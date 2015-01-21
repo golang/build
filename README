@@ -1,8 +1,7 @@
-// Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+This subrepository holds the source for various packages and tools that support
+development of the Go programming language.
 
-The files in these directories constitute the continuous builder:
+To submit changes to this repository, see http://golang.org/doc/contribute.html.
 
 app/: a.k.a the "dashboard"; the App Engine code that runs http://build.golang.org/
 
