@@ -5,6 +5,8 @@ apt-get update
 apt-get install -y --no-install-recommends curl ca-certificates
 # Optionally used by some net/http tests:
 apt-get install -y --no-install-recommends strace
+# Optionally used by runtime tests for gdb:
+apt-get install -y --no-install-recommends gdb
 # For using numeric libraries within GCC.
 apt-get install -y --no-install-recommends libgmp10-dev libmpc-dev libmpfr-dev
 # For building binutils and gcc from source.

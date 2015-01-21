@@ -4,6 +4,8 @@ apt-get update
 apt-get install -y --no-install-recommends ca-certificates
 # Optionally used by some net/http tests:
 apt-get install -y --no-install-recommends strace 
+# Optionally used by runtime tests for gdb:
+apt-get install -y --no-install-recommends gdb
 # For building Go's bootstrap 'dist' prog
 apt-get install -y --no-install-recommends gcc libc6-dev
 # For 32-bit builds:
