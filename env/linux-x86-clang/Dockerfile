@@ -15,7 +15,7 @@ ADD /scripts/install-apt-deps.sh /scripts/
 RUN /scripts/install-apt-deps.sh
 
 ADD /scripts/build-go-builder.sh /scripts/
-RUN GO_REV=go1.4 BUILDER_REV=d79e0375a /scripts/build-go-builder.sh && test -f /usr/local/bin/builder
+RUN GO_REV=go1.4 TOOLS_REV=d79e0375a BUILDER_REV=fa8373a /scripts/build-go-builder.sh && test -f /usr/local/bin/builder
 
 ENV CC /usr/bin/clang
 
