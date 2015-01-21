@@ -27,6 +27,7 @@ type BuildConfig struct {
 	// VM-specific settings:
 	VMImage     string // e.g. "openbsd-amd64-56"
 	machineType string // optional GCE instance type
+	Go14URL     string // URL to built Go 1.4 tar.gz
 
 	// Docker-specific settings: (used if VMImage == "")
 	Image   string   // Docker image to use to build
@@ -151,6 +152,7 @@ func init() {
 		Name:        "openbsd-amd64-gce56",
 		VMImage:     "openbsd-amd64-56",
 		machineType: "n1-highcpu-2",
+		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-openbsd-amd64.tar.gz",
 	})
 	addBuilder(BuildConfig{
 		// It's named "partial" because the buildlet sets

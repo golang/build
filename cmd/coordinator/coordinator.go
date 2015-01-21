@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"camlistore.org/pkg/syncutil"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/types"
@@ -39,6 +40,12 @@ import (
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/cloud/compute/metadata"
 )
+
+func init() {
+	// Disabled until its networking/MTU problems are fixed:
+	// https://github.com/golang/go/issues/9491#issuecomment-70881865
+	delete(dashboard.Builders, "plan9-386-gcepartial")
+}
 
 var (
 	masterKeyFile  = flag.String("masterkey", "", "Path to builder master key. Else fetched using GCE project attribute 'builder-master-key'.")
@@ -760,17 +767,34 @@ func buildInVM(conf dashboard.BuildConfig, st *buildStatus) (retErr error) {
 		return
 	}
 
-	st.logEventTime("start_write_tar")
-	if err := bc.PutTar(tarRes.Body, "go"); err != nil {
-		tarRes.Body.Close()
-		return fmt.Errorf("writing tarball from Gerrit: %v", err)
+	var grp syncutil.Group
+	grp.Go(func() error {
+		st.logEventTime("start_write_go_tar")
+		if err := bc.PutTar(tarRes.Body, "go"); err != nil {
+			tarRes.Body.Close()
+			return fmt.Errorf("writing tarball from Gerrit: %v", err)
+		}
+		st.logEventTime("end_write_go_tar")
+		return nil
+	})
+	if conf.Go14URL != "" {
+		grp.Go(func() error {
+			st.logEventTime("start_write_go14_tar")
+			if err := bc.PutTarFromURL(conf.Go14URL, "go1.4"); err != nil {
+				return err
+			}
+			st.logEventTime("end_write_go14_tar")
+			return nil
+		})
 	}
-	st.logEventTime("end_write_tar")
+	if err := grp.Err(); err != nil {
+		return err
+	}
 
 	execStartTime := time.Now()
 	st.logEventTime("pre_exec")
 
-	remoteErr, err := bc.Exec(conf.AllScript(), buildlet.ExecOpts{
+	remoteErr, err := bc.Exec(path.Join("go", conf.AllScript()), buildlet.ExecOpts{
 		Output:      st,
 		OnStartExec: func() { st.logEventTime("running_exec") },
 	})

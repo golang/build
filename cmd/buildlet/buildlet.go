@@ -236,6 +236,10 @@ func fixMTU() {
 // writes into small pieces to make sure we don't get too near the
 // MTU, and we hope the kernel doesn't coalesce different flushed
 // writes back together into the same TCP IP packets.
+// TODO(bradfitz): this has never proven to work. See:
+//    https://github.com/golang/go/issues/9491#issuecomment-70881865
+// But we do depend on its http.Flusher.Flush-per-Write behavior, so we
+// can't delete this entirely.
 type mtuWriter struct {
 	rw http.ResponseWriter
 }
@@ -257,15 +261,12 @@ func (mw mtuWriter) Write(p []byte) (n int, err error) {
 		}
 		p = p[n0:]
 		mw.rw.(http.Flusher).Flush()
-		if len(p) > 0 {
-			// Whitelisted operating systems:
-			if runtime.GOOS == "openbsd" || runtime.GOOS == "linux" {
-				// Nothing
-			} else {
-				// Try to prevent the kernel from Nagel-ing the IP packets
-				// together into one that's too large.
-				time.Sleep(250 * time.Millisecond)
-			}
+		if len(p) > 0 && runtime.GOOS == "plan9" {
+			// Try to prevent the kernel from Nagel-ing the IP packets
+			// together into one that's too large.
+			// This didn't fix anything, though.
+			// See https://github.com/golang/go/issues/9491#issuecomment-70881865
+			//time.Sleep(250 * time.Millisecond)
 		}
 	}
 	return n, nil
