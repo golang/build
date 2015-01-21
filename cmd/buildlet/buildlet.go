@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build extdep
-
 // The buildlet is an HTTP server that untars content to disk and runs
 // commands it has untarred, streaming their output back over HTTP.
 // It is part of Go's continuous build system.

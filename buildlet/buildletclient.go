@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build extdep
-
 // Package buildlet contains client tools for working with a buildlet
 // server.
 package buildlet // import "golang.org/x/build/buildlet"

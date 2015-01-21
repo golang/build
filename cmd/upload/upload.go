@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build extdep
-
 // The upload command writes a file to Google Cloud Storage. It's used
 // exclusively by the Makefiles in the Go project repos. Think of it
 // as a very light version of gsutil or gcloud, but with some

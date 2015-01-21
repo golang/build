@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build extdep
-
 // The coordinator runs on GCE and coordinates builds in Docker containers.
 package main // import "golang.org/x/build/cmd/coordinator"
 
@@ -750,7 +748,7 @@ func buildInVM(conf dashboard.BuildConfig, st *buildStatus) (retErr error) {
 
 	// Write the VERSION file.
 	st.logEventTime("start_write_version_tar")
-	if err := bc.PutTarball(versionTgz(st.rev)); err != nil {
+	if err := bc.PutTar(versionTgz(st.rev), "go"); err != nil {
 		return fmt.Errorf("writing VERSION tgz: %v", err)
 	}
 
@@ -763,7 +761,7 @@ func buildInVM(conf dashboard.BuildConfig, st *buildStatus) (retErr error) {
 	}
 
 	st.logEventTime("start_write_tar")
-	if err := bc.PutTarball(tarRes.Body); err != nil {
+	if err := bc.PutTar(tarRes.Body, "go"); err != nil {
 		tarRes.Body.Close()
 		return fmt.Errorf("writing tarball from Gerrit: %v", err)
 	}

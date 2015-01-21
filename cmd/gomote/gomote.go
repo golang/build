@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build extdep
-
 /*
 The gomote command is a client for the Go builder infrastructure.
 It's a remote control for remote Go builder machines.

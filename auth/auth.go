@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build extdep
-
 // Package auth contains shared code related to OAuth2 and obtaining
 // tokens for a project.
 package auth
