@@ -4,7 +4,8 @@ export GOPATH=/gopath
 export GOROOT=/goroot
 PREFIX=/usr/local
 : ${GO_REV:?"need to be set to the golang repo revision used to build the commit watcher."}
-: ${WATCHER_REV:?"need to be set to the go.tools repo revision for the commit watcher."}
+: ${TOOLS_REV:?"need to be set to the tools repo revision used to build the commit watcher."}
+: ${WATCHER_REV:?"need to be set to the build repo revision for the commit watcher."}
 
 mkdir -p $GOROOT
 git clone https://go.googlesource.com/go $GOROOT
@@ -13,8 +14,13 @@ git clone https://go.googlesource.com/go $GOROOT
 GO_TOOLS=$GOPATH/src/golang.org/x/tools
 mkdir -p $GO_TOOLS
 git clone https://go.googlesource.com/tools $GO_TOOLS
+(cd $GO_TOOLS && git reset --hard $TOOLS_REV)
+
+GO_BUILD=$GOPATH/src/golang.org/x/build
+mkdir -p $GO_BUILD
+git clone https://go.googlesource.com/build $GO_BUILD
 
 mkdir -p $PREFIX/bin
-(cd $GO_TOOLS && git reset --hard $WATCHER_REV && GOBIN=$PREFIX/bin /goroot/bin/go install golang.org/x/tools/dashboard/watcher)
+(cd $GO_BUILD && git reset --hard $WATCHER_REV && GOBIN=$PREFIX/bin /goroot/bin/go install golang.org/x/build/cmd/watcher)
 
 rm -fR $GOROOT/bin $GOROOT/pkg $GOPATH

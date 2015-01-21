@@ -6,7 +6,7 @@
 
 // Package buildlet contains client tools for working with a buildlet
 // server.
-package buildlet // import "golang.org/x/tools/dashboard/buildlet"
+package buildlet // import "golang.org/x/build/buildlet"
 
 import (
 	"errors"

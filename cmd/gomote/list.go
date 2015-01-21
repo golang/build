@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	"golang.org/x/tools/dashboard/buildlet"
+	"golang.org/x/build/buildlet"
 )
 
 func list(args []string) error {

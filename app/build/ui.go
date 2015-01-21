@@ -21,7 +21,7 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/tools/dashboard/types"
+	"golang.org/x/build/types"
 
 	"cache"
 

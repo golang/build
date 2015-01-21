@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/tools/dashboard"
-	"golang.org/x/tools/dashboard/buildlet"
+	"golang.org/x/build/buildlet"
+	"golang.org/x/build/dashboard"
 )
 
 func create(args []string) error {

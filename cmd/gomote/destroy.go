@@ -14,7 +14,7 @@ import (
 	"os"
 	"time"
 
-	"golang.org/x/tools/dashboard/buildlet"
+	"golang.org/x/build/buildlet"
 )
 
 func destroy(args []string) error {

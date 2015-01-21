@@ -20,8 +20,8 @@ import (
 	"os"
 	"strings"
 
+	"golang.org/x/build/auth"
 	"golang.org/x/oauth2"
-	"golang.org/x/tools/dashboard/auth"
 	"google.golang.org/cloud"
 	"google.golang.org/cloud/storage"
 )

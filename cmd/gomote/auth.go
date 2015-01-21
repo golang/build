@@ -13,9 +13,9 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"golang.org/x/build/auth"
+	"golang.org/x/build/buildlet"
 	"golang.org/x/oauth2"
-	"golang.org/x/tools/dashboard/auth"
-	"golang.org/x/tools/dashboard/buildlet"
 	"google.golang.org/api/compute/v1"
 )
 

@@ -4,7 +4,7 @@
 
 // Command watcher watches the specified repository for new commits
 // and reports them to the build dashboard.
-package main // import "golang.org/x/tools/dashboard/watcher"
+package main // import "golang.org/x/build/cmd/watcher"
 
 import (
 	"bufio"

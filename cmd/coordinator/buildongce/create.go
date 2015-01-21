@@ -4,7 +4,7 @@
 
 // +build extdep
 
-package main // import "golang.org/x/tools/dashboard/cmd/coordinator/buildongce"
+package main // import "golang.org/x/build/cmd/coordinator/buildongce"
 
 import (
 	"bufio"

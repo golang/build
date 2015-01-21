@@ -12,7 +12,7 @@
 // provides no security of its own. It is assumed that any user uses
 // it with an appropriately-configured firewall between their VM
 // instances.
-package main // import "golang.org/x/tools/dashboard/cmd/buildlet"
+package main // import "golang.org/x/build/cmd/buildlet"
 
 import (
 	"archive/tar"

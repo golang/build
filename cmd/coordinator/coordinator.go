@@ -5,7 +5,7 @@
 // +build extdep
 
 // The coordinator runs on GCE and coordinates builds in Docker containers.
-package main // import "golang.org/x/tools/dashboard/cmd/coordinator"
+package main // import "golang.org/x/build/cmd/coordinator"
 
 import (
 	"archive/tar"
@@ -33,11 +33,11 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/build/buildlet"
+	"golang.org/x/build/dashboard"
+	"golang.org/x/build/types"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	"golang.org/x/tools/dashboard"
-	"golang.org/x/tools/dashboard/buildlet"
-	"golang.org/x/tools/dashboard/types"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/cloud/compute/metadata"
 )
