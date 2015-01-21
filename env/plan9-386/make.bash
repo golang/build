@@ -6,7 +6,7 @@ set -e
 
 # Download Plan 9
 if ! sha1sum -c plan9-gce.iso.sha1; then
-  curl --fail -O http://9legacy.org/download/go/plan9-gce.iso.bz2
+  curl --fail -O http://9legacy.org/download/go/2015-01-22/plan9-gce.iso.bz2
   bunzip2 plan9-gce.iso.bz2
   sha1sum -c plan9-gce.iso.sha1
 fi
@@ -173,6 +173,9 @@ send "echo ip/ipconfig >>/cfg/helix/cpurc\n"
 
 expect -exact "term% "
 send "echo ndb/dns -r >>/cfg/helix/cpurc\n"
+
+expect -exact "term% "
+send "echo echo mtu 1460 '>'/net/ipifc/0/ctl >>/cfg/helix/cpurc\n"
 
 expect -exact "term% "
 send "echo echo remove 10.0.0.0 /104 10.0.0.0 '>'/net/iproute >>/cfg/helix/cpurc\n"
