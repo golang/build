@@ -128,6 +128,10 @@ type ExecOpts struct {
 	// Args are the arguments to pass to the cmd given to Client.Exec.
 	Args []string
 
+	// ExtraEnv are KEY=VALUE pairs to append to the buildlet
+	// process's environment.
+	ExtraEnv []string
+
 	// SystemLevel controls whether the command is run outside of
 	// the buildlet's environment.
 	SystemLevel bool
@@ -154,6 +158,7 @@ func (c *Client) Exec(cmd string, opts ExecOpts) (remoteErr, execErr error) {
 		"cmd":    {cmd},
 		"mode":   {mode},
 		"cmdArg": opts.Args,
+		"env":    opts.ExtraEnv,
 	}
 	req, err := http.NewRequest("POST", c.URL()+"/exec", strings.NewReader(form.Encode()))
 	if err != nil {

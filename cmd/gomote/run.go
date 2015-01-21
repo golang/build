@@ -22,6 +22,8 @@ func run(args []string) error {
 	}
 	var sys bool
 	fs.BoolVar(&sys, "system", false, "run inside the system, and not inside the workdir; this is implicit if cmd starts with '/'")
+	var env stringSlice
+	fs.Var(&env, "e", "Environment variable KEY=value. The -e flag may be repeated multiple times to add multiple things to the environment.")
 
 	fs.Parse(args)
 	if fs.NArg() < 2 {
@@ -37,9 +39,26 @@ func run(args []string) error {
 		SystemLevel: sys || strings.HasPrefix(cmd, "/"),
 		Output:      os.Stdout,
 		Args:        fs.Args()[2:],
+		ExtraEnv:    []string(env),
 	})
 	if execErr != nil {
 		return fmt.Errorf("Error trying to execute %s: %v", cmd, execErr)
 	}
 	return remoteErr
+}
+
+// stringSlice implements flag.Value, specifically for storing environment
+// variable key=value pairs.
+type stringSlice []string
+
+func (*stringSlice) String() string { return "" } // default value
+
+func (ss *stringSlice) Set(v string) error {
+	if v != "" {
+		if !strings.Contains(v, "=") {
+			return fmt.Errorf("-e argument %q doesn't contains an '=' sign.", v)
+		}
+		*ss = append(*ss, v)
+	}
+	return nil
 }

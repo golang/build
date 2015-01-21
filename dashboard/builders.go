@@ -30,12 +30,16 @@ type BuildConfig struct {
 	Go14URL     string // URL to built Go 1.4 tar.gz
 
 	// Docker-specific settings: (used if VMImage == "")
-	Image   string   // Docker image to use to build
-	cmd     string   // optional -cmd flag (relative to go/src/)
-	env     []string // extra environment ("key=value") pairs
-	dashURL string   // url of the build dashboard
-	tool    string   // the tool this configuration is for
+	Image   string // Docker image to use to build
+	cmd     string // optional -cmd flag (relative to go/src/)
+	dashURL string // url of the build dashboard
+	tool    string // the tool this configuration is for
+
+	// Use by both VMs and Docker:
+	env []string // extra environment ("key=value") pairs
 }
+
+func (c *BuildConfig) Env() []string { return append([]string(nil), c.env...) }
 
 func (c *BuildConfig) GOOS() string { return c.Name[:strings.Index(c.Name, "-")] }
 
@@ -52,14 +56,18 @@ func (c *BuildConfig) GOARCH() string {
 // do the build and run its standard set of tests.
 // Example values are "src/all.bash", "src/all.bat", "src/all.rc".
 func (c *BuildConfig) AllScript() string {
+	if strings.HasSuffix(c.Name, "-race") {
+		if strings.HasPrefix(c.Name, "windows-") {
+			return "src/race.bat"
+		}
+		return "src/race.bash"
+	}
 	if strings.HasPrefix(c.Name, "windows-") {
 		return "src/all.bat"
 	}
 	if strings.HasPrefix(c.Name, "plan9-") {
 		return "src/all.rc"
 	}
-	// TODO(bradfitz): race.bash, etc, once the race builder runs
-	// via the buildlet.
 	return "src/all.bash"
 }
 
@@ -149,19 +157,41 @@ func init() {
 
 	// VMs:
 	addBuilder(BuildConfig{
+		Name:        "freebsd-amd64-gce101",
+		VMImage:     "freebsd-amd64-gce101",
+		machineType: "n1-highcpu-2",
+		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-freebsd-amd64.tar.gz",
+		env:         []string{"CC=clang"},
+	})
+	addBuilder(BuildConfig{
+		Name:        "freebsd-amd64-race",
+		VMImage:     "freebsd-amd64-gce101",
+		machineType: "n1-highcpu-4",
+		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-freebsd-amd64.tar.gz",
+		env:         []string{"CC=clang"},
+	})
+	addBuilder(BuildConfig{
+		Name:        "freebsd-386-gce101",
+		VMImage:     "freebsd-amd64-gce101",
+		machineType: "n1-highcpu-2",
+		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-freebsd-amd64.tar.gz",
+		env:         []string{"GOARCH=386", "CC=clang"},
+	})
+	addBuilder(BuildConfig{
 		Name:        "openbsd-amd64-gce56",
 		VMImage:     "openbsd-amd64-56",
 		machineType: "n1-highcpu-2",
 		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-openbsd-amd64.tar.gz",
 	})
 	addBuilder(BuildConfig{
+		Name:    "plan9-386-gcepartial",
+		VMImage: "plan9-386",
+		Go14URL: "https://storage.googleapis.com/go-builder-data/go1.4-plan9-386.tar.gz",
 		// It's named "partial" because the buildlet sets
 		// GOTESTONLY=std to stop after the "go test std"
 		// tests because it's so slow otherwise.
-		// TODO(braditz): move that env variable to the
-		// coordinator and into this config.
-		Name:    "plan9-386-gcepartial",
-		VMImage: "plan9-386",
+		env: []string{"GOTESTONLY=std"},
+
 		// We *were* using n1-standard-1 because Plan 9 can only
 		// reliably use a single CPU. Using 2 or 4 and we see
 		// test failures. See:

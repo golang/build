@@ -39,7 +39,7 @@ import (
 
 var (
 	haltEntireOS = flag.Bool("halt", true, "halt OS in /halt handler. If false, the buildlet process just ends.")
-	scratchDir   = flag.String("scratchdir", "", "Temporary directory to use. The contents of this directory may be deleted at any time. If empty, TempDir is used to create one.")
+	workDir      = flag.String("workdir", "", "Temporary directory to use. The contents of this directory may be deleted at any time. If empty, TempDir is used to create one.")
 	listenAddr   = flag.String("listen", defaultListenAddr(), "address to listen on. Warning: this service is inherently insecure and offers no protection of its own. Do not expose this port to the world.")
 )
 
@@ -72,33 +72,21 @@ func main() {
 	if onGCE {
 		fixMTU()
 	}
-	if runtime.GOOS == "plan9" {
-		// Plan 9 is too slow on GCE, so stop running run.rc after the basics.
-		// See https://golang.org/cl/2522 and https://golang.org/issue/9491
-		// TODO(bradfitz): once the buildlet has environment variable support,
-		// the coordinator can send this in, and this variable can be part of
-		// the build configuration struct instead of hard-coded here.
-		// But no need for environment variables quite yet.
-		os.Setenv("GOTESTONLY", "std")
-	}
-	if *scratchDir == "" {
+	if *workDir == "" {
 		dir, err := ioutil.TempDir("", "buildlet-scatch")
 		if err != nil {
-			log.Fatalf("error creating scratchdir with ioutil.TempDir: %v", err)
+			log.Fatalf("error creating workdir with ioutil.TempDir: %v", err)
 		}
-		*scratchDir = dir
+		*workDir = dir
 	}
-	// TODO(bradfitz): if this becomes more of a general tool,
-	// perhaps we want to remove this hard-coded here. Also,
-	// if/once the exec handler ever gets generic environment
-	// variable support, it would make sense to remove this too
-	// and push it to the client.  This hard-codes policy. But
-	// that's okay for now.
-	os.Setenv("GOROOT_BOOTSTRAP", filepath.Join(*scratchDir, "go1.4"))
-	os.Setenv("WORKDIR", *scratchDir) // mostly for demos
+	// This is hard-coded because the client-supplied environment has
+	// no way to expand relative paths from the workDir.
+	// TODO(bradfitz): if we ever need more than this, make some mechanism.
+	os.Setenv("GOROOT_BOOTSTRAP", filepath.Join(*workDir, "go1.4"))
+	os.Setenv("WORKDIR", *workDir) // mostly for demos
 
-	if _, err := os.Lstat(*scratchDir); err != nil {
-		log.Fatalf("invalid --scratchdir %q: %v", *scratchDir, err)
+	if _, err := os.Lstat(*workDir); err != nil {
+		log.Fatalf("invalid --workdir %q: %v", *workDir, err)
 	}
 	http.HandleFunc("/", handleRoot)
 	http.HandleFunc("/debug/goroutines", handleGoroutines)
@@ -208,7 +196,7 @@ func fixMTU_plan9() error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.WriteString(f, "mtu 1400\n"); err != nil { // not 1460
+	if _, err := io.WriteString(f, "mtu 1460\n"); err != nil {
 		f.Close()
 		return err
 	}
@@ -230,46 +218,18 @@ func fixMTU() {
 	}
 }
 
-// mtuWriter is a hack for environments where we can't (or can't yet)
-// fix the machine's MTU.
-// Instead of telling the operating system the MTU, we just cut up our
-// writes into small pieces to make sure we don't get too near the
-// MTU, and we hope the kernel doesn't coalesce different flushed
-// writes back together into the same TCP IP packets.
-// TODO(bradfitz): this has never proven to work. See:
-//    https://github.com/golang/go/issues/9491#issuecomment-70881865
-// But we do depend on its http.Flusher.Flush-per-Write behavior, so we
-// can't delete this entirely.
-type mtuWriter struct {
+// flushWriter is an io.Writer that Flushes after each Write if the
+// underlying Writer implements http.Flusher.
+type flushWriter struct {
 	rw http.ResponseWriter
 }
 
-func (mw mtuWriter) Write(p []byte) (n int, err error) {
-	const mtu = 1000 // way less than 1460; since HTTP response headers might be in there too
-	for len(p) > 0 {
-		chunk := p
-		if len(chunk) > mtu {
-			chunk = p[:mtu]
-		}
-		n0, err := mw.rw.Write(chunk)
-		n += n0
-		if n0 != len(chunk) && err == nil {
-			err = io.ErrShortWrite
-		}
-		if err != nil {
-			return n, err
-		}
-		p = p[n0:]
-		mw.rw.(http.Flusher).Flush()
-		if len(p) > 0 && runtime.GOOS == "plan9" {
-			// Try to prevent the kernel from Nagel-ing the IP packets
-			// together into one that's too large.
-			// This didn't fix anything, though.
-			// See https://github.com/golang/go/issues/9491#issuecomment-70881865
-			//time.Sleep(250 * time.Millisecond)
-		}
+func (fw flushWriter) Write(p []byte) (n int, err error) {
+	n, err = fw.rw.Write(p)
+	if f, ok := fw.rw.(http.Flusher); ok {
+		f.Flush()
 	}
-	return n, nil
+	return
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
@@ -281,10 +241,9 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 // unauthenticated /debug/goroutines handler
-func handleGoroutines(rw http.ResponseWriter, r *http.Request) {
-	w := mtuWriter{rw}
+func handleGoroutines(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Dumping goroutines.")
-	rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	buf := make([]byte, 2<<20)
 	buf = buf[:runtime.Stack(buf, true)]
 	w.Write(buf)
@@ -319,19 +278,19 @@ func validRelativeDir(dir string) bool {
 	return true
 }
 
-func handleGetTGZ(rw http.ResponseWriter, r *http.Request) {
+func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
-		http.Error(rw, "requires GET method", http.StatusBadRequest)
+		http.Error(w, "requires GET method", http.StatusBadRequest)
 		return
 	}
 	dir := r.FormValue("dir")
 	if !validRelativeDir(dir) {
-		http.Error(rw, "bogus dir", http.StatusBadRequest)
+		http.Error(w, "bogus dir", http.StatusBadRequest)
 		return
 	}
-	zw := gzip.NewWriter(mtuWriter{rw})
+	zw := gzip.NewWriter(w)
 	tw := tar.NewWriter(zw)
-	base := filepath.Join(*scratchDir, filepath.FromSlash(dir))
+	base := filepath.Join(*workDir, filepath.FromSlash(dir))
 	err := filepath.Walk(base, func(path string, fi os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -374,7 +333,7 @@ func handleGetTGZ(rw http.ResponseWriter, r *http.Request) {
 		log.Printf("Walk error: %v", err)
 		// Decent way to signal failure to the caller, since it'll break
 		// the chunked response, rather than have a valid EOF.
-		conn, _, _ := rw.(http.Hijacker).Hijack()
+		conn, _, _ := w.(http.Hijacker).Hijack()
 		conn.Close()
 	}
 	tw.Close()
@@ -409,7 +368,7 @@ func handleWriteTGZ(w http.ResponseWriter, r *http.Request) {
 	}
 
 	urlParam, _ := url.ParseQuery(r.URL.RawQuery)
-	baseDir := *scratchDir
+	baseDir := *workDir
 	if dir := urlParam.Get("dir"); dir != "" {
 		if !validRelativeDir(dir) {
 			http.Error(w, "bogus dir", http.StatusBadRequest)
@@ -527,7 +486,7 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "requires 'cmd' parameter", http.StatusBadRequest)
 			return
 		}
-		absCmd = filepath.Join(*scratchDir, filepath.FromSlash(cmdPath))
+		absCmd = filepath.Join(*workDir, filepath.FromSlash(cmdPath))
 	}
 
 	if f, ok := w.(http.Flusher); ok {
@@ -536,13 +495,14 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 
 	cmd := exec.Command(absCmd, r.PostForm["cmdArg"]...)
 	if sysMode {
-		cmd.Dir = *scratchDir
+		cmd.Dir = *workDir
 	} else {
 		cmd.Dir = filepath.Dir(absCmd)
 	}
-	cmdOutput := mtuWriter{w}
+	cmdOutput := flushWriter{w}
 	cmd.Stdout = cmdOutput
 	cmd.Stderr = cmdOutput
+	cmd.Env = append(os.Environ(), r.PostForm["env"]...)
 	err := cmd.Start()
 	if err == nil {
 		go func() {

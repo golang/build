@@ -7,7 +7,12 @@ buildlet.darwin-amd64: buildlet.go
 
 buildlet.freebsd-amd64: buildlet.go
 	GOOS=freebsd GOARCH=amd64 go build -o $@
-	cat $@ | (cd ../upload && go run upload.go --public go-builder-data/$@)
+
+# We use the same binary for freebsd-386 as freebsd-amd64:
+.PHONY: freebsd
+freebsd: buildlet.freebsd-amd64
+	cat buildlet.freebsd-amd64 | (cd ../upload && go run upload.go --public go-builder-data/buildlet.freebsd-amd64)
+	cat buildlet.freebsd-amd64 | (cd ../upload && go run upload.go --public go-builder-data/buildlet.freebsd-386)
 
 buildlet.linux-amd64: buildlet.go
 	GOOS=linux GOARCH=amd64 go build -o $@

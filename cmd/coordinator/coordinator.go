@@ -42,8 +42,6 @@ import (
 )
 
 func init() {
-	// Disabled until its networking/MTU problems are fixed:
-	// https://github.com/golang/go/issues/9491#issuecomment-70881865
 	delete(dashboard.Builders, "plan9-386-gcepartial")
 }
 
@@ -797,6 +795,7 @@ func buildInVM(conf dashboard.BuildConfig, st *buildStatus) (retErr error) {
 	remoteErr, err := bc.Exec(path.Join("go", conf.AllScript()), buildlet.ExecOpts{
 		Output:      st,
 		OnStartExec: func() { st.logEventTime("running_exec") },
+		ExtraEnv:    conf.Env(),
 	})
 	if err != nil {
 		return err
