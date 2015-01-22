@@ -184,6 +184,12 @@ func init() {
 		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-openbsd-amd64.tar.gz",
 	})
 	addBuilder(BuildConfig{
+		Name:        "openbsd-386-gce56",
+		VMImage:     "openbsd-386-56",
+		machineType: "n1-highcpu-2",
+		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-openbsd-386.tar.gz",
+	})
+	addBuilder(BuildConfig{
 		Name:    "plan9-386-gcepartial",
 		VMImage: "plan9-386",
 		Go14URL: "https://storage.googleapis.com/go-builder-data/go1.4-plan9-386.tar.gz",

@@ -26,6 +26,10 @@ buildlet.openbsd-amd64: buildlet.go
 	GOOS=openbsd GOARCH=amd64 go build -o $@
 	cat $@ | (cd ../upload && go run upload.go --public go-builder-data/$@)
 
+buildlet.openbsd-386: buildlet.go
+	GOOS=openbsd GOARCH=386 go build -o $@
+	cat $@ | (cd ../upload && go run upload.go --public go-builder-data/$@)
+
 buildlet.plan9-386: buildlet.go
 	GOOS=plan9 GOARCH=386 go build -o $@
 	cat $@ | (cd ../upload && go run upload.go --public go-builder-data/$@)

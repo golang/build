@@ -1,0 +1,3 @@
+This is a copy of ../openbsd-amd64, but changing "amd64" to "i386".
+
+It's possible they could be combined, but they're not.
