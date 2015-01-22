@@ -169,13 +169,10 @@ expect -exact "term% "
 send "dircp /cfg/example /cfg/helix\n"
 
 expect -exact "term% "
-send "echo ip/ipconfig >>/cfg/helix/cpurc\n"
+send "echo ip/ipconfig -o mtu >>/cfg/helix/cpurc\n"
 
 expect -exact "term% "
 send "echo ndb/dns -r >>/cfg/helix/cpurc\n"
-
-expect -exact "term% "
-send "echo echo mtu 1460 '>'/net/ipifc/0/ctl >>/cfg/helix/cpurc\n"
 
 expect -exact "term% "
 send "echo echo remove 10.0.0.0 /104 10.0.0.0 '>'/net/iproute >>/cfg/helix/cpurc\n"
