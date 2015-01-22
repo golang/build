@@ -157,6 +157,12 @@ func init() {
 
 	// VMs:
 	addBuilder(BuildConfig{
+		Name:        "freebsd-amd64-gce93",
+		VMImage:     "freebsd-amd64-gce93",
+		machineType: "n1-highcpu-2",
+		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-freebsd-amd64.tar.gz",
+	})
+	addBuilder(BuildConfig{
 		Name:        "freebsd-amd64-gce101",
 		VMImage:     "freebsd-amd64-gce101",
 		machineType: "n1-highcpu-2",

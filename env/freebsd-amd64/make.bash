@@ -11,8 +11,30 @@
 # Only tested on Ubuntu 14.04.
 # Requires packages: qemu expect mkisofs
 
-set -e -x
-readonly VERSION=10.1
+set -e
+
+case $1 in
+9.3)
+  readonly VERSION=9.3
+  readonly VERSION_TRAILER="-20140711-r268512"
+  readonly DNS_LOOKUP=dig
+;;
+
+10.1)
+  if [ -z $1 ]; then
+    echo "No version specified, defaulting to 10.1"
+  fi
+  readonly VERSION=10.1
+  readonly VERSION_TRAILER=
+  # BIND replaced by unbound on FreeBSD 10, so drill(1) is the new dig(1)
+  readonly DNS_LOOKUP=drill
+;;
+*)
+  echo "Usage: $0 <version>"
+  echo " version - FreeBSD version to build. Valid choices: 9.3 10.1"
+  exit 1
+esac
+
 readonly IMAGE=freebsd-amd64-gce${VERSION/\./}.tar.gz
 
 if [ $(tput cols) -lt 80 ]; then
@@ -21,11 +43,11 @@ if [ $(tput cols) -lt 80 ]; then
 fi
 
 if ! [ -e FreeBSD-${VERSION:?}-RELEASE-amd64.raw ]; then
-  curl -O ftp://ftp.freebsd.org/pub/FreeBSD/releases/VM-IMAGES/${VERSION:?}-RELEASE/amd64/Latest/FreeBSD-${VERSION:?}-RELEASE-amd64.raw.xz
-  xz -d FreeBSD-${VERSION:?}-RELEASE-amd64.raw.xz
+  curl -O ftp://ftp.freebsd.org/pub/FreeBSD/releases/VM-IMAGES/${VERSION:?}-RELEASE/amd64/Latest/FreeBSD-${VERSION:?}-RELEASE-amd64${VERSION_TRAILER}.raw.xz
+  xz -d FreeBSD-${VERSION:?}-RELEASE-amd64${VERSION_TRAILER}.raw.xz
 fi
 
-cp FreeBSD-${VERSION:?}-RELEASE-amd64.raw disk.raw
+cp FreeBSD-${VERSION:?}-RELEASE-amd64${VERSION_TRAILER}.raw disk.raw
 
 mkdir -p iso/etc iso/usr/local/etc/rc.d
 
@@ -55,8 +77,7 @@ buildlet_start()
 	echo "starting buildlet script"
 	netstat -rn
 	cat /etc/resolv.conf
-	# BIND replaced by unbound on FreeBSD 10, so drill(1) is the new dig(1)
-	drill metadata.google.internal
+	${DNS_LOOKUP:?} metadata.google.internal
 	(
 	 set -e
 	 export PATH="\$PATH:/usr/local/bin"
