@@ -9,20 +9,18 @@ package build
 import (
 	"bytes"
 	"encoding/gob"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/url"
-	"regexp"
 	"runtime"
 	"sort"
+	"strings"
 	"text/template"
 
 	"appengine"
 	"appengine/datastore"
 	"appengine/delay"
-	"appengine/mail"
 	"appengine/urlfetch"
 )
 
@@ -123,83 +121,86 @@ func firstMatch(c appengine.Context, q *datastore.Query, v interface{}) error {
 	return err
 }
 
-var notifyLater = delay.Func("notify", notify)
+var (
+	notifyLater = delay.Func("notify", notify)
+	notifyTmpl  = template.Must(template.New("notify.txt").
+			Funcs(template.FuncMap(tmplFuncs)).ParseFiles("build/notify.txt"))
+)
 
 // notify tries to update the CL for the given Commit with a failure message.
 // If it doesn't succeed, it sends a failure email to golang-dev.
 func notify(c appengine.Context, com *Commit, builder, logHash string) {
-	v := url.Values{"brokebuild": {builder}, "log": {logHash}}
-	if !updateCL(c, com, v) {
-		// Send a mail notification if the CL can't be found.
-		sendFailMail(c, com, builder, logHash)
+	var msg bytes.Buffer
+	err := notifyTmpl.Execute(&msg, struct {
+		Builder  string
+		LogHash  string
+		Hostname string
+	}{builder, logHash, domain})
+	if err != nil {
+		c.Criticalf("couldn't render template: %v", err)
+		return
+	}
+	if err := postGerritMessage(c, com, msg.String()); err != nil {
+		c.Errorf("couldn't post to gerrit: %v", err)
 	}
 }
 
-// updateCL tells gobot to update the CL for the given Commit with
-// the provided query values.
-func updateCL(c appengine.Context, com *Commit, v url.Values) bool {
-	cl, err := lookupCL(c, com)
+// postGerritMessage posts a message to the code review thread for the given
+// Commit.
+func postGerritMessage(c appengine.Context, com *Commit, message string) error {
+	if appengine.IsDevAppServer() {
+		c.Infof("Skiping update of Gerrit review for %v with message: %v", com, message)
+		return nil
+	}
+	// Get change ID using commit hash.
+	resp, err := urlfetch.Client(c).Get("https://go-review.googlesource.com/r/" + com.Hash)
 	if err != nil {
-		c.Errorf("could not find CL for %v: %v", com.Hash, err)
-		return false
+		return fmt.Errorf("lookup %v: contacting Gerrit %v", com.Hash, err)
 	}
-	u := fmt.Sprintf("%v?cl=%v&%s", gobotBase, cl, v.Encode())
-	r, err := urlfetch.Client(c).Post(u, "text/plain", nil)
+	resp.Body.Close()
+	if resp.Request == nil || resp.Request.URL == nil {
+		return fmt.Errorf("lookup %s: missing request info in http response", com.Hash)
+	}
+	frag := resp.Request.URL.Fragment
+	if !strings.HasPrefix(frag, "/c/") || !strings.HasSuffix(frag, "/") {
+		return fmt.Errorf("lookup %s: unexpected URL fragment: #%s", com.Hash, frag)
+	}
+	id := frag[len("/c/") : len(frag)-len("/")]
+
+	// Prepare request.
+	msg := struct {
+		Message string `json:"message"`
+	}{message}
+	data, err := json.Marshal(&msg)
 	if err != nil {
-		c.Errorf("could not update CL %v: %v", cl, err)
-		return false
+		return fmt.Errorf("marshalling message: %v", err)
 	}
-	r.Body.Close()
-	if r.StatusCode != http.StatusOK {
-		c.Errorf("could not update CL %v: %v", cl, r.Status)
-		return false
+	req, err := http.NewRequest("POST", "https://go-review.googlesource.com/a/changes/"+id+"/revisions/current/review", bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("preparing message: %v", err)
 	}
-	return true
+	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth(Config(c, "GerritUsername"), Config(c, "GerritPassword"))
+
+	// Make request.
+	resp, err = urlfetch.Client(c).Do(req)
+	if err != nil {
+		return fmt.Errorf("posting message: %v", err)
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return fmt.Errorf("reading response body: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("posting message: %s\n%s", resp.Status, body)
+	}
+	return nil
 }
-
-var clURL = regexp.MustCompile(`https://codereview.appspot.com/([0-9]+)`)
-
-// lookupCL consults code.google.com for the full change description for the
-// provided Commit, and returns the relevant CL number.
-func lookupCL(c appengine.Context, com *Commit) (string, error) {
-	url := "https://code.google.com/p/go/source/detail?r=" + com.Hash
-	r, err := urlfetch.Client(c).Get(url)
-	if err != nil {
-		return "", err
-	}
-	defer r.Body.Close()
-	if r.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("retrieving %v: %v", url, r.Status)
-	}
-	b, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		return "", err
-	}
-	m := clURL.FindAllSubmatch(b, -1)
-	if m == nil {
-		return "", errors.New("no CL URL found on changeset page")
-	}
-	// Return the last visible codereview URL on the page,
-	// in case the change description refers to another CL.
-	return string(m[len(m)-1][1]), nil
-}
-
-var sendFailMailTmpl = template.Must(template.New("notify.txt").
-	Funcs(template.FuncMap(tmplFuncs)).
-	ParseFiles("build/notify.txt"))
 
 func init() {
 	gob.Register(&Commit{}) // for delay
 }
-
-var (
-	sendPerfMailLater = delay.Func("sendPerfMail", sendPerfMailFunc)
-	sendPerfMailTmpl  = template.Must(
-		template.New("perf_notify.txt").
-			Funcs(template.FuncMap(tmplFuncs)).
-			ParseFiles("build/perf_notify.txt"),
-	)
-)
 
 // MUST be called from inside a transaction.
 func sendPerfFailMail(c appengine.Context, builder string, res *PerfResult) error {
@@ -240,47 +241,6 @@ func commonNotify(c appengine.Context, com *Commit, builder, logHash string) err
 	return putCommit(c, com)
 }
 
-// sendFailMail sends a mail notification that the build failed on the
-// provided commit and builder.
-func sendFailMail(c appengine.Context, com *Commit, builder, logHash string) {
-	// get Log
-	k := datastore.NewKey(c, "Log", logHash, 0, nil)
-	l := new(Log)
-	if err := datastore.Get(c, k, l); err != nil {
-		c.Errorf("finding Log record %v: %v", logHash, err)
-		return
-	}
-	logText, err := l.Text()
-	if err != nil {
-		c.Errorf("unpacking Log record %v: %v", logHash, err)
-		return
-	}
-
-	// prepare mail message
-	var body bytes.Buffer
-	err = sendFailMailTmpl.Execute(&body, map[string]interface{}{
-		"Builder": builder, "Commit": com, "LogHash": logHash, "LogText": logText,
-		"Hostname": domain,
-	})
-	if err != nil {
-		c.Errorf("rendering mail template: %v", err)
-		return
-	}
-	subject := fmt.Sprintf("%s broken by %s", builder, shortDesc(com.Desc))
-	msg := &mail.Message{
-		Sender:  mailFrom,
-		To:      []string{failMailTo},
-		ReplyTo: failMailTo,
-		Subject: subject,
-		Body:    body.String(),
-	}
-
-	// send mail
-	if err := mail.Send(c, msg); err != nil {
-		c.Errorf("sending mail: %v", err)
-	}
-}
-
 type PerfChangeBenchmark struct {
 	Name    string
 	Metrics []*PerfChangeMetric
@@ -311,6 +271,15 @@ type PerfChangeMetricSlice []*PerfChangeMetric
 func (l PerfChangeMetricSlice) Len() int           { return len(l) }
 func (l PerfChangeMetricSlice) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
 func (l PerfChangeMetricSlice) Less(i, j int) bool { return l[i].Name < l[j].Name }
+
+var (
+	sendPerfMailLater = delay.Func("sendPerfMail", sendPerfMailFunc)
+	sendPerfMailTmpl  = template.Must(
+		template.New("perf_notify.txt").
+			Funcs(template.FuncMap(tmplFuncs)).
+			ParseFiles("build/perf_notify.txt"),
+	)
+)
 
 func sendPerfMailFunc(c appengine.Context, com *Commit, prevCommitHash, builder string, changes []*PerfChange) {
 	// Sort the changes into the right order.
@@ -347,32 +316,7 @@ func sendPerfMailFunc(c appengine.Context, com *Commit, prevCommitHash, builder 
 		return
 	}
 
-	// First, try to update the CL.
-	v := url.Values{"textmsg": {body.String()}}
-	if updateCL(c, com, v) {
-		return
-	}
-
-	// Otherwise, send mail (with Commit, for independent mail message).
-	body.Reset()
-	err = sendPerfMailTmpl.Execute(&body, map[string]interface{}{
-		"Builder": builder, "Commit": com, "Hostname": domain, "Url": u, "Benchmarks": benchmarks,
-	})
-	if err != nil {
-		c.Errorf("rendering perf mail template: %v", err)
-		return
-	}
-	subject := fmt.Sprintf("Perf changes on %s by %s", builder, shortDesc(com.Desc))
-	msg := &mail.Message{
-		Sender:  mailFrom,
-		To:      []string{failMailTo},
-		ReplyTo: failMailTo,
-		Subject: subject,
-		Body:    body.String(),
-	}
-
-	// send mail
-	if err := mail.Send(c, msg); err != nil {
-		c.Errorf("sending mail: %v", err)
+	if err := postGerritMessage(c, com, body.String()); err != nil {
+		c.Errorf("posting to gerrit: %v", err)
 	}
 }

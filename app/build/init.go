@@ -43,5 +43,8 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 	// Create secret key.
 	key.Secret(c)
 
+	// Create dummy config values.
+	initConfig(c)
+
 	fmt.Fprint(w, "OK")
 }
