@@ -41,10 +41,6 @@ import (
 	"google.golang.org/cloud/compute/metadata"
 )
 
-func init() {
-	delete(dashboard.Builders, "plan9-386-gcepartial")
-}
-
 var (
 	masterKeyFile  = flag.String("masterkey", "", "Path to builder master key. Else fetched using GCE project attribute 'builder-master-key'.")
 	maxLocalBuilds = flag.Int("maxbuilds", 6, "Max concurrent Docker builds (VM builds don't count)")

@@ -64,7 +64,11 @@ func defaultListenAddr() string {
 var osHalt func() // set by some machines
 
 func main() {
+	if runtime.GOOS == "plan9" {
+		log.SetOutput(&plan9LogWriter{w: os.Stderr})
+	}
 	flag.Parse()
+
 	onGCE := metadata.OnGCE()
 	if !onGCE && !strings.HasPrefix(*listenAddr, "localhost:") {
 		log.Printf("** WARNING ***  This server is unsafe and offers no security. Be careful.")
@@ -610,4 +614,24 @@ func (h requirePasswordHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		return
 	}
 	h.h.ServeHTTP(w, r)
+}
+
+// plan9LogWriter truncates log writes to 128 bytes,
+// to work around some Plan 9 and/or GCE serial port bug.
+type plan9LogWriter struct {
+	w   io.Writer
+	buf []byte
+}
+
+func (pw *plan9LogWriter) Write(p []byte) (n int, err error) {
+	const max = 128 - len("\n\x00")
+	if len(p) < max {
+		return pw.w.Write(p)
+	}
+	if pw.buf == nil {
+		pw.buf = make([]byte, max+1)
+	}
+	n = copy(pw.buf[:max], p)
+	pw.buf[n] = '\n'
+	return pw.w.Write(pw.buf[:n+1])
 }
