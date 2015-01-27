@@ -124,8 +124,7 @@ func StartNewVM(ts oauth2.TokenSource, instName, builderType string, opts VMOpts
 	// which the VMs are configured to download at boot and run.
 	// This lets us/ update the buildlet more easily than
 	// rebuilding the whole VM image.
-	addMeta("buildlet-binary-url",
-		"http://storage.googleapis.com/go-builder-data/buildlet."+conf.GOOS()+"-"+conf.GOARCH())
+	addMeta("buildlet-binary-url", conf.BuildletBinaryURL())
 	addMeta("builder-type", builderType)
 	if !opts.TLS.IsZero() {
 		addMeta("tls-cert", opts.TLS.CertPEM)
@@ -232,7 +231,7 @@ OpLoop:
 		break
 	}
 	if !alive {
-		return nil, fmt.Errorf("buildlet didn't come up in %v", timeout)
+		return nil, fmt.Errorf("buildlet didn't come up at %s in %v", buildletURL, timeout)
 	}
 
 	return NewClient(ipPort, opts.TLS), nil

@@ -28,6 +28,7 @@ type BuildConfig struct {
 	VMImage     string // e.g. "openbsd-amd64-56"
 	machineType string // optional GCE instance type
 	Go14URL     string // URL to built Go 1.4 tar.gz
+	buildletURL string // optional override buildlet URL
 
 	// Docker-specific settings: (used if VMImage == "")
 	Image   string // Docker image to use to build
@@ -50,6 +51,14 @@ func (c *BuildConfig) GOARCH() string {
 		return arch
 	}
 	return arch[:i]
+}
+
+// BuildletBinaryURL returns the public URL of this builder's buildlet.
+func (c *BuildConfig) BuildletBinaryURL() string {
+	if c.buildletURL != "" {
+		return c.buildletURL
+	}
+	return "http://storage.googleapis.com/go-builder-data/buildlet." + c.GOOS() + "-" + c.GOARCH()
 }
 
 // AllScript returns the relative path to the operating system's script to
@@ -128,14 +137,7 @@ func (conf BuildConfig) DockerRunArgs(rev, builderKey string) ([]string, error) 
 }
 
 func init() {
-	addBuilder(BuildConfig{Name: "linux-386"})
-	addBuilder(BuildConfig{Name: "linux-386-387", env: []string{"GO386=387"}})
-	addBuilder(BuildConfig{Name: "linux-amd64"})
-	addBuilder(BuildConfig{Name: "linux-amd64-nocgo", env: []string{"CGO_ENABLED=0", "USER=root"}})
-	addBuilder(BuildConfig{Name: "linux-amd64-noopt", env: []string{"GO_GCFLAGS=-N -l"}})
-	addBuilder(BuildConfig{Name: "linux-amd64-race"})
-	addBuilder(BuildConfig{Name: "nacl-386"})
-	addBuilder(BuildConfig{Name: "nacl-amd64p32"})
+	// Docker-based gccgo builders:
 	addBuilder(BuildConfig{
 		Name:    "linux-amd64-gccgo",
 		Image:   "gobuilders/linux-x86-gccgo",
@@ -150,10 +152,14 @@ func init() {
 		dashURL: "https://build.golang.org/gccgo",
 		tool:    "gccgo",
 	})
+
+	// TODO(bradfitz,adg,jbd): convert these (sid, clang, nacl) to VMs too:
 	addBuilder(BuildConfig{Name: "linux-386-sid", Image: "gobuilders/linux-x86-sid"})
 	addBuilder(BuildConfig{Name: "linux-amd64-sid", Image: "gobuilders/linux-x86-sid"})
 	addBuilder(BuildConfig{Name: "linux-386-clang", Image: "gobuilders/linux-x86-clang"})
 	addBuilder(BuildConfig{Name: "linux-amd64-clang", Image: "gobuilders/linux-x86-clang"})
+	addBuilder(BuildConfig{Name: "nacl-386"})
+	addBuilder(BuildConfig{Name: "nacl-amd64p32"})
 
 	// VMs:
 	addBuilder(BuildConfig{
@@ -180,8 +186,55 @@ func init() {
 		Name:        "freebsd-386-gce101",
 		VMImage:     "freebsd-amd64-gce101",
 		machineType: "n1-highcpu-2",
+		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.freebsd-amd64",
 		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-freebsd-amd64.tar.gz",
-		env:         []string{"GOARCH=386", "CC=clang"},
+		// TODO(bradfitz): setting GOHOSTARCH=386 should work
+		// to eliminate some unnecessary work (it works on
+		// Linux), but fails on FreeBSD with:
+		//   ##### ../misc/cgo/testso
+		//   Shared object "libcgosotest.so" not found, required by "main"
+		// Maybe this is a clang thing? We'll see when we do linux clang too.
+		env: []string{"GOARCH=386", "CC=clang"},
+	})
+	addBuilder(BuildConfig{
+		Name:        "linux-386",
+		VMImage:     "linux-buildlet-std",
+		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
+		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOARCH=386", "GOHOSTARCH=386"},
+	})
+	addBuilder(BuildConfig{
+		Name:        "linux-386-387",
+		VMImage:     "linux-buildlet-std",
+		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
+		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOARCH=386", "GOHOSTARCH=386", "GO386=387"},
+	})
+	addBuilder(BuildConfig{
+		Name:    "linux-amd64",
+		VMImage: "linux-buildlet-std",
+		env:     []string{"GOROOT_BOOTSTRAP=/go1.4"},
+	})
+	addBuilder(BuildConfig{
+		Name:    "linux-amd64-nocgo",
+		VMImage: "linux-buildlet-std",
+		env: []string{
+			"GOROOT_BOOTSTRAP=/go1.4",
+			"CGO_ENABLED=0",
+			// This USER=root was required for Docker-based builds but probably isn't required
+			// in the VM anymore, since the buildlet probably already has this in its environment.
+			// (It was required because without cgo, it couldn't find the username)
+			"USER=root",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:    "linux-amd64-noopt",
+		VMImage: "linux-buildlet-std",
+		env:     []string{"GOROOT_BOOTSTRAP=/go1.4", "GO_GCFLAGS=-N -l"},
+	})
+	addBuilder(BuildConfig{
+		Name:        "linux-amd64-race",
+		VMImage:     "linux-buildlet-std",
+		machineType: "n1-highcpu-4",
+		env:         []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	})
 	addBuilder(BuildConfig{
 		Name:        "openbsd-amd64-gce56",
@@ -257,7 +310,7 @@ func addBuilder(c BuildConfig) {
 			c.cmd = "/usr/local/bin/build-command.pl"
 		}
 	}
-	if strings.HasPrefix(c.Name, "linux-") && c.Image == "" {
+	if strings.HasPrefix(c.Name, "linux-") && c.Image == "" && c.VMImage == "" {
 		c.Image = "gobuilders/linux-x86-base"
 	}
 	if c.Image == "" && c.VMImage == "" {
