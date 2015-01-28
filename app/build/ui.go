@@ -98,7 +98,6 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 		p.HasPrev = true
 	}
 	data := &uiTemplateData{d, pkg, commits, builders, tipState, p, branch}
-	data.populateBuildingURLs(c)
 
 	switch r.FormValue("mode") {
 	case "failures":
@@ -108,6 +107,9 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 		jsonHandler(w, r, data)
 		return
 	}
+
+	// Populate building URLs for the HTML UI only.
+	data.populateBuildingURLs(c)
 
 	var buf bytes.Buffer
 	if err := uiTemplate.Execute(&buf, data); err != nil {
