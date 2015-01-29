@@ -807,8 +807,17 @@ func logHandler(w http.ResponseWriter, r *http.Request) {
 	key := datastore.NewKey(c, "Log", hash, 0, nil)
 	l := new(Log)
 	if err := datastore.Get(c, key, l); err != nil {
-		logErr(w, r, err)
-		return
+		if err == datastore.ErrNoSuchEntity {
+			// Fall back to default namespace;
+			// maybe this was on the old dashboard.
+			c := appengine.NewContext(r)
+			key := datastore.NewKey(c, "Log", hash, 0, nil)
+			err = datastore.Get(c, key, l)
+		}
+		if err != nil {
+			logErr(w, r, err)
+			return
+		}
 	}
 	b, err := l.Text()
 	if err != nil {
