@@ -43,10 +43,10 @@ func tarHeader(t *testing.T, fi fileInfo) *tar.Header {
 func TestFileList(t *testing.T) {
 	fl := new(FileList)
 
-	fl.Add(tarHeader(t, fileInfo{name: "symlink-file", target: "link-target", mode: 0644 | os.ModeSymlink}))
+	fl.AddHeader(tarHeader(t, fileInfo{name: "symlink-file", target: "link-target", mode: 0644 | os.ModeSymlink}))
 	fl.AddRegular(tarHeader(t, fileInfo{name: "regular.txt", mode: 0644, size: 7}), 7, strings.NewReader("foo bar"))
 
-	tgz := fl.OpenTarGz()
+	tgz := fl.TarGz()
 	defer tgz.Close()
 	zr, err := gzip.NewReader(tgz)
 	if err != nil {

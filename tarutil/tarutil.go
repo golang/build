@@ -25,13 +25,13 @@ type FileList struct {
 type headerContent struct {
 	header *tar.Header
 
-	// For regularf files:
+	// For regular files:
 	size    int64
 	content io.ReaderAt
 }
 
-// Add adds a non-regular file to the FileList.
-func (fl *FileList) Add(h *tar.Header) {
+// AddHeader adds a non-regular file to the FileList.
+func (fl *FileList) AddHeader(h *tar.Header) {
 	fl.files = append(fl.files, headerContent{header: h})
 }
 
@@ -44,12 +44,12 @@ func (fl *FileList) AddRegular(h *tar.Header, size int64, content io.ReaderAt) {
 	})
 }
 
-// OpenTarGz returns an io.Reader of a gzip-compressed tar file
+// TarGz returns an io.ReadCloser of a gzip-compressed tar file
 // containing the contents of the FileList.
 // All Add calls must happen before OpenTarGz is called.
 // Callers must call Close on the returned ReadCloser to release
 // resources.
-func (fl *FileList) OpenTarGz() io.ReadCloser {
+func (fl *FileList) TarGz() io.ReadCloser {
 	pr, pw := io.Pipe()
 	go func() {
 		err := fl.writeTarGz(pw)
