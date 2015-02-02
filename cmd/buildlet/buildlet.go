@@ -104,7 +104,7 @@ func main() {
 	http.Handle("/exec", requireAuth(handleExec))
 	http.Handle("/halt", requireAuth(handleHalt))
 	http.Handle("/tgz", requireAuth(handleGetTGZ))
-	// TODO: removeall
+	http.Handle("/removeall", requireAuth(handleRemoveAll))
 
 	tlsCert, tlsKey := metadataValue("tls-cert"), metadataValue("tls-key")
 	if (tlsCert == "") != (tlsKey == "") {
@@ -574,6 +574,32 @@ func haltMachine() {
 	log.Printf("Shutdown: %v", err)
 	log.Printf("Ending buildlet process post-halt")
 	os.Exit(0)
+}
+
+func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "requires POST method", http.StatusBadRequest)
+		return
+	}
+	r.ParseForm()
+	paths := r.Form["path"]
+	if len(paths) == 0 {
+		http.Error(w, "requires 'path' parameter", http.StatusBadRequest)
+		return
+	}
+	for _, p := range paths {
+		if !validRelPath(p) {
+			http.Error(w, fmt.Sprintf("bad 'path' parameter: %q", p), http.StatusBadRequest)
+			return
+		}
+	}
+	for _, p := range paths {
+		p = filepath.Join(*workDir, filepath.FromSlash(p))
+		if err := os.RemoveAll(p); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 }
 
 func validRelPath(p string) bool {

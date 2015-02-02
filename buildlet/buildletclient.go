@@ -206,16 +206,17 @@ func (c *Client) Destroy() error {
 	if err != nil {
 		return err
 	}
-	res, err := c.do(req)
+	return c.doOK(req)
+}
+
+// RemoveAll deletes the provided paths, relative to the work directory.
+func (c *Client) RemoveAll(paths ...string) error {
+	form := url.Values{"path": paths}
+	req, err := http.NewRequest("POST", c.URL()+"/removeall", strings.NewReader(form.Encode()))
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		slurp, _ := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
-		return fmt.Errorf("buildlet: HTTP status %v: %s", res.Status, slurp)
-	}
-	return nil
+	return c.doOK(req)
 }
 
 func condRun(fn func()) {
