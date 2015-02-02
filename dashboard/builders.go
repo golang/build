@@ -80,6 +80,28 @@ func (c *BuildConfig) AllScript() string {
 	return "src/all.bash"
 }
 
+// MakeScript returns the relative path to the operating system's script to
+// do the build.
+// Example values are "src/make.bash", "src/make.bat", "src/make.rc".
+func (c *BuildConfig) MakeScript() string {
+	if strings.HasPrefix(c.Name, "windows-") {
+		return "src/make.bat"
+	}
+	if strings.HasPrefix(c.Name, "plan9-") {
+		return "src/make.rc"
+	}
+	return "src/make.bash"
+}
+
+// GorootFinal returns the default install location for
+// releases for this platform.
+func (c *BuildConfig) GorootFinal() string {
+	if strings.HasPrefix(c.Name, "windows-") {
+		return "c:\\go"
+	}
+	return "/usr/local/go"
+}
+
 func (c *BuildConfig) UsesDocker() bool { return c.VMImage == "" }
 func (c *BuildConfig) UsesVM() bool     { return c.VMImage != "" }
 
