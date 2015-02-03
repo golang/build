@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -27,10 +28,22 @@ func NewClient(ipPort string, kp KeyPair) *Client {
 		password: kp.Password(),
 		httpClient: &http.Client{
 			Transport: &http.Transport{
+				Dial:    defaultDialer(),
 				DialTLS: kp.tlsDialer(),
 			},
 		},
 	}
+}
+
+// defaultDialer returns the net/http package's default Dial function.
+// Notably, this sets TCP keep-alive values, so when we kill VMs
+// (whose TCP stacks stop replying, forever), we don't leak file
+// descriptors for otherwise forever-stalled TCP connections.
+func defaultDialer() func(network, addr string) (net.Conn, error) {
+	if fn := http.DefaultTransport.(*http.Transport).Dial; fn != nil {
+		return fn
+	}
+	return net.Dial
 }
 
 // A Client interacts with a single buildlet.

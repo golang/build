@@ -54,7 +54,7 @@ func (kp KeyPair) tlsDialer() func(network, addr string) (net.Conn, error) {
 		if network != "tcp" {
 			return nil, fmt.Errorf("unexpected network %q", network)
 		}
-		plainConn, err := net.Dial("tcp", addr)
+		plainConn, err := defaultDialer()("tcp", addr)
 		if err != nil {
 			return nil, err
 		}
