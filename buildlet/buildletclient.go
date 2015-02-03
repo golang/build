@@ -15,6 +15,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
+
+	"golang.org/x/oauth2"
 )
 
 // NewClient returns a *Client that will manipulate ipPort,
@@ -230,6 +233,50 @@ func (c *Client) RemoveAll(paths ...string) error {
 		return err
 	}
 	return c.doOK(req)
+}
+
+// DestroyVM shuts down the buildlet and destroys the VM instance.
+func (c *Client) DestroyVM(ts oauth2.TokenSource, proj, zone, instance string) error {
+	gceErrc := make(chan error, 1)
+	buildletErrc := make(chan error, 1)
+	go func() {
+		gceErrc <- DestroyVM(ts, proj, zone, instance)
+	}()
+	go func() {
+		buildletErrc <- c.Destroy()
+	}()
+	timeout := time.NewTimer(5 * time.Second)
+	defer timeout.Stop()
+
+	var retErr error
+	var gceDone, buildletDone bool
+	for !gceDone || !buildletDone {
+		select {
+		case err := <-gceErrc:
+			if err != nil {
+				retErr = err
+			}
+			gceDone = true
+		case err := <-buildletErrc:
+			if err != nil {
+				retErr = err
+			}
+			buildletDone = true
+		case <-timeout.C:
+			e := ""
+			if !buildletDone {
+				e = "timeout asking buildlet to shut down"
+			}
+			if !gceDone {
+				if e != "" {
+					e += " and "
+				}
+				e += "timeout asking GCE to delete builder VM"
+			}
+			return errors.New(e)
+		}
+	}
+	return retErr
 }
 
 func condRun(fn func()) {

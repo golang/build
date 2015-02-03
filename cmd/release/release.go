@@ -108,7 +108,10 @@ func makeRelease(bc dashboard.BuildConfig) (err error) {
 
 	defer func() {
 		log.Printf("%v: Destroying VM.", instance)
-		haltAndDestroy(client, instance)
+		err := client.DestroyVM(projTokenSource(), *project, *zone, instance)
+		if err != nil {
+			log.Printf("%v: Destroying VM: %v", instance, err)
+		}
 	}()
 
 	// Push source to VM
@@ -173,49 +176,6 @@ func makeRelease(bc dashboard.BuildConfig) (err error) {
 	log.Printf("%v: Wrote %q.", instance, filename)
 
 	return nil
-}
-
-func haltAndDestroy(bc *buildlet.Client, instance string) {
-	// TODO(adg): move this to buildlet library.
-
-	// Ask buildlet to kill itself, and tell GCE to kill it too.
-	gceErrc := make(chan error, 1)
-	buildletErrc := make(chan error, 1)
-	go func() {
-		gceErrc <- buildlet.DestroyVM(projTokenSource(), *project, *zone, instance)
-	}()
-	go func() {
-		buildletErrc <- bc.Destroy()
-	}()
-	timeout := time.NewTimer(5 * time.Second)
-	defer timeout.Stop()
-
-	var gceDone, buildletDone bool
-	for !gceDone || !buildletDone {
-		select {
-		case err := <-gceErrc:
-			if err != nil {
-				log.Printf("%v: GCE: %v", instance, err)
-			} else {
-				log.Printf("%v: Requested GCE delete.", instance)
-			}
-			gceDone = true
-		case err := <-buildletErrc:
-			if err != nil {
-				log.Printf("%v: Buildlet: %v", instance, err)
-			} else {
-				log.Printf("%v: Requested buildlet to shut down.", instance)
-			}
-			buildletDone = true
-		case <-timeout.C:
-			if !buildletDone {
-				log.Printf("%v: timeout asking buildlet to shut down", instance)
-			}
-			if !gceDone {
-				log.Printf("%v: timeout asking GCE to delete builder VM", instance)
-			}
-		}
-	}
 }
 
 func projTokenSource() oauth2.TokenSource {
