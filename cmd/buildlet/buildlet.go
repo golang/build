@@ -105,6 +105,7 @@ func main() {
 	http.Handle("/halt", requireAuth(handleHalt))
 	http.Handle("/tgz", requireAuth(handleGetTGZ))
 	http.Handle("/removeall", requireAuth(handleRemoveAll))
+	http.Handle("/workdir", requireAuth(handleWorkDir))
 
 	tlsCert, tlsKey := metadataValue("tls-cert"), metadataValue("tls-key")
 	if (tlsCert == "") != (tlsKey == "") {
@@ -581,7 +582,10 @@ func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "requires POST method", http.StatusBadRequest)
 		return
 	}
-	r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	paths := r.Form["path"]
 	if len(paths) == 0 {
 		http.Error(w, "requires 'path' parameter", http.StatusBadRequest)
@@ -600,6 +604,14 @@ func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+func handleWorkDir(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "requires GET method", http.StatusBadRequest)
+		return
+	}
+	fmt.Fprint(w, *workDir)
 }
 
 func validRelPath(p string) bool {

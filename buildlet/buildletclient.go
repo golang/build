@@ -232,6 +232,7 @@ func (c *Client) RemoveAll(paths ...string) error {
 	if err != nil {
 		return err
 	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	return c.doOK(req)
 }
 
@@ -277,6 +278,27 @@ func (c *Client) DestroyVM(ts oauth2.TokenSource, proj, zone, instance string) e
 		}
 	}
 	return retErr
+}
+
+// WorkDir returns the absolute path to the buildlet work directory.
+func (c *Client) WorkDir() (string, error) {
+	req, err := http.NewRequest("GET", c.URL()+"/workdir", nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := c.do(req)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.New(resp.Status)
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 func condRun(fn func()) {
