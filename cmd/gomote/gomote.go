@@ -79,6 +79,7 @@ func registerCommands() {
 	registerCommand("run", "run a command on a buildlet", run)
 	registerCommand("put", "put files on a buildlet", put)
 	registerCommand("puttar", "extract a tar.gz to a buildlet", putTar)
+	registerCommand("put14", "put Go 1.4 in place", put14)
 	registerCommand("gettar", "extract a tar.gz from a buildlet", getTar)
 }
 

@@ -5,10 +5,15 @@
 package main
 
 import (
+	"archive/tar"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"strings"
+
+	"golang.org/x/build/dashboard"
+	"golang.org/x/build/tarutil"
 )
 
 // put a .tar.gz
@@ -48,7 +53,23 @@ func putTar(args []string) error {
 		if fs.NArg() != 1 {
 			fs.Usage()
 		}
-		return bc.PutTarFromURL(tarURL, dir)
+		if err := bc.PutTarFromURL(tarURL, dir); err != nil {
+			return err
+		}
+		if rev != "" {
+			// Put a VERSION file there too, to avoid git usage.
+			version := strings.NewReader("devel " + rev)
+			var vtar tarutil.FileList
+			vtar.AddRegular(&tar.Header{
+				Name: "VERSION",
+				Mode: 0644,
+				Size: int64(version.Len()),
+			}, int64(version.Len()), version)
+			tgz := vtar.TarGz()
+			defer tgz.Close()
+			return bc.PutTar(tgz, dir)
+		}
+		return nil
 	}
 
 	var tgz io.Reader = os.Stdin
@@ -61,6 +82,34 @@ func putTar(args []string) error {
 		tgz = f
 	}
 	return bc.PutTar(tgz, dir)
+}
+
+// put go1.4 in the workdir
+func put14(args []string) error {
+	fs := flag.NewFlagSet("put14", flag.ContinueOnError)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "create usage: gomote put14 <buildlet-name>")
+		fs.PrintDefaults()
+		os.Exit(1)
+	}
+	fs.Parse(args)
+	if fs.NArg() != 1 {
+		fs.Usage()
+	}
+	name := fs.Arg(0)
+	conf, ok := dashboard.Builders[name]
+	if !ok {
+		return fmt.Errorf("unknown builder %q", name)
+	}
+	if conf.Go14URL == "" {
+		fmt.Println("No Go14URL field defined for %q; ignoring. (may be baked into image)", name)
+		return nil
+	}
+	bc, err := namedClient(name)
+	if err != nil {
+		return err
+	}
+	return bc.PutTarFromURL(conf.Go14URL, "go1.4")
 }
 
 // put single files

@@ -17,11 +17,26 @@ import (
 	"golang.org/x/build/dashboard"
 )
 
+func vmTypes() (s []string) {
+	for k, conf := range dashboard.Builders {
+		if conf.UsesVM() {
+			s = append(s, k)
+		}
+	}
+	sort.Strings(s)
+	return
+}
+
 func create(args []string) error {
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
+
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "create usage: gomote create [create-opts] <type>\n\n")
+		fmt.Fprintln(os.Stderr, "create usage: gomote create [create-opts] <type>\n")
 		fs.PrintDefaults()
+		fmt.Fprintln(os.Stderr, "\nValid types:\n")
+		for _, t := range vmTypes() {
+			fmt.Fprintf(os.Stderr, "  * %s\n", t)
+		}
 		os.Exit(1)
 	}
 	var timeout time.Duration
