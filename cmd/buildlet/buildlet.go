@@ -77,11 +77,21 @@ func main() {
 		fixMTU()
 	}
 	if *workDir == "" {
-		dir, err := ioutil.TempDir("", "buildlet-scatch")
-		if err != nil {
-			log.Fatalf("error creating workdir with ioutil.TempDir: %v", err)
+		switch runtime.GOOS {
+		case "windows":
+			// We want a short path on Windows, due to
+			// Windows issues with maximum path lengths.
+			*workDir = `C:\workdir`
+			if err := os.MkdirAll(*workDir, 0755); err != nil {
+				log.Fatalf("error creating workdir: %v", err)
+			}
+		default:
+			dir, err := ioutil.TempDir("", "buildlet-scatch")
+			if err != nil {
+				log.Fatalf("error creating workdir with ioutil.TempDir: %v", err)
+			}
+			*workDir = dir
 		}
-		*workDir = dir
 	}
 	// This is hard-coded because the client-supplied environment has
 	// no way to expand relative paths from the workDir.
@@ -300,7 +310,7 @@ func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		rel := strings.TrimPrefix(strings.TrimPrefix(path, base), "/")
+		rel := strings.TrimPrefix(filepath.ToSlash(strings.TrimPrefix(path, base)), "/")
 		var linkName string
 		if fi.Mode()&os.ModeSymlink != 0 {
 			linkName, err = os.Readlink(path)
@@ -507,7 +517,11 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	cmdOutput := flushWriter{w}
 	cmd.Stdout = cmdOutput
 	cmd.Stderr = cmdOutput
-	cmd.Env = append(os.Environ(), r.PostForm["env"]...)
+	cmd.Env = append(baseEnv(), r.PostForm["env"]...)
+
+	fmt.Fprintf(cmdOutput, ":: Running %s with args %q and env %q in dir %s\n\n",
+		cmd.Path, cmd.Args, cmd.Env, cmd.Dir)
+
 	err := cmd.Start()
 	if err == nil {
 		go func() {
@@ -530,6 +544,58 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set(hdrProcessState, state)
 	log.Printf("Run = %s", state)
+}
+
+func baseEnv() []string {
+	if runtime.GOOS == "windows" {
+		return windowsBaseEnv()
+	}
+	return os.Environ()
+}
+
+func windowsBaseEnv() (e []string) {
+	e = append(e, "GOBUILDEXIT=1") // exit all.bat with completion status
+	btype, err := metadata.InstanceAttributeValue("builder-type")
+	if err != nil {
+		log.Fatalf("Failed to get builder-type: %v", err)
+		return nil
+	}
+	is64 := strings.HasPrefix(btype, "windows-amd64")
+	for _, pair := range os.Environ() {
+		const pathEq = "PATH="
+		if hasPrefixFold(pair, pathEq) {
+			e = append(e, "PATH="+windowsPath(pair[len(pathEq):], is64))
+		} else {
+			e = append(e, pair)
+		}
+	}
+	return e
+}
+
+// hasPrefixFold is a case-insensitive strings.HasPrefix.
+func hasPrefixFold(s, prefix string) bool {
+	return len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix)
+}
+
+// windowsPath cleans the windows %PATH% environment.
+// is64Bit is whether this is a windows-amd64-* builder.
+// The PATH is assumed to be that of the image described in env/windows/README.
+func windowsPath(old string, is64Bit bool) string {
+	vv := filepath.SplitList(old)
+	newPath := make([]string, 0, len(vv))
+	for _, v := range vv {
+		// The base VM image has both the 32-bit and 64-bit gcc installed.
+		// They're both in the environment, so scrub the one
+		// we don't want (TDM-GCC-64 or TDM-GCC-32).
+		if strings.Contains(v, "TDM-GCC-") {
+			gcc64 := strings.Contains(v, "TDM-GCC-64")
+			if is64Bit != gcc64 {
+				continue
+			}
+		}
+		newPath = append(newPath, v)
+	}
+	return strings.Join(newPath, string(filepath.ListSeparator))
 }
 
 func handleHalt(w http.ResponseWriter, r *http.Request) {

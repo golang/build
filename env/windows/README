@@ -3,8 +3,13 @@ on Linux and scripts qemu to prepare a GCE image, the Windows image
 builder image is prepared by hand, following this list of
 instructions:
 
--- in GCE, create a new Windows 2008 server instance. Set its initial username
-   to "wingopher" and the password to something.
+-- In the GCE project's Networks > Default network, edit the "RDP" rule and
+   set its "Target tag" to "allow-rdp".  (VMs will require the "allow-rdp" tag
+   to have any RDP access from the outside)
+
+-- in GCE, create a new Windows 2008 server instance. Set its initial
+   username to "wingopher" and the password to something. Be sure to
+   uncheck "Delete the boot disk when instance terminates".
 
 -- boot it. first boot is slow.
 
@@ -16,14 +21,13 @@ instructions:
      the builds later. And we don't care about security since this isn't
      going to be Internet-facing. No ports will be accessible
    * disable Windows Error Report (“Not participating”)
-
-TODO: disable the Windows firewall too. might break some outgoing net
-      tests? Figure out where to do this.
+   * disable the Windows firewall (GCE provides its own)
 
 -- Enable auto-login:
    * Start > Run > Open: "control userpasswords2" [OK]
    * Uncheck the "Users must enter a user name..." box (it already was
      unchecked for me)
+   * Click to highlight the sole user (this makes it be the auto-login user)
    * Press "OK"
    * Enter password twice.
 
@@ -31,7 +35,7 @@ TODO: disable the Windows firewall too. might break some outgoing net
    * Bring up cmd.exe (Start > Run > "cmd" [OK])
    * Copy/paste (Right click: paste) this into cmd.exe:
 
-     bitsadmin /transfer mydownloadjob  /download /priority normal https://storage.googleapis.com/winstrap/winstrap-2015-01-03-440bb77.exe c:\users\wingopher\Desktop\winstrap.exe
+     bitsadmin /transfer mydownloadjob  /download /priority normal https://storage.googleapis.com/winstrap/winstrap-2015-01-03-43d7fa3.exe c:\users\wingopher\Desktop\winstrap.exe
 
    * It should appear on the desktop.
 
@@ -52,16 +56,26 @@ TODO: disable the Windows firewall too. might break some outgoing net
    c:\TDM-GCC-32.  Don’t pick other locations. The gobuilder adds
    those to your path.
 
-TODO(bradfitz): this document is incomplete. Cover gcesysprep,
-regedit(?), windows-startup-script-cmd, etc.  And I think winstrap
-will need to write things to something outside of C:\Users, since
-sysprep on reboot nukes all users, at least on GCE. We probably need
-to run the buildlet's stage0 from the windows-startup-script-cmd. Find
-& ask Windows experts.
+-- disable GCE service so things boot quickly and don't kill the user
+   we've configured on boot.
+   - Run Regedit,
+   - Go to the registry entry "HKEY_LOCAL_MACHINE/SYSTEM/CurrentControlSet/Services"
+   - delete the Google Compute Engine folder.
 
--- 
+-- disable GCEStartupTask in the "Task Scheduler", for the same reason.
+   Maybe only one of these two is required. Might as well do both.
 
-Docs:
+-- shutdown the machine
+
+-- delete the GCE image (but not its boot disk)
+
+-- Go to GCE Compute > Images > New Image and create an image named "windows-buildlet" with
+   "Source Type" of "Disk" and pick the Source Disk from the previously-deleted image.
+   You can now delete the old disk if you want.
+
+
+** Misc docs:
+
 http://www.win2008workstation.com/configure-auto-logon/
 https://cloud.google.com/compute/docs/operating-systems/windows
   -- notably "windows-startup-script-cmd" ala:

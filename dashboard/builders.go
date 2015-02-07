@@ -303,7 +303,28 @@ func init() {
 		// and we'll stop timing out on tests.
 		machineType: "n1-highcpu-2",
 	})
-
+	addBuilder(BuildConfig{
+		Name:        "windows-amd64-gce",
+		VMImage:     "windows-buildlet",
+		machineType: "n1-highcpu-2",
+		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-windows-amd64.tar.gz",
+		env:         []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+	})
+	addBuilder(BuildConfig{
+		Name:        "windows-amd64-race",
+		VMImage:     "windows-buildlet",
+		machineType: "n1-highcpu-4",
+		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-windows-amd64.tar.gz",
+		env:         []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+	})
+	addBuilder(BuildConfig{
+		Name:        "windows-386-gce",
+		VMImage:     "windows-buildlet",
+		machineType: "n1-highcpu-2",
+		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.windows-amd64",
+		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-windows-386.tar.gz",
+		env:         []string{"GOARCH=386", "GOHOSTARCH=386"},
+	})
 }
 
 func addBuilder(c BuildConfig) {

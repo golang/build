@@ -102,7 +102,7 @@ func put14(args []string) error {
 		return fmt.Errorf("unknown builder %q", name)
 	}
 	if conf.Go14URL == "" {
-		fmt.Println("No Go14URL field defined for %q; ignoring. (may be baked into image)", name)
+		fmt.Printf("No Go14URL field defined for %q; ignoring. (may be baked into image)\n", name)
 		return nil
 	}
 	bc, err := namedClient(name)
