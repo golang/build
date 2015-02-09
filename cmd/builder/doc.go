@@ -36,6 +36,10 @@ Optional flags:
   -rev=N: Build revision N and exit
 
   -cmd="./all.bash": Build command (specify absolute or relative to go/src)
+    This flag is overridden in the following conditions:
+
+    - If the build key ends in -race, then race.bash or race.bat will be chosen.
+    - If the build key begins with nacl, then nacltest.bash will be chosen.
 
   -v: Verbose logging
 

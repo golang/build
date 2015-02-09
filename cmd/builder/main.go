@@ -74,6 +74,7 @@ var (
 	releaseRe   = regexp.MustCompile(`^release\.r[0-9\-.]+`)
 	allCmd      = "all" + suffix
 	makeCmd     = "make" + suffix
+	naclCmd     = "nacltest.bash" // nacl support is linux only
 	raceCmd     = "race" + suffix
 	cleanCmd    = "clean" + suffix
 	suffix      = defaultSuffix()
@@ -361,9 +362,14 @@ func (b *Builder) builderEnv(name string) (builderEnv, error) {
 // buildCmd returns the build command to invoke.
 // Builders which contain the string '-race' in their
 // name will override *buildCmd and return raceCmd.
+// Builders which start with "nacl-" will override
+// *buildCmd and return naclCmd.
 func (b *Builder) buildCmd() string {
 	if strings.Contains(b.name, "-race") {
 		return raceCmd
+	}
+	if strings.HasPrefix(b.name, "nacl-") {
+		return naclCmd
 	}
 	return *buildCmd
 }
