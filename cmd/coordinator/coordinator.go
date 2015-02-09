@@ -797,6 +797,7 @@ func buildInVM(conf dashboard.BuildConfig, st *buildStatus) (retErr error) {
 		Output:      st,
 		OnStartExec: func() { st.logEventTime("running_exec") },
 		ExtraEnv:    conf.Env(),
+		Debug:       true,
 	})
 	if err != nil {
 		return err

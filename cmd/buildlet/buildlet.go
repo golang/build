@@ -15,6 +15,7 @@ package main // import "golang.org/x/build/cmd/buildlet"
 import (
 	"archive/tar"
 	"compress/gzip"
+	"crypto/sha1"
 	"crypto/tls"
 	"errors"
 	"flag"
@@ -116,6 +117,7 @@ func main() {
 	http.Handle("/tgz", requireAuth(handleGetTGZ))
 	http.Handle("/removeall", requireAuth(handleRemoveAll))
 	http.Handle("/workdir", requireAuth(handleWorkDir))
+	http.Handle("/ls", requireAuth(handleLs))
 
 	tlsCert, tlsKey := metadataValue("tls-cert"), metadataValue("tls-key")
 	if (tlsCert == "") != (tlsKey == "") {
@@ -356,6 +358,32 @@ func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleWriteTGZ(w http.ResponseWriter, r *http.Request) {
+	urlParam, _ := url.ParseQuery(r.URL.RawQuery)
+	baseDir := *workDir
+	if dir := urlParam.Get("dir"); dir != "" {
+		if !validRelativeDir(dir) {
+			http.Error(w, "bogus dir", http.StatusBadRequest)
+			return
+		}
+		dir = filepath.FromSlash(dir)
+		baseDir = filepath.Join(baseDir, dir)
+
+		// Special case: if the directory is "go1.4" and it already exists, do nothing.
+		// This lets clients do a blind write to it and not do extra work.
+		if r.Method == "POST" && dir == "go1.4" {
+			if fi, err := os.Stat(baseDir); err == nil && fi.IsDir() {
+				log.Printf("skipping URL puttar to go1.4 dir; already exists")
+				io.WriteString(w, "SKIP")
+				return
+			}
+		}
+
+		if err := os.MkdirAll(baseDir, 0755); err != nil {
+			http.Error(w, "mkdir of base: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
 	var tgz io.Reader
 	switch r.Method {
 	case "PUT":
@@ -380,21 +408,6 @@ func handleWriteTGZ(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "requires PUT or POST method", http.StatusBadRequest)
 		return
-	}
-
-	urlParam, _ := url.ParseQuery(r.URL.RawQuery)
-	baseDir := *workDir
-	if dir := urlParam.Get("dir"); dir != "" {
-		if !validRelativeDir(dir) {
-			http.Error(w, "bogus dir", http.StatusBadRequest)
-			return
-		}
-		dir = filepath.FromSlash(dir)
-		baseDir = filepath.Join(baseDir, dir)
-		if err := os.MkdirAll(baseDir, 0755); err != nil {
-			http.Error(w, "mkdir of base: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
 	}
 
 	err := untar(tgz, baseDir)
@@ -455,6 +468,16 @@ func untar(r io.Reader, dir string) error {
 				return fmt.Errorf("only wrote %d bytes to %s; expected %d", n, abs, f.Size)
 			}
 			log.Printf("wrote %s", abs)
+			if !f.ModTime.IsZero() {
+				if err := os.Chtimes(abs, f.ModTime, f.ModTime); err != nil {
+					// benign error. Gerrit doesn't even set the
+					// modtime in these, and we don't end up relying
+					// on it anywhere (the gomote push command relies
+					// on digests only), so this is a little pointless
+					// for now.
+					log.Printf("error changing modtime: %v", err)
+				}
+			}
 		case mode.IsDir():
 			if err := os.MkdirAll(abs, 0755); err != nil {
 				return err
@@ -491,6 +514,8 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	cmdPath := r.FormValue("cmd") // required
 	absCmd := cmdPath
 	sysMode := r.FormValue("mode") == "sys"
+	debug, _ := strconv.ParseBool(r.FormValue("debug"))
+
 	if sysMode {
 		if cmdPath == "" {
 			http.Error(w, "requires 'cmd' parameter", http.StatusBadRequest)
@@ -519,8 +544,10 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	cmd.Stderr = cmdOutput
 	cmd.Env = append(baseEnv(), r.PostForm["env"]...)
 
-	fmt.Fprintf(cmdOutput, ":: Running %s with args %q and env %q in dir %s\n\n",
-		cmd.Path, cmd.Args, cmd.Env, cmd.Dir)
+	if debug {
+		fmt.Fprintf(cmdOutput, ":: Running %s with args %q and env %q in dir %s\n\n",
+			cmd.Path, cmd.Args, cmd.Env, cmd.Dir)
+	}
 
 	err := cmd.Start()
 	if err == nil {
@@ -670,6 +697,11 @@ func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// If we nuked the work directory, recreate it.
+	if err := os.MkdirAll(*workDir, 0755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 func handleWorkDir(w http.ResponseWriter, r *http.Request) {
@@ -678,6 +710,84 @@ func handleWorkDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Fprint(w, *workDir)
+}
+
+func handleLs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "requires GET method", http.StatusBadRequest)
+		return
+	}
+	dir := r.FormValue("dir")
+	recursive, _ := strconv.ParseBool(r.FormValue("recursive"))
+	digest, _ := strconv.ParseBool(r.FormValue("digest"))
+	skip := r.Form["skip"] // '/'-separated relative dirs
+
+	if !validRelativeDir(dir) {
+		http.Error(w, "bogus dir", http.StatusBadRequest)
+		return
+	}
+	base := filepath.Join(*workDir, filepath.FromSlash(dir))
+	anyOutput := false
+	err := filepath.Walk(base, func(path string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel := strings.TrimPrefix(filepath.ToSlash(strings.TrimPrefix(path, base)), "/")
+		if rel == "" && fi.IsDir() {
+			return nil
+		}
+		if fi.IsDir() {
+			for _, v := range skip {
+				if rel == v {
+					return filepath.SkipDir
+				}
+			}
+		}
+		anyOutput = true
+		fmt.Fprintf(w, "%s\t%s", fi.Mode(), rel)
+		if fi.Mode().IsRegular() {
+			fmt.Fprintf(w, "\t%d\t%s", fi.Size(), fi.ModTime().UTC().Format(time.RFC3339))
+			if digest {
+				if sha1, err := fileSHA1(path); err != nil {
+					return err
+				} else {
+					io.WriteString(w, "\t"+sha1)
+				}
+			}
+		} else if fi.Mode().IsDir() {
+			io.WriteString(w, "/")
+		}
+		io.WriteString(w, "\n")
+		if fi.IsDir() && !recursive {
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	if err != nil {
+		log.Printf("Walk error: %v", err)
+		if anyOutput {
+			// Decent way to signal failure to the caller, since it'll break
+			// the chunked response, rather than have a valid EOF.
+			conn, _, _ := w.(http.Hijacker).Hijack()
+			conn.Close()
+			return
+		}
+		http.Error(w, "Walk error: "+err.Error(), 500)
+		return
+	}
+}
+
+func fileSHA1(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	s1 := sha1.New()
+	if _, err := io.Copy(s1, f); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", s1.Sum(nil)), nil
 }
 
 func validRelPath(p string) bool {

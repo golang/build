@@ -7,6 +7,7 @@
 package buildlet // import "golang.org/x/build/buildlet"
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -152,6 +153,10 @@ type ExecOpts struct {
 	// the buildlet's environment.
 	SystemLevel bool
 
+	// Debug, if true, instructs to the buildlet to print extra debug
+	// info to the output before the command begins executing.
+	Debug bool
+
 	// OnStartExec is an optional hook that runs after the 200 OK
 	// response from the buildlet, but before the output begins
 	// writing to Output.
@@ -175,6 +180,7 @@ func (c *Client) Exec(cmd string, opts ExecOpts) (remoteErr, execErr error) {
 		"mode":   {mode},
 		"cmdArg": opts.Args,
 		"env":    opts.ExtraEnv,
+		"debug":  {fmt.Sprint(opts.Debug)},
 	}
 	req, err := http.NewRequest("POST", c.URL()+"/exec", strings.NewReader(form.Encode()))
 	if err != nil {
@@ -227,6 +233,9 @@ func (c *Client) Destroy() error {
 
 // RemoveAll deletes the provided paths, relative to the work directory.
 func (c *Client) RemoveAll(paths ...string) error {
+	if len(paths) == 0 {
+		return nil
+	}
 	form := url.Values{"path": paths}
 	req, err := http.NewRequest("POST", c.URL()+"/removeall", strings.NewReader(form.Encode()))
 	if err != nil {
@@ -299,6 +308,79 @@ func (c *Client) WorkDir() (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+// DirEntry is the information about a file on a buildlet.
+type DirEntry struct {
+	// line is of the form "drw-rw-rw\t<name>" and then if a regular file,
+	// also "\t<size>\t<modtime>". in either case, without trailing newline.
+	// TODO: break into parsed fields?
+	line string
+}
+
+func (de DirEntry) String() string {
+	return de.line
+}
+
+func (de DirEntry) Name() string {
+	f := strings.Split(de.line, "\t")
+	if len(f) < 2 {
+		return ""
+	}
+	return f[1]
+}
+
+func (de DirEntry) Digest() string {
+	f := strings.Split(de.line, "\t")
+	if len(f) < 5 {
+		return ""
+	}
+	return f[4]
+}
+
+// ListDirOpts are options for Client.ListDir.
+type ListDirOpts struct {
+	// Recursive controls whether the directory is listed
+	// recursively.
+	Recursive bool
+
+	// Skip are the directories to skip, relative to the directory
+	// passed to ListDir. Each item should contain only forward
+	// slashes and not start or end in slashes.
+	Skip []string
+
+	// Digest controls whether the SHA-1 digests of regular files
+	// are returned.
+	Digest bool
+}
+
+// ListDir lists the contents of a directory.
+// The fn callback is run for each entry.
+func (c *Client) ListDir(dir string, opts ListDirOpts, fn func(DirEntry)) error {
+	param := url.Values{
+		"dir":       {dir},
+		"recursive": {fmt.Sprint(opts.Recursive)},
+		"skip":      opts.Skip,
+		"digest":    {fmt.Sprint(opts.Digest)},
+	}
+	req, err := http.NewRequest("GET", c.URL()+"/ls?"+param.Encode(), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return errors.New(resp.Status)
+	}
+	sc := bufio.NewScanner(resp.Body)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		fn(DirEntry{line: line})
+	}
+	return sc.Err()
 }
 
 func condRun(fn func()) {

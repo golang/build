@@ -40,6 +40,9 @@ func list(args []string) error {
 }
 
 func namedClient(name string) (*buildlet.Client, error) {
+	if strings.Contains(name, ":") {
+		return buildlet.NewClient(name, buildlet.NoKeyPair), nil
+	}
 	// TODO(bradfitz): cache the list on disk and avoid the API call?
 	vms, err := buildlet.ListVMs(projTokenSource(), *proj, *zone)
 	if err != nil {

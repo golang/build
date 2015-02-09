@@ -22,6 +22,8 @@ func run(args []string) error {
 	}
 	var sys bool
 	fs.BoolVar(&sys, "system", false, "run inside the system, and not inside the workdir; this is implicit if cmd starts with '/'")
+	var debug bool
+	fs.BoolVar(&debug, "debug", false, "write debug info about the command's execution before it begins")
 	var env stringSlice
 	fs.Var(&env, "e", "Environment variable KEY=value. The -e flag may be repeated multiple times to add multiple things to the environment.")
 
@@ -40,6 +42,7 @@ func run(args []string) error {
 		Output:      os.Stdout,
 		Args:        fs.Args()[2:],
 		ExtraEnv:    []string(env),
+		Debug:       debug,
 	})
 	if execErr != nil {
 		return fmt.Errorf("Error trying to execute %s: %v", cmd, execErr)
