@@ -38,7 +38,6 @@ func (b *Builder) envv() []string {
 		e = []string{
 			"GOOS=" + b.goos,
 			"GOARCH=" + b.goarch,
-			"GOROOT_FINAL=/usr/local/go",
 		}
 		switch b.goos {
 		case "android", "nacl":
@@ -68,12 +67,11 @@ func (b *Builder) envvWindows() []string {
 	var start map[string]string
 	if *buildTool == "go" {
 		start = map[string]string{
-			"GOOS":         b.goos,
-			"GOHOSTOS":     b.goos,
-			"GOARCH":       b.goarch,
-			"GOHOSTARCH":   b.goarch,
-			"GOROOT_FINAL": `c:\go`,
-			"GOBUILDEXIT":  "1", // exit all.bat with completion status.
+			"GOOS":        b.goos,
+			"GOHOSTOS":    b.goos,
+			"GOARCH":      b.goarch,
+			"GOHOSTARCH":  b.goarch,
+			"GOBUILDEXIT": "1", // exit all.bat with completion status.
 		}
 	}
 
