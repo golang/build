@@ -6,10 +6,13 @@ package main
 
 import (
 	"archive/tar"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"golang.org/x/build/dashboard"
@@ -112,20 +115,63 @@ func put14(args []string) error {
 	return bc.PutTarFromURL(conf.Go14URL, "go1.4")
 }
 
-// put single files
+// put single file
 func put(args []string) error {
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "create usage: gomote put [put-opts] <type>\n\n")
+		fmt.Fprintln(os.Stderr, "create usage: gomote put [put-opts] <buildlet-name> <source or '-' for stdin> [destination]\n\n")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
+	modeStr := fs.String("mode", "", "Unix file mode (octal); default to source file mode")
 	fs.Parse(args)
-	if fs.NArg() != 1 {
+	if n := fs.NArg(); n < 2 || n > 3 {
 		fs.Usage()
 	}
-	return fmt.Errorf("TODO")
-	builderType := fs.Arg(0)
-	_ = builderType
-	return nil
+
+	bc, err := namedClient(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+
+	var r io.Reader = os.Stdin
+	var mode os.FileMode = 0666
+
+	src := fs.Arg(1)
+	if src != "-" {
+		f, err := os.Open(src)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		r = f
+
+		if *modeStr == "" {
+			fi, err := f.Stat()
+			if err != nil {
+				return err
+			}
+			mode = fi.Mode()
+		}
+	}
+	if *modeStr != "" {
+		modeInt, err := strconv.ParseInt(*modeStr, 8, 64)
+		if err != nil {
+			return err
+		}
+		mode = os.FileMode(modeInt)
+		if !mode.IsRegular() {
+			return fmt.Errorf("bad mode: %v", mode)
+		}
+	}
+
+	dest := fs.Arg(2)
+	if dest == "" {
+		if src == "-" {
+			return errors.New("must specify destination file name when source is standard input")
+		}
+		dest = filepath.Base(src)
+	}
+
+	return bc.Put(r, dest, mode)
 }

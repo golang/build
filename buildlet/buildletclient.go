@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -114,6 +115,19 @@ func (c *Client) PutTarFromURL(tarURL, dir string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return c.doOK(req)
+}
+
+// Put writes the provided file to path (relative to workdir) and sets mode.
+func (c *Client) Put(r io.Reader, path string, mode os.FileMode) error {
+	param := url.Values{
+		"path": {path},
+		"mode": {fmt.Sprint(int64(mode))},
+	}
+	req, err := http.NewRequest("PUT", c.URL()+"/write?"+param.Encode(), r)
+	if err != nil {
+		return err
+	}
 	return c.doOK(req)
 }
 

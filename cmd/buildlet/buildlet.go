@@ -112,6 +112,7 @@ func main() {
 		return requirePasswordHandler{http.HandlerFunc(handler), password}
 	}
 	http.Handle("/writetgz", requireAuth(handleWriteTGZ))
+	http.Handle("/write", requireAuth(handleWrite))
 	http.Handle("/exec", requireAuth(handleExec))
 	http.Handle("/halt", requireAuth(handleHalt))
 	http.Handle("/tgz", requireAuth(handleGetTGZ))
@@ -420,6 +421,61 @@ func handleWriteTGZ(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	io.WriteString(w, "OK")
+}
+
+func handleWrite(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "PUT" {
+		http.Error(w, "requires POST method", http.StatusBadRequest)
+		return
+	}
+
+	param, _ := url.ParseQuery(r.URL.RawQuery)
+
+	path := filepath.FromSlash(param.Get("path"))
+	if path == "" || !validRelPath(path) {
+		http.Error(w, "bad path", http.StatusBadRequest)
+		return
+	}
+
+	modeInt, err := strconv.ParseInt(param.Get("mode"), 10, 64)
+	mode := os.FileMode(modeInt)
+	if err != nil || !mode.IsRegular() {
+		http.Error(w, "bad mode", http.StatusBadRequest)
+		return
+	}
+
+	// Make the directory if it doesn't exist.
+	if dir := filepath.Dir(path); dir != "." || dir != string(filepath.Separator) {
+		// TODO(adg): support dirmode parameter?
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if err := writeFile(r.Body, path, mode); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	io.WriteString(w, "OK")
+}
+
+func writeFile(r io.Reader, path string, mode os.FileMode) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(f, r); err != nil {
+		f.Close()
+		return err
+	}
+	// Try to set the mode again, in case the file already existed.
+	if err := f.Chmod(mode); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // untar reads the gzip-compressed tar file from r and writes it into dir.
