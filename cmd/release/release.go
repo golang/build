@@ -17,7 +17,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"golang.org/x/build/auth"
 	"golang.org/x/build/buildlet"
@@ -27,14 +26,17 @@ import (
 )
 
 var (
+	target = flag.String("target", "", "If specified, build specific target platform ('linux-amd64')")
+
 	rev      = flag.String("rev", "", "Go revision to build")
 	toolsRev = flag.String("tools", "", "Tools revision to build")
-	project  = flag.String("project", "symbolic-datum-552", "Google Cloud Project")
-	zone     = flag.String("zone", "us-central1-a", "Compute Engine zone")
-	target   = flag.String("target", "", "If specified, build specific target platform")
-)
+	tourRev  = flag.String("tour", "master", "Tour revision to include")
+	blogRev  = flag.String("blog", "master", "Blog revision to include")
+	netRev   = flag.String("blog", "master", "Net revision to include")
 
-const timeout = time.Hour
+	project = flag.String("project", "symbolic-datum-552", "Google Cloud Project")
+	zone    = flag.String("zone", "us-central1-a", "Compute Engine zone")
+)
 
 type Build struct {
 	OS, Arch string
@@ -75,12 +77,17 @@ var builds = []*Build{
 	},
 }
 
-const toolsRepo = "golang.org/x/tools"
+const (
+	toolsRepo = "golang.org/x/tools"
+	blogRepo  = "golang.org/x/blog"
+	tourRepo  = "golang.org/x/tour"
+)
 
 var toolPaths = []string{
 	"golang.org/x/tools/cmd/cover",
 	"golang.org/x/tools/cmd/godoc",
 	"golang.org/x/tools/cmd/vet",
+	"golang.org/x/tour/gotour",
 }
 
 var preBuildCleanFiles = []string{
@@ -138,7 +145,6 @@ func (b *Build) make() (err error) {
 		Zone:        *zone,
 		ProjectID:   *project,
 		TLS:         keypair,
-		DeleteIn:    timeout,
 		Description: fmt.Sprintf("release buildlet for %s", os.Getenv("USER")),
 		OnInstanceRequested: func() {
 			log.Printf("%v: Sent create request. Waiting for operation.", b)
@@ -168,21 +174,29 @@ func (b *Build) make() (err error) {
 		return err
 	}
 
-	const (
-		goDir    = "go"
-		goPath   = "gopath"
-		toolsDir = goPath + "/src/" + toolsRepo
-	)
-
 	// Push source to VM
 	log.Printf("%v: Pushing source to VM.", b)
-	tar := "https://go.googlesource.com/go/+archive/" + *rev + ".tar.gz"
-	if err := client.PutTarFromURL(tar, goDir); err != nil {
-		return err
-	}
-	tar = "https://go.googlesource.com/tools/+archive/" + *toolsRev + ".tar.gz"
-	if err := client.PutTarFromURL(tar, toolsDir); err != nil {
-		return err
+	const (
+		goDir  = "go"
+		goPath = "gopath"
+	)
+	for _, r := range []struct {
+		repo, rev string
+	}{
+		{"go", *rev},
+		{"tools", *toolsRev},
+		{"blog", *blogRev},
+		{"tour", *tourRev},
+		{"net", *netRev},
+	} {
+		dir := goDir
+		if r.repo != "go" {
+			dir = goPath + "/src/golang.org/x/" + r.repo
+		}
+		tar := "https://go.googlesource.com/" + r.repo + "/+archive/" + r.rev + ".tar.gz"
+		if err := client.PutTarFromURL(tar, dir); err != nil {
+			return err
+		}
 	}
 
 	log.Printf("%v: Cleaning goroot (pre-build).", b)
@@ -232,6 +246,7 @@ func (b *Build) make() (err error) {
 		out := new(bytes.Buffer)
 		remoteErr, err := client.Exec(goCmd, buildlet.ExecOpts{
 			Output:   out,
+			Dir:      ".", // root of buildlet work directory
 			Args:     args,
 			ExtraEnv: env,
 		})
@@ -273,28 +288,39 @@ func (b *Build) make() (err error) {
 		}
 	}
 
-	for _, p := range toolPaths {
-		log.Printf("%v: Building %v.", b, p)
-		if err := runGo("install", p); err != nil {
-			return err
-		}
+	log.Printf("%v: Building %v.", b, strings.Join(toolPaths, ", "))
+	if err := runGo(append([]string{"install"}, toolPaths...)...); err != nil {
+		return err
 	}
 
-	// TODO(adg): check out blog, add to misc
-	// TODO(adg): check out tour, add to misc
+	log.Printf("%v: Pushing and running releaselet.", b)
+	// TODO(adg): locate releaselet.go in GOPATH
+	const releaselet = "releaselet.go"
+	f, err := os.Open(releaselet)
+	if err != nil {
+		return err
+	}
+	err = client.Put(f, releaselet, 0666)
+	f.Close()
+	if err != nil {
+		return err
+	}
+	if err := runGo("run", releaselet); err != nil {
+		return err
+	}
 
 	log.Printf("%v: Cleaning goroot (post-build).", b)
 	// Need to delete everything except the final "go" directory,
 	// as we make the tarball relative to workdir.
-	cleanFiles := append(addPrefix(goDir, postBuildCleanFiles), goPath)
+	cleanFiles := append(addPrefix(goDir, postBuildCleanFiles), goPath, releaselet)
 	if err := client.RemoveAll(cleanFiles...); err != nil {
 		return err
 	}
 
-	// TODO(adg): build msi files on windows and pkg files on osx
+	// TODO(adg): fetch msi or pkg files
 
 	// Download tarball
-	log.Printf("%v: Downloading tarball", b)
+	log.Printf("%v: Downloading tarball.", b)
 	tgz, err := client.GetTar(".")
 	if err != nil {
 		return err
@@ -302,7 +328,7 @@ func (b *Build) make() (err error) {
 	// TODO(adg): deduce actual version
 	version := "VERSION"
 	filename := "go." + version + "." + b.String() + ".tar.gz"
-	f, err := os.Create(filename)
+	f, err = os.Create(filename)
 	if err != nil {
 		return err
 	}
