@@ -436,6 +436,7 @@ func handleWrite(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad path", http.StatusBadRequest)
 		return
 	}
+	path = filepath.Join(*workDir, path)
 
 	modeInt, err := strconv.ParseInt(param.Get("mode"), 10, 64)
 	mode := os.FileMode(modeInt)
@@ -445,12 +446,10 @@ func handleWrite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Make the directory if it doesn't exist.
-	if dir := filepath.Dir(path); dir != "." || dir != string(filepath.Separator) {
-		// TODO(adg): support dirmode parameter?
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+	// TODO(adg): support dirmode parameter?
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	if err := writeFile(r.Body, path, mode); err != nil {
@@ -569,6 +568,7 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 
 	cmdPath := r.FormValue("cmd") // required
 	absCmd := cmdPath
+	dir := r.FormValue("dir") // optional
 	sysMode := r.FormValue("mode") == "sys"
 	debug, _ := strconv.ParseBool(r.FormValue("debug"))
 
@@ -577,12 +577,29 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "requires 'cmd' parameter", http.StatusBadRequest)
 			return
 		}
+		if dir == "" {
+			dir = *workDir
+		} else {
+			dir = filepath.FromSlash(dir)
+			if !filepath.IsAbs(dir) {
+				dir = filepath.Join(*workDir, dir)
+			}
+		}
 	} else {
 		if !validRelPath(cmdPath) {
 			http.Error(w, "requires 'cmd' parameter", http.StatusBadRequest)
 			return
 		}
 		absCmd = filepath.Join(*workDir, filepath.FromSlash(cmdPath))
+		if dir == "" {
+			dir = filepath.Dir(absCmd)
+		} else {
+			if !validRelPath(dir) {
+				http.Error(w, "bogus 'dir' parameter", http.StatusBadRequest)
+				return
+			}
+			dir = filepath.Join(*workDir, filepath.FromSlash(dir))
+		}
 	}
 
 	if f, ok := w.(http.Flusher); ok {
@@ -590,11 +607,7 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cmd := exec.Command(absCmd, r.PostForm["cmdArg"]...)
-	if sysMode {
-		cmd.Dir = *workDir
-	} else {
-		cmd.Dir = filepath.Dir(absCmd)
-	}
+	cmd.Dir = dir
 	cmdOutput := flushWriter{w}
 	cmd.Stdout = cmdOutput
 	cmd.Stderr = cmdOutput

@@ -156,6 +156,11 @@ type ExecOpts struct {
 	// If nil, the output is discarded.
 	Output io.Writer
 
+	// Dir is the directory from which to execute the command.
+	// It is optional. If not specified, it defaults to the directory of
+	// the command, or the work directory if SystemLevel is set.
+	Dir string
+
 	// Args are the arguments to pass to the cmd given to Client.Exec.
 	Args []string
 
@@ -192,6 +197,7 @@ func (c *Client) Exec(cmd string, opts ExecOpts) (remoteErr, execErr error) {
 	form := url.Values{
 		"cmd":    {cmd},
 		"mode":   {mode},
+		"dir":    {opts.Dir},
 		"cmdArg": opts.Args,
 		"env":    opts.ExtraEnv,
 		"debug":  {fmt.Sprint(opts.Debug)},
