@@ -33,4 +33,11 @@ func main() {
 	}
 	v, _ := json.MarshalIndent(cl, "", "  ")
 	os.Stdout.Write(v)
+
+	log.Printf("SetReview = %v", c.SetReview("I2383397c056a9ffe174ac7c2c6e5bb334406fbf9", "current", gerrit.ReviewInput{
+		Message: "test test",
+		Labels: map[string]int{
+			"TryBot-Result": -1,
+		},
+	}))
 }

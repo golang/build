@@ -7,8 +7,12 @@ package gerrit
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -46,11 +50,24 @@ func (c *Client) httpClient() *http.Client {
 	return http.DefaultClient
 }
 
-func (c *Client) doGet(dst interface{}, path string, arg url.Values) error {
+func (c *Client) do(dst interface{}, method, path string, arg url.Values, body interface{}) error {
+	var bodyr io.Reader
+	var contentType string
+	if body != nil {
+		v, err := json.MarshalIndent(body, "", "  ")
+		if err != nil {
+			return err
+		}
+		bodyr = bytes.NewReader(v)
+		contentType = "application/json"
+	}
 	var err error
-	req, err := http.NewRequest("GET", c.url+path+"?"+arg.Encode(), nil)
+	req, err := http.NewRequest(method, c.url+path+"?"+arg.Encode(), bodyr)
 	if err != nil {
 		return err
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 	c.auth.setAuth(c, req)
 	res, err := c.httpClient().Do(req)
@@ -58,6 +75,11 @@ func (c *Client) doGet(dst interface{}, path string, arg url.Values) error {
 		return err
 	}
 	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
+		return fmt.Errorf("HTTP status %s; %s", res.Status, body)
+	}
 
 	// The JSON response begins with an XSRF-defeating header
 	// like ")]}\n". Read that and skip it.
@@ -123,6 +145,9 @@ func condInt(n int) []string {
 	return nil
 }
 
+// QueryChanges queries changes. The q parameter is a Gerrit search query.
+// For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-changes
+// For the query syntax, see https://gerrit-review.googlesource.com/Documentation/user-search.html#_search_operators
 func (c *Client) QueryChanges(q string, opts ...QueryChangesOpt) ([]*ChangeInfo, error) {
 	var opt QueryChangesOpt
 	switch len(opts) {
@@ -133,10 +158,29 @@ func (c *Client) QueryChanges(q string, opts ...QueryChangesOpt) ([]*ChangeInfo,
 		return nil, errors.New("only 1 option struct supported")
 	}
 	var changes []*ChangeInfo
-	err := c.doGet(&changes, "/changes/", url.Values{
+	err := c.do(&changes, "GET", "/changes/", url.Values{
 		"q": {q},
 		"n": condInt(opt.N),
 		"o": opt.Fields,
-	})
+	}, nil)
 	return changes, err
+}
+
+type ReviewInput struct {
+	Message string         `json:"message,omitempty"`
+	Labels  map[string]int `json:"labels,omitempty"`
+}
+
+type reviewInfo struct {
+	Labels map[string]int `json:"labels,omitempty"`
+}
+
+// SetReview leaves a message on a change and/or modifies labels.
+// For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#set-review
+// The changeID is https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-id
+// The revision is https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#revision-id
+func (c *Client) SetReview(changeID, revision string, review ReviewInput) error {
+	var res reviewInfo
+	return c.do(&res, "POST", fmt.Sprintf("/changes/%s/revisions/%s/review", changeID, revision),
+		nil, review)
 }
