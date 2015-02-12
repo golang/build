@@ -23,9 +23,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	c := gerrit.NewClient("https://go-review.googlesource.com/a",
+	c := gerrit.NewClient("https://go-review.googlesource.com",
 		gerrit.BasicAuth("git-gobot.golang.org", strings.TrimSpace(string(gobotPass))))
-	cl, err := c.QueryChanges("label:TryBot=1 label:TryBot-Result=0 project:go status:open", gerrit.QueryChangesOpt{
+	cl, err := c.QueryChanges("label:Run-TryBot=1 label:TryBot-Result=0 project:go status:open", gerrit.QueryChangesOpt{
 		Fields: []string{"CURRENT_REVISION"},
 	})
 	if err != nil {
@@ -37,7 +37,7 @@ func main() {
 	log.Printf("SetReview = %v", c.SetReview("I2383397c056a9ffe174ac7c2c6e5bb334406fbf9", "current", gerrit.ReviewInput{
 		Message: "test test",
 		Labels: map[string]int{
-			"TryBot-Result": -1,
+			"TryBot-Result": 0,
 		},
 	}))
 }

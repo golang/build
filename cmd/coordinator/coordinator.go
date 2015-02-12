@@ -12,6 +12,7 @@ import (
 	"crypto/hmac"
 	"crypto/md5"
 	"crypto/rand"
+	"crypto/sha1"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -34,33 +35,76 @@ import (
 	"camlistore.org/pkg/syncutil"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/gerrit"
 	"golang.org/x/build/types"
+	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/compute/v1"
+	"google.golang.org/cloud"
 	"google.golang.org/cloud/compute/metadata"
+	"google.golang.org/cloud/storage"
 )
 
 var (
 	masterKeyFile  = flag.String("masterkey", "", "Path to builder master key. Else fetched using GCE project attribute 'builder-master-key'.")
 	maxLocalBuilds = flag.Int("maxbuilds", 6, "Max concurrent Docker builds (VM builds don't count)")
 
+	// TODO(bradfitz): remove this list and just query it from the compute API:
+	// http://godoc.org/google.golang.org/api/compute/v1#RegionsService.Get
+	// and Region.Zones: http://godoc.org/google.golang.org/api/compute/v1#Region
 	cleanZones = flag.String("zones", "us-central1-a,us-central1-b,us-central1-f", "Comma-separated list of zones to periodically clean of stale build VMs (ones that failed to shut themselves down)")
 
 	// Debug flags:
 	just = flag.String("just", "", "If non-empty, run single build in the foreground. Requires rev.")
 	rev  = flag.String("rev", "", "Revision to build.")
+
+	buildLogBucket = flag.String("logbucket", "go-build-log", "GCS bucket to put trybot build failures in")
 )
+
+// LOCK ORDER:
+//   statusMu, buildStatus.mu, trySet.mu
+// TODO(bradfitz,adg): rewrite the coordinator
 
 var (
 	startTime = time.Now()
 	watchers  = map[string]watchConfig{} // populated at startup, keyed by repo, e.g. "https://go.googlesource.com/go"
-	donec     = make(chan builderRev)    // reports of finished builders
+	donec     = make(chan builderRev)    // reports of finished builders (but not try builds)
 
-	statusMu   sync.Mutex // guards both status (ongoing ones) and statusDone (just finished)
+	statusMu   sync.Mutex // guards the following four structures; see LOCK ORDER comment above
 	status     = map[builderRev]*buildStatus{}
-	statusDone []*buildStatus // finished recently, capped to maxStatusDone
+	statusDone []*buildStatus         // finished recently, capped to maxStatusDone
+	tries      = map[tryKey]*trySet{} // trybot builds
+	tryList    []tryKey
 )
+
+// tryBuilders must be VMs. The Docker container builds are going away.
+var tryBuilders []dashboard.BuildConfig
+
+func init() {
+	tryList := []string{
+		"linux-386",
+		"linux-amd64",
+		"linux-amd64-race",
+		"freebsd-386-gce101",
+		"freebsd-amd64-gce101",
+		"windows-386-gce",
+		"windows-amd64-gce",
+		"openbsd-386-gce56",
+		"openbsd-amd64-gce56",
+		"plan9-386-gcepartial",
+		"nacl-386",
+		"nacl-amd64p32",
+	}
+	for _, bname := range tryList {
+		conf, ok := dashboard.Builders[bname]
+		if ok && conf.UsesVM() {
+			tryBuilders = append(tryBuilders, conf)
+		} else {
+			log.Printf("ignoring invalid or non-VM try builder config %q", bname)
+		}
+	}
+}
 
 const (
 	maxStatusDone = 30
@@ -80,6 +124,9 @@ var (
 	computeService *compute.Service
 	externalIP     string
 	tokenSource    oauth2.TokenSource
+	serviceCtx     context.Context
+	errTryDeps     error // non-nil if try bots are disabled
+	gerritClient   *gerrit.Client
 )
 
 func initGCE() error {
@@ -106,7 +153,35 @@ func initGCE() error {
 		return fmt.Errorf("ExternalIP: %v", err)
 	}
 	tokenSource = google.ComputeTokenSource("default")
-	computeService, _ = compute.New(oauth2.NewClient(oauth2.NoContext, tokenSource))
+	httpClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
+	serviceCtx = cloud.NewContext(projectID, httpClient)
+	computeService, _ = compute.New(httpClient)
+	errTryDeps = checkTryBuildDeps()
+	if errTryDeps != nil {
+		log.Printf("TryBot builders disabled due to error: %v", errTryDeps)
+	} else {
+		log.Printf("TryBot builders enabled.")
+	}
+
+	return nil
+}
+
+func checkTryBuildDeps() error {
+	if !hasStorageScope() {
+		return errors.New("coordinator's GCE instance lacks the storage service scope")
+	}
+	wr := storage.NewWriter(serviceCtx, *buildLogBucket, "hello.txt")
+	fmt.Fprintf(wr, "Hello, world! Coordinator start-up at %v", time.Now())
+	if err := wr.Close(); err != nil {
+		return fmt.Errorf("test write of a GCS object failed: %v", err)
+	}
+	gobotPass, err := metadata.ProjectAttributeValue("gobot-password")
+	if err != nil {
+		return fmt.Errorf("failed to get project metadata 'gobot-password': %v", err)
+	}
+	gerritClient = gerrit.NewClient("https://go-review.googlesource.com",
+		gerrit.BasicAuth("git-gobot.golang.org", strings.TrimSpace(string(gobotPass))))
+
 	return nil
 }
 
@@ -141,8 +216,8 @@ func recordResult(builderName string, ok bool, hash, buildLog string, runTime ti
 	return dash("POST", "result", args, req, nil)
 }
 
-// pingDashboard is a goroutine that periodically POSTS to build.golang.org/building
-// to let it know that we're still working on a build.
+// pingDashboard runs in its own goroutine, created periodically to
+// POST to build.golang.org/building to let it know that we're still working on a build.
 func pingDashboard(st *buildStatus) {
 	u := "https://build.golang.org/building?" + url.Values{
 		"builder": []string{st.name},
@@ -218,6 +293,7 @@ func main() {
 
 	workc := make(chan builderRev)
 	go findWorkLoop(workc)
+	go findTryWorkLoop()
 	// TODO(cmang): gccgo will need its own findWorkLoop
 
 	ticker := time.NewTicker(1 * time.Minute)
@@ -357,6 +433,19 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	recent = append(recent, statusDone...)
 	numTotal := len(status)
 	numDocker, err := numDockerBuilds()
+
+	// TODO: make this prettier.
+	var tryBuf bytes.Buffer
+	for _, key := range tryList {
+		if ts := tries[key]; ts != nil {
+			state := ts.state()
+			fmt.Fprintf(&tryBuf, "Change-ID: %v Commit: %v\n", key.ChangeID, key.Commit)
+			fmt.Fprintf(&tryBuf, "   Remain: %d, fails: %v\n", state.remain, state.failed)
+			for _, bs := range ts.builds {
+				fmt.Fprintf(&tryBuf, "  %s: running=%v\n", bs.name, bs.isRunning())
+			}
+		}
+	}
 	statusMu.Unlock()
 
 	sort.Sort(byAge(active))
@@ -374,6 +463,14 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, "<pre>")
 	for _, st := range active {
 		io.WriteString(w, st.htmlStatusLine())
+	}
+	io.WriteString(w, "</pre>")
+
+	io.WriteString(w, "<h2>trybot state</h2><pre>")
+	if errTryDeps != nil {
+		fmt.Fprintf(w, "<b>trybots disabled: </b>: %v\n", html.EscapeString(errTryDeps.Error()))
+	} else {
+		w.Write(tryBuf.Bytes())
 	}
 	io.WriteString(w, "</pre>")
 
@@ -514,6 +611,267 @@ func findWork(work chan<- builderRev) error {
 	return nil
 }
 
+// findTryWorkLoop is a goroutine which loops periodically and queries
+// Gerrit for TryBot work.
+func findTryWorkLoop() {
+	if errTryDeps != nil {
+		return
+	}
+	ticker := time.NewTicker(60 * time.Second)
+	for {
+		if err := findTryWork(); err != nil {
+			log.Printf("failed to find trybot work: %v", err)
+		}
+		<-ticker.C
+	}
+}
+
+func findTryWork() error {
+	cis, err := gerritClient.QueryChanges("label:Run-TryBot=1 label:TryBot-Result=0 project:go status:open", gerrit.QueryChangesOpt{
+		Fields: []string{"CURRENT_REVISION"},
+	})
+	if err != nil {
+		return err
+	}
+	if len(cis) == 0 {
+		return nil
+	}
+
+	statusMu.Lock()
+	defer statusMu.Unlock()
+
+	tryList = make([]tryKey, 0, len(cis))
+	wanted := map[tryKey]bool{}
+	for _, ci := range cis {
+		if ci.ChangeID == "" || ci.CurrentRevision == "" {
+			log.Printf("Warning: skipping incomplete %#v", ci)
+			continue
+		}
+		key := tryKey{
+			ChangeID: ci.ChangeID,
+			Commit:   ci.CurrentRevision,
+		}
+		tryList = append(tryList, key)
+		wanted[key] = true
+		if _, ok := tries[key]; ok {
+			// already in progress
+			continue
+		}
+		tries[key] = newTrySet(key)
+	}
+	for k, ts := range tries {
+		if !wanted[k] {
+			delete(tries, k)
+			go ts.cancelBuilds()
+		}
+	}
+	return nil
+}
+
+type tryKey struct {
+	ChangeID string // I1a27695838409259d1586a0adfa9f92bccf7ceba
+	Commit   string // ecf3dffc81dc21408fb02159af352651882a8383
+}
+
+// trySet is a the state of a set of builds of different
+// configurations, all for the same (Change-ID, Commit) pair.  The
+// sets which are still wanted (not already submitted or canceled) are
+// stored in the global 'tries' map.
+type trySet struct {
+	// immutable
+	tryKey
+
+	// mu guards state.
+	// See LOCK ORDER comment above.
+	mu sync.Mutex
+	trySetState
+}
+
+type trySetState struct {
+	remain int
+	failed []string // build names
+	builds []*buildStatus
+}
+
+func (ts trySetState) clone() trySetState {
+	return trySetState{
+		remain: ts.remain,
+		failed: append([]string(nil), ts.failed...),
+		builds: append([]*buildStatus(nil), ts.builds...),
+	}
+}
+
+// newTrySet creates a new trySet group of builders for a given key,
+// the (Change-ID, Commit) pair.  It also starts goroutines for each
+// build.
+//
+// Must hold statusMu.
+func newTrySet(key tryKey) *trySet {
+	log.Printf("Starting new trybot set for %v", key)
+	ts := &trySet{
+		tryKey: key,
+		trySetState: trySetState{
+			remain: len(tryBuilders),
+			builds: make([]*buildStatus, len(tryBuilders)),
+		},
+	}
+	go ts.notifyStarting()
+	for i, bconf := range tryBuilders {
+		ch := make(chan builderRev, 1)
+		bs := startBuildingInVM(bconf, key.Commit, ts, ch)
+		brev := builderRev{name: bconf.Name, rev: key.Commit}
+		status[brev] = bs
+		ts.builds[i] = bs
+		go ts.awaitTryBuild(i, bconf, bs, ch)
+	}
+	return ts
+}
+
+// state returns a copy of the trySet's state.
+func (ts *trySet) state() trySetState {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	return ts.trySetState.clone()
+}
+
+// notifyStarting runs in its own goroutine and posts to Gerrit that
+// the trybots have started on the user's CL with a link of where to watch.
+func (ts *trySet) notifyStarting() {
+	// Ignore error. This isn't critical.
+	gerritClient.SetReview(ts.ChangeID, ts.Commit, gerrit.ReviewInput{
+		// TODO: good hostname, SSL, and pretty handler for just this tryset
+		Message: "TryBots beginning. Status page: http://107.178.219.46/",
+	})
+}
+
+// awaitTryBuild runs in its own goroutine and waits for a build in a
+// trySet to complete.
+//
+// If the build fails without getting to the end, it sleeps and
+// reschedules it, as long as it's still wanted.
+func (ts *trySet) awaitTryBuild(idx int, bconf dashboard.BuildConfig, bs *buildStatus, ch chan builderRev) {
+	for {
+	WaitCh:
+		for {
+			timeout := time.NewTimer(5 * time.Minute)
+			select {
+			case <-ch:
+				timeout.Stop()
+				break WaitCh
+			case <-timeout.C:
+				if !ts.wanted() {
+					// Build was canceled.
+					return
+				}
+			}
+		}
+
+		if bs.hasEvent("done") {
+			ts.noteBuildComplete(bconf, bs)
+			return
+		}
+
+		// Sleep a bit and retry.
+		time.Sleep(30 * time.Second)
+		if !ts.wanted() {
+			return
+		}
+		bs = startBuildingInVM(bconf, ts.Commit, ts, ch)
+		brev := builderRev{name: bconf.Name, rev: ts.Commit}
+		setStatus(brev, bs)
+		ts.mu.Lock()
+		ts.builds[idx] = bs
+		ts.mu.Unlock()
+	}
+}
+
+// wanted reports whether this trySet is still active.
+//
+// If the commmit has been submitted, or change abandoned, or the
+// checkbox unchecked, wanted returns false.
+func (ts *trySet) wanted() bool {
+	statusMu.Lock()
+	defer statusMu.Unlock()
+	_, ok := tries[ts.tryKey]
+	return ok
+}
+
+// cancelBuilds run in its own goroutine and cancels this trySet's
+// currently-active builds because they're no longer wanted.
+func (ts *trySet) cancelBuilds() {
+	// TODO(bradfitz): implement
+}
+
+func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus) {
+	brev := builderRev{name: bconf.Name, rev: ts.Commit}
+	markDone(brev)
+
+	bs.mu.Lock()
+	succeeded := bs.succeeded
+	var buildLog string
+	if !succeeded {
+		buildLog = bs.output.String()
+	}
+	bs.mu.Unlock()
+
+	ts.mu.Lock()
+	ts.remain--
+	remain := ts.remain
+	if !succeeded {
+		ts.failed = append(ts.failed, bconf.Name)
+	}
+	anyFail := len(ts.failed) > 0
+	var failList []string
+	if remain == 0 {
+		// Copy of it before we unlock mu, even though it's gone down to 0.
+		failList = append([]string(nil), ts.failed...)
+	}
+	ts.mu.Unlock()
+
+	if !succeeded {
+		s1 := sha1.New()
+		io.WriteString(s1, buildLog)
+		objName := fmt.Sprintf("%s/%s_%x.log", bs.rev[:8], bs.name, s1.Sum(nil)[:4])
+		wr := storage.NewWriter(serviceCtx, *buildLogBucket, objName)
+		wr.ContentType = "text/plain; charset=utf-8"
+		wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
+		if _, err := io.WriteString(wr, buildLog); err != nil {
+			log.Printf("Failed to write to GCS: %v", err)
+			return
+		}
+		if err := wr.Close(); err != nil {
+			log.Printf("Failed to write to GCS: %v", err)
+			return
+		}
+		if err := gerritClient.SetReview(ts.ChangeID, ts.Commit, gerrit.ReviewInput{
+			Message: fmt.Sprintf(
+				"This change failed on %s:\n"+
+					"See https://storage.googleapis.com/%s/%s\n\n"+
+					"Consult https://build.golang.org/ to see whether it's a new failure.",
+				bs.name, *buildLogBucket, objName),
+		}); err != nil {
+			log.Printf("Failed to call Gerrit: %v", err)
+			return
+		}
+	}
+
+	if remain == 0 {
+		score, msg := 1, "TryBots are happy."
+		if anyFail {
+			score, msg = -1, fmt.Sprintf("%d of %d TryBots failed: %s", len(failList), len(ts.builds), strings.Join(failList, ", "))
+		}
+		if err := gerritClient.SetReview(ts.ChangeID, ts.Commit, gerrit.ReviewInput{
+			Message: msg,
+			Labels: map[string]int{
+				"TryBot-Result": score,
+			},
+		}); err != nil {
+			log.Printf("Failed to call Gerrit: %v", err)
+			return
+		}
+	}
+}
+
 // builderRev is a build configuration type and a revision.
 type builderRev struct {
 	name string // e.g. "linux-amd64-race"
@@ -614,7 +972,7 @@ func numDockerBuilds() (n int, err error) {
 
 func startBuilding(conf dashboard.BuildConfig, rev string) (*buildStatus, error) {
 	if conf.UsesVM() {
-		return startBuildingInVM(conf, rev)
+		return startBuildingInVM(conf, rev, nil, donec), nil
 	} else {
 		return startBuildingInDocker(conf, rev)
 	}
@@ -684,8 +1042,10 @@ func randHex(n int) string {
 }
 
 // startBuildingInVM starts a VM on GCE running the buildlet binary to build rev.
+// The ts may be nil if this isn't a try build.
+// The done channel always receives exactly 1 value.
 // TODO(bradfitz): move this into a buildlet client package.
-func startBuildingInVM(conf dashboard.BuildConfig, rev string) (*buildStatus, error) {
+func startBuildingInVM(conf dashboard.BuildConfig, rev string, ts *trySet, done chan<- builderRev) *buildStatus {
 	brev := builderRev{
 		name: conf.Name,
 		rev:  rev,
@@ -698,6 +1058,7 @@ func startBuildingInVM(conf dashboard.BuildConfig, rev string) (*buildStatus, er
 		builderRev: brev,
 		start:      time.Now(),
 		instName:   name,
+		trySet:     ts,
 	}
 
 	go func() {
@@ -711,9 +1072,9 @@ func startBuildingInVM(conf dashboard.BuildConfig, rev string) (*buildStatus, er
 		if err != nil {
 			fmt.Fprintf(st, "\n\nError: %v\n", err)
 		}
-		donec <- builderRev{conf.Name, rev}
+		done <- builderRev{conf.Name, rev}
 	}()
-	return st, nil
+	return st
 }
 
 func buildInVM(conf dashboard.BuildConfig, st *buildStatus) (retErr error) {
@@ -803,15 +1164,17 @@ func buildInVM(conf dashboard.BuildConfig, st *buildStatus) (retErr error) {
 		return err
 	}
 	st.logEventTime("done")
-	var log string
-	if remoteErr != nil {
-		log = st.logs()
-	}
-	if err := recordResult(st.name, remoteErr == nil, st.rev, log, time.Since(execStartTime)); err != nil {
+	if st.trySet == nil {
+		var buildLog string
 		if remoteErr != nil {
-			return fmt.Errorf("Remote error was %q but failed to report it to the dashboard: %v", remoteErr, err)
+			buildLog = st.logs()
 		}
-		return fmt.Errorf("Build succeeded but failed to report it to the dashboard: %v", err)
+		if err := recordResult(st.name, remoteErr == nil, st.rev, buildLog, time.Since(execStartTime)); err != nil {
+			if remoteErr != nil {
+				return fmt.Errorf("Remote error was %q but failed to report it to the dashboard: %v", remoteErr, err)
+			}
+			return fmt.Errorf("Build succeeded but failed to report it to the dashboard: %v", err)
+		}
 	}
 	if remoteErr != nil {
 		return fmt.Errorf("%s failed: %v", conf.AllScript(), remoteErr)
@@ -830,6 +1193,7 @@ type buildStatus struct {
 	builderRev
 	start     time.Time
 	container string // container ID for docker, else it's a VM
+	trySet    *trySet
 
 	// Immutable, used by VM only:
 	instName string
@@ -846,6 +1210,12 @@ func (st *buildStatus) setDone(succeeded bool) {
 	defer st.mu.Unlock()
 	st.succeeded = succeeded
 	st.done = time.Now()
+}
+
+func (st *buildStatus) isRunning() bool {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.done.IsZero()
 }
 
 func (st *buildStatus) logEventTime(event string) {
@@ -879,6 +1249,10 @@ func (st *buildStatus) htmlStatusLine() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "<a href='https://github.com/golang/go/wiki/DashboardBuilders'>%s</a> rev <a href='%s%s'>%s</a>",
 		st.name, urlPrefix, st.rev, st.rev)
+	if ts := st.trySet; ts != nil {
+		fmt.Fprintf(&buf, " (trying <a href='https://go-review.googlesource.com/#/q/%s'>%s</a>)",
+			ts.ChangeID, ts.ChangeID[:8])
+	}
 
 	if st.done.IsZero() {
 		buf.WriteString(", running")
@@ -1126,7 +1500,7 @@ func deleteVM(zone, instName string) {
 	log.Printf("Sent request to delete instance %q in zone %q. Operation ID == %v", instName, zone, op.Id)
 }
 
-func hasComputeScope() bool {
+func hasScope(want string) bool {
 	if !metadata.OnGCE() {
 		return false
 	}
@@ -1136,11 +1510,19 @@ func hasComputeScope() bool {
 		return false
 	}
 	for _, v := range scopes {
-		if v == compute.ComputeScope {
+		if v == want {
 			return true
 		}
 	}
 	return false
+}
+
+func hasComputeScope() bool {
+	return hasScope(compute.ComputeScope)
+}
+
+func hasStorageScope() bool {
+	return hasScope(storage.ScopeReadWrite) || hasScope(storage.ScopeFullControl)
 }
 
 // dash is copied from the builder binary. It runs the given method and command on the dashboard.

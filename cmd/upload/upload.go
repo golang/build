@@ -25,9 +25,10 @@ import (
 )
 
 var (
-	public  = flag.Bool("public", false, "object should be world-readable")
-	file    = flag.String("file", "-", "Filename to read object from, or '-' for stdin.")
-	verbose = flag.Bool("verbose", false, "verbose logging")
+	public    = flag.Bool("public", false, "object should be world-readable")
+	cacheable = flag.Bool("cacheable", true, "object should be cacheable")
+	file      = flag.String("file", "-", "Filename to read object from, or '-' for stdin.")
+	verbose   = flag.Bool("verbose", false, "verbose logging")
 )
 
 func main() {
@@ -67,6 +68,9 @@ func main() {
 	w.ACL = append(w.ACL, storage.ACLRule{Entity: storage.ACLEntity("project-owners-" + proj), Role: storage.RoleOwner})
 	if *public {
 		w.ACL = append(w.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
+		if !*cacheable {
+			w.CacheControl = "no-cache"
+		}
 	}
 	var content io.Reader
 	if *file == "-" {
@@ -101,6 +105,7 @@ func main() {
 
 var bucketProject = map[string]string{
 	"go-builder-data":       "symbolic-datum-552",
+	"go-build-log":          "symbolic-datum-552",
 	"http2-demo-server-tls": "symbolic-datum-552",
 	"winstrap":              "999119582588",
 	"gobuilder":             "999119582588", // deprecated

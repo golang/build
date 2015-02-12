@@ -31,6 +31,7 @@ type Client struct {
 
 // NewClient returns a new Gerrit client with the given URL prefix
 // and authentication mode.
+// The url should be just the scheme and hostname.
 // If auth is nil, a default is used, or requests are made unauthenticated.
 func NewClient(url string, auth Auth) *Client {
 	if auth == nil {
@@ -61,8 +62,14 @@ func (c *Client) do(dst interface{}, method, path string, arg url.Values, body i
 		bodyr = bytes.NewReader(v)
 		contentType = "application/json"
 	}
+	// slashA is either "/a" (for authenticated requests) or "" for unauthenticated.
+	// See https://gerrit-review.googlesource.com/Documentation/rest-api.html#authentication
+	slashA := "/a"
+	if _, ok := c.auth.(noAuth); ok {
+		slashA = ""
+	}
 	var err error
-	req, err := http.NewRequest(method, c.url+path+"?"+arg.Encode(), bodyr)
+	req, err := http.NewRequest(method, c.url+slashA+path+"?"+arg.Encode(), bodyr)
 	if err != nil {
 		return err
 	}
