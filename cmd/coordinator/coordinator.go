@@ -574,11 +574,6 @@ func findWork(work chan<- builderRev) error {
 			return errors.New("bogus JSON response from dashboard: results is too long.")
 		}
 		for i, res := range br.Results {
-			if res == "https://build.golang.org/log/" {
-				// Work around golang.org/issue/9701
-				// TODO(bradfitz): remove this hack, once #9701 is fixed.
-				res = ""
-			}
 			if res != "" {
 				// It's either "ok" or a failure URL.
 				continue
