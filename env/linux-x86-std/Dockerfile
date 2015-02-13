@@ -2,7 +2,8 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-# Base builder image: gobuilders/linux-x86-base
+# Normal Linux builder VM
+# Docker tag gobuilders/linux-x86-std
 
 FROM debian:wheezy
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
@@ -11,10 +12,10 @@ ENV DEBIAN_FRONTEND noninteractive
 
 RUN apt-get update
 RUN apt-get install -y --no-install-recommends ca-certificates
-# Optionally used by some net/http tests:
-RUN apt-get install -y --no-install-recommends strace
 # Optionally used by runtime tests for gdb:
 RUN apt-get install -y --no-install-recommends gdb
+# Optionally used by some net/http tests:
+RUN apt-get install -y --no-install-recommends strace
 # For building Go's bootstrap 'dist' prog
 RUN apt-get install -y --no-install-recommends gcc libc6-dev
 # For 32-bit builds:
@@ -22,8 +23,12 @@ RUN apt-get install -y --no-install-recommends gcc libc6-dev
 RUN apt-get install -y --no-install-recommends libc6-dev-i386 gcc-multilib
 # For downloading Go 1.4:
 RUN apt-get install -y --no-install-recommends curl
+
+# Required for networking in a VM on GCE:
 RUN apt-get install -y --no-install-recommends net-tools ifupdown isc-dhcp-client dhcp3-client
+# And misc basic tools:
 RUN apt-get install -y --no-install-recommends procps lsof psmisc
+
 RUN apt-get clean
 
 RUN mkdir -p /go1.4-amd64 && (curl --silent https://storage.googleapis.com/golang/go1.4.linux-amd64.tar.gz | tar -C /go1.4-amd64 -zxv)
@@ -44,5 +49,3 @@ RUN rm -rf /var/cache/debconf/*
 RUN rm -rf /usr/share/man
 
 RUN (echo "auto lo"; echo "iface lo inet loopback"; echo "auto eth0"; echo "iface eth0 inet dhcp") > /etc/network/interfaces
-
-
