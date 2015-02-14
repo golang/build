@@ -5,11 +5,11 @@
 docker: Dockerfile
 	docker build -t gobuilders/linux-x86-sid .
 
-docker-linux.sid.tar.gz: docker
-	docker save gobuilders/linux-x86-sid | gzip | (cd ../../cmd/upload && go run upload.go --public go-builder-data/docker-linux.sid.tar.gz)
+# TODO(bradfitz): test targets, using cmd/gomote and the buildlet in the container.
 
-check: docker
-	docker run -e GOROOT_BOOTSTRAP=/go1.4-amd64/go gobuilders/linux-x86-sid /usr/local/bin/builder -rev=20a10e7ddd1b -buildroot=/ -v -report=false linux-amd64-sid
-
-check32: docker
-	docker run -e GOROOT_BOOTSTRAP=/go1.4-386/go gobuilders/linux-x86-sid /usr/local/bin/builder -rev=20a10e7ddd1b -buildroot=/ -v -report=false linux-386-sid
+# TODO(bradfitz): docs on how to build a new image. In a nutshell,
+#
+#    $ go install golang.org/x/build/cmd/docker2boot
+#    $ sudo docker2boot --image=gobuilders/linux-x86-sid --out=linux-buildlet-sid.tar.gz --gb=3
+#    $ gsutil cp -a public-read linux-buildlet-sid.tar.gz gs://go-builder-data/linux-buildlet-sid.tar.gz
+#    $ gcloud compute --project symbolic-datum-552 images create linux-buildlet-sid --source-uri gs://go-builder-data/linux-buildlet-sid.tar.gz

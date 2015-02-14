@@ -175,9 +175,7 @@ func init() {
 		tool:    "gccgo",
 	})
 
-	// TODO(bradfitz,adg,jbd): convert these (sid, nacl) to VMs too:
-	addBuilder(BuildConfig{Name: "linux-386-sid", Image: "gobuilders/linux-x86-sid"})
-	addBuilder(BuildConfig{Name: "linux-amd64-sid", Image: "gobuilders/linux-x86-sid"})
+	// TODO(bradfitz,adg,jbd): convert nacl builders to be VMs too:
 	addBuilder(BuildConfig{Name: "nacl-386"})
 	addBuilder(BuildConfig{Name: "nacl-amd64p32"})
 
@@ -266,6 +264,17 @@ func init() {
 		Name:    "linux-amd64-clang",
 		VMImage: "linux-buildlet-clang",
 		env:     []string{"GOROOT_BOOTSTRAP=/go1.4", "CC=/usr/bin/clang"},
+	})
+	addBuilder(BuildConfig{
+		Name:        "linux-386-sid",
+		VMImage:     "linux-buildlet-sid",
+		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
+		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOHOSTARCH=386"},
+	})
+	addBuilder(BuildConfig{
+		Name:    "linux-amd64-sid",
+		VMImage: "linux-buildlet-sid",
+		env:     []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	})
 	addBuilder(BuildConfig{
 		Name:        "openbsd-amd64-gce56",
