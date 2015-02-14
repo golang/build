@@ -260,7 +260,7 @@ func init() {
 		Name:        "linux-386-clang",
 		VMImage:     "linux-buildlet-clang",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
-		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "CC=/usr/bin/clang"},
+		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "CC=/usr/bin/clang", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
 		Name:    "linux-amd64-clang",
