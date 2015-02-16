@@ -8,6 +8,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -152,10 +153,13 @@ func main() {
 
 	// Install grub. Adjust the grub.cfg to have the correct
 	// filesystem UUID of the filesystem made above.
+	fsUUID := filesystemUUID()
 	grubCfgFile := filepath.Join(mntDir, "boot/grub/grub.cfg")
-	writeFile(grubCfgFile, strings.Replace(slurpFile(grubCfgFile), bootUUID, filesystemUUID(), -1))
+	writeFile(grubCfgFile, strings.Replace(slurpFile(grubCfgFile), bootUUID, fsUUID, -1))
 	run("rm", filepath.Join(mntDir, "boot/grub/device.map"))
 	run("grub-install", "--boot-directory="+filepath.Join(mntDir, "boot"), "/dev/nbd0")
+	fstabFile := filepath.Join(mntDir, "etc/fstab")
+	writeFile(fstabFile, fmt.Sprintf("UUID=%s / ext4 errors=remount-ro 0 1", fsUUID))
 
 	// Set some password for testing.
 	run("chroot", mntDir, "/bin/bash", "-c", "echo root:r | chpasswd")
