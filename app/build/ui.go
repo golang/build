@@ -313,7 +313,7 @@ func unsupported(builder string) bool {
 }
 
 func unsupportedOS(os string) bool {
-	if os == "race" {
+	if os == "race" || os == "android" {
 		return false
 	}
 	p, ok := osPriority[os]
@@ -327,9 +327,10 @@ var osPriority = map[string]int{
 	"linux":   0,
 	"windows": 0,
 	// race == 1
-	"openbsd":   2,
-	"netbsd":    3,
-	"dragonfly": 4,
+	"android":   2,
+	"openbsd":   3,
+	"netbsd":    4,
+	"dragonfly": 5,
 }
 
 // TagState represents the state of all Packages at a Tag.
