@@ -28,6 +28,17 @@ type goEnv struct {
 	goos, goarch string
 }
 
+func (b *Builder) crossCompile() bool {
+	switch b.goos {
+	case "android", "nacl":
+		return true
+	case "darwin":
+		return b.goarch == "arm" // iOS
+	default:
+		return false
+	}
+}
+
 func (b *Builder) envv() []string {
 	if runtime.GOOS == "windows" {
 		return b.envvWindows()
@@ -39,10 +50,7 @@ func (b *Builder) envv() []string {
 			"GOOS=" + b.goos,
 			"GOARCH=" + b.goarch,
 		}
-		switch b.goos {
-		case "android", "nacl":
-			// Cross compile.
-		default:
+		if !b.crossCompile() {
 			// If we are building, for example, linux/386 on a linux/amd64 machine we want to
 			// make sure that the whole build is done as a if this were compiled on a real
 			// linux/386 machine. In other words, we want to not do a cross compilation build.
