@@ -5,8 +5,12 @@
 docker: Dockerfile
 	docker build -t gobuilders/linux-x86-nacl .
 
-upload: docker
-	docker save gobuilders/linux-x86-nacl | gzip | (cd ../../cmd/upload && go run upload.go --public go-builder-data/docker-linux.nacl.tar.gz)
+# TODO(bradfitz): test targets, using cmd/gomote and the buildlet in the container.
 
-check: docker
-	docker run gobuilders/linux-x86-nacl /usr/local/bin/builder -rev=77e96c9208d0 -buildroot=/ -v -cmd=/usr/local/bin/build-command.pl -report=false nacl-amd64p32
+# TODO(bradfitz): docs on how to build a new image. In a nutshell,
+#
+#    $ go install golang.org/x/build/cmd/docker2boot
+#    $ sudo docker2boot --image=gobuilders/linux-x86-nacl --out=linux-buildlet-nacl.tar.gz --gb=3
+#    $ gsutil cp -a public-read linux-buildlet-nacl.tar.gz gs://go-builder-data/linux-buildlet-nacl.tar.gz
+#    $ gcloud compute --project symbolic-datum-552 images create linux-buildlet-nacl --source-uri gs://go-builder-data/linux-buildlet-nacl.tar.gz
+

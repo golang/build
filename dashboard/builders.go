@@ -77,6 +77,9 @@ func (c *BuildConfig) AllScript() string {
 	if strings.HasPrefix(c.Name, "plan9-") {
 		return "src/all.rc"
 	}
+	if strings.HasPrefix(c.Name, "nacl-") {
+		return "src/nacltest.bash"
+	}
 	return "src/all.bash"
 }
 
@@ -174,10 +177,6 @@ func init() {
 		dashURL: "https://build.golang.org/gccgo",
 		tool:    "gccgo",
 	})
-
-	// TODO(bradfitz,adg,jbd): convert nacl builders to be VMs too:
-	addBuilder(BuildConfig{Name: "nacl-386"})
-	addBuilder(BuildConfig{Name: "nacl-amd64p32"})
 
 	// VMs:
 	addBuilder(BuildConfig{
@@ -277,6 +276,18 @@ func init() {
 		env:     []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	})
 	addBuilder(BuildConfig{
+		Name:        "nacl-386",
+		VMImage:     "linux-buildlet-nacl",
+		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
+		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
+	})
+	addBuilder(BuildConfig{
+		Name:        "nacl-amd64p32",
+		VMImage:     "linux-buildlet-nacl",
+		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
+		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
+	})
+	addBuilder(BuildConfig{
 		Name:        "openbsd-amd64-gce56",
 		VMImage:     "openbsd-amd64-56",
 		machineType: "n1-highcpu-2",
@@ -361,15 +372,6 @@ func addBuilder(c BuildConfig) {
 	}
 	if c.tool == "" {
 		c.tool = "go"
-	}
-
-	if strings.HasPrefix(c.Name, "nacl-") {
-		if c.Image == "" {
-			c.Image = "gobuilders/linux-x86-nacl"
-		}
-		if c.cmd == "" {
-			c.cmd = "/usr/local/bin/build-command.pl"
-		}
 	}
 	if strings.HasPrefix(c.Name, "linux-") && c.Image == "" && c.VMImage == "" {
 		c.Image = "gobuilders/linux-x86-base"

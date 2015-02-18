@@ -1,27 +1,19 @@
-# Copyright 2014 The Go Authors. All rights reserved.
+# Copyright 2015 The Go Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
 # gobuilders/linux-x86-nacl for 32- and 64-bit nacl.
 #
 # We need more modern libc than Debian stable as used in base, so we're
-# using Ubuntu LTS here.
-#
-# TODO(bradfitz): make both be Ubuntu? But we also want Debian, Fedora, 
-# etc coverage., so deal with unifying these later, once there's a plan
-# or a generator for them and the other builders are turned down.
+# using Debian sid instead.
 
-FROM ubuntu:trusty
+FROM gobuilders/linux-x86-sid
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
 ENV DEBIAN_FRONTEND noninteractive
 
-ADD /scripts/install-apt-deps.sh /scripts/
-RUN /scripts/install-apt-deps.sh
+RUN (cd /usr/bin && curl -s -O https://storage.googleapis.com/gobuilder/sel_ldr_x86_32 && chmod +x sel_ldr_x86_32)
+RUN (cd /usr/bin && curl -s -O https://storage.googleapis.com/gobuilder/sel_ldr_x86_64 && chmod +x sel_ldr_x86_64)
 
-ADD /scripts/build-go-builder.sh /scripts/
-RUN GO_REV=go1.4 TOOLS_REV=d79e0375a BUILDER_REV=fa8373a /scripts/build-go-builder.sh && test -f /usr/local/bin/builder
-
-ADD build-command.pl /usr/local/bin/
-
-ENV PATH /usr/local/bin:$GOROOT/bin:$PATH
+ADD go_nacl_386_exec /usr/bin/
+ADD go_nacl_amd64p32_exec /usr/bin/
