@@ -47,15 +47,17 @@ import (
 )
 
 var (
-	masterKeyFile  = flag.String("masterkey", "", "Path to builder master key. Else fetched using GCE project attribute 'builder-master-key'.")
-	maxLocalBuilds = flag.Int("maxbuilds", 6, "Max concurrent Docker builds (VM builds don't count)")
+	masterKeyFile = flag.String("masterkey", "", "Path to builder master key. Else fetched using GCE project attribute 'builder-master-key'.")
 
 	// TODO(bradfitz): remove this list and just query it from the compute API:
 	// http://godoc.org/google.golang.org/api/compute/v1#RegionsService.Get
 	// and Region.Zones: http://godoc.org/google.golang.org/api/compute/v1#Region
 	cleanZones = flag.String("zones", "us-central1-a,us-central1-b,us-central1-f", "Comma-separated list of zones to periodically clean of stale build VMs (ones that failed to shut themselves down)")
 
-	// Debug flags:
+	// TODO(bradfitz,adg): remove Docker-based build support.
+	maxLocalBuilds = flag.Int("maxbuilds", 1, "Max concurrent Docker builds (VM builds don't count)")
+	// TODO(bradfitz,adg): remove these two debug flags too. work
+	// on proper integration tests instead.
 	just = flag.String("just", "", "If non-empty, run single build in the foreground. Requires rev.")
 	rev  = flag.String("rev", "", "Revision to build.")
 

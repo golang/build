@@ -23,8 +23,8 @@ import (
 var (
 	proj      = flag.String("project", "symbolic-datum-552", "name of Project")
 	zone      = flag.String("zone", "us-central1-a", "GCE zone")
-	mach      = flag.String("machinetype", "n1-standard-16", "Machine type")
-	instName  = flag.String("instance_name", "go-builder-1", "Name of VM instance.")
+	mach      = flag.String("machinetype", "n1-highcpu-2", "Machine type")
+	instName  = flag.String("instance_name", "farmer", "Name of VM instance.")
 	sshPub    = flag.String("ssh_public_key", "", "ssh public key file to authorize. Can modify later in Google's web UI anyway.")
 	staticIP  = flag.String("static_ip", "", "Static IP to use. If empty, automatic.")
 	reuseDisk = flag.Bool("reuse_disk", true, "Whether disk images should be reused between shutdowns/restarts.")
@@ -83,6 +83,12 @@ func main() {
 	flag.Parse()
 	if *proj == "" {
 		log.Fatalf("Missing --project flag")
+	}
+	if *proj == "symbolic-datum-552" && *staticIP == "" {
+		// Hard-code this, since GCP doesn't let you rename an IP address, and so
+		// this IP is still called "go-buidler-1-ip" in our project, from our old
+		// naming convention plan.
+		*staticIP = "107.178.219.46"
 	}
 	prefix := "https://www.googleapis.com/compute/v1/projects/" + *proj
 	machType := prefix + "/zones/" + *zone + "/machineTypes/" + *mach
@@ -150,7 +156,7 @@ func main() {
 		MachineType: machType,
 		Disks:       []*compute.AttachedDisk{instanceDisk(computeService)},
 		Tags: &compute.Tags{
-			Items: []string{"http-server", "https-server"},
+			Items: []string{"http-server", "https-server", "allow-ssh"},
 		},
 		Metadata: &compute.Metadata{
 			Items: []*compute.MetadataItems{
