@@ -32,7 +32,7 @@ var (
 	toolsRev = flag.String("tools", "", "Tools revision to build")
 	tourRev  = flag.String("tour", "master", "Tour revision to include")
 	blogRev  = flag.String("blog", "master", "Blog revision to include")
-	netRev   = flag.String("blog", "master", "Net revision to include")
+	netRev   = flag.String("net", "master", "Net revision to include")
 
 	project = flag.String("project", "symbolic-datum-552", "Google Cloud Project")
 	zone    = flag.String("zone", "us-central1-a", "Compute Engine zone")
