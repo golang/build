@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/build/auth"
 	"golang.org/x/build/buildlet"
@@ -146,6 +147,7 @@ func (b *Build) make() (err error) {
 		ProjectID:   *project,
 		TLS:         keypair,
 		Description: fmt.Sprintf("release buildlet for %s", os.Getenv("USER")),
+		DeleteIn:    1 * time.Hour, // If we don't shut it down, it should kill itself.
 		OnInstanceRequested: func() {
 			log.Printf("%v: Sent create request. Waiting for operation.", b)
 		},
