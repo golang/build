@@ -54,13 +54,6 @@ var (
 	// and Region.Zones: http://godoc.org/google.golang.org/api/compute/v1#Region
 	cleanZones = flag.String("zones", "us-central1-a,us-central1-b,us-central1-f", "Comma-separated list of zones to periodically clean of stale build VMs (ones that failed to shut themselves down)")
 
-	// TODO(bradfitz,adg): remove Docker-based build support.
-	maxLocalBuilds = flag.Int("maxbuilds", 1, "Max concurrent Docker builds (VM builds don't count)")
-	// TODO(bradfitz,adg): remove these two debug flags too. work
-	// on proper integration tests instead.
-	just = flag.String("just", "", "If non-empty, run single build in the foreground. Requires rev.")
-	rev  = flag.String("rev", "", "Revision to build.")
-
 	buildLogBucket = flag.String("logbucket", "go-build-log", "GCS bucket to put trybot build failures in")
 )
 
@@ -100,10 +93,10 @@ func init() {
 	}
 	for _, bname := range tryList {
 		conf, ok := dashboard.Builders[bname]
-		if ok && conf.UsesVM() {
+		if ok {
 			tryBuilders = append(tryBuilders, conf)
 		} else {
-			log.Printf("ignoring invalid or non-VM try builder config %q", bname)
+			log.Printf("ignoring invalid try builder config %q", bname)
 		}
 	}
 }
@@ -195,12 +188,7 @@ type imageInfo struct {
 }
 
 var images = map[string]*imageInfo{
-	"go-commit-watcher":          {url: "https://storage.googleapis.com/go-builder-data/docker-commit-watcher.tar.gz"},
-	"gobuilders/linux-x86-base":  {url: "https://storage.googleapis.com/go-builder-data/docker-linux.base.tar.gz"},
-	"gobuilders/linux-x86-clang": {url: "https://storage.googleapis.com/go-builder-data/docker-linux.clang.tar.gz"},
-	"gobuilders/linux-x86-gccgo": {url: "https://storage.googleapis.com/go-builder-data/docker-linux.gccgo.tar.gz"},
-	"gobuilders/linux-x86-nacl":  {url: "https://storage.googleapis.com/go-builder-data/docker-linux.nacl.tar.gz"},
-	"gobuilders/linux-x86-sid":   {url: "https://storage.googleapis.com/go-builder-data/docker-linux.sid.tar.gz"},
+	"go-commit-watcher": {url: "https://storage.googleapis.com/go-builder-data/docker-commit-watcher.tar.gz"},
 }
 
 // recordResult sends build results to the dashboard
@@ -258,27 +246,6 @@ func main() {
 	// TODO(adg,cmang): fix gccgo watcher
 	// addWatcher(watchConfig{repo: "https://code.google.com/p/gofrontend", dash: "https://build.golang.org/gccgo/"})
 
-	if (*just != "") != (*rev != "") {
-		log.Fatalf("--just and --rev must be used together")
-	}
-	if *just != "" {
-		conf, ok := dashboard.Builders[*just]
-		if !ok {
-			log.Fatalf("unknown builder %q", *just)
-		}
-		args, err := conf.DockerRunArgs(*rev, builderKey(*just))
-		if err != nil {
-			log.Fatal(err)
-		}
-		cmd := exec.Command("docker", append([]string{"run"}, args...)...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			log.Fatalf("Build failed: %v", err)
-		}
-		return
-	}
-
 	http.HandleFunc("/", handleStatus)
 	http.HandleFunc("/logs", handleLogs)
 	go http.ListenAndServe(":80", nil)
@@ -302,7 +269,7 @@ func main() {
 	for {
 		select {
 		case work := <-workc:
-			log.Printf("workc received %+v; len(status) = %v, maxLocalBuilds = %v; cur = %p", work, len(status), *maxLocalBuilds, status[work])
+			log.Printf("workc received %+v; len(status) = %v, cur = %p", work, len(status), status[work])
 			if mayBuildRev(work) {
 				conf, _ := dashboard.Builders[work.name]
 				if st, err := startBuilding(conf, work.rev); err == nil {
@@ -339,28 +306,10 @@ func isBuilding(work builderRev) bool {
 // mayBuildRev reports whether the build type & revision should be started.
 // It returns true if it's not already building, and there is capacity.
 func mayBuildRev(work builderRev) bool {
-	conf, ok := dashboard.Builders[work.name]
-	if !ok {
-		return false
-	}
-
 	statusMu.Lock()
 	_, building := status[work]
 	statusMu.Unlock()
-
-	if building {
-		return false
-	}
-	if conf.UsesVM() {
-		// These don't count towards *maxLocalBuilds.
-		return true
-	}
-	numDocker, err := numDockerBuilds()
-	if err != nil {
-		log.Printf("not starting %v due to docker ps failure: %v", work, err)
-		return false
-	}
-	return numDocker < *maxLocalBuilds
+	return !building
 }
 
 func setStatus(work builderRev, st *buildStatus) {
@@ -434,7 +383,6 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	recent = append(recent, statusDone...)
 	numTotal := len(status)
-	numDocker, err := numDockerBuilds()
 
 	// TODO: make this prettier.
 	var tryBuf bytes.Buffer
@@ -455,12 +403,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	io.WriteString(w, "<html><body><h1>Go build coordinator</h1>")
 
-	if err != nil {
-		fmt.Fprintf(w, "<h2>Error</h2>Error fetching Docker build count: <i>%s</i>\n", html.EscapeString(err.Error()))
-	}
-
-	fmt.Fprintf(w, "<h2>running</h2><p>%d total builds active (Docker: %d/%d; VMs: %d/∞):",
-		numTotal, numDocker, *maxLocalBuilds, numTotal-numDocker)
+	fmt.Fprintf(w, "<h2>running</h2><p>%d total builds active", numTotal)
 
 	io.WriteString(w, "<pre>")
 	for _, st := range active {
@@ -511,9 +454,6 @@ func writeStatusHeader(w http.ResponseWriter, st *buildStatus) {
 	defer st.mu.Unlock()
 	fmt.Fprintf(w, "  builder: %s\n", st.name)
 	fmt.Fprintf(w, "      rev: %s\n", st.rev)
-	if st.container != "" {
-		fmt.Fprintf(w, "container: %s\n", st.container)
-	}
 	if st.instName != "" {
 		fmt.Fprintf(w, "  vm name: %s\n", st.instName)
 	}
@@ -953,80 +893,8 @@ func condUpdateImage(img string) error {
 	return nil
 }
 
-// numDockerBuilds finds the number of go builder instances currently running.
-func numDockerBuilds() (n int, err error) {
-	out, err := exec.Command("docker", "ps").Output()
-	if err != nil {
-		return 0, err
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.Contains(line, "gobuilders/") {
-			n++
-		}
-	}
-	return n, nil
-}
-
 func startBuilding(conf dashboard.BuildConfig, rev string) (*buildStatus, error) {
-	if conf.UsesVM() {
-		return startBuildingInVM(conf, rev, nil, donec), nil
-	} else {
-		return startBuildingInDocker(conf, rev)
-	}
-}
-
-func startBuildingInDocker(conf dashboard.BuildConfig, rev string) (*buildStatus, error) {
-	if err := condUpdateImage(conf.Image); err != nil {
-		log.Printf("Failed to setup container for %v %v: %v", conf.Name, rev, err)
-		return nil, err
-	}
-
-	runArgs, err := conf.DockerRunArgs(rev, builderKey(conf.Name))
-	if err != nil {
-		return nil, err
-	}
-	cmd := exec.Command("docker", append([]string{"run", "-d"}, runArgs...)...)
-	all, err := cmd.CombinedOutput()
-	log.Printf("Docker run for %v %v = err:%v, output:%s", conf.Name, rev, err, all)
-	if err != nil {
-		return nil, err
-	}
-	container := strings.TrimSpace(string(all))
-	brev := builderRev{
-		name: conf.Name,
-		rev:  rev,
-	}
-	st := &buildStatus{
-		builderRev: brev,
-		container:  container,
-		start:      time.Now(),
-	}
-	log.Printf("%v now building in Docker container %v", brev, st.container)
-	go func() {
-		all, err := exec.Command("docker", "wait", container).CombinedOutput()
-		output := strings.TrimSpace(string(all))
-		var ok bool
-		if err == nil {
-			exit, err := strconv.Atoi(output)
-			ok = (err == nil && exit == 0)
-		}
-		st.setDone(ok)
-		log.Printf("docker wait %s/%s: %v, %s", container, rev, err, output)
-		donec <- builderRev{conf.Name, rev}
-		exec.Command("docker", "rm", container).Run()
-	}()
-	go func() {
-		cmd := exec.Command("docker", "logs", "-f", container)
-		cmd.Stdout = st
-		cmd.Stderr = st
-		if err := cmd.Run(); err != nil {
-			// The docker logs subcommand always returns
-			// success, even if the underlying process
-			// fails.
-			log.Printf("failed to follow docker logs of %s: %v", container, err)
-		}
-	}()
-	return st, nil
+	return startBuildingInVM(conf, rev, nil, donec), nil
 }
 
 func randHex(n int) string {
@@ -1188,12 +1056,9 @@ type eventAndTime struct {
 type buildStatus struct {
 	// Immutable:
 	builderRev
-	start     time.Time
-	container string // container ID for docker, else it's a VM
-	trySet    *trySet
-
-	// Immutable, used by VM only:
-	instName string
+	start    time.Time
+	trySet   *trySet // or nil
+	instName string  // VM instance name
 
 	mu        sync.Mutex   // guards following
 	done      time.Time    // finished running
@@ -1259,11 +1124,7 @@ func (st *buildStatus) htmlStatusLine() string {
 		buf.WriteString(", failed")
 	}
 
-	if st.container != "" {
-		fmt.Fprintf(&buf, " in container <a href='%s'>%s</a>", st.logsURL(), st.container)
-	} else {
-		fmt.Fprintf(&buf, " in VM <a href='%s'>%s</a>", st.logsURL(), st.instName)
-	}
+	fmt.Fprintf(&buf, " in VM <a href='%s'>%s</a>", st.logsURL(), st.instName)
 
 	t := st.done
 	if t.IsZero() {
@@ -1400,13 +1261,15 @@ func loadKey() {
 	masterKeyCache = []byte(strings.TrimSpace(masterKey))
 }
 
+// This is only for the watcher container, since all builds run in VMs
+// now.
 func cleanUpOldContainers() {
 	for {
 		for _, cid := range oldContainers() {
 			log.Printf("Cleaning old container %v", cid)
 			exec.Command("docker", "rm", "-v", cid).Run()
 		}
-		time.Sleep(30 * time.Second)
+		time.Sleep(60 * time.Second)
 	}
 }
 

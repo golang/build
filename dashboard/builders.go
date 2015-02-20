@@ -6,37 +6,24 @@
 // pieces of the Go continuous build system.
 package dashboard
 
-import (
-	"errors"
-	"io/ioutil"
-	"os"
-	"strings"
-)
+import "strings"
 
 // Builders are the different build configurations.
 // The keys are like "darwin-amd64" or "linux-386-387".
 // This map should not be modified by other packages.
 var Builders = map[string]BuildConfig{}
 
-// A BuildConfig describes how to run either a Docker-based or VM-based builder.
+// A BuildConfig describes how to run a VM-based builder.
 type BuildConfig struct {
 	// Name is the unique name of the builder, in the form of
 	// "darwin-386" or "linux-amd64-race".
 	Name string
 
-	// VM-specific settings:
 	VMImage     string // e.g. "openbsd-amd64-56"
 	machineType string // optional GCE instance type
 	Go14URL     string // URL to built Go 1.4 tar.gz
 	buildletURL string // optional override buildlet URL
 
-	// Docker-specific settings: (used if VMImage == "")
-	Image   string // Docker image to use to build
-	cmd     string // optional -cmd flag (relative to go/src/)
-	dashURL string // url of the build dashboard
-	tool    string // the tool this configuration is for
-
-	// Use by both VMs and Docker:
 	env []string // extra environment ("key=value") pairs
 }
 
@@ -105,9 +92,6 @@ func (c *BuildConfig) GorootFinal() string {
 	return "/usr/local/go"
 }
 
-func (c *BuildConfig) UsesDocker() bool { return c.VMImage == "" }
-func (c *BuildConfig) UsesVM() bool     { return c.VMImage != "" }
-
 // MachineType returns the GCE machine type to use for this builder.
 func (c *BuildConfig) MachineType() string {
 	if v := c.machineType; v != "" {
@@ -116,69 +100,7 @@ func (c *BuildConfig) MachineType() string {
 	return "n1-highcpu-2"
 }
 
-// DockerRunArgs returns the arguments that go after "docker run" to execute
-// this docker image. The rev (git hash) is required. The builderKey is optional.
-// TODO(bradfitz): remove the builderKey being passed down, once the coordinator
-// does the reporting to the dashboard for docker builds too.
-func (conf BuildConfig) DockerRunArgs(rev, builderKey string) ([]string, error) {
-	if !conf.UsesDocker() {
-		return nil, errors.New("not a docker-based build")
-	}
-	var args []string
-	if builderKey != "" {
-		tmpKey := "/tmp/" + conf.Name + ".buildkey"
-		if _, err := os.Stat(tmpKey); err != nil {
-			if err := ioutil.WriteFile(tmpKey, []byte(builderKey), 0600); err != nil {
-				return nil, err
-			}
-		}
-		// Images may look for .gobuildkey in / or /root, so provide both.
-		// TODO(adg): fix images that look in the wrong place.
-		args = append(args, "-v", tmpKey+":/.gobuildkey")
-		args = append(args, "-v", tmpKey+":/root/.gobuildkey")
-	}
-	for _, pair := range conf.env {
-		args = append(args, "-e", pair)
-	}
-	if strings.HasPrefix(conf.Name, "linux-amd64") {
-		args = append(args, "-e", "GOROOT_BOOTSTRAP=/go1.4-amd64/go")
-	} else if strings.HasPrefix(conf.Name, "linux-386") {
-		args = append(args, "-e", "GOROOT_BOOTSTRAP=/go1.4-386/go")
-	}
-	args = append(args,
-		conf.Image,
-		"/usr/local/bin/builder",
-		"-rev="+rev,
-		"-dashboard="+conf.dashURL,
-		"-tool="+conf.tool,
-		"-buildroot=/",
-		"-v",
-	)
-	if conf.cmd != "" {
-		args = append(args, "-cmd", conf.cmd)
-	}
-	args = append(args, conf.Name)
-	return args, nil
-}
-
 func init() {
-	// Docker-based gccgo builders:
-	addBuilder(BuildConfig{
-		Name:    "linux-amd64-gccgo",
-		Image:   "gobuilders/linux-x86-gccgo",
-		cmd:     "make RUNTESTFLAGS=\"--target_board=unix/-m64\" check-go -j16",
-		dashURL: "https://build.golang.org/gccgo",
-		tool:    "gccgo",
-	})
-	addBuilder(BuildConfig{
-		Name:    "linux-386-gccgo",
-		Image:   "gobuilders/linux-x86-gccgo",
-		cmd:     "make RUNTESTFLAGS=\"--target_board=unix/-m32\" check-go -j16",
-		dashURL: "https://build.golang.org/gccgo",
-		tool:    "gccgo",
-	})
-
-	// VMs:
 	addBuilder(BuildConfig{
 		Name:        "freebsd-amd64-gce93",
 		VMImage:     "freebsd-amd64-gce93",
@@ -357,30 +279,14 @@ func init() {
 }
 
 func addBuilder(c BuildConfig) {
-	if c.tool == "gccgo" {
-		// TODO(cmang,bradfitz,adg): fix gccgo
-		return
-	}
 	if c.Name == "" {
 		panic("empty name")
 	}
 	if _, dup := Builders[c.Name]; dup {
 		panic("dup name")
 	}
-	if c.dashURL == "" {
-		c.dashURL = "https://build.golang.org"
-	}
-	if c.tool == "" {
-		c.tool = "go"
-	}
-	if strings.HasPrefix(c.Name, "linux-") && c.Image == "" && c.VMImage == "" {
-		c.Image = "gobuilders/linux-x86-base"
-	}
-	if c.Image == "" && c.VMImage == "" {
-		panic("empty image and vmImage")
-	}
-	if c.Image != "" && c.VMImage != "" {
-		panic("can't specify both image and vmImage")
+	if c.VMImage == "" {
+		panic("empty VMImage")
 	}
 	Builders[c.Name] = c
 }
