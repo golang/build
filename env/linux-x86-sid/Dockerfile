@@ -40,10 +40,8 @@ RUN mv /go1.4-amd64/go /go1.4 && rmdir /go1.4-amd64
 RUN curl -o /usr/local/bin/stage0 https://storage.googleapis.com/go-builder-data/stage0.linux-amd64.92ebb4ec
 RUN chmod +x /usr/local/bin/stage0
 
-# systemd (as used by Debian sid) wants this in /etc/rc.local now and
-# not /etc/init.d/rc.local:
-ADD scripts/rc.local /etc/rc.local
-RUN chmod +x /etc/rc.local
+ADD buildlet.service /etc/systemd/system/buildlet.service
+RUN systemctl enable /etc/systemd/system/buildlet.service
 
 RUN rm -rf /var/lib/apt/lists /usr/share/doc
 RUN rm -rf /go1.4/pkg/linux_amd64_race /go1.4/api /go1.4/blog /go1.4/doc /go1.4/misc /go1.4/test
@@ -52,5 +50,8 @@ RUN rm -rf /go1.4/pkg/linux_amd64_race /go1.4/test /go1.4/api
 RUN (cd /usr/share/locale/ && ls -1 | grep -v en | xargs rm -rf)
 RUN rm -rf /var/cache/debconf/*
 RUN rm -rf /usr/share/man
+
+RUN rm -f /lib/systemd/system/multi-user.target.wants/systemd-logind.service
+RUN (echo "[Journal]"; echo "ForwardToConsole=yes") > /etc/systemd/journald.conf
 
 RUN (echo "auto lo"; echo "iface lo inet loopback"; echo "auto eth0"; echo "iface eth0 inet dhcp") > /etc/network/interfaces
