@@ -151,6 +151,24 @@ func main() {
 	writeFile(filepath.Join(mntDir, "etc", "hosts"), "127.0.0.1\tlocalhost\n")
 	writeFile(filepath.Join(mntDir, "etc", "resolve.conf"), "nameserver 8.8.8.8\n")
 
+	// Append the source image id & docker version to /etc/issue.
+	issue, err := ioutil.ReadFile("/etc/issue")
+	if err != nil && !os.IsNotExist(err) {
+		failf("Failed to read /etc/issue: %v", err)
+	}
+	out, err = exec.Command("docker", "inspect", "-f", "{{.Id}}", *img).CombinedOutput()
+	if err != nil {
+		failf("Error getting image id: %v, %s", err, out)
+	}
+	id := strings.TrimSpace(string(out))
+	out, err = exec.Command("docker", "-v").CombinedOutput()
+	if err != nil {
+		failf("Error getting docker version: %v, %s", err, out)
+	}
+	dockerVersion := strings.TrimSpace(string(out))
+	d2bissue := fmt.Sprintf("%s\nPrepared by docker2boot\nSource Docker image: %s %s\n%s\n", issue, *img, id, dockerVersion)
+	writeFile(filepath.Join(mntDir, "etc", "issue"), d2bissue)
+
 	// Install grub. Adjust the grub.cfg to have the correct
 	// filesystem UUID of the filesystem made above.
 	fsUUID := filesystemUUID()
