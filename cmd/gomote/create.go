@@ -18,10 +18,8 @@ import (
 )
 
 func vmTypes() (s []string) {
-	for k, conf := range dashboard.Builders {
-		if conf.UsesVM() {
-			s = append(s, k)
-		}
+	for k := range dashboard.Builders {
+		s = append(s, k)
 	}
 	sort.Strings(s)
 	return
@@ -47,21 +45,18 @@ func create(args []string) error {
 		fs.Usage()
 	}
 	builderType := fs.Arg(0)
-	conf, ok := dashboard.Builders[builderType]
-	if !ok || !conf.UsesVM() {
+	_, ok := dashboard.Builders[builderType]
+	if !ok {
 		var valid []string
 		var prefixMatch []string
-		for k, conf := range dashboard.Builders {
-			if conf.UsesVM() {
-				valid = append(valid, k)
-				if strings.HasPrefix(k, builderType) {
-					prefixMatch = append(prefixMatch, k)
-				}
+		for k := range dashboard.Builders {
+			valid = append(valid, k)
+			if strings.HasPrefix(k, builderType) {
+				prefixMatch = append(prefixMatch, k)
 			}
 		}
 		if len(prefixMatch) == 1 {
 			builderType = prefixMatch[0]
-			conf, _ = dashboard.Builders[builderType]
 		} else {
 			sort.Strings(valid)
 			return fmt.Errorf("Invalid builder type %q. Valid options include: %q", builderType, valid)
