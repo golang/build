@@ -243,8 +243,7 @@ func main() {
 	}
 
 	addWatcher(watchConfig{repo: "https://go.googlesource.com/go", dash: "https://build.golang.org/"})
-	// TODO(adg,cmang): fix gccgo watcher
-	// addWatcher(watchConfig{repo: "https://code.google.com/p/gofrontend", dash: "https://build.golang.org/gccgo/"})
+	addWatcher(watchConfig{repo: "https://go.googlesource.com/gofrontend", dash: "https://build.golang.org/gccgo/"})
 
 	http.HandleFunc("/", handleStatus)
 	http.HandleFunc("/logs", handleLogs)
