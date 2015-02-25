@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -247,6 +248,7 @@ func main() {
 
 	http.HandleFunc("/", handleStatus)
 	http.HandleFunc("/logs", handleLogs)
+	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
 	go http.ListenAndServe(":80", nil)
 
 	go cleanUpOldContainers()
@@ -446,6 +448,13 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 	// http.Flusher.Flush and CloseNotifier and registering interest
 	// of new writes with the buildStatus. Will require moving the
 	// BUILDERKEY scrubbing into the Write method.
+}
+
+func handleDebugGoroutines(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	buf := make([]byte, 1<<20)
+	buf = buf[:runtime.Stack(buf, true)]
+	w.Write(buf)
 }
 
 func writeStatusHeader(w http.ResponseWriter, st *buildStatus) {
