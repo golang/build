@@ -268,6 +268,9 @@ func todoHandler(r *http.Request) (interface{}, error) {
 	}
 	var err error
 	builder := r.FormValue("builder")
+	if builderKeyRevoked(builder) {
+		return nil, fmt.Errorf("builder key revoked; no work given")
+	}
 	for _, kind := range r.Form["kind"] {
 		var com *Commit
 		switch kind {
@@ -889,6 +892,15 @@ func (e errBadMethod) Error() string {
 	return "bad method: " + string(e)
 }
 
+func builderKeyRevoked(builder string) bool {
+	if builder == "plan9-amd64-mischief" {
+		// Broken and unmaintained for months.
+		// It's polluting the dashboard.
+		return true
+	}
+	return false
+}
+
 // AuthHandler wraps a http.HandlerFunc with a handler that validates the
 // supplied key and builder query parameters.
 func AuthHandler(h dashHandler) http.HandlerFunc {
@@ -962,7 +974,13 @@ func validHash(hash string) bool {
 }
 
 func validKey(c appengine.Context, key, builder string) bool {
-	return isMasterKey(c, key) || key == builderKey(c, builder)
+	if isMasterKey(c, key) {
+		return true
+	}
+	if builderKeyRevoked(builder) {
+		return false
+	}
+	return key == builderKey(c, builder)
 }
 
 func isMasterKey(c appengine.Context, k string) bool {

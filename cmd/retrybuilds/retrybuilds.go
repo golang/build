@@ -38,6 +38,7 @@ var (
 	redoFlaky     = flag.Bool("redo-flaky", false, "Reset all flaky builds. If builder is empty, the master key is required.")
 	builderPrefix = flag.String("builder-prefix", "https://build.golang.org", "builder URL prefix")
 	logHash       = flag.String("loghash", "", "If non-empty, clear the build that failed with this loghash prefix")
+	sendMasterKey = flag.Bool("sendmaster", false, "send the master key in request instead of a builder-specific key; allows overriding actions of revoked keys")
 )
 
 type Failure struct {
@@ -190,6 +191,9 @@ func builderKeyFromMaster(builder string) (key string, ok bool) {
 	slurp, err := ioutil.ReadFile(*masterKeyFile)
 	if err != nil {
 		return
+	}
+	if *sendMasterKey {
+		return string(slurp), true
 	}
 	h := hmac.New(md5.New, bytes.TrimSpace(slurp))
 	h.Write([]byte(builder))
