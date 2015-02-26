@@ -25,7 +25,7 @@ RUN apt-get install -y gcc-arm-linux-gnueabihf
 RUN mkdir /arm
 
 # The list of packages in include are copied from linux-x86-std
-RUN debootstrap --arch=armhf --foreign --include=curl,ca-certificates,strace,gdb,lsof,psmisc sid /arm/root
+RUN debootstrap --arch=armhf --foreign --include=curl,ca-certificates,strace,gcc,libc6-dev,gdb,lsof,psmisc sid /arm/root
 
 # Script to finish off the debootstrap installation.
 ADD stage2 /arm/root/stage2
@@ -47,6 +47,15 @@ RUN cd $GOROOT/src && GOARCH=arm GOOS=linux ./make.bash
 RUN GOARCH=arm GOOS=linux go get golang.org/x/build/cmd/buildlet/stage0
 RUN mkdir -p /arm/root/usr/local/bin && cp $GOPATH/bin/linux_arm/stage0 /arm/root/usr/local/bin
 RUN rm -rf /go1.4 /gopath
+
+# Fetch go1.4.2 for arm
+RUN curl -O http://dave.cheney.net/paste/go1.4.2.linux-arm~multiarch-armv7-1.tar.gz
+RUN echo '607573c55dc89d135c3c9c84bba6ba6095a37a1e  go1.4.2.linux-arm~multiarch-armv7-1.tar.gz' | sha1sum -c
+RUN tar xfv go1.4.2.linux-arm~multiarch-armv7-1.tar.gz -C /arm/root/
+RUN rm go1.4.2.linux-arm~multiarch-armv7-1.tar.gz
+RUN mv /arm/root/go /arm/root/go1.4
+RUN rm -rf /arm/root/go1.4/api /arm/root/go1.4/blog /arm/root/go1.4/doc /arm/root/go1.4/misc /arm/root/go1.4/test
+RUN find /arm/root/go1.4 -type d -name testdata | xargs rm -rf
 
 # Install e2fsimage to prepare a root disk without running any
 # "privilaged" docker operations (i.e. mount).
