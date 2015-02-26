@@ -58,6 +58,13 @@ var (
 	buildLogBucket = flag.String("logbucket", "go-build-log", "GCS bucket to put trybot build failures in")
 )
 
+func init() {
+	// This builder is slow and triggering other coordinator bugs,
+	// or some timeout issue on one side. I don't feel like
+	// debugging it at the moment.
+	delete(dashboard.Builders, "plan9-386-gcepartial")
+}
+
 // LOCK ORDER:
 //   statusMu, buildStatus.mu, trySet.mu
 // TODO(bradfitz,adg): rewrite the coordinator
@@ -247,6 +254,7 @@ func main() {
 	addWatcher(watchConfig{repo: "https://go.googlesource.com/gofrontend", dash: "https://build.golang.org/gccgo/"})
 
 	http.HandleFunc("/", handleStatus)
+	http.HandleFunc("/try", handleTryStatus)
 	http.HandleFunc("/logs", handleLogs)
 	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
 	go http.ListenAndServe(":80", nil)
@@ -427,6 +435,58 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, "</pre>")
 
 	fmt.Fprintf(w, "<h2>disk space</h2><pre>%s</pre></body></html>", html.EscapeString(diskFree()))
+}
+
+func handleTryStatus(w http.ResponseWriter, r *http.Request) {
+	ts := trySetOfCommitPrefix(r.FormValue("commit"))
+	if ts == nil {
+		http.Error(w, "TryBot result not found (already done, invalid, or not yet discovered from Gerrit). Check Gerrit for results.", http.StatusNotFound)
+		return
+	}
+	ts.mu.Lock()
+	tss := ts.trySetState.clone()
+	ts.mu.Unlock()
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, "<html><head><title>trybot status</title></head><body>[<a href='/'>overall status</a>] &gt; %s\n", ts.ChangeID)
+
+	fmt.Fprintf(w, "<h1>trybot status</h1>")
+	fmt.Fprintf(w, "Change-ID: <a href='https://go-review.googlesource.com/#/q/%s'>%s</a><br>\n", ts.ChangeID, ts.ChangeID)
+	fmt.Fprintf(w, "Commit: <a href='https://go-review.googlesource.com/#/q/%s'>%s</a><br>\n", ts.Commit, ts.Commit)
+	fmt.Fprintf(w, "<p>Builds remain: %d</p>\n", tss.remain)
+	fmt.Fprintf(w, "<p>Builds failed: %v</p>\n", tss.failed)
+	fmt.Fprintf(w, "<p>Builds</p><table cellpadding=5 border=1>\n")
+	for _, bs := range tss.builds {
+		status := "<i>(running)</i>"
+		bs.mu.Lock()
+		if !bs.done.IsZero() {
+			if bs.succeeded {
+				status = "pass"
+			} else {
+				status = "<b>FAIL</b>"
+			}
+		}
+		bs.mu.Unlock()
+		fmt.Fprintf(w, "<tr valign=top><td align=left>%s</td><td align=center>%s</td><td><pre>%s</pre></td></tr>\n",
+			bs.name,
+			status,
+			bs.htmlStatusLine())
+	}
+	fmt.Fprintf(w, "</table></body></html>")
+}
+
+func trySetOfCommitPrefix(commitPrefix string) *trySet {
+	if commitPrefix == "" {
+		return nil
+	}
+	statusMu.Lock()
+	defer statusMu.Unlock()
+	for k, ts := range tries {
+		if strings.HasPrefix(k.Commit, commitPrefix) {
+			return ts
+		}
+	}
+	return nil
 }
 
 func diskFree() string {
@@ -685,7 +745,7 @@ func (ts *trySet) notifyStarting() {
 	// Ignore error. This isn't critical.
 	gerritClient.SetReview(ts.ChangeID, ts.Commit, gerrit.ReviewInput{
 		// TODO: good hostname, SSL, and pretty handler for just this tryset
-		Message: "TryBots beginning. Status page: http://107.178.219.46/",
+		Message: "TryBots beginning. Status page: http://farmer.golang.org/try?commit=" + ts.Commit[:8],
 	})
 }
 
