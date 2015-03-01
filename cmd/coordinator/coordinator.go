@@ -47,6 +47,12 @@ import (
 	"google.golang.org/cloud/storage"
 )
 
+func init() {
+	// Disabled until we have test sharding. This takes 85+ minutes.
+	// Test sharding is https://github.com/golang/go/issues/10029
+	delete(dashboard.Builders, "linux-arm-qemu")
+}
+
 var (
 	masterKeyFile = flag.String("masterkey", "", "Path to builder master key. Else fetched using GCE project attribute 'builder-master-key'.")
 
@@ -57,13 +63,6 @@ var (
 
 	buildLogBucket = flag.String("logbucket", "go-build-log", "GCS bucket to put trybot build failures in")
 )
-
-func init() {
-	// This builder is slow and triggering other coordinator bugs,
-	// or some timeout issue on one side. I don't feel like
-	// debugging it at the moment.
-	delete(dashboard.Builders, "plan9-386-gcepartial")
-}
 
 // LOCK ORDER:
 //   statusMu, buildStatus.mu, trySet.mu

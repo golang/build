@@ -198,6 +198,11 @@ func init() {
 		env:     []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	})
 	addBuilder(BuildConfig{
+		Name:    "linux-arm-qemu",
+		VMImage: "linux-buildlet-arm",
+		env:     []string{"GOROOT_BOOTSTRAP=/go1.4", "IN_QEMU=1"},
+	})
+	addBuilder(BuildConfig{
 		Name:        "nacl-386",
 		VMImage:     "linux-buildlet-nacl",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
@@ -223,7 +228,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:    "plan9-386-gcepartial",
-		VMImage: "plan9-386",
+		VMImage: "plan9-386-v2",
 		Go14URL: "https://storage.googleapis.com/go-builder-data/go1.4-plan9-386.tar.gz",
 		// It's named "partial" because the buildlet sets
 		// GOTESTONLY=std to stop after the "go test std"
@@ -235,7 +240,7 @@ func init() {
 		// test failures. See:
 		//    https://golang.org/issue/8393
 		//    https://golang.org/issue/9491
-		// n1-standard-1 has 3.6 GB of memory which is
+		// n1-standard-1 has 3.6 GB of memory which WAS (see below)
 		// overkill (userspace probably only sees 2GB anyway),
 		// but it's the cheapest option. And plenty to keep
 		// our ~250 MB of inputs+outputs in its ramfs.
@@ -247,12 +252,16 @@ func init() {
 		// means that the n1-standard-2 machine type will see
 		// a whole physical core."
 		//
-		// ... so we use n1-highcpu-2 (1.80 RAM, still
+		// ... so we used n1-highcpu-2 (1.80 RAM, still
 		// plenty), just so we can get 1 whole core for the
 		// single-core Plan 9. It will see 2 virtual cores and
 		// only use 1, but we hope that 1 will be more powerful
 		// and we'll stop timing out on tests.
-		machineType: "n1-highcpu-2",
+		//
+		// But then with the toolchain conversion to Go and
+		// using ramfs, it turns out we need more memory
+		// anyway, so use n1-highcpu-4.
+		machineType: "n1-highcpu-4",
 	})
 	addBuilder(BuildConfig{
 		Name:        "windows-amd64-gce",
