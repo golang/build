@@ -209,6 +209,8 @@ OpLoop:
 	impatientClient := &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
+			Dial:              defaultDialer(),
+			DisableKeepAlives: true,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
 			},
