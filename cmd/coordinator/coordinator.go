@@ -502,6 +502,8 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	writeStatusHeader(w, st)
 
+	w.(http.Flusher).Flush()
+
 	logs := st.watchLogs()
 	defer st.unregisterWatcher(logs)
 	closed := w.(http.CloseNotifier).CloseNotify()
@@ -1010,10 +1012,10 @@ func startBuildingInVM(conf dashboard.BuildConfig, rev string, ts *trySet, done 
 				go deleteVM(projectZone, st.instName)
 			}
 		}
-		st.setDone(err == nil)
 		if err != nil {
 			fmt.Fprintf(st, "\n\nError: %v\n", err)
 		}
+		st.setDone(err == nil)
 		done <- builderRev{conf.Name, rev}
 	}()
 	return st
@@ -1156,8 +1158,10 @@ func (st *buildStatus) setDone(succeeded bool) {
 func (st *buildStatus) isRunning() bool {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	return st.done.IsZero()
+	return st.isRunningLocked()
 }
+
+func (st *buildStatus) isRunningLocked() bool { return st.done.IsZero() }
 
 func (st *buildStatus) logEventTime(event string) {
 	st.mu.Lock()
@@ -1266,7 +1270,7 @@ func (st *buildStatus) watchLogs() <-chan []byte {
 
 	ch := make(chan []byte, 10) // room for a few log writes
 	ch <- st.output.Bytes()
-	if !st.isRunning() {
+	if !st.isRunningLocked() {
 		close(ch)
 		return ch
 	}
