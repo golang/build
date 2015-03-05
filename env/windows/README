@@ -47,6 +47,8 @@ instructions:
    * Right-mouse-drag "Start Buildlet" from the desktop (from winstrap) to the
      Startup folder and "Create shortcuts here"
 
+-- Install wix35 (ignore the warning about notinstalling "Votive" something)
+
 -- Install git with middle option: "Use Git from Windows Command Prompt",
    otherwise all the defaults.
 
