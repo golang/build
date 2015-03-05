@@ -34,7 +34,7 @@ func list(args []string) error {
 		if !strings.HasPrefix(vm.Name, prefix) {
 			continue
 		}
-		fmt.Printf("%s\thttps://%s\n", vm.Type, strings.TrimSuffix(vm.IPPort, ":443"))
+		fmt.Printf("%s\thttps://%s\n", strings.TrimPrefix(vm.Name, prefix), strings.TrimSuffix(vm.IPPort, ":443"))
 	}
 	return nil
 }
@@ -66,4 +66,30 @@ func namedClient(name string) (*buildlet.Client, error) {
 		return nil, fmt.Errorf("prefix %q is ambiguous")
 	}
 	return nil, fmt.Errorf("buildlet %q not running", name)
+}
+
+// nextName returns the next available numbered name or the given buildlet base
+// name. For example, if the provided prefix is "linux-amd64" and there's
+// already an instance named "linux-amd64", nextName will return
+// "linux-amd64-1".
+func nextName(prefix string) (string, error) {
+	vms, err := buildlet.ListVMs(projTokenSource(), *proj, *zone)
+	if err != nil {
+		return "", fmt.Errorf("error listing VMs: %v", err)
+	}
+	matches := map[string]bool{}
+	for _, vm := range vms {
+		if strings.HasPrefix(vm.Name, prefix) {
+			matches[vm.Name] = true
+		}
+	}
+	if len(matches) == 0 || !matches[prefix] {
+		return prefix, nil
+	}
+	for i := 1; ; i++ {
+		next := fmt.Sprintf("%v-%v", prefix, i)
+		if !matches[next] {
+			return next, nil
+		}
+	}
 }
