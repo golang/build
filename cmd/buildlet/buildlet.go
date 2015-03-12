@@ -14,6 +14,7 @@ package main // import "golang.org/x/build/cmd/buildlet"
 
 import (
 	"archive/tar"
+	"bufio"
 	"compress/gzip"
 	"crypto/sha1"
 	"crypto/tls"
@@ -917,4 +918,13 @@ func (pw *plan9LogWriter) Write(p []byte) (n int, err error) {
 	n = copy(pw.buf[:max], p)
 	pw.buf[n] = '\n'
 	return pw.w.Write(pw.buf[:n+1])
+}
+
+func requireTrailerSupport() {
+	// Depend on a symbol that was added after HTTP Trailer support was
+	// implemented (4b96409 Dec 29 2014)j so that this function will fail
+	// to compile without Trailer support.
+	// bufio.Reader.Discard was added by ee2ecc4 Jan 7 2015.
+	var r bufio.Reader
+	_ = r.Discard
 }
