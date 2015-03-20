@@ -24,6 +24,8 @@ type BuildConfig struct {
 	Go14URL     string // URL to built Go 1.4 tar.gz
 	buildletURL string // optional override buildlet URL
 
+	RegularDisk bool // if true, use spinning disk instead of SSD
+
 	env []string // extra environment ("key=value") pairs
 }
 
@@ -268,6 +270,7 @@ func init() {
 		VMImage:     "windows-buildlet",
 		machineType: "n1-highcpu-2",
 		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-windows-amd64.tar.gz",
+		RegularDisk: true,
 		env:         []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
@@ -275,6 +278,7 @@ func init() {
 		VMImage:     "windows-buildlet",
 		machineType: "n1-highcpu-4",
 		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-windows-amd64.tar.gz",
+		RegularDisk: true,
 		env:         []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
@@ -283,6 +287,7 @@ func init() {
 		machineType: "n1-highcpu-2",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.windows-amd64",
 		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-windows-386.tar.gz",
+		RegularDisk: true,
 		env:         []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
 }

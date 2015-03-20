@@ -17,6 +17,16 @@ import (
 	"google.golang.org/api/compute/v1"
 )
 
+// GCEGate optionally specifies a function to run before any GCE API call.
+// It's intended to be used to bound QPS rate to GCE.
+var GCEGate func()
+
+func apiGate() {
+	if GCEGate != nil {
+		GCEGate()
+	}
+}
+
 // VMOpts control how new VMs are started.
 type VMOpts struct {
 	// Zone is the GCE zone to create the VM in. Required.
@@ -77,6 +87,10 @@ func StartNewVM(ts oauth2.TokenSource, instName, builderType string, opts VMOpts
 
 	prefix := "https://www.googleapis.com/compute/v1/projects/" + projectID
 	machType := prefix + "/zones/" + zone + "/machineTypes/" + conf.MachineType()
+	diskType := "https://www.googleapis.com/compute/v1/projects/" + projectID + "/zones/" + zone + "/diskTypes/pd-ssd"
+	if conf.RegularDisk {
+		diskType = "" // a spinning disk
+	}
 
 	instance := &compute.Instance{
 		Name:        instName,
@@ -90,7 +104,7 @@ func StartNewVM(ts oauth2.TokenSource, instName, builderType string, opts VMOpts
 				InitializeParams: &compute.AttachedDiskInitializeParams{
 					DiskName:    instName,
 					SourceImage: "https://www.googleapis.com/compute/v1/projects/" + projectID + "/global/images/" + conf.VMImage,
-					DiskType:    "https://www.googleapis.com/compute/v1/projects/" + projectID + "/zones/" + zone + "/diskTypes/pd-ssd",
+					DiskType:    diskType,
 				},
 			},
 		},
@@ -146,6 +160,7 @@ func StartNewVM(ts oauth2.TokenSource, instName, builderType string, opts VMOpts
 		addMeta(k, v)
 	}
 
+	apiGate()
 	op, err := computeService.Instances.Insert(projectID, zone, instance).Do()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create instance: %v", err)
@@ -157,6 +172,7 @@ func StartNewVM(ts oauth2.TokenSource, instName, builderType string, opts VMOpts
 OpLoop:
 	for {
 		time.Sleep(2 * time.Second)
+		apiGate()
 		op, err := computeService.ZoneOperations.Get(projectID, zone, createOp).Do()
 		if err != nil {
 			return nil, fmt.Errorf("Failed to get op %s: %v", createOp, err)
@@ -178,6 +194,7 @@ OpLoop:
 	}
 	condRun(opts.OnInstanceCreated)
 
+	apiGate()
 	inst, err := computeService.Instances.Get(projectID, zone, instName).Do()
 	if err != nil {
 		return nil, fmt.Errorf("Error getting instance %s details after creation: %v", instName, err)
@@ -244,6 +261,7 @@ OpLoop:
 // returns once it's been requested, not when it's done.
 func DestroyVM(ts oauth2.TokenSource, proj, zone, instance string) error {
 	computeService, _ := compute.New(oauth2.NewClient(oauth2.NoContext, ts))
+	apiGate()
 	_, err := computeService.Instances.Delete(proj, zone, instance).Do()
 	return err
 }
@@ -264,6 +282,7 @@ func ListVMs(ts oauth2.TokenSource, proj, zone string) ([]VM, error) {
 	computeService, _ := compute.New(oauth2.NewClient(oauth2.NoContext, ts))
 
 	// TODO(bradfitz): paging over results if more than 500
+	apiGate()
 	list, err := computeService.Instances.List(proj, zone).Do()
 	if err != nil {
 		return nil, err

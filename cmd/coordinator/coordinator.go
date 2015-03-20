@@ -42,6 +42,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/cloud"
 	"google.golang.org/cloud/compute/metadata"
 	"google.golang.org/cloud/storage"
@@ -220,7 +221,7 @@ func pingDashboard(st *buildStatus) {
 		"builder": []string{st.name},
 		"key":     []string{builderKey(st.name)},
 		"hash":    []string{st.rev},
-		"url":     []string{fmt.Sprintf("http://%v/logs?name=%s&rev=%s&st=%p", externalIP, st.name, st.rev, st)},
+		"url":     []string{fmt.Sprintf("http://farmer.golang.org/logs?name=%s&rev=%s&st=%p", st.name, st.rev, st)},
 	}.Encode()
 	for {
 		st.mu.Lock()
@@ -411,7 +412,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	io.WriteString(w, "<html><body><h1>Go build coordinator</h1>")
 
-	fmt.Fprintf(w, "<h2>running</h2><p>%d total builds active", numTotal)
+	fmt.Fprintf(w, "<h2>running</h2><p>%d total builds active; VM capacity: %d/%d", numTotal, len(vmCap), cap(vmCap))
 
 	io.WriteString(w, "<pre>")
 	for _, st := range active {
@@ -1009,11 +1010,6 @@ func startBuildingInVM(conf dashboard.BuildConfig, rev string, ts *trySet, done 
 	go func() {
 		err := buildInVM(conf, st)
 		if err != nil {
-			if st.hasEvent("instance_created") {
-				go deleteVM(projectZone, st.instName)
-			}
-		}
-		if err != nil {
 			fmt.Fprintf(st, "\n\nError: %v\n", err)
 		}
 		st.setDone(err == nil)
@@ -1022,24 +1018,53 @@ func startBuildingInVM(conf dashboard.BuildConfig, rev string, ts *trySet, done 
 	return st
 }
 
+// We artifically limit ourselves to 60 VMs right now, assuming that
+// each takes 2 CPU, and we have a current quota of 200 CPUs. That
+// gives us headroom, but also doesn't account for SSD or memory
+// quota.
+// TODO(bradfitz): better quota system.
+const maxVMs = 60
+
+var vmCap = make(chan bool, maxVMs)
+
+func awaitVMCountQuota() { vmCap <- true }
+func putVMCountQuota()   { <-vmCap }
+
 func buildInVM(conf dashboard.BuildConfig, st *buildStatus) (retErr error) {
+	st.logEventTime("awaiting_gce_quota")
+	awaitVMCountQuota()
+	defer putVMCountQuota()
+
+	needDelete := false
+	defer func() {
+		if !needDelete {
+			return
+		}
+		deleteVM(projectZone, st.instName)
+	}()
+
+	st.logEventTime("creating_instance")
+	log.Printf("Creating VM for %s, %s", conf.Name, st.rev)
 	bc, err := buildlet.StartNewVM(tokenSource, st.instName, conf.Name, buildlet.VMOpts{
 		ProjectID:   projectID,
 		Zone:        projectZone,
 		Description: fmt.Sprintf("Go Builder building %s %s", conf.Name, st.rev),
 		DeleteIn:    vmDeleteTimeout,
 		OnInstanceRequested: func() {
+			needDelete = true
 			st.logEventTime("instance_create_requested")
 			log.Printf("%v now booting VM %v for build", st.builderRev, st.instName)
 		},
 		OnInstanceCreated: func() {
 			st.logEventTime("instance_created")
+			needDelete = true // redundant with OnInstanceRequested one, but fine.
 		},
 		OnGotInstanceInfo: func() {
 			st.logEventTime("waiting_for_buildlet")
 		},
 	})
 	if err != nil {
+		log.Printf("Failed to create VM for %s, %s: %v", conf.Name, st.rev, err)
 		return err
 	}
 	st.logEventTime("buildlet_up")
@@ -1459,6 +1484,7 @@ func cleanZoneVMs(zone string) error {
 	// partially-different 500.
 	// TODO(bradfitz): revist this code if we ever start running
 	// thousands of VMs.
+	gceAPIGate()
 	list, err := computeService.Instances.List(projectID, zone).Do()
 	if err != nil {
 		return fmt.Errorf("listing instances: %v", err)
@@ -1495,13 +1521,25 @@ func cleanZoneVMs(zone string) error {
 	return nil
 }
 
-func deleteVM(zone, instName string) {
+// deleteVM starts a delete of an instance in a given zone.
+//
+// It either returns an operation name (if delete is pending) or the
+// empty string if the instance didn't exist.
+func deleteVM(zone, instName string) (operation string, err error) {
+	gceAPIGate()
 	op, err := computeService.Instances.Delete(projectID, zone, instName).Do()
+	apiErr, ok := err.(*googleapi.Error)
+	if ok {
+		if apiErr.Code == 404 {
+			return "", nil
+		}
+	}
 	if err != nil {
 		log.Printf("Failed to delete instance %q in zone %q: %v", instName, zone, err)
-		return
+		return "", err
 	}
-	log.Printf("Sent request to delete instance %q in zone %q. Operation ID == %v", instName, zone, op.Id)
+	log.Printf("Sent request to delete instance %q in zone %q. Operation ID, Name: %v, %v", instName, zone, op.Id, op.Name)
+	return op.Name, nil
 }
 
 func hasScope(want string) bool {
@@ -1626,4 +1664,17 @@ func check(err error) {
 	if err != nil {
 		panic("previously assumed to never fail: " + err.Error())
 	}
+}
+
+// apiCallTicker ticks regularly, preventing us from accidentally making
+// GCE API calls too quickly. Our quota is 20 QPS, but we temporarily
+// limit ourselves to less than that.
+var apiCallTicker = time.NewTicker(time.Second / 5)
+
+func init() {
+	buildlet.GCEGate = gceAPIGate
+}
+
+func gceAPIGate() {
+	<-apiCallTicker.C
 }
