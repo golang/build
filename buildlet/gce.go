@@ -183,6 +183,8 @@ OpLoop:
 		case "DONE":
 			if op.Error != nil {
 				for _, operr := range op.Error.Errors {
+					// TODO: catch Code=="QUOTA_EXCEEDED" and "Message" and return
+					// a known error value/type.
 					return nil, fmt.Errorf("Error creating instance: %+v", operr)
 				}
 				return nil, errors.New("Failed to start.")

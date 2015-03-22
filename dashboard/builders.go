@@ -267,7 +267,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "windows-amd64-gce",
-		VMImage:     "windows-buildlet",
+		VMImage:     "windows-buildlet-v2",
 		machineType: "n1-highcpu-2",
 		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-windows-amd64.tar.gz",
 		RegularDisk: true,
@@ -275,7 +275,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "windows-amd64-race",
-		VMImage:     "windows-buildlet",
+		VMImage:     "windows-buildlet-v2",
 		machineType: "n1-highcpu-4",
 		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-windows-amd64.tar.gz",
 		RegularDisk: true,
@@ -283,7 +283,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "windows-386-gce",
-		VMImage:     "windows-buildlet",
+		VMImage:     "windows-buildlet-v2",
 		machineType: "n1-highcpu-2",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.windows-amd64",
 		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-windows-386.tar.gz",

@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -34,6 +35,10 @@ const attr = "buildlet-binary-url"
 func main() {
 	flag.Parse()
 
+	if !awaitNetwork() {
+		sleepFatalf("network didn't become reachable")
+	}
+
 	// Note: we name it ".exe" for Windows, but the name also
 	// works fine on Linux, etc.
 	target := filepath.FromSlash("./buildlet.exe")
@@ -52,6 +57,20 @@ func main() {
 	if err := cmd.Run(); err != nil {
 		sleepFatalf("Error running buildlet: %v", err)
 	}
+}
+
+// awaitNetwork reports whether the network came up within 30 seconds,
+// determined somewhat arbitrarily via a DNS lookup for google.com.
+func awaitNetwork() bool {
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(time.Second) {
+		if addrs, _ := net.LookupIP("google.com"); len(addrs) > 0 {
+			log.Printf("network is up.")
+			return true
+		}
+		log.Printf("waiting for network...")
+	}
+	log.Printf("gave up waiting for network")
+	return false
 }
 
 func buildletURL() string {

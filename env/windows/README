@@ -31,6 +31,12 @@ instructions:
    * Press "OK"
    * Enter password twice.
 
+-- Prevent password expiration. This bit us once, and I'm not sure this is yet
+   sufficient, but:
+      User Accounts (from above) > Advanced (tab) > Advanced (button) >
+      [lusrmgr]: for all three users, disable password expiration (right click
+      and then Properties and it's a checkbox)
+
 -- Download winstrap.
    * Bring up cmd.exe (Start > Run > "cmd" [OK])
    * Copy/paste (Right click: paste) this into cmd.exe:
