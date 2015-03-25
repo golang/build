@@ -206,13 +206,13 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "nacl-386",
-		VMImage:     "linux-buildlet-nacl",
+		VMImage:     "linux-buildlet-nacl-v2",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
 		Name:        "nacl-amd64p32",
-		VMImage:     "linux-buildlet-nacl",
+		VMImage:     "linux-buildlet-nacl-v2",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
