@@ -9,7 +9,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"crypto/rand"
 	"crypto/sha1"
 	"encoding/json"
 	"errors"
@@ -59,7 +58,6 @@ var (
 
 var (
 	startTime = time.Now()
-	donec     = make(chan builderRev) // reports of finished builders (but not try builds)
 
 	statusMu   sync.Mutex // guards the following four structures; see LOCK ORDER comment above
 	status     = map[builderRev]*buildStatus{}
@@ -120,7 +118,7 @@ func main() {
 	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
 	go http.ListenAndServe(":80", nil)
 
-	go cleanUpOldVMs()
+	go gcePool.cleanUpOldVMs()
 
 	// Start the Docker processes on this host polling Gerrit and
 	// pinging build.golang.org when new commits are available.
@@ -136,18 +134,15 @@ func main() {
 		select {
 		case work := <-workc:
 			log.Printf("workc received %+v; len(status) = %v, cur = %p", work, len(status), status[work])
-			if mayBuildRev(work) {
-				conf, _ := dashboard.Builders[work.name]
-				if st, err := startBuilding(conf, work.rev); err == nil {
-					setStatus(work, st)
-					go pingDashboard(st)
-				} else {
-					log.Printf("Error starting to build %v: %v", work, err)
-				}
+			if !mayBuildRev(work) {
+				continue
 			}
-		case done := <-donec:
-			log.Printf("%v done", done)
-			markDone(done)
+			st, err := newBuild(work)
+			if err != nil {
+				log.Printf("Bad build work params %v: %v", work, err)
+			} else {
+				st.start()
+			}
 		case <-ticker.C:
 			if numCurrentBuilds() == 0 && time.Now().After(startTime.Add(10*time.Minute)) {
 				// TODO: halt the whole machine to kill the VM or something
@@ -181,6 +176,11 @@ func mayBuildRev(work builderRev) bool {
 func setStatus(work builderRev, st *buildStatus) {
 	statusMu.Lock()
 	defer statusMu.Unlock()
+	// TODO: panic if status[work] already exists. audit all callers.
+	// For instance, what if a trybot is running, and then the CL is merged
+	// and the findWork goroutine picks it up and it has the same commit,
+	// because it didn't need to be rebased in Gerrit's cherrypick?
+	// Could we then have two running with the same key?
 	status[work] = st
 }
 
@@ -197,21 +197,6 @@ func markDone(work builderRev) {
 		statusDone = statusDone[:len(statusDone)-1]
 	}
 	statusDone = append(statusDone, st)
-}
-
-func vmIsBuilding(instName string) bool {
-	if instName == "" {
-		log.Printf("bogus empty instance name passed to vmIsBuilding")
-		return false
-	}
-	statusMu.Lock()
-	defer statusMu.Unlock()
-	for _, st := range status {
-		if st.instName == instName {
-			return true
-		}
-	}
-	return false
 }
 
 // statusPtrStr disambiguates which status to return if there are
@@ -237,7 +222,7 @@ func getStatus(work builderRev, statusPtrStr string) *buildStatus {
 type byAge []*buildStatus
 
 func (s byAge) Len() int           { return len(s) }
-func (s byAge) Less(i, j int) bool { return s[i].start.Before(s[j].start) }
+func (s byAge) Less(i, j int) bool { return s[i].startTime.Before(s[j].startTime) }
 func (s byAge) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 func handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -269,7 +254,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	io.WriteString(w, "<html><body><h1>Go build coordinator</h1>")
 
-	fmt.Fprintf(w, "<h2>running</h2><p>%d total builds active; VM capacity: %d/%d", numTotal, len(vmCap), cap(vmCap))
+	fmt.Fprintf(w, "<h2>running</h2><p>%d total builds active; VM capacity: %d/%d", numTotal, len(gcePool.vmCap), cap(gcePool.vmCap))
 
 	io.WriteString(w, "<pre>")
 	for _, st := range active {
@@ -361,6 +346,11 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	writeStatusHeader(w, st)
 
+	if !st.hasEvent("pre_exec") {
+		fmt.Fprintf(w, "\n\n(buildlet still starting; no live streaming. reload manually to see status)\n")
+		return
+	}
+
 	w.(http.Flusher).Flush()
 
 	logs := st.watchLogs()
@@ -392,10 +382,8 @@ func writeStatusHeader(w http.ResponseWriter, st *buildStatus) {
 	defer st.mu.Unlock()
 	fmt.Fprintf(w, "  builder: %s\n", st.name)
 	fmt.Fprintf(w, "      rev: %s\n", st.rev)
-	if st.instName != "" {
-		fmt.Fprintf(w, "  vm name: %s\n", st.instName)
-	}
-	fmt.Fprintf(w, "  started: %v\n", st.start)
+	fmt.Fprintf(w, " buildlet: %s\n", st.bc)
+	fmt.Fprintf(w, "  started: %v\n", st.startTime)
 	done := !st.done.IsZero()
 	if done {
 		fmt.Fprintf(w, "  started: %v\n", st.done)
@@ -592,12 +580,14 @@ func newTrySet(key tryKey) *trySet {
 	}
 	go ts.notifyStarting()
 	for i, bconf := range tryBuilders {
-		ch := make(chan builderRev, 1)
-		bs := startBuildingInVM(bconf, key.Commit, ts, ch)
 		brev := builderRev{name: bconf.Name, rev: key.Commit}
+
+		bs, _ := newBuild(brev)
+		bs.trySet = ts
 		status[brev] = bs
 		ts.builds[i] = bs
-		go ts.awaitTryBuild(i, bconf, bs, ch)
+		go bs.start() // acquires statusMu itself, so in a goroutine
+		go ts.awaitTryBuild(i, bconf, bs)
 	}
 	return ts
 }
@@ -624,13 +614,13 @@ func (ts *trySet) notifyStarting() {
 //
 // If the build fails without getting to the end, it sleeps and
 // reschedules it, as long as it's still wanted.
-func (ts *trySet) awaitTryBuild(idx int, bconf dashboard.BuildConfig, bs *buildStatus, ch chan builderRev) {
+func (ts *trySet) awaitTryBuild(idx int, bconf dashboard.BuildConfig, bs *buildStatus) {
 	for {
 	WaitCh:
 		for {
-			timeout := time.NewTimer(5 * time.Minute)
+			timeout := time.NewTimer(10 * time.Minute)
 			select {
-			case <-ch:
+			case <-bs.donec:
 				timeout.Stop()
 				break WaitCh
 			case <-timeout.C:
@@ -646,14 +636,18 @@ func (ts *trySet) awaitTryBuild(idx int, bconf dashboard.BuildConfig, bs *buildS
 			return
 		}
 
+		// TODO(bradfitz): rethink this logic. we should only
+		// start a new build if the old one appears dead or
+		// hung.
+
 		// Sleep a bit and retry.
 		time.Sleep(30 * time.Second)
 		if !ts.wanted() {
 			return
 		}
-		bs = startBuildingInVM(bconf, ts.Commit, ts, ch)
 		brev := builderRev{name: bconf.Name, rev: ts.Commit}
-		setStatus(brev, bs)
+		bs, _ = newBuild(brev)
+		go bs.start()
 		ts.mu.Lock()
 		ts.builds[idx] = bs
 		ts.mu.Unlock()
@@ -678,9 +672,6 @@ func (ts *trySet) cancelBuilds() {
 }
 
 func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus) {
-	brev := builderRev{name: bconf.Name, rev: ts.Commit}
-	markDone(brev)
-
 	bs.mu.Lock()
 	succeeded := bs.succeeded
 	var buildLog string
@@ -751,102 +742,84 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 type builderRev struct {
 	name string // e.g. "linux-amd64-race"
 	rev  string // lowercase hex git hash
+	// TODO: optional subrepo name/hash
 }
 
-func startBuilding(conf dashboard.BuildConfig, rev string) (*buildStatus, error) {
-	return startBuildingInVM(conf, rev, nil, donec), nil
+type eventTimeLogger interface {
+	logEventTime(name string)
 }
 
-func randHex(n int) string {
-	buf := make([]byte, n/2)
-	_, err := rand.Read(buf)
-	if err != nil {
-		panic("Failed to get randomness: " + err.Error())
-	}
-	return fmt.Sprintf("%x", buf)
+type BuildletPool interface {
+	// GetBuildlet returns a new buildlet client.
+	//
+	// The machineType is the machine type (e.g. "linux-amd64-race").
+	//
+	// The rev is git hash. Implementations should not use it for
+	// anything except for log messages or VM naming.
+	//
+	// Clients must Close when done with the client.
+	GetBuildlet(machineType, rev string, el eventTimeLogger) (*buildlet.Client, error)
+
+	String() string // TODO(bradfitz): more status stuff
 }
 
-// startBuildingInVM starts a VM on GCE running the buildlet binary to build rev.
-// The ts may be nil if this isn't a try build.
-// The done channel always receives exactly 1 value.
-// TODO(bradfitz): move this into a buildlet client package.
-func startBuildingInVM(conf dashboard.BuildConfig, rev string, ts *trySet, done chan<- builderRev) *buildStatus {
-	brev := builderRev{
-		name: conf.Name,
-		rev:  rev,
+func poolForConf(conf dashboard.BuildConfig) (BuildletPool, error) {
+	if conf.VMImage != "" {
+		return gcePool, nil
 	}
-	// name is the project-wide unique name of the GCE instance. It can't be longer
-	// than 61 bytes, so we only use the first 8 bytes of the rev.
-	name := "buildlet-" + conf.Name + "-" + rev[:8] + "-rn" + randHex(6)
+	return nil, fmt.Errorf("unknown buildlet pool type for builder %q", conf.Name)
+}
 
-	st := &buildStatus{
-		builderRev: brev,
-		start:      time.Now(),
-		instName:   name,
-		trySet:     ts,
+func newBuild(rev builderRev) (*buildStatus, error) {
+	// Note: can't acquire statusMu in newBuild, as this is called
+	// from findTryWork -> newTrySet, which holds statusMu.
+
+	conf, ok := dashboard.Builders[rev.name]
+	if !ok {
+		return nil, fmt.Errorf("unknown builder type %q", rev.name)
 	}
+	return &buildStatus{
+		builderRev: rev,
+		conf:       conf,
+		donec:      make(chan struct{}),
+		startTime:  time.Now(),
+	}, nil
+}
 
+// start sets the st.startTime and starts the build in a new goroutine.
+// If it returns an error, st is not modified and a new goroutine has not
+// been started.
+// The build status's donec channel is closed on when the build is complete
+// in either direction.
+func (st *buildStatus) start() {
+	setStatus(st.builderRev, st)
+	go st.pingDashboard()
 	go func() {
-		err := buildInVM(conf, st)
+		err := st.build()
 		if err != nil {
 			fmt.Fprintf(st, "\n\nError: %v\n", err)
 		}
 		st.setDone(err == nil)
-		done <- builderRev{conf.Name, rev}
+		markDone(st.builderRev)
 	}()
-	return st
 }
 
-// We artifically limit ourselves to 60 VMs right now, assuming that
-// each takes 2 CPU, and we have a current quota of 200 CPUs. That
-// gives us headroom, but also doesn't account for SSD or memory
-// quota.
-// TODO(bradfitz): better quota system.
-const maxVMs = 60
-
-var vmCap = make(chan bool, maxVMs)
-
-func awaitVMCountQuota() { vmCap <- true }
-func putVMCountQuota()   { <-vmCap }
-
-func buildInVM(conf dashboard.BuildConfig, st *buildStatus) (retErr error) {
-	st.logEventTime("awaiting_gce_quota")
-	awaitVMCountQuota()
-	defer putVMCountQuota()
-
-	needDelete := false
-	defer func() {
-		if !needDelete {
-			return
-		}
-		deleteVM(projectZone, st.instName)
-	}()
-
-	st.logEventTime("creating_instance")
-	log.Printf("Creating VM for %s, %s", conf.Name, st.rev)
-	bc, err := buildlet.StartNewVM(tokenSource, st.instName, conf.Name, buildlet.VMOpts{
-		ProjectID:   projectID,
-		Zone:        projectZone,
-		Description: fmt.Sprintf("Go Builder building %s %s", conf.Name, st.rev),
-		DeleteIn:    vmDeleteTimeout,
-		OnInstanceRequested: func() {
-			needDelete = true
-			st.logEventTime("instance_create_requested")
-			log.Printf("%v now booting VM %v for build", st.builderRev, st.instName)
-		},
-		OnInstanceCreated: func() {
-			st.logEventTime("instance_created")
-			needDelete = true // redundant with OnInstanceRequested one, but fine.
-		},
-		OnGotInstanceInfo: func() {
-			st.logEventTime("waiting_for_buildlet")
-		},
-	})
+func (st *buildStatus) build() (retErr error) {
+	pool, err := poolForConf(st.conf)
 	if err != nil {
-		log.Printf("Failed to create VM for %s, %s: %v", conf.Name, st.rev, err)
 		return err
 	}
-	st.logEventTime("buildlet_up")
+	st.logEventTime("get_buildlet")
+	bc, err := pool.GetBuildlet(st.conf.Name, st.rev, st)
+	if err != nil {
+		return fmt.Errorf("failed to get a buildlet: %v", err)
+	}
+	defer bc.Close()
+	st.mu.Lock()
+	st.bc = bc
+	st.mu.Unlock()
+
+	st.logEventTime("got_buildlet")
 	goodRes := func(res *http.Response, err error, what string) bool {
 		if err != nil {
 			retErr = fmt.Errorf("%s: %v", what, err)
@@ -886,10 +859,10 @@ func buildInVM(conf dashboard.BuildConfig, st *buildStatus) (retErr error) {
 		st.logEventTime("end_write_go_tar")
 		return nil
 	})
-	if conf.Go14URL != "" {
+	if st.conf.Go14URL != "" {
 		grp.Go(func() error {
 			st.logEventTime("start_write_go14_tar")
-			if err := bc.PutTarFromURL(conf.Go14URL, "go1.4"); err != nil {
+			if err := bc.PutTarFromURL(st.conf.Go14URL, "go1.4"); err != nil {
 				return err
 			}
 			st.logEventTime("end_write_go14_tar")
@@ -903,10 +876,10 @@ func buildInVM(conf dashboard.BuildConfig, st *buildStatus) (retErr error) {
 	execStartTime := time.Now()
 	st.logEventTime("pre_exec")
 
-	remoteErr, err := bc.Exec(path.Join("go", conf.AllScript()), buildlet.ExecOpts{
+	remoteErr, err := bc.Exec(path.Join("go", st.conf.AllScript()), buildlet.ExecOpts{
 		Output:      st,
 		OnStartExec: func() { st.logEventTime("running_exec") },
-		ExtraEnv:    conf.Env(),
+		ExtraEnv:    st.conf.Env(),
 		Debug:       true,
 	})
 	if err != nil {
@@ -926,7 +899,7 @@ func buildInVM(conf dashboard.BuildConfig, st *buildStatus) (retErr error) {
 		}
 	}
 	if remoteErr != nil {
-		return fmt.Errorf("%s failed: %v", conf.AllScript(), remoteErr)
+		return fmt.Errorf("%s failed: %v", st.conf.AllScript(), remoteErr)
 	}
 	return nil
 }
@@ -940,14 +913,16 @@ type eventAndTime struct {
 type buildStatus struct {
 	// Immutable:
 	builderRev
-	start    time.Time
-	trySet   *trySet // or nil
-	instName string  // VM instance name
+	conf      dashboard.BuildConfig
+	startTime time.Time     // actually time of newBuild (~same thing)
+	trySet    *trySet       // or nil
+	donec     chan struct{} // closed when done
 
-	mu        sync.Mutex   // guards following
-	done      time.Time    // finished running
-	succeeded bool         // set when done
-	output    bytes.Buffer // stdout and stderr
+	mu        sync.Mutex       // guards following
+	bc        *buildlet.Client // nil initially, until pool returns one
+	done      time.Time        // finished running
+	succeeded bool             // set when done
+	output    bytes.Buffer     // stdout and stderr
 	events    []eventAndTime
 	watcher   []*logWatcher
 }
@@ -958,6 +933,7 @@ func (st *buildStatus) setDone(succeeded bool) {
 	st.succeeded = succeeded
 	st.done = time.Now()
 	st.notifyWatchersLocked(true)
+	close(st.donec)
 }
 
 func (st *buildStatus) isRunning() bool {
@@ -1012,11 +988,11 @@ func (st *buildStatus) htmlStatusLine() string {
 		buf.WriteString(", failed")
 	}
 
-	fmt.Fprintf(&buf, " in VM <a href='%s'>%s</a>", st.logsURL(), st.instName)
+	fmt.Fprintf(&buf, "; <a href='%s'>build log</a>; %s", st.logsURL(), html.EscapeString(st.bc.String()))
 
 	t := st.done
 	if t.IsZero() {
-		t = st.start
+		t = st.startTime
 	}
 	fmt.Fprintf(&buf, ", %v ago\n", time.Since(t))
 	st.writeEventsLocked(&buf, true)
@@ -1127,6 +1103,14 @@ func versionTgz(rev string) io.Reader {
 	zw := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(zw)
 
+	// Writing to a bytes.Buffer should never fail, so check
+	// errors with an explosion:
+	check := func(err error) {
+		if err != nil {
+			panic("previously assumed to never fail: " + err.Error())
+		}
+	}
+
 	contents := fmt.Sprintf("devel " + rev)
 	check(tw.WriteHeader(&tar.Header{
 		Name: "VERSION",
@@ -1138,12 +1122,4 @@ func versionTgz(rev string) io.Reader {
 	check(tw.Close())
 	check(zw.Close())
 	return bytes.NewReader(buf.Bytes())
-}
-
-// check is only for things which should be impossible (not even rare)
-// to fail.
-func check(err error) {
-	if err != nil {
-		panic("previously assumed to never fail: " + err.Error())
-	}
 }

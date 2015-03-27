@@ -115,7 +115,7 @@ func recordResult(builderName string, ok bool, hash, buildLog string, runTime ti
 
 // pingDashboard runs in its own goroutine, created periodically to
 // POST to build.golang.org/building to let it know that we're still working on a build.
-func pingDashboard(st *buildStatus) {
+func (st *buildStatus) pingDashboard() {
 	u := "https://build.golang.org/building?" + url.Values{
 		"builder": []string{st.name},
 		"key":     []string{builderKey(st.name)},

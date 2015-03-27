@@ -2,17 +2,21 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Code interacting with Google Compute Engine (GCE).
+// Code interacting with Google Compute Engine (GCE) and
+// a GCE implementation of the BuildletPoolimplementation of the BuildletPool
+// interface.
 
 package main
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log"
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/build/buildlet"
@@ -108,6 +112,104 @@ func checkTryBuildDeps() error {
 	return nil
 }
 
+// We artifically limit ourselves to 60 VMs right now, assuming that
+// each takes 2 CPU, and we have a current quota of 200 CPUs. That
+// gives us headroom, but also doesn't account for SSD or memory
+// quota.
+// TODO(bradfitz): better quota system.
+const maxVMs = 60
+
+var gcePool = &gceBuildletPool{
+	vmCap: make(chan bool, maxVMs),
+}
+var _ BuildletPool = (*gceBuildletPool)(nil)
+
+type gceBuildletPool struct {
+	// vmCap is a semaphore used to limit the number of VMs in
+	// use.
+	vmCap chan bool
+
+	mu       sync.Mutex
+	instUsed map[string]bool // GCE VM instance name -> true
+}
+
+func (p *gceBuildletPool) GetBuildlet(typ, rev string, el eventTimeLogger) (*buildlet.Client, error) {
+	el.logEventTime("awaiting_gce_quota")
+	p.awaitVMCountQuota()
+
+	// name is the project-wide unique name of the GCE instance. It can't be longer
+	// than 61 bytes.
+	instName := "buildlet-" + typ + "-" + rev[:8] + "-rn" + randHex(6)
+	p.setInstanceUsed(instName, true)
+
+	var needDelete bool
+
+	el.logEventTime("instance_name=" + instName)
+	el.logEventTime("creating_instance")
+	log.Printf("Creating GCE VM %q for %s at %s", instName, typ, rev)
+	bc, err := buildlet.StartNewVM(tokenSource, instName, typ, buildlet.VMOpts{
+		ProjectID:   projectID,
+		Zone:        projectZone,
+		Description: fmt.Sprintf("Go Builder for %s at %s", typ, rev),
+		DeleteIn:    vmDeleteTimeout,
+		OnInstanceRequested: func() {
+			needDelete = true
+			el.logEventTime("instance_create_requested")
+			log.Printf("GCE VM %q now booting", instName)
+		},
+		OnInstanceCreated: func() {
+			el.logEventTime("instance_created")
+			needDelete = true // redundant with OnInstanceRequested one, but fine.
+		},
+		OnGotInstanceInfo: func() {
+			el.logEventTime("waiting_for_buildlet")
+		},
+	})
+	if err != nil {
+		log.Printf("Failed to create VM for %s, %s: %v", typ, rev, err)
+		if needDelete {
+			deleteVM(projectZone, instName)
+		}
+		p.setInstanceUsed(instName, false)
+		p.putVMCountQuota()
+		return nil, err
+	}
+	bc.SetDescription("GCE VM: " + instName)
+	bc.SetCloseFunc(func() error {
+		deleteVM(projectZone, instName)
+		p.setInstanceUsed(instName, false)
+		p.putVMCountQuota()
+		return nil
+	})
+	return bc, nil
+}
+
+func (p *gceBuildletPool) String() string {
+	return fmt.Sprintf("GCE pool TODO(bradfitz): status info")
+}
+
+func (p *gceBuildletPool) awaitVMCountQuota() { p.vmCap <- true }
+func (p *gceBuildletPool) putVMCountQuota()   { <-p.vmCap }
+
+func (p *gceBuildletPool) setInstanceUsed(instName string, used bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.instUsed == nil {
+		p.instUsed = make(map[string]bool)
+	}
+	if used {
+		p.instUsed[instName] = true
+	} else {
+		delete(p.instUsed, instName)
+	}
+}
+
+func (p *gceBuildletPool) instanceUsed(instName string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.instUsed[instName]
+}
+
 // cleanUpOldVMs loops forever and periodically enumerates virtual
 // machines and deletes those which have expired.
 //
@@ -121,14 +223,14 @@ func checkTryBuildDeps() error {
 // stranded and wasting resources forever, we instead set the
 // "delete-at" metadata attribute on them when created to some time
 // that's well beyond their expected lifetime.
-func cleanUpOldVMs() {
+func (p *gceBuildletPool) cleanUpOldVMs() {
 	if computeService == nil {
 		return
 	}
 	for {
 		for _, zone := range strings.Split(*cleanZones, ",") {
 			zone = strings.TrimSpace(zone)
-			if err := cleanZoneVMs(zone); err != nil {
+			if err := p.cleanZoneVMs(zone); err != nil {
 				log.Printf("Error cleaning VMs in zone %q: %v", zone, err)
 			}
 		}
@@ -137,7 +239,7 @@ func cleanUpOldVMs() {
 }
 
 // cleanZoneVMs is part of cleanUpOldVMs, operating on a single zone.
-func cleanZoneVMs(zone string) error {
+func (p *gceBuildletPool) cleanZoneVMs(zone string) error {
 	// Fetch the first 500 (default) running instances and clean
 	// thoes. We expect that we'll be running many fewer than
 	// that. Even if we have more, eventually the first 500 will
@@ -174,7 +276,7 @@ func cleanZoneVMs(zone string) error {
 		// prevents us from deleting buildlet VMs used by
 		// Gophers for interactive development & debugging
 		// (non-builder users); those are named "mote-*".
-		if sawDeleteAt && strings.HasPrefix(inst.Name, "buildlet-") && !vmIsBuilding(inst.Name) {
+		if sawDeleteAt && strings.HasPrefix(inst.Name, "buildlet-") && !p.instanceUsed(inst.Name) {
 			log.Printf("Deleting VM %q in zone %q from an earlier coordinator generation ...", inst.Name, zone)
 			deleteVM(zone, inst.Name)
 		}
@@ -226,4 +328,13 @@ func hasComputeScope() bool {
 
 func hasStorageScope() bool {
 	return hasScope(storage.ScopeReadWrite) || hasScope(storage.ScopeFullControl)
+}
+
+func randHex(n int) string {
+	buf := make([]byte, n/2)
+	_, err := rand.Read(buf)
+	if err != nil {
+		panic("Failed to get randomness: " + err.Error())
+	}
+	return fmt.Sprintf("%x", buf)
 }

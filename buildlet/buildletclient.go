@@ -40,6 +40,28 @@ func NewClient(ipPort string, kp KeyPair) *Client {
 	}
 }
 
+// SetCloseFunc sets a function to be called when c.Close is called.
+// SetCloseFunc must not be called concurrently with Close.
+func (c *Client) SetCloseFunc(fn func() error) {
+	c.closeFunc = fn
+}
+
+func (c *Client) Close() error {
+	var err error
+	if c.closeFunc != nil {
+		err = c.closeFunc()
+		c.closeFunc = nil
+	}
+	return err
+}
+
+// SetDescription sets a short description of where the buildlet
+// connection came from.  This is used by the build coordinator status
+// page, mostly for debugging.
+func (c *Client) SetDescription(v string) {
+	c.desc = v
+}
+
 // defaultDialer returns the net/http package's default Dial function.
 // Notably, this sets TCP keep-alive values, so when we kill VMs
 // (whose TCP stacks stop replying, forever), we don't leak file
@@ -57,6 +79,16 @@ type Client struct {
 	tls        KeyPair
 	password   string // basic auth password or empty for none
 	httpClient *http.Client
+
+	closeFunc func() error
+	desc      string
+}
+
+func (c *Client) String() string {
+	if c == nil {
+		return "(nil *buildlet.Client)"
+	}
+	return strings.TrimSpace(c.URL() + " " + c.desc)
 }
 
 // URL returns the buildlet's URL prefix, without a trailing slash.
