@@ -9,8 +9,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"crypto/hmac"
-	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha1"
 	"encoding/json"
@@ -22,13 +20,10 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
-	"os"
 	"os/exec"
 	"path"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -38,13 +33,6 @@ import (
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/types"
-	"golang.org/x/net/context"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
-	"google.golang.org/api/compute/v1"
-	"google.golang.org/api/googleapi"
-	"google.golang.org/cloud"
-	"google.golang.org/cloud/compute/metadata"
 	"google.golang.org/cloud/storage"
 )
 
@@ -71,8 +59,7 @@ var (
 
 var (
 	startTime = time.Now()
-	watchers  = map[string]watchConfig{} // populated at startup, keyed by repo, e.g. "https://go.googlesource.com/go"
-	donec     = make(chan builderRev)    // reports of finished builders (but not try builds)
+	donec     = make(chan builderRev) // reports of finished builders (but not try builds)
 
 	statusMu   sync.Mutex // guards the following four structures; see LOCK ORDER comment above
 	status     = map[builderRev]*buildStatus{}
@@ -120,129 +107,6 @@ const (
 	vmDeleteTimeout = 45 * time.Minute
 )
 
-// Initialized by initGCE:
-var (
-	projectID      string
-	projectZone    string
-	computeService *compute.Service
-	externalIP     string
-	tokenSource    oauth2.TokenSource
-	serviceCtx     context.Context
-	errTryDeps     error // non-nil if try bots are disabled
-	gerritClient   *gerrit.Client
-)
-
-func initGCE() error {
-	if !metadata.OnGCE() {
-		return errors.New("not running on GCE; VM support disabled")
-	}
-	var err error
-	projectID, err = metadata.ProjectID()
-	if err != nil {
-		return fmt.Errorf("failed to get current GCE ProjectID: %v", err)
-	}
-	projectZone, err = metadata.Get("instance/zone")
-	if err != nil || projectZone == "" {
-		return fmt.Errorf("failed to get current GCE zone: %v", err)
-	}
-	// Convert the zone from "projects/1234/zones/us-central1-a" to "us-central1-a".
-	projectZone = path.Base(projectZone)
-	if !hasComputeScope() {
-		return errors.New("The coordinator is not running with access to read and write Compute resources. VM support disabled.")
-
-	}
-	externalIP, err = metadata.ExternalIP()
-	if err != nil {
-		return fmt.Errorf("ExternalIP: %v", err)
-	}
-	tokenSource = google.ComputeTokenSource("default")
-	httpClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
-	serviceCtx = cloud.NewContext(projectID, httpClient)
-	computeService, _ = compute.New(httpClient)
-	errTryDeps = checkTryBuildDeps()
-	if errTryDeps != nil {
-		log.Printf("TryBot builders disabled due to error: %v", errTryDeps)
-	} else {
-		log.Printf("TryBot builders enabled.")
-	}
-
-	return nil
-}
-
-func checkTryBuildDeps() error {
-	if !hasStorageScope() {
-		return errors.New("coordinator's GCE instance lacks the storage service scope")
-	}
-	wr := storage.NewWriter(serviceCtx, *buildLogBucket, "hello.txt")
-	fmt.Fprintf(wr, "Hello, world! Coordinator start-up at %v", time.Now())
-	if err := wr.Close(); err != nil {
-		return fmt.Errorf("test write of a GCS object failed: %v", err)
-	}
-	gobotPass, err := metadata.ProjectAttributeValue("gobot-password")
-	if err != nil {
-		return fmt.Errorf("failed to get project metadata 'gobot-password': %v", err)
-	}
-	gerritClient = gerrit.NewClient("https://go-review.googlesource.com",
-		gerrit.BasicAuth("git-gobot.golang.org", strings.TrimSpace(string(gobotPass))))
-
-	return nil
-}
-
-type imageInfo struct {
-	url string // of tar file
-
-	mu      sync.Mutex
-	lastMod string
-}
-
-var images = map[string]*imageInfo{
-	"go-commit-watcher": {url: "https://storage.googleapis.com/go-builder-data/docker-commit-watcher.tar.gz"},
-}
-
-// recordResult sends build results to the dashboard
-func recordResult(builderName string, ok bool, hash, buildLog string, runTime time.Duration) error {
-	req := map[string]interface{}{
-		"Builder":     builderName,
-		"PackagePath": "",
-		"Hash":        hash,
-		"GoHash":      "",
-		"OK":          ok,
-		"Log":         buildLog,
-		"RunTime":     runTime,
-	}
-	args := url.Values{"key": {builderKey(builderName)}, "builder": {builderName}}
-	return dash("POST", "result", args, req, nil)
-}
-
-// pingDashboard runs in its own goroutine, created periodically to
-// POST to build.golang.org/building to let it know that we're still working on a build.
-func pingDashboard(st *buildStatus) {
-	u := "https://build.golang.org/building?" + url.Values{
-		"builder": []string{st.name},
-		"key":     []string{builderKey(st.name)},
-		"hash":    []string{st.rev},
-		"url":     []string{fmt.Sprintf("http://farmer.golang.org/logs?name=%s&rev=%s&st=%p", st.name, st.rev, st)},
-	}.Encode()
-	for {
-		st.mu.Lock()
-		done := st.done
-		st.mu.Unlock()
-		if !done.IsZero() {
-			return
-		}
-		if res, _ := http.PostForm(u, nil); res != nil {
-			res.Body.Close()
-		}
-		time.Sleep(60 * time.Second)
-	}
-}
-
-type watchConfig struct {
-	repo     string        // "https://go.googlesource.com/go"
-	dash     string        // "https://build.golang.org/" (must end in /)
-	interval time.Duration // Polling interval
-}
-
 func main() {
 	flag.Parse()
 
@@ -250,24 +114,17 @@ func main() {
 		log.Printf("VM support disabled due to error initializing GCE: %v", err)
 	}
 
-	addWatcher(watchConfig{repo: "https://go.googlesource.com/go", dash: "https://build.golang.org/"})
-	addWatcher(watchConfig{repo: "https://go.googlesource.com/gofrontend", dash: "https://build.golang.org/gccgo/"})
-
 	http.HandleFunc("/", handleStatus)
 	http.HandleFunc("/try", handleTryStatus)
 	http.HandleFunc("/logs", handleLogs)
 	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
 	go http.ListenAndServe(":80", nil)
 
-	go cleanUpOldContainers()
 	go cleanUpOldVMs()
 
-	stopWatchers() // clean up before we start new ones
-	for _, watcher := range watchers {
-		if err := startWatching(watchers[watcher.repo]); err != nil {
-			log.Printf("Error starting watcher for %s: %v", watcher.repo, err)
-		}
-	}
+	// Start the Docker processes on this host polling Gerrit and
+	// pinging build.golang.org when new commits are available.
+	startWatchers() // in watcher.go
 
 	workc := make(chan builderRev)
 	go findWorkLoop(workc)
@@ -896,84 +753,6 @@ type builderRev struct {
 	rev  string // lowercase hex git hash
 }
 
-// returns the part after "docker run"
-func (conf watchConfig) dockerRunArgs() (args []string) {
-	log.Printf("Running watcher with master key %q", masterKey())
-	if key := masterKey(); len(key) > 0 {
-		tmpKey := "/tmp/watcher.buildkey"
-		if _, err := os.Stat(tmpKey); err != nil {
-			if err := ioutil.WriteFile(tmpKey, key, 0600); err != nil {
-				log.Fatal(err)
-			}
-		}
-		// Images may look for .gobuildkey in / or /root, so provide both.
-		// TODO(adg): fix images that look in the wrong place.
-		args = append(args, "-v", tmpKey+":/.gobuildkey")
-		args = append(args, "-v", tmpKey+":/root/.gobuildkey")
-	}
-	args = append(args,
-		"go-commit-watcher",
-		"/usr/local/bin/watcher",
-		"-repo="+conf.repo,
-		"-dash="+conf.dash,
-		"-poll="+conf.interval.String(),
-	)
-	return
-}
-
-func addWatcher(c watchConfig) {
-	if c.repo == "" {
-		c.repo = "https://go.googlesource.com/go"
-	}
-	if c.dash == "" {
-		c.dash = "https://build.golang.org/"
-	}
-	if c.interval == 0 {
-		c.interval = 10 * time.Second
-	}
-	watchers[c.repo] = c
-}
-
-func condUpdateImage(img string) error {
-	ii := images[img]
-	if ii == nil {
-		return fmt.Errorf("image %q doesn't exist", img)
-	}
-	ii.mu.Lock()
-	defer ii.mu.Unlock()
-	res, err := http.Head(ii.url)
-	if err != nil {
-		return fmt.Errorf("Error checking %s: %v", ii.url, err)
-	}
-	if res.StatusCode != 200 {
-		return fmt.Errorf("Error checking %s: %v", ii.url, res.Status)
-	}
-	if res.Header.Get("Last-Modified") == ii.lastMod {
-		return nil
-	}
-
-	res, err = http.Get(ii.url)
-	if err != nil || res.StatusCode != 200 {
-		return fmt.Errorf("Get after Head failed for %s: %v, %v", ii.url, err, res)
-	}
-	defer res.Body.Close()
-
-	log.Printf("Running: docker load of %s\n", ii.url)
-	cmd := exec.Command("docker", "load")
-	cmd.Stdin = res.Body
-
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-
-	if cmd.Run(); err != nil {
-		log.Printf("Failed to pull latest %s from %s and pipe into docker load: %v, %s", img, ii.url, err, out.Bytes())
-		return err
-	}
-	ii.lastMod = res.Header.Get("Last-Modified")
-	return nil
-}
-
 func startBuilding(conf dashboard.BuildConfig, rev string) (*buildStatus, error) {
 	return startBuildingInVM(conf, rev, nil, donec), nil
 }
@@ -1343,303 +1122,6 @@ func (st *buildStatus) notifyWatchersLocked(done bool) {
 	}
 }
 
-// Stop any previous go-commit-watcher Docker tasks, so they don't
-// pile up upon restarts of the coordinator.
-func stopWatchers() {
-	out, err := exec.Command("docker", "ps").Output()
-	if err != nil {
-		return
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if !strings.Contains(line, "go-commit-watcher:") {
-			continue
-		}
-		f := strings.Fields(line)
-		exec.Command("docker", "rm", "-f", "-v", f[0]).Run()
-	}
-}
-
-func startWatching(conf watchConfig) (err error) {
-	defer func() {
-		if err != nil {
-			restartWatcherSoon(conf)
-		}
-	}()
-	log.Printf("Starting watcher for %v", conf.repo)
-	if err := condUpdateImage("go-commit-watcher"); err != nil {
-		log.Printf("Failed to setup container for commit watcher: %v", err)
-		return err
-	}
-
-	cmd := exec.Command("docker", append([]string{"run", "-d"}, conf.dockerRunArgs()...)...)
-	all, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Printf("Docker run for commit watcher = err:%v, output: %s", err, all)
-		return err
-	}
-	container := strings.TrimSpace(string(all))
-	// Start a goroutine to wait for the watcher to die.
-	go func() {
-		exec.Command("docker", "wait", container).Run()
-		exec.Command("docker", "rm", "-v", container).Run()
-		log.Printf("Watcher crashed. Restarting soon.")
-		restartWatcherSoon(conf)
-	}()
-	return nil
-}
-
-func restartWatcherSoon(conf watchConfig) {
-	time.AfterFunc(30*time.Second, func() {
-		startWatching(conf)
-	})
-}
-
-func builderKey(builder string) string {
-	master := masterKey()
-	if len(master) == 0 {
-		return ""
-	}
-	h := hmac.New(md5.New, master)
-	io.WriteString(h, builder)
-	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
-func masterKey() []byte {
-	keyOnce.Do(loadKey)
-	return masterKeyCache
-}
-
-var (
-	keyOnce        sync.Once
-	masterKeyCache []byte
-)
-
-func loadKey() {
-	if *masterKeyFile != "" {
-		b, err := ioutil.ReadFile(*masterKeyFile)
-		if err != nil {
-			log.Fatal(err)
-		}
-		masterKeyCache = bytes.TrimSpace(b)
-		return
-	}
-	masterKey, err := metadata.ProjectAttributeValue("builder-master-key")
-	if err != nil {
-		log.Fatalf("No builder master key available: %v", err)
-	}
-	masterKeyCache = []byte(strings.TrimSpace(masterKey))
-}
-
-// This is only for the watcher container, since all builds run in VMs
-// now.
-func cleanUpOldContainers() {
-	for {
-		for _, cid := range oldContainers() {
-			log.Printf("Cleaning old container %v", cid)
-			exec.Command("docker", "rm", "-v", cid).Run()
-		}
-		time.Sleep(60 * time.Second)
-	}
-}
-
-func oldContainers() []string {
-	out, _ := exec.Command("docker", "ps", "-a", "--filter=status=exited", "--no-trunc", "-q").Output()
-	return strings.Fields(string(out))
-}
-
-// cleanUpOldVMs loops forever and periodically enumerates virtual
-// machines and deletes those which have expired.
-//
-// A VM is considered expired if it has a "delete-at" metadata
-// attribute having a unix timestamp before the current time.
-//
-// This is the safety mechanism to delete VMs which stray from the
-// normal deleting process. VMs are created to run a single build and
-// should be shut down by a controlling process. Due to various types
-// of failures, they might get stranded. To prevent them from getting
-// stranded and wasting resources forever, we instead set the
-// "delete-at" metadata attribute on them when created to some time
-// that's well beyond their expected lifetime.
-func cleanUpOldVMs() {
-	if computeService == nil {
-		return
-	}
-	for {
-		for _, zone := range strings.Split(*cleanZones, ",") {
-			zone = strings.TrimSpace(zone)
-			if err := cleanZoneVMs(zone); err != nil {
-				log.Printf("Error cleaning VMs in zone %q: %v", zone, err)
-			}
-		}
-		time.Sleep(time.Minute)
-	}
-}
-
-// cleanZoneVMs is part of cleanUpOldVMs, operating on a single zone.
-func cleanZoneVMs(zone string) error {
-	// Fetch the first 500 (default) running instances and clean
-	// thoes. We expect that we'll be running many fewer than
-	// that. Even if we have more, eventually the first 500 will
-	// either end or be cleaned, and then the next call will get a
-	// partially-different 500.
-	// TODO(bradfitz): revist this code if we ever start running
-	// thousands of VMs.
-	gceAPIGate()
-	list, err := computeService.Instances.List(projectID, zone).Do()
-	if err != nil {
-		return fmt.Errorf("listing instances: %v", err)
-	}
-	for _, inst := range list.Items {
-		if inst.Metadata == nil {
-			// Defensive. Not seen in practice.
-			continue
-		}
-		sawDeleteAt := false
-		for _, it := range inst.Metadata.Items {
-			if it.Key == "delete-at" {
-				sawDeleteAt = true
-				unixDeadline, err := strconv.ParseInt(it.Value, 10, 64)
-				if err != nil {
-					log.Printf("invalid delete-at value %q seen; ignoring", it.Value)
-				}
-				if err == nil && time.Now().Unix() > unixDeadline {
-					log.Printf("Deleting expired VM %q in zone %q ...", inst.Name, zone)
-					deleteVM(zone, inst.Name)
-				}
-			}
-		}
-		// Delete buildlets (things we made) from previous
-		// generations.  Thenaming restriction (buildlet-*)
-		// prevents us from deleting buildlet VMs used by
-		// Gophers for interactive development & debugging
-		// (non-builder users); those are named "mote-*".
-		if sawDeleteAt && strings.HasPrefix(inst.Name, "buildlet-") && !vmIsBuilding(inst.Name) {
-			log.Printf("Deleting VM %q in zone %q from an earlier coordinator generation ...", inst.Name, zone)
-			deleteVM(zone, inst.Name)
-		}
-	}
-	return nil
-}
-
-// deleteVM starts a delete of an instance in a given zone.
-//
-// It either returns an operation name (if delete is pending) or the
-// empty string if the instance didn't exist.
-func deleteVM(zone, instName string) (operation string, err error) {
-	gceAPIGate()
-	op, err := computeService.Instances.Delete(projectID, zone, instName).Do()
-	apiErr, ok := err.(*googleapi.Error)
-	if ok {
-		if apiErr.Code == 404 {
-			return "", nil
-		}
-	}
-	if err != nil {
-		log.Printf("Failed to delete instance %q in zone %q: %v", instName, zone, err)
-		return "", err
-	}
-	log.Printf("Sent request to delete instance %q in zone %q. Operation ID, Name: %v, %v", instName, zone, op.Id, op.Name)
-	return op.Name, nil
-}
-
-func hasScope(want string) bool {
-	if !metadata.OnGCE() {
-		return false
-	}
-	scopes, err := metadata.Scopes("default")
-	if err != nil {
-		log.Printf("failed to query metadata default scopes: %v", err)
-		return false
-	}
-	for _, v := range scopes {
-		if v == want {
-			return true
-		}
-	}
-	return false
-}
-
-func hasComputeScope() bool {
-	return hasScope(compute.ComputeScope)
-}
-
-func hasStorageScope() bool {
-	return hasScope(storage.ScopeReadWrite) || hasScope(storage.ScopeFullControl)
-}
-
-// dash is copied from the builder binary. It runs the given method and command on the dashboard.
-//
-// TODO(bradfitz,adg): unify this somewhere?
-//
-// If args is non-nil it is encoded as the URL query string.
-// If req is non-nil it is JSON-encoded and passed as the body of the HTTP POST.
-// If resp is non-nil the server's response is decoded into the value pointed
-// to by resp (resp must be a pointer).
-func dash(meth, cmd string, args url.Values, req, resp interface{}) error {
-	const builderVersion = 1 // keep in sync with dashboard/app/build/handler.go
-	argsCopy := url.Values{"version": {fmt.Sprint(builderVersion)}}
-	for k, v := range args {
-		if k == "version" {
-			panic(`dash: reserved args key: "version"`)
-		}
-		argsCopy[k] = v
-	}
-	var r *http.Response
-	var err error
-	cmd = "https://build.golang.org/" + cmd + "?" + argsCopy.Encode()
-	switch meth {
-	case "GET":
-		if req != nil {
-			log.Panicf("%s to %s with req", meth, cmd)
-		}
-		r, err = http.Get(cmd)
-	case "POST":
-		var body io.Reader
-		if req != nil {
-			b, err := json.Marshal(req)
-			if err != nil {
-				return err
-			}
-			body = bytes.NewBuffer(b)
-		}
-		r, err = http.Post(cmd, "text/json", body)
-	default:
-		log.Panicf("%s: invalid method %q", cmd, meth)
-		panic("invalid method: " + meth)
-	}
-	if err != nil {
-		return err
-	}
-	defer r.Body.Close()
-	if r.StatusCode != http.StatusOK {
-		return fmt.Errorf("bad http response: %v", r.Status)
-	}
-	body := new(bytes.Buffer)
-	if _, err := body.ReadFrom(r.Body); err != nil {
-		return err
-	}
-
-	// Read JSON-encoded Response into provided resp
-	// and return an error if present.
-	var result = struct {
-		Response interface{}
-		Error    string
-	}{
-		// Put the provided resp in here as it can be a pointer to
-		// some value we should unmarshal into.
-		Response: resp,
-	}
-	if err = json.Unmarshal(body.Bytes(), &result); err != nil {
-		log.Printf("json unmarshal %#q: %s\n", body.Bytes(), err)
-		return err
-	}
-	if result.Error != "" {
-		return errors.New(result.Error)
-	}
-
-	return nil
-}
-
 func versionTgz(rev string) io.Reader {
 	var buf bytes.Buffer
 	zw := gzip.NewWriter(&buf)
@@ -1664,17 +1146,4 @@ func check(err error) {
 	if err != nil {
 		panic("previously assumed to never fail: " + err.Error())
 	}
-}
-
-// apiCallTicker ticks regularly, preventing us from accidentally making
-// GCE API calls too quickly. Our quota is 20 QPS, but we temporarily
-// limit ourselves to less than that.
-var apiCallTicker = time.NewTicker(time.Second / 5)
-
-func init() {
-	buildlet.GCEGate = gceAPIGate
-}
-
-func gceAPIGate() {
-	<-apiCallTicker.C
 }
