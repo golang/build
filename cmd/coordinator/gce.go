@@ -24,7 +24,7 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	"google.golang.org/api/compute/v1"
+	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/cloud"
 	"google.golang.org/cloud/compute/metadata"
@@ -65,6 +65,10 @@ func initGCE() error {
 	if err != nil {
 		return fmt.Errorf("failed to get current GCE ProjectID: %v", err)
 	}
+	tokenSource = google.ComputeTokenSource("default")
+	httpClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
+	serviceCtx = cloud.NewContext(projectID, httpClient)
+
 	projectZone, err = metadata.Get("instance/zone")
 	if err != nil || projectZone == "" {
 		return fmt.Errorf("failed to get current GCE zone: %v", err)
@@ -79,9 +83,6 @@ func initGCE() error {
 	if err != nil {
 		return fmt.Errorf("ExternalIP: %v", err)
 	}
-	tokenSource = google.ComputeTokenSource("default")
-	httpClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
-	serviceCtx = cloud.NewContext(projectID, httpClient)
 	computeService, _ = compute.New(httpClient)
 	errTryDeps = checkTryBuildDeps()
 	if errTryDeps != nil {

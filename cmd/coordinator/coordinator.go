@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"crypto/sha1"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -18,6 +19,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os/exec"
 	"path"
@@ -105,6 +107,62 @@ const (
 	vmDeleteTimeout = 45 * time.Minute
 )
 
+func readGCSFile(name string) ([]byte, error) {
+	r, err := storage.NewReader(serviceCtx, "go-builder-data", name)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return ioutil.ReadAll(r)
+}
+
+func listenAndServeTLS() {
+	certPEM, err := readGCSFile("farmer-cert.pem")
+	if err != nil {
+		log.Printf("cannot load TLS cert, skipping https: %v", err)
+		return
+	}
+	keyPEM, err := readGCSFile("farmer-key.pem")
+	if err != nil {
+		log.Printf("cannot load TLS key, skipping https: %v", err)
+		return
+	}
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		log.Printf("bad TLS cert: %v", err)
+		return
+	}
+
+	server := &http.Server{Addr: ":443"}
+	config := &tls.Config{
+		NextProtos:   []string{"http/1.1"},
+		Certificates: []tls.Certificate{cert},
+	}
+
+	ln, err := net.Listen("tcp", server.Addr)
+	if err != nil {
+		log.Fatalf("net.Listen(%s): %v", server.Addr, err)
+	}
+	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)
+	if err := server.Serve(tlsLn); err != nil {
+		log.Fatalf("serve https: %v", err)
+	}
+}
+
+type tcpKeepAliveListener struct {
+	*net.TCPListener
+}
+
+func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
+	tc, err := ln.AcceptTCP()
+	if err != nil {
+		return
+	}
+	tc.SetKeepAlive(true)
+	tc.SetKeepAlivePeriod(3 * time.Minute)
+	return tc, nil
+}
+
 func main() {
 	flag.Parse()
 
@@ -116,7 +174,13 @@ func main() {
 	http.HandleFunc("/try", handleTryStatus)
 	http.HandleFunc("/logs", handleLogs)
 	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
-	go http.ListenAndServe(":80", nil)
+	go func() {
+		err := http.ListenAndServe(":80", nil)
+		if err != nil {
+			log.Fatalf("http.ListenAndServe:80: %v", err)
+		}
+	}()
+	go listenAndServeTLS()
 
 	go gcePool.cleanUpOldVMs()
 
