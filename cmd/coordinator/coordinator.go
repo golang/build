@@ -711,6 +711,7 @@ func (ts *trySet) awaitTryBuild(idx int, bconf dashboard.BuildConfig, bs *buildS
 		}
 		brev := builderRev{name: bconf.Name, rev: ts.Commit}
 		bs, _ = newBuild(brev)
+		bs.trySet = ts
 		go bs.start()
 		ts.mu.Lock()
 		ts.builds[idx] = bs
