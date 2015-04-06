@@ -18,6 +18,7 @@ import (
 	"compress/gzip"
 	"crypto/sha1"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -36,13 +37,16 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/build/buildlet"
 	"google.golang.org/cloud/compute/metadata"
 )
 
 var (
 	haltEntireOS = flag.Bool("halt", true, "halt OS in /halt handler. If false, the buildlet process just ends.")
 	workDir      = flag.String("workdir", "", "Temporary directory to use. The contents of this directory may be deleted at any time. If empty, TempDir is used to create one.")
-	listenAddr   = flag.String("listen", defaultListenAddr(), "address to listen on. Warning: this service is inherently insecure and offers no protection of its own. Do not expose this port to the world.")
+	listenAddr   = flag.String("listen", defaultListenAddr(), "address to listen on. Unused in reverse mode. Warning: this service is inherently insecure and offers no protection of its own. Do not expose this port to the world.")
+	reverse      = flag.Bool("reverse", false, "instead of listening for a coordinator, work in reverse. The buildlet dials the coordinator and awaits instructions.")
+	coordinator  = flag.String("coordinator", "localhost:8119", "address of coordinator, in production use farmer.golang.org. Only used in reverse mode.")
 )
 
 func defaultListenAddr() string {
@@ -119,8 +123,17 @@ func main() {
 	http.Handle("/tgz", requireAuth(handleGetTGZ))
 	http.Handle("/removeall", requireAuth(handleRemoveAll))
 	http.Handle("/workdir", requireAuth(handleWorkDir))
+	http.Handle("/info", requireAuth(handleInfo))
 	http.Handle("/ls", requireAuth(handleLs))
 
+	if *reverse {
+		dialCoordinator()
+	} else {
+		listenForCoordinator()
+	}
+}
+
+func listenForCoordinator() {
 	tlsCert, tlsKey := metadataValue("tls-cert"), metadataValue("tls-key")
 	if (tlsCert == "") != (tlsKey == "") {
 		log.Fatalf("tls-cert and tls-key must both be supplied, or neither.")
@@ -780,6 +793,27 @@ func handleWorkDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Fprint(w, *workDir)
+}
+
+func handleInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "requires GET method", http.StatusBadRequest)
+		return
+	}
+	// TODO(crawshaw): make targets configurable
+	info := buildlet.Info{
+		Version: 1,
+		Targets: []string{
+			runtime.GOOS + "-" + runtime.GOARCH,
+		},
+	}
+	b, err := json.Marshal(info)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Write(b)
 }
 
 func handleLs(w http.ResponseWriter, r *http.Request) {

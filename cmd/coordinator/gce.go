@@ -225,6 +225,9 @@ func (p *gceBuildletPool) instanceUsed(instName string) bool {
 // "delete-at" metadata attribute on them when created to some time
 // that's well beyond their expected lifetime.
 func (p *gceBuildletPool) cleanUpOldVMs() {
+	if *mode == "dev" {
+		return
+	}
 	if computeService == nil {
 		return
 	}
