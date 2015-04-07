@@ -25,7 +25,7 @@ type reverseBuildletPool struct {
 }
 
 type reverseBuildlet struct {
-	info   buildlet.Info
+	modes  []string
 	client *buildlet.Client
 }
 
@@ -34,7 +34,19 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "buildlet registration requires SSL", http.StatusInternalServerError)
 		return
 	}
-	// TODO(crawshaw): check key
+	// Check build keys.
+	modes := r.Header["X-Go-Builder-Type"]
+	gobuildkeys := r.Header["X-Go-Builder-Key"]
+	if len(modes) == 0 || len(modes) != len(gobuildkeys) {
+		http.Error(w, fmt.Sprintf("need at least one mode and matching key, got %d/%d", len(modes), len(gobuildkeys)), http.StatusPreconditionFailed)
+		return
+	}
+	for i, m := range modes {
+		if gobuildkeys[i] != builderKey(m) {
+			http.Error(w, fmt.Sprintf("bad key for mode %q", m), http.StatusPreconditionFailed)
+			return
+		}
+	}
 
 	conn, bufrw, err := w.(http.Hijacker).Hijack()
 	if err != nil {
@@ -44,28 +56,38 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Registering reverse buildlet %s", r.RemoteAddr)
 
 	// The server becomes a (very simple) http client.
-	(&http.Response{Status: "200 OK", Proto: "HTTP/1.1"}).Write(conn)
+	(&http.Response{StatusCode: 200, Proto: "HTTP/1.1"}).Write(conn)
 
 	client := buildlet.NewClient("none", buildlet.NoKeyPair)
 	client.SetHTTPClient(&http.Client{
 		Transport: newRoundTripper(bufrw),
 	})
-	info, err := client.Info()
+	status, err := client.Status()
 	if err != nil {
-		log.Printf("Reverse connection did not answer /info: %v", err)
+		log.Printf("Reverse connection did not answer status: %v", err)
 		conn.Close()
 		return
 	}
-	if info.Version < minBuildletVersion {
-		log.Printf("Buildlet too old: %s, %+v", r.RemoteAddr, info)
+	if status.Version < minBuildletVersion {
+		log.Printf("Buildlet too old: %s, %+v", r.RemoteAddr, status)
 		conn.Close()
 		return
 	}
-	log.Printf("Buildlet %s: %+v", r.RemoteAddr, info)
-	// TODO(crawshaw): register buildlet with pool, pass conn
-	// TODO(crawshaw): add connection test
-	select {}
+	log.Printf("Buildlet %s: %+v for %s", r.RemoteAddr, status, modes)
+
+	// TODO(crawshaw): unregister buildlet when it disconnects. Maybe just
+	// periodically request Status, and if there's no response unregister.
+	reversePool.mu.Lock()
+	defer reversePool.mu.Unlock()
+	b := reverseBuildlet{
+		modes:  modes,
+		client: client,
+	}
+	reversePool.buildlets = append(reversePool.buildlets, b)
+	registerBuildlet(b)
 }
+
+var registerBuildlet = func(b reverseBuildlet) {} // test hook
 
 func newRoundTripper(bufrw *bufio.ReadWriter) *reverseRoundTripper {
 	return &reverseRoundTripper{

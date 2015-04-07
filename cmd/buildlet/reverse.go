@@ -2,22 +2,53 @@ package main
 
 import (
 	"bufio"
+	"crypto/hmac"
+	"crypto/md5"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 )
 
 func dialCoordinator() {
-	caCert := testCoordinatorCA
-	addr := *coordinator
-	if strings.HasPrefix(addr, "farmer.golang.org") {
-		if addr == "farmer.golang.org" {
-			addr = "farmer.golang.org:443"
+	devMode := !strings.HasPrefix(*coordinator, "farmer.golang.org")
+
+	modes := strings.Split(*reverse, ",")
+	var keys []string
+	for _, m := range modes {
+		if devMode {
+			keys = append(keys, string(devBuilderKey(m)))
+			continue
 		}
-		caCert = coordinatorCA
+		keyPath := filepath.Join(homedir(), ".gobuildkey-"+m)
+		key, err := ioutil.ReadFile(keyPath)
+		if os.IsNotExist(err) && len(modes) == 1 {
+			globalKeyPath := filepath.Join(homedir(), ".gobuildkey")
+			key, err = ioutil.ReadFile(globalKeyPath)
+			if err != nil {
+				log.Fatalf("cannot read either key file %q or %q: %v", keyPath, globalKeyPath, err)
+			}
+		} else if err != nil {
+			log.Fatalf("cannot read key file %q: %v", keyPath, err)
+		}
+		keys = append(keys, string(key))
+	}
+
+	caCert := coordinatorCA
+	addr := *coordinator
+	if addr == "farmer.golang.org" {
+		addr = "farmer.golang.org:443"
+	}
+	if devMode {
+		caCert = testCoordinatorCA
 	}
 
 	caPool := x509.NewCertPool()
@@ -40,17 +71,24 @@ func dialCoordinator() {
 	}
 	bufr := bufio.NewReader(conn)
 
-	// TODO(crawshaw): include build key as part of initial request.
 	req, err := http.NewRequest("GET", "/reverse", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
+	req.Header["X-Go-Builder-Type"] = modes
+	req.Header["X-Go-Builder-Key"] = keys
 	if err := req.Write(conn); err != nil {
 		log.Fatalf("coordinator /reverse request failed: %v", err)
 	}
-	if _, err := http.ReadResponse(bufr, req); err != nil {
+	resp, err := http.ReadResponse(bufr, req)
+	if err != nil {
 		log.Fatalf("coordinator /reverse response failed: %v", err)
 	}
+	if resp.StatusCode != 200 {
+		msg, _ := ioutil.ReadAll(resp.Body)
+		log.Fatalf("coordinator registration failed:\n\t%s", msg)
+	}
+	resp.Body.Close()
 
 	// The client becomes the simple http server.
 	log.Printf("Connected to coordinator, serving HTTP back at them.")
@@ -88,6 +126,26 @@ type reverseAddr string
 
 func (a reverseAddr) Network() string { return "reverse" }
 func (a reverseAddr) String() string  { return "reverse:" + string(a) }
+
+func devBuilderKey(builder string) string {
+	h := hmac.New(md5.New, []byte("gophers rule"))
+	io.WriteString(h, builder)
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+func homedir() string {
+	if runtime.GOOS == "windows" {
+		return os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
+	}
+	return os.Getenv("HOME")
+}
+
+// TestDialCoordinator dials the coordinator. Exported for testing.
+func TestDialCoordinator() {
+	// TODO(crawshaw): move some of this logic out of main to simplify testing hook.
+	http.Handle("/status", http.HandlerFunc(handleStatus))
+	dialCoordinator()
+}
 
 /*
 Certificate authority and the coordinator SSL key were created with:

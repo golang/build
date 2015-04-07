@@ -347,38 +347,37 @@ func (c *Client) DestroyVM(ts oauth2.TokenSource, proj, zone, instance string) e
 	return retErr
 }
 
-// Info provides configuration information about the buildlet.
+// Status provides status information about the buildlet.
 //
 // A coordinator can use the provided information to decide what, if anything,
 // to do with a buildlet.
-type Info struct {
-	Version int      // buildlet version, coordinator rejects any value less than 1.
-	Targets []string // list of "goos-goarch[-extra]"
+type Status struct {
+	Version int // buildlet version, coordinator rejects any value less than 1.
 }
 
-// Info returns an Info value describing this buildlet.
-func (c *Client) Info() (Info, error) {
-	req, err := http.NewRequest("GET", c.URL()+"/info", nil)
+// Status returns an Status value describing this buildlet.
+func (c *Client) Status() (Status, error) {
+	req, err := http.NewRequest("GET", c.URL()+"/status", nil)
 	if err != nil {
-		return Info{}, err
+		return Status{}, err
 	}
 	resp, err := c.do(req)
 	if err != nil {
-		return Info{}, err
+		return Status{}, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return Info{}, errors.New(resp.Status)
+		return Status{}, errors.New(resp.Status)
 	}
 	b, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		return Info{}, err
+		return Status{}, err
 	}
-	var info Info
-	if err := json.Unmarshal(b, &info); err != nil {
-		return Info{}, err
+	var status Status
+	if err := json.Unmarshal(b, &status); err != nil {
+		return Status{}, err
 	}
-	return info, nil
+	return status, nil
 }
 
 // WorkDir returns the absolute path to the buildlet work directory.

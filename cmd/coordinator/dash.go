@@ -165,6 +165,10 @@ func loadKey() {
 		masterKeyCache = bytes.TrimSpace(b)
 		return
 	}
+	if *mode == "dev" {
+		masterKeyCache = []byte("gophers rule")
+		return
+	}
 	masterKey, err := metadata.ProjectAttributeValue("builder-master-key")
 	if err != nil {
 		log.Fatalf("No builder master key available: %v", err)

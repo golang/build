@@ -179,6 +179,18 @@ gpRUwP6i5yhi838rMgurGVFr3O/0Sv7wMx5UNEJ/RopbQ2K/bnwn
 }
 
 func listenAndServeTLS() {
+	addr := ":443"
+	if *mode == "dev" {
+		addr = ":8119"
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("net.Listen(%s): %v", addr, err)
+	}
+	serveTLS(ln)
+}
+
+func serveTLS(ln net.Listener) {
 	certPEM, err := readGCSFile("farmer-cert.pem")
 	if err != nil {
 		log.Printf("cannot load TLS cert, skipping https: %v", err)
@@ -195,20 +207,13 @@ func listenAndServeTLS() {
 		return
 	}
 
-	server := &http.Server{Addr: ":443"}
-	if *mode == "dev" {
-		server.Addr = ":8119"
-	}
+	server := &http.Server{Addr: ln.Addr().String()}
 	config := &tls.Config{
 		NextProtos:   []string{"http/1.1"},
 		Certificates: []tls.Certificate{cert},
 	}
-
-	ln, err := net.Listen("tcp", server.Addr)
-	if err != nil {
-		log.Fatalf("net.Listen(%s): %v", server.Addr, err)
-	}
 	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)
+	log.Printf("Coordinator serving on: %v", tlsLn.Addr())
 	if err := server.Serve(tlsLn); err != nil {
 		log.Fatalf("serve https: %v", err)
 	}
