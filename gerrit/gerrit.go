@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Client is a Gerrit client.
@@ -104,7 +105,8 @@ type ChangeInfo struct {
 	// "'<project>~<branch>~<Change-Id>'", where 'project',
 	// 'branch' and 'Change-Id' are URL encoded. For 'branch' the
 	// refs/heads/ prefix is omitted.
-	ID string `json:"id"`
+	ID           string `json:"id"`
+	ChangeNumber int    `json:"_number"`
 
 	Project string `json:"project"`
 
@@ -120,16 +122,113 @@ type ChangeInfo struct {
 	// ABANDONED, DRAFT).
 	Status string `json:"status"`
 
+	Created  TimeStamp `json:"created"`
+	Updated  TimeStamp `json:"updated"`
+	Mergable bool      `json:"mergable"`
+
 	// CurrentRevision is the commit ID of the current patch set
 	// of this change.  This is only set if the current revision
-	// is requested or if all revisions are requested.
+	// is requested or if all revisions are requested (fields
+	// "CURRENT_REVISION" or "ALL_REVISIONS").
 	CurrentRevision string `json:"current_revision"`
+
+	// Revisions maps a commit ID of the patch set to a
+	// RevisionInfo entity.
+	//
+	// Only set if the current revision is requested (in which
+	// case it will only contain a key for the current revision)
+	// or if all revisions are requested.
+	Revisions map[string]RevisionInfo `json:"revisions"`
+
+	// Owner is the author of the change.
+	// The details are only filled in if field "DETAILED_ACCOUNTS" is requested.
+	Owner *AccountInfo `json:"owner"`
+
+	// Messages are included if field "MESSAGES" is requested.
+	Messages []ChangeMessageInfo `json:"messages"`
+
+	Labels map[string]LabelInfo `json:"labels"`
 
 	// TODO: more as needed
 
 	// MoreChanges is set on the last change from QueryChanges if
 	// the result set is truncated by an 'n' parameter.
 	MoreChanges bool `json:"_more_changes"`
+}
+
+type AccountInfo struct {
+	NumericID int64  `json:"_account_id"`
+	Name      string `json:"name,omitempty"`
+	Email     string `json:"email,omitempty"`
+	Username  string `json:"username,omitempty"`
+}
+
+func (ai *AccountInfo) Equal(v *AccountInfo) bool {
+	if ai == nil || v == nil {
+		return false
+	}
+	return ai.NumericID == v.NumericID
+}
+
+type ChangeMessageInfo struct {
+	ID             string       `json:"id"`
+	Author         *AccountInfo `json:"author"`
+	Time           TimeStamp    `json:"date"`
+	Message        string       `json:"message"`
+	RevisionNumber int          `json:"_revision_number"`
+}
+
+// The LabelInfo entity contains information about a label on a
+// change, always corresponding to the current patch set.
+//
+// There are two options that control the contents of LabelInfo:
+// LABELS and DETAILED_LABELS.
+//
+// For a quick summary of the state of labels, use LABELS.
+//
+// For detailed information about labels, including exact numeric
+// votes for all users and the allowed range of votes for the current
+// user, use DETAILED_LABELS.
+type LabelInfo struct {
+	// Optional means the label may be set, but it’s neither
+	// necessary for submission nor does it block submission if
+	// set.
+	Optional bool `json:"optional"`
+
+	// Fields set by LABELS field option:
+
+	All []ApprovalInfo `json:"all"`
+}
+
+type ApprovalInfo struct {
+	AccountInfo
+	Value int       `json:"value"`
+	Date  TimeStamp `json:"date"`
+}
+
+// The RevisionInfo entity contains information about a patch set. Not
+// all fields are returned by default. Additional fields can be
+// obtained by adding o parameters as described at:
+// https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-changes
+type RevisionInfo struct {
+	Commit *CommitInfo `json:"commit"`
+
+	// TODO: more
+}
+
+type CommitInfo struct {
+	Author    GitPersonInfo `json:"author"`
+	Committer GitPersonInfo `json:"committer"`
+	CommitID  string        `json:"commit"`
+	Subject   string        `json:"subject"`
+	Message   string        `json:"message"`
+}
+
+type GitPersonInfo struct {
+	Name     string    `json:"name"`
+	Email    string    `json:"Email"`
+	Date     TimeStamp `json:"date"`
+	TZOffset int       `json:"tz"`
 }
 
 // QueryChangesOpt are options for QueryChanges.
@@ -191,3 +290,27 @@ func (c *Client) SetReview(changeID, revision string, review ReviewInput) error 
 	return c.do(&res, "POST", fmt.Sprintf("/changes/%s/revisions/%s/review", changeID, revision),
 		nil, review)
 }
+
+type TimeStamp time.Time
+
+// Gerrit's timestamp layout is like time.RFC3339Nano, but with a space instead of the "T",
+// and without a timezone (it's always in UTC).
+const timeStampLayout = "2006-01-02 15:04:05.999999999"
+
+func (ts *TimeStamp) UnmarshalJSON(p []byte) error {
+	if len(p) < 2 {
+		return errors.New("Timestamp too short")
+	}
+	if p[0] != '"' || p[len(p)-1] != '"' {
+		return errors.New("not double-quoted")
+	}
+	s := strings.Trim(string(p), "\"")
+	t, err := time.Parse(timeStampLayout, s)
+	if err != nil {
+		return err
+	}
+	*ts = TimeStamp(t)
+	return nil
+}
+
+func (ts TimeStamp) Time() time.Time { return time.Time(ts) }
