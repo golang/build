@@ -893,9 +893,15 @@ func (e errBadMethod) Error() string {
 }
 
 func builderKeyRevoked(builder string) bool {
-	if builder == "plan9-amd64-mischief" {
+	switch builder {
+	case "plan9-amd64-mischief":
 		// Broken and unmaintained for months.
 		// It's polluting the dashboard.
+		return true
+	case "linux-arm-onlinenet":
+		// Requested to be revoked by Dave Cheney.
+		// The machine is in a fail+report loop
+		// and can't be accessed. Revoke it for now.
 		return true
 	}
 	return false
