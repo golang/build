@@ -176,19 +176,21 @@ func jsonHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 	// TODO(bradfitz): we'll probably want more than one later, for people looking at
 	// the subrepo-specific build history pages. But for now this gets me some data
 	// to make forward progress.
-	tip := data.TipState // a TagState
-	for _, pkgState := range tip.Packages {
-		goRev := tip.Tag.Hash
-		rev := types.BuildRevision{
-			Repo:       pkgState.Package.Name,
-			Revision:   pkgState.Commit.Hash,
-			GoRevision: goRev,
-			Results:    make([]string, len(data.Builders)),
+	tip := data.TipState // a *TagState
+	if tip != nil {
+		for _, pkgState := range tip.Packages {
+			goRev := tip.Tag.Hash
+			rev := types.BuildRevision{
+				Repo:       pkgState.Package.Name,
+				Revision:   pkgState.Commit.Hash,
+				GoRevision: goRev,
+				Results:    make([]string, len(data.Builders)),
+			}
+			for i, b := range res.Builders {
+				rev.Results[i] = cell(pkgState.Commit.Result(b, goRev))
+			}
+			res.Revisions = append(res.Revisions, rev)
 		}
-		for i, b := range res.Builders {
-			rev.Results[i] = cell(pkgState.Commit.Result(b, goRev))
-		}
-		res.Revisions = append(res.Revisions, rev)
 	}
 
 	v, _ := json.MarshalIndent(res, "", "\t")
