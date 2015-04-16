@@ -33,7 +33,7 @@ func (b *Builder) crossCompile() bool {
 	case "android", "nacl":
 		return true
 	case "darwin":
-		return b.goarch == "arm" // iOS
+		return b.goarch == "arm" || b.goarch == "arm64" // iOS
 	default:
 		return false
 	}
