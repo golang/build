@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/build/types"
 
@@ -164,6 +165,7 @@ func jsonHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 		rev := types.BuildRevision{
 			Repo:     "go",
 			Revision: c.Hash,
+			Date:     c.Time.Format(time.RFC3339),
 			Results:  make([]string, len(data.Builders)),
 		}
 		for i, b := range data.Builders {
@@ -184,6 +186,7 @@ func jsonHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 				Repo:       pkgState.Package.Name,
 				Revision:   pkgState.Commit.Hash,
 				GoRevision: goRev,
+				Date:       pkgState.Commit.Time.Format(time.RFC3339),
 				Results:    make([]string, len(data.Builders)),
 			}
 			for i, b := range res.Builders {

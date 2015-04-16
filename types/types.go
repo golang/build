@@ -33,6 +33,9 @@ type BuildRevision struct {
 	// Otherwise this is empty.
 	GoRevision string `json:"goRevision,omitempty"`
 
+	// Date is the commit date of this revision, formatted in RFC3339.
+	Date string `json:"date"`
+
 	// Results are the build results for each of the builders in
 	// the same length slice BuildStatus.Builders.
 	// Each string is either "" (if no data), "ok", or the URL to failure logs.
