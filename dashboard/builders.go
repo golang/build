@@ -13,7 +13,7 @@ import "strings"
 // This map should not be modified by other packages.
 var Builders = map[string]BuildConfig{}
 
-// A BuildConfig describes how to run a VM-based builder.
+// A BuildConfig describes how to run a builder.
 type BuildConfig struct {
 	// Name is the unique name of the builder, in the form of
 	// "darwin-386" or "linux-amd64-race".
@@ -24,6 +24,7 @@ type BuildConfig struct {
 	Go14URL     string // URL to built Go 1.4 tar.gz
 	buildletURL string // optional override buildlet URL
 
+	IsReverse   bool // if true, only use the reverse buildlet pool
 	RegularDisk bool // if true, use spinning disk instead of SSD
 
 	env []string // extra environment ("key=value") pairs
@@ -290,6 +291,11 @@ func init() {
 		RegularDisk: true,
 		env:         []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
+	addBuilder(BuildConfig{
+		Name:      "darwin-amd64",
+		Go14URL:   "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
+		IsReverse: true,
+	})
 }
 
 func addBuilder(c BuildConfig) {
@@ -299,7 +305,7 @@ func addBuilder(c BuildConfig) {
 	if _, dup := Builders[c.Name]; dup {
 		panic("dup name")
 	}
-	if c.VMImage == "" {
+	if c.VMImage == "" && !c.IsReverse {
 		panic("empty VMImage")
 	}
 	Builders[c.Name] = c

@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"camlistore.org/pkg/syncutil"
+
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
@@ -268,23 +269,26 @@ func main() {
 			log.Fatalf("http.ListenAndServe:80: %v", err)
 		}
 	}()
-	go listenAndServeTLS()
+
+	workc := make(chan builderRev)
 
 	if *mode == "dev" {
 		// TODO(crawshaw): do more in test mode
-		select {}
+		gcePool.SetEnabled(false)
+		http.HandleFunc("/dosomework/", handleDoSomeWork(workc))
+	} else {
+		go gcePool.cleanUpOldVMs()
+
+		// Start the Docker processes on this host polling Gerrit and
+		// pinging build.golang.org when new commits are available.
+		startWatchers() // in watcher.go
+
+		go findWorkLoop(workc)
+		go findTryWorkLoop()
+		// TODO(cmang): gccgo will need its own findWorkLoop
 	}
 
-	go gcePool.cleanUpOldVMs()
-
-	// Start the Docker processes on this host polling Gerrit and
-	// pinging build.golang.org when new commits are available.
-	startWatchers() // in watcher.go
-
-	workc := make(chan builderRev)
-	go findWorkLoop(workc)
-	go findTryWorkLoop()
-	// TODO(cmang): gccgo will need its own findWorkLoop
+	go listenAndServeTLS()
 
 	ticker := time.NewTicker(1 * time.Minute)
 	for {
@@ -322,12 +326,16 @@ func isBuilding(work builderRev) bool {
 }
 
 // mayBuildRev reports whether the build type & revision should be started.
-// It returns true if it's not already building, and there is capacity.
-func mayBuildRev(work builderRev) bool {
-	statusMu.Lock()
-	_, building := status[work]
-	statusMu.Unlock()
-	return !building
+// It returns true if it's not already building, and if a reverse buildlet is
+// required, if an appropriate machine is registered.
+func mayBuildRev(rev builderRev) bool {
+	if isBuilding(rev) {
+		return false
+	}
+	if !dashboard.Builders[rev.name].IsReverse {
+		return true
+	}
+	return reversePool.CanBuild(rev.name)
 }
 
 func setStatus(work builderRev, st *buildStatus) {
@@ -432,6 +440,8 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, st.htmlStatusLine())
 	}
 	io.WriteString(w, "</pre>")
+
+	fmt.Fprintf(w, "<h2>reverse buildlets</h2><pre>%s</pre>", html.EscapeString(reversePool.String()))
 
 	fmt.Fprintf(w, "<h2>disk space</h2><pre>%s</pre></body></html>", html.EscapeString(diskFree()))
 }
@@ -925,7 +935,7 @@ func poolForConf(conf dashboard.BuildConfig) (BuildletPool, error) {
 	if conf.VMImage != "" {
 		return gcePool, nil
 	}
-	return nil, fmt.Errorf("unknown buildlet pool type for builder %q", conf.Name)
+	return reversePool, nil
 }
 
 func newBuild(rev builderRev) (*buildStatus, error) {

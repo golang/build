@@ -4,29 +4,190 @@
 
 package main
 
+/*
+This file implements reverse buildlets. These are buildlets that are not
+started by the coordinator. They dial the coordinator and then accept
+instructions. This feature is used for machines that cannot be started by
+an API, for example real OS X machines with iOS and Android devices attached.
+
+You can test this setup locally. In one terminal start a coordinator.
+It will default to dev mode, using a dummy TLS cert and not talking to GCE.
+
+	$ coordinator
+
+In another terminal, start a reverse buildlet:
+
+	$ buildlet -reverse "darwin-amd64"
+
+It will dial and register itself with the coordinator. To confirm the
+coordinator can see the buildlet, check the logs output or visit its
+diagnostics page: https://localhost:8119. To send the buildlet some
+work, go to:
+
+	https://localhost:8119/dosomework
+*/
+
 import (
 	"bufio"
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"sync"
+	"time"
 
 	"golang.org/x/build/buildlet"
 )
 
 const minBuildletVersion = 1
 
-var reversePool = &reverseBuildletPool{}
-
-type reverseBuildletPool struct {
-	mu        sync.Mutex
-	buildlets []reverseBuildlet
+var reversePool = &reverseBuildletPool{
+	buildletReturned: make(chan token, 1),
 }
 
+type token struct{}
+
+type reverseBuildletPool struct {
+	buildletReturned chan token // best-effort tickle when any buildlet becomes free
+
+	mu        sync.Mutex // guards buildlets and their fields
+	buildlets []*reverseBuildlet
+}
+
+var errInUse = errors.New("all buildlets are in use")
+
+func (p *reverseBuildletPool) tryToGrab(machineType string) (*buildlet.Client, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	usableCount := 0
+	for _, b := range p.buildlets {
+		usable := false
+		for _, m := range b.modes {
+			if m == machineType {
+				usable = true
+				usableCount++
+				break
+			}
+		}
+		if usable && b.inUseAs == "" {
+			// Found an unused match.
+			b.inUseAs = machineType
+			b.client.SetCloseFunc(func() error {
+				p.mu.Lock()
+				b.inUseAs = ""
+				p.mu.Unlock()
+				select {
+				case p.buildletReturned <- token{}:
+				default:
+				}
+				return nil
+			})
+			return b.client, nil
+		}
+	}
+	if usableCount == 0 {
+		return nil, fmt.Errorf("no buildlets registered for machine type %q", machineType)
+	}
+	return nil, errInUse
+}
+
+func (p *reverseBuildletPool) GetBuildlet(machineType, rev string, el eventTimeLogger) (*buildlet.Client, error) {
+	start := time.Now()
+	for {
+		el.logEventTime("try_to_grab=" + machineType + ", wait=" + time.Now().Sub(start).String())
+		b, err := p.tryToGrab(machineType)
+		if err == errInUse {
+			select {
+			case <-p.buildletReturned:
+			// As multiple goroutines can be listening for the
+			// buildletReturned signal, it must be treated as
+			// a best effort signal. So periodically try to grab
+			// a buildlet again.
+			case <-time.After(30 * time.Second):
+			}
+		} else if err != nil {
+			return nil, err
+		}
+		return b, nil
+	}
+}
+
+func (p *reverseBuildletPool) String() string {
+	buf := bytes.NewBufferString("Reverse Buildlet Pool:")
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	inUse := 0
+	for _, b := range p.buildlets {
+		if b.inUseAs != "" {
+			inUse++
+		}
+	}
+	fmt.Fprintf(buf, " %d buildlets registered, %d in use", len(p.buildlets), inUse)
+	for _, b := range p.buildlets {
+		fmt.Fprintf(buf, "\n\t%v", b.modes)
+		if b.inUseAs != "" {
+			fmt.Fprintf(buf, ", in use as: %v", b.inUseAs)
+		}
+	}
+	buf.WriteByte('\n')
+	return buf.String()
+}
+
+// Modes returns the a deduplicated list of buildlet modes curently supported
+// by the pool. Buildlet modes are described on reverseBuildlet comments.
+func (p *reverseBuildletPool) Modes() (modes []string) {
+	mm := make(map[string]bool)
+	p.mu.Lock()
+	for _, b := range p.buildlets {
+		for _, mode := range b.modes {
+			mm[mode] = true
+		}
+	}
+	p.mu.Unlock()
+
+	for mode := range mm {
+		modes = append(modes, mode)
+	}
+	sort.Strings(modes)
+	return modes
+}
+
+// CanBuild reports whether the pool has a machine capable of building mode.
+// The machine may be in use, so you may have to wait.
+func (p *reverseBuildletPool) CanBuild(mode string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, b := range p.buildlets {
+		for _, m := range b.modes {
+			if m == mode {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// reverseBuildlet is a registered reverse buildlet.
+// Its immediate fields are guarded by the reverseBuildletPool mutex.
 type reverseBuildlet struct {
-	modes  []string
 	client *buildlet.Client
+
+	// modes is the set of valid modes for this buildlet.
+	//
+	// A mode is the equivalent of a builder name, for example
+	// "darwin-amd64", "android-arm", or "linux-amd64-race".
+	//
+	// Each buildlet may potentially have several modes. For example a
+	// Mac OS X machine with an attached iOS device may be registered
+	// as both "darwin-amd64", "darwin-arm64".
+	modes []string
+
+	// inUseAs signifies that the buildlet is in use as the named mode.
+	// guarded by mutex on reverseBuildletPool.
+	inUseAs string
 }
 
 func handleReverse(w http.ResponseWriter, r *http.Request) {
@@ -79,12 +240,12 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 	// periodically request Status, and if there's no response unregister.
 	reversePool.mu.Lock()
 	defer reversePool.mu.Unlock()
-	b := reverseBuildlet{
+	b := &reverseBuildlet{
 		modes:  modes,
 		client: client,
 	}
 	reversePool.buildlets = append(reversePool.buildlets, b)
-	registerBuildlet(b)
+	registerBuildlet(*b)
 }
 
 var registerBuildlet = func(b reverseBuildlet) {} // test hook
@@ -106,11 +267,8 @@ type reverseRoundTripper struct {
 }
 
 func (c *reverseRoundTripper) RoundTrip(req *http.Request) (resp *http.Response, err error) {
-	select {
-	case c.sema <- true:
-	default:
-		return nil, fmt.Errorf("reverseRoundTripper: line busy")
-	}
+	// Serialize trips. It is up to callers to avoid deadlocking.
+	c.sema <- true
 	if err := req.Write(c.bufrw); err != nil {
 		return nil, err
 	}

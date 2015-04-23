@@ -110,12 +110,20 @@ func recordResult(builderName string, ok bool, hash, buildLog string, runTime ti
 		"RunTime":     runTime,
 	}
 	args := url.Values{"key": {builderKey(builderName)}, "builder": {builderName}}
+	if *mode == "dev" {
+		log.Printf("In dev mode, not recording result: %v", req)
+		return nil
+	}
 	return dash("POST", "result", args, req, nil)
 }
 
 // pingDashboard runs in its own goroutine, created periodically to
 // POST to build.golang.org/building to let it know that we're still working on a build.
 func (st *buildStatus) pingDashboard() {
+	if *mode == "dev" {
+		log.Print("In dev mode, not pinging dashboard")
+		return
+	}
 	u := "https://build.golang.org/building?" + url.Values{
 		"builder": []string{st.name},
 		"key":     []string{builderKey(st.name)},

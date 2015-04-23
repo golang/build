@@ -134,6 +134,14 @@ type gceBuildletPool struct {
 	instUsed map[string]bool // GCE VM instance name -> true
 }
 
+func (p *gceBuildletPool) SetEnabled(enabled bool) {
+	if enabled {
+		p.vmCap = make(chan bool, maxVMs)
+	} else {
+		p.vmCap = make(chan bool)
+	}
+}
+
 func (p *gceBuildletPool) GetBuildlet(typ, rev string, el eventTimeLogger) (*buildlet.Client, error) {
 	el.logEventTime("awaiting_gce_quota")
 	p.awaitVMCountQuota()
