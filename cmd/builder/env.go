@@ -297,6 +297,7 @@ func extraEnv() []string {
 		"PATH",
 		"TMPDIR",
 		"USER",
+		"GO_TEST_TIMEOUT_SCALE", // increase test timeout for slow builders
 	}
 	if runtime.GOOS == "plan9" {
 		extra = append(extra, "objtype", "cputype", "path")
