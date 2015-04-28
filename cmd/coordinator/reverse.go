@@ -110,8 +110,9 @@ func (p *reverseBuildletPool) GetBuildlet(machineType, rev string, el eventTimeL
 			}
 		} else if err != nil {
 			return nil, err
+		} else {
+			return b, nil
 		}
-		return b, nil
 	}
 }
 
