@@ -48,6 +48,15 @@ var reversePool = &reverseBuildletPool{
 	buildletReturned: make(chan token, 1),
 }
 
+func init() {
+	go func() {
+		for {
+			time.Sleep(30 * time.Second)
+			reversePool.reverseHealthCheck()
+		}
+	}()
+}
+
 type token struct{}
 
 type reverseBuildletPool struct {
@@ -92,6 +101,56 @@ func (p *reverseBuildletPool) tryToGrab(machineType string) (*buildlet.Client, e
 		return nil, fmt.Errorf("no buildlets registered for machine type %q", machineType)
 	}
 	return nil, errInUse
+}
+
+// reverseHealthCheck requests the status page of each idle buildlet.
+// If the buildlet fails to respond promptly, it is removed from the pool.
+func (p *reverseBuildletPool) reverseHealthCheck() {
+	p.mu.Lock()
+	responses := make(map[*reverseBuildlet]chan error)
+	for _, b := range p.buildlets {
+		if b.inUseAs == "health" { // sanity check
+			panic("previous health check still running")
+		}
+		if b.inUseAs != "" {
+			continue // skip busy buildlets
+		}
+		b.inUseAs = "health"
+		res := make(chan error, 1)
+		responses[b] = res
+		client := b.client
+		go func() {
+			_, err := client.Status()
+			res <- err
+		}()
+	}
+	p.mu.Unlock()
+	time.Sleep(5 * time.Second) // give buildlets time to respond
+	p.mu.Lock()
+
+	var buildlets []*reverseBuildlet
+	for _, b := range p.buildlets {
+		res := responses[b]
+		if b.inUseAs != "health" || res == nil {
+			// buildlet skipped or registered after health check
+			buildlets = append(buildlets, b)
+			continue
+		}
+		b.inUseAs = ""
+		err, done := <-res
+		if !done {
+			err = errors.New("health check timeout")
+		}
+		if err == nil {
+			buildlets = append(buildlets, b)
+			continue
+		}
+		// remove bad buildlet
+		log.Printf("Reverse buildlet %s %v not responding, removing from pool", b.client, b.modes)
+		b.client.Close()
+	}
+	p.buildlets = buildlets
+	p.mu.Unlock()
 }
 
 func (p *reverseBuildletPool) GetBuildlet(machineType, rev string, el eventTimeLogger) (*buildlet.Client, error) {
