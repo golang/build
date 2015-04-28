@@ -30,13 +30,13 @@ func TestReverseDial(t *testing.T) {
 	flag.CommandLine.Set("coordinator", ln.Addr().String())
 	flag.CommandLine.Set("reverse", wantModes)
 
-	ch := make(chan reverseBuildlet)
-	registerBuildlet = func(b reverseBuildlet) { ch <- b }
+	ch := make(chan []string)
+	registerBuildlet = func(modes []string) { ch <- modes }
 	go buildletmain.TestDialCoordinator()
 
 	select {
-	case b := <-ch:
-		gotModes := strings.Join(b.modes, ",")
+	case modes := <-ch:
+		gotModes := strings.Join(modes, ",")
 		if gotModes != wantModes {
 			t.Errorf("want buildlet registered with modes %q, got %q", wantModes, gotModes)
 		}

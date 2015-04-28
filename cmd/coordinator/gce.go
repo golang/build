@@ -12,6 +12,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"path"
 	"strconv"
@@ -193,8 +194,12 @@ func (p *gceBuildletPool) GetBuildlet(typ, rev string, el eventTimeLogger) (*bui
 	return bc, nil
 }
 
+func (p *gceBuildletPool) WriteHTMLStatus(w io.Writer) {
+	fmt.Fprintf(w, "<b>GCE pool</b> capacity: %d/%d", len(p.vmCap), cap(p.vmCap))
+}
+
 func (p *gceBuildletPool) String() string {
-	return fmt.Sprintf("GCE pool TODO(bradfitz): status info")
+	return fmt.Sprintf("GCE pool capacity: %d/%d", len(p.vmCap), cap(p.vmCap))
 }
 
 func (p *gceBuildletPool) awaitVMCountQuota() { p.vmCap <- true }

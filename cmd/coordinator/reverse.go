@@ -29,7 +29,6 @@ work, go to:
 
 import (
 	"bufio"
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -154,9 +153,7 @@ func (p *reverseBuildletPool) reverseHealthCheck() {
 }
 
 func (p *reverseBuildletPool) GetBuildlet(machineType, rev string, el eventTimeLogger) (*buildlet.Client, error) {
-	start := time.Now()
 	for {
-		el.logEventTime("try_to_grab=" + machineType + ", wait=" + time.Now().Sub(start).String())
 		b, err := p.tryToGrab(machineType)
 		if err == errInUse {
 			select {
@@ -175,25 +172,45 @@ func (p *reverseBuildletPool) GetBuildlet(machineType, rev string, el eventTimeL
 	}
 }
 
-func (p *reverseBuildletPool) String() string {
-	buf := bytes.NewBufferString("Reverse Buildlet Pool:")
+func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
+	inUse := make(map[string]int)
+	total := make(map[string]int)
+
 	p.mu.Lock()
-	defer p.mu.Unlock()
+	for _, b := range p.buildlets {
+		for _, mode := range b.modes {
+			if b.inUseAs != "" && b.inUseAs != "health" {
+				inUse[mode]++
+			}
+			total[mode]++
+		}
+	}
+	p.mu.Unlock()
+
+	var modes []string
+	for mode := range total {
+		modes = append(modes, mode)
+	}
+	sort.Strings(modes)
+
+	io.WriteString(w, "<b>Reverse pool</b><ul>")
+	for _, mode := range modes {
+		fmt.Fprintf(w, "<li>%s: %d/%d</li>", mode, inUse[mode], total[mode])
+	}
+	io.WriteString(w, "</ul>")
+}
+
+func (p *reverseBuildletPool) String() string {
+	p.mu.Lock()
 	inUse := 0
 	for _, b := range p.buildlets {
-		if b.inUseAs != "" {
+		if b.inUseAs != "" && b.inUseAs != "health" {
 			inUse++
 		}
 	}
-	fmt.Fprintf(buf, " %d buildlets registered, %d in use", len(p.buildlets), inUse)
-	for _, b := range p.buildlets {
-		fmt.Fprintf(buf, "\n\t%v", b.modes)
-		if b.inUseAs != "" {
-			fmt.Fprintf(buf, ", in use as: %v", b.inUseAs)
-		}
-	}
-	buf.WriteByte('\n')
-	return buf.String()
+	p.mu.Unlock()
+
+	return fmt.Sprintf("Reverse pool capacity: %d/%d %s", inUse, len(p.buildlets), p.Modes())
 }
 
 // Modes returns the a deduplicated list of buildlet modes curently supported
@@ -305,10 +322,10 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		client: client,
 	}
 	reversePool.buildlets = append(reversePool.buildlets, b)
-	registerBuildlet(*b)
+	registerBuildlet(modes)
 }
 
-var registerBuildlet = func(b reverseBuildlet) {} // test hook
+var registerBuildlet = func(modes []string) {} // test hook
 
 func newRoundTripper(bufrw *bufio.ReadWriter) *reverseRoundTripper {
 	return &reverseRoundTripper{

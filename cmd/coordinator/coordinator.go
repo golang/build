@@ -332,10 +332,10 @@ func mayBuildRev(rev builderRev) bool {
 	if isBuilding(rev) {
 		return false
 	}
-	if !dashboard.Builders[rev.name].IsReverse {
-		return true
+	if dashboard.Builders[rev.name].IsReverse {
+		return reversePool.CanBuild(rev.name)
 	}
-	return reversePool.CanBuild(rev.name)
+	return true
 }
 
 func setStatus(work builderRev, st *buildStatus) {
@@ -419,7 +419,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	io.WriteString(w, "<html><body><h1>Go build coordinator</h1>")
 
-	fmt.Fprintf(w, "<h2>running</h2><p>%d total builds active; VM capacity: %d/%d", numTotal, len(gcePool.vmCap), cap(gcePool.vmCap))
+	fmt.Fprintf(w, "<h2>running</h2><p>%d total builds active", numTotal)
 
 	io.WriteString(w, "<pre>")
 	for _, st := range active {
@@ -441,7 +441,11 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	io.WriteString(w, "</pre>")
 
-	fmt.Fprintf(w, "<h2>reverse buildlets</h2><pre>%s</pre>", html.EscapeString(reversePool.String()))
+	io.WriteString(w, "<h2>buildlet pools</h2><ul><li>")
+	gcePool.WriteHTMLStatus(w)
+	io.WriteString(w, "</li><li>")
+	reversePool.WriteHTMLStatus(w)
+	io.WriteString(w, "</li></ul>")
 
 	fmt.Fprintf(w, "<h2>disk space</h2><pre>%s</pre></body></html>", html.EscapeString(diskFree()))
 }
