@@ -292,7 +292,7 @@ func init() {
 		env:         []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
-		Name:      "darwin-amd64",
+		Name:      "darwin-amd64-10_10",
 		Go14URL:   "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
 		IsReverse: true,
 	})
