@@ -194,6 +194,9 @@ func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 	sort.Strings(modes)
 
 	io.WriteString(w, "<b>Reverse pool</b><ul>")
+	if len(modes) == 0 {
+		io.WriteString(w, "<li>no connections</li>")
+	}
 	for _, mode := range modes {
 		fmt.Fprintf(w, "<li>%s: %d/%d</li>", mode, inUse[mode], total[mode])
 	}
