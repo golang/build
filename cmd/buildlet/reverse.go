@@ -6,6 +6,7 @@ import (
 	"crypto/md5"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,9 +17,20 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
-func dialCoordinator() {
+func repeatDialCoordinator() {
+	for {
+		if err := dialCoordinator(); err != nil {
+			log.Print(err)
+		}
+		log.Printf("Waiting 30 seconds and dialing again.")
+		time.Sleep(30 * time.Second)
+	}
+}
+
+func dialCoordinator() error {
 	devMode := !strings.HasPrefix(*coordinator, "farmer.golang.org")
 
 	modes := strings.Split(*reverse, ",")
@@ -59,7 +71,7 @@ func dialCoordinator() {
 	log.Printf("Dialing coordinator %s...", addr)
 	tcpConn, err := net.Dial("tcp", addr)
 	if err != nil {
-		log.Fatalf("Could not dial %s: %v", addr, err)
+		return err // try again
 	}
 	config := &tls.Config{
 		ServerName: "go",
@@ -67,7 +79,7 @@ func dialCoordinator() {
 	}
 	conn := tls.Client(tcpConn, config)
 	if err := conn.Handshake(); err != nil {
-		log.Fatalf("failed to handshake with coordinator: %v", err)
+		return fmt.Errorf("failed to handshake with coordinator: %v", err)
 	}
 	bufr := bufio.NewReader(conn)
 
@@ -78,22 +90,28 @@ func dialCoordinator() {
 	req.Header["X-Go-Builder-Type"] = modes
 	req.Header["X-Go-Builder-Key"] = keys
 	if err := req.Write(conn); err != nil {
-		log.Fatalf("coordinator /reverse request failed: %v", err)
+		return fmt.Errorf("coordinator /reverse request failed: %v", err)
 	}
 	resp, err := http.ReadResponse(bufr, req)
 	if err != nil {
-		log.Fatalf("coordinator /reverse response failed: %v", err)
+		return fmt.Errorf("coordinator /reverse response failed: %v", err)
 	}
 	if resp.StatusCode != 200 {
 		msg, _ := ioutil.ReadAll(resp.Body)
-		log.Fatalf("coordinator registration failed:\n\t%s", msg)
+		return fmt.Errorf("coordinator registration failed:\n\t%s", msg)
 	}
 	resp.Body.Close()
 
 	// The client becomes the simple http server.
 	log.Printf("Connected to coordinator, serving HTTP back at them.")
-	srv := &http.Server{}
-	srv.Serve(newReverseListener(conn))
+	stateCh := make(chan http.ConnState, 1)
+	srv := &http.Server{
+		ConnState: func(_ net.Conn, state http.ConnState) { stateCh <- state },
+	}
+	return srv.Serve(&reverseListener{
+		c:       conn,
+		stateCh: stateCh,
+	})
 }
 
 func newReverseListener(c net.Conn) net.Listener {
@@ -102,9 +120,13 @@ func newReverseListener(c net.Conn) net.Listener {
 }
 
 // reverseListener serves out a single underlying conn, once.
-// After that it blocks. A one-connection, boring net.Listener.
+//
+// After handing out a single conn, Accept blocks and listens for
+// conneciton state changes on stateCh. If too long passes since last
+// use, it reports the connection closed.
 type reverseListener struct {
-	c net.Conn
+	c       net.Conn
+	stateCh <-chan http.ConnState
 }
 
 func (rl *reverseListener) Accept() (net.Conn, error) {
@@ -113,9 +135,26 @@ func (rl *reverseListener) Accept() (net.Conn, error) {
 		rl.c = nil
 		return c, nil
 	}
-	// TODO(crawshaw): return error when the connection is closed and
-	// make sure the function calling srv.Serve redials the communicator.
-	select {}
+	const timeout = 1 * time.Minute
+	timer := time.NewTimer(timeout)
+	var state http.ConnState
+	for {
+		select {
+		case state = <-rl.stateCh:
+			if state == http.StateClosed {
+				return nil, errors.New("coordinator connection closed")
+			}
+		// The coordinator sends a health check every 30 seconds
+		// when buildlets are idle. If we go a minute without
+		// seeing anything, assume the coordinator is in a bad way
+		// (probably restarted) and close the connection.
+		case <-timer.C:
+			if state == http.StateIdle {
+				return nil, errors.New("coordinator connection unhealthy")
+			}
+		}
+		timer.Reset(timeout)
+	}
 }
 
 func (rl *reverseListener) Close() error   { return nil }

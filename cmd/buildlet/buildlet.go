@@ -129,7 +129,7 @@ func main() {
 	if *reverse == "" {
 		listenForCoordinator()
 	} else {
-		dialCoordinator()
+		repeatDialCoordinator()
 	}
 }
 
