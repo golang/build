@@ -70,7 +70,19 @@ func (c *BuildConfig) AllScript() string {
 	if strings.HasPrefix(c.Name, "nacl-") {
 		return "src/nacltest.bash"
 	}
+	if strings.HasPrefix(c.Name, "darwin-arm") {
+		return "src/iostest.bash"
+	}
 	return "src/all.bash"
+}
+
+// AllScript returns the set of arguments that should be passed to the
+// all.bash-equivalent script. Usually empty.
+func (c *BuildConfig) AllScriptArgs() []string {
+	if strings.HasPrefix(c.Name, "darwin-arm") {
+		return []string{"-restart"}
+	}
+	return nil
 }
 
 // MakeScript returns the relative path to the operating system's script to
@@ -295,6 +307,20 @@ func init() {
 		Name:      "darwin-amd64-10_10",
 		Go14URL:   "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
 		IsReverse: true,
+	})
+	addBuilder(BuildConfig{
+		Name:      "darwin-arm-iphone4s",
+		Go14URL:   "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
+		IsReverse: true,
+		env:       []string{"GOARCH=arm", "GOHOSTARCH=amd64"},
+	})
+	// iOS builder. Runs on an OS X host. It cross compiling binaries
+	// for darwin/arm64 and runs them on an attached iPad Mini 3.
+	addBuilder(BuildConfig{
+		Name:      "darwin-arm64-ipadmini3",
+		Go14URL:   "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
+		IsReverse: true,
+		env:       []string{"GOARCH=arm64", "GOHOSTARCH=amd64"},
 	})
 }
 

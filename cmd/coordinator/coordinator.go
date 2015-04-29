@@ -1053,6 +1053,7 @@ func (st *buildStatus) build() (retErr error) {
 		OnStartExec: func() { st.logEventTime("running_exec") },
 		ExtraEnv:    st.conf.Env(),
 		Debug:       true,
+		Args:        st.conf.AllScriptArgs(),
 	})
 	if err != nil {
 		return err
