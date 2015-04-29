@@ -167,6 +167,12 @@ func (p *reverseBuildletPool) GetBuildlet(machineType, rev string, el eventTimeL
 		} else if err != nil {
 			return nil, err
 		} else {
+			// Clean up any files from previous builds.
+			if err := b.RemoveAll("."); err != nil {
+				b.Close()
+				return nil, err
+			}
+			el.logEventTime("cleaned_up")
 			return b, nil
 		}
 	}
