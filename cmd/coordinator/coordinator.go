@@ -16,16 +16,15 @@ import (
 	"flag"
 	"fmt"
 	"html"
+	"html/template"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path"
 	"runtime"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +37,8 @@ import (
 	"golang.org/x/build/types"
 	"google.golang.org/cloud/storage"
 )
+
+var processStartTime = time.Now()
 
 func init() {
 	// Disabled until we have test sharding. This takes 85+ minutes.
@@ -261,6 +262,7 @@ func main() {
 	http.HandleFunc("/logs", handleLogs)
 	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
 	http.HandleFunc("/reverse", handleReverse)
+	http.HandleFunc("/style.css", handleStyleCSS)
 	go func() {
 		if *mode == "dev" {
 			return
@@ -391,66 +393,6 @@ func (s byAge) Len() int           { return len(s) }
 func (s byAge) Less(i, j int) bool { return s[i].startTime.Before(s[j].startTime) }
 func (s byAge) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
-func handleStatus(w http.ResponseWriter, r *http.Request) {
-	var active []*buildStatus
-	var recent []*buildStatus
-	statusMu.Lock()
-	for _, st := range status {
-		active = append(active, st)
-	}
-	recent = append(recent, statusDone...)
-	numTotal := len(status)
-
-	// TODO: make this prettier.
-	var tryBuf bytes.Buffer
-	for _, key := range tryList {
-		if ts := tries[key]; ts != nil {
-			state := ts.state()
-			fmt.Fprintf(&tryBuf, "Change-ID: %v Commit: %v\n", key.ChangeID, key.Commit)
-			fmt.Fprintf(&tryBuf, "   Remain: %d, fails: %v\n", state.remain, state.failed)
-			for _, bs := range ts.builds {
-				fmt.Fprintf(&tryBuf, "  %s: running=%v\n", bs.name, bs.isRunning())
-			}
-		}
-	}
-	statusMu.Unlock()
-
-	sort.Sort(byAge(active))
-	sort.Sort(sort.Reverse(byAge(recent)))
-
-	io.WriteString(w, "<html><body><h1>Go build coordinator</h1>")
-
-	fmt.Fprintf(w, "<h2>running</h2><p>%d total builds active", numTotal)
-
-	io.WriteString(w, "<pre>")
-	for _, st := range active {
-		io.WriteString(w, st.htmlStatusLine())
-	}
-	io.WriteString(w, "</pre>")
-
-	io.WriteString(w, "<h2>trybot state</h2><pre>")
-	if errTryDeps != nil {
-		fmt.Fprintf(w, "<b>trybots disabled: </b>: %v\n", html.EscapeString(errTryDeps.Error()))
-	} else {
-		w.Write(tryBuf.Bytes())
-	}
-	io.WriteString(w, "</pre>")
-
-	io.WriteString(w, "<h2>recently completed</h2><pre>")
-	for _, st := range recent {
-		io.WriteString(w, st.htmlStatusLine())
-	}
-	io.WriteString(w, "</pre>")
-
-	io.WriteString(w, "<h2>buildlet pools</h2><ul><li>")
-	gcePool.WriteHTMLStatus(w)
-	io.WriteString(w, "</li><li>")
-	reversePool.WriteHTMLStatus(w)
-	io.WriteString(w, "</li></ul>")
-
-	fmt.Fprintf(w, "<h2>disk space</h2><pre>%s</pre></body></html>", html.EscapeString(diskFree()))
-}
-
 func handleTryStatus(w http.ResponseWriter, r *http.Request) {
 	ts := trySetOfCommitPrefix(r.FormValue("commit"))
 	if ts == nil {
@@ -484,7 +426,7 @@ func handleTryStatus(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "<tr valign=top><td align=left>%s</td><td align=center>%s</td><td><pre>%s</pre></td></tr>\n",
 			bs.name,
 			status,
-			bs.htmlStatusLine())
+			bs.HTMLStatusLine())
 	}
 	fmt.Fprintf(w, "</table></body></html>")
 }
@@ -501,11 +443,6 @@ func trySetOfCommitPrefix(commitPrefix string) *trySet {
 		}
 	}
 	return nil
-}
-
-func diskFree() string {
-	out, _ := exec.Command("df", "-h").Output()
-	return string(out)
 }
 
 func handleLogs(w http.ResponseWriter, r *http.Request) {
@@ -1135,9 +1072,9 @@ func (st *buildStatus) hasEvent(event string) bool {
 	return false
 }
 
-// htmlStatusLine returns the HTML to show within the <pre> block on
+// HTMLStatusLine returns the HTML to show within the <pre> block on
 // the main page's list of active builds.
-func (st *buildStatus) htmlStatusLine() string {
+func (st *buildStatus) HTMLStatusLine() template.HTML {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
@@ -1170,7 +1107,7 @@ func (st *buildStatus) htmlStatusLine() string {
 	}
 	fmt.Fprintf(&buf, ", %v ago\n", time.Since(t))
 	st.writeEventsLocked(&buf, true)
-	return buf.String()
+	return template.HTML(buf.String())
 }
 
 func (st *buildStatus) logsURL() string {
