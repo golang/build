@@ -19,6 +19,8 @@ type BuildConfig struct {
 	// "darwin-386" or "linux-amd64-race".
 	Name string
 
+	Notes       string // notes for humans
+	Owner       string // e.g. "bradfitz@golang.org", empty means golang-dev
 	VMImage     string // e.g. "openbsd-amd64-56"
 	machineType string // optional GCE instance type
 	Go14URL     string // URL to built Go 1.4 tar.gz
@@ -124,6 +126,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "freebsd-amd64-gce101",
+		Notes:       "FreeBSD 10.1; GCE VM is built from script in build/env/freebsd-amd64",
 		VMImage:     "freebsd-amd64-gce101",
 		machineType: "n1-highcpu-2",
 		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-freebsd-amd64.tar.gz",
@@ -158,6 +161,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "linux-386-387",
+		Notes:       "GO386=386",
 		VMImage:     "linux-buildlet-std",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOARCH=386", "GOHOSTARCH=386", "GO386=387"},
@@ -169,6 +173,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:    "linux-amd64-nocgo",
+		Notes:   "cgo disabled",
 		VMImage: "linux-buildlet-std",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/go1.4",
@@ -181,6 +186,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:    "linux-amd64-noopt",
+		Notes:   "optimizations and inlining disabled",
 		VMImage: "linux-buildlet-std",
 		env:     []string{"GOROOT_BOOTSTRAP=/go1.4", "GO_GCFLAGS=-N -l"},
 	})
@@ -198,6 +204,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:    "linux-amd64-clang",
+		Notes:   "Debian wheezy + clang 3.5 instead of gcc",
 		VMImage: "linux-buildlet-clang",
 		env:     []string{"GOROOT_BOOTSTRAP=/go1.4", "CC=/usr/bin/clang"},
 	})
@@ -209,6 +216,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:    "linux-amd64-sid",
+		Notes:   "Debian sid (unstable)",
 		VMImage: "linux-buildlet-sid",
 		env:     []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	})
@@ -231,18 +239,21 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "openbsd-amd64-gce56",
+		Notes:       "OpenBSD 5.6; GCE VM is built from script in build/env/openbsd-amd64",
 		VMImage:     "openbsd-amd64-56",
 		machineType: "n1-highcpu-2",
 		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-openbsd-amd64.tar.gz",
 	})
 	addBuilder(BuildConfig{
 		Name:        "openbsd-386-gce56",
+		Notes:       "OpenBSD 5.6; GCE VM is built from script in build/env/openbsd-386",
 		VMImage:     "openbsd-386-56",
 		machineType: "n1-highcpu-2",
 		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-openbsd-386.tar.gz",
 	})
 	addBuilder(BuildConfig{
 		Name:    "plan9-386-gcepartial",
+		Notes:   "Plan 9 from 0intro; GCE VM is built from script in build/env/plan9-386; runs with GOTESTONLY=std (only stdlib tests)",
 		VMImage: "plan9-386-v2",
 		Go14URL: "https://storage.googleapis.com/go-builder-data/go1.4-plan9-386.tar.gz",
 		// It's named "partial" because the buildlet sets
@@ -288,6 +299,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "windows-amd64-race",
+		Notes:       "Only runs -race tests (./race.bat)",
 		VMImage:     "windows-buildlet-v2",
 		machineType: "n1-highcpu-4",
 		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-windows-amd64.tar.gz",
@@ -305,19 +317,22 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:      "darwin-amd64-10_10",
+		Notes:     "Mac Mini running OS X 10.10 (Yosemite)",
 		Go14URL:   "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
 		IsReverse: true,
 	})
 	addBuilder(BuildConfig{
-		Name:      "darwin-arm-iphone4s",
+		Name:      "darwin-arm-a5ios",
+		Notes:     "iPhone 4S (A5 processor), via a Mac Mini",
+		Owner:     "crawshaw@golang.org",
 		Go14URL:   "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
 		IsReverse: true,
 		env:       []string{"GOARCH=arm", "GOHOSTARCH=amd64"},
 	})
-	// iOS builder. Runs on an OS X host. It cross compiling binaries
-	// for darwin/arm64 and runs them on an attached iPad Mini 3.
 	addBuilder(BuildConfig{
-		Name:      "darwin-arm64-ipadmini3",
+		Name:      "darwin-arm64-a7ios",
+		Notes:     "iPad Mini 3 (A7 processor), via a Mac Mini",
+		Owner:     "crawshaw@golang.org",
 		Go14URL:   "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
 		IsReverse: true,
 		env:       []string{"GOARCH=arm64", "GOHOSTARCH=amd64"},
