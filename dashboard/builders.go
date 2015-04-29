@@ -75,6 +75,9 @@ func (c *BuildConfig) AllScript() string {
 	if strings.HasPrefix(c.Name, "darwin-arm") {
 		return "src/iostest.bash"
 	}
+	if c.Name == "all-compile" {
+		return "src/buildall.bash"
+	}
 	return "src/all.bash"
 }
 
@@ -170,6 +173,13 @@ func init() {
 		Name:    "linux-amd64",
 		VMImage: "linux-buildlet-std",
 		env:     []string{"GOROOT_BOOTSTRAP=/go1.4"},
+	})
+	addBuilder(BuildConfig{
+		Name:        "all-compile",
+		VMImage:     "linux-buildlet-std",
+		Notes:       "Runs buildall.sh to compile stdlib for all GOOS/GOARCH, but doesn't run any tests.",
+		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
+		env:         []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	})
 	addBuilder(BuildConfig{
 		Name:    "linux-amd64-nocgo",
