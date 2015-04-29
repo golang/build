@@ -77,6 +77,7 @@ var tryBuilders []dashboard.BuildConfig
 
 func init() {
 	tryList := []string{
+		"all-compile",
 		"linux-386",
 		"linux-amd64",
 		"linux-amd64-race",
