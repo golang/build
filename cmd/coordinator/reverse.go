@@ -153,9 +153,14 @@ func (p *reverseBuildletPool) reverseHealthCheck() {
 }
 
 func (p *reverseBuildletPool) GetBuildlet(machineType, rev string, el eventTimeLogger) (*buildlet.Client, error) {
+	seenErrInUse := false
 	for {
 		b, err := p.tryToGrab(machineType)
 		if err == errInUse {
+			if !seenErrInUse {
+				el.logEventTime("waiting_machine_in_use")
+				seenErrInUse = true
+			}
 			select {
 			case <-p.buildletReturned:
 			// As multiple goroutines can be listening for the
@@ -167,6 +172,7 @@ func (p *reverseBuildletPool) GetBuildlet(machineType, rev string, el eventTimeL
 		} else if err != nil {
 			return nil, err
 		} else {
+			el.logEventTime("got_machine")
 			// Clean up any files from previous builds.
 			if err := b.RemoveAll("."); err != nil {
 				b.Close()
