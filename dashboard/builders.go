@@ -177,6 +177,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:        "all-compile",
 		VMImage:     "linux-buildlet-std",
+		machineType: "n1-highcpu-16", // CPU-bound, uses it well.
 		Notes:       "Runs buildall.sh to compile stdlib for all GOOS/GOARCH, but doesn't run any tests.",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4"},
