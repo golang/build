@@ -296,7 +296,7 @@ func builderPriority(builder string) (p int) {
 	}
 	// Group race builders together.
 	if isRace(builder) {
-		return 1
+		return 2
 	}
 	// If the OS has a specified priority, use it.
 	if p, ok := osPriority[builderOS(builder)]; ok {
@@ -318,24 +318,25 @@ func unsupported(builder string) bool {
 }
 
 func unsupportedOS(os string) bool {
-	if os == "race" || os == "android" {
+	if os == "race" || os == "android" || os == "all" {
 		return false
 	}
 	p, ok := osPriority[os]
-	return !ok || p > 0
+	return !ok || p > 1
 }
 
 // Priorities for specific operating systems.
 var osPriority = map[string]int{
-	"darwin":  0,
-	"freebsd": 0,
-	"linux":   0,
-	"windows": 0,
-	// race == 1
-	"android":   2,
-	"openbsd":   3,
-	"netbsd":    4,
-	"dragonfly": 5,
+	"all":     0,
+	"darwin":  1,
+	"freebsd": 1,
+	"linux":   1,
+	"windows": 1,
+	// race == 2
+	"android":   3,
+	"openbsd":   4,
+	"netbsd":    5,
+	"dragonfly": 6,
 }
 
 // TagState represents the state of all Packages at a Tag.
