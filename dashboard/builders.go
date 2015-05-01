@@ -120,6 +120,14 @@ func (c *BuildConfig) MachineType() string {
 	return "n1-highcpu-2"
 }
 
+// ShortOwner returns a short human-readable owner.
+func (c BuildConfig) ShortOwner() string {
+	if c.Owner == "" {
+		return "go-dev"
+	}
+	return strings.TrimSuffix(c.Owner, "@golang.org")
+}
+
 func init() {
 	addBuilder(BuildConfig{
 		Name:        "freebsd-amd64-gce93",

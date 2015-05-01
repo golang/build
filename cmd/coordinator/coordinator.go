@@ -258,11 +258,12 @@ func main() {
 	}
 
 	http.HandleFunc("/", handleStatus)
-	http.HandleFunc("/try", handleTryStatus)
-	http.HandleFunc("/logs", handleLogs)
 	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
+	http.HandleFunc("/builders", handleBuilders)
+	http.HandleFunc("/logs", handleLogs)
 	http.HandleFunc("/reverse", handleReverse)
 	http.HandleFunc("/style.css", handleStyleCSS)
+	http.HandleFunc("/try", handleTryStatus)
 	go func() {
 		if *mode == "dev" {
 			return

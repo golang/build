@@ -182,4 +182,19 @@ header nav a {
 	border: 1px solid #375EAB;
 	border-radius: 5px;
 }
+
+table {
+	border-collapse: collapse;
+	font-size: 9pt;
+}
+
+table td, table th, table td, table th {
+	text-align: left;
+	vertical-align: top;
+	padding: 2px 6px;
+}
+
+table thead tr {
+	background: #fff !important;
+}
 `
