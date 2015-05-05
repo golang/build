@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"sort"
 	"sync"
@@ -147,6 +148,7 @@ func (p *reverseBuildletPool) reverseHealthCheck() {
 		// remove bad buildlet
 		log.Printf("Reverse buildlet %s %v not responding, removing from pool", b.client, b.modes)
 		b.client.Close()
+		b.conn.Close()
 	}
 	p.buildlets = buildlets
 	p.mu.Unlock()
@@ -266,6 +268,7 @@ func (p *reverseBuildletPool) CanBuild(mode string) bool {
 // Its immediate fields are guarded by the reverseBuildletPool mutex.
 type reverseBuildlet struct {
 	client *buildlet.Client
+	conn   net.Conn
 
 	// modes is the set of valid modes for this buildlet.
 	//
@@ -335,6 +338,7 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 	b := &reverseBuildlet{
 		modes:  modes,
 		client: client,
+		conn:   conn,
 	}
 	reversePool.buildlets = append(reversePool.buildlets, b)
 	registerBuildlet(modes)
