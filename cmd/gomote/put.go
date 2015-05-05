@@ -15,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/build/dashboard"
 	"golang.org/x/build/tarutil"
 )
 
@@ -100,7 +99,7 @@ func put14(args []string) error {
 		fs.Usage()
 	}
 	name := fs.Arg(0)
-	conf, ok := dashboard.Builders[name]
+	conf, ok := namedConfig(name)
 	if !ok {
 		return fmt.Errorf("unknown builder %q", name)
 	}

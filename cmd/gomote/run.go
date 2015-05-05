@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"golang.org/x/build/buildlet"
-	"golang.org/x/build/dashboard"
 )
 
 func run(args []string) error {
@@ -34,7 +33,7 @@ func run(args []string) error {
 	}
 	name, cmd := fs.Arg(0), fs.Arg(1)
 
-	conf, ok := dashboard.Builders[name]
+	conf, ok := namedConfig(name)
 	if !ok {
 		return fmt.Errorf("unknown builder type %q", name)
 	}

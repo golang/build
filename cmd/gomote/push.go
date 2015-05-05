@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	"golang.org/x/build/buildlet"
-	"golang.org/x/build/dashboard"
 )
 
 func push(args []string) error {
@@ -88,7 +87,7 @@ func push(args []string) error {
 	}
 
 	if !haveGo14 {
-		if conf, ok := dashboard.Builders[name]; ok {
+		if conf, ok := namedConfig(name); ok {
 			if conf.Go14URL != "" {
 				log.Printf("installing go1.4")
 				if err := bc.PutTarFromURL(conf.Go14URL, "go1.4"); err != nil {
@@ -96,7 +95,7 @@ func push(args []string) error {
 				}
 			}
 		} else {
-			log.Printf("unknown buildlet type %q has no go1.4 directory; ignoring.")
+			log.Printf("unknown buildlet type %q has no go1.4 directory; ignoring.", name)
 		}
 	}
 

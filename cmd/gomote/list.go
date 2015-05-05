@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/dashboard"
 )
 
 func list(args []string) error {
@@ -63,9 +64,21 @@ func namedClient(name string) (*buildlet.Client, error) {
 		return buildlet.NewClient(vm.IPPort, vm.TLS), nil
 	}
 	if len(matches) > 1 {
-		return nil, fmt.Errorf("prefix %q is ambiguous")
+		return nil, fmt.Errorf("prefix %q is ambiguous", wantName)
 	}
 	return nil, fmt.Errorf("buildlet %q not running", name)
+}
+
+// namedConfig returns the builder configuration that matches the given mote
+// name. It matches prefixes to accommodate motes than have "-n" suffixes.
+func namedConfig(name string) (dashboard.BuildConfig, bool) {
+	match := ""
+	for cname := range dashboard.Builders {
+		if strings.HasPrefix(name, cname) && len(cname) > len(match) {
+			match = cname
+		}
+	}
+	return dashboard.Builders[match], match != ""
 }
 
 // nextName returns the next available numbered name or the given buildlet base
