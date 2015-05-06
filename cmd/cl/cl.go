@@ -270,8 +270,8 @@ var (
 	reviewerRE     = regexp.MustCompile(`(?m)^R=([\w\-.@]+)\b`)
 	scoreRE        = regexp.MustCompile(`\APatch Set \d+: Code-Review([+-][0-9]+)`)
 	removedScoreRE = regexp.MustCompile(`\ARemoved the following votes:\n\n\* Code-Review([+-][0-9]+) by [^\n]* <([^\n]*)>`)
-	issueRefRE     = regexp.MustCompile(`#(\d+)\b`)
-	goIssueRefRE   = regexp.MustCompile(`\bgolang/go#(\d+)\b`)
+	issueRefRE     = regexp.MustCompile(`#\d+\b`)
+	goIssueRefRE   = regexp.MustCompile(`\bgolang/go#\d+\b`)
 )
 
 func parseCL(ci *gerrit.ChangeInfo) *CL {
@@ -408,7 +408,7 @@ func parseCL(ci *gerrit.ChangeInfo) *CL {
 	sort.Strings(cl.Files)
 	if rev.Commit != nil {
 		for _, ref := range refRE.FindAllString(rev.Commit.Message, -1) {
-			n, _ := strconv.Atoi(ref[1:])
+			n, _ := strconv.Atoi(ref[strings.Index(ref, "#")+1:])
 			if n != 0 {
 				cl.Issues = append(cl.Issues, n)
 			}
