@@ -109,32 +109,37 @@ func dialCoordinator() error {
 		ConnState: func(_ net.Conn, state http.ConnState) { stateCh <- state },
 	}
 	return srv.Serve(&reverseListener{
-		c:       conn,
+		conn:    conn,
 		stateCh: stateCh,
 	})
 }
 
-func newReverseListener(c net.Conn) net.Listener {
-	rl := &reverseListener{c: c}
-	return rl
-}
-
 // reverseListener serves out a single underlying conn, once.
 //
-// After handing out a single conn, Accept blocks and listens for
-// conneciton state changes on stateCh. If too long passes since last
-// use, it reports the connection closed.
+// It is designed to be passed to a *http.Server, which loops
+// continually calling Accept. As this reverse connection only
+// ever has one connection to hand out, it responds to the first
+// Accept, and then blocks on the second Accept.
+//
+// While blocking on the second Accept, this listener takes on the
+// job of checking the health of the original net.Conn it handed out.
+// If it goes unused for a while, it closes the original net.Conn
+// and returns an error, ending the life of the *http.Server
 type reverseListener struct {
-	c       net.Conn
+	done    bool
+	conn    net.Conn
 	stateCh <-chan http.ConnState
 }
 
 func (rl *reverseListener) Accept() (net.Conn, error) {
-	if rl.c != nil {
-		c := rl.c
-		rl.c = nil
-		return c, nil
+	if !rl.done {
+		// First call to Accept, return our one net.Conn.
+		rl.done = true
+		return rl.conn, nil
 	}
+	// Second call to Accept, block until we decide the entire
+	// server should be torn down.
+	defer rl.conn.Close()
 	const timeout = 1 * time.Minute
 	timer := time.NewTimer(timeout)
 	var state http.ConnState
