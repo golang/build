@@ -172,7 +172,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "linux-386-387",
-		Notes:       "GO386=386",
+		Notes:       "GO386=387",
 		VMImage:     "linux-buildlet-std",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOARCH=386", "GOHOSTARCH=386", "GO386=387"},
