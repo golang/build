@@ -245,6 +245,16 @@ func init() {
 		env:     []string{"GOROOT_BOOTSTRAP=/go1.4", "IN_QEMU=1"},
 	})
 	addBuilder(BuildConfig{
+		Name:      "linux-arm",
+		IsReverse: true,
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+	})
+	addBuilder(BuildConfig{
+		Name:      "linux-arm-arm5",
+		IsReverse: true,
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go", "GOARM=arm5"},
+	})
+	addBuilder(BuildConfig{
 		Name:        "nacl-386",
 		VMImage:     "linux-buildlet-nacl-v2",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
