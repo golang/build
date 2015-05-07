@@ -137,8 +137,13 @@ func (p *reverseBuildletPool) reverseHealthCheck() {
 			continue
 		}
 		b.inUseAs = ""
-		err, done := <-res
-		if !done {
+		var err error
+		select {
+		case err = <-res:
+		default:
+			// It had 5 seconds above to send to the
+			// buffered channel. So if we're here, it took
+			// over 5 seconds.
 			err = errors.New("health check timeout")
 		}
 		if err == nil {
@@ -147,8 +152,8 @@ func (p *reverseBuildletPool) reverseHealthCheck() {
 		}
 		// remove bad buildlet
 		log.Printf("Reverse buildlet %s %v not responding, removing from pool", b.client, b.modes)
-		b.client.Close()
-		b.conn.Close()
+		go b.client.Close()
+		go b.conn.Close()
 	}
 	p.buildlets = buildlets
 	p.mu.Unlock()
@@ -366,13 +371,16 @@ func (c *reverseRoundTripper) RoundTrip(req *http.Request) (resp *http.Response,
 	// Serialize trips. It is up to callers to avoid deadlocking.
 	c.sema <- true
 	if err := req.Write(c.bufrw); err != nil {
+		<-c.sema
 		return nil, err
 	}
 	if err := c.bufrw.Flush(); err != nil {
+		<-c.sema
 		return nil, err
 	}
 	resp, err = http.ReadResponse(c.bufrw.Reader, req)
 	if err != nil {
+		<-c.sema
 		return nil, err
 	}
 	resp.Body = &reverseLockedBody{resp.Body, c.sema}
