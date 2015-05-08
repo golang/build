@@ -22,7 +22,7 @@ import (
 func putTar(args []string) error {
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "create usage: gomote puttar [put-opts] <buildlet-name> [tar.gz file or '-' for stdin]\n")
+		fmt.Fprintln(os.Stderr, "create usage: gomote puttar [put-opts] <buildlet-name> [tar.gz file or '-' for stdin]")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
@@ -114,7 +114,7 @@ func put14(args []string) error {
 func put(args []string) error {
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "create usage: gomote put [put-opts] <buildlet-name> <source or '-' for stdin> [destination]\n\n")
+		fmt.Fprintln(os.Stderr, "create usage: gomote put [put-opts] <buildlet-name> <source or '-' for stdin> [destination]")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}

@@ -15,7 +15,7 @@ import (
 func getTar(args []string) error {
 	fs := flag.NewFlagSet("get", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "create usage: gomote gettar [get-opts] <buildlet-name>\n")
+		fmt.Fprintln(os.Stderr, "create usage: gomote gettar [get-opts] <buildlet-name>")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}

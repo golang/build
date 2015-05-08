@@ -26,9 +26,9 @@ func create(args []string) error {
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
 
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "create usage: gomote create [create-opts] <type>\n")
+		fmt.Fprintln(os.Stderr, "create usage: gomote create [create-opts] <type>")
 		fs.PrintDefaults()
-		fmt.Fprintln(os.Stderr, "\nValid types:\n")
+		fmt.Fprintln(os.Stderr, "\nValid types:")
 		for _, t := range vmTypes() {
 			fmt.Fprintf(os.Stderr, "  * %s\n", t)
 		}
