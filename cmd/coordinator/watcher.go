@@ -13,11 +13,14 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
 	"time"
+
+	"google.golang.org/cloud/compute/metadata"
 )
 
 var (
@@ -25,9 +28,10 @@ var (
 )
 
 type watchConfig struct {
-	repo     string        // "https://go.googlesource.com/go"
-	dash     string        // "https://build.golang.org/" (must end in /)
-	interval time.Duration // Polling interval
+	repo       string        // "https://go.googlesource.com/go"
+	dash       string        // "https://build.golang.org/" (must end in /)
+	interval   time.Duration // Polling interval
+	mirrorBase string        // "https://github.com/golang/" or empty to disable mirroring
 }
 
 type imageInfo struct {
@@ -42,7 +46,7 @@ var images = map[string]*imageInfo{
 }
 
 func startWatchers() {
-	addWatcher(watchConfig{repo: "https://go.googlesource.com/go", dash: "https://build.golang.org/"})
+	addWatcher(watchConfig{repo: "https://go.googlesource.com/go", dash: "https://build.golang.org/", mirrorBase: "https://github.com/golang/"})
 	addWatcher(watchConfig{repo: "https://go.googlesource.com/gofrontend", dash: "https://build.golang.org/gccgo/"})
 
 	go cleanUpOldContainers()
@@ -93,6 +97,14 @@ func (conf watchConfig) dockerRunArgs() (args []string) {
 		"-dash="+conf.dash,
 		"-poll="+conf.interval.String(),
 	)
+	if conf.mirrorBase != "" {
+		dst, err := url.Parse(conf.mirrorBase)
+		if err != nil {
+			log.Fatalf("Bad mirror destination URL: %q", conf.mirrorBase)
+		}
+		dst.User = url.UserPassword(mirrorCred())
+		args = append(args, "-mirror="+dst.String())
+	}
 	return
 }
 
@@ -199,4 +211,29 @@ func cleanUpOldContainers() {
 func oldContainers() []string {
 	out, _ := exec.Command("docker", "ps", "-a", "--filter=status=exited", "--no-trunc", "-q").Output()
 	return strings.Fields(string(out))
+}
+
+func mirrorCred() (username, password string) {
+	mirrorCredOnce.Do(loadMirrorCred)
+	return mirrorCredCache.username, mirrorCredCache.password
+}
+
+var (
+	mirrorCredOnce  sync.Once
+	mirrorCredCache struct {
+		username, password string
+	}
+)
+
+func loadMirrorCred() {
+	cred, err := metadata.ProjectAttributeValue("mirror-credentials")
+	if err != nil {
+		log.Println("No mirror credentials available: %v", err)
+		return
+	}
+	p := strings.SplitN(strings.TrimSpace(cred), ":", 2)
+	if len(p) != 2 {
+		log.Fatalf("Bad mirror credentials: %q", cred)
+	}
+	mirrorCredCache.username, mirrorCredCache.password = p[0], p[1]
 }

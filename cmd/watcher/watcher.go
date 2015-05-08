@@ -43,6 +43,7 @@ var (
 	keyFile      = flag.String("key", defaultKeyFile, "Build dashboard key file")
 	pollInterval = flag.Duration("poll", 10*time.Second, "Remote repo poll interval")
 	network      = flag.Bool("network", true, "Enable network calls (disable for testing)")
+	mirrorBase   = flag.String("mirror", "", `Mirror repository base URL (eg "https://github.com/golang/")`)
 )
 
 var (
@@ -82,7 +83,12 @@ func run() error {
 	errc := make(chan error)
 
 	go func() {
-		r, err := NewRepo(dir, *repoURL, "")
+		dst := ""
+		if *mirrorBase != "" {
+			name := (*repoURL)[strings.LastIndex(*repoURL, "/")+1:]
+			dst = *mirrorBase + name
+		}
+		r, err := NewRepo(dir, *repoURL, dst, "")
 		if err != nil {
 			errc <- err
 			return
@@ -96,8 +102,13 @@ func run() error {
 	}
 	for _, path := range subrepos {
 		go func(path string) {
-			url := goBase + strings.TrimPrefix(path, "golang.org/x/")
-			r, err := NewRepo(dir, url, path)
+			name := strings.TrimPrefix(path, "golang.org/x/")
+			url := goBase + name
+			dst := ""
+			if *mirrorBase != "" {
+				dst = *mirrorBase + name
+			}
+			r, err := NewRepo(dir, url, dst, path)
 			if err != nil {
 				errc <- err
 				return
@@ -116,24 +127,40 @@ type Repo struct {
 	path     string             // base import path for repo (blank for main repo)
 	commits  map[string]*Commit // keyed by full commit hash (40 lowercase hex digits)
 	branches map[string]*Branch // keyed by branch name, eg "release-branch.go1.3" (or empty for default)
+	mirror   bool               // push new commits to 'dest' remote
 }
 
 // NewRepo checks out a new instance of the Mercurial repository
-// specified by url to a new directory inside dir.
+// specified by srcURL to a new directory inside dir.
+// If dstURL is not empty, changes from the source repository will
+// be mirrored to the specified destination repository.
 // The path argument is the base import path of the repository,
 // and should be empty for the main Go repo.
-func NewRepo(dir, url, path string) (*Repo, error) {
+func NewRepo(dir, srcURL, dstURL, path string) (*Repo, error) {
 	r := &Repo{
 		path:     path,
 		root:     filepath.Join(dir, filepath.Base(path)),
 		commits:  make(map[string]*Commit),
 		branches: make(map[string]*Branch),
+		mirror:   dstURL != "",
 	}
 
-	r.logf("cloning %v", url)
-	cmd := exec.Command("git", "clone", url, r.root)
+	r.logf("cloning %v", srcURL)
+	cmd := exec.Command("git", "clone", srcURL, r.root)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("%v\n\n%s", err, out)
+	}
+
+	if r.mirror {
+		cmd := exec.Command("git", "remote", "add", "dest", dstURL)
+		cmd.Dir = r.root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("%v\n%s", err, out)
+		}
+		r.logf("initial push to %v", dstURL)
+		if err := r.push(); err != nil {
+			return nil, err
+		}
 	}
 
 	r.logf("loading commit log")
@@ -153,6 +180,11 @@ func (r *Repo) Watch() error {
 	for {
 		if err := r.fetch(); err != nil {
 			return err
+		}
+		if r.mirror {
+			if err := r.push(); err != nil {
+				return err
+			}
 		}
 		if err := r.update(true); err != nil {
 			return err
@@ -570,20 +602,40 @@ func (r *Repo) log(dir string, args ...string) ([]*Commit, error) {
 // fetch runs "git fetch" in the repository root.
 // It tries three times, just in case it failed because of a transient error.
 func (r *Repo) fetch() error {
-	var err error
-	for tries := 0; tries < 3; tries++ {
-		time.Sleep(time.Duration(tries) * 5 * time.Second) // Linear back-off.
+	return try(3, func() error {
 		cmd := exec.Command("git", "fetch", "--all")
 		cmd.Dir = r.root
-		if out, e := cmd.CombinedOutput(); err != nil {
-			e = fmt.Errorf("%v\n\n%s", e, out)
-			log.Printf("git fetch error %v: %v", r.root, e)
-			if err == nil {
-				err = e
-			}
-			continue
+		if out, err := cmd.CombinedOutput(); err != nil {
+			err = fmt.Errorf("%v\n\n%s", err, out)
+			r.logf("git fetch: %v", err)
+			return err
 		}
 		return nil
+	})
+}
+
+// fetch runs "git push -f --mirror dest" in the repository root.
+// It tries three times, just in case it failed because of a transient error.
+func (r *Repo) push() error {
+	return try(3, func() error {
+		cmd := exec.Command("git", "push", "-f", "--mirror", "dest")
+		cmd.Dir = r.root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			err = fmt.Errorf("%v\n\n%s", err, out)
+			r.logf("git push: %v", err)
+			return err
+		}
+		return nil
+	})
+}
+
+func try(n int, fn func() error) error {
+	var err error
+	for tries := 0; tries < n; tries++ {
+		time.Sleep(time.Duration(tries) * 5 * time.Second) // Linear back-off.
+		if err = fn(); err == nil {
+			break
+		}
 	}
 	return err
 }
