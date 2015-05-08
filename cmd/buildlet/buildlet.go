@@ -637,7 +637,10 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			select {
 			case <-clientGone:
-				cmd.Process.Kill()
+				err := killProcessTree(cmd.Process)
+				if err != nil {
+					log.Printf("Kill failed: %v", err)
+				}
 			case <-handlerDone:
 				return
 			}
@@ -957,4 +960,10 @@ func requireTrailerSupport() {
 	// bufio.Reader.Discard was added by ee2ecc4 Jan 7 2015.
 	var r bufio.Reader
 	_ = r.Discard
+}
+
+var killProcessTree = killProcessTreeUnix
+
+func killProcessTreeUnix(p *os.Process) error {
+	return p.Kill()
 }
