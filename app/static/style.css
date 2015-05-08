@@ -142,6 +142,10 @@ table td, table th, table td, table th {
 table tr:nth-child(2n+1) {
   background: #F4F4F4;
 }
+
+table tr.commit:hover {
+  background-color: #ffff99 !important;
+}
  
 table thead tr {
   background: #fff !important;
