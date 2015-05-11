@@ -655,10 +655,11 @@ type trySet struct {
 	// immutable
 	tryKey
 
-	// mu guards state.
+	// mu guards state and errMsg
 	// See LOCK ORDER comment above.
 	mu sync.Mutex
 	trySetState
+	errMsg bytes.Buffer
 }
 
 type trySetState struct {
@@ -798,12 +799,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 	if !succeeded {
 		ts.failed = append(ts.failed, bconf.Name)
 	}
-	anyFail := len(ts.failed) > 0
-	var failList []string
-	if remain == 0 {
-		// Copy of it before we unlock mu, even though it's gone down to 0.
-		failList = append([]string(nil), ts.failed...)
-	}
+	numFail := len(ts.failed)
 	ts.mu.Unlock()
 
 	if !succeeded {
@@ -821,22 +817,33 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 			log.Printf("Failed to write to GCS: %v", err)
 			return
 		}
-		if err := gerritClient.SetReview(ts.ChangeID, ts.Commit, gerrit.ReviewInput{
-			Message: fmt.Sprintf(
-				"This change failed on %s:\n"+
-					"See https://storage.googleapis.com/%s/%s\n\n"+
-					"Consult https://build.golang.org/ to see whether it's a new failure.",
-				bs.name, *buildLogBucket, objName),
-		}); err != nil {
-			log.Printf("Failed to call Gerrit: %v", err)
-			return
+		failLogURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", *buildLogBucket, objName)
+		ts.mu.Lock()
+		fmt.Fprintf(&ts.errMsg, "Failed on %s: %s\n", bs.name, failLogURL)
+		ts.mu.Unlock()
+
+		if numFail == 1 && remain > 0 {
+			if err := gerritClient.SetReview(ts.ChangeID, ts.Commit, gerrit.ReviewInput{
+				Message: fmt.Sprintf(
+					"This change failed on %s:\n"+
+						"See %s\n\n"+
+						"Consult https://build.golang.org/ to see whether it's a new failure. Other builds still in progress; subsequent failure notices suppressed until final report.",
+					bs.name, failLogURL),
+			}); err != nil {
+				log.Printf("Failed to call Gerrit: %v", err)
+				return
+			}
 		}
 	}
 
 	if remain == 0 {
 		score, msg := 1, "TryBots are happy."
-		if anyFail {
-			score, msg = -1, fmt.Sprintf("%d of %d TryBots failed: %s", len(failList), len(ts.builds), strings.Join(failList, ", "))
+		if numFail > 0 {
+			ts.mu.Lock()
+			errMsg := ts.errMsg.String()
+			ts.mu.Unlock()
+			score, msg = -1, fmt.Sprintf("%d of %d TryBots failed:\n%s\nConsult https://build.golang.org/ to see whether they are new failures.",
+				numFail, len(ts.builds), errMsg)
 		}
 		if err := gerritClient.SetReview(ts.ChangeID, ts.Commit, gerrit.ReviewInput{
 			Message: msg,
