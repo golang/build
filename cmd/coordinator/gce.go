@@ -3,8 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Code interacting with Google Compute Engine (GCE) and
-// a GCE implementation of the BuildletPoolimplementation of the BuildletPool
-// interface.
+// a GCE implementation of the BuildletPool interface.
 
 package main
 
