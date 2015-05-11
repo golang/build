@@ -252,7 +252,11 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:      "linux-arm-arm5",
 		IsReverse: true,
-		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go", "GOARM=arm5"},
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/local/go",
+			"GOARM=arm5",
+			"GO_TEST_TIMEOUT_SCALE=5", // slow.
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:        "nacl-386",
