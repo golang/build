@@ -31,9 +31,8 @@ import (
 
 const (
 	goBase         = "https://go.googlesource.com/"
-	watcherVersion = 3 // must match dashboard/app/build/handler.go's watcherVersion
-	origin         = "origin/"
-	master         = origin + "master" // name of the master branch
+	watcherVersion = 3        // must match dashboard/app/build/handler.go's watcherVersion
+	master         = "master" // name of the master branch
 	metaURL        = goBase + "?b=master&format=JSON"
 )
 
@@ -314,7 +313,7 @@ func (r *Repo) postCommit(c *Commit) error {
 		User:   c.Author,
 		Desc:   c.Desc,
 		Time:   t,
-		Branch: strings.TrimPrefix(c.Branch, origin),
+		Branch: c.Branch,
 
 		NeedsBenchmarking: c.NeedsBenchmarking(),
 	}
@@ -376,7 +375,7 @@ func (r *Repo) update(noisy bool) error {
 			// If we know about this branch,
 			// only log commits down to the known head.
 			revspec = b.Head.Hash + ".." + name
-		} else if revspec != master {
+		} else if name != master {
 			// If this is an unknown non-master branch,
 			// log up to where it forked from master.
 			base, err := r.mergeBase(name, master)
@@ -529,7 +528,7 @@ func (r *Repo) mergeBase(a, b string) (string, error) {
 // remotes returns a slice of remote branches known to the git repo.
 // It always puts "origin/master" first.
 func (r *Repo) remotes() ([]string, error) {
-	cmd := exec.Command("git", "branch", "-r")
+	cmd := exec.Command("git", "branch")
 	cmd.Dir = r.root
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -537,13 +536,14 @@ func (r *Repo) remotes() ([]string, error) {
 	}
 	bs := []string{master}
 	for _, b := range strings.Split(string(out), "\n") {
+		b = strings.TrimPrefix(b, "* ")
 		b = strings.TrimSpace(b)
 		// Ignore aliases, blank lines, and master (it's already in bs).
 		if b == "" || strings.Contains(b, "->") || b == master {
 			continue
 		}
 		// Ignore pre-go1 release branches; they are just noise.
-		if strings.HasPrefix(b, origin+"release-branch.r") {
+		if strings.HasPrefix(b, "release-branch.r") {
 			continue
 		}
 		bs = append(bs, b)
@@ -568,7 +568,7 @@ func (r *Repo) log(dir string, args ...string) ([]*Commit, error) {
 	cmd.Dir = r.root
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("git log %v: %v", strings.Join(args, " "), err)
+		return nil, fmt.Errorf("git %v: %v\n%s", strings.Join(args, " "), err, out)
 	}
 
 	// We have a commit with description that contains 0x1b byte.
@@ -614,7 +614,7 @@ func (r *Repo) fetch() error {
 	})
 }
 
-// fetch runs "git push -f --mirror dest" in the repository root.
+// push runs "git push -f --mirror dest" in the repository root.
 // It tries three times, just in case it failed because of a transient error.
 func (r *Repo) push() error {
 	return try(3, func() error {
@@ -669,7 +669,7 @@ type Commit struct {
 func (c *Commit) String() string {
 	s := c.Hash
 	if c.Branch != "" {
-		s += fmt.Sprintf("[%v]", strings.TrimPrefix(c.Branch, origin))
+		s += fmt.Sprintf("[%v]", c.Branch)
 	}
 	s += fmt.Sprintf("(%q)", strings.SplitN(c.Desc, "\n", 2)[0])
 	return s
