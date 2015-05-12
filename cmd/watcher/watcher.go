@@ -146,7 +146,7 @@ func NewRepo(dir, srcURL, dstURL, path string) (*Repo, error) {
 	}
 
 	r.logf("cloning %v", srcURL)
-	cmd := exec.Command("git", "clone", srcURL, r.root)
+	cmd := exec.Command("git", "clone", "--mirror", srcURL, r.root)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("%v\n\n%s", err, out)
 	}
@@ -603,7 +603,7 @@ func (r *Repo) log(dir string, args ...string) ([]*Commit, error) {
 // It tries three times, just in case it failed because of a transient error.
 func (r *Repo) fetch() error {
 	return try(3, func() error {
-		cmd := exec.Command("git", "fetch", "--all")
+		cmd := exec.Command("git", "fetch", "origin")
 		cmd.Dir = r.root
 		if out, err := cmd.CombinedOutput(); err != nil {
 			err = fmt.Errorf("%v\n\n%s", err, out)
