@@ -254,7 +254,7 @@ func init() {
 		IsReverse: true,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go",
-			"GOARM=arm5",
+			"GOARM=5",
 			"GO_TEST_TIMEOUT_SCALE=5", // slow.
 		},
 	})
