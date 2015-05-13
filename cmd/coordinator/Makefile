@@ -1,4 +1,4 @@
-coordinator: coordinator.go gce.go watcher.go dash.go
+coordinator: builders.go coordinator.go  dash.go debug.go reverse.go status.go watcher.go
 	GOOS=linux go build -o coordinator .
 
 # After "make upload", either reboot the machine, or ssh to it and:

@@ -228,7 +228,7 @@ var (
 func loadMirrorCred() {
 	cred, err := metadata.ProjectAttributeValue("mirror-credentials")
 	if err != nil {
-		log.Println("No mirror credentials available: %v", err)
+		log.Printf("No mirror credentials available: %v", err)
 		return
 	}
 	p := strings.SplitN(strings.TrimSpace(cred), ":", 2)

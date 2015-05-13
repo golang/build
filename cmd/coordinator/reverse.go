@@ -192,14 +192,26 @@ func (p *reverseBuildletPool) GetBuildlet(machineType, rev string, el eventTimeL
 }
 
 func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
-	inUse := make(map[string]int)
+	// total maps from a builder type to the number of machines which are
+	// capable of that role.
 	total := make(map[string]int)
+	// inUse and inUseOther track the number of machines using machines.
+	// inUse is how many machines are building that type, and inUseOther counts
+	// how many machines are occupied doing a similar role on that hardware.
+	// e.g. "darwin-amd64-10_10" occupied as a "darwin-arm-a5ios",
+	// or "linux-arm" as a "linux-arm-arm5" count as inUseOther.
+	inUse := make(map[string]int)
+	inUseOther := make(map[string]int)
 
 	p.mu.Lock()
 	for _, b := range p.buildlets {
 		for _, mode := range b.modes {
 			if b.inUseAs != "" && b.inUseAs != "health" {
-				inUse[mode]++
+				if mode == b.inUseAs {
+					inUse[mode]++
+				} else {
+					inUseOther[mode]++
+				}
 			}
 			total[mode]++
 		}
@@ -217,7 +229,12 @@ func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 		io.WriteString(w, "<li>no connections</li>")
 	}
 	for _, mode := range modes {
-		fmt.Fprintf(w, "<li>%s: %d/%d</li>", mode, inUse[mode], total[mode])
+		use, other := inUse[mode], inUseOther[mode]
+		if use+other == 0 {
+			fmt.Fprintf(w, "<li>%s: 0/%d</li>", mode, total[mode])
+		} else {
+			fmt.Fprintf(w, "<li>%s: %d/%d (%d + %d other)</li>", mode, use+other, total[mode], use, other)
+		}
 	}
 	io.WriteString(w, "</ul>")
 }

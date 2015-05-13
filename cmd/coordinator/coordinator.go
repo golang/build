@@ -493,6 +493,7 @@ func writeStatusHeader(w http.ResponseWriter, st *buildStatus) {
 	defer st.mu.Unlock()
 	fmt.Fprintf(w, "  builder: %s\n", st.name)
 	fmt.Fprintf(w, "      rev: %s\n", st.rev)
+	workaroundFlush(w)
 	fmt.Fprintf(w, " buildlet: %s\n", st.bc)
 	fmt.Fprintf(w, "  started: %v\n", st.startTime)
 	done := !st.done.IsZero()
@@ -507,6 +508,16 @@ func writeStatusHeader(w http.ResponseWriter, st *buildStatus) {
 		st.writeEventsLocked(w, false)
 	}
 	io.WriteString(w, "\nBuild log:\n")
+	workaroundFlush(w)
+}
+
+// workaroundFlush is an unnecessary flush to work around a bug in Chrome.
+// See https://code.google.com/p/chromium/issues/detail?id=2016 for the details.
+// In summary: a couple unnecessary chunk flushes bypass the content type
+// sniffing which happen (even if unused?), even if you set nosniff as we do
+// in func handleLogs.
+func workaroundFlush(w http.ResponseWriter) {
+	w.(http.Flusher).Flush()
 }
 
 // findWorkLoop polls http://build.golang.org/?mode=json looking for new work
@@ -994,6 +1005,7 @@ func (st *buildStatus) build() (retErr error) {
 
 	execStartTime := time.Now()
 	st.logEventTime("pre_exec")
+	fmt.Fprintf(st, "%s at %v\n\n", st.name, st.rev)
 
 	remoteErr, err := bc.Exec(path.Join("go", st.conf.AllScript()), buildlet.ExecOpts{
 		Output:      st,
