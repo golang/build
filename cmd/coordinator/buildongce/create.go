@@ -21,14 +21,15 @@ import (
 )
 
 var (
-	proj      = flag.String("project", "symbolic-datum-552", "name of Project")
-	zone      = flag.String("zone", "us-central1-a", "GCE zone")
-	mach      = flag.String("machinetype", "n1-highcpu-2", "Machine type")
-	instName  = flag.String("instance_name", "farmer", "Name of VM instance.")
-	sshPub    = flag.String("ssh_public_key", "", "ssh public key file to authorize. Can modify later in Google's web UI anyway.")
-	staticIP  = flag.String("static_ip", "", "Static IP to use. If empty, automatic.")
-	reuseDisk = flag.Bool("reuse_disk", true, "Whether disk images should be reused between shutdowns/restarts.")
-	ssd       = flag.Bool("ssd", false, "use a solid state disk (faster, more expensive)")
+	proj        = flag.String("project", "symbolic-datum-552", "name of Project")
+	zone        = flag.String("zone", "us-central1-a", "GCE zone")
+	mach        = flag.String("machinetype", "n1-highcpu-2", "Machine type")
+	instName    = flag.String("instance_name", "farmer", "Name of VM instance.")
+	sshPub      = flag.String("ssh_public_key", "", "ssh public key file to authorize. Can modify later in Google's web UI anyway.")
+	staticIP    = flag.String("static_ip", "", "Static IP to use. If empty, automatic.")
+	reuseDisk   = flag.Bool("reuse_disk", true, "Whether disk images should be reused between shutdowns/restarts.")
+	ssd         = flag.Bool("ssd", false, "use a solid state disk (faster, more expensive)")
+	coordinator = flag.String("coord", "https://storage.googleapis.com/go-builder-data/coordinator", "Coordinator binary URL")
 )
 
 func readFile(v string) string {
@@ -69,7 +70,7 @@ coreos:
         Requires=docker.service
         
         [Service]
-        ExecStartPre=/bin/bash -c 'mkdir -p /opt/bin && curl -s -o /opt/bin/coordinator http://storage.googleapis.com/go-builder-data/coordinator && chmod +x /opt/bin/coordinator'
+        ExecStartPre=/bin/bash -c 'mkdir -p /opt/bin && curl -s -o /opt/bin/coordinator $COORDINATOR && chmod +x /opt/bin/coordinator'
         ExecStart=/opt/bin/coordinator
         RestartSec=10s
         Restart=always
@@ -137,7 +138,7 @@ func main() {
 		}
 	}
 
-	cloudConfig := baseConfig
+	cloudConfig := strings.Replace(baseConfig, "$COORDINATOR", *coordinator, 1)
 	if *sshPub != "" {
 		key := strings.TrimSpace(readFile(*sshPub))
 		cloudConfig += fmt.Sprintf("\nssh_authorized_keys:\n    - %s\n", key)
