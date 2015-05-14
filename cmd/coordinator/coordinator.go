@@ -92,6 +92,12 @@ func init() {
 		"plan9-386-gcepartial",
 		"nacl-386",
 		"nacl-amd64p32",
+		"linux-arm-shard_test",
+		"linux-arm-shard_std_am",
+		"linux-arm-shard_std_nz",
+		"linux-arm-shard_runtimecpu",
+		"linux-arm-shard_cgotest",
+		"linux-arm-shard_misc",
 	}
 	for _, bname := range tryList {
 		conf, ok := dashboard.Builders[bname]
@@ -935,12 +941,20 @@ func (st *buildStatus) start() {
 }
 
 func (st *buildStatus) build() (retErr error) {
-	pool, err := poolForConf(st.conf)
+	buildletType := st.conf.BuildletType
+	if buildletType == "" {
+		buildletType = st.conf.Name
+	}
+	bconf, ok := dashboard.Builders[buildletType]
+	if !ok {
+		return fmt.Errorf("invalid BuildletType %q for %q", buildletType, st.conf.Name)
+	}
+	pool, err := poolForConf(bconf)
 	if err != nil {
 		return err
 	}
 	st.logEventTime("get_buildlet")
-	bc, err := pool.GetBuildlet(st.conf.Name, st.rev, st)
+	bc, err := pool.GetBuildlet(buildletType, st.rev, st)
 	if err != nil {
 		return fmt.Errorf("failed to get a buildlet: %v", err)
 	}

@@ -30,6 +30,19 @@ type BuildConfig struct {
 	RegularDisk bool // if true, use spinning disk instead of SSD
 	TryOnly     bool // only used for trybots, and not regular builds
 
+	// BuildletType optionally specifies the type of buildlet to
+	// request from the buildlet pool. If empty, it defaults to
+	// the value of Name.
+	//
+	// Note: we should probably start using this mechanism for
+	// more builder types, which combined with buildlet reuse
+	// could reduce latency. (e.g. "linux-386-387", "linux-amd64",
+	// and "linux-amd64-race" all sharing same buildlet and
+	// machine type, and able to jump onto each others
+	// buidlets... they vary only in env/args). For now we're
+	// only using this for ARM trybots.
+	BuildletType string
+
 	env []string // extra environment ("key=value") pairs
 }
 
@@ -251,6 +264,68 @@ func init() {
 		IsReverse: true,
 		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 	})
+	// Sharded ARM trybots:
+	addBuilder(BuildConfig{
+		Name:         "linux-arm-shard_test",
+		BuildletType: "linux-arm",
+		TryOnly:      true,
+		IsReverse:    true,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/local/go",
+			"GOTESTONLY=^test$",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:         "linux-arm-shard_std_am",
+		BuildletType: "linux-arm",
+		TryOnly:      true,
+		IsReverse:    true,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/local/go",
+			"GOTESTONLY=^go_test:[a-m]$",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:         "linux-arm-shard_std_nz",
+		BuildletType: "linux-arm",
+		TryOnly:      true,
+		IsReverse:    true,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/local/go",
+			"GOTESTONLY=^go_test:[n-z]$",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:         "linux-arm-shard_runtimecpu",
+		BuildletType: "linux-arm",
+		TryOnly:      true,
+		IsReverse:    true,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/local/go",
+			"GOTESTONLY=^runtime:cpu124$",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:         "linux-arm-shard_cgotest",
+		BuildletType: "linux-arm",
+		TryOnly:      true,
+		IsReverse:    true,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/local/go",
+			"GOTESTONLY=^cgo_test$",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:         "linux-arm-shard_misc",
+		BuildletType: "linux-arm",
+		TryOnly:      true,
+		IsReverse:    true,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/local/go",
+			"GOTESTONLY=!^(go_test:|test$|cgo_test$|runtime:cpu124$|)",
+		},
+	})
+
 	addBuilder(BuildConfig{
 		Name:      "linux-arm-arm5",
 		IsReverse: true,
@@ -291,10 +366,10 @@ func init() {
 		Notes:   "Plan 9 from 0intro; GCE VM is built from script in build/env/plan9-386; runs with GOTESTONLY=std (only stdlib tests)",
 		VMImage: "plan9-386-v2",
 		Go14URL: "https://storage.googleapis.com/go-builder-data/go1.4-plan9-386.tar.gz",
-		// It's named "partial" because the buildlet sets
-		// GOTESTONLY=std to stop after the "go test std"
-		// tests because it's so slow otherwise.
-		env: []string{"GOTESTONLY=std"},
+		// It's named "partial" because the buildlet only runs
+		// the standard library tests ("go test std cmd", basically).
+		// TODO: run a full Plan 9 builder, or a sharded one.
+		env: []string{"GOTESTONLY=^go_test:"},
 
 		// We *were* using n1-standard-1 because Plan 9 can only
 		// reliably use a single CPU. Using 2 or 4 and we see

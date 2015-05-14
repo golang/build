@@ -120,6 +120,10 @@ func recordResult(builderName string, ok bool, hash, buildLog string, runTime ti
 // pingDashboard runs in its own goroutine, created periodically to
 // POST to build.golang.org/building to let it know that we're still working on a build.
 func (st *buildStatus) pingDashboard() {
+	if st.conf.TryOnly {
+		// Builders that are trybot-only don't appear on the dashboard.
+		return
+	}
 	if *mode == "dev" {
 		log.Print("In dev mode, not pinging dashboard")
 		return
