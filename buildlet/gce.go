@@ -85,6 +85,8 @@ func StartNewVM(ts oauth2.TokenSource, instName, builderType string, opts VMOpts
 		return nil, errors.New("buildlet: missing required ProjectID option")
 	}
 
+	usePreempt := true
+Try:
 	prefix := "https://www.googleapis.com/compute/v1/projects/" + projectID
 	machType := prefix + "/zones/" + zone + "/machineTypes/" + conf.MachineType()
 	diskType := "https://www.googleapis.com/compute/v1/projects/" + projectID + "/zones/" + zone + "/diskTypes/pd-ssd"
@@ -126,6 +128,9 @@ func StartNewVM(ts oauth2.TokenSource, instName, builderType string, opts VMOpts
 				},
 				Network: prefix + "/global/networks/default",
 			},
+		},
+		Scheduling: &compute.Scheduling{
+			Preemptible: usePreempt,
 		},
 	}
 	addMeta := func(key, value string) {
@@ -183,6 +188,10 @@ OpLoop:
 		case "DONE":
 			if op.Error != nil {
 				for _, operr := range op.Error.Errors {
+					if operr.Code == "ZONE_RESOURCE_POOL_EXHAUSTED" && usePreempt {
+						usePreempt = false
+						goto Try
+					}
 					// TODO: catch Code=="QUOTA_EXCEEDED" and "Message" and return
 					// a known error value/type.
 					return nil, fmt.Errorf("Error creating instance: %+v", operr)
