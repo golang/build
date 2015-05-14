@@ -569,8 +569,8 @@ func findWork(work chan<- builderRev) error {
 				continue
 			}
 			builder := bs.Builders[i]
-			if _, ok := dashboard.Builders[builder]; !ok {
-				// Not managed by the coordinator.
+			if builderInfo, ok := dashboard.Builders[builder]; !ok || builderInfo.TryOnly {
+				// Not managed by the coordinator, or a trybot-only one.
 				continue
 			}
 			br := builderRev{bs.Builders[i], br.Revision}
@@ -582,8 +582,8 @@ func findWork(work chan<- builderRev) error {
 
 	// And to bootstrap new builders, see if we have any builders
 	// that the dashboard doesn't know about.
-	for b := range dashboard.Builders {
-		if knownToDashboard[b] {
+	for b, builderInfo := range dashboard.Builders {
+		if builderInfo.TryOnly || knownToDashboard[b] {
 			continue
 		}
 		for _, rev := range goRevisions {

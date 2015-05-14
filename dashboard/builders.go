@@ -28,6 +28,7 @@ type BuildConfig struct {
 
 	IsReverse   bool // if true, only use the reverse buildlet pool
 	RegularDisk bool // if true, use spinning disk instead of SSD
+	TryOnly     bool // only used for trybots, and not regular builds
 
 	env []string // extra environment ("key=value") pairs
 }
@@ -184,6 +185,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "all-compile",
+		TryOnly:     true, // TODO: for speed, restrict this to builds not covered by other trybots
 		VMImage:     "linux-buildlet-std",
 		machineType: "n1-highcpu-16", // CPU-bound, uses it well.
 		Notes:       "Runs buildall.sh to compile stdlib for all GOOS/GOARCH, but doesn't run any tests.",
