@@ -5,5 +5,7 @@
 docker: Dockerfile
 	docker build -t go-commit-watcher .
 
-docker-commit-watcher.tar.gz: docker
+upload: docker
 	docker save go-commit-watcher | gzip | (cd ../../cmd/upload && go run upload.go --public go-builder-data/docker-commit-watcher.tar.gz)
+dev-upload:
+	docker save go-commit-watcher | gzip | (cd ../../cmd/upload && go run upload.go --public dev-go-builder-data/docker-commit-watcher.tar.gz)
