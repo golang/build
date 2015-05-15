@@ -336,21 +336,25 @@ func (r *Repo) postCommit(c *Commit) error {
 		return nil
 	}
 
-	u := fmt.Sprintf("%vcommit?version=%v&key=%v", *dashboard, watcherVersion, dashboardKey)
+	v := url.Values{"version": {fmt.Sprint(watcherVersion)}, "key": {dashboardKey}}
+	u := *dashboard + "commit?" + v.Encode()
 	resp, err := http.Post(u, "text/json", bytes.NewReader(b))
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return fmt.Errorf("postCommit: reading body: %v", err)
+	}
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("postCommit: status: %v", resp.Status)
+		return fmt.Errorf("postCommit: status: %v\nbody: %s", resp.Status, body)
 	}
 
 	var s struct {
 		Error string
 	}
-	err = json.NewDecoder(resp.Body).Decode(&s)
-	if err != nil {
+	if err := json.Unmarshal(body, &s); err != nil {
 		return fmt.Errorf("postCommit: decoding response: %v", err)
 	}
 	if s.Error != "" {
@@ -775,7 +779,6 @@ func pollGerritAndTickle() {
 				last[repo] = hash
 				select {
 				case repoTickler(repo) <- true:
-					log.Printf("tickled the %s repo poller", repo)
 				default:
 				}
 			}
