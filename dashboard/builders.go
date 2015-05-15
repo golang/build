@@ -282,7 +282,7 @@ func init() {
 		IsReverse:    true,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go",
-			"GOTESTONLY=^go_test:[a-m]$",
+			"GOTESTONLY=^go_test:[a-m]",
 		},
 	})
 	addBuilder(BuildConfig{
@@ -292,7 +292,7 @@ func init() {
 		IsReverse:    true,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go",
-			"GOTESTONLY=^go_test:[n-z]$",
+			"GOTESTONLY=^go_test:[n-z]",
 		},
 	})
 	addBuilder(BuildConfig{
@@ -322,7 +322,7 @@ func init() {
 		IsReverse:    true,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go",
-			"GOTESTONLY=!^(go_test:|test$|cgo_test$|runtime:cpu124$|)",
+			"GOTESTONLY=!^(go_test:|test$|cgo_test$|runtime:cpu124$)",
 		},
 	})
 
