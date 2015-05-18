@@ -54,6 +54,7 @@ var (
 	serviceCtx     context.Context
 	errTryDeps     error // non-nil if try bots are disabled
 	gerritClient   *gerrit.Client
+	devCluster     bool // are we running in the dev cluster?
 )
 
 func initGCE() error {
@@ -91,6 +92,11 @@ func initGCE() error {
 		log.Printf("TryBot builders enabled.")
 	}
 
+	devCluster = projectID == "go-dashboard-dev"
+	if devCluster {
+		maxVMs = 6
+	}
+
 	return nil
 }
 
@@ -118,7 +124,7 @@ func checkTryBuildDeps() error {
 // gives us headroom, but also doesn't account for SSD or memory
 // quota.
 // TODO(bradfitz): better quota system.
-const maxVMs = 60
+var maxVMs = 60
 
 var gcePool = &gceBuildletPool{
 	vmCap: make(chan bool, maxVMs),

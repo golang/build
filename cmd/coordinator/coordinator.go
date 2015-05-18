@@ -133,7 +133,11 @@ func readGCSFile(name string) ([]byte, error) {
 		return []byte(b), nil
 	}
 
-	r, err := storage.NewReader(serviceCtx, "go-builder-data", name)
+	bucket := "go-builder-data"
+	if devCluster {
+		bucket = "dev-go-builder-data"
+	}
+	r, err := storage.NewReader(serviceCtx, bucket, name)
 	if err != nil {
 		return nil, err
 	}
@@ -289,6 +293,14 @@ func main() {
 		http.HandleFunc("/dosomework/", handleDoSomeWork(workc))
 	} else {
 		go gcePool.cleanUpOldVMs()
+
+		if devCluster {
+			// Only run the linux-amd64 builder in the dev cluster (for now).
+			conf := dashboard.Builders["linux-amd64"]
+			// TODO(adg): uncomment once we have buildlet images in the dev bucket
+			//conf.SetBuildletBinaryURL(strings.Replace(conf.BuildletBinaryURL(), "go-builder-data", "dev-go-builder-data", 1))
+			dashboard.Builders = map[string]dashboard.BuildConfig{"linux-amd64": conf}
+		}
 
 		// Start the Docker processes on this host polling Gerrit and
 		// pinging build.golang.org when new commits are available.
@@ -541,7 +553,7 @@ func findWorkLoop(work chan<- builderRev) {
 
 func findWork(work chan<- builderRev) error {
 	var bs types.BuildStatus
-	res, err := http.Get("https://build.golang.org/?mode=json")
+	res, err := http.Get(dashBase() + "?mode=json")
 	if err != nil {
 		return err
 	}

@@ -25,6 +25,15 @@ import (
 	"google.golang.org/cloud/compute/metadata"
 )
 
+// dashBase returns the base URL of the build dashboard.
+// It must be called after initGCE (so not at init time).
+func dashBase() string {
+	if devCluster {
+		return "https://go-dashboard-dev.appspot.com/"
+	}
+	return "https://build.golang.org/"
+}
+
 // dash is copied from the builder binary. It runs the given method and command on the dashboard.
 //
 // TODO(bradfitz,adg): unify this somewhere?
@@ -44,7 +53,7 @@ func dash(meth, cmd string, args url.Values, req, resp interface{}) error {
 	}
 	var r *http.Response
 	var err error
-	cmd = "https://build.golang.org/" + cmd + "?" + argsCopy.Encode()
+	cmd = dashBase() + cmd + "?" + argsCopy.Encode()
 	switch meth {
 	case "GET":
 		if req != nil {
@@ -128,7 +137,7 @@ func (st *buildStatus) pingDashboard() {
 		log.Print("In dev mode, not pinging dashboard")
 		return
 	}
-	u := "https://build.golang.org/building?" + url.Values{
+	u := dashBase() + "building?" + url.Values{
 		"builder": []string{st.name},
 		"key":     []string{builderKey(st.name)},
 		"hash":    []string{st.rev},

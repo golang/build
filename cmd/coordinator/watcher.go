@@ -46,8 +46,12 @@ var images = map[string]*imageInfo{
 }
 
 func startWatchers() {
-	addWatcher(watchConfig{repo: "https://go.googlesource.com/go", dash: "https://build.golang.org/", mirrorBase: "https://github.com/golang/"})
-	addWatcher(watchConfig{repo: "https://go.googlesource.com/gofrontend", dash: "https://build.golang.org/gccgo/"})
+	mirrorBase := "https://github.com/golang/"
+	if devCluster {
+		mirrorBase = "" // don't mirror from dev cluster
+	}
+	addWatcher(watchConfig{repo: "https://go.googlesource.com/go", dash: dashBase(), mirrorBase: mirrorBase})
+	addWatcher(watchConfig{repo: "https://go.googlesource.com/gofrontend", dash: dashBase() + "gccgo/"})
 
 	go cleanUpOldContainers()
 
@@ -128,24 +132,28 @@ func condUpdateImage(img string) error {
 	}
 	ii.mu.Lock()
 	defer ii.mu.Unlock()
-	res, err := http.Head(ii.url)
+	u := ii.url
+	if devCluster {
+		u = strings.Replace(u, "go-builder-data", "dev-go-builder-data", 1)
+	}
+	res, err := http.Head(u)
 	if err != nil {
-		return fmt.Errorf("Error checking %s: %v", ii.url, err)
+		return fmt.Errorf("Error checking %s: %v", u, err)
 	}
 	if res.StatusCode != 200 {
-		return fmt.Errorf("Error checking %s: %v", ii.url, res.Status)
+		return fmt.Errorf("Error checking %s: %v", u, res.Status)
 	}
 	if res.Header.Get("Last-Modified") == ii.lastMod {
 		return nil
 	}
 
-	res, err = http.Get(ii.url)
+	res, err = http.Get(u)
 	if err != nil || res.StatusCode != 200 {
-		return fmt.Errorf("Get after Head failed for %s: %v, %v", ii.url, err, res)
+		return fmt.Errorf("Get after Head failed for %s: %v, %v", u, err, res)
 	}
 	defer res.Body.Close()
 
-	log.Printf("Running: docker load of %s\n", ii.url)
+	log.Printf("Running: docker load of %s\n", u)
 	cmd := exec.Command("docker", "load")
 	cmd.Stdin = res.Body
 
@@ -154,7 +162,7 @@ func condUpdateImage(img string) error {
 	cmd.Stderr = &out
 
 	if cmd.Run(); err != nil {
-		log.Printf("Failed to pull latest %s from %s and pipe into docker load: %v, %s", img, ii.url, err, out.Bytes())
+		log.Printf("Failed to pull latest %s from %s and pipe into docker load: %v, %s", img, u, err, out.Bytes())
 		return err
 	}
 	ii.lastMod = res.Header.Get("Last-Modified")
@@ -184,7 +192,7 @@ func startWatching(conf watchConfig) (err error) {
 	go func() {
 		exec.Command("docker", "wait", container).Run()
 		exec.Command("docker", "rm", "-v", container).Run()
-		log.Printf("Watcher crashed. Restarting soon.")
+		log.Printf("Watcher %v crashed. Restarting soon.", conf.repo)
 		restartWatcherSoon(conf)
 	}()
 	return nil

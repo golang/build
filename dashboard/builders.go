@@ -67,6 +67,11 @@ func (c *BuildConfig) BuildletBinaryURL() string {
 	return "http://storage.googleapis.com/go-builder-data/buildlet." + c.GOOS() + "-" + c.GOARCH()
 }
 
+// SetBuildletBinaryURL sets the public URL of this builder's buildlet.
+func (c *BuildConfig) SetBuildletBinaryURL(u string) {
+	c.buildletURL = u
+}
+
 // AllScript returns the relative path to the operating system's script to
 // do the build and run its standard set of tests.
 // Example values are "src/all.bash", "src/all.bat", "src/all.rc".
