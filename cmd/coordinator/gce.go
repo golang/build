@@ -94,7 +94,8 @@ func initGCE() error {
 
 	devCluster = projectID == "go-dashboard-dev"
 	if devCluster {
-		maxVMs = 6
+		log.Printf("Running in dev cluster")
+		gcePool.vmCap = make(chan bool, 1)
 	}
 
 	return nil
@@ -124,7 +125,7 @@ func checkTryBuildDeps() error {
 // gives us headroom, but also doesn't account for SSD or memory
 // quota.
 // TODO(bradfitz): better quota system.
-var maxVMs = 60
+const maxVMs = 60
 
 var gcePool = &gceBuildletPool{
 	vmCap: make(chan bool, maxVMs),
