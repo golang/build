@@ -206,6 +206,16 @@ type ExecOpts struct {
 	// process's environment.
 	ExtraEnv []string
 
+	// Path, if non-nil, specifies the PATH variable of the executed
+	// process's environment. A non-nil empty list clears the path.
+	// The following expansions apply:
+	//   - the string "$PATH" expands to any existing PATH element(s)
+	//   - the substring "$WORKDIR" expands to buildlet's temp workdir
+	// After expansions, the list is joined with an OS-specific list
+	// separator and supplied to the executed process as its PATH
+	// environment variable.
+	Path []string
+
 	// SystemLevel controls whether the command is run outside of
 	// the buildlet's environment.
 	SystemLevel bool
@@ -232,12 +242,19 @@ func (c *Client) Exec(cmd string, opts ExecOpts) (remoteErr, execErr error) {
 	if opts.SystemLevel {
 		mode = "sys"
 	}
+	path := opts.Path
+	if len(path) == 0 && path != nil {
+		// url.Values doesn't distinguish between a nil slice and
+		// a non-nil zero-length slice, so use this sentinel value.
+		path = []string{"$EMPTY"}
+	}
 	form := url.Values{
 		"cmd":    {cmd},
 		"mode":   {mode},
 		"dir":    {opts.Dir},
 		"cmdArg": opts.Args,
 		"env":    opts.ExtraEnv,
+		"path":   path,
 		"debug":  {fmt.Sprint(opts.Debug)},
 	}
 	req, err := http.NewRequest("POST", c.URL()+"/exec", strings.NewReader(form.Encode()))

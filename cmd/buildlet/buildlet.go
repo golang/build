@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/envutil"
 	"google.golang.org/cloud/compute/metadata"
 )
 
@@ -620,12 +621,16 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 		f.Flush()
 	}
 
+	env := append(baseEnv(), r.PostForm["env"]...)
+	env = envutil.Dedup(runtime.GOOS == "windows", env)
+	env = setPathEnv(env, r.PostForm["path"], *workDir)
+
 	cmd := exec.Command(absCmd, r.PostForm["cmdArg"]...)
 	cmd.Dir = dir
 	cmdOutput := flushWriter{w}
 	cmd.Stdout = cmdOutput
 	cmd.Stderr = cmdOutput
-	cmd.Env = append(baseEnv(), r.PostForm["env"]...)
+	cmd.Env = env
 
 	if debug {
 		fmt.Fprintf(cmdOutput, ":: Running %s with args %q and env %q in dir %s\n\n",
@@ -657,6 +662,59 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set(hdrProcessState, state)
 	log.Printf("Run = %s", state)
+}
+
+// setPathEnv returns a copy of the provided environment with any existing
+// PATH variables replaced by the user-provided path.
+// These substitutions are applied to user-supplied path elements:
+//   - the string "$PATH" expands to the original PATH elements
+//   - the substring "$WORKDIR" expands to the provided workDir
+// A path of just ["$EMPTY"] removes the PATH variable from the environment.
+func setPathEnv(env, path []string, workDir string) []string {
+	if len(path) == 0 {
+		return env
+	}
+
+	var (
+		pathIdx  = -1
+		pathOrig = ""
+	)
+	for i, s := range env {
+		if strings.HasPrefix(s, "PATH=") {
+			pathIdx = i
+			pathOrig = strings.TrimPrefix(s, "PATH=")
+			break
+		}
+	}
+	if len(path) == 1 && path[0] == "$EMPTY" {
+		// Remove existing path variable if it exists.
+		if pathIdx >= 0 {
+			env = append(env[:pathIdx], env[pathIdx+1:]...)
+		}
+		return env
+	}
+
+	// Apply substitions to a copy of the path argument.
+	path = append([]string{}, path...)
+	for i, s := range path {
+		if s == "$PATH" {
+			path[i] = pathOrig // ok if empty
+		} else {
+			path[i] = strings.Replace(s, "$WORKDIR", workDir, -1)
+		}
+	}
+
+	// Put the new PATH in env.
+	env = append([]string{}, env...)
+	// TODO(adg): check that this works on plan 9
+	pathEnv := "PATH=" + strings.Join(path, string(filepath.ListSeparator))
+	if pathIdx >= 0 {
+		env[pathIdx] = pathEnv
+	} else {
+		env = append(env, pathEnv)
+	}
+
+	return env
 }
 
 func baseEnv() []string {
