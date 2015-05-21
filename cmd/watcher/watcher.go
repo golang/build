@@ -555,19 +555,20 @@ func (r *Repo) remotes() ([]string, error) {
 	return bs, nil
 }
 
-const logFormat = `--format=format:%H
+const logFormat = `--format=format:` + logBoundary + `%H
 %P
 %an <%ae>
 %cD
 %B
-` + logBoundary
+` + fileBoundary
 
 const logBoundary = `_-_- magic boundary -_-_`
+const fileBoundary = `_-_- file boundary -_-_`
 
 // log runs "git log" with the supplied arguments
 // and parses the output into Commit values.
 func (r *Repo) log(dir string, args ...string) ([]*Commit, error) {
-	args = append([]string{"log", "--date=rfc", logFormat}, args...)
+	args = append([]string{"log", "--date=rfc", "--name-only", logFormat}, args...)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = r.root
 	out, err := cmd.CombinedOutput()
@@ -590,14 +591,27 @@ func (r *Repo) log(dir string, args ...string) ([]*Commit, error) {
 		if len(p) != 5 {
 			return nil, fmt.Errorf("git log %v: malformed commit: %q", strings.Join(args, " "), text)
 		}
+
+		// The change summary contains the change description and files
+		// modified in this commit.  There is no way to directly refer
+		// to the modified files in the log formatting string, so we look
+		// for the file boundary after the description.
+		changeSummary := p[4]
+		descAndFiles := strings.SplitN(changeSummary, fileBoundary, 2)
+		desc := strings.TrimSpace(descAndFiles[0])
+
+		// For branch merges, the list of files can still be empty
+		// because there are no changed files.
+		files := strings.Replace(strings.TrimSpace(descAndFiles[1]), "\n", " ", -1)
+
 		cs = append(cs, &Commit{
 			Hash: p[0],
 			// TODO(adg): This may break with branch merges.
 			Parent: strings.Split(p[1], " ")[0],
 			Author: p[2],
 			Date:   p[3],
-			Desc:   strings.TrimSpace(p[4]),
-			// TODO(adg): populate Files
+			Desc:   desc,
+			Files:  files,
 		})
 	}
 	return cs, nil
