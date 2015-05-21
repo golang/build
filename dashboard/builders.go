@@ -100,7 +100,7 @@ func (c *BuildConfig) AllScript() string {
 	return "src/all.bash"
 }
 
-// AllScript returns the set of arguments that should be passed to the
+// AllScriptArgs returns the set of arguments that should be passed to the
 // all.bash-equivalent script. Usually empty.
 func (c *BuildConfig) AllScriptArgs() []string {
 	if strings.HasPrefix(c.Name, "darwin-arm") {
@@ -120,6 +120,31 @@ func (c *BuildConfig) MakeScript() string {
 		return "src/make.rc"
 	}
 	return "src/make.bash"
+}
+
+// MakeScriptArgs returns the set of arguments that should be passed to the
+// make.bash-equivalent script. Usually empty.
+func (c *BuildConfig) MakeScriptArgs() []string {
+	return c.AllScriptArgs()
+}
+
+// RunScript returns the relative path to the operating system's script to
+// run the test suite.
+// Example values are "src/run.bash", "src/run.bat", "src/run.rc".
+func (c *BuildConfig) RunScript() string {
+	if strings.HasPrefix(c.Name, "windows-") {
+		return "src/run.bat"
+	}
+	if strings.HasPrefix(c.Name, "plan9-") {
+		return "src/run.rc"
+	}
+	return "src/run.bash"
+}
+
+// RunScriptArgs returns the set of arguments that should be passed to the
+// run.bash-equivalent script.
+func (c *BuildConfig) RunScriptArgs() []string {
+	return []string{"--no-rebuild"}
 }
 
 // GorootFinal returns the default install location for

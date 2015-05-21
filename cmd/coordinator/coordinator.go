@@ -297,8 +297,7 @@ func main() {
 		if devCluster {
 			// Only run the linux-amd64 builder in the dev cluster (for now).
 			conf := dashboard.Builders["linux-amd64"]
-			// TODO(adg): uncomment once we have buildlet images in the dev bucket
-			//conf.SetBuildletBinaryURL(strings.Replace(conf.BuildletBinaryURL(), "go-builder-data", "dev-go-builder-data", 1))
+			conf.SetBuildletBinaryURL(strings.Replace(conf.BuildletBinaryURL(), "go-builder-data", "dev-go-builder-data", 1))
 			dashboard.Builders = map[string]dashboard.BuildConfig{"linux-amd64": conf}
 		}
 
@@ -1033,17 +1032,43 @@ func (st *buildStatus) build() (retErr error) {
 	st.logEventTime("pre_exec")
 	fmt.Fprintf(st, "%s at %v\n\n", st.name, st.rev)
 
-	remoteErr, err := bc.Exec(path.Join("go", st.conf.AllScript()), buildlet.ExecOpts{
-		Output:      st,
-		OnStartExec: func() { st.logEventTime("running_exec") },
-		ExtraEnv:    st.conf.Env(),
-		Debug:       true,
-		Args:        st.conf.AllScriptArgs(),
+	makeScript := st.conf.MakeScript()
+	lastScript := makeScript
+	remoteErr, err := bc.Exec(path.Join("go", makeScript), buildlet.ExecOpts{
+		Output: st,
+		OnStartExec: func() {
+			st.logEventTime("running_exec") // TODO(adg): remove this?
+			st.logEventTime("make_exec")
+		},
+		ExtraEnv: st.conf.Env(),
+		Debug:    true,
+		Args:     st.conf.MakeScriptArgs(),
 	})
 	if err != nil {
 		return err
 	}
-	st.logEventTime("done")
+	st.logEventTime("make_done")
+
+	if remoteErr == nil {
+		runScript := st.conf.RunScript()
+		lastScript = runScript
+		remoteErr, err = bc.Exec(path.Join("go", runScript), buildlet.ExecOpts{
+			Output:      st,
+			OnStartExec: func() { st.logEventTime("run_exec") },
+			ExtraEnv:    st.conf.Env(),
+			// all.X sources make.X which adds $GOROOT/bin to $PATH,
+			// so run.X expects to find the go binary in $PATH.
+			Path:  []string{"$WORKDIR/go/bin", "$PATH"},
+			Debug: true,
+			Args:  st.conf.RunScriptArgs(),
+		})
+		if err != nil {
+			return err
+		}
+		st.logEventTime("run_done")
+	}
+	st.logEventTime("done") // TODO(adg): remove this?
+
 	if st.trySet == nil {
 		var buildLog string
 		if remoteErr != nil {
@@ -1057,7 +1082,7 @@ func (st *buildStatus) build() (retErr error) {
 		}
 	}
 	if remoteErr != nil {
-		return fmt.Errorf("%s failed: %v", st.conf.AllScript(), remoteErr)
+		return fmt.Errorf("%v failed: %v", lastScript, remoteErr)
 	}
 	return nil
 }
