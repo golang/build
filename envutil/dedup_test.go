@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+package envutil
 
 import (
 	"reflect"
 	"testing"
 )
 
-func TestDedupEnv(t *testing.T) {
+func TestDedup(t *testing.T) {
 	tests := []struct {
 		noCase bool
 		in     []string
@@ -27,9 +27,9 @@ func TestDedupEnv(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		got := dedupEnv(tt.noCase, tt.in)
+		got := Dedup(tt.noCase, tt.in)
 		if !reflect.DeepEqual(got, tt.want) {
-			t.Errorf("dedupEnv(%v, %q) = %q; want %q", tt.noCase, tt.in, got, tt.want)
+			t.Errorf("Dedup(%v, %q) = %q; want %q", tt.noCase, tt.in, got, tt.want)
 		}
 	}
 }
