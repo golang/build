@@ -296,9 +296,7 @@ func main() {
 
 		if devCluster {
 			// Only run the linux-amd64 builder in the dev cluster (for now).
-			conf := dashboard.Builders["linux-amd64"]
-			conf.SetBuildletBinaryURL(strings.Replace(conf.BuildletBinaryURL(), "go-builder-data", "dev-go-builder-data", 1))
-			dashboard.Builders = map[string]dashboard.BuildConfig{"linux-amd64": conf}
+			dashboard.Builders = devClusterBuilders()
 		}
 
 		// Start the Docker processes on this host polling Gerrit and
@@ -332,6 +330,19 @@ func main() {
 			}
 		}
 	}
+}
+
+func devClusterBuilders() map[string]dashboard.BuildConfig {
+	m := map[string]dashboard.BuildConfig{}
+	for _, name := range []string{
+		"linux-amd64",
+		"windows-amd64-gce",
+	} {
+		conf := dashboard.Builders[name]
+		conf.SetBuildletBinaryURL(strings.Replace(conf.BuildletBinaryURL(), "go-builder-data", "dev-go-builder-data", 1))
+		m[name] = conf
+	}
+	return m
 }
 
 func numCurrentBuilds() int {
