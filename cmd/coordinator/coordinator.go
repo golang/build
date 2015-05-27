@@ -54,10 +54,12 @@ var (
 	// and Region.Zones: http://godoc.org/google.golang.org/api/compute/v1#Region
 	cleanZones = flag.String("zones", "us-central1-a,us-central1-b,us-central1-f", "Comma-separated list of zones to periodically clean of stale build VMs (ones that failed to shut themselves down)")
 
-	buildLogBucket = flag.String("logbucket", "go-build-log", "GCS bucket to put trybot build failures in")
-
 	mode = flag.String("mode", "", "valid modes are 'dev', 'prod', or '' for auto-detect")
 )
+
+func buildLogBucket() string {
+	return devPrefix() + "go-build-log"
+}
 
 // LOCK ORDER:
 //   statusMu, buildStatus.mu, trySet.mu
@@ -133,11 +135,7 @@ func readGCSFile(name string) ([]byte, error) {
 		return []byte(b), nil
 	}
 
-	bucket := "go-builder-data"
-	if devCluster {
-		bucket = "dev-go-builder-data"
-	}
-	r, err := storage.NewReader(serviceCtx, bucket, name)
+	r, err := storage.NewReader(serviceCtx, devPrefix()+"go-builder-data", name)
 	if err != nil {
 		return nil, err
 	}
@@ -853,7 +851,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 		s1 := sha1.New()
 		io.WriteString(s1, buildLog)
 		objName := fmt.Sprintf("%s/%s_%x.log", bs.rev[:8], bs.name, s1.Sum(nil)[:4])
-		wr := storage.NewWriter(serviceCtx, *buildLogBucket, objName)
+		wr := storage.NewWriter(serviceCtx, buildLogBucket(), objName)
 		wr.ContentType = "text/plain; charset=utf-8"
 		wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
 		if _, err := io.WriteString(wr, buildLog); err != nil {
@@ -864,7 +862,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 			log.Printf("Failed to write to GCS: %v", err)
 			return
 		}
-		failLogURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", *buildLogBucket, objName)
+		failLogURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", buildLogBucket(), objName)
 		ts.mu.Lock()
 		fmt.Fprintf(&ts.errMsg, "Failed on %s: %s\n", bs.name, failLogURL)
 		ts.mu.Unlock()

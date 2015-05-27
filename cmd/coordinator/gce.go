@@ -55,9 +55,22 @@ var (
 	errTryDeps     error // non-nil if try bots are disabled
 	gerritClient   *gerrit.Client
 	devCluster     bool // are we running in the dev cluster?
+
+	initGCECalled bool
 )
 
+func devPrefix() string {
+	if !initGCECalled {
+		panic("devPrefix called before initGCE")
+	}
+	if devCluster {
+		return "dev-"
+	}
+	return ""
+}
+
 func initGCE() error {
+	initGCECalled = true
 	if !metadata.OnGCE() {
 		return errors.New("not running on GCE; VM support disabled")
 	}
@@ -105,7 +118,7 @@ func checkTryBuildDeps() error {
 	if !hasStorageScope() {
 		return errors.New("coordinator's GCE instance lacks the storage service scope")
 	}
-	wr := storage.NewWriter(serviceCtx, *buildLogBucket, "hello.txt")
+	wr := storage.NewWriter(serviceCtx, buildLogBucket(), "hello.txt")
 	fmt.Fprintf(wr, "Hello, world! Coordinator start-up at %v", time.Now())
 	if err := wr.Close(); err != nil {
 		return fmt.Errorf("test write of a GCS object failed: %v", err)
