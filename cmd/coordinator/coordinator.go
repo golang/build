@@ -61,6 +61,10 @@ func buildLogBucket() string {
 	return devPrefix() + "go-build-log"
 }
 
+func snapBucket() string {
+	return devPrefix() + "go-build-snap"
+}
+
 // LOCK ORDER:
 //   statusMu, buildStatus.mu, trySet.mu
 // TODO(bradfitz,adg): rewrite the coordinator
@@ -1069,6 +1073,14 @@ func (st *buildStatus) build() (retErr error) {
 		}
 		st.logEventTime("make_done")
 
+		if err := st.cleanForSnapshot(); err != nil {
+			return fmt.Errorf("cleanForSnapshot: %v", err)
+		}
+
+		if err := st.writeSnapshot(); err != nil {
+			return fmt.Errorf("writeSnapshot: %v", err)
+		}
+
 		if remoteErr == nil {
 			runScript := st.conf.RunScript()
 			lastScript = runScript
@@ -1126,6 +1138,40 @@ func (st *buildStatus) build() (retErr error) {
 		return fmt.Errorf("%v failed: %v", lastScript, remoteErr)
 	}
 	return nil
+}
+
+var cleanForSnapshotFiles = []string{
+	"go/doc/gopher",
+	"go/pkg/bootstrap",
+}
+
+func (st *buildStatus) cleanForSnapshot() error {
+	st.logEventTime("clean_for_snapshot")
+	defer st.logEventTime("clean_for_snapshot_done")
+
+	return st.bc.RemoveAll(cleanForSnapshotFiles...)
+}
+
+func (st *buildStatus) writeSnapshot() error {
+	st.logEventTime("write_snapshot")
+	defer st.logEventTime("write_snapshot_done")
+
+	tgz, err := st.bc.GetTar("go")
+	if err != nil {
+		return err
+	}
+	defer tgz.Close()
+
+	objName := fmt.Sprintf("%v/%v/%v.tar.gz", "go", st.name, st.rev)
+	wr := storage.NewWriter(serviceCtx, snapBucket(), objName)
+	wr.ContentType = "application/octet-stream"
+	wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
+	if _, err := io.Copy(wr, tgz); err != nil {
+		wr.Close()
+		return err
+	}
+
+	return wr.Close()
 }
 
 type eventAndTime struct {
