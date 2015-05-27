@@ -753,11 +753,19 @@ func (ts *trySet) state() trySetState {
 // notifyStarting runs in its own goroutine and posts to Gerrit that
 // the trybots have started on the user's CL with a link of where to watch.
 func (ts *trySet) notifyStarting() {
+	msg := "TryBots beginning. Status page: http://farmer.golang.org/try?commit=" + ts.Commit[:8]
+
+	if ci, err := gerritClient.GetChangeDetail(ts.ChangeID); err == nil {
+		for _, cmi := range ci.Messages {
+			if cmi.Message == msg {
+				// Dup. Don't spam.
+				return
+			}
+		}
+	}
+
 	// Ignore error. This isn't critical.
-	gerritClient.SetReview(ts.ChangeID, ts.Commit, gerrit.ReviewInput{
-		// TODO: good hostname, SSL, and pretty handler for just this tryset
-		Message: "TryBots beginning. Status page: http://farmer.golang.org/try?commit=" + ts.Commit[:8],
-	})
+	gerritClient.SetReview(ts.ChangeID, ts.Commit, gerrit.ReviewInput{Message: msg})
 }
 
 // awaitTryBuild runs in its own goroutine and waits for a build in a
