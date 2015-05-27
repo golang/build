@@ -30,7 +30,15 @@ var (
 	reuseDisk   = flag.Bool("reuse_disk", true, "Whether disk images should be reused between shutdowns/restarts.")
 	ssd         = flag.Bool("ssd", false, "use a solid state disk (faster, more expensive)")
 	coordinator = flag.String("coord", "https://storage.googleapis.com/go-builder-data/coordinator", "Coordinator binary URL")
+	dev         = flag.Bool("dev", false, "change default -project and -coordinator flags to their default dev cluster values, as well as use 'dev-' prefixed OAuth token files.")
 )
+
+func devPrefix() string {
+	if *dev {
+		return "dev-"
+	}
+	return ""
+}
 
 func readFile(v string) string {
 	slurp, err := ioutil.ReadFile(v)
@@ -40,20 +48,7 @@ func readFile(v string) string {
 	return strings.TrimSpace(string(slurp))
 }
 
-var config = &oauth2.Config{
-	// The client-id and secret should be for an "Installed Application" when using
-	// the CLI. Later we'll use a web application with a callback.
-	ClientID:     readFile("client-id.dat"),
-	ClientSecret: readFile("client-secret.dat"),
-	Endpoint:     google.Endpoint,
-	Scopes: []string{
-		compute.DevstorageFull_controlScope,
-		compute.ComputeScope,
-		"https://www.googleapis.com/auth/sqlservice",
-		"https://www.googleapis.com/auth/sqlservice.admin",
-	},
-	RedirectURL: "urn:ietf:wg:oauth:2.0:oob",
-}
+var oauthConfig *oauth2.Config
 
 const baseConfig = `#cloud-config
 coreos:
@@ -82,6 +77,30 @@ coreos:
 
 func main() {
 	flag.Parse()
+
+	oauthConfig = &oauth2.Config{
+		// The client-id and secret should be for an "Installed Application" when using
+		// the CLI. Later we'll use a web application with a callback.
+		ClientID:     readFile(devPrefix() + "client-id.dat"),
+		ClientSecret: readFile(devPrefix() + "client-secret.dat"),
+		Endpoint:     google.Endpoint,
+		Scopes: []string{
+			compute.DevstorageFullControlScope,
+			compute.ComputeScope,
+			"https://www.googleapis.com/auth/sqlservice",
+			"https://www.googleapis.com/auth/sqlservice.admin",
+		},
+		RedirectURL: "urn:ietf:wg:oauth:2.0:oob",
+	}
+
+	if *dev {
+		if *proj == "symbolic-datum-552" {
+			*proj = "go-dashboard-dev"
+		}
+		if *coordinator == "https://storage.googleapis.com/go-builder-data/coordinator" {
+			*coordinator = "https://storage.googleapis.com/dev-go-builder-data/coordinator"
+		}
+	}
 	if *proj == "" {
 		log.Fatalf("Missing --project flag")
 	}
@@ -94,18 +113,18 @@ func main() {
 	prefix := "https://www.googleapis.com/compute/v1/projects/" + *proj
 	machType := prefix + "/zones/" + *zone + "/machineTypes/" + *mach
 
-	const tokenFileName = "token.dat"
+	tokenFileName := devPrefix() + "token.dat"
 	tokenFile := tokenCacheFile(tokenFileName)
 	tokenSource := oauth2.ReuseTokenSource(nil, tokenFile)
 	token, err := tokenSource.Token()
 	if err != nil {
 		log.Printf("Error getting token from %s: %v", tokenFileName, err)
-		log.Printf("Get auth code from %v", config.AuthCodeURL("my-state"))
+		log.Printf("Get auth code from %v", oauthConfig.AuthCodeURL("my-state"))
 		fmt.Print("\nEnter auth code: ")
 		sc := bufio.NewScanner(os.Stdin)
 		sc.Scan()
 		authCode := strings.TrimSpace(sc.Text())
-		token, err = config.Exchange(oauth2.NoContext, authCode)
+		token, err = oauthConfig.Exchange(oauth2.NoContext, authCode)
 		if err != nil {
 			log.Fatalf("Error exchanging auth code for a token: %v", err)
 		}
@@ -183,7 +202,7 @@ func main() {
 			{
 				Email: "default",
 				Scopes: []string{
-					compute.DevstorageFull_controlScope,
+					compute.DevstorageFullControlScope,
 					compute.ComputeScope,
 				},
 			},
