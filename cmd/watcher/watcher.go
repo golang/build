@@ -43,6 +43,7 @@ var (
 	pollInterval = flag.Duration("poll", 10*time.Second, "Remote repo poll interval")
 	network      = flag.Bool("network", true, "Enable network calls (disable for testing)")
 	mirrorBase   = flag.String("mirror", "", `Mirror repository base URL (eg "https://github.com/golang/")`)
+	filter       = flag.String("filter", "", "Comma-separated list of directories or files to watch for new commits (only works on main repo)")
 )
 
 var (
@@ -569,6 +570,11 @@ const fileBoundary = `_-_- file boundary -_-_`
 // and parses the output into Commit values.
 func (r *Repo) log(dir string, args ...string) ([]*Commit, error) {
 	args = append([]string{"log", "--date=rfc", "--name-only", logFormat}, args...)
+	if r.path == "" && *filter != "" {
+		paths := strings.Split(*filter, ",")
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
 	cmd := exec.Command("git", args...)
 	cmd.Dir = r.root
 	out, err := cmd.CombinedOutput()
