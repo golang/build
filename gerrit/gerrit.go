@@ -70,7 +70,11 @@ func (c *Client) do(dst interface{}, method, path string, arg url.Values, body i
 		slashA = ""
 	}
 	var err error
-	req, err := http.NewRequest(method, c.url+slashA+path+"?"+arg.Encode(), bodyr)
+	u := c.url + slashA + path
+	if arg != nil {
+		u += "?" + arg.Encode()
+	}
+	req, err := http.NewRequest(method, u, bodyr)
 	if err != nil {
 		return err
 	}
@@ -278,6 +282,18 @@ func (c *Client) QueryChanges(q string, opts ...QueryChangesOpt) ([]*ChangeInfo,
 		"o": opt.Fields,
 	}, nil)
 	return changes, err
+}
+
+// GetChangeDetail retrieves a change with labels, detailed labels, detailed
+// accounts, and messages.
+// For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#get-change-detail
+func (c *Client) GetChangeDetail(changeID string) (*ChangeInfo, error) {
+	var change ChangeInfo
+	err := c.do(&change, "GET", "/changes/"+changeID+"/detail", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &change, nil
 }
 
 type ReviewInput struct {
