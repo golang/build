@@ -100,6 +100,22 @@ func (c *BuildConfig) AllScript() string {
 	return "src/all.bash"
 }
 
+// SplitMakeRun reports whether the coordinator should first compile
+// (using c.MakeScript), then snapshot, then run the tests (ideally
+// sharded) using c.RunScript.
+// Eventually this function should always return true (and then be deleted)
+// but for now we've only set up the scripts and verified that the main
+// configurations work.
+func (c *BuildConfig) SplitMakeRun() bool {
+	switch c.AllScript() {
+	case "src/all.bash", "src/all.bat", "src/all.rc":
+		// These we've verified to work.
+		return true
+	}
+	// Conservatively:
+	return false
+}
+
 // AllScriptArgs returns the set of arguments that should be passed to the
 // all.bash-equivalent script. Usually empty.
 func (c *BuildConfig) AllScriptArgs() []string {

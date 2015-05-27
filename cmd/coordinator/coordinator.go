@@ -1043,42 +1043,66 @@ func (st *buildStatus) build() (retErr error) {
 	st.logEventTime("pre_exec")
 	fmt.Fprintf(st, "%s at %v\n\n", st.name, st.rev)
 
-	makeScript := st.conf.MakeScript()
-	lastScript := makeScript
-	remoteErr, err := bc.Exec(path.Join("go", makeScript), buildlet.ExecOpts{
-		Output: st,
-		OnStartExec: func() {
-			st.logEventTime("running_exec") // TODO(adg): remove this?
-			st.logEventTime("make_exec")
-		},
-		ExtraEnv: st.conf.Env(),
-		Debug:    true,
-		Args:     st.conf.MakeScriptArgs(),
-	})
-	if err != nil {
-		return err
-	}
-	st.logEventTime("make_done")
-
-	if remoteErr == nil {
-		runScript := st.conf.RunScript()
-		lastScript = runScript
-		remoteErr, err = bc.Exec(path.Join("go", runScript), buildlet.ExecOpts{
-			Output:      st,
-			OnStartExec: func() { st.logEventTime("run_exec") },
-			ExtraEnv:    st.conf.Env(),
-			// all.X sources make.X which adds $GOROOT/bin to $PATH,
-			// so run.X expects to find the go binary in $PATH.
-			Path:  []string{"$WORKDIR/go/bin", "$PATH"},
-			Debug: true,
-			Args:  st.conf.RunScriptArgs(),
+	var lastScript string
+	var remoteErr error
+	if st.conf.SplitMakeRun() {
+		makeScript := st.conf.MakeScript()
+		lastScript = makeScript
+		remoteErr, err = bc.Exec(path.Join("go", makeScript), buildlet.ExecOpts{
+			Output: st,
+			OnStartExec: func() {
+				st.logEventTime("running_exec")
+				st.logEventTime("make_exec")
+			},
+			ExtraEnv: st.conf.Env(),
+			Debug:    true,
+			Args:     st.conf.MakeScriptArgs(),
 		})
 		if err != nil {
 			return err
 		}
-		st.logEventTime("run_done")
+		st.logEventTime("make_done")
+
+		if remoteErr == nil {
+			runScript := st.conf.RunScript()
+			lastScript = runScript
+			remoteErr, err = bc.Exec(path.Join("go", runScript), buildlet.ExecOpts{
+				Output:      st,
+				OnStartExec: func() { st.logEventTime("run_exec") },
+				ExtraEnv:    st.conf.Env(),
+				// all.X sources make.X which adds $GOROOT/bin to $PATH,
+				// so run.X expects to find the go binary in $PATH.
+				Path:  []string{"$WORKDIR/go/bin", "$PATH"},
+				Debug: true,
+				Args:  st.conf.RunScriptArgs(),
+			})
+			if err != nil {
+				return err
+			}
+			st.logEventTime("run_done")
+		}
+	} else {
+		// Old way.
+		// TOOD(bradfitz,adg): delete this block when all builders
+		// can split make & run (and then delete the SplitMakeRun method)
+		allScript := st.conf.AllScript()
+		lastScript = allScript
+		remoteErr, err = bc.Exec(path.Join("go", allScript), buildlet.ExecOpts{
+			Output: st,
+			OnStartExec: func() {
+				st.logEventTime("running_exec")
+				st.logEventTime("all_exec")
+			},
+			ExtraEnv: st.conf.Env(),
+			Debug:    true,
+			Args:     st.conf.AllScriptArgs(),
+		})
+		if err != nil {
+			return err
+		}
+		st.logEventTime("all_done")
 	}
-	st.logEventTime("done") // TODO(adg): remove this?
+	st.logEventTime("done")
 
 	if st.trySet == nil {
 		var buildLog string
