@@ -486,6 +486,14 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	writeStatusHeader(w, st)
 
+	if r.FormValue("nostream") != "" {
+		fmt.Fprintf(w, "\n\n(no live streaming. reload manually to see status)\n")
+		st.mu.Lock()
+		defer st.mu.Unlock()
+		st.output.WriteTo(w)
+		return
+	}
+
 	if !st.hasEvent("pre_exec") {
 		fmt.Fprintf(w, "\n\n(buildlet still starting; no live streaming. reload manually to see status)\n")
 		return
