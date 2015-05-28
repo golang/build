@@ -1073,15 +1073,15 @@ func (st *buildStatus) build() (retErr error) {
 		}
 		st.logEventTime("make_done")
 
-		if err := st.cleanForSnapshot(); err != nil {
-			return fmt.Errorf("cleanForSnapshot: %v", err)
-		}
-
-		if err := st.writeSnapshot(); err != nil {
-			return fmt.Errorf("writeSnapshot: %v", err)
-		}
-
 		if remoteErr == nil {
+			if err := st.cleanForSnapshot(); err != nil {
+				return fmt.Errorf("cleanForSnapshot: %v", err)
+			}
+
+			if err := st.writeSnapshot(); err != nil {
+				return fmt.Errorf("writeSnapshot: %v", err)
+			}
+
 			runScript := st.conf.RunScript()
 			lastScript = runScript
 			remoteErr, err = bc.Exec(path.Join("go", runScript), buildlet.ExecOpts{
