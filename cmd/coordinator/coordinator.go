@@ -490,7 +490,7 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "\n\n(no live streaming. reload manually to see status)\n")
 		st.mu.Lock()
 		defer st.mu.Unlock()
-		st.output.WriteTo(w)
+		w.Write(st.output.Bytes())
 		return
 	}
 
