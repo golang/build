@@ -316,7 +316,6 @@ func main() {
 	for {
 		select {
 		case work := <-workc:
-			log.Printf("workc received %+v; len(status) = %v, cur = %p", work, len(status), status[work])
 			if !mayBuildRev(work) {
 				continue
 			}
