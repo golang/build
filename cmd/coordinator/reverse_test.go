@@ -2,6 +2,12 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build BROKEN
+
+// I get:
+// $ go test -v
+// ./reverse_test.go:15: can't find import: "golang.org/x/build/cmd/buildlet"
+
 package main
 
 import (

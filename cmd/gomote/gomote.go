@@ -24,11 +24,17 @@ import (
 	"fmt"
 	"os"
 	"sort"
+
+	"golang.org/x/build/dashboard"
 )
 
 var (
 	proj = flag.String("project", "symbolic-datum-552", "GCE project owning builders")
 	zone = flag.String("zone", "us-central1-a", "GCE zone")
+
+	// Mostly dev options:
+	dev            = flag.Bool("dev", false, "if true, the default project becomes the default dev project")
+	buildletBucket = flag.String("buildletbucket", "", "Optional alternate GCS bucket for the buildlet binaries.")
 )
 
 type command struct {
@@ -91,6 +97,13 @@ func main() {
 	registerCommands()
 	flag.Usage = usage
 	flag.Parse()
+	if *dev {
+		*proj = "go-dashboard-dev"
+		dashboard.BuildletBucket = "dev-go-builder-data"
+	}
+	if v := *buildletBucket; v != "" {
+		dashboard.BuildletBucket = v
+	}
 	args := flag.Args()
 	if len(args) == 0 {
 		usage()

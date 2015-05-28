@@ -159,7 +159,7 @@ func (p *reverseBuildletPool) reverseHealthCheck() {
 	p.mu.Unlock()
 }
 
-func (p *reverseBuildletPool) GetBuildlet(machineType, rev string, el eventTimeLogger) (*buildlet.Client, error) {
+func (p *reverseBuildletPool) GetBuildlet(cancel Cancel, machineType, rev string, el eventTimeLogger) (*buildlet.Client, error) {
 	seenErrInUse := false
 	for {
 		b, err := p.tryToGrab(machineType)
@@ -175,6 +175,8 @@ func (p *reverseBuildletPool) GetBuildlet(machineType, rev string, el eventTimeL
 			// a best effort signal. So periodically try to grab
 			// a buildlet again.
 			case <-time.After(30 * time.Second):
+			case <-cancel:
+				return nil, ErrCanceled
 			}
 		} else if err != nil {
 			return nil, err

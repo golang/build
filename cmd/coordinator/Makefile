@@ -1,5 +1,5 @@
 coordinator: builders.go coordinator.go dash.go debug.go gce.go reverse.go status.go watcher.go
-	GOOS=linux go build -o coordinator .
+	GOOS=linux go build --ldflags="-X main.Version $$USER-$$(TZ=UTC date +%FT%T)Z" -o coordinator .
 
 # After "make upload", either reboot the machine, or ssh to it and:
 #   sudo systemctl restart gobuild.service

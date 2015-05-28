@@ -14,6 +14,7 @@ import (
 	"io"
 	"log"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -108,7 +109,7 @@ func initGCE() error {
 	devCluster = projectID == "go-dashboard-dev"
 	if devCluster {
 		log.Printf("Running in dev cluster")
-		gcePool.vmCap = make(chan bool, 1)
+		gcePool.vmCap = make(chan bool, 5)
 	}
 
 	return nil
@@ -151,7 +152,7 @@ type gceBuildletPool struct {
 	vmCap chan bool
 
 	mu       sync.Mutex
-	instUsed map[string]bool // GCE VM instance name -> true
+	instUsed map[string]time.Time // GCE VM instance name -> creationTime
 }
 
 func (p *gceBuildletPool) SetEnabled(enabled bool) {
@@ -162,9 +163,11 @@ func (p *gceBuildletPool) SetEnabled(enabled bool) {
 	}
 }
 
-func (p *gceBuildletPool) GetBuildlet(typ, rev string, el eventTimeLogger) (*buildlet.Client, error) {
+func (p *gceBuildletPool) GetBuildlet(cancel Cancel, typ, rev string, el eventTimeLogger) (*buildlet.Client, error) {
 	el.logEventTime("awaiting_gce_quota")
-	p.awaitVMCountQuota()
+	if err := p.awaitVMCountQuota(cancel); err != nil {
+		return nil, err
+	}
 
 	// name is the project-wide unique name of the GCE instance. It can't be longer
 	// than 61 bytes.
@@ -173,8 +176,7 @@ func (p *gceBuildletPool) GetBuildlet(typ, rev string, el eventTimeLogger) (*bui
 
 	var needDelete bool
 
-	el.logEventTime("instance_name=" + instName)
-	el.logEventTime("creating_instance")
+	el.logEventTime("creating_gce_instance", instName)
 	log.Printf("Creating GCE VM %q for %s at %s", instName, typ, rev)
 	bc, err := buildlet.StartNewVM(tokenSource, instName, typ, buildlet.VMOpts{
 		ProjectID:   projectID,
@@ -191,7 +193,7 @@ func (p *gceBuildletPool) GetBuildlet(typ, rev string, el eventTimeLogger) (*bui
 			needDelete = true // redundant with OnInstanceRequested one, but fine.
 		},
 		OnGotInstanceInfo: func() {
-			el.logEventTime("waiting_for_buildlet")
+			el.logEventTime("got_instance_info", "waiting_for_buildlet...")
 		},
 	})
 	if err != nil {
@@ -215,23 +217,44 @@ func (p *gceBuildletPool) GetBuildlet(typ, rev string, el eventTimeLogger) (*bui
 
 func (p *gceBuildletPool) WriteHTMLStatus(w io.Writer) {
 	fmt.Fprintf(w, "<b>GCE pool</b> capacity: %d/%d", len(p.vmCap), cap(p.vmCap))
+	const show = 6 // must be even
+	active := p.instancesActive()
+	if len(active) > 0 {
+		fmt.Fprintf(w, "<ul>")
+		for i, inst := range active {
+			if i < show/2 || i >= len(active)-(show/2) {
+				fmt.Fprintf(w, "<li>%v, %v</li>\n", inst.name, time.Since(inst.creation))
+			} else if i == show/2 {
+				fmt.Fprintf(w, "<li>... %d of %d total omitted ...</li>\n", len(active)-show, len(active))
+			}
+		}
+		fmt.Fprintf(w, "</ul>")
+	}
 }
 
 func (p *gceBuildletPool) String() string {
 	return fmt.Sprintf("GCE pool capacity: %d/%d", len(p.vmCap), cap(p.vmCap))
 }
 
-func (p *gceBuildletPool) awaitVMCountQuota() { p.vmCap <- true }
-func (p *gceBuildletPool) putVMCountQuota()   { <-p.vmCap }
+// awaitVMCountQuota waits for quota.
+func (p *gceBuildletPool) awaitVMCountQuota(cancel Cancel) error {
+	select {
+	case p.vmCap <- true:
+		return nil
+	case <-cancel:
+		return ErrCanceled
+	}
+}
+func (p *gceBuildletPool) putVMCountQuota() { <-p.vmCap }
 
 func (p *gceBuildletPool) setInstanceUsed(instName string, used bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.instUsed == nil {
-		p.instUsed = make(map[string]bool)
+		p.instUsed = make(map[string]time.Time)
 	}
 	if used {
-		p.instUsed[instName] = true
+		p.instUsed[instName] = time.Now()
 	} else {
 		delete(p.instUsed, instName)
 	}
@@ -240,8 +263,34 @@ func (p *gceBuildletPool) setInstanceUsed(instName string, used bool) {
 func (p *gceBuildletPool) instanceUsed(instName string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.instUsed[instName]
+	_, ok := p.instUsed[instName]
+	return ok
 }
+
+func (p *gceBuildletPool) instancesActive() (ret []instanceTime) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for name, create := range p.instUsed {
+		ret = append(ret, instanceTime{
+			name:     name,
+			creation: create,
+		})
+	}
+	sort.Sort(byCreationTime(ret))
+	return ret
+}
+
+// instanceTime is a GCE instance name and its creation time.
+type instanceTime struct {
+	name     string
+	creation time.Time
+}
+
+type byCreationTime []instanceTime
+
+func (s byCreationTime) Len() int           { return len(s) }
+func (s byCreationTime) Less(i, j int) bool { return s[i].creation.Before(s[j].creation) }
+func (s byCreationTime) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 // cleanUpOldVMs loops forever and periodically enumerates virtual
 // machines and deletes those which have expired.

@@ -105,6 +105,8 @@ func (c *Client) URL() string {
 	return "http://" + strings.TrimSuffix(c.ipPort, ":80")
 }
 
+func (c *Client) IPPort() string { return c.ipPort }
+
 func (c *Client) do(req *http.Request) (*http.Response, error) {
 	if c.password != "" {
 		req.SetBasicAuth("gomote", c.password)

@@ -41,3 +41,7 @@ dev-buildlet.windows-amd64: buildlet.go reverse.go buildlet_windows.go
 	GOOS=windows GOARCH=amd64 go build -o $@
 	cat $@ | (cd ../upload && go run upload.go --public dev-go-builder-data/buildlet.windows-amd64)
 
+dev-buildlet.plan9-386: buildlet.go reverse.go
+	GOOS=plan9 GOARCH=386 go build -o $@
+	cat $@ | (cd ../upload && go run upload.go --public dev-go-builder-data/buildlet.plan9-386)
+

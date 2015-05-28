@@ -232,7 +232,7 @@ OpLoop:
 	}
 	condRun(opts.OnGotInstanceInfo)
 
-	const timeout = 90 * time.Second
+	const timeout = 3 * time.Minute
 	var alive bool
 	impatientClient := &http.Client{
 		Timeout: 5 * time.Second,

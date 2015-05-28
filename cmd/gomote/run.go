@@ -27,6 +27,10 @@ func run(args []string) error {
 	fs.BoolVar(&debug, "debug", false, "write debug info about the command's execution before it begins")
 	var env stringSlice
 	fs.Var(&env, "e", "Environment variable KEY=value. The -e flag may be repeated multiple times to add multiple things to the environment.")
+	var path string
+	fs.StringVar(&path, "path", "", "Comma-separated list of ExecOpts.Path elements. The special string 'EMPTY' means to run without any $PATH. The empty string (default) does not modify the $PATH.")
+	var dir string
+	fs.StringVar(&dir, "dir", "", "Directory to run from. Defaults to the directory of the command, or the work directory if -system is true.")
 
 	fs.Parse(args)
 	if fs.NArg() < 2 {
@@ -44,12 +48,21 @@ func run(args []string) error {
 		return err
 	}
 
+	var pathOpt []string
+	if path == "EMPTY" {
+		pathOpt = []string{} // non-nil
+	} else if path != "" {
+		pathOpt = strings.Split(path, ",")
+	}
+
 	remoteErr, execErr := bc.Exec(cmd, buildlet.ExecOpts{
+		Dir:         dir,
 		SystemLevel: sys || strings.HasPrefix(cmd, "/"),
 		Output:      os.Stdout,
 		Args:        fs.Args()[2:],
 		ExtraEnv:    envutil.Dedup(conf.GOOS() == "windows", append(conf.Env(), []string(env)...)),
 		Debug:       debug,
+		Path:        pathOpt,
 	})
 	if execErr != nil {
 		return fmt.Errorf("Error trying to execute %s: %v", cmd, execErr)

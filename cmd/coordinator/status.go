@@ -27,6 +27,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 		Uptime:   round(time.Now().Sub(processStartTime)),
 		Recent:   append([]*buildStatus{}, statusDone...),
 		DiskFree: df,
+		Version:  Version,
 	}
 	for _, st := range status {
 		data.Active = append(data.Active, st)
@@ -84,6 +85,7 @@ type statusData struct {
 	GCEPoolStatus     template.HTML // TODO: embed template
 	ReversePoolStatus template.HTML // TODO: embed template
 	DiskFree          string
+	Version           string
 }
 
 var statusTmpl = template.Must(template.New("status").Parse(`
@@ -101,7 +103,7 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 </header>
 
 <h2>Running</h2>
-<p>{{printf "%d" .Total}} total builds active. Uptime {{printf "%s" .Uptime}}.
+<p>{{printf "%d" .Total}} total builds active. Uptime {{printf "%s" .Uptime}}. Version {{.Version}}.
 
 <ul>
 {{range .Active}}

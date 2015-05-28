@@ -74,6 +74,11 @@ func main() {
 	if runtime.GOOS == "plan9" {
 		log.SetOutput(&plan9LogWriter{w: os.Stderr})
 	}
+	if runtime.GOOS == "linux" {
+		if w, err := os.OpenFile("/dev/console", os.O_WRONLY, 0); err == nil {
+			log.SetOutput(w)
+		}
+	}
 	flag.Parse()
 
 	onGCE := metadata.OnGCE()
@@ -93,9 +98,12 @@ func main() {
 				log.Fatalf("error creating workdir: %v", err)
 			}
 		default:
-			dir, err := ioutil.TempDir("", "buildlet-scatch")
-			if err != nil {
-				log.Fatalf("error creating workdir with ioutil.TempDir: %v", err)
+			dir := filepath.Join(os.TempDir(), "workdir")
+			if err := os.RemoveAll(dir); err != nil { // should be no-op
+				log.Fatal(err)
+			}
+			if err := os.Mkdir(dir, 0755); err != nil {
+				log.Fatal(err)
 			}
 			*workDir = dir
 		}
@@ -632,11 +640,15 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	cmd.Stderr = cmdOutput
 	cmd.Env = env
 
+	log.Printf("[%p] Running %s with args %q and env %q in dir %s",
+		cmd, cmd.Path, cmd.Args, cmd.Env, cmd.Dir)
+
 	if debug {
 		fmt.Fprintf(cmdOutput, ":: Running %s with args %q and env %q in dir %s\n\n",
 			cmd.Path, cmd.Args, cmd.Env, cmd.Dir)
 	}
 
+	t0 := time.Now()
 	err := cmd.Start()
 	if err == nil {
 		go func() {
@@ -661,7 +673,7 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.Header().Set(hdrProcessState, state)
-	log.Printf("Run = %s", state)
+	log.Printf("[%p] Run = %s, after %v", cmd, state, time.Since(t0))
 }
 
 // setPathEnv returns a copy of the provided environment with any existing
@@ -679,10 +691,11 @@ func setPathEnv(env, path []string, workDir string) []string {
 		pathIdx  = -1
 		pathOrig = ""
 	)
+
 	for i, s := range env {
-		if strings.HasPrefix(s, "PATH=") {
+		if isPathEnvPair(s) {
 			pathIdx = i
-			pathOrig = strings.TrimPrefix(s, "PATH=")
+			pathOrig = s[len("PaTh="):] // in whatever case
 			break
 		}
 	}
@@ -706,8 +719,7 @@ func setPathEnv(env, path []string, workDir string) []string {
 
 	// Put the new PATH in env.
 	env = append([]string{}, env...)
-	// TODO(adg): check that this works on plan 9
-	pathEnv := "PATH=" + strings.Join(path, string(filepath.ListSeparator))
+	pathEnv := pathEnvVar() + "=" + strings.Join(path, pathSeparator())
 	if pathIdx >= 0 {
 		env[pathIdx] = pathEnv
 	} else {
@@ -715,6 +727,39 @@ func setPathEnv(env, path []string, workDir string) []string {
 	}
 
 	return env
+}
+
+// isPathEnvPair reports whether the key=value pair s represents
+// the operating system's path variable.
+func isPathEnvPair(s string) bool {
+	// On Unix it's PATH.
+	// On Plan 9 it's path.
+	// On Windows it's pAtH case-insensitive.
+	if runtime.GOOS == "windows" {
+		return len(s) >= 5 && strings.EqualFold(s[:5], "PATH=")
+	}
+	if runtime.GOOS == "plan9" {
+		return strings.HasPrefix(s, "path=")
+	}
+	return strings.HasPrefix(s, "PATH=")
+}
+
+// On Unix it's PATH.
+// On Plan 9 it's path.
+// On Windows it's pAtH case-insensitive.
+func pathEnvVar() string {
+	if runtime.GOOS == "plan9" {
+		return "path"
+	}
+	return "PATH"
+}
+
+func pathSeparator() string {
+	if runtime.GOOS == "plan9" {
+		return "\x00"
+	} else {
+		return string(filepath.ListSeparator)
+	}
 }
 
 func baseEnv() []string {
@@ -835,6 +880,7 @@ func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	for _, p := range paths {
+		log.Printf("Removing %s", p)
 		p = filepath.Join(*workDir, filepath.FromSlash(p))
 		if err := os.RemoveAll(p); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

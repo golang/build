@@ -30,6 +30,10 @@ type BuildConfig struct {
 	RegularDisk bool // if true, use spinning disk instead of SSD
 	TryOnly     bool // only used for trybots, and not regular builds
 
+	// NumTestHelpers is the number of _additional_ buildlets
+	// past the first help out with sharded tests.
+	NumTestHelpers int
+
 	// BuildletType optionally specifies the type of buildlet to
 	// request from the buildlet pool. If empty, it defaults to
 	// the value of Name.
@@ -59,12 +63,37 @@ func (c *BuildConfig) GOARCH() string {
 	return arch[:i]
 }
 
+// FilePathJoin is mostly like filepath.Join (without the cleaning) except
+// it uses the path separator of c.GOOS instead of the host system's.
+func (c *BuildConfig) FilePathJoin(x ...string) string {
+	if c.GOOS() == "windows" {
+		return strings.Join(x, "\\")
+	}
+	return strings.Join(x, "/")
+}
+
+// BuildletBucket is the GCS storage bucket which holds the buildlet binaries.
+// Tools working in the dev project may change this.
+var BuildletBucket = "go-builder-data"
+
+func fixBuildletBucket(u string) string {
+	if BuildletBucket == "go-builder-data" {
+		// Prod. Default case.
+		return u
+	}
+	// Dev project remapping:
+	return strings.Replace(u,
+		"//storage.googleapis.com/go-builder-data/",
+		"//storage.googleapis.com/"+BuildletBucket+"/",
+		1)
+}
+
 // BuildletBinaryURL returns the public URL of this builder's buildlet.
 func (c *BuildConfig) BuildletBinaryURL() string {
 	if c.buildletURL != "" {
-		return c.buildletURL
+		return fixBuildletBucket(c.buildletURL)
 	}
-	return "http://storage.googleapis.com/go-builder-data/buildlet." + c.GOOS() + "-" + c.GOARCH()
+	return fixBuildletBucket("http://storage.googleapis.com/go-builder-data/buildlet." + c.GOOS() + "-" + c.GOARCH())
 }
 
 // SetBuildletBinaryURL sets the public URL of this builder's buildlet.
@@ -190,18 +219,20 @@ func (c BuildConfig) ShortOwner() string {
 
 func init() {
 	addBuilder(BuildConfig{
-		Name:        "freebsd-amd64-gce93",
-		VMImage:     "freebsd-amd64-gce93",
-		machineType: "n1-highcpu-2",
-		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-freebsd-amd64.tar.gz",
+		Name:           "freebsd-amd64-gce93",
+		VMImage:        "freebsd-amd64-gce93",
+		machineType:    "n1-highcpu-2",
+		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-freebsd-amd64.tar.gz",
+		NumTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
-		Name:        "freebsd-amd64-gce101",
-		Notes:       "FreeBSD 10.1; GCE VM is built from script in build/env/freebsd-amd64",
-		VMImage:     "freebsd-amd64-gce101",
-		machineType: "n1-highcpu-2",
-		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-freebsd-amd64.tar.gz",
-		env:         []string{"CC=clang"},
+		Name:           "freebsd-amd64-gce101",
+		Notes:          "FreeBSD 10.1; GCE VM is built from script in build/env/freebsd-amd64",
+		VMImage:        "freebsd-amd64-gce101",
+		machineType:    "n1-highcpu-2",
+		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-freebsd-amd64.tar.gz",
+		env:            []string{"CC=clang"},
+		NumTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
 		Name:        "freebsd-amd64-race",
@@ -225,10 +256,11 @@ func init() {
 		env: []string{"GOARCH=386", "CC=clang"},
 	})
 	addBuilder(BuildConfig{
-		Name:        "linux-386",
-		VMImage:     "linux-buildlet-std",
-		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
-		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOARCH=386", "GOHOSTARCH=386"},
+		Name:           "linux-386",
+		VMImage:        "linux-buildlet-std",
+		buildletURL:    "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
+		env:            []string{"GOROOT_BOOTSTRAP=/go1.4", "GOARCH=386", "GOHOSTARCH=386"},
+		NumTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
 		Name:        "linux-386-387",
@@ -238,9 +270,10 @@ func init() {
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOARCH=386", "GOHOSTARCH=386", "GO386=387"},
 	})
 	addBuilder(BuildConfig{
-		Name:    "linux-amd64",
-		VMImage: "linux-buildlet-std",
-		env:     []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		Name:           "linux-amd64",
+		VMImage:        "linux-buildlet-std",
+		env:            []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		NumTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
 		Name:        "all-compile",
@@ -275,6 +308,7 @@ func init() {
 		VMImage:     "linux-buildlet-std",
 		machineType: "n1-highcpu-4",
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		// TODO(bradfitz): make race.bash shardable, then: NumTestHelpers: 3
 	})
 	addBuilder(BuildConfig{
 		Name:        "linux-386-clang",
@@ -394,28 +428,26 @@ func init() {
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
-		Name:        "openbsd-amd64-gce56",
-		Notes:       "OpenBSD 5.6; GCE VM is built from script in build/env/openbsd-amd64",
-		VMImage:     "openbsd-amd64-56",
-		machineType: "n1-highcpu-2",
-		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-openbsd-amd64.tar.gz",
+		Name:           "openbsd-amd64-gce56",
+		Notes:          "OpenBSD 5.6; GCE VM is built from script in build/env/openbsd-amd64",
+		VMImage:        "openbsd-amd64-56",
+		machineType:    "n1-highcpu-2",
+		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-openbsd-amd64.tar.gz",
+		NumTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
-		Name:        "openbsd-386-gce56",
-		Notes:       "OpenBSD 5.6; GCE VM is built from script in build/env/openbsd-386",
-		VMImage:     "openbsd-386-56",
-		machineType: "n1-highcpu-2",
-		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-openbsd-386.tar.gz",
+		Name:           "openbsd-386-gce56",
+		Notes:          "OpenBSD 5.6; GCE VM is built from script in build/env/openbsd-386",
+		VMImage:        "openbsd-386-56",
+		machineType:    "n1-highcpu-2",
+		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-openbsd-386.tar.gz",
+		NumTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
-		Name:    "plan9-386-gcepartial",
-		Notes:   "Plan 9 from 0intro; GCE VM is built from script in build/env/plan9-386; runs with GOTESTONLY=std (only stdlib tests)",
+		Name:    "plan9-386",
+		Notes:   "Plan 9 from 0intro; GCE VM is built from script in build/env/plan9-386",
 		VMImage: "plan9-386-v2",
 		Go14URL: "https://storage.googleapis.com/go-builder-data/go1.4-plan9-386.tar.gz",
-		// It's named "partial" because the buildlet only runs
-		// the standard library tests ("go test std cmd", basically).
-		// TODO: run a full Plan 9 builder, or a sharded one.
-		env: []string{"GOTESTONLY=^go_test:"},
 
 		// We *were* using n1-standard-1 because Plan 9 can only
 		// reliably use a single CPU. Using 2 or 4 and we see
@@ -439,19 +471,18 @@ func init() {
 		// single-core Plan 9. It will see 2 virtual cores and
 		// only use 1, but we hope that 1 will be more powerful
 		// and we'll stop timing out on tests.
-		//
-		// But then with the toolchain conversion to Go and
-		// using ramfs, it turns out we need more memory
-		// anyway, so use n1-highcpu-4.
-		machineType: "n1-highcpu-4",
+		machineType: "n1-highcpu-2",
+
+		NumTestHelpers: 5, // slow
 	})
 	addBuilder(BuildConfig{
-		Name:        "windows-amd64-gce",
-		VMImage:     "windows-buildlet-v2",
-		machineType: "n1-highcpu-2",
-		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-windows-amd64.tar.gz",
-		RegularDisk: true,
-		env:         []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		Name:           "windows-amd64-gce",
+		VMImage:        "windows-buildlet-v2",
+		machineType:    "n1-highcpu-2",
+		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-windows-amd64.tar.gz",
+		RegularDisk:    true,
+		env:            []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		NumTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
 		Name:        "windows-amd64-race",
@@ -463,19 +494,21 @@ func init() {
 		env:         []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
-		Name:        "windows-386-gce",
-		VMImage:     "windows-buildlet-v2",
-		machineType: "n1-highcpu-2",
-		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.windows-amd64",
-		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-windows-386.tar.gz",
-		RegularDisk: true,
-		env:         []string{"GOARCH=386", "GOHOSTARCH=386"},
+		Name:           "windows-386-gce",
+		VMImage:        "windows-buildlet-v2",
+		machineType:    "n1-highcpu-2",
+		buildletURL:    "http://storage.googleapis.com/go-builder-data/buildlet.windows-amd64",
+		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-windows-386.tar.gz",
+		RegularDisk:    true,
+		env:            []string{"GOARCH=386", "GOHOSTARCH=386"},
+		NumTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
-		Name:      "darwin-amd64-10_10",
-		Notes:     "Mac Mini running OS X 10.10 (Yosemite)",
-		Go14URL:   "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
-		IsReverse: true,
+		Name:           "darwin-amd64-10_10",
+		Notes:          "Mac Mini running OS X 10.10 (Yosemite)",
+		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
+		IsReverse:      true,
+		NumTestHelpers: 1, // limited resources
 	})
 	addBuilder(BuildConfig{
 		Name:      "darwin-arm-a5ios",
