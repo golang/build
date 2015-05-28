@@ -1082,6 +1082,12 @@ func (st *buildStatus) build() (retErr error) {
 				return fmt.Errorf("writeSnapshot: %v", err)
 			}
 
+			tests, err := st.distTestList()
+			if err != nil {
+				return fmt.Errorf("distTestList: %v", err)
+			}
+			fmt.Fprintf(st, "Number of dist tests to run: %d\n", len(tests))
+
 			runScript := st.conf.RunScript()
 			lastScript = runScript
 			remoteErr, err = bc.Exec(path.Join("go", runScript), buildlet.ExecOpts{
@@ -1172,6 +1178,24 @@ func (st *buildStatus) writeSnapshot() error {
 	}
 
 	return wr.Close()
+}
+
+func (st *buildStatus) distTestList() (names []string, err error) {
+	var buf bytes.Buffer
+	remoteErr, err := st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+		Output:      &buf,
+		ExtraEnv:    st.conf.Env(),
+		OnStartExec: func() { st.logEventTime("discovering_tests") },
+		Path:        []string{"$WORKDIR/go/bin", "$PATH"},
+		Args:        []string{"tool", "dist", "test", "--no-rebuild", "--list"},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("Exec error: %v, %s", remoteErr, buf.Bytes())
+	}
+	if remoteErr != nil {
+		return nil, fmt.Errorf("Remote error: %v, %s", remoteErr, buf.Bytes())
+	}
+	return strings.Fields(buf.String()), nil
 }
 
 type eventAndTime struct {
