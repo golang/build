@@ -108,17 +108,22 @@ func dash(meth, cmd string, args url.Values, req, resp interface{}) error {
 }
 
 // recordResult sends build results to the dashboard
-func recordResult(builderName string, ok bool, hash, buildLog string, runTime time.Duration) error {
+func recordResult(br builderRev, ok bool, buildLog string, runTime time.Duration) error {
 	req := map[string]interface{}{
-		"Builder":     builderName,
+		"Builder":     br.name,
 		"PackagePath": "",
-		"Hash":        hash,
+		"Hash":        br.rev,
 		"GoHash":      "",
 		"OK":          ok,
 		"Log":         buildLog,
 		"RunTime":     runTime,
 	}
-	args := url.Values{"key": {builderKey(builderName)}, "builder": {builderName}}
+	if br.isSubrepo() {
+		req["PackagePath"] = subrepoPrefix + br.subName
+		req["Hash"] = br.subRev
+		req["GoHash"] = br.rev
+	}
+	args := url.Values{"key": {builderKey(br.name)}, "builder": {br.name}}
 	if *mode == "dev" {
 		log.Printf("In dev mode, not recording result: %v", req)
 		return nil
@@ -137,12 +142,20 @@ func (st *buildStatus) pingDashboard() {
 		log.Print("In dev mode, not pinging dashboard")
 		return
 	}
-	u := dashBase() + "building?" + url.Values{
+	st.mu.Lock()
+	logsURL := st.logsURLLocked()
+	st.mu.Unlock()
+	args := url.Values{
 		"builder": []string{st.name},
 		"key":     []string{builderKey(st.name)},
 		"hash":    []string{st.rev},
-		"url":     []string{fmt.Sprintf("http://farmer.golang.org/temporarylogs?name=%s&rev=%s&st=%p", st.name, st.rev, st)},
-	}.Encode()
+		"url":     []string{logsURL},
+	}
+	if st.isSubrepo() {
+		args.Set("hash", st.subRev)
+		args.Set("gohash", st.rev)
+	}
+	u := dashBase() + "building?" + args.Encode()
 	for {
 		st.mu.Lock()
 		done := st.done

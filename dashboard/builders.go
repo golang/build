@@ -163,6 +163,14 @@ func (c *BuildConfig) SplitMakeRun() bool {
 	return false
 }
 
+func (c *BuildConfig) BuildSubrepos() bool {
+	if !c.SplitMakeRun() {
+		return false
+	}
+	// TODO(adg,bradfitz): expand this
+	return c.Name == "linux-amd64" || c.Name == "windows-amd64-gce"
+}
+
 // AllScriptArgs returns the set of arguments that should be passed to the
 // all.bash-equivalent script. Usually empty.
 func (c *BuildConfig) AllScriptArgs() []string {

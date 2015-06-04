@@ -41,6 +41,8 @@ import (
 	"google.golang.org/cloud/storage"
 )
 
+const subrepoPrefix = "golang.org/x/"
+
 var processStartTime = time.Now()
 
 var Version string // set by linker -X
@@ -85,6 +87,13 @@ var (
 	statusDone []*buildStatus         // finished recently, capped to maxStatusDone
 	tries      = map[tryKey]*trySet{} // trybot builds
 	tryList    []tryKey
+
+	// subrepoHead contains the hashes of the latest master HEAD
+	// for each sub-repo. It is populated by findWork.
+	subrepoHead = struct {
+		sync.Mutex
+		m map[string]string // [repo]hash
+	}{m: map[string]string{}}
 )
 
 // tryBuilders must be VMs. The Docker container builds are going away.
@@ -306,7 +315,6 @@ func main() {
 
 		if devCluster {
 			dashboard.BuildletBucket = "dev-go-builder-data"
-			// Only run the linux-amd64 builder in the dev cluster (for now).
 			dashboard.Builders = devClusterBuilders()
 		}
 
@@ -489,7 +497,13 @@ func trySetOfCommitPrefix(commitPrefix string) *trySet {
 }
 
 func handleLogs(w http.ResponseWriter, r *http.Request) {
-	st := getStatus(builderRev{r.FormValue("name"), r.FormValue("rev")}, r.FormValue("st"))
+	br := builderRev{
+		name:    r.FormValue("name"),
+		rev:     r.FormValue("rev"),
+		subName: r.FormValue("subName"), // may be empty
+		subRev:  r.FormValue("subRev"),  // may be empty
+	}
+	st := getStatus(br, r.FormValue("st"))
 	if st == nil {
 		http.NotFound(w, r)
 		return
@@ -575,9 +589,17 @@ func workaroundFlush(w http.ResponseWriter) {
 func findWorkLoop(work chan<- builderRev) {
 	// Useful for debugging a single run:
 	if devCluster && false {
-		work <- builderRev{name: "linux-amd64", rev: "54789eff385780c54254f822e09505b6222918e2"}
-		work <- builderRev{name: "windows-amd64-gce", rev: "54789eff385780c54254f822e09505b6222918e2"}
-		return
+		work <- builderRev{name: "linux-amd64", rev: "c9778ec302b2e0e0d6027e1e0fca892e428d9657", subName: "tools", subRev: "ac303766f5f240c1796eeea3dc9bf34f1261aa35"}
+		//work <- builderRev{name: "linux-amd64", rev: "54789eff385780c54254f822e09505b6222918e2"}
+		//work <- builderRev{name: "windows-amd64-gce", rev: "54789eff385780c54254f822e09505b6222918e2"}
+
+		// Still run findWork but ignore what it does.
+		ignore := make(chan builderRev)
+		go func() {
+			for range ignore {
+			}
+		}()
+		work = ignore
 	}
 	ticker := time.NewTicker(15 * time.Second)
 	for {
@@ -612,8 +634,11 @@ func findWork(work chan<- builderRev) error {
 		if br.Repo == "go" {
 			goRevisions = append(goRevisions, br.Revision)
 		} else {
-			// TODO(bradfitz): support these: golang.org/issue/9506
-			continue
+			// The dashboard provides only the head revision for
+			// each sub-repo; store it in subrepoHead for later use.
+			subrepoHead.Lock()
+			subrepoHead.m[br.Repo] = br.Revision
+			subrepoHead.Unlock()
 		}
 		if len(br.Results) != len(bs.Builders) {
 			return errors.New("bogus JSON response from dashboard: results is too long.")
@@ -624,13 +649,37 @@ func findWork(work chan<- builderRev) error {
 				continue
 			}
 			builder := bs.Builders[i]
-			if builderInfo, ok := dashboard.Builders[builder]; !ok || builderInfo.TryOnly {
+			builderInfo, ok := dashboard.Builders[builder]
+			if !ok || builderInfo.TryOnly {
 				// Not managed by the coordinator, or a trybot-only one.
 				continue
 			}
-			br := builderRev{bs.Builders[i], br.Revision}
-			if !isBuilding(br) {
-				work <- br
+			if br.Repo != "go" && !builderInfo.SplitMakeRun() {
+				// If we don't split make and run then we can't
+				// have a snapshot from which to build sub-repos.
+				continue
+			}
+
+			var rev builderRev
+			if br.Repo == "go" {
+				rev = builderRev{
+					name: bs.Builders[i],
+					rev:  br.Revision,
+				}
+			} else {
+				rev = builderRev{
+					name:    bs.Builders[i],
+					rev:     br.GoRevision,
+					subName: br.Repo,
+					subRev:  br.Revision,
+				}
+				if !builderInfo.BuildSubrepos() || !rev.snapshotExists() {
+					// Don't try to build this sub-repo until we have a snapshot.
+					continue
+				}
+			}
+			if !isBuilding(rev) {
+				work <- rev
 			}
 		}
 	}
@@ -642,7 +691,7 @@ func findWork(work chan<- builderRev) error {
 			continue
 		}
 		for _, rev := range goRevisions {
-			br := builderRev{b, rev}
+			br := builderRev{name: b, rev: rev}
 			if !isBuilding(br) {
 				work <- br
 			}
@@ -943,8 +992,15 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 // builderRev is a build configuration type and a revision.
 type builderRev struct {
 	name string // e.g. "linux-amd64-race"
-	rev  string // lowercase hex git hash
-	// TODO: optional subrepo name/hash
+	rev  string // lowercase hex core repo git hash
+
+	// optional sub-repository details (both must be present)
+	subName string // e.g. "net"
+	subRev  string // lowercase hex sub-repo git hash
+}
+
+func (br builderRev) isSubrepo() bool {
+	return br.subName != ""
 }
 
 type eventTimeLogger interface {
@@ -1127,7 +1183,7 @@ func (st *buildStatus) expectedBuildletStartDuration() time.Duration {
 // ready, such that they're ready when make.bash is done. But we don't
 // want to start too early, lest we waste idle resources during make.bash.
 func (st *buildStatus) getHelpersReadySoon() {
-	if st.conf.NumTestHelpers == 0 {
+	if st.isSubrepo() || st.conf.NumTestHelpers == 0 {
 		return
 	}
 	time.AfterFunc(st.expectedMakeBashDuration()-st.expectedBuildletStartDuration(),
@@ -1149,6 +1205,19 @@ func (st *buildStatus) onceInitHelpersFunc() {
 	st.helpers = GetBuildlets(st.donec, pool, st.conf.NumTestHelpers, st.buildletType(), st.rev, st)
 }
 
+// We should try to build from a snapshot if this is a subrepo build, we can
+// expect there to be a snapshot (splitmakerun), and the snapshot exists.
+func (st *buildStatus) useSnapshot() bool {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.useSnapshotMemo != nil {
+		return *st.useSnapshotMemo
+	}
+	b := st.isSubrepo() && st.conf.SplitMakeRun() && st.snapshotExists()
+	st.useSnapshotMemo = &b
+	return b
+}
+
 func (st *buildStatus) build() error {
 	pool, err := st.buildletPool()
 	if err != nil {
@@ -1166,99 +1235,31 @@ func (st *buildStatus) build() error {
 
 	st.logEventTime("got_buildlet", bc.IPPort())
 
-	// Write the VERSION file.
-	st.logEventTime("start_write_version_tar")
-	if err := bc.PutTar(versionTgz(st.rev), "go"); err != nil {
-		return fmt.Errorf("writing VERSION tgz: %v", err)
-	}
-
-	var grp syncutil.Group
-	grp.Go(func() error {
-		st.logEventTime("fetch_go_tar")
-		tarReader, err := getSourceTgz(st, "go", st.rev)
-		if err != nil {
+	if st.useSnapshot() {
+		st.logEventTime("start_write_snapshot_tar")
+		if err := bc.PutTarFromURL(st.snapshotURL(), "go"); err != nil {
+			return fmt.Errorf("failed to put snapshot to buildlet: %v", err)
+		}
+		st.logEventTime("end_write_snapshot_tar")
+	} else {
+		// Write the Go source and bootstrap tool chain in parallel.
+		var grp syncutil.Group
+		grp.Go(st.writeGoSource)
+		grp.Go(st.writeBootstrapToolchain)
+		if err := grp.Err(); err != nil {
 			return err
 		}
-		st.logEventTime("start_write_go_tar")
-		if err := bc.PutTar(tarReader, "go"); err != nil {
-			return fmt.Errorf("writing tarball from Gerrit: %v", err)
-		}
-		st.logEventTime("end_write_go_tar")
-		return nil
-	})
-	if st.conf.Go14URL != "" {
-		grp.Go(func() error {
-			st.logEventTime("start_write_go14_tar")
-			if err := bc.PutTarFromURL(st.conf.Go14URL, "go1.4"); err != nil {
-				return err
-			}
-			st.logEventTime("end_write_go14_tar")
-			return nil
-		})
-	}
-	if err := grp.Err(); err != nil {
-		return err
 	}
 
 	execStartTime := time.Now()
 	st.logEventTime("pre_exec")
 	fmt.Fprintf(st, "%s at %v\n\n", st.name, st.rev)
 
-	var lastScript string
 	var remoteErr error
 	if st.conf.SplitMakeRun() {
-		st.getHelpersReadySoon()
-		makeScript := st.conf.MakeScript()
-		lastScript = makeScript
-		maket0 := time.Now()
-		remoteErr, err = bc.Exec(path.Join("go", makeScript), buildlet.ExecOpts{
-			Output: st,
-			OnStartExec: func() {
-				st.logEventTime("running_exec", makeScript)
-			},
-			ExtraEnv: st.conf.Env(),
-			Debug:    true,
-			Args:     st.conf.MakeScriptArgs(),
-		})
-		if err != nil {
-			return err
-		}
-		st.logEventTime("exec_done", fmt.Sprintf("%s in %v", makeScript, time.Since(maket0)))
-
-		if remoteErr == nil {
-			if err := st.cleanForSnapshot(); err != nil {
-				return fmt.Errorf("cleanForSnapshot: %v", err)
-			}
-
-			if err := st.writeSnapshot(); err != nil {
-				return fmt.Errorf("writeSnapshot: %v", err)
-			}
-
-			lastScript = "runTests"
-			remoteErr, err = st.runTests(st.getHelpers())
-			if err != nil {
-				return fmt.Errorf("runTests: %v", err)
-			}
-		}
+		remoteErr, err = st.runAllSharded()
 	} else {
-		// Old way.
-		// TOOD(bradfitz,adg): delete this block when all builders
-		// can split make & run (and then delete the SplitMakeRun method)
-		st.logEventTime("legacy_all_path")
-		allScript := st.conf.AllScript()
-		lastScript = allScript
-		remoteErr, err = bc.Exec(path.Join("go", allScript), buildlet.ExecOpts{
-			Output: st,
-			OnStartExec: func() {
-				st.logEventTime("running_exec")
-			},
-			ExtraEnv: st.conf.Env(),
-			Debug:    true,
-			Args:     st.conf.AllScriptArgs(),
-		})
-		if err != nil {
-			return err
-		}
+		remoteErr, err = st.runAllLegacy()
 	}
 	doneMsg := "all tests passed"
 	if remoteErr != nil {
@@ -1276,7 +1277,7 @@ func (st *buildStatus) build() error {
 		if remoteErr != nil {
 			buildLog = st.logs()
 		}
-		if err := recordResult(st.name, remoteErr == nil, st.rev, buildLog, time.Since(execStartTime)); err != nil {
+		if err := recordResult(st.builderRev, remoteErr == nil, buildLog, time.Since(execStartTime)); err != nil {
 			if remoteErr != nil {
 				return fmt.Errorf("Remote error was %q but failed to report it to the dashboard: %v", remoteErr, err)
 			}
@@ -1284,8 +1285,149 @@ func (st *buildStatus) build() error {
 		}
 	}
 	if remoteErr != nil {
-		return fmt.Errorf("%v failed: %v", lastScript, remoteErr)
+		return remoteErr
 	}
+	return nil
+}
+
+// runAllSharded runs make.bash and then shards the test execution.
+// remoteErr and err are as described at the top of this file.
+func (st *buildStatus) runAllSharded() (remoteErr, err error) {
+	st.getHelpersReadySoon()
+
+	remoteErr, err = st.runMake()
+	if err != nil {
+		return nil, err
+	}
+	if remoteErr != nil {
+		return fmt.Errorf("build failed: %v", remoteErr), nil
+	}
+
+	if err := st.doSnapshot(); err != nil {
+		return nil, err
+	}
+
+	if st.isSubrepo() {
+		remoteErr, err = st.runSubrepoTests()
+	} else {
+		remoteErr, err = st.runTests(st.getHelpers())
+	}
+	if err != nil {
+		return nil, fmt.Errorf("runTests: %v", err)
+	}
+	if remoteErr != nil {
+		return fmt.Errorf("tests failed: %v", remoteErr), nil
+	}
+	return nil, nil
+}
+
+// runMake builds the tool chain.
+// remoteErr and err are as described at the top of this file.
+func (st *buildStatus) runMake() (remoteErr, err error) {
+	// Don't do this if we're using a pre-built snapshot.
+	if st.useSnapshot() {
+		return nil, nil
+	}
+
+	// Build the source code.
+	makeScript := st.conf.MakeScript()
+	t0 := time.Now()
+	remoteErr, err = st.bc.Exec(path.Join("go", makeScript), buildlet.ExecOpts{
+		Output: st,
+		OnStartExec: func() {
+			st.logEventTime("running_exec", makeScript)
+		},
+		ExtraEnv: st.conf.Env(),
+		Debug:    true,
+		Args:     st.conf.MakeScriptArgs(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	st.logEventTime("exec_done", fmt.Sprintf("%s in %v", makeScript, time.Since(t0)))
+	if remoteErr != nil {
+		return fmt.Errorf("make script failed: %v", remoteErr), nil
+	}
+	return nil, nil
+}
+
+// runAllLegacy executes all.bash (or .bat, or whatever) in the traditional way.
+// remoteErr and err are as described at the top of this file.
+//
+// TODO(bradfitz,adg): delete this function when all builders
+// can split make & run (and then delete the SplitMakeRun method)
+func (st *buildStatus) runAllLegacy() (remoteErr, err error) {
+	st.logEventTime("legacy_all_path")
+	allScript := st.conf.AllScript()
+	t0 := time.Now()
+	remoteErr, err = st.bc.Exec(path.Join("go", allScript), buildlet.ExecOpts{
+		Output: st,
+		OnStartExec: func() {
+			st.logEventTime("running_exec", allScript)
+		},
+		ExtraEnv: st.conf.Env(),
+		Debug:    true,
+		Args:     st.conf.AllScriptArgs(),
+	})
+	if err != nil {
+		return err, nil
+	}
+	st.logEventTime("exec_done", fmt.Sprintf("%s in %v", allScript, time.Since(t0)))
+	if remoteErr != nil {
+		return fmt.Errorf("all script failed: %v", remoteErr), nil
+	}
+	return nil, nil
+}
+
+func (st *buildStatus) doSnapshot() error {
+	// If we're using a pre-built snapshot, don't make another.
+	if st.useSnapshot() {
+		return nil
+	}
+
+	if err := st.cleanForSnapshot(); err != nil {
+		return fmt.Errorf("cleanForSnapshot: %v", err)
+	}
+	if err := st.writeSnapshot(); err != nil {
+		return fmt.Errorf("writeSnapshot: %v", err)
+	}
+	return nil
+}
+
+func (br *builderRev) snapshotExists() bool {
+	resp, err := http.Head(br.snapshotURL())
+	return err == nil && resp.StatusCode == http.StatusOK
+}
+
+func (st *buildStatus) writeGoSource() error {
+	// Write the VERSION file.
+	st.logEventTime("start_write_version_tar")
+	if err := st.bc.PutTar(versionTgz(st.rev), "go"); err != nil {
+		return fmt.Errorf("writing VERSION tgz: %v", err)
+	}
+
+	st.logEventTime("fetch_go_tar")
+	tarReader, err := getSourceTgz(st, "go", st.rev)
+	if err != nil {
+		return err
+	}
+	st.logEventTime("start_write_go_tar")
+	if err := st.bc.PutTar(tarReader, "go"); err != nil {
+		return fmt.Errorf("writing tarball from Gerrit: %v", err)
+	}
+	st.logEventTime("end_write_go_tar")
+	return nil
+}
+
+func (st *buildStatus) writeBootstrapToolchain() error {
+	if st.conf.Go14URL == "" {
+		return nil
+	}
+	st.logEventTime("start_write_go14_tar")
+	if err := st.bc.PutTarFromURL(st.conf.Go14URL, "go1.4"); err != nil {
+		return err
+	}
+	st.logEventTime("end_write_go14_tar")
 	return nil
 }
 
@@ -1301,12 +1443,16 @@ func (st *buildStatus) cleanForSnapshot() error {
 	return st.bc.RemoveAll(cleanForSnapshotFiles...)
 }
 
-func (st *buildStatus) snapshotObjectName() string {
-	return fmt.Sprintf("%v/%v/%v.tar.gz", "go", st.name, st.rev)
+// snapshotObjectName is the cloud storage object name of the
+// built Go tree for this builder and Go rev (not the sub-repo).
+// The entries inside this tarball do not begin with "go/".
+func (br *builderRev) snapshotObjectName() string {
+	return fmt.Sprintf("%v/%v/%v.tar.gz", "go", br.name, br.rev)
 }
 
-func (st *buildStatus) snapshotURL() string {
-	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", snapBucket(), st.snapshotObjectName())
+// snapshotURL is the absolute URL of the snapshot object (see above).
+func (br *builderRev) snapshotURL() string {
+	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", snapBucket(), br.snapshotObjectName())
 }
 
 func (st *buildStatus) writeSnapshot() error {
@@ -1609,6 +1755,100 @@ func testDuration(name string) time.Duration {
 		return secs.Duration()
 	}
 	return minGoTestSpeed * 2
+}
+
+func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
+	st.logEventTime("fetching_subrepo", st.subName)
+
+	workDir, err := st.bc.WorkDir()
+	if err != nil {
+		log.Printf("error discovering workdir for helper %s: %v", st.bc.IPPort(), err)
+		return
+	}
+	goroot := st.conf.FilePathJoin(workDir, "go")
+	gopath := st.conf.FilePathJoin(workDir, "gopath")
+
+	fetched := map[string]bool{}
+	toFetch := []string{st.subName}
+
+	// fetch checks out the provided sub-repo to the buildlet's workspace.
+	fetch := func(repo, rev string) error {
+		fetched[repo] = true
+		tgz, err := getSourceTgz(st, repo, rev)
+		if err != nil {
+			return err
+		}
+		return st.bc.PutTar(tgz, "gopath/src/"+subrepoPrefix+repo)
+	}
+
+	// findDeps uses 'go list' on the checked out repo to find its
+	// dependencies, and adds any not-yet-fetched deps to toFetched.
+	findDeps := func(repo string) error {
+		repoPath := subrepoPrefix + repo
+		var buf bytes.Buffer
+		rErr, err := st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+			Output:   &buf,
+			ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath),
+			Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+			Args:     []string{"list", "-f", `{{range .Deps}}{{printf "%v\n" .}}{{end}}`, repoPath + "/..."},
+		})
+		if err != nil {
+			return fmt.Errorf("exec go list on buildlet: %v", err)
+		}
+		if rErr != nil {
+			return fmt.Errorf("go list error on buildlet: %v\n%s", rErr, buf.Bytes())
+		}
+		for _, p := range strings.Fields(buf.String()) {
+			if !strings.HasPrefix(p, subrepoPrefix) || strings.HasPrefix(p, repoPath) {
+				continue
+			}
+			repo = strings.TrimPrefix(p, subrepoPrefix)
+			if i := strings.Index(repo, "/"); i >= 0 {
+				repo = repo[:i]
+			}
+			if !fetched[repo] {
+				toFetch = append(toFetch, repo)
+			}
+		}
+		return nil
+	}
+
+	// Recursively fetch the repo and its dependencies.
+	// Dependencies are always fetched at master, which isn't
+	// great but the dashboard data model doesn't track
+	// sub-repo dependencies. TODO(adg): fix this somehow??
+	for i := 0; i < len(toFetch); i++ {
+		repo := toFetch[i]
+		if fetched[repo] {
+			continue
+		}
+		// Fetch the HEAD revision by default.
+		subrepoHead.Lock()
+		rev := subrepoHead.m[repo]
+		subrepoHead.Unlock()
+		if rev == "" {
+			rev = "master" // should happen rarely; ok if it does.
+		}
+		// For the repo under test, choose that specific revision.
+		if i == 0 {
+			rev = st.subRev
+		}
+		if err := fetch(repo, rev); err != nil {
+			return nil, err
+		}
+		if err := findDeps(repo); err != nil {
+			return nil, err
+		}
+	}
+
+	st.logEventTime("starting_tests", st.subName)
+	defer st.logEventTime("tests_complete")
+	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+		Output:   st,
+		ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath),
+		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+		Args:     []string{"test", "-short", subrepoPrefix + st.subName + "/..."},
+	})
 }
 
 // runTests is only called for builders which support a split make/run
@@ -1980,14 +2220,15 @@ type buildStatus struct {
 	onceInitHelpers sync.Once // guards call of onceInitHelpersFunc, to init::
 	helpers         <-chan *buildlet.Client
 
-	mu        sync.Mutex       // guards following
-	failURL   string           // if non-empty, permanent URL of failure
-	bc        *buildlet.Client // nil initially, until pool returns one
-	done      time.Time        // finished running
-	succeeded bool             // set when done
-	output    bytes.Buffer     // stdout and stderr
-	events    []eventAndTime
-	watcher   []*logWatcher
+	mu              sync.Mutex       // guards following
+	failURL         string           // if non-empty, permanent URL of failure
+	bc              *buildlet.Client // nil initially, until pool returns one
+	done            time.Time        // finished running
+	succeeded       bool             // set when done
+	output          bytes.Buffer     // stdout and stderr
+	events          []eventAndTime
+	watcher         []*logWatcher
+	useSnapshotMemo *bool
 }
 
 func (st *buildStatus) setDone(succeeded bool) {
@@ -2053,6 +2294,10 @@ func (st *buildStatus) HTMLStatusLine() template.HTML {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "<a href='https://github.com/golang/go/wiki/DashboardBuilders'>%s</a> rev <a href='%s%s'>%s</a>",
 		st.name, urlPrefix, st.rev, st.rev)
+	if st.isSubrepo() {
+		fmt.Fprintf(&buf, " (sub-repo %s rev <a href='%s%s'>%s</a>)",
+			st.subName, urlPrefix, st.subRev, st.subRev)
+	}
 	if ts := st.trySet; ts != nil {
 		fmt.Fprintf(&buf, " (trying <a href='https://go-review.googlesource.com/#/q/%s'>%s</a>)",
 			ts.ChangeID, ts.ChangeID[:8])
@@ -2078,10 +2323,15 @@ func (st *buildStatus) HTMLStatusLine() template.HTML {
 }
 
 func (st *buildStatus) logsURLLocked() string {
-	if u := st.failURL; u != "" {
-		return u
+	host := "farmer.golang.org"
+	if devCluster {
+		host = externalIP
 	}
-	return fmt.Sprintf("/temporarylogs?name=%s&rev=%s&st=%p", st.name, st.rev, st)
+	u := fmt.Sprintf("http://%v/temporarylogs?name=%s&rev=%s&st=%p", host, st.name, st.rev, st)
+	if st.isSubrepo() {
+		u += fmt.Sprintf("&subName=%v&subRev=%v", st.subName, st.subRev)
+	}
+	return u
 }
 
 // st.mu must be held.
@@ -2218,23 +2468,24 @@ func versionTgz(rev string) io.Reader {
 
 var sourceGroup singleflight.Group
 
-var sourceCache = lru.New(20) // git rev -> []byte
+var sourceCache = lru.New(40) // git rev -> []byte
 
 // repo is go.googlesource.com repo ("go", "net", etc)
 // rev is git revision.
 func getSourceTgz(el eventTimeLogger, repo, rev string) (tgz io.Reader, err error) {
 	fromCache := false
-	vi, err, shared := sourceGroup.Do(rev, func() (interface{}, error) {
-		if tgzBytes, ok := sourceCache.Get(rev); ok {
+	key := fmt.Sprintf("%v-%v", repo, rev)
+	vi, err, shared := sourceGroup.Do(key, func() (interface{}, error) {
+		if tgzBytes, ok := sourceCache.Get(key); ok {
 			fromCache = true
 			return tgzBytes, nil
 		}
 
 		for i := 0; i < 10; i++ {
-			el.logEventTime("fetching_source", "from watcher")
+			el.logEventTime("fetching_source", fmt.Sprintf("%v from watcher", key))
 			tgzBytes, err := getSourceTgzFromWatcher(repo, rev)
 			if err == nil {
-				sourceCache.Add(rev, tgzBytes)
+				sourceCache.Add(key, tgzBytes)
 				return tgzBytes, nil
 			}
 			log.Printf("Error fetching source %s/%s from watcher (after %v uptime): %v",
@@ -2244,17 +2495,17 @@ func getSourceTgz(el eventTimeLogger, repo, rev string) (tgz io.Reader, err erro
 			time.Sleep(6 * time.Second)
 		}
 
-		el.logEventTime("fetching_source", "from gerrit")
+		el.logEventTime("fetching_source", fmt.Sprintf("%v from gerrit", key))
 		tgzBytes, err := getSourceTgzFromGerrit(repo, rev)
 		if err == nil {
-			sourceCache.Add(rev, tgzBytes)
+			sourceCache.Add(key, tgzBytes)
 		}
 		return tgzBytes, err
 	})
 	if err != nil {
 		return nil, err
 	}
-	el.logEventTime("got_source", fmt.Sprintf("cache=%v shared=%v", fromCache, shared))
+	el.logEventTime("got_source", fmt.Sprintf("%v cache=%v shared=%v", key, fromCache, shared))
 	return bytes.NewReader(vi.([]byte)), nil
 }
 
