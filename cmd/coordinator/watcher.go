@@ -32,6 +32,8 @@ type watchConfig struct {
 	dash       string        // "https://build.golang.org/" (must end in /)
 	interval   time.Duration // Polling interval
 	mirrorBase string        // "https://github.com/golang/" or empty to disable mirroring
+	netHost    bool          // run docker container in the host's network namespace
+	httpAddr   string
 }
 
 type imageInfo struct {
@@ -45,12 +47,20 @@ var images = map[string]*imageInfo{
 	"go-commit-watcher": {url: "https://storage.googleapis.com/go-builder-data/docker-commit-watcher.tar.gz"},
 }
 
+const gitArchiveAddr = "127.0.0.1:21536" // 21536 == keys above WATCH
+
 func startWatchers() {
 	mirrorBase := "https://github.com/golang/"
 	if devCluster {
 		mirrorBase = "" // don't mirror from dev cluster
 	}
-	addWatcher(watchConfig{repo: "https://go.googlesource.com/go", dash: dashBase(), mirrorBase: mirrorBase})
+	addWatcher(watchConfig{
+		repo:       "https://go.googlesource.com/go",
+		dash:       dashBase(),
+		mirrorBase: mirrorBase,
+		netHost:    true,
+		httpAddr:   gitArchiveAddr,
+	})
 	addWatcher(watchConfig{repo: "https://go.googlesource.com/gofrontend", dash: dashBase() + "gccgo/"})
 
 	go cleanUpOldContainers()
@@ -94,12 +104,16 @@ func (conf watchConfig) dockerRunArgs() (args []string) {
 		args = append(args, "-v", tmpKey+":/.gobuildkey")
 		args = append(args, "-v", tmpKey+":/root/.gobuildkey")
 	}
+	if conf.netHost {
+		args = append(args, "--net=host")
+	}
 	args = append(args,
 		"go-commit-watcher",
 		"/usr/local/bin/watcher",
 		"-repo="+conf.repo,
 		"-dash="+conf.dash,
 		"-poll="+conf.interval.String(),
+		"-http="+conf.httpAddr,
 	)
 	if conf.mirrorBase != "" {
 		dst, err := url.Parse(conf.mirrorBase)
@@ -191,8 +205,13 @@ func startWatching(conf watchConfig) (err error) {
 	// Start a goroutine to wait for the watcher to die.
 	go func() {
 		exec.Command("docker", "wait", container).Run()
+		out, _ := exec.Command("docker", "logs", container).CombinedOutput()
 		exec.Command("docker", "rm", "-v", container).Run()
-		log.Printf("Watcher %v crashed. Restarting soon.", conf.repo)
+		const maxLogBytes = 1 << 10
+		if len(out) > maxLogBytes {
+			out = out[len(out)-maxLogBytes:]
+		}
+		log.Printf("Watcher %v crashed. Restarting soon. Logs: %s", conf.repo, out)
 		restartWatcherSoon(conf)
 	}()
 	return nil

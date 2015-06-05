@@ -16,6 +16,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -24,6 +25,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +46,7 @@ var (
 	network      = flag.Bool("network", true, "Enable network calls (disable for testing)")
 	mirrorBase   = flag.String("mirror", "", `Mirror repository base URL (eg "https://github.com/golang/")`)
 	filter       = flag.String("filter", "", "Comma-separated list of directories or files to watch for new commits (only works on main repo)")
+	httpAddr     = flag.String("http", "", "If non-empty, the listen address to run an HTTP server on")
 )
 
 var (
@@ -80,6 +83,14 @@ func run() error {
 	}
 	defer os.RemoveAll(dir)
 
+	if *httpAddr != "" {
+		ln, err := net.Listen("tcp", *httpAddr)
+		if err != nil {
+			return err
+		}
+		go http.Serve(ln, nil)
+	}
+
 	errc := make(chan error)
 
 	go func() {
@@ -88,11 +99,13 @@ func run() error {
 			name := (*repoURL)[strings.LastIndex(*repoURL, "/")+1:]
 			dst = *mirrorBase + name
 		}
+		name := strings.TrimPrefix(*repoURL, goBase)
 		r, err := NewRepo(dir, *repoURL, dst, "")
 		if err != nil {
 			errc <- err
 			return
 		}
+		http.Handle("/"+name+".tar.gz", r)
 		errc <- r.Watch()
 	}()
 
@@ -113,6 +126,7 @@ func run() error {
 				errc <- err
 				return
 			}
+			http.Handle("/"+name+".tar.gz", r)
 			errc <- r.Watch()
 		}(path)
 	}
@@ -276,6 +290,9 @@ func (r *Repo) postChildren(b *Branch, parent *Commit) error {
 			continue
 		}
 		if err := r.postCommit(c); err != nil {
+			if strings.Contains(err.Error(), "this package already has a first commit; aborting") {
+				return nil
+			}
 			return err
 		}
 	}
@@ -651,6 +668,28 @@ func (r *Repo) push() error {
 		}
 		return nil
 	})
+}
+
+func (r *Repo) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if req.Method != "GET" && req.Method != "HEAD" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	rev := req.FormValue("rev")
+	if rev == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	cmd := exec.Command("git", "archive", "--format=tgz", rev)
+	cmd.Dir = r.root
+	tgz, err := cmd.Output()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Length", strconv.Itoa(len(tgz)))
+	w.Header().Set("Content-Type", "application/x-compressed")
+	w.Write(tgz)
 }
 
 func try(n int, fn func() error) error {

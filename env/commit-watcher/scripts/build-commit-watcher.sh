@@ -20,6 +20,11 @@ GO_BUILD=$GOPATH/src/golang.org/x/build
 mkdir -p $GO_BUILD
 git clone https://go.googlesource.com/build $GO_BUILD
 
+# Um, this didn't seem to work? Old git version in wheezy?
+#git fetch https://go.googlesource.com/build $WATCHER_REV:origin/dummy-commit # in case it's a pending CL
+# Hack, instead:
+cd $GO_BUILD && git fetch https://go.googlesource.com/build refs/changes/50/10750/5
+
 mkdir -p $PREFIX/bin
 (cd $GO_BUILD && git reset --hard $WATCHER_REV && GOBIN=$PREFIX/bin /goroot/bin/go install golang.org/x/build/cmd/watcher)
 

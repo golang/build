@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -62,6 +63,12 @@ type VMOpts struct {
 	// OnInstanceCreated optionally specifies a hook to run synchronously
 	// after the computeService.Instances.Get call.
 	OnGotInstanceInfo func()
+
+	// FallbackToFullPrice optionally specifies a hook to return a new
+	// GCE instance name if the first one failed to launch
+	// as preemptible. (If you use the same name, GCE complains about
+	// resources already existing, even if it failed to be created)
+	FallbackToFullPrice func() (newInstname string)
 }
 
 // StartNewVM boots a new VM on GCE and returns a buildlet client
@@ -85,13 +92,26 @@ func StartNewVM(ts oauth2.TokenSource, instName, builderType string, opts VMOpts
 		return nil, errors.New("buildlet: missing required ProjectID option")
 	}
 
-	usePreempt := true
+	usePreempt := false
 Try:
 	prefix := "https://www.googleapis.com/compute/v1/projects/" + projectID
 	machType := prefix + "/zones/" + zone + "/machineTypes/" + conf.MachineType()
 	diskType := "https://www.googleapis.com/compute/v1/projects/" + projectID + "/zones/" + zone + "/diskTypes/pd-ssd"
 	if conf.RegularDisk {
 		diskType = "" // a spinning disk
+	}
+
+	// Request an IP address if this is a world-facing buildlet.
+	var accessConfigs []*compute.AccessConfig
+	// TODO(bradfitz): remove the "true ||" part once we figure out why the buildlet
+	// never boots without an IP address. Userspace seems to hang before we get to the buildlet?
+	if true || !opts.TLS.IsZero() {
+		accessConfigs = []*compute.AccessConfig{
+			&compute.AccessConfig{
+				Type: "ONE_TO_ONE_NAT",
+				Name: "External NAT",
+			},
+		}
 	}
 
 	instance := &compute.Instance{
@@ -120,13 +140,8 @@ Try:
 		Metadata: &compute.Metadata{},
 		NetworkInterfaces: []*compute.NetworkInterface{
 			&compute.NetworkInterface{
-				AccessConfigs: []*compute.AccessConfig{
-					&compute.AccessConfig{
-						Type: "ONE_TO_ONE_NAT",
-						Name: "External NAT",
-					},
-				},
-				Network: prefix + "/global/networks/default",
+				AccessConfigs: accessConfigs,
+				Network:       prefix + "/global/networks/default",
 			},
 		},
 		Scheduling: &compute.Scheduling{
@@ -188,8 +203,12 @@ OpLoop:
 		case "DONE":
 			if op.Error != nil {
 				for _, operr := range op.Error.Errors {
-					if operr.Code == "ZONE_RESOURCE_POOL_EXHAUSTED" && usePreempt {
+					log.Printf("failed to create instance %s in zone %s: %v", instName, zone, operr.Code)
+					if operr.Code == "ZONE_RESOURCE_POOL_EXHAUSTED" && usePreempt && opts.FallbackToFullPrice != nil {
+						oldName := instName
 						usePreempt = false
+						instName = opts.FallbackToFullPrice()
+						log.Printf("buildlet/gce: retrying without preempt with name %q (previously: %q)", instName, oldName)
 						goto Try
 					}
 					// TODO: catch Code=="QUOTA_EXCEEDED" and "Message" and return

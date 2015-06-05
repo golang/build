@@ -22,7 +22,7 @@ import (
 
 var (
 	proj        = flag.String("project", "symbolic-datum-552", "name of Project")
-	zone        = flag.String("zone", "us-central1-a", "GCE zone")
+	zone        = flag.String("zone", "us-central1-b", "GCE zone")
 	mach        = flag.String("machinetype", "n1-highcpu-2", "Machine type")
 	instName    = flag.String("instance_name", "farmer", "Name of VM instance.")
 	sshPub      = flag.String("ssh_public_key", "", "ssh public key file to authorize. Can modify later in Google's web UI anyway.")

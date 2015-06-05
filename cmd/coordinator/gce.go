@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
@@ -39,7 +40,7 @@ func init() {
 // apiCallTicker ticks regularly, preventing us from accidentally making
 // GCE API calls too quickly. Our quota is 20 QPS, but we temporarily
 // limit ourselves to less than that.
-var apiCallTicker = time.NewTicker(time.Second / 5)
+var apiCallTicker = time.NewTicker(time.Second / 10)
 
 func gceAPIGate() {
 	<-apiCallTicker.C
@@ -49,6 +50,7 @@ func gceAPIGate() {
 var (
 	projectID      string
 	projectZone    string
+	projectRegion  string
 	computeService *compute.Service
 	externalIP     string
 	tokenSource    oauth2.TokenSource
@@ -88,12 +90,15 @@ func initGCE() error {
 	if err != nil || projectZone == "" {
 		return fmt.Errorf("failed to get current GCE zone: %v", err)
 	}
+
 	// Convert the zone from "projects/1234/zones/us-central1-a" to "us-central1-a".
 	projectZone = path.Base(projectZone)
 	if !hasComputeScope() {
 		return errors.New("The coordinator is not running with access to read and write Compute resources. VM support disabled.")
 
 	}
+	projectRegion = projectZone[:strings.LastIndex(projectZone, "-")] // "us-central1"
+
 	externalIP, err = metadata.ExternalIP()
 	if err != nil {
 		return fmt.Errorf("ExternalIP: %v", err)
@@ -109,9 +114,8 @@ func initGCE() error {
 	devCluster = projectID == "go-dashboard-dev"
 	if devCluster {
 		log.Printf("Running in dev cluster")
-		gcePool.vmCap = make(chan bool, 5)
 	}
-
+	go gcePool.pollQuotaLoop()
 	return nil
 }
 
@@ -134,38 +138,72 @@ func checkTryBuildDeps() error {
 	return nil
 }
 
-// We artifically limit ourselves to 60 VMs right now, assuming that
-// each takes 2 CPU, and we have a current quota of 200 CPUs. That
-// gives us headroom, but also doesn't account for SSD or memory
-// quota.
-// TODO(bradfitz): better quota system.
-const maxVMs = 60
+var gcePool = &gceBuildletPool{}
 
-var gcePool = &gceBuildletPool{
-	vmCap: make(chan bool, maxVMs),
-}
 var _ BuildletPool = (*gceBuildletPool)(nil)
 
-type gceBuildletPool struct {
-	// vmCap is a semaphore used to limit the number of VMs in
-	// use.
-	vmCap chan bool
+// maxInstances is a temporary hack because we can't get buildlets to boot
+// without IPs, and we only have 200 IP addresses.
+// TODO(bradfitz): remove this once fixed.
+const maxInstances = 190
 
-	mu       sync.Mutex
-	instUsed map[string]time.Time // GCE VM instance name -> creationTime
+type gceBuildletPool struct {
+	mu sync.Mutex // guards all following
+
+	disabled bool
+
+	// CPU quota usage & limits.
+	cpuLeft   int // dead-reckoning CPUs remain
+	instLeft  int // dead-reckoning instances remain
+	instUsage int
+	cpuUsage  int
+	addrUsage int
+	inst      map[string]time.Time // GCE VM instance name -> creationTime
+}
+
+func (p *gceBuildletPool) pollQuotaLoop() {
+	for {
+		p.pollQuota()
+		time.Sleep(5 * time.Second)
+	}
+}
+
+func (p *gceBuildletPool) pollQuota() {
+	gceAPIGate()
+	reg, err := computeService.Regions.Get(projectID, projectRegion).Do()
+	if err != nil {
+		log.Printf("Failed to get quota for %s/%s: %v", projectID, projectRegion, err)
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, quota := range reg.Quotas {
+		switch quota.Metric {
+		case "CPUS":
+			p.cpuLeft = int(quota.Limit) - int(quota.Usage)
+			p.cpuUsage = int(quota.Usage)
+		case "INSTANCES":
+			p.instLeft = int(quota.Limit) - int(quota.Usage)
+			p.instUsage = int(quota.Usage)
+		case "IN_USE_ADDRESSES":
+			p.addrUsage = int(quota.Usage)
+		}
+	}
 }
 
 func (p *gceBuildletPool) SetEnabled(enabled bool) {
-	if enabled {
-		p.vmCap = make(chan bool, maxVMs)
-	} else {
-		p.vmCap = make(chan bool)
-	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.disabled = !enabled
 }
 
 func (p *gceBuildletPool) GetBuildlet(cancel Cancel, typ, rev string, el eventTimeLogger) (*buildlet.Client, error) {
 	el.logEventTime("awaiting_gce_quota")
-	if err := p.awaitVMCountQuota(cancel); err != nil {
+	conf, ok := dashboard.Builders[typ]
+	if !ok {
+		return nil, fmt.Errorf("gcepool: unknown buildlet type %q", typ)
+	}
+	if err := p.awaitVMCountQuota(cancel, conf.GCENumCPU()); err != nil {
 		return nil, err
 	}
 
@@ -184,9 +222,17 @@ func (p *gceBuildletPool) GetBuildlet(cancel Cancel, typ, rev string, el eventTi
 		Description: fmt.Sprintf("Go Builder for %s at %s", typ, rev),
 		DeleteIn:    vmDeleteTimeout,
 		OnInstanceRequested: func() {
-			needDelete = true
-			el.logEventTime("instance_create_requested")
+			el.logEventTime("instance_create_requested", instName)
 			log.Printf("GCE VM %q now booting", instName)
+		},
+		FallbackToFullPrice: func() string {
+			el.logEventTime("gce_fallback_to_full_price", "for "+instName)
+			p.setInstanceUsed(instName, false)
+			newName := instName + "-f"
+			log.Printf("Gave up on preemptible %q; now booting %q", instName, newName)
+			instName = newName
+			p.setInstanceUsed(instName, true)
+			return newName
 		},
 		OnInstanceCreated: func() {
 			el.logEventTime("instance_created")
@@ -197,26 +243,39 @@ func (p *gceBuildletPool) GetBuildlet(cancel Cancel, typ, rev string, el eventTi
 		},
 	})
 	if err != nil {
+		el.logEventTime("gce_buildlet_create_failure", fmt.Sprintf("%s: %v", instName, err))
 		log.Printf("Failed to create VM for %s, %s: %v", typ, rev, err)
 		if needDelete {
 			deleteVM(projectZone, instName)
+			p.putVMCountQuota(conf.GCENumCPU())
 		}
 		p.setInstanceUsed(instName, false)
-		p.putVMCountQuota()
 		return nil, err
 	}
 	bc.SetDescription("GCE VM: " + instName)
-	bc.SetCloseFunc(func() error {
-		deleteVM(projectZone, instName)
-		p.setInstanceUsed(instName, false)
-		p.putVMCountQuota()
-		return nil
-	})
+	bc.SetCloseFunc(func() error { return p.putBuildlet(bc, typ, instName) })
 	return bc, nil
 }
 
+func (p *gceBuildletPool) putBuildlet(bc *buildlet.Client, typ, instName string) error {
+	// TODO(bradfitz): add the buildlet to a freelist (of max N
+	// items) for up to 10 minutes since when it got started if
+	// it's never seen a command execution failure, and we can
+	// wipe all its disk content. (perhaps wipe its disk content when
+	// it's retrieved, not put back on the freelist)
+	deleteVM(projectZone, instName)
+	p.setInstanceUsed(instName, false)
+
+	conf, ok := dashboard.Builders[typ]
+	if !ok {
+		panic("failed to lookup conf") // should've worked if we did it before
+	}
+	p.putVMCountQuota(conf.GCENumCPU())
+	return nil
+}
+
 func (p *gceBuildletPool) WriteHTMLStatus(w io.Writer) {
-	fmt.Fprintf(w, "<b>GCE pool</b> capacity: %d/%d", len(p.vmCap), cap(p.vmCap))
+	fmt.Fprintf(w, "<b>GCE pool</b> capacity: %s", p.capacityString())
 	const show = 6 // must be even
 	active := p.instancesActive()
 	if len(active) > 0 {
@@ -233,44 +292,84 @@ func (p *gceBuildletPool) WriteHTMLStatus(w io.Writer) {
 }
 
 func (p *gceBuildletPool) String() string {
-	return fmt.Sprintf("GCE pool capacity: %d/%d", len(p.vmCap), cap(p.vmCap))
+	return fmt.Sprintf("GCE pool capacity: %s", p.capacityString())
 }
 
-// awaitVMCountQuota waits for quota.
-func (p *gceBuildletPool) awaitVMCountQuota(cancel Cancel) error {
-	select {
-	case p.vmCap <- true:
-		return nil
-	case <-cancel:
-		return ErrCanceled
+func (p *gceBuildletPool) capacityString() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return fmt.Sprintf("%d/%d instances; %d/%d CPUs",
+		len(p.inst), p.instUsage+p.instLeft,
+		p.cpuUsage, p.cpuUsage+p.cpuLeft)
+}
+
+// awaitVMCountQuota waits for numCPU CPUs of quota to become available,
+// or returns ErrCanceled.
+func (p *gceBuildletPool) awaitVMCountQuota(cancel Cancel, numCPU int) error {
+	// Poll every 2 seconds, which could be better, but works and
+	// is simple.
+	for {
+		if p.tryAllocateQuota(numCPU) {
+			return nil
+		}
+		select {
+		case <-time.After(2 * time.Second):
+		case <-cancel:
+			return ErrCanceled
+		}
 	}
 }
-func (p *gceBuildletPool) putVMCountQuota() { <-p.vmCap }
+
+func (p *gceBuildletPool) tryAllocateQuota(numCPU int) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.disabled {
+		return false
+	}
+	if p.cpuLeft >= numCPU && p.instLeft >= 1 && len(p.inst) < maxInstances && p.addrUsage < maxInstances {
+		p.cpuUsage += numCPU
+		p.cpuLeft -= numCPU
+		p.instLeft--
+		p.addrUsage++
+		return true
+	}
+	return false
+}
+
+// putVMCountQuota adjusts the dead-reckoning of our quota usage by
+// one instance and cpu CPUs.
+func (p *gceBuildletPool) putVMCountQuota(cpu int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cpuUsage -= cpu
+	p.cpuLeft += cpu
+	p.instLeft++
+}
 
 func (p *gceBuildletPool) setInstanceUsed(instName string, used bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.instUsed == nil {
-		p.instUsed = make(map[string]time.Time)
+	if p.inst == nil {
+		p.inst = make(map[string]time.Time)
 	}
 	if used {
-		p.instUsed[instName] = time.Now()
+		p.inst[instName] = time.Now()
 	} else {
-		delete(p.instUsed, instName)
+		delete(p.inst, instName)
 	}
 }
 
 func (p *gceBuildletPool) instanceUsed(instName string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	_, ok := p.instUsed[instName]
+	_, ok := p.inst[instName]
 	return ok
 }
 
 func (p *gceBuildletPool) instancesActive() (ret []instanceTime) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	for name, create := range p.instUsed {
+	for name, create := range p.inst {
 		ret = append(ret, instanceTime{
 			name:     name,
 			creation: create,

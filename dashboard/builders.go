@@ -6,7 +6,10 @@
 // pieces of the Go continuous build system.
 package dashboard
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // Builders are the different build configurations.
 // The keys are like "darwin-amd64" or "linux-386-387".
@@ -38,16 +41,18 @@ type BuildConfig struct {
 	// request from the buildlet pool. If empty, it defaults to
 	// the value of Name.
 	//
-	// Note: we should probably start using this mechanism for
-	// more builder types, which combined with buildlet reuse
-	// could reduce latency. (e.g. "linux-386-387", "linux-amd64",
-	// and "linux-amd64-race" all sharing same buildlet and
-	// machine type, and able to jump onto each others
-	// buidlets... they vary only in env/args). For now we're
-	// only using this for ARM trybots.
+	// These should be used to minimize builder types, so the buildlet pool
+	// implementations can reuse buildlets from similar-enough builds.
+	// (e.g. a shared linux-386 trybot can be reused for some linux-amd64
+	// or linux-amd64-race tests, etc)
+	//
+	// TODO(bradfitz): break BuildConfig up into BuildConfig and
+	// BuildletConfig and have a BuildConfig refer to a
+	// BuildletConfig. There's no much confusion now.
 	BuildletType string
 
-	env []string // extra environment ("key=value") pairs
+	env           []string // extra environment ("key=value") pairs
+	allScriptArgs []string
 }
 
 func (c *BuildConfig) Env() []string { return append([]string(nil), c.env...) }
@@ -123,7 +128,7 @@ func (c *BuildConfig) AllScript() string {
 	if strings.HasPrefix(c.Name, "darwin-arm") {
 		return "src/iostest.bash"
 	}
-	if c.Name == "all-compile" {
+	if c.Name == "misc-compile" {
 		return "src/buildall.bash"
 	}
 	return "src/all.bash"
@@ -136,6 +141,19 @@ func (c *BuildConfig) AllScript() string {
 // but for now we've only set up the scripts and verified that the main
 // configurations work.
 func (c *BuildConfig) SplitMakeRun() bool {
+	if strings.HasPrefix(c.Name, "linux-arm") {
+		// On Scaleway, we don't want to snapshot these to GCS
+		// yet.  That might be a lot of bandwidth and we
+		// haven't measure their speed yet. We might want to
+		// store snapshots within Scaleway instead.  For now:
+		// use the old way.
+		return false
+	}
+	if strings.HasPrefix(c.Name, "darwin-") {
+		// TODO(bradfitz,crawshaw,adg): this is failing for some reason:
+		// Error: runTests: distTestList: Remote error: fork/exec /var/folders/5h/sqs3zkxd12zclcslj67vccqh0000gp/T/buildlet-scatch190808745/go/bin/go: no such file or directory
+		return false
+	}
 	switch c.AllScript() {
 	case "src/all.bash", "src/all.bat", "src/all.rc":
 		// These we've verified to work.
@@ -151,7 +169,7 @@ func (c *BuildConfig) AllScriptArgs() []string {
 	if strings.HasPrefix(c.Name, "darwin-arm") {
 		return []string{"-restart"}
 	}
-	return nil
+	return append([]string(nil), c.allScriptArgs...)
 }
 
 // MakeScript returns the relative path to the operating system's script to
@@ -217,6 +235,13 @@ func (c BuildConfig) ShortOwner() string {
 	return strings.TrimSuffix(c.Owner, "@golang.org")
 }
 
+// GCENumCPU reports the number of GCE CPUs this buildlet requires.
+func (c *BuildConfig) GCENumCPU() int {
+	t := c.MachineType()
+	n, _ := strconv.Atoi(t[strings.LastIndex(t, "-")+1:])
+	return n
+}
+
 func init() {
 	addBuilder(BuildConfig{
 		Name:           "freebsd-amd64-gce93",
@@ -242,8 +267,9 @@ func init() {
 		env:         []string{"CC=clang"},
 	})
 	addBuilder(BuildConfig{
-		Name:        "freebsd-386-gce101",
-		VMImage:     "freebsd-amd64-gce101",
+		Name:    "freebsd-386-gce101",
+		VMImage: "freebsd-amd64-gce101",
+		//BuildletType: "freebsd-amd64-gce101",
 		machineType: "n1-highcpu-2",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.freebsd-amd64",
 		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-freebsd-amd64.tar.gz",
@@ -256,16 +282,18 @@ func init() {
 		env: []string{"GOARCH=386", "CC=clang"},
 	})
 	addBuilder(BuildConfig{
-		Name:           "linux-386",
-		VMImage:        "linux-buildlet-std",
+		Name:    "linux-386",
+		VMImage: "linux-buildlet-std",
+		//BuildletType:   "linux-amd64",
 		buildletURL:    "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
 		env:            []string{"GOROOT_BOOTSTRAP=/go1.4", "GOARCH=386", "GOHOSTARCH=386"},
 		NumTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
-		Name:        "linux-386-387",
-		Notes:       "GO386=387",
-		VMImage:     "linux-buildlet-std",
+		Name:    "linux-386-387",
+		Notes:   "GO386=387",
+		VMImage: "linux-buildlet-std",
+		//BuildletType: "linux-amd64",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOARCH=386", "GOHOSTARCH=386", "GO386=387"},
 	})
@@ -276,13 +304,18 @@ func init() {
 		NumTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
-		Name:        "all-compile",
-		TryOnly:     true, // TODO: for speed, restrict this to builds not covered by other trybots
+		Name:        "misc-compile",
+		TryOnly:     true,
 		VMImage:     "linux-buildlet-std",
 		machineType: "n1-highcpu-16", // CPU-bound, uses it well.
-		Notes:       "Runs buildall.sh to compile stdlib for all GOOS/GOARCH, but doesn't run any tests.",
+		Notes:       "Runs buildall.sh to compile stdlib for GOOS/GOARCH pairs not otherwise covered by trybots, but doesn't run any tests.",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		allScriptArgs: []string{
+			// Filtering pattern to buildall.bash:
+			// TODO: add darwin-386 and
+			"^(linux-arm64|linux-ppc64|linux-ppc64le|nacl-arm|plan9-amd64|solaris-amd64|netbsd-386|netbsd-amd64|netbsd-arm|freebsd-arm|darwin-386)$",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:    "linux-amd64-nocgo",
@@ -301,7 +334,8 @@ func init() {
 		Name:    "linux-amd64-noopt",
 		Notes:   "optimizations and inlining disabled",
 		VMImage: "linux-buildlet-std",
-		env:     []string{"GOROOT_BOOTSTRAP=/go1.4", "GO_GCFLAGS=-N -l"},
+		//BuildletType: "linux-amd64",
+		env: []string{"GOROOT_BOOTSTRAP=/go1.4", "GO_GCFLAGS=-N -l"},
 	})
 	addBuilder(BuildConfig{
 		Name:        "linux-amd64-race",
@@ -311,8 +345,9 @@ func init() {
 		// TODO(bradfitz): make race.bash shardable, then: NumTestHelpers: 3
 	})
 	addBuilder(BuildConfig{
-		Name:        "linux-386-clang",
-		VMImage:     "linux-buildlet-clang",
+		Name:    "linux-386-clang",
+		VMImage: "linux-buildlet-clang",
+		//BuildletType: "linux-amd64-clang",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "CC=/usr/bin/clang", "GOHOSTARCH=386"},
 	})
@@ -420,6 +455,7 @@ func init() {
 		VMImage:     "linux-buildlet-nacl-v2",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
+		//BuildletType: "nacl-amd64p32",
 	})
 	addBuilder(BuildConfig{
 		Name:        "nacl-amd64p32",
@@ -494,9 +530,10 @@ func init() {
 		env:         []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
-		Name:           "windows-386-gce",
-		VMImage:        "windows-buildlet-v2",
-		machineType:    "n1-highcpu-2",
+		Name:        "windows-386-gce",
+		VMImage:     "windows-buildlet-v2",
+		machineType: "n1-highcpu-2",
+		// TODO(bradfitz): once buildlet type vs. config type is split: BuildletType:   "windows-amd64-gce",
 		buildletURL:    "http://storage.googleapis.com/go-builder-data/buildlet.windows-amd64",
 		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-windows-386.tar.gz",
 		RegularDisk:    true,
