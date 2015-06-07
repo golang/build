@@ -675,6 +675,20 @@ func defaultBuildRoot() string {
 // On windows, if remove fails (which can happen if test/benchmark timeouts
 // and keeps some files open) it tries to rename the dir.
 func removePath(path string) error {
+	// Windows will not remove files that are marked read-only.
+	// Git has several files which are marked read-only
+	// that prevent the path from being removed.
+	if runtime.GOOS == "windows" {
+		filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
+			if info.IsDir() {
+				return nil
+			}
+			if info.Mode() == 0444 {
+				os.Chmod(path, 0666)
+			}
+			return nil
+		})
+	}
 	if err := os.RemoveAll(path); err != nil {
 		if runtime.GOOS == "windows" {
 			err = os.Rename(path, filepath.Clean(path)+"_remove_me")
