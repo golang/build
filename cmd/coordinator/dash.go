@@ -141,7 +141,7 @@ func (st *buildStatus) pingDashboard() {
 		"builder": []string{st.name},
 		"key":     []string{builderKey(st.name)},
 		"hash":    []string{st.rev},
-		"url":     []string{fmt.Sprintf("http://farmer.golang.org/logs?name=%s&rev=%s&st=%p", st.name, st.rev, st)},
+		"url":     []string{fmt.Sprintf("http://farmer.golang.org/temporarylogs?name=%s&rev=%s&st=%p", st.name, st.rev, st)},
 	}.Encode()
 	for {
 		st.mu.Lock()
