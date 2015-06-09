@@ -9,7 +9,6 @@ package build
 import (
 	"bytes"
 	"compress/gzip"
-	"crypto/sha1"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +23,8 @@ import (
 	"appengine/datastore"
 
 	"cache"
+
+	"golang.org/x/build/internal/loghash"
 )
 
 const (
@@ -863,13 +864,11 @@ func (l *Log) Text() ([]byte, error) {
 }
 
 func PutLog(c appengine.Context, text string) (hash string, err error) {
-	h := sha1.New()
-	io.WriteString(h, text)
 	b := new(bytes.Buffer)
 	z, _ := gzip.NewWriterLevel(b, gzip.BestCompression)
 	io.WriteString(z, text)
 	z.Close()
-	hash = fmt.Sprintf("%x", h.Sum(nil))
+	hash = loghash.New(text)
 	key := datastore.NewKey(c, "Log", hash, 0, nil)
 	_, err = datastore.Put(c, key, &Log{b.Bytes()})
 	return
