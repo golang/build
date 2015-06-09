@@ -114,6 +114,37 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	return c.httpClient.Do(req)
 }
 
+var errHeaderTimeout = errors.New("timeout waiting for headers")
+
+// doHeaderTimeout calls c.do(req) and returns its results, or
+// errHeaderTimeout if max elapses first.
+func (c *Client) doHeaderTimeout(req *http.Request, max time.Duration) (res *http.Response, err error) {
+	type resErr struct {
+		res *http.Response
+		err error
+	}
+	resErrc := make(chan resErr, 1)
+	go func() {
+		res, err := c.do(req)
+		resErrc <- resErr{res, err}
+	}()
+
+	timer := time.NewTimer(max)
+	defer timer.Stop()
+
+	select {
+	case re := <-resErrc:
+		return re.res, re.err
+	case <-timer.C:
+		go func() {
+			if re := <-resErrc; re.res != nil {
+				res.Body.Close()
+			}
+		}()
+		return nil, errHeaderTimeout
+	}
+}
+
 // doOK sends the request and expects a 200 OK response.
 func (c *Client) doOK(req *http.Request) error {
 	res, err := c.do(req)
@@ -264,7 +295,14 @@ func (c *Client) Exec(cmd string, opts ExecOpts) (remoteErr, execErr error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	res, err := c.do(req)
+
+	// The first thing the buildlet's exec handler does is flush the headers, so
+	// 5 seconds should be plenty of time, regardless of where on the planet
+	// (Atlanta, Paris, etc) the reverse buildlet is:
+	res, err := c.doHeaderTimeout(req, 5*time.Second)
+	if err == errHeaderTimeout {
+		return nil, errors.New("buildlet: timeout waiting for exec header response")
+	}
 	if err != nil {
 		return nil, err
 	}
