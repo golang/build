@@ -281,7 +281,7 @@ func main() {
 	http.HandleFunc("/", handleStatus)
 	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
 	http.HandleFunc("/builders", handleBuilders)
-	http.HandleFunc("/logs", handleLogs)
+	http.HandleFunc("/temporarylogs", handleLogs)
 	http.HandleFunc("/reverse", handleReverse)
 	http.HandleFunc("/style.css", handleStyleCSS)
 	http.HandleFunc("/try", handleTryStatus)
@@ -897,6 +897,10 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 			return
 		}
 		failLogURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", buildLogBucket(), objName)
+
+		bs.mu.Lock()
+		bs.failURL = failLogURL
+		bs.mu.Unlock()
 		ts.mu.Lock()
 		fmt.Fprintf(&ts.errMsg, "Failed on %s: %s\n", bs.name, failLogURL)
 		ts.mu.Unlock()
@@ -1977,6 +1981,7 @@ type buildStatus struct {
 	helpers         <-chan *buildlet.Client
 
 	mu        sync.Mutex       // guards following
+	failURL   string           // if non-empty, permanent URL of failure
 	bc        *buildlet.Client // nil initially, until pool returns one
 	done      time.Time        // finished running
 	succeeded bool             // set when done
@@ -2061,7 +2066,7 @@ func (st *buildStatus) HTMLStatusLine() template.HTML {
 		buf.WriteString(", failed")
 	}
 
-	fmt.Fprintf(&buf, "; <a href='%s'>build log</a>; %s", st.logsURL(), html.EscapeString(st.bc.String()))
+	fmt.Fprintf(&buf, "; <a href='%s'>build log</a>; %s", st.logsURLLocked(), html.EscapeString(st.bc.String()))
 
 	t := st.done
 	if t.IsZero() {
@@ -2072,8 +2077,11 @@ func (st *buildStatus) HTMLStatusLine() template.HTML {
 	return template.HTML(buf.String())
 }
 
-func (st *buildStatus) logsURL() string {
-	return fmt.Sprintf("/logs?name=%s&rev=%s&st=%p", st.name, st.rev, st)
+func (st *buildStatus) logsURLLocked() string {
+	if u := st.failURL; u != "" {
+		return u
+	}
+	return fmt.Sprintf("/temporarylogs?name=%s&rev=%s&st=%p", st.name, st.rev, st)
 }
 
 // st.mu must be held.
@@ -2089,7 +2097,7 @@ func (st *buildStatus) writeEventsLocked(w io.Writer, htmlMode bool) {
 		text := evt.text
 		if htmlMode {
 			if e == "running_exec" {
-				e = fmt.Sprintf("<a href='%s'>%s</a>", st.logsURL(), e)
+				e = fmt.Sprintf("<a href='%s'>%s</a>", st.logsURLLocked(), e)
 			}
 			e = "<b>" + e + "</b>"
 			text = "<i>" + html.EscapeString(text) + "</i>"
