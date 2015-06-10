@@ -419,6 +419,7 @@ func (td *uiTemplateData) populateBuildingURLs(ctx appengine.Context) {
 		for _, b := range td.Builders {
 			for _, pkg := range ts.Packages {
 				c := pkg.Commit
+				commit[c.Hash] = c
 				if c.Result(b, goHash) == nil {
 					need = append(need, buildingKey(c.Hash, goHash, b))
 				}
