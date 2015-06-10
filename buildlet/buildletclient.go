@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -88,6 +89,9 @@ type Client struct {
 
 	closeFunc func() error
 	desc      string
+
+	mu     sync.Mutex
+	broken bool // client is broken in some way
 }
 
 func (c *Client) String() string {
@@ -106,6 +110,20 @@ func (c *Client) URL() string {
 }
 
 func (c *Client) IPPort() string { return c.ipPort }
+
+// MarkBroken marks this client as broken in some way.
+func (c *Client) MarkBroken() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.broken = true
+}
+
+// IsBroken reports whether this client is broken in some way.
+func (c *Client) IsBroken() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.broken
+}
 
 func (c *Client) do(req *http.Request) (*http.Response, error) {
 	if c.password != "" {
@@ -301,6 +319,7 @@ func (c *Client) Exec(cmd string, opts ExecOpts) (remoteErr, execErr error) {
 	// (Atlanta, Paris, etc) the reverse buildlet is:
 	res, err := c.doHeaderTimeout(req, 5*time.Second)
 	if err == errHeaderTimeout {
+		c.MarkBroken()
 		return nil, errors.New("buildlet: timeout waiting for exec header response")
 	}
 	if err != nil {

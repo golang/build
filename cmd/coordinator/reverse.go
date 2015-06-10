@@ -51,7 +51,7 @@ var reversePool = &reverseBuildletPool{
 func init() {
 	go func() {
 		for {
-			time.Sleep(30 * time.Second)
+			time.Sleep(5 * time.Second)
 			reversePool.reverseHealthCheck()
 		}
 	}()
@@ -101,6 +101,21 @@ func (p *reverseBuildletPool) tryToGrab(machineType string) (*buildlet.Client, e
 		return nil, fmt.Errorf("no buildlets registered for machine type %q", machineType)
 	}
 	return nil, errInUse
+}
+
+// nukeBuildlet wipes out victim as a buildlet we'll ever return again,
+// and closes its TCP connection in hopes that it will fix itself
+// later.
+func (p *reverseBuildletPool) nukeBuildlet(victim *buildlet.Client) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i, rb := range p.buildlets {
+		if rb.client == victim {
+			defer rb.conn.Close()
+			p.buildlets = append(p.buildlets[:i], p.buildlets[i+1:]...)
+			return
+		}
+	}
 }
 
 // reverseHealthCheck requests the status page of each idle buildlet.
@@ -307,6 +322,7 @@ type reverseBuildlet struct {
 	// inUseAs signifies that the buildlet is in use as the named mode.
 	// guarded by mutex on reverseBuildletPool.
 	inUseAs string
+	// TODO: inUseTime time.Time + more HTML status
 }
 
 func handleReverse(w http.ResponseWriter, r *http.Request) {
