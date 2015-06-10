@@ -186,7 +186,9 @@
         {{range $.Builders}}
           <td class="result{{if (unsupported .)}} unsupported{{end}}">
             {{with $pkg.Commit.Result . $goHash}}
-              {{if .OK}}
+              {{if .BuildingURL}}
+                <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" border=0></a>
+              {{else if .OK}}
                 <span class="ok">ok</span>
               {{else}}
                 <a href="{{$.Dashboard.Prefix}}/log/{{.LogHash}}" class="fail">fail</a>
