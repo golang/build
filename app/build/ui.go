@@ -576,8 +576,8 @@ func shortDesc(desc string) string {
 
 // shortHash returns a short version of a hash.
 func shortHash(hash string) string {
-	if len(hash) > 12 {
-		hash = hash[:12]
+	if len(hash) > 7 {
+		hash = hash[:7]
 	}
 	return hash
 }

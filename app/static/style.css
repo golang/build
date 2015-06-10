@@ -169,7 +169,7 @@ table thead tr {
   width: 2em;
 }
  
-.build .col-hash, .build .col-result, .build .col-metric, .build .col-numresults {
+.build .col-desc, .build .col-result, .build .col-metric, .build .col-numresults {
   border-right: 1px solid #ccc;
 }
 
@@ -192,13 +192,16 @@ table thead tr {
 
 .build .desc, .build .time, .build .user {
   white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
  
 .build .desc {
-  text-align: left;
-  max-width: 470px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.build .user {
+  max-width: 50px;
 }
  
 .good   { text-decoration: none; color: #000000; border: 2px solid #00E700}

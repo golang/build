@@ -46,12 +46,12 @@
 
     <table class="build">
       <colgroup class="col-hash" {{if $.Package.Path}}span="2"{{end}}></colgroup>
-    {{range $.Builders | builderSpans}}
-      <colgroup class="col-result{{if .Unsupported}} unsupported{{end}}" span="{{.N}}"></colgroup>
-    {{end}}
       <colgroup class="col-user"></colgroup>
       <colgroup class="col-time"></colgroup>
       <colgroup class="col-desc"></colgroup>
+    {{range $.Builders | builderSpans}}
+      <colgroup class="col-result{{if .Unsupported}} unsupported{{end}}" span="{{.N}}"></colgroup>
+    {{end}}
       <tr>
         <!-- extra row to make alternating colors use dark for first result -->
       </tr>
@@ -61,12 +61,12 @@
     {{else}}
         <th>&nbsp;</th>
     {{end}}
+        <th></th>
+        <th></th>
+        <th></th>
     {{range $.Builders | builderSpans}}
         <th {{if .Unsupported}}class="unsupported"{{end}} colspan="{{.N}}">{{.OS}}</th>
     {{end}}
-        <th></th>
-        <th></th>
-        <th></th>
       </tr>
       <tr>
     {{if $.Package.Path}}
@@ -75,20 +75,26 @@
     {{else}}
         <th>&nbsp;</th>
     {{end}}
+        <th></th>
+        <th></th>
+        <th></th>
     {{range $.Builders}}
         <th class="result arch{{if (unsupported .)}} unsupported{{end}}" title="{{.}}">{{builderSubheading .}}</th>
     {{end}}
-        <th></th>
-        <th></th>
-        <th></th>
       </tr>
     {{range $c := $.Commits}}
       {{range $i, $h := $c.ResultGoHashes}}
         <tr class="commit">
         {{if $i}}
           <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
+          <td>&nbsp;</td>
         {{else}}
           <td class="hash"><a href="{{repoURL $.Dashboard.Name $c.Hash $.Package.Path}}">{{shortHash $c.Hash}}</a></td>
+          <td class="user" title="{{$c.User}}">{{shortUser $c.User}}</td>
+          <td class="time">{{$c.Time.Format "02 Jan 15:04"}}</td>
+          <td class="desc" title="{{$c.Desc}}">{{shortDesc $c.Desc}}</td>
         {{end}}
         {{if $h}} 
           <td class="hash"><a href="{{repoURL $.Dashboard.Name $h ""}}">{{shortHash $h}}</a></td>
@@ -108,15 +114,6 @@
               {{end}}
             </td>
           {{end}}
-        {{if $i}}
-          <td>&nbsp;</td>
-          <td>&nbsp;</td>
-          <td>&nbsp;</td>
-        {{else}}
-          <td class="user" title="{{$c.User}}">{{shortUser $c.User}}</td>
-          <td class="time">{{$c.Time.Format "Mon 02 Jan 15:04"}}</td>
-          <td class="desc" title="{{$c.Desc}}">{{shortDesc $c.Desc}}</td>
-        {{end}}
         </tr>
       {{end}}
     {{end}}
@@ -147,34 +144,34 @@
       <table class="build">
       <colgroup class="col-package"></colgroup>
       <colgroup class="col-hash"></colgroup>
-      {{range $.Builders | builderSpans}}
-        <colgroup class="col-result{{if .Unsupported}} unsupported{{end}}" span="{{.N}}"></colgroup>
-      {{end}}
       <colgroup class="col-user"></colgroup>
       <colgroup class="col-time"></colgroup>
       <colgroup class="col-desc"></colgroup>
+      {{range $.Builders | builderSpans}}
+        <colgroup class="col-result{{if .Unsupported}} unsupported{{end}}" span="{{.N}}"></colgroup>
+      {{end}}
       <tr>
         <!-- extra row to make alternating colors use dark for first result -->
       </tr>
       <tr>
         <th></th>
         <th></th>
+        <th></th>
+        <th></th>
+        <th></th>
         {{range $.Builders | builderSpans}}
           <th {{if .Unsupported}}class="unsupported"{{end}} colspan="{{.N}}">{{.OS}}</th>
         {{end}}
-        <th></th>
-        <th></th>
-        <th></th>
       </tr>
       <tr>
+        <th></th>
+        <th></th>
+        <th></th>
         <th></th>
         <th></th>
         {{range $.Builders}}
           <th class="result arch{{if (unsupported .)}} unsupported{{end}}" title="{{.}}">{{builderSubheading .}}</th>
         {{end}}
-        <th></th>
-        <th></th>
-        <th></th>
       </tr>
     {{range $pkg := .Packages}}
       <tr class="commit">
@@ -183,6 +180,11 @@
           {{$h := $pkg.Commit.Hash}}
           <a href="{{repoURL $.Dashboard.Name $h $pkg.Commit.PackagePath}}">{{shortHash $h}}</a>
         </td>
+        {{with $pkg.Commit}}
+          <td class="user" title="{{.User}}">{{shortUser .User}}</td>
+          <td class="time">{{.Time.Format "02 Jan 15:04"}}</td>
+          <td class="desc" title="{{.Desc}}">{{shortDesc .Desc}}</td>
+        {{end}}
         {{range $.Builders}}
           <td class="result{{if (unsupported .)}} unsupported{{end}}">
             {{with $pkg.Commit.Result . $goHash}}
@@ -197,11 +199,6 @@
               &nbsp;
             {{end}}
           </td>
-        {{end}}
-        {{with $pkg.Commit}}
-          <td class="user" title="{{.User}}">{{shortUser .User}}</td>
-          <td class="time">{{.Time.Format "Mon 02 Jan 15:04"}}</td>
-          <td class="desc" title="{{.Desc}}">{{shortDesc .Desc}}</td>
         {{end}}
       </tr>
     {{end}}
