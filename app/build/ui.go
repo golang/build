@@ -387,6 +387,12 @@ type uiTemplateData struct {
 	Branch     string
 }
 
+// buildingKey returns a memcache key that points to the log URL
+// of an inflight build for the given hash, goHash, and builder.
+func buildingKey(hash, goHash, builder string) string {
+	return fmt.Sprintf("building|%v|%v|%v", hash, goHash, builder)
+}
+
 // populateBuildingURLs populates each commit in Commits' buildingURLs map with the
 // URLs of builds which are currently in progress.
 func (td *uiTemplateData) populateBuildingURLs(ctx appengine.Context) {
@@ -397,18 +403,33 @@ func (td *uiTemplateData) populateBuildingURLs(ctx appengine.Context) {
 
 	commit := map[string]*Commit{} // commit hash -> Commit
 
-	// TODO(bradfitz): this only populates the main repo, not subpackages currently.
+	// Gather pending commits for main repo.
 	for _, b := range td.Builders {
 		for _, c := range td.Commits {
 			if c.Result(b, "") == nil {
 				commit[c.Hash] = c
-				need = append(need, "building|"+c.Hash+"||"+b)
+				need = append(need, buildingKey(c.Hash, "", b))
 			}
 		}
 	}
+
+	// Gather pending commits for sub-repos.
+	if ts := td.TipState; ts != nil {
+		goHash := ts.Tag.Hash
+		for _, b := range td.Builders {
+			for _, pkg := range ts.Packages {
+				c := pkg.Commit
+				if c.Result(b, goHash) == nil {
+					need = append(need, buildingKey(c.Hash, goHash, b))
+				}
+			}
+		}
+	}
+
 	if len(need) == 0 {
 		return
 	}
+
 	m, err := memcache.GetMulti(ctx, need)
 	if err != nil {
 		// oh well. this is a cute non-critical feature anyway.

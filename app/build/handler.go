@@ -530,7 +530,7 @@ func buildingHandler(r *http.Request) (interface{}, error) {
 		return nil, errBadMethod(r.Method)
 	}
 	c := contextForRequest(r)
-	key := fmt.Sprintf("building|%s|%s|%s", r.FormValue("hash"), r.FormValue("gohash"), r.FormValue("builder"))
+	key := buildingKey(r.FormValue("hash"), r.FormValue("gohash"), r.FormValue("builder"))
 	err := memcache.Set(c, &memcache.Item{
 		Key:        key,
 		Value:      []byte(r.FormValue("url")),
