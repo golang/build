@@ -32,9 +32,6 @@ func dashboardForRequest(r *http.Request) *Dashboard {
 	if strings.HasPrefix(r.URL.Path, gccgoDash.Prefix) {
 		return gccgoDash
 	}
-	if strings.HasPrefix(r.URL.Path, hgDash.Prefix) {
-		return hgDash
-	}
 	return goDash
 }
 
@@ -52,69 +49,7 @@ func (d *Dashboard) Context(c appengine.Context) appengine.Context {
 }
 
 // the currently known dashboards.
-var dashboards = []*Dashboard{goDash, hgDash, gccgoDash}
-
-// hgDash is the dashboard for the old Mercural Go repository.
-var hgDash = &Dashboard{
-	Name:      "Mercurial",
-	Namespace: "", // Used to be the default.
-	Prefix:    "/hg",
-	Packages:  hgPackages,
-}
-
-// hgPackages is a list of all of the packages
-// built by the old Mercurial Go repository.
-var hgPackages = []*Package{
-	{
-		Kind: "go",
-		Name: "Go",
-	},
-	{
-		Kind: "subrepo",
-		Name: "go.blog",
-		Path: "code.google.com/p/go.blog",
-	},
-	{
-		Kind: "subrepo",
-		Name: "go.codereview",
-		Path: "code.google.com/p/go.codereview",
-	},
-	{
-		Kind: "subrepo",
-		Name: "go.crypto",
-		Path: "code.google.com/p/go.crypto",
-	},
-	{
-		Kind: "subrepo",
-		Name: "go.exp",
-		Path: "code.google.com/p/go.exp",
-	},
-	{
-		Kind: "subrepo",
-		Name: "go.image",
-		Path: "code.google.com/p/go.image",
-	},
-	{
-		Kind: "subrepo",
-		Name: "go.net",
-		Path: "code.google.com/p/go.net",
-	},
-	{
-		Kind: "subrepo",
-		Name: "go.sys",
-		Path: "code.google.com/p/go.sys",
-	},
-	{
-		Kind: "subrepo",
-		Name: "go.talks",
-		Path: "code.google.com/p/go.talks",
-	},
-	{
-		Kind: "subrepo",
-		Name: "go.tools",
-		Path: "code.google.com/p/go.tools",
-	},
-}
+var dashboards = []*Dashboard{goDash, gccgoDash}
 
 // goDash is the dashboard for the main go repository.
 var goDash = &Dashboard{
