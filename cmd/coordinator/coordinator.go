@@ -1100,7 +1100,6 @@ func newBuild(rev builderRev) (*buildStatus, error) {
 // in either direction.
 func (st *buildStatus) start() {
 	setStatus(st.builderRev, st)
-	go st.pingDashboard()
 	go func() {
 		err := st.build()
 		if err != nil {
@@ -2228,6 +2227,7 @@ type buildStatus struct {
 	done            time.Time        // finished running
 	succeeded       bool             // set when done
 	output          bytes.Buffer     // stdout and stderr
+	startedPinging  bool             // started pinging the go dashboard
 	events          []eventAndTime
 	watcher         []*logWatcher
 	useSnapshotMemo *bool
@@ -2257,6 +2257,13 @@ func (st *buildStatus) logf(format string, args ...interface{}) {
 func (st *buildStatus) logEventTime(event string, optText ...string) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	switch event {
+	case "creating_gce_instance", "got_machine", "got_buildlet":
+		if !st.startedPinging {
+			st.startedPinging = true
+			go st.pingDashboard()
+		}
+	}
 	var text string
 	if len(optText) > 0 {
 		if len(optText) > 1 {
