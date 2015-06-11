@@ -167,8 +167,18 @@ func (c *BuildConfig) BuildSubrepos() bool {
 	if !c.SplitMakeRun() {
 		return false
 	}
-	// TODO(adg,bradfitz): expand this
-	return c.Name == "linux-amd64" || c.Name == "windows-amd64-gce"
+	// TODO(adg,bradfitz): expand this as required
+	switch c.Name {
+	case "darwin-amd64-10_10",
+		"freebsd-386-gce101", "freebsd-amd64-gce101",
+		"linux-386", "linux-amd64", "linux-amd64-nocgo",
+		"openbsd-386-gce56", "openbsd-amd64-gce56",
+		"plan9-386",
+		"windows-386-gce", "windows-amd64-gce":
+		return true
+	default:
+		return false
+	}
 }
 
 // AllScriptArgs returns the set of arguments that should be passed to the
