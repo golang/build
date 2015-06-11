@@ -1253,7 +1253,11 @@ func (st *buildStatus) build() error {
 
 	execStartTime := time.Now()
 	st.logEventTime("pre_exec")
-	fmt.Fprintf(st, "%s at %v\n\n", st.name, st.rev)
+	fmt.Fprintf(st, "%s at %v", st.name, st.rev)
+	if st.isSubrepo() {
+		fmt.Fprintf(st, " building %v at %v", st.subName, st.subRev)
+	}
+	fmt.Fprint(st, "\n\n")
 
 	var remoteErr error
 	if st.conf.SplitMakeRun() {
