@@ -1371,7 +1371,7 @@ func (st *buildStatus) runAllLegacy() (remoteErr, err error) {
 		Args:     st.conf.AllScriptArgs(),
 	})
 	if err != nil {
-		return err, nil
+		return nil, err
 	}
 	st.logEventTime("exec_done", fmt.Sprintf("%s in %v", allScript, time.Since(t0)))
 	if remoteErr != nil {
