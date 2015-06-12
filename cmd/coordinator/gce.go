@@ -23,6 +23,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/lru"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -252,6 +253,7 @@ func (p *gceBuildletPool) GetBuildlet(cancel Cancel, typ, rev string, el eventTi
 		p.setInstanceUsed(instName, false)
 		return nil, err
 	}
+	bc.EnableHeartbeats()
 	bc.SetDescription("GCE VM: " + instName)
 	bc.SetCloseFunc(func() error { return p.putBuildlet(bc, typ, instName) })
 	return bc, nil
@@ -461,18 +463,23 @@ func (p *gceBuildletPool) cleanZoneVMs(zone string) error {
 		// Gophers for interactive development & debugging
 		// (non-builder users); those are named "mote-*".
 		if sawDeleteAt && strings.HasPrefix(inst.Name, "buildlet-") && !p.instanceUsed(inst.Name) {
-			log.Printf("Deleting VM %q in zone %q from an earlier coordinator generation ...", inst.Name, zone)
-			deleteVM(zone, inst.Name)
+			if _, ok := deletedVMCache.Get(inst.Name); !ok {
+				log.Printf("Deleting VM %q in zone %q from an earlier coordinator generation ...", inst.Name, zone)
+				deleteVM(zone, inst.Name)
+			}
 		}
 	}
 	return nil
 }
+
+var deletedVMCache = lru.New(100) // keyed by instName
 
 // deleteVM starts a delete of an instance in a given zone.
 //
 // It either returns an operation name (if delete is pending) or the
 // empty string if the instance didn't exist.
 func deleteVM(zone, instName string) (operation string, err error) {
+	deletedVMCache.Add(instName, token{})
 	gceAPIGate()
 	op, err := computeService.Instances.Delete(projectID, zone, instName).Do()
 	apiErr, ok := err.(*googleapi.Error)

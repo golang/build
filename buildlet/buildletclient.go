@@ -33,6 +33,7 @@ func NewClient(ipPort string, kp KeyPair) *Client {
 		ipPort:   ipPort,
 		tls:      kp,
 		password: kp.Password(),
+		peerDead: make(chan struct{}),
 		httpClient: &http.Client{
 			Transport: &http.Transport{
 				Dial:    defaultDialer(),
@@ -49,12 +50,21 @@ func (c *Client) SetCloseFunc(fn func() error) {
 }
 
 func (c *Client) Close() error {
+	c.setPeerDead(errors.New("Close called"))
 	var err error
 	if c.closeFunc != nil {
 		err = c.closeFunc()
 		c.closeFunc = nil
 	}
 	return err
+}
+
+// To be called only via c.setPeerDeadOnce.Do(s.setPeerDead)
+func (c *Client) setPeerDead(err error) {
+	c.setPeerDeadOnce.Do(func() {
+		c.deadErr = err
+		close(c.peerDead)
+	})
 }
 
 // SetDescription sets a short description of where the buildlet
@@ -65,8 +75,19 @@ func (c *Client) SetDescription(v string) {
 }
 
 // SetHTTPClient replaces the underlying HTTP client.
+// It should only be called before the Client is used.
 func (c *Client) SetHTTPClient(httpClient *http.Client) {
 	c.httpClient = httpClient
+}
+
+// EnableHeartbeats enables background heartbeating
+// against the peer.
+// It should only be called before the Client is used.
+func (c *Client) EnableHeartbeats() {
+	// TODO(bradfitz): make this always enabled, once the
+	// reverse buildlet connection model supports
+	// multiple connections at once.
+	c.heartbeat = true
 }
 
 // defaultDialer returns the net/http package's default Dial function.
@@ -86,9 +107,15 @@ type Client struct {
 	tls        KeyPair
 	password   string // basic auth password or empty for none
 	httpClient *http.Client
+	heartbeat  bool // whether to heartbeat in the background
 
 	closeFunc func() error
 	desc      string
+
+	initHeartbeatOnce sync.Once
+	setPeerDeadOnce   sync.Once
+	peerDead          chan struct{} // closed on peer death
+	deadErr           error         // guarded by peerDead's close
 
 	mu     sync.Mutex
 	broken bool // client is broken in some way
@@ -126,10 +153,39 @@ func (c *Client) IsBroken() bool {
 }
 
 func (c *Client) do(req *http.Request) (*http.Response, error) {
+	c.initHeartbeatOnce.Do(c.initHeartbeats)
 	if c.password != "" {
 		req.SetBasicAuth("gomote", c.password)
 	}
 	return c.httpClient.Do(req)
+}
+
+func (c *Client) initHeartbeats() {
+	if !c.heartbeat {
+		// TODO(bradfitz): make this always enabled later, once
+		// reverse buildlets are fixed.
+		return
+	}
+	go c.heartbeatLoop()
+}
+
+func (c *Client) heartbeatLoop() {
+	for {
+		select {
+		case <-c.peerDead:
+			// Already dead by something else.
+			// Most likely: c.Close was called.
+			return
+		case <-time.After(10 * time.Second):
+			t0 := time.Now()
+			if _, err := c.Status(); err != nil {
+				err := fmt.Errorf("Buildlet %v failed heartbeat after %v; marking dead; err=%v", c, time.Since(t0), err)
+				c.MarkBroken()
+				c.setPeerDead(err)
+				return
+			}
+		}
+	}
 }
 
 var errHeaderTimeout = errors.New("timeout waiting for headers")
@@ -150,15 +206,20 @@ func (c *Client) doHeaderTimeout(req *http.Request, max time.Duration) (res *htt
 	timer := time.NewTimer(max)
 	defer timer.Stop()
 
+	cleanup := func() {
+		if re := <-resErrc; re.res != nil {
+			re.res.Body.Close()
+		}
+	}
+
 	select {
 	case re := <-resErrc:
 		return re.res, re.err
+	case <-c.peerDead:
+		go cleanup()
+		return nil, c.deadErr
 	case <-timer.C:
-		go func() {
-			if re := <-resErrc; re.res != nil {
-				res.Body.Close()
-			}
-		}()
+		go cleanup()
 		return nil, errHeaderTimeout
 	}
 }
@@ -279,7 +340,12 @@ type ExecOpts struct {
 	// response from the buildlet, but before the output begins
 	// writing to Output.
 	OnStartExec func()
+
+	// Timeout is an optional duration before ErrTimeout is returned.
+	Timeout time.Duration
 }
+
+var ErrTimeout = errors.New("buildlet: timeout waiting for command to complete")
 
 // Exec runs cmd on the buildlet.
 //
@@ -315,9 +381,9 @@ func (c *Client) Exec(cmd string, opts ExecOpts) (remoteErr, execErr error) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	// The first thing the buildlet's exec handler does is flush the headers, so
-	// 5 seconds should be plenty of time, regardless of where on the planet
+	// 10 seconds should be plenty of time, regardless of where on the planet
 	// (Atlanta, Paris, etc) the reverse buildlet is:
-	res, err := c.doHeaderTimeout(req, 5*time.Second)
+	res, err := c.doHeaderTimeout(req, 10*time.Second)
 	if err == errHeaderTimeout {
 		c.MarkBroken()
 		return nil, errors.New("buildlet: timeout waiting for exec header response")
@@ -332,28 +398,52 @@ func (c *Client) Exec(cmd string, opts ExecOpts) (remoteErr, execErr error) {
 	}
 	condRun(opts.OnStartExec)
 
-	// Stream the output:
-	out := opts.Output
-	if out == nil {
-		out = ioutil.Discard
+	type errs struct {
+		remoteErr, execErr error
 	}
-	if _, err := io.Copy(out, res.Body); err != nil {
-		return nil, fmt.Errorf("error copying response: %v", err)
-	}
+	resc := make(chan errs, 1)
+	go func() {
+		// Stream the output:
+		out := opts.Output
+		if out == nil {
+			out = ioutil.Discard
+		}
+		if _, err := io.Copy(out, res.Body); err != nil {
+			resc <- errs{execErr: fmt.Errorf("error copying response: %v", err)}
+			return
+		}
 
-	// Don't record to the dashboard unless we heard the trailer from
-	// the buildlet, otherwise it was probably some unrelated error
-	// (like the VM being killed, or the buildlet crashing due to
-	// e.g. https://golang.org/issue/9309, since we require a tip
-	// build of the buildlet to get Trailers support)
-	state := res.Trailer.Get("Process-State")
-	if state == "" {
-		return nil, errors.New("missing Process-State trailer from HTTP response; buildlet built with old (<= 1.4) Go?")
+		// Don't record to the dashboard unless we heard the trailer from
+		// the buildlet, otherwise it was probably some unrelated error
+		// (like the VM being killed, or the buildlet crashing due to
+		// e.g. https://golang.org/issue/9309, since we require a tip
+		// build of the buildlet to get Trailers support)
+		state := res.Trailer.Get("Process-State")
+		if state == "" {
+			resc <- errs{execErr: errors.New("missing Process-State trailer from HTTP response; buildlet built with old (<= 1.4) Go?")}
+			return
+		}
+		if state != "ok" {
+			resc <- errs{remoteErr: errors.New(state)}
+		} else {
+			resc <- errs{} // success
+		}
+	}()
+	var timer <-chan time.Time
+	if opts.Timeout > 0 {
+		t := time.NewTimer(opts.Timeout)
+		defer t.Stop()
+		timer = t.C
 	}
-	if state != "ok" {
-		return errors.New(state), nil
+	select {
+	case <-timer:
+		c.MarkBroken()
+		return nil, ErrTimeout
+	case res := <-resc:
+		return res.remoteErr, res.execErr
+	case <-c.peerDead:
+		return nil, c.deadErr
 	}
-	return nil, nil
 }
 
 // Destroy shuts down the buildlet, destroying all state immediately.
@@ -437,7 +527,7 @@ func (c *Client) Status() (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	resp, err := c.do(req)
+	resp, err := c.doHeaderTimeout(req, 10*time.Second) // plenty of time
 	if err != nil {
 		return Status{}, err
 	}
@@ -462,7 +552,7 @@ func (c *Client) WorkDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	resp, err := c.do(req)
+	resp, err := c.doHeaderTimeout(req, 10*time.Second) // plenty of time
 	if err != nil {
 		return "", err
 	}

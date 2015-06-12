@@ -115,12 +115,13 @@ func init() {
 		"plan9-386",
 		"nacl-386",
 		"nacl-amd64p32",
-		"linux-arm-shard_test",
-		"linux-arm-shard_std_am",
-		"linux-arm-shard_std_nz",
-		"linux-arm-shard_runtimecpu",
-		"linux-arm-shard_cgotest",
-		"linux-arm-shard_misc",
+		/*		"linux-arm-shard_test",
+				"linux-arm-shard_std_am",
+				"linux-arm-shard_std_nz",
+				"linux-arm-shard_runtimecpu",
+				"linux-arm-shard_cgotest",
+				"linux-arm-shard_misc",
+		*/
 	}
 	for _, bname := range tryList {
 		conf, ok := dashboard.Builders[bname]
@@ -512,8 +513,11 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	writeStatusHeader(w, st)
 
-	if r.FormValue("nostream") != "" {
-		fmt.Fprintf(w, "\n\n(no live streaming. reload manually to see status)\n")
+	nostream := r.FormValue("nostream") != ""
+	if nostream || !st.isRunning() {
+		if nostream {
+			fmt.Fprintf(w, "\n\n(live streaming disabled; reload manually to see status)\n")
+		}
 		st.mu.Lock()
 		defer st.mu.Unlock()
 		w.Write(st.output.Bytes())
@@ -1268,6 +1272,13 @@ func (st *buildStatus) build() error {
 	doneMsg := "all tests passed"
 	if remoteErr != nil {
 		doneMsg = "with test failures"
+	} else if err != nil {
+		doneMsg = "comm error: " + err.Error()
+	}
+	if err != nil {
+		// Return the error *before* we create the magic
+		// "done" event. (which the try coordinator looks for)
+		return err
 	}
 	st.logEventTime("done", doneMsg) // "done" is a magic value
 
@@ -1857,7 +1868,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 
 // runTests is only called for builders which support a split make/run
 // (should be everything, at least soon). Currently (2015-05-27) iOS
-// and Android and Nacl may not. Untested.
+// and Android and Nacl do not.
 func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err error) {
 	testNames, err := st.distTestList()
 	if err != nil {
@@ -1875,8 +1886,12 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 		for {
 			tis, ok := set.testsToRunInOrder()
 			if !ok {
-				st.logEventTime("in_order_tests_complete")
-				return
+				select {
+				case <-st.donec:
+					return
+				case <-time.After(5 * time.Second):
+				}
+				continue
 			}
 			goroot := "" // no need to override; main buildlet's GOROOT is baked into binaries
 			st.runTestsOnBuildlet(st.bc, tis, goroot)
@@ -1892,7 +1907,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 					defer time.Sleep(5 * time.Minute)
 					defer st.logEventTime("DEV_HELPER_SLEEP", bc.IPPort())
 				}
-				st.logEventTime("got_helper", bc.IPPort())
+				st.logEventTime("got_helper", bc.String())
 				if err := bc.PutTarFromURL(st.snapshotURL(), "go"); err != nil {
 					log.Printf("failed to extract snapshot for helper %s: %v", bc.IPPort(), err)
 					return
@@ -1902,9 +1917,9 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 					log.Printf("error discovering workdir for helper %s: %v", bc.IPPort(), err)
 					return
 				}
-				st.logEventTime("setup_helper", bc.IPPort())
+				st.logEventTime("setup_helper", bc.String())
 				goroot := st.conf.FilePathJoin(workDir, "go")
-				for {
+				for !bc.IsBroken() {
 					tis, ok := set.testsToRunBiggestFirst()
 					if !ok {
 						st.logEventTime("biggest_tests_complete", bc.IPPort())
@@ -1950,8 +1965,14 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 			return fmt.Errorf("dist test failed: %s: %v", ti.name, ti.remoteErr), nil
 		}
 	}
-	shardedDuration := time.Since(startTime)
-	st.logEventTime("tests_complete", fmt.Sprintf("took %v; aggregate %v; saved %v", shardedDuration, serialDuration, serialDuration-shardedDuration))
+	elapsed := time.Since(startTime)
+	var msg string
+	if st.conf.NumTestHelpers > 0 {
+		msg = fmt.Sprintf("took %v; aggregate %v; saved %v", elapsed, serialDuration, serialDuration-elapsed)
+	} else {
+		msg = fmt.Sprintf("took %v", elapsed)
+	}
+	st.logEventTime("tests_complete", msg)
 	fmt.Fprintf(st, "\nAll tests passed.\n")
 	return nil, nil
 }
@@ -1982,6 +2003,11 @@ func parseOutputAndBanner(b []byte) (banner string, out []byte) {
 // (A communication error)
 const maxTestExecErrors = 3
 
+func execTimeout(testNames []string) time.Duration {
+	// TODO(bradfitz): something smarter probably.
+	return 10 * time.Minute
+}
+
 // runTestsOnBuildlet runs tis on bc, using the optional goroot environment variable.
 func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, goroot string) {
 	names := make([]string, len(tis))
@@ -1993,19 +2019,6 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 	}
 	which := fmt.Sprintf("%s: %v", bc.IPPort(), names)
 	st.logEventTime("start_tests", which)
-
-	// TODO(bradfitz,adg): a few weeks after
-	// https://go-review.googlesource.com/10688 is submitted,
-	// around Jun 18th 2015, remove this innerRx stuff and just
-	// pass a list of test names to dist instead. We don't want to
-	// do it right away, so people don't have to rebase their CLs
-	// to avoid trybot failures.
-	var innerRx string
-	if len(tis) > 1 {
-		innerRx = "(" + strings.Join(names, "|") + ")"
-	} else {
-		innerRx = names[0]
-	}
 
 	var buf bytes.Buffer
 	t0 := time.Now()
@@ -2019,8 +2032,11 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 		Dir:      ".",
 		Output:   &buf, // see "maybe stream lines" TODO below
 		ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot),
+		Timeout:  execTimeout(names),
 		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
-		Args:     []string{"tool", "dist", "test", "--no-rebuild", "--banner=" + banner, "--run=^" + innerRx + "$"},
+		Args: append([]string{
+			"tool", "dist", "test", "--no-rebuild", "--banner=" + banner,
+		}, names...),
 	})
 	summary := "ok"
 	if err != nil {
@@ -2029,7 +2045,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 		summary = "test failed remotely"
 	}
 	execDuration := time.Since(t0)
-	st.logEventTime("end_tests", fmt.Sprintf("%s; %s after %v", which, summary, execDuration))
+	st.logEventTime("end_tests", fmt.Sprintf("%s; %s (test exec = %v)", which, summary, execDuration))
 	if err != nil {
 		for _, ti := range tis {
 			ti.numFail++
@@ -2306,25 +2322,26 @@ func (st *buildStatus) HTMLStatusLine() template.HTML {
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "<a href='https://github.com/golang/go/wiki/DashboardBuilders'>%s</a> rev <a href='%s%s'>%s</a>",
-		st.name, urlPrefix, st.rev, st.rev)
+		st.name, urlPrefix, st.rev, st.rev[:8])
 	if st.isSubrepo() {
 		fmt.Fprintf(&buf, " (sub-repo %s rev <a href='%s%s'>%s</a>)",
-			st.subName, urlPrefix, st.subRev, st.subRev)
+			st.subName, urlPrefix, st.subRev, st.subRev[:8])
 	}
 	if ts := st.trySet; ts != nil {
-		fmt.Fprintf(&buf, " (trying <a href='https://go-review.googlesource.com/#/q/%s'>%s</a>)",
+		fmt.Fprintf(&buf, " (<a href='/try?commit=%v'>trybot set</a> for <a href='https://go-review.googlesource.com/#/q/%s'>%s</a>)",
+			ts.Commit[:8],
 			ts.ChangeID, ts.ChangeID[:8])
 	}
 
 	if st.done.IsZero() {
 		buf.WriteString(", running")
+		fmt.Fprintf(&buf, "; <a href='%s'>build log</a>; %s", st.logsURLLocked(), html.EscapeString(st.bc.String()))
 	} else if st.succeeded {
 		buf.WriteString(", succeeded")
 	} else {
 		buf.WriteString(", failed")
+		fmt.Fprintf(&buf, "; <a href='%s'>build log</a>; %s", st.logsURLLocked(), html.EscapeString(st.bc.String()))
 	}
-
-	fmt.Fprintf(&buf, "; <a href='%s'>build log</a>; %s", st.logsURLLocked(), html.EscapeString(st.bc.String()))
 
 	t := st.done
 	if t.IsZero() {

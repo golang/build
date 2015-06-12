@@ -37,7 +37,8 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	for _, key := range tryList {
 		if ts := tries[key]; ts != nil {
 			state := ts.state()
-			fmt.Fprintf(&buf, "Change-ID: %v Commit: %v\n", key.ChangeID, key.Commit)
+			fmt.Fprintf(&buf, "Change-ID: %v Commit: %v (<a href='/try?commit=%v'>status</a>)\n",
+				key.ChangeID, key.Commit, key.Commit[:8])
 			fmt.Fprintf(&buf, "   Remain: %d, fails: %v\n", state.remain, state.failed)
 			for _, bs := range ts.builds {
 				fmt.Fprintf(&buf, "  %s: running=%v\n", bs.name, bs.isRunning())
@@ -51,7 +52,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	if errTryDeps != nil {
 		data.TrybotsErr = errTryDeps.Error()
 	} else {
-		data.Trybots = buf.String()
+		data.Trybots = template.HTML(buf.String())
 	}
 
 	buf.Reset()
@@ -81,7 +82,7 @@ type statusData struct {
 	Active            []*buildStatus
 	Recent            []*buildStatus
 	TrybotsErr        string
-	Trybots           string
+	Trybots           template.HTML
 	GCEPoolStatus     template.HTML // TODO: embed template
 	ReversePoolStatus template.HTML // TODO: embed template
 	DiskFree          string
