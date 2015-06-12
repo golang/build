@@ -561,7 +561,7 @@ func writeStatusHeader(w http.ResponseWriter, st *buildStatus) {
 	fmt.Fprintf(w, "  started: %v\n", st.startTime)
 	done := !st.done.IsZero()
 	if done {
-		fmt.Fprintf(w, "  started: %v\n", st.done)
+		fmt.Fprintf(w, "    ended: %v\n", st.done)
 		fmt.Fprintf(w, "  success: %v\n", st.succeeded)
 	} else {
 		fmt.Fprintf(w, "   status: still running\n")
