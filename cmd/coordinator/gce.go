@@ -143,12 +143,17 @@ func checkTryBuildDeps() error {
 	if err := wr.Close(); err != nil {
 		return fmt.Errorf("test write of a GCS object to bucket %q failed: %v", buildLogBucket(), err)
 	}
-	gobotPass, err := metadata.ProjectAttributeValue("gobot-password")
-	if err != nil {
-		return fmt.Errorf("failed to get project metadata 'gobot-password': %v", err)
+	if inStaging {
+		// Don't expect to write to Gerrit in staging mode.
+		gerritClient = gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
+	} else {
+		gobotPass, err := metadata.ProjectAttributeValue("gobot-password")
+		if err != nil {
+			return fmt.Errorf("failed to get project metadata 'gobot-password': %v", err)
+		}
+		gerritClient = gerrit.NewClient("https://go-review.googlesource.com",
+			gerrit.BasicAuth("git-gobot.golang.org", strings.TrimSpace(string(gobotPass))))
 	}
-	gerritClient = gerrit.NewClient("https://go-review.googlesource.com",
-		gerrit.BasicAuth("git-gobot.golang.org", strings.TrimSpace(string(gobotPass))))
 
 	return nil
 }

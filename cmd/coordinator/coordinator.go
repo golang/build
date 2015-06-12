@@ -97,18 +97,11 @@ var (
 	statusDone []*buildStatus         // finished recently, capped to maxStatusDone
 	tries      = map[tryKey]*trySet{} // trybot builds
 	tryList    []tryKey
-
-	// subrepoHead contains the hashes of the latest master HEAD
-	// for each sub-repo. It is populated by findWork.
-	subrepoHead = struct {
-		sync.Mutex
-		m map[string]string // [repo]hash
-	}{m: map[string]string{}}
 )
 
 var tryBuilders []dashboard.BuildConfig
 
-func init() {
+func initTryBuilders() {
 	tryList := []string{
 		"misc-compile",
 		"darwin-amd64-10_10",
@@ -319,6 +312,7 @@ func main() {
 			dashboard.BuildletBucket = "dev-go-builder-data"
 			dashboard.Builders = stagingClusterBuilders()
 		}
+		initTryBuilders()
 
 		// Start the Docker processes on this host polling Gerrit and
 		// pinging build.golang.org when new commits are available.
@@ -652,13 +646,15 @@ func findWork(work chan<- builderRev) error {
 	for _, br := range bs.Revisions {
 		awaitSnapshot := false
 		if br.Repo == "go" {
+			if len(goRevisions) == 0 {
+				// First Go revision on page; update repo head.
+				setRepoHead(br.Repo, br.Revision)
+			}
 			goRevisions = append(goRevisions, br.Revision)
 		} else {
 			// The dashboard provides only the head revision for
 			// each sub-repo; store it in subrepoHead for later use.
-			subrepoHead.Lock()
-			subrepoHead.m[br.Repo] = br.Revision
-			subrepoHead.Unlock()
+			setRepoHead(br.Repo, br.Revision)
 
 			// If this is the first time we've seen this sub-repo
 			// in this loop, then br.GoRevision is the go repo
@@ -672,6 +668,7 @@ func findWork(work chan<- builderRev) error {
 			awaitSnapshot = !seenSubrepo[br.Repo]
 			seenSubrepo[br.Repo] = true
 		}
+
 		if len(br.Results) != len(bs.Builders) {
 			return errors.New("bogus JSON response from dashboard: results is too long.")
 		}
@@ -749,7 +746,7 @@ func findTryWork() error {
 	if inStaging && true {
 		return nil
 	}
-	cis, err := gerritClient.QueryChanges("label:Run-TryBot=1 label:TryBot-Result=0 project:go status:open", gerrit.QueryChangesOpt{
+	cis, err := gerritClient.QueryChanges("label:Run-TryBot=1 label:TryBot-Result=0 status:open", gerrit.QueryChangesOpt{
 		Fields: []string{"CURRENT_REVISION"},
 	})
 	if err != nil {
@@ -774,6 +771,7 @@ func findTryWork() error {
 			Branch:   ci.Branch,
 			ChangeID: ci.ChangeID,
 			Commit:   ci.CurrentRevision,
+			Repo:     ci.Project,
 		}
 		tryList = append(tryList, key)
 		wanted[key] = true
@@ -781,7 +779,15 @@ func findTryWork() error {
 			// already in progress
 			continue
 		}
-		tries[key] = newTrySet(key)
+		ts, err := newTrySet(key)
+		if err != nil {
+			if err == errHeadUnknown {
+				continue // benign transient error
+			}
+			log.Printf("Error creating trySet for %v: %v", key, err)
+			continue
+		}
+		tries[key] = ts
 	}
 	for k, ts := range tries {
 		if !wanted[k] {
@@ -797,6 +803,7 @@ type tryKey struct {
 	Branch   string // master
 	ChangeID string // I1a27695838409259d1586a0adfa9f92bccf7ceba
 	Commit   string // ecf3dffc81dc21408fb02159af352651882a8383
+	Repo     string // "go"
 }
 
 // ChangeTriple returns the Gerrit (project, branch, change-ID) triple
@@ -835,12 +842,23 @@ func (ts trySetState) clone() trySetState {
 	}
 }
 
+var errHeadUnknown = errors.New("Cannot create trybot set without a known Go head (transient error)")
+
 // newTrySet creates a new trySet group of builders for a given key,
-// the (Change-ID, Commit) pair.  It also starts goroutines for each
-// build.
+// the (Change-ID, Commit, Repo) tuple.
+// It also starts goroutines for each build.
+// This will fail if the current Go repo HEAD is unknown.
 //
 // Must hold statusMu.
-func newTrySet(key tryKey) *trySet {
+func newTrySet(key tryKey) (*trySet, error) {
+	goHead := getRepoHead("go")
+	if key.Repo != "go" && goHead == "" {
+		// We don't know the go HEAD yet (but we will)
+		// so don't create this trySet yet as we don't
+		// know which Go revision to build against.
+		return nil, errHeadUnknown
+	}
+
 	log.Printf("Starting new trybot set for %v", key)
 	ts := &trySet{
 		tryKey: key,
@@ -849,18 +867,37 @@ func newTrySet(key tryKey) *trySet {
 			builds: make([]*buildStatus, len(tryBuilders)),
 		},
 	}
+
 	go ts.notifyStarting()
 	for i, bconf := range tryBuilders {
-		brev := builderRev{name: bconf.Name, rev: key.Commit}
-
-		bs, _ := newBuild(brev)
+		brev := tryKeyToBuilderRev(bconf.Name, key)
+		bs, err := newBuild(brev)
+		if err != nil {
+			log.Printf("can't create build for %q: %v", brev, err)
+			continue
+		}
 		bs.trySet = ts
 		status[brev] = bs
 		ts.builds[i] = bs
 		go bs.start() // acquires statusMu itself, so in a goroutine
 		go ts.awaitTryBuild(i, bconf, bs)
 	}
-	return ts
+	return ts, nil
+}
+
+func tryKeyToBuilderRev(builder string, key tryKey) builderRev {
+	if key.Repo == "go" {
+		return builderRev{
+			name: builder,
+			rev:  key.Commit,
+		}
+	}
+	return builderRev{
+		name:    builder,
+		rev:     getRepoHead("go"),
+		subName: key.Repo,
+		subRev:  key.Commit,
+	}
 }
 
 // state returns a copy of the trySet's state.
@@ -929,7 +966,7 @@ func (ts *trySet) awaitTryBuild(idx int, bconf dashboard.BuildConfig, bs *buildS
 		if !ts.wanted() {
 			return
 		}
-		brev := builderRev{name: bconf.Name, rev: ts.Commit}
+		brev := tryKeyToBuilderRev(bconf.Name, ts.tryKey)
 		bs, _ = newBuild(brev)
 		bs.trySet = ts
 		go bs.start()
@@ -1979,9 +2016,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 			continue
 		}
 		// Fetch the HEAD revision by default.
-		subrepoHead.Lock()
-		rev := subrepoHead.m[repo]
-		subrepoHead.Unlock()
+		rev := getRepoHead(repo)
 		if rev == "" {
 			rev = "master" // should happen rarely; ok if it does.
 		}
@@ -2693,3 +2728,26 @@ func getSourceTgzFromURL(source, repo, rev, urlStr string) (tgz []byte, err erro
 }
 
 var nl = []byte("\n")
+
+// repoHead contains the hashes of the latest master HEAD
+// for each sub-repo. It is populated by findWork.
+var repoHead = struct {
+	sync.Mutex
+	m map[string]string // [repo]hash (["go"]"d3adb33f")
+}{m: map[string]string{}}
+
+// getRepoHead returns the commit hash of the latest master HEAD
+// for the given repo ("go", "tools", "sys", etc).
+func getRepoHead(repo string) string {
+	repoHead.Lock()
+	defer repoHead.Unlock()
+	return repoHead.m[repo]
+}
+
+// getRepoHead sets the commit hash of the latest master HEAD
+// for the given repo ("go", "tools", "sys", etc).
+func setRepoHead(repo, head string) {
+	repoHead.Lock()
+	defer repoHead.Unlock()
+	repoHead.m[repo] = head
+}
