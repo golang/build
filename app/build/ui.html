@@ -29,15 +29,26 @@
       <div class="clear"></div>
     </header>
 
+    <form action="." method="GET">
     <nav class="dashboards">
       {{range buildDashboards}}
         <a href="{{.Prefix}}/">{{.Name}}</a>
+      {{end}}
+      {{if not (eq .Branch "")}}
+      <label>
+        <select name="branch" onchange="this.form.submit()">
+        {{range $.Branches}}
+          <option value="{{.}}"{{if eq $.Branch .}} selected{{end}}>{{.}}</option>
+        {{end}}
+        </select>
+      </label>
       {{end}}
       <label>
         <input type=checkbox id="showshort">
         show only <a href="http://golang.org/wiki/PortingPolicy">first-class ports</a>
       </label>
     </nav>
+    </form>
     {{with $.Package.Name}}<h2>{{.}}</h2>{{end}}
 
   <div class="page">
@@ -87,17 +98,20 @@
         <tr class="commit">
         {{if $i}}
           <td>&nbsp;</td>
+        {{if $h}} 
+          <td>&nbsp;</td>
+        {{end}}
           <td>&nbsp;</td>
           <td>&nbsp;</td>
           <td>&nbsp;</td>
         {{else}}
           <td class="hash"><a href="{{repoURL $.Dashboard.Name $c.Hash $.Package.Path}}">{{shortHash $c.Hash}}</a></td>
+        {{if $h}} 
+          <td class="hash"><a href="{{repoURL $.Dashboard.Name $h ""}}">{{shortHash $h}}</a></td>
+        {{end}}
           <td class="user" title="{{$c.User}}">{{shortUser $c.User}}</td>
           <td class="time">{{$c.Time.Format "02 Jan 15:04"}}</td>
           <td class="desc" title="{{$c.Desc}}">{{shortDesc $c.Desc}}</td>
-        {{end}}
-        {{if $h}} 
-          <td class="hash"><a href="{{repoURL $.Dashboard.Name $h ""}}">{{shortHash $h}}</a></td>
         {{end}}
           {{range $.Builders}}
             <td class="result{{if (unsupported .)}} unsupported{{end}}">

@@ -1,13 +1,13 @@
 * { box-sizing: border-box; }
 
-      .dashboards {
-        padding: 0.5em;
-      }
-      .dashboards a {
-        padding: 0.5em;
-        background: #eee;
-        color: blue;
-      }
+.dashboards {
+  padding: 0.5em;
+}
+.dashboards > a {
+  padding: 0.5em;
+  background: #eee;
+  color: blue;
+}
 
 body {
   margin: 0;

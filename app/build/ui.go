@@ -42,20 +42,34 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 	now := cache.Now(c)
 	key := "build-ui"
 
+	mode := r.FormValue("mode")
+
 	page, _ := strconv.Atoi(r.FormValue("page"))
 	if page < 0 {
 		page = 0
 	}
 	key += fmt.Sprintf("-page%v", page)
 
-	branch := r.FormValue("branch")
-	if branch != "" {
-		key += "-branch-" + branch
-	}
-
 	repo := r.FormValue("repo")
 	if repo != "" {
 		key += "-repo-" + repo
+	}
+
+	branch := r.FormValue("branch")
+	switch branch {
+	case "all":
+		branch = ""
+	case "":
+		branch = "master"
+	}
+	if repo != "" || mode == "json" {
+		// Don't filter on branches in sub-repos.
+		// TODO(adg): figure out how to make this work sensibly.
+		// Don't filter on branches in json mode.
+		branch = ""
+	}
+	if branch != "" {
+		key += "-branch-" + branch
 	}
 
 	var b []byte
@@ -81,7 +95,7 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 	builders := commitBuilders(commits)
 
 	var tipState *TagState
-	if pkg.Kind == "" && page == 0 && (branch == "" || branch == "default") {
+	if pkg.Kind == "" && page == 0 && (branch == "" || branch == "master") {
 		// only show sub-repo state on first page of normal repo view
 		tipState, err = TagStateByName(c, "tip")
 		if err != nil {
@@ -98,9 +112,12 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 		p.Prev = page - 1
 		p.HasPrev = true
 	}
-	data := &uiTemplateData{d, pkg, commits, builders, tipState, p, branch}
 
-	switch r.FormValue("mode") {
+	branches := listBranches(c)
+
+	data := &uiTemplateData{d, pkg, commits, builders, tipState, p, branches, branch}
+
+	switch mode {
 	case "failures":
 		failuresHandler(w, r, data)
 		return
@@ -121,6 +138,19 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 	cache.Set(r, now, key, buf.Bytes())
 
 	buf.WriteTo(w)
+}
+
+func listBranches(c appengine.Context) (branches []string) {
+	var commits []*Commit
+	_, err := datastore.NewQuery("Commit").Distinct().Project("Branch").GetAll(c, &commits)
+	if err != nil {
+		c.Errorf("listBranches: %v", err)
+		return
+	}
+	for _, c := range commits {
+		branches = append(branches, c.Branch)
+	}
+	return
 }
 
 // failuresHandler is https://build.golang.org/?mode=failures , where it outputs
@@ -214,43 +244,14 @@ func dashCommits(c appengine.Context, pkg *Package, page int, branch string) ([]
 		Ancestor(pkg.Key(c)).
 		Order("-Num")
 
+	if branch != "" {
+		q = q.Filter("Branch =", branch)
+	}
+
 	var commits []*Commit
-	if branch == "" {
-		_, err := q.Limit(commitsPerPage).Offset(offset).
-			GetAll(c, &commits)
-		return commits, err
-	}
-
-	// Look for commits on a specific branch.
-	for t, n := q.Run(c), 0; len(commits) < commitsPerPage && n < 1000; {
-		var c Commit
-		_, err := t.Next(&c)
-		if err == datastore.Done {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if !isBranchCommit(&c, branch) {
-			continue
-		}
-		if n >= offset {
-			commits = append(commits, &c)
-		}
-		n++
-	}
-	return commits, nil
-}
-
-// isBranchCommit reports whether the given commit is on the specified branch.
-// It does so by examining the commit description, so there will be some bad
-// matches where the branch commits do not begin with the "[branch]" prefix.
-func isBranchCommit(c *Commit, b string) bool {
-	d := strings.TrimSpace(c.Desc)
-	if b == "default" {
-		return !strings.HasPrefix(d, "[")
-	}
-	return strings.HasPrefix(d, "["+b+"]")
+	_, err := q.Limit(commitsPerPage).Offset(offset).
+		GetAll(c, &commits)
+	return commits, err
 }
 
 // commitBuilders returns the names of the builders that provided
@@ -384,6 +385,7 @@ type uiTemplateData struct {
 	Builders   []string
 	TipState   *TagState
 	Pagination *Pagination
+	Branches   []string
 	Branch     string
 }
 
