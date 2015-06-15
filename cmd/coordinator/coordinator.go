@@ -634,7 +634,9 @@ func findWork(work chan<- builderRev) error {
 	}
 
 	var goRevisions []string
+	seenSubrepo := make(map[string]bool)
 	for _, br := range bs.Revisions {
+		awaitSnapshot := false
 		if br.Repo == "go" {
 			goRevisions = append(goRevisions, br.Revision)
 		} else {
@@ -643,6 +645,18 @@ func findWork(work chan<- builderRev) error {
 			subrepoHead.Lock()
 			subrepoHead.m[br.Repo] = br.Revision
 			subrepoHead.Unlock()
+
+			// If this is the first time we've seen this sub-repo
+			// in this loop, then br.GoRevision is the go repo
+			// HEAD.  To save resources, we only build subrepos
+			// against HEAD once we have a snapshot.
+			// The next time we see this sub-repo in this loop, the
+			// GoRevision is one of the release branches, for which
+			// we may not have a snapshot (if the release was made
+			// a long time before this builder came up), so skip
+			// the snapshot check.
+			awaitSnapshot = !seenSubrepo[br.Repo]
+			seenSubrepo[br.Repo] = true
 		}
 		if len(br.Results) != len(bs.Builders) {
 			return errors.New("bogus JSON response from dashboard: results is too long.")
@@ -658,9 +672,8 @@ func findWork(work chan<- builderRev) error {
 				// Not managed by the coordinator, or a trybot-only one.
 				continue
 			}
-			if br.Repo != "go" && !builderInfo.SplitMakeRun() {
-				// If we don't split make and run then we can't
-				// have a snapshot from which to build sub-repos.
+			if br.Repo != "go" && !builderInfo.BuildSubrepos() {
+				// This builder can't build subrepos; skip.
 				continue
 			}
 
@@ -677,8 +690,7 @@ func findWork(work chan<- builderRev) error {
 					subName: br.Repo,
 					subRev:  br.Revision,
 				}
-				if !builderInfo.BuildSubrepos() || !rev.snapshotExists() {
-					// Don't try to build this sub-repo until we have a snapshot.
+				if awaitSnapshot && !rev.snapshotExists() {
 					continue
 				}
 			}
