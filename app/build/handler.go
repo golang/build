@@ -193,11 +193,19 @@ func addCommit(c appengine.Context, com *Commit) error {
 		// where there is already commit data. A bad thing to do.)
 		return errors.New("this package already has a first commit; aborting")
 	}
-	// update the tip Tag if this is the Go repo and it's on the master branch.
-	if p.Path == "" && com.Branch == "master" && !isUpdate {
-		t := &Tag{Kind: "tip", Hash: com.Hash}
-		if _, err = datastore.Put(c, t.Key(c), t); err != nil {
-			return fmt.Errorf("putting Tag: %v", err)
+	// Update the relevant Tag entity, if applicable.
+	if !isUpdate && p.Path == "" {
+		var t *Tag
+		if com.Branch == "master" {
+			t = &Tag{Kind: "tip", Hash: com.Hash}
+		}
+		if strings.HasPrefix(com.Branch, "release-branch.") {
+			t = &Tag{Kind: "release", Name: com.Branch, Hash: com.Hash}
+		}
+		if t != nil {
+			if _, err = datastore.Put(c, t.Key(c), t); err != nil {
+				return fmt.Errorf("putting Tag: %v", err)
+			}
 		}
 	}
 	// put the Commit
@@ -346,7 +354,7 @@ func buildTodo(c appengine.Context, builder, packagePath, goHash string) (*Commi
 	// If so, ask the builder to build a go tree at the tip commit.
 	// TODO(adg): do the same for "weekly" and "release" tags.
 
-	tag, err := GetTag(c, "tip")
+	tag, err := GetTag(c, "tip", "")
 	if err != nil {
 		return nil, err
 	}

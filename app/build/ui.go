@@ -94,13 +94,33 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	builders := commitBuilders(commits)
 
-	var tipState *TagState
+	branches := listBranches(c)
+
+	var tagState []*TagState
+	// Only show sub-repo state on first page of normal repo view.
 	if pkg.Kind == "" && page == 0 && (branch == "" || branch == "master") {
-		// only show sub-repo state on first page of normal repo view
-		tipState, err = TagStateByName(c, "tip")
+		s, err := GetTagState(c, "tip", "")
 		if err != nil {
+			if err == datastore.ErrNoSuchEntity {
+				err = fmt.Errorf("tip tag not found")
+			}
 			logErr(w, r, err)
 			return
+		}
+		tagState = []*TagState{s}
+		for _, b := range branches {
+			if !strings.HasPrefix(b, "release-branch.") {
+				continue
+			}
+			s, err := GetTagState(c, "release", b)
+			if err == datastore.ErrNoSuchEntity {
+				continue
+			}
+			if err != nil {
+				logErr(w, r, err)
+				return
+			}
+			tagState = append(tagState, s)
 		}
 	}
 
@@ -113,9 +133,7 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 		p.HasPrev = true
 	}
 
-	branches := listBranches(c)
-
-	data := &uiTemplateData{d, pkg, commits, builders, tipState, p, branches, branch}
+	data := &uiTemplateData{d, pkg, commits, builders, tagState, p, branches, branch}
 
 	switch mode {
 	case "failures":
@@ -204,14 +222,11 @@ func jsonHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 		res.Revisions = append(res.Revisions, rev)
 	}
 
-	// Then the one commit each for the subrepos.
-	// TODO(bradfitz): we'll probably want more than one later, for people looking at
-	// the subrepo-specific build history pages. But for now this gets me some data
-	// to make forward progress.
-	tip := data.TipState // a *TagState
-	if tip != nil {
-		for _, pkgState := range tip.Packages {
-			goRev := tip.Tag.Hash
+	// Then the one commit each for the subrepos for each of the tracked tags.
+	// (tip, Go 1.4, etc)
+	for _, ts := range data.TagState {
+		for _, pkgState := range ts.Packages {
+			goRev := ts.Tag.Hash
 			rev := types.BuildRevision{
 				Repo:       pkgState.Package.Name,
 				Revision:   pkgState.Commit.Hash,
@@ -342,6 +357,7 @@ var osPriority = map[string]int{
 
 // TagState represents the state of all Packages at a Tag.
 type TagState struct {
+	Name     string // "tip", "release-branch.go1.4", etc
 	Tag      *Commit
 	Packages []*PackageState
 }
@@ -352,9 +368,10 @@ type PackageState struct {
 	Commit  *Commit
 }
 
-// TagStateByName fetches the results for all Go subrepos at the specified Tag.
-func TagStateByName(c appengine.Context, name string) (*TagState, error) {
-	tag, err := GetTag(c, name)
+// GetTagState fetches the results for all Go subrepos at the specified Tag.
+// (Kind is "tip" or "release"; name is like "release-branch.go1.4".)
+func GetTagState(c appengine.Context, kind, name string) (*TagState, error) {
+	tag, err := GetTag(c, kind, name)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +379,7 @@ func TagStateByName(c appengine.Context, name string) (*TagState, error) {
 	if err != nil {
 		return nil, err
 	}
-	var st TagState
+	st := TagState{Name: tag.String()}
 	for _, pkg := range pkgs {
 		com, err := pkg.LastCommit(c)
 		if err != nil {
@@ -383,7 +400,7 @@ type uiTemplateData struct {
 	Package    *Package
 	Commits    []*Commit
 	Builders   []string
-	TipState   *TagState
+	TagState   []*TagState
 	Pagination *Pagination
 	Branches   []string
 	Branch     string
@@ -416,7 +433,7 @@ func (td *uiTemplateData) populateBuildingURLs(ctx appengine.Context) {
 	}
 
 	// Gather pending commits for sub-repos.
-	if ts := td.TipState; ts != nil {
+	for _, ts := range td.TagState {
 		goHash := ts.Tag.Hash
 		for _, b := range td.Builders {
 			for _, pkg := range ts.Packages {

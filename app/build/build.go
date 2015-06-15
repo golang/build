@@ -877,19 +877,33 @@ func PutLog(c appengine.Context, text string) (hash string, err error) {
 // A Tag is used to keep track of the most recent Go weekly and release tags.
 // Typically there will be one Tag entity for each kind of hg tag.
 type Tag struct {
-	Kind string // "weekly", "release", or "tip"
+	Kind string // "release", or "tip"
 	Name string // the tag itself (for example: "release.r60")
 	Hash string
 }
 
+func (t *Tag) String() string {
+	if t.Kind == "tip" {
+		return "tip"
+	}
+	return t.Name
+}
+
 func (t *Tag) Key(c appengine.Context) *datastore.Key {
 	p := &Package{}
-	return datastore.NewKey(c, "Tag", t.Kind, 0, p.Key(c))
+	s := t.Kind
+	if t.Kind == "release" {
+		s += "-" + t.Name
+	}
+	return datastore.NewKey(c, "Tag", s, 0, p.Key(c))
 }
 
 func (t *Tag) Valid() error {
-	if t.Kind != "weekly" && t.Kind != "release" && t.Kind != "tip" {
+	if t.Kind != "release" && t.Kind != "tip" {
 		return errors.New("invalid Kind")
+	}
+	if t.Kind == "release" && t.Name == "" {
+		return errors.New("release must have Name")
 	}
 	if !validHash(t.Hash) {
 		return errors.New("invalid Hash")
@@ -905,12 +919,9 @@ func (t *Tag) Commit(c appengine.Context) (*Commit, error) {
 }
 
 // GetTag fetches a Tag by name from the datastore.
-func GetTag(c appengine.Context, tag string) (*Tag, error) {
-	t := &Tag{Kind: tag}
+func GetTag(c appengine.Context, kind, name string) (*Tag, error) {
+	t := &Tag{Kind: kind, Name: name}
 	if err := datastore.Get(c, t.Key(c), t); err != nil {
-		if err == datastore.ErrNoSuchEntity {
-			return nil, errors.New("tag not found: " + tag)
-		}
 		return nil, err
 	}
 	if err := t.Valid(); err != nil {

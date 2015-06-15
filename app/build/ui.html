@@ -147,11 +147,11 @@
     <p>No commits to display. Hm.</p>
   {{end}}
 
-  {{with $.TipState}}
+  {{range $.TagState}}
     {{$goHash := .Tag.Hash}}
     {{if .Packages}}
       <h2>
-        Sub-repositories at tip
+        Sub-repositories at {{.Name}}
         <small>(<a href="{{repoURL $.Dashboard.Name .Tag.Hash ""}}">{{shortHash .Tag.Hash}}</a>)</small>
       </h2>
 
