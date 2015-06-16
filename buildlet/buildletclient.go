@@ -170,6 +170,7 @@ func (c *Client) initHeartbeats() {
 }
 
 func (c *Client) heartbeatLoop() {
+	failInARow := 0
 	for {
 		select {
 		case <-c.peerDead:
@@ -179,10 +180,14 @@ func (c *Client) heartbeatLoop() {
 		case <-time.After(10 * time.Second):
 			t0 := time.Now()
 			if _, err := c.Status(); err != nil {
-				err := fmt.Errorf("Buildlet %v failed heartbeat after %v; marking dead; err=%v", c, time.Since(t0), err)
-				c.MarkBroken()
-				c.setPeerDead(err)
-				return
+				failInARow++
+				if failInARow == 3 {
+					c.MarkBroken()
+					c.setPeerDead(fmt.Errorf("Buildlet %v failed heartbeat after %v; marking dead; err=%v", c, time.Since(t0), err))
+					return
+				}
+			} else {
+				failInARow = 0
 			}
 		}
 	}

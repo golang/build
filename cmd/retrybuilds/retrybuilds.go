@@ -108,6 +108,7 @@ var flakePhrases = []string{
 	"error exporting repository: exit status",
 	"remote error: User Is Over Quota",
 	"fatal: remote did not send all necessary objects",
+	"Failed to schedule \"", // e.g. Failed to schedule "go_test:archive/tar" test after 3 tries.
 }
 
 func isFlaky(failLog string) bool {
