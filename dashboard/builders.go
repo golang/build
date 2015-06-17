@@ -106,11 +106,15 @@ func (c *BuildConfig) SetBuildletBinaryURL(u string) {
 	c.buildletURL = u
 }
 
+func (c *BuildConfig) IsRace() bool {
+	return strings.HasSuffix(c.Name, "-race")
+}
+
 // AllScript returns the relative path to the operating system's script to
 // do the build and run its standard set of tests.
 // Example values are "src/all.bash", "src/all.bat", "src/all.rc".
 func (c *BuildConfig) AllScript() string {
-	if strings.HasSuffix(c.Name, "-race") {
+	if c.IsRace() {
 		if strings.HasPrefix(c.Name, "windows-") {
 			return "src/race.bat"
 		}
@@ -155,7 +159,7 @@ func (c *BuildConfig) SplitMakeRun() bool {
 		return false
 	}
 	switch c.AllScript() {
-	case "src/all.bash", "src/all.bat", "src/all.rc":
+	case "src/all.bash", "src/race.bash", "src/all.bat", "src/all.rc":
 		// These we've verified to work.
 		return true
 	}
@@ -356,11 +360,11 @@ func init() {
 		env: []string{"GOROOT_BOOTSTRAP=/go1.4", "GO_GCFLAGS=-N -l"},
 	})
 	addBuilder(BuildConfig{
-		Name:        "linux-amd64-race",
-		VMImage:     "linux-buildlet-std",
-		machineType: "n1-highcpu-4",
-		env:         []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		// TODO(bradfitz): make race.bash shardable, then: NumTestHelpers: 3
+		Name:           "linux-amd64-race",
+		VMImage:        "linux-buildlet-std",
+		machineType:    "n1-highcpu-4",
+		env:            []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		NumTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
 		Name:    "linux-386-clang",

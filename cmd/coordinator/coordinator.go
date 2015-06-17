@@ -1375,6 +1375,27 @@ func (st *buildStatus) runMake() (remoteErr, err error) {
 	if remoteErr != nil {
 		return fmt.Errorf("make script failed: %v", remoteErr), nil
 	}
+
+	// Need to run "go install -race std" before the snapshot + tests.
+	if st.conf.IsRace() {
+		remoteErr, err = st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+			Output: st,
+			OnStartExec: func() {
+				st.logEventTime("running_exec", "go install -race std")
+			},
+			ExtraEnv: st.conf.Env(),
+			Debug:    true,
+			Args:     []string{"install", "-race", "std"},
+		})
+		if err != nil {
+			return nil, err
+		}
+		if remoteErr != nil {
+			return fmt.Errorf("go install -race std failed: %v", remoteErr), nil
+		}
+		st.logEventTime("exec_done", "-race std installed")
+	}
+
 	return nil, nil
 }
 
@@ -1504,13 +1525,17 @@ func (st *buildStatus) writeSnapshot() error {
 }
 
 func (st *buildStatus) distTestList() (names []string, err error) {
+	args := []string{"tool", "dist", "test", "--no-rebuild", "--list"}
+	if st.conf.IsRace() {
+		args = append(args, "--race")
+	}
 	var buf bytes.Buffer
 	remoteErr, err := st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 		Output:      &buf,
 		ExtraEnv:    st.conf.Env(),
 		OnStartExec: func() { st.logEventTime("discovering_tests") },
 		Path:        []string{"$WORKDIR/go/bin", "$PATH"},
-		Args:        []string{"tool", "dist", "test", "--no-rebuild", "--list"},
+		Args:        args,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("Exec error: %v, %s", remoteErr, buf.Bytes())
@@ -2032,6 +2057,11 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 	which := fmt.Sprintf("%s: %v", bc.IPPort(), names)
 	st.logEventTime("start_tests", which)
 
+	args := []string{"tool", "dist", "test", "--no-rebuild", "--banner=" + banner}
+	if st.conf.IsRace() {
+		args = append(args, "--race")
+	}
+	args = append(args, names...)
 	var buf bytes.Buffer
 	t0 := time.Now()
 	remoteErr, err := bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
@@ -2046,9 +2076,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 		ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot),
 		Timeout:  execTimeout(names),
 		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
-		Args: append([]string{
-			"tool", "dist", "test", "--no-rebuild", "--banner=" + banner,
-		}, names...),
+		Args:     args,
 	})
 	summary := "ok"
 	if err != nil {
