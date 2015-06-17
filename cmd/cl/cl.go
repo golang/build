@@ -7,7 +7,7 @@ CL prints a list of open Go code reviews (also known as change lists, or CLs).
 
 Usage:
 
-	cl [-json] [-r] [-url] [query ...]
+	cl [-closed] [-json] [-r] [-url] [query ...]
 
 CL searches Gerrit for CLs matching the query and then
 prints a line for each CL that is waiting for review
@@ -31,6 +31,10 @@ If the CL is waiting for a reviewer, the reviewer column
 has an asterisk.
 If the CL has been reviewed by the reviewer,
 the reviewer column shows the current score.
+
+By default, CL omits closed reviews, those with an R=close reply
+and no subsequent upload of a new patch set.
+If the -closed flag is specified, CL adds closed reviews to the output.
 
 If the -r flag is specified, CL shows only CLs that need review,
 not those waiting for the author. In this mode, the
@@ -87,6 +91,7 @@ import (
 )
 
 var (
+	flagClosed      = flag.Bool("closed", false, "print closed CLs")
 	flagNeedsReview = flag.Bool("r", false, "print only CLs in need of review")
 	flagJSON        = flag.Bool("json", false, "print CLs in JSON format")
 	flagURL         = flag.Bool("url", false, "print full URLs for CLs")
@@ -136,7 +141,7 @@ func main() {
 	cls := []*CL{} // non-nil for json
 	for _, ci := range cis {
 		cl := parseCL(ci)
-		if *flagNeedsReview && !cl.NeedsReview {
+		if *flagNeedsReview && !cl.NeedsReview || !*flagClosed && cl.Closed {
 			continue
 		}
 		cls = append(cls, cl)
