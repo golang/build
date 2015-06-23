@@ -271,7 +271,7 @@ func todoHandler(r *http.Request) (interface{}, error) {
 	now := cache.Now(c)
 	key := "build-todo-" + r.Form.Encode()
 	var todo *Todo
-	if cache.Get(r, now, key, &todo) {
+	if cache.Get(c, r, now, key, &todo) {
 		return todo, nil
 	}
 	var err error
@@ -307,7 +307,7 @@ func todoHandler(r *http.Request) (interface{}, error) {
 		}
 	}
 	if err == nil {
-		cache.Set(r, now, key, todo)
+		cache.Set(c, r, now, key, todo)
 	}
 	return todo, err
 }
@@ -518,14 +518,14 @@ func packagesHandler(r *http.Request) (interface{}, error) {
 	now := cache.Now(c)
 	key := "build-packages-" + kind
 	var p []*Package
-	if cache.Get(r, now, key, &p) {
+	if cache.Get(c, r, now, key, &p) {
 		return p, nil
 	}
 	p, err := Packages(c, kind)
 	if err != nil {
 		return nil, err
 	}
-	cache.Set(r, now, key, p)
+	cache.Set(c, r, now, key, p)
 	return p, nil
 }
 

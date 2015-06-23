@@ -12,11 +12,9 @@ package build
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -72,75 +70,83 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 		key += "-branch-" + branch
 	}
 
-	var b []byte
-	if cache.Get(r, now, key, &b) {
-		w.Write(b)
-		return
-	}
+	var data uiTemplateData
+	if !cache.Get(c, r, now, key, &data) {
 
-	pkg := &Package{} // empty package is the main repository
-	if repo != "" {
-		var err error
-		pkg, err = GetPackage(c, repo)
-		if err != nil {
-			logErr(w, r, err)
-			return
-		}
-	}
-	commits, err := dashCommits(c, pkg, page, branch)
-	if err != nil {
-		logErr(w, r, err)
-		return
-	}
-	builders := commitBuilders(commits)
-
-	branches := listBranches(c)
-
-	var tagState []*TagState
-	// Only show sub-repo state on first page of normal repo view.
-	if pkg.Kind == "" && page == 0 && (branch == "" || branch == "master") {
-		s, err := GetTagState(c, "tip", "")
-		if err != nil {
-			if err == datastore.ErrNoSuchEntity {
-				err = fmt.Errorf("tip tag not found")
-			}
-			logErr(w, r, err)
-			return
-		}
-		tagState = []*TagState{s}
-		for _, b := range branches {
-			if !strings.HasPrefix(b, "release-branch.") {
-				continue
-			}
-			s, err := GetTagState(c, "release", b)
-			if err == datastore.ErrNoSuchEntity {
-				continue
-			}
+		pkg := &Package{} // empty package is the main repository
+		if repo != "" {
+			var err error
+			pkg, err = GetPackage(c, repo)
 			if err != nil {
 				logErr(w, r, err)
 				return
 			}
-			tagState = append(tagState, s)
 		}
-	}
+		commits, err := dashCommits(c, pkg, page, branch)
+		if err != nil {
+			logErr(w, r, err)
+			return
+		}
+		builders := commitBuilders(commits)
 
-	p := &Pagination{}
-	if len(commits) == commitsPerPage {
-		p.Next = page + 1
-	}
-	if page > 0 {
-		p.Prev = page - 1
-		p.HasPrev = true
-	}
+		branches := listBranches(c)
 
-	data := &uiTemplateData{d, pkg, commits, builders, tagState, p, branches, branch}
+		var tagState []*TagState
+		// Only show sub-repo state on first page of normal repo view.
+		if pkg.Kind == "" && page == 0 && (branch == "" || branch == "master") {
+			s, err := GetTagState(c, "tip", "")
+			if err != nil {
+				if err == datastore.ErrNoSuchEntity {
+					err = fmt.Errorf("tip tag not found")
+				}
+				logErr(w, r, err)
+				return
+			}
+			tagState = []*TagState{s}
+			for _, b := range branches {
+				if !strings.HasPrefix(b, "release-branch.") {
+					continue
+				}
+				s, err := GetTagState(c, "release", b)
+				if err == datastore.ErrNoSuchEntity {
+					continue
+				}
+				if err != nil {
+					logErr(w, r, err)
+					return
+				}
+				tagState = append(tagState, s)
+			}
+		}
+
+		p := &Pagination{}
+		if len(commits) == commitsPerPage {
+			p.Next = page + 1
+		}
+		if page > 0 {
+			p.Prev = page - 1
+			p.HasPrev = true
+		}
+
+		data = uiTemplateData{
+			Package:    pkg,
+			Commits:    commits,
+			Builders:   builders,
+			TagState:   tagState,
+			Pagination: p,
+			Branches:   branches,
+			Branch:     branch,
+		}
+		cache.Set(c, r, now, key, &data)
+	}
+	data.Dashboard = d
 
 	switch mode {
 	case "failures":
-		failuresHandler(w, r, data)
+		failuresHandler(w, r, &data)
 		return
 	case "json":
-		jsonHandler(w, r, data)
+		jsonHandler(w, r, &data)
 		return
 	}
 
@@ -148,13 +154,10 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 	data.populateBuildingURLs(c)
 
 	var buf bytes.Buffer
-	if err := uiTemplate.Execute(&buf, data); err != nil {
+	if err := uiTemplate.Execute(&buf, &data); err != nil {
 		logErr(w, r, err)
 		return
 	}
-
-	cache.Set(r, now, key, buf.Bytes())
-
 	buf.WriteTo(w)
 }
 
@@ -612,37 +615,16 @@ func shortUser(user string) string {
 	return user
 }
 
-// repoRe matches Google Code repositories and subrepositories (without paths).
-var repoRe = regexp.MustCompile(`^code\.google\.com/p/([a-z0-9\-]+)(\.[a-z0-9\-]+)?$`)
-
 // repoURL returns the URL of a change at a Google Code repository or subrepo.
 func repoURL(dashboard, hash, packagePath string) (string, error) {
 	if packagePath == "" {
 		if dashboard == "Gccgo" {
-			return "https://go.googlesource.com/gofrontend/+/" + hash, nil
+			return "https://github.com/golang/gofrontend/commit/" + hash, nil
 		}
-		if dashboard == "Mercurial" {
-			return "https://golang.org/change/" + hash, nil
-		}
-		// TODO(adg): use the above once /change/ points to git hashes
-		return "https://go.googlesource.com/go/+/" + hash, nil
+		return "https://github.com/golang/go/commit/" + hash, nil
 	}
-
-	// TODO(adg): remove this old hg stuff, one day.
-	if dashboard == "Mercurial" {
-		m := repoRe.FindStringSubmatch(packagePath)
-		if m == nil {
-			return "", errors.New("unrecognized package: " + packagePath)
-		}
-		url := "https://code.google.com/p/" + m[1] + "/source/detail?r=" + hash
-		if len(m) > 2 {
-			url += "&repo=" + m[2][1:]
-		}
-		return url, nil
-	}
-
 	repo := strings.TrimPrefix(packagePath, "golang.org/x/")
-	return "https://go.googlesource.com/" + repo + "/+/" + hash, nil
+	return "https://github.com/golang/" + repo + "/commit/" + hash, nil
 }
 
 // tail returns the trailing n lines of s.

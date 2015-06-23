@@ -667,14 +667,14 @@ const perfConfigCacheKey = "perf-config"
 func GetPerfConfig(c appengine.Context, r *http.Request) (*PerfConfig, error) {
 	pc := new(PerfConfig)
 	now := cache.Now(c)
-	if cache.Get(r, now, perfConfigCacheKey, pc) {
+	if cache.Get(c, r, now, perfConfigCacheKey, pc) {
 		return pc, nil
 	}
 	err := datastore.Get(c, PerfConfigKey(c), pc)
 	if err != nil && err != datastore.ErrNoSuchEntity {
 		return nil, fmt.Errorf("GetPerfConfig: %v", err)
 	}
-	cache.Set(r, now, perfConfigCacheKey, pc)
+	cache.Set(c, r, now, perfConfigCacheKey, pc)
 	return pc, nil
 }
 

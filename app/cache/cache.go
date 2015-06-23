@@ -20,7 +20,7 @@ var TimeKey = "cachetime"
 
 const (
 	nocache = "nocache"
-	expiry  = 600 // 10 minutes
+	expiry  = 10 * time.Minute
 )
 
 func newTime() uint64 { return uint64(time.Now().Unix()) << 32 }
@@ -49,13 +49,12 @@ func Tick(c appengine.Context) uint64 {
 // Get fetches data for name at time now from memcache and unmarshals it into
 // value. It reports whether it found the cache record and logs any errors to
 // the admin console.
-func Get(r *http.Request, now uint64, name string, value interface{}) bool {
+func Get(c appengine.Context, r *http.Request, now uint64, name string, value interface{}) bool {
 	if now == 0 || r.FormValue(nocache) != "" {
 		return false
 	}
-	c := appengine.NewContext(r)
 	key := fmt.Sprintf("%s.%d", name, now)
-	_, err := memcache.JSON.Get(c, key, value)
+	_, err := memcache.Gob.Get(c, key, value)
 	if err == nil {
 		c.Debugf("cache hit %q", key)
 		return true
@@ -69,13 +68,12 @@ func Get(r *http.Request, now uint64, name string, value interface{}) bool {
 
 // Set puts value into memcache under name at time now.
 // It logs any errors to the admin console.
-func Set(r *http.Request, now uint64, name string, value interface{}) {
+func Set(c appengine.Context, r *http.Request, now uint64, name string, value interface{}) {
 	if now == 0 || r.FormValue(nocache) != "" {
 		return
 	}
-	c := appengine.NewContext(r)
 	key := fmt.Sprintf("%s.%d", name, now)
-	err := memcache.JSON.Set(c, &memcache.Item{
+	err := memcache.Gob.Set(c, &memcache.Item{
 		Key:        key,
 		Object:     value,
 		Expiration: expiry,
