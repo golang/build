@@ -272,6 +272,10 @@ func todoHandler(r *http.Request) (interface{}, error) {
 	key := "build-todo-" + r.Form.Encode()
 	var todo *Todo
 	if cache.Get(c, r, now, key, &todo) {
+		// Hack to avoid storing nil in memcache.
+		if todo.Kind == "none" {
+			return nil, nil
+		}
 		return todo, nil
 	}
 	var err error
@@ -307,7 +311,15 @@ func todoHandler(r *http.Request) (interface{}, error) {
 		}
 	}
 	if err == nil {
+		// Hack to avoid storing nil in memcache.
+		if todo == nil {
+			todo = &Todo{Kind: "none"}
+		}
 		cache.Set(c, r, now, key, todo)
+	}
+	// Hack to avoid storing nil in memcache.
+	if todo.Kind == "none" {
+		return nil, nil
 	}
 	return todo, err
 }
