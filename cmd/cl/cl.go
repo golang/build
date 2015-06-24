@@ -331,24 +331,38 @@ func parseCL(ci *gerrit.ChangeInfo) *CL {
 	}
 
 	// Determine reviewer, in priorty order.
+	// When breaking ties, give preference to R= setting.
+	// Otherwise compare by email address.
+	maybe := func(who string) {
+		if cl.ReviewerEmail == "" || who == explicitReviewer || cl.ReviewerEmail != explicitReviewer && cl.ReviewerEmail > who {
+			cl.ReviewerEmail = who
+		}
+	}
+
 	// 1. Anyone who -2'ed the CL.
 	if cl.ReviewerEmail == "" {
 		for who, score := range scores {
 			if score == -2 {
-				cl.ReviewerEmail = who
-				break
+				maybe(who)
 			}
 		}
 	}
+
 	// 2. Anyone who +2'ed the CL.
 	if cl.ReviewerEmail == "" {
 		for who, score := range scores {
 			if score == +2 {
-				cl.ReviewerEmail = who
-				break
+				maybe(who)
 			}
 		}
 	}
+
+	// 2½. Even if a CL is +2 or -2, R=closed wins,
+	// so that it doesn't appear in listings by default.
+	if explicitReviewer == "close" {
+		cl.ReviewerEmail = "close"
+	}
+
 	// 3. Last explicit R= in review message.
 	if cl.ReviewerEmail == "" {
 		cl.ReviewerEmail = explicitReviewer
