@@ -279,6 +279,8 @@ var (
 	goIssueRefRE   = regexp.MustCompile(`\bgolang/go#\d+\b`)
 )
 
+const goReleaseCycle = 6 // working on Go 1.x
+
 func parseCL(ci *gerrit.ChangeInfo) *CL {
 	loadReviewers()
 
@@ -288,14 +290,16 @@ func parseCL(ci *gerrit.ChangeInfo) *CL {
 		initialReviewer  = ""
 		firstResponder   = ""
 		explicitReviewer = ""
+		closeReason      = ""
 	)
 	for _, msg := range ci.Messages {
 		if msg.Author == nil { // happens for Gerrit-generated messages
 			continue
 		}
 		if strings.HasPrefix(msg.Message, "Uploaded patch set ") {
-			if explicitReviewer == "close" {
+			if explicitReviewer == "close" && !strings.HasPrefix(closeReason, "Go") {
 				explicitReviewer = ""
+				closeReason = ""
 			}
 			for who, score := range scores {
 				if score == +1 || score == -1 {
@@ -306,6 +310,13 @@ func parseCL(ci *gerrit.ChangeInfo) *CL {
 		if m := reviewerRE.FindStringSubmatch(msg.Message); m != nil {
 			if m[1] == "close" {
 				explicitReviewer = "close"
+				closeReason = "Closed"
+			} else if strings.HasPrefix(m[1], "go1.") {
+				n, _ := strconv.Atoi(m[1][len("go1."):])
+				if n > goReleaseCycle {
+					explicitReviewer = "close"
+					closeReason = "Go" + m[1][2:]
+				}
 			} else if m[1] == "golang-dev" || m[1] == "golang-codereviews" {
 				explicitReviewer = "golang-dev"
 			} else if x := mailLookup[m[1]]; x != "" {
@@ -406,7 +417,7 @@ func parseCL(ci *gerrit.ChangeInfo) *CL {
 	}
 
 	if cl.ReviewerEmail == "close" {
-		cl.Reviewer = ""
+		cl.Reviewer = closeReason
 		cl.ReviewerEmail = ""
 		cl.Closed = true
 		cl.NeedsReview = false
