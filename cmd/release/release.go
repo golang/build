@@ -129,17 +129,30 @@ func main() {
 	wg.Wait()
 }
 
-func (b *Build) make() (err error) {
+func (b *Build) shouldStartNewVM() bool {
+	if strings.HasPrefix(b.Builder, "darwin-") {
+		return false
+	}
+	return true
+}
+
+func (b *Build) buildlet() (*buildlet.Client, error) {
+	if b.shouldStartNewVM() {
+		return b.buildletFromVM()
+	}
+	panic("TODO: obtain a buildlet via the coordiantor, where the OS X machines are dialed into via the reverse pool")
+}
+
+func (b *Build) buildletFromVM() (*buildlet.Client, error) {
 	bc, ok := dashboard.Builders[b.Builder]
 	if !ok {
-		return fmt.Errorf("unknown builder: %v", bc)
+		return nil, fmt.Errorf("unknown builder: %v", bc)
 	}
-
 	// Start VM
 	log.Printf("%v: Starting VM.", b)
 	keypair, err := buildlet.NewKeyPair()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	instance := fmt.Sprintf("release-%v-%v-rn%v", os.Getenv("USER"), bc.Name, randHex(6))
 	client, err := buildlet.StartNewVM(projTokenSource(), instance, bc.Name, buildlet.VMOpts{
@@ -156,18 +169,35 @@ func (b *Build) make() (err error) {
 		},
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	log.Printf("%v: Instance %v up.", b, instance)
 
-	defer func() {
-		if err != nil {
-			log.Printf("%v: %v", b, err)
-		}
+	client.SetCloseFunc(func() error {
 		log.Printf("%v: Destroying VM.", b)
 		err := client.DestroyVM(projTokenSource(), *project, *zone, instance)
 		if err != nil {
 			log.Printf("%v: Destroying VM: %v", b, err)
+		}
+		return nil
+	})
+	return client, nil
+}
+
+func (b *Build) make() (err error) {
+	bc, ok := dashboard.Builders[b.Builder]
+	if !ok {
+		return fmt.Errorf("unknown builder: %v", bc)
+	}
+
+	client, err := b.buildlet()
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+	defer func() {
+		if err != nil {
+			log.Printf("%v: %v", b, err)
 		}
 	}()
 
