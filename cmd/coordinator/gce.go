@@ -58,17 +58,17 @@ var (
 	serviceCtx     context.Context
 	errTryDeps     error // non-nil if try bots are disabled
 	gerritClient   *gerrit.Client
-	devCluster     bool // are we running in the dev cluster?
+	inStaging      bool // are we running in the staging project? (named -dev)
 
 	initGCECalled bool
 )
 
-func devPrefix() string {
+func stagingPrefix() string {
 	if !initGCECalled {
-		panic("devPrefix called before initGCE")
+		panic("stagingPrefix called before initGCE")
 	}
-	if devCluster {
-		return "dev-"
+	if inStaging {
+		return "dev-" // legacy prefix; must match resource names
 	}
 	return ""
 }
@@ -112,9 +112,9 @@ func initGCE() error {
 		log.Printf("TryBot builders enabled.")
 	}
 
-	devCluster = projectID == "go-dashboard-dev"
-	if devCluster {
-		log.Printf("Running in dev cluster")
+	inStaging = projectID == "go-dashboard-dev"
+	if inStaging {
+		log.Printf("Running in staging cluster (%q)", projectID)
 	}
 	go gcePool.pollQuotaLoop()
 	return nil

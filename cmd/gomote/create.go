@@ -63,27 +63,36 @@ func create(args []string) error {
 		}
 	}
 
-	instPrefix := fmt.Sprintf("mote-%s-", username())
-	instName, err := nextName(instPrefix + builderType)
-	if err != nil {
-		return err
+	if *user == "" {
+		instPrefix := fmt.Sprintf("mote-%s-", username())
+		instName, err := nextName(instPrefix + builderType)
+		if err != nil {
+			return err
+		}
+		client, err := buildlet.StartNewVM(projTokenSource(), instName, builderType, buildlet.VMOpts{
+			Zone:        *zone,
+			ProjectID:   *proj,
+			TLS:         userKeyPair(),
+			DeleteIn:    timeout,
+			Description: fmt.Sprintf("gomote buildlet for %s", username()),
+			OnInstanceRequested: func() {
+				log.Printf("Sent create request. Waiting for operation.")
+			},
+			OnInstanceCreated: func() {
+				log.Printf("Instance created.")
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create VM: %v", err)
+		}
+		fmt.Printf("%s\t%s\n", strings.TrimPrefix(instName, instPrefix), client.URL())
+	} else {
+		cc := coordinatorClient()
+		client, err := cc.CreateBuildlet(builderType)
+		if err != nil {
+			return fmt.Errorf("failed to create buildlet: %v", err)
+		}
+		fmt.Println(client.RemoteName())
 	}
-	client, err := buildlet.StartNewVM(projTokenSource(), instName, builderType, buildlet.VMOpts{
-		Zone:        *zone,
-		ProjectID:   *proj,
-		TLS:         userKeyPair(),
-		DeleteIn:    timeout,
-		Description: fmt.Sprintf("gomote buildlet for %s", username()),
-		OnInstanceRequested: func() {
-			log.Printf("Sent create request. Waiting for operation.")
-		},
-		OnInstanceCreated: func() {
-			log.Printf("Instance created.")
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create VM: %v", err)
-	}
-	fmt.Printf("%s\t%s\n", strings.TrimPrefix(instName, instPrefix), client.URL())
 	return nil
 }

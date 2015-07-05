@@ -29,11 +29,10 @@ import (
 //
 // This constructor returns immediately without testing the host or auth.
 func NewClient(ipPort string, kp KeyPair) *Client {
-	return &Client{
+	c := &Client{
 		ipPort:   ipPort,
 		tls:      kp,
 		password: kp.Password(),
-		peerDead: make(chan struct{}),
 		httpClient: &http.Client{
 			Transport: &http.Transport{
 				Dial:    defaultDialer(),
@@ -41,6 +40,12 @@ func NewClient(ipPort string, kp KeyPair) *Client {
 			},
 		},
 	}
+	c.setCommon()
+	return c
+}
+
+func (c *Client) setCommon() {
+	c.peerDead = make(chan struct{})
 }
 
 // SetCloseFunc sets a function to be called when c.Close is called.
@@ -103,11 +108,14 @@ func defaultDialer() func(network, addr string) (net.Conn, error) {
 
 // A Client interacts with a single buildlet.
 type Client struct {
-	ipPort     string
-	tls        KeyPair
-	password   string // basic auth password or empty for none
-	httpClient *http.Client
-	heartbeat  bool // whether to heartbeat in the background
+	ipPort         string // required, unless remoteBuildlet+baseURL is set
+	tls            KeyPair
+	httpClient     *http.Client
+	heartbeat      bool   // whether to heartbeat in the background
+	baseURL        string // optional baseURL (used by remote buildlets)
+	authUser       string // defaults to "gomote", if password is non-empty
+	password       string // basic auth password or empty for none
+	remoteBuildlet string // non-empty if for remote buildlets
 
 	closeFunc func() error
 	desc      string
@@ -128,8 +136,18 @@ func (c *Client) String() string {
 	return strings.TrimSpace(c.URL() + " " + c.desc)
 }
 
+// RemoteName returns the name of this client's buildlet on the
+// coordinator. If this buildlet isn't a remote buildlet created via
+// a buildlet, this returns the empty string.
+func (c *Client) RemoteName() string {
+	return c.remoteBuildlet
+}
+
 // URL returns the buildlet's URL prefix, without a trailing slash.
 func (c *Client) URL() string {
+	if c.baseURL != "" {
+		return strings.TrimRight(c.baseURL, "/")
+	}
 	if !c.tls.IsZero() {
 		return "https://" + strings.TrimSuffix(c.ipPort, ":443")
 	}
@@ -152,12 +170,37 @@ func (c *Client) IsBroken() bool {
 	return c.broken
 }
 
+func (c *Client) authUsername() string {
+	if c.authUser != "" {
+		return c.authUser
+	}
+	return "gomote"
+}
+
 func (c *Client) do(req *http.Request) (*http.Response, error) {
 	c.initHeartbeatOnce.Do(c.initHeartbeats)
 	if c.password != "" {
-		req.SetBasicAuth("gomote", c.password)
+		req.SetBasicAuth(c.authUsername(), c.password)
+	}
+	if c.remoteBuildlet != "" {
+		req.Header.Set("X-Buildlet-Proxy", c.remoteBuildlet)
 	}
 	return c.httpClient.Do(req)
+}
+
+// ProxyRoundTripper returns a RoundTripper that sends HTTP requests directly
+// through to the underlying buildlet, adding auth and X-Buildlet-Proxy headers
+// as necessary. This is really only intended for use by the coordinator.
+func (c *Client) ProxyRoundTripper() http.RoundTripper {
+	return proxyRoundTripper{c}
+}
+
+type proxyRoundTripper struct {
+	c *Client
+}
+
+func (p proxyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return p.c.do(req)
 }
 
 func (c *Client) initHeartbeats() {
@@ -635,7 +678,8 @@ func (c *Client) ListDir(dir string, opts ListDirOpts, fn func(DirEntry)) error 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return errors.New(resp.Status)
+		slurp, _ := ioutil.ReadAll(io.LimitReader(resp.Body, 1<<10))
+		return fmt.Errorf("%s: %s", resp.Status, slurp)
 	}
 	sc := bufio.NewScanner(resp.Body)
 	for sc.Scan() {

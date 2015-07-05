@@ -27,6 +27,9 @@ func destroy(args []string) error {
 	if err != nil {
 		return err
 	}
-
-	return bc.DestroyVM(projTokenSource(), *proj, *zone, fmt.Sprintf("mote-%s-%s", username(), name))
+	if *user == "" {
+		return bc.DestroyVM(projTokenSource(), *proj, *zone, fmt.Sprintf("mote-%s-%s", username(), name))
+	} else {
+		return bc.Destroy()
+	}
 }

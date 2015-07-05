@@ -25,15 +25,19 @@ import (
 	"os"
 	"sort"
 
+	"golang.org/x/build"
+	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 )
 
 var (
+	user = flag.String("user", username(), "gomote server username; if set to the empty string, only GCE VMs can be created, without using the coordinator.")
+
 	proj = flag.String("project", "symbolic-datum-552", "GCE project owning builders")
 	zone = flag.String("zone", "us-central1-a", "GCE zone")
 
 	// Mostly dev options:
-	dev            = flag.Bool("dev", false, "if true, the default project becomes the default dev project")
+	dev            = flag.Bool("dev", false, "if true, the default project becomes the default staging project")
 	buildletBucket = flag.String("buildletbucket", "", "Optional alternate GCS bucket for the buildlet binaries.")
 )
 
@@ -75,6 +79,20 @@ func registerCommand(name, des string, run func([]string) error) {
 		name: name,
 		des:  des,
 		run:  run,
+	}
+}
+
+func coordinatorClient() *buildlet.CoordinatorClient {
+	inst := build.ProdCoordinator
+	if *dev {
+		inst = build.StagingCoordinator
+	}
+	return &buildlet.CoordinatorClient{
+		Auth: buildlet.UserPass{
+			Username: "user-" + *user,
+			Password: userToken(),
+		},
+		Instance: inst,
 	}
 }
 

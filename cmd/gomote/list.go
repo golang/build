@@ -7,8 +7,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strings"
+	"time"
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
@@ -26,16 +28,27 @@ func list(args []string) error {
 		fs.Usage()
 	}
 
-	prefix := fmt.Sprintf("mote-%s-", username())
-	vms, err := buildlet.ListVMs(projTokenSource(), *proj, *zone)
-	if err != nil {
-		return fmt.Errorf("failed to list VMs: %v", err)
-	}
-	for _, vm := range vms {
-		if !strings.HasPrefix(vm.Name, prefix) {
-			continue
+	if *user == "" {
+		prefix := fmt.Sprintf("mote-%s-", username())
+		vms, err := buildlet.ListVMs(projTokenSource(), *proj, *zone)
+		if err != nil {
+			return fmt.Errorf("failed to list VMs: %v", err)
 		}
-		fmt.Printf("%s\thttps://%s\n", strings.TrimPrefix(vm.Name, prefix), strings.TrimSuffix(vm.IPPort, ":443"))
+		for _, vm := range vms {
+			if !strings.HasPrefix(vm.Name, prefix) {
+				continue
+			}
+			fmt.Printf("%s\thttps://%s\n", strings.TrimPrefix(vm.Name, prefix), strings.TrimSuffix(vm.IPPort, ":443"))
+		}
+	} else {
+		cc := coordinatorClient()
+		rbs, err := cc.RemoteBuildlets()
+		if err != nil {
+			log.Fatal(err)
+		}
+		for _, rb := range rbs {
+			fmt.Printf("%s\t%s\texpires in %v\n", rb.Name, rb.Type, rb.Expires.Sub(time.Now()))
+		}
 	}
 	return nil
 }
@@ -43,6 +56,10 @@ func list(args []string) error {
 func namedClient(name string) (*buildlet.Client, error) {
 	if strings.Contains(name, ":") {
 		return buildlet.NewClient(name, buildlet.NoKeyPair), nil
+	}
+	if *user != "" {
+		cc := coordinatorClient()
+		return cc.NamedBuildlet(name)
 	}
 	// TODO(bradfitz): cache the list on disk and avoid the API call?
 	vms, err := buildlet.ListVMs(projTokenSource(), *proj, *zone)

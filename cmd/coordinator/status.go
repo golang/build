@@ -47,6 +47,8 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	statusMu.Unlock()
 
+	data.RemoteBuildlets = template.HTML(remoteBuildletStatus())
+
 	sort.Sort(byAge(data.Active))
 	sort.Sort(sort.Reverse(byAge(data.Recent)))
 	if errTryDeps != nil {
@@ -85,6 +87,7 @@ type statusData struct {
 	Trybots           template.HTML
 	GCEPoolStatus     template.HTML // TODO: embed template
 	ReversePoolStatus template.HTML // TODO: embed template
+	RemoteBuildlets   template.HTML
 	DiskFree          string
 	Version           string
 }
@@ -128,6 +131,9 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 <li>{{.GCEPoolStatus}}</li>
 <li>{{.ReversePoolStatus}}</li>
 </ul>
+
+<h2>Remote buildlets</h3>
+{{.RemoteBuildlets}}
 
 <h2>Disk Space</h2>
 <pre>{{.DiskFree}}</pre>

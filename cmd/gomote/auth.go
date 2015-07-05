@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"golang.org/x/build/auth"
 	"golang.org/x/build/buildlet"
@@ -82,4 +83,25 @@ func slurpString(f string) string {
 		log.Fatal(err)
 	}
 	return string(slurp)
+}
+
+func userToken() string {
+	if *user == "" {
+		panic("userToken called with user flag empty")
+	}
+	keyDir := configDir()
+	baseFile := "user-" + *user + ".token"
+	if *dev {
+		baseFile = "dev-" + baseFile
+	}
+	tokenFile := filepath.Join(keyDir, baseFile)
+	slurp, err := ioutil.ReadFile(tokenFile)
+	if os.IsNotExist(err) {
+		log.Printf("Missing file %s for user %q. Change --user or obtain a token and place it there.",
+			tokenFile, *user)
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+	return strings.TrimSpace(string(slurp))
 }

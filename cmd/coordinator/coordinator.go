@@ -65,19 +65,21 @@ var (
 	// and Region.Zones: http://godoc.org/google.golang.org/api/compute/v1#Region
 	cleanZones = flag.String("zones", "us-central1-a,us-central1-b,us-central1-f", "Comma-separated list of zones to periodically clean of stale build VMs (ones that failed to shut themselves down)")
 
-	mode = flag.String("mode", "", "valid modes are 'dev', 'prod', or '' for auto-detect")
+	mode = flag.String("mode", "", "valid modes are 'dev', 'prod', or '' for auto-detect. dev means localhost development, not be confused with staging on go-dashboard-dev, which is still the 'prod' mode.")
 )
 
 func buildLogBucket() string {
-	return devPrefix() + "go-build-log"
+	return stagingPrefix() + "go-build-log"
 }
 
 func snapBucket() string {
-	return devPrefix() + "go-build-snap"
+	return stagingPrefix() + "go-build-snap"
 }
 
 // LOCK ORDER:
 //   statusMu, buildStatus.mu, trySet.mu
+// (Other locks, such as subrepoHead.Mutex or the remoteBuildlet mutex should
+// not be used along with other locks)
 
 var (
 	startTime = time.Now()
@@ -96,7 +98,6 @@ var (
 	}{m: map[string]string{}}
 )
 
-// tryBuilders must be VMs. The Docker container builds are going away.
 var tryBuilders []dashboard.BuildConfig
 
 func init() {
@@ -157,7 +158,7 @@ func readGCSFile(name string) ([]byte, error) {
 		return []byte(b), nil
 	}
 
-	r, err := storage.NewReader(serviceCtx, devPrefix()+"go-builder-data", name)
+	r, err := storage.NewReader(serviceCtx, stagingPrefix()+"go-builder-data", name)
 	if err != nil {
 		return nil, err
 	}
@@ -166,6 +167,8 @@ func readGCSFile(name string) ([]byte, error) {
 }
 
 // Fake keys signed by a fake CA.
+// These are used in localhost dev mode. (Not to be confused with the
+// staging "dev" instance under GCE project "go-dashboard-dev")
 var testFiles = map[string]string{
 	"farmer-cert.pem": `-----BEGIN CERTIFICATE-----
 MIICljCCAX4CCQCoS+/smvkG2TANBgkqhkiG9w0BAQUFADANMQswCQYDVQQDEwJn
@@ -241,7 +244,10 @@ func serveTLS(ln net.Listener) {
 		return
 	}
 
-	server := &http.Server{Addr: ln.Addr().String()}
+	server := &http.Server{
+		Addr:    ln.Addr().String(),
+		Handler: httpRouter{},
+	}
 	config := &tls.Config{
 		NextProtos:   []string{"http/1.1"},
 		Certificates: []tls.Certificate{cert},
@@ -265,6 +271,12 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 	tc.SetKeepAlive(true)
 	tc.SetKeepAlivePeriod(3 * time.Minute)
 	return tc, nil
+}
+
+type eventTimeLoggerFunc func(event string, optText ...string)
+
+func (fn eventTimeLoggerFunc) logEventTime(event string, optText ...string) {
+	fn(event, optText...)
 }
 
 func main() {
@@ -295,11 +307,13 @@ func main() {
 	http.HandleFunc("/reverse", handleReverse)
 	http.HandleFunc("/style.css", handleStyleCSS)
 	http.HandleFunc("/try", handleTryStatus)
+	http.Handle("/buildlet/create", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletCreate)))
+	http.Handle("/buildlet/list", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletList)))
 	go func() {
 		if *mode == "dev" {
 			return
 		}
-		err := http.ListenAndServe(":80", nil)
+		err := http.ListenAndServe(":80", httpRouter{})
 		if err != nil {
 			log.Fatalf("http.ListenAndServe:80: %v", err)
 		}
@@ -314,9 +328,9 @@ func main() {
 	} else {
 		go gcePool.cleanUpOldVMs()
 
-		if devCluster {
+		if inStaging {
 			dashboard.BuildletBucket = "dev-go-builder-data"
-			dashboard.Builders = devClusterBuilders()
+			dashboard.Builders = stagingClusterBuilders()
 		}
 
 		// Start the Docker processes on this host polling Gerrit and
@@ -351,7 +365,7 @@ func main() {
 	}
 }
 
-func devClusterBuilders() map[string]dashboard.BuildConfig {
+func stagingClusterBuilders() map[string]dashboard.BuildConfig {
 	m := map[string]dashboard.BuildConfig{}
 	for _, name := range []string{
 		"linux-amd64",
@@ -384,7 +398,7 @@ func mayBuildRev(rev builderRev) bool {
 	if isBuilding(rev) {
 		return false
 	}
-	if devCluster && numCurrentBuilds() != 0 {
+	if inStaging && numCurrentBuilds() != 0 {
 		return false
 	}
 	if dashboard.Builders[rev.name].IsReverse {
@@ -592,7 +606,7 @@ func workaroundFlush(w http.ResponseWriter) {
 // TODO(bradfitz): it also currently does not support subrepos.
 func findWorkLoop(work chan<- builderRev) {
 	// Useful for debugging a single run:
-	if devCluster && false {
+	if inStaging && false {
 		work <- builderRev{name: "linux-amd64", rev: "c9778ec302b2e0e0d6027e1e0fca892e428d9657", subName: "tools", subRev: "ac303766f5f240c1796eeea3dc9bf34f1261aa35"}
 		//work <- builderRev{name: "linux-amd64", rev: "54789eff385780c54254f822e09505b6222918e2"}
 		//work <- builderRev{name: "windows-amd64-gce", rev: "54789eff385780c54254f822e09505b6222918e2"}
@@ -604,6 +618,9 @@ func findWorkLoop(work chan<- builderRev) {
 			}
 		}()
 		work = ignore
+	}
+	if inStaging {
+		return
 	}
 	ticker := time.NewTicker(15 * time.Second)
 	for {
@@ -732,6 +749,9 @@ func findTryWorkLoop() {
 }
 
 func findTryWork() error {
+	if inStaging && true {
+		return nil
+	}
 	cis, err := gerritClient.QueryChanges("label:Run-TryBot=1 label:TryBot-Result=0 project:go status:open", gerrit.QueryChangesOpt{
 		Fields: []string{"CURRENT_REVISION"},
 	})
@@ -1086,11 +1106,11 @@ func GetBuildlets(cancel Cancel, pool BuildletPool, n int, machineType, rev stri
 	return ch
 }
 
-func poolForConf(conf dashboard.BuildConfig) (BuildletPool, error) {
+func poolForConf(conf dashboard.BuildConfig) BuildletPool {
 	if conf.VMImage != "" {
-		return gcePool, nil
+		return gcePool
 	}
-	return reversePool, nil
+	return reversePool
 }
 
 func newBuild(rev builderRev) (*buildStatus, error) {
@@ -1139,7 +1159,7 @@ func (st *buildStatus) buildletPool() (BuildletPool, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid BuildletType %q for %q", buildletType, st.conf.Name)
 	}
-	return poolForConf(bconf)
+	return poolForConf(bconf), nil
 }
 
 func (st *buildStatus) expectedMakeBashDuration() time.Duration {
@@ -1988,7 +2008,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 				lastBanner = banner
 				fmt.Fprintf(st, "\n##### %s\n", banner)
 			}
-			if devCluster {
+			if inStaging {
 				out = bytes.TrimSuffix(out, nl)
 				st.Write(out)
 				fmt.Fprintf(st, " (shard %s; par=%d)\n", ti.shardIPPort, ti.groupSize)
@@ -2394,7 +2414,7 @@ func (st *buildStatus) HTMLStatusLine() template.HTML {
 
 func (st *buildStatus) logsURLLocked() string {
 	host := "farmer.golang.org"
-	if devCluster {
+	if inStaging {
 		host = externalIP
 	}
 	u := fmt.Sprintf("http://%v/temporarylogs?name=%s&rev=%s&st=%p", host, st.name, st.rev, st)

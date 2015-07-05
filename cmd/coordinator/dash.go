@@ -28,7 +28,7 @@ import (
 // dashBase returns the base URL of the build dashboard.
 // It must be called after initGCE (so not at init time).
 func dashBase() string {
-	if devCluster {
+	if inStaging {
 		return "https://go-dashboard-dev.appspot.com/"
 	}
 	return "https://build.golang.org/"

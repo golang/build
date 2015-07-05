@@ -51,7 +51,7 @@ const gitArchiveAddr = "127.0.0.1:21536" // 21536 == keys above WATCH
 
 func startWatchers() {
 	mirrorBase := "https://github.com/golang/"
-	if devCluster {
+	if inStaging {
 		mirrorBase = "" // don't mirror from dev cluster
 	}
 	addWatcher(watchConfig{
@@ -147,7 +147,7 @@ func condUpdateImage(img string) error {
 	ii.mu.Lock()
 	defer ii.mu.Unlock()
 	u := ii.url
-	if devCluster {
+	if inStaging {
 		u = strings.Replace(u, "go-builder-data", "dev-go-builder-data", 1)
 	}
 	res, err := http.Head(u)
