@@ -104,11 +104,16 @@ func main() {
 	if *proj == "" {
 		log.Fatalf("Missing --project flag")
 	}
-	if *proj == "symbolic-datum-552" && *staticIP == "" {
+	if *staticIP == "" {
 		// Hard-code this, since GCP doesn't let you rename an IP address, and so
 		// this IP is still called "go-buidler-1-ip" in our project, from our old
 		// naming convention plan.
-		*staticIP = "107.178.219.46"
+		switch *proj {
+		case "symbolic-datum-552":
+			*staticIP = "107.178.219.46"
+		case "go-dashboard-dev":
+			*staticIP = "104.154.113.235"
+		}
 	}
 	prefix := "https://www.googleapis.com/compute/v1/projects/" + *proj
 	machType := prefix + "/zones/" + *zone + "/machineTypes/" + *mach
