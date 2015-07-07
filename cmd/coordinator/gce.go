@@ -210,7 +210,11 @@ func (p *gceBuildletPool) GetBuildlet(cancel Cancel, typ, rev string, el eventTi
 
 	// name is the project-wide unique name of the GCE instance. It can't be longer
 	// than 61 bytes.
-	instName := "buildlet-" + typ + "-" + rev[:8] + "-rn" + randHex(6)
+	revPrefix := rev
+	if len(revPrefix) > 8 {
+		revPrefix = rev[:8]
+	}
+	instName := "buildlet-" + typ + "-" + revPrefix + "-rn" + randHex(6)
 	p.setInstanceUsed(instName, true)
 
 	var needDelete bool
