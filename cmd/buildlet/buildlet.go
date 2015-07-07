@@ -461,11 +461,12 @@ func handleWrite(w http.ResponseWriter, r *http.Request) {
 
 	param, _ := url.ParseQuery(r.URL.RawQuery)
 
-	path := filepath.FromSlash(param.Get("path"))
+	path := param.Get("path")
 	if path == "" || !validRelPath(path) {
 		http.Error(w, "bad path", http.StatusBadRequest)
 		return
 	}
+	path = filepath.FromSlash(path)
 	path = filepath.Join(*workDir, path)
 
 	modeInt, err := strconv.ParseInt(param.Get("mode"), 10, 64)
@@ -500,9 +501,11 @@ func writeFile(r io.Reader, path string, mode os.FileMode) error {
 		return err
 	}
 	// Try to set the mode again, in case the file already existed.
-	if err := f.Chmod(mode); err != nil {
-		f.Close()
-		return err
+	if runtime.GOOS != "windows" {
+		if err := f.Chmod(mode); err != nil {
+			f.Close()
+			return err
+		}
 	}
 	return f.Close()
 }

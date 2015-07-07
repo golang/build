@@ -60,13 +60,14 @@ func dialCoordinator() error {
 		keys = append(keys, string(key))
 	}
 
-	caCert := build.ProdCoordinatorCert
+	caCert := build.ProdCoordinatorCA
 	addr := *coordinator
 	if addr == "farmer.golang.org" {
 		addr = "farmer.golang.org:443"
 	}
 	if devMode {
-		caCert = build.DevCoordinatorCert
+		panic("TODO: sort out staging va dev here")
+		//caCert = build.DevCoordinatorCA
 	}
 
 	caPool := x509.NewCertPool()
