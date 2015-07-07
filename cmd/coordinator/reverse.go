@@ -185,6 +185,22 @@ func (p *reverseBuildletPool) reverseHealthCheck() {
 	p.mu.Unlock()
 }
 
+var (
+	highPriorityBuildletMu sync.Mutex
+	highPriorityBuildlet   = make(map[string]chan *buildlet.Client)
+)
+
+func highPriChan(typ string) chan *buildlet.Client {
+	highPriorityBuildletMu.Lock()
+	defer highPriorityBuildletMu.Unlock()
+	if c, ok := highPriorityBuildlet[typ]; ok {
+		return c
+	}
+	c := make(chan *buildlet.Client)
+	highPriorityBuildlet[typ] = c
+	return c
+}
+
 func (p *reverseBuildletPool) GetBuildlet(cancel Cancel, machineType, rev string, el eventTimeLogger) (*buildlet.Client, error) {
 	seenErrInUse := false
 	for {
@@ -194,7 +210,15 @@ func (p *reverseBuildletPool) GetBuildlet(cancel Cancel, machineType, rev string
 				el.logEventTime("waiting_machine_in_use")
 				seenErrInUse = true
 			}
+			var highPri chan *buildlet.Client
+			if rev == "release" || rev == "adg" || rev == "bradfitz" {
+				highPri = highPriChan(machineType)
+				log.Printf("Rev %q is waiting high-priority", rev)
+			}
 			select {
+			case bc := <-highPri:
+				log.Printf("Rev %q stole a high-priority one.", rev)
+				return p.cleanedBuildlet(bc, el)
 			case <-p.buildletReturned:
 			// As multiple goroutines can be listening for the
 			// buildletReturned signal, it must be treated as
@@ -207,16 +231,25 @@ func (p *reverseBuildletPool) GetBuildlet(cancel Cancel, machineType, rev string
 		} else if err != nil {
 			return nil, err
 		} else {
-			el.logEventTime("got_machine")
-			// Clean up any files from previous builds.
-			if err := b.RemoveAll("."); err != nil {
-				b.Close()
-				return nil, err
+			select {
+			case highPriChan(machineType) <- b:
+				// Somebody else was more important.
+			default:
+				return p.cleanedBuildlet(b, el)
 			}
-			el.logEventTime("cleaned_up")
-			return b, nil
 		}
 	}
+}
+
+func (p *reverseBuildletPool) cleanedBuildlet(b *buildlet.Client, el eventTimeLogger) (*buildlet.Client, error) {
+	el.logEventTime("got_machine")
+	// Clean up any files from previous builds.
+	if err := b.RemoveAll("."); err != nil {
+		b.Close()
+		return nil, err
+	}
+	el.logEventTime("cleaned_up")
+	return b, nil
 }
 
 func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
