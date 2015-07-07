@@ -7,23 +7,21 @@ package main
 
 import (
 	"bytes"
-	"crypto/rand"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
-	"time"
 
-	"golang.org/x/build/auth"
+	"golang.org/x/build"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
-	"golang.org/x/oauth2"
-	"google.golang.org/api/compute/v1"
 )
 
 var (
@@ -35,9 +33,10 @@ var (
 	blogRev  = flag.String("blog", "master", "Blog revision to include")
 	netRev   = flag.String("net", "master", "Net revision to include")
 
-	project = flag.String("project", "symbolic-datum-552", "Google Cloud Project")
-	zone    = flag.String("zone", "us-central1-a", "Compute Engine zone")
+	user = flag.String("user", username(), "coordinator username, appended to 'user-'")
 )
+
+var coordClient *buildlet.CoordinatorClient
 
 type Build struct {
 	OS, Arch string
@@ -113,6 +112,8 @@ func main() {
 		log.Fatal("must specify -tools flag")
 	}
 
+	coordClient = coordinatorClient()
+
 	var wg sync.WaitGroup
 	for _, b := range builds {
 		b := b
@@ -129,59 +130,15 @@ func main() {
 	wg.Wait()
 }
 
-func (b *Build) shouldStartNewVM() bool {
-	if strings.HasPrefix(b.Builder, "darwin-") {
-		return false
-	}
-	return true
-}
-
 func (b *Build) buildlet() (*buildlet.Client, error) {
-	if b.shouldStartNewVM() {
-		return b.buildletFromVM()
-	}
-	panic("TODO: obtain a buildlet via the coordiantor, where the OS X machines are dialed into via the reverse pool")
-}
-
-func (b *Build) buildletFromVM() (*buildlet.Client, error) {
-	bc, ok := dashboard.Builders[b.Builder]
-	if !ok {
-		return nil, fmt.Errorf("unknown builder: %v", bc)
-	}
-	// Start VM
-	log.Printf("%v: Starting VM.", b)
-	keypair, err := buildlet.NewKeyPair()
+	bc, err := coordClient.CreateBuildlet(b.Builder)
 	if err != nil {
 		return nil, err
 	}
-	instance := fmt.Sprintf("release-%v-%v-rn%v", os.Getenv("USER"), bc.Name, randHex(6))
-	client, err := buildlet.StartNewVM(projTokenSource(), instance, bc.Name, buildlet.VMOpts{
-		Zone:        *zone,
-		ProjectID:   *project,
-		TLS:         keypair,
-		Description: fmt.Sprintf("release buildlet for %s", os.Getenv("USER")),
-		DeleteIn:    1 * time.Hour, // If we don't shut it down, it should kill itself.
-		OnInstanceRequested: func() {
-			log.Printf("%v: Sent create request. Waiting for operation.", b)
-		},
-		OnInstanceCreated: func() {
-			log.Printf("%v: Instance created.", b)
-		},
+	bc.SetCloseFunc(func() error {
+		return bc.Destroy()
 	})
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("%v: Instance %v up.", b, instance)
-
-	client.SetCloseFunc(func() error {
-		log.Printf("%v: Destroying VM.", b)
-		err := client.DestroyVM(projTokenSource(), *project, *zone, instance)
-		if err != nil {
-			log.Printf("%v: Destroying VM: %v", b, err)
-		}
-		return nil
-	})
-	return client, nil
+	return bc, nil
 }
 
 func (b *Build) make() (err error) {
@@ -376,27 +333,62 @@ func (b *Build) make() (err error) {
 	return nil
 }
 
-func projTokenSource() oauth2.TokenSource {
-	ts, err := auth.ProjectTokenSource(*project, compute.ComputeScope)
-	if err != nil {
-		log.Fatalf("Failed to get OAuth2 token source for project %s: %v", *project, err)
-	}
-	return ts
-}
-
-func randHex(n int) string {
-	buf := make([]byte, n/2)
-	_, err := rand.Read(buf)
-	if err != nil {
-		panic("Failed to get randomness: " + err.Error())
-	}
-	return fmt.Sprintf("%x", buf)
-}
-
 func addPrefix(prefix string, in []string) []string {
 	var out []string
 	for _, s := range in {
 		out = append(out, path.Join(prefix, s))
 	}
 	return out
+}
+
+func coordinatorClient() *buildlet.CoordinatorClient {
+	return &buildlet.CoordinatorClient{
+		Auth: buildlet.UserPass{
+			Username: "user-" + *user,
+			Password: userToken(),
+		},
+		Instance: build.ProdCoordinator,
+	}
+}
+
+func homeDir() string {
+	if runtime.GOOS == "windows" {
+		return os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
+	}
+	return os.Getenv("HOME")
+}
+
+func configDir() string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(os.Getenv("APPDATA"), "Gomote")
+	}
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, "gomote")
+	}
+	return filepath.Join(homeDir(), ".config", "gomote")
+}
+
+func username() string {
+	if runtime.GOOS == "windows" {
+		return os.Getenv("USERNAME")
+	}
+	return os.Getenv("USER")
+}
+
+func userToken() string {
+	if *user == "" {
+		panic("userToken called with user flag empty")
+	}
+	keyDir := configDir()
+	baseFile := "user-" + *user + ".token"
+	tokenFile := filepath.Join(keyDir, baseFile)
+	slurp, err := ioutil.ReadFile(tokenFile)
+	if os.IsNotExist(err) {
+		log.Printf("Missing file %s for user %q. Change --user or obtain a token and place it there.",
+			tokenFile, *user)
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+	return strings.TrimSpace(string(slurp))
 }
