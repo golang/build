@@ -32,6 +32,7 @@ var (
 	tourRev  = flag.String("tour", "master", "Tour revision to include")
 	blogRev  = flag.String("blog", "master", "Blog revision to include")
 	netRev   = flag.String("net", "master", "Net revision to include")
+	version  = flag.String("version", "", "Version string (go1.5.2)")
 
 	user = flag.String("user", username(), "coordinator username, appended to 'user-'")
 )
@@ -49,6 +50,11 @@ type Build struct {
 
 func (b *Build) String() string {
 	return fmt.Sprintf("%v-%v", b.OS, b.Arch)
+}
+
+func (b *Build) logf(format string, args ...interface{}) {
+	format = fmt.Sprintf("%v: %s", b, format)
+	log.Printf(format, args...)
 }
 
 var builds = []*Build{
@@ -73,7 +79,25 @@ var builds = []*Build{
 		OS:      "freebsd",
 		Arch:    "amd64",
 		Race:    true,
+		Static:  true,
 		Builder: "freebsd-amd64-gce101",
+	},
+	{
+		OS:      "windows",
+		Arch:    "386",
+		Builder: "windows-386-gce",
+	},
+	{
+		OS:      "windows",
+		Arch:    "amd64",
+		Race:    true,
+		Builder: "windows-amd64-gce",
+	},
+	{
+		OS:      "darwin",
+		Arch:    "amd64",
+		Race:    true,
+		Builder: "darwin-amd64-10_10",
 	},
 }
 
@@ -84,9 +108,7 @@ const (
 )
 
 var toolPaths = []string{
-	"golang.org/x/tools/cmd/cover",
 	"golang.org/x/tools/cmd/godoc",
-	"golang.org/x/tools/cmd/vet",
 	"golang.org/x/tour/gotour",
 }
 
@@ -96,10 +118,12 @@ var preBuildCleanFiles = []string{
 	".hgignore",
 	".hgtags",
 	"misc/dashboard",
+	"misc/makerelease",
 }
 
 var postBuildCleanFiles = []string{
 	"VERSION.cache",
+	"pkg/bootstrap",
 }
 
 func main() {
@@ -111,6 +135,9 @@ func main() {
 	if *toolsRev == "" {
 		log.Fatal("must specify -tools flag")
 	}
+	if *version == "" {
+		log.Fatal("must specify -version flag")
+	}
 
 	coordClient = coordinatorClient()
 
@@ -120,17 +147,22 @@ func main() {
 		if *target != "" && b.String() != *target {
 			continue
 		}
+		b.logf("Start.")
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			b.make() // error logged by make function
+			if err := b.make(); err != nil {
+				b.logf("Error: %v", err)
+			} else {
+				b.logf("Done.")
+			}
 		}()
 	}
-	// TODO(adg): show progress of running builders
 	wg.Wait()
 }
 
 func (b *Build) buildlet() (*buildlet.Client, error) {
+	b.logf("Creating buildlet.")
 	bc, err := coordClient.CreateBuildlet(b.Builder)
 	if err != nil {
 		return nil, err
@@ -141,7 +173,7 @@ func (b *Build) buildlet() (*buildlet.Client, error) {
 	return bc, nil
 }
 
-func (b *Build) make() (err error) {
+func (b *Build) make() error {
 	bc, ok := dashboard.Builders[b.Builder]
 	if !ok {
 		return fmt.Errorf("unknown builder: %v", bc)
@@ -152,22 +184,24 @@ func (b *Build) make() (err error) {
 		return err
 	}
 	defer client.Close()
-	defer func() {
-		if err != nil {
-			log.Printf("%v: %v", b, err)
-		}
-	}()
 
 	work, err := client.WorkDir()
 	if err != nil {
 		return err
 	}
 
+	// Write out version file.
+	b.logf("Writing VERSION file.")
+	if err := client.Put(strings.NewReader(*version), "go/VERSION", 0644); err != nil {
+		return err
+	}
+
 	// Push source to VM
-	log.Printf("%v: Pushing source to VM.", b)
+	b.logf("Pushing source to VM.")
 	const (
 		goDir  = "go"
 		goPath = "gopath"
+		go14   = "go1.4"
 	)
 	for _, r := range []struct {
 		repo, rev string
@@ -188,7 +222,14 @@ func (b *Build) make() (err error) {
 		}
 	}
 
-	log.Printf("%v: Cleaning goroot (pre-build).", b)
+	if bc.Go14URL != "" {
+		b.logf("Installing go1.4.")
+		if err := client.PutTarFromURL(bc.Go14URL, go14); err != nil {
+			return err
+		}
+	}
+
+	b.logf("Cleaning goroot (pre-build).")
 	if err := client.RemoveAll(addPrefix(goDir, preBuildCleanFiles)...); err != nil {
 		return err
 	}
@@ -198,21 +239,18 @@ func (b *Build) make() (err error) {
 	if b.OS == "windows" {
 		sep = "\\"
 	}
-	env := []string{
-		"GOOS=" + b.OS,
-		"GOARCH=" + b.Arch,
-		"GOHOSTOS=" + b.OS,
-		"GOHOSTARCH=" + b.Arch,
-		"GOROOT_FINAL=" + bc.GorootFinal(),
-		"GOROOT=" + work + sep + goDir,
-		"GOPATH=" + work + sep + goPath,
-	}
+	env := append(bc.Env(),
+		"GOROOT_FINAL="+bc.GorootFinal(),
+		"GOROOT="+work+sep+goDir,
+		"GOBIN=",
+		"GOPATH="+work+sep+goPath,
+	)
 	if b.Static {
 		env = append(env, "GO_DISTFLAGS=-s")
 	}
 
 	// Execute build
-	log.Printf("%v: Building.", b)
+	b.logf("Building.")
 	out := new(bytes.Buffer)
 	mk := filepath.Join(goDir, bc.MakeScript())
 	remoteErr, err := client.Exec(mk, buildlet.ExecOpts{
@@ -223,7 +261,6 @@ func (b *Build) make() (err error) {
 		return err
 	}
 	if remoteErr != nil {
-		// TODO(adg): write log to file instead?
 		return fmt.Errorf("Build failed: %v\nOutput:\n%v", remoteErr, out)
 	}
 
@@ -249,7 +286,7 @@ func (b *Build) make() (err error) {
 	}
 
 	if b.Race {
-		log.Printf("%v: Building race detector.", b)
+		b.logf("Building race detector.")
 
 		// Because on release branches, go install -a std is a NOP,
 		// we have to resort to delete pkg/$GOOS_$GOARCH, install -race,
@@ -277,12 +314,12 @@ func (b *Build) make() (err error) {
 		}
 	}
 
-	log.Printf("%v: Building %v.", b, strings.Join(toolPaths, ", "))
+	b.logf("Building %v.", strings.Join(toolPaths, ", "))
 	if err := runGo(append([]string{"install"}, toolPaths...)...); err != nil {
 		return err
 	}
 
-	log.Printf("%v: Pushing and running releaselet.", b)
+	b.logf("Pushing and running releaselet.")
 	// TODO(adg): locate releaselet.go in GOPATH
 	const releaselet = "releaselet.go"
 	f, err := os.Open(releaselet)
@@ -298,25 +335,30 @@ func (b *Build) make() (err error) {
 		return err
 	}
 
-	log.Printf("%v: Cleaning goroot (post-build).", b)
+	cleanFiles := append(addPrefix(goDir, postBuildCleanFiles), goPath, releaselet, go14)
+
+	switch b.OS {
+	case "darwin":
+		// TODO(adg): fetch and remove pkg file
+	case "windows":
+		// TODO(adg): fetch and remove msi file
+	}
+
+	b.logf("Cleaning goroot (post-build).")
+
 	// Need to delete everything except the final "go" directory,
 	// as we make the tarball relative to workdir.
-	cleanFiles := append(addPrefix(goDir, postBuildCleanFiles), goPath, releaselet)
 	if err := client.RemoveAll(cleanFiles...); err != nil {
 		return err
 	}
 
-	// TODO(adg): fetch msi or pkg files
-
 	// Download tarball
-	log.Printf("%v: Downloading tarball.", b)
+	b.logf("Downloading tarball.")
 	tgz, err := client.GetTar(".")
 	if err != nil {
 		return err
 	}
-	// TODO(adg): deduce actual version
-	version := "VERSION"
-	filename := "go." + version + "." + b.String() + ".tar.gz"
+	filename := *version + "." + b.String() + ".tar.gz"
 	f, err = os.Create(filename)
 	if err != nil {
 		return err
@@ -328,7 +370,7 @@ func (b *Build) make() (err error) {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	log.Printf("%v: Wrote %q.", b, filename)
+	b.logf("Wrote %q.", filename)
 
 	return nil
 }
