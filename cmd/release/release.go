@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// TODO(adg): build source release
+// TODO(adg): put windows release in a zip file
+// TODO(adg): put uploader in here
+
 // Command release builds a Go release.
 package main
 
@@ -61,7 +65,7 @@ var builds = []*Build{
 	{
 		OS:      "linux",
 		Arch:    "386",
-		Builder: "linux-amd64",
+		Builder: "linux-386",
 	},
 	{
 		OS:      "linux",
