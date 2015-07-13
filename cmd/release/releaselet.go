@@ -32,7 +32,7 @@ func main() {
 		// TODO(adg): build msi files on windows
 	case "darwin":
 		// TOOD(adg): build pkg files on darwin
-		//err = darwinPkg()
+		err = darwinPkg()
 	}
 	if err != nil {
 		log.Fatal(err)
@@ -145,28 +145,36 @@ func darwinPkg() error {
 	}
 
 	// Build the package file.
-	dest := "pkg"
+	dest := "package"
 	if err := os.Mkdir(dest, 0755); err != nil {
 		return err
 	}
 	defer os.RemoveAll(dest)
 
-	cmd := exec.Command("pkgbuild",
+	if err := run("pkgbuild",
 		"--identifier", "com.googlecode.go",
 		"--version", version,
 		"--scripts", "darwin/scripts",
 		"--root", work,
-		filepath.Join(dest, "com.googlecode.go.pkg"))
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	if err := cmd.Run(); err != nil {
+		filepath.Join(dest, "com.googlecode.go.pkg"),
+	); err != nil {
 		return err
 	}
 
-	cmd = exec.Command("productbuild",
+	const pkg = "pkg" // known to cmd/release
+	if err := os.Mkdir(pkg, 0755); err != nil {
+		return err
+	}
+	return run("productbuild",
 		"--distribution", "darwin/Distribution",
 		"--resources", "darwin/Resources",
 		"--package-path", dest,
-		"go.pkg")
+		filepath.Join(cwd, pkg, "go.pkg"), // file name irrelevant
+	)
+}
+
+func run(name string, arg ...string) error {
+	cmd := exec.Command(name, arg...)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	return cmd.Run()
 }
@@ -186,8 +194,7 @@ func cp(dst, src string) error {
 		return err
 	}
 	defer df.Close()
-	// Windows doesn't currently implement Fchmod
-	// TODO(adg): is this still true?
+	// Windows doesn't implement Fchmod.
 	if runtime.GOOS != "windows" {
 		if err := df.Chmod(fi.Mode()); err != nil {
 			return err

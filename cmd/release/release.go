@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// TODO(adg): build source release
 // TODO(adg): put windows release in a zip file
 // TODO(adg): put uploader in here
 
@@ -10,7 +9,9 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"flag"
 	"fmt"
 	"io"
@@ -31,12 +32,13 @@ import (
 var (
 	target = flag.String("target", "", "If specified, build specific target platform ('linux-amd64')")
 
-	rev      = flag.String("rev", "", "Go revision to build")
-	toolsRev = flag.String("tools", "", "Tools revision to build")
-	tourRev  = flag.String("tour", "master", "Tour revision to include")
-	blogRev  = flag.String("blog", "master", "Blog revision to include")
-	netRev   = flag.String("net", "master", "Net revision to include")
-	version  = flag.String("version", "", "Version string (go1.5.2)")
+	rev       = flag.String("rev", "", "Go revision to build")
+	toolsRev  = flag.String("tools", "", "Tools revision to build")
+	tourRev   = flag.String("tour", "master", "Tour revision to include")
+	blogRev   = flag.String("blog", "master", "Blog revision to include")
+	netRev    = flag.String("net", "master", "Net revision to include")
+	version   = flag.String("version", "", "Version string (go1.5.2)")
+	coordAddr = flag.String("coordinator", "", "Coordinator instance address (default is production)")
 
 	user = flag.String("user", username(), "coordinator username, appended to 'user-'")
 )
@@ -45,6 +47,7 @@ var coordClient *buildlet.CoordinatorClient
 
 type Build struct {
 	OS, Arch string
+	Source   bool
 
 	Race   bool // Build race detector.
 	Static bool // Statically-link binaries.
@@ -53,6 +56,9 @@ type Build struct {
 }
 
 func (b *Build) String() string {
+	if b.Source {
+		return "src"
+	}
 	return fmt.Sprintf("%v-%v", b.OS, b.Arch)
 }
 
@@ -62,6 +68,10 @@ func (b *Build) logf(format string, args ...interface{}) {
 }
 
 var builds = []*Build{
+	{
+		Source:  true,
+		Builder: "linux-amd64",
+	},
 	{
 		OS:      "linux",
 		Arch:    "386",
@@ -216,6 +226,9 @@ func (b *Build) make() error {
 		{"tour", *tourRev},
 		{"net", *netRev},
 	} {
+		if b.Source && r.repo != "go" {
+			continue
+		}
 		dir := goDir
 		if r.repo != "go" {
 			dir = goPath + "/src/golang.org/x/" + r.repo
@@ -226,7 +239,7 @@ func (b *Build) make() error {
 		}
 	}
 
-	if bc.Go14URL != "" {
+	if bc.Go14URL != "" && !b.Source {
 		b.logf("Installing go1.4.")
 		if err := client.PutTarFromURL(bc.Go14URL, go14); err != nil {
 			return err
@@ -238,6 +251,11 @@ func (b *Build) make() error {
 		return err
 	}
 
+	if b.Source {
+		b.logf("Skipping build.")
+		return b.fetchTarball(client)
+	}
+
 	// Set up build environment.
 	sep := "/"
 	if b.OS == "windows" {
@@ -246,8 +264,8 @@ func (b *Build) make() error {
 	env := append(bc.Env(),
 		"GOROOT_FINAL="+bc.GorootFinal(),
 		"GOROOT="+work+sep+goDir,
-		"GOBIN=",
 		"GOPATH="+work+sep+goPath,
+		"GOBIN=",
 	)
 	if b.Static {
 		env = append(env, "GO_DISTFLAGS=-s")
@@ -343,9 +361,19 @@ func (b *Build) make() error {
 
 	switch b.OS {
 	case "darwin":
-		// TODO(adg): fetch and remove pkg file
+		filename := *version + "." + b.String() + ".pkg"
+		if err := b.fetchFile(client, filename, "pkg"); err != nil {
+			return err
+		}
+		cleanFiles = append(cleanFiles, "pkg")
 	case "windows":
-		// TODO(adg): fetch and remove msi file
+		if false { // TODO(adg): implement this
+			filename := *version + "." + b.String() + ".msi"
+			if err := b.fetchFile(client, filename, "msi"); err != nil {
+				return err
+			}
+			cleanFiles = append(cleanFiles, "msi")
+		}
 	}
 
 	b.logf("Cleaning goroot (post-build).")
@@ -356,26 +384,61 @@ func (b *Build) make() error {
 		return err
 	}
 
-	// Download tarball
+	return b.fetchTarball(client)
+}
+
+func (b *Build) fetchTarball(client *buildlet.Client) error {
 	b.logf("Downloading tarball.")
 	tgz, err := client.GetTar(".")
 	if err != nil {
 		return err
 	}
 	filename := *version + "." + b.String() + ".tar.gz"
-	f, err = os.Create(filename)
+	return b.writeFile(filename, tgz)
+}
+
+// fetchFile fetches the specified directory from the given buildlet, and
+// writes the first file it finds in that directory to dest.
+func (b *Build) fetchFile(client *buildlet.Client, dest, dir string) error {
+	b.logf("Downloading file from %q.", dir)
+	tgz, err := client.GetTar(dir)
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(f, tgz); err != nil {
+	defer tgz.Close()
+	zr, err := gzip.NewReader(tgz)
+	if err != nil {
+		return err
+	}
+	tr := tar.NewReader(zr)
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			return io.ErrUnexpectedEOF
+		}
+		if err != nil {
+			return err
+		}
+		if !h.FileInfo().IsDir() {
+			break
+		}
+	}
+	return b.writeFile(dest, tr)
+}
+
+func (b *Build) writeFile(name string, r io.Reader) error {
+	f, err := os.Create(name)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(f, r); err != nil {
 		f.Close()
 		return err
 	}
 	if err := f.Close(); err != nil {
 		return err
 	}
-	b.logf("Wrote %q.", filename)
-
+	b.logf("Wrote %q.", name)
 	return nil
 }
 
@@ -388,12 +451,16 @@ func addPrefix(prefix string, in []string) []string {
 }
 
 func coordinatorClient() *buildlet.CoordinatorClient {
+	inst := build.ProdCoordinator
+	if *coordAddr != "" {
+		inst = build.CoordinatorInstance(*coordAddr)
+	}
 	return &buildlet.CoordinatorClient{
 		Auth: buildlet.UserPass{
 			Username: "user-" + *user,
 			Password: userToken(),
 		},
-		Instance: build.ProdCoordinator,
+		Instance: inst,
 	}
 }
 
