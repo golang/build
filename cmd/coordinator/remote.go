@@ -105,7 +105,7 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 
 	// rev is just a comment basically. The GCE pool uses it for
 	// naming.
-	rev := strings.TrimPrefix(user, "user-")
+	rev := user // includes "user-" prefix.
 
 	var closeNotify <-chan bool
 	if cn, ok := w.(http.CloseNotifier); ok {

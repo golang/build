@@ -208,6 +208,14 @@ func (p *gceBuildletPool) GetBuildlet(cancel Cancel, typ, rev string, el eventTi
 		return nil, err
 	}
 
+	deleteIn := vmDeleteTimeout
+	if strings.HasPrefix(rev, "user-") {
+		// Created by gomote (see remote.go), so don't kill it in 45 minutes.
+		// remote.go handles timeouts itself.
+		deleteIn = 0
+		rev = strings.TrimPrefix(rev, "user-")
+	}
+
 	// name is the project-wide unique name of the GCE instance. It can't be longer
 	// than 61 bytes.
 	revPrefix := rev
@@ -225,7 +233,7 @@ func (p *gceBuildletPool) GetBuildlet(cancel Cancel, typ, rev string, el eventTi
 		ProjectID:   projectID,
 		Zone:        projectZone,
 		Description: fmt.Sprintf("Go Builder for %s at %s", typ, rev),
-		DeleteIn:    vmDeleteTimeout,
+		DeleteIn:    deleteIn,
 		OnInstanceRequested: func() {
 			el.logEventTime("instance_create_requested", instName)
 			log.Printf("GCE VM %q now booting", instName)
@@ -462,10 +470,8 @@ func (p *gceBuildletPool) cleanZoneVMs(zone string) error {
 			}
 		}
 		// Delete buildlets (things we made) from previous
-		// generations.  Thenaming restriction (buildlet-*)
-		// prevents us from deleting buildlet VMs used by
-		// Gophers for interactive development & debugging
-		// (non-builder users); those are named "mote-*".
+		// generations. Only deleting things starting with "buildlet-"
+		// is a historical restriction, but still fine for paranoia.
 		if sawDeleteAt && strings.HasPrefix(inst.Name, "buildlet-") && !p.instanceUsed(inst.Name) {
 			if _, ok := deletedVMCache.Get(inst.Name); !ok {
 				log.Printf("Deleting VM %q in zone %q from an earlier coordinator generation ...", inst.Name, zone)
