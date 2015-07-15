@@ -80,8 +80,9 @@ func dialCoordinator() error {
 		return err // try again
 	}
 	config := &tls.Config{
-		ServerName: "go",
-		RootCAs:    caPool,
+		ServerName:         "go",
+		RootCAs:            caPool,
+		InsecureSkipVerify: devMode,
 	}
 	conn := tls.Client(tcpConn, config)
 	if err := conn.Handshake(); err != nil {

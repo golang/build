@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 )
 
 // CoordinatorInstance is either "prod", "staging", or "localhost:<port>".
@@ -40,8 +41,9 @@ func (ci CoordinatorInstance) TLSHostPort() (string, error) {
 func (ci CoordinatorInstance) TLSDialer() func(network, addr string) (net.Conn, error) {
 	caPool := x509.NewCertPool()
 	tlsConf := &tls.Config{
-		ServerName: "go", // fixed name; see build.go
-		RootCAs:    caPool,
+		ServerName:         "go", // fixed name; see build.go
+		RootCAs:            caPool,
+		InsecureSkipVerify: ci.isDev(),
 	}
 	var err error
 	ca := ci.CACert()
@@ -79,8 +81,14 @@ func (ci CoordinatorInstance) CACert() string {
 		return ProdCoordinatorCA
 	} else if ci == StagingCoordinator {
 		return StagingCoordinatorCA
+	} else if ci.isDev() {
+		return DevCoordinatorCA
 	}
 	return ""
+}
+
+func (ci CoordinatorInstance) isDev() bool {
+	return strings.HasPrefix(string(ci), "localhost")
 }
 
 /*
@@ -139,49 +147,49 @@ yHd17CDY55cj4fworr/PayJuB7JJOrLk68yx2eUlK0Np
 // development mode. (Not to be confused with the staging "dev" instance
 // under GCE project "go-dashboard-dev")
 const DevCoordinatorCA = `-----BEGIN CERTIFICATE-----
-MIICljCCAX4CCQCoS+/smvkG2TANBgkqhkiG9w0BAQUFADANMQswCQYDVQQDEwJn
-bzAeFw0xNTA0MDYwMzE3NDJaFw0xNzA0MDUwMzE3NDJaMA0xCzAJBgNVBAMTAmdv
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1NMaVxX8RfCMtQB18azV
-hL6/U7C8W2G+8WXYeFuOpgP2SHnMbsUeTiUYWS1xqAxUh3Vl/TT1HIASRDL7kBis
-yj+drspafnCr4Yp9oJx1xlIhVXGD/SyHk5oewkjkNEmrFtUT07mT2lmZqD3XJ+6V
-aQslRxhPEkLGsXIA/hCucPIplI9jgLY8TmOBhQ7RzXAnk/ayAzDkCgkWB4k/zaFy
-LiHjEkE7O7PIjjY51btCLep9QSts98zojY5oYNj2RdQOZa56MHAlh9hbdpm+P1vp
-2QBpsDbVpHYv2VPCPvkdOGU1/nzumsxHy17DcirKP8Tuf6zMf9obeuSlMvUUPptl
-hwIDAQABMA0GCSqGSIb3DQEBBQUAA4IBAQBxvUMKsX+DEhZSmc164IuSVJ9ucZ97
-+KWn4nCwnVkI/RrsJpiTj3pZNRkAxq2vmZTpUdU0CgGHdZNXp/6s/GX4cSzFphSf
-WZQN0CG/O50SQ39m7fz/dZ2Xse6EH2grr6KN0QsDhK/RVxecQv57rY9nLFHnC60t
-vJBDC739lWlnsGDxylJNxEk2l5c2rJdn82yGw2G9pQ/LDVAtO1G2rxGkpi4FcpGk
-rNAa6MiwcyFHcAr3OsigLm4Q9bCS6YXfQDvCZGAR91ADXVWDFC1sgBgM3U3+1bGp
-tgXUVKymUvoVq0BiY4BCCYDluoErgZDytLmnUOxrykYi532VpRbbK2ja
+MIICljCCAX4CCQDN22+A+3+WjjANBgkqhkiG9w0BAQUFADANMQswCQYDVQQDEwJn
+bzAeFw0xNTA3MTUwMzIzMDhaFw0xNzA3MTQwMzIzMDhaMA0xCzAJBgNVBAMTAmdv
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlj8cK93O6klUVcAn3eC1
+za5khnTe/dLPaErrVcymJvdFKEedzNOA6aI9eB2F21KafKcQCaMR+aWBuWzHf4cR
+p39oQwIi3h1rCpTCq4tMJB2cXarl3ygj5U/VcFLwPcHl0EYFMxHEF4MM2qiPQvpr
+5mt/DTwFtkg+Wb3gHylDqtaOqHwta/wTFfGoI03P2OXRgi8a0UkgPpVXlaiamqfb
+kpId7cRLUPp+dJWvvvbHtkSkIo1k+z3UAluHEhF5j5jBqTQM9A+7otFMkO5QUjJS
+9E25/cQuaPOnu+xqkxnPPXkABIHvnmLK3pxPJ2CaEFPVpzqe+98Bmqxi3ll9vMUS
+dwIDAQABMA0GCSqGSIb3DQEBBQUAA4IBAQA/ZZdBMuJUwzitfrcIF3Jtx+ujuNkw
+Jc7eCKATu/ylyfS/ORBk+9GjTRlRDomngz4SojuqR+au92sU4OrLnuEE1hK18TBy
+FIiU7CFBG1qj08Ijb812SYAxNr7uKCPfYfM9qbhBLEvQyHrTi9exEey27yWZxy9C
+H123Rv8mpI8rGa39k5M9tqtPfXXRChHhXHaU5B0jpk0NWXTDsTTJxqDZqS3NiUPS
+I2cBKSy6qTfqEwvxAmcu0tDWzDo2N4Ol1yUy6des7hOHuS9mO5W4qk5D6Yr58+H/
+hdFnZur+fHY+hgulEWZjcg1JMzEDhiIYGUbXJrErRIRhxnCksus3tkWD
 -----END CERTIFICATE-----`
 
 // DevCoordinatorKey is the key used by the coordinator and buildlet in
 // development mode. (Not to be confused with the staging "dev" instance
 // under GCE project "go-dashboard-dev")
 const DevCoordinatorKey = `-----BEGIN RSA PRIVATE KEY-----
-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
+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
 -----END RSA PRIVATE KEY-----`
