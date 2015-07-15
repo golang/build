@@ -66,8 +66,7 @@ func dialCoordinator() error {
 		addr = "farmer.golang.org:443"
 	}
 	if devMode {
-		panic("TODO: sort out staging va dev here")
-		//caCert = build.DevCoordinatorCA
+		caCert = build.DevCoordinatorCA
 	}
 
 	caPool := x509.NewCertPool()
