@@ -204,12 +204,6 @@ func (b *Build) make() error {
 		return err
 	}
 
-	// Write out version file.
-	b.logf("Writing VERSION file.")
-	if err := client.Put(strings.NewReader(*version), "go/VERSION", 0644); err != nil {
-		return err
-	}
-
 	// Push source to VM
 	b.logf("Pushing source to VM.")
 	const (
@@ -244,6 +238,12 @@ func (b *Build) make() error {
 		if err := client.PutTarFromURL(bc.Go14URL, go14); err != nil {
 			return err
 		}
+	}
+
+	// Write out version file.
+	b.logf("Writing VERSION file.")
+	if err := client.Put(strings.NewReader(*version), "go/VERSION", 0644); err != nil {
+		return err
 	}
 
 	b.logf("Cleaning goroot (pre-build).")
@@ -341,6 +341,11 @@ func (b *Build) make() error {
 		return err
 	}
 
+	b.logf("Cleaning goroot (post-build).")
+	if err := client.RemoveAll(addPrefix(goDir, postBuildCleanFiles)...); err != nil {
+		return err
+	}
+
 	b.logf("Pushing and running releaselet.")
 	// TODO(adg): locate releaselet.go in GOPATH
 	const releaselet = "releaselet.go"
@@ -357,7 +362,7 @@ func (b *Build) make() error {
 		return err
 	}
 
-	cleanFiles := append(addPrefix(goDir, postBuildCleanFiles), goPath, releaselet, go14)
+	cleanFiles := []string{goPath, releaselet, go14}
 
 	switch b.OS {
 	case "darwin":
@@ -367,19 +372,16 @@ func (b *Build) make() error {
 		}
 		cleanFiles = append(cleanFiles, "pkg")
 	case "windows":
-		if false { // TODO(adg): implement this
-			filename := *version + "." + b.String() + ".msi"
-			if err := b.fetchFile(client, filename, "msi"); err != nil {
-				return err
-			}
-			cleanFiles = append(cleanFiles, "msi")
+		filename := *version + "." + b.String() + ".msi"
+		if err := b.fetchFile(client, filename, "msi"); err != nil {
+			return err
 		}
+		cleanFiles = append(cleanFiles, "msi")
 	}
-
-	b.logf("Cleaning goroot (post-build).")
 
 	// Need to delete everything except the final "go" directory,
 	// as we make the tarball relative to workdir.
+	b.logf("Cleaning workdir.")
 	if err := client.RemoveAll(cleanFiles...); err != nil {
 		return err
 	}
