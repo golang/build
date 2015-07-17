@@ -281,7 +281,7 @@ func installWix(path string) error {
 }
 
 func httpGet(url string) ([]byte, error) {
-	r, err := http.Get(wixBinaries)
+	r, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -630,10 +630,7 @@ var windowsData = map[string]string{
 </Wix>
 `,
 
-	// TODO(adg): figure out why this causes light to throw an encoding error
-	//"LICENSE.rtf":           storageBase + "windows/LICENSE.rtf",
-	"LICENSE.rtf": "", // empty license for now
-
+	"LICENSE.rtf":           storageBase + "windows/LICENSE.rtf",
 	"images/Banner.jpg":     storageBase + "windows/Banner.jpg",
 	"images/Dialog.jpg":     storageBase + "windows/Dialog.jpg",
 	"images/DialogLeft.jpg": storageBase + "windows/DialogLeft.jpg",
