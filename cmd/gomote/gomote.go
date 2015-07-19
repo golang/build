@@ -31,14 +31,9 @@ import (
 )
 
 var (
-	user = flag.String("user", username(), "gomote server username; if set to the empty string, only GCE VMs can be created, without using the coordinator.")
+	user = flag.String("user", username(), "gomote server username. You must have the token for user-$USER. The error message will say where to put it.")
 
-	proj = flag.String("project", "symbolic-datum-552", "GCE project owning builders")
-	zone = flag.String("zone", "us-central1-a", "GCE zone")
-
-	// Mostly dev options:
-	dev            = flag.Bool("dev", false, "if true, the default project becomes the default staging project")
-	buildletBucket = flag.String("buildletbucket", "", "Optional alternate GCS bucket for the buildlet binaries.")
+	staging = flag.Bool("staging", false, "if true, use the staging build coordinator and buildlets")
 )
 
 type command struct {
@@ -84,7 +79,7 @@ func registerCommand(name, des string, run func([]string) error) {
 
 func coordinatorClient() *buildlet.CoordinatorClient {
 	inst := build.ProdCoordinator
-	if *dev {
+	if *staging {
 		inst = build.StagingCoordinator
 	}
 	return &buildlet.CoordinatorClient{
@@ -115,12 +110,8 @@ func main() {
 	registerCommands()
 	flag.Usage = usage
 	flag.Parse()
-	if *dev {
-		*proj = "go-dashboard-dev"
+	if *staging {
 		dashboard.BuildletBucket = "dev-go-builder-data"
-	}
-	if v := *buildletBucket; v != "" {
-		dashboard.BuildletBucket = v
 	}
 	args := flag.Args()
 	if len(args) == 0 {

@@ -7,13 +7,10 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"sort"
 	"strings"
-	"time"
 
-	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 )
 
@@ -37,8 +34,10 @@ func create(args []string) error {
 		}
 		os.Exit(1)
 	}
-	var timeout time.Duration
-	fs.DurationVar(&timeout, "timeout", 60*time.Minute, "how long the VM will live before being deleted.")
+	// TODO(bradfitz): restore this option, and send it to the coordinator:
+	// For now, comment it out so it's not misleading.
+	// var timeout time.Duration
+	// fs.DurationVar(&timeout, "timeout", 60*time.Minute, "how long the VM will live before being deleted.")
 
 	fs.Parse(args)
 	if fs.NArg() != 1 {
@@ -63,36 +62,11 @@ func create(args []string) error {
 		}
 	}
 
-	if *user == "" {
-		instPrefix := fmt.Sprintf("mote-%s-", username())
-		instName, err := nextName(instPrefix + builderType)
-		if err != nil {
-			return err
-		}
-		client, err := buildlet.StartNewVM(projTokenSource(), instName, builderType, buildlet.VMOpts{
-			Zone:        *zone,
-			ProjectID:   *proj,
-			TLS:         userKeyPair(),
-			DeleteIn:    timeout,
-			Description: fmt.Sprintf("gomote buildlet for %s", username()),
-			OnInstanceRequested: func() {
-				log.Printf("Sent create request. Waiting for operation.")
-			},
-			OnInstanceCreated: func() {
-				log.Printf("Instance created.")
-			},
-		})
-		if err != nil {
-			return fmt.Errorf("failed to create VM: %v", err)
-		}
-		fmt.Printf("%s\t%s\n", strings.TrimPrefix(instName, instPrefix), client.URL())
-	} else {
-		cc := coordinatorClient()
-		client, err := cc.CreateBuildlet(builderType)
-		if err != nil {
-			return fmt.Errorf("failed to create buildlet: %v", err)
-		}
-		fmt.Println(client.RemoteName())
+	cc := coordinatorClient()
+	client, err := cc.CreateBuildlet(builderType)
+	if err != nil {
+		return fmt.Errorf("failed to create buildlet: %v", err)
 	}
+	fmt.Println(client.RemoteName())
 	return nil
 }

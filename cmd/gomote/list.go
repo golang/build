@@ -28,62 +28,51 @@ func list(args []string) error {
 		fs.Usage()
 	}
 
-	if *user == "" {
-		prefix := fmt.Sprintf("mote-%s-", username())
-		vms, err := buildlet.ListVMs(projTokenSource(), *proj, *zone)
-		if err != nil {
-			return fmt.Errorf("failed to list VMs: %v", err)
-		}
-		for _, vm := range vms {
-			if !strings.HasPrefix(vm.Name, prefix) {
-				continue
+	cc := coordinatorClient()
+	rbs, err := cc.RemoteBuildlets()
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, rb := range rbs {
+		fmt.Printf("%s\t%s\texpires in %v\n", rb.Name, rb.Type, rb.Expires.Sub(time.Now()))
+	}
+
+	return nil
+}
+
+func clientAndConf(name string) (bc *buildlet.Client, conf dashboard.BuildConfig, err error) {
+	cc := coordinatorClient()
+
+	rbs, err := cc.RemoteBuildlets()
+	if err != nil {
+		return
+	}
+	var ok bool
+	for _, rb := range rbs {
+		if rb.Name == name {
+			conf, ok = namedConfig(rb.Type)
+			if !ok {
+				err = fmt.Errorf("builder %q exists, but unknown type %q", name, rb.Type)
+				return
 			}
-			fmt.Printf("%s\thttps://%s\n", strings.TrimPrefix(vm.Name, prefix), strings.TrimSuffix(vm.IPPort, ":443"))
-		}
-	} else {
-		cc := coordinatorClient()
-		rbs, err := cc.RemoteBuildlets()
-		if err != nil {
-			log.Fatal(err)
-		}
-		for _, rb := range rbs {
-			fmt.Printf("%s\t%s\texpires in %v\n", rb.Name, rb.Type, rb.Expires.Sub(time.Now()))
+			break
 		}
 	}
-	return nil
+	if !ok {
+		err = fmt.Errorf("unknown builder %q", name)
+		return
+	}
+
+	bc, err = namedClient(name)
+	return
 }
 
 func namedClient(name string) (*buildlet.Client, error) {
 	if strings.Contains(name, ":") {
 		return buildlet.NewClient(name, buildlet.NoKeyPair), nil
 	}
-	if *user != "" {
-		cc := coordinatorClient()
-		return cc.NamedBuildlet(name)
-	}
-	// TODO(bradfitz): cache the list on disk and avoid the API call?
-	vms, err := buildlet.ListVMs(projTokenSource(), *proj, *zone)
-	if err != nil {
-		return nil, fmt.Errorf("error listing VMs while looking up %q: %v", name, err)
-	}
-	wantName := fmt.Sprintf("mote-%s-%s", username(), name)
-	var matches []buildlet.VM
-	for _, vm := range vms {
-		if vm.Name == wantName {
-			return buildlet.NewClient(vm.IPPort, vm.TLS), nil
-		}
-		if strings.HasPrefix(vm.Name, wantName) {
-			matches = append(matches, vm)
-		}
-	}
-	if len(matches) == 1 {
-		vm := matches[0]
-		return buildlet.NewClient(vm.IPPort, vm.TLS), nil
-	}
-	if len(matches) > 1 {
-		return nil, fmt.Errorf("prefix %q is ambiguous", wantName)
-	}
-	return nil, fmt.Errorf("buildlet %q not running", name)
+	cc := coordinatorClient()
+	return cc.NamedBuildlet(name)
 }
 
 // namedConfig returns the builder configuration that matches the given mote
@@ -96,30 +85,4 @@ func namedConfig(name string) (dashboard.BuildConfig, bool) {
 		}
 	}
 	return dashboard.Builders[match], match != ""
-}
-
-// nextName returns the next available numbered name or the given buildlet base
-// name. For example, if the provided prefix is "linux-amd64" and there's
-// already an instance named "linux-amd64", nextName will return
-// "linux-amd64-1".
-func nextName(prefix string) (string, error) {
-	vms, err := buildlet.ListVMs(projTokenSource(), *proj, *zone)
-	if err != nil {
-		return "", fmt.Errorf("error listing VMs: %v", err)
-	}
-	matches := map[string]bool{}
-	for _, vm := range vms {
-		if strings.HasPrefix(vm.Name, prefix) {
-			matches[vm.Name] = true
-		}
-	}
-	if len(matches) == 0 || !matches[prefix] {
-		return prefix, nil
-	}
-	for i := 1; ; i++ {
-		next := fmt.Sprintf("%v-%v", prefix, i)
-		if !matches[next] {
-			return next, nil
-		}
-	}
 }

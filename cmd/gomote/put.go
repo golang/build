@@ -99,17 +99,13 @@ func put14(args []string) error {
 		fs.Usage()
 	}
 	name := fs.Arg(0)
-	conf, ok := namedConfig(name)
-	if !ok {
-		return fmt.Errorf("unknown builder %q", name)
+	bc, conf, err := clientAndConf(name)
+	if err != nil {
+		return err
 	}
 	if conf.Go14URL == "" {
 		fmt.Printf("No Go14URL field defined for %q; ignoring. (may be baked into image)\n", name)
 		return nil
-	}
-	bc, err := namedClient(name)
-	if err != nil {
-		return err
 	}
 	return bc.PutTarFromURL(conf.Go14URL, "go1.4")
 }

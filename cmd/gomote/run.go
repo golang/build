@@ -40,34 +40,8 @@ func run(args []string) error {
 	name, cmd := fs.Arg(0), fs.Arg(1)
 
 	var conf dashboard.BuildConfig
-	if *user == "" {
-		var ok bool
-		conf, ok = namedConfig(name)
-		if !ok {
-			return fmt.Errorf("unknown builder type %q", name)
-		}
-	} else {
-		cc := coordinatorClient()
-		rbs, err := cc.RemoteBuildlets()
-		if err != nil {
-			return err
-		}
-		var ok bool
-		for _, rb := range rbs {
-			if rb.Name == name {
-				conf, ok = namedConfig(rb.Type)
-				if !ok {
-					return fmt.Errorf("builder %q exists, but unknown type %q", name, rb.Type)
-				}
-				break
-			}
-		}
-		if !ok {
-			return fmt.Errorf("unknown builder %q", name)
-		}
-	}
 
-	bc, err := namedClient(name)
+	bc, conf, err := clientAndConf(name)
 	if err != nil {
 		return err
 	}
