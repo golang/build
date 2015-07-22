@@ -565,6 +565,22 @@ func init() {
 		NumTestHelpers: 1, // limited resources
 	})
 	addBuilder(BuildConfig{
+		Name:           "darwin-386-10_10",
+		Notes:          "Mac Mini running OS X 10.10 (Yosemite)",
+		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
+		IsReverse:      true,
+		env:            []string{"GOARCH=386"},
+		NumTestHelpers: 1, // limited resources
+	})
+	addBuilder(BuildConfig{
+		Name:           "android-arm-sdk19",
+		Notes:          "Android ARM device running android-19 (KitKat 4.4), attatched to Mac Mini",
+		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
+		IsReverse:      true,
+		env:            []string{"GOOS=android", "GOARCH=arm"},
+		NumTestHelpers: 1, // limited resources
+	})
+	addBuilder(BuildConfig{
 		Name:      "darwin-arm-a5ios",
 		Notes:     "iPhone 4S (A5 processor), via a Mac Mini",
 		Owner:     "crawshaw@golang.org",
