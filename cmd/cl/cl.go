@@ -290,6 +290,9 @@ func parseCL(ci *gerrit.ChangeInfo) *CL {
 		explicitReviewer = ""
 	)
 	for _, msg := range ci.Messages {
+		if msg.Author == nil { // happens for Gerrit-generated messages
+			continue
+		}
 		if strings.HasPrefix(msg.Message, "Uploaded patch set ") {
 			if explicitReviewer == "close" {
 				explicitReviewer = ""
@@ -386,6 +389,9 @@ func parseCL(ci *gerrit.ChangeInfo) *CL {
 	// figure out whether the CL is in need of review
 	// (or else is waiting for the author to do more work).
 	for _, msg := range ci.Messages {
+		if msg.Author == nil { // happens for Gerrit-generated messages
+			continue
+		}
 		if cl.Start.IsZero() {
 			cl.Start = msg.Time.Time()
 		}
