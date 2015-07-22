@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 // TODO(adg): put windows release in a zip file
-// TODO(adg): put uploader in here
 
 // Command release builds a Go release.
 package main
@@ -39,11 +38,54 @@ var (
 	netRev    = flag.String("net", "master", "Net revision to include")
 	version   = flag.String("version", "", "Version string (go1.5.2)")
 	coordAddr = flag.String("coordinator", "", "Coordinator instance address (default is production)")
+	user      = flag.String("user", username(), "coordinator username, appended to 'user-'")
 
-	user = flag.String("user", username(), "coordinator username, appended to 'user-'")
+	uploadMode = flag.Bool("upload", false, "Upload files (exclusive to all other flags)")
 )
 
 var coordClient *buildlet.CoordinatorClient
+
+func main() {
+	flag.Parse()
+
+	if *uploadMode {
+		if err := upload(flag.Args()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	if *rev == "" {
+		log.Fatal("must specify -rev flag")
+	}
+	if *toolsRev == "" {
+		log.Fatal("must specify -tools flag")
+	}
+	if *version == "" {
+		log.Fatal("must specify -version flag")
+	}
+
+	coordClient = coordinatorClient()
+
+	var wg sync.WaitGroup
+	for _, b := range builds {
+		b := b
+		if *target != "" && b.String() != *target {
+			continue
+		}
+		b.logf("Start.")
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := b.make(); err != nil {
+				b.logf("Error: %v", err)
+			} else {
+				b.logf("Done.")
+			}
+		}()
+	}
+	wg.Wait()
+}
 
 type Build struct {
 	OS, Arch string
@@ -138,41 +180,6 @@ var preBuildCleanFiles = []string{
 var postBuildCleanFiles = []string{
 	"VERSION.cache",
 	"pkg/bootstrap",
-}
-
-func main() {
-	flag.Parse()
-
-	if *rev == "" {
-		log.Fatal("must specify -rev flag")
-	}
-	if *toolsRev == "" {
-		log.Fatal("must specify -tools flag")
-	}
-	if *version == "" {
-		log.Fatal("must specify -version flag")
-	}
-
-	coordClient = coordinatorClient()
-
-	var wg sync.WaitGroup
-	for _, b := range builds {
-		b := b
-		if *target != "" && b.String() != *target {
-			continue
-		}
-		b.logf("Start.")
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := b.make(); err != nil {
-				b.logf("Error: %v", err)
-			} else {
-				b.logf("Done.")
-			}
-		}()
-	}
-	wg.Wait()
 }
 
 func (b *Build) buildlet() (*buildlet.Client, error) {
