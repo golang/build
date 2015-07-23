@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// TODO(adg): put windows release in a zip file
-
 // Command release builds a Go release.
 package main
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"flag"
@@ -45,6 +44,8 @@ var (
 
 var coordClient *buildlet.CoordinatorClient
 
+const releaselet = "releaselet.go"
+
 func main() {
 	flag.Parse()
 
@@ -53,6 +54,10 @@ func main() {
 			log.Fatal(err)
 		}
 		return
+	}
+
+	if _, err := os.Stat(releaselet); err != nil {
+		log.Fatalf("couldn't locate %q: %v", releaselet, err)
 	}
 
 	if *rev == "" {
@@ -355,7 +360,6 @@ func (b *Build) make() error {
 
 	b.logf("Pushing and running releaselet.")
 	// TODO(adg): locate releaselet.go in GOPATH
-	const releaselet = "releaselet.go"
 	f, err := os.Open(releaselet)
 	if err != nil {
 		return err
@@ -393,6 +397,9 @@ func (b *Build) make() error {
 		return err
 	}
 
+	if b.OS == "windows" {
+		return b.fetchZip(client)
+	}
 	return b.fetchTarball(client)
 }
 
@@ -404,6 +411,79 @@ func (b *Build) fetchTarball(client *buildlet.Client) error {
 	}
 	filename := *version + "." + b.String() + ".tar.gz"
 	return b.writeFile(filename, tgz)
+}
+
+func (b *Build) fetchZip(client *buildlet.Client) error {
+	b.logf("Downloading tarball and re-compressing as zip.")
+
+	tgz, err := client.GetTar(".")
+	if err != nil {
+		return err
+	}
+	defer tgz.Close()
+
+	filename := *version + "." + b.String() + ".zip"
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	if err := tgzToZip(f, tgz); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+
+	b.logf("Wrote %q.", filename)
+	return nil
+}
+
+func tgzToZip(w io.Writer, r io.Reader) error {
+	zr, err := gzip.NewReader(r)
+	if err != nil {
+		return err
+	}
+	tr := tar.NewReader(zr)
+
+	zw := zip.NewWriter(w)
+	for {
+		th, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		fi := th.FileInfo()
+		zh, err := zip.FileInfoHeader(fi)
+		if err != nil {
+			return err
+		}
+		zh.Name = th.Name // for the full path
+		switch strings.ToLower(path.Ext(zh.Name)) {
+		case ".jpg", ".jpeg", ".png", ".gif":
+			// Don't re-compress already compressed files.
+			zh.Method = zip.Store
+		default:
+			zh.Method = zip.Deflate
+		}
+		if fi.IsDir() {
+			zh.Name += "/" // zip prefers a trailing slash
+			zh.Method = zip.Store
+		}
+		w, err := zw.CreateHeader(zh)
+		if err != nil {
+			return err
+		}
+		if fi.IsDir() {
+			continue
+		}
+		if _, err := io.Copy(w, tr); err != nil {
+			return err
+		}
+	}
+	return zw.Close()
 }
 
 // fetchFile fetches the specified directory from the given buildlet, and
