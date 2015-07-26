@@ -410,7 +410,7 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 
 	client := buildlet.NewClient("none", buildlet.NoKeyPair)
 	client.SetHTTPClient(&http.Client{
-		Transport: newRoundTripper(conn, bufrw),
+		Transport: newRoundTripper(client, conn, bufrw),
 	})
 	client.SetDescription(fmt.Sprintf("reverse peer %s for modes %v", r.RemoteAddr, modes))
 	tstatus := time.Now()
@@ -443,8 +443,9 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 
 var registerBuildlet = func(modes []string) {} // test hook
 
-func newRoundTripper(conn net.Conn, bufrw *bufio.ReadWriter) *reverseRoundTripper {
+func newRoundTripper(bc *buildlet.Client, conn net.Conn, bufrw *bufio.ReadWriter) *reverseRoundTripper {
 	return &reverseRoundTripper{
+		bc:    bc,
 		conn:  conn,
 		bufrw: bufrw,
 		sema:  make(chan bool, 1),
@@ -456,6 +457,7 @@ func newRoundTripper(conn net.Conn, bufrw *bufio.ReadWriter) *reverseRoundTrippe
 //
 // Attempts at concurrent requests return an error.
 type reverseRoundTripper struct {
+	bc    *buildlet.Client
 	conn  net.Conn
 	bufrw *bufio.ReadWriter
 	sema  chan bool
@@ -499,7 +501,14 @@ func (b *reverseLockedBody) Read(p []byte) (n int, err error) {
 }
 
 func (b *reverseLockedBody) Close() error {
+	// Set a timer to hard-nuke the connection in case b.body.Close hangs,
+	// as seen in Issue 11869.
+	t := time.AfterFunc(5*time.Second, func() {
+		reversePool.nukeBuildlet(b.rt.bc)
+		go b.rt.conn.Close() // redundant if nukeBuildlet did it, but harmless.
+	})
 	err := b.body.Close()
+	t.Stop()
 	<-b.sema
 	b.body = nil // prevent double close
 	return err
