@@ -1344,7 +1344,7 @@ func (st *buildStatus) runMake() (remoteErr, err error) {
 		OnStartExec: func() {
 			st.logEventTime("running_exec", makeScript)
 		},
-		ExtraEnv: st.conf.Env(),
+		ExtraEnv: append(st.conf.Env(), "GOBIN="),
 		Debug:    true,
 		Args:     st.conf.MakeScriptArgs(),
 	})
@@ -1363,7 +1363,7 @@ func (st *buildStatus) runMake() (remoteErr, err error) {
 			OnStartExec: func() {
 				st.logEventTime("running_exec", "go install -race std")
 			},
-			ExtraEnv: st.conf.Env(),
+			ExtraEnv: append(st.conf.Env(), "GOBIN="),
 			Debug:    true,
 			Args:     []string{"install", "-race", "std"},
 		})

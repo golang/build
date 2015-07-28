@@ -153,11 +153,6 @@ func (c *BuildConfig) SplitMakeRun() bool {
 		// use the old way.
 		return false
 	}
-	if strings.HasPrefix(c.Name, "darwin-") {
-		// TODO(bradfitz,crawshaw,adg): this is failing for some reason:
-		// Error: runTests: distTestList: Remote error: fork/exec /var/folders/5h/sqs3zkxd12zclcslj67vccqh0000gp/T/buildlet-scatch190808745/go/bin/go: no such file or directory
-		return false
-	}
 	switch c.AllScript() {
 	case "src/all.bash", "src/race.bash", "src/all.bat", "src/all.rc":
 		// These we've verified to work.
