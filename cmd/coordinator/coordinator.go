@@ -1876,10 +1876,14 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	st.logEventTime("starting_tests", st.subName)
 	defer st.logEventTime("tests_complete")
 	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
-		Output:   st,
-		ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath),
-		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
-		Args:     []string{"test", "-short", subrepoPrefix + st.subName + "/..."},
+		Output: st,
+		// TODO(adg): remove vendor experiment variable after Go 1.6
+		ExtraEnv: append(st.conf.Env(),
+			"GOROOT="+goroot,
+			"GOPATH="+gopath,
+			"GO15VENDOREXPERIMENT=1"),
+		Path: []string{"$WORKDIR/go/bin", "$PATH"},
+		Args: []string{"test", "-short", subrepoPrefix + st.subName + "/..."},
 	})
 }
 
