@@ -29,6 +29,9 @@ RUN apt-get install -y --no-install-recommends net-tools ifupdown isc-dhcp-clien
 # And misc basic tools:
 RUN apt-get install -y --no-install-recommends procps lsof psmisc
 
+# Required by x/mobile repo:
+RUN apt-get install -y --no-install-recommends libgles2-mesa-dev libopenal-dev fonts-droid
+
 RUN apt-get clean
 
 RUN mkdir -p /go1.4-amd64 && (curl --silent https://storage.googleapis.com/golang/go1.4.linux-amd64.tar.gz | tar -C /go1.4-amd64 -zxv)
