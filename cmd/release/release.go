@@ -14,6 +14,7 @@ import (
 	"compress/gzip"
 	"flag"
 	"fmt"
+	gobuild "go/build"
 	"io"
 	"io/ioutil"
 	"log"
@@ -46,8 +47,6 @@ var (
 
 var coordClient *buildlet.CoordinatorClient
 
-const releaselet = "releaselet.go"
-
 func main() {
 	flag.Parse()
 
@@ -58,8 +57,8 @@ func main() {
 		return
 	}
 
-	if _, err := os.Stat(releaselet); err != nil {
-		log.Fatalf("couldn't locate %q: %v", releaselet, err)
+	if err := findReleaselet(); err != nil {
+		log.Fatalf("couldn't find releaselet source: %v", err)
 	}
 
 	if *rev == "" {
@@ -92,6 +91,28 @@ func main() {
 		}()
 	}
 	wg.Wait()
+}
+
+var releaselet = "releaselet.go"
+
+func findReleaselet() error {
+	// First try the working directory.
+	if _, err := os.Stat(releaselet); err == nil {
+		return nil
+	}
+
+	// Then, try to locate the release command in the workspace.
+	const importPath = "golang.org/x/build/cmd/release"
+	pkg, err := gobuild.Import(importPath, "", gobuild.FindOnly)
+	if err != nil {
+		return fmt.Errorf("finding %q: %v", importPath, err)
+	}
+	r := filepath.Join(pkg.Dir, releaselet)
+	if _, err := os.Stat(r); err != nil {
+		return err
+	}
+	releaselet = r
+	return nil
 }
 
 type Build struct {
@@ -362,7 +383,6 @@ func (b *Build) make() error {
 	}
 
 	b.logf("Pushing and running releaselet.")
-	// TODO(adg): locate releaselet.go in GOPATH
 	f, err := os.Open(releaselet)
 	if err != nil {
 		return err
