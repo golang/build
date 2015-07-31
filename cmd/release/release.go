@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// TODO(adg): add flag so that we can choose to run make.bash only
+
 // Command release builds a Go release.
 package main
 
@@ -286,10 +288,11 @@ func (b *Build) make() error {
 	// Execute build
 	b.logf("Building.")
 	out := new(bytes.Buffer)
-	mk := filepath.Join(goDir, bc.MakeScript())
-	remoteErr, err := client.Exec(mk, buildlet.ExecOpts{
+	all := filepath.Join(goDir, bc.AllScript())
+	remoteErr, err := client.Exec(all, buildlet.ExecOpts{
 		Output:   out,
 		ExtraEnv: env,
+		Args:     bc.AllScriptArgs(),
 	})
 	if err != nil {
 		return err
