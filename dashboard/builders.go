@@ -56,7 +56,7 @@ type BuildConfig struct {
 }
 
 func (c *BuildConfig) Env() []string {
-	return append([]string("GO_BUILDER_NAME="+c.Name), c.env...)
+	return append([]string{"GO_BUILDER_NAME=" + c.Name}, c.env...)
 }
 
 func (c *BuildConfig) GOOS() string { return c.Name[:strings.Index(c.Name, "-")] }
