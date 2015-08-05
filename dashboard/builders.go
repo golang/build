@@ -526,7 +526,7 @@ func init() {
 		// single-core Plan 9. It will see 2 virtual cores and
 		// only use 1, but we hope that 1 will be more powerful
 		// and we'll stop timing out on tests.
-		machineType: "n1-highcpu-2",
+		machineType: "n1-highcpu-4",
 
 		NumTestHelpers: 5, // slow
 	})
