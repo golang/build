@@ -387,16 +387,16 @@ func (b *Build) make() error {
 	if err != nil {
 		return err
 	}
-	err = client.Put(f, releaselet, 0666)
+	err = client.Put(f, "releaselet.go", 0666)
 	f.Close()
 	if err != nil {
 		return err
 	}
-	if err := runGo("run", releaselet); err != nil {
+	if err := runGo("run", "releaselet.go"); err != nil {
 		return err
 	}
 
-	cleanFiles := []string{goPath, releaselet, go14}
+	cleanFiles := []string{"releaselet.go", goPath, go14}
 
 	switch b.OS {
 	case "darwin":
