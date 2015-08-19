@@ -492,7 +492,6 @@ func tgzToZip(w io.Writer, r io.Reader) error {
 			zh.Method = zip.Deflate
 		}
 		if fi.IsDir() {
-			zh.Name += "/" // zip prefers a trailing slash
 			zh.Method = zip.Store
 		}
 		w, err := zw.CreateHeader(zh)
