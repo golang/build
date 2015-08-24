@@ -215,8 +215,11 @@ type ApprovalInfo struct {
 // obtained by adding o parameters as described at:
 // https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-changes
 type RevisionInfo struct {
-	Commit *CommitInfo          `json:"commit"`
-	Files  map[string]*FileInfo `json:"files"`
+	Commit  *CommitInfo           `json:"commit"`
+	Files   map[string]*FileInfo  `json:"files"`
+	Created TimeStamp             `json:"created"`
+	Ref     string                `json:"ref"`
+	Fetch   map[string]*FetchInfo `json:"fetch"`
 	// TODO: more
 }
 
@@ -241,6 +244,12 @@ type FileInfo struct {
 	OldPath       string `json:"old_path"`
 	LinesInserted int    `json:"lines_inserted"`
 	LinesDeleted  int    `json:"lines_deleted"`
+}
+
+type FetchInfo struct {
+	URL      string            `json:"url"`
+	Ref      string            `json:"ref"`
+	Commands map[string]string `json:"commands"`
 }
 
 // QueryChangesOpt are options for QueryChanges.
