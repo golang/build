@@ -324,6 +324,18 @@ func (c *Client) SetReview(changeID, revision string, review ReviewInput) error 
 		nil, review)
 }
 
+// GetAccountInfo gets the specified account's information from Gerrit.
+// For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-accounts.html#get-account
+// The accountID is https://gerrit-review.googlesource.com/Documentation/rest-api-accounts.html#account-id
+//
+// Note that getting "self" is a good way to validate host access, since it only requires peeker
+// access to the host, not to any particular repository.
+func (c *Client) GetAccountInfo(accountID string) (AccountInfo, error) {
+	var res AccountInfo
+	err := c.do(&res, "GET", fmt.Sprintf("/accounts/%s", accountID), nil, nil)
+	return res, err
+}
+
 type TimeStamp time.Time
 
 // Gerrit's timestamp layout is like time.RFC3339Nano, but with a space instead of the "T",
