@@ -151,7 +151,7 @@ Try:
 	addMeta := func(key, value string) {
 		instance.Metadata.Items = append(instance.Metadata.Items, &compute.MetadataItems{
 			Key:   key,
-			Value: value,
+			Value: &value,
 		})
 	}
 	// The buildlet-binary-url is the URL of the buildlet binary
@@ -324,7 +324,9 @@ func ListVMs(ts oauth2.TokenSource, proj, zone string) ([]VM, error) {
 		}
 		meta := map[string]string{}
 		for _, it := range inst.Metadata.Items {
-			meta[it.Key] = it.Value
+			if it.Value != nil {
+				meta[it.Key] = *it.Value
+			}
 		}
 		builderType := meta["builder-type"]
 		if builderType == "" {
