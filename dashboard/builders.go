@@ -131,6 +131,9 @@ func (c *BuildConfig) AllScript() string {
 	if strings.HasPrefix(c.Name, "nacl-") {
 		return "src/nacltest.bash"
 	}
+	if strings.HasPrefix(c.Name, "android-") {
+		return "src/androidtest.bash"
+	}
 	if strings.HasPrefix(c.Name, "darwin-arm") {
 		return "src/iostest.bash"
 	}
