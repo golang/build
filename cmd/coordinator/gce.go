@@ -459,7 +459,11 @@ func (p *gceBuildletPool) cleanZoneVMs(zone string) error {
 		for _, it := range inst.Metadata.Items {
 			if it.Key == "delete-at" {
 				sawDeleteAt = true
-				unixDeadline, err := strconv.ParseInt(it.Value, 10, 64)
+				if it.Value == nil {
+					log.Printf("missing delete-at value; ignoring")
+					continue
+				}
+				unixDeadline, err := strconv.ParseInt(*it.Value, 10, 64)
 				if err != nil {
 					log.Printf("invalid delete-at value %q seen; ignoring", it.Value)
 				}

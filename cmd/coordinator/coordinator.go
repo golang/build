@@ -2381,6 +2381,9 @@ func (st *buildStatus) logsURLLocked() string {
 	if inStaging {
 		host = externalIP
 	}
+	if *mode == "dev" {
+		host = "localhost:8119"
+	}
 	u := fmt.Sprintf("http://%v/temporarylogs?name=%s&rev=%s&st=%p", host, st.name, st.rev, st)
 	if st.isSubrepo() {
 		u += fmt.Sprintf("&subName=%v&subRev=%v", st.subName, st.subRev)
@@ -2535,7 +2538,7 @@ func getSourceTgz(el eventTimeLogger, repo, rev string) (tgz io.Reader, err erro
 			return tgzBytes, nil
 		}
 
-		for i := 0; i < 10; i++ {
+		for i := 0; *mode != "dev" && i < 10; i++ {
 			el.logEventTime("fetching_source", fmt.Sprintf("%v from watcher", key))
 			tgzBytes, err := getSourceTgzFromWatcher(repo, rev)
 			if err == nil {
