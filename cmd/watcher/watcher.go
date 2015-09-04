@@ -100,7 +100,7 @@ func run() error {
 			dst = *mirrorBase + name
 		}
 		name := strings.TrimPrefix(*repoURL, goBase)
-		r, err := NewRepo(dir, *repoURL, dst, "")
+		r, err := NewRepo(dir, *repoURL, dst, "", true)
 		if err != nil {
 			errc <- err
 			return
@@ -113,26 +113,54 @@ func run() error {
 	if err != nil {
 		return err
 	}
+
+	start := func(name, path string, dash bool) {
+		url := goBase + name
+		dst := ""
+		if *mirrorBase != "" {
+			dst = *mirrorBase + name
+			if !repoExists(dst) {
+				log.Println("skipping mirror to nonexistent repo:", dst)
+				dst = ""
+			}
+		}
+		r, err := NewRepo(dir, url, dst, path, dash)
+		if err != nil {
+			errc <- err
+			return
+		}
+		http.Handle("/"+name+".tar.gz", r)
+		errc <- r.Watch()
+	}
+
+	seen := map[string]bool{"go": true}
 	for _, path := range subrepos {
-		go func(path string) {
-			name := strings.TrimPrefix(path, "golang.org/x/")
-			url := goBase + name
-			dst := ""
-			if *mirrorBase != "" {
-				dst = *mirrorBase + name
+		name := strings.TrimPrefix(path, "golang.org/x/")
+		seen[name] = true
+		go start(name, path, true)
+	}
+	if *mirrorBase != "" {
+		for name := range gerritMetaMap() {
+			if seen[name] {
+				// Repo already picked up by dashboard list.
+				continue
 			}
-			r, err := NewRepo(dir, url, dst, path)
-			if err != nil {
-				errc <- err
-				return
-			}
-			http.Handle("/"+name+".tar.gz", r)
-			errc <- r.Watch()
-		}(path)
+			go start(name, "golang.org/x/"+name, false)
+		}
 	}
 
 	// Must be non-nil.
 	return <-errc
+}
+
+func repoExists(url string) bool {
+	r, err := http.Get(url)
+	if err != nil {
+		log.Printf("repoExists %v: %v", url, err)
+		return false
+	}
+	r.Body.Close()
+	return r.StatusCode/100 == 2
 }
 
 // Repo represents a repository to be watched.
@@ -141,6 +169,7 @@ type Repo struct {
 	path     string             // base import path for repo (blank for main repo)
 	commits  map[string]*Commit // keyed by full commit hash (40 lowercase hex digits)
 	branches map[string]*Branch // keyed by branch name, eg "release-branch.go1.3" (or empty for default)
+	dash     bool               // push new commits to the dashboard
 	mirror   bool               // push new commits to 'dest' remote
 }
 
@@ -150,13 +179,16 @@ type Repo struct {
 // be mirrored to the specified destination repository.
 // The path argument is the base import path of the repository,
 // and should be empty for the main Go repo.
-func NewRepo(dir, srcURL, dstURL, path string) (*Repo, error) {
+// The dash argument should be set true if commits to this
+// repo should be reported to the build dashboard.
+func NewRepo(dir, srcURL, dstURL, path string, dash bool) (*Repo, error) {
 	r := &Repo{
 		path:     path,
 		root:     filepath.Join(dir, filepath.Base(path)),
 		commits:  make(map[string]*Commit),
 		branches: make(map[string]*Branch),
 		mirror:   dstURL != "",
+		dash:     dash,
 	}
 
 	r.logf("cloning %v", srcURL)
@@ -177,17 +209,20 @@ func NewRepo(dir, srcURL, dstURL, path string) (*Repo, error) {
 		}
 	}
 
-	r.logf("loading commit log")
-	if err := r.update(false); err != nil {
-		return nil, err
+	if r.dash {
+		r.logf("loading commit log")
+		if err := r.update(false); err != nil {
+			return nil, err
+		}
+		r.logf("found %v branches among %v commits\n", len(r.branches), len(r.commits))
 	}
 
-	r.logf("found %v branches among %v commits\n", len(r.branches), len(r.commits))
 	return r, nil
 }
 
 // Watch continuously runs "git fetch" in the repo, checks for
-// new commits, and posts any new commits to the dashboard.
+// new commits, posts any new commits to the dashboard (if enabled),
+// and mirrors commits to a destination repo (if enabled).
 // It only returns a non-nil error.
 func (r *Repo) Watch() error {
 	tickler := repoTickler(r.name())
@@ -200,20 +235,8 @@ func (r *Repo) Watch() error {
 				return err
 			}
 		}
-		if err := r.update(true); err != nil {
-			return err
-		}
-		remotes, err := r.remotes()
-		if err != nil {
-			return err
-		}
-		for _, name := range remotes {
-			b, ok := r.branches[name]
-			if !ok {
-				// skip branch; must be already merged
-				continue
-			}
-			if err := r.postNewCommits(b); err != nil {
+		if r.dash {
+			if err := r.updateDashboard(); err != nil {
 				return err
 			}
 		}
@@ -227,6 +250,27 @@ func (r *Repo) Watch() error {
 		case <-timer.C:
 		}
 	}
+}
+
+func (r *Repo) updateDashboard() error {
+	if err := r.update(true); err != nil {
+		return err
+	}
+	remotes, err := r.remotes()
+	if err != nil {
+		return err
+	}
+	for _, name := range remotes {
+		b, ok := r.branches[name]
+		if !ok {
+			// skip branch; must be already merged
+			continue
+		}
+		if err := r.postNewCommits(b); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Repo) name() string {
