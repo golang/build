@@ -1100,6 +1100,7 @@ func (st *buildStatus) start() {
 		err := st.build()
 		if err != nil {
 			fmt.Fprintf(st, "\n\nError: %v\n", err)
+			log.Println(st.builderRev, "failed:", err)
 		}
 		st.setDone(err == nil)
 		markDone(st.builderRev)
@@ -1256,7 +1257,11 @@ func (st *buildStatus) build() error {
 	fmt.Fprint(st, "\n\n")
 
 	var remoteErr error
-	if st.conf.SplitMakeRun() {
+	hasDist, err := st.hasDistTest()
+	if err != nil {
+		return err
+	}
+	if st.conf.SplitMakeRun() && hasDist {
 		remoteErr, err = st.runAllSharded()
 	} else {
 		remoteErr, err = st.runAllLegacy()
@@ -1295,6 +1300,16 @@ func (st *buildStatus) build() error {
 		return remoteErr
 	}
 	return nil
+}
+
+// hasDistTest reports whether the version of Go installed to
+// the buildlet has the "go tool dist test" command.
+func (st *buildStatus) hasDistTest() (ok bool, err error) {
+	return ok, st.bc.ListDir("go/src/cmd/dist", buildlet.ListDirOpts{}, func(e buildlet.DirEntry) {
+		if strings.HasSuffix(e.Name(), "test.go") {
+			ok = true
+		}
+	})
 }
 
 // runAllSharded runs make.bash and then shards the test execution.
@@ -1358,7 +1373,7 @@ func (st *buildStatus) runMake() (remoteErr, err error) {
 
 	// Need to run "go install -race std" before the snapshot + tests.
 	if st.conf.IsRace() {
-		remoteErr, err = st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+		remoteErr, err = st.bc.Exec("go/bin/go", buildlet.ExecOpts{
 			Output: st,
 			OnStartExec: func() {
 				st.logEventTime("running_exec", "go install -race std")
@@ -1794,8 +1809,8 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 
 	workDir, err := st.bc.WorkDir()
 	if err != nil {
-		log.Printf("error discovering workdir for helper %s: %v", st.bc.IPPort(), err)
-		return
+		err = fmt.Errorf("error discovering workdir for helper %s: %v", st.bc.IPPort(), err)
+		return nil, err
 	}
 	goroot := st.conf.FilePathJoin(workDir, "go")
 	gopath := st.conf.FilePathJoin(workDir, "gopath")
@@ -1815,20 +1830,21 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 
 	// findDeps uses 'go list' on the checked out repo to find its
 	// dependencies, and adds any not-yet-fetched deps to toFetched.
-	findDeps := func(repo string) error {
+	findDeps := func(repo string) (rErr, err error) {
 		repoPath := subrepoPrefix + repo
 		var buf bytes.Buffer
-		rErr, err := st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+		rErr, err = st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 			Output:   &buf,
 			ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath),
 			Path:     []string{"$WORKDIR/go/bin", "$PATH"},
 			Args:     []string{"list", "-f", `{{range .Deps}}{{printf "%v\n" .}}{{end}}`, repoPath + "/..."},
 		})
 		if err != nil {
-			return fmt.Errorf("exec go list on buildlet: %v", err)
+			return nil, fmt.Errorf("exec go list on buildlet: %v", err)
 		}
 		if rErr != nil {
-			return fmt.Errorf("go list error on buildlet: %v\n%s", rErr, buf.Bytes())
+			fmt.Fprintf(st, "go list error:\n%s", &buf)
+			return rErr, nil
 		}
 		for _, p := range strings.Fields(buf.String()) {
 			if !strings.HasPrefix(p, subrepoPrefix) || strings.HasPrefix(p, repoPath) {
@@ -1842,7 +1858,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 				toFetch = append(toFetch, repo)
 			}
 		}
-		return nil
+		return nil, nil
 	}
 
 	// Recursively fetch the repo and its dependencies.
@@ -1868,8 +1884,12 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		if err := fetch(repo, rev); err != nil {
 			return nil, err
 		}
-		if err := findDeps(repo); err != nil {
+		if rErr, err := findDeps(repo); err != nil {
 			return nil, err
+		} else if rErr != nil {
+			// An issue with the package may cause "go list" to
+			// fail and this is a legimiate build error.
+			return rErr, nil
 		}
 	}
 
