@@ -7,6 +7,9 @@ PREFIX=/usr/local
 : ${TOOLS_REV:?"need to be set to the tools repo revision used to build the commit watcher."}
 : ${WATCHER_REV:?"need to be set to the build repo revision for the commit watcher."}
 
+curl https://storage.googleapis.com/golang/go1.4.2.linux-amd64.tar.gz | tar -xz -C $HOME
+mv $HOME/go $HOME/go1.4
+
 mkdir -p $GOROOT
 git clone https://go.googlesource.com/go $GOROOT
 (cd $GOROOT/src && git reset --hard $GO_REV && find && ./make.bash)
