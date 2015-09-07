@@ -198,10 +198,8 @@ func NewRepo(dir, srcURL, dstURL, path string, dash bool) (*Repo, error) {
 	}
 
 	if r.mirror {
-		cmd := exec.Command("git", "remote", "add", "dest", dstURL)
-		cmd.Dir = r.root
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("%v\n%s", err, out)
+		if err := r.addRemote("dest", dstURL); err != nil {
+			return nil, fmt.Errorf("adding remote: %v", err)
 		}
 		r.logf("initial push to %v", dstURL)
 		if err := r.push(); err != nil {
@@ -218,6 +216,23 @@ func NewRepo(dir, srcURL, dstURL, path string, dash bool) (*Repo, error) {
 	}
 
 	return r, nil
+}
+
+// addRemote edits the git config file to add the specified remote.
+// We don't use "git remote add" because that will also add a "fetch" line
+// which will create refs that we don't want.
+func (r *Repo) addRemote(name, url string) error {
+	gitConfig := filepath.Join(r.root, "config")
+	f, err := os.OpenFile(gitConfig, os.O_WRONLY|os.O_APPEND, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(f, "\n[remote %q]\n\turl = %v\n", name, url)
+	if err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // Watch continuously runs "git fetch" in the repo, checks for
