@@ -1070,6 +1070,9 @@ func poolForConf(conf dashboard.BuildConfig) BuildletPool {
 	if conf.VMImage != "" {
 		return gcePool
 	}
+	if conf.KubeImage != "" {
+		return kubePool // Kubernetes
+	}
 	return reversePool
 }
 

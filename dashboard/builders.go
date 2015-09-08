@@ -25,6 +25,7 @@ type BuildConfig struct {
 	Notes       string // notes for humans
 	Owner       string // e.g. "bradfitz@golang.org", empty means golang-dev
 	VMImage     string // e.g. "openbsd-amd64-56"
+	KubeImage   string // e.g. "linux-buildlet-std:latest" (suffix after "gcr.io/<PROJ>/")
 	machineType string // optional GCE instance type
 	Go14URL     string // URL to built Go 1.4 tar.gz
 	buildletURL string // optional override buildlet URL
@@ -612,6 +613,9 @@ func addBuilder(c BuildConfig) {
 	}
 	if c.VMImage == "" && !c.IsReverse {
 		panic("empty VMImage")
+	}
+	if c.VMImage != "" && c.KubeImage != "" {
+		panic("there can be only one of VMImage/KubeImage")
 	}
 	Builders[c.Name] = c
 }

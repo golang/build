@@ -312,6 +312,7 @@ func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 func (p *reverseBuildletPool) String() string {
 	p.mu.Lock()
 	inUse := 0
+	total := len(p.buildlets)
 	for _, b := range p.buildlets {
 		if b.inUseAs != "" && b.inUseAs != "health" {
 			inUse++
@@ -319,7 +320,7 @@ func (p *reverseBuildletPool) String() string {
 	}
 	p.mu.Unlock()
 
-	return fmt.Sprintf("Reverse pool capacity: %d/%d %s", inUse, len(p.buildlets), p.Modes())
+	return fmt.Sprintf("Reverse pool capacity: %d/%d %s", inUse, total, p.Modes())
 }
 
 // Modes returns the a deduplicated list of buildlet modes curently supported
