@@ -15,12 +15,12 @@ import (
 	"strings"
 	"time"
 
-	api "github.com/GoogleCloudPlatform/kubernetes/pkg/api/v1beta3"
+	api "github.com/kubernetes/kubernetes/pkg/api/v1"
 )
 
 const (
 	// APIEndpoint defines the base path for kubernetes API resources.
-	APIEndpoint  = "/api/v1beta3"
+	APIEndpoint  = "/api/v1"
 	defaultPodNS = "/namespaces/default/pods"
 )
 

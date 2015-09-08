@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	api "github.com/GoogleCloudPlatform/kubernetes/pkg/api/v1beta3"
+	api "github.com/kubernetes/kubernetes/pkg/api/v1"
 	"golang.org/x/build/kubernetes"
 	"golang.org/x/oauth2"
 )
