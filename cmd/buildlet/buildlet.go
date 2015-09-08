@@ -74,7 +74,7 @@ func main() {
 	if runtime.GOOS == "plan9" {
 		log.SetOutput(&plan9LogWriter{w: os.Stderr})
 	}
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS == "linux" && !inKube {
 		if w, err := os.OpenFile("/dev/console", os.O_WRONLY, 0); err == nil {
 			log.SetOutput(w)
 		}
@@ -177,12 +177,27 @@ func listenForCoordinator() {
 	log.Fatalf("Serve: %v", srv.Serve(ln))
 }
 
+var inKube, _ = strconv.ParseBool(os.Getenv("IN_KUBERNETES"))
+
 // metadataValue returns the GCE metadata instance value for the given key.
 // If the metadata is not defined, the returned string is empty.
 //
 // If not running on GCE, it falls back to using environment variables
 // for local development.
 func metadataValue(key string) string {
+	// On Kubernetes
+	if inKube {
+		v := os.Getenv(key)
+		// Respect curl-style '@' prefix to mean the rest is a filename.
+		if strings.HasPrefix(v, "@") {
+			slurp, err := ioutil.ReadFile(v[1:])
+			if err != nil {
+				log.Fatalf("Error reading file for %v: %v", key, err)
+			}
+			return string(slurp)
+		}
+	}
+
 	// The common case:
 	if metadata.OnGCE() {
 		v, err := metadata.InstanceAttributeValue(key)

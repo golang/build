@@ -11,6 +11,8 @@ import (
 	"sync"
 
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/dashboard"
+	"golang.org/x/build/kubernetes/api"
 )
 
 /*
@@ -40,4 +42,69 @@ func (p *kubeBuildletPool) String() string {
 	// ...
 	p.mu.Unlock()
 	return fmt.Sprintf("Kubernetes pool capacity: %d/%d", inUse, total)
+}
+
+// uid is caller-generated random id for the build
+func buildletPod(cfg dashboard.BuildConfig, uid string) (*api.Pod, error) {
+	pn := fmt.Sprintf("%v-%v", cfg.Name, uid)
+	p := &api.Pod{
+		TypeMeta: api.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Pod",
+		},
+		ObjectMeta: api.ObjectMeta{
+			Name: pn,
+			Labels: map[string]string{
+				"type": "buildlet",
+				"name": pn,
+			},
+		},
+		Spec: api.PodSpec{
+			Containers: []api.Container{
+				{
+					Name:  pn,
+					Image: cfg.KubeImage,
+					Ports: []api.ContainerPort{
+						{
+							Name:          "buildlet",
+							ContainerPort: 80,
+						},
+					},
+					Env: []api.EnvVar{
+						{
+							Name:  "IN_KUBERNETES",
+							Value: "1",
+						},
+					},
+				},
+			},
+		},
+	}
+	return p, nil
+}
+
+func buildletService(p *api.Pod) (*api.Service, error) {
+	s := &api.Service{
+		TypeMeta: api.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Service",
+		},
+		ObjectMeta: api.ObjectMeta{
+			Name: p.ObjectMeta.Name,
+			Labels: map[string]string{
+				"type": "buildlet-service",
+				"name": p.ObjectMeta.Name,
+			},
+		},
+		Spec: api.ServiceSpec{
+			Selector: p.ObjectMeta.Labels,
+			Type:     api.ServiceTypeNodePort,
+			Ports: []api.ServicePort{
+				{
+					Protocol: api.ProtocolTCP,
+				},
+			},
+		},
+	}
+	return s, nil
 }

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	api "github.com/kubernetes/kubernetes/pkg/api/v1"
+	"golang.org/x/build/kubernetes/api"
 )
 
 const (
