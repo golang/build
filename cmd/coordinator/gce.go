@@ -83,7 +83,13 @@ func initGCE() error {
 	if err != nil {
 		return fmt.Errorf("failed to get current GCE ProjectID: %v", err)
 	}
-	tokenSource = google.ComputeTokenSource("default")
+
+	inStaging = projectID == "go-dashboard-dev"
+	if inStaging {
+		log.Printf("Running in staging cluster (%q)", projectID)
+	}
+
+	tokenSource, _ = google.DefaultTokenSource(oauth2.NoContext)
 	httpClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
 	serviceCtx = cloud.NewContext(projectID, httpClient)
 
@@ -112,10 +118,6 @@ func initGCE() error {
 		log.Printf("TryBot builders enabled.")
 	}
 
-	inStaging = projectID == "go-dashboard-dev"
-	if inStaging {
-		log.Printf("Running in staging cluster (%q)", projectID)
-	}
 	go gcePool.pollQuotaLoop()
 	return nil
 }
@@ -127,7 +129,7 @@ func checkTryBuildDeps() error {
 	wr := storage.NewWriter(serviceCtx, buildLogBucket(), "hello.txt")
 	fmt.Fprintf(wr, "Hello, world! Coordinator start-up at %v", time.Now())
 	if err := wr.Close(); err != nil {
-		return fmt.Errorf("test write of a GCS object failed: %v", err)
+		return fmt.Errorf("test write of a GCS object to bucket %q failed: %v", buildLogBucket(), err)
 	}
 	gobotPass, err := metadata.ProjectAttributeValue("gobot-password")
 	if err != nil {
@@ -516,8 +518,9 @@ func deleteVM(zone, instName string) (operation string, err error) {
 }
 
 func hasScope(want string) bool {
+	// If not on GCE, assume full access
 	if !metadata.OnGCE() {
-		return false
+		return true
 	}
 	scopes, err := metadata.Scopes("default")
 	if err != nil {

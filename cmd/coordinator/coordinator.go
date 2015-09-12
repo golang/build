@@ -129,12 +129,13 @@ func init() {
 const (
 	maxStatusDone = 30
 
-	// vmDeleteTimeout is how long before we delete a VM.
+	// vmDeleteTimeout and podDeleteTimeout is how long before we delete a VM.
 	// In practice this need only be as long as the slowest
 	// builder (plan9 currently), because on startup this program
 	// already deletes all buildlets it doesn't know about
 	// (i.e. ones from a previous instance of the coordinator).
-	vmDeleteTimeout = 45 * time.Minute
+	vmDeleteTimeout  = 45 * time.Minute
+	podDeleteTimeout = 45 * time.Minute
 )
 
 func readGCSFile(name string) ([]byte, error) {
@@ -253,6 +254,11 @@ func main() {
 		if *mode == "" {
 			*mode = "prod"
 		}
+	}
+
+	err = initKube()
+	if err != nil {
+		log.Printf("Kube support disabled due to eror initializing Kubernetes: %v", err)
 	}
 	switch *mode {
 	case "dev", "prod":
