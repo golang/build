@@ -39,6 +39,7 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/envutil"
+	"golang.org/x/build/pargzip"
 	"google.golang.org/cloud/compute/metadata"
 )
 
@@ -48,7 +49,17 @@ var (
 	listenAddr   = flag.String("listen", "AUTO", "address to listen on. Unused in reverse mode. Warning: this service is inherently insecure and offers no protection of its own. Do not expose this port to the world.")
 	reverse      = flag.String("reverse", "", "if non-empty, go into reverse mode where the buildlet dials the coordinator instead of listening for connections. The value is a comma-separated list of modes, e.g. 'darwin-arm,darwin-amd64-race'")
 	coordinator  = flag.String("coordinator", "localhost:8119", "address of coordinator, in production use farmer.golang.org. Only used in reverse mode.")
+	hostname     = flag.String("hostname", "", "hostname to advertise to coordinator for reverse mode; default is actual hostname")
 )
+
+// Bump this whenever something notable happens, or when another
+// component needs a certain feature. This shows on the coordinator
+// per reverse client, and is also accessible via the buildlet
+// package's client API (via the Status method).
+//
+// Notable versions:
+//    3: switched to revdial protocol
+const buildletVersion = 3
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -74,7 +85,8 @@ func main() {
 	if runtime.GOOS == "plan9" {
 		log.SetOutput(&plan9LogWriter{w: os.Stderr})
 	}
-	if runtime.GOOS == "linux" && !inKube {
+	onGCE := metadata.OnGCE()
+	if runtime.GOOS == "linux" && onGCE && !inKube {
 		if w, err := os.OpenFile("/dev/console", os.O_WRONLY, 0); err == nil {
 			log.SetOutput(w)
 		}
@@ -88,7 +100,6 @@ func main() {
 		*listenAddr = v
 	}
 
-	onGCE := metadata.OnGCE()
 	if !onGCE && !strings.HasPrefix(*listenAddr, "localhost:") {
 		log.Printf("** WARNING ***  This server is unsafe and offers no security. Be careful.")
 	}
@@ -128,7 +139,10 @@ func main() {
 	http.HandleFunc("/debug/goroutines", handleGoroutines)
 	http.HandleFunc("/debug/x", handleX)
 
-	password := metadataValue("password")
+	var password string
+	if *reverse == "" {
+		password = metadataValue("password")
+	}
 	requireAuth := func(handler func(w http.ResponseWriter, r *http.Request)) http.Handler {
 		return requirePasswordHandler{http.HandlerFunc(handler), password}
 	}
@@ -145,7 +159,7 @@ func main() {
 	if *reverse == "" {
 		listenForCoordinator()
 	} else {
-		repeatDialCoordinator()
+		dialCoordinator()
 	}
 }
 
@@ -351,7 +365,7 @@ func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bogus dir", http.StatusBadRequest)
 		return
 	}
-	zw := gzip.NewWriter(w)
+	zw := pargzip.NewWriter(w)
 	tw := tar.NewWriter(zw)
 	base := filepath.Join(*workDir, filepath.FromSlash(dir))
 	err := filepath.Walk(base, func(path string, fi os.FileInfo, err error) error {
@@ -442,11 +456,13 @@ func handleWriteTGZ(w http.ResponseWriter, r *http.Request) {
 		}
 		res, err := http.Get(urlStr)
 		if err != nil {
+			log.Printf("Failed to fetch tgz URL %s: %v", urlStr, err)
 			http.Error(w, fmt.Sprintf("fetching URL %s: %v", urlStr, err), http.StatusInternalServerError)
 			return
 		}
 		defer res.Body.Close()
 		if res.StatusCode != http.StatusOK {
+			log.Printf("Failed to fetch tgz URL %s: status=%v", urlStr, res.Status)
 			http.Error(w, fmt.Sprintf("fetching provided url: %s", res.Status), http.StatusInternalServerError)
 			return
 		}
@@ -458,6 +474,7 @@ func handleWriteTGZ(w http.ResponseWriter, r *http.Request) {
 
 	err := untar(tgz, baseDir)
 	if err != nil {
+		log.Printf("untar failure: %v", err)
 		status := http.StatusInternalServerError
 		if he, ok := err.(httpStatuser); ok {
 			status = he.httpStatus()
@@ -906,8 +923,25 @@ func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, p := range paths {
 		log.Printf("Removing %s", p)
-		p = filepath.Join(*workDir, filepath.FromSlash(p))
-		if err := os.RemoveAll(p); err != nil {
+		fullDir := filepath.Join(*workDir, filepath.FromSlash(p))
+		err := os.RemoveAll(fullDir)
+		if p == "." && err != nil {
+			// If workDir is a mountpoint and/or contains a binary
+			// using it, we can get a "Device or resource busy" error.
+			// See if it's now empty and ignore the error.
+			if f, oerr := os.Open(*workDir); oerr == nil {
+				if all, derr := f.Readdirnames(-1); derr == nil && len(all) == 0 {
+					log.Printf("Ignoring fail of RemoveAll(.)")
+					err = nil
+				} else {
+					log.Printf("Readdir = %q, %f", all, derr)
+				}
+				f.Close()
+			} else {
+				log.Printf("Failed to open workdir: %v", oerr)
+			}
+		}
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -933,7 +967,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := buildlet.Status{
-		Version: 1,
+		Version: buildletVersion,
 	}
 	b, err := json.Marshal(status)
 	if err != nil {

@@ -151,14 +151,6 @@ func (c *BuildConfig) AllScript() string {
 // but for now we've only set up the scripts and verified that the main
 // configurations work.
 func (c *BuildConfig) SplitMakeRun() bool {
-	if strings.HasPrefix(c.Name, "linux-arm") {
-		// On Scaleway, we don't want to snapshot these to GCS
-		// yet.  That might be a lot of bandwidth and we
-		// haven't measure their speed yet. We might want to
-		// store snapshots within Scaleway instead.  For now:
-		// use the old way.
-		return false
-	}
 	switch c.AllScript() {
 	case "src/all.bash", "src/race.bash", "src/all.bat", "src/all.rc":
 		// These we've verified to work.
@@ -336,7 +328,6 @@ func init() {
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		allScriptArgs: []string{
 			// Filtering pattern to buildall.bash:
-			// TODO: add darwin-386 and
 			"^(linux-arm64|linux-ppc64|linux-ppc64le|nacl-arm|plan9-amd64|solaris-amd64|netbsd-386|netbsd-amd64|netbsd-arm|freebsd-arm|darwin-386)$",
 		},
 	})
@@ -393,77 +384,11 @@ func init() {
 		env:     []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	})
 	addBuilder(BuildConfig{
-		Name:    "linux-arm-qemu",
-		VMImage: "linux-buildlet-arm",
-		env:     []string{"GOROOT_BOOTSTRAP=/go1.4", "IN_QEMU=1"},
+		Name:           "linux-arm",
+		IsReverse:      true,
+		NumTestHelpers: 6,
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 	})
-	addBuilder(BuildConfig{
-		Name:      "linux-arm",
-		IsReverse: true,
-		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
-	})
-	// Sharded ARM trybots:
-	addBuilder(BuildConfig{
-		Name:         "linux-arm-shard_test",
-		BuildletType: "linux-arm",
-		TryOnly:      true,
-		IsReverse:    true,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/local/go",
-			"GOTESTONLY=^test$",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:         "linux-arm-shard_std_am",
-		BuildletType: "linux-arm",
-		TryOnly:      true,
-		IsReverse:    true,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/local/go",
-			"GOTESTONLY=^go_test:[a-m]",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:         "linux-arm-shard_std_nz",
-		BuildletType: "linux-arm",
-		TryOnly:      true,
-		IsReverse:    true,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/local/go",
-			"GOTESTONLY=^go_test:[n-z]",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:         "linux-arm-shard_runtimecpu",
-		BuildletType: "linux-arm",
-		TryOnly:      true,
-		IsReverse:    true,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/local/go",
-			"GOTESTONLY=^runtime:cpu124$",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:         "linux-arm-shard_cgotest",
-		BuildletType: "linux-arm",
-		TryOnly:      true,
-		IsReverse:    true,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/local/go",
-			"GOTESTONLY=^cgo_test$",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:         "linux-arm-shard_misc",
-		BuildletType: "linux-arm",
-		TryOnly:      true,
-		IsReverse:    true,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/local/go",
-			"GOTESTONLY=!^(go_test:|test$|cgo_test$|runtime:cpu124$)",
-		},
-	})
-
 	addBuilder(BuildConfig{
 		Name:      "linux-arm-arm5",
 		IsReverse: true,

@@ -28,12 +28,12 @@ work, go to:
 */
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"sort"
@@ -42,21 +42,13 @@ import (
 	"time"
 
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/revdial"
 )
 
 const minBuildletVersion = 1
 
 var reversePool = &reverseBuildletPool{
 	buildletReturned: make(chan token, 1),
-}
-
-func init() {
-	go func() {
-		for {
-			time.Sleep(15 * time.Second)
-			reversePool.reverseHealthCheck()
-		}
-	}()
 }
 
 type token struct{}
@@ -88,11 +80,7 @@ func (p *reverseBuildletPool) tryToGrab(machineType string) (*buildlet.Client, e
 			b.inUseAs = machineType
 			b.inUseTime = time.Now()
 			b.client.SetCloseFunc(func() error {
-				p.mu.Lock()
-				b.inUseAs = ""
-				b.inUseTime = time.Now()
-				p.mu.Unlock()
-				p.noteBuildletReturned()
+				p.nukeBuildlet(b.client)
 				return nil
 			})
 			return b.client, nil
@@ -126,63 +114,63 @@ func (p *reverseBuildletPool) nukeBuildlet(victim *buildlet.Client) {
 	}
 }
 
-// reverseHealthCheck requests the status page of each idle buildlet.
+// healthCheckBuildletLoop periodically requests the status from b.
 // If the buildlet fails to respond promptly, it is removed from the pool.
-func (p *reverseBuildletPool) reverseHealthCheck() {
-	p.mu.Lock()
-	responses := make(map[*reverseBuildlet]chan error)
-	for _, b := range p.buildlets {
-		if b.inUseAs == "health" { // sanity check
-			panic("previous health check still running")
+func (p *reverseBuildletPool) healthCheckBuildletLoop(b *reverseBuildlet) {
+	for {
+		time.Sleep(time.Duration(10+rand.Intn(5)) * time.Second)
+		if !p.healthCheckBuildlet(b) {
+			return
 		}
-		if b.inUseAs != "" {
-			continue // skip busy buildlets
-		}
-		b.inUseAs = "health"
-		b.inUseTime = time.Now()
-		res := make(chan error, 1)
-		responses[b] = res
-		client := b.client
-		go func() {
-			_, err := client.Status()
-			res <- err
-		}()
 	}
-	p.mu.Unlock()
-	time.Sleep(5 * time.Second) // give buildlets time to respond
-	p.mu.Lock()
+}
 
-	var buildlets []*reverseBuildlet
-	for _, b := range p.buildlets {
-		res := responses[b]
-		if b.inUseAs != "health" || res == nil {
-			// buildlet skipped or registered after health check
-			buildlets = append(buildlets, b)
-			continue
-		}
-		b.inUseAs = ""
-		b.inUseTime = time.Now()
-		p.noteBuildletReturned()
-		var err error
-		select {
-		case err = <-res:
-		default:
-			// It had 5 seconds above to send to the
-			// buffered channel. So if we're here, it took
-			// over 5 seconds.
-			err = errors.New("health check timeout")
-		}
-		if err == nil {
-			buildlets = append(buildlets, b)
-			continue
-		}
-		// remove bad buildlet
-		log.Printf("Reverse buildlet %s %v not responding, removing from pool", b.client, b.modes)
-		go b.client.Close()
-		go b.conn.Close()
+func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
+	p.mu.Lock()
+	if b.inUseAs == "health" { // sanity check
+		panic("previous health check still running")
 	}
-	p.buildlets = buildlets
+	if b.inUseAs != "" {
+		p.mu.Unlock()
+		return true // skip busy buildlets
+	}
+	b.inUseAs = "health"
+	b.inUseTime = time.Now()
+	res := make(chan error, 1)
+	go func() {
+		_, err := b.client.Status()
+		res <- err
+	}()
 	p.mu.Unlock()
+
+	t := time.NewTimer(5 * time.Second) // give buildlets time to respond
+	var err error
+	select {
+	case err = <-res:
+		t.Stop()
+	case <-t.C:
+		err = errors.New("health check timeout")
+	}
+
+	if err != nil {
+		// remove bad buildlet
+		log.Printf("Health check fail; removing reverse buildlet %s %v: %v", b.client, b.modes, err)
+		go b.client.Close()
+		go p.nukeBuildlet(b.client)
+		return false
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if b.inUseAs != "health" {
+		// buildlet was grabbed while lock was released; harmless.
+		return true
+	}
+	b.inUseAs = ""
+	b.inUseTime = time.Now()
+	p.noteBuildletReturned()
+	return true
 }
 
 var (
@@ -242,13 +230,13 @@ func (p *reverseBuildletPool) GetBuildlet(cancel Cancel, machineType, rev string
 }
 
 func (p *reverseBuildletPool) cleanedBuildlet(b *buildlet.Client, el eventTimeLogger) (*buildlet.Client, error) {
-	el.logEventTime("got_machine")
+	el.logEventTime("got_machine", b.String())
 	// Clean up any files from previous builds.
 	if err := b.RemoveAll("."); err != nil {
 		b.Close()
 		return nil, err
 	}
-	el.logEventTime("cleaned_up")
+	el.logEventTime("cleaned_up", b.Name())
 	return b, nil
 }
 
@@ -266,13 +254,21 @@ func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 
 	var machineBuf bytes.Buffer
 	p.mu.Lock()
-	for _, b := range p.buildlets {
+	buildlets := append([]*reverseBuildlet(nil), p.buildlets...)
+	sort.Sort(byModeThenHostname(buildlets))
+	for _, b := range buildlets {
 		machStatus := "<i>idle</i>"
 		if b.inUseAs != "" {
 			machStatus = "working as <b>" + b.inUseAs + "</b>"
 		}
-		fmt.Fprintf(&machineBuf, "<li>%s, %s: %s for %v</li>\n",
-			b.conn.RemoteAddr(), strings.Join(b.modes, ", "), machStatus, time.Since(b.inUseTime))
+		fmt.Fprintf(&machineBuf, "<li>%s (%s) version %s, %s: connected %v, %s for %v</li>\n",
+			b.hostname,
+			b.conn.RemoteAddr(),
+			b.version,
+			strings.Join(b.modes, ", "),
+			time.Since(b.regTime),
+			machStatus,
+			time.Since(b.inUseTime))
 		for _, mode := range b.modes {
 			if b.inUseAs != "" && b.inUseAs != "health" {
 				if mode == b.inUseAs {
@@ -357,11 +353,28 @@ func (p *reverseBuildletPool) CanBuild(mode string) bool {
 	return false
 }
 
+func (p *reverseBuildletPool) addBuildlet(b *reverseBuildlet) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.buildlets = append(p.buildlets, b)
+	go p.healthCheckBuildletLoop(b)
+}
+
 // reverseBuildlet is a registered reverse buildlet.
 // Its immediate fields are guarded by the reverseBuildletPool mutex.
 type reverseBuildlet struct {
-	client *buildlet.Client
-	conn   net.Conn
+	// hostname is the name of the buildlet host.
+	// It doesn't have to be a complete DNS name.
+	hostname string
+	// version is the reverse buildlet's version.
+	version string
+
+	// sessRand is the unique random number for every unique buildlet session.
+	sessRand string
+
+	client  *buildlet.Client
+	conn    net.Conn
+	regTime time.Time // when it was first connected
 
 	// modes is the set of valid modes for this buildlet.
 	//
@@ -378,6 +391,13 @@ type reverseBuildlet struct {
 	// Both are guarded by the mutex on reverseBuildletPool.
 	inUseAs   string
 	inUseTime time.Time
+}
+
+func (b *reverseBuildlet) firstMode() string {
+	if len(b.modes) == 0 {
+		return ""
+	}
+	return b.modes[0]
 }
 
 func handleReverse(w http.ResponseWriter, r *http.Request) {
@@ -404,20 +424,28 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	log.Printf("Registering reverse buildlet %s for modes %v", r.RemoteAddr, modes)
+	hostname := r.Header.Get("X-Go-Builder-Hostname")
 
-	// The server becomes a (very simple) http client.
-	(&http.Response{StatusCode: 200, Proto: "HTTP/1.1"}).Write(conn)
+	revDialer := revdial.NewDialer(bufrw, conn)
 
-	client := buildlet.NewClient("none", buildlet.NoKeyPair)
+	log.Printf("Registering reverse buildlet %q (%s) for modes %v", hostname, r.RemoteAddr, modes)
+
+	(&http.Response{StatusCode: http.StatusSwitchingProtocols, Proto: "HTTP/1.1"}).Write(conn)
+
+	client := buildlet.NewClient(hostname, buildlet.NoKeyPair)
 	client.SetHTTPClient(&http.Client{
-		Transport: newRoundTripper(client, conn, bufrw),
+		Transport: &http.Transport{
+			Dial: func(network, addr string) (net.Conn, error) {
+				return revDialer.Dial()
+			},
+		},
 	})
-	client.SetDescription(fmt.Sprintf("reverse peer %s for modes %v", r.RemoteAddr, modes))
+	client.SetDescription(fmt.Sprintf("reverse peer %s/%s for modes %v", hostname, r.RemoteAddr, modes))
 	tstatus := time.Now()
 	status, err := client.Status()
 	if err != nil {
-		log.Printf("Reverse connection %s for modes %v did not answer status after %v: %v", r.RemoteAddr, modes, time.Since(tstatus), err)
+		log.Printf("Reverse connection %s/%s for modes %v did not answer status after %v: %v",
+			hostname, r.RemoteAddr, modes, time.Since(tstatus), err)
 		conn.Close()
 		return
 	}
@@ -426,91 +454,32 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 		return
 	}
-	log.Printf("Buildlet %s: %+v for %s", r.RemoteAddr, status, modes)
+	log.Printf("Buildlet %s/%s: %+v for %s", hostname, r.RemoteAddr, status, modes)
 
-	// TODO(crawshaw): unregister buildlet when it disconnects. Maybe just
-	// periodically request Status, and if there's no response unregister.
-	reversePool.mu.Lock()
-	defer reversePool.mu.Unlock()
+	now := time.Now()
 	b := &reverseBuildlet{
+		hostname:  hostname,
+		version:   r.Header.Get("X-Go-Builder-Version"),
 		modes:     modes,
 		client:    client,
 		conn:      conn,
-		inUseTime: time.Now(),
+		inUseTime: now,
+		regTime:   now,
 	}
-	reversePool.buildlets = append(reversePool.buildlets, b)
-	registerBuildlet(modes)
+	reversePool.addBuildlet(b)
+	registerBuildlet(modes) // testing only
 }
 
 var registerBuildlet = func(modes []string) {} // test hook
 
-func newRoundTripper(bc *buildlet.Client, conn net.Conn, bufrw *bufio.ReadWriter) *reverseRoundTripper {
-	return &reverseRoundTripper{
-		bc:    bc,
-		conn:  conn,
-		bufrw: bufrw,
-		sema:  make(chan bool, 1),
-	}
-}
+type byModeThenHostname []*reverseBuildlet
 
-// reverseRoundTripper is an http client that serializes all requests
-// over a *bufio.ReadWriter.
-//
-// Attempts at concurrent requests return an error.
-type reverseRoundTripper struct {
-	bc    *buildlet.Client
-	conn  net.Conn
-	bufrw *bufio.ReadWriter
-	sema  chan bool
-}
-
-func (c *reverseRoundTripper) RoundTrip(req *http.Request) (resp *http.Response, err error) {
-	// Serialize trips. It is up to callers to avoid deadlocking.
-	c.sema <- true
-	if err := req.Write(c.bufrw); err != nil {
-		go c.conn.Close()
-		<-c.sema
-		return nil, err
+func (s byModeThenHostname) Len() int      { return len(s) }
+func (s byModeThenHostname) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s byModeThenHostname) Less(i, j int) bool {
+	bi, bj := s[i], s[j]
+	if bi.firstMode() < bj.firstMode() {
+		return true
 	}
-	if err := c.bufrw.Flush(); err != nil {
-		go c.conn.Close()
-		<-c.sema
-		return nil, err
-	}
-	resp, err = http.ReadResponse(c.bufrw.Reader, req)
-	if err != nil {
-		go c.conn.Close()
-		<-c.sema
-		return nil, err
-	}
-	resp.Body = &reverseLockedBody{c, resp.Body, c.sema}
-	return resp, err
-}
-
-type reverseLockedBody struct {
-	rt   *reverseRoundTripper
-	body io.ReadCloser
-	sema chan bool
-}
-
-func (b *reverseLockedBody) Read(p []byte) (n int, err error) {
-	n, err = b.body.Read(p)
-	if err != nil && err != io.EOF {
-		go b.rt.conn.Close()
-	}
-	return
-}
-
-func (b *reverseLockedBody) Close() error {
-	// Set a timer to hard-nuke the connection in case b.body.Close hangs,
-	// as seen in Issue 11869.
-	t := time.AfterFunc(5*time.Second, func() {
-		reversePool.nukeBuildlet(b.rt.bc)
-		go b.rt.conn.Close() // redundant if nukeBuildlet did it, but harmless.
-	})
-	err := b.body.Close()
-	t.Stop()
-	<-b.sema
-	b.body = nil // prevent double close
-	return err
+	return bi.hostname < bj.hostname
 }

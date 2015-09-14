@@ -18,24 +18,25 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
 )
 
 var (
 	proj        = flag.String("project", "symbolic-datum-552", "name of Project")
-	zone        = flag.String("zone", "us-central1-b", "GCE zone")
+	zone        = flag.String("zone", "us-central1-f", "GCE zone")
 	mach        = flag.String("machinetype", "n1-highcpu-2", "Machine type")
 	instName    = flag.String("instance_name", "farmer", "Name of VM instance.")
 	sshPub      = flag.String("ssh_public_key", "", "ssh public key file to authorize. Can modify later in Google's web UI anyway.")
 	staticIP    = flag.String("static_ip", "", "Static IP to use. If empty, automatic.")
 	reuseDisk   = flag.Bool("reuse_disk", true, "Whether disk images should be reused between shutdowns/restarts.")
-	ssd         = flag.Bool("ssd", false, "use a solid state disk (faster, more expensive)")
+	ssd         = flag.Bool("ssd", true, "use a solid state disk (faster, more expensive)")
 	coordinator = flag.String("coord", "https://storage.googleapis.com/go-builder-data/coordinator", "Coordinator binary URL")
-	dev         = flag.Bool("dev", false, "change default -project and -coordinator flags to their default dev cluster values, as well as use 'dev-' prefixed OAuth token files.")
+	staging     = flag.Bool("staging", false, "change default -project and -coordinator flags to their default dev cluster values, as well as use 'staging-' prefixed OAuth token files.")
 )
 
-func devPrefix() string {
-	if *dev {
-		return "dev-"
+func stagingPrefix() string {
+	if *staging {
+		return "staging-"
 	}
 	return ""
 }
@@ -81,8 +82,8 @@ func main() {
 	oauthConfig = &oauth2.Config{
 		// The client-id and secret should be for an "Installed Application" when using
 		// the CLI. Later we'll use a web application with a callback.
-		ClientID:     readFile(devPrefix() + "client-id.dat"),
-		ClientSecret: readFile(devPrefix() + "client-secret.dat"),
+		ClientID:     readFile(stagingPrefix() + "client-id.dat"),
+		ClientSecret: readFile(stagingPrefix() + "client-secret.dat"),
 		Endpoint:     google.Endpoint,
 		Scopes: []string{
 			compute.DevstorageFullControlScope,
@@ -93,7 +94,7 @@ func main() {
 		RedirectURL: "urn:ietf:wg:oauth:2.0:oob",
 	}
 
-	if *dev {
+	if *staging {
 		if *proj == "symbolic-datum-552" {
 			*proj = "go-dashboard-dev"
 		}
@@ -118,7 +119,7 @@ func main() {
 	prefix := "https://www.googleapis.com/compute/v1/projects/" + *proj
 	machType := prefix + "/zones/" + *zone + "/machineTypes/" + *mach
 
-	tokenFileName := devPrefix() + "token.dat"
+	tokenFileName := stagingPrefix() + "token.dat"
 	tokenFile := tokenCacheFile(tokenFileName)
 	tokenSource := oauth2.ReuseTokenSource(nil, tokenFile)
 	token, err := tokenSource.Token()
@@ -187,7 +188,7 @@ func main() {
 			Items: []*compute.MetadataItems{
 				{
 					Key:   "user-data",
-					Value: cloudConfig,
+					Value: googleapi.String(cloudConfig),
 				},
 			},
 		},
@@ -255,7 +256,7 @@ OpLoop:
 }
 
 func instanceDisk(svc *compute.Service) *compute.AttachedDisk {
-	const imageURL = "https://www.googleapis.com/compute/v1/projects/coreos-cloud/global/images/coreos-alpha-402-2-0-v20140807"
+	const imageURL = "https://www.googleapis.com/compute/v1/projects/coreos-cloud/global/images/coreos-stable-723-3-0-v20150804"
 	diskName := *instName + "-coreos-stateless-pd"
 
 	if *reuseDisk {

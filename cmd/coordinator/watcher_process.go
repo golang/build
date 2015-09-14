@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Command watcher watches the specified repository for new commits
-// and reports them to the build dashboard.
-package main // import "golang.org/x/build/cmd/watcher"
+// The watcher binary watches the specified repositories for new
+// commits and reports them to the build dashboard. This binary is
+// compiled in to the coordinator binary and runs in a Docker
+// container (see env/watcher-world) via the coordinator.
+
+package main
 
 import (
 	"bufio"
@@ -39,15 +42,15 @@ const (
 )
 
 var (
-	repoURL      = flag.String("repo", goBase+"go", "Repository URL")
-	dashboard    = flag.String("dash", "https://build.golang.org/", "Dashboard URL (must end in /)")
-	keyFile      = flag.String("key", defaultKeyFile, "Build dashboard key file")
-	pollInterval = flag.Duration("poll", 10*time.Second, "Remote repo poll interval")
-	network      = flag.Bool("network", true, "Enable network calls (disable for testing)")
-	mirrorBase   = flag.String("mirror", "", `Mirror repository base URL (eg "https://github.com/golang/")`)
-	filter       = flag.String("filter", "", "Comma-separated list of directories or files to watch for new commits (only works on main repo)")
-	httpAddr     = flag.String("http", "", "If non-empty, the listen address to run an HTTP server on")
-	report       = flag.Bool("report", true, "Report updates to build dashboard (use false for development dry-run mode)")
+	repoURL      = flag.String("watcher.repo", goBase+"go", "Repository URL")
+	dashFlag     = flag.String("watcher.dash", "https://build.golang.org/", "Dashboard URL (must end in /)")
+	keyFile      = flag.String("watcher.key", defaultKeyFile, "Build dashboard key file")
+	pollInterval = flag.Duration("watcher.poll", 10*time.Second, "Remote repo poll interval")
+	network      = flag.Bool("watcher.network", true, "Enable network calls (disable for testing)")
+	mirrorBase   = flag.String("watcher.mirror", "", `Mirror repository base URL (eg "https://github.com/golang/")`)
+	filter       = flag.String("watcher.filter", "", "Comma-separated list of directories or files to watch for new commits (only works on main repo)")
+	httpAddr     = flag.String("watcher.http", "", "If non-empty, the listen address to run an HTTP server on")
+	report       = flag.Bool("watcher.report", true, "Report updates to build dashboard (use false for development dry-run mode)")
 )
 
 var (
@@ -56,19 +59,18 @@ var (
 	networkSeen    = make(map[string]bool) // track known hashes for testing
 )
 
-func main() {
-	flag.Parse()
+func watcherMain() {
+	log.Printf("Running watcher role.")
 	go pollGerritAndTickle()
-
-	err := run()
-	fmt.Fprintln(os.Stderr, err)
+	err := runWatcher()
+	log.Printf("Watcher exiting after failure: %v", err)
 	os.Exit(1)
 }
 
-// run is a little wrapper so we can use defer and return to signal
+// runWatcher is a little wrapper so we can use defer and return to signal
 // errors. It should only return a non-nil error.
-func run() error {
-	if !strings.HasSuffix(*dashboard, "/") {
+func runWatcher() error {
+	if !strings.HasSuffix(*dashFlag, "/") {
 		return errors.New("dashboard URL (-dashboard) must end in /")
 	}
 
@@ -421,7 +423,7 @@ func (r *Repo) postCommit(c *Commit) error {
 	}
 
 	v := url.Values{"version": {fmt.Sprint(watcherVersion)}, "key": {dashboardKey}}
-	u := *dashboard + "commit?" + v.Encode()
+	u := *dashFlag + "commit?" + v.Encode()
 	resp, err := http.Post(u, "text/json", bytes.NewReader(b))
 	if err != nil {
 		return err
@@ -574,7 +576,7 @@ func (r *Repo) dashSeen(hash string) (bool, error) {
 		return networkSeen[hash], nil
 	}
 	v := url.Values{"hash": {hash}, "packagePath": {r.path}}
-	u := *dashboard + "commit?" + v.Encode()
+	u := *dashFlag + "commit?" + v.Encode()
 	resp, err := http.Get(u)
 	if err != nil {
 		return false, err
@@ -847,7 +849,7 @@ func subrepoList() ([]string, error) {
 		return nil, nil
 	}
 
-	r, err := http.Get(*dashboard + "packages?kind=subrepo")
+	r, err := http.Get(*dashFlag + "packages?kind=subrepo")
 	if err != nil {
 		return nil, fmt.Errorf("subrepo list: %v", err)
 	}

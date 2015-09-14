@@ -10,7 +10,6 @@ import (
 	"crypto/md5"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -20,24 +19,19 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
-	"time"
 
 	"golang.org/x/build"
+	"golang.org/x/build/revdial"
 )
-
-func repeatDialCoordinator() {
-	for {
-		if err := dialCoordinator(); err != nil {
-			log.Print(err)
-		}
-		log.Printf("Waiting 30 seconds and dialing again.")
-		time.Sleep(30 * time.Second)
-	}
-}
 
 func dialCoordinator() error {
 	devMode := !strings.HasPrefix(*coordinator, "farmer.golang.org")
+
+	if *hostname == "" {
+		*hostname, _ = os.Hostname()
+	}
 
 	modes := strings.Split(*reverse, ",")
 	var keys []string
@@ -96,6 +90,8 @@ func dialCoordinator() error {
 	}
 	req.Header["X-Go-Builder-Type"] = modes
 	req.Header["X-Go-Builder-Key"] = keys
+	req.Header.Set("X-Go-Builder-Hostname", *hostname)
+	req.Header.Set("X-Go-Builder-Version", strconv.Itoa(buildletVersion))
 	if err := req.Write(conn); err != nil {
 		return fmt.Errorf("coordinator /reverse request failed: %v", err)
 	}
@@ -103,80 +99,20 @@ func dialCoordinator() error {
 	if err != nil {
 		return fmt.Errorf("coordinator /reverse response failed: %v", err)
 	}
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != 101 {
 		msg, _ := ioutil.ReadAll(resp.Body)
 		return fmt.Errorf("coordinator registration failed:\n\t%s", msg)
 	}
-	resp.Body.Close()
 
-	// The client becomes the simple http server.
-	log.Printf("Connected to coordinator, serving HTTP back at them.")
-	stateCh := make(chan http.ConnState, 1)
-	srv := &http.Server{
-		ConnState: func(_ net.Conn, state http.ConnState) { stateCh <- state },
-	}
-	return srv.Serve(&reverseListener{
-		conn:    conn,
-		stateCh: stateCh,
-	})
+	log.Printf("Connected to coordinator; reverse dialing active")
+	srv := &http.Server{}
+	err = srv.Serve(revdial.NewListener(bufio.NewReadWriter(
+		bufio.NewReader(conn),
+		bufio.NewWriter(conn),
+	)))
+	log.Printf("Reverse buildlet Serve complete; err=%v", err)
+	return err
 }
-
-// reverseListener serves out a single underlying conn, once.
-//
-// It is designed to be passed to a *http.Server, which loops
-// continually calling Accept. As this reverse connection only
-// ever has one connection to hand out, it responds to the first
-// Accept, and then blocks on the second Accept.
-//
-// While blocking on the second Accept, this listener takes on the
-// job of checking the health of the original net.Conn it handed out.
-// If it goes unused for a while, it closes the original net.Conn
-// and returns an error, ending the life of the *http.Server
-type reverseListener struct {
-	done    bool
-	conn    net.Conn
-	stateCh <-chan http.ConnState
-}
-
-func (rl *reverseListener) Accept() (net.Conn, error) {
-	if !rl.done {
-		// First call to Accept, return our one net.Conn.
-		rl.done = true
-		return rl.conn, nil
-	}
-	// Second call to Accept, block until we decide the entire
-	// server should be torn down.
-	defer rl.conn.Close()
-	const timeout = 1 * time.Minute
-	timer := time.NewTimer(timeout)
-	var state http.ConnState
-	for {
-		select {
-		case state = <-rl.stateCh:
-			if state == http.StateClosed {
-				return nil, errors.New("coordinator connection closed")
-			}
-		// The coordinator sends a health check every 30 seconds
-		// when buildlets are idle. If we go a minute without
-		// seeing anything, assume the coordinator is in a bad way
-		// (probably restarted) and close the connection.
-		case <-timer.C:
-			if state == http.StateIdle {
-				return nil, errors.New("coordinator connection unhealthy")
-			}
-		}
-		timer.Reset(timeout)
-	}
-}
-
-func (rl *reverseListener) Close() error   { return nil }
-func (rl *reverseListener) Addr() net.Addr { return reverseAddr("buildlet") }
-
-// reverseAddr implements net.Addr for reverseListener.
-type reverseAddr string
-
-func (a reverseAddr) Network() string { return "reverse" }
-func (a reverseAddr) String() string  { return "reverse:" + string(a) }
 
 func devBuilderKey(builder string) string {
 	h := hmac.New(md5.New, []byte("gophers rule"))
@@ -188,7 +124,14 @@ func homedir() string {
 	if runtime.GOOS == "windows" {
 		return os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
 	}
-	return os.Getenv("HOME")
+	home := os.Getenv("HOME")
+	if home != "" {
+		return home
+	}
+	if os.Getuid() == 0 {
+		return "/root"
+	}
+	return "/"
 }
 
 // TestDialCoordinator dials the coordinator. Exported for testing.

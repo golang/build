@@ -33,6 +33,14 @@ buildlet.windows-amd64: buildlet.go reverse.go buildlet_windows.go
 	GOOS=windows GOARCH=amd64 go build -o $@
 	cat $@ | (cd ../upload && go run upload.go --public go-builder-data/$@)
 
+buildlet.linux-arm: buildlet.go reverse.go
+	GOOS=linux GOARCH=arm go build -o $@
+	cat $@ | (cd ../upload && go run upload.go --public go-builder-data/$@)
+
+dev-buildlet.linux-arm: buildlet.go reverse.go
+	GOOS=linux GOARCH=arm go build -o $@
+	cat $@ | (cd ../upload && go run upload.go --public dev-go-builder-data/buildlet.linux-arm)
+
 dev-buildlet.linux-amd64: buildlet.go reverse.go
 	GOOS=linux GOARCH=amd64 go build -o $@
 	cat $@ | (cd ../upload && go run upload.go --public dev-go-builder-data/buildlet.linux-amd64)

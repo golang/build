@@ -52,13 +52,9 @@ var Version string // set by linker -X
 // finishes before destroying buildlets.
 const devPause = false
 
-func init() {
-	// Disabled until we have test sharding. This takes 85+ minutes.
-	// Test sharding is https://github.com/golang/go/issues/10029
-	delete(dashboard.Builders, "linux-arm-qemu")
-}
-
 var (
+	role = flag.String("role", "coordinator", "Which role this binary should run as. Valid options: coordinator, watcher")
+
 	masterKeyFile = flag.String("masterkey", "", "Path to builder master key. Else fetched using GCE project attribute 'builder-master-key'.")
 
 	// TODO(bradfitz): remove this list and just query it from the compute API:
@@ -117,13 +113,7 @@ func init() {
 		"plan9-386",
 		"nacl-386",
 		"nacl-amd64p32",
-		/*		"linux-arm-shard_test",
-				"linux-arm-shard_std_am",
-				"linux-arm-shard_std_nz",
-				"linux-arm-shard_runtimecpu",
-				"linux-arm-shard_cgotest",
-				"linux-arm-shard_misc",
-		*/
+		// "linux-arm",
 	}
 	for _, bname := range tryList {
 		conf, ok := dashboard.Builders[bname]
@@ -241,6 +231,16 @@ func (fn eventTimeLoggerFunc) logEventTime(event string, optText ...string) {
 
 func main() {
 	flag.Parse()
+	switch *role {
+	default:
+		log.Fatalf("unsupported role %q", *role)
+	case "watcher":
+		watcherMain()
+		panic("watcherMain finished")
+	case "coordinator":
+		// fall through
+	}
+
 	log.Printf("coordinator version %q starting", Version)
 	err := initGCE()
 	if err != nil {
@@ -262,6 +262,7 @@ func main() {
 
 	http.HandleFunc("/", handleStatus)
 	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
+	http.HandleFunc("/debug/watcher", handleDebugWatcher)
 	http.HandleFunc("/builders", handleBuilders)
 	http.HandleFunc("/temporarylogs", handleLogs)
 	http.HandleFunc("/reverse", handleReverse)
@@ -309,6 +310,9 @@ func main() {
 		select {
 		case work := <-workc:
 			if !mayBuildRev(work) {
+				if inStaging {
+					log.Printf("may not build %v; skipping", work)
+				}
 				continue
 			}
 			st, err := newBuild(work)
@@ -328,6 +332,7 @@ func main() {
 func stagingClusterBuilders() map[string]dashboard.BuildConfig {
 	m := map[string]dashboard.BuildConfig{}
 	for _, name := range []string{
+		"linux-arm",
 		"linux-amd64",
 		"linux-amd64-race",
 		"windows-amd64-gce",
@@ -566,10 +571,17 @@ func workaroundFlush(w http.ResponseWriter) {
 // TODO(bradfitz): it also currently does not support subrepos.
 func findWorkLoop(work chan<- builderRev) {
 	// Useful for debugging a single run:
-	if inStaging && false {
-		work <- builderRev{name: "linux-amd64", rev: "c9778ec302b2e0e0d6027e1e0fca892e428d9657", subName: "tools", subRev: "ac303766f5f240c1796eeea3dc9bf34f1261aa35"}
+	if inStaging && true {
+		//work <- builderRev{name: "linux-arm", rev: "c9778ec302b2e0e0d6027e1e0fca892e428d9657", subName: "tools", subRev: "ac303766f5f240c1796eeea3dc9bf34f1261aa35"}
 		//work <- builderRev{name: "linux-amd64", rev: "54789eff385780c54254f822e09505b6222918e2"}
 		//work <- builderRev{name: "windows-amd64-gce", rev: "54789eff385780c54254f822e09505b6222918e2"}
+		log.Printf("Test work awaiting arm")
+		for !reversePool.CanBuild("linux-arm") {
+			time.Sleep(time.Second)
+		}
+		log.Printf("Sending test work.")
+		work <- builderRev{name: "linux-arm", rev: "c1aee8c825c2179ad4959ebf533bf27c4b774d00"}
+		log.Printf("Sent test work.")
 
 		// Still run findWork but ignore what it does.
 		ignore := make(chan builderRev)
@@ -1049,11 +1061,11 @@ func GetBuildlets(cancel Cancel, pool BuildletPool, n int, machineType, rev stri
 				}
 				return
 			}
-			el.logEventTime("helper_ready")
+			el.logEventTime("empty_helper_ready", bc.Name())
 			select {
 			case ch <- bc:
 			case <-cancel:
-				el.logEventTime("helper_killed_before_use")
+				el.logEventTime("helper_killed_before_use", bc.Name())
 				bc.Close()
 				return
 			}
@@ -1212,7 +1224,7 @@ func (st *buildStatus) useSnapshot() bool {
 	if st.useSnapshotMemo != nil {
 		return *st.useSnapshotMemo
 	}
-	b := st.isSubrepo() && st.conf.SplitMakeRun() && st.snapshotExists()
+	b := st.conf.SplitMakeRun() && st.snapshotExists()
 	st.useSnapshotMemo = &b
 	return b
 }
@@ -1944,33 +1956,34 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	go func() {
 		for helper := range helpers {
 			go func(bc *buildlet.Client) {
-				defer st.logEventTime("closed_helper", bc.IPPort())
+				defer st.logEventTime("closed_helper", bc.Name())
 				defer bc.Close()
 				defer nukeIfBroken(bc)
 				if devPause {
 					defer time.Sleep(5 * time.Minute)
-					defer st.logEventTime("DEV_HELPER_SLEEP", bc.IPPort())
+					defer st.logEventTime("DEV_HELPER_SLEEP", bc.Name())
 				}
-				st.logEventTime("got_helper", bc.String())
+				st.logEventTime("got_empty_test_helper", bc.String())
 				if err := bc.PutTarFromURL(st.snapshotURL(), "go"); err != nil {
-					log.Printf("failed to extract snapshot for helper %s: %v", bc.IPPort(), err)
+					log.Printf("failed to extract snapshot for helper %s: %v", bc.Name(), err)
 					return
 				}
 				workDir, err := bc.WorkDir()
 				if err != nil {
-					log.Printf("error discovering workdir for helper %s: %v", bc.IPPort(), err)
+					log.Printf("error discovering workdir for helper %s: %v", bc.Name(), err)
 					return
 				}
-				st.logEventTime("setup_helper", bc.String())
+				st.logEventTime("test_helper_set_up", bc.Name())
 				goroot := st.conf.FilePathJoin(workDir, "go")
 				for !bc.IsBroken() {
 					tis, ok := set.testsToRunBiggestFirst()
 					if !ok {
-						st.logEventTime("biggest_tests_complete", bc.IPPort())
+						st.logEventTime("no_new_tests_remain", bc.Name())
 						return
 					}
 					st.runTestsOnBuildlet(bc, tis, goroot)
 				}
+				st.logEventTime("test_helper_is_broken", bc.Name())
 			}(helper)
 		}
 	}()
@@ -2061,7 +2074,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 			panic("only go_test:* tests may be merged")
 		}
 	}
-	which := fmt.Sprintf("%s: %v", bc.IPPort(), names)
+	which := fmt.Sprintf("%s: %v", bc.Name(), names)
 	st.logEventTime("start_tests", which)
 
 	args := []string{"tool", "dist", "test", "--no-rebuild", "--banner=" + banner}
@@ -2297,7 +2310,7 @@ type buildStatus struct {
 	startedPinging  bool             // started pinging the go dashboard
 	events          []eventAndTime
 	watcher         []*logWatcher
-	useSnapshotMemo *bool
+	useSnapshotMemo *bool // if non-nil, memoized result of useSnapshot
 }
 
 func (st *buildStatus) setDone(succeeded bool) {
@@ -2322,6 +2335,9 @@ func (st *buildStatus) logf(format string, args ...interface{}) {
 }
 
 func (st *buildStatus) logEventTime(event string, optText ...string) {
+	if inStaging {
+		st.logf("%s %v", event, optText)
+	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	switch event {

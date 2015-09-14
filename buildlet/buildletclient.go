@@ -54,8 +54,10 @@ func (c *Client) SetCloseFunc(fn func() error) {
 	c.closeFunc = fn
 }
 
+var ErrClosed = errors.New("buildlet: Client closed")
+
 func (c *Client) Close() error {
-	c.setPeerDead(errors.New("Close called"))
+	c.setPeerDead(ErrClosed) // TODO(bradfitz): split concept of closed vs. broken?
 	var err error
 	if c.closeFunc != nil {
 		err = c.closeFunc()
@@ -67,6 +69,10 @@ func (c *Client) Close() error {
 // To be called only via c.setPeerDeadOnce.Do(s.setPeerDead)
 func (c *Client) setPeerDead(err error) {
 	c.setPeerDeadOnce.Do(func() {
+		c.MarkBroken()
+		if err == nil {
+			err = errors.New("peer dead (no specific error)")
+		}
 		c.deadErr = err
 		close(c.peerDead)
 	})
@@ -155,6 +161,13 @@ func (c *Client) URL() string {
 }
 
 func (c *Client) IPPort() string { return c.ipPort }
+
+func (c *Client) Name() string {
+	if c.ipPort != "" {
+		return c.ipPort
+	}
+	return "(unnamed-buildlet)"
+}
 
 // MarkBroken marks this client as broken in some way.
 func (c *Client) MarkBroken() {
@@ -571,6 +584,12 @@ type Status struct {
 
 // Status returns an Status value describing this buildlet.
 func (c *Client) Status() (Status, error) {
+	select {
+	case <-c.peerDead:
+		return Status{}, c.deadErr
+	default:
+		// Continue below.
+	}
 	req, err := http.NewRequest("GET", c.URL()+"/status", nil)
 	if err != nil {
 		return Status{}, err
