@@ -47,6 +47,7 @@ var (
 	mirrorBase   = flag.String("mirror", "", `Mirror repository base URL (eg "https://github.com/golang/")`)
 	filter       = flag.String("filter", "", "Comma-separated list of directories or files to watch for new commits (only works on main repo)")
 	httpAddr     = flag.String("http", "", "If non-empty, the listen address to run an HTTP server on")
+	report       = flag.Bool("report", true, "Report updates to build dashboard (use false for development dry-run mode)")
 )
 
 var (
@@ -71,10 +72,12 @@ func run() error {
 		return errors.New("dashboard URL (-dashboard) must end in /")
 	}
 
-	if k, err := readKey(); err != nil {
-		return err
-	} else {
-		dashboardKey = k
+	if *report {
+		if k, err := readKey(); err != nil {
+			return err
+		} else {
+			dashboardKey = k
+		}
 	}
 
 	dir, err := ioutil.TempDir("", "watcher")
@@ -365,6 +368,10 @@ func (r *Repo) postChildren(b *Branch, parent *Commit) error {
 
 // postCommit sends a commit to the build dashboard.
 func (r *Repo) postCommit(c *Commit) error {
+	if !*report {
+		r.logf("dry-run mode; NOT posting commit to dashboard: %v", c)
+		return nil
+	}
 	r.logf("sending commit to dashboard: %v", c)
 
 	t, err := time.Parse("Mon, 2 Jan 2006 15:04:05 -0700", c.Date)
