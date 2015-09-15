@@ -7,6 +7,9 @@
 package cache
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/gob"
 	"fmt"
 	"net/http"
 	"time"
@@ -54,7 +57,7 @@ func Get(c appengine.Context, r *http.Request, now uint64, name string, value in
 		return false
 	}
 	key := fmt.Sprintf("%s.%d", name, now)
-	_, err := memcache.Gob.Get(c, key, value)
+	_, err := gzipGobCodec.Get(c, key, value)
 	if err == nil {
 		c.Debugf("cache hit %q", key)
 		return true
@@ -73,7 +76,7 @@ func Set(c appengine.Context, r *http.Request, now uint64, name string, value in
 		return
 	}
 	key := fmt.Sprintf("%s.%d", name, now)
-	err := memcache.Gob.Set(c, &memcache.Item{
+	err := gzipGobCodec.Set(c, &memcache.Item{
 		Key:        key,
 		Object:     value,
 		Expiration: expiry,
@@ -81,4 +84,26 @@ func Set(c appengine.Context, r *http.Request, now uint64, name string, value in
 	if err != nil {
 		c.Errorf("set cache %q: %v", key, err)
 	}
+}
+
+var gzipGobCodec = memcache.Codec{Marshal: marshal, Unmarshal: unmarshal}
+
+func marshal(v interface{}) ([]byte, error) {
+	var b bytes.Buffer
+	zw := gzip.NewWriter(&b)
+	if err := gob.NewEncoder(zw).Encode(v); err != nil {
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
+func unmarshal(b []byte, v interface{}) error {
+	zr, err := gzip.NewReader(bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+	return gob.NewDecoder(zr).Decode(v)
 }
