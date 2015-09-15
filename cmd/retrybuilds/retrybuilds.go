@@ -118,6 +118,9 @@ func isFlaky(failLog string) bool {
 	if strings.HasPrefix(failLog, "timed out after ") {
 		return true
 	}
+	if strings.HasPrefix(faillog, "Failed to schedule ") {
+		return true
+	}
 	for _, phrase := range flakePhrases {
 		if strings.Contains(failLog, phrase) {
 			return true
