@@ -38,6 +38,7 @@ import (
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/lru"
 	"golang.org/x/build/internal/singleflight"
+	"golang.org/x/build/livelog"
 	"golang.org/x/build/types"
 	"google.golang.org/cloud/storage"
 )
@@ -497,8 +498,6 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 		if nostream {
 			fmt.Fprintf(w, "\n\n(live streaming disabled; reload manually to see status)\n")
 		}
-		st.mu.Lock()
-		defer st.mu.Unlock()
 		w.Write(st.output.Bytes())
 		return
 	}
@@ -510,19 +509,20 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 
 	w.(http.Flusher).Flush()
 
-	logs := st.watchLogs()
-	defer st.unregisterWatcher(logs)
-	closed := w.(http.CloseNotifier).CloseNotify()
+	output := st.output.Reader()
+	go func() {
+		<-w.(http.CloseNotifier).CloseNotify()
+		output.Close()
+	}()
+	buf := make([]byte, 65536)
 	for {
-		select {
-		case b, ok := <-logs:
-			if !ok {
-				return
-			}
-			w.Write(b)
-			w.(http.Flusher).Flush()
-		case <-closed:
+		n, err := output.Read(buf)
+		if _, err2 := w.Write(buf[:n]); err2 != nil {
 			return
+		}
+		w.(http.Flusher).Flush()
+		if err != nil {
+			break
 		}
 	}
 }
@@ -2312,10 +2312,9 @@ type buildStatus struct {
 	bc              *buildlet.Client // nil initially, until pool returns one
 	done            time.Time        // finished running
 	succeeded       bool             // set when done
-	output          bytes.Buffer     // stdout and stderr
+	output          livelog.Buffer   // stdout and stderr
 	startedPinging  bool             // started pinging the go dashboard
 	events          []eventAndTime
-	watcher         []*logWatcher
 	useSnapshotMemo *bool // if non-nil, memoized result of useSnapshot
 }
 
@@ -2324,7 +2323,7 @@ func (st *buildStatus) setDone(succeeded bool) {
 	defer st.mu.Unlock()
 	st.succeeded = succeeded
 	st.done = time.Now()
-	st.notifyWatchersLocked(true)
+	st.output.Close()
 	close(st.donec)
 }
 
@@ -2463,83 +2462,11 @@ func (st *buildStatus) writeEventsLocked(w io.Writer, htmlMode bool) {
 }
 
 func (st *buildStatus) logs() string {
-	st.mu.Lock()
-	defer st.mu.Unlock()
 	return st.output.String()
 }
 
 func (st *buildStatus) Write(p []byte) (n int, err error) {
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	const maxBufferSize = 2 << 20 // 2MB of output is way more than we expect.
-	plen := len(p)
-	if st.output.Len()+len(p) > maxBufferSize {
-		p = p[:maxBufferSize-st.output.Len()]
-	}
-	st.output.Write(p) // bytes.Buffer can't fail
-	st.notifyWatchersLocked(false)
-	return plen, nil
-}
-
-// logWatcher holds the state of a client watching the logs of a running build.
-type logWatcher struct {
-	ch     chan []byte
-	offset int // Offset of seen logs (offset == len(buf) means "up to date")
-}
-
-// watchLogs returns a channel on which the build's logs is sent.
-// When the build is complete the channel is closed.
-func (st *buildStatus) watchLogs() <-chan []byte {
-	st.mu.Lock()
-	defer st.mu.Unlock()
-
-	ch := make(chan []byte, 10) // room for a few log writes
-	ch <- st.output.Bytes()
-	if !st.isRunningLocked() {
-		close(ch)
-		return ch
-	}
-
-	st.watcher = append(st.watcher, &logWatcher{
-		ch:     ch,
-		offset: st.output.Len(),
-	})
-	return ch
-}
-
-// unregisterWatcher removes the provided channel from the list of watchers,
-// so that it receives no further log data.
-func (st *buildStatus) unregisterWatcher(ch <-chan []byte) {
-	st.mu.Lock()
-	defer st.mu.Unlock()
-
-	for i, w := range st.watcher {
-		if w.ch == ch {
-			st.watcher = append(st.watcher[:i], st.watcher[i+1:]...)
-			break
-		}
-	}
-}
-
-// notifyWatchersLocked pushes any new log data to watching clients.
-// If done is true it closes any watcher channels.
-//
-// NOTE: st.mu must be held.
-func (st *buildStatus) notifyWatchersLocked(done bool) {
-	l := st.output.Len()
-	for _, w := range st.watcher {
-		if w.offset < l {
-			select {
-			case w.ch <- st.output.Bytes()[w.offset:]:
-				w.offset = l
-			default:
-				// If the receiver isn't ready, drop the write.
-			}
-		}
-		if done {
-			close(w.ch)
-		}
-	}
+	return st.output.Write(p)
 }
 
 func versionTgz(rev string) io.Reader {
