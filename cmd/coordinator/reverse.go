@@ -79,10 +79,6 @@ func (p *reverseBuildletPool) tryToGrab(machineType string) (*buildlet.Client, e
 			// Found an unused match.
 			b.inUseAs = machineType
 			b.inUseTime = time.Now()
-			b.client.SetCloseFunc(func() error {
-				p.nukeBuildlet(b.client)
-				return nil
-			})
 			return b.client, nil
 		}
 	}
@@ -441,6 +437,7 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 	client.SetDescription(fmt.Sprintf("reverse peer %s/%s for modes %v", hostname, r.RemoteAddr, modes))
+	client.SetOnHeartbeatFailure(func() { conn.Close() })
 	tstatus := time.Now()
 	status, err := client.Status()
 	if err != nil {

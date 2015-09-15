@@ -48,25 +48,38 @@ func (c *Client) setCommon() {
 	c.peerDead = make(chan struct{})
 }
 
-// SetCloseFunc sets a function to be called when c.Close is called.
-// SetCloseFunc must not be called concurrently with Close.
-func (c *Client) SetCloseFunc(fn func() error) {
-	c.closeFunc = fn
+// SetOnHeartbeatFailure sets a function to be called when heartbeats
+// against this builder fail, or when the client is destroyed with
+// Close. The function fn is never called more than once.
+// SetOnHeartbeatFailure must be set before any use of the buildlet.
+func (c *Client) SetOnHeartbeatFailure(fn func()) {
+	c.heartbeatFailure = fn
 }
 
 var ErrClosed = errors.New("buildlet: Client closed")
 
+// Closes destroys and closes down the buildlet, destroying all state
+// immediately.
 func (c *Client) Close() error {
-	c.setPeerDead(ErrClosed) // TODO(bradfitz): split concept of closed vs. broken?
-	var err error
-	if c.closeFunc != nil {
-		err = c.closeFunc()
-		c.closeFunc = nil
-	}
-	return err
+	c.closeOnce.Do(func() {
+		// Send a best-effort notification to the server to destroy itself.
+		// Don't want too long (since it's likely in a broken state anyway).
+		// Ignore the return value, since we're about to forcefully destroy
+		// it anyway.
+		req, err := http.NewRequest("POST", c.URL()+"/halt", nil)
+		if err != nil {
+			// ignore.
+		} else {
+			_, err = c.doHeaderTimeout(req, 2*time.Second)
+		}
+		if err == nil {
+			err = ErrClosed
+		}
+		c.setPeerDead(err) // which will also cause c.heartbeatFailure to run
+	})
+	return nil
 }
 
-// To be called only via c.setPeerDeadOnce.Do(s.setPeerDead)
 func (c *Client) setPeerDead(err error) {
 	c.setPeerDeadOnce.Do(func() {
 		c.MarkBroken()
@@ -112,9 +125,10 @@ type Client struct {
 	password       string // basic auth password or empty for none
 	remoteBuildlet string // non-empty if for remote buildlets
 
-	closeFunc func() error
-	desc      string
+	heartbeatFailure func() // optional
+	desc             string
 
+	closeOnce         sync.Once
 	initHeartbeatOnce sync.Once
 	setPeerDeadOnce   sync.Once
 	peerDead          chan struct{} // closed on peer death
@@ -214,17 +228,20 @@ func (c *Client) heartbeatLoop() {
 	for {
 		select {
 		case <-c.peerDead:
-			// Already dead by something else.
-			// Most likely: c.Close was called.
+			// Dead for whatever reason (heartbeat, remote
+			// side closed, caller Closed
+			// normally). Regardless, we call the
+			// heartbeatFailure func if set.
+			if c.heartbeatFailure != nil {
+				c.heartbeatFailure()
+			}
 			return
 		case <-time.After(10 * time.Second):
 			t0 := time.Now()
 			if _, err := c.Status(); err != nil {
 				failInARow++
 				if failInARow == 3 {
-					c.MarkBroken()
 					c.setPeerDead(fmt.Errorf("Buildlet %v failed heartbeat after %v; marking dead; err=%v", c, time.Since(t0), err))
-					return
 				}
 			} else {
 				failInARow = 0
@@ -491,15 +508,6 @@ func (c *Client) Exec(cmd string, opts ExecOpts) (remoteErr, execErr error) {
 	}
 }
 
-// Destroy shuts down the buildlet, destroying all state immediately.
-func (c *Client) Destroy() error {
-	req, err := http.NewRequest("POST", c.URL()+"/halt", nil)
-	if err != nil {
-		return err
-	}
-	return c.doOK(req)
-}
-
 // RemoveAll deletes the provided paths, relative to the work directory.
 func (c *Client) RemoveAll(paths ...string) error {
 	if len(paths) == 0 {
@@ -516,13 +524,14 @@ func (c *Client) RemoveAll(paths ...string) error {
 
 // DestroyVM shuts down the buildlet and destroys the VM instance.
 func (c *Client) DestroyVM(ts oauth2.TokenSource, proj, zone, instance string) error {
+	// TODO(bradfitz): move GCE stuff out of this package?
 	gceErrc := make(chan error, 1)
 	buildletErrc := make(chan error, 1)
 	go func() {
 		gceErrc <- DestroyVM(ts, proj, zone, instance)
 	}()
 	go func() {
-		buildletErrc <- c.Destroy()
+		buildletErrc <- c.Close()
 	}()
 	timeout := time.NewTimer(5 * time.Second)
 	defer timeout.Stop()

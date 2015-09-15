@@ -1240,7 +1240,6 @@ func (st *buildStatus) build() error {
 		return fmt.Errorf("failed to get a buildlet: %v", err)
 	}
 	defer bc.Close()
-	defer nukeIfBroken(bc)
 	st.mu.Lock()
 	st.bc = bc
 	st.mu.Unlock()
@@ -1966,7 +1965,6 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 			go func(bc *buildlet.Client) {
 				defer st.logEventTime("closed_helper", bc.Name())
 				defer bc.Close()
-				defer nukeIfBroken(bc)
 				if devPause {
 					defer time.Sleep(5 * time.Minute)
 					defer st.logEventTime("DEV_HELPER_SLEEP", bc.Name())
@@ -2640,14 +2638,6 @@ func getSourceTgzFromURL(source, repo, rev, urlStr string) (tgz []byte, err erro
 		return nil, fmt.Errorf("reading %s/%s from %s: %v", repo, rev, source, err)
 	}
 	return slurp, nil
-}
-
-func nukeIfBroken(bc *buildlet.Client) {
-	if bc.IsBroken() {
-		// It may not have come from the reverse pool, but it's harmless if
-		// it didn't.
-		reversePool.nukeBuildlet(bc)
-	}
 }
 
 var nl = []byte("\n")

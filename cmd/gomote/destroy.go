@@ -27,5 +27,5 @@ func destroy(args []string) error {
 	if err != nil {
 		return err
 	}
-	return bc.Destroy()
+	return bc.Close()
 }

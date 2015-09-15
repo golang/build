@@ -216,9 +216,6 @@ func (b *Build) buildlet() (*buildlet.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	bc.SetCloseFunc(func() error {
-		return bc.Destroy()
-	})
 	return bc, nil
 }
 

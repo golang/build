@@ -66,11 +66,6 @@ func addRemoteBuildlet(rb *remoteBuildlet) (name string) {
 	}
 }
 
-func destroyCloseBuildlet(bc *buildlet.Client) {
-	bc.Destroy()
-	bc.Close()
-}
-
 func expireBuildlets() {
 	defer cleanTimer.Reset(remoteBuildletCleanInterval)
 	remoteBuildlets.Lock()
@@ -78,7 +73,7 @@ func expireBuildlets() {
 	now := time.Now()
 	for name, rb := range remoteBuildlets.m {
 		if !rb.Expires.IsZero() && rb.Expires.Before(now) {
-			go destroyCloseBuildlet(rb.buildlet)
+			go rb.buildlet.Close()
 			delete(remoteBuildlets.m, name)
 		}
 	}
@@ -261,7 +256,7 @@ func proxyBuildletHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "POST" && r.URL.Path == "/halt" {
-		err := rb.buildlet.Destroy()
+		err := rb.buildlet.Close()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}

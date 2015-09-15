@@ -266,7 +266,9 @@ func (p *gceBuildletPool) GetBuildlet(cancel Cancel, typ, rev string, el eventTi
 		return nil, err
 	}
 	bc.SetDescription("GCE VM: " + instName)
-	bc.SetCloseFunc(func() error { return p.putBuildlet(bc, typ, instName) })
+	bc.SetOnHeartbeatFailure(func() {
+		p.putBuildlet(bc, typ, instName)
+	})
 	return bc, nil
 }
 
@@ -274,8 +276,12 @@ func (p *gceBuildletPool) putBuildlet(bc *buildlet.Client, typ, instName string)
 	// TODO(bradfitz): add the buildlet to a freelist (of max N
 	// items) for up to 10 minutes since when it got started if
 	// it's never seen a command execution failure, and we can
-	// wipe all its disk content. (perhaps wipe its disk content when
-	// it's retrieved, not put back on the freelist)
+	// wipe all its disk content? (perhaps wipe its disk content
+	// when it's retrieved, like the reverse buildlet pool) But
+	// this will require re-introducing a distinction in the
+	// buildlet client library between Close, Destroy/Halt, and
+	// tracking execution errors.  That was all half-baked before
+	// and thus removed. Now Close always destroys everything.
 	deleteVM(projectZone, instName)
 	p.setInstanceUsed(instName, false)
 
