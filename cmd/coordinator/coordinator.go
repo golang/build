@@ -113,7 +113,7 @@ func init() {
 		"plan9-386",
 		"nacl-386",
 		"nacl-amd64p32",
-		// "linux-arm",
+		"linux-arm",
 	}
 	for _, bname := range tryList {
 		conf, ok := dashboard.Builders[bname]
@@ -1553,7 +1553,15 @@ func (st *buildStatus) distTestList() (names []string, err error) {
 	if remoteErr != nil {
 		return nil, fmt.Errorf("Remote error: %v, %s", remoteErr, buf.Bytes())
 	}
-	return strings.Fields(buf.String()), nil
+	for _, test := range strings.Fields(buf.String()) {
+		if test == "shootout" && strings.HasPrefix(st.name, "linux-arm") {
+			// TODO(bradfitz): skipping this test on linux-arm for now; issue #12623
+			// Re-enable later once there's a -fast mode and it's sharded.
+			continue
+		}
+		names = append(names, test)
+	}
+	return names, nil
 }
 
 func (st *buildStatus) newTestSet(names []string) *testSet {
@@ -2062,7 +2070,7 @@ const maxTestExecErrors = 3
 
 func execTimeout(testNames []string) time.Duration {
 	// TODO(bradfitz): something smarter probably.
-	return 10 * time.Minute
+	return 20 * time.Minute
 }
 
 // runTestsOnBuildlet runs tis on bc, using the optional goroot environment variable.

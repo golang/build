@@ -265,7 +265,6 @@ func (p *gceBuildletPool) GetBuildlet(cancel Cancel, typ, rev string, el eventTi
 		p.setInstanceUsed(instName, false)
 		return nil, err
 	}
-	bc.EnableHeartbeats()
 	bc.SetDescription("GCE VM: " + instName)
 	bc.SetCloseFunc(func() error { return p.putBuildlet(bc, typ, instName) })
 	return bc, nil

@@ -91,16 +91,6 @@ func (c *Client) SetHTTPClient(httpClient *http.Client) {
 	c.httpClient = httpClient
 }
 
-// EnableHeartbeats enables background heartbeating
-// against the peer.
-// It should only be called before the Client is used.
-func (c *Client) EnableHeartbeats() {
-	// TODO(bradfitz): make this always enabled, once the
-	// reverse buildlet connection model supports
-	// multiple connections at once.
-	c.heartbeat = true
-}
-
 // defaultDialer returns the net/http package's default Dial function.
 // Notably, this sets TCP keep-alive values, so when we kill VMs
 // (whose TCP stacks stop replying, forever), we don't leak file
@@ -117,7 +107,6 @@ type Client struct {
 	ipPort         string // required, unless remoteBuildlet+baseURL is set
 	tls            KeyPair
 	httpClient     *http.Client
-	heartbeat      bool   // whether to heartbeat in the background
 	baseURL        string // optional baseURL (used by remote buildlets)
 	authUser       string // defaults to "gomote", if password is non-empty
 	password       string // basic auth password or empty for none
@@ -217,11 +206,6 @@ func (p proxyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 }
 
 func (c *Client) initHeartbeats() {
-	if !c.heartbeat {
-		// TODO(bradfitz): make this always enabled later, once
-		// reverse buildlets are fixed.
-		return
-	}
 	go c.heartbeatLoop()
 }
 
