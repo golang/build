@@ -66,7 +66,7 @@ coreos:
         Requires=docker.service
         
         [Service]
-        ExecStartPre=/bin/bash -c 'mkdir -p /opt/bin && curl -s -o /opt/bin/coordinator $COORDINATOR && chmod +x /opt/bin/coordinator'
+        ExecStartPre=/bin/bash -c 'mkdir -p /opt/bin && curl -s -o /opt/bin/coordinator.tmp $COORDINATOR && install -m 0755 /opt/bin/coordinator{.tmp,}'
         ExecStart=/opt/bin/coordinator
         RestartSec=10s
         Restart=always
