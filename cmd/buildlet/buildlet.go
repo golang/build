@@ -159,7 +159,7 @@ func main() {
 	if *reverse == "" {
 		listenForCoordinator()
 	} else {
-		dialCoordinator()
+		log.Fatal(dialCoordinator())
 	}
 }
 

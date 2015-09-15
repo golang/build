@@ -71,7 +71,7 @@ func dialCoordinator() error {
 	log.Printf("Dialing coordinator %s...", addr)
 	tcpConn, err := net.Dial("tcp", addr)
 	if err != nil {
-		return err // try again
+		return err
 	}
 	config := &tls.Config{
 		ServerName:         "go",
@@ -101,7 +101,7 @@ func dialCoordinator() error {
 	}
 	if resp.StatusCode != 101 {
 		msg, _ := ioutil.ReadAll(resp.Body)
-		return fmt.Errorf("coordinator registration failed:\n\t%s", msg)
+		return fmt.Errorf("coordinator registration failed; want HTTP status 101; got %v:\n\t%s", resp.Status, msg)
 	}
 
 	log.Printf("Connected to coordinator; reverse dialing active")
@@ -110,8 +110,7 @@ func dialCoordinator() error {
 		bufio.NewReader(conn),
 		bufio.NewWriter(conn),
 	)))
-	log.Printf("Reverse buildlet Serve complete; err=%v", err)
-	return err
+	return fmt.Errorf("http.Serve on reverse connection complete: %v", err)
 }
 
 func devBuilderKey(builder string) string {
