@@ -90,7 +90,7 @@ func startWatchers() {
 	}
 }
 
-// Stop any previous go-commit-watcher Docker tasks, so they don't
+// Stop any previous go-watcher-world Docker tasks, so they don't
 // pile up upon restarts of the coordinator.
 func stopWatchers() {
 	out, err := exec.Command("docker", "ps").Output()
@@ -98,7 +98,7 @@ func stopWatchers() {
 		return
 	}
 	for _, line := range strings.Split(string(out), "\n") {
-		if !strings.Contains(line, "go-commit-watcher:") {
+		if !strings.Contains(line, "go-watcher-world:") {
 			continue
 		}
 		f := strings.Fields(line)
