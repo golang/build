@@ -1534,6 +1534,12 @@ func (st *buildStatus) writeSnapshot() error {
 }
 
 func (st *buildStatus) distTestList() (names []string, err error) {
+	workDir, err := st.bc.WorkDir()
+	if err != nil {
+		return nil, fmt.Errorf("distTestList, WorkDir: %v", err)
+	}
+	goroot := st.conf.FilePathJoin(workDir, "go")
+
 	args := []string{"tool", "dist", "test", "--no-rebuild", "--list"}
 	if st.conf.IsRace() {
 		args = append(args, "--race")
@@ -1541,7 +1547,7 @@ func (st *buildStatus) distTestList() (names []string, err error) {
 	var buf bytes.Buffer
 	remoteErr, err := st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 		Output:      &buf,
-		ExtraEnv:    st.conf.Env(),
+		ExtraEnv:    append(st.conf.Env(), "GOROOT="+goroot),
 		OnStartExec: func() { st.logEventTime("discovering_tests") },
 		Path:        []string{"$WORKDIR/go/bin", "$PATH"},
 		Args:        args,
@@ -1941,6 +1947,12 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	st.logEventTime("starting_tests", fmt.Sprintf("%d tests", len(set.items)))
 	startTime := time.Now()
 
+	workDir, err := st.bc.WorkDir()
+	if err != nil {
+		return nil, fmt.Errorf("error discovering workdir for main buildlet, %s: %v", st.bc.Name(), err)
+	}
+	mainBuildletGoroot := st.conf.FilePathJoin(workDir, "go")
+
 	// We use our original buildlet to run the tests in order, to
 	// make the streaming somewhat smooth and not incredibly
 	// lumpy.  The rest of the buildlets run the largest tests
@@ -1956,8 +1968,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 				}
 				continue
 			}
-			goroot := "" // no need to override; main buildlet's GOROOT is baked into binaries
-			st.runTestsOnBuildlet(st.bc, tis, goroot)
+			st.runTestsOnBuildlet(st.bc, tis, mainBuildletGoroot)
 		}
 	}()
 	go func() {
@@ -2113,6 +2124,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 	execDuration := time.Since(t0)
 	st.logEventTime("end_tests", fmt.Sprintf("%s; %s (test exec = %v)", which, summary, execDuration))
 	if err != nil {
+		bc.MarkBroken() // prevents reuse
 		for _, ti := range tis {
 			ti.numFail++
 			st.logf("Execution error running %s on %s: %v (numFails = %d)", ti.name, bc, err, ti.numFail)
