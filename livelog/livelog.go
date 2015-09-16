@@ -49,7 +49,7 @@ func (b *Buffer) Close() error {
 	return nil
 }
 
-// wakeReaders wakes any sleeping readers and removes them from the asleep map.
+// wakeReaders wakes any sleeping readers.
 // b.mu must be held when calling.
 func (b *Buffer) wakeReaders() {
 	if b.wake != nil {
