@@ -65,7 +65,7 @@ func (b *Buffer) Bytes() []byte {
 	return append([]byte(nil), b.buf...)
 }
 
-// Bytes returns a copy of the underlying buffer as a string.
+// String returns a copy of the underlying buffer as a string.
 func (b *Buffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
