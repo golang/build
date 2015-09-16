@@ -63,10 +63,6 @@ func startWatchers() {
 	if inStaging {
 		mirrorBase = "" // don't mirror from dev cluster
 	}
-	const bradIsGrumpy = true
-	if bradIsGrumpy {
-		mirrorBase = "" // one fewer thing to crash; TODO(adg): fix.
-	}
 	addWatcher(watchConfig{
 		repo:       "https://go.googlesource.com/go",
 		dash:       dashBase(),
@@ -140,7 +136,7 @@ func (conf watchConfig) dockerRunArgs() (args []string) {
 			log.Fatalf("Bad mirror destination URL: %q", conf.mirrorBase)
 		}
 		dst.User = url.UserPassword(mirrorCred())
-		args = append(args, "-mirror="+dst.String())
+		args = append(args, "-watcher.mirror="+dst.String())
 	}
 	return
 }

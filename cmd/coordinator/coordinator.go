@@ -114,7 +114,7 @@ func init() {
 		"plan9-386",
 		"nacl-386",
 		"nacl-amd64p32",
-		"linux-arm",
+		//"linux-arm",
 	}
 	for _, bname := range tryList {
 		conf, ok := dashboard.Builders[bname]
