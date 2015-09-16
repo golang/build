@@ -2,8 +2,19 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package revdial implements a dialer and listener which multiplexes
-// multiples connections over one.
+// Package revdial implements a Dialer and Listener which work together
+// to turn an accepted connection (for instance, a Hijacked HTTP request) into
+// a Dialer which can then create net.Conns connecting back to the original
+// dialer, which then gets a net.Listener accepting those conns.
+//
+// This is basically a very minimal SOCKS5 client & server.
+//
+// The motivation is that sometimes you want to run a server on a
+// machine deep inside a NAT. Rather than connecting to the machine
+// directly (which you can't, because of the NAT), you have the
+// sequestered machine connect out to a public machine. Both sides
+// then use revdial and the public machine can become a client for the
+// NATed machine.
 package revdial
 
 /*
@@ -33,6 +44,7 @@ import (
 	"time"
 )
 
+// The Dialer can create new connections.
 type Dialer struct {
 	rw     *bufio.ReadWriter
 	closer io.Closer
@@ -72,6 +84,7 @@ func NewDialer(rw *bufio.ReadWriter, c io.Closer) *Dialer {
 	return d
 }
 
+// Close closes the Dialer and all still-open connections from it.
 func (d *Dialer) Close() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -140,6 +153,7 @@ func (d *Dialer) onFrame(f frame) error {
 	return nil
 }
 
+// Dial creates a new connection back to the Listener.
 func (d *Dialer) Dial() (net.Conn, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -370,6 +384,8 @@ func readFrames(br *bufio.Reader, of onFramer) error {
 	}
 }
 
+// NewListener returns a new Listener, accepting connections which
+// arrive from rw.
 func NewListener(rw *bufio.ReadWriter) *Listener {
 	ln := &Listener{
 		connc: make(chan net.Conn, 8), // arbitrary
@@ -397,6 +413,8 @@ func NewListener(rw *bufio.ReadWriter) *Listener {
 
 var _ net.Listener = (*Listener)(nil)
 
+// Listener is a net.Listener, returning new connections which arrive
+// from a corresponding Dialer.
 type Listener struct {
 	rw    *bufio.ReadWriter
 	connc chan net.Conn
@@ -407,6 +425,7 @@ type Listener struct {
 	closed  bool
 }
 
+// Accept blocks and returns a new connections, or an error.
 func (ln *Listener) Accept() (net.Conn, error) {
 	c, ok := <-ln.connc
 	if !ok {
@@ -416,11 +435,16 @@ func (ln *Listener) Accept() (net.Conn, error) {
 		if err != nil {
 			return nil, fmt.Errorf("revdial: Listener closed; %v", err)
 		}
-		return nil, errors.New("revdial: Listener closed")
+		return nil, ErrListenerClosed
 	}
 	return c, nil
 }
 
+// ErrListenerClosed is returned by Accept after Close has been called.
+var ErrListenerClosed = errors.New("revdial: Listener closed")
+
+// Close closes the Listener, making future Accept calls return an
+// error.
 func (ln *Listener) Close() error {
 	ln.mu.Lock()
 	defer ln.mu.Unlock()
@@ -432,6 +456,8 @@ func (ln *Listener) Close() error {
 	return nil
 }
 
+// Addr returns a dummy address. This exists only to conform to the
+// net.Listener interface.
 func (ln *Listener) Addr() net.Addr { return fakeAddr{} }
 
 func (ln *Listener) closeConn(id uint32) error {
