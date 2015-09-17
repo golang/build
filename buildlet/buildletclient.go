@@ -259,6 +259,13 @@ func (c *Client) doHeaderTimeout(req *http.Request, max time.Duration) (res *htt
 		res *http.Response
 		err error
 	}
+
+	if req.Cancel != nil {
+		panic("use of Request.Cancel inside the buildlet package is reserved for doHeaderTimeout")
+	}
+	cancelc := make(chan struct{}) // closed to abort
+	req.Cancel = cancelc
+
 	resErrc := make(chan resErr, 1)
 	go func() {
 		res, err := c.do(req)
@@ -269,6 +276,7 @@ func (c *Client) doHeaderTimeout(req *http.Request, max time.Duration) (res *htt
 	defer timer.Stop()
 
 	cleanup := func() {
+		close(cancelc)
 		if re := <-resErrc; re.res != nil {
 			re.res.Body.Close()
 		}
