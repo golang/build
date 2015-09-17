@@ -12,6 +12,7 @@ import (
 	"net"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestDialer(t *testing.T) {
@@ -148,7 +149,7 @@ func TestInterop(t *testing.T) {
 	defer d.Close()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -186,4 +187,36 @@ func TestInterop(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// Verify that the server (e.g. the buildlet dialing the coordinator)
+// going away unblocks all connections active back to it.
+func TestServerEOFKillsConns(t *testing.T) {
+	pr, pw := io.Pipe()
+	var out bytes.Buffer
+	d := NewDialer(bufio.NewReadWriter(
+		bufio.NewReader(pr),
+		bufio.NewWriter(&out),
+	), ioutil.NopCloser(nil))
+
+	c, err := d.Dial()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	readErr := make(chan error, 1)
+	go func() {
+		_, err := c.Read([]byte{0})
+		readErr <- err
+	}()
+	pw.Close()
+
+	select {
+	case err := <-readErr:
+		if err == nil {
+			t.Fatal("got nil read error; want non-nil")
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("timeout")
+	}
 }

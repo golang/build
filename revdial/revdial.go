@@ -49,11 +49,11 @@ type Dialer struct {
 	rw     *bufio.ReadWriter
 	closer io.Closer
 
-	mu      sync.Mutex // guards following, and writes to rw
-	readErr error      // non-nil when peer ends
-	closed  bool
-	conns   map[uint32]*conn
-	nextID  uint32
+	mu     sync.Mutex // guards following, and writes to rw
+	err    error      // non-nil when closed or peer dies
+	closed bool
+	conns  map[uint32]*conn
+	nextID uint32
 }
 
 // NewDialer returns the side of the connection which will initiate
@@ -69,30 +69,32 @@ func NewDialer(rw *bufio.ReadWriter, c io.Closer) *Dialer {
 	}
 	go func() {
 		err := readFrames(rw.Reader, d)
-		d.mu.Lock()
-		defer d.mu.Unlock()
-		if d.closed {
-			// Be quiet; errors are expected
-			return
-		}
-		defer c.Close()
 		if err == nil {
 			err = errors.New("revdial: Dialer.readFrames terminated with success")
 		}
-		d.readErr = err
+		d.closeWithError(err)
 	}()
 	return d
 }
 
+var errDialerClosed = errors.New("revdial: Dialer closed")
+
 // Close closes the Dialer and all still-open connections from it.
 func (d *Dialer) Close() error {
+	return d.closeWithError(errDialerClosed)
+}
+
+func (d *Dialer) closeWithError(err error) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.closed {
 		return nil
 	}
 	d.closed = true
+	d.err = err
 	for _, c := range d.conns {
+		// TODO(bradfitz): propagate err to peers. For now they'll just fail with
+		// EOF, which works but isn't as nice as it could be.
 		c.peerClose()
 	}
 	return d.closer.Close()
