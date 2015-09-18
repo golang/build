@@ -1280,6 +1280,11 @@ func (st *buildStatus) build() error {
 	} else {
 		remoteErr, err = st.runAllLegacy()
 	}
+
+	// bc (aka st.bc) may be invalid past this point, so let's
+	// close it to make sure we we don't accidentally use it.
+	bc.Close()
+
 	doneMsg := "all tests passed"
 	if remoteErr != nil {
 		doneMsg = "with test failures"
@@ -1328,6 +1333,10 @@ func (st *buildStatus) hasDistTest() (ok bool, err error) {
 
 // runAllSharded runs make.bash and then shards the test execution.
 // remoteErr and err are as described at the top of this file.
+//
+// After runAllSharded returns, the caller must assume that st.bc
+// might be invalid (It's possible that only one of the helper
+// buildlets survived).
 func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 	st.getHelpersReadySoon()
 
@@ -1971,6 +1980,9 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 // runTests is only called for builders which support a split make/run
 // (should be everything, at least soon). Currently (2015-05-27) iOS
 // and Android and Nacl do not.
+//
+// After runTests completes, the caller must assume that st.bc might be invalid
+// (It's possible that only one of the helper buildlets survived).
 func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err error) {
 	testNames, err := st.distTestList()
 	if err != nil {
@@ -1990,8 +2002,13 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	// make the streaming somewhat smooth and not incredibly
 	// lumpy.  The rest of the buildlets run the largest tests
 	// first (critical path scheduling).
+	// The buildletActivity WaitGroup is used to track when all
+	// the buildlets are dead or don.
+	var buildletActivity sync.WaitGroup
+	buildletActivity.Add(2) // one per goroutine below (main + helper launcher goroutine)
 	go func() {
-		for {
+		defer buildletActivity.Done() // for the per-goroutine Add(2) above
+		for !st.bc.IsBroken() {
 			tis, ok := set.testsToRunInOrder()
 			if !ok {
 				select {
@@ -2003,10 +2020,14 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 			}
 			st.runTestsOnBuildlet(st.bc, tis, mainBuildletGoroot)
 		}
+		st.logEventTime("main_buildlet_broken", st.bc.Name())
 	}()
 	go func() {
+		defer buildletActivity.Done() // for the per-goroutine Add(2) above
 		for helper := range helpers {
+			defer buildletActivity.Add(1)
 			go func(bc *buildlet.Client) {
+				defer buildletActivity.Done() // for the per-helper Add(1) above
 				defer st.logEventTime("closed_helper", bc.Name())
 				defer bc.Close()
 				if devPause {
@@ -2038,16 +2059,29 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 		}
 	}()
 
+	// Convert a sync.WaitGroup into a channel.
+	// Aside: https://groups.google.com/forum/#!topic/golang-dev/7fjGWuImu5k
+	buildletsGone := make(chan struct{})
+	go func() {
+		buildletActivity.Wait()
+		close(buildletsGone)
+	}()
+
 	var lastBanner string
 	var serialDuration time.Duration
 	for _, ti := range set.items {
 	AwaitDone:
 		for {
+			timer := time.NewTimer(30 * time.Second)
 			select {
 			case <-ti.done: // wait for success
+				timer.Stop()
 				break AwaitDone
-			case <-time.After(30 * time.Second):
+			case <-timer.C:
 				st.logEventTime("still_waiting_on_test", ti.name)
+			case <-buildletsGone:
+				set.cancelAll()
+				return nil, fmt.Errorf("dist test failed: all buildlets had network errors or timeouts, yet tests remain")
 			}
 		}
 
@@ -2134,6 +2168,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 	args = append(args, names...)
 	var buf bytes.Buffer
 	t0 := time.Now()
+	timeout := execTimeout(names)
 	remoteErr, err := bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 		// We set Dir to "." instead of the default ("go/bin") so when the dist tests
 		// try to run os/exec.Command("go", "test", ...), the LookPath of "go" doesn't
@@ -2144,7 +2179,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 		Dir:      ".",
 		Output:   &buf, // see "maybe stream lines" TODO below
 		ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot),
-		Timeout:  execTimeout(names),
+		Timeout:  timeout,
 		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
 		Args:     args,
 	})
@@ -2161,11 +2196,10 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 		for _, ti := range tis {
 			ti.numFail++
 			st.logf("Execution error running %s on %s: %v (numFails = %d)", ti.name, bc, err, ti.numFail)
-			if ti.numFail >= maxTestExecErrors {
-				msg := fmt.Sprintf("Failed to schedule %q test after %d tries.\n", ti.name, maxTestExecErrors)
-				ti.output = []byte(msg)
-				ti.remoteErr = errors.New(msg)
-				close(ti.done)
+			if err == buildlet.ErrTimeout {
+				ti.failf("Test %q ran over %v limit (%v)", ti.name, timeout, execDuration)
+			} else if ti.numFail >= maxTestExecErrors {
+				ti.failf("Failed to schedule %q test after %d tries.\n", ti.name, maxTestExecErrors)
 			} else {
 				ti.retry()
 			}
@@ -2326,6 +2360,13 @@ func (ti *testItem) isDone() bool {
 func (ti *testItem) retry() {
 	// release it to make it available for somebody else to try later:
 	<-ti.take
+}
+
+func (ti *testItem) failf(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	ti.output = []byte(msg)
+	ti.remoteErr = errors.New(msg)
+	close(ti.done)
 }
 
 type byTestDuration []*testItem
