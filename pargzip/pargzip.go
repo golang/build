@@ -41,7 +41,8 @@ type Writer struct {
 	w  io.Writer
 	bw *bufio.Writer
 
-	allWritten chan struct{} // when writing goroutine ends
+	allWritten  chan struct{} // when writing goroutine ends
+	wasWriteErr chan struct{} // closed after 'err' set
 
 	sem    chan bool        // semaphore bounding compressions in flight
 	chunkc chan *writeChunk // closed on Close
@@ -103,8 +104,9 @@ func (c *writeChunk) compress() (err error) {
 // Write.
 func NewWriter(w io.Writer) *Writer {
 	return &Writer{
-		w:          w,
-		allWritten: make(chan struct{}),
+		w:           w,
+		allWritten:  make(chan struct{}),
+		wasWriteErr: make(chan struct{}),
 
 		UseSystemGzip: true,
 		ChunkSize:     1 << 20,
@@ -122,6 +124,7 @@ func (w *Writer) init() {
 		defer close(w.allWritten)
 		for c := range w.chunkc {
 			if err := w.writeCompressedChunk(c); err != nil {
+				close(w.wasWriteErr)
 				return
 			}
 		}
@@ -136,7 +139,12 @@ func (w *Writer) startChunk(p []byte) {
 		donec: make(chan struct{}),
 	}
 	go c.compress() // receives from w.sem
-	w.chunkc <- c
+	select {
+	case w.chunkc <- c:
+	case <-w.wasWriteErr:
+		// Discard chunks that come after any chunk that failed
+		// to write.
+	}
 }
 
 func (w *Writer) writeCompressedChunk(c *writeChunk) (err error) {
