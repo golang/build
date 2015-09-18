@@ -475,8 +475,9 @@ func (s byModeThenHostname) Len() int      { return len(s) }
 func (s byModeThenHostname) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 func (s byModeThenHostname) Less(i, j int) bool {
 	bi, bj := s[i], s[j]
-	if bi.firstMode() < bj.firstMode() {
-		return true
+	mi, mj := bi.firstMode(), bj.firstMode()
+	if mi == mj {
+		return bi.hostname < bj.hostname
 	}
-	return bi.hostname < bj.hostname
+	return mi < mj
 }
