@@ -29,6 +29,11 @@ uint8: frame type
 uint32: conn id  (coordinator chooses, no ack from peer)
 uint16: length of rest of data (for all frame types)
 
+TODO(bradfitz): health checking PING packet type? since we can't use
+TCP keep-alives at this layer. I guess we can just assume our caller
+set up TCP keep-alives or similar. But it's actually tedious/hard to
+do.
+
 */
 
 import (
@@ -54,6 +59,7 @@ type Dialer struct {
 	closed bool
 	conns  map[uint32]*conn
 	nextID uint32
+	donec  chan struct{}
 }
 
 // NewDialer returns the side of the connection which will initiate
@@ -66,6 +72,7 @@ func NewDialer(rw *bufio.ReadWriter, c io.Closer) *Dialer {
 		closer: c,
 		conns:  map[uint32]*conn{},
 		nextID: 1, // just for debugging, not seeing zeros
+		donec:  make(chan struct{}),
 	}
 	go func() {
 		err := readFrames(rw.Reader, d)
@@ -76,6 +83,10 @@ func NewDialer(rw *bufio.ReadWriter, c io.Closer) *Dialer {
 	}()
 	return d
 }
+
+// Done returns a channel which is closed when d is either closed or closed
+// by the peer.
+func (d *Dialer) Done() <-chan struct{} { return d.donec }
 
 var errDialerClosed = errors.New("revdial: Dialer closed")
 
@@ -97,7 +108,13 @@ func (d *Dialer) closeWithError(err error) error {
 		// EOF, which works but isn't as nice as it could be.
 		c.peerClose()
 	}
-	return d.closer.Close()
+	closeErr := d.closer.Close()
+	close(d.donec)
+
+	if err == errDialerClosed || err == nil {
+		return closeErr
+	}
+	return closeErr
 }
 
 func (d *Dialer) conn(id uint32) (*conn, error) {

@@ -62,6 +62,11 @@ var ErrClosed = errors.New("buildlet: Client closed")
 // Closes destroys and closes down the buildlet, destroying all state
 // immediately.
 func (c *Client) Close() error {
+	// TODO(bradfitz): have a Client-wide Done channel we set on
+	// all outbound HTTP Requests and close it in the once here?
+	// Then if something was in-flight and somebody else Closes,
+	// the local http.Transport notices, rather than noticing via
+	// the remote machine dying or timing out.
 	c.closeOnce.Do(func() {
 		// Send a best-effort notification to the server to destroy itself.
 		// Don't want too long (since it's likely in a broken state anyway).

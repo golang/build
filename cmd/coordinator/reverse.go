@@ -438,10 +438,30 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 	client.SetDescription(fmt.Sprintf("reverse peer %s/%s for modes %v", hostname, r.RemoteAddr, modes))
+
+	var isDead struct {
+		sync.Mutex
+		v bool
+	}
 	client.SetOnHeartbeatFailure(func() {
+		isDead.Lock()
+		isDead.v = true
+		isDead.Unlock()
 		conn.Close()
 		reversePool.nukeBuildlet(client)
 	})
+
+	// If the reverse dialer (which is always reading from the
+	// conn) detects that the remote went away, close the buildlet
+	// client proactively show
+	go func() {
+		<-revDialer.Done()
+		isDead.Lock()
+		defer isDead.Unlock()
+		if !isDead.v {
+			client.Close()
+		}
+	}()
 	tstatus := time.Now()
 	status, err := client.Status()
 	if err != nil {

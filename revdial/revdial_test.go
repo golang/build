@@ -216,7 +216,13 @@ func TestServerEOFKillsConns(t *testing.T) {
 		if err == nil {
 			t.Fatal("got nil read error; want non-nil")
 		}
-	case <-time.After(5 * time.Second):
-		t.Error("timeout")
+	case <-time.After(2 * time.Second):
+		t.Error("timeout waiting for Read")
+	}
+
+	select {
+	case <-d.Done():
+	case <-time.After(2 * time.Second):
+		t.Error("timeout waiting for Done channel")
 	}
 }
