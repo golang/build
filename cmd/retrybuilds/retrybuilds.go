@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/md5"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -28,6 +29,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -87,8 +89,8 @@ func fixTheFlakes() {
 			if err != nil {
 				log.Fatalf("Error fetching %s: %v", f.LogURL, err)
 			}
-			defer res.Body.Close()
 			failLog, err := ioutil.ReadAll(res.Body)
+			res.Body.Close()
 			if err != nil {
 				log.Fatalf("Error reading %s: %v", f.LogURL, err)
 			}
@@ -165,14 +167,38 @@ func wipe(builder, hash string) {
 		"hash":    {hash},
 		"key":     {builderKey(builder)},
 	}
-	res, err := http.PostForm(*builderPrefix+"/clear-results?"+vals.Encode(), nil)
-	if err != nil {
-		log.Fatal(err)
+	for i := 0; i < 10; i++ {
+		res, err := http.PostForm(*builderPrefix+"/clear-results?"+vals.Encode(), nil)
+		if err != nil {
+			log.Fatal(err)
+		}
+		body, err := ioutil.ReadAll(res.Body)
+		res.Body.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+		if res.StatusCode != 200 {
+			log.Fatalf("Error clearing %v hash %q: %v", builder, hash, res.Status)
+		}
+		var dashResponse struct {
+			Error string
+		}
+		if err := json.Unmarshal(body, &dashResponse); err != nil {
+			log.Fatalf("Bad dashboard response: %v\nBody: %s", err, body)
+		}
+
+		switch e := dashResponse.Error; e {
+		case "datastore: concurrent transaction":
+			log.Printf("Concurrent datastore transaction wiping %v %v: retrying in 1 second", builder, hash)
+			time.Sleep(time.Second)
+			continue
+		default:
+			log.Fatalf("Dashboard error: %v", e)
+		case "":
+			return
+		}
 	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		log.Fatalf("Error clearing %v hash %q: %v", builder, hash, res.Status)
-	}
+	log.Fatalf("Too many datastore transaction issues wiping %v %v", builder, hash)
 }
 
 func builderKey(builder string) string {
@@ -223,8 +249,8 @@ func failures() (ret []Failure) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer res.Body.Close()
 	slurp, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
