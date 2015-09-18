@@ -54,7 +54,7 @@ var oauthConfig *oauth2.Config
 const baseConfig = `#cloud-config
 coreos:
   update:
-    group: alpha
+    group: stable
     reboot-strategy: off
   units:
     - name: gobuild.service
@@ -70,6 +70,7 @@ coreos:
         ExecStart=/opt/bin/coordinator
         RestartSec=10s
         Restart=always
+        StartLimitInterval=0
         Type=simple
         
         [Install]
