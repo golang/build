@@ -21,6 +21,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/build"
 	"golang.org/x/build/revdial"
@@ -69,7 +70,11 @@ func dialCoordinator() error {
 	}
 
 	log.Printf("Dialing coordinator %s...", addr)
-	tcpConn, err := net.Dial("tcp", addr)
+	dialer := net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 15 * time.Second,
+	}
+	tcpConn, err := dialer.Dial("tcp", addr)
 	if err != nil {
 		return err
 	}

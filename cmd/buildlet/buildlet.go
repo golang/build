@@ -59,7 +59,8 @@ var (
 //
 // Notable versions:
 //    3: switched to revdial protocol
-const buildletVersion = 3
+//    5: reverse dialing uses timeouts+tcp keepalives, pargzip fix
+const buildletVersion = 5
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
