@@ -39,6 +39,7 @@ var (
 	builderPrefix = flag.String("builder-prefix", "https://build.golang.org", "builder URL prefix")
 	logHash       = flag.String("loghash", "", "If non-empty, clear the build that failed with this loghash prefix")
 	sendMasterKey = flag.Bool("sendmaster", false, "send the master key in request instead of a builder-specific key; allows overriding actions of revoked keys")
+	branch        = flag.String("branch", "master", "branch to find flakes from (for use with -redo-flaky)")
 )
 
 type Failure struct {
@@ -218,7 +219,7 @@ func failures() (ret []Failure) {
 	}
 	ret = []Failure{} // non-nil
 
-	res, err := http.Get(*builderPrefix + "/?mode=failures")
+	res, err := http.Get(*builderPrefix + "/?mode=failures&branch=" + url.QueryEscape(*branch))
 	if err != nil {
 		log.Fatal(err)
 	}
