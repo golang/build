@@ -1451,9 +1451,46 @@ func (st *buildStatus) doSnapshot() error {
 	return nil
 }
 
+// snapshotExists reports whether the snapshot exists and isn't corrupt.
+// Unfortunately we put some corrupt ones in for awhile, so this check is
+// now more paranoid than it used to be.
 func (br *builderRev) snapshotExists() bool {
-	resp, err := http.Head(br.snapshotURL())
-	return err == nil && resp.StatusCode == http.StatusOK
+	// TODO(bradfitz): clean up the repo and revert this to what
+	// it was before, maybe based on the date of the file. The old
+	// code was just:
+	// resp, err := http.Head(br.snapshotURL())
+	// return err == nil && resp.StatusCode == http.StatusOK
+
+	resp, err := http.Get(br.snapshotURL())
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return false
+	}
+	// Verify the .tar.gz is valid.
+	gz, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		log.Printf("corrupt snapshot? %s gzip.NewReader: %v", br.snapshotURL(), err)
+		return false
+	}
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Printf("corrupt snapshot? %s tar.Next: %v", br.snapshotURL(), err)
+			return false
+		}
+		if _, err := io.Copy(ioutil.Discard, tr); err != nil {
+			log.Printf("corrupt snapshot? %s reading contents of %s: %v", br.snapshotURL(), hdr.Name, err)
+			return false
+		}
+	}
+	return gz.Close() == nil
 }
 
 func (st *buildStatus) writeGoSource() error {
