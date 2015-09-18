@@ -1563,7 +1563,8 @@ func (st *buildStatus) writeSnapshot() error {
 	wr.ContentType = "application/octet-stream"
 	wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
 	if _, err := io.Copy(wr, tgz); err != nil {
-		wr.Close()
+		st.logf("failed to write snapshot to GCS: %v", err)
+		wr.CloseWithError(err)
 		return err
 	}
 
