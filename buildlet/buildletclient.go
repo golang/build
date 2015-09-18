@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -241,6 +242,7 @@ func (c *Client) heartbeatLoop() {
 			if _, err := c.Status(); err != nil {
 				failInARow++
 				if failInARow == 3 {
+					log.Printf("Buildlet %v failed three heartbeats; final error: %v", c, err)
 					c.setPeerDead(fmt.Errorf("Buildlet %v failed heartbeat after %v; marking dead; err=%v", c, time.Since(t0), err))
 				}
 			} else {
