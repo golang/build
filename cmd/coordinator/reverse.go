@@ -48,13 +48,13 @@ import (
 const minBuildletVersion = 1
 
 var reversePool = &reverseBuildletPool{
-	buildletReturned: make(chan token, 1),
+	available: make(chan token, 1),
 }
 
 type token struct{}
 
 type reverseBuildletPool struct {
-	buildletReturned chan token // best-effort tickle when any buildlet becomes free
+	available chan token // best-effort tickle when any buildlet becomes free
 
 	mu        sync.Mutex // guards buildlets and their fields
 	buildlets []*reverseBuildlet
@@ -88,9 +88,9 @@ func (p *reverseBuildletPool) tryToGrab(machineType string) (*buildlet.Client, e
 	return nil, errInUse
 }
 
-func (p *reverseBuildletPool) noteBuildletReturned() {
+func (p *reverseBuildletPool) noteBuildletAvailable() {
 	select {
-	case p.buildletReturned <- token{}:
+	case p.available <- token{}:
 	default:
 	}
 }
@@ -165,7 +165,7 @@ func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 	}
 	b.inUseAs = ""
 	b.inUseTime = time.Now()
-	p.noteBuildletReturned()
+	p.noteBuildletAvailable()
 	return true
 }
 
@@ -200,17 +200,17 @@ func (p *reverseBuildletPool) GetBuildlet(cancel Cancel, machineType, rev string
 				log.Printf("Rev %q is waiting high-priority", rev)
 			}
 			select {
+			case <-cancel:
+				return nil, ErrCanceled
 			case bc := <-highPri:
 				log.Printf("Rev %q stole a high-priority one.", rev)
 				return p.cleanedBuildlet(bc, el)
-			case <-p.buildletReturned:
-			// As multiple goroutines can be listening for the
-			// buildletReturned signal, it must be treated as
-			// a best effort signal. So periodically try to grab
-			// a buildlet again.
-			case <-time.After(30 * time.Second):
-			case <-cancel:
-				return nil, ErrCanceled
+			// As multiple goroutines can be listening for
+			// the available signal, it must be treated as
+			// a best effort signal. So periodically try
+			// to grab a buildlet again:
+			case <-time.After(10 * time.Second):
+			case <-p.available:
 			}
 		} else if err != nil {
 			return nil, err
@@ -351,6 +351,7 @@ func (p *reverseBuildletPool) CanBuild(mode string) bool {
 
 func (p *reverseBuildletPool) addBuildlet(b *reverseBuildlet) {
 	p.mu.Lock()
+	defer p.noteBuildletAvailable()
 	defer p.mu.Unlock()
 	p.buildlets = append(p.buildlets, b)
 	go p.healthCheckBuildletLoop(b)
@@ -437,7 +438,10 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 	client.SetDescription(fmt.Sprintf("reverse peer %s/%s for modes %v", hostname, r.RemoteAddr, modes))
-	client.SetOnHeartbeatFailure(func() { conn.Close() })
+	client.SetOnHeartbeatFailure(func() {
+		conn.Close()
+		reversePool.nukeBuildlet(client)
+	})
 	tstatus := time.Now()
 	status, err := client.Status()
 	if err != nil {
