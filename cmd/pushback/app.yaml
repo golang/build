@@ -9,6 +9,3 @@ manual_scaling:
 handlers:
 - url: /.*
   script: _go_app
-
-health_check:
-  enable_health_check: False

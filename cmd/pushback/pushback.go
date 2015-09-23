@@ -7,9 +7,6 @@
 // closes the request. This is for projects that don't use Pull Requests.
 package main
 
-// TODO(adg): periodically poll repositories for pull requests in case we
-// dropped any webhook calls.
-
 import (
 	"bytes"
 	"crypto/hmac"
@@ -24,7 +21,9 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
+	"time"
 
 	"google.golang.org/cloud/compute/metadata"
 )
@@ -32,10 +31,40 @@ import (
 const (
 	authMetadataKey   = "pushback-credentials"
 	secretMetadataKey = "pushback-webhook-secret"
+	pollInterval      = 30 * time.Minute
 )
 
+var repos = []string{
+	"golang/arch",
+	"golang/benchmarks",
+	"golang/blog",
+	"golang/build",
+	"golang/crypto",
+	"golang/debug",
+	"golang/exp",
+	"golang/go",
+	"golang/gofrontend",
+	"golang/image",
+	"golang/mobile",
+	"golang/net",
+	"golang/oauth2",
+	"golang/playground",
+	"golang/proposal",
+	"golang/review",
+	"golang/sublime-build",
+	"golang/sublime-config",
+	"golang/talks",
+	"golang/text",
+	"golang/tools",
+	"golang/tour",
+}
+
 func main() {
+	go poll()
 	http.HandleFunc("/webhook", webhook)
+	http.HandleFunc("/_ah/health", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "OK")
+	})
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
@@ -46,6 +75,46 @@ func logErr(w io.Writer, desc string, err error) {
 	if debug {
 		fmt.Fprintln(w, desc, err)
 	}
+}
+
+func poll() {
+	ticker := time.NewTicker(pollInterval)
+	for {
+		for _, repo := range repos {
+			if err := pollRepo(repo); err != nil {
+				log.Printf("polling repo %v: %v", repo, err)
+			}
+		}
+		<-ticker.C
+	}
+}
+
+func pollRepo(repo string) error {
+	v := url.Values{"q": {fmt.Sprintf("type:pr state:open repo:%v", repo)}}
+	u := fmt.Sprintf("https://api.github.com/search/issues?%v", v.Encode())
+	body, err := doRequest("GET", u, nil)
+	if err != nil {
+		return err
+	}
+	var results struct {
+		Items []struct {
+			Number int
+		}
+	}
+	if err := json.Unmarshal(body, &results); err != nil {
+		return err
+	}
+	for _, r := range results.Items {
+		if repo == "golang/go" && r.Number == 9220 {
+			// This is a placeholder issue to remind people
+			// that we don't use pull requests; don't close it.
+			continue
+		}
+		if err := closePR(repo, r.Number); err != nil {
+			log.Printf("closing pr %v#%v: %v", repo, r.Number, err)
+		}
+	}
+	return nil
 }
 
 func webhook(w http.ResponseWriter, r *http.Request) {
@@ -128,13 +197,13 @@ func validate(r *http.Request) (body []byte, err error) {
 func closePR(repo string, id int) error {
 	// Post the comment.
 	url := fmt.Sprintf("https://api.github.com/repos/%v/issues/%v/comments", repo, id)
-	if err := doRequest("POST", url, bytes.NewReader(messageJSON)); err != nil {
+	if _, err := doRequest("POST", url, bytes.NewReader(messageJSON)); err != nil {
 		return fmt.Errorf("POST to %v: %v", url, err)
 	}
 
 	// Close the issue.
 	url = fmt.Sprintf("https://api.github.com/repos/%v/pulls/%v", repo, id)
-	if err := doRequest("PATCH", url, strings.NewReader(`{"state":"closed"}`)); err != nil {
+	if _, err := doRequest("PATCH", url, strings.NewReader(`{"state":"closed"}`)); err != nil {
 		return fmt.Errorf("PATCH to %v: %v", url, err)
 	}
 
@@ -142,33 +211,36 @@ func closePR(repo string, id int) error {
 }
 
 // doRequest makes an authenticated request to the GitHub API.
-func doRequest(method, url string, body io.Reader) error {
+func doRequest(method, url string, body io.Reader) ([]byte, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// These values are cached, so we can fetch them every time.
 	userpass, err := metadata.ProjectAttributeValue(authMetadataKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	p := strings.SplitN(userpass, ":", 2)
 	if len(p) != 2 {
-		return errors.New("bad authentication data")
+		return nil, errors.New("bad authentication data")
 	}
 	req.SetBasicAuth(p[0], p[1])
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	respBody, _ := ioutil.ReadAll(resp.Body)
+	respBody, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("Bad response: %v\nBody:\n%s", resp.Status, respBody)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	if resp.StatusCode/100 != 2 {
+		return respBody, fmt.Errorf("Bad response: %v\nBody:\n%s", resp.Status, respBody)
+	}
+	return respBody, nil
 
 }
 
