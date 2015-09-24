@@ -294,7 +294,8 @@ func init() {
 		//   ##### ../misc/cgo/testso
 		//   Shared object "libcgosotest.so" not found, required by "main"
 		// Maybe this is a clang thing? We'll see when we do linux clang too.
-		env: []string{"GOARCH=386", "CC=clang"},
+		env:            []string{"GOARCH=386", "CC=clang"},
+		NumTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
 		Name:    "linux-386",
