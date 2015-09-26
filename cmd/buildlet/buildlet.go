@@ -200,21 +200,9 @@ var inKube, _ = strconv.ParseBool(os.Getenv("IN_KUBERNETES"))
 // If not running on GCE, it falls back to using environment variables
 // for local development.
 func metadataValue(key string) string {
-	// On Kubernetes
-	if inKube {
-		v := os.Getenv(key)
-		// Respect curl-style '@' prefix to mean the rest is a filename.
-		if strings.HasPrefix(v, "@") {
-			slurp, err := ioutil.ReadFile(v[1:])
-			if err != nil {
-				log.Fatalf("Error reading file for %v: %v", key, err)
-			}
-			return string(slurp)
-		}
-	}
 
-	// The common case:
-	if metadata.OnGCE() {
+	// The common case (on GCE, but not in Kubernetes):
+	if metadata.OnGCE() && !inKube {
 		v, err := metadata.InstanceAttributeValue(key)
 		if _, notDefined := err.(metadata.NotDefinedError); notDefined {
 			return ""
@@ -225,9 +213,9 @@ func metadataValue(key string) string {
 		return v
 	}
 
-	// Else let developers use environment variables to fake
-	// metadata keys, for local testing.
-	envKey := "GCEMETA_" + strings.Replace(key, "-", "_", -1)
+	// Else allow use of environment variables to fake
+	// metadata keys, for Kubernetes pods or local testing.
+	envKey := "META_" + strings.Replace(key, "-", "_", -1)
 	v := os.Getenv(envKey)
 	// Respect curl-style '@' prefix to mean the rest is a filename.
 	if strings.HasPrefix(v, "@") {

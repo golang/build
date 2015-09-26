@@ -89,6 +89,7 @@ func main() {
 		Scopes: []string{
 			compute.DevstorageFullControlScope,
 			compute.ComputeScope,
+			compute.CloudPlatformScope,
 			"https://www.googleapis.com/auth/sqlservice",
 			"https://www.googleapis.com/auth/sqlservice.admin",
 		},

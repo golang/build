@@ -124,7 +124,10 @@ func awaitNetwork() bool {
 }
 
 func buildletURL() string {
-	if !metadata.OnGCE() {
+	// The buildlet download URL is located in an env var
+	// when the buildlet is not running on GCE, or is running
+	// on Kubernetes.
+	if !metadata.OnGCE() || os.Getenv("IN_KUBERNETES") == "1" {
 		if v := os.Getenv("META_BUILDLET_BINARY_URL"); v != "" {
 			return v
 		}

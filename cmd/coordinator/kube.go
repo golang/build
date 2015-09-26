@@ -32,16 +32,19 @@ var (
 	containerService *container.Service
 	kubeClient       *kubernetes.Client
 	initKubeCalled   bool
-	registryPrefix   = "grc.io/" + projectID + "/"
+	registryPrefix   = "gcr.io"
 )
 
 const (
 	clusterName = "buildlets"
 )
 
+// initGCE must be called before initKube
 func initKube() error {
 	initKubeCalled = true
 
+	// projectID was set by initGCE
+	registryPrefix += "/" + projectID
 	if !hasCloudPlatformScope() {
 		return errors.New("coordinator not running with access to the Cloud Platform scope.")
 
@@ -95,7 +98,7 @@ func initKube() error {
 		},
 	}
 
-	kubeClient, err = kubernetes.NewClient(cluster.Endpoint, kubeHTTPClient)
+	kubeClient, err = kubernetes.NewClient("https://"+cluster.Endpoint, kubeHTTPClient)
 	if err != nil {
 		return fmt.Errorf("kubernetes HTTP client could not be created: %v", err)
 	}

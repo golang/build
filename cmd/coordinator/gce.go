@@ -47,6 +47,10 @@ func gceAPIGate() {
 	<-apiCallTicker.C
 }
 
+const (
+	stagingProjectID = "go-dashboard-dev"
+)
+
 // Initialized by initGCE:
 var (
 	projectID      string
@@ -75,8 +79,10 @@ func stagingPrefix() string {
 
 func initGCE() error {
 	initGCECalled = true
+	// Use the staging project if not on GCE. This assumes the DefaultTokenSource
+	// credential used below has access to that project.
 	if !metadata.OnGCE() {
-		return errors.New("not running on GCE; VM support disabled")
+		projectID = stagingProjectID
 	}
 	var err error
 	projectID, err = metadata.ProjectID()
@@ -84,7 +90,7 @@ func initGCE() error {
 		return fmt.Errorf("failed to get current GCE ProjectID: %v", err)
 	}
 
-	inStaging = projectID == "go-dashboard-dev"
+	inStaging = projectID == stagingProjectID
 	if inStaging {
 		log.Printf("Running in staging cluster (%q)", projectID)
 	}

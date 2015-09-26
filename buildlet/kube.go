@@ -5,8 +5,10 @@
 package buildlet
 
 import (
-	"errors"
+	"crypto/tls"
 	"fmt"
+	"net/http"
+	"strings"
 	"time"
 
 	"golang.org/x/build/dashboard"
@@ -56,7 +58,7 @@ func StartPod(kubeClient *kubernetes.Client, podName, builderType string, opts P
 	if !ok || conf.KubeImage == "" {
 		return nil, fmt.Errorf("invalid builder type %q", builderType)
 	}
-	p := &api.Pod{
+	pod := &api.Pod{
 		TypeMeta: api.TypeMeta{
 			APIVersion: "v1",
 			Kind:       "Pod",
@@ -74,7 +76,7 @@ func StartPod(kubeClient *kubernetes.Client, podName, builderType string, opts P
 			Containers: []api.Container{
 				{
 					Name:            "buildlet",
-					Image:           opts.ImageRegistry + conf.KubeImage,
+					Image:           imageID(opts.ImageRegistry, conf.KubeImage),
 					ImagePullPolicy: api.PullAlways,
 					Command:         []string{"/usr/local/bin/stage0"},
 					Ports: []api.ContainerPort{
@@ -87,18 +89,101 @@ func StartPod(kubeClient *kubernetes.Client, podName, builderType string, opts P
 							Name:  "IN_KUBERNETES",
 							Value: "1",
 						},
-						{
-							Name:  "META_BUILDLET_BINARY_URL",
-							Value: conf.BuildletBinaryURL(),
-						},
 					},
 				},
 			},
 		},
 	}
+	addEnv := func(name, value string) {
+		for i, _ := range pod.Spec.Containers {
+			pod.Spec.Containers[i].Env = append(pod.Spec.Containers[i].Env, api.EnvVar{
+				Name:  name,
+				Value: value,
+			})
+		}
+	}
+	// The buildlet-binary-url is the URL of the buildlet binary
+	// which the pods are configured to download at boot and run.
+	// This lets us/ update the buildlet more easily than
+	// rebuilding the whole pod image.
+	addEnv("META_BUILDLET_BINARY_URL", conf.BuildletBinaryURL())
+	addEnv("META_BUILDER_TYPE", builderType)
+	if !opts.TLS.IsZero() {
+		addEnv("META_TLS_CERT", opts.TLS.CertPEM)
+		addEnv("META_TLS_KEY", opts.TLS.KeyPEM)
+		addEnv("META_PASSWORD", opts.TLS.Password())
+	}
 
-	if _, err := kubeClient.Run(p); err != nil {
+	if opts.DeleteIn != 0 {
+		// In case the pod gets away from us (generally: if the
+		// coordinator dies while a build is running), then we
+		// set this attribute of when it should be killed so
+		// we can kill it later when the coordinator is
+		// restarted. The cleanUpOldPods goroutine loop handles
+		// that killing.
+		addEnv("META_DELETE_AT", fmt.Sprint(time.Now().Add(opts.DeleteIn).Unix()))
+	}
+
+	status, err := kubeClient.Run(pod)
+	if err != nil {
 		return nil, fmt.Errorf("pod could not be created: %v", err)
 	}
-	return nil, errors.New("TODO")
+	// The new pod must be in Running phase. Possible phases are described at
+	// http://releases.k8s.io/HEAD/docs/user-guide/pod-states.md#pod-phase
+	if status.Phase != api.PodRunning {
+		return nil, fmt.Errorf("pod is in invalid state %q: %v", status.Phase, status.Message)
+	}
+
+	// Wait for the pod to boot and its buildlet to come up.
+	var buildletURL string
+	var ipPort string
+	if !opts.TLS.IsZero() {
+		buildletURL = "https://" + status.PodIP
+		ipPort = status.PodIP + ":443"
+	} else {
+		buildletURL = "http://" + status.PodIP
+		ipPort = status.PodIP + ":80"
+	}
+	condRun(opts.OnGotPodInfo)
+
+	const timeout = 3 * time.Minute
+	var alive bool
+	impatientClient := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			Dial:              defaultDialer(),
+			DisableKeepAlives: true,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+	deadline := time.Now().Add(timeout)
+	try := 0
+	for time.Now().Before(deadline) {
+		try++
+		res, err := impatientClient.Get(buildletURL)
+		if err != nil {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		res.Body.Close()
+		if res.StatusCode != 200 {
+			return nil, fmt.Errorf("buildlet returned HTTP status code %d on try number %d", res.StatusCode, try)
+		}
+		alive = true
+		break
+	}
+	if !alive {
+		return nil, fmt.Errorf("buildlet didn't come up at %s in %v", buildletURL, timeout)
+	}
+
+	return NewClient(ipPort, opts.TLS), nil
+}
+
+func imageID(registry, image string) string {
+	// Sanitize the registry and image names
+	registry = strings.TrimRight(registry, "/")
+	image = strings.TrimLeft(image, "/")
+	return registry + "/" + image
 }
