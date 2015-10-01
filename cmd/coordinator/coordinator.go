@@ -259,6 +259,7 @@ func main() {
 
 	err = initKube()
 	if err != nil {
+		kubeErr = err
 		log.Printf("Kube support disabled due to eror initializing Kubernetes: %v", err)
 	}
 	switch *mode {

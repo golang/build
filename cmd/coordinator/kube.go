@@ -31,6 +31,7 @@ This file implements the Kubernetes-based buildlet pool.
 var (
 	containerService *container.Service
 	kubeClient       *kubernetes.Client
+	kubeErr          error
 	initKubeCalled   bool
 	registryPrefix   = "gcr.io"
 )
@@ -117,6 +118,12 @@ func (p *kubeBuildletPool) GetBuildlet(cancel Cancel, typ, rev string, el eventT
 	conf, ok := dashboard.Builders[typ]
 	if !ok || conf.KubeImage == "" {
 		return nil, fmt.Errorf("kubepool: invalid builder type %q", typ)
+	}
+	if kubeErr != nil {
+		return nil, kubeErr
+	}
+	if kubeClient == nil {
+		panic("expect non-nil kubeClient")
 	}
 
 	deleteIn := podDeleteTimeout

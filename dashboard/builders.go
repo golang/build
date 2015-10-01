@@ -537,8 +537,8 @@ func addBuilder(c BuildConfig) {
 	if _, dup := Builders[c.Name]; dup {
 		panic("dup name")
 	}
-	if c.VMImage == "" && !c.IsReverse {
-		panic("empty VMImage")
+	if (c.VMImage == "" && c.KubeImage == "") && !c.IsReverse {
+		panic("empty VMImage and KubeImage on non-reverse builder")
 	}
 	if c.VMImage != "" && c.KubeImage != "" {
 		panic("there can be only one of VMImage/KubeImage")
