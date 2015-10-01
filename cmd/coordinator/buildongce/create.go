@@ -49,8 +49,6 @@ func readFile(v string) string {
 	return strings.TrimSpace(string(slurp))
 }
 
-var oauthConfig *oauth2.Config
-
 const baseConfig = `#cloud-config
 coreos:
   update:
@@ -80,22 +78,6 @@ coreos:
 func main() {
 	flag.Parse()
 
-	oauthConfig = &oauth2.Config{
-		// The client-id and secret should be for an "Installed Application" when using
-		// the CLI. Later we'll use a web application with a callback.
-		ClientID:     readFile(stagingPrefix() + "client-id.dat"),
-		ClientSecret: readFile(stagingPrefix() + "client-secret.dat"),
-		Endpoint:     google.Endpoint,
-		Scopes: []string{
-			compute.DevstorageFullControlScope,
-			compute.ComputeScope,
-			compute.CloudPlatformScope,
-			"https://www.googleapis.com/auth/sqlservice",
-			"https://www.googleapis.com/auth/sqlservice.admin",
-		},
-		RedirectURL: "urn:ietf:wg:oauth:2.0:oob",
-	}
-
 	if *staging {
 		if *proj == "symbolic-datum-552" {
 			*proj = "go-dashboard-dev"
@@ -121,28 +103,7 @@ func main() {
 	prefix := "https://www.googleapis.com/compute/v1/projects/" + *proj
 	machType := prefix + "/zones/" + *zone + "/machineTypes/" + *mach
 
-	tokenFileName := stagingPrefix() + "token.dat"
-	tokenFile := tokenCacheFile(tokenFileName)
-	tokenSource := oauth2.ReuseTokenSource(nil, tokenFile)
-	token, err := tokenSource.Token()
-	if err != nil {
-		log.Printf("Error getting token from %s: %v", tokenFileName, err)
-		log.Printf("Get auth code from %v", oauthConfig.AuthCodeURL("my-state"))
-		fmt.Print("\nEnter auth code: ")
-		sc := bufio.NewScanner(os.Stdin)
-		sc.Scan()
-		authCode := strings.TrimSpace(sc.Text())
-		token, err = oauthConfig.Exchange(oauth2.NoContext, authCode)
-		if err != nil {
-			log.Fatalf("Error exchanging auth code for a token: %v", err)
-		}
-		if err := tokenFile.WriteToken(token); err != nil {
-			log.Fatalf("Error writing to %s: %v", tokenFileName, err)
-		}
-		tokenSource = oauth2.ReuseTokenSource(token, nil)
-	}
-
-	oauthClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
+	oauthClient := oauth2.NewClient(oauth2.NoContext, tokenSource())
 
 	computeService, _ := compute.New(oauthClient)
 
@@ -212,6 +173,7 @@ func main() {
 				Scopes: []string{
 					compute.DevstorageFullControlScope,
 					compute.ComputeScope,
+					compute.CloudPlatformScope,
 				},
 			},
 		},
@@ -255,6 +217,50 @@ OpLoop:
 	}
 	ij, _ := json.MarshalIndent(inst, "", "    ")
 	log.Printf("Instance: %s", ij)
+}
+
+func tokenSource() oauth2.TokenSource {
+	var tokensource oauth2.TokenSource
+	tokenSource, err := google.DefaultTokenSource(oauth2.NoContext)
+	if err == nil {
+		return tokenSource
+	}
+	oauthConfig := &oauth2.Config{
+		// The client-id and secret should be for an "Installed Application" when using
+		// the CLI. Later we'll use a web application with a callback.
+		ClientID:     readFile(stagingPrefix() + "client-id.dat"),
+		ClientSecret: readFile(stagingPrefix() + "client-secret.dat"),
+		Endpoint:     google.Endpoint,
+		Scopes: []string{
+			compute.DevstorageFullControlScope,
+			compute.ComputeScope,
+			compute.CloudPlatformScope,
+			"https://www.googleapis.com/auth/sqlservice",
+			"https://www.googleapis.com/auth/sqlservice.admin",
+		},
+		RedirectURL: "urn:ietf:wg:oauth:2.0:oob",
+	}
+	tokenFileName := stagingPrefix() + "token.dat"
+	tokenFile := tokenCacheFile(tokenFileName)
+	tokenSource = oauth2.ReuseTokenSource(nil, tokenFile)
+	token, err := tokenSource.Token()
+	if err != nil {
+		log.Printf("Error getting token from %s: %v", tokenFileName, err)
+		log.Printf("Get auth code from %v", oauthConfig.AuthCodeURL("my-state"))
+		fmt.Print("\nEnter auth code: ")
+		sc := bufio.NewScanner(os.Stdin)
+		sc.Scan()
+		authCode := strings.TrimSpace(sc.Text())
+		token, err = oauthConfig.Exchange(oauth2.NoContext, authCode)
+		if err != nil {
+			log.Fatalf("Error exchanging auth code for a token: %v", err)
+		}
+		if err := tokenFile.WriteToken(token); err != nil {
+			log.Fatalf("Error writing to %s: %v", tokenFileName, err)
+		}
+		tokenSource = oauth2.ReuseTokenSource(token, nil)
+	}
+	return tokensource
 }
 
 func instanceDisk(svc *compute.Service) *compute.AttachedDisk {
