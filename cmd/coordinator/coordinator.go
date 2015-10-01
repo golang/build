@@ -2033,7 +2033,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	go func() {
 		defer buildletActivity.Done() // for the per-goroutine Add(2) above
 		for helper := range helpers {
-			defer buildletActivity.Add(1)
+			buildletActivity.Add(1)
 			go func(bc *buildlet.Client) {
 				defer buildletActivity.Done() // for the per-helper Add(1) above
 				defer st.logEventTime("closed_helper", bc.Name())
