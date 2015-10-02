@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -106,12 +107,13 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	if cn, ok := w.(http.CloseNotifier); ok {
 		closeNotify = cn.CloseNotify()
 	}
-	cancel := make(chan struct{})
+
+	ctx, cancel := context.WithCancel(context.Background())
 
 	resc := make(chan *buildlet.Client)
 	errc := make(chan error)
 	go func() {
-		bc, err := pool.GetBuildlet(cancel, typ, rev, eventTimeLoggerFunc(func(event string, optText ...string) {
+		bc, err := pool.GetBuildlet(ctx, typ, rev, eventTimeLoggerFunc(func(event string, optText ...string) {
 			var extra string
 			if len(optText) > 0 {
 				extra = " " + optText[0]
@@ -152,7 +154,7 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-closeNotify:
 			log.Printf("client went away during buildlet create request")
-			close(cancel)
+			cancel()
 			closeNotify = nil // unnecessary, but habit.
 		}
 	}

@@ -7,6 +7,7 @@ package buildlet
 import (
 	"crypto/tls"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -14,6 +15,8 @@ import (
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/kubernetes"
 	"golang.org/x/build/kubernetes/api"
+	"golang.org/x/net/context"
+	"golang.org/x/net/context/ctxhttp"
 )
 
 // PodOpts control how new pods are started.
@@ -53,7 +56,7 @@ type PodOpts struct {
 
 // StartPod creates a new pod on a Kubernetes cluster and returns a buildlet client
 // configured to speak to it.
-func StartPod(kubeClient *kubernetes.Client, podName, builderType string, opts PodOpts) (*Client, error) {
+func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, builderType string, opts PodOpts) (*Client, error) {
 	conf, ok := dashboard.Builders[builderType]
 	if !ok || conf.KubeImage == "" {
 		return nil, fmt.Errorf("invalid builder type %q", builderType)
@@ -72,7 +75,7 @@ func StartPod(kubeClient *kubernetes.Client, podName, builderType string, opts P
 			},
 		},
 		Spec: api.PodSpec{
-			RestartPolicy: "Never",
+			RestartPolicy: api.RestartPolicyNever,
 			Containers: []api.Container{
 				{
 					Name:            "buildlet",
@@ -124,7 +127,7 @@ func StartPod(kubeClient *kubernetes.Client, podName, builderType string, opts P
 		addEnv("META_DELETE_AT", fmt.Sprint(time.Now().Add(opts.DeleteIn).Unix()))
 	}
 
-	status, err := kubeClient.Run(pod)
+	status, err := kubeClient.Run(ctx, pod)
 	if err != nil {
 		return nil, fmt.Errorf("pod could not be created: %v", err)
 	}
@@ -146,8 +149,6 @@ func StartPod(kubeClient *kubernetes.Client, podName, builderType string, opts P
 	}
 	condRun(opts.OnGotPodInfo)
 
-	const timeout = 3 * time.Minute
-	var alive bool
 	impatientClient := &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
@@ -158,27 +159,59 @@ func StartPod(kubeClient *kubernetes.Client, podName, builderType string, opts P
 			},
 		},
 	}
-	deadline := time.Now().Add(timeout)
-	try := 0
-	for time.Now().Before(deadline) {
-		try++
-		res, err := impatientClient.Get(buildletURL)
-		if err != nil {
-			time.Sleep(1 * time.Second)
-			continue
-		}
-		res.Body.Close()
-		if res.StatusCode != 200 {
-			return nil, fmt.Errorf("buildlet returned HTTP status code %d on try number %d", res.StatusCode, try)
-		}
-		alive = true
-		break
-	}
-	if !alive {
-		return nil, fmt.Errorf("buildlet didn't come up at %s in %v", buildletURL, timeout)
-	}
 
-	return NewClient(ipPort, opts.TLS), nil
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	c := make(chan error, 1)
+	go func() {
+		defer close(c)
+		try := 0
+		for {
+			try++
+			// Make sure pod is still running
+			podStatus, err := kubeClient.PodStatus(ctx, pod.Name)
+			if err != nil {
+				c <- fmt.Errorf("polling the buildlet pod for its status failed: %v", err)
+				return
+			}
+			if podStatus.Phase != api.PodRunning {
+				podLog, err := kubeClient.PodLog(ctx, pod.Name)
+				if err != nil {
+					log.Printf("failed to retrieve log for pod %q: %v", pod.Name, err)
+					c <- fmt.Errorf("buildlet pod left the Running phase and entered phase %q", podStatus.Phase)
+					return
+				}
+				log.Printf("log from pod %q: %v", pod.Name, podLog)
+				c <- fmt.Errorf("buildlet pod left the Running phase and entered phase %q", podStatus.Phase)
+				return
+			}
+
+			res, err := ctxhttp.Get(ctx, impatientClient, buildletURL)
+			if err != nil {
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			res.Body.Close()
+			if res.StatusCode != 200 {
+				c <- fmt.Errorf("buildlet returned HTTP status code %d on try number %d", res.StatusCode, try)
+			}
+			return
+		}
+	}()
+
+	// Wait for the buildlet to respond to an HTTP request. If the timeout happens first, or
+	// if the buildlet pod leaves the running state, return an error.
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case err = <-c:
+			if err != nil {
+				return nil, err
+			}
+			return NewClient(ipPort, opts.TLS), nil
+		}
+	}
 }
 
 func imageID(registry, image string) string {

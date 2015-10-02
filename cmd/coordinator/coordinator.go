@@ -40,6 +40,7 @@ import (
 	"golang.org/x/build/internal/singleflight"
 	"golang.org/x/build/livelog"
 	"golang.org/x/build/types"
+	"golang.org/x/net/context"
 	"google.golang.org/cloud/storage"
 )
 
@@ -876,7 +877,7 @@ func (ts *trySet) awaitTryBuild(idx int, bconf dashboard.BuildConfig, bs *buildS
 		for {
 			timeout := time.NewTimer(10 * time.Minute)
 			select {
-			case <-bs.donec:
+			case <-bs.ctx.Done():
 				timeout.Stop()
 				break WaitCh
 			case <-timeout.C:
@@ -1023,22 +1024,6 @@ type eventTimeLogger interface {
 	logEventTime(event string, optText ...string)
 }
 
-var ErrCanceled = errors.New("canceled")
-
-// Cancel is a channel that's closed by the caller when the request is no longer
-// desired. The function receiving a cancel should return ErrCanceled whenever
-// Cancel becomes readable.
-type Cancel <-chan struct{}
-
-func (c Cancel) IsCanceled() bool {
-	select {
-	case <-c:
-		return true
-	default:
-		return false
-	}
-}
-
 type BuildletPool interface {
 	// GetBuildlet returns a new buildlet client.
 	//
@@ -1048,23 +1033,23 @@ type BuildletPool interface {
 	// anything except for log messages or VM naming.
 	//
 	// Clients must Close when done with the client.
-	GetBuildlet(cancel Cancel, machineType, rev string, el eventTimeLogger) (*buildlet.Client, error)
+	GetBuildlet(ctx context.Context, machineType, rev string, el eventTimeLogger) (*buildlet.Client, error)
 
 	String() string // TODO(bradfitz): more status stuff
 }
 
 // GetBuildlets creates up to n buildlets and sends them on the returned channel
 // before closing the channel.
-func GetBuildlets(cancel Cancel, pool BuildletPool, n int, machineType, rev string, el eventTimeLogger) <-chan *buildlet.Client {
+func GetBuildlets(ctx context.Context, pool BuildletPool, n int, machineType, rev string, el eventTimeLogger) <-chan *buildlet.Client {
 	ch := make(chan *buildlet.Client) // NOT buffered
 	var wg sync.WaitGroup
 	wg.Add(n)
 	for i := 0; i < n; i++ {
 		go func() {
 			defer wg.Done()
-			bc, err := pool.GetBuildlet(cancel, machineType, rev, el)
+			bc, err := pool.GetBuildlet(ctx, machineType, rev, el)
 			if err != nil {
-				if err != ErrCanceled {
+				if err != context.Canceled {
 					log.Printf("failed to get a %s buildlet for rev %s: %v", machineType, rev, err)
 				}
 				return
@@ -1072,7 +1057,7 @@ func GetBuildlets(cancel Cancel, pool BuildletPool, n int, machineType, rev stri
 			el.logEventTime("empty_helper_ready", bc.Name())
 			select {
 			case ch <- bc:
-			case <-cancel:
+			case <-ctx.Done():
 				el.logEventTime("helper_killed_before_use", bc.Name())
 				bc.Close()
 				return
@@ -1104,18 +1089,20 @@ func newBuild(rev builderRev) (*buildStatus, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown builder type %q", rev.name)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	return &buildStatus{
 		builderRev: rev,
 		conf:       conf,
-		donec:      make(chan struct{}),
 		startTime:  time.Now(),
+		ctx:        ctx,
+		cancel:     cancel,
 	}, nil
 }
 
 // start sets the st.startTime and starts the build in a new goroutine.
 // If it returns an error, st is not modified and a new goroutine has not
 // been started.
-// The build status's donec channel is closed on when the build is complete
+// The build status's context is closed on when the build is complete
 // in either direction.
 func (st *buildStatus) start() {
 	setStatus(st.builderRev, st)
@@ -1221,7 +1208,7 @@ func (st *buildStatus) getHelpers() <-chan *buildlet.Client {
 
 func (st *buildStatus) onceInitHelpersFunc() {
 	pool, _ := st.buildletPool() // won't return an error since we called it already
-	st.helpers = GetBuildlets(st.donec, pool, st.conf.NumTestHelpers, st.buildletType(), st.rev, st)
+	st.helpers = GetBuildlets(st.ctx, pool, st.conf.NumTestHelpers, st.buildletType(), st.rev, st)
 }
 
 // We should try to build from a snapshot if this is a subrepo build, we can
@@ -1243,7 +1230,7 @@ func (st *buildStatus) build() error {
 		return err
 	}
 	st.logEventTime("get_buildlet")
-	bc, err := pool.GetBuildlet(nil, st.buildletType(), st.rev, st)
+	bc, err := pool.GetBuildlet(st.ctx, st.buildletType(), st.rev, st)
 	if err != nil {
 		return fmt.Errorf("failed to get a buildlet: %v", err)
 	}
@@ -2011,7 +1998,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	// lumpy.  The rest of the buildlets run the largest tests
 	// first (critical path scheduling).
 	// The buildletActivity WaitGroup is used to track when all
-	// the buildlets are dead or don.
+	// the buildlets are dead or done.
 	var buildletActivity sync.WaitGroup
 	buildletActivity.Add(2) // one per goroutine below (main + helper launcher goroutine)
 	go func() {
@@ -2020,7 +2007,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 			tis, ok := set.testsToRunInOrder()
 			if !ok {
 				select {
-				case <-st.donec:
+				case <-st.ctx.Done():
 					return
 				case <-time.After(5 * time.Second):
 				}
@@ -2394,12 +2381,13 @@ type buildStatus struct {
 	// Immutable:
 	builderRev
 	conf      dashboard.BuildConfig
-	startTime time.Time     // actually time of newBuild (~same thing)
-	trySet    *trySet       // or nil
-	donec     chan struct{} // closed when done
+	startTime time.Time // actually time of newBuild (~same thing)
+	trySet    *trySet   // or nil
 
 	onceInitHelpers sync.Once // guards call of onceInitHelpersFunc, to init::
 	helpers         <-chan *buildlet.Client
+	ctx             context.Context    // used to start the build
+	cancel          context.CancelFunc // used to cancel context; for use by setDone only
 
 	mu              sync.Mutex       // guards following
 	failURL         string           // if non-empty, permanent URL of failure
@@ -2418,7 +2406,7 @@ func (st *buildStatus) setDone(succeeded bool) {
 	st.succeeded = succeeded
 	st.done = time.Now()
 	st.output.Close()
-	close(st.donec)
+	st.cancel()
 }
 
 func (st *buildStatus) isRunning() bool {

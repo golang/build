@@ -206,13 +206,13 @@ func (p *gceBuildletPool) SetEnabled(enabled bool) {
 	p.disabled = !enabled
 }
 
-func (p *gceBuildletPool) GetBuildlet(cancel Cancel, typ, rev string, el eventTimeLogger) (*buildlet.Client, error) {
+func (p *gceBuildletPool) GetBuildlet(ctx context.Context, typ, rev string, el eventTimeLogger) (*buildlet.Client, error) {
 	el.logEventTime("awaiting_gce_quota")
 	conf, ok := dashboard.Builders[typ]
 	if !ok {
 		return nil, fmt.Errorf("gcepool: unknown buildlet type %q", typ)
 	}
-	if err := p.awaitVMCountQuota(cancel, conf.GCENumCPU()); err != nil {
+	if err := p.awaitVMCountQuota(ctx, conf.GCENumCPU()); err != nil {
 		return nil, err
 	}
 
@@ -331,8 +331,8 @@ func (p *gceBuildletPool) capacityString() string {
 }
 
 // awaitVMCountQuota waits for numCPU CPUs of quota to become available,
-// or returns ErrCanceled.
-func (p *gceBuildletPool) awaitVMCountQuota(cancel Cancel, numCPU int) error {
+// or returns ctx.Err.
+func (p *gceBuildletPool) awaitVMCountQuota(ctx context.Context, numCPU int) error {
 	// Poll every 2 seconds, which could be better, but works and
 	// is simple.
 	for {
@@ -341,8 +341,8 @@ func (p *gceBuildletPool) awaitVMCountQuota(cancel Cancel, numCPU int) error {
 		}
 		select {
 		case <-time.After(2 * time.Second):
-		case <-cancel:
-			return ErrCanceled
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/kubernetes"
+	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	container "google.golang.org/api/container/v1"
 )
@@ -114,7 +115,7 @@ type kubeBuildletPool struct {
 	mu sync.Mutex
 }
 
-func (p *kubeBuildletPool) GetBuildlet(cancel Cancel, typ, rev string, el eventTimeLogger) (*buildlet.Client, error) {
+func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, typ, rev string, el eventTimeLogger) (*buildlet.Client, error) {
 	conf, ok := dashboard.Builders[typ]
 	if !ok || conf.KubeImage == "" {
 		return nil, fmt.Errorf("kubepool: invalid builder type %q", typ)
@@ -146,9 +147,9 @@ func (p *kubeBuildletPool) GetBuildlet(cancel Cancel, typ, rev string, el eventT
 	var needDelete bool
 
 	el.logEventTime("creating_kube_pod", podName)
-	log.Printf("Creating Kubernetes  pod %q for %s at %s", podName, typ, rev)
+	log.Printf("Creating Kubernetes pod %q for %s at %s", podName, typ, rev)
 
-	bc, err := buildlet.StartPod(kubeClient, podName, typ, buildlet.PodOpts{
+	bc, err := buildlet.StartPod(ctx, kubeClient, podName, typ, buildlet.PodOpts{
 		ImageRegistry: registryPrefix,
 		Description:   fmt.Sprintf("Go Builder for %s at %s", typ, rev),
 		DeleteIn:      deleteIn,

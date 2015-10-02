@@ -43,6 +43,7 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/revdial"
+	"golang.org/x/net/context"
 )
 
 const minBuildletVersion = 1
@@ -185,7 +186,7 @@ func highPriChan(typ string) chan *buildlet.Client {
 	return c
 }
 
-func (p *reverseBuildletPool) GetBuildlet(cancel Cancel, machineType, rev string, el eventTimeLogger) (*buildlet.Client, error) {
+func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, machineType, rev string, el eventTimeLogger) (*buildlet.Client, error) {
 	seenErrInUse := false
 	for {
 		b, err := p.tryToGrab(machineType)
@@ -200,8 +201,8 @@ func (p *reverseBuildletPool) GetBuildlet(cancel Cancel, machineType, rev string
 				log.Printf("Rev %q is waiting high-priority", rev)
 			}
 			select {
-			case <-cancel:
-				return nil, ErrCanceled
+			case <-ctx.Done():
+				return nil, ctx.Err()
 			case bc := <-highPri:
 				log.Printf("Rev %q stole a high-priority one.", rev)
 				return p.cleanedBuildlet(bc, el)
