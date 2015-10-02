@@ -5,9 +5,9 @@ usage:
 	echo "Use staging or prod targets" ; exit 1
 
 staging: Dockerfile
-	docker build -t gcr.io/go-dashboard-dev/linux-x86-std .
-	gcloud docker push gcr.io/go-dashboard-dev/linux-x86-std
+	docker build -t gcr.io/go-dashboard-dev/linux-buildlet-std:latest .
+	gcloud docker push gcr.io/go-dashboard-dev/linux-buildlet-std:latest
 
 prod: Dockerfile
-	docker build -t gcr.io/symbolic-datum-552/linux-x86-std .
-	gcloud docker push gcr.io/symbolic-datum-552/linux-x86-std
+	docker build -t gcr.io/symbolic-datum-552/linux-buildlet-std:latest .
+	gcloud docker push gcr.io/symbolic-datum-552/linux-buildlet-std:latest
