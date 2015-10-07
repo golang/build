@@ -10,15 +10,21 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
+	"time"
 
 	"golang.org/x/build/auth"
+	"golang.org/x/build/envutil"
+	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"google.golang.org/cloud"
 	"google.golang.org/cloud/storage"
@@ -27,8 +33,9 @@ import (
 var (
 	public    = flag.Bool("public", false, "object should be world-readable")
 	cacheable = flag.Bool("cacheable", true, "object should be cacheable")
-	file      = flag.String("file", "-", "Filename to read object from, or '-' for stdin.")
+	file      = flag.String("file", "-", "Filename to read object from, or '-' for stdin. If it begins with 'go:' then the rest is considered to be a Go target to install first, and then upload.")
 	verbose   = flag.Bool("verbose", false, "verbose logging")
+	osarch    = flag.String("osarch", "", "Optional 'GOOS-GOARCH' value to cross-compile; used only if --file begins with 'go:'. As a special case, if the value contains a '.' byte, anything up to and including that period is discarded.")
 )
 
 func main() {
@@ -46,6 +53,9 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
+	if strings.HasPrefix(*file, "go:") {
+		buildGoTarget()
+	}
 	bucket, object := args[0], args[1]
 
 	proj, ok := bucketProject[bucket]
@@ -58,8 +68,15 @@ func main() {
 		log.Fatalf("Failed to get an OAuth2 token source: %v", err)
 	}
 	httpClient := oauth2.NewClient(oauth2.NoContext, ts)
-
 	ctx := cloud.NewContext(proj, httpClient)
+
+	if alreadyUploaded(ctx, bucket, object) {
+		if *verbose {
+			log.Printf("Already uploaded.")
+		}
+		return
+	}
+
 	w := storage.NewWriter(ctx, bucket, object)
 	// If you don't give the owners access, the web UI seems to
 	// have a bug and doesn't have access to see that it's public, so
@@ -118,4 +135,92 @@ func tokenSource(bucket string) (oauth2.TokenSource, error) {
 		return nil, fmt.Errorf("unknown project for bucket %q", bucket)
 	}
 	return auth.ProjectTokenSource(proj, storage.ScopeReadWrite)
+}
+
+func buildGoTarget() {
+	target := strings.TrimPrefix(*file, "go:")
+	var goos, goarch string
+	if *osarch != "" {
+		*osarch = (*osarch)[strings.LastIndex(*osarch, ".")+1:]
+		v := strings.Split(*osarch, "-")
+		if len(v) != 2 || v[0] == "" || v[1] == "" {
+			log.Fatalf("invalid -osarch value %q", *osarch)
+		}
+		goos, goarch = v[0], v[1]
+	}
+
+	env := envutil.Dedup(runtime.GOOS == "windows", append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch))
+	cmd := exec.Command("go", "list", "-f", "{{.Target}}", target)
+	cmd.Env = env
+	out, err := cmd.Output()
+	if err != nil {
+		log.Fatalf("go list: %v", err)
+	}
+	outFile := string(bytes.TrimSpace(out))
+	fi0, err := os.Stat(outFile)
+	if os.IsNotExist(err) {
+		if *verbose {
+			log.Printf("File %s doesn't exist; building...", outFile)
+		}
+	}
+
+	version := os.Getenv("USER") + "-" + time.Now().Format(time.RFC3339)
+	cmd = exec.Command("go", "install", "-x", "--ldflags=-X main.Version="+version, target)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if *verbose {
+		cmd.Stdout = os.Stdout
+	}
+	cmd.Env = env
+	if err := cmd.Run(); err != nil {
+		log.Fatalf("go install %s: %v, %s", target, err, stderr.Bytes())
+	}
+
+	fi1, err := os.Stat(outFile)
+	if err != nil {
+		log.Fatalf("Expected output file %s stat failure after go install %v: %v", outFile, target, err)
+	}
+	if !os.SameFile(fi0, fi1) {
+		if *verbose {
+			log.Printf("File %s rebuilt.", outFile)
+		}
+	}
+	*file = outFile
+}
+
+// alreadyUploaded reports whether *file has already been uploaded and the correct contents
+// are on cloud storage already.
+func alreadyUploaded(ctx context.Context, bucket, object string) bool {
+	if *file == "-" {
+		return false // don't know.
+	}
+	o, err := storage.StatObject(ctx, bucket, object)
+	if err == storage.ErrObjectNotExist {
+		return false
+	}
+	if err != nil {
+		log.Printf("Warning: stat failure: %v", err)
+		return false
+	}
+	m5 := md5.New()
+	fi, err := os.Stat(*file)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if fi.Size() != o.Size {
+		return false
+	}
+	f, err := os.Open(*file)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+	n, err := io.Copy(m5, f)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if n != fi.Size() {
+		log.Printf("Warning: file size of %v changed", *file)
+	}
+	return bytes.Equal(m5.Sum(nil), o.MD5)
 }
