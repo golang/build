@@ -308,10 +308,12 @@ func (c *conn) Read(p []byte) (n int, err error) {
 
 func (c *conn) Write(p []byte) (n int, err error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.closed {
+		c.mu.Unlock()
 		return 0, errors.New("revdial: Write on Closed conn")
 	}
+	c.mu.Unlock()
+
 	const max = 0xffff // max chunk size
 	for len(p) > 0 {
 		chunk := p
@@ -481,13 +483,14 @@ func (ln *Listener) Addr() net.Addr { return fakeAddr{} }
 
 func (ln *Listener) closeConn(id uint32) error {
 	ln.mu.Lock()
-	defer ln.mu.Unlock()
 	c, ok := ln.conns[id]
-	if !ok {
-		return nil
+	if ok {
+		delete(ln.conns, id)
 	}
-	c.peerClose()
-	delete(ln.conns, id)
+	ln.mu.Unlock()
+	if ok {
+		c.peerClose()
+	}
 	return nil
 }
 
