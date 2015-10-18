@@ -61,6 +61,11 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	gcePool.WriteHTMLStatus(&buf)
 	data.GCEPoolStatus = template.HTML(buf.String())
 	buf.Reset()
+
+	kubePool.WriteHTMLStatus(&buf)
+	data.KubePoolStatus = template.HTML(buf.String())
+	buf.Reset()
+
 	reversePool.WriteHTMLStatus(&buf)
 	data.ReversePoolStatus = template.HTML(buf.String())
 
@@ -86,6 +91,7 @@ type statusData struct {
 	TrybotsErr        string
 	Trybots           template.HTML
 	GCEPoolStatus     template.HTML // TODO: embed template
+	KubePoolStatus    template.HTML // TODO: embed template
 	ReversePoolStatus template.HTML // TODO: embed template
 	RemoteBuildlets   template.HTML
 	DiskFree          string
@@ -129,6 +135,7 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 <h2>Buildlet pools</h2>
 <ul>
 <li>{{.GCEPoolStatus}}</li>
+<li>{{.KubePoolStatus}}</li>
 <li>{{.ReversePoolStatus}}</li>
 </ul>
 

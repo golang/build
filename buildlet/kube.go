@@ -19,6 +19,13 @@ import (
 	"golang.org/x/net/context/ctxhttp"
 )
 
+var (
+	// TODO(evanbrown): resource requirements should be
+	// defined per-builder in dashboard/builders.go
+	BuildletCPU    = api.MustParse("2")         // 2 Cores
+	BuildletMemory = api.MustParse("2000000Ki") // 2,000,000Ki RAM
+)
+
 // PodOpts control how new pods are started.
 type PodOpts struct {
 	// ImageRegistry specifies the Docker registry Kubernetes
@@ -39,11 +46,6 @@ type PodOpts struct {
 	// DeleteIn optionally specifies a duration at which
 	// to delete the pod.
 	DeleteIn time.Duration
-
-	// OnInstanceRequested optionally specifies a hook to run synchronously
-	// after the pod create call, but before
-	// waiting for its operation to proceed.
-	OnPodRequested func()
 
 	// OnPodCreated optionally specifies a hook to run synchronously
 	// after the pod operation succeeds.
@@ -73,6 +75,7 @@ func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, build
 				"type": builderType,
 				"role": "buildlet",
 			},
+			Annotations: map[string]string{},
 		},
 		Spec: api.PodSpec{
 			RestartPolicy: api.RestartPolicyNever,
@@ -81,7 +84,13 @@ func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, build
 					Name:            "buildlet",
 					Image:           imageID(opts.ImageRegistry, conf.KubeImage),
 					ImagePullPolicy: api.PullAlways,
-					Command:         []string{"/usr/local/bin/stage0"},
+					Resources: api.ResourceRequirements{
+						Limits: api.ResourceList{
+							api.ResourceCPU:    BuildletCPU,
+							api.ResourceMemory: BuildletMemory,
+						},
+					},
+					Command: []string{"/usr/local/bin/stage0"},
 					Ports: []api.ContainerPort{
 						{
 							ContainerPort: 80,
@@ -120,17 +129,19 @@ func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, build
 	if opts.DeleteIn != 0 {
 		// In case the pod gets away from us (generally: if the
 		// coordinator dies while a build is running), then we
-		// set this attribute of when it should be killed so
+		// set this annotation of when it should be killed so
 		// we can kill it later when the coordinator is
 		// restarted. The cleanUpOldPods goroutine loop handles
 		// that killing.
-		addEnv("META_DELETE_AT", fmt.Sprint(time.Now().Add(opts.DeleteIn).Unix()))
+		pod.ObjectMeta.Annotations["delete-at"] = fmt.Sprint(time.Now().Add(opts.DeleteIn).Unix())
 	}
 
-	status, err := kubeClient.Run(ctx, pod)
+	status, err := kubeClient.RunPod(ctx, pod)
 	if err != nil {
 		return nil, fmt.Errorf("pod could not be created: %v", err)
 	}
+	condRun(opts.OnPodCreated)
+
 	// The new pod must be in Running phase. Possible phases are described at
 	// http://releases.k8s.io/HEAD/docs/user-guide/pod-states.md#pod-phase
 	if status.Phase != api.PodRunning {

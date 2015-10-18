@@ -393,11 +393,11 @@ func (p *gceBuildletPool) instanceUsed(instName string) bool {
 	return ok
 }
 
-func (p *gceBuildletPool) instancesActive() (ret []instanceTime) {
+func (p *gceBuildletPool) instancesActive() (ret []resourceTime) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for name, create := range p.inst {
-		ret = append(ret, instanceTime{
+		ret = append(ret, resourceTime{
 			name:     name,
 			creation: create,
 		})
@@ -406,13 +406,13 @@ func (p *gceBuildletPool) instancesActive() (ret []instanceTime) {
 	return ret
 }
 
-// instanceTime is a GCE instance name and its creation time.
-type instanceTime struct {
+// resourceTime is a GCE instance or Kube pod name and its creation time.
+type resourceTime struct {
 	name     string
 	creation time.Time
 }
 
-type byCreationTime []instanceTime
+type byCreationTime []resourceTime
 
 func (s byCreationTime) Len() int           { return len(s) }
 func (s byCreationTime) Less(i, j int) bool { return s[i].creation.Before(s[j].creation) }

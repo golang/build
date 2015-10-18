@@ -306,6 +306,7 @@ func main() {
 		http.HandleFunc("/dosomework/", handleDoSomeWork(workc))
 	} else {
 		go gcePool.cleanUpOldVMs()
+		go kubePool.cleanUpOldPods(context.Background())
 
 		if inStaging {
 			dashboard.BuildletBucket = "dev-go-builder-data"
