@@ -661,7 +661,7 @@ const fileBoundary = `_-_- file boundary -_-_`
 // log runs "git log" with the supplied arguments
 // and parses the output into Commit values.
 func (r *Repo) log(dir string, args ...string) ([]*Commit, error) {
-	args = append([]string{"log", "--date=rfc", "--name-only", logFormat}, args...)
+	args = append([]string{"log", "--date=rfc", "--name-only", "--parents", logFormat}, args...)
 	if r.path == "" && *filter != "" {
 		paths := strings.Split(*filter, ",")
 		args = append(args, "--")
