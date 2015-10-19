@@ -2,6 +2,9 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
+# Linux builder VM for gccgo
+# Docker tag gobuilders/linux-x86-gccgo
+
 FROM debian:wheezy
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
@@ -15,8 +18,8 @@ RUN apt-get install -y --no-install-recommends strace
 RUN apt-get install -y --no-install-recommends gdb
 # For using numeric libraries within GCC.
 RUN apt-get install -y --no-install-recommends libgmp10-dev libmpc-dev libmpfr-dev
-# For building binutils and gcc from source.
-RUN apt-get install -y --no-install-recommends make g++ flex bison
+# For building gcc from source.
+RUN apt-get install -y --no-install-recommends make g++ flex bison binutils-dev texinfo
 # Same as above, but for 32-bit builds as well.
 RUN apt-get install -y --no-install-recommends libc6-dev-i386 g++-multilib
 # For running the extended gccgo testsuite
@@ -36,9 +39,10 @@ RUN chmod +x /usr/local/bin/stage0
 
 ADD scripts/rc.local /etc/init.d/rc.local
 RUN chmod +x /etc/init.d/rc.local
-RUN (echo "auto lo"; echo "iface lo inet loopback"; echo "auto eth0"; echo "iface eth0 inet dhcp") > /etc/network/interfaces
 
 RUN rm -rf /var/lib/apt/lists /usr/share/doc 
 RUN (cd /usr/share/locale/ && ls -1 | grep -v en | xargs rm -rf)
 RUN rm -rf /var/cache/debconf/*
 RUN rm -rf /usr/share/man
+
+RUN (echo "auto lo"; echo "iface lo inet loopback"; echo "auto eth0"; echo "iface eth0 inet dhcp") > /etc/network/interfaces
