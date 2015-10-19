@@ -111,6 +111,7 @@ func main() {
 	flag.Usage = usage
 	flag.Parse()
 	if *staging {
+		// TODO(cmang): make this configurable.
 		dashboard.BuildletBucket = "dev-go-builder-data"
 	}
 	args := flag.Args()

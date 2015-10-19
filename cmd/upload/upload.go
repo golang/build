@@ -121,12 +121,14 @@ func main() {
 }
 
 var bucketProject = map[string]string{
-	"dev-go-builder-data":   "go-dashboard-dev",
-	"go-builder-data":       "symbolic-datum-552",
-	"go-build-log":          "symbolic-datum-552",
-	"http2-demo-server-tls": "symbolic-datum-552",
-	"winstrap":              "999119582588",
-	"gobuilder":             "999119582588", // deprecated
+	"dev-gccgo-builder-data": "gccgo-dashboard-dev",
+	"dev-go-builder-data":    "go-dashboard-dev",
+	"gccgo-builder-data":     "gccgo-dashboard-builders",
+	"go-builder-data":        "symbolic-datum-552",
+	"go-build-log":           "symbolic-datum-552",
+	"http2-demo-server-tls":  "symbolic-datum-552",
+	"winstrap":               "999119582588",
+	"gobuilder":              "999119582588", // deprecated
 }
 
 func tokenSource(bucket string) (oauth2.TokenSource, error) {

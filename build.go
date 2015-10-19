@@ -27,6 +27,7 @@ func (ci CoordinatorInstance) TLSHostPort() (string, error) {
 	case ProdCoordinator:
 		return "farmer.golang.org:443", nil
 	case StagingCoordinator:
+		// TODO(cmang): make this project dependent.
 		return "104.154.113.235:443", nil
 	}
 	if ci == "" {
