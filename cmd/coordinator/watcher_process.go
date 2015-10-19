@@ -48,7 +48,8 @@ var (
 	pollInterval = flag.Duration("watcher.poll", 10*time.Second, "Remote repo poll interval")
 	network      = flag.Bool("watcher.network", true, "Enable network calls (disable for testing)")
 	mirrorBase   = flag.String("watcher.mirror", "", `Mirror repository base URL (eg "https://github.com/golang/")`)
-	filter       = flag.String("watcher.filter", "", "Comma-separated list of directories or files to watch for new commits (only works on main repo)")
+	filter       = flag.String("watcher.filter", "", "If non-empty, a comma-separated list of directories or files to watch for new commits (only works on main repo). If empty, watch all files in repo.")
+	branches     = flag.String("watcher.branches", "", "If non-empty, a comma-separated list of branches to watch. If empty, watch changes on every branch.")
 	httpAddr     = flag.String("watcher.http", "", "If non-empty, the listen address to run an HTTP server on")
 	report       = flag.Bool("watcher.report", true, "Report updates to build dashboard (use false for development dry-run mode)")
 )
@@ -494,8 +495,8 @@ func (r *Repo) update(noisy bool) error {
 		var added []*Commit
 		for _, c := range log {
 			// Sanity check: we shouldn't see the same commit twice.
-			if _, ok := r.commits[c.Hash]; ok {
-				return fmt.Errorf("found commit we already knew about: %v", c.Hash)
+			if dup, ok := r.commits[c.Hash]; ok {
+				return fmt.Errorf("found commit we already knew about: %v; first seen on %s, now on %s", c, name, dup.Branch)
 			}
 			if noisy {
 				r.logf("found new commit %v", c)
@@ -625,6 +626,10 @@ func (r *Repo) mergeBase(a, b string) (string, error) {
 // remotes returns a slice of remote branches known to the git repo.
 // It always puts "origin/master" first.
 func (r *Repo) remotes() ([]string, error) {
+	if *branches != "" {
+		return strings.Split(*branches, ","), nil
+	}
+
 	cmd := exec.Command("git", "branch")
 	cmd.Dir = r.root
 	out, err := cmd.CombinedOutput()
