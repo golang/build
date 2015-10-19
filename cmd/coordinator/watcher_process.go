@@ -328,7 +328,7 @@ func (r *Repo) postNewCommits(b *Branch) error {
 			}
 		} else {
 			// Find the commit that this branch forked from.
-			base, err := r.mergeBase(b.Name, master)
+			base, err := r.mergeBase("heads/"+b.Name, master)
 			if err != nil {
 				return err
 			}
@@ -460,19 +460,26 @@ func (r *Repo) update(noisy bool) error {
 		b := r.branches[name]
 
 		// Find all unseen commits on this branch.
-		revspec := name
+		revspec := "heads/" + name
 		if b != nil {
 			// If we know about this branch,
 			// only log commits down to the known head.
-			revspec = b.Head.Hash + ".." + name
+			revspec = b.Head.Hash + ".." + revspec
 		} else if name != master {
 			// If this is an unknown non-master branch,
 			// log up to where it forked from master.
-			base, err := r.mergeBase(name, master)
+			base, err := r.mergeBase(revspec, master)
+			if base == "" {
+				// This branch did not fork from master so we
+				// don't care about it.
+				delete(r.branches, name)
+				log.Printf("Found independent branch %s. This branch will not be watched.", name)
+				continue
+			}
 			if err != nil {
 				return err
 			}
-			revspec = base + ".." + name
+			revspec = base + ".." + revspec
 		}
 		log, err := r.log("--topo-order", revspec)
 		if err != nil {
@@ -610,7 +617,7 @@ func (r *Repo) mergeBase(a, b string) (string, error) {
 	cmd.Dir = r.root
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("git merge-base: %v", err)
+		return "", fmt.Errorf("git merge-base %s..%s: %v", a, b, err)
 	}
 	return string(bytes.TrimSpace(out)), nil
 }
