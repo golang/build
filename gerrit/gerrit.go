@@ -232,6 +232,7 @@ type CommitInfo struct {
 	CommitID  string        `json:"commit"`
 	Subject   string        `json:"subject"`
 	Message   string        `json:"message"`
+	Parents   []CommitInfo  `json:"parents"`
 }
 
 type GitPersonInfo struct {
