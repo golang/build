@@ -2511,14 +2511,14 @@ func (st *buildStatus) HTMLStatusLine() template.HTML {
 }
 
 func (st *buildStatus) logsURLLocked() string {
-	host := "farmer.golang.org"
+	urlPrefix := "http://farmer.golang.org"
 	if inStaging {
-		host = externalIP
+		urlPrefix = "http://" + externalIP
 	}
 	if *mode == "dev" {
-		host = "localhost:8119"
+		urlPrefix = "https://localhost:8119"
 	}
-	u := fmt.Sprintf("http://%v/temporarylogs?name=%s&rev=%s&st=%p", host, st.name, st.rev, st)
+	u := fmt.Sprintf("%v/temporarylogs?name=%s&rev=%s&st=%p", urlPrefix, st.name, st.rev, st)
 	if st.isSubrepo() {
 		u += fmt.Sprintf("&subName=%v&subRev=%v", st.subName, st.subRev)
 	}
