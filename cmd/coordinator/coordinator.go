@@ -1167,7 +1167,7 @@ func (st *buildStatus) expectedBuildletStartDuration() time.Duration {
 	case *reverseBuildletPool:
 		goos, arch := st.conf.GOOS(), st.conf.GOARCH()
 		if goos == "darwin" {
-			if arch == "arm" && arch == "arm64" {
+			if arch == "arm" || arch == "arm64" {
 				// iOS; idle or it's not.
 				return 0
 			}

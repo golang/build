@@ -60,7 +60,7 @@ func main() {
 
 	proj, ok := bucketProject[bucket]
 	if !ok {
-		log.Fatalf("bucket %q doesn't have an associated project in upload.go")
+		log.Fatalf("bucket %q doesn't have an associated project in upload.go", bucket)
 	}
 
 	ts, err := tokenSource(bucket)

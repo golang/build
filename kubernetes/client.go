@@ -231,7 +231,7 @@ func (c *Client) PodLog(ctx context.Context, podName string) (string, error) {
 	}
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response body: GET %q: %v, url, err")
+		return "", fmt.Errorf("failed to read response body: GET %q: %v", url, err)
 	}
 	res.Body.Close()
 	return string(body), nil

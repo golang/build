@@ -924,7 +924,7 @@ func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
 					log.Printf("Ignoring fail of RemoveAll(.)")
 					err = nil
 				} else {
-					log.Printf("Readdir = %q, %f", all, derr)
+					log.Printf("Readdir = %q, %v", all, derr)
 				}
 				f.Close()
 			} else {

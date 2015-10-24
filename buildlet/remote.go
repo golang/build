@@ -106,7 +106,7 @@ type RemoteBuildlet struct {
 	Expires time.Time
 }
 
-func (cc CoordinatorClient) RemoteBuildlets() ([]RemoteBuildlet, error) {
+func (cc *CoordinatorClient) RemoteBuildlets() ([]RemoteBuildlet, error) {
 	hc, err := cc.client()
 	if err != nil {
 		return nil, err
