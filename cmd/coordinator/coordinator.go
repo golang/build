@@ -101,6 +101,8 @@ var (
 var tryBuilders []dashboard.BuildConfig
 
 func init() {
+	delete(dashboard.Builders, "plan9-386") // golang.org/issue/13077
+
 	tryList := []string{
 		"misc-compile",
 		"darwin-amd64-10_10",
