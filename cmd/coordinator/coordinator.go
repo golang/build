@@ -2,7 +2,13 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// The coordinator runs on GCE and coordinates builds in Docker containers.
+// The coordinator runs the majority of the Go build system.
+//
+// It is responsible for finding build work and executing it,
+// reporting the results to build.golang.org for public display.
+//
+// For an overview of the Go build system, see the README at
+// the root of the x/build repo.
 package main // import "golang.org/x/build/cmd/coordinator"
 
 import (
