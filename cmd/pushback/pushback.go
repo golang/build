@@ -53,6 +53,7 @@ var repos = []string{
 	"golang/review",
 	"golang/sublime-build",
 	"golang/sublime-config",
+	"golang/sync",
 	"golang/talks",
 	"golang/text",
 	"golang/tools",
