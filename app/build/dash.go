@@ -127,6 +127,11 @@ var goPackages = []*Package{
 	},
 	{
 		Kind: "subrepo",
+		Name: "time",
+		Path: "golang.org/x/time",
+	},
+	{
+		Kind: "subrepo",
 		Name: "tools",
 		Path: "golang.org/x/tools",
 	},

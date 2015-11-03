@@ -56,6 +56,7 @@ var repos = []string{
 	"golang/sync",
 	"golang/talks",
 	"golang/text",
+	"golang/time",
 	"golang/tools",
 	"golang/tour",
 }
