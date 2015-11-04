@@ -29,12 +29,27 @@ type BuildRevision struct {
 	// Revision is the full git hash of the repo.
 	Revision string `json:"revision"`
 
+	// ParentRevisions is the full git hashes of the parents of
+	// Revision.
+	ParentRevisions []string `json:"parentRevisions"`
+
 	// GoRevision is the full git hash of the "go" repo, if Repo is not "go" itself.
 	// Otherwise this is empty.
 	GoRevision string `json:"goRevision,omitempty"`
 
 	// Date is the commit date of this revision, formatted in RFC3339.
 	Date string `json:"date"`
+
+	// Branch is the branch of this commit, e.g. "master" or "dev.ssa".
+	Branch string `json:"branch"`
+
+	// Author is the author of this commit in standard git form
+	// "Name <email>".
+	Author string `json:"author"`
+
+	// Desc is the commit message of this commit. It may be
+	// truncated.
+	Desc string `json:"desc"`
 
 	// Results are the build results for each of the builders in
 	// the same length slice BuildStatus.Builders.

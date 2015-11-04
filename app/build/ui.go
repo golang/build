@@ -214,11 +214,10 @@ func jsonHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 	// First the commits from the main section (the "go" repo)
 	for _, c := range data.Commits {
 		rev := types.BuildRevision{
-			Repo:     "go",
-			Revision: c.Hash,
-			Date:     c.Time.Format(time.RFC3339),
-			Results:  make([]string, len(data.Builders)),
+			Repo:    "go",
+			Results: make([]string, len(data.Builders)),
 		}
+		commitToBuildRevision(c, &rev)
 		for i, b := range data.Builders {
 			rev.Results[i] = cell(c.Result(b, ""))
 		}
@@ -232,11 +231,10 @@ func jsonHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 			goRev := ts.Tag.Hash
 			rev := types.BuildRevision{
 				Repo:       pkgState.Package.Name,
-				Revision:   pkgState.Commit.Hash,
 				GoRevision: goRev,
-				Date:       pkgState.Commit.Time.Format(time.RFC3339),
 				Results:    make([]string, len(data.Builders)),
 			}
+			commitToBuildRevision(pkgState.Commit, &rev)
 			for i, b := range res.Builders {
 				rev.Results[i] = cell(pkgState.Commit.Result(b, goRev))
 			}
@@ -247,6 +245,18 @@ func jsonHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 	v, _ := json.MarshalIndent(res, "", "\t")
 	w.Header().Set("Content-Type", "text/json; charset=utf-8")
 	w.Write(v)
+}
+
+// commitToBuildRevision fills in the fields of BuildRevision rev that
+// are derived from Commit c.
+func commitToBuildRevision(c *Commit, rev *types.BuildRevision) {
+	rev.Revision = c.Hash
+	// TODO: A comment may have more than one parent.
+	rev.ParentRevisions = []string{c.ParentHash}
+	rev.Date = c.Time.Format(time.RFC3339)
+	rev.Branch = c.Branch
+	rev.Author = c.User
+	rev.Desc = c.Desc
 }
 
 type Pagination struct {
