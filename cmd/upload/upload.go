@@ -36,6 +36,7 @@ var (
 	file      = flag.String("file", "-", "Filename to read object from, or '-' for stdin. If it begins with 'go:' then the rest is considered to be a Go target to install first, and then upload.")
 	verbose   = flag.Bool("verbose", false, "verbose logging")
 	osarch    = flag.String("osarch", "", "Optional 'GOOS-GOARCH' value to cross-compile; used only if --file begins with 'go:'. As a special case, if the value contains a '.' byte, anything up to and including that period is discarded.")
+	project   = flag.String("project", "", "GCE Project. If blank, it's automatically inferred from the bucket name for the common Go buckets.")
 )
 
 func main() {
@@ -58,12 +59,15 @@ func main() {
 	}
 	bucket, object := args[0], args[1]
 
-	proj, ok := bucketProject[bucket]
-	if !ok {
-		log.Fatalf("bucket %q doesn't have an associated project in upload.go", bucket)
+	proj := *project
+	if proj == "" {
+		proj, _ = bucketProject[bucket]
+		if proj == "" {
+			log.Fatalf("bucket %q doesn't have an associated project in upload.go", bucket)
+		}
 	}
 
-	ts, err := tokenSource(bucket)
+	ts, err := auth.ProjectTokenSource(proj, storage.ScopeReadWrite)
 	if err != nil {
 		log.Fatalf("Failed to get an OAuth2 token source: %v", err)
 	}
@@ -129,14 +133,6 @@ var bucketProject = map[string]string{
 	"http2-demo-server-tls":  "symbolic-datum-552",
 	"winstrap":               "999119582588",
 	"gobuilder":              "999119582588", // deprecated
-}
-
-func tokenSource(bucket string) (oauth2.TokenSource, error) {
-	proj, ok := bucketProject[bucket]
-	if !ok {
-		return nil, fmt.Errorf("unknown project for bucket %q", bucket)
-	}
-	return auth.ProjectTokenSource(proj, storage.ScopeReadWrite)
 }
 
 func buildGoTarget() {
