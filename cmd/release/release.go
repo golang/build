@@ -132,6 +132,8 @@ func (b *Build) String() string {
 	return fmt.Sprintf("%v-%v", b.OS, b.Arch)
 }
 
+func (b *Build) toolDir() string { return "go/pkg/tool/" + b.OS + "_" + b.Arch }
+
 func (b *Build) logf(format string, args ...interface{}) {
 	format = fmt.Sprintf("%v: %s", b, format)
 	log.Printf(format, args...)
@@ -208,6 +210,7 @@ var preBuildCleanFiles = []string{
 var postBuildCleanFiles = []string{
 	"VERSION.cache",
 	"pkg/bootstrap",
+	"src/cmd/api",
 }
 
 func (b *Build) buildlet() (*buildlet.Client, error) {
@@ -376,6 +379,9 @@ func (b *Build) make() error {
 
 	b.logf("Cleaning goroot (post-build).")
 	if err := client.RemoveAll(addPrefix(goDir, postBuildCleanFiles)...); err != nil {
+		return err
+	}
+	if err := client.RemoveAll(b.toolDir() + "/api"); err != nil {
 		return err
 	}
 
