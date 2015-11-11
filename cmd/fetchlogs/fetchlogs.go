@@ -5,11 +5,12 @@
 // Fetchlogs downloads build failure logs from the Go dashboard so
 // they can be accessed and searched from the local file system.
 //
-// It organizes these logs into two directories created in the current
-// working directory. The log/ directory contains all log files named
-// the same way they are named by the dashboard (which happens to be
-// the SHA-1 of their contents). The rev/ directory contains symlinks
-// back to these logs named
+// It organizes these logs into two directories created in the
+// directory specified by the -dir flag (which typically defaults to
+// ~/.cache/fetchlogs). The log/ directory contains all log files
+// named the same way they are named by the dashboard (which happens
+// to be the SHA-1 of their contents). The rev/ directory contains
+// symlinks back to these logs named
 //
 //    rev/<ISO 8601 commit date>-<git revision>/<builder>
 //
@@ -40,9 +41,12 @@ import (
 	"golang.org/x/build/types"
 )
 
+var defaultDir = filepath.Join(xdgCacheDir(), "fetchlogs")
+
 var (
 	flagN   = flag.Int("n", 300, "limit to most recent `N` commits")
 	flagPar = flag.Int("j", 5, "number of concurrent download `jobs`")
+	flagDir = flag.String("dir", defaultDir, "`directory` to save logs to")
 )
 
 func main() {
@@ -55,7 +59,18 @@ func main() {
 		os.Exit(2)
 	}
 
+	// If the top-level directory is the default XDG cache
+	// directory, make sure it exists.
+	if *flagDir == defaultDir {
+		if err := xdgCreateDir(*flagDir); err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	// Create directory structure.
+	if err := os.Chdir(*flagDir); err != nil {
+		log.Fatal(err)
+	}
 	ensureDir("log")
 	ensureDir("rev")
 
