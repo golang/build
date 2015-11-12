@@ -11,7 +11,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -21,14 +20,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 )
 
 var (
 	flagGoroot = flag.String("goroot", "", "path to Go repository to update (required)")
-	flagRev    = flag.Int("rev", 0, "llvm compiler-rt revision (required)")
+	flagRev    = flag.String("rev", "", "llvm compiler-rt git revision from http://llvm.org/git/compiler-rt.git (required)")
 )
 
 // TODO: use buildlet package instead of calling out to gomote.
@@ -37,22 +35,75 @@ var platforms = []*Platform{
 		OS:   "freebsd",
 		Arch: "amd64",
 		Type: "freebsd-amd64-race",
-		Commands: []string{
-			"gomote put14 $INST",
-			"gomote run $INST /usr/sbin/pkg install -y clang36-3.6.2 subversion",
-			"gomote run $INST /usr/local/bin/git clone https://go.googlesource.com/go",
-			"gomote run $INST /usr/local/bin/svn checkout -r $REV http://llvm.org/svn/llvm-project/compiler-rt/trunk/lib tsan",
-			"gomote run -e CC=/usr/local/llvm36/bin/clang $INST tsan/tsan/go/buildgo.sh",
-			"gomote run $INST /bin/cp tsan/tsan/go/race_$GOOS_$GOARCH.syso go/src/runtime/race",
-			"gomote run $INST go/src/race.bash",
-			"gomote gettar -dir=go/src/runtime/race $INST",
-		},
+		Script: `#!/usr/bin/env bash
+set -e
+git clone https://go.googlesource.com/go
+git clone http://llvm.org/git/compiler-rt.git
+(cd compiler-rt && git checkout $REV)
+(cd compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
+cp compiler-rt/lib/tsan/go/race_freebsd_amd64.syso go/src/runtime/race
+(cd go/src && ./race.bash)
+			`,
+	},
+	&Platform{
+		OS:   "darwin",
+		Arch: "amd64",
+		Type: "darwin-amd64-10_10",
+		Script: `#!/usr/bin/env bash
+set -e
+git clone https://go.googlesource.com/go
+git clone http://llvm.org/git/compiler-rt.git
+(cd compiler-rt && git checkout $REV)
+(cd compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
+cp compiler-rt/lib/tsan/go/race_darwin_amd64.syso go/src/runtime/race
+(cd go/src && ./race.bash)
+			`,
+	},
+	&Platform{
+		OS:   "linux",
+		Arch: "amd64",
+		Type: "linux-amd64-race",
+		Script: `#!/usr/bin/env bash
+set -e
+apt-get update
+apt-get install -y git g++
+git clone https://go.googlesource.com/go
+git clone http://llvm.org/git/compiler-rt.git
+(cd compiler-rt && git checkout $REV)
+(cd compiler-rt/lib/tsan/go && ./buildgo.sh)
+cp compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/race
+(cd go/src && ./race.bash)
+			`,
+	},
+	&Platform{
+		OS:   "windows",
+		Arch: "amd64",
+		Type: "windows-amd64-race",
+		Script: `
+git clone https://go.googlesource.com/go
+if %errorlevel% neq 0 exit /b %errorlevel%
+git clone http://llvm.org/git/compiler-rt.git
+if %errorlevel% neq 0 exit /b %errorlevel%
+cd compiler-rt
+git checkout %REV%
+if %errorlevel% neq 0 exit /b %errorlevel%
+cd ..
+cd compiler-rt/lib/tsan/go
+call build.bat
+if %errorlevel% neq 0 exit /b %errorlevel%
+cd ../../../..
+xcopy compiler-rt\lib\tsan\go\race_windows_amd64.syso go\src\runtime\race\race_windows_amd64.syso /Y
+if %errorlevel% neq 0 exit /b %errorlevel%
+cd go/src
+call race.bat
+if %errorlevel% neq 0 exit /b %errorlevel%
+			`,
 	},
 }
 
 func main() {
 	flag.Parse()
-	if *flagRev <= 0 || *flagGoroot == "" {
+	if *flagRev == "" || *flagGoroot == "" {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
@@ -64,11 +115,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("bad -goroot? %v", err)
 	}
-	readmeRev := regexp.MustCompile("Current runtime is built on rev ([0-9]+)\\.").FindSubmatchIndex(readme)
+	readmeRev := regexp.MustCompile("Current runtime is built on rev ([0-9,a-z]+)\\.").FindSubmatchIndex(readme)
 	if readmeRev == nil {
 		log.Fatalf("failed to find current revision in src/runtime/race/README")
 	}
-	readme = bytes.Replace(readme, readme[readmeRev[2]:readmeRev[3]], []byte(strconv.Itoa(*flagRev)), -1)
+	readme = bytes.Replace(readme, readme[readmeRev[2]:readmeRev[3]], []byte(*flagRev), -1)
 	if err := ioutil.WriteFile(readmeFile, readme, 0640); err != nil {
 		log.Fatalf("failed to write README file: %v", err)
 	}
@@ -82,7 +133,7 @@ func main() {
 			defer wg.Done()
 			p.Err = p.Build()
 			if p.Err != nil {
-				p.Err = fmt.Errorf("failed: %v (log is saved to %v)", p.Err, p.Log.Name())
+				p.Err = fmt.Errorf("failed: %v", p.Err)
 				log.Printf("%v: %v", p.Name, p.Err)
 			}
 		}()
@@ -106,14 +157,14 @@ func main() {
 }
 
 type Platform struct {
-	OS       string
-	Arch     string
-	Name     string // something for logging
-	Type     string // gomote instance type
-	Inst     string // actual gomote instance name
-	Err      error
-	Log      *os.File
-	Commands []string
+	OS     string
+	Arch   string
+	Name   string // something for logging
+	Type   string // gomote instance type
+	Inst   string // actual gomote instance name
+	Err    error
+	Log    *os.File
+	Script string
 }
 
 func (p *Platform) Build() error {
@@ -126,33 +177,67 @@ func (p *Platform) Build() error {
 		return fmt.Errorf("failed to create log file: %v", err)
 	}
 	defer p.Log.Close()
+	log.Printf("%v: logging to %v", p.Name, p.Log.Name())
 
 	// Create gomote instance (or reuse an existing instance for debugging).
 	if p.Inst == "" {
-		inst, err := p.Exec(fmt.Sprintf("gomote create %v", p.Type), true)
-		if err != nil {
-			return fmt.Errorf("gomote create failed: %v\n%s", err, inst)
+		// Creation sometimes fails with transient errors like:
+		// "buildlet didn't come up at http://10.240.0.13 in 3m0s".
+		var createErr error
+		for i := 0; i < 10; i++ {
+			inst, err := p.Gomote("create", p.Type)
+			if err != nil {
+				log.Printf("%v: instance creation failed, retrying", p.Name)
+				createErr = err
+				continue
+			}
+			p.Inst = strings.Trim(string(inst), " \t\n")
+			break
 		}
-		p.Inst = strings.Trim(string(inst), " \t\n")
+		if p.Inst == "" {
+			return createErr
+		}
 	}
 	log.Printf("%s: using instance %v", p.Name, p.Inst)
 
-	// Execute the sequence of commands.
-	var targz []byte
-	for i, command := range p.Commands {
-		gettar := i == len(p.Commands)-1 // the last command is supposed to be gomote gettar
-		output, err := p.Exec(command, !gettar)
-		if err != nil {
-			return errors.New("command failed")
-		}
-		if gettar {
-			targz = output
-		}
+	// put14
+	if _, err := p.Gomote("put14", p.Inst); err != nil {
+		return err
+	}
+
+	// Execute the script.
+	script, err := ioutil.TempFile("", "racebuild")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %v", err)
+	}
+	defer func() {
+		script.Close()
+		os.Remove(script.Name())
+	}()
+	if _, err := script.Write([]byte(p.Script)); err != nil {
+		return fmt.Errorf("failed to write temp file: %v", err)
+	}
+	script.Close()
+	targetName := "script.bash"
+	if p.OS == "windows" {
+		targetName = "script.bat"
+	}
+	if _, err := p.Gomote("put", "-mode=0700", p.Inst, script.Name(), targetName); err != nil {
+		return err
+	}
+	if _, err := p.Gomote("run", "-e=REV="+*flagRev, p.Inst, targetName); err != nil {
+		return err
+	}
+
+	// The script is supposed to leave updated runtime at that path. Copy it out.
+	syso := fmt.Sprintf("race_%v_%s.syso", p.OS, p.Arch)
+	targz, err := p.Gomote("gettar", "-dir=go/src/runtime/race/"+syso, p.Inst)
+	if err != nil {
+		return err
 	}
 
 	// Untar the runtime and write it to goroot.
-	sysof := filepath.Join(*flagGoroot, "src", "runtime", "race", fmt.Sprintf("race_%v_%s.syso", p.OS, p.Arch))
-	if err := p.WriteSyso(sysof, targz); err != nil {
+	if err := p.WriteSyso(filepath.Join(*flagGoroot, "src", "runtime", "race", syso), targz); err != nil {
 		return fmt.Errorf("%v", err)
 	}
 
@@ -161,50 +246,39 @@ func (p *Platform) Build() error {
 }
 
 func (p *Platform) WriteSyso(sysof string, targz []byte) error {
-	syso, err := os.Create(sysof)
-	if err != nil {
-		return fmt.Errorf("failed to open race runtime: %v", err)
-	}
-	defer syso.Close()
-
 	// Ungzip.
 	gzipr, err := gzip.NewReader(bytes.NewReader(targz))
 	if err != nil {
 		return fmt.Errorf("failed to read gzip archive: %v", err)
 	}
 	defer gzipr.Close()
-
-	// Find the necessary file in tar.
 	tr := tar.NewReader(gzipr)
-	for {
-		hdr, err := tr.Next()
-		if err != nil {
-			return fmt.Errorf("failed to read tar archive: %v", err)
-		}
-		if hdr.Name == filepath.Base(syso.Name()) {
-			break
-		}
+	if _, err := tr.Next(); err != nil {
+		return fmt.Errorf("failed to read tar archive: %v", err)
 	}
 
+	// Copy the file.
+	syso, err := os.Create(sysof)
+	if err != nil {
+		return fmt.Errorf("failed to open race runtime: %v", err)
+	}
+	defer syso.Close()
 	if _, err := io.Copy(syso, tr); err != nil {
 		return fmt.Errorf("failed to write race runtime: %v", err)
 	}
 	return nil
 }
 
-func (p *Platform) Exec(command string, logOutout bool) ([]byte, error) {
-	command = strings.Replace(command, "$REV", strconv.Itoa(*flagRev), -1)
-	command = strings.Replace(command, "$INST", p.Inst, -1)
-	command = strings.Replace(command, "$GOOS", p.OS, -1)
-	command = strings.Replace(command, "$GOARCH", p.Arch, -1)
-	log.Printf("%s: %s", p.Name, command)
-	fmt.Fprintf(p.Log, "$ %v\n", command)
-	args := strings.Split(command, " ")
-	cmd := exec.Command(args[0], args[1:]...)
-	output, err := cmd.CombinedOutput()
-	if logOutout {
+func (p *Platform) Gomote(args ...string) ([]byte, error) {
+	log.Printf("%v: gomote %v", p.Name, args)
+	fmt.Fprintf(p.Log, "$ gomote %v\n", args)
+	output, err := exec.Command("gomote", args...).CombinedOutput()
+	if err != nil || args[0] != "gettar" {
 		p.Log.Write(output)
 	}
 	fmt.Fprintf(p.Log, "\n\n")
+	if err != nil {
+		err = fmt.Errorf("gomote %v failed: %v", args, err)
+	}
 	return output, err
 }
