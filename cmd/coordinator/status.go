@@ -38,7 +38,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 		if ts := tries[key]; ts != nil {
 			state := ts.state()
 			fmt.Fprintf(&buf, "Change-ID: %v Commit: %v (<a href='/try?commit=%v'>status</a>)\n",
-				key.ChangeID, key.Commit, key.Commit[:8])
+				key.ChangeTriple(), key.Commit, key.Commit[:8])
 			fmt.Fprintf(&buf, "   Remain: %d, fails: %v\n", state.remain, state.failed)
 			for _, bs := range ts.builds {
 				fmt.Fprintf(&buf, "  %s: running=%v\n", bs.name, bs.isRunning())
