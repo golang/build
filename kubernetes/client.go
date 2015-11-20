@@ -91,7 +91,7 @@ func (c *Client) RunPod(ctx context.Context, pod *api.Pod) (*api.Pod, error) {
 		log.Printf("Timed out waiting for pod to leave pending state. Pod will be deleted.")
 		// The pod did not leave the pending state. We should try to manually delete it before
 		// returning an error.
-		c.DeletePod(context.Background(), createdPod.Name)
+		c.DeletePod(context.Background(), podResult.Name)
 		return nil, err
 	}
 	return createdPod, nil

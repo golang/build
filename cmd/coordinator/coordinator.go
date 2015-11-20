@@ -1483,7 +1483,7 @@ func (st *buildStatus) doSnapshot() error {
 	return nil
 }
 
-var timeSnapshotCorruptionFixed = time.Date(2015, time.November, 1, 0, 0, 0, 0, nil)
+var timeSnapshotCorruptionFixed = time.Date(2015, time.November, 1, 0, 0, 0, 0, time.UTC)
 
 // snapshotExists reports whether the snapshot exists and isn't corrupt.
 // Unfortunately we put some corrupt ones in for awhile, so this check is
