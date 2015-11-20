@@ -513,6 +513,30 @@ func init() {
 		NumTestHelpers: 1, // limited resources
 	})
 	addBuilder(BuildConfig{
+		Name:           "android-arm64-sdk21",
+		Notes:          "Android arm64 device using the android-21 toolchain, attatched to Mac Mini",
+		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
+		IsReverse:      true,
+		env:            []string{"GOOS=android", "GOARCH=arm64"},
+		NumTestHelpers: 1, // limited resources
+	})
+	addBuilder(BuildConfig{
+		Name:           "android-386-sdk21",
+		Notes:          "Android 386 device using the android-21 toolchain, attatched to Mac Mini",
+		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
+		IsReverse:      true,
+		env:            []string{"GOOS=android", "GOARCH=386"},
+		NumTestHelpers: 1, // limited resources
+	})
+	addBuilder(BuildConfig{
+		Name:           "android-amd64-sdk21",
+		Notes:          "Android amd64 device using the android-21 toolchain, attatched to Mac Mini",
+		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
+		IsReverse:      true,
+		env:            []string{"GOOS=android", "GOARCH=amd64"},
+		NumTestHelpers: 1, // limited resources
+	})
+	addBuilder(BuildConfig{
 		Name:      "darwin-arm-a5ios",
 		Notes:     "iPhone 4S (A5 processor), via a Mac Mini",
 		Owner:     "crawshaw@golang.org",
