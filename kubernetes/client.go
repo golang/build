@@ -57,7 +57,7 @@ func NewClient(baseURL string, client *http.Client) (*Client, error) {
 // An error is returned if the pod can not be created, if it does
 // does not enter the running phase within 2 minutes, or if ctx.Done
 // is closed.
-func (c *Client) RunPod(ctx context.Context, pod *api.Pod) (*api.PodStatus, error) {
+func (c *Client) RunPod(ctx context.Context, pod *api.Pod) (*api.Pod, error) {
 	var podJSON bytes.Buffer
 	if err := json.NewEncoder(&podJSON).Encode(pod); err != nil {
 		return nil, fmt.Errorf("failed to encode pod in json: %v", err)
@@ -86,15 +86,15 @@ func (c *Client) RunPod(ctx context.Context, pod *api.Pod) (*api.PodStatus, erro
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	status, err := c.AwaitPodNotPending(ctx, podResult.Name, podResult.ObjectMeta.ResourceVersion)
+	createdPod, err := c.AwaitPodNotPending(ctx, podResult.Name, podResult.ObjectMeta.ResourceVersion)
 	if err != nil {
 		log.Printf("Timed out waiting for pod to leave pending state. Pod will be deleted.")
 		// The pod did not leave the pending state. We should try to manually delete it before
 		// returning an error.
-		c.DeletePod(context.Background(), podResult.Name)
+		c.DeletePod(context.Background(), createdPod.Name)
 		return nil, err
 	}
-	return status, nil
+	return createdPod, nil
 }
 
 // GetPods returns all pods in the cluster, regardless of status.
@@ -156,14 +156,14 @@ func (c *Client) DeletePod(ctx context.Context, podName string) error {
 // history from being retrieved when the watch is initiated.
 // If there is an error polling for the pod's status, or if
 // ctx.Done is closed, podStatusResult will contain an error.
-func (c *Client) AwaitPodNotPending(ctx context.Context, podName, podResourceVersion string) (*api.PodStatus, error) {
+func (c *Client) AwaitPodNotPending(ctx context.Context, podName, podResourceVersion string) (*api.Pod, error) {
 	if podResourceVersion == "" {
 		return nil, fmt.Errorf("resourceVersion for pod %v must be provided", podName)
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	podStatusResult, err := c.WatchPodStatus(ctx, podName, podResourceVersion)
+	podStatusResult, err := c.WatchPod(ctx, podName, podResourceVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -174,8 +174,8 @@ func (c *Client) AwaitPodNotPending(ctx context.Context, podName, podResourceVer
 			if psr.Err != nil {
 				return nil, psr.Err
 			}
-			if psr.Status.Phase != api.PodPending {
-				return psr.Status, nil
+			if psr.Pod.Status.Phase != api.PodPending {
+				return psr.Pod, nil
 			}
 		}
 	}
@@ -183,8 +183,9 @@ func (c *Client) AwaitPodNotPending(ctx context.Context, podName, podResourceVer
 
 // PodStatusResult wraps a api.PodStatus and error
 type PodStatusResult struct {
-	Status *api.PodStatus
-	Err    error
+	Pod  *api.Pod
+	Type string
+	Err  error
 }
 
 type watchPodStatus struct {
@@ -194,7 +195,7 @@ type watchPodStatus struct {
 	Object api.Pod `json:"object"`
 }
 
-// WatchPodStatus long-polls the Kubernetes watch API to be notified
+// WatchPod long-polls the Kubernetes watch API to be notified
 // of changes to the specified pod. Changes are sent on the returned
 // PodStatusResult channel as they are received.
 // The podResourceVersion is required to prevent a pod's entire
@@ -203,7 +204,7 @@ type watchPodStatus struct {
 // If any error occurs communicating with the Kubernetes API, the
 // error will be sent on the returned PodStatusResult channel and
 // it will be closed.
-func (c *Client) WatchPodStatus(ctx context.Context, podName, podResourceVersion string) (<-chan PodStatusResult, error) {
+func (c *Client) WatchPod(ctx context.Context, podName, podResourceVersion string) (<-chan PodStatusResult, error) {
 	if podResourceVersion == "" {
 		return nil, fmt.Errorf("resourceVersion for pod %v must be provided", podName)
 	}
@@ -253,7 +254,7 @@ func (c *Client) WatchPodStatus(ctx context.Context, podName, podResourceVersion
 				statusChan <- PodStatusResult{Err: fmt.Errorf("failed to decode watch pod status: %v", err)}
 				return
 			}
-			statusChan <- PodStatusResult{Status: &wps.Object.Status}
+			statusChan <- PodStatusResult{Pod: &wps.Object, Type: wps.Type}
 		}
 	}()
 	return statusChan, nil

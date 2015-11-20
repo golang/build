@@ -136,7 +136,7 @@ func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, build
 		pod.ObjectMeta.Annotations["delete-at"] = fmt.Sprint(time.Now().Add(opts.DeleteIn).Unix())
 	}
 
-	status, err := kubeClient.RunPod(ctx, pod)
+	newPod, err := kubeClient.RunPod(ctx, pod)
 	if err != nil {
 		return nil, fmt.Errorf("pod could not be created: %v", err)
 	}
@@ -144,19 +144,19 @@ func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, build
 
 	// The new pod must be in Running phase. Possible phases are described at
 	// http://releases.k8s.io/HEAD/docs/user-guide/pod-states.md#pod-phase
-	if status.Phase != api.PodRunning {
-		return nil, fmt.Errorf("pod is in invalid state %q: %v", status.Phase, status.Message)
+	if newPod.Status.Phase != api.PodRunning {
+		return nil, fmt.Errorf("pod is in invalid state %q: %v", newPod.Status.Phase, newPod.Status.Message)
 	}
 
 	// Wait for the pod to boot and its buildlet to come up.
 	var buildletURL string
 	var ipPort string
 	if !opts.TLS.IsZero() {
-		buildletURL = "https://" + status.PodIP
-		ipPort = status.PodIP + ":443"
+		buildletURL = "https://" + newPod.Status.PodIP
+		ipPort = newPod.Status.PodIP + ":443"
 	} else {
-		buildletURL = "http://" + status.PodIP
-		ipPort = status.PodIP + ":80"
+		buildletURL = "http://" + newPod.Status.PodIP
+		ipPort = newPod.Status.PodIP + ":80"
 	}
 	condRun(opts.OnGotPodInfo)
 
