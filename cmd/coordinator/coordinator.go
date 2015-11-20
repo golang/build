@@ -265,6 +265,7 @@ func main() {
 		}
 	}
 
+	// TODO(evanbrown: disable kubePool if init fails)
 	err = initKube()
 	if err != nil {
 		kubeErr = err
@@ -305,7 +306,9 @@ func main() {
 		http.HandleFunc("/dosomework/", handleDoSomeWork(workc))
 	} else {
 		go gcePool.cleanUpOldVMs()
-		go kubePool.cleanUpOldPods(context.Background())
+		if kubeErr == nil {
+			go kubePool.cleanUpOldPods(context.Background())
+		}
 
 		if *enableDebugProd {
 			http.HandleFunc("/dosomework/", handleDoSomeWork(workc))
@@ -1153,6 +1156,7 @@ func (st *buildStatus) buildletPool() (BuildletPool, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid BuildletType %q for %q", buildletType, st.conf.Name)
 	}
+	// TODO(evanbrown): if pool is disabled, return an error
 	return poolForConf(bconf), nil
 }
 

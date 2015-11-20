@@ -53,10 +53,12 @@ func initKube() error {
 	registryPrefix += "/" + projectID
 	if !hasCloudPlatformScope() {
 		return errors.New("coordinator not running with access to the Cloud Platform scope.")
-
 	}
 	httpClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
-	containerService, _ = container.New(httpClient)
+	containerService, err = container.New(httpClient)
+	if err != nil {
+		return fmt.Errorf("could not create client for Google Container Engine")
+	}
 
 	cluster, err := containerService.Projects.Zones.Clusters.Get(projectID, projectZone, clusterName).Do()
 	if err != nil {
@@ -329,6 +331,7 @@ func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
 		pods, err := kubeClient.GetPods(ctx)
 		if err != nil {
 			log.Printf("Error cleaning pods: %v", err)
+			return
 		}
 		for _, pod := range pods {
 			if pod.ObjectMeta.Annotations == nil {
