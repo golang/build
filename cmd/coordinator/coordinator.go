@@ -1483,17 +1483,30 @@ func (st *buildStatus) doSnapshot() error {
 	return nil
 }
 
+var timeSnapshotCorruptionFixed = time.Date(2015, time.November, 1, 0, 0, 0, 0, nil)
+
 // snapshotExists reports whether the snapshot exists and isn't corrupt.
 // Unfortunately we put some corrupt ones in for awhile, so this check is
 // now more paranoid than it used to be.
 func (br *builderRev) snapshotExists() bool {
-	// TODO(bradfitz): clean up the repo and revert this to what
-	// it was before, maybe based on the date of the file. The old
-	// code was just:
-	// resp, err := http.Head(br.snapshotURL())
-	// return err == nil && resp.StatusCode == http.StatusOK
+	resp, err := http.Head(br.snapshotURL())
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return false
+	}
 
-	resp, err := http.Get(br.snapshotURL())
+	// If the snapshot is newer than the point at which we fixed writing
+	// potentially-truncated snapshots to GCS, then stop right here.
+	// See history in golang.org/issue/12671
+	lastMod, err := http.ParseTime(resp.Header.Get("Last-Modified"))
+	if err == nil && lastMod.After(timeSnapshotCorruptionFixed) {
+		log.Printf("Snapshot exists for %v (without truncate checks)", br)
+		return true
+	}
+
+	// Otherwise, if the snapshot is too old, verify it.
+	// This path is slow.
+	// TODO(bradfitz): delete this in 6 months or so? (around 2016-06-01)
+	resp, err = http.Get(br.snapshotURL())
 	if err != nil {
 		return false
 	}
