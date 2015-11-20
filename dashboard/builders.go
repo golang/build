@@ -320,6 +320,12 @@ func init() {
 		NumTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
+		Name:           "linux-amd64-kube",
+		KubeImage:      "linux-x86-std:latest",
+		env:            []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		NumTestHelpers: 3,
+	})
+	addBuilder(BuildConfig{
 		Name:        "misc-compile",
 		TryOnly:     true,
 		VMImage:     "linux-buildlet-std",

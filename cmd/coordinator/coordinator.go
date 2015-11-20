@@ -70,8 +70,9 @@ var (
 	// and Region.Zones: http://godoc.org/google.golang.org/api/compute/v1#Region
 	cleanZones = flag.String("zones", "us-central1-a,us-central1-b,us-central1-f", "Comma-separated list of zones to periodically clean of stale build VMs (ones that failed to shut themselves down)")
 
-	mode         = flag.String("mode", "", "valid modes are 'dev', 'prod', or '' for auto-detect. dev means localhost development, not be confused with staging on go-dashboard-dev, which is still the 'prod' mode.")
-	devEnableGCE = flag.Bool("dev_gce", false, "Whether or not to enable the GCE pool when in dev mode. The pool is enabled by default in prod mode.")
+	mode            = flag.String("mode", "", "valid modes are 'dev', 'prod', or '' for auto-detect. dev means localhost development, not be confused with staging on go-dashboard-dev, which is still the 'prod' mode.")
+	devEnableGCE    = flag.Bool("dev_gce", false, "Whether or not to enable the GCE pool when in dev mode. The pool is enabled by default in prod mode.")
+	enableDebugProd = flag.Bool("debug_prod", false, "Enable the /dosomework URL to manually schedule a build on a prod coordinator. Enabled by default in dev mode.")
 )
 
 func buildLogBucket() string {
@@ -305,6 +306,10 @@ func main() {
 	} else {
 		go gcePool.cleanUpOldVMs()
 		go kubePool.cleanUpOldPods(context.Background())
+
+		if *enableDebugProd {
+			http.HandleFunc("/dosomework/", handleDoSomeWork(workc))
+		}
 
 		if inStaging {
 			dashboard.BuildletBucket = "dev-go-builder-data"

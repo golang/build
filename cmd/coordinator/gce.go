@@ -48,7 +48,8 @@ func gceAPIGate() {
 }
 
 const (
-	stagingProjectID = "go-dashboard-dev"
+	stagingProjectID   = "go-dashboard-dev"
+	stagingProjectZone = "us-central1-f"
 )
 
 // Initialized by initGCE:
@@ -79,38 +80,38 @@ func stagingPrefix() string {
 
 func initGCE() error {
 	initGCECalled = true
+	var err error
 	// Use the staging project if not on GCE. This assumes the DefaultTokenSource
 	// credential used below has access to that project.
 	if !metadata.OnGCE() {
 		projectID = stagingProjectID
-	}
-	var err error
-	projectID, err = metadata.ProjectID()
-	if err != nil {
-		return fmt.Errorf("failed to get current GCE ProjectID: %v", err)
+		projectZone = stagingProjectZone
+	} else {
+		projectID, err = metadata.ProjectID()
+		if err != nil {
+			return fmt.Errorf("failed to get current GCE ProjectID: %v", err)
+		}
+		projectZone, err = metadata.Get("instance/zone")
+		if err != nil || projectZone == "" {
+			return fmt.Errorf("failed to get current GCE zone: %v", err)
+		}
+		// Convert the zone from "projects/1234/zones/us-central1-a" to "us-central1-a".
+		projectZone = path.Base(projectZone)
+		if !hasComputeScope() {
+			return errors.New("The coordinator is not running with access to read and write Compute resources. VM support disabled.")
+
+		}
 	}
 
 	inStaging = projectID == stagingProjectID
 	if inStaging {
 		log.Printf("Running in staging cluster (%q)", projectID)
 	}
+	projectRegion = projectZone[:strings.LastIndex(projectZone, "-")] // "us-central1"
 
 	tokenSource, _ = google.DefaultTokenSource(oauth2.NoContext)
 	httpClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
 	serviceCtx = cloud.NewContext(projectID, httpClient)
-
-	projectZone, err = metadata.Get("instance/zone")
-	if err != nil || projectZone == "" {
-		return fmt.Errorf("failed to get current GCE zone: %v", err)
-	}
-
-	// Convert the zone from "projects/1234/zones/us-central1-a" to "us-central1-a".
-	projectZone = path.Base(projectZone)
-	if !hasComputeScope() {
-		return errors.New("The coordinator is not running with access to read and write Compute resources. VM support disabled.")
-
-	}
-	projectRegion = projectZone[:strings.LastIndex(projectZone, "-")] // "us-central1"
 
 	externalIP, err = metadata.ExternalIP()
 	if err != nil {
@@ -542,11 +543,11 @@ func hasScope(want string) bool {
 }
 
 func hasComputeScope() bool {
-	return hasScope(compute.ComputeScope)
+	return hasScope(compute.ComputeScope) || hasScope(compute.CloudPlatformScope)
 }
 
 func hasStorageScope() bool {
-	return hasScope(storage.ScopeReadWrite) || hasScope(storage.ScopeFullControl)
+	return hasScope(storage.ScopeReadWrite) || hasScope(storage.ScopeFullControl) || hasScope(compute.CloudPlatformScope)
 }
 
 func randHex(n int) string {
