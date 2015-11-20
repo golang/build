@@ -16,6 +16,10 @@ import (
 )
 
 func handleStatus(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
 	round := func(t time.Duration) time.Duration {
 		return t / time.Second * time.Second
 	}
