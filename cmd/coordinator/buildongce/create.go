@@ -24,7 +24,7 @@ import (
 var (
 	proj        = flag.String("project", "symbolic-datum-552", "name of Project")
 	zone        = flag.String("zone", "us-central1-f", "GCE zone")
-	mach        = flag.String("machinetype", "n1-highcpu-2", "Machine type")
+	mach        = flag.String("machinetype", "n1-standard-4", "Machine type")
 	instName    = flag.String("instance_name", "farmer", "Name of VM instance.")
 	sshPub      = flag.String("ssh_public_key", "", "ssh public key file to authorize. Can modify later in Google's web UI anyway.")
 	staticIP    = flag.String("static_ip", "", "Static IP to use. If empty, automatic.")
@@ -91,7 +91,7 @@ func main() {
 	}
 	if *staticIP == "" {
 		// Hard-code this, since GCP doesn't let you rename an IP address, and so
-		// this IP is still called "go-buidler-1-ip" in our project, from our old
+		// this IP is still called "go-builder-1-ip" in our project, from our old
 		// naming convention plan.
 		switch *proj {
 		case "symbolic-datum-552":
