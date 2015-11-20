@@ -55,9 +55,10 @@ func initKube() error {
 		return errors.New("coordinator not running with access to the Cloud Platform scope.")
 	}
 	httpClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
+	var err error
 	containerService, err = container.New(httpClient)
 	if err != nil {
-		return fmt.Errorf("could not create client for Google Container Engine")
+		return fmt.Errorf("could not create client for Google Container Engine: %v", err)
 	}
 
 	cluster, err := containerService.Projects.Zones.Clusters.Get(projectID, projectZone, clusterName).Do()
