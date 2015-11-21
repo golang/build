@@ -256,9 +256,9 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		url := "http://" + domain + t.path
 		if t.vals != nil {
-			url += "?" + t.vals.Encode() + "&version=2"
+			url += "?" + t.vals.Encode() + "&version=3"
 		} else {
-			url += "?version=2"
+			url += "?version=3"
 		}
 		req, err := http.NewRequest("POST", url, body)
 		if err != nil {
