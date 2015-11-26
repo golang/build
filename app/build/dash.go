@@ -29,10 +29,18 @@ type Dashboard struct {
 
 // dashboardForRequest returns the appropriate dashboard for a given URL path.
 func dashboardForRequest(r *http.Request) *Dashboard {
-	if strings.HasPrefix(r.URL.Path, gccgoDash.Prefix) {
-		return gccgoDash
+	for _, d := range dashboards[1:] {
+		if d.Prefix == "" {
+			panic("prefix can be empty only for the first dashboard")
+		}
+		if strings.HasPrefix(r.URL.Path, d.Prefix) {
+			return d
+		}
 	}
-	return goDash
+	if dashboards[0].Prefix != "" {
+		panic("prefix for the first dashboard should be empty")
+	}
+	return dashboards[0]
 }
 
 // Context returns a namespaced context for this dashboard, or panics if it
@@ -48,7 +56,9 @@ func (d *Dashboard) Context(c appengine.Context) appengine.Context {
 	return n
 }
 
-// the currently known dashboards.
+// The currently known dashboards.
+// The first one should have an empty prefix and
+// the other ones a non empty prefix.
 var dashboards = []*Dashboard{goDash, gccgoDash}
 
 // goDash is the dashboard for the main go repository.
