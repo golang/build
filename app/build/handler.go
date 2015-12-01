@@ -95,7 +95,8 @@ func commitHandler(r *http.Request) (interface{}, error) {
 	if dashboardForRequest(r) != gccgoDash {
 		v, _ := strconv.Atoi(r.FormValue("version"))
 		if v != watcherVersion {
-			return nil, fmt.Errorf("rejecting POST from commit watcher; need version %v", watcherVersion)
+			return nil, fmt.Errorf("rejecting POST from commit watcher; need version %v instead of %v",
+				watcherVersion, v)
 		}
 	}
 
@@ -579,7 +580,8 @@ func resultHandler(r *http.Request) (interface{}, error) {
 	if dashboardForRequest(r) != gccgoDash {
 		v, _ := strconv.Atoi(r.FormValue("version"))
 		if v != builderVersion {
-			return nil, fmt.Errorf("rejecting POST from builder; need version %v", builderVersion)
+			return nil, fmt.Errorf("rejecting POST from builder; need version %v instead of %v",
+				builderVersion, v)
 		}
 	}
 
