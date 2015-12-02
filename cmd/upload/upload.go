@@ -25,7 +25,6 @@ import (
 	"golang.org/x/build/auth"
 	"golang.org/x/build/envutil"
 	"golang.org/x/net/context"
-	"golang.org/x/oauth2"
 	"google.golang.org/cloud"
 	"google.golang.org/cloud/storage"
 )
@@ -72,17 +71,21 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to get an OAuth2 token source: %v", err)
 	}
-	httpClient := oauth2.NewClient(oauth2.NoContext, ts)
-	ctx := cloud.NewContext(proj, httpClient)
 
-	if alreadyUploaded(ctx, bucket, object) {
+	ctx := context.Background()
+	storageClient, err := storage.NewClient(ctx, cloud.WithTokenSource(ts))
+	if err != nil {
+		log.Fatalf("storage.NewClient: %v", err)
+	}
+
+	if alreadyUploaded(storageClient, bucket, object) {
 		if *verbose {
 			log.Printf("Already uploaded.")
 		}
 		return
 	}
 
-	w := storage.NewWriter(ctx, bucket, object)
+	w := storageClient.Bucket(bucket).Object(object).NewWriter(ctx)
 	// If you don't give the owners access, the web UI seems to
 	// have a bug and doesn't have access to see that it's public, so
 	// won't render the "Shared Publicly" link. So we do that, even
@@ -189,11 +192,11 @@ func buildGoTarget() {
 
 // alreadyUploaded reports whether *file has already been uploaded and the correct contents
 // are on cloud storage already.
-func alreadyUploaded(ctx context.Context, bucket, object string) bool {
+func alreadyUploaded(storageClient *storage.Client, bucket, object string) bool {
 	if *file == "-" {
 		return false // don't know.
 	}
-	o, err := storage.StatObject(ctx, bucket, object)
+	o, err := storageClient.Bucket(bucket).Object(object).Attrs(context.Background())
 	if err == storage.ErrObjectNotExist {
 		return false
 	}
