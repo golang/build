@@ -63,6 +63,7 @@ var (
 	serviceCtx     context.Context
 	errTryDeps     error // non-nil if try bots are disabled
 	gerritClient   *gerrit.Client
+	storageClient  *storage.Client
 	inStaging      bool // are we running in the staging project? (named -dev)
 
 	initGCECalled bool
@@ -112,6 +113,10 @@ func initGCE() error {
 	tokenSource, _ = google.DefaultTokenSource(oauth2.NoContext)
 	httpClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
 	serviceCtx = cloud.NewContext(projectID, httpClient)
+	storageClient, err = storage.NewClient(serviceCtx, cloud.WithBaseHTTP(httpClient))
+	if err != nil {
+		log.Fatalf("storage.NewClient: %v", err)
+	}
 
 	externalIP, err = metadata.ExternalIP()
 	if err != nil {
@@ -133,7 +138,7 @@ func checkTryBuildDeps() error {
 	if !hasStorageScope() {
 		return errors.New("coordinator's GCE instance lacks the storage service scope")
 	}
-	wr := storage.NewWriter(serviceCtx, buildLogBucket(), "hello.txt")
+	wr := storageClient.Bucket(buildLogBucket()).Object("hello.txt").NewWriter(serviceCtx)
 	fmt.Fprintf(wr, "Hello, world! Coordinator start-up at %v", time.Now())
 	if err := wr.Close(); err != nil {
 		return fmt.Errorf("test write of a GCS object to bucket %q failed: %v", buildLogBucket(), err)

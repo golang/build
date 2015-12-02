@@ -39,6 +39,7 @@ var (
 	kubeErr          error
 	initKubeCalled   bool
 	registryPrefix   = "gcr.io"
+	kubeCluster      *container.Cluster
 )
 
 const (
@@ -61,7 +62,7 @@ func initKube() error {
 		return fmt.Errorf("could not create client for Google Container Engine: %v", err)
 	}
 
-	cluster, err := containerService.Projects.Zones.Clusters.Get(projectID, projectZone, clusterName).Do()
+	kubeCluster, err = containerService.Projects.Zones.Clusters.Get(projectID, projectZone, clusterName).Do()
 	if err != nil {
 		return fmt.Errorf("cluster %q could not be found in project %q, zone %q: %v", clusterName, projectID, projectZone, err)
 	}
@@ -77,9 +78,9 @@ func initKube() error {
 		}
 		return []byte(s)
 	}
-	clientCert := decode("client cert", cluster.MasterAuth.ClientCertificate)
-	clientKey := decode("client key", cluster.MasterAuth.ClientKey)
-	caCert := decode("cluster cert", cluster.MasterAuth.ClusterCaCertificate)
+	clientCert := decode("client cert", kubeCluster.MasterAuth.ClientCertificate)
+	clientKey := decode("client key", kubeCluster.MasterAuth.ClientKey)
+	caCert := decode("cluster cert", kubeCluster.MasterAuth.ClusterCaCertificate)
 	if err != nil {
 		return err
 	}
@@ -107,7 +108,7 @@ func initKube() error {
 		},
 	}
 
-	kubeClient, err = kubernetes.NewClient("https://"+cluster.Endpoint, kubeHTTPClient)
+	kubeClient, err = kubernetes.NewClient("https://"+kubeCluster.Endpoint, kubeHTTPClient)
 	if err != nil {
 		return fmt.Errorf("kubernetes HTTP client could not be created: %v", err)
 	}

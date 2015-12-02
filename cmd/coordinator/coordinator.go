@@ -161,7 +161,7 @@ func readGCSFile(name string) ([]byte, error) {
 		return []byte(b), nil
 	}
 
-	r, err := storage.NewReader(serviceCtx, stagingPrefix()+"go-builder-data", name)
+	r, err := storageClient.Bucket(stagingPrefix() + "go-builder-data").Object(name).NewReader(serviceCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -978,7 +978,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 		s1 := sha1.New()
 		io.WriteString(s1, buildLog)
 		objName := fmt.Sprintf("%s/%s_%x.log", bs.rev[:8], bs.name, s1.Sum(nil)[:4])
-		wr := storage.NewWriter(serviceCtx, buildLogBucket(), objName)
+		wr := storageClient.Bucket(buildLogBucket()).Object(objName).NewWriter(serviceCtx)
 		wr.ContentType = "text/plain; charset=utf-8"
 		wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
 		if _, err := io.WriteString(wr, buildLog); err != nil {
@@ -1591,7 +1591,7 @@ func (st *buildStatus) writeSnapshot() error {
 	}
 	defer tgz.Close()
 
-	wr := storage.NewWriter(serviceCtx, snapBucket(), st.snapshotObjectName())
+	wr := storageClient.Bucket(snapBucket()).Object(st.snapshotObjectName()).NewWriter(serviceCtx)
 	wr.ContentType = "application/octet-stream"
 	wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
 	if _, err := io.Copy(wr, tgz); err != nil {
