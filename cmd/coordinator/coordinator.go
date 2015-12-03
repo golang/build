@@ -1059,7 +1059,8 @@ type BuildletPool interface {
 	// The rev is git hash. Implementations should not use it for
 	// anything except for log messages or VM naming.
 	//
-	// Clients must Close when done with the client.
+	// Users of GetBuildlet must both call Client.Close when done
+	// with the client as well as cancel the provided Context.
 	GetBuildlet(ctx context.Context, machineType, rev string, el eventTimeLogger) (*buildlet.Client, error)
 
 	String() string // TODO(bradfitz): more status stuff

@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"go4.org/cloud/gceutil"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/kubernetes"
@@ -40,10 +41,12 @@ var (
 	initKubeCalled   bool
 	registryPrefix   = "gcr.io"
 	kubeCluster      *container.Cluster
+	kubeInstances    gceutil.InstanceGroupAndManager
 )
 
 const (
-	clusterName = "buildlets"
+	clusterName      = "buildlets"
+	makeSmallTimeout = 10 * time.Minute
 )
 
 // initGCE must be called before initKube
@@ -65,6 +68,28 @@ func initKube() error {
 	kubeCluster, err = containerService.Projects.Zones.Clusters.Get(projectID, projectZone, clusterName).Do()
 	if err != nil {
 		return fmt.Errorf("cluster %q could not be found in project %q, zone %q: %v", clusterName, projectID, projectZone, err)
+	}
+
+	if len(kubeCluster.InstanceGroupUrls) != 1 {
+		return fmt.Errorf("kubernetes cluster instance group URLs = %q; want exactly 1 entry", kubeCluster.InstanceGroupUrls)
+	}
+	instanceGroupURL := kubeCluster.InstanceGroupUrls[0]
+
+	if ig, err := gceutil.InstanceGroups(computeService, projectID, projectZone); err != nil {
+		return fmt.Errorf("failed to list instance groups: %v", err)
+	} else {
+		var ok bool
+		kubeInstances, ok = ig[instanceGroupURL]
+		if !ok {
+			var found []string
+			for k := range ig {
+				found = append(found, k)
+			}
+			return fmt.Errorf("Kubernetes cluster claimed to have instance group url %q but it wasn't found. Found: %q", instanceGroupURL, found)
+		}
+		if kubeInstances.Manager == nil {
+			return fmt.Errorf("Kubernetes instance group %q is not managed", instanceGroupURL)
+		}
 	}
 
 	// Decode certs
@@ -128,6 +153,7 @@ var kubePool = &kubeBuildletPool{
 type kubeBuildletPool struct {
 	mu sync.Mutex // guards all following
 
+	makeSmallTimer *time.Timer          // timer which resizes pool down to 1 node
 	pods           map[string]time.Time // pod instance name -> creationTime
 	cpuCapacity    *api.Quantity        // cpu capacity as reported by the Kubernetes api
 	memoryCapacity *api.Quantity
@@ -279,8 +305,31 @@ func (p *kubeBuildletPool) setPodUsed(podName string, used bool) {
 		// Track cpu and memory usage
 		p.cpuUsage.Sub(buildlet.BuildletCPU)
 		p.memoryUsage.Sub(buildlet.BuildletMemory)
-
+		if len(p.pods) == 0 {
+			if p.makeSmallTimer == nil {
+				p.makeSmallTimer = time.AfterFunc(makeSmallTimeout, p.makeSmallMaybe)
+			} else {
+				p.makeSmallTimer.Reset(makeSmallTimeout)
+			}
+		}
 	}
+}
+
+// makeSmallMaybe sees if the cluster is still idle and if so, resizes
+// it down to only 1 node.
+func (p *kubeBuildletPool) makeSmallMaybe() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.pods) > 0 {
+		// Guess we found work to do.
+		return
+	}
+	log.Printf("kube pool: resizing down to minimum size")
+	op, err := computeService.InstanceGroupManagers.Resize(projectID, projectZone, kubeInstances.Manager.SelfLink, 1).Do()
+	if err != nil {
+		log.Printf("kube pool: resizing down to minimum size: %v", err)
+	}
+	log.Printf("kube pool: resizing down to minimum is happening. op: %v", op)
 }
 
 func (p *kubeBuildletPool) podUsed(podName string) bool {
