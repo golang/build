@@ -37,7 +37,7 @@ import (
 	"sync"
 	"time"
 
-	"camlistore.org/pkg/syncutil"
+	"go4.org/syncutil"
 
 	"golang.org/x/build"
 	"golang.org/x/build/buildlet"
