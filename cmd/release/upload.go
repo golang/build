@@ -49,10 +49,13 @@ type File struct {
 var fileRe = regexp.MustCompile(`^(go[a-z0-9-.]+)\.(src|([a-z0-9]+)-([a-z0-9]+)(?:-([a-z0-9.]+))?)\.(tar\.gz|zip|pkg|msi)$`)
 
 func upload(files []string) error {
-	ctx, err := serviceContext()
+	ctx := context.Background()
+	c, err := storageClient(ctx)
 	if err != nil {
 		return err
 	}
+	defer c.Close()
+
 	for _, name := range files {
 		base := filepath.Base(name)
 		log.Printf("Uploading %v", base)
@@ -68,14 +71,14 @@ func upload(files []string) error {
 			b.OS = m[3]
 			b.Arch = m[4]
 		}
-		if err := uploadFile(ctx, &b, version, name); err != nil {
+		if err := uploadFile(ctx, c, &b, version, name); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func uploadFile(ctx context.Context, b *Build, version, filename string) error {
+func uploadFile(ctx context.Context, c *storage.Client, b *Build, version, filename string) error {
 	file, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return err
@@ -83,7 +86,7 @@ func uploadFile(ctx context.Context, b *Build, version, filename string) error {
 	base := filepath.Base(filename)
 
 	// Upload the file to Google Cloud Storage.
-	wr := storage.NewWriter(ctx, storageBucket, base)
+	wr := c.Bucket(storageBucket).Object(base).NewWriter(ctx)
 	wr.ACL = []storage.ACLRule{
 		{Entity: storage.AllUsers, Role: storage.RoleReader},
 	}
@@ -129,7 +132,7 @@ func uploadFile(ctx context.Context, b *Build, version, filename string) error {
 
 }
 
-func serviceContext() (context.Context, error) {
+func storageClient(ctx context.Context) (*storage.Client, error) {
 	file := filepath.Join(os.Getenv("HOME"), "keys", "golang-org.service.json")
 	blob, err := ioutil.ReadFile(file)
 	if err != nil {
@@ -139,5 +142,5 @@ func serviceContext() (context.Context, error) {
 	if err != nil {
 		return nil, err
 	}
-	return cloud.NewContext(projectID, config.Client(context.Background())), nil
+	return storage.NewClient(ctx, cloud.WithBaseHTTP(config.Client(ctx)))
 }
