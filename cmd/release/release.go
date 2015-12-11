@@ -123,6 +123,8 @@ type Build struct {
 	Static bool // Statically-link binaries.
 
 	Builder string // Key for dashboard.Builders.
+
+	Goarm int // GOARM value if set.
 }
 
 func (b *Build) String() string {
@@ -148,6 +150,12 @@ var builds = []*Build{
 		OS:      "linux",
 		Arch:    "386",
 		Builder: "linux-386",
+	},
+	{
+		OS:      "linux",
+		Arch:    "arm",
+		Builder: "linux-arm",
+		Goarm:   6, // for compatibility with all Raspberry Pi models.
 	},
 	{
 		OS:      "linux",
@@ -302,6 +310,11 @@ func (b *Build) make() error {
 		"GOPATH="+work+sep+goPath,
 		"GOBIN=",
 	)
+
+	if b.Goarm > 0 {
+		env = append(env, fmt.Sprintf("GOARM=%d", b.Goarm))
+	}
+
 	if b.Static {
 		env = append(env, "GO_DISTFLAGS=-s")
 	}
