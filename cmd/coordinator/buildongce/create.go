@@ -7,11 +7,13 @@ package main // import "golang.org/x/build/cmd/coordinator/buildongce"
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -32,6 +34,9 @@ var (
 	ssd         = flag.Bool("ssd", true, "use a solid state disk (faster, more expensive)")
 	coordinator = flag.String("coord", "https://storage.googleapis.com/go-builder-data/coordinator", "Coordinator binary URL")
 	staging     = flag.Bool("staging", false, "change default -project and -coordinator flags to their default dev cluster values, as well as use 'staging-' prefixed OAuth token files.")
+	makeDisks   = flag.Bool("make_basepin", false, "Create the basepin disk images for all builders, then stop. Does not create the VM.")
+
+	useDefTokenSource = flag.Bool("default_token_source", true, "Use the golang.org/x/oauth2/google.DefaultTokenSource (may cause problems on VMs on GCE without the right scopes)")
 )
 
 func stagingPrefix() string {
@@ -106,6 +111,13 @@ func main() {
 	oauthClient := oauth2.NewClient(oauth2.NoContext, tokenSource())
 
 	computeService, _ := compute.New(oauthClient)
+
+	if *makeDisks {
+		if err := makeBasepinDisks(computeService); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 
 	natIP := *staticIP
 	if natIP == "" {
@@ -184,31 +196,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create instance: %v", err)
 	}
-	opName := op.Name
-	log.Printf("Created. Waiting on operation %v", opName)
-OpLoop:
-	for {
-		time.Sleep(2 * time.Second)
-		op, err := computeService.ZoneOperations.Get(*proj, *zone, opName).Do()
-		if err != nil {
-			log.Fatalf("Failed to get op %s: %v", opName, err)
-		}
-		switch op.Status {
-		case "PENDING", "RUNNING":
-			log.Printf("Waiting on operation %v", opName)
-			continue
-		case "DONE":
-			if op.Error != nil {
-				for _, operr := range op.Error.Errors {
-					log.Printf("Error: %+v", operr)
-				}
-				log.Fatalf("Failed to start.")
-			}
-			log.Printf("Success. %+v", op)
-			break OpLoop
-		default:
-			log.Fatalf("Unknown status %q: %+v", op.Status, op)
-		}
+	if err := awaitOp(computeService, op); err != nil {
+		log.Fatalf("failed to start: %v", err)
 	}
 
 	inst, err := computeService.Instances.Get(*proj, *zone, *instName).Do()
@@ -219,11 +208,44 @@ OpLoop:
 	log.Printf("Instance: %s", ij)
 }
 
+func awaitOp(svc *compute.Service, op *compute.Operation) error {
+	opName := op.Name
+	log.Printf("Waiting on operation %v", opName)
+	for {
+		time.Sleep(2 * time.Second)
+		op, err := svc.ZoneOperations.Get(*proj, *zone, opName).Do()
+		if err != nil {
+			return fmt.Errorf("Failed to get op %s: %v", opName, err)
+		}
+		switch op.Status {
+		case "PENDING", "RUNNING":
+			log.Printf("Waiting on operation %v", opName)
+			continue
+		case "DONE":
+			if op.Error != nil {
+				var last error
+				for _, operr := range op.Error.Errors {
+					log.Printf("Error: %+v", operr)
+					last = fmt.Errorf("%v", operr)
+				}
+				return last
+			}
+			log.Printf("Success. %+v", op)
+			return nil
+		default:
+			return fmt.Errorf("Unknown status %q: %+v", op.Status, op)
+		}
+	}
+}
+
 func tokenSource() oauth2.TokenSource {
-	var tokensource oauth2.TokenSource
-	tokenSource, err := google.DefaultTokenSource(oauth2.NoContext)
-	if err == nil {
-		return tokenSource
+	var ts oauth2.TokenSource
+	var err error
+	if *useDefTokenSource {
+		ts, err = google.DefaultTokenSource(oauth2.NoContext)
+		if err == nil {
+			return ts
+		}
 	}
 	oauthConfig := &oauth2.Config{
 		// The client-id and secret should be for an "Installed Application" when using
@@ -242,8 +264,8 @@ func tokenSource() oauth2.TokenSource {
 	}
 	tokenFileName := stagingPrefix() + "token.dat"
 	tokenFile := tokenCacheFile(tokenFileName)
-	tokenSource = oauth2.ReuseTokenSource(nil, tokenFile)
-	token, err := tokenSource.Token()
+	ts = oauth2.ReuseTokenSource(nil, tokenFile)
+	token, err := ts.Token()
 	if err != nil {
 		log.Printf("Error getting token from %s: %v", tokenFileName, err)
 		log.Printf("Get auth code from %v", oauthConfig.AuthCodeURL("my-state"))
@@ -258,9 +280,9 @@ func tokenSource() oauth2.TokenSource {
 		if err := tokenFile.WriteToken(token); err != nil {
 			log.Fatalf("Error writing to %s: %v", tokenFileName, err)
 		}
-		tokenSource = oauth2.ReuseTokenSource(token, nil)
+		ts = oauth2.ReuseTokenSource(token, nil)
 	}
-	return tokensource
+	return ts
 }
 
 func instanceDisk(svc *compute.Service) *compute.AttachedDisk {
@@ -334,4 +356,65 @@ func (f tokenCacheFile) WriteToken(t *oauth2.Token) error {
 		return err
 	}
 	return ioutil.WriteFile(string(f), jt, 0600)
+}
+
+func makeBasepinDisks(svc *compute.Service) error {
+	// Try to find it by name.
+	imList, err := svc.Images.List(*proj).Do()
+	if err != nil {
+		return err
+	}
+	if imList.NextPageToken != "" {
+		return errors.New("too many images; pagination not supported")
+	}
+	diskList, err := svc.Disks.List(*proj, *zone).Do()
+	if err != nil {
+		return err
+	}
+	if diskList.NextPageToken != "" {
+		return errors.New("too many disks; pagination not supported (yet?)")
+	}
+
+	need := make(map[string]*compute.Image) // keys like "https://www.googleapis.com/compute/v1/projects/symbolic-datum-552/global/images/linux-buildlet-arm"
+	for _, im := range imList.Items {
+		need[im.SelfLink] = im
+	}
+
+	for _, d := range diskList.Items {
+		if !strings.HasPrefix(d.Name, "basepin-") {
+			continue
+		}
+		if si, ok := need[d.SourceImage]; ok && d.SourceImageId == fmt.Sprint(si.Id) {
+			log.Printf("Have %s: %s (%v)\n", d.Name, d.SourceImage, d.SourceImageId)
+			delete(need, d.SourceImage)
+		}
+	}
+
+	var needed []string
+	for imageName := range need {
+		needed = append(needed, imageName)
+	}
+	sort.Strings(needed)
+	for _, n := range needed {
+		log.Printf("Need %v", n)
+	}
+	for i, imName := range needed {
+		im := need[imName]
+		log.Printf("(%d/%d) Creating %s ...", i+1, len(needed), im.Name)
+		op, err := svc.Disks.Insert(*proj, *zone, &compute.Disk{
+			Description:   "zone-cached basepin image of " + im.Name,
+			Name:          "basepin-" + im.Name + "-" + fmt.Sprint(im.Id),
+			SizeGb:        im.DiskSizeGb,
+			SourceImage:   im.SelfLink,
+			SourceImageId: fmt.Sprint(im.Id),
+			Type:          "https://www.googleapis.com/compute/v1/projects/" + *proj + "/zones/" + *zone + "/diskTypes/pd-ssd",
+		}).Do()
+		if err != nil {
+			return err
+		}
+		if err := awaitOp(svc, op); err != nil {
+			log.Fatalf("failed to create: %v", err)
+		}
+	}
+	return nil
 }
