@@ -1001,7 +1001,8 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 		if numFail == 1 && remain > 0 {
 			if err := gerritClient.SetReview(ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
 				Message: fmt.Sprintf(
-					"This change failed on %s:\n"+
+					"Build is still in progress...\n"+
+						"This change failed on %s:\n"+
 						"See %s\n\n"+
 						"Consult https://build.golang.org/ to see whether it's a new failure. Other builds still in progress; subsequent failure notices suppressed until final report.",
 					bs.name, failLogURL),
