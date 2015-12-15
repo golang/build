@@ -48,7 +48,7 @@ func push(args []string) error {
 		fs.Usage()
 	}
 	name := fs.Arg(0)
-	bc, err := namedClient(name)
+	bc, conf, err := clientAndConf(name)
 	if err != nil {
 		return err
 	}
@@ -87,15 +87,11 @@ func push(args []string) error {
 	}
 
 	if !haveGo14 {
-		if conf, ok := namedConfig(name); ok {
-			if conf.Go14URL != "" {
-				log.Printf("installing go1.4")
-				if err := bc.PutTarFromURL(conf.Go14URL, "go1.4"); err != nil {
-					return err
-				}
+		if conf.Go14URL != "" {
+			log.Printf("installing go1.4")
+			if err := bc.PutTarFromURL(conf.Go14URL, "go1.4"); err != nil {
+				return err
 			}
-		} else {
-			log.Printf("unknown buildlet type %q has no go1.4 directory; ignoring.", name)
 		}
 	}
 
