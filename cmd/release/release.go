@@ -41,6 +41,7 @@ var (
 	version   = flag.String("version", "", "Version string (go1.5.2)")
 	coordAddr = flag.String("coordinator", "", "Coordinator instance address (default is production)")
 	user      = flag.String("user", username(), "coordinator username, appended to 'user-'")
+	skipTests = flag.Bool("skip_tests", false, "skip tests; run make.bash instead of all.bash (only use if you ran trybots first)")
 
 	uploadMode = flag.Bool("upload", false, "Upload files (exclusive to all other flags)")
 )
@@ -315,11 +316,17 @@ func (b *Build) make() error {
 	// Execute build
 	b.logf("Building.")
 	out := new(bytes.Buffer)
-	all := filepath.Join(goDir, bc.AllScript())
+	script := bc.AllScript()
+	scriptArgs := bc.AllScriptArgs()
+	if *skipTests {
+		script = bc.MakeScript()
+		scriptArgs = bc.MakeScriptArgs()
+	}
+	all := filepath.Join(goDir, script)
 	remoteErr, err := client.Exec(all, buildlet.ExecOpts{
 		Output:   out,
 		ExtraEnv: env,
-		Args:     bc.AllScriptArgs(),
+		Args:     scriptArgs,
 	})
 	if err != nil {
 		return err
