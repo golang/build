@@ -346,8 +346,12 @@ func (b *Build) make() error {
 	}
 	runGo := func(args ...string) error {
 		out := new(bytes.Buffer)
+		var execOut io.Writer = out
+		if *watch && *target != "" {
+			execOut = io.MultiWriter(out, os.Stdout)
+		}
 		remoteErr, err := client.Exec(goCmd, buildlet.ExecOpts{
-			Output:   out,
+			Output:   execOut,
 			Dir:      ".", // root of buildlet work directory
 			Args:     args,
 			ExtraEnv: env,
