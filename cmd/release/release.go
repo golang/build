@@ -32,6 +32,7 @@ import (
 
 var (
 	target = flag.String("target", "", "If specified, build specific target platform ('linux-amd64')")
+	watch  = flag.Bool("watch", false, "Watch the build. Only compatible with -target")
 
 	rev       = flag.String("rev", "", "Go revision to build")
 	toolsRev  = flag.String("tools", "", "Tools revision to build")
@@ -323,8 +324,12 @@ func (b *Build) make() error {
 		scriptArgs = bc.MakeScriptArgs()
 	}
 	all := filepath.Join(goDir, script)
+	var execOut io.Writer = out
+	if *watch && *target != "" {
+		execOut = io.MultiWriter(out, os.Stdout)
+	}
 	remoteErr, err := client.Exec(all, buildlet.ExecOpts{
-		Output:   out,
+		Output:   execOut,
 		ExtraEnv: env,
 		Args:     scriptArgs,
 	})
