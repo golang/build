@@ -119,8 +119,7 @@ type Build struct {
 	OS, Arch string
 	Source   bool
 
-	Race   bool // Build race detector.
-	Static bool // Statically-link binaries.
+	Race bool // Build race detector.
 
 	Builder string // Key for dashboard.Builders.
 
@@ -161,7 +160,6 @@ var builds = []*Build{
 		OS:      "linux",
 		Arch:    "amd64",
 		Race:    true,
-		Static:  true,
 		Builder: "linux-amd64",
 	},
 	{
@@ -173,7 +171,6 @@ var builds = []*Build{
 		OS:      "freebsd",
 		Arch:    "amd64",
 		Race:    true,
-		Static:  true,
 		Builder: "freebsd-amd64-gce101",
 	},
 	{
@@ -313,10 +310,6 @@ func (b *Build) make() error {
 
 	if b.Goarm > 0 {
 		env = append(env, fmt.Sprintf("GOARM=%d", b.Goarm))
-	}
-
-	if b.Static {
-		env = append(env, "GO_DISTFLAGS=-s")
 	}
 
 	// Execute build
