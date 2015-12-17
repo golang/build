@@ -368,29 +368,8 @@ func (b *Build) make() error {
 	if b.Race {
 		b.logf("Building race detector.")
 
-		// Because on release branches, go install -a std is a NOP,
-		// we have to resort to delete pkg/$GOOS_$GOARCH, install -race,
-		// and then reinstall std so that we're not left with a slower,
-		// race-enabled cmd/go, etc.
-		if err := client.RemoveAll(path.Join(goDir, "pkg", b.OS+"_"+b.Arch)); err != nil {
-			return err
-		}
-		if err := runGo("tool", "dist", "install", "runtime"); err != nil {
-			return err
-		}
 		if err := runGo("install", "-race", "std"); err != nil {
 			return err
-		}
-		if err := runGo("install", "std"); err != nil {
-			return err
-		}
-		// Re-building go command leaves old versions of go.exe as go.exe~ on windows.
-		// See (*builder).copyFile in $GOROOT/src/cmd/go/build.go for details.
-		// Remove it manually.
-		if b.OS == "windows" {
-			if err := client.RemoveAll(goCmd + "~"); err != nil {
-				return err
-			}
 		}
 	}
 
