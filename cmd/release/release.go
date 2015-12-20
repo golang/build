@@ -133,7 +133,7 @@ func (b *Build) String() string {
 		return "src"
 	}
 	if b.Goarm != 0 {
-		return fmt.Sprintf("%v-%v%v", b.OS, b.Arch, b.Goarm)
+		return fmt.Sprintf("%v-%vv%vl", b.OS, b.Arch, b.Goarm)
 	}
 	return fmt.Sprintf("%v-%v", b.OS, b.Arch)
 }
