@@ -486,7 +486,7 @@ var windowsData = map[string]string{
 <?endif?>
 
 <Product
-    Id="FF5B30B2-08C2-11E1-85A2-6ACA4824019B"
+    Id="*"
     Name="Go Programming Language $(var.Arch) $(var.GoVersion)"
     Language="1033"
     Version="$(var.WixGoVersion)"
