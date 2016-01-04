@@ -183,14 +183,20 @@ type Repo struct {
 // specified by srcURL to a new directory inside dir.
 // If dstURL is not empty, changes from the source repository will
 // be mirrored to the specified destination repository.
-// The path argument is the base import path of the repository,
+// The importPath argument is the base import path of the repository,
 // and should be empty for the main Go repo.
 // The dash argument should be set true if commits to this
 // repo should be reported to the build dashboard.
-func NewRepo(dir, srcURL, dstURL, path string, dash bool) (*Repo, error) {
+func NewRepo(dir, srcURL, dstURL, importPath string, dash bool) (*Repo, error) {
+	var root string
+	if importPath == "" {
+		root = filepath.Join(dir, "go")
+	} else {
+		root = filepath.Join(dir, path.Base(importPath))
+	}
 	r := &Repo{
-		path:     path,
-		root:     filepath.Join(dir, filepath.Base(path)),
+		path:     importPath,
+		root:     root,
 		commits:  make(map[string]*Commit),
 		branches: make(map[string]*Branch),
 		mirror:   dstURL != "",
