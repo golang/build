@@ -870,6 +870,9 @@ func newTrySet(key tryKey) (*trySet, error) {
 
 	go ts.notifyStarting()
 	for i, bconf := range tryBuilders {
+		if key.Repo != "go" && !bconf.BuildSubrepos() {
+			continue
+		}
 		brev := tryKeyToBuilderRev(bconf.Name, key)
 		bs, err := newBuild(brev)
 		if err != nil {
