@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"go4.org/cloud/gceutil"
+	"go4.org/cloud/google/gceutil"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/kubernetes"
