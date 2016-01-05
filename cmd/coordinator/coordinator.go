@@ -99,7 +99,10 @@ var (
 	tryList    []tryKey
 )
 
-var tryBuilders []dashboard.BuildConfig
+var (
+	tryBuilders    []dashboard.BuildConfig // for testing the go repo
+	subTryBuilders []dashboard.BuildConfig // for testing sub-repos
+)
 
 func initTryBuilders() {
 	tryList := []string{
@@ -123,6 +126,9 @@ func initTryBuilders() {
 		conf, ok := dashboard.Builders[bname]
 		if ok {
 			tryBuilders = append(tryBuilders, conf)
+			if conf.BuildSubrepos() {
+				subTryBuilders = append(subTryBuilders, conf)
+			}
 		} else {
 			log.Printf("ignoring invalid try builder config %q", bname)
 		}
@@ -859,20 +865,22 @@ func newTrySet(key tryKey) (*trySet, error) {
 		return nil, errHeadUnknown
 	}
 
+	builders := tryBuilders
+	if key.Repo != "go" {
+		builders = subTryBuilders
+	}
+
 	log.Printf("Starting new trybot set for %v", key)
 	ts := &trySet{
 		tryKey: key,
 		trySetState: trySetState{
-			remain: len(tryBuilders),
-			builds: make([]*buildStatus, len(tryBuilders)),
+			remain: len(builders),
+			builds: make([]*buildStatus, len(builders)),
 		},
 	}
 
 	go ts.notifyStarting()
-	for i, bconf := range tryBuilders {
-		if key.Repo != "go" && !bconf.BuildSubrepos() {
-			continue
-		}
+	for i, bconf := range builders {
 		brev := tryKeyToBuilderRev(bconf.Name, key)
 		bs, err := newBuild(brev)
 		if err != nil {
