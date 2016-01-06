@@ -1535,10 +1535,33 @@ func (st *buildStatus) doSnapshot() error {
 
 var timeSnapshotCorruptionFixed = time.Date(2015, time.November, 1, 0, 0, 0, 0, time.UTC)
 
+// TODO(adg): prune this map over time (might never be necessary, though)
+var snapshotExistsCache = struct {
+	sync.Mutex
+	m map[builderRev]bool
+}{m: map[builderRev]bool{}}
+
 // snapshotExists reports whether the snapshot exists and isn't corrupt.
 // Unfortunately we put some corrupt ones in for awhile, so this check is
 // now more paranoid than it used to be.
-func (br *builderRev) snapshotExists() bool {
+func (br *builderRev) snapshotExists() (ok bool) {
+	// If we already know this snapshot exists, don't check again.
+	snapshotExistsCache.Lock()
+	exists := snapshotExistsCache.m[*br]
+	snapshotExistsCache.Unlock()
+	if exists {
+		return true
+	}
+
+	// When the function exits, cache an affirmative result.
+	defer func() {
+		if ok {
+			snapshotExistsCache.Lock()
+			snapshotExistsCache.m[*br] = true
+			snapshotExistsCache.Unlock()
+		}
+	}()
+
 	resp, err := http.Head(br.snapshotURL())
 	if err != nil || resp.StatusCode != http.StatusOK {
 		return false
