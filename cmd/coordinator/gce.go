@@ -102,6 +102,11 @@ func initGCE() error {
 			return errors.New("The coordinator is not running with access to read and write Compute resources. VM support disabled.")
 
 		}
+
+		externalIP, err = metadata.ExternalIP()
+		if err != nil {
+			return fmt.Errorf("ExternalIP: %v", err)
+		}
 	}
 
 	inStaging = projectID == stagingProjectID
@@ -118,10 +123,6 @@ func initGCE() error {
 		log.Fatalf("storage.NewClient: %v", err)
 	}
 
-	externalIP, err = metadata.ExternalIP()
-	if err != nil {
-		return fmt.Errorf("ExternalIP: %v", err)
-	}
 	computeService, _ = compute.New(httpClient)
 	errTryDeps = checkTryBuildDeps()
 	if errTryDeps != nil {
