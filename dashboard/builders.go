@@ -24,7 +24,7 @@ type BuildConfig struct {
 
 	Notes       string // notes for humans
 	Owner       string // e.g. "bradfitz@golang.org", empty means golang-dev
-	VMImage     string // e.g. "openbsd-amd64-56"
+	VMImage     string // e.g. "openbsd-amd64-58"
 	KubeImage   string // e.g. "linux-buildlet-std:latest" (suffix after "gcr.io/<PROJ>/")
 	machineType string // optional GCE instance type
 	Go14URL     string // URL to built Go 1.4 tar.gz
@@ -169,7 +169,7 @@ func (c *BuildConfig) BuildSubrepos() bool {
 	case "darwin-amd64-10_10",
 		"freebsd-386-gce101", "freebsd-amd64-gce101",
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
-		"openbsd-386-gce56", "openbsd-amd64-gce56",
+		"openbsd-386-gce58", "openbsd-amd64-gce58",
 		"plan9-386",
 		"windows-386-gce", "windows-amd64-gce":
 		return true
@@ -413,19 +413,19 @@ func init() {
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
-		Name:           "openbsd-amd64-gce56",
-		Notes:          "OpenBSD 5.6; GCE VM is built from script in build/env/openbsd-amd64",
-		VMImage:        "openbsd-amd64-56",
+		Name:           "openbsd-amd64-gce58",
+		Notes:          "OpenBSD 5.8; GCE VM is built from script in build/env/openbsd-amd64",
+		VMImage:        "openbsd-amd64-58",
 		machineType:    "n1-highcpu-2",
-		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-openbsd-amd64.tar.gz",
+		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-openbsd-amd64-gce58.tar.gz",
 		NumTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
-		Name:           "openbsd-386-gce56",
-		Notes:          "OpenBSD 5.6; GCE VM is built from script in build/env/openbsd-386",
-		VMImage:        "openbsd-386-56",
+		Name:           "openbsd-386-gce58",
+		Notes:          "OpenBSD 5.8; GCE VM is built from script in build/env/openbsd-386",
+		VMImage:        "openbsd-386-58",
 		machineType:    "n1-highcpu-2",
-		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-openbsd-386.tar.gz",
+		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-openbsd-386-gce58.tar.gz",
 		NumTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
