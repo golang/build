@@ -6,7 +6,7 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -31,15 +31,15 @@ const (
 )
 
 // File represents a file on the golang.org downloads page.
-// It should be kept in sync with the (currently Google-interal) download code.
+// It should be kept in sync with the download code in x/tools/godoc/dl.
 type File struct {
-	Filename string
-	OS       string
-	Arch     string
-	Version  string
-	Checksum string
-	Size     int64
-	Kind     string // "archive", "installer", "source"
+	Filename       string
+	OS             string
+	Arch           string
+	Version        string
+	ChecksumSHA256 string
+	Size           int64
+	Kind           string // "archive", "installer", "source"
 }
 
 // fileRe matches the files created by the release tool, such as:
@@ -106,13 +106,13 @@ func uploadFile(ctx context.Context, c *storage.Client, b *Build, version, filen
 		kind = "installer"
 	}
 	req, err := json.Marshal(File{
-		Filename: base,
-		Version:  version,
-		OS:       b.OS,
-		Arch:     b.Arch,
-		Checksum: fmt.Sprintf("%x", sha1.Sum(file)),
-		Size:     int64(len(file)),
-		Kind:     kind,
+		Filename:       base,
+		Version:        version,
+		OS:             b.OS,
+		Arch:           b.Arch,
+		ChecksumSHA256: fmt.Sprintf("%x", sha256.Sum256(file)),
+		Size:           int64(len(file)),
+		Kind:           kind,
 	})
 	if err != nil {
 		return err
