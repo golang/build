@@ -331,7 +331,14 @@ func cp(dst, src string) error {
 		}
 	}
 	_, err = io.Copy(df, sf)
-	return err
+	if err != nil {
+		return err
+	}
+	if err := df.Close(); err != nil {
+		return err
+	}
+	// Ensure the destination has the same mtime as the source.
+	return os.Chtimes(dst, fi.ModTime(), fi.ModTime())
 }
 
 func cpDir(dst, src string) error {
