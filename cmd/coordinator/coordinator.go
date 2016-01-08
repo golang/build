@@ -360,6 +360,7 @@ func stagingClusterBuilders() map[string]dashboard.BuildConfig {
 	for _, name := range []string{
 		"linux-arm",
 		"linux-amd64",
+		"linux-amd64-kube",
 		"linux-amd64-race",
 		"windows-amd64-gce",
 		"plan9-386",
