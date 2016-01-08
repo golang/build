@@ -98,6 +98,6 @@ var tmplDoSomeWork = template.Must(template.New("").Parse(`
 {{range .}}
 <form action="/dosomework/{{.}}" method="POST"><button>{{.}}</button></form><br\>
 {{end}}
-<form action="/dosomework/linux-amd64" method="POST"><button>linux-amd64</button></form><br\>
+<form action="/dosomework/linux-amd64-kube" method="POST"><button>linux-amd64-kube</button></form><br\>
 </body></html>
 `))

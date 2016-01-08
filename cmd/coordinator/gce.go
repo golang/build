@@ -27,6 +27,7 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	monitoring "google.golang.org/api/cloudmonitoring/v2beta2"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/cloud"
@@ -102,7 +103,6 @@ func initGCE() error {
 			return errors.New("The coordinator is not running with access to read and write Compute resources. VM support disabled.")
 
 		}
-
 		externalIP, err = metadata.ExternalIP()
 		if err != nil {
 			return fmt.Errorf("ExternalIP: %v", err)
@@ -115,7 +115,7 @@ func initGCE() error {
 	}
 	projectRegion = projectZone[:strings.LastIndex(projectZone, "-")] // "us-central1"
 
-	tokenSource, err = google.DefaultTokenSource(oauth2.NoContext)
+	tokenSource, err = google.DefaultTokenSource(oauth2.NoContext, compute.CloudPlatformScope, monitoring.MonitoringScope)
 	if err != nil {
 		log.Fatalf("failed to get a token source: %v", err)
 	}

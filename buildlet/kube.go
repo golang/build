@@ -85,6 +85,10 @@ func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, build
 					Image:           imageID(opts.ImageRegistry, conf.KubeImage),
 					ImagePullPolicy: api.PullAlways,
 					Resources: api.ResourceRequirements{
+						Requests: api.ResourceList{
+							api.ResourceCPU:    BuildletCPU,
+							api.ResourceMemory: BuildletMemory,
+						},
 						Limits: api.ResourceList{
 							api.ResourceCPU:    BuildletCPU,
 							api.ResourceMemory: BuildletMemory,
