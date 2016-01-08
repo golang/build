@@ -285,16 +285,10 @@ func init() {
 		Name:    "freebsd-386-gce101",
 		VMImage: "freebsd-amd64-gce101",
 		//BuildletType: "freebsd-amd64-gce101",
-		machineType: "n1-highcpu-2",
-		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.freebsd-amd64",
-		Go14URL:     "https://storage.googleapis.com/go-builder-data/go1.4-freebsd-amd64.tar.gz",
-		// TODO(bradfitz): setting GOHOSTARCH=386 should work
-		// to eliminate some unnecessary work (it works on
-		// Linux), but fails on FreeBSD with:
-		//   ##### ../misc/cgo/testso
-		//   Shared object "libcgosotest.so" not found, required by "main"
-		// Maybe this is a clang thing? We'll see when we do linux clang too.
-		env:            []string{"GOARCH=386", "CC=clang"},
+		machineType:    "n1-highcpu-2",
+		buildletURL:    "http://storage.googleapis.com/go-builder-data/buildlet.freebsd-amd64",
+		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-freebsd-amd64.tar.gz",
+		env:            []string{"GOARCH=386", "GOHOSTARCH=386", "CC=clang"},
 		NumTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
