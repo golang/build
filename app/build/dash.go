@@ -150,6 +150,11 @@ var goPackages = []*Package{
 		Name: "tools",
 		Path: "golang.org/x/tools",
 	},
+	{
+		Kind: "subrepo",
+		Name: "tour",
+		Path: "golang.org/x/tour",
+	},
 }
 
 // gccgoDash is the dashboard for gccgo.
