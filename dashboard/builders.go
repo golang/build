@@ -329,7 +329,7 @@ func init() {
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		allScriptArgs: []string{
 			// Filtering pattern to buildall.bash:
-			"^(linux-arm64|linux-ppc64|linux-ppc64le|nacl-arm|plan9-amd64|solaris-amd64|netbsd-386|netbsd-amd64|netbsd-arm|freebsd-arm|darwin-386)$",
+			"^(linux-arm64|linux-ppc64|linux-ppc64le|linux-mips.*|nacl-arm|plan9-amd64|solaris-amd64|netbsd-386|netbsd-amd64|netbsd-arm|freebsd-arm|darwin-386)$",
 		},
 	})
 	addBuilder(BuildConfig{
