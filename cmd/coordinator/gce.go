@@ -115,7 +115,10 @@ func initGCE() error {
 	}
 	projectRegion = projectZone[:strings.LastIndex(projectZone, "-")] // "us-central1"
 
-	tokenSource, _ = google.DefaultTokenSource(oauth2.NoContext)
+	tokenSource, err = google.DefaultTokenSource(oauth2.NoContext)
+	if err != nil {
+		log.Fatalf("failed to get a token source: %v", err)
+	}
 	httpClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
 	serviceCtx = cloud.NewContext(projectID, httpClient)
 	storageClient, err = storage.NewClient(serviceCtx, cloud.WithBaseHTTP(httpClient))
