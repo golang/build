@@ -89,9 +89,9 @@ resources:
       monitoring_service: "none"
       node_config:
         machine_type: "{{ .KubeMachineType }}"
-        oauth_scopes: 
+        oauth_scopes:
           - "https://www.googleapis.com/auth/cloud-platform"
-      master_auth: 
+      master_auth:
         username: "admin"
         password: "{{ .KubePassword }}"
 - name: autoscaler
@@ -100,9 +100,9 @@ resources:
     zone: "{{ .Zone }}"
     name: "{{ .KubeName }}"
     target: "$(ref.{{ .KubeName }}.instanceGroupUrls[0])"
-    autoscalingPolicy: 
-      minNumReplicas: {{ .KubeMinNodes }} 
-      maxNumReplicas: {{ .KubeMaxNodes }} 
+    autoscalingPolicy:
+      minNumReplicas: {{ .KubeMinNodes }}
+      maxNumReplicas: {{ .KubeMaxNodes }}
       coolDownPeriodSec: 600
       customMetricUtilizations:
         - metric: custom.cloudmonitoring.googleapis.com/cluster/cpu_used

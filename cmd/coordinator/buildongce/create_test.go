@@ -30,9 +30,9 @@ resources:
       monitoring_service: "none"
       node_config:
         machine_type: "n1-standard-8"
-        oauth_scopes: 
+        oauth_scopes:
           - "https://www.googleapis.com/auth/cloud-platform"
-      master_auth: 
+      master_auth:
         username: "admin"
         password: ""
 - name: autoscaler
@@ -41,10 +41,10 @@ resources:
     zone: "us-central1-f"
     name: "buildlets"
     target: "$(ref.buildlets.instanceGroupUrls[0])"
-    autoscalingPolicy: 
-      minNumReplicas: 1 
-      maxNumReplicas: 5 
-      coolDownPeriodSec: 600 
+    autoscalingPolicy:
+      minNumReplicas: 1
+      maxNumReplicas: 5
+      coolDownPeriodSec: 600
       customMetricUtilizations:
         - metric: custom.cloudmonitoring.googleapis.com/cluster/cpu_used
           utilizationTarget: .5
