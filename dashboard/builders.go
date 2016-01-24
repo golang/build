@@ -501,7 +501,7 @@ func init() {
 		Notes:          "Mac Mini running OS X 10.10 (Yosemite)",
 		Go14URL:        "https://storage.googleapis.com/go-builder-data/go1.4-darwin-amd64.tar.gz",
 		IsReverse:      true,
-		env:            []string{"GOARCH=386"},
+		env:            []string{"GOARCH=386", "GOHOSTARCH=386"},
 		NumTestHelpers: 0, // disabled per golang.org/issue/12979
 	})
 	addBuilder(BuildConfig{
