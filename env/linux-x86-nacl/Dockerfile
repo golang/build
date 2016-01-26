@@ -7,14 +7,14 @@
 # We need more modern libc than Debian stable as used in base, so we're
 # using Debian sid instead.
 
-FROM gobuilders/linux-x86-sid
+FROM gcr.io/symbolic-datum-552/linux-x86-std:latest
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
 ENV DEBIAN_FRONTEND noninteractive
 
 RUN apt-get update
-RUN apt-get install -y --no-install-recommends bzip2
-RUN (cd /usr/bin && curl -s -O https://storage.googleapis.com/nativeclient-mirror/nacl/nacl_sdk/39.0.2171.99/naclsdk_linux.tar.bz2 && tar xjf naclsdk_linux.tar.bz2 --strip-components=2 pepper_39/tools/sel_ldr_x86_32 pepper_39/tools/sel_ldr_x86_64 && rm naclsdk_linux.tar.bz2)
+RUN apt-get install -y --no-install-recommends bzip2 lib32stdc++6
+RUN (cd /usr/bin && curl -s -O https://storage.googleapis.com/nativeclient-mirror/nacl/nacl_sdk/44.0.2403.157/naclsdk_linux.tar.bz2 && tar xjf naclsdk_linux.tar.bz2 --strip-components=2 pepper_44/tools/sel_ldr_x86_32 pepper_44/tools/sel_ldr_x86_64 && rm naclsdk_linux.tar.bz2)
 
 ADD go_nacl_386_exec /usr/bin/
 ADD go_nacl_amd64p32_exec /usr/bin/

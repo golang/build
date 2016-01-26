@@ -413,6 +413,19 @@ func init() {
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
+		Name:        "nacl-386-kube",
+		KubeImage:   "linux-x86-nacl:latest",
+		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
+		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
+		//BuildletType: "nacl-amd64p32",
+	})
+	addBuilder(BuildConfig{
+		Name:        "nacl-amd64p32-kube",
+		KubeImage:   "linux-x86-nacl:latest",
+		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
+		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
+	})
+	addBuilder(BuildConfig{
 		Name:           "openbsd-amd64-gce58",
 		Notes:          "OpenBSD 5.8; GCE VM is built from script in build/env/openbsd-amd64",
 		VMImage:        "openbsd-amd64-58",
