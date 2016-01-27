@@ -417,7 +417,6 @@ func init() {
 		KubeImage:   "linux-x86-nacl:latest",
 		buildletURL: "http://storage.googleapis.com/go-builder-data/buildlet.linux-amd64",
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
-		//BuildletType: "nacl-amd64p32",
 	})
 	addBuilder(BuildConfig{
 		Name:        "nacl-amd64p32-kube",
@@ -568,6 +567,9 @@ func init() {
 }
 
 func addBuilder(c BuildConfig) {
+	if c.KubeImage != "" {
+		return // Disabled for now. https://golang.org/issue/14112
+	}
 	if c.Name == "" {
 		panic("empty name")
 	}
