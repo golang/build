@@ -122,7 +122,11 @@ func main() {
 
 	c := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
 	query := strings.Join(flag.Args(), " ")
-	cis, err := c.QueryChanges("is:open -project:scratch -message:do-not-review "+query, gerrit.QueryChangesOpt{
+	open := "is:open"
+	if strings.Contains(query, " is:") || strings.HasPrefix(query, "is:") {
+		open = ""
+	}
+	cis, err := c.QueryChanges(open+" -project:scratch -message:do-not-review "+query, gerrit.QueryChangesOpt{
 		N: 5000,
 		Fields: []string{
 			"LABELS",
@@ -222,6 +226,7 @@ type CL struct {
 	Issues             []int          // issues referenced by commit message
 	Scores             map[string]int // current review scores
 	Files              []string       // files changed in CL
+	Status             string         // "new", "submitted", "merged", ...
 }
 
 func (cl *CL) Age() time.Duration {
@@ -342,6 +347,7 @@ func parseCL(ci *gerrit.ChangeInfo) *CL {
 		Author:      shorten(ci.Owner.Email),
 		AuthorEmail: ci.Owner.Email,
 		Scores:      scores,
+		Status:      strings.ToLower(ci.Status),
 	}
 
 	// Determine reviewer, in priorty order.
