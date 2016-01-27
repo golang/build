@@ -140,7 +140,7 @@ func main() {
 
 	buildEnv.KubePassword = randomPassword()
 
-	oauthClient, err = google.DefaultClient(oauth2.NoContext)
+	oauthClient, err = google.DefaultClient(oauth2.NoContext, compute.CloudPlatformScope, compute.ComputeScope, compute.DevstorageFullControlScope)
 	if err != nil {
 		log.Fatalf("could not create oAuth client: %v", err)
 	}
