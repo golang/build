@@ -173,7 +173,7 @@ func createCoordinator() error {
 		}
 	}
 
-	natIP := *staticIP
+	natIP := buildEnv.StaticIP
 	if natIP == "" {
 		// Try to find it by name.
 		aggAddrList, err := computeService.Addresses.AggregatedList(buildEnv.ProjectName).Do()
