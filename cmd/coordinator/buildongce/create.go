@@ -14,11 +14,12 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"text/template"
 	"time"
+
+	"go4.org/cloud/google/gceutil"
 
 	"golang.org/x/build/buildenv"
 	"golang.org/x/oauth2"
@@ -30,7 +31,6 @@ import (
 
 var (
 	proj            = flag.String("project", "", "Optional name of the Google Cloud Platform project to create the infrastructure in. If empty, the project from a configuration defined in golang.org/x/build/buildenv will be used.")
-	sshPub          = flag.String("ssh_public_key", "", "Optional ssh public key file to authorize. Can modify later in Google's web UI.")
 	staticIP        = flag.String("static_ip", "", "Static IP to use. If empty, automatic.")
 	reuseDisk       = flag.Bool("reuse_disk", true, "Whether disk images should be reused between shutdowns/restarts.")
 	ssd             = flag.Bool("ssd", true, "If true, use a solid state disk (faster, more expensive)")
@@ -193,13 +193,6 @@ func createCoordinator() error {
 	}
 
 	cloudConfig := strings.Replace(baseConfig, "$COORDINATOR", buildEnv.CoordinatorURL, 1)
-	if *sshPub != "" {
-		key := strings.TrimSpace(readFile(*sshPub))
-		cloudConfig += fmt.Sprintf("\nssh_authorized_keys:\n    - %s\n", key)
-	}
-	if os.Getenv("USER") == "bradfitz" {
-		cloudConfig += fmt.Sprintf("\nssh_authorized_keys:\n    - %s\n", "ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAIEAwks9dwWKlRC+73gRbvYtVg0vdCwDSuIlyt4z6xa/YU/jTDynM4R4W10hm2tPjy8iR1k8XhDv4/qdxe6m07NjG/By1tkmGpm1mGwho4Pr5kbAAy/Qg+NLCSdAYnnE00FQEcFOC15GFVMOW2AzDGKisReohwH9eIzHPzdYQNPRWXE= bradfitz@papag.bradfitz.com")
-	}
 	const maxCloudConfig = 32 << 10 // per compute API docs
 	if len(cloudConfig) > maxCloudConfig {
 		return fmt.Errorf("cloud config length of %d bytes is over %d byte limit", len(cloudConfig), maxCloudConfig)
@@ -352,7 +345,10 @@ OpLoop:
 }
 
 func instanceDisk(svc *compute.Service) *compute.AttachedDisk {
-	const imageURL = "https://www.googleapis.com/compute/v1/projects/coreos-cloud/global/images/coreos-stable-723-3-0-v20150804"
+	imageURL, err := gceutil.CoreOSImageURL(oauthClient)
+	if err != nil {
+		log.Fatalf("Error fetching CoreOS Image URL: %v", err)
+	}
 	diskName := buildEnv.CoordinatorName + "-coreos-stateless-pd"
 
 	if *reuseDisk {
