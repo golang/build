@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -88,11 +87,10 @@ func (c *Client) RunPod(ctx context.Context, pod *api.Pod) (*api.Pod, error) {
 
 	createdPod, err := c.AwaitPodNotPending(ctx, podResult.Name, podResult.ObjectMeta.ResourceVersion)
 	if err != nil {
-		log.Printf("Timed out waiting for pod to leave pending state. Pod will be deleted.")
 		// The pod did not leave the pending state. We should try to manually delete it before
 		// returning an error.
 		c.DeletePod(context.Background(), podResult.Name)
-		return nil, err
+		return nil, fmt.Errorf("timed out waiting for pod %q to leave pending state: %v", pod.Name, err)
 	}
 	return createdPod, nil
 }
