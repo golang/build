@@ -7,7 +7,7 @@
 # We need more modern libc than Debian stable as used in base, so we're
 # using Debian sid instead.
 
-FROM gcr.io/symbolic-datum-552/linux-x86-std:latest
+FROM {{REPO}}/linux-x86-std:latest
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
 ENV DEBIAN_FRONTEND noninteractive
