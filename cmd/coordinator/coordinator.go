@@ -773,6 +773,10 @@ func findTryWork() error {
 			log.Printf("Warning: skipping incomplete %#v", ci)
 			continue
 		}
+		if ci.Project == "build" {
+			// Skip trybot request in build repo.
+			continue
+		}
 		key := tryKey{
 			Project:  ci.Project,
 			Branch:   ci.Branch,
