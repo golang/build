@@ -250,15 +250,23 @@ func doRequest(method, url string, body io.Reader) ([]byte, error) {
 const message = `
 Hi! Thanks for the PR!
 
-However, our project doesn't use GitHub's Pull Requests,
+Unfortunately, the Go project doesn't use GitHub's Pull Requests,
 so we can't accept your contribution this way.
-
 We instead use a code review system called Gerrit.
-You can find the details in our Contribution Guidelines:
-https://golang.org/doc/contribute.html
+
+The good news is, I'm here to help.
+
+From here, you have two options:
+
+1. Read our [Contribution Guidelines](https://golang.org/doc/contribute.html) to learn how to send a change with Gerrit.
+2. Or, [create an issue](https://golang.org/issue/new) about the issue this PR addresses, so that someone else can fix it.
 
 I'm going to close this Pull Request now.
-Please consider sending this change using Gerrit.
+Please don't be offended! :-)
+
+Thanks again,
+
+GopherBot (on behalf of the Go Team)
 `
 
 var messageJSON []byte
