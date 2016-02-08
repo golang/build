@@ -52,7 +52,52 @@ func (c *Client) httpClient() *http.Client {
 	return http.DefaultClient
 }
 
-func (c *Client) do(dst interface{}, method, path string, arg url.Values, body interface{}) error {
+// HTTPError is the error type returned when a Gerrit API call does not return
+// the expected status.
+type HTTPError struct {
+	Res     *http.Response
+	Body    []byte // 4KB prefix
+	BodyErr error  // any error reading Body
+}
+
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("HTTP status %s; %s", e.Res.Status, e.Body)
+}
+
+// doArg is one of urlValues, reqBody, or wantResStatus
+type doArg interface {
+	isDoArg()
+}
+
+type wantResStatus int
+
+func (wantResStatus) isDoArg() {}
+
+type reqBody struct{ body interface{} }
+
+func (reqBody) isDoArg() {}
+
+type urlValues url.Values
+
+func (urlValues) isDoArg() {}
+
+func (c *Client) do(dst interface{}, method, path string, opts ...doArg) error {
+	var arg url.Values
+	var body interface{}
+	var wantStatus = http.StatusOK
+	for _, opt := range opts {
+		switch opt := opt.(type) {
+		case wantResStatus:
+			wantStatus = int(opt)
+		case reqBody:
+			body = opt.body
+		case urlValues:
+			arg = url.Values(opt)
+		default:
+			panic(fmt.Sprintf("internal error; unsupported type %T", opt))
+		}
+	}
+
 	var bodyr io.Reader
 	var contentType string
 	if body != nil {
@@ -88,9 +133,9 @@ func (c *Client) do(dst interface{}, method, path string, arg url.Values, body i
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
-		return fmt.Errorf("HTTP status %s; %s", res.Status, body)
+	if res.StatusCode != wantStatus {
+		body, err := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
+		return &HTTPError{res, body, err}
 	}
 
 	// The JSON response begins with an XSRF-defeating header
@@ -289,11 +334,11 @@ func (c *Client) QueryChanges(q string, opts ...QueryChangesOpt) ([]*ChangeInfo,
 		return nil, errors.New("only 1 option struct supported")
 	}
 	var changes []*ChangeInfo
-	err := c.do(&changes, "GET", "/changes/", url.Values{
+	err := c.do(&changes, "GET", "/changes/", urlValues{
 		"q": {q},
 		"n": condInt(opt.N),
 		"o": opt.Fields,
-	}, nil)
+	})
 	return changes, err
 }
 
@@ -302,7 +347,7 @@ func (c *Client) QueryChanges(q string, opts ...QueryChangesOpt) ([]*ChangeInfo,
 // For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#get-change-detail
 func (c *Client) GetChangeDetail(changeID string) (*ChangeInfo, error) {
 	var change ChangeInfo
-	err := c.do(&change, "GET", "/changes/"+changeID+"/detail", nil, nil)
+	err := c.do(&change, "GET", "/changes/"+changeID+"/detail")
 	if err != nil {
 		return nil, err
 	}
@@ -325,13 +370,88 @@ type reviewInfo struct {
 func (c *Client) SetReview(changeID, revision string, review ReviewInput) error {
 	var res reviewInfo
 	return c.do(&res, "POST", fmt.Sprintf("/changes/%s/revisions/%s/review", changeID, revision),
-		nil, review)
+		reqBody{review})
 }
 
 // AbandonChange abandons the given change.
 func (c *Client) AbandonChange(changeID string) error {
 	var change ChangeInfo
-	return c.do(&change, "POST", "/changes/"+changeID+"/abandon", nil, nil)
+	return c.do(&change, "POST", "/changes/"+changeID+"/abandon")
+}
+
+// ProjectInput contains the options for creating a new project.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#project-input
+type ProjectInput struct {
+	Parent      string `json:"parent,omitempty"`
+	Description string `json:"description,omitempty"`
+	SubmitType  string `json:"submit_type,omitempty"`
+
+	CreateNewChangeForAllNotInTarget string `json:"create_new_change_for_all_not_in_target,omitempty"`
+
+	// TODO(bradfitz): more, as needed.
+}
+
+// ProjectInfo is information about a Gerrit project.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#project-info
+type ProjectInfo struct {
+	ID          string            `json:"id"`
+	Name        string            `json:"name"`
+	Parent      string            `json:"parent"`
+	Description string            `json:"description"`
+	State       string            `json:"state"`
+	Branches    map[string]string `json:"branches"`
+}
+
+// CreateProject creates a new project.
+func (c *Client) CreateProject(name string, p ...ProjectInput) (ProjectInfo, error) {
+	var pi ProjectInput
+	if len(p) > 1 {
+		panic("invalid use of multiple project inputs")
+	}
+	if len(p) == 1 {
+		pi = p[0]
+	}
+	var res ProjectInfo
+	err := c.do(&res, "PUT", fmt.Sprintf("/projects/%s", name), reqBody{&pi}, wantResStatus(http.StatusCreated))
+	return res, err
+}
+
+// ErrProjectNotExist is returned when a project doesn't exist.
+// It is not necessarily returned unless a method is documented as
+// returning it.
+var ErrProjectNotExist = errors.New("gerrit: requested project does not exist")
+
+// GetProjectInfo returns info about a project.
+// If the project doesn't exist, the error will be ErrProjectNotExist.
+func (c *Client) GetProjectInfo(name string) (ProjectInfo, error) {
+	var res ProjectInfo
+	err := c.do(&res, "GET", fmt.Sprintf("/projects/%s", name))
+	if he, ok := err.(*HTTPError); ok && he.Res.StatusCode == 404 {
+		return res, ErrProjectNotExist
+	}
+	return res, err
+}
+
+// BranchInfo is information about a branch.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#branch-info
+type BranchInfo struct {
+	Ref       string `json:"ref"`
+	Revision  string `json:"revision"`
+	CanDelete bool   `json:"can_delete"`
+}
+
+// GetProjectBranches returns a project's branches.
+func (c *Client) GetProjectBranches(name string) (map[string]BranchInfo, error) {
+	var res []BranchInfo
+	err := c.do(&res, "GET", fmt.Sprintf("/projects/%s/branches/", name))
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]BranchInfo{}
+	for _, bi := range res {
+		m[bi.Ref] = bi
+	}
+	return m, nil
 }
 
 // GetAccountInfo gets the specified account's information from Gerrit.
@@ -342,7 +462,7 @@ func (c *Client) AbandonChange(changeID string) error {
 // access to the host, not to any particular repository.
 func (c *Client) GetAccountInfo(accountID string) (AccountInfo, error) {
 	var res AccountInfo
-	err := c.do(&res, "GET", fmt.Sprintf("/accounts/%s", accountID), nil, nil)
+	err := c.do(&res, "GET", fmt.Sprintf("/accounts/%s", accountID))
 	return res, err
 }
 
