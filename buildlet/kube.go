@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/build/buildenv"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/kubernetes"
 	"golang.org/x/build/kubernetes/api"
@@ -28,6 +29,9 @@ var (
 
 // PodOpts control how new pods are started.
 type PodOpts struct {
+	// ProjectID is the GCE project ID. Required.
+	ProjectID string
+
 	// ImageRegistry specifies the Docker registry Kubernetes
 	// will use to create the pod. Required.
 	ImageRegistry string
@@ -122,7 +126,7 @@ func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, build
 	// which the pods are configured to download at boot and run.
 	// This lets us/ update the buildlet more easily than
 	// rebuilding the whole pod image.
-	addEnv("META_BUILDLET_BINARY_URL", conf.BuildletBinaryURL())
+	addEnv("META_BUILDLET_BINARY_URL", conf.BuildletBinaryURL(buildenv.ByProjectID(opts.ProjectID)))
 	addEnv("META_BUILDER_TYPE", builderType)
 	if !opts.TLS.IsZero() {
 		addEnv("META_TLS_CERT", opts.TLS.CertPEM)

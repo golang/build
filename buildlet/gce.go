@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/build/buildenv"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/compute/v1"
@@ -158,7 +159,7 @@ Try:
 	// which the VMs are configured to download at boot and run.
 	// This lets us/ update the buildlet more easily than
 	// rebuilding the whole VM image.
-	addMeta("buildlet-binary-url", conf.BuildletBinaryURL())
+	addMeta("buildlet-binary-url", conf.BuildletBinaryURL(buildenv.ByProjectID(opts.ProjectID)))
 	addMeta("builder-type", builderType)
 	if !opts.TLS.IsZero() {
 		addMeta("tls-cert", opts.TLS.CertPEM)

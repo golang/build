@@ -26,14 +26,16 @@ import (
 	"sort"
 
 	"golang.org/x/build"
+	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
-	"golang.org/x/build/dashboard"
 )
 
 var (
 	user = flag.String("user", username(), "gomote server username. You must have the token for user-$USER. The error message will say where to put it.")
 
 	staging = flag.Bool("staging", false, "if true, use the staging build coordinator and buildlets")
+
+	buildEnv = buildenv.Production
 )
 
 type command struct {
@@ -111,8 +113,7 @@ func main() {
 	flag.Usage = usage
 	flag.Parse()
 	if *staging {
-		// TODO(cmang): make this configurable.
-		dashboard.BuildletBucket = "dev-go-builder-data"
+		buildEnv = buildenv.Staging
 	}
 	args := flag.Args()
 	if len(args) == 0 {

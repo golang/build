@@ -9,6 +9,7 @@ package main
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
@@ -48,16 +50,10 @@ func gceAPIGate() {
 	<-apiCallTicker.C
 }
 
-const (
-	stagingProjectID   = "go-dashboard-dev"
-	stagingProjectZone = "us-central1-f"
-)
-
 // Initialized by initGCE:
 var (
-	projectID      string
-	projectZone    string
-	projectRegion  string
+	buildEnv *buildenv.Environment
+
 	computeService *compute.Service
 	externalIP     string
 	tokenSource    oauth2.TokenSource
@@ -70,57 +66,49 @@ var (
 	initGCECalled bool
 )
 
-func stagingPrefix() string {
-	if !initGCECalled {
-		panic("stagingPrefix called before initGCE")
-	}
-	if inStaging {
-		return "dev-" // legacy prefix; must match resource names
-	}
-	return ""
-}
-
 func initGCE() error {
 	initGCECalled = true
 	var err error
-	// Use the staging project if not on GCE. This assumes the DefaultTokenSource
-	// credential used below has access to that project.
-	if !metadata.OnGCE() {
-		projectID = stagingProjectID
-		projectZone = stagingProjectZone
-	} else {
-		projectID, err = metadata.ProjectID()
-		if err != nil {
-			return fmt.Errorf("failed to get current GCE ProjectID: %v", err)
-		}
-		projectZone, err = metadata.Get("instance/zone")
+
+	// If the coordinator is running on a GCE instance and a
+	// buildEnv was not specified with the env flag, set the
+	// buildEnvName to the project ID
+	if metadata.OnGCE() && *buildEnvName == "" {
+		*buildEnvName, _ = metadata.ProjectID()
+	}
+
+	buildEnv := buildenv.ByProjectID(*buildEnvName)
+
+	// If running on GCE, override the zone and static IP, and check service account permissions.
+	if metadata.OnGCE() {
+		projectZone, err := metadata.Get("instance/zone")
 		if err != nil || projectZone == "" {
 			return fmt.Errorf("failed to get current GCE zone: %v", err)
 		}
 		// Convert the zone from "projects/1234/zones/us-central1-a" to "us-central1-a".
 		projectZone = path.Base(projectZone)
+		buildEnv.Zone = projectZone
+
+		buildEnv.StaticIP, err = metadata.ExternalIP()
+		if err != nil {
+			return fmt.Errorf("ExternalIP: %v", err)
+		}
+
 		if !hasComputeScope() {
 			return errors.New("The coordinator is not running with access to read and write Compute resources. VM support disabled.")
 
 		}
-		externalIP, err = metadata.ExternalIP()
-		if err != nil {
-			return fmt.Errorf("ExternalIP: %v", err)
-		}
 	}
 
-	inStaging = projectID == stagingProjectID
-	if inStaging {
-		log.Printf("Running in staging cluster (%q)", projectID)
-	}
-	projectRegion = projectZone[:strings.LastIndex(projectZone, "-")] // "us-central1"
+	cfgDump, _ := json.MarshalIndent(buildEnv, "", "  ")
+	log.Printf("Loaded configuration %q for project %q:\n%s", *buildEnvName, buildEnv.ProjectName, cfgDump)
 
 	tokenSource, err = google.DefaultTokenSource(oauth2.NoContext, compute.CloudPlatformScope, monitoring.MonitoringScope)
 	if err != nil {
 		log.Fatalf("failed to get a token source: %v", err)
 	}
 	httpClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
-	serviceCtx = cloud.NewContext(projectID, httpClient)
+	serviceCtx = cloud.NewContext(buildEnv.ProjectName, httpClient)
 	storageClient, err = storage.NewClient(serviceCtx, cloud.WithBaseHTTP(httpClient))
 	if err != nil {
 		log.Fatalf("storage.NewClient: %v", err)
@@ -142,10 +130,10 @@ func checkTryBuildDeps() error {
 	if !hasStorageScope() {
 		return errors.New("coordinator's GCE instance lacks the storage service scope")
 	}
-	wr := storageClient.Bucket(buildLogBucket()).Object("hello.txt").NewWriter(serviceCtx)
+	wr := storageClient.Bucket(buildEnv.LogBucket).Object("hello.txt").NewWriter(serviceCtx)
 	fmt.Fprintf(wr, "Hello, world! Coordinator start-up at %v", time.Now())
 	if err := wr.Close(); err != nil {
-		return fmt.Errorf("test write of a GCS object to bucket %q failed: %v", buildLogBucket(), err)
+		return fmt.Errorf("test write of a GCS object to bucket %q failed: %v", buildEnv.LogBucket, err)
 	}
 	if inStaging {
 		// Don't expect to write to Gerrit in staging mode.
@@ -194,9 +182,9 @@ func (p *gceBuildletPool) pollQuotaLoop() {
 
 func (p *gceBuildletPool) pollQuota() {
 	gceAPIGate()
-	reg, err := computeService.Regions.Get(projectID, projectRegion).Do()
+	reg, err := computeService.Regions.Get(buildEnv.ProjectName, buildEnv.Region()).Do()
 	if err != nil {
-		log.Printf("Failed to get quota for %s/%s: %v", projectID, projectRegion, err)
+		log.Printf("Failed to get quota for %s/%s: %v", buildEnv.ProjectName, buildEnv.Region(), err)
 		return
 	}
 	p.mu.Lock()
@@ -253,8 +241,8 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, typ, rev string, el e
 	el.logEventTime("creating_gce_instance", instName)
 	log.Printf("Creating GCE VM %q for %s at %s", instName, typ, rev)
 	bc, err := buildlet.StartNewVM(tokenSource, instName, typ, buildlet.VMOpts{
-		ProjectID:   projectID,
-		Zone:        projectZone,
+		ProjectID:   buildEnv.ProjectName,
+		Zone:        buildEnv.Zone,
 		Description: fmt.Sprintf("Go Builder for %s at %s", typ, rev),
 		DeleteIn:    deleteIn,
 		OnInstanceRequested: func() {
@@ -282,7 +270,7 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, typ, rev string, el e
 		el.logEventTime("gce_buildlet_create_failure", fmt.Sprintf("%s: %v", instName, err))
 		log.Printf("Failed to create VM for %s, %s: %v", typ, rev, err)
 		if needDelete {
-			deleteVM(projectZone, instName)
+			deleteVM(buildEnv.Zone, instName)
 			p.putVMCountQuota(conf.GCENumCPU())
 		}
 		p.setInstanceUsed(instName, false)
@@ -305,7 +293,7 @@ func (p *gceBuildletPool) putBuildlet(bc *buildlet.Client, typ, instName string)
 	// buildlet client library between Close, Destroy/Halt, and
 	// tracking execution errors.  That was all half-baked before
 	// and thus removed. Now Close always destroys everything.
-	deleteVM(projectZone, instName)
+	deleteVM(buildEnv.Zone, instName)
 	p.setInstanceUsed(instName, false)
 
 	conf, ok := dashboard.Builders[typ]
@@ -474,7 +462,7 @@ func (p *gceBuildletPool) cleanZoneVMs(zone string) error {
 	// TODO(bradfitz): revist this code if we ever start running
 	// thousands of VMs.
 	gceAPIGate()
-	list, err := computeService.Instances.List(projectID, zone).Do()
+	list, err := computeService.Instances.List(buildEnv.ProjectName, zone).Do()
 	if err != nil {
 		return fmt.Errorf("listing instances: %v", err)
 	}
@@ -523,7 +511,7 @@ var deletedVMCache = lru.New(100) // keyed by instName
 func deleteVM(zone, instName string) (operation string, err error) {
 	deletedVMCache.Add(instName, token{})
 	gceAPIGate()
-	op, err := computeService.Instances.Delete(projectID, zone, instName).Do()
+	op, err := computeService.Instances.Delete(buildEnv.ProjectName, zone, instName).Do()
 	apiErr, ok := err.(*googleapi.Error)
 	if ok {
 		if apiErr.Code == 404 {

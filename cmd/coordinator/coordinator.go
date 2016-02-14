@@ -62,27 +62,18 @@ var Version string // set by linker -X
 const devPause = false
 
 var (
-	role = flag.String("role", "coordinator", "Which role this binary should run as. Valid options: coordinator, watcher")
-
+	role          = flag.String("role", "coordinator", "Which role this binary should run as. Valid options: coordinator, watcher")
 	masterKeyFile = flag.String("masterkey", "", "Path to builder master key. Else fetched using GCE project attribute 'builder-master-key'.")
 
 	// TODO(bradfitz): remove this list and just query it from the compute API:
 	// http://godoc.org/google.golang.org/api/compute/v1#RegionsService.Get
 	// and Region.Zones: http://godoc.org/google.golang.org/api/compute/v1#Region
-	cleanZones = flag.String("zones", "us-central1-a,us-central1-b,us-central1-f", "Comma-separated list of zones to periodically clean of stale build VMs (ones that failed to shut themselves down)")
-
-	mode            = flag.String("mode", "", "valid modes are 'dev', 'prod', or '' for auto-detect. dev means localhost development, not be confused with staging on go-dashboard-dev, which is still the 'prod' mode.")
+	cleanZones      = flag.String("zones", "us-central1-a,us-central1-b,us-central1-f", "Comma-separated list of zones to periodically clean of stale build VMs (ones that failed to shut themselves down)")
+	mode            = flag.String("mode", "", "Valid modes are 'dev', 'prod', or '' for auto-detect. dev means localhost development, not be confused with staging on go-dashboard-dev, which is still the 'prod' mode.")
+	buildEnvName    = flag.String("env", "", "The build environment configuration to use. Not required if running on GCE, but will override GCE default config if set.")
 	devEnableGCE    = flag.Bool("dev_gce", false, "Whether or not to enable the GCE pool when in dev mode. The pool is enabled by default in prod mode.")
 	enableDebugProd = flag.Bool("debug_prod", false, "Enable the /dosomework URL to manually schedule a build on a prod coordinator. Enabled by default in dev mode.")
 )
-
-func buildLogBucket() string {
-	return stagingPrefix() + "go-build-log"
-}
-
-func snapBucket() string {
-	return stagingPrefix() + "go-build-snap"
-}
 
 // LOCK ORDER:
 //   statusMu, buildStatus.mu, trySet.mu
@@ -160,7 +151,7 @@ func readGCSFile(name string) ([]byte, error) {
 		return []byte(b), nil
 	}
 
-	r, err := storageClient.Bucket(stagingPrefix() + "go-builder-data").Object(name).NewReader(serviceCtx)
+	r, err := storageClient.Bucket(buildEnv.BuildletBucket).Object(name).NewReader(serviceCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +306,6 @@ func main() {
 		}
 
 		if inStaging {
-			dashboard.BuildletBucket = "dev-go-builder-data"
 			dashboard.Builders = stagingClusterBuilders()
 		}
 		initTryBuilders()
@@ -1031,7 +1021,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 		s1 := sha1.New()
 		io.WriteString(s1, buildLog)
 		objName := fmt.Sprintf("%s/%s_%x.log", bs.rev[:8], bs.name, s1.Sum(nil)[:4])
-		wr := storageClient.Bucket(buildLogBucket()).Object(objName).NewWriter(serviceCtx)
+		wr := storageClient.Bucket(buildEnv.LogBucket).Object(objName).NewWriter(serviceCtx)
 		wr.ContentType = "text/plain; charset=utf-8"
 		wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
 		if _, err := io.WriteString(wr, buildLog); err != nil {
@@ -1042,7 +1032,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 			log.Printf("Failed to write to GCS: %v", err)
 			return
 		}
-		failLogURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", buildLogBucket(), objName)
+		failLogURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", buildEnv.LogBucket, objName)
 
 		bs.mu.Lock()
 		bs.failURL = failLogURL
@@ -1669,7 +1659,7 @@ func (br *builderRev) snapshotObjectName() string {
 
 // snapshotURL is the absolute URL of the snapshot object (see above).
 func (br *builderRev) snapshotURL() string {
-	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", snapBucket(), br.snapshotObjectName())
+	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", buildEnv.SnapBucket, br.snapshotObjectName())
 }
 
 func (st *buildStatus) writeSnapshot() error {
@@ -1682,7 +1672,7 @@ func (st *buildStatus) writeSnapshot() error {
 	}
 	defer tgz.Close()
 
-	wr := storageClient.Bucket(snapBucket()).Object(st.snapshotObjectName()).NewWriter(serviceCtx)
+	wr := storageClient.Bucket(buildEnv.SnapBucket).Object(st.snapshotObjectName()).NewWriter(serviceCtx)
 	wr.ContentType = "application/octet-stream"
 	wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
 	if _, err := io.Copy(wr, tgz); err != nil {

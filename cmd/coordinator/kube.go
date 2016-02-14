@@ -60,7 +60,7 @@ func initKube() error {
 	initKubeCalled = true
 
 	// projectID was set by initGCE
-	registryPrefix += "/" + projectID
+	registryPrefix += "/" + buildEnv.ProjectName
 	if !hasCloudPlatformScope() {
 		return errors.New("coordinator not running with access to the Cloud Platform scope.")
 	}
@@ -79,9 +79,9 @@ func initKube() error {
 	tsService = monitoring.NewTimeseriesService(monService)
 	metricDescService = monitoring.NewMetricDescriptorsService(monService)
 
-	kubeCluster, err = containerService.Projects.Zones.Clusters.Get(projectID, projectZone, clusterName).Do()
+	kubeCluster, err = containerService.Projects.Zones.Clusters.Get(buildEnv.ProjectName, buildEnv.Zone, clusterName).Do()
 	if err != nil {
-		return fmt.Errorf("cluster %q could not be found in project %q, zone %q: %v", clusterName, projectID, projectZone, err)
+		return fmt.Errorf("cluster %q could not be found in project %q, zone %q: %v", clusterName, buildEnv.ProjectName, buildEnv.Zone, err)
 	}
 
 	// Decode certs
@@ -163,18 +163,18 @@ func tryCreateMetrics() {
 			{Key: clusterNameLabelKey},
 			{Key: serviceLabelKey},
 		},
-		Project: projectID,
+		Project: buildEnv.ProjectName,
 		TypeDescriptor: &monitoring.MetricDescriptorTypeDescriptor{
 			MetricType: "gauge",
 			ValueType:  "double",
 		},
 	}
-	_, err := metricDescService.Create(projectID, metric).Do()
+	_, err := metricDescService.Create(buildEnv.ProjectName, metric).Do()
 	if err != nil {
 		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == 403 {
 			log.Printf("Error creating CPU metric: could not authenticate to Google Cloud Monitoring. If you are running the coordinator on a local machine in dev mode, configure service account credentials for authentication as described at https://cloud.google.com/monitoring/api/authentication#service_account_authorization. Error message: %v\n", err)
 		} else {
-			log.Fatalf("Failed to create CPU metric for project. Ensure the Google Cloud Monitoring API is enabled for project %v: %v.", projectID, err)
+			log.Fatalf("Failed to create CPU metric for project. Ensure the Google Cloud Monitoring API is enabled for project %v: %v.", buildEnv.ProjectName, err)
 		}
 	}
 
@@ -185,18 +185,18 @@ func tryCreateMetrics() {
 			{Key: clusterNameLabelKey},
 			{Key: serviceLabelKey},
 		},
-		Project: projectID,
+		Project: buildEnv.ProjectName,
 		TypeDescriptor: &monitoring.MetricDescriptorTypeDescriptor{
 			MetricType: "gauge",
 			ValueType:  "double",
 		},
 	}
-	_, err = metricDescService.Create(projectID, metric).Do()
+	_, err = metricDescService.Create(buildEnv.ProjectName, metric).Do()
 	if err != nil {
 		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == 403 {
 			log.Printf("Error creating memory metric: could not authenticate to Google Cloud Monitoring. If you are running the coordinator on a local machine in dev mode, configure service account credentials for authentication as described at https://cloud.google.com/monitoring/api/authentication#service_account_authorization. Error message: %v\n", err)
 		} else {
-			log.Fatalf("Failed to create memory metric for project. Ensure the Google Cloud Monitoring API is enabled for project %v: %v.", projectID, err)
+			log.Fatalf("Failed to create memory metric for project. Ensure the Google Cloud Monitoring API is enabled for project %v: %v.", buildEnv.ProjectName, err)
 		}
 	}
 }
@@ -212,12 +212,12 @@ func (p *kubeBuildletPool) pollCapacityLoop() {
 func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 	nodes, err := kubeClient.GetNodes(ctx)
 	if err != nil {
-		log.Printf("failed to retrieve nodes to calculate cluster capacity for %s/%s: %v", projectID, projectRegion, err)
+		log.Printf("failed to retrieve nodes to calculate cluster capacity for %s/%s: %v", buildEnv.ProjectName, buildEnv.Region(), err)
 		return
 	}
 	pods, err := kubeClient.GetPods(ctx)
 	if err != nil {
-		log.Printf("failed to retrieve pods to calculate cluster capacity for %s/%s: %v", projectID, projectRegion, err)
+		log.Printf("failed to retrieve pods to calculate cluster capacity for %s/%s: %v", buildEnv.ProjectName, buildEnv.Region(), err)
 		return
 	}
 
@@ -261,7 +261,7 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 				},
 				TimeseriesDesc: &monitoring.TimeseriesDescriptor{
 					Metric:  cpuUsedMetric,
-					Project: projectID,
+					Project: buildEnv.ProjectName,
 					Labels: map[string]string{
 						clusterNameLabelKey: clusterName,
 						serviceLabelKey:     "container",
@@ -276,7 +276,7 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 				},
 				TimeseriesDesc: &monitoring.TimeseriesDescriptor{
 					Metric:  memoryUsedMetric,
-					Project: projectID,
+					Project: buildEnv.ProjectName,
 					Labels: map[string]string{
 						clusterNameLabelKey: clusterName,
 						serviceLabelKey:     "container",
@@ -286,7 +286,7 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 		},
 	}
 
-	_, err = tsService.Write(projectID, &wtr).Do()
+	_, err = tsService.Write(buildEnv.ProjectName, &wtr).Do()
 	if err != nil {
 		log.Printf("custom cluster utilization metric could not be written to Google Cloud Monitoring: %v", err)
 	}
@@ -327,6 +327,7 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, typ, rev string, el 
 	log.Printf("Creating Kubernetes pod %q for %s at %s", podName, typ, rev)
 
 	bc, err := buildlet.StartPod(ctx, kubeClient, podName, typ, buildlet.PodOpts{
+		ProjectID:     buildEnv.ProjectName,
 		ImageRegistry: registryPrefix,
 		Description:   fmt.Sprintf("Go Builder for %s at %s", typ, rev),
 		DeleteIn:      deleteIn,

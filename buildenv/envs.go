@@ -6,6 +6,11 @@
 // environments the Go build system can run in.
 package buildenv
 
+import (
+	"fmt"
+	"strings"
+)
+
 const (
 	prefix = "https://www.googleapis.com/compute/v1/projects/"
 )
@@ -17,6 +22,12 @@ type Environment struct {
 	// The GCP project name that the build infrastructure will be provisioned in.
 	// This field may be overridden as necessary without impacting other fields.
 	ProjectName string
+
+	// The IsProd flag indicates whether production functionality should be
+	// enabled. When true, GCE and Kubernetes builders are enabled and the
+	// coordinator serves on 443. Otherwise, GCE and Kubernetes builders are
+	// disabled and the coordinator serves on 8119.
+	IsProd bool
 
 	// Zone is the GCE zone that the coordinator instance and Kubernetes cluster
 	// will run in. This field may be overridden as necessary without impacting
@@ -60,16 +71,50 @@ type Environment struct {
 
 	// CoordinatorName is the hostname of the coordinator instance.
 	CoordinatorName string
+
+	// BuildletBucket is the GCS bucket that stores buildlet binaries.
+	BuildletBucket string
+
+	// The GCS bucket that logs are written to.
+	LogBucket string
+
+	// The GCS bucket that snapshots are written to.
+	SnapBucket string
 }
 
-// This method returns the URI for the environment's Machine Type.
+// MachineTypeURI returns the URI for the environment's Machine Type.
 func (e Environment) MachineTypeURI() string {
 	return e.ComputePrefix() + "/zones/" + e.Zone + "/machineTypes/" + e.MachineType
 }
 
-// This method returns the URI prefix for Compute Engine resources in a project.
+// ComputePrefix returns the URI prefix for Compute Engine resources in a project.
 func (e Environment) ComputePrefix() string {
 	return prefix + e.ProjectName
+}
+
+// Region returns the GCE region, derived from its zone.
+func (e Environment) Region() string {
+	return e.Zone[:strings.LastIndex(e.Zone, "-")]
+}
+
+// ByProjectID returns an Environment for the specified
+// project ID. It is currently limited to the symbolic-datum-552
+// and go-dashboard-dev projects.
+// ByProjectID will panic if the project ID is not known.
+func ByProjectID(projectID string) *Environment {
+	var envKeys []string
+
+	for k := range possibleEnvs {
+		envKeys = append(envKeys, k)
+	}
+
+	var env *Environment
+	env, ok := possibleEnvs[projectID]
+	if !ok {
+		panic(fmt.Sprintf("Can't get buildenv for unknown project %q. Possible envs are %s", projectID, envKeys))
+	}
+
+	return env
 }
 
 // Staging defines the environment that the coordinator and build
@@ -78,6 +123,7 @@ func (e Environment) ComputePrefix() string {
 // a custom project.
 var Staging = &Environment{
 	ProjectName:     "go-dashboard-dev",
+	IsProd:          true,
 	Zone:            "us-central1-f",
 	ZonesToClean:    []string{"us-central1-a", "us-central1-b", "us-central1-f"},
 	StaticIP:        "104.154.113.235",
@@ -85,15 +131,19 @@ var Staging = &Environment{
 	KubeMinNodes:    1,
 	KubeMaxNodes:    5,
 	KubeName:        "buildlets",
-	KubeMachineType: "n1-standard-8",
+	KubeMachineType: "n1-standard-32",
 	CoordinatorURL:  "https://storage.googleapis.com/dev-go-builder-data/coordinator",
 	CoordinatorName: "farmer",
+	BuildletBucket:  "dev-go-builder-data",
+	LogBucket:       "dev-go-build-log",
+	SnapBucket:      "dev-go-build-snap",
 }
 
 // Production defines the environment that the coordinator and build
 // infrastructure is deployed to for production usage at build.golang.org.
 var Production = &Environment{
 	ProjectName:     "symbolic-datum-552",
+	IsProd:          true,
 	Zone:            "us-central1-f",
 	ZonesToClean:    []string{"us-central1-f"},
 	StaticIP:        "107.178.219.46",
@@ -101,7 +151,16 @@ var Production = &Environment{
 	KubeMinNodes:    1,
 	KubeMaxNodes:    10,
 	KubeName:        "buildlets",
-	KubeMachineType: "n1-standard-8",
+	KubeMachineType: "n1-standard-32",
 	CoordinatorURL:  "https://storage.googleapis.com/go-builder-data/coordinator",
 	CoordinatorName: "farmer",
+	BuildletBucket:  "go-builder-data",
+	LogBucket:       "go-build-log",
+	SnapBucket:      "go-build-snap",
+}
+
+// possibleEnvs enumerate the known buildenv.Environment definitions.
+var possibleEnvs = map[string]*Environment{
+	"symbolic-datum-552": Production,
+	"go-dashboard-dev":   Staging,
 }
