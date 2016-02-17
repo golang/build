@@ -103,14 +103,9 @@ resources:
     autoscalingPolicy:
       minNumReplicas: {{ .KubeMinNodes }}
       maxNumReplicas: {{ .KubeMaxNodes }}
-      coolDownPeriodSec: 600
-      customMetricUtilizations:
-        - metric: custom.cloudmonitoring.googleapis.com/cluster/cpu_used
-          utilizationTarget: .5
-          utilizationTargetType: GAUGE
-        - metric: custom.cloudmonitoring.googleapis.com/cluster/memory_used
-          utilizationTarget: .5
-          utilizationTargetType: GAUGE`
+      coolDownPeriodSec: 1200
+      cpuUtilization:
+        utilizationTarget: .6`
 
 func readFile(v string) string {
 	slurp, err := ioutil.ReadFile(v)

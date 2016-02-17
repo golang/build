@@ -65,9 +65,15 @@ var (
 	role          = flag.String("role", "coordinator", "Which role this binary should run as. Valid options: coordinator, watcher")
 	masterKeyFile = flag.String("masterkey", "", "Path to builder master key. Else fetched using GCE project attribute 'builder-master-key'.")
 
-	mode         = flag.String("mode", "", "Valid modes are 'dev', 'prod', or '' for auto-detect. dev means localhost development, not be confused with staging on go-dashboard-dev, which is still the 'prod' mode.")
-	buildEnvName = flag.String("env", "", "The build environment configuration to use. Not required if running on GCE, but will override GCE default config if set.")
-	devEnableGCE = flag.Bool("dev_gce", false, "Whether or not to enable the GCE pool when in dev mode. The pool is enabled by default in prod mode.")
+	// TODO(bradfitz): remove this list and just query it from the compute API:
+	// http://godoc.org/google.golang.org/api/compute/v1#RegionsService.Get
+	// and Region.Zones: http://godoc.org/google.golang.org/api/compute/v1#Region
+	cleanZones = flag.String("zones", "us-central1-a,us-central1-b,us-central1-f", "Comma-separated list of zones to periodically clean of stale build VMs (ones that failed to shut themselves down)")
+
+	mode            = flag.String("mode", "", "Valid modes are 'dev', 'prod', or '' for auto-detect. dev means localhost development, not be confused with staging on go-dashboard-dev, which is still the 'prod' mode.")
+	buildEnvName    = flag.String("env", "", "The build environment configuration to use. Not required if running on GCE.")
+	devEnableGCE    = flag.Bool("dev_gce", false, "Whether or not to enable the GCE pool when in dev mode. The pool is enabled by default in prod mode.")
+	enableDebugProd = flag.Bool("debug_prod", false, "Enable the /dosomework URL to manually schedule a build on a prod coordinator. Enabled by default in dev mode.")
 )
 
 // LOCK ORDER:
@@ -375,7 +381,7 @@ func mayBuildRev(rev builderRev) bool {
 	if isBuilding(rev) {
 		return false
 	}
-	if inStaging && numCurrentBuilds() != 0 {
+	if buildEnv.MaxBuilds > 0 && numCurrentBuilds() >= buildEnv.MaxBuilds {
 		return false
 	}
 	if strings.Contains(rev.name, "netbsd") {

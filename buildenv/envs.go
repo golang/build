@@ -84,6 +84,12 @@ type Environment struct {
 
 	// The GCS bucket that snapshots are written to.
 	SnapBucket string
+
+	// The maximum number of concurrent builds that can run.
+	// The zero value indicates unlimited builds and is the default.
+	// MaxBuilds is typically used to limit the number of builds in
+	// a development or staging environment.
+	MaxBuilds int
 }
 
 // MachineTypeURI returns the URI for the environment's Machine Type.

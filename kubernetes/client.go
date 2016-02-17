@@ -53,8 +53,7 @@ func NewClient(baseURL string, client *http.Client) (*Client, error) {
 // Run creates a new pod resource in the default pod namespace with
 // the given pod API specification.
 // It returns the pod status once it has entered the Running phase.
-// An error is returned if the pod can not be created, if it does
-// does not enter the running phase within 2 minutes, or if ctx.Done
+// An error is returned if the pod can not be created, or if ctx.Done
 // is closed.
 func (c *Client) RunPod(ctx context.Context, pod *api.Pod) (*api.Pod, error) {
 	var podJSON bytes.Buffer
@@ -82,17 +81,27 @@ func (c *Client) RunPod(ctx context.Context, pod *api.Pod) (*api.Pod, error) {
 	if err := json.Unmarshal(body, &podResult); err != nil {
 		return nil, fmt.Errorf("failed to decode pod resources: %v", err)
 	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
 
-	createdPod, err := c.AwaitPodNotPending(ctx, podResult.Name, podResult.ObjectMeta.ResourceVersion)
-	if err != nil {
-		// The pod did not leave the pending state. We should try to manually delete it before
-		// returning an error.
-		c.DeletePod(context.Background(), podResult.Name)
-		return nil, fmt.Errorf("timed out waiting for pod %q to leave pending state: %v", pod.Name, err)
+	retryWait := 1
+	retryMax := retryWait << 3 // retry 3 times
+	for {
+		createdPod, err := c.AwaitPodNotPending(ctx, podResult.Name, podResult.ObjectMeta.ResourceVersion)
+		if err != nil {
+			if err == context.Canceled {
+				return nil, err
+			}
+			if retryWait < retryMax { // retry
+				time.Sleep(time.Duration(retryWait) * time.Second)
+				retryWait = retryWait << 1
+				continue
+			}
+			// The pod did not leave the pending state. We should try to manually delete it before
+			// returning an error.
+			c.DeletePod(context.Background(), podResult.Name)
+			return nil, fmt.Errorf("waiting for pod %q to leave pending state: %v", pod.Name, err)
+		}
+		return createdPod, nil
 	}
-	return createdPod, nil
 }
 
 // GetPods returns all pods in the cluster, regardless of status.
@@ -219,11 +228,14 @@ func (c *Client) WatchPod(ctx context.Context, podName, podResourceVersion strin
 			return
 		}
 		res, err := ctxhttp.Do(ctx, c.httpClient, req)
-		defer res.Body.Close()
 		if err != nil {
-			statusChan <- PodStatusResult{Err: fmt.Errorf("failed to make request: GET %q: %v", getURL, err)}
+			if err != context.Canceled {
+				statusChan <- PodStatusResult{Err: fmt.Errorf("failed to make request: GET %q: %v", getURL, err)}
+			}
+			statusChan <- PodStatusResult{Err: err} // context.Canceled
 			return
 		}
+		defer res.Body.Close()
 
 		var wps watchPodStatus
 		reader := bufio.NewReader(res.Body)

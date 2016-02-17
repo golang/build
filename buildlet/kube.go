@@ -51,11 +51,16 @@ type PodOpts struct {
 	// to delete the pod.
 	DeleteIn time.Duration
 
-	// OnPodCreated optionally specifies a hook to run synchronously
-	// after the pod operation succeeds.
-	OnPodCreated func()
+	// OnPodCreating optionally specifies a hook to run synchronously
+	// after the pod create request has been made, but before the create
+	// has suceeded.
+	OnPodCreating func()
 
 	// OnPodCreated optionally specifies a hook to run synchronously
+	// after the pod create request succeeds.
+	OnPodCreated func()
+
+	// OnGotPodInfo optionally specifies a hook to run synchronously
 	// after the pod Get call.
 	OnGotPodInfo func()
 }
@@ -144,17 +149,18 @@ func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, build
 		pod.ObjectMeta.Annotations["delete-at"] = fmt.Sprint(time.Now().Add(opts.DeleteIn).Unix())
 	}
 
+	condRun(opts.OnPodCreating)
 	newPod, err := kubeClient.RunPod(ctx, pod)
 	if err != nil {
-		return nil, fmt.Errorf("pod could not be created: %v", err)
+		return nil, err
 	}
-	condRun(opts.OnPodCreated)
 
 	// The new pod must be in Running phase. Possible phases are described at
 	// http://releases.k8s.io/HEAD/docs/user-guide/pod-states.md#pod-phase
 	if newPod.Status.Phase != api.PodRunning {
 		return nil, fmt.Errorf("pod is in invalid state %q: %v", newPod.Status.Phase, newPod.Status.Message)
 	}
+	condRun(opts.OnPodCreated)
 
 	// Wait for the pod to boot and its buildlet to come up.
 	var buildletURL string

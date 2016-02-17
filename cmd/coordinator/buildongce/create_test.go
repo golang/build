@@ -29,7 +29,7 @@ resources:
       logging_service: "logging.googleapis.com"
       monitoring_service: "none"
       node_config:
-        machine_type: "n1-standard-8"
+        machine_type: "n1-standard-16"
         oauth_scopes:
           - "https://www.googleapis.com/auth/cloud-platform"
       master_auth:
@@ -44,14 +44,9 @@ resources:
     autoscalingPolicy:
       minNumReplicas: 1
       maxNumReplicas: 5
-      coolDownPeriodSec: 600
-      customMetricUtilizations:
-        - metric: custom.cloudmonitoring.googleapis.com/cluster/cpu_used
-          utilizationTarget: .5
-          utilizationTargetType: GAUGE
-        - metric: custom.cloudmonitoring.googleapis.com/cluster/memory_used
-          utilizationTarget: .5
-          utilizationTargetType: GAUGE`},
+      coolDownPeriodSec: 1200
+      cpuUtilization:
+        utilizationTarget: .6`},
 	}
 	for _, test := range tests {
 		tpl, err := template.New("kube").Parse(kubeConfig)

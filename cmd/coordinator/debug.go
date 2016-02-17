@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -37,59 +38,80 @@ func handleDoSomeWork(work chan<- builderRev) func(w http.ResponseWriter, r *htt
 		}
 
 		mode := strings.TrimPrefix(r.URL.Path, "/dosomework/")
-		log.Printf("looking for work: %q", mode)
+
+		count, err := strconv.Atoi(r.FormValue("count"))
+		if err != nil {
+			count = 1
+		}
+
+		// Cap number of jobs that can be scheduled from debug UI. If
+		// buildEnv.MaxBuilds is zero, there is no cap.
+		if buildEnv.MaxBuilds > 0 && count > buildEnv.MaxBuilds {
+			count = buildEnv.MaxBuilds
+		}
+		log.Printf("looking for %v work items for %q", count, mode)
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		fmt.Fprintf(w, "looking for work for %s...\n", mode)
 		if f, ok := w.(http.Flusher); ok {
 			f.Flush()
 		}
-		rev, err := latestBuildableGoRev()
+		revs, err := latestBuildableGoRev(count)
 		if err != nil {
 			fmt.Fprintf(w, "cannot find revision: %v", err)
 			return
 		}
-		fmt.Fprintf(w, "found work: %s\n", rev)
-		work <- builderRev{name: mode, rev: rev}
+		fmt.Fprintf(w, "found work: %v\n", revs)
+		for _, rev := range revs {
+			work <- builderRev{name: mode, rev: rev}
+		}
 	}
 }
 
-func latestBuildableGoRev() (string, error) {
+// latestBuildableGoRev returns the specified number of most recent buildable
+// revisions. If there are not enough buildable revisions available to satisfy
+// the specified amount, unbuildable revisions will be used to meet the
+// specified count.
+func latestBuildableGoRev(count int) ([]string, error) {
 	var bs types.BuildStatus
+	var revisions []string
 	res, err := http.Get("https://build.golang.org/?mode=json")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer res.Body.Close()
 	if err := json.NewDecoder(res.Body).Decode(&bs); err != nil {
-		return "", err
+		return nil, err
 	}
 	if res.StatusCode != 200 {
-		return "", fmt.Errorf("unexpected build.golang.org http status %v", res.Status)
+		return nil, fmt.Errorf("unexpected build.golang.org http status %v", res.Status)
 	}
-	// Find first "ok" revision.
+	// Find first count "ok" revisions
 	for _, br := range bs.Revisions {
 		if br.Repo == "go" {
-			ok := false
 			for _, res := range br.Results {
 				if res == "ok" {
-					ok = true
+					revisions = append(revisions, br.Revision)
 					break
 				}
 			}
-			if !ok {
-				continue
-			}
-			return br.Revision, nil
+		}
+		if len(revisions) == count {
+			return revisions, nil
 		}
 	}
-	// No "ok" revisions, return the first go revision.
+
+	// If there weren't enough "ok" revisions, add enough "not ok"
+	// revisions to satisfy count.
 	for _, br := range bs.Revisions {
 		if br.Repo == "go" {
-			return br.Revision, nil
+			revisions = append(revisions, br.Revision)
+			if len(revisions) == count {
+				return revisions, nil
+			}
 		}
 	}
-	return "", errors.New("no revisions on build.golang.org")
+	return nil, errors.New("no revisions on build.golang.org")
 }
 
 var tmplDoSomeWork = template.Must(template.New("").Parse(`
@@ -98,6 +120,6 @@ var tmplDoSomeWork = template.Must(template.New("").Parse(`
 {{range .}}
 <form action="/dosomework/{{.}}" method="POST"><button>{{.}}</button></form><br\>
 {{end}}
-<form action="/dosomework/linux-amd64-kube" method="POST"><button>linux-amd64-kube</button></form><br\>
+<form action="/dosomework/linux-amd64-kube" method="POST"><input type="text" name="count" id="count" value="1"></input><button>linux-amd64-kube</button></form><br\>
 </body></html>
 `))

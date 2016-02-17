@@ -45,6 +45,7 @@ var (
 	initKubeCalled    bool
 	registryPrefix    = "gcr.io"
 	kubeCluster       *container.Cluster
+	nodeCount         int
 )
 
 const (
@@ -53,6 +54,15 @@ const (
 	memoryUsedMetric    = "custom.cloudmonitoring.googleapis.com/cluster/memory_used" // % of available memory in the cluster that is scheduled
 	serviceLabelKey     = "cloud.googleapis.com/service"                              // allow selection of custom metric based on service name
 	clusterNameLabelKey = "custom.cloudmonitoring.googleapis.com/cluster_name"        // allow selection of custom metric based on cluster name
+	// This is a conservative estimate of the amount of time required for a
+	// build to run, exclusive of scheduling time. It is used to calculate
+	// a worst-case estimate of the time for a build to complete, freeing
+	// up available resources for the next build to run. This would ideally
+	// be adjusted based on observed values during the lifetime of the
+	// coordinator process.
+	timePerBuild       = 10 * time.Minute // estimated time in minutes to complete a build
+	timeToSchedule     = 90 * time.Second // estimated time for pod to enter running state when cluster resources are available
+	clusterCPUOverhead = 2                // Number of CPUs per node required by the system
 )
 
 // initGCE must be called before initKube
@@ -137,22 +147,45 @@ func initKube() error {
 	return nil
 }
 
-var kubePool = &kubeBuildletPool{
-	cpuCapacity:    api.NewQuantity(0, api.DecimalSI),
-	cpuUsage:       api.NewQuantity(0, api.DecimalSI),
-	memoryCapacity: api.NewQuantity(0, api.BinarySI),
-	memoryUsage:    api.NewQuantity(0, api.BinarySI),
-}
-
 // kubeBuildletPool is the Kubernetes buildlet pool.
 type kubeBuildletPool struct {
 	mu sync.Mutex // guards all following
 
-	pods           map[string]time.Time // pod instance name -> creationTime
-	cpuCapacity    *api.Quantity        // cpu capacity as reported by the Kubernetes api
-	memoryCapacity *api.Quantity
-	cpuUsage       *api.Quantity
-	memoryUsage    *api.Quantity
+	pods             map[string]podHistory // pod instance name -> podHistory
+	clusterResources *kubeResource         // cpu and memory resources of the Kubernetes cluster
+	pendingResources *kubeResource         // cpu and memory resources waiting to be scheduled
+	runningResources *kubeResource         // cpu and memory resources already running (periodically updated from API)
+}
+
+var kubePool = &kubeBuildletPool{
+	clusterResources: &kubeResource{
+		cpu:    api.NewQuantity(0, api.DecimalSI),
+		memory: api.NewQuantity(0, api.BinarySI),
+	},
+	pendingResources: &kubeResource{
+		cpu:    api.NewQuantity(0, api.DecimalSI),
+		memory: api.NewQuantity(0, api.BinarySI),
+	},
+	runningResources: &kubeResource{
+		cpu:    api.NewQuantity(0, api.DecimalSI),
+		memory: api.NewQuantity(0, api.BinarySI),
+	},
+}
+
+type kubeResource struct {
+	cpu    *api.Quantity
+	memory *api.Quantity
+}
+
+type podHistory struct {
+	requestedAt   time.Time
+	estReadyAt    time.Time
+	actualReadyAt time.Time
+	deletedAt     time.Time
+}
+
+func (p podHistory) String() string {
+	return fmt.Sprintf("requested at %v, estimated ready at %v, actual ready at %v, deleted at %v", p.requestedAt, p.estReadyAt, p.actualReadyAt, p.deletedAt)
 }
 
 func tryCreateMetrics() {
@@ -205,7 +238,21 @@ func (p *kubeBuildletPool) pollCapacityLoop() {
 	ctx := context.Background()
 	for {
 		p.pollCapacity(ctx)
-		time.Sleep(30 * time.Second)
+		time.Sleep(15 * time.Second)
+	}
+}
+
+// Returns a worst-case estimate of the amount of time before a pod
+// would enter the running state if it were scheduled now.
+func (p *kubeBuildletPool) estTimeToStartPod(ctx context.Context) time.Duration {
+	p.pollCapacity(ctx)
+	scheduledCores := p.pendingResources.cpu.Value() + p.runningResources.cpu.Value()    // Running or pending cores
+	clusterCores := p.clusterResources.cpu.Value() - int64(clusterCPUOverhead*nodeCount) // Cores in cluster less system requirements
+
+	if buildlet.BuildletCPU.Value()+scheduledCores < clusterCores {
+		return timeToSchedule
+	} else {
+		return time.Second * time.Duration(float64(scheduledCores)/float64(clusterCores)*timePerBuild.Seconds())
 	}
 }
 
@@ -222,40 +269,67 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 	}
 
 	p.mu.Lock()
-	defer p.mu.Unlock()
+	// Calculate the total provisioned, pending, and running CPU and memory
+	// in the cluster
+	provisioned := &kubeResource{
+		cpu:    api.NewQuantity(0, api.DecimalSI),
+		memory: api.NewQuantity(0, api.BinarySI),
+	}
+	running := &kubeResource{
+		cpu:    api.NewQuantity(0, api.DecimalSI),
+		memory: api.NewQuantity(0, api.BinarySI),
+	}
+	pending := &kubeResource{
+		cpu:    api.NewQuantity(0, api.DecimalSI),
+		memory: api.NewQuantity(0, api.BinarySI),
+	}
 
-	// Calculate the total CPU and memory used by pods in the cluster
-	var sumCPUUsed = api.NewQuantity(0, api.DecimalSI)
-	var sumMemoryUsed = api.NewQuantity(0, api.BinarySI)
-	for _, p := range pods {
-		for _, c := range p.Spec.Containers {
-			sumCPUUsed.Add(c.Resources.Requests[api.ResourceCPU])
-			sumMemoryUsed.Add(c.Resources.Requests[api.ResourceMemory])
+	// Resources used by running and pending pods
+	var resourceCounter *kubeResource
+	for _, pod := range pods {
+		switch pod.Status.Phase {
+		case api.PodPending:
+			resourceCounter = pending
+		case api.PodRunning:
+			resourceCounter = running
+		}
+		for _, c := range pod.Spec.Containers {
+			// The Kubernetes API rarely, but can, return a response
+			// with an empty Requests map. Check to be sure...
+			if _, ok := c.Resources.Requests[api.ResourceCPU]; ok {
+				resourceCounter.cpu.Add(c.Resources.Requests[api.ResourceCPU])
+			}
+			if _, ok := c.Resources.Requests[api.ResourceMemory]; ok {
+				resourceCounter.memory.Add(c.Resources.Requests[api.ResourceMemory])
+			}
 		}
 	}
-	p.cpuUsage = sumCPUUsed
-	p.memoryUsage = sumMemoryUsed
+	p.runningResources = running
+	p.pendingResources = pending
 
-	// Calculate the total CPU and memory capacity of the cluster
-	var sumCPUCapacity = api.NewQuantity(0, api.DecimalSI)
-	var sumMemoryCapacity = api.NewQuantity(0, api.BinarySI)
+	// Resources provisioned to the cluster
+	nodeCount = len(nodes)
 	for _, n := range nodes {
-		sumCPUCapacity.Add(n.Status.Capacity[api.ResourceCPU])
-		sumMemoryCapacity.Add(n.Status.Capacity[api.ResourceMemory])
+		provisioned.cpu.Add(n.Status.Capacity[api.ResourceCPU])
+		provisioned.memory.Add(n.Status.Capacity[api.ResourceMemory])
 	}
-	p.cpuCapacity = sumCPUCapacity
-	p.memoryCapacity = sumMemoryCapacity
+	p.clusterResources = provisioned
+	p.mu.Unlock()
 
-	// Calculate the % of CPU and memory consumed
-	pctCPUConsumed := float64(p.cpuUsage.Value()) / float64(p.cpuCapacity.Value())
-	pctMemoryConsumed := float64(p.memoryUsage.Value()) / float64(p.memoryCapacity.Value())
+	// Estimate the time it would take for a build pod to be scheduled
+	// in the current resource environment
+
+	// Calculate requested CPU and memory (both running and pending pods) vs
+	// provisioned capacity in the cluster.
+	pctCPUWanted := float64(p.pendingResources.cpu.Value()+p.runningResources.cpu.Value()) / float64(p.clusterResources.cpu.Value())
+	pctMemoryWanted := float64(p.pendingResources.memory.Value()+p.runningResources.memory.Value()) / float64(p.clusterResources.memory.Value())
 	t := time.Now().Format(time.RFC3339)
 
 	wtr := monitoring.WriteTimeseriesRequest{
 		Timeseries: []*monitoring.TimeseriesPoint{
 			{
 				Point: &monitoring.Point{
-					DoubleValue: &pctCPUConsumed,
+					DoubleValue: &pctCPUWanted,
 					Start:       t,
 					End:         t,
 				},
@@ -270,7 +344,7 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 			},
 			{
 				Point: &monitoring.Point{
-					DoubleValue: &pctMemoryConsumed,
+					DoubleValue: &pctMemoryWanted,
 					Start:       t,
 					End:         t,
 				},
@@ -311,6 +385,10 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, typ string, lg logge
 
 	podName := "buildlet-" + typ + "-rn" + randHex(7)
 
+	// Get an estimate for when the pod will be started/running and set
+	// the context timeout based on that
+	estReady := p.estTimeToStartPod(ctx)
+	ctx, _ = context.WithTimeout(ctx, estReady)
 	var needDelete bool
 
 	lg.logEventTime("creating_kube_pod", podName)
@@ -321,10 +399,15 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, typ string, lg logge
 		ImageRegistry: registryPrefix,
 		Description:   fmt.Sprintf("Go Builder for %s at %s", typ),
 		DeleteIn:      deleteIn,
+		OnPodCreating: func() {
+			lg.logEventTime("pod_creating")
+			p.setPodUsed(podName, true)
+			p.updatePodHistory(podName, podHistory{requestedAt: time.Now(), estReadyAt: time.Now().Add(estReady)})
+			needDelete = true
+		},
 		OnPodCreated: func() {
 			lg.logEventTime("pod_created")
-			p.setPodUsed(podName, true)
-			needDelete = true
+			p.updatePodHistory(podName, podHistory{actualReadyAt: time.Now()})
 		},
 		OnGotPodInfo: func() {
 			lg.logEventTime("got_pod_info", "waiting_for_buildlet...")
@@ -335,7 +418,9 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, typ string, lg logge
 
 		if needDelete {
 			log.Printf("Deleting failed pod %q", podName)
-			kubeClient.DeletePod(ctx, podName)
+			if err := kubeClient.DeletePod(context.Background(), podName); err != nil {
+				log.Printf("Error deleting pod %q: %v", podName, err)
+			}
 			p.setPodUsed(podName, false)
 		}
 		return nil, err
@@ -348,7 +433,7 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, typ string, lg logge
 	// running the buildlet.
 	go func() {
 		<-ctx.Done()
-		log.Printf("Deleting pod %q after build context cancel received ", podName)
+		log.Printf("Deleting pod %q after build context completed", podName)
 		// Giving DeletePod a new context here as the build ctx has been canceled
 		kubeClient.DeletePod(context.Background(), podName)
 		p.setPodUsed(podName, false)
@@ -377,29 +462,50 @@ func (p *kubeBuildletPool) WriteHTMLStatus(w io.Writer) {
 func (p *kubeBuildletPool) capacityString() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return fmt.Sprintf("%v/%v CPUs; %v/%v Memory",
-		p.cpuUsage, p.cpuCapacity,
-		p.memoryUsage, p.memoryCapacity)
+	return fmt.Sprintf("<ul><li>%v CPUs running, %v CPUs pending, %v total CPUs in cluster</li><li>%v memory running, %v memory pending, %v total memory in cluster</li></ul>",
+		p.runningResources.cpu, p.pendingResources.cpu, p.clusterResources.cpu,
+		p.runningResources.memory, p.pendingResources.memory, p.clusterResources.memory)
 }
 
 func (p *kubeBuildletPool) setPodUsed(podName string, used bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.pods == nil {
-		p.pods = make(map[string]time.Time)
+		p.pods = make(map[string]podHistory)
 	}
 	if used {
-		p.pods[podName] = time.Now()
-		// Track cpu and memory usage
-		p.cpuUsage.Add(buildlet.BuildletCPU)
-		p.memoryUsage.Add(buildlet.BuildletMemory)
+		p.pods[podName] = podHistory{requestedAt: time.Now()}
 
 	} else {
+		p.pods[podName] = podHistory{deletedAt: time.Now()}
+		// TODO(evanbrown): log this podHistory data for analytics purposes before deleting
 		delete(p.pods, podName)
-		// Track cpu and memory usage
-		p.cpuUsage.Sub(buildlet.BuildletCPU)
-		p.memoryUsage.Sub(buildlet.BuildletMemory)
 	}
+}
+
+func (p *kubeBuildletPool) updatePodHistory(podName string, updatedHistory podHistory) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	ph, ok := p.pods[podName]
+	if !ok {
+		return fmt.Errorf("pod %q does not exist", podName)
+	}
+
+	if !updatedHistory.actualReadyAt.IsZero() {
+		ph.actualReadyAt = updatedHistory.actualReadyAt
+	}
+	if !updatedHistory.estReadyAt.IsZero() {
+		ph.estReadyAt = updatedHistory.estReadyAt
+	}
+	if !updatedHistory.requestedAt.IsZero() {
+		ph.requestedAt = updatedHistory.requestedAt
+	}
+	if !updatedHistory.deletedAt.IsZero() {
+		ph.deletedAt = updatedHistory.deletedAt
+	}
+	p.pods[podName] = ph
+	return nil
 }
 
 func (p *kubeBuildletPool) podUsed(podName string) bool {
@@ -412,10 +518,10 @@ func (p *kubeBuildletPool) podUsed(podName string) bool {
 func (p *kubeBuildletPool) podsActive() (ret []resourceTime) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	for name, create := range p.pods {
+	for name, ph := range p.pods {
 		ret = append(ret, resourceTime{
 			name:     name,
-			creation: create,
+			creation: ph.requestedAt,
 		})
 	}
 	sort.Sort(byCreationTime(ret))
