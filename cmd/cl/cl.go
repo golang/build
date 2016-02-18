@@ -252,7 +252,7 @@ func issuesString(cl *godash.CL) string {
 	return s
 }
 
-const goReleaseCycle = 6 // working on Go 1.x
+const goReleaseCycle = 8 // working on Go 1.x
 
 var reviewers *godash.Reviewers
 
