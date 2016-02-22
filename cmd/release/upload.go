@@ -84,15 +84,15 @@ func uploadFile(ctx context.Context, c *storage.Client, b *Build, version, filen
 		return err
 	}
 	base := filepath.Base(filename)
+	checksum := fmt.Sprintf("%x", sha256.Sum256(file))
 
-	// Upload the file to Google Cloud Storage.
-	wr := c.Bucket(storageBucket).Object(base).NewWriter(ctx)
-	wr.ACL = []storage.ACLRule{
-		{Entity: storage.AllUsers, Role: storage.RoleReader},
+	// Upload file to Google Cloud Storage.
+	if err := putObject(ctx, c, base, file); err != nil {
+		return fmt.Errorf("uploading %q: %v", base, err)
 	}
-	wr.Write(file)
-	if err := wr.Close(); err != nil {
-		return fmt.Errorf("uploading file: %v", err)
+	// Upload file.sha256.
+	if err := putObject(ctx, c, base+".sha256", []byte(checksum)); err != nil {
+		return fmt.Errorf("uploading %q: %v", base+".sha256", err)
 	}
 
 	// Post file details to golang.org.
@@ -110,7 +110,7 @@ func uploadFile(ctx context.Context, c *storage.Client, b *Build, version, filen
 		Version:        version,
 		OS:             b.OS,
 		Arch:           b.Arch,
-		ChecksumSHA256: fmt.Sprintf("%x", sha256.Sum256(file)),
+		ChecksumSHA256: checksum,
 		Size:           int64(len(file)),
 		Kind:           kind,
 	})
@@ -130,6 +130,22 @@ func uploadFile(ctx context.Context, c *storage.Client, b *Build, version, filen
 	}
 	return nil
 
+}
+
+func putObject(ctx context.Context, c *storage.Client, name string, body []byte) error {
+	wr := c.Bucket(storageBucket).Object(name).NewWriter(ctx)
+	wr.ACL = []storage.ACLRule{
+		{Entity: storage.AllUsers, Role: storage.RoleReader},
+		// If you don't give the owners access, the web UI seems to
+		// have a bug and doesn't have access to see that it's public,
+		// so won't render the "Shared Publicly" link. So we do that,
+		// even though it's dumb and unnecessary otherwise:
+		{Entity: storage.ACLEntity("project-owners-" + projectID), Role: storage.RoleOwner},
+	}
+	if _, err := wr.Write(body); err != nil {
+		return err
+	}
+	return wr.Close()
 }
 
 func storageClient(ctx context.Context) (*storage.Client, error) {
