@@ -68,6 +68,7 @@ var tourContent = []string{
 
 var tourPackages = []string{
 	"pic",
+	"reader",
 	"tree",
 	"wc",
 }
