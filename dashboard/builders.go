@@ -564,6 +564,28 @@ func init() {
 		IsReverse: true,
 		env:       []string{"GOARCH=arm64", "GOHOSTARCH=amd64"},
 	})
+	addBuilder(BuildConfig{
+		Name:           "solaris-amd64-smartosbuildlet",
+		Notes:          "run by Go team on Joyent, on a SmartOS 'infrastructure container'",
+		IsReverse:      true,
+		NumTestHelpers: 0,
+		env:            []string{"GOROOT_BOOTSTRAP=/root/go-solaris-amd64-bootstrap"},
+	})
+	addBuilder(BuildConfig{
+		Name:           "linux-ppc64le-buildlet",
+		Notes:          "Debian jessie; run by Go team on osuosl.org",
+		IsReverse:      true,
+		NumTestHelpers: 0,
+		env:            []string{"GOROOT_BOOTSTRAP=/home/debian/go-linux-ppc64le-bootstrap"},
+	})
+	addBuilder(BuildConfig{
+		Name:           "linux-s390x-ibm",
+		Notes:          "run by IBM",
+		IsReverse:      true,
+		NumTestHelpers: 0,
+		env:            []string{"GOROOT_BOOTSTRAP=/var/buildlet/go-linux-ppc64le-bootstrap"},
+	})
+
 }
 
 func addBuilder(c BuildConfig) {
