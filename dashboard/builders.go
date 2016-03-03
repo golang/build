@@ -583,7 +583,7 @@ func init() {
 		Notes:          "run by IBM",
 		IsReverse:      true,
 		NumTestHelpers: 0,
-		env:            []string{"GOROOT_BOOTSTRAP=/var/buildlet/go-linux-ppc64le-bootstrap"},
+		env:            []string{"GOROOT_BOOTSTRAP=/var/buildlet/go-linux-s390x-bootstrap"},
 	})
 
 }
