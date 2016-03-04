@@ -13,3 +13,7 @@ buildlet-stage0.linux-arm-scaleway: stage0.go
 buildlet-stage0.linux-amd64-kube: stage0.go
 	GOOS=linux GOARCH=amd64 go build -o $@
 	cat $@ | (cd ../../upload && go run upload.go --public --cacheable=false go-builder-data/$@)
+
+buildlet-stage0.linux-s390x: stage0.go
+	GOOS=linux GOARCH=s390x go build -o $@
+	cat $@ | (cd ../../upload && go run upload.go --public --cacheable=false go-builder-data/$@)

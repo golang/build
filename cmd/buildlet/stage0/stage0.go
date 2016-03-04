@@ -72,8 +72,20 @@ func main() {
 	if onScaleway {
 		cmd.Args = append(cmd.Args, scalewayBuildletArgs()...)
 	}
+	if runtime.GOOS == "linux" && runtime.GOARCH == "s390x" {
+		cmd.Args = append(cmd.Args, s390xBuildletArgs()...)
+	}
 	if err := cmd.Run(); err != nil {
 		sleepFatalf("Error running buildlet: %v", err)
+	}
+}
+
+func s390xBuildletArgs() []string {
+	return []string{
+		"--halt=false",
+		"--workdir=/data/golang/workdir",
+		"--reverse=linux-s390x-ibm",
+		"--coordinator=farmer.golang.org:443",
 	}
 }
 
