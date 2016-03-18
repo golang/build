@@ -174,3 +174,11 @@ var gccgoDash = &Dashboard{
 		},
 	},
 }
+
+// hiddenBranches specifies branches that
+// should not be displayed on the build dashboard.
+// This also prevents the builder infrastructure
+// from testing sub-repos against these branches.
+var hiddenBranches = map[string]bool{
+	"release-branch.go1.4": true,
+}

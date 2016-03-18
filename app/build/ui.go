@@ -107,6 +107,9 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 				if !strings.HasPrefix(b, "release-branch.") {
 					continue
 				}
+				if hiddenBranches[b] {
+					continue
+				}
 				s, err := GetTagState(c, "release", b)
 				if err == datastore.ErrNoSuchEntity {
 					continue
