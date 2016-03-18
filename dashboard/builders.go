@@ -341,6 +341,13 @@ func init() {
 		env: []string{"GOROOT_BOOTSTRAP=/go1.4", "GO_GCFLAGS=-N -l"},
 	})
 	addBuilder(BuildConfig{
+		Name:    "linux-amd64-ssacheck",
+		Notes:   "SSA internal checks enabled",
+		VMImage: "linux-buildlet-std",
+		//BuildletType: "linux-amd64",
+		env: []string{"GOROOT_BOOTSTRAP=/go1.4", "GO_GCFLAGS=-d=ssa/check/on"},
+	})
+	addBuilder(BuildConfig{
 		Name:           "linux-amd64-race",
 		VMImage:        "linux-buildlet-std",
 		machineType:    "n1-highcpu-4",
