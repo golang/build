@@ -77,7 +77,7 @@ func initGCE() error {
 		*buildEnvName, _ = metadata.ProjectID()
 	}
 
-	buildEnv := buildenv.ByProjectID(*buildEnvName)
+	buildEnv = buildenv.ByProjectID(*buildEnvName)
 
 	// If running on GCE, override the zone and static IP, and check service account permissions.
 	if metadata.OnGCE() {
