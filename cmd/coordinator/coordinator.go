@@ -1627,11 +1627,12 @@ func (st *buildStatus) writeGoSource() error {
 }
 
 func (st *buildStatus) writeBootstrapToolchain() error {
-	if st.conf.Go14URL == "" {
+	u := st.conf.GoBootstrapURL(buildEnv)
+	if u == "" {
 		return nil
 	}
 	st.logEventTime("start_write_go14_tar")
-	if err := st.bc.PutTarFromURL(st.conf.Go14URL, "go1.4"); err != nil {
+	if err := st.bc.PutTarFromURL(u, "go1.4"); err != nil {
 		return err
 	}
 	st.logEventTime("end_write_go14_tar")

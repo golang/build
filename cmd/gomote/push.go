@@ -87,9 +87,9 @@ func push(args []string) error {
 	}
 
 	if !haveGo14 {
-		if conf.Go14URL != "" {
+		if u := conf.GoBootstrapURL(buildEnv); u != "" {
 			log.Printf("installing go1.4")
-			if err := bc.PutTarFromURL(conf.Go14URL, "go1.4"); err != nil {
+			if err := bc.PutTarFromURL(u, "go1.4"); err != nil {
 				return err
 			}
 		}

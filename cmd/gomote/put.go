@@ -103,11 +103,12 @@ func put14(args []string) error {
 	if err != nil {
 		return err
 	}
-	if conf.Go14URL == "" {
-		fmt.Printf("No Go14URL field defined for %q; ignoring. (may be baked into image)\n", name)
+	u := conf.GoBootstrapURL(buildEnv)
+	if u == "" {
+		fmt.Printf("No GoBootstrapURL defined for %q; ignoring. (may be baked into image)\n", name)
 		return nil
 	}
-	return bc.PutTarFromURL(conf.Go14URL, "go1.4")
+	return bc.PutTarFromURL(u, "go1.4")
 }
 
 // put single file

@@ -73,6 +73,7 @@ type Environment struct {
 	CoordinatorName string
 
 	// BuildletBucket is the GCS bucket that stores buildlet binaries.
+	// TODO: rename. this is not just for buildlets; also for bootstrap.
 	BuildletBucket string
 
 	// The GCS bucket that logs are written to.

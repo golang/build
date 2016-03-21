@@ -26,6 +26,7 @@ import (
 	"sync"
 
 	"golang.org/x/build"
+	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 )
@@ -40,14 +41,16 @@ var (
 	blogRev   = flag.String("blog", "master", "Blog revision to include")
 	netRev    = flag.String("net", "master", "Net revision to include")
 	version   = flag.String("version", "", "Version string (go1.5.2)")
-	coordAddr = flag.String("coordinator", "", "Coordinator instance address (default is production)")
 	user      = flag.String("user", username(), "coordinator username, appended to 'user-'")
 	skipTests = flag.Bool("skip_tests", false, "skip tests; run make.bash instead of all.bash (only use if you ran trybots first)")
 
 	uploadMode = flag.Bool("upload", false, "Upload files (exclusive to all other flags)")
 )
 
-var coordClient *buildlet.CoordinatorClient
+var (
+	coordClient *buildlet.CoordinatorClient
+	buildEnv    *buildenv.Environment
+)
 
 func main() {
 	flag.Parse()
@@ -74,6 +77,7 @@ func main() {
 	}
 
 	coordClient = coordinatorClient()
+	buildEnv = buildenv.Production
 
 	var wg sync.WaitGroup
 	for _, b := range builds {
@@ -278,9 +282,9 @@ func (b *Build) make() error {
 		}
 	}
 
-	if bc.Go14URL != "" && !b.Source {
+	if u := bc.GoBootstrapURL(buildEnv); u != "" && !b.Source {
 		b.logf("Installing go1.4.")
-		if err := client.PutTarFromURL(bc.Go14URL, go14); err != nil {
+		if err := client.PutTarFromURL(u, go14); err != nil {
 			return err
 		}
 	}
@@ -569,16 +573,12 @@ func addPrefix(prefix string, in []string) []string {
 }
 
 func coordinatorClient() *buildlet.CoordinatorClient {
-	inst := build.ProdCoordinator
-	if *coordAddr != "" {
-		inst = build.CoordinatorInstance(*coordAddr)
-	}
 	return &buildlet.CoordinatorClient{
 		Auth: buildlet.UserPass{
 			Username: "user-" + *user,
 			Password: userToken(),
 		},
-		Instance: inst,
+		Instance: build.ProdCoordinator,
 	}
 }
 
