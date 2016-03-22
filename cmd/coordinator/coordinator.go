@@ -1021,9 +1021,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 		s1 := sha1.New()
 		io.WriteString(s1, buildLog)
 		objName := fmt.Sprintf("%s/%s_%x.log", bs.rev[:8], bs.name, s1.Sum(nil)[:4])
-		wr := storageClient.Bucket(buildEnv.LogBucket).Object(objName).NewWriter(serviceCtx)
-		wr.ContentType = "text/plain; charset=utf-8"
-		wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
+		wr, failLogURL := newFailureLogBlob(objName)
 		if _, err := io.WriteString(wr, buildLog); err != nil {
 			log.Printf("Failed to write to GCS: %v", err)
 			return
@@ -1032,7 +1030,6 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 			log.Printf("Failed to write to GCS: %v", err)
 			return
 		}
-		failLogURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", buildEnv.LogBucket, objName)
 
 		bs.mu.Lock()
 		bs.failURL = failLogURL
@@ -2780,4 +2777,34 @@ func setRepoHead(repo, head string) {
 	repoHead.Lock()
 	defer repoHead.Unlock()
 	repoHead.m[repo] = head
+}
+
+// newFailureLogBlob creates a new object to record a public failure log.
+// The objName should be a Google Cloud Storage object name.
+// When developing on localhost, the WriteCloser may be of a different type.
+func newFailureLogBlob(objName string) (obj io.WriteCloser, url_ string) {
+	if *mode == "dev" {
+		// TODO(bradfitz): write to disk or something, or
+		// something testable. Maybe memory.
+		return struct {
+			io.Writer
+			io.Closer
+		}{
+			os.Stderr,
+			ioutil.NopCloser(nil),
+		}, "devmode://fail-log/" + objName
+	}
+	if storageClient == nil {
+		panic("nil storageClient in newFailureBlob")
+	}
+	bucket := buildEnv.LogBucket
+
+	wr := storageClient.Bucket(bucket).Object(objName).NewWriter(serviceCtx)
+	wr.ContentType = "text/plain; charset=utf-8"
+	wr.ACL = append(wr.ACL, storage.ACLRule{
+		Entity: storage.AllUsers,
+		Role:   storage.RoleReader,
+	})
+
+	return wr, fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, objName)
 }
