@@ -34,13 +34,13 @@ type Environment struct {
 	// other fields.
 	Zone string
 
-	// ZonesToClean are the  GCE zones that will be periodically cleaned by
+	// ZonesToClean are the GCE zones that will be periodically cleaned by
 	// deleting old VMs. The zero value means that no cleaning will occur.
 	// This field is optional.
 	ZonesToClean []string
 
 	// StaticIP is the public, static IP address that will be attached to the
-	// coorindator instance. The zero value means the address will be looked
+	// coordinator instance. The zero value means the address will be looked
 	// up by name. This field is optional.
 	StaticIP string
 
@@ -66,7 +66,10 @@ type Environment struct {
 	// will be set to a random value at runtime.
 	KubePassword string
 
-	// CoorindatorURL is the location from which the coordinator bin will be downloaded.
+	// CoordinatorURL is the location from which the coordinator
+	// binary will be downloaded.
+	// This is only used by cmd/coordinator/buildongce/create.go when
+	// creating the coordinator VM from scratch.
 	CoordinatorURL string
 
 	// CoordinatorName is the hostname of the coordinator instance.
