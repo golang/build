@@ -441,9 +441,13 @@ func (p *gceBuildletPool) cleanUpOldVMs() {
 	if computeService == nil {
 		return
 	}
+
+	// TODO(bradfitz): remove this list and just query it from the compute API?
+	// http://godoc.org/google.golang.org/api/compute/v1#RegionsService.Get
+	// and Region.Zones: http://godoc.org/google.golang.org/api/compute/v1#Region
+
 	for {
-		for _, zone := range strings.Split(*cleanZones, ",") {
-			zone = strings.TrimSpace(zone)
+		for _, zone := range buildEnv.ZonesToClean {
 			if err := p.cleanZoneVMs(zone); err != nil {
 				log.Printf("Error cleaning VMs in zone %q: %v", zone, err)
 			}
