@@ -165,7 +165,7 @@ var testFiles = map[string]string{
 func listenAndServeTLS() {
 	addr := ":443"
 	if *mode == "dev" {
-		addr = ":8119"
+		addr = "localhost:8119"
 	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {

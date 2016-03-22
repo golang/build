@@ -73,8 +73,15 @@ func initGCE() error {
 	// If the coordinator is running on a GCE instance and a
 	// buildEnv was not specified with the env flag, set the
 	// buildEnvName to the project ID
-	if metadata.OnGCE() && *buildEnvName == "" {
-		*buildEnvName, _ = metadata.ProjectID()
+	if *buildEnvName == "" {
+		if *mode == "dev" {
+			*buildEnvName = "dev"
+		} else if metadata.OnGCE() {
+			*buildEnvName, err = metadata.ProjectID()
+			if err != nil {
+				log.Fatalf("metadata.ProjectID: %v", err)
+			}
+		}
 	}
 
 	buildEnv = buildenv.ByProjectID(*buildEnvName)
@@ -108,10 +115,12 @@ func initGCE() error {
 		log.Fatalf("failed to get a token source: %v", err)
 	}
 	httpClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
-	serviceCtx = cloud.NewContext(buildEnv.ProjectName, httpClient)
-	storageClient, err = storage.NewClient(serviceCtx, cloud.WithBaseHTTP(httpClient))
-	if err != nil {
-		log.Fatalf("storage.NewClient: %v", err)
+	if *mode != "dev" {
+		serviceCtx = cloud.NewContext(buildEnv.ProjectName, httpClient)
+		storageClient, err = storage.NewClient(serviceCtx, cloud.WithBaseHTTP(httpClient))
+		if err != nil {
+			log.Fatalf("storage.NewClient: %v", err)
+		}
 	}
 
 	computeService, _ = compute.New(httpClient)
@@ -129,6 +138,9 @@ func initGCE() error {
 func checkTryBuildDeps() error {
 	if !hasStorageScope() {
 		return errors.New("coordinator's GCE instance lacks the storage service scope")
+	}
+	if *mode == "dev" {
+		return errors.New("running in dev mode")
 	}
 	wr := storageClient.Bucket(buildEnv.LogBucket).Object("hello.txt").NewWriter(serviceCtx)
 	fmt.Fprintf(wr, "Hello, world! Coordinator start-up at %v", time.Now())
@@ -174,6 +186,14 @@ type gceBuildletPool struct {
 }
 
 func (p *gceBuildletPool) pollQuotaLoop() {
+	if computeService == nil {
+		log.Printf("pollQuotaLoop: no GCE access; not checking quota.")
+		return
+	}
+	if buildEnv.ProjectName == "" {
+		log.Printf("pollQuotaLoop: no GCE project name confingured; not checking quota.")
+		return
+	}
 	for {
 		p.pollQuota()
 		time.Sleep(5 * time.Second)
