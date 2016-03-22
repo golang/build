@@ -163,8 +163,14 @@ var Production = &Environment{
 	SnapBucket:      "go-build-snap",
 }
 
+var Development = &Environment{
+	IsProd:   false,
+	StaticIP: "127.0.0.1",
+}
+
 // possibleEnvs enumerate the known buildenv.Environment definitions.
 var possibleEnvs = map[string]*Environment{
+	"dev":                Development,
 	"symbolic-datum-552": Production,
 	"go-dashboard-dev":   Staging,
 }
