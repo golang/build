@@ -11,6 +11,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -218,6 +219,7 @@ func initScaleway() {
 	initScalewaySwap()
 	initScalewayWorkdir()
 	initScalewayMeta()
+	initScalewayDNS()
 	initScalewayGo14()
 	log.Printf("Scaleway init complete; metadata is %+v", scalewayMeta)
 }
@@ -250,6 +252,20 @@ func initScalewayMeta() {
 	}
 	if err := json.NewDecoder(res.Body).Decode(&scalewayMeta); err != nil {
 		log.Fatalf("invalid JSON from scaleway metadata URL %s: %v", metaURL, err)
+	}
+}
+
+func initScalewayDNS() {
+	setFileContents("/etc/resolv.conf", []byte("nameserver 8.8.8.8\n"))
+}
+
+func setFileContents(file string, contents []byte) {
+	old, err := ioutil.ReadFile(file)
+	if err == nil && bytes.Equal(old, contents) {
+		return
+	}
+	if err := ioutil.WriteFile(file, contents, 0644); err != nil {
+		log.Fatal(err)
 	}
 }
 

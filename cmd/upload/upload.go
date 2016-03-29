@@ -145,6 +145,9 @@ func buildGoTarget() {
 	if *osarch != "" {
 		*osarch = (*osarch)[strings.LastIndex(*osarch, ".")+1:]
 		v := strings.Split(*osarch, "-")
+		if len(v) == 3 {
+			v = v[:2] // support e.g. "linux-arm-scaleway" as GOOS=linux, GOARCH=arm
+		}
 		if len(v) != 2 || v[0] == "" || v[1] == "" {
 			log.Fatalf("invalid -osarch value %q", *osarch)
 		}
