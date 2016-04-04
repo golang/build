@@ -145,6 +145,18 @@ func main() {
 		log.Fatalf("could not create oAuth client: %v", err)
 	}
 
+	computeService, err = compute.New(oauthClient)
+	if err != nil {
+		log.Fatalf("could not create client for Google Compute Engine: %v", err)
+	}
+
+	if *makeDisks {
+		if err := makeBasepinDisks(computeService); err != nil {
+			log.Fatalf("could not create basepin disks: %v", err)
+		}
+		return
+	}
+
 	if !*skipCoordinator {
 		err = createCoordinator()
 		if err != nil {
@@ -162,16 +174,6 @@ func main() {
 
 func createCoordinator() error {
 	log.Printf("Creating coordinator instance: %v", buildEnv.CoordinatorName)
-	computeService, err = compute.New(oauthClient)
-	if err != nil {
-		return fmt.Errorf("could not create client for Google Compute Engine: %v", err)
-	}
-
-	if *makeDisks {
-		if err := makeBasepinDisks(computeService); err != nil {
-			return fmt.Errorf("could not create basepin disks: %v", err)
-		}
-	}
 
 	natIP := buildEnv.StaticIP
 	if natIP == "" {
@@ -410,9 +412,9 @@ func randomPassword() string {
 
 func makeBasepinDisks(svc *compute.Service) error {
 	// Try to find it by name.
-	imList, err := svc.Images.List(*proj).Do()
+	imList, err := svc.Images.List(buildEnv.ProjectName).Do()
 	if err != nil {
-		return err
+		return fmt.Errorf("Error listing images for %s: %v", buildEnv.ProjectName, err)
 	}
 	if imList.NextPageToken != "" {
 		return errors.New("too many images; pagination not supported")

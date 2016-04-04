@@ -439,6 +439,15 @@ func init() {
 		NumTestHelpers:     3,
 	})
 	addBuilder(BuildConfig{
+		Name:               "netbsd-amd64-gce",
+		Notes:              "NetBSD tip; GCE VM is built from script in build/env/netbsd-amd64",
+		VMImage:            "netbsd-amd64-gce",
+		machineType:        "n1-highcpu-2",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64.tar.gz",
+		NumTestHelpers:     3,
+	})
+
+	addBuilder(BuildConfig{
 		Name:               "plan9-386",
 		Notes:              "Plan 9 from 0intro; GCE VM is built from script in build/env/plan9-386",
 		VMImage:            "plan9-386-v2",
