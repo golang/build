@@ -27,6 +27,11 @@ fi
 
 WORKDIR=work-NetBSD-${ARCH}
 
+# Remove WORKDIR unless -k (keep) is given.
+if [ "$1" != "-k" ]; then
+  rm -rf ${WORKDIR}
+fi
+
 # Download and build anita (automated NetBSD installer).
 if ! sha1sum -c anita-${ANITA_VERSION}.tar.gz.sha1; then
   curl -vO http://www.gson.org/netbsd/anita/download/anita-${ANITA_VERSION}.tar.gz
