@@ -374,6 +374,9 @@ func mayBuildRev(rev builderRev) bool {
 	if inStaging && numCurrentBuilds() != 0 {
 		return false
 	}
+	if strings.Contains(rev.name, "netbsd") {
+		return false
+	}
 	if dashboard.Builders[rev.name].IsReverse {
 		return reversePool.CanBuild(rev.name)
 	}
