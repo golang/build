@@ -229,7 +229,7 @@ func (p *gceBuildletPool) SetEnabled(enabled bool) {
 	p.disabled = !enabled
 }
 
-func (p *gceBuildletPool) GetBuildlet(ctx context.Context, typ, rev string, el eventTimeLogger) (*buildlet.Client, error) {
+func (p *gceBuildletPool) GetBuildlet(ctx context.Context, typ string, el eventTimeLogger) (*buildlet.Client, error) {
 	el.logEventTime("awaiting_gce_quota")
 	conf, ok := dashboard.Builders[typ]
 	if !ok {
@@ -239,31 +239,22 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, typ, rev string, el e
 		return nil, err
 	}
 
-	deleteIn := vmDeleteTimeout
-	if strings.HasPrefix(rev, "user-") {
-		// Created by gomote (see remote.go), so don't kill it in 45 minutes.
-		// remote.go handles timeouts itself.
-		deleteIn = 0
-		rev = strings.TrimPrefix(rev, "user-")
+	deleteIn, ok := ctx.Value(buildletTimeoutOpt{}).(time.Duration)
+	if !ok {
+		deleteIn = vmDeleteTimeout
 	}
 
-	// name is the project-wide unique name of the GCE instance. It can't be longer
-	// than 61 bytes.
-	revPrefix := rev
-	if len(revPrefix) > 8 {
-		revPrefix = rev[:8]
-	}
-	instName := "buildlet-" + typ + "-" + revPrefix + "-rn" + randHex(6)
+	instName := "buildlet-" + typ + "-rn" + randHex(7)
 	p.setInstanceUsed(instName, true)
 
 	var needDelete bool
 
 	el.logEventTime("creating_gce_instance", instName)
-	log.Printf("Creating GCE VM %q for %s at %s", instName, typ, rev)
+	log.Printf("Creating GCE VM %q for %s", instName, typ)
 	bc, err := buildlet.StartNewVM(tokenSource, instName, typ, buildlet.VMOpts{
 		ProjectID:   buildEnv.ProjectName,
 		Zone:        buildEnv.Zone,
-		Description: fmt.Sprintf("Go Builder for %s at %s", typ, rev),
+		Description: fmt.Sprintf("Go Builder for %s", typ),
 		DeleteIn:    deleteIn,
 		OnInstanceRequested: func() {
 			el.logEventTime("instance_create_requested", instName)
@@ -288,7 +279,7 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, typ, rev string, el e
 	})
 	if err != nil {
 		el.logEventTime("gce_buildlet_create_failure", fmt.Sprintf("%s: %v", instName, err))
-		log.Printf("Failed to create VM for %s, %s: %v", typ, rev, err)
+		log.Printf("Failed to create VM for %s: %v", typ, err)
 		if needDelete {
 			deleteVM(buildEnv.Zone, instName)
 			p.putVMCountQuota(conf.GCENumCPU())

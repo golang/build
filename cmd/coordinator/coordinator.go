@@ -1086,34 +1086,55 @@ type eventTimeLogger interface {
 	logEventTime(event string, optText ...string)
 }
 
+// spanLogger is something that has the createSpan method, which
+// creates a event spanning some duration which will eventually be
+// logged and visualized.
+type spanLogger interface {
+	// optText is 0 or 1 strings.
+	createSpan(event string, optText ...string) eventSpan
+}
+
+type eventSpan interface {
+	// done marks a span as done.
+	// The err is returned unmodified for convenience at callsites.
+	done(err error) error
+}
+
+// buildletTimeoutOpt is a context.Value key for BuildletPool.GetBuildlet.
+type buildletTimeoutOpt struct{} // context Value key; value is time.Duration
+
+// highPriorityOpt is a context.Value key for BuildletPool.GetBuildlet.
+// If its value is true, that means the caller should be prioritized.
+type highPriorityOpt struct{} // value is bool
+
 type BuildletPool interface {
 	// GetBuildlet returns a new buildlet client.
 	//
 	// The machineType is the machine type (e.g. "linux-amd64-race").
 	//
-	// The rev is git hash. Implementations should not use it for
-	// anything except for log messages or VM naming.
-	//
 	// Users of GetBuildlet must both call Client.Close when done
 	// with the client as well as cancel the provided Context.
-	GetBuildlet(ctx context.Context, machineType, rev string, el eventTimeLogger) (*buildlet.Client, error)
+	//
+	// The ctx may have context values of type buildletTimeoutOpt
+	// and highPriorityOpt.
+	GetBuildlet(ctx context.Context, machineType string, el eventTimeLogger) (*buildlet.Client, error)
 
 	String() string // TODO(bradfitz): more status stuff
 }
 
 // GetBuildlets creates up to n buildlets and sends them on the returned channel
 // before closing the channel.
-func GetBuildlets(ctx context.Context, pool BuildletPool, n int, machineType, rev string, el eventTimeLogger) <-chan *buildlet.Client {
+func GetBuildlets(ctx context.Context, pool BuildletPool, n int, machineType string, el eventTimeLogger) <-chan *buildlet.Client {
 	ch := make(chan *buildlet.Client) // NOT buffered
 	var wg sync.WaitGroup
 	wg.Add(n)
 	for i := 0; i < n; i++ {
 		go func() {
 			defer wg.Done()
-			bc, err := pool.GetBuildlet(ctx, machineType, rev, el)
+			bc, err := pool.GetBuildlet(ctx, machineType, el)
 			if err != nil {
 				if err != context.Canceled {
-					log.Printf("failed to get a %s buildlet for rev %s: %v", machineType, rev, err)
+					log.Printf("failed to get a %s buildlet: %v", machineType, err)
 				}
 				return
 			}
@@ -1272,7 +1293,7 @@ func (st *buildStatus) getHelpers() <-chan *buildlet.Client {
 
 func (st *buildStatus) onceInitHelpersFunc() {
 	pool, _ := st.buildletPool() // won't return an error since we called it already
-	st.helpers = GetBuildlets(st.ctx, pool, st.conf.NumTestHelpers, st.buildletType(), st.rev, st)
+	st.helpers = GetBuildlets(st.ctx, pool, st.conf.NumTestHelpers, st.buildletType(), st)
 }
 
 // We should try to build from a snapshot if this is a subrepo build, we can
@@ -1293,8 +1314,9 @@ func (st *buildStatus) build() error {
 	if err != nil {
 		return err
 	}
-	st.logEventTime("get_buildlet")
-	bc, err := pool.GetBuildlet(st.ctx, st.buildletType(), st.rev, st)
+	sp := st.createSpan("get_buildlet")
+	bc, err := pool.GetBuildlet(st.ctx, st.buildletType(), st)
+	sp.done(err)
 	if err != nil {
 		return fmt.Errorf("failed to get a buildlet: %v", err)
 	}
@@ -1303,14 +1325,14 @@ func (st *buildStatus) build() error {
 	st.bc = bc
 	st.mu.Unlock()
 
-	st.logEventTime("got_buildlet", bc.IPPort())
+	st.logEventTime("using_buildlet", bc.IPPort())
 
 	if st.useSnapshot() {
-		st.logEventTime("start_write_snapshot_tar")
+		sp := st.createSpan("write_snapshot_tar")
 		if err := bc.PutTarFromURL(st.snapshotURL(), "go"); err != nil {
-			return fmt.Errorf("failed to put snapshot to buildlet: %v", err)
+			return sp.done(fmt.Errorf("failed to put snapshot to buildlet: %v", err))
 		}
-		st.logEventTime("end_write_snapshot_tar")
+		sp.done(nil)
 	} else {
 		// Write the Go source and bootstrap tool chain in parallel.
 		var grp syncutil.Group
@@ -1322,18 +1344,20 @@ func (st *buildStatus) build() error {
 	}
 
 	execStartTime := time.Now()
-	st.logEventTime("pre_exec")
 	fmt.Fprintf(st, "%s at %v", st.name, st.rev)
 	if st.isSubrepo() {
 		fmt.Fprintf(st, " building %v at %v", st.subName, st.subRev)
 	}
 	fmt.Fprint(st, "\n\n")
 
-	var remoteErr error
+	distSpan := st.createSpan("check_dist")
 	hasDist, err := st.hasDistTest()
+	distSpan.done(err)
 	if err != nil {
 		return err
 	}
+
+	var remoteErr error
 	if st.conf.SplitMakeRun() && hasDist {
 		remoteErr, err = st.runAllSharded()
 	} else {
@@ -1434,43 +1458,41 @@ func (st *buildStatus) runMake() (remoteErr, err error) {
 	}
 
 	// Build the source code.
-	makeScript := st.conf.MakeScript()
-	t0 := time.Now()
-	remoteErr, err = st.bc.Exec(path.Join("go", makeScript), buildlet.ExecOpts{
-		Output: st,
-		OnStartExec: func() {
-			st.logEventTime("running_exec", makeScript)
-		},
+	makeSpan := st.createSpan("make", st.conf.MakeScript())
+	remoteErr, err = st.bc.Exec(path.Join("go", st.conf.MakeScript()), buildlet.ExecOpts{
+		Output:   st,
 		ExtraEnv: append(st.conf.Env(), "GOBIN="),
 		Debug:    true,
 		Args:     st.conf.MakeScriptArgs(),
 	})
 	if err != nil {
+		makeSpan.done(err)
 		return nil, err
 	}
-	st.logEventTime("exec_done", fmt.Sprintf("%s in %v", makeScript, time.Since(t0)))
 	if remoteErr != nil {
+		makeSpan.done(remoteErr)
 		return fmt.Errorf("make script failed: %v", remoteErr), nil
 	}
+	makeSpan.done(nil)
 
 	// Need to run "go install -race std" before the snapshot + tests.
 	if st.conf.IsRace() {
+		sp := st.createSpan("install_race_std")
 		remoteErr, err = st.bc.Exec("go/bin/go", buildlet.ExecOpts{
-			Output: st,
-			OnStartExec: func() {
-				st.logEventTime("running_exec", "go install -race std")
-			},
+			Output:   st,
 			ExtraEnv: append(st.conf.Env(), "GOBIN="),
 			Debug:    true,
 			Args:     []string{"install", "-race", "std"},
 		})
 		if err != nil {
+			sp.done(err)
 			return nil, err
 		}
 		if remoteErr != nil {
+			sp.done(err)
 			return fmt.Errorf("go install -race std failed: %v", remoteErr), nil
 		}
-		st.logEventTime("exec_done", "-race std installed")
+		sp.done(nil)
 	}
 
 	return nil, nil
@@ -1482,25 +1504,23 @@ func (st *buildStatus) runMake() (remoteErr, err error) {
 // TODO(bradfitz,adg): delete this function when all builders
 // can split make & run (and then delete the SplitMakeRun method)
 func (st *buildStatus) runAllLegacy() (remoteErr, err error) {
-	st.logEventTime("legacy_all_path")
 	allScript := st.conf.AllScript()
-	t0 := time.Now()
+	sp := st.createSpan("legacy_all_path", allScript)
 	remoteErr, err = st.bc.Exec(path.Join("go", allScript), buildlet.ExecOpts{
-		Output: st,
-		OnStartExec: func() {
-			st.logEventTime("running_exec", allScript)
-		},
+		Output:   st,
 		ExtraEnv: st.conf.Env(),
 		Debug:    true,
 		Args:     st.conf.AllScriptArgs(),
 	})
 	if err != nil {
+		sp.done(err)
 		return nil, err
 	}
-	st.logEventTime("exec_done", fmt.Sprintf("%s in %v", allScript, time.Since(t0)))
 	if remoteErr != nil {
+		sp.done(err)
 		return fmt.Errorf("all script failed: %v", remoteErr), nil
 	}
+	sp.done(nil)
 	return nil, nil
 }
 
@@ -1599,22 +1619,20 @@ func (br *builderRev) snapshotExists() (ok bool) {
 
 func (st *buildStatus) writeGoSource() error {
 	// Write the VERSION file.
-	st.logEventTime("start_write_version_tar")
+	sp := st.createSpan("write_version_tar")
 	if err := st.bc.PutTar(versionTgz(st.rev), "go"); err != nil {
-		return fmt.Errorf("writing VERSION tgz: %v", err)
+		return sp.done(fmt.Errorf("writing VERSION tgz: %v", err))
 	}
 
-	st.logEventTime("fetch_go_tar")
-	tarReader, err := getSourceTgz(st, "go", st.rev)
+	srcTar, err := getSourceTgz(st, "go", st.rev, st.trySet != nil)
 	if err != nil {
 		return err
 	}
-	st.logEventTime("start_write_go_tar")
-	if err := st.bc.PutTar(tarReader, "go"); err != nil {
-		return fmt.Errorf("writing tarball from Gerrit: %v", err)
+	sp = st.createSpan("write_go_src_tar")
+	if err := st.bc.PutTar(srcTar, "go"); err != nil {
+		return sp.done(fmt.Errorf("writing tarball from Gerrit: %v", err))
 	}
-	st.logEventTime("end_write_go_tar")
-	return nil
+	return sp.done(nil)
 }
 
 func (st *buildStatus) writeBootstrapToolchain() error {
@@ -1622,12 +1640,9 @@ func (st *buildStatus) writeBootstrapToolchain() error {
 	if u == "" {
 		return nil
 	}
-	st.logEventTime("start_write_go14_tar")
-	if err := st.bc.PutTarFromURL(u, "go1.4"); err != nil {
-		return err
-	}
-	st.logEventTime("end_write_go14_tar")
-	return nil
+	const bootstrapDir = "go1.4" // might be newer; name is the default
+	sp := st.createSpan("write_go_bootstrap_tar")
+	return sp.done(st.bc.PutTarFromURL(u, bootstrapDir))
 }
 
 var cleanForSnapshotFiles = []string{
@@ -1636,10 +1651,8 @@ var cleanForSnapshotFiles = []string{
 }
 
 func (st *buildStatus) cleanForSnapshot() error {
-	st.logEventTime("clean_for_snapshot")
-	defer st.logEventTime("clean_for_snapshot_done")
-
-	return st.bc.RemoveAll(cleanForSnapshotFiles...)
+	sp := st.createSpan("clean_for_snapshot")
+	return sp.done(st.bc.RemoveAll(cleanForSnapshotFiles...))
 }
 
 // snapshotObjectName is the cloud storage object name of the
@@ -1654,11 +1667,13 @@ func (br *builderRev) snapshotURL() string {
 	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", buildEnv.SnapBucket, br.snapshotObjectName())
 }
 
-func (st *buildStatus) writeSnapshot() error {
-	st.logEventTime("write_snapshot")
-	defer st.logEventTime("write_snapshot_done")
+func (st *buildStatus) writeSnapshot() (err error) {
+	sp := st.createSpan("write_snapshot_to_gcs")
+	defer func() { sp.done(err) }()
 
+	tsp := st.createSpan("fetch_snapshot_reader_from_buildlet")
 	tgz, err := st.bc.GetTar("go")
+	tsp.done(err)
 	if err != nil {
 		return err
 	}
@@ -1987,7 +2002,8 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	// fetch checks out the provided sub-repo to the buildlet's workspace.
 	fetch := func(repo, rev string) error {
 		fetched[repo] = true
-		tgz, err := getSourceTgz(st, repo, rev)
+		isTry := st.trySet != nil && repo == st.subName // i.e. hit Gerrit directly
+		tgz, err := getSourceTgz(st, repo, rev, isTry)
 		if err != nil {
 			return err
 		}
@@ -2057,8 +2073,8 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		}
 	}
 
-	st.logEventTime("starting_tests", st.subName)
-	defer st.logEventTime("tests_complete")
+	sp := st.createSpan("running_subrepo_tests", st.subName)
+	defer func() { sp.done(err) }()
 	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 		Output: st,
 		// TODO(adg): remove vendor experiment variable after Go 1.6
@@ -2253,7 +2269,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 		}
 	}
 	which := fmt.Sprintf("%s: %v", bc.Name(), names)
-	st.logEventTime("start_tests", which)
+	sp := st.createSpan("start_tests", which)
 
 	args := []string{"tool", "dist", "test", "--no-rebuild", "--banner=" + banner}
 	if st.conf.IsRace() {
@@ -2277,14 +2293,8 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
 		Args:     args,
 	})
-	summary := "ok"
-	if err != nil {
-		summary = "commErr=" + err.Error()
-	} else if remoteErr != nil {
-		summary = "test failed remotely"
-	}
 	execDuration := time.Since(t0)
-	st.logEventTime("end_tests", fmt.Sprintf("%s; %s (test exec = %v)", which, summary, execDuration))
+	sp.done(err)
 	if err != nil {
 		bc.MarkBroken() // prevents reuse
 		for _, ti := range tis {
@@ -2483,7 +2493,7 @@ type buildStatus struct {
 	startTime time.Time // actually time of newBuild (~same thing)
 	trySet    *trySet   // or nil
 
-	onceInitHelpers sync.Once // guards call of onceInitHelpersFunc, to init::
+	onceInitHelpers sync.Once // guards call of onceInitHelpersFunc
 	helpers         <-chan *buildlet.Client
 	ctx             context.Context    // used to start the build
 	cancel          context.CancelFunc // used to cancel context; for use by setDone only
@@ -2520,7 +2530,57 @@ func (st *buildStatus) logf(format string, args ...interface{}) {
 	log.Printf("[build %s %s]: %s", st.name, st.rev, fmt.Sprintf(format, args...))
 }
 
+// span is an event covering a region of time.
+// A span ultimately ends in an error or success, and will eventually
+// be visualized and logged.
+type span struct {
+	event   string // event name like "get_foo" or "write_bar"
+	optText string // optional details for event
+	start   time.Time
+	el      eventTimeLogger // where we log to at the end; TODO: this will change
+}
+
+func createSpan(el eventTimeLogger, event string, optText ...string) *span {
+	if len(optText) > 1 {
+		panic("usage")
+	}
+	start := time.Now()
+	var opt string
+	if len(optText) > 0 {
+		opt = optText[0]
+	}
+	el.logEventTime(event, opt)
+	return &span{
+		el:      el,
+		event:   event,
+		start:   start,
+		optText: opt,
+	}
+}
+
+func (s *span) done(err error) error {
+	t1 := time.Now()
+	td := t1.Sub(s.start)
+	var text bytes.Buffer
+	fmt.Fprintf(&text, "after %v", td)
+	if err != nil {
+		fmt.Fprintf(&text, "; err=%v", err)
+	}
+	if s.optText != "" {
+		fmt.Fprintf(&text, "; %v", s.optText)
+	}
+	s.el.logEventTime("finish_"+s.event, text.String())
+	return err
+}
+
+func (st *buildStatus) createSpan(event string, optText ...string) eventSpan {
+	return createSpan(st, event, optText...)
+}
+
 func (st *buildStatus) logEventTime(event string, optText ...string) {
+	if len(optText) > 1 {
+		panic("usage")
+	}
 	if inStaging {
 		st.logf("%s %v", event, optText)
 	}
@@ -2535,9 +2595,6 @@ func (st *buildStatus) logEventTime(event string, optText ...string) {
 	}
 	var text string
 	if len(optText) > 0 {
-		if len(optText) > 1 {
-			panic("usage")
-		}
 		text = optText[0]
 	}
 	st.events = append(st.events, eventAndTime{
@@ -2680,33 +2737,47 @@ var sourceGroup singleflight.Group
 
 var sourceCache = lru.New(40) // git rev -> []byte
 
+func useWatcher() bool {
+	return *mode != "dev"
+}
+
 // repo is go.googlesource.com repo ("go", "net", etc)
 // rev is git revision.
-func getSourceTgz(el eventTimeLogger, repo, rev string) (tgz io.Reader, err error) {
+func getSourceTgz(sl spanLogger, repo, rev string, isTry bool) (tgz io.Reader, err error) {
+	sp := sl.createSpan("get_source")
+	defer func() { sp.done(err) }()
+
 	fromCache := false
 	key := fmt.Sprintf("%v-%v", repo, rev)
-	vi, err, shared := sourceGroup.Do(key, func() (interface{}, error) {
+	vi, err, _ := sourceGroup.Do(key, func() (interface{}, error) {
 		if tgzBytes, ok := sourceCache.Get(key); ok {
 			fromCache = true
 			return tgzBytes, nil
 		}
 
-		for i := 0; *mode != "dev" && i < 10; i++ {
-			el.logEventTime("fetching_source", fmt.Sprintf("%v from watcher", key))
-			tgzBytes, err := getSourceTgzFromWatcher(repo, rev)
-			if err == nil {
-				sourceCache.Add(key, tgzBytes)
-				return tgzBytes, nil
+		if useWatcher() && !isTry {
+			sp := sl.createSpan("get_source_from_watcher")
+			for i := 0; i < 10; i++ {
+				if i > 0 {
+					// Wait for watcher to start up. Give it a minute until
+					// we try Gerrit.
+					time.Sleep(6 * time.Second)
+				}
+				tgzBytes, err := getSourceTgzFromWatcher(repo, rev)
+				if err == nil {
+					sourceCache.Add(key, tgzBytes)
+					sp.done(nil)
+					return tgzBytes, nil
+				}
+				log.Printf("Error fetching source %s/%s from watcher (after %v uptime): %v",
+					repo, rev, time.Since(processStartTime), err)
 			}
-			log.Printf("Error fetching source %s/%s from watcher (after %v uptime): %v",
-				repo, rev, time.Since(processStartTime), err)
-			// Wait for watcher to start up. Give it a minute until
-			// we try Gerrit.
-			time.Sleep(6 * time.Second)
+			sp.done(errors.New("timeout"))
 		}
 
-		el.logEventTime("fetching_source", fmt.Sprintf("%v from gerrit", key))
+		sp := sl.createSpan("get_source_from_gerrit", fmt.Sprintf("%v from gerrit", key))
 		tgzBytes, err := getSourceTgzFromGerrit(repo, rev)
+		sp.done(err)
 		if err == nil {
 			sourceCache.Add(key, tgzBytes)
 		}
@@ -2715,7 +2786,6 @@ func getSourceTgz(el eventTimeLogger, repo, rev string) (tgz io.Reader, err erro
 	if err != nil {
 		return nil, err
 	}
-	el.logEventTime("got_source", fmt.Sprintf("%v cache=%v shared=%v", key, fromCache, shared))
 	return bytes.NewReader(vi.([]byte)), nil
 }
 

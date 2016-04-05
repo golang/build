@@ -186,8 +186,9 @@ func highPriChan(typ string) chan *buildlet.Client {
 	return c
 }
 
-func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, machineType, rev string, el eventTimeLogger) (*buildlet.Client, error) {
+func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, machineType string, el eventTimeLogger) (*buildlet.Client, error) {
 	seenErrInUse := false
+	isHighPriority, _ := ctx.Value(highPriorityOpt{}).(bool)
 	for {
 		b, err := p.tryToGrab(machineType)
 		if err == errInUse {
@@ -196,15 +197,13 @@ func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, machineType, rev 
 				seenErrInUse = true
 			}
 			var highPri chan *buildlet.Client
-			if rev == "release" || rev == "adg" || rev == "bradfitz" {
+			if isHighPriority {
 				highPri = highPriChan(machineType)
-				log.Printf("Rev %q is waiting high-priority", rev)
 			}
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case bc := <-highPri:
-				log.Printf("Rev %q stole a high-priority one.", rev)
 				return p.cleanedBuildlet(bc, el)
 			// As multiple goroutines can be listening for
 			// the available signal, it must be treated as

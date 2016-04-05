@@ -292,7 +292,7 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 	}
 }
 
-func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, typ, rev string, el eventTimeLogger) (*buildlet.Client, error) {
+func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, typ string, el eventTimeLogger) (*buildlet.Client, error) {
 	conf, ok := dashboard.Builders[typ]
 	if !ok || conf.KubeImage == "" {
 		return nil, fmt.Errorf("kubepool: invalid builder type %q", typ)
@@ -304,32 +304,22 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, typ, rev string, el 
 		panic("expect non-nil kubeClient")
 	}
 
-	deleteIn := podDeleteTimeout
-	if strings.HasPrefix(rev, "user-") {
-		// Created by gomote (see remote.go), so don't kill it in 45 minutes.
-		// remote.go handles timeouts itself.
-		deleteIn = 0
-		rev = strings.TrimPrefix(rev, "user-")
+	deleteIn, ok := ctx.Value(buildletTimeoutOpt{}).(time.Duration)
+	if !ok {
+		deleteIn = podDeleteTimeout
 	}
 
-	// name is the cluster-wide unique name of the kubernetes pod. Max length
-	// is not documented, but it's kept <= 61 bytes, in line with GCE
-	revPrefix := rev
-	if len(revPrefix) > 8 {
-		revPrefix = rev[:8]
-	}
-
-	podName := "buildlet-" + typ + "-" + revPrefix + "-rn" + randHex(6)
+	podName := "buildlet-" + typ + "-rn" + randHex(7)
 
 	var needDelete bool
 
 	el.logEventTime("creating_kube_pod", podName)
-	log.Printf("Creating Kubernetes pod %q for %s at %s", podName, typ, rev)
+	log.Printf("Creating Kubernetes pod %q for %s", podName, typ)
 
 	bc, err := buildlet.StartPod(ctx, kubeClient, podName, typ, buildlet.PodOpts{
 		ProjectID:     buildEnv.ProjectName,
 		ImageRegistry: registryPrefix,
-		Description:   fmt.Sprintf("Go Builder for %s at %s", typ, rev),
+		Description:   fmt.Sprintf("Go Builder for %s at %s", typ),
 		DeleteIn:      deleteIn,
 		OnPodCreated: func() {
 			el.logEventTime("pod_created")

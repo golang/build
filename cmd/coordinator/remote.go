@@ -99,21 +99,23 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	user, _, _ := r.BasicAuth()
 	pool := poolForConf(bconf)
 
-	// rev is just a comment basically. The GCE pool uses it for
-	// naming.
-	rev := user // includes "user-" prefix.
-
 	var closeNotify <-chan bool
 	if cn, ok := w.(http.CloseNotifier); ok {
 		closeNotify = cn.CloseNotify()
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx := context.WithValue(context.Background(), buildletTimeoutOpt{}, time.Duration(0))
+	ctx, cancel := context.WithCancel(ctx)
+
+	// Doing a release?
+	if user == "release" || user == "adg" || user == "bradfitz" {
+		ctx = context.WithValue(ctx, highPriorityOpt{}, true)
+	}
 
 	resc := make(chan *buildlet.Client)
 	errc := make(chan error)
 	go func() {
-		bc, err := pool.GetBuildlet(ctx, typ, rev, eventTimeLoggerFunc(func(event string, optText ...string) {
+		bc, err := pool.GetBuildlet(ctx, typ, eventTimeLoggerFunc(func(event string, optText ...string) {
 			var extra string
 			if len(optText) > 0 {
 				extra = " " + optText[0]
