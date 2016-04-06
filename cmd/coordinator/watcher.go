@@ -76,8 +76,6 @@ func startWatchers() {
 		addWatcher(watchConfig{repo: "https://go.googlesource.com/gofrontend", dash: dashBase() + "gccgo/"})
 	}
 
-	go cleanUpOldContainers()
-
 	stopWatchers() // clean up before we start new ones
 	for _, watcher := range watchers {
 		if err := startWatching(watchers[watcher.repo]); err != nil {
@@ -89,22 +87,41 @@ func startWatchers() {
 // Stop any previous go-watcher-world Docker tasks, so they don't
 // pile up upon restarts of the coordinator.
 func stopWatchers() {
-	out, err := exec.Command("docker", "ps").Output()
+	out, err := exec.Command("docker", "ps", "--no-trunc").Output()
 	if err != nil {
 		return
 	}
+	foundOld := false
 	for _, line := range strings.Split(string(out), "\n") {
-		if !strings.Contains(line, "go-watcher-world:") {
+		if !strings.Contains(line, "go-watcher-world") {
 			continue
 		}
+		foundOld = true
 		f := strings.Fields(line)
-		exec.Command("docker", "rm", "-f", "-v", f[0]).Run()
+		id := f[0]
+		log.Printf("killing old watcher process %s ...", id)
+		err := exec.Command("docker", "rm", "-f", "-v", id).Run()
+		log.Printf("killed old watcher process %s: %v", id, err)
+	}
+	if !foundOld {
+		return
+	}
+	out, _ = exec.Command("docker", "ps", "--no-trunc").Output()
+	if strings.Contains(string(out), "go-watcher-world") {
+		log.Printf("Failed to kill previous watchers. Current containers: %s", out)
 	}
 }
+
+const watcherGitCacheDir = "/var/cache/watcher-git"
 
 // returns the part after "docker run"
 func (conf watchConfig) dockerRunArgs() (args []string) {
 	log.Printf("Running watcher with master key %q", masterKey())
+
+	if err := os.MkdirAll(watcherGitCacheDir, 0755); err != nil {
+		log.Fatalf("Failed to created watcher's git cache dir: %v", err)
+	}
+
 	if key := masterKey(); len(key) > 0 {
 		tmpKey := "/tmp/watcher.buildkey"
 		if _, err := os.Stat(tmpKey); err != nil {
@@ -112,11 +129,12 @@ func (conf watchConfig) dockerRunArgs() (args []string) {
 				log.Fatal(err)
 			}
 		}
+		args = append(args, "-v", os.Args[0]+":/usr/local/bin/watcher")
+		args = append(args, "-v", watcherGitCacheDir+":"+watcherGitCacheDir)
 		// Images may look for .gobuildkey in / or /root, so provide both.
 		// TODO(adg): fix images that look in the wrong place.
 		args = append(args, "-v", tmpKey+":/.gobuildkey")
 		args = append(args, "-v", tmpKey+":/root/.gobuildkey")
-		args = append(args, "-v", os.Args[0]+":/usr/local/bin/watcher")
 	}
 	if conf.netHost {
 		args = append(args, "--net=host")
@@ -270,23 +288,6 @@ func restartWatcherSoon(conf watchConfig) {
 	time.AfterFunc(30*time.Second, func() {
 		startWatching(conf)
 	})
-}
-
-// This is only for the watcher container, since all builds run in VMs
-// now.
-func cleanUpOldContainers() {
-	for {
-		for _, cid := range oldContainers() {
-			log.Printf("Cleaning old container %v", cid)
-			exec.Command("docker", "rm", "-v", cid).Run()
-		}
-		time.Sleep(60 * time.Second)
-	}
-}
-
-func oldContainers() []string {
-	out, _ := exec.Command("docker", "ps", "-a", "--filter=status=exited", "--no-trunc", "-q").Output()
-	return strings.Fields(string(out))
 }
 
 func mirrorCred() (username, password string) {

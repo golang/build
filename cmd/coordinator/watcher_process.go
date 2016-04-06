@@ -83,11 +83,17 @@ func runWatcher() error {
 		}
 	}
 
-	dir, err := ioutil.TempDir("", "watcher")
-	if err != nil {
-		return err
+	var dir string
+	if fi, err := os.Stat(watcherGitCacheDir); err == nil && fi.IsDir() {
+		dir = watcherGitCacheDir
+	} else {
+		var err error
+		dir, err = ioutil.TempDir("", "watcher")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(dir)
 	}
-	defer os.RemoveAll(dir)
 
 	if *httpAddr != "" {
 		ln, err := net.Listen("tcp", *httpAddr)
@@ -203,10 +209,31 @@ func NewRepo(dir, srcURL, dstURL, importPath string, dash bool) (*Repo, error) {
 		dash:     dash,
 	}
 
-	r.logf("cloning %v", srcURL)
-	cmd := exec.Command("git", "clone", "--mirror", srcURL, r.root)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("%v\n\n%s", err, out)
+	needClone := true
+	if r.shouldTryReuseGitDir(dstURL) {
+		cmd := exec.Command("git", "fetch", "--all")
+		cmd.Dir = r.root
+		r.logf("running git fetch --all")
+		t0 := time.Now()
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		if err != nil {
+			r.logf("git fetch --all failed; proceeding to wipe + clone instead; err: %v, stderr: %s", err, stderr.Bytes())
+		} else {
+			needClone = false
+			r.logf("ran git fetch --all in %v", time.Since(t0))
+		}
+	}
+	if needClone {
+		os.RemoveAll(r.root)
+		t0 := time.Now()
+		r.logf("cloning %v", srcURL)
+		cmd := exec.Command("git", "clone", "--mirror", srcURL, r.root)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("cloning %s: %v\n\n%s", srcURL, err, out)
+		}
+		r.logf("cloned in %v", time.Since(t0))
 	}
 
 	if r.mirror {
@@ -230,9 +257,41 @@ func NewRepo(dir, srcURL, dstURL, importPath string, dash bool) (*Repo, error) {
 	return r, nil
 }
 
-// addRemote edits the git config file to add the specified remote.
-// We don't use "git remote add" because that will also add a "fetch" line
-// which will create refs that we don't want.
+// shouldTryReuseGitDir reports whether we should try to reuse r.root as the git
+// directory. (The directory may be corrupt, though.)
+// dstURL is optional, and is the desired remote URL for a remote named "dest".
+func (r *Repo) shouldTryReuseGitDir(dstURL string) bool {
+	if _, err := os.Stat(filepath.Join(r.root, "FETCH_HEAD")); err != nil {
+		return false
+	}
+	if dstURL == "" {
+		return true
+	}
+
+	// Does the "dest" remote match? If not, we return false and nuke
+	// the world and re-clone out of laziness.
+	cmd := exec.Command("git", "remote", "-v")
+	cmd.Dir = r.root
+	out, err := cmd.Output()
+	if err != nil {
+		log.Printf("git remote -v: %v", err)
+	}
+	for _, ln := range strings.Split(string(out), "\n") {
+		if !strings.HasPrefix(ln, "dest") {
+			continue
+		}
+		f := strings.Fields(ln)
+		if len(f) < 2 {
+			continue
+		}
+		if f[0] == "dest" && f[1] == dstURL {
+			return true
+		}
+	}
+	r.logf("not reusing old repo: remote \"dest\" URL doesn't match")
+	return false
+}
+
 func (r *Repo) addRemote(name, url string) error {
 	gitConfig := filepath.Join(r.root, "config")
 	f, err := os.OpenFile(gitConfig, os.O_WRONLY|os.O_APPEND, os.ModePerm)
