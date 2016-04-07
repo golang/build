@@ -583,7 +583,14 @@ func init() {
 		Notes:          "Debian jessie; run by Go team on osuosl.org",
 		IsReverse:      true,
 		NumTestHelpers: 0,
-		env:            []string{"GOROOT_BOOTSTRAP=/home/debian/go-linux-ppc64le-bootstrap"},
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+	})
+	addBuilder(BuildConfig{
+		Name:           "linux-arm64-buildlet",
+		Notes:          "Ubuntu wily; run by Go team, from linaro",
+		IsReverse:      true,
+		NumTestHelpers: 0,
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-s390x-ibm",
