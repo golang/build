@@ -220,10 +220,14 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 	return tc, nil
 }
 
-type eventTimeLoggerFunc func(event string, optText ...string)
+type loggerFunc func(event string, optText ...string)
 
-func (fn eventTimeLoggerFunc) logEventTime(event string, optText ...string) {
+func (fn loggerFunc) logEventTime(event string, optText ...string) {
 	fn(event, optText...)
+}
+
+func (fn loggerFunc) createSpan(event string, optText ...string) eventSpan {
+	return createSpan(fn, event, optText...)
 }
 
 func main() {
@@ -583,15 +587,13 @@ func findWorkLoop(work chan<- builderRev) {
 	// Useful for debugging a single run:
 	if inStaging && true {
 		//work <- builderRev{name: "linux-arm", rev: "c9778ec302b2e0e0d6027e1e0fca892e428d9657", subName: "tools", subRev: "ac303766f5f240c1796eeea3dc9bf34f1261aa35"}
-		//work <- builderRev{name: "linux-amd64", rev: "54789eff385780c54254f822e09505b6222918e2"}
-		//work <- builderRev{name: "windows-amd64-gce", rev: "54789eff385780c54254f822e09505b6222918e2"}
+		work <- builderRev{name: "linux-amd64", rev: "cdc0ebbebe64d8fa601914945112db306c85c426"}
 		log.Printf("Test work awaiting arm")
-		for !reversePool.CanBuild("linux-arm") {
-			time.Sleep(time.Second)
+		if false {
+			for !reversePool.CanBuild("linux-arm") {
+				time.Sleep(time.Second)
+			}
 		}
-		log.Printf("Sending test work.")
-		work <- builderRev{name: "linux-arm", rev: "c1aee8c825c2179ad4959ebf533bf27c4b774d00"}
-		log.Printf("Sent test work.")
 
 		// Still run findWork but ignore what it does.
 		ignore := make(chan builderRev)
@@ -1100,6 +1102,15 @@ type eventSpan interface {
 	done(err error) error
 }
 
+// logger is the logging interface used within the coordinator.
+// It can both log a message at a point in time, as well
+// as log a span (something having a start and end time, as well as
+// a final success status).
+type logger interface {
+	eventTimeLogger // point in time
+	spanLogger      // action spanning time
+}
+
 // buildletTimeoutOpt is a context.Value key for BuildletPool.GetBuildlet.
 type buildletTimeoutOpt struct{} // context Value key; value is time.Duration
 
@@ -1117,36 +1128,38 @@ type BuildletPool interface {
 	//
 	// The ctx may have context values of type buildletTimeoutOpt
 	// and highPriorityOpt.
-	GetBuildlet(ctx context.Context, machineType string, el eventTimeLogger) (*buildlet.Client, error)
+	GetBuildlet(ctx context.Context, machineType string, lg logger) (*buildlet.Client, error)
 
 	String() string // TODO(bradfitz): more status stuff
 }
 
 // GetBuildlets creates up to n buildlets and sends them on the returned channel
 // before closing the channel.
-func GetBuildlets(ctx context.Context, pool BuildletPool, n int, machineType string, el eventTimeLogger) <-chan *buildlet.Client {
+func GetBuildlets(ctx context.Context, pool BuildletPool, n int, machineType string, lg logger) <-chan *buildlet.Client {
 	ch := make(chan *buildlet.Client) // NOT buffered
 	var wg sync.WaitGroup
 	wg.Add(n)
 	for i := 0; i < n; i++ {
-		go func() {
+		go func(i int) {
 			defer wg.Done()
-			bc, err := pool.GetBuildlet(ctx, machineType, el)
+			sp := lg.createSpan("get_helper", fmt.Sprintf("helper %d/%d", i+1, n))
+			bc, err := pool.GetBuildlet(ctx, machineType, lg)
+			sp.done(err)
 			if err != nil {
 				if err != context.Canceled {
 					log.Printf("failed to get a %s buildlet: %v", machineType, err)
 				}
 				return
 			}
-			el.logEventTime("empty_helper_ready", bc.Name())
+			lg.logEventTime("empty_helper_ready", bc.Name())
 			select {
 			case ch <- bc:
 			case <-ctx.Done():
-				el.logEventTime("helper_killed_before_use", bc.Name())
+				lg.logEventTime("helper_killed_before_use", bc.Name())
 				bc.Close()
 				return
 			}
-		}()
+		}(i)
 	}
 	go func() {
 		wg.Wait()
@@ -2676,12 +2689,8 @@ func (st *buildStatus) logsURLLocked() string {
 // st.mu must be held.
 func (st *buildStatus) writeEventsLocked(w io.Writer, htmlMode bool) {
 	var lastT time.Time
-	for i, evt := range st.events {
+	for _, evt := range st.events {
 		lastT = evt.t
-		var elapsed string
-		if i != 0 {
-			elapsed = fmt.Sprintf("+%0.1fs", evt.t.Sub(st.events[i-1].t).Seconds())
-		}
 		e := evt.evt
 		text := evt.text
 		if htmlMode {
@@ -2691,7 +2700,7 @@ func (st *buildStatus) writeEventsLocked(w io.Writer, htmlMode bool) {
 			e = "<b>" + e + "</b>"
 			text = "<i>" + html.EscapeString(text) + "</i>"
 		}
-		fmt.Fprintf(w, " %7s %v %s %s\n", elapsed, evt.t.Format(time.RFC3339), e, text)
+		fmt.Fprintf(w, "  %v %s %s\n", evt.t.Format(time.RFC3339), e, text)
 	}
 	if st.isRunningLocked() {
 		fmt.Fprintf(w, " %7s (now)\n", fmt.Sprintf("+%0.1fs", time.Since(lastT).Seconds()))

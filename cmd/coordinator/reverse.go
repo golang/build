@@ -186,14 +186,15 @@ func highPriChan(typ string) chan *buildlet.Client {
 	return c
 }
 
-func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, machineType string, el eventTimeLogger) (*buildlet.Client, error) {
+func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, machineType string, lg logger) (*buildlet.Client, error) {
 	seenErrInUse := false
 	isHighPriority, _ := ctx.Value(highPriorityOpt{}).(bool)
+	sp := lg.createSpan("wait_static_builder", machineType)
 	for {
 		b, err := p.tryToGrab(machineType)
 		if err == errInUse {
 			if !seenErrInUse {
-				el.logEventTime("waiting_machine_in_use")
+				lg.logEventTime("waiting_machine_in_use")
 				seenErrInUse = true
 			}
 			var highPri chan *buildlet.Client
@@ -202,9 +203,10 @@ func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, machineType strin
 			}
 			select {
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return nil, sp.done(ctx.Err())
 			case bc := <-highPri:
-				return p.cleanedBuildlet(bc, el)
+				sp.done(nil)
+				return p.cleanedBuildlet(bc, lg)
 			// As multiple goroutines can be listening for
 			// the available signal, it must be treated as
 			// a best effort signal. So periodically try
@@ -213,26 +215,29 @@ func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, machineType strin
 			case <-p.available:
 			}
 		} else if err != nil {
+			sp.done(err)
 			return nil, err
 		} else {
 			select {
 			case highPriChan(machineType) <- b:
 				// Somebody else was more important.
 			default:
-				return p.cleanedBuildlet(b, el)
+				sp.done(nil)
+				return p.cleanedBuildlet(b, lg)
 			}
 		}
 	}
 }
 
-func (p *reverseBuildletPool) cleanedBuildlet(b *buildlet.Client, el eventTimeLogger) (*buildlet.Client, error) {
-	el.logEventTime("got_machine", b.String())
+func (p *reverseBuildletPool) cleanedBuildlet(b *buildlet.Client, lg logger) (*buildlet.Client, error) {
 	// Clean up any files from previous builds.
-	if err := b.RemoveAll("."); err != nil {
+	sp := lg.createSpan("clean_buildlet", b.String())
+	err := b.RemoveAll(".")
+	sp.done(err)
+	if err != nil {
 		b.Close()
 		return nil, err
 	}
-	el.logEventTime("cleaned_up", b.Name())
 	return b, nil
 }
 

@@ -292,7 +292,7 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 	}
 }
 
-func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, typ string, el eventTimeLogger) (*buildlet.Client, error) {
+func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, typ string, lg logger) (*buildlet.Client, error) {
 	conf, ok := dashboard.Builders[typ]
 	if !ok || conf.KubeImage == "" {
 		return nil, fmt.Errorf("kubepool: invalid builder type %q", typ)
@@ -313,7 +313,7 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, typ string, el event
 
 	var needDelete bool
 
-	el.logEventTime("creating_kube_pod", podName)
+	lg.logEventTime("creating_kube_pod", podName)
 	log.Printf("Creating Kubernetes pod %q for %s", podName, typ)
 
 	bc, err := buildlet.StartPod(ctx, kubeClient, podName, typ, buildlet.PodOpts{
@@ -322,16 +322,16 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, typ string, el event
 		Description:   fmt.Sprintf("Go Builder for %s at %s", typ),
 		DeleteIn:      deleteIn,
 		OnPodCreated: func() {
-			el.logEventTime("pod_created")
+			lg.logEventTime("pod_created")
 			p.setPodUsed(podName, true)
 			needDelete = true
 		},
 		OnGotPodInfo: func() {
-			el.logEventTime("got_pod_info", "waiting_for_buildlet...")
+			lg.logEventTime("got_pod_info", "waiting_for_buildlet...")
 		},
 	})
 	if err != nil {
-		el.logEventTime("kube_buildlet_create_failure", fmt.Sprintf("%s: %v", podName, err))
+		lg.logEventTime("kube_buildlet_create_failure", fmt.Sprintf("%s: %v", podName, err))
 
 		if needDelete {
 			log.Printf("Deleting failed pod %q", podName)

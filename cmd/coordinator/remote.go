@@ -115,7 +115,7 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	resc := make(chan *buildlet.Client)
 	errc := make(chan error)
 	go func() {
-		bc, err := pool.GetBuildlet(ctx, typ, eventTimeLoggerFunc(func(event string, optText ...string) {
+		bc, err := pool.GetBuildlet(ctx, typ, loggerFunc(func(event string, optText ...string) {
 			var extra string
 			if len(optText) > 0 {
 				extra = " " + optText[0]
