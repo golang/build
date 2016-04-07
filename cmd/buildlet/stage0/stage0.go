@@ -35,6 +35,8 @@ import (
 // upstart+systemd+init scripts:
 var networkWait = flag.Duration("network-wait", 0, "if non-zero, the time to wait for the network to come up.")
 
+const osArch = runtime.GOOS + "/" + runtime.GOARCH
+
 const attr = "buildlet-binary-url"
 
 var (
@@ -45,10 +47,15 @@ var (
 func main() {
 	flag.Parse()
 
-	if runtime.GOOS == "linux" && runtime.GOARCH == "arm" {
+	switch osArch {
+	case "linux/arm":
 		if _, err := os.Stat("/usr/local/bin/oc-metadata"); err == nil {
 			initScaleway()
 		}
+	case "linux/arm64":
+		initLinaroARM64()
+	case "linux/ppc64le":
+		initOregonStatePPC64le()
 	}
 
 	if !awaitNetwork() {
@@ -73,19 +80,26 @@ func main() {
 	if onScaleway {
 		cmd.Args = append(cmd.Args, scalewayBuildletArgs()...)
 	}
-	if runtime.GOOS == "linux" && runtime.GOARCH == "s390x" {
-		cmd.Args = append(cmd.Args, s390xBuildletArgs()...)
+	switch osArch {
+	case "linux/s390x":
+		cmd.Args = append(cmd.Args, "--workdir=/data/golang/workdir")
+		cmd.Args = append(cmd.Args, reverseBuildletArgs("linux-s390x-ibm")...)
+	case "linux/arm64":
+		cmd.Args = append(cmd.Args, reverseBuildletArgs("linux-arm64-buildlet")...)
+	case "linux/ppc64le":
+		cmd.Args = append(cmd.Args, reverseBuildletArgs("linux-ppc64le-buildlet")...)
+	case "solaris/amd64":
+		cmd.Args = append(cmd.Args, reverseBuildletArgs("solaris-amd64-smartosbuildlet")...)
 	}
 	if err := cmd.Run(); err != nil {
 		sleepFatalf("Error running buildlet: %v", err)
 	}
 }
 
-func s390xBuildletArgs() []string {
+func reverseBuildletArgs(builder string) []string {
 	return []string{
 		"--halt=false",
-		"--workdir=/data/golang/workdir",
-		"--reverse=linux-s390x-ibm",
+		"--reverse=" + builder,
 		"--coordinator=farmer.golang.org:443",
 	}
 }
@@ -137,6 +151,16 @@ func awaitNetwork() bool {
 }
 
 func buildletURL() string {
+	switch osArch {
+	case "linux/s390x":
+		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-s390x"
+	case "linux/arm64":
+		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-arm64"
+	case "linux/ppc64le":
+		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64le"
+	case "solaris/amd64":
+		return "https://storage.googleapis.com/go-builder-data/buildlet.solaris-amd64"
+	}
 	// The buildlet download URL is located in an env var
 	// when the buildlet is not running on GCE, or is running
 	// on Kubernetes.
@@ -341,4 +365,46 @@ func initScalewayGo14() {
 	if err := os.Rename("/usr/local/go.tmp", "/usr/local/go"); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func aptGetInstall(pkgs ...string) {
+	args := append([]string{"--yes", "install"}, pkgs...)
+	cmd := exec.Command("apt-get", args...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		log.Fatalf("error running apt-get install: %s", out)
+	}
+}
+
+func initBootstrapDir(destDir, tgzCache string) {
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		log.Fatal(err)
+	}
+	// TODO(bradfitz): rewrite this to use Go instead of curl+tar
+	// if this ever gets used on platforms besides Unix. For
+	// Windows and Plan 9 we bake in the bootstrap tarball into
+	// the image anyway. So this works for now. Solaris might require
+	// tweaking to use gtar instead or something.
+	latestURL := fmt.Sprintf("https://storage.googleapis.com/go-builder-data/gobootstrap-%s-%s.tar.gz",
+		runtime.GOOS, runtime.GOARCH)
+	curl := exec.Command("/usr/bin/curl", "-R", "-o", tgzCache, "-z", tgzCache, latestURL)
+	out, err := curl.CombinedOutput()
+	if err != nil {
+		log.Fatalf("curl error fetching %s to %s: %s", latestURL, out, err)
+	}
+	tar := exec.Command("tar", "zxf", tgzCache)
+	tar.Dir = destDir
+	out, err = tar.CombinedOutput()
+	if err != nil {
+		log.Fatalf("error untarring %s to %s: %s", tgzCache, destDir, out)
+	}
+}
+
+func initLinaroARM64() {
+	aptGetInstall("gcc", "strace", "libc6-dev", "gdb")
+	initBootstrapDir("/usr/local/go-bootstrap", "/usr/local/go-bootstrap.tar.gz")
+}
+
+func initOregonStatePPC64le() {
+	aptGetInstall("gcc", "strace", "libc6-dev", "gdb")
+	initBootstrapDir("/usr/local/go-bootstrap", "/usr/local/go-bootstrap.tar.gz")
 }
