@@ -25,6 +25,9 @@ import (
 )
 
 func main() {
+	if err := godoc(); err != nil {
+		log.Fatal(err)
+	}
 	if err := blog(); err != nil {
 		log.Fatal(err)
 	}
@@ -41,6 +44,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func godoc() error {
+	// Copy godoc binary to $GOROOT/bin.
+	return cp(
+		filepath.FromSlash("go/bin/godoc"+ext()),
+		filepath.FromSlash("gopath/bin/gotour"+ext()),
+	)
 }
 
 const blogPath = "golang.org/x/blog"
