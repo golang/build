@@ -54,6 +54,7 @@ type Environment struct {
 
 	// KubeMaxNodes is the maximum number of nodes that the autoscaler can
 	// provision in the Kubernetes cluster.
+	// If KubeMaxNodes is 0, Kubernetes is not used.
 	KubeMaxNodes int64
 
 	// KubeMachineType is the GCE machine type to use for the Kubernetes cluster nodes.
@@ -79,16 +80,17 @@ type Environment struct {
 	// TODO: rename. this is not just for buildlets; also for bootstrap.
 	BuildletBucket string
 
-	// The GCS bucket that logs are written to.
+	// LogBucket is the GCS bucket to which logs are written.
 	LogBucket string
 
-	// The GCS bucket that snapshots are written to.
+	// SnapBucket is the GCS bucket to which snapshots of
+	// completed builds (after make.bash, before tests) are
+	// written.
 	SnapBucket string
 
-	// The maximum number of concurrent builds that can run.
-	// The zero value indicates unlimited builds and is the default.
-	// MaxBuilds is typically used to limit the number of builds in
-	// a development or staging environment.
+	// MaxBuilds is the maximum number of concurrent builds that
+	// can run. Zero means unlimit. This is typically only used
+	// in a development or staging environment.
 	MaxBuilds int
 }
 
@@ -139,7 +141,7 @@ var Staging = &Environment{
 	StaticIP:        "104.154.113.235",
 	MachineType:     "n1-standard-1",
 	KubeMinNodes:    1,
-	KubeMaxNodes:    5,
+	KubeMaxNodes:    2,
 	KubeName:        "buildlets",
 	KubeMachineType: "n1-standard-32",
 	CoordinatorURL:  "https://storage.googleapis.com/dev-go-builder-data/coordinator",
@@ -158,8 +160,8 @@ var Production = &Environment{
 	ZonesToClean:    []string{"us-central1-f"},
 	StaticIP:        "107.178.219.46",
 	MachineType:     "n1-standard-4",
-	KubeMinNodes:    1,
-	KubeMaxNodes:    10,
+	KubeMinNodes:    3,
+	KubeMaxNodes:    5,
 	KubeName:        "buildlets",
 	KubeMachineType: "n1-standard-32",
 	CoordinatorURL:  "https://storage.googleapis.com/go-builder-data/coordinator",

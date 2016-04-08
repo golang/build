@@ -14,6 +14,8 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"text/template"
@@ -30,7 +32,7 @@ import (
 )
 
 var (
-	proj            = flag.String("project", "", "Optional name of the Google Cloud Platform project to create the infrastructure in. If empty, the project from a configuration defined in golang.org/x/build/buildenv will be used.")
+	proj            = flag.String("project", "", "Optional name of the Google Cloud Platform project to create the infrastructure in. If empty, the project defined in golang.org/x/build/buildenv is used, for either production or staging (if the -staging flag is used)")
 	staticIP        = flag.String("static_ip", "", "Static IP to use. If empty, automatic.")
 	reuseDisk       = flag.Bool("reuse_disk", true, "Whether disk images should be reused between shutdowns/restarts.")
 	ssd             = flag.Bool("ssd", true, "If true, use a solid state disk (faster, more expensive)")
@@ -134,6 +136,15 @@ func main() {
 	}
 
 	buildEnv.KubePassword = randomPassword()
+
+	// Brad is sick of google.DefaultClient giving him the
+	// permissions from the instance via the metadata service. Use
+	// the service account from disk if it exists instead:
+	keyFile := filepath.Join(os.Getenv("HOME"), "keys", buildEnv.ProjectName+".key.json")
+	if _, err := os.Stat(keyFile); err == nil {
+		log.Printf("Using service account from %s", keyFile)
+		os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", keyFile)
+	}
 
 	oauthClient, err = google.DefaultClient(oauth2.NoContext, compute.CloudPlatformScope, compute.ComputeScope, compute.DevstorageFullControlScope)
 	if err != nil {
@@ -288,6 +299,10 @@ func createCluster() error {
 	deploymentService, err = dm.New(oauthClient)
 	if err != nil {
 		return fmt.Errorf("could not create client for Google Cloud Deployment Manager: %v", err)
+	}
+
+	if buildEnv.KubeMaxNodes == 0 || buildEnv.KubeMinNodes == 0 {
+		return fmt.Errorf("buildenv KubeMaxNodes/KubeMinNodes values cannot be 0")
 	}
 
 	tpl, err := template.New("kube").Parse(kubeConfig)

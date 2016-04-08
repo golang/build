@@ -603,9 +603,6 @@ func init() {
 }
 
 func addBuilder(c BuildConfig) {
-	if c.KubeImage != "" {
-		return // Disabled for now. https://golang.org/issue/14112
-	}
 	if c.Name == "" {
 		panic("empty name")
 	}

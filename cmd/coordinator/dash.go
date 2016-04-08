@@ -28,6 +28,8 @@ import (
 // dashBase returns the base URL of the build dashboard.
 // It must be called after initGCE (so not at init time).
 func dashBase() string {
+	// TODO(bradfitz,evanbrown): use buildenv instead of global variable.
+	// In fact, kill the inStaging variable altogether.
 	if inStaging {
 		return "https://go-dashboard-dev.appspot.com/"
 	}

@@ -55,7 +55,6 @@ var (
 	buildEnv *buildenv.Environment
 
 	computeService *compute.Service
-	externalIP     string
 	tokenSource    oauth2.TokenSource
 	serviceCtx     context.Context
 	errTryDeps     error // non-nil if try bots are disabled

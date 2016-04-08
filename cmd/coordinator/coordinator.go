@@ -40,6 +40,7 @@ import (
 	"go4.org/syncutil"
 
 	"golang.org/x/build"
+	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
@@ -349,12 +350,12 @@ func main() {
 func stagingClusterBuilders() map[string]dashboard.BuildConfig {
 	m := map[string]dashboard.BuildConfig{}
 	for _, name := range []string{
-		"linux-arm",
-		"linux-amd64",
+		//		"linux-arm",
+		//		"linux-amd64",
 		"linux-amd64-kube",
-		"linux-amd64-race",
-		"windows-amd64-gce",
-		"plan9-386",
+		//		"linux-amd64-race",
+		//		"windows-amd64-gce",
+		//		"plan9-386",
 	} {
 		m[name] = dashboard.Builders[name]
 	}
@@ -387,8 +388,12 @@ func mayBuildRev(rev builderRev) bool {
 	if strings.Contains(rev.name, "netbsd") {
 		return false
 	}
-	if dashboard.Builders[rev.name].IsReverse {
+	buildConf := dashboard.Builders[rev.name]
+	if buildConf.IsReverse {
 		return reversePool.CanBuild(rev.name)
+	}
+	if buildConf.KubeImage != "" && kubeErr != nil {
+		return false
 	}
 	return true
 }
@@ -522,7 +527,7 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !st.hasEvent("pre_exec") {
+	if !st.hasEvent("check_dist") {
 		fmt.Fprintf(w, "\n\n(buildlet still starting; no live streaming. reload manually to see status)\n")
 		return
 	}
@@ -591,7 +596,7 @@ func workaroundFlush(w http.ResponseWriter) {
 // TODO(bradfitz): it also currently does not support subrepos.
 func findWorkLoop(work chan<- builderRev) {
 	// Useful for debugging a single run:
-	if inStaging && true {
+	if inStaging && false {
 		//work <- builderRev{name: "linux-arm", rev: "c9778ec302b2e0e0d6027e1e0fca892e428d9657", subName: "tools", subRev: "ac303766f5f240c1796eeea3dc9bf34f1261aa35"}
 		work <- builderRev{name: "linux-amd64", rev: "cdc0ebbebe64d8fa601914945112db306c85c426"}
 		log.Printf("Test work awaiting arm")
@@ -608,9 +613,6 @@ func findWorkLoop(work chan<- builderRev) {
 			}
 		}()
 		work = ignore
-	}
-	if inStaging {
-		return
 	}
 	ticker := time.NewTicker(15 * time.Second)
 	for {
@@ -1233,7 +1235,6 @@ func (st *buildStatus) buildletPool() (BuildletPool, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid BuildletType %q for %q", buildletType, st.conf.Name)
 	}
-	// TODO(evanbrown): if pool is disabled, return an error
 	return poolForConf(bconf), nil
 }
 
@@ -1369,7 +1370,7 @@ func (st *buildStatus) build() error {
 	}
 	fmt.Fprint(st, "\n\n")
 
-	distSpan := st.createSpan("check_dist")
+	distSpan := st.createSpan("check_dist") // warning: magic event named used by handleLogs
 	hasDist, err := st.hasDistTest()
 	distSpan.done(err)
 	if err != nil {
@@ -2678,9 +2679,11 @@ func (st *buildStatus) HTMLStatusLine() template.HTML {
 }
 
 func (st *buildStatus) logsURLLocked() string {
-	urlPrefix := "http://farmer.golang.org"
-	if inStaging {
-		urlPrefix = "http://" + externalIP
+	var urlPrefix string
+	if buildEnv == buildenv.Production {
+		urlPrefix = "http://farmer.golang.org"
+	} else {
+		urlPrefix = "http://" + buildEnv.StaticIP
 	}
 	if *mode == "dev" {
 		urlPrefix = "https://localhost:8119"
