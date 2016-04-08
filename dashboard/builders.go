@@ -599,7 +599,13 @@ func init() {
 		NumTestHelpers: 0,
 		env:            []string{"GOROOT_BOOTSTRAP=/var/buildlet/go-linux-s390x-bootstrap"},
 	})
-
+	addBuilder(BuildConfig{
+		Name:           "solaris-amd64-oraclejtsylve",
+		Notes:          "temporary test builder run by jtsylve",
+		IsReverse:      true,
+		NumTestHelpers: 0,
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+	})
 }
 
 func addBuilder(c BuildConfig) {

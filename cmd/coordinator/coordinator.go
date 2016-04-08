@@ -359,6 +359,13 @@ func stagingClusterBuilders() map[string]dashboard.BuildConfig {
 	} {
 		m[name] = dashboard.Builders[name]
 	}
+
+	// Also permit all the reverse buildlets:
+	for name, bc := range dashboard.Builders {
+		if bc.IsReverse {
+			m[name] = bc
+		}
+	}
 	return m
 }
 
