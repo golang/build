@@ -1974,6 +1974,7 @@ var fixedTestDuration = map[string]Seconds{
 	"go_test:cmd/objdump":                    3.60,
 	"go_test:cmd/pack":                       2.64,
 	"go_test:cmd/pprof/internal/profile":     1.29,
+	"go_test:cmd/compile/internal/gc":        25,
 	"runtime:cpu124":                         44.78,
 	"sync_cpu":                               1.01,
 	"cgo_stdio":                              1.53,
