@@ -15,6 +15,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/rand"
 	"crypto/sha1"
 	"crypto/tls"
 	"encoding/json"
@@ -831,6 +832,7 @@ func (k *tryKey) ChangeTriple() string {
 type trySet struct {
 	// immutable
 	tryKey
+	tryID string // "T" + 9 random hex
 
 	// mu guards state and errMsg
 	// See LOCK ORDER comment above.
@@ -878,6 +880,7 @@ func newTrySet(key tryKey) (*trySet, error) {
 	log.Printf("Starting new trybot set for %v", key)
 	ts := &trySet{
 		tryKey: key,
+		tryID:  "T" + randHex(9),
 		trySetState: trySetState{
 			remain: len(builders),
 			builds: make([]*buildStatus, len(builders)),
@@ -1202,6 +1205,7 @@ func newBuild(rev builderRev) (*buildStatus, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &buildStatus{
+		buildID:    "B" + randHex(9),
 		builderRev: rev,
 		conf:       conf,
 		startTime:  time.Now(),
@@ -2516,8 +2520,9 @@ type eventAndTime struct {
 type buildStatus struct {
 	// Immutable:
 	builderRev
+	buildID   string // "B" + 9 random hex
 	conf      dashboard.BuildConfig
-	startTime time.Time // actually time of newBuild (~same thing)
+	startTime time.Time // actually time of newBuild (~same thing); TODO(bradfitz): rename this createTime
 	trySet    *trySet   // or nil
 
 	onceInitHelpers sync.Once // guards call of onceInitHelpersFunc
@@ -2896,4 +2901,12 @@ func newFailureLogBlob(objName string) (obj io.WriteCloser, url_ string) {
 	})
 
 	return wr, fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, objName)
+}
+
+func randHex(n int) string {
+	buf := make([]byte, n/2+1)
+	if _, err := rand.Read(buf); err != nil {
+		log.Fatalf("randHex: %v", err)
+	}
+	return fmt.Sprintf("%x", buf)[:n]
 }

@@ -8,7 +8,6 @@
 package main
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -577,13 +576,4 @@ func hasComputeScope() bool {
 
 func hasStorageScope() bool {
 	return hasScope(storage.ScopeReadWrite) || hasScope(storage.ScopeFullControl) || hasScope(compute.CloudPlatformScope)
-}
-
-func randHex(n int) string {
-	buf := make([]byte, n/2)
-	_, err := rand.Read(buf)
-	if err != nil {
-		panic("Failed to get randomness: " + err.Error())
-	}
-	return fmt.Sprintf("%x", buf)
 }
