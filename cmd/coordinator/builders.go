@@ -29,7 +29,7 @@ var buildersTmpl = template.Must(template.New("builders").Parse(`
 <header>
 	<h1>Go Build Coordinator</h1>
 	<nav>
-		<a href="http://build.golang.org">Dashboard</a>
+		<a href="https://build.golang.org">Dashboard</a>
 		<a href="/builders">Builders</a>
 	</nav>
 	<div class="clear"></div>

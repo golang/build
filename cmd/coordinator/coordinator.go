@@ -598,7 +598,7 @@ func workaroundFlush(w http.ResponseWriter) {
 	w.(http.Flusher).Flush()
 }
 
-// findWorkLoop polls http://build.golang.org/?mode=json looking for new work
+// findWorkLoop polls https://build.golang.org/?mode=json looking for new work
 // for the main dashboard. It does not support gccgo.
 // TODO(bradfitz): it also currently does not support subrepos.
 func findWorkLoop(work chan<- builderRev) {

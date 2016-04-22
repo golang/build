@@ -3,7 +3,7 @@ development of the Go programming language.
 
 To submit changes to this repository, see http://golang.org/doc/contribute.html.
 
-app/: a.k.a the "dashboard"; the App Engine code that runs http://build.golang.org/
+app/: a.k.a the "dashboard"; the App Engine code that runs https://build.golang.org/
 
 cmd/:
 

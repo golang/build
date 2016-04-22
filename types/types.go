@@ -7,7 +7,7 @@
 package types
 
 // BuildStatus is the data structure that's marshalled as JSON
-// for the http://build.golang.org/?mode=json page.
+// for the https://build.golang.org/?mode=json page.
 type BuildStatus struct {
 	// Builders is a list of all known builders.
 	// The order that builders appear is the same order as the build results for a revision.
@@ -20,7 +20,7 @@ type BuildStatus struct {
 }
 
 // BuildRevision is the status of a commit across all builders.
-// It corresponds to a single row of http://build.golang.org/
+// It corresponds to a single row of https://build.golang.org/
 type BuildRevision struct {
 	// Repo is "go" for the main repo, else  "tools", "crypto", "net", etc.
 	// These are repos as listed at https://go.googlesource.com/

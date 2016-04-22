@@ -304,7 +304,7 @@ func sendPerfMailFunc(c appengine.Context, com *Commit, prevCommitHash, builder 
 	}
 	sort.Sort(PerfChangeBenchmarkSlice(benchmarks))
 
-	u := fmt.Sprintf("http://%v/perfdetail?commit=%v&commit0=%v&kind=builder&builder=%v", domain, com.Hash, prevCommitHash, builder)
+	u := fmt.Sprintf("https://%v/perfdetail?commit=%v&commit0=%v&kind=builder&builder=%v", domain, com.Hash, prevCommitHash, builder)
 
 	// Prepare mail message (without Commit, for updateCL).
 	var body bytes.Buffer
