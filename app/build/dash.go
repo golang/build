@@ -15,24 +15,8 @@ import (
 
 func handleFunc(path string, h http.HandlerFunc) {
 	for _, d := range dashboards {
-		http.Handle(d.Prefix+path, httpsOnlyHandler{h})
+		http.HandleFunc(d.Prefix+path, h)
 	}
-}
-
-// httpsOnlyHandler redirects requests to "http://example.com/foo?bar"
-// to "https://example.com/foo?bar"
-type httpsOnlyHandler struct {
-	fn http.HandlerFunc
-}
-
-func (h httpsOnlyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if !appengine.IsDevAppServer() && r.TLS == nil {
-		r.URL.Scheme = "https"
-		r.URL.Host = r.Host
-		http.Redirect(w, r, r.URL.String(), http.StatusFound)
-		return
-	}
-	h.fn(w, r)
 }
 
 // Dashboard describes a unique build dashboard.
