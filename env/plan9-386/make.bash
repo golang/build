@@ -6,7 +6,7 @@ set -e
 
 # Download Plan 9
 if ! sha1sum -c plan9-gce.iso.sha1; then
-  curl --fail -O http://9legacy.org/download/go/2015-02-26/plan9-gce.iso.bz2
+  curl --fail -O http://9legacy.org/download/go/2016-05-01/plan9-gce.iso.bz2
   bunzip2 plan9-gce.iso.bz2
   sha1sum -c plan9-gce.iso.sha1
 fi
@@ -136,6 +136,12 @@ expect -exact "term% "
 send "9fat:\n"
 
 expect -exact "term% "
+send "sed /^debugboot'='/d /n/9fat/plan9.ini >/tmp/plan9.ini\n"
+
+expect -exact "term% "
+send "mv /tmp/plan9.ini /n/9fat/plan9.ini\n"
+
+expect -exact "term% "
 send "sed s/9pcf/9pccpuf/ /n/9fat/plan9.ini >/tmp/plan9.ini\n"
 
 expect -exact "term% "
@@ -234,6 +240,8 @@ send "fshalt\n"
 expect -exact "done halting"
 exit
 EOF
+
+echo
 
 # Create Compute Engine disk image.
 echo "Archiving disk.raw... (this may take a while)"
