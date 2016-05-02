@@ -87,8 +87,6 @@ var (
 // not be used along with other locks)
 
 var (
-	startTime = time.Now()
-
 	statusMu   sync.Mutex // guards the following four structures; see LOCK ORDER comment above
 	status     = map[builderRev]*buildStatus{}
 	statusDone []*buildStatus         // finished recently, capped to maxStatusDone
@@ -346,7 +344,7 @@ func main() {
 				st.start()
 			}
 		case <-ticker.C:
-			if numCurrentBuilds() == 0 && time.Now().After(startTime.Add(10*time.Minute)) {
+			if numCurrentBuilds() == 0 && time.Now().After(processStartTime.Add(10*time.Minute)) {
 				// TODO: halt the whole machine to kill the VM or something
 			}
 		}
