@@ -656,6 +656,11 @@ func findWork(work chan<- builderRev) error {
 	var goRevisions []string
 	seenSubrepo := make(map[string]bool)
 	for _, br := range bs.Revisions {
+		if br.Repo == "grpc-review" {
+			// Skip the grpc repo. It's only for reviews
+			// for now (using LetsUseGerrit).
+			continue
+		}
 		awaitSnapshot := false
 		if br.Repo == "go" {
 			if len(goRevisions) == 0 {
@@ -778,8 +783,9 @@ func findTryWork() error {
 			log.Printf("Warning: skipping incomplete %#v", ci)
 			continue
 		}
-		if ci.Project == "build" {
+		if ci.Project == "build" || ci.Project == "grpc-review" {
 			// Skip trybot request in build repo.
+			// Also skip grpc-review, which is only for reviews for now.
 			continue
 		}
 		key := tryKey{
