@@ -33,6 +33,7 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/cloud"
 	"google.golang.org/cloud/compute/metadata"
+	"google.golang.org/cloud/datastore"
 	"google.golang.org/cloud/storage"
 )
 
@@ -53,6 +54,7 @@ func gceAPIGate() {
 var (
 	buildEnv *buildenv.Environment
 
+	dsClient       *datastore.Client
 	computeService *compute.Service
 	tokenSource    oauth2.TokenSource
 	serviceCtx     context.Context
@@ -120,6 +122,12 @@ func initGCE() error {
 		if err != nil {
 			log.Fatalf("storage.NewClient: %v", err)
 		}
+	}
+
+	dsClient, err = datastore.NewClient(context.Background(), buildEnv.ProjectName)
+	if err != nil {
+		// TODO(bradfitz): make fatal later, once working.
+		log.Printf("Error creating datastore client: %v", err)
 	}
 
 	computeService, _ = compute.New(httpClient)

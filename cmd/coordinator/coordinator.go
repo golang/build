@@ -55,7 +55,10 @@ import (
 
 const subrepoPrefix = "golang.org/x/"
 
-var processStartTime = time.Now()
+var (
+	processStartTime = time.Now()
+	processID        = "P" + randHex(9)
+)
 
 var Version string // set by linker -X
 
@@ -268,6 +271,9 @@ func main() {
 		kubeErr = err
 		log.Printf("Kube support disabled due to eror initializing Kubernetes: %v", err)
 	}
+
+	go updateInstanceRecord()
+
 	switch *mode {
 	case "dev", "prod":
 		log.Printf("Running in %s mode", *mode)
