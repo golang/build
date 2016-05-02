@@ -1105,6 +1105,20 @@ func (br builderRev) isSubrepo() bool {
 	return br.subName != ""
 }
 
+func (br builderRev) subRevOrGoRev() string {
+	if br.subRev != "" {
+		return br.subRev
+	}
+	return br.rev
+}
+
+func (br builderRev) repoOrGo() string {
+	if br.subName == "" {
+		return "go"
+	}
+	return br.subName
+}
+
 type eventTimeLogger interface {
 	logEventTime(event string, optText ...string)
 }
@@ -1218,15 +1232,14 @@ func newBuild(rev builderRev) (*buildStatus, error) {
 	}, nil
 }
 
-// start sets the st.startTime and starts the build in a new goroutine.
-// If it returns an error, st is not modified and a new goroutine has not
-// been started.
-// The build status's context is closed on when the build is complete
-// in either direction.
+// start starts the build in a new goroutine.
+// The buildStatus's context is closed on when the build is complete,
+// successfully or not.
 func (st *buildStatus) start() {
 	setStatus(st.builderRev, st)
 	go func() {
 		err := st.build()
+		st.buildRecord().put()
 		if err != nil {
 			fmt.Fprintf(st, "\n\nError: %v\n", err)
 			log.Println(st.builderRev, "failed:", err)
@@ -1344,6 +1357,7 @@ func (st *buildStatus) useSnapshot() bool {
 }
 
 func (st *buildStatus) build() error {
+	st.buildRecord().put()
 	pool, err := st.buildletPool()
 	if err != nil {
 		return err
@@ -1436,6 +1450,36 @@ func (st *buildStatus) build() error {
 		return remoteErr
 	}
 	return nil
+}
+
+func (st *buildStatus) buildRecord() *BuildRecord {
+	rec := &BuildRecord{
+		ID:        st.buildID,
+		ProcessID: processID,
+		StartTime: st.startTime,
+		IsTry:     st.trySet != nil,
+		GoRev:     st.rev,
+		Rev:       st.subRevOrGoRev(),
+		Repo:      st.repoOrGo(),
+		Builder:   st.name,
+		OS:        st.conf.GOOS(),
+		Arch:      st.conf.GOARCH(),
+	}
+
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	// TODO: buildlet instance name
+	if !st.done.IsZero() {
+		rec.EndTime = st.done
+		rec.FailureURL = st.failURL
+		rec.Seconds = rec.EndTime.Sub(rec.StartTime).Seconds()
+		if st.succeeded {
+			rec.Result = "ok"
+		} else {
+			rec.Result = "fail"
+		}
+	}
+	return rec
 }
 
 // hasDistTest reports whether the version of Go installed to
