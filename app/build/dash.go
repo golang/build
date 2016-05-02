@@ -15,8 +15,16 @@ import (
 
 func handleFunc(path string, h http.HandlerFunc) {
 	for _, d := range dashboards {
-		http.HandleFunc(d.Prefix+path, h)
+		http.Handle(d.Prefix+path, hstsHandler(h))
 	}
+}
+
+// hstsHandler wraps an http.HandlerFunc such that it sets the HSTS header.
+func hstsHandler(fn http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; preload")
+		fn(w, r)
+	})
 }
 
 // Dashboard describes a unique build dashboard.
