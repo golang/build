@@ -2673,7 +2673,7 @@ func (st *buildStatus) logEventTime(event string, optText ...string) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	switch event {
-	case "creating_gce_instance", "got_machine", "got_buildlet":
+	case "finish_get_buildlet", "create_gce_buildlet":
 		if !st.startedPinging {
 			st.startedPinging = true
 			go st.pingDashboard()
