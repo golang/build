@@ -39,6 +39,7 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/envutil"
+	"golang.org/x/build/internal/httpdl"
 	"golang.org/x/build/pargzip"
 	"google.golang.org/cloud/compute/metadata"
 )
@@ -137,6 +138,9 @@ func main() {
 	if _, err := os.Lstat(*workDir); err != nil {
 		log.Fatalf("invalid --workdir %q: %v", *workDir, err)
 	}
+	if runtime.GOOS == "solaris" && runtime.GOARCH == "amd64" {
+		downloadBootstrapGoroot("/root/go-solaris-amd64-bootstrap", "https://storage.googleapis.com/go-builder-data/gobootstrap-solaris-amd64.tar.gz")
+	}
 	http.HandleFunc("/", handleRoot)
 	http.HandleFunc("/debug/goroutines", handleGoroutines)
 	http.HandleFunc("/debug/x", handleX)
@@ -162,6 +166,35 @@ func main() {
 		listenForCoordinator()
 	} else {
 		log.Fatal(dialCoordinator())
+	}
+}
+
+func downloadBootstrapGoroot(destDir, url string) {
+	tarPath := destDir + ".tar.gz"
+	origInfo, err := os.Stat(tarPath)
+	if err != nil && !os.IsNotExist(err) {
+		log.Fatalf("Checking for tar existence: %v", err)
+	}
+	if err := httpdl.Download(tarPath, url); err != nil {
+		log.Fatalf("Downloading %s to %s: %v", url, tarPath, err)
+	}
+	newInfo, err := os.Stat(tarPath)
+	if err != nil {
+		log.Fatalf("Stat after download: %v", err)
+	}
+	if os.SameFile(origInfo, newInfo) {
+		// The file on disk was unmodified, so we probably untarred it already.
+		return
+	}
+	f, err := os.Open(tarPath)
+	if err != nil {
+		log.Fatalf("Opening after download: %v", err)
+	}
+	defer f.Close()
+	if err := untar(f, destDir); err != nil {
+		os.Remove(tarPath)
+		os.RemoveAll(destDir)
+		log.Fatalf("Untarring %s: %v", url, err)
 	}
 }
 
