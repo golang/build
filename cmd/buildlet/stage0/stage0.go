@@ -15,7 +15,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -27,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/build/internal/httpdl"
 	"google.golang.org/cloud/compute/metadata"
 )
 
@@ -194,47 +194,24 @@ func sleepFatalf(format string, args ...interface{}) {
 }
 
 func download(file, url string) error {
-	if strings.HasPrefix(url, "https://storage.googleapis.com") {
-		url += fmt.Sprintf("?%d", time.Now().Unix())
-	}
 	log.Printf("Downloading %s to %s ...\n", url, file)
-
-	var res *http.Response
-	var err error
 	deadline := time.Now().Add(*networkWait)
 	for {
-		res, err = http.Get(url)
-		if err != nil {
-			if time.Now().Before(deadline) {
-				time.Sleep(1 * time.Second)
-				continue
-			}
-			return fmt.Errorf("Error fetching %v: %v", url, err)
+		err := httpdl.Download(file, url)
+		if err == nil {
+			fi, _ := os.Stat(file)
+			log.Printf("Downloaded %s (%d bytes)", file, fi.Size())
+			return nil
 		}
-		break
-	}
-	if res.StatusCode != 200 {
-		return fmt.Errorf("HTTP status code of %s was %v", url, res.Status)
-	}
-	tmp := file + ".tmp"
-	os.Remove(tmp)
-	os.Remove(file)
-	f, err := os.Create(tmp)
-	if err != nil {
+		// TODO(bradfitz): delete this whole download function
+		// and move this functionality into a "WaitNetwork"
+		// function somewhere?
+		if time.Now().Before(deadline) {
+			time.Sleep(1 * time.Second)
+			continue
+		}
 		return err
 	}
-	n, err := io.Copy(f, res.Body)
-	res.Body.Close()
-	if err != nil {
-		return fmt.Errorf("Error reading %v: %v", url, err)
-	}
-	f.Close()
-	err = os.Rename(tmp, file)
-	if err != nil {
-		return err
-	}
-	log.Printf("Downloaded %s (%d bytes)", file, n)
-	return nil
 }
 
 func initScaleway() {
