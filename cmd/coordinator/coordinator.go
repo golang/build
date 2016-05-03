@@ -1245,12 +1245,12 @@ func (st *buildStatus) start() {
 	setStatus(st.builderRev, st)
 	go func() {
 		err := st.build()
-		st.buildRecord().put()
 		if err != nil {
 			fmt.Fprintf(st, "\n\nError: %v\n", err)
 			log.Println(st.builderRev, "failed:", err)
 		}
 		st.setDone(err == nil)
+		st.buildRecord().put()
 		markDone(st.builderRev)
 	}()
 }
