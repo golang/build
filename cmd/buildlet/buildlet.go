@@ -139,6 +139,7 @@ func main() {
 		log.Fatalf("invalid --workdir %q: %v", *workDir, err)
 	}
 	if runtime.GOOS == "solaris" && runtime.GOARCH == "amd64" {
+		os.Setenv("PATH", os.Getenv("PATH")+":/opt/local/bin")
 		downloadBootstrapGoroot("/root/go-solaris-amd64-bootstrap", "https://storage.googleapis.com/go-builder-data/gobootstrap-solaris-amd64.tar.gz")
 	}
 	http.HandleFunc("/", handleRoot)
