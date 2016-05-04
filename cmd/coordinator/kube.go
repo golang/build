@@ -268,6 +268,12 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 			resourceCounter = pending
 		case api.PodRunning:
 			resourceCounter = running
+		case api.PodSucceeded:
+			// TODO(bradfitz,evanbrown): this was spamming
+			// logs a lot. Don't count these resources, I
+			// assume. We weren't before (when the
+			// log.Printf below was firing) anyway.
+			continue
 		default:
 			log.Printf("Pod in unknown state (%q); ignoring", pod.Status.Phase)
 			continue

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -226,6 +227,9 @@ func (c *Client) WatchPod(ctx context.Context, podName, podResourceVersion strin
 
 	go func() {
 		defer close(statusChan)
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
 		// Make request to Kubernetes API
 		getURL := c.endpointURL + defaultWatchPod + "/" + podName
 		req, err := http.NewRequest("GET", getURL, nil)
@@ -240,7 +244,10 @@ func (c *Client) WatchPod(ctx context.Context, podName, podResourceVersion strin
 			return
 		}
 		defer res.Body.Close()
-
+		if res.StatusCode != 200 {
+			statusChan <- PodStatusResult{Err: fmt.Errorf("WatchPod status %v", res.Status)}
+			return
+		}
 		reader := bufio.NewReader(res.Body)
 
 		// bufio.Reader.ReadBytes is blocking, so we watch for
@@ -253,8 +260,22 @@ func (c *Client) WatchPod(ctx context.Context, podName, podResourceVersion strin
 			res.Body.Close()
 		}()
 
+		const backupPollDuration = 30 * time.Second
+		backupPoller := time.AfterFunc(backupPollDuration, func() {
+			log.Printf("kubernetes: backup poller in WatchPod checking on %q", podName)
+			st, err := c.PodStatus(ctx, podName)
+			log.Printf("kubernetes: backup poller in WatchPod PodStatus(%q) = %v, %v", podName, st, err)
+			if err != nil {
+				// Some error.
+				cancel()
+			}
+		})
+		defer backupPoller.Stop()
+
 		for {
 			line, err := reader.ReadBytes('\n')
+			log.Printf("kubernetes WatchPod status line of %q: %q, %v", podName, line, err)
+			backupPoller.Reset(backupPollDuration)
 			if err != nil {
 				statusChan <- PodStatusResult{Err: fmt.Errorf("error reading streaming response body: %v", err)}
 				return
