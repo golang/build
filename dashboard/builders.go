@@ -38,6 +38,7 @@ type BuildConfig struct {
 	IsReverse   bool // if true, only use the reverse buildlet pool
 	RegularDisk bool // if true, use spinning disk instead of SSD
 	TryOnly     bool // only used for trybots, and not regular builds
+	CompileOnly bool // if true, compile tests, but don't run them
 
 	// NumTestHelpers is the number of _additional_ buildlets
 	// past the first help out with sharded tests.
@@ -142,11 +143,17 @@ func (c *BuildConfig) AllScript() string {
 // configurations work.
 func (c *BuildConfig) SplitMakeRun() bool {
 	switch c.AllScript() {
-	case "src/all.bash", "src/race.bash", "src/all.bat", "src/all.rc":
+	case "src/all.bash", "src/all.bat",
+		"src/race.bash", "src/race.bat",
+		"src/all.rc",
+		"src/nacltest.bash":
 		// These we've verified to work.
 		return true
 	}
-	// Conservatively:
+	// TODO(bradfitz): make androidtest.bash and iotest.bash work
+	// too. And buildall.bash should really just be N small
+	// Kubernetes jobs instead of a "buildall.bash". Then we can
+	// delete this whole method.
 	return false
 }
 
@@ -186,6 +193,9 @@ func (c *BuildConfig) MakeScript() string {
 	}
 	if strings.HasPrefix(c.Name, "plan9-") {
 		return "src/make.rc"
+	}
+	if strings.HasPrefix(c.Name, "nacl-") {
+		return "src/naclmake.bash"
 	}
 	return "src/make.bash"
 }
@@ -282,29 +292,21 @@ func init() {
 		NumTestHelpers:     3,
 	})
 	addBuilder(BuildConfig{
-		Name:    "linux-386",
-		VMImage: "linux-buildlet-std",
-		//BuildletType:   "linux-amd64",
+		Name:            "linux-386",
+		KubeImage:       "linux-x86-std:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4", "GOARCH=386", "GOHOSTARCH=386"},
 		NumTestHelpers:  3,
 	})
 	addBuilder(BuildConfig{
-		Name:    "linux-386-387",
-		Notes:   "GO386=387",
-		VMImage: "linux-buildlet-std",
-		//BuildletType: "linux-amd64",
+		Name:            "linux-386-387",
+		Notes:           "GO386=387",
+		KubeImage:       "linux-x86-std:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4", "GOARCH=386", "GOHOSTARCH=386", "GO386=387"},
 	})
 	addBuilder(BuildConfig{
-		Name:           "linux-amd64",
-		VMImage:        "linux-buildlet-std",
-		env:            []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		NumTestHelpers: 3,
-	})
-	addBuilder(BuildConfig{
-		Name:            "linux-amd64-kube",
+		Name:            "linux-amd64",
 		KubeImage:       "linux-x86-std:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
@@ -324,9 +326,9 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:    "linux-amd64-nocgo",
-		Notes:   "cgo disabled",
-		VMImage: "linux-buildlet-std",
+		Name:      "linux-amd64-nocgo",
+		Notes:     "cgo disabled",
+		KubeImage: "linux-x86-std:latest",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/go1.4",
 			"CGO_ENABLED=0",
@@ -337,23 +339,21 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:    "linux-amd64-noopt",
-		Notes:   "optimizations and inlining disabled",
-		VMImage: "linux-buildlet-std",
-		//BuildletType: "linux-amd64",
-		env: []string{"GOROOT_BOOTSTRAP=/go1.4", "GO_GCFLAGS=-N -l"},
+		Name:      "linux-amd64-noopt",
+		Notes:     "optimizations and inlining disabled",
+		KubeImage: "linux-x86-std:latest",
+		env:       []string{"GOROOT_BOOTSTRAP=/go1.4", "GO_GCFLAGS=-N -l"},
 	})
 	addBuilder(BuildConfig{
-		Name:    "linux-amd64-ssacheck",
-		Notes:   "SSA internal checks enabled",
-		VMImage: "linux-buildlet-std",
-		//BuildletType: "linux-amd64",
-		env: []string{"GOROOT_BOOTSTRAP=/go1.4", "GO_GCFLAGS=-d=ssa/check/on"},
+		Name:        "linux-amd64-ssacheck",
+		CompileOnly: true,
+		Notes:       "SSA internal checks enabled",
+		KubeImage:   "linux-x86-std:latest",
+		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GO_GCFLAGS=-d=ssa/check/on"},
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-amd64-race",
-		VMImage:        "linux-buildlet-std",
-		machineType:    "n1-highcpu-4",
+		KubeImage:      "linux-x86-std:latest",
 		env:            []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		NumTestHelpers: 4,
 	})
@@ -399,27 +399,16 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:            "nacl-386",
-		VMImage:         "linux-buildlet-nacl-v2",
+		KubeImage:       "linux-x86-nacl:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		NumTestHelpers:  3,
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
-		//BuildletType: "nacl-amd64p32",
 	})
 	addBuilder(BuildConfig{
 		Name:            "nacl-amd64p32",
-		VMImage:         "linux-buildlet-nacl-v2",
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
-	})
-	addBuilder(BuildConfig{
-		Name:            "nacl-386-kube",
 		KubeImage:       "linux-x86-nacl:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
-	})
-	addBuilder(BuildConfig{
-		Name:            "nacl-amd64p32-kube",
-		KubeImage:       "linux-x86-nacl:latest",
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		NumTestHelpers:  3,
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{

@@ -106,6 +106,7 @@ func initTryBuilders() {
 		"linux-386",
 		"linux-amd64",
 		"linux-amd64-race",
+		"linux-amd64-ssacheck",
 		"freebsd-386-gce101",
 		"freebsd-amd64-gce101",
 		"windows-386-gce",
@@ -1786,6 +1787,9 @@ func (st *buildStatus) distTestList() (names []string, err error) {
 	if st.conf.IsRace() {
 		args = append(args, "--race")
 	}
+	if st.conf.CompileOnly {
+		args = append(args, "--compile-only")
+	}
 	var buf bytes.Buffer
 	remoteErr, err := st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 		Output:      &buf,
@@ -2362,6 +2366,9 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 	args := []string{"tool", "dist", "test", "--no-rebuild", "--banner=" + banner}
 	if st.conf.IsRace() {
 		args = append(args, "--race")
+	}
+	if st.conf.CompileOnly {
+		args = append(args, "--compile-only")
 	}
 	args = append(args, names...)
 	var buf bytes.Buffer
