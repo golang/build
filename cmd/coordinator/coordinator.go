@@ -1798,6 +1798,9 @@ func (st *buildStatus) distTestList() (names []string, err error) {
 		return nil, fmt.Errorf("Exec error: %v, %s", remoteErr, buf.Bytes())
 	}
 	if remoteErr != nil {
+		if strings.Contains(buf.String(), "flag provided but not defined: -compile-only") {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("Remote error: %v, %s", remoteErr, buf.Bytes())
 	}
 	for _, test := range strings.Fields(buf.String()) {
