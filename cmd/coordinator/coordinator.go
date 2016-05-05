@@ -726,6 +726,9 @@ func findWork(work chan<- builderRev) error {
 				if awaitSnapshot && !rev.snapshotExists() {
 					continue
 				}
+				if rev.skipBuild() {
+					continue
+				}
 			}
 			if !isBuilding(rev) {
 				work <- rev
@@ -1110,6 +1113,18 @@ type builderRev struct {
 	// optional sub-repository details (both must be present)
 	subName string // e.g. "net"
 	subRev  string // lowercase hex sub-repo git hash
+}
+
+func (br builderRev) skipBuild() bool {
+	switch br.subName {
+	case "build", // has external deps
+		"exp",    // always broken, depends on mobile which is broken
+		"mobile", // always broken (gl, etc). doesn't compile.
+		"term",   // no code yet in repo: "warning: "golang.org/x/term/..." matched no packages"
+		"oauth2": // has external deps
+		return true
+	}
+	return false
 }
 
 func (br builderRev) isSubrepo() bool {
