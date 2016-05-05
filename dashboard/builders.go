@@ -129,7 +129,7 @@ func (c *BuildConfig) AllScript() string {
 	if strings.HasPrefix(c.Name, "darwin-arm") {
 		return "src/iostest.bash"
 	}
-	if c.Name == "misc-compile" {
+	if strings.HasPrefix(c.Name, "misc-compile") {
 		return "src/buildall.bash"
 	}
 	return "src/all.bash"
@@ -312,19 +312,27 @@ func init() {
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		NumTestHelpers:  3,
 	})
-	addBuilder(BuildConfig{
-		Name:            "misc-compile",
-		TryOnly:         true,
-		VMImage:         "linux-buildlet-std",
-		machineType:     "n1-highcpu-16", // CPU-bound, uses it well.
-		Notes:           "Runs buildall.sh to compile stdlib for GOOS/GOARCH pairs not otherwise covered by trybots, but doesn't run any tests.",
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		allScriptArgs: []string{
-			// Filtering pattern to buildall.bash:
-			"^(linux-arm64|linux-ppc64|linux-ppc64le|linux-mips.*|nacl-arm|plan9-amd64|solaris-amd64|netbsd-386|netbsd-amd64|netbsd-arm|freebsd-arm|darwin-386)$",
-		},
-	})
+
+	addMiscCompile := func(suffix, rx string) {
+		addBuilder(BuildConfig{
+			Name:            "misc-compile" + suffix,
+			TryOnly:         true,
+			CompileOnly:     true,
+			KubeImage:       "linux-x86-std:latest",
+			Notes:           "Runs buildall.sh to cross-compile std packages for " + rx + ", but doesn't run any tests.",
+			buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+			env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+			allScriptArgs: []string{
+				// Filtering pattern to buildall.bash:
+				rx,
+			},
+		})
+	}
+	addMiscCompile("", "^(linux-arm64|linux-mips.*|nacl-arm|solaris-amd64|freebsd-arm|darwin-386)$")
+	addMiscCompile("-ppc", "^(linux-ppc64|linux-ppc64le)$")
+	addMiscCompile("-netbsd", "^netbsd-")
+	addMiscCompile("-plan9", "^plan9-")
+
 	addBuilder(BuildConfig{
 		Name:      "linux-amd64-nocgo",
 		Notes:     "cgo disabled",

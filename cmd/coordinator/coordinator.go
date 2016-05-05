@@ -101,7 +101,6 @@ var (
 
 func initTryBuilders() {
 	tryList := []string{
-		"misc-compile",
 		"darwin-amd64-10_10",
 		"linux-386",
 		"linux-amd64",
@@ -117,15 +116,20 @@ func initTryBuilders() {
 		"nacl-amd64p32",
 		"linux-arm",
 	}
+	for bname := range dashboard.Builders {
+		if strings.HasPrefix(bname, "misc-compile") {
+			tryList = append(tryList, bname)
+		}
+	}
 	for _, bname := range tryList {
 		conf, ok := dashboard.Builders[bname]
-		if ok {
-			tryBuilders = append(tryBuilders, conf)
-			if conf.BuildSubrepos() {
-				subTryBuilders = append(subTryBuilders, conf)
-			}
-		} else {
+		if !ok {
 			log.Printf("ignoring invalid try builder config %q", bname)
+			continue
+		}
+		tryBuilders = append(tryBuilders, conf)
+		if conf.BuildSubrepos() {
+			subTryBuilders = append(subTryBuilders, conf)
 		}
 	}
 }
