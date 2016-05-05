@@ -58,7 +58,11 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	if errTryDeps != nil {
 		data.TrybotsErr = errTryDeps.Error()
 	} else {
-		data.Trybots = template.HTML(buf.String())
+		if buf.Len() == 0 {
+			data.Trybots = template.HTML("<i>(none)</i>")
+		} else {
+			data.Trybots = template.HTML("<pre>" + buf.String() + "</pre>")
+		}
 	}
 
 	buf.Reset()
@@ -119,35 +123,38 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 <h2>Running</h2>
 <p>{{printf "%d" .Total}} total builds active. Uptime {{printf "%s" .Uptime}}. Version {{.Version}}.
 
-<h2 id=trybots>Trybot state</h2><pre>
-{{if .TrybotsErr}}<b>trybots disabled:</b>: {{.TrybotsErr}}{{else}}{{.Trybots}}{{end}}
-</pre>
+<h2 id=trybots><a href='#trybots'>🔗</a> Active Trybot Runs</h2>
+{{- if .TrybotsErr}}
+<b>trybots disabled:</b>: {{.TrybotsErr}}
+{{else}}
+{{.Trybots}}
+{{end}}
 
-<h2 id=pools>Buildlet pools</h2>
+<h2 id=remote><a href='#remote'>🔗</a> Remote buildlets</h3>
+{{.RemoteBuildlets}}
+
+<h2 id=pools><a href='#pools'>🔗</a> Buildlet pools</h2>
 <ul>
 <li>{{.GCEPoolStatus}}</li>
 <li>{{.KubePoolStatus}}</li>
 <li>{{.ReversePoolStatus}}</li>
 </ul>
 
-<h2 id=remote>Remote buildlets</h3>
-{{.RemoteBuildlets}}
-
-<h2 id=active>Active builds</h2>
+<h2 id=active><a href='#active'>🔗</a> Active builds</h2>
 <ul>
 {{range .Active}}
 <li><pre>{{.HTMLStatusLine}}</pre></li>
 {{end}}
 </ul>
 
-<h2 id=completed>Recently completed</h2>
+<h2 id=completed><a href='#completed'>🔗</a> Recently completed</h2>
 <ul>
 {{range .Recent}}
-<li><pre>{{.HTMLStatusLine_done}}</pre></li>
+<li><span>{{.HTMLStatusLine_done}}</span></li>
 {{end}}
 </ul>
 
-<h2 id=disk>Disk Space</h2>
+<h2 id=disk><a href='#disk'>🔗</a> Disk Space</h2>
 <pre>{{.DiskFree}}</pre>
 
 </body>

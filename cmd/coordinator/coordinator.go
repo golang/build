@@ -2757,21 +2757,27 @@ func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
 			ts.ChangeTriple(), ts.ChangeID[:8])
 	}
 
+	var state string
 	if st.done.IsZero() {
-		buf.WriteString(", running")
+		state = "running"
 	} else if st.succeeded {
-		buf.WriteString(", succeeded")
+		state = "succeeded"
 	} else {
-		buf.WriteString(", failed")
+		state = "<font color='#700000'>failed</font>"
 	}
-	fmt.Fprintf(&buf, "; <a href='%s'>build log</a>; %s", st.logsURLLocked(), html.EscapeString(st.bc.String()))
+	if full {
+		fmt.Fprintf(&buf, "; <a href='%s'>%s</a>; %s", st.logsURLLocked(), state, html.EscapeString(st.bc.String()))
+	} else {
+		fmt.Fprintf(&buf, "; <a href='%s'>%s</a>", st.logsURLLocked(), state)
+	}
 
 	t := st.done
 	if t.IsZero() {
 		t = st.startTime
 	}
-	fmt.Fprintf(&buf, ", %v ago\n", time.Since(t))
+	fmt.Fprintf(&buf, ", %v ago", time.Since(t))
 	if full {
+		buf.WriteByte('\n')
 		st.writeEventsLocked(&buf, true)
 	}
 	return template.HTML(buf.String())
