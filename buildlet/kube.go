@@ -150,15 +150,15 @@ func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, build
 	}
 
 	condRun(opts.OnPodCreating)
-	newPod, err := kubeClient.RunPod(ctx, pod)
+	podStatus, err := kubeClient.RunLongLivedPod(ctx, pod)
 	if err != nil {
 		return nil, err
 	}
 
 	// The new pod must be in Running phase. Possible phases are described at
 	// http://releases.k8s.io/HEAD/docs/user-guide/pod-states.md#pod-phase
-	if newPod.Status.Phase != api.PodRunning {
-		return nil, fmt.Errorf("pod is in invalid state %q: %v", newPod.Status.Phase, newPod.Status.Message)
+	if podStatus.Phase != api.PodRunning {
+		return nil, fmt.Errorf("pod is in invalid state %q: %v", podStatus.Phase, podStatus.Message)
 	}
 	condRun(opts.OnPodCreated)
 
@@ -166,11 +166,11 @@ func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, build
 	var buildletURL string
 	var ipPort string
 	if !opts.TLS.IsZero() {
-		buildletURL = "https://" + newPod.Status.PodIP
-		ipPort = newPod.Status.PodIP + ":443"
+		buildletURL = "https://" + podStatus.PodIP
+		ipPort = podStatus.PodIP + ":443"
 	} else {
-		buildletURL = "http://" + newPod.Status.PodIP
-		ipPort = newPod.Status.PodIP + ":80"
+		buildletURL = "http://" + podStatus.PodIP
+		ipPort = podStatus.PodIP + ":80"
 	}
 	condRun(opts.OnGotPodInfo)
 

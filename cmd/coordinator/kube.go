@@ -539,14 +539,25 @@ func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
 			log.Printf("Error cleaning pods: %v", err)
 			return
 		}
+		var stats struct {
+			Pods          int
+			WithAttr      int
+			WithDelete    int
+			DeletedOld    int // even if failed to delete
+			StillUsed     int
+			DeletedOldGen int // even if failed to delete
+		}
 		for _, pod := range pods {
 			if pod.ObjectMeta.Annotations == nil {
 				// Defensive. Not seen in practice.
 				continue
 			}
+			stats.Pods++
 			sawDeleteAt := false
+			stats.WithAttr++
 			for k, v := range pod.ObjectMeta.Annotations {
 				if k == "delete-at" {
+					stats.WithDelete++
 					sawDeleteAt = true
 					if v == "" {
 						log.Printf("missing delete-at value; ignoring")
@@ -557,10 +568,11 @@ func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
 						log.Printf("invalid delete-at value %q seen; ignoring", v)
 					}
 					if err == nil && time.Now().Unix() > unixDeadline {
+						stats.DeletedOld++
 						log.Printf("Deleting expired pod %q in zone %q ...", pod.Name)
 						err = kubeClient.DeletePod(ctx, pod.Name)
 						if err != nil {
-							log.Printf("problem deleting pod: %v", err)
+							log.Printf("problem deleting old pod %q: %v", pod.Name, err)
 						}
 					}
 				}
@@ -568,14 +580,20 @@ func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
 			// Delete buildlets (things we made) from previous
 			// generations. Only deleting things starting with "buildlet-"
 			// is a historical restriction, but still fine for paranoia.
-			if sawDeleteAt && strings.HasPrefix(pod.Name, "buildlet-") && !p.podUsed(pod.Name) {
-				log.Printf("Deleting pod %q from an earlier coordinator generation ...", pod.Name)
-				err = kubeClient.DeletePod(ctx, pod.Name)
-				if err != nil {
-					log.Printf("problem deleting pod: %v", err)
+			if sawDeleteAt && strings.HasPrefix(pod.Name, "buildlet-") {
+				if p.podUsed(pod.Name) {
+					stats.StillUsed++
+				} else {
+					stats.DeletedOldGen++
+					log.Printf("Deleting pod %q from an earlier coordinator generation ...", pod.Name)
+					err = kubeClient.DeletePod(ctx, pod.Name)
+					if err != nil {
+						log.Printf("problem deleting pod: %v", err)
+					}
 				}
 			}
 		}
+		log.Printf("Kubernetes pod cleanup loop stats: %+v", stats)
 		time.Sleep(time.Minute)
 	}
 }
