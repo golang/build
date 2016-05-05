@@ -119,34 +119,35 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 <h2>Running</h2>
 <p>{{printf "%d" .Total}} total builds active. Uptime {{printf "%s" .Uptime}}. Version {{.Version}}.
 
-<ul>
-{{range .Active}}
-<li><pre>{{.HTMLStatusLine}}</pre></li>
-{{end}}
-</ul>
-
-<h2>Trybot state</h2><pre>
+<h2 id=trybots>Trybot state</h2><pre>
 {{if .TrybotsErr}}<b>trybots disabled:</b>: {{.TrybotsErr}}{{else}}{{.Trybots}}{{end}}
 </pre>
 
-<h2>Recently completed</h2>
-<ul>
-{{range .Recent}}
-<li><pre>{{.HTMLStatusLine}}</pre></li>
-{{end}}
-</ul>
-
-<h2>Buildlet pools</h2>
+<h2 id=pools>Buildlet pools</h2>
 <ul>
 <li>{{.GCEPoolStatus}}</li>
 <li>{{.KubePoolStatus}}</li>
 <li>{{.ReversePoolStatus}}</li>
 </ul>
 
-<h2>Remote buildlets</h3>
+<h2 id=remote>Remote buildlets</h3>
 {{.RemoteBuildlets}}
 
-<h2>Disk Space</h2>
+<h2 id=active>Active builds</h2>
+<ul>
+{{range .Active}}
+<li><pre>{{.HTMLStatusLine}}</pre></li>
+{{end}}
+</ul>
+
+<h2 id=completed>Recently completed</h2>
+<ul>
+{{range .Recent}}
+<li><pre>{{.HTMLStatusLine_done}}</pre></li>
+{{end}}
+</ul>
+
+<h2 id=disk>Disk Space</h2>
 <pre>{{.DiskFree}}</pre>
 
 </body>

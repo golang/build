@@ -2717,7 +2717,10 @@ func (st *buildStatus) hasEvent(event string) bool {
 
 // HTMLStatusLine returns the HTML to show within the <pre> block on
 // the main page's list of active builds.
-func (st *buildStatus) HTMLStatusLine() template.HTML {
+func (st *buildStatus) HTMLStatusLine() template.HTML      { return st.htmlStatusLine(true) }
+func (st *buildStatus) HTMLStatusLine_done() template.HTML { return st.htmlStatusLine(false) }
+
+func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
@@ -2741,20 +2744,21 @@ func (st *buildStatus) HTMLStatusLine() template.HTML {
 
 	if st.done.IsZero() {
 		buf.WriteString(", running")
-		fmt.Fprintf(&buf, "; <a href='%s'>build log</a>; %s", st.logsURLLocked(), html.EscapeString(st.bc.String()))
 	} else if st.succeeded {
 		buf.WriteString(", succeeded")
 	} else {
 		buf.WriteString(", failed")
-		fmt.Fprintf(&buf, "; <a href='%s'>build log</a>; %s", st.logsURLLocked(), html.EscapeString(st.bc.String()))
 	}
+	fmt.Fprintf(&buf, "; <a href='%s'>build log</a>; %s", st.logsURLLocked(), html.EscapeString(st.bc.String()))
 
 	t := st.done
 	if t.IsZero() {
 		t = st.startTime
 	}
 	fmt.Fprintf(&buf, ", %v ago\n", time.Since(t))
-	st.writeEventsLocked(&buf, true)
+	if full {
+		st.writeEventsLocked(&buf, true)
+	}
 	return template.HTML(buf.String())
 }
 
