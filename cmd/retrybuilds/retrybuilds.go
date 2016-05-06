@@ -112,6 +112,11 @@ var flakePhrases = []string{
 	"remote error: User Is Over Quota",
 	"fatal: remote did not send all necessary objects",
 	"Failed to schedule \"", // e.g. Failed to schedule "go_test:archive/tar" test after 3 tries.
+	"lookup _xmpp-server._tcp.google.com. on 8.8.8.8:53: dial udp 8.8.8.8:53: i/o timeout",
+	"lookup _xmpp-server._tcp.google.com on",
+	"lookup gmail.com. on 8.8.8.8:53: dial udp 8.8.8.8:53: i/o timeout",
+	"lookup gmail.com on 8.8.8.8:53",
+	"lookup www.mit.edu on ",
 }
 
 func isFlaky(failLog string) bool {

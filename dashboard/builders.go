@@ -39,6 +39,7 @@ type BuildConfig struct {
 	RegularDisk bool // if true, use spinning disk instead of SSD
 	TryOnly     bool // only used for trybots, and not regular builds
 	CompileOnly bool // if true, compile tests, but don't run them
+	FlakyNet    bool // network tests are flaky (try anyway, but ignore some failures)
 
 	// NumTestHelpers is the number of _additional_ buildlets
 	// past the first help out with sharded tests.
@@ -63,7 +64,11 @@ type BuildConfig struct {
 }
 
 func (c *BuildConfig) Env() []string {
-	return append([]string{"GO_BUILDER_NAME=" + c.Name}, c.env...)
+	env := []string{"GO_BUILDER_NAME=" + c.Name}
+	if c.FlakyNet {
+		env = append(env, "GO_BUILDER_FLAKY_NET=1")
+	}
+	return append(env, c.env...)
 }
 
 func (c *BuildConfig) GOOS() string { return c.Name[:strings.Index(c.Name, "-")] }
@@ -393,12 +398,14 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:           "linux-arm",
 		IsReverse:      true,
+		FlakyNet:       true,
 		NumTestHelpers: 6,
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 	})
 	addBuilder(BuildConfig{
 		Name:      "linux-arm-arm5",
 		IsReverse: true,
+		FlakyNet:  true,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go",
 			"GOARM=5",
@@ -579,6 +586,7 @@ func init() {
 		Name:           "linux-ppc64le-buildlet",
 		Notes:          "Debian jessie; run by Go team on osuosl.org",
 		IsReverse:      true,
+		FlakyNet:       true,
 		NumTestHelpers: 0,
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 	})
@@ -586,6 +594,7 @@ func init() {
 		Name:           "linux-arm64-buildlet",
 		Notes:          "Ubuntu wily; run by Go team, from linaro",
 		IsReverse:      true,
+		FlakyNet:       true,
 		NumTestHelpers: 0,
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 	})
