@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 )
 
@@ -41,6 +42,7 @@ func NewClient(ipPort string, kp KeyPair) *Client {
 			},
 		},
 	}
+	c.ctx, c.ctxCancel = context.WithCancel(context.Background())
 	c.setCommon()
 	return c
 }
@@ -131,6 +133,8 @@ type Client struct {
 	password       string // basic auth password or empty for none
 	remoteBuildlet string // non-empty if for remote buildlets
 
+	ctx              context.Context
+	ctxCancel        context.CancelFunc
 	heartbeatFailure func() // optional
 	desc             string
 
@@ -183,6 +187,7 @@ func (c *Client) MarkBroken() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.broken = true
+	c.ctxCancel()
 }
 
 // IsBroken reports whether this client is broken in some way.
@@ -200,6 +205,9 @@ func (c *Client) authUsername() string {
 }
 
 func (c *Client) do(req *http.Request) (*http.Response, error) {
+	if req.Cancel == nil {
+		req.Cancel = c.ctx.Done()
+	}
 	c.initHeartbeatOnce.Do(c.initHeartbeats)
 	if c.password != "" {
 		req.SetBasicAuth(c.authUsername(), c.password)
