@@ -454,7 +454,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:               "plan9-386",
 		Notes:              "Plan 9 from 0intro; GCE VM is built from script in build/env/plan9-386",
-		VMImage:            "plan9-386-v2",
+		VMImage:            "plan9-386-v3",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-plan9-386.tar.gz",
 
 		// We *were* using n1-standard-1 because Plan 9 can only
