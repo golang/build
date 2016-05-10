@@ -42,13 +42,13 @@ func NewClient(ipPort string, kp KeyPair) *Client {
 			},
 		},
 	}
-	c.ctx, c.ctxCancel = context.WithCancel(context.Background())
 	c.setCommon()
 	return c
 }
 
 func (c *Client) setCommon() {
 	c.peerDead = make(chan struct{})
+	c.ctx, c.ctxCancel = context.WithCancel(context.Background())
 }
 
 // SetOnHeartbeatFailure sets a function to be called when heartbeats
