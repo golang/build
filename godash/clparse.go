@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package godash generates Go dashboards about current issues and CLs.
 package godash
 
 import (
+	"bytes"
+	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
@@ -244,4 +245,25 @@ func (cl *CL) Age(now time.Time) time.Duration {
 
 func (cl *CL) Delay(now time.Time) time.Duration {
 	return now.Sub(cl.NeedsReviewChanged)
+}
+
+func (cl *CL) Summary(now time.Time) string {
+	var buf bytes.Buffer
+	who := "author"
+	if cl.NeedsReview {
+		who = "reviewer"
+	}
+	rev := cl.Reviewer
+	if rev == "" {
+		rev = "???"
+	}
+	score := ""
+	if x := cl.Scores[cl.ReviewerEmail]; x != 0 {
+		score = fmt.Sprintf("%+d", x)
+	}
+	fmt.Fprintf(&buf, "%s → %s%s, %d/%d days, waiting for %s", cl.Author, rev, score, int(now.Sub(cl.NeedsReviewChanged).Seconds()/86400), int(now.Sub(cl.Start).Seconds()/86400), who)
+	for _, id := range cl.Issues {
+		fmt.Fprintf(&buf, " #%d", id)
+	}
+	return buf.String()
 }
