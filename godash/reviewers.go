@@ -5,8 +5,10 @@
 package godash
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
+	"time"
 )
 
 // reviewScale is the relative weight of a single review compared to
@@ -33,13 +35,20 @@ func (x reviewersByCount) Less(i, j int) bool {
 // repository. It can be used to resolve e-mail addresses into short
 // names and vice versa.
 type Reviewers struct {
-	// data is used for caching the commit information
+	// data contains the information that should be serialized if
+	// the Reviewers struct is serialized. (MarshalJSON and
+	// UnmarshalJSON will transparently use data instead of the
+	// full Reviewers struct.)
 	data struct {
 		// IsReviewer maps full e-mail addresses to booleans.
 		IsReviewer map[string]bool // rsc@golang.org -> true
 		// CountByAddr maps full e-mail address to a score of
 		// the number of CLs authored and reviewed.
 		CountByAddr map[string]int64
+		// LastSHA and LastTime track the SHA and time of the
+		// last commit included in these stats.
+		LastSHA  string
+		LastTime time.Time
 	}
 	// mailLookup maps short names to full e-mail addresses.
 	mailLookup map[string]string // rsc -> rsc@golang.org
@@ -103,4 +112,16 @@ func (r *Reviewers) recalculate() {
 			r.mailLookup[short] = rev.addr
 		}
 	}
+}
+
+func (r *Reviewers) MarshalJSON() ([]byte, error) {
+	return json.Marshal(r.data)
+}
+
+func (r *Reviewers) UnmarshalJSON(b []byte) error {
+	if err := json.Unmarshal(b, &r.data); err != nil {
+		return err
+	}
+	r.recalculate()
+	return nil
 }

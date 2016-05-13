@@ -50,7 +50,6 @@ type Data struct {
 	GoReleaseCycle int
 	Now            time.Time
 
-	// TODO(quentin): Add ability to cache reviewer information.
 	Reviewers *Reviewers
 }
 
@@ -75,9 +74,6 @@ func (d *Data) FetchData(gh *github.Client, ger *gerrit.Client, days int, clOnly
 		}
 	}
 	since := d.Now.Add(-(time.Duration(days)*24 + 12) * time.Hour).UTC().Round(time.Second)
-	d.Reviewers = &Reviewers{}
-	d.Reviewers.LoadLocal()
-	// TODO(quentin): d.Reviewers.LoadGithub(gh)
 	cls, err := fetchCLs(ger, d.Reviewers, d.GoReleaseCycle, "is:open")
 	if err != nil {
 		return err

@@ -29,6 +29,7 @@ package main
 import (
 	"bytes"
 	"crypto/md5"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"html"
@@ -58,10 +59,12 @@ var (
 
 	days = flag.Int("days", 7, "number of days back")
 
-	flagCL    = flag.Bool("cl", false, "print CLs only (no issues)")
-	flagHTML  = flag.Bool("html", false, "print HTML output")
-	flagMail  = flag.Bool("mail", false, "generate weekly mail")
-	tokenFile = flag.String("token", "", "read GitHub token personal access token from `file` (default $HOME/.github-issue-token)")
+	flagCL     = flag.Bool("cl", false, "print CLs only (no issues)")
+	flagHTML   = flag.Bool("html", false, "print HTML output")
+	flagMail   = flag.Bool("mail", false, "generate weekly mail")
+	flagGithub = flag.Bool("github", false, "load commits from Github (SLOW)")
+	tokenFile  = flag.String("token", "", "read GitHub token personal access token from `file` (default $HOME/.github-issue-token)")
+	cacheFile  = flag.String("cache", "", "path at which to read/write expensive data, if provided")
 )
 
 func main() {
@@ -76,9 +79,36 @@ func main() {
 	}
 	gh := godash.NewGitHubClient("golang/go", readAuthToken(), nil)
 	ger := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
-	data := &godash.Data{}
+	data := &godash.Data{Reviewers: &godash.Reviewers{}}
+	if *cacheFile != "" {
+		contents, err := ioutil.ReadFile(*cacheFile)
+		if err != nil {
+			log.Printf("failed to load cache file; ignoring: %v", err)
+		} else {
+			if err := json.Unmarshal(contents, &data); err != nil {
+				log.Fatalf("failed to unmarshal cache file: %v", err)
+			}
+		}
+	}
+	if *flagGithub {
+		if err := data.Reviewers.LoadGithub(gh); err != nil {
+			log.Fatalf("failed to fetch commit information from Github: %v", err)
+		}
+	} else {
+		data.Reviewers.LoadLocal()
+	}
 	if err := data.FetchData(gh, ger, *days, *flagCL, *flagMail); err != nil {
-		log.Fatalf("Failed to fetch data: %v", err)
+		log.Fatalf("failed to fetch data: %v", err)
+	}
+
+	if *cacheFile != "" {
+		contents, err := json.MarshalIndent(data, "", "  ")
+		if err != nil {
+			log.Fatalf("marshaling cache: %v", err)
+		}
+		if err := ioutil.WriteFile(*cacheFile, contents, 0666); err != nil {
+			log.Fatalf("writing cache: %v", err)
+		}
 	}
 
 	if *flagMail {
