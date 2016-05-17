@@ -371,7 +371,7 @@ type section struct {
 	body  string
 }
 
-func (d *Data) PrintIssues(output io.Writer) {
+func (d *Data) PrintIssues(w io.Writer) {
 	groups := d.groupData(true, false)
 
 	milestones := d.getActiveMilestones()
@@ -420,18 +420,18 @@ func (d *Data) PrintIssues(output io.Writer) {
 			titles = append(titles, fmt.Sprintf("%d %s", s.count, s.title))
 		}
 	}
-	fmt.Fprintf(output, "%s\n", strings.Join(titles, " + "))
+	fmt.Fprintf(w, "%s\n", strings.Join(titles, " + "))
 	for _, s := range sections {
 		if s.count > 0 {
-			fmt.Fprintf(output, "\n%s\n%s", s.title, s.body)
+			fmt.Fprintf(w, "\n%s\n%s", s.title, s.body)
 		}
 	}
 }
 
-func (d *Data) PrintCLs(output io.Writer) {
+func (d *Data) PrintCLs(w io.Writer) {
 	count, body := d.printGroups(d.groupData(false, true), true, func(item *Item) bool { return len(item.CLs) > 0 })
-	fmt.Fprintf(output, "%d Pending CLs\n", count)
-	fmt.Fprintf(output, "\n%s\n%s", "Pending CLs", body)
+	fmt.Fprintf(w, "%d Pending CLs\n", count)
+	fmt.Fprintf(w, "\n%s\n%s", "Pending CLs", body)
 }
 
 func (d *Data) printGroups(groups []*Group, clDetail bool, match func(*Item) bool) (int, string) {

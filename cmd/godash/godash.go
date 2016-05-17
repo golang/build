@@ -32,12 +32,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"html"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -131,8 +129,17 @@ func main() {
 		data.PrintIssues(&output)
 	}
 
+	if *flagMail {
+		fmt.Printf("Subject: Go weekly report for %s\n", time.Now().Format("2006-01-02"))
+		fmt.Printf("From: \"Gopher Robot\" <gobot@golang.org>\n")
+		fmt.Printf("To: golang-dev@googlegroups.com\n")
+		fmt.Printf("Message-Id: <godash.%x@golang.org>\n", md5.Sum([]byte(output.String())))
+		fmt.Printf("Content-Type: text/html; charset=utf-8\n")
+		fmt.Printf("\n")
+	}
+
 	if *flagHTML {
-		printHTML()
+		godash.PrintHTML(os.Stdout, output.String())
 		return
 	}
 	os.Stdout.Write(output.Bytes())
@@ -161,43 +168,4 @@ func readAuthToken() string {
 		log.Fatalf("reading token: %s mode is %#o, want %#o", shortFilename, fi.Mode()&0777, fi.Mode()&0700)
 	}
 	return strings.TrimSpace(string(data))
-}
-
-func printHTML() {
-	data := html.EscapeString(output.String())
-	i := strings.Index(data, "\n")
-	if i < 0 {
-		i = len(data)
-	}
-	if *flagMail {
-		fmt.Printf("Subject: Go weekly report for %s\n", time.Now().Format("2006-01-02"))
-		fmt.Printf("From: \"Gopher Robot\" <gobot@golang.org>\n")
-		fmt.Printf("To: golang-dev@googlegroups.com\n")
-		fmt.Printf("Message-Id: <godash.%x@golang.org>\n", md5.Sum([]byte(data)))
-		fmt.Printf("Content-Type: text/html; charset=utf-8\n")
-		fmt.Printf("\n")
-	}
-	fmt.Printf("<html>\n")
-	fmt.Printf("<meta charset=\"UTF-8\">\n")
-	fmt.Printf("<title>%s</title>\n", data[:i])
-	fmt.Printf("<style>\n")
-	fmt.Printf(".early {}\n")
-	fmt.Printf(".maybe {}\n")
-	fmt.Printf(".late {color: #700; text-decoration: underline;}\n")
-	fmt.Printf(".closed {background-color: #eee;}\n")
-	fmt.Printf("hr {border: none; border-top: 2px solid #000; height: 5px; border-bottom: 1px solid #000;}\n")
-	fmt.Printf("</style>\n")
-	fmt.Printf("<pre>\n")
-	data = regexp.MustCompile(`(?m)^HOWTO`).ReplaceAllString(data, `<a target="_blank" href="index.html">about the dashboard</a>`)
-	data = regexp.MustCompile(`(CL (\d+))\b`).ReplaceAllString(data, "<a target=\"_blank\" href='https://golang.org/cl/$2'>$1</a>")
-	data = regexp.MustCompile(`(#(\d\d\d+))\b`).ReplaceAllString(data, "<a target=\"_blank\" href='https://golang.org/issue/$2'>$1</a>")
-	data = regexp.MustCompile(`(?m)^(Closed Last Week|Pending Proposals|Pending CLs|Go[\?A-Za-z0-9][^\n]*)`).ReplaceAllString(data, "<hr><b><font size='+1'>$1</font></b>")
-	data = regexp.MustCompile(`(?m)^([\?A-Za-z0-9][^\n]*)`).ReplaceAllString(data, "<b>$1</b>")
-	data = regexp.MustCompile(`(?m)^([^\n]*\[early[^\n]*)`).ReplaceAllString(data, "<span class='early'>$1</span>")
-	data = regexp.MustCompile(`(?m)^([^\n]*\[maybe[^\n]*)`).ReplaceAllString(data, "<span class='maybe'>$1</span>")
-	data = regexp.MustCompile(`(?m)^( +)(.*)( → )(.*)(, [\d/]+ days)(, waiting for reviewer)`).ReplaceAllString(data, "$1$2$3<b>$4</b>$5$6")
-	data = regexp.MustCompile(`(?m)^( +)(.*)( → )(.*)(, [\d/]+ days)(, waiting for author)`).ReplaceAllString(data, "$1<b>$2</b>$3$4$5$6")
-	data = regexp.MustCompile(`(→ )(.*, \d\d+)(/\d+ days)(, waiting for reviewer)`).ReplaceAllString(data, "$1<b class='late'>$2</b>$3$4")
-	fmt.Printf("%s\n", data)
-	fmt.Printf("</pre>\n")
 }
