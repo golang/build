@@ -46,7 +46,7 @@ type Item struct {
 type Data struct {
 	Issues         map[int]*Issue
 	CLs            []*CL
-	Milestones     []string
+	Milestones     []*github.Milestone
 	GoReleaseCycle int
 	Now            time.Time
 
@@ -66,7 +66,7 @@ func (d *Data) FetchData(gh *github.Client, ger *gerrit.Client, days int, clOnly
 	d.Milestones = m
 
 	for _, m := range d.Milestones {
-		if matches := releaseRE.FindStringSubmatch(m); matches != nil {
+		if matches := releaseRE.FindStringSubmatch(*m.Title); matches != nil {
 			n, _ := strconv.Atoi(matches[1])
 			if d.GoReleaseCycle == 0 || d.GoReleaseCycle > n {
 				d.GoReleaseCycle = n
@@ -324,21 +324,22 @@ func dirKey(s string) string {
 	return s
 }
 
-var milestoneRE = regexp.MustCompile(`^Go1\.(\d+)(|\.(\d+))(|Early|Maybe)$`)
+var milestoneRE = regexp.MustCompile(`^Go1\.(\d+)(|\.(\d+))(|[A-Z].*)$`)
 
 type milestone struct {
 	title        string
 	major, minor int
+	due          time.Time
 }
 
 func (d *Data) getActiveMilestones() []string {
 	var all []milestone
-	for _, title := range d.Milestones {
-		if m := milestoneRE.FindStringSubmatch(title); m != nil {
+	for _, dm := range d.Milestones {
+		if m := milestoneRE.FindStringSubmatch(*dm.Title); m != nil {
 			major, _ := strconv.Atoi(m[1])
 			minor, _ := strconv.Atoi(m[3])
 			if major <= d.GoReleaseCycle {
-				all = append(all, milestone{title, major, minor})
+				all = append(all, milestone{*dm.Title, major, minor, getTime(dm.DueOn)})
 			}
 		}
 	}
@@ -361,6 +362,9 @@ func (x milestones) Less(i, j int) bool {
 	}
 	if a.minor != b.minor {
 		return a.minor < b.minor
+	}
+	if !a.due.Equal(b.due) {
+		return a.due.Before(b.due)
 	}
 	return a.title < b.title
 }

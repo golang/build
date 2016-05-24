@@ -132,12 +132,13 @@ func searchIssues(client *github.Client, q string) ([]*Issue, error) {
 	return all, nil
 }
 
-func getMilestones(client *github.Client) ([]string, error) {
-	var all []string
+func getMilestones(client *github.Client) ([]*github.Milestone, error) {
+	var all []*github.Milestone
 	milestones, _, err := client.Issues.ListMilestones(projectOwner, projectRepo, nil)
-	for _, m := range milestones {
+	for i := range milestones {
+		m := &milestones[i]
 		if m.Title != nil {
-			all = append(all, *m.Title)
+			all = append(all, m)
 		}
 	}
 	return all, err
