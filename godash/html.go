@@ -31,7 +31,7 @@ func PrintHTML(w io.Writer, data string) {
 	fmt.Fprintf(w, "hr {border: none; border-top: 2px solid #000; height: 5px; border-bottom: 1px solid #000;}\n")
 	fmt.Fprintf(w, "</style>\n")
 	fmt.Fprintf(w, "<pre>\n")
-	data = regexp.MustCompile(`(?m)^HOWTO`).ReplaceAllString(data, `<a target="_blank" href="index.html">about the dashboard</a>`)
+	data = regexp.MustCompile(`(?m)^HOWTO`).ReplaceAllString(data, `<a target="_blank" href="/">about the dashboard</a>`)
 	data = regexp.MustCompile(`(CL (\d+))\b`).ReplaceAllString(data, "<a target=\"_blank\" href='https://golang.org/cl/$2'>$1</a>")
 	data = regexp.MustCompile(`(#(\d\d\d+))\b`).ReplaceAllString(data, "<a target=\"_blank\" href='https://golang.org/issue/$2'>$1</a>")
 	data = regexp.MustCompile(`(?m)^(Closed Last Week|Pending Proposals|Pending CLs|Go[\?A-Za-z0-9][^\n]*)`).ReplaceAllString(data, "<hr><b><font size='+1'>$1</font></b>")
