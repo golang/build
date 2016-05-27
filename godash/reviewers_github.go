@@ -39,6 +39,9 @@ pages:
 			}
 			if commit.Commit != nil && commit.Commit.Author != nil && commit.Commit.Author.Email != nil {
 				r.add(*commit.Commit.Author.Email, false)
+				if commit.Author != nil && commit.Author.Login != nil {
+					r.data.GitHubByAddr[*commit.Commit.Author.Email] = *commit.Author.Login
+				}
 			}
 			if commit.Commit != nil && commit.Commit.Message != nil {
 				for _, line := range strings.Split(string(*commit.Commit.Message), "\n") {

@@ -1,0 +1,102 @@
+h1 {
+	font-size: 1.5em;
+	margin-top: 0.1em;
+	margin-bottom: 0.1em;
+}
+.loginbar {
+	float: right;
+}
+a.showing {
+	color: black;
+	text-decoration: none;
+	font-weight: bold;
+}
+table {
+	border-spacing: 0;
+	width: 100%;
+}
+tbody.hidden tr.dir {
+	display: none;
+}
+tr.hidden {
+	display: none;
+}
+tr.item td {
+	border-top: 1px solid #ccc;
+}
+td {
+	vertical-align: top;
+	padding: 2px;
+}
+td.highlight {
+	width: 1em;
+}
+tr.dir {
+	background-color: #ffc;
+}
+tr.dir td {
+	border-top: 1px solid black;
+}
+td.id {
+	width: 7em;
+}
+tr.todo td.highlight {
+	border-right: 5px solid blue;
+}
+td.author {
+	width: 9em;
+}
+td.reviewer {
+	width: 9em;
+}
+div.loginbar, span.howto, span.lgtmornot, span.summary, span.files {
+	font-family: sans-serif;
+	font-size: 80%;
+}
+div.loginbar {
+	padding-bottom: 1em;
+}
+span.lgtmornot, span.summary, span.files {
+	color: #777;
+}
+span.lgtm {
+	color: #0c8;
+	font-weight: bold;
+}
+span.notlgtm {
+	color: #e00;
+	font-weight: bold;
+}
+span.milestone {
+	font-size: 60%;
+}
+span.milestone.release {
+	background-color: #f99;
+}
+tr.old span.age {
+	font-weight: bold;
+	font-style: italic;
+	color: #e00;
+}
+span.assignreviewer {
+	font-weight: normal;
+	font-size: 60%;
+	font-family: sans-serif;
+}
+a.big {
+	font-size: 150%;
+	border: 1px solid blue;
+}
+td.mine {
+	font-weight: bold;
+}
+tr.nest td.id {
+	padding-left: 1em;
+}
+div.extra {
+	margin-left: 1em;
+}
+span.verb {
+	font-size: 60%;
+	font-family: sans-serif;
+}

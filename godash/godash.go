@@ -113,7 +113,12 @@ func (d *Data) FetchData(gh *github.Client, ger *gerrit.Client, days int, clOnly
 	return nil
 }
 
-func (d *Data) groupData(includeIssues, allCLs bool) []*Group {
+// GroupData returns information about all the issues and CLs,
+// grouping related issues and CLs together and then grouping those
+// items by directory affected. includeIssues specifies whether to
+// include both CLs and issues or just CLs. allCLs specifies whether
+// to include CLs from non-go projects (i.e. x/ repos).
+func (d *Data) GroupData(includeIssues, allCLs bool) []*Group {
 	groupsByDir := make(map[string]*Group)
 	addGroup := func(item *Item) {
 		dir := item.Dir()
@@ -332,7 +337,7 @@ type milestone struct {
 	due          time.Time
 }
 
-func (d *Data) getActiveMilestones() []string {
+func (d *Data) GetActiveMilestones() []string {
 	var all []milestone
 	for _, dm := range d.Milestones {
 		if m := milestoneRE.FindStringSubmatch(*dm.Title); m != nil {
@@ -376,9 +381,9 @@ type section struct {
 }
 
 func (d *Data) PrintIssues(w io.Writer) {
-	groups := d.groupData(true, false)
+	groups := d.GroupData(true, false)
 
-	milestones := d.getActiveMilestones()
+	milestones := d.GetActiveMilestones()
 
 	sections := []*section{}
 
@@ -392,7 +397,7 @@ func (d *Data) PrintIssues(w io.Writer) {
 	// Pending CLs
 	// This uses a different grouping (by CL, not by issue) since
 	// otherwise we might print a CL twice.
-	count, body := d.printGroups(d.groupData(false, false), false, func(item *Item) bool { return len(item.CLs) > 0 })
+	count, body := d.printGroups(d.GroupData(false, false), false, func(item *Item) bool { return len(item.CLs) > 0 })
 	sections = append(sections, &section{
 		"Pending CLs",
 		count, body,
@@ -433,7 +438,7 @@ func (d *Data) PrintIssues(w io.Writer) {
 }
 
 func (d *Data) PrintCLs(w io.Writer) {
-	count, body := d.printGroups(d.groupData(false, true), true, func(item *Item) bool { return len(item.CLs) > 0 })
+	count, body := d.printGroups(d.GroupData(false, true), true, func(item *Item) bool { return len(item.CLs) > 0 })
 	fmt.Fprintf(w, "%d Pending CLs\n", count)
 	fmt.Fprintf(w, "\n%s\n%s", "Pending CLs", body)
 }

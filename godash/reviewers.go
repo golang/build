@@ -5,6 +5,8 @@
 package godash
 
 import (
+	"bytes"
+	"encoding/gob"
 	"encoding/json"
 	"sort"
 	"strings"
@@ -45,11 +47,16 @@ type Reviewers struct {
 		// CountByAddr maps full e-mail address to a score of
 		// the number of CLs authored and reviewed.
 		CountByAddr map[string]int64
+		// GitHubByAddr maps full e-mail address to GitHub username.
+		GitHubByAddr map[string]string
 		// LastSHA and LastTime track the SHA and time of the
 		// last commit included in these stats.
 		LastSHA  string
 		LastTime time.Time
 	}
+	// addrByGitHub maps GitHub usernames to preferred address
+	// (the address with the highest review count).
+	addrByGitHub map[string]string
 	// mailLookup maps short names to full e-mail addresses.
 	mailLookup map[string]string // rsc -> rsc@golang.org
 }
@@ -76,6 +83,23 @@ func (r *Reviewers) Resolve(short string) string {
 	return r.mailLookup[short]
 }
 
+// Preferred takes an address and returns the preferred e-mail address
+// for that user, which may be the same. It does this by resolving the
+// GitHub username and then returning the address most-used for
+// commits on that username.
+func (r *Reviewers) Preferred(addr string) string {
+	if out := r.addrByGitHub[r.data.GitHubByAddr[addr]]; out != "" {
+		return out
+	}
+	return addr
+}
+
+// ResolveGitHub takes a GitHub login name and returns the matching
+// full e-mail address, or "" if the name could not be resolved.
+func (r *Reviewers) ResolveGitHub(login string) string {
+	return r.addrByGitHub[login]
+}
+
 // add increments a reviewer's count. recalculate must be called to
 // regenerate the mail lookup table.
 func (r *Reviewers) add(addr string, isReviewer bool) {
@@ -87,6 +111,9 @@ func (r *Reviewers) add(addr string, isReviewer bool) {
 	}
 	if r.data.CountByAddr == nil {
 		r.data.CountByAddr = make(map[string]int64)
+	}
+	if r.data.GitHubByAddr == nil {
+		r.data.GitHubByAddr = make(map[string]string)
 	}
 	if isReviewer {
 		r.data.IsReviewer[addr] = true
@@ -112,6 +139,12 @@ func (r *Reviewers) recalculate() {
 			r.mailLookup[short] = rev.addr
 		}
 	}
+	r.addrByGitHub = map[string]string{}
+	for addr, user := range r.data.GitHubByAddr {
+		if r.addrByGitHub[user] == "" || r.data.CountByAddr[r.addrByGitHub[user]] < r.data.CountByAddr[addr] {
+			r.addrByGitHub[user] = addr
+		}
+	}
 }
 
 func (r *Reviewers) MarshalJSON() ([]byte, error) {
@@ -120,6 +153,24 @@ func (r *Reviewers) MarshalJSON() ([]byte, error) {
 
 func (r *Reviewers) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &r.data); err != nil {
+		return err
+	}
+	r.recalculate()
+	return nil
+}
+
+func (r *Reviewers) GobEncode() ([]byte, error) {
+	var out bytes.Buffer
+	e := gob.NewEncoder(&out)
+	if err := e.Encode(&r.data); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+func (r *Reviewers) GobDecode(b []byte) error {
+	d := gob.NewDecoder(bytes.NewBuffer(b))
+	if err := d.Decode(&r.data); err != nil {
 		return err
 	}
 	r.recalculate()

@@ -9,7 +9,7 @@ package devapp
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/gob"
 	"fmt"
 	"net/http"
 	"strings"
@@ -31,6 +31,7 @@ func init() {
 		page := page
 		http.Handle("/"+page, hstsHandler(func(w http.ResponseWriter, r *http.Request) { servePage(w, r, page) }))
 	}
+	http.Handle("/dash", hstsHandler(showDash))
 	http.HandleFunc("/update", updateHandler)
 	http.HandleFunc("/setToken", setTokenHandler)
 }
@@ -82,7 +83,7 @@ func update(ctx context.Context) error {
 	var token, cache Cache
 	var keys []*datastore.Key
 	keys = append(keys, datastore.NewKey(ctx, entityPrefix+"Cache", "github-token", 0, nil))
-	keys = append(keys, datastore.NewKey(ctx, entityPrefix+"Cache", "reviewers", 0, nil))
+	keys = append(keys, datastore.NewKey(ctx, entityPrefix+"Cache", "data", 0, nil))
 	datastore.GetMulti(ctx, keys, []*Cache{&token, &cache}) // Ignore errors since they might not exist.
 	// Without a deadline, urlfetch will use a 5s timeout which is too slow for Gerrit.
 	ctx, cancel := context.WithTimeout(ctx, 9*time.Minute)
@@ -93,7 +94,8 @@ func update(ctx context.Context) error {
 	ger.HTTPClient = urlfetch.Client(ctx)
 	data := &godash.Data{Reviewers: &godash.Reviewers{}}
 	if len(cache.Value) > 0 {
-		if err := json.Unmarshal(cache.Value, data.Reviewers); err != nil {
+		d := gob.NewDecoder(bytes.NewBuffer(cache.Value))
+		if err := d.Decode(&data); err != nil {
 			return err
 		}
 	}
@@ -128,14 +130,13 @@ func update(ctx context.Context) error {
 		}
 	}
 
-	// N.B. We can't serialize the whole data because a) it's too
-	// big and b) it can only be serialized by Go >=1.7.
-	js, err := json.MarshalIndent(data.Reviewers, "", "  ")
-	if err != nil {
+	var cacheout bytes.Buffer
+	e := gob.NewEncoder(&cacheout)
+	if err := e.Encode(&data); err != nil {
 		return err
 	}
-	cache.Value = js
-	if _, err = datastore.Put(ctx, datastore.NewKey(ctx, entityPrefix+"Cache", "reviewers", 0, nil), &cache); err != nil {
+	cache.Value = cacheout.Bytes()
+	if _, err := datastore.Put(ctx, datastore.NewKey(ctx, entityPrefix+"Cache", "data", 0, nil), &cache); err != nil {
 		return err
 	}
 	return nil
