@@ -28,6 +28,7 @@ func PrintHTML(w io.Writer, data string) {
 	fmt.Fprintf(w, ".maybe {}\n")
 	fmt.Fprintf(w, ".late {color: #700; text-decoration: underline;}\n")
 	fmt.Fprintf(w, ".closed {background-color: #eee;}\n")
+	fmt.Fprintf(w, "pre {white-space: pre-wrap;}\n")
 	fmt.Fprintf(w, "hr {border: none; border-top: 2px solid #000; height: 5px; border-bottom: 1px solid #000;}\n")
 	fmt.Fprintf(w, "</style>\n")
 	fmt.Fprintf(w, "<pre>\n")
