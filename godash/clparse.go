@@ -19,11 +19,9 @@ import (
 // Parsing of Gerrit information and review messages to produce CL structure.
 
 var (
-	reviewerRE     = regexp.MustCompile(`(?m)^R=([\w\-.@]+)\b`)
-	scoreRE        = regexp.MustCompile(`\APatch Set \d+: Code-Review([+-][0-9]+)`)
-	removedScoreRE = regexp.MustCompile(`\ARemoved the following votes:\n\n\* Code-Review([+-][0-9]+) by [^\n]* <([^\n]*)>`)
-	issueRefRE     = regexp.MustCompile(`#\d+\b`)
-	goIssueRefRE   = regexp.MustCompile(`\bgolang/go#\d+\b`)
+	reviewerRE   = regexp.MustCompile(`(?m)^R=([\w\-.@]+)\b`)
+	issueRefRE   = regexp.MustCompile(`#\d+\b`)
+	goIssueRefRE = regexp.MustCompile(`\bgolang/go#\d+\b`)
 )
 
 // ParseCL takes a ChangeInfo as returned from the Gerrit API and
@@ -48,11 +46,6 @@ func ParseCL(ci *gerrit.ChangeInfo, reviewers *Reviewers, goReleaseCycle int) *C
 				explicitReviewer = ""
 				closeReason = ""
 			}
-			for who, score := range scores {
-				if score == +1 || score == -1 {
-					delete(scores, who)
-				}
-			}
 		}
 		if m := reviewerRE.FindStringSubmatch(msg.Message); m != nil {
 			if m[1] == "close" {
@@ -70,16 +63,12 @@ func ParseCL(ci *gerrit.ChangeInfo, reviewers *Reviewers, goReleaseCycle int) *C
 				explicitReviewer = x
 			}
 		}
-		if m := scoreRE.FindStringSubmatch(msg.Message); m != nil {
-			n, _ := strconv.Atoi(m[1])
-			scores[msg.Author.Email] = n
-		}
-		if m := removedScoreRE.FindStringSubmatch(msg.Message); m != nil {
-			delete(scores, m[1])
-		}
 		if firstResponder == "" && reviewers.IsReviewer(msg.Author.Email) && msg.Author.Email != ci.Owner.Email {
 			firstResponder = msg.Author.Email
 		}
+	}
+	for _, score := range ci.Labels["Code-Review"].All {
+		scores[score.Email] = score.Value
 	}
 
 	cl := &CL{

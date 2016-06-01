@@ -60,7 +60,7 @@
 			<td class="reviewer {{.Reviewer | mine}} {{css "todo" .NeedsReview}}">
 				<span id="reviewer-{{.Number}}">{{.Reviewer | short}}</span>
 			<td class="summary">{{.Subject}}
-				<span class="lgtmornot">{{range $r, $score := .Scores}}<span class="{{css "lgtm" (ge $score 0)}}{{css "notlgtm" (le $score 0)}}">{{$r}} {{printf "%+d" $score}}</span> {{end}}</span><br>
+				<span class="lgtmornot">{{range $r, $score := .Scores}}<span class="{{css "lgtm" (ge $score 0)}}{{css "notlgtm" (le $score 0)}}">{{$r | short}}{{if $score}} {{printf "%+d" $score}}{{end}}</span> {{end}}</span><br>
 				<div class="extra">
 				<span class="summary"><span class="age">last updated {{.NeedsReviewChanged | since}}</span>, {{if .NeedsReview}}<span class="needsreview">waiting for reviewer</span>{{else}}<span class="needswork">waiting for author</span>{{end}}</span><br>
 				<span class="files">{{.Files | join " "}}</span>
