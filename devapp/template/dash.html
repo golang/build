@@ -30,6 +30,7 @@
 </div>
 
 <h1>Go development dashboard</h1>
+<span>updated {{.Now}}</span><br>
 <span class="howto"><a target="_blank" href="http://golang.org/s/go-dev-howto">how to use</a><br></span>
 <br>
 
@@ -56,9 +57,9 @@
 			<tr class="item {{if $Item.Issue}}nest{{end}} {{.NeedsReviewChanged | old}}">
 			<td class="highlight">
 			<td class="codereview id"><a target="_blank" href="https://golang.org/cl/{{.Number}}">CL {{.Number}}</a>
-			<td class="author {{.Author | mine}} {{css "todo" (not .NeedsReview)}}">{{.Author | short}}
+			<td class="author {{.Author | mine}} {{css "todo" (not .NeedsReview)}}">{{.Author}}
 			<td class="reviewer {{.Reviewer | mine}} {{css "todo" .NeedsReview}}">
-				<span id="reviewer-{{.Number}}">{{.Reviewer | short}}</span>
+				<span id="reviewer-{{.Number}}">{{.Reviewer}}</span>
 			<td class="summary">{{.Subject}}
 				<span class="lgtmornot">{{range $r, $score := .Scores}}<span class="{{css "lgtm" (ge $score 0)}}{{css "notlgtm" (le $score 0)}}">{{$r | short}}{{if $score}} {{printf "%+d" $score}}{{end}}</span> {{end}}</span><br>
 				<div class="extra">

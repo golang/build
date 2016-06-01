@@ -98,10 +98,12 @@ func showDash(w http.ResponseWriter, req *http.Request) {
 
 	tData := struct {
 		User          string
+		Now           string
 		Login, Logout string
 		Dirs          []*godash.Group
 	}{
 		d.email,
+		data.Now.UTC().Format(time.UnixDate),
 		login, logout,
 		filtered,
 	}
@@ -179,13 +181,15 @@ func (d *display) second(index int) string {
 }
 
 // mine returns the css class "mine" if the email address is the logged-in user.
-// It also returns "unassigned" for the unassigned reviewer "golang-dev"
-// (see reviewer above).
+// It also returns "unassigned" for an unassigned reviewer.
 func (d *display) mine(email string) string {
+	if long := d.data.Reviewers.Resolve(email); long != "" {
+		email = long
+	}
 	if d.data.Reviewers.Preferred(email) == d.email {
 		return "mine"
 	}
-	if email == "golang-dev" {
+	if email == "" {
 		return "unassigned"
 	}
 	return ""
