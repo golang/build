@@ -11,9 +11,11 @@ import (
 	"html/template"
 	"io/ioutil"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/google/go-github/github"
 	"golang.org/x/build/godash"
 	"golang.org/x/net/context"
 	"google.golang.org/appengine"
@@ -29,6 +31,55 @@ func findEmail(ctx context.Context, data *godash.Data) string {
 		return data.Reviewers.Preferred(u.Email)
 	}
 	return ""
+}
+
+type itemsByMilestone struct {
+	list       []*godash.Item
+	milestones []string
+}
+
+func (x itemsByMilestone) Len() int           { return len(x.list) }
+func (x itemsByMilestone) Swap(i, j int)      { x.list[i], x.list[j] = x.list[j], x.list[i] }
+func (x itemsByMilestone) Less(i, j int) bool { return x.index(x.list[i]) < x.index(x.list[j]) }
+
+func (x itemsByMilestone) index(i *godash.Item) int {
+	if i.Issue == nil {
+		return len(x.milestones)
+	}
+	milestone := i.Issue.Milestone
+	for i, m := range x.milestones {
+		if m == milestone {
+			return i
+		}
+	}
+	return len(x.milestones)
+}
+
+type byDate []*github.Milestone
+
+func (x byDate) Len() int      { return len(x) }
+func (x byDate) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
+func (x byDate) Less(i, j int) bool {
+	a, b := x[i].DueOn, x[j].DueOn
+	if a == nil {
+		return false
+	}
+	if b == nil {
+		return true
+	}
+	return a.Before(*b)
+}
+
+func datedMilestones(milestones []*github.Milestone) []string {
+	milestones = append([]*github.Milestone{}, milestones...)
+	sort.Stable(byDate(milestones))
+	var names []string
+	for _, m := range milestones {
+		if m.Title != nil {
+			names = append(names, *m.Title)
+		}
+	}
+	return names
 }
 
 func showDash(w http.ResponseWriter, req *http.Request) {
@@ -84,6 +135,7 @@ func showDash(w http.ResponseWriter, req *http.Request) {
 		if group.Dir == "closed" || group.Dir == "proposal" {
 			continue
 		}
+		sort.Stable(itemsByMilestone{group.Items, datedMilestones(data.Milestones)})
 		filtered = append(filtered, group)
 	}
 
