@@ -50,7 +50,7 @@ func godoc() error {
 	// Copy godoc binary to $GOROOT/bin.
 	return cp(
 		filepath.FromSlash("go/bin/godoc"+ext()),
-		filepath.FromSlash("gopath/bin/gotour"+ext()),
+		filepath.FromSlash("gopath/bin/godoc"+ext()),
 	)
 }
 
