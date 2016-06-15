@@ -41,6 +41,7 @@ var repos = []string{
 	"golang/build",
 	"golang/crypto",
 	"golang/debug",
+	"golang/example",
 	"golang/exp",
 	"golang/gddo",
 	"golang/go",
