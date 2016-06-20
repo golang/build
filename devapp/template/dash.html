@@ -51,7 +51,12 @@
 			<td class="author {{.Reporter | ghemail | mine}}">{{.Reporter | ghemail | short}}
 			<td class="reviewer {{.Assignee | ghemail | mine}}">{{.Assignee | ghemail | short}}
 			<td class="summary">{{.Title}}
-                          {{with .Milestone}}<span class="milestone {{. | release}}">{{.}}</span>{{end}}
+				{{with .Milestone}}<span class="milestone {{. | release}}">{{.}}</span>{{end}}
+				{{if not .Updated.IsZero}}
+				<div class="extra">
+					<span class="summary"><span class="age">last updated {{.Updated | since}}</span></span>
+				</div>
+				{{end}}
 		{{end}}
 		{{range .CLs}}
 			<tr class="item {{if $Item.Issue}}nest{{end}} {{.NeedsReviewChanged | old}}">

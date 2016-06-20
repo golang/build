@@ -80,6 +80,7 @@ func issueToIssue(issue *github.Issue) *Issue {
 		Milestone: getMilestoneTitle(issue.Milestone),
 		Reporter:  getUserLogin(issue.User),
 		Created:   getTime(issue.CreatedAt),
+		Updated:   getTime(issue.UpdatedAt),
 	}
 }
 

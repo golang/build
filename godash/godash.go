@@ -22,14 +22,14 @@ import (
 )
 
 type Issue struct {
-	Number          int
-	Title           string
-	Labels          []string
-	Reporter        string
-	Assignee        string
-	Milestone       string
-	State           string
-	Created, Closed time.Time
+	Number                   int
+	Title                    string
+	Labels                   []string
+	Reporter                 string
+	Assignee                 string
+	Milestone                string
+	State                    string
+	Created, Updated, Closed time.Time
 }
 
 type Group struct {
