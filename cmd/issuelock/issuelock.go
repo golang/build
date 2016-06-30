@@ -6,10 +6,13 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,7 +20,16 @@ import (
 	"golang.org/x/oauth2"
 )
 
+func usage() {
+	fmt.Fprintf(os.Stderr, "Usage: issuelock [<issue>]\n")
+	flag.PrintDefaults()
+	os.Exit(1)
+}
+
 func main() {
+	flag.Usage = usage
+	flag.Parse()
+
 	tokenFile := filepath.Join(os.Getenv("HOME"), "keys", "github-gobot")
 	slurp, err := ioutil.ReadFile(tokenFile)
 	if err != nil {
@@ -30,6 +42,20 @@ func main() {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: f[1]})
 	tc := oauth2.NewClient(oauth2.NoContext, ts)
 	client := github.NewClient(tc)
+
+	if flag.NArg() == 1 {
+		issueNum, err := strconv.Atoi(flag.Arg(0))
+		if err != nil {
+			usage()
+		}
+		if err := freeze(client, issueNum); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if flag.NArg() > 1 {
+		usage()
+	}
 
 	tooOld := time.Now().Add(-365 * 24 * time.Hour).Format("2006-01-02")
 	log.Printf("Freezing closed issues before %v", tooOld)
