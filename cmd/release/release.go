@@ -214,6 +214,7 @@ var toolPaths = []string{
 
 var preBuildCleanFiles = []string{
 	".gitattributes",
+	".github",
 	".gitignore",
 	".hgignore",
 	".hgtags",
