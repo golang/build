@@ -660,6 +660,7 @@ func findWork(work chan<- builderRev) error {
 
 	var goRevisions []string
 	seenSubrepo := make(map[string]bool)
+	var setGoRepoHead bool
 	for _, br := range bs.Revisions {
 		if br.Repo == "grpc-review" {
 			// Skip the grpc repo. It's only for reviews
@@ -668,9 +669,10 @@ func findWork(work chan<- builderRev) error {
 		}
 		awaitSnapshot := false
 		if br.Repo == "go" {
-			if len(goRevisions) == 0 {
+			if !setGoRepoHead && br.Branch == "master" {
 				// First Go revision on page; update repo head.
 				setRepoHead(br.Repo, br.Revision)
+				setGoRepoHead = true
 			}
 			goRevisions = append(goRevisions, br.Revision)
 		} else {
