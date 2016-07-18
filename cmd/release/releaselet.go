@@ -47,9 +47,17 @@ func main() {
 }
 
 func godoc() error {
+	// Pre Go 1.7, the godoc binary is placed here by cmd/go.
+	// After Go 1.7, we need to copy the binary from GOPATH/bin to GOROOT/bin.
+	// TODO(cbro): Remove after Go 1.6 is no longer supported.
+	dst := filepath.FromSlash("go/bin/godoc" + ext())
+	if _, err := os.Stat(dst); err == nil {
+		return nil
+	}
+
 	// Copy godoc binary to $GOROOT/bin.
 	return cp(
-		filepath.FromSlash("go/bin/godoc"+ext()),
+		dst,
 		filepath.FromSlash("gopath/bin/godoc"+ext()),
 	)
 }
