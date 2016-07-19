@@ -27,7 +27,8 @@ var (
 // ParseCL takes a ChangeInfo as returned from the Gerrit API and
 // applies Go-project-specific logic to turn it into a CL struct. The
 // primary information that is added is the CL's state in the Go
-// review process, based on parsing R= lines in comments on the CL.
+// review process, based on parsing R= lines in the comments and the
+// most recent commit message of the CL.
 func ParseCL(ci *gerrit.ChangeInfo, reviewers *Reviewers, goReleaseCycle int) *CL {
 	// Gather information.
 	var (
@@ -37,17 +38,8 @@ func ParseCL(ci *gerrit.ChangeInfo, reviewers *Reviewers, goReleaseCycle int) *C
 		explicitReviewer = ""
 		closeReason      = ""
 	)
-	for _, msg := range ci.Messages {
-		if msg.Author == nil { // happens for Gerrit-generated messages
-			continue
-		}
-		if strings.HasPrefix(msg.Message, "Uploaded patch set ") {
-			if explicitReviewer == "close" && !strings.HasPrefix(closeReason, "Go") {
-				explicitReviewer = ""
-				closeReason = ""
-			}
-		}
-		if m := reviewerRE.FindStringSubmatch(msg.Message); m != nil {
+	parseReviewer := func(msg string) {
+		if m := reviewerRE.FindStringSubmatch(msg); m != nil {
 			if m[1] == "close" {
 				explicitReviewer = "close"
 				closeReason = "Closed"
@@ -63,6 +55,24 @@ func ParseCL(ci *gerrit.ChangeInfo, reviewers *Reviewers, goReleaseCycle int) *C
 				explicitReviewer = x
 			}
 		}
+	}
+
+	rev := ci.Revisions[ci.CurrentRevision]
+
+	for _, msg := range ci.Messages {
+		if msg.Author == nil { // happens for Gerrit-generated messages
+			continue
+		}
+		if strings.HasPrefix(msg.Message, "Uploaded patch set ") {
+			if explicitReviewer == "close" && !strings.HasPrefix(closeReason, "Go") {
+				explicitReviewer = ""
+				closeReason = ""
+			}
+			if msg.RevisionNumber == rev.PatchSetNumber && rev.Commit != nil {
+				parseReviewer(rev.Commit.Message)
+			}
+		}
+		parseReviewer(msg.Message)
 		if firstResponder == "" && reviewers.IsReviewer(msg.Author.Email) && msg.Author.Email != ci.Owner.Email {
 			firstResponder = msg.Author.Email
 		}
@@ -177,7 +187,6 @@ func ParseCL(ci *gerrit.ChangeInfo, reviewers *Reviewers, goReleaseCycle int) *C
 		refRE = goIssueRefRE
 	}
 
-	rev := ci.Revisions[ci.CurrentRevision]
 	for file := range rev.Files {
 		cl.Files = append(cl.Files, file)
 	}
