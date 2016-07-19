@@ -9,9 +9,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -26,26 +24,11 @@ import (
 
 const (
 	// APIEndpoint defines the base path for kubernetes API resources.
-	APIEndpoint       = "/api/v1"
-	defaultPodNS      = "/namespaces/default/pods"
-	defaultSecretNS   = "/namespaces/default/secrets"
-	defaultWatchPodNS = "/watch/namespaces/default/pods"
-	nodes             = "/nodes"
+	APIEndpoint     = "/api/v1"
+	defaultPod      = "/namespaces/default/pods"
+	defaultWatchPod = "/watch/namespaces/default/pods"
+	nodes           = "/nodes"
 )
-
-// ErrSecretNotFound is returned by GetSecret when a secret is not found.
-var ErrSecretNotFound = errors.New("kubernetes: secret not found")
-
-// APIError is returned by Client methods when an API call failed.
-type APIError struct {
-	StatusCode int
-	Body       string
-	Header     http.Header
-}
-
-func (e *APIError) Error() string {
-	return fmt.Sprintf("API error %d: %q", e.StatusCode, e.Body)
-}
 
 // Client is a client for the Kubernetes master.
 type Client struct {
@@ -77,9 +60,30 @@ func NewClient(baseURL string, client *http.Client) (*Client, error) {
 // An error is returned if the pod can not be created, or if ctx.Done
 // is closed.
 func (c *Client) RunLongLivedPod(ctx context.Context, pod *api.Pod) (*api.PodStatus, error) {
+	var podJSON bytes.Buffer
+	if err := json.NewEncoder(&podJSON).Encode(pod); err != nil {
+		return nil, fmt.Errorf("failed to encode pod in json: %v", err)
+	}
+	postURL := c.endpointURL + defaultPod
+	req, err := http.NewRequest("POST", postURL, &podJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: POST %q : %v", postURL, err)
+	}
+	res, err := ctxhttp.Do(ctx, c.httpClient, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: POST %q: %v", postURL, err)
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read request body for POST %q: %v", postURL, err)
+	}
+	if res.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("http error: %d POST %q: %q: %v", res.StatusCode, postURL, string(body), err)
+	}
 	var podResult api.Pod
-	if err := c.do(ctx, &podResult, "POST", wantCreated, defaultPodNS, pod); err != nil {
-		return nil, err
+	if err := json.Unmarshal(body, &podResult); err != nil {
+		return nil, fmt.Errorf("failed to decode pod resources: %v", err)
 	}
 
 	for {
@@ -112,16 +116,54 @@ func (c *Client) RunLongLivedPod(ctx context.Context, pod *api.Pod) (*api.PodSta
 
 // GetPods returns all pods in the cluster, regardless of status.
 func (c *Client) GetPods(ctx context.Context) ([]api.Pod, error) {
-	var res api.PodList
-	if err := c.do(ctx, &res, "GET", wantOK, c.endpointURL+defaultPodNS, nil); err != nil {
-		return nil, err
+	getURL := c.endpointURL + defaultPod
+
+	// Make request to Kubernetes API
+	req, err := http.NewRequest("GET", getURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: GET %q : %v", getURL, err)
 	}
-	return res.Items, nil
+	res, err := ctxhttp.Do(ctx, c.httpClient, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: GET %q: %v", getURL, err)
+	}
+
+	body, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read request body for GET %q: %v", getURL, err)
+	}
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("http error %d GET %q: %q: %v", res.StatusCode, getURL, string(body), err)
+	}
+
+	var podList api.PodList
+	if err := json.Unmarshal(body, &podList); err != nil {
+		return nil, fmt.Errorf("failed to decode list of pod resources: %v", err)
+	}
+	return podList.Items, nil
 }
 
 // PodDelete deletes the specified Kubernetes pod.
 func (c *Client) DeletePod(ctx context.Context, podName string) error {
-	return c.do(ctx, nil, "DELETE", wantOK, defaultPodNS+"/"+podName, nil)
+	url := c.endpointURL + defaultPod + "/" + podName
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: DELETE %q : %v", url, err)
+	}
+	res, err := ctxhttp.Do(ctx, c.httpClient, req)
+	if err != nil {
+		return fmt.Errorf("failed to make request: DELETE %q: %v", url, err)
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return fmt.Errorf("failed to read response body: DELETE %q: %v, url, err")
+	}
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("http error: %d DELETE %q: %q: %v", res.StatusCode, url, string(body), err)
+	}
+	return nil
 }
 
 // TODO(bradfitz): WatchPod is unreliable, so this is disabled.
@@ -204,7 +246,7 @@ func (c *Client) _WatchPod(ctx context.Context, podName, podResourceVersion stri
 		defer cancel()
 
 		// Make request to Kubernetes API
-		getURL := c.endpointURL + defaultWatchPodNS + "/" + podName
+		getURL := c.endpointURL + defaultWatchPod + "/" + podName
 		req, err := http.NewRequest("GET", getURL, nil)
 		req.URL.Query().Add("resourceVersion", podResourceVersion)
 		if err != nil {
@@ -267,9 +309,30 @@ func (c *Client) _WatchPod(ctx context.Context, podName, podResourceVersion stri
 // Retrieve the status of a pod synchronously from the Kube
 // API server.
 func (c *Client) PodStatus(ctx context.Context, podName string) (*api.PodStatus, error) {
-	var pod api.Pod
-	if err := c.do(ctx, &pod, "GET", wantOK, defaultPodNS+"/"+podName, nil); err != nil {
-		return nil, err
+	getURL := c.endpointURL + defaultPod + "/" + podName
+
+	// Make request to Kubernetes API
+	req, err := http.NewRequest("GET", getURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: GET %q : %v", getURL, err)
+	}
+	res, err := ctxhttp.Do(ctx, c.httpClient, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: GET %q: %v", getURL, err)
+	}
+
+	body, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read request body for GET %q: %v", getURL, err)
+	}
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("http error %d GET %q: %q: %v", res.StatusCode, getURL, string(body), err)
+	}
+
+	var pod *api.Pod
+	if err := json.Unmarshal(body, &pod); err != nil {
+		return nil, fmt.Errorf("failed to decode pod resources: %v", err)
 	}
 	return &pod.Status, nil
 }
@@ -278,88 +341,48 @@ func (c *Client) PodStatus(ctx context.Context, podName string) (*api.PodStatus,
 // in the pod.
 func (c *Client) PodLog(ctx context.Context, podName string) (string, error) {
 	// TODO(evanbrown): support multiple containers
-	var logs string
-	if err := c.do(ctx, &logs, "GET", wantOK, defaultPodNS+"/"+podName+"/log", nil); err != nil {
-		return "", err
+	url := c.endpointURL + defaultPod + "/" + podName + "/log"
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: GET %q : %v", url, err)
 	}
-	return logs, nil
+	res, err := ctxhttp.Do(ctx, c.httpClient, req)
+	if err != nil {
+		return "", fmt.Errorf("failed to make request: GET %q: %v", url, err)
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: GET %q: %v", url, err)
+	}
+	if res.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("http error %d GET %q: %q: %v", res.StatusCode, url, string(body), err)
+	}
+	return string(body), nil
 }
 
 // PodNodes returns the list of nodes that comprise the Kubernetes cluster
 func (c *Client) GetNodes(ctx context.Context) ([]api.Node, error) {
-	var res api.NodeList
-	if err := c.do(ctx, &res, "GET", wantOK, nodes, nil); err != nil {
-		return nil, err
-	}
-	return res.Items, nil
-}
-
-// CreateSecret creates a new secret resource in the default secret namespace with
-// the given secret.
-// It returns a new secret instance corresponding to the server side representation.
-func (c *Client) CreateSecret(ctx context.Context, secret *api.Secret) (*api.Secret, error) {
-	var res api.Secret
-	if err := c.do(ctx, &res, "POST", wantCreated, defaultSecretNS, secret); err != nil {
-		return nil, err
-	}
-	return &res, nil
-}
-
-// GetSecret returns the specified secret from the default secret namespace.
-// If the secret is not found, the err will be ErrSecretNotFound.
-func (c *Client) GetSecret(ctx context.Context, name string) (*api.Secret, error) {
-	var res api.Secret
-	if err := c.do(ctx, &res, "GET", wantOK, defaultSecretNS+"/"+name, nil); err != nil {
-		return nil, err
-	}
-	return &res, nil
-}
-
-func wantOK(code int) bool      { return code == http.StatusOK }
-func wantCreated(code int) bool { return code == http.StatusCreated }
-
-func (c *Client) do(ctx context.Context, dst interface{}, method string, checkResStatus func(int) bool, path string, payload interface{}) error {
-	var body io.Reader
-	if payload != nil {
-		buf := new(bytes.Buffer)
-		if err := json.NewEncoder(buf).Encode(payload); err != nil {
-			return fmt.Errorf("failed encode json payload: %v", err)
-		}
-		body = buf
-	}
-	req, err := http.NewRequest(method, c.endpointURL+path, body)
+	url := c.endpointURL + nodes
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %s %q : %v", method, path, err)
+		return nil, fmt.Errorf("failed to create request: GET %q : %v", url, err)
 	}
-	resp, err := ctxhttp.Do(ctx, c.httpClient, req)
+	res, err := ctxhttp.Do(ctx, c.httpClient, req)
 	if err != nil {
-		return fmt.Errorf("failed to perform request: %s %q: %v", method, path, err)
+		return nil, fmt.Errorf("failed to make request: GET %q: %v", url, err)
 	}
-	defer resp.Body.Close()
-	if !checkResStatus(resp.StatusCode) {
-		body, _ := ioutil.ReadAll(resp.Body)
-		return &APIError{
-			StatusCode: resp.StatusCode,
-			Body:       string(body),
-			Header:     resp.Header,
-		}
+	body, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: GET %q: %v, url, err")
 	}
-
-	switch dst := dst.(type) {
-	case nil:
-		return nil
-	case *string:
-		// string dest
-		bs, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read raw body: %v", err)
-		}
-		*dst = string(bs)
-	default:
-		// json dest
-		if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
-			return fmt.Errorf("failed to decode API response: %v", err)
-		}
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("http error %d GET %q: %q: %v", res.StatusCode, url, string(body), err)
 	}
-	return nil
+	var nodeList *api.NodeList
+	if err := json.Unmarshal(body, &nodeList); err != nil {
+		return nil, fmt.Errorf("failed to decode node list: %v", err)
+	}
+	return nodeList.Items, nil
 }
