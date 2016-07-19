@@ -78,7 +78,7 @@ func NewClient(baseURL string, client *http.Client) (*Client, error) {
 // is closed.
 func (c *Client) RunLongLivedPod(ctx context.Context, pod *api.Pod) (*api.PodStatus, error) {
 	var podResult api.Pod
-	if err := c.do(ctx, &podResult, "POST", defaultPodNS, pod); err != nil {
+	if err := c.do(ctx, &podResult, "POST", wantCreated, defaultPodNS, pod); err != nil {
 		return nil, err
 	}
 
@@ -113,7 +113,7 @@ func (c *Client) RunLongLivedPod(ctx context.Context, pod *api.Pod) (*api.PodSta
 // GetPods returns all pods in the cluster, regardless of status.
 func (c *Client) GetPods(ctx context.Context) ([]api.Pod, error) {
 	var res api.PodList
-	if err := c.do(ctx, &res, "GET", c.endpointURL+defaultPodNS, nil); err != nil {
+	if err := c.do(ctx, &res, "GET", wantOK, c.endpointURL+defaultPodNS, nil); err != nil {
 		return nil, err
 	}
 	return res.Items, nil
@@ -121,7 +121,7 @@ func (c *Client) GetPods(ctx context.Context) ([]api.Pod, error) {
 
 // PodDelete deletes the specified Kubernetes pod.
 func (c *Client) DeletePod(ctx context.Context, podName string) error {
-	return c.do(ctx, nil, "DELETE", defaultPodNS+"/"+podName, nil)
+	return c.do(ctx, nil, "DELETE", wantOK, defaultPodNS+"/"+podName, nil)
 }
 
 // TODO(bradfitz): WatchPod is unreliable, so this is disabled.
@@ -268,7 +268,7 @@ func (c *Client) _WatchPod(ctx context.Context, podName, podResourceVersion stri
 // API server.
 func (c *Client) PodStatus(ctx context.Context, podName string) (*api.PodStatus, error) {
 	var pod api.Pod
-	if err := c.do(ctx, &pod, "GET", defaultPodNS+"/"+podName, nil); err != nil {
+	if err := c.do(ctx, &pod, "GET", wantOK, defaultPodNS+"/"+podName, nil); err != nil {
 		return nil, err
 	}
 	return &pod.Status, nil
@@ -279,7 +279,7 @@ func (c *Client) PodStatus(ctx context.Context, podName string) (*api.PodStatus,
 func (c *Client) PodLog(ctx context.Context, podName string) (string, error) {
 	// TODO(evanbrown): support multiple containers
 	var logs string
-	if err := c.do(ctx, &logs, "GET", defaultPodNS+"/"+podName+"/log", nil); err != nil {
+	if err := c.do(ctx, &logs, "GET", wantOK, defaultPodNS+"/"+podName+"/log", nil); err != nil {
 		return "", err
 	}
 	return logs, nil
@@ -288,7 +288,7 @@ func (c *Client) PodLog(ctx context.Context, podName string) (string, error) {
 // PodNodes returns the list of nodes that comprise the Kubernetes cluster
 func (c *Client) GetNodes(ctx context.Context) ([]api.Node, error) {
 	var res api.NodeList
-	if err := c.do(ctx, &res, "GET", nodes, nil); err != nil {
+	if err := c.do(ctx, &res, "GET", wantOK, nodes, nil); err != nil {
 		return nil, err
 	}
 	return res.Items, nil
@@ -299,7 +299,7 @@ func (c *Client) GetNodes(ctx context.Context) ([]api.Node, error) {
 // It returns a new secret instance corresponding to the server side representation.
 func (c *Client) CreateSecret(ctx context.Context, secret *api.Secret) (*api.Secret, error) {
 	var res api.Secret
-	if err := c.do(ctx, &res, "POST", defaultSecretNS, secret); err != nil {
+	if err := c.do(ctx, &res, "POST", wantCreated, defaultSecretNS, secret); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -309,13 +309,16 @@ func (c *Client) CreateSecret(ctx context.Context, secret *api.Secret) (*api.Sec
 // If the secret is not found, the err will be ErrSecretNotFound.
 func (c *Client) GetSecret(ctx context.Context, name string) (*api.Secret, error) {
 	var res api.Secret
-	if err := c.do(ctx, &res, "GET", defaultSecretNS+"/"+name, nil); err != nil {
+	if err := c.do(ctx, &res, "GET", wantOK, defaultSecretNS+"/"+name, nil); err != nil {
 		return nil, err
 	}
 	return &res, nil
 }
 
-func (c *Client) do(ctx context.Context, dst interface{}, method string, path string, payload interface{}) error {
+func wantOK(code int) bool      { return code == http.StatusOK }
+func wantCreated(code int) bool { return code == http.StatusCreated }
+
+func (c *Client) do(ctx context.Context, dst interface{}, method string, checkResStatus func(int) bool, path string, payload interface{}) error {
 	var body io.Reader
 	if payload != nil {
 		buf := new(bytes.Buffer)
@@ -333,7 +336,7 @@ func (c *Client) do(ctx context.Context, dst interface{}, method string, path st
 		return fmt.Errorf("failed to perform request: %s %q: %v", method, path, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
+	if !checkResStatus(resp.StatusCode) {
 		body, _ := ioutil.ReadAll(resp.Body)
 		return &APIError{
 			StatusCode: resp.StatusCode,
