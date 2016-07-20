@@ -47,7 +47,7 @@ var (
 	keyFile      = flag.String("watcher.key", defaultKeyFile, "Build dashboard key file")
 	pollInterval = flag.Duration("watcher.poll", 10*time.Second, "Remote repo poll interval")
 	network      = flag.Bool("watcher.network", true, "Enable network calls (disable for testing)")
-	mirrorBase   = flag.String("watcher.mirror", "", `Mirror repository base URL (eg "https://github.com/golang/")`)
+	mirror       = flag.Bool("watcher.mirror", false, "whether to mirror to github")
 	filter       = flag.String("watcher.filter", "", "If non-empty, a comma-separated list of directories or files to watch for new commits (only works on main repo). If empty, watch all files in repo.")
 	branches     = flag.String("watcher.branches", "", "If non-empty, a comma-separated list of branches to watch. If empty, watch changes on every branch.")
 	httpAddr     = flag.String("watcher.http", "", "If non-empty, the listen address to run an HTTP server on")
@@ -57,7 +57,7 @@ var (
 var (
 	defaultKeyFile = filepath.Join(homeDir(), ".gobuildkey")
 	dashboardKey   = ""
-	networkSeen    = make(map[string]bool) // track known hashes for testing
+	networkSeen    = make(map[string]bool) // testing mode only (-watcher.network=false); known hashes
 )
 
 func watcherMain() {
@@ -107,9 +107,9 @@ func runWatcher() error {
 
 	go func() {
 		dst := ""
-		if *mirrorBase != "" {
+		if *mirror {
 			name := (*repoURL)[strings.LastIndex(*repoURL, "/")+1:]
-			dst = *mirrorBase + name
+			dst = "git@github.com:golang/" + name + ".git"
 		}
 		name := strings.TrimPrefix(*repoURL, goBase)
 		r, err := NewRepo(dir, *repoURL, dst, "", true)
@@ -127,13 +127,15 @@ func runWatcher() error {
 	}
 
 	start := func(name, path string, dash bool) {
+		log.Printf("Starting watch of repo %s", name)
 		url := goBase + name
-		dst := ""
-		if *mirrorBase != "" {
-			dst = *mirrorBase + name
-			if !repoExists(dst) {
-				log.Println("skipping mirror to nonexistent repo:", dst)
-				dst = ""
+		var dst string
+		if *mirror {
+			if shouldMirror(name) {
+				log.Printf("Starting mirror of subrepo %s", name)
+				dst = "git@github.com:golang/" + name + ".git"
+			} else {
+				log.Printf("Not mirroring repo %s", name)
 			}
 		}
 		r, err := NewRepo(dir, url, dst, path, dash)
@@ -151,7 +153,7 @@ func runWatcher() error {
 		seen[name] = true
 		go start(name, path, true)
 	}
-	if *mirrorBase != "" {
+	if *mirror {
 		for name := range gerritMetaMap() {
 			if seen[name] {
 				// Repo already picked up by dashboard list.
@@ -165,14 +167,88 @@ func runWatcher() error {
 	return <-errc
 }
 
-func repoExists(url string) bool {
-	r, err := http.Get(url)
+// shouldReport reports whether the named repo should be mirrored from
+// Gerrit to Github.
+func shouldMirror(name string) bool {
+	switch name {
+	case
+		"arch",
+		"benchmarks",
+		"blog",
+		"build",
+		"crypto",
+		"debug",
+		"example",
+		"exp",
+		"gddo",
+		"go",
+		"gofrontend",
+		"image",
+		"mobile",
+		"net",
+		"oauth2",
+		"playground",
+		"proposal",
+		"review",
+		"sync",
+		"sys",
+		"talks",
+		"term",
+		"text",
+		"time",
+		"tools",
+		"tour":
+		return true
+	}
+	// Else, see if it appears to be a subrepo:
+	r, err := http.Get("https://golang.org/x/" + name)
 	if err != nil {
-		log.Printf("repoExists %v: %v", url, err)
+		log.Printf("repo %v doesn't seem to exist: %v", name, err)
 		return false
 	}
 	r.Body.Close()
 	return r.StatusCode/100 == 2
+}
+
+// a statusEntry is a status string at a specific time.
+type statusEntry struct {
+	status string
+	t      time.Time
+}
+
+// statusRing is a ring buffer of timestamped status messages.
+type statusRing struct {
+	mu   sync.Mutex      // guards rest
+	head int             // next position to fill
+	ent  [50]statusEntry // ring buffer of entries; zero time means unpopulated
+}
+
+func (r *statusRing) add(status string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.ent[r.head] = statusEntry{status, time.Now()}
+	r.head++
+	if r.head == len(r.ent) {
+		r.head = 0
+	}
+}
+
+func (r *statusRing) foreachDesc(fn func(statusEntry)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	i := r.head
+	for {
+		i--
+		if i < 0 {
+			i = len(r.ent) - 1
+		}
+		if i == r.head || r.ent[i].t.IsZero() {
+			return
+		}
+		fn(r.ent[i])
+	}
 }
 
 // Repo represents a repository to be watched.
@@ -183,6 +259,7 @@ type Repo struct {
 	branches map[string]*Branch // keyed by branch name, eg "release-branch.go1.3" (or empty for default)
 	dash     bool               // push new commits to the dashboard
 	mirror   bool               // push new commits to 'dest' remote
+	status   statusRing
 }
 
 // NewRepo checks out a new instance of the Mercurial repository
@@ -209,41 +286,51 @@ func NewRepo(dir, srcURL, dstURL, importPath string, dash bool) (*Repo, error) {
 		dash:     dash,
 	}
 
+	http.Handle("/debug/watcher/"+r.name(), r)
+
 	needClone := true
 	if r.shouldTryReuseGitDir(dstURL) {
-		cmd := exec.Command("git", "fetch", "--all")
+		r.setStatus("reusing git dir; running git fetch")
+		cmd := exec.Command("git", "fetch", "origin")
 		cmd.Dir = r.root
-		r.logf("running git fetch --all")
+		r.logf("running git fetch")
 		t0 := time.Now()
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
 		err := cmd.Run()
 		if err != nil {
-			r.logf("git fetch --all failed; proceeding to wipe + clone instead; err: %v, stderr: %s", err, stderr.Bytes())
+			r.logf("git fetch failed; proceeding to wipe + clone instead; err: %v, stderr: %s", err, stderr.Bytes())
 		} else {
 			needClone = false
-			r.logf("ran git fetch --all in %v", time.Since(t0))
+			r.logf("ran git fetch in %v", time.Since(t0))
 		}
 	}
 	if needClone {
+		r.setStatus("need clone; removing cache root")
 		os.RemoveAll(r.root)
 		t0 := time.Now()
+		r.setStatus("running fresh git clone --mirror")
 		r.logf("cloning %v", srcURL)
 		cmd := exec.Command("git", "clone", "--mirror", srcURL, r.root)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return nil, fmt.Errorf("cloning %s: %v\n\n%s", srcURL, err, out)
 		}
+		r.setStatus("cloned")
 		r.logf("cloned in %v", time.Since(t0))
 	}
 
 	if r.mirror {
+		r.setStatus("adding dest remote")
 		if err := r.addRemote("dest", dstURL); err != nil {
+			r.setStatus("failed to add dest")
 			return nil, fmt.Errorf("adding remote: %v", err)
 		}
-		r.logf("initial push to %v", dstURL)
+		r.setStatus("added dest remote")
+		r.logf("starting initial push to %v", dstURL)
 		if err := r.push(); err != nil {
 			return nil, err
 		}
+		r.logf("did initial push to %v", dstURL)
 	}
 
 	if r.dash {
@@ -257,14 +344,24 @@ func NewRepo(dir, srcURL, dstURL, importPath string, dash bool) (*Repo, error) {
 	return r, nil
 }
 
+func (r *Repo) setStatus(status string) {
+	r.status.add(status)
+}
+
 // shouldTryReuseGitDir reports whether we should try to reuse r.root as the git
 // directory. (The directory may be corrupt, though.)
 // dstURL is optional, and is the desired remote URL for a remote named "dest".
 func (r *Repo) shouldTryReuseGitDir(dstURL string) bool {
 	if _, err := os.Stat(filepath.Join(r.root, "FETCH_HEAD")); err != nil {
+		if os.IsNotExist(err) {
+			r.logf("not reusing git dir; no FETCH_HEAD at %s", r.root)
+		} else {
+			r.logf("not reusing git dir; %v", err)
+		}
 		return false
 	}
 	if dstURL == "" {
+		r.logf("not reusing git dir because dstURL is empty")
 		return true
 	}
 
@@ -276,6 +373,7 @@ func (r *Repo) shouldTryReuseGitDir(dstURL string) bool {
 	if err != nil {
 		log.Printf("git remote -v: %v", err)
 	}
+	foundWrong := false
 	for _, ln := range strings.Split(string(out), "\n") {
 		if !strings.HasPrefix(ln, "dest") {
 			continue
@@ -284,8 +382,14 @@ func (r *Repo) shouldTryReuseGitDir(dstURL string) bool {
 		if len(f) < 2 {
 			continue
 		}
-		if f[0] == "dest" && f[1] == dstURL {
-			return true
+		if f[0] == "dest" {
+			if f[1] == dstURL {
+				return true
+			}
+			if !foundWrong {
+				foundWrong = true
+				r.logf("found dest of %q, which doesn't equal sought %q", f[1], dstURL)
+			}
 		}
 	}
 	r.logf("not reusing old repo: remote \"dest\" URL doesn't match")
@@ -326,19 +430,29 @@ func (r *Repo) Watch() error {
 				return err
 			}
 		}
+
+		r.setStatus("waiting")
 		// We still run a timer but a very slow one, just
 		// in case the mechanism updating the repo tickler
 		// breaks for some reason.
 		timer := time.NewTimer(5 * time.Minute)
 		select {
 		case <-tickler:
+			r.setStatus("got update tickle")
 			timer.Stop()
 		case <-timer.C:
+			r.setStatus("poll timer fired")
 		}
 	}
 }
 
-func (r *Repo) updateDashboard() error {
+func (r *Repo) updateDashboard() (err error) {
+	r.setStatus("updating dashboard")
+	defer func() {
+		if err == nil {
+			r.setStatus("updated dashboard")
+		}
+	}()
 	if err := r.update(true); err != nil {
 		return err
 	}
@@ -783,8 +897,21 @@ func (r *Repo) log(dir string, args ...string) ([]*Commit, error) {
 
 // fetch runs "git fetch" in the repository root.
 // It tries three times, just in case it failed because of a transient error.
-func (r *Repo) fetch() error {
+func (r *Repo) fetch() (err error) {
+	n := 0
+	r.setStatus("running git fetch origin")
+	defer func() {
+		if err != nil {
+			r.setStatus("git fetch failed")
+		} else {
+			r.setStatus("ran git fetch")
+		}
+	}()
 	return try(3, func() error {
+		n++
+		if n > 1 {
+			r.setStatus(fmt.Sprintf("running git fetch origin, attempt %d", n))
+		}
 		cmd := exec.Command("git", "fetch", "origin")
 		cmd.Dir = r.root
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -798,15 +925,72 @@ func (r *Repo) fetch() error {
 
 // push runs "git push -f --mirror dest" in the repository root.
 // It tries three times, just in case it failed because of a transient error.
-func (r *Repo) push() error {
+func (r *Repo) push() (err error) {
+	n := 0
+	r.setStatus("syncing to github")
+	defer func() {
+		if err != nil {
+			r.setStatus("sync to github failed")
+		} else {
+			r.setStatus("did sync to github")
+		}
+	}()
 	return try(3, func() error {
-		cmd := exec.Command("git", "push", "-f", "--mirror", "dest")
-		cmd.Dir = r.root
-		if out, err := cmd.CombinedOutput(); err != nil {
-			err = fmt.Errorf("%v\n\n%s", err, out)
-			r.logf("git push: %v", err)
+		n++
+		if n > 1 {
+			r.setStatus(fmt.Sprintf("syncing to github, attempt %d", n))
+		}
+		r.setStatus("sync: fetching local refs")
+		local, err := r.getLocalRefs()
+		if err != nil {
+			r.logf("failed to get local refs: %v", err)
 			return err
 		}
+		r.setStatus(fmt.Sprintf("sync: got %d local refs", len(local)))
+
+		r.setStatus("sync: fetching remote refs")
+		remote, err := r.getRemoteRefs("dest")
+		if err != nil {
+			r.logf("failed to get local refs: %v", err)
+			return err
+		}
+		r.setStatus(fmt.Sprintf("sync: got %d remote refs", len(remote)))
+
+		var pushRefs []string
+		for ref, hash := range local {
+			if remote[ref] != hash {
+				pushRefs = append(pushRefs, ref)
+			}
+		}
+		sort.Sort(refByPriority(pushRefs))
+		if len(pushRefs) == 0 {
+			r.setStatus("nothing to sync")
+			return nil
+		}
+		for len(pushRefs) > 0 {
+			r.setStatus(fmt.Sprintf("%d refs to push; pushing batch", len(pushRefs)))
+			r.logf("%d refs remain to sync to github", len(pushRefs))
+			args := []string{"push", "-f", "dest"}
+			n := 0
+			for _, ref := range pushRefs {
+				args = append(args, "+"+local[ref]+":"+ref)
+				n++
+				if n == 200 {
+					break
+				}
+			}
+			pushRefs = pushRefs[n:]
+			cmd := exec.Command("git", args...)
+			cmd.Dir = r.root
+			cmd.Stderr = os.Stderr
+			out, err := cmd.Output()
+			if err != nil {
+				r.logf("git push failed, running git %s: %s", args, out)
+				r.setStatus("git push failure")
+				return err
+			}
+		}
+		r.setStatus("sync complete")
 		return nil
 	})
 }
@@ -814,6 +998,10 @@ func (r *Repo) push() error {
 func (r *Repo) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if req.Method != "GET" && req.Method != "HEAD" {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if strings.HasPrefix(req.URL.Path, "/debug/watcher/") {
+		r.serveStatus(w, req)
 		return
 	}
 	rev := req.FormValue("rev")
@@ -831,6 +1019,20 @@ func (r *Repo) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Length", strconv.Itoa(len(tgz)))
 	w.Header().Set("Content-Type", "application/x-compressed")
 	w.Write(tgz)
+}
+
+func (r *Repo) serveStatus(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprintf(w, "<html><head><title>watcher: %s</title><body><h1>watcher status for repo: %q</h1>\n",
+		r.name(), r.name())
+	fmt.Fprintf(w, "<pre>\n")
+	nowRound := time.Now().Round(time.Second)
+	r.status.foreachDesc(func(ent statusEntry) {
+		fmt.Fprintf(w, "%v   %-20s %v\n",
+			ent.t.In(time.UTC).Format(time.RFC3339),
+			nowRound.Sub(ent.t.Round(time.Second)).String()+" ago",
+			ent.status)
+	})
 }
 
 func try(n int, fn func() error) error {
@@ -1027,4 +1229,61 @@ func gerritMetaMap() map[string]string {
 		}
 	}
 	return m
+}
+
+func (r *Repo) getLocalRefs() (map[string]string, error) {
+	cmd := exec.Command("git", "show-ref")
+	cmd.Dir = r.root
+	return parseRefs(cmd)
+}
+
+func (r *Repo) getRemoteRefs(dest string) (map[string]string, error) {
+	cmd := exec.Command("git", "ls-remote", dest)
+	cmd.Dir = r.root
+	return parseRefs(cmd)
+}
+
+func parseRefs(cmd *exec.Cmd) (map[string]string, error) {
+	refHash := map[string]string{}
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	bs := bufio.NewScanner(out)
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	for bs.Scan() {
+		f := strings.Fields(bs.Text())
+		refHash[f[1]] = f[0]
+	}
+	go cmd.Wait()
+	return refHash, bs.Err()
+}
+
+type refByPriority []string
+
+func (s refByPriority) Len() int      { return len(s) }
+func (s refByPriority) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s refByPriority) Less(i, j int) bool {
+	p1 := priority[refType(s[i])]
+	p2 := priority[refType(s[j])]
+	if p1 != p2 {
+		return p1 > p2
+	}
+	return s[i] <= s[j]
+}
+
+func refType(s string) string {
+	s = strings.TrimPrefix(s, "refs/")
+	if i := strings.IndexByte(s, '/'); i != -1 {
+		return s[:i]
+	}
+	return s
+}
+
+var priority = map[string]int{
+	"heads":   5,
+	"tags":    4,
+	"changes": 3,
 }

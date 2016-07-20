@@ -7,7 +7,7 @@
 # itself. This Dockerfile is just the environment in which that binary
 # then runs.
 
-FROM debian:wheezy
+FROM debian:sid
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
 ENV DEBIAN_FRONTEND noninteractive

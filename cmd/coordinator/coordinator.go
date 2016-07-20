@@ -286,7 +286,8 @@ func main() {
 
 	http.HandleFunc("/", handleStatus)
 	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
-	http.HandleFunc("/debug/watcher", handleDebugWatcher)
+	http.HandleFunc("/debug/watcherlogs", handleDebugWatcherLogs)
+	http.HandleFunc("/debug/watcher/", handleDebugWatcher)
 	http.HandleFunc("/builders", handleBuilders)
 	http.HandleFunc("/temporarylogs", handleLogs)
 	http.HandleFunc("/reverse", handleReverse)
@@ -2872,11 +2873,9 @@ func getSourceTgz(sl spanLogger, repo, rev string, isTry bool) (tgz io.Reader, e
 	sp := sl.createSpan("get_source")
 	defer func() { sp.done(err) }()
 
-	fromCache := false
 	key := fmt.Sprintf("%v-%v", repo, rev)
 	vi, err, _ := sourceGroup.Do(key, func() (interface{}, error) {
 		if tgzBytes, ok := sourceCache.Get(key); ok {
-			fromCache = true
 			return tgzBytes, nil
 		}
 

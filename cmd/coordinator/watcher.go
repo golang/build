@@ -13,6 +13,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/exec"
@@ -29,12 +30,12 @@ var (
 )
 
 type watchConfig struct {
-	repo       string        // "https://go.googlesource.com/go"
-	dash       string        // "https://build.golang.org/" (must end in /)
-	interval   time.Duration // Polling interval
-	mirrorBase string        // "https://github.com/golang/" or empty to disable mirroring
-	netHost    bool          // run docker container in the host's network namespace
-	httpAddr   string
+	repo     string        // "https://go.googlesource.com/go"
+	dash     string        // "https://build.golang.org/" (must end in /)
+	interval time.Duration // Polling interval
+	mirror   bool          // whether to enable mirroring to github
+	netHost  bool          // run docker container in the host's network namespace
+	httpAddr string
 }
 
 type imageInfo struct {
@@ -59,16 +60,16 @@ var images = map[string]*imageInfo{
 const gitArchiveAddr = "127.0.0.1:21536" // 21536 == keys above WATCH
 
 func startWatchers() {
-	mirrorBase := "https://github.com/golang/"
+	mirror := true
 	if inStaging {
-		mirrorBase = "" // don't mirror from dev cluster
+		mirror = false
 	}
 	addWatcher(watchConfig{
-		repo:       "https://go.googlesource.com/go",
-		dash:       dashBase(),
-		mirrorBase: mirrorBase,
-		netHost:    true,
-		httpAddr:   gitArchiveAddr,
+		repo:     "https://go.googlesource.com/go",
+		dash:     dashBase(),
+		mirror:   mirror,
+		netHost:  true,
+		httpAddr: gitArchiveAddr,
 	})
 	if false {
 		// TODO(cmang,adg): only use one watcher or the other, depending on which build
@@ -122,6 +123,25 @@ func (conf watchConfig) dockerRunArgs() (args []string) {
 		log.Fatalf("Failed to created watcher's git cache dir: %v", err)
 	}
 
+	args = append(args, "-v", os.Args[0]+":/usr/local/bin/watcher")
+	args = append(args, "-v", watcherGitCacheDir+":"+watcherGitCacheDir)
+
+	// Bind mount in gopherbot's private ed25519 ssh key from the PEM contents
+	// in the GCE metadata. (Appending a newline, else it's invalid)
+	if priv, err := metadata.ProjectAttributeValue("github-ssh"); err == nil {
+		file := "/tmp/id_ed25519.gopherbot.ssh"
+		if _, err := os.Stat(file); err != nil {
+			if err := ioutil.WriteFile(file, []byte(priv+"\n"), 0600); err != nil {
+				log.Fatal(err)
+			}
+		}
+		log.Printf("added gopherbot ssh key")
+		args = append(args, "-v", file+":/root/.ssh/id_ed25519")
+	} else {
+		log.Printf("no gopherbot ssh key found in GCE metadata: %v", err)
+	}
+
+	// Bind mount in the key for the build.golang.org private token.
 	if key := masterKey(); len(key) > 0 {
 		tmpKey := "/tmp/watcher.buildkey"
 		if _, err := os.Stat(tmpKey); err != nil {
@@ -129,8 +149,6 @@ func (conf watchConfig) dockerRunArgs() (args []string) {
 				log.Fatal(err)
 			}
 		}
-		args = append(args, "-v", os.Args[0]+":/usr/local/bin/watcher")
-		args = append(args, "-v", watcherGitCacheDir+":"+watcherGitCacheDir)
 		// Images may look for .gobuildkey in / or /root, so provide both.
 		// TODO(adg): fix images that look in the wrong place.
 		args = append(args, "-v", tmpKey+":/.gobuildkey")
@@ -148,13 +166,8 @@ func (conf watchConfig) dockerRunArgs() (args []string) {
 		"-watcher.poll="+conf.interval.String(),
 		"-watcher.http="+conf.httpAddr,
 	)
-	if conf.mirrorBase != "" {
-		dst, err := url.Parse(conf.mirrorBase)
-		if err != nil {
-			log.Fatalf("Bad mirror destination URL: %q", conf.mirrorBase)
-		}
-		dst.User = url.UserPassword(mirrorCred())
-		args = append(args, "-watcher.mirror="+dst.String())
+	if conf.mirror {
+		args = append(args, "-watcher.mirror")
 	}
 	return
 }
@@ -224,7 +237,7 @@ var (
 
 var matchTokens = regexp.MustCompile(`\b[0-9a-f]{40}\b`)
 
-func handleDebugWatcher(w http.ResponseWriter, r *http.Request) {
+func handleDebugWatcherLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	watchLogMu.Lock()
 	defer watchLogMu.Unlock()
@@ -235,6 +248,26 @@ func handleDebugWatcher(w http.ResponseWriter, r *http.Request) {
 		logs, _ := exec.Command("docker", "logs", container).CombinedOutput()
 		fmt.Fprintf(w, "============== Watcher %s, current container logs:\n%s\n\n", repo, matchTokens.ReplaceAll(logs, []byte("---40hexomitted---")))
 	}
+}
+
+// watcherProxy is the proxy which forwards from
+// http://farmer.golang.org/ to the watcher (git cache+sync) child
+// process listening on http://127.0.0.1:21536.  This is used for
+// /debug/watcher/<reponame> status pages, which are served at the
+// same URL paths for both the farmer.golang.org host and the internal
+// backend.
+var watcherProxy *httputil.ReverseProxy
+
+func init() {
+	u, err := url.Parse("http://" + gitArchiveAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	watcherProxy = httputil.NewSingleHostReverseProxy(u)
+}
+
+func handleDebugWatcher(w http.ResponseWriter, r *http.Request) {
+	watcherProxy.ServeHTTP(w, r)
 }
 
 func startWatching(conf watchConfig) (err error) {
