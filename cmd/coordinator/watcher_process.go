@@ -551,7 +551,7 @@ func (r *Repo) update(noisy bool) error {
 			}
 			// If we've already seen this commit,
 			// only store the master one in r.commits.
-			if dup, ok := r.commits[c.Hash]; ok {
+			if _, ok := r.commits[c.Hash]; ok {
 				nDups++
 				if name != master {
 					nDrops++
