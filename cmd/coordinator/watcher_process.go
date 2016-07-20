@@ -531,21 +531,6 @@ func (r *Repo) update(noisy bool) error {
 			// If we know about this branch,
 			// only log commits down to the known head.
 			revspec = b.Head.Hash + ".." + revspec
-		} else if name != master {
-			// If this is an unknown non-master branch,
-			// log up to where it forked from master.
-			base, err := r.mergeBase(revspec, master)
-			if base == "" {
-				// This branch did not fork from master so we
-				// don't care about it.
-				delete(r.branches, name)
-				log.Printf("Found independent branch %s. This branch will not be watched.", name)
-				continue
-			}
-			if err != nil {
-				return err
-			}
-			revspec = base + ".." + revspec
 		}
 		log, err := r.log("--topo-order", revspec)
 		if err != nil {
@@ -556,19 +541,30 @@ func (r *Repo) update(noisy bool) error {
 			continue
 		}
 
+		var nDups, nDrops int
+
 		// Add unknown commits to r.commits.
 		var added []*Commit
 		for _, c := range log {
-			// Sanity check: we shouldn't see the same commit twice.
-			if dup, ok := r.commits[c.Hash]; ok {
-				return fmt.Errorf("found commit we already knew about: %v; first seen on %s, now on %s", c, name, dup.Branch)
-			}
 			if noisy {
 				r.logf("found new commit %v", c)
+			}
+			// If we've already seen this commit,
+			// only store the master one in r.commits.
+			if dup, ok := r.commits[c.Hash]; ok {
+				nDups++
+				if name != master {
+					nDrops++
+					continue
+				}
 			}
 			c.Branch = name
 			r.commits[c.Hash] = c
 			added = append(added, c)
+		}
+
+		if nDups > 0 {
+			r.logf("saw %v duplicate commits; dropped %v of them", nDups, nDrops)
 		}
 
 		// Link added commits.
