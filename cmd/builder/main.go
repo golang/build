@@ -67,6 +67,7 @@ var (
 	fileLock      = flag.String("filelock", "", "File to lock around benchmaring (synchronizes several builders)")
 	verbose       = flag.Bool("v", false, "verbose")
 	report        = flag.Bool("report", true, "whether to report results to the dashboard")
+	subrepos      = flag.Bool("subrepos", true, "whether to build subrepos")
 )
 
 var (
@@ -437,7 +438,7 @@ func (b *Builder) buildHash(hash string) error {
 		return fmt.Errorf("recordResult: %s", err)
 	}
 
-	if *buildTool == "go" {
+	if *buildTool == "go" && *subrepos {
 		// build sub-repositories
 		goRoot := filepath.Join(workpath, *buildTool)
 		goPath := workpath
