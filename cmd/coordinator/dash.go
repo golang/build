@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/cloud/compute/metadata"
+	"cloud.google.com/go/compute/metadata"
 )
 
 // dashBase returns the base URL of the build dashboard.

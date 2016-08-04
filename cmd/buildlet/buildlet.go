@@ -37,11 +37,11 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/envutil"
 	"golang.org/x/build/internal/httpdl"
 	"golang.org/x/build/pargzip"
-	"google.golang.org/cloud/compute/metadata"
 )
 
 var (

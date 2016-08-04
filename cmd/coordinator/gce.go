@@ -20,6 +20,9 @@ import (
 	"sync"
 	"time"
 
+	"cloud.google.com/go/compute/metadata"
+	"cloud.google.com/go/datastore"
+	"cloud.google.com/go/storage"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
@@ -31,10 +34,7 @@ import (
 	monitoring "google.golang.org/api/cloudmonitoring/v2beta2"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
-	"google.golang.org/cloud"
-	"google.golang.org/cloud/compute/metadata"
-	"google.golang.org/cloud/datastore"
-	"google.golang.org/cloud/storage"
+	"google.golang.org/api/option"
 )
 
 func init() {
@@ -57,7 +57,6 @@ var (
 	dsClient       *datastore.Client
 	computeService *compute.Service
 	tokenSource    oauth2.TokenSource
-	serviceCtx     context.Context
 	errTryDeps     error // non-nil if try bots are disabled
 	gerritClient   *gerrit.Client
 	storageClient  *storage.Client
@@ -117,8 +116,7 @@ func initGCE() error {
 	}
 	httpClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
 	if *mode != "dev" {
-		serviceCtx = cloud.NewContext(buildEnv.ProjectName, httpClient)
-		storageClient, err = storage.NewClient(serviceCtx, cloud.WithBaseHTTP(httpClient))
+		storageClient, err = storage.NewClient(context.Background(), option.WithHTTPClient(httpClient))
 		if err != nil {
 			log.Fatalf("storage.NewClient: %v", err)
 		}
@@ -149,7 +147,7 @@ func checkTryBuildDeps() error {
 	if *mode == "dev" {
 		return errors.New("running in dev mode")
 	}
-	wr := storageClient.Bucket(buildEnv.LogBucket).Object("hello.txt").NewWriter(serviceCtx)
+	wr := storageClient.Bucket(buildEnv.LogBucket).Object("hello.txt").NewWriter(context.Background())
 	fmt.Fprintf(wr, "Hello, world! Coordinator start-up at %v", time.Now())
 	if err := wr.Close(); err != nil {
 		return fmt.Errorf("test write of a GCS object to bucket %q failed: %v", buildEnv.LogBucket, err)

@@ -8,7 +8,7 @@ import (
 	"log"
 	"time"
 
-	"google.golang.org/cloud/datastore"
+	"cloud.google.com/go/datastore"
 
 	"golang.org/x/net/context"
 )

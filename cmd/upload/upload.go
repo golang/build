@@ -22,11 +22,11 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"golang.org/x/build/auth"
 	"golang.org/x/build/envutil"
 	"golang.org/x/net/context"
-	"google.golang.org/cloud"
-	"google.golang.org/cloud/storage"
+	"google.golang.org/api/option"
 )
 
 var (
@@ -73,7 +73,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	storageClient, err := storage.NewClient(ctx, cloud.WithTokenSource(ts))
+	storageClient, err := storage.NewClient(ctx, option.WithTokenSource(ts))
 	if err != nil {
 		log.Fatalf("storage.NewClient: %v", err)
 	}

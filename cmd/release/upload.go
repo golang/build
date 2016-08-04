@@ -18,10 +18,10 @@ import (
 	"regexp"
 	"strings"
 
+	"cloud.google.com/go/storage"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
-	"google.golang.org/cloud"
-	"google.golang.org/cloud/storage"
+	"google.golang.org/api/option"
 )
 
 const (
@@ -158,5 +158,5 @@ func storageClient(ctx context.Context) (*storage.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return storage.NewClient(ctx, cloud.WithBaseHTTP(config.Client(ctx)))
+	return storage.NewClient(ctx, option.WithHTTPClient(config.Client(ctx)))
 }

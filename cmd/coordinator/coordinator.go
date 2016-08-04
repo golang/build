@@ -40,6 +40,7 @@ import (
 
 	"go4.org/syncutil"
 
+	"cloud.google.com/go/storage"
 	"golang.org/x/build"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
@@ -50,7 +51,6 @@ import (
 	"golang.org/x/build/livelog"
 	"golang.org/x/build/types"
 	"golang.org/x/net/context"
-	"google.golang.org/cloud/storage"
 )
 
 const subrepoPrefix = "golang.org/x/"
@@ -159,7 +159,7 @@ func readGCSFile(name string) ([]byte, error) {
 		return []byte(b), nil
 	}
 
-	r, err := storageClient.Bucket(buildEnv.BuildletBucket).Object(name).NewReader(serviceCtx)
+	r, err := storageClient.Bucket(buildEnv.BuildletBucket).Object(name).NewReader(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -1786,7 +1786,7 @@ func (st *buildStatus) writeSnapshot() (err error) {
 	}
 	defer tgz.Close()
 
-	wr := storageClient.Bucket(buildEnv.SnapBucket).Object(st.snapshotObjectName()).NewWriter(serviceCtx)
+	wr := storageClient.Bucket(buildEnv.SnapBucket).Object(st.snapshotObjectName()).NewWriter(context.Background())
 	wr.ContentType = "application/octet-stream"
 	wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
 	if _, err := io.Copy(wr, tgz); err != nil {
@@ -2987,7 +2987,7 @@ func newFailureLogBlob(objName string) (obj io.WriteCloser, url_ string) {
 	}
 	bucket := buildEnv.LogBucket
 
-	wr := storageClient.Bucket(bucket).Object(objName).NewWriter(serviceCtx)
+	wr := storageClient.Bucket(bucket).Object(objName).NewWriter(context.Background())
 	wr.ContentType = "text/plain; charset=utf-8"
 	wr.ACL = append(wr.ACL, storage.ACLRule{
 		Entity: storage.AllUsers,

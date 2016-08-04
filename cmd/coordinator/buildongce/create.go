@@ -23,13 +23,13 @@ import (
 
 	"go4.org/cloud/google/gceutil"
 
+	"cloud.google.com/go/datastore"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
 	dm "google.golang.org/api/deploymentmanager/v2"
 	"google.golang.org/api/googleapi"
-	"google.golang.org/cloud/datastore"
 )
 
 var (
