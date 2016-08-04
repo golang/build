@@ -69,7 +69,7 @@ func getLabelNames(x []github.Label) []string {
 	return out
 }
 
-func issueToIssue(issue github.Issue) *Issue {
+func issueToIssue(issue *github.Issue) *Issue {
 	return &Issue{
 		Number:    getInt(issue.Number),
 		Title:     getString(issue.Title),
@@ -119,7 +119,7 @@ func searchIssues(client *github.Client, q string) ([]*Issue, error) {
 			},
 		})
 		for _, issue := range x.Issues {
-			all = append(all, issueToIssue(issue))
+			all = append(all, issueToIssue(&issue))
 		}
 		if err != nil {
 			return all, err
@@ -136,7 +136,7 @@ func getMilestones(client *github.Client) ([]*github.Milestone, error) {
 	var all []*github.Milestone
 	milestones, _, err := client.Issues.ListMilestones(projectOwner, projectRepo, nil)
 	for i := range milestones {
-		m := &milestones[i]
+		m := milestones[i]
 		if m.Title != nil {
 			all = append(all, m)
 		}
