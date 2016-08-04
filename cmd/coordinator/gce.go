@@ -34,7 +34,6 @@ import (
 	monitoring "google.golang.org/api/cloudmonitoring/v2beta2"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
-	"google.golang.org/api/option"
 )
 
 func init() {
@@ -110,24 +109,25 @@ func initGCE() error {
 	cfgDump, _ := json.MarshalIndent(buildEnv, "", "  ")
 	log.Printf("Loaded configuration %q for project %q:\n%s", *buildEnvName, buildEnv.ProjectName, cfgDump)
 
-	tokenSource, err = google.DefaultTokenSource(oauth2.NoContext, compute.CloudPlatformScope, monitoring.MonitoringScope)
-	if err != nil {
-		log.Fatalf("failed to get a token source: %v", err)
-	}
-	httpClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
+	ctx := context.Background()
 	if *mode != "dev" {
-		storageClient, err = storage.NewClient(context.Background(), option.WithHTTPClient(httpClient))
+		storageClient, err = storage.NewClient(ctx)
 		if err != nil {
 			log.Fatalf("storage.NewClient: %v", err)
 		}
 	}
 
-	dsClient, err = datastore.NewClient(context.Background(), buildEnv.ProjectName)
+	dsClient, err = datastore.NewClient(ctx, buildEnv.ProjectName)
 	if err != nil {
 		// TODO(bradfitz): make fatal later, once working.
 		log.Printf("Error creating datastore client: %v", err)
 	}
 
+	tokenSource, err = google.DefaultTokenSource(ctx, compute.CloudPlatformScope, monitoring.MonitoringScope)
+	if err != nil {
+		log.Fatalf("failed to get a token source: %v", err)
+	}
+	httpClient := oauth2.NewClient(ctx, tokenSource)
 	computeService, _ = compute.New(httpClient)
 	errTryDeps = checkTryBuildDeps()
 	if errTryDeps != nil {

@@ -158,5 +158,5 @@ func storageClient(ctx context.Context) (*storage.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return storage.NewClient(ctx, option.WithHTTPClient(config.Client(ctx)))
+	return storage.NewClient(ctx, option.WithTokenSource(config.TokenSource(ctx)))
 }
