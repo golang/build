@@ -44,9 +44,12 @@ type Item struct {
 
 // Data represents all the data needed to compute the dashboard
 type Data struct {
-	Issues         map[int]*Issue
-	CLs            []*CL
-	Milestones     []*github.Milestone
+	Issues     map[int]*Issue
+	CLs        []*CL
+	Milestones []*github.Milestone
+	// GoReleaseCycle is the minor version of the current
+	// under-development Go release. Issues and CLs for versions
+	// greater than the current Go release will be hidden.
 	GoReleaseCycle int
 	Now            time.Time
 
@@ -65,6 +68,10 @@ func (d *Data) FetchData(gh *github.Client, ger *gerrit.Client, days int, clOnly
 	}
 	d.Milestones = m
 
+	// Find the lowest-numbered open release milestone. We assume
+	// that is the currently-in-development release, and anything
+	// later should be hidden.
+	d.GoReleaseCycle = 0
 	for _, m := range d.Milestones {
 		if matches := releaseRE.FindStringSubmatch(*m.Title); matches != nil {
 			n, _ := strconv.Atoi(matches[1])
