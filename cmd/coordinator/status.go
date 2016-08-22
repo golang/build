@@ -8,8 +8,11 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
+	"os"
 	"os/exec"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -27,11 +30,13 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	statusMu.Lock()
 	data := statusData{
-		Total:    len(status),
-		Uptime:   round(time.Now().Sub(processStartTime)),
-		Recent:   append([]*buildStatus{}, statusDone...),
-		DiskFree: df,
-		Version:  Version,
+		Total:        len(status),
+		Uptime:       round(time.Now().Sub(processStartTime)),
+		Recent:       append([]*buildStatus{}, statusDone...),
+		DiskFree:     df,
+		Version:      Version,
+		NumFD:        fdCount(),
+		NumGoroutine: runtime.NumGoroutine(),
 	}
 	for _, st := range status {
 		data.Active = append(data.Active, st)
@@ -85,6 +90,25 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	buf.WriteTo(w)
 }
 
+func fdCount() int {
+	f, err := os.Open("/proc/self/fd")
+	if err != nil {
+		return -1
+	}
+	defer f.Close()
+	n := 0
+	for {
+		names, err := f.Readdirnames(1000)
+		n += len(names)
+		if err == io.EOF {
+			return n
+		}
+		if err != nil {
+			return -1
+		}
+	}
+}
+
 func diskFree() string {
 	out, _ := exec.Command("df", "-h").Output()
 	return string(out)
@@ -92,7 +116,9 @@ func diskFree() string {
 
 // statusData is the data that fills out statusTmpl.
 type statusData struct {
-	Total             int
+	Total             int // number of total builds active
+	NumFD             int
+	NumGoroutine      int
 	Uptime            time.Duration
 	Active            []*buildStatus
 	Recent            []*buildStatus
@@ -156,6 +182,12 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 
 <h2 id=disk><a href='#disk'>🔗</a> Disk Space</h2>
 <pre>{{.DiskFree}}</pre>
+
+<h2 id=disk><a href='#fd'>🔗</a> File Descriptors</h2>
+<p>{{.NumFD}}</p>
+
+<h2 id=disk><a href='#goroutines'>🔗</a> Goroutines</h2>
+<p>{{.NumGoroutine}} <a href='/debug/goroutines'>goroutines</a></p>
 
 </body>
 </html>

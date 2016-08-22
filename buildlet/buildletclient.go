@@ -31,16 +31,17 @@ import (
 //
 // This constructor returns immediately without testing the host or auth.
 func NewClient(ipPort string, kp KeyPair) *Client {
+	tr := &http.Transport{
+		Dial:            defaultDialer(),
+		DialTLS:         kp.tlsDialer(),
+		IdleConnTimeout: time.Minute,
+	}
 	c := &Client{
-		ipPort:   ipPort,
-		tls:      kp,
-		password: kp.Password(),
-		httpClient: &http.Client{
-			Transport: &http.Transport{
-				Dial:    defaultDialer(),
-				DialTLS: kp.tlsDialer(),
-			},
-		},
+		ipPort:     ipPort,
+		tls:        kp,
+		password:   kp.Password(),
+		httpClient: &http.Client{Transport: tr},
+		closeFuncs: []func(){tr.CloseIdleConnections},
 	}
 	c.setCommon()
 	return c
@@ -82,6 +83,9 @@ func (c *Client) Close() error {
 		}
 		if err == nil {
 			err = ErrClosed
+		}
+		for _, fn := range c.closeFuncs {
+			fn()
 		}
 		c.setPeerDead(err) // which will also cause c.heartbeatFailure to run
 	})
@@ -132,6 +136,8 @@ type Client struct {
 	authUser       string // defaults to "gomote", if password is non-empty
 	password       string // basic auth password or empty for none
 	remoteBuildlet string // non-empty if for remote buildlets
+
+	closeFuncs []func() // optional extra code to run on close
 
 	ctx              context.Context
 	ctxCancel        context.CancelFunc
