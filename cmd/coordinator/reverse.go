@@ -123,6 +123,9 @@ func (p *reverseBuildletPool) healthCheckBuildletLoop(b *reverseBuildlet) {
 }
 
 func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
+	if b.client.IsBroken() {
+		return false
+	}
 	p.mu.Lock()
 	if b.inUseAs == "health" { // sanity check
 		panic("previous health check still running")
