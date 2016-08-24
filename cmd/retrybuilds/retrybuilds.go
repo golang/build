@@ -120,6 +120,9 @@ var flakePhrases = []string{
 }
 
 func isFlaky(failLog string) bool {
+	if strings.Count(strings.TrimSpace(failLog), "\n") < 2 {
+		return true
+	}
 	if strings.HasPrefix(failLog, "exit status ") {
 		return true
 	}
