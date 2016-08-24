@@ -1467,6 +1467,15 @@ func (st *buildStatus) build() error {
 		var buildLog string
 		if remoteErr != nil {
 			buildLog = st.logs()
+			// If we just have the line-or-so little
+			// banner at top, that means we didn't get any
+			// interesting output from the remote side, so
+			// include the remoteErr text.  Otherwise
+			// assume that remoteErr is redundant with the
+			// buildlog text itself.
+			if strings.Count(buildLog, "\n") < 10 {
+				buildLog += "\n" + remoteErr.Error()
+			}
 		}
 		if err := recordResult(st.builderRev, remoteErr == nil, buildLog, time.Since(execStartTime)); err != nil {
 			if remoteErr != nil {
@@ -1798,10 +1807,11 @@ func (st *buildStatus) writeSnapshot() (err error) {
 	return wr.Close()
 }
 
-func (st *buildStatus) distTestList() (names []string, err error) {
+func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 	workDir, err := st.bc.WorkDir()
 	if err != nil {
-		return nil, fmt.Errorf("distTestList, WorkDir: %v", err)
+		err = fmt.Errorf("distTestList, WorkDir: %v", err)
+		return
 	}
 	goroot := st.conf.FilePathJoin(workDir, "go")
 
@@ -1813,26 +1823,26 @@ func (st *buildStatus) distTestList() (names []string, err error) {
 		args = append(args, "--compile-only")
 	}
 	var buf bytes.Buffer
-	remoteErr, err := st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+	remoteErr, err = st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 		Output:      &buf,
 		ExtraEnv:    append(st.conf.Env(), "GOROOT="+goroot),
 		OnStartExec: func() { st.logEventTime("discovering_tests") },
 		Path:        []string{"$WORKDIR/go/bin", "$PATH"},
 		Args:        args,
 	})
-	if err != nil {
-		return nil, fmt.Errorf("Exec error: %v, %s", remoteErr, buf.Bytes())
-	}
 	if remoteErr != nil {
-		if strings.Contains(buf.String(), "flag provided but not defined: -compile-only") {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("Remote error: %v, %s", remoteErr, buf.Bytes())
+		remoteErr = fmt.Errorf("Remote error: %v, %s", remoteErr, buf.Bytes())
+		err = nil
+		return
+	}
+	if err != nil {
+		err = fmt.Errorf("Exec error: %v, %s", err, buf.Bytes())
+		return
 	}
 	for _, test := range strings.Fields(buf.String()) {
 		names = append(names, test)
 	}
-	return names, nil
+	return names, nil, nil
 }
 
 func (st *buildStatus) newTestSet(names []string) *testSet {
@@ -2208,9 +2218,12 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 // After runTests completes, the caller must assume that st.bc might be invalid
 // (It's possible that only one of the helper buildlets survived).
 func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err error) {
-	testNames, err := st.distTestList()
+	testNames, remoteErr, err := st.distTestList()
+	if remoteErr != nil {
+		return fmt.Errorf("distTestList remote: %v", remoteErr), nil
+	}
 	if err != nil {
-		return nil, fmt.Errorf("distTestList: %v", err)
+		return nil, fmt.Errorf("distTestList exec: %v", err)
 	}
 	set := st.newTestSet(testNames)
 	st.logEventTime("starting_tests", fmt.Sprintf("%d tests", len(set.items)))
