@@ -5,8 +5,6 @@
 package devapp
 
 import (
-	"bytes"
-	"encoding/gob"
 	"fmt"
 	"html/template"
 	"io/ioutil"
@@ -19,7 +17,6 @@ import (
 	"golang.org/x/build/godash"
 	"golang.org/x/net/context"
 	"google.golang.org/appengine"
-	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/log"
 	"google.golang.org/appengine/user"
 )
@@ -82,18 +79,25 @@ func datedMilestones(milestones []*github.Milestone) []string {
 	return names
 }
 
+func loadData(ctx context.Context) (*godash.Data, error) {
+	cache, err := getCache(ctx, "gzdata")
+	if err != nil {
+		return nil, err
+	}
+	return parseData(cache)
+}
+
+func parseData(cache *Cache) (*godash.Data, error) {
+	data := &godash.Data{Reviewers: &godash.Reviewers{}}
+	return data, unpackCache(cache, &data)
+}
+
 func showDash(w http.ResponseWriter, req *http.Request) {
 	ctx := appengine.NewContext(req)
 	req.ParseForm()
 
-	var cache Cache
-	if err := datastore.Get(ctx, datastore.NewKey(ctx, entityPrefix+"Cache", "data", 0, nil), &cache); err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-
-	data := &godash.Data{Reviewers: &godash.Reviewers{}}
-	if err := gob.NewDecoder(bytes.NewBuffer(cache.Value)).Decode(data); err != nil {
+	data, err := loadData(ctx)
+	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}

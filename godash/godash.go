@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/go-github/github"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/net/context"
 )
 
 type Issue struct {
@@ -60,8 +61,9 @@ var (
 	releaseRE = regexp.MustCompile(`^Go1\.(\d+)$`)
 )
 
-func (d *Data) FetchData(gh *github.Client, ger *gerrit.Client, days int, clOnly, includeMerged bool) error {
+func (d *Data) FetchData(ctx context.Context, gh *github.Client, ger *gerrit.Client, log func(string, ...interface{}), days int, clOnly, includeMerged bool) error {
 	d.Now = time.Now()
+	start := time.Now()
 	m, err := getMilestones(gh)
 	if err != nil {
 		return err
@@ -85,6 +87,8 @@ func (d *Data) FetchData(gh *github.Client, ger *gerrit.Client, days int, clOnly
 	if err != nil {
 		return err
 	}
+	log("Fetched %d open CLs in %.3f seconds", len(cls), time.Now().Sub(start).Seconds())
+	start = time.Now()
 
 	var open []*CL
 	for _, cl := range cls {
@@ -97,6 +101,8 @@ func (d *Data) FetchData(gh *github.Client, ger *gerrit.Client, days int, clOnly
 		if err != nil {
 			return err
 		}
+		log("Fetched %d merged CLs in %.3f seconds", len(cls), time.Now().Sub(start).Seconds())
+		start = time.Now()
 		open = append(open, cls...)
 	}
 	d.CLs = open
@@ -108,10 +114,14 @@ func (d *Data) FetchData(gh *github.Client, ger *gerrit.Client, days int, clOnly
 		if err != nil {
 			return err
 		}
+		log("Fetched %d open issues in %.3f seconds", len(res), time.Now().Sub(start).Seconds())
+		start = time.Now()
 		res2, err := searchIssues(gh, "is:closed closed:>="+since.Format(time.RFC3339))
 		if err != nil {
 			return err
 		}
+		log("Fetched %d closed issues in %.3f seconds", len(res2), time.Now().Sub(start).Seconds())
+		start = time.Now()
 		res = append(res, res2...)
 		for _, issue := range res {
 			d.Issues[issue.Number] = issue

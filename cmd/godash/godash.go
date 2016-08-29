@@ -41,6 +41,7 @@ import (
 
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/godash"
+	"golang.org/x/net/context"
 )
 
 const PointRelease = "Go1.6.1"
@@ -57,12 +58,14 @@ var (
 
 	days = flag.Int("days", 7, "number of days back")
 
-	flagCL     = flag.Bool("cl", false, "print CLs only (no issues)")
-	flagHTML   = flag.Bool("html", false, "print HTML output")
-	flagMail   = flag.Bool("mail", false, "generate weekly mail")
-	flagGithub = flag.Bool("github", false, "load commits from Github (SLOW)")
-	tokenFile  = flag.String("token", "", "read GitHub token personal access token from `file` (default $HOME/.github-issue-token)")
-	cacheFile  = flag.String("cache", "", "path at which to read/write expensive data, if provided")
+	flagCL        = flag.Bool("cl", false, "print CLs only (no issues)")
+	flagHTML      = flag.Bool("html", false, "print HTML output")
+	flagMail      = flag.Bool("mail", false, "generate weekly mail")
+	flagGithub    = flag.Bool("github", false, "load commits from Github (SLOW)")
+	tokenFile     = flag.String("token", "", "read GitHub token personal access token from `file` (default $HOME/.github-issue-token)")
+	cacheFile     = flag.String("cache", "", "path at which to read/write expensive data, if provided")
+	flagCacheOnly = flag.Bool("cacheonly", false, "use only data present in cache; do not fetch new data")
+	flagVerbose   = flag.Bool("v", false, "show fetch progress")
 )
 
 func main() {
@@ -95,17 +98,23 @@ func main() {
 	} else {
 		data.Reviewers.LoadLocal()
 	}
-	if err := data.FetchData(gh, ger, *days, *flagCL, *flagMail); err != nil {
-		log.Fatalf("failed to fetch data: %v", err)
-	}
-
-	if *cacheFile != "" {
-		contents, err := json.MarshalIndent(data, "", "  ")
-		if err != nil {
-			log.Fatalf("marshaling cache: %v", err)
+	if !*flagCacheOnly {
+		l := func(string, ...interface{}) {}
+		if *flagVerbose {
+			l = log.Printf
 		}
-		if err := ioutil.WriteFile(*cacheFile, contents, 0666); err != nil {
-			log.Fatalf("writing cache: %v", err)
+		if err := data.FetchData(context.Background(), gh, ger, l, *days, *flagCL, *flagMail); err != nil {
+			log.Fatalf("failed to fetch data: %v", err)
+		}
+
+		if *cacheFile != "" {
+			contents, err := json.MarshalIndent(data, "", "  ")
+			if err != nil {
+				log.Fatalf("marshaling cache: %v", err)
+			}
+			if err := ioutil.WriteFile(*cacheFile, contents, 0666); err != nil {
+				log.Fatalf("writing cache: %v", err)
+			}
 		}
 	}
 

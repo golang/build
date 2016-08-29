@@ -24,7 +24,7 @@ handlers:
 - url: /(|dash|release|cl)
   script: _go_app
   secure: always
-- url: /update
+- url: /update.*
   script: _go_app
   login: admin
   secure: always

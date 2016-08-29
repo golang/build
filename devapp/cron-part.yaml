@@ -3,3 +3,7 @@
   url: /update
   schedule: every 5 minutes
   target: dev
+- description: update issue stats
+  url: /update/stats
+  schedule: every 24 hours
+  target: dev

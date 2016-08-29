@@ -9,8 +9,9 @@ package devapp
 
 import (
 	"bytes"
-	"encoding/gob"
 	"fmt"
+	"io"
+	stdlog "log"
 	"net/http"
 	"strings"
 	"time"
@@ -32,8 +33,10 @@ func init() {
 		http.Handle("/"+page, hstsHandler(func(w http.ResponseWriter, r *http.Request) { servePage(w, r, page) }))
 	}
 	http.Handle("/dash", hstsHandler(showDash))
-	http.HandleFunc("/update", updateHandler)
+	http.Handle("/update", ctxHandler(update))
 	http.HandleFunc("/setToken", setTokenHandler)
+	// Defined in stats.go
+	http.Handle("/update/stats", ctxHandler(updateStats))
 }
 
 // hstsHandler wraps an http.HandlerFunc such that it sets the HSTS header.
@@ -42,6 +45,23 @@ func hstsHandler(fn http.HandlerFunc) http.Handler {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000; preload")
 		fn(w, r)
 	})
+}
+
+func ctxHandler(fn func(ctx context.Context, w http.ResponseWriter, r *http.Request) error) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := appengine.NewContext(r)
+		if err := fn(ctx, w, r); err != nil {
+			http.Error(w, err.Error(), 500)
+		}
+	})
+}
+
+func logFn(ctx context.Context, w io.Writer) func(string, ...interface{}) {
+	logger := stdlog.New(w, "", stdlog.Lmicroseconds)
+	return func(format string, args ...interface{}) {
+		logger.Printf(format, args...)
+		log.Infof(ctx, format, args...)
+	}
 }
 
 type Page struct {
@@ -60,17 +80,6 @@ func servePage(w http.ResponseWriter, r *http.Request, page string) {
 	w.Write(entity.Content)
 }
 
-type Cache struct {
-	Value []byte
-}
-
-func updateHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := appengine.NewContext(r)
-	if err := update(ctx); err != nil {
-		http.Error(w, err.Error(), 500)
-	}
-}
-
 func writePage(ctx context.Context, page string, content []byte) error {
 	entity := &Page{
 		Content: content,
@@ -79,31 +88,25 @@ func writePage(ctx context.Context, page string, content []byte) error {
 	return err
 }
 
-func update(ctx context.Context) error {
-	var token, cache Cache
-	var keys []*datastore.Key
-	keys = append(keys, datastore.NewKey(ctx, entityPrefix+"Cache", "github-token", 0, nil))
-	keys = append(keys, datastore.NewKey(ctx, entityPrefix+"Cache", "data", 0, nil))
-	datastore.GetMulti(ctx, keys, []*Cache{&token, &cache}) // Ignore errors since they might not exist.
-	// Without a deadline, urlfetch will use a 5s timeout which is too slow for Gerrit.
-	ctx, cancel := context.WithTimeout(ctx, 9*time.Minute)
-	defer cancel()
-	transport := &urlfetch.Transport{Context: ctx}
-	gh := godash.NewGitHubClient("golang/go", string(token.Value), transport)
+func update(ctx context.Context, w http.ResponseWriter, _ *http.Request) error {
+	caches := getCaches(ctx, "github-token", "gzdata")
+	gh := godash.NewGitHubClient("golang/go", string(caches["github-token"].Value), &urlfetch.Transport{Context: ctx})
 	ger := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
-	ger.HTTPClient = urlfetch.Client(ctx)
-	data := &godash.Data{Reviewers: &godash.Reviewers{}}
-	if len(cache.Value) > 0 {
-		d := gob.NewDecoder(bytes.NewBuffer(cache.Value))
-		if err := d.Decode(&data); err != nil {
-			return err
-		}
+	// Without a deadline, urlfetch will use a 5s timeout which is too slow for Gerrit.
+	gerctx, cancel := context.WithTimeout(ctx, 9*time.Minute)
+	defer cancel()
+	ger.HTTPClient = urlfetch.Client(gerctx)
+
+	data, err := parseData(caches["gzdata"])
+	if err != nil {
+		return err
 	}
 
 	if err := data.Reviewers.LoadGithub(gh); err != nil {
 		return err
 	}
-	if err := data.FetchData(gh, ger, 7, false, false); err != nil {
+	l := logFn(ctx, w)
+	if err := data.FetchData(ctx, gh, ger, l, 7, false, false); err != nil {
 		log.Criticalf(ctx, "failed to fetch data: %v", err)
 		return err
 	}
@@ -129,17 +132,7 @@ func update(ctx context.Context) error {
 			return err
 		}
 	}
-
-	var cacheout bytes.Buffer
-	e := gob.NewEncoder(&cacheout)
-	if err := e.Encode(&data); err != nil {
-		return err
-	}
-	cache.Value = cacheout.Bytes()
-	if _, err := datastore.Put(ctx, datastore.NewKey(ctx, entityPrefix+"Cache", "data", 0, nil), &cache); err != nil {
-		return err
-	}
-	return nil
+	return writeCache(ctx, "gzdata", &data)
 }
 
 func setTokenHandler(w http.ResponseWriter, r *http.Request) {
