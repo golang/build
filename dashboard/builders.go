@@ -624,6 +624,22 @@ func init() {
 		env:            []string{"GOROOT_BOOTSTRAP=/var/buildlet/go-linux-s390x-bootstrap"},
 	})
 	addBuilder(BuildConfig{
+		Name:            "linux-s390x-crosscompile",
+		Notes:           "s390x cross-compile builder for releases; doesn't run tests",
+		KubeImage:       "linux-s390x-stretch:latest",
+		CompileOnly:     true,
+		TryOnly:         true, // but not in trybot set for now
+		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env: []string{
+			"GOROOT_BOOTSTRAP=/go1.4",
+			"CGO_ENABLED=1",
+			"GOARCH=s390x",
+			"GOHOSTARCH=amd64",
+			"CC_FOR_TARGET=s390x-linux-gnu-gcc",
+		},
+	})
+
+	addBuilder(BuildConfig{
 		Name:           "solaris-amd64-oraclejtsylve",
 		Notes:          "temporary test builder run by jtsylve",
 		IsReverse:      true,

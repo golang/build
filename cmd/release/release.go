@@ -80,11 +80,13 @@ func main() {
 	buildEnv = buildenv.Production
 
 	var wg sync.WaitGroup
+	matches := 0
 	for _, b := range builds {
 		b := b
 		if *target != "" && b.String() != *target {
 			continue
 		}
+		matches++
 		b.logf("Start.")
 		wg.Add(1)
 		go func() {
@@ -95,6 +97,9 @@ func main() {
 				b.logf("Done.")
 			}
 		}()
+	}
+	if *target != "" && matches == 0 {
+		log.Fatalf("no targets matched %q", *target)
 	}
 	wg.Wait()
 }
@@ -129,7 +134,8 @@ type Build struct {
 
 	Builder string // Key for dashboard.Builders.
 
-	Goarm int // GOARM value if set.
+	Goarm    int  // GOARM value if set.
+	MakeOnly bool // don't run tests; needed by cross-compile builders (s390x)
 }
 
 func (b *Build) String() string {
@@ -199,6 +205,12 @@ var builds = []*Build{
 		Race:    true,
 		Builder: "darwin-amd64-10_10",
 	},
+	{
+		OS:       "linux",
+		Arch:     "s390x",
+		MakeOnly: true,
+		Builder:  "linux-s390x-crosscompile",
+	},
 }
 
 const (
@@ -243,6 +255,11 @@ func (b *Build) make() error {
 		return fmt.Errorf("unknown builder: %v", bc)
 	}
 
+	var hostArch string // non-empty if we're cross-compiling (s390x)
+	if b.MakeOnly && bc.KubeImage != "" && (bc.GOARCH() != "amd64" && bc.GOARCH() != "386") {
+		hostArch = "amd64"
+	}
+
 	client, err := b.buildlet()
 	if err != nil {
 		return err
@@ -254,8 +271,8 @@ func (b *Build) make() error {
 		return err
 	}
 
-	// Push source to VM
-	b.logf("Pushing source to VM.")
+	// Push source to buildlet
+	b.logf("Pushing source to buildlet.")
 	const (
 		goDir  = "go"
 		goPath = "gopath"
@@ -279,6 +296,7 @@ func (b *Build) make() error {
 		}
 		tar := "https://go.googlesource.com/" + r.repo + "/+archive/" + r.rev + ".tar.gz"
 		if err := client.PutTarFromURL(tar, dir); err != nil {
+			b.logf("failed to put tarball %q into dir %q: %v", tar, dir, err)
 			return err
 		}
 	}
@@ -327,7 +345,7 @@ func (b *Build) make() error {
 	out := new(bytes.Buffer)
 	script := bc.AllScript()
 	scriptArgs := bc.AllScriptArgs()
-	if *skipTests {
+	if *skipTests || b.MakeOnly {
 		script = bc.MakeScript()
 		scriptArgs = bc.MakeScriptArgs()
 	}
@@ -358,11 +376,15 @@ func (b *Build) make() error {
 		if *watch && *target != "" {
 			execOut = io.MultiWriter(out, os.Stdout)
 		}
+		cmdEnv := append([]string(nil), env...)
+		if len(args) > 0 && args[0] == "run" && hostArch != "" {
+			cmdEnv = setGOARCH(cmdEnv, hostArch)
+		}
 		remoteErr, err := client.Exec(goCmd, buildlet.ExecOpts{
 			Output:   execOut,
 			Dir:      ".", // root of buildlet work directory
 			Args:     args,
-			ExtraEnv: env,
+			ExtraEnv: cmdEnv,
 		})
 		if err != nil {
 			return err
@@ -405,6 +427,10 @@ func (b *Build) make() error {
 		return err
 	}
 	if err := runGo("run", "releaselet.go"); err != nil {
+		log.Printf("releaselet failed: %v", err)
+		client.ListDir(".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
+			log.Printf("remote: %v", ent)
+		})
 		return err
 	}
 
@@ -623,4 +649,19 @@ func userToken() string {
 		log.Fatal(err)
 	}
 	return strings.TrimSpace(string(slurp))
+}
+
+func setGOARCH(env []string, goarch string) []string {
+	wantKV := "GOARCH=" + goarch
+	existing := false
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "GOARCH=") && kv != wantKV {
+			env[i] = wantKV
+			existing = true
+		}
+	}
+	if existing {
+		return env
+	}
+	return append(env, wantKV)
 }

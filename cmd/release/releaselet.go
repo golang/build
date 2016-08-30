@@ -34,6 +34,17 @@ func main() {
 	if err := tour(); err != nil {
 		log.Fatal(err)
 	}
+	if dir := archDir(); dir != "" {
+		if err := cp("go/bin/go", "go/bin/"+dir+"/go"); err != nil {
+			log.Fatal(err)
+		}
+		if err := cp("go/bin/gofmt", "go/bin/"+dir+"/gofmt"); err != nil {
+			log.Fatal(err)
+		}
+		os.RemoveAll("go/bin/" + dir)
+		os.RemoveAll("go/pkg/linux_amd64")
+		os.RemoveAll("go/pkg/tool/linux_amd64")
+	}
 	var err error
 	switch runtime.GOOS {
 	case "windows":
@@ -44,6 +55,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func archDir() string {
+	if os.Getenv("GO_BUILDER_NAME") == "linux-s390x-crosscompile" {
+		return "linux_s390x"
+	}
+	return ""
 }
 
 func godoc() error {
@@ -58,7 +76,7 @@ func godoc() error {
 	// Copy godoc binary to $GOROOT/bin.
 	return cp(
 		dst,
-		filepath.FromSlash("gopath/bin/godoc"+ext()),
+		filepath.FromSlash("gopath/bin/"+archDir()+"/godoc"+ext()),
 	)
 }
 
@@ -110,7 +128,7 @@ func tour() error {
 	// Copy gotour binary to tool directory as "tour"; invoked as "go tool tour".
 	return cp(
 		filepath.FromSlash("go/pkg/tool/"+runtime.GOOS+"_"+runtime.GOARCH+"/tour"+ext()),
-		filepath.FromSlash("gopath/bin/gotour"+ext()),
+		filepath.FromSlash("gopath/bin/"+archDir()+"/gotour"+ext()),
 	)
 }
 
@@ -339,7 +357,8 @@ func cp(dst, src string) error {
 	if err != nil {
 		return err
 	}
-	df, err := os.Create(dst)
+	tmpDst := dst + ".tmp"
+	df, err := os.Create(tmpDst)
 	if err != nil {
 		return err
 	}
@@ -355,6 +374,9 @@ func cp(dst, src string) error {
 		return err
 	}
 	if err := df.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpDst, dst); err != nil {
 		return err
 	}
 	// Ensure the destination has the same mtime as the source.
