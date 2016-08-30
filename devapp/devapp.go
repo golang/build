@@ -36,6 +36,8 @@ func init() {
 	http.Handle("/update", ctxHandler(update))
 	http.HandleFunc("/setToken", setTokenHandler)
 	// Defined in stats.go
+	http.HandleFunc("/stats/raw", rawHandler)
+	http.HandleFunc("/stats/svg", svgHandler)
 	http.Handle("/update/stats", ctxHandler(updateStats))
 }
 
