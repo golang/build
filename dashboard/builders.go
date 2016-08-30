@@ -527,6 +527,24 @@ func init() {
 		env:                []string{"GOARCH=386", "GOHOSTARCH=386"},
 		NumTestHelpers:     0, // disabled per golang.org/issue/12979
 	})
+
+	addBuilder(BuildConfig{
+		Name:      "darwin-amd64-10_8",
+		IsReverse: true,
+		FlakyNet:  true,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:      "darwin-amd64-10_11",
+		FlakyNet:  true,
+		IsReverse: true,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
+		},
+	})
+
 	addBuilder(BuildConfig{
 		Name:               "android-arm-sdk19",
 		Notes:              "Android ARM device running android-19 (KitKat 4.4), attatched to Mac Mini",
