@@ -12,6 +12,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -1238,7 +1239,9 @@ func (r *Repo) getLocalRefs() (map[string]string, error) {
 }
 
 func (r *Repo) getRemoteRefs(dest string) (map[string]string, error) {
-	cmd := exec.Command("git", "ls-remote", dest)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "ls-remote", dest)
 	cmd.Dir = r.root
 	return parseRefs(cmd)
 }
@@ -1257,7 +1260,13 @@ func parseRefs(cmd *exec.Cmd) (map[string]string, error) {
 		f := strings.Fields(bs.Text())
 		refHash[f[1]] = f[0]
 	}
-	go cmd.Wait()
+	if err := bs.Err(); err != nil {
+		go cmd.Wait() // prevent zombies
+		return nil, err
+	}
+	if err := cmd.Wait(); err != nil {
+		return nil, err
+	}
 	return refHash, bs.Err()
 }
 
