@@ -15,6 +15,7 @@ package main // import "golang.org/x/build/cmd/buildlet"
 import (
 	"archive/tar"
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"crypto/sha1"
 	"crypto/tls"
@@ -32,6 +33,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -85,6 +87,10 @@ func defaultListenAddr() string {
 var osHalt func() // set by some machines
 
 func main() {
+	switch os.Getenv("GO_BUILDER_ENV") {
+	case "macstadium_vm":
+		configureMacStadium()
+	}
 	if runtime.GOOS == "plan9" {
 		log.SetOutput(&plan9LogWriter{w: os.Stderr})
 	}
@@ -97,13 +103,13 @@ func main() {
 	log.Printf("buildlet starting.")
 	flag.Parse()
 
-	if *listenAddr == "AUTO" {
+	if *listenAddr == "AUTO" && *reverse == "" {
 		v := defaultListenAddr()
 		log.Printf("Will listen on %s", v)
 		*listenAddr = v
 	}
 
-	if !onGCE && !strings.HasPrefix(*listenAddr, "localhost:") {
+	if !onGCE && !strings.HasPrefix(*listenAddr, "localhost:") && *reverse == "" {
 		log.Printf("** WARNING ***  This server is unsafe and offers no security. Be careful.")
 	}
 	if onGCE {
@@ -1153,4 +1159,42 @@ var killProcessTree = killProcessTreeUnix
 
 func killProcessTreeUnix(p *os.Process) error {
 	return p.Kill()
+}
+
+// configureMacStadium configures the buildlet flags for use on a Mac
+// VM running on MacStadium under VMWare.
+func configureMacStadium() {
+	*haltEntireOS = false // for now
+
+	// TODO: setup RAM disk for tmp and set *workDir
+
+	version, err := exec.Command("sw_vers", "-productVersion").Output()
+	if err != nil {
+		log.Fatal("failed to find sw_vers -productVersion: %v", err)
+	}
+	majorMinor := regexp.MustCompile(`^(\d+)\.(\d+)`)
+	m := majorMinor.FindStringSubmatch(string(version))
+	if m == nil {
+		log.Fatalf("unsupported sw_vers version %q", version)
+	}
+	*reverse = "darwin-amd64-" + m[1] + "_" + m[2]
+	*coordinator = "farmer.golang.org:443"
+	*hostname = vmwareGetInfo("guestinfo.name")
+}
+
+func vmwareGetInfo(key string) string {
+	cmd := exec.Command("/Library/Application Support/VMware Tools/vmware-tools-daemon",
+		"--cmd",
+		"info-get "+key)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		if strings.Contains(stderr.String(), "No value found") {
+			return ""
+		}
+		log.Fatalf("Error running vmware-tools-daemon --cmd 'info-get %s': %v, %s\n%s", key, err, stderr.Bytes(), stdout.Bytes())
+	}
+	return strings.TrimSpace(stdout.String())
 }

@@ -27,8 +27,42 @@ import (
 	"golang.org/x/build/revdial"
 )
 
+var reverseModeBuildKey string
+
+func keyForMode(mode string) (string, error) {
+	if isDevReverseMode() {
+		return string(devBuilderKey(mode)), nil
+	}
+	if os.Getenv("GO_BUILDER_ENV") == "macstadium_vm" {
+		infoKey := "guestinfo.key-" + mode
+		key := vmwareGetInfo(infoKey)
+		if key == "" {
+			return "", fmt.Errorf("no build key found for VMWare info-get key %q", infoKey)
+		}
+		return key, nil
+	}
+
+	keyPath := filepath.Join(homedir(), ".gobuildkey-"+mode)
+	key, err := ioutil.ReadFile(keyPath)
+	if err != nil {
+		if os.IsNotExist(err) && !strings.Contains(*reverse, ",") {
+			globalKeyPath := filepath.Join(homedir(), ".gobuildkey")
+			key, err = ioutil.ReadFile(globalKeyPath)
+			if err != nil {
+				return "", fmt.Errorf("cannot read either key file %q or %q: %v", keyPath, globalKeyPath, err)
+			}
+		}
+		return "", fmt.Errorf("cannot read key file %q: %v", keyPath, err)
+	}
+	return string(key), nil
+}
+
+func isDevReverseMode() bool {
+	return !strings.HasPrefix(*coordinator, "farmer.golang.org")
+}
+
 func dialCoordinator() error {
-	devMode := !strings.HasPrefix(*coordinator, "farmer.golang.org")
+	devMode := isDevReverseMode()
 
 	if *hostname == "" {
 		*hostname, _ = os.Hostname()
@@ -37,22 +71,11 @@ func dialCoordinator() error {
 	modes := strings.Split(*reverse, ",")
 	var keys []string
 	for _, m := range modes {
-		if devMode {
-			keys = append(keys, string(devBuilderKey(m)))
-			continue
+		key, err := keyForMode(m)
+		if err != nil {
+			log.Fatalf("failed to find key for %s: %v", m, err)
 		}
-		keyPath := filepath.Join(homedir(), ".gobuildkey-"+m)
-		key, err := ioutil.ReadFile(keyPath)
-		if os.IsNotExist(err) && len(modes) == 1 {
-			globalKeyPath := filepath.Join(homedir(), ".gobuildkey")
-			key, err = ioutil.ReadFile(globalKeyPath)
-			if err != nil {
-				log.Fatalf("cannot read either key file %q or %q: %v", keyPath, globalKeyPath, err)
-			}
-		} else if err != nil {
-			log.Fatalf("cannot read key file %q: %v", keyPath, err)
-		}
-		keys = append(keys, string(key))
+		keys = append(keys, key)
 	}
 
 	caCert := build.ProdCoordinatorCA
