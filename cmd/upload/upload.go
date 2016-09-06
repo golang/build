@@ -10,6 +10,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/md5"
 	"flag"
 	"fmt"
@@ -37,6 +38,7 @@ var (
 	osarch    = flag.String("osarch", "", "Optional 'GOOS-GOARCH' value to cross-compile; used only if --file begins with 'go:'. As a special case, if the value contains a '.' byte, anything up to and including that period is discarded.")
 	project   = flag.String("project", "", "GCE Project. If blank, it's automatically inferred from the bucket name for the common Go buckets.")
 	tags      = flag.String("tags", "", "tags to pass to go list, go install, etc. Only applicable if the --file value begins with 'go:'")
+	doGzip    = flag.Bool("gzip", false, "gzip the stored contents (not the upload's Content-Encoding); this forces the Content-Type to be application/octet-stream. To prevent misuse, the object name must also end in '.gz'")
 )
 
 func main() {
@@ -58,6 +60,10 @@ func main() {
 		buildGoTarget()
 	}
 	bucket, object := args[0], args[1]
+
+	if *doGzip && !strings.HasSuffix(object, ".gz") {
+		log.Fatalf("--gzip flag requires object ending in .gz")
+	}
 
 	proj := *project
 	if proj == "" {
@@ -106,6 +112,17 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+	if *doGzip {
+		var zbuf bytes.Buffer
+		zw := gzip.NewWriter(&zbuf)
+		if _, err := io.Copy(zw, content); err != nil {
+			log.Fatalf("compressing content: %v", err)
+		}
+		if err := zw.Close(); err != nil {
+			log.Fatalf("gzip.Close: %v", err)
+		}
+		content = &zbuf
+	}
 
 	const maxSlurp = 1 << 20
 	var buf bytes.Buffer
@@ -113,7 +130,11 @@ func main() {
 	if err != nil && err != io.EOF {
 		log.Fatalf("Error reading from stdin: %v, %v", n, err)
 	}
-	w.ContentType = http.DetectContentType(buf.Bytes())
+	if *doGzip {
+		w.ContentType = "application/octet-stream"
+	} else {
+		w.ContentType = http.DetectContentType(buf.Bytes())
+	}
 
 	_, err = io.Copy(w, io.MultiReader(&buf, content))
 	if cerr := w.Close(); cerr != nil && err == nil {
@@ -143,6 +164,7 @@ func buildGoTarget() {
 	target := strings.TrimPrefix(*file, "go:")
 	var goos, goarch string
 	if *osarch != "" {
+		*osarch = strings.TrimSuffix(*osarch, ".gz")
 		*osarch = (*osarch)[strings.LastIndex(*osarch, ".")+1:]
 		v := strings.Split(*osarch, "-")
 		if len(v) == 3 {
