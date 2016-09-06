@@ -8,11 +8,11 @@ Then, to create more:
 
 # 10.11
 
-export VMHOST=12
-export VMWHICH=a
+export VMHOST=4
+export VMWHICH=b
 export VMNAME=osx11_host${VMHOST}_${VMWHICH}
 date
-govc vm.create -m 4096 -c 2 -on=false -net dvPortGroup-Private -ds "mac_host_$VMHOST"  -g darwin14_64Guest $VMNAME
+govc vm.create -m 4096 -c 2 -on=false -net dvPortGroup-Private -ds "BOOT_$VMHOST"  -g darwin14_64Guest $VMNAME
 govc vm.change -e smc.present=TRUE -e ich7m.present=TRUE -e firmware=efi -vm $VMNAME
 govc device.usb.add -vm $VMNAME
 govc vm.disk.attach -vm $VMNAME -link=true -persist=false -ds=NetApp-1 -disk "osx_11_frozen/osx_11_frozen.vmdk"

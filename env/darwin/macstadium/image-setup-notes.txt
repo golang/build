@@ -6,6 +6,8 @@ System Preferences > Desktop & Screensaver > never screensaver
 
 System Preferences > Energy Saver > never sleep
 
+System Preferences > Sharing > enable ssh (for later)
+
 curl -o stage0.sh https://....
 
 chmod +x stage0.sh
@@ -16,9 +18,17 @@ System Preferences > Users & Groups > auto-login "gopher" user, run Desktop/run-
 
 passwordless sudo
 
+install xcode
+  (as of 10.10 or 10.9, running git first time will propt for install;
+   before that, need to find old xcode version)
+
 sudo visudo
 Change line from:
   %admin ALL=(ALL) ALL
 to:
   %admin ALL=(ALL) NOPASSWD: ALL
+
+verbose boot:
+
+run-builder-darwin-10_11.sh
 
