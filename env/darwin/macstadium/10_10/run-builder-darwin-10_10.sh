@@ -15,4 +15,5 @@ gunzip -f buildlet.gz
 chmod +x buildlet
 
 export GO_BUILDER_ENV=macstadium_vm
-exec ./buildlet
+while true; do ./buildlet || sleep 5; done
+
