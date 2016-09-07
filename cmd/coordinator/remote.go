@@ -278,6 +278,7 @@ func proxyBuildletHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	outReq.Header = r.Header
+	outReq.ContentLength = r.ContentLength
 	proxy := &httputil.ReverseProxy{
 		Director:      func(*http.Request) {}, // nothing
 		Transport:     rb.buildlet.ProxyRoundTripper(),
