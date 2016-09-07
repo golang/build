@@ -101,7 +101,7 @@ var (
 
 func initTryBuilders() {
 	tryList := []string{
-		"darwin-amd64-10_10",
+		"darwin-amd64-10_11",
 		"linux-386",
 		"linux-amd64",
 		"linux-amd64-race",

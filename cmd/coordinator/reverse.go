@@ -417,6 +417,8 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("need at least one mode and matching key, got %d/%d", len(modes), len(gobuildkeys)), http.StatusPreconditionFailed)
 		return
 	}
+	hostname := r.Header.Get("X-Go-Builder-Hostname")
+
 	for i, m := range modes {
 		if gobuildkeys[i] != builderKey(m) {
 			http.Error(w, fmt.Sprintf("bad key for mode %q", m), http.StatusPreconditionFailed)
@@ -424,12 +426,25 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Silently pretend that "gomacmini-*.local" doesn't want to do darwin-amd64-10_10 and
+	// darwin-386-10_10 anymore.
+	// TODO(bradfitz): remove this hack after we reconfigure those machines.
+	if strings.HasPrefix(hostname, "gomacmini-") && strings.HasSuffix(hostname, ".local") {
+		var filtered []string
+		for _, m := range modes {
+			if m == "darwin-amd64-10_10" || m == "darwin-386-10_10" {
+				continue
+			}
+			filtered = append(filtered, m)
+		}
+		modes = filtered
+	}
+
 	conn, bufrw, err := w.(http.Hijacker).Hijack()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	hostname := r.Header.Get("X-Go-Builder-Hostname")
 
 	revDialer := revdial.NewDialer(bufrw, conn)
 

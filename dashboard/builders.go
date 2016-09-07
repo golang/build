@@ -168,7 +168,10 @@ func (c *BuildConfig) BuildSubrepos() bool {
 	}
 	// TODO(adg,bradfitz): expand this as required
 	switch c.Name {
-	case "darwin-amd64-10_10",
+	case "darwin-amd64-10_8",
+		"darwin-amd64-10_10",
+		"darwin-amd64-10_11",
+		"darwin-386-10_11",
 		"freebsd-386-gce101", "freebsd-amd64-gce101",
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
 		"openbsd-386-gce58", "openbsd-amd64-gce58",
@@ -513,33 +516,26 @@ func init() {
 		NumTestHelpers:     3,
 	})
 	addBuilder(BuildConfig{
-		Name:               "darwin-amd64-10_10",
-		Notes:              "Mac Mini running OS X 10.10 (Yosemite)",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-darwin-amd64.tar.gz",
-		IsReverse:          true,
-		NumTestHelpers:     0, // disabled per golang.org/issue/12979
-	})
-	addBuilder(BuildConfig{
-		Name:               "darwin-386-10_10",
-		Notes:              "Mac Mini running OS X 10.10 (Yosemite)",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-darwin-amd64.tar.gz",
-		IsReverse:          true,
-		env:                []string{"GOARCH=386", "GOHOSTARCH=386"},
-		NumTestHelpers:     0, // disabled per golang.org/issue/12979
-	})
-
-	addBuilder(BuildConfig{
 		Name:      "darwin-amd64-10_8",
+		Notes:     "MacStadium OS X 10.8 VM under VMWare ESXi",
 		IsReverse: true,
-		FlakyNet:  true,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:      "darwin-amd64-10_11",
-		FlakyNet:  true,
+		Name:      "darwin-amd64-10_10",
+		Notes:     "MacStadium OS X 10.10 VM under VMWare ESXi",
 		IsReverse: true,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:           "darwin-amd64-10_11",
+		Notes:          "MacStadium OS X 10.11 VM under VMWare ESXi",
+		NumTestHelpers: 2,
+		IsReverse:      true,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
 		},
