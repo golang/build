@@ -95,10 +95,10 @@ func svgHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-type openFilter struct{}
+type openFilter bool
 
-func (openFilter) F(g table.Grouping) table.Grouping {
-	return table.Filter(g, func(closed time.Time) bool { return closed.IsZero() }, "Closed")
+func (o openFilter) F(g table.Grouping) table.Grouping {
+	return table.Filter(g, func(closed time.Time) bool { return bool(o) == closed.IsZero() }, "Closed")
 }
 
 type releaseFilter struct{}
@@ -300,7 +300,9 @@ func plot(w http.ResponseWriter, req *http.Request, stats table.Grouping) error 
 	case "":
 		switch filter := req.Form.Get("filter"); filter {
 		case "open":
-			plot.Stat(openFilter{})
+			plot.Stat(openFilter(true))
+		case "closed":
+			plot.Stat(openFilter(false))
 		case "":
 		default:
 			return fmt.Errorf("unknown filter %q", filter)
