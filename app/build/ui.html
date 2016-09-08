@@ -112,7 +112,7 @@
             <td class="result{{if (unsupported .)}} unsupported{{end}}">
               {{with $c.Result . $h}}
                 {{if .BuildingURL}}
-                  <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" border=0></a>
+                  <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" height=16 width=16 border=0></a>
                 {{else if .OK}}
                   <span class="ok">ok</span>
                 {{else}}
@@ -198,7 +198,7 @@
           <td class="result{{if (unsupported .)}} unsupported{{end}}">
             {{with $pkg.Commit.Result . $goHash}}
               {{if .BuildingURL}}
-                <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" border=0></a>
+                <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" height=16 width=16 border=0></a>
               {{else if .OK}}
                 <span class="ok">ok</span>
               {{else}}
