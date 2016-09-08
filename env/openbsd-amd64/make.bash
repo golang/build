@@ -16,11 +16,11 @@ if [[ "${ARCH}" != "amd64" && "${ARCH}" != "i386" ]]; then
   exit 1
 fi
 
-readonly ISO="install58-${ARCH}.iso"
-readonly ISO_PATCHED="install58-${ARCH}-patched.iso"
+readonly ISO="install60-${ARCH}.iso"
+readonly ISO_PATCHED="install60-${ARCH}-patched.iso"
 
 if [[ ! -f "${ISO}" ]]; then
-  curl -o "${ISO}" "http://${MIRROR}/pub/OpenBSD/5.8/${ARCH}/install58.iso"
+  curl -o "${ISO}" "http://${MIRROR}/pub/OpenBSD/6.0/${ARCH}/install60.iso"
 fi
 
 function cleanup() {
@@ -32,7 +32,7 @@ function cleanup() {
 	rm -f etc/rc.local
 	rm -f install.site
 	rm -f random.seed
-	rm -f site58.tgz
+	rm -f site60.tgz
 	rmdir etc
 }
 
@@ -41,11 +41,11 @@ trap cleanup EXIT INT
 # XXX: Download and save bash, curl, and their dependencies too?
 # Currently we download them from the network during the install process.
 
-# Create custom site58.tgz set.
+# Create custom site60.tgz set.
 mkdir -p etc
 cat >install.site <<EOF
 #!/bin/sh
-env PKG_PATH=http://${MIRROR}/pub/OpenBSD/5.8/packages/${ARCH} \
+env PKG_PATH=http://${MIRROR}/pub/OpenBSD/6.0/packages/${ARCH} \
   pkg_add -iv bash curl git
 
 echo 'set tty com0' > boot.conf
@@ -71,7 +71,7 @@ cat >etc/rc.local <<EOF
 )
 EOF
 chmod +x install.site
-tar -zcvf site58.tgz install.site etc/rc.local
+tar -zcvf site60.tgz install.site etc/rc.local
 
 # Autoinstall script.
 cat >auto_install.conf <<EOF
@@ -79,7 +79,6 @@ System hostname = buildlet
 Which network interface = vio0
 IPv4 address for vio0 = dhcp
 IPv6 address for vio0 = none
-DNS nameservers = 8.8.8.8
 Password for root account = root
 Do you expect to run the X Window System = no
 Change the default console to com0 = yes
@@ -108,7 +107,7 @@ echo 'set tty com0' > boot.conf
 dd if=/dev/urandom of=random.seed bs=4096 count=1
 cp "${ISO}" "${ISO_PATCHED}"
 growisofs -M "${ISO_PATCHED}" -l -R -graft-points \
-  /5.8/${ARCH}/site58.tgz=site58.tgz \
+  /6.0/${ARCH}/site60.tgz=site60.tgz \
   /auto_install.conf=auto_install.conf \
   /disklabel.template=disklabel.template \
   /etc/boot.conf=boot.conf \
@@ -120,25 +119,30 @@ qemu-img create -f raw disk.raw 10G
 
 # Run the installer to create the disk image.
 expect <<EOF
-spawn qemu-system-x86_64 -nographic -smp 2 -drive if=virtio,file=disk.raw \
-  -cdrom "${ISO_PATCHED}" -net nic,model=virtio -net user -boot once=d
+set timeout 600
 
-expect "boot>"
+spawn qemu-system-x86_64 -nographic -smp 2 \
+  -drive if=virtio,file=disk.raw,format=raw -cdrom "${ISO_PATCHED}" \
+  -net nic,model=virtio -net user -boot once=d
+
+expect timeout { exit 1 } "boot>"
 send "\n"
 
 # Need to wait for the kernel to boot.
-expect -timeout 600 "\(I\)nstall, \(U\)pgrade, \(A\)utoinstall or \(S\)hell\?"
+expect timeout { exit 1 } "\(I\)nstall, \(U\)pgrade, \(A\)utoinstall or \(S\)hell\?"
 send "s\n"
 
-expect "# "
+expect timeout { exit 1 } "# "
 send "mount /dev/cd0c /mnt\n"
 send "cp /mnt/auto_install.conf /mnt/disklabel.template /\n"
 send "umount /mnt\n"
+# Avoid a race with DHCP configuration by sleeping briefly.
+send "echo -n \"1256\na\n\tsleep 5\n.\nw\nq\n\" | ed install.sub\n"
 send "exit\n"
 
-expect -timeout 600 "CONGRATULATIONS!"
+expect timeout { exit 1 } "CONGRATULATIONS!"
 
-expect -timeout 600 eof
+expect timeout { exit 1 } eof
 EOF
 
 # Create Compute Engine disk image.
