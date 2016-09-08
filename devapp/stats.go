@@ -80,6 +80,11 @@ func rawHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func svgHandler(w http.ResponseWriter, req *http.Request) {
+	if req.URL.RawQuery == "" {
+		http.ServeFile(w, req, "static/svg.html")
+		return
+	}
+
 	ctx := appengine.NewContext(req)
 	req.ParseForm()
 
@@ -237,10 +242,8 @@ func plot(w http.ResponseWriter, req *http.Request, stats table.Grouping) error 
 		switch scale := req.Form.Get(aes + "scale"); scale {
 		case "log":
 			ls := gg.NewLogScaler(10)
-			if aes == "x" {
-				// Our plots tend to go to 0, which makes log scales unhappy.
-				ls.SetMin(1)
-			}
+			// Our plots tend to go to 0, which makes log scales unhappy.
+			ls.SetMin(1)
 			plot.SetScale(aes, ls)
 		case "lin":
 			s := gg.NewLinearScaler()
