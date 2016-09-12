@@ -106,29 +106,18 @@ type releaseFilter struct{}
 var milestoneRE = regexp.MustCompile(`^(Go\d+(\.\d+)?)(|\.(\d+))(|[-A-Za-z].*)$`)
 
 func milestoneToRelease(milestone string) string {
-	switch milestone {
-	case "Unreleased", "Unplanned":
-		return milestone
-	}
-	var release string
 	if m := milestoneRE.FindStringSubmatch(milestone); m != nil {
-		release = m[1]
+		return m[1]
 	}
-	return release
+	return ""
 }
 
 func (releaseFilter) F(g table.Grouping) table.Grouping {
-	g = table.MapTables(g, func(_ table.GroupID, t *table.Table) *table.Table {
-		var releases []string
-		tb := table.NewBuilder(t)
-		milestones := t.MustColumn("Milestone").([]string)
-		for _, milestone := range milestones {
-			releases = append(releases, milestoneToRelease(milestone))
+	return table.MapCols(g, func(milestones, releases []string) {
+		for i := range milestones {
+			releases[i] = milestoneToRelease(milestones[i])
 		}
-		tb.Add("Release", releases)
-		return tb.Done()
-	})
-	return table.Filter(g, func(r string) bool { return r != "" }, "Release")
+	}, "Milestone")("Release")
 }
 
 type countChange struct {
@@ -155,6 +144,9 @@ func (o openCount) F(input table.Grouping) table.Grouping {
 		releases := make(map[string]countChangeSlice)
 		add := func(milestone string, t time.Time, count int) {
 			r := milestoneToRelease(milestone)
+			if r == "" {
+				r = milestone
+			}
 			releases[r] = append(releases[r], countChange{t, count})
 		}
 
@@ -240,6 +232,7 @@ func argtoi(req *http.Request, arg string) (int, bool, error) {
 
 func plot(w http.ResponseWriter, req *http.Request, stats table.Grouping) error {
 	plot := gg.NewPlot(stats)
+	plot.Stat(releaseFilter{})
 	for _, aes := range []string{"x", "y"} {
 		switch scale := req.Form.Get(aes + "scale"); scale {
 		case "log":
@@ -311,7 +304,7 @@ func plot(w http.ResponseWriter, req *http.Request, stats table.Grouping) error 
 		{
 			// TODO: I wish Grouping had a .Column like Table has.
 			var found bool
-			for _, c := range stats.Columns() {
+			for _, c := range plot.Data().Columns() {
 				if c == column {
 					found = true
 				}
