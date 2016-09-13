@@ -41,9 +41,12 @@ type BuildConfig struct {
 	CompileOnly bool // if true, compile tests, but don't run them
 	FlakyNet    bool // network tests are flaky (try anyway, but ignore some failures)
 
-	// NumTestHelpers is the number of _additional_ buildlets
-	// past the first help out with sharded tests.
-	NumTestHelpers int
+	// numTestHelpers is the number of _additional_ buildlets
+	// past the first one to help out with sharded tests.
+	// For trybots, the numTryHelpers value is used, unless it's
+	// zero, in which case numTestHelpers is used.
+	numTestHelpers    int
+	numTryTestHelpers int // for trybots. if 0, numTesthelpers is used
 
 	// BuildletType optionally specifies the type of buildlet to
 	// request from the buildlet pool. If empty, it defaults to
@@ -265,13 +268,20 @@ func (c *BuildConfig) GCENumCPU() int {
 	return n
 }
 
+func (c *BuildConfig) NumTestHelpers(isTry bool) int {
+	if isTry && c.numTryTestHelpers != 0 {
+		return c.numTryTestHelpers
+	}
+	return c.numTestHelpers
+}
+
 func init() {
 	addBuilder(BuildConfig{
 		Name:               "freebsd-amd64-gce93",
 		VMImage:            "freebsd-amd64-gce93",
 		machineType:        "n1-highcpu-2",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
-		NumTestHelpers:     3,
+		numTestHelpers:     1,
 	})
 	addBuilder(BuildConfig{
 		Name:               "freebsd-amd64-gce101",
@@ -280,7 +290,8 @@ func init() {
 		machineType:        "n1-highcpu-2",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		env:                []string{"CC=clang"},
-		NumTestHelpers:     3,
+		numTestHelpers:     2,
+		numTryTestHelpers:  4,
 	})
 	addBuilder(BuildConfig{
 		Name:               "freebsd-amd64-race",
@@ -297,14 +308,14 @@ func init() {
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		env:                []string{"GOARCH=386", "GOHOSTARCH=386", "CC=clang"},
-		NumTestHelpers:     3,
+		numTestHelpers:     3,
 	})
 	addBuilder(BuildConfig{
 		Name:            "linux-386",
 		KubeImage:       "linux-x86-std:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4", "GOARCH=386", "GOHOSTARCH=386"},
-		NumTestHelpers:  3,
+		numTestHelpers:  3,
 	})
 	addBuilder(BuildConfig{
 		Name:            "linux-386-387",
@@ -318,7 +329,7 @@ func init() {
 		KubeImage:       "linux-x86-std:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		NumTestHelpers:  3,
+		numTestHelpers:  3,
 	})
 
 	addMiscCompile := func(suffix, rx string) {
@@ -368,10 +379,11 @@ func init() {
 		env:         []string{"GOROOT_BOOTSTRAP=/go1.4", "GO_GCFLAGS=-d=ssa/check/on"},
 	})
 	addBuilder(BuildConfig{
-		Name:           "linux-amd64-race",
-		KubeImage:      "linux-x86-std:latest",
-		env:            []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		NumTestHelpers: 4,
+		Name:              "linux-amd64-race",
+		KubeImage:         "linux-x86-std:latest",
+		env:               []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		numTestHelpers:    2,
+		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
 		Name:    "linux-386-clang",
@@ -399,11 +411,12 @@ func init() {
 		env:     []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	})
 	addBuilder(BuildConfig{
-		Name:           "linux-arm",
-		IsReverse:      true,
-		FlakyNet:       true,
-		NumTestHelpers: 6,
-		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+		Name:              "linux-arm",
+		IsReverse:         true,
+		FlakyNet:          true,
+		numTestHelpers:    2,
+		numTryTestHelpers: 7,
+		env:               []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 	})
 	addBuilder(BuildConfig{
 		Name:      "linux-arm-arm5",
@@ -419,14 +432,14 @@ func init() {
 		Name:            "nacl-386",
 		KubeImage:       "linux-x86-nacl:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		NumTestHelpers:  3,
+		numTestHelpers:  3,
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
 		Name:            "nacl-amd64p32",
 		KubeImage:       "linux-x86-nacl:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		NumTestHelpers:  3,
+		numTestHelpers:  3,
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4", "GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
@@ -435,7 +448,8 @@ func init() {
 		VMImage:            "openbsd-amd64-58",
 		machineType:        "n1-highcpu-2",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-openbsd-amd64-gce58.tar.gz",
-		NumTestHelpers:     3,
+		numTestHelpers:     2,
+		numTryTestHelpers:  5,
 	})
 	addBuilder(BuildConfig{
 		Name:               "openbsd-386-gce58",
@@ -443,7 +457,7 @@ func init() {
 		VMImage:            "openbsd-386-58",
 		machineType:        "n1-highcpu-2",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-openbsd-386-gce58.tar.gz",
-		NumTestHelpers:     3,
+		numTestHelpers:     2,
 	})
 	addBuilder(BuildConfig{
 		Name:               "netbsd-amd64-gce",
@@ -451,7 +465,7 @@ func init() {
 		VMImage:            "netbsd-amd64-gce",
 		machineType:        "n1-highcpu-2",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64.tar.gz",
-		NumTestHelpers:     3,
+		numTestHelpers:     1,
 	})
 
 	addBuilder(BuildConfig{
@@ -484,7 +498,7 @@ func init() {
 		// and we'll stop timing out on tests.
 		machineType: "n1-highcpu-4",
 
-		NumTestHelpers: 5, // slow
+		numTestHelpers: 1,
 	})
 	addBuilder(BuildConfig{
 		Name:               "windows-amd64-gce",
@@ -493,7 +507,8 @@ func init() {
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		RegularDisk:        true,
 		env:                []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
-		NumTestHelpers:     3,
+		numTestHelpers:     1,
+		numTryTestHelpers:  5,
 	})
 	addBuilder(BuildConfig{
 		Name:               "windows-amd64-race",
@@ -513,7 +528,8 @@ func init() {
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-386.tar.gz",
 		RegularDisk:        true,
 		env:                []string{"GOARCH=386", "GOHOSTARCH=386"},
-		NumTestHelpers:     3,
+		numTestHelpers:     1,
+		numTryTestHelpers:  5,
 	})
 	addBuilder(BuildConfig{
 		Name:      "darwin-amd64-10_8",
@@ -532,10 +548,11 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:           "darwin-amd64-10_11",
-		Notes:          "MacStadium OS X 10.11 VM under VMWare ESXi",
-		NumTestHelpers: 2,
-		IsReverse:      true,
+		Name:              "darwin-amd64-10_11",
+		Notes:             "MacStadium OS X 10.11 VM under VMWare ESXi",
+		numTestHelpers:    2,
+		numTryTestHelpers: 3,
+		IsReverse:         true,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
 		},
@@ -547,7 +564,7 @@ func init() {
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-darwin-amd64.tar.gz",
 		IsReverse:          true,
 		env:                []string{"GOOS=android", "GOARCH=arm"},
-		NumTestHelpers:     1, // limited resources
+		numTestHelpers:     1, // limited resources
 	})
 	addBuilder(BuildConfig{
 		Name:               "android-arm64-sdk21",
@@ -555,7 +572,7 @@ func init() {
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-darwin-amd64.tar.gz",
 		IsReverse:          true,
 		env:                []string{"GOOS=android", "GOARCH=arm64"},
-		NumTestHelpers:     1, // limited resources
+		numTestHelpers:     1, // limited resources
 	})
 	addBuilder(BuildConfig{
 		Name:               "android-386-sdk21",
@@ -563,7 +580,7 @@ func init() {
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-darwin-amd64.tar.gz",
 		IsReverse:          true,
 		env:                []string{"GOOS=android", "GOARCH=386"},
-		NumTestHelpers:     1, // limited resources
+		numTestHelpers:     1, // limited resources
 	})
 	addBuilder(BuildConfig{
 		Name:               "android-amd64-sdk21",
@@ -571,7 +588,7 @@ func init() {
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-darwin-amd64.tar.gz",
 		IsReverse:          true,
 		env:                []string{"GOOS=android", "GOARCH=amd64"},
-		NumTestHelpers:     1, // limited resources
+		numTestHelpers:     1, // limited resources
 	})
 	addBuilder(BuildConfig{
 		Name:               "darwin-arm-a5ios",
@@ -590,33 +607,30 @@ func init() {
 		env:                []string{"GOARCH=arm64", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
-		Name:           "solaris-amd64-smartosbuildlet",
-		Notes:          "run by Go team on Joyent, on a SmartOS 'infrastructure container'",
-		IsReverse:      true,
-		NumTestHelpers: 0,
-		env:            []string{"GOROOT_BOOTSTRAP=/root/go-solaris-amd64-bootstrap"},
+		Name:      "solaris-amd64-smartosbuildlet",
+		Notes:     "run by Go team on Joyent, on a SmartOS 'infrastructure container'",
+		IsReverse: true,
+		env:       []string{"GOROOT_BOOTSTRAP=/root/go-solaris-amd64-bootstrap"},
 	})
 	addBuilder(BuildConfig{
-		Name:           "linux-ppc64le-buildlet",
-		Notes:          "Debian jessie; run by Go team on osuosl.org",
-		IsReverse:      true,
-		FlakyNet:       true,
-		NumTestHelpers: 0,
-		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		Name:      "linux-ppc64le-buildlet",
+		Notes:     "Debian jessie; run by Go team on osuosl.org",
+		IsReverse: true,
+		FlakyNet:  true,
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 	})
 	addBuilder(BuildConfig{
-		Name:           "linux-arm64-buildlet",
-		Notes:          "Ubuntu wily; run by Go team, from linaro",
-		IsReverse:      true,
-		FlakyNet:       true,
-		NumTestHelpers: 0,
-		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		Name:      "linux-arm64-buildlet",
+		Notes:     "Ubuntu wily; run by Go team, from linaro",
+		IsReverse: true,
+		FlakyNet:  true,
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-s390x-ibm",
 		Notes:          "run by IBM",
 		IsReverse:      true,
-		NumTestHelpers: 0,
+		numTestHelpers: 0,
 		env:            []string{"GOROOT_BOOTSTRAP=/var/buildlet/go-linux-s390x-bootstrap"},
 	})
 	addBuilder(BuildConfig{
@@ -639,7 +653,7 @@ func init() {
 		Name:           "solaris-amd64-oraclejtsylve",
 		Notes:          "temporary test builder run by jtsylve",
 		IsReverse:      true,
-		NumTestHelpers: 0,
+		numTestHelpers: 0,
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 	})
 }

@@ -106,11 +106,9 @@ func initTryBuilders() {
 		"linux-amd64",
 		"linux-amd64-race",
 		"linux-amd64-ssacheck",
-		"freebsd-386-gce101",
 		"freebsd-amd64-gce101",
 		"windows-386-gce",
 		"windows-amd64-gce",
-		"openbsd-386-gce58",
 		"openbsd-amd64-gce58",
 		"nacl-386",
 		"nacl-amd64p32",
@@ -1301,20 +1299,13 @@ func (st *buildStatus) expectedMakeBashDuration() time.Duration {
 	// better in this file.
 	goos, goarch := st.conf.GOOS(), st.conf.GOARCH()
 
-	if goos == "plan9" {
-		return 2500 * time.Millisecond
-	}
 	if goos == "linux" {
 		if goarch == "arm" {
 			return 4 * time.Minute
 		}
-		return 1000 * time.Millisecond
+		return 45 * time.Second
 	}
-	if goos == "windows" {
-		return 1000 * time.Millisecond
-	}
-
-	return 1500 * time.Millisecond
+	return 60 * time.Second
 }
 
 func (st *buildStatus) expectedBuildletStartDuration() time.Duration {
@@ -1350,7 +1341,7 @@ func (st *buildStatus) expectedBuildletStartDuration() time.Duration {
 // ready, such that they're ready when make.bash is done. But we don't
 // want to start too early, lest we waste idle resources during make.bash.
 func (st *buildStatus) getHelpersReadySoon() {
-	if st.isSubrepo() || st.conf.NumTestHelpers == 0 {
+	if st.isSubrepo() || st.conf.NumTestHelpers(st.isTry()) == 0 {
 		return
 	}
 	time.AfterFunc(st.expectedMakeBashDuration()-st.expectedBuildletStartDuration(),
@@ -1369,7 +1360,7 @@ func (st *buildStatus) getHelpers() <-chan *buildlet.Client {
 
 func (st *buildStatus) onceInitHelpersFunc() {
 	pool, _ := st.buildletPool() // won't return an error since we called it already
-	st.helpers = GetBuildlets(st.ctx, pool, st.conf.NumTestHelpers, st.buildletType(), st)
+	st.helpers = GetBuildlets(st.ctx, pool, st.conf.NumTestHelpers(st.isTry()), st.buildletType(), st)
 }
 
 // We should try to build from a snapshot if this is a subrepo build, we can
@@ -1490,12 +1481,14 @@ func (st *buildStatus) build() error {
 	return nil
 }
 
+func (st *buildStatus) isTry() bool { return st.trySet != nil }
+
 func (st *buildStatus) buildRecord() *BuildRecord {
 	rec := &BuildRecord{
 		ID:        st.buildID,
 		ProcessID: processID,
 		StartTime: st.startTime,
-		IsTry:     st.trySet != nil,
+		IsTry:     st.isTry(),
 		GoRev:     st.rev,
 		Rev:       st.subRevOrGoRev(),
 		Repo:      st.repoOrGo(),
@@ -2345,7 +2338,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	}
 	elapsed := time.Since(startTime)
 	var msg string
-	if st.conf.NumTestHelpers > 0 {
+	if st.conf.NumTestHelpers(st.isTry()) > 0 {
 		msg = fmt.Sprintf("took %v; aggregate %v; saved %v", elapsed, serialDuration, serialDuration-elapsed)
 	} else {
 		msg = fmt.Sprintf("took %v", elapsed)
