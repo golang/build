@@ -91,17 +91,27 @@ func main() {
 	case "macstadium_vm":
 		configureMacStadium()
 	}
-	if runtime.GOOS == "plan9" {
-		log.SetOutput(&plan9LogWriter{w: os.Stderr})
-	}
 	onGCE := metadata.OnGCE()
-	if runtime.GOOS == "linux" && onGCE && !inKube {
-		if w, err := os.OpenFile("/dev/console", os.O_WRONLY, 0); err == nil {
-			log.SetOutput(w)
+	switch runtime.GOOS {
+	case "plan9":
+		log.SetOutput(&plan9LogWriter{w: os.Stderr})
+	case "linux":
+		if onGCE && !inKube {
+			if w, err := os.OpenFile("/dev/console", os.O_WRONLY, 0); err == nil {
+				log.SetOutput(w)
+			}
 		}
 	}
+
 	log.Printf("buildlet starting.")
 	flag.Parse()
+
+	// Optimize emphemeral filesystems. Prefer speed over safety, since these machines
+	// will be gone soon.
+	switch runtime.GOOS {
+	case "openbsd", "freebsd":
+		makeBSDFilesystemFast()
+	}
 
 	if *listenAddr == "AUTO" && *reverse == "" {
 		v := defaultListenAddr()
@@ -1197,4 +1207,27 @@ func vmwareGetInfo(key string) string {
 		log.Fatalf("Error running vmware-tools-daemon --cmd 'info-get %s': %v, %s\n%s", key, err, stderr.Bytes(), stdout.Bytes())
 	}
 	return strings.TrimSpace(stdout.String())
+}
+
+func makeBSDFilesystemFast() {
+	if !metadata.OnGCE() {
+		log.Printf("Not on GCE; not remounting root filesystem.")
+		return
+	}
+	btype, err := metadata.InstanceAttributeValue("builder-type")
+	if _, ok := err.(metadata.NotDefinedError); ok && len(btype) == 0 {
+		log.Printf("Not remounting root filesystem due to missing builder-type metadata.")
+		return
+	}
+	if err != nil {
+		log.Printf("Not remounting root filesystem due to failure getting builder type instance metadata: %v", err)
+		return
+	}
+	// Tested on OpenBSD and FreeBSD:
+	out, err := exec.Command("/sbin/mount", "-u", "-o", "async,noatime", "/").CombinedOutput()
+	if err != nil {
+		log.Printf("Warning: failed to remount %s root filesystem with async,noatime: %v, %s", runtime.GOOS, err, out)
+		return
+	}
+	log.Printf("Remounted / with async,noatime.")
 }
