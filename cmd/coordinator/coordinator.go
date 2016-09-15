@@ -1775,7 +1775,7 @@ func (br *builderRev) snapshotObjectName() string {
 
 // snapshotURL is the absolute URL of the snapshot object (see above).
 func (br *builderRev) snapshotURL() string {
-	return fmt.Sprintf("https://storage.googleapis.com/%s/%s", buildEnv.SnapBucket, br.snapshotObjectName())
+	return buildEnv.SnapshotURL(br.name, br.rev)
 }
 
 func (st *buildStatus) writeSnapshot() (err error) {

@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 )
 
@@ -62,7 +63,10 @@ func create(args []string) error {
 		}
 	}
 
-	cc := coordinatorClient()
+	cc, err := buildlet.NewCoordinatorClientFromFlags()
+	if err != nil {
+		return fmt.Errorf("failed to create coordinator client: %v", err)
+	}
 	client, err := cc.CreateBuildlet(builderType)
 	if err != nil {
 		return fmt.Errorf("failed to create buildlet: %v", err)

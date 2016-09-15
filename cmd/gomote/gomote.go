@@ -25,17 +25,12 @@ import (
 	"os"
 	"sort"
 
-	"golang.org/x/build"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 )
 
 var (
-	user = flag.String("user", username(), "gomote server username. You must have the token for user-$USER. The error message will say where to put it.")
-
-	staging = flag.Bool("staging", false, "if true, use the staging build coordinator and buildlets")
-
-	buildEnv = buildenv.Production
+	buildEnv *buildenv.Environment
 )
 
 type command struct {
@@ -79,20 +74,6 @@ func registerCommand(name, des string, run func([]string) error) {
 	}
 }
 
-func coordinatorClient() *buildlet.CoordinatorClient {
-	inst := build.ProdCoordinator
-	if *staging {
-		inst = build.StagingCoordinator
-	}
-	return &buildlet.CoordinatorClient{
-		Auth: buildlet.UserPass{
-			Username: "user-" + *user,
-			Password: userToken(),
-		},
-		Instance: inst,
-	}
-}
-
 func registerCommands() {
 	registerCommand("create", "create a buildlet", create)
 	registerCommand("destroy", "destroy a buildlet", destroy)
@@ -109,12 +90,11 @@ func registerCommands() {
 }
 
 func main() {
+	buildlet.RegisterFlags()
 	registerCommands()
 	flag.Usage = usage
 	flag.Parse()
-	if *staging {
-		buildEnv = buildenv.Staging
-	}
+	buildEnv = buildenv.FromFlags()
 	args := flag.Args()
 	if len(args) == 0 {
 		usage()

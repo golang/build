@@ -28,7 +28,10 @@ func list(args []string) error {
 		fs.Usage()
 	}
 
-	cc := coordinatorClient()
+	cc, err := buildlet.NewCoordinatorClientFromFlags()
+	if err != nil {
+		log.Fatal(err)
+	}
 	rbs, err := cc.RemoteBuildlets()
 	if err != nil {
 		log.Fatal(err)
@@ -41,7 +44,10 @@ func list(args []string) error {
 }
 
 func clientAndConf(name string) (bc *buildlet.Client, conf dashboard.BuildConfig, err error) {
-	cc := coordinatorClient()
+	cc, err := buildlet.NewCoordinatorClientFromFlags()
+	if err != nil {
+		return
+	}
 
 	rbs, err := cc.RemoteBuildlets()
 	if err != nil {
@@ -71,6 +77,9 @@ func namedClient(name string) (*buildlet.Client, error) {
 	if strings.Contains(name, ":") {
 		return buildlet.NewClient(name, buildlet.NoKeyPair), nil
 	}
-	cc := coordinatorClient()
+	cc, err := buildlet.NewCoordinatorClientFromFlags()
+	if err != nil {
+		return nil, err
+	}
 	return cc.NamedBuildlet(name)
 }

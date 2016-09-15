@@ -7,15 +7,20 @@ package buildlet
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/build"
+	"golang.org/x/build/buildenv"
 )
 
 type UserPass struct {
@@ -156,4 +161,83 @@ func (cc *CoordinatorClient) NamedBuildlet(name string) (*Client, error) {
 	}
 	c.setCommon()
 	return c, nil
+}
+
+var (
+	flagsRegistered bool
+	gomoteUserFlag  string
+)
+
+// RegisterFlags registers "user" and "staging" flags that control the
+// behavior of NewCoordinatorClientFromFlags. These are used by remote
+// client commands like gomote.
+func RegisterFlags() {
+	if !flagsRegistered {
+		buildenv.RegisterFlags()
+		flag.StringVar(&gomoteUserFlag, "user", username(), "gomote server username")
+		flagsRegistered = true
+	}
+}
+
+// username finds the user's username in the environment.
+func username() string {
+	if runtime.GOOS == "windows" {
+		return os.Getenv("USERNAME")
+	}
+	return os.Getenv("USER")
+}
+
+// configDir finds the OS-dependent config dir.
+func configDir() string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(os.Getenv("APPDATA"), "Gomote")
+	}
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, "gomote")
+	}
+	return filepath.Join(os.Getenv("HOME"), ".config", "gomote")
+}
+
+// userToken reads the gomote token from the user's home directory.
+func userToken() (string, error) {
+	if gomoteUserFlag == "" {
+		panic("userToken called with user flag empty")
+	}
+	keyDir := configDir()
+	baseFile := "user-" + gomoteUserFlag + ".token"
+	if buildenv.FromFlags() == buildenv.Staging {
+		baseFile = "staging-" + baseFile
+	}
+	tokenFile := filepath.Join(keyDir, baseFile)
+	slurp, err := ioutil.ReadFile(tokenFile)
+	if os.IsNotExist(err) {
+		return "", fmt.Errorf("Missing file %s for user %q. Change --user or obtain a token and place it there.",
+			tokenFile, gomoteUserFlag)
+	}
+	return strings.TrimSpace(string(slurp)), err
+}
+
+// NewCoordinatorClientFromFlags constructs a CoordinatorClient for the current user.
+func NewCoordinatorClientFromFlags() (*CoordinatorClient, error) {
+	if !flagsRegistered {
+		return nil, errors.New("RegisterFlags not called")
+	}
+	inst := build.ProdCoordinator
+	if buildenv.FromFlags() == buildenv.Staging {
+		inst = build.StagingCoordinator
+	}
+	if gomoteUserFlag == "" {
+		return nil, errors.New("user flag must be specified")
+	}
+	tok, err := userToken()
+	if err != nil {
+		return nil, err
+	}
+	return &CoordinatorClient{
+		Auth: UserPass{
+			Username: "user-" + gomoteUserFlag,
+			Password: tok,
+		},
+		Instance: inst,
+	}, nil
 }

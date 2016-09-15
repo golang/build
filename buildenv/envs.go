@@ -7,6 +7,7 @@
 package buildenv
 
 import (
+	"flag"
 	"fmt"
 	"strings"
 )
@@ -112,6 +113,14 @@ func (e Environment) Region() string {
 	return e.Zone[:strings.LastIndex(e.Zone, "-")]
 }
 
+// SnapshotURL returns the absolute URL of the .tar.gz containing a
+// built Go tree for the builderType and Go rev (40 character Git
+// commit hash). The tarball is suitable for passing to
+// (*buildlet.Client).PutTarFromURL.
+func (e Environment) SnapshotURL(builderType, rev string) string {
+	return fmt.Sprintf("https://storage.googleapis.com/%s/go/%s/%s.tar.gz", e.SnapBucket, builderType, rev)
+}
+
 // DashBase returns the base URL of the build dashboard, ending in a slash.
 func (e Environment) DashBase() string {
 	// TODO(quentin): Should we really default to production? That's what the old code did.
@@ -195,4 +204,29 @@ var possibleEnvs = map[string]*Environment{
 	"dev":                Development,
 	"symbolic-datum-552": Production,
 	"go-dashboard-dev":   Staging,
+}
+
+var (
+	registeredFlags bool
+	stagingFlag     bool
+)
+
+// RegisterFlags registers the "staging" flag. It is required if FromFlags is used.
+func RegisterFlags() {
+	if !registeredFlags {
+		flag.BoolVar(&stagingFlag, "staging", false, "use the staging build coordinator and buildlets")
+		registeredFlags = true
+	}
+}
+
+// FromFlags returns the build environment specified from flags.
+// By default it returns the production environment.
+func FromFlags() *Environment {
+	if !registeredFlags {
+		panic("FromFlags called without RegisterFlags")
+	}
+	if stagingFlag {
+		return Staging
+	}
+	return Production
 }
