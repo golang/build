@@ -156,7 +156,7 @@ func (st *State) CreateMac(ctx context.Context, minor int) (err error) {
 		"-vm", name,
 		"-link=true",
 		"-persist=false",
-		"-ds=NetApp-1",
+		"-ds=Pure1-1",
 		"-disk", fmt.Sprintf("%s/osx_%d_frozen.vmdk", netAppDir, minor),
 	); err != nil {
 		return err
@@ -297,11 +297,11 @@ func govcJSONDecode(ctx context.Context, dst interface{}, args ...string) error 
 }
 
 // findFrozenDir returns the name of the top-level directory on the
-// NetApp-1 shared datastore containing a directory starting with
+// Pure1-1 shared datastore containing a directory starting with
 // "osx_<minor>_frozen". It might be that just that, or have a suffix
 // like "_1" or "_2".
 func findFrozenDir(ctx context.Context, minor int) (string, error) {
-	out, err := exec.CommandContext(ctx, "govc", "datastore.ls", "-ds=NetApp-1").Output()
+	out, err := exec.CommandContext(ctx, "govc", "datastore.ls", "-ds=Pure1-1").Output()
 	if err != nil {
 		return "", err
 	}
