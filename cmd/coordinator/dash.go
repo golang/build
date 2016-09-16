@@ -25,17 +25,6 @@ import (
 	"cloud.google.com/go/compute/metadata"
 )
 
-// dashBase returns the base URL of the build dashboard.
-// It must be called after initGCE (so not at init time).
-func dashBase() string {
-	// TODO(bradfitz,evanbrown): use buildenv instead of global variable.
-	// In fact, kill the inStaging variable altogether.
-	if inStaging {
-		return "https://go-dashboard-dev.appspot.com/"
-	}
-	return "https://build.golang.org/"
-}
-
 // dash is copied from the builder binary. It runs the given method and command on the dashboard.
 //
 // TODO(bradfitz,adg): unify this somewhere?
@@ -55,7 +44,7 @@ func dash(meth, cmd string, args url.Values, req, resp interface{}) error {
 	}
 	var r *http.Response
 	var err error
-	cmd = dashBase() + cmd + "?" + argsCopy.Encode()
+	cmd = buildEnv.DashBase() + cmd + "?" + argsCopy.Encode()
 	switch meth {
 	case "GET":
 		if req != nil {
@@ -157,7 +146,7 @@ func (st *buildStatus) pingDashboard() {
 		args.Set("hash", st.subRev)
 		args.Set("gohash", st.rev)
 	}
-	u := dashBase() + "building?" + args.Encode()
+	u := buildEnv.DashBase() + "building?" + args.Encode()
 	for {
 		st.mu.Lock()
 		done := st.done

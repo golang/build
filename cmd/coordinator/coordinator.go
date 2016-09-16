@@ -663,7 +663,7 @@ func findWorkLoop(work chan<- builderRev) {
 
 func findWork(work chan<- builderRev) error {
 	var bs types.BuildStatus
-	res, err := http.Get(dashBase() + "?mode=json")
+	res, err := http.Get(buildEnv.DashBase() + "?mode=json")
 	if err != nil {
 		return err
 	}

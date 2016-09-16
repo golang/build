@@ -66,7 +66,7 @@ func startWatchers() {
 	}
 	addWatcher(watchConfig{
 		repo:     "https://go.googlesource.com/go",
-		dash:     dashBase(),
+		dash:     buildEnv.DashBase(),
 		mirror:   mirror,
 		netHost:  true,
 		httpAddr: gitArchiveAddr,
@@ -74,7 +74,7 @@ func startWatchers() {
 	if false {
 		// TODO(cmang,adg): only use one watcher or the other, depending on which build
 		// coordinator is in use.
-		addWatcher(watchConfig{repo: "https://go.googlesource.com/gofrontend", dash: dashBase() + "gccgo/"})
+		addWatcher(watchConfig{repo: "https://go.googlesource.com/gofrontend", dash: buildEnv.DashBase() + "gccgo/"})
 	}
 
 	stopWatchers() // clean up before we start new ones

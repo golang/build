@@ -67,6 +67,9 @@ type Environment struct {
 	// will be set to a random value at runtime.
 	KubePassword string
 
+	// DashURL is the base URL of the build dashboard, ending in a slash.
+	DashURL string
+
 	// CoordinatorURL is the location from which the coordinator
 	// binary will be downloaded.
 	// This is only used by cmd/coordinator/buildongce/create.go when
@@ -109,6 +112,15 @@ func (e Environment) Region() string {
 	return e.Zone[:strings.LastIndex(e.Zone, "-")]
 }
 
+// DashBase returns the base URL of the build dashboard, ending in a slash.
+func (e Environment) DashBase() string {
+	// TODO(quentin): Should we really default to production? That's what the old code did.
+	if e.DashURL != "" {
+		return e.DashURL
+	}
+	return Production.DashURL
+}
+
 // ByProjectID returns an Environment for the specified
 // project ID. It is currently limited to the symbolic-datum-552
 // and go-dashboard-dev projects.
@@ -144,6 +156,7 @@ var Staging = &Environment{
 	KubeMaxNodes:    2,
 	KubeName:        "buildlets",
 	KubeMachineType: "n1-standard-32",
+	DashURL:         "https://go-dashboard-dev.appspot.com/",
 	CoordinatorURL:  "https://storage.googleapis.com/dev-go-builder-data/coordinator",
 	CoordinatorName: "farmer",
 	BuildletBucket:  "dev-go-builder-data",
@@ -164,6 +177,7 @@ var Production = &Environment{
 	KubeMaxNodes:    5,
 	KubeName:        "buildlets",
 	KubeMachineType: "n1-standard-32",
+	DashURL:         "https://build.golang.org/",
 	CoordinatorURL:  "https://storage.googleapis.com/go-builder-data/coordinator",
 	CoordinatorName: "farmer",
 	BuildletBucket:  "go-builder-data",
