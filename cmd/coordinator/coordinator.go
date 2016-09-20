@@ -542,7 +542,7 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !st.hasEvent("check_dist") {
+	if !st.hasEvent("make_and_test") {
 		fmt.Fprintf(w, "\n\n(buildlet still starting; no live streaming. reload manually to see status)\n")
 		return
 	}
@@ -1418,19 +1418,15 @@ func (st *buildStatus) build() error {
 	}
 	fmt.Fprint(st, "\n\n")
 
-	distSpan := st.createSpan("check_dist") // warning: magic event named used by handleLogs
-	hasDist, err := st.hasDistTest()
-	distSpan.done(err)
-	if err != nil {
-		return err
-	}
+	makeTest := st.createSpan("make_and_test") // warning: magic event named used by handleLogs
 
 	var remoteErr error
-	if st.conf.SplitMakeRun() && hasDist {
+	if st.conf.SplitMakeRun() {
 		remoteErr, err = st.runAllSharded()
 	} else {
 		remoteErr, err = st.runAllLegacy()
 	}
+	makeTest.done(err)
 
 	// bc (aka st.bc) may be invalid past this point, so let's
 	// close it to make sure we we don't accidentally use it.
@@ -1511,16 +1507,6 @@ func (st *buildStatus) buildRecord() *BuildRecord {
 		}
 	}
 	return rec
-}
-
-// hasDistTest reports whether the version of Go installed to
-// the buildlet has the "go tool dist test" command.
-func (st *buildStatus) hasDistTest() (ok bool, err error) {
-	return ok, st.bc.ListDir("go/src/cmd/dist", buildlet.ListDirOpts{}, func(e buildlet.DirEntry) {
-		if strings.HasSuffix(e.Name(), "test.go") {
-			ok = true
-		}
-	})
 }
 
 // runAllSharded runs make.bash and then shards the test execution.
