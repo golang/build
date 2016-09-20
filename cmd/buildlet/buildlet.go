@@ -462,6 +462,7 @@ func handleWriteTGZ(w http.ResponseWriter, r *http.Request) {
 	baseDir := *workDir
 	if dir := urlParam.Get("dir"); dir != "" {
 		if !validRelativeDir(dir) {
+			log.Printf("writetgz: bogus dir %q", dir)
 			http.Error(w, "bogus dir", http.StatusBadRequest)
 			return
 		}
@@ -472,49 +473,55 @@ func handleWriteTGZ(w http.ResponseWriter, r *http.Request) {
 		// This lets clients do a blind write to it and not do extra work.
 		if r.Method == "POST" && dir == "go1.4" {
 			if fi, err := os.Stat(baseDir); err == nil && fi.IsDir() {
-				log.Printf("skipping URL puttar to go1.4 dir; already exists")
+				log.Printf("writetgz: skipping URL puttar to go1.4 dir; already exists")
 				io.WriteString(w, "SKIP")
 				return
 			}
 		}
 
 		if err := os.MkdirAll(baseDir, 0755); err != nil {
+			log.Printf("writetgz: %v", err)
 			http.Error(w, "mkdir of base: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 
 	var tgz io.Reader
+	var urlStr string
 	switch r.Method {
 	case "PUT":
 		tgz = r.Body
+		log.Printf("writetgz: untarring Request.Body into %s", baseDir)
 	case "POST":
-		urlStr := r.FormValue("url")
+		urlStr = r.FormValue("url")
 		if urlStr == "" {
+			log.Printf("writetgz: missing url POST param")
 			http.Error(w, "missing url POST param", http.StatusBadRequest)
 			return
 		}
+		t0 := time.Now()
 		res, err := http.Get(urlStr)
 		if err != nil {
-			log.Printf("Failed to fetch tgz URL %s: %v", urlStr, err)
+			log.Printf("writetgz: failed to fetch tgz URL %s: %v", urlStr, err)
 			http.Error(w, fmt.Sprintf("fetching URL %s: %v", urlStr, err), http.StatusInternalServerError)
 			return
 		}
 		defer res.Body.Close()
 		if res.StatusCode != http.StatusOK {
-			log.Printf("Failed to fetch tgz URL %s: status=%v", urlStr, res.Status)
+			log.Printf("writetgz: failed to fetch tgz URL %s: status=%v", urlStr, res.Status)
 			http.Error(w, fmt.Sprintf("fetching provided url: %s", res.Status), http.StatusInternalServerError)
 			return
 		}
 		tgz = res.Body
+		log.Printf("writetgz: untarring %s (got headers in %v) into %s", urlStr, time.Since(t0), baseDir)
 	default:
+		log.Printf("writetgz: invalid method %q", r.Method)
 		http.Error(w, "requires PUT or POST method", http.StatusBadRequest)
 		return
 	}
 
 	err := untar(tgz, baseDir)
 	if err != nil {
-		log.Printf("untar failure: %v", err)
 		status := http.StatusInternalServerError
 		if he, ok := err.(httpStatuser); ok {
 			status = he.httpStatus()
@@ -583,7 +590,18 @@ func writeFile(r io.Reader, path string, mode os.FileMode) error {
 }
 
 // untar reads the gzip-compressed tar file from r and writes it into dir.
-func untar(r io.Reader, dir string) error {
+func untar(r io.Reader, dir string) (err error) {
+	t0 := time.Now()
+	nFiles := 0
+	madeDir := map[string]bool{}
+	defer func() {
+		td := time.Since(t0)
+		if err == nil {
+			log.Printf("extracted tarball into %s: %d files, %d dirs (%v)", dir, nFiles, len(madeDir), td)
+		} else {
+			log.Printf("error extracting tarball into %s after %d files, %d dirs, %v: %v", dir, nFiles, len(madeDir), td, err)
+		}
+	}()
 	zr, err := gzip.NewReader(r)
 	if err != nil {
 		return badRequest("requires gzip-compressed body: " + err.Error())
@@ -612,7 +630,13 @@ func untar(r io.Reader, dir string) error {
 			// already be made by a directory entry in the tar
 			// beforehand. Thus, don't check for errors; the next
 			// write will fail with the same error.
-			os.MkdirAll(filepath.Dir(abs), 0755)
+			dir := filepath.Dir(abs)
+			if !madeDir[dir] {
+				if err := os.MkdirAll(filepath.Dir(abs), 0755); err != nil {
+					return err
+				}
+				madeDir[dir] = true
+			}
 			wf, err := os.OpenFile(abs, os.O_RDWR|os.O_CREATE|os.O_TRUNC, mode.Perm())
 			if err != nil {
 				return err
@@ -627,7 +651,6 @@ func untar(r io.Reader, dir string) error {
 			if n != f.Size {
 				return fmt.Errorf("only wrote %d bytes to %s; expected %d", n, abs, f.Size)
 			}
-			log.Printf("wrote %s", abs)
 			if !f.ModTime.IsZero() {
 				if err := os.Chtimes(abs, f.ModTime, f.ModTime); err != nil {
 					// benign error. Gerrit doesn't even set the
@@ -638,10 +661,12 @@ func untar(r io.Reader, dir string) error {
 					log.Printf("error changing modtime: %v", err)
 				}
 			}
+			nFiles++
 		case mode.IsDir():
 			if err := os.MkdirAll(abs, 0755); err != nil {
 				return err
 			}
+			madeDir[abs] = true
 		default:
 			return badRequest(fmt.Sprintf("tar file entry %s contained unsupported file type %v", f.Name, mode))
 		}
