@@ -16,7 +16,7 @@ import (
 func TestWriter(t *testing.T) {
 	var in bytes.Buffer
 	big := strings.Repeat("a", 4<<10)
-	for in.Len() < 10<<20 {
+	for in.Len() < 20<<20 {
 		for i := 0; i < 256; i++ {
 			in.WriteByte(byte(i))
 			in.WriteString(big)
@@ -27,7 +27,6 @@ func TestWriter(t *testing.T) {
 	zw := NewWriter(&zbuf)
 	zw.ChunkSize = 1 << 20
 	zw.Parallel = 4
-	zw.UseSystemGzip = true
 	t0 := time.Now()
 	if n, err := io.Copy(zw, bytes.NewReader(in.Bytes())); err != nil {
 		t.Fatalf("Copy: %v", err)
