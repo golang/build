@@ -7,6 +7,7 @@ package devapp
 import (
 	"encoding/json"
 	"fmt"
+	"image/color"
 	"math"
 	"net/http"
 	"regexp"
@@ -17,9 +18,11 @@ import (
 	"golang.org/x/build/godash"
 	gdstats "golang.org/x/build/godash/stats"
 
+	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/gg"
 	"github.com/aclements/go-gg/ggstat"
 	"github.com/aclements/go-gg/table"
+	"github.com/aclements/go-moremath/stats"
 	"github.com/kylelemons/godebug/pretty"
 	"golang.org/x/net/context"
 	"google.golang.org/appengine"
@@ -223,6 +226,38 @@ func (o openCount) F(input table.Grouping) table.Grouping {
 	})
 }
 
+// windowedPercentiles computes the 0, 25, 50, 75, and 100th
+// percentile of the values in column Y over the range (X[i]-Window,
+// X[i]).
+type windowedPercentiles struct {
+	Window time.Duration
+	// X must name a time.Time column, Y must name a time.Duration column.
+	X, Y string
+}
+
+// TODO: This ought to be able to operate on any float64-convertible
+// column, but MapCols doesn't use slice.Convert.
+func (p windowedPercentiles) F(input table.Grouping) table.Grouping {
+	return table.MapCols(input, func(xs []time.Time, ys []time.Duration, outMin []time.Duration, out25 []time.Duration, out50 []time.Duration, out75 []time.Duration, outMax []time.Duration, points []int) {
+		var ysFloat []float64
+		slice.Convert(&ysFloat, ys)
+		for i, x := range xs {
+			start := x.Add(-p.Window)
+			iStart := sort.Search(len(xs), func(j int) bool { return xs[j].After(start) })
+
+			data := ysFloat[iStart : i+1]
+			points[i] = len(data) // XXX
+
+			s := stats.Sample{Xs: data}.Copy().Sort()
+
+			min, max := s.Bounds()
+			outMin[i], outMax[i] = time.Duration(min), time.Duration(max)
+			p25, p50, p75 := s.Percentile(.25), s.Percentile(.5), s.Percentile(.75)
+			out25[i], out50[i], out75[i] = time.Duration(p25), time.Duration(p50), time.Duration(p75)
+		}
+	}, p.X, p.Y)("min "+p.Y, "p25 "+p.Y, "median "+p.Y, "p75 "+p.Y, "max "+p.Y, "points "+p.Y)
+}
+
 func argtoi(req *http.Request, arg string) (int, bool, error) {
 	val := req.Form.Get(arg)
 	if val != "" {
@@ -239,14 +274,23 @@ func plot(w http.ResponseWriter, req *http.Request, stats table.Grouping) error 
 	plot := gg.NewPlot(stats)
 	plot.Stat(releaseFilter{})
 	for _, aes := range []string{"x", "y"} {
+		var s gg.ContinuousScaler
 		switch scale := req.Form.Get(aes + "scale"); scale {
 		case "log":
-			ls := gg.NewLogScaler(10)
+			s = gg.NewLogScaler(10)
 			// Our plots tend to go to 0, which makes log scales unhappy.
-			ls.SetMin(1)
-			plot.SetScale(aes, ls)
+			s.SetMin(1)
 		case "lin":
-			s := gg.NewLinearScaler()
+			s = gg.NewLinearScaler()
+		case "":
+			if aes == "y" {
+				s = gg.NewLinearScaler()
+				s.Include(0)
+			}
+		default:
+			return fmt.Errorf("unknown %sscale %q", aes, scale)
+		}
+		if s != nil {
 			max, ok, err := argtoi(req, aes+"max")
 			if err != nil {
 				return err
@@ -260,14 +304,6 @@ func plot(w http.ResponseWriter, req *http.Request, stats table.Grouping) error 
 				s.SetMin(min)
 			}
 			plot.SetScale(aes, s)
-		case "":
-			if aes == "y" {
-				s := gg.NewLinearScaler()
-				s.Include(0)
-				plot.SetScale(aes, s)
-			}
-		default:
-			return fmt.Errorf("unknown %sscale %q", aes, scale)
 		}
 	}
 	switch pivot := req.Form.Get("pivot"); pivot {
@@ -368,9 +404,53 @@ func plot(w http.ResponseWriter, req *http.Request, stats table.Grouping) error 
 				X: column,
 				Y: "probability density",
 			})
+		case "percentile":
+			window := 30 * 24 * time.Hour
+			if win := req.Form.Get("window"); win != "" {
+				var err error
+				window, err = time.ParseDuration(win)
+				if err != nil {
+					return err
+				}
+			}
+			plot.Stat(windowedPercentiles{
+				Window: window,
+				X:      column,
+				Y:      "Open",
+			})
+			// plot.Stat(ggstat.Agg(column)(ggstat.AggMin("Open"), ggstat.AggMax("Open"), ggstat.AggPercentile("median", .5, "Open"), ggstat.AggPercentile("p25", .25, "Open"), ggstat.AggPercentile("p75", .75, "Open")))
+			/*
+				plot.Add(gg.LayerPaths{
+					X: column,
+					Y: "points Open",
+				})
+			*/
+			plot.Add(gg.LayerArea{
+				X:     column,
+				Upper: "max Open",
+				Lower: "min Open",
+				Fill:  plot.Const(color.Gray{192}),
+			})
+			plot.Add(gg.LayerArea{
+				X:     column,
+				Upper: "p75 Open",
+				Lower: "p25 Open",
+				Fill:  plot.Const(color.Gray{128}),
+			})
+			plot.Add(gg.LayerPaths{
+				X: column,
+				Y: "median Open",
+			})
+		default:
+			return fmt.Errorf("unknown agg %q", agg)
 		}
 	default:
 		return fmt.Errorf("unknown pivot %q", pivot)
+	}
+	if req.Form.Get("raw") != "" {
+		w.Header().Set("Content-Type", "text/plain")
+		table.Fprint(w, plot.Data())
+		return nil
 	}
 	w.Header().Set("Content-Type", "image/svg+xml")
 	plot.WriteSVG(w, 1200, 600)

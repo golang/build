@@ -7,9 +7,10 @@
   <li><code>xscale</code>
     <ul>
       <li><code>xscale=log</code> - log scale</li>
-      <li><code>xscale=lin</code> - linear scale. Also supports <code>xmin</code> and <code>xmax</code> parameters.</li>
+      <li><code>xscale=lin</code> - linear scale.</li>
   </ul></li>
-  <li><code>yscale</code> - same as xscale but for y axis</li>
+  <li><code>x{min,max}</code> - set min and max for scale. Only take effect if xscale is also supplied.</li>
+  <li><code>y{scale,min,max}</code> - same as x* but for y axis</li>
   <li><code>pivot</code> - predefined graphs
     <ul>
       <li><code>pivot=opencount</code> - plot number of open issues over time. With <code>group=release</code> plots the number of open issues by release over time.</li>
@@ -23,7 +24,7 @@
           </li>
           <li><code>column</code> - column to bucket issues by
             <ul>
-              <li><code>column={Created,Closed,Updated}{,Day,Month,Year}</code> - time, day, month, or year the issue was created, closed, or updated</li>
+              <li><code>column={Created,Closed,Updated}{,Day,Week,Month,Year}</code> - time, day, week, month, or year the issue was created, closed, or updated</li>
               <li><code>column=UpdateAge</code> - time since issue was last updated</li>
             </ul>
           </li>
@@ -33,6 +34,11 @@
               <li><code>agg=ecdf</code> - CDF of values</li>
               <li><code>agg=bin</code> - automatically chosen histogram bins</li>
               <li><code>agg=density</code> - best fit PDF of values</li>
+              <li><code>agg=percentile</code> - plots percentiles of a second column (currently hardcoded to <code>Open</code>), over a moving window (defaulting to 30 days)
+                <ul>
+                  <li><code>window=24h</code> - time.Duration over which to window percentiles</li>
+                </ul>
+              </li>
             </ul>
         </ul>
       </li>
