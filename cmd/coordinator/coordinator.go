@@ -1341,7 +1341,7 @@ func (st *buildStatus) expectedBuildletStartDuration() time.Duration {
 // ready, such that they're ready when make.bash is done. But we don't
 // want to start too early, lest we waste idle resources during make.bash.
 func (st *buildStatus) getHelpersReadySoon() {
-	if st.isSubrepo() || st.conf.NumTestHelpers(st.isTry()) == 0 {
+	if st.isSubrepo() || st.conf.NumTestHelpers(st.isTry()) == 0 || st.conf.IsReverse {
 		return
 	}
 	time.AfterFunc(st.expectedMakeBashDuration()-st.expectedBuildletStartDuration(),
@@ -1819,9 +1819,23 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 		return
 	}
 	for _, test := range strings.Fields(buf.String()) {
+		if st.shouldSkipTest(test) {
+			continue
+		}
 		names = append(names, test)
 	}
 	return names, nil, nil
+}
+
+// shouldSkipTest reports whether this test should be skipped.  We
+// only do this for slow builders running redundant tests. (That is,
+// tests which have identical behavior across different ports)
+func (st *buildStatus) shouldSkipTest(testName string) bool {
+	switch testName {
+	case "api":
+		return st.isTry() && st.name != "linux-amd64"
+	}
+	return false
 }
 
 func (st *buildStatus) newTestSet(names []string) *testSet {
