@@ -256,7 +256,7 @@ func (b *Build) make() error {
 	}
 
 	var hostArch string // non-empty if we're cross-compiling (s390x)
-	if b.MakeOnly && bc.KubeImage != "" && (bc.GOARCH() != "amd64" && bc.GOARCH() != "386") {
+	if b.MakeOnly && bc.IsKube() && (bc.GOARCH() != "amd64" && bc.GOARCH() != "386") {
 		hostArch = "amd64"
 	}
 

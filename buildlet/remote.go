@@ -58,17 +58,25 @@ func (cc *CoordinatorClient) client() (*http.Client, error) {
 	return cc.hc, nil
 }
 
-// CreateBuildlet creates a new buildlet of the given type on cc.
+// CreateBuildlet creates a new buildlet of the given builder type on
+// cc.
+//
+// This takes a builderType (instead of a hostType), but the
+// returned buildlet can be used as any builder that has the same
+// underlying buildlet type. For instance, a linux-amd64 buildlet can
+// act as either linux-amd64 or linux-386-387.
+//
 // It may expire at any time.
 // To release it, call Client.Destroy.
-func (cc *CoordinatorClient) CreateBuildlet(buildletType string) (*Client, error) {
+func (cc *CoordinatorClient) CreateBuildlet(builderType string) (*Client, error) {
 	hc, err := cc.client()
 	if err != nil {
 		return nil, err
 	}
 	ipPort, _ := cc.instance().TLSHostPort() // must succeed if client did
 	form := url.Values{
-		"type": {buildletType},
+		"version":     {"20160922"}, // checked by cmd/coordinator/remote.go
+		"builderType": {builderType},
 	}
 	req, _ := http.NewRequest("POST",
 		"https://"+ipPort+"/buildlet/create",
@@ -100,10 +108,11 @@ func (cc *CoordinatorClient) CreateBuildlet(buildletType string) (*Client, error
 }
 
 type RemoteBuildlet struct {
-	Type    string // "openbsd-386"
-	Name    string // "buildlet-adg-openbsd-386-2"
-	Created time.Time
-	Expires time.Time
+	HostType    string // "host-linux-kubestd"
+	BuilderType string // "linux-386-387"
+	Name        string // "buildlet-adg-openbsd-386-2"
+	Created     time.Time
+	Expires     time.Time
 }
 
 func (cc *CoordinatorClient) RemoteBuildlets() ([]RemoteBuildlet, error) {
@@ -113,7 +122,6 @@ func (cc *CoordinatorClient) RemoteBuildlets() ([]RemoteBuildlet, error) {
 	}
 	ipPort, _ := cc.instance().TLSHostPort() // must succeed if client did
 	req, _ := http.NewRequest("GET", "https://"+ipPort+"/buildlet/list", nil)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth(cc.Auth.Username, cc.Auth.Password)
 	res, err := hc.Do(req)
 	if err != nil {

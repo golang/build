@@ -42,6 +42,7 @@ import (
 	"time"
 
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/dashboard"
 	"golang.org/x/build/revdial"
 	"golang.org/x/net/context"
 )
@@ -63,28 +64,24 @@ type reverseBuildletPool struct {
 
 var errInUse = errors.New("all buildlets are in use")
 
-func (p *reverseBuildletPool) tryToGrab(machineType string) (*buildlet.Client, error) {
+func (p *reverseBuildletPool) tryToGrab(hostType string) (*buildlet.Client, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	usableCount := 0
+	candidates := 0
 	for _, b := range p.buildlets {
-		usable := false
-		for _, m := range b.modes {
-			if m == machineType {
-				usable = true
-				usableCount++
-				break
-			}
+		isCandidate := b.hostType == hostType
+		if isCandidate {
+			candidates++
 		}
-		if usable && b.inUseAs == "" {
+		if isCandidate && !b.inUse {
 			// Found an unused match.
-			b.inUseAs = machineType
+			b.inUse = true
 			b.inUseTime = time.Now()
 			return b.client, nil
 		}
 	}
-	if usableCount == 0 {
-		return nil, fmt.Errorf("no buildlets registered for machine type %q", machineType)
+	if candidates == 0 {
+		return nil, fmt.Errorf("no buildlets registered for host type %q", hostType)
 	}
 	return nil, errInUse
 }
@@ -127,14 +124,15 @@ func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 		return false
 	}
 	p.mu.Lock()
-	if b.inUseAs == "health" { // sanity check
+	if b.inHealthCheck { // sanity check
 		panic("previous health check still running")
 	}
-	if b.inUseAs != "" {
+	if b.inUse {
 		p.mu.Unlock()
 		return true // skip busy buildlets
 	}
-	b.inUseAs = "health"
+	b.inUse = true
+	b.inHealthCheck = true
 	b.inUseTime = time.Now()
 	res := make(chan error, 1)
 	go func() {
@@ -154,7 +152,7 @@ func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 
 	if err != nil {
 		// remove bad buildlet
-		log.Printf("Health check fail; removing reverse buildlet %s %v: %v", b.client, b.modes, err)
+		log.Printf("Health check fail; removing reverse buildlet %v (type %v): %v", b.hostname, b.hostType, err)
 		go b.client.Close()
 		go p.nukeBuildlet(b.client)
 		return false
@@ -163,11 +161,12 @@ func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if b.inUseAs != "health" {
+	if !b.inHealthCheck {
 		// buildlet was grabbed while lock was released; harmless.
 		return true
 	}
-	b.inUseAs = ""
+	b.inUse = false
+	b.inHealthCheck = false
 	b.inUseTime = time.Now()
 	p.noteBuildletAvailable()
 	return true
@@ -178,23 +177,23 @@ var (
 	highPriorityBuildlet   = make(map[string]chan *buildlet.Client)
 )
 
-func highPriChan(typ string) chan *buildlet.Client {
+func highPriChan(hostType string) chan *buildlet.Client {
 	highPriorityBuildletMu.Lock()
 	defer highPriorityBuildletMu.Unlock()
-	if c, ok := highPriorityBuildlet[typ]; ok {
+	if c, ok := highPriorityBuildlet[hostType]; ok {
 		return c
 	}
 	c := make(chan *buildlet.Client)
-	highPriorityBuildlet[typ] = c
+	highPriorityBuildlet[hostType] = c
 	return c
 }
 
-func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, machineType string, lg logger) (*buildlet.Client, error) {
+func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg logger) (*buildlet.Client, error) {
 	seenErrInUse := false
 	isHighPriority, _ := ctx.Value(highPriorityOpt{}).(bool)
-	sp := lg.createSpan("wait_static_builder", machineType)
+	sp := lg.createSpan("wait_static_builder", hostType)
 	for {
-		b, err := p.tryToGrab(machineType)
+		b, err := p.tryToGrab(hostType)
 		if err == errInUse {
 			if !seenErrInUse {
 				lg.logEventTime("waiting_machine_in_use")
@@ -202,7 +201,7 @@ func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, machineType strin
 			}
 			var highPri chan *buildlet.Client
 			if isHighPriority {
-				highPri = highPriChan(machineType)
+				highPri = highPriChan(hostType)
 			}
 			select {
 			case <-ctx.Done():
@@ -222,7 +221,7 @@ func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, machineType strin
 			return nil, err
 		} else {
 			select {
-			case highPriChan(machineType) <- b:
+			case highPriChan(hostType) <- b:
 				// Somebody else was more important.
 			default:
 				sp.done(nil)
@@ -245,113 +244,84 @@ func (p *reverseBuildletPool) cleanedBuildlet(b *buildlet.Client, lg logger) (*b
 }
 
 func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
-	// total maps from a builder type to the number of machines which are
+	// total maps from a host type to the number of machines which are
 	// capable of that role.
 	total := make(map[string]int)
-	// inUse and inUseOther track the number of machines using machines.
-	// inUse is how many machines are building that type, and inUseOther counts
-	// how many machines are occupied doing a similar role on that hardware.
-	// e.g. "darwin-amd64-10_10" occupied as a "darwin-arm-a5ios",
-	// or "linux-arm" as a "linux-arm-arm5" count as inUseOther.
+	// inUse track the number of non-idle host types.
 	inUse := make(map[string]int)
-	inUseOther := make(map[string]int)
 
-	var machineBuf bytes.Buffer
+	var buf bytes.Buffer
 	p.mu.Lock()
 	buildlets := append([]*reverseBuildlet(nil), p.buildlets...)
-	sort.Sort(byModeThenHostname(buildlets))
+	sort.Sort(byTypeThenHostname(buildlets))
 	for _, b := range buildlets {
 		machStatus := "<i>idle</i>"
-		if b.inUseAs != "" {
-			machStatus = "working as <b>" + b.inUseAs + "</b>"
+		if b.inUse {
+			machStatus = "working"
 		}
-		fmt.Fprintf(&machineBuf, "<li>%s (%s) version %s, %s: connected %v, %s for %v</li>\n",
+		fmt.Fprintf(&buf, "<li>%s (%s) version %s, %s: connected %v, %s for %v</li>\n",
 			b.hostname,
 			b.conn.RemoteAddr(),
 			b.version,
-			strings.Join(b.modes, ", "),
+			b.hostType,
 			time.Since(b.regTime),
 			machStatus,
 			time.Since(b.inUseTime))
-		for _, mode := range b.modes {
-			if b.inUseAs != "" && b.inUseAs != "health" {
-				if mode == b.inUseAs {
-					inUse[mode]++
-				} else {
-					inUseOther[mode]++
-				}
-			}
-			total[mode]++
+		total[b.hostType]++
+		if b.inUse && !b.inHealthCheck {
+			inUse[b.hostType]++
 		}
 	}
 	p.mu.Unlock()
 
-	var modes []string
-	for mode := range total {
-		modes = append(modes, mode)
+	var typs []string
+	for typ := range total {
+		typs = append(typs, typ)
 	}
-	sort.Strings(modes)
+	sort.Strings(typs)
 
 	io.WriteString(w, "<b>Reverse pool summary</b><ul>")
-	if len(modes) == 0 {
+	if len(typs) == 0 {
 		io.WriteString(w, "<li>no connections</li>")
 	}
-	for _, mode := range modes {
-		use, other := inUse[mode], inUseOther[mode]
-		if use+other == 0 {
-			fmt.Fprintf(w, "<li>%s: 0/%d</li>", mode, total[mode])
-		} else {
-			fmt.Fprintf(w, "<li>%s: %d/%d (%d + %d other)</li>", mode, use+other, total[mode], use, other)
-		}
+	for _, typ := range typs {
+		fmt.Fprintf(w, "<li>%s: %d/%d</li>", typ, inUse[typ], total[typ])
 	}
 	io.WriteString(w, "</ul>")
 
-	fmt.Fprintf(w, "<b>Reverse pool machine detail</b><ul>%s</ul>", machineBuf.Bytes())
+	fmt.Fprintf(w, "<b>Reverse pool machine detail</b><ul>%s</ul>", buf.Bytes())
 }
 
 func (p *reverseBuildletPool) String() string {
+	// This doesn't currently show up anywhere, so ignore it for now.
+	return "TODO: some reverse buildlet summary"
+}
+
+// HostTypes returns the a deduplicated list of buildlet types curently supported
+// by the pool.
+func (p *reverseBuildletPool) HostTypes() (types []string) {
+	s := make(map[string]bool)
 	p.mu.Lock()
-	inUse := 0
-	total := len(p.buildlets)
 	for _, b := range p.buildlets {
-		if b.inUseAs != "" && b.inUseAs != "health" {
-			inUse++
-		}
+		s[b.hostType] = true
 	}
 	p.mu.Unlock()
 
-	return fmt.Sprintf("Reverse pool capacity: %d/%d %s", inUse, total, p.Modes())
+	for t := range s {
+		types = append(types, t)
+	}
+	sort.Strings(types)
+	return types
 }
 
-// Modes returns the a deduplicated list of buildlet modes curently supported
-// by the pool. Buildlet modes are described on reverseBuildlet comments.
-func (p *reverseBuildletPool) Modes() (modes []string) {
-	mm := make(map[string]bool)
-	p.mu.Lock()
-	for _, b := range p.buildlets {
-		for _, mode := range b.modes {
-			mm[mode] = true
-		}
-	}
-	p.mu.Unlock()
-
-	for mode := range mm {
-		modes = append(modes, mode)
-	}
-	sort.Strings(modes)
-	return modes
-}
-
-// CanBuild reports whether the pool has a machine capable of building mode.
-// The machine may be in use, so you may have to wait.
-func (p *reverseBuildletPool) CanBuild(mode string) bool {
+// CanBuild reports whether the pool has a machine capable of building mode,
+// even if said machine isn't currently idle.
+func (p *reverseBuildletPool) CanBuild(hostType string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, b := range p.buildlets {
-		for _, m := range b.modes {
-			if m == mode {
-				return true
-			}
+		if b.hostType == hostType {
+			return true
 		}
 	}
 	return false
@@ -381,28 +351,17 @@ type reverseBuildlet struct {
 	conn    net.Conn
 	regTime time.Time // when it was first connected
 
-	// modes is the set of valid modes for this buildlet.
-	//
-	// A mode is the equivalent of a builder name, for example
-	// "darwin-amd64", "android-arm", or "linux-amd64-race".
-	//
-	// Each buildlet may potentially have several modes. For example a
-	// Mac OS X machine with an attached iOS device may be registered
-	// as both "darwin-amd64", "darwin-arm64".
-	modes []string
+	// hostType is the configuration of this machine.
+	// It is the key into the dashboard.Hosts map.
+	hostType string
 
-	// inUseAs signifies that the buildlet is in use as the named mode.
+	// inUseAs signifies that the buildlet is in use.
 	// inUseTime is when it entered that state.
-	// Both are guarded by the mutex on reverseBuildletPool.
-	inUseAs   string
-	inUseTime time.Time
-}
-
-func (b *reverseBuildlet) firstMode() string {
-	if len(b.modes) == 0 {
-		return ""
-	}
-	return b.modes[0]
+	// inHealthCheck is whether it's inUse due to a health check.
+	// All three are guarded by the mutex on reverseBuildletPool.
+	inUse         bool
+	inUseTime     time.Time
+	inHealthCheck bool
 }
 
 func handleReverse(w http.ResponseWriter, r *http.Request) {
@@ -411,6 +370,8 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Check build keys.
+
+	// modes can be either 1 buildlet type (new way) or builder mode(s) (the old way)
 	modes := r.Header["X-Go-Builder-Type"]
 	gobuildkeys := r.Header["X-Go-Builder-Key"]
 	if len(modes) == 0 || len(modes) != len(gobuildkeys) {
@@ -440,6 +401,9 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		modes = filtered
 	}
 
+	// Collapse their modes down into a singluar hostType
+	hostType := mapBuilderToHostType(modes)
+
 	conn, bufrw, err := w.(http.Hijacker).Hijack()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -447,8 +411,7 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 	}
 
 	revDialer := revdial.NewDialer(bufrw, conn)
-
-	log.Printf("Registering reverse buildlet %q (%s) for modes %v", hostname, r.RemoteAddr, modes)
+	log.Printf("Registering reverse buildlet %q (%s) for host type %v", hostname, r.RemoteAddr, hostType)
 
 	(&http.Response{StatusCode: http.StatusSwitchingProtocols, Proto: "HTTP/1.1"}).Write(conn)
 
@@ -460,7 +423,7 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	})
-	client.SetDescription(fmt.Sprintf("reverse peer %s/%s for modes %v", hostname, r.RemoteAddr, modes))
+	client.SetDescription(fmt.Sprintf("reverse peer %s/%s for host type %v", hostname, r.RemoteAddr, hostType))
 
 	var isDead struct {
 		sync.Mutex
@@ -504,7 +467,7 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 	b := &reverseBuildlet{
 		hostname:  hostname,
 		version:   r.Header.Get("X-Go-Builder-Version"),
-		modes:     modes,
+		hostType:  hostType,
 		client:    client,
 		conn:      conn,
 		inUseTime: now,
@@ -516,15 +479,41 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 
 var registerBuildlet = func(modes []string) {} // test hook
 
-type byModeThenHostname []*reverseBuildlet
+type byTypeThenHostname []*reverseBuildlet
 
-func (s byModeThenHostname) Len() int      { return len(s) }
-func (s byModeThenHostname) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-func (s byModeThenHostname) Less(i, j int) bool {
+func (s byTypeThenHostname) Len() int      { return len(s) }
+func (s byTypeThenHostname) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s byTypeThenHostname) Less(i, j int) bool {
 	bi, bj := s[i], s[j]
-	mi, mj := bi.firstMode(), bj.firstMode()
-	if mi == mj {
+	ti, tj := bi.hostType, bj.hostType
+	if ti == tj {
 		return bi.hostname < bj.hostname
 	}
-	return mi < mj
+	return ti < tj
+}
+
+// mapBuilderToHostType maps from the user's Request.Header["X-Go-Builder-Type"]
+// mode list down into a single host type, or the empty string if unknown.
+func mapBuilderToHostType(modes []string) string {
+	// First, see if any of the provided modes are a host type.
+	// If so, this is an updated client.
+	for _, v := range modes {
+		if _, ok := dashboard.Hosts[v]; ok {
+			return v
+		}
+	}
+
+	// Else, it's an old client, still speaking in terms of
+	// builder names.  See if any are registered aliases. First
+	// one wins. (There are no ambiguities in the wild.)
+	for hostType, hconf := range dashboard.Hosts {
+		for _, alias := range hconf.ReverseAliases {
+			for _, v := range modes {
+				if v == alias {
+					return hostType
+				}
+			}
+		}
+	}
+	return ""
 }

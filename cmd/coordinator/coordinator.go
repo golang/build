@@ -51,6 +51,7 @@ import (
 	"golang.org/x/build/livelog"
 	"golang.org/x/build/types"
 	"golang.org/x/net/context"
+	"golang.org/x/time/rate"
 )
 
 const subrepoPrefix = "golang.org/x/"
@@ -337,7 +338,9 @@ func main() {
 		case work := <-workc:
 			if !mayBuildRev(work) {
 				if inStaging {
-					log.Printf("may not build %v; skipping", work)
+					if _, ok := dashboard.Builders[work.name]; ok && logCantBuildStaging.Allow() {
+						log.Printf("may not build %v; skipping", work)
+					}
 				}
 				continue
 			}
@@ -358,19 +361,23 @@ func main() {
 func stagingClusterBuilders() map[string]dashboard.BuildConfig {
 	m := map[string]dashboard.BuildConfig{}
 	for _, name := range []string{
-		//		"linux-arm",
-		//		"linux-amd64",
-		"linux-amd64-kube",
-		//		"linux-amd64-race",
-		//		"windows-amd64-gce",
-		//		"plan9-386",
+		"linux-arm",
+		"linux-arm-arm5",
+		"linux-amd64",
+		"linux-386-387",
+		"windows-amd64-gce",
+		"windows-386-gce",
 	} {
-		m[name] = dashboard.Builders[name]
+		if c, ok := dashboard.Builders[name]; ok {
+			m[name] = c
+		} else {
+			panic(fmt.Sprintf("unknown builder %q", name))
+		}
 	}
 
 	// Also permit all the reverse buildlets:
 	for name, bc := range dashboard.Builders {
-		if bc.IsReverse {
+		if bc.IsReverse() {
 			m[name] = bc
 		}
 	}
@@ -390,6 +397,11 @@ func isBuilding(work builderRev) bool {
 	return building
 }
 
+var (
+	logUnknownBuilder   = rate.NewLimiter(rate.Every(5*time.Second), 2)
+	logCantBuildStaging = rate.NewLimiter(rate.Every(1*time.Second), 2)
+)
+
 // mayBuildRev reports whether the build type & revision should be started.
 // It returns true if it's not already building, and if a reverse buildlet is
 // required, if an appropriate machine is registered.
@@ -403,11 +415,17 @@ func mayBuildRev(rev builderRev) bool {
 	if strings.Contains(rev.name, "netbsd") {
 		return false
 	}
-	buildConf := dashboard.Builders[rev.name]
-	if buildConf.IsReverse {
-		return reversePool.CanBuild(rev.name)
+	buildConf, ok := dashboard.Builders[rev.name]
+	if !ok {
+		if logUnknownBuilder.Allow() {
+			log.Printf("unknown builder %q", rev.name)
+		}
+		return false
 	}
-	if buildConf.KubeImage != "" && kubeErr != nil {
+	if buildConf.IsReverse() {
+		return reversePool.CanBuild(buildConf.HostType)
+	}
+	if buildConf.IsKube() && kubeErr != nil {
 		return false
 	}
 	return true
@@ -611,14 +629,19 @@ func workaroundFlush(w http.ResponseWriter) {
 // TODO(bradfitz): it also currently does not support subrepos.
 func findWorkLoop(work chan<- builderRev) {
 	// Useful for debugging a single run:
-	if inStaging && false {
+	if inStaging {
 		//work <- builderRev{name: "linux-arm", rev: "c9778ec302b2e0e0d6027e1e0fca892e428d9657", subName: "tools", subRev: "ac303766f5f240c1796eeea3dc9bf34f1261aa35"}
-		work <- builderRev{name: "linux-amd64", rev: "cdc0ebbebe64d8fa601914945112db306c85c426"}
-		log.Printf("Test work awaiting arm")
-		if false {
-			for !reversePool.CanBuild("linux-arm") {
+		const debugArm = false
+		if debugArm {
+			for !reversePool.CanBuild("buildlet-linux-arm") {
+				log.Printf("waiting for ARM to register.")
 				time.Sleep(time.Second)
 			}
+			log.Printf("ARM machine(s) registered.")
+			work <- builderRev{name: "linux-arm", rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
+		} else {
+			work <- builderRev{name: "windows-amd64-gce", rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
+			work <- builderRev{name: "windows-386-gce", rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
 		}
 
 		// Still run findWork but ignore what it does.
@@ -1183,21 +1206,23 @@ type highPriorityOpt struct{} // value is bool
 type BuildletPool interface {
 	// GetBuildlet returns a new buildlet client.
 	//
-	// The machineType is the machine type (e.g. "linux-amd64-race").
+	// The hostType is the key into the dashboard.Hosts
+	// map (such as "host-linux-kubestd"), NOT the buidler type
+	// ("linux-386").
 	//
 	// Users of GetBuildlet must both call Client.Close when done
 	// with the client as well as cancel the provided Context.
 	//
 	// The ctx may have context values of type buildletTimeoutOpt
 	// and highPriorityOpt.
-	GetBuildlet(ctx context.Context, machineType string, lg logger) (*buildlet.Client, error)
+	GetBuildlet(ctx context.Context, hostType string, lg logger) (*buildlet.Client, error)
 
 	String() string // TODO(bradfitz): more status stuff
 }
 
 // GetBuildlets creates up to n buildlets and sends them on the returned channel
 // before closing the channel.
-func GetBuildlets(ctx context.Context, pool BuildletPool, n int, machineType string, lg logger) <-chan *buildlet.Client {
+func GetBuildlets(ctx context.Context, pool BuildletPool, n int, hostType string, lg logger) <-chan *buildlet.Client {
 	ch := make(chan *buildlet.Client) // NOT buffered
 	var wg sync.WaitGroup
 	wg.Add(n)
@@ -1205,11 +1230,11 @@ func GetBuildlets(ctx context.Context, pool BuildletPool, n int, machineType str
 		go func(i int) {
 			defer wg.Done()
 			sp := lg.createSpan("get_helper", fmt.Sprintf("helper %d/%d", i+1, n))
-			bc, err := pool.GetBuildlet(ctx, machineType, lg)
+			bc, err := pool.GetBuildlet(ctx, hostType, lg)
 			sp.done(err)
 			if err != nil {
 				if err != context.Canceled {
-					log.Printf("failed to get a %s buildlet: %v", machineType, err)
+					log.Printf("failed to get a %s buildlet: %v", hostType, err)
 				}
 				return
 			}
@@ -1231,13 +1256,16 @@ func GetBuildlets(ctx context.Context, pool BuildletPool, n int, machineType str
 }
 
 func poolForConf(conf dashboard.BuildConfig) BuildletPool {
-	if conf.VMImage != "" {
+	switch {
+	case conf.IsGCE():
 		return gcePool
-	}
-	if conf.KubeImage != "" {
+	case conf.IsKube():
 		return kubePool // Kubernetes
+	case conf.IsReverse():
+		return reversePool
+	default:
+		panic(fmt.Sprintf("no buildlet pool for builder type %q", conf.Name))
 	}
-	return reversePool
 }
 
 func newBuild(rev builderRev) (*buildStatus, error) {
@@ -1276,20 +1304,8 @@ func (st *buildStatus) start() {
 	}()
 }
 
-func (st *buildStatus) buildletType() string {
-	if v := st.conf.BuildletType; v != "" {
-		return v
-	}
-	return st.conf.Name
-}
-
-func (st *buildStatus) buildletPool() (BuildletPool, error) {
-	buildletType := st.buildletType()
-	bconf, ok := dashboard.Builders[buildletType]
-	if !ok {
-		return nil, fmt.Errorf("invalid BuildletType %q for %q", buildletType, st.conf.Name)
-	}
-	return poolForConf(bconf), nil
+func (st *buildStatus) buildletPool() BuildletPool {
+	return poolForConf(st.conf)
 }
 
 func (st *buildStatus) expectedMakeBashDuration() time.Duration {
@@ -1312,7 +1328,7 @@ func (st *buildStatus) expectedBuildletStartDuration() time.Duration {
 	// TODO: move this to dashboard/builders.go? But once we based on on historical
 	// measurements, it'll need GCE services (bigtable/bigquery?), so it's probably
 	// better in this file.
-	pool, _ := st.buildletPool()
+	pool := st.buildletPool()
 	switch pool.(type) {
 	case *gceBuildletPool:
 		return time.Minute
@@ -1341,7 +1357,7 @@ func (st *buildStatus) expectedBuildletStartDuration() time.Duration {
 // ready, such that they're ready when make.bash is done. But we don't
 // want to start too early, lest we waste idle resources during make.bash.
 func (st *buildStatus) getHelpersReadySoon() {
-	if st.isSubrepo() || st.conf.NumTestHelpers(st.isTry()) == 0 || st.conf.IsReverse {
+	if st.isSubrepo() || st.conf.NumTestHelpers(st.isTry()) == 0 || st.conf.IsReverse() {
 		return
 	}
 	time.AfterFunc(st.expectedMakeBashDuration()-st.expectedBuildletStartDuration(),
@@ -1359,8 +1375,8 @@ func (st *buildStatus) getHelpers() <-chan *buildlet.Client {
 }
 
 func (st *buildStatus) onceInitHelpersFunc() {
-	pool, _ := st.buildletPool() // won't return an error since we called it already
-	st.helpers = GetBuildlets(st.ctx, pool, st.conf.NumTestHelpers(st.isTry()), st.buildletType(), st)
+	pool := st.buildletPool()
+	st.helpers = GetBuildlets(st.ctx, pool, st.conf.NumTestHelpers(st.isTry()), st.conf.HostType, st)
 }
 
 // We should try to build from a snapshot if this is a subrepo build, we can
@@ -1378,12 +1394,9 @@ func (st *buildStatus) useSnapshot() bool {
 
 func (st *buildStatus) build() error {
 	st.buildRecord().put()
-	pool, err := st.buildletPool()
-	if err != nil {
-		return err
-	}
+	pool := st.buildletPool()
 	sp := st.createSpan("get_buildlet")
-	bc, err := pool.GetBuildlet(st.ctx, st.buildletType(), st)
+	bc, err := pool.GetBuildlet(st.ctx, st.conf.HostType, st)
 	sp.done(err)
 	if err != nil {
 		return fmt.Errorf("failed to get a buildlet: %v", err)

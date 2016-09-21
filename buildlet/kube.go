@@ -67,10 +67,10 @@ type PodOpts struct {
 
 // StartPod creates a new pod on a Kubernetes cluster and returns a buildlet client
 // configured to speak to it.
-func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, builderType string, opts PodOpts) (*Client, error) {
-	conf, ok := dashboard.Builders[builderType]
+func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, hostType string, opts PodOpts) (*Client, error) {
+	conf, ok := dashboard.Hosts[hostType]
 	if !ok || conf.KubeImage == "" {
-		return nil, fmt.Errorf("invalid builder type %q", builderType)
+		return nil, fmt.Errorf("invalid builder type %q", hostType)
 	}
 	pod := &api.Pod{
 		TypeMeta: api.TypeMeta{
@@ -81,7 +81,7 @@ func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, build
 			Name: podName,
 			Labels: map[string]string{
 				"name": podName,
-				"type": builderType,
+				"type": hostType,
 				"role": "buildlet",
 			},
 			Annotations: map[string]string{},
@@ -132,7 +132,7 @@ func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, build
 	// This lets us/ update the buildlet more easily than
 	// rebuilding the whole pod image.
 	addEnv("META_BUILDLET_BINARY_URL", conf.BuildletBinaryURL(buildenv.ByProjectID(opts.ProjectID)))
-	addEnv("META_BUILDER_TYPE", builderType)
+	addEnv("META_BUILDLET_HOST_TYPE", hostType)
 	if !opts.TLS.IsZero() {
 		addEnv("META_TLS_CERT", opts.TLS.CertPEM)
 		addEnv("META_TLS_KEY", opts.TLS.KeyPEM)

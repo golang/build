@@ -32,6 +32,8 @@ func run(args []string) error {
 	fs.StringVar(&path, "path", "", "Comma-separated list of ExecOpts.Path elements. The special string 'EMPTY' means to run without any $PATH. The empty string (default) does not modify the $PATH.")
 	var dir string
 	fs.StringVar(&dir, "dir", "", "Directory to run from. Defaults to the directory of the command, or the work directory if -system is true.")
+	var builderEnv string
+	fs.StringVar(&builderEnv, "builderenv", "", "Optional alternate builder to act like. Must share the same underlying buildlet host type, or it's an error. For instance, linux-amd64-race or linux-386-387 are compatible with linux-amd64, but openbsd-amd64 and openbsd-386 are different hosts.")
 
 	fs.Parse(args)
 	if fs.NArg() < 2 {
@@ -44,6 +46,18 @@ func run(args []string) error {
 	bc, conf, err := clientAndConf(name)
 	if err != nil {
 		return err
+	}
+
+	if builderEnv != "" {
+		altConf, ok := dashboard.Builders[builderEnv]
+		if !ok {
+			return fmt.Errorf("unknown --builderenv=%q builder value", builderEnv)
+		}
+		if altConf.HostType != conf.HostType {
+			return fmt.Errorf("--builderEnv=%q has host type %q, which is not compatible with the named buildlet's host type %q",
+				builderEnv, altConf.HostType, conf.HostType)
+		}
+		conf = altConf
 	}
 
 	var pathOpt []string

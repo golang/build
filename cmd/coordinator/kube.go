@@ -350,10 +350,10 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 	}
 }
 
-func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, typ string, lg logger) (*buildlet.Client, error) {
-	conf, ok := dashboard.Builders[typ]
-	if !ok || conf.KubeImage == "" {
-		return nil, fmt.Errorf("kubepool: invalid builder type %q", typ)
+func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg logger) (*buildlet.Client, error) {
+	hconf, ok := dashboard.Hosts[hostType]
+	if !ok || !hconf.IsKube() {
+		return nil, fmt.Errorf("kubepool: invalid host type %q", hostType)
 	}
 	if kubeErr != nil {
 		return nil, kubeErr
@@ -367,19 +367,19 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, typ string, lg logge
 		deleteIn = podDeleteTimeout
 	}
 
-	podName := "buildlet-" + typ + "-rn" + randHex(7)
+	podName := "buildlet-" + strings.TrimPrefix(hostType, "host-") + "-rn" + randHex(7)
 
 	// Get an estimate for when the pod will be started/running and set
 	// the context timeout based on that
 	var needDelete bool
 
 	lg.logEventTime("creating_kube_pod", podName)
-	log.Printf("Creating Kubernetes pod %q for %s", podName, typ)
+	log.Printf("Creating Kubernetes pod %q for %s", podName, hostType)
 
-	bc, err := buildlet.StartPod(ctx, kubeClient, podName, typ, buildlet.PodOpts{
+	bc, err := buildlet.StartPod(ctx, kubeClient, podName, hostType, buildlet.PodOpts{
 		ProjectID:     buildEnv.ProjectName,
 		ImageRegistry: registryPrefix,
-		Description:   fmt.Sprintf("Go Builder for %s at %s", typ),
+		Description:   fmt.Sprintf("Go Builder for %s at %s", hostType),
 		DeleteIn:      deleteIn,
 		OnPodCreating: func() {
 			lg.logEventTime("pod_creating")
@@ -593,7 +593,9 @@ func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
 				}
 			}
 		}
-		log.Printf("Kubernetes pod cleanup loop stats: %+v", stats)
+		if stats.Pods > 0 {
+			log.Printf("Kubernetes pod cleanup loop stats: %+v", stats)
+		}
 		time.Sleep(time.Minute)
 	}
 }

@@ -58,16 +58,16 @@ buildlet.solaris-amd64: FORCE
 
 dev-buildlet.linux-arm: FORCE
 	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public dev-go-builder-data/$@
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public dev-go-builder-data/buildlet.linux-arm
 
 dev-buildlet.linux-amd64: FORCE
 	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public dev-go-builder-data/$@
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public dev-go-builder-data/buildlet.linux-amd64
 
 dev-buildlet.windows-amd64: FORCE
 	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public dev-go-builder-data/$@
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public dev-go-builder-data/buildlet.windows-amd64
 
 dev-buildlet.plan9-386: FORCE
 	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public dev-go-builder-data/$@
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public dev-go-builder-data/buildlet.plan9-386

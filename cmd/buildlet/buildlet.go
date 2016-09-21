@@ -509,7 +509,7 @@ func handleWriteTGZ(w http.ResponseWriter, r *http.Request) {
 		defer res.Body.Close()
 		if res.StatusCode != http.StatusOK {
 			log.Printf("writetgz: failed to fetch tgz URL %s: status=%v", urlStr, res.Status)
-			http.Error(w, fmt.Sprintf("fetching provided url: %s", res.Status), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("writetgz: fetching provided URL %q: %s", urlStr, res.Status), http.StatusInternalServerError)
 			return
 		}
 		tgz = res.Body
@@ -736,7 +736,14 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 		f.Flush()
 	}
 
-	env := append(baseEnv(), r.PostForm["env"]...)
+	goarch := "amd64" // unless we find otherwise
+	for _, pair := range r.PostForm["env"] {
+		if hasPrefixFold(pair, "GOARCH=") {
+			goarch = pair[len("GOARCH="):]
+		}
+	}
+
+	env := append(baseEnv(goarch), r.PostForm["env"]...)
 	env = envutil.Dedup(runtime.GOOS == "windows", env)
 	env = setPathEnv(env, r.PostForm["path"], *workDir)
 
@@ -869,21 +876,17 @@ func pathSeparator() string {
 	}
 }
 
-func baseEnv() []string {
+func baseEnv(goarch string) []string {
 	if runtime.GOOS == "windows" {
-		return windowsBaseEnv()
+		return windowsBaseEnv(goarch)
 	}
 	return os.Environ()
 }
 
-func windowsBaseEnv() (e []string) {
+func windowsBaseEnv(goarch string) (e []string) {
 	e = append(e, "GOBUILDEXIT=1") // exit all.bat with completion status
-	btype, err := metadata.InstanceAttributeValue("builder-type")
-	if err != nil {
-		log.Fatalf("Failed to get builder-type: %v", err)
-		return nil
-	}
-	is64 := strings.HasPrefix(btype, "windows-amd64")
+
+	is64 := goarch != "386"
 	for _, pair := range os.Environ() {
 		const pathEq = "PATH="
 		if hasPrefixFold(pair, pathEq) {
@@ -1239,9 +1242,9 @@ func makeBSDFilesystemFast() {
 		log.Printf("Not on GCE; not remounting root filesystem.")
 		return
 	}
-	btype, err := metadata.InstanceAttributeValue("builder-type")
+	btype, err := metadata.InstanceAttributeValue("buildlet-type")
 	if _, ok := err.(metadata.NotDefinedError); ok && len(btype) == 0 {
-		log.Printf("Not remounting root filesystem due to missing builder-type metadata.")
+		log.Printf("Not remounting root filesystem due to missing buildlet-type metadata.")
 		return
 	}
 	if err != nil {

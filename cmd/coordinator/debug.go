@@ -26,7 +26,7 @@ func handleDoSomeWork(work chan<- builderRev) func(w http.ResponseWriter, r *htt
 		if r.Method == "GET" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			buf := new(bytes.Buffer)
-			if err := tmplDoSomeWork.Execute(buf, reversePool.Modes()); err != nil {
+			if err := tmplDoSomeWork.Execute(buf, reversePool.HostTypes()); err != nil {
 				http.Error(w, fmt.Sprintf("dosomework: %v", err), http.StatusInternalServerError)
 			}
 			buf.WriteTo(w)

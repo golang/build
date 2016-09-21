@@ -234,13 +234,13 @@ func (p *gceBuildletPool) SetEnabled(enabled bool) {
 	p.disabled = !enabled
 }
 
-func (p *gceBuildletPool) GetBuildlet(ctx context.Context, typ string, lg logger) (bc *buildlet.Client, err error) {
-	conf, ok := dashboard.Builders[typ]
+func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg logger) (bc *buildlet.Client, err error) {
+	hconf, ok := dashboard.Hosts[hostType]
 	if !ok {
-		return nil, fmt.Errorf("gcepool: unknown buildlet type %q", typ)
+		return nil, fmt.Errorf("gcepool: unknown host type %q", hostType)
 	}
 	qsp := lg.createSpan("awaiting_gce_quota")
-	err = p.awaitVMCountQuota(ctx, conf.GCENumCPU())
+	err = p.awaitVMCountQuota(ctx, hconf.GCENumCPU())
 	qsp.done(err)
 	if err != nil {
 		return nil, err
@@ -251,7 +251,7 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, typ string, lg logger
 		deleteIn = vmDeleteTimeout
 	}
 
-	instName := "buildlet-" + typ + "-rn" + randHex(7)
+	instName := "buildlet-" + strings.TrimPrefix(hostType, "host-") + "-rn" + randHex(7)
 	p.setInstanceUsed(instName, true)
 
 	gceBuildletSpan := lg.createSpan("create_gce_buildlet", instName)
@@ -264,11 +264,11 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, typ string, lg logger
 		curSpan      = createSpan // either instSpan or waitBuildlet
 	)
 
-	log.Printf("Creating GCE VM %q for %s", instName, typ)
-	bc, err = buildlet.StartNewVM(tokenSource, instName, typ, buildlet.VMOpts{
+	log.Printf("Creating GCE VM %q for %s", instName, hostType)
+	bc, err = buildlet.StartNewVM(tokenSource, instName, hostType, buildlet.VMOpts{
 		ProjectID:   buildEnv.ProjectName,
 		Zone:        buildEnv.Zone,
-		Description: fmt.Sprintf("Go Builder for %s", typ),
+		Description: fmt.Sprintf("Go Builder for %s", hostType),
 		DeleteIn:    deleteIn,
 		OnInstanceRequested: func() {
 			log.Printf("GCE VM %q now booting", instName)
@@ -295,10 +295,10 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, typ string, lg logger
 	})
 	if err != nil {
 		curSpan.done(err)
-		log.Printf("Failed to create VM for %s: %v", typ, err)
+		log.Printf("Failed to create VM for %s: %v", hostType, err)
 		if needDelete {
 			deleteVM(buildEnv.Zone, instName)
-			p.putVMCountQuota(conf.GCENumCPU())
+			p.putVMCountQuota(hconf.GCENumCPU())
 		}
 		p.setInstanceUsed(instName, false)
 		return nil, err
@@ -306,12 +306,12 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, typ string, lg logger
 	waitBuildlet.done(nil)
 	bc.SetDescription("GCE VM: " + instName)
 	bc.SetOnHeartbeatFailure(func() {
-		p.putBuildlet(bc, typ, instName)
+		p.putBuildlet(bc, hostType, instName)
 	})
 	return bc, nil
 }
 
-func (p *gceBuildletPool) putBuildlet(bc *buildlet.Client, typ, instName string) error {
+func (p *gceBuildletPool) putBuildlet(bc *buildlet.Client, hostType, instName string) error {
 	// TODO(bradfitz): add the buildlet to a freelist (of max N
 	// items) for up to 10 minutes since when it got started if
 	// it's never seen a command execution failure, and we can
@@ -324,11 +324,11 @@ func (p *gceBuildletPool) putBuildlet(bc *buildlet.Client, typ, instName string)
 	deleteVM(buildEnv.Zone, instName)
 	p.setInstanceUsed(instName, false)
 
-	conf, ok := dashboard.Builders[typ]
+	hconf, ok := dashboard.Hosts[hostType]
 	if !ok {
 		panic("failed to lookup conf") // should've worked if we did it before
 	}
-	p.putVMCountQuota(conf.GCENumCPU())
+	p.putVMCountQuota(hconf.GCENumCPU())
 	return nil
 }
 

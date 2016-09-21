@@ -34,7 +34,7 @@ func list(args []string) error {
 		log.Fatal(err)
 	}
 	for _, rb := range rbs {
-		fmt.Printf("%s\t%s\texpires in %v\n", rb.Name, rb.Type, rb.Expires.Sub(time.Now()))
+		fmt.Printf("%s\t%s\t%s\texpires in %v\n", rb.Name, rb.BuilderType, rb.HostType, rb.Expires.Sub(time.Now()))
 	}
 
 	return nil
@@ -50,9 +50,9 @@ func clientAndConf(name string) (bc *buildlet.Client, conf dashboard.BuildConfig
 	var ok bool
 	for _, rb := range rbs {
 		if rb.Name == name {
-			conf, ok = namedConfig(rb.Type)
+			conf, ok = dashboard.Builders[rb.BuilderType]
 			if !ok {
-				err = fmt.Errorf("builder %q exists, but unknown type %q", name, rb.Type)
+				err = fmt.Errorf("builder %q exists, but unknown builder type %q", name, rb.BuilderType)
 				return
 			}
 			break
@@ -73,16 +73,4 @@ func namedClient(name string) (*buildlet.Client, error) {
 	}
 	cc := coordinatorClient()
 	return cc.NamedBuildlet(name)
-}
-
-// namedConfig returns the builder configuration that matches the given mote
-// name. It matches prefixes to accommodate motes than have "-n" suffixes.
-func namedConfig(name string) (dashboard.BuildConfig, bool) {
-	match := ""
-	for cname := range dashboard.Builders {
-		if strings.HasPrefix(name, cname) && len(cname) > len(match) {
-			match = cname
-		}
-	}
-	return dashboard.Builders[match], match != ""
 }

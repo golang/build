@@ -43,11 +43,12 @@ func init() {
 }
 
 type remoteBuildlet struct {
-	User    string // "user-foo" build key
-	Name    string // dup of key
-	Type    string
-	Created time.Time
-	Expires time.Time
+	User        string // "user-foo" build key
+	Name        string // dup of key
+	HostType    string
+	BuilderType string // default builder config to use if not overwritten
+	Created     time.Time
+	Expires     time.Time
 
 	buildlet *buildlet.Client
 }
@@ -57,7 +58,7 @@ func addRemoteBuildlet(rb *remoteBuildlet) (name string) {
 	defer remoteBuildlets.Unlock()
 	n := 0
 	for {
-		name = fmt.Sprintf("%s-%s-%d", rb.User, rb.Type, n)
+		name = fmt.Sprintf("%s-%s-%d", rb.User, rb.BuilderType, n)
 		if _, ok := remoteBuildlets.m[name]; ok {
 			n++
 		} else {
@@ -86,14 +87,19 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "POST required", 400)
 		return
 	}
-	typ := r.FormValue("type")
-	if typ == "" {
-		http.Error(w, "missing 'type' parameter", 400)
+	const serverVersion = "20160922" // sent by cmd/gomote via buildlet/remote.go
+	if version := r.FormValue("version"); version < serverVersion {
+		http.Error(w, fmt.Sprintf("gomote client version %q is too old; predates server version %q", version, serverVersion), 400)
 		return
 	}
-	bconf, ok := dashboard.Builders[typ]
+	builderType := r.FormValue("builderType")
+	if builderType == "" {
+		http.Error(w, "missing 'builderType' parameter", 400)
+		return
+	}
+	bconf, ok := dashboard.Builders[builderType]
 	if !ok {
-		http.Error(w, "unknown builder type in 'type' parameter", 400)
+		http.Error(w, "unknown builder type in 'builderType' parameter", 400)
 		return
 	}
 	user, _, _ := r.BasicAuth()
@@ -115,12 +121,12 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	resc := make(chan *buildlet.Client)
 	errc := make(chan error)
 	go func() {
-		bc, err := pool.GetBuildlet(ctx, typ, loggerFunc(func(event string, optText ...string) {
+		bc, err := pool.GetBuildlet(ctx, bconf.HostType, loggerFunc(func(event string, optText ...string) {
 			var extra string
 			if len(optText) > 0 {
 				extra = " " + optText[0]
 			}
-			log.Printf("creating buildlet %s for %s: %s%s", typ, user, event, extra)
+			log.Printf("creating buildlet %s for %s: %s%s", bconf.HostType, user, event, extra)
 		}))
 		if bc != nil {
 			resc <- bc
@@ -132,11 +138,12 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 		select {
 		case bc := <-resc:
 			rb := &remoteBuildlet{
-				User:     user,
-				Type:     typ,
-				buildlet: bc,
-				Created:  time.Now(),
-				Expires:  time.Now().Add(remoteBuildletIdleTimeout),
+				User:        user,
+				BuilderType: builderType,
+				HostType:    bconf.HostType,
+				buildlet:    bc,
+				Created:     time.Now(),
+				Expires:     time.Now().Add(remoteBuildletIdleTimeout),
 			}
 			rb.Name = addRemoteBuildlet(rb)
 			jenc, err := json.MarshalIndent(rb, "", "  ")
@@ -165,7 +172,7 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 // always wrapped in requireBuildletProxyAuth.
 func handleBuildletList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
-		http.Error(w, "POST required", 400)
+		http.Error(w, "GET required", 400)
 		return
 	}
 	res := make([]*remoteBuildlet, 0) // so it's never JSON "null"

@@ -74,12 +74,15 @@ type VMOpts struct {
 
 // StartNewVM boots a new VM on GCE and returns a buildlet client
 // configured to speak to it.
-func StartNewVM(ts oauth2.TokenSource, instName, builderType string, opts VMOpts) (*Client, error) {
+func StartNewVM(ts oauth2.TokenSource, instName, hostType string, opts VMOpts) (*Client, error) {
 	computeService, _ := compute.New(oauth2.NewClient(oauth2.NoContext, ts))
 
-	conf, ok := dashboard.Builders[builderType]
+	hconf, ok := dashboard.Hosts[hostType]
 	if !ok {
-		return nil, fmt.Errorf("invalid builder type %q", builderType)
+		return nil, fmt.Errorf("invalid host type %q", hostType)
+	}
+	if !hconf.IsGCE() {
+		return nil, fmt.Errorf("host type %q is not a GCE host type", hostType)
 	}
 
 	zone := opts.Zone
@@ -96,9 +99,9 @@ func StartNewVM(ts oauth2.TokenSource, instName, builderType string, opts VMOpts
 	usePreempt := false
 Try:
 	prefix := "https://www.googleapis.com/compute/v1/projects/" + projectID
-	machType := prefix + "/zones/" + zone + "/machineTypes/" + conf.MachineType()
+	machType := prefix + "/zones/" + zone + "/machineTypes/" + hconf.MachineType()
 	diskType := "https://www.googleapis.com/compute/v1/projects/" + projectID + "/zones/" + zone + "/diskTypes/pd-ssd"
-	if conf.RegularDisk {
+	if hconf.RegularDisk {
 		diskType = "" // a spinning disk
 	}
 
@@ -126,7 +129,7 @@ Try:
 				Type:       "PERSISTENT",
 				InitializeParams: &compute.AttachedDiskInitializeParams{
 					DiskName:    instName,
-					SourceImage: "https://www.googleapis.com/compute/v1/projects/" + projectID + "/global/images/" + conf.VMImage,
+					SourceImage: "https://www.googleapis.com/compute/v1/projects/" + projectID + "/global/images/" + hconf.VMImage,
 					DiskType:    diskType,
 				},
 			},
@@ -159,8 +162,8 @@ Try:
 	// which the VMs are configured to download at boot and run.
 	// This lets us/ update the buildlet more easily than
 	// rebuilding the whole VM image.
-	addMeta("buildlet-binary-url", conf.BuildletBinaryURL(buildenv.ByProjectID(opts.ProjectID)))
-	addMeta("builder-type", builderType)
+	addMeta("buildlet-binary-url", hconf.BuildletBinaryURL(buildenv.ByProjectID(opts.ProjectID)))
+	addMeta("buildlet-host-type", hostType)
 	if !opts.TLS.IsZero() {
 		addMeta("tls-cert", opts.TLS.CertPEM)
 		addMeta("tls-key", opts.TLS.KeyPEM)
@@ -304,7 +307,7 @@ type VM struct {
 	Name   string
 	IPPort string
 	TLS    KeyPair
-	Type   string
+	Type   string // buildlet type
 }
 
 // ListVMs lists all VMs.
@@ -329,13 +332,13 @@ func ListVMs(ts oauth2.TokenSource, proj, zone string) ([]VM, error) {
 				meta[it.Key] = *it.Value
 			}
 		}
-		builderType := meta["builder-type"]
-		if builderType == "" {
+		hostType := meta["buildlet-host-type"]
+		if hostType == "" {
 			continue
 		}
 		vm := VM{
 			Name: inst.Name,
-			Type: builderType,
+			Type: hostType,
 			TLS: KeyPair{
 				CertPEM: meta["tls-cert"],
 				KeyPEM:  meta["tls-key"],
