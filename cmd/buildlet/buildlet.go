@@ -1242,9 +1242,9 @@ func makeBSDFilesystemFast() {
 		log.Printf("Not on GCE; not remounting root filesystem.")
 		return
 	}
-	btype, err := metadata.InstanceAttributeValue("buildlet-type")
+	btype, err := metadata.InstanceAttributeValue("buildlet-host-type")
 	if _, ok := err.(metadata.NotDefinedError); ok && len(btype) == 0 {
-		log.Printf("Not remounting root filesystem due to missing buildlet-type metadata.")
+		log.Printf("Not remounting root filesystem due to missing buildlet-host-type metadata.")
 		return
 	}
 	if err != nil {
