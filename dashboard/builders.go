@@ -275,6 +275,14 @@ type BuildConfig struct {
 	CompileOnly bool // if true, compile tests, but don't run them
 	FlakyNet    bool // network tests are flaky (try anyway, but ignore some failures)
 
+	// StopAfterMake causes the build to stop after the make
+	// script completes, returning its result as the result of the
+	// whole build. It does not run or compile any of the tests,
+	// nor does it write a snapshot of the world to cloud
+	// storage. This option is only supported for builders whose
+	// BuildConfig.SplitMakeRun returns true.
+	StopAfterMake bool
+
 	// numTestHelpers is the number of _additional_ buildlets
 	// past the first one to help out with sharded tests.
 	// For trybots, the numTryHelpers value is used, unless it's
@@ -627,6 +635,12 @@ func init() {
 		FlakyNet:          true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 7,
+	})
+	addBuilder(BuildConfig{
+		Name:          "linux-arm-nativemake",
+		Notes:         "runs make.bash on real ARM hardware, but does not run tests",
+		HostType:      "host-linux-arm",
+		StopAfterMake: true,
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-arm-arm5",

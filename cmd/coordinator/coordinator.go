@@ -1538,6 +1538,9 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 	if remoteErr != nil {
 		return fmt.Errorf("build failed: %v", remoteErr), nil
 	}
+	if st.conf.StopAfterMake {
+		return nil, nil
+	}
 
 	if err := st.doSnapshot(); err != nil {
 		return nil, err
