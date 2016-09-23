@@ -503,6 +503,20 @@ func (c BuildConfig) ShortOwner() string {
 	return strings.TrimSuffix(owner, "@golang.org")
 }
 
+// PoolName returns a short summary of the builder's host type for the
+// http://farmer.golang.org/builders page.
+func (c *HostConfig) PoolName() string {
+	switch {
+	case c.IsReverse:
+		return "Reverse (dedicated machine/VM)"
+	case c.IsGCE():
+		return "GCE VM"
+	case c.IsKube():
+		return "Kubernetes container"
+	}
+	return "??"
+}
+
 // GCENumCPU reports the number of GCE CPUs this buildlet requires.
 func (c *HostConfig) GCENumCPU() int {
 	t := c.MachineType()
