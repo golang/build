@@ -560,7 +560,7 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !st.hasEvent("make_and_test") {
+	if !st.hasEvent("make_and_test") && !st.hasEvent("make_cross_compile_kube") {
 		fmt.Fprintf(w, "\n\n(buildlet still starting; no live streaming. reload manually to see status)\n")
 		return
 	}
@@ -633,7 +633,7 @@ func findWorkLoop(work chan<- builderRev) {
 		//work <- builderRev{name: "linux-arm", rev: "c9778ec302b2e0e0d6027e1e0fca892e428d9657", subName: "tools", subRev: "ac303766f5f240c1796eeea3dc9bf34f1261aa35"}
 		const debugArm = false
 		if debugArm {
-			for !reversePool.CanBuild("buildlet-linux-arm") {
+			for !reversePool.CanBuild("host-linux-arm") {
 				log.Printf("waiting for ARM to register.")
 				time.Sleep(time.Second)
 			}
@@ -1392,10 +1392,43 @@ func (st *buildStatus) useSnapshot() bool {
 	return b
 }
 
+func (st *buildStatus) forceSnapshotUsage() {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	truth := true
+	st.useSnapshotMemo = &truth
+}
+
+func (st *buildStatus) shouldCrossCompileMake() bool {
+	if inStaging {
+		return st.name == "linux-arm" && kubeErr == nil
+	}
+	return st.isTry() && st.name == "linux-arm" && kubeErr == nil
+}
+
 func (st *buildStatus) build() error {
 	st.buildRecord().put()
+
+	sp := st.createSpan("checking_for_snapshot")
+	if inStaging {
+		err := storageClient.Bucket(buildEnv.SnapBucket).Object(st.snapshotObjectName()).Delete(context.Background())
+		st.logEventTime("deleted_snapshot", fmt.Sprint(err))
+	}
+	snapshotExists := st.useSnapshot()
+	if inStaging {
+		st.logEventTime("use_snapshot", fmt.Sprint(snapshotExists))
+	}
+	sp.done(nil)
+
+	if !snapshotExists && st.shouldCrossCompileMake() {
+		if err := st.crossCompileMakeAndSnapshot(); err != nil {
+			return err
+		}
+		st.forceSnapshotUsage()
+	}
+
+	sp = st.createSpan("get_buildlet")
 	pool := st.buildletPool()
-	sp := st.createSpan("get_buildlet")
 	bc, err := pool.GetBuildlet(st.ctx, st.conf.HostType, st)
 	sp.done(err)
 	if err != nil {
@@ -1542,7 +1575,7 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 		return nil, nil
 	}
 
-	if err := st.doSnapshot(); err != nil {
+	if err := st.doSnapshot(st.bc); err != nil {
 		return nil, err
 	}
 
@@ -1558,6 +1591,68 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 		return fmt.Errorf("tests failed: %v", remoteErr), nil
 	}
 	return nil, nil
+}
+
+func (st *buildStatus) crossCompileMakeAndSnapshot() (err error) {
+	// TODO: currently we ditch this buildlet when we're done with
+	// the make.bash & snapshot. For extra speed later, we could
+	// keep it around and use it to "go test -c" each stdlib
+	// package's tests, and push the binary to each ARM helper
+	// machine. That might be too little gain for the complexity,
+	// though, or slower once we ship everything around.
+	ctx, cancel := context.WithCancel(st.ctx)
+	defer cancel()
+	sp := st.createSpan("get_buildlet_cross")
+	kubeBC, err := kubePool.GetBuildlet(ctx, "host-linux-armhf-cross", st)
+	sp.done(err)
+	if err != nil {
+		return err
+	}
+	defer kubeBC.Close()
+
+	if err := st.writeGoSourceTo(kubeBC); err != nil {
+		return err
+	}
+
+	makeSpan := st.createSpan("make_cross_compile_kube")
+	defer func() { makeSpan.done(err) }()
+
+	goos, goarch := st.conf.GOOS(), st.conf.GOARCH()
+
+	remoteErr, err := kubeBC.Exec("/bin/bash", buildlet.ExecOpts{
+		SystemLevel: true,
+		Args: []string{
+			"-c",
+			"cd $WORKDIR/go/src && " +
+				"./make.bash && " +
+				"cd .. && " +
+				"mv bin/*_*/* bin && " +
+				"rmdir bin/*_* && " +
+				"rm -rf pkg/linux_amd64 pkg/tool/linux_amd64 pkg/bootstrap pkg/obj",
+		},
+		Output: st,
+		ExtraEnv: []string{
+			"GOROOT_BOOTSTRAP=/go1.4",
+			"CGO_ENABLED=1",
+			"CC_FOR_TARGET=arm-linux-gnueabihf-gcc",
+			"GOOS=" + goos,
+			"GOARCH=" + goarch,
+			"GOARM=7", // harmless if GOARCH != "arm"
+		},
+		Debug: true,
+	})
+	if err != nil {
+		return err
+	}
+	if remoteErr != nil {
+		return fmt.Errorf("remote error: %v", remoteErr)
+	}
+
+	if err := st.doSnapshot(kubeBC); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // runMake builds the tool chain.
@@ -1635,16 +1730,16 @@ func (st *buildStatus) runAllLegacy() (remoteErr, err error) {
 	return nil, nil
 }
 
-func (st *buildStatus) doSnapshot() error {
+func (st *buildStatus) doSnapshot(bc *buildlet.Client) error {
 	// If we're using a pre-built snapshot, don't make another.
 	if st.useSnapshot() {
 		return nil
 	}
 
-	if err := st.cleanForSnapshot(); err != nil {
+	if err := st.cleanForSnapshot(bc); err != nil {
 		return fmt.Errorf("cleanForSnapshot: %v", err)
 	}
-	if err := st.writeSnapshot(); err != nil {
+	if err := st.writeSnapshot(bc); err != nil {
 		return fmt.Errorf("writeSnapshot: %v", err)
 	}
 	return nil
@@ -1655,7 +1750,7 @@ var timeSnapshotCorruptionFixed = time.Date(2015, time.November, 1, 0, 0, 0, 0, 
 // TODO(adg): prune this map over time (might never be necessary, though)
 var snapshotExistsCache = struct {
 	sync.Mutex
-	m map[builderRev]bool
+	m map[builderRev]bool // set; only true values
 }{m: map[builderRev]bool{}}
 
 // snapshotExists reports whether the snapshot exists and isn't corrupt.
@@ -1729,18 +1824,22 @@ func (br *builderRev) snapshotExists() (ok bool) {
 }
 
 func (st *buildStatus) writeGoSource() error {
+	return st.writeGoSourceTo(st.bc)
+}
+
+func (st *buildStatus) writeGoSourceTo(bc *buildlet.Client) error {
 	// Write the VERSION file.
 	sp := st.createSpan("write_version_tar")
-	if err := st.bc.PutTar(versionTgz(st.rev), "go"); err != nil {
+	if err := bc.PutTar(versionTgz(st.rev), "go"); err != nil {
 		return sp.done(fmt.Errorf("writing VERSION tgz: %v", err))
 	}
 
-	srcTar, err := getSourceTgz(st, "go", st.rev, st.trySet != nil)
+	srcTar, err := getSourceTgz(st, "go", st.rev, st.isTry())
 	if err != nil {
 		return err
 	}
 	sp = st.createSpan("write_go_src_tar")
-	if err := st.bc.PutTar(srcTar, "go"); err != nil {
+	if err := bc.PutTar(srcTar, "go"); err != nil {
 		return sp.done(fmt.Errorf("writing tarball from Gerrit: %v", err))
 	}
 	return sp.done(nil)
@@ -1756,14 +1855,12 @@ func (st *buildStatus) writeBootstrapToolchain() error {
 	return sp.done(st.bc.PutTarFromURL(u, bootstrapDir))
 }
 
-var cleanForSnapshotFiles = []string{
-	"go/doc/gopher",
-	"go/pkg/bootstrap",
-}
-
-func (st *buildStatus) cleanForSnapshot() error {
+func (st *buildStatus) cleanForSnapshot(bc *buildlet.Client) error {
 	sp := st.createSpan("clean_for_snapshot")
-	return sp.done(st.bc.RemoveAll(cleanForSnapshotFiles...))
+	return sp.done(bc.RemoveAll(
+		"go/doc/gopher",
+		"go/pkg/bootstrap",
+	))
 }
 
 // snapshotObjectName is the cloud storage object name of the
@@ -1778,12 +1875,12 @@ func (br *builderRev) snapshotURL() string {
 	return buildEnv.SnapshotURL(br.name, br.rev)
 }
 
-func (st *buildStatus) writeSnapshot() (err error) {
+func (st *buildStatus) writeSnapshot(bc *buildlet.Client) (err error) {
 	sp := st.createSpan("write_snapshot_to_gcs")
 	defer func() { sp.done(err) }()
 
 	tsp := st.createSpan("fetch_snapshot_reader_from_buildlet")
-	tgz, err := st.bc.GetTar("go")
+	tgz, err := bc.GetTar("go")
 	tsp.done(err)
 	if err != nil {
 		return err
@@ -1847,6 +1944,11 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 // only do this for slow builders running redundant tests. (That is,
 // tests which have identical behavior across different ports)
 func (st *buildStatus) shouldSkipTest(testName string) bool {
+	if inStaging && st.name == "linux-arm" && false {
+		if strings.HasPrefix(testName, "go_test:") && testName < "go_test:runtime" {
+			return true
+		}
+	}
 	switch testName {
 	case "api":
 		return st.isTry() && st.name != "linux-amd64"
@@ -2714,6 +2816,7 @@ type span struct {
 	event   string // event name like "get_foo" or "write_bar"
 	optText string // optional details for event
 	start   time.Time
+	end     time.Time
 	el      eventTimeLogger // where we log to at the end; TODO: this will change
 }
 
@@ -2735,8 +2838,16 @@ func createSpan(el eventTimeLogger, event string, optText ...string) *span {
 	}
 }
 
+// done ends a span.
+// It is legal to call done multiple times. Only the first call
+// logs.
+// done always returns its input argument.
 func (s *span) done(err error) error {
+	if !s.end.IsZero() {
+		return err
+	}
 	t1 := time.Now()
+	s.end = t1
 	td := t1.Sub(s.start)
 	var text bytes.Buffer
 	fmt.Fprintf(&text, "after %v", td)
@@ -2923,6 +3034,10 @@ var sourceGroup singleflight.Group
 var sourceCache = lru.New(40) // git rev -> []byte
 
 func useWatcher() bool {
+	if inStaging {
+		// Adjust as needed, depending on what you're testing.
+		return false
+	}
 	return *mode != "dev"
 }
 

@@ -28,6 +28,13 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
+	"host-linux-armhf-cross": &HostConfig{
+		Notes:           "Kubernetes container on GKE built from env/crosscompile/linux-armhf-jessie",
+		KubeImage:       "linux-armhf-jessie:latest",
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+	},
+
 	"host-nacl-kube": &HostConfig{
 		Notes:           "Kubernetes container on GKE.",
 		KubeImage:       "linux-x86-nacl:latest",
