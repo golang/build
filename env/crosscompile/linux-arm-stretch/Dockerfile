@@ -14,8 +14,10 @@ ENV DEBIAN_FRONTEND noninteractive
 # git-core: for interacting with the Go source & subrepos
 # gcc, libc-dev: for building Go's bootstrap 'dist' prog
 # gcc-armel-linux-gnu, libc6-dev-armel-cross: for armel builds
+# linux-libc-dev(armel): for asm/errno.h
 # procps, lsof, psmisc: misc tools
-RUN apt-get update && apt-get install -y \
+RUN dpkg --add-architecture armel \
+	&& apt-get update && apt-get install -y \
 	bzip2 \
 	ca-certificates \
 	curl \
@@ -24,6 +26,7 @@ RUN apt-get update && apt-get install -y \
 	libc6-dev \
 	gcc-arm-linux-gnueabi \
 	libc6-dev-armel-cross \
+	linux-libc-dev:armel \
 	procps \
 	lsof \
 	psmisc \
