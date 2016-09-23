@@ -31,7 +31,6 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	monitoring "google.golang.org/api/cloudmonitoring/v2beta2"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 )
@@ -123,7 +122,7 @@ func initGCE() error {
 		log.Printf("Error creating datastore client: %v", err)
 	}
 
-	tokenSource, err = google.DefaultTokenSource(ctx, compute.CloudPlatformScope, monitoring.MonitoringScope)
+	tokenSource, err = google.DefaultTokenSource(ctx, compute.CloudPlatformScope)
 	if err != nil {
 		log.Fatalf("failed to get a token source: %v", err)
 	}
