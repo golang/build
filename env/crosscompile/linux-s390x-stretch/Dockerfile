@@ -48,4 +48,3 @@ RUN curl -o /usr/local/bin/stage0 https://storage.googleapis.com/go-builder-data
 	&& chmod +x /usr/local/bin/stage0
 
 ENV GOROOT_BOOTSTRAP=/go1.4 GOOS=linux GOARCH=s390x CC_FOR_TARGET=s390x-linux-gnu-gcc
-COPY build-release.sh /usr/bin/
