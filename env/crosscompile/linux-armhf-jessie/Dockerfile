@@ -5,16 +5,20 @@
 # Linux builder VM running Debian stretch (i.e. Debian testing)
 # Docker tag gobuilders/linux-armhf-stretch
 
-FROM debian:stretch
+FROM debian:jessie
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
 ENV DEBIAN_FRONTEND noninteractive
 
-# curl: for getting and unpacking Go 1.4 source
+# Add the Debian cross toolchains repository and key
+COPY emdebian-toolchain-archive.key /tmp/
+RUN echo "deb http://emdebian.org/tools/debian/ jessie main" >> /etc/apt/sources.list \
+	&& apt-key add /tmp/emdebian-toolchain-archive.key
+
 # git-core: for interacting with the Go source & subrepos
 # gcc, libc-dev: for building Go's bootstrap 'dist' prog
-# gcc-armhf-linux-gnu, libc6-dev-armhf-cross: for armhf builds
-# linux-libc-dev(armhf): for asm/errno.h
+# gcc-armhf-linux-gnu: for armhf builds
+# libc-dev(armhf): for asm/errno.h
 # procps, lsof, psmisc: misc tools
 RUN dpkg --add-architecture armhf \
 	&& apt-get update && apt-get install -y \
@@ -25,8 +29,7 @@ RUN dpkg --add-architecture armhf \
 	gcc \
 	libc6-dev \
 	gcc-arm-linux-gnueabihf \
-	libc6-dev-armhf-cross \
-	linux-libc-dev:armhf \
+	libc-dev:armhf \
 	procps \
 	lsof \
 	psmisc \
