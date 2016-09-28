@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script type="text/javascript" src="https://www.google.com/jsapi"></script>
+    <script type="text/javascript">
+      google.load("visualization", "1", {packages:["corechart"]});
+      google.setOnLoadCallback(drawCharts);
+      function drawCharts() {
+          var data = google.visualization.arrayToDataTable(ReleaseData);
+          var options = {
+            title: 'Go 1.{{.GoReleaseCycle}} Release Issues',
+            isStacked: true,
+            width: 1100, height: 450,
+            vAxis: {minValue: 0},
+            focusTarget: 'category',
+            series: [
+              // TODO: What if we change the set of labels? How to map these more intelligently?
+              {color: '#008'}, // Early
+              {color: '#44c'}, // Release
+              {color: '#ccc'}, // Maybe
+            ]
+          };
+          var chart = new google.visualization.AreaChart(document.getElementById('ReleaseDiv'));
+          chart.draw(data, options);
+
+          var data = google.visualization.arrayToDataTable(TriageData);
+          var options = {
+            title: 'Issue Progress',
+            isStacked: true,
+            width: 1100, height: 450,
+            vAxis: {minValue: 0},
+            focusTarget: 'category',
+            series: [
+              {color: '#c00'}, // Triage needed
+              {color: '#cc0', lineDashStyle: [4, 4]}, // NeedsInvestigation
+              {color: '#ee4', lineDashStyle: [4, 4]}, // NeedsInvestigation+Waiting
+              {color: '#ff8', lineDashStyle: [4, 4]}, // NeedsInvestigation+Blocked
+              {color: '#0a0', lineDashStyle: [4, 4]}, // NeedsDecision
+              {color: '#4d4', lineDashStyle: [4, 4]}, // NeedsDecision+Waiting
+              {color: '#8f8', lineDashStyle: [4, 4]}, // NeedsDecision+Blocked
+              {color: '#00c', lineDashStyle: [4, 4]}, // NeedsFix
+              {color: '#44e', lineDashStyle: [4, 4]}, // NeedsFix+Waiting
+              {color: '#88f', lineDashStyle: [4, 4]}, // NeedsFix+Blocked
+            ]
+          };
+          var chart = new google.visualization.AreaChart(document.getElementById('TriageDiv'));
+          chart.draw(data, options);
+      }
+      function myDate(s) {
+        return new Date(s)
+      }
+    </script>
+    <script type="text/javascript" src="/stats/release/data.js?cycle={{.GoReleaseCycle}}"></script>
+
+<style>
+body { font-family: sans-serif; }
+h1 { text-align: center; }
+</style>
+</head>
+
+<body>
+
+<h1>Go 1.{{.GoReleaseCycle}} Issue Tracker Dashboard</h1>
+
+<div id="ReleaseDiv"></div>
+
+<div id="TriageDiv"></div>
+
+</body>

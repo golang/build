@@ -38,6 +38,8 @@ func init() {
 	// Defined in stats.go
 	http.HandleFunc("/stats/raw", rawHandler)
 	http.HandleFunc("/stats/svg", svgHandler)
+	http.Handle("/stats/release", ctxHandler(release))
+	http.Handle("/stats/release/data.js", ctxHandler(releaseData))
 	http.Handle("/update/stats", ctxHandler(updateStats))
 }
 
@@ -125,6 +127,7 @@ func update(ctx context.Context, w http.ResponseWriter, _ *http.Request) error {
 		if cls {
 			data.PrintCLs(&output)
 		} else {
+			fmt.Fprintf(&output, fmt.Sprintf(`<a href="/stats/release?cycle=%d">Go 1.%d Issue Stats Dashboard</a>`, data.GoReleaseCycle, data.GoReleaseCycle))
 			data.PrintIssues(&output)
 		}
 		var html bytes.Buffer

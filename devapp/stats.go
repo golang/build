@@ -7,12 +7,15 @@ package devapp
 import (
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"image/color"
+	"io/ioutil"
 	"math"
 	"net/http"
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/build/godash"
@@ -67,6 +70,37 @@ func updateStats(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 	log("Have data about %d issues", len(stats.Issues))
 	log("Updated issue stats to %v (detail to %v) in %.3f seconds", stats.Since, stats.IssueDetailSince, time.Now().Sub(start).Seconds())
 	return writeCache(ctx, "gzstats", stats)
+}
+
+func release(ctx context.Context, w http.ResponseWriter, req *http.Request) error {
+	req.ParseForm()
+
+	tmpl, err := ioutil.ReadFile("template/release.html")
+	if err != nil {
+		return err
+	}
+
+	t, err := template.New("main").Parse(string(tmpl))
+	if err != nil {
+		return err
+	}
+
+	cycle, _, err := argtoi(req, "cycle")
+	if err != nil {
+		return err
+	}
+	if cycle == 0 {
+		data, err := loadData(ctx)
+		if err != nil {
+			return err
+		}
+		cycle = data.GoReleaseCycle
+	}
+
+	if err := t.Execute(w, struct{ GoReleaseCycle int }{cycle}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func rawHandler(w http.ResponseWriter, r *http.Request) {
@@ -143,19 +177,23 @@ func (s countChangeSlice) Less(i, j int) bool { return s[i].t.Before(s[j].t) }
 // were open at each time. This produces columns called "Time" and
 // "Count".
 type openCount struct {
-	// ByRelease will add a Release column and provide counts per release.
-	ByRelease bool
+	// By is the column to group by; if "" all issues will be
+	// grouped together. Only "Release" and "Milestone" are
+	// supported.
+	By string
 }
 
 func (o openCount) F(input table.Grouping) table.Grouping {
 	return table.MapTables(input, func(_ table.GroupID, t *table.Table) *table.Table {
-		releases := make(map[string]countChangeSlice)
+		groups := make(map[string]countChangeSlice)
 		add := func(milestone string, t time.Time, count int) {
-			r := milestoneToRelease(milestone)
-			if r == "" {
-				r = milestone
+			if o.By == "Release" {
+				r := milestoneToRelease(milestone)
+				if r != "" {
+					milestone = r
+				}
 			}
-			releases[r] = append(releases[r], countChange{t, count})
+			groups[milestone] = append(groups[milestone], countChange{t, count})
 		}
 
 		created := t.MustColumn("Created").([]time.Time)
@@ -189,9 +227,9 @@ func (o openCount) F(input table.Grouping) table.Grouping {
 
 		var times []time.Time
 		var counts []int
-		if o.ByRelease {
+		if o.By != "" {
 			var names []string
-			for name, s := range releases {
+			for name, s := range groups {
 				sort.Sort(s)
 				sum := 0
 				for _, c := range s {
@@ -201,10 +239,10 @@ func (o openCount) F(input table.Grouping) table.Grouping {
 					counts = append(counts, sum)
 				}
 			}
-			nt.Add("Release", names)
+			nt.Add(o.By, names)
 		} else {
 			var all countChangeSlice
-			for _, s := range releases {
+			for _, s := range groups {
 				all = append(all, s...)
 			}
 			sort.Sort(all)
@@ -308,25 +346,34 @@ func plot(w http.ResponseWriter, req *http.Request, stats table.Grouping) error 
 	}
 	switch pivot := req.Form.Get("pivot"); pivot {
 	case "opencount":
-		byRelease := req.Form.Get("group") == "release"
-		plot.Stat(openCount{ByRelease: byRelease})
-		if byRelease {
-			plot.GroupBy("Release")
+		o := openCount{}
+		switch by := req.Form.Get("group"); by {
+		case "release":
+			o.By = "Release"
+		case "milestone":
+			o.By = "Milestone"
+		case "":
+		default:
+			return fmt.Errorf("unknown group %q", by)
+		}
+		plot.Stat(o)
+		if o.By != "" {
+			plot.GroupBy(o.By)
 		}
 		plot.SortBy("Time")
 		lp := gg.LayerPaths{
 			X: "Time",
 			Y: "Count",
 		}
-		if byRelease {
-			lp.Color = "Release"
+		if o.By != "" {
+			lp.Color = o.By
 		}
 		plot.Add(gg.LayerSteps{LayerPaths: lp})
-		if byRelease {
+		if o.By != "" {
 			plot.Add(gg.LayerTooltips{
 				X:     "Time",
 				Y:     "Count",
-				Label: "Release",
+				Label: o.By,
 			})
 		}
 	case "":
@@ -454,5 +501,101 @@ func plot(w http.ResponseWriter, req *http.Request, stats table.Grouping) error 
 	}
 	w.Header().Set("Content-Type", "image/svg+xml")
 	plot.WriteSVG(w, 1200, 600)
+	return nil
+}
+
+func releaseData(ctx context.Context, w http.ResponseWriter, req *http.Request) error {
+	req.ParseForm()
+
+	stats := &godash.Stats{}
+	if err := loadCache(ctx, "gzstats", stats); err != nil {
+		return err
+	}
+
+	cycle, _, err := argtoi(req, "cycle")
+	if err != nil {
+		return err
+	}
+	if cycle == 0 {
+		data, err := loadData(ctx)
+		if err != nil {
+			return err
+		}
+		cycle = data.GoReleaseCycle
+	}
+
+	prefix := fmt.Sprintf("Go1.%d", cycle)
+
+	w.Header().Set("Content-Type", "application/javascript")
+
+	g := gdstats.IssueStats(stats)
+	g = openCount{By: "Milestone"}.F(g)
+	g = table.Filter(g, func(m string) bool { return strings.HasPrefix(m, prefix) }, "Milestone")
+	g = table.SortBy(g, "Time")
+
+	// Dump data; remember that each row only affects one count, so we need to hold the counts from the previous row. Kind of like Pivot.
+	data := [][]interface{}{{"Date"}}
+	counts := make(map[string]int)
+	var (
+		maxt time.Time
+		maxc int
+	)
+	for _, gid := range g.Tables() {
+		// Find all the milestones that exist
+		ms := g.Table(gid).MustColumn("Milestone").([]string)
+		for _, m := range ms {
+			counts[m] = 0
+		}
+		// Find the peak of the graph
+		ts := g.Table(gid).MustColumn("Time").([]time.Time)
+		cs := g.Table(gid).MustColumn("Count").([]int)
+		for i, c := range cs {
+			if c > maxc {
+				maxc = c
+				maxt = ts[i]
+			}
+		}
+	}
+
+	// Only show the most recent 6 months of data.
+	start := maxt.Add(time.Duration(-6 * 30 * 24 * time.Hour))
+	g = table.Filter(g, func(t time.Time) bool { return t.After(start) }, "Time")
+
+	milestones := []string{prefix + "Early", prefix, prefix + "Maybe"}
+	for m := range counts {
+		switch m {
+		case prefix + "Early", prefix, prefix + "Maybe":
+		default:
+			milestones = append(milestones, m)
+		}
+	}
+	for _, m := range milestones {
+		data[0] = append(data[0], m)
+	}
+	for _, gid := range g.Tables() {
+		t := g.Table(gid)
+		time := t.MustColumn("Time").([]time.Time)
+		milestone := t.MustColumn("Milestone").([]string)
+		count := t.MustColumn("Count").([]int)
+		for i := range time {
+			counts[milestone[i]] = count[i]
+			row := []interface{}{time[i].UnixNano() / 1e6}
+			for _, m := range milestones {
+				row = append(row, counts[m])
+			}
+			data = append(data, row)
+		}
+	}
+	fmt.Fprintf(w, "var ReleaseData = ")
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		return err
+	}
+	fmt.Fprintf(w, ";\n")
+	fmt.Fprintf(w, `
+ReleaseData.map(function(row, i) {
+  if (i > 0) {
+    row[0] = new Date(row[0])
+  }
+});`)
 	return nil
 }

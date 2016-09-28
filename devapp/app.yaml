@@ -26,7 +26,7 @@ handlers:
   static_dir: static
   application_readable: true
   secure: always
-- url: /(|dash|release|cl|stats/raw|stats/svg)
+- url: /(|dash|release|cl|stats/raw|stats/svg|stats/release|stats/release/data.js)
   script: _go_app
   secure: always
 - url: /update.*
