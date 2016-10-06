@@ -54,6 +54,8 @@ func main() {
 		}
 	case "linux/arm64":
 		initLinaroARM64()
+	case "linux/ppc64":
+		initOregonStatePPC64()
 	case "linux/ppc64le":
 		initOregonStatePPC64le()
 	}
@@ -74,9 +76,21 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+
+	env := os.Environ()
+	if isUnix() && os.Getuid() == 0 {
+		if os.Getenv("USER") == "" {
+			env = append(env, "USER=root")
+		}
+		if os.Getenv("HOME") == "" {
+			env = append(env, "HOME=/root")
+		}
+	}
+
 	cmd := exec.Command(target)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	cmd.Env = env
 	if onScaleway {
 		cmd.Args = append(cmd.Args, scalewayBuildletArgs()...)
 	}
@@ -86,6 +100,8 @@ func main() {
 		cmd.Args = append(cmd.Args, reverseBuildletArgs("linux-s390x-ibm")...)
 	case "linux/arm64":
 		cmd.Args = append(cmd.Args, reverseBuildletArgs("linux-arm64-buildlet")...)
+	case "linux/ppc64":
+		cmd.Args = append(cmd.Args, reverseBuildletArgs("linux-ppc64-buildlet")...)
 	case "linux/ppc64le":
 		cmd.Args = append(cmd.Args, reverseBuildletArgs("linux-ppc64le-buildlet")...)
 	case "solaris/amd64":
@@ -156,6 +172,8 @@ func buildletURL() string {
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-s390x"
 	case "linux/arm64":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-arm64"
+	case "linux/ppc64":
+		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64"
 	case "linux/ppc64le":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64le"
 	case "solaris/amd64":
@@ -381,7 +399,20 @@ func initLinaroARM64() {
 	initBootstrapDir("/usr/local/go-bootstrap", "/usr/local/go-bootstrap.tar.gz")
 }
 
+func initOregonStatePPC64() {
+	aptGetInstall("gcc", "strace", "libc6-dev", "gdb")
+	initBootstrapDir("/usr/local/go-bootstrap", "/usr/local/go-bootstrap.tar.gz")
+}
+
 func initOregonStatePPC64le() {
 	aptGetInstall("gcc", "strace", "libc6-dev", "gdb")
 	initBootstrapDir("/usr/local/go-bootstrap", "/usr/local/go-bootstrap.tar.gz")
+}
+
+func isUnix() bool {
+	switch runtime.GOOS {
+	case "plan9", "windows":
+		return false
+	}
+	return true
 }

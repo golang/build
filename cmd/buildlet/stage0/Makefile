@@ -16,6 +16,10 @@ buildlet-stage0.linux-arm64: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
 
+buildlet-stage0.linux-ppc64: FORCE
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
+
 buildlet-stage0.linux-ppc64le: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@

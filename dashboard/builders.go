@@ -166,6 +166,12 @@ var Hosts = map[string]*HostConfig{
 		env:            []string{"GOROOT_BOOTSTRAP=/var/buildlet/go-linux-s390x-bootstrap"},
 		ReverseAliases: []string{"linux-s390x-ibm"},
 	},
+	"host-linux-ppc64-osu": &HostConfig{
+		Notes:          "Debian jessie; run by Go team on osuosl.org",
+		IsReverse:      true,
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		ReverseAliases: []string{"linux-ppc64-buildlet"},
+	},
 	"host-linux-ppc64le-osu": &HostConfig{
 		Notes:          "Debian jessie; run by Go team on osuosl.org",
 		IsReverse:      true,
@@ -776,6 +782,11 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "solaris-amd64-smartosbuildlet",
 		HostType: "host-solaris-amd64",
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-ppc64-buildlet",
+		HostType: "host-linux-ppc64-osu",
+		FlakyNet: true,
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-ppc64le-buildlet",

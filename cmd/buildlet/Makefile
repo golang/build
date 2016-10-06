@@ -48,6 +48,10 @@ buildlet.linux-arm64: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public go-builder-data/$@
 
+buildlet.linux-ppc64: FORCE
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public go-builder-data/$@
+
 buildlet.linux-ppc64le: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public go-builder-data/$@
