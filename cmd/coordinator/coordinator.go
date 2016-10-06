@@ -1299,7 +1299,7 @@ func (st *buildStatus) start() {
 			log.Println(st.builderRev, "failed:", err)
 		}
 		st.setDone(err == nil)
-		st.buildRecord().put()
+		putBuildRecord(st.buildRecord())
 		markDone(st.builderRev)
 	}()
 }
@@ -1407,7 +1407,7 @@ func (st *buildStatus) shouldCrossCompileMake() bool {
 }
 
 func (st *buildStatus) build() error {
-	st.buildRecord().put()
+	putBuildRecord(st.buildRecord())
 
 	sp := st.createSpan("checking_for_snapshot")
 	if inStaging {
@@ -1525,8 +1525,8 @@ func (st *buildStatus) build() error {
 
 func (st *buildStatus) isTry() bool { return st.trySet != nil }
 
-func (st *buildStatus) buildRecord() *BuildRecord {
-	rec := &BuildRecord{
+func (st *buildStatus) buildRecord() *types.BuildRecord {
+	rec := &types.BuildRecord{
 		ID:        st.buildID,
 		ProcessID: processID,
 		StartTime: st.startTime,
@@ -1551,6 +1551,29 @@ func (st *buildStatus) buildRecord() *BuildRecord {
 		} else {
 			rec.Result = "fail"
 		}
+	}
+	return rec
+}
+
+func (st *buildStatus) spanRecord(sp *span, err error) *types.SpanRecord {
+	rec := &types.SpanRecord{
+		BuildID: st.buildID,
+		IsTry:   st.isTry(),
+		GoRev:   st.rev,
+		Rev:     st.subRevOrGoRev(),
+		Repo:    st.repoOrGo(),
+		Builder: st.name,
+		OS:      st.conf.GOOS(),
+		Arch:    st.conf.GOARCH(),
+
+		Event:     sp.event,
+		Detail:    sp.optText,
+		StartTime: sp.start,
+		EndTime:   sp.end,
+		Seconds:   sp.end.Sub(sp.start).Seconds(),
+	}
+	if err != nil {
+		rec.Error = err.Error()
 	}
 	return rec
 }
@@ -2182,7 +2205,8 @@ var fixedTestDuration = map[string]Seconds{
 	"go_test:cmd/objdump":                    3.60,
 	"go_test:cmd/pack":                       2.64,
 	"go_test:cmd/pprof/internal/profile":     1.29,
-	"go_test:cmd/compile/internal/gc":        25,
+	"go_test:cmd/compile/internal/gc":        18,
+	"gp_test:cmd/compile/internal/ssa":       8,
 	"runtime:cpu124":                         44.78,
 	"sync_cpu":                               1.01,
 	"cgo_stdio":                              1.53,
@@ -2201,7 +2225,6 @@ var fixedTestDuration = map[string]Seconds{
 	"wiki":                                   3.56,
 	"shootout":                               11.34,
 	"bench_go1":                              3.72,
-	"test":                                   45, // old, but valid for a couple weeks from 2015-06-04
 	"test:0_5":                               10,
 	"test:1_5":                               10,
 	"test:2_5":                               10,
@@ -2543,8 +2566,16 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 			panic("only go_test:* tests may be merged")
 		}
 	}
-	which := fmt.Sprintf("%s: %v", bc.Name(), names)
-	sp := st.createSpan("start_tests", which)
+	var spanName string
+	var detail string
+	if len(names) == 1 {
+		spanName = "run_test:" + names[0]
+		detail = bc.Name()
+	} else {
+		spanName = "run_tests_multi"
+		detail = fmt.Sprintf("%s: %v", bc.Name(), names)
+	}
+	sp := st.createSpan(spanName, detail)
 
 	args := []string{"tool", "dist", "test", "--no-rebuild", "--banner=" + banner}
 	if st.conf.IsRace() {
@@ -2856,6 +2887,9 @@ func (s *span) done(err error) error {
 	}
 	if s.optText != "" {
 		fmt.Fprintf(&text, "; %v", s.optText)
+	}
+	if st, ok := s.el.(*buildStatus); ok {
+		putSpanRecord(st.spanRecord(s, err))
 	}
 	s.el.logEventTime("finish_"+s.event, text.String())
 	return err

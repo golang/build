@@ -15,6 +15,8 @@ import (
 	"reflect"
 	"time"
 
+	"golang.org/x/build/types"
+
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
 )
@@ -85,7 +87,7 @@ func sync(ctx context.Context) {
 		n := 0
 		var rows []*bigquery.ValuesSaver
 		for {
-			var s dsBuildRecord
+			var s types.BuildRecord
 			key, err := dsit.Next(&s)
 			if err == datastore.Done {
 				break
@@ -131,25 +133,4 @@ func sync(ctx context.Context) {
 		}
 	}
 
-}
-
-// dsBuildRecord is the Datastore record type written by
-// x/build/cmd/coordinator for each build. See docs there.
-//
-// TODO(bradfitz): add a new shared package for data types.
-type dsBuildRecord struct {
-	Arch       string
-	Builder    string
-	EndTime    time.Time
-	StartTime  time.Time
-	GoRev      string
-	ID         string
-	IsTry      bool
-	OS         string
-	ProcessID  string
-	Repo       string
-	Result     string
-	Rev        string
-	Seconds    float64
-	FailureURL string
 }

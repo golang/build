@@ -5,11 +5,13 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"time"
 
 	"cloud.google.com/go/datastore"
 
+	"golang.org/x/build/types"
 	"golang.org/x/net/context"
 )
 
@@ -45,30 +47,7 @@ func updateInstanceRecord() {
 	}
 }
 
-// BuildRecord is the datastore entity we write both at the beginning
-// and end of a build. Some fields are not updated until the end.
-type BuildRecord struct {
-	ID        string
-	ProcessID string
-	StartTime time.Time
-	IsTry     bool // is trybot run
-	GoRev     string
-	Rev       string // same as GoRev for repo "go"
-	Repo      string // "go", "net", etc.
-	Builder   string // "linux-amd64-foo"
-	OS        string // "linux"
-	Arch      string // "amd64"
-
-	EndTime    time.Time
-	Seconds    float64
-	Result     string // empty string, "ok", "fail"
-	FailureURL string `datastore:",noindex"`
-
-	// TODO(bradfitz): log which reverse buildlet we got?
-	// Buildlet string
-}
-
-func (br *BuildRecord) put() {
+func putBuildRecord(br *types.BuildRecord) {
 	if dsClient == nil {
 		return
 	}
@@ -76,5 +55,16 @@ func (br *BuildRecord) put() {
 	key := datastore.NewKey(ctx, "Build", br.ID, 0, nil)
 	if _, err := dsClient.Put(ctx, key, br); err != nil {
 		log.Printf("datastore Build Put: %v", err)
+	}
+}
+
+func putSpanRecord(sr *types.SpanRecord) {
+	if dsClient == nil {
+		return
+	}
+	ctx := context.Background()
+	key := datastore.NewKey(ctx, "Span", fmt.Sprintf("%s-%v-%v", sr.BuildID, sr.StartTime.UnixNano(), sr.Event), 0, nil)
+	if _, err := dsClient.Put(ctx, key, sr); err != nil {
+		log.Printf("datastore Span Put: %v", err)
 	}
 }

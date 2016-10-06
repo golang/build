@@ -6,6 +6,8 @@
 // system.
 package types
 
+import "time"
+
 // BuildStatus is the data structure that's marshalled as JSON
 // for the https://build.golang.org/?mode=json page.
 type BuildStatus struct {
@@ -55,4 +57,47 @@ type BuildRevision struct {
 	// the same length slice BuildStatus.Builders.
 	// Each string is either "" (if no data), "ok", or the URL to failure logs.
 	Results []string `json:"results"`
+}
+
+// SpanRecord is a datastore entity we write only at the end of a span
+// (roughly a "step") of the build.
+type SpanRecord struct {
+	BuildID string
+	IsTry   bool // is trybot run
+	GoRev   string
+	Rev     string // same as GoRev for repo "go"
+	Repo    string // "go", "net", etc.
+	Builder string // "linux-amd64-foo"
+	OS      string // "linux"
+	Arch    string // "amd64"
+
+	Event     string
+	Error     string // empty for no error
+	Detail    string
+	StartTime time.Time
+	EndTime   time.Time
+	Seconds   float64
+}
+
+// BuildRecord is the datastore entity we write both at the beginning
+// and end of a build. Some fields are not updated until the end.
+type BuildRecord struct {
+	ID        string
+	ProcessID string
+	StartTime time.Time
+	IsTry     bool // is trybot run
+	GoRev     string
+	Rev       string // same as GoRev for repo "go"
+	Repo      string // "go", "net", etc.
+	Builder   string // "linux-amd64-foo"
+	OS        string // "linux"
+	Arch      string // "amd64"
+
+	EndTime    time.Time
+	Seconds    float64
+	Result     string // empty string, "ok", "fail"
+	FailureURL string `datastore:",noindex"`
+
+	// TODO(bradfitz): log which reverse buildlet we got?
+	// Buildlet string
 }
