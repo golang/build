@@ -52,7 +52,9 @@ func keyForMode(mode string) (string, error) {
 				return "", fmt.Errorf("cannot read either key file %q or %q: %v", keyPath, globalKeyPath, err)
 			}
 		}
-		return "", fmt.Errorf("cannot read key file %q: %v", keyPath, err)
+		if len(key) == 0 || err != nil {
+			return "", fmt.Errorf("cannot read key file %q: %v", keyPath, err)
+		}
 	}
 	return string(key), nil
 }
