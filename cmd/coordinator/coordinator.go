@@ -19,6 +19,7 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/tls"
+	"encoding/csv"
 	"errors"
 	"flag"
 	"fmt"
@@ -36,6 +37,7 @@ import (
 	"path"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -2028,7 +2030,7 @@ func (st *buildStatus) newTestSet(names []string, benchmarks []*benchmarkItem) *
 		set.items = append(set.items, &testItem{
 			set:      set,
 			name:     name,
-			duration: testDuration(name),
+			duration: testDuration(st.builderRev.name, name),
 			take:     make(chan token, 1),
 			done:     make(chan token),
 		})
@@ -2039,7 +2041,7 @@ func (st *buildStatus) newTestSet(names []string, benchmarks []*benchmarkItem) *
 			set:      set,
 			name:     name,
 			bench:    bench,
-			duration: testDuration(name),
+			duration: testDuration(st.builderRev.name, name),
 			take:     make(chan token, 1),
 			done:     make(chan token),
 		})
@@ -2047,7 +2049,7 @@ func (st *buildStatus) newTestSet(names []string, benchmarks []*benchmarkItem) *
 	return set
 }
 
-func partitionGoTests(tests []string) (sets [][]string) {
+func partitionGoTests(builderName string, tests []string) (sets [][]string) {
 	var srcTests []string
 	var cmdTests []string
 	for _, name := range tests {
@@ -2073,16 +2075,96 @@ func partitionGoTests(tests []string) (sets [][]string) {
 			curDur = 0
 		}
 	}
-	for _, name := range goTests {
-		d := testDuration(name) - minGoTestSpeed // subtract 'go' tool overhead
+	for _, testName := range goTests {
+		d := testDuration(builderName, testName)
 		if curDur+d > sizeThres {
 			flush() // no-op if empty
 		}
-		curSet = append(curSet, name)
+		curSet = append(curSet, testName)
 		curDur += d
 	}
 
 	flush()
+	return
+}
+
+func secondsToDuration(sec float64) time.Duration {
+	return time.Duration(float64(sec) * float64(time.Second))
+}
+
+type testDurationMap map[string]map[string]time.Duration // builder name => test name => avg
+
+var (
+	testDurations   atomic.Value // of testDurationMap
+	testDurationsMu sync.Mutex   // held while updating testDurations
+)
+
+func getTestDurations() testDurationMap {
+	if m, ok := testDurations.Load().(testDurationMap); ok {
+		return m
+	}
+	testDurationsMu.Lock()
+	defer testDurationsMu.Unlock()
+	if m, ok := testDurations.Load().(testDurationMap); ok {
+		return m
+	}
+	updateTestDurationsLocked()
+	return testDurations.Load().(testDurationMap)
+}
+
+func updateTestDurations() {
+	testDurationsMu.Lock()
+	defer testDurationsMu.Unlock()
+	updateTestDurationsLocked()
+}
+
+func updateTestDurationsLocked() {
+	defer time.AfterFunc(1*time.Hour, updateTestDurations)
+	m := loadTestDurations()
+	testDurations.Store(m)
+}
+
+// The csv file on cloud storage looks like:
+//    Builder,Event,MedianSeconds,count
+//    linux-arm-arm5,run_test:runtime:cpu124,334.49922194,10
+//    linux-arm,run_test:runtime:cpu124,284.609130993,26
+//    linux-arm-arm5,run_test:go_test:cmd/compile/internal/gc,260.0241916,12
+//    linux-arm,run_test:go_test:cmd/compile/internal/gc,224.425924681,26
+//    solaris-amd64-smartosbuildlet,run_test:test:2_5,199.653975717,9
+//    solaris-amd64-smartosbuildlet,run_test:test:1_5,169.89733442,9
+//    solaris-amd64-smartosbuildlet,run_test:test:3_5,163.770453839,9
+//    solaris-amd64-smartosbuildlet,run_test:test:0_5,158.250119402,9
+//    openbsd-386-gce58,run_test:runtime:cpu124,146.494229388,12
+func loadTestDurations() (m testDurationMap) {
+	m = make(testDurationMap)
+	r, err := storageClient.Bucket(buildEnv.BuildletBucket).Object("test-durations.csv").NewReader(context.Background())
+	if err != nil {
+		log.Printf("loading test durations object from GCS: %v", err)
+		return
+	}
+	defer r.Close()
+	recs, err := csv.NewReader(r).ReadAll()
+	if err != nil {
+		log.Printf("reading test durations CSV: %v", err)
+		return
+	}
+	for _, rec := range recs {
+		if len(rec) < 3 || rec[0] == "Builder" {
+			continue
+		}
+		builder, testName, secondsStr := rec[0], rec[1], rec[2]
+		secs, err := strconv.ParseFloat(secondsStr, 64)
+		if err != nil {
+			log.Printf("unexpected seconds value in test durations CSV: %v", err)
+			continue
+		}
+		mm := m[builder]
+		if mm == nil {
+			mm = make(map[string]time.Duration)
+			m[builder] = mm
+		}
+		mm[testName] = secondsToDuration(secs)
+	}
 	return
 }
 
@@ -2325,11 +2407,18 @@ var fixedTestDuration = map[string]Seconds{
 
 // testDuration predicts how long the dist test 'name' will take 'name' will take.
 // It's only a scheduling guess.
-func testDuration(name string) time.Duration {
-	if secs, ok := fixedTestDuration[name]; ok {
+func testDuration(builderName, testName string) time.Duration {
+	if false { // disabled for now. never tested. TODO: test, enable.
+		durs := getTestDurations()
+		bdur := durs[builderName]
+		if d, ok := bdur[testName]; ok {
+			return d
+		}
+	}
+	if secs, ok := fixedTestDuration[testName]; ok {
 		return secs.Duration()
 	}
-	if strings.HasPrefix(name, "bench:") {
+	if strings.HasPrefix(testName, "bench:") {
 		// Assume benchmarks are roughly 20 seconds per run.
 		return 2 * benchRuns * 20 * time.Second
 	}
@@ -2845,7 +2934,7 @@ func (s *testSet) initInOrder() {
 
 	// First do the go_test:* ones. partitionGoTests
 	// only returns those, which are the ones we merge together.
-	stdSets := partitionGoTests(names)
+	stdSets := partitionGoTests(s.st.builderRev.name, names)
 	for _, set := range stdSets {
 		tis := make([]*testItem, len(set))
 		for i, name := range set {
