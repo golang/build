@@ -19,6 +19,8 @@ RUN apt-get install -y --no-install-recommends gdb
 RUN apt-get install -y --no-install-recommends strace
 # For building Go's bootstrap 'dist' prog
 RUN apt-get install -y --no-install-recommends gcc libc6-dev
+# For compiling cgo with fortran support
+RUN apt-get install -y --no-install-recommends gfortran
 # For 32-bit builds:
 # TODO(bradfitz): move these into a 386 image that derives from this one.
 RUN apt-get install -y --no-install-recommends libc6-dev-i386 gcc-multilib
