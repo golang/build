@@ -24,7 +24,7 @@ var Builders = map[string]BuildConfig{}
 var Hosts = map[string]*HostConfig{
 	"host-linux-kubestd": &HostConfig{
 		Notes:           "Kubernetes container on GKE.",
-		KubeImage:       "linux-x86-std:latest",
+		KubeImage:       "linux-x86-std-kube:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},

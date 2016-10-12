@@ -3,8 +3,8 @@
 # license that can be found in the LICENSE file.
 
 # Normal Linux builder
-# Docker tag gcr.io/go-dashboard-dev/linux-x86-std (staging)
-# and gcr.io/symbolic-datum-552/linux-x86-std (prod)
+# Docker tag gcr.io/go-dashboard-dev/linux-x86-std-kube (staging)
+# and gcr.io/symbolic-datum-552/linux-x86-std-kube (prod)
 
 FROM debian:wheezy
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
