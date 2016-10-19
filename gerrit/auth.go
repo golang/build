@@ -5,6 +5,9 @@
 package gerrit
 
 import (
+	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -171,3 +174,90 @@ var NoAuth = noAuth{}
 type noAuth struct{}
 
 func (noAuth) setAuth(c *Client, r *http.Request) {}
+
+type digestAuth struct {
+	Username, Password, Realm, NONCE, QOP, Opaque, Algorithm string
+}
+
+func getDigestAuth(username, password string, resp *http.Response) *digestAuth {
+	header := resp.Header.Get("www-authenticate")
+	parts := strings.SplitN(header, " ", 2)
+	parts = strings.Split(parts[1], ", ")
+	opts := make(map[string]string)
+
+	for _, part := range parts {
+		vals := strings.SplitN(part, "=", 2)
+		key := vals[0]
+		val := strings.Trim(vals[1], "\",")
+		opts[key] = val
+	}
+
+	auth := digestAuth{
+		username, password,
+		opts["realm"], opts["nonce"], opts["qop"], opts["opaque"], opts["algorithm"],
+	}
+	return &auth
+}
+
+func setDigestAuth(r *http.Request, username, password string, resp *http.Response, nc int) {
+	auth := getDigestAuth(username, password, resp)
+	authStr := getDigestAuthString(auth, r.URL, r.Method, nc)
+	r.Header.Add("Authorization", authStr)
+}
+
+func getDigestAuthString(auth *digestAuth, url *url.URL, method string, nc int) string {
+	var buf bytes.Buffer
+	h := md5.New()
+	fmt.Fprintf(&buf, "%s:%s:%s", auth.Username, auth.Realm, auth.Password)
+	buf.WriteTo(h)
+	ha1 := hex.EncodeToString(h.Sum(nil))
+
+	h = md5.New()
+	fmt.Fprintf(&buf, "%s:%s", method, url.Path)
+	buf.WriteTo(h)
+	ha2 := hex.EncodeToString(h.Sum(nil))
+
+	ncStr := fmt.Sprintf("%08x", nc)
+	hnc := "MTM3MDgw"
+
+	h = md5.New()
+	fmt.Fprintf(&buf, "%s:%s:%s:%s:%s:%s", ha1, auth.NONCE, ncStr, hnc, auth.QOP, ha2)
+	buf.WriteTo(h)
+	respdig := hex.EncodeToString(h.Sum(nil))
+
+	buf.Write([]byte("Digest "))
+	fmt.Fprintf(&buf,
+		`username="%s", realm="%s", nonce="%s", uri="%s", response="%s"`,
+		auth.Username, auth.Realm, auth.NONCE, url.Path, respdig,
+	)
+
+	if auth.Opaque != "" {
+		fmt.Fprintf(&buf, `, opaque="%s"`, auth.Opaque)
+	}
+	if auth.QOP != "" {
+		fmt.Fprintf(&buf, `, qop="%s", nc=%s, cnonce="%s"`, auth.QOP, ncStr, hnc)
+	}
+	if auth.Algorithm != "" {
+		fmt.Fprintf(&buf, `, algorithm="%s"`, auth.Algorithm)
+	}
+
+	return buf.String()
+}
+
+func (a digestAuth) setAuth(c *Client, r *http.Request) {
+	resp, err := http.Get(r.URL.String())
+	if err != nil {
+		return
+	}
+	setDigestAuth(r, a.Username, a.Password, resp, 1)
+}
+
+// DigestAuth returns an Auth implementation which sends
+// the provided username and password using HTTP Digest Authentication
+// (RFC 2617)
+func DigestAuth(username, password string) Auth {
+	return digestAuth{
+		Username: username,
+		Password: password,
+	}
+}
