@@ -189,4 +189,5 @@ var gccgoDash = &Dashboard{
 // from testing sub-repos against these branches.
 var hiddenBranches = map[string]bool{
 	"release-branch.go1.4": true,
+	"release-branch.go1.5": true,
 }
