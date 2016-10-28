@@ -198,6 +198,7 @@ func (p *Platform) Build() error {
 			return createErr
 		}
 	}
+	defer p.Gomote("destroy", p.Inst)
 	log.Printf("%s: using instance %v", p.Name, p.Inst)
 
 	// put14
