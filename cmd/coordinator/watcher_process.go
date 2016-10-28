@@ -959,6 +959,11 @@ func (r *Repo) push() (err error) {
 
 		var pushRefs []string
 		for ref, hash := range local {
+			if strings.Contains(ref, "refs/users/") ||
+				strings.Contains(ref, "refs/cache-auto") ||
+				strings.Contains(ref, "refs/changes/") {
+				continue
+			}
 			if remote[ref] != hash {
 				pushRefs = append(pushRefs, ref)
 			}
