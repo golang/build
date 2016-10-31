@@ -19,6 +19,7 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/datastore"
+	"google.golang.org/api/iterator"
 )
 
 var (
@@ -60,12 +61,12 @@ func sync(ctx context.Context) {
 		log.Fatalf("Read: %v", err)
 	}
 	var values bigquery.ValueList
-	if !it.Next(ctx) {
+	err = it.Next(&values)
+	if err == iterator.Done {
 		log.Fatalf("No result.")
 	}
-	err = it.Get(&values)
 	if err != nil {
-		log.Fatalf("Get: %v", err)
+		log.Fatalf("Next: %v", err)
 	}
 	t, ok := values[0].(time.Time)
 	if !ok {
@@ -78,7 +79,7 @@ func sync(ctx context.Context) {
 		log.Fatalf("datastore.NewClient: %v", err)
 	}
 
-	up := buildsTable.NewUploader()
+	up := buildsTable.Uploader()
 
 	log.Printf("Max: %v", t)
 	dsit := ds.Run(ctx, datastore.NewQuery("Build").Filter("EndTime >", t).Filter("EndTime <", t.Add(24*90*time.Hour)).Order("EndTime"))
