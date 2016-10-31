@@ -89,7 +89,7 @@ func sync(ctx context.Context) {
 		for {
 			var s types.BuildRecord
 			key, err := dsit.Next(&s)
-			if err == datastore.Done {
+			if err == iterator.Done {
 				break
 			}
 			n++

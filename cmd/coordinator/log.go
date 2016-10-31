@@ -34,7 +34,7 @@ func updateInstanceRecord() {
 	}
 	ctx := context.Background()
 	for {
-		key := datastore.NewKey(ctx, "Process", processID, 0, nil)
+		key := datastore.NameKey("Process", processID, nil)
 		_, err := dsClient.Put(ctx, key, &ProcessRecord{
 			ID:            processID,
 			Start:         processStartTime,
@@ -52,7 +52,7 @@ func putBuildRecord(br *types.BuildRecord) {
 		return
 	}
 	ctx := context.Background()
-	key := datastore.NewKey(ctx, "Build", br.ID, 0, nil)
+	key := datastore.NameKey("Build", br.ID, nil)
 	if _, err := dsClient.Put(ctx, key, br); err != nil {
 		log.Printf("datastore Build Put: %v", err)
 	}
@@ -63,7 +63,7 @@ func putSpanRecord(sr *types.SpanRecord) {
 		return
 	}
 	ctx := context.Background()
-	key := datastore.NewKey(ctx, "Span", fmt.Sprintf("%s-%v-%v", sr.BuildID, sr.StartTime.UnixNano(), sr.Event), 0, nil)
+	key := datastore.NameKey("Span", fmt.Sprintf("%s-%v-%v", sr.BuildID, sr.StartTime.UnixNano(), sr.Event), nil)
 	if _, err := dsClient.Put(ctx, key, sr); err != nil {
 		log.Printf("datastore Span Put: %v", err)
 	}
