@@ -48,6 +48,22 @@ buildlet.linux-arm64: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public go-builder-data/$@
 
+buildlet.linux-mips: FORCE
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public go-builder-data/$@
+
+buildlet.linux-mipsle: FORCE
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public go-builder-data/$@
+
+buildlet.linux-mips64: FORCE
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public go-builder-data/$@
+
+buildlet.linux-mips64le: FORCE
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public go-builder-data/$@
+
 buildlet.linux-ppc64: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public go-builder-data/$@

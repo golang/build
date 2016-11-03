@@ -190,6 +190,30 @@ var Hosts = map[string]*HostConfig{
 		env:            []string{"GOROOT_BOOTSTRAP=/root/go-solaris-amd64-bootstrap"},
 		ReverseAliases: []string{"solaris-amd64-smartosbuildlet"},
 	},
+	"host-linux-mips": &HostConfig{
+		Notes:          "Run by Brendan Kirby, imgtec.com",
+		IsReverse:      true,
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		ReverseAliases: []string{"linux-mips"},
+	},
+	"host-linux-mipsle": &HostConfig{
+		Notes:          "Run by Brendan Kirby, imgtec.com",
+		IsReverse:      true,
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		ReverseAliases: []string{"linux-mipsle"},
+	},
+	"host-linux-mips64": &HostConfig{
+		Notes:          "Run by Brendan Kirby, imgtec.com",
+		IsReverse:      true,
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		ReverseAliases: []string{"linux-mips64"},
+	},
+	"host-linux-mips64le": &HostConfig{
+		Notes:          "Run by Brendan Kirby, imgtec.com",
+		IsReverse:      true,
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		ReverseAliases: []string{"linux-mips64le"},
+	},
 }
 
 func init() {
@@ -797,6 +821,22 @@ func init() {
 		Name:     "linux-arm64-buildlet",
 		HostType: "host-linux-arm64-linaro",
 		FlakyNet: true,
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-mips",
+		HostType: "host-linux-mips",
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-mipsle",
+		HostType: "host-linux-mipsle",
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-mips64",
+		HostType: "host-linux-mips64",
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-mips64le",
+		HostType: "host-linux-mips64le",
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-s390x-ibm",
