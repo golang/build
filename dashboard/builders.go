@@ -193,25 +193,25 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-mips": &HostConfig{
 		Notes:          "Run by Brendan Kirby, imgtec.com",
 		IsReverse:      true,
-		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mips"},
 		ReverseAliases: []string{"linux-mips"},
 	},
 	"host-linux-mipsle": &HostConfig{
 		Notes:          "Run by Brendan Kirby, imgtec.com",
 		IsReverse:      true,
-		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mipsle"},
 		ReverseAliases: []string{"linux-mipsle"},
 	},
 	"host-linux-mips64": &HostConfig{
 		Notes:          "Run by Brendan Kirby, imgtec.com",
 		IsReverse:      true,
-		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mips64"},
 		ReverseAliases: []string{"linux-mips64"},
 	},
 	"host-linux-mips64le": &HostConfig{
 		Notes:          "Run by Brendan Kirby, imgtec.com",
 		IsReverse:      true,
-		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mips64le"},
 		ReverseAliases: []string{"linux-mips64le"},
 	},
 }
