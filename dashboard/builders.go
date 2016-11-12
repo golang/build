@@ -637,7 +637,9 @@ func init() {
 			},
 		})
 	}
-	addMiscCompile("", "^(linux-arm64|linux-mips.*|nacl-arm|solaris-amd64|freebsd-arm|darwin-386)$")
+	addMiscCompile("", "^(linux-arm64|linux-mips64.*|nacl-arm|solaris-amd64|freebsd-arm|darwin-386)$")
+	// TODO(bradfitz): add linux-mips* (or just make a "-mips" suffix builder) to add 32-bit
+	// mips, once that port is finished.
 	addMiscCompile("-ppc", "^(linux-ppc64|linux-ppc64le)$")
 	addMiscCompile("-netbsd", "^netbsd-")
 	addMiscCompile("-plan9", "^plan9-")
