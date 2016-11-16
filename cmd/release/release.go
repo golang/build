@@ -211,6 +211,16 @@ var builds = []*Build{
 		MakeOnly: true,
 		Builder:  "linux-s390x-crosscompile",
 	},
+	// TODO(bradfitz): switch this ppc64 builder to a Kubernetes
+	// container cross-compiling ppc64 like the s390x one? For
+	// now, the ppc64le builders (5) are back, so let's see if we
+	// can just depend on them not going away.
+	{
+		OS:       "linux",
+		Arch:     "ppc64le",
+		MakeOnly: true,
+		Builder:  "linux-ppc64le-buildlet",
+	},
 }
 
 const (
