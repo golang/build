@@ -562,7 +562,9 @@ var windowsData = map[string]string{
 <Icon Id="gopher.ico" SourceFile="images\gopher.ico"/>
 <Property Id="ARPPRODUCTICON" Value="gopher.ico" />
 <Media Id='1' Cabinet="go.cab" EmbedCab="yes" CompressionLevel="high" />
-<Condition Message="Windows XP or greater required."> VersionNT >= 500</Condition>
+<Condition Message="Windows XP (with Service Pack 2) or greater required.">
+     (VersionNT >= 501 AND (WindowsBuild > 2600 OR ServicePackLevel >= 2))
+</Condition>
 <MajorUpgrade AllowDowngrades="yes" />
 <SetDirectory Id="INSTALLDIRROOT" Value="[%SYSTEMDRIVE]"/>
 
