@@ -96,7 +96,11 @@ resources:
           - "https://www.googleapis.com/auth/cloud-platform"
       master_auth:
         username: "admin"
-        password: "{{ .KubePassword }}"
+        password: "{{ .KubePassword }}"`
+
+// Old autoscaler part:
+/*
+`
 - name: autoscaler
   type: compute.v1.autoscaler
   properties:
@@ -109,6 +113,7 @@ resources:
       coolDownPeriodSec: 1200
       cpuUtilization:
         utilizationTarget: .6`
+*/
 
 func readFile(v string) string {
 	slurp, err := ioutil.ReadFile(v)

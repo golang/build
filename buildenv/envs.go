@@ -182,8 +182,8 @@ var Production = &Environment{
 	ZonesToClean:    []string{"us-central1-f"},
 	StaticIP:        "107.178.219.46",
 	MachineType:     "n1-standard-4",
-	KubeMinNodes:    3,
-	KubeMaxNodes:    5,
+	KubeMinNodes:    5,
+	KubeMaxNodes:    5, // auto-scaling disabled
 	KubeName:        "buildlets",
 	KubeMachineType: "n1-standard-32",
 	DashURL:         "https://build.golang.org/",

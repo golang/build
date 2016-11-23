@@ -147,7 +147,7 @@ func (c *Client) GetPods(ctx context.Context) ([]api.Pod, error) {
 // PodDelete deletes the specified Kubernetes pod.
 func (c *Client) DeletePod(ctx context.Context, podName string) error {
 	url := c.endpointURL + defaultPod + "/" + podName
-	req, err := http.NewRequest("DELETE", url, nil)
+	req, err := http.NewRequest("DELETE", url, strings.NewReader(`{"gracePeriodSeconds":0}`))
 	if err != nil {
 		return fmt.Errorf("failed to create request: DELETE %q : %v", url, err)
 	}

@@ -23,8 +23,9 @@ import (
 var (
 	// TODO(evanbrown): resource requirements should be
 	// defined per-builder in dashboard/builders.go
-	BuildletCPU    = api.MustParse("2")         // 2 Cores
-	BuildletMemory = api.MustParse("2000000Ki") // 2,000,000Ki RAM
+	BuildletCPU      = api.MustParse("2")         // 2 Cores
+	BuildletCPULimit = api.MustParse("8")         // 8 Cores
+	BuildletMemory   = api.MustParse("4000000Ki") // 4,000,000Ki RAM
 )
 
 // PodOpts control how new pods are started.
@@ -99,7 +100,7 @@ func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, hostT
 							api.ResourceMemory: BuildletMemory,
 						},
 						Limits: api.ResourceList{
-							api.ResourceCPU:    BuildletCPU,
+							api.ResourceCPU:    BuildletCPULimit,
 							api.ResourceMemory: BuildletMemory,
 						},
 					},
