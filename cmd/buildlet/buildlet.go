@@ -17,6 +17,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha1"
 	"crypto/tls"
 	"encoding/json"
@@ -240,8 +241,35 @@ func listenForCoordinator() {
 		ln = tls.NewListener(ln, tlsConf)
 	}
 
-	log.Fatalf("Serve: %v", srv.Serve(ln))
+	serveErr := make(chan error, 1)
+	go func() {
+		serveErr <- srv.Serve(ln)
+	}()
+
+	signalChan := make(chan os.Signal, 1)
+	if registerSignal != nil {
+		registerSignal(signalChan)
+	}
+	select {
+	case sig := <-signalChan:
+		log.Printf("received signal %v; shutting down gracefully.", sig)
+	case err := <-serveErr:
+		log.Fatalf("Serve: %v", err)
+	}
+	time.AfterFunc(5*time.Second, func() {
+		log.Printf("timeout shutting down gracefully; exiting immediately")
+		os.Exit(1)
+	})
+	if err := srv.Shutdown(context.Background()); err != nil {
+		log.Printf("Graceful shutdown error: %v; exiting immediately instead", err)
+		os.Exit(1)
+	}
+	log.Printf("graceful shutdown complete.")
+	os.Exit(0)
 }
+
+// registerSignal if non-nil registers shutdown signals with the provided chan.
+var registerSignal func(chan<- os.Signal)
 
 var inKube, _ = strconv.ParseBool(os.Getenv("IN_KUBERNETES"))
 
