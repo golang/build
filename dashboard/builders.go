@@ -53,6 +53,12 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
+	"host-linux-x86-alpine": &HostConfig{
+		Notes:           "Kubernetes alpine container on GKE.",
+		KubeImage:       "linux-x86-alpine:latest",
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64-static",
+		env:             []string{"GOROOT_BOOTSTRAP=/usr/lib/go"},
+	},
 	"host-linux-clang": &HostConfig{
 		Notes:           "GCE VM with clang.",
 		VMImage:         "linux-buildlet-clang",

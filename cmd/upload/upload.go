@@ -41,6 +41,7 @@ var (
 	doGzip        = flag.Bool("gzip", false, "gzip the stored contents (not the upload's Content-Encoding); this forces the Content-Type to be application/octet-stream. To prevent misuse, the object name must also end in '.gz'")
 	extraEnv      = flag.String("extraenv", "", "comma-separated list of addition KEY=val environment pairs to include in build environment when building a target to upload")
 	installSuffix = flag.String("installsuffix", "", "installsuffix for the go command")
+	static        = flag.Bool("static", false, "compile the binary statically, adds necessary ldflags")
 )
 
 func main() {
@@ -203,12 +204,16 @@ func buildGoTarget() {
 	}
 
 	version := os.Getenv("USER") + "-" + time.Now().Format(time.RFC3339)
+	ldflags := "-X main.Version=" + version
+	if *static {
+		ldflags = "-linkmode=external -extldflags '-static -pthread' " + ldflags
+	}
 	cmd = exec.Command("go",
 		"install",
 		"--tags="+*tags,
 		"--installsuffix="+*installSuffix,
 		"-x",
-		"--ldflags=-X main.Version="+version,
+		"--ldflags="+ldflags,
 		target)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
