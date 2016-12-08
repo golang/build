@@ -61,7 +61,7 @@ cat >etc/rc.local <<EOF
   (
     set -e
     export PATH="\$PATH:/usr/local/bin"
-    /usr/local/bin/curl -o /buildlet \$(/usr/local/bin/curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/buildlet-binary-url)
+    /usr/local/bin/curl -o /buildlet \$(/usr/local/bin/curl --fail -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/buildlet-binary-url)
     chmod +x /buildlet
     exec /buildlet
   )
