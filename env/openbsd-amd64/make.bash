@@ -54,6 +54,17 @@ EOF
 cat >etc/rc.local <<EOF
 (
   set -x
+
+  # GCE network configuration seems broken on OpenBSD 6.0,
+  # fix up routing using a high priority route...
+  GW=\$(route -n show | awk '/default/ { print \$2 }')
+  IP=\$(ifconfig vio0 | awk '/inet/ { print \$2 }')
+  pkill dhclient
+  route flush
+  ifconfig vio0 \${IP}/8
+  route add -priority 2 10.0.0.0/8 \${GW}
+  route add default \${GW}
+
   echo "starting buildlet script"
   netstat -rn
   cat /etc/resolv.conf
