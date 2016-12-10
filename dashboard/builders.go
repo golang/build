@@ -64,19 +64,26 @@ var Hosts = map[string]*HostConfig{
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		ReverseAliases: []string{"linux-arm", "linux-arm-arm5"},
 	},
+	"host-openbsd-amd64-60": &HostConfig{
+		VMImage:            "openbsd-amd64-60",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-60.tar.gz",
+		Notes:              "OpenBSD 6.0; GCE VM is built from script in build/env/openbsd-amd64",
+	},
 	"host-openbsd-amd64-58-gce": &HostConfig{
 		VMImage:            "openbsd-amd64-58",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-openbsd-amd64-gce58.tar.gz",
-		Notes:              "OpenBSD 5.8; GCE VM is built from script in build/env/openbsd-amd64",
+		Notes:              "OpenBSD 5.8; GCE VM was previously built from script in build/env/openbsd-amd64",
 	},
 	"host-openbsd-386-58-gce": &HostConfig{
 		VMImage:            "openbsd-386-58",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-openbsd-386-gce58.tar.gz",
-		Notes:              "OpenBSD 5.8; GCE VM is built from script in build/env/openbsd-386",
+		Notes:              "OpenBSD 5.8; GCE VM was previously built from script in build/env/openbsd-386",
 	},
 	"host-freebsd-93-gce": &HostConfig{
 		VMImage:            "freebsd-amd64-gce93",
@@ -198,6 +205,7 @@ var Hosts = map[string]*HostConfig{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mips",
 			"GOARCH=mips",
 			"GOHOSTARCH=mips",
+			"GO_TEST_TIMEOUT_SCALE=4",
 		},
 		ReverseAliases: []string{"linux-mips"},
 	},
@@ -218,6 +226,7 @@ var Hosts = map[string]*HostConfig{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mips64",
 			"GOARCH=mips64",
 			"GOHOSTARCH=mips64",
+			"GO_TEST_TIMEOUT_SCALE=4",
 		},
 		ReverseAliases: []string{"linux-mips64"},
 	},
@@ -281,7 +290,7 @@ type HostConfig struct {
 	buildletURLTmpl string
 
 	// Exactly 1 of these must be set:
-	VMImage   string // e.g. "openbsd-amd64-58"
+	VMImage   string // e.g. "openbsd-amd64-60"
 	KubeImage string // e.g. "linux-buildlet-std:latest" (suffix after "gcr.io/<PROJ>/")
 	IsReverse bool   // if true, only use the reverse buildlet pool
 
@@ -473,6 +482,7 @@ func (c *BuildConfig) BuildSubrepos() bool {
 		"freebsd-386-gce101", "freebsd-amd64-gce101",
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
 		"openbsd-386-gce58", "openbsd-amd64-gce58",
+		"openbsd-amd64-60", "openbsd-386-60",
 		"plan9-386",
 		"windows-386-gce", "windows-amd64-gce":
 		return true
@@ -733,6 +743,12 @@ func init() {
 		HostType:       "host-nacl-kube",
 		numTestHelpers: 3,
 		env:            []string{"GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
+	})
+	addBuilder(BuildConfig{
+		Name:              "openbsd-amd64-gce60",
+		HostType:          "host-openbsd-amd64-60",
+		numTestHelpers:    2,
+		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-gce58",
