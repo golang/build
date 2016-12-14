@@ -71,19 +71,12 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-60.tar.gz",
 		Notes:              "OpenBSD 6.0; GCE VM is built from script in build/env/openbsd-amd64",
 	},
-	"host-openbsd-amd64-58-gce": &HostConfig{
-		VMImage:            "openbsd-amd64-58",
-		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-openbsd-amd64-gce58.tar.gz",
-		Notes:              "OpenBSD 5.8; GCE VM was previously built from script in build/env/openbsd-amd64",
-	},
-	"host-openbsd-386-58-gce": &HostConfig{
-		VMImage:            "openbsd-386-58",
+	"host-openbsd-386-60": &HostConfig{
+		VMImage:            "openbsd-386-60",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-openbsd-386-gce58.tar.gz",
-		Notes:              "OpenBSD 5.8; GCE VM was previously built from script in build/env/openbsd-386",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-60.tar.gz",
+		Notes:              "OpenBSD 6.0; GCE VM is built from script in build/env/openbsd-386",
 	},
 	"host-freebsd-93-gce": &HostConfig{
 		VMImage:            "freebsd-amd64-gce93",
@@ -481,8 +474,7 @@ func (c *BuildConfig) BuildSubrepos() bool {
 		"darwin-386-10_11",
 		"freebsd-386-gce101", "freebsd-amd64-gce101",
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
-		"openbsd-386-gce58", "openbsd-amd64-gce58",
-		"openbsd-amd64-60", "openbsd-386-60",
+		"openbsd-386-60", "openbsd-amd64-60",
 		"plan9-386",
 		"windows-386-gce", "windows-amd64-gce":
 		return true
@@ -745,21 +737,16 @@ func init() {
 		env:            []string{"GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
-		Name:              "openbsd-amd64-gce60",
+		Name:              "openbsd-amd64-60",
 		HostType:          "host-openbsd-amd64-60",
 		numTestHelpers:    2,
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
-		Name:              "openbsd-amd64-gce58",
-		HostType:          "host-openbsd-amd64-58-gce",
+		Name:              "openbsd-386-60",
+		HostType:          "host-openbsd-386-60",
 		numTestHelpers:    2,
 		numTryTestHelpers: 5,
-	})
-	addBuilder(BuildConfig{
-		Name:           "openbsd-386-gce58",
-		HostType:       "host-openbsd-386-58-gce",
-		numTestHelpers: 2,
 	})
 	addBuilder(BuildConfig{
 		Name:           "netbsd-amd64-gce",

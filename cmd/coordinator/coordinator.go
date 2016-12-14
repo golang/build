@@ -110,7 +110,7 @@ func initTryBuilders() {
 		"freebsd-amd64-gce101",
 		"windows-386-gce",
 		"windows-amd64-gce",
-		"openbsd-amd64-gce58",
+		"openbsd-amd64-60",
 		"nacl-386",
 		"nacl-amd64p32",
 		"linux-arm",
