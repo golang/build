@@ -251,9 +251,21 @@ func windowsMSI() error {
 		return err
 	}
 
+	msArch := func() string {
+		switch runtime.GOARCH {
+		default:
+			panic("unknown arch for windows " + runtime.GOARCH)
+		case "386":
+			return "x86"
+		case "amd64":
+			return "x64"
+		}
+	}
+
 	// Build package.
 	if err := runDir(win, filepath.Join(wix, "candle"),
 		"-nologo",
+		"-arch", msArch(),
 		"-dGoVersion="+version,
 		"-dWixGoVersion="+wixVersion(version),
 		"-dArch="+runtime.GOARCH,
@@ -498,7 +510,7 @@ function installCheck() {
 	    my.result.type = 'Warning';
 	    return false;
 	}
-    return true;    
+    return true;
 }
     </script>
     <choices-outline>
@@ -543,7 +555,7 @@ var windowsData = map[string]string{
     UpgradeCode="$(var.UpgradeCode)" >
 
 <Package
-    Id='*' 
+    Id='*'
     Keywords='Installer'
     Description="The Go Programming Language Installer"
     Comments="The Go programming language is an open source project to make programmers more productive."
@@ -551,7 +563,6 @@ var windowsData = map[string]string{
     Compressed="yes"
     InstallScope="perMachine"
     Languages="1033" />
-    <!--    Platform="x86 or x64" -->
 
 <Property Id="ARPCOMMENTS" Value="The Go programming language is a fast, statically typed, compiled language that feels like a dynamically typed, interpreted language." />
 <Property Id="ARPCONTACT" Value="golang-nuts@googlegroups.com" />
@@ -610,16 +621,16 @@ var windowsData = map[string]string{
         Root="HKCU"
         Key="Software\GoProgrammingLanguage"
         Name="ShortCuts"
-        Type="integer" 
+        Type="integer"
         Value="1"
-        KeyPath="yes" /> 
+        KeyPath="yes" />
   </Component>
 </DirectoryRef>
 
 <!-- Registry & Environment Settings -->
 <DirectoryRef Id="GoEnvironmentEntries">
   <Component Id="Component_GoEnvironment" Guid="{3ec7a4d5-eb08-4de7-9312-2df392c45993}">
-    <RegistryKey 
+    <RegistryKey
         Root="HKCU"
         Key="Software\GoProgrammingLanguage"
         Action="create" >
