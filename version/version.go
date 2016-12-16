@@ -28,6 +28,10 @@ import (
 	"golang.org/x/build/envutil"
 )
 
+func init() {
+	http.DefaultTransport = &userAgentTransport{http.DefaultTransport}
+}
+
 // Run runs the "go" tool of the provided Go version.
 func Run(version string) {
 	log.SetFlags(0)
@@ -306,12 +310,12 @@ func copyFromURL(dstFile, srcURL string) (err error) {
 		}
 	}()
 	c := &http.Client{
-		Transport: &http.Transport{
+		Transport: &userAgentTransport{&http.Transport{
 			// It's already compressed. Prefer accurate ContentLength.
 			// (Not that GCS would try to compress it, though)
 			DisableCompression: true,
 			DisableKeepAlives:  true,
-		},
+		}},
 	}
 	res, err := c.Get(srcURL)
 	if err != nil {
@@ -431,4 +435,18 @@ func validRelPath(p string) bool {
 		return false
 	}
 	return true
+}
+
+type userAgentTransport struct {
+	rt http.RoundTripper
+}
+
+func (uat userAgentTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	version := runtime.Version()
+	if strings.Contains(version, "devel") {
+		// Strip the SHA hash and date. We don't want spaces or other tokens (see RFC2616 14.43)
+		version = "devel"
+	}
+	r.Header.Set("User-Agent", "golang-x-build-version/"+version)
+	return uat.rt.RoundTrip(r)
 }
