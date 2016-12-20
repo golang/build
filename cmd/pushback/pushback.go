@@ -51,6 +51,7 @@ var repos = []string{
 	"golang/net",
 	"golang/oauth2",
 	"golang/playground",
+	"golang/perf",
 	"golang/proposal",
 	"golang/review",
 	"golang/sublime-build",
