@@ -1,7 +1,6 @@
 This service runs as a Google Managed VM.
-Use the gcloud tool to deploy:
 
-$ gcloud --project symbolic-datum-552 preview app deploy --no-promote app.yaml
+Deploy with ./deploy.bash.
 
 Then use the Cloud Console to set the new version as the default,
 and delete the old instance (lest it keep running):
