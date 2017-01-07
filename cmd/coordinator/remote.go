@@ -229,7 +229,7 @@ func remoteBuildletStatus() string {
 
 // httpRouter separates out HTTP traffic being proxied
 // to buildlets on behalf of remote clients from traffic
-// destined for the coordiantor itself (the default).
+// destined for the coordinator itself (the default).
 type httpRouter struct{}
 
 func (httpRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {

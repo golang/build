@@ -401,7 +401,7 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		modes = filtered
 	}
 
-	// Collapse their modes down into a singluar hostType
+	// Collapse their modes down into a singular hostType
 	hostType := mapBuilderToHostType(modes)
 
 	conn, bufrw, err := w.(http.Hijacker).Hijack()

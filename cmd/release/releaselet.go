@@ -430,7 +430,7 @@ var versionRe = regexp.MustCompile(`^go(\d+(\.\d+)*)`)
 // The Microsoft installer requires version format major.minor.build
 // (http://msdn.microsoft.com/en-us/library/aa370859%28v=vs.85%29.aspx).
 // Where the major and minor field has a maximum value of 255 and build 65535.
-// The offical Go version format is goMAJOR.MINOR.PATCH at $GOROOT/VERSION.
+// The official Go version format is goMAJOR.MINOR.PATCH at $GOROOT/VERSION.
 // It's based on the Mercurial tag. Remove prefix and suffix to make the
 // installer happy.
 func wixVersion(v string) string {

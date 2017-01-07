@@ -54,7 +54,7 @@ type PodOpts struct {
 
 	// OnPodCreating optionally specifies a hook to run synchronously
 	// after the pod create request has been made, but before the create
-	// has suceeded.
+	// has succeeded.
 	OnPodCreating func()
 
 	// OnPodCreated optionally specifies a hook to run synchronously

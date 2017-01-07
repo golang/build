@@ -621,7 +621,7 @@ const (
 	StorageMediumMemory  StorageMedium = "Memory" // use memory (tmpfs)
 )
 
-// Protocol defines network protocols supported for things like conatiner ports.
+// Protocol defines network protocols supported for things like container ports.
 type Protocol string
 
 const (
@@ -1505,7 +1505,7 @@ type ServiceSpec struct {
 	SessionAffinity ServiceAffinity `json:"sessionAffinity,omitempty"`
 }
 
-// ServicePort conatins information on service's port.
+// ServicePort contains information on service's port.
 type ServicePort struct {
 	// The name of this port within the service. This must be a DNS_LABEL.
 	// All ports within a ServiceSpec must have unique names. This maps to
@@ -1762,7 +1762,7 @@ const (
 	NodeReady NodeConditionType = "Ready"
 )
 
-// NodeCondition contains condition infromation for a node.
+// NodeCondition contains condition information for a node.
 type NodeCondition struct {
 	// Type of node condition, currently only Ready.
 	Type NodeConditionType `json:"type"`
@@ -2540,7 +2540,7 @@ type DownwardAPIVolumeFile struct {
 
 // SecurityContext holds security configuration that will be applied to a container.
 type SecurityContext struct {
-	// The linux kernel capabilites that should be added or removed.
+	// The linux kernel capabilities that should be added or removed.
 	// Default to Container.Capabilities if left unset.
 	// More info: http://releases.k8s.io/HEAD/docs/design/security_context.md#security-context
 	Capabilities *Capabilities `json:"capabilities,omitempty"`
