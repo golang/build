@@ -345,9 +345,19 @@ func (c *Client) QueryChanges(q string, opts ...QueryChangesOpt) ([]*ChangeInfo,
 // GetChangeDetail retrieves a change with labels, detailed labels, detailed
 // accounts, and messages.
 // For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#get-change-detail
-func (c *Client) GetChangeDetail(changeID string) (*ChangeInfo, error) {
+func (c *Client) GetChangeDetail(changeID string, opts ...QueryChangesOpt) (*ChangeInfo, error) {
+	var opt QueryChangesOpt
+	switch len(opts) {
+	case 0:
+	case 1:
+		opt = opts[0]
+	default:
+		return nil, errors.New("only 1 option struct supported")
+	}
 	var change ChangeInfo
-	err := c.do(&change, "GET", "/changes/"+changeID+"/detail")
+	err := c.do(&change, "GET", "/changes/"+changeID+"/detail", urlValues{
+		"o": opt.Fields,
+	})
 	if err != nil {
 		return nil, err
 	}
