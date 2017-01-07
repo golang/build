@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package build contains constants for the Go continous build system.
+// Package build contains constants for the Go continuous build system.
 package build
 
 import (
