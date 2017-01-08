@@ -87,7 +87,7 @@ func (d *Data) FetchData(ctx context.Context, gh *github.Client, ger *gerrit.Cli
 	if err != nil {
 		return err
 	}
-	log("Fetched %d open CLs in %.3f seconds", len(cls), time.Now().Sub(start).Seconds())
+	log("Fetched %d open CLs in %.3f seconds", len(cls), time.Since(start).Seconds())
 	start = time.Now()
 
 	var open []*CL
@@ -101,7 +101,7 @@ func (d *Data) FetchData(ctx context.Context, gh *github.Client, ger *gerrit.Cli
 		if err != nil {
 			return err
 		}
-		log("Fetched %d merged CLs in %.3f seconds", len(cls), time.Now().Sub(start).Seconds())
+		log("Fetched %d merged CLs in %.3f seconds", len(cls), time.Since(start).Seconds())
 		start = time.Now()
 		open = append(open, cls...)
 	}
@@ -114,13 +114,13 @@ func (d *Data) FetchData(ctx context.Context, gh *github.Client, ger *gerrit.Cli
 		if err != nil {
 			return err
 		}
-		log("Fetched %d open issues in %.3f seconds", len(res), time.Now().Sub(start).Seconds())
+		log("Fetched %d open issues in %.3f seconds", len(res), time.Since(start).Seconds())
 		start = time.Now()
 		res2, err := searchIssues(gh, "is:closed closed:>="+since.Format(time.RFC3339))
 		if err != nil {
 			return err
 		}
-		log("Fetched %d closed issues in %.3f seconds", len(res2), time.Now().Sub(start).Seconds())
+		log("Fetched %d closed issues in %.3f seconds", len(res2), time.Since(start).Seconds())
 		res = append(res, res2...)
 		for _, issue := range res {
 			d.Issues[issue.Number] = issue

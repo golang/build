@@ -16,16 +16,23 @@ import (
 	"github.com/google/go-github/github"
 	"golang.org/x/build/godash"
 	"golang.org/x/net/context"
-	"google.golang.org/appengine"
-	"google.golang.org/appengine/log"
-	"google.golang.org/appengine/user"
 )
 
-func findEmail(ctx context.Context, data *godash.Data) string {
-	u := user.Current(ctx)
+var onAppengine = false
 
-	if u != nil {
-		return data.Reviewers.Preferred(u.Email)
+type logger interface {
+	Infof(context.Context, string, ...interface{})
+	Errorf(context.Context, string, ...interface{})
+	Criticalf(context.Context, string, ...interface{})
+}
+
+var log logger
+
+func findEmail(ctx context.Context, data *godash.Data) string {
+	email := currentUserEmail(ctx)
+
+	if email != "" {
+		return data.Reviewers.Preferred(email)
 	}
 	return ""
 }
@@ -67,6 +74,14 @@ func (x byDate) Less(i, j int) bool {
 	return a.Before(*b)
 }
 
+func loadData(ctx context.Context) (*godash.Data, error) {
+	cache, err := getCache(ctx, "gzdata")
+	if err != nil {
+		return nil, err
+	}
+	return parseData(cache)
+}
+
 func datedMilestones(milestones []*github.Milestone) []string {
 	milestones = append([]*github.Milestone{}, milestones...)
 	sort.Stable(byDate(milestones))
@@ -79,21 +94,13 @@ func datedMilestones(milestones []*github.Milestone) []string {
 	return names
 }
 
-func loadData(ctx context.Context) (*godash.Data, error) {
-	cache, err := getCache(ctx, "gzdata")
-	if err != nil {
-		return nil, err
-	}
-	return parseData(cache)
-}
-
 func parseData(cache *Cache) (*godash.Data, error) {
 	data := &godash.Data{Reviewers: &godash.Reviewers{}}
 	return data, unpackCache(cache, &data)
 }
 
 func showDash(w http.ResponseWriter, req *http.Request) {
-	ctx := appengine.NewContext(req)
+	ctx := getContext(req)
 	req.ParseForm()
 
 	data, err := loadData(ctx)
@@ -143,11 +150,11 @@ func showDash(w http.ResponseWriter, req *http.Request) {
 		filtered = append(filtered, group)
 	}
 
-	login, err := user.LoginURL(ctx, "/dash")
+	login, err := loginURL(ctx, "/dash")
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 	}
-	logout, err := user.LogoutURL(ctx, "/dash")
+	logout, err := logoutURL(ctx, "/dash")
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 	}

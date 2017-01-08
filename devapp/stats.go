@@ -18,34 +18,46 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/build/godash"
-	gdstats "golang.org/x/build/godash/stats"
-
 	"github.com/aclements/go-gg/generic/slice"
 	"github.com/aclements/go-gg/gg"
 	"github.com/aclements/go-gg/ggstat"
 	"github.com/aclements/go-gg/table"
 	"github.com/aclements/go-moremath/stats"
 	"github.com/kylelemons/godebug/pretty"
+	"golang.org/x/build/godash"
+	gdstats "golang.org/x/build/godash/stats"
 	"golang.org/x/net/context"
-	"google.golang.org/appengine"
-	"google.golang.org/appengine/urlfetch"
+	"golang.org/x/sync/errgroup"
 )
 
 func updateStats(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	r.ParseForm()
 
-	caches := getCaches(ctx, "github-token", "gzstats")
+	g, errctx := errgroup.WithContext(ctx)
+	var token string
+	g.Go(func() error {
+		var err error
+		token, err = getToken(errctx)
+		return err
+	})
+	var gzstats *Cache
+	g.Go(func() error {
+		gzstats, _ = getCache(errctx, "gzstats")
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		return err
+	}
 
 	log := logFn(ctx, w)
 
 	stats := &godash.Stats{}
-	if err := unpackCache(caches["gzstats"], stats); err != nil {
+	if err := unpackCache(gzstats, stats); err != nil {
 		return err
 	}
 
-	transport := &urlfetch.Transport{Context: ctx}
-	gh := godash.NewGitHubClient("golang/go", string(caches["github-token"].Value), transport)
+	transport := newTransport(ctx)
+	gh := godash.NewGitHubClient("golang/go", token, transport)
 
 	if r.Form.Get("reset_detail") != "" {
 		stats.IssueDetailSince = time.Time{}
@@ -68,13 +80,15 @@ func updateStats(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 		}
 	}
 	log("Have data about %d issues", len(stats.Issues))
-	log("Updated issue stats to %v (detail to %v) in %.3f seconds", stats.Since, stats.IssueDetailSince, time.Now().Sub(start).Seconds())
+	log("Updated issue stats to %v (detail to %v) in %.3f seconds", stats.Since, stats.IssueDetailSince, time.Since(start).Seconds())
 	return writeCache(ctx, "gzstats", stats)
 }
 
+// GET /stats/release
 func release(ctx context.Context, w http.ResponseWriter, req *http.Request) error {
 	req.ParseForm()
 
+	// TODO add this to the binary with go-bindata or similar.
 	tmpl, err := ioutil.ReadFile("template/release.html")
 	if err != nil {
 		return err
@@ -97,14 +111,12 @@ func release(ctx context.Context, w http.ResponseWriter, req *http.Request) erro
 		cycle = data.GoReleaseCycle
 	}
 
-	if err := t.Execute(w, struct{ GoReleaseCycle int }{cycle}); err != nil {
-		return err
-	}
-	return nil
+	return t.Execute(w, struct{ GoReleaseCycle int }{cycle})
 }
 
+// GET /stats/raw
 func rawHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := appengine.NewContext(r)
+	ctx := getContext(r)
 
 	stats := &godash.Stats{}
 	if err := loadCache(ctx, "gzstats", stats); err != nil {
@@ -116,13 +128,14 @@ func rawHandler(w http.ResponseWriter, r *http.Request) {
 	(&pretty.Config{PrintStringers: true}).Fprint(w, stats)
 }
 
+// GET /stats/svg
 func svgHandler(w http.ResponseWriter, req *http.Request) {
 	if req.URL.RawQuery == "" {
 		http.ServeFile(w, req, "static/svg.html")
 		return
 	}
 
-	ctx := appengine.NewContext(req)
+	ctx := getContext(req)
 	req.ParseForm()
 
 	stats := &godash.Stats{}
@@ -290,7 +303,7 @@ func (p windowedPercentiles) F(input table.Grouping) table.Grouping {
 
 			min, max := s.Bounds()
 			outMin[i], outMax[i] = time.Duration(min), time.Duration(max)
-			p25, p50, p75 := s.Percentile(.25), s.Percentile(.5), s.Percentile(.75)
+			p25, p50, p75 := s.Quantile(.25), s.Quantile(.5), s.Quantile(.75)
 			out25[i], out50[i], out75[i] = time.Duration(p25), time.Duration(p50), time.Duration(p75)
 		}
 	}, p.X, p.Y)("min "+p.Y, "p25 "+p.Y, "median "+p.Y, "p75 "+p.Y, "max "+p.Y, "points "+p.Y)

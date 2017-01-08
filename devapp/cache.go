@@ -10,8 +10,6 @@ import (
 	"encoding/gob"
 
 	"golang.org/x/net/context"
-	"google.golang.org/appengine/datastore"
-	"google.golang.org/appengine/log"
 )
 
 // Cache is a datastore entity type that contains serialized data for dashboards.
@@ -20,27 +18,6 @@ type Cache struct {
 	// to be cached. It must be []byte to avail ourselves of the
 	// datastore's 1 MB size limit.
 	Value []byte
-}
-
-func getCaches(ctx context.Context, names ...string) map[string]*Cache {
-	out := make(map[string]*Cache)
-	var keys []*datastore.Key
-	var ptrs []*Cache
-	for _, name := range names {
-		keys = append(keys, datastore.NewKey(ctx, entityPrefix+"Cache", name, 0, nil))
-		out[name] = &Cache{}
-		ptrs = append(ptrs, out[name])
-	}
-	datastore.GetMulti(ctx, keys, ptrs) // Ignore errors since they might not exist.
-	return out
-}
-
-func getCache(ctx context.Context, name string) (*Cache, error) {
-	var cache Cache
-	if err := datastore.Get(ctx, datastore.NewKey(ctx, entityPrefix+"Cache", name, 0, nil), &cache); err != nil {
-		return nil, err
-	}
-	return &cache, nil
 }
 
 func unpackCache(cache *Cache, data interface{}) error {
@@ -78,8 +55,5 @@ func writeCache(ctx context.Context, name string, data interface{}) error {
 	}
 	cache.Value = cacheout.Bytes()
 	log.Infof(ctx, "Cache %q update finished; writing %d bytes", name, cacheout.Len())
-	if _, err := datastore.Put(ctx, datastore.NewKey(ctx, entityPrefix+"Cache", name, 0, nil), &cache); err != nil {
-		return err
-	}
-	return nil
+	return putCache(ctx, name, &cache)
 }

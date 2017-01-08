@@ -19,13 +19,11 @@ import (
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/godash"
 	"golang.org/x/net/context"
-	"google.golang.org/appengine"
-	"google.golang.org/appengine/datastore"
-	"google.golang.org/appengine/log"
-	"google.golang.org/appengine/urlfetch"
 )
 
 const entityPrefix = "DevApp"
+
+var gerritTransport http.RoundTripper
 
 func init() {
 	for _, page := range []string{"release", "cl"} {
@@ -34,7 +32,6 @@ func init() {
 	}
 	http.Handle("/dash", hstsHandler(showDash))
 	http.Handle("/update", ctxHandler(update))
-	http.HandleFunc("/setToken", setTokenHandler)
 	// Defined in stats.go
 	http.HandleFunc("/stats/raw", rawHandler)
 	http.HandleFunc("/stats/svg", svgHandler)
@@ -53,7 +50,7 @@ func hstsHandler(fn http.HandlerFunc) http.Handler {
 
 func ctxHandler(fn func(ctx context.Context, w http.ResponseWriter, r *http.Request) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := appengine.NewContext(r)
+		ctx := getContext(r)
 		if err := fn(ctx, w, r); err != nil {
 			http.Error(w, err.Error(), 500)
 		}
@@ -74,34 +71,30 @@ type Page struct {
 }
 
 func servePage(w http.ResponseWriter, r *http.Request, page string) {
-	ctx := appengine.NewContext(r)
-	var entity Page
-	if err := datastore.Get(ctx, datastore.NewKey(ctx, entityPrefix+"Page", page, 0, nil), &entity); err != nil {
+	ctx := r.Context()
+	entity, err := getPage(ctx, page)
+	if err != nil {
 		http.Error(w, "page not found", 404)
 		return
 	}
-	w.Header().Set("Content-type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(entity.Content)
 }
 
-func writePage(ctx context.Context, page string, content []byte) error {
-	entity := &Page{
-		Content: content,
-	}
-	_, err := datastore.Put(ctx, datastore.NewKey(ctx, entityPrefix+"Page", page, 0, nil), entity)
-	return err
-}
-
 func update(ctx context.Context, w http.ResponseWriter, _ *http.Request) error {
-	caches := getCaches(ctx, "github-token", "gzdata")
-	gh := godash.NewGitHubClient("golang/go", string(caches["github-token"].Value), &urlfetch.Transport{Context: ctx})
+	token, err := getToken(ctx)
+	if err != nil {
+		return err
+	}
+	gzdata, _ := getCache(ctx, "gzdata")
+	gh := godash.NewGitHubClient("golang/go", token, newTransport(ctx))
 	ger := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
 	// Without a deadline, urlfetch will use a 5s timeout which is too slow for Gerrit.
 	gerctx, cancel := context.WithTimeout(ctx, 9*time.Minute)
 	defer cancel()
-	ger.HTTPClient = urlfetch.Client(gerctx)
+	ger.HTTPClient = newHTTPClient(gerctx)
 
-	data, err := parseData(caches["gzdata"])
+	data, err := parseData(gzdata)
 	if err != nil {
 		return err
 	}
@@ -110,7 +103,7 @@ func update(ctx context.Context, w http.ResponseWriter, _ *http.Request) error {
 		return err
 	}
 	l := logFn(ctx, w)
-	if err := data.FetchData(ctx, gh, ger, l, 7, false, false); err != nil {
+	if err := data.FetchData(gerctx, gh, ger, l, 7, false, false); err != nil {
 		log.Criticalf(ctx, "failed to fetch data: %v", err)
 		return err
 	}
@@ -138,16 +131,4 @@ func update(ctx context.Context, w http.ResponseWriter, _ *http.Request) error {
 		}
 	}
 	return writeCache(ctx, "gzdata", &data)
-}
-
-func setTokenHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := appengine.NewContext(r)
-	r.ParseForm()
-	if value := r.Form.Get("value"); value != "" {
-		var token Cache
-		token.Value = []byte(value)
-		if _, err := datastore.Put(ctx, datastore.NewKey(ctx, entityPrefix+"Cache", "github-token", 0, nil), &token); err != nil {
-			http.Error(w, err.Error(), 500)
-		}
-	}
 }
