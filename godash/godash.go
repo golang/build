@@ -121,7 +121,6 @@ func (d *Data) FetchData(ctx context.Context, gh *github.Client, ger *gerrit.Cli
 			return err
 		}
 		log("Fetched %d closed issues in %.3f seconds", len(res2), time.Now().Sub(start).Seconds())
-		start = time.Now()
 		res = append(res, res2...)
 		for _, issue := range res {
 			d.Issues[issue.Number] = issue
