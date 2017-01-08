@@ -16,7 +16,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -26,12 +25,9 @@ import (
 )
 
 const (
-	codeProject          = "go"
-	codePyScript         = "misc/dashboard/googlecode_upload.py"
 	gofrontendImportPath = "code.google.com/p/gofrontend"
 	mkdirPerm            = 0750
 	waitInterval         = 30 * time.Second // time to wait before checking for new revs
-	pkgBuildInterval     = 24 * time.Hour   // rebuild packages every 24 hours
 )
 
 type Builder struct {
@@ -49,7 +45,6 @@ var (
 	doBench       = flag.Bool("bench", false, "Run benchmarks")
 	buildroot     = flag.String("buildroot", defaultBuildRoot(), "Directory under which to build")
 	dashboard     = flag.String("dashboard", "https://build.golang.org", "Dashboard app base path")
-	buildRelease  = flag.Bool("release", false, "Build and upload binary release archives")
 	buildRevision = flag.String("rev", "", "Build specified revision and exit")
 	buildCmd      = flag.String("cmd", filepath.Join(".", allCmd), "Build command (specify relative to go/src/)")
 	buildTool     = flag.String("tool", "go", "Tool to build.")
@@ -71,15 +66,12 @@ var (
 )
 
 var (
-	binaryTagRe = regexp.MustCompile(`^(release\.r|weekly\.)[0-9\-.]+`)
-	releaseRe   = regexp.MustCompile(`^release\.r[0-9\-.]+`)
-	allCmd      = "all" + suffix
-	makeCmd     = "make" + suffix
-	naclCmd     = "nacltest.bash" // nacl support is linux only
-	raceCmd     = "race" + suffix
-	cleanCmd    = "clean" + suffix
-	suffix      = defaultSuffix()
-	exeExt      = defaultExeExt()
+	allCmd  = "all" + suffix
+	makeCmd = "make" + suffix
+	naclCmd = "nacltest.bash" // nacl support is linux only
+	raceCmd = "race" + suffix
+	suffix  = defaultSuffix()
+	exeExt  = defaultExeExt()
 
 	benchCPU      = CpuList([]int{1})
 	benchAffinity = CpuList([]int{})
@@ -625,11 +617,6 @@ func repoForTool() (*vcs.RepoRoot, error) {
 	default:
 		return nil, fmt.Errorf("unknown build tool: %s", *buildTool)
 	}
-}
-
-func isDirectory(name string) bool {
-	s, err := os.Stat(name)
-	return err == nil && s.IsDir()
 }
 
 func isFile(name string) bool {
