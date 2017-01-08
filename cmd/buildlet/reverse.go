@@ -28,8 +28,6 @@ import (
 	"golang.org/x/build/revdial"
 )
 
-var reverseModeBuildKey string
-
 // mode is either a BuildConfig or HostConfig name (map key in x/build/dashboard/builders.go)
 func keyForMode(mode string) (string, error) {
 	if isDevReverseMode() {
