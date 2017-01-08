@@ -178,33 +178,6 @@ func (b *Builder) recordPerfResult(req *PerfResult) error {
 	return dash("POST", "perf-result", args, req, nil)
 }
 
-func postCommit(key, pkg string, l *HgLog) error {
-	if !*report {
-		return nil
-	}
-	t, err := time.Parse(time.RFC3339, l.Date)
-	if err != nil {
-		return fmt.Errorf("parsing %q: %v", l.Date, t)
-	}
-	return dash("POST", "commit", url.Values{"key": {key}}, obj{
-		"PackagePath":       pkg,
-		"Hash":              l.Hash,
-		"ParentHash":        l.Parent,
-		"Time":              t.Format(time.RFC3339),
-		"User":              l.Author,
-		"Desc":              l.Desc,
-		"NeedsBenchmarking": l.bench,
-	}, nil)
-}
-
-func dashboardCommit(pkg, hash string) bool {
-	err := dash("GET", "commit", url.Values{
-		"packagePath": {pkg},
-		"hash":        {hash},
-	}, nil, nil)
-	return err == nil
-}
-
 func dashboardPackages(kind string) []string {
 	args := url.Values{"kind": []string{kind}}
 	var resp []struct {
