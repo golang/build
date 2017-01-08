@@ -10,7 +10,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
@@ -114,14 +113,6 @@ resources:
       cpuUtilization:
         utilizationTarget: .6`
 */
-
-func readFile(v string) string {
-	slurp, err := ioutil.ReadFile(v)
-	if err != nil {
-		log.Fatalf("Error reading %s: %v", v, err)
-	}
-	return strings.TrimSpace(string(slurp))
-}
 
 func main() {
 	buildEnv = buildenv.Production
