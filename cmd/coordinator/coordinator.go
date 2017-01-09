@@ -400,6 +400,18 @@ func numCurrentBuilds() int {
 	return len(status)
 }
 
+func numCurrentVetAllBuilds() int {
+	statusMu.Lock()
+	defer statusMu.Unlock()
+	n := 0
+	for br := range status {
+		if strings.HasSuffix(br.name, "-vetall") {
+			n++
+		}
+	}
+	return n
+}
+
 func isBuilding(work builderRev) bool {
 	statusMu.Lock()
 	defer statusMu.Unlock()
@@ -417,6 +429,9 @@ var (
 // required, if an appropriate machine is registered.
 func mayBuildRev(rev builderRev) bool {
 	if isBuilding(rev) {
+		return false
+	}
+	if strings.HasSuffix(rev.name, "-vetall") && numCurrentVetAllBuilds() > 0 {
 		return false
 	}
 	if buildEnv.MaxBuilds > 0 && numCurrentBuilds() >= buildEnv.MaxBuilds {

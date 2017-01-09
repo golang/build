@@ -672,6 +672,14 @@ func init() {
 		HostType:       "host-linux-kubestd",
 		numTestHelpers: 3,
 	})
+	// Add the -vetall builder. The builder name suffix "-vetall" is recognized by cmd/dist/test.go
+	// to only run the "go vet std cmd" test and no others.
+	addBuilder(BuildConfig{
+		Name:           "misc-vet-vetall",
+		HostType:       "host-linux-kubestd",
+		Notes:          "Runs vet over the standard library.",
+		numTestHelpers: 5,
+	})
 
 	addMiscCompile := func(suffix, rx string) {
 		addBuilder(BuildConfig{
