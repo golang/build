@@ -51,33 +51,37 @@ commands = [
   halt -p
 )
 EOF""",
-    "echo dhcp > /etc/ifconfig.vioif0",
+    """cat > /etc/ifconfig.vioif0 << EOF
+!/usr/pkg/sbin/dhcpcd vioif0
+!route add default \`ifconfig vioif0 | awk '/inet / { print \$2 }' | sed 's/[0-9]*$/1/'\` -ifp vioif0
+EOF""",
     "dhcpcd",
+    "env PKG_PATH=https://cdn.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add bash curl dhcpcd" % (arch, release),
+    "env PKG_PATH=https://cdn.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add git-base" % (arch, release),
+    "env PKG_PATH=https://cdn.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add mozilla-rootcerts go14" % (arch, release),
     """ed /etc/fstab << EOF
 H
 %s/wd0/sd0/
 wq
 EOF""",
-    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add bash curl git-base mozilla-rootcerts go14" % (arch, release),
     "touch /etc/openssl/openssl.cnf",
     "/usr/pkg/sbin/mozilla-rootcerts install",
-    "sync",
-    #"shutdown -hp now",
+    "sync; shutdown -hp now",
 ]
 
 
 a = anita.Anita(
     # TODO(bsiegert) use latest
-    anita.URL(find_latest_release(arch)),
-    workdir = "work-NetBSD-%s" % arch,
-    disk_size = "4G",
+    anita.URL("https://cdn.NetBSD.org/pub/NetBSD/NetBSD-7.1_RC1/%s/" % arch),
+    workdir="work-NetBSD-%s" % arch,
+    disk_size="4G",
     memory_size = "1G",
-    persist = True)
+    persist=True)
 child = a.boot()
 anita.login(child)
 
 for cmd in commands:
-  anita.shell_cmd(child, cmd, 600)
+  anita.shell_cmd(child, cmd, 1200)
 
 # Sometimes, the halt command times out, even though it has completed
 # successfully.
