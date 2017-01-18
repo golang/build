@@ -161,6 +161,14 @@ var Hosts = map[string]*HostConfig{
 		},
 		ReverseAliases: []string{"darwin-amd64-10_11"},
 	},
+	"host-darwin-10_12": &HostConfig{
+		IsReverse: true,
+		Notes:     "MacStadium OS X 10.12 VM under VMWare ESXi",
+		env: []string{
+			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
+		},
+		ReverseAliases: []string{"darwin-amd64-10_12"},
+	},
 	"host-linux-s390x": &HostConfig{
 		Notes:          "run by IBM",
 		IsReverse:      true,
@@ -471,6 +479,7 @@ func (c *BuildConfig) BuildSubrepos() bool {
 	case "darwin-amd64-10_8",
 		"darwin-amd64-10_10",
 		"darwin-amd64-10_11",
+		"darwin-amd64-10_12",
 		"darwin-386-10_11",
 		"freebsd-386-gce101", "freebsd-amd64-gce101",
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
@@ -792,6 +801,10 @@ func init() {
 		HostType:          "host-darwin-10_11",
 		numTestHelpers:    2,
 		numTryTestHelpers: 3,
+	})
+	addBuilder(BuildConfig{
+		Name:     "darwin-amd64-10_12",
+		HostType: "host-darwin-10_12",
 	})
 
 	addBuilder(BuildConfig{

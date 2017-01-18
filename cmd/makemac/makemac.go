@@ -10,7 +10,7 @@ See https://github.com/vmware/govmomi/tree/master/govc
 
 Usage:
 
-  $ makemac <osx_minor_version>  # e.g, 8, 9, 10, 11
+  $ makemac <osx_minor_version>  # e.g, 8, 9, 10, 11, 12
 
 */
 package main
@@ -89,7 +89,7 @@ func (st *State) CreateMac(ctx context.Context, minor int) (err error) {
 		guestType = "darwin12_64Guest"
 	case 9:
 		guestType = "darwin13_64Guest"
-	case 10, 11:
+	case 10, 11, 12:
 		guestType = "darwin14_64Guest"
 	default:
 		return fmt.Errorf("unsupported makemac minor OS X version %d", minor)
