@@ -4,10 +4,13 @@
 
 package godash
 
-import "golang.org/x/build/gerrit"
+import (
+	"golang.org/x/build/gerrit"
+	"golang.org/x/net/context"
+)
 
-func fetchCLs(client *gerrit.Client, reviewers *Reviewers, goReleaseCycle int, q string) ([]*CL, error) {
-	cis, err := client.QueryChanges("-project:scratch -message:do-not-review "+q, gerrit.QueryChangesOpt{
+func fetchCLs(ctx context.Context, client *gerrit.Client, reviewers *Reviewers, goReleaseCycle int, q string) ([]*CL, error) {
+	cis, err := client.QueryChanges(ctx, "-project:scratch -message:do-not-review "+q, gerrit.QueryChangesOpt{
 		N: 5000,
 		Fields: []string{
 			"LABELS",

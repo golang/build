@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"cloud.google.com/go/datastore"
 
 	"golang.org/x/build/types"
-	"golang.org/x/net/context"
 )
 
 // Process is a datastore record about the lifetime of a coordinator process.

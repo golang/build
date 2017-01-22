@@ -29,6 +29,7 @@ work, go to:
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -44,7 +45,6 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/revdial"
-	"golang.org/x/net/context"
 )
 
 const minBuildletVersion = 1

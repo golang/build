@@ -14,8 +14,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"golang.org/x/build/gerrit"
+	"golang.org/x/net/context"
 )
 
 func main() {
@@ -25,7 +27,9 @@ func main() {
 	}
 	c := gerrit.NewClient("https://go-review.googlesource.com",
 		gerrit.BasicAuth("git-gobot.golang.org", strings.TrimSpace(string(gobotPass))))
-	cl, err := c.QueryChanges("label:Run-TryBot=1 label:TryBot-Result=0 project:go status:open", gerrit.QueryChangesOpt{
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cl, err := c.QueryChanges(ctx, "label:Run-TryBot=1 label:TryBot-Result=0 project:go status:open", gerrit.QueryChangesOpt{
 		Fields: []string{"CURRENT_REVISION"},
 	})
 	if err != nil {
@@ -34,7 +38,7 @@ func main() {
 	v, _ := json.MarshalIndent(cl, "", "  ")
 	os.Stdout.Write(v)
 
-	log.Printf("SetReview = %v", c.SetReview("I2383397c056a9ffe174ac7c2c6e5bb334406fbf9", "current", gerrit.ReviewInput{
+	log.Printf("SetReview = %v", c.SetReview(ctx, "I2383397c056a9ffe174ac7c2c6e5bb334406fbf9", "current", gerrit.ReviewInput{
 		Message: "test test",
 		Labels: map[string]int{
 			"TryBot-Result": 0,

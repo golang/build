@@ -83,7 +83,7 @@ func (d *Data) FetchData(ctx context.Context, gh *github.Client, ger *gerrit.Cli
 		}
 	}
 	since := d.Now.Add(-(time.Duration(days)*24 + 12) * time.Hour).UTC().Round(time.Second)
-	cls, err := fetchCLs(ger, d.Reviewers, d.GoReleaseCycle, "is:open")
+	cls, err := fetchCLs(ctx, ger, d.Reviewers, d.GoReleaseCycle, "is:open")
 	if err != nil {
 		return err
 	}
@@ -97,7 +97,7 @@ func (d *Data) FetchData(ctx context.Context, gh *github.Client, ger *gerrit.Cli
 		}
 	}
 	if includeMerged {
-		cls, err := fetchCLs(ger, d.Reviewers, d.GoReleaseCycle, "is:merged since:\""+since.Format("2006-01-02 15:04:05")+"\"")
+		cls, err := fetchCLs(ctx, ger, d.Reviewers, d.GoReleaseCycle, "is:merged since:\""+since.Format("2006-01-02 15:04:05")+"\"")
 		if err != nil {
 			return err
 		}

@@ -3,6 +3,9 @@
 // license that can be found in the LICENSE file.
 
 // Package gerrit contains code to interact with Gerrit servers.
+//
+// The API is not subject to the Go 1 compatibility promise and may change at
+// any time.
 package gerrit
 
 import (
@@ -18,6 +21,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/net/context"
 )
 
 // Client is a Gerrit client.
@@ -81,7 +86,7 @@ type urlValues url.Values
 
 func (urlValues) isDoArg() {}
 
-func (c *Client) do(dst interface{}, method, path string, opts ...doArg) error {
+func (c *Client) do(ctx context.Context, dst interface{}, method, path string, opts ...doArg) error {
 	var arg url.Values
 	var body interface{}
 	var wantStatus = http.StatusOK
@@ -127,7 +132,7 @@ func (c *Client) do(dst interface{}, method, path string, opts ...doArg) error {
 		req.Header.Set("Content-Type", contentType)
 	}
 	c.auth.setAuth(c, req)
-	res, err := c.httpClient().Do(req)
+	res, err := c.httpClient().Do(withContext(req, ctx))
 	if err != nil {
 		return err
 	}
@@ -324,7 +329,7 @@ func condInt(n int) []string {
 // QueryChanges queries changes. The q parameter is a Gerrit search query.
 // For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-changes
 // For the query syntax, see https://gerrit-review.googlesource.com/Documentation/user-search.html#_search_operators
-func (c *Client) QueryChanges(q string, opts ...QueryChangesOpt) ([]*ChangeInfo, error) {
+func (c *Client) QueryChanges(ctx context.Context, q string, opts ...QueryChangesOpt) ([]*ChangeInfo, error) {
 	var opt QueryChangesOpt
 	switch len(opts) {
 	case 0:
@@ -334,7 +339,7 @@ func (c *Client) QueryChanges(q string, opts ...QueryChangesOpt) ([]*ChangeInfo,
 		return nil, errors.New("only 1 option struct supported")
 	}
 	var changes []*ChangeInfo
-	err := c.do(&changes, "GET", "/changes/", urlValues{
+	err := c.do(ctx, &changes, "GET", "/changes/", urlValues{
 		"q": {q},
 		"n": condInt(opt.N),
 		"o": opt.Fields,
@@ -345,7 +350,7 @@ func (c *Client) QueryChanges(q string, opts ...QueryChangesOpt) ([]*ChangeInfo,
 // GetChangeDetail retrieves a change with labels, detailed labels, detailed
 // accounts, and messages.
 // For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#get-change-detail
-func (c *Client) GetChangeDetail(changeID string, opts ...QueryChangesOpt) (*ChangeInfo, error) {
+func (c *Client) GetChangeDetail(ctx context.Context, changeID string, opts ...QueryChangesOpt) (*ChangeInfo, error) {
 	var opt QueryChangesOpt
 	switch len(opts) {
 	case 0:
@@ -355,7 +360,7 @@ func (c *Client) GetChangeDetail(changeID string, opts ...QueryChangesOpt) (*Cha
 		return nil, errors.New("only 1 option struct supported")
 	}
 	var change ChangeInfo
-	err := c.do(&change, "GET", "/changes/"+changeID+"/detail", urlValues{
+	err := c.do(ctx, &change, "GET", "/changes/"+changeID+"/detail", urlValues{
 		"o": opt.Fields,
 	})
 	if err != nil {
@@ -377,16 +382,16 @@ type reviewInfo struct {
 // For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#set-review
 // The changeID is https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-id
 // The revision is https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#revision-id
-func (c *Client) SetReview(changeID, revision string, review ReviewInput) error {
+func (c *Client) SetReview(ctx context.Context, changeID, revision string, review ReviewInput) error {
 	var res reviewInfo
-	return c.do(&res, "POST", fmt.Sprintf("/changes/%s/revisions/%s/review", changeID, revision),
+	return c.do(ctx, &res, "POST", fmt.Sprintf("/changes/%s/revisions/%s/review", changeID, revision),
 		reqBody{review})
 }
 
 // AbandonChange abandons the given change.
-func (c *Client) AbandonChange(changeID string) error {
+func (c *Client) AbandonChange(ctx context.Context, changeID string) error {
 	var change ChangeInfo
-	return c.do(&change, "POST", "/changes/"+changeID+"/abandon")
+	return c.do(ctx, &change, "POST", "/changes/"+changeID+"/abandon")
 }
 
 // ProjectInput contains the options for creating a new project.
@@ -413,7 +418,7 @@ type ProjectInfo struct {
 }
 
 // CreateProject creates a new project.
-func (c *Client) CreateProject(name string, p ...ProjectInput) (ProjectInfo, error) {
+func (c *Client) CreateProject(ctx context.Context, name string, p ...ProjectInput) (ProjectInfo, error) {
 	var pi ProjectInput
 	if len(p) > 1 {
 		panic("invalid use of multiple project inputs")
@@ -422,7 +427,7 @@ func (c *Client) CreateProject(name string, p ...ProjectInput) (ProjectInfo, err
 		pi = p[0]
 	}
 	var res ProjectInfo
-	err := c.do(&res, "PUT", fmt.Sprintf("/projects/%s", name), reqBody{&pi}, wantResStatus(http.StatusCreated))
+	err := c.do(ctx, &res, "PUT", fmt.Sprintf("/projects/%s", name), reqBody{&pi}, wantResStatus(http.StatusCreated))
 	return res, err
 }
 
@@ -433,9 +438,9 @@ var ErrProjectNotExist = errors.New("gerrit: requested project does not exist")
 
 // GetProjectInfo returns info about a project.
 // If the project doesn't exist, the error will be ErrProjectNotExist.
-func (c *Client) GetProjectInfo(name string) (ProjectInfo, error) {
+func (c *Client) GetProjectInfo(ctx context.Context, name string) (ProjectInfo, error) {
 	var res ProjectInfo
-	err := c.do(&res, "GET", fmt.Sprintf("/projects/%s", name))
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s", name))
 	if he, ok := err.(*HTTPError); ok && he.Res.StatusCode == 404 {
 		return res, ErrProjectNotExist
 	}
@@ -451,9 +456,9 @@ type BranchInfo struct {
 }
 
 // GetProjectBranches returns a project's branches.
-func (c *Client) GetProjectBranches(name string) (map[string]BranchInfo, error) {
+func (c *Client) GetProjectBranches(ctx context.Context, name string) (map[string]BranchInfo, error) {
 	var res []BranchInfo
-	err := c.do(&res, "GET", fmt.Sprintf("/projects/%s/branches/", name))
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/", name))
 	if err != nil {
 		return nil, err
 	}
@@ -470,9 +475,9 @@ func (c *Client) GetProjectBranches(name string) (map[string]BranchInfo, error) 
 //
 // Note that getting "self" is a good way to validate host access, since it only requires peeker
 // access to the host, not to any particular repository.
-func (c *Client) GetAccountInfo(accountID string) (AccountInfo, error) {
+func (c *Client) GetAccountInfo(ctx context.Context, accountID string) (AccountInfo, error) {
 	var res AccountInfo
-	err := c.do(&res, "GET", fmt.Sprintf("/accounts/%s", accountID))
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/accounts/%s", accountID))
 	return res, err
 }
 

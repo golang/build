@@ -8,6 +8,7 @@ package main // import "golang.org/x/build/cmd/coordinator"
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -21,7 +22,6 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
-	"golang.org/x/net/context"
 )
 
 var (

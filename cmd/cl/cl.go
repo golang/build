@@ -81,6 +81,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -131,7 +132,9 @@ func main() {
 	if strings.Contains(query, " is:") || strings.HasPrefix(query, "is:") {
 		open = ""
 	}
-	cis, err := c.QueryChanges(open+" -project:scratch -message:do-not-review "+query, gerrit.QueryChangesOpt{
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cis, err := c.QueryChanges(ctx, open+" -project:scratch -message:do-not-review "+query, gerrit.QueryChangesOpt{
 		N: 5000,
 		Fields: []string{
 			"LABELS",

@@ -15,6 +15,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/tls"
@@ -50,7 +51,6 @@ import (
 	"golang.org/x/build/internal/singleflight"
 	"golang.org/x/build/livelog"
 	"golang.org/x/build/types"
-	"golang.org/x/net/context"
 	"golang.org/x/time/rate"
 )
 
@@ -788,7 +788,7 @@ func findTryWork() error {
 	if inStaging && true {
 		return nil
 	}
-	cis, err := gerritClient.QueryChanges("label:Run-TryBot=1 label:TryBot-Result=0 status:open", gerrit.QueryChangesOpt{
+	cis, err := gerritClient.QueryChanges(context.Background(), "label:Run-TryBot=1 label:TryBot-Result=0 status:open", gerrit.QueryChangesOpt{
 		Fields: []string{"CURRENT_REVISION"},
 	})
 	if err != nil {
@@ -966,7 +966,8 @@ func (ts *trySet) state() trySetState {
 func (ts *trySet) notifyStarting() {
 	msg := "TryBots beginning. Status page: http://farmer.golang.org/try?commit=" + ts.Commit[:8]
 
-	if ci, err := gerritClient.GetChangeDetail(ts.ChangeTriple()); err == nil {
+	ctx := context.Background()
+	if ci, err := gerritClient.GetChangeDetail(ctx, ts.ChangeTriple()); err == nil {
 		if len(ci.Messages) == 0 {
 			log.Printf("No Gerrit comments retrieved on %v", ts.ChangeTriple())
 		}
@@ -981,7 +982,7 @@ func (ts *trySet) notifyStarting() {
 	}
 
 	// Ignore error. This isn't critical.
-	gerritClient.SetReview(ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{Message: msg})
+	gerritClient.SetReview(ctx, ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{Message: msg})
 }
 
 // awaitTryBuild runs in its own goroutine and waits for a build in a
@@ -1087,7 +1088,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 		ts.mu.Unlock()
 
 		if numFail == 1 && remain > 0 {
-			if err := gerritClient.SetReview(ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
+			if err := gerritClient.SetReview(bs.ctx, ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
 				Message: fmt.Sprintf(
 					"Build is still in progress...\n"+
 						"This change failed on %s:\n"+
@@ -1110,7 +1111,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 			score, msg = -1, fmt.Sprintf("%d of %d TryBots failed:\n%s\nConsult https://build.golang.org/ to see whether they are new failures.",
 				numFail, len(ts.builds), errMsg)
 		}
-		if err := gerritClient.SetReview(ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
+		if err := gerritClient.SetReview(bs.ctx, ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
 			Message: msg,
 			Labels: map[string]int{
 				"TryBot-Result": score,
