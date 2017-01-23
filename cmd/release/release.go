@@ -348,6 +348,8 @@ func (b *Build) make() error {
 
 	if b.Goarm > 0 {
 		env = append(env, fmt.Sprintf("GOARM=%d", b.Goarm))
+		env = append(env, fmt.Sprintf("CGO_CFLAGS=-march=armv%d", b.Goarm))
+		env = append(env, fmt.Sprintf("CGO_LDFLAGS=-march=armv%d", b.Goarm))
 	}
 
 	// Execute build
