@@ -29,24 +29,12 @@ resources:
       logging_service: "logging.googleapis.com"
       monitoring_service: "none"
       node_config:
-        machine_type: "n1-standard-16"
+        machine_type: "n1-standard-32"
         oauth_scopes:
           - "https://www.googleapis.com/auth/cloud-platform"
       master_auth:
         username: "admin"
-        password: ""
-- name: autoscaler
-  type: compute.v1.autoscaler
-  properties:
-    zone: "us-central1-f"
-    name: "buildlets"
-    target: "$(ref.buildlets.instanceGroupUrls[0])"
-    autoscalingPolicy:
-      minNumReplicas: 1
-      maxNumReplicas: 5
-      coolDownPeriodSec: 1200
-      cpuUtilization:
-        utilizationTarget: .6`},
+        password: ""`},
 	}
 	for _, test := range tests {
 		tpl, err := template.New("kube").Parse(kubeConfig)
