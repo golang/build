@@ -415,8 +415,8 @@ func mayBuildRev(rev builderRev) bool {
 		}
 		return false
 	}
-	if buildConf.IsReverse() {
-		return reversePool.CanBuild(buildConf.HostType)
+	if buildConf.IsReverse() && !reversePool.CanBuild(buildConf.HostType) {
+		return false
 	}
 	if buildConf.IsKube() && kubeErr != nil {
 		return false
@@ -673,7 +673,7 @@ func findWork(work chan<- builderRev) error {
 		knownToDashboard[b] = true
 	}
 
-	var goRevisions []string
+	var goRevisions []string // revisions of repo "go", branch "master" revisions
 	seenSubrepo := make(map[string]bool)
 	var setGoRepoHead bool
 	for _, br := range bs.Revisions {
@@ -684,12 +684,14 @@ func findWork(work chan<- builderRev) error {
 		}
 		awaitSnapshot := false
 		if br.Repo == "go" {
-			if !setGoRepoHead && br.Branch == "master" {
-				// First Go revision on page; update repo head.
-				setRepoHead(br.Repo, br.Revision)
-				setGoRepoHead = true
+			if br.Branch == "master" {
+				if !setGoRepoHead {
+					// First Go revision on page; update repo head.
+					setRepoHead(br.Repo, br.Revision)
+					setGoRepoHead = true
+				}
+				goRevisions = append(goRevisions, br.Revision)
 			}
-			goRevisions = append(goRevisions, br.Revision)
 		} else {
 			// The dashboard provides only the head revision for
 			// each sub-repo; store it in subrepoHead for later use.
@@ -717,6 +719,10 @@ func findWork(work chan<- builderRev) error {
 				continue
 			}
 			builder := bs.Builders[i]
+			if skipBranchForBuilder(br.Repo, br.Branch, builder) {
+				continue
+			}
+
 			builderInfo, ok := dashboard.Builders[builder]
 			if !ok || builderInfo.TryOnly {
 				// Not managed by the coordinator, or a trybot-only one.
@@ -757,6 +763,9 @@ func findWork(work chan<- builderRev) error {
 	// that the dashboard doesn't know about.
 	for b, builderInfo := range dashboard.Builders {
 		if builderInfo.TryOnly || knownToDashboard[b] {
+			continue
+		}
+		if skipBranchForBuilder("go", "master", b) {
 			continue
 		}
 		for _, rev := range goRevisions {
@@ -808,7 +817,7 @@ func findTryWork() error {
 			log.Printf("Warning: skipping incomplete %#v", ci)
 			continue
 		}
-		if ci.Project == "build" || ci.Project == "grpc-review" {
+		if ci.Project == "build" || ci.Project == "grpc-review" || ci.Project == "perf" {
 			// Skip trybot request in build repo.
 			// Also skip grpc-review, which is only for reviews for now.
 			continue
@@ -846,7 +855,7 @@ func findTryWork() error {
 }
 
 type tryKey struct {
-	Project  string // "go", "build", etc
+	Project  string // "go", "net", etc
 	Branch   string // master
 	ChangeID string // I1a27695838409259d1586a0adfa9f92bccf7ceba
 	Commit   string // ecf3dffc81dc21408fb02159af352651882a8383
@@ -1088,7 +1097,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 		ts.mu.Unlock()
 
 		if numFail == 1 && remain > 0 {
-			if err := gerritClient.SetReview(bs.ctx, ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
+			if err := gerritClient.SetReview(context.Background(), ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
 				Message: fmt.Sprintf(
 					"Build is still in progress...\n"+
 						"This change failed on %s:\n"+
@@ -1111,7 +1120,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 			score, msg = -1, fmt.Sprintf("%d of %d TryBots failed:\n%s\nConsult https://build.golang.org/ to see whether they are new failures.",
 				numFail, len(ts.builds), errMsg)
 		}
-		if err := gerritClient.SetReview(bs.ctx, ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
+		if err := gerritClient.SetReview(context.Background(), ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
 			Message: msg,
 			Labels: map[string]int{
 				"TryBot-Result": score,
@@ -1139,6 +1148,7 @@ func (br builderRev) skipBuild() bool {
 		"exp",    // always broken, depends on mobile which is broken
 		"mobile", // always broken (gl, etc). doesn't compile.
 		"term",   // no code yet in repo: "warning: "golang.org/x/term/..." matched no packages"
+		"perf",   // has external deps
 		"oauth2": // has external deps
 		return true
 	}
@@ -3205,4 +3215,28 @@ func randHex(n int) string {
 		log.Fatalf("randHex: %v", err)
 	}
 	return fmt.Sprintf("%x", buf)[:n]
+}
+
+func skipBranchForBuilder(repo, branch, builder string) bool {
+	if strings.HasPrefix(builder, "darwin-") {
+		switch builder {
+		case "darwin-amd64-10_8", "darwin-amd64-10_10", "darwin-amd64-10_11",
+			"darwin-386-10_8", "darwin-386-10_10", "darwin-386-10_11":
+			// OS X before Sierra can build any branch.
+			// (We've never had a 10.9 builder.)
+		default:
+			// Sierra or after, however, requires the 1.7 branch:
+			switch branch {
+			case "release-branch.go1.6",
+				"release-branch.go1.5",
+				"release-branch.go1.4",
+				"release-branch.go1.3",
+				"release-branch.go1.2",
+				"release-branch.go1.1",
+				"release-branch.go1":
+				return true
+			}
+		}
+	}
+	return false
 }

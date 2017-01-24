@@ -479,7 +479,6 @@ func (c *BuildConfig) BuildSubrepos() bool {
 	case "darwin-amd64-10_8",
 		"darwin-amd64-10_10",
 		"darwin-amd64-10_11",
-		"darwin-amd64-10_12",
 		"darwin-386-10_11",
 		"freebsd-386-gce101", "freebsd-amd64-gce101",
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
@@ -487,6 +486,11 @@ func (c *BuildConfig) BuildSubrepos() bool {
 		"plan9-386",
 		"windows-386-gce", "windows-amd64-gce":
 		return true
+	case "darwin-amd64-10_12":
+		// Don't build subrepos on Sierra until
+		// https://github.com/golang/go/issues/18751#issuecomment-274955794
+		// is addressed.
+		return false
 	default:
 		return false
 	}
