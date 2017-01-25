@@ -70,8 +70,10 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 		key += "-branch-" + branch
 	}
 
+	hashes := r.Form["hash"]
+
 	var data uiTemplateData
-	if !cache.Get(c, r, now, key, &data) {
+	if len(hashes) > 0 || !cache.Get(c, r, now, key, &data) {
 
 		pkg := &Package{} // empty package is the main repository
 		if repo != "" {
@@ -82,7 +84,13 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		commits, err := dashCommits(c, pkg, page, branch)
+		var commits []*Commit
+		var err error
+		if len(hashes) > 0 {
+			commits, err = fetchCommits(c, pkg, hashes)
+		} else {
+			commits, err = dashCommits(c, pkg, page, branch)
+		}
 		if err != nil {
 			logErr(w, r, err)
 			return
@@ -93,7 +101,7 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 
 		var tagState []*TagState
 		// Only show sub-repo state on first page of normal repo view.
-		if pkg.Kind == "" && page == 0 && (branch == "" || branch == "master") {
+		if pkg.Kind == "" && len(hashes) == 0 && page == 0 && (branch == "" || branch == "master") {
 			s, err := GetTagState(c, "tip", "")
 			if err != nil {
 				if err == datastore.ErrNoSuchEntity {
@@ -140,7 +148,9 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 			Branches:   branches,
 			Branch:     branch,
 		}
-		cache.Set(c, r, now, key, &data)
+		if len(hashes) == 0 {
+			cache.Set(c, r, now, key, &data)
+		}
 	}
 	data.Dashboard = d
 
@@ -283,6 +293,22 @@ func dashCommits(c appengine.Context, pkg *Package, page int, branch string) ([]
 	_, err := q.Limit(commitsPerPage).Offset(offset).
 		GetAll(c, &commits)
 	return commits, err
+}
+
+// fetchCommits gets a slice of the specific commit hashes
+func fetchCommits(c appengine.Context, pkg *Package, hashes []string) ([]*Commit, error) {
+	var out []*Commit
+	var keys []*datastore.Key
+	for _, hash := range hashes {
+		commit := &Commit{
+			Hash:        hash,
+			PackagePath: pkg.Path,
+		}
+		out = append(out, commit)
+		keys = append(keys, commit.Key(c))
+	}
+	err := datastore.GetMulti(c, keys, out)
+	return out, err
 }
 
 // commitBuilders returns the names of the builders that provided
