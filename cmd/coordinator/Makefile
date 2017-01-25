@@ -15,3 +15,9 @@ upload: FORCE
 dev-upload: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=linux-amd64 --file=go:golang.org/x/build/cmd/coordinator --public dev-go-builder-data/coordinator
+
+# Work-in-progress:
+docker-prod: FORCE
+	docker build -f Dockerfile --tag=gcr.io/symbolic-datum-552/coordinator:latest ../..
+docker-dev: FORCE
+	docker build -f Dockerfile --tag=gcr.io/go-dashboard-dev/coordinator:latest ../..
