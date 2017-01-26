@@ -315,6 +315,7 @@ func copyFromURL(dstFile, srcURL string) (err error) {
 			// (Not that GCS would try to compress it, though)
 			DisableCompression: true,
 			DisableKeepAlives:  true,
+			Proxy:              http.ProxyFromEnvironment,
 		}},
 	}
 	res, err := c.Get(srcURL)
