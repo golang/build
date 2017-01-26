@@ -2,7 +2,11 @@
 
 set -e
 
-url="https://storage.googleapis.com/go-builder-data/buildlet.darwin-amd64.gz"
+# Add unix timestamp to the end to bust caches, otherwise GCS caches aggressively if you
+# accidentally upload a buildlet with caching enabled once. Ideally this script
+# would be replaced with a Go program that only did this with HEAD and then only fetched
+# the full blob if the Last-Modified or ETag had changed from before. But network is cheap.
+url="https://storage.googleapis.com/go-builder-data/buildlet.darwin-amd64.gz?$(date +%s)"
 while ! curl -f -o buildlet.gz "$url"; do
     echo
     echo "curl failed to fetch $url"

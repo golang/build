@@ -108,12 +108,17 @@ func dialCoordinator() error {
 		RootCAs:            caPool,
 		InsecureSkipVerify: devMode,
 	}
+	log.Printf("Doing TLS handshake with coordinator...")
+	tcpConn.SetDeadline(time.Now().Add(30 * time.Second))
 	conn := tls.Client(tcpConn, config)
 	if err := conn.Handshake(); err != nil {
 		return fmt.Errorf("failed to handshake with coordinator: %v", err)
 	}
+	tcpConn.SetDeadline(time.Time{})
+
 	bufr := bufio.NewReader(conn)
 
+	log.Printf("Registering reverse mode with coordinator...")
 	req, err := http.NewRequest("GET", "/reverse", nil)
 	if err != nil {
 		log.Fatal(err)
@@ -138,9 +143,20 @@ func dialCoordinator() error {
 	srv := &http.Server{}
 	err = srv.Serve(revdial.NewListener(bufio.NewReadWriter(
 		bufio.NewReader(conn),
-		bufio.NewWriter(conn),
+		bufio.NewWriter(deadlinePerWriteConn{conn, 60 * time.Second}),
 	)))
 	return fmt.Errorf("http.Serve on reverse connection complete: %v", err)
+}
+
+type deadlinePerWriteConn struct {
+	net.Conn
+	writeTimeout time.Duration
+}
+
+func (c deadlinePerWriteConn) Write(p []byte) (n int, err error) {
+	c.Conn.SetWriteDeadline(time.Now().Add(c.writeTimeout))
+	defer c.Conn.SetWriteDeadline(time.Time{})
+	return c.Conn.Write(p)
 }
 
 func devBuilderKey(builder string) string {
