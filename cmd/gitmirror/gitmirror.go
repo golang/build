@@ -2,21 +2,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-/*
-
- TODO, DEPRECATED: as of 2017-01-27, this is still being used, but is
- approximately never updated, and is being migrated to the new
- "gitmirror" binary and Dockerfile to be run on GKE. Don't make
- changes here until cmd/gitmirror is in use in production on GKE, and
- then delete this.
-
-*/
-
-// The watcher binary watches the specified repositories for new
-// commits and reports them to the build dashboard. This binary is
-// compiled in to the coordinator binary and runs in a Docker
-// container (see env/watcher-world) via the coordinator.
-
+// The gitmirror binary watches the specified Gerrit repositories for
+// new commits and reports them to the build dashboard.
+//
+// It also serves tarballs over HTTP for the build system, and pushes
+// new commits to Github.
 package main
 
 import (
@@ -53,37 +43,66 @@ const (
 )
 
 var (
-	repoURL      = flag.String("watcher.repo", goBase+"go", "Repository URL")
-	dashFlag     = flag.String("watcher.dash", "https://build.golang.org/", "Dashboard URL (must end in /)")
-	keyFile      = flag.String("watcher.key", defaultKeyFile, "Build dashboard key file")
-	pollInterval = flag.Duration("watcher.poll", 10*time.Second, "Remote repo poll interval")
-	network      = flag.Bool("watcher.network", true, "Enable network calls (disable for testing)")
-	mirror       = flag.Bool("watcher.mirror", false, "whether to mirror to github")
-	filter       = flag.String("watcher.filter", "", "If non-empty, a comma-separated list of directories or files to watch for new commits (only works on main repo). If empty, watch all files in repo.")
-	branches     = flag.String("watcher.branches", "", "If non-empty, a comma-separated list of branches to watch. If empty, watch changes on every branch.")
-	httpAddr     = flag.String("watcher.http", "", "If non-empty, the listen address to run an HTTP server on")
-	report       = flag.Bool("watcher.report", true, "Report updates to build dashboard (use false for development dry-run mode)")
+	httpAddr = flag.String("http", "", "If non-empty, the listen address to run an HTTP server on")
+	cacheDir = flag.String("cachedir", "/var/cache/git-mirror", "git cache directory. If empty a temp directory is made.")
+
+	repoURL  = flag.String("repo", goBase+"go", "main Repository URL (but subrepos are also mirrored)") // TODO: delete this?
+	dashFlag = flag.String("dash", "https://build.golang.org/", "Dashboard URL (must end in /)")
+	keyFile  = flag.String("key", defaultKeyFile, "Build dashboard key file") // TODO: make automatic from metadata/k8s secrets
+
+	pollInterval = flag.Duration("poll", 10*time.Second, "Remote repo poll interval")
+
+	// TODO(bradfitz): these three are all kinda the same and
+	// redundant. Unify after research.
+	network = flag.Bool("network", true, "Enable network calls (disable for testing)")
+	mirror  = flag.Bool("mirror", false, "whether to mirror to github")
+	report  = flag.Bool("report", true, "Report updates to build dashboard (use false for development dry-run mode)")
+
+	filter   = flag.String("filter", "", "If non-empty, a comma-separated list of directories or files to watch for new commits (only works on main repo). If empty, watch all files in repo.")
+	branches = flag.String("branches", "", "If non-empty, a comma-separated list of branches to watch. If empty, watch changes on every branch.")
 )
 
 var (
-	defaultKeyFile = filepath.Join(homeDir(), ".gobuildkey")
+	defaultKeyFile = filepath.Join(homeDir(), ".gobuildkey") // TODO: use k8s secrets or GCE proj metadata
 	dashboardKey   = ""
-	networkSeen    = make(map[string]bool) // testing mode only (-watcher.network=false); known hashes
+	networkSeen    = make(map[string]bool) // testing mode only (-network=false); known hashes
 )
 
-func watcherMain() {
-	log.Printf("Running watcher role.")
+func main() {
+	flag.Parse()
+	log.Printf("gitmirror running.")
+
+	if err := os.MkdirAll(*cacheDir, 0755); err != nil {
+		log.Fatalf("Failed to created watcher's git cache dir: %v", err)
+	}
+
 	go pollGerritAndTickle()
-	err := runWatcher()
-	log.Printf("Watcher exiting after failure: %v", err)
-	os.Exit(1)
+	err := runGitMirror()
+	log.Fatalf("gitmirror exiting after failure: %v", err)
 }
 
-// runWatcher is a little wrapper so we can use defer and return to signal
+// runGitMirror is a little wrapper so we can use defer and return to signal
 // errors. It should only return a non-nil error.
-func runWatcher() error {
+func runGitMirror() error {
 	if !strings.HasSuffix(*dashFlag, "/") {
 		return errors.New("dashboard URL (-dashboard) must end in /")
+	}
+
+	if *cacheDir == "" {
+		dir, err := ioutil.TempDir("", "gitmirror")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer os.RemoveAll(dir)
+		*cacheDir = dir
+	} else {
+		fi, err := os.Stat(*cacheDir)
+		if err != nil {
+			return fmt.Errorf("invalid -cachedir: %v", err)
+		}
+		if !fi.IsDir() {
+			return fmt.Errorf("invalid -cachedir=%q; not a directory", *cacheDir)
+		}
 	}
 
 	if *report {
@@ -92,18 +111,6 @@ func runWatcher() error {
 		} else {
 			dashboardKey = k
 		}
-	}
-
-	var dir string
-	if fi, err := os.Stat(watcherGitCacheDir); err == nil && fi.IsDir() {
-		dir = watcherGitCacheDir
-	} else {
-		var err error
-		dir, err = ioutil.TempDir("", "watcher")
-		if err != nil {
-			return err
-		}
-		defer os.RemoveAll(dir)
 	}
 
 	if *httpAddr != "" {
@@ -115,7 +122,7 @@ func runWatcher() error {
 	}
 
 	errc := make(chan error)
-
+	dir := *cacheDir
 	go func() {
 		dst := ""
 		if *mirror {
@@ -1140,6 +1147,7 @@ func subrepoList() ([]string, error) {
 		return nil, nil
 	}
 
+	// TODO: timeout on all http requests.
 	r, err := http.Get(*dashFlag + "packages?kind=subrepo")
 	if err != nil {
 		return nil, fmt.Errorf("subrepo list: %v", err)
@@ -1209,6 +1217,7 @@ func pollGerritAndTickle() {
 // latest master hash.
 // The returned map is nil on any transient error.
 func gerritMetaMap() map[string]string {
+	// TODO: timeout
 	res, err := http.Get(metaURL)
 	if err != nil {
 		return nil

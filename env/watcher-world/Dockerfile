@@ -2,6 +2,12 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
+# TODO, DEPRECATED: as of 2017-01-27, this is still being used, but is
+# approximately never updated, and is being migrated to the new
+# "gitmirror" binary and Dockerfile to be run on GKE. Don't make
+# changes here until cmd/gitmirror is in use in production on GKE, and
+# then delete this.
+
 # Commit watcher's environment for Go repos, but without the commit
 # watcher itself. That is now folded into the coordinator binary
 # itself. This Dockerfile is just the environment in which that binary

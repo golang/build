@@ -5,6 +5,11 @@
 FROM golang:1.8-wheezy
 LABEL maintainer "golang-dev@googlegroups.com"
 
+# todo(bradfitz): remove duplication between this and coordinator.
+# Maybe make both derive FROM "golang_org:buildbase" or something. But
+# then I want to make sure that FROM base is rebuilt always when things in
+# x/build change.
+
 RUN go get -d cloud.google.com/go/compute/metadata
 RUN cd /go/src/cloud.google.com/go/compute/metadata && git reset --hard cd0da878c66091060d2e7403abd62192b3e387e0
 
@@ -32,8 +37,11 @@ RUN cd /go/src/gopkg.in/inf.v0 && git reset --hard 3887ee99ecf07df5b447e9b00d9c0
 
 RUN cd /go/src/google.golang.org/grpc && git reset --hard 50955793b0183f9de69bd78e2ec251cf20aab121
 
+COPY /cmd/gitmirror/install-apt-deps.sh /scripts/install-apt-deps.sh
+RUN  /scripts/install-apt-deps.sh
+
 COPY . /go/src/golang.org/x/build/
 
-RUN go install golang.org/x/build/cmd/coordinator
+RUN go install golang.org/x/build/cmd/gitmirror
 
-ENTRYPOINT ["/go/bin/coordinator"]
+ENTRYPOINT ["/go/bin/gitmirror"]
