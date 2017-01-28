@@ -369,9 +369,24 @@ func (c *Client) GetChangeDetail(ctx context.Context, changeID string, opts ...Q
 	return &change, nil
 }
 
+// ReviewInput contains information for adding a review to a revision.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#review-input
 type ReviewInput struct {
 	Message string         `json:"message,omitempty"`
 	Labels  map[string]int `json:"labels,omitempty"`
+
+	// Comments contains optional per-line comments to post.
+	// The map key is a file path (such as "src/foo/bar.go").
+	Comments map[string][]CommentInput `json:"comments,omitempty"`
+}
+
+// CommentInput contains information for creating an inline comment.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#comment-input
+type CommentInput struct {
+	Line    int    `json:"line"`
+	Message string `json:"message"`
+
+	// TODO(haya14busa): more, as needed.
 }
 
 type reviewInfo struct {
