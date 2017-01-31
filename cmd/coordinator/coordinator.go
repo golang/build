@@ -817,7 +817,7 @@ func findTryWork() error {
 			log.Printf("Warning: skipping incomplete %#v", ci)
 			continue
 		}
-		if ci.Project == "build" || ci.Project == "grpc-review" || ci.Project == "perf" {
+		if ci.Project == "build" || ci.Project == "grpc-review" {
 			// Skip trybot request in build repo.
 			// Also skip grpc-review, which is only for reviews for now.
 			continue
@@ -1148,7 +1148,6 @@ func (br builderRev) skipBuild() bool {
 		"exp",    // always broken, depends on mobile which is broken
 		"mobile", // always broken (gl, etc). doesn't compile.
 		"term",   // no code yet in repo: "warning: "golang.org/x/term/..." matched no packages"
-		"perf",   // has external deps
 		"oauth2": // has external deps
 		return true
 	}
