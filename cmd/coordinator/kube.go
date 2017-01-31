@@ -6,14 +6,10 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,7 +20,7 @@ import (
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/kubernetes"
 	"golang.org/x/build/kubernetes/api"
-	"golang.org/x/oauth2"
+	"golang.org/x/build/kubernetes/gke"
 	container "google.golang.org/api/container/v1"
 )
 
@@ -56,64 +52,18 @@ func initKube() error {
 	if !hasCloudPlatformScope() {
 		return errors.New("coordinator not running with access to the Cloud Platform scope.")
 	}
-	httpClient := oauth2.NewClient(oauth2.NoContext, tokenSource)
-	var err error
 
-	containerService, err = container.New(httpClient)
-	if err != nil {
-		return fmt.Errorf("could not create client for Google Container Engine: %v", err)
-	}
-
-	kubeCluster, err = containerService.Projects.Zones.Clusters.Get(buildEnv.ProjectName, buildEnv.Zone, clusterName).Do()
-	if err != nil {
-		return fmt.Errorf("cluster %q could not be found in project %q, zone %q: %v", clusterName, buildEnv.ProjectName, buildEnv.Zone, err)
-	}
-
-	// Decode certs
-	decode := func(which string, cert string) []byte {
-		if err != nil {
-			return nil
-		}
-		s, decErr := base64.StdEncoding.DecodeString(cert)
-		if decErr != nil {
-			err = fmt.Errorf("error decoding %s cert: %v", which, decErr)
-		}
-		return []byte(s)
-	}
-	clientCert := decode("client cert", kubeCluster.MasterAuth.ClientCertificate)
-	clientKey := decode("client key", kubeCluster.MasterAuth.ClientKey)
-	caCert := decode("cluster cert", kubeCluster.MasterAuth.ClusterCaCertificate)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel() // ctx is only used for discovery and connect; not retained.
+	kc, err := gke.NewClient(ctx,
+		clusterName,
+		gke.OptZone(buildEnv.Zone),
+		gke.OptProject(buildEnv.ProjectName),
+		gke.OptTokenSource(tokenSource))
 	if err != nil {
 		return err
 	}
-
-	// HTTPS client
-	cert, err := tls.X509KeyPair(clientCert, clientKey)
-	if err != nil {
-		return fmt.Errorf("x509 client key pair could not be generated: %v", err)
-	}
-
-	// CA Cert from kube master
-	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM([]byte(caCert))
-
-	// Setup TLS config
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      caCertPool,
-	}
-	tlsConfig.BuildNameToCertificate()
-
-	kubeHTTPClient := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: tlsConfig,
-		},
-	}
-
-	kubeClient, err = kubernetes.NewClient("https://"+kubeCluster.Endpoint, kubeHTTPClient)
-	if err != nil {
-		return fmt.Errorf("kubernetes HTTP client could not be created: %v", err)
-	}
+	kubeClient = kc
 
 	go kubePool.pollCapacityLoop()
 	return nil

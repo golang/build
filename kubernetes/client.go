@@ -51,6 +51,14 @@ func NewClient(baseURL string, client *http.Client) (*Client, error) {
 	}, nil
 }
 
+// Close closes any idle HTTP connections still connected to the Kubernetes master.
+func (c *Client) Close() error {
+	if tr, ok := c.httpClient.Transport.(*http.Transport); ok {
+		tr.CloseIdleConnections()
+	}
+	return nil
+}
+
 // RunLongLivedPod creates a new pod resource in the default pod namespace with
 // the given pod API specification. It assumes the pod runs a
 // long-lived server (i.e. if the container exit quickly quickly, even
