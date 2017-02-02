@@ -843,6 +843,17 @@ func init() {
 	})
 
 	addBuilder(BuildConfig{
+		Name:  "darwin-arm-a1549ios",
+		Notes: "iPhone 6 (model A1549), via a Mac Mini; owned by elias.naur",
+		env:   []string{"GOARCH=arm", "GOHOSTARCH=amd64"},
+	})
+	addBuilder(BuildConfig{
+		Name:  "darwin-arm64-a1549ios",
+		Notes: "iPhone 6 (model A1549), via a Mac Mini; owned by elias.naur",
+		env:   []string{"GOARCH=arm64", "GOHOSTARCH=amd64"},
+	})
+
+	addBuilder(BuildConfig{
 		Name:     "solaris-amd64-smartosbuildlet",
 		HostType: "host-solaris-amd64",
 	})
