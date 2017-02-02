@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	stdlog "log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -30,15 +31,15 @@ func init() {
 type stderrLogger struct{}
 
 func (s *stderrLogger) Infof(_ context.Context, format string, args ...interface{}) {
-	log.Printf(format, args...)
+	stdlog.Printf(format, args...)
 }
 
 func (s *stderrLogger) Errorf(_ context.Context, format string, args ...interface{}) {
-	log.Printf(format, args...)
+	stdlog.Printf(format, args...)
 }
 
 func (s *stderrLogger) Criticalf(_ context.Context, format string, args ...interface{}) {
-	log.Printf(format, args...)
+	stdlog.Printf(format, args...)
 }
 
 func newTransport(ctx context.Context) http.RoundTripper {

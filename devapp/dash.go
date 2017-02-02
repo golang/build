@@ -153,10 +153,12 @@ func showDash(w http.ResponseWriter, req *http.Request) {
 	login, err := loginURL(ctx, "/dash")
 	if err != nil {
 		http.Error(w, err.Error(), 500)
+		return
 	}
 	logout, err := logoutURL(ctx, "/dash")
 	if err != nil {
 		http.Error(w, err.Error(), 500)
+		return
 	}
 
 	tData := struct {
