@@ -26,6 +26,9 @@ var tokenFile = flag.String("token", "", "read GitHub token personal access toke
 
 func init() {
 	log = &stderrLogger{}
+	// TODO don't bind to the working directory.
+	http.Handle("/static/", http.FileServer(http.Dir(".")))
+	http.HandleFunc("/favicon.ico", faviconHandler)
 }
 
 type stderrLogger struct{}
@@ -59,11 +62,13 @@ func currentUserEmail(ctx context.Context) string {
 // loginURL returns a URL that, when visited, prompts the user to sign in,
 // then redirects the user to the URL specified by dest.
 func loginURL(ctx context.Context, path string) (string, error) {
-	return "", errors.New("loginURL: unimplemented")
+	// TODO implement
+	return "/login", nil
 }
 
 func logoutURL(ctx context.Context, path string) (string, error) {
-	return "", errors.New("logoutURL: unimplemented")
+	// TODO implement
+	return "/logout", nil
 }
 
 func getCaches(ctx context.Context, names ...string) map[string]*Cache {
@@ -161,4 +166,8 @@ func getToken(ctx context.Context) (string, error) {
 
 func getContext(r *http.Request) context.Context {
 	return r.Context()
+}
+
+func faviconHandler(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "./static/favicon.ico")
 }
