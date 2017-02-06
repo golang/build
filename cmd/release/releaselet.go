@@ -681,6 +681,9 @@ var windowsData = map[string]string{
     <Custom Action="SetApplicationRootDirectory" Before="InstallFinalize" />
 </InstallExecuteSequence>
 
+<!-- Notify top level applications of the new PATH variable (golang.org/issue/18680)  -->
+<CustomActionRef Id="WixBroadcastEnvironmentChange" />
+
 <!-- Include the user interface -->
 <WixVariable Id="WixUILicenseRtf" Value="LICENSE.rtf" />
 <WixVariable Id="WixUIBannerBmp" Value="images\Banner.jpg" />
