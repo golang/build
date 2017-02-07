@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: gitmirror
+spec:
+  replicas: 1
+  selector:
+    app: gitmirror
+  template:
+    metadata:
+      name: gitmirror
+      labels:
+        app: gitmirror
+    spec:
+      containers:
+      - name: gitmirror
+        image: gcr.io/symbolic-datum-552/gitmirror:latest
+        command: ["/go/bin/gitmirror", "-http=:8585", "-mirror=false", "-report=false", "-network=false"]
+        ports:
+        - containerPort: 8585
+        resources:
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"

@@ -33,6 +33,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"cloud.google.com/go/compute/metadata"
 )
 
 const (
@@ -48,7 +50,7 @@ var (
 
 	repoURL  = flag.String("repo", goBase+"go", "main Repository URL (but subrepos are also mirrored)") // TODO: delete this?
 	dashFlag = flag.String("dash", "https://build.golang.org/", "Dashboard URL (must end in /)")
-	keyFile  = flag.String("key", defaultKeyFile, "Build dashboard key file") // TODO: make automatic from metadata/k8s secrets
+	keyFile  = flag.String("key", defaultKeyFile, "Build dashboard key file. If empty, automatic from GCE project metadata")
 
 	pollInterval = flag.Duration("poll", 10*time.Second, "Remote repo poll interval")
 
@@ -63,10 +65,14 @@ var (
 )
 
 var (
-	defaultKeyFile = filepath.Join(homeDir(), ".gobuildkey") // TODO: use k8s secrets or GCE proj metadata
+	defaultKeyFile = filepath.Join(homeDir(), ".gobuildkey")
 	dashboardKey   = ""
 	networkSeen    = make(map[string]bool) // testing mode only (-network=false); known hashes
 )
+
+var httpClient = &http.Client{
+	Timeout: 30 * time.Second, // overkill
+}
 
 func main() {
 	flag.Parse()
@@ -114,6 +120,7 @@ func runGitMirror() error {
 	}
 
 	if *httpAddr != "" {
+		http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
 		ln, err := net.Listen("tcp", *httpAddr)
 		if err != nil {
 			return err
@@ -219,7 +226,7 @@ func shouldMirror(name string) bool {
 		return true
 	}
 	// Else, see if it appears to be a subrepo:
-	r, err := http.Get("https://golang.org/x/" + name)
+	r, err := httpClient.Get("https://golang.org/x/" + name)
 	if err != nil {
 		log.Printf("repo %v doesn't seem to exist: %v", name, err)
 		return false
@@ -778,7 +785,7 @@ func (r *Repo) dashSeen(hash string) (bool, error) {
 	}
 	v := url.Values{"hash": {hash}, "packagePath": {r.path}}
 	u := *dashFlag + "commit?" + v.Encode()
-	resp, err := http.Get(u)
+	resp, err := httpClient.Get(u)
 	if err != nil {
 		return false, err
 	}
@@ -985,7 +992,14 @@ func (r *Repo) push() (err error) {
 				pushRefs = append(pushRefs, ref)
 			}
 		}
-		sort.Sort(refByPriority(pushRefs))
+		sort.Slice(pushRefs, func(i, j int) bool {
+			p1 := priority[refType(pushRefs[i])]
+			p2 := priority[refType(pushRefs[j])]
+			if p1 != p2 {
+				return p1 > p2
+			}
+			return pushRefs[i] <= pushRefs[j]
+		})
 		if len(pushRefs) == 0 {
 			r.setStatus("nothing to sync")
 			return nil
@@ -1133,6 +1147,13 @@ func homeDir() string {
 
 func readKey() (string, error) {
 	c, err := ioutil.ReadFile(*keyFile)
+	if os.IsNotExist(err) && metadata.OnGCE() {
+		key, err := metadata.ProjectAttributeValue("builder-master-key")
+		if err != nil {
+			return "", fmt.Errorf("-key=%s doesn't exist, and key can't be loaded from GCE metadata: %v", err)
+		}
+		return strings.TrimSpace(key), nil
+	}
 	if err != nil {
 		return "", err
 	}
@@ -1147,8 +1168,7 @@ func subrepoList() ([]string, error) {
 		return nil, nil
 	}
 
-	// TODO: timeout on all http requests.
-	r, err := http.Get(*dashFlag + "packages?kind=subrepo")
+	r, err := httpClient.Get(*dashFlag + "packages?kind=subrepo")
 	if err != nil {
 		return nil, fmt.Errorf("subrepo list: %v", err)
 	}
@@ -1217,8 +1237,7 @@ func pollGerritAndTickle() {
 // latest master hash.
 // The returned map is nil on any transient error.
 func gerritMetaMap() map[string]string {
-	// TODO: timeout
-	res, err := http.Get(metaURL)
+	res, err := httpClient.Get(metaURL)
 	if err != nil {
 		return nil
 	}
@@ -1294,19 +1313,6 @@ func parseRefs(cmd *exec.Cmd) (map[string]string, error) {
 	return refHash, bs.Err()
 }
 
-type refByPriority []string
-
-func (s refByPriority) Len() int      { return len(s) }
-func (s refByPriority) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-func (s refByPriority) Less(i, j int) bool {
-	p1 := priority[refType(s[i])]
-	p2 := priority[refType(s[j])]
-	if p1 != p2 {
-		return p1 > p2
-	}
-	return s[i] <= s[j]
-}
-
 func refType(s string) string {
 	s = strings.TrimPrefix(s, "refs/")
 	if i := strings.IndexByte(s, '/'); i != -1 {
@@ -1319,4 +1325,10 @@ var priority = map[string]int{
 	"heads":   5,
 	"tags":    4,
 	"changes": 3,
+}
+
+func handleDebugGoroutines(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	buf := make([]byte, 1<<20)
+	w.Write(buf[:runtime.Stack(buf, true)])
 }
