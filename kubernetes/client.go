@@ -10,10 +10,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -22,18 +24,15 @@ import (
 	"golang.org/x/net/context/ctxhttp"
 )
 
-const (
-	// APIEndpoint defines the base path for kubernetes API resources.
-	APIEndpoint     = "/api/v1"
-	defaultPod      = "/namespaces/default/pods"
-	defaultWatchPod = "/watch/namespaces/default/pods"
-	nodes           = "/nodes"
-)
-
 // Client is a client for the Kubernetes master.
 type Client struct {
+	httpClient *http.Client
+
+	// endPointURL is the Kubernetes master URL ending in
+	// "/api/v1".
 	endpointURL string
-	httpClient  *http.Client
+
+	namespace string // always in URL path-escaped form (for now)
 }
 
 // NewClient returns a new Kubernetes client.
@@ -46,8 +45,9 @@ func NewClient(baseURL string, client *http.Client) (*Client, error) {
 		return nil, fmt.Errorf("failed to parse URL %q: %v", baseURL, err)
 	}
 	return &Client{
-		endpointURL: strings.TrimSuffix(validURL.String(), "/") + APIEndpoint,
+		endpointURL: strings.TrimSuffix(validURL.String(), "/") + "/api/v1",
 		httpClient:  client,
+		namespace:   "default",
 	}, nil
 }
 
@@ -57,6 +57,12 @@ func (c *Client) Close() error {
 		tr.CloseIdleConnections()
 	}
 	return nil
+}
+
+// nsEndpoint returns the API endpoint root for this client.
+// (This has nothing to do with Service Endpoints.)
+func (c *Client) nsEndpoint() string {
+	return c.endpointURL + "/namespaces/" + c.namespace + "/"
 }
 
 // RunLongLivedPod creates a new pod resource in the default pod namespace with
@@ -72,7 +78,7 @@ func (c *Client) RunLongLivedPod(ctx context.Context, pod *api.Pod) (*api.PodSta
 	if err := json.NewEncoder(&podJSON).Encode(pod); err != nil {
 		return nil, fmt.Errorf("failed to encode pod in json: %v", err)
 	}
-	postURL := c.endpointURL + defaultPod
+	postURL := c.nsEndpoint() + "pods"
 	req, err := http.NewRequest("POST", postURL, &podJSON)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: POST %q : %v", postURL, err)
@@ -122,39 +128,90 @@ func (c *Client) RunLongLivedPod(ctx context.Context, pod *api.Pod) (*api.PodSta
 	}
 }
 
-// GetPods returns all pods in the cluster, regardless of status.
-func (c *Client) GetPods(ctx context.Context) ([]api.Pod, error) {
-	getURL := c.endpointURL + defaultPod
-
-	// Make request to Kubernetes API
-	req, err := http.NewRequest("GET", getURL, nil)
+func (c *Client) do(ctx context.Context, method, urlStr string, dst interface{}) error {
+	req, err := http.NewRequest(method, urlStr, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: GET %q : %v", getURL, err)
+		return err
 	}
 	res, err := ctxhttp.Do(ctx, c.httpClient, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make request: GET %q: %v", getURL, err)
+		return err
 	}
-
-	body, err := ioutil.ReadAll(res.Body)
-	res.Body.Close()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read request body for GET %q: %v", getURL, err)
-	}
+	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("http error %d GET %q: %q: %v", res.StatusCode, getURL, string(body), err)
+		body, _ := ioutil.ReadAll(res.Body)
+		return fmt.Errorf("%v %s: %v, %s", method, urlStr, res.Status, body)
 	}
+	if dst != nil {
+		var r io.Reader = res.Body
+		if false && strings.Contains(urlStr, "endpoints") { // for debugging
+			r = io.TeeReader(r, os.Stderr)
+		}
+		return json.NewDecoder(r).Decode(dst)
+	}
+	return nil
+}
 
-	var podList api.PodList
-	if err := json.Unmarshal(body, &podList); err != nil {
-		return nil, fmt.Errorf("failed to decode list of pod resources: %v", err)
+// GetServices return all services in the cluster, regardless of status.
+func (c *Client) GetServices(ctx context.Context) ([]api.Service, error) {
+	var list api.ServiceList
+	if err := c.do(ctx, "GET", c.nsEndpoint()+"services", &list); err != nil {
+		return nil, err
 	}
-	return podList.Items, nil
+	return list.Items, nil
+}
+
+// Endpoint represents a service endpoint address.
+type Endpoint struct {
+	IP       string
+	Port     int
+	PortName string
+	Protocol string // "TCP" or "UDP"; never empty
+}
+
+// GetServiceEndpoints returns the endpoints for the named service.
+// If portName is non-empty, only endpoints matching that port nae are returned.
+func (c *Client) GetServiceEndpoints(ctx context.Context, serviceName, portName string) ([]Endpoint, error) {
+	var res api.Endpoints
+	// TODO: path escape serviceName?
+	if err := c.do(ctx, "GET", c.nsEndpoint()+"endpoints/"+serviceName, &res); err != nil {
+		return nil, err
+	}
+	var ep []Endpoint
+	for _, ss := range res.Subsets {
+		for _, port := range ss.Ports {
+			if portName != "" && port.Name != portName {
+				continue
+			}
+			for _, addr := range ss.Addresses {
+				proto := string(port.Protocol)
+				if proto == "" {
+					proto = "TCP"
+				}
+				ep = append(ep, Endpoint{
+					IP:       addr.IP,
+					Port:     port.Port,
+					PortName: port.Name,
+					Protocol: proto,
+				})
+			}
+		}
+	}
+	return ep, nil
+}
+
+// GetPods returns all pods in the cluster, regardless of status.
+func (c *Client) GetPods(ctx context.Context) ([]api.Pod, error) {
+	var list api.PodList
+	if err := c.do(ctx, "GET", c.nsEndpoint()+"pods", &list); err != nil {
+		return nil, err
+	}
+	return list.Items, nil
 }
 
 // PodDelete deletes the specified Kubernetes pod.
 func (c *Client) DeletePod(ctx context.Context, podName string) error {
-	url := c.endpointURL + defaultPod + "/" + podName
+	url := c.nsEndpoint() + "pods/" + podName
 	req, err := http.NewRequest("DELETE", url, strings.NewReader(`{"gracePeriodSeconds":0}`))
 	if err != nil {
 		return fmt.Errorf("failed to create request: DELETE %q : %v", url, err)
@@ -254,7 +311,7 @@ func (c *Client) _WatchPod(ctx context.Context, podName, podResourceVersion stri
 		defer cancel()
 
 		// Make request to Kubernetes API
-		getURL := c.endpointURL + defaultWatchPod + "/" + podName
+		getURL := c.endpointURL + "/watch/namespaces/" + c.namespace + "/pods/" + podName
 		req, err := http.NewRequest("GET", getURL, nil)
 		req.URL.Query().Add("resourceVersion", podResourceVersion)
 		if err != nil {
@@ -317,7 +374,7 @@ func (c *Client) _WatchPod(ctx context.Context, podName, podResourceVersion stri
 // Retrieve the status of a pod synchronously from the Kube
 // API server.
 func (c *Client) PodStatus(ctx context.Context, podName string) (*api.PodStatus, error) {
-	getURL := c.endpointURL + defaultPod + "/" + podName
+	getURL := c.nsEndpoint() + "pods/" + podName // TODO: escape podName?
 
 	// Make request to Kubernetes API
 	req, err := http.NewRequest("GET", getURL, nil)
@@ -349,7 +406,7 @@ func (c *Client) PodStatus(ctx context.Context, podName string) (*api.PodStatus,
 // in the pod.
 func (c *Client) PodLog(ctx context.Context, podName string) (string, error) {
 	// TODO(evanbrown): support multiple containers
-	url := c.endpointURL + defaultPod + "/" + podName + "/log"
+	url := c.nsEndpoint() + "pods/" + podName + "/log" // TODO: escape podName?
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: GET %q : %v", url, err)
@@ -371,26 +428,9 @@ func (c *Client) PodLog(ctx context.Context, podName string) (string, error) {
 
 // PodNodes returns the list of nodes that comprise the Kubernetes cluster
 func (c *Client) GetNodes(ctx context.Context) ([]api.Node, error) {
-	url := c.endpointURL + nodes
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: GET %q : %v", url, err)
+	var list api.NodeList
+	if err := c.do(ctx, "GET", c.nsEndpoint()+"nodes", &list); err != nil {
+		return nil, err
 	}
-	res, err := ctxhttp.Do(ctx, c.httpClient, req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make request: GET %q: %v", url, err)
-	}
-	body, err := ioutil.ReadAll(res.Body)
-	res.Body.Close()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: GET %q: %v, url, err")
-	}
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("http error %d GET %q: %q: %v", res.StatusCode, url, string(body), err)
-	}
-	var nodeList *api.NodeList
-	if err := json.Unmarshal(body, &nodeList); err != nil {
-		return nil, fmt.Errorf("failed to decode node list: %v", err)
-	}
-	return nodeList.Items, nil
+	return list.Items, nil
 }
