@@ -46,9 +46,8 @@ const (
 
 var (
 	httpAddr = flag.String("http", "", "If non-empty, the listen address to run an HTTP server on")
-	cacheDir = flag.String("cachedir", "/var/cache/git-mirror", "git cache directory. If empty a temp directory is made.")
+	cacheDir = flag.String("cachedir", "", "git cache directory. If empty a temp directory is made.")
 
-	repoURL  = flag.String("repo", goBase+"go", "main Repository URL (but subrepos are also mirrored)") // TODO: delete this?
 	dashFlag = flag.String("dash", "https://build.golang.org/", "Dashboard URL (must end in /)")
 	keyFile  = flag.String("key", defaultKeyFile, "Build dashboard key file. If empty, automatic from GCE project metadata")
 
@@ -78,10 +77,6 @@ func main() {
 	flag.Parse()
 	log.Printf("gitmirror running.")
 
-	if err := os.MkdirAll(*cacheDir, 0755); err != nil {
-		log.Fatalf("Failed to created watcher's git cache dir: %v", err)
-	}
-
 	go pollGerritAndTickle()
 	err := runGitMirror()
 	log.Fatalf("gitmirror exiting after failure: %v", err)
@@ -94,6 +89,26 @@ func runGitMirror() error {
 		return errors.New("dashboard URL (-dashboard) must end in /")
 	}
 
+	if *mirror {
+		sshDir := filepath.Join(homeDir(), ".ssh")
+		sshKey := filepath.Join(sshDir, "id_ed25519")
+		if _, err := os.Stat(sshKey); err == nil {
+			log.Printf("Using github ssh key at %v", sshKey)
+		} else {
+			if privKey, err := metadata.ProjectAttributeValue("github-ssh"); err == nil && len(privKey) > 0 {
+				if err := os.MkdirAll(sshDir, 0700); err != nil {
+					return err
+				}
+				if err := ioutil.WriteFile(sshKey, []byte(privKey+"\n"), 0600); err != nil {
+					return err
+				}
+				log.Printf("Wrote %s from GCE metadata.", sshKey)
+			} else {
+				return fmt.Errorf("Can't mirror to github without 'github-ssh' GCE metadata or file %v", sshKey)
+			}
+		}
+	}
+
 	if *cacheDir == "" {
 		dir, err := ioutil.TempDir("", "gitmirror")
 		if err != nil {
@@ -103,11 +118,17 @@ func runGitMirror() error {
 		*cacheDir = dir
 	} else {
 		fi, err := os.Stat(*cacheDir)
-		if err != nil {
-			return fmt.Errorf("invalid -cachedir: %v", err)
-		}
-		if !fi.IsDir() {
-			return fmt.Errorf("invalid -cachedir=%q; not a directory", *cacheDir)
+		if os.IsNotExist(err) {
+			if err := os.MkdirAll(*cacheDir, 0755); err != nil {
+				return fmt.Errorf("failed to create watcher's git cache dir: %v", err)
+			}
+		} else {
+			if err != nil {
+				return fmt.Errorf("invalid -cachedir: %v", err)
+			}
+			if !fi.IsDir() {
+				return fmt.Errorf("invalid -cachedir=%q; not a directory", *cacheDir)
+			}
 		}
 	}
 
@@ -120,6 +141,7 @@ func runGitMirror() error {
 	}
 
 	if *httpAddr != "" {
+		http.HandleFunc("/debug/env", handleDebugEnv)
 		http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
 		ln, err := net.Listen("tcp", *httpAddr)
 		if err != nil {
@@ -129,29 +151,13 @@ func runGitMirror() error {
 	}
 
 	errc := make(chan error)
-	dir := *cacheDir
-	go func() {
-		dst := ""
-		if *mirror {
-			name := (*repoURL)[strings.LastIndex(*repoURL, "/")+1:]
-			dst = "git@github.com:golang/" + name + ".git"
-		}
-		name := strings.TrimPrefix(*repoURL, goBase)
-		r, err := NewRepo(dir, *repoURL, dst, "", true)
-		if err != nil {
-			errc <- err
-			return
-		}
-		http.Handle("/"+name+".tar.gz", r)
-		errc <- r.Watch()
-	}()
 
 	subrepos, err := subrepoList()
 	if err != nil {
 		return err
 	}
 
-	start := func(name, path string, dash bool) {
+	startRepo := func(name, path string, dash bool) {
 		log.Printf("Starting watch of repo %s", name)
 		url := goBase + name
 		var dst string
@@ -163,20 +169,26 @@ func runGitMirror() error {
 				log.Printf("Not mirroring repo %s", name)
 			}
 		}
-		r, err := NewRepo(dir, url, dst, path, dash)
+		r, err := NewRepo(url, dst, path, dash)
 		if err != nil {
 			errc <- err
 			return
 		}
 		http.Handle("/"+name+".tar.gz", r)
-		errc <- r.Watch()
+		reposMu.Lock()
+		repos = append(repos, r)
+		sort.Slice(repos, func(i, j int) bool { return repos[i].name() < repos[j].name() })
+		reposMu.Unlock()
+		r.Loop()
 	}
+
+	go startRepo("go", "", true)
 
 	seen := map[string]bool{"go": true}
 	for _, path := range subrepos {
 		name := strings.TrimPrefix(path, "golang.org/x/")
 		seen[name] = true
-		go start(name, path, true)
+		go startRepo(name, path, true)
 	}
 	if *mirror {
 		for name := range gerritMetaMap() {
@@ -184,12 +196,33 @@ func runGitMirror() error {
 				// Repo already picked up by dashboard list.
 				continue
 			}
-			go start(name, "golang.org/x/"+name, false)
+			go startRepo(name, "golang.org/x/"+name, false)
 		}
 	}
 
-	// Must be non-nil.
+	http.HandleFunc("/", handleRoot)
+
+	// Blocks forever if all the NewRepo calls succeed:
 	return <-errc
+}
+
+var (
+	reposMu sync.Mutex
+	repos   []*Repo
+)
+
+func handleRoot(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	reposMu.Lock()
+	defer reposMu.Unlock()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, "<html><body><pre>\a")
+	for _, r := range repos {
+		fmt.Fprintf(w, "<a href='/debug/watcher/%s'>%s</a> - %s\n", r.name(), r.name(), r.statusLine())
+	}
 }
 
 // shouldReport reports whether the named repo should be mirrored from
@@ -278,30 +311,34 @@ func (r *statusRing) foreachDesc(fn func(statusEntry)) {
 
 // Repo represents a repository to be watched.
 type Repo struct {
-	root     string             // on-disk location of the git repo
+	root     string             // on-disk location of the git repo, *cacheDir/name
 	path     string             // base import path for repo (blank for main repo)
 	commits  map[string]*Commit // keyed by full commit hash (40 lowercase hex digits)
 	branches map[string]*Branch // keyed by branch name, eg "release-branch.go1.3" (or empty for default)
 	dash     bool               // push new commits to the dashboard
 	mirror   bool               // push new commits to 'dest' remote
 	status   statusRing
+
+	mu        sync.Mutex
+	err       error
+	firstBad  time.Time
+	lastBad   time.Time
+	firstGood time.Time
+	lastGood  time.Time
 }
 
-// NewRepo checks out a new instance of the Mercurial repository
-// specified by srcURL to a new directory inside dir.
+// NewRepo checks out a new instance of the git repository
+// specified by srcURL.
+//
 // If dstURL is not empty, changes from the source repository will
 // be mirrored to the specified destination repository.
 // The importPath argument is the base import path of the repository,
 // and should be empty for the main Go repo.
 // The dash argument should be set true if commits to this
 // repo should be reported to the build dashboard.
-func NewRepo(dir, srcURL, dstURL, importPath string, dash bool) (*Repo, error) {
-	var root string
-	if importPath == "" {
-		root = filepath.Join(dir, "go")
-	} else {
-		root = filepath.Join(dir, path.Base(importPath))
-	}
+func NewRepo(srcURL, dstURL, importPath string, dash bool) (*Repo, error) {
+	name := path.Base(srcURL) // "go", "net", etc
+	root := filepath.Join(*cacheDir, name)
 	r := &Repo{
 		path:     importPath,
 		root:     root,
@@ -351,11 +388,6 @@ func NewRepo(dir, srcURL, dstURL, importPath string, dash bool) (*Repo, error) {
 			return nil, fmt.Errorf("adding remote: %v", err)
 		}
 		r.setStatus("added dest remote")
-		r.logf("starting initial push to %v", dstURL)
-		if err := r.push(); err != nil {
-			return nil, err
-		}
-		r.logf("did initial push to %v", dstURL)
 	}
 
 	if r.dash {
@@ -367,6 +399,52 @@ func NewRepo(dir, srcURL, dstURL, importPath string, dash bool) (*Repo, error) {
 	}
 
 	return r, nil
+}
+
+func (r *Repo) setErr(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	change := (r.err != nil) != (err != nil)
+	now := time.Now()
+	if err != nil {
+		if change {
+			r.firstBad = now
+		}
+		r.lastBad = now
+	} else {
+		if change {
+			r.firstGood = now
+		}
+		r.lastGood = now
+	}
+	r.err = err
+}
+
+var startTime = time.Now()
+
+func (r *Repo) statusLine() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.lastGood.IsZero() {
+		if r.err != nil {
+			return fmt.Sprintf("broken; permanently? always failing, for %v", time.Since(r.firstBad))
+		}
+		if time.Since(startTime) < 5*time.Minute {
+			return "ok; starting up, no report yet"
+		}
+		return fmt.Sprintf("hung; hang at start-up? no report since start %v ago", time.Since(startTime))
+	}
+	if r.err == nil {
+		if sinceGood := time.Since(r.lastGood); sinceGood > 6*time.Minute {
+			return fmt.Sprintf("hung? no activity since last success %v ago", sinceGood)
+		}
+		if r.lastBad.After(time.Now().Add(-1 * time.Hour)) {
+			return fmt.Sprintf("ok; recent failure %v ago", time.Since(r.lastBad))
+		}
+		return "ok"
+	}
+	return fmt.Sprintf("broken for %v", time.Since(r.lastGood))
 }
 
 func (r *Repo) setStatus(status string) {
@@ -438,24 +516,30 @@ func (r *Repo) addRemote(name, url string) error {
 // Watch continuously runs "git fetch" in the repo, checks for
 // new commits, posts any new commits to the dashboard (if enabled),
 // and mirrors commits to a destination repo (if enabled).
-// It only returns a non-nil error.
-func (r *Repo) Watch() error {
+func (r *Repo) Loop() {
 	tickler := repoTickler(r.name())
 	for {
 		if err := r.fetch(); err != nil {
-			return err
+			r.setErr(err)
+			time.Sleep(10 * time.Second)
+			continue
 		}
 		if r.mirror {
 			if err := r.push(); err != nil {
-				return err
+				r.setErr(err)
+				time.Sleep(10 * time.Second)
+				continue
 			}
 		}
 		if r.dash {
 			if err := r.updateDashboard(); err != nil {
-				return err
+				r.setErr(err)
+				time.Sleep(10 * time.Second)
+				continue
 			}
 		}
 
+		r.setErr(nil)
 		r.setStatus("waiting")
 		// We still run a timer but a very slow one, just
 		// in case the mechanism updating the repo tickler
@@ -976,7 +1060,7 @@ func (r *Repo) push() (err error) {
 		r.setStatus("sync: fetching remote refs")
 		remote, err := r.getRemoteRefs("dest")
 		if err != nil {
-			r.logf("failed to get local refs: %v", err)
+			r.logf("failed to get remote refs: %v", err)
 			return err
 		}
 		r.setStatus(fmt.Sprintf("sync: got %d remote refs", len(remote)))
@@ -1291,6 +1375,10 @@ func (r *Repo) getRemoteRefs(dest string) (map[string]string, error) {
 
 func parseRefs(cmd *exec.Cmd) (map[string]string, error) {
 	refHash := map[string]string{}
+	var errBuf bytes.Buffer
+	if cmd.Stderr == nil {
+		cmd.Stderr = &errBuf
+	}
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
@@ -1308,9 +1396,9 @@ func parseRefs(cmd *exec.Cmd) (map[string]string, error) {
 		return nil, err
 	}
 	if err := cmd.Wait(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("wait err: %v, stderr: %s", err, errBuf.Bytes())
 	}
-	return refHash, bs.Err()
+	return refHash, nil
 }
 
 func refType(s string) string {
@@ -1331,4 +1419,11 @@ func handleDebugGoroutines(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	buf := make([]byte, 1<<20)
 	w.Write(buf[:runtime.Stack(buf, true)])
+}
+
+func handleDebugEnv(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	for _, kv := range os.Environ() {
+		fmt.Fprintf(w, "%s\n", kv)
+	}
 }
