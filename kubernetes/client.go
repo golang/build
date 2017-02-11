@@ -152,7 +152,7 @@ func (c *Client) do(ctx context.Context, method, urlStr string, dst interface{})
 	return nil
 }
 
-// GetServices return all services in the cluster, regardless of status.
+// GetServices returns all services in the cluster, regardless of status.
 func (c *Client) GetServices(ctx context.Context) ([]api.Service, error) {
 	var list api.ServiceList
 	if err := c.do(ctx, "GET", c.nsEndpoint()+"services", &list); err != nil {
@@ -170,7 +170,7 @@ type Endpoint struct {
 }
 
 // GetServiceEndpoints returns the endpoints for the named service.
-// If portName is non-empty, only endpoints matching that port nae are returned.
+// If portName is non-empty, only endpoints matching that port name are returned.
 func (c *Client) GetServiceEndpoints(ctx context.Context, serviceName, portName string) ([]Endpoint, error) {
 	var res api.Endpoints
 	// TODO: path escape serviceName?
