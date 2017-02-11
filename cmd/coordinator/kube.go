@@ -30,15 +30,12 @@ This file implements the Kubernetes-based buildlet pool.
 
 // Initialized by initKube:
 var (
-	containerService *container.Service
-	kubeClient       *kubernetes.Client
-	kubeErr          error
-	registryPrefix   = "gcr.io"
-	kubeCluster      *container.Cluster
-)
-
-const (
-	clusterName = "buildlets"
+	containerService    *container.Service
+	buildletsKubeClient *kubernetes.Client // for "buildlets" cluster
+	goKubeClient        *kubernetes.Client // for "go" cluster (misc jobs)
+	kubeErr             error
+	registryPrefix      = "gcr.io"
+	kubeCluster         *container.Cluster
 )
 
 // initGCE must be called before initKube
@@ -55,15 +52,24 @@ func initKube() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel() // ctx is only used for discovery and connect; not retained.
-	kc, err := gke.NewClient(ctx,
-		clusterName,
+	var err error
+	buildletsKubeClient, err = gke.NewClient(ctx,
+		"buildlets",
 		gke.OptZone(buildEnv.Zone),
 		gke.OptProject(buildEnv.ProjectName),
 		gke.OptTokenSource(tokenSource))
 	if err != nil {
 		return err
 	}
-	kubeClient = kc
+
+	goKubeClient, err = gke.NewClient(ctx,
+		"go",
+		gke.OptZone(buildEnv.Zone),
+		gke.OptProject(buildEnv.ProjectName),
+		gke.OptTokenSource(tokenSource))
+	if err != nil {
+		return err
+	}
 
 	go kubePool.pollCapacityLoop()
 	return nil
@@ -118,12 +124,12 @@ func (p *kubeBuildletPool) pollCapacityLoop() {
 }
 
 func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
-	nodes, err := kubeClient.GetNodes(ctx)
+	nodes, err := buildletsKubeClient.GetNodes(ctx)
 	if err != nil {
 		log.Printf("failed to retrieve nodes to calculate cluster capacity for %s/%s: %v", buildEnv.ProjectName, buildEnv.Region(), err)
 		return
 	}
-	pods, err := kubeClient.GetPods(ctx)
+	pods, err := buildletsKubeClient.GetPods(ctx)
 	if err != nil {
 		log.Printf("failed to retrieve pods to calculate cluster capacity for %s/%s: %v", buildEnv.ProjectName, buildEnv.Region(), err)
 		return
@@ -195,8 +201,8 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg 
 	if kubeErr != nil {
 		return nil, kubeErr
 	}
-	if kubeClient == nil {
-		panic("expect non-nil kubeClient")
+	if buildletsKubeClient == nil {
+		panic("expect non-nil buildletsKubeClient")
 	}
 
 	deleteIn, ok := ctx.Value(buildletTimeoutOpt{}).(time.Duration)
@@ -213,7 +219,7 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg 
 	lg.logEventTime("creating_kube_pod", podName)
 	log.Printf("Creating Kubernetes pod %q for %s", podName, hostType)
 
-	bc, err := buildlet.StartPod(ctx, kubeClient, podName, hostType, buildlet.PodOpts{
+	bc, err := buildlet.StartPod(ctx, buildletsKubeClient, podName, hostType, buildlet.PodOpts{
 		ProjectID:     buildEnv.ProjectName,
 		ImageRegistry: registryPrefix,
 		Description:   fmt.Sprintf("Go Builder for %s at %s", hostType),
@@ -237,7 +243,7 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg 
 
 		if needDelete {
 			log.Printf("Deleting failed pod %q", podName)
-			if err := kubeClient.DeletePod(context.Background(), podName); err != nil {
+			if err := buildletsKubeClient.DeletePod(context.Background(), podName); err != nil {
 				log.Printf("Error deleting pod %q: %v", podName, err)
 			}
 			p.setPodUsed(podName, false)
@@ -254,7 +260,7 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg 
 		<-ctx.Done()
 		log.Printf("Deleting pod %q after build context completed", podName)
 		// Giving DeletePod a new context here as the build ctx has been canceled
-		kubeClient.DeletePod(context.Background(), podName)
+		buildletsKubeClient.DeletePod(context.Background(), podName)
 		p.setPodUsed(podName, false)
 	}()
 
@@ -371,7 +377,7 @@ func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
 		return
 	}
 	for {
-		pods, err := kubeClient.GetPods(ctx)
+		pods, err := buildletsKubeClient.GetPods(ctx)
 		if err != nil {
 			log.Printf("Error cleaning pods: %v", err)
 			return
@@ -407,7 +413,7 @@ func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
 					if err == nil && time.Now().Unix() > unixDeadline {
 						stats.DeletedOld++
 						log.Printf("Deleting expired pod %q in zone %q ...", pod.Name)
-						err = kubeClient.DeletePod(ctx, pod.Name)
+						err = buildletsKubeClient.DeletePod(ctx, pod.Name)
 						if err != nil {
 							log.Printf("problem deleting old pod %q: %v", pod.Name, err)
 						}
@@ -423,7 +429,7 @@ func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
 				} else {
 					stats.DeletedOldGen++
 					log.Printf("Deleting pod %q from an earlier coordinator generation ...", pod.Name)
-					err = kubeClient.DeletePod(ctx, pod.Name)
+					err = buildletsKubeClient.DeletePod(ctx, pod.Name)
 					if err != nil {
 						log.Printf("problem deleting pod: %v", err)
 					}

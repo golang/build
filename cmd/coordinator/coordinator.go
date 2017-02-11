@@ -30,7 +30,9 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	_ "net/http/pprof"
+	"net/url"
 	"os"
 	"path"
 	"runtime"
@@ -240,9 +242,6 @@ func main() {
 	switch *role {
 	default:
 		log.Fatalf("unsupported role %q", *role)
-	case "watcher":
-		watcherMain()
-		panic("watcherMain finished")
 	case "coordinator":
 		// fall through
 	}
@@ -278,7 +277,6 @@ func main() {
 
 	http.HandleFunc("/", handleStatus)
 	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
-	http.HandleFunc("/debug/watcherlogs", handleDebugWatcherLogs)
 	http.HandleFunc("/debug/watcher/", handleDebugWatcher)
 	http.HandleFunc("/builders", handleBuilders)
 	http.HandleFunc("/temporarylogs", handleLogs)
@@ -314,10 +312,6 @@ func main() {
 		}
 		initTryBuilders()
 
-		// Start the Docker processes on this host polling Gerrit and
-		// pinging build.golang.org when new commits are available.
-		startWatchers() // in watcher.go
-
 		go findWorkLoop(workc)
 		go findTryWorkLoop()
 		// TODO(cmang): gccgo will need its own findWorkLoop
@@ -349,6 +343,28 @@ func main() {
 			}
 		}
 	}
+}
+
+// watcherProxy is the proxy which forwards from
+// http://farmer.golang.org/ to the gitmirror kubeneretes service (git
+// cache+sync).
+// This is used for /debug/watcher/<reponame> status pages, which are
+// served at the same URL paths for both the farmer.golang.org host
+// and the internal backend. (The name "watcher" is old; it's now called
+// "gitmirror" but the URL path remains for now.)
+var watcherProxy *httputil.ReverseProxy
+
+func init() {
+	u, err := url.Parse("http://gitmirror/") // unused hostname
+	if err != nil {
+		log.Fatal(err)
+	}
+	watcherProxy = httputil.NewSingleHostReverseProxy(u)
+	watcherProxy.Transport = gitMirrorClient.Transport
+}
+
+func handleDebugWatcher(w http.ResponseWriter, r *http.Request) {
+	watcherProxy.ServeHTTP(w, r)
 }
 
 func stagingClusterBuilders() map[string]dashboard.BuildConfig {
@@ -3098,7 +3114,7 @@ func getSourceTgz(sl spanLogger, repo, rev string, isTry bool) (tgz io.Reader, e
 					// we try Gerrit.
 					time.Sleep(6 * time.Second)
 				}
-				tgzBytes, err := getSourceTgzFromWatcher(repo, rev)
+				tgzBytes, err := getSourceTgzFromGitMirror(repo, rev)
 				if err == nil {
 					sourceCache.Add(key, tgzBytes)
 					sp.done(nil)
@@ -3124,16 +3140,31 @@ func getSourceTgz(sl spanLogger, repo, rev string, isTry bool) (tgz io.Reader, e
 	return bytes.NewReader(vi.([]byte)), nil
 }
 
+var gitMirrorClient = &http.Client{
+	Timeout: 30 * time.Second,
+	Transport: &http.Transport{
+		IdleConnTimeout: 30 * time.Second,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return goKubeClient.DialServicePort(ctx, "gitmirror", "")
+		},
+	},
+}
+
+var gerritHTTPClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
+
 func getSourceTgzFromGerrit(repo, rev string) (tgz []byte, err error) {
-	return getSourceTgzFromURL("gerrit", repo, rev, "https://go.googlesource.com/"+repo+"/+archive/"+rev+".tar.gz")
+	return getSourceTgzFromURL(gerritHTTPClient, "gerrit", repo, rev, "https://go.googlesource.com/"+repo+"/+archive/"+rev+".tar.gz")
 }
 
-func getSourceTgzFromWatcher(repo, rev string) (tgz []byte, err error) {
-	return getSourceTgzFromURL("watcher", repo, rev, "http://"+gitArchiveAddr+"/"+repo+".tar.gz?rev="+rev)
+func getSourceTgzFromGitMirror(repo, rev string) (tgz []byte, err error) {
+	// The "gitmirror" hostname is unused:
+	return getSourceTgzFromURL(gitMirrorClient, "gitmirror", repo, rev, "http://gitmirror/"+repo+".tar.gz?rev="+rev)
 }
 
-func getSourceTgzFromURL(source, repo, rev, urlStr string) (tgz []byte, err error) {
-	res, err := http.Get(urlStr)
+func getSourceTgzFromURL(hc *http.Client, source, repo, rev, urlStr string) (tgz []byte, err error) {
+	res, err := hc.Get(urlStr)
 	if err != nil {
 		return nil, fmt.Errorf("fetching %s/%s from %s: %v", repo, rev, source, err)
 	}
