@@ -98,7 +98,9 @@ func dash(meth, cmd string, args url.Values, req, resp interface{}) error {
 	return nil
 }
 
-// recordResult sends build results to the dashboard
+// recordResult sends build results to the dashboard.
+// This is not used for trybot failures; only failures after commit.
+// The URLs end up looking like https://build.golang.org/log/$HEXDIGEST
 func recordResult(br builderRev, ok bool, buildLog string, runTime time.Duration) error {
 	req := map[string]interface{}{
 		"Builder":     br.name,
