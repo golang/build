@@ -96,7 +96,7 @@ var (
 )
 
 func initTryBuilders() {
-	tryList := []string{
+	names := []string{
 		"darwin-amd64-10_11",
 		"linux-386",
 		"linux-amd64",
@@ -110,15 +110,15 @@ func initTryBuilders() {
 		"nacl-amd64p32",
 		"linux-arm",
 	}
-	for bname := range dashboard.Builders {
-		if strings.HasPrefix(bname, "misc-compile") {
-			tryList = append(tryList, bname)
+	for name := range dashboard.Builders {
+		if strings.HasPrefix(name, "misc-compile") {
+			names = append(names, name)
 		}
 	}
-	for _, bname := range tryList {
-		conf, ok := dashboard.Builders[bname]
+	for _, name := range names {
+		conf, ok := dashboard.Builders[name]
 		if !ok {
-			log.Printf("ignoring invalid try builder config %q", bname)
+			log.Printf("ignoring invalid try builder config %q", name)
 			continue
 		}
 		tryBuilders = append(tryBuilders, conf)
@@ -818,9 +818,6 @@ func findTryWork() error {
 	})
 	if err != nil {
 		return err
-	}
-	if len(cis) == 0 {
-		return nil
 	}
 
 	statusMu.Lock()
