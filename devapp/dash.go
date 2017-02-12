@@ -206,7 +206,6 @@ func (d *display) short(s interface{}) interface{} {
 	default:
 		return s
 	}
-	return s
 }
 
 // css returns name if cond is true; otherwise it returns the empty string.

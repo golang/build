@@ -112,6 +112,7 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 
 	ctx := context.WithValue(context.Background(), buildletTimeoutOpt{}, time.Duration(0))
 	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	// Doing a release?
 	if user == "release" || user == "adg" || user == "bradfitz" {

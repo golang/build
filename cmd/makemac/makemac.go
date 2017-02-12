@@ -69,7 +69,7 @@ func main() {
 
 // State is the state of the world.
 type State struct {
-	mu sync.Mutex `json:"-"`
+	mu sync.Mutex
 
 	Hosts  map[string]int    // IP address -> running Mac VM count (including 0)
 	VMHost map[string]string // "mac_10_8_host2b" => "10.0.0.0"

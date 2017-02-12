@@ -1236,7 +1236,7 @@ func configureMacStadium() {
 
 	version, err := exec.Command("sw_vers", "-productVersion").Output()
 	if err != nil {
-		log.Fatal("failed to find sw_vers -productVersion: %v", err)
+		log.Fatalf("failed to find sw_vers -productVersion: %v", err)
 	}
 	majorMinor := regexp.MustCompile(`^(\d+)\.(\d+)`)
 	m := majorMinor.FindStringSubmatch(string(version))

@@ -222,7 +222,7 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg 
 	bc, err := buildlet.StartPod(ctx, buildletsKubeClient, podName, hostType, buildlet.PodOpts{
 		ProjectID:     buildEnv.ProjectName,
 		ImageRegistry: registryPrefix,
-		Description:   fmt.Sprintf("Go Builder for %s at %s", hostType),
+		Description:   fmt.Sprintf("Go Builder for %s", hostType),
 		DeleteIn:      deleteIn,
 		OnPodCreating: func() {
 			lg.logEventTime("pod_creating")
@@ -412,7 +412,7 @@ func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
 					}
 					if err == nil && time.Now().Unix() > unixDeadline {
 						stats.DeletedOld++
-						log.Printf("Deleting expired pod %q in zone %q ...", pod.Name)
+						log.Printf("Deleting expired pod %q in zone %q ...", pod.Name, buildEnv.Zone)
 						err = buildletsKubeClient.DeletePod(ctx, pod.Name)
 						if err != nil {
 							log.Printf("problem deleting old pod %q: %v", pod.Name, err)

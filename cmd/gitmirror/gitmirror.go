@@ -1234,7 +1234,7 @@ func readKey() (string, error) {
 	if os.IsNotExist(err) && metadata.OnGCE() {
 		key, err := metadata.ProjectAttributeValue("builder-master-key")
 		if err != nil {
-			return "", fmt.Errorf("-key=%s doesn't exist, and key can't be loaded from GCE metadata: %v", err)
+			return "", fmt.Errorf("-key=%s doesn't exist, and key can't be loaded from GCE metadata: %v", *keyFile, err)
 		}
 		return strings.TrimSpace(key), nil
 	}
