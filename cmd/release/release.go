@@ -12,6 +12,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"flag"
 	"fmt"
 	gobuild "go/build"
@@ -478,7 +479,7 @@ func (b *Build) make() error {
 
 func (b *Build) fetchTarball(client *buildlet.Client) error {
 	b.logf("Downloading tarball.")
-	tgz, err := client.GetTar(".")
+	tgz, err := client.GetTar(context.Background(), ".")
 	if err != nil {
 		return err
 	}
@@ -489,7 +490,7 @@ func (b *Build) fetchTarball(client *buildlet.Client) error {
 func (b *Build) fetchZip(client *buildlet.Client) error {
 	b.logf("Downloading tarball and re-compressing as zip.")
 
-	tgz, err := client.GetTar(".")
+	tgz, err := client.GetTar(context.Background(), ".")
 	if err != nil {
 		return err
 	}
@@ -562,7 +563,7 @@ func tgzToZip(w io.Writer, r io.Reader) error {
 // writes the first file it finds in that directory to dest.
 func (b *Build) fetchFile(client *buildlet.Client, dest, dir string) error {
 	b.logf("Downloading file from %q.", dir)
-	tgz, err := client.GetTar(dir)
+	tgz, err := client.GetTar(context.Background(), dir)
 	if err != nil {
 		return err
 	}

@@ -374,12 +374,12 @@ func (c *Client) Put(r io.Reader, path string, mode os.FileMode) error {
 
 // GetTar returns a .tar.gz stream of the given directory, relative to the buildlet's work dir.
 // The provided dir may be empty to get everything.
-func (c *Client) GetTar(dir string) (tgz io.ReadCloser, err error) {
+func (c *Client) GetTar(ctx context.Context, dir string) (io.ReadCloser, error) {
 	req, err := http.NewRequest("GET", c.URL()+"/tgz?dir="+url.QueryEscape(dir), nil)
 	if err != nil {
 		return nil, err
 	}
-	res, err := c.do(req)
+	res, err := c.do(req.WithContext(ctx))
 	if err != nil {
 		return nil, err
 	}

@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -32,7 +33,7 @@ func getTar(args []string) error {
 	if err != nil {
 		return err
 	}
-	tgz, err := bc.GetTar(dir)
+	tgz, err := bc.GetTar(context.Background(), dir)
 	if err != nil {
 		return err
 	}

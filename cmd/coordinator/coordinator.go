@@ -1917,16 +1917,18 @@ func (br *builderRev) snapshotURL() string {
 func (st *buildStatus) writeSnapshot(bc *buildlet.Client) (err error) {
 	sp := st.createSpan("write_snapshot_to_gcs")
 	defer func() { sp.done(err) }()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
 
 	tsp := st.createSpan("fetch_snapshot_reader_from_buildlet")
-	tgz, err := bc.GetTar("go")
+	tgz, err := bc.GetTar(ctx, "go")
 	tsp.done(err)
 	if err != nil {
 		return err
 	}
 	defer tgz.Close()
 
-	wr := storageClient.Bucket(buildEnv.SnapBucket).Object(st.snapshotObjectName()).NewWriter(context.Background())
+	wr := storageClient.Bucket(buildEnv.SnapBucket).Object(st.snapshotObjectName()).NewWriter(ctx)
 	wr.ContentType = "application/octet-stream"
 	wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
 	if _, err := io.Copy(wr, tgz); err != nil {
