@@ -23,7 +23,7 @@ type Corpus struct {
 	// ... TODO
 
 	mu           sync.RWMutex
-	githubIssues map[githubRepo]map[int]*githubIssue // repo -> num -> issue
+	githubIssues map[githubRepo]map[int32]*githubIssue // repo -> num -> issue
 	githubUsers  map[int64]*githubUser
 }
 
@@ -34,8 +34,8 @@ type githubRepo string
 // githubUser represents a github user.
 // It is a subset of https://developer.github.com/v3/users/#get-a-single-user
 type githubUser struct {
-	ID       int64
-	Username string // what Github calls "Login"
+	ID    int64
+	Login string
 }
 
 // githubIssue represents a github issue.
@@ -88,8 +88,67 @@ func (c *Corpus) processMutationLocked(m *maintpb.Mutation) {
 	// TODO: more...
 }
 
+func (c *Corpus) repoKey(owner, repo string) githubRepo {
+	if owner == "" || repo == "" {
+		return ""
+	}
+	// TODO: avoid garbage, use interned strings? profile later
+	// once we have gigabytes of mutation logs to slurp at
+	// start-up. (The same thing mattered for Camlistore start-up
+	// time at least)
+	return githubRepo(owner + "/" + repo)
+}
+
+func (c *Corpus) getGithubUser(pu *maintpb.GithubUser) *githubUser {
+	if pu == nil {
+		return nil
+	}
+	if u := c.githubUsers[pu.Id]; u != nil {
+		if pu.Login != "" && pu.Login != u.Login {
+			u.Login = pu.Login
+		}
+		return u
+	}
+	if c.githubUsers == nil {
+		c.githubUsers = make(map[int64]*githubUser)
+	}
+	u := &githubUser{
+		ID:    pu.Id,
+		Login: pu.Login,
+	}
+	c.githubUsers[pu.Id] = u
+	return u
+}
+
 func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
-	// TODO: ...
+	k := c.repoKey(m.Owner, m.Repo)
+	if k == "" {
+		// TODO: errors? return false? skip for now.
+		return
+	}
+	if m.Number == 0 {
+		return
+	}
+	issueMap, ok := c.githubIssues[k]
+	if !ok {
+		if c.githubIssues == nil {
+			c.githubIssues = make(map[githubRepo]map[int32]*githubIssue)
+		}
+		issueMap = make(map[int32]*githubIssue)
+		c.githubIssues[k] = issueMap
+	}
+	gi, ok := issueMap[m.Number]
+	if !ok {
+		gi = &githubIssue{
+			Number: m.Number,
+			User:   c.getGithubUser(m.User),
+		}
+		issueMap[m.Number] = gi
+	}
+	if m.Body != "" {
+		gi.Body = m.Body
+	}
+	// TODO: times, etc.
 }
 
 // PopulateFromServer populates the corpus from a maintnerd server.
