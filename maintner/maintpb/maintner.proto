@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// https://developers.google.com/protocol-buffers/docs/proto3
 syntax = "proto3";
+
+import "github.com/golang/protobuf/ptypes/timestamp/timestamp.proto";
 
 package maintpb;
 
@@ -16,8 +19,8 @@ message GithubIssueMutation {
   int32 number = 3;  // 1, 2, 3... (not the ID)
 
   GithubUser user = 4;   // only set for new/updated issues, not new comments
-  Timestamp created = 5; // only needed on new issues
-  Timestamp updated = 6; // only set on updated issue text
+  google.protobuf.Timestamp created = 5; // only needed on new issues
+  google.protobuf.Timestamp updated = 6; // only set on updated issue text
   string body = 7; // for new or updated issue text (top post, which isn't a comment)
 
   repeated GithubIssueCommentMutation comment = 8;
@@ -27,27 +30,11 @@ message GithubIssueCommentMutation {
   int64 id = 1;
   GithubUser user = 2;
   string body = 3;
-  Timestamp created = 4;
-  Timestamp updated = 5;
+  google.protobuf.Timestamp created = 4;
+  google.protobuf.Timestamp updated = 5;
 }
 
 message GithubUser {
   int64 id = 1;
   string login = 2;
-}
-
-// Timestamp is a copy of the protobuf well-known Timestamp.
-// TODO: use the official one, after figuring out the protoc command line
-// chicanery.
-message Timestamp {
-  // Represents seconds of UTC time since Unix epoch
-  // 1970-01-01T00:00:00Z. Must be from from 0001-01-01T00:00:00Z to
-  // 9999-12-31T23:59:59Z inclusive.
-  int64 seconds = 1;
-
-  // Non-negative fractions of a second at nanosecond resolution. Negative
-  // second values with fractions must still have non-negative nanos values
-  // that count forward in time. Must be from 0 to 999,999,999
-  // inclusive.
-  int32 nanos = 2;
 }

@@ -4,7 +4,11 @@
 
 package maintpb
 
-// See https://github.com/golang/protobuf#installation and
-// then run "go generate" in this directory to update.
+// Run "go generate" in this directory to update. You need to have:
+// - a protoc binary
+// - a protoc-gen-go binary
+// - go get github.com/golang/protobuf
+//
+// See https://github.com/golang/protobuf#installation for more info.
 
-//go:generate protoc --go_out=plugins=grpc:. maintner.proto
+//go:generate protoc --proto_path=$GOPATH/src:. --go_out=plugins=grpc:. maintner.proto
