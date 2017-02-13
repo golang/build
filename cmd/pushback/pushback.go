@@ -65,6 +65,18 @@ var repos = []string{
 	"golang/tour",
 }
 
+// keepOpen represents PRs that shouldn't be automatically closed
+// by pushback. These PRs are dummy PRs telling users that Only
+// Gerrit CLs are accepted to increase the awareness that the Go
+// projects cannot accept PRs.
+var keepOpen = []struct {
+	repo string
+	id   int
+}{
+	{"golang/go", 9920},
+	{"golang/oauth2", 217},
+}
+
 func main() {
 	go poll()
 	http.HandleFunc("/webhook", webhook)
@@ -110,12 +122,8 @@ func pollRepo(repo string) error {
 	if err := json.Unmarshal(body, &results); err != nil {
 		return err
 	}
+
 	for _, r := range results.Items {
-		if repo == "golang/go" && r.Number == 9220 {
-			// This is a placeholder issue to remind people
-			// that we don't use pull requests; don't close it.
-			continue
-		}
 		if err := closePR(repo, r.Number); err != nil {
 			log.Printf("closing pr %v#%v: %v", repo, r.Number, err)
 		}
@@ -200,7 +208,16 @@ func validate(r *http.Request) (body []byte, err error) {
 }
 
 // closePR posts a helpful message before closing the specified pull request.
+// Placeholder PRs are skipped.
 func closePR(repo string, id int) error {
+	for _, ko := range keepOpen {
+		if repo == ko.repo && id == ko.id {
+			// This is a placeholder issue to remind people
+			// that we don't use pull requests; don't close it.
+			return nil
+		}
+	}
+
 	// Post the comment.
 	url := fmt.Sprintf("https://api.github.com/repos/%v/issues/%v/comments", repo, id)
 	if _, err := doRequest("POST", url, bytes.NewReader(messageJSON)); err != nil {
