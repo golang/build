@@ -156,7 +156,7 @@ type Client struct {
 }
 
 // SetReleaseMode sets whether this client is being used in "release
-// mode", to prepare the final binaries to be shipped to uses. All
+// mode", to prepare the final binaries to be shipped to users. All
 // this mode does for now is disable pargzip multi-stream gzip
 // files. See golang.org/issue/19052.
 //
