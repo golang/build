@@ -257,6 +257,7 @@ func (b *Build) buildlet() (*buildlet.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	bc.SetReleaseMode(true) // disable pargzip; golang.org/issue/19052
 	return bc, nil
 }
 
