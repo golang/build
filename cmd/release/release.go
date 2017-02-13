@@ -10,6 +10,7 @@ package main
 import (
 	"archive/tar"
 	"archive/zip"
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -601,7 +602,36 @@ func (b *Build) writeFile(name string, r io.Reader) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
+	if strings.HasSuffix(name, ".gz") {
+		if err := verifyGzipSingleStream(name); err != nil {
+			return fmt.Errorf("error verifying that %s is a single-stream gzip: %v", name, err)
+		}
+	}
 	b.logf("Wrote %q.", name)
+	return nil
+}
+
+// verifyGzipSingleStream verifies that the named gzip file is not
+// a multi-stream file. See golang.org/issue/19052
+func verifyGzipSingleStream(name string) error {
+	f, err := os.Open(name)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	br := bufio.NewReader(f)
+	zr, err := gzip.NewReader(br)
+	if err != nil {
+		return err
+	}
+	zr.Multistream(false)
+	if _, err := io.Copy(ioutil.Discard, zr); err != nil {
+		return fmt.Errorf("reading first stream: %v", err)
+	}
+	peek, err := br.Peek(1)
+	if len(peek) > 0 || err != io.EOF {
+		return fmt.Errorf("unexpected peek of %d, %v after first gzip stream", len(peek), err)
+	}
 	return nil
 }
 
