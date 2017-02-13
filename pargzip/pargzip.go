@@ -5,8 +5,6 @@
 // Package pargzip contains a parallel gzip writer implementation.  By
 // compressing each chunk of data in parallel, all the CPUs on the
 // machine can be used, at a slight loss of compression efficiency.
-// In addition, this implementation can use the system gzip binary as
-// a child process, which is faster than Go's native implementation.
 package pargzip
 
 import (
