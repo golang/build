@@ -12,10 +12,16 @@ package maintner
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/go-github/github"
 	"golang.org/x/build/maintner/maintpb"
+	"golang.org/x/oauth2"
 )
 
 // Corpus holds all of a project's metadata.
@@ -166,4 +172,55 @@ func (c *Corpus) PopulateFromDisk(ctx context.Context, dir string) error {
 // the upstream Git, Github, and/or Gerrit servers.
 func (c *Corpus) PopulateFromAPIs(ctx context.Context) error {
 	panic("TODO")
+}
+
+func (c *Corpus) PollGithubLoop(owner, repo, tokenFile string) error {
+	slurp, err := ioutil.ReadFile(tokenFile)
+	if err != nil {
+		return err
+	}
+	f := strings.SplitN(strings.TrimSpace(string(slurp)), ":", 2)
+	if len(f) != 2 || f[0] == "" || f[1] == "" {
+		return fmt.Errorf("Expected token file %s to be of form <username>:<token>", tokenFile)
+	}
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: f[1]})
+	tc := oauth2.NewClient(oauth2.NoContext, ts)
+	ghc := github.NewClient(tc)
+	for {
+		err := c.pollGithub(owner, repo, ghc)
+		log.Printf("Polled github for %s/%s; err = %v. Sleeping.", owner, repo, err)
+		time.Sleep(30 * time.Second)
+	}
+}
+
+func (c *Corpus) pollGithub(owner, repo string, ghc *github.Client) error {
+	log.Printf("Polling github for %s/%s ...", owner, repo)
+	page := 1
+	keepGoing := true
+	for keepGoing {
+		// TODO: use https://godoc.org/github.com/google/go-github/github#ActivityService.ListIssueEventsForRepository probably
+		issues, res, err := ghc.Issues.ListByRepo(owner, repo, &github.IssueListByRepoOptions{
+			State:     "all",
+			Sort:      "updated",
+			Direction: "desc",
+			ListOptions: github.ListOptions{
+				Page:    page,
+				PerPage: 100,
+			},
+		})
+		if err != nil {
+			return err
+		}
+		log.Printf("github %s/%s: page %d, num issues %d, res: %#v", owner, repo, page, len(issues), res)
+		keepGoing = false
+		for _, is := range issues {
+			_ = is
+			changes := false
+			if changes {
+				keepGoing = true
+			}
+		}
+		page++
+	}
+	return nil
 }
