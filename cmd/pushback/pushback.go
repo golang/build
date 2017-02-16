@@ -73,8 +73,8 @@ var keepOpen = []struct {
 	repo string
 	id   int
 }{
-	{"golang/go", 9920},
-	{"golang/oauth2", 217},
+	{"golang/go", 19117},
+	{"golang/oauth2", 218},
 }
 
 func main() {
