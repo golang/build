@@ -112,7 +112,9 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 
 	ctx := context.WithValue(context.Background(), buildletTimeoutOpt{}, time.Duration(0))
 	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	// NOTE: don't defer close this cancel. If the context is
+	// closed, the pod is destroyed.
+	// TODO: clean this up.
 
 	// Doing a release?
 	if user == "release" || user == "adg" || user == "bradfitz" {
@@ -153,7 +155,7 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 				log.Print(err)
 				return
 			}
-			log.Printf("created buildlet %v for %v", rb.Name, rb.User)
+			log.Printf("created buildlet %v for %v (%s)", rb.Name, rb.User, bc.String())
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			jenc = append(jenc, '\n')
 			w.Write(jenc)
