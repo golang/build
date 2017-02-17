@@ -56,9 +56,9 @@ EOF""",
 !route add default \`ifconfig vioif0 | awk '/inet / { print \$2 }' | sed 's/[0-9]*$/1/'\` -ifp vioif0
 EOF""",
     "dhcpcd",
-    "env PKG_PATH=https://cdn.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add bash curl dhcpcd" % (arch, release),
-    "env PKG_PATH=https://cdn.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add git-base" % (arch, release),
-    "env PKG_PATH=https://cdn.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add mozilla-rootcerts go14" % (arch, release),
+    "env PKG_PATH=https://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add bash curl dhcpcd" % (arch, release),
+    "env PKG_PATH=https://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add git-base" % (arch, release),
+    "env PKG_PATH=https://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add mozilla-rootcerts go14" % (arch, release),
     """ed /etc/fstab << EOF
 H
 %s/wd0/sd0/
