@@ -1312,7 +1312,12 @@ func GetBuildlets(ctx context.Context, pool BuildletPool, n int, hostType string
 	return ch
 }
 
+var testPoolHook func(dashboard.BuildConfig) BuildletPool
+
 func poolForConf(conf dashboard.BuildConfig) BuildletPool {
+	if testPoolHook != nil {
+		return testPoolHook(conf)
+	}
 	switch {
 	case conf.IsGCE():
 		return gcePool
