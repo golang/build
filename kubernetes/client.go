@@ -429,7 +429,7 @@ func (c *Client) PodLog(ctx context.Context, podName string) (string, error) {
 // PodNodes returns the list of nodes that comprise the Kubernetes cluster
 func (c *Client) GetNodes(ctx context.Context) ([]api.Node, error) {
 	var list api.NodeList
-	if err := c.do(ctx, "GET", c.nsEndpoint()+"nodes", &list); err != nil {
+	if err := c.do(ctx, "GET", c.endpointURL+"/nodes", &list); err != nil {
 		return nil, err
 	}
 	return list.Items, nil

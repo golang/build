@@ -150,3 +150,19 @@ func foreachCluster(t *testing.T, fn func(*container.Cluster, *kubernetes.Client
 		kc.Close()
 	}
 }
+
+func TestGetNodes(t *testing.T) {
+	var passed bool
+	ctx := context.Background()
+	foreachCluster(t, func(cl *container.Cluster, kc *kubernetes.Client) {
+		if passed {
+			return
+		}
+		nodes, err := kc.GetNodes(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("%d nodes in cluster %s", len(nodes), cl.Name)
+		passed = true
+	})
+}
