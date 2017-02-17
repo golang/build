@@ -6,11 +6,11 @@ Filing tickets: https://support.osuosl.org/
 
 Machines:
 
-ssh debian@140.211.168.138
-ssh debian@140.211.168.139
-ssh debian@140.211.168.140
-ssh debian@140.211.168.141
-ssh debian@140.211.168.142
+go-le-1: debian@140.211.168.23
+go-le-2: debian@140.211.168.18
+go-le-3: debian@140.211.168.180
+go-le-4: debian@140.211.168.161
+go-le-5: debian@140.211.168.162
 
 They accepting ssh keys:
 
