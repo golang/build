@@ -3105,23 +3105,17 @@ func getSourceTgz(sl spanLogger, repo, rev string, isTry bool) (tgz io.Reader, e
 			return tgzBytes, nil
 		}
 
+		// TODO(braditz): remove the isTry part and always use the gitmirror. golang.org/issue/19166
 		if useWatcher() && !isTry {
 			sp := sl.createSpan("get_source_from_watcher")
-			for i := 0; i < 10; i++ {
-				if i > 0 {
-					// Wait for watcher to start up. Give it a minute until
-					// we try Gerrit.
-					time.Sleep(6 * time.Second)
-				}
-				tgzBytes, err := getSourceTgzFromGitMirror(repo, rev)
-				if err == nil {
-					sourceCache.Add(key, tgzBytes)
-					sp.done(nil)
-					return tgzBytes, nil
-				}
-				log.Printf("Error fetching source %s/%s from watcher (after %v uptime): %v",
-					repo, rev, time.Since(processStartTime), err)
+			tgzBytes, err := getSourceTgzFromGitMirror(repo, rev)
+			if err == nil {
+				sourceCache.Add(key, tgzBytes)
+				sp.done(nil)
+				return tgzBytes, nil
 			}
+			log.Printf("Error fetching source %s/%s from watcher (after %v uptime): %v",
+				repo, rev, time.Since(processStartTime), err)
 			sp.done(errors.New("timeout"))
 		}
 
@@ -3158,8 +3152,20 @@ func getSourceTgzFromGerrit(repo, rev string) (tgz []byte, err error) {
 }
 
 func getSourceTgzFromGitMirror(repo, rev string) (tgz []byte, err error) {
-	// The "gitmirror" hostname is unused:
-	return getSourceTgzFromURL(gitMirrorClient, "gitmirror", repo, rev, "http://gitmirror/"+repo+".tar.gz?rev="+rev)
+	for i := 0; i < 2; i++ { // two tries; different pods maybe?
+		if i > 0 {
+			time.Sleep(1 * time.Second)
+		}
+		// The "gitmirror" hostname is unused:
+		tgz, err = getSourceTgzFromURL(gitMirrorClient, "gitmirror", repo, rev, "http://gitmirror/"+repo+".tar.gz?rev="+rev)
+		if err == nil {
+			return tgz, nil
+		}
+		if tr, ok := http.DefaultTransport.(*http.Transport); ok {
+			tr.CloseIdleConnections()
+		}
+	}
+	return nil, err
 }
 
 func getSourceTgzFromURL(hc *http.Client, source, repo, rev, urlStr string) (tgz []byte, err error) {
@@ -3172,7 +3178,8 @@ func getSourceTgzFromURL(hc *http.Client, source, repo, rev, urlStr string) (tgz
 		slurp, _ := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
 		return nil, fmt.Errorf("fetching %s/%s from %s: %v; body: %s", repo, rev, source, res.Status, slurp)
 	}
-	const maxSize = 25 << 20 // seems unlikely; go source is 7.8MB on 2015-06-15
+	// TODO(bradfitz): finish golang.org/issue/11224
+	const maxSize = 50 << 20 // talks repo is over 25MB; go source is 7.8MB on 2015-06-15
 	slurp, err := ioutil.ReadAll(io.LimitReader(res.Body, maxSize+1))
 	if len(slurp) > maxSize && err == nil {
 		err = fmt.Errorf("body over %d bytes", maxSize)
