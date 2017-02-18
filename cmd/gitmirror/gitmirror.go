@@ -374,7 +374,7 @@ func NewRepo(srcURL, dstURL, importPath string, dash bool) (*Repo, error) {
 		os.RemoveAll(r.root)
 		t0 := time.Now()
 		r.setStatus("running fresh git clone --mirror")
-		r.logf("cloning %v", srcURL)
+		r.logf("cloning %v into %s", srcURL, r.root)
 		cmd := exec.Command("git", "clone", "--mirror", srcURL, r.root)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return nil, fmt.Errorf("cloning %s: %v\n\n%s", srcURL, err, out)
@@ -1118,6 +1118,52 @@ func (r *Repo) push() (err error) {
 	})
 }
 
+// hasRev returns true if the repo contains the commit-ish rev.
+func (r *Repo) hasRev(ctx context.Context, rev string) bool {
+	cmd := exec.CommandContext(ctx, "git", "cat-file", "-t", rev)
+	cmd.Dir = r.root
+	return cmd.Run() == nil
+}
+
+// if non-nil, used by r.archive to create a "git archive" command.
+var testHookArchiveCmd func(context.Context, string, ...string) *exec.Cmd
+
+// if non-nil, used by r.archive to create a "git fetch" command.
+var testHookFetchCmd func(context.Context, string, ...string) *exec.Cmd
+
+// archive exports the git repository at the given rev and returns the
+// compressed repository.
+func (r *Repo) archive(ctx context.Context, rev string) ([]byte, error) {
+	var cmd *exec.Cmd
+	if testHookArchiveCmd == nil {
+		cmd = exec.CommandContext(ctx, "git", "archive", "--format=tgz", rev)
+	} else {
+		cmd = testHookArchiveCmd(ctx, "git", "archive", "--format=tgz", rev)
+	}
+	cmd.Dir = r.root
+	return cmd.Output()
+}
+
+// fetchRev attempts to fetch rev from remote.
+func (r *Repo) fetchRev(ctx context.Context, remote, rev string) error {
+	var cmd *exec.Cmd
+	if testHookFetchCmd == nil {
+		cmd = exec.CommandContext(ctx, "git", "fetch", remote, rev)
+	} else {
+		cmd = testHookFetchCmd(ctx, "git", "fetch", remote, rev)
+	}
+	cmd.Dir = r.root
+	return cmd.Run()
+}
+
+func (r *Repo) fetchRevIfNeeded(ctx context.Context, rev string) error {
+	if r.hasRev(ctx, rev) {
+		return nil
+	}
+	r.logf("attempting to fetch missing revision %s from origin", rev)
+	return r.fetchRev(ctx, "origin", rev)
+}
+
 // GET /<name>.tar.gz
 // GET /debug/watcher/<name>
 func (r *Repo) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -1134,9 +1180,13 @@ func (r *Repo) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	cmd := exec.CommandContext(req.Context(), "git", "archive", "--format=tgz", rev)
-	cmd.Dir = r.root
-	tgz, err := cmd.Output()
+	ctx, cancel := context.WithTimeout(req.Context(), 30*time.Second)
+	defer cancel()
+	if err := r.fetchRevIfNeeded(ctx, rev); err != nil {
+		// Try the archive anyway, it might work
+		r.logf("error fetching revision %s: %v", rev, err)
+	}
+	tgz, err := r.archive(ctx, rev)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -1347,6 +1397,9 @@ func (r *Repo) getLocalRefs() (map[string]string, error) {
 	return parseRefs(cmd)
 }
 
+// getRemoteRefs tells you which references are available in the remote
+// named dest, and returns a map of refs to the matching commit, e.g.
+// "refs/heads/master" => "6b27048ae5e6ad1ef927e72e437531493de612fe".
 func (r *Repo) getRemoteRefs(dest string) (map[string]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
