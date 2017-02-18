@@ -211,6 +211,7 @@ var (
 	repos   []*Repo
 )
 
+// GET /
 func handleRoot(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -225,7 +226,7 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// shouldReport reports whether the named repo should be mirrored from
+// shouldMirror reports whether the named repo should be mirrored from
 // Gerrit to Github.
 func shouldMirror(name string) bool {
 	switch name {
@@ -513,7 +514,7 @@ func (r *Repo) addRemote(name, url string) error {
 	return f.Close()
 }
 
-// Watch continuously runs "git fetch" in the repo, checks for
+// Loop continuously runs "git fetch" in the repo, checks for
 // new commits, posts any new commits to the dashboard (if enabled),
 // and mirrors commits to a destination repo (if enabled).
 func (r *Repo) Loop() {
@@ -1116,6 +1117,8 @@ func (r *Repo) push() (err error) {
 	})
 }
 
+// GET /<name>.tar.gz
+// GET /debug/watcher/<name>
 func (r *Repo) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if req.Method != "GET" && req.Method != "HEAD" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -1130,7 +1133,7 @@ func (r *Repo) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	cmd := exec.Command("git", "archive", "--format=tgz", rev)
+	cmd := exec.CommandContext(req.Context(), "git", "archive", "--format=tgz", rev)
 	cmd.Dir = r.root
 	tgz, err := cmd.Output()
 	if err != nil {
@@ -1154,6 +1157,7 @@ func (r *Repo) serveStatus(w http.ResponseWriter, req *http.Request) {
 			nowRound.Sub(ent.t.Round(time.Second)).String()+" ago",
 			ent.status)
 	})
+	fmt.Fprintf(w, "\n</pre></body></html>")
 }
 
 func try(n int, fn func() error) error {
@@ -1415,12 +1419,14 @@ var priority = map[string]int{
 	"changes": 3,
 }
 
+// GET /debug/goroutines
 func handleDebugGoroutines(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	buf := make([]byte, 1<<20)
 	w.Write(buf[:runtime.Stack(buf, true)])
 }
 
+// GET /debug/env
 func handleDebugEnv(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	for _, kv := range os.Environ() {
