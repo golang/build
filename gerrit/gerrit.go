@@ -427,6 +427,7 @@ type ProjectInfo struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
 	Parent      string            `json:"parent"`
+	CloneURL    string            `json:"clone_url"`
 	Description string            `json:"description"`
 	State       string            `json:"state"`
 	Branches    map[string]string `json:"branches"`
@@ -494,6 +495,13 @@ func (c *Client) GetAccountInfo(ctx context.Context, accountID string) (AccountI
 	var res AccountInfo
 	err := c.do(ctx, &res, "GET", fmt.Sprintf("/accounts/%s", accountID))
 	return res, err
+}
+
+// GetProjects returns a map of all projects on the Gerrit server.
+func (c *Client) GetProjects(ctx context.Context, branch string) (map[string]*ProjectInfo, error) {
+	mp := make(map[string]*ProjectInfo)
+	err := c.do(ctx, &mp, "GET", fmt.Sprintf("?b=%s&format=JSON", branch))
+	return mp, err
 }
 
 type TimeStamp time.Time

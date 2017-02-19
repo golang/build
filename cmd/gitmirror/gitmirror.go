@@ -17,7 +17,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -35,13 +34,13 @@ import (
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
+	"golang.org/x/build/gerrit"
 )
 
 const (
 	goBase         = "https://go.googlesource.com/"
 	watcherVersion = 3        // must match dashboard/app/build/handler.go's watcherVersion
 	master         = "master" // name of the master branch
-	metaURL        = goBase + "?b=master&format=JSON"
 )
 
 var (
@@ -72,6 +71,8 @@ var (
 var httpClient = &http.Client{
 	Timeout: 30 * time.Second, // overkill
 }
+
+var gerritClient = gerrit.NewClient(goBase, gerrit.NoAuth)
 
 func main() {
 	flag.Parse()
@@ -1325,33 +1326,10 @@ func pollGerritAndTickle() {
 // latest master hash.
 // The returned map is nil on any transient error.
 func gerritMetaMap() map[string]string {
-	res, err := httpClient.Get(metaURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	meta, err := gerritClient.GetProjects(ctx, "master")
 	if err != nil {
-		return nil
-	}
-	defer res.Body.Close()
-	defer io.Copy(ioutil.Discard, res.Body) // ensure EOF for keep-alive
-	if res.StatusCode != 200 {
-		return nil
-	}
-	var meta map[string]struct {
-		Branches map[string]string
-	}
-	br := bufio.NewReader(res.Body)
-	// For security reasons or something, this URL starts with ")]}'\n" before
-	// the JSON object. So ignore that.
-	// Shawn Pearce says it's guaranteed to always be just one line, ending in '\n'.
-	for {
-		b, err := br.ReadByte()
-		if err != nil {
-			return nil
-		}
-		if b == '\n' {
-			break
-		}
-	}
-	if err := json.NewDecoder(br).Decode(&meta); err != nil {
-		log.Printf("JSON decoding error from %v: %s", metaURL, err)
 		return nil
 	}
 	m := map[string]string{}
