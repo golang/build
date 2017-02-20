@@ -199,7 +199,7 @@ func (c *Corpus) pollGithub(owner, repo string, ghc *github.Client) error {
 	keepGoing := true
 	for keepGoing {
 		// TODO: use https://godoc.org/github.com/google/go-github/github#ActivityService.ListIssueEventsForRepository probably
-		issues, res, err := ghc.Issues.ListByRepo(owner, repo, &github.IssueListByRepoOptions{
+		issues, res, err := ghc.Issues.ListByRepo(context.TODO(), owner, repo, &github.IssueListByRepoOptions{
 			State:     "all",
 			Sort:      "updated",
 			Direction: "desc",

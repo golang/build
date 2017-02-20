@@ -8,11 +8,12 @@ import (
 	"strings"
 
 	"github.com/google/go-github/github"
+	"golang.org/x/net/context"
 )
 
 // LoadGithub fetches the list of reviewers for the current
 // repository, sorted by how many reviews each has done.
-func (r *Reviewers) LoadGithub(client *github.Client) error {
+func (r *Reviewers) LoadGithub(ctx context.Context, client *github.Client) error {
 	// TODO(quentin): GitHub has an API for fetching the list of
 	// authors ordered by # of commits... is this sufficient
 	// instead of walking the whole commit list?
@@ -26,7 +27,7 @@ pages:
 				PerPage: 100,
 			},
 		}
-		commits, resp, err := client.Repositories.ListCommits(projectOwner, projectRepo, &opt)
+		commits, resp, err := client.Repositories.ListCommits(ctx, projectOwner, projectRepo, &opt)
 		for _, commit := range commits {
 			if commit.Commit != nil && commit.Commit.Committer != nil && commit.Commit.Committer.Date != nil && commit.SHA != nil {
 				if commit.Commit.Committer.Date.After(r.data.LastTime) {

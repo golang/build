@@ -16,7 +16,7 @@ import (
 
 // Update fetches new information from GitHub for any issues modified since s was last updated.
 func (s *Stats) Update(ctx context.Context, gh *github.Client, log func(string, ...interface{})) error {
-	res, err := listIssues(gh, github.IssueListByRepoOptions{State: "all", Since: s.Since})
+	res, err := listIssues(ctx, gh, github.IssueListByRepoOptions{State: "all", Since: s.Since})
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func (s *Stats) Update(ctx context.Context, gh *github.Client, log func(string, 
 	for i := 0; i < 5; i++ {
 		g.Go(func() error {
 			for num := range numch {
-				if err := s.UpdateIssue(gh, num, log); err != nil {
+				if err := s.UpdateIssue(ctx, gh, num, log); err != nil {
 					return err
 				}
 			}
@@ -93,7 +93,7 @@ func (s *Stats) Update(ctx context.Context, gh *github.Client, log func(string, 
 }
 
 // UpdateIssue updates a single issue, without moving s.Since.
-func (s *Stats) UpdateIssue(gh *github.Client, num int, log func(string, ...interface{})) error {
+func (s *Stats) UpdateIssue(ctx context.Context, gh *github.Client, num int, log func(string, ...interface{})) error {
 	issue := s.Issues[num]
 	var milestone string
 	var labels []string
@@ -104,7 +104,7 @@ func (s *Stats) UpdateIssue(gh *github.Client, num int, log func(string, ...inte
 		milestone = m
 	}
 	for page := 1; ; {
-		events, resp, err := gh.Issues.ListIssueEvents(projectOwner, projectRepo, num, &github.ListOptions{
+		events, resp, err := gh.Issues.ListIssueEvents(ctx, projectOwner, projectRepo, num, &github.ListOptions{
 			Page:    page,
 			PerPage: 100,
 		})

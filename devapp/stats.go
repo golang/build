@@ -69,7 +69,7 @@ func updateStats(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 		if err != nil {
 			return err
 		}
-		err = stats.UpdateIssue(gh, num, log)
+		err = stats.UpdateIssue(ctx, gh, num, log)
 		if err != nil {
 			return err
 		}

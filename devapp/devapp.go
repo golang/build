@@ -99,7 +99,7 @@ func update(ctx context.Context, w http.ResponseWriter, _ *http.Request) error {
 		return err
 	}
 
-	if err := data.Reviewers.LoadGithub(gh); err != nil {
+	if err := data.Reviewers.LoadGithub(ctx, gh); err != nil {
 		return err
 	}
 	l := logFn(ctx, w)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/github"
+	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 )
 
@@ -84,7 +85,7 @@ func issueToIssue(issue *github.Issue) *Issue {
 	}
 }
 
-func listIssues(client *github.Client, opt github.IssueListByRepoOptions) ([]*Issue, error) {
+func listIssues(ctx context.Context, client *github.Client, opt github.IssueListByRepoOptions) ([]*Issue, error) {
 	var all []*Issue
 	for page := 1; ; {
 		xopt := opt
@@ -92,7 +93,7 @@ func listIssues(client *github.Client, opt github.IssueListByRepoOptions) ([]*Is
 			Page:    page,
 			PerPage: 100,
 		}
-		issues, resp, err := client.Issues.ListByRepo(projectOwner, projectRepo, &xopt)
+		issues, resp, err := client.Issues.ListByRepo(ctx, projectOwner, projectRepo, &xopt)
 		for _, issue := range issues {
 			if issue.PullRequestLinks == nil {
 				all = append(all, issueToIssue(issue))
@@ -109,11 +110,11 @@ func listIssues(client *github.Client, opt github.IssueListByRepoOptions) ([]*Is
 	return all, nil
 }
 
-func searchIssues(client *github.Client, q string) ([]*Issue, error) {
+func searchIssues(ctx context.Context, client *github.Client, q string) ([]*Issue, error) {
 	var all []*Issue
 	for page := 1; ; {
 		// TODO(rsc): Rethink excluding pull requests.
-		x, resp, err := client.Search.Issues("type:issue state:open repo:"+project+" "+q, &github.SearchOptions{
+		x, resp, err := client.Search.Issues(ctx, "type:issue state:open repo:"+project+" "+q, &github.SearchOptions{
 			ListOptions: github.ListOptions{
 				Page:    page,
 				PerPage: 100,
@@ -133,9 +134,9 @@ func searchIssues(client *github.Client, q string) ([]*Issue, error) {
 	return all, nil
 }
 
-func getMilestones(client *github.Client) ([]*github.Milestone, error) {
+func getMilestones(ctx context.Context, client *github.Client) ([]*github.Milestone, error) {
 	var all []*github.Milestone
-	milestones, _, err := client.Issues.ListMilestones(projectOwner, projectRepo, nil)
+	milestones, _, err := client.Issues.ListMilestones(ctx, projectOwner, projectRepo, nil)
 	for i := range milestones {
 		m := milestones[i]
 		if m.Title != nil {

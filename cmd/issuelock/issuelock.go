@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -40,15 +41,17 @@ func main() {
 		log.Fatalf("Expected token file %s to be of form <username>:<token>", tokenFile)
 	}
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: f[1]})
-	tc := oauth2.NewClient(oauth2.NoContext, ts)
+	tc := oauth2.NewClient(context.Background(), ts)
 	client := github.NewClient(tc)
 
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
 	if flag.NArg() == 1 {
 		issueNum, err := strconv.Atoi(flag.Arg(0))
 		if err != nil {
 			usage()
 		}
-		if err := freeze(client, issueNum); err != nil {
+		if err := freeze(ctx, client, issueNum); err != nil {
 			log.Fatal(err)
 		}
 		return
@@ -60,7 +63,7 @@ func main() {
 	tooOld := time.Now().Add(-365 * 24 * time.Hour).Format("2006-01-02")
 	log.Printf("Freezing closed issues before %v", tooOld)
 	for {
-		result, response, err := client.Search.Issues("repo:golang/go is:closed -label:FrozenDueToAge updated:<="+tooOld, &github.SearchOptions{
+		result, response, err := client.Search.Issues(ctx, "repo:golang/go is:closed -label:FrozenDueToAge updated:<="+tooOld, &github.SearchOptions{
 			Sort:  "created",
 			Order: "asc",
 			ListOptions: github.ListOptions{
@@ -78,7 +81,7 @@ func main() {
 		for _, is := range result.Issues {
 			num := *is.Number
 			log.Printf("Freezing issue: %d", *is.Number)
-			if err := freeze(client, num); err != nil {
+			if err := freeze(ctx, client, num); err != nil {
 				log.Fatal(err)
 			}
 			time.Sleep(500 * time.Millisecond) // be nice to github
@@ -86,11 +89,11 @@ func main() {
 	}
 }
 
-func freeze(client *github.Client, issueNum int) error {
-	_, err := client.Issues.Lock("golang", "go", issueNum)
+func freeze(ctx context.Context, client *github.Client, issueNum int) error {
+	_, err := client.Issues.Lock(ctx, "golang", "go", issueNum)
 	if err != nil {
 		return err
 	}
-	_, _, err = client.Issues.AddLabelsToIssue("golang", "go", issueNum, []string{"FrozenDueToAge"})
+	_, _, err = client.Issues.AddLabelsToIssue(ctx, "golang", "go", issueNum, []string{"FrozenDueToAge"})
 	return err
 }

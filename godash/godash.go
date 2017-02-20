@@ -63,8 +63,8 @@ var (
 
 func (d *Data) FetchData(ctx context.Context, gh *github.Client, ger *gerrit.Client, log func(string, ...interface{}), days int, clOnly, includeMerged bool) error {
 	d.Now = time.Now()
-	start := time.Now()
-	m, err := getMilestones(gh)
+	start := d.Now
+	m, err := getMilestones(ctx, gh)
 	if err != nil {
 		return err
 	}
@@ -110,13 +110,13 @@ func (d *Data) FetchData(ctx context.Context, gh *github.Client, ger *gerrit.Cli
 	d.Issues = make(map[int]*Issue)
 
 	if !clOnly {
-		res, err := listIssues(gh, github.IssueListByRepoOptions{State: "open"})
+		res, err := listIssues(ctx, gh, github.IssueListByRepoOptions{State: "open"})
 		if err != nil {
 			return err
 		}
 		log("Fetched %d open issues in %.3f seconds", len(res), time.Since(start).Seconds())
 		start = time.Now()
-		res2, err := searchIssues(gh, "is:closed closed:>="+since.Format(time.RFC3339))
+		res2, err := searchIssues(ctx, gh, "is:closed closed:>="+since.Format(time.RFC3339))
 		if err != nil {
 			return err
 		}
