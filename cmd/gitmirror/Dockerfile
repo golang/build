@@ -4,7 +4,7 @@
 
 # Note that OpenSSH 6.5+ is required for the Github SSH private key, which requires
 # at least Debian Jessie (not Wheezy). This uses Jessie:
-FROM golang:1.8-rc
+FROM golang:1.8
 LABEL maintainer "golang-dev@googlegroups.com"
 
 # todo(bradfitz): remove duplication between this and coordinator.
