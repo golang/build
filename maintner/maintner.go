@@ -22,15 +22,53 @@ import (
 	"github.com/google/go-github/github"
 	"golang.org/x/build/maintner/maintpb"
 	"golang.org/x/oauth2"
+	"golang.org/x/sync/errgroup"
 )
 
 // Corpus holds all of a project's metadata.
+//
+// There are two main phases to the Corpus: the catch-up phase, when the Corpus
+// is populated from a MutationSource (disk, database), and the polling phase,
+// when the Corpus polls for new events and stores/writes them to disk. Call
+// StartLogging between the catch-up phase and the polling phase.
 type Corpus struct {
 	// ... TODO
 
 	mu           sync.RWMutex
 	githubIssues map[githubRepo]map[int32]*githubIssue // repo -> num -> issue
 	githubUsers  map[int64]*githubUser
+	githubRepos  []repoObj
+	// If true, log new commits
+	shouldLog bool
+}
+
+type repoObj struct {
+	name      githubRepo
+	tokenFile string
+}
+
+func NewCorpus() *Corpus {
+	return &Corpus{
+		githubIssues: make(map[githubRepo]map[int32]*githubIssue),
+		githubUsers:  make(map[int64]*githubUser),
+		githubRepos:  []repoObj{},
+	}
+}
+
+// StartLogging indicates that further changes should be written to the log.
+func (c *Corpus) StartLogging() {
+	c.mu.Lock()
+	c.shouldLog = true
+	c.mu.Unlock()
+}
+
+func (c *Corpus) AddGithub(owner, repo, tokenFile string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.githubRepos = append(c.githubRepos, repoObj{
+		name:      githubRepo(owner + "/" + repo),
+		tokenFile: tokenFile,
+	})
 }
 
 // githubRepo is a github org & repo, lowercase, joined by a '/',
@@ -65,6 +103,11 @@ type MutationSource interface {
 	// All sends on the returned channel should select
 	// on the provided context.
 	GetMutations(context.Context) <-chan *maintpb.Mutation
+}
+
+// Initialize populates the Corpus using the data from the MutationSource.
+func (c *Corpus) Initialize(ctx context.Context, src MutationSource) error {
+	return c.processMutations(ctx, src)
 }
 
 func (c *Corpus) processMutations(ctx context.Context, src MutationSource) error {
@@ -174,7 +217,21 @@ func (c *Corpus) PopulateFromAPIs(ctx context.Context) error {
 	panic("TODO")
 }
 
-func (c *Corpus) PollGithubLoop(owner, repo, tokenFile string) error {
+// Poll checks for new changes on all repositories being tracked by the Corpus.
+func (c *Corpus) Poll(ctx context.Context) error {
+	group, ctx := errgroup.WithContext(ctx)
+	for _, rp := range c.githubRepos {
+		rp := rp
+		group.Go(func() error {
+			return c.PollGithubLoop(ctx, rp.name, rp.tokenFile)
+		})
+	}
+	return group.Wait()
+}
+
+// PollGithubLoop checks for new changes on a single Github repository and
+// updates the Corpus with any changes.
+func (c *Corpus) PollGithubLoop(ctx context.Context, rp githubRepo, tokenFile string) error {
 	slurp, err := ioutil.ReadFile(tokenFile)
 	if err != nil {
 		return err
@@ -187,16 +244,21 @@ func (c *Corpus) PollGithubLoop(owner, repo, tokenFile string) error {
 	tc := oauth2.NewClient(oauth2.NoContext, ts)
 	ghc := github.NewClient(tc)
 	for {
-		err := c.pollGithub(owner, repo, ghc)
-		log.Printf("Polled github for %s/%s; err = %v. Sleeping.", owner, repo, err)
+		err := c.pollGithub(ctx, rp, ghc)
+		if err == context.Canceled {
+			return err
+		}
+		log.Printf("Polled github for %s; err = %v. Sleeping.", rp, err)
 		time.Sleep(30 * time.Second)
 	}
 }
 
-func (c *Corpus) pollGithub(owner, repo string, ghc *github.Client) error {
-	log.Printf("Polling github for %s/%s ...", owner, repo)
+func (c *Corpus) pollGithub(ctx context.Context, rp githubRepo, ghc *github.Client) error {
+	log.Printf("Polling github for %s ...", rp)
 	page := 1
 	keepGoing := true
+	splits := strings.SplitN(string(rp), "/", 2)
+	owner, repo := splits[0], splits[1]
 	for keepGoing {
 		// TODO: use https://godoc.org/github.com/google/go-github/github#ActivityService.ListIssueEventsForRepository probably
 		issues, res, err := ghc.Issues.ListByRepo(context.TODO(), owner, repo, &github.IssueListByRepoOptions{
@@ -214,7 +276,7 @@ func (c *Corpus) pollGithub(owner, repo string, ghc *github.Client) error {
 		log.Printf("github %s/%s: page %d, num issues %d, res: %#v", owner, repo, page, len(issues), res)
 		keepGoing = false
 		for _, is := range issues {
-			_ = is
+			fmt.Printf("issue %d: %s\n", is.ID, *is.Title)
 			changes := false
 			if changes {
 				keepGoing = true

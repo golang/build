@@ -71,11 +71,11 @@ func TestRev(t *testing.T) {
 		t.Fatalf("GET /: want code 200, got %d", w.Code)
 	}
 	if f.Cmd != "git" {
-		t.Fatal("cmd: want 'git' for cmd, got %s", f.Cmd)
+		t.Fatalf("cmd: want 'git' for cmd, got %s", f.Cmd)
 	}
 	wantArgs := []string{"archive", "--format=tgz", "example-branch"}
 	if !reflect.DeepEqual(f.Args, wantArgs) {
-		t.Fatal("cmd: want '%q' for args, got %q", wantArgs, f.Args)
+		t.Fatalf("cmd: want '%q' for args, got %q", wantArgs, f.Args)
 	}
 }
 
@@ -101,6 +101,6 @@ func TestRevNotFound(t *testing.T) {
 	}
 	wantArgs := []string{"fetch", "origin", "example-branch"}
 	if !reflect.DeepEqual(f2.Args, wantArgs) {
-		t.Fatal("cmd: want '%q' for args, got %q", wantArgs, f2.Args)
+		t.Fatalf("cmd: want '%q' for args, got %q", wantArgs, f2.Args)
 	}
 }

@@ -12,8 +12,8 @@ import (
 )
 
 type mutationTest struct {
-	corpus Corpus
-	want   Corpus
+	corpus *Corpus
+	want   *Corpus
 }
 
 func (mt mutationTest) test(t *testing.T, muts ...*maintpb.Mutation) {
@@ -28,7 +28,7 @@ func (mt mutationTest) test(t *testing.T, muts ...*maintpb.Mutation) {
 
 func TestProcessMutation_Github_NewIssue(t *testing.T) {
 	mutationTest{
-		want: Corpus{
+		want: &Corpus{
 			githubUsers: map[int64]*githubUser{
 				100: &githubUser{
 					Login: "gopherbot",
