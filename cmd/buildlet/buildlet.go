@@ -640,6 +640,7 @@ func untar(r io.Reader, dir string) (err error) {
 		return badRequest("requires gzip-compressed body: " + err.Error())
 	}
 	tr := tar.NewReader(zr)
+	loggedChtimesError := false
 	for {
 		f, err := tr.Next()
 		if err == io.EOF {
@@ -684,14 +685,23 @@ func untar(r io.Reader, dir string) (err error) {
 			if n != f.Size {
 				return fmt.Errorf("only wrote %d bytes to %s; expected %d", n, abs, f.Size)
 			}
-			if !f.ModTime.IsZero() {
-				if err := os.Chtimes(abs, f.ModTime, f.ModTime); err != nil {
+			modTime := f.ModTime
+			if modTime.After(t0) {
+				// Clamp modtimes at system time. See
+				// golang.org/issue/19062 when clock on
+				// buildlet was behind the gitmirror server
+				// doing the git-archive.
+				modTime = t0
+			}
+			if !modTime.IsZero() {
+				if err := os.Chtimes(abs, modTime, modTime); err != nil && !loggedChtimesError {
 					// benign error. Gerrit doesn't even set the
 					// modtime in these, and we don't end up relying
 					// on it anywhere (the gomote push command relies
 					// on digests only), so this is a little pointless
 					// for now.
-					log.Printf("error changing modtime: %v", err)
+					log.Printf("error changing modtime: %v (further Chtimes errors suppressed)", err)
+					loggedChtimesError = true // once is enough
 				}
 			}
 			nFiles++
