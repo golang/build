@@ -3105,9 +3105,8 @@ func getSourceTgz(sl spanLogger, repo, rev string, isTry bool) (tgz io.Reader, e
 			return tgzBytes, nil
 		}
 
-		// TODO(braditz): remove the isTry part and always use the gitmirror. golang.org/issue/19166
-		if useWatcher() && !isTry {
-			sp := sl.createSpan("get_source_from_watcher")
+		if useWatcher() {
+			sp := sl.createSpan("get_source_from_gitmirror")
 			tgzBytes, err := getSourceTgzFromGitMirror(repo, rev)
 			if err == nil {
 				sourceCache.Add(key, tgzBytes)
