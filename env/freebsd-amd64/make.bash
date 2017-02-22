@@ -8,30 +8,43 @@
 # an ISO mounted as the CD-ROM, and customizes the system before powering down.
 # SSH is enabled, and a user gopher, password gopher, is created.
 
-# Only tested on Ubuntu 14.04.
+# Only tested on Ubuntu 16.04.
 # Requires packages: qemu expect mkisofs
 
 set -e
+
+function download_image() {
+  local release_url=ftp://ftp.freebsd.org/pub/FreeBSD/releases/VM-IMAGES/${VERSION:?}-RELEASE/amd64/Latest
+  local img_filename=FreeBSD-${VERSION:?}-RELEASE-amd64${VERSION_TRAILER}.raw.xz
+  curl -O ${release_url}/${img_filename}
+  echo "${SHA256}  ${img_filename}" | sha256sum -c -
+  xz -d FreeBSD-${VERSION:?}-RELEASE-amd64${VERSION_TRAILER}.raw.xz
+}
 
 case $1 in
 9.3)
   readonly VERSION=9.3
   readonly VERSION_TRAILER="-20140711-r268512"
   readonly DNS_LOOKUP=dig
+  readonly SHA256=4737218995ae056207c68f3105c0fbe655c32e8b76d2160ebfb1bba56dd5196f
 ;;
 
-10.1)
-  if [ -z $1 ]; then
-    echo "No version specified, defaulting to 10.1"
-  fi
-  readonly VERSION=10.1
+10.3)
+  readonly VERSION=10.3
   readonly VERSION_TRAILER=
   # BIND replaced by unbound on FreeBSD 10, so drill(1) is the new dig(1)
   readonly DNS_LOOKUP=drill
+  readonly SHA256=1d710ba643bf6a8ce5bff5a9d69b1657ccff83dd1f2df711d9b4e02f9aab7d06
+;;
+11.0)
+  readonly VERSION=11.0
+  readonly VERSION_TRAILER=
+  readonly DNS_LOOKUP=drill
+  readonly SHA256=f9f7fcac1acfe210979a72e0642a70fcf9c9381cc1884e966eac8381c724158c
 ;;
 *)
   echo "Usage: $0 <version>"
-  echo " version - FreeBSD version to build. Valid choices: 9.3 10.1"
+  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 11.0"
   exit 1
 esac
 
@@ -43,8 +56,7 @@ if [ $(tput cols) -lt 80 ]; then
 fi
 
 if ! [ -e FreeBSD-${VERSION:?}-RELEASE-amd64.raw ]; then
-  curl -O ftp://ftp.freebsd.org/pub/FreeBSD/releases/VM-IMAGES/${VERSION:?}-RELEASE/amd64/Latest/FreeBSD-${VERSION:?}-RELEASE-amd64${VERSION_TRAILER}.raw.xz
-  xz -d FreeBSD-${VERSION:?}-RELEASE-amd64${VERSION_TRAILER}.raw.xz
+  download_image
 fi
 
 cp FreeBSD-${VERSION:?}-RELEASE-amd64${VERSION_TRAILER}.raw disk.raw
@@ -117,7 +129,7 @@ sleep 2
 # TODO(wathiede): set serial output so we can track boot on GCE.
 expect <<EOF
 set timeout 600
-spawn qemu-system-x86_64 -display curses -smp 2 -drive if=virtio,file=disk.raw -cdrom config.iso -net nic,model=virtio -net user
+spawn qemu-system-x86_64 -display curses -smp 2 -drive if=virtio,file=disk.raw,cache=none -cdrom config.iso -net nic,model=virtio -net user
 
 # Speed-up boot by going in to single user mode.
 expect "Welcome to FreeBSD"
