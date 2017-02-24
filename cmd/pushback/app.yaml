@@ -1,11 +1,6 @@
-module: pushback
+service: pushback
 runtime: go
-api_version: go1
-vm: true
+env: flex
 
 manual_scaling:
   instances: 1
-
-handlers:
-- url: /.*
-  script: _go_app
