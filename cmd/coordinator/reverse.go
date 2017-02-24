@@ -30,6 +30,7 @@ work, go to:
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -45,50 +46,110 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/revdial"
+	"golang.org/x/build/types"
 )
 
 const minBuildletVersion = 1
 
-var reversePool = &reverseBuildletPool{
-	available: make(chan token, 1),
-}
+var reversePool = new(reverseBuildletPool)
 
 type token struct{}
 
 type reverseBuildletPool struct {
-	available chan token // best-effort tickle when any buildlet becomes free
-
-	mu        sync.Mutex // guards buildlets and their fields
+	mu sync.Mutex // guards all fields, including fields of *reverseBuildlet
+	// TODO: switch to a map[hostType][]buildlets or map of set.
 	buildlets []*reverseBuildlet
+	wakeChan  map[string]chan token // hostType => best-effort wake-up chan when buildlet free
+	waiters   map[string]int        // hostType => number waiters blocked in GetBuildlet
 }
 
-var errInUse = errors.New("all buildlets are in use")
+func (p *reverseBuildletPool) ServeReverseStatusJSON(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	status := p.buildReverseStatusJSON()
+	j, _ := json.MarshalIndent(status, "", "\t")
+	w.Write(j)
+}
 
-func (p *reverseBuildletPool) tryToGrab(hostType string) (*buildlet.Client, error) {
+func (p *reverseBuildletPool) buildReverseStatusJSON() *types.ReverseBuilderStatus {
+	status := &types.ReverseBuilderStatus{}
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	candidates := 0
 	for _, b := range p.buildlets {
-		isCandidate := b.hostType == hostType
-		if isCandidate {
-			candidates++
+		hs := status.Host(b.hostType)
+		if hs.Machines == nil {
+			hs.Machines = make(map[string]*types.ReverseBuilder)
 		}
-		if isCandidate && !b.inUse {
-			// Found an unused match.
-			b.inUse = true
-			b.inUseTime = time.Now()
-			return b.client, nil
+		hs.Connected++
+		bs := &types.ReverseBuilder{
+			Name:         b.hostname,
+			HostType:     b.hostType,
+			ConnectedSec: time.Since(b.regTime).Seconds(),
+			Version:      b.version,
+		}
+		if b.inUse && !b.inHealthCheck {
+			hs.Busy++
+			bs.Busy = true
+			bs.BusySec = time.Since(b.inUseTime).Seconds()
+		} else {
+			hs.Idle++
+			bs.IdleSec = time.Since(b.inUseTime).Seconds()
+		}
+
+		hs.Machines[b.hostname] = bs
+	}
+	for hostType, waiters := range p.waiters {
+		status.Host(hostType).Waiters = waiters
+	}
+	for hostType, hc := range dashboard.Hosts {
+		if hc.ExpectNum > 0 {
+			status.Host(hostType).Expect = hc.ExpectNum
 		}
 	}
-	if candidates == 0 {
-		return nil, fmt.Errorf("no buildlets registered for host type %q", hostType)
-	}
-	return nil, errInUse
+	return status
 }
 
-func (p *reverseBuildletPool) noteBuildletAvailable() {
+// tryToGrab returns non-nil bc on success if a buildlet is free.
+//
+// Otherwise it returns how many were busy, which might be 0 if none
+// were (yet?) registered. The busy valid is only valid if bc == nil.
+func (p *reverseBuildletPool) tryToGrab(hostType string) (bc *buildlet.Client, busy int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, b := range p.buildlets {
+		if b.hostType != hostType {
+			continue
+		}
+		if b.inUse {
+			busy++
+			continue
+		}
+		// Found an unused match.
+		b.inUse = true
+		b.inUseTime = time.Now()
+		return b.client, 0
+	}
+	return nil, busy
+}
+
+func (p *reverseBuildletPool) getWakeChan(hostType string) chan token {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.wakeChan == nil {
+		p.wakeChan = make(map[string]chan token)
+	}
+	c, ok := p.wakeChan[hostType]
+	if !ok {
+		c = make(chan token)
+		p.wakeChan[hostType] = c
+	}
+	return c
+}
+
+func (p *reverseBuildletPool) noteBuildletAvailable(hostType string) {
+	wake := p.getWakeChan(hostType)
 	select {
-	case p.available <- token{}:
+	case wake <- token{}:
 	default:
 	}
 }
@@ -168,7 +229,7 @@ func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 	b.inUse = false
 	b.inHealthCheck = false
 	b.inUseTime = time.Now()
-	p.noteBuildletAvailable()
+	go p.noteBuildletAvailable(b.hostType)
 	return true
 }
 
@@ -188,45 +249,53 @@ func highPriChan(hostType string) chan *buildlet.Client {
 	return c
 }
 
+func (p *reverseBuildletPool) updateWaiterCounter(hostType string, delta int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.waiters == nil {
+		p.waiters = make(map[string]int)
+	}
+	p.waiters[hostType] += delta
+}
+
 func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg logger) (*buildlet.Client, error) {
+	p.updateWaiterCounter(hostType, 1)
+	defer p.updateWaiterCounter(hostType, -1)
 	seenErrInUse := false
 	isHighPriority, _ := ctx.Value(highPriorityOpt{}).(bool)
 	sp := lg.createSpan("wait_static_builder", hostType)
 	for {
-		b, err := p.tryToGrab(hostType)
-		if err == errInUse {
-			if !seenErrInUse {
-				lg.logEventTime("waiting_machine_in_use")
-				seenErrInUse = true
-			}
-			var highPri chan *buildlet.Client
-			if isHighPriority {
-				highPri = highPriChan(hostType)
-			}
+		bc, busy := p.tryToGrab(hostType)
+		if bc != nil {
 			select {
-			case <-ctx.Done():
-				return nil, sp.done(ctx.Err())
-			case bc := <-highPri:
-				sp.done(nil)
-				return p.cleanedBuildlet(bc, lg)
-			// As multiple goroutines can be listening for
-			// the available signal, it must be treated as
-			// a best effort signal. So periodically try
-			// to grab a buildlet again:
-			case <-time.After(10 * time.Second):
-			case <-p.available:
-			}
-		} else if err != nil {
-			sp.done(err)
-			return nil, err
-		} else {
-			select {
-			case highPriChan(hostType) <- b:
+			case highPriChan(hostType) <- bc:
 				// Somebody else was more important.
 			default:
 				sp.done(nil)
-				return p.cleanedBuildlet(b, lg)
+				return p.cleanedBuildlet(bc, lg)
 			}
+		}
+		if busy > 0 && !seenErrInUse {
+			lg.logEventTime("waiting_machine_in_use")
+			seenErrInUse = true
+		}
+		var highPri chan *buildlet.Client
+		if isHighPriority {
+			highPri = highPriChan(hostType)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, sp.done(ctx.Err())
+		case bc := <-highPri:
+			sp.done(nil)
+			return p.cleanedBuildlet(bc, lg)
+
+		case <-time.After(10 * time.Second):
+			// As multiple goroutines can be listening for
+			// the available signal, it must be treated as
+			// a best effort signal. So periodically try
+			// to grab a buildlet again.
+		case <-p.getWakeChan(hostType):
 		}
 	}
 }
@@ -329,7 +398,7 @@ func (p *reverseBuildletPool) CanBuild(hostType string) bool {
 
 func (p *reverseBuildletPool) addBuildlet(b *reverseBuildlet) {
 	p.mu.Lock()
-	defer p.noteBuildletAvailable()
+	defer p.noteBuildletAvailable(b.hostType)
 	defer p.mu.Unlock()
 	p.buildlets = append(p.buildlets, b)
 	go p.healthCheckBuildletLoop(b)

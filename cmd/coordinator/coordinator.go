@@ -283,6 +283,7 @@ func main() {
 	http.HandleFunc("/reverse", handleReverse)
 	http.HandleFunc("/style.css", handleStyleCSS)
 	http.HandleFunc("/try", handleTryStatus)
+	http.HandleFunc("/status/reverse.json", reversePool.ServeReverseStatusJSON)
 	http.Handle("/buildlet/create", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletCreate)))
 	http.Handle("/buildlet/list", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletList)))
 	go func() {

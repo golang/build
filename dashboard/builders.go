@@ -61,6 +61,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-linux-arm": &HostConfig{
 		IsReverse:      true,
+		ExpectNum:      50,
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		ReverseAliases: []string{"linux-arm", "linux-arm-arm5"},
 	},
@@ -139,6 +140,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_8": &HostConfig{
 		IsReverse: true,
+		ExpectNum: 1,
 		Notes:     "MacStadium OS X 10.8 VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
@@ -147,6 +149,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_10": &HostConfig{
 		IsReverse: true,
+		ExpectNum: 2,
 		Notes:     "MacStadium OS X 10.10 VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
@@ -155,6 +158,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_11": &HostConfig{
 		IsReverse: true,
+		ExpectNum: 15,
 		Notes:     "MacStadium OS X 10.11 VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
@@ -163,6 +167,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_12": &HostConfig{
 		IsReverse: true,
+		ExpectNum: 2,
 		Notes:     "MacStadium OS X 10.12 VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
@@ -178,30 +183,35 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-ppc64-osu": &HostConfig{
 		Notes:          "Debian jessie; run by Go team on osuosl.org",
 		IsReverse:      true,
+		ExpectNum:      5,
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		ReverseAliases: []string{"linux-ppc64-buildlet"},
 	},
 	"host-linux-ppc64le-osu": &HostConfig{
 		Notes:          "Debian jessie; run by Go team on osuosl.org",
 		IsReverse:      true,
+		ExpectNum:      5,
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		ReverseAliases: []string{"linux-ppc64le-buildlet"},
 	},
 	"host-linux-arm64-linaro": &HostConfig{
 		Notes:          "Ubuntu wily; run by Go team, from linaro",
 		IsReverse:      true,
+		ExpectNum:      5,
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		ReverseAliases: []string{"linux-arm64-buildlet"},
 	},
 	"host-solaris-amd64": &HostConfig{
 		Notes:          "run by Go team on Joyent, on a SmartOS 'infrastructure container'",
 		IsReverse:      true,
+		ExpectNum:      5,
 		env:            []string{"GOROOT_BOOTSTRAP=/root/go-solaris-amd64-bootstrap"},
 		ReverseAliases: []string{"solaris-amd64-smartosbuildlet"},
 	},
 	"host-linux-mips": &HostConfig{
 		Notes:     "Run by Brendan Kirby, imgtec.com",
 		IsReverse: true,
+		ExpectNum: 1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mips",
 			"GOARCH=mips",
@@ -213,6 +223,7 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-mipsle": &HostConfig{
 		Notes:     "Run by Brendan Kirby, imgtec.com",
 		IsReverse: true,
+		ExpectNum: 1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mipsle",
 			"GOARCH=mipsle",
@@ -223,6 +234,7 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-mips64": &HostConfig{
 		Notes:     "Run by Brendan Kirby, imgtec.com",
 		IsReverse: true,
+		ExpectNum: 1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mips64",
 			"GOARCH=mips64",
@@ -234,6 +246,7 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-mips64le": &HostConfig{
 		Notes:     "Run by Brendan Kirby, imgtec.com",
 		IsReverse: true,
+		ExpectNum: 1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mips64le",
 			"GOARCH=mips64le",
@@ -298,6 +311,9 @@ type HostConfig struct {
 	// GCE options, if VMImage != ""
 	machineType string // optional GCE instance type
 	RegularDisk bool   // if true, use spinning disk instead of SSD
+
+	// ReverseOptions:
+	ExpectNum int // expected number of reverse buildlets of this type
 
 	// Optional base env. GOROOT_BOOTSTRAP should go here if the buildlet
 	// has Go 1.4+ baked in somewhere.

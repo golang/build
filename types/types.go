@@ -101,3 +101,49 @@ type BuildRecord struct {
 	// TODO(bradfitz): log which reverse buildlet we got?
 	// Buildlet string
 }
+
+type ReverseBuilder struct {
+	Name         string
+	HostType     string
+	ConnectedSec float64
+	IdleSec      float64 `json:",omitempty"`
+	BusySec      float64 `json:",omitempty"`
+	Version      string  // buildlet version
+	Busy         bool
+}
+
+// ReverseHostStatus is part of ReverseBuilderStatus.
+type ReverseHostStatus struct {
+	HostType  string // dashboard.Hosts key
+	Connected int    // number of connected buildlets
+	Expect    int    // expected number, from dashboard.Hosts config
+	Idle      int
+	Busy      int
+	Waiters   int // number of builds waiting on a buildlet host of this type
+
+	// Machines are all connected buildlets of this host type,
+	// keyed by machine self-reported unique name.
+	Machines map[string]*ReverseBuilder
+}
+
+// ReverseBuilderStatus is http://farmer.golang.org/status/reverse.json
+//
+// It is used by monitoring and the Mac VMWare infrastructure to
+// adjust the Mac VMs based on deaths and demand.
+type ReverseBuilderStatus struct {
+	// Machines maps from the connected builder name (anything unique) to its status.
+	HostTypes map[string]*ReverseHostStatus
+}
+
+func (s *ReverseBuilderStatus) Host(hostType string) *ReverseHostStatus {
+	if s.HostTypes == nil {
+		s.HostTypes = make(map[string]*ReverseHostStatus)
+	}
+	hs, ok := s.HostTypes[hostType]
+	if ok {
+		return hs
+	}
+	hs = &ReverseHostStatus{HostType: hostType}
+	s.HostTypes[hostType] = hs
+	return hs
+}
