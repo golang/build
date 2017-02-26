@@ -12,6 +12,7 @@ package maintner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -19,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/protobuf/ptypes"
 	"github.com/google/go-github/github"
 	"golang.org/x/build/maintner/maintpb"
 	"golang.org/x/oauth2"
@@ -74,6 +76,24 @@ func (c *Corpus) AddGithub(owner, repo, tokenFile string) {
 // githubRepo is a github org & repo, lowercase, joined by a '/',
 // such as "golang/go".
 type githubRepo string
+
+// Org finds "golang" in the githubRepo string "golang/go", or returns an empty
+// string if it is malformed.
+func (gr githubRepo) Org() string {
+	sep := strings.IndexByte(string(gr), '/')
+	if sep == -1 {
+		return ""
+	}
+	return string(gr[:sep])
+}
+
+func (gr githubRepo) Repo() string {
+	sep := strings.IndexByte(string(gr), '/')
+	if sep == -1 || sep == len(gr)-1 {
+		return ""
+	}
+	return string(gr[sep+1:])
+}
 
 // githubUser represents a github user.
 // It is a subset of https://developer.github.com/v3/users/#get-a-single-user
@@ -169,7 +189,80 @@ func (c *Corpus) getGithubUser(pu *maintpb.GithubUser) *githubUser {
 	return u
 }
 
-func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
+var errNoChanges = errors.New("No changes in this github.Issue")
+
+// newMutationFromIssue generates a GithubIssueMutation using the smallest
+// possible diff between ci (a corpus Issue) and gi (an external github issue).
+//
+// If newMutationFromIssue returns nil, the provided github.Issue is no newer
+// than the data we have in the corpus. ci may be nil.
+func newMutationFromIssue(ci *githubIssue, gi *github.Issue, rp githubRepo) *maintpb.GithubIssueMutation {
+	if gi == nil || gi.Number == nil {
+		panic(fmt.Sprintf("github issue with nil number: %#v", gi))
+	}
+	owner, repo := rp.Org(), rp.Repo()
+	// always need these fields to figure out which key to write to
+	m := &maintpb.GithubIssueMutation{
+		Owner:  owner,
+		Repo:   repo,
+		Number: int32(*gi.Number),
+	}
+	if ci == nil {
+		// We don't know about this github issue, so populate all fields in one
+		// mutation.
+		if gi.CreatedAt != nil {
+			tproto, err := ptypes.TimestampProto(*gi.CreatedAt)
+			if err != nil {
+				panic(err)
+			}
+			m.Created = tproto
+		}
+		if gi.UpdatedAt != nil {
+			tproto, err := ptypes.TimestampProto(*gi.UpdatedAt)
+			if err != nil {
+				panic(err)
+			}
+			m.Updated = tproto
+		}
+		if gi.Body != nil {
+			m.Body = *gi.Body
+		}
+		return m
+	}
+	if gi.UpdatedAt != nil {
+		if gi.UpdatedAt.Before(ci.Updated) {
+			// This data is stale, ignore it.
+			return nil
+		}
+		tproto, err := ptypes.TimestampProto(*gi.UpdatedAt)
+		if err != nil {
+			panic(err)
+		}
+		m.Updated = tproto
+	}
+	if gi.Body != nil && *gi.Body != ci.Body {
+		m.Body = *gi.Body
+	}
+	return m
+}
+
+// getIssue finds an issue in the Corpus or returns nil, false if it is not
+// present.
+func (c *Corpus) getIssue(rp githubRepo, number int32) (*githubIssue, bool) {
+	issueMap, ok := c.githubIssues[rp]
+	if !ok {
+		return nil, false
+	}
+	gi, ok := issueMap[number]
+	return gi, ok
+}
+
+// processGithubIssueMutation updates the corpus with the information in m, and
+// returns true if the Corpus was modified.
+func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) (changed bool) {
+	if c == nil {
+		panic("nil corpus")
+	}
 	k := c.repoKey(m.Owner, m.Repo)
 	if k == "" {
 		// TODO: errors? return false? skip for now.
@@ -188,16 +281,39 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 	}
 	gi, ok := issueMap[m.Number]
 	if !ok {
+		created, err := ptypes.Timestamp(m.Created)
+		if err != nil {
+			panic(err)
+		}
 		gi = &githubIssue{
-			Number: m.Number,
-			User:   c.getGithubUser(m.User),
+			Number:  m.Number,
+			User:    c.getGithubUser(m.User),
+			Created: created,
 		}
 		issueMap[m.Number] = gi
+		changed = true
+	}
+	// Check Updated before all other fields so they don't update if this
+	// Mutation is stale
+	if m.Updated != nil {
+		updated, err := ptypes.Timestamp(m.Updated)
+		if err != nil {
+			panic(err)
+		}
+		if !updated.IsZero() && updated.Before(gi.Updated) {
+			// this mutation represents data older than the data we have in
+			// the corpus; ignore it.
+			return false
+		}
+		gi.Updated = updated
+		changed = changed || updated.After(gi.Updated)
 	}
 	if m.Body != "" {
 		gi.Body = m.Body
+		changed = changed || m.Body != gi.Body
 	}
-	// TODO: times, etc.
+	// ignoring Created since it *should* never update
+	return changed
 }
 
 // PopulateFromServer populates the corpus from a maintnerd server.
@@ -257,14 +373,16 @@ func (c *Corpus) pollGithub(ctx context.Context, rp githubRepo, ghc *github.Clie
 	log.Printf("Polling github for %s ...", rp)
 	page := 1
 	keepGoing := true
-	splits := strings.SplitN(string(rp), "/", 2)
-	owner, repo := splits[0], splits[1]
+	owner, repo := rp.Org(), rp.Repo()
 	for keepGoing {
 		// TODO: use https://godoc.org/github.com/google/go-github/github#ActivityService.ListIssueEventsForRepository probably
-		issues, res, err := ghc.Issues.ListByRepo(context.TODO(), owner, repo, &github.IssueListByRepoOptions{
+		issues, _, err := ghc.Issues.ListByRepo(ctx, owner, repo, &github.IssueListByRepoOptions{
 			State:     "all",
 			Sort:      "updated",
 			Direction: "desc",
+			// TODO: if an issue gets updated while we are paging, we might
+			// process the same issue twice - as item 100 on page 1 and then
+			// again as item 1 on page 2.
 			ListOptions: github.ListOptions{
 				Page:    page,
 				PerPage: 100,
@@ -273,15 +391,22 @@ func (c *Corpus) pollGithub(ctx context.Context, rp githubRepo, ghc *github.Clie
 		if err != nil {
 			return err
 		}
-		log.Printf("github %s/%s: page %d, num issues %d, res: %#v", owner, repo, page, len(issues), res)
-		keepGoing = false
+		log.Printf("github %s/%s: page %d, num issues %d", owner, repo, page, len(issues))
+		if len(issues) == 0 {
+			break
+		}
+		c.mu.Lock()
 		for _, is := range issues {
 			fmt.Printf("issue %d: %s\n", is.ID, *is.Title)
-			changes := false
-			if changes {
-				keepGoing = true
+			gi, _ := c.getIssue(rp, int32(*is.Number))
+			mp := newMutationFromIssue(gi, is, rp)
+			if mp == nil {
+				keepGoing = false
+				break
 			}
+			c.processGithubIssueMutation(mp)
 		}
+		c.mu.Unlock()
 		page++
 	}
 	return nil
