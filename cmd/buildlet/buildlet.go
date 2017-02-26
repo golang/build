@@ -1004,6 +1004,13 @@ func haltMachine() {
 		err = exec.Command("/bin/halt", "-n", "-f", "-p").Run()
 	case "plan9":
 		err = exec.Command("fshalt").Run()
+	case "darwin":
+		if os.Getenv("GO_BUILDER_ENV") == "macstadium_vm" {
+			// Fast, sloppy, unsafe, because we're never reusing this VM again.
+			err = exec.Command("/sbin/halt", "-n", "-q", "-l").Run()
+		} else {
+			err = errors.New("not respecting -halt flag on macOS in unknown environment")
+		}
 	default:
 		err = errors.New("No system-specific halt command run; will just end buildlet process.")
 	}
@@ -1258,7 +1265,14 @@ func configureMacStadium() {
 	if m == nil {
 		log.Fatalf("unsupported sw_vers version %q", version)
 	}
-	*reverse = "darwin-amd64-" + m[1] + "_" + m[2]
+	major, minor := m[1], m[2] // "10", "12"
+	if minor == "12" {
+		// macOS Sierra wedges its network stack if it runs
+		// all.bash a few times in a row. Reboot between each
+		// build.
+		*haltEntireOS = true
+	}
+	*reverse = "darwin-amd64-" + major + "_" + minor
 	*coordinator = "farmer.golang.org:443"
 	*hostname = vmwareGetInfo("guestinfo.name")
 }
