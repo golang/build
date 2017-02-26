@@ -65,7 +65,8 @@ var (
 //    3: switched to revdial protocol
 //    5: reverse dialing uses timeouts+tcp keepalives, pargzip fix
 //    7: version bumps while debugging revdial hang (Issue 12816)
-const buildletVersion = 7
+//    8: mac screensaver disabled
+const buildletVersion = 8
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -1256,6 +1257,8 @@ func configureMacStadium() {
 
 	// TODO: setup RAM disk for tmp and set *workDir
 
+	disableMacScreensaver()
+
 	version, err := exec.Command("sw_vers", "-productVersion").Output()
 	if err != nil {
 		log.Fatalf("failed to find sw_vers -productVersion: %v", err)
@@ -1275,6 +1278,13 @@ func configureMacStadium() {
 	*reverse = "darwin-amd64-" + major + "_" + minor
 	*coordinator = "farmer.golang.org:443"
 	*hostname = vmwareGetInfo("guestinfo.name")
+}
+
+func disableMacScreensaver() {
+	err := exec.Command("defaults", "-currentHost", "write", "com.apple.screensaver", "idleTime", "0").Run()
+	if err != nil {
+		log.Printf("disabling screensaver: %v", err)
+	}
 }
 
 func vmwareGetInfo(key string) string {
