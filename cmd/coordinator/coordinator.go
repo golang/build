@@ -422,9 +422,6 @@ func mayBuildRev(rev builderRev) bool {
 	if buildEnv.MaxBuilds > 0 && numCurrentBuilds() >= buildEnv.MaxBuilds {
 		return false
 	}
-	if strings.Contains(rev.name, "netbsd") {
-		return false
-	}
 	buildConf, ok := dashboard.Builders[rev.name]
 	if !ok {
 		if logUnknownBuilder.Allow() {

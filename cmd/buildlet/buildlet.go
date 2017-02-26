@@ -110,7 +110,7 @@ func main() {
 	// Optimize emphemeral filesystems. Prefer speed over safety, since these machines
 	// will be gone soon.
 	switch runtime.GOOS {
-	case "openbsd", "freebsd":
+	case "openbsd", "freebsd", "netbsd":
 		makeBSDFilesystemFast()
 	}
 
@@ -1308,7 +1308,7 @@ func makeBSDFilesystemFast() {
 		log.Printf("Not remounting root filesystem due to failure getting builder type instance metadata: %v", err)
 		return
 	}
-	// Tested on OpenBSD and FreeBSD:
+	// Tested on OpenBSD, FreeBSD, and NetBSD:
 	out, err := exec.Command("/sbin/mount", "-u", "-o", "async,noatime", "/").CombinedOutput()
 	if err != nil {
 		log.Printf("Warning: failed to remount %s root filesystem with async,noatime: %v, %s", runtime.GOOS, err, out)
