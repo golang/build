@@ -1164,6 +1164,18 @@ func (br builderRev) skipBuild() bool {
 		"term",   // no code yet in repo: "warning: "golang.org/x/term/..." matched no packages"
 		"oauth2": // has external deps
 		return true
+	case "perf":
+		if br.name == "linux-amd64-nocgo" {
+			// The "perf" repo requires sqlite, which
+			// requires cgo. Skip the no-cgo builder.
+			return true
+		}
+	case "net":
+		if br.name == "darwin-amd64-10_8" || br.name == "darwin-386-10_8" {
+			// One of the tests seems to panic the kernel
+			// and kill our buildlet which goes in a loop.
+			return true
+		}
 	}
 	return false
 }
