@@ -1930,7 +1930,11 @@ func (br *builderRev) snapshotURL() string {
 func (st *buildStatus) writeSnapshot(bc *buildlet.Client) (err error) {
 	sp := st.createSpan("write_snapshot_to_gcs")
 	defer func() { sp.done(err) }()
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	// This should happen in 15 seconds or so, but I saw timeouts
+	// a couple times at 1 minute. Some buildlets might be far
+	// away on the network, so be more lenient. The timeout mostly
+	// is here to prevent infinite hangs.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	tsp := st.createSpan("fetch_snapshot_reader_from_buildlet")
