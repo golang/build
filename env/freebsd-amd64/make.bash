@@ -48,7 +48,7 @@ case $1 in
   exit 1
 esac
 
-readonly IMAGE=freebsd-amd64-gce${VERSION/\./}.tar.gz
+readonly IMAGE=freebsd-amd64-${VERSION/\./}.tar.gz
 
 if [ $(tput cols) -lt 80 ]; then
 	echo "Running qemu with curses display requires a window 80 columns or larger or expect(1) won't work correctly."

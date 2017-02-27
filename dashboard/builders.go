@@ -93,6 +93,14 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		env:                []string{"CC=clang"},
 	},
+	"host-freebsd-110": &HostConfig{
+		VMImage:            "freebsd-amd64-110",
+		Notes:              "FreeBSD 11.0; GCE VM is built from script in build/env/freebsd-amd64",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64", // TODO(bradfitz): why was this http instead of https?
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
+		env:                []string{"CC=clang"},
+	},
 	"host-netbsd-70": &HostConfig{
 		VMImage:            "netbsd-amd64-70",
 		Notes:              "NetBSD 7.0_2016Q4; GCE VM is built from script in build/env/netbsd-amd64",
@@ -497,6 +505,7 @@ func (c *BuildConfig) BuildSubrepos() bool {
 		"darwin-amd64-10_11",
 		"darwin-386-10_11",
 		"freebsd-386-gce101", "freebsd-amd64-gce101",
+		"freebsd-386-110", "freebsd-amd64-110",
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
 		"openbsd-386-60", "openbsd-amd64-60",
 		"plan9-386",
@@ -618,9 +627,8 @@ func (c *BuildConfig) NumTestHelpers(isTry bool) int {
 
 func init() {
 	addBuilder(BuildConfig{
-		Name:           "freebsd-amd64-gce93",
-		HostType:       "host-freebsd-93-gce",
-		numTestHelpers: 1,
+		Name:     "freebsd-amd64-gce93",
+		HostType: "host-freebsd-93-gce",
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-gce101",
@@ -629,12 +637,21 @@ func init() {
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
+		Name:     "freebsd-amd64-110",
+		HostType: "host-freebsd-110",
+	})
+	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-race",
-		HostType: "host-freebsd-101-gce",
+		HostType: "host-freebsd-101-gce", // TODO(bradfitz): switch to FreeBSD 11? test first.
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-386-gce101",
 		HostType: "host-freebsd-101-gce",
+		env:      []string{"GOARCH=386", "GOHOSTARCH=386"},
+	})
+	addBuilder(BuildConfig{
+		Name:     "freebsd-386-110",
+		HostType: "host-freebsd-110",
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
