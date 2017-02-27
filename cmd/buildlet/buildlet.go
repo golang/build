@@ -49,6 +49,7 @@ import (
 
 var (
 	haltEntireOS = flag.Bool("halt", true, "halt OS in /halt handler. If false, the buildlet process just ends.")
+	rebootOnHalt = flag.Bool("reboot", false, "reboot system in /halt handler.")
 	workDir      = flag.String("workdir", "", "Temporary directory to use. The contents of this directory may be deleted at any time. If empty, TempDir is used to create one.")
 	listenAddr   = flag.String("listen", "AUTO", "address to listen on. Unused in reverse mode. Warning: this service is inherently insecure and offers no protection of its own. Do not expose this port to the world.")
 	reverse      = flag.String("reverse", "", "if non-empty, go into reverse mode where the buildlet dials the coordinator instead of listening for connections. The value is a comma-separated list of modes, e.g. 'darwin-arm,darwin-amd64-race'")
@@ -107,6 +108,13 @@ func main() {
 
 	log.Printf("buildlet starting.")
 	flag.Parse()
+
+	if *reverse == "solaris-amd64-smartosbuildlet" {
+		// These machines were setup without GO_BUILDER_ENV
+		// set in their base image, so do init work here after
+		// flag parsing instead of at top.
+		*rebootOnHalt = true
+	}
 
 	// Optimize emphemeral filesystems. Prefer speed over safety, since these machines
 	// will be gone soon.
@@ -973,12 +981,25 @@ func handleHalt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "requires POST method", http.StatusBadRequest)
 		return
 	}
+
+	// Do the halt in 1 second, to give the HTTP response time to
+	// complete.
+	//
+	// TODO(bradfitz): maybe prevent any (unlikely) future HTTP
+	// requests from doing anything from this point on in the
+	// remaining second.
 	log.Printf("Halting in 1 second.")
-	// do the halt in 1 second, to give the HTTP response time to complete:
-	time.AfterFunc(1*time.Second, haltMachine)
+	time.AfterFunc(1*time.Second, doHalt)
 }
 
-func haltMachine() {
+func doHalt() {
+	if *rebootOnHalt {
+		if err := exec.Command("reboot").Run(); err != nil {
+			log.Printf("Error running reboot: %v", err)
+		}
+		os.Exit(0)
+
+	}
 	if !*haltEntireOS {
 		log.Printf("Ending buildlet process due to halt.")
 		os.Exit(0)
