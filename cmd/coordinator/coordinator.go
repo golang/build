@@ -2020,6 +2020,9 @@ func (st *buildStatus) shouldSkipTest(testName string) bool {
 		}
 	}
 	switch testName {
+	case "vet/all":
+		// Old vetall test name, before the sharding in CL 37572.
+		return true
 	case "api":
 		return st.isTry() && st.name != "linux-amd64"
 	}
