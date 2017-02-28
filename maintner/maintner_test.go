@@ -15,6 +15,18 @@ import (
 	"golang.org/x/build/maintner/maintpb"
 )
 
+type dummyMutationLogger struct {
+	Mutations []*maintpb.Mutation
+}
+
+func (d *dummyMutationLogger) Log(m *maintpb.Mutation) error {
+	if d.Mutations == nil {
+		d.Mutations = []*maintpb.Mutation{}
+	}
+	d.Mutations = append(d.Mutations, m)
+	return nil
+}
+
 type mutationTest struct {
 	corpus *Corpus
 	want   *Corpus
@@ -23,7 +35,7 @@ type mutationTest struct {
 func (mt mutationTest) test(t *testing.T, muts ...*maintpb.Mutation) {
 	c := mt.corpus
 	if c == nil {
-		c = NewCorpus()
+		c = NewCorpus(&dummyMutationLogger{})
 	}
 	for _, m := range muts {
 		c.processMutationLocked(m)
@@ -44,7 +56,7 @@ func init() {
 }
 
 func TestProcessMutation_Github_NewIssue(t *testing.T) {
-	c := NewCorpus()
+	c := NewCorpus(&dummyMutationLogger{})
 	c.githubUsers = map[int64]*githubUser{
 		100: &githubUser{
 			Login: "gopherbot",
@@ -79,7 +91,7 @@ func TestProcessMutation_Github_NewIssue(t *testing.T) {
 func TestProcessMutation_OldIssue(t *testing.T) {
 	// process a mutation with an Updated timestamp older than the existing
 	// issue.
-	c := NewCorpus()
+	c := NewCorpus(&dummyMutationLogger{})
 	c.githubUsers = map[int64]*githubUser{
 		100: &githubUser{
 			Login: "gopherbot",
@@ -136,14 +148,14 @@ func TestNewMutationsFromIssue(t *testing.T) {
 		State:     github.String("closed"),
 	}
 	is := newMutationFromIssue(nil, gh, githubRepo("golang/go"))
-	want := &maintpb.GithubIssueMutation{
+	want := &maintpb.Mutation{GithubIssue: &maintpb.GithubIssueMutation{
 		Owner:   "golang",
 		Repo:    "go",
 		Number:  5,
 		Body:    "body of the issue",
 		Created: tp1,
 		Updated: tp2,
-	}
+	}}
 	if !reflect.DeepEqual(is, want) {
 		t.Errorf("issue mismatch\n got: %#v\nwant: %#v", is, want)
 	}

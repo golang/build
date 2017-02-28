@@ -33,12 +33,15 @@ func (n *nullMutation) GetMutations(ctx context.Context) <-chan *maintpb.Mutatio
 var (
 	listen      = flag.String("listen", ":6343", "listen address")
 	watchGithub = flag.String("watch-github", "", "Comma separated list of owner/repo pairs to slurp")
+	dataDir     = flag.String("data-dir", "", "Local directory to write protobuf files to")
 )
 
 func main() {
 	flag.Parse()
 	pairs := strings.Split(*watchGithub, ",")
-	corpus := maintner.NewCorpus()
+	// TODO switch based on flags, for now only local file sync works
+	logger := maintner.NewDiskMutationLogger(*dataDir)
+	corpus := maintner.NewCorpus(logger)
 	for _, pair := range pairs {
 		splits := strings.SplitN(pair, "/", 2)
 		if len(splits) != 2 || splits[1] == "" {
