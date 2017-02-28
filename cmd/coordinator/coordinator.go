@@ -306,7 +306,7 @@ func main() {
 	} else {
 		go gcePool.cleanUpOldVMs()
 		if kubeErr == nil {
-			go kubePool.cleanUpOldPods(context.Background())
+			go kubePool.cleanUpOldPodsLoop(context.Background())
 		}
 
 		if inStaging {

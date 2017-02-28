@@ -30,7 +30,6 @@ This file implements the Kubernetes-based buildlet pool.
 
 // Initialized by initKube:
 var (
-	containerService    *container.Service
 	buildletsKubeClient *kubernetes.Client // for "buildlets" cluster
 	goKubeClient        *kubernetes.Client // for "go" cluster (misc jobs)
 	kubeErr             error
@@ -372,74 +371,81 @@ func (p *kubeBuildletPool) String() string {
 // stranded and wasting resources forever, we instead set the
 // "delete-at" metadata attribute on them when created to some time
 // that's well beyond their expected lifetime.
-func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
-	if containerService == nil {
+func (p *kubeBuildletPool) cleanUpOldPodsLoop(ctx context.Context) {
+	if buildletsKubeClient == nil {
+		log.Printf("cleanUpOldPods: no buildletsKubeClient configured; aborting.")
 		return
 	}
 	for {
-		pods, err := buildletsKubeClient.GetPods(ctx)
-		if err != nil {
-			log.Printf("Error cleaning pods: %v", err)
-			return
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		p.cleanUpOldPods(ctx)
+		cancel()
+		time.Sleep(time.Minute)
+	}
+}
+
+func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
+	pods, err := buildletsKubeClient.GetPods(ctx)
+	if err != nil {
+		log.Printf("cleanUpOldPods: error getting pods: %v", err)
+		return
+	}
+	var stats struct {
+		Pods          int
+		WithAttr      int
+		WithDelete    int
+		DeletedOld    int // even if failed to delete
+		StillUsed     int
+		DeletedOldGen int // even if failed to delete
+	}
+	for _, pod := range pods {
+		if pod.ObjectMeta.Annotations == nil {
+			// Defensive. Not seen in practice.
+			continue
 		}
-		var stats struct {
-			Pods          int
-			WithAttr      int
-			WithDelete    int
-			DeletedOld    int // even if failed to delete
-			StillUsed     int
-			DeletedOldGen int // even if failed to delete
-		}
-		for _, pod := range pods {
-			if pod.ObjectMeta.Annotations == nil {
-				// Defensive. Not seen in practice.
-				continue
-			}
-			stats.Pods++
-			sawDeleteAt := false
-			stats.WithAttr++
-			for k, v := range pod.ObjectMeta.Annotations {
-				if k == "delete-at" {
-					stats.WithDelete++
-					sawDeleteAt = true
-					if v == "" {
-						log.Printf("missing delete-at value; ignoring")
-						continue
-					}
-					unixDeadline, err := strconv.ParseInt(v, 10, 64)
-					if err != nil {
-						log.Printf("invalid delete-at value %q seen; ignoring", v)
-					}
-					if err == nil && time.Now().Unix() > unixDeadline {
-						stats.DeletedOld++
-						log.Printf("Deleting expired pod %q in zone %q ...", pod.Name, buildEnv.Zone)
-						err = buildletsKubeClient.DeletePod(ctx, pod.Name)
-						if err != nil {
-							log.Printf("problem deleting old pod %q: %v", pod.Name, err)
-						}
-					}
+		stats.Pods++
+		sawDeleteAt := false
+		stats.WithAttr++
+		for k, v := range pod.ObjectMeta.Annotations {
+			if k == "delete-at" {
+				stats.WithDelete++
+				sawDeleteAt = true
+				if v == "" {
+					log.Printf("cleanUpOldPods: missing delete-at value; ignoring")
+					continue
 				}
-			}
-			// Delete buildlets (things we made) from previous
-			// generations. Only deleting things starting with "buildlet-"
-			// is a historical restriction, but still fine for paranoia.
-			if sawDeleteAt && strings.HasPrefix(pod.Name, "buildlet-") {
-				if p.podUsed(pod.Name) {
-					stats.StillUsed++
-				} else {
-					stats.DeletedOldGen++
-					log.Printf("Deleting pod %q from an earlier coordinator generation ...", pod.Name)
+				unixDeadline, err := strconv.ParseInt(v, 10, 64)
+				if err != nil {
+					log.Printf("cleanUpOldPods: invalid delete-at value %q seen; ignoring", v)
+				}
+				if err == nil && time.Now().Unix() > unixDeadline {
+					stats.DeletedOld++
+					log.Printf("cleanUpOldPods: Deleting expired pod %q in zone %q ...", pod.Name, buildEnv.Zone)
 					err = buildletsKubeClient.DeletePod(ctx, pod.Name)
 					if err != nil {
-						log.Printf("problem deleting pod: %v", err)
+						log.Printf("cleanUpOldPods: problem deleting old pod %q: %v", pod.Name, err)
 					}
 				}
 			}
 		}
-		if stats.Pods > 0 {
-			log.Printf("Kubernetes pod cleanup loop stats: %+v", stats)
+		// Delete buildlets (things we made) from previous
+		// generations. Only deleting things starting with "buildlet-"
+		// is a historical restriction, but still fine for paranoia.
+		if sawDeleteAt && strings.HasPrefix(pod.Name, "buildlet-") {
+			if p.podUsed(pod.Name) {
+				stats.StillUsed++
+			} else {
+				stats.DeletedOldGen++
+				log.Printf("cleanUpOldPods: deleting pod %q from an earlier coordinator generation ...", pod.Name)
+				err = buildletsKubeClient.DeletePod(ctx, pod.Name)
+				if err != nil {
+					log.Printf("cleanUpOldPods: problem deleting pod: %v", err)
+				}
+			}
 		}
-		time.Sleep(time.Minute)
+	}
+	if stats.Pods > 0 {
+		log.Printf("cleanUpOldPods: loop stats: %+v", stats)
 	}
 }
 
