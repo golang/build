@@ -374,7 +374,7 @@ func (c *Corpus) PollGithubLoop(ctx context.Context, rp githubRepo, tokenFile st
 		return fmt.Errorf("Expected token file %s to be of form <username>:<token>", tokenFile)
 	}
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: f[1]})
-	tc := oauth2.NewClient(oauth2.NoContext, ts)
+	tc := oauth2.NewClient(ctx, ts)
 	ghc := github.NewClient(tc)
 	for {
 		err := c.pollGithub(ctx, rp, ghc)
@@ -383,7 +383,12 @@ func (c *Corpus) PollGithubLoop(ctx context.Context, rp githubRepo, tokenFile st
 		}
 		log.Printf("Polled github for %s; err = %v. Sleeping.", rp, err)
 		// TODO: select and listen for context errors
-		time.Sleep(30 * time.Second)
+		select {
+		case <-time.After(30 * time.Second):
+			continue
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 }
 
