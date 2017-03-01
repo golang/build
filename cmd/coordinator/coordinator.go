@@ -764,9 +764,9 @@ func findWork(work chan<- builderRev) error {
 				if awaitSnapshot && !rev.snapshotExists() {
 					continue
 				}
-				if rev.skipBuild() {
-					continue
-				}
+			}
+			if rev.skipBuild() {
+				continue
 			}
 			if !isBuilding(rev) {
 				work <- rev
@@ -1155,6 +1155,10 @@ type builderRev struct {
 }
 
 func (br builderRev) skipBuild() bool {
+	if strings.HasPrefix(br.name, "netbsd-386") {
+		// Hangs during make.bash. TODO: remove once Issue 19339 is fixed.
+		return true
+	}
 	switch br.subName {
 	case "build", // has external deps
 		"exp",    // always broken, depends on mobile which is broken
