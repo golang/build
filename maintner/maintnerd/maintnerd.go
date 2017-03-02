@@ -56,9 +56,10 @@ func main() {
 	ln.Close() // TODO: use
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := corpus.Initialize(ctx, &nullMutation{}); err != nil {
+	if err := corpus.Initialize(ctx, logger); err != nil {
 		log.Fatal(err)
 	}
+	corpus.StartLogging()
 	if err := corpus.Poll(ctx); err != nil {
 		log.Fatal(err)
 	}
