@@ -15,6 +15,15 @@ import (
 	"golang.org/x/build/maintner/maintpb"
 )
 
+var u1 = &githubUser{
+	Login: "gopherbot",
+	ID:    100,
+}
+var u2 = &githubUser{
+	Login: "kevinburke",
+	ID:    101,
+}
+
 type dummyMutationLogger struct {
 	Mutations []*maintpb.Mutation
 }
@@ -58,18 +67,17 @@ func init() {
 func TestProcessMutation_Github_NewIssue(t *testing.T) {
 	c := NewCorpus(&dummyMutationLogger{})
 	c.githubUsers = map[int64]*githubUser{
-		100: &githubUser{
-			Login: "gopherbot",
-			ID:    100,
-		},
+		u1.ID: u1,
 	}
 	c.githubIssues = map[githubRepo]map[int32]*githubIssue{
 		"golang/go": map[int32]*githubIssue{
 			3: &githubIssue{
-				Number:  3,
-				User:    &githubUser{ID: 100, Login: "gopherbot"},
-				Body:    "some body",
-				Created: t1,
+				Number:    3,
+				User:      u1,
+				Title:     "some title",
+				Body:      "some body",
+				Created:   t1,
+				Assignees: []*githubUser{},
 			},
 		},
 	}
@@ -82,6 +90,7 @@ func TestProcessMutation_Github_NewIssue(t *testing.T) {
 				Login: "gopherbot",
 				Id:    100,
 			},
+			Title:   "some title",
 			Body:    "some body",
 			Created: tp1,
 		},
@@ -93,19 +102,17 @@ func TestProcessMutation_OldIssue(t *testing.T) {
 	// issue.
 	c := NewCorpus(&dummyMutationLogger{})
 	c.githubUsers = map[int64]*githubUser{
-		100: &githubUser{
-			Login: "gopherbot",
-			ID:    100,
-		},
+		u1.ID: u1,
 	}
 	c.githubIssues = map[githubRepo]map[int32]*githubIssue{
 		"golang/go": map[int32]*githubIssue{
 			3: &githubIssue{
-				Number:  3,
-				User:    &githubUser{ID: 100, Login: "gopherbot"},
-				Body:    "some body",
-				Created: t2,
-				Updated: t2,
+				Number:    3,
+				User:      u1,
+				Body:      "some body",
+				Created:   t2,
+				Updated:   t2,
+				Assignees: []*githubUser{},
 			},
 		},
 	}
@@ -123,7 +130,7 @@ func TestProcessMutation_OldIssue(t *testing.T) {
 			Updated: tp2,
 		},
 	}, &maintpb.Mutation{
-		// The second issue is older than the first.
+		// The second issue is older than the first and should be ignored.
 		GithubIssue: &maintpb.GithubIssueMutation{
 			Owner:  "golang",
 			Repo:   "go",
@@ -149,15 +156,61 @@ func TestNewMutationsFromIssue(t *testing.T) {
 	}
 	is := newMutationFromIssue(nil, gh, githubRepo("golang/go"))
 	want := &maintpb.Mutation{GithubIssue: &maintpb.GithubIssueMutation{
-		Owner:   "golang",
-		Repo:    "go",
-		Number:  5,
-		Body:    "body of the issue",
-		Created: tp1,
-		Updated: tp2,
+		Owner:     "golang",
+		Repo:      "go",
+		Number:    5,
+		Body:      "body of the issue",
+		Created:   tp1,
+		Updated:   tp2,
+		Assignees: []*maintpb.GithubUser{},
 	}}
 	if !reflect.DeepEqual(is, want) {
 		t.Errorf("issue mismatch\n got: %#v\nwant: %#v", is, want)
+	}
+}
+
+func TestNewAssigneesHandlesNil(t *testing.T) {
+	users := []*github.User{
+		&github.User{Login: github.String("foo"), ID: github.Int(3)},
+	}
+	got := newAssignees(nil, users)
+	want := []*maintpb.GithubUser{&maintpb.GithubUser{
+		Id:    3,
+		Login: "foo",
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("assignee mismatch\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
+func TestAssigneesDeleted(t *testing.T) {
+	c := NewCorpus(&dummyMutationLogger{})
+	c.githubUsers = map[int64]*githubUser{
+		u1.ID: u1,
+	}
+	assignees := []*githubUser{u1, u2}
+	issue := &githubIssue{
+		Number:    3,
+		User:      u1,
+		Body:      "some body",
+		Created:   t2,
+		Updated:   t2,
+		Assignees: assignees,
+	}
+	c.githubIssues = map[githubRepo]map[int32]*githubIssue{
+		"golang/go": map[int32]*githubIssue{
+			3: issue,
+		},
+	}
+	repo := githubRepo("golang/go")
+	mutation := newMutationFromIssue(issue, &github.Issue{
+		Number:    github.Int(3),
+		Assignees: []*github.User{&github.User{ID: github.Int(int(u2.ID))}},
+	}, repo)
+	c.processMutation(mutation)
+	gi, _ := c.getIssue(repo, 3)
+	if len(gi.Assignees) != 1 || gi.Assignees[0].ID != u2.ID {
+		t.Errorf("expected u1 to be deleted, got %v", gi.Assignees)
 	}
 }
 

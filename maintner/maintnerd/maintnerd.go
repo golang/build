@@ -34,6 +34,7 @@ var (
 	listen      = flag.String("listen", ":6343", "listen address")
 	watchGithub = flag.String("watch-github", "", "Comma separated list of owner/repo pairs to slurp")
 	dataDir     = flag.String("data-dir", "", "Local directory to write protobuf files to")
+	debug       = flag.Bool("debug", false, "Print debug logging information")
 )
 
 func main() {
@@ -42,6 +43,9 @@ func main() {
 	// TODO switch based on flags, for now only local file sync works
 	logger := maintner.NewDiskMutationLogger(*dataDir)
 	corpus := maintner.NewCorpus(logger)
+	if *debug {
+		corpus.SetDebug()
+	}
 	for _, pair := range pairs {
 		splits := strings.SplitN(pair, "/", 2)
 		if len(splits) != 2 || splits[1] == "" {
@@ -57,6 +61,10 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := corpus.Initialize(ctx, logger); err != nil {
+		// TODO: if Initialize only partially syncs the data, we need to delete
+		// whatever files it created, since Github returns events newest first
+		// and we use the issue updated dates to check whether we need to keep
+		// syncing.
 		log.Fatal(err)
 	}
 	corpus.StartLogging()

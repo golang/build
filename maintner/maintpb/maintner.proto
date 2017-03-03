@@ -19,9 +19,12 @@ message GithubIssueMutation {
   int32 number = 3;  // 1, 2, 3... (not the ID)
 
   GithubUser user = 4;   // only set for new/updated issues, not new comments
+  repeated GithubUser assignees = 10; // who the issue is assigned to
+  repeated int64 deleted_assignees = 11; // IDs of users to delete from the assignee list
   google.protobuf.Timestamp created = 5; // only needed on new issues
   google.protobuf.Timestamp updated = 6; // only set on updated issue text
   string body = 7; // for new or updated issue text (top post, which isn't a comment)
+  string title = 9; // issue title
 
   repeated GithubIssueCommentMutation comment = 8;
 }
