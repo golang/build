@@ -550,6 +550,7 @@ func (c *Corpus) PollGithubLoop(ctx context.Context, rp githubRepo, tokenFile st
 func (c *Corpus) pollGithub(ctx context.Context, rp githubRepo, ghc *github.Client) error {
 	log.Printf("Polling github for %s ...", rp)
 	page := 1
+	seen := make(map[int64]bool)
 	keepGoing := true
 	owner, repo := rp.Org(), rp.Repo()
 	for keepGoing {
@@ -574,7 +575,17 @@ func (c *Corpus) pollGithub(ctx context.Context, rp githubRepo, ghc *github.Clie
 			break
 		}
 		for _, is := range issues {
-			gi, _ := c.getIssue(rp, int32(is.GetNumber()))
+			id := int64(is.GetID())
+			if seen[id] {
+				// If an issue gets updated (and bumped to the top) while we
+				// are paging, it's possible the last issue from page N can
+				// appear as the first issue on page N+1. Don't process that
+				// issue twice.
+				// https://github.com/google/go-github/issues/566
+				continue
+			}
+			seen[id] = true
+			gi, _ := c.getIssue(rp, int32(*is.Number))
 			mp := newMutationFromIssue(gi, is, rp)
 			if mp == nil {
 				keepGoing = false

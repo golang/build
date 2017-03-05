@@ -86,6 +86,9 @@ func (d *DiskMutationLogger) GetMutations(ctx context.Context) <-chan *maintpb.M
 	}
 	go func() {
 		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if info.IsDir() && info.Name() != dir {
+				return filepath.SkipDir
+			}
 			if err != nil {
 				return err
 			}
