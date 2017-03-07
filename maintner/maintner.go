@@ -448,6 +448,7 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) (cha
 		gi = &githubIssue{
 			// User added below
 			Number:    m.Number,
+			ID:        m.Id,
 			Created:   created,
 			Assignees: []*githubUser{},
 		}

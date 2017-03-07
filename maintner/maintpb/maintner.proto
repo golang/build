@@ -17,6 +17,7 @@ message GithubIssueMutation {
   string owner = 1;  // "golang"
   string repo = 2;  // "go"
   int32 number = 3;  // 1, 2, 3... (not the ID)
+  int64 id = 12;  // unique across all repos
 
   GithubUser user = 4;   // only set for new/updated issues, not new comments
   repeated GithubUser assignees = 10; // who the issue is assigned to
