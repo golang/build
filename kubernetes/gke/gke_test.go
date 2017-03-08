@@ -132,6 +132,13 @@ func foreachCluster(t *testing.T, fn func(*container.Cluster, *kubernetes.Client
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := ts.Token(); err != nil {
+		val, err := metadata.InstanceAttributeValue("service-accounts/default/token")
+		if val == "" {
+			t.Skip("skipping on GCE instance without a service account")
+		}
+		t.Skipf("default token source doesn't work; skipping test: %v", err)
+	}
 
 	clusters, err := containerService.Projects.Zones.Clusters.List(proj, "-").Context(ctx).Do()
 	if err != nil {
