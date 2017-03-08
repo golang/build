@@ -11,6 +11,7 @@ package maintpb;
 
 message Mutation {
   GithubIssueMutation github_issue = 1;
+  GitMutation git = 2;
 }
 
 message GithubIssueMutation {
@@ -41,4 +42,42 @@ message GithubIssueCommentMutation {
 message GithubUser {
   int64 id = 1;
   string login = 2;
+}
+
+message GitMutation {
+  GitRepo repo = 1;
+
+  // commit adds a commit, or adds new information to a commit if fields
+  // are added in the future.
+  GitCommit commit = 2;
+}
+
+// GitRepo identifies a git repo being mutated.
+message GitRepo {
+  // If go_repo is set, it identifies a go.googlesource.com/<go_repo> repo.
+  string go_repo = 1;
+
+  // TODO: code.googlesource.com and github repos later.
+}
+
+message GitCommit {
+  string sha1 = 1; // the full lowercase 40-hex-byte sha1 sum
+
+  // raw is the "git cat-file commit $sha1" output.
+  bytes raw = 2;
+
+  GitDiffTree diff_tree = 3;
+}
+
+// git diff-tree --numstat oldtree newtree
+message GitDiffTree {
+  repeated GitDiffTreeFile file = 1;
+}
+
+// GitDiffTreeFile represents one line of `git diff-tree --numstat` output.
+message GitDiffTreeFile {
+  string file = 1;
+  int64  added = 2;
+  int64  deleted = 3;
+  bool   binary = 4;
 }

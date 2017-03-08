@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -36,10 +37,11 @@ import (
 type Corpus struct {
 	MutationLogger MutationLogger
 
-	mu           sync.RWMutex
-	githubIssues map[githubRepo]map[int32]*githubIssue // repo -> num -> issue
-	githubUsers  map[int64]*githubUser
-	githubRepos  []repoObj
+	mu               sync.RWMutex
+	githubIssues     map[githubRepo]map[int32]*githubIssue // repo -> num -> issue
+	githubUsers      map[int64]*githubUser
+	pollGithubIssues []polledGithubIssues
+	pollGitDirs      []polledGitCommits
 	// If true, log new commits
 	shouldLog bool
 	debug     bool
@@ -47,16 +49,20 @@ type Corpus struct {
 	// TODO
 }
 
-type repoObj struct {
+type polledGithubIssues struct {
 	name      githubRepo
 	tokenFile string
+}
+
+type polledGitCommits struct {
+	repo *maintpb.GitRepo
+	dir  string
 }
 
 func NewCorpus(logger MutationLogger) *Corpus {
 	return &Corpus{
 		githubIssues:   make(map[githubRepo]map[int32]*githubIssue),
 		githubUsers:    make(map[int64]*githubUser),
-		githubRepos:    []repoObj{},
 		MutationLogger: logger,
 	}
 }
@@ -81,9 +87,31 @@ func (c *Corpus) debugf(format string, v ...interface{}) {
 func (c *Corpus) AddGithub(owner, repo, tokenFile string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.githubRepos = append(c.githubRepos, repoObj{
+	c.pollGithubIssues = append(c.pollGithubIssues, polledGithubIssues{
 		name:      githubRepo(owner + "/" + repo),
 		tokenFile: tokenFile,
+	})
+}
+
+// gerritProjNameRx is the pattern describing a Gerrit project name.
+// TODO: figure out if this is accurate.
+var gerritProjNameRx = regexp.MustCompile(`^[a-z0-9]+[a-z0-9\-\_]*$`)
+
+// AddGoGitRepo registers a git directory to have its metadata slurped into the corpus.
+// The goRepo is a name like "go" or "net". The dir is a path on disk.
+//
+// TODO(bradfitz): this whole interface is temporary. Make this
+// support any git repo and make this (optionally?) use the gitmirror
+// service later instead of a separate copy on disk.
+func (c *Corpus) AddGoGitRepo(goRepo, dir string) {
+	if !gerritProjNameRx.MatchString(goRepo) {
+		panic(fmt.Sprintf("bogus goRepo value %q", goRepo))
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pollGitDirs = append(c.pollGitDirs, polledGitCommits{
+		repo: &maintpb.GitRepo{GoRepo: goRepo},
+		dir:  dir,
 	})
 }
 
@@ -509,13 +537,26 @@ func (c *Corpus) PopulateFromAPIs(ctx context.Context) error {
 // Poll checks for new changes on all repositories being tracked by the Corpus.
 func (c *Corpus) Poll(ctx context.Context) error {
 	group, ctx := errgroup.WithContext(ctx)
-	for _, rp := range c.githubRepos {
+	for _, rp := range c.pollGithubIssues {
 		rp := rp
 		group.Go(func() error {
 			return c.PollGithubLoop(ctx, rp.name, rp.tokenFile)
 		})
 	}
+	for _, rp := range c.pollGitDirs {
+		rp := rp
+		group.Go(func() error {
+			return c.PollGitCommits(ctx, rp)
+		})
+	}
 	return group.Wait()
+}
+
+// PollGithubCommits polls for git commits in a directory.
+func (c *Corpus) PollGitCommits(ctx context.Context, conf polledGitCommits) error {
+	log.Printf("TODO: poll %v from %v", conf.repo, conf.dir)
+	select {} // TODO(bradfitz): actuall poll
+	return nil
 }
 
 // PollGithubLoop checks for new changes on a single Github repository and
