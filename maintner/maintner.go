@@ -35,6 +35,7 @@ type Corpus struct {
 	// corpus state:
 	shouldLog bool
 	debug     bool
+	strIntern map[string]string // interned strings
 	// github-specific
 	pollGithubIssues []polledGithubIssues
 	githubIssues     map[githubRepo]map[int32]*githubIssue // repo -> num -> issue
@@ -59,6 +60,18 @@ func NewCorpus(logger MutationLogger) *Corpus {
 		githubUsers:    make(map[int64]*githubUser),
 		MutationLogger: logger,
 	}
+}
+
+// requires c.mu be held for writing
+func (c *Corpus) str(s string) string {
+	if v, ok := c.strIntern[s]; ok {
+		return v
+	}
+	if c.strIntern == nil {
+		c.strIntern = make(map[string]string)
+	}
+	c.strIntern[s] = s
+	return s
 }
 
 // StartLogging indicates that further changes should be written to the log.

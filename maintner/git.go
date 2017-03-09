@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -74,6 +75,7 @@ type gitCommit struct {
 	committer  *gitPerson
 	commitTime time.Time
 	msg        string
+	files      []*maintpb.GitDiffTreeFile
 }
 
 type gitPerson struct {
@@ -109,9 +111,14 @@ func (c *Corpus) PollGitCommits(ctx context.Context, conf polledGitCommits) erro
 	c.enqueueCommitLocked(refHash)
 	c.mu.Unlock()
 
+	idle := false
 	for {
 		hash := c.gitCommitToIndex()
 		if hash == nil {
+			if !idle {
+				log.Printf("All git commits index for %v; idle.", conf.repo)
+				idle = true
+			}
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -249,6 +256,12 @@ func (c *Corpus) processGitMutation(m *maintpb.GitMutation) {
 		parents: make([]gitHash, 0, bytes.Count(hdr, parentSpace)),
 		msg:     string(msg),
 	}
+	if commit.DiffTree != nil {
+		gc.files = commit.DiffTree.File
+	}
+	for _, f := range gc.files {
+		f.File = c.str(f.File) // intern the string
+	}
 	parents := 0
 	err := foreachLine(hdr, func(ln []byte) error {
 		if bytes.HasPrefix(ln, parentSpace) {
@@ -372,4 +385,43 @@ func (c *Corpus) gitLocation(v string) *time.Location {
 	}
 	c.zoneCache[v] = loc
 	return loc
+}
+
+type FileCount struct {
+	File  string
+	Count int
+}
+
+// queryFrequentlyModifiedFiles is an example query just for fun.
+// It is not currently used by anything.
+func (c *Corpus) QueryFrequentlyModifiedFiles(topN int) []FileCount {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	n := map[string]int{} // file -> count
+	for _, gc := range c.gitCommit {
+		for _, f := range gc.files {
+			n[modernizeFilename(f.File)]++
+		}
+	}
+	files := make([]FileCount, 0, len(n))
+	for file, count := range n {
+		files = append(files, FileCount{file, count})
+	}
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].Count > files[j].Count
+	})
+	if len(files) > topN {
+		files = files[:topN]
+	}
+	return files
+}
+
+func modernizeFilename(f string) string {
+	if strings.HasPrefix(f, "src/pkg/") {
+		f = "src/" + strings.TrimPrefix(f, "src/pkg/")
+	}
+	if strings.HasPrefix(f, "src/http/") {
+		f = "src/net/http/" + strings.TrimPrefix(f, "src/http/")
+	}
+	return f
 }

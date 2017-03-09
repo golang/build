@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -38,6 +39,9 @@ var (
 	watchGoGit  = flag.Bool("watch-go-git", false, "Watch Go's main git repo.")
 	dataDir     = flag.String("data-dir", "", "Local directory to write protobuf files to")
 	debug       = flag.Bool("debug", false, "Print debug logging information")
+
+	// Temporary:
+	qTopFiles = flag.Bool("query-top-changed-files", false, "[temporary demo flag] If true, show the most modified git files and then exit instead of polling. This will be removed when this becomes a gRPC server.")
 )
 
 func main() {
@@ -68,11 +72,13 @@ func main() {
 		// Assumes GOROOT is a git checkout. Good enough for now for development.
 		corpus.AddGoGitRepo("go", runtime.GOROOT())
 	}
+
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
 		log.Fatal(err)
 	}
 	ln.Close() // TODO: use
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := corpus.Initialize(ctx, logger); err != nil {
@@ -82,6 +88,20 @@ func main() {
 		// syncing.
 		log.Fatal(err)
 	}
+
+	runtime.GC()
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	log.Printf("Loaded data. Memory: %v MB", ms.HeapAlloc>>20)
+
+	if *qTopFiles {
+		top := corpus.QueryFrequentlyModifiedFiles(25)
+		for _, fc := range top {
+			fmt.Printf(" %5d %s\n", fc.Count, fc.File)
+		}
+		return
+	}
+
 	corpus.StartLogging()
 	if err := corpus.Poll(ctx); err != nil {
 		log.Fatal(err)
