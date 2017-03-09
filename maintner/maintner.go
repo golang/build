@@ -37,16 +37,21 @@ import (
 type Corpus struct {
 	MutationLogger MutationLogger
 
-	mu               sync.RWMutex
-	githubIssues     map[githubRepo]map[int32]*githubIssue // repo -> num -> issue
-	githubUsers      map[int64]*githubUser
-	pollGithubIssues []polledGithubIssues
-	pollGitDirs      []polledGitCommits
-	// If true, log new commits
+	mu sync.RWMutex // guards all following fields
+	// corpus state:
 	shouldLog bool
 	debug     bool
-
-	// TODO
+	// github-specific
+	pollGithubIssues []polledGithubIssues
+	githubIssues     map[githubRepo]map[int32]*githubIssue // repo -> num -> issue
+	githubUsers      map[int64]*githubUser
+	// git-specific:
+	pollGitDirs   []polledGitCommits
+	gitPeople     map[string]*gitPerson
+	gitCommit     map[gitHash]*gitCommit
+	gitCommitTodo map[gitHash]bool          // -> true
+	gitOfHg       map[string]gitHash        // hg hex hash -> git hash
+	zoneCache     map[string]*time.Location // "+0530" => location
 }
 
 type polledGithubIssues struct {
@@ -177,15 +182,18 @@ func (c *Corpus) Initialize(ctx context.Context, src MutationSource) error {
 func (c *Corpus) processMutations(ctx context.Context, src MutationSource) error {
 	ch := src.GetMutations(ctx)
 	done := ctx.Done()
-
+	log.Printf("Reloading data from log %T ...", src)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for {
 		select {
 		case <-done:
-			return ctx.Err()
+			err := ctx.Err()
+			log.Printf("Context expired while loading data from log %T: %v", src, err)
+			return err
 		case m, ok := <-ch:
 			if !ok {
+				log.Printf("Reloaded data from log %T.", src)
 				return nil
 			}
 			c.processMutationLocked(m)
@@ -211,7 +219,10 @@ func (c *Corpus) processMutationLocked(m *maintpb.Mutation) {
 	if im := m.GithubIssue; im != nil {
 		c.processGithubIssueMutation(im)
 	}
-	// TODO: more...
+	if gm := m.Git; gm != nil {
+		c.processGitMutation(gm)
+	}
+	// TODO: more.
 }
 
 func (c *Corpus) repoKey(owner, repo string) githubRepo {
@@ -550,13 +561,6 @@ func (c *Corpus) Poll(ctx context.Context) error {
 		})
 	}
 	return group.Wait()
-}
-
-// PollGithubCommits polls for git commits in a directory.
-func (c *Corpus) PollGitCommits(ctx context.Context, conf polledGitCommits) error {
-	log.Printf("TODO: poll %v from %v", conf.repo, conf.dir)
-	select {} // TODO(bradfitz): actuall poll
-	return nil
 }
 
 // PollGithubLoop checks for new changes on a single Github repository and

@@ -33,7 +33,7 @@ func (n *nullMutation) GetMutations(ctx context.Context) <-chan *maintpb.Mutatio
 }
 
 var (
-	listen      = flag.String("listen", ":6343", "listen address")
+	listen      = flag.String("listen", "localhost:6343", "listen address")
 	watchGithub = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
 	watchGoGit  = flag.Bool("watch-go-git", false, "Watch Go's main git repo.")
 	dataDir     = flag.String("data-dir", "", "Local directory to write protobuf files to")

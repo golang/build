@@ -85,20 +85,20 @@ func (d *DiskMutationLogger) GetMutations(ctx context.Context) <-chan *maintpb.M
 		dir = "."
 	}
 	go func() {
-		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-			if info.IsDir() && info.Name() != dir {
+		err := filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
+			if fi.IsDir() && path != filepath.Clean(dir) {
 				return filepath.SkipDir
 			}
 			if err != nil {
 				return err
 			}
-			if !strings.HasPrefix(info.Name(), "maintner-") {
+			if !strings.HasPrefix(fi.Name(), "maintner-") {
 				return nil
 			}
-			if !strings.HasSuffix(info.Name(), ".proto.gz") {
+			if !strings.HasSuffix(fi.Name(), ".proto.gz") {
 				return nil
 			}
-			f, err := os.Open(info.Name())
+			f, err := os.Open(path)
 			if err != nil {
 				return err
 			}
