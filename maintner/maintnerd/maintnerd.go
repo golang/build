@@ -19,26 +19,15 @@ import (
 	"strings"
 
 	"golang.org/x/build/maintner"
-	"golang.org/x/build/maintner/maintpb"
 )
 
-// TODO add a real mutation source
-type nullMutation struct{}
-
-func (n *nullMutation) GetMutations(ctx context.Context) <-chan *maintpb.Mutation {
-	ch := make(chan *maintpb.Mutation)
-	go func() {
-		close(ch)
-	}()
-	return ch
-}
-
 var (
-	listen      = flag.String("listen", "localhost:6343", "listen address")
-	watchGithub = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
-	watchGoGit  = flag.Bool("watch-go-git", false, "Watch Go's main git repo.")
-	dataDir     = flag.String("data-dir", "", "Local directory to write protobuf files to")
-	debug       = flag.Bool("debug", false, "Print debug logging information")
+	listen        = flag.String("listen", "localhost:6343", "listen address")
+	watchGithub   = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
+	watchGoGit    = flag.Bool("watch-go-git", false, "Watch Go's main git repo.")
+	dataDir       = flag.String("data-dir", "", "Local directory to write protobuf files to")
+	debug         = flag.Bool("debug", false, "Print debug logging information")
+	stopAfterLoad = flag.Bool("stop-after-load", false, "Debug: stop after loading all old data; don't poll for new data.")
 
 	// Temporary:
 	qTopFiles = flag.Bool("query-top-changed-files", false, "[temporary demo flag] If true, show the most modified git files and then exit instead of polling. This will be removed when this becomes a gRPC server.")
@@ -73,12 +62,6 @@ func main() {
 		corpus.AddGoGitRepo("go", runtime.GOROOT())
 	}
 
-	ln, err := net.Listen("tcp", *listen)
-	if err != nil {
-		log.Fatal(err)
-	}
-	ln.Close() // TODO: use
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := corpus.Initialize(ctx, logger); err != nil {
@@ -94,6 +77,10 @@ func main() {
 	runtime.ReadMemStats(&ms)
 	log.Printf("Loaded data. Memory: %v MB", ms.HeapAlloc>>20)
 
+	if *stopAfterLoad {
+		return
+	}
+
 	if *qTopFiles {
 		top := corpus.QueryFrequentlyModifiedFiles(25)
 		for _, fc := range top {
@@ -101,6 +88,12 @@ func main() {
 		}
 		return
 	}
+
+	ln, err := net.Listen("tcp", *listen)
+	if err != nil {
+		log.Fatal(err)
+	}
+	ln.Close() // TODO: use
 
 	corpus.StartLogging()
 	if err := corpus.Poll(ctx); err != nil {

@@ -18,6 +18,13 @@ message GithubIssueMutation {
   string owner = 1;  // "golang"
   string repo = 2;  // "go"
   int32 number = 3;  // 1, 2, 3... (not the ID)
+
+  // not_exist is set true if the issue has been found to not exist.
+  // If true, the owner/repo/number fields above must still be set.
+  // If a future issue mutation for the same number arrives without
+  // not_exist set, then the issue comes back to life.
+  bool not_exist = 13;
+
   int64 id = 12;  // unique across all repos
 
   GithubUser user = 4;   // only set for new/updated issues, not new comments

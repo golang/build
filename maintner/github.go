@@ -64,6 +64,7 @@ type githubUser struct {
 type githubIssue struct {
 	ID        int64
 	Number    int32
+	NotExist  bool // if true, rest of fields should be ignored.
 	Closed    bool
 	User      *githubUser
 	Assignees []*githubUser
@@ -298,12 +299,30 @@ func newMutationFromIssue(ci *githubIssue, gi *github.Issue, rp githubRepo) *mai
 func (c *Corpus) getIssue(rp githubRepo, number int32) (*githubIssue, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	issueMap, ok := c.githubIssues[rp]
-	if !ok {
-		return nil, false
-	}
-	gi, ok := issueMap[number]
+	gi, ok := c.githubIssues[rp][number]
 	return gi, ok
+}
+
+func (c *Corpus) githubMissingIssues(rp githubRepo) []int32 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	issues := c.githubIssues[rp]
+
+	var maxNum int32
+	for num := range issues {
+		if num > maxNum {
+			maxNum = num
+		}
+	}
+
+	var missing []int32
+	for num := int32(1); num < maxNum; num++ {
+		if _, ok := issues[num]; !ok {
+			missing = append(missing, num)
+		}
+	}
+	return missing
 }
 
 // processGithubIssueMutation updates the corpus with the information in m, and
@@ -330,20 +349,33 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) (cha
 	}
 	gi, ok := issueMap[m.Number]
 	if !ok {
-		created, err := ptypes.Timestamp(m.Created)
+		changed = true
+		gi = &githubIssue{
+			// User added below
+			Number: m.Number,
+			ID:     m.Id,
+		}
+		issueMap[m.Number] = gi
+
+		if m.NotExist {
+			gi.NotExist = true
+			return changed
+		}
+
+		var err error
+		gi.Created, err = ptypes.Timestamp(m.Created)
 		if err != nil {
 			panic(err)
 		}
-		gi = &githubIssue{
-			// User added below
-			Number:    m.Number,
-			ID:        m.Id,
-			Created:   created,
-			Assignees: []*githubUser{},
-		}
-		issueMap[m.Number] = gi
-		changed = true
 	}
+	if m.NotExist != gi.NotExist {
+		changed = true
+		gi.NotExist = m.NotExist
+	}
+	if gi.NotExist {
+		return changed
+	}
+
 	// Check Updated before all other fields so they don't update if this
 	// Mutation is stale
 	if m.Updated != nil {
@@ -420,9 +452,6 @@ func (c *Corpus) pollGithub(ctx context.Context, rp githubRepo, ghc *github.Clie
 			State:     "all",
 			Sort:      "updated",
 			Direction: "desc",
-			// TODO: if an issue gets updated while we are paging, we might
-			// process the same issue twice - as item 100 on page 1 and then
-			// again as item 1 on page 2.
 			ListOptions: github.ListOptions{
 				Page:    page,
 				PerPage: 100,
@@ -433,8 +462,10 @@ func (c *Corpus) pollGithub(ctx context.Context, rp githubRepo, ghc *github.Clie
 		}
 		log.Printf("github %s/%s: page %d, num issues %d", owner, repo, page, len(issues))
 		if len(issues) == 0 {
+			log.Printf("github %s: reached end.", rp)
 			break
 		}
+		changes := 0
 		for _, is := range issues {
 			id := int64(is.GetID())
 			if seen[id] {
@@ -449,13 +480,56 @@ func (c *Corpus) pollGithub(ctx context.Context, rp githubRepo, ghc *github.Clie
 			gi, _ := c.getIssue(rp, int32(*is.Number))
 			mp := newMutationFromIssue(gi, is, rp)
 			if mp == nil {
-				keepGoing = false
-				break
+				continue
 			}
+			changes++
 			fmt.Printf("modifying %s, issue %d: %s\n", rp, is.GetNumber(), is.GetTitle())
 			c.processMutation(mp)
 		}
+
+		c.mu.RLock()
+		num := len(c.githubIssues[rp])
+		c.mu.RUnlock()
+		log.Printf("Num %s issues: %v (%v changes this page)", rp, num, changes)
+
+		if changes == 0 {
+			missing := c.githubMissingIssues(rp)
+			log.Printf("%d missing github issues.", len(missing))
+			if len(missing) < 100 {
+				keepGoing = false
+			}
+		}
 		page++
 	}
+
+	missing := c.githubMissingIssues(rp)
+	if len(missing) > 0 {
+		log.Printf("Remaining missing %v issues: %v", rp, missing)
+		for _, num := range missing {
+			log.Printf("Getting issue %v %v ...", rp, num)
+			issue, _, err := ghc.Issues.Get(ctx, owner, repo, int(num))
+			if ge, ok := err.(*github.ErrorResponse); ok && ge.Message == "Not Found" {
+				mp := &maintpb.Mutation{
+					GithubIssue: &maintpb.GithubIssueMutation{
+						Owner:    owner,
+						Repo:     repo,
+						Number:   num,
+						NotExist: true,
+					},
+				}
+				c.processMutation(mp)
+				continue
+			} else if err != nil {
+				return err
+			}
+			mp := newMutationFromIssue(nil, issue, rp)
+			if mp == nil {
+				continue
+			}
+			fmt.Printf("modified %s, issue %d: %s\n", rp, issue.GetNumber(), issue.GetTitle())
+			c.processMutation(mp)
+		}
+	}
+
 	return nil
 }

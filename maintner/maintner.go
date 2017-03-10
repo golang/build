@@ -197,7 +197,10 @@ func (c *Corpus) Poll(ctx context.Context) error {
 	for _, rp := range c.pollGithubIssues {
 		rp := rp
 		group.Go(func() error {
-			return c.PollGithubLoop(ctx, rp.name, rp.tokenFile)
+			log.Printf("Polling %v ...", rp)
+			err := c.PollGithubLoop(ctx, rp.name, rp.tokenFile)
+			log.Printf("Polling %v: %v", rp, err)
+			return err
 		})
 	}
 	for _, rp := range c.pollGitDirs {
