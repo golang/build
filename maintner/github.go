@@ -423,14 +423,18 @@ func (c *Corpus) PollGithubLoop(ctx context.Context, rp githubRepo, tokenFile st
 	}
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: f[1]})
 	tc := oauth2.NewClient(ctx, ts)
-	ghc := github.NewClient(tc)
+
+	p := &githubRepoPoller{
+		c:   c,
+		ghc: github.NewClient(tc),
+		rp:  rp,
+	}
 	for {
-		err := c.pollGithub(ctx, rp, ghc)
+		err := p.sync(ctx)
+		p.logf("sync = %v; sleeping", err)
 		if err == context.Canceled {
 			return err
 		}
-		log.Printf("Polled github for %s; err = %v. Sleeping.", rp, err)
-		// TODO: select and listen for context errors
 		select {
 		case <-time.After(30 * time.Second):
 			continue
@@ -440,15 +444,37 @@ func (c *Corpus) PollGithubLoop(ctx context.Context, rp githubRepo, tokenFile st
 	}
 }
 
-func (c *Corpus) pollGithub(ctx context.Context, rp githubRepo, ghc *github.Client) error {
-	log.Printf("Polling github for %s ...", rp)
+// A githubRepoPoller updates the Corpus c to have the latest version
+// of the Github repo rp, using the Github client ghc.
+type githubRepoPoller struct {
+	c   *Corpus
+	rp  githubRepo
+	ghc *github.Client
+}
+
+func (p *githubRepoPoller) logf(format string, args ...interface{}) {
+	log.Printf("sync github "+string(p.rp)+": "+format, args...)
+}
+
+func (p *githubRepoPoller) sync(ctx context.Context) error {
+	p.logf("Beginning sync.")
+	if err := p.syncIssues(ctx); err != nil {
+		return err
+	}
+	// TODO: comments
+	// TODO: events
+	return nil
+}
+
+func (p *githubRepoPoller) syncIssues(ctx context.Context) error {
+	c, rp := p.c, p.rp
 	page := 1
 	seen := make(map[int64]bool)
 	keepGoing := true
-	owner, repo := rp.Org(), rp.Repo()
+	owner, repo := p.rp.Org(), p.rp.Repo()
 	for keepGoing {
 		// TODO: use https://godoc.org/github.com/google/go-github/github#ActivityService.ListIssueEventsForRepository probably
-		issues, _, err := ghc.Issues.ListByRepo(ctx, owner, repo, &github.IssueListByRepoOptions{
+		issues, _, err := p.ghc.Issues.ListByRepo(ctx, owner, repo, &github.IssueListByRepoOptions{
 			State:     "all",
 			Sort:      "updated",
 			Direction: "desc",
@@ -460,9 +486,9 @@ func (c *Corpus) pollGithub(ctx context.Context, rp githubRepo, ghc *github.Clie
 		if err != nil {
 			return err
 		}
-		log.Printf("github %s/%s: page %d, num issues %d", owner, repo, page, len(issues))
+		p.logf("issues: page %d, num issues %d", page, len(issues))
 		if len(issues) == 0 {
-			log.Printf("github %s: reached end.", rp)
+			p.logf("isses: reached end.")
 			break
 		}
 		changes := 0
@@ -483,18 +509,18 @@ func (c *Corpus) pollGithub(ctx context.Context, rp githubRepo, ghc *github.Clie
 				continue
 			}
 			changes++
-			fmt.Printf("modifying %s, issue %d: %s\n", rp, is.GetNumber(), is.GetTitle())
+			p.logf("changed issue %d: %s", is.GetNumber(), is.GetTitle())
 			c.processMutation(mp)
 		}
 
 		c.mu.RLock()
 		num := len(c.githubIssues[rp])
 		c.mu.RUnlock()
-		log.Printf("Num %s issues: %v (%v changes this page)", rp, num, changes)
+		p.logf("%v issues (%v changes this page)", num, changes)
 
 		if changes == 0 {
 			missing := c.githubMissingIssues(rp)
-			log.Printf("%d missing github issues.", len(missing))
+			p.logf("%d missing github issues.", len(missing))
 			if len(missing) < 100 {
 				keepGoing = false
 			}
@@ -504,10 +530,10 @@ func (c *Corpus) pollGithub(ctx context.Context, rp githubRepo, ghc *github.Clie
 
 	missing := c.githubMissingIssues(rp)
 	if len(missing) > 0 {
-		log.Printf("Remaining missing %v issues: %v", rp, missing)
+		p.logf("remaining issues: %v", missing)
 		for _, num := range missing {
-			log.Printf("Getting issue %v %v ...", rp, num)
-			issue, _, err := ghc.Issues.Get(ctx, owner, repo, int(num))
+			p.logf("getting issue %v ...", num)
+			issue, _, err := p.ghc.Issues.Get(ctx, owner, repo, int(num))
 			if ge, ok := err.(*github.ErrorResponse); ok && ge.Message == "Not Found" {
 				mp := &maintpb.Mutation{
 					GithubIssue: &maintpb.GithubIssueMutation{
@@ -526,8 +552,8 @@ func (c *Corpus) pollGithub(ctx context.Context, rp githubRepo, ghc *github.Clie
 			if mp == nil {
 				continue
 			}
-			fmt.Printf("modified %s, issue %d: %s\n", rp, issue.GetNumber(), issue.GetTitle())
-			c.processMutation(mp)
+			p.logf("modified issue %d: %s", issue.GetNumber(), issue.GetTitle())
+			p.c.processMutation(mp)
 		}
 	}
 
