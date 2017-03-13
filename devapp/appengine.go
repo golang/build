@@ -60,10 +60,6 @@ func logoutURL(ctx context.Context, path string) (string, error) {
 	return user.LogoutURL(ctx, path)
 }
 
-func newHTTPClient(ctx context.Context) *http.Client {
-	return urlfetch.Client(ctx)
-}
-
 func getCache(ctx context.Context, name string) (*Cache, error) {
 	var cache Cache
 	if err := datastore.Get(ctx, datastore.NewKey(ctx, entityPrefix+"Cache", name, 0, nil), &cache); err != nil {

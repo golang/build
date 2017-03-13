@@ -56,7 +56,10 @@ func updateStats(ctx context.Context, w http.ResponseWriter, r *http.Request) er
 		return err
 	}
 
-	transport := newTransport(ctx)
+	transport := &countTransport{newTransport(ctx), 0}
+	defer func() {
+		log("Sent %d requests to GitHub", transport.Count())
+	}()
 	gh := godash.NewGitHubClient("golang/go", token, transport)
 
 	if r.Form.Get("reset_detail") != "" {

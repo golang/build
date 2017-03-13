@@ -14,6 +14,7 @@ import (
 	stdlog "log"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/build/gerrit"
@@ -52,6 +53,7 @@ func ctxHandler(fn func(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := getContext(r)
 		if err := fn(ctx, w, r); err != nil {
+			log.Criticalf(ctx, "handler failed: %v", err)
 			http.Error(w, err.Error(), 500)
 		}
 	})
@@ -81,18 +83,36 @@ func servePage(w http.ResponseWriter, r *http.Request, page string) {
 	w.Write(entity.Content)
 }
 
+type countTransport struct {
+	http.RoundTripper
+	count int64
+}
+
+func (ct *countTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	atomic.AddInt64(&ct.count, 1)
+	return ct.RoundTripper.RoundTrip(req)
+}
+
+func (ct *countTransport) Count() int64 {
+	return atomic.LoadInt64(&ct.count)
+}
+
 func update(ctx context.Context, w http.ResponseWriter, _ *http.Request) error {
 	token, err := getToken(ctx)
 	if err != nil {
 		return err
 	}
 	gzdata, _ := getCache(ctx, "gzdata")
-	gh := godash.NewGitHubClient("golang/go", token, newTransport(ctx))
+	ct := &countTransport{newTransport(ctx), 0}
+	gh := godash.NewGitHubClient("golang/go", token, ct)
+	defer func() {
+		log.Infof(ctx, "Sent %d requests to GitHub", ct.Count())
+	}()
 	ger := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
 	// Without a deadline, urlfetch will use a 5s timeout which is too slow for Gerrit.
 	gerctx, cancel := context.WithTimeout(ctx, 9*time.Minute)
 	defer cancel()
-	ger.HTTPClient = newHTTPClient(gerctx)
+	ger.HTTPClient = &http.Client{Transport: newTransport(gerctx)}
 
 	data, err := parseData(gzdata)
 	if err != nil {
@@ -100,6 +120,7 @@ func update(ctx context.Context, w http.ResponseWriter, _ *http.Request) error {
 	}
 
 	if err := data.Reviewers.LoadGithub(ctx, gh); err != nil {
+		log.Criticalf(ctx, "failed to load reviewers: %v", err)
 		return err
 	}
 	l := logFn(ctx, w)

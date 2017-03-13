@@ -66,10 +66,6 @@ func logoutURL(ctx context.Context, path string) (string, error) {
 	return "", errors.New("logoutURL: unimplemented")
 }
 
-func newHTTPClient(ctx context.Context) *http.Client {
-	return &http.Client{}
-}
-
 func getCaches(ctx context.Context, names ...string) map[string]*Cache {
 	out := make(map[string]*Cache)
 	dstoreMu.Lock()
