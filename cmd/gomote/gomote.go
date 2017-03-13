@@ -11,9 +11,10 @@ Usage:
   gomote [global-flags] cmd [cmd-flags]
 
   For example,
-  $ gomote create openbsd-amd64-gce56
-  $ gomote push
-  $ gomote run openbsd-amd64-gce56 src/make.bash
+  $ gomote create openbsd-amd64-60
+  user-username-openbsd-amd64-60-0
+  $ gomote push user-username-openbsd-amd64-60-0
+  $ gomote run user-username-openbsd-amd64-60-0 go/src/make.bash
 
 TODO: document more, and figure out the CLI interface more.
 */
