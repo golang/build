@@ -37,9 +37,9 @@ type Corpus struct {
 	debug     bool
 	strIntern map[string]string // interned strings
 	// github-specific
-	pollGithubIssues []polledGithubIssues
-	githubIssues     map[githubRepo]map[int32]*githubIssue // repo -> num -> issue
-	githubUsers      map[int64]*githubUser
+	watchedGithubRepos []watchedGithubRepo
+	githubIssues       map[githubRepo]map[int32]*githubIssue // repo -> num -> issue
+	githubUsers        map[int64]*githubUser
 	// git-specific:
 	pollGitDirs   []polledGitCommits
 	gitPeople     map[string]*gitPerson
@@ -194,7 +194,7 @@ func (c *Corpus) PopulateFromAPIs(ctx context.Context) error {
 // Poll checks for new changes on all repositories being tracked by the Corpus.
 func (c *Corpus) Poll(ctx context.Context) error {
 	group, ctx := errgroup.WithContext(ctx)
-	for _, rp := range c.pollGithubIssues {
+	for _, rp := range c.watchedGithubRepos {
 		rp := rp
 		group.Go(func() error {
 			log.Printf("Polling %v ...", rp)

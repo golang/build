@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"golang.org/x/build/maintner"
 )
@@ -64,6 +65,7 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	t0 := time.Now()
 	if err := corpus.Initialize(ctx, logger); err != nil {
 		// TODO: if Initialize only partially syncs the data, we need to delete
 		// whatever files it created, since Github returns events newest first
@@ -71,11 +73,12 @@ func main() {
 		// syncing.
 		log.Fatal(err)
 	}
+	initDur := time.Since(t0)
 
 	runtime.GC()
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
-	log.Printf("Loaded data. Memory: %v MB", ms.HeapAlloc>>20)
+	log.Printf("Loaded data in %v. Memory: %v MB", initDur, ms.HeapAlloc>>20)
 
 	if *stopAfterLoad {
 		return

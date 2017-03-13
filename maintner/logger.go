@@ -78,7 +78,7 @@ func (d *DiskMutationLogger) Log(m *maintpb.Mutation) error {
 func (d *DiskMutationLogger) GetMutations(ctx context.Context) <-chan *maintpb.Mutation {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
-	ch := make(chan *maintpb.Mutation)
+	ch := make(chan *maintpb.Mutation, 50) // buffered: overlap gunzip/unmarshal with loading
 	// files _should_ be in lexical order
 	var dir = d.directory
 	if dir == "" {

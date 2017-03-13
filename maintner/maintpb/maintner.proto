@@ -36,13 +36,25 @@ message GithubIssueMutation {
   string title = 9; // issue title
 
   repeated GithubIssueCommentMutation comment = 8;
+
+  GithubIssueCommentSyncStatus comment_status = 14;
+}
+
+// GithubIssueCommentSyncStatus notes where syncing is at for comments
+// on an issue,
+// This mutation type is only made at/after the same top-level mutation
+// which created the corresponding comments.
+message GithubIssueCommentSyncStatus {
+  // server_date is the "Date" response header from Github for the
+  // final HTTP response.
+  google.protobuf.Timestamp server_date = 1;
 }
 
 message GithubIssueCommentMutation {
   int64 id = 1;
-  GithubUser user = 2;
-  string body = 3;
-  google.protobuf.Timestamp created = 4;
+  GithubUser user = 2; // not present in edits later
+  string body = 3;   // may not be present in edits later (if only reactions changed? TODO: investigate)
+  google.protobuf.Timestamp created = 4; // not present in edits later
   google.protobuf.Timestamp updated = 5;
 }
 
