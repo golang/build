@@ -71,7 +71,7 @@ type Page struct {
 }
 
 func servePage(w http.ResponseWriter, r *http.Request, page string) {
-	ctx := r.Context()
+	ctx := getContext(r)
 	entity, err := getPage(ctx, page)
 	if err != nil {
 		http.Error(w, "page not found", 404)

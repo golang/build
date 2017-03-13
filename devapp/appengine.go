@@ -8,12 +8,9 @@ package devapp
 
 import (
 	"net/http"
-	"os"
 
-	"appengine"
-
-	"golang.org/x/build/godash"
 	"golang.org/x/net/context"
+	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
 	applog "google.golang.org/appengine/log"
 	"google.golang.org/appengine/urlfetch"
@@ -63,15 +60,6 @@ func logoutURL(ctx context.Context, path string) (string, error) {
 	return user.LogoutURL(ctx, path)
 }
 
-func loadData(ctx context.Context) (*godash.Data, error) {
-	os.Stderr.WriteString("appengine load data")
-	cache, err := getCache(ctx, "gzdata")
-	if err != nil {
-		return nil, err
-	}
-	return parseData(cache)
-}
-
 func newHTTPClient(ctx context.Context) *http.Client {
 	return urlfetch.Client(ctx)
 }
@@ -112,7 +100,7 @@ func writePage(ctx context.Context, page string, content []byte) error {
 }
 
 func putCache(ctx context.Context, name string, c *Cache) error {
-	_, err := datastore.Put(ctx, datastore.NewKey(ctx, entityPrefix+"Cache", name, 0, nil), &c)
+	_, err := datastore.Put(ctx, datastore.NewKey(ctx, entityPrefix+"Cache", name, 0, nil), c)
 	return err
 }
 
@@ -121,12 +109,12 @@ func getToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return cache.Value, nil
+	return string(cache.Value), nil
 }
 
 // Store a token in the database
 func setTokenHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx := appengine.NewContext(r)
 	r.ParseForm()
 	if value := r.Form.Get("value"); value != "" {
 		var token Cache
