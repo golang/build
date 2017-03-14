@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build !appenginevm
 // +build !appengine
 
 package devapp
@@ -25,7 +26,7 @@ import (
 var tokenFile = flag.String("token", "", "read GitHub token personal access token from `file` (default $HOME/.github-issue-token)")
 
 func init() {
-	log = &stderrLogger{}
+	logger = &stderrLogger{}
 	// TODO don't bind to the working directory.
 	http.Handle("/static/", http.FileServer(http.Dir(".")))
 	http.HandleFunc("/favicon.ico", faviconHandler)
@@ -170,9 +171,4 @@ func getToken(ctx context.Context) (string, error) {
 
 func getContext(r *http.Request) context.Context {
 	return r.Context()
-}
-
-func faviconHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "image/x-icon")
-	http.ServeFile(w, r, "./static/favicon.ico")
 }

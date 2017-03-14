@@ -17,7 +17,7 @@ type Cache struct {
 	// Value contains a gzipped gob'd serialization of the object
 	// to be cached. It must be []byte to avail ourselves of the
 	// datastore's 1 MB size limit.
-	Value []byte
+	Value []byte `datastore:"value,noindex"`
 }
 
 func unpackCache(cache *Cache, data interface{}) error {
@@ -54,6 +54,6 @@ func writeCache(ctx context.Context, name string, data interface{}) error {
 		return err
 	}
 	cache.Value = cacheout.Bytes()
-	log.Infof(ctx, "Cache %q update finished; writing %d bytes", name, cacheout.Len())
+	logger.Infof(ctx, "Cache %q update finished; writing %d bytes", name, cacheout.Len())
 	return putCache(ctx, name, &cache)
 }

@@ -11,7 +11,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	stdlog "log"
+	"log"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -53,23 +53,23 @@ func ctxHandler(fn func(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := getContext(r)
 		if err := fn(ctx, w, r); err != nil {
-			log.Criticalf(ctx, "handler failed: %v", err)
+			logger.Criticalf(ctx, "handler failed: %v", err)
 			http.Error(w, err.Error(), 500)
 		}
 	})
 }
 
 func logFn(ctx context.Context, w io.Writer) func(string, ...interface{}) {
-	logger := stdlog.New(w, "", stdlog.Lmicroseconds)
+	stdLogger := log.New(w, "", log.Lmicroseconds)
 	return func(format string, args ...interface{}) {
-		logger.Printf(format, args...)
-		log.Infof(ctx, format, args...)
+		stdLogger.Printf(format, args...)
+		logger.Infof(ctx, format, args...)
 	}
 }
 
 type Page struct {
 	// Content is the complete HTML of the page.
-	Content []byte
+	Content []byte `datastore:"content,noindex"`
 }
 
 func servePage(w http.ResponseWriter, r *http.Request, page string) {
@@ -106,7 +106,7 @@ func update(ctx context.Context, w http.ResponseWriter, _ *http.Request) error {
 	ct := &countTransport{newTransport(ctx), 0}
 	gh := godash.NewGitHubClient("golang/go", token, ct)
 	defer func() {
-		log.Infof(ctx, "Sent %d requests to GitHub", ct.Count())
+		logger.Infof(ctx, "Sent %d requests to GitHub", ct.Count())
 	}()
 	ger := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
 	// Without a deadline, urlfetch will use a 5s timeout which is too slow for Gerrit.
@@ -120,12 +120,12 @@ func update(ctx context.Context, w http.ResponseWriter, _ *http.Request) error {
 	}
 
 	if err := data.Reviewers.LoadGithub(ctx, gh); err != nil {
-		log.Criticalf(ctx, "failed to load reviewers: %v", err)
+		logger.Criticalf(ctx, "failed to load reviewers: %v", err)
 		return err
 	}
 	l := logFn(ctx, w)
 	if err := data.FetchData(gerctx, gh, ger, l, 7, false, false); err != nil {
-		log.Criticalf(ctx, "failed to fetch data: %v", err)
+		logger.Criticalf(ctx, "failed to fetch data: %v", err)
 		return err
 	}
 
@@ -152,4 +152,31 @@ func update(ctx context.Context, w http.ResponseWriter, _ *http.Request) error {
 		}
 	}
 	return writeCache(ctx, "gzdata", &data)
+}
+
+// POST /setToken
+//
+// Store a github token in the database, so we can use it for API calls.
+// Necessary because the only available configuration method is the app.yaml
+// file, which we want to check in, and can't store secrets.
+func setTokenHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		w.Header().Set("Allow", "POST")
+		http.Error(w, "Method not allowed", 405)
+		return
+	}
+	ctx := r.Context()
+	r.ParseForm()
+	if value := r.Form.Get("value"); value != "" {
+		var token Cache
+		token.Value = []byte(value)
+		if err := putCache(ctx, "github-token", &token); err != nil {
+			http.Error(w, err.Error(), 500)
+		}
+	}
+}
+
+// GET /favicon.ico
+func faviconHandler(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "./static/favicon.ico")
 }

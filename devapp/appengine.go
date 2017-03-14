@@ -18,23 +18,22 @@ import (
 )
 
 func init() {
-	onAppengine = !appengine.IsDevAppServer()
-	log = &appengineLogger{}
+	logger = appengineLogger{}
 
 	http.HandleFunc("/setToken", setTokenHandler)
 }
 
 type appengineLogger struct{}
 
-func (a *appengineLogger) Infof(ctx context.Context, format string, args ...interface{}) {
+func (a appengineLogger) Infof(ctx context.Context, format string, args ...interface{}) {
 	applog.Infof(ctx, format, args...)
 }
 
-func (a *appengineLogger) Errorf(ctx context.Context, format string, args ...interface{}) {
+func (a appengineLogger) Errorf(ctx context.Context, format string, args ...interface{}) {
 	applog.Errorf(ctx, format, args...)
 }
 
-func (a *appengineLogger) Criticalf(ctx context.Context, format string, args ...interface{}) {
+func (a appengineLogger) Criticalf(ctx context.Context, format string, args ...interface{}) {
 	applog.Criticalf(ctx, format, args...)
 }
 
@@ -106,19 +105,6 @@ func getToken(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return string(cache.Value), nil
-}
-
-// Store a token in the database
-func setTokenHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := appengine.NewContext(r)
-	r.ParseForm()
-	if value := r.Form.Get("value"); value != "" {
-		var token Cache
-		token.Value = []byte(value)
-		if err := putCache(ctx, "github-token", &token); err != nil {
-			http.Error(w, err.Error(), 500)
-		}
-	}
 }
 
 func getContext(r *http.Request) context.Context {

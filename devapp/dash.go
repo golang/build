@@ -18,15 +18,15 @@ import (
 	"golang.org/x/net/context"
 )
 
-var onAppengine = false
-
-type logger interface {
+type pkgLogger interface {
+	// This needs to be x/net/context because App Engine Standard still runs on
+	// Go 1.6.
 	Infof(context.Context, string, ...interface{})
 	Errorf(context.Context, string, ...interface{})
 	Criticalf(context.Context, string, ...interface{})
 }
 
-var log logger
+var logger pkgLogger
 
 func findEmail(ctx context.Context, data *godash.Data) string {
 	email := currentUserEmail(ctx)
@@ -118,7 +118,7 @@ func showDash(w http.ResponseWriter, req *http.Request) {
 
 	tmpl, err := ioutil.ReadFile("template/dash.html")
 	if err != nil {
-		log.Errorf(ctx, "reading template: %v", err)
+		logger.Errorf(ctx, "reading template: %v", err)
 		return
 	}
 	t, err := template.New("main").Funcs(template.FuncMap{
@@ -135,7 +135,7 @@ func showDash(w http.ResponseWriter, req *http.Request) {
 		"release": d.release,
 	}).Parse(string(tmpl))
 	if err != nil {
-		log.Errorf(ctx, "parsing template: %v", err)
+		logger.Errorf(ctx, "parsing template: %v", err)
 		return
 	}
 
@@ -174,7 +174,7 @@ func showDash(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if err := t.Execute(w, tData); err != nil {
-		log.Errorf(ctx, "execute: %v", err)
+		logger.Errorf(ctx, "execute: %v", err)
 		http.Error(w, "error executing template", 500)
 		return
 	}
