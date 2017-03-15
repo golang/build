@@ -19,7 +19,6 @@ import (
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -55,6 +54,7 @@ import (
 	"golang.org/x/build/livelog"
 	"golang.org/x/build/types"
 	"golang.org/x/crypto/acme/autocert"
+	perfstorage "golang.org/x/perf/storage"
 	"golang.org/x/time/rate"
 )
 
@@ -79,11 +79,17 @@ var Version string // set by linker -X
 // finishes before destroying buildlets.
 const devPause = false
 
+// stagingTryWork is a debug option to enable or disable running trybot work in staging.
+// If enabled, only open CLs containing "Run-StagingTryBot" in a comment will be run.
+const stagingTryWork = true
+
 var (
-	masterKeyFile = flag.String("masterkey", "", "Path to builder master key. Else fetched using GCE project attribute 'builder-master-key'.")
-	mode          = flag.String("mode", "", "Valid modes are 'dev', 'prod', or '' for auto-detect. dev means localhost development, not be confused with staging on go-dashboard-dev, which is still the 'prod' mode.")
-	buildEnvName  = flag.String("env", "", "The build environment configuration to use. Not required if running on GCE.")
-	devEnableGCE  = flag.Bool("dev_gce", false, "Whether or not to enable the GCE pool when in dev mode. The pool is enabled by default in prod mode.")
+	masterKeyFile  = flag.String("masterkey", "", "Path to builder master key. Else fetched using GCE project attribute 'builder-master-key'.")
+	mode           = flag.String("mode", "", "Valid modes are 'dev', 'prod', or '' for auto-detect. dev means localhost development, not be confused with staging on go-dashboard-dev, which is still the 'prod' mode.")
+	buildEnvName   = flag.String("env", "", "The build environment configuration to use. Not required if running on GCE.")
+	devEnableGCE   = flag.Bool("dev_gce", false, "Whether or not to enable the GCE pool when in dev mode. The pool is enabled by default in prod mode.")
+	shouldRunBench = flag.Bool("run_bench", false, "Whether or not to run benchmarks on trybot commits. Override by GCE project attribute 'farmer-run-bench'.")
+	perfServer     = flag.String("perf_server", "", "Upload benchmark results to `server`. Overrides buildenv default for testing.")
 )
 
 // LOCK ORDER:
@@ -673,18 +679,9 @@ func findWorkLoop(work chan<- builderRev) {
 
 func findWork(work chan<- builderRev) error {
 	var bs types.BuildStatus
-	res, err := http.Get(buildEnv.DashBase() + "?mode=json")
-	if err != nil {
+	if err := dash("GET", "", url.Values{"mode": {"json"}}, nil, &bs); err != nil {
 		return err
 	}
-	defer res.Body.Close()
-	if err := json.NewDecoder(res.Body).Decode(&bs); err != nil {
-		return err
-	}
-	if res.StatusCode != 200 {
-		return fmt.Errorf("unexpected http status %v", res.Status)
-	}
-
 	knownToDashboard := map[string]bool{} // keys are builder
 	for _, b := range bs.Builders {
 		knownToDashboard[b] = true
@@ -811,11 +808,15 @@ func findTryWorkLoop() {
 }
 
 func findTryWork() error {
-	if inStaging && true {
+	query := "label:Run-TryBot=1 label:TryBot-Result=0 status:open"
+	if inStaging && !stagingTryWork {
 		return nil
 	}
-	cis, err := gerritClient.QueryChanges(context.Background(), "label:Run-TryBot=1 label:TryBot-Result=0 status:open", gerrit.QueryChangesOpt{
-		Fields: []string{"CURRENT_REVISION"},
+	if inStaging {
+		query = `comment:"Run-StagingTryBot" label:TryBot-Result=0 status:open`
+	}
+	cis, err := gerritClient.QueryChanges(context.Background(), query, gerrit.QueryChangesOpt{
+		Fields: []string{"CURRENT_REVISION", "CURRENT_COMMIT"},
 	})
 	if err != nil {
 		return err
@@ -849,7 +850,7 @@ func findTryWork() error {
 			// already in progress
 			continue
 		}
-		ts, err := newTrySet(key)
+		ts, err := newTrySet(key, ci)
 		if err != nil {
 			if err == errHeadUnknown {
 				continue // benign transient error
@@ -891,6 +892,7 @@ type trySet struct {
 	// immutable
 	tryKey
 	tryID string // "T" + 9 random hex
+	ci    *gerrit.ChangeInfo
 
 	// mu guards state and errMsg
 	// See LOCK ORDER comment above.
@@ -900,16 +902,18 @@ type trySet struct {
 }
 
 type trySetState struct {
-	remain int
-	failed []string // build names
-	builds []*buildStatus
+	remain       int
+	failed       []string // build names
+	builds       []*buildStatus
+	benchResults []string // builder names
 }
 
 func (ts trySetState) clone() trySetState {
 	return trySetState{
-		remain: ts.remain,
-		failed: append([]string(nil), ts.failed...),
-		builds: append([]*buildStatus(nil), ts.builds...),
+		remain:       ts.remain,
+		failed:       append([]string(nil), ts.failed...),
+		builds:       append([]*buildStatus(nil), ts.builds...),
+		benchResults: append([]string(nil), ts.benchResults...),
 	}
 }
 
@@ -917,11 +921,12 @@ var errHeadUnknown = errors.New("Cannot create trybot set without a known Go hea
 
 // newTrySet creates a new trySet group of builders for a given key,
 // the (Change-ID, Commit, Repo) tuple.
+// ci must contain the gerrit ChangeInfo for this change, and it must be fetched with the "CURRENT_REVISION" and "CURRENT_COMMIT" fields.
 // It also starts goroutines for each build.
 // This will fail if the current Go repo HEAD is unknown.
 //
 // Must hold statusMu.
-func newTrySet(key tryKey) (*trySet, error) {
+func newTrySet(key tryKey, ci *gerrit.ChangeInfo) (*trySet, error) {
 	goHead := getRepoHead("go")
 	if key.Repo != "go" && goHead == "" {
 		// We don't know the go HEAD yet (but we will)
@@ -939,6 +944,7 @@ func newTrySet(key tryKey) (*trySet, error) {
 	ts := &trySet{
 		tryKey: key,
 		tryID:  "T" + randHex(9),
+		ci:     ci,
 		trySetState: trySetState{
 			remain: len(builders),
 			builds: make([]*buildStatus, len(builders)),
@@ -1078,15 +1084,20 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 	if !succeeded {
 		buildLog = bs.output.String()
 	}
+	hasBenchResults := bs.hasBenchResults
 	bs.mu.Unlock()
 
 	ts.mu.Lock()
+	if hasBenchResults {
+		ts.benchResults = append(ts.benchResults, bs.name)
+	}
 	ts.remain--
 	remain := ts.remain
 	if !succeeded {
 		ts.failed = append(ts.failed, bconf.Name)
 	}
 	numFail := len(ts.failed)
+	benchResults := append([]string(nil), ts.benchResults...)
 	ts.mu.Unlock()
 
 	if !succeeded {
@@ -1133,6 +1144,9 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 			ts.mu.Unlock()
 			score, msg = -1, fmt.Sprintf("%d of %d TryBots failed:\n%s\nConsult https://build.golang.org/ to see whether they are new failures.",
 				numFail, len(ts.builds), errMsg)
+		}
+		if len(benchResults) > 0 {
+			msg += fmt.Sprintf("\nBenchmark results for %s are available at:\nhttps://perf.golang.org/search?q=cl:%d+try:%s", strings.Join(benchResults, ", "), ts.ci.ChangeNumber, ts.tryID)
 		}
 		if err := gerritClient.SetReview(context.Background(), ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
 			Message: msg,
@@ -1624,6 +1638,14 @@ func (st *buildStatus) spanRecord(sp *span, err error) *types.SpanRecord {
 	return rec
 }
 
+// shouldBench returns whether we should attempt to run benchmarks
+func (st *buildStatus) shouldBench() bool {
+	if !*shouldRunBench {
+		return false
+	}
+	return st.isTry() && !st.isSubrepo() && st.conf.RunBench
+}
+
 // runAllSharded runs make.bash and then shards the test execution.
 // remoteErr and err are as described at the top of this file.
 //
@@ -1633,12 +1655,14 @@ func (st *buildStatus) spanRecord(sp *span, err error) *types.SpanRecord {
 func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 	st.getHelpersReadySoon()
 
-	remoteErr, err = st.runMake()
-	if err != nil {
-		return nil, err
-	}
-	if remoteErr != nil {
-		return fmt.Errorf("build failed: %v", remoteErr), nil
+	if !st.useSnapshot() {
+		remoteErr, err = st.runMake(st.bc, "go", st)
+		if err != nil {
+			return nil, err
+		}
+		if remoteErr != nil {
+			return fmt.Errorf("build failed: %v", remoteErr), nil
+		}
 	}
 	if st.conf.StopAfterMake {
 		return nil, nil
@@ -1653,6 +1677,7 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 	} else {
 		remoteErr, err = st.runTests(st.getHelpers())
 	}
+
 	if err != nil {
 		return nil, fmt.Errorf("runTests: %v", err)
 	}
@@ -1747,17 +1772,14 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *crossCompileConfig) (
 }
 
 // runMake builds the tool chain.
+// goroot is relative to the workdir with forward slashes.
+// w is the Writer to send build output to.
 // remoteErr and err are as described at the top of this file.
-func (st *buildStatus) runMake() (remoteErr, err error) {
-	// Don't do this if we're using a pre-built snapshot.
-	if st.useSnapshot() {
-		return nil, nil
-	}
-
+func (st *buildStatus) runMake(bc *buildlet.Client, goroot string, w io.Writer) (remoteErr, err error) {
 	// Build the source code.
 	makeSpan := st.createSpan("make", st.conf.MakeScript())
-	remoteErr, err = st.bc.Exec(path.Join("go", st.conf.MakeScript()), buildlet.ExecOpts{
-		Output:   st,
+	remoteErr, err = bc.Exec(path.Join(goroot, st.conf.MakeScript()), buildlet.ExecOpts{
+		Output:   w,
 		ExtraEnv: append(st.conf.Env(), "GOBIN="),
 		Debug:    true,
 		Args:     st.conf.MakeScriptArgs(),
@@ -1775,8 +1797,8 @@ func (st *buildStatus) runMake() (remoteErr, err error) {
 	// Need to run "go install -race std" before the snapshot + tests.
 	if st.conf.IsRace() {
 		sp := st.createSpan("install_race_std")
-		remoteErr, err = st.bc.Exec("go/bin/go", buildlet.ExecOpts{
-			Output:   st,
+		remoteErr, err = bc.Exec(path.Join(goroot, "bin/go"), buildlet.ExecOpts{
+			Output:   w,
 			ExtraEnv: append(st.conf.Env(), "GOBIN="),
 			Debug:    true,
 			Args:     []string{"install", "-race", "std"},
@@ -1867,7 +1889,7 @@ func (st *buildStatus) writeGoSourceTo(bc *buildlet.Client) error {
 		return sp.done(fmt.Errorf("writing VERSION tgz: %v", err))
 	}
 
-	srcTar, err := getSourceTgz(st, "go", st.rev, st.isTry())
+	srcTar, err := getSourceTgz(st, "go", st.rev)
 	if err != nil {
 		return err
 	}
@@ -1998,7 +2020,7 @@ func (st *buildStatus) shouldSkipTest(testName string) bool {
 	return false
 }
 
-func (st *buildStatus) newTestSet(names []string) *testSet {
+func (st *buildStatus) newTestSet(names []string, benchmarks []*benchmarkItem) *testSet {
 	set := &testSet{
 		st: st,
 	}
@@ -2006,6 +2028,17 @@ func (st *buildStatus) newTestSet(names []string) *testSet {
 		set.items = append(set.items, &testItem{
 			set:      set,
 			name:     name,
+			duration: testDuration(name),
+			take:     make(chan token, 1),
+			done:     make(chan token),
+		})
+	}
+	for _, bench := range benchmarks {
+		name := "bench:" + bench.name()
+		set.items = append(set.items, &testItem{
+			set:      set,
+			name:     name,
+			bench:    bench,
 			duration: testDuration(name),
 			take:     make(chan token, 1),
 			done:     make(chan token),
@@ -2296,7 +2329,19 @@ func testDuration(name string) time.Duration {
 	if secs, ok := fixedTestDuration[name]; ok {
 		return secs.Duration()
 	}
+	if strings.HasPrefix(name, "bench:") {
+		// Assume benchmarks are roughly 20 seconds per run.
+		return 2 * benchRuns * 20 * time.Second
+	}
 	return minGoTestSpeed * 2
+}
+
+func (st *buildStatus) fetchSubrepo(bc *buildlet.Client, repo, rev string) error {
+	tgz, err := getSourceTgz(st, repo, rev)
+	if err != nil {
+		return err
+	}
+	return bc.PutTar(tgz, "gopath/src/"+subrepoPrefix+repo)
 }
 
 func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
@@ -2316,12 +2361,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	// fetch checks out the provided sub-repo to the buildlet's workspace.
 	fetch := func(repo, rev string) error {
 		fetched[repo] = true
-		isTry := st.trySet != nil && repo == st.subName // i.e. hit Gerrit directly
-		tgz, err := getSourceTgz(st, repo, rev, isTry)
-		if err != nil {
-			return err
-		}
-		return st.bc.PutTar(tgz, "gopath/src/"+subrepoPrefix+repo)
+		return st.fetchSubrepo(st.bc, repo, rev)
 	}
 
 	// findDeps uses 'go list' on the checked out repo to find its
@@ -2415,7 +2455,16 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	if err != nil {
 		return nil, fmt.Errorf("distTestList exec: %v", err)
 	}
-	set := st.newTestSet(testNames)
+	var benches []*benchmarkItem
+	if st.shouldBench() {
+		sp := st.createSpan("enumerate_benchmarks")
+		b, err := st.enumerateBenchmarks(st.bc)
+		sp.done(err)
+		if err == nil {
+			benches = b
+		}
+	}
+	set := st.newTestSet(testNames, benches)
 	st.logEventTime("starting_tests", fmt.Sprintf("%d tests", len(set.items)))
 	startTime := time.Now()
 
@@ -2494,6 +2543,8 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 		close(buildletsGone)
 	}()
 
+	benchFiles := st.benchFiles()
+
 	var lastBanner string
 	var serialDuration time.Duration
 	for _, ti := range set.items {
@@ -2509,6 +2560,14 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 			case <-buildletsGone:
 				set.cancelAll()
 				return nil, fmt.Errorf("dist test failed: all buildlets had network errors or timeouts, yet tests remain")
+			}
+		}
+
+		if ti.bench != nil {
+			for i, s := range ti.bench.output {
+				if i < len(benchFiles) {
+					benchFiles[i].out.WriteString(s)
+				}
 			}
 		}
 
@@ -2542,7 +2601,68 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	}
 	st.logEventTime("tests_complete", msg)
 	fmt.Fprintf(st, "\nAll tests passed.\n")
+	for _, f := range benchFiles {
+		if f.out.Len() > 0 {
+			st.hasBenchResults = true
+		}
+	}
+	if st.hasBenchResults {
+		sp := st.createSpan("upload_bench_results")
+		sp.done(st.uploadBenchResults(st.ctx, benchFiles))
+	}
 	return nil, nil
+}
+
+func (st *buildStatus) uploadBenchResults(ctx context.Context, files []*benchFile) error {
+	s := *perfServer
+	if s == "" {
+		s = buildEnv.PerfDataURL
+	}
+	client := &perfstorage.Client{BaseURL: s, HTTPClient: oAuthHTTPClient}
+	u := client.NewUpload(ctx)
+	for _, b := range files {
+		w, err := u.CreateFile(b.name)
+		if err != nil {
+			u.Abort()
+			return err
+		}
+		if _, err := b.out.WriteTo(w); err != nil {
+			u.Abort()
+			return err
+		}
+	}
+	status, err := u.Commit()
+	if err != nil {
+		return err
+	}
+	st.logEventTime("bench_upload", status.UploadID)
+	return nil
+}
+
+type benchFile struct {
+	name string
+	out  bytes.Buffer
+}
+
+func (st *buildStatus) benchFiles() []*benchFile {
+	if !st.shouldBench() {
+		return nil
+	}
+	rev := st.trySet.ci.Revisions[st.trySet.ci.CurrentRevision]
+	ps := rev.PatchSetNumber
+	benchFiles := []*benchFile{
+		{name: "orig.txt"},
+		{name: fmt.Sprintf("ps%d.txt", ps)},
+	}
+	fmt.Fprintf(&benchFiles[0].out, "cl: %d\nps: %d\ntry: %s\nbuildlet: %s\nbranch: %s\nrepo: https://go.googlesource.com/%s\n",
+		st.trySet.ci.ChangeNumber, ps, st.trySet.tryID,
+		st.name, st.trySet.ci.Branch, st.trySet.ci.Project,
+	)
+	if inStaging {
+		benchFiles[0].out.WriteString("staging: true\n")
+	}
+	benchFiles[1].out.Write(benchFiles[0].out.Bytes())
+	return benchFiles
 }
 
 const (
@@ -2607,20 +2727,25 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 	var buf bytes.Buffer
 	t0 := time.Now()
 	timeout := execTimeout(names)
-	remoteErr, err := bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
-		// We set Dir to "." instead of the default ("go/bin") so when the dist tests
-		// try to run os/exec.Command("go", "test", ...), the LookPath of "go" doesn't
-		// return "./go.exe" (which exists in the current directory: "go/bin") and then
-		// fail when dist tries to run the binary in dir "$GOROOT/src", since
-		// "$GOROOT/src" + "./go.exe" doesn't exist. Perhaps LookPath should return
-		// an absolute path.
-		Dir:      ".",
-		Output:   &buf, // see "maybe stream lines" TODO below
-		ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot),
-		Timeout:  timeout,
-		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
-		Args:     args,
-	})
+	var remoteErr, err error
+	if ti := tis[0]; ti.bench != nil {
+		remoteErr, err = ti.bench.run(st, bc, &buf)
+	} else {
+		remoteErr, err = bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+			// We set Dir to "." instead of the default ("go/bin") so when the dist tests
+			// try to run os/exec.Command("go", "test", ...), the LookPath of "go" doesn't
+			// return "./go.exe" (which exists in the current directory: "go/bin") and then
+			// fail when dist tries to run the binary in dir "$GOROOT/src", since
+			// "$GOROOT/src" + "./go.exe" doesn't exist. Perhaps LookPath should return
+			// an absolute path.
+			Dir:      ".",
+			Output:   &buf, // see "maybe stream lines" TODO below
+			ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot),
+			Timeout:  timeout,
+			Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+			Args:     args,
+		})
+	}
 	execDuration := time.Since(t0)
 	sp.done(err)
 	if err != nil {
@@ -2751,6 +2876,8 @@ type testItem struct {
 	name     string        // "go_test:sort"
 	duration time.Duration // optional approximate size
 
+	bench *benchmarkItem // If populated, this is a benchmark instead of a regular test.
+
 	take chan token // buffered size 1: sending takes ownership of rest of fields:
 
 	done    chan token // closed when done; guards output & failed
@@ -2828,6 +2955,8 @@ type buildStatus struct {
 	cancel          context.CancelFunc // used to cancel context; for use by setDone only
 
 	hasBuildlet int32 // atomic: non-zero if this build has a buildlet; for status.go.
+
+	hasBenchResults bool // set by runTests, may only be used when build() returns.
 
 	mu              sync.Mutex       // guards following
 	failURL         string           // if non-empty, permanent URL of failure
@@ -3093,7 +3222,7 @@ func useGitMirror() bool {
 
 // repo is go.googlesource.com repo ("go", "net", etc)
 // rev is git revision.
-func getSourceTgz(sl spanLogger, repo, rev string, isTry bool) (tgz io.Reader, err error) {
+func getSourceTgz(sl spanLogger, repo, rev string) (tgz io.Reader, err error) {
 	sp := sl.createSpan("get_source")
 	defer func() { sp.done(err) }()
 

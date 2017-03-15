@@ -431,6 +431,9 @@ type BuildConfig struct {
 	// the tarball in under ~5 minutes.
 	SkipSnapshot bool
 
+	// RunBench causes the coordinator to run benchmarks on this buildlet type.
+	RunBench bool
+
 	// StopAfterMake causes the build to stop after the make
 	// script completes, returning its result as the result of the
 	// whole build. It does not run or compile any of the tests,
@@ -712,6 +715,7 @@ func init() {
 		TryBot:            true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 4,
+		RunBench:          true,
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-110",
@@ -738,6 +742,7 @@ func init() {
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		numTestHelpers:    1,
 		numTryTestHelpers: 3,
+		RunBench:          true,
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-386-387",
@@ -750,6 +755,7 @@ func init() {
 		HostType:       "host-linux-kubestd",
 		TryBot:         true,
 		numTestHelpers: 3,
+		RunBench:       true,
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-alpine",
@@ -849,6 +855,7 @@ func init() {
 		FlakyNet:          true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 7,
+		RunBench:          true,
 	})
 	addBuilder(BuildConfig{
 		Name:          "linux-arm-nativemake",
@@ -917,6 +924,7 @@ func init() {
 		TryBot:            true,
 		numTestHelpers:    1,
 		numTryTestHelpers: 5,
+		RunBench:          true,
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-race",

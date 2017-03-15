@@ -28,6 +28,7 @@ import (
 	compute "google.golang.org/api/compute/v1"
 	dm "google.golang.org/api/deploymentmanager/v2"
 	"google.golang.org/api/googleapi"
+	oauth2api "google.golang.org/api/oauth2/v2"
 )
 
 var (
@@ -238,6 +239,7 @@ func createCoordinator() error {
 					compute.ComputeScope,
 					compute.CloudPlatformScope,
 					datastore.ScopeDatastore,
+					oauth2api.UserinfoEmailScope,
 				},
 			},
 		},

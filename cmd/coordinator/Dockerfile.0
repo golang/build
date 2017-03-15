@@ -12,6 +12,9 @@ LABEL maintainer "golang-dev@googlegroups.com"
 RUN go get -d cloud.google.com/go/compute/metadata cloud.google.com/go/datastore cloud.google.com/go/storage
 RUN cd /go/src/cloud.google.com/go && git reset --hard cd0da878c66091060d2e7403abd62192b3e387e0
 
+RUN go get -d golang.org/x/perf/storage
+RUN cd /go/src/golang.org/x/perf && git reset --hard b74b45749c47cd1edf5b64df78ecf13bd2dd944f
+
 RUN go get -d golang.org/x/time/rate
 RUN cd /go/src/golang.org/x/time/rate && git reset --hard f51c12702a4d776e4c1fa9b0fabab841babae631
 

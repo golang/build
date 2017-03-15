@@ -71,6 +71,9 @@ type Environment struct {
 	// DashURL is the base URL of the build dashboard, ending in a slash.
 	DashURL string
 
+	// PerfDataURL is the base URL of the benchmark storage server.
+	PerfDataURL string
+
 	// CoordinatorURL is the location from which the coordinator
 	// binary will be downloaded.
 	// This is only used by cmd/coordinator/buildongce/create.go when
@@ -171,6 +174,7 @@ var Staging = &Environment{
 	KubeName:        "buildlets",
 	KubeMachineType: "n1-standard-8",
 	DashURL:         "https://go-dashboard-dev.appspot.com/",
+	PerfDataURL:     "https://perfdata.golang.org",
 	CoordinatorURL:  "https://storage.googleapis.com/dev-go-builder-data/coordinator",
 	CoordinatorName: "farmer",
 	BuildletBucket:  "dev-go-builder-data",
@@ -192,6 +196,7 @@ var Production = &Environment{
 	KubeName:            "buildlets",
 	KubeMachineType:     "n1-standard-32",
 	DashURL:             "https://build.golang.org/",
+	PerfDataURL:         "https://perfdata.golang.org",
 	CoordinatorURL:      "https://storage.googleapis.com/go-builder-data/coordinator",
 	CoordinatorName:     "farmer",
 	BuildletBucket:      "go-builder-data",

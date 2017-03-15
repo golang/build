@@ -79,20 +79,9 @@ func dash(meth, cmd string, args url.Values, req, resp interface{}) error {
 
 	// Read JSON-encoded Response into provided resp
 	// and return an error if present.
-	var result = struct {
-		Response interface{}
-		Error    string
-	}{
-		// Put the provided resp in here as it can be a pointer to
-		// some value we should unmarshal into.
-		Response: resp,
-	}
-	if err = json.Unmarshal(body.Bytes(), &result); err != nil {
+	if err = json.Unmarshal(body.Bytes(), resp); err != nil {
 		log.Printf("json unmarshal %#q: %s\n", body.Bytes(), err)
 		return err
-	}
-	if result.Error != "" {
-		return errors.New(result.Error)
 	}
 
 	return nil
@@ -121,7 +110,17 @@ func recordResult(br builderRev, ok bool, buildLog string, runTime time.Duration
 		log.Printf("In dev mode, not recording result: %v", req)
 		return nil
 	}
-	return dash("POST", "result", args, req, nil)
+	var result struct {
+		Response interface{}
+		Error    string
+	}
+	if err := dash("POST", "result", args, req, &result); err != nil {
+		return err
+	}
+	if result.Error != "" {
+		return errors.New(result.Error)
+	}
+	return nil
 }
 
 // pingDashboard runs in its own goroutine, created periodically to

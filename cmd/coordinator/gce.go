@@ -15,6 +15,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"path"
 	"sort"
@@ -36,6 +37,7 @@ import (
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
+	oauth2api "google.golang.org/api/oauth2/v2"
 )
 
 func init() {
@@ -65,6 +67,10 @@ var (
 
 	initGCECalled bool
 )
+
+// oAuthHTTPClient is the OAuth2 HTTP client used to make API calls to Google Cloud APIs.
+// It is initialized by initGCE.
+var oAuthHTTPClient *http.Client
 
 func initGCE() error {
 	initGCECalled = true
@@ -106,6 +112,10 @@ func initGCE() error {
 			return errors.New("The coordinator is not running with access to read and write Compute resources. VM support disabled.")
 
 		}
+
+		if value, err := metadata.ProjectAttributeValue("farmer-run-bench"); err == nil {
+			*shouldRunBench, _ = strconv.ParseBool(value)
+		}
 	}
 
 	cfgDump, _ := json.MarshalIndent(buildEnv, "", "  ")
@@ -128,7 +138,7 @@ func initGCE() error {
 		}
 	}
 
-	tokenSource, err = google.DefaultTokenSource(ctx, compute.CloudPlatformScope)
+	tokenSource, err = google.DefaultTokenSource(ctx, oauth2api.UserinfoEmailScope, compute.CloudPlatformScope)
 	if err != nil {
 		if *mode == "dev" {
 			// don't try to do anything else with GCE, as it will likely fail
@@ -136,8 +146,8 @@ func initGCE() error {
 		}
 		log.Fatalf("failed to get a token source: %v", err)
 	}
-	httpClient := oauth2.NewClient(ctx, tokenSource)
-	computeService, _ = compute.New(httpClient)
+	oAuthHTTPClient = oauth2.NewClient(ctx, tokenSource)
+	computeService, _ = compute.New(oAuthHTTPClient)
 	errTryDeps = checkTryBuildDeps()
 	if errTryDeps != nil {
 		log.Printf("TryBot builders disabled due to error: %v", errTryDeps)
