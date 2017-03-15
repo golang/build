@@ -5,10 +5,14 @@
 package maintner
 
 import (
+	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/ptypes"
 	google_protobuf "github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/google/go-github/github"
@@ -49,8 +53,13 @@ func (mt mutationTest) test(t *testing.T, muts ...*maintpb.Mutation) {
 	for _, m := range muts {
 		c.processMutationLocked(m)
 	}
-	if !reflect.DeepEqual(c, mt.want) {
-		t.Errorf("corpus mismatch\n got: %#v\nwant: %#v", c, mt.want)
+	c.github.c = nil
+	mt.want.github.c = nil
+	if !reflect.DeepEqual(c.github, mt.want.github) {
+		t.Errorf("corpus mismatch:\n got: %s\n\nwant: %s\n\ndiff: %v",
+			spew.Sdump(c.github),
+			spew.Sdump(mt.want.github),
+			diffPath(reflect.ValueOf(c.github), reflect.ValueOf(mt.want.github)))
 	}
 }
 
@@ -66,18 +75,24 @@ func init() {
 
 func TestProcessMutation_Github_NewIssue(t *testing.T) {
 	c := NewCorpus(&dummyMutationLogger{})
-	c.githubUsers = map[int64]*githubUser{
+	github := &githubGlobal{c: c}
+	c.github = github
+	github.users = map[int64]*githubUser{
 		u1.ID: u1,
 	}
-	c.githubIssues = map[githubRepo]map[int32]*githubIssue{
-		"golang/go": map[int32]*githubIssue{
-			3: &githubIssue{
-				Number:    3,
-				User:      u1,
-				Title:     "some title",
-				Body:      "some body",
-				Created:   t1,
-				Assignees: nil,
+	github.repos = map[githubRepoID]*githubRepo{
+		githubRepoID{"golang", "go"}: &githubRepo{
+			github: github,
+			id:     githubRepoID{"golang", "go"},
+			issues: map[int32]*githubIssue{
+				3: &githubIssue{
+					Number:    3,
+					User:      u1,
+					Title:     "some title",
+					Body:      "some body",
+					Created:   t1,
+					Assignees: nil,
+				},
 			},
 		},
 	}
@@ -97,55 +112,6 @@ func TestProcessMutation_Github_NewIssue(t *testing.T) {
 	})
 }
 
-func TestProcessMutation_OldIssue(t *testing.T) {
-	// process a mutation with an Updated timestamp older than the existing
-	// issue.
-	c := NewCorpus(&dummyMutationLogger{})
-	c.githubUsers = map[int64]*githubUser{
-		u1.ID: u1,
-	}
-	c.githubIssues = map[githubRepo]map[int32]*githubIssue{
-		"golang/go": map[int32]*githubIssue{
-			3: &githubIssue{
-				Number:    3,
-				User:      u1,
-				Body:      "some body",
-				Created:   t2,
-				Updated:   t2,
-				Assignees: nil,
-			},
-		},
-	}
-	mutationTest{want: c}.test(t, &maintpb.Mutation{
-		GithubIssue: &maintpb.GithubIssueMutation{
-			Owner:  "golang",
-			Repo:   "go",
-			Number: 3,
-			User: &maintpb.GithubUser{
-				Login: "gopherbot",
-				Id:    100,
-			},
-			Body:    "some body",
-			Created: tp2,
-			Updated: tp2,
-		},
-	}, &maintpb.Mutation{
-		// The second issue is older than the first and should be ignored.
-		GithubIssue: &maintpb.GithubIssueMutation{
-			Owner:  "golang",
-			Repo:   "go",
-			Number: 3,
-			User: &maintpb.GithubUser{
-				Login: "gopherbot",
-				Id:    100,
-			},
-			Body:    "issue body changed",
-			Created: tp1,
-			Updated: tp1,
-		},
-	})
-}
-
 func TestNewMutationsFromIssue(t *testing.T) {
 	gh := &github.Issue{
 		Number:    github.Int(5),
@@ -154,18 +120,24 @@ func TestNewMutationsFromIssue(t *testing.T) {
 		Body:      github.String("body of the issue"),
 		State:     github.String("closed"),
 	}
-	is := newMutationFromIssue(nil, gh, githubRepo("golang/go"))
+	gr := &githubRepo{
+		id: githubRepoID{"golang", "go"},
+	}
+	is := gr.newMutationFromIssue(nil, gh)
 	want := &maintpb.Mutation{GithubIssue: &maintpb.GithubIssueMutation{
-		Owner:     "golang",
-		Repo:      "go",
-		Number:    5,
-		Body:      "body of the issue",
-		Created:   tp1,
-		Updated:   tp2,
-		Assignees: []*maintpb.GithubUser{},
+		Owner:       "golang",
+		Repo:        "go",
+		Number:      5,
+		Body:        "body of the issue",
+		Created:     tp1,
+		Updated:     tp2,
+		Assignees:   []*maintpb.GithubUser{},
+		NoMilestone: true,
+		Closed:      &maintpb.BoolChange{Val: true},
 	}}
 	if !reflect.DeepEqual(is, want) {
-		t.Errorf("issue mismatch\n got: %#v\nwant: %#v", is, want)
+		t.Errorf("issue mismatch\n got: %v\nwant: %v\ndiff path: %v", spew.Sdump(is), spew.Sdump(want),
+			diffPath(reflect.ValueOf(is), reflect.ValueOf(want)))
 	}
 }
 
@@ -185,9 +157,6 @@ func TestNewAssigneesHandlesNil(t *testing.T) {
 
 func TestAssigneesDeleted(t *testing.T) {
 	c := NewCorpus(&dummyMutationLogger{})
-	c.githubUsers = map[int64]*githubUser{
-		u1.ID: u1,
-	}
 	assignees := []*githubUser{u1, u2}
 	issue := &githubIssue{
 		Number:    3,
@@ -197,45 +166,115 @@ func TestAssigneesDeleted(t *testing.T) {
 		Updated:   t2,
 		Assignees: assignees,
 	}
-	c.githubIssues = map[githubRepo]map[int32]*githubIssue{
-		"golang/go": map[int32]*githubIssue{
+	gr := &githubRepo{
+		id: githubRepoID{"golang", "go"},
+		issues: map[int32]*githubIssue{
 			3: issue,
 		},
 	}
-	repo := githubRepo("golang/go")
-	mutation := newMutationFromIssue(issue, &github.Issue{
+	c.github = &githubGlobal{
+		users: map[int64]*githubUser{
+			u1.ID: u1,
+		},
+		repos: map[githubRepoID]*githubRepo{
+			githubRepoID{"golang", "go"}: gr,
+		},
+	}
+
+	mutation := gr.newMutationFromIssue(issue, &github.Issue{
 		Number:    github.Int(3),
 		Assignees: []*github.User{&github.User{ID: github.Int(int(u2.ID))}},
-	}, repo)
+	})
 	c.processMutation(mutation)
-	gi, _ := c.getIssue(repo, 3)
+	gi := gr.issues[3]
 	if len(gi.Assignees) != 1 || gi.Assignees[0].ID != u2.ID {
 		t.Errorf("expected u1 to be deleted, got %v", gi.Assignees)
 	}
 }
 
-func TestGithubRepoOrg(t *testing.T) {
-	gr := githubRepo("golang/go")
-	want := "golang"
-	if org := gr.Org(); org != want {
-		t.Errorf("githubRepo(\"%s\").Org(): got %s, want %s", gr, org, want)
+func diffPath(got, want reflect.Value) error {
+	if !got.IsValid() {
+		return errors.New("'got' value invalid")
 	}
-	gr = githubRepo("unknown format")
-	want = ""
-	if org := gr.Org(); org != want {
-		t.Errorf("githubRepo(\"%s\").Org(): got %s, want %s", gr, org, want)
+	if !want.IsValid() {
+		return errors.New("'want' value invalid")
 	}
-}
 
-func TestGithubRepo(t *testing.T) {
-	gr := githubRepo("golang/go")
-	want := "go"
-	if repo := gr.Repo(); repo != want {
-		t.Errorf("githubRepo(\"%s\").Repo(): got %s, want %s", gr, repo, want)
+	t := got.Type()
+	if t != want.Type() {
+		return fmt.Errorf("got=%s, want=%s", got.Type(), want.Type())
 	}
-	gr = githubRepo("bad/")
-	want = ""
-	if repo := gr.Repo(); repo != want {
-		t.Errorf("githubRepo(\"%s\").Repo(): got %s, want %s", gr, repo, want)
+
+	switch t.Kind() {
+	case reflect.Ptr, reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Slice:
+		if got.IsNil() != want.IsNil() {
+			if got.IsNil() {
+				return fmt.Errorf("got = (%s)(nil), want = non-nil", t)
+			}
+			return fmt.Errorf("got = (%s)(non-nil), want = nil", t)
+		}
+	}
+
+	switch t.Kind() {
+	case reflect.Ptr:
+		if got.IsNil() {
+			return nil
+		}
+		return diffPath(got.Elem(), want.Elem())
+
+	case reflect.Struct:
+		nf := t.NumField()
+		for i := 0; i < nf; i++ {
+			sf := t.Field(i)
+			if err := diffPath(got.Field(i), want.Field(i)); err != nil {
+				inner := err.Error()
+				sep := "."
+				if strings.HasPrefix(inner, "field ") {
+					inner = strings.TrimPrefix(inner, "field ")
+				} else {
+					sep = ": "
+				}
+				return fmt.Errorf("field %s%s%v", sf.Name, sep, inner)
+			}
+		}
+		return nil
+	case reflect.String:
+		if got.String() != want.String() {
+			return fmt.Errorf("got = %q; want = %q", got.String(), want.String())
+		}
+		return nil
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if got.Int() != want.Int() {
+			return fmt.Errorf("got = %v; want = %v", got.Int(), want.Int())
+		}
+		return nil
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if got.Uint() != want.Uint() {
+			return fmt.Errorf("got = %v; want = %v", got.Uint(), want.Uint())
+		}
+		return nil
+
+	case reflect.Bool:
+		if got.Bool() != want.Bool() {
+			return fmt.Errorf("got = %v; want = %v", got.Bool(), want.Bool())
+		}
+		return nil
+
+	case reflect.Slice:
+		gl, wl := got.Len(), want.Len()
+		if gl != wl {
+			return fmt.Errorf("slice len %v; want %v", gl, wl)
+		}
+		for i := 0; i < gl; i++ {
+			if err := diffPath(got.Index(i), want.Index(i)); err != nil {
+				return fmt.Errorf("index[%d] differs: %v", i, err)
+			}
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("unhandled kind %v", t.Kind())
 	}
 }

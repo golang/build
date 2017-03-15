@@ -30,6 +30,7 @@ import (
 // StartLogging between the catch-up phase and the polling phase.
 type Corpus struct {
 	MutationLogger MutationLogger
+	Verbose        bool
 
 	mu sync.RWMutex // guards all following fields
 	// corpus state:
@@ -37,9 +38,8 @@ type Corpus struct {
 	debug     bool
 	strIntern map[string]string // interned strings
 	// github-specific
+	github             *githubGlobal
 	watchedGithubRepos []watchedGithubRepo
-	githubIssues       map[githubRepo]map[int32]*githubIssue // repo -> num -> issue
-	githubUsers        map[int64]*githubUser
 	// git-specific:
 	pollGitDirs   []polledGitCommits
 	gitPeople     map[string]*gitPerson
@@ -55,11 +55,7 @@ type polledGitCommits struct {
 }
 
 func NewCorpus(logger MutationLogger) *Corpus {
-	return &Corpus{
-		githubIssues:   make(map[githubRepo]map[int32]*githubIssue),
-		githubUsers:    make(map[int64]*githubUser),
-		MutationLogger: logger,
-	}
+	return &Corpus{MutationLogger: logger}
 }
 
 // requires c.mu be held for writing
@@ -151,6 +147,9 @@ func (c *Corpus) processMutations(ctx context.Context, src MutationSource) error
 }
 
 func (c *Corpus) processMutation(m *maintpb.Mutation) {
+	if c.Verbose {
+		log.Printf("mutation: %v", m)
+	}
 	c.mu.Lock()
 	c.processMutationLocked(m)
 	c.mu.Unlock()
@@ -194,12 +193,12 @@ func (c *Corpus) PopulateFromAPIs(ctx context.Context) error {
 // Poll checks for new changes on all repositories being tracked by the Corpus.
 func (c *Corpus) Poll(ctx context.Context) error {
 	group, ctx := errgroup.WithContext(ctx)
-	for _, rp := range c.watchedGithubRepos {
-		rp := rp
+	for _, w := range c.watchedGithubRepos {
+		gr, tokenFile := w.gr, w.tokenFile
 		group.Go(func() error {
-			log.Printf("Polling %v ...", rp)
-			err := c.PollGithubLoop(ctx, rp.name, rp.tokenFile)
-			log.Printf("Polling %v: %v", rp, err)
+			log.Printf("Polling %v ...", gr.id)
+			err := gr.PollGithubLoop(ctx, tokenFile)
+			log.Printf("Polling %v: %v", gr.id, err)
 			return err
 		})
 	}

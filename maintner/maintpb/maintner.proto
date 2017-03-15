@@ -35,9 +35,34 @@ message GithubIssueMutation {
   string body = 7; // for new or updated issue text (top post, which isn't a comment)
   string title = 9; // issue title
 
+  bool no_milestone = 15; // true unsets any previously-set milestone; false ignored.
+  // When setting a milestone, the following are all each set if known:
+  int64 milestone_id = 16; // sets milestone to this milestone id (e.g. 2386495, global?)
+  int64 milestone_num = 17; // sets milestone to this milestone number (e.g. 2, per-repo)
+  string milestone_title = 18;
+
+  BoolChange closed = 19;
+  BoolChange locked = 25;
+
+  google.protobuf.Timestamp closed_at = 21;
+  GithubUser closed_by = 22;
+
+  repeated int64 remove_label = 23; // label IDs to remove
+  repeated GithubLabel add_label = 24;
+
   repeated GithubIssueCommentMutation comment = 8;
 
   GithubIssueCommentSyncStatus comment_status = 14;
+}
+
+// BoolChange represents a change to a boolean value.
+message BoolChange {
+  bool val = 1;
+}
+
+message GithubLabel {
+  int64 id = 1;
+  string name = 2;
 }
 
 // GithubIssueCommentSyncStatus notes where syncing is at for comments
