@@ -77,7 +77,7 @@ func TestProcessMutation_Github_NewIssue(t *testing.T) {
 				Title:     "some title",
 				Body:      "some body",
 				Created:   t1,
-				Assignees: []*githubUser{},
+				Assignees: nil,
 			},
 		},
 	}
@@ -112,7 +112,7 @@ func TestProcessMutation_OldIssue(t *testing.T) {
 				Body:      "some body",
 				Created:   t2,
 				Updated:   t2,
-				Assignees: []*githubUser{},
+				Assignees: nil,
 			},
 		},
 	}
