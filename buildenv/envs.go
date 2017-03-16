@@ -164,7 +164,7 @@ var Staging = &Environment{
 	KubeMinNodes:    1,
 	KubeMaxNodes:    2,
 	KubeName:        "buildlets",
-	KubeMachineType: "n1-standard-32",
+	KubeMachineType: "n1-standard-8",
 	DashURL:         "https://go-dashboard-dev.appspot.com/",
 	CoordinatorURL:  "https://storage.googleapis.com/dev-go-builder-data/coordinator",
 	CoordinatorName: "farmer",
