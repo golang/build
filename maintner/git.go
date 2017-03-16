@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
 	"os/exec"
 	"regexp"
 	"sort"
@@ -93,10 +92,10 @@ func (c *Corpus) enqueueCommitLocked(h gitHash) {
 	c.gitCommitTodo[h] = true
 }
 
-// PollGithubCommits polls for git commits in a directory.
+// PollGitCommits polls for git commits in a directory.
 func (c *Corpus) PollGitCommits(ctx context.Context, conf polledGitCommits) error {
 	cmd := exec.CommandContext(ctx, "git", "show-ref", "refs/remotes/origin/master")
-	cmd.Dir = os.Getenv("GOROOT")
+	cmd.Dir = conf.dir
 	out, err := cmd.Output()
 	if err != nil {
 		log.Fatal(err)
