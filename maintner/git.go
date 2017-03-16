@@ -95,7 +95,7 @@ func (c *Corpus) enqueueCommitLocked(h gitHash) {
 
 // PollGithubCommits polls for git commits in a directory.
 func (c *Corpus) PollGitCommits(ctx context.Context, conf polledGitCommits) error {
-	cmd := exec.Command("git", "show-ref", "refs/remotes/origin/master")
+	cmd := exec.CommandContext(ctx, "git", "show-ref", "refs/remotes/origin/master")
 	cmd.Dir = os.Getenv("GOROOT")
 	out, err := cmd.Output()
 	if err != nil {
@@ -124,9 +124,13 @@ func (c *Corpus) PollGitCommits(ctx context.Context, conf polledGitCommits) erro
 		}
 		if err := c.indexCommit(conf, hash); err != nil {
 			log.Printf("Error indexing %v: %v", hash, err)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
 			// TODO: temporary vs permanent failure? reschedule? fail hard?
 			// For now just loop with a sleep.
-			time.Sleep(5 * time.Second)
+			case <-time.After(5 * time.Second):
+			}
 		}
 	}
 	log.Printf("TODO: poll %v from %v", conf.repo, conf.dir)
