@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
+	"golang.org/x/build/buildenv"
 	"golang.org/x/build/gerrit"
 )
 
@@ -47,7 +48,7 @@ var (
 	httpAddr = flag.String("http", "", "If non-empty, the listen address to run an HTTP server on")
 	cacheDir = flag.String("cachedir", "", "git cache directory. If empty a temp directory is made.")
 
-	dashFlag = flag.String("dash", "https://build.golang.org/", "Dashboard URL (must end in /)")
+	dashFlag = flag.String("dash", "", "Dashboard URL (must end in /). If unset, will be automatically derived from the GCE project name.")
 	keyFile  = flag.String("key", defaultKeyFile, "Build dashboard key file. If empty, automatic from GCE project metadata")
 
 	pollInterval = flag.Duration("poll", 10*time.Second, "Remote repo poll interval")
@@ -76,6 +77,18 @@ var gerritClient = gerrit.NewClient(goBase, gerrit.NoAuth)
 
 func main() {
 	flag.Parse()
+
+	if *dashFlag == "" && metadata.OnGCE() {
+		project, err := metadata.ProjectID()
+		if err != nil {
+			log.Fatalf("metadata.ProjectID: %v", err)
+		}
+		*dashFlag = buildenv.ByProjectID(project).DashBase()
+	}
+	if *dashFlag == "" {
+		log.Fatal("-dash must be specified and could not be autodetected")
+	}
+
 	log.Printf("gitmirror running.")
 
 	go pollGerritAndTickle()
