@@ -10,6 +10,6 @@ docker-dev: Dockerfile
 	docker build -f Dockerfile --tag=gcr.io/go-dashboard-dev/gitmirror:latest  ../..
 
 push-prod: docker-prod
-	gcloud docker push gcr.io/symbolic-datum-552/gitmirror:$(VERSION)
+	gcloud docker -- push gcr.io/symbolic-datum-552/gitmirror:$(VERSION)
 push-dev: docker-dev
-	gcloud docker push gcr.io/go-dashboard-dev/gitmirror:latest
+	gcloud docker -- push gcr.io/go-dashboard-dev/gitmirror:latest

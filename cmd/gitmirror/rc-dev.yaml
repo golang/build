@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: gitmirror-v4
+spec:
+  replicas: 2
+  selector:
+    app: gitmirror
+  template:
+    metadata:
+      name: gitmirror
+      labels:
+        app: gitmirror
+    spec:
+      volumes:
+      - name: cache-volume
+        emptyDir:
+          medium: Memory
+      containers:
+      - name: gitmirror
+        image: gcr.io/go-dashboard-dev/gitmirror:latest
+        command: ["/go/bin/gitmirror", "-http=:8585", "-report=true", "-network=true", "-cachedir=/cache/gitmirror"]
+        volumeMounts:
+        - mountPath: /cache
+          name: cache-volume
+        ports:
+        - containerPort: 8585
+        resources:
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
