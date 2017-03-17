@@ -724,7 +724,7 @@ func init() {
 		HostType:    "host-linux-kubestd",
 		CompileOnly: true,
 		Notes:       "SSA internal checks enabled",
-		env:         []string{"GO_GCFLAGS=-d=ssa/check/on"},
+		env:         []string{"GO_GCFLAGS=-d=ssa/check/on,dclstack"},
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-amd64-race",
