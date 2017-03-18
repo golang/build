@@ -10,8 +10,21 @@ import "github.com/golang/protobuf/ptypes/timestamp/timestamp.proto";
 package maintpb;
 
 message Mutation {
-  GithubIssueMutation github_issue = 1;
+  GithubIssueMutation github_issue = 1; // issue-specific changes
+  GithubMutation github = 3; // labels, milestones (not issue-specific)
+
   GitMutation git = 2;
+}
+
+message GithubMutation {
+  string owner = 1;  // "golang"
+  string repo = 2;  // "go"
+
+  // Updated labels. (All must have id set at least)
+  repeated GithubLabel labels = 3;
+
+  // Updated milestones. (All must have id set at least)
+  repeated GithubMilestone milestones = 4;
 }
 
 message GithubIssueMutation {
@@ -36,7 +49,9 @@ message GithubIssueMutation {
   string title = 9; // issue title
 
   bool no_milestone = 15; // true unsets any previously-set milestone; false ignored.
-  // When setting a milestone, the following are all each set if known:
+  // When setting a milestone, only the milestone_id must be set.
+  // TODO: allow num or title to be used if Github only returns those? So far unneeded.
+  // The num and title, if non-zero, are treated as if they were a GithubMutation.Milestone update.
   int64 milestone_id = 16; // sets milestone to this milestone id (e.g. 2386495, global?)
   int64 milestone_num = 17; // sets milestone to this milestone number (e.g. 2, per-repo)
   string milestone_title = 18;
@@ -63,6 +78,15 @@ message BoolChange {
 message GithubLabel {
   int64 id = 1;
   string name = 2;
+}
+
+message GithubMilestone {
+  int64 id = 1; // required
+
+  // Following only need to be non-zero on changes:
+  string title = 2;
+  BoolChange closed = 3;
+  int64 number = 4;
 }
 
 // GithubIssueCommentSyncStatus notes where syncing is at for comments

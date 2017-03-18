@@ -82,7 +82,7 @@ type githubRepo struct {
 	labels     map[int64]*githubLabel
 }
 
-func (g *githubRepo) getOrCreateMilestone(id int64, num int32, title string) *githubMilestone {
+func (g *githubRepo) getOrCreateMilestone(id int64) *githubMilestone {
 	if id == 0 {
 		panic("zero id")
 	}
@@ -93,17 +93,12 @@ func (g *githubRepo) getOrCreateMilestone(id int64, num int32, title string) *gi
 	if g.milestones == nil {
 		g.milestones = map[int64]*githubMilestone{}
 	}
-	m = &githubMilestone{
-		ID: id,
-		// TODO: use num?
-		Title: title,
-	}
+	m = &githubMilestone{ID: id}
 	g.milestones[id] = m
 	return m
 }
 
-func (g *githubRepo) getOrCreateLabel(lp *maintpb.GithubLabel) *githubLabel {
-	id := lp.Id
+func (g *githubRepo) getOrCreateLabel(id int64) *githubLabel {
 	if id == 0 {
 		panic("zero id")
 	}
@@ -114,10 +109,7 @@ func (g *githubRepo) getOrCreateLabel(lp *maintpb.GithubLabel) *githubLabel {
 	if g.labels == nil {
 		g.labels = map[int64]*githubLabel{}
 	}
-	lb = &githubLabel{
-		ID:   id,
-		Name: lp.Name,
-	}
+	lb = &githubLabel{ID: id}
 	g.labels[id] = lb
 	return lb
 }
@@ -188,10 +180,83 @@ type githubLabel struct {
 	// TODO: color?
 }
 
+// GenMutationDiff generates a diff from in-memory state 'a' (which
+// may be nil) to the current (non-nil) state b from GitHub. It
+// returns nil if there's no difference.
+func (a *githubLabel) GenMutationDiff(b *github.Label) *maintpb.GithubLabel {
+	id := int64(b.GetID())
+	if a != nil && a.ID == id && a.Name == b.GetName() {
+		// No change.
+		return nil
+	}
+	return &maintpb.GithubLabel{Id: id, Name: b.GetName()}
+}
+
+func (lb *githubLabel) processMutation(mut maintpb.GithubLabel) {
+	if lb.ID == 0 {
+		panic("bogus label ID 0")
+	}
+	if lb.ID != mut.Id {
+		panic(fmt.Sprintf("label ID = %v != mutation ID = %v", lb.ID, mut.Id))
+	}
+	if mut.Name != "" {
+		lb.Name = mut.Name
+	}
+}
+
 type githubMilestone struct {
-	ID    int64
-	Title string
-	// TODO: due date, etc?
+	ID     int64
+	Title  string
+	Number int32
+	Closed bool
+}
+
+// emptyMilestone is a non-nil *githubMilestone with zero values for
+// all fields.
+var emptyMilestone = new(githubMilestone)
+
+// GenMutationDiff generates a diff from in-memory state 'a' (which
+// may be nil) to the current (non-nil) state b from GitHub. It
+// returns nil if there's no difference.
+func (a *githubMilestone) GenMutationDiff(b *github.Milestone) *maintpb.GithubMilestone {
+	var ret *maintpb.GithubMilestone // lazily inited by diff
+	diff := func() *maintpb.GithubMilestone {
+		if ret == nil {
+			ret = &maintpb.GithubMilestone{Id: int64(b.GetID())}
+		}
+		return ret
+	}
+	if a == nil {
+		a = emptyMilestone
+	}
+	if a.Title != b.GetTitle() {
+		diff().Title = b.GetTitle()
+	}
+	if a.Number != int32(b.GetNumber()) {
+		diff().Number = int64(b.GetNumber())
+	}
+	if closed := b.GetState() == "closed"; a.Closed != closed {
+		diff().Closed = &maintpb.BoolChange{Val: closed}
+	}
+	return ret
+}
+
+func (ms *githubMilestone) processMutation(mut maintpb.GithubMilestone) {
+	if ms.ID == 0 {
+		panic("bogus milestone ID 0")
+	}
+	if ms.ID != mut.Id {
+		panic(fmt.Sprintf("milestone ID = %v != mutation ID = %v", ms.ID, mut.Id))
+	}
+	if mut.Title != "" {
+		ms.Title = mut.Title
+	}
+	if mut.Number != 0 {
+		ms.Number = int32(mut.Number)
+	}
+	if mut.Closed != nil {
+		ms.Closed = mut.Closed.Val
+	}
 }
 
 type githubComment struct {
@@ -672,8 +737,24 @@ func (r *githubRepo) missingIssues() []int32 {
 	return missing
 }
 
-// processGithubIssueMutation updates the corpus with the information in m, and
-// returns true if the Corpus was modified.
+// processGithubIssueMutation updates the corpus with the information in m.
+func (c *Corpus) processGithubMutation(m *maintpb.GithubMutation) {
+	gr := c.github.getOrCreateRepo(m.Owner, m.Repo)
+	if gr == nil {
+		log.Printf("bogus Owner/Repo %q/%q in mutation: %v", m.Owner, m.Repo, m)
+		return
+	}
+	for _, lp := range m.Labels {
+		lb := gr.getOrCreateLabel(lp.Id)
+		lb.processMutation(*lp)
+	}
+	for _, mp := range m.Milestones {
+		ms := gr.getOrCreateMilestone(mp.Id)
+		ms.processMutation(*mp)
+	}
+}
+
+// processGithubIssueMutation updates the corpus with the information in m.
 func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 	if c == nil {
 		panic("nil corpus")
@@ -741,7 +822,13 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 	if m.NoMilestone {
 		gi.Milestone = noMilestone
 	} else if m.MilestoneId != 0 {
-		gi.Milestone = gr.getOrCreateMilestone(m.MilestoneId, int32(m.MilestoneNum), m.MilestoneTitle)
+		ms := gr.getOrCreateMilestone(m.MilestoneId)
+		ms.processMutation(maintpb.GithubMilestone{
+			Id:     m.MilestoneId,
+			Title:  m.MilestoneTitle,
+			Number: m.MilestoneNum,
+		})
+		gi.Milestone = ms
 	}
 	if m.ClosedBy != nil {
 		gi.ClosedBy = c.github.getUser(m.ClosedBy)
@@ -768,8 +855,10 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 		for _, lid := range m.RemoveLabel {
 			delete(gi.Labels, lid)
 		}
-		for _, lpb := range m.AddLabel {
-			gi.Labels[lpb.Id] = gr.getOrCreateLabel(lpb)
+		for _, lp := range m.AddLabel {
+			lb := gr.getOrCreateLabel(lp.Id)
+			lb.processMutation(*lp)
+			gi.Labels[lp.Id] = lb
 		}
 	}
 
@@ -916,19 +1005,69 @@ func (p *githubRepoPoller) sync(ctx context.Context) error {
 }
 
 func (p *githubRepoPoller) syncMilestones(ctx context.Context) error {
-	return p.foreachItem(ctx, p.getMilestonePage, func(e interface{}) error {
-		m := e.(*github.Milestone)
-		log.Printf("Milestone %v: %s", m.GetID(), m)
+	var mut *maintpb.GithubMutation // lazy init
+	var changes int
+	err := p.foreachItem(ctx, p.getMilestonePage, func(e interface{}) error {
+		ms := e.(*github.Milestone)
+		id := int64(ms.GetID())
+		p.c.mu.RLock()
+		diff := p.gr.milestones[id].GenMutationDiff(ms)
+		p.c.mu.RUnlock()
+		if diff == nil {
+			return nil
+		}
+		if mut == nil {
+			mut = &maintpb.GithubMutation{
+				Owner: p.Owner(),
+				Repo:  p.Repo(),
+			}
+		}
+		mut.Milestones = append(mut.Milestones, diff)
+		changes++
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	p.logf("%d milestone changes.", changes)
+	if changes == 0 {
+		return nil
+	}
+	p.c.processMutation(&maintpb.Mutation{Github: mut})
+	return nil
 }
 
 func (p *githubRepoPoller) syncLabels(ctx context.Context) error {
-	return p.foreachItem(ctx, p.getLabelPage, func(e interface{}) error {
+	var mut *maintpb.GithubMutation // lazy init
+	var changes int
+	err := p.foreachItem(ctx, p.getLabelPage, func(e interface{}) error {
 		lb := e.(*github.Label)
-		log.Printf("Label %v: %v", lb.GetID(), lb.GetName())
+		id := int64(lb.GetID())
+		p.c.mu.RLock()
+		diff := p.gr.labels[id].GenMutationDiff(lb)
+		p.c.mu.RUnlock()
+		if diff == nil {
+			return nil
+		}
+		if mut == nil {
+			mut = &maintpb.GithubMutation{
+				Owner: p.Owner(),
+				Repo:  p.Repo(),
+			}
+		}
+		mut.Labels = append(mut.Labels, diff)
+		changes++
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	p.logf("%d label changes.", changes)
+	if changes == 0 {
+		return nil
+	}
+	p.c.processMutation(&maintpb.Mutation{Github: mut})
+	return nil
 }
 
 func (p *githubRepoPoller) getMilestonePage(ctx context.Context, page int) ([]interface{}, *github.Response, error) {

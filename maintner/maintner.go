@@ -167,10 +167,12 @@ func (c *Corpus) processMutationLocked(m *maintpb.Mutation) {
 	if im := m.GithubIssue; im != nil {
 		c.processGithubIssueMutation(im)
 	}
+	if gm := m.Github; gm != nil {
+		c.processGithubMutation(gm)
+	}
 	if gm := m.Git; gm != nil {
 		c.processGitMutation(gm)
 	}
-	// TODO: more.
 }
 
 // PopulateFromServer populates the corpus from a maintnerd server.
