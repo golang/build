@@ -21,7 +21,7 @@ func Get(ctx context.Context) (*maintner.Corpus, error) {
 	// we assume it's already on disk.
 	dir := filepath.Join(os.Getenv("HOME"), "var", "maintnerd")
 	logger := maintner.NewDiskMutationLogger(dir)
-	corpus := maintner.NewCorpus(logger)
+	corpus := maintner.NewCorpus(logger, dir)
 	if err := corpus.Initialize(ctx, logger); err != nil {
 		return nil, err
 	}

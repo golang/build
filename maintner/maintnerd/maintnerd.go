@@ -26,6 +26,8 @@ var (
 	syncQuit    = flag.Bool("sync-and-quit", false, "sync once and quit; don't run a server")
 	verbose     = flag.Bool("verbose", false, "enable verbose debug output")
 	watchGithub = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
+	// TODO: specify gerrit auth via gitcookies or similar
+	watchGerrit = flag.String("watch-gerrit", "", `Comma-separated list of Gerrit projects to watch (e.g. "https://go.googlesource.com/go")`)
 	watchGoGit  = flag.Bool("watch-go-git", false, "Watch Go's main git repo.")
 	dataDir     = flag.String("data-dir", "", "Local directory to write protobuf files to (default $HOME/var/maintnerd)")
 	debug       = flag.Bool("debug", false, "Print debug logging information")
@@ -57,7 +59,7 @@ func main() {
 	}
 	// TODO switch based on flags, for now only local file sync works
 	logger := maintner.NewDiskMutationLogger(*dataDir)
-	corpus := maintner.NewCorpus(logger)
+	corpus := maintner.NewCorpus(logger, *dataDir)
 	if *debug {
 		corpus.SetDebug()
 	}
@@ -74,6 +76,12 @@ func main() {
 	if *watchGoGit {
 		// Assumes GOROOT is a git checkout. Good enough for now for development.
 		corpus.AddGoGitRepo("go", runtime.GOROOT())
+	}
+	if *watchGerrit != "" {
+		for _, project := range strings.Split(*watchGerrit, ",") {
+			// token may be empty, that's OK.
+			corpus.AddGerrit(project)
+		}
 	}
 
 	var ln net.Listener

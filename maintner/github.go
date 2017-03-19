@@ -936,7 +936,7 @@ func (r *GitHubRepo) missingIssues() []int32 {
 	return missing
 }
 
-// processGithubIssueMutation updates the corpus with the information in m.
+// processGithubMutation updates the corpus with the information in m.
 func (c *Corpus) processGithubMutation(m *maintpb.GithubMutation) {
 	gr := c.github.getOrCreateRepo(m.Owner, m.Repo)
 	if gr == nil {

@@ -32,6 +32,7 @@ type gitHash interface {
 type gitSHA1 [20]byte
 
 func (h gitSHA1) String() string { return fmt.Sprintf("%x", h[:]) }
+
 func (h gitSHA1) Less(h2 gitHash) bool {
 	switch h2 := h2.(type) {
 	case gitSHA1:

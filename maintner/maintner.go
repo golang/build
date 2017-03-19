@@ -18,6 +18,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/protobuf/ptypes"
+	"github.com/golang/protobuf/ptypes/timestamp"
+
 	"golang.org/x/build/maintner/maintpb"
 	"golang.org/x/sync/errgroup"
 )
@@ -39,7 +42,9 @@ type Corpus struct {
 	strIntern map[string]string // interned strings
 	// github-specific
 	github             *GitHub
+	gerrit             *Gerrit
 	watchedGithubRepos []watchedGithubRepo
+	watchedGerritRepos []watchedGerritRepo
 	// git-specific:
 	pollGitDirs   []polledGitCommits
 	gitPeople     map[string]*gitPerson
@@ -47,6 +52,7 @@ type Corpus struct {
 	gitCommitTodo map[gitHash]bool          // -> true
 	gitOfHg       map[string]gitHash        // hg hex hash -> git hash
 	zoneCache     map[string]*time.Location // "+0530" => location
+	dataDir       string
 }
 
 type polledGitCommits struct {
@@ -54,8 +60,9 @@ type polledGitCommits struct {
 	dir  string
 }
 
-func NewCorpus(logger MutationLogger) *Corpus {
-	return &Corpus{MutationLogger: logger}
+// NewCorpus creates a new Corpus.
+func NewCorpus(logger MutationLogger, dataDir string) *Corpus {
+	return &Corpus{MutationLogger: logger, dataDir: dataDir}
 }
 
 // GitHub returns the corpus's github data.
@@ -64,6 +71,16 @@ func (c *Corpus) GitHub() *GitHub {
 		return c.github
 	}
 	return new(GitHub)
+}
+
+// mustProtoFromTime turns a time.Time into a *timestamp.Timestamp or panics if
+// in is invalid.
+func mustProtoFromTime(in time.Time) *timestamp.Timestamp {
+	tp, err := ptypes.TimestampProto(in)
+	if err != nil {
+		panic(err)
+	}
+	return tp
 }
 
 // requires c.mu be held for writing
@@ -181,6 +198,9 @@ func (c *Corpus) processMutationLocked(m *maintpb.Mutation) {
 	if gm := m.Git; gm != nil {
 		c.processGitMutation(gm)
 	}
+	if gm := m.Gerrit; gm != nil {
+		c.processGerritMutation(gm)
+	}
 }
 
 // SyncLoop runs forever (until an error or context expiration) and
@@ -209,6 +229,15 @@ func (c *Corpus) sync(ctx context.Context, loop bool) error {
 		rp := rp
 		group.Go(func() error {
 			return c.syncGitCommits(ctx, rp, loop)
+		})
+	}
+	for _, w := range c.watchedGerritRepos {
+		project := w.project
+		group.Go(func() error {
+			log.Printf("Polling %v ...", project.url)
+			err := project.sync(ctx, loop)
+			log.Printf("Polling %v: %v", project.url, err)
+			return err
 		})
 	}
 	return group.Wait()
