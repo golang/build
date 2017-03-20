@@ -434,6 +434,45 @@ func TestParseGithubEvents(t *testing.T) {
 				},
 			},
 		},
+
+		{
+			name: "renamed",
+			j: `{
+    "id": 1006107803,
+    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1006107803",
+    "actor": {
+      "login": "bradfitz",
+      "id": 2621
+    },
+    "event": "renamed",
+    "commit_id": null,
+    "commit_url": null,
+    "created_at": "2017-03-20T02:53:43Z",
+    "rename": {
+      "from": "test-2",
+      "to": "test-2 new name"
+    }
+  }`,
+			e: &githubEvent{
+				ID:      1006107803,
+				Type:    "renamed",
+				Created: t3339("2017-03-20T02:53:43Z"),
+				Actor: &githubUser{
+					ID:    2621,
+					Login: "bradfitz",
+				},
+				From: "test-2",
+				To:   "test-2 new name",
+			},
+			p: &maintpb.GithubIssueEvent{
+				Id:         1006107803,
+				EventType:  "renamed",
+				ActorId:    2621,
+				Created:    p3339("2017-03-20T02:53:43Z"),
+				RenameFrom: "test-2",
+				RenameTo:   "test-2 new name",
+			},
+		},
 	}
 
 	var eventTypes []string

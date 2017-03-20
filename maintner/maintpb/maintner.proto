@@ -66,8 +66,10 @@ message GithubIssueMutation {
   repeated GithubLabel add_label = 24;
 
   repeated GithubIssueCommentMutation comment = 8;
+  GithubIssueSyncStatus comment_status = 14;
 
-  GithubIssueCommentSyncStatus comment_status = 14;
+  repeated GithubIssueEvent event = 26;  // new events to add
+  GithubIssueSyncStatus event_status = 27;
 }
 
 // BoolChange represents a change to a boolean value.
@@ -97,8 +99,8 @@ message GithubIssueEvent {
 
   // event_type can be one of "assigned", "unassigned", "labeled",
   // "unlabeled", "opened", "edited", "milestoned", "demilestoned",
-  // "closed", "reopened", or anything else that Github adds in the
-  // future.
+  // "closed", "reopened", "referenced", "renamed" or anything else
+  // that Github adds in the future.
   string event_type = 2;
   int64 actor_id = 3;
   google.protobuf.Timestamp created = 4; // time of the event
@@ -120,6 +122,10 @@ message GithubIssueEvent {
   // For "referenced", "closed":
   GithubCommit commit = 9;
 
+  // For "renamed" events:
+  string rename_from = 11;
+  string rename_to = 12;
+
   // other_json is usually empty. If Github adds event types or fields
   // in the future, this captures those added fields. If non-empty it
   // will be a JSON object with the fields that weren't understood.
@@ -132,11 +138,11 @@ message GithubCommit {
   string commit_id = 3; // "0beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33"
 }
 
-// GithubIssueCommentSyncStatus notes where syncing is at for comments
+// GithubIssueSyncStatus notes where syncing is at for comments
 // on an issue,
 // This mutation type is only made at/after the same top-level mutation
 // which created the corresponding comments.
-message GithubIssueCommentSyncStatus {
+message GithubIssueSyncStatus {
   // server_date is the "Date" response header from Github for the
   // final HTTP response.
   google.protobuf.Timestamp server_date = 1;

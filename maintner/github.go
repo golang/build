@@ -301,8 +301,10 @@ type githubEvent struct {
 
 func (e *githubEvent) Proto() *maintpb.GithubIssueEvent {
 	p := &maintpb.GithubIssueEvent{
-		Id:        e.ID,
-		EventType: e.Type,
+		Id:         e.ID,
+		EventType:  e.Type,
+		RenameFrom: e.From,
+		RenameTo:   e.To,
 	}
 	if e.OtherJSON != "" {
 		p.OtherJson = []byte(e.OtherJSON)
@@ -349,6 +351,8 @@ func (r *githubRepo) newGithubEvent(p *maintpb.GithubIssueEvent) *githubEvent {
 		Actor:    g.getOrCreateUserID(p.ActorId),
 		Assignee: g.getOrCreateUserID(p.AssigneeId),
 		Assigner: g.getOrCreateUserID(p.AssignerId),
+		From:     p.RenameFrom,
+		To:       p.RenameTo,
 	}
 	if p.Created != nil {
 		e.Created, _ = ptypes.Timestamp(p.Created)
@@ -985,6 +989,22 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 			gi.commentsSyncedAsOf = serverDate.UTC()
 		}
 	}
+
+	for _, emut := range m.Event {
+		if emut.Id == 0 {
+			log.Printf("Ignoring bogus event mutation lacking Id: %v", emut)
+			continue
+		}
+		if gi.events == nil {
+			gi.events = make(map[int64]*githubEvent)
+		}
+		gi.events[emut.Id] = gr.newGithubEvent(emut)
+	}
+	if m.EventStatus != nil && m.EventStatus.ServerDate != nil {
+		if serverDate, err := ptypes.Timestamp(m.EventStatus.ServerDate); err == nil {
+			gi.eventsSyncedAsOf = serverDate.UTC()
+		}
+	}
 }
 
 // githubCache is an httpcache.Cache wrapper that only
@@ -1037,18 +1057,20 @@ func (gr *githubRepo) PollGithubLoop(ctx context.Context, tokenFile string) erro
 	if len(f) != 2 || f[0] == "" || f[1] == "" {
 		return fmt.Errorf("Expected token file %s to be of form <username>:<token>", tokenFile)
 	}
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: f[1]})
-	tc := oauth2.NewClient(ctx, ts)
-	tc.Transport = &httpcache.Transport{
-		Transport:           tc.Transport, // underlying oauth2 transport
+	token := f[1]
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
+	hc := oauth2.NewClient(ctx, ts)
+	hc.Transport = &httpcache.Transport{
+		Transport:           hc.Transport,
 		Cache:               &githubCache{Cache: httpcache.NewMemoryCache()},
 		MarkCachedResponses: true, // adds "X-From-Cache: 1" response header.
 	}
 
 	p := &githubRepoPoller{
-		c:   gr.github.c,
-		gr:  gr,
-		ghc: github.NewClient(tc),
+		c:     gr.github.c,
+		token: token,
+		gr:    gr,
+		ghc:   github.NewClient(hc),
 	}
 	for {
 		err := p.sync(ctx)
@@ -1057,7 +1079,7 @@ func (gr *githubRepo) PollGithubLoop(ctx context.Context, tokenFile string) erro
 			return err
 		}
 		select {
-		case <-time.After(10 * time.Second):
+		case <-time.After(30 * time.Second):
 			continue
 		case <-ctx.Done():
 			return ctx.Err()
@@ -1068,9 +1090,10 @@ func (gr *githubRepo) PollGithubLoop(ctx context.Context, tokenFile string) erro
 // A githubRepoPoller updates the Corpus (gr.c) to have the latest
 // version of the Github repo rp, using the Github client ghc.
 type githubRepoPoller struct {
-	c   *Corpus // shortcut for gr.github.c
-	gr  *githubRepo
-	ghc *github.Client
+	c     *Corpus // shortcut for gr.github.c
+	gr    *githubRepo
+	ghc   *github.Client
+	token string
 }
 
 func (p *githubRepoPoller) Owner() string { return p.gr.id.Owner }
@@ -1097,7 +1120,7 @@ func (p *githubRepoPoller) sync(ctx context.Context) error {
 func (p *githubRepoPoller) syncMilestones(ctx context.Context) error {
 	var mut *maintpb.GithubMutation // lazy init
 	var changes int
-	err := p.foreachItem(ctx, p.getMilestonePage, func(e interface{}) error {
+	err := p.foreachItem(ctx, 1, p.getMilestonePage, func(e interface{}) error {
 		ms := e.(*github.Milestone)
 		id := int64(ms.GetID())
 		p.c.mu.RLock()
@@ -1130,7 +1153,7 @@ func (p *githubRepoPoller) syncMilestones(ctx context.Context) error {
 func (p *githubRepoPoller) syncLabels(ctx context.Context) error {
 	var mut *maintpb.GithubMutation // lazy init
 	var changes int
-	err := p.foreachItem(ctx, p.getLabelPage, func(e interface{}) error {
+	err := p.foreachItem(ctx, 1, p.getLabelPage, func(e interface{}) error {
 		lb := e.(*github.Label)
 		id := int64(lb.GetID())
 		p.c.mu.RLock()
@@ -1193,9 +1216,9 @@ func (p *githubRepoPoller) getLabelPage(ctx context.Context, page int) ([]interf
 // If the first page's response was cached, fn is never called.
 func (p *githubRepoPoller) foreachItem(
 	ctx context.Context,
+	page int,
 	getPage func(ctx context.Context, page int) ([]interface{}, *github.Response, error),
 	fn func(interface{}) error) error {
-	page := 1
 	for {
 		select {
 		case <-ctx.Done():
@@ -1262,19 +1285,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context) error {
 			break
 		}
 
-		// If there's something new (not a cached response),
-		// then check for updated milestones and labels before
-		// creating issue mutations below. Doesn't matter
-		// much, but helps to have it all loaded.
-		if !fromCache {
-			group, ctx := errgroup.WithContext(ctx)
-			group.Go(func() error { return p.syncMilestones(ctx) })
-			group.Go(func() error { return p.syncLabels(ctx) })
-			if err := group.Wait(); err != nil {
-				return err
-			}
-		}
-
+		didMilestoneLabelSync := false
 		changes := 0
 		for _, is := range issues {
 			id := int64(is.GetID())
@@ -1299,6 +1310,21 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context) error {
 			if mp == nil {
 				continue
 			}
+
+			// If there's something new (not a cached response),
+			// then check for updated milestones and labels before
+			// creating issue mutations below. Doesn't matter
+			// much, but helps to have it all loaded.
+			if !fromCache && !didMilestoneLabelSync {
+				didMilestoneLabelSync = true
+				group, ctx := errgroup.WithContext(ctx)
+				group.Go(func() error { return p.syncMilestones(ctx) })
+				group.Go(func() error { return p.syncLabels(ctx) })
+				if err := group.Wait(); err != nil {
+					return err
+				}
+			}
+
 			changes++
 			p.logf("changed issue %d: %s", is.GetNumber(), is.GetTitle())
 			c.processMutation(mp)
@@ -1484,7 +1510,7 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 
 		if res.NextPage == 0 {
 			sdp, _ := ptypes.TimestampProto(serverDate)
-			mut.GithubIssue.CommentStatus = &maintpb.GithubIssueCommentSyncStatus{ServerDate: sdp}
+			mut.GithubIssue.CommentStatus = &maintpb.GithubIssueSyncStatus{ServerDate: sdp}
 			morePages = false
 		}
 
@@ -1509,29 +1535,108 @@ func (p *githubRepoPoller) issueNumbersWithStaleEventSync() (issueNums []int32) 
 }
 
 func (p *githubRepoPoller) syncEvents(ctx context.Context) error {
-	return nil // TODO: enable
-
 	for {
 		nums := p.issueNumbersWithStaleEventSync()
 		if len(nums) == 0 {
-			p.logf("event sync: done.")
 			return nil
 		}
 		remain := len(nums)
-		for _, num := range nums {
+		for i, num := range nums {
 			p.logf("event sync: %d issues remaining; syncing issue %v", remain, num)
 			if err := p.syncEventsOnIssue(ctx, num); err != nil {
 				p.logf("event sync on issue %d: %v", num, err)
 				return err
 			}
 			remain--
+			if i >= 30 { // TODO(bradfitz): temporary. ~1 QPS for now, until caught up.
+				p.logf("event sync: stopping early.")
+				return nil
+			}
 		}
 	}
+	p.logf("event sync: done.")
 	return nil
 }
 
 func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32) error {
+	const perPage = 100
+	p.c.mu.RLock()
+	gi := p.gr.issues[issueNum]
+	if gi == nil {
+		panic(fmt.Sprintf("bogus issue %v", issueNum))
+	}
+	have := len(gi.events)
+	p.c.mu.RUnlock()
 
+	skipPages := have / perPage
+
+	mut := &maintpb.Mutation{
+		GithubIssue: &maintpb.GithubIssueMutation{
+			Owner:  p.Owner(),
+			Repo:   p.Repo(),
+			Number: issueNum,
+		},
+	}
+
+	err := p.foreachItem(ctx,
+		1+skipPages,
+		func(ctx context.Context, page int) ([]interface{}, *github.Response, error) {
+			u := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues/%v/events?per_page=%v&page=%v",
+				p.Owner(), p.Repo(), issueNum, perPage, page)
+			req, _ := http.NewRequest("GET", u, nil)
+
+			req.Header.Set("Authorization", "Bearer "+p.token)
+			req.Header.Set("User-Agent", "golang-x-build-maintner/1.0")
+			ctx, cancel := context.WithTimeout(ctx, time.Minute)
+			defer cancel()
+			req = req.WithContext(ctx)
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				log.Printf("Fetching %s: %v", u, err)
+				return nil, nil, err
+			}
+			log.Printf("Fetching %s: %v", u, res.Status)
+			if res.StatusCode != http.StatusOK {
+				log.Printf("Fetching %s: %v: %+v", u, res.Status, res.Header)
+				// TODO: rate limiting, etc.
+				return nil, nil, fmt.Errorf("%s: %v", u, res.Status)
+			}
+			evts, err := parseGithubEvents(res.Body)
+			if err != nil {
+				return nil, nil, fmt.Errorf("%s: parse github events: %v", u, err)
+			}
+			is := make([]interface{}, len(evts))
+			for i, v := range evts {
+				is[i] = v
+			}
+			serverDate, err := http.ParseTime(res.Header.Get("Date"))
+			if err != nil {
+				return nil, nil, fmt.Errorf("invalid server Date response: %v", err)
+			}
+			sdp, _ := ptypes.TimestampProto(serverDate.UTC())
+			mut.GithubIssue.EventStatus = &maintpb.GithubIssueSyncStatus{ServerDate: sdp}
+
+			return is, makeGithubResponse(res), err
+		},
+		func(v interface{}) error {
+			ge := v.(*githubEvent)
+			p.c.mu.RLock()
+			_, ok := gi.events[ge.ID]
+			p.c.mu.RUnlock()
+			if ok {
+				// Already have it. And they're
+				// assumed to be immutable, so the
+				// copy we already have should be
+				// good. Don't add to mutation log.
+				return nil
+			}
+			mut.GithubIssue.Event = append(mut.GithubIssue.Event, ge.Proto())
+			return nil
+		})
+	if err != nil {
+		return err
+	}
+	p.c.processMutation(mut)
 	return nil
 }
 
@@ -1638,4 +1743,45 @@ func jint64(v interface{}) int64 {
 	default:
 		panic(fmt.Sprintf("unexpected type %T", v))
 	}
+}
+
+// Copy of go-github's func newResponse, basically.
+func makeGithubResponse(res *http.Response) *github.Response {
+	gr := &github.Response{Response: res}
+	for _, lv := range res.Header["Link"] {
+		for _, link := range strings.Split(lv, ",") {
+			segs := strings.Split(strings.TrimSpace(link), ";")
+			if len(segs) < 2 {
+				continue
+			}
+			// ensure href is properly formatted
+			if !strings.HasPrefix(segs[0], "<") || !strings.HasSuffix(segs[0], ">") {
+				continue
+			}
+
+			// try to pull out page parameter
+			u, err := url.Parse(segs[0][1 : len(segs[0])-1])
+			if err != nil {
+				continue
+			}
+			page := u.Query().Get("page")
+			if page == "" {
+				continue
+			}
+
+			for _, seg := range segs[1:] {
+				switch strings.TrimSpace(seg) {
+				case `rel="next"`:
+					gr.NextPage, _ = strconv.Atoi(page)
+				case `rel="prev"`:
+					gr.PrevPage, _ = strconv.Atoi(page)
+				case `rel="first"`:
+					gr.FirstPage, _ = strconv.Atoi(page)
+				case `rel="last"`:
+					gr.LastPage, _ = strconv.Atoi(page)
+				}
+			}
+		}
+	}
+	return gr
 }
