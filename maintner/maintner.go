@@ -58,6 +58,14 @@ func NewCorpus(logger MutationLogger) *Corpus {
 	return &Corpus{MutationLogger: logger}
 }
 
+// GitHub returns the corpus's github data.
+func (c *Corpus) GitHub() *GitHub {
+	if c.github != nil {
+		return c.github
+	}
+	return new(GitHub)
+}
+
 // requires c.mu be held for writing
 func (c *Corpus) str(s string) string {
 	if v, ok := c.strIntern[s]; ok {

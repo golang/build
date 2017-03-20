@@ -86,6 +86,27 @@ type GitHubRepo struct {
 	labels     map[int64]*GitHubLabel
 }
 
+// ForeachIssue calls fn for each issue in the repo.
+//
+// If fn returns an error, iteration ends and ForeachIssue returns
+// with that error.
+//
+// The fn function is called serially, with increasingly numbered
+// issues.
+func (gr *GitHubRepo) ForeachIssue(fn func(*GitHubIssue) error) error {
+	s := make([]*GitHubIssue, 0, len(gr.issues))
+	for _, gi := range gr.issues {
+		s = append(s, gi)
+	}
+	sort.Slice(s, func(i, j int) bool { return s[i].Number < s[j].Number })
+	for _, gi := range s {
+		if err := fn(gi); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (g *GitHubRepo) getOrCreateMilestone(id int64) *GitHubMilestone {
 	if id == 0 {
 		panic("zero id")
@@ -154,6 +175,81 @@ type GitHubIssue struct {
 	events             map[int64]*GitHubIssueEvent // by event.ID
 }
 
+// HasEvent reports whether there's any GitHubIssueEvent in this
+// issue's history of the given type.
+func (gi *GitHubIssue) HasEvent(eventType string) bool {
+	for _, e := range gi.events {
+		if e.Type == eventType {
+			return true
+		}
+	}
+	return false
+}
+
+// ForeachEvent calls fn for each event on the issue.
+//
+// If fn returns an error, iteration ends and ForeachEvent returns
+// with that error.
+//
+// The fn function is called serially, in order of the event's time.
+func (gi *GitHubIssue) ForeachEvent(fn func(*GitHubIssueEvent) error) error {
+	// TODO: keep these sorted in the corpus
+	s := make([]*GitHubIssueEvent, 0, len(gi.events))
+	for _, e := range gi.events {
+		s = append(s, e)
+	}
+	sort.Slice(s, func(i, j int) bool {
+		ci, cj := s[i].Created, s[j].Created
+		if ci.Before(cj) {
+			return true
+		}
+		return ci.Equal(cj) && s[i].ID < s[j].ID
+	})
+	for _, e := range s {
+		if err := fn(e); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ForeachComment calls fn for each event on the issue.
+//
+// If fn returns an error, iteration ends and ForeachComment returns
+// with that error.
+//
+// The fn function is called serially, in order of the comment's time.
+func (gi *GitHubIssue) ForeachComment(fn func(*GitHubComment) error) error {
+	// TODO: keep these sorted in the corpus
+	s := make([]*GitHubComment, 0, len(gi.comments))
+	for _, e := range gi.comments {
+		s = append(s, e)
+	}
+	sort.Slice(s, func(i, j int) bool {
+		ci, cj := s[i].Created, s[j].Created
+		if ci.Before(cj) {
+			return true
+		}
+		return ci.Equal(cj) && s[i].ID < s[j].ID
+	})
+	for _, e := range s {
+		if err := fn(e); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// HasLabel reports whether the issue is labeled with the given label.
+func (gi *GitHubIssue) HasLabel(label string) bool {
+	for _, lb := range gi.Labels {
+		if lb.Name == label {
+			return true
+		}
+	}
+	return false
+}
+
 func (gi *GitHubIssue) getCreatedAt() time.Time {
 	if gi == nil {
 		return time.Time{}
@@ -214,6 +310,9 @@ type GitHubMilestone struct {
 	Number int32
 	Closed bool
 }
+
+// IsNone reports whether ms represents the sentinel "no milestone" milestone.
+func (ms *GitHubMilestone) IsNone() bool { return ms == noMilestone }
 
 // emptyMilestone is a non-nil *githubMilestone with zero values for
 // all fields.
