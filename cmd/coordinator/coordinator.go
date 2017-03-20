@@ -637,7 +637,7 @@ func workaroundFlush(w http.ResponseWriter) {
 // TODO(bradfitz): it also currently does not support subrepos.
 func findWorkLoop(work chan<- builderRev) {
 	// Useful for debugging a single run:
-	if inStaging {
+	if inStaging && false {
 		//work <- builderRev{name: "linux-arm", rev: "c9778ec302b2e0e0d6027e1e0fca892e428d9657", subName: "tools", subRev: "ac303766f5f240c1796eeea3dc9bf34f1261aa35"}
 		const debugArm = false
 		if debugArm {
