@@ -92,8 +92,8 @@ func (c *Corpus) enqueueCommitLocked(h gitHash) {
 	c.gitCommitTodo[h] = true
 }
 
-// PollGitCommits polls for git commits in a directory.
-func (c *Corpus) PollGitCommits(ctx context.Context, conf polledGitCommits) error {
+// syncGitCommits polls for git commits in a directory.
+func (c *Corpus) syncGitCommits(ctx context.Context, conf polledGitCommits, loop bool) error {
 	cmd := exec.CommandContext(ctx, "git", "show-ref", "refs/remotes/origin/master")
 	cmd.Dir = conf.dir
 	out, err := cmd.Output()
@@ -114,6 +114,9 @@ func (c *Corpus) PollGitCommits(ctx context.Context, conf polledGitCommits) erro
 	for {
 		hash := c.gitCommitToIndex()
 		if hash == nil {
+			if !loop {
+				return nil
+			}
 			if !idle {
 				log.Printf("All git commits index for %v; idle.", conf.repo)
 				idle = true
@@ -317,7 +320,7 @@ func (c *Corpus) processGitMutation(m *maintpb.GitMutation) {
 	if c.gitCommitTodo != nil {
 		delete(c.gitCommitTodo, hash)
 	}
-	if n := len(c.gitCommit); n%100 == 0 {
+	if n := len(c.gitCommit); n%100 == 0 && c.Verbose {
 		log.Printf("Num git commits = %v", n)
 	}
 }

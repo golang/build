@@ -175,31 +175,24 @@ func (c *Corpus) processMutationLocked(m *maintpb.Mutation) {
 	}
 }
 
-// PopulateFromServer populates the corpus from a maintnerd server.
-func (c *Corpus) PopulateFromServer(ctx context.Context, serverURL string) error {
-	panic("TODO")
+// SyncLoop runs forever (until an error or context expiration) and
+// updates the corpus as the tracked sources change.
+func (c *Corpus) SyncLoop(ctx context.Context) error {
+	return c.sync(ctx, true)
 }
 
-// PopulateFromDisk populates the corpus from a set of mutation logs
-// in a local directory.
-func (c *Corpus) PopulateFromDisk(ctx context.Context, dir string) error {
-	panic("TODO")
+// Sync updates the corpus from its tracked sources.
+func (c *Corpus) Sync(ctx context.Context) error {
+	return c.sync(ctx, false)
 }
 
-// PopulateFromAPIs populates the corpus using API calls to
-// the upstream Git, Github, and/or Gerrit servers.
-func (c *Corpus) PopulateFromAPIs(ctx context.Context) error {
-	panic("TODO")
-}
-
-// Poll checks for new changes on all repositories being tracked by the Corpus.
-func (c *Corpus) Poll(ctx context.Context) error {
+func (c *Corpus) sync(ctx context.Context, loop bool) error {
 	group, ctx := errgroup.WithContext(ctx)
 	for _, w := range c.watchedGithubRepos {
 		gr, tokenFile := w.gr, w.tokenFile
 		group.Go(func() error {
 			log.Printf("Polling %v ...", gr.id)
-			err := gr.PollGithubLoop(ctx, tokenFile)
+			err := gr.sync(ctx, tokenFile, loop)
 			log.Printf("Polling %v: %v", gr.id, err)
 			return err
 		})
@@ -207,7 +200,7 @@ func (c *Corpus) Poll(ctx context.Context) error {
 	for _, rp := range c.pollGitDirs {
 		rp := rp
 		group.Go(func() error {
-			return c.PollGitCommits(ctx, rp)
+			return c.syncGitCommits(ctx, rp, loop)
 		})
 	}
 	return group.Wait()

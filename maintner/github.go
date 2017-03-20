@@ -1052,9 +1052,10 @@ func (c *githubCache) Set(urlKey string, res []byte) {
 	}
 }
 
-// PollGithubLoop checks for new changes on a single Github repository and
-// updates the Corpus with any changes.
-func (gr *GitHubRepo) PollGithubLoop(ctx context.Context, tokenFile string) error {
+// sync checks for new changes on a single Github repository and
+// updates the Corpus with any changes. If loop is true, it runs
+// forever.
+func (gr *GitHubRepo) sync(ctx context.Context, tokenFile string, loop bool) error {
 	slurp, err := ioutil.ReadFile(tokenFile)
 	if err != nil {
 		return err
@@ -1066,6 +1067,9 @@ func (gr *GitHubRepo) PollGithubLoop(ctx context.Context, tokenFile string) erro
 	token := f[1]
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	hc := oauth2.NewClient(ctx, ts)
+	if tr, ok := hc.Transport.(*http.Transport); ok {
+		defer tr.CloseIdleConnections()
+	}
 	hc.Transport = &httpcache.Transport{
 		Transport:           hc.Transport,
 		Cache:               &githubCache{Cache: httpcache.NewMemoryCache()},
@@ -1080,10 +1084,10 @@ func (gr *GitHubRepo) PollGithubLoop(ctx context.Context, tokenFile string) erro
 	}
 	for {
 		err := p.sync(ctx)
-		p.logf("sync = %v; sleeping", err)
-		if err == context.Canceled {
+		if err == context.Canceled || !loop {
 			return err
 		}
+		p.logf("sync = %v; sleeping", err)
 		select {
 		case <-time.After(30 * time.Second):
 			continue

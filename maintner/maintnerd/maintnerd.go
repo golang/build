@@ -23,6 +23,7 @@ import (
 
 var (
 	listen      = flag.String("listen", "localhost:6343", "listen address")
+	syncQuit    = flag.Bool("sync-and-quit", false, "sync once and quit; don't run a server")
 	verbose     = flag.Bool("verbose", false, "enable verbose debug output")
 	watchGithub = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
 	watchGoGit  = flag.Bool("watch-go-git", false, "Watch Go's main git repo.")
@@ -75,6 +76,16 @@ func main() {
 		corpus.AddGoGitRepo("go", runtime.GOROOT())
 	}
 
+	var ln net.Listener
+	var err error
+	if !*syncQuit {
+		ln, err = net.Listen("tcp", *listen)
+		if err != nil {
+			log.Fatal(err)
+		}
+		ln.Close() // TODO: use
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	t0 := time.Now()
@@ -92,15 +103,13 @@ func main() {
 	runtime.ReadMemStats(&ms)
 	log.Printf("Loaded data in %v. Memory: %v MB", initDur, ms.HeapAlloc>>20)
 
-	ln, err := net.Listen("tcp", *listen)
-	if err != nil {
-		log.Fatal(err)
-	}
-	ln.Close() // TODO: use
-
 	corpus.StartLogging()
-	if err := corpus.Poll(ctx); err != nil {
-		log.Fatal(err)
+	if *syncQuit {
+		if err := corpus.Sync(ctx); err != nil {
+			log.Fatalf("corpus.Sync = %v", err)
+		}
+		return
 	}
-	log.Fatalf("Exiting.")
+
+	log.Fatalf("Corpus.SyncLoop = %v", corpus.SyncLoop(ctx))
 }
