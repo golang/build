@@ -5,76 +5,32 @@
 package maintner
 
 import (
-	"bufio"
-	"net/http"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/golang/protobuf/ptypes"
+	"github.com/golang/protobuf/ptypes/timestamp"
+
+	"golang.org/x/build/maintner/maintpb"
 )
 
 func TestParseGithubEvents(t *testing.T) {
-	res, err := http.ReadResponse(bufio.NewReader(strings.NewReader(eventRes)), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	events, err := parseGithubEvents(res.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for i, e := range events {
-		t.Logf("events[%d]: %#v at %v by %#v", i, e, e.Created, e.Actor)
-		if e.OtherJSON != "" {
-			t.Errorf("Contains OtherJSON: events[%d]: %#v at %v by %#v", i, e, e.Created, e.Actor)
-		}
-	}
-}
-
-const eventRes = `HTTP/1.1 200 OK
-Server: GitHub.com
-Date: Tue, 14 Mar 2017 20:55:28 GMT
-Content-Type: application/json; charset=utf-8
-Status: 200 OK
-X-RateLimit-Limit: 60
-X-RateLimit-Remaining: 55
-X-RateLimit-Reset: 1489527982
-Cache-Control: public, max-age=60, s-maxage=60
-Vary: Accept
-ETag: "47e7fe4c82c28a54a4d0d82dc10e603f"
-X-GitHub-Media-Type: github.v3; format=json
-Link: <https://api.github.com/repositories/23096959/issues/9/events?per_page=2&page=2>; rel="next", <https://api.github.com/repositories/23096959/issues/9/events?per_page=2&page=2>; rel="last"
-Access-Control-Expose-Headers: ETag, Link, X-GitHub-OTP, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, X-OAuth-Scopes, X-Accepted-OAuth-Scopes, X-Poll-Interval
-Access-Control-Allow-Origin: *
-Content-Security-Policy: default-src 'none'
-Strict-Transport-Security: max-age=31536000; includeSubdomains; preload
-X-Content-Type-Options: nosniff
-X-Frame-Options: deny
-X-XSS-Protection: 1; mode=block
-Vary: Accept-Encoding
-X-Served-By: a30e6f9aa7cf5731b87dfb3b9992202d
-X-GitHub-Request-Id: B13C:356D:B31D97B:D547D0F:58C858C0
-
-[
-  {
+	tests := []struct {
+		name string                    // test
+		j    string                    // JSON from Github API
+		e    *githubEvent              // in-memory
+		p    *maintpb.GithubIssueEvent // on disk
+	}{
+		{
+			name: "labeled",
+			j: `{
     "id": 998144526,
     "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/998144526",
     "actor": {
       "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
+      "id": 2621
     },
     "event": "labeled",
     "commit_id": null,
@@ -84,59 +40,73 @@ X-GitHub-Request-Id: B13C:356D:B31D97B:D547D0F:58C858C0
       "name": "enhancement",
       "color": "84b6eb"
     }
-  },
-  {
-    "id": 998144527,
-    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/998144527",
+  }
+`,
+			e: &githubEvent{
+				ID:      998144526,
+				Type:    "labeled",
+				Created: t3339("2017-03-13T22:39:28Z"),
+				Actor: &githubUser{
+					ID:    2621,
+					Login: "bradfitz",
+				},
+				Label: "enhancement",
+			},
+			p: &maintpb.GithubIssueEvent{
+				Id:        998144526,
+				EventType: "labeled",
+				ActorId:   2621,
+				Created:   p3339("2017-03-13T22:39:28Z"),
+				Label:     &maintpb.GithubLabel{Name: "enhancement"},
+			},
+		},
+
+		{
+			name: "unlabeled",
+			j: `{
+    "id": 998144526,
+    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/998144526",
     "actor": {
       "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
+      "id": 2621
     },
-    "event": "labeled",
+    "event": "unlabeled",
     "commit_id": null,
     "commit_url": null,
     "created_at": "2017-03-13T22:39:28Z",
     "label": {
-      "name": "help wanted",
-      "color": "128A0C"
+      "name": "enhancement",
+      "color": "84b6eb"
     }
-  },
-  {
+  }
+`,
+			e: &githubEvent{
+				ID:      998144526,
+				Type:    "unlabeled",
+				Created: t3339("2017-03-13T22:39:28Z"),
+				Actor: &githubUser{
+					ID:    2621,
+					Login: "bradfitz",
+				},
+				Label: "enhancement",
+			},
+			p: &maintpb.GithubIssueEvent{
+				Id:        998144526,
+				EventType: "unlabeled",
+				ActorId:   2621,
+				Created:   p3339("2017-03-13T22:39:28Z"),
+				Label:     &maintpb.GithubLabel{Name: "enhancement"},
+			},
+		},
+
+		{
+			name: "milestoned",
+			j: `{
     "id": 998144529,
     "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/998144529",
     "actor": {
       "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
+      "id": 2621
     },
     "event": "milestoned",
     "commit_id": null,
@@ -144,29 +114,69 @@ X-GitHub-Request-Id: B13C:356D:B31D97B:D547D0F:58C858C0
     "created_at": "2017-03-13T22:39:28Z",
     "milestone": {
       "title": "World Domination"
-    }
-  },
-  {
+    }}`,
+			e: &githubEvent{
+				ID:      998144529,
+				Type:    "milestoned",
+				Created: t3339("2017-03-13T22:39:28Z"),
+				Actor: &githubUser{
+					ID:    2621,
+					Login: "bradfitz",
+				},
+				Milestone: "World Domination",
+			},
+			p: &maintpb.GithubIssueEvent{
+				Id:        998144529,
+				EventType: "milestoned",
+				ActorId:   2621,
+				Created:   p3339("2017-03-13T22:39:28Z"),
+				Milestone: &maintpb.GithubMilestone{Title: "World Domination"},
+			},
+		},
+
+		{
+			name: "demilestoned",
+			j: `{
+    "id": 998144529,
+    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/998144529",
+    "actor": {
+      "login": "bradfitz",
+      "id": 2621
+    },
+    "event": "demilestoned",
+    "commit_id": null,
+    "commit_url": null,
+    "created_at": "2017-03-13T22:39:28Z",
+    "milestone": {
+      "title": "World Domination"
+    }}`,
+			e: &githubEvent{
+				ID:      998144529,
+				Type:    "demilestoned",
+				Created: t3339("2017-03-13T22:39:28Z"),
+				Actor: &githubUser{
+					ID:    2621,
+					Login: "bradfitz",
+				},
+				Milestone: "World Domination",
+			},
+			p: &maintpb.GithubIssueEvent{
+				Id:        998144529,
+				EventType: "demilestoned",
+				ActorId:   2621,
+				Created:   p3339("2017-03-13T22:39:28Z"),
+				Milestone: &maintpb.GithubMilestone{Title: "World Domination"},
+			},
+		},
+
+		{
+			name: "assigned",
+			j: `{
     "id": 998144530,
     "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/998144530",
     "actor": {
       "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
+      "id": 2621
     },
     "event": "assigned",
     "commit_id": null,
@@ -174,371 +184,47 @@ X-GitHub-Request-Id: B13C:356D:B31D97B:D547D0F:58C858C0
     "created_at": "2017-03-13T22:39:28Z",
     "assignee": {
       "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
+      "id": 2621
     },
     "assigner": {
       "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
-    }
-  },
-  {
-    "id": 998144646,
-    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/998144646",
-    "actor": {
-      "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
-    },
-    "event": "locked",
-    "commit_id": null,
-    "commit_url": null,
-    "created_at": "2017-03-13T22:39:36Z"
-  },
-  {
-    "id": 999944299,
-    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/999944299",
-    "actor": {
-      "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
-    },
-    "event": "demilestoned",
-    "commit_id": null,
-    "commit_url": null,
-    "created_at": "2017-03-14T22:23:08Z",
-    "milestone": {
-      "title": "World Domination"
-    }
-  },
-  {
-    "id": 999944363,
-    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/999944363",
-    "actor": {
-      "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
-    },
-    "event": "unlabeled",
-    "commit_id": null,
-    "commit_url": null,
-    "created_at": "2017-03-14T22:23:12Z",
-    "label": {
-      "name": "help wanted",
-      "color": "128A0C"
-    }
-  },
-  {
-    "id": 999945324,
-    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/999945324",
-    "actor": {
-      "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
-    },
-    "event": "labeled",
-    "commit_id": null,
-    "commit_url": null,
-    "created_at": "2017-03-14T22:23:40Z",
-    "label": {
-      "name": "invalid",
-      "color": "e6e6e6"
-    }
-  },
-  {
-    "id": 999945325,
-    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/999945325",
-    "actor": {
-      "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
-    },
-    "event": "labeled",
-    "commit_id": null,
-    "commit_url": null,
-    "created_at": "2017-03-14T22:23:40Z",
-    "label": {
-      "name": "wontfix",
-      "color": "ffffff"
-    }
-  },
-  {
-    "id": 1000011082,
-    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1000011082",
-    "actor": {
-      "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
-    },
-    "event": "assigned",
-    "commit_id": null,
-    "commit_url": null,
-    "created_at": "2017-03-14T23:22:57Z",
-    "assignee": {
-      "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
-    },
-    "assigner": {
-      "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
-    }
-  },
-  {
-    "id": 1000011083,
-    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1000011083",
-    "actor": {
-      "login": "shurcooL",
-      "id": 1924134,
-      "avatar_url": "https://avatars0.githubusercontent.com/u/1924134?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/shurcooL",
-      "html_url": "https://github.com/shurcooL",
-      "followers_url": "https://api.github.com/users/shurcooL/followers",
-      "following_url": "https://api.github.com/users/shurcooL/following{/other_user}",
-      "gists_url": "https://api.github.com/users/shurcooL/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/shurcooL/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/shurcooL/subscriptions",
-      "organizations_url": "https://api.github.com/users/shurcooL/orgs",
-      "repos_url": "https://api.github.com/users/shurcooL/repos",
-      "events_url": "https://api.github.com/users/shurcooL/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/shurcooL/received_events",
-      "type": "User",
-      "site_admin": false
-    },
-    "event": "assigned",
-    "commit_id": null,
-    "commit_url": null,
-    "created_at": "2017-03-14T23:22:57Z",
-    "assignee": {
-      "login": "shurcooL",
-      "id": 1924134,
-      "avatar_url": "https://avatars0.githubusercontent.com/u/1924134?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/shurcooL",
-      "html_url": "https://github.com/shurcooL",
-      "followers_url": "https://api.github.com/users/shurcooL/followers",
-      "following_url": "https://api.github.com/users/shurcooL/following{/other_user}",
-      "gists_url": "https://api.github.com/users/shurcooL/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/shurcooL/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/shurcooL/subscriptions",
-      "organizations_url": "https://api.github.com/users/shurcooL/orgs",
-      "repos_url": "https://api.github.com/users/shurcooL/repos",
-      "events_url": "https://api.github.com/users/shurcooL/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/shurcooL/received_events",
-      "type": "User",
-      "site_admin": false
-    },
-    "assigner": {
-      "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
-    }
-  },
-  {
-    "id": 1000014895,
-    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1000014895",
-    "actor": {
-      "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
-    },
-    "event": "unlocked",
-    "commit_id": null,
-    "commit_url": null,
-    "created_at": "2017-03-14T23:26:21Z"
-  },
-  {
+      "id": 2621
+    }}`,
+			e: &githubEvent{
+				ID:      998144530,
+				Type:    "assigned",
+				Created: t3339("2017-03-13T22:39:28Z"),
+				Actor: &githubUser{
+					ID:    2621,
+					Login: "bradfitz",
+				},
+				Assignee: &githubUser{
+					ID:    2621,
+					Login: "bradfitz",
+				},
+				Assigner: &githubUser{
+					ID:    2621,
+					Login: "bradfitz",
+				},
+			},
+			p: &maintpb.GithubIssueEvent{
+				Id:         998144530,
+				EventType:  "assigned",
+				ActorId:    2621,
+				Created:    p3339("2017-03-13T22:39:28Z"),
+				AssigneeId: 2621,
+				AssignerId: 2621,
+			},
+		},
+
+		{
+			name: "unassigned",
+			j: `{
     "id": 1000077586,
     "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1000077586",
     "actor": {
       "login": "shurcooL",
-      "id": 1924134,
-      "avatar_url": "https://avatars0.githubusercontent.com/u/1924134?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/shurcooL",
-      "html_url": "https://github.com/shurcooL",
-      "followers_url": "https://api.github.com/users/shurcooL/followers",
-      "following_url": "https://api.github.com/users/shurcooL/following{/other_user}",
-      "gists_url": "https://api.github.com/users/shurcooL/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/shurcooL/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/shurcooL/subscriptions",
-      "organizations_url": "https://api.github.com/users/shurcooL/orgs",
-      "repos_url": "https://api.github.com/users/shurcooL/repos",
-      "events_url": "https://api.github.com/users/shurcooL/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/shurcooL/received_events",
-      "type": "User",
-      "site_admin": false
+      "id": 1924134
     },
     "event": "unassigned",
     "commit_id": null,
@@ -546,130 +232,251 @@ X-GitHub-Request-Id: B13C:356D:B31D97B:D547D0F:58C858C0
     "created_at": "2017-03-15T00:31:42Z",
     "assignee": {
       "login": "shurcooL",
-      "id": 1924134,
-      "avatar_url": "https://avatars0.githubusercontent.com/u/1924134?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/shurcooL",
-      "html_url": "https://github.com/shurcooL",
-      "followers_url": "https://api.github.com/users/shurcooL/followers",
-      "following_url": "https://api.github.com/users/shurcooL/following{/other_user}",
-      "gists_url": "https://api.github.com/users/shurcooL/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/shurcooL/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/shurcooL/subscriptions",
-      "organizations_url": "https://api.github.com/users/shurcooL/orgs",
-      "repos_url": "https://api.github.com/users/shurcooL/repos",
-      "events_url": "https://api.github.com/users/shurcooL/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/shurcooL/received_events",
-      "type": "User",
-      "site_admin": false
+      "id": 1924134
     },
     "assigner": {
       "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
+      "id": 2621
     }
-  },
-  {
-    "id": 769896411,
-    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/769896411",
-    "actor": {
-      "login": "rakyll",
-      "id": 108380,
-      "avatar_url": "https://avatars3.githubusercontent.com/u/108380?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/rakyll",
-      "html_url": "https://github.com/rakyll",
-      "followers_url": "https://api.github.com/users/rakyll/followers",
-      "following_url": "https://api.github.com/users/rakyll/following{/other_user}",
-      "gists_url": "https://api.github.com/users/rakyll/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/rakyll/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/rakyll/subscriptions",
-      "organizations_url": "https://api.github.com/users/rakyll/orgs",
-      "repos_url": "https://api.github.com/users/rakyll/repos",
-      "events_url": "https://api.github.com/users/rakyll/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/rakyll/received_events",
-      "type": "User",
-      "site_admin": false
-    },
-    "event": "renamed",
-    "commit_id": null,
-    "commit_url": null,
-    "created_at": "2016-08-28T05:14:52Z",
-    "rename": {
-      "from": "add a link to the original issue",
-      "to": "cmd/servegoissues: add a link to the original issue"
-    }
-  },
-  {
-    "id": 769905440,
-    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/769905440",
-    "actor": {
-      "login": "shurcooL",
-      "id": 1924134,
-      "avatar_url": "https://avatars0.githubusercontent.com/u/1924134?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/shurcooL",
-      "html_url": "https://github.com/shurcooL",
-      "followers_url": "https://api.github.com/users/shurcooL/followers",
-      "following_url": "https://api.github.com/users/shurcooL/following{/other_user}",
-      "gists_url": "https://api.github.com/users/shurcooL/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/shurcooL/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/shurcooL/subscriptions",
-      "organizations_url": "https://api.github.com/users/shurcooL/orgs",
-      "repos_url": "https://api.github.com/users/shurcooL/repos",
-      "events_url": "https://api.github.com/users/shurcooL/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/shurcooL/received_events",
-      "type": "User",
-      "site_admin": false
-    },
-    "event": "referenced",
-    "commit_id": "5383ecf5a0824649ffcc0349f00f0317575753d0",
-    "commit_url": "https://api.github.com/repos/bradfitz/go-issue-mirror/commits/5383ecf5a0824649ffcc0349f00f0317575753d0",
-    "created_at": "2016-08-28T06:28:38Z"
-  },
-  {
-    "id": 790032051,
-    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/790032051",
+  }`,
+			e: &githubEvent{
+				ID:      1000077586,
+				Type:    "unassigned",
+				Created: t3339("2017-03-15T00:31:42Z"),
+				Actor: &githubUser{
+					ID:    1924134,
+					Login: "shurcooL",
+				},
+				Assignee: &githubUser{
+					ID:    1924134,
+					Login: "shurcooL",
+				},
+				Assigner: &githubUser{
+					ID:    2621,
+					Login: "bradfitz",
+				},
+			},
+			p: &maintpb.GithubIssueEvent{
+				Id:         1000077586,
+				EventType:  "unassigned",
+				ActorId:    1924134,
+				Created:    p3339("2017-03-15T00:31:42Z"),
+				AssigneeId: 1924134,
+				AssignerId: 2621,
+			},
+		},
+
+		{
+			name: "locked",
+			j: `{
+    "id": 998144646,
+    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/998144646",
     "actor": {
       "login": "bradfitz",
-      "id": 2621,
-      "avatar_url": "https://avatars2.githubusercontent.com/u/2621?v=3",
-      "gravatar_id": "",
-      "url": "https://api.github.com/users/bradfitz",
-      "html_url": "https://github.com/bradfitz",
-      "followers_url": "https://api.github.com/users/bradfitz/followers",
-      "following_url": "https://api.github.com/users/bradfitz/following{/other_user}",
-      "gists_url": "https://api.github.com/users/bradfitz/gists{/gist_id}",
-      "starred_url": "https://api.github.com/users/bradfitz/starred{/owner}{/repo}",
-      "subscriptions_url": "https://api.github.com/users/bradfitz/subscriptions",
-      "organizations_url": "https://api.github.com/users/bradfitz/orgs",
-      "repos_url": "https://api.github.com/users/bradfitz/repos",
-      "events_url": "https://api.github.com/users/bradfitz/events{/privacy}",
-      "received_events_url": "https://api.github.com/users/bradfitz/received_events",
-      "type": "User",
-      "site_admin": false
+      "id": 2621
     },
-    "event": "closed",
+    "event": "locked",
     "commit_id": null,
     "commit_url": null,
-    "created_at": "2016-09-15T00:18:43Z"
-  }
-]
-`
+    "created_at": "2017-03-13T22:39:36Z"
+  }`,
+			e: &githubEvent{
+				ID:      998144646,
+				Type:    "locked",
+				Created: t3339("2017-03-13T22:39:36Z"),
+				Actor: &githubUser{
+					ID:    2621,
+					Login: "bradfitz",
+				},
+			},
+			p: &maintpb.GithubIssueEvent{
+				Id:        998144646,
+				EventType: "locked",
+				ActorId:   2621,
+				Created:   p3339("2017-03-13T22:39:36Z"),
+			},
+		},
+
+		{
+			name: "unlocked",
+			j: `{
+    "id": 1000014895,
+    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1000014895",
+    "actor": {
+      "login": "bradfitz",
+      "id": 2621
+    },
+    "event": "unlocked",
+    "commit_id": null,
+    "commit_url": null,
+    "created_at": "2017-03-14T23:26:21Z"
+ }`,
+			e: &githubEvent{
+				ID:      1000014895,
+				Type:    "unlocked",
+				Created: t3339("2017-03-14T23:26:21Z"),
+				Actor: &githubUser{
+					ID:    2621,
+					Login: "bradfitz",
+				},
+			},
+			p: &maintpb.GithubIssueEvent{
+				Id:        1000014895,
+				EventType: "unlocked",
+				ActorId:   2621,
+				Created:   p3339("2017-03-14T23:26:21Z"),
+			},
+		},
+
+		{
+			name: "closed",
+			j: `  {
+    "id": 1006040931,
+    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1006040931",
+    "actor": {
+      "login": "bradfitz",
+      "id": 2621
+    },
+    "event": "closed",
+    "commit_id": "e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
+    "commit_url": "https://api.github.com/repos/bradfitz/go-issue-mirror/commits/e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
+    "created_at": "2017-03-19T23:40:33Z"
+  }`,
+			e: &githubEvent{
+				ID:      1006040931,
+				Type:    "closed",
+				Created: t3339("2017-03-19T23:40:33Z"),
+				Actor: &githubUser{
+					ID:    2621,
+					Login: "bradfitz",
+				},
+				CommitID:  "e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
+				CommitURL: "https://api.github.com/repos/bradfitz/go-issue-mirror/commits/e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
+			},
+			p: &maintpb.GithubIssueEvent{
+				Id:        1006040931,
+				EventType: "closed",
+				ActorId:   2621,
+				Created:   p3339("2017-03-19T23:40:33Z"),
+				Commit: &maintpb.GithubCommit{
+					Owner:    "bradfitz",
+					Repo:     "go-issue-mirror",
+					CommitId: "e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
+				},
+			},
+		},
+
+		{
+			name: "reopened",
+			j: `{
+    "id": 1000014895,
+    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1000014895",
+    "actor": {
+      "login": "bradfitz",
+      "id": 2621
+    },
+    "event": "reopened",
+    "commit_id": null,
+    "commit_url": null,
+    "created_at": "2017-03-14T23:26:21Z"
+ }`,
+			e: &githubEvent{
+				ID:      1000014895,
+				Type:    "reopened",
+				Created: t3339("2017-03-14T23:26:21Z"),
+				Actor: &githubUser{
+					ID:    2621,
+					Login: "bradfitz",
+				},
+			},
+			p: &maintpb.GithubIssueEvent{
+				Id:        1000014895,
+				EventType: "reopened",
+				ActorId:   2621,
+				Created:   p3339("2017-03-14T23:26:21Z"),
+			},
+		},
+
+		{
+			name: "referenced",
+			j: `{
+    "id": 1006040930,
+    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1006040930",
+    "actor": {
+      "login": "bradfitz",
+      "id": 2621
+    },
+    "event": "referenced",
+    "commit_id": "e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
+    "commit_url": "https://api.github.com/repos/bradfitz/go-issue-mirror/commits/e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
+    "created_at": "2017-03-19T23:40:32Z"
+  }`,
+			e: &githubEvent{
+				ID:      1006040930,
+				Type:    "referenced",
+				Created: t3339("2017-03-19T23:40:32Z"),
+				Actor: &githubUser{
+					ID:    2621,
+					Login: "bradfitz",
+				},
+				CommitID:  "e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
+				CommitURL: "https://api.github.com/repos/bradfitz/go-issue-mirror/commits/e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
+			},
+			p: &maintpb.GithubIssueEvent{
+				Id:        1006040930,
+				EventType: "referenced",
+				ActorId:   2621,
+				Created:   p3339("2017-03-19T23:40:32Z"),
+				Commit: &maintpb.GithubCommit{
+					Owner:    "bradfitz",
+					Repo:     "go-issue-mirror",
+					CommitId: "e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
+				},
+			},
+		},
+	}
+
+	var eventTypes []string
+
+	for _, tt := range tests {
+		evts, err := parseGithubEvents(strings.NewReader("[" + tt.j + "]"))
+		if err != nil {
+			t.Errorf("%s: parse JSON: %v", tt.name, err)
+			continue
+		}
+		if len(evts) != 1 {
+			t.Errorf("%s: parse JSON = %v entries; want 1", tt.name, len(evts))
+			continue
+		}
+		gote := evts[0]
+		if !reflect.DeepEqual(gote, tt.e) {
+			t.Errorf("%s: JSON -> githubEvent differs: %v", tt.name, DeepDiff(gote, tt.e))
+			continue
+		}
+		eventTypes = append(eventTypes, gote.Type)
+
+		gotp := gote.Proto()
+		if !reflect.DeepEqual(gotp, tt.p) {
+			t.Errorf("%s: githubEvent -> proto differs: %v", tt.name, DeepDiff(gotp, tt.p))
+			continue
+		}
+
+		var c Corpus
+		c.initGithub()
+		c.github.getOrCreateUserID(2621).Login = "bradfitz"
+		c.github.getOrCreateUserID(1924134).Login = "shurcooL"
+		gr := c.github.getOrCreateRepo("foowner", "bar")
+		e2 := gr.newGithubEvent(gotp)
+
+		if !reflect.DeepEqual(e2, tt.e) {
+			t.Errorf("%s: proto -> githubEvent differs: %v", tt.name, DeepDiff(e2, tt.e))
+			continue
+		}
+	}
+
+	t.Logf("Tested event types: %q", eventTypes)
+
+}
 
 func TestCacheableURL(t *testing.T) {
 	tests := []struct {
@@ -698,4 +505,20 @@ func TestCacheableURL(t *testing.T) {
 			t.Errorf("cacheableURL(%q) = %v; want %v", tt.v, got, tt.want)
 		}
 	}
+}
+
+func t3339(s string) time.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		panic(err)
+	}
+	return t.UTC()
+}
+
+func p3339(s string) *timestamp.Timestamp {
+	tp, err := ptypes.TimestampProto(t3339(s))
+	if err != nil {
+		panic(err)
+	}
+	return tp
 }

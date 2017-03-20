@@ -192,6 +192,10 @@ func TestAssigneesDeleted(t *testing.T) {
 	}
 }
 
+func DeepDiff(got, want interface{}) error {
+	return diffPath(reflect.ValueOf(got), reflect.ValueOf(want))
+}
+
 func diffPath(got, want reflect.Value) error {
 	if !got.IsValid() {
 		return errors.New("'got' value invalid")

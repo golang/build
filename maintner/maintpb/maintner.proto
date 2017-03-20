@@ -89,6 +89,49 @@ message GithubMilestone {
   int64 number = 4;
 }
 
+// See https://developer.github.com/v3/activity/events/types/#issuesevent
+// for some info.
+message GithubIssueEvent {
+  // Required:
+  int64 id = 1;
+
+  // event_type can be one of "assigned", "unassigned", "labeled",
+  // "unlabeled", "opened", "edited", "milestoned", "demilestoned",
+  // "closed", "reopened", or anything else that Github adds in the
+  // future.
+  string event_type = 2;
+  int64 actor_id = 3;
+  google.protobuf.Timestamp created = 4; // time of the event
+
+  // label is populated for "labeled" and "unlabeled" events.
+  // The label will usually not have an ID, due to Github's API
+  // not returning one.
+  GithubLabel label = 5;
+
+  // milestone is populated for "milestoned" and "demilestoned" events.
+  // The label will usually not have an ID, due to Github's API
+  // not returning one.
+  GithubMilestone milestone = 6;
+
+  // For "assigned", "unassigned":
+  int64 assignee_id = 7; // always same as actor_id it seems? Github API doesn't say.
+  int64 assigner_id = 8;
+
+  // For "referenced", "closed":
+  GithubCommit commit = 9;
+
+  // other_json is usually empty. If Github adds event types or fields
+  // in the future, this captures those added fields. If non-empty it
+  // will be a JSON object with the fields that weren't understood.
+  bytes other_json = 10;
+}
+
+message GithubCommit {
+  string owner = 1;     // "golang"
+  string repo = 2;      // "go"
+  string commit_id = 3; // "0beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33"
+}
+
 // GithubIssueCommentSyncStatus notes where syncing is at for comments
 // on an issue,
 // This mutation type is only made at/after the same top-level mutation

@@ -299,6 +299,81 @@ type githubEvent struct {
 	CommitID, CommitURL string      // for type: "closed", "referenced" ... ?
 }
 
+func (e *githubEvent) Proto() *maintpb.GithubIssueEvent {
+	p := &maintpb.GithubIssueEvent{
+		Id:        e.ID,
+		EventType: e.Type,
+	}
+	if e.OtherJSON != "" {
+		p.OtherJson = []byte(e.OtherJSON)
+	}
+	if !e.Created.IsZero() {
+		if tp, err := ptypes.TimestampProto(e.Created); err == nil {
+			p.Created = tp
+		}
+	}
+	if e.Actor != nil {
+		p.ActorId = e.Actor.ID
+	}
+	if e.Assignee != nil {
+		p.AssigneeId = e.Assignee.ID
+	}
+	if e.Assigner != nil {
+		p.AssignerId = e.Assigner.ID
+	}
+	if e.Label != "" {
+		p.Label = &maintpb.GithubLabel{Name: e.Label}
+	}
+	if e.Milestone != "" {
+		p.Milestone = &maintpb.GithubMilestone{Title: e.Milestone}
+	}
+	if e.CommitID != "" {
+		c := &maintpb.GithubCommit{CommitId: e.CommitID}
+		if m := rxGithubCommitURL.FindStringSubmatch(e.CommitURL); m != nil {
+			c.Owner = m[1]
+			c.Repo = m[2]
+		}
+		p.Commit = c
+	}
+	return p
+}
+
+var rxGithubCommitURL = regexp.MustCompile(`^https://api\.github\.com/repos/([^/]+)/([^/]+)/commits/`)
+
+// r.github.c.mu must be held.
+func (r *githubRepo) newGithubEvent(p *maintpb.GithubIssueEvent) *githubEvent {
+	g := r.github
+	e := &githubEvent{
+		ID:       p.Id,
+		Type:     p.EventType,
+		Actor:    g.getOrCreateUserID(p.ActorId),
+		Assignee: g.getOrCreateUserID(p.AssigneeId),
+		Assigner: g.getOrCreateUserID(p.AssignerId),
+	}
+	if p.Created != nil {
+		e.Created, _ = ptypes.Timestamp(p.Created)
+	}
+	if len(p.OtherJson) > 0 {
+		// TODO: parse it and see if we've since learned how
+		// to deal with it?
+		log.Printf("Unknown JSON in log: %s", p.OtherJson)
+	}
+	if p.Label != nil {
+		e.Label = g.c.str(p.Label.Name)
+	}
+	if p.Milestone != nil {
+		e.Milestone = g.c.str(p.Milestone.Title)
+	}
+	if c := p.Commit; c != nil {
+		e.CommitID = c.CommitId
+		if c.Owner != "" && c.Repo != "" {
+			// TODO: this field is dumb. break it down.
+			e.CommitURL = "https://api.github.com/repos/" + c.Owner + "/" + c.Repo + "/commits/" + c.CommitId
+		}
+	}
+	return e
+}
+
 // (requires corpus be locked for reads)
 func (gi *githubIssue) commentsSynced() bool {
 	if gi.NotExist {
@@ -367,6 +442,21 @@ func (g *githubGlobal) getUser(pu *maintpb.GithubUser) *githubUser {
 		Login: pu.Login,
 	}
 	g.users[pu.Id] = u
+	return u
+}
+
+func (g *githubGlobal) getOrCreateUserID(id int64) *githubUser {
+	if id == 0 {
+		return nil
+	}
+	if u := g.users[id]; u != nil {
+		return u
+	}
+	if g.users == nil {
+		g.users = make(map[int64]*githubUser)
+	}
+	u := &githubUser{ID: id}
+	g.users[id] = u
 	return u
 }
 
