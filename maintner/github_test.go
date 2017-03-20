@@ -20,7 +20,7 @@ func TestParseGithubEvents(t *testing.T) {
 	tests := []struct {
 		name string                    // test
 		j    string                    // JSON from Github API
-		e    *githubEvent              // in-memory
+		e    *GitHubIssueEvent         // in-memory
 		p    *maintpb.GithubIssueEvent // on disk
 	}{
 		{
@@ -42,11 +42,11 @@ func TestParseGithubEvents(t *testing.T) {
     }
   }
 `,
-			e: &githubEvent{
+			e: &GitHubIssueEvent{
 				ID:      998144526,
 				Type:    "labeled",
 				Created: t3339("2017-03-13T22:39:28Z"),
-				Actor: &githubUser{
+				Actor: &GitHubUser{
 					ID:    2621,
 					Login: "bradfitz",
 				},
@@ -80,11 +80,11 @@ func TestParseGithubEvents(t *testing.T) {
     }
   }
 `,
-			e: &githubEvent{
+			e: &GitHubIssueEvent{
 				ID:      998144526,
 				Type:    "unlabeled",
 				Created: t3339("2017-03-13T22:39:28Z"),
-				Actor: &githubUser{
+				Actor: &GitHubUser{
 					ID:    2621,
 					Login: "bradfitz",
 				},
@@ -115,11 +115,11 @@ func TestParseGithubEvents(t *testing.T) {
     "milestone": {
       "title": "World Domination"
     }}`,
-			e: &githubEvent{
+			e: &GitHubIssueEvent{
 				ID:      998144529,
 				Type:    "milestoned",
 				Created: t3339("2017-03-13T22:39:28Z"),
-				Actor: &githubUser{
+				Actor: &GitHubUser{
 					ID:    2621,
 					Login: "bradfitz",
 				},
@@ -150,11 +150,11 @@ func TestParseGithubEvents(t *testing.T) {
     "milestone": {
       "title": "World Domination"
     }}`,
-			e: &githubEvent{
+			e: &GitHubIssueEvent{
 				ID:      998144529,
 				Type:    "demilestoned",
 				Created: t3339("2017-03-13T22:39:28Z"),
-				Actor: &githubUser{
+				Actor: &GitHubUser{
 					ID:    2621,
 					Login: "bradfitz",
 				},
@@ -190,19 +190,19 @@ func TestParseGithubEvents(t *testing.T) {
       "login": "bradfitz",
       "id": 2621
     }}`,
-			e: &githubEvent{
+			e: &GitHubIssueEvent{
 				ID:      998144530,
 				Type:    "assigned",
 				Created: t3339("2017-03-13T22:39:28Z"),
-				Actor: &githubUser{
+				Actor: &GitHubUser{
 					ID:    2621,
 					Login: "bradfitz",
 				},
-				Assignee: &githubUser{
+				Assignee: &GitHubUser{
 					ID:    2621,
 					Login: "bradfitz",
 				},
-				Assigner: &githubUser{
+				Assigner: &GitHubUser{
 					ID:    2621,
 					Login: "bradfitz",
 				},
@@ -239,19 +239,19 @@ func TestParseGithubEvents(t *testing.T) {
       "id": 2621
     }
   }`,
-			e: &githubEvent{
+			e: &GitHubIssueEvent{
 				ID:      1000077586,
 				Type:    "unassigned",
 				Created: t3339("2017-03-15T00:31:42Z"),
-				Actor: &githubUser{
+				Actor: &GitHubUser{
 					ID:    1924134,
 					Login: "shurcooL",
 				},
-				Assignee: &githubUser{
+				Assignee: &GitHubUser{
 					ID:    1924134,
 					Login: "shurcooL",
 				},
-				Assigner: &githubUser{
+				Assigner: &GitHubUser{
 					ID:    2621,
 					Login: "bradfitz",
 				},
@@ -280,11 +280,11 @@ func TestParseGithubEvents(t *testing.T) {
     "commit_url": null,
     "created_at": "2017-03-13T22:39:36Z"
   }`,
-			e: &githubEvent{
+			e: &GitHubIssueEvent{
 				ID:      998144646,
 				Type:    "locked",
 				Created: t3339("2017-03-13T22:39:36Z"),
-				Actor: &githubUser{
+				Actor: &GitHubUser{
 					ID:    2621,
 					Login: "bradfitz",
 				},
@@ -311,11 +311,11 @@ func TestParseGithubEvents(t *testing.T) {
     "commit_url": null,
     "created_at": "2017-03-14T23:26:21Z"
  }`,
-			e: &githubEvent{
+			e: &GitHubIssueEvent{
 				ID:      1000014895,
 				Type:    "unlocked",
 				Created: t3339("2017-03-14T23:26:21Z"),
-				Actor: &githubUser{
+				Actor: &GitHubUser{
 					ID:    2621,
 					Login: "bradfitz",
 				},
@@ -342,11 +342,11 @@ func TestParseGithubEvents(t *testing.T) {
     "commit_url": "https://api.github.com/repos/bradfitz/go-issue-mirror/commits/e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
     "created_at": "2017-03-19T23:40:33Z"
   }`,
-			e: &githubEvent{
+			e: &GitHubIssueEvent{
 				ID:      1006040931,
 				Type:    "closed",
 				Created: t3339("2017-03-19T23:40:33Z"),
-				Actor: &githubUser{
+				Actor: &GitHubUser{
 					ID:    2621,
 					Login: "bradfitz",
 				},
@@ -380,11 +380,11 @@ func TestParseGithubEvents(t *testing.T) {
     "commit_url": null,
     "created_at": "2017-03-14T23:26:21Z"
  }`,
-			e: &githubEvent{
+			e: &GitHubIssueEvent{
 				ID:      1000014895,
 				Type:    "reopened",
 				Created: t3339("2017-03-14T23:26:21Z"),
-				Actor: &githubUser{
+				Actor: &GitHubUser{
 					ID:    2621,
 					Login: "bradfitz",
 				},
@@ -411,11 +411,11 @@ func TestParseGithubEvents(t *testing.T) {
     "commit_url": "https://api.github.com/repos/bradfitz/go-issue-mirror/commits/e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
     "created_at": "2017-03-19T23:40:32Z"
   }`,
-			e: &githubEvent{
+			e: &GitHubIssueEvent{
 				ID:      1006040930,
 				Type:    "referenced",
 				Created: t3339("2017-03-19T23:40:32Z"),
-				Actor: &githubUser{
+				Actor: &GitHubUser{
 					ID:    2621,
 					Login: "bradfitz",
 				},
@@ -453,11 +453,11 @@ func TestParseGithubEvents(t *testing.T) {
       "to": "test-2 new name"
     }
   }`,
-			e: &githubEvent{
+			e: &GitHubIssueEvent{
 				ID:      1006107803,
 				Type:    "renamed",
 				Created: t3339("2017-03-20T02:53:43Z"),
-				Actor: &githubUser{
+				Actor: &GitHubUser{
 					ID:    2621,
 					Login: "bradfitz",
 				},

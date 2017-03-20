@@ -38,7 +38,7 @@ type Corpus struct {
 	debug     bool
 	strIntern map[string]string // interned strings
 	// github-specific
-	github             *githubGlobal
+	github             *GitHub
 	watchedGithubRepos []watchedGithubRepo
 	// git-specific:
 	pollGitDirs   []polledGitCommits

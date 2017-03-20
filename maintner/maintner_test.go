@@ -19,11 +19,11 @@ import (
 	"golang.org/x/build/maintner/maintpb"
 )
 
-var u1 = &githubUser{
+var u1 = &GitHubUser{
 	Login: "gopherbot",
 	ID:    100,
 }
-var u2 = &githubUser{
+var u2 = &GitHubUser{
 	Login: "kevinburke",
 	ID:    101,
 }
@@ -75,17 +75,17 @@ func init() {
 
 func TestProcessMutation_Github_NewIssue(t *testing.T) {
 	c := NewCorpus(&dummyMutationLogger{})
-	github := &githubGlobal{c: c}
+	github := &GitHub{c: c}
 	c.github = github
-	github.users = map[int64]*githubUser{
+	github.users = map[int64]*GitHubUser{
 		u1.ID: u1,
 	}
-	github.repos = map[githubRepoID]*githubRepo{
-		githubRepoID{"golang", "go"}: &githubRepo{
+	github.repos = map[githubRepoID]*GitHubRepo{
+		githubRepoID{"golang", "go"}: &GitHubRepo{
 			github: github,
 			id:     githubRepoID{"golang", "go"},
-			issues: map[int32]*githubIssue{
-				3: &githubIssue{
+			issues: map[int32]*GitHubIssue{
+				3: &GitHubIssue{
 					Number:    3,
 					User:      u1,
 					Title:     "some title",
@@ -120,7 +120,7 @@ func TestNewMutationsFromIssue(t *testing.T) {
 		Body:      github.String("body of the issue"),
 		State:     github.String("closed"),
 	}
-	gr := &githubRepo{
+	gr := &GitHubRepo{
 		id: githubRepoID{"golang", "go"},
 	}
 	is := gr.newMutationFromIssue(nil, gh)
@@ -157,8 +157,8 @@ func TestNewAssigneesHandlesNil(t *testing.T) {
 
 func TestAssigneesDeleted(t *testing.T) {
 	c := NewCorpus(&dummyMutationLogger{})
-	assignees := []*githubUser{u1, u2}
-	issue := &githubIssue{
+	assignees := []*GitHubUser{u1, u2}
+	issue := &GitHubIssue{
 		Number:    3,
 		User:      u1,
 		Body:      "some body",
@@ -166,17 +166,17 @@ func TestAssigneesDeleted(t *testing.T) {
 		Updated:   t2,
 		Assignees: assignees,
 	}
-	gr := &githubRepo{
+	gr := &GitHubRepo{
 		id: githubRepoID{"golang", "go"},
-		issues: map[int32]*githubIssue{
+		issues: map[int32]*GitHubIssue{
 			3: issue,
 		},
 	}
-	c.github = &githubGlobal{
-		users: map[int64]*githubUser{
+	c.github = &GitHub{
+		users: map[int64]*GitHubUser{
 			u1.ID: u1,
 		},
-		repos: map[githubRepoID]*githubRepo{
+		repos: map[githubRepoID]*GitHubRepo{
 			githubRepoID{"golang", "go"}: gr,
 		},
 	}

@@ -50,13 +50,17 @@ func (id githubRepoID) valid() bool {
 	return true
 }
 
-type githubGlobal struct {
+type GitHub struct {
 	c     *Corpus
-	users map[int64]*githubUser
-	repos map[githubRepoID]*githubRepo
+	users map[int64]*GitHubUser
+	repos map[githubRepoID]*GitHubRepo
 }
 
-func (g *githubGlobal) getOrCreateRepo(owner, repo string) *githubRepo {
+func (g *GitHub) Repo(owner, repo string) *GitHubRepo {
+	return g.repos[githubRepoID{owner, repo}]
+}
+
+func (g *GitHub) getOrCreateRepo(owner, repo string) *GitHubRepo {
 	id := githubRepoID{owner, repo}
 	if !id.valid() {
 		return nil
@@ -65,24 +69,24 @@ func (g *githubGlobal) getOrCreateRepo(owner, repo string) *githubRepo {
 	if ok {
 		return r
 	}
-	r = &githubRepo{
+	r = &GitHubRepo{
 		github: g,
 		id:     id,
-		issues: map[int32]*githubIssue{},
+		issues: map[int32]*GitHubIssue{},
 	}
 	g.repos[id] = r
 	return r
 }
 
-type githubRepo struct {
-	github     *githubGlobal
+type GitHubRepo struct {
+	github     *GitHub
 	id         githubRepoID
-	issues     map[int32]*githubIssue // num -> issue
-	milestones map[int64]*githubMilestone
-	labels     map[int64]*githubLabel
+	issues     map[int32]*GitHubIssue // num -> issue
+	milestones map[int64]*GitHubMilestone
+	labels     map[int64]*GitHubLabel
 }
 
-func (g *githubRepo) getOrCreateMilestone(id int64) *githubMilestone {
+func (g *GitHubRepo) getOrCreateMilestone(id int64) *GitHubMilestone {
 	if id == 0 {
 		panic("zero id")
 	}
@@ -91,14 +95,14 @@ func (g *githubRepo) getOrCreateMilestone(id int64) *githubMilestone {
 		return m
 	}
 	if g.milestones == nil {
-		g.milestones = map[int64]*githubMilestone{}
+		g.milestones = map[int64]*GitHubMilestone{}
 	}
-	m = &githubMilestone{ID: id}
+	m = &GitHubMilestone{ID: id}
 	g.milestones[id] = m
 	return m
 }
 
-func (g *githubRepo) getOrCreateLabel(id int64) *githubLabel {
+func (g *GitHubRepo) getOrCreateLabel(id int64) *GitHubLabel {
 	if id == 0 {
 		panic("zero id")
 	}
@@ -107,64 +111,64 @@ func (g *githubRepo) getOrCreateLabel(id int64) *githubLabel {
 		return lb
 	}
 	if g.labels == nil {
-		g.labels = map[int64]*githubLabel{}
+		g.labels = map[int64]*GitHubLabel{}
 	}
-	lb = &githubLabel{ID: id}
+	lb = &GitHubLabel{ID: id}
 	g.labels[id] = lb
 	return lb
 }
 
-// githubUser represents a github user.
+// GitHubUser represents a github user.
 // It is a subset of https://developer.github.com/v3/users/#get-a-single-user
-type githubUser struct {
+type GitHubUser struct {
 	ID    int64
 	Login string
 }
 
-// githubIssue represents a github issue.
+// GitHubIssue represents a github issue.
 // This is maintner's in-memory representation. It differs slightly
 // from the API's *github.Issue type, notably in the lack of pointers
 // for all fields.
 // See https://developer.github.com/v3/issues/#get-a-single-issue
-type githubIssue struct {
+type GitHubIssue struct {
 	ID        int64
 	Number    int32
 	NotExist  bool // if true, rest of fields should be ignored.
 	Closed    bool
 	Locked    bool
-	User      *githubUser
-	Assignees []*githubUser
+	User      *GitHubUser
+	Assignees []*GitHubUser
 	Created   time.Time
 	Updated   time.Time
 	ClosedAt  time.Time
-	ClosedBy  *githubUser
+	ClosedBy  *GitHubUser
 	Title     string
 	Body      string
-	Milestone *githubMilestone       // nil for unknown, noMilestone for none
-	Labels    map[int64]*githubLabel // label ID => label
+	Milestone *GitHubMilestone       // nil for unknown, noMilestone for none
+	Labels    map[int64]*GitHubLabel // label ID => label
 
-	commentsUpdatedTil time.Time                // max comment modtime seen
-	commentsSyncedAsOf time.Time                // as of server's Date header
-	comments           map[int64]*githubComment // by comment.ID
-	eventsSyncedAsOf   time.Time                // as of server's Date header
-	events             map[int64]*githubEvent   // by event.ID
+	commentsUpdatedTil time.Time                   // max comment modtime seen
+	commentsSyncedAsOf time.Time                   // as of server's Date header
+	comments           map[int64]*GitHubComment    // by comment.ID
+	eventsSyncedAsOf   time.Time                   // as of server's Date header
+	events             map[int64]*GitHubIssueEvent // by event.ID
 }
 
-func (gi *githubIssue) getCreatedAt() time.Time {
+func (gi *GitHubIssue) getCreatedAt() time.Time {
 	if gi == nil {
 		return time.Time{}
 	}
 	return gi.Created
 }
 
-func (gi *githubIssue) getUpdatedAt() time.Time {
+func (gi *GitHubIssue) getUpdatedAt() time.Time {
 	if gi == nil {
 		return time.Time{}
 	}
 	return gi.Updated
 }
 
-func (gi *githubIssue) getClosedAt() time.Time {
+func (gi *GitHubIssue) getClosedAt() time.Time {
 	if gi == nil {
 		return time.Time{}
 	}
@@ -172,9 +176,9 @@ func (gi *githubIssue) getClosedAt() time.Time {
 }
 
 // noMilestone is a sentinel value to explicitly mean no milestone.
-var noMilestone = new(githubMilestone)
+var noMilestone = new(GitHubMilestone)
 
-type githubLabel struct {
+type GitHubLabel struct {
 	ID   int64
 	Name string
 	// TODO: color?
@@ -183,7 +187,7 @@ type githubLabel struct {
 // GenMutationDiff generates a diff from in-memory state 'a' (which
 // may be nil) to the current (non-nil) state b from GitHub. It
 // returns nil if there's no difference.
-func (a *githubLabel) GenMutationDiff(b *github.Label) *maintpb.GithubLabel {
+func (a *GitHubLabel) GenMutationDiff(b *github.Label) *maintpb.GithubLabel {
 	id := int64(b.GetID())
 	if a != nil && a.ID == id && a.Name == b.GetName() {
 		// No change.
@@ -192,7 +196,7 @@ func (a *githubLabel) GenMutationDiff(b *github.Label) *maintpb.GithubLabel {
 	return &maintpb.GithubLabel{Id: id, Name: b.GetName()}
 }
 
-func (lb *githubLabel) processMutation(mut maintpb.GithubLabel) {
+func (lb *GitHubLabel) processMutation(mut maintpb.GithubLabel) {
 	if lb.ID == 0 {
 		panic("bogus label ID 0")
 	}
@@ -204,7 +208,7 @@ func (lb *githubLabel) processMutation(mut maintpb.GithubLabel) {
 	}
 }
 
-type githubMilestone struct {
+type GitHubMilestone struct {
 	ID     int64
 	Title  string
 	Number int32
@@ -213,12 +217,12 @@ type githubMilestone struct {
 
 // emptyMilestone is a non-nil *githubMilestone with zero values for
 // all fields.
-var emptyMilestone = new(githubMilestone)
+var emptyMilestone = new(GitHubMilestone)
 
 // GenMutationDiff generates a diff from in-memory state 'a' (which
 // may be nil) to the current (non-nil) state b from GitHub. It
 // returns nil if there's no difference.
-func (a *githubMilestone) GenMutationDiff(b *github.Milestone) *maintpb.GithubMilestone {
+func (a *GitHubMilestone) GenMutationDiff(b *github.Milestone) *maintpb.GithubMilestone {
 	var ret *maintpb.GithubMilestone // lazily inited by diff
 	diff := func() *maintpb.GithubMilestone {
 		if ret == nil {
@@ -241,7 +245,7 @@ func (a *githubMilestone) GenMutationDiff(b *github.Milestone) *maintpb.GithubMi
 	return ret
 }
 
-func (ms *githubMilestone) processMutation(mut maintpb.GithubMilestone) {
+func (ms *GitHubMilestone) processMutation(mut maintpb.GithubMilestone) {
 	if ms.ID == 0 {
 		panic("bogus milestone ID 0")
 	}
@@ -259,17 +263,19 @@ func (ms *githubMilestone) processMutation(mut maintpb.GithubMilestone) {
 	}
 }
 
-type githubComment struct {
+type GitHubComment struct {
 	ID      int64
-	User    *githubUser
+	User    *GitHubUser
 	Created time.Time
 	Updated time.Time
 	Body    string
 }
 
-// TODO: this struct is a little wide. change it to an interface
-// instead?  Maybe later, if memory profiling suggests it would help.
-type githubEvent struct {
+type GitHubIssueEvent struct {
+	// TODO: this struct is a little wide. change it to an interface
+	// instead?  Maybe later, if memory profiling suggests it would help.
+
+	// ID is the ID of the event.
 	ID int64
 
 	// Type is one of:
@@ -289,17 +295,17 @@ type githubEvent struct {
 	OtherJSON string
 
 	Created time.Time
-	Actor   *githubUser
+	Actor   *GitHubUser
 
 	Label               string      // for type: "unlabeled", "labeled"
-	Assignee            *githubUser // for type "assigned", "unassigned"
-	Assigner            *githubUser // for type "assigned", "unassigned"
+	Assignee            *GitHubUser // for type "assigned", "unassigned"
+	Assigner            *GitHubUser // for type "assigned", "unassigned"
 	Milestone           string      // for type: "milestoned", "demilestoned"
 	From, To            string      // for type: "renamed"
 	CommitID, CommitURL string      // for type: "closed", "referenced" ... ?
 }
 
-func (e *githubEvent) Proto() *maintpb.GithubIssueEvent {
+func (e *GitHubIssueEvent) Proto() *maintpb.GithubIssueEvent {
 	p := &maintpb.GithubIssueEvent{
 		Id:         e.ID,
 		EventType:  e.Type,
@@ -343,9 +349,9 @@ func (e *githubEvent) Proto() *maintpb.GithubIssueEvent {
 var rxGithubCommitURL = regexp.MustCompile(`^https://api\.github\.com/repos/([^/]+)/([^/]+)/commits/`)
 
 // r.github.c.mu must be held.
-func (r *githubRepo) newGithubEvent(p *maintpb.GithubIssueEvent) *githubEvent {
+func (r *GitHubRepo) newGithubEvent(p *maintpb.GithubIssueEvent) *GitHubIssueEvent {
 	g := r.github
-	e := &githubEvent{
+	e := &GitHubIssueEvent{
 		ID:       p.Id,
 		Type:     p.EventType,
 		Actor:    g.getOrCreateUserID(p.ActorId),
@@ -379,7 +385,7 @@ func (r *githubRepo) newGithubEvent(p *maintpb.GithubIssueEvent) *githubEvent {
 }
 
 // (requires corpus be locked for reads)
-func (gi *githubIssue) commentsSynced() bool {
+func (gi *GitHubIssue) commentsSynced() bool {
 	if gi.NotExist {
 		// Issue doesn't exist, so can't sync its non-issues,
 		// so consider it done.
@@ -389,7 +395,7 @@ func (gi *githubIssue) commentsSynced() bool {
 }
 
 // (requires corpus be locked for reads)
-func (gi *githubIssue) eventsSynced() bool {
+func (gi *GitHubIssue) eventsSynced() bool {
 	if gi.NotExist {
 		// Issue doesn't exist, so can't sync its non-issues,
 		// so consider it done.
@@ -402,9 +408,9 @@ func (c *Corpus) initGithub() {
 	if c.github != nil {
 		return
 	}
-	c.github = &githubGlobal{
+	c.github = &GitHub{
 		c:     c,
-		repos: map[githubRepoID]*githubRepo{},
+		repos: map[githubRepoID]*GitHubRepo{},
 	}
 }
 
@@ -423,12 +429,12 @@ func (c *Corpus) AddGithub(owner, repo, tokenFile string) {
 }
 
 type watchedGithubRepo struct {
-	gr        *githubRepo
+	gr        *GitHubRepo
 	tokenFile string
 }
 
 // g.c.mu must be held
-func (g *githubGlobal) getUser(pu *maintpb.GithubUser) *githubUser {
+func (g *GitHub) getUser(pu *maintpb.GithubUser) *GitHubUser {
 	if pu == nil {
 		return nil
 	}
@@ -439,9 +445,9 @@ func (g *githubGlobal) getUser(pu *maintpb.GithubUser) *githubUser {
 		return u
 	}
 	if g.users == nil {
-		g.users = make(map[int64]*githubUser)
+		g.users = make(map[int64]*GitHubUser)
 	}
-	u := &githubUser{
+	u := &GitHubUser{
 		ID:    pu.Id,
 		Login: pu.Login,
 	}
@@ -449,7 +455,7 @@ func (g *githubGlobal) getUser(pu *maintpb.GithubUser) *githubUser {
 	return u
 }
 
-func (g *githubGlobal) getOrCreateUserID(id int64) *githubUser {
+func (g *GitHub) getOrCreateUserID(id int64) *GitHubUser {
 	if id == 0 {
 		return nil
 	}
@@ -457,9 +463,9 @@ func (g *githubGlobal) getOrCreateUserID(id int64) *githubUser {
 		return u
 	}
 	if g.users == nil {
-		g.users = make(map[int64]*githubUser)
+		g.users = make(map[int64]*GitHubUser)
 	}
-	u := &githubUser{ID: id}
+	u := &GitHubUser{ID: id}
 	g.users[id] = u
 	return u
 }
@@ -467,7 +473,7 @@ func (g *githubGlobal) getOrCreateUserID(id int64) *githubUser {
 // newGithubUserProto creates a GithubUser with the minimum diff between
 // existing and g. The return value is nil if there were no changes. existing
 // may also be nil.
-func newGithubUserProto(existing *githubUser, g *github.User) *maintpb.GithubUser {
+func newGithubUserProto(existing *GitHubUser, g *github.User) *maintpb.GithubUser {
 	if g == nil {
 		return nil
 	}
@@ -493,7 +499,7 @@ func newGithubUserProto(existing *githubUser, g *github.User) *maintpb.GithubUse
 
 // deletedAssignees returns an array of user ID's that are present in existing
 // but not present in new.
-func deletedAssignees(existing []*githubUser, new []*github.User) []int64 {
+func deletedAssignees(existing []*GitHubUser, new []*github.User) []int64 {
 	mp := make(map[int64]bool, len(existing))
 	for _, u := range new {
 		id := int64(u.GetID())
@@ -512,8 +518,8 @@ func deletedAssignees(existing []*githubUser, new []*github.User) []int64 {
 // new will be present in the returned array in their entirety. Modified users
 // will appear containing only the ID field and changed fields. Unmodified users
 // will not appear in the returned array.
-func newAssignees(existing []*githubUser, new []*github.User) []*maintpb.GithubUser {
-	mp := make(map[int64]*githubUser, len(existing))
+func newAssignees(existing []*GitHubUser, new []*github.User) []*maintpb.GithubUser {
+	mp := make(map[int64]*GitHubUser, len(existing))
 	for _, u := range existing {
 		mp[u.ID] = u
 	}
@@ -546,9 +552,9 @@ func newAssignees(existing []*githubUser, new []*github.User) []*maintpb.GithubU
 // setAssigneesFromProto returns a new array of assignees according to the
 // instructions in new (adds or modifies users in existing), and toDelete
 // (deletes them). c.mu must be held.
-func (g *githubGlobal) setAssigneesFromProto(existing []*githubUser, new []*maintpb.GithubUser, toDelete []int64) []*githubUser {
+func (g *GitHub) setAssigneesFromProto(existing []*GitHubUser, new []*maintpb.GithubUser, toDelete []int64) []*GitHubUser {
 	c := g.c
-	mp := make(map[int64]*githubUser)
+	mp := make(map[int64]*GitHubUser)
 	for _, u := range existing {
 		mp[u.ID] = u
 	}
@@ -584,8 +590,8 @@ func (g *githubGlobal) setAssigneesFromProto(existing []*githubUser, new []*main
 // get a Github Issue from its in-memory state 'a' to the current
 // github API state 'b'.
 type githubIssueDiffer struct {
-	gr *githubRepo
-	a  *githubIssue  // may be nil if no current state
+	gr *GitHubRepo
+	a  *GitHubIssue  // may be nil if no current state
 	b  *github.Issue // may NOT be nil
 }
 
@@ -660,7 +666,7 @@ func (d githubIssueDiffer) diffTimeField(dst **timestamp.Timestamp, memTime, git
 }
 
 func (d githubIssueDiffer) diffUser(m *maintpb.GithubIssueMutation) bool {
-	var existing *githubUser
+	var existing *GitHubUser
 	if d.a != nil {
 		existing = d.a.User
 	}
@@ -669,7 +675,7 @@ func (d githubIssueDiffer) diffUser(m *maintpb.GithubIssueMutation) bool {
 }
 
 func (d githubIssueDiffer) diffClosedBy(m *maintpb.GithubIssueMutation) bool {
-	var existing *githubUser
+	var existing *GitHubUser
 	if d.a != nil {
 		existing = d.a.ClosedBy
 	}
@@ -798,7 +804,7 @@ func (d githubIssueDiffer) diffLockedState(m *maintpb.GithubIssueMutation) bool 
 //
 // If newMutationFromIssue returns nil, the provided github.Issue is no newer
 // than the data we have in the corpus. 'a'. may be nil.
-func (r *githubRepo) newMutationFromIssue(a *githubIssue, b *github.Issue) *maintpb.Mutation {
+func (r *GitHubRepo) newMutationFromIssue(a *GitHubIssue, b *github.Issue) *maintpb.Mutation {
 	if b == nil || b.Number == nil {
 		panic(fmt.Sprintf("github issue with nil number: %#v", b))
 	}
@@ -810,7 +816,7 @@ func (r *githubRepo) newMutationFromIssue(a *githubIssue, b *github.Issue) *main
 	return &maintpb.Mutation{GithubIssue: gim}
 }
 
-func (r *githubRepo) missingIssues() []int32 {
+func (r *GitHubRepo) missingIssues() []int32 {
 	c := r.github.c
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -865,13 +871,13 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 	}
 	gi, ok := gr.issues[m.Number]
 	if !ok {
-		gi = &githubIssue{
+		gi = &GitHubIssue{
 			// User added below
 			Number: m.Number,
 			ID:     m.Id,
 		}
 		if gr.issues == nil {
-			gr.issues = make(map[int32]*githubIssue)
+			gr.issues = make(map[int32]*GitHubIssue)
 		}
 		gr.issues[m.Number] = gi
 
@@ -944,7 +950,7 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 	}
 	if len(m.RemoveLabel) > 0 || len(m.AddLabel) > 0 {
 		if gi.Labels == nil {
-			gi.Labels = make(map[int64]*githubLabel)
+			gi.Labels = make(map[int64]*GitHubLabel)
 		}
 		for _, lid := range m.RemoveLabel {
 			delete(gi.Labels, lid)
@@ -964,9 +970,9 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 		gc, ok := gi.comments[cmut.Id]
 		if !ok {
 			if gi.comments == nil {
-				gi.comments = make(map[int64]*githubComment)
+				gi.comments = make(map[int64]*GitHubComment)
 			}
-			gc = &githubComment{ID: cmut.Id}
+			gc = &GitHubComment{ID: cmut.Id}
 			gi.comments[gc.ID] = gc
 		}
 		if cmut.User != nil {
@@ -996,7 +1002,7 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 			continue
 		}
 		if gi.events == nil {
-			gi.events = make(map[int64]*githubEvent)
+			gi.events = make(map[int64]*GitHubIssueEvent)
 		}
 		gi.events[emut.Id] = gr.newGithubEvent(emut)
 	}
@@ -1048,7 +1054,7 @@ func (c *githubCache) Set(urlKey string, res []byte) {
 
 // PollGithubLoop checks for new changes on a single Github repository and
 // updates the Corpus with any changes.
-func (gr *githubRepo) PollGithubLoop(ctx context.Context, tokenFile string) error {
+func (gr *GitHubRepo) PollGithubLoop(ctx context.Context, tokenFile string) error {
 	slurp, err := ioutil.ReadFile(tokenFile)
 	if err != nil {
 		return err
@@ -1091,7 +1097,7 @@ func (gr *githubRepo) PollGithubLoop(ctx context.Context, tokenFile string) erro
 // version of the Github repo rp, using the Github client ghc.
 type githubRepoPoller struct {
 	c     *Corpus // shortcut for gr.github.c
-	gr    *githubRepo
+	gr    *GitHubRepo
 	ghc   *github.Client
 	token string
 }
@@ -1619,7 +1625,7 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 			return is, makeGithubResponse(res), err
 		},
 		func(v interface{}) error {
-			ge := v.(*githubEvent)
+			ge := v.(*GitHubIssueEvent)
 			p.c.mu.RLock()
 			_, ok := gi.events[ge.ID]
 			p.c.mu.RUnlock()
@@ -1648,14 +1654,14 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 // the "OtherJSON" field for future updates of the code to parse. (If
 // Github adds new Event types in the future, we want to archive them,
 // even if we don't understand them)
-func parseGithubEvents(r io.Reader) ([]*githubEvent, error) {
+func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
 	var jevents []map[string]interface{}
 	jd := json.NewDecoder(r)
 	jd.UseNumber()
 	if err := jd.Decode(&jevents); err != nil {
 		return nil, err
 	}
-	var evts []*githubEvent
+	var evts []*GitHubIssueEvent
 	for _, em := range jevents {
 		for k, v := range em {
 			if v == nil {
@@ -1664,7 +1670,7 @@ func parseGithubEvents(r io.Reader) ([]*githubEvent, error) {
 		}
 		delete(em, "url")
 
-		e := &githubEvent{}
+		e := &GitHubIssueEvent{}
 
 		e.Type, _ = em["event"].(string)
 		delete(em, "event")
@@ -1678,13 +1684,13 @@ func parseGithubEvents(r io.Reader) ([]*githubEvent, error) {
 		e.CommitURL, _ = em["commit_url"].(string) // "https://api.github.com/repos/bradfitz/go-issue-mirror/commits/5383ecf5a0824649ffcc0349f00f0317575753d0"
 		delete(em, "commit_url")
 
-		getUser := func(field string, gup **githubUser) {
+		getUser := func(field string, gup **GitHubUser) {
 			am, ok := em[field].(map[string]interface{})
 			if !ok {
 				return
 			}
 			delete(em, field)
-			gu := &githubUser{ID: jint64(am["id"])}
+			gu := &GitHubUser{ID: jint64(am["id"])}
 			gu.Login, _ = am["login"].(string)
 			*gup = gu
 		}

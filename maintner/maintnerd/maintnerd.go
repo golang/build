@@ -9,7 +9,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"os"
@@ -23,16 +22,12 @@ import (
 )
 
 var (
-	listen        = flag.String("listen", "localhost:6343", "listen address")
-	verbose       = flag.Bool("verbose", false, "enable verbose debug output")
-	watchGithub   = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
-	watchGoGit    = flag.Bool("watch-go-git", false, "Watch Go's main git repo.")
-	dataDir       = flag.String("data-dir", "", "Local directory to write protobuf files to (default $HOME/var/maintnerd)")
-	debug         = flag.Bool("debug", false, "Print debug logging information")
-	stopAfterLoad = flag.Bool("stop-after-load", false, "Debug: stop after loading all old data; don't poll for new data.")
-
-	// Temporary:
-	qTopFiles = flag.Bool("query-top-changed-files", false, "[temporary demo flag] If true, show the most modified git files and then exit instead of polling. This will be removed when this becomes a gRPC server.")
+	listen      = flag.String("listen", "localhost:6343", "listen address")
+	verbose     = flag.Bool("verbose", false, "enable verbose debug output")
+	watchGithub = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
+	watchGoGit  = flag.Bool("watch-go-git", false, "Watch Go's main git repo.")
+	dataDir     = flag.String("data-dir", "", "Local directory to write protobuf files to (default $HOME/var/maintnerd)")
+	debug       = flag.Bool("debug", false, "Print debug logging information")
 )
 
 func init() {
@@ -96,18 +91,6 @@ func main() {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 	log.Printf("Loaded data in %v. Memory: %v MB", initDur, ms.HeapAlloc>>20)
-
-	if *stopAfterLoad {
-		return
-	}
-
-	if *qTopFiles {
-		top := corpus.QueryFrequentlyModifiedFiles(25)
-		for _, fc := range top {
-			fmt.Printf(" %5d %s\n", fc.Count, fc.File)
-		}
-		return
-	}
 
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
