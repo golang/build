@@ -142,8 +142,6 @@ func (b *gopherbot) addLabel(ctx context.Context, gi *maintner.GitHubIssue, labe
 // again for another year.
 func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 	tooOld := time.Now().Add(-365 * 24 * time.Hour)
-	log.Printf("Freezing closed issues before %v", tooOld.Format("2006-01-02"))
-
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
 		if !gi.Closed || gi.Locked {
 			return nil

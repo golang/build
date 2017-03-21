@@ -1650,17 +1650,13 @@ func (p *githubRepoPoller) syncEvents(ctx context.Context) error {
 			return nil
 		}
 		remain := len(nums)
-		for i, num := range nums {
+		for _, num := range nums {
 			p.logf("event sync: %d issues remaining; syncing issue %v", remain, num)
 			if err := p.syncEventsOnIssue(ctx, num); err != nil {
 				p.logf("event sync on issue %d: %v", num, err)
 				return err
 			}
 			remain--
-			if i >= 30 { // TODO(bradfitz): temporary. ~1 QPS for now, until caught up.
-				p.logf("event sync: stopping early.")
-				return nil
-			}
 		}
 	}
 	p.logf("event sync: done.")
