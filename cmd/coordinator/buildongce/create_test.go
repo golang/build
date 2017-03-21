@@ -29,7 +29,7 @@ resources:
       logging_service: "logging.googleapis.com"
       monitoring_service: "none"
       node_config:
-        machine_type: "n1-standard-32"
+        machine_type: "n1-standard-8"
         oauth_scopes:
           - "https://www.googleapis.com/auth/cloud-platform"
       master_auth:
