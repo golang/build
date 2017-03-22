@@ -37,6 +37,9 @@ type DiskMutationLogger struct {
 // NewDiskMutationLogger creates a new DiskMutationLogger, which will create
 // mutations in the given directory.
 func NewDiskMutationLogger(directory string) *DiskMutationLogger {
+	if directory == "" {
+		panic("empty directory")
+	}
 	return &DiskMutationLogger{directory: directory}
 }
 
@@ -79,18 +82,17 @@ func (d *DiskMutationLogger) GetMutations(ctx context.Context) <-chan *maintpb.M
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	ch := make(chan *maintpb.Mutation, 50) // buffered: overlap gunzip/unmarshal with loading
-	// files _should_ be in lexical order
-	var dir = d.directory
-	if dir == "" {
-		dir = "."
+	if d.directory == "" {
+		panic("empty directory")
 	}
 	go func() {
-		err := filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
-			if fi.IsDir() && path != filepath.Clean(dir) {
-				return filepath.SkipDir
-			}
+		// Walk guarantees that files are walked in lexical order, which we depend on.
+		err := filepath.Walk(d.directory, func(path string, fi os.FileInfo, err error) error {
 			if err != nil {
 				return err
+			}
+			if fi.IsDir() && path != filepath.Clean(d.directory) {
+				return filepath.SkipDir
 			}
 			if !strings.HasPrefix(fi.Name(), "maintner-") {
 				return nil
@@ -137,7 +139,7 @@ func (d *DiskMutationLogger) GetMutations(ctx context.Context) <-chan *maintpb.M
 			return zr.Close()
 		})
 		if err != nil {
-			log.Printf("error walking directory %s: %v", dir, err)
+			log.Printf("error walking directory %s: %v", d.directory, err)
 		}
 		close(ch)
 	}()
