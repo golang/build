@@ -169,5 +169,6 @@ func getContext(r *http.Request) context.Context {
 }
 
 func faviconHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "image/x-icon")
 	http.ServeFile(w, r, "./static/favicon.ico")
 }
