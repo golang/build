@@ -31,14 +31,16 @@ import (
 )
 
 var (
-	public    = flag.Bool("public", false, "object should be world-readable")
-	cacheable = flag.Bool("cacheable", true, "object should be cacheable")
-	file      = flag.String("file", "-", "Filename to read object from, or '-' for stdin. If it begins with 'go:' then the rest is considered to be a Go target to install first, and then upload.")
-	verbose   = flag.Bool("verbose", false, "verbose logging")
-	osarch    = flag.String("osarch", "", "Optional 'GOOS-GOARCH' value to cross-compile; used only if --file begins with 'go:'. As a special case, if the value contains a '.' byte, anything up to and including that period is discarded.")
-	project   = flag.String("project", "", "GCE Project. If blank, it's automatically inferred from the bucket name for the common Go buckets.")
-	tags      = flag.String("tags", "", "tags to pass to go list, go install, etc. Only applicable if the --file value begins with 'go:'")
-	doGzip    = flag.Bool("gzip", false, "gzip the stored contents (not the upload's Content-Encoding); this forces the Content-Type to be application/octet-stream. To prevent misuse, the object name must also end in '.gz'")
+	public        = flag.Bool("public", false, "object should be world-readable")
+	cacheable     = flag.Bool("cacheable", true, "object should be cacheable")
+	file          = flag.String("file", "-", "Filename to read object from, or '-' for stdin. If it begins with 'go:' then the rest is considered to be a Go target to install first, and then upload.")
+	verbose       = flag.Bool("verbose", false, "verbose logging")
+	osarch        = flag.String("osarch", "", "Optional 'GOOS-GOARCH' value to cross-compile; used only if --file begins with 'go:'. As a special case, if the value contains a '.' byte, anything up to and including that period is discarded.")
+	project       = flag.String("project", "", "GCE Project. If blank, it's automatically inferred from the bucket name for the common Go buckets.")
+	tags          = flag.String("tags", "", "tags to pass to go list, go install, etc. Only applicable if the --file value begins with 'go:'")
+	doGzip        = flag.Bool("gzip", false, "gzip the stored contents (not the upload's Content-Encoding); this forces the Content-Type to be application/octet-stream. To prevent misuse, the object name must also end in '.gz'")
+	extraEnv      = flag.String("extraenv", "", "comma-separated list of addition KEY=val environment pairs to include in build environment when building a target to upload")
+	installSuffix = flag.String("installsuffix", "", "installsuffix for the go command")
 )
 
 func main() {
@@ -176,8 +178,17 @@ func buildGoTarget() {
 		goos, goarch = v[0], v[1]
 	}
 
-	env := envutil.Dedup(runtime.GOOS == "windows", append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch))
-	cmd := exec.Command("go", "list", "--tags="+*tags, "-f", "{{.Target}}", target)
+	env := append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch)
+	if *extraEnv != "" {
+		env = append(env, strings.Split(*extraEnv, ",")...)
+	}
+	env = envutil.Dedup(runtime.GOOS == "windows", env)
+	cmd := exec.Command("go",
+		"list",
+		"--tags="+*tags,
+		"--installsuffix="+*installSuffix,
+		"-f", "{{.Target}}",
+		target)
 	cmd.Env = env
 	out, err := cmd.Output()
 	if err != nil {
@@ -192,7 +203,13 @@ func buildGoTarget() {
 	}
 
 	version := os.Getenv("USER") + "-" + time.Now().Format(time.RFC3339)
-	cmd = exec.Command("go", "install", "--tags="+*tags, "-x", "--ldflags=-X main.Version="+version, target)
+	cmd = exec.Command("go",
+		"install",
+		"--tags="+*tags,
+		"--installsuffix="+*installSuffix,
+		"-x",
+		"--ldflags=-X main.Version="+version,
+		target)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if *verbose {

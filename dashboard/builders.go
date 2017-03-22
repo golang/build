@@ -65,6 +65,12 @@ var Hosts = map[string]*HostConfig{
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		ReverseAliases: []string{"linux-arm", "linux-arm-arm5"},
 	},
+	"host-linux-arm5spacemonkey": &HostConfig{
+		IsReverse:      true,
+		ExpectNum:      3,
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+		ReverseAliases: []string{"linux-arm-arm5spacemonkey"},
+	},
 	"host-openbsd-amd64-60": &HostConfig{
 		VMImage:            "openbsd-amd64-60",
 		machineType:        "n1-highcpu-4",
@@ -777,6 +783,11 @@ func init() {
 			"GOARM=5",
 			"GO_TEST_TIMEOUT_SCALE=5", // slow.
 		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-arm-arm5spacemonkey",
+		HostType: "host-linux-arm5spacemonkey",
+		env:      []string{"GOARM=5"},
 	})
 	addBuilder(BuildConfig{
 		Name:           "nacl-386",

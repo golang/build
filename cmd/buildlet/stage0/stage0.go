@@ -49,8 +49,12 @@ func main() {
 
 	switch osArch {
 	case "linux/arm":
-		if _, err := os.Stat("/usr/local/bin/oc-metadata"); err == nil {
-			initScaleway()
+		if os.Getenv("GO_BUILDER_ENV") == "linux-arm-arm5spacemonkey" {
+			// No setup currently.
+		} else {
+			if _, err := os.Stat("/usr/local/bin/oc-metadata"); err == nil {
+				initScaleway()
+			}
 		}
 	case "linux/arm64":
 		initLinaroARM64()
@@ -93,6 +97,9 @@ func main() {
 	cmd.Env = env
 	if onScaleway {
 		cmd.Args = append(cmd.Args, scalewayBuildletArgs()...)
+	}
+	if os.Getenv("GO_BUILDER_ENV") == "linux-arm-arm5spacemonkey" {
+		cmd.Args = append(cmd.Args, reverseBuildletArgs("linux-arm-arm5spacemonkey")...)
 	}
 	switch osArch {
 	case "linux/s390x":
@@ -167,6 +174,9 @@ func awaitNetwork() bool {
 }
 
 func buildletURL() string {
+	if os.Getenv("GO_BUILDER_ENV") == "linux-arm-arm5spacemonkey" {
+		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-arm-arm5"
+	}
 	switch osArch {
 	case "linux/s390x":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-s390x"
