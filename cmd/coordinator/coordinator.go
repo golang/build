@@ -56,7 +56,15 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const subrepoPrefix = "golang.org/x/"
+const (
+	subrepoPrefix = "golang.org/x/"
+
+	// eventDone is a build event name meaning the build was
+	// completed (either successfully or with remote errors).
+	// Notably, it is NOT included for network/communication
+	// errors.
+	eventDone = "done"
+)
 
 var (
 	processStartTime = time.Now()
@@ -1028,7 +1036,7 @@ func (ts *trySet) awaitTryBuild(idx int, bconf dashboard.BuildConfig, bs *buildS
 			}
 		}
 
-		if bs.hasEvent("done") {
+		if bs.hasEvent(eventDone) {
 			ts.noteBuildComplete(bconf, bs)
 			return
 		}
@@ -1523,7 +1531,7 @@ func (st *buildStatus) build() error {
 		// "done" event. (which the try coordinator looks for)
 		return err
 	}
-	st.logEventTime("done", doneMsg) // "done" is a magic value
+	st.logEventTime(eventDone, doneMsg)
 
 	if devPause {
 		st.logEventTime("DEV_MAIN_SLEEP")
@@ -1721,6 +1729,9 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *crossCompileConfig) (
 		return err
 	}
 	if remoteErr != nil {
+		// Add the "done" event if make.bash fails, otherwise
+		// try builders will loop forever:
+		st.logEventTime(eventDone, fmt.Sprintf("make.bash failed: %v", remoteErr))
 		return fmt.Errorf("remote error: %v", remoteErr)
 	}
 
