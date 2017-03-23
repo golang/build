@@ -1430,11 +1430,14 @@ func (st *buildStatus) forceSnapshotUsage() {
 	st.useSnapshotMemo = &truth
 }
 
-func (st *buildStatus) shouldCrossCompileMake() bool {
-	if inStaging {
-		return st.name == "linux-arm" && kubeErr == nil
+func (st *buildStatus) getCrossCompileConfig() *crossCompileConfig {
+	if kubeErr != nil {
+		return nil
 	}
-	return st.isTry() && st.name == "linux-arm" && kubeErr == nil
+	if inStaging || st.isTry() {
+		return crossCompileConfigs[st.name]
+	}
+	return nil
 }
 
 func (st *buildStatus) build() error {
@@ -1451,8 +1454,8 @@ func (st *buildStatus) build() error {
 	}
 	sp.done(nil)
 
-	if !snapshotExists && st.shouldCrossCompileMake() {
-		if err := st.crossCompileMakeAndSnapshot(); err != nil {
+	if config := st.getCrossCompileConfig(); !snapshotExists && config != nil {
+		if err := st.crossCompileMakeAndSnapshot(config); err != nil {
 			return err
 		}
 		st.forceSnapshotUsage()
@@ -1647,7 +1650,26 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 	return nil, nil
 }
 
-func (st *buildStatus) crossCompileMakeAndSnapshot() (err error) {
+type crossCompileConfig struct {
+	Buildlet    string
+	CCForTarget string
+	GOARM       string
+}
+
+var crossCompileConfigs = map[string]*crossCompileConfig{
+	"linux-arm": {
+		Buildlet:    "host-linux-armhf-cross",
+		CCForTarget: "arm-linux-gnueabihf-gcc",
+		GOARM:       "7",
+	},
+	"linux-arm-arm5spacemonkey": {
+		Buildlet:    "host-linux-armel-cross",
+		CCForTarget: "arm-linux-gnueabi-gcc",
+		GOARM:       "5",
+	},
+}
+
+func (st *buildStatus) crossCompileMakeAndSnapshot(config *crossCompileConfig) (err error) {
 	// TODO: currently we ditch this buildlet when we're done with
 	// the make.bash & snapshot. For extra speed later, we could
 	// keep it around and use it to "go test -c" each stdlib
@@ -1657,7 +1679,7 @@ func (st *buildStatus) crossCompileMakeAndSnapshot() (err error) {
 	ctx, cancel := context.WithCancel(st.ctx)
 	defer cancel()
 	sp := st.createSpan("get_buildlet_cross")
-	kubeBC, err := kubePool.GetBuildlet(ctx, "host-linux-armhf-cross", st)
+	kubeBC, err := kubePool.GetBuildlet(ctx, config.Buildlet, st)
 	sp.done(err)
 	if err != nil {
 		return err
@@ -1688,10 +1710,10 @@ func (st *buildStatus) crossCompileMakeAndSnapshot() (err error) {
 		ExtraEnv: []string{
 			"GOROOT_BOOTSTRAP=/go1.4",
 			"CGO_ENABLED=1",
-			"CC_FOR_TARGET=arm-linux-gnueabihf-gcc",
+			"CC_FOR_TARGET=" + config.CCForTarget,
 			"GOOS=" + goos,
 			"GOARCH=" + goarch,
-			"GOARM=7", // harmless if GOARCH != "arm"
+			"GOARM=" + config.GOARM, // harmless if GOARCH != "arm"
 		},
 		Debug: true,
 	})
