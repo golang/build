@@ -27,7 +27,7 @@ var (
 	verbose     = flag.Bool("verbose", false, "enable verbose debug output")
 	watchGithub = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
 	// TODO: specify gerrit auth via gitcookies or similar
-	watchGerrit = flag.String("watch-gerrit", "", `Comma-separated list of Gerrit projects to watch (e.g. "https://go.googlesource.com/go")`)
+	watchGerrit = flag.String("watch-gerrit", "", `Comma-separated list of Gerrit projects to watch, each of form "hostname/project" (e.g. "go.googlesource.com/go")`)
 	watchGoGit  = flag.Bool("watch-go-git", false, "Watch Go's main git repo.")
 	dataDir     = flag.String("data-dir", "", "Local directory to write protobuf files to (default $HOME/var/maintnerd)")
 	debug       = flag.Bool("debug", false, "Print debug logging information")

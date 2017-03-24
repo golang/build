@@ -232,11 +232,11 @@ func (c *Corpus) sync(ctx context.Context, loop bool) error {
 		})
 	}
 	for _, w := range c.watchedGerritRepos {
-		project := w.project
+		gp := w.project
 		group.Go(func() error {
-			log.Printf("Polling %v ...", project.url)
-			err := project.sync(ctx, loop)
-			log.Printf("Polling %v: %v", project.url, err)
+			log.Printf("Polling gerrit %v ...", gp.proj)
+			err := gp.sync(ctx, loop)
+			log.Printf("Polling gerrit %v: %v", gp.proj, err)
 			return err
 		})
 	}

@@ -36,30 +36,41 @@ type Gerrit struct {
 }
 
 // c.mu must be held
-func (g *Gerrit) getOrCreateProject(gerritURL string) *GerritProject {
-	proj, ok := g.projects[gerritURL]
+func (g *Gerrit) getOrCreateProject(gerritProj string) *GerritProject {
+	proj, ok := g.projects[gerritProj]
 	if ok {
 		return proj
 	}
 	proj = &GerritProject{
 		gerrit: g,
-		url:    gerritURL,
-		gitDir: filepath.Join(g.dataDir, url.PathEscape(gerritURL)),
+		proj:   gerritProj,
+		gitDir: filepath.Join(g.dataDir, url.PathEscape(gerritProj)),
 		cls:    map[int32]*gerritCL{},
+		remote: map[gerritCLVersion]gitHash{},
 	}
-	g.projects[gerritURL] = proj
+	g.projects[gerritProj] = proj
 	return proj
 }
 
 // GerritProject represents a single Gerrit project.
 type GerritProject struct {
 	gerrit *Gerrit
-	url    string // "https://go.googlesource.com"
+	proj   string // "go.googlesource.com/net"
 	// TODO: Many different Git remotes can share the same Gerrit instance, e.g.
 	// the Go Gerrit instance supports build, gddo, go. For the moment these are
 	// all treated separately, since the remotes are separate.
 	gitDir string
 	cls    map[int32]*gerritCL
+	remote map[gerritCLVersion]gitHash
+}
+
+func (gp *GerritProject) logf(format string, args ...interface{}) {
+	log.Printf("gerrit "+gp.proj+": "+format, args...)
+}
+
+type gerritCLVersion struct {
+	CLNumber int32
+	Version  int32 // version 0 is used for the "meta" ref.
 }
 
 type gerritCL struct {
@@ -99,6 +110,9 @@ type watchedGerritRepo struct {
 func (c *Corpus) AddGerrit(gerritURL string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if strings.Count(gerritURL, "/") != 1 {
+		panic(fmt.Sprintf("gerrit URL %q expected to contain exactly 1 slash", gerritURL))
+	}
 	c.initGerrit()
 	project := c.gerrit.getOrCreateProject(gerritURL)
 	if project == nil {
@@ -110,7 +124,40 @@ func (c *Corpus) AddGerrit(gerritURL string) {
 }
 
 func (c *Corpus) processGerritMutation(gm *maintpb.GerritMutation) {
-	panic("TODO")
+	if c.gerrit == nil {
+		// Untracked.
+		return
+	}
+	gp, ok := c.gerrit.projects[gm.Project]
+	if !ok {
+		// Untracked.
+		return
+	}
+	for _, refp := range gm.Refs {
+		m := rxChangeRef.FindStringSubmatch(refp.Ref)
+		if m == nil {
+			continue
+		}
+		cl, err := strconv.ParseInt(m[1], 10, 32)
+		version, ok := gerritVersionNumber(m[2])
+		if !ok || err != nil {
+			continue
+		}
+		gp.remote[gerritCLVersion{int32(cl), version}] = gitHashFromHexStr(refp.Sha1)
+	}
+
+	// TODO: commits
+}
+
+func gerritVersionNumber(s string) (version int32, ok bool) {
+	if s == "meta" {
+		return 0, true
+	}
+	v, err := strconv.ParseInt(s, 10, 32)
+	if err != nil {
+		return 0, false
+	}
+	return int32(v), true
 }
 
 // rxRemoteRef matches "git ls-remote" lines.
@@ -129,12 +176,18 @@ func (c *Corpus) processGerritMutation(gm *maintpb.GerritMutation) {
 // refs/changes/99/99/1, refs/changes/99/199/meta.
 var rxRemoteRef = regexp.MustCompile(`^([0-9a-f]{40,})\s+refs/changes/[0-9a-f]{2}/([0-9]+)/(.+)$`)
 
+// $1: change num
+// $2: version or "meta"
+var rxChangeRef = regexp.MustCompile(`^refs/changes/[0-9a-f]{2}/([0-9]+)/(meta|(?:\d+))`)
+
 func (gp *GerritProject) sync(ctx context.Context, loop bool) error {
 	if err := gp.init(ctx); err != nil {
+		gp.logf("init: %v", err)
 		return err
 	}
 	for {
 		if err := gp.syncOnce(ctx); err != nil {
+			gp.logf("sync: %v", err)
 			return err
 		}
 		if !loop {
@@ -151,70 +204,62 @@ func (gp *GerritProject) sync(ctx context.Context, loop bool) error {
 func (gp *GerritProject) syncOnce(ctx context.Context) error {
 	c := gp.gerrit.c
 
-	// TODO abstract the cmd running boilerplate
 	fetchCtx, cancel := context.WithTimeout(ctx, time.Minute)
 	cmd := exec.CommandContext(fetchCtx, "git", "fetch", "origin")
-	buf := new(bytes.Buffer)
-	cmd.Stdout = buf
-	cmd.Stderr = buf
 	cmd.Dir = gp.gitDir
-	err := cmd.Run()
+	out, err := cmd.CombinedOutput()
 	cancel()
 	if err != nil {
-		os.Stderr.Write(buf.Bytes())
-		return err
+		return fmt.Errorf("git fetch origin: %v, %s", err, out)
 	}
+
 	cmd = exec.CommandContext(ctx, "git", "ls-remote")
-	buf.Reset()
-	cmd.Stdout = buf
-	cmd.Stderr = buf
 	cmd.Dir = gp.gitDir
-	if err := cmd.Run(); err != nil {
-		os.Stderr.Write(buf.Bytes())
-		return err
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git ls-remote: %v, %s", err, out)
 	}
-	remoteHash := map[int32]gitHash{} // CL -> current server value
-	bs := bufio.NewScanner(buf)
+
+	var changedRefs []*maintpb.GitRef
+
+	bs := bufio.NewScanner(bytes.NewReader(out))
 	for bs.Scan() {
 		m := rxRemoteRef.FindSubmatch(bs.Bytes())
 		if m == nil {
 			continue
 		}
 		clNum, err := strconv.ParseInt(string(m[2]), 10, 32)
-		if err != nil {
-			return fmt.Errorf("maintner: error parsing CL as a number: %v", err)
+		version, ok := gerritVersionNumber(string(m[3]))
+		if err != nil || !ok {
+			continue
 		}
-		remoteHash[int32(clNum)] = gitHashFromHex(m[1])
+		sha1 := m[1]
+		hash := gitHashFromHex(sha1)
 
+		c.mu.RLock()
+		curHash := gp.remote[gerritCLVersion{int32(clNum), version}]
+		c.mu.RUnlock()
+
+		if curHash != hash {
+			changedRefs = append(changedRefs, &maintpb.GitRef{
+				Ref:  strings.TrimSpace(bs.Text()[len(sha1):]),
+				Sha1: string(sha1),
+			})
+		}
 	}
 	if err := bs.Err(); err != nil {
 		return err
 	}
-
-	var toFetch []gitHash
-	c.mu.RLock() // while we read from gp.cls
-	for cl, hash := range remoteHash {
-		if cl, ok := gp.cls[cl]; !ok || cl.Hash != hash {
-			toFetch = append(toFetch, hash)
-		}
+	if len(changedRefs) == 0 {
+		return nil
 	}
-	c.mu.RUnlock()
-
-	if err := gp.fetchHashes(ctx, toFetch); err != nil {
-		return err
-	}
-	for cl, hash := range remoteHash {
-		c.mu.RLock()
-		val, ok := gp.cls[cl]
-		c.mu.RUnlock()
-		if !ok || val.Hash != hash {
-			// TODO: parallelize updates if this gets slow, we can probably do
-			// lots of filesystem reads without penalty
-			if err := gp.updateCL(ctx, cl, hash); err != nil {
-				return err
-			}
-		}
-	}
+	gp.logf("%d new refs.", len(changedRefs))
+	c.processMutation(&maintpb.Mutation{
+		Gerrit: &maintpb.GerritMutation{
+			Project: gp.proj,
+			Refs:    changedRefs,
+		},
+	})
 	return nil
 }
 
@@ -244,10 +289,7 @@ func (gp *GerritProject) newMutationFromCL(a *gerritCL, b *gerritMetaCommit) *ma
 		panic("TODO")
 		return &maintpb.Mutation{
 			Gerrit: &maintpb.GerritMutation{
-			//Url:      gp.url,
-			//MetaSha1: sha1,
-			//Number:   b.Number,
-			//MetaRaw:  b.Raw,
+				Project: gp.proj,
 			},
 		}
 	}
@@ -290,7 +332,7 @@ func (gp *GerritProject) fetchHashes(ctx context.Context, hashes []gitHash) erro
 		cmd := exec.CommandContext(ctx, "git", args...)
 		cmd.Dir = gp.gitDir
 		if out, err := cmd.CombinedOutput(); err != nil {
-			log.Printf("error fetching %d hashes from git remote %s: %s", len(batch), gp.url, out)
+			log.Printf("error fetching %d hashes from gerrit project %s: %s", len(batch), gp.proj, out)
 			return err
 		}
 	}
@@ -306,33 +348,37 @@ func (gp *GerritProject) init(ctx context.Context) error {
 	if _, err := exec.LookPath("git"); err != nil {
 		return err
 	}
+
 	if _, err := os.Stat(filepath.Join(gp.gitDir, ".git", "config")); err == nil {
 		remoteBytes, err := exec.CommandContext(ctx, "git", "remote", "-v").Output()
 		if err != nil {
 			return err
 		}
-		if !strings.Contains(string(remoteBytes), "origin") && !strings.Contains(string(remoteBytes), gp.url) {
+		if !strings.Contains(string(remoteBytes), "origin") && !strings.Contains(string(remoteBytes), "https://"+gp.proj) {
 			return fmt.Errorf("didn't find origin & gp.url in remote output %s", string(remoteBytes))
 		}
-	} else {
-		cmd := exec.CommandContext(ctx, "git", "init")
-		buf := new(bytes.Buffer)
-		cmd.Stdout = buf
-		cmd.Stderr = buf
-		cmd.Dir = gp.gitDir
-		if err := cmd.Run(); err != nil {
-			log.Printf(`Error running "git init": %s`, buf.String())
-			return err
-		}
-		buf.Reset()
-		cmd = exec.CommandContext(ctx, "git", "remote", "add", "origin", gp.url)
-		cmd.Stdout = buf
-		cmd.Stderr = buf
-		cmd.Dir = gp.gitDir
-		if err := cmd.Run(); err != nil {
-			log.Printf(`Error running "git remote add origin": %s`, buf.String())
-			return err
-		}
+		gp.logf("git directory exists.")
+		return nil
 	}
+
+	cmd := exec.CommandContext(ctx, "git", "init")
+	buf := new(bytes.Buffer)
+	cmd.Stdout = buf
+	cmd.Stderr = buf
+	cmd.Dir = gp.gitDir
+	if err := cmd.Run(); err != nil {
+		log.Printf(`Error running "git init": %s`, buf.String())
+		return err
+	}
+	buf.Reset()
+	cmd = exec.CommandContext(ctx, "git", "remote", "add", "origin", "https://"+gp.proj)
+	cmd.Stdout = buf
+	cmd.Stderr = buf
+	cmd.Dir = gp.gitDir
+	if err := cmd.Run(); err != nil {
+		log.Printf(`Error running "git remote add origin": %s`, buf.String())
+		return err
+	}
+
 	return nil
 }
