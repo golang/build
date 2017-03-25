@@ -111,7 +111,6 @@ func main() {
 	runtime.ReadMemStats(&ms)
 	log.Printf("Loaded data in %v. Memory: %v MB", initDur, ms.HeapAlloc>>20)
 
-	corpus.StartLogging()
 	if *syncQuit {
 		if err := corpus.Sync(ctx); err != nil {
 			log.Fatalf("corpus.Sync = %v", err)

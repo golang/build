@@ -236,7 +236,7 @@ func (c *Corpus) indexCommit(conf polledGitCommits, hash gitHash) error {
 			Commit: commit,
 		},
 	}
-	c.processMutation(m)
+	c.addMutation(m)
 	return nil
 }
 

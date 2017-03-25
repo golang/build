@@ -254,7 +254,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 		return nil
 	}
 	gp.logf("%d new refs.", len(changedRefs))
-	c.processMutation(&maintpb.Mutation{
+	c.addMutation(&maintpb.Mutation{
 		Gerrit: &maintpb.GerritMutation{
 			Project: gp.proj,
 			Refs:    changedRefs,
@@ -313,7 +313,7 @@ func (gp *GerritProject) updateCL(ctx context.Context, clNum int32, hash gitHash
 		Raw:    buf.Bytes(),
 	}
 	proto := gp.newMutationFromCL(gp.cls[clNum], cl)
-	gp.gerrit.c.processMutation(proto)
+	gp.gerrit.c.addMutation(proto)
 	return nil
 }
 

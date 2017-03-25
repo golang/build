@@ -29,15 +29,13 @@ import (
 //
 // There are two main phases to the Corpus: the catch-up phase, when the Corpus
 // is populated from a MutationSource (disk, database), and the polling phase,
-// when the Corpus polls for new events and stores/writes them to disk. Call
-// StartLogging between the catch-up phase and the polling phase.
+// when the Corpus polls for new events and stores/writes them to disk.
 type Corpus struct {
 	MutationLogger MutationLogger
 	Verbose        bool
 
 	mu sync.RWMutex // guards all following fields
 	// corpus state:
-	shouldLog bool
 	debug     bool
 	strIntern map[string]string // interned strings
 	// github-specific
@@ -93,13 +91,6 @@ func (c *Corpus) str(s string) string {
 	}
 	c.strIntern[s] = s
 	return s
-}
-
-// StartLogging indicates that further changes should be written to the log.
-func (c *Corpus) StartLogging() {
-	c.mu.Lock()
-	c.shouldLog = true
-	c.mu.Unlock()
 }
 
 func (c *Corpus) SetDebug() {
@@ -171,19 +162,22 @@ func (c *Corpus) processMutations(ctx context.Context, src MutationSource) error
 	}
 }
 
-func (c *Corpus) processMutation(m *maintpb.Mutation) {
+// addMutation adds a mutation to the log and immediately processes it.
+func (c *Corpus) addMutation(m *maintpb.Mutation) {
 	if c.Verbose {
 		log.Printf("mutation: %v", m)
 	}
 	c.mu.Lock()
 	c.processMutationLocked(m)
 	c.mu.Unlock()
-	if c.MutationLogger != nil && c.shouldLog {
-		err := c.MutationLogger.Log(m)
-		if err != nil {
-			// TODO: handle errors better
-			fmt.Printf("could not log mutation %v: %v\n", m, err)
-		}
+
+	if c.MutationLogger == nil {
+		return
+	}
+	err := c.MutationLogger.Log(m)
+	if err != nil {
+		// TODO: handle errors better? failing is only safe option.
+		log.Fatalf("could not log mutation %v: %v\n", m, err)
 	}
 }
 

@@ -1255,7 +1255,7 @@ func (p *githubRepoPoller) syncMilestones(ctx context.Context) error {
 	if changes == 0 {
 		return nil
 	}
-	p.c.processMutation(&maintpb.Mutation{Github: mut})
+	p.c.addMutation(&maintpb.Mutation{Github: mut})
 	return nil
 }
 
@@ -1288,7 +1288,7 @@ func (p *githubRepoPoller) syncLabels(ctx context.Context) error {
 	if changes == 0 {
 		return nil
 	}
-	p.c.processMutation(&maintpb.Mutation{Github: mut})
+	p.c.addMutation(&maintpb.Mutation{Github: mut})
 	return nil
 }
 
@@ -1436,7 +1436,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context) error {
 
 			changes++
 			p.logf("changed issue %d: %s", is.GetNumber(), is.GetTitle())
-			c.processMutation(mp)
+			c.addMutation(mp)
 		}
 
 		if changes == 0 {
@@ -1476,7 +1476,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context) error {
 						NotExist: true,
 					},
 				}
-				c.processMutation(mp)
+				c.addMutation(mp)
 				continue
 			} else if err != nil {
 				return err
@@ -1486,7 +1486,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context) error {
 				continue
 			}
 			p.logf("modified issue %d: %s", issue.GetNumber(), issue.GetTitle())
-			c.processMutation(mp)
+			c.addMutation(mp)
 		}
 	}
 
@@ -1623,7 +1623,7 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 			morePages = false
 		}
 
-		p.c.processMutation(mut)
+		p.c.addMutation(mut)
 	}
 	return nil
 }
@@ -1741,7 +1741,7 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 	if err != nil {
 		return err
 	}
-	p.c.processMutation(mut)
+	p.c.addMutation(mut)
 	return nil
 }
 

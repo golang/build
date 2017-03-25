@@ -185,7 +185,7 @@ func TestAssigneesDeleted(t *testing.T) {
 		Number:    github.Int(3),
 		Assignees: []*github.User{&github.User{ID: github.Int(int(u2.ID))}},
 	})
-	c.processMutation(mutation)
+	c.addMutation(mutation)
 	gi := gr.issues[3]
 	if len(gi.Assignees) != 1 || gi.Assignees[0].ID != u2.ID {
 		t.Errorf("expected u1 to be deleted, got %v", gi.Assignees)
