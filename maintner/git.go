@@ -146,7 +146,10 @@ func (c *Corpus) gitCommitToIndex() gitHash {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	for hash := range c.gitCommitTodo {
-		return hash
+		if _, ok := c.gitCommit[hash]; !ok {
+			return hash
+		}
+		log.Printf("Warning: git commit %v in todo map, but already known; ignoring", hash)
 	}
 	return nil
 }
@@ -158,31 +161,24 @@ var (
 	committerSpace = []byte("committer ")
 	treeSpace      = []byte("tree ")
 	golangHgSpace  = []byte("golang-hg ")
+	gpgSigSpace    = []byte("gpgsig ")
+	space          = []byte(" ")
 )
 
-func (c *Corpus) indexCommit(conf polledGitCommits, hash gitHash) error {
-	if conf.repo == nil {
-		panic("bogus config; nil repo")
-	}
+func parseCommitFromGit(dir string, hash gitHash) (*maintpb.GitCommit, error) {
 	cmd := exec.Command("git", "cat-file", "commit", hash.String())
-	cmd.Dir = conf.dir
+	cmd.Dir = dir
 	catFile, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("git cat-file -p %v: %v", hash, err)
+		return nil, fmt.Errorf("git cat-file -p %v: %v", hash, err)
 	}
 	cmd = exec.Command("git", "diff-tree", "--numstat", hash.String())
-	cmd.Dir = conf.dir
+	cmd.Dir = dir
 	diffTreeOut, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("git diff-tree --numstat %v: %v", hash, err)
+		return nil, fmt.Errorf("git diff-tree --numstat %v: %v", hash, err)
 	}
 
-	c.mu.Lock()
-	if _, ok := c.gitCommit[hash]; ok {
-		c.mu.Unlock()
-		return nil
-	}
-	c.mu.Unlock()
 	diffTree := &maintpb.GitDiffTree{}
 	bs := bufio.NewScanner(bytes.NewReader(diffTreeOut))
 	lineNum := 0
@@ -218,7 +214,7 @@ func (c *Corpus) indexCommit(conf polledGitCommits, hash gitHash) error {
 		})
 	}
 	if err := bs.Err(); err != nil {
-		return err
+		return nil, err
 	}
 	commit := &maintpb.GitCommit{
 		Raw:      catFile,
@@ -228,7 +224,18 @@ func (c *Corpus) indexCommit(conf polledGitCommits, hash gitHash) error {
 	case gitSHA1:
 		commit.Sha1 = hash.String()
 	default:
-		return fmt.Errorf("unsupported git hash type %T", hash)
+		return nil, fmt.Errorf("unsupported git hash type %T", hash)
+	}
+	return commit, nil
+}
+
+func (c *Corpus) indexCommit(conf polledGitCommits, hash gitHash) error {
+	if conf.repo == nil {
+		panic("bogus config; nil repo")
+	}
+	commit, err := parseCommitFromGit(conf.dir, hash)
+	if err != nil {
+		return err
 	}
 	m := &maintpb.Mutation{
 		Git: &maintpb.GitMutation{
@@ -246,16 +253,20 @@ func (c *Corpus) processGitMutation(m *maintpb.GitMutation) {
 	if commit == nil {
 		return
 	}
+	// TODO: care about m.Repo?
+	c.processGitCommit(commit)
+}
+
+func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*gitCommit, error) {
 	if len(commit.Sha1) != 40 {
-		return
+		return nil, fmt.Errorf("bogus git sha1 %q", commit.Sha1)
 	}
 	hash := gitHashFromHexStr(commit.Sha1)
 
 	catFile := commit.Raw
 	i := bytes.Index(catFile, nlnl)
 	if i == 0 {
-		log.Printf("Unparseable commit %q", hash)
-		return
+		return nil, fmt.Errorf("commit %v lacks double newline", hash)
 	}
 	hdr, msg := catFile[:i], catFile[i+2:]
 	gc := &gitCommit{
@@ -307,12 +318,17 @@ func (c *Corpus) processGitMutation(m *maintpb.GitMutation) {
 			c.gitOfHg[string(ln[len(golangHgSpace):])] = hash
 			return nil
 		}
+		if bytes.HasPrefix(ln, gpgSigSpace) || bytes.HasPrefix(ln, space) {
+			// Jessie Frazelle is a unique butterfly.
+			return nil
+
+		}
 		log.Printf("in commit %s, unrecognized line %q", hash, ln)
 		return nil
 	})
 	if err != nil {
 		log.Printf("Unparseable commit %q: %v", hash, err)
-		return
+		return nil, fmt.Errorf("Unparseable commit %q: %v", hash, err)
 	}
 	if c.gitCommit == nil {
 		c.gitCommit = map[gitHash]*gitCommit{}
@@ -324,6 +340,7 @@ func (c *Corpus) processGitMutation(m *maintpb.GitMutation) {
 	if n := len(c.gitCommit); n%100 == 0 && c.Verbose {
 		log.Printf("Num git commits = %v", n)
 	}
+	return gc, nil
 }
 
 // calls f on each non-empty line in v, without the trailing \n. the

@@ -62,6 +62,7 @@ type GerritProject struct {
 	gitDir string
 	cls    map[int32]*gerritCL
 	remote map[gerritCLVersion]gitHash
+	need   map[gitHash]bool
 }
 
 func (gp *GerritProject) logf(format string, args ...interface{}) {
@@ -123,6 +124,7 @@ func (c *Corpus) AddGerrit(gerritURL string) {
 	})
 }
 
+// called with c.mu Locked
 func (c *Corpus) processGerritMutation(gm *maintpb.GerritMutation) {
 	if c.gerrit == nil {
 		// Untracked.
@@ -133,6 +135,11 @@ func (c *Corpus) processGerritMutation(gm *maintpb.GerritMutation) {
 		// Untracked.
 		return
 	}
+	gp.processMutation(gm)
+}
+
+// called with c.mu Locked
+func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 	for _, refp := range gm.Refs {
 		m := rxChangeRef.FindStringSubmatch(refp.Ref)
 		if m == nil {
@@ -143,10 +150,37 @@ func (c *Corpus) processGerritMutation(gm *maintpb.GerritMutation) {
 		if !ok || err != nil {
 			continue
 		}
-		gp.remote[gerritCLVersion{int32(cl), version}] = gitHashFromHexStr(refp.Sha1)
+		hash := gitHashFromHexStr(refp.Sha1)
+		gp.remote[gerritCLVersion{int32(cl), version}] = hash
+		gp.markNeededCommit(hash)
 	}
 
-	// TODO: commits
+	c := gp.gerrit.c
+	for _, commitp := range gm.Commits {
+		gc, err := c.processGitCommit(commitp)
+		if err != nil {
+			continue
+		}
+		if gp.need != nil {
+			delete(gp.need, gc.hash)
+		}
+		for _, p := range gc.parents {
+			gp.markNeededCommit(p)
+		}
+	}
+}
+
+// c.mu must be held
+func (gp *GerritProject) markNeededCommit(hash gitHash) {
+	c := gp.gerrit.c
+	if _, ok := c.gitCommit[hash]; ok {
+		// Already have it.
+		return
+	}
+	if gp.need == nil {
+		gp.need = map[gitHash]bool{}
+	}
+	gp.need[hash] = true
 }
 
 func gerritVersionNumber(s string) (version int32, ok bool) {
@@ -202,6 +236,13 @@ func (gp *GerritProject) sync(ctx context.Context, loop bool) error {
 }
 
 func (gp *GerritProject) syncOnce(ctx context.Context) error {
+	if err := gp.syncRefs(ctx); err != nil {
+		return err
+	}
+	return gp.syncCommits(ctx)
+}
+
+func (gp *GerritProject) syncRefs(ctx context.Context) error {
 	c := gp.gerrit.c
 
 	fetchCtx, cancel := context.WithTimeout(ctx, time.Minute)
@@ -221,6 +262,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 	}
 
 	var changedRefs []*maintpb.GitRef
+	var toFetch []gitHash
 
 	bs := bufio.NewScanner(bytes.NewReader(out))
 	for bs.Scan() {
@@ -241,6 +283,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 		c.mu.RUnlock()
 
 		if curHash != hash {
+			toFetch = append(toFetch, hash)
 			changedRefs = append(changedRefs, &maintpb.GitRef{
 				Ref:  strings.TrimSpace(bs.Text()[len(sha1):]),
 				Sha1: string(sha1),
@@ -253,13 +296,49 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 	if len(changedRefs) == 0 {
 		return nil
 	}
-	gp.logf("%d new refs.", len(changedRefs))
+	gp.logf("%d new refs; fetching...", len(changedRefs))
+	if err := gp.fetchHashes(ctx, toFetch); err != nil {
+		return err
+	}
+	gp.logf("fetched %d new refs.", len(changedRefs))
+
 	c.addMutation(&maintpb.Mutation{
 		Gerrit: &maintpb.GerritMutation{
 			Project: gp.proj,
 			Refs:    changedRefs,
 		},
 	})
+	return nil
+}
+
+func (gp *GerritProject) syncCommits(ctx context.Context) error {
+	c := gp.gerrit.c
+	for {
+		hash := gp.commitToIndex()
+		if hash == nil {
+			return nil
+		}
+		commit, err := parseCommitFromGit(gp.gitDir, hash)
+		if err != nil {
+			return err
+		}
+		c.addMutation(&maintpb.Mutation{
+			Gerrit: &maintpb.GerritMutation{
+				Project: gp.proj,
+				Commits: []*maintpb.GitCommit{commit},
+			},
+		})
+	}
+}
+
+func (gp *GerritProject) commitToIndex() gitHash {
+	c := gp.gerrit.c
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for hash := range gp.need {
+		return hash
+	}
 	return nil
 }
 
