@@ -1524,7 +1524,6 @@ func (p *githubRepoPoller) syncComments(ctx context.Context) error {
 			remain--
 		}
 	}
-	return nil
 }
 
 func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int32) error {
@@ -1659,8 +1658,6 @@ func (p *githubRepoPoller) syncEvents(ctx context.Context) error {
 			remain--
 		}
 	}
-	p.logf("event sync: done.")
-	return nil
 }
 
 func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32) error {

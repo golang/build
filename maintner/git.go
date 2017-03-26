@@ -136,9 +136,6 @@ func (c *Corpus) syncGitCommits(ctx context.Context, conf polledGitCommits, loop
 			}
 		}
 	}
-	log.Printf("TODO: poll %v from %v", conf.repo, conf.dir)
-	select {} // TODO(bradfitz): actuall poll
-	return nil
 }
 
 // returns nil if no work.
