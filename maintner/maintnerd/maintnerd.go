@@ -7,6 +7,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"log"
@@ -18,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
 )
 
@@ -28,9 +30,10 @@ var (
 	watchGithub = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
 	// TODO: specify gerrit auth via gitcookies or similar
 	watchGerrit = flag.String("watch-gerrit", "", `Comma-separated list of Gerrit projects to watch, each of form "hostname/project" (e.g. "go.googlesource.com/go")`)
-	watchGoGit  = flag.Bool("watch-go-git", false, "Watch Go's main git repo.")
-	dataDir     = flag.String("data-dir", "", "Local directory to write protobuf files to (default $HOME/var/maintnerd)")
-	debug       = flag.Bool("debug", false, "Print debug logging information")
+
+	config  = flag.String("config", "", "If non-empty, the name of a pre-defined config. Currently only 'go' is recognized.")
+	dataDir = flag.String("data-dir", "", "Local directory to write protobuf files to (default $HOME/var/maintnerd)")
+	debug   = flag.Bool("debug", false, "Print debug logging information")
 )
 
 func init() {
@@ -64,6 +67,14 @@ func main() {
 		corpus.SetDebug()
 	}
 	corpus.Verbose = *verbose
+	switch *config {
+	case "":
+		// Nothing
+	case "go":
+		setGoConfig()
+	default:
+		log.Fatalf("unknown --config=%s", *config)
+	}
 	if *watchGithub != "" {
 		for _, pair := range strings.Split(*watchGithub, ",") {
 			splits := strings.SplitN(pair, "/", 2)
@@ -72,10 +83,6 @@ func main() {
 			}
 			corpus.AddGithub(splits[0], splits[1], path.Join(os.Getenv("HOME"), ".github-issue-token"))
 		}
-	}
-	if *watchGoGit {
-		// Assumes GOROOT is a git checkout. Good enough for now for development.
-		corpus.AddGoGitRepo("go", runtime.GOROOT())
 	}
 	if *watchGerrit != "" {
 		for _, project := range strings.Split(*watchGerrit, ",") {
@@ -109,7 +116,7 @@ func main() {
 	runtime.GC()
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
-	log.Printf("Loaded data in %v. Memory: %v MB", initDur, ms.HeapAlloc>>20)
+	log.Printf("Loaded data in %v. Memory: %v MB (%v bytes)", initDur, ms.HeapAlloc>>20, ms.HeapAlloc)
 
 	if *syncQuit {
 		if err := corpus.Sync(ctx); err != nil {
@@ -119,4 +126,27 @@ func main() {
 	}
 
 	log.Fatalf("Corpus.SyncLoop = %v", corpus.SyncLoop(ctx))
+}
+
+func setGoConfig() {
+	if *watchGithub != "" {
+		log.Fatalf("can't set both --config and --watch-github")
+	}
+	if *watchGerrit != "" {
+		log.Fatalf("can't set both --config and --watch-gerrit")
+	}
+	*watchGithub = "golang/go"
+
+	gerrc := gerrit.NewClient("https://go-review.googlesource.com/", gerrit.NoAuth)
+	projs, err := gerrc.ListProjects(context.Background())
+	if err != nil {
+		log.Fatalf("error listing Go's gerrit projects: %v", err)
+	}
+	var buf bytes.Buffer
+	buf.WriteString("code.googlesource.com/gocloud,code.googlesource.com/google-api-go-client")
+	for _, pi := range projs {
+		buf.WriteString(",go.googlesource.com/")
+		buf.WriteString(pi.ID)
+	}
+	*watchGerrit = buf.String()
 }

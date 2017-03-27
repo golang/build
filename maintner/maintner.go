@@ -45,6 +45,7 @@ type Corpus struct {
 	watchedGithubRepos []watchedGithubRepo
 	watchedGerritRepos []watchedGerritRepo
 	// git-specific:
+	lastGitCount  time.Time // last time of log spam about loading status
 	pollGitDirs   []polledGitCommits
 	gitPeople     map[string]*gitPerson
 	gitCommit     map[gitHash]*gitCommit

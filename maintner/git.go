@@ -341,8 +341,12 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*gitCommit, error)
 	if c.gitCommitTodo != nil {
 		delete(c.gitCommitTodo, hash)
 	}
-	if n := len(c.gitCommit); n%100 == 0 && c.Verbose {
-		log.Printf("Num git commits = %v", n)
+	if c.Verbose {
+		now := time.Now()
+		if now.After(c.lastGitCount.Add(time.Second)) {
+			c.lastGitCount = now
+			log.Printf("Num git commits = %v", len(c.gitCommit))
+		}
 	}
 	return gc, nil
 }
