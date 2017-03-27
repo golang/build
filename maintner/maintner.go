@@ -94,6 +94,13 @@ func (c *Corpus) str(s string) string {
 	return s
 }
 
+func (c *Corpus) strb(b []byte) string {
+	if v, ok := c.strIntern[string(b)]; ok {
+		return v
+	}
+	return c.str(string(b))
+}
+
 func (c *Corpus) SetDebug() {
 	c.debug = true
 }

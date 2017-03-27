@@ -270,7 +270,7 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*gitCommit, error)
 	gc := &gitCommit{
 		hash:    hash,
 		parents: make([]gitHash, 0, bytes.Count(hdr, parentSpace)),
-		msg:     string(msg),
+		msg:     c.strb(msg),
 	}
 	if commit.DiffTree != nil {
 		gc.files = commit.DiffTree.File
