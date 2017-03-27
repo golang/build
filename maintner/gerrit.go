@@ -139,13 +139,14 @@ func (c *Corpus) AddGerrit(gerritProj string) {
 // called with c.mu Locked
 func (c *Corpus) processGerritMutation(gm *maintpb.GerritMutation) {
 	if c.gerrit == nil {
-		// Untracked.
-		return
+		// TODO: option to ignore mutation if user isn't interested.
+		c.initGerrit()
 	}
 	gp, ok := c.gerrit.projects[gm.Project]
 	if !ok {
-		// Untracked.
-		return
+		// TODO: option to ignore mutation if user isn't interested.
+		// For now, always process the record.
+		gp = c.gerrit.getOrCreateProject(gm.Project)
 	}
 	gp.processMutation(gm)
 }

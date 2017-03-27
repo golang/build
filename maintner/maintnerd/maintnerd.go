@@ -26,6 +26,7 @@ import (
 var (
 	listen      = flag.String("listen", "localhost:6343", "listen address")
 	syncQuit    = flag.Bool("sync-and-quit", false, "sync once and quit; don't run a server")
+	initQuit    = flag.Bool("init-and-quit", false, "load the mutation log and quit; don't run a server")
 	verbose     = flag.Bool("verbose", false, "enable verbose debug output")
 	watchGithub = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
 	// TODO: specify gerrit auth via gitcookies or similar
@@ -93,7 +94,7 @@ func main() {
 
 	var ln net.Listener
 	var err error
-	if !*syncQuit {
+	if !*syncQuit && !*initQuit {
 		ln, err = net.Listen("tcp", *listen)
 		if err != nil {
 			log.Fatal(err)
@@ -117,6 +118,9 @@ func main() {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 	log.Printf("Loaded data in %v. Memory: %v MB (%v bytes)", initDur, ms.HeapAlloc>>20, ms.HeapAlloc)
+	if *initQuit {
+		return
+	}
 
 	if *syncQuit {
 		if err := corpus.Sync(ctx); err != nil {
