@@ -3141,10 +3141,6 @@ var sourceGroup singleflight.Group
 var sourceCache = lru.New(40) // git rev -> []byte
 
 func useWatcher() bool {
-	if inStaging {
-		// Adjust as needed, depending on what you're testing.
-		return false
-	}
 	return *mode != "dev"
 }
 
