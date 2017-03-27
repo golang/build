@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -368,28 +367,36 @@ func foreachLine(v []byte, f func([]byte) error) error {
 	return nil
 }
 
-var personRx = regexp.MustCompile(`^(.+) (\d+) ([\+\-]\d\d\d\d)\s*$`)
-
-//
 // parsePerson parses an "author" or "committer" value from "git cat-file -p COMMIT"
 // The values are like:
 //    Foo Bar <foobar@gmail.com> 1488624439 +0900
 // c.mu must be held for writing.
 func (c *Corpus) parsePerson(v []byte) (*gitPerson, time.Time, error) {
-	m := personRx.FindSubmatch(v) // TODO(bradfitz): for speed, don't use regexp :(
-	if m == nil {
+	v = bytes.TrimSpace(v)
+
+	lastSpace := bytes.LastIndexByte(v, ' ')
+	if lastSpace < 0 {
 		return nil, time.Time{}, errors.New("failed to match person")
 	}
+	tz := v[lastSpace+1:] // "+0800"
+	v = v[:lastSpace]     // now v is "Foo Bar <foobar@gmail.com> 1488624439"
 
-	ut, err := strconv.ParseInt(string(m[2]), 10, 64)
+	lastSpace = bytes.LastIndexByte(v, ' ')
+	if lastSpace < 0 {
+		return nil, time.Time{}, errors.New("failed to match person")
+	}
+	unixTime := v[lastSpace+1:]
+	nameEmail := v[:lastSpace] // now v is "Foo Bar <foobar@gmail.com>"
+
+	ut, err := strconv.ParseInt(string(unixTime), 10, 64)
 	if err != nil {
 		return nil, time.Time{}, err
 	}
-	t := time.Unix(ut, 0).In(c.gitLocation(string(m[3])))
+	t := time.Unix(ut, 0).In(c.gitLocation(tz))
 
-	p, ok := c.gitPeople[string(m[1])]
+	p, ok := c.gitPeople[string(nameEmail)]
 	if !ok {
-		p = &gitPerson{str: string(m[1])}
+		p = &gitPerson{str: string(nameEmail)}
 		if c.gitPeople == nil {
 			c.gitPeople = map[string]*gitPerson{}
 		}
@@ -401,21 +408,22 @@ func (c *Corpus) parsePerson(v []byte) (*gitPerson, time.Time, error) {
 
 // v is like '[+-]hhmm'
 // c.mu must be held for writing.
-func (c *Corpus) gitLocation(v string) *time.Location {
-	if loc, ok := c.zoneCache[v]; ok {
+func (c *Corpus) gitLocation(v []byte) *time.Location {
+	if loc, ok := c.zoneCache[string(v)]; ok {
 		return loc
 	}
-	h, _ := strconv.Atoi(v[1:3])
-	m, _ := strconv.Atoi(v[3:5])
+	s := string(v)
+	h, _ := strconv.Atoi(s[1:3])
+	m, _ := strconv.Atoi(s[3:5])
 	east := 1
 	if v[0] == '-' {
 		east = -1
 	}
-	loc := time.FixedZone(v, east*(h*3600+m*60))
+	loc := time.FixedZone(s, east*(h*3600+m*60))
 	if c.zoneCache == nil {
 		c.zoneCache = map[string]*time.Location{}
 	}
-	c.zoneCache[v] = loc
+	c.zoneCache[s] = loc
 	return loc
 }
 
