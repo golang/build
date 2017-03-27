@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -431,6 +432,31 @@ type ProjectInfo struct {
 	Description string            `json:"description"`
 	State       string            `json:"state"`
 	Branches    map[string]string `json:"branches"`
+}
+
+// ListProjects returns the server's active projects.
+//
+// The returned slice is sorted by project ID and excludes the "All-Projects" project.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#list-projects
+func (c *Client) ListProjects(ctx context.Context) ([]ProjectInfo, error) {
+	var res map[string]ProjectInfo
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/"))
+	if err != nil {
+		return nil, err
+	}
+	var ret []ProjectInfo
+	for name, pi := range res {
+		if name == "All-Projects" {
+			continue
+		}
+		if pi.State != "ACTIVE" {
+			continue
+		}
+		ret = append(ret, pi)
+	}
+	sort.Slice(ret, func(i, j int) bool { return ret[i].ID < ret[j].ID })
+	return ret, nil
 }
 
 // CreateProject creates a new project.
