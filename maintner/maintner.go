@@ -36,6 +36,7 @@ type Corpus struct {
 
 	mu sync.RWMutex // guards all following fields
 	// corpus state:
+	didInit   bool // true after Initialize completes successfully
 	debug     bool
 	strIntern map[string]string // interned strings
 	// github-specific
@@ -137,10 +138,6 @@ type MutationSource interface {
 
 // Initialize populates the Corpus using the data from the MutationSource.
 func (c *Corpus) Initialize(ctx context.Context, src MutationSource) error {
-	return c.processMutations(ctx, src)
-}
-
-func (c *Corpus) processMutations(ctx context.Context, src MutationSource) error {
 	ch := src.GetMutations(ctx)
 	done := ctx.Done()
 	log.Printf("Reloading data from log %T ...", src)
@@ -155,6 +152,7 @@ func (c *Corpus) processMutations(ctx context.Context, src MutationSource) error
 		case m, ok := <-ch:
 			if !ok {
 				log.Printf("Reloaded data from log %T.", src)
+				c.didInit = true
 				return nil
 			}
 			c.processMutationLocked(m)

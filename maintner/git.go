@@ -159,6 +159,7 @@ var (
 	treeSpace      = []byte("tree ")
 	golangHgSpace  = []byte("golang-hg ")
 	gpgSigSpace    = []byte("gpgsig ")
+	encodingSpace  = []byte("encoding ")
 	space          = []byte(" ")
 )
 
@@ -318,7 +319,13 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*gitCommit, error)
 		if bytes.HasPrefix(ln, gpgSigSpace) || bytes.HasPrefix(ln, space) {
 			// Jessie Frazelle is a unique butterfly.
 			return nil
-
+		}
+		if bytes.HasPrefix(ln, encodingSpace) {
+			// Also ignore this. In practice this has only
+			// been seen to declare that a commit's
+			// metadata is utf-8 when the author name has
+			// non-ASCII.
+			return nil
 		}
 		log.Printf("in commit %s, unrecognized line %q", hash, ln)
 		return nil

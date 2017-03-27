@@ -179,7 +179,9 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 			cl.Commit = gc
 			cl.Version = clv.Version
 		}
-		gp.logf("Ref %+v => %v", clv, hash)
+		if c.didInit {
+			gp.logf("Ref %+v => %v", clv, hash)
+		}
 	}
 
 	for _, commitp := range gm.Commits {
