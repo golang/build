@@ -48,10 +48,10 @@ type Corpus struct {
 	// git-specific:
 	lastGitCount  time.Time // last time of log spam about loading status
 	pollGitDirs   []polledGitCommits
-	gitPeople     map[string]*gitPerson
-	gitCommit     map[gitHash]*gitCommit
-	gitCommitTodo map[gitHash]bool          // -> true
-	gitOfHg       map[string]gitHash        // hg hex hash -> git hash
+	gitPeople     map[string]*GitPerson
+	gitCommit     map[GitHash]*GitCommit
+	gitCommitTodo map[GitHash]bool          // -> true
+	gitOfHg       map[string]GitHash        // hg hex hash -> git hash
 	zoneCache     map[string]*time.Location // "+0530" => location
 	dataDir       string
 }

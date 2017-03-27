@@ -514,7 +514,6 @@ func TestParseGithubEvents(t *testing.T) {
 	}
 
 	t.Logf("Tested event types: %q", eventTypes)
-
 }
 
 func TestCacheableURL(t *testing.T) {

@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -45,8 +46,8 @@ func (g *Gerrit) getOrCreateProject(gerritProj string) *GerritProject {
 		gerrit: g,
 		proj:   gerritProj,
 		gitDir: filepath.Join(g.dataDir, url.PathEscape(gerritProj)),
-		cls:    map[int32]*gerritCL{},
-		remote: map[gerritCLVersion]gitHash{},
+		cls:    map[int32]*GerritCL{},
+		remote: map[gerritCLVersion]GitHash{},
 	}
 	g.projects[gerritProj] = proj
 	return proj
@@ -60,9 +61,33 @@ type GerritProject struct {
 	// the Go Gerrit instance supports build, gddo, go. For the moment these are
 	// all treated separately, since the remotes are separate.
 	gitDir string
-	cls    map[int32]*gerritCL
-	remote map[gerritCLVersion]gitHash
-	need   map[gitHash]bool
+	cls    map[int32]*GerritCL
+	remote map[gerritCLVersion]GitHash
+	need   map[GitHash]bool
+}
+
+// ForeachOpenCL calls fn for each open CL in the repo.
+//
+// If fn returns an error, iteration ends and ForeachIssue returns
+// with that error.
+//
+// The fn function is called serially, with increasingly numbered
+// CLs.
+func (gp *GerritProject) ForeachOpenCL(fn func(*GerritCL) error) error {
+	var s []*GerritCL
+	for _, cl := range gp.cls {
+		if cl.Status != "new" {
+			continue
+		}
+		s = append(s, cl)
+	}
+	sort.Slice(s, func(i, j int) bool { return s[i].Number < s[j].Number })
+	for _, cl := range s {
+		if err := fn(cl); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (gp *GerritProject) logf(format string, args ...interface{}) {
@@ -74,7 +99,8 @@ type gerritCLVersion struct {
 	Version  int32 // version 0 is used for the "meta" ref.
 }
 
-type gerritCL struct {
+// A GerritCL represents a single change in Gerrit.
+type GerritCL struct {
 	// Number is the CL number on the Gerrit
 	// server. (e.g. 1, 2, 3)
 	Number int32
@@ -85,17 +111,15 @@ type gerritCL struct {
 
 	// Commit is the git commit of the latest version of this CL.
 	// Previous versions are available via GerritProject.remote.
-	Commit *gitCommit
+	Commit *GitCommit
 
 	// Meta is the head of the most recent Gerrit "meta" commit
 	// for this CL. This is guaranteed to be a linear history
 	// back to a CL-specific root commit for this meta branch.
-	Meta *gitCommit
+	Meta *GitCommit
 
-	// Status is TODO.
-	// Will be something like "merged", "abandoned", "new"
-	// Or maybe bools.
-	// Status string
+	// Status will be "merged", "abandoned", "new", or "draft".
+	Status string
 }
 
 // c.mu must be held
@@ -151,6 +175,56 @@ func (c *Corpus) processGerritMutation(gm *maintpb.GerritMutation) {
 	gp.processMutation(gm)
 }
 
+var statusIndicator = "\n    Status: "
+
+// The Go Gerrit site does not really use the "draft" status much, but if
+// you need to test it, create a dummy commit and then run
+//
+//     git push origin HEAD:refs/drafts/master
+var statuses = []string{"merged", "abandoned", "draft", "new"}
+
+// getGerritStatus takes a current and previous commit, and returns a Gerrit
+// status, or the empty string to indicate the status did not change between the
+// two commits.
+//
+// getGerritStatus relies on the Gerrit code review convention of amending
+// the meta commit to include the current status of the CL. The Gerrit search
+// bar allows you to search for changes with the following statuses: "open",
+// "reviewed", "closed", "abandoned", "merged", "draft", "pending". The REST API
+// returns only "NEW", "DRAFT", "ABANDONED", "MERGED". Gerrit attaches "draft",
+// "abandoned", "new", and "merged" statuses to some meta commits; you may have
+// to search the current meta commit's parents to find the last good commit.
+//
+// Corpus.mu must be held.
+func (gp *GerritProject) getGerritStatus(currentMeta, oldMeta *GitCommit) string {
+	commit := currentMeta
+	c := gp.gerrit.c
+	for {
+		idx := strings.Index(commit.Msg, statusIndicator)
+		if idx > -1 {
+			off := idx + len(statusIndicator)
+			for _, status := range statuses {
+				if strings.HasPrefix(commit.Msg[off:], status) {
+					return status
+				}
+			}
+		}
+		if len(commit.Parents) == 0 {
+			return "new"
+		}
+		parentHash := commit.Parents[0] // meta tree has no merge commits
+		commit = c.gitCommit[parentHash]
+		if commit == nil {
+			gp.logf("getGerritStatus: did not find parent commit %s", parentHash)
+			return "new"
+		}
+		if oldMeta != nil && commit.Hash == oldMeta.Hash {
+			return ""
+		}
+	}
+	return "new"
+}
+
 // called with c.mu Locked
 func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 	c := gp.gerrit.c
@@ -175,7 +249,11 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 		gp.remote[clv] = hash
 		cl := gp.getOrCreateCL(clv.CLNumber)
 		if clv.Version == 0 {
+			oldMeta := cl.Meta
 			cl.Meta = gc
+			if status := gp.getGerritStatus(cl.Meta, oldMeta); status != "" {
+				cl.Status = status
+			}
 		} else {
 			cl.Commit = gc
 			cl.Version = clv.Version
@@ -191,34 +269,34 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 			continue
 		}
 		if gp.need != nil {
-			delete(gp.need, gc.hash)
+			delete(gp.need, gc.Hash)
 		}
-		for _, p := range gc.parents {
+		for _, p := range gc.Parents {
 			gp.markNeededCommit(p)
 		}
 	}
 }
 
 // c.mu must be held
-func (gp *GerritProject) markNeededCommit(hash gitHash) {
+func (gp *GerritProject) markNeededCommit(hash GitHash) {
 	c := gp.gerrit.c
 	if _, ok := c.gitCommit[hash]; ok {
 		// Already have it.
 		return
 	}
 	if gp.need == nil {
-		gp.need = map[gitHash]bool{}
+		gp.need = map[GitHash]bool{}
 	}
 	gp.need[hash] = true
 }
 
 // c.mu must be held
-func (gp *GerritProject) getOrCreateCL(num int32) *gerritCL {
+func (gp *GerritProject) getOrCreateCL(num int32) *GerritCL {
 	cl, ok := gp.cls[num]
 	if ok {
 		return cl
 	}
-	cl = &gerritCL{
+	cl = &GerritCL{
 		Number: num,
 	}
 	gp.cls[num] = cl
@@ -297,7 +375,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 	}
 
 	var changedRefs []*maintpb.GitRef
-	var toFetch []gitHash
+	var toFetch []GitHash
 
 	bs := bufio.NewScanner(bytes.NewReader(out))
 
@@ -397,7 +475,7 @@ func (gp *GerritProject) syncCommits(ctx context.Context) (n int, err error) {
 	}
 }
 
-func (gp *GerritProject) commitToIndex() gitHash {
+func (gp *GerritProject) commitToIndex() GitHash {
 	c := gp.gerrit.c
 
 	c.mu.RLock()
@@ -412,7 +490,7 @@ var (
 	statusSpace = []byte("Status: ")
 )
 
-func (gp *GerritProject) fetchHashes(ctx context.Context, hashes []gitHash) error {
+func (gp *GerritProject) fetchHashes(ctx context.Context, hashes []GitHash) error {
 	args := []string{"fetch", "--quiet", "origin"}
 	for _, hash := range hashes {
 		args = append(args, hash.String())

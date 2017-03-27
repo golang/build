@@ -21,15 +21,15 @@ import (
 	"golang.org/x/build/maintner/maintpb"
 )
 
-// gitHash is a git commit in binary form (NOT hex form).
+// GitHash is a git commit in binary form (NOT hex form).
 // They are currently always 20 bytes long. (for SHA-1 refs)
 // That may change in the future.
-type gitHash string
+type GitHash string
 
-func (h gitHash) String() string { return fmt.Sprintf("%x", string(h)) }
+func (h GitHash) String() string { return fmt.Sprintf("%x", string(h)) }
 
 // requires c.mu be held for writing
-func (c *Corpus) gitHashFromHexStr(s string) gitHash {
+func (c *Corpus) gitHashFromHexStr(s string) GitHash {
 	if len(s) != 40 {
 		panic(fmt.Sprintf("bogus git hash %q", s))
 	}
@@ -39,11 +39,11 @@ func (c *Corpus) gitHashFromHexStr(s string) gitHash {
 	if err != nil {
 		panic(fmt.Sprintf("bogus git hash %q: %v", s, err))
 	}
-	return gitHash(c.strb(buf[:20]))
+	return GitHash(c.strb(buf[:20]))
 }
 
 // requires c.mu be held for writing
-func (c *Corpus) gitHashFromHex(s []byte) gitHash {
+func (c *Corpus) gitHashFromHex(s []byte) GitHash {
 	if len(s) != 40 {
 		panic(fmt.Sprintf("bogus git hash %q", s))
 	}
@@ -52,32 +52,34 @@ func (c *Corpus) gitHashFromHex(s []byte) gitHash {
 	if err != nil {
 		panic(fmt.Sprintf("bogus git hash %q: %v", s, err))
 	}
-	return gitHash(c.strb(buf[:20]))
+	return GitHash(c.strb(buf[:20]))
 }
 
-type gitCommit struct {
-	hash       gitHash
-	tree       gitHash
-	parents    []gitHash
-	author     *gitPerson
-	authorTime time.Time
-	committer  *gitPerson
-	commitTime time.Time
-	msg        string
-	files      []*maintpb.GitDiffTreeFile
+// GitCommit represents a single commit in a git repository.
+type GitCommit struct {
+	Hash       GitHash
+	Tree       GitHash
+	Parents    []GitHash
+	Author     *GitPerson
+	AuthorTime time.Time
+	Committer  *GitPerson
+	CommitTime time.Time
+	Msg        string // Commit message subject and body
+	Files      []*maintpb.GitDiffTreeFile
 }
 
-type gitPerson struct {
-	str string // "Foo Bar <foo@bar.com>"
+// GitPerson is a person in a git commit.
+type GitPerson struct {
+	Str string // "Foo Bar <foo@bar.com>"
 }
 
 // requires c.mu be held for writing.
-func (c *Corpus) enqueueCommitLocked(h gitHash) {
+func (c *Corpus) enqueueCommitLocked(h GitHash) {
 	if _, ok := c.gitCommit[h]; ok {
 		return
 	}
 	if c.gitCommitTodo == nil {
-		c.gitCommitTodo = map[gitHash]bool{}
+		c.gitCommitTodo = map[GitHash]bool{}
 	}
 	c.gitCommitTodo[h] = true
 }
@@ -128,7 +130,7 @@ func (c *Corpus) syncGitCommits(ctx context.Context, conf polledGitCommits, loop
 }
 
 // returns nil if no work.
-func (c *Corpus) gitCommitToIndex() gitHash {
+func (c *Corpus) gitCommitToIndex() GitHash {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	for hash := range c.gitCommitTodo {
@@ -152,7 +154,7 @@ var (
 	space          = []byte(" ")
 )
 
-func parseCommitFromGit(dir string, hash gitHash) (*maintpb.GitCommit, error) {
+func parseCommitFromGit(dir string, hash GitHash) (*maintpb.GitCommit, error) {
 	cmd := exec.Command("git", "cat-file", "commit", hash.String())
 	cmd.Dir = dir
 	catFile, err := cmd.Output()
@@ -216,7 +218,7 @@ func parseCommitFromGit(dir string, hash gitHash) (*maintpb.GitCommit, error) {
 	return commit, nil
 }
 
-func (c *Corpus) indexCommit(conf polledGitCommits, hash gitHash) error {
+func (c *Corpus) indexCommit(conf polledGitCommits, hash GitHash) error {
 	if conf.repo == nil {
 		panic("bogus config; nil repo")
 	}
@@ -245,7 +247,7 @@ func (c *Corpus) processGitMutation(m *maintpb.GitMutation) {
 }
 
 // c.mu is held for writing.
-func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*gitCommit, error) {
+func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*GitCommit, error) {
 	if len(commit.Sha1) != 40 {
 		return nil, fmt.Errorf("bogus git sha1 %q", commit.Sha1)
 	}
@@ -257,15 +259,15 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*gitCommit, error)
 		return nil, fmt.Errorf("commit %v lacks double newline", hash)
 	}
 	hdr, msg := catFile[:i], catFile[i+2:]
-	gc := &gitCommit{
-		hash:    hash,
-		parents: make([]gitHash, 0, bytes.Count(hdr, parentSpace)),
-		msg:     c.strb(msg),
+	gc := &GitCommit{
+		Hash:    hash,
+		Parents: make([]GitHash, 0, bytes.Count(hdr, parentSpace)),
+		Msg:     c.strb(msg),
 	}
 	if commit.DiffTree != nil {
-		gc.files = commit.DiffTree.File
+		gc.Files = commit.DiffTree.File
 	}
-	for _, f := range gc.files {
+	for _, f := range gc.Files {
 		f.File = c.str(f.File) // intern the string
 	}
 	parents := 0
@@ -273,7 +275,7 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*gitCommit, error)
 		if bytes.HasPrefix(ln, parentSpace) {
 			parents++
 			parentHash := c.gitHashFromHex(ln[len(parentSpace):])
-			gc.parents = append(gc.parents, parentHash)
+			gc.Parents = append(gc.Parents, parentHash)
 			c.enqueueCommitLocked(parentHash)
 			return nil
 		}
@@ -282,8 +284,8 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*gitCommit, error)
 			if err != nil {
 				return fmt.Errorf("unrecognized author line %q: %v", ln, err)
 			}
-			gc.author = p
-			gc.authorTime = t
+			gc.Author = p
+			gc.AuthorTime = t
 			return nil
 		}
 		if bytes.HasPrefix(ln, committerSpace) {
@@ -291,17 +293,17 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*gitCommit, error)
 			if err != nil {
 				return fmt.Errorf("unrecognized committer line %q: %v", ln, err)
 			}
-			gc.committer = p
-			gc.commitTime = t
+			gc.Committer = p
+			gc.CommitTime = t
 			return nil
 		}
 		if bytes.HasPrefix(ln, treeSpace) {
-			gc.tree = c.gitHashFromHex(ln[len(treeSpace):])
+			gc.Tree = c.gitHashFromHex(ln[len(treeSpace):])
 			return nil
 		}
 		if bytes.HasPrefix(ln, golangHgSpace) {
 			if c.gitOfHg == nil {
-				c.gitOfHg = map[string]gitHash{}
+				c.gitOfHg = map[string]GitHash{}
 			}
 			c.gitOfHg[string(ln[len(golangHgSpace):])] = hash
 			return nil
@@ -325,7 +327,7 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*gitCommit, error)
 		return nil, fmt.Errorf("Unparseable commit %q: %v", hash, err)
 	}
 	if c.gitCommit == nil {
-		c.gitCommit = map[gitHash]*gitCommit{}
+		c.gitCommit = map[GitHash]*GitCommit{}
 	}
 	c.gitCommit[hash] = gc
 	if c.gitCommitTodo != nil {
@@ -362,7 +364,7 @@ func foreachLine(v []byte, f func([]byte) error) error {
 // The values are like:
 //    Foo Bar <foobar@gmail.com> 1488624439 +0900
 // c.mu must be held for writing.
-func (c *Corpus) parsePerson(v []byte) (*gitPerson, time.Time, error) {
+func (c *Corpus) parsePerson(v []byte) (*GitPerson, time.Time, error) {
 	v = bytes.TrimSpace(v)
 
 	lastSpace := bytes.LastIndexByte(v, ' ')
@@ -387,11 +389,11 @@ func (c *Corpus) parsePerson(v []byte) (*gitPerson, time.Time, error) {
 
 	p, ok := c.gitPeople[string(nameEmail)]
 	if !ok {
-		p = &gitPerson{str: string(nameEmail)}
+		p = &GitPerson{Str: string(nameEmail)}
 		if c.gitPeople == nil {
-			c.gitPeople = map[string]*gitPerson{}
+			c.gitPeople = map[string]*GitPerson{}
 		}
-		c.gitPeople[p.str] = p
+		c.gitPeople[p.Str] = p
 	}
 	return p, t, nil
 
@@ -430,7 +432,7 @@ func (c *Corpus) QueryFrequentlyModifiedFiles(topN int) []FileCount {
 	defer c.mu.RUnlock()
 	n := map[string]int{} // file -> count
 	for _, gc := range c.gitCommit {
-		for _, f := range gc.files {
+		for _, f := range gc.Files {
 			n[modernizeFilename(f.File)]++
 		}
 	}
