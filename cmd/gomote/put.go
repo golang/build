@@ -46,7 +46,7 @@ func putTar(args []string) error {
 	}
 
 	name := fs.Arg(0)
-	bc, err := namedClient(name)
+	bc, _, err := clientAndConf(name)
 	if err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func put(args []string) error {
 		fs.Usage()
 	}
 
-	bc, err := namedClient(fs.Arg(0))
+	bc, _, err := clientAndConf(fs.Arg(0))
 	if err != nil {
 		return err
 	}

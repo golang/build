@@ -25,7 +25,7 @@ func rm(args []string) error {
 	}
 	name := fs.Arg(0)
 	args = fs.Args()[1:]
-	bc, err := namedClient(name)
+	bc, _, err := clientAndConf(name)
 	if err != nil {
 		return err
 	}

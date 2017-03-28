@@ -23,7 +23,7 @@ func destroy(args []string) error {
 		fs.Usage()
 	}
 	name := fs.Arg(0)
-	bc, err := namedClient(name)
+	bc, _, err := clientAndConf(name)
 	if err != nil {
 		return err
 	}
