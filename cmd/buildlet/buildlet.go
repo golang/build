@@ -67,7 +67,8 @@ var (
 //    5: reverse dialing uses timeouts+tcp keepalives, pargzip fix
 //    7: version bumps while debugging revdial hang (Issue 12816)
 //    8: mac screensaver disabled
-const buildletVersion = 8
+//    9: change reverse dialer's cert pool (our CA + system, Issue 16442)
+const buildletVersion = 9
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -192,7 +193,8 @@ func main() {
 	if *reverse == "" {
 		listenForCoordinator()
 	} else {
-		log.Fatal(dialCoordinator())
+		err := dialCoordinator() // blocks forever in normal case
+		log.Fatalf("Error dialing coordinator: %v", err)
 	}
 }
 

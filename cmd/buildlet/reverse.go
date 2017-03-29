@@ -10,6 +10,7 @@ import (
 	"crypto/md5"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -89,9 +90,24 @@ func dialCoordinator() error {
 		caCert = build.DevCoordinatorCA
 	}
 
-	caPool := x509.NewCertPool()
-	if !caPool.AppendCertsFromPEM([]byte(caCert)) {
-		log.Fatal("failed to append coordinator CA certificate")
+	var caPool *x509.CertPool
+	if runtime.GOOS == "windows" {
+		// No SystemCertPool on Windows. But we don't run
+		// Windows in reverse mode anyway.  So just don't set
+		// caPool, which will cause tls.Config to use the
+		// system verification.
+	} else {
+		var err error
+		caPool, err = x509.SystemCertPool()
+		if err != nil {
+			return fmt.Errorf("SystemCertPool: %v", err)
+		}
+		// Temporarily accept our own CA. This predates LetsEncrypt.
+		// Our old self-signed cert expires April 4th, 2017.
+		// We can remove this after golang.org/issue/16442 if fixed.
+		if !caPool.AppendCertsFromPEM([]byte(caCert)) {
+			return errors.New("failed to append coordinator CA certificate")
+		}
 	}
 
 	log.Printf("Dialing coordinator %s...", addr)
