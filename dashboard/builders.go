@@ -274,6 +274,15 @@ var Hosts = map[string]*HostConfig{
 		},
 		ReverseAliases: []string{"linux-mips64le"},
 	},
+	"host-darwin-amd64-eliasnaur": &HostConfig{
+		Notes:     "Mac Mini hosted by Elias Naur, running mobile reverse buildlets",
+		IsReverse: true,
+		ExpectNum: 2,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
+			"GOHOSTARCH=amd64",
+		},
+	},
 }
 
 func init() {
@@ -904,14 +913,16 @@ func init() {
 	})
 
 	addBuilder(BuildConfig{
-		Name:  "darwin-arm-a1549ios",
-		Notes: "iPhone 6 (model A1549), via a Mac Mini; owned by elias.naur",
-		env:   []string{"GOARCH=arm", "GOHOSTARCH=amd64"},
+		Name:     "darwin-arm-a1549ios",
+		HostType: "host-darwin-amd64-eliasnaur",
+		Notes:    "iPhone 6 (model A1549), via a Mac Mini; owned by elias.naur",
+		env:      []string{"GOARCH=arm"},
 	})
 	addBuilder(BuildConfig{
-		Name:  "darwin-arm64-a1549ios",
-		Notes: "iPhone 6 (model A1549), via a Mac Mini; owned by elias.naur",
-		env:   []string{"GOARCH=arm64", "GOHOSTARCH=amd64"},
+		Name:     "darwin-arm64-a1549ios",
+		HostType: "host-darwin-amd64-eliasnaur",
+		Notes:    "iPhone 6 (model A1549), via a Mac Mini; owned by elias.naur",
+		env:      []string{"GOARCH=arm64"},
 	})
 
 	addBuilder(BuildConfig{
