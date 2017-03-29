@@ -924,6 +924,27 @@ func init() {
 		Notes:    "iPhone 6 (model A1549), via a Mac Mini; owned by elias.naur",
 		env:      []string{"GOARCH=arm64"},
 	})
+	addBuilder(BuildConfig{
+		Name:     "android-arm-wiko-fever",
+		HostType: "host-darwin-amd64-eliasnaur",
+		Notes:    "Android Wiko Fever phone running Android 6.0, via a Mac Mini",
+		env: []string{
+			"GOOS=android",
+			"GOARCH=arm",
+			"GOARM=7",
+			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-arm/bin/clang",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "android-arm64-wiko-fever",
+		HostType: "host-darwin-amd64-eliasnaur",
+		Notes:    "Android Wiko Fever phone running Android 6.0, via a Mac Mini",
+		env: []string{
+			"GOOS=android",
+			"GOARCH=arm64",
+			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-arm64/bin/clang",
+		},
+	})
 
 	addBuilder(BuildConfig{
 		Name:     "solaris-amd64-smartosbuildlet",
