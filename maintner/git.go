@@ -21,48 +21,38 @@ import (
 	"golang.org/x/build/maintner/maintpb"
 )
 
-type gitHash interface {
-	String() string
-	Less(gitHash) bool
-}
+// gitHash is a git commit in binary form (NOT hex form).
+// They are currently always 20 bytes long. (for SHA-1 refs)
+// That may change in the future.
+type gitHash string
 
-// gitSHA1 (the value type) is the current (only) implementation of
-// the gitHash interface.
-type gitSHA1 [20]byte
+func (h gitHash) String() string { return fmt.Sprintf("%x", string(h)) }
 
-func (h gitSHA1) String() string { return fmt.Sprintf("%x", h[:]) }
-
-func (h gitSHA1) Less(h2 gitHash) bool {
-	switch h2 := h2.(type) {
-	case gitSHA1:
-		return bytes.Compare(h[:], h2[:]) < 0
-	default:
-		panic("unsupported type")
-	}
-}
-
-func gitHashFromHexStr(s string) gitHash {
+// requires c.mu be held for writing
+func (c *Corpus) gitHashFromHexStr(s string) gitHash {
 	if len(s) != 40 {
 		panic(fmt.Sprintf("bogus git hash %q", s))
 	}
-	var hash gitSHA1
-	n, err := hex.Decode(hash[:], []byte(s)) // TODO: garbage
-	if n != 20 || err != nil {
-		panic(fmt.Sprintf("bogus git hash %q", s))
+	var buf [40]byte
+	copy(buf[:], s)
+	_, err := hex.Decode(buf[:20], buf[:]) // aliasing is safe
+	if err != nil {
+		panic(fmt.Sprintf("bogus git hash %q: %v", s, err))
 	}
-	return hash
+	return gitHash(c.strb(buf[:20]))
 }
 
-func gitHashFromHex(s []byte) gitHash {
+// requires c.mu be held for writing
+func (c *Corpus) gitHashFromHex(s []byte) gitHash {
 	if len(s) != 40 {
 		panic(fmt.Sprintf("bogus git hash %q", s))
 	}
-	var hash gitSHA1
-	n, err := hex.Decode(hash[:], s)
-	if n != 20 || err != nil {
-		panic(fmt.Sprintf("bogus git hash %q", s))
+	var buf [20]byte
+	_, err := hex.Decode(buf[:], s)
+	if err != nil {
+		panic(fmt.Sprintf("bogus git hash %q: %v", s, err))
 	}
-	return hash
+	return gitHash(c.strb(buf[:20]))
 }
 
 type gitCommit struct {
@@ -105,15 +95,15 @@ func (c *Corpus) syncGitCommits(ctx context.Context, conf polledGitCommits, loop
 		return fmt.Errorf("no remote found for refs/remotes/origin/master")
 	}
 	ref := strings.Fields(outs)[0]
-	refHash := gitHashFromHexStr(ref)
 	c.mu.Lock()
+	refHash := c.gitHashFromHexStr(ref)
 	c.enqueueCommitLocked(refHash)
 	c.mu.Unlock()
 
 	idle := false
 	for {
 		hash := c.gitCommitToIndex()
-		if hash == nil {
+		if hash == "" {
 			if !loop {
 				return nil
 			}
@@ -147,7 +137,7 @@ func (c *Corpus) gitCommitToIndex() gitHash {
 		}
 		log.Printf("Warning: git commit %v in todo map, but already known; ignoring", hash)
 	}
-	return nil
+	return ""
 }
 
 var (
@@ -217,11 +207,11 @@ func parseCommitFromGit(dir string, hash gitHash) (*maintpb.GitCommit, error) {
 		Raw:      catFile,
 		DiffTree: diffTree,
 	}
-	switch hash.(type) {
-	case gitSHA1:
+	switch len(hash) {
+	case 20:
 		commit.Sha1 = hash.String()
 	default:
-		return nil, fmt.Errorf("unsupported git hash type %T", hash)
+		return nil, fmt.Errorf("unsupported git hash %q", hash.String())
 	}
 	return commit, nil
 }
@@ -244,7 +234,7 @@ func (c *Corpus) indexCommit(conf polledGitCommits, hash gitHash) error {
 	return nil
 }
 
-// Note: c.mu is held for writing.
+// c.mu is held for writing.
 func (c *Corpus) processGitMutation(m *maintpb.GitMutation) {
 	commit := m.Commit
 	if commit == nil {
@@ -254,11 +244,12 @@ func (c *Corpus) processGitMutation(m *maintpb.GitMutation) {
 	c.processGitCommit(commit)
 }
 
+// c.mu is held for writing.
 func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*gitCommit, error) {
 	if len(commit.Sha1) != 40 {
 		return nil, fmt.Errorf("bogus git sha1 %q", commit.Sha1)
 	}
-	hash := gitHashFromHexStr(commit.Sha1)
+	hash := c.gitHashFromHexStr(commit.Sha1)
 
 	catFile := commit.Raw
 	i := bytes.Index(catFile, nlnl)
@@ -281,7 +272,7 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*gitCommit, error)
 	err := foreachLine(hdr, func(ln []byte) error {
 		if bytes.HasPrefix(ln, parentSpace) {
 			parents++
-			parentHash := gitHashFromHex(ln[len(parentSpace):])
+			parentHash := c.gitHashFromHex(ln[len(parentSpace):])
 			gc.parents = append(gc.parents, parentHash)
 			c.enqueueCommitLocked(parentHash)
 			return nil
@@ -305,7 +296,7 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*gitCommit, error)
 			return nil
 		}
 		if bytes.HasPrefix(ln, treeSpace) {
-			gc.tree = gitHashFromHex(ln[len(treeSpace):])
+			gc.tree = c.gitHashFromHex(ln[len(treeSpace):])
 			return nil
 		}
 		if bytes.HasPrefix(ln, golangHgSpace) {

@@ -165,7 +165,7 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 		if !ok || err != nil {
 			continue
 		}
-		hash := gitHashFromHexStr(refp.Sha1)
+		hash := c.gitHashFromHexStr(refp.Sha1)
 		gc, ok := c.gitCommit[hash]
 		if !ok {
 			gp.logf("ERROR: ref %v references unknown hash %v; ignoring", refp, hash)
@@ -300,7 +300,12 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 	var toFetch []gitHash
 
 	bs := bufio.NewScanner(bytes.NewReader(out))
-	c.mu.RLock() // to access gp.remote; okay because ls-remote output all in out already
+
+	// Take the lock here to access gp.remote and call c.gitHashFromHex.
+	// It's acceptable to take such a coarse-looking lock because
+	// it's not actually around I/O: all the input from ls-remote has
+	// already been slurped into memory.
+	c.mu.Lock()
 	for bs.Scan() {
 		m := rxRemoteRef.FindSubmatch(bs.Bytes())
 		if m == nil {
@@ -312,7 +317,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 			continue
 		}
 		sha1 := m[1]
-		hash := gitHashFromHex(sha1)
+		hash := c.gitHashFromHex(sha1)
 
 		curHash := gp.remote[gerritCLVersion{int32(clNum), version}]
 
@@ -324,7 +329,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 			})
 		}
 	}
-	c.mu.RUnlock()
+	c.mu.Unlock()
 	if err := bs.Err(); err != nil {
 		return err
 	}
@@ -370,7 +375,7 @@ func (gp *GerritProject) syncCommits(ctx context.Context) (n int, err error) {
 	lastLog := time.Now()
 	for {
 		hash := gp.commitToIndex()
-		if hash == nil {
+		if hash == "" {
 			return n, nil
 		}
 		now := time.Now()
@@ -400,7 +405,7 @@ func (gp *GerritProject) commitToIndex() gitHash {
 	for hash := range gp.need {
 		return hash
 	}
-	return nil
+	return ""
 }
 
 var (

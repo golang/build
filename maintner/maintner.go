@@ -38,7 +38,8 @@ type Corpus struct {
 	// corpus state:
 	didInit   bool // true after Initialize completes successfully
 	debug     bool
-	strIntern map[string]string // interned strings
+	strIntern map[string]string // interned strings, including binary githashes
+
 	// github-specific
 	github             *GitHub
 	gerrit             *Gerrit
