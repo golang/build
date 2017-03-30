@@ -53,6 +53,8 @@ import (
 	"golang.org/x/build/internal/singleflight"
 	"golang.org/x/build/livelog"
 	"golang.org/x/build/types"
+	"golang.org/x/crypto/acme/autocert"
+	xcontext "golang.org/x/net/context"
 	"golang.org/x/time/rate"
 )
 
@@ -191,29 +193,44 @@ func listenAndServeTLS() {
 }
 
 func serveTLS(ln net.Listener) {
-	certPEM, err := readGCSFile("farmer-cert.pem")
-	if err != nil {
-		log.Printf("cannot load TLS cert, skipping https: %v", err)
-		return
+	config := &tls.Config{
+		NextProtos: []string{"http/1.1"},
 	}
-	keyPEM, err := readGCSFile("farmer-key.pem")
-	if err != nil {
-		log.Printf("cannot load TLS key, skipping https: %v", err)
-		return
-	}
-	cert, err := tls.X509KeyPair(certPEM, keyPEM)
-	if err != nil {
-		log.Printf("bad TLS cert: %v", err)
-		return
+
+	if bucket := buildEnv.AutoCertCacheBucket; bucket != "" {
+		m := autocert.Manager{
+			Prompt: autocert.AcceptTOS,
+			HostPolicy: func(_ xcontext.Context, host string) error {
+				if !strings.HasSuffix(host, ".golang.org") {
+					return fmt.Errorf("bogus host %q", host)
+				}
+				return nil
+			},
+			Cache: &gcsAutocertCache{storageClient, bucket},
+		}
+		config.GetCertificate = m.GetCertificate
+	} else {
+		certPEM, err := readGCSFile("farmer-cert.pem")
+		if err != nil {
+			log.Printf("cannot load TLS cert, skipping https: %v", err)
+			return
+		}
+		keyPEM, err := readGCSFile("farmer-key.pem")
+		if err != nil {
+			log.Printf("cannot load TLS key, skipping https: %v", err)
+			return
+		}
+		cert, err := tls.X509KeyPair(certPEM, keyPEM)
+		if err != nil {
+			log.Printf("bad TLS cert: %v", err)
+			return
+		}
+		config.Certificates = []tls.Certificate{cert}
 	}
 
 	server := &http.Server{
 		Addr:    ln.Addr().String(),
 		Handler: httpRouter{},
-	}
-	config := &tls.Config{
-		NextProtos:   []string{"http/1.1"},
-		Certificates: []tls.Certificate{cert},
 	}
 	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)
 	log.Printf("Coordinator serving on: %v", tlsLn.Addr())

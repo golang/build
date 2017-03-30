@@ -104,13 +104,13 @@ func dialCoordinator() error {
 		}
 		// Temporarily accept our own CA. This predates LetsEncrypt.
 		// Our old self-signed cert expires April 4th, 2017.
-		// We can remove this after golang.org/issue/16442 if fixed.
+		// We can remove this after golang.org/issue/16442 is fixed.
 		if !caPool.AppendCertsFromPEM([]byte(caCert)) {
 			return errors.New("failed to append coordinator CA certificate")
 		}
 	}
 
-	log.Printf("Dialing coordinator %s...", addr)
+	log.Printf("Dialing coordinator %s ...", addr)
 	dialer := net.Dialer{
 		Timeout:   10 * time.Second,
 		KeepAlive: 15 * time.Second,
@@ -119,13 +119,15 @@ func dialCoordinator() error {
 	if err != nil {
 		return err
 	}
+
+	serverName := strings.TrimSuffix(addr, ":443")
+	log.Printf("Doing TLS handshake with coordinator (verifying hostname %q)...", serverName)
+	tcpConn.SetDeadline(time.Now().Add(30 * time.Second))
 	config := &tls.Config{
-		ServerName:         "go",
+		ServerName:         serverName,
 		RootCAs:            caPool,
 		InsecureSkipVerify: devMode,
 	}
-	log.Printf("Doing TLS handshake with coordinator...")
-	tcpConn.SetDeadline(time.Now().Add(30 * time.Second))
 	conn := tls.Client(tcpConn, config)
 	if err := conn.Handshake(); err != nil {
 		return fmt.Errorf("failed to handshake with coordinator: %v", err)

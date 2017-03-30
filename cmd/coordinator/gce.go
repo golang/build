@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"path"
 	"sort"
@@ -29,6 +30,8 @@ import (
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/lru"
+	"golang.org/x/crypto/acme/autocert"
+	xcontext "golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
@@ -581,4 +584,40 @@ func hasComputeScope() bool {
 
 func hasStorageScope() bool {
 	return hasScope(storage.ScopeReadWrite) || hasScope(storage.ScopeFullControl) || hasScope(compute.CloudPlatformScope)
+}
+
+// gcsAutocertCache implements the
+// golang.org/x/crypto/acme/autocert.Cache interface using a Google
+// Cloud Storage bucket. It assumes it assumes the whole bucket.
+type gcsAutocertCache struct {
+	gcs    *storage.Client
+	bucket string
+}
+
+func (c *gcsAutocertCache) Get(ctx xcontext.Context, key string) ([]byte, error) {
+	rd, err := c.gcs.Bucket(c.bucket).Object(key).NewReader(ctx)
+	if err == storage.ErrObjectNotExist {
+		return nil, autocert.ErrCacheMiss
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rd.Close()
+	return ioutil.ReadAll(rd)
+}
+
+func (c *gcsAutocertCache) Put(ctx xcontext.Context, key string, data []byte) error {
+	wr := c.gcs.Bucket(c.bucket).Object(key).NewWriter(ctx)
+	if _, err := wr.Write(data); err != nil {
+		return err
+	}
+	return wr.Close()
+}
+
+func (c *gcsAutocertCache) Delete(ctx xcontext.Context, key string) error {
+	err := c.gcs.Bucket(c.bucket).Object(key).Delete(ctx)
+	if err == storage.ErrObjectNotExist {
+		return nil
+	}
+	return err
 }

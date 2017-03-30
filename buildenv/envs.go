@@ -96,6 +96,11 @@ type Environment struct {
 	// can run. Zero means unlimit. This is typically only used
 	// in a development or staging environment.
 	MaxBuilds int
+
+	// AutoCertCacheBucket is the GCS bucket to use for the
+	// golang.org/x/crypto/acme/autocert (LetsEncrypt) cache.
+	// If empty, LetsEncrypt isn't used.
+	AutoCertCacheBucket string
 }
 
 // MachineTypeURI returns the URI for the environment's Machine Type.
@@ -176,22 +181,23 @@ var Staging = &Environment{
 // Production defines the environment that the coordinator and build
 // infrastructure is deployed to for production usage at build.golang.org.
 var Production = &Environment{
-	ProjectName:     "symbolic-datum-552",
-	IsProd:          true,
-	Zone:            "us-central1-f",
-	ZonesToClean:    []string{"us-central1-f"},
-	StaticIP:        "107.178.219.46",
-	MachineType:     "n1-standard-4",
-	KubeMinNodes:    5,
-	KubeMaxNodes:    5, // auto-scaling disabled
-	KubeName:        "buildlets",
-	KubeMachineType: "n1-standard-32",
-	DashURL:         "https://build.golang.org/",
-	CoordinatorURL:  "https://storage.googleapis.com/go-builder-data/coordinator",
-	CoordinatorName: "farmer",
-	BuildletBucket:  "go-builder-data",
-	LogBucket:       "go-build-log",
-	SnapBucket:      "go-build-snap",
+	ProjectName:         "symbolic-datum-552",
+	IsProd:              true,
+	Zone:                "us-central1-f",
+	ZonesToClean:        []string{"us-central1-f"},
+	StaticIP:            "107.178.219.46",
+	MachineType:         "n1-standard-4",
+	KubeMinNodes:        5,
+	KubeMaxNodes:        5, // auto-scaling disabled
+	KubeName:            "buildlets",
+	KubeMachineType:     "n1-standard-32",
+	DashURL:             "https://build.golang.org/",
+	CoordinatorURL:      "https://storage.googleapis.com/go-builder-data/coordinator",
+	CoordinatorName:     "farmer",
+	BuildletBucket:      "go-builder-data",
+	LogBucket:           "go-build-log",
+	SnapBucket:          "go-build-snap",
+	AutoCertCacheBucket: "farmer-golang-org-autocert-cache",
 }
 
 var Development = &Environment{
