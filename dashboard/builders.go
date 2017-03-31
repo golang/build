@@ -274,10 +274,21 @@ var Hosts = map[string]*HostConfig{
 		},
 		ReverseAliases: []string{"linux-mips64le"},
 	},
-	"host-darwin-amd64-eliasnaur": &HostConfig{
-		Notes:     "Mac Mini hosted by Elias Naur, running mobile reverse buildlets",
+	"host-darwin-amd64-eliasnaur-android": &HostConfig{
+		Notes:     "Mac Mini hosted by Elias Naur, running the android reverse buildlet",
 		IsReverse: true,
-		ExpectNum: 2,
+		ExpectNum: 1,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
+			"GOHOSTARCH=amd64",
+			"GOOS=android",
+			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-arm/bin/clang",
+		},
+	},
+	"host-darwin-amd64-eliasnaur-ios": &HostConfig{
+		Notes:     "Mac Mini hosted by Elias Naur, running the ios reverse buildlet",
+		IsReverse: true,
+		ExpectNum: 1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
 			"GOHOSTARCH=amd64",
@@ -914,35 +925,31 @@ func init() {
 
 	addBuilder(BuildConfig{
 		Name:     "darwin-arm-a1549ios",
-		HostType: "host-darwin-amd64-eliasnaur",
+		HostType: "host-darwin-amd64-eliasnaur-ios",
 		Notes:    "iPhone 6 (model A1549), via a Mac Mini; owned by elias.naur",
 		env:      []string{"GOARCH=arm"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "darwin-arm64-a1549ios",
-		HostType: "host-darwin-amd64-eliasnaur",
+		HostType: "host-darwin-amd64-eliasnaur-ios",
 		Notes:    "iPhone 6 (model A1549), via a Mac Mini; owned by elias.naur",
 		env:      []string{"GOARCH=arm64"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "android-arm-wiko-fever",
-		HostType: "host-darwin-amd64-eliasnaur",
+		HostType: "host-darwin-amd64-eliasnaur-android",
 		Notes:    "Android Wiko Fever phone running Android 6.0, via a Mac Mini",
 		env: []string{
-			"GOOS=android",
 			"GOARCH=arm",
 			"GOARM=7",
-			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-arm/bin/clang",
 		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "android-arm64-wiko-fever",
-		HostType: "host-darwin-amd64-eliasnaur",
+		HostType: "host-darwin-amd64-eliasnaur-android",
 		Notes:    "Android Wiko Fever phone running Android 6.0, via a Mac Mini",
 		env: []string{
-			"GOOS=android",
 			"GOARCH=arm64",
-			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-arm64/bin/clang",
 		},
 	})
 
