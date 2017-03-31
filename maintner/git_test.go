@@ -17,7 +17,7 @@ func TestParsePerson(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantp := &GitPerson{str: "Foo Bar <foo@bar.com>"}
+	wantp := &GitPerson{Str: "Foo Bar <foo@bar.com>"}
 	if !reflect.DeepEqual(p, wantp) {
 		t.Errorf("person = %+v; want %+v", p, wantp)
 	}
