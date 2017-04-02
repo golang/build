@@ -588,7 +588,9 @@ func hasStorageScope() bool {
 
 // gcsAutocertCache implements the
 // golang.org/x/crypto/acme/autocert.Cache interface using a Google
-// Cloud Storage bucket. It assumes it assumes the whole bucket.
+// Cloud Storage bucket. It assumes that autocert gets to use the
+// whole keyspace of the bucket. That is, don't reuse this bucket for
+// other purposes.
 type gcsAutocertCache struct {
 	gcs    *storage.Client
 	bucket string
