@@ -152,7 +152,11 @@ func main() {
 				log.Fatalf("error creating workdir: %v", err)
 			}
 		default:
-			dir := filepath.Join(os.TempDir(), "workdir")
+			wdName := "workdir"
+			if *reverseType != "" {
+				wdName += "-" + *reverseType
+			}
+			dir := filepath.Join(os.TempDir(), wdName)
 			if err := os.RemoveAll(dir); err != nil { // should be no-op
 				log.Fatal(err)
 			}
