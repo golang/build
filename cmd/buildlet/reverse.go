@@ -87,7 +87,7 @@ func dialCoordinator() error {
 		// New way.
 		key, err := keyForMode(*reverseType)
 		if err != nil {
-			log.Fatalf("failed to find key for %s: %v", m, err)
+			log.Fatalf("failed to find key for %s: %v", *reverseType, err)
 		}
 		keys = append(keys, key)
 	}
