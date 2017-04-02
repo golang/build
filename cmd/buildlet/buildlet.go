@@ -125,16 +125,17 @@ func main() {
 		makeBSDFilesystemFast()
 	}
 
-	if *listenAddr == "AUTO" && *reverse == "" {
+	if *reverse != "" && *reverseType != "" {
+		log.Fatalf("can't specify both --reverse and --reverse-type")
+	}
+	isReverse := *reverse != "" || *reverseType != ""
+
+	if *listenAddr == "AUTO" && !isReverse {
 		v := defaultListenAddr()
 		log.Printf("Will listen on %s", v)
 		*listenAddr = v
 	}
 
-	if *reverse != "" && *reverseType != "" {
-		log.Fatalf("can't specify both --reverse and --reverse-type")
-	}
-	isReverse := *reverse != "" || *reverseType != ""
 	if !onGCE && !isReverse && !strings.HasPrefix(*listenAddr, "localhost:") {
 		log.Printf("** WARNING ***  This server is unsafe and offers no security. Be careful.")
 	}
