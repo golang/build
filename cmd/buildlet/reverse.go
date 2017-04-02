@@ -30,6 +30,7 @@ import (
 
 var reverseModeBuildKey string
 
+// mode is either a BuildConfig or HostConfig name (map key in x/build/dashboard/builders.go)
 func keyForMode(mode string) (string, error) {
 	if isDevReverseMode() {
 		return string(devBuilderKey(mode)), nil
@@ -71,10 +72,20 @@ func dialCoordinator() error {
 		*hostname, _ = os.Hostname()
 	}
 
-	modes := strings.Split(*reverse, ",")
-	var keys []string
-	for _, m := range modes {
-		key, err := keyForMode(m)
+	var modes, keys []string
+	if *reverse != "" {
+		// Old way.
+		modes = strings.Split(*reverse, ",")
+		for _, m := range modes {
+			key, err := keyForMode(m)
+			if err != nil {
+				log.Fatalf("failed to find key for %s: %v", m, err)
+			}
+			keys = append(keys, key)
+		}
+	} else {
+		// New way.
+		key, err := keyForMode(*reverseType)
 		if err != nil {
 			log.Fatalf("failed to find key for %s: %v", m, err)
 		}
@@ -141,7 +152,12 @@ func dialCoordinator() error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	req.Header["X-Go-Builder-Type"] = modes
+	if *reverse != "" {
+		// Old way.
+		req.Header["X-Go-Builder-Type"] = modes
+	} else {
+		req.Header.Set("X-Go-Host-Type", *reverseType)
+	}
 	req.Header["X-Go-Builder-Key"] = keys
 	req.Header.Set("X-Go-Builder-Hostname", *hostname)
 	req.Header.Set("X-Go-Builder-Version", strconv.Itoa(buildletVersion))

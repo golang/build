@@ -441,8 +441,19 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 	// Check build keys.
 
 	// modes can be either 1 buildlet type (new way) or builder mode(s) (the old way)
-	modes := r.Header["X-Go-Builder-Type"]
+	hostType := r.Header.Get("X-Go-Host-Type")
+	modes := r.Header["X-Go-Builder-Type"] // old way
 	gobuildkeys := r.Header["X-Go-Builder-Key"]
+
+	// Convert the new argument style (X-Go-Host-Type) into the
+	// old way, to minimize changes in the rest of this code.
+	if hostType != "" {
+		if len(modes) > 0 {
+			http.Error(w, "invalid mix of X-Go-Host-Type and X-Go-Builder-Type", http.StatusBadRequest)
+			return
+		}
+		modes = []string{hostType}
+	}
 	if len(modes) == 0 || len(modes) != len(gobuildkeys) {
 		http.Error(w, fmt.Sprintf("need at least one mode and matching key, got %d/%d", len(modes), len(gobuildkeys)), http.StatusPreconditionFailed)
 		return
@@ -470,8 +481,11 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		modes = filtered
 	}
 
-	// Collapse their modes down into a singular hostType
-	hostType := mapBuilderToHostType(modes)
+	// For older builders using the buildlet's -reverse flag only,
+	// collapse their builder modes down into a singular hostType.
+	if hostType == "" {
+		hostType = mapBuilderToHostType(modes)
+	}
 
 	conn, bufrw, err := w.(http.Hijacker).Hijack()
 	if err != nil {
