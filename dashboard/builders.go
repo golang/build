@@ -282,7 +282,6 @@ var Hosts = map[string]*HostConfig{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
 			"GOHOSTARCH=amd64",
 			"GOOS=android",
-			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-arm/bin/clang",
 		},
 	},
 	"host-darwin-amd64-eliasnaur-ios": &HostConfig{
@@ -942,6 +941,7 @@ func init() {
 		env: []string{
 			"GOARCH=arm",
 			"GOARM=7",
+			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-arm/bin/clang",
 		},
 	})
 	addBuilder(BuildConfig{
@@ -950,6 +950,7 @@ func init() {
 		Notes:    "Android Wiko Fever phone running Android 6.0, via a Mac Mini",
 		env: []string{
 			"GOARCH=arm64",
+			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-arm64/bin/clang",
 		},
 	})
 
