@@ -505,12 +505,13 @@ func getStatus(work builderRev, statusPtrStr string) *buildStatus {
 	for k, ts := range tries {
 		if k.Commit == work.rev {
 			ts.mu.Lock()
-			defer ts.mu.Unlock()
 			for _, st := range ts.builds {
 				if st.builderRev == work && match(st) {
+					ts.mu.Unlock()
 					return st
 				}
 			}
+			ts.mu.Unlock()
 		}
 	}
 	return nil
