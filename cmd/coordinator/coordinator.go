@@ -1391,8 +1391,8 @@ func (st *buildStatus) expectedBuildletStartDuration() time.Duration {
 				return 0
 			}
 			if arch == "amd64" || arch == "386" {
-				return 0               // TODO: remove this once we're using VMware
-				return 1 * time.Minute // VMware boot of hermetic OS X
+				return 0 // TODO: remove this once we're using VMware
+				// return 1 * time.Minute // VMware boot of hermetic OS X
 			}
 		}
 		if goos == "linux" && arch == "arm" {

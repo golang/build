@@ -56,13 +56,13 @@ func clientAndConf(name string) (bc *buildlet.Client, conf dashboard.BuildConfig
 	if strings.Contains(name, "@") {
 		f := strings.SplitN(name, "@", 2)
 		if len(f) != 2 {
-			err = fmt.Errorf("unsupported name %q; for @ form expect <build-config-name>@host[:port]")
+			err = fmt.Errorf("unsupported name %q; for @ form expect <build-config-name>@host[:port]", name)
 			return
 		}
 		builderType := f[0]
 		conf, ok = dashboard.Builders[builderType]
 		if !ok {
-			err = fmt.Errorf("unknown builder type %q", name, builderType)
+			err = fmt.Errorf("unknown builder type %q (name %q)", builderType, name)
 			return
 		}
 		ipPort := f[1]

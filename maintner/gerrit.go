@@ -222,7 +222,6 @@ func (gp *GerritProject) getGerritStatus(currentMeta, oldMeta *GitCommit) string
 			return ""
 		}
 	}
-	return "new"
 }
 
 // called with c.mu Locked
