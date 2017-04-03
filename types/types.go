@@ -126,7 +126,7 @@ type ReverseHostStatus struct {
 	Machines map[string]*ReverseBuilder
 }
 
-// ReverseBuilderStatus is http://farmer.golang.org/status/reverse.json
+// ReverseBuilderStatus is https://farmer.golang.org/status/reverse.json
 //
 // It is used by monitoring and the Mac VMWare infrastructure to
 // adjust the Mac VMs based on deaths and demand.

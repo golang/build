@@ -373,7 +373,7 @@ func main() {
 }
 
 // watcherProxy is the proxy which forwards from
-// http://farmer.golang.org/ to the gitmirror kubeneretes service (git
+// https://farmer.golang.org/ to the gitmirror kubernetes service (git
 // cache+sync).
 // This is used for /debug/watcher/<reponame> status pages, which are
 // served at the same URL paths for both the farmer.golang.org host
@@ -1010,7 +1010,7 @@ func (ts *trySet) state() trySetState {
 // notifyStarting runs in its own goroutine and posts to Gerrit that
 // the trybots have started on the user's CL with a link of where to watch.
 func (ts *trySet) notifyStarting() {
-	msg := "TryBots beginning. Status page: http://farmer.golang.org/try?commit=" + ts.Commit[:8]
+	msg := "TryBots beginning. Status page: https://farmer.golang.org/try?commit=" + ts.Commit[:8]
 
 	ctx := context.Background()
 	if ci, err := gerritClient.GetChangeDetail(ctx, ts.ChangeTriple()); err == nil {
@@ -3083,7 +3083,7 @@ func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
 func (st *buildStatus) logsURLLocked() string {
 	var urlPrefix string
 	if buildEnv == buildenv.Production {
-		urlPrefix = "http://farmer.golang.org"
+		urlPrefix = "https://farmer.golang.org"
 	} else {
 		urlPrefix = "http://" + buildEnv.StaticIP
 	}

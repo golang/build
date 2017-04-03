@@ -47,7 +47,7 @@ func usage() {
 
 var (
 	flagStatus = flag.Bool("status", false, "print status only")
-	flagAuto   = flag.Bool("auto", false, "Automatically create & destoy as needed, reacting to http://farmer.golang.org/status/reverse.json status.")
+	flagAuto   = flag.Bool("auto", false, "Automatically create & destroy as needed, reacting to https://farmer.golang.org/status/reverse.json status.")
 )
 
 func main() {
@@ -387,7 +387,7 @@ func autoAdjust() {
 		return
 	}
 
-	req, _ := http.NewRequest("GET", "http://farmer.golang.org/status/reverse.json", nil)
+	req, _ := http.NewRequest("GET", "https://farmer.golang.org/status/reverse.json", nil)
 	req = req.WithContext(ctx)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {

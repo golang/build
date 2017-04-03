@@ -629,7 +629,7 @@ func (c BuildConfig) ShortOwner() string {
 }
 
 // PoolName returns a short summary of the builder's host type for the
-// http://farmer.golang.org/builders page.
+// https://farmer.golang.org/builders page.
 func (c *HostConfig) PoolName() string {
 	switch {
 	case c.IsReverse:

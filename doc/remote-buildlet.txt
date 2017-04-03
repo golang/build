@@ -53,5 +53,3 @@ Flow:
 
 *) Client may release it by doing the normal buildlet.Client.Destroy call
    to its /halt method.
-
-
