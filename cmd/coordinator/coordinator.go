@@ -80,7 +80,6 @@ var Version string // set by linker -X
 const devPause = false
 
 var (
-	role          = flag.String("role", "coordinator", "Which role this binary should run as. Valid options: coordinator, watcher")
 	masterKeyFile = flag.String("masterkey", "", "Path to builder master key. Else fetched using GCE project attribute 'builder-master-key'.")
 	mode          = flag.String("mode", "", "Valid modes are 'dev', 'prod', or '' for auto-detect. dev means localhost development, not be confused with staging on go-dashboard-dev, which is still the 'prod' mode.")
 	buildEnvName  = flag.String("env", "", "The build environment configuration to use. Not required if running on GCE.")
@@ -265,12 +264,6 @@ func (fn loggerFunc) createSpan(event string, optText ...string) eventSpan {
 
 func main() {
 	flag.Parse()
-	switch *role {
-	default:
-		log.Fatalf("unsupported role %q", *role)
-	case "coordinator":
-		// fall through
-	}
 
 	log.Printf("coordinator version %q starting", Version)
 	err := initGCE()
