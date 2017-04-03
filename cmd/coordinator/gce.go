@@ -31,7 +31,6 @@ import (
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/lru"
 	"golang.org/x/crypto/acme/autocert"
-	xcontext "golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
@@ -596,7 +595,7 @@ type gcsAutocertCache struct {
 	bucket string
 }
 
-func (c *gcsAutocertCache) Get(ctx xcontext.Context, key string) ([]byte, error) {
+func (c *gcsAutocertCache) Get(ctx context.Context, key string) ([]byte, error) {
 	rd, err := c.gcs.Bucket(c.bucket).Object(key).NewReader(ctx)
 	if err == storage.ErrObjectNotExist {
 		return nil, autocert.ErrCacheMiss
@@ -608,7 +607,7 @@ func (c *gcsAutocertCache) Get(ctx xcontext.Context, key string) ([]byte, error)
 	return ioutil.ReadAll(rd)
 }
 
-func (c *gcsAutocertCache) Put(ctx xcontext.Context, key string, data []byte) error {
+func (c *gcsAutocertCache) Put(ctx context.Context, key string, data []byte) error {
 	wr := c.gcs.Bucket(c.bucket).Object(key).NewWriter(ctx)
 	if _, err := wr.Write(data); err != nil {
 		return err
@@ -616,7 +615,7 @@ func (c *gcsAutocertCache) Put(ctx xcontext.Context, key string, data []byte) er
 	return wr.Close()
 }
 
-func (c *gcsAutocertCache) Delete(ctx xcontext.Context, key string) error {
+func (c *gcsAutocertCache) Delete(ctx context.Context, key string) error {
 	err := c.gcs.Bucket(c.bucket).Object(key).Delete(ctx)
 	if err == storage.ErrObjectNotExist {
 		return nil

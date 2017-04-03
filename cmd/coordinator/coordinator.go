@@ -54,7 +54,6 @@ import (
 	"golang.org/x/build/livelog"
 	"golang.org/x/build/types"
 	"golang.org/x/crypto/acme/autocert"
-	xcontext "golang.org/x/net/context"
 	"golang.org/x/time/rate"
 )
 
@@ -199,7 +198,7 @@ func serveTLS(ln net.Listener) {
 	if bucket := buildEnv.AutoCertCacheBucket; bucket != "" {
 		m := autocert.Manager{
 			Prompt: autocert.AcceptTOS,
-			HostPolicy: func(_ xcontext.Context, host string) error {
+			HostPolicy: func(_ context.Context, host string) error {
 				if !strings.HasSuffix(host, ".golang.org") {
 					return fmt.Errorf("bogus host %q", host)
 				}

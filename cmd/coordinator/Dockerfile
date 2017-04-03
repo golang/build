@@ -14,6 +14,9 @@ RUN cd /go/src/golang.org/x/time/rate && git reset --hard f51c12702a4d776e4c1fa9
 RUN go get -d golang.org/x/oauth2
 RUN cd /go/src/golang.org/x/oauth2 && git reset --hard 314dd2c0bf3ebd592ec0d20847d27e79d0dbe8dd
 
+RUN go get -d golang.org/x/crypto/acme/autocert
+RUN cd /go/src/golang.org/x/crypto && git reset --hard 573951cbe80bb6352881271bb276f48749eab6f4
+
 RUN go get -d go4.org/syncutil
 RUN cd /go/src/go4.org && git reset --hard 7ce08ca145dbe0e66a127c447b80ee7914f3e4f9
 
