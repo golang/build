@@ -7,7 +7,6 @@ package maintner
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,7 +86,6 @@ func (d *DiskMutationLogger) GetMutations(ctx context.Context) <-chan *maintpb.M
 	go func() {
 		defer close(ch)
 		err := d.ForeachFile(func(fullPath string, fi os.FileInfo) error {
-			log.Printf("File %s has size %v", fullPath, fi.Size())
 			return reclog.ForeachFileRecord(fullPath, func(off int64, hdr, rec []byte) error {
 				m := new(maintpb.Mutation)
 				if err := proto.Unmarshal(rec, m); err != nil {

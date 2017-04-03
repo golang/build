@@ -77,6 +77,14 @@ func (c *Corpus) GitHub() *GitHub {
 	return new(GitHub)
 }
 
+// Gerrit returns the corpus's Gerrit data.
+func (c *Corpus) Gerrit() *Gerrit {
+	if c.gerrit != nil {
+		return c.gerrit
+	}
+	return new(Gerrit)
+}
+
 // mustProtoFromTime turns a time.Time into a *timestamp.Timestamp or panics if
 // in is invalid.
 func mustProtoFromTime(in time.Time) *timestamp.Timestamp {

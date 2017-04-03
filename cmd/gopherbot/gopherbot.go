@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -15,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -117,6 +119,17 @@ func main() {
 		fail = true
 	}
 
+	// "CL nnnn mentions this issue"
+	if err := bot.cl2issue(ctx); err != nil {
+		log.Printf("cl2issue: %v", err)
+		fail = true
+	}
+
+	if err := bot.checkCherryPicks(ctx); err != nil {
+		log.Printf("checking cherry picks: %v", err)
+		fail = true
+	}
+
 	if fail {
 		os.Exit(1)
 	}
@@ -130,6 +143,54 @@ type gopherbot struct {
 
 func (b *gopherbot) addLabel(ctx context.Context, gi *maintner.GitHubIssue, label string) error {
 	_, _, err := b.ghc.Issues.AddLabelsToIssue(ctx, "golang", "go", int(gi.Number), []string{label})
+	return err
+}
+
+func (b *gopherbot) addGitHubComment(ctx context.Context, org, repo string, issueNum int32, msg string) error {
+	gr := b.corpus.GitHub().Repo(org, repo)
+	if gr == nil {
+		return fmt.Errorf("unknown github repo %s/%s", org, repo)
+	}
+	var since time.Time
+	if gi := gr.Issue(issueNum); gi != nil {
+		dup := false
+		gi.ForeachComment(func(c *maintner.GitHubComment) error {
+			since = c.Updated
+			// TODO: check for gopherbot as author? check for exact match?
+			// This seems fine for now.
+			if strings.Contains(c.Body, msg) {
+				dup = true
+				return errStopIteration
+			}
+			return nil
+		})
+		if dup {
+			// Comment's already been posted. Nothing to do.
+			return nil
+		}
+	}
+	// See if there is a dup comment from when gopherbot last got
+	// its data from maintner.
+	ics, _, err := b.ghc.Issues.ListComments(ctx, org, repo, int(issueNum), &github.IssueListCommentsOptions{
+		Since:       since,
+		ListOptions: github.ListOptions{PerPage: 1000},
+	})
+	if err != nil {
+		return err
+	}
+	for _, ic := range ics {
+		if strings.Contains(ic.GetBody(), msg) {
+			// Dup.
+			return nil
+		}
+	}
+	if *dryRun {
+		log.Printf("[dry run] would add comment to github.com/%s/%s/issues/%d: %v", org, repo, issueNum, msg)
+		return nil
+	}
+	_, _, err = b.ghc.Issues.CreateComment(ctx, org, repo, int(issueNum), &github.IssueComment{
+		Body: github.String(msg),
+	})
 	return err
 }
 
@@ -337,17 +398,89 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 		}
 
 		// TODO: write a task that reopens issues if the OP speaks up.
-		_, _, err := b.ghc.Issues.CreateComment(ctx, "golang", "go", int(gi.Number), &github.IssueComment{
-			Body: github.String("Timed out in state WaitingForInfo. Closing.\n\n(I am just a bot, though. Please speak up if this is a mistake or you have the requested information.)"),
-		})
-		if err != nil {
+		if err := b.addGitHubComment(ctx, "golang", "go", gi.Number,
+			"Timed out in state WaitingForInfo. Closing.\n\n(I am just a bot, though. Please speak up if this is a mistake or you have the requested information.)"); err != nil {
 			return err
 		}
-		_, _, err = b.ghc.Issues.Edit(ctx, "golang", "go", int(gi.Number), &github.IssueRequest{State: github.String("closed")})
+		_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(gi.Number), &github.IssueRequest{State: github.String("closed")})
 		return err
 	})
 
 }
+
+// Issue 19776: assist with cherry picks based on Milestones
+func (b *gopherbot) checkCherryPicks(ctx context.Context) error {
+	// TODO(bradfitz): write this. Debugging stuff below only.
+	return nil
+
+	sum := map[string]int{}
+	b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		if gi.Milestone.IsNone() || gi.Milestone.IsUnknown() || gi.Milestone.Closed {
+			return nil
+		}
+		title := gi.Milestone.Title
+		if !strings.HasPrefix(title, "Go") || strings.Count(title, ".") != 2 {
+			return nil
+		}
+		sum[title]++
+		return nil
+	})
+	var titles []string
+	for k := range sum {
+		titles = append(titles, k)
+	}
+	sort.Slice(titles, func(i, j int) bool { return sum[titles[i]] < sum[titles[j]] })
+	for _, title := range titles {
+		fmt.Printf(" %10d %s\n", sum[title], title)
+	}
+	return nil
+}
+
+// Write "CL https://golang.org/issue/NNNN mentions this issue" on
+// Github when a new Gerrit CL references a Github issue.
+func (b *gopherbot) cl2issue(ctx context.Context) error {
+	monthAgo := time.Now().Add(-30 * 24 * time.Hour)
+	b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+		if gp.Server() != "go.googlesource.com" {
+			return nil
+		}
+		return gp.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
+			if cl.Meta == nil || cl.Meta.AuthorTime.Before(monthAgo) {
+				// If the CL was last updated over a
+				// month ago, assume (as an
+				// optimization) that gopherbot
+				// already processed this issue.
+				return nil
+			}
+			for _, ref := range cl.GitHubIssueRefs {
+				gi := ref.Repo.Issue(ref.Number)
+				if gi == nil || gi.Closed {
+					continue
+				}
+				hasComment := false
+				substr := fmt.Sprintf("%d mentions this issue.", cl.Number)
+				gi.ForeachComment(func(c *maintner.GitHubComment) error {
+					if strings.Contains(c.Body, substr) {
+						hasComment = true
+						return errStopIteration
+					}
+					return nil
+				})
+				if !hasComment {
+					if err := b.addGitHubComment(ctx, "golang", "go", gi.Number, fmt.Sprintf("CL https://golang.org/cl/%d mentions this issue.", cl.Number)); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		})
+	})
+	return nil
+}
+
+// errStopIteration is used to stop iteration over issues or comments.
+// It has no special meaning.
+var errStopIteration = errors.New("stop iteration")
 
 func isDocumentationTitle(t string) bool {
 	if !strings.Contains(t, "doc") && !strings.Contains(t, "Doc") {

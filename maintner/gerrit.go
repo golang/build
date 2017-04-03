@@ -30,10 +30,11 @@ import (
 
 // Gerrit holds information about a number of Gerrit projects.
 type Gerrit struct {
-	c       *Corpus
-	dataDir string // the root Corpus data directory
-	// keys are like "https://go.googlesource.com/build"
-	projects map[string]*GerritProject
+	c        *Corpus
+	dataDir  string                    // the root Corpus data directory
+	projects map[string]*GerritProject // keyed by "go.googlesource.com/build"
+
+	clsReferencingGithubIssue map[GitHubIssueRef][]*GerritCL
 }
 
 // c.mu must be held
@@ -53,6 +54,17 @@ func (g *Gerrit) getOrCreateProject(gerritProj string) *GerritProject {
 	return proj
 }
 
+// ForeachProjectUnsorted calls fn for each known Gerrit project.
+// Iteration ends if fn returns a non-nil value.
+func (g *Gerrit) ForeachProjectUnsorted(fn func(*GerritProject) error) error {
+	for _, p := range g.projects {
+		if err := fn(p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // GerritProject represents a single Gerrit project.
 type GerritProject struct {
 	gerrit *Gerrit
@@ -64,6 +76,24 @@ type GerritProject struct {
 	cls    map[int32]*GerritCL
 	remote map[gerritCLVersion]GitHash
 	need   map[GitHash]bool
+}
+
+func (gp *GerritProject) ServerSlashProject() string { return gp.proj }
+
+// Server returns the Gerrit server, such as "go.googlesource.com".
+func (gp *GerritProject) Server() string {
+	if i := strings.IndexByte(gp.proj, '/'); i != -1 {
+		return gp.proj[:i]
+	}
+	return ""
+}
+
+// Project returns the Gerrit project on the server, such as "go" or "crypto".
+func (gp *GerritProject) Project() string {
+	if i := strings.IndexByte(gp.proj, '/'); i != -1 {
+		return gp.proj[i+1:]
+	}
+	return ""
 }
 
 // ForeachOpenCL calls fn for each open CL in the repo.
@@ -90,10 +120,22 @@ func (gp *GerritProject) ForeachOpenCL(fn func(*GerritCL) error) error {
 	return nil
 }
 
+func (gp *GerritProject) ForeachCLUnsorted(fn func(*GerritCL) error) error {
+	for _, cl := range gp.cls {
+		if err := fn(cl); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (gp *GerritProject) logf(format string, args ...interface{}) {
 	log.Printf("gerrit "+gp.proj+": "+format, args...)
 }
 
+// gerritCLVersion is a value type used as a map key to store a CL
+// number and a patchset version. Its Version field is overloaded
+// to reference the "meta" metadata commit if the Version is 0.
 type gerritCLVersion struct {
 	CLNumber int32
 	Version  int32 // version 0 is used for the "meta" ref.
@@ -101,6 +143,9 @@ type gerritCLVersion struct {
 
 // A GerritCL represents a single change in Gerrit.
 type GerritCL struct {
+	// Project is the project this CL is part of.
+	Project *GerritProject
+
 	// Number is the CL number on the Gerrit
 	// server. (e.g. 1, 2, 3)
 	Number int32
@@ -120,6 +165,47 @@ type GerritCL struct {
 
 	// Status will be "merged", "abandoned", "new", or "draft".
 	Status string
+
+	// GitHubIssueRefs are parsed references to GitHub issues.
+	GitHubIssueRefs []GitHubIssueRef
+}
+
+// References reports whether cl includes a commit message reference
+// to the provided Github issue ref.
+func (cl *GerritCL) References(ref GitHubIssueRef) bool {
+	for _, eref := range cl.GitHubIssueRefs {
+		if eref == ref {
+			return true
+		}
+	}
+	return false
+}
+
+func (cl *GerritCL) updateGithubIssueRefs() {
+	gp := cl.Project
+	gerrit := gp.gerrit
+	gc := cl.Commit
+
+	oldRefs := cl.GitHubIssueRefs
+	newRefs := gerrit.c.parseGithubRefs(gp.proj, gc.Msg)
+	cl.GitHubIssueRefs = newRefs
+	for _, ref := range newRefs {
+		if !clSliceContains(gerrit.clsReferencingGithubIssue[ref], cl) {
+			// TODO: make this as small as
+			// possible? Most will have length
+			// 1. Care about default capacity of
+			// 2?
+			gerrit.clsReferencingGithubIssue[ref] = append(gerrit.clsReferencingGithubIssue[ref], cl)
+		}
+	}
+	for _, ref := range oldRefs {
+		if !cl.References(ref) {
+			// TODO: remove ref from gerrit.clsReferencingGithubIssue
+			// It could be a map of maps I suppose, but not as compact.
+			// So uses a slice as the second layer, since there will normally
+			// be one item.
+		}
+	}
 }
 
 // c.mu must be held
@@ -128,9 +214,10 @@ func (c *Corpus) initGerrit() {
 		return
 	}
 	c.gerrit = &Gerrit{
-		c:        c,
-		dataDir:  c.dataDir,
-		projects: map[string]*GerritProject{},
+		c:                         c,
+		dataDir:                   c.dataDir,
+		projects:                  map[string]*GerritProject{},
+		clsReferencingGithubIssue: map[GitHubIssueRef][]*GerritCL{},
 	}
 }
 
@@ -256,6 +343,7 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 		} else {
 			cl.Commit = gc
 			cl.Version = clv.Version
+			cl.updateGithubIssueRefs()
 		}
 		if c.didInit {
 			gp.logf("Ref %+v => %v", clv, hash)
@@ -274,6 +362,16 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 			gp.markNeededCommit(p)
 		}
 	}
+}
+
+// clSliceContains reports whether cls contains cl.
+func clSliceContains(cls []*GerritCL, cl *GerritCL) bool {
+	for _, v := range cls {
+		if v == cl {
+			return true
+		}
+	}
+	return false
 }
 
 // c.mu must be held
@@ -296,7 +394,8 @@ func (gp *GerritProject) getOrCreateCL(num int32) *GerritCL {
 		return cl
 	}
 	cl = &GerritCL{
-		Number: num,
+		Project: gp,
+		Number:  num,
 	}
 	gp.cls[num] = cl
 	return cl

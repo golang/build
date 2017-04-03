@@ -35,14 +35,14 @@ import (
 // package for responses fulfilled from cache due to a 304 from the server.
 const xFromCache = "X-From-Cache"
 
-// githubRepoID is a github org & repo, lowercase.
-type githubRepoID struct {
+// GithubRepoID is a github org & repo, lowercase.
+type GithubRepoID struct {
 	Owner, Repo string
 }
 
-func (id githubRepoID) String() string { return id.Owner + "/" + id.Repo }
+func (id GithubRepoID) String() string { return id.Owner + "/" + id.Repo }
 
-func (id githubRepoID) valid() bool {
+func (id GithubRepoID) valid() bool {
 	if id.Owner == "" || id.Repo == "" {
 		// TODO: more validation. whatever github requires.
 		return false
@@ -53,15 +53,16 @@ func (id githubRepoID) valid() bool {
 type GitHub struct {
 	c     *Corpus
 	users map[int64]*GitHubUser
-	repos map[githubRepoID]*GitHubRepo
+	repos map[GithubRepoID]*GitHubRepo
 }
 
+// Repo returns the repo if it's known. Otherwise it returns nil.
 func (g *GitHub) Repo(owner, repo string) *GitHubRepo {
-	return g.repos[githubRepoID{owner, repo}]
+	return g.repos[GithubRepoID{owner, repo}]
 }
 
 func (g *GitHub) getOrCreateRepo(owner, repo string) *GitHubRepo {
-	id := githubRepoID{owner, repo}
+	id := GithubRepoID{owner, repo}
 	if !id.valid() {
 		return nil
 	}
@@ -80,11 +81,16 @@ func (g *GitHub) getOrCreateRepo(owner, repo string) *GitHubRepo {
 
 type GitHubRepo struct {
 	github     *GitHub
-	id         githubRepoID
+	id         GithubRepoID
 	issues     map[int32]*GitHubIssue // num -> issue
 	milestones map[int64]*GitHubMilestone
 	labels     map[int64]*GitHubLabel
 }
+
+func (gr *GitHubRepo) ID() GithubRepoID { return gr.id }
+
+// Issue returns the the provided issue number, or nil if it's not known.
+func (gr *GitHubRepo) Issue(n int32) *GitHubIssue { return gr.issues[n] }
 
 // ForeachIssue calls fn for each issue in the repo.
 //
@@ -144,6 +150,14 @@ func (g *GitHubRepo) getOrCreateLabel(id int64) *GitHubLabel {
 type GitHubUser struct {
 	ID    int64
 	Login string
+}
+
+// GitHubIssueRef is a reference to an issue (or pull request) number
+// in a repo. These are parsed from text making references such as
+// "golang/go#1234" or just "#1234" (with an implicit Repo).
+type GitHubIssueRef struct {
+	Repo   *GitHubRepo // must be non-nil
+	Number int32       // GitHubIssue.Number
 }
 
 // GitHubIssue represents a github issue.
@@ -313,6 +327,10 @@ type GitHubMilestone struct {
 
 // IsNone reports whether ms represents the sentinel "no milestone" milestone.
 func (ms *GitHubMilestone) IsNone() bool { return ms == noMilestone }
+
+// IsUnknown reports whether ms is nil, which represents the unknown
+// state. Milestones should never be in this state, though.
+func (ms *GitHubMilestone) IsUnknown() bool { return ms == nil }
 
 // emptyMilestone is a non-nil *githubMilestone with zero values for
 // all fields.
@@ -509,7 +527,7 @@ func (c *Corpus) initGithub() {
 	}
 	c.github = &GitHub{
 		c:     c,
-		repos: map[githubRepoID]*GitHubRepo{},
+		repos: map[GithubRepoID]*GitHubRepo{},
 	}
 }
 
@@ -1890,4 +1908,59 @@ func makeGithubResponse(res *http.Response) *github.Response {
 		}
 	}
 	return gr
+}
+
+var rxReferences = regexp.MustCompile(`\b(?:([\w\-]+)/([\w\-]+))?\#(\d+)\b`)
+
+func (c *Corpus) parseGithubRefs(gerritProj string, commitMsg string) []GitHubIssueRef {
+	// Use of rxReferences by itself caused this function to take 20% of the CPU time.
+	// TODO(bradfitz): stop using regexps here.
+	// But in the meantime, help the regexp engine with this one weird trick:
+	// Reduce the length of the string given to FindAllStringSubmatch.
+	// Discard all lines before the first line containing a '#'.
+	// The "Fixes #nnnn" is usually at the end, so this discards most of the input.
+	// Now CPU is only 2% instead of 20%.
+	hash := strings.IndexByte(commitMsg, '#')
+	if hash == -1 {
+		return nil
+	}
+	nl := strings.LastIndexByte(commitMsg[:hash], '\n')
+	commitMsg = commitMsg[nl+1:]
+
+	// TODO: use FindAllStringSubmatchIndex instead, so we can
+	// back up and see what's behind it and ignore "#1", "#2",
+	// "#3" 'references' which are actually bullets or ARM
+	// disassembly, and only respect them as real if they have the
+	// word "Fixes " or "Issue " or similar before them.
+	ms := rxReferences.FindAllStringSubmatch(commitMsg, -1)
+	if len(ms) == 0 {
+		return nil
+	}
+	/* e.g.
+	2017/03/30 21:42:07 matches: [["golang/go#9327" "golang" "go" "9327"]]
+	2017/03/30 21:42:07 matches: [["golang/go#16512" "golang" "go" "16512"] ["golang/go#18404" "golang" "go" "18404"]]
+	2017/03/30 21:42:07 matches: [["#1" "" "" "1"]]
+	2017/03/30 21:42:07 matches: [["#10234" "" "" "10234"]]
+	2017/03/30 21:42:31 matches: [["GoogleCloudPlatform/gcloud-golang#262" "GoogleCloudPlatform" "gcloud-golang" "262"]]
+	2017/03/30 21:42:31 matches: [["GoogleCloudPlatform/google-cloud-go#481" "GoogleCloudPlatform" "google-cloud-go" "481"]]
+	*/
+	github := c.GitHub()
+	refs := make([]GitHubIssueRef, 0, len(ms))
+	for _, m := range ms {
+		owner, repo, numStr := strings.ToLower(m[1]), strings.ToLower(m[2]), m[3]
+		num, err := strconv.ParseInt(numStr, 10, 32)
+		if err != nil {
+			continue
+		}
+		if owner == "" {
+			if gerritProj == "go.googlesource.com/go" {
+				owner, repo = "golang", "go"
+			} else {
+				continue
+			}
+		}
+		gr := github.getOrCreateRepo(owner, repo)
+		refs = append(refs, GitHubIssueRef{gr, int32(num)})
+	}
+	return refs
 }

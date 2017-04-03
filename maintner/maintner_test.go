@@ -80,10 +80,10 @@ func TestProcessMutation_Github_NewIssue(t *testing.T) {
 	github.users = map[int64]*GitHubUser{
 		u1.ID: u1,
 	}
-	github.repos = map[githubRepoID]*GitHubRepo{
-		githubRepoID{"golang", "go"}: &GitHubRepo{
+	github.repos = map[GithubRepoID]*GitHubRepo{
+		GithubRepoID{"golang", "go"}: &GitHubRepo{
 			github: github,
-			id:     githubRepoID{"golang", "go"},
+			id:     GithubRepoID{"golang", "go"},
 			issues: map[int32]*GitHubIssue{
 				3: &GitHubIssue{
 					Number:    3,
@@ -121,7 +121,7 @@ func TestNewMutationsFromIssue(t *testing.T) {
 		State:     github.String("closed"),
 	}
 	gr := &GitHubRepo{
-		id: githubRepoID{"golang", "go"},
+		id: GithubRepoID{"golang", "go"},
 	}
 	is := gr.newMutationFromIssue(nil, gh)
 	want := &maintpb.Mutation{GithubIssue: &maintpb.GithubIssueMutation{
@@ -167,7 +167,7 @@ func TestAssigneesDeleted(t *testing.T) {
 		Assignees: assignees,
 	}
 	gr := &GitHubRepo{
-		id: githubRepoID{"golang", "go"},
+		id: GithubRepoID{"golang", "go"},
 		issues: map[int32]*GitHubIssue{
 			3: issue,
 		},
@@ -176,8 +176,8 @@ func TestAssigneesDeleted(t *testing.T) {
 		users: map[int64]*GitHubUser{
 			u1.ID: u1,
 		},
-		repos: map[githubRepoID]*GitHubRepo{
-			githubRepoID{"golang", "go"}: gr,
+		repos: map[GithubRepoID]*GitHubRepo{
+			GithubRepoID{"golang", "go"}: gr,
 		},
 	}
 
