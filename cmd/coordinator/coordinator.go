@@ -264,6 +264,9 @@ func (fn loggerFunc) createSpan(event string, optText ...string) eventSpan {
 func main() {
 	flag.Parse()
 
+	if Version == "" && *mode == "dev" {
+		Version = "dev"
+	}
 	log.Printf("coordinator version %q starting", Version)
 	err := initGCE()
 	if err != nil {
@@ -281,7 +284,7 @@ func main() {
 	err = initKube()
 	if err != nil {
 		kubeErr = err
-		log.Printf("Kube support disabled due to eror initializing Kubernetes: %v", err)
+		log.Printf("Kube support disabled due to error initializing Kubernetes: %v", err)
 	}
 
 	go updateInstanceRecord()

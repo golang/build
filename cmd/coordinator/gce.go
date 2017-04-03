@@ -120,12 +120,19 @@ func initGCE() error {
 
 	dsClient, err = datastore.NewClient(ctx, buildEnv.ProjectName)
 	if err != nil {
-		// TODO(bradfitz): make fatal later, once working.
-		log.Printf("Error creating datastore client: %v", err)
+		if *mode == "dev" {
+			log.Printf("Error creating datastore client: %v", err)
+		} else {
+			log.Fatalf("Error creating datastore client: %v", err)
+		}
 	}
 
 	tokenSource, err = google.DefaultTokenSource(ctx, compute.CloudPlatformScope)
 	if err != nil {
+		if *mode == "dev" {
+			// don't try to do anything else with GCE, as it will likely fail
+			return nil
+		}
 		log.Fatalf("failed to get a token source: %v", err)
 	}
 	httpClient := oauth2.NewClient(ctx, tokenSource)
@@ -197,7 +204,7 @@ func (p *gceBuildletPool) pollQuotaLoop() {
 		return
 	}
 	if buildEnv.ProjectName == "" {
-		log.Printf("pollQuotaLoop: no GCE project name confingured; not checking quota.")
+		log.Printf("pollQuotaLoop: no GCE project name configured; not checking quota.")
 		return
 	}
 	for {
