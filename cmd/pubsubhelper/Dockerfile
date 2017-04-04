@@ -12,20 +12,32 @@ LABEL maintainer "golang-dev@googlegroups.com"
 # then I want to make sure that FROM base is rebuilt always when things in
 # x/build change.
 
-RUN go get -d cloud.google.com/go/compute/metadata
-RUN cd /go/src/cloud.google.com/go/compute/metadata && git reset --hard cd0da878c66091060d2e7403abd62192b3e387e0
-
-RUN go get -d golang.org/x/time/rate
-RUN cd /go/src/golang.org/x/time/rate && git reset --hard f51c12702a4d776e4c1fa9b0fabab841babae631
-
-RUN go get -d golang.org/x/oauth2
-RUN cd /go/src/golang.org/x/oauth2 && git reset --hard 314dd2c0bf3ebd592ec0d20847d27e79d0dbe8dd
-
 COPY /cmd/gitmirror/install-apt-deps.sh /scripts/install-apt-deps.sh
 RUN  /scripts/install-apt-deps.sh
 
-RUN go get -d github.com/bradfitz/go-smtpd/smtpd
-RUN cd /go/src/github.com/bradfitz/go-smtpd/smtpd && git reset --hard 8ebf70ba0acf0674302879b9872da16f478c29d5
+RUN go get -d cloud.google.com/go/compute/metadata && \
+    cd /go/src/cloud.google.com/go/compute/metadata && \
+    git reset --hard cd0da878c66091060d2e7403abd62192b3e387e0
+
+RUN go get -d golang.org/x/time/rate && \
+    cd /go/src/golang.org/x/time/rate && \
+    git reset --hard f51c12702a4d776e4c1fa9b0fabab841babae631
+
+RUN go get -d golang.org/x/oauth2 && \
+    cd /go/src/golang.org/x/oauth2 && \
+    git reset --hard 314dd2c0bf3ebd592ec0d20847d27e79d0dbe8dd
+
+RUN go get -d github.com/bradfitz/go-smtpd/smtpd && \
+    cd /go/src/github.com/bradfitz/go-smtpd/smtpd && \
+    git reset --hard deb6d623762522f8ad4a55b952001e4215a76cf4
+
+RUN go get -d github.com/jellevandenhooff/dkim && \
+    cd /go/src/github.com/jellevandenhooff/dkim && \
+    git reset --hard f50fe3d243e1a9c9369eea29813517f3af190518
+
+RUN go get -d golang.org/x/crypto/acme/autocert && \
+    cd /go/src/golang.org/x/crypto/acme/autocert && \
+    git reset --hard 573951cbe80bb6352881271bb276f48749eab6f4
 
 COPY . /go/src/golang.org/x/build/
 

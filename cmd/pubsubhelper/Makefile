@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-VERSION=v4
+VERSION=v1
 
 docker-prod: Dockerfile
 	docker build -f Dockerfile --tag=gcr.io/symbolic-datum-552/pubsubhelper:$(VERSION)  ../..

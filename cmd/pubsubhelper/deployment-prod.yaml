@@ -9,10 +9,19 @@ spec:
       labels:
         app: pubsubhelper
     spec:
+      volumes:
+      - name: pv-autocert-cache
+        gcePersistentDisk:
+          pdName: pubsubhelper-autocert-cache
+          fsType: ext4
       containers:
       - name: pubsubhelper
-        image: gcr.io/symbolic-datum-552/pubsubhelper:v4
+        image: gcr.io/symbolic-datum-552/pubsubhelper:v1
+        imagePullPolicy: Always
         command: ["/go/bin/pubsubhelper"]
+        volumeMounts:
+        - mountPath: /autocert-cache
+          name: pv-autocert-cache
         ports:
         - containerPort: 25
         - containerPort: 80
