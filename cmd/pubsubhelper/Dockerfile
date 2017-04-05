@@ -39,6 +39,10 @@ RUN go get -d golang.org/x/crypto/acme/autocert && \
     cd /go/src/golang.org/x/crypto/acme/autocert && \
     git reset --hard 573951cbe80bb6352881271bb276f48749eab6f4
 
+RUN go get -d go4.org/types && \
+    cd /go/src/go4.org && \
+    git reset --hard d7e10a7752d55a1f81e384fe49a6a5b417a9a6dd
+
 COPY . /go/src/golang.org/x/build/
 
 RUN go install golang.org/x/build/cmd/pubsubhelper

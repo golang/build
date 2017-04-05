@@ -24,10 +24,12 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bradfitz/go-smtpd/smtpd"
 	"github.com/jellevandenhooff/dkim"
+	"go4.org/types"
 	"golang.org/x/build/cmd/pubsubhelper/pubsubtypes"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -39,28 +41,12 @@ var (
 	smtpListen = flag.String("smtp", ":25", "SMTP listen address")
 )
 
-func handleRoot(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	io.WriteString(w, `<html>
-<body>
-  This is <a href="https://godoc.org/golang.org/x/build/cmd/pubsubhelper">pubsubhelper</a>.
-</body>
-</html>
-`)
-}
-
-func handleWaitEvent(w http.ResponseWriter, r *http.Request) {
-
-}
-
 func main() {
 	flag.Parse()
 
 	http.HandleFunc("/", handleRoot)
 	http.HandleFunc("/waitevent", handleWaitEvent)
+	http.HandleFunc("/recent", handleRecent)
 
 	errc := make(chan error)
 	go func() {
@@ -110,6 +96,86 @@ func main() {
 	}()
 
 	log.Fatal(<-errc)
+}
+
+func handleRoot(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	io.WriteString(w, `<html>
+<body>
+  This is <a href="https://godoc.org/golang.org/x/build/cmd/pubsubhelper">pubsubhelper</a>.
+
+<ul>
+   <li><b><a href="/waitevent">/waitevent</a></b>: long-poll wait 30s for next event (use ?after=[RFC3339Nano] to resume at point)</li>
+   <li><b><a href="/recent">/recent</a></b>: recent events, without long-polling.</li>
+</ul>
+
+</body>
+</html>
+`)
+}
+
+func handleWaitEvent(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "requires GET", http.StatusBadRequest)
+		return
+	}
+
+	ch := make(chan *eventAndJSON, 1)
+
+	var after time.Time
+	if v := r.FormValue("after"); v != "" {
+		var err error
+		after, err = time.Parse(time.RFC3339Nano, r.FormValue("after"))
+		if err != nil {
+			http.Error(w, "'after' parameter is not in time.RFC3339Nano format", http.StatusBadRequest)
+			return
+		}
+	} else {
+		after = time.Now()
+	}
+
+	register(ch, after)
+	defer unregister(ch)
+	ctx := r.Context()
+
+	timer := time.NewTimer(30 * time.Second)
+	defer timer.Stop()
+
+	var e *eventAndJSON
+	select {
+	case <-ctx.Done():
+		return
+	case <-timer.C:
+		e = newEventAndJSON(&pubsubtypes.Event{
+			LongPollTimeout: true,
+		})
+	case e = <-ch:
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	io.WriteString(w, e.json)
+}
+
+func handleRecent(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	var buf bytes.Buffer
+	mu.Lock()
+	buf.WriteString("[\n")
+	n := 0
+	for i := len(recent) - 1; i >= 0; i-- {
+		ev := recent[i]
+		if n > 0 {
+			buf.WriteString(",\n")
+		}
+		n++
+		buf.WriteString(ev.json)
+	}
+	buf.WriteString("\n]\n")
+	mu.Unlock()
+	w.Write(buf.Bytes())
 }
 
 type env struct {
@@ -194,9 +260,19 @@ func (e *env) Close() error {
 		return nil
 	}
 	changeNum, _ := strconv.Atoi(hdr.Get("X-Gerrit-Change-Number"))
+
+	// Extract gerrit project "oauth2" from List-Id header like:
+	// List-Id: <gerrit-oauth2.go-review.googlesource.com>
+	project := strings.TrimPrefix(hdr.Get("List-Id"), "<gerrit-")
+	if i := strings.IndexByte(project, '.'); i == -1 {
+		project = ""
+	} else {
+		project = project[:i]
+	}
 	publish(&pubsubtypes.Event{
 		Gerrit: &pubsubtypes.GerritEvent{
 			URL:          strings.Trim(hdr.Get("X-Gerrit-ChangeURL"), "<>"),
+			Project:      project,
 			CommitHash:   hdr.Get("X-Gerrit-Commit"),
 			ChangeNumber: changeNum,
 		},
@@ -204,14 +280,87 @@ func (e *env) Close() error {
 	return nil
 }
 
-func publish(e *pubsubtypes.Event) {
-	je, err := json.MarshalIndent(e, "", "\t")
+type eventAndJSON struct {
+	*pubsubtypes.Event
+	json string // JSON MarshalIndent of Event
+}
+
+var (
+	mu      sync.Mutex      // guards following
+	recent  []*eventAndJSON // newest at end
+	waiting = map[chan *eventAndJSON]struct{}{}
+)
+
+const (
+	keepMin = 50
+	maxAge  = 1 * time.Hour
+)
+
+func register(ch chan *eventAndJSON, after time.Time) {
+	mu.Lock()
+	defer mu.Unlock()
+	for _, e := range recent {
+		if e.Time.Time().After(after) {
+			ch <- e
+			return
+		}
+	}
+	waiting[ch] = struct{}{}
+}
+
+func unregister(ch chan *eventAndJSON) {
+	mu.Lock()
+	defer mu.Unlock()
+	delete(waiting, ch)
+}
+
+// numOldInRecentLocked returns how many leading items of recent are
+// too old.
+func numOldInRecentLocked() int {
+	if len(recent) <= keepMin {
+		return 0
+	}
+	n := 0
+	tooOld := time.Now().Add(-maxAge)
+	for _, e := range recent {
+		if e.Time.Time().After(tooOld) {
+			break
+		}
+		n++
+	}
+	return n
+}
+
+func newEventAndJSON(e *pubsubtypes.Event) *eventAndJSON {
+	e.Time = types.Time3339(time.Now())
+	j, err := json.MarshalIndent(e, "", "\t")
 	if err != nil {
 		log.Printf("JSON error: %v", err)
-		return
 	}
-	log.Printf("Event: %s", je)
+	return &eventAndJSON{
+		Event: e,
+		json:  string(j),
+	}
+}
 
+func publish(e *pubsubtypes.Event) {
+	ej := newEventAndJSON(e)
+	log.Printf("Event: %s", ej.json)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	recent = append(recent, ej)
+	// Trim old ones off the front of recent
+	if n := numOldInRecentLocked(); n > 0 {
+		copy(recent, recent[n:])
+		recent = recent[:len(recent)-n]
+	}
+
+	for ch := range waiting {
+		ch <- ej
+		delete(waiting, ch)
+	}
 }
 
 type dnsClient struct{}
