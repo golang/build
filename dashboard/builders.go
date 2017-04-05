@@ -229,7 +229,7 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"solaris-amd64-smartosbuildlet"},
 	},
 	"host-linux-mips": &HostConfig{
-		Notes:     "Run by Brendan Kirby, imgtec.com",
+		Notes:     "Run by Brendan Kirby (@MIPSbkirby), imgtec.com",
 		IsReverse: true,
 		ExpectNum: 1,
 		env: []string{
@@ -241,7 +241,7 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"linux-mips"},
 	},
 	"host-linux-mipsle": &HostConfig{
-		Notes:     "Run by Brendan Kirby, imgtec.com",
+		Notes:     "Run by Brendan Kirby (@MIPSbkirby), imgtec.com",
 		IsReverse: true,
 		ExpectNum: 1,
 		env: []string{
@@ -252,7 +252,7 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"linux-mipsle"},
 	},
 	"host-linux-mips64": &HostConfig{
-		Notes:     "Run by Brendan Kirby, imgtec.com",
+		Notes:     "Run by Brendan Kirby (@MIPSbkirby), imgtec.com",
 		IsReverse: true,
 		ExpectNum: 1,
 		env: []string{
@@ -264,7 +264,7 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"linux-mips64"},
 	},
 	"host-linux-mips64le": &HostConfig{
-		Notes:     "Run by Brendan Kirby, imgtec.com",
+		Notes:     "Run by Brendan Kirby (@MIPSbkirby), imgtec.com",
 		IsReverse: true,
 		ExpectNum: 1,
 		env: []string{
