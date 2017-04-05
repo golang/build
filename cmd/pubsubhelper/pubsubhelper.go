@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
@@ -44,9 +45,18 @@ var (
 func main() {
 	flag.Parse()
 
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, os.Interrupt)
+	go func() {
+		sig := <-ch
+		log.Printf("Signal %v received; exiting with status 0.", sig)
+		os.Exit(0)
+	}()
+
 	http.HandleFunc("/", handleRoot)
 	http.HandleFunc("/waitevent", handleWaitEvent)
 	http.HandleFunc("/recent", handleRecent)
+	http.HandleFunc("/github-webhook", handleGithubWebhook)
 
 	errc := make(chan error)
 	go func() {
@@ -128,7 +138,7 @@ func handleWaitEvent(w http.ResponseWriter, r *http.Request) {
 	var after time.Time
 	if v := r.FormValue("after"); v != "" {
 		var err error
-		after, err = time.Parse(time.RFC3339Nano, r.FormValue("after"))
+		after, err = time.Parse(time.RFC3339Nano, v)
 		if err != nil {
 			http.Error(w, "'after' parameter is not in time.RFC3339Nano format", http.StatusBadRequest)
 			return
@@ -161,12 +171,26 @@ func handleWaitEvent(w http.ResponseWriter, r *http.Request) {
 
 func handleRecent(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+
+	var after time.Time
+	if v := r.FormValue("after"); v != "" {
+		var err error
+		after, err = time.Parse(time.RFC3339Nano, v)
+		if err != nil {
+			http.Error(w, "'after' parameter is not in time.RFC3339Nano format", http.StatusBadRequest)
+			return
+		}
+	}
+
 	var buf bytes.Buffer
 	mu.Lock()
 	buf.WriteString("[\n")
 	n := 0
 	for i := len(recent) - 1; i >= 0; i-- {
 		ev := recent[i]
+		if ev.Time.Time().Before(after) {
+			continue
+		}
 		if n > 0 {
 			buf.WriteString(",\n")
 		}
