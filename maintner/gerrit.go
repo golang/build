@@ -338,6 +338,7 @@ func (gp *GerritProject) sync(ctx context.Context, loop bool) error {
 		gp.logf("init: %v", err)
 		return err
 	}
+	activityCh := gp.gerrit.c.activityChan("gerrit:" + gp.proj)
 	for {
 		if err := gp.syncOnce(ctx); err != nil {
 			gp.logf("sync: %v", err)
@@ -346,10 +347,14 @@ func (gp *GerritProject) sync(ctx context.Context, loop bool) error {
 		if !loop {
 			return nil
 		}
+		timer := time.NewTimer(15 * time.Minute)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return ctx.Err()
-		case <-time.After(1 * time.Minute):
+		case <-activityCh:
+			timer.Stop()
+		case <-timer.C:
 		}
 	}
 }

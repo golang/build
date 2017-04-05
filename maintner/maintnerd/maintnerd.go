@@ -31,10 +31,10 @@ var (
 	watchGithub = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
 	// TODO: specify gerrit auth via gitcookies or similar
 	watchGerrit = flag.String("watch-gerrit", "", `Comma-separated list of Gerrit projects to watch, each of form "hostname/project" (e.g. "go.googlesource.com/go")`)
-
-	config  = flag.String("config", "", "If non-empty, the name of a pre-defined config. Currently only 'go' is recognized.")
-	dataDir = flag.String("data-dir", "", "Local directory to write protobuf files to (default $HOME/var/maintnerd)")
-	debug   = flag.Bool("debug", false, "Print debug logging information")
+	pubsub      = flag.String("pubsub", "", "If non-empty, the golang.org/x/build/cmd/pubsubhelper URL scheme and hostname, without path")
+	config      = flag.String("config", "", "If non-empty, the name of a pre-defined config. Currently only 'go' is recognized.")
+	dataDir     = flag.String("data-dir", "", "Local directory to write protobuf files to (default $HOME/var/maintnerd)")
+	debug       = flag.Bool("debug", false, "Print debug logging information")
 )
 
 func init() {
@@ -129,6 +129,9 @@ func main() {
 		return
 	}
 
+	if *pubsub != "" {
+		corpus.StartPubSubHelperSubscribe(*pubsub)
+	}
 	log.Fatalf("Corpus.SyncLoop = %v", corpus.SyncLoop(ctx))
 }
 
@@ -139,6 +142,7 @@ func setGoConfig() {
 	if *watchGerrit != "" {
 		log.Fatalf("can't set both --config and --watch-gerrit")
 	}
+	*pubsub = "https://pubsubhelper.golang.org"
 	*watchGithub = "golang/go"
 
 	gerrc := gerrit.NewClient("https://go-review.googlesource.com/", gerrit.NoAuth)

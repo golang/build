@@ -40,6 +40,9 @@ type Corpus struct {
 	debug     bool
 	strIntern map[string]string // interned strings, including binary githashes
 
+	// pubsub:
+	activityChans map[string]chan struct{} // keyed by topic
+
 	// github-specific
 	github             *GitHub
 	gerrit             *Gerrit

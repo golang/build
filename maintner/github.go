@@ -1181,17 +1181,21 @@ func (gr *GitHubRepo) sync(ctx context.Context, tokenFile string, loop bool) err
 		gr:    gr,
 		ghc:   github.NewClient(hc),
 	}
+	activityCh := gr.github.c.activityChan("github:" + gr.id.String())
 	for {
 		err := p.sync(ctx)
 		if err == context.Canceled || !loop {
 			return err
 		}
 		p.logf("sync = %v; sleeping", err)
+		timer := time.NewTimer(15 * time.Minute)
 		select {
-		case <-time.After(30 * time.Second):
-			continue
 		case <-ctx.Done():
+			timer.Stop()
 			return ctx.Err()
+		case <-activityCh:
+			timer.Stop()
+		case <-timer.C:
 		}
 	}
 }
