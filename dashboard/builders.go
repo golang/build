@@ -120,6 +120,13 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.netbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64.tar.gz",
 	},
+	"host-netbsd-71": &HostConfig{
+		VMImage:            "netbsd-amd64-71",
+		Notes:              "NetBSD 7.1RC1; GCE VM is built from script in build/env/netbsd-amd64",
+		machineType:        "n1-highcpu-2",
+		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.netbsd-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64.tar.gz",
+	},
 	"host-plan9-386-gce": &HostConfig{
 		VMImage:            "plan9-386-v4",
 		Notes:              "Plan 9 from 0intro; GCE VM is built from script in build/env/plan9-386",
@@ -220,6 +227,12 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:      5,
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		ReverseAliases: []string{"linux-arm64-buildlet"},
+	},
+	"host-linux-arm64-packet": &HostConfig{
+		Notes:     "On 96 core packet.net hosts (Xenial host) in Docker containers (Jesise); run by Go team. See x/build/env/linux-arm64/packet",
+		IsReverse: true,
+		ExpectNum: 10,
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 	},
 	"host-solaris-amd64": &HostConfig{
 		Notes:          "run by Go team on Joyent, on a SmartOS 'infrastructure container'",
@@ -839,12 +852,12 @@ func init() {
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
-		Name:     "netbsd-amd64-70",
-		HostType: "host-netbsd-70",
+		Name:     "netbsd-amd64-71",
+		HostType: "host-netbsd-71",
 	})
 	addBuilder(BuildConfig{
-		Name:     "netbsd-386-70",
-		HostType: "host-netbsd-70",
+		Name:     "netbsd-386-71",
+		HostType: "host-netbsd-71",
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
@@ -972,6 +985,11 @@ func init() {
 		Name:     "linux-arm64-buildlet",
 		HostType: "host-linux-arm64-linaro",
 		FlakyNet: true,
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-arm64-packet",
+		HostType: "host-linux-arm64-packet",
+		FlakyNet: true, // unknown; just copied from the linaro one
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-mips",

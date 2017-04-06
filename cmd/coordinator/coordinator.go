@@ -1179,6 +1179,12 @@ func (br builderRev) skipBuild() bool {
 		// Hangs during make.bash. TODO: remove once Issue 19339 is fixed.
 		return true
 	}
+	if strings.HasPrefix(br.name, "netbsd-amd64") {
+		// Broken and unloved. Wasting resources.
+		// Still available via gomote, but not building for now.
+		// TODO: remove once Issue 19652 is fixed.
+		return true
+	}
 	switch br.subName {
 	case "build", // has external deps
 		"exp",    // always broken, depends on mobile which is broken

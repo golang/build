@@ -57,7 +57,11 @@ func main() {
 			}
 		}
 	case "linux/arm64":
-		initLinaroARM64()
+		if os.Getenv("GO_BUILDER_ENV") == "host-linux-arm64-packet" {
+			// No setup currently.
+		} else {
+			initLinaroARM64()
+		}
 	case "linux/ppc64":
 		initOregonStatePPC64()
 	case "linux/ppc64le":
