@@ -166,19 +166,14 @@ func main() {
 			*workDir = dir
 		}
 	}
-	// This is hard-coded because the client-supplied environment has
-	// no way to expand relative paths from the workDir.
-	// TODO(bradfitz): if we ever need more than this, make some mechanism.
-	os.Setenv("GOROOT_BOOTSTRAP", filepath.Join(*workDir, "go1.4"))
+
 	os.Setenv("WORKDIR", *workDir) // mostly for demos
 
 	if _, err := os.Lstat(*workDir); err != nil {
 		log.Fatalf("invalid --workdir %q: %v", *workDir, err)
 	}
-	if runtime.GOOS == "solaris" && runtime.GOARCH == "amd64" {
-		os.Setenv("PATH", os.Getenv("PATH")+":/opt/local/bin")
-		downloadBootstrapGoroot("/root/go-solaris-amd64-bootstrap", "https://storage.googleapis.com/go-builder-data/gobootstrap-solaris-amd64.tar.gz")
-	}
+	initGorootBootstrap()
+
 	http.HandleFunc("/", handleRoot)
 	http.HandleFunc("/debug/goroutines", handleGoroutines)
 	http.HandleFunc("/debug/x", handleX)
@@ -208,6 +203,19 @@ func main() {
 	}
 }
 
+func initGorootBootstrap() {
+	// Default if not otherwise configured in dashboard/builders.go:
+	os.Setenv("GOROOT_BOOTSTRAP", filepath.Join(*workDir, "go1.4"))
+
+	if runtime.GOOS == "solaris" && runtime.GOARCH == "amd64" {
+		os.Setenv("PATH", os.Getenv("PATH")+":/opt/local/bin")
+		downloadBootstrapGoroot("/root/go-solaris-amd64-bootstrap", "https://storage.googleapis.com/go-builder-data/gobootstrap-solaris-amd64.tar.gz")
+	}
+	if runtime.GOOS == "linux" && runtime.GOARCH == "ppc64" {
+		downloadBootstrapGoroot("/usr/local/go-bootstrap", "https://storage.googleapis.com/go-builder-data/gobootstrap-linux-ppc64.tar.gz")
+	}
+}
+
 func downloadBootstrapGoroot(destDir, url string) {
 	tarPath := destDir + ".tar.gz"
 	origInfo, err := os.Stat(tarPath)
@@ -224,6 +232,12 @@ func downloadBootstrapGoroot(destDir, url string) {
 	if os.SameFile(origInfo, newInfo) {
 		// The file on disk was unmodified, so we probably untarred it already.
 		return
+	}
+	if err := os.RemoveAll(destDir); err != nil {
+		log.Fatal(err)
+	}
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		log.Fatal(err)
 	}
 	f, err := os.Open(tarPath)
 	if err != nil {

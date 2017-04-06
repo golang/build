@@ -117,6 +117,7 @@ var flakePhrases = []string{
 	"lookup gmail.com. on 8.8.8.8:53: dial udp 8.8.8.8:53: i/o timeout",
 	"lookup gmail.com on 8.8.8.8:53",
 	"lookup www.mit.edu on ",
+	"undefined: runtime.SetMutexProfileFraction", // ppc64 builders had not-quite-go1.8 bootstrap
 }
 
 func isFlaky(failLog string) bool {
