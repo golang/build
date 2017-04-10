@@ -7,8 +7,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -104,7 +106,16 @@ func removeBuilder(name string) {
 
 var buildName = runtime.GOOS + "-" + runtime.GOARCH + "-test"
 
+type tlogger struct{ t *testing.T }
+
+func (t tlogger) Write(p []byte) (int, error) {
+	t.t.Logf("LOG: %s", p)
+	return len(p), nil
+}
+
 func TestHandleBuildletCreate(t *testing.T) {
+	log.SetOutput(tlogger{t})
+	defer log.SetOutput(os.Stderr)
 	addBuilder(buildName)
 	testPoolHook = func(_ dashboard.BuildConfig) BuildletPool { return testPool }
 	defer func() {
