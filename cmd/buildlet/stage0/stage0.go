@@ -103,27 +103,41 @@ func main() {
 		cmd.Args = append(cmd.Args, scalewayBuildletArgs()...)
 	}
 	if os.Getenv("GO_BUILDER_ENV") == "linux-arm-arm5spacemonkey" {
-		cmd.Args = append(cmd.Args, reverseBuildletArgs("linux-arm-arm5spacemonkey")...)
+		cmd.Args = append(cmd.Args, legacyReverseBuildletArgs("linux-arm-arm5spacemonkey")...)
 	}
 	switch osArch {
 	case "linux/s390x":
 		cmd.Args = append(cmd.Args, "--workdir=/data/golang/workdir")
-		cmd.Args = append(cmd.Args, reverseBuildletArgs("linux-s390x-ibm")...)
+		cmd.Args = append(cmd.Args, legacyReverseBuildletArgs("linux-s390x-ibm")...)
 	case "linux/arm64":
-		cmd.Args = append(cmd.Args, reverseBuildletArgs("linux-arm64-buildlet")...)
+		if os.Getenv("GO_BUILDER_ENV") == "host-linux-arm64-packet" {
+			hostname := os.Getenv("HOSTNAME") // if empty, docker container name is used
+			cmd.Args = append(cmd.Args,
+				"--reverse-type=host-linux-arm64-packet",
+				"--workdir=/workdir",
+				"--hostname="+hostname,
+				"--halt=false",
+				"--reboot=false",
+				"--coordinator=farmer.golang.org:443",
+			)
+		} else {
+			cmd.Args = append(cmd.Args, legacyReverseBuildletArgs("linux-arm64-buildlet")...)
+		}
 	case "linux/ppc64":
-		cmd.Args = append(cmd.Args, reverseBuildletArgs("linux-ppc64-buildlet")...)
+		cmd.Args = append(cmd.Args, legacyReverseBuildletArgs("linux-ppc64-buildlet")...)
 	case "linux/ppc64le":
-		cmd.Args = append(cmd.Args, reverseBuildletArgs("linux-ppc64le-buildlet")...)
+		cmd.Args = append(cmd.Args, legacyReverseBuildletArgs("linux-ppc64le-buildlet")...)
 	case "solaris/amd64":
-		cmd.Args = append(cmd.Args, reverseBuildletArgs("solaris-amd64-smartosbuildlet")...)
+		cmd.Args = append(cmd.Args, legacyReverseBuildletArgs("solaris-amd64-smartosbuildlet")...)
 	}
 	if err := cmd.Run(); err != nil {
 		sleepFatalf("Error running buildlet: %v", err)
 	}
 }
 
-func reverseBuildletArgs(builder string) []string {
+// legacyReverseBuildletArgs passes builder as the deprecated --reverse flag.
+// New code should use --reverse-type instead.
+func legacyReverseBuildletArgs(builder string) []string {
 	return []string{
 		"--halt=false",
 		"--reverse=" + builder,

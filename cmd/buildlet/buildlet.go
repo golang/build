@@ -198,8 +198,11 @@ func main() {
 	if !isReverse {
 		listenForCoordinator()
 	} else {
-		err := dialCoordinator() // blocks forever in normal case
-		log.Fatalf("Error dialing coordinator: %v", err)
+		if err := dialCoordinator(); err != nil {
+			log.Fatalf("Error dialing coordinator: %v", err)
+		}
+		log.Printf("buildlet reverse mode exiting.")
+		os.Exit(0)
 	}
 }
 

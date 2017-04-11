@@ -1,0 +1,44 @@
+Only needed to create new machines: (skip this step)
+
+  https://app.packet.net/
+  u: bradfitz@golang.org
+  p: see link in email (l:password packet)
+
+Machines:
+
+golang-builder-1:
+
+     $ ssh -i ~/keys/id_ed25519_golang1 root@147.75.109.230
+     (key: http://go/golang-ssh-key)
+
+Machine details:
+
+  root@golang-builder-1:~# cat /proc/cpuinfo | grep process | wc -l
+  96
+ 
+  root@golang-builder-1:~# free
+  total        used        free      shared  buff/cache   available
+  Mem:      131971924      526620   131055328       12700      389976   130876088
+  Swap:       3321056           0     3321056
+
+  root@golang-builder-1:~# lsb_release  -a
+  No LSB modules are available.
+  Distributor ID:    Ubuntu
+  Description:       Ubuntu 16.04.1 LTS
+  Release:           16.04
+  Codename:          xenial
+
+
+But each machine is setup like:
+
+   $ apt-get install docker.io
+   
+   $ build.sh (with Dockerfile in same directory)
+   
+   $ GOARCH=arm64 GOOS=linux go install golang.org/x/build/cmd/rundockerbuildlet && \
+     scp -i ~/keys/id_ed25519_golang1 ~/bin/linux_arm64/rundockerbuildlet  root@147.75.109.230:/usr/local/bin
+
+   $ scp -i ~/keys/id_ed25519_golang1 rundockerbuildlet.service root@147.75.109.230:/etc/systemd/user/
+
+   $ systemctl enable /etc/systemd/user/rundockerbuildlet.service
+   $ systemctl start rundockerbuildlet.service

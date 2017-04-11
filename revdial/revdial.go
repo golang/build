@@ -446,6 +446,13 @@ type Listener struct {
 	closed  bool
 }
 
+// Closed reports whether the listener has been closed.
+func (ln *Listener) Closed() bool {
+	ln.mu.Lock()
+	defer ln.mu.Unlock()
+	return ln.closed
+}
+
 // Accept blocks and returns a new connections, or an error.
 func (ln *Listener) Accept() (net.Conn, error) {
 	c, ok := <-ln.connc

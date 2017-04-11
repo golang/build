@@ -235,9 +235,9 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"linux-arm64-buildlet"},
 	},
 	"host-linux-arm64-packet": &HostConfig{
-		Notes:     "On 96 core packet.net hosts (Xenial host) in Docker containers (Jesise); run by Go team. See x/build/env/linux-arm64/packet",
+		Notes:     "On 96 core packet.net host (Xenial) in Docker containers (Jessie); run by Go team. See x/build/env/linux-arm64/packet",
 		IsReverse: true,
-		ExpectNum: 10,
+		ExpectNum: 20,
 		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 	},
 	"host-solaris-amd64": &HostConfig{

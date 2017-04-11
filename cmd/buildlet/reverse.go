@@ -43,11 +43,16 @@ func keyForMode(mode string) (string, error) {
 		}
 		return key, nil
 	}
-
 	keyPath := filepath.Join(homedir(), ".gobuildkey-"+mode)
+	if v := os.Getenv("GO_BUILD_KEY_PATH"); v != "" {
+		keyPath = v
+	}
 	key, err := ioutil.ReadFile(keyPath)
+	if ok, _ := strconv.ParseBool(os.Getenv("GO_BUILD_KEY_DELETE_AFTER_READ")); ok {
+		os.Remove(keyPath)
+	}
 	if err != nil {
-		if os.IsNotExist(err) && !strings.Contains(*reverse, ",") {
+		if os.IsNotExist(err) && *reverseType == "" && !strings.Contains(*reverse, ",") {
 			globalKeyPath := filepath.Join(homedir(), ".gobuildkey")
 			key, err = ioutil.ReadFile(globalKeyPath)
 			if err != nil {
@@ -175,10 +180,14 @@ func dialCoordinator() error {
 
 	log.Printf("Connected to coordinator; reverse dialing active")
 	srv := &http.Server{}
-	err = srv.Serve(revdial.NewListener(bufio.NewReadWriter(
+	ln := revdial.NewListener(bufio.NewReadWriter(
 		bufio.NewReader(conn),
 		bufio.NewWriter(deadlinePerWriteConn{conn, 60 * time.Second}),
-	)))
+	))
+	err = srv.Serve(ln)
+	if ln.Closed() {
+		return nil
+	}
 	return fmt.Errorf("http.Serve on reverse connection complete: %v", err)
 }
 
