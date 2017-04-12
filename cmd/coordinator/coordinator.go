@@ -106,10 +106,7 @@ var (
 
 func initTryBuilders() {
 	for _, name := range dashboard.TrybotBuilderNames() {
-		conf, ok := dashboard.Builders[name]
-		if !ok {
-			panic("bogus")
-		}
+		conf := dashboard.Builders[name]
 		tryBuilders = append(tryBuilders, conf)
 		if conf.BuildSubrepos() {
 			subTryBuilders = append(subTryBuilders, conf)

@@ -52,7 +52,7 @@ func keyForMode(mode string) (string, error) {
 		os.Remove(keyPath)
 	}
 	if err != nil {
-		if os.IsNotExist(err) && *reverseType == "" && !strings.Contains(*reverse, ",") {
+		if os.IsNotExist(err) && *reverse != "" && !strings.Contains(*reverse, ",") {
 			globalKeyPath := filepath.Join(homedir(), ".gobuildkey")
 			key, err = ioutil.ReadFile(globalKeyPath)
 			if err != nil {
