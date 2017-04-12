@@ -11,13 +11,13 @@ usage:
 staging: Dockerfile
 	sed 's|{{REPO}}|'"$(STAGING_REPO)"'|g' Dockerfile > Dockerfile.make
 	docker build -t $(STAGING_REPO)/$(IMAGE_NAME):latest -f Dockerfile.make .
-	gcloud docker push $(STAGING_REPO)/$(IMAGE_NAME):latest
+	gcloud docker -- push $(STAGING_REPO)/$(IMAGE_NAME):latest
 	rm Dockerfile.make
 
 prod: Dockerfile
 	sed 's|{{REPO}}|'"$(PROD_REPO)"'|g' Dockerfile > Dockerfile.make
 	docker build -t $(PROD_REPO)/$(IMAGE_NAME):latest -f Dockerfile.make .
-	gcloud docker push $(PROD_REPO)/$(IMAGE_NAME):latest
+	gcloud docker -- push $(PROD_REPO)/$(IMAGE_NAME):latest
 	rm Dockerfile.make
 
 # You must provide a REPO=your-repo-name arg when you make
@@ -26,5 +26,5 @@ prod: Dockerfile
 dev: Dockerfile
 	sed 's|{{REPO}}|'"$(REPO)"'|g' Dockerfile > Dockerfile.make
 	docker build -t $(REPO)/$(IMAGE_NAME):latest -f Dockerfile.make .
-	gcloud docker push $(REPO)/$(IMAGE_NAME):latest
+	gcloud docker -- push $(REPO)/$(IMAGE_NAME):latest
 	rm Dockerfile.make

@@ -21,4 +21,4 @@ prod: Dockerfile
 # that will be prefixed to the name of the image being built.
 dev: Dockerfile
 	docker build -t $(REPO)/$(IMAGE_NAME):latest .
-	gcloud docker push $(REPO)/$(IMAGE_NAME):latest
+	gcloud docker -- push $(REPO)/$(IMAGE_NAME):latest
