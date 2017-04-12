@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -39,7 +40,12 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 		NumGoroutine: runtime.NumGoroutine(),
 	}
 	for _, st := range status {
-		data.Active = append(data.Active, st)
+		if atomic.LoadInt32(&st.hasBuildlet) != 0 {
+			data.ActiveBuilds++
+			data.Active = append(data.Active, st)
+		} else {
+			data.Pending = append(data.Pending, st)
+		}
 	}
 	// TODO: make this prettier.
 	var buf bytes.Buffer
@@ -59,6 +65,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	data.RemoteBuildlets = template.HTML(remoteBuildletStatus())
 
 	sort.Sort(byAge(data.Active))
+	sort.Sort(byAge(data.Pending))
 	sort.Sort(sort.Reverse(byAge(data.Recent)))
 	if errTryDeps != nil {
 		data.TrybotsErr = errTryDeps.Error()
@@ -116,11 +123,13 @@ func diskFree() string {
 
 // statusData is the data that fills out statusTmpl.
 type statusData struct {
-	Total             int // number of total builds active
+	Total             int // number of total builds (including those waiting for a buildlet)
+	ActiveBuilds      int // number of running builds (subset of Total with a buildlet)
 	NumFD             int
 	NumGoroutine      int
 	Uptime            time.Duration
-	Active            []*buildStatus
+	Active            []*buildStatus // have a buildlet
+	Pending           []*buildStatus // waiting on a buildlet
 	Recent            []*buildStatus
 	TrybotsErr        string
 	Trybots           template.HTML
@@ -147,7 +156,7 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 </header>
 
 <h2>Running</h2>
-<p>{{printf "%d" .Total}} total builds active. Uptime {{printf "%s" .Uptime}}. Version {{.Version}}.
+<p>{{printf "%d" .Total}} total builds; {{printf "%d" .ActiveBuilds}} active. Uptime {{printf "%s" .Uptime}}. Version {{.Version}}.
 
 <h2 id=trybots><a href='#trybots'>🔗</a> Active Trybot Runs</h2>
 {{- if .TrybotsErr}}
@@ -169,6 +178,13 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 <h2 id=active><a href='#active'>🔗</a> Active builds</h2>
 <ul>
 {{range .Active}}
+<li><pre>{{.HTMLStatusLine}}</pre></li>
+{{end}}
+</ul>
+
+<h2 id=pending><a href='#pending'>🔗</a> Pending builds</h2>
+<ul>
+{{range .Pending}}
 <li><pre>{{.HTMLStatusLine}}</pre></li>
 {{end}}
 </ul>

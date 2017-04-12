@@ -39,6 +39,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go4.org/syncutil"
@@ -1469,6 +1470,7 @@ func (st *buildStatus) build() error {
 	if err != nil {
 		return fmt.Errorf("failed to get a buildlet: %v", err)
 	}
+	atomic.StoreInt32(&st.hasBuildlet, 1)
 	defer bc.Close()
 	st.mu.Lock()
 	st.bc = bc
@@ -2874,6 +2876,8 @@ type buildStatus struct {
 	ctx             context.Context    // used to start the build
 	cancel          context.CancelFunc // used to cancel context; for use by setDone only
 
+	hasBuildlet int32 // atomic: non-zero if this build has a buildlet; for status.go.
+
 	mu              sync.Mutex       // guards following
 	failURL         string           // if non-empty, permanent URL of failure
 	bc              *buildlet.Client // nil initially, until pool returns one
@@ -3013,9 +3017,6 @@ func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
 	defer st.mu.Unlock()
 
 	urlPrefix := "https://go-review.googlesource.com/#/q/"
-	if strings.Contains(st.name, "gccgo") {
-		urlPrefix = "https://code.google.com/p/gofrontend/source/detail?r="
-	}
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "<a href='https://github.com/golang/go/wiki/DashboardBuilders'>%s</a> rev <a href='%s%s'>%s</a>",
