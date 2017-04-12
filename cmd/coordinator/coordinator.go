@@ -776,7 +776,7 @@ func findWork(work chan<- builderRev) error {
 		}
 		for _, rev := range goRevisions {
 			br := builderRev{name: b, rev: rev}
-			if !isBuilding(br) {
+			if !br.skipBuild() && !isBuilding(br) {
 				work <- br
 			}
 		}
