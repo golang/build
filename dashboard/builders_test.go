@@ -20,3 +20,26 @@ func TestOSARCHAccessors(t *testing.T) {
 		}
 	}
 }
+
+func TestListTrybots(t *testing.T) {
+	tryBots := TrybotBuilderNames()
+	t.Logf("Builders:")
+	for _, name := range tryBots {
+		t.Logf("  - %s", name)
+	}
+}
+
+func TestHostConfigsAllUsed(t *testing.T) {
+	used := map[string]bool{}
+	for _, conf := range Builders {
+		used[conf.HostType] = true
+	}
+	for hostType := range Hosts {
+		if !used[hostType] {
+			// Currently host-linux-armhf-cross and host-linux-armel-cross aren't
+			// referenced, but the coordinator hard-codes them, so don't make
+			// this an error for now.
+			t.Logf("warning: host type %q is not referenced from any build config", hostType)
+		}
+	}
+}

@@ -104,31 +104,10 @@ var (
 )
 
 func initTryBuilders() {
-	names := []string{
-		"darwin-amd64-10_11",
-		"linux-386",
-		"linux-amd64",
-		"linux-amd64-race",
-		"linux-amd64-ssacheck",
-		"freebsd-amd64-gce101",
-		"windows-386-gce",
-		"windows-amd64-gce",
-		"openbsd-amd64-60",
-		"nacl-386",
-		"nacl-amd64p32",
-		"linux-arm",
-		"misc-vet-vetall",
-	}
-	for name := range dashboard.Builders {
-		if strings.HasPrefix(name, "misc-compile") {
-			names = append(names, name)
-		}
-	}
-	for _, name := range names {
+	for _, name := range dashboard.TrybotBuilderNames() {
 		conf, ok := dashboard.Builders[name]
 		if !ok {
-			log.Printf("ignoring invalid try builder config %q", name)
-			continue
+			panic("bogus")
 		}
 		tryBuilders = append(tryBuilders, conf)
 		if conf.BuildSubrepos() {
@@ -148,27 +127,6 @@ const (
 	vmDeleteTimeout  = 45 * time.Minute
 	podDeleteTimeout = 45 * time.Minute
 )
-
-func readGCSFile(name string) ([]byte, error) {
-	if *mode == "dev" {
-		b, ok := testFiles[name]
-		if !ok {
-			return nil, &os.PathError{
-				Op:   "open",
-				Path: name,
-				Err:  os.ErrNotExist,
-			}
-		}
-		return []byte(b), nil
-	}
-
-	r, err := storageClient.Bucket(buildEnv.BuildletBucket).Object(name).NewReader(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
-	return ioutil.ReadAll(r)
-}
 
 // Fake keys signed by a fake CA.
 // These are used in localhost dev mode. (Not to be confused with the
@@ -320,7 +278,7 @@ func main() {
 	workc := make(chan builderRev)
 
 	if *mode == "dev" {
-		// TODO(crawshaw): do more in test mode
+		// TODO(crawshaw): do more in dev mode
 		gcePool.SetEnabled(*devEnableGCE)
 		http.HandleFunc("/dosomework/", handleDoSomeWork(workc))
 	} else {
@@ -3145,6 +3103,8 @@ func (st *buildStatus) Write(p []byte) (n int, err error) {
 	return st.output.Write(p)
 }
 
+// versionTgz returns an io.Reader of a *.tar.gz file containing only
+// a VERSION file containing the contents of the provided rev string.
 func versionTgz(rev string) io.Reader {
 	var buf bytes.Buffer
 	zw := gzip.NewWriter(&buf)
@@ -3175,7 +3135,7 @@ var sourceGroup singleflight.Group
 
 var sourceCache = lru.New(40) // git rev -> []byte
 
-func useWatcher() bool {
+func useGitMirror() bool {
 	return *mode != "dev"
 }
 
@@ -3191,7 +3151,7 @@ func getSourceTgz(sl spanLogger, repo, rev string, isTry bool) (tgz io.Reader, e
 			return tgzBytes, nil
 		}
 
-		if useWatcher() {
+		if useGitMirror() {
 			sp := sl.createSpan("get_source_from_gitmirror")
 			tgzBytes, err := getSourceTgzFromGitMirror(repo, rev)
 			if err == nil {

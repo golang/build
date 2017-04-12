@@ -15,6 +15,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"os"
 	"path"
 	"sort"
 	"strconv"
@@ -628,4 +629,25 @@ func (c *gcsAutocertCache) Delete(ctx context.Context, key string) error {
 		return nil
 	}
 	return err
+}
+
+func readGCSFile(name string) ([]byte, error) {
+	if *mode == "dev" {
+		b, ok := testFiles[name]
+		if !ok {
+			return nil, &os.PathError{
+				Op:   "open",
+				Path: name,
+				Err:  os.ErrNotExist,
+			}
+		}
+		return []byte(b), nil
+	}
+
+	r, err := storageClient.Bucket(buildEnv.BuildletBucket).Object(name).NewReader(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return ioutil.ReadAll(r)
 }

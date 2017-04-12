@@ -8,6 +8,7 @@ package dashboard
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -17,6 +18,7 @@ import (
 // Builders are the different build configurations.
 // The keys are like "darwin-amd64" or "linux-386-387".
 // This map should not be modified by other packages.
+// Initialization happens below, via calls to addBuilder.
 var Builders = map[string]BuildConfig{}
 
 // Hosts contains the names and configs of all the types of
@@ -118,13 +120,6 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64", // TODO(bradfitz): why was this http instead of https?
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		env:                []string{"CC=clang"},
-	},
-	"host-netbsd-70": &HostConfig{
-		VMImage:            "netbsd-amd64-70",
-		Notes:              "NetBSD 7.0_2016Q4; GCE VM is built from script in build/env/netbsd-amd64",
-		machineType:        "n1-highcpu-2",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.netbsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64.tar.gz",
 	},
 	"host-netbsd-71": &HostConfig{
 		VMImage:            "netbsd-amd64-71",
@@ -409,6 +404,7 @@ type BuildConfig struct {
 
 	Notes string // notes for humans
 
+	TryBot      bool // be a trybot
 	TryOnly     bool // only used for trybots, and not regular builds
 	CompileOnly bool // if true, compile tests, but don't run them
 	FlakyNet    bool // network tests are flaky (try anyway, but ignore some failures)
@@ -683,6 +679,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-gce101",
 		HostType:          "host-freebsd-101-gce",
+		TryBot:            true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 4,
 	})
@@ -707,6 +704,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "linux-386",
 		HostType:          "host-linux-kubestd",
+		TryBot:            true,
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		numTestHelpers:    1,
 		numTryTestHelpers: 3,
@@ -720,7 +718,12 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:           "linux-amd64",
 		HostType:       "host-linux-kubestd",
+		TryBot:         true,
 		numTestHelpers: 3,
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-amd64-alpine",
+		HostType: "host-linux-x86-alpine",
 	})
 	// Add the -vetall builder. The builder name suffix "-vetall" is recognized by cmd/dist/test.go
 	// to only run the "go vet std cmd" test and no others.
@@ -728,6 +731,7 @@ func init() {
 		Name:           "misc-vet-vetall",
 		HostType:       "host-linux-kubestd",
 		Notes:          "Runs vet over the standard library.",
+		TryBot:         true,
 		numTestHelpers: 5,
 	})
 
@@ -735,6 +739,7 @@ func init() {
 		addBuilder(BuildConfig{
 			Name:        "misc-compile" + suffix,
 			HostType:    "host-linux-kubestd",
+			TryBot:      true,
 			TryOnly:     true,
 			CompileOnly: true,
 			Notes:       "Runs buildall.sh to cross-compile std packages for " + rx + ", but doesn't run any tests.",
@@ -772,6 +777,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:        "linux-amd64-ssacheck",
 		HostType:    "host-linux-kubestd",
+		TryBot:      true,
 		CompileOnly: true,
 		Notes:       "SSA internal checks enabled",
 		env:         []string{"GO_GCFLAGS=-d=ssa/check/on,dclstack"},
@@ -779,6 +785,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "linux-amd64-race",
 		HostType:          "host-linux-kubestd",
+		TryBot:            true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 5,
 	})
@@ -808,6 +815,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "linux-arm",
 		HostType:          "host-linux-arm",
+		TryBot:            true,
 		FlakyNet:          true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 7,
@@ -836,26 +844,27 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:           "nacl-386",
 		HostType:       "host-nacl-kube",
+		TryBot:         true,
 		numTestHelpers: 3,
 		env:            []string{"GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
 		Name:           "nacl-amd64p32",
 		HostType:       "host-nacl-kube",
+		TryBot:         true,
 		numTestHelpers: 3,
 		env:            []string{"GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-60",
 		HostType:          "host-openbsd-amd64-60",
+		TryBot:            true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
-		Name:              "openbsd-386-60",
-		HostType:          "host-openbsd-386-60",
-		numTestHelpers:    2,
-		numTryTestHelpers: 5,
+		Name:     "openbsd-386-60",
+		HostType: "host-openbsd-386-60",
 	})
 	addBuilder(BuildConfig{
 		Name:     "netbsd-amd64-71",
@@ -875,6 +884,7 @@ func init() {
 		Name:              "windows-amd64-gce",
 		HostType:          "host-windows-gce",
 		env:               []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		TryBot:            true,
 		numTestHelpers:    1,
 		numTryTestHelpers: 5,
 	})
@@ -888,6 +898,7 @@ func init() {
 		Name:              "windows-386-gce",
 		HostType:          "host-windows-gce",
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		TryBot:            true,
 		numTestHelpers:    1,
 		numTryTestHelpers: 5,
 	})
@@ -902,6 +913,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_11",
 		HostType:          "host-darwin-10_11",
+		TryBot:            true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 3,
 	})
@@ -1037,6 +1049,8 @@ func (c BuildConfig) isMobile() bool {
 	return strings.HasPrefix(c.Name, "android-") || strings.HasPrefix(c.Name, "darwin-arm")
 }
 
+// addBuilder adds c to the Builders map after doing some sanity
+// checks.
 func addBuilder(c BuildConfig) {
 	if c.Name == "" {
 		panic("empty name")
@@ -1062,5 +1076,29 @@ func addBuilder(c BuildConfig) {
 	if _, ok := Hosts[c.HostType]; !ok {
 		panic(fmt.Sprintf("undefined HostType %q for builder %q", c.HostType, c.Name))
 	}
+
+	types := 0
+	for _, fn := range []func() bool{c.IsReverse, c.IsKube, c.IsGCE} {
+		if fn() {
+			types++
+		}
+	}
+	if types != 1 {
+		panic(fmt.Sprintf("build config %q host type inconsistent (must be Reverse, Kube, or GCE)", c.Name))
+	}
+
 	Builders[c.Name] = c
+}
+
+// TrybotBuilderNames returns the names of the builder configs
+// with the TryBot field set true.
+func TrybotBuilderNames() []string {
+	var ret []string
+	for name, conf := range Builders {
+		if conf.TryBot {
+			ret = append(ret, name)
+		}
+	}
+	sort.Strings(ret)
+	return ret
 }
