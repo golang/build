@@ -491,6 +491,9 @@ func (c *BuildConfig) IsRace() bool {
 // do the build and run its standard set of tests.
 // Example values are "src/all.bash", "src/all.bat", "src/all.rc".
 func (c *BuildConfig) AllScript() string {
+	if c.Name == "" {
+		panic("bogus BuildConfig")
+	}
 	if c.IsRace() {
 		if strings.HasPrefix(c.Name, "windows-") {
 			return "src/race.bat"
