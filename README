@@ -3,7 +3,14 @@ development of the Go programming language.
 
 To submit changes to this repository, see http://golang.org/doc/contribute.html.
 
-app/: a.k.a the "dashboard"; the App Engine code that runs https://build.golang.org/
+app/: the App Engine code that runs https://build.golang.org/ and
+      stores which builds have passed or failed. It is responsible for
+      knowing which post-submit builds still need to be done. (It doesn't know
+      anyting about trybot builds that need to be done)
+      It doesn't execute any builds itself. See the coordinator.
+
+buildenv/: variables with details of the production environment vs the
+           staging environment.
 
 cmd/:
 
@@ -22,12 +29,15 @@ cmd/:
 
   upload/:  a Go program to upload to Google Cloud Storage. used by Makefiles elsewhere.
 
-  watcher/: a daemon that watches for new commits to the Go repository and
-          its sub-repositories, and notifies the dashboard of those commits.
+  gitmirror/: a daemon that watches for new commits to the Go repository and
+              its sub-repositories, and notifies the dashboard of those commits,
+              as well as syncing them to GitHub. It also serves tarballs to
+              the coordinator.
+
+dashboard/: the configuration of the various build configs and host configs.
 
 env/:     configuration files describing the environment of builders and related
-          binaries. Many builders are still configured ad-hoc, without a hermetic
-          environment.
+          binaries.
 
 types/:   a Go package contain common types used by other pieces.
 
