@@ -62,14 +62,14 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/lib/go"},
 	},
 	"host-linux-clang": &HostConfig{
-		Notes:           "GCE VM with clang.",
-		VMImage:         "linux-buildlet-clang",
+		Notes:           "Kubernetes container on GKE with clang.",
+		KubeImage:       "linux-x86-clang:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
 	"host-linux-sid": &HostConfig{
 		Notes:           "Debian sid, updated occasionally.",
-		KubeImage:       "linux-x86-sid",
+		KubeImage:       "linux-x86-sid:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
