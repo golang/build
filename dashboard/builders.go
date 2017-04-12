@@ -68,8 +68,8 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
 	"host-linux-sid": &HostConfig{
-		Notes:           "GCE VM with Debian sid.",
-		VMImage:         "linux-buildlet-sid",
+		Notes:           "Debian sid, updated occasionally.",
+		KubeImage:       "linux-x86-sid",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
