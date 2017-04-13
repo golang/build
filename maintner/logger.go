@@ -5,36 +5,18 @@
 package maintner
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/golang/protobuf/proto"
 	"golang.org/x/build/maintner/maintpb"
-)
-
-// The on-DiskMutationLogger format is as follows:
-//
-// The log is a stream of proto3-marshalled *maintpb.Mutation, spread
-// over 1 or more files named maintner-YYYY-MM-DD.mutlog.  Each record
-// begins with the variably-lengthed prefix "REC@XXX+YYY=" where the
-// 0+ XXXX digits are the hex offset on disk (where the 'R' on disk is
-// written) and the 0+ YYY digits are the hex length of the marshalled
-// proto. After the YYY digits there is a '=' byte before the YYY bytes
-// of proto. There is no record footer.
-var (
-	headerPrefix = []byte("REC@")
-	headerSuffix = []byte("=")
-	plus         = []byte("+")
+	"golang.org/x/build/maintner/reclog"
 )
 
 // A MutationLogger logs mutations.
@@ -73,113 +55,55 @@ func (d *DiskMutationLogger) Log(m *maintpb.Mutation) error {
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-
-	f, err := os.OpenFile(d.filename(), os.O_RDWR|os.O_APPEND|os.O_CREATE, 0600)
-	if err != nil {
-		return err
-	}
-	off, err := f.Seek(0, io.SeekEnd)
-	if err != nil {
-		return err
-	}
-	st, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	if off != st.Size() {
-		return fmt.Errorf("Size %v != offset %v", st.Size(), off)
-	}
-
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "REC@%x+%x=", off, len(data))
-	buf.Write(data)
-	if _, err := f.Write(buf.Bytes()); err != nil {
-		f.Close()
-		return err
-	}
-	return f.Close()
+	return reclog.AppendRecordToFile(d.filename(), data)
 }
 
-func (d *DiskMutationLogger) GetMutations(ctx context.Context) <-chan *maintpb.Mutation {
+func (d *DiskMutationLogger) ForeachFile(fn func(fullPath string, fi os.FileInfo) error) error {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
-	ch := make(chan *maintpb.Mutation, 50) // buffered: overlap gunzip/unmarshal with loading
 	if d.directory == "" {
 		panic("empty directory")
 	}
+	// Walk guarantees that files are walked in lexical order, which we depend on.
+	return filepath.Walk(d.directory, func(path string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if fi.IsDir() && path != filepath.Clean(d.directory) {
+			return filepath.SkipDir
+		}
+		if !strings.HasPrefix(fi.Name(), "maintner-") {
+			return nil
+		}
+		if !strings.HasSuffix(fi.Name(), ".mutlog") {
+			return nil
+		}
+		return fn(path, fi)
+	})
+}
+
+func (d *DiskMutationLogger) GetMutations(ctx context.Context) <-chan *maintpb.Mutation {
+	ch := make(chan *maintpb.Mutation, 50) // buffered: overlap gunzip/unmarshal with loading
 	go func() {
-		// Walk guarantees that files are walked in lexical order, which we depend on.
-		err := filepath.Walk(d.directory, func(path string, fi os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if fi.IsDir() && path != filepath.Clean(d.directory) {
-				return filepath.SkipDir
-			}
-			if !strings.HasPrefix(fi.Name(), "maintner-") {
-				return nil
-			}
-			if !strings.HasSuffix(fi.Name(), ".mutlog") {
-				return nil
-			}
-			var off int64
-			f, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			br := bufio.NewReader(f)
-			var buf bytes.Buffer
-			for {
-				startOff := off
-				hdr, err := br.ReadSlice('=')
-				if err != nil {
-					if err == io.EOF && len(hdr) == 0 {
-						return nil
-					}
-					return err
-				}
-				if len(hdr) > 40 {
-					return fmt.Errorf("malformed overlong header %q... at %v, offset %v", hdr[:40], path, startOff)
-				}
-				if !bytes.HasPrefix(hdr, headerPrefix) || !bytes.HasSuffix(hdr, headerSuffix) || bytes.Count(hdr, plus) != 1 {
-					return fmt.Errorf("malformed header %q at %v, offset %v", hdr, path, startOff)
-				}
-				plusPos := bytes.IndexByte(hdr, '+')
-				hdrOff, err := strconv.ParseInt(string(hdr[len(headerPrefix):plusPos]), 16, 64)
-				if err != nil {
-					return fmt.Errorf("malformed header %q (malformed offset) at %v, offset %v", hdr, path, startOff)
-				}
-				if hdrOff != startOff {
-					return fmt.Errorf("malformed header %q with offset %v doesn't match expected offset %v in %v", hdr, hdrOff, startOff, path)
-				}
-				hdrSize, err := strconv.ParseInt(string(hdr[plusPos+1:len(hdr)-1]), 16, 64)
-				if err != nil {
-					return fmt.Errorf("malformed header %q (bad size) at %v, offset %v", hdr, path, startOff)
-				}
-				off += int64(len(hdr))
-
-				buf.Reset()
-				if _, err := io.CopyN(&buf, br, hdrSize); err != nil {
-					return fmt.Errorf("truncated record at offset %v: %v", startOff, err)
-				}
-				off += hdrSize
-
+		defer close(ch)
+		err := d.ForeachFile(func(fullPath string, fi os.FileInfo) error {
+			log.Printf("File %s has size %v", fullPath, fi.Size())
+			return reclog.ForeachFileRecord(fullPath, func(off int64, hdr, rec []byte) error {
 				m := new(maintpb.Mutation)
-				if err := proto.Unmarshal(buf.Bytes(), m); err != nil {
+				if err := proto.Unmarshal(rec, m); err != nil {
 					return err
 				}
 				select {
 				case ch <- m:
+					return nil
 				case <-ctx.Done():
 					return ctx.Err()
 				}
-			}
+			})
 		})
 		if err != nil {
-			log.Printf("error walking directory %s: %v", d.directory, err)
+			panic(err)
 		}
-		close(ch)
 	}()
 	return ch
 }
