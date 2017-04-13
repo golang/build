@@ -57,10 +57,11 @@ func main() {
 			}
 		}
 	case "linux/arm64":
-		if os.Getenv("GO_BUILDER_ENV") == "host-linux-arm64-packet" {
-			// No setup currently.
-		} else {
-			initLinaroARM64()
+		switch env := os.Getenv("GO_BUILDER_ENV"); env {
+		case "host-linux-arm64-packet", "host-linux-arm64-linaro":
+			// No special setup.
+		default:
+			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
 		}
 	case "linux/ppc64":
 		initOregonStatePPC64()
@@ -110,18 +111,19 @@ func main() {
 		cmd.Args = append(cmd.Args, "--workdir=/data/golang/workdir")
 		cmd.Args = append(cmd.Args, legacyReverseBuildletArgs("linux-s390x-ibm")...)
 	case "linux/arm64":
-		if os.Getenv("GO_BUILDER_ENV") == "host-linux-arm64-packet" {
+		switch v := os.Getenv("GO_BUILDER_ENV"); v {
+		case "host-linux-arm64-packet", "host-linux-arm64-linaro":
 			hostname := os.Getenv("HOSTNAME") // if empty, docker container name is used
 			cmd.Args = append(cmd.Args,
-				"--reverse-type=host-linux-arm64-packet",
+				"--reverse-type="+v,
 				"--workdir=/workdir",
 				"--hostname="+hostname,
 				"--halt=false",
 				"--reboot=false",
 				"--coordinator=farmer.golang.org:443",
 			)
-		} else {
-			cmd.Args = append(cmd.Args, legacyReverseBuildletArgs("linux-arm64-buildlet")...)
+		default:
+			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
 		}
 	case "linux/ppc64":
 		cmd.Args = append(cmd.Args, legacyReverseBuildletArgs("linux-ppc64-buildlet")...)
@@ -420,11 +422,6 @@ func initBootstrapDir(destDir, tgzCache string) {
 	if err != nil {
 		log.Fatalf("error untarring %s to %s: %s", tgzCache, destDir, out)
 	}
-}
-
-func initLinaroARM64() {
-	aptGetInstall("gcc", "strace", "libc6-dev", "gdb")
-	initBootstrapDir("/usr/local/go-bootstrap", "/usr/local/go-bootstrap.tar.gz")
 }
 
 func initOregonStatePPC64() {
