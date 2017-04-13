@@ -803,13 +803,13 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "linux-386-clang",
 		HostType: "host-linux-clang",
-		Notes:    "Debian wheezy + clang 3.5 instead of gcc",
+		Notes:    "Debian jessie + clang 3.9 instead of gcc",
 		env:      []string{"CC=/usr/bin/clang", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-clang",
 		HostType: "host-linux-clang",
-		Notes:    "Debian wheezy + clang 3.5 instead of gcc",
+		Notes:    "Debian jessie + clang 3.9 instead of gcc",
 		env:      []string{"CC=/usr/bin/clang"},
 	})
 	addBuilder(BuildConfig{

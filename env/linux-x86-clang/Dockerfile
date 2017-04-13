@@ -30,8 +30,9 @@ RUN apt-get update && apt-get install -y \
 	lsof \
 	psmisc \
 	&& rm -rf /var/lib/apt/lists/* \
-	&& rm -f /usr/bin/gcc
-
+	&& rm -f /usr/bin/gcc \
+	&& ln -snf /usr/bin/clang-3.9 /usr/bin/clang \
+	&& ln -snf /usr/bin/clang++-3.9 /usr/bin/clang++
 
 RUN mkdir -p /go1.4-amd64 \
 	&& ( \
