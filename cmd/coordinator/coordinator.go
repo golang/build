@@ -1409,15 +1409,16 @@ func (st *buildStatus) onceInitHelpersFunc() {
 	st.helpers = GetBuildlets(st.ctx, pool, st.conf.NumTestHelpers(st.isTry()), st.conf.HostType, st)
 }
 
-// We should try to build from a snapshot if this is a subrepo build, we can
-// expect there to be a snapshot (splitmakerun), and the snapshot exists.
+// useSnapshot reports whether this type of build uses a snapshot of
+// make.bash if it exists (anything can SplitMakeRun) and that the
+// snapshot exists.
 func (st *buildStatus) useSnapshot() bool {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if st.useSnapshotMemo != nil {
 		return *st.useSnapshotMemo
 	}
-	b := st.conf.SplitMakeRun() && st.snapshotExists()
+	b := st.conf.SplitMakeRun() && st.builderRev.snapshotExists()
 	st.useSnapshotMemo = &b
 	return b
 }
@@ -1448,9 +1449,6 @@ func (st *buildStatus) build() error {
 		st.logEventTime("deleted_snapshot", fmt.Sprint(err))
 	}
 	snapshotExists := st.useSnapshot()
-	if inStaging {
-		st.logEventTime("use_snapshot", fmt.Sprint(snapshotExists))
-	}
 	sp.done(nil)
 
 	if config := st.getCrossCompileConfig(); !snapshotExists && config != nil {
@@ -1814,7 +1812,9 @@ func (st *buildStatus) doSnapshot(bc *buildlet.Client) error {
 	if st.useSnapshot() {
 		return nil
 	}
-
+	if st.conf.SkipSnapshot {
+		return nil
+	}
 	if err := st.cleanForSnapshot(bc); err != nil {
 		return fmt.Errorf("cleanForSnapshot: %v", err)
 	}
@@ -1824,82 +1824,22 @@ func (st *buildStatus) doSnapshot(bc *buildlet.Client) error {
 	return nil
 }
 
-var timeSnapshotCorruptionFixed = time.Date(2015, time.November, 1, 0, 0, 0, 0, time.UTC)
-
-// TODO(adg): prune this map over time (might never be necessary, though)
-var snapshotExistsCache = struct {
-	sync.Mutex
-	m map[builderRev]bool // set; only true values
-}{m: map[builderRev]bool{}}
-
-// snapshotExists reports whether the snapshot exists and isn't corrupt.
-// Unfortunately we put some corrupt ones in for awhile, so this check is
-// now more paranoid than it used to be.
-func (br *builderRev) snapshotExists() (ok bool) {
-	// If we already know this snapshot exists, don't check again.
-	snapshotExistsCache.Lock()
-	exists := snapshotExistsCache.m[*br]
-	snapshotExistsCache.Unlock()
-	if exists {
-		return true
-	}
-
-	// When the function exits, cache an affirmative result.
-	defer func() {
-		if ok {
-			snapshotExistsCache.Lock()
-			snapshotExistsCache.m[*br] = true
-			snapshotExistsCache.Unlock()
-		}
-	}()
-
-	resp, err := http.Head(br.snapshotURL())
-	if err != nil || resp.StatusCode != http.StatusOK {
-		return false
-	}
-
-	// If the snapshot is newer than the point at which we fixed writing
-	// potentially-truncated snapshots to GCS, then stop right here.
-	// See history in golang.org/issue/12671
-	lastMod, err := http.ParseTime(resp.Header.Get("Last-Modified"))
-	if err == nil && lastMod.After(timeSnapshotCorruptionFixed) {
-		log.Printf("Snapshot exists for %v (without truncate checks)", br)
-		return true
-	}
-
-	// Otherwise, if the snapshot is too old, verify it.
-	// This path is slow.
-	// TODO(bradfitz): delete this in 6 months or so? (around 2016-06-01)
-	resp, err = http.Get(br.snapshotURL())
+// snapshotExists reports whether the snapshot exists in storage.
+// It returns potentially false negatives on network errors.
+// Callers must not depend on this as more than an optimization.
+func (br *builderRev) snapshotExists() bool {
+	req, err := http.NewRequest("HEAD", br.snapshotURL(), nil)
 	if err != nil {
-		return false
+		panic(err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return false
-	}
-	// Verify the .tar.gz is valid.
-	gz, err := gzip.NewReader(resp.Body)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	res, err := http.DefaultClient.Do(req.WithContext(ctx))
 	if err != nil {
-		log.Printf("corrupt snapshot? %s gzip.NewReader: %v", br.snapshotURL(), err)
+		log.Printf("snapshotExists check: %v", err)
 		return false
 	}
-	tr := tar.NewReader(gz)
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Printf("corrupt snapshot? %s tar.Next: %v", br.snapshotURL(), err)
-			return false
-		}
-		if _, err := io.Copy(ioutil.Discard, tr); err != nil {
-			log.Printf("corrupt snapshot? %s reading contents of %s: %v", br.snapshotURL(), hdr.Name, err)
-			return false
-		}
-	}
-	return gz.Close() == nil
+	return res.StatusCode == http.StatusOK
 }
 
 func (st *buildStatus) writeGoSource() error {

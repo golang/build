@@ -409,6 +409,14 @@ type BuildConfig struct {
 	CompileOnly bool // if true, compile tests, but don't run them
 	FlakyNet    bool // network tests are flaky (try anyway, but ignore some failures)
 
+	// SkipSnapshot, if true, means to not fetch a tarball
+	// snapshot of the world post-make.bash from the buildlet (and
+	// thus to not write it to Google Cloud Storage). This is
+	// incompatible with sharded tests, and should only be used
+	// for very slow builders or networks, unable to transfer
+	// the tarball in under ~5 minutes.
+	SkipSnapshot bool
+
 	// StopAfterMake causes the build to stop after the make
 	// script completes, returning its result as the result of the
 	// whole build. It does not run or compile any of the tests,
@@ -1013,20 +1021,24 @@ func init() {
 		FlakyNet: true, // unknown; just copied from the linaro one
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-mips",
-		HostType: "host-linux-mips",
+		Name:         "linux-mips",
+		HostType:     "host-linux-mips",
+		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-mipsle",
-		HostType: "host-linux-mipsle",
+		Name:         "linux-mipsle",
+		HostType:     "host-linux-mipsle",
+		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-mips64",
-		HostType: "host-linux-mips64",
+		Name:         "linux-mips64",
+		HostType:     "host-linux-mips64",
+		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-mips64le",
-		HostType: "host-linux-mips64le",
+		Name:         "linux-mips64le",
+		HostType:     "host-linux-mips64le",
+		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-s390x-ibm",
@@ -1078,6 +1090,9 @@ func addBuilder(c BuildConfig) {
 	}
 	if _, ok := Hosts[c.HostType]; !ok {
 		panic(fmt.Sprintf("undefined HostType %q for builder %q", c.HostType, c.Name))
+	}
+	if c.SkipSnapshot && (c.numTestHelpers > 0 || c.numTryTestHelpers > 0) {
+		panic(fmt.Sprintf("config %q's SkipSnapshot is not compatible with sharded test helpers", c.Name))
 	}
 
 	types := 0
