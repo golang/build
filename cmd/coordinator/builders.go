@@ -47,7 +47,7 @@ var buildersTmpl = template.Must(template.New("builders").Parse(`
 <tr>
 	<td>{{.Name}}</td>
 	<td><a href='#{{.HostType}}'>{{.HostType}}</a></td>
-	<td>{{.ShortOwner}}</td>
+	<td>{{if .OwnerGithub}}<a href='https://github.com/{{.OwnerGithub}}'>@{{.OwnerGithub}}</a>{{else}}{{.ShortOwner}}{{end}}</td>
 	<td>{{.Notes}}</td>
 </tr>
 {{end}}

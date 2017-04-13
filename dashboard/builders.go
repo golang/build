@@ -204,6 +204,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-linux-s390x": &HostConfig{
 		Notes:          "run by IBM",
+		OwnerGithub:    "mundaym",
 		IsReverse:      true,
 		env:            []string{"GOROOT_BOOTSTRAP=/var/buildlet/go-linux-s390x-bootstrap"},
 		ReverseAliases: []string{"linux-s390x-ibm"},
@@ -243,9 +244,10 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"solaris-amd64-smartosbuildlet"},
 	},
 	"host-linux-mips": &HostConfig{
-		Notes:     "Run by Brendan Kirby (@MIPSbkirby), imgtec.com",
-		IsReverse: true,
-		ExpectNum: 1,
+		Notes:       "Run by Brendan Kirby, imgtec.com",
+		OwnerGithub: "MIPSbkirby",
+		IsReverse:   true,
+		ExpectNum:   1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mips",
 			"GOARCH=mips",
@@ -255,9 +257,10 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"linux-mips"},
 	},
 	"host-linux-mipsle": &HostConfig{
-		Notes:     "Run by Brendan Kirby (@MIPSbkirby), imgtec.com",
-		IsReverse: true,
-		ExpectNum: 1,
+		Notes:       "Run by Brendan Kirby, imgtec.com",
+		OwnerGithub: "MIPSbkirby",
+		IsReverse:   true,
+		ExpectNum:   1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mipsle",
 			"GOARCH=mipsle",
@@ -266,9 +269,10 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"linux-mipsle"},
 	},
 	"host-linux-mips64": &HostConfig{
-		Notes:     "Run by Brendan Kirby (@MIPSbkirby), imgtec.com",
-		IsReverse: true,
-		ExpectNum: 1,
+		Notes:       "Run by Brendan Kirby, imgtec.com",
+		OwnerGithub: "MIPSbkirby",
+		IsReverse:   true,
+		ExpectNum:   1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mips64",
 			"GOARCH=mips64",
@@ -278,9 +282,10 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"linux-mips64"},
 	},
 	"host-linux-mips64le": &HostConfig{
-		Notes:     "Run by Brendan Kirby (@MIPSbkirby), imgtec.com",
-		IsReverse: true,
-		ExpectNum: 1,
+		Notes:       "Run by Brendan Kirby, imgtec.com",
+		OwnerGithub: "MIPSbkirby",
+		IsReverse:   true,
+		ExpectNum:   1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mips64le",
 			"GOARCH=mips64le",
@@ -289,9 +294,10 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"linux-mips64le"},
 	},
 	"host-darwin-amd64-eliasnaur-android": &HostConfig{
-		Notes:     "Mac Mini hosted by Elias Naur, running the android reverse buildlet",
-		IsReverse: true,
-		ExpectNum: 1,
+		Notes:       "Mac Mini hosted by Elias Naur, running the android reverse buildlet",
+		OwnerGithub: "eliasnaur",
+		IsReverse:   true,
+		ExpectNum:   1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
 			"GOHOSTARCH=amd64",
@@ -299,9 +305,10 @@ var Hosts = map[string]*HostConfig{
 		},
 	},
 	"host-darwin-amd64-eliasnaur-ios": &HostConfig{
-		Notes:     "Mac Mini hosted by Elias Naur, running the ios reverse buildlet",
-		IsReverse: true,
-		ExpectNum: 1,
+		Notes:       "Mac Mini hosted by Elias Naur, running the ios reverse buildlet",
+		OwnerGithub: "eliasnaur",
+		IsReverse:   true,
+		ExpectNum:   1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
 			"GOHOSTARCH=amd64",
@@ -376,8 +383,9 @@ type HostConfig struct {
 	// relevant Cloud Storage bucket as specified by the build environment.
 	goBootstrapURLTmpl string // optional URL to a built Go 1.4+ tar.gz
 
-	Owner string // optional email of owner; "bradfitz@golang.org", empty means golang-dev
-	Notes string // notes for humans
+	Owner       string // optional email of owner; "bradfitz@golang.org", empty means golang-dev
+	OwnerGithub string // optional GitHub username of owner
+	Notes       string // notes for humans
 
 	// ReverseAliases lists alternate names for this buildlet
 	// config, for older clients doing a reverse dial into the
@@ -652,6 +660,11 @@ func (c BuildConfig) ShortOwner() string {
 		return "go-dev"
 	}
 	return strings.TrimSuffix(owner, "@golang.org")
+}
+
+// OwnerGithub returns the Github handle of the owner.
+func (c BuildConfig) OwnerGithub() string {
+	return c.hostConf().OwnerGithub
 }
 
 // PoolName returns a short summary of the builder's host type for the
