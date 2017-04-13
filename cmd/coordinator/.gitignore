@@ -1,3 +1,4 @@
 buildongce/client-*.dat
 buildongce/token.dat
 coordinator
+ca-certificates.crt
