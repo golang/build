@@ -1,36 +1,25 @@
 # Copyright 2017 The Go Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
-
-# Note that OpenSSH 6.5+ is required for the Github SSH private key, which requires
-# at least Debian Jessie (not Wheezy). This uses Jessie:
-FROM golang:1.8
+FROM debian:jessie
 LABEL maintainer "golang-dev@googlegroups.com"
 
-# todo(bradfitz): remove duplication between this and coordinator.
-# Maybe make both derive FROM "golang_org:buildbase" or something. But
-# then I want to make sure that FROM base is rebuilt always when things in
-# x/build change.
+# For interacting with the Go source & subrepos
+RUN apt-get update && apt-get install -y \
+	--no-install-recommends \
+	ca-certificates \
+	git-core \
+	openssh-client \
+	&& rm -rf /var/lib/apt/lists/*
 
-# You can verify this list with prdeps:
-# go get github.com/davecheney/prdeps
-# prdeps -d 1 golang.org/x/build/cmd/coordinator
+# Add Github.com's known_hosts entries, so git push calls later don't
+# prompt, and don't need to have their strict host key checking
+# disabled.
+RUN mkdir -p ~/.ssh/ \
+	&& chmod 0700 ~/.ssh/ \
+	&& echo "|1|SFEvEAqYsJ18JCr+0iV4GtlwS4w=|P6oCZUUd/5t9pH4Om7ShlfltRyE= ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==" > ~/.ssh/known_hosts \
+	&& echo "|1|HygGkfOGLovavKfixjXWFJ7Yk1I=|lb/724row8KDTMC1dZiJlHyjxWM= ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==" >> ~/.ssh/known_hosts \
+	&& chmod 0600 ~/.ssh/known_hosts
 
-RUN go get -d cloud.google.com/go/compute/metadata
-RUN cd /go/src/cloud.google.com/go/compute/metadata && git reset --hard cd0da878c66091060d2e7403abd62192b3e387e0
-# Need to rerun because cd0da878 depends on gax-go and tip doesn't.
-RUN go get -d -v cloud.google.com/go/compute/metadata
-
-RUN go get -d golang.org/x/net/context golang.org/x/net/context/ctxhttp
-RUN cd /go/src/golang.org/x/net && git reset --hard f2499483f923065a842d38eb4c7f1927e6fc6e6d
-
-RUN cd /go/src/google.golang.org/grpc && git reset --hard 50955793b0183f9de69bd78e2ec251cf20aab121
-
-COPY /cmd/gitmirror/install-apt-deps.sh /scripts/install-apt-deps.sh
-RUN  /scripts/install-apt-deps.sh
-
-COPY . /go/src/golang.org/x/build/
-
-RUN go install golang.org/x/build/cmd/gitmirror
-
-ENTRYPOINT ["/go/bin/gitmirror"]
+COPY gitmirror /
+ENTRYPOINT ["/gitmirror"]

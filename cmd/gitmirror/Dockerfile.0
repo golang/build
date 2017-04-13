@@ -1,0 +1,26 @@
+# Copyright 2017 The Go Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
+# Note that OpenSSH 6.5+ is required for the Github SSH private key, which requires
+# at least Debian Jessie (not Wheezy). This uses Jessie:
+FROM golang:1.8
+LABEL maintainer "golang-dev@googlegroups.com"
+
+# You can verify this list with prdeps:
+# go get github.com/davecheney/prdeps
+# prdeps -d 1 golang.org/x/build/cmd/coordinator
+
+RUN go get -d cloud.google.com/go/compute/metadata
+RUN cd /go/src/cloud.google.com/go/compute/metadata && git reset --hard cd0da878c66091060d2e7403abd62192b3e387e0
+# Need to rerun because cd0da878 depends on gax-go and tip doesn't.
+RUN go get -d -v cloud.google.com/go/compute/metadata
+
+RUN go get -d golang.org/x/net/context golang.org/x/net/context/ctxhttp
+RUN cd /go/src/golang.org/x/net && git reset --hard f2499483f923065a842d38eb4c7f1927e6fc6e6d
+
+RUN cd /go/src/google.golang.org/grpc && git reset --hard 50955793b0183f9de69bd78e2ec251cf20aab121
+
+COPY . /go/src/golang.org/x/build/
+
+RUN go install golang.org/x/build/cmd/gitmirror
