@@ -34,11 +34,13 @@ But each machine is setup like:
    $ apt-get install docker.io
    
    $ build.sh (with Dockerfile in same directory)
+
+   $ echo "<BUILDER KEY>" > /etc/gobuild.key
    
    $ GOARCH=arm64 GOOS=linux go install golang.org/x/build/cmd/rundockerbuildlet && \
-     scp -i ~/keys/id_ed25519_golang1 ~/bin/linux_arm64/rundockerbuildlet  root@147.75.109.230:/usr/local/bin
+     scp -i ~/keys/id_ed25519_golang1 ~/bin/linux_arm64/rundockerbuildlet root@147.75.109.230:/usr/local/bin
 
-   $ scp -i ~/keys/id_ed25519_golang1 rundockerbuildlet.service root@147.75.109.230:/etc/systemd/user/
+   $ scp -i ~/keys/id_ed25519_golang1 rundockerbuildlet.service root@147.75.109.230:/usr/local/bin:/etc/systemd/user/
 
    $ systemctl enable /etc/systemd/user/rundockerbuildlet.service
    $ systemctl start rundockerbuildlet.service

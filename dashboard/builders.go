@@ -224,7 +224,7 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"linux-ppc64le-buildlet"},
 	},
 	"host-linux-arm64-linaro": &HostConfig{
-		Notes:          "Ubuntu wily; run by Go team, from linaro",
+		Notes:          "Ubuntu xenial; run by Go team, from linaro",
 		IsReverse:      true,
 		ExpectNum:      5,
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},

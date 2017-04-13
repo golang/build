@@ -4,6 +4,6 @@
 
 FROM golang.org/linux-arm64
 
-ENV GO_BUILDER_ENV host-linux-arm64-packet
+ENV GO_BUILDER_ENV host-linux-arm64-linaro
 
 CMD ["/usr/local/bin/stage0"]
