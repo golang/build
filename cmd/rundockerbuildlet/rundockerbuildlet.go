@@ -77,6 +77,7 @@ func checkFix() error {
 		if strings.HasPrefix(status, "Exited") {
 			if out, err := exec.Command("docker", "rm", container).CombinedOutput(); err != nil {
 				log.Printf("error running docker rm %s: %v, %s", container, err, out)
+				continue
 			}
 			log.Printf("Removed container %s (%s)", container, name)
 		}
