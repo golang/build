@@ -5,6 +5,7 @@
 package buildlet
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -75,7 +76,7 @@ type VMOpts struct {
 // StartNewVM boots a new VM on GCE and returns a buildlet client
 // configured to speak to it.
 func StartNewVM(ts oauth2.TokenSource, instName, hostType string, opts VMOpts) (*Client, error) {
-	computeService, _ := compute.New(oauth2.NewClient(oauth2.NoContext, ts))
+	computeService, _ := compute.New(oauth2.NewClient(context.TODO(), ts))
 
 	hconf, ok := dashboard.Hosts[hostType]
 	if !ok {
@@ -294,7 +295,7 @@ OpLoop:
 // currently (2015-01-19) very slow for no good reason. This function
 // returns once it's been requested, not when it's done.
 func DestroyVM(ts oauth2.TokenSource, proj, zone, instance string) error {
-	computeService, _ := compute.New(oauth2.NewClient(oauth2.NoContext, ts))
+	computeService, _ := compute.New(oauth2.NewClient(context.TODO(), ts))
 	apiGate()
 	_, err := computeService.Instances.Delete(proj, zone, instance).Do()
 	return err
@@ -313,7 +314,7 @@ type VM struct {
 // ListVMs lists all VMs.
 func ListVMs(ts oauth2.TokenSource, proj, zone string) ([]VM, error) {
 	var vms []VM
-	computeService, _ := compute.New(oauth2.NewClient(oauth2.NoContext, ts))
+	computeService, _ := compute.New(oauth2.NewClient(context.TODO(), ts))
 
 	// TODO(bradfitz): paging over results if more than 500
 	apiGate()

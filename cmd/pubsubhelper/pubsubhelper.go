@@ -280,7 +280,7 @@ func (e *env) Close() error {
 	tp := textproto.NewReader(bufio.NewReader(bytes.NewReader(headerBytes)))
 	hdr, err := tp.ReadMIMEHeader()
 	if err != nil {
-		log.Printf("Ignoring ReadMIMEHeader error: %v    from email:\n%s", headerBytes)
+		log.Printf("Ignoring ReadMIMEHeader error: %v    from email:\n%s", err, headerBytes)
 		return nil
 	}
 	changeNum, _ := strconv.Atoi(hdr.Get("X-Gerrit-Change-Number"))

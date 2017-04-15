@@ -90,7 +90,7 @@ func checkFix() error {
 			continue
 		}
 		log.Printf("Creating %s ...", name)
-		keyFile := fmt.Sprintf("/tmp/buildkey%s/gobuildkey", num)
+		keyFile := fmt.Sprintf("/tmp/buildkey%02d/gobuildkey", num)
 		if err := os.MkdirAll(filepath.Dir(keyFile), 0700); err != nil {
 			return err
 		}

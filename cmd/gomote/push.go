@@ -54,7 +54,6 @@ func push(args []string) error {
 	}
 
 	haveGo14 := false
-	haveGo := false
 	remote := map[string]buildlet.DirEntry{} // keys like "src/make.bash"
 
 	lsOpts := buildlet.ListDirOpts{
@@ -78,7 +77,6 @@ func push(args []string) error {
 			return
 		}
 		if strings.HasPrefix(name, "go/") {
-			haveGo = true
 			remote[name[len("go/"):]] = ent
 		}
 
@@ -94,15 +92,6 @@ func push(args []string) error {
 			}
 		}
 	}
-
-	// TODO(bradfitz,adg): if !haveGo, then run 'git rev-parse
-	// HEAD' in goroot and see what the user's HEAD is,
-	// approximately. Then tell the buildlet to fetch that tarball
-	// directly from Gerrit as a base. Then do another ListDir to
-	// the buildlet to get the new list, which will result in a
-	// smaller upload payload. This is important when working from
-	// home with a slower network connection to GCE. (upload a few
-	// KB instead of 10-40 MB)
 
 	type fileInfo struct {
 		fi   os.FileInfo

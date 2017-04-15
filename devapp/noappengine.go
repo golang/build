@@ -155,6 +155,10 @@ func getToken(ctx context.Context) (string, error) {
 			return
 		}
 		fi, err := os.Stat(filename)
+		if err != nil {
+			githubOnceErr = err
+			return
+		}
 		if fi.Mode()&0077 != 0 {
 			githubOnceErr = fmt.Errorf("reading token: %s mode is %#o, want %#o", shortFilename, fi.Mode()&0777, fi.Mode()&0700)
 			return

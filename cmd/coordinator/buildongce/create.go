@@ -6,6 +6,7 @@ package main // import "golang.org/x/build/cmd/coordinator/buildongce"
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -20,11 +21,9 @@ import (
 	"text/template"
 	"time"
 
-	"go4.org/cloud/google/gceutil"
-
 	"cloud.google.com/go/datastore"
+	"go4.org/cloud/google/gceutil"
 	"golang.org/x/build/buildenv"
-	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
 	dm "google.golang.org/api/deploymentmanager/v2"
@@ -143,7 +142,7 @@ func main() {
 		os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", keyFile)
 	}
 
-	oauthClient, err = google.DefaultClient(oauth2.NoContext, compute.CloudPlatformScope, compute.ComputeScope, compute.DevstorageFullControlScope)
+	oauthClient, err = google.DefaultClient(context.Background(), compute.CloudPlatformScope, compute.ComputeScope, compute.DevstorageFullControlScope)
 	if err != nil {
 		log.Fatalf("could not create oAuth client: %v", err)
 	}

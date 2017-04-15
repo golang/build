@@ -171,7 +171,6 @@ func (d *DiskMutationLogger) GetMutations(ctx context.Context) <-chan *maintpb.M
 				}
 				select {
 				case ch <- m:
-					break
 				case <-ctx.Done():
 					return ctx.Err()
 				}
