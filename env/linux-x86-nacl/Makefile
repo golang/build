@@ -21,7 +21,7 @@ prod: Dockerfile
 	rm Dockerfile.make
 
 # You must provide a REPO=your-repo-name arg when you make
-# this targarget. REPO is the name of the Docker repository
+# this target. REPO is the name of the Docker repository
 # that will be prefixed to the name of the image being built.
 dev: Dockerfile
 	sed 's|{{REPO}}|'"$(REPO)"'|g' Dockerfile > Dockerfile.make

@@ -17,7 +17,7 @@ prod: Dockerfile
 	gcloud docker -- push $(PROD_REPO)/$(IMAGE_NAME):latest
 
 # You must provide a REPO=your-repo-name arg when you make
-# this targarget. REPO is the name of the Docker repository
+# this target. REPO is the name of the Docker repository
 # that will be prefixed to the name of the image being built.
 dev: Dockerfile
 	docker build -t $(REPO)/$(IMAGE_NAME):latest .
