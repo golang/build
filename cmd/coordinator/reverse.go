@@ -328,14 +328,14 @@ func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 		if b.inUse {
 			machStatus = "working"
 		}
-		fmt.Fprintf(&buf, "<li>%s (%s) version %s, %s: connected %v, %s for %v</li>\n",
+		fmt.Fprintf(&buf, "<li>%s (%s) version %s, %s: connected %s, %s for %s</li>\n",
 			b.hostname,
 			b.conn.RemoteAddr(),
 			b.version,
 			b.hostType,
-			time.Since(b.regTime),
+			friendlyDuration(time.Since(b.regTime)),
 			machStatus,
-			time.Since(b.inUseTime))
+			friendlyDuration(time.Since(b.inUseTime)))
 		total[b.hostType]++
 		if b.inUse && !b.inHealthCheck {
 			inUse[b.hostType]++

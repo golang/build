@@ -349,7 +349,7 @@ func (p *gceBuildletPool) WriteHTMLStatus(w io.Writer) {
 		fmt.Fprintf(w, "<ul>")
 		for i, inst := range active {
 			if i < show/2 || i >= len(active)-(show/2) {
-				fmt.Fprintf(w, "<li>%v, %v</li>\n", inst.name, time.Since(inst.creation))
+				fmt.Fprintf(w, "<li>%v, %s</li>\n", inst.name, friendlyDuration(time.Since(inst.creation)))
 			} else if i == show/2 {
 				fmt.Fprintf(w, "<li>... %d of %d total omitted ...</li>\n", len(active)-show, len(active))
 			}

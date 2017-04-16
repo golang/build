@@ -2888,7 +2888,7 @@ func (s *span) done(err error) error {
 	s.end = t1
 	td := t1.Sub(s.start)
 	var text bytes.Buffer
-	fmt.Fprintf(&text, "after %v", td)
+	fmt.Fprintf(&text, "after %s", friendlyDuration(td))
 	if err != nil {
 		fmt.Fprintf(&text, "; err=%v", err)
 	}

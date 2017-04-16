@@ -116,6 +116,19 @@ func fdCount() int {
 	}
 }
 
+func friendlyDuration(d time.Duration) string {
+	if d > 10*time.Second {
+		d2 := ((d + 50*time.Millisecond) / (100 * time.Millisecond)) * (100 * time.Millisecond)
+		return d2.String()
+	}
+	if d > time.Second {
+		d2 := ((d + 5*time.Millisecond) / (10 * time.Millisecond)) * (10 * time.Millisecond)
+		return d2.String()
+	}
+	d2 := ((d + 50*time.Microsecond) / (100 * time.Microsecond)) * (100 * time.Microsecond)
+	return d2.String()
+}
+
 func diskFree() string {
 	out, _ := exec.Command("df", "-h").Output()
 	return string(out)
