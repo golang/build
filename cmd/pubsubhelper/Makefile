@@ -3,21 +3,21 @@
 # license that can be found in the LICENSE file.
 
 VERSION=v2
-DOCKER_IMAGE_STAGE0=stage0/pubsubhelper:latest
-DOCKER_CTR_STAGE0=pubsubhelper-stage0
+DOCKER_IMAGE_build0=build0/pubsubhelper:latest
+DOCKER_CTR_build0=pubsubhelper-build0
 
-stage0: *.go Dockerfile.0
-	docker build --force-rm -f Dockerfile.0 --tag=$(DOCKER_IMAGE_STAGE0) ../..
+build0: *.go Dockerfile.0
+	docker build --force-rm -f Dockerfile.0 --tag=$(DOCKER_IMAGE_build0) ../..
 
-pubsubhelper: stage0
-	docker create --name $(DOCKER_CTR_STAGE0) $(DOCKER_IMAGE_STAGE0)
-	docker cp $(DOCKER_CTR_STAGE0):/go/bin/$@ $@
-	docker rm $(DOCKER_CTR_STAGE0)
+pubsubhelper: build0
+	docker create --name $(DOCKER_CTR_build0) $(DOCKER_IMAGE_build0)
+	docker cp $(DOCKER_CTR_build0):/go/bin/$@ $@
+	docker rm $(DOCKER_CTR_build0)
 
 ca-certificates.crt:
-	docker create --name $(DOCKER_CTR_STAGE0) $(DOCKER_IMAGE_STAGE0)
-	docker cp $(DOCKER_CTR_STAGE0):/etc/ssl/certs/$@ $@
-	docker rm $(DOCKER_CTR_STAGE0)
+	docker create --name $(DOCKER_CTR_build0) $(DOCKER_IMAGE_build0)
+	docker cp $(DOCKER_CTR_build0):/etc/ssl/certs/$@ $@
+	docker rm $(DOCKER_CTR_build0)
 
 docker-prod: Dockerfile pubsubhelper ca-certificates.crt
 	docker build --force-rm --tag=gcr.io/symbolic-datum-552/pubsubhelper:$(VERSION) .
