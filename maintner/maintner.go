@@ -156,7 +156,9 @@ type MutationSource interface {
 	GetMutations(context.Context) <-chan *maintpb.Mutation
 }
 
-// Initialize populates the Corpus using the data from the MutationSource.
+// Initialize populates the Corpus using the data from the
+// MutationSource. It returns once it's up-to-date. To incrementally
+// update it later, use the Update method.
 func (c *Corpus) Initialize(ctx context.Context, src MutationSource) error {
 	ch := src.GetMutations(ctx)
 	done := ctx.Done()
@@ -178,6 +180,14 @@ func (c *Corpus) Initialize(ctx context.Context, src MutationSource) error {
 			c.processMutationLocked(m)
 		}
 	}
+}
+
+// Update incrementally updates the corpus from its current state to
+// the latest state from the MutationSource passed earlier to
+// Initialize. It does not return until there's either a new change or
+// the context expires.
+func (c *Corpus) Update(ctx context.Context) error {
+	panic("TODO")
 }
 
 // addMutation adds a mutation to the log and immediately processes it.

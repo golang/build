@@ -28,6 +28,7 @@ import (
 
 var (
 	dryRun = flag.Bool("dry-run", false, "just report what would've been done, without changing anything")
+	daemon = flag.Bool("daemon", false, "run in daemon mode")
 )
 
 func getGithubToken() (string, error) {
@@ -82,56 +83,29 @@ func main() {
 		gorepo: repo,
 	}
 
-	var fail bool
-
-	if err := bot.freezeOldIssues(ctx); err != nil {
-		log.Printf("freezing old issues: %v", err)
-		fail = true
-	}
-
-	if err := bot.labelProposals(ctx); err != nil {
-		log.Printf("labeling proposals: %v", err)
-		fail = true
-	}
-
-	if err := bot.setSubrepoMilestones(ctx); err != nil {
-		log.Printf("setting subrepo milestones: %v", err)
-		fail = true
-	}
-
-	if err := bot.setGccgoMilestones(ctx); err != nil {
-		log.Printf("setting gccgo milestones: %v", err)
-		fail = true
-	}
-
-	if err := bot.labelBuildIssues(ctx); err != nil {
-		log.Printf("labeling build issues: %v", err)
-		fail = true
-	}
-
-	if err := bot.labelDocumentationIssues(ctx); err != nil {
-		log.Printf("labeling documentation issues: %v", err)
-		fail = true
-	}
-
-	if err := bot.closeStaleWaitingForInfo(ctx); err != nil {
-		log.Printf("closing stale WaitingForInfo: %v", err)
-		fail = true
-	}
-
-	// "CL nnnn mentions this issue"
-	if err := bot.cl2issue(ctx); err != nil {
-		log.Printf("cl2issue: %v", err)
-		fail = true
-	}
-
-	if err := bot.checkCherryPicks(ctx); err != nil {
-		log.Printf("checking cherry picks: %v", err)
-		fail = true
-	}
-
-	if fail {
-		os.Exit(1)
+	for {
+		var nextLoop time.Time
+		err := bot.doTasks(ctx)
+		if err != nil {
+			log.Print(err)
+			nextLoop = time.Now().Add(30 * time.Second)
+		}
+		if !*daemon {
+			if err != nil {
+				os.Exit(1)
+			}
+			return
+		}
+		// TODO: if err != nil, pass a ctx with 30s timeout and retry the doTasks.
+		// Maybe use a better ctx above too.
+		if err := corpus.Update(ctx); err != nil {
+			log.Fatalf("corpus.Update: %v", err)
+		}
+		if nextLoop.After(time.Now()) {
+			sleep := time.Until(nextLoop)
+			log.Printf("Sleeping for %v after previous error.", sleep)
+			time.Sleep(sleep)
+		}
 	}
 }
 
@@ -139,6 +113,31 @@ type gopherbot struct {
 	ghc    *github.Client
 	corpus *maintner.Corpus
 	gorepo *maintner.GitHubRepo
+}
+
+var tasks = []struct {
+	name string
+	fn   func(*gopherbot, context.Context) error
+}{
+	{"freeze old issues", (*gopherbot).freezeOldIssues},
+	{"label proposals", (*gopherbot).labelProposals},
+	{"set subrepo milestones", (*gopherbot).setSubrepoMilestones},
+	{"set gccgo milestones", (*gopherbot).setGccgoMilestones},
+	{"label build issues", (*gopherbot).labelBuildIssues},
+	{"label documentation issues", (*gopherbot).labelDocumentationIssues},
+	{"close stale WaitingForInfo", (*gopherbot).closeStaleWaitingForInfo},
+	{"cl2issue", (*gopherbot).cl2issue},
+	{"check cherry picks", (*gopherbot).checkCherryPicks},
+}
+
+func (b *gopherbot) doTasks(ctx context.Context) error {
+	for _, task := range tasks {
+		if err := task.fn(b, ctx); err != nil {
+			log.Printf("%s: %v", task.name, err)
+			return err
+		}
+	}
+	return nil
 }
 
 func (b *gopherbot) addLabel(ctx context.Context, gi *maintner.GitHubIssue, label string) error {
@@ -467,6 +466,10 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 					return nil
 				})
 				if !hasComment {
+					printIssue("cl2issue", gi)
+					if *dryRun {
+						return nil
+					}
 					if err := b.addGitHubComment(ctx, "golang", "go", gi.Number, fmt.Sprintf("CL https://golang.org/cl/%d mentions this issue.", cl.Number)); err != nil {
 						return err
 					}
