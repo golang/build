@@ -5,13 +5,12 @@
 package gerrit
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
-
-	"golang.org/x/net/context"
 )
 
 // taken from https://go-review.googlesource.com/projects/go

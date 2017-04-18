@@ -8,6 +8,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"log"
@@ -17,7 +18,6 @@ import (
 	"time"
 
 	"golang.org/x/build/gerrit"
-	"golang.org/x/net/context"
 )
 
 func main() {

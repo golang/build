@@ -11,6 +11,7 @@ package gerrit
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,8 +23,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/net/context"
 )
 
 // Client is a Gerrit client.
@@ -133,7 +132,7 @@ func (c *Client) do(ctx context.Context, dst interface{}, method, path string, o
 		req.Header.Set("Content-Type", contentType)
 	}
 	c.auth.setAuth(c, req)
-	res, err := c.httpClient().Do(withContext(req, ctx))
+	res, err := c.httpClient().Do(req.WithContext(ctx))
 	if err != nil {
 		return err
 	}

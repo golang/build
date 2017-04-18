@@ -5,10 +5,10 @@
 package gerrit_test
 
 import (
+	"context"
 	"fmt"
 
 	"golang.org/x/build/gerrit"
-	"golang.org/x/net/context"
 )
 
 func Example() {
