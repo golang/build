@@ -552,3 +552,37 @@ func (ts *TimeStamp) UnmarshalJSON(p []byte) error {
 }
 
 func (ts TimeStamp) Time() time.Time { return time.Time(ts) }
+
+// GroupInfo contains information about a group.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-groups.html#group-info.
+type GroupInfo struct {
+	ID      string           `json:"id"`
+	URL     string           `json:"url"`
+	Name    string           `json:"name"`
+	GroupID int64            `json:"group_id"`
+	Options GroupOptionsInfo `json:"options"`
+	Owner   string           `json:"owner"`
+	OwnerID string           `json:"owner_id"`
+}
+
+type GroupOptionsInfo struct {
+	VisibleToAll bool `json:"visible_to_all"`
+}
+
+func (c *Client) GetGroups(ctx context.Context) (map[string]*GroupInfo, error) {
+	res := make(map[string]*GroupInfo)
+	err := c.do(ctx, &res, "GET", "/groups/")
+	for k, gi := range res {
+		if gi != nil && gi.Name == "" {
+			gi.Name = k
+		}
+	}
+	return res, err
+}
+
+func (c *Client) GetGroupMembers(ctx context.Context, groupID string) ([]AccountInfo, error) {
+	var ais []AccountInfo
+	err := c.do(ctx, &ais, "GET", "/groups/"+groupID+"/members")
+	return ais, err
+}

@@ -183,6 +183,8 @@ type GerritCL struct {
 	// server. (e.g. 1, 2, 3)
 	Number int32
 
+	Created time.Time
+
 	// Version is the number of versions of the patchset for this
 	// CL seen so far. It starts at 1.
 	Version int32
@@ -377,6 +379,9 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 			cl.Meta = gc
 			if status := gp.getGerritStatus(cl.Meta, oldMeta); status != "" {
 				cl.Status = status
+			}
+			if cl.Created.IsZero() || gc.CommitTime.Before(cl.Created) {
+				cl.Created = gc.CommitTime
 			}
 		} else {
 			cl.Commit = gc

@@ -72,6 +72,25 @@ type GitPerson struct {
 	Str string // "Foo Bar <foo@bar.com>"
 }
 
+// Email returns the GitPerson's email address only, without the name
+// or angle brackets.
+func (p *GitPerson) Email() string {
+	lt := strings.IndexByte(p.Str, '<')
+	gt := strings.IndexByte(p.Str, '>')
+	if lt < 0 || gt < lt {
+		return ""
+	}
+	return p.Str[lt+1 : gt]
+}
+
+func (p *GitPerson) Name() string {
+	i := strings.IndexByte(p.Str, '<')
+	if i < 0 {
+		return p.Str
+	}
+	return strings.TrimSpace(p.Str[:i])
+}
+
 // requires c.mu be held for writing.
 func (c *Corpus) enqueueCommitLocked(h GitHash) {
 	if _, ok := c.gitCommit[h]; ok {
