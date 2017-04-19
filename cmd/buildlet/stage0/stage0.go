@@ -28,6 +28,7 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/build/internal/httpdl"
+	"golang.org/x/build/internal/untar"
 )
 
 // This lets us be lazy and put the stage0 start-up in rc.local where
@@ -44,8 +45,19 @@ var (
 	scalewayMeta scalewayMetadata
 )
 
+// untar helper, for the Windows image prep script.
+var (
+	untarFile    = flag.String("untar-file", "", "if non-empty, tar.gz to untar to --untar-dest-dir")
+	untarDestDir = flag.String("untar-dest-dir", "", "destination directory to untar --untar-file to")
+)
+
 func main() {
 	flag.Parse()
+
+	if *untarFile != "" {
+		untarMode()
+		return
+	}
 
 	switch osArch {
 	case "linux/arm":
@@ -440,4 +452,24 @@ func isUnix() bool {
 		return false
 	}
 	return true
+}
+
+func untarMode() {
+	if *untarDestDir == "" {
+		log.Fatal("--untar-dest-dir must not be empty")
+	}
+	if fi, err := os.Stat(*untarDestDir); err != nil || !fi.IsDir() {
+		if err != nil {
+			log.Fatalf("--untar-dest-dir %q: %v", *untarDestDir, err)
+		}
+		log.Fatalf("--untar-dest-dir %q not a directory.", *untarDestDir)
+	}
+	f, err := os.Open(*untarFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+	if err := untar.Untar(f, *untarDestDir); err != nil {
+		log.Fatalf("Untarring %q to %q: %v", *untarFile, *untarDestDir)
+	}
 }
