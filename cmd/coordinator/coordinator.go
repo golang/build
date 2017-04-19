@@ -377,6 +377,17 @@ func numCurrentBuilds() int {
 	return len(status)
 }
 
+func numCurrentBuildsOfType(typ string) (n int) {
+	statusMu.Lock()
+	defer statusMu.Unlock()
+	for rev := range status {
+		if rev.name == typ {
+			n++
+		}
+	}
+	return
+}
+
 func isBuilding(work builderRev) bool {
 	statusMu.Lock()
 	defer statusMu.Unlock()
@@ -404,6 +415,9 @@ func mayBuildRev(rev builderRev) bool {
 		if logUnknownBuilder.Allow() {
 			log.Printf("unknown builder %q", rev.name)
 		}
+		return false
+	}
+	if buildConf.MaxAtOnce > 0 && numCurrentBuildsOfType(rev.name) >= buildConf.MaxAtOnce {
 		return false
 	}
 	if buildConf.IsReverse() && !reversePool.CanBuild(buildConf.HostType) {

@@ -417,6 +417,12 @@ type BuildConfig struct {
 	CompileOnly bool // if true, compile tests, but don't run them
 	FlakyNet    bool // network tests are flaky (try anyway, but ignore some failures)
 
+	// MaxAtOnce optionally specifies a cap of how many builds of
+	// this type can run at once. Zero means unlimited. This is a
+	// temporary measure until the build scheduler
+	// (golang.org/issue/19178) is done.
+	MaxAtOnce int
+
 	// SkipSnapshot, if true, means to not fetch a tarball
 	// snapshot of the world post-make.bash from the buildlet (and
 	// thus to not write it to Google Cloud Storage). This is
