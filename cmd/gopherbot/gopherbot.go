@@ -17,19 +17,28 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
 	"github.com/google/go-github/github"
+	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
 	"golang.org/x/oauth2"
 )
 
 var (
-	dryRun = flag.Bool("dry-run", false, "just report what would've been done, without changing anything")
-	daemon = flag.Bool("daemon", false, "run in daemon mode")
+	dryRun          = flag.Bool("dry-run", false, "just report what would've been done, without changing anything")
+	daemon          = flag.Bool("daemon", false, "run in daemon mode")
+	githubTokenFile = flag.String("github-token-file", filepath.Join(os.Getenv("HOME"), "keys", "github-gobot"), `File to load Github token from. File should be of form <username>:<token>`)
+	// go here: https://go-review.googlesource.com/settings#HTTPCredentials
+	// click "Obtain Password"
+	// The next page will have a .gitcookies file - look for the part that has
+	// "git-youremail@yourcompany.com=password". Copy and paste that to the
+	// token file with a colon in between the email and password.
+	gerritTokenFile = flag.String("gerrit-token-file", filepath.Join(os.Getenv("HOME"), "keys", "gerrit-gobot"), `File to load Gerrit token from. File should be of form <git-email>:<token>`)
 )
 
 // GitHub Label IDs for the golang/go repo.
@@ -48,16 +57,44 @@ func getGithubToken() (string, error) {
 			}
 		}
 	}
-	tokenFile := filepath.Join(os.Getenv("HOME"), "keys", "github-gobot")
-	slurp, err := ioutil.ReadFile(tokenFile)
+	slurp, err := ioutil.ReadFile(*githubTokenFile)
 	if err != nil {
 		return "", err
 	}
 	f := strings.SplitN(strings.TrimSpace(string(slurp)), ":", 2)
 	if len(f) != 2 || f[0] == "" || f[1] == "" {
-		return "", fmt.Errorf("Expected token file %s to be of form <username>:<token>", tokenFile)
+		return "", fmt.Errorf("Expected token %q to be of form <username>:<token>", slurp)
 	}
 	return f[1], nil
+}
+
+func getGerritAuth() (username string, password string, err error) {
+	var slurp string
+	if metadata.OnGCE() {
+		for _, key := range []string{"gopherbot-gerrit-token", "maintner-gerrit-token", "gobot-password"} {
+			slurp, err = metadata.ProjectAttributeValue(key)
+			if len(slurp) != 0 {
+				continue
+			}
+		}
+	}
+	if len(slurp) == 0 {
+		var slurpBytes []byte
+		slurpBytes, err = ioutil.ReadFile(*gerritTokenFile)
+		if err != nil {
+			return "", "", err
+		}
+		slurp = string(slurpBytes)
+	}
+	f := strings.SplitN(strings.TrimSpace(slurp), ":", 2)
+	if len(f) == 1 {
+		// assume the whole thing is the token
+		return "git-gobot.golang.org", f[0], nil
+	}
+	if len(f) != 2 || f[0] == "" || f[1] == "" {
+		return "", "", fmt.Errorf("Expected Gerrit token %q to be of form <git-email>:<token>", slurp)
+	}
+	return f[0], f[1], nil
 }
 
 func getGithubClient() (*github.Client, error) {
@@ -73,6 +110,22 @@ func getGithubClient() (*github.Client, error) {
 	return github.NewClient(tc), nil
 }
 
+func getGerritClient() (*gerrit.Client, error) {
+	username, token, err := getGerritAuth()
+	if err != nil {
+		return nil, err
+	}
+	c := gerrit.NewClient("https://go-review.googlesource.com", gerrit.BasicAuth(username, token))
+	return c, nil
+}
+
+func init() {
+	flag.Usage = func() {
+		os.Stderr.WriteString("gopherbot runs Go's gopherbot role account on GitHub and Gerrit.\n\n")
+		flag.PrintDefaults()
+	}
+}
+
 func main() {
 	flag.Parse()
 
@@ -80,8 +133,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	gerritc, err := getGerritClient()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	bot := &gopherbot{ghc: ghc}
+	bot := &gopherbot{ghc: ghc, gerrit: gerritc}
 	bot.initCorpus()
 
 	ctx := context.Background()
@@ -124,12 +181,16 @@ func main() {
 
 type gopherbot struct {
 	ghc    *github.Client
+	gerrit *gerrit.Client
 	corpus *maintner.Corpus
 	gorepo *maintner.GitHubRepo
 
 	// maxIssueMod is the latest modification time of all Go
 	// github issues. It's updated at the end of the run of tasks.
-	maxIssueMod time.Time
+	maxIssueMod       time.Time
+	knownContributors map[string]bool
+	// Most recent CL processed by the contributor congratulation script
+	mostRecentCL int32
 }
 
 var tasks = []struct {
@@ -146,6 +207,7 @@ var tasks = []struct {
 	{"cl2issue", (*gopherbot).cl2issue},
 	{"check cherry picks", (*gopherbot).checkCherryPicks},
 	{"update needs", (*gopherbot).updateNeeds},
+	{"congratulate new contributors", (*gopherbot).congratulateNewContributors},
 }
 
 func (b *gopherbot) initCorpus() {
@@ -252,6 +314,56 @@ func (b *gopherbot) addGitHubComment(ctx context.Context, org, repo string, issu
 		Body: github.String(msg),
 	})
 	return err
+}
+
+type gerritCommentOpts struct {
+	OldPhrases []string
+	Version    string // if empty, latest version is used
+}
+
+var emptyGerritCommentOpts gerritCommentOpts
+
+// addGerritComment adds the given comment to the CL specified by the changeID
+// and the patch set identified by the version.
+//
+// As an idempotence check, before adding the comment the comment and the list
+// of oldPhrases are checked against the CL to ensure that no phrase in the list
+// has already been added to the list as a comment.
+func (b *gopherbot) addGerritComment(ctx context.Context, changeID, comment string, opts *gerritCommentOpts) error {
+	if b == nil {
+		panic("nil gopherbot")
+	}
+	if opts == nil {
+		opts = &emptyGerritCommentOpts
+	}
+	// One final staleness check before sending a message: get the list
+	// of comments from the API and check whether any of them match.
+	info, err := b.gerrit.GetChange(ctx, changeID, gerrit.QueryChangesOpt{
+		Fields: []string{"MESSAGES", "CURRENT_REVISION"},
+	})
+	if err != nil {
+		return err
+	}
+	for _, msg := range info.Messages {
+		if strings.Contains(msg.Message, comment) {
+			return nil // Our comment is already there
+		}
+		for j := range opts.OldPhrases {
+			// Message looks something like "Patch set X:\n\n(our text)"
+			if strings.Contains(msg.Message, opts.OldPhrases[j]) {
+				return nil // Our comment is already there
+			}
+		}
+	}
+	var rev string
+	if opts.Version != "" {
+		rev = opts.Version
+	} else {
+		rev = info.CurrentRevision
+	}
+	return b.gerrit.SetReview(ctx, changeID, rev, gerrit.ReviewInput{
+		Message: comment,
+	})
 }
 
 // freezeOldIssues locks any issue that's old and closed.
@@ -613,6 +725,122 @@ func (b *gopherbot) updateNeeds(ctx context.Context) error {
 		}
 		return nil
 	})
+}
+
+// If any of the messages in this array have been posted on a CL, don't post
+// again. If you amend the message even slightly, please prepend the new message
+// to this list, to avoid re-spamming people.
+//
+// The first message is the "current" message.
+var congratulatoryMessages = []string{
+	// TODO: provide more helpful info? Amend, don't add 2nd commit, link to a
+	// review guide?
+	//
+	// also TODO: make this a template? May want to provide more dynamic
+	// information in the future. Would make it tougher to search and see if
+	// a comment has been previously posted.
+	`Congratulations on opening your first change. Thank you for your contribution!
+
+Next steps:
+Within the next week or so, a maintainer will review your change and provide
+feedback. See https://golang.org/doc/contribute.html#review for more info and
+tips to get your patch through code review.
+
+Most changes in the Go project go through a few rounds of revision. This can be
+surprising to people new to the project. The careful, iterative review process
+is our way of helping mentor contributors and ensuring that their contributions
+have a lasting impact.
+
+During May-July and Nov-Jan the Go project is in a code freeze, during which
+little code gets reviewed or merged. If a reviewer responds with a comment like
+R=go1.11, it means that this CL will be reviewed as part of the next development
+cycle. See https://golang.org/s/release for more details.`, // TODO only show freeze message during freeze
+	"It's your first ever CL! Congrats, and thanks for sending!",
+}
+
+// Don't want to congratulate people on CL's they submitted a year ago.
+var congratsEpoch = time.Date(2017, 6, 17, 0, 0, 0, 0, time.UTC)
+
+func (b *gopherbot) congratulateNewContributors(ctx context.Context) error {
+	cls := make(map[string]*maintner.GerritCL)
+	newHighestCL := b.mostRecentCL
+	b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+		if gp.Server() != "go.googlesource.com" {
+			return nil
+		}
+		return gp.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
+			if b.knownContributors == nil {
+				b.knownContributors = make(map[string]bool)
+			}
+			if cl.Commit == nil {
+				return nil
+			}
+			if cl.Number <= b.mostRecentCL {
+				return nil
+			}
+			if cl.Number > newHighestCL {
+				newHighestCL = cl.Number
+			}
+			email := cl.Commit.Author.Str
+			if b.knownContributors[email] {
+				return nil
+			}
+			if cls[email] != nil {
+				// this person has multiple CLs; not a new contributor.
+				b.knownContributors[email] = true
+				delete(cls, email)
+				return nil
+			}
+			cls[email] = cl
+			return nil
+		})
+	})
+	for email, cl := range cls {
+		if cl.Commit == nil || cl.Commit.CommitTime.Before(congratsEpoch) {
+			b.knownContributors[email] = true
+			continue
+		}
+		if cl.Status == "merged" {
+			b.knownContributors[email] = true
+			continue
+		}
+		foundMessage := false
+		for i := range cl.Messages {
+			// TODO: once gopherbot starts posting these messages and we
+			// have the author's name for Gopherbot, check the author name
+			// matches as well.
+			for j := range congratulatoryMessages {
+				// Message looks something like "Patch set X:\n\n(our text)"
+				if strings.Contains(cl.Messages[i].Message, congratulatoryMessages[j]) {
+					foundMessage = true
+					break
+				}
+			}
+			if foundMessage {
+				break
+			}
+		}
+
+		if foundMessage {
+			b.knownContributors[email] = true
+			continue
+		}
+		if *dryRun {
+			log.Printf("[dry run] would add comment to golang.org/cl/%d, congratulating %s on their first commit (committed on %v)", cl.Number, cl.Commit.Author.Str, cl.Commit.CommitTime)
+			b.knownContributors[email] = true
+			continue
+		}
+		opts := &gerritCommentOpts{
+			OldPhrases: congratulatoryMessages,
+		}
+		err := b.addGerritComment(ctx, strconv.Itoa(int(cl.Number)), congratulatoryMessages[0], opts)
+		if err != nil {
+			return err
+		}
+		b.knownContributors[email] = true
+	}
+	b.mostRecentCL = newHighestCL
+	return nil
 }
 
 // errStopIteration is used to stop iteration over issues or comments.

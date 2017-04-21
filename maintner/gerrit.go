@@ -257,7 +257,16 @@ type GerritMessage struct {
 	// the git commit).
 	Date time.Time
 
-	// TODO author id etc.
+	// Author returns the author of the commit. This takes the form "Kevin Burke
+	// <13437@62eb7196-b449-3ce5-99f1-c037f21e1705>", where the number before
+	// the '@' sign is your Gerrit user ID, and the UUID after the '@' sign
+	// seems to be the same for all commits for the same Gerrit server, across
+	// projects.
+	//
+	// TODO: Merge the *GitPerson object here and for a person's Git commits
+	// (which use their real email) via the user ID, so they point to the same
+	// object.
+	Author *GitPerson
 }
 
 // References reports whether cl includes a commit message reference
@@ -487,9 +496,17 @@ func (gp *GerritProject) getGerritMessage(commit *GitCommit) *GerritMessage {
 		l = l + i + 1
 	}
 	return &GerritMessage{
+		Author:  commit.Author,
 		Date:    commit.CommitTime,
 		Message: v,
 		Version: int32(version),
+	}
+}
+
+func reverseGerritMessages(ss []*GerritMessage) {
+	for i := len(ss)/2 - 1; i >= 0; i-- {
+		opp := len(ss) - 1 - i
+		ss[i], ss[opp] = ss[opp], ss[i]
 	}
 }
 
@@ -533,19 +550,16 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 			oldMeta := cl.Meta
 			cl.Meta = gc
 			foundStatus := ""
-			var messages []*GerritMessage
+			// Walk from the newest commit backwards, so we store the messages
+			// in reverse order and then flip the array before setting on the
+			// GerritCL object.
+			var backwardMessages []*GerritMessage
 			gp.foreachCommitParent(cl.Meta.Hash, func(gc *GitCommit) error {
 				if status := getGerritStatus(gc); status != "" && foundStatus == "" {
 					foundStatus = status
 				}
 				if message := gp.getGerritMessage(gc); message != nil {
-					// Walk from the newest commit backwards, so we need to
-					// insert all messages at the beginning of the array.
-					// TODO: store these in reverse order instead and avoid
-					// the quadratic inserting at the beginning.
-					messages = append(messages, nil)
-					copy(messages[1:], messages[:])
-					messages[0] = message
+					backwardMessages = append(backwardMessages, message)
 				}
 				if oldMeta != nil && gc.Hash == oldMeta.Hash {
 					return errStopIteration
@@ -560,7 +574,8 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 			if cl.Created.IsZero() || gc.CommitTime.Before(cl.Created) {
 				cl.Created = gc.CommitTime
 			}
-			cl.Messages = append(cl.Messages, messages...)
+			reverseGerritMessages(backwardMessages)
+			cl.Messages = append(cl.Messages, backwardMessages...)
 		} else {
 			cl.Commit = gc
 			cl.Version = clv.Version
