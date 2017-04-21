@@ -163,6 +163,8 @@ type GitHubIssueRef struct {
 	Number int32       // GitHubIssue.Number
 }
 
+func (r GitHubIssueRef) String() string { return fmt.Sprintf("%s#%d", r.Repo.ID(), r.Number) }
+
 // GitHubIssue represents a github issue.
 // This is maintner's in-memory representation. It differs slightly
 // from the API's *github.Issue type, notably in the lack of pointers
@@ -1949,7 +1951,7 @@ func makeGithubResponse(res *http.Response) *github.Response {
 	return gr
 }
 
-var rxReferences = regexp.MustCompile(`\b(?:([\w\-]+)/([\w\-]+))?\#(\d+)\b`)
+var rxReferences = regexp.MustCompile(`(?:\b([\w\-]+)/([\w\-]+))?\#(\d+)\b`)
 
 func (c *Corpus) parseGithubRefs(gerritProj string, commitMsg string) []GitHubIssueRef {
 	// Use of rxReferences by itself caused this function to take 20% of the CPU time.

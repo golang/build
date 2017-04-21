@@ -560,3 +560,30 @@ func p3339(s string) *timestamp.Timestamp {
 	}
 	return tp
 }
+
+func TestParseGithubRefs(t *testing.T) {
+	tests := []struct {
+		gerritProj string // "go.googlesource.com/go", etc
+		msg        string
+		want       []string
+	}{
+		{"go.googlesource.com/go", "\nFixes #1234\n", []string{"golang/go#1234"}},
+		{"go.googlesource.com/go", "Fixes #1234\n", []string{"golang/go#1234"}},
+		{"go.googlesource.com/go", "Fixes #1234", []string{"golang/go#1234"}},
+		{"go.googlesource.com/go", "Fixes golang/go#1234", []string{"golang/go#1234"}},
+		{"go.googlesource.com/go", "Fixes golang/go#1234\n", []string{"golang/go#1234"}},
+		{"go.googlesource.com/go", "Fixes golang/go#1234.", []string{"golang/go#1234"}},
+		{"go.googlesource.com/net", "Fixes golang/go#1234.", []string{"golang/go#1234"}},
+		{"go.googlesource.com/net", "Fixes #1234", nil},
+	}
+	for _, tt := range tests {
+		c := new(Corpus)
+		var got []string
+		for _, ref := range c.parseGithubRefs(tt.gerritProj, tt.msg) {
+			got = append(got, ref.String())
+		}
+		if !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("parseGithubRefs(%q, %q) = %q; want %q", tt.gerritProj, tt.msg, got, tt.want)
+		}
+	}
+}
