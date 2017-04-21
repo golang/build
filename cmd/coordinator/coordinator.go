@@ -1795,13 +1795,13 @@ func (st *buildStatus) runMake(bc *buildlet.Client, goroot string, w io.Writer) 
 	makeSpan.done(nil)
 
 	// Need to run "go install -race std" before the snapshot + tests.
-	if st.conf.IsRace() {
+	if pkgs := st.conf.GoInstallRacePackages(); len(pkgs) > 0 {
 		sp := st.createSpan("install_race_std")
 		remoteErr, err = bc.Exec(path.Join(goroot, "bin/go"), buildlet.ExecOpts{
 			Output:   w,
 			ExtraEnv: append(st.conf.Env(), "GOBIN="),
 			Debug:    true,
-			Args:     []string{"install", "-race", "std"},
+			Args:     append([]string{"install", "-race"}, pkgs...),
 		})
 		if err != nil {
 			sp.done(err)

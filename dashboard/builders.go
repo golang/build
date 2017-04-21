@@ -460,6 +460,12 @@ type BuildConfig struct {
 	// BuildConfig.SplitMakeRun returns true.
 	StopAfterMake bool
 
+	// InstallRacePackages controls which packages to "go install
+	// -race <pkgs>" after running make.bash (or equivalent).  If
+	// the builder ends in "-race", the default if non-nil is just
+	// "std".
+	InstallRacePackages []string
+
 	// numTestHelpers is the number of _additional_ buildlets
 	// past the first one to help out with sharded tests.
 	// For trybots, the numTryHelpers value is used, unless it's
@@ -528,6 +534,16 @@ func (c *HostConfig) BuildletBinaryURL(e *buildenv.Environment) string {
 
 func (c *BuildConfig) IsRace() bool {
 	return strings.HasSuffix(c.Name, "-race")
+}
+
+func (c *BuildConfig) GoInstallRacePackages() []string {
+	if c.InstallRacePackages != nil {
+		return append([]string(nil), c.InstallRacePackages...)
+	}
+	if c.IsRace() {
+		return []string{"std"}
+	}
+	return nil
 }
 
 // AllScript returns the relative path to the operating system's script to
@@ -835,6 +851,13 @@ func init() {
 		CompileOnly: true,
 		Notes:       "SSA internal checks enabled",
 		env:         []string{"GO_GCFLAGS=-d=ssa/check/on,dclstack"},
+	})
+	addBuilder(BuildConfig{
+		Name:                "linux-amd64-racecompile",
+		HostType:            "host-linux-kubestd",
+		CompileOnly:         true,
+		InstallRacePackages: []string{"cmd/compile"},
+		Notes:               "race-enabled cmd/compile",
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-amd64-race",
