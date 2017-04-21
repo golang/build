@@ -1951,6 +1951,7 @@ func (c *Corpus) parseGithubRefs(gerritProj string, commitMsg string) []GitHubIs
 	2017/03/30 21:42:31 matches: [["GoogleCloudPlatform/gcloud-golang#262" "GoogleCloudPlatform" "gcloud-golang" "262"]]
 	2017/03/30 21:42:31 matches: [["GoogleCloudPlatform/google-cloud-go#481" "GoogleCloudPlatform" "google-cloud-go" "481"]]
 	*/
+	c.initGithub()
 	github := c.GitHub()
 	refs := make([]GitHubIssueRef, 0, len(ms))
 	for _, m := range ms {
