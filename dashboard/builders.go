@@ -166,6 +166,24 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		RegularDisk:        true,
 	},
+	"host-windows-amd64-2008": &HostConfig{
+		VMImage:            "windows-amd64-server-2008r2-v1",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
+	},
+	"host-windows-amd64-2012": &HostConfig{
+		VMImage:            "windows-amd64-server-2012r2-v1",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
+	},
+	"host-windows-amd64-2016": &HostConfig{
+		VMImage:            "windows-amd64-server-2016-v1",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
+	},
 	"host-darwin-10_8": &HostConfig{
 		IsReverse: true,
 		ExpectNum: 1,
@@ -916,6 +934,24 @@ func init() {
 		Name:           "plan9-386",
 		HostType:       "host-plan9-386-gce",
 		numTestHelpers: 1,
+	})
+	addBuilder(BuildConfig{
+		Name:      "windows-amd64-2008",
+		HostType:  "host-windows-amd64-2008",
+		env:       []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		MaxAtOnce: 1, // TODO(bradfitz): for now, until proven
+	})
+	addBuilder(BuildConfig{
+		Name:      "windows-amd64-2012",
+		HostType:  "host-windows-amd64-2012",
+		env:       []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		MaxAtOnce: 1, // TODO(bradfitz): for now, until proven
+	})
+	addBuilder(BuildConfig{
+		Name:      "windows-amd64-2016",
+		HostType:  "host-windows-amd64-2016",
+		env:       []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		MaxAtOnce: 1, // TODO(bradfitz): for now, until proven
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-gce",

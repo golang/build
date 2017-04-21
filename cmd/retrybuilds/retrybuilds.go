@@ -118,6 +118,7 @@ var flakePhrases = []string{
 	"lookup gmail.com on 8.8.8.8:53",
 	"lookup www.mit.edu on ",
 	"undefined: runtime.SetMutexProfileFraction", // ppc64 builders had not-quite-go1.8 bootstrap
+	"make.bat: The parameter is incorrect",
 }
 
 func isFlaky(failLog string) bool {

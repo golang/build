@@ -1002,6 +1002,7 @@ func windowsPath(old string, is64Bit bool) string {
 		}
 		newPath = append(newPath, v)
 	}
+	newPath = append(newPath, `C:\godep\gcc\bin`)
 	return strings.Join(newPath, string(filepath.ListSeparator))
 }
 
