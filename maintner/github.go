@@ -1207,19 +1207,46 @@ func (gr *GitHubRepo) sync(ctx context.Context, tokenFile string, loop bool) err
 		ghc:   github.NewClient(hc),
 	}
 	activityCh := gr.github.c.activityChan("github:" + gr.id.String())
+	var unfetchedActivity bool // got webhook update, but haven't seen new data yet
+	var sleepDelay time.Duration
 	for {
+		prevLastUpdate := p.lastUpdate
 		err := p.sync(ctx)
 		if err == context.Canceled || !loop {
 			return err
 		}
+		sawChanges := !p.lastUpdate.Equal(prevLastUpdate)
+		if sawChanges {
+			unfetchedActivity = false
+		}
+		// If we got woken up by a webhook, sometimes
+		// immediately polling Github for the data results in
+		// a cache hit saying nothing's changed. Don't believe
+		// it. Polling quickly with exponential backoff until
+		// we see what we're expecting.
+		if unfetchedActivity {
+			if sleepDelay == 0 {
+				sleepDelay = 1 * time.Second
+			} else {
+				sleepDelay *= 2
+				if sleepDelay > 15*time.Minute {
+					sleepDelay = 15 * time.Minute
+				}
+			}
+			p.logf("unfetched activity; re-polling in %v", sleepDelay)
+		} else {
+			sleepDelay = 15 * time.Minute
+		}
 		p.logf("sync = %v; sleeping", err)
-		timer := time.NewTimer(15 * time.Minute)
+		timer := time.NewTimer(sleepDelay)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			return ctx.Err()
 		case <-activityCh:
 			timer.Stop()
+			unfetchedActivity = true
+			sleepDelay = 0
 		case <-timer.C:
 		}
 	}
@@ -1228,10 +1255,11 @@ func (gr *GitHubRepo) sync(ctx context.Context, tokenFile string, loop bool) err
 // A githubRepoPoller updates the Corpus (gr.c) to have the latest
 // version of the Github repo rp, using the Github client ghc.
 type githubRepoPoller struct {
-	c     *Corpus // shortcut for gr.github.c
-	gr    *GitHubRepo
-	ghc   *github.Client
-	token string
+	c          *Corpus // shortcut for gr.github.c
+	gr         *GitHubRepo
+	ghc        *github.Client
+	token      string
+	lastUpdate time.Time // modified by sync
 }
 
 func (p *githubRepoPoller) Owner() string { return p.gr.id.Owner }
@@ -1285,6 +1313,7 @@ func (p *githubRepoPoller) syncMilestones(ctx context.Context) error {
 		return nil
 	}
 	p.c.addMutation(&maintpb.Mutation{Github: mut})
+	p.lastUpdate = time.Now()
 	return nil
 }
 
@@ -1318,6 +1347,7 @@ func (p *githubRepoPoller) syncLabels(ctx context.Context) error {
 		return nil
 	}
 	p.c.addMutation(&maintpb.Mutation{Github: mut})
+	p.lastUpdate = time.Now()
 	return nil
 }
 
@@ -1466,6 +1496,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context) error {
 			changes++
 			p.logf("changed issue %d: %s", is.GetNumber(), is.GetTitle())
 			c.addMutation(mp)
+			p.lastUpdate = time.Now()
 		}
 
 		if changes == 0 {
@@ -1516,6 +1547,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context) error {
 			}
 			p.logf("modified issue %d: %s", issue.GetNumber(), issue.GetTitle())
 			c.addMutation(mp)
+			p.lastUpdate = time.Now()
 		}
 	}
 
