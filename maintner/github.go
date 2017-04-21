@@ -1585,7 +1585,7 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 			return fmt.Errorf("invalid server Date response: %v", err)
 		}
 		serverDate = serverDate.UTC()
-		p.logf("Number of issue comments since %v: %v (res=%#v)", since, len(ics), res)
+		p.logf("Number of comments on issue %d since %v: %v", issueNum, since, len(ics))
 
 		mut := &maintpb.Mutation{
 			GithubIssue: &maintpb.GithubIssueMutation{
