@@ -62,6 +62,9 @@ func (g *GitHub) Repo(owner, repo string) *GitHubRepo {
 }
 
 func (g *GitHub) getOrCreateRepo(owner, repo string) *GitHubRepo {
+	if g == nil {
+		panic("cannot call methods on nil GitHub")
+	}
 	id := GithubRepoID{owner, repo}
 	if !id.valid() {
 		return nil
@@ -956,6 +959,10 @@ func (r *GitHubRepo) missingIssues() []int32 {
 
 // processGithubMutation updates the corpus with the information in m.
 func (c *Corpus) processGithubMutation(m *maintpb.GithubMutation) {
+	if c == nil {
+		panic("nil corpus")
+	}
+	c.initGithub()
 	gr := c.github.getOrCreateRepo(m.Owner, m.Repo)
 	if gr == nil {
 		log.Printf("bogus Owner/Repo %q/%q in mutation: %v", m.Owner, m.Repo, m)

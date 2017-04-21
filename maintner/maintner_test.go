@@ -112,6 +112,25 @@ func TestProcessMutation_Github_NewIssue(t *testing.T) {
 	})
 }
 
+func TestProcessMutation_Github(t *testing.T) {
+	c := NewCorpus(&dummyMutationLogger{}, "")
+	github := &GitHub{c: c}
+	c.github = github
+	github.repos = map[GithubRepoID]*GitHubRepo{
+		GithubRepoID{"golang", "go"}: &GitHubRepo{
+			github: github,
+			id:     GithubRepoID{"golang", "go"},
+			issues: make(map[int32]*GitHubIssue),
+		},
+	}
+	mutationTest{want: c}.test(t, &maintpb.Mutation{
+		Github: &maintpb.GithubMutation{
+			Owner: "golang",
+			Repo:  "go",
+		},
+	})
+}
+
 func TestNewMutationsFromIssue(t *testing.T) {
 	gh := &github.Issue{
 		Number:    github.Int(5),
