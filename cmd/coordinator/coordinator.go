@@ -2581,7 +2581,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 	names := make([]string, len(tis))
 	for i, ti := range tis {
 		names[i] = ti.name
-		if i > 0 && !strings.HasPrefix(ti.name, "go_test:") {
+		if i > 0 && (!strings.HasPrefix(ti.name, "go_test:") || !strings.HasPrefix(names[0], "go_test:")) {
 			panic("only go_test:* tests may be merged")
 		}
 	}
