@@ -59,7 +59,7 @@ func sync(ctx context.Context) {
 	if err != nil {
 		log.Fatalf("Read: %v", err)
 	}
-	var values *[]bigquery.Value
+	var values []bigquery.Value
 	err = it.Next(&values)
 	if err == iterator.Done {
 		log.Fatalf("No result.")
@@ -67,7 +67,7 @@ func sync(ctx context.Context) {
 	if err != nil {
 		log.Fatalf("Next: %v", err)
 	}
-	t, ok := (*values)[0].(time.Time)
+	t, ok := values[0].(time.Time)
 	if !ok {
 		log.Fatalf("not a time")
 	}
