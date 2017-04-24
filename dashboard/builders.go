@@ -617,7 +617,7 @@ func (c *BuildConfig) BuildSubrepos() bool {
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
 		"openbsd-386-60", "openbsd-amd64-60",
 		"plan9-386",
-		"windows-386-gce", "windows-amd64-gce":
+		"windows-386-gce", "windows-amd64-2008":
 		return true
 	case "darwin-amd64-10_12":
 		// Don't build subrepos on Sierra until
@@ -959,35 +959,26 @@ func init() {
 		numTestHelpers: 1,
 	})
 	addBuilder(BuildConfig{
-		Name:      "windows-amd64-2008",
-		HostType:  "host-windows-amd64-2008",
-		env:       []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
-		MaxAtOnce: 1, // TODO(bradfitz): for now, until proven
-	})
-	addBuilder(BuildConfig{
-		Name:      "windows-amd64-2012",
-		HostType:  "host-windows-amd64-2012",
-		env:       []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
-		MaxAtOnce: 1, // TODO(bradfitz): for now, until proven
-	})
-	addBuilder(BuildConfig{
-		Name:      "windows-amd64-2016",
-		HostType:  "host-windows-amd64-2016",
-		env:       []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
-		MaxAtOnce: 1, // TODO(bradfitz): for now, until proven
-	})
-	addBuilder(BuildConfig{
-		Name:              "windows-amd64-gce",
-		HostType:          "host-windows-gce",
+		Name:              "windows-amd64-2008",
+		HostType:          "host-windows-amd64-2008",
 		env:               []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
 		TryBot:            true,
-		numTestHelpers:    1,
-		numTryTestHelpers: 5,
 		RunBench:          true,
+		numTryTestHelpers: 5,
+	})
+	addBuilder(BuildConfig{
+		Name:     "windows-amd64-2012",
+		HostType: "host-windows-amd64-2012",
+		env:      []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+	})
+	addBuilder(BuildConfig{
+		Name:     "windows-amd64-2016",
+		HostType: "host-windows-amd64-2016",
+		env:      []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-race",
-		HostType: "host-windows-gce",
+		HostType: "host-windows-amd64-2008",
 		Notes:    "Only runs -race tests (./race.bat)",
 		env:      []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
 	})

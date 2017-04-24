@@ -199,7 +199,7 @@ var builds = []*Build{
 		OS:      "windows",
 		Arch:    "amd64",
 		Race:    true,
-		Builder: "windows-amd64-gce",
+		Builder: "windows-amd64-2008",
 	},
 	{
 		OS:      "darwin",

@@ -360,7 +360,7 @@ func stagingClusterBuilders() map[string]dashboard.BuildConfig {
 		"linux-arm-arm5",
 		"linux-amd64",
 		"linux-386-387",
-		"windows-amd64-gce",
+		"windows-amd64-2008",
 		"windows-386-gce",
 	} {
 		if c, ok := dashboard.Builders[name]; ok {
@@ -658,7 +658,7 @@ func findWorkLoop(work chan<- builderRev) {
 			log.Printf("ARM machine(s) registered.")
 			work <- builderRev{name: "linux-arm", rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
 		} else {
-			work <- builderRev{name: "windows-amd64-gce", rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
+			work <- builderRev{name: "windows-amd64-2008", rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
 			work <- builderRev{name: "windows-386-gce", rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
 		}
 

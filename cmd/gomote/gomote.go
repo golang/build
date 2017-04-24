@@ -77,7 +77,7 @@ behalf. All subsequent commands (such as "gomote run" or "gomote ls")
 then proxy your request via the coordinator.  To access a buildlet
 directly (for example, when working on the buildlet code), you can
 skip the "gomote create" step and use the special builder name
-"<build-config-name>@ip[:port>", such as "windows-amd64-gce@10.1.5.3".
+"<build-config-name>@ip[:port>", such as "windows-amd64-2008@10.1.5.3".
 
 */
 package main
