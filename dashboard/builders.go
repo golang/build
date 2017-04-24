@@ -1008,6 +1008,12 @@ func init() {
 		numTryTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
+		Name:      "darwin-386-10_11",
+		HostType:  "host-darwin-10_11",
+		MaxAtOnce: 1,
+		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
+	})
+	addBuilder(BuildConfig{
 		Name:     "darwin-amd64-10_12",
 		HostType: "host-darwin-10_12",
 	})
