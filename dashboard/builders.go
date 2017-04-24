@@ -856,6 +856,8 @@ func init() {
 		Name:                "linux-amd64-racecompile",
 		HostType:            "host-linux-kubestd",
 		CompileOnly:         true,
+		SkipSnapshot:        true,
+		StopAfterMake:       true,
 		InstallRacePackages: []string{"cmd/compile"},
 		Notes:               "race-enabled cmd/compile",
 	})

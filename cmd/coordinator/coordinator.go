@@ -1443,6 +1443,9 @@ func (st *buildStatus) onceInitHelpersFunc() {
 // make.bash if it exists (anything can SplitMakeRun) and that the
 // snapshot exists.
 func (st *buildStatus) useSnapshot() bool {
+	if st.conf.SkipSnapshot {
+		return false
+	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if st.useSnapshotMemo != nil {
@@ -1816,6 +1819,36 @@ func (st *buildStatus) runMake(bc *buildlet.Client, goroot string, w io.Writer) 
 		sp.done(nil)
 	}
 
+	if st.name == "linux-amd64-racecompile" {
+		return st.runConcurrentGoBuildStdCmd(bc)
+	}
+
+	return nil, nil
+}
+
+// runConcurrentGoBuildStdCmd is a step specific only to the
+// "linux-amd64-racecompile" builder to exercise the Go 1.9's new
+// concurrent compilation. It re-builds the standard library and tools
+// with -gcflags=-c=128 using a race-enabled cmd/compile (built by
+// caller, runMake, per builder config).
+// The idea is that this might find data races in cmd/compile.
+func (st *buildStatus) runConcurrentGoBuildStdCmd(bc *buildlet.Client) (remoteErr, err error) {
+	span := st.createSpan("go_build_c128_std_cmd")
+	remoteErr, err = bc.Exec("go/bin/go", buildlet.ExecOpts{
+		Output:   st,
+		ExtraEnv: append(st.conf.Env(), "GOBIN="),
+		Debug:    true,
+		Args:     []string{"build", "-a", "-gcflags=-c=128", "std", "cmd"},
+	})
+	if err != nil {
+		span.done(err)
+		return nil, err
+	}
+	if remoteErr != nil {
+		span.done(remoteErr)
+		return fmt.Errorf("go build failed: %v", remoteErr), nil
+	}
+	span.done(nil)
 	return nil, nil
 }
 
