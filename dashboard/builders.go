@@ -84,6 +84,7 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:      3,
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		ReverseAliases: []string{"linux-arm-arm5spacemonkey"},
+		OwnerGithub:    "zeebo",
 	},
 	"host-openbsd-amd64-60": &HostConfig{
 		VMImage:            "openbsd-amd64-60",
@@ -905,16 +906,6 @@ func init() {
 		Notes:         "runs make.bash on real ARM hardware, but does not run tests",
 		HostType:      "host-linux-arm",
 		StopAfterMake: true,
-	})
-	addBuilder(BuildConfig{
-		Name:     "linux-arm-arm5",
-		HostType: "host-linux-arm",
-		Notes:    "GOARM=5, but running on newer-than GOARM=5 hardware",
-		FlakyNet: true,
-		env: []string{
-			"GOARM=5",
-			"GO_TEST_TIMEOUT_SCALE=5", // slow.
-		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-arm-arm5spacemonkey",
