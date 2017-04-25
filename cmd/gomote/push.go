@@ -25,6 +25,8 @@ import (
 
 func push(args []string) error {
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
+	var dryRun bool
+	fs.BoolVar(&dryRun, "dry-run", false, "print what would be done only")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "create usage: gomote push <instance>")
 		fs.PrintDefaults()
@@ -87,8 +89,12 @@ func push(args []string) error {
 	if !haveGo14 {
 		if u := conf.GoBootstrapURL(buildEnv); u != "" {
 			log.Printf("installing go1.4")
-			if err := bc.PutTarFromURL(u, "go1.4"); err != nil {
-				return err
+			if dryRun {
+				log.Printf("(Dry-run) Would have pushed go1.4")
+			} else {
+				if err := bc.PutTarFromURL(u, "go1.4"); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -153,14 +159,23 @@ func push(args []string) error {
 			withGo[i] = "go/" + v
 		}
 		sort.Strings(withGo)
-		log.Printf("Deleting remote files: %q", withGo)
-		if err := bc.RemoveAll(withGo...); err != nil {
-			return fmt.Errorf("Deleting remote unwanted files: %v", err)
+		if dryRun {
+			log.Printf("(Dry-run) Would have deleted remote files: %q", withGo)
+		} else {
+			log.Printf("Deleting remote files: %q", withGo)
+			if err := bc.RemoveAll(withGo...); err != nil {
+				return fmt.Errorf("Deleting remote unwanted files: %v", err)
+			}
 		}
 	}
 
 	var toSend []string
 	for rel, inf := range local {
+		switch rel {
+		case "VERSION.cache", "src/runtime/internal/sys/zversion.go", "src/cmd/internal/objabi/zbootstrap.go",
+			"src/go/build/zcgo.go":
+			continue
+		}
 		if !inf.fi.Mode().IsRegular() {
 			// TODO(bradfitz): this is only doing regular files
 			// for now, so empty directories, symlinks, etc aren't
@@ -192,6 +207,10 @@ func push(args []string) error {
 			return err
 		}
 		log.Printf("Uploading %d new/changed files; %d byte .tar.gz", len(toSend), tgz.Len())
+		if dryRun {
+			log.Printf("(Dry-run mode; not doing anything.")
+			return nil
+		}
 		if err := bc.PutTar(tgz, "go"); err != nil {
 			return fmt.Errorf("writing tarball to buildlet: %v", err)
 		}
