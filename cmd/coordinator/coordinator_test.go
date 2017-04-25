@@ -14,7 +14,7 @@ func TestPartitionGoTests(t *testing.T) {
 	for name := range fixedTestDuration {
 		in = append(in, name)
 	}
-	sets := partitionGoTests(in)
+	sets := partitionGoTests("", in)
 	for i, set := range sets {
 		t.Logf("set %d = \"-run=^(%s)$\"", i, strings.Join(set, "|"))
 	}
