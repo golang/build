@@ -1467,8 +1467,15 @@ func (st *buildStatus) getCrossCompileConfig() *crossCompileConfig {
 	if kubeErr != nil {
 		return nil
 	}
+	config := crossCompileConfigs[st.name]
+	if config == nil {
+		return nil
+	}
+	if config.AlwaysCrossCompile {
+		return config
+	}
 	if inStaging || st.isTry() {
-		return crossCompileConfigs[st.name]
+		return config
 	}
 	return nil
 }
@@ -1693,21 +1700,24 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 }
 
 type crossCompileConfig struct {
-	Buildlet    string
-	CCForTarget string
-	GOARM       string
+	Buildlet           string
+	CCForTarget        string
+	GOARM              string
+	AlwaysCrossCompile bool
 }
 
 var crossCompileConfigs = map[string]*crossCompileConfig{
 	"linux-arm": {
-		Buildlet:    "host-linux-armhf-cross",
-		CCForTarget: "arm-linux-gnueabihf-gcc",
-		GOARM:       "7",
+		Buildlet:           "host-linux-armhf-cross",
+		CCForTarget:        "arm-linux-gnueabihf-gcc",
+		GOARM:              "7",
+		AlwaysCrossCompile: false,
 	},
 	"linux-arm-arm5spacemonkey": {
-		Buildlet:    "host-linux-armel-cross",
-		CCForTarget: "arm-linux-gnueabi-gcc",
-		GOARM:       "5",
+		Buildlet:           "host-linux-armel-cross",
+		CCForTarget:        "arm-linux-gnueabi-gcc",
+		GOARM:              "5",
+		AlwaysCrossCompile: true,
 	},
 }
 
