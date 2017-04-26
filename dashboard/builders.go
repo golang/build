@@ -795,6 +795,9 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-alpine",
 		HostType: "host-linux-x86-alpine",
+		env: []string{
+			"GO_EXTLINK_ENABLED=1", // Issue 18243 (internal linking broken)
+		},
 	})
 	// Add the -vetall builder. The builder name suffix "-vetall" is recognized by cmd/dist/test.go
 	// to only run the "go vet std cmd" test and no others.
