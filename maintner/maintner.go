@@ -149,11 +149,29 @@ func (c *Corpus) AddGoGitRepo(goRepo, dir string) {
 // A MutationSource yields a log of mutations that will catch a corpus
 // back up to the present.
 type MutationSource interface {
-	// GetMutations returns a channel of mutations.
-	// The channel should be closed at the end.
+	// GetMutations returns a channel of mutations or related events.
+	// The channel will never be closed.
 	// All sends on the returned channel should select
 	// on the provided context.
-	GetMutations(context.Context) <-chan *maintpb.Mutation
+	GetMutations(context.Context) <-chan MutationStreamEvent
+}
+
+// MutationStreamEvent represents one of three possible events while
+// reading mutations from disk. An event is either a mutation, an
+// error, or reaching the current end of the log. Only one of the
+// fields will be non-zero.
+type MutationStreamEvent struct {
+	Mutation *maintpb.Mutation
+
+	// Err is a fatal error reading the log. No other events will
+	// follow an Err.
+	Err error
+
+	// End, if true, means that all mutations have been sent and
+	// the next event might take some time to arrive (it might not
+	// have occurred yet). The End event is not a terminal state
+	// like Err. There may be multiple Ends.
+	End bool
 }
 
 // Initialize populates the Corpus using the data from the
@@ -171,13 +189,17 @@ func (c *Corpus) Initialize(ctx context.Context, src MutationSource) error {
 			err := ctx.Err()
 			log.Printf("Context expired while loading data from log %T: %v", src, err)
 			return err
-		case m, ok := <-ch:
-			if !ok {
-				log.Printf("Reloaded data from log %T.", src)
+		case e := <-ch:
+			if e.Err != nil {
+				log.Printf("Corpus.Initialize: %v", e.Err)
+				return e.Err
+			}
+			if e.End {
 				c.didInit = true
+				log.Printf("Reloaded data from log %T.", src)
 				return nil
 			}
-			c.processMutationLocked(m)
+			c.processMutationLocked(e.Mutation)
 		}
 	}
 }
@@ -239,28 +261,56 @@ func (c *Corpus) Sync(ctx context.Context) error {
 func (c *Corpus) sync(ctx context.Context, loop bool) error {
 	group, ctx := errgroup.WithContext(ctx)
 	for _, w := range c.watchedGithubRepos {
-		gr, tokenFile := w.gr, w.tokenFile
+		gr, token := w.gr, w.token
 		group.Go(func() error {
 			log.Printf("Polling %v ...", gr.id)
-			err := gr.sync(ctx, tokenFile, loop)
-			log.Printf("Polling %v: %v", gr.id, err)
-			return err
+			for {
+				err := gr.sync(ctx, token, loop)
+				if loop && isTempErr(err) {
+					log.Printf("Temporary error from github %v: %v", gr.ID(), err)
+					time.Sleep(30 * time.Second)
+					continue
+				}
+				log.Printf("github sync ending for %v: %v", gr.ID(), err)
+				return err
+			}
 		})
 	}
 	for _, rp := range c.pollGitDirs {
 		rp := rp
 		group.Go(func() error {
-			return c.syncGitCommits(ctx, rp, loop)
+			for {
+				err := c.syncGitCommits(ctx, rp, loop)
+				if loop && isTempErr(err) {
+					log.Printf("Temporary error from git repo %v: %v", rp.dir, err)
+					time.Sleep(30 * time.Second)
+					continue
+				}
+				log.Printf("git sync ending for %v: %v", rp.dir, err)
+				return err
+			}
 		})
 	}
 	for _, w := range c.watchedGerritRepos {
 		gp := w.project
 		group.Go(func() error {
 			log.Printf("Polling gerrit %v ...", gp.proj)
-			err := gp.sync(ctx, loop)
-			log.Printf("Polling gerrit %v: %v", gp.proj, err)
-			return err
+			for {
+				err := gp.sync(ctx, loop)
+				if loop && isTempErr(err) {
+					log.Printf("Temporary error from gerrit %v: %v", gp.proj, err)
+					time.Sleep(30 * time.Second)
+					continue
+				}
+				log.Printf("gerrit sync ending for %v: %v", gp.proj, err)
+				return err
+			}
 		})
 	}
 	return group.Wait()
+}
+
+func isTempErr(err error) bool {
+	log.Printf("IS TEMP ERROR? %T %v", err, err)
+	return true
 }

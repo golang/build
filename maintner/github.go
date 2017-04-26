@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -536,7 +535,7 @@ func (c *Corpus) initGithub() {
 	}
 }
 
-func (c *Corpus) AddGithub(owner, repo, tokenFile string) {
+func (c *Corpus) AddGithub(owner, repo, token string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.initGithub()
@@ -545,14 +544,14 @@ func (c *Corpus) AddGithub(owner, repo, tokenFile string) {
 		log.Fatalf("invalid github owner/repo %q/%q", owner, repo)
 	}
 	c.watchedGithubRepos = append(c.watchedGithubRepos, watchedGithubRepo{
-		gr:        gr,
-		tokenFile: tokenFile,
+		gr:    gr,
+		token: token,
 	})
 }
 
 type watchedGithubRepo struct {
-	gr        *GitHubRepo
-	tokenFile string
+	gr    *GitHubRepo
+	token string
 }
 
 // g.c.mu must be held
@@ -1181,16 +1180,7 @@ func (c *githubCache) Set(urlKey string, res []byte) {
 // sync checks for new changes on a single Github repository and
 // updates the Corpus with any changes. If loop is true, it runs
 // forever.
-func (gr *GitHubRepo) sync(ctx context.Context, tokenFile string, loop bool) error {
-	slurp, err := ioutil.ReadFile(tokenFile)
-	if err != nil {
-		return err
-	}
-	f := strings.SplitN(strings.TrimSpace(string(slurp)), ":", 2)
-	if len(f) != 2 || f[0] == "" || f[1] == "" {
-		return fmt.Errorf("Expected token file %s to be of form <username>:<token>", tokenFile)
-	}
-	token := f[1]
+func (gr *GitHubRepo) sync(ctx context.Context, token string, loop bool) error {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	hc := oauth2.NewClient(ctx, ts)
 	if tr, ok := hc.Transport.(*http.Transport); ok {

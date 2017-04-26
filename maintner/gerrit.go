@@ -440,6 +440,9 @@ func (gp *GerritProject) sync(ctx context.Context, loop bool) error {
 	activityCh := gp.gerrit.c.activityChan("gerrit:" + gp.proj)
 	for {
 		if err := gp.syncOnce(ctx); err != nil {
+			if ee, ok := err.(*exec.ExitError); ok {
+				err = fmt.Errorf("%v; stderr=%q", err, ee.Stderr)
+			}
 			gp.logf("sync: %v", err)
 			return err
 		}
@@ -609,6 +612,13 @@ func (gp *GerritProject) fetchHashes(ctx context.Context, hashes []GitHash) erro
 	return nil
 }
 
+func formatExecError(err error) string {
+	if ee, ok := err.(*exec.ExitError); ok {
+		return fmt.Sprintf("%v; stderr=%q", err, ee.Stderr)
+	}
+	return fmt.Sprint(err)
+}
+
 func (gp *GerritProject) init(ctx context.Context) error {
 	if err := os.MkdirAll(gp.gitDir, 0755); err != nil {
 		return err
@@ -616,13 +626,15 @@ func (gp *GerritProject) init(ctx context.Context) error {
 	// try to short circuit a git init error, since the init error matching is
 	// brittle
 	if _, err := exec.LookPath("git"); err != nil {
-		return err
+		return fmt.Errorf("looking for git binary: %v", err)
 	}
 
 	if _, err := os.Stat(filepath.Join(gp.gitDir, ".git", "config")); err == nil {
-		remoteBytes, err := exec.CommandContext(ctx, "git", "remote", "-v").Output()
+		cmd := exec.CommandContext(ctx, "git", "remote", "-v")
+		cmd.Dir = gp.gitDir
+		remoteBytes, err := cmd.Output()
 		if err != nil {
-			return err
+			return fmt.Errorf("running git remote -v in %v: %v", gp.gitDir, formatExecError(err))
 		}
 		if !strings.Contains(string(remoteBytes), "origin") && !strings.Contains(string(remoteBytes), "https://"+gp.proj) {
 			return fmt.Errorf("didn't find origin & gp.url in remote output %s", string(remoteBytes))

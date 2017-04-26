@@ -9,32 +9,45 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"flag"
+	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
+	"cloud.google.com/go/compute/metadata"
+	"cloud.google.com/go/storage"
+	"golang.org/x/build/autocertcache"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
+	"golang.org/x/crypto/acme/autocert"
 )
 
 var (
-	listen      = flag.String("listen", "localhost:6343", "listen address")
-	syncQuit    = flag.Bool("sync-and-quit", false, "sync once and quit; don't run a server")
-	initQuit    = flag.Bool("init-and-quit", false, "load the mutation log and quit; don't run a server")
-	verbose     = flag.Bool("verbose", false, "enable verbose debug output")
-	watchGithub = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
+	listen         = flag.String("listen", "localhost:6343", "listen address")
+	autocertDomain = flag.String("autocert", "", "if non-empty, listen on port 443 and serve a LetsEncrypt TLS cert on this domain")
+	autocertBucket = flag.String("autocert-bucket", "", "if non-empty, Google Cloud Storage bucket to store LetsEncrypt cache in")
+	syncQuit       = flag.Bool("sync-and-quit", false, "sync once and quit; don't run a server")
+	initQuit       = flag.Bool("init-and-quit", false, "load the mutation log and quit; don't run a server")
+	verbose        = flag.Bool("verbose", false, "enable verbose debug output")
+	watchGithub    = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
 	// TODO: specify gerrit auth via gitcookies or similar
 	watchGerrit = flag.String("watch-gerrit", "", `Comma-separated list of Gerrit projects to watch, each of form "hostname/project" (e.g. "go.googlesource.com/go")`)
 	pubsub      = flag.String("pubsub", "", "If non-empty, the golang.org/x/build/cmd/pubsubhelper URL scheme and hostname, without path")
 	config      = flag.String("config", "", "If non-empty, the name of a pre-defined config. Currently only 'go' is recognized.")
 	dataDir     = flag.String("data-dir", "", "Local directory to write protobuf files to (default $HOME/var/maintnerd)")
 	debug       = flag.Bool("debug", false, "Print debug logging information")
+
+	bucket         = flag.String("bucket", "", "if non-empty, Google Cloud Storage bucket to use for log storage")
+	migrateGCSFlag = flag.Bool("migrate-disk-to-gcs", false, "[dev] If true, migrate from disk-based logs to GCS logs on start-up, then quit.")
 )
 
 func init() {
@@ -56,13 +69,43 @@ func main() {
 	flag.Parse()
 	if *dataDir == "" {
 		*dataDir = filepath.Join(os.Getenv("HOME"), "var", "maintnerd")
-		if err := os.MkdirAll(*dataDir, 0755); err != nil {
-			log.Fatal(err)
+		if *bucket == "" {
+			if err := os.MkdirAll(*dataDir, 0755); err != nil {
+				log.Fatal(err)
+			}
+			log.Printf("Storing data in implicit directory %s", *dataDir)
 		}
-		log.Printf("Storing data in implicit directory %s", *dataDir)
 	}
-	// TODO switch based on flags, for now only local file sync works
-	logger := maintner.NewDiskMutationLogger(*dataDir)
+	if *migrateGCSFlag && *bucket == "" {
+		log.Fatalf("--bucket flag required with --migrate-disk-to-gcs")
+	}
+
+	type storage interface {
+		maintner.MutationSource
+		maintner.MutationLogger
+	}
+	var logger storage
+	if *bucket != "" {
+		ctx := context.Background()
+		gl, err := newGCSLog(ctx, *bucket)
+		if err != nil {
+			log.Fatalf("newGCSLog: %v", err)
+		}
+		http.HandleFunc("/logs", gl.serveJSONLogsIndex)
+		http.HandleFunc("/logs/", gl.serveLogFile)
+		if *migrateGCSFlag {
+			diskLog := maintner.NewDiskMutationLogger(*dataDir)
+			if err := gl.copyFrom(diskLog); err != nil {
+				log.Fatalf("migrate: %v", err)
+			}
+			log.Printf("Success.")
+			return
+		}
+		logger = gl
+	} else {
+		logger = maintner.NewDiskMutationLogger(*dataDir)
+	}
+
 	corpus := maintner.NewCorpus(logger, *dataDir)
 	if *debug {
 		corpus.SetDebug()
@@ -82,7 +125,11 @@ func main() {
 			if len(splits) != 2 || splits[1] == "" {
 				log.Fatalf("Invalid github repo: %s. Should be 'owner/repo,owner2/repo2'", pair)
 			}
-			corpus.AddGithub(splits[0], splits[1], path.Join(os.Getenv("HOME"), ".github-issue-token"))
+			token, err := getGithubToken()
+			if err != nil {
+				log.Fatalf("getting github token: %v", err)
+			}
+			corpus.AddGithub(splits[0], splits[1], token)
 		}
 	}
 	if *watchGerrit != "" {
@@ -99,7 +146,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		ln.Close() // TODO: use
+		log.Printf("Listening on %v", ln.Addr())
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -132,7 +179,25 @@ func main() {
 	if *pubsub != "" {
 		corpus.StartPubSubHelperSubscribe(*pubsub)
 	}
-	log.Fatalf("Corpus.SyncLoop = %v", corpus.SyncLoop(ctx))
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		io.WriteString(w, "<html><body>This is <a href='https://godoc.org/golang.org/x/build/maintner/maintnerd'>maintnerd</a>, the <a href='https://godoc.org/golang.org/x/build/maintner'>maintner</a> server.</body>")
+	})
+
+	errc := make(chan error)
+	go func() { errc <- fmt.Errorf("Corpus.SyncLoop = %v", corpus.SyncLoop(ctx)) }()
+	if ln != nil {
+		go func() { errc <- fmt.Errorf("http.Serve = %v", http.Serve(ln, nil)) }()
+	}
+	if *autocertDomain != "" {
+		go func() { errc <- serveTLS() }()
+	}
+
+	log.Fatal(<-errc)
 }
 
 func setGoConfig() {
@@ -157,4 +222,68 @@ func setGoConfig() {
 		buf.WriteString(pi.ID)
 	}
 	*watchGerrit = buf.String()
+}
+
+func getGithubToken() (string, error) {
+	if metadata.OnGCE() {
+		token, err := metadata.ProjectAttributeValue("maintner-github-token")
+		if err == nil {
+			return token, nil
+		}
+		log.Printf("getting GCE metadata 'maintner-github-token': %v", err)
+		log.Printf("falling back to github token from file.")
+	}
+
+	tokenFile := filepath.Join(os.Getenv("HOME"), ".github-issue-token")
+	slurp, err := ioutil.ReadFile(tokenFile)
+	if err != nil {
+		return "", err
+	}
+	f := strings.SplitN(strings.TrimSpace(string(slurp)), ":", 2)
+	if len(f) != 2 || f[0] == "" || f[1] == "" {
+		return "", fmt.Errorf("Expected token file %s to be of form <username>:<token>", tokenFile)
+	}
+	token := f[1]
+	return token, nil
+}
+
+func serveTLS() error {
+	if *autocertBucket == "" {
+		return fmt.Errorf("using --autocert requires --autocert-bucket.")
+	}
+	ln, err := net.Listen("tcp", ":443")
+	if err != nil {
+		return err
+	}
+	sc, err := storage.NewClient(context.Background())
+	if err != nil {
+		return fmt.Errorf("storage.NewClient: %v", err)
+	}
+	m := autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist(*autocertDomain),
+		Cache:      autocertcache.NewGoogleCloudStorageCache(sc, *autocertBucket),
+	}
+	config := &tls.Config{
+		GetCertificate: m.GetCertificate,
+	}
+	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)
+	server := &http.Server{
+		Addr: ln.Addr().String(),
+	}
+	return server.Serve(tlsLn)
+}
+
+type tcpKeepAliveListener struct {
+	*net.TCPListener
+}
+
+func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
+	tc, err := ln.AcceptTCP()
+	if err != nil {
+		return
+	}
+	tc.SetKeepAlive(true)
+	tc.SetKeepAlivePeriod(3 * time.Minute)
+	return tc, nil
 }

@@ -81,10 +81,9 @@ func (d *DiskMutationLogger) ForeachFile(fn func(fullPath string, fi os.FileInfo
 	})
 }
 
-func (d *DiskMutationLogger) GetMutations(ctx context.Context) <-chan *maintpb.Mutation {
-	ch := make(chan *maintpb.Mutation, 50) // buffered: overlap gunzip/unmarshal with loading
+func (d *DiskMutationLogger) GetMutations(ctx context.Context) <-chan MutationStreamEvent {
+	ch := make(chan MutationStreamEvent, 50) // buffered: overlap gunzip/unmarshal with loading
 	go func() {
-		defer close(ch)
 		err := d.ForeachFile(func(fullPath string, fi os.FileInfo) error {
 			return reclog.ForeachFileRecord(fullPath, func(off int64, hdr, rec []byte) error {
 				m := new(maintpb.Mutation)
@@ -92,15 +91,20 @@ func (d *DiskMutationLogger) GetMutations(ctx context.Context) <-chan *maintpb.M
 					return err
 				}
 				select {
-				case ch <- m:
+				case ch <- MutationStreamEvent{Mutation: m}:
 					return nil
 				case <-ctx.Done():
 					return ctx.Err()
 				}
 			})
 		})
-		if err != nil {
-			panic(err)
+		final := MutationStreamEvent{Err: err}
+		if err == nil {
+			final.End = true
+		}
+		select {
+		case ch <- final:
+		case <-ctx.Done():
 		}
 	}()
 	return ch
