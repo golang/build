@@ -816,9 +816,6 @@ func (m *GitDiffTreeFile) GetBinary() bool {
 	return false
 }
 
-// GerritMutation represents an individual Gerrit CL. The URL and Number must
-// always be present, to identify the CL. The other fields may or may not be
-// present.
 type GerritMutation struct {
 	// Project is the Gerrit server and project, without scheme (https implied) or
 	// trailing slash.

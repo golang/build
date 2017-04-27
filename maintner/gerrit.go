@@ -13,6 +13,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -233,6 +234,30 @@ type GerritCL struct {
 
 	// GitHubIssueRefs are parsed references to GitHub issues.
 	GitHubIssueRefs []GitHubIssueRef
+
+	// Messages contains all of the messages for this CL, in sorted order.
+	Messages []*GerritMessage
+}
+
+// GerritMessage is a Gerrit reply that is attached to the CL as a whole, and
+// not to a file or line of a patch set.
+//
+// Maintner does very little parsing or formatting of a Message body. Messages
+// are stored the same way they are stored in the API.
+type GerritMessage struct {
+	// Version is the patch set version this message was sent on.
+	Version int32
+
+	// Message is the raw message contents from Gerrit (a subset
+	// of the raw git commit message), starting with "Patch Set
+	// nnnn".
+	Message string
+
+	// Date is when this message was stored (the commit time of
+	// the git commit).
+	Date time.Time
+
+	// TODO author id etc.
 }
 
 // References reports whether cl includes a commit message reference
@@ -297,7 +322,6 @@ func (c *Corpus) TrackGerrit(gerritProj string) {
 	if c.mutationLogger == nil {
 		panic("can't TrackGerrit in non-leader mode")
 	}
-
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -340,9 +364,8 @@ var statusIndicator = "\nStatus: "
 //     git push origin HEAD:refs/drafts/master
 var statuses = []string{"merged", "abandoned", "draft", "new"}
 
-// getGerritStatus takes a current and previous commit, and returns a Gerrit
-// status, or the empty string to indicate the status did not change between the
-// two commits.
+// getGerritStatus returns a Gerrit status for a commit, or the empty string to
+// indicate the commit did not show a status.
 //
 // getGerritStatus relies on the Gerrit code review convention of amending
 // the meta commit to include the current status of the CL. The Gerrit search
@@ -351,33 +374,90 @@ var statuses = []string{"merged", "abandoned", "draft", "new"}
 // returns only "NEW", "DRAFT", "ABANDONED", "MERGED". Gerrit attaches "draft",
 // "abandoned", "new", and "merged" statuses to some meta commits; you may have
 // to search the current meta commit's parents to find the last good commit.
+func getGerritStatus(commit *GitCommit) string {
+	idx := strings.Index(commit.Msg, statusIndicator)
+	if idx == -1 {
+		return ""
+	}
+	off := idx + len(statusIndicator)
+	for _, status := range statuses {
+		if strings.HasPrefix(commit.Msg[off:], status) {
+			return status
+		}
+	}
+	return ""
+}
+
+var errStopIteration = errors.New("stop iteration")
+var errTooManyParents = errors.New("maintner: too many commit parents")
+
+// foreachCommitParent walks a commit's parents, calling f for each commit until
+// an error is returned from f or a commit has no parent.
+//
+// foreachCommitParent returns errTooManyParents (and stops processing) if a commit
+// has more than one parent.
 //
 // Corpus.mu must be held.
-func (gp *GerritProject) getGerritStatus(currentMeta, oldMeta *GitCommit) string {
-	commit := currentMeta
+func (gp *GerritProject) foreachCommitParent(hash GitHash, f func(*GitCommit) error) error {
 	c := gp.gerrit.c
+	commit := c.gitCommit[hash]
 	for {
-		idx := strings.Index(commit.Msg, statusIndicator)
-		if idx > -1 {
-			off := idx + len(statusIndicator)
-			for _, status := range statuses {
-				if strings.HasPrefix(commit.Msg[off:], status) {
-					return status
-				}
-			}
+		if commit == nil {
+			return nil
 		}
-		if len(commit.Parents) == 0 {
-			return "new"
+		if err := f(commit); err != nil {
+			return err
+		}
+		if commit.Parents == nil || len(commit.Parents) == 0 {
+			return nil
+		}
+		if len(commit.Parents) > 1 {
+			return errTooManyParents
 		}
 		parentHash := commit.Parents[0].Hash // meta tree has no merge commits
 		commit = c.gitCommit[parentHash]
-		if commit == nil {
-			gp.logf("getGerritStatus: did not find parent commit %s", parentHash)
-			return "new"
+	}
+}
+
+// getGerritMessage parses a Gerrit comment from the given commit or returns nil
+// if there wasn't one.
+//
+// Corpus.mu must be held.
+func (gp *GerritProject) getGerritMessage(commit *GitCommit) *GerritMessage {
+	start := strings.Index(commit.Msg, "\nPatch Set ")
+	if start == -1 {
+		return nil
+	}
+	numStart := start + len("\nPatch Set ")
+	colon := strings.IndexByte(commit.Msg[numStart:], ':')
+	if colon == -1 {
+		return nil
+	}
+	version, err := strconv.ParseInt(commit.Msg[numStart:numStart+colon], 10, 32)
+	if err != nil {
+		gp.logf("unexpected patch set number in %s; err: %v", commit.Hash, err)
+		return nil
+	}
+	start++
+	v := commit.Msg[start:]
+	l := 0
+	for {
+		i := strings.IndexByte(v, '\n')
+		if i < 0 {
+			return nil
 		}
-		if oldMeta != nil && commit.Hash == oldMeta.Hash {
-			return ""
+		if strings.HasPrefix(v[:i], "Patch-set:") {
+			// two newlines before the Patch-set message
+			v = commit.Msg[start : start+l-2]
+			break
 		}
+		v = v[i+1:]
+		l = l + i + 1
+	}
+	return &GerritMessage{
+		Date:    commit.CommitTime,
+		Message: v,
+		Version: int32(version),
 	}
 }
 
@@ -420,12 +500,35 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 		if clv.Version == 0 {
 			oldMeta := cl.Meta
 			cl.Meta = gc
-			if status := gp.getGerritStatus(cl.Meta, oldMeta); status != "" {
-				cl.Status = status
+			foundStatus := ""
+			var messages []*GerritMessage
+			gp.foreachCommitParent(cl.Meta.Hash, func(gc *GitCommit) error {
+				if status := getGerritStatus(gc); status != "" && foundStatus == "" {
+					foundStatus = status
+				}
+				if message := gp.getGerritMessage(gc); message != nil {
+					// Walk from the newest commit backwards, so we need to
+					// insert all messages at the beginning of the array.
+					// TODO: store these in reverse order instead and avoid
+					// the quadratic inserting at the beginning.
+					messages = append(messages, nil)
+					copy(messages[1:], messages[:])
+					messages[0] = message
+				}
+				if oldMeta != nil && gc.Hash == oldMeta.Hash {
+					return errStopIteration
+				}
+				return nil
+			})
+			if foundStatus != "" {
+				cl.Status = foundStatus
+			} else if cl.Status == "" {
+				cl.Status = "new"
 			}
 			if cl.Created.IsZero() || gc.CommitTime.Before(cl.Created) {
 				cl.Created = gc.CommitTime
 			}
+			cl.Messages = append(cl.Messages, messages...)
 		} else {
 			cl.Commit = gc
 			cl.Version = clv.Version
