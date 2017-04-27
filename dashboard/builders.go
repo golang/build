@@ -955,7 +955,7 @@ func init() {
 		Name:              "windows-amd64-2008",
 		HostType:          "host-windows-amd64-2008",
 		env:               []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
-		TryBot:            true,
+		TryBot:            false, // Disabled until new Windows builders reliably come up quickly
 		RunBench:          true,
 		numTryTestHelpers: 5,
 	})
@@ -981,6 +981,15 @@ func init() {
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		TryBot:            true,
 		numTestHelpers:    1,
+		numTryTestHelpers: 5,
+	})
+	// Temporary trybot until windows-amd64-20xx are fixed to boot reliably & quickly.
+	addBuilder(BuildConfig{
+		Name:              "windows-amd64-gce",
+		HostType:          "host-windows-gce",
+		env:               []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		TryBot:            true,
+		TryOnly:           true,
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
