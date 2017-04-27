@@ -168,19 +168,19 @@ var Hosts = map[string]*HostConfig{
 		RegularDisk:        true,
 	},
 	"host-windows-amd64-2008": &HostConfig{
-		VMImage:            "windows-amd64-server-2008r2-v1",
+		VMImage:            "windows-amd64-server-2008r2-v2",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 	},
 	"host-windows-amd64-2012": &HostConfig{
-		VMImage:            "windows-amd64-server-2012r2-v1",
+		VMImage:            "windows-amd64-server-2012r2-v2",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 	},
 	"host-windows-amd64-2016": &HostConfig{
-		VMImage:            "windows-amd64-server-2016-v1",
+		VMImage:            "windows-amd64-server-2016-v2",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
@@ -618,7 +618,7 @@ func (c *BuildConfig) BuildSubrepos() bool {
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
 		"openbsd-386-60", "openbsd-amd64-60",
 		"plan9-386",
-		"windows-386-gce", "windows-amd64-2008":
+		"windows-386-gce", "windows-amd64-2008", "windows-386-2008":
 		return true
 	case "darwin-amd64-10_12":
 		// Don't build subrepos on Sierra until
@@ -955,6 +955,14 @@ func init() {
 		Name:              "windows-amd64-2008",
 		HostType:          "host-windows-amd64-2008",
 		env:               []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		TryBot:            false, // Disabled until new Windows builders reliably come up quickly
+		RunBench:          true,
+		numTryTestHelpers: 5,
+	})
+	addBuilder(BuildConfig{
+		Name:              "windows-386-2008",
+		HostType:          "host-windows-amd64-2008",
+		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		TryBot:            false, // Disabled until new Windows builders reliably come up quickly
 		RunBench:          true,
 		numTryTestHelpers: 5,

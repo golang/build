@@ -990,6 +990,8 @@ func hasPrefixFold(s, prefix string) bool {
 func windowsPath(old string, is64Bit bool) string {
 	vv := filepath.SplitList(old)
 	newPath := make([]string, 0, len(vv))
+
+	// for windows-buildlet-v2 images
 	for _, v := range vv {
 		// The base VM image has both the 32-bit and 64-bit gcc installed.
 		// They're both in the environment, so scrub the one
@@ -1002,7 +1004,14 @@ func windowsPath(old string, is64Bit bool) string {
 		}
 		newPath = append(newPath, v)
 	}
-	newPath = append(newPath, `C:\godep\gcc\bin`)
+
+	// for windows-amd64-* images
+	if is64Bit {
+		newPath = append(newPath, `C:\godep\gcc64\bin`)
+	} else {
+		newPath = append(newPath, `C:\godep\gcc32\bin`)
+	}
+
 	return strings.Join(newPath, string(filepath.ListSeparator))
 }
 
