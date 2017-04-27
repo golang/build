@@ -249,7 +249,6 @@ var preBuildCleanFiles = []string{
 var postBuildCleanFiles = []string{
 	"VERSION.cache",
 	"pkg/bootstrap",
-	"src/cmd/api",
 }
 
 func (b *Build) buildlet() (*buildlet.Client, error) {
