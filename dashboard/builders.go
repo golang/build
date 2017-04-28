@@ -856,6 +856,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:                "linux-amd64-racecompile",
 		HostType:            "host-linux-kubestd",
+		TryBot:              true,
 		CompileOnly:         true,
 		SkipSnapshot:        true,
 		StopAfterMake:       true,
