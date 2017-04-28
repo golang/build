@@ -40,6 +40,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tarm/serial"
+
 	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/envutil"
@@ -104,6 +106,13 @@ func main() {
 		if onGCE && !inKube {
 			if w, err := os.OpenFile("/dev/console", os.O_WRONLY, 0); err == nil {
 				log.SetOutput(w)
+			}
+		}
+	case "windows":
+		if onGCE {
+			c := &serial.Config{Name: "COM1", Baud: 9600}
+			if s, err := serial.OpenPort(c); err == nil {
+				log.SetOutput(s)
 			}
 		}
 	}
