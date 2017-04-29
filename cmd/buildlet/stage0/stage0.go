@@ -470,6 +470,6 @@ func untarMode() {
 	}
 	defer f.Close()
 	if err := untar.Untar(f, *untarDestDir); err != nil {
-		log.Fatalf("Untarring %q to %q: %v", *untarFile, *untarDestDir)
+		log.Fatalf("Untarring %q to %q: %v", *untarFile, *untarDestDir, err)
 	}
 }

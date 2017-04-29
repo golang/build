@@ -178,5 +178,8 @@ func setTokenHandler(w http.ResponseWriter, r *http.Request) {
 
 // GET /favicon.ico
 func faviconHandler(w http.ResponseWriter, r *http.Request) {
+	// Need to specify content type for consistent tests, without this it's
+	// determined from mime.types on the box the test is running on
+	w.Header().Set("Content-Type", "image/x-icon")
 	http.ServeFile(w, r, "./static/favicon.ico")
 }
