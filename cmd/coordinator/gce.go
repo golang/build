@@ -32,7 +32,6 @@ import (
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/lru"
-	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
@@ -601,44 +600,6 @@ func hasComputeScope() bool {
 
 func hasStorageScope() bool {
 	return hasScope(storage.ScopeReadWrite) || hasScope(storage.ScopeFullControl) || hasScope(compute.CloudPlatformScope)
-}
-
-// gcsAutocertCache implements the
-// golang.org/x/crypto/acme/autocert.Cache interface using a Google
-// Cloud Storage bucket. It assumes that autocert gets to use the
-// whole keyspace of the bucket. That is, don't reuse this bucket for
-// other purposes.
-type gcsAutocertCache struct {
-	gcs    *storage.Client
-	bucket string
-}
-
-func (c *gcsAutocertCache) Get(ctx context.Context, key string) ([]byte, error) {
-	rd, err := c.gcs.Bucket(c.bucket).Object(key).NewReader(ctx)
-	if err == storage.ErrObjectNotExist {
-		return nil, autocert.ErrCacheMiss
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer rd.Close()
-	return ioutil.ReadAll(rd)
-}
-
-func (c *gcsAutocertCache) Put(ctx context.Context, key string, data []byte) error {
-	wr := c.gcs.Bucket(c.bucket).Object(key).NewWriter(ctx)
-	if _, err := wr.Write(data); err != nil {
-		return err
-	}
-	return wr.Close()
-}
-
-func (c *gcsAutocertCache) Delete(ctx context.Context, key string) error {
-	err := c.gcs.Bucket(c.bucket).Object(key).Delete(ctx)
-	if err == storage.ErrObjectNotExist {
-		return nil
-	}
-	return err
 }
 
 func readGCSFile(name string) ([]byte, error) {

@@ -47,6 +47,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/build"
+	"golang.org/x/build/autocertcache"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
@@ -168,7 +169,7 @@ func serveTLS(ln net.Listener) {
 				}
 				return nil
 			},
-			Cache: &gcsAutocertCache{storageClient, bucket},
+			Cache: autocertcache.NewGoogleCloudStorageCache(storageClient, bucket),
 		}
 		config.GetCertificate = m.GetCertificate
 	} else {
