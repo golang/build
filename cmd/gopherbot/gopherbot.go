@@ -66,29 +66,14 @@ func main() {
 		log.Fatal(err)
 	}
 
+	bot := &gopherbot{ghc: ghc}
+	bot.initCorpus()
+
 	ctx := context.Background()
-	corpus, err := godata.Get(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	repo := corpus.GitHub().Repo("golang", "go")
-	if repo == nil {
-		log.Fatal("Failed to find Go repo.")
-	}
-
-	bot := &gopherbot{
-		ghc:    ghc,
-		corpus: corpus,
-		gorepo: repo,
-	}
-
 	for {
-		var nextLoop time.Time
 		err := bot.doTasks(ctx)
 		if err != nil {
 			log.Print(err)
-			nextLoop = time.Now().Add(30 * time.Second)
 		}
 		if !*daemon {
 			if err != nil {
@@ -96,15 +81,25 @@ func main() {
 			}
 			return
 		}
-		// TODO: if err != nil, pass a ctx with 30s timeout and retry the doTasks.
-		// Maybe use a better ctx above too.
-		if err := corpus.Update(ctx); err != nil {
-			log.Fatalf("corpus.Update: %v", err)
+		if err != nil {
+			log.Printf("sleeping 30s after previous error.")
+			time.Sleep(30 * time.Second)
 		}
-		if nextLoop.After(time.Now()) {
-			sleep := time.Until(nextLoop)
-			log.Printf("Sleeping for %v after previous error.", sleep)
-			time.Sleep(sleep)
+		for {
+			t0 := time.Now()
+			err := bot.corpus.Update(ctx)
+			if err != nil {
+				if err == maintner.ErrSplit {
+					log.Print("Corpus out of sync. Re-fetching corpus.")
+					bot.initCorpus()
+				} else {
+					log.Printf("corpus.Update: %v; sleeping 15s", err)
+					time.Sleep(15 * time.Second)
+					continue
+				}
+			}
+			log.Printf("got corpus update after %v", time.Since(t0))
+			break
 		}
 	}
 }
@@ -128,6 +123,22 @@ var tasks = []struct {
 	{"close stale WaitingForInfo", (*gopherbot).closeStaleWaitingForInfo},
 	{"cl2issue", (*gopherbot).cl2issue},
 	{"check cherry picks", (*gopherbot).checkCherryPicks},
+}
+
+func (b *gopherbot) initCorpus() {
+	ctx := context.Background()
+	corpus, err := godata.Get(ctx)
+	if err != nil {
+		log.Fatalf("godata.Get: %v", err)
+	}
+
+	repo := corpus.GitHub().Repo("golang", "go")
+	if repo == nil {
+		log.Fatal("Failed to find Go repo in Corpus.")
+	}
+
+	b.corpus = corpus
+	b.gorepo = repo
 }
 
 func (b *gopherbot) doTasks(ctx context.Context) error {

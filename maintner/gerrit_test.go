@@ -40,8 +40,9 @@ var statusTests = []struct {
 }
 
 func TestGetGerritStatus(t *testing.T) {
-	c := NewCorpus(&dummyMutationLogger{}, "")
-	c.AddGerrit("go.googlesource.com/build")
+	var c Corpus
+	c.EnableLeaderMode(new(dummyMutationLogger), "/fake/dir")
+	c.TrackGerrit("go.googlesource.com/build")
 	gp := c.gerrit.projects["go.googlesource.com/build"]
 	for _, tt := range statusTests {
 		gc := &GitCommit{Msg: tt.msg}

@@ -18,8 +18,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/golang/protobuf/proto"
 	"golang.org/x/build/maintner/maintpb"
 	"golang.org/x/build/maintner/reclog"
 )
@@ -42,6 +43,14 @@ type netMutSource struct {
 	server   string
 	base     *url.URL
 	cacheDir string
+
+	last []fileSeg
+
+	// Hooks for testing. If nil, unused:
+	testHookGetServerSegments          func(context.Context) ([]LogSegmentJSON, error)
+	testHookWaitForServerSegmentUpdate func(context.Context) error
+	testHookSyncSeg                    func(context.Context, LogSegmentJSON) (fileSeg, error)
+	testHookFilePrefixSum224           func(file string, n int64) string
 }
 
 func (ns *netMutSource) GetMutations(ctx context.Context) <-chan MutationStreamEvent {
@@ -60,41 +69,184 @@ func (ns *netMutSource) GetMutations(ctx context.Context) <-chan MutationStreamE
 	return ch
 }
 
-func (ns *netMutSource) sendMutations(ctx context.Context, ch chan<- MutationStreamEvent) error {
+func (ns *netMutSource) waitForServerSegmentUpdate(ctx context.Context) error {
+	if fn := ns.testHookWaitForServerSegmentUpdate; fn != nil {
+		return fn(ctx)
+	}
+
+	// TODO: 5 second sleep is dumb. make it
+	// subscribe to pubsubhelper? maybe the
+	// server's response header should reference
+	// its pubsubhelper server URL. but then we
+	// can't assume activity means it'll be picked
+	// up right away. so maybe wait for activity,
+	// and then poll every second for 10 seconds
+	// or so, or until there's changes, and then
+	// go back to every 5 second polling or
+	// something. or maybe the maintnerd server should
+	// have its own long poll functionality.
+	// for now, just 5 second polling:
+	log.Printf("sleeping for 5s...")
+	select {
+	case <-time.After(5 * time.Second):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (ns *netMutSource) getServerSegments(ctx context.Context) ([]LogSegmentJSON, error) {
+	if fn := ns.testHookGetServerSegments; fn != nil {
+		return fn(ctx)
+	}
+
 	req, err := http.NewRequest("GET", ns.server, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req = req.WithContext(ctx)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		return fmt.Errorf("%s: %v", ns.server, res.Status)
+		return nil, fmt.Errorf("%s: %v", ns.server, res.Status)
 	}
 	var segs []LogSegmentJSON
-	if err := json.NewDecoder(res.Body).Decode(&segs); err != nil {
-		return fmt.Errorf("decoding %s JSON: %v", ns.server, err)
+	err = json.NewDecoder(res.Body).Decode(&segs)
+	if err != nil {
+		return nil, fmt.Errorf("decoding %s JSON: %v", ns.server, err)
 	}
+	return segs, nil
+}
 
-	// TODO: optimization: if already on GCE, skip sync to disk part and just
-	// read from network. fast & free network inside.
-
-	var fileSegs []fileSeg
-	for _, seg := range segs {
-		fileSeg, err := ns.syncSeg(ctx, seg)
+func (ns *netMutSource) getNewSegments(ctx context.Context) ([]fileSeg, error) {
+	for {
+		segs, err := ns.getServerSegments(ctx)
 		if err != nil {
-			return fmt.Errorf("syncing segment %d: %v", seg.Number, err)
+			return nil, err
 		}
-		fileSegs = append(fileSegs, fileSeg)
+		// TODO: optimization: if already on GCE, skip sync to disk part and just
+		// read from network. fast & free network inside.
+
+		var fileSegs []fileSeg
+		for _, seg := range segs {
+			fileSeg, err := ns.syncSeg(ctx, seg)
+			if err != nil {
+				return nil, fmt.Errorf("syncing segment %d: %v", seg.Number, err)
+			}
+			fileSegs = append(fileSegs, fileSeg)
+		}
+		sumLast := sumSegSize(ns.last)
+		sumCommon := ns.sumCommonPrefixSize(fileSegs, ns.last)
+		if sumLast != sumCommon {
+			return nil, ErrSplit
+		}
+		sumCur := sumSegSize(fileSegs)
+		if sumCommon == sumCur {
+			// Nothing new. Wait.
+			if err := ns.waitForServerSegmentUpdate(ctx); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		ns.last = fileSegs
+
+		newSegs := trimLeadingSegBytes(fileSegs, sumCommon)
+		return newSegs, nil
 	}
-	return foreachFileSeg(fileSegs, func(seg fileSeg) error {
+}
+
+func trimLeadingSegBytes(in []fileSeg, trim int64) []fileSeg {
+	// First trim off whole segments, sharing the same underlying memory.
+	for len(in) > 0 && trim >= in[0].size {
+		trim -= in[0].size
+		in = in[1:]
+	}
+	if len(in) == 0 {
+		return nil
+	}
+	// Now copy, since we'll be modifying the first element.
+	out := append([]fileSeg(nil), in...)
+	out[0].skip = trim
+	return out
+}
+
+// filePrefixSum224 returns the lowercase hex SHA-224 of the first n bytes of file.
+func (ns *netMutSource) filePrefixSum224(file string, n int64) string {
+	if fn := ns.testHookFilePrefixSum224; fn != nil {
+		return fn(file, n)
+	}
+	f, err := os.Open(file)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Print(err)
+		}
+		return ""
+	}
+	defer f.Close()
+	h := sha256.New224()
+	_, err = io.CopyN(h, f, n)
+	if err != nil {
+		log.Print(err)
+		return ""
+	}
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+func sumSegSize(segs []fileSeg) (sum int64) {
+	for _, seg := range segs {
+		sum += seg.size
+	}
+	return
+}
+
+func (ns *netMutSource) sumCommonPrefixSize(a, b []fileSeg) (sum int64) {
+	for len(a) > 0 && len(b) > 0 {
+		sa, sb := a[0], b[0]
+		if sa.sha224 == sb.sha224 {
+			// Whole chunk in common.
+			sum += sa.size
+			a, b = a[1:], b[1:]
+			continue
+		}
+		if sa.size == sb.size {
+			// If they're the same size but different
+			// sums, it must've forked.
+			return
+		}
+		// See if one chunk is a prefix of the other.
+		// Make sa be the smaller one.
+		if sb.size < sa.size {
+			sa, sb = sb, sa
+		}
+		// Hash the beginning of the bigger size.
+		bPrefixSum := ns.filePrefixSum224(sb.file, sa.size)
+		if bPrefixSum == sa.sha224 {
+			sum += sa.size
+		}
+		break
+	}
+	return
+}
+
+func (ns *netMutSource) sendMutations(ctx context.Context, ch chan<- MutationStreamEvent) error {
+	newSegs, err := ns.getNewSegments(ctx)
+	if err != nil {
+		return err
+	}
+	return foreachFileSeg(newSegs, func(seg fileSeg) error {
 		f, err := os.Open(seg.file)
 		if err != nil {
 			return err
 		}
 		defer f.Close()
+		if seg.skip > 0 {
+			if _, err := f.Seek(seg.skip, io.SeekStart); err != nil {
+				return err
+			}
+		}
 		return reclog.ForeachRecord(io.LimitReader(f, seg.size), func(off int64, hdr, rec []byte) error {
 			m := new(maintpb.Mutation)
 			if err := proto.Unmarshal(rec, m); err != nil {
@@ -119,13 +271,21 @@ func foreachFileSeg(segs []fileSeg, fn func(seg fileSeg) error) error {
 	return nil
 }
 
+// TODO: add a constructor for this? or simplify it. make it Size +
+// File + embedded LogSegmentJSON?
 type fileSeg struct {
-	seg  int
-	file string // full path
-	size int64
+	seg    int
+	file   string // full path
+	sha224 string
+	skip   int64
+	size   int64
 }
 
 func (ns *netMutSource) syncSeg(ctx context.Context, seg LogSegmentJSON) (fileSeg, error) {
+	if fn := ns.testHookSyncSeg; fn != nil {
+		return fn(ctx, seg)
+	}
+
 	isFinalSeg := !strings.HasPrefix(seg.URL, "https://storage.googleapis.com/")
 	relURL, err := url.Parse(seg.URL)
 	if err != nil {
@@ -138,7 +298,7 @@ func (ns *netMutSource) syncSeg(ctx context.Context, seg LogSegmentJSON) (fileSe
 	// Do we already have it? Files named in their final form with the sha224 are considered
 	// complete and immutable.
 	if fi, err := os.Stat(frozen); err == nil && fi.Size() == seg.Size {
-		return fileSeg{seg.Number, frozen, fi.Size()}, nil
+		return fileSeg{seg: seg.Number, file: frozen, size: fi.Size(), sha224: seg.SHA224}, nil
 	}
 
 	// See how much data we already have in the partial growing file.
@@ -152,9 +312,9 @@ func (ns *netMutSource) syncSeg(ctx context.Context, seg LogSegmentJSON) (fileSe
 				if err := os.Rename(partial, frozen); err != nil {
 					return fileSeg{}, err
 				}
-				return fileSeg{seg.Number, frozen, seg.Size}, nil
+				return fileSeg{seg: seg.Number, file: frozen, sha224: seg.SHA224, size: seg.Size}, nil
 			}
-			return fileSeg{seg.Number, partial, seg.Size}, nil
+			return fileSeg{seg: seg.Number, file: partial, sha224: seg.SHA224, size: seg.Size}, nil
 		}
 	}
 
@@ -213,7 +373,7 @@ func (ns *netMutSource) syncSeg(ctx context.Context, seg LogSegmentJSON) (fileSe
 		return fileSeg{}, err
 	}
 	log.Printf("wrote %v", finalName)
-	return fileSeg{seg.Number, finalName, seg.Size}, nil
+	return fileSeg{seg: seg.Number, file: finalName, size: seg.Size, sha224: seg.SHA224}, nil
 }
 
 type LogSegmentJSON struct {

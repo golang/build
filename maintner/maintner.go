@@ -12,6 +12,7 @@ package maintner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
@@ -27,13 +28,13 @@ import (
 
 // Corpus holds all of a project's metadata.
 //
-// There are two main phases to the Corpus: the catch-up phase, when the Corpus
-// is populated from a MutationSource (disk, database), and the polling phase,
-// when the Corpus polls for new events and stores/writes them to disk.
+// Many public accessor methods are missing. File bugs at golang.org/issues/new.
 type Corpus struct {
 	mutationLogger MutationLogger // non-nil when this is a self-updating corpus
+	mutationSource MutationSource // from Initialize
 	verbose        bool
 	dataDir        string
+	sawErrSplit    bool
 
 	mu sync.RWMutex // guards all following fields
 	// corpus state:
@@ -64,7 +65,9 @@ type polledGitCommits struct {
 	dir  string
 }
 
-// EnableLeaderMode prepares c to be the leader.
+// EnableLeaderMode prepares c to be the leader. This should only be
+// called by the maintnerd process.
+//
 // The provided scratchDir will store git checkouts.
 func (c *Corpus) EnableLeaderMode(logger MutationLogger, scratchDir string) {
 	c.mutationLogger = logger
@@ -139,13 +142,13 @@ func (c *Corpus) debugf(format string, v ...interface{}) {
 // TODO: figure out if this is accurate.
 var gerritProjNameRx = regexp.MustCompile(`^[a-z0-9]+[a-z0-9\-\_]*$`)
 
-// AddGoGitRepo registers a git directory to have its metadata slurped into the corpus.
+// TrackGoGitRepo registers a git directory to have its metadata slurped into the corpus.
 // The goRepo is a name like "go" or "net". The dir is a path on disk.
 //
-// TODO(bradfitz): this whole interface is temporary. Make this
-// support any git repo and make this (optionally?) use the gitmirror
-// service later instead of a separate copy on disk.
-func (c *Corpus) AddGoGitRepo(goRepo, dir string) {
+func (c *Corpus) TrackGoGitRepo(goRepo, dir string) {
+	if c.mutationLogger == nil {
+		panic("can't TrackGoGitRepo in non-leader mode")
+	}
 	if !gerritProjNameRx.MatchString(goRepo) {
 		panic(fmt.Sprintf("bogus goRepo value %q", goRepo))
 	}
@@ -189,9 +192,47 @@ type MutationStreamEvent struct {
 // MutationSource. It returns once it's up-to-date. To incrementally
 // update it later, use the Update method.
 func (c *Corpus) Initialize(ctx context.Context, src MutationSource) error {
+	if c.mutationSource != nil {
+		panic("duplicate call to Initialize")
+	}
+	c.mutationSource = src
+	log.Printf("Loading data from log %T ...", src)
+	return c.update(ctx)
+}
+
+// ErrSplit is returned when the the client notices the leader's
+// mutation log has changed. This can happen if the leader restarts
+// with uncommitted transactions. (The leader only commits mutations
+// periodically.)
+var ErrSplit = errors.New("maintner: leader server's history split, process out of sync")
+
+// Update incrementally updates the corpus from its current state to
+// the latest state from the MutationSource passed earlier to
+// Initialize. It does not return until there's either a new change or
+// the context expires.
+// If Update returns ErrSplit, the corpus can longer be updated.
+//
+// Update must not be called concurrently with any other method or
+// access of the corpus, including other Update calls.
+func (c *Corpus) Update(ctx context.Context) error {
+	if c.mutationSource == nil {
+		panic("Update called with call to Initialize")
+	}
+	if c.sawErrSplit {
+		panic("Update called after previous Update call returned ErrSplit")
+	}
+	log.Printf("Updating data from log %T ...", c.mutationSource)
+	err := c.update(ctx)
+	if err == ErrSplit {
+		c.sawErrSplit = true
+	}
+	return err
+}
+
+func (c *Corpus) update(ctx context.Context) error {
+	src := c.mutationSource
 	ch := src.GetMutations(ctx)
 	done := ctx.Done()
-	log.Printf("Reloading data from log %T ...", src)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for {
@@ -202,7 +243,7 @@ func (c *Corpus) Initialize(ctx context.Context, src MutationSource) error {
 			return err
 		case e := <-ch:
 			if e.Err != nil {
-				log.Printf("Corpus.Initialize: %v", e.Err)
+				log.Printf("Corpus GetMutations: %v", e.Err)
 				return e.Err
 			}
 			if e.End {
@@ -213,14 +254,6 @@ func (c *Corpus) Initialize(ctx context.Context, src MutationSource) error {
 			c.processMutationLocked(e.Mutation)
 		}
 	}
-}
-
-// Update incrementally updates the corpus from its current state to
-// the latest state from the MutationSource passed earlier to
-// Initialize. It does not return until there's either a new change or
-// the context expires.
-func (c *Corpus) Update(ctx context.Context) error {
-	panic("TODO")
 }
 
 // addMutation adds a mutation to the log and immediately processes it.

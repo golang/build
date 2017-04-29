@@ -222,10 +222,15 @@ type watchedGerritRepo struct {
 	project *GerritProject
 }
 
-// AddGerrit adds the Gerrit project with the given project to the corpus.
+// TrackGerrit registers the Gerrit project with the given project as a project
+// to watch and append to the mutation log. Only valid in leader mode.
 // The provided string should be of the form "hostname/project", without a scheme
 // or trailing slash.
-func (c *Corpus) AddGerrit(gerritProj string) {
+func (c *Corpus) TrackGerrit(gerritProj string) {
+	if c.mutationLogger == nil {
+		panic("can't TrackGerrit in non-leader mode")
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

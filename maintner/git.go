@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -418,43 +417,4 @@ func (c *Corpus) gitLocation(v []byte) *time.Location {
 	}
 	c.zoneCache[s] = loc
 	return loc
-}
-
-type FileCount struct {
-	File  string
-	Count int
-}
-
-// queryFrequentlyModifiedFiles is an example query just for fun.
-// It is not currently used by anything.
-func (c *Corpus) QueryFrequentlyModifiedFiles(topN int) []FileCount {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	n := map[string]int{} // file -> count
-	for _, gc := range c.gitCommit {
-		for _, f := range gc.Files {
-			n[modernizeFilename(f.File)]++
-		}
-	}
-	files := make([]FileCount, 0, len(n))
-	for file, count := range n {
-		files = append(files, FileCount{file, count})
-	}
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].Count > files[j].Count
-	})
-	if len(files) > topN {
-		files = files[:topN]
-	}
-	return files
-}
-
-func modernizeFilename(f string) string {
-	if strings.HasPrefix(f, "src/pkg/") {
-		f = "src/" + strings.TrimPrefix(f, "src/pkg/")
-	}
-	if strings.HasPrefix(f, "src/http/") {
-		f = "src/net/http/" + strings.TrimPrefix(f, "src/http/")
-	}
-	return f
 }

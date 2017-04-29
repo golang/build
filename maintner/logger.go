@@ -26,7 +26,9 @@ type MutationLogger interface {
 // DiskMutationLogger logs mutations to disk.
 type DiskMutationLogger struct {
 	directory string
-	mu        sync.RWMutex
+
+	mu   sync.Mutex
+	done bool // true after first GetMutations
 }
 
 // NewDiskMutationLogger creates a new DiskMutationLogger, which will create
@@ -58,8 +60,8 @@ func (d *DiskMutationLogger) Log(m *maintpb.Mutation) error {
 }
 
 func (d *DiskMutationLogger) ForeachFile(fn func(fullPath string, fi os.FileInfo) error) error {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	if d.directory == "" {
 		panic("empty directory")
 	}
@@ -82,7 +84,21 @@ func (d *DiskMutationLogger) ForeachFile(fn func(fullPath string, fi os.FileInfo
 }
 
 func (d *DiskMutationLogger) GetMutations(ctx context.Context) <-chan MutationStreamEvent {
+	d.mu.Lock()
+	wasDone := d.done
+	d.done = true
+	d.mu.Unlock()
+
+	if wasDone {
+		// TODO: support subsequent Update? for now we only
+		// support the initial loading.  The network mutation
+		// source is the new implementation with Update
+		// support.
+		return nil
+	}
+
 	ch := make(chan MutationStreamEvent, 50) // buffered: overlap gunzip/unmarshal with loading
+
 	go func() {
 		err := d.ForeachFile(func(fullPath string, fi os.FileInfo) error {
 			return reclog.ForeachFileRecord(fullPath, func(off int64, hdr, rec []byte) error {

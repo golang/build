@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package godata loads the Go project's corpus of Git, Github, and Gerrit activity.
+// Package godata loads the Go project's corpus of Git, Github, and
+// Gerrit activity into memory to allow easy analysis without worrying
+// about APIs and their pagination, quotas, and other nuisances and
+// limitations.
 package godata
 
 import (
@@ -16,7 +19,25 @@ import (
 	"golang.org/x/build/maintner"
 )
 
-// Get returns the Go project's corpus.
+// Get returns the Go project's corpus, containing all Git commits,
+// Github activity, and Gerrit activity and metadata since the
+// beginning of the project.
+//
+// The initial call to Get will download approximately 350-400 MB of
+// data into a directory "golang-maintner" under your operating
+// system's user cache directory. Subsequent calls will only download
+// what's changed since the previous call.
+//
+// Even with all the data already cached on local disk, a call to Get
+// takes approximately 5 seconds to read the mutation log into memory.
+// For daemons, use Corpus.Update to incrementally update an
+// already-loaded Corpus.
+//
+// The in-memory representation is about 25% larger than its on-disk
+// size. It's currently under 500 MB.
+//
+// See https://godoc.org/golang.org/x/build/maintner#Corpus for how
+// to walk the data structure. Enjoy.
 func Get(ctx context.Context) (*maintner.Corpus, error) {
 	targetDir := filepath.Join(xdgCacheDir(), "golang-maintner")
 	if err := os.MkdirAll(targetDir, 0700); err != nil {

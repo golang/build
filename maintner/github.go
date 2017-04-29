@@ -55,6 +55,28 @@ type GitHub struct {
 	repos map[GithubRepoID]*GitHubRepo
 }
 
+// ForeachRepo calls fn serially for each GithubRepo, stopping if fn
+// returns an error. The function is called with lexically increasing
+// repo IDs.
+func (g *GitHub) ForeachRepo(fn func(*GitHubRepo) error) error {
+	var ids []GithubRepoID
+	for id := range g.repos {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool {
+		if ids[i].Owner < ids[i].Owner {
+			return true
+		}
+		return ids[i].Owner == ids[j].Owner && ids[i].Repo < ids[j].Repo
+	})
+	for _, id := range ids {
+		if err := fn(g.repos[id]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Repo returns the repo if it's known. Otherwise it returns nil.
 func (g *GitHub) Repo(owner, repo string) *GitHubRepo {
 	return g.repos[GithubRepoID{owner, repo}]
@@ -535,7 +557,14 @@ func (c *Corpus) initGithub() {
 	}
 }
 
-func (c *Corpus) AddGithub(owner, repo, token string) {
+// TrackGithub registers the named Github repo as a repo to
+// watch and append to the mutation log. Only valid in leader mode.
+// The token is the auth token to use to make API calls.
+func (c *Corpus) TrackGithub(owner, repo, token string) {
+	if c.mutationLogger == nil {
+		panic("can't TrackGerrit in non-leader mode")
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.initGithub()

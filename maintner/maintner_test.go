@@ -48,7 +48,7 @@ type mutationTest struct {
 func (mt mutationTest) test(t *testing.T, muts ...*maintpb.Mutation) {
 	c := mt.corpus
 	if c == nil {
-		c = NewCorpus(&dummyMutationLogger{}, "")
+		c = new(Corpus)
 	}
 	for _, m := range muts {
 		c.processMutationLocked(m)
@@ -74,7 +74,7 @@ func init() {
 }
 
 func TestProcessMutation_Github_NewIssue(t *testing.T) {
-	c := NewCorpus(&dummyMutationLogger{}, "")
+	c := new(Corpus)
 	github := &GitHub{c: c}
 	c.github = github
 	github.users = map[int64]*GitHubUser{
@@ -113,7 +113,7 @@ func TestProcessMutation_Github_NewIssue(t *testing.T) {
 }
 
 func TestProcessMutation_Github(t *testing.T) {
-	c := NewCorpus(&dummyMutationLogger{}, "")
+	c := new(Corpus)
 	github := &GitHub{c: c}
 	c.github = github
 	github.repos = map[GithubRepoID]*GitHubRepo{
@@ -175,7 +175,7 @@ func TestNewAssigneesHandlesNil(t *testing.T) {
 }
 
 func TestAssigneesDeleted(t *testing.T) {
-	c := NewCorpus(&dummyMutationLogger{}, "")
+	c := new(Corpus)
 	assignees := []*GitHubUser{u1, u2}
 	issue := &GitHubIssue{
 		Number:    3,
