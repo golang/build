@@ -717,7 +717,7 @@ type githubIssueDiffer struct {
 }
 
 func (d githubIssueDiffer) verbose() bool {
-	return d.gr.github != nil && d.gr.github.c != nil && d.gr.github.c.Verbose
+	return d.gr.github != nil && d.gr.github.c != nil && d.gr.github.c.verbose
 }
 
 // returns nil if no changes.

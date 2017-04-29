@@ -31,8 +31,9 @@ import (
 // is populated from a MutationSource (disk, database), and the polling phase,
 // when the Corpus polls for new events and stores/writes them to disk.
 type Corpus struct {
-	MutationLogger MutationLogger
-	Verbose        bool
+	mutationLogger MutationLogger // non-nil when this is a self-updating corpus
+	verbose        bool
+	dataDir        string
 
 	mu sync.RWMutex // guards all following fields
 	// corpus state:
@@ -56,7 +57,6 @@ type Corpus struct {
 	gitCommitTodo map[GitHash]bool          // -> true
 	gitOfHg       map[string]GitHash        // hg hex hash -> git hash
 	zoneCache     map[string]*time.Location // "+0530" => location
-	dataDir       string
 }
 
 type polledGitCommits struct {
@@ -64,9 +64,20 @@ type polledGitCommits struct {
 	dir  string
 }
 
-// NewCorpus creates a new Corpus.
-func NewCorpus(logger MutationLogger, dataDir string) *Corpus {
-	return &Corpus{MutationLogger: logger, dataDir: dataDir}
+// EnableLeaderMode prepares c to be the leader.
+// The provided scratchDir will store git checkouts.
+func (c *Corpus) EnableLeaderMode(logger MutationLogger, scratchDir string) {
+	c.mutationLogger = logger
+	c.dataDir = scratchDir
+}
+
+func (c *Corpus) SetVerbose(v bool) { c.verbose = v }
+
+func (c *Corpus) getDataDir() string {
+	if c.dataDir == "" {
+		panic("getDataDir called before Corpus.EnableLeaderMode")
+	}
+	return c.dataDir
 }
 
 // GitHub returns the corpus's github data.
@@ -214,17 +225,17 @@ func (c *Corpus) Update(ctx context.Context) error {
 
 // addMutation adds a mutation to the log and immediately processes it.
 func (c *Corpus) addMutation(m *maintpb.Mutation) {
-	if c.Verbose {
+	if c.verbose {
 		log.Printf("mutation: %v", m)
 	}
 	c.mu.Lock()
 	c.processMutationLocked(m)
 	c.mu.Unlock()
 
-	if c.MutationLogger == nil {
+	if c.mutationLogger == nil {
 		return
 	}
-	err := c.MutationLogger.Log(m)
+	err := c.mutationLogger.Log(m)
 	if err != nil {
 		// TODO: handle errors better? failing is only safe option.
 		log.Fatalf("could not log mutation %v: %v\n", m, err)

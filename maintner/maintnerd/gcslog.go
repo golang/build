@@ -153,14 +153,6 @@ func (gl *gcsLog) initLoad(ctx context.Context) error {
 	return nil
 }
 
-type LogSegmentJSON struct {
-	Number int    `json:"number"`
-	Size   int64  `json:"size"`
-	SHA224 string `json:"sha224"`
-	URL    string `json:"url"` // TODO ....
-	// TODO ....
-}
-
 func (gl *gcsLog) serveLogFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" && r.Method != "HEAD" {
 		http.Error(w, "bad method", http.StatusBadRequest)
@@ -210,16 +202,16 @@ func (gl *gcsLog) serveJSONLogsIndex(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-func (gl *gcsLog) getJSONLogs(startSeg int) (segs []LogSegmentJSON) {
+func (gl *gcsLog) getJSONLogs(startSeg int) (segs []maintner.LogSegmentJSON) {
 	gl.mu.Lock()
 	defer gl.mu.Unlock()
 	if startSeg > gl.curNum || startSeg < 0 {
 		startSeg = 0
 	}
-	segs = make([]LogSegmentJSON, 0, gl.curNum-startSeg)
+	segs = make([]maintner.LogSegmentJSON, 0, gl.curNum-startSeg)
 	for i := startSeg; i < gl.curNum; i++ {
 		seg := gl.seg[i]
-		segs = append(segs, LogSegmentJSON{
+		segs = append(segs, maintner.LogSegmentJSON{
 			Number: i,
 			Size:   seg.size,
 			SHA224: seg.sha224,
@@ -227,7 +219,7 @@ func (gl *gcsLog) getJSONLogs(startSeg int) (segs []LogSegmentJSON) {
 		})
 	}
 	if gl.logBuf.Len() > 0 {
-		segs = append(segs, LogSegmentJSON{
+		segs = append(segs, maintner.LogSegmentJSON{
 			Number: gl.curNum,
 			Size:   int64(gl.logBuf.Len()),
 			SHA224: fmt.Sprintf("%x", gl.logSHA224.Sum(nil)),

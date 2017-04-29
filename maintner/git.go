@@ -333,7 +333,7 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*GitCommit, error)
 	if c.gitCommitTodo != nil {
 		delete(c.gitCommitTodo, hash)
 	}
-	if c.Verbose {
+	if c.verbose {
 		now := time.Now()
 		if now.After(c.lastGitCount.Add(time.Second)) {
 			c.lastGitCount = now

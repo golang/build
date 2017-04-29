@@ -106,11 +106,12 @@ func main() {
 		logger = maintner.NewDiskMutationLogger(*dataDir)
 	}
 
-	corpus := maintner.NewCorpus(logger, *dataDir)
+	corpus := new(maintner.Corpus)
+	corpus.EnableLeaderMode(logger, *dataDir)
 	if *debug {
 		corpus.SetDebug()
 	}
-	corpus.Verbose = *verbose
+	corpus.SetVerbose(*verbose)
 	switch *config {
 	case "":
 		// Nothing

@@ -31,7 +31,6 @@ import (
 // Gerrit holds information about a number of Gerrit projects.
 type Gerrit struct {
 	c        *Corpus
-	dataDir  string                    // the root Corpus data directory
 	projects map[string]*GerritProject // keyed by "go.googlesource.com/build"
 
 	clsReferencingGithubIssue map[GitHubIssueRef][]*GerritCL
@@ -46,7 +45,6 @@ func (g *Gerrit) getOrCreateProject(gerritProj string) *GerritProject {
 	proj = &GerritProject{
 		gerrit: g,
 		proj:   gerritProj,
-		gitDir: filepath.Join(g.dataDir, url.PathEscape(gerritProj)),
 		cls:    map[int32]*GerritCL{},
 		remote: map[gerritCLVersion]GitHash{},
 	}
@@ -69,13 +67,13 @@ func (g *Gerrit) ForeachProjectUnsorted(fn func(*GerritProject) error) error {
 type GerritProject struct {
 	gerrit *Gerrit
 	proj   string // "go.googlesource.com/net"
-	// TODO: Many different Git remotes can share the same Gerrit instance, e.g.
-	// the Go Gerrit instance supports build, gddo, go. For the moment these are
-	// all treated separately, since the remotes are separate.
-	gitDir string
 	cls    map[int32]*GerritCL
 	remote map[gerritCLVersion]GitHash
 	need   map[GitHash]bool
+}
+
+func (gp *GerritProject) gitDir() string {
+	return filepath.Join(gp.gerrit.c.getDataDir(), url.PathEscape(gp.proj))
 }
 
 func (gp *GerritProject) ServerSlashProject() string { return gp.proj }
@@ -215,7 +213,6 @@ func (c *Corpus) initGerrit() {
 	}
 	c.gerrit = &Gerrit{
 		c:                         c,
-		dataDir:                   c.dataDir,
 		projects:                  map[string]*GerritProject{},
 		clsReferencingGithubIssue: map[GitHubIssueRef][]*GerritCL{},
 	}
@@ -231,6 +228,7 @@ type watchedGerritRepo struct {
 func (c *Corpus) AddGerrit(gerritProj string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	if strings.Count(gerritProj, "/") != 1 {
 		panic(fmt.Sprintf("gerrit project argument %q expected to contain exactly 1 slash", gerritProj))
 	}
@@ -463,10 +461,11 @@ func (gp *GerritProject) sync(ctx context.Context, loop bool) error {
 
 func (gp *GerritProject) syncOnce(ctx context.Context) error {
 	c := gp.gerrit.c
+	gitDir := gp.gitDir()
 
 	fetchCtx, cancel := context.WithTimeout(ctx, time.Minute)
 	cmd := exec.CommandContext(fetchCtx, "git", "fetch", "origin")
-	cmd.Dir = gp.gitDir
+	cmd.Dir = gitDir
 	out, err := cmd.CombinedOutput()
 	cancel()
 	if err != nil {
@@ -474,7 +473,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 	}
 
 	cmd = exec.CommandContext(ctx, "git", "ls-remote")
-	cmd.Dir = gp.gitDir
+	cmd.Dir = gitDir
 	out, err = cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git ls-remote: %v, %s", err, out)
@@ -567,7 +566,7 @@ func (gp *GerritProject) syncCommits(ctx context.Context) (n int, err error) {
 			lastLog = now
 			gp.logf("parsing commits (%v done)", n)
 		}
-		commit, err := parseCommitFromGit(gp.gitDir, hash)
+		commit, err := parseCommitFromGit(gp.gitDir(), hash)
 		if err != nil {
 			return n, err
 		}
@@ -603,7 +602,7 @@ func (gp *GerritProject) fetchHashes(ctx context.Context, hashes []GitHash) erro
 	}
 	gp.logf("fetching %v hashes...", len(hashes))
 	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = gp.gitDir
+	cmd.Dir = gp.gitDir()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		log.Printf("error fetching %d hashes from gerrit project %s: %s", len(hashes), gp.proj, out)
 		return err
@@ -620,7 +619,8 @@ func formatExecError(err error) string {
 }
 
 func (gp *GerritProject) init(ctx context.Context) error {
-	if err := os.MkdirAll(gp.gitDir, 0755); err != nil {
+	gitDir := gp.gitDir()
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
 		return err
 	}
 	// try to short circuit a git init error, since the init error matching is
@@ -629,12 +629,12 @@ func (gp *GerritProject) init(ctx context.Context) error {
 		return fmt.Errorf("looking for git binary: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(gp.gitDir, ".git", "config")); err == nil {
+	if _, err := os.Stat(filepath.Join(gitDir, ".git", "config")); err == nil {
 		cmd := exec.CommandContext(ctx, "git", "remote", "-v")
-		cmd.Dir = gp.gitDir
+		cmd.Dir = gitDir
 		remoteBytes, err := cmd.Output()
 		if err != nil {
-			return fmt.Errorf("running git remote -v in %v: %v", gp.gitDir, formatExecError(err))
+			return fmt.Errorf("running git remote -v in %v: %v", gitDir, formatExecError(err))
 		}
 		if !strings.Contains(string(remoteBytes), "origin") && !strings.Contains(string(remoteBytes), "https://"+gp.proj) {
 			return fmt.Errorf("didn't find origin & gp.url in remote output %s", string(remoteBytes))
@@ -647,7 +647,7 @@ func (gp *GerritProject) init(ctx context.Context) error {
 	buf := new(bytes.Buffer)
 	cmd.Stdout = buf
 	cmd.Stderr = buf
-	cmd.Dir = gp.gitDir
+	cmd.Dir = gitDir
 	if err := cmd.Run(); err != nil {
 		log.Printf(`Error running "git init": %s`, buf.String())
 		return err
@@ -656,7 +656,7 @@ func (gp *GerritProject) init(ctx context.Context) error {
 	cmd = exec.CommandContext(ctx, "git", "remote", "add", "origin", "https://"+gp.proj)
 	cmd.Stdout = buf
 	cmd.Stderr = buf
-	cmd.Dir = gp.gitDir
+	cmd.Dir = gitDir
 	if err := cmd.Run(); err != nil {
 		log.Printf(`Error running "git remote add origin": %s`, buf.String())
 		return err
