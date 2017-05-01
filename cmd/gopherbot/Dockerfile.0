@@ -1,0 +1,42 @@
+# Copyright 2017 The Go Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+FROM golang:1.8
+LABEL maintainer "golang-dev@googlegroups.com"
+
+RUN go get -d cloud.google.com/go/compute/metadata && \
+    cd /go/src/cloud.google.com/go/compute/metadata && \
+    git reset --hard cd0da878c66091060d2e7403abd62192b3e387e0
+
+RUN go get -d golang.org/x/oauth2 && \
+    cd /go/src/golang.org/x/oauth2 && \
+    git reset --hard 314dd2c0bf3ebd592ec0d20847d27e79d0dbe8dd
+
+RUN go get -d github.com/golang/protobuf/proto && \
+    cd /go/src/github.com/golang/protobuf/proto && \
+    git reset --hard 18c9bb3261723cd5401db4d0c9fbc5c3b6c70fe8
+
+RUN go get -d github.com/google/go-github/github && \
+    cd /go/src/github.com/google/go-github/github && \
+    git reset --hard e8d46665e050742f457a58088b1e6b794b2ae966
+
+RUN go get -d github.com/googleapis/gax-go && \
+    cd /go/src/github.com/googleapis/gax-go && \
+    git reset --hard 9af46dd5a1713e8b5cd71106287eba3cefdde50b
+
+RUN go get -d golang.org/x/sync/errgroup && \
+    cd /go/src/golang.org/x/sync/errgroup && \
+    git reset --hard 457c5828408160d6a47e17645169cf8fa20218c4
+
+RUN go get -d github.com/gregjones/httpcache && \
+    cd /go/src/github.com/gregjones/httpcache && \
+    git reset --hard d02018f006d98f58512bf3adfc171d88d17626df
+
+RUN go get -d go4.org/types && \
+    cd /go/src/go4.org && \
+    git reset --hard 7ce08ca145dbe0e66a127c447b80ee7914f3e4f9
+
+COPY . /go/src/golang.org/x/build/
+
+RUN go install -ldflags "-linkmode=external -extldflags '-static -pthread'" golang.org/x/build/cmd/gopherbot
+

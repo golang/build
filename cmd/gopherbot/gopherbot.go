@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/compute/metadata"
 	"github.com/google/go-github/github"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
@@ -32,7 +33,14 @@ var (
 )
 
 func getGithubToken() (string, error) {
-	// TODO: get from GCE metadata, etc.
+	if metadata.OnGCE() {
+		for _, key := range []string{"gopherbot-github-token", "maintner-github-token"} {
+			token, err := metadata.ProjectAttributeValue(key)
+			if err == nil {
+				return token, nil
+			}
+		}
+	}
 	tokenFile := filepath.Join(os.Getenv("HOME"), "keys", "github-gobot")
 	slurp, err := ioutil.ReadFile(tokenFile)
 	if err != nil {
