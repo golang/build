@@ -16,6 +16,25 @@ const (
 	prefix = "https://www.googleapis.com/compute/v1/projects/"
 )
 
+// KubeConfig describes the configuration of a Kubernetes cluster.
+type KubeConfig struct {
+	// MinNodes is the minimum number of nodes in the Kubernetes cluster.
+	// The autoscaler will ensure that at least this many nodes is always
+	// running despite any scale-down decision.
+	MinNodes int64
+
+	// MaxNodes is the maximum number of nodes that the autoscaler can
+	// provision in the Kubernetes cluster.
+	// If MaxNodes is 0, Kubernetes is not used.
+	MaxNodes int64
+
+	// MachineType is the GCE machine type to use for the Kubernetes cluster nodes.
+	MachineType string
+
+	// Name is the name of the Kubernetes cluster that will be created.
+	Name string
+}
+
 // Environment describes the configuration of the infrastructure for a
 // coordinator and its buildlet resources running on Google Cloud Platform.
 // Staging and Production are the two common build environments.
@@ -48,25 +67,10 @@ type Environment struct {
 	// MachineType is the GCE machine type to use for the coordinator.
 	MachineType string
 
-	// KubeMinNodes is the minimum number of nodes in the Kubernetes cluster.
-	// The autoscaler will ensure that at least this many nodes is always
-	// running despite any scale-down decision.
-	KubeMinNodes int64
-
-	// KubeMaxNodes is the maximum number of nodes that the autoscaler can
-	// provision in the Kubernetes cluster.
-	// If KubeMaxNodes is 0, Kubernetes is not used.
-	KubeMaxNodes int64
-
-	// KubeMachineType is the GCE machine type to use for the Kubernetes cluster nodes.
-	KubeMachineType string
-
-	// KubeName is the name of the Kubernetes cluster that will be created.
-	KubeName string
-
-	// KubePassword is the admin password for the Kubernetes cluster. Its value
-	// will be set to a random value at runtime.
-	KubePassword string
+	// KubeBuild is the Kubernetes config for the buildlet cluster.
+	KubeBuild KubeConfig
+	// KubeTools is the Kubernetes config for the tools cluster.
+	KubeTools KubeConfig
 
 	// DashURL is the base URL of the build dashboard, ending in a slash.
 	DashURL string
@@ -163,16 +167,24 @@ func ByProjectID(projectID string) *Environment {
 // For local dev, override the project with the program's flag to set
 // a custom project.
 var Staging = &Environment{
-	ProjectName:     "go-dashboard-dev",
-	IsProd:          true,
-	Zone:            "us-central1-f",
-	ZonesToClean:    []string{"us-central1-a", "us-central1-b", "us-central1-f"},
-	StaticIP:        "104.154.113.235",
-	MachineType:     "n1-standard-1",
-	KubeMinNodes:    1,
-	KubeMaxNodes:    2,
-	KubeName:        "buildlets",
-	KubeMachineType: "n1-standard-8",
+	ProjectName:  "go-dashboard-dev",
+	IsProd:       true,
+	Zone:         "us-central1-f",
+	ZonesToClean: []string{"us-central1-a", "us-central1-b", "us-central1-f"},
+	StaticIP:     "104.154.113.235",
+	MachineType:  "n1-standard-1",
+	KubeBuild: KubeConfig{
+		MinNodes:    1,
+		MaxNodes:    2,
+		Name:        "buildlets",
+		MachineType: "n1-standard-8",
+	},
+	KubeTools: KubeConfig{
+		MinNodes:    3,
+		MaxNodes:    3,
+		Name:        "go",
+		MachineType: "n1-standard-4",
+	},
 	DashURL:         "https://go-dashboard-dev.appspot.com/",
 	PerfDataURL:     "https://perfdata.golang.org",
 	CoordinatorURL:  "https://storage.googleapis.com/dev-go-builder-data/coordinator",
@@ -185,16 +197,24 @@ var Staging = &Environment{
 // Production defines the environment that the coordinator and build
 // infrastructure is deployed to for production usage at build.golang.org.
 var Production = &Environment{
-	ProjectName:         "symbolic-datum-552",
-	IsProd:              true,
-	Zone:                "us-central1-f",
-	ZonesToClean:        []string{"us-central1-f"},
-	StaticIP:            "107.178.219.46",
-	MachineType:         "n1-standard-4",
-	KubeMinNodes:        5,
-	KubeMaxNodes:        5, // auto-scaling disabled
-	KubeName:            "buildlets",
-	KubeMachineType:     "n1-standard-32",
+	ProjectName:  "symbolic-datum-552",
+	IsProd:       true,
+	Zone:         "us-central1-f",
+	ZonesToClean: []string{"us-central1-f"},
+	StaticIP:     "107.178.219.46",
+	MachineType:  "n1-standard-4",
+	KubeBuild: KubeConfig{
+		MinNodes:    5,
+		MaxNodes:    5, // auto-scaling disabled
+		Name:        "buildlets",
+		MachineType: "n1-standard-32",
+	},
+	KubeTools: KubeConfig{
+		MinNodes:    3,
+		MaxNodes:    3,
+		Name:        "go",
+		MachineType: "n1-standard-4",
+	},
 	DashURL:             "https://build.golang.org/",
 	PerfDataURL:         "https://perfdata.golang.org",
 	CoordinatorURL:      "https://storage.googleapis.com/go-builder-data/coordinator",

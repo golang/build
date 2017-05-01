@@ -7,12 +7,12 @@ package main // import "golang.org/x/build/cmd/coordinator/buildongce"
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -80,22 +80,23 @@ coreos:
 // cluster's instance group to add capacity based on CPU utilization
 const kubeConfig = `
 resources:
-- name: "{{ .KubeName }}"
+- name: "{{ .Kube.Name }}"
   type: container.v1.cluster
   properties:
-    zone: "{{ .Zone }}"
+    zone: "{{ .Env.Zone }}"
     cluster:
-      initial_node_count: {{ .KubeMinNodes }}
+      initial_node_count: {{ .Kube.MinNodes }}
       network: "default"
       logging_service: "logging.googleapis.com"
       monitoring_service: "none"
       node_config:
-        machine_type: "{{ .KubeMachineType }}"
+        machine_type: "{{ .Kube.MachineType }}"
         oauth_scopes:
           - "https://www.googleapis.com/auth/cloud-platform"
+          - "https://www.googleapis.com/auth/userinfo.email"
       master_auth:
         username: "admin"
-        password: "{{ .KubePassword }}"`
+        password: "{{ .Password }}"`
 
 // Old autoscaler part:
 /*
@@ -132,8 +133,6 @@ func main() {
 		buildEnv.StaticIP = *staticIP
 	}
 
-	buildEnv.KubePassword = randomPassword()
-
 	// Brad is sick of google.DefaultClient giving him the
 	// permissions from the instance via the metadata service. Use
 	// the service account from disk if it exists instead:
@@ -168,9 +167,11 @@ func main() {
 	}
 
 	if !*skipKube {
-		err = createCluster()
-		if err != nil {
-			log.Fatalf("Error creating Kubernetes cluster: %v", err)
+		for _, c := range []*buildenv.KubeConfig{&buildEnv.KubeBuild, &buildEnv.KubeTools} {
+			err = createCluster(c)
+			if err != nil {
+				log.Fatalf("Error creating Kubernetes cluster %q: %v", c.Name, err)
+			}
 		}
 	}
 }
@@ -293,15 +294,15 @@ func awaitOp(svc *compute.Service, op *compute.Operation) error {
 	}
 }
 
-func createCluster() error {
-	log.Printf("Creating Kubernetes cluster: %v", buildEnv.KubeName)
+func createCluster(kube *buildenv.KubeConfig) error {
+	log.Printf("Creating Kubernetes cluster: %v", kube.Name)
 	deploymentService, err = dm.New(oauthClient)
 	if err != nil {
 		return fmt.Errorf("could not create client for Google Cloud Deployment Manager: %v", err)
 	}
 
-	if buildEnv.KubeMaxNodes == 0 || buildEnv.KubeMinNodes == 0 {
-		return fmt.Errorf("buildenv KubeMaxNodes/KubeMinNodes values cannot be 0")
+	if kube.MaxNodes == 0 || kube.MinNodes == 0 {
+		return fmt.Errorf("MaxNodes/MinNodes values cannot be 0")
 	}
 
 	tpl, err := template.New("kube").Parse(kubeConfig)
@@ -310,13 +311,21 @@ func createCluster() error {
 	}
 
 	var result bytes.Buffer
-	err = tpl.Execute(&result, buildEnv)
+	err = tpl.Execute(&result, struct {
+		Env      *buildenv.Environment
+		Kube     *buildenv.KubeConfig
+		Password string
+	}{
+		buildEnv,
+		kube,
+		randomPassword(),
+	})
 	if err != nil {
 		return fmt.Errorf("could not execute Deployment Manager template: %v", err)
 	}
 
 	deployment := &dm.Deployment{
-		Name: buildEnv.KubeName,
+		Name: kube.Name,
 		Target: &dm.TargetConfiguration{
 			Config: &dm.ConfigFile{
 				Content: result.String(),
@@ -410,13 +419,12 @@ func instanceDisk(svc *compute.Service) *compute.AttachedDisk {
 }
 
 func randomPassword() string {
-	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
-	p := make([]byte, 20)
-	rand.Seed(time.Now().UnixNano())
-	for i := range p {
-		p[i] = chars[rand.Intn(len(chars))]
+	const n = 20
+	buf := make([]byte, n/2+1)
+	if _, err := rand.Read(buf); err != nil {
+		log.Fatalf("randomPassword: %v", err)
 	}
-	return string(p)
+	return fmt.Sprintf("%x", buf)[:n]
 }
 
 func makeBasepinDisks(svc *compute.Service) error {

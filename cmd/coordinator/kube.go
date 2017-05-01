@@ -39,8 +39,8 @@ var (
 
 // initGCE must be called before initKube
 func initKube() error {
-	if buildEnv.KubeMaxNodes == 0 {
-		return errors.New("Kubernetes builders disabled due to KubeMaxNodes == 0")
+	if buildEnv.KubeBuild.MaxNodes == 0 {
+		return errors.New("Kubernetes builders disabled due to KubeBuild.MaxNodes == 0")
 	}
 
 	// projectID was set by initGCE
@@ -53,7 +53,7 @@ func initKube() error {
 	defer cancel() // ctx is only used for discovery and connect; not retained.
 	var err error
 	buildletsKubeClient, err = gke.NewClient(ctx,
-		"buildlets",
+		buildEnv.KubeBuild.Name,
 		gke.OptZone(buildEnv.Zone),
 		gke.OptProject(buildEnv.ProjectName),
 		gke.OptTokenSource(tokenSource))
@@ -62,7 +62,7 @@ func initKube() error {
 	}
 
 	goKubeClient, err = gke.NewClient(ctx,
-		"go",
+		buildEnv.KubeTools.Name,
 		gke.OptZone(buildEnv.Zone),
 		gke.OptProject(buildEnv.ProjectName),
 		gke.OptTokenSource(tokenSource))
