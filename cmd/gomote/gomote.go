@@ -23,10 +23,10 @@ To list the subcommands, run "gomote" without arguments:
 
   Commands:
 
-    create     create a buildlet
+    create     create a buildlet; with no args, list types of buildlets
     destroy    destroy a buildlet
     gettar     extract a tar.gz from a buildlet
-    list       list buildlets
+    list       list active buildlets
     ls         list the contents of a directory on a buildlet
     ping       test whether a buildlet is alive and reachable
     push       sync the repo of your pwd to the buildlet
@@ -39,7 +39,7 @@ To list the subcommands, run "gomote" without arguments:
 To list all the builder types available, run "create" with no arguments:
 
   $ gomote create
-  (tons of builder types)
+  (list tons of buildlet types)
 
 The "gomote run" command has many of its own flags:
 
@@ -138,11 +138,11 @@ func registerCommand(name, des string, run func([]string) error) {
 }
 
 func registerCommands() {
-	registerCommand("create", "create a buildlet", create)
+	registerCommand("create", "create a buildlet; with no args, list types of buildlets", create)
 	registerCommand("destroy", "destroy a buildlet", destroy)
 	registerCommand("gettar", "extract a tar.gz from a buildlet", getTar)
 	registerCommand("ls", "list the contents of a directory on a buildlet", ls)
-	registerCommand("list", "list buildlets", list)
+	registerCommand("list", "list active buildlets", list)
 	registerCommand("ping", "test whether a buildlet is alive and reachable ", ping)
 	registerCommand("push", "sync the repo of your pwd to the buildlet", push)
 	registerCommand("put", "put files on a buildlet", put)
