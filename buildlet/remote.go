@@ -5,6 +5,7 @@
 package buildlet
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -204,6 +205,11 @@ func userToken() (string, error) {
 		panic("userToken called with user flag empty")
 	}
 	keyDir := configDir()
+	userPath := filepath.Join(keyDir, "user-"+gomoteUserFlag+".user")
+	b, err := ioutil.ReadFile(userPath)
+	if err == nil {
+		gomoteUserFlag = string(bytes.TrimSpace(b))
+	}
 	baseFile := "user-" + gomoteUserFlag + ".token"
 	if buildenv.FromFlags() == buildenv.Staging {
 		baseFile = "staging-" + baseFile
