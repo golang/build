@@ -26,7 +26,7 @@ RUN go get -d github.com/golang/protobuf/proto && \
     cd /go/src/github.com/golang/protobuf && git reset --hard 2bba0603135d7d7f5cb73b2125beeda19c09f4ef
 
 RUN go get -d cloud.google.com/go/storage && \
-    cd /go/src/cloud.google.com/go && git reset --hard 1ec09e65be459e9a0c9014ff8e4591d8c2f1bed6
+    cd /go/src/cloud.google.com/go && git reset --hard 2f1da5d762c81a12c516bfb8a9ede96f42750361
 
 RUN go get -d golang.org/x/crypto/acme/autocert && \
     cd /go/src/golang.org/x/crypto && git reset --hard c7af5bf2638a1164f2eb5467c39c6cffbd13a02e
