@@ -6,6 +6,7 @@ package main
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"crypto/sha1"
@@ -99,6 +100,45 @@ func push(args []string) error {
 		}
 	}
 
+	// Invoke 'git check-ignore' and use it to query whether paths have been gitignored.
+	// If anything goes wrong at any point, fall back to assuming that nothing is gitignored.
+	var isGitIgnored func(string) bool
+	gci := exec.Command("git", "check-ignore", "--stdin", "-n", "-v", "-z")
+	gci.Env = append(os.Environ(), "GIT_FLUSH=1")
+	gciIn, errIn := gci.StdinPipe()
+	defer gciIn.Close() // allow git process to exit
+	gciOut, errOut := gci.StdoutPipe()
+	errStart := gci.Start()
+	if errIn != nil || errOut != nil || errStart != nil {
+		isGitIgnored = func(string) bool { return false }
+	} else {
+		var failed bool
+		br := bufio.NewReader(gciOut)
+		isGitIgnored = func(path string) bool {
+			if failed {
+				return false
+			}
+			fmt.Fprintf(gciIn, "%s\x00", path)
+			// Response is of form "<source> <NULL> <linenum> <NULL> <pattern> <NULL> <pathname> <NULL>"
+			// Read all four and check that the path is correct.
+			// If so, the path is ignored iff the source (reason why ignored) is non-empty.
+			var resp [4][]byte
+			for i := range resp {
+				b, err := br.ReadBytes(0)
+				if err != nil {
+					failed = true
+					return false
+				}
+				resp[i] = b[:len(b)-1] // drop trailing NULL
+			}
+			// Sanity check
+			if string(resp[3]) != path {
+				panic("git check-ignore path did not roundtrip, got " + string(resp[3]) + " sent " + path)
+			}
+			return len(resp[0]) > 0
+		}
+	}
+
 	type fileInfo struct {
 		fi   os.FileInfo
 		sha1 string // if regular file
@@ -126,6 +166,12 @@ func push(args []string) error {
 			}
 		}
 		inf := fileInfo{fi: fi}
+		if isGitIgnored(path) {
+			if fi.Mode().IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		if fi.Mode().IsRegular() {
 			inf.sha1, err = fileSHA1(path)
 			if err != nil {
@@ -143,6 +189,10 @@ func push(args []string) error {
 		if rel == "VERSION" {
 			// Don't delete this. It's harmless, and necessary.
 			// Clients can overwrite it if they want.
+			continue
+		}
+		if isGitIgnored(rel) {
+			// Don't delete remote gitignored files; this breaks built toolchains.
 			continue
 		}
 		rel = strings.TrimRight(rel, "/")
