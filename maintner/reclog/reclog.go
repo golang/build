@@ -55,7 +55,7 @@ func ForeachFileRecord(path string, fn RecordCallback) error {
 		return err
 	}
 	defer f.Close()
-	if err := ForeachRecord(f, fn); err != nil {
+	if err := ForeachRecord(f, 0, fn); err != nil {
 		return fmt.Errorf("error in %s: %v", path, err)
 	}
 	return nil
@@ -64,8 +64,9 @@ func ForeachFileRecord(path string, fn RecordCallback) error {
 // ForeachRecord calls fn for each record in r.
 // Calls to fn are made serially.
 // If fn returns an error, iteration ends and that error is returned.
-func ForeachRecord(r io.Reader, fn RecordCallback) error {
-	var off int64
+// The startOffset be 0 if reading from the beginning of a file.
+func ForeachRecord(r io.Reader, startOffset int64, fn RecordCallback) error {
+	off := startOffset
 	br := bufio.NewReader(r)
 	var buf bytes.Buffer
 	var hdrBuf bytes.Buffer

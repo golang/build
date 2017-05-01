@@ -74,7 +74,7 @@ func (ns *netMutSource) waitForServerSegmentUpdate(ctx context.Context) error {
 		return fn(ctx)
 	}
 
-	// TODO: 5 second sleep is dumb. make it
+	// TODO: few second sleep is dumb. make it
 	// subscribe to pubsubhelper? maybe the
 	// server's response header should reference
 	// its pubsubhelper server URL. but then we
@@ -82,13 +82,12 @@ func (ns *netMutSource) waitForServerSegmentUpdate(ctx context.Context) error {
 	// up right away. so maybe wait for activity,
 	// and then poll every second for 10 seconds
 	// or so, or until there's changes, and then
-	// go back to every 5 second polling or
+	// go back to every 2 second polling or
 	// something. or maybe the maintnerd server should
 	// have its own long poll functionality.
-	// for now, just 5 second polling:
-	log.Printf("sleeping for 5s...")
+	// for now, just 2 second polling:
 	select {
-	case <-time.After(5 * time.Second):
+	case <-time.After(2 * time.Second):
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -247,7 +246,7 @@ func (ns *netMutSource) sendMutations(ctx context.Context, ch chan<- MutationStr
 				return err
 			}
 		}
-		return reclog.ForeachRecord(io.LimitReader(f, seg.size), func(off int64, hdr, rec []byte) error {
+		return reclog.ForeachRecord(io.LimitReader(f, seg.size-seg.skip), seg.skip, func(off int64, hdr, rec []byte) error {
 			m := new(maintpb.Mutation)
 			if err := proto.Unmarshal(rec, m); err != nil {
 				return err

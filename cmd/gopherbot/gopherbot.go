@@ -71,10 +71,13 @@ func main() {
 
 	ctx := context.Background()
 	for {
+		t0 := time.Now()
 		err := bot.doTasks(ctx)
 		if err != nil {
 			log.Print(err)
 		}
+		botDur := time.Since(t0)
+		log.Printf("gopherbot ran in %v", botDur)
 		if !*daemon {
 			if err != nil {
 				os.Exit(1)

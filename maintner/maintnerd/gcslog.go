@@ -396,7 +396,7 @@ func (gl *gcsLog) GetMutations(ctx context.Context) <-chan maintner.MutationStre
 	ch := make(chan maintner.MutationStreamEvent, 50) // buffered: overlap gunzip/unmarshal with loading
 	go func() {
 		err := gl.foreachSegmentReader(ctx, func(r io.Reader) error {
-			return reclog.ForeachRecord(r, func(off int64, hdr, rec []byte) error {
+			return reclog.ForeachRecord(r, 0, func(off int64, hdr, rec []byte) error {
 				m := new(maintpb.Mutation)
 				if err := proto.Unmarshal(rec, m); err != nil {
 					return err
