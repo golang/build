@@ -358,7 +358,7 @@ func stagingClusterBuilders() map[string]dashboard.BuildConfig {
 	m := map[string]dashboard.BuildConfig{}
 	for _, name := range []string{
 		"linux-arm",
-		"linux-arm-arm5",
+		"linux-arm-arm5spacemonkey",
 		"linux-amd64",
 		"linux-386-387",
 		"windows-amd64-2008",
