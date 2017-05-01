@@ -52,3 +52,36 @@ func TestGetGerritStatus(t *testing.T) {
 		}
 	}
 }
+
+var normalizeTests = []struct {
+	in  string
+	out string
+}{
+	{"foo", "foo"},
+	{"http://foo", "foo"},
+	{"upspin-review.googlesource.com", "upspin.googlesource.com"},
+	{"go-review.googlesource.com", "go.googlesource.com"},
+}
+
+func TestNormalizeServer(t *testing.T) {
+	for _, tt := range normalizeTests {
+		got := normalizeGerritServer(tt.in)
+		if got != tt.out {
+			t.Errorf("normalizeGerritServer(%q) = %q, want %q", tt.in, got, tt.out)
+		}
+	}
+}
+
+func TestGerritProject(t *testing.T) {
+	var c Corpus
+	c.EnableLeaderMode(new(dummyMutationLogger), "/fake/dir")
+	c.TrackGerrit("go.googlesource.com/build")
+	gp := c.Gerrit().Project("go-review.googlesource.com", "build")
+	if gp == nil {
+		t.Errorf("expected go-review.googlesource.com to return a project, got nil")
+	}
+	gp = c.Gerrit().Project("go-review.googlesource.com", "unknown")
+	if gp != nil {
+		t.Errorf("expected go-review.googlesource.com to return nil, got a project")
+	}
+}

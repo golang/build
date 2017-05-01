@@ -36,6 +36,27 @@ type Gerrit struct {
 	clsReferencingGithubIssue map[GitHubIssueRef][]*GerritCL
 }
 
+func normalizeGerritServer(server string) string {
+	u, err := url.Parse(server)
+	if err == nil && u.Host != "" {
+		server = u.Host
+	}
+	if strings.HasSuffix(server, "-review.googlesource.com") {
+		// special case: the review site is hosted at a different URL than the
+		// Git checkout URL.
+		return strings.Replace(server, "-review.googlesource.com", ".googlesource.com", 1)
+	}
+	return server
+}
+
+// Project returns the specified Gerrit project if it's known, otherwise
+// it returns nil. Server is the Gerrit server's hostname, such as
+// "go.googlesource.com".
+func (g *Gerrit) Project(server, project string) *GerritProject {
+	server = normalizeGerritServer(server)
+	return g.projects[server+"/"+project]
+}
+
 // c.mu must be held
 func (g *Gerrit) getOrCreateProject(gerritProj string) *GerritProject {
 	proj, ok := g.projects[gerritProj]
