@@ -97,6 +97,8 @@ func (gp *GerritProject) gitDir() string {
 	return filepath.Join(gp.gerrit.c.getDataDir(), url.PathEscape(gp.proj))
 }
 
+// ServerSlashProject returns the server and project together, such as
+// "go.googlesource.com/build".
 func (gp *GerritProject) ServerSlashProject() string { return gp.proj }
 
 // Server returns the Gerrit server, such as "go.googlesource.com".
@@ -117,7 +119,7 @@ func (gp *GerritProject) Project() string {
 
 // ForeachOpenCL calls fn for each open CL in the repo.
 //
-// If fn returns an error, iteration ends and ForeachIssue returns
+// If fn returns an error, iteration ends and ForeachOpenCL returns
 // with that error.
 //
 // The fn function is called serially, with increasingly numbered
@@ -139,6 +141,10 @@ func (gp *GerritProject) ForeachOpenCL(fn func(*GerritCL) error) error {
 	return nil
 }
 
+// ForeachCLUnsorted calls fn for each CL in the repo, in any order
+//
+// If fn returns an error, iteration ends and ForeachCLUnsorted returns with
+// that error.
 func (gp *GerritProject) ForeachCLUnsorted(fn func(*GerritCL) error) error {
 	for _, cl := range gp.cls {
 		if err := fn(cl); err != nil {
@@ -146,6 +152,14 @@ func (gp *GerritProject) ForeachCLUnsorted(fn func(*GerritCL) error) error {
 		}
 	}
 	return nil
+}
+
+// CL returns the GerritCL with the given number, or nil if it is not present.
+//
+// CL numbers are shared across all projects on a Gerrit server, so you can get
+// nil unless you have the GerritProject containing that CL.
+func (gp *GerritProject) CL(number int32) *GerritCL {
+	return gp.cls[number]
 }
 
 func (gp *GerritProject) logf(format string, args ...interface{}) {

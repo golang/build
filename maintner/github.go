@@ -49,6 +49,7 @@ func (id GithubRepoID) valid() bool {
 	return true
 }
 
+// GitHub holds data about a GitHub repo.
 type GitHub struct {
 	c     *Corpus
 	users map[int64]*GitHubUser
