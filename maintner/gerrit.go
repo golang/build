@@ -265,7 +265,7 @@ func (c *Corpus) processGerritMutation(gm *maintpb.GerritMutation) {
 	gp.processMutation(gm)
 }
 
-var statusIndicator = "\n    Status: "
+var statusIndicator = "\nStatus: "
 
 // The Go Gerrit site does not really use the "draft" status much, but if
 // you need to test it, create a dummy commit and then run
