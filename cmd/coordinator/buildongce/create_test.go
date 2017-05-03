@@ -15,9 +15,10 @@ import (
 func TestDeploymentManagerManifest(t *testing.T) {
 	tests := []struct {
 		env      *buildenv.Environment
+		kube     *buildenv.KubeConfig
 		expected string
 	}{
-		{buildenv.Staging, `
+		{buildenv.Staging, &buildenv.Staging.KubeBuild, `
 resources:
 - name: "buildlets"
   type: container.v1.cluster
@@ -32,6 +33,7 @@ resources:
         machine_type: "n1-standard-8"
         oauth_scopes:
           - "https://www.googleapis.com/auth/cloud-platform"
+          - "https://www.googleapis.com/auth/userinfo.email"
       master_auth:
         username: "admin"
         password: ""`},
@@ -43,7 +45,7 @@ resources:
 		}
 
 		var result bytes.Buffer
-		err = tpl.Execute(&result, test.env)
+		err = tpl.Execute(&result, deploymentTemplateData{Env: test.env, Kube: test.kube})
 		if err != nil {
 			t.Errorf("could not execute Deployment Manager template: %v", err)
 		}

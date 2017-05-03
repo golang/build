@@ -294,6 +294,12 @@ func awaitOp(svc *compute.Service, op *compute.Operation) error {
 	}
 }
 
+type deploymentTemplateData struct {
+	Env      *buildenv.Environment
+	Kube     *buildenv.KubeConfig
+	Password string
+}
+
 func createCluster(kube *buildenv.KubeConfig) error {
 	log.Printf("Creating Kubernetes cluster: %v", kube.Name)
 	deploymentService, err = dm.New(oauthClient)
@@ -311,14 +317,10 @@ func createCluster(kube *buildenv.KubeConfig) error {
 	}
 
 	var result bytes.Buffer
-	err = tpl.Execute(&result, struct {
-		Env      *buildenv.Environment
-		Kube     *buildenv.KubeConfig
-		Password string
-	}{
-		buildEnv,
-		kube,
-		randomPassword(),
+	err = tpl.Execute(&result, deploymentTemplateData{
+		Env:      buildEnv,
+		Kube:     kube,
+		Password: randomPassword(),
 	})
 	if err != nil {
 		return fmt.Errorf("could not execute Deployment Manager template: %v", err)
