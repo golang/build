@@ -1,3 +1,7 @@
+# Copyright 2017 The Go Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
 usage: FORCE
 	# See Makefile targets.
 	exit 1
@@ -21,7 +25,7 @@ DOCKER_IMAGE_build0=build0/coordinator:latest
 DOCKER_CTR_build0=coordinator-build0
 
 build0: *.go Dockerfile.0
-	docker build --force-rm -f Dockerfile.0 --tag=$(DOCKER_IMAGE_build0) ../..
+	docker build --force-rm -f Dockerfile.0 --build-arg "version=$$(./version.sh)" --tag=$(DOCKER_IMAGE_build0) ../..
 
 coordinator: build0
 	docker create --name $(DOCKER_CTR_build0) $(DOCKER_IMAGE_build0)
