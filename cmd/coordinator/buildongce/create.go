@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -21,26 +20,18 @@ import (
 	"text/template"
 	"time"
 
-	"cloud.google.com/go/datastore"
-	"go4.org/cloud/google/gceutil"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
 	dm "google.golang.org/api/deploymentmanager/v2"
-	"google.golang.org/api/googleapi"
-	oauth2api "google.golang.org/api/oauth2/v2"
 )
 
 var (
-	proj            = flag.String("project", "", "Optional name of the Google Cloud Platform project to create the infrastructure in. If empty, the project defined in golang.org/x/build/buildenv is used, for either production or staging (if the -staging flag is used)")
-	staticIP        = flag.String("static_ip", "", "Static IP to use. If empty, automatic.")
-	reuseDisk       = flag.Bool("reuse_disk", true, "Whether disk images should be reused between shutdowns/restarts.")
-	ssd             = flag.Bool("ssd", true, "If true, use a solid state disk (faster, more expensive)")
-	coordinator     = flag.String("coord", "", "Optional coordinator binary URL. If empty, the URL from a configuration defined in golang.org/x/build/buildenv will be used. ")
-	staging         = flag.Bool("staging", false, "If true, buildenv.Staging will be used to provide default configuration values. Otherwise, buildenv.Production is used.")
-	skipKube        = flag.Bool("skip_kube", false, "If true, the Kubernetes cluster will not be created.")
-	skipCoordinator = flag.Bool("skip_coordinator", false, "If true, the coordinator instance will not be created.")
-	makeDisks       = flag.Bool("make_basepin", false, "Create the basepin disk images for all builders, then stop. Does not create the VM.")
+	proj = flag.String("project", "", "Optional name of the Google Cloud Platform project to create the infrastructure in. If empty, the project defined in golang.org/x/build/buildenv is used, for either production or staging (if the -staging flag is used)")
+
+	staging      = flag.Bool("staging", false, "If true, buildenv.Staging will be used to provide default configuration values. Otherwise, buildenv.Production is used.")
+	makeClusters = flag.String("make-clusters", "go,buildlets", "comma-separated list of clusters to create. Empty means none.")
+	makeDisks    = flag.Bool("make-basepin", false, "Create the basepin disk images for all builders, then stop. Does not create the VM.")
 
 	computeService    *compute.Service
 	deploymentService *dm.Service
@@ -48,32 +39,6 @@ var (
 	err               error
 	buildEnv          *buildenv.Environment
 )
-
-const baseConfig = `#cloud-config
-coreos:
-  update:
-    group: stable
-    reboot-strategy: off
-  units:
-    - name: gobuild.service
-      command: start
-      content: |
-        [Unit]
-        Description=Go Builders
-        After=docker.service
-        Requires=docker.service
-        
-        [Service]
-        ExecStartPre=/bin/bash -c 'mkdir -p /opt/bin && curl -s -o /opt/bin/coordinator.tmp $COORDINATOR && install -m 0755 /opt/bin/coordinator{.tmp,}'
-        ExecStart=/opt/bin/coordinator
-        RestartSec=10s
-        Restart=always
-        StartLimitInterval=0
-        Type=simple
-         
-        [Install]
-        WantedBy=multi-user.target
-`
 
 // Deployment Manager V2 manifest for creating a Google Container Engine
 // cluster to run buildlets, as well as an autoscaler attached to the
@@ -126,12 +91,6 @@ func main() {
 	if *proj != "" {
 		buildEnv.ProjectName = *proj
 	}
-	if *coordinator != "" {
-		buildEnv.CoordinatorURL = *coordinator
-	}
-	if *staticIP != "" {
-		buildEnv.StaticIP = *staticIP
-	}
 
 	// Brad is sick of google.DefaultClient giving him the
 	// permissions from the instance via the metadata service. Use
@@ -159,109 +118,12 @@ func main() {
 		return
 	}
 
-	if !*skipCoordinator {
-		err = createCoordinator()
+	for _, c := range []*buildenv.KubeConfig{&buildEnv.KubeBuild, &buildEnv.KubeTools} {
+		err := createCluster(c)
 		if err != nil {
-			log.Fatalf("Error creating coordinator instance: %v", err)
+			log.Fatalf("Error creating Kubernetes cluster %q: %v", c.Name, err)
 		}
 	}
-
-	if !*skipKube {
-		for _, c := range []*buildenv.KubeConfig{&buildEnv.KubeBuild, &buildEnv.KubeTools} {
-			err = createCluster(c)
-			if err != nil {
-				log.Fatalf("Error creating Kubernetes cluster %q: %v", c.Name, err)
-			}
-		}
-	}
-}
-
-func createCoordinator() error {
-	log.Printf("Creating coordinator instance: %v", buildEnv.CoordinatorName)
-
-	natIP := buildEnv.StaticIP
-	if natIP == "" {
-		// Try to find it by name.
-		aggAddrList, err := computeService.Addresses.AggregatedList(buildEnv.ProjectName).Do()
-		if err != nil {
-			return fmt.Errorf("could not find IP address: %v", err)
-		}
-		// https://godoc.org/google.golang.org/api/compute/v1#AddressAggregatedList
-	IPLoop:
-		for _, asl := range aggAddrList.Items {
-			for _, addr := range asl.Addresses {
-				if addr.Name == buildEnv.CoordinatorName+"-ip" && addr.Status == "RESERVED" {
-					natIP = addr.Address
-					break IPLoop
-				}
-			}
-		}
-	}
-
-	cloudConfig := strings.Replace(baseConfig, "$COORDINATOR", buildEnv.CoordinatorURL, 1)
-	const maxCloudConfig = 32 << 10 // per compute API docs
-	if len(cloudConfig) > maxCloudConfig {
-		return fmt.Errorf("cloud config length of %d bytes is over %d byte limit", len(cloudConfig), maxCloudConfig)
-	}
-
-	instance := &compute.Instance{
-		Name:        buildEnv.CoordinatorName,
-		Description: "Go Builder",
-		MachineType: buildEnv.MachineTypeURI(),
-		Disks:       []*compute.AttachedDisk{instanceDisk(computeService)},
-		Tags: &compute.Tags{
-			Items: []string{"http-server", "https-server", "allow-ssh"},
-		},
-		Metadata: &compute.Metadata{
-			Items: []*compute.MetadataItems{
-				{
-					Key:   "user-data",
-					Value: googleapi.String(cloudConfig),
-				},
-			},
-		},
-		NetworkInterfaces: []*compute.NetworkInterface{
-			&compute.NetworkInterface{
-				AccessConfigs: []*compute.AccessConfig{
-					&compute.AccessConfig{
-						Type:  "ONE_TO_ONE_NAT",
-						Name:  "External NAT",
-						NatIP: natIP,
-					},
-				},
-				Network: buildEnv.ComputePrefix() + "/global/networks/default",
-			},
-		},
-		ServiceAccounts: []*compute.ServiceAccount{
-			{
-				Email: "default",
-				Scopes: []string{
-					compute.DevstorageFullControlScope,
-					compute.ComputeScope,
-					compute.CloudPlatformScope,
-					datastore.ScopeDatastore,
-					oauth2api.UserinfoEmailScope,
-				},
-			},
-		},
-	}
-
-	log.Printf("Creating instance...")
-	op, err := computeService.Instances.Insert(buildEnv.ProjectName, buildEnv.Zone, instance).Do()
-	if err != nil {
-		return fmt.Errorf("Failed to create instance: %v", err)
-	}
-	if err := awaitOp(computeService, op); err != nil {
-		log.Fatalf("failed to start: %v", err)
-	}
-
-	inst, err := computeService.Instances.Get(buildEnv.ProjectName, buildEnv.Zone, buildEnv.CoordinatorName).Do()
-	if err != nil {
-		log.Fatalf("Error getting instance after creation: %v", err)
-	}
-	ij, _ := json.MarshalIndent(inst, "", "    ")
-	log.Printf("Instance: %s", ij)
-	return nil
 }
 
 func awaitOp(svc *compute.Service, op *compute.Operation) error {
@@ -300,7 +162,20 @@ type deploymentTemplateData struct {
 	Password string
 }
 
+func wantClusterCreate(name string) bool {
+	for _, want := range strings.Split(*makeClusters, ",") {
+		if want == name {
+			return true
+		}
+	}
+	return false
+}
+
 func createCluster(kube *buildenv.KubeConfig) error {
+	if !wantClusterCreate(kube.Name) {
+		log.Printf("skipping kubernetes cluster %q per flag", kube.Name)
+		return nil
+	}
 	log.Printf("Creating Kubernetes cluster: %v", kube.Name)
 	deploymentService, err = dm.New(oauthClient)
 	if err != nil {
@@ -366,67 +241,12 @@ OpLoop:
 	return nil
 }
 
-func instanceDisk(svc *compute.Service) *compute.AttachedDisk {
-	imageURL, err := gceutil.CoreOSImageURL(oauthClient)
-	if err != nil {
-		log.Fatalf("Error fetching CoreOS Image URL: %v", err)
-	}
-	diskName := buildEnv.CoordinatorName + "-coreos-stateless-pd"
-
-	if *reuseDisk {
-		dl, err := svc.Disks.List(buildEnv.ProjectName, buildEnv.Zone).Do()
-		if err != nil {
-			log.Fatalf("Error listing disks: %v", err)
-		}
-		for _, disk := range dl.Items {
-			if disk.Name != diskName {
-				continue
-			}
-			return &compute.AttachedDisk{
-				AutoDelete: false,
-				Boot:       true,
-				DeviceName: diskName,
-				Type:       "PERSISTENT",
-				Source:     disk.SelfLink,
-				Mode:       "READ_WRITE",
-
-				// The GCP web UI's "Show REST API" link includes a
-				// "zone" parameter, but it's not in the API
-				// description. But it wants this form (disk.Zone, a
-				// full zone URL, not *zone):
-				// Zone: disk.Zone,
-				// ... but it seems to work without it.  Keep this
-				// comment here until I file a bug with the GCP
-				// people.
-			}
-		}
-	}
-
-	diskType := ""
-	if *ssd {
-		diskType = "https://www.googleapis.com/compute/v1/projects/" + buildEnv.ProjectName + "/zones/" + buildEnv.Zone + "/diskTypes/pd-ssd"
-	}
-
-	return &compute.AttachedDisk{
-		AutoDelete: !*reuseDisk,
-		Boot:       true,
-		Type:       "PERSISTENT",
-		InitializeParams: &compute.AttachedDiskInitializeParams{
-			DiskName:    diskName,
-			SourceImage: imageURL,
-			DiskSizeGb:  50,
-			DiskType:    diskType,
-		},
-	}
-}
-
 func randomPassword() string {
-	const n = 20
-	buf := make([]byte, n/2+1)
+	buf := make([]byte, 10)
 	if _, err := rand.Read(buf); err != nil {
 		log.Fatalf("randomPassword: %v", err)
 	}
-	return fmt.Sprintf("%x", buf)[:n]
+	return fmt.Sprintf("%x", buf)
 }
 
 func makeBasepinDisks(svc *compute.Service) error {
