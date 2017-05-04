@@ -1335,7 +1335,6 @@ func (p *githubRepoPoller) syncMilestones(ctx context.Context) error {
 		return nil
 	}
 	p.c.addMutation(&maintpb.Mutation{Github: mut})
-	p.lastUpdate = time.Now()
 	return nil
 }
 
@@ -1368,7 +1367,6 @@ func (p *githubRepoPoller) syncLabels(ctx context.Context) error {
 	if changes == 0 {
 		return nil
 	}
-	p.c.addMutation(&maintpb.Mutation{Github: mut})
 	p.lastUpdate = time.Now()
 	return nil
 }
