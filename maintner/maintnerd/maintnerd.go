@@ -186,7 +186,19 @@ func main() {
 			http.NotFound(w, r)
 			return
 		}
-		io.WriteString(w, "<html><body>This is <a href='https://godoc.org/golang.org/x/build/maintner/maintnerd'>maintnerd</a>, the <a href='https://godoc.org/golang.org/x/build/maintner'>maintner</a> server.</body>")
+		io.WriteString(w, `<html>
+<body>
+<p>
+  This is <a href='https://godoc.org/golang.org/x/build/maintner/maintnerd'>maintnerd</a>,
+  the <a href='https://godoc.org/golang.org/x/build/maintner'>maintner</a> server.
+  See the <a href='https://godoc.org/golang.org/x/build/maintner/godata'>godata package</a> for
+  a client.
+</p>
+<ul>
+   <li><a href='/logs'>/logs</a>
+</ul>
+</body></html>
+`)
 	})
 
 	errc := make(chan error)

@@ -45,6 +45,7 @@ type gcsLog struct {
 	bucket     *storage.BucketHandle
 
 	mu         sync.Mutex // guards the following
+	cond       *sync.Cond
 	seg        map[int]gcsLogSegment
 	curNum     int
 	logBuf     bytes.Buffer
@@ -67,17 +68,25 @@ func (s gcsLogSegment) String() string {
 	return fmt.Sprintf("{gcsLogSegment num=%v, size=%v, sha=%v, created=%v}", s.num, s.size, s.sha224, s.created.Format(time.RFC3339))
 }
 
+// newGCSLogBase returns a new gcsLog instance without any association
+// with Google Cloud Storage.
+func newGCSLogBase() *gcsLog {
+	gl := &gcsLog{
+		seg: map[int]gcsLogSegment{},
+	}
+	gl.cond = sync.NewCond(&gl.mu)
+	return gl
+}
+
 func newGCSLog(ctx context.Context, bucketName string) (*gcsLog, error) {
 	sc, err := storage.NewClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("storage.NewClient: %v", err)
 	}
-	gl := &gcsLog{
-		sc:         sc,
-		bucketName: bucketName,
-		bucket:     sc.Bucket(bucketName),
-		seg:        map[int]gcsLogSegment{},
-	}
+	gl := newGCSLogBase()
+	gl.sc = sc
+	gl.bucketName = bucketName
+	gl.bucket = sc.Bucket(bucketName)
 	if err := gl.initLoad(ctx); err != nil {
 		return nil, err
 	}
@@ -192,14 +201,93 @@ func (gl *gcsLog) serveJSONLogsIndex(w http.ResponseWriter, r *http.Request) {
 
 	startSeg, _ := strconv.Atoi(r.FormValue("startseg"))
 	if startSeg < 0 {
-		http.Error(w, "bad seg", http.StatusBadRequest)
+		http.Error(w, "bad startseg", http.StatusBadRequest)
 		return
 	}
+
+	// Long poll if request contains non-zero waitsizenot parameter.
+	// The client's provided 'waitsizenot' value is the sum of the segment
+	// sizes they already know. They're waiting for something new.
+	if s := r.FormValue("waitsizenot"); s != "" {
+		oldSize, err := strconv.ParseInt(s, 10, 64)
+		if err != nil || oldSize < 0 {
+			http.Error(w, "bad waitsizenot", http.StatusBadRequest)
+			return
+		}
+		// Return a 304 if there's no activity in just under a minute.
+		// This keeps some occasional activity on the TCP connection
+		// so we (and any proxies) know it's alive, and can fit
+		// within reason read/write deadlines on either side.
+		ctx, cancel := context.WithTimeout(r.Context(), 55*time.Second)
+		defer cancel()
+		changed := gl.waitSizeNot(ctx, oldSize)
+		if !changed {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
+
 	segs := gl.getJSONLogs(startSeg)
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Sum-Segment-Size", fmt.Sprint(sumSegmentSizes(segs)))
+
 	body, _ := json.MarshalIndent(segs, "", "\t")
 	w.Write(body)
+}
+
+// sumSegmentSizes returns the sum of each seg.Size in segs.
+func sumSegmentSizes(segs []maintner.LogSegmentJSON) (sum int64) {
+	for _, seg := range segs {
+		sum += seg.Size
+	}
+	return sum
+}
+
+// waitSizeNot blocks until the sum of gcsLog is not v, or the context expires.
+// It reports whether the size changed.
+func (gl *gcsLog) waitSizeNot(ctx context.Context, v int64) (changed bool) {
+	returned := make(chan struct{})
+	defer close(returned)
+	go gl.waitSizeNotAwaitContextOrChange(ctx, returned)
+	gl.mu.Lock()
+	defer gl.mu.Unlock()
+	for {
+		if curSize := gl.sumSizeLocked(); curSize != v {
+			log.Printf("waitSize fired. from %d => %d", v, curSize)
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		default:
+			gl.cond.Wait()
+		}
+	}
+}
+
+// waitSizeNotAwaitContextOrChange is part of waitSizeNot.
+// It's a goroutine that selects on two channels and calls
+// sync.Cond.Broadcast to wake up the waitSizeNot waiter if the
+// context expires.
+func (gl *gcsLog) waitSizeNotAwaitContextOrChange(ctx context.Context, returned <-chan struct{}) {
+	select {
+	case <-ctx.Done():
+		gl.cond.Broadcast()
+	case <-returned:
+		// No need to do a wakeup. Caller is already gone.
+	}
+}
+
+func (gl *gcsLog) sumSizeLocked() int64 {
+	var sum int64
+	for n, seg := range gl.seg {
+		if n != gl.curNum {
+			sum += seg.size
+		}
+	}
+	sum += int64(gl.logBuf.Len())
+	return sum
 }
 
 func (gl *gcsLog) getJSONLogs(startSeg int) (segs []maintner.LogSegmentJSON) {
@@ -272,6 +360,7 @@ func (gl *gcsLog) Log(m *maintpb.Mutation) error {
 	if err := reclog.WriteRecord(gcsLogWriter{gl}, int64(gl.logBuf.Len()), data); err != nil {
 		return err
 	}
+	gl.cond.Broadcast() // wake any long-polling subscribers
 
 	// Otherwise schedule a periodic flush.
 	if gl.flushTimer == nil {

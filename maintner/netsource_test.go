@@ -155,7 +155,6 @@ func TestGetNewSegments(t *testing.T) {
 		// If empty, prefixSum calls are errors.
 		prefixSum string
 
-		wantWaits int
 		want      []fileSeg
 		wantSplit bool
 	}
@@ -240,7 +239,6 @@ func TestGetNewSegments(t *testing.T) {
 					{Number: 2, Size: 102, SHA224: "def"},
 				},
 			},
-			wantWaits: 1,
 			want: []fileSeg{
 				{seg: 2, size: 102, sha224: "def", skip: 0, file: "/fake/0002.mutlog"},
 			},
@@ -305,7 +303,7 @@ func TestGetNewSegments(t *testing.T) {
 			waits := 0
 			ns := &netMutSource{
 				last: tt.lastSegs,
-				testHookGetServerSegments: func(context.Context) (segs []LogSegmentJSON, err error) {
+				testHookGetServerSegments: func(_ context.Context, waitSizeNot int64) (segs []LogSegmentJSON, err error) {
 					serverSegCalls++
 					if serverSegCalls > 10 {
 						t.Fatalf("infinite loop calling getServerSegments? num wait calls = %v", waits)
@@ -318,10 +316,6 @@ func TestGetNewSegments(t *testing.T) {
 						tt.serverSegs = tt.serverSegs[1:]
 					}
 					return segs, nil
-				},
-				testHookWaitForServerSegmentUpdate: func(context.Context) error {
-					waits++
-					return nil
 				},
 				testHookSyncSeg: func(_ context.Context, seg LogSegmentJSON) (fileSeg, error) {
 					return fileSeg{
@@ -353,10 +347,6 @@ func TestGetNewSegments(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("mismatch\n got: %+v\nwant: %+v\n", got, tt.want)
 			}
-			if tt.wantWaits != waits {
-				t.Errorf("wait calls = %v; want %v", waits, tt.wantWaits)
-			}
-
 		})
 	}
 }

@@ -47,10 +47,10 @@ type netMutSource struct {
 	last []fileSeg
 
 	// Hooks for testing. If nil, unused:
-	testHookGetServerSegments          func(context.Context) ([]LogSegmentJSON, error)
-	testHookWaitForServerSegmentUpdate func(context.Context) error
-	testHookSyncSeg                    func(context.Context, LogSegmentJSON) (fileSeg, error)
-	testHookFilePrefixSum224           func(file string, n int64) string
+	testHookGetServerSegments      func(context.Context, int64) ([]LogSegmentJSON, error)
+	testHookWaitAfterServerDupData func(context.Context) error
+	testHookSyncSeg                func(context.Context, LogSegmentJSON) (fileSeg, error)
+	testHookFilePrefixSum224       func(file string, n int64) string
 }
 
 func (ns *netMutSource) GetMutations(ctx context.Context) <-chan MutationStreamEvent {
@@ -69,60 +69,54 @@ func (ns *netMutSource) GetMutations(ctx context.Context) <-chan MutationStreamE
 	return ch
 }
 
-func (ns *netMutSource) waitForServerSegmentUpdate(ctx context.Context) error {
-	if fn := ns.testHookWaitForServerSegmentUpdate; fn != nil {
-		return fn(ctx)
-	}
-
-	// TODO: few second sleep is dumb. make it
-	// subscribe to pubsubhelper? maybe the
-	// server's response header should reference
-	// its pubsubhelper server URL. but then we
-	// can't assume activity means it'll be picked
-	// up right away. so maybe wait for activity,
-	// and then poll every second for 10 seconds
-	// or so, or until there's changes, and then
-	// go back to every 2 second polling or
-	// something. or maybe the maintnerd server should
-	// have its own long poll functionality.
-	// for now, just 2 second polling:
-	select {
-	case <-time.After(2 * time.Second):
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-func (ns *netMutSource) getServerSegments(ctx context.Context) ([]LogSegmentJSON, error) {
+// waitSizeNot optionally specifies that the request should long-poll waiting for the server
+// to have a sum of log segment sizes different than the value specified.
+func (ns *netMutSource) getServerSegments(ctx context.Context, waitSizeNot int64) ([]LogSegmentJSON, error) {
 	if fn := ns.testHookGetServerSegments; fn != nil {
-		return fn(ctx)
+		return fn(ctx, waitSizeNot)
 	}
 
-	req, err := http.NewRequest("GET", ns.server, nil)
-	if err != nil {
-		return nil, err
+	logsURL := ns.server
+	if waitSizeNot > 0 {
+		logsURL += fmt.Sprintf("?waitsizenot=%d", waitSizeNot)
 	}
-	req = req.WithContext(ctx)
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
+	for {
+		req, err := http.NewRequest("GET", logsURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		req = req.WithContext(ctx)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		// If we're doing a long poll and the server replies
+		// with a 304 response, that means the server is just
+		// heart-beating us and trying to get a response back
+		// within its various deadlines. But we should just
+		// try again.
+		if waitSizeNot > 0 && res.StatusCode == http.StatusNotModified {
+			res.Body.Close()
+			continue
+		}
+		defer res.Body.Close()
+		if res.StatusCode != 200 {
+			return nil, fmt.Errorf("%s: %v", ns.server, res.Status)
+		}
+		var segs []LogSegmentJSON
+		err = json.NewDecoder(res.Body).Decode(&segs)
+		if err != nil {
+			return nil, fmt.Errorf("decoding %s JSON: %v", ns.server, err)
+		}
+		return segs, nil
 	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return nil, fmt.Errorf("%s: %v", ns.server, res.Status)
-	}
-	var segs []LogSegmentJSON
-	err = json.NewDecoder(res.Body).Decode(&segs)
-	if err != nil {
-		return nil, fmt.Errorf("decoding %s JSON: %v", ns.server, err)
-	}
-	return segs, nil
 }
 
 func (ns *netMutSource) getNewSegments(ctx context.Context) ([]fileSeg, error) {
 	for {
-		segs, err := ns.getServerSegments(ctx)
+		sumLast := sumSegSize(ns.last)
+
+		segs, err := ns.getServerSegments(ctx, sumLast)
 		if err != nil {
 			return nil, err
 		}
@@ -137,16 +131,25 @@ func (ns *netMutSource) getNewSegments(ctx context.Context) ([]fileSeg, error) {
 			}
 			fileSegs = append(fileSegs, fileSeg)
 		}
-		sumLast := sumSegSize(ns.last)
 		sumCommon := ns.sumCommonPrefixSize(fileSegs, ns.last)
 		if sumLast != sumCommon {
 			return nil, ErrSplit
 		}
 		sumCur := sumSegSize(fileSegs)
 		if sumCommon == sumCur {
-			// Nothing new. Wait.
-			if err := ns.waitForServerSegmentUpdate(ctx); err != nil {
-				return nil, err
+			// Nothing new. This shouldn't happen once the
+			// server is updated to respect the
+			// "?waitsizenot=NNN" long polling parameter.
+			// But keep this brief pause as a backup to
+			// prevent spinning and because clients &
+			// servers won't be updated simultaneously.
+			if ns.testHookGetServerSegments == nil {
+				log.Printf("maintner.netsource: server returned unchanged log segments; old server?")
+			}
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(1 * time.Second):
 			}
 			continue
 		}
