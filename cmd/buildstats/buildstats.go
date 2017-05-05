@@ -52,10 +52,28 @@ func syncBuilds(ctx context.Context) {
 	}
 	buildsTable := bq.Dataset("builds").Table("Builds")
 	meta, err := buildsTable.Metadata(ctx)
+	if ae, ok := err.(*googleapi.Error); ok && ae.Code == 404 {
+		log.Printf("Creating table Builds...")
+		err = buildsTable.Create(ctx)
+		if err == nil {
+			meta, err = buildsTable.Metadata(ctx)
+		}
+	}
 	if err != nil {
 		log.Fatalf("Metadata: %v", err)
 	}
 	log.Printf("Metadata: %#v", meta)
+	if len(meta.Schema) == 0 {
+		log.Printf("EMPTY SCHEMA")
+		schema, err := bigquery.InferSchema(types.BuildRecord{})
+		if err != nil {
+			log.Fatalf("InferSchema: %v", err)
+		}
+		meta, err = buildsTable.Update(ctx, bigquery.TableMetadataToUpdate{Schema: schema})
+		if err != nil {
+			log.Fatalf("table.Update schema: %v", err)
+		}
+	}
 	for i, fs := range meta.Schema {
 		log.Printf("  schema[%v]: %+v", i, fs)
 		for j, fs := range fs.Schema {
@@ -63,7 +81,7 @@ func syncBuilds(ctx context.Context) {
 		}
 	}
 
-	q := bq.Query("SELECT MAX(EndTime) FROM [symbolic-datum-552:builds.Builds]")
+	q := bq.Query("SELECT MAX(EndTime) FROM [" + env.ProjectName + ":builds.Builds]")
 	it, err := q.Read(ctx)
 	if err != nil {
 		log.Fatalf("Read: %v", err)
@@ -76,11 +94,18 @@ func syncBuilds(ctx context.Context) {
 	if err != nil {
 		log.Fatalf("Next: %v", err)
 	}
-	t, ok := values[0].(time.Time)
-	if !ok {
-		log.Fatalf("not a time")
+	var since time.Time
+	switch t := values[0].(type) {
+	case nil:
+		// NULL. No rows.
+		log.Printf("starting from the beginning...")
+	case time.Time:
+		since = values[0].(time.Time)
+	default:
+		log.Fatalf("MAX(EndType) = %T: want nil or time.Time", t)
 	}
-	log.Printf("Max is %v (%v)", t, t.Location())
+
+	log.Printf("Max is %v (%v)", since, since.Location())
 
 	ds, err := datastore.NewClient(ctx, env.ProjectName)
 	if err != nil {
@@ -89,8 +114,16 @@ func syncBuilds(ctx context.Context) {
 
 	up := buildsTable.Uploader()
 
-	log.Printf("Max: %v", t)
-	dsit := ds.Run(ctx, datastore.NewQuery("Build").Filter("EndTime >", t).Filter("EndTime <", t.Add(24*90*time.Hour)).Order("EndTime"))
+	log.Printf("Max: %v", since)
+	dsq := datastore.NewQuery("Build")
+	if !since.IsZero() {
+		dsq = dsq.Filter("EndTime >", since).Filter("EndTime <", since.Add(24*90*time.Hour))
+	} else {
+		// Ignore rows without endtime.
+		dsq = dsq.Filter("EndTime >", time.Unix(1, 0))
+	}
+	dsq = dsq.Order("EndTime")
+	dsit := ds.Run(ctx, dsq)
 	var maxPut time.Time
 	for {
 		n := 0
@@ -180,7 +213,7 @@ func syncSpans(ctx context.Context) {
 		}
 	}
 
-	q := bq.Query("SELECT MAX(EndTime) FROM [symbolic-datum-552:builds.Spans]")
+	q := bq.Query("SELECT MAX(EndTime) FROM [" + env.ProjectName + ":builds.Spans]")
 	it, err := q.Read(ctx)
 	if err != nil {
 		log.Fatalf("Read: %v", err)
