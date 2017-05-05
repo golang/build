@@ -361,7 +361,6 @@ func stagingClusterBuilders() map[string]dashboard.BuildConfig {
 		"linux-arm-arm5spacemonkey",
 		"linux-amd64",
 		"linux-386-387",
-		"windows-amd64-2008",
 		"windows-386-gce",
 	} {
 		if c, ok := dashboard.Builders[name]; ok {

@@ -102,9 +102,11 @@ func initGCE() error {
 		projectZone = path.Base(projectZone)
 		buildEnv.Zone = projectZone
 
-		buildEnv.StaticIP, err = metadata.ExternalIP()
-		if err != nil {
-			return fmt.Errorf("ExternalIP: %v", err)
+		if buildEnv.StaticIP == "" {
+			buildEnv.StaticIP, err = metadata.ExternalIP()
+			if err != nil {
+				return fmt.Errorf("ExternalIP: %v", err)
+			}
 		}
 
 		if !hasComputeScope() {
