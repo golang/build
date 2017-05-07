@@ -1367,7 +1367,7 @@ func (p *githubRepoPoller) syncLabels(ctx context.Context) error {
 	if changes == 0 {
 		return nil
 	}
-	p.lastUpdate = time.Now()
+	p.c.addMutation(&maintpb.Mutation{Github: mut})
 	return nil
 }
 
