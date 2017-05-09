@@ -2780,6 +2780,7 @@ func (st *buildStatus) benchFiles() []*benchFile {
 	if !st.shouldBench() {
 		return nil
 	}
+	// We know rev and rev.Commit.Parents[0] exist because benchmarkItem.buildParent has checked.
 	rev := st.trySet.ci.Revisions[st.trySet.ci.CurrentRevision]
 	ps := rev.PatchSetNumber
 	benchFiles := []*benchFile{
@@ -2794,6 +2795,8 @@ func (st *buildStatus) benchFiles() []*benchFile {
 		benchFiles[0].out.WriteString("staging: true\n")
 	}
 	benchFiles[1].out.Write(benchFiles[0].out.Bytes())
+	fmt.Fprintf(&benchFiles[0].out, "commit: %s\n", rev.Commit.Parents[0].CommitID)
+	fmt.Fprintf(&benchFiles[1].out, "commit: %s\n", st.builderRev.rev)
 	return benchFiles
 }
 
