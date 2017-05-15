@@ -750,7 +750,6 @@ func init() {
 		TryBot:            true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 4,
-		RunBench:          true,
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-110",
@@ -777,7 +776,6 @@ func init() {
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		numTestHelpers:    1,
 		numTryTestHelpers: 3,
-		RunBench:          true,
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-386-387",
@@ -789,7 +787,7 @@ func init() {
 		Name:           "linux-amd64",
 		HostType:       "host-linux-kubestd",
 		TryBot:         true,
-		numTestHelpers: 3,
+		numTestHelpers: 6, // As of 2017/05/16, 3 helpers are needed for tests and 3 more for benchmarks to complete in 5m.
 		RunBench:       true,
 	})
 	addBuilder(BuildConfig{
@@ -900,7 +898,6 @@ func init() {
 		FlakyNet:          true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 7,
-		RunBench:          true,
 	})
 	addBuilder(BuildConfig{
 		Name:          "linux-arm-nativemake",
@@ -957,7 +954,6 @@ func init() {
 		HostType:          "host-windows-amd64-2008",
 		env:               []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
 		TryBot:            false, // Disabled until new Windows builders reliably come up quickly
-		RunBench:          true,
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
@@ -965,7 +961,6 @@ func init() {
 		HostType:          "host-windows-amd64-2008",
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		TryBot:            false, // Disabled until new Windows builders reliably come up quickly
-		RunBench:          true,
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{

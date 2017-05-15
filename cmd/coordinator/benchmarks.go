@@ -149,6 +149,16 @@ func (st *buildStatus) runOneBenchBinary(bc *buildlet.Client, w io.Writer, goroo
 		Path:   []string{"$WORKDIR/" + goroot + "/bin", "$PATH"},
 		ExtraEnv: []string{
 			"GOROOT=" + st.conf.FilePathJoin(workDir, goroot),
+			// Some builders run in virtualization
+			// environments (GCE, GKE, etc.). These
+			// environments have CPU antagonists - by
+			// limiting GOMAXPROCS to 2 we can reduce the
+			// variability of benchmarks by leaving free
+			// cores available for antagonists. We don't
+			// want GOMAXPROCS=1 because that invokes
+			// special runtime behavior. Test data is at
+			// https://perf.golang.org/search?q=upload%3A20170512.4+cores%3Aall+parallel%3A4+%7C+gomaxprocs%3A2+vs+gomaxprocs%3A16+vs+gomaxprocs%3A32
+			"GOMAXPROCS=2",
 		},
 	})
 }
