@@ -60,6 +60,15 @@ type Corpus struct {
 	zoneCache     map[string]*time.Location // "+0530" => location
 }
 
+// RLock grabs the corpus's read lock. Grabbing the read lock prevents
+// any concurrent writes from mutation the corpus. This is only
+// necessary if the application is querying the corpus and calling its
+// Update method concurrently.
+func (c *Corpus) RLock() { c.mu.RLock() }
+
+// RUnlock unlocks the corpus's read lock.
+func (c *Corpus) RUnlock() { c.mu.RUnlock() }
+
 type polledGitCommits struct {
 	repo *maintpb.GitRepo
 	dir  string
@@ -74,6 +83,7 @@ func (c *Corpus) EnableLeaderMode(logger MutationLogger, scratchDir string) {
 	c.dataDir = scratchDir
 }
 
+// SetVerbose enables or disables verbose logging.
 func (c *Corpus) SetVerbose(v bool) { c.verbose = v }
 
 func (c *Corpus) getDataDir() string {
@@ -97,6 +107,20 @@ func (c *Corpus) Gerrit() *Gerrit {
 		return c.gerrit
 	}
 	return new(Gerrit)
+}
+
+// Check verifies the internal structure of the Corpus data structures.
+// It is intended for tests and debugging.
+func (c *Corpus) Check() error {
+	for hash, gc := range c.gitCommit {
+		if gc.Committer == placeholderCommitter {
+			return fmt.Errorf("git commit for key %q was placeholder", hash)
+		}
+		if gc.Hash != hash {
+			return fmt.Errorf("git commit for key %q had GitCommit.Hash %q", hash, gc.Hash)
+		}
+	}
+	return nil
 }
 
 // GitCommit returns the provided git commit, or nil if it's unknown.

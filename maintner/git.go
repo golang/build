@@ -54,17 +54,49 @@ func (c *Corpus) gitHashFromHex(s []byte) GitHash {
 	return GitHash(c.strb(buf[:20]))
 }
 
+// placeholderCommitter is a sentinel value for GitCommit.Committer to
+// mean that the GitCommit is a placeholder. It's used for commits we
+// know should exist (because they're referenced as parents) but we
+// haven't yet seen in the log.
+var placeholderCommitter = new(GitPerson)
+
 // GitCommit represents a single commit in a git repository.
 type GitCommit struct {
 	Hash       GitHash
 	Tree       GitHash
-	Parents    []GitHash
+	Parents    []*GitCommit
 	Author     *GitPerson
 	AuthorTime time.Time
 	Committer  *GitPerson
 	CommitTime time.Time
 	Msg        string // Commit message subject and body
 	Files      []*maintpb.GitDiffTreeFile
+}
+
+// HasAncestor reports whether gc contains the provided ancestor
+// commit in gc's history.
+func (gc *GitCommit) HasAncestor(ancestor *GitCommit) bool {
+	return gc.hasAncestor(ancestor, make(map[*GitCommit]bool))
+}
+
+func (gc *GitCommit) hasAncestor(ancestor *GitCommit, checked map[*GitCommit]bool) bool {
+	if v, ok := checked[ancestor]; ok {
+		return v
+	}
+	checked[gc] = false
+	for _, pc := range gc.Parents {
+		if pc == nil {
+			panic("nil parent")
+		}
+		if pc.Committer == placeholderCommitter {
+			panic("found placeholder")
+		}
+		if pc.Hash == ancestor.Hash || pc.hasAncestor(ancestor, checked) {
+			checked[gc] = true
+			return true
+		}
+	}
+	return false
 }
 
 // GitPerson is a person in a git commit.
@@ -266,6 +298,9 @@ func (c *Corpus) processGitMutation(m *maintpb.GitMutation) {
 
 // c.mu is held for writing.
 func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*GitCommit, error) {
+	if c.gitCommit == nil {
+		c.gitCommit = map[GitHash]*GitCommit{}
+	}
 	if len(commit.Sha1) != 40 {
 		return nil, fmt.Errorf("bogus git sha1 %q", commit.Sha1)
 	}
@@ -279,7 +314,7 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*GitCommit, error)
 	hdr, msg := catFile[:i], catFile[i+2:]
 	gc := &GitCommit{
 		Hash:    hash,
-		Parents: make([]GitHash, 0, bytes.Count(hdr, parentSpace)),
+		Parents: make([]*GitCommit, 0, bytes.Count(hdr, parentSpace)),
 		Msg:     c.strb(msg),
 	}
 	if commit.DiffTree != nil {
@@ -293,7 +328,16 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*GitCommit, error)
 		if bytes.HasPrefix(ln, parentSpace) {
 			parents++
 			parentHash := c.gitHashFromHex(ln[len(parentSpace):])
-			gc.Parents = append(gc.Parents, parentHash)
+			parent := c.gitCommit[parentHash]
+			if parent == nil {
+				// Install a placeholder to be filled in later.
+				parent = &GitCommit{
+					Hash:      parentHash,
+					Committer: placeholderCommitter,
+				}
+				c.gitCommit[parentHash] = parent
+			}
+			gc.Parents = append(gc.Parents, parent)
 			c.enqueueCommitLocked(parentHash)
 			return nil
 		}
@@ -344,10 +388,12 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*GitCommit, error)
 		log.Printf("Unparseable commit %q: %v", hash, err)
 		return nil, fmt.Errorf("Unparseable commit %q: %v", hash, err)
 	}
-	if c.gitCommit == nil {
-		c.gitCommit = map[GitHash]*GitCommit{}
+	if ph, ok := c.gitCommit[hash]; ok {
+		// Update placeholder.
+		*ph = *gc
+	} else {
+		c.gitCommit[hash] = gc
 	}
-	c.gitCommit[hash] = gc
 	if c.gitCommitTodo != nil {
 		delete(c.gitCommitTodo, hash)
 	}

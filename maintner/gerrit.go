@@ -339,7 +339,7 @@ func (gp *GerritProject) getGerritStatus(currentMeta, oldMeta *GitCommit) string
 		if len(commit.Parents) == 0 {
 			return "new"
 		}
-		parentHash := commit.Parents[0] // meta tree has no merge commits
+		parentHash := commit.Parents[0].Hash // meta tree has no merge commits
 		commit = c.gitCommit[parentHash]
 		if commit == nil {
 			gp.logf("getGerritStatus: did not find parent commit %s", parentHash)
@@ -402,7 +402,7 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 			delete(gp.need, gc.Hash)
 		}
 		for _, p := range gc.Parents {
-			gp.markNeededCommit(p)
+			gp.markNeededCommit(p.Hash)
 		}
 	}
 }
