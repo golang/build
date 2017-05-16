@@ -80,7 +80,7 @@ func (gc *GitCommit) HasAncestor(ancestor *GitCommit) bool {
 }
 
 func (gc *GitCommit) hasAncestor(ancestor *GitCommit, checked map[*GitCommit]bool) bool {
-	if v, ok := checked[ancestor]; ok {
+	if v, ok := checked[gc]; ok {
 		return v
 	}
 	checked[gc] = false
