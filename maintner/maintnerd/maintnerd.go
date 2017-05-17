@@ -17,23 +17,28 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/storage"
+	"go4.org/grpc"
 	"golang.org/x/build/autocertcache"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
+	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/crypto/acme/autocert"
 )
 
 var (
 	listen         = flag.String("listen", "localhost:6343", "listen address")
+	devTLSPort     = flag.Int("dev-tls-port", 0, "if non-zero, port number to run localhost self-signed TLS server")
 	autocertDomain = flag.String("autocert", "", "if non-empty, listen on port 443 and serve a LetsEncrypt TLS cert on this domain")
 	autocertBucket = flag.String("autocert-bucket", "", "if non-empty, Google Cloud Storage bucket to store LetsEncrypt cache in")
 	syncQuit       = flag.Bool("sync-and-quit", false, "sync once and quit; don't run a server")
@@ -196,7 +201,15 @@ func main() {
 		corpus.StartPubSubHelperSubscribe(*pubsub)
 	}
 
+	grpcServer := grpc.NewServer()
+	apipb.RegisterMaintnerServiceServer(grpcServer, &apiService{c: corpus})
+	http.Handle("/apipb.MaintnerService/", grpcServer)
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+			grpcServer.ServeHTTP(w, r)
+			return
+		}
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
@@ -224,7 +237,10 @@ func main() {
 		go func() { errc <- fmt.Errorf("http.Serve = %v", http.Serve(ln, nil)) }()
 	}
 	if *autocertDomain != "" {
-		go func() { errc <- serveTLS() }()
+		go func() { errc <- serveAutocertTLS() }()
+	}
+	if *devTLSPort != 0 {
+		go func() { errc <- serveDevTLS(*devTLSPort) }()
 	}
 
 	log.Fatal(<-errc)
@@ -287,7 +303,28 @@ func getGithubToken() (string, error) {
 	return token, nil
 }
 
-func serveTLS() error {
+func serveDevTLS(port int) error {
+	ln, err := net.Listen("tcp", "localhost:"+strconv.Itoa(port))
+	if err != nil {
+		return err
+	}
+	defer ln.Close()
+	log.Printf("Serving self-signed TLS at https://%s", ln.Addr())
+	// Abuse httptest for its localhost TLS setup code:
+	ts := httptest.NewUnstartedServer(http.DefaultServeMux)
+	// Ditch the provided listener, replace with our own:
+	ts.Listener.Close()
+	ts.Listener = ln
+	ts.TLS = &tls.Config{
+		NextProtos:         []string{"h2", "http/1.1"},
+		InsecureSkipVerify: true,
+	}
+	ts.StartTLS()
+
+	select {}
+}
+
+func serveAutocertTLS() error {
 	if *autocertBucket == "" {
 		return fmt.Errorf("using --autocert requires --autocert-bucket.")
 	}
@@ -295,6 +332,7 @@ func serveTLS() error {
 	if err != nil {
 		return err
 	}
+	defer ln.Close()
 	sc, err := storage.NewClient(context.Background())
 	if err != nil {
 		return fmt.Errorf("storage.NewClient: %v", err)

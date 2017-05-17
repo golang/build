@@ -1,0 +1,27 @@
+// Copyright 2017 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+// https://developers.google.com/protocol-buffers/docs/proto3
+syntax = "proto3";
+
+package apipb;
+
+message HasAncestorRequest {
+  string commit = 1;   // full git commit hash (subject of query)
+  string ancestor = 2; // full git commit hash of sought ancestor
+}
+
+message HasAncestorResponse {
+  // has_ancestor is whether ancestor appears in commit's history.
+  bool has_ancestor = 1;
+
+  // unknown_commit is true if the provided commit was unknown.
+  bool unknown_commit = 2;
+}
+
+service MaintnerService {
+  // HasAncestor reports whether one commit contains another commit
+  // in its git history.
+  rpc HasAncestor(HasAncestorRequest) returns (HasAncestorResponse);
+}

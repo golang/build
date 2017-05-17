@@ -463,6 +463,21 @@ func (c *Corpus) parsePerson(v []byte) (*GitPerson, time.Time, error) {
 
 }
 
+// GitCommit returns the provided git commit, or nil if it's unknown.
+func (c *Corpus) GitCommit(hash string) *GitCommit {
+	if len(hash) != 40 {
+		// TODO: support prefix lookups. build a trie. But
+		// for now just avoid panicking in gitHashFromHexStr.
+		return nil
+	}
+	var buf [20]byte
+	_, err := decodeHexStr(buf[:], hash)
+	if err != nil {
+		return nil
+	}
+	return c.gitCommit[GitHash(buf[:])]
+}
+
 // v is like '[+-]hhmm'
 // c.mu must be held for writing.
 func (c *Corpus) gitLocation(v []byte) *time.Location {
@@ -482,4 +497,38 @@ func (c *Corpus) gitLocation(v []byte) *time.Location {
 	}
 	c.zoneCache[s] = loc
 	return loc
+}
+
+func decodeHexStr(dst []byte, src string) (int, error) {
+	if len(src)%2 == 1 {
+		return 0, hex.ErrLength
+	}
+
+	for i := 0; i < len(src)/2; i++ {
+		a, ok := fromHexChar(src[i*2])
+		if !ok {
+			return 0, hex.InvalidByteError(src[i*2])
+		}
+		b, ok := fromHexChar(src[i*2+1])
+		if !ok {
+			return 0, hex.InvalidByteError(src[i*2+1])
+		}
+		dst[i] = (a << 4) | b
+	}
+
+	return len(src) / 2, nil
+}
+
+// fromHexChar converts a hex character into its value and a success flag.
+func fromHexChar(c byte) (byte, bool) {
+	switch {
+	case '0' <= c && c <= '9':
+		return c - '0', true
+	case 'a' <= c && c <= 'f':
+		return c - 'a' + 10, true
+	case 'A' <= c && c <= 'F':
+		return c - 'A' + 10, true
+	}
+
+	return 0, false
 }

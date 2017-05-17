@@ -123,16 +123,6 @@ func (c *Corpus) Check() error {
 	return nil
 }
 
-// GitCommit returns the provided git commit, or nil if it's unknown.
-func (c *Corpus) GitCommit(hash string) *GitCommit {
-	if len(hash) != 40 {
-		// TODO: support prefix lookups. build a trie. But
-		// for now just avoid panicking in gitHashFromHexStr.
-		return nil
-	}
-	return c.gitCommit[c.gitHashFromHexStr(hash)]
-}
-
 // mustProtoFromTime turns a time.Time into a *timestamp.Timestamp or panics if
 // in is invalid.
 func mustProtoFromTime(in time.Time) *timestamp.Timestamp {
