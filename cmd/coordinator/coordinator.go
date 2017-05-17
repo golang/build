@@ -834,7 +834,7 @@ func findTryWork() error {
 		query = `comment:"Run-StagingTryBot" label:TryBot-Result=0 status:open`
 	}
 	cis, err := gerritClient.QueryChanges(context.Background(), query, gerrit.QueryChangesOpt{
-		Fields: []string{"CURRENT_REVISION", "CURRENT_COMMIT"},
+		Fields: []string{"CURRENT_REVISION", "CURRENT_COMMIT", "CURRENT_FILES"},
 	})
 	if err != nil {
 		return err

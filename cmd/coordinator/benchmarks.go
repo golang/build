@@ -58,6 +58,19 @@ func (st *buildStatus) buildGo1(bc *buildlet.Client, goroot string, w io.Writer)
 	})
 }
 
+// buildPkg builds a package's benchmarks.
+func (st *buildStatus) buildPkg(bc *buildlet.Client, goroot string, w io.Writer, pkg, name string) (remoteErr, err error) {
+	workDir, err := bc.WorkDir()
+	if err != nil {
+		return nil, err
+	}
+	return bc.Exec(path.Join(goroot, "bin", "go"), buildlet.ExecOpts{
+		Output:   w,
+		ExtraEnv: []string{"GOROOT=" + st.conf.FilePathJoin(workDir, goroot)},
+		Args:     []string{"test", "-c", "-o", st.conf.FilePathJoin(workDir, goroot, name), pkg},
+	})
+}
+
 // buildXBenchmark builds a benchmark from x/benchmarks.
 func (st *buildStatus) buildXBenchmark(bc *buildlet.Client, goroot string, w io.Writer, rev, pkg, name string) (remoteErr, err error) {
 	workDir, err := bc.WorkDir()
@@ -131,7 +144,50 @@ func (st *buildStatus) enumerateBenchmarks(bc *buildlet.Client) ([]*benchmarkIte
 				return st.buildXBenchmark(bc, goroot, w, rev, pkg, name)
 			}})
 	}
-	// TODO(quentin): Enumerate package benchmarks that were affected by the CL
+	// Enumerate package benchmarks that were affected by the CL
+	if st.trySet != nil && st.trySet.ci != nil {
+		rev := st.trySet.ci.Revisions[st.trySet.ci.CurrentRevision]
+		var args []string
+		for p := range rev.Files {
+			if strings.HasPrefix(p, "src/") {
+				pkg := path.Dir(p[len("src/"):])
+				if pkg != "" {
+					args = append(args, pkg)
+				}
+			}
+		}
+		// Find packages that actually have benchmarks or tests.
+		var buf bytes.Buffer
+		remoteErr, err := bc.Exec("go/bin/go", buildlet.ExecOpts{
+			Output: &buf,
+			ExtraEnv: []string{
+				"GOROOT=" + st.conf.FilePathJoin(workDir, "go"),
+			},
+			Args: append([]string{"list", "-e", "-f", "{{if or (len .TestGoFiles) (len .XTestGoFiles)}}{{.ImportPath}}{{end}}"}, args...),
+		})
+		if remoteErr != nil {
+			return nil, remoteErr
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		for _, pkg := range strings.Fields(buf.String()) {
+			// Some packages have large numbers of benchmarks.
+			// To avoid running benchmarks for hours and hours, we exclude runtime (which has 350+ benchmarks) and run benchmarks for .1s instead of the default 1s.
+			// This allows the remaining standard library packages to run a single iteration of a package's benchmarks in <20s, making them have the same scale as go1 benchmark shards.
+			if pkg == "runtime" {
+				continue
+			}
+			name := "bench-" + strings.Replace(pkg, "/", "-", -1) + ".exe"
+			out = append(out, &benchmarkItem{
+				binary: name,
+				args:   []string{"-test.bench", ".", "-test.benchmem", "-test.run", "^$", "-test.benchtime", "100ms"},
+				build: func(bc *buildlet.Client, goroot string, w io.Writer) (error, error) {
+					return st.buildPkg(bc, goroot, w, pkg, name)
+				}})
+		}
+	}
 	return out, nil
 }
 
