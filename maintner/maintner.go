@@ -337,6 +337,10 @@ func (c *Corpus) Sync(ctx context.Context) error {
 }
 
 func (c *Corpus) sync(ctx context.Context, loop bool) error {
+	if _, ok := c.mutationSource.(*netMutSource); ok {
+		return errors.New("maintner: can't run Corpus.Sync on a Corpus using NetworkMutationSource (did you mean Update?)")
+	}
+
 	group, ctx := errgroup.WithContext(ctx)
 	for _, w := range c.watchedGithubRepos {
 		gr, token := w.gr, w.token

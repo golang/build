@@ -28,6 +28,7 @@ import (
 	"golang.org/x/build/autocertcache"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
+	"golang.org/x/build/maintner/godata"
 	"golang.org/x/crypto/acme/autocert"
 )
 
@@ -38,13 +39,13 @@ var (
 	syncQuit       = flag.Bool("sync-and-quit", false, "sync once and quit; don't run a server")
 	initQuit       = flag.Bool("init-and-quit", false, "load the mutation log and quit; don't run a server")
 	verbose        = flag.Bool("verbose", false, "enable verbose debug output")
+	genMut         = flag.Bool("generate-mutations", true, "whether this instance should read from upstream git/gerrit/github and generate new mutations to the end of the log. This requires network access and only one instance can be generating mutation")
 	watchGithub    = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
-	// TODO: specify gerrit auth via gitcookies or similar
-	watchGerrit = flag.String("watch-gerrit", "", `Comma-separated list of Gerrit projects to watch, each of form "hostname/project" (e.g. "go.googlesource.com/go")`)
-	pubsub      = flag.String("pubsub", "", "If non-empty, the golang.org/x/build/cmd/pubsubhelper URL scheme and hostname, without path")
-	config      = flag.String("config", "", "If non-empty, the name of a pre-defined config. Currently only 'go' is recognized.")
-	dataDir     = flag.String("data-dir", "", "Local directory to write protobuf files to (default $HOME/var/maintnerd)")
-	debug       = flag.Bool("debug", false, "Print debug logging information")
+	watchGerrit    = flag.String("watch-gerrit", "", `Comma-separated list of Gerrit projects to watch, each of form "hostname/project" (e.g. "go.googlesource.com/go")`)
+	pubsub         = flag.String("pubsub", "", "If non-empty, the golang.org/x/build/cmd/pubsubhelper URL scheme and hostname, without path")
+	config         = flag.String("config", "", "If non-empty, the name of a pre-defined config. Valid options are 'go' to be the primary Go server; 'godata' to run the server locally using the godata package.")
+	dataDir        = flag.String("data-dir", "", "Local directory to write protobuf files to (default $HOME/var/maintnerd)")
+	debug          = flag.Bool("debug", false, "Print debug logging information")
 
 	bucket         = flag.String("bucket", "", "if non-empty, Google Cloud Storage bucket to use for log storage")
 	migrateGCSFlag = flag.Bool("migrate-disk-to-gcs", false, "[dev] If true, migrate from disk-based logs to GCS logs on start-up, then quit.")
@@ -85,41 +86,52 @@ func main() {
 		maintner.MutationLogger
 	}
 	var logger storage
-	if *bucket != "" {
-		ctx := context.Background()
-		gl, err := newGCSLog(ctx, *bucket)
-		if err != nil {
-			log.Fatalf("newGCSLog: %v", err)
-		}
-		http.HandleFunc("/logs", gl.serveJSONLogsIndex)
-		http.HandleFunc("/logs/", gl.serveLogFile)
-		if *migrateGCSFlag {
-			diskLog := maintner.NewDiskMutationLogger(*dataDir)
-			if err := gl.copyFrom(diskLog); err != nil {
-				log.Fatalf("migrate: %v", err)
-			}
-			log.Printf("Success.")
-			return
-		}
-		logger = gl
-	} else {
-		logger = maintner.NewDiskMutationLogger(*dataDir)
-	}
 
 	corpus := new(maintner.Corpus)
-	corpus.EnableLeaderMode(logger, *dataDir)
-	if *debug {
-		corpus.SetDebug()
-	}
-	corpus.SetVerbose(*verbose)
 	switch *config {
 	case "":
 		// Nothing
 	case "go":
 		setGoConfig()
+	case "godata":
+		setGodataConfig()
+		var err error
+		log.Printf("Using godata corpus...")
+		corpus, err = godata.Get(context.Background())
+		if err != nil {
+			log.Fatal(err)
+		}
 	default:
-		log.Fatalf("unknown --config=%s", *config)
+		log.Fatalf("unknown --copnfig=%s", *config)
 	}
+	if *genMut {
+		if *bucket != "" {
+			ctx := context.Background()
+			gl, err := newGCSLog(ctx, *bucket)
+			if err != nil {
+				log.Fatalf("newGCSLog: %v", err)
+			}
+			http.HandleFunc("/logs", gl.serveJSONLogsIndex)
+			http.HandleFunc("/logs/", gl.serveLogFile)
+			if *migrateGCSFlag {
+				diskLog := maintner.NewDiskMutationLogger(*dataDir)
+				if err := gl.copyFrom(diskLog); err != nil {
+					log.Fatalf("migrate: %v", err)
+				}
+				log.Printf("Success.")
+				return
+			}
+			logger = gl
+		} else {
+			logger = maintner.NewDiskMutationLogger(*dataDir)
+		}
+		corpus.EnableLeaderMode(logger, *dataDir)
+	}
+	if *debug {
+		corpus.SetDebug()
+	}
+	corpus.SetVerbose(*verbose)
+
 	if *watchGithub != "" {
 		for _, pair := range strings.Split(*watchGithub, ",") {
 			splits := strings.SplitN(pair, "/", 2)
@@ -153,19 +165,22 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	t0 := time.Now()
-	if err := corpus.Initialize(ctx, logger); err != nil {
-		// TODO: if Initialize only partially syncs the data, we need to delete
-		// whatever files it created, since Github returns events newest first
-		// and we use the issue updated dates to check whether we need to keep
-		// syncing.
-		log.Fatal(err)
-	}
-	initDur := time.Since(t0)
 
-	runtime.GC()
-	var ms runtime.MemStats
-	runtime.ReadMemStats(&ms)
-	log.Printf("Loaded data in %v. Memory: %v MB (%v bytes)", initDur, ms.HeapAlloc>>20, ms.HeapAlloc)
+	if logger != nil {
+		if err := corpus.Initialize(ctx, logger); err != nil {
+			// TODO: if Initialize only partially syncs the data, we need to delete
+			// whatever files it created, since Github returns events newest first
+			// and we use the issue updated dates to check whether we need to keep
+			// syncing.
+			log.Fatal(err)
+		}
+		initDur := time.Since(t0)
+
+		runtime.GC()
+		var ms runtime.MemStats
+		runtime.ReadMemStats(&ms)
+		log.Printf("Loaded data in %v. Memory: %v MB (%v bytes)", initDur, ms.HeapAlloc>>20, ms.HeapAlloc)
+	}
 	if *initQuit {
 		return
 	}
@@ -202,7 +217,9 @@ func main() {
 	})
 
 	errc := make(chan error)
-	go func() { errc <- fmt.Errorf("Corpus.SyncLoop = %v", corpus.SyncLoop(ctx)) }()
+	if *genMut {
+		go func() { errc <- fmt.Errorf("Corpus.SyncLoop = %v", corpus.SyncLoop(ctx)) }()
+	}
 	if ln != nil {
 		go func() { errc <- fmt.Errorf("http.Serve = %v", http.Serve(ln, nil)) }()
 	}
@@ -235,6 +252,16 @@ func setGoConfig() {
 		buf.WriteString(pi.ID)
 	}
 	*watchGerrit = buf.String()
+}
+
+func setGodataConfig() {
+	if *watchGithub != "" {
+		log.Fatalf("can't set both --config and --watch-github")
+	}
+	if *watchGerrit != "" {
+		log.Fatalf("can't set both --config and --watch-gerrit")
+	}
+	*genMut = false
 }
 
 func getGithubToken() (string, error) {
