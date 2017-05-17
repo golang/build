@@ -1,35 +1,28 @@
-To create a fresh builder host:  (should only be needed once)
+C1 image created with docker base image using 
+`armv7l 4.10.8 docker #1` bootscript.
 
-Create a new Scaleway server with type "Docker 1.5" (second tab).
+Machines:
 
-Make a tmpfs:
-# echo "tmpfs /tmpfs tmpfs" >> /etc/fstab
-# mkdir /tmpfs
+    $ ssh -i ~/keys/id_ed25519_golang1 root@$C1_SERVER_IP
+    (key: http://go/go-builders-ssh)
 
-Make a 2GB swap file:
-# dd if=/dev/zero of=/swap count=2097152 obs=1024
-# mkswap /swap
-# chmod 0600 /swap
-# echo "/swap none swap loop 0 0" >> /etc/fstab
+Machine setup:
+	# local:
+	$ scp env/linux-arm/scaleway/* root@$C1_SERVER_IP:~/scaleway
 
-Reboot.
+	$ GOARCH=arm GOOS=linux go install golang.org/x/build/cmd/rundockerbuildlet && \
+	 scp ~/bin/linux_arm/rundockerbuildlet root@$C1_SERVER_IP:/usr/local/bin
+	$ GOARCH=arm GOOS=linux go install golang.org/x/build/cmd/buildlet/stage0 && \
+	 scp ~/bin/linux_arm/stage0 root@$C1_SERVER_IP:~/scaleway
+	# NOTE: commit SHA of rundockerbuildlet/stage0 on instance snapshot (06/19/17)
+	# golang.org/x/build is 282d813.
 
-Should see swaps in "cat /proc/swaps" and tmpfs in "cat /proc/mounts" now.
+	$ scp rundockerbuildlet.service root@$C1_SERVER_IP:/etc/systemd/user/
 
-* Copy the contents of this directory to the server.
+	# c1 server:
 
-* Go into that directory and:
-  # docker build -t buildlet .
+	$ echo "<BUILDER KEY>" > /etc/gobuild.key > /root/.gobuildkey
 
-Add to /etc/rc.local:
+	$ systemctl enable /etc/systemd/user/rundockerbuildlet.service
+	$ systemctl start rundockerbuildlet.service
 
-  (mkdir -p /tmpfs/buildertmp && docker run -e BUILDKEY_ARM=xxx -e BUILDKEY_ARM5=xxx -v=/tmpfs/buildertmp:/tmp --restart=always -d --name=buildlet buildlet) &
-  sleep 5
-
-.. before the exit 0
-
-Power it down (with ARCHIVE),
-
-Snapshot the disk.
-
-Start a bunch of them. (see golang.org/x/build/cmd/scaleway)

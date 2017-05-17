@@ -10,10 +10,12 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,19 +31,26 @@ var (
 	keyFile  = flag.String("key", "/etc/gobuild.key", "go build key file")
 )
 
-var buildKey []byte
+var (
+	buildKey     []byte
+	scalewayMeta = new(scalewayMetadata)
+)
 
 func main() {
 	flag.Parse()
 
 	key, err := ioutil.ReadFile(*keyFile)
 	if err != nil {
-		log.Fatalf("error reading build key from --key=%s: %v", buildKey, err)
+		log.Fatalf("error reading build key from --key=%s: %v", keyFile, err)
 	}
 	buildKey = bytes.TrimSpace(key)
 
 	if *image == "" {
 		log.Fatalf("docker --image is required")
+	}
+
+	if _, err := os.Stat("/usr/local/bin/oc-metadata"); err == nil {
+		initScalewayMeta()
 	}
 
 	log.Printf("Started. Will keep %d copies of %s running.", *numInst, *image)
@@ -71,7 +80,12 @@ func checkFix() error {
 			continue
 		}
 		container, name, status := f[0], f[1], f[2]
-		if !strings.HasPrefix(name, *basename) {
+		prefix := *basename
+		if scalewayMeta != nil {
+			// scaleway containers are named after their instance.
+			prefix = scalewayMeta.Hostname
+		}
+		if !strings.HasPrefix(name, prefix) {
 			continue
 		}
 		if strings.HasPrefix(status, "Exited") {
@@ -85,7 +99,15 @@ func checkFix() error {
 	}
 
 	for num := 1; num <= *numInst; num++ {
-		name := fmt.Sprintf("%s%02d", *basename, num)
+		var name string
+		if scalewayMeta != nil {
+			// The -name passed to 'docker run' should match the
+			// c1 instance hostname for debugability.
+			// There should only be one running container per c1 instance.
+			name = scalewayMeta.Hostname
+		} else {
+			name = fmt.Sprintf("%s%02d", *basename, num)
+		}
 		if running[name] {
 			continue
 		}
@@ -112,4 +134,25 @@ func checkFix() error {
 		log.Printf("Created %v", name)
 	}
 	return nil
+}
+
+type scalewayMetadata struct {
+	Name     string   `json:"name"`
+	Hostname string   `json:"hostname"`
+	Tags     []string `json:"tags"`
+}
+
+func initScalewayMeta() {
+	const metaURL = "http://169.254.42.42/conf?format=json"
+	res, err := http.Get(metaURL)
+	if err != nil {
+		log.Fatalf("failed to get scaleway metadata: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		log.Fatalf("failed to get scaleway metadata from %s: %v", metaURL, res.Status)
+	}
+	if err := json.NewDecoder(res.Body).Decode(scalewayMeta); err != nil {
+		log.Fatalf("invalid JSON from scaleway metadata URL %s: %v", metaURL, err)
+	}
 }
