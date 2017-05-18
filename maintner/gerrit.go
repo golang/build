@@ -125,6 +125,25 @@ func (gp *GerritProject) Project() string {
 	return ""
 }
 
+// ForeachNonChangeRef calls fn for each git ref on the server that is
+// not a change (code review) ref. In general, these correspond to
+// submitted changes.
+// fn is called serially with sorted ref names.
+// Iteration stops with the first non-nil error returned by fn.
+func (gp *GerritProject) ForeachNonChangeRef(fn func(ref string, hash GitHash) error) error {
+	refs := make([]string, 0, len(gp.ref))
+	for ref := range gp.ref {
+		refs = append(refs, ref)
+	}
+	sort.Strings(refs)
+	for _, ref := range refs {
+		if err := fn(ref, gp.ref[ref]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ForeachOpenCL calls fn for each open CL in the repo.
 //
 // If fn returns an error, iteration ends and ForeachOpenCL returns

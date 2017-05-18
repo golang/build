@@ -13,10 +13,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha1"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -36,6 +38,8 @@ import (
 	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/maintner"
+	"golang.org/x/build/maintner/godata"
 )
 
 const (
@@ -51,7 +55,7 @@ var (
 	dashFlag = flag.String("dash", "", "Dashboard URL (must end in /). If unset, will be automatically derived from the GCE project name.")
 	keyFile  = flag.String("key", defaultKeyFile, "Build dashboard key file. If empty, automatic from GCE project metadata")
 
-	pollInterval = flag.Duration("poll", 10*time.Second, "Remote repo poll interval")
+	pollInterval = flag.Duration("poll", 60*time.Second, "Remote repo poll interval")
 
 	// TODO(bradfitz): these three are all kinda the same and
 	// redundant. Unify after research.
@@ -92,6 +96,7 @@ func main() {
 	log.Printf("gitmirror running.")
 
 	go pollGerritAndTickle()
+	go subscribeToMaintnerAndTickleLoop()
 	err := runGitMirror()
 	log.Fatalf("gitmirror exiting after failure: %v", err)
 }
@@ -1382,6 +1387,57 @@ func pollGerritAndTickle() {
 			}
 		}
 		time.Sleep(*pollInterval)
+	}
+}
+
+// subscribeToMaintnerAndTickleLoop subscribes to maintner.golang.org
+// and watches for any ref changes in realtime.
+func subscribeToMaintnerAndTickleLoop() {
+	for {
+		if err := subscribeToMaintnerAndTickle(); err != nil {
+			log.Printf("maintner loop: %v; retrying in 30 seconds", err)
+			time.Sleep(30 * time.Second)
+		}
+	}
+}
+
+func subscribeToMaintnerAndTickle() error {
+	log.Printf("Loading maintner data.")
+	t0 := time.Now()
+	ctx := context.Background()
+	corpus, err := godata.Get(ctx)
+	if err != nil {
+		return err
+	}
+	log.Printf("Loaded maintner data in %v", time.Since(t0))
+	last := map[string]string{} // go.googlesource.com repo base => digest of all refs
+	for {
+		corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+			proj := path.Base(gp.ServerSlashProject())
+			s1 := sha1.New()
+			gp.ForeachNonChangeRef(func(ref string, hash maintner.GitHash) error {
+				io.WriteString(s1, string(hash))
+				return nil
+			})
+			sum := fmt.Sprintf("%x", s1.Sum(nil))
+			lastSum := last[proj]
+			if lastSum == sum {
+				return nil
+			}
+			last[proj] = sum
+			if lastSum == "" {
+				return nil
+			}
+			log.Printf("maintner refs for %s changed", gp.ServerSlashProject())
+			select {
+			case repoTickler(proj) <- true:
+			default:
+			}
+			return nil
+		})
+		if err := corpus.Update(ctx); err != nil {
+			return err
+		}
 	}
 }
 

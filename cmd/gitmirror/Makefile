@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-VERSION=v4
+VERSION=latest
 DOCKER_IMAGE_build0=build0/gitmirror:latest
 DOCKER_CTR_build0=gitmirror-build0
 

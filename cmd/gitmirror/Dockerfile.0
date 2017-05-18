@@ -21,6 +21,19 @@ RUN cd /go/src/golang.org/x/net && git reset --hard f2499483f923065a842d38eb4c7f
 
 RUN cd /go/src/google.golang.org/grpc && git reset --hard 50955793b0183f9de69bd78e2ec251cf20aab121
 
+# None of these deps are really needed, but they're in the maintner package in code
+# only used by the maintnerd process. Oh well.
+RUN go get -d github.com/google/go-github/github && \
+    cd /go/src/github.com/google/go-github && git reset --hard 6896997c7c9fe603fb9d2e8e92303bb18481e60a
+RUN go get -d github.com/gregjones/httpcache && \
+    cd /go/src/github.com/gregjones/httpcache && git reset --hard d02018f006d98f58512bf3adfc171d88d17626df
+RUN go get -d go4.org/types && \
+    cd /go/src/go4.org && git reset --hard 7ce08ca145dbe0e66a127c447b80ee7914f3e4f9
+RUN go get -d golang.org/x/sync/errgroup && \
+    cd /go/src/golang.org/x/sync && git reset --hard 5a06fca2c336a4b2b2fcb45702e8c47621b2aa2c
+RUN go get -d golang.org/x/oauth2 && \
+    cd /go/src/golang.org/x/oauth2 && git reset --hard 314dd2c0bf3ebd592ec0d20847d27e79d0dbe8dd
+
 COPY . /go/src/golang.org/x/build/
 
 RUN go install golang.org/x/build/cmd/gitmirror

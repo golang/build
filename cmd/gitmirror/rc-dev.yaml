@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ReplicationController
 metadata:
-  name: gitmirror-v4
+  name: gitmirror-rc
 spec:
   replicas: 2
   selector:
@@ -19,7 +19,11 @@ spec:
       containers:
       - name: gitmirror
         image: gcr.io/go-dashboard-dev/gitmirror:latest
-        command: ["/go/bin/gitmirror", "-http=:8585", "-report=true", "-network=true", "-cachedir=/cache/gitmirror"]
+        imagePullPolicy: Always
+        env:
+        - name: XDG_CACHE_HOME
+          value: "/cache"
+        command: ["/gitmirror", "-http=:8585", "-report=true", "-network=true", "-cachedir=/cache/gitmirror"]
         volumeMounts:
         - mountPath: /cache
           name: cache-volume

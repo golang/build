@@ -48,6 +48,18 @@ func TestCorpusCheck(t *testing.T) {
 	}
 }
 
+func TestGerritForeachNonChangeRef(t *testing.T) {
+	c := getGoData(t)
+	c.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+		t.Logf("%s:", gp.ServerSlashProject())
+		gp.ForeachNonChangeRef(func(ref string, hash maintner.GitHash) error {
+			t.Logf("  %s %s", hash, ref)
+			return nil
+		})
+		return nil
+	})
+}
+
 func TestGitAncestor(t *testing.T) {
 	c := getGoData(t)
 	tests := []struct {
