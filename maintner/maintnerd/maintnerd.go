@@ -48,7 +48,7 @@ var (
 	watchGithub    = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
 	watchGerrit    = flag.String("watch-gerrit", "", `Comma-separated list of Gerrit projects to watch, each of form "hostname/project" (e.g. "go.googlesource.com/go")`)
 	pubsub         = flag.String("pubsub", "", "If non-empty, the golang.org/x/build/cmd/pubsubhelper URL scheme and hostname, without path")
-	config         = flag.String("config", "", "If non-empty, the name of a pre-defined config. Valid options are 'go' to be the primary Go server; 'godata' to run the server locally using the godata package.")
+	config         = flag.String("config", "", "If non-empty, the name of a pre-defined config. Valid options are 'go' to be the primary Go server; 'godata' to run the server locally using the godata package, and 'devgo' to act like 'go', but mirror from godata at start-up.")
 	dataDir        = flag.String("data-dir", "", "Local directory to write protobuf files to (default $HOME/var/maintnerd)")
 	debug          = flag.Bool("debug", false, "Print debug logging information")
 
@@ -96,6 +96,24 @@ func main() {
 	switch *config {
 	case "":
 		// Nothing
+	case "devgo":
+		dir := godata.Dir()
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("Syncing from https://maintner.golang.org/logs to %s", dir)
+		mutSrc := maintner.NewNetworkMutationSource("https://maintner.golang.org/logs", dir)
+		for evt := range mutSrc.GetMutations(context.Background()) {
+			if evt.Err != nil {
+				log.Fatal(evt.Err)
+			}
+			if evt.End {
+				break
+			}
+		}
+		syncProdToDevMutationLogs()
+		log.Printf("Synced from https://maintner.golang.org/logs.")
+		setGoConfig()
 	case "go":
 		setGoConfig()
 	case "godata":
@@ -364,4 +382,58 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 	tc.SetKeepAlive(true)
 	tc.SetKeepAlivePeriod(3 * time.Minute)
 	return tc, nil
+}
+
+func syncProdToDevMutationLogs() {
+	src := godata.Dir()
+	dst := *dataDir
+
+	want := map[string]int64{} // basename => size
+
+	srcFis, err := ioutil.ReadDir(src)
+	if err != nil {
+		log.Fatal(err)
+	}
+	dstFis, err := ioutil.ReadDir(dst)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, fi := range srcFis {
+		name := fi.Name()
+		if !strings.HasSuffix(name, ".mutlog") {
+			continue
+		}
+		// The DiskMutationLogger (as we'l use in the dst dir)
+		// prepends "maintner-".  So prepend that here ahead
+		// of time, even though the network mutation source's
+		// cache doesn't.
+		want["maintner-"+name] = fi.Size()
+	}
+
+	for _, fi := range dstFis {
+		name := fi.Name()
+		if !strings.HasSuffix(name, ".mutlog") {
+			continue
+		}
+		if want[name] == fi.Size() {
+			delete(want, name)
+			continue
+		}
+		log.Printf("dst file %q unwanted", name)
+		if err := os.Remove(filepath.Join(dst, name)); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	for name := range want {
+		log.Printf("syncing %s from %s to %s", name, src, dst)
+		slurp, err := ioutil.ReadFile(filepath.Join(src, strings.TrimPrefix(name, "maintner-")))
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := ioutil.WriteFile(filepath.Join(dst, name), slurp, 0644); err != nil {
+			log.Fatal(err)
+		}
+	}
 }

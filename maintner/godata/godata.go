@@ -39,7 +39,7 @@ import (
 // See https://godoc.org/golang.org/x/build/maintner#Corpus for how
 // to walk the data structure. Enjoy.
 func Get(ctx context.Context) (*maintner.Corpus, error) {
-	targetDir := filepath.Join(xdgCacheDir(), "golang-maintner")
+	targetDir := Dir()
 	if err := os.MkdirAll(targetDir, 0700); err != nil {
 		return nil, err
 	}
@@ -49,6 +49,11 @@ func Get(ctx context.Context) (*maintner.Corpus, error) {
 		return nil, err
 	}
 	return corpus, nil
+}
+
+// Dir returns the directory containing the cached mutation logs.
+func Dir() string {
+	return filepath.Join(xdgCacheDir(), "golang-maintner")
 }
 
 // xdgCacheDir returns the XDG Base Directory Specification cache
