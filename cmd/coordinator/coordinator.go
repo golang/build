@@ -43,6 +43,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go4.org/grpc"
 	"go4.org/syncutil"
 
 	"cloud.google.com/go/storage"
@@ -55,6 +56,7 @@ import (
 	"golang.org/x/build/internal/lru"
 	"golang.org/x/build/internal/singleflight"
 	"golang.org/x/build/livelog"
+	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/types"
 	"golang.org/x/crypto/acme/autocert"
 	perfstorage "golang.org/x/perf/storage"
@@ -112,6 +114,8 @@ var (
 	tryBuilders    []dashboard.BuildConfig // for testing the go repo
 	subTryBuilders []dashboard.BuildConfig // for testing sub-repos
 )
+
+var maintnerClient apipb.MaintnerServiceClient
 
 func initTryBuilders() {
 	for _, name := range dashboard.TrybotBuilderNames() {
@@ -260,6 +264,12 @@ func main() {
 	default:
 		log.Fatalf("Unknown mode: %q", *mode)
 	}
+
+	cc, err := grpc.NewClient(http.DefaultClient, "https://maintner.golang.org")
+	if err != nil {
+		log.Fatal(err)
+	}
+	maintnerClient = apipb.NewMaintnerServiceClient(cc)
 
 	http.HandleFunc("/", handleStatus)
 	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
@@ -1843,6 +1853,39 @@ func (st *buildStatus) runMake(bc *buildlet.Client, goroot string, w io.Writer) 
 // caller, runMake, per builder config).
 // The idea is that this might find data races in cmd/compile.
 func (st *buildStatus) runConcurrentGoBuildStdCmd(bc *buildlet.Client) (remoteErr, err error) {
+	// Only run this step if this rev has the cmd/compile -c flag.
+	// See Issue 20222.
+	qctx, cancel := context.WithTimeout(st.ctx, 30*time.Second)
+	defer cancel()
+	spanha := st.createSpan("ask_maintner_has_ancestor")
+	for {
+		const dashCRev = "22f1b56dab29d397d2bdbdd603d85e60fb678089"
+		res, err := maintnerClient.HasAncestor(qctx, &apipb.HasAncestorRequest{
+			Commit:   st.rev,
+			Ancestor: dashCRev,
+		})
+		if err != nil {
+			log.Printf("HasAncestor(%q, %q) error: %v", st.rev, dashCRev, err)
+			spanha.done(err)
+			return nil, err
+		}
+		if res.UnknownCommit {
+			select {
+			case <-qctx.Done():
+				return qctx.Err(), nil
+			case <-time.After(1 * time.Second):
+			}
+			continue
+		}
+		spanha.done(nil)
+		if !res.HasAncestor {
+			// Old commit (e.g. 1.8 branch). Don't test.
+			return nil, nil
+		}
+		// Recent commit. Break & test.
+		break
+	}
+
 	span := st.createSpan("go_build_c128_std_cmd")
 	remoteErr, err = bc.Exec("go/bin/go", buildlet.ExecOpts{
 		Output:   st,

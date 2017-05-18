@@ -52,6 +52,9 @@ RUN go get -d gopkg.in/inf.v0 && \
 RUN cd /go/src/google.golang.org/grpc && \
     git reset --hard 50955793b0183f9de69bd78e2ec251cf20aab121
 
+RUN go get go4.org/grpc && \
+    cd /go/src/go4.org/grpc && git reset --hard 32ab3eb96f50a8c0f4103aa8d149cd1f15576636
+
 # Makefile passes a string with --build-arg version
 # This becomes part of the cache key for all subsequent instructions,
 # so it must not be placed above the "go get" commands above.
