@@ -68,6 +68,7 @@ func (g *Gerrit) getOrCreateProject(gerritProj string) *GerritProject {
 		proj:   gerritProj,
 		cls:    map[int32]*GerritCL{},
 		remote: map[gerritCLVersion]GitHash{},
+		ref:    map[string]GitHash{},
 	}
 	g.projects[gerritProj] = proj
 	return proj
@@ -91,6 +92,13 @@ type GerritProject struct {
 	cls    map[int32]*GerritCL
 	remote map[gerritCLVersion]GitHash
 	need   map[GitHash]bool
+
+	// ref are the non-change refs with keys like "HEAD",
+	// "refs/heads/master", "refs/tags/v0.8.0", etc.
+	//
+	// Notably, this excludes the "refs/changes/*" refs matched by
+	// rxChangeRef. Those are in the remote map.
+	ref map[string]GitHash
 }
 
 func (gp *GerritProject) gitDir() string {
@@ -356,16 +364,23 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 	c := gp.gerrit.c
 
 	for _, refp := range gm.Refs {
+		hash := c.gitHashFromHexStr(refp.Sha1)
 		m := rxChangeRef.FindStringSubmatch(refp.Ref)
 		if m == nil {
+			// Misc ref, not a change ref.
+			if _, ok := c.gitCommit[hash]; !ok {
+				gp.logf("ERROR: non-change ref %v references unknown hash %v; ignoring", refp, hash)
+				continue
+			}
+			gp.ref[refp.Ref] = hash
 			continue
 		}
+
 		clNum64, err := strconv.ParseInt(m[1], 10, 32)
 		version, ok := gerritVersionNumber(m[2])
 		if !ok || err != nil {
 			continue
 		}
-		hash := c.gitHashFromHexStr(refp.Sha1)
 		gc, ok := c.gitCommit[hash]
 		if !ok {
 			gp.logf("ERROR: ref %v references unknown hash %v; ignoring", refp, hash)
@@ -535,24 +550,38 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 	// already been slurped into memory.
 	c.mu.Lock()
 	for bs.Scan() {
-		m := rxRemoteRef.FindSubmatch(bs.Bytes())
-		if m == nil {
+		line := bs.Bytes()
+		tab := bytes.IndexByte(line, '\t')
+		if tab == -1 {
+			if !strings.HasPrefix(bs.Text(), "From ") {
+				gp.logf("bogus ls-remote line: %q", line)
+			}
 			continue
 		}
-		clNum, err := strconv.ParseInt(string(m[2]), 10, 32)
-		version, ok := gerritVersionNumber(string(m[3]))
-		if err != nil || !ok {
-			continue
+		sha1 := string(line[:tab])
+		refName := strings.TrimSpace(string(line[tab+1:]))
+		hash := c.gitHashFromHexStr(sha1)
+
+		var needFetch bool
+
+		m := rxRemoteRef.FindSubmatch(line)
+		if m != nil {
+			clNum, err := strconv.ParseInt(string(m[2]), 10, 32)
+			version, ok := gerritVersionNumber(string(m[3]))
+			if err != nil || !ok {
+				continue
+			}
+			curHash := gp.remote[gerritCLVersion{int32(clNum), version}]
+			needFetch = curHash != hash
+		} else if trackGerritRef(refName) && gp.ref[refName] != hash {
+			needFetch = true
+			gp.logf("gerrit ref %q = %q", refName, sha1)
 		}
-		sha1 := m[1]
-		hash := c.gitHashFromHex(sha1)
 
-		curHash := gp.remote[gerritCLVersion{int32(clNum), version}]
-
-		if curHash != hash {
+		if needFetch {
 			toFetch = append(toFetch, hash)
 			changedRefs = append(changedRefs, &maintpb.GitRef{
-				Ref:  strings.TrimSpace(bs.Text()[len(sha1):]),
+				Ref:  refName,
 				Sha1: string(sha1),
 			})
 		}
@@ -708,4 +737,16 @@ func (gp *GerritProject) init(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// trackGerritRef reports whether we care to record changes about the
+// given ref.
+func trackGerritRef(ref string) bool {
+	if strings.HasPrefix(ref, "refs/users/") {
+		return false
+	}
+	if strings.HasPrefix(ref, "refs/cache-automerge/") {
+		return false
+	}
+	return true
 }
