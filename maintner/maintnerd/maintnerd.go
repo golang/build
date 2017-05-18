@@ -34,6 +34,7 @@ import (
 	"golang.org/x/build/maintner/godata"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/crypto/acme/autocert"
+	"golang.org/x/net/http2"
 )
 
 var (
@@ -362,10 +363,14 @@ func serveAutocertTLS() error {
 	}
 	config := &tls.Config{
 		GetCertificate: m.GetCertificate,
+		NextProtos:     []string{"h2", "http/1.1"},
 	}
 	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)
 	server := &http.Server{
 		Addr: ln.Addr().String(),
+	}
+	if err := http2.ConfigureServer(server, nil); err != nil {
+		log.Fatalf("http2.ConfigureServer: %v", err)
 	}
 	return server.Serve(tlsLn)
 }

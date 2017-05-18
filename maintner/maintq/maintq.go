@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	server = flag.String("server", "maintnerd.golang.org", "maintnerd server")
+	server = flag.String("server", "maintner.golang.org", "maintnerd server")
 )
 
 func main() {
