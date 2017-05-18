@@ -31,6 +31,9 @@ RUN go get -d cloud.google.com/go/storage && \
 RUN go get golang.org/x/crypto/acme/autocert && \
     cd /go/src/golang.org/x/crypto && git reset --hard c7af5bf2638a1164f2eb5467c39c6cffbd13a02e
 
+RUN go get go4.org/grpc && \
+    cd /go/src/go4.org/grpc && git reset --hard 32ab3eb96f50a8c0f4103aa8d149cd1f15576636
+
 # Optimization to speed COPY+go install steps later. This go install
 # isn't required for correctness.
 RUN go install golang.org/x/oauth2 \
