@@ -467,6 +467,11 @@ type BuildConfig struct {
 	// "std".
 	InstallRacePackages []string
 
+	// GoDeps is a list of of git sha1 commits that must be in the
+	// commit to be tested's history. If absent, this builder is
+	// not run for that commit.
+	GoDeps []string
+
 	// numTestHelpers is the number of _additional_ buildlets
 	// past the first one to help out with sharded tests.
 	// For trybots, the numTryHelpers value is used, unless it's
@@ -850,6 +855,9 @@ func init() {
 		CompileOnly: true,
 		Notes:       "SSA internal checks enabled",
 		env:         []string{"GO_GCFLAGS=-d=ssa/check/on,dclstack"},
+		GoDeps: []string{
+			"f65abf6ddc8d1f3d403a9195fd74eaffa022b07f", // adds dclstack
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:                "linux-amd64-racecompile",
@@ -860,6 +868,9 @@ func init() {
 		StopAfterMake:       true,
 		InstallRacePackages: []string{"cmd/compile"},
 		Notes:               "race-enabled cmd/compile",
+		GoDeps: []string{
+			"22f1b56dab29d397d2bdbdd603d85e60fb678089", // adds cmd/compile -c; Issue 20222
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-amd64-race",

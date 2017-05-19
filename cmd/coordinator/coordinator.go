@@ -71,6 +71,12 @@ const (
 	// Notably, it is NOT included for network/communication
 	// errors.
 	eventDone = "done"
+
+	// eventSkipBuildMissingDep is a build event name meaning
+	// the builder type is not applicable to the commit being
+	// tested because the commit lacks a necessary dependency
+	// in its git history.
+	eventSkipBuildMissingDep = "skipped_build_missing_dep"
 )
 
 var (
@@ -1048,7 +1054,7 @@ func (ts *trySet) awaitTryBuild(idx int, bconf dashboard.BuildConfig, bs *buildS
 			}
 		}
 
-		if bs.hasEvent(eventDone) {
+		if bs.hasEvent(eventDone) || bs.hasEvent(eventSkipBuildMissingDep) {
 			ts.noteBuildComplete(bconf, bs)
 			return
 		}
@@ -1358,18 +1364,22 @@ func newBuild(rev builderRev) (*buildStatus, error) {
 }
 
 // start starts the build in a new goroutine.
-// The buildStatus's context is closed on when the build is complete,
+// The buildStatus's context is closed when the build is complete,
 // successfully or not.
 func (st *buildStatus) start() {
 	setStatus(st.builderRev, st)
 	go func() {
 		err := st.build()
-		if err != nil {
-			fmt.Fprintf(st, "\n\nError: %v\n", err)
-			log.Println(st.builderRev, "failed:", err)
+		if err == errSkipBuildDueToDeps {
+			st.setDone(true)
+		} else {
+			if err != nil {
+				fmt.Fprintf(st, "\n\nError: %v\n", err)
+				log.Println(st.builderRev, "failed:", err)
+			}
+			st.setDone(err == nil)
+			putBuildRecord(st.buildRecord())
 		}
-		st.setDone(err == nil)
-		putBuildRecord(st.buildRecord())
 		markDone(st.builderRev)
 	}()
 }
@@ -1490,7 +1500,57 @@ func (st *buildStatus) getCrossCompileConfig() *crossCompileConfig {
 	return nil
 }
 
+func (st *buildStatus) checkDep(ctx context.Context, dep string) (have bool, err error) {
+	span := st.createSpan("ask_maintner_has_ancestor")
+	defer func() { span.done(err) }()
+	tries := 0
+	for {
+		tries++
+		res, err := maintnerClient.HasAncestor(ctx, &apipb.HasAncestorRequest{
+			Commit:   st.rev,
+			Ancestor: dep,
+		})
+		if err != nil {
+			if tries == 3 {
+				span.done(err)
+				return false, err
+			}
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		if res.UnknownCommit {
+			select {
+			case <-ctx.Done():
+				return false, ctx.Err()
+			case <-time.After(1 * time.Second):
+			}
+			continue
+		}
+		return res.HasAncestor, nil
+	}
+}
+
+var errSkipBuildDueToDeps = errors.New("build was skipped due to missing deps")
+
 func (st *buildStatus) build() error {
+	if deps := st.conf.GoDeps; len(deps) > 0 {
+		ctx, cancel := context.WithTimeout(st.ctx, 30*time.Second)
+		defer cancel()
+		for _, dep := range deps {
+			has, err := st.checkDep(ctx, dep)
+			if err != nil {
+				fmt.Fprintf(st, "Error checking whether commit %s includes ancestor %s: %v\n", st.rev, dep, err)
+				return err
+			}
+			if !has {
+				st.logEventTime(eventSkipBuildMissingDep)
+				fmt.Fprintf(st, "skipping build; commit %s lacks ancestor %s\n", st.rev, dep)
+				return errSkipBuildDueToDeps
+			}
+		}
+		cancel()
+	}
+
 	putBuildRecord(st.buildRecord())
 
 	sp := st.createSpan("checking_for_snapshot")
@@ -1853,39 +1913,6 @@ func (st *buildStatus) runMake(bc *buildlet.Client, goroot string, w io.Writer) 
 // caller, runMake, per builder config).
 // The idea is that this might find data races in cmd/compile.
 func (st *buildStatus) runConcurrentGoBuildStdCmd(bc *buildlet.Client) (remoteErr, err error) {
-	// Only run this step if this rev has the cmd/compile -c flag.
-	// See Issue 20222.
-	qctx, cancel := context.WithTimeout(st.ctx, 30*time.Second)
-	defer cancel()
-	spanha := st.createSpan("ask_maintner_has_ancestor")
-	for {
-		const dashCRev = "22f1b56dab29d397d2bdbdd603d85e60fb678089"
-		res, err := maintnerClient.HasAncestor(qctx, &apipb.HasAncestorRequest{
-			Commit:   st.rev,
-			Ancestor: dashCRev,
-		})
-		if err != nil {
-			log.Printf("HasAncestor(%q, %q) error: %v", st.rev, dashCRev, err)
-			spanha.done(err)
-			return nil, err
-		}
-		if res.UnknownCommit {
-			select {
-			case <-qctx.Done():
-				return qctx.Err(), nil
-			case <-time.After(1 * time.Second):
-			}
-			continue
-		}
-		spanha.done(nil)
-		if !res.HasAncestor {
-			// Old commit (e.g. 1.8 branch). Don't test.
-			return nil, nil
-		}
-		// Recent commit. Break & test.
-		break
-	}
-
 	span := st.createSpan("go_build_c128_std_cmd")
 	remoteErr, err = bc.Exec("go/bin/go", buildlet.ExecOpts{
 		Output:   st,
