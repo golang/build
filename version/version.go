@@ -313,6 +313,7 @@ func copyFromURL(dstFile, srcURL string) (err error) {
 		Transport: &userAgentTransport{&http.Transport{
 			// It's already compressed. Prefer accurate ContentLength.
 			// (Not that GCS would try to compress it, though)
+			Proxy:              http.ProxyFromEnvironment,
 			DisableCompression: true,
 			DisableKeepAlives:  true,
 			Proxy:              http.ProxyFromEnvironment,
