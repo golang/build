@@ -73,11 +73,21 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
+	// TODO(shadams): remove once scaleway docker migration
+	// is complete.
 	"host-linux-arm": &HostConfig{
 		IsReverse:      true,
 		ExpectNum:      50,
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		ReverseAliases: []string{"linux-arm", "linux-arm-arm5"},
+	},
+	// TODO(shadams): fix reverse aliases to match host-linux-arm
+	// once scaleway docker migration is complete.
+	"host-linux-arm-scaleway": &HostConfig{
+		IsReverse:      true,
+		ExpectNum:      50,
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+		ReverseAliases: []string{"linux-arm-TMP"},
 	},
 	"host-linux-arm5spacemonkey": &HostConfig{
 		IsReverse:      true,
@@ -902,6 +912,8 @@ func init() {
 		HostType: "host-linux-sid",
 		Notes:    "Debian sid (unstable)",
 	})
+	// TODO(shadams): change HostType to host-linux-arm-scaleway
+	// when scaleway docker migration is complete.
 	addBuilder(BuildConfig{
 		Name:              "linux-arm",
 		HostType:          "host-linux-arm",
@@ -909,6 +921,12 @@ func init() {
 		FlakyNet:          true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 7,
+	})
+	// TODO(shadams): remove when scaleway docker migration
+	// is complete.
+	addBuilder(BuildConfig{
+		Name:     "linux-arm-TMP",
+		HostType: "host-linux-arm-scaleway",
 	})
 	addBuilder(BuildConfig{
 		Name:          "linux-arm-nativemake",
