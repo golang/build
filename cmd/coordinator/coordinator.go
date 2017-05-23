@@ -2538,8 +2538,8 @@ func testDuration(builderName, testName string) time.Duration {
 	return minGoTestSpeed * 2
 }
 
-func (st *buildStatus) fetchSubrepo(bc *buildlet.Client, repo, rev string) error {
-	tgz, err := getSourceTgz(st, repo, rev)
+func fetchSubrepo(sl spanLogger, bc *buildlet.Client, repo, rev string) error {
+	tgz, err := getSourceTgz(sl, repo, rev)
 	if err != nil {
 		return err
 	}
@@ -2563,7 +2563,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	// fetch checks out the provided sub-repo to the buildlet's workspace.
 	fetch := func(repo, rev string) error {
 		fetched[repo] = true
-		return st.fetchSubrepo(st.bc, repo, rev)
+		return fetchSubrepo(st, st.bc, repo, rev)
 	}
 
 	// findDeps uses 'go list' on the checked out repo to find its
@@ -2660,7 +2660,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	var benches []*benchmarkItem
 	if st.shouldBench() {
 		sp := st.createSpan("enumerate_benchmarks")
-		b, err := st.enumerateBenchmarks(st.bc)
+		b, err := enumerateBenchmarks(st, st.conf, st.bc, "go", st.trySet)
 		sp.done(err)
 		if err == nil {
 			benches = b

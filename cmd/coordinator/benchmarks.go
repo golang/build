@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/dashboard"
 )
 
 // benchRuns is the number of times to run each benchmark binary
@@ -23,7 +24,7 @@ type benchmarkItem struct {
 	binary   string   // name of binary relative to goroot
 	args     []string // args to run binary with
 	preamble string   // string to print before benchmark results (e.g. "pkg: test/bench/go1\n")
-	output   []string // old, new benchmark output
+	output   []string // benchmark output for each commit
 
 	build func(bc *buildlet.Client, goroot string, w io.Writer) (remoteErr, err error) // how to build benchmark binary
 }
@@ -33,7 +34,7 @@ func (b *benchmarkItem) name() string {
 }
 
 // buildGo1 builds the Go 1 benchmarks.
-func (st *buildStatus) buildGo1(bc *buildlet.Client, goroot string, w io.Writer) (remoteErr, err error) {
+func buildGo1(conf dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer) (remoteErr, err error) {
 	workDir, err := bc.WorkDir()
 	if err != nil {
 		return nil, err
@@ -52,47 +53,47 @@ func (st *buildStatus) buildGo1(bc *buildlet.Client, goroot string, w io.Writer)
 	}
 	return bc.Exec(path.Join(goroot, "bin", "go"), buildlet.ExecOpts{
 		Output:   w,
-		ExtraEnv: []string{"GOROOT=" + st.conf.FilePathJoin(workDir, goroot)},
+		ExtraEnv: []string{"GOROOT=" + conf.FilePathJoin(workDir, goroot)},
 		Args:     []string{"test", "-c"},
 		Dir:      path.Join(goroot, "test/bench/go1"),
 	})
 }
 
 // buildPkg builds a package's benchmarks.
-func (st *buildStatus) buildPkg(bc *buildlet.Client, goroot string, w io.Writer, pkg, name string) (remoteErr, err error) {
+func buildPkg(conf dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer, pkg, name string) (remoteErr, err error) {
 	workDir, err := bc.WorkDir()
 	if err != nil {
 		return nil, err
 	}
 	return bc.Exec(path.Join(goroot, "bin", "go"), buildlet.ExecOpts{
 		Output:   w,
-		ExtraEnv: []string{"GOROOT=" + st.conf.FilePathJoin(workDir, goroot)},
-		Args:     []string{"test", "-c", "-o", st.conf.FilePathJoin(workDir, goroot, name), pkg},
+		ExtraEnv: []string{"GOROOT=" + conf.FilePathJoin(workDir, goroot)},
+		Args:     []string{"test", "-c", "-o", conf.FilePathJoin(workDir, goroot, name), pkg},
 	})
 }
 
 // buildXBenchmark builds a benchmark from x/benchmarks.
-func (st *buildStatus) buildXBenchmark(bc *buildlet.Client, goroot string, w io.Writer, rev, pkg, name string) (remoteErr, err error) {
+func buildXBenchmark(sl spanLogger, conf dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer, rev, pkg, name string) (remoteErr, err error) {
 	workDir, err := bc.WorkDir()
 	if err != nil {
 		return nil, err
 	}
 	if err := bc.ListDir("gopath/src/golang.org/x/benchmarks", buildlet.ListDirOpts{}, func(buildlet.DirEntry) {}); err != nil {
-		if err := st.fetchSubrepo(bc, "benchmarks", rev); err != nil {
+		if err := fetchSubrepo(sl, bc, "benchmarks", rev); err != nil {
 			return nil, err
 		}
 	}
 	return bc.Exec(path.Join(goroot, "bin/go"), buildlet.ExecOpts{
 		Output: w,
 		ExtraEnv: []string{
-			"GOROOT=" + st.conf.FilePathJoin(workDir, goroot),
-			"GOPATH=" + st.conf.FilePathJoin(workDir, "gopath"),
+			"GOROOT=" + conf.FilePathJoin(workDir, goroot),
+			"GOPATH=" + conf.FilePathJoin(workDir, "gopath"),
 		},
-		Args: []string{"build", "-o", st.conf.FilePathJoin(workDir, goroot, name), pkg},
+		Args: []string{"build", "-o", conf.FilePathJoin(workDir, goroot, name), pkg},
 	})
 }
 
-func (st *buildStatus) enumerateBenchmarks(bc *buildlet.Client) ([]*benchmarkItem, error) {
+func enumerateBenchmarks(sl spanLogger, conf dashboard.BuildConfig, bc *buildlet.Client, goroot string, trySet *trySet) ([]*benchmarkItem, error) {
 	workDir, err := bc.WorkDir()
 	if err != nil {
 		err = fmt.Errorf("buildBench, WorkDir: %v", err)
@@ -104,7 +105,7 @@ func (st *buildStatus) enumerateBenchmarks(bc *buildlet.Client) ([]*benchmarkIte
 		rev = "master" // should happen rarely; ok if it does.
 	}
 
-	if err := st.fetchSubrepo(bc, "benchmarks", rev); err != nil {
+	if err := fetchSubrepo(sl, bc, "benchmarks", rev); err != nil {
 		return nil, err
 	}
 
@@ -116,17 +117,19 @@ func (st *buildStatus) enumerateBenchmarks(bc *buildlet.Client) ([]*benchmarkIte
 			binary:   "test/bench/go1/go1.test",
 			args:     []string{"-test.bench", re, "-test.benchmem"},
 			preamble: "pkg: test/bench/go1\n",
-			build:    st.buildGo1,
+			build: func(bc *buildlet.Client, goroot string, w io.Writer) (error, error) {
+				return buildGo1(conf, bc, goroot, w)
+			},
 		})
 	}
 
 	// Enumerate x/benchmarks
 	var buf bytes.Buffer
-	remoteErr, err := bc.Exec("go/bin/go", buildlet.ExecOpts{
+	remoteErr, err := bc.Exec(path.Join(goroot, "bin/go"), buildlet.ExecOpts{
 		Output: &buf,
 		ExtraEnv: []string{
-			"GOROOT=" + st.conf.FilePathJoin(workDir, "go"),
-			"GOPATH=" + st.conf.FilePathJoin(workDir, "gopath"),
+			"GOROOT=" + conf.FilePathJoin(workDir, goroot),
+			"GOPATH=" + conf.FilePathJoin(workDir, "gopath"),
 		},
 		Args: []string{"list", "-f", `{{if eq .Name "main"}}{{.ImportPath}}{{end}}`, "golang.org/x/benchmarks/..."},
 	})
@@ -141,12 +144,12 @@ func (st *buildStatus) enumerateBenchmarks(bc *buildlet.Client) ([]*benchmarkIte
 		name := "bench-" + path.Base(pkg) + ".exe"
 		out = append(out, &benchmarkItem{
 			binary: name, args: nil, build: func(bc *buildlet.Client, goroot string, w io.Writer) (error, error) {
-				return st.buildXBenchmark(bc, goroot, w, rev, pkg, name)
+				return buildXBenchmark(sl, conf, bc, goroot, w, rev, pkg, name)
 			}})
 	}
 	// Enumerate package benchmarks that were affected by the CL
-	if st.trySet != nil && st.trySet.ci != nil {
-		rev := st.trySet.ci.Revisions[st.trySet.ci.CurrentRevision]
+	if trySet != nil && trySet.ci != nil {
+		rev := trySet.ci.Revisions[trySet.ci.CurrentRevision]
 		var args []string
 		for p := range rev.Files {
 			if strings.HasPrefix(p, "src/") {
@@ -158,10 +161,10 @@ func (st *buildStatus) enumerateBenchmarks(bc *buildlet.Client) ([]*benchmarkIte
 		}
 		// Find packages that actually have benchmarks or tests.
 		var buf bytes.Buffer
-		remoteErr, err := bc.Exec("go/bin/go", buildlet.ExecOpts{
+		remoteErr, err := bc.Exec(path.Join(goroot, "bin/go"), buildlet.ExecOpts{
 			Output: &buf,
 			ExtraEnv: []string{
-				"GOROOT=" + st.conf.FilePathJoin(workDir, "go"),
+				"GOROOT=" + conf.FilePathJoin(workDir, goroot),
 			},
 			Args: append([]string{"list", "-e", "-f", "{{if or (len .TestGoFiles) (len .XTestGoFiles)}}{{.ImportPath}}{{end}}"}, args...),
 		})
@@ -184,7 +187,7 @@ func (st *buildStatus) enumerateBenchmarks(bc *buildlet.Client) ([]*benchmarkIte
 				binary: name,
 				args:   []string{"-test.bench", ".", "-test.benchmem", "-test.run", "^$", "-test.benchtime", "100ms"},
 				build: func(bc *buildlet.Client, goroot string, w io.Writer) (error, error) {
-					return st.buildPkg(bc, goroot, w, pkg, name)
+					return buildPkg(conf, bc, goroot, w, pkg, name)
 				}})
 		}
 	}
@@ -192,7 +195,7 @@ func (st *buildStatus) enumerateBenchmarks(bc *buildlet.Client) ([]*benchmarkIte
 }
 
 // runOneBenchBinary runs a binary on the buildlet and writes its output to w with a trailing newline.
-func (st *buildStatus) runOneBenchBinary(bc *buildlet.Client, w io.Writer, goroot string, path string, args []string) (remoteErr, err error) {
+func runOneBenchBinary(conf dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot string, path string, args []string) (remoteErr, err error) {
 	defer w.Write([]byte{'\n'})
 	workDir, err := bc.WorkDir()
 	if err != nil {
@@ -204,7 +207,7 @@ func (st *buildStatus) runOneBenchBinary(bc *buildlet.Client, w io.Writer, goroo
 		Args:   args,
 		Path:   []string{"$WORKDIR/" + goroot + "/bin", "$PATH"},
 		ExtraEnv: []string{
-			"GOROOT=" + st.conf.FilePathJoin(workDir, goroot),
+			"GOROOT=" + conf.FilePathJoin(workDir, goroot),
 			// Some builders run in virtualization
 			// environments (GCE, GKE, etc.). These
 			// environments have CPU antagonists - by
@@ -219,24 +222,31 @@ func (st *buildStatus) runOneBenchBinary(bc *buildlet.Client, w io.Writer, goroo
 	})
 }
 
-func (b *benchmarkItem) buildParent(st *buildStatus, bc *buildlet.Client, w io.Writer) error {
-	pbr := st.builderRev // copy
+// parentRev returns the parent of this build's commit (but only if this build comes from a trySet).
+func (st *buildStatus) parentRev() (pbr builderRev, err error) {
+	pbr = st.builderRev // copy
 	rev := st.trySet.ci.Revisions[st.trySet.ci.CurrentRevision]
 	if rev.Commit == nil {
-		return fmt.Errorf("commit information missing for revision %q", st.trySet.ci.CurrentRevision)
+		err = fmt.Errorf("commit information missing for revision %q", st.trySet.ci.CurrentRevision)
+		return
 	}
 	if len(rev.Commit.Parents) == 0 {
 		// TODO(quentin): Log?
-		return errors.New("commit has no parent")
+		err = errors.New("commit has no parent")
+		return
 	}
 	pbr.rev = rev.Commit.Parents[0].CommitID
-	if pbr.snapshotExists() {
-		return bc.PutTarFromURL(pbr.snapshotURL(), "go-parent")
+	return
+}
+
+func (st *buildStatus) buildRev(sl spanLogger, conf dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot string, br builderRev) error {
+	if br.snapshotExists() {
+		return bc.PutTarFromURL(br.snapshotURL(), "go-parent")
 	}
-	if err := bc.PutTar(versionTgz(pbr.rev), "go-parent"); err != nil {
+	if err := bc.PutTar(versionTgz(br.rev), "go-parent"); err != nil {
 		return err
 	}
-	srcTar, err := getSourceTgz(st, "go", pbr.rev)
+	srcTar, err := getSourceTgz(sl, "go", br.rev)
 	if err != nil {
 		return err
 	}
@@ -256,8 +266,12 @@ func (b *benchmarkItem) buildParent(st *buildStatus, bc *buildlet.Client, w io.W
 func (b *benchmarkItem) run(st *buildStatus, bc *buildlet.Client, w io.Writer) (remoteErr, err error) {
 	// Ensure we have a built parent repo.
 	if err := bc.ListDir("go-parent", buildlet.ListDirOpts{}, func(buildlet.DirEntry) {}); err != nil {
+		pbr, err := st.parentRev()
+		if err != nil {
+			return nil, err
+		}
 		sp := st.createSpan("bench_build_parent", bc.Name())
-		err := b.buildParent(st, bc, w)
+		err = st.buildRev(st, st.conf, bc, w, "go-parent", pbr)
 		sp.done(err)
 		if err != nil {
 			return nil, err
@@ -292,7 +306,7 @@ func (b *benchmarkItem) run(st *buildStatus, bc *buildlet.Client, w io.Writer) (
 			fmt.Fprintf(&c.out, "iteration: %d\nstart-time: %s\n", i, time.Now().UTC().Format(time.RFC3339))
 			p := path.Join(c.path, b.binary)
 			sp := st.createSpan("run_one_bench", p)
-			remoteErr, err = st.runOneBenchBinary(bc, &c.out, c.path, p, b.args)
+			remoteErr, err = runOneBenchBinary(st.conf, bc, &c.out, c.path, p, b.args)
 			sp.done(err)
 			if err != nil || remoteErr != nil {
 				c.out.WriteTo(w)
