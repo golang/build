@@ -69,6 +69,8 @@ func (g *Gerrit) getOrCreateProject(gerritProj string) *GerritProject {
 		cls:    map[int32]*GerritCL{},
 		remote: map[gerritCLVersion]GitHash{},
 		ref:    map[string]GitHash{},
+		commit: map[GitHash]*GitCommit{},
+		need:   map[GitHash]bool{},
 	}
 	g.projects[gerritProj] = proj
 	return proj
@@ -92,6 +94,7 @@ type GerritProject struct {
 	cls    map[int32]*GerritCL
 	remote map[gerritCLVersion]GitHash
 	need   map[GitHash]bool
+	commit map[GitHash]*GitCommit
 
 	// ref are the non-change refs with keys like "HEAD",
 	// "refs/heads/master", "refs/tags/v0.8.0", etc.
@@ -383,15 +386,21 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 	c := gp.gerrit.c
 
 	for _, refp := range gm.Refs {
+		refName := refp.Ref
 		hash := c.gitHashFromHexStr(refp.Sha1)
-		m := rxChangeRef.FindStringSubmatch(refp.Ref)
+		m := rxChangeRef.FindStringSubmatch(refName)
 		if m == nil {
+			if strings.HasPrefix(refName, "refs/meta/") {
+				// Some of these slipped in to the data
+				// before we started ignoring them. So ignore them here.
+				continue
+			}
 			// Misc ref, not a change ref.
 			if _, ok := c.gitCommit[hash]; !ok {
 				gp.logf("ERROR: non-change ref %v references unknown hash %v; ignoring", refp, hash)
 				continue
 			}
-			gp.ref[refp.Ref] = hash
+			gp.ref[refName] = hash
 			continue
 		}
 
@@ -430,11 +439,12 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 	for _, commitp := range gm.Commits {
 		gc, err := c.processGitCommit(commitp)
 		if err != nil {
+			gp.logf("error processing commit %q: %v", commitp.Sha1, err)
 			continue
 		}
-		if gp.need != nil {
-			delete(gp.need, gc.Hash)
-		}
+		gp.commit[gc.Hash] = gc
+		delete(gp.need, gc.Hash)
+
 		for _, p := range gc.Parents {
 			gp.markNeededCommit(p.Hash)
 		}
@@ -453,13 +463,9 @@ func clSliceContains(cls []*GerritCL, cl *GerritCL) bool {
 
 // c.mu must be held
 func (gp *GerritProject) markNeededCommit(hash GitHash) {
-	c := gp.gerrit.c
-	if _, ok := c.gitCommit[hash]; ok {
+	if _, ok := gp.commit[hash]; ok {
 		// Already have it.
 		return
-	}
-	if gp.need == nil {
-		gp.need = map[GitHash]bool{}
 	}
 	gp.need[hash] = true
 }
@@ -538,7 +544,40 @@ func (gp *GerritProject) sync(ctx context.Context, loop bool) error {
 	}
 }
 
+// syncMissingCommits is a cleanup step to fix a previous maintner bug where
+// refs were updated without all their reachable commits being indexed and
+// recorded in the log. This should only ever run once, and only in Go's history.
+// If we restarted the log from the beginning this wouldn't be necessary.
+func (gp *GerritProject) syncMissingCommits(ctx context.Context) error {
+	c := gp.gerrit.c
+	var hashes []GitHash
+	c.mu.Lock()
+	for hash := range gp.need {
+		hashes = append(hashes, hash)
+	}
+	c.mu.Unlock()
+	if len(hashes) == 0 {
+		return nil
+	}
+
+	gp.logf("fixing indexing of %d missing commits", len(hashes))
+	if err := gp.fetchHashes(ctx, hashes); err != nil {
+		return err
+	}
+
+	n, err := gp.syncCommits(ctx)
+	if err != nil {
+		return err
+	}
+	gp.logf("%d missing commits indexed", n)
+	return nil
+}
+
 func (gp *GerritProject) syncOnce(ctx context.Context) error {
+	if err := gp.syncMissingCommits(ctx); err != nil {
+		return err
+	}
+
 	c := gp.gerrit.c
 	gitDir := gp.gitDir()
 
@@ -555,7 +594,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 	cmd.Dir = gitDir
 	out, err = cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("git ls-remote: %v, %s", err, out)
+		return fmt.Errorf("git ls-remote in %s: %v, %s", gitDir, err, out)
 	}
 
 	var changedRefs []*maintpb.GitRef
@@ -764,8 +803,40 @@ func trackGerritRef(ref string) bool {
 	if strings.HasPrefix(ref, "refs/users/") {
 		return false
 	}
+	if strings.HasPrefix(ref, "refs/meta/") {
+		return false
+	}
 	if strings.HasPrefix(ref, "refs/cache-automerge/") {
 		return false
 	}
 	return true
+}
+
+func (g *Gerrit) check() error {
+	for key, gp := range g.projects {
+		if err := gp.check(); err != nil {
+			return fmt.Errorf("%s: %v", key, err)
+		}
+	}
+	return nil
+}
+
+func (gp *GerritProject) check() error {
+	if len(gp.need) != 0 {
+		return fmt.Errorf("%d missing commits", len(gp.need))
+	}
+	for hash, gc := range gp.commit {
+		if gc.Committer == placeholderCommitter {
+			return fmt.Errorf("git commit for key %q was placeholder", hash)
+		}
+		if gc.Hash != hash {
+			return fmt.Errorf("git commit for key %q had GitCommit.Hash %q", hash, gc.Hash)
+		}
+		for _, pc := range gc.Parents {
+			if _, ok := gp.commit[pc.Hash]; !ok {
+				return fmt.Errorf("git commit %q exits but its parent %q does not", gc.Hash, pc.Hash)
+			}
+		}
+	}
+	return nil
 }

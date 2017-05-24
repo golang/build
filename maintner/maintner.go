@@ -112,13 +112,8 @@ func (c *Corpus) Gerrit() *Gerrit {
 // Check verifies the internal structure of the Corpus data structures.
 // It is intended for tests and debugging.
 func (c *Corpus) Check() error {
-	for hash, gc := range c.gitCommit {
-		if gc.Committer == placeholderCommitter {
-			return fmt.Errorf("git commit for key %q was placeholder", hash)
-		}
-		if gc.Hash != hash {
-			return fmt.Errorf("git commit for key %q had GitCommit.Hash %q", hash, gc.Hash)
-		}
+	if err := c.Gerrit().check(); err != nil {
+		return fmt.Errorf("gerrit: %v", err)
 	}
 	return nil
 }

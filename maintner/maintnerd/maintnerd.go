@@ -213,6 +213,9 @@ func main() {
 		if err := corpus.Sync(ctx); err != nil {
 			log.Fatalf("corpus.Sync = %v", err)
 		}
+		if err := corpus.Check(); err != nil {
+			log.Fatalf("post-Sync Corpus.Check = %v", err)
+		}
 		return
 	}
 
