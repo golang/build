@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/cmd/coordinator/spanlog"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/buildgo"
 )
 
 // benchRuns is the number of times to run each benchmark binary
@@ -224,8 +226,8 @@ func runOneBenchBinary(conf dashboard.BuildConfig, bc *buildlet.Client, w io.Wri
 }
 
 // parentRev returns the parent of this build's commit (but only if this build comes from a trySet).
-func (st *buildStatus) parentRev() (pbr builderRev, err error) {
-	pbr = st.builderRev // copy
+func (st *buildStatus) parentRev() (pbr buildgo.BuilderRev, err error) {
+	pbr = st.BuilderRev // copy
 	rev := st.trySet.ci.Revisions[st.trySet.ci.CurrentRevision]
 	if rev.Commit == nil {
 		err = fmt.Errorf("commit information missing for revision %q", st.trySet.ci.CurrentRevision)
@@ -236,25 +238,25 @@ func (st *buildStatus) parentRev() (pbr builderRev, err error) {
 		err = errors.New("commit has no parent")
 		return
 	}
-	pbr.rev = rev.Commit.Parents[0].CommitID
+	pbr.Rev = rev.Commit.Parents[0].CommitID
 	return
 }
 
-func (st *buildStatus) buildRev(sl spanlog.Logger, conf dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot string, br builderRev) error {
-	if br.snapshotExists() {
-		return bc.PutTarFromURL(br.snapshotURL(), "go-parent")
+func (st *buildStatus) buildRev(sl spanlog.Logger, conf dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot string, br buildgo.BuilderRev) error {
+	if br.SnapshotExists(context.TODO(), buildEnv) {
+		return bc.PutTarFromURL(br.SnapshotURL(buildEnv), goroot)
 	}
-	if err := bc.PutTar(versionTgz(br.rev), "go-parent"); err != nil {
+	if err := bc.PutTar(versionTgz(br.Rev), goroot); err != nil {
 		return err
 	}
-	srcTar, err := getSourceTgz(sl, "go", br.rev)
+	srcTar, err := getSourceTgz(sl, "go", br.Rev)
 	if err != nil {
 		return err
 	}
-	if err := bc.PutTar(srcTar, "go-parent"); err != nil {
+	if err := bc.PutTar(srcTar, goroot); err != nil {
 		return err
 	}
-	remoteErr, err := st.runMake(bc, "go-parent", w)
+	remoteErr, err := st.runMake(bc, goroot, w)
 	if err != nil {
 		return err
 	}

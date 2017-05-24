@@ -56,7 +56,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 				key.ChangeTriple(), key.Commit, key.Commit[:8])
 			fmt.Fprintf(&buf, "   Remain: %d, fails: %v\n", state.remain, state.failed)
 			for _, bs := range ts.builds {
-				fmt.Fprintf(&buf, "  %s: running=%v\n", bs.name, bs.isRunning())
+				fmt.Fprintf(&buf, "  %s: running=%v\n", bs.Name, bs.isRunning())
 			}
 		}
 	}

@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/build/internal/buildgo"
+
 	"cloud.google.com/go/compute/metadata"
 )
 
@@ -90,22 +92,22 @@ func dash(meth, cmd string, args url.Values, req, resp interface{}) error {
 // recordResult sends build results to the dashboard.
 // This is not used for trybot failures; only failures after commit.
 // The URLs end up looking like https://build.golang.org/log/$HEXDIGEST
-func recordResult(br builderRev, ok bool, buildLog string, runTime time.Duration) error {
+func recordResult(br buildgo.BuilderRev, ok bool, buildLog string, runTime time.Duration) error {
 	req := map[string]interface{}{
-		"Builder":     br.name,
+		"Builder":     br.Name,
 		"PackagePath": "",
-		"Hash":        br.rev,
+		"Hash":        br.Rev,
 		"GoHash":      "",
 		"OK":          ok,
 		"Log":         buildLog,
 		"RunTime":     runTime,
 	}
-	if br.isSubrepo() {
-		req["PackagePath"] = subrepoPrefix + br.subName
-		req["Hash"] = br.subRev
-		req["GoHash"] = br.rev
+	if br.IsSubrepo() {
+		req["PackagePath"] = subrepoPrefix + br.SubName
+		req["Hash"] = br.SubRev
+		req["GoHash"] = br.Rev
 	}
-	args := url.Values{"key": {builderKey(br.name)}, "builder": {br.name}}
+	args := url.Values{"key": {builderKey(br.Name)}, "builder": {br.Name}}
 	if *mode == "dev" {
 		log.Printf("In dev mode, not recording result: %v", req)
 		return nil
@@ -138,14 +140,14 @@ func (st *buildStatus) pingDashboard() {
 	logsURL := st.logsURLLocked()
 	st.mu.Unlock()
 	args := url.Values{
-		"builder": []string{st.name},
-		"key":     []string{builderKey(st.name)},
-		"hash":    []string{st.rev},
+		"builder": []string{st.Name},
+		"key":     []string{builderKey(st.Name)},
+		"hash":    []string{st.Rev},
 		"url":     []string{logsURL},
 	}
-	if st.isSubrepo() {
-		args.Set("hash", st.subRev)
-		args.Set("gohash", st.rev)
+	if st.IsSubrepo() {
+		args.Set("hash", st.SubRev)
+		args.Set("gohash", st.Rev)
 	}
 	u := buildEnv.DashBase() + "building?" + args.Encode()
 	for {

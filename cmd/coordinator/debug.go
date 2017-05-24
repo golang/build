@@ -15,13 +15,14 @@ import (
 	"strings"
 	"text/template"
 
+	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/types"
 )
 
 // handleDoSomeWork adds the last committed CL as work to do.
 //
 // Only available in dev mode.
-func handleDoSomeWork(work chan<- builderRev) func(w http.ResponseWriter, r *http.Request) {
+func handleDoSomeWork(work chan<- buildgo.BuilderRev) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -63,7 +64,7 @@ func handleDoSomeWork(work chan<- builderRev) func(w http.ResponseWriter, r *htt
 		}
 		fmt.Fprintf(w, "found work: %v\n", revs)
 		for _, rev := range revs {
-			work <- builderRev{name: mode, rev: rev}
+			work <- buildgo.BuilderRev{Name: mode, Rev: rev}
 		}
 	}
 }

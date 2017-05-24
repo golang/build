@@ -54,6 +54,7 @@ import (
 	"golang.org/x/build/cmd/coordinator/spanlog"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/lru"
 	"golang.org/x/build/internal/singleflight"
 	"golang.org/x/build/livelog"
@@ -111,7 +112,7 @@ var (
 
 var (
 	statusMu   sync.Mutex // guards the following four structures; see LOCK ORDER comment above
-	status     = map[builderRev]*buildStatus{}
+	status     = map[buildgo.BuilderRev]*buildStatus{}
 	statusDone []*buildStatus         // finished recently, capped to maxStatusDone
 	tries      = map[tryKey]*trySet{} // trybot builds
 	tryList    []tryKey
@@ -299,7 +300,7 @@ func main() {
 		}
 	}()
 
-	workc := make(chan builderRev)
+	workc := make(chan buildgo.BuilderRev)
 
 	if *mode == "dev" {
 		// TODO(crawshaw): do more in dev mode
@@ -329,7 +330,7 @@ func main() {
 		case work := <-workc:
 			if !mayBuildRev(work) {
 				if inStaging {
-					if _, ok := dashboard.Builders[work.name]; ok && logCantBuildStaging.Allow() {
+					if _, ok := dashboard.Builders[work.Name]; ok && logCantBuildStaging.Allow() {
 						log.Printf("may not build %v; skipping", work)
 					}
 				}
@@ -406,14 +407,14 @@ func numCurrentBuildsOfType(typ string) (n int) {
 	statusMu.Lock()
 	defer statusMu.Unlock()
 	for rev := range status {
-		if rev.name == typ {
+		if rev.Name == typ {
 			n++
 		}
 	}
 	return
 }
 
-func isBuilding(work builderRev) bool {
+func isBuilding(work buildgo.BuilderRev) bool {
 	statusMu.Lock()
 	defer statusMu.Unlock()
 	_, building := status[work]
@@ -428,21 +429,21 @@ var (
 // mayBuildRev reports whether the build type & revision should be started.
 // It returns true if it's not already building, and if a reverse buildlet is
 // required, if an appropriate machine is registered.
-func mayBuildRev(rev builderRev) bool {
+func mayBuildRev(rev buildgo.BuilderRev) bool {
 	if isBuilding(rev) {
 		return false
 	}
 	if buildEnv.MaxBuilds > 0 && numCurrentBuilds() >= buildEnv.MaxBuilds {
 		return false
 	}
-	buildConf, ok := dashboard.Builders[rev.name]
+	buildConf, ok := dashboard.Builders[rev.Name]
 	if !ok {
 		if logUnknownBuilder.Allow() {
-			log.Printf("unknown builder %q", rev.name)
+			log.Printf("unknown builder %q", rev.Name)
 		}
 		return false
 	}
-	if buildConf.MaxAtOnce > 0 && numCurrentBuildsOfType(rev.name) >= buildConf.MaxAtOnce {
+	if buildConf.MaxAtOnce > 0 && numCurrentBuildsOfType(rev.Name) >= buildConf.MaxAtOnce {
 		return false
 	}
 	if buildConf.IsReverse() && !reversePool.CanBuild(buildConf.HostType) {
@@ -454,7 +455,7 @@ func mayBuildRev(rev builderRev) bool {
 	return true
 }
 
-func setStatus(work builderRev, st *buildStatus) {
+func setStatus(work buildgo.BuilderRev, st *buildStatus) {
 	statusMu.Lock()
 	defer statusMu.Unlock()
 	// TODO: panic if status[work] already exists. audit all callers.
@@ -465,7 +466,7 @@ func setStatus(work builderRev, st *buildStatus) {
 	status[work] = st
 }
 
-func markDone(work builderRev) {
+func markDone(work buildgo.BuilderRev) {
 	statusMu.Lock()
 	defer statusMu.Unlock()
 	st, ok := status[work]
@@ -483,7 +484,7 @@ func markDone(work builderRev) {
 // statusPtrStr disambiguates which status to return if there are
 // multiple in the history (e.g. recent failures where the build
 // didn't finish for reasons outside of all.bash failing)
-func getStatus(work builderRev, statusPtrStr string) *buildStatus {
+func getStatus(work buildgo.BuilderRev, statusPtrStr string) *buildStatus {
 	statusMu.Lock()
 	defer statusMu.Unlock()
 	match := func(st *buildStatus) bool {
@@ -493,15 +494,15 @@ func getStatus(work builderRev, statusPtrStr string) *buildStatus {
 		return st
 	}
 	for _, st := range statusDone {
-		if st.builderRev == work && match(st) {
+		if st.BuilderRev == work && match(st) {
 			return st
 		}
 	}
 	for k, ts := range tries {
-		if k.Commit == work.rev {
+		if k.Commit == work.Rev {
 			ts.mu.Lock()
 			for _, st := range ts.builds {
-				if st.builderRev == work && match(st) {
+				if st.BuilderRev == work && match(st) {
 					ts.mu.Unlock()
 					return st
 				}
@@ -549,7 +550,7 @@ func handleTryStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		bs.mu.Unlock()
 		fmt.Fprintf(w, "<tr valign=top><td align=left>%s</td><td align=center>%s</td><td><pre>%s</pre></td></tr>\n",
-			bs.name,
+			bs.Name,
 			status,
 			bs.HTMLStatusLine())
 	}
@@ -571,11 +572,11 @@ func trySetOfCommitPrefix(commitPrefix string) *trySet {
 }
 
 func handleLogs(w http.ResponseWriter, r *http.Request) {
-	br := builderRev{
-		name:    r.FormValue("name"),
-		rev:     r.FormValue("rev"),
-		subName: r.FormValue("subName"), // may be empty
-		subRev:  r.FormValue("subRev"),  // may be empty
+	br := buildgo.BuilderRev{
+		Name:    r.FormValue("name"),
+		Rev:     r.FormValue("rev"),
+		SubName: r.FormValue("subName"), // may be empty
+		SubRev:  r.FormValue("subRev"),  // may be empty
 	}
 	st := getStatus(br, r.FormValue("st"))
 	if st == nil {
@@ -630,8 +631,8 @@ func handleDebugGoroutines(w http.ResponseWriter, r *http.Request) {
 func writeStatusHeader(w http.ResponseWriter, st *buildStatus) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	fmt.Fprintf(w, "  builder: %s\n", st.name)
-	fmt.Fprintf(w, "      rev: %s\n", st.rev)
+	fmt.Fprintf(w, "  builder: %s\n", st.Name)
+	fmt.Fprintf(w, "      rev: %s\n", st.Rev)
 	workaroundFlush(w)
 	fmt.Fprintf(w, " buildlet: %s\n", st.bc)
 	fmt.Fprintf(w, "  started: %v\n", st.startTime)
@@ -662,10 +663,10 @@ func workaroundFlush(w http.ResponseWriter) {
 // findWorkLoop polls https://build.golang.org/?mode=json looking for new work
 // for the main dashboard. It does not support gccgo.
 // TODO(bradfitz): it also currently does not support subrepos.
-func findWorkLoop(work chan<- builderRev) {
+func findWorkLoop(work chan<- buildgo.BuilderRev) {
 	// Useful for debugging a single run:
 	if inStaging && false {
-		//work <- builderRev{name: "linux-arm", rev: "c9778ec302b2e0e0d6027e1e0fca892e428d9657", subName: "tools", subRev: "ac303766f5f240c1796eeea3dc9bf34f1261aa35"}
+		//work <- buildgo.BuilderRev{name: "linux-arm", rev: "c9778ec302b2e0e0d6027e1e0fca892e428d9657", subName: "tools", subRev: "ac303766f5f240c1796eeea3dc9bf34f1261aa35"}
 		const debugArm = false
 		if debugArm {
 			for !reversePool.CanBuild("host-linux-arm") {
@@ -673,14 +674,14 @@ func findWorkLoop(work chan<- builderRev) {
 				time.Sleep(time.Second)
 			}
 			log.Printf("ARM machine(s) registered.")
-			work <- builderRev{name: "linux-arm", rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
+			work <- buildgo.BuilderRev{Name: "linux-arm", Rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
 		} else {
-			work <- builderRev{name: "windows-amd64-2008", rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
-			work <- builderRev{name: "windows-386-gce", rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
+			work <- buildgo.BuilderRev{Name: "windows-amd64-2008", Rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
+			work <- buildgo.BuilderRev{Name: "windows-386-gce", Rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
 		}
 
 		// Still run findWork but ignore what it does.
-		ignore := make(chan builderRev)
+		ignore := make(chan buildgo.BuilderRev)
 		go func() {
 			for range ignore {
 			}
@@ -696,7 +697,7 @@ func findWorkLoop(work chan<- builderRev) {
 	}
 }
 
-func findWork(work chan<- builderRev) error {
+func findWork(work chan<- buildgo.BuilderRev) error {
 	var bs types.BuildStatus
 	if err := dash("GET", "", url.Values{"mode": {"json"}}, nil, &bs); err != nil {
 		return err
@@ -766,24 +767,24 @@ func findWork(work chan<- builderRev) error {
 				continue
 			}
 
-			var rev builderRev
+			var rev buildgo.BuilderRev
 			if br.Repo == "go" {
-				rev = builderRev{
-					name: bs.Builders[i],
-					rev:  br.Revision,
+				rev = buildgo.BuilderRev{
+					Name: bs.Builders[i],
+					Rev:  br.Revision,
 				}
 			} else {
-				rev = builderRev{
-					name:    bs.Builders[i],
-					rev:     br.GoRevision,
-					subName: br.Repo,
-					subRev:  br.Revision,
+				rev = buildgo.BuilderRev{
+					Name:    bs.Builders[i],
+					Rev:     br.GoRevision,
+					SubName: br.Repo,
+					SubRev:  br.Revision,
 				}
-				if awaitSnapshot && !rev.snapshotExists() {
+				if awaitSnapshot && !rev.SnapshotExists(context.TODO(), buildEnv) {
 					continue
 				}
 			}
-			if rev.skipBuild() {
+			if skipBuild(rev) {
 				continue
 			}
 			if !isBuilding(rev) {
@@ -802,8 +803,8 @@ func findWork(work chan<- builderRev) error {
 			continue
 		}
 		for _, rev := range goRevisions {
-			br := builderRev{name: b, rev: rev}
-			if !br.skipBuild() && !isBuilding(br) {
+			br := buildgo.BuilderRev{Name: b, Rev: rev}
+			if !skipBuild(br) && !isBuilding(br) {
 				work <- br
 			}
 		}
@@ -987,18 +988,18 @@ func newTrySet(key tryKey, ci *gerrit.ChangeInfo) (*trySet, error) {
 	return ts, nil
 }
 
-func tryKeyToBuilderRev(builder string, key tryKey) builderRev {
+func tryKeyToBuilderRev(builder string, key tryKey) buildgo.BuilderRev {
 	if key.Repo == "go" {
-		return builderRev{
-			name: builder,
-			rev:  key.Commit,
+		return buildgo.BuilderRev{
+			Name: builder,
+			Rev:  key.Commit,
 		}
 	}
-	return builderRev{
-		name:    builder,
-		rev:     getRepoHead("go"),
-		subName: key.Repo,
-		subRev:  key.Commit,
+	return buildgo.BuilderRev{
+		Name:    builder,
+		Rev:     getRepoHead("go"),
+		SubName: key.Repo,
+		SubRev:  key.Commit,
 	}
 }
 
@@ -1108,7 +1109,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 
 	ts.mu.Lock()
 	if hasBenchResults {
-		ts.benchResults = append(ts.benchResults, bs.name)
+		ts.benchResults = append(ts.benchResults, bs.Name)
 	}
 	ts.remain--
 	remain := ts.remain
@@ -1122,7 +1123,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 	if !succeeded {
 		s1 := sha1.New()
 		io.WriteString(s1, buildLog)
-		objName := fmt.Sprintf("%s/%s_%x.log", bs.rev[:8], bs.name, s1.Sum(nil)[:4])
+		objName := fmt.Sprintf("%s/%s_%x.log", bs.Rev[:8], bs.Name, s1.Sum(nil)[:4])
 		wr, failLogURL := newFailureLogBlob(objName)
 		if _, err := io.WriteString(wr, buildLog); err != nil {
 			log.Printf("Failed to write to GCS: %v", err)
@@ -1137,7 +1138,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 		bs.failURL = failLogURL
 		bs.mu.Unlock()
 		ts.mu.Lock()
-		fmt.Fprintf(&ts.errMsg, "Failed on %s: %s\n", bs.name, failLogURL)
+		fmt.Fprintf(&ts.errMsg, "Failed on %s: %s\n", bs.Name, failLogURL)
 		ts.mu.Unlock()
 
 		if numFail == 1 && remain > 0 {
@@ -1147,7 +1148,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 						"This change failed on %s:\n"+
 						"See %s\n\n"+
 						"Consult https://build.golang.org/ to see whether it's a new failure. Other builds still in progress; subsequent failure notices suppressed until final report.",
-					bs.name, failLogURL),
+					bs.Name, failLogURL),
 			}); err != nil {
 				log.Printf("Failed to call Gerrit: %v", err)
 				return
@@ -1179,28 +1180,18 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 	}
 }
 
-// builderRev is a build configuration type and a revision.
-type builderRev struct {
-	name string // e.g. "linux-amd64-race"
-	rev  string // lowercase hex core repo git hash
-
-	// optional sub-repository details (both must be present)
-	subName string // e.g. "net"
-	subRev  string // lowercase hex sub-repo git hash
-}
-
-func (br builderRev) skipBuild() bool {
-	if strings.HasPrefix(br.name, "netbsd-386") {
+func skipBuild(br buildgo.BuilderRev) bool {
+	if strings.HasPrefix(br.Name, "netbsd-386") {
 		// Hangs during make.bash. TODO: remove once Issue 19339 is fixed.
 		return true
 	}
-	if strings.HasPrefix(br.name, "netbsd-amd64") {
+	if strings.HasPrefix(br.Name, "netbsd-amd64") {
 		// Broken and unloved. Wasting resources.
 		// Still available via gomote, but not building for now.
 		// TODO: remove once Issue 19652 is fixed.
 		return true
 	}
-	switch br.subName {
+	switch br.SubName {
 	case "build", // has external deps
 		"exp",    // always broken, depends on mobile which is broken
 		"mobile", // always broken (gl, etc). doesn't compile.
@@ -1208,37 +1199,19 @@ func (br builderRev) skipBuild() bool {
 		"oauth2": // has external deps
 		return true
 	case "perf":
-		if br.name == "linux-amd64-nocgo" {
+		if br.Name == "linux-amd64-nocgo" {
 			// The "perf" repo requires sqlite, which
 			// requires cgo. Skip the no-cgo builder.
 			return true
 		}
 	case "net":
-		if br.name == "darwin-amd64-10_8" || br.name == "darwin-386-10_8" {
+		if br.Name == "darwin-amd64-10_8" || br.Name == "darwin-386-10_8" {
 			// One of the tests seems to panic the kernel
 			// and kill our buildlet which goes in a loop.
 			return true
 		}
 	}
 	return false
-}
-
-func (br builderRev) isSubrepo() bool {
-	return br.subName != ""
-}
-
-func (br builderRev) subRevOrGoRev() string {
-	if br.subRev != "" {
-		return br.subRev
-	}
-	return br.rev
-}
-
-func (br builderRev) repoOrGo() string {
-	if br.subName == "" {
-		return "go"
-	}
-	return br.subName
 }
 
 type eventTimeLogger interface {
@@ -1331,18 +1304,18 @@ func poolForConf(conf dashboard.BuildConfig) BuildletPool {
 	}
 }
 
-func newBuild(rev builderRev) (*buildStatus, error) {
+func newBuild(rev buildgo.BuilderRev) (*buildStatus, error) {
 	// Note: can't acquire statusMu in newBuild, as this is called
 	// from findTryWork -> newTrySet, which holds statusMu.
 
-	conf, ok := dashboard.Builders[rev.name]
+	conf, ok := dashboard.Builders[rev.Name]
 	if !ok {
-		return nil, fmt.Errorf("unknown builder type %q", rev.name)
+		return nil, fmt.Errorf("unknown builder type %q", rev.Name)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &buildStatus{
 		buildID:    "B" + randHex(9),
-		builderRev: rev,
+		BuilderRev: rev,
 		conf:       conf,
 		startTime:  time.Now(),
 		ctx:        ctx,
@@ -1354,7 +1327,7 @@ func newBuild(rev builderRev) (*buildStatus, error) {
 // The buildStatus's context is closed when the build is complete,
 // successfully or not.
 func (st *buildStatus) start() {
-	setStatus(st.builderRev, st)
+	setStatus(st.BuilderRev, st)
 	go func() {
 		err := st.build()
 		if err == errSkipBuildDueToDeps {
@@ -1362,12 +1335,12 @@ func (st *buildStatus) start() {
 		} else {
 			if err != nil {
 				fmt.Fprintf(st, "\n\nError: %v\n", err)
-				log.Println(st.builderRev, "failed:", err)
+				log.Println(st.BuilderRev, "failed:", err)
 			}
 			st.setDone(err == nil)
 			putBuildRecord(st.buildRecord())
 		}
-		markDone(st.builderRev)
+		markDone(st.BuilderRev)
 	}()
 }
 
@@ -1424,7 +1397,7 @@ func (st *buildStatus) expectedBuildletStartDuration() time.Duration {
 // ready, such that they're ready when make.bash is done. But we don't
 // want to start too early, lest we waste idle resources during make.bash.
 func (st *buildStatus) getHelpersReadySoon() {
-	if st.isSubrepo() || st.conf.NumTestHelpers(st.isTry()) == 0 || st.conf.IsReverse() {
+	if st.IsSubrepo() || st.conf.NumTestHelpers(st.isTry()) == 0 || st.conf.IsReverse() {
 		return
 	}
 	time.AfterFunc(st.expectedMakeBashDuration()-st.expectedBuildletStartDuration(),
@@ -1458,7 +1431,7 @@ func (st *buildStatus) useSnapshot() bool {
 	if st.useSnapshotMemo != nil {
 		return *st.useSnapshotMemo
 	}
-	b := st.conf.SplitMakeRun() && st.builderRev.snapshotExists()
+	b := st.conf.SplitMakeRun() && st.BuilderRev.SnapshotExists(context.TODO(), buildEnv)
 	st.useSnapshotMemo = &b
 	return b
 }
@@ -1474,7 +1447,7 @@ func (st *buildStatus) getCrossCompileConfig() *crossCompileConfig {
 	if kubeErr != nil {
 		return nil
 	}
-	config := crossCompileConfigs[st.name]
+	config := crossCompileConfigs[st.Name]
 	if config == nil {
 		return nil
 	}
@@ -1494,7 +1467,7 @@ func (st *buildStatus) checkDep(ctx context.Context, dep string) (have bool, err
 	for {
 		tries++
 		res, err := maintnerClient.HasAncestor(ctx, &apipb.HasAncestorRequest{
-			Commit:   st.rev,
+			Commit:   st.Rev,
 			Ancestor: dep,
 		})
 		if err != nil {
@@ -1526,12 +1499,12 @@ func (st *buildStatus) build() error {
 		for _, dep := range deps {
 			has, err := st.checkDep(ctx, dep)
 			if err != nil {
-				fmt.Fprintf(st, "Error checking whether commit %s includes ancestor %s: %v\n", st.rev, dep, err)
+				fmt.Fprintf(st, "Error checking whether commit %s includes ancestor %s: %v\n", st.Rev, dep, err)
 				return err
 			}
 			if !has {
 				st.LogEventTime(eventSkipBuildMissingDep)
-				fmt.Fprintf(st, "skipping build; commit %s lacks ancestor %s\n", st.rev, dep)
+				fmt.Fprintf(st, "skipping build; commit %s lacks ancestor %s\n", st.Rev, dep)
 				return errSkipBuildDueToDeps
 			}
 		}
@@ -1542,7 +1515,7 @@ func (st *buildStatus) build() error {
 
 	sp := st.CreateSpan("checking_for_snapshot")
 	if inStaging {
-		err := storageClient.Bucket(buildEnv.SnapBucket).Object(st.snapshotObjectName()).Delete(context.Background())
+		err := storageClient.Bucket(buildEnv.SnapBucket).Object(st.SnapshotObjectName()).Delete(context.Background())
 		st.LogEventTime("deleted_snapshot", fmt.Sprint(err))
 	}
 	snapshotExists := st.useSnapshot()
@@ -1572,7 +1545,7 @@ func (st *buildStatus) build() error {
 
 	if st.useSnapshot() {
 		sp := st.CreateSpan("write_snapshot_tar")
-		if err := bc.PutTarFromURL(st.snapshotURL(), "go"); err != nil {
+		if err := bc.PutTarFromURL(st.SnapshotURL(buildEnv), "go"); err != nil {
 			return sp.Done(fmt.Errorf("failed to put snapshot to buildlet: %v", err))
 		}
 		sp.Done(nil)
@@ -1587,9 +1560,9 @@ func (st *buildStatus) build() error {
 	}
 
 	execStartTime := time.Now()
-	fmt.Fprintf(st, "%s at %v", st.name, st.rev)
-	if st.isSubrepo() {
-		fmt.Fprintf(st, " building %v at %v", st.subName, st.subRev)
+	fmt.Fprintf(st, "%s at %v", st.Name, st.Rev)
+	if st.IsSubrepo() {
+		fmt.Fprintf(st, " building %v at %v", st.SubName, st.SubRev)
 	}
 	fmt.Fprint(st, "\n\n")
 
@@ -1639,7 +1612,7 @@ func (st *buildStatus) build() error {
 				buildLog += "\n" + remoteErr.Error()
 			}
 		}
-		if err := recordResult(st.builderRev, remoteErr == nil, buildLog, time.Since(execStartTime)); err != nil {
+		if err := recordResult(st.BuilderRev, remoteErr == nil, buildLog, time.Since(execStartTime)); err != nil {
 			if remoteErr != nil {
 				return fmt.Errorf("Remote error was %q but failed to report it to the dashboard: %v", remoteErr, err)
 			}
@@ -1660,10 +1633,10 @@ func (st *buildStatus) buildRecord() *types.BuildRecord {
 		ProcessID: processID,
 		StartTime: st.startTime,
 		IsTry:     st.isTry(),
-		GoRev:     st.rev,
-		Rev:       st.subRevOrGoRev(),
-		Repo:      st.repoOrGo(),
-		Builder:   st.name,
+		GoRev:     st.Rev,
+		Rev:       st.SubRevOrGoRev(),
+		Repo:      st.RepoOrGo(),
+		Builder:   st.Name,
 		OS:        st.conf.GOOS(),
 		Arch:      st.conf.GOARCH(),
 	}
@@ -1688,10 +1661,10 @@ func (st *buildStatus) spanRecord(sp *span, err error) *types.SpanRecord {
 	rec := &types.SpanRecord{
 		BuildID: st.buildID,
 		IsTry:   st.isTry(),
-		GoRev:   st.rev,
-		Rev:     st.subRevOrGoRev(),
-		Repo:    st.repoOrGo(),
-		Builder: st.name,
+		GoRev:   st.Rev,
+		Rev:     st.SubRevOrGoRev(),
+		Repo:    st.RepoOrGo(),
+		Builder: st.Name,
 		OS:      st.conf.GOOS(),
 		Arch:    st.conf.GOARCH(),
 
@@ -1712,7 +1685,7 @@ func (st *buildStatus) shouldBench() bool {
 	if !*shouldRunBench {
 		return false
 	}
-	return st.isTry() && !st.isSubrepo() && st.conf.RunBench
+	return st.isTry() && !st.IsSubrepo() && st.conf.RunBench
 }
 
 // runAllSharded runs make.bash and then shards the test execution.
@@ -1741,7 +1714,7 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 		return nil, err
 	}
 
-	if st.isSubrepo() {
+	if st.IsSubrepo() {
 		remoteErr, err = st.runSubrepoTests()
 	} else {
 		remoteErr, err = st.runTests(st.getHelpers())
@@ -1886,7 +1859,7 @@ func (st *buildStatus) runMake(bc *buildlet.Client, goroot string, w io.Writer) 
 		sp.Done(nil)
 	}
 
-	if st.name == "linux-amd64-racecompile" {
+	if st.Name == "linux-amd64-racecompile" {
 		return st.runConcurrentGoBuildStdCmd(bc)
 	}
 
@@ -1962,24 +1935,6 @@ func (st *buildStatus) doSnapshot(bc *buildlet.Client) error {
 	return nil
 }
 
-// snapshotExists reports whether the snapshot exists in storage.
-// It returns potentially false negatives on network errors.
-// Callers must not depend on this as more than an optimization.
-func (br *builderRev) snapshotExists() bool {
-	req, err := http.NewRequest("HEAD", br.snapshotURL(), nil)
-	if err != nil {
-		panic(err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	res, err := http.DefaultClient.Do(req.WithContext(ctx))
-	if err != nil {
-		log.Printf("snapshotExists check: %v", err)
-		return false
-	}
-	return res.StatusCode == http.StatusOK
-}
-
 func (st *buildStatus) writeGoSource() error {
 	return st.writeGoSourceTo(st.bc)
 }
@@ -1987,11 +1942,11 @@ func (st *buildStatus) writeGoSource() error {
 func (st *buildStatus) writeGoSourceTo(bc *buildlet.Client) error {
 	// Write the VERSION file.
 	sp := st.CreateSpan("write_version_tar")
-	if err := bc.PutTar(versionTgz(st.rev), "go"); err != nil {
+	if err := bc.PutTar(versionTgz(st.Rev), "go"); err != nil {
 		return sp.Done(fmt.Errorf("writing VERSION tgz: %v", err))
 	}
 
-	srcTar, err := getSourceTgz(st, "go", st.rev)
+	srcTar, err := getSourceTgz(st, "go", st.Rev)
 	if err != nil {
 		return err
 	}
@@ -2020,18 +1975,6 @@ func (st *buildStatus) cleanForSnapshot(bc *buildlet.Client) error {
 	))
 }
 
-// snapshotObjectName is the cloud storage object name of the
-// built Go tree for this builder and Go rev (not the sub-repo).
-// The entries inside this tarball do not begin with "go/".
-func (br *builderRev) snapshotObjectName() string {
-	return fmt.Sprintf("%v/%v/%v.tar.gz", "go", br.name, br.rev)
-}
-
-// snapshotURL is the absolute URL of the snapshot object (see above).
-func (br *builderRev) snapshotURL() string {
-	return buildEnv.SnapshotURL(br.name, br.rev)
-}
-
 func (st *buildStatus) writeSnapshot(bc *buildlet.Client) (err error) {
 	sp := st.CreateSpan("write_snapshot_to_gcs")
 	defer func() { sp.Done(err) }()
@@ -2050,7 +1993,7 @@ func (st *buildStatus) writeSnapshot(bc *buildlet.Client) (err error) {
 	}
 	defer tgz.Close()
 
-	wr := storageClient.Bucket(buildEnv.SnapBucket).Object(st.snapshotObjectName()).NewWriter(ctx)
+	wr := storageClient.Bucket(buildEnv.SnapBucket).Object(st.SnapshotObjectName()).NewWriter(ctx)
 	wr.ContentType = "application/octet-stream"
 	wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
 	if _, err := io.Copy(wr, tgz); err != nil {
@@ -2107,7 +2050,7 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 // only do this for slow builders running redundant tests. (That is,
 // tests which have identical behavior across different ports)
 func (st *buildStatus) shouldSkipTest(testName string) bool {
-	if inStaging && st.name == "linux-arm" && false {
+	if inStaging && st.Name == "linux-arm" && false {
 		if strings.HasPrefix(testName, "go_test:") && testName < "go_test:runtime" {
 			return true
 		}
@@ -2117,7 +2060,7 @@ func (st *buildStatus) shouldSkipTest(testName string) bool {
 		// Old vetall test name, before the sharding in CL 37572.
 		return true
 	case "api":
-		return st.isTry() && st.name != "linux-amd64"
+		return st.isTry() && st.Name != "linux-amd64"
 	}
 	return false
 }
@@ -2130,7 +2073,7 @@ func (st *buildStatus) newTestSet(names []string, benchmarks []*benchmarkItem) *
 		set.items = append(set.items, &testItem{
 			set:      set,
 			name:     name,
-			duration: testDuration(st.builderRev.name, name),
+			duration: testDuration(st.BuilderRev.Name, name),
 			take:     make(chan token, 1),
 			done:     make(chan token),
 		})
@@ -2141,7 +2084,7 @@ func (st *buildStatus) newTestSet(names []string, benchmarks []*benchmarkItem) *
 			set:      set,
 			name:     name,
 			bench:    bench,
-			duration: testDuration(st.builderRev.name, name),
+			duration: testDuration(st.BuilderRev.Name, name),
 			take:     make(chan token, 1),
 			done:     make(chan token),
 		})
@@ -2534,7 +2477,7 @@ func fetchSubrepo(sl spanlog.Logger, bc *buildlet.Client, repo, rev string) erro
 }
 
 func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
-	st.LogEventTime("fetching_subrepo", st.subName)
+	st.LogEventTime("fetching_subrepo", st.SubName)
 
 	workDir, err := st.bc.WorkDir()
 	if err != nil {
@@ -2545,7 +2488,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	gopath := st.conf.FilePathJoin(workDir, "gopath")
 
 	fetched := map[string]bool{}
-	toFetch := []string{st.subName}
+	toFetch := []string{st.SubName}
 
 	// fetch checks out the provided sub-repo to the buildlet's workspace.
 	fetch := func(repo, rev string) error {
@@ -2602,7 +2545,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		}
 		// For the repo under test, choose that specific revision.
 		if i == 0 {
-			rev = st.subRev
+			rev = st.SubRev
 		}
 		if err := fetch(repo, rev); err != nil {
 			return nil, err
@@ -2616,7 +2559,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		}
 	}
 
-	sp := st.CreateSpan("running_subrepo_tests", st.subName)
+	sp := st.CreateSpan("running_subrepo_tests", st.SubName)
 	defer func() { sp.Done(err) }()
 	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 		Output: st,
@@ -2626,7 +2569,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 			"GOPATH="+gopath,
 			"GO15VENDOREXPERIMENT=1"),
 		Path: []string{"$WORKDIR/go/bin", "$PATH"},
-		Args: []string{"test", "-short", subrepoPrefix + st.subName + "/..."},
+		Args: []string{"test", "-short", subrepoPrefix + st.SubName + "/..."},
 	})
 }
 
@@ -2700,7 +2643,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 					defer st.LogEventTime("DEV_HELPER_SLEEP", bc.Name())
 				}
 				st.LogEventTime("got_empty_test_helper", bc.String())
-				if err := bc.PutTarFromURL(st.snapshotURL(), "go"); err != nil {
+				if err := bc.PutTarFromURL(st.SnapshotURL(buildEnv), "go"); err != nil {
 					log.Printf("failed to extract snapshot for helper %s: %v", bc.Name(), err)
 					return
 				}
@@ -2846,14 +2789,14 @@ func (st *buildStatus) benchFiles() []*benchFile {
 	}
 	fmt.Fprintf(&benchFiles[0].out, "cl: %d\nps: %d\ntry: %s\nbuildlet: %s\nbranch: %s\nrepo: https://go.googlesource.com/%s\n",
 		st.trySet.ci.ChangeNumber, ps, st.trySet.tryID,
-		st.name, st.trySet.ci.Branch, st.trySet.ci.Project,
+		st.Name, st.trySet.ci.Branch, st.trySet.ci.Project,
 	)
 	if inStaging {
 		benchFiles[0].out.WriteString("staging: true\n")
 	}
 	benchFiles[1].out.Write(benchFiles[0].out.Bytes())
 	fmt.Fprintf(&benchFiles[0].out, "commit: %s\n", rev.Commit.Parents[0].CommitID)
-	fmt.Fprintf(&benchFiles[1].out, "commit: %s\n", st.builderRev.rev)
+	fmt.Fprintf(&benchFiles[1].out, "commit: %s\n", st.BuilderRev.Rev)
 	return benchFiles
 }
 
@@ -3037,7 +2980,7 @@ func (s *testSet) initInOrder() {
 
 	// First do the go_test:* ones. partitionGoTests
 	// only returns those, which are the ones we merge together.
-	stdSets := partitionGoTests(s.st.builderRev.name, names)
+	stdSets := partitionGoTests(s.st.BuilderRev.Name, names)
 	for _, set := range stdSets {
 		tis := make([]*testItem, len(set))
 		for i, name := range set {
@@ -3135,7 +3078,7 @@ type eventAndTime struct {
 // buildStatus is the status of a build.
 type buildStatus struct {
 	// Immutable:
-	builderRev
+	buildgo.BuilderRev
 	buildID   string // "B" + 9 random hex
 	conf      dashboard.BuildConfig
 	startTime time.Time // actually time of newBuild (~same thing); TODO(bradfitz): rename this createTime
@@ -3179,7 +3122,7 @@ func (st *buildStatus) isRunning() bool {
 func (st *buildStatus) isRunningLocked() bool { return st.done.IsZero() }
 
 func (st *buildStatus) logf(format string, args ...interface{}) {
-	log.Printf("[build %s %s]: %s", st.name, st.rev, fmt.Sprintf(format, args...))
+	log.Printf("[build %s %s]: %s", st.Name, st.Rev, fmt.Sprintf(format, args...))
 }
 
 // span is an event covering a region of time.
@@ -3292,10 +3235,10 @@ func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "<a href='https://github.com/golang/go/wiki/DashboardBuilders'>%s</a> rev <a href='%s%s'>%s</a>",
-		st.name, urlPrefix, st.rev, st.rev[:8])
-	if st.isSubrepo() {
+		st.Name, urlPrefix, st.Rev, st.Rev[:8])
+	if st.IsSubrepo() {
 		fmt.Fprintf(&buf, " (sub-repo %s rev <a href='%s%s'>%s</a>)",
-			st.subName, urlPrefix, st.subRev, st.subRev[:8])
+			st.SubName, urlPrefix, st.SubRev, st.SubRev[:8])
 	}
 	if ts := st.trySet; ts != nil {
 		fmt.Fprintf(&buf, " (<a href='/try?commit=%v'>trybot set</a> for <a href='https://go-review.googlesource.com/#/q/%s'>%s</a>)",
@@ -3339,9 +3282,9 @@ func (st *buildStatus) logsURLLocked() string {
 	if *mode == "dev" {
 		urlPrefix = "https://localhost:8119"
 	}
-	u := fmt.Sprintf("%v/temporarylogs?name=%s&rev=%s&st=%p", urlPrefix, st.name, st.rev, st)
-	if st.isSubrepo() {
-		u += fmt.Sprintf("&subName=%v&subRev=%v", st.subName, st.subRev)
+	u := fmt.Sprintf("%v/temporarylogs?name=%s&rev=%s&st=%p", urlPrefix, st.Name, st.Rev, st)
+	if st.IsSubrepo() {
+		u += fmt.Sprintf("&subName=%v&subRev=%v", st.SubName, st.SubRev)
 	}
 	return u
 }
