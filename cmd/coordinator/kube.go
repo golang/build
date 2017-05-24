@@ -215,7 +215,7 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg 
 	// the context timeout based on that
 	var needDelete bool
 
-	lg.logEventTime("creating_kube_pod", podName)
+	lg.LogEventTime("creating_kube_pod", podName)
 	log.Printf("Creating Kubernetes pod %q for %s", podName, hostType)
 
 	bc, err := buildlet.StartPod(ctx, buildletsKubeClient, podName, hostType, buildlet.PodOpts{
@@ -224,21 +224,21 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg 
 		Description:   fmt.Sprintf("Go Builder for %s", hostType),
 		DeleteIn:      deleteIn,
 		OnPodCreating: func() {
-			lg.logEventTime("pod_creating")
+			lg.LogEventTime("pod_creating")
 			p.setPodUsed(podName, true)
 			p.updatePodHistory(podName, podHistory{requestedAt: time.Now()})
 			needDelete = true
 		},
 		OnPodCreated: func() {
-			lg.logEventTime("pod_created")
+			lg.LogEventTime("pod_created")
 			p.updatePodHistory(podName, podHistory{readyAt: time.Now()})
 		},
 		OnGotPodInfo: func() {
-			lg.logEventTime("got_pod_info", "waiting_for_buildlet...")
+			lg.LogEventTime("got_pod_info", "waiting_for_buildlet...")
 		},
 	})
 	if err != nil {
-		lg.logEventTime("kube_buildlet_create_failure", fmt.Sprintf("%s: %v", podName, err))
+		lg.LogEventTime("kube_buildlet_create_failure", fmt.Sprintf("%s: %v", podName, err))
 
 		if needDelete {
 			log.Printf("Deleting failed pod %q", podName)

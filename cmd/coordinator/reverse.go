@@ -263,7 +263,7 @@ func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, 
 	defer p.updateWaiterCounter(hostType, -1)
 	seenErrInUse := false
 	isHighPriority, _ := ctx.Value(highPriorityOpt{}).(bool)
-	sp := lg.createSpan("wait_static_builder", hostType)
+	sp := lg.CreateSpan("wait_static_builder", hostType)
 	for {
 		bc, busy := p.tryToGrab(hostType)
 		if bc != nil {
@@ -271,12 +271,12 @@ func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, 
 			case highPriChan(hostType) <- bc:
 				// Somebody else was more important.
 			default:
-				sp.done(nil)
+				sp.Done(nil)
 				return p.cleanedBuildlet(bc, lg)
 			}
 		}
 		if busy > 0 && !seenErrInUse {
-			lg.logEventTime("waiting_machine_in_use")
+			lg.LogEventTime("waiting_machine_in_use")
 			seenErrInUse = true
 		}
 		var highPri chan *buildlet.Client
@@ -285,9 +285,9 @@ func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, 
 		}
 		select {
 		case <-ctx.Done():
-			return nil, sp.done(ctx.Err())
+			return nil, sp.Done(ctx.Err())
 		case bc := <-highPri:
-			sp.done(nil)
+			sp.Done(nil)
 			return p.cleanedBuildlet(bc, lg)
 
 		case <-time.After(10 * time.Second):
@@ -302,9 +302,9 @@ func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, 
 
 func (p *reverseBuildletPool) cleanedBuildlet(b *buildlet.Client, lg logger) (*buildlet.Client, error) {
 	// Clean up any files from previous builds.
-	sp := lg.createSpan("clean_buildlet", b.String())
+	sp := lg.CreateSpan("clean_buildlet", b.String())
 	err := b.RemoveAll(".")
-	sp.done(err)
+	sp.Done(err)
 	if err != nil {
 		b.Close()
 		return nil, err

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/cmd/coordinator/spanlog"
 	"golang.org/x/build/dashboard"
 )
 
@@ -73,7 +74,7 @@ func buildPkg(conf dashboard.BuildConfig, bc *buildlet.Client, goroot string, w 
 }
 
 // buildXBenchmark builds a benchmark from x/benchmarks.
-func buildXBenchmark(sl spanLogger, conf dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer, rev, pkg, name string) (remoteErr, err error) {
+func buildXBenchmark(sl spanlog.Logger, conf dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer, rev, pkg, name string) (remoteErr, err error) {
 	workDir, err := bc.WorkDir()
 	if err != nil {
 		return nil, err
@@ -93,7 +94,7 @@ func buildXBenchmark(sl spanLogger, conf dashboard.BuildConfig, bc *buildlet.Cli
 	})
 }
 
-func enumerateBenchmarks(sl spanLogger, conf dashboard.BuildConfig, bc *buildlet.Client, goroot string, trySet *trySet) ([]*benchmarkItem, error) {
+func enumerateBenchmarks(sl spanlog.Logger, conf dashboard.BuildConfig, bc *buildlet.Client, goroot string, trySet *trySet) ([]*benchmarkItem, error) {
 	workDir, err := bc.WorkDir()
 	if err != nil {
 		err = fmt.Errorf("buildBench, WorkDir: %v", err)
@@ -239,7 +240,7 @@ func (st *buildStatus) parentRev() (pbr builderRev, err error) {
 	return
 }
 
-func (st *buildStatus) buildRev(sl spanLogger, conf dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot string, br builderRev) error {
+func (st *buildStatus) buildRev(sl spanlog.Logger, conf dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot string, br builderRev) error {
 	if br.snapshotExists() {
 		return bc.PutTarFromURL(br.snapshotURL(), "go-parent")
 	}
@@ -270,18 +271,18 @@ func (b *benchmarkItem) run(st *buildStatus, bc *buildlet.Client, w io.Writer) (
 		if err != nil {
 			return nil, err
 		}
-		sp := st.createSpan("bench_build_parent", bc.Name())
+		sp := st.CreateSpan("bench_build_parent", bc.Name())
 		err = st.buildRev(st, st.conf, bc, w, "go-parent", pbr)
-		sp.done(err)
+		sp.Done(err)
 		if err != nil {
 			return nil, err
 		}
 	}
 	// Build benchmark.
 	for _, goroot := range []string{"go", "go-parent"} {
-		sp := st.createSpan("bench_build", fmt.Sprintf("%s/%s: %s", goroot, b.binary, bc.Name()))
+		sp := st.CreateSpan("bench_build", fmt.Sprintf("%s/%s: %s", goroot, b.binary, bc.Name()))
 		remoteErr, err = b.build(bc, goroot, w)
-		sp.done(err)
+		sp.Done(err)
 		if remoteErr != nil || err != nil {
 			return remoteErr, err
 		}
@@ -305,9 +306,9 @@ func (b *benchmarkItem) run(st *buildStatus, bc *buildlet.Client, w io.Writer) (
 		for _, c := range commits {
 			fmt.Fprintf(&c.out, "iteration: %d\nstart-time: %s\n", i, time.Now().UTC().Format(time.RFC3339))
 			p := path.Join(c.path, b.binary)
-			sp := st.createSpan("run_one_bench", p)
+			sp := st.CreateSpan("run_one_bench", p)
 			remoteErr, err = runOneBenchBinary(st.conf, bc, &c.out, c.path, p, b.args)
-			sp.done(err)
+			sp.Done(err)
 			if err != nil || remoteErr != nil {
 				c.out.WriteTo(w)
 				return

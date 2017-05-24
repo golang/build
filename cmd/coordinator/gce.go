@@ -29,6 +29,7 @@ import (
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/cmd/coordinator/spanlog"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/lru"
@@ -259,9 +260,9 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 	if !ok {
 		return nil, fmt.Errorf("gcepool: unknown host type %q", hostType)
 	}
-	qsp := lg.createSpan("awaiting_gce_quota")
+	qsp := lg.CreateSpan("awaiting_gce_quota")
 	err = p.awaitVMCountQuota(ctx, hconf.GCENumCPU())
-	qsp.done(err)
+	qsp.Done(err)
 	if err != nil {
 		return nil, err
 	}
@@ -274,13 +275,13 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 	instName := "buildlet-" + strings.TrimPrefix(hostType, "host-") + "-rn" + randHex(7)
 	p.setInstanceUsed(instName, true)
 
-	gceBuildletSpan := lg.createSpan("create_gce_buildlet", instName)
-	defer func() { gceBuildletSpan.done(err) }()
+	gceBuildletSpan := lg.CreateSpan("create_gce_buildlet", instName)
+	defer func() { gceBuildletSpan.Done(err) }()
 
 	var (
 		needDelete   bool
-		createSpan   eventSpan    = lg.createSpan("create_gce_instance", instName)
-		waitBuildlet eventSpan    // made after create is done
+		createSpan   spanlog.Span = lg.CreateSpan("create_gce_instance", instName)
+		waitBuildlet spanlog.Span // made after create is done
 		curSpan      = createSpan // either instSpan or waitBuildlet
 	)
 
@@ -294,7 +295,7 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 			log.Printf("GCE VM %q now booting", instName)
 		},
 		FallbackToFullPrice: func() string {
-			lg.logEventTime("gce_fallback_to_full_price", "for "+instName)
+			lg.LogEventTime("gce_fallback_to_full_price", "for "+instName)
 			p.setInstanceUsed(instName, false)
 			newName := instName + "-f"
 			log.Printf("Gave up on preemptible %q; now booting %q", instName, newName)
@@ -305,16 +306,16 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 		OnInstanceCreated: func() {
 			needDelete = true
 
-			createSpan.done(nil)
-			waitBuildlet = lg.createSpan("wait_buildlet_start", instName)
+			createSpan.Done(nil)
+			waitBuildlet = lg.CreateSpan("wait_buildlet_start", instName)
 			curSpan = waitBuildlet
 		},
 		OnGotInstanceInfo: func() {
-			lg.logEventTime("got_instance_info", "waiting_for_buildlet...")
+			lg.LogEventTime("got_instance_info", "waiting_for_buildlet...")
 		},
 	})
 	if err != nil {
-		curSpan.done(err)
+		curSpan.Done(err)
 		log.Printf("Failed to create VM for %s: %v", hostType, err)
 		if needDelete {
 			deleteVM(buildEnv.Zone, instName)
@@ -323,7 +324,7 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 		p.setInstanceUsed(instName, false)
 		return nil, err
 	}
-	waitBuildlet.done(nil)
+	waitBuildlet.Done(nil)
 	bc.SetDescription("GCE VM: " + instName)
 	bc.SetOnHeartbeatFailure(func() {
 		p.putBuildlet(bc, hostType, instName)
