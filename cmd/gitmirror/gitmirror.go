@@ -231,8 +231,10 @@ var (
 )
 
 // GET /
+// or:
+// GET /debug/watcher/
 func handleRoot(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
+	if r.URL.Path != "/" && r.URL.Path != "/debug/watcher/" {
 		http.NotFound(w, r)
 		return
 	}
