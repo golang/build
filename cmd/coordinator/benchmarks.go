@@ -242,7 +242,7 @@ func (st *buildStatus) parentRev() (pbr buildgo.BuilderRev, err error) {
 	return
 }
 
-func (st *buildStatus) buildRev(sl spanlog.Logger, conf dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot string, br buildgo.BuilderRev) error {
+func buildRev(sl spanlog.Logger, conf dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot string, br buildgo.BuilderRev) error {
 	if br.SnapshotExists(context.TODO(), buildEnv) {
 		return bc.PutTarFromURL(br.SnapshotURL(buildEnv), goroot)
 	}
@@ -256,7 +256,13 @@ func (st *buildStatus) buildRev(sl spanlog.Logger, conf dashboard.BuildConfig, b
 	if err := bc.PutTar(srcTar, goroot); err != nil {
 		return err
 	}
-	remoteErr, err := st.runMake(bc, goroot, w)
+	builder := buildgo.GoBuilder{
+		Logger:     sl,
+		BuilderRev: br,
+		Conf:       conf,
+		Goroot:     goroot,
+	}
+	remoteErr, err := builder.RunMake(bc, w)
 	if err != nil {
 		return err
 	}
@@ -274,7 +280,7 @@ func (b *benchmarkItem) run(st *buildStatus, bc *buildlet.Client, w io.Writer) (
 			return nil, err
 		}
 		sp := st.CreateSpan("bench_build_parent", bc.Name())
-		err = st.buildRev(st, st.conf, bc, w, "go-parent", pbr)
+		err = buildRev(st, st.conf, bc, w, "go-parent", pbr)
 		sp.Done(err)
 		if err != nil {
 			return nil, err

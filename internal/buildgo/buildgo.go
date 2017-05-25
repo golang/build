@@ -9,11 +9,16 @@ package buildgo
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"path"
 	"time"
 
 	"golang.org/x/build/buildenv"
+	"golang.org/x/build/buildlet"
+	"golang.org/x/build/cmd/coordinator/spanlog"
+	"golang.org/x/build/dashboard"
 )
 
 // BuilderRev is a build configuration type and a revision.
@@ -72,4 +77,89 @@ func (br *BuilderRev) SnapshotExists(ctx context.Context, buildEnv *buildenv.Env
 		return false
 	}
 	return res.StatusCode == http.StatusOK
+}
+
+// A GoBuilder knows how to build a revision of Go with the given configuration.
+type GoBuilder struct {
+	spanlog.Logger
+	BuilderRev
+	Conf dashboard.BuildConfig
+	// Goroot is a Unix-style path relative to the work directory of the builder (e.g. "go").
+	Goroot string
+}
+
+// RunMake builds the tool chain.
+// goroot is relative to the workdir with forward slashes.
+// w is the Writer to send build output to.
+// remoteErr and err are as described at the top of this file.
+func (gb GoBuilder) RunMake(bc *buildlet.Client, w io.Writer) (remoteErr, err error) {
+	// Build the source code.
+	makeSpan := gb.CreateSpan("make", gb.Conf.MakeScript())
+	remoteErr, err = bc.Exec(path.Join(gb.Goroot, gb.Conf.MakeScript()), buildlet.ExecOpts{
+		Output:   w,
+		ExtraEnv: append(gb.Conf.Env(), "GOBIN="),
+		Debug:    true,
+		Args:     gb.Conf.MakeScriptArgs(),
+	})
+	if err != nil {
+		makeSpan.Done(err)
+		return nil, err
+	}
+	if remoteErr != nil {
+		makeSpan.Done(remoteErr)
+		return fmt.Errorf("make script failed: %v", remoteErr), nil
+	}
+	makeSpan.Done(nil)
+
+	// Need to run "go install -race std" before the snapshot + tests.
+	if pkgs := gb.Conf.GoInstallRacePackages(); len(pkgs) > 0 {
+		sp := gb.CreateSpan("install_race_std")
+		remoteErr, err = bc.Exec(path.Join(gb.Goroot, "bin/go"), buildlet.ExecOpts{
+			Output:   w,
+			ExtraEnv: append(gb.Conf.Env(), "GOBIN="),
+			Debug:    true,
+			Args:     append([]string{"install", "-race"}, pkgs...),
+		})
+		if err != nil {
+			sp.Done(err)
+			return nil, err
+		}
+		if remoteErr != nil {
+			sp.Done(err)
+			return fmt.Errorf("go install -race std failed: %v", remoteErr), nil
+		}
+		sp.Done(nil)
+	}
+
+	if gb.Name == "linux-amd64-racecompile" {
+		return gb.runConcurrentGoBuildStdCmd(bc, w)
+	}
+
+	return nil, nil
+}
+
+// runConcurrentGoBuildStdCmd is a step specific only to the
+// "linux-amd64-racecompile" builder to exercise the Go 1.9's new
+// concurrent compilation. It re-builds the standard library and tools
+// with -gcflags=-c=8 using a race-enabled cmd/compile (built by
+// caller, runMake, per builder config).
+// The idea is that this might find data races in cmd/compile.
+func (gb GoBuilder) runConcurrentGoBuildStdCmd(bc *buildlet.Client, w io.Writer) (remoteErr, err error) {
+	span := gb.CreateSpan("go_build_c128_std_cmd")
+	remoteErr, err = bc.Exec(path.Join(gb.Goroot, "bin/go"), buildlet.ExecOpts{
+		Output:   w,
+		ExtraEnv: append(gb.Conf.Env(), "GOBIN="),
+		Debug:    true,
+		Args:     []string{"build", "-a", "-gcflags=-c=8", "std", "cmd"},
+	})
+	if err != nil {
+		span.Done(err)
+		return nil, err
+	}
+	if remoteErr != nil {
+		span.Done(remoteErr)
+		return fmt.Errorf("go build failed: %v", remoteErr), nil
+	}
+	span.Done(nil)
+	return nil, nil
 }
