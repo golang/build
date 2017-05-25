@@ -55,8 +55,7 @@ import (
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/buildgo"
-	"golang.org/x/build/internal/lru"
-	"golang.org/x/build/internal/singleflight"
+	"golang.org/x/build/internal/sourcecache"
 	"golang.org/x/build/livelog"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/types"
@@ -365,7 +364,12 @@ func init() {
 		log.Fatal(err)
 	}
 	watcherProxy = httputil.NewSingleHostReverseProxy(u)
-	watcherProxy.Transport = gitMirrorClient.Transport
+	watcherProxy.Transport = &http.Transport{
+		IdleConnTimeout: 30 * time.Second,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return goKubeClient.DialServicePort(ctx, "gitmirror", "")
+		},
+	}
 }
 
 func handleDebugWatcher(w http.ResponseWriter, r *http.Request) {
@@ -1348,6 +1352,25 @@ func (st *buildStatus) buildletPool() BuildletPool {
 	return poolForConf(st.conf)
 }
 
+// parentRev returns the parent of this build's commit (but only if this build comes from a trySet).
+func (st *buildStatus) parentRev() (pbr buildgo.BuilderRev, err error) {
+	// TODO(quentin): Support non-try commits by asking maintnerd
+	// (at which point this no longer needs to be a method on buildStatus).
+	pbr = st.BuilderRev // copy
+	rev := st.trySet.ci.Revisions[st.trySet.ci.CurrentRevision]
+	if rev.Commit == nil {
+		err = fmt.Errorf("commit information missing for revision %q", st.trySet.ci.CurrentRevision)
+		return
+	}
+	if len(rev.Commit.Parents) == 0 {
+		// TODO(quentin): Log?
+		err = errors.New("commit has no parent")
+		return
+	}
+	pbr.Rev = rev.Commit.Parents[0].CommitID
+	return
+}
+
 func (st *buildStatus) expectedMakeBashDuration() time.Duration {
 	// TODO: base this on historical measurements, instead of statically configured.
 	// TODO: move this to dashboard/builders.go? But once we based on on historical
@@ -1688,6 +1711,16 @@ func (st *buildStatus) shouldBench() bool {
 	return st.isTry() && !st.IsSubrepo() && st.conf.RunBench
 }
 
+// goBuilder returns a GoBuilder for this buildStatus.
+func (st *buildStatus) goBuilder() buildgo.GoBuilder {
+	return buildgo.GoBuilder{
+		Logger:     st,
+		BuilderRev: st.BuilderRev,
+		Conf:       st.conf,
+		Goroot:     "go",
+	}
+}
+
 // runAllSharded runs make.bash and then shards the test execution.
 // remoteErr and err are as described at the top of this file.
 //
@@ -1698,13 +1731,7 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 	st.getHelpersReadySoon()
 
 	if !st.useSnapshot() {
-		builder := buildgo.GoBuilder{
-			Logger:     st,
-			BuilderRev: st.BuilderRev,
-			Conf:       st.conf,
-			Goroot:     "go",
-		}
-		remoteErr, err = builder.RunMake(st.bc, st)
+		remoteErr, err = st.goBuilder().RunMake(st.bc, st)
 		if err != nil {
 			return nil, err
 		}
@@ -1876,7 +1903,7 @@ func (st *buildStatus) writeGoSourceTo(bc *buildlet.Client) error {
 		return sp.Done(fmt.Errorf("writing VERSION tgz: %v", err))
 	}
 
-	srcTar, err := getSourceTgz(st, "go", st.Rev)
+	srcTar, err := sourcecache.GetSourceTgz(st, "go", st.Rev)
 	if err != nil {
 		return err
 	}
@@ -1995,7 +2022,7 @@ func (st *buildStatus) shouldSkipTest(testName string) bool {
 	return false
 }
 
-func (st *buildStatus) newTestSet(names []string, benchmarks []*benchmarkItem) *testSet {
+func (st *buildStatus) newTestSet(names []string, benchmarks []*buildgo.BenchmarkItem) *testSet {
 	set := &testSet{
 		st: st,
 	}
@@ -2009,7 +2036,7 @@ func (st *buildStatus) newTestSet(names []string, benchmarks []*benchmarkItem) *
 		})
 	}
 	for _, bench := range benchmarks {
-		name := "bench:" + bench.name()
+		name := "bench:" + bench.Name()
 		set.items = append(set.items, &testItem{
 			set:      set,
 			name:     name,
@@ -2393,17 +2420,9 @@ func testDuration(builderName, testName string) time.Duration {
 	}
 	if strings.HasPrefix(testName, "bench:") {
 		// Assume benchmarks are roughly 20 seconds per run.
-		return 2 * benchRuns * 20 * time.Second
+		return 2 * 5 * 20 * time.Second
 	}
 	return minGoTestSpeed * 2
-}
-
-func fetchSubrepo(sl spanlog.Logger, bc *buildlet.Client, repo, rev string) error {
-	tgz, err := getSourceTgz(sl, repo, rev)
-	if err != nil {
-		return err
-	}
-	return bc.PutTar(tgz, "gopath/src/"+subrepoPrefix+repo)
 }
 
 func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
@@ -2423,7 +2442,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	// fetch checks out the provided sub-repo to the buildlet's workspace.
 	fetch := func(repo, rev string) error {
 		fetched[repo] = true
-		return fetchSubrepo(st, st.bc, repo, rev)
+		return buildgo.FetchSubrepo(st, st.bc, repo, rev)
 	}
 
 	// findDeps uses 'go list' on the checked out repo to find its
@@ -2503,6 +2522,26 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	})
 }
 
+// affectedPkgs returns the name of every package affected by this commit.
+// The returned list may contain duplicates and is unsorted.
+// It is safe to call this on a nil trySet.
+func (ts *trySet) affectedPkgs() (pkgs []string) {
+	// TODO(quentin): Support non-try commits by asking maintnerd for the affected files.
+	if ts == nil || ts.ci == nil {
+		return
+	}
+	rev := ts.ci.Revisions[ts.ci.CurrentRevision]
+	for p := range rev.Files {
+		if strings.HasPrefix(p, "src/") {
+			pkg := path.Dir(p[len("src/"):])
+			if pkg != "" {
+				pkgs = append(pkgs, pkg)
+			}
+		}
+	}
+	return
+}
+
 // runTests is only called for builders which support a split make/run
 // (should be everything, at least soon). Currently (2015-05-27) iOS
 // and Android and Nacl do not.
@@ -2517,10 +2556,14 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	if err != nil {
 		return nil, fmt.Errorf("distTestList exec: %v", err)
 	}
-	var benches []*benchmarkItem
+	var benches []*buildgo.BenchmarkItem
 	if st.shouldBench() {
 		sp := st.CreateSpan("enumerate_benchmarks")
-		b, err := enumerateBenchmarks(st, st.conf, st.bc, "go", st.trySet)
+		rev := getRepoHead("benchmarks")
+		if rev == "" {
+			rev = "master" // should happen rarely; ok if it does.
+		}
+		b, err := st.goBuilder().EnumerateBenchmarks(st.bc, rev, st.trySet.affectedPkgs())
 		sp.Done(err)
 		if err == nil {
 			benches = b
@@ -2626,7 +2669,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 		}
 
 		if ti.bench != nil {
-			for i, s := range ti.bench.output {
+			for i, s := range ti.bench.Output {
 				if i < len(benchFiles) {
 					benchFiles[i].out.WriteString(s)
 				}
@@ -2710,7 +2753,7 @@ func (st *buildStatus) benchFiles() []*benchFile {
 	if !st.shouldBench() {
 		return nil
 	}
-	// We know rev and rev.Commit.Parents[0] exist because benchmarkItem.buildParent has checked.
+	// We know rev and rev.Commit.Parents[0] exist because BenchmarkItem.buildParent has checked.
 	rev := st.trySet.ci.Revisions[st.trySet.ci.CurrentRevision]
 	ps := rev.PatchSetNumber
 	benchFiles := []*benchFile{
@@ -2794,7 +2837,11 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 	timeout := execTimeout(names)
 	var remoteErr, err error
 	if ti := tis[0]; ti.bench != nil {
-		remoteErr, err = ti.bench.run(st, bc, &buf)
+		pbr, perr := st.parentRev()
+		// TODO(quentin): Error if parent commit could not be determined?
+		if perr == nil {
+			remoteErr, err = ti.bench.Run(buildEnv, st, st.conf, bc, &buf, []buildgo.BuilderRev{st.BuilderRev, pbr})
+		}
 	} else {
 		remoteErr, err = bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 			// We set Dir to "." instead of the default ("go/bin") so when the dist tests
@@ -2941,7 +2988,7 @@ type testItem struct {
 	name     string        // "go_test:sort"
 	duration time.Duration // optional approximate size
 
-	bench *benchmarkItem // If populated, this is a benchmark instead of a regular test.
+	bench *buildgo.BenchmarkItem // If populated, this is a benchmark instead of a regular test.
 
 	take chan token // buffered size 1: sending takes ownership of rest of fields:
 
@@ -3277,108 +3324,8 @@ func versionTgz(rev string) io.Reader {
 	return bytes.NewReader(buf.Bytes())
 }
 
-var sourceGroup singleflight.Group
-
-var sourceCache = lru.New(40) // git rev -> []byte
-
 func useGitMirror() bool {
 	return *mode != "dev"
-}
-
-// repo is go.googlesource.com repo ("go", "net", etc)
-// rev is git revision.
-func getSourceTgz(sl spanlog.Logger, repo, rev string) (tgz io.Reader, err error) {
-	sp := sl.CreateSpan("get_source")
-	defer func() { sp.Done(err) }()
-
-	key := fmt.Sprintf("%v-%v", repo, rev)
-	vi, err, _ := sourceGroup.Do(key, func() (interface{}, error) {
-		if tgzBytes, ok := sourceCache.Get(key); ok {
-			return tgzBytes, nil
-		}
-
-		if useGitMirror() {
-			sp := sl.CreateSpan("get_source_from_gitmirror")
-			tgzBytes, err := getSourceTgzFromGitMirror(repo, rev)
-			if err == nil {
-				sourceCache.Add(key, tgzBytes)
-				sp.Done(nil)
-				return tgzBytes, nil
-			}
-			log.Printf("Error fetching source %s/%s from watcher (after %v uptime): %v",
-				repo, rev, time.Since(processStartTime), err)
-			sp.Done(errors.New("timeout"))
-		}
-
-		sp := sl.CreateSpan("get_source_from_gerrit", fmt.Sprintf("%v from gerrit", key))
-		tgzBytes, err := getSourceTgzFromGerrit(repo, rev)
-		sp.Done(err)
-		if err == nil {
-			sourceCache.Add(key, tgzBytes)
-		}
-		return tgzBytes, err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return bytes.NewReader(vi.([]byte)), nil
-}
-
-var gitMirrorClient = &http.Client{
-	Timeout: 30 * time.Second,
-	Transport: &http.Transport{
-		IdleConnTimeout: 30 * time.Second,
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return goKubeClient.DialServicePort(ctx, "gitmirror", "")
-		},
-	},
-}
-
-var gerritHTTPClient = &http.Client{
-	Timeout: 30 * time.Second,
-}
-
-func getSourceTgzFromGerrit(repo, rev string) (tgz []byte, err error) {
-	return getSourceTgzFromURL(gerritHTTPClient, "gerrit", repo, rev, "https://go.googlesource.com/"+repo+"/+archive/"+rev+".tar.gz")
-}
-
-func getSourceTgzFromGitMirror(repo, rev string) (tgz []byte, err error) {
-	for i := 0; i < 2; i++ { // two tries; different pods maybe?
-		if i > 0 {
-			time.Sleep(1 * time.Second)
-		}
-		// The "gitmirror" hostname is unused:
-		tgz, err = getSourceTgzFromURL(gitMirrorClient, "gitmirror", repo, rev, "http://gitmirror/"+repo+".tar.gz?rev="+rev)
-		if err == nil {
-			return tgz, nil
-		}
-		if tr, ok := http.DefaultTransport.(*http.Transport); ok {
-			tr.CloseIdleConnections()
-		}
-	}
-	return nil, err
-}
-
-func getSourceTgzFromURL(hc *http.Client, source, repo, rev, urlStr string) (tgz []byte, err error) {
-	res, err := hc.Get(urlStr)
-	if err != nil {
-		return nil, fmt.Errorf("fetching %s/%s from %s: %v", repo, rev, source, err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode/100 != 2 {
-		slurp, _ := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
-		return nil, fmt.Errorf("fetching %s/%s from %s: %v; body: %s", repo, rev, source, res.Status, slurp)
-	}
-	// TODO(bradfitz): finish golang.org/issue/11224
-	const maxSize = 50 << 20 // talks repo is over 25MB; go source is 7.8MB on 2015-06-15
-	slurp, err := ioutil.ReadAll(io.LimitReader(res.Body, maxSize+1))
-	if len(slurp) > maxSize && err == nil {
-		err = fmt.Errorf("body over %d bytes", maxSize)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("reading %s/%s from %s: %v", repo, rev, source, err)
-	}
-	return slurp, nil
 }
 
 var nl = []byte("\n")

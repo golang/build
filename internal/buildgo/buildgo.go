@@ -7,6 +7,9 @@
 package buildgo
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -19,7 +22,10 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/cmd/coordinator/spanlog"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/sourcecache"
 )
+
+const subrepoPrefix = "golang.org/x/"
 
 // BuilderRev is a build configuration type and a revision.
 type BuilderRev struct {
@@ -162,4 +168,40 @@ func (gb GoBuilder) runConcurrentGoBuildStdCmd(bc *buildlet.Client, w io.Writer)
 	}
 	span.Done(nil)
 	return nil, nil
+}
+
+func FetchSubrepo(sl spanlog.Logger, bc *buildlet.Client, repo, rev string) error {
+	tgz, err := sourcecache.GetSourceTgz(sl, repo, rev)
+	if err != nil {
+		return err
+	}
+	return bc.PutTar(tgz, "gopath/src/"+subrepoPrefix+repo)
+}
+
+// VersionTgz returns an io.Reader of a *.tar.gz file containing only
+// a VERSION file containing the contents of the provided rev string.
+func VersionTgz(rev string) io.Reader {
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(zw)
+
+	// Writing to a bytes.Buffer should never fail, so check
+	// errors with an explosion:
+	check := func(err error) {
+		if err != nil {
+			panic("previously assumed to never fail: " + err.Error())
+		}
+	}
+
+	contents := fmt.Sprintf("devel " + rev)
+	check(tw.WriteHeader(&tar.Header{
+		Name: "VERSION",
+		Mode: 0644,
+		Size: int64(len(contents)),
+	}))
+	_, err := io.WriteString(tw, contents)
+	check(err)
+	check(tw.Close())
+	check(zw.Close())
+	return bytes.NewReader(buf.Bytes())
 }

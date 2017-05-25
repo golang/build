@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/sourcecache"
 	"golang.org/x/build/kubernetes"
 	"golang.org/x/build/kubernetes/api"
 	"golang.org/x/build/kubernetes/gke"
@@ -69,6 +71,10 @@ func initKube() error {
 	if err != nil {
 		return err
 	}
+
+	sourcecache.RegisterGitMirrorDial(func(ctx context.Context) (net.Conn, error) {
+		return goKubeClient.DialServicePort(ctx, "gitmirror", "")
+	})
 
 	go kubePool.pollCapacityLoop()
 	return nil
