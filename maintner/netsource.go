@@ -13,10 +13,12 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,6 +71,87 @@ func (ns *netMutSource) GetMutations(ctx context.Context) <-chan MutationStreamE
 	return ch
 }
 
+// isNoInternetError reports whether the provided error is because there's no
+// network connectivity.
+func isNoInternetError(err error) bool {
+	switch err := err.(type) {
+	case *url.Error:
+		return isNoInternetError(err.Err)
+	case *net.OpError:
+		return isNoInternetError(err.Err)
+	case *net.DNSError:
+		// Trashy:
+		return err.Err == "no such host"
+	default:
+		log.Printf("Unknown error type %T: %#v", err, err)
+		return false
+	}
+}
+
+func (ns *netMutSource) locallyCachedSegments() (segs []fileSeg, err error) {
+	defer func() {
+		if err != nil {
+			log.Printf("No network connection and failed to use local cache: %v", err)
+		} else {
+			log.Printf("No network connection; using %d locally cached segments.", len(segs))
+		}
+	}()
+	fis, err := ioutil.ReadDir(ns.cacheDir)
+	if err != nil {
+		return nil, err
+	}
+	fiMap := map[string]os.FileInfo{}
+	segHex := map[int]string{}
+	segGrowing := map[int]bool{}
+	for _, fi := range fis {
+		name := fi.Name()
+		if !strings.HasSuffix(name, ".mutlog") {
+			continue
+		}
+		fiMap[name] = fi
+
+		if len(name) == len("0000.6897fab4d3afcda332424b2a2a1a4469021074282bc7be5606aaa221.mutlog") {
+			num, err := strconv.Atoi(name[:4])
+			if err != nil {
+				continue
+			}
+			segHex[num] = strings.TrimSuffix(name[5:], ".mutlog")
+		} else if strings.HasSuffix(name, ".growing.mutlog") {
+			num, err := strconv.Atoi(name[:4])
+			if err != nil {
+				continue
+			}
+			segGrowing[num] = true
+		}
+	}
+	for num := 0; ; num++ {
+		if hex, ok := segHex[num]; ok {
+			name := fmt.Sprintf("%04d.%s.mutlog", num, hex)
+			segs = append(segs, fileSeg{
+				seg:    num,
+				file:   filepath.Join(ns.cacheDir, name),
+				size:   fiMap[name].Size(),
+				sha224: hex,
+			})
+			continue
+		}
+		if segGrowing[num] {
+			name := fmt.Sprintf("%04d.growing.mutlog", num)
+			slurp, err := ioutil.ReadFile(filepath.Join(ns.cacheDir, name))
+			if err != nil {
+				return nil, err
+			}
+			segs = append(segs, fileSeg{
+				seg:    num,
+				file:   filepath.Join(ns.cacheDir, name),
+				size:   int64(len(slurp)),
+				sha224: fmt.Sprintf("%x", sha256.Sum224(slurp)),
+			})
+		}
+		return segs, nil
+	}
+}
+
 // waitSizeNot optionally specifies that the request should long-poll waiting for the server
 // to have a sum of log segment sizes different than the value specified.
 func (ns *netMutSource) getServerSegments(ctx context.Context, waitSizeNot int64) ([]LogSegmentJSON, error) {
@@ -117,6 +200,18 @@ func (ns *netMutSource) getNewSegments(ctx context.Context) ([]fileSeg, error) {
 		sumLast := sumSegSize(ns.last)
 
 		segs, err := ns.getServerSegments(ctx, sumLast)
+		if isNoInternetError(err) {
+			if sumLast == 0 {
+				return ns.locallyCachedSegments()
+			}
+			log.Printf("No internet; blocking.")
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(15 * time.Second):
+				continue
+			}
+		}
 		if err != nil {
 			return nil, err
 		}
