@@ -29,6 +29,7 @@ type BenchmarkItem struct {
 	binary   string   // name of binary relative to goroot
 	args     []string // args to run binary with
 	preamble string   // string to print before benchmark results (e.g. "pkg: test/bench/go1\n")
+	dir      string   // optional directory (relative to $WORKDIR) to run benchmarks in
 	Output   []string // benchmark output for each commit
 
 	build func(bc *buildlet.Client, goroot string, w io.Writer) (remoteErr, err error) // how to build benchmark binary
@@ -184,6 +185,7 @@ func (gb GoBuilder) EnumerateBenchmarks(bc *buildlet.Client, benchmarksRev strin
 			name := "bench-" + strings.Replace(pkg, "/", "-", -1) + ".exe"
 			out = append(out, &BenchmarkItem{
 				binary: name,
+				dir:    path.Join(gb.Goroot, "src", pkg),
 				args:   []string{"-test.bench", ".", "-test.benchmem", "-test.run", "^$", "-test.benchtime", "100ms"},
 				build: func(bc *buildlet.Client, goroot string, w io.Writer) (error, error) {
 					return buildPkg(gb.Conf, bc, goroot, w, pkg, name)
@@ -194,15 +196,18 @@ func (gb GoBuilder) EnumerateBenchmarks(bc *buildlet.Client, benchmarksRev strin
 }
 
 // runOneBenchBinary runs a binary on the buildlet and writes its output to w with a trailing newline.
-func runOneBenchBinary(conf dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot string, path string, args []string) (remoteErr, err error) {
+//
+// TODO: this signature is too big. Make it a method of something?
+func runOneBenchBinary(conf dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot, dir, binaryPath string, args []string) (remoteErr, err error) {
 	defer w.Write([]byte{'\n'})
 	workDir, err := bc.WorkDir()
 	if err != nil {
 		return nil, fmt.Errorf("runOneBenchBinary, WorkDir: %v", err)
 	}
 	// Some benchmarks need GOROOT so they can invoke cmd/go.
-	return bc.Exec(path, buildlet.ExecOpts{
+	return bc.Exec(binaryPath, buildlet.ExecOpts{
 		Output: w,
+		Dir:    dir,
 		Args:   args,
 		Path:   []string{"$WORKDIR/" + goroot + "/bin", "$PATH"},
 		ExtraEnv: []string{
@@ -290,12 +295,17 @@ func (b *BenchmarkItem) Run(buildEnv *buildenv.Environment, sl spanlog.Logger, c
 	for i := 0; i < benchRuns; i++ {
 		for _, c := range commits {
 			fmt.Fprintf(&c.out, "iteration: %d\nstart-time: %s\n", i, time.Now().UTC().Format(time.RFC3339))
-			p := path.Join(c.path, b.binary)
-			sp := sl.CreateSpan("run_one_bench", p)
-			remoteErr, err = runOneBenchBinary(conf, bc, &c.out, c.path, p, b.args)
+			binaryPath := path.Join(c.path, b.binary)
+			sp := sl.CreateSpan("run_one_bench", binaryPath)
+			remoteErr, err = runOneBenchBinary(conf, bc, &c.out, c.path, b.dir, binaryPath, b.args)
 			sp.Done(err)
 			if err != nil || remoteErr != nil {
 				c.out.WriteTo(w)
+				if err != nil {
+					fmt.Fprintf(w, "execution error: %v\n", err)
+				} else if remoteErr != nil {
+					fmt.Fprintf(w, "remote error: %v\n", remoteErr)
+				}
 				return
 			}
 		}
