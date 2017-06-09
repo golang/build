@@ -27,7 +27,6 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/storage"
-	"go4.org/grpc"
 	"golang.org/x/build/autocertcache"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
@@ -35,6 +34,7 @@ import (
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/http2"
+	"grpc.go4.org"
 )
 
 var (

@@ -14,9 +14,9 @@ import (
 	"net/http"
 	"strings"
 
-	"go4.org/grpc"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/net/http2"
+	"grpc.go4.org"
 )
 
 var (

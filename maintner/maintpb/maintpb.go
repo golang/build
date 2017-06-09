@@ -7,7 +7,7 @@ package maintpb
 // Run "go generate" in this directory to update. You need to:
 //
 // - have the protoc binary in your $PATH
-// - go get go4.org/grpc-codegen/protoc-gen-go4grpc
+// - go get grpc-codegen.go4.org/protoc-gen-go4grpc
 //
 // See https://github.com/golang/protobuf#installation for how to install
 // the protoc binary.

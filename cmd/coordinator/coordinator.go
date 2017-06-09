@@ -43,8 +43,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go4.org/grpc"
 	"go4.org/syncutil"
+	"grpc.go4.org"
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/build"
