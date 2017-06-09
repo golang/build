@@ -961,8 +961,9 @@ func init() {
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
-		Name:     "openbsd-386-60",
-		HostType: "host-openbsd-386-60",
+		Name:      "openbsd-386-60",
+		HostType:  "host-openbsd-386-60",
+		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})
 	addBuilder(BuildConfig{
 		Name:     "netbsd-amd64-71",
@@ -977,6 +978,7 @@ func init() {
 		Name:           "plan9-386",
 		HostType:       "host-plan9-386-gce",
 		numTestHelpers: 1,
+		MaxAtOnce:      2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2008",
