@@ -64,6 +64,9 @@ func main() {
 			return nil
 		}
 		gp.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
+			if cl.Status != "merged" {
+				return nil
+			}
 			relnote := clRelNote(cl)
 			if relnote == "" ||
 				bytes.Contains(existingHTML, []byte(fmt.Sprintf("CL %d", cl.Number))) {
