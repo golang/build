@@ -1170,7 +1170,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 				numFail, len(ts.builds), errMsg)
 		}
 		if len(benchResults) > 0 {
-			msg += fmt.Sprintf("\nBenchmark results for %s are available at:\nhttps://perf.golang.org/search?q=cl:%d+try:%s", strings.Join(benchResults, ", "), ts.ci.ChangeNumber, ts.tryID)
+			msg += fmt.Sprintf("\nBenchmark results are available at:\nhttps://perf.golang.org/search?q=cl:%d+try:%s", ts.ci.ChangeNumber, ts.tryID)
 		}
 		if err := gerritClient.SetReview(context.Background(), ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
 			Message: msg,
