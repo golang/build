@@ -14,7 +14,7 @@
 //
 // See the release notes at https://beta.golang.org/doc/go1.8
 //
-// File bugs at http://golang.org/issues/new
+// File bugs at https://golang.org/issues/new
 package main
 
 import "golang.org/x/build/version"
