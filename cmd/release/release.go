@@ -180,6 +180,11 @@ var builds = []*Build{
 		Builder: "linux-amd64",
 	},
 	{
+		OS:      "linux",
+		Arch:    "arm64",
+		Builder: "linux-arm64-packet",
+	},
+	{
 		OS:      "freebsd",
 		Arch:    "386",
 		Builder: "freebsd-386-gce101",
