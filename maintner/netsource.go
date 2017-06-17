@@ -74,6 +74,9 @@ func (ns *netMutSource) GetMutations(ctx context.Context) <-chan MutationStreamE
 // isNoInternetError reports whether the provided error is because there's no
 // network connectivity.
 func isNoInternetError(err error) bool {
+	if err == nil {
+		return false
+	}
 	switch err := err.(type) {
 	case *url.Error:
 		return isNoInternetError(err.Err)
