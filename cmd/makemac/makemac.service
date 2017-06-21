@@ -1,0 +1,12 @@
+[Unit]
+Description=Go Builders - makemac
+Documentation=https://github.com/golang/build/blob/master/cmd/makemac/makemac.go
+After=network.target
+
+[Service]
+User=gopher
+Environment="PATH=/home/gopher/bin:/usr/local/bin:/usr/bin"
+ExecStart=/home/gopher/makemac -auto
+
+[Install]
+WantedBy=multi-user.target
