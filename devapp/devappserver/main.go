@@ -7,10 +7,9 @@
 //
 // Usage:
 //
-//	devappserver --port=8081
+//	devappserver --http=:8081
 //
-// By default devapp listens on port 8081. You can also configure the port by
-// setting the PORT environment variable (but not both).
+// By default devappserver listens on port 80.
 //
 // For the moment, Github issues and Gerrit CL's are stored in memory
 // in the running process. To trigger an initial download, visit
@@ -32,35 +31,21 @@ import (
 
 func init() {
 	flag.Usage = func() {
-		os.Stderr.WriteString(`usage: devapp [-port=port]
+		os.Stderr.WriteString(`usage: devappserver [-http=addr]
 
-Devapp generates the dashboard that powers dev.golang.org.
+devappserver generates the dashboard that powers dev.golang.org.
 	`)
 	}
 }
 
-const defaultPort = "8081"
-
 func main() {
-	portFlag := flag.String("port", "", "Port to listen on")
+	httpAddr := flag.String("http", ":80", "HTTP service address (e.g., ':8080')")
 	flag.Parse()
-	if *portFlag != "" && os.Getenv("PORT") != "" {
-		os.Stderr.WriteString("cannot set both $PORT and --port flags\n")
-		os.Exit(2)
-	}
-	var port string
-	if p := os.Getenv("PORT"); p != "" {
-		port = p
-	} else if *portFlag != "" {
-		port = *portFlag
-	} else {
-		port = defaultPort
-	}
-	ln, err := net.Listen("tcp", ":"+port)
+	ln, err := net.Listen("tcp", *httpAddr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error listening on %s: %v\n", port, err)
+		fmt.Fprintf(os.Stderr, "Error listening on %s: %v\n", *httpAddr, err)
 		os.Exit(2)
 	}
-	fmt.Fprintf(os.Stderr, "Listening on port %s\n", port)
+	fmt.Fprintf(os.Stderr, "Serving at %s\n", ln.Addr().String())
 	log.Fatal(http.Serve(ln, nil))
 }

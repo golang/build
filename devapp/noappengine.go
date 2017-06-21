@@ -8,7 +8,6 @@
 package devapp
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -20,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/net/context"
 )
 
@@ -130,11 +130,13 @@ func putCache(_ context.Context, name string, c *Cache) error {
 	return nil
 }
 
-var githubToken string
-var githubOnceErr error
-var githubOnce sync.Once
+var (
+	githubToken   string
+	githubOnceErr error
+	githubOnce    sync.Once
+)
 
-func getToken(ctx context.Context) (string, error) {
+func getTokenFromFile(ctx context.Context) (string, error) {
 	githubOnce.Do(func() {
 		const short = ".github-issue-token"
 		filename := filepath.Clean(os.Getenv("HOME") + "/" + short)
@@ -145,14 +147,16 @@ func getToken(ctx context.Context) (string, error) {
 		}
 		data, err := ioutil.ReadFile(filename)
 		if err != nil {
-			msg := fmt.Sprintln("reading token: ", err, "\n\n"+
-				"Please create a personal access token at https://github.com/settings/tokens/new\n"+
-				"and write it to ", shortFilename, " to use this program.\n"+
-				"The token only needs the repo scope, or private_repo if you want to\n"+
-				"view or edit issues for private repositories.\n"+
-				"The benefit of using a personal access token over using your GitHub\n"+
-				"password directly is that you can limit its use and revoke it at any time.\n\n")
-			githubOnceErr = errors.New(msg)
+			const fmtStr = `reading token: %v
+
+Please create a personal access token at https://github.com/settings/tokens/new
+and write it to %s or store it in GCE metadata using the
+key 'maintner-github-token' to use this program.
+The token only needs the repo scope, or private_repo if you want to view or edit
+issues for private repositories. The benefit of using a personal access token
+over using your GitHub password directly is that you can limit its use and revoke
+it at any time.`
+			githubOnceErr = fmt.Errorf(fmtStr, err, shortFilename)
 			return
 		}
 		fi, err := os.Stat(filename)
@@ -167,6 +171,17 @@ func getToken(ctx context.Context) (string, error) {
 		githubToken = strings.TrimSpace(string(data))
 	})
 	return githubToken, githubOnceErr
+}
+
+func getToken(ctx context.Context) (string, error) {
+	if metadata.OnGCE() {
+		// Re-use maintner-github-token until this is migrated to using the maintner API.
+		token, err := metadata.ProjectAttributeValue("maintner-github-token")
+		if len(token) > 0 && err == nil {
+			return token, nil
+		}
+	}
+	return getTokenFromFile(ctx)
 }
 
 func getContext(r *http.Request) context.Context {

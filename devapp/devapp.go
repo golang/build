@@ -141,7 +141,6 @@ func update(ctx context.Context, w http.ResponseWriter, _ *http.Request) error {
 		if cls {
 			data.PrintCLs(&output)
 		} else {
-			fmt.Fprintf(&output, fmt.Sprintf(`<a href="/stats/release?cycle=%d">Go 1.%d Issue Stats Dashboard</a>`, data.GoReleaseCycle, data.GoReleaseCycle))
 			data.PrintIssues(&output)
 		}
 		var html bytes.Buffer

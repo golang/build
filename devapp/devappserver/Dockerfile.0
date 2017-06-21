@@ -28,6 +28,9 @@ RUN go get -d golang.org/x/oauth2 && \
 RUN go get -d golang.org/x/sync/errgroup && \
     cd /go/src/golang.org/x/sync && git reset --hard f52d1811a62927559de87708c8913c1650ce4f26
 
+RUN go get -d cloud.google.com/go/compute/metadata && \
+    cd /go/src/cloud.google.com/go && git reset --hard 23179f286bc31e07fba2eddaa540fb999b1b1fd9
+
 # Optimization to speed COPY+go install steps later. This go install
 # isn't required for correctness.
 RUN go install github.com/aclements/go-gg/generic/slice \
@@ -39,7 +42,8 @@ RUN go install github.com/aclements/go-gg/generic/slice \
     github.com/kylelemons/godebug/pretty \
     golang.org/x/net/context \
     golang.org/x/oauth2 \
-    golang.org/x/sync/errgroup
+    golang.org/x/sync/errgroup \
+    cloud.google.com/go/compute/metadata
 
 COPY . /go/src/golang.org/x/build/
 
