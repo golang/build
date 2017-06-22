@@ -11,7 +11,9 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -291,7 +293,8 @@ func windowsMSI() error {
 	)
 }
 
-const wixBinaries = "https://storage.googleapis.com/go-builder-data/wix35-binaries.zip"
+const wixBinaries = "https://storage.googleapis.com/go-builder-data/wix311-binaries.zip"
+const wixSha256 = "da034c489bd1dd6d8e1623675bf5e899f32d74d6d8312f8dd125a084543193de"
 
 // installWix fetches and installs the wix toolkit to the specified path.
 func installWix(path string) error {
@@ -299,6 +302,12 @@ func installWix(path string) error {
 	body, err := httpGet(wixBinaries)
 	if err != nil {
 		return err
+	}
+
+	// Verify sha256
+	sum := sha256.Sum256(body)
+	if fmt.Sprintf("%x", sum) != wixSha256 {
+		return errors.New("sha256 mismatch for wix toolkit")
 	}
 
 	// Unzip to path.
@@ -632,8 +641,7 @@ var windowsData = map[string]string{
   <Component Id="Component_GoEnvironment" Guid="{3ec7a4d5-eb08-4de7-9312-2df392c45993}">
     <RegistryKey
         Root="HKCU"
-        Key="Software\GoProgrammingLanguage"
-        Action="create" >
+        Key="Software\GoProgrammingLanguage">
             <RegistryValue
                 Name="installed"
                 Type="integer"
@@ -680,6 +688,9 @@ var windowsData = map[string]string{
 <InstallExecuteSequence>
     <Custom Action="SetApplicationRootDirectory" Before="InstallFinalize" />
 </InstallExecuteSequence>
+
+<!-- Notify top level applications of the new PATH variable (golang.org/issue/18680)  -->
+<CustomActionRef Id="WixBroadcastEnvironmentChange" />
 
 <!-- Include the user interface -->
 <WixVariable Id="WixUILicenseRtf" Value="LICENSE.rtf" />
