@@ -1,0 +1,28 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: devappserver-deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: devappserver
+    spec:
+      containers:
+      - name: devappserver
+        image: gcr.io/symbolic-datum-552/devappserver:latest
+        imagePullPolicy: Always
+        command: ["/go/bin/devappserver"]
+        volumeMounts:
+        - mountPath: /autocert-cache
+          name: pv-autocert-cache
+        ports:
+        - containerPort: 80
+        - containerPort: 443
+        resources:
+          requests:
+            cpu: "1"
+            memory: "1Gi"
+          limits:
+            memory: "2Gi"
