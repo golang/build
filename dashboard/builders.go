@@ -913,7 +913,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:          "linux-arm-nativemake",
 		Notes:         "runs make.bash on real ARM hardware, but does not run tests",
-		HostType:      "host-linux-arm",
+		HostType:      "host-linux-arm-scaleway",
 		StopAfterMake: true,
 	})
 	addBuilder(BuildConfig{
