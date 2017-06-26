@@ -20,6 +20,7 @@ RUN go get -d github.com/kylelemons/godebug/pretty && \
     cd /go/src/github.com/kylelemons/godebug && git reset --hard a616ab194758ae0a11290d87ca46ee8c440117b0
 
 RUN go get -d golang.org/x/net/context && \
+    go get -d golang.org/x/net/http2 && \
     cd /go/src/golang.org/x/net && git reset --hard fe686d45ea04bc1bd4eff6a52865ce8757320325
 
 RUN go get -d golang.org/x/oauth2 && \
@@ -29,7 +30,11 @@ RUN go get -d golang.org/x/sync/errgroup && \
     cd /go/src/golang.org/x/sync && git reset --hard f52d1811a62927559de87708c8913c1650ce4f26
 
 RUN go get -d cloud.google.com/go/compute/metadata && \
+    go get -d cloud.google.com/go/storage && \
     cd /go/src/cloud.google.com/go && git reset --hard 23179f286bc31e07fba2eddaa540fb999b1b1fd9
+
+RUN go get -d golang.org/x/crypto/acme/autocert && \
+    cd /go/src/golang.org/x/crypto && git reset --hard adbae1b6b6fb4b02448a0fc0dbbc9ba2b95b294d
 
 # Optimization to speed COPY+go install steps later. This go install
 # isn't required for correctness.
