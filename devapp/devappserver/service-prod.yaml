@@ -13,4 +13,4 @@ spec:
   selector:
     app: devappserver
   type: LoadBalancer
-  loadBalancerIP: 35.184.237.80
+  loadBalancerIP: 35.188.206.122

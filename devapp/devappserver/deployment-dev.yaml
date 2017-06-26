@@ -11,7 +11,7 @@ spec:
     spec:
       containers:
       - name: devappserver
-        image: gcr.io/symbolic-datum-552/devappserver:latest
+        image: gcr.io/go-dashboard-dev/devappserver:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 80
