@@ -5,18 +5,20 @@
 package main
 
 import (
-	"fmt"
+	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
+var testServer = newServer(http.DefaultServeMux, "./static/")
+
 func TestStaticAssetsFound(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
-	http.DefaultServeMux.ServeHTTP(w, req)
-	if w.Code != 200 {
-		t.Errorf("expected code 200, got %d", w.Code)
+	testServer.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected code %d, got %d", http.StatusOK, w.Code)
 	}
 	if hdr := w.Header().Get("Content-Type"); hdr != "text/html; charset=utf-8" {
 		t.Errorf("incorrect Content-Type header, got headers: %v", w.Header())
@@ -26,9 +28,9 @@ func TestStaticAssetsFound(t *testing.T) {
 func TestFaviconFound(t *testing.T) {
 	req := httptest.NewRequest("GET", "/favicon.ico", nil)
 	w := httptest.NewRecorder()
-	http.DefaultServeMux.ServeHTTP(w, req)
-	if w.Code != 200 {
-		t.Errorf("expected code 200, got %d", w.Code)
+	testServer.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected code %d, got %d", http.StatusOK, w.Code)
 	}
 	if hdr := w.Header().Get("Content-Type"); hdr != "image/x-icon" {
 		t.Errorf("incorrect Content-Type header, got headers: %v", w.Header())
@@ -36,12 +38,10 @@ func TestFaviconFound(t *testing.T) {
 }
 
 func TestHSTSHeaderSet(t *testing.T) {
-	http.Handle("/test_hsts", hstsHandler(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "much secure")
-	}))
-	req := httptest.NewRequest("GET", "/test_hsts", nil)
+	req := httptest.NewRequest("GET", "/", nil)
+	req.TLS = &tls.ConnectionState{}
 	w := httptest.NewRecorder()
-	http.DefaultServeMux.ServeHTTP(w, req)
+	testServer.ServeHTTP(w, req)
 	if hdr := w.Header().Get("Strict-Transport-Security"); hdr == "" {
 		t.Errorf("missing Strict-Transport-Security header; headers = %v", w.Header())
 	}

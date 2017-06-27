@@ -20,7 +20,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -37,11 +36,6 @@ func init() {
 		os.Stderr.WriteString("devapp generates the dashboard that powers dev.golang.org.\n")
 		flag.PrintDefaults()
 	}
-
-	// TODO don't bind relative to a working directory.
-	http.Handle("/", http.FileServer(http.Dir("./static/")))
-	http.HandleFunc("/favicon.ico", faviconHandler)
-	http.Handle("/release", hstsHandler(func(w http.ResponseWriter, r *http.Request) { servePage(w, r, "release") }))
 }
 
 func main() {
@@ -50,10 +44,13 @@ func main() {
 		devTLSPort     = flag.Int("dev-tls-port", 0, "if non-zero, port number to run localhost self-signed TLS server")
 		autocertBucket = flag.String("autocert-bucket", "", "if non-empty, listen on port 443 and serve a LetsEncrypt TLS cert using this Google Cloud Storage bucket as a cache")
 		updateInterval = flag.Duration("update-interval", 5*time.Minute, "how often to update the dashboard data")
+		staticDir      = flag.String("static-dir", "./static/", "location of static directory relative to binary location")
 	)
 	flag.Parse()
 
 	go updateLoop(*updateInterval)
+
+	s := newServer(http.NewServeMux(), *staticDir)
 
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
@@ -63,13 +60,19 @@ func main() {
 
 	errc := make(chan error)
 	if ln != nil {
-		go func() { errc <- fmt.Errorf("http.Serve = %v", http.Serve(ln, nil)) }()
+		go func() {
+			handler := http.Handler(s)
+			if *autocertBucket != "" {
+				handler = http.HandlerFunc(redirectHTTP)
+			}
+			errc <- fmt.Errorf("http.Serve = %v", http.Serve(ln, handler))
+		}()
 	}
 	if *autocertBucket != "" {
-		go func() { errc <- serveAutocertTLS(*autocertBucket) }()
+		go func() { errc <- serveAutocertTLS(s, *autocertBucket) }()
 	}
 	if *devTLSPort != 0 {
-		go func() { errc <- serveDevTLS(*devTLSPort) }()
+		go func() { errc <- serveDevTLS(s, *devTLSPort) }()
 	}
 
 	log.Fatal(<-errc)
@@ -85,7 +88,15 @@ func updateLoop(interval time.Duration) {
 	}
 }
 
-func serveDevTLS(port int) error {
+func redirectHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.TLS != nil || r.Host == "" {
+		http.NotFound(w, r)
+		return
+	}
+	http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusFound)
+}
+
+func serveDevTLS(h http.Handler, port int) error {
 	ln, err := net.Listen("tcp", "localhost:"+strconv.Itoa(port))
 	if err != nil {
 		return err
@@ -93,7 +104,7 @@ func serveDevTLS(port int) error {
 	defer ln.Close()
 	log.Printf("Serving self-signed TLS at https://%s", ln.Addr())
 	// Abuse httptest for its localhost TLS setup code:
-	ts := httptest.NewUnstartedServer(http.DefaultServeMux)
+	ts := httptest.NewUnstartedServer(h)
 	// Ditch the provided listener, replace with our own:
 	ts.Listener.Close()
 	ts.Listener = ln
@@ -106,7 +117,7 @@ func serveDevTLS(port int) error {
 	select {}
 }
 
-func serveAutocertTLS(bucket string) error {
+func serveAutocertTLS(h http.Handler, bucket string) error {
 	ln, err := net.Listen("tcp", ":443")
 	if err != nil {
 		return err
@@ -132,7 +143,8 @@ func serveAutocertTLS(bucket string) error {
 	}
 	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)
 	server := &http.Server{
-		Addr: ln.Addr().String(),
+		Addr:    ln.Addr().String(),
+		Handler: h,
 	}
 	if err := http2.ConfigureServer(server, nil); err != nil {
 		log.Fatalf("http2.ConfigureServer: %v", err)
@@ -153,55 +165,6 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 	tc.SetKeepAlive(true)
 	tc.SetKeepAlivePeriod(3 * time.Minute)
 	return tc, nil
-}
-
-// hstsHandler wraps an http.HandlerFunc such that it sets the HSTS header.
-func hstsHandler(fn http.HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Strict-Transport-Security", "max-age=31536000; preload")
-		fn(w, r)
-	})
-}
-
-type page struct {
-	// Content is the complete HTML of the page.
-	Content []byte
-}
-
-var (
-	pageStore   = map[string]*page{}
-	pageStoreMu sync.Mutex
-)
-
-func getPage(name string) (*page, error) {
-	pageStoreMu.Lock()
-	defer pageStoreMu.Unlock()
-	p, ok := pageStore[name]
-	if ok {
-		return p, nil
-	}
-	return nil, fmt.Errorf("page key %s not found", name)
-}
-
-func writePage(pageStr string, content []byte) error {
-	pageStoreMu.Lock()
-	defer pageStoreMu.Unlock()
-	entity := &page{
-		Content: content,
-	}
-	pageStore[pageStr] = entity
-	return nil
-}
-
-func servePage(w http.ResponseWriter, r *http.Request, pageStr string) {
-	entity, err := getPage(pageStr)
-	if err != nil {
-		log.Printf("getPage(%s) = %v", pageStr, err)
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(entity.Content)
 }
 
 type countTransport struct {
@@ -269,12 +232,4 @@ func newTransport(ctx context.Context) http.RoundTripper {
 		t.ResponseHeaderTimeout = time.Until(dline)
 	}
 	return t
-}
-
-// GET /favicon.ico
-func faviconHandler(w http.ResponseWriter, r *http.Request) {
-	// Need to specify content type for consistent tests, without this it's
-	// determined from mime.types on the box the test is running on
-	w.Header().Set("Content-Type", "image/x-icon")
-	http.ServeFile(w, r, "./static/favicon.ico")
 }
