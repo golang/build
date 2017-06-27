@@ -17,6 +17,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -125,11 +126,7 @@ func dialCoordinator() error {
 	}
 
 	log.Printf("Dialing coordinator %s ...", addr)
-	dialer := net.Dialer{
-		Timeout:   10 * time.Second,
-		KeepAlive: 15 * time.Second,
-	}
-	tcpConn, err := dialer.Dial("tcp", addr)
+	tcpConn, err := dialCoordinatorTCP(addr)
 	if err != nil {
 		return err
 	}
@@ -187,6 +184,62 @@ func dialCoordinator() error {
 		return nil
 	}
 	return fmt.Errorf("http.Serve on reverse connection complete: %v", err)
+}
+
+var coordDialer = &net.Dialer{
+	Timeout:   10 * time.Second,
+	KeepAlive: 15 * time.Second,
+}
+
+// dialCoordinatorTCP returns a TCP connection to the coordinator, making
+// a CONNECT request to a proxy as a fallback.
+func dialCoordinatorTCP(addr string) (net.Conn, error) {
+	tcpConn, err := coordDialer.Dial("tcp", addr)
+	if err != nil {
+		// If we had problems connecting to the TCP addr
+		// directly, perhaps there's a proxy in the way. See
+		// if they have an HTTPS_PROXY environment variable
+		// defined and try to do a CONNECT request to it.
+		req, _ := http.NewRequest("GET", "https://"+addr, nil)
+		proxyURL, _ := http.ProxyFromEnvironment(req)
+		if proxyURL != nil {
+			return dialCoordinatorViaCONNECT(addr, proxyURL)
+		}
+		return nil, err
+	}
+	return tcpConn, nil
+}
+
+func dialCoordinatorViaCONNECT(addr string, proxy *url.URL) (net.Conn, error) {
+	proxyAddr := proxy.Host
+	if proxy.Port() == "" {
+		proxyAddr = net.JoinHostPort(proxyAddr, "80")
+	}
+	log.Printf("dialing proxy %q ...", proxyAddr)
+	c, err := net.Dial("tcp", proxyAddr)
+	if err != nil {
+		return nil, fmt.Errorf("dialing proxy %q failed: %v", proxyAddr, err)
+	}
+	fmt.Fprintf(c, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", addr, proxy.Hostname())
+	br := bufio.NewReader(c)
+	res, err := http.ReadResponse(br, nil)
+	if err != nil {
+		return nil, fmt.Errorf("reading HTTP response from CONNECT to %s via proxy %s failed: %v",
+			addr, proxyAddr, err)
+	}
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("proxy error from %s while dialing %s: %v", proxyAddr, addr, res.Status)
+	}
+
+	// It's safe to discard the bufio.Reader here and return the
+	// original TCP conn directly because we only use this for
+	// TLS, and in TLS the client speaks first, so we know there's
+	// no unbuffered data. But we can double-check.
+	if br.Buffered() > 0 {
+		return nil, fmt.Errorf("unexpected %d bytes of buffered data from CONNECT proxy %q",
+			br.Buffered(), proxyAddr)
+	}
+	return c, nil
 }
 
 type deadlinePerWriteConn struct {
