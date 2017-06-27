@@ -1,19 +1,19 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: devappserver-deployment
+  name: devapp-deployment
 spec:
   replicas: 1
   template:
     metadata:
       labels:
-        app: devappserver
+        app: devapp
     spec:
       containers:
-      - name: devappserver
-        image: gcr.io/symbolic-datum-552/devappserver:latest
+      - name: devapp
+        image: gcr.io/go-dashboard-dev/devapp:latest
         imagePullPolicy: Always
-        command: ["/devappserver", "-listen=:80", "-autocert-bucket=golang-devapp-autocert"]
+        command: ["/devapp", "-listen=:80", "-autocert-bucket=golang-devapp-dev-autocert"]
         ports:
         - containerPort: 80
         - containerPort: 443

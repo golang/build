@@ -1,13 +1,13 @@
-# devappserver
+# devapp
 
 ## Local development
 
 ```sh
-$ make devappserver
-$ ./devappserver -http=:8080
+$ make devapp
+$ ./devapp
 ```
 
-Then visit http://localhost:8080
+Then visit http://localhost:6343
 
 ## Deployment
 

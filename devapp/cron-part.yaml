@@ -1,9 +1,0 @@
-# To load, run ../app/cron.sh
-- description: update release and CL dashboards
-  url: /update
-  schedule: every 5 minutes
-  target: dev
-- description: update issue stats
-  url: /update/stats
-  schedule: every 24 hours
-  target: dev

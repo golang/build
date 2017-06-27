@@ -1,0 +1,34 @@
+# Copyright 2017 The Go Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+FROM golang:1.8
+LABEL maintainer "golang-dev@googlegroups.com"
+
+RUN go get -d github.com/google/go-github/github && \
+    cd /go/src/github.com/google/go-github && git reset --hard 7a51fb928f52a196d5f31daefb8a489453ef54ff
+
+RUN go get -d golang.org/x/net/http2 && \
+    cd /go/src/golang.org/x/net && git reset --hard fe686d45ea04bc1bd4eff6a52865ce8757320325
+
+RUN go get -d golang.org/x/sync/errgroup && \
+    cd /go/src/golang.org/x/sync && git reset --hard f52d1811a62927559de87708c8913c1650ce4f26
+
+RUN go get -d cloud.google.com/go/compute/metadata && \
+    go get -d cloud.google.com/go/storage && \
+    cd /go/src/cloud.google.com/go && git reset --hard 23179f286bc31e07fba2eddaa540fb999b1b1fd9
+
+RUN go get -d golang.org/x/crypto/acme/autocert && \
+    cd /go/src/golang.org/x/crypto && git reset --hard adbae1b6b6fb4b02448a0fc0dbbc9ba2b95b294d
+
+# Optimization to speed COPY+go install steps later. This go install
+# isn't required for correctness.
+RUN go install \
+    github.com/google/go-github/github \
+    golang.org/x/sync/errgroup \
+    cloud.google.com/go/compute/metadata \
+    cloud.google.com/go/storage \
+    golang.org/x/crypto/acme/autocert
+
+COPY . /go/src/golang.org/x/build/
+
+RUN go install -ldflags "-linkmode=external -extldflags '-static -pthread'" golang.org/x/build/devapp

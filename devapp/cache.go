@@ -1,23 +1,37 @@
-// Copyright 2016 The Go Authors.  All rights reserved.
+// Copyright 2016 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package devapp
+package main
 
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/gob"
+	"fmt"
+	"log"
+	"sync"
 
-	"golang.org/x/net/context"
+	"golang.org/x/build/godash"
 )
 
-// Cache is a datastore entity type that contains serialized data for dashboards.
+// A Cache contains serialized data for dashboards.
 type Cache struct {
 	// Value contains a gzipped gob'd serialization of the object
 	// to be cached. It must be []byte to avail ourselves of the
 	// datastore's 1 MB size limit.
 	Value []byte `datastore:"value,noindex"`
+}
+
+var (
+	dstore   = map[string]*Cache{}
+	dstoreMu sync.Mutex
+)
+
+func parseData(cache *Cache) (*godash.Data, error) {
+	data := &godash.Data{Reviewers: &godash.Reviewers{}}
+	return data, unpackCache(cache, &data)
 }
 
 func unpackCache(cache *Cache, data interface{}) error {
@@ -54,6 +68,23 @@ func writeCache(ctx context.Context, name string, data interface{}) error {
 		return err
 	}
 	cache.Value = cacheout.Bytes()
-	logger.Infof(ctx, "Cache %q update finished; writing %d bytes", name, cacheout.Len())
+	log.Printf("Cache %q update finished; writing %d bytes", name, cacheout.Len())
 	return putCache(ctx, name, &cache)
+}
+
+func putCache(_ context.Context, name string, c *Cache) error {
+	dstoreMu.Lock()
+	defer dstoreMu.Unlock()
+	dstore[name] = c
+	return nil
+}
+
+func getCache(_ context.Context, name string) (*Cache, error) {
+	dstoreMu.Lock()
+	defer dstoreMu.Unlock()
+	cache, ok := dstore[name]
+	if ok {
+		return cache, nil
+	}
+	return &Cache{}, fmt.Errorf("cache key %s not found", name)
 }

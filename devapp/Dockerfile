@@ -4,5 +4,6 @@
 FROM scratch
 LABEL maintainer "golang-dev@googlegroups.com"
 COPY ca-certificates.crt /etc/ssl/certs/
-COPY devappserver /
-ENTRYPOINT ["/devappserver"]
+COPY devapp /
+COPY static /static
+ENTRYPOINT ["/devapp"]
