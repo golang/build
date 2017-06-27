@@ -13,7 +13,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -43,7 +42,6 @@ func init() {
 	http.Handle("/", http.FileServer(http.Dir("./static/")))
 	http.HandleFunc("/favicon.ico", faviconHandler)
 	http.Handle("/release", hstsHandler(func(w http.ResponseWriter, r *http.Request) { servePage(w, r, "release") }))
-	http.Handle("/update", ctxHandler(update))
 }
 
 func main() {
@@ -51,8 +49,11 @@ func main() {
 		listen         = flag.String("listen", "localhost:6343", "listen address")
 		devTLSPort     = flag.Int("dev-tls-port", 0, "if non-zero, port number to run localhost self-signed TLS server")
 		autocertBucket = flag.String("autocert-bucket", "", "if non-empty, listen on port 443 and serve a LetsEncrypt TLS cert using this Google Cloud Storage bucket as a cache")
+		updateInterval = flag.Duration("update-interval", 5*time.Minute, "how often to update the dashboard data")
 	)
 	flag.Parse()
+
+	go updateLoop(*updateInterval)
 
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
@@ -72,6 +73,16 @@ func main() {
 	}
 
 	log.Fatal(<-errc)
+}
+
+func updateLoop(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	for {
+		if err := update(); err != nil {
+			log.Printf("update: %v", err)
+		}
+		<-ticker.C
+	}
 }
 
 func serveDevTLS(port int) error {
@@ -152,25 +163,9 @@ func hstsHandler(fn http.HandlerFunc) http.Handler {
 	})
 }
 
-func ctxHandler(fn func(ctx context.Context, w http.ResponseWriter, r *http.Request) error) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		if err := fn(ctx, w, r); err != nil {
-			log.Printf("handler failed: %v", err)
-			http.Error(w, err.Error(), 500)
-		}
-	})
-}
-
-func logFn(ctx context.Context, w io.Writer) func(string, ...interface{}) {
-	return func(format string, args ...interface{}) {
-		log.Printf(format, args...)
-	}
-}
-
 type page struct {
 	// Content is the complete HTML of the page.
-	Content []byte `datastore:"content,noindex"`
+	Content []byte
 }
 
 var (
@@ -178,17 +173,17 @@ var (
 	pageStoreMu sync.Mutex
 )
 
-func getPage(ctx context.Context, name string) (*page, error) {
+func getPage(name string) (*page, error) {
 	pageStoreMu.Lock()
 	defer pageStoreMu.Unlock()
 	p, ok := pageStore[name]
 	if ok {
 		return p, nil
 	}
-	return &page{}, fmt.Errorf("page key %s not found", name)
+	return nil, fmt.Errorf("page key %s not found", name)
 }
 
-func writePage(ctx context.Context, pageStr string, content []byte) error {
+func writePage(pageStr string, content []byte) error {
 	pageStoreMu.Lock()
 	defer pageStoreMu.Unlock()
 	entity := &page{
@@ -199,11 +194,10 @@ func writePage(ctx context.Context, pageStr string, content []byte) error {
 }
 
 func servePage(w http.ResponseWriter, r *http.Request, pageStr string) {
-	ctx := r.Context()
-	entity, err := getPage(ctx, pageStr)
+	entity, err := getPage(pageStr)
 	if err != nil {
-		log.Printf("getPage(ctx, %s) = %v", pageStr, err)
-		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		log.Printf("getPage(%s) = %v", pageStr, err)
+		http.NotFound(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -224,22 +218,20 @@ func (ct *countTransport) Count() int64 {
 	return atomic.LoadInt64(&ct.count)
 }
 
-func update(ctx context.Context, w http.ResponseWriter, _ *http.Request) error {
-	token, err := getToken(ctx)
+func update() error {
+	log.Printf("Updating dashboard data...")
+	token, err := getToken()
 	if err != nil {
 		return err
 	}
-	gzdata, _ := getCache(ctx, "gzdata")
+	gzdata, _ := getCache("gzdata")
+
+	ctx := context.Background()
 	ct := &countTransport{newTransport(ctx), 0}
 	gh := godash.NewGitHubClient("golang/go", token, ct)
 	defer func() {
 		log.Printf("Sent %d requests to GitHub", ct.Count())
 	}()
-	ger := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
-	// Without a deadline, urlfetch will use a 5s timeout which is too slow for Gerrit.
-	gerctx, cancel := context.WithTimeout(ctx, 9*time.Minute)
-	defer cancel()
-	ger.HTTPClient = &http.Client{Transport: newTransport(gerctx)}
 
 	data, err := parseData(gzdata)
 	if err != nil {
@@ -247,13 +239,12 @@ func update(ctx context.Context, w http.ResponseWriter, _ *http.Request) error {
 	}
 
 	if err := data.Reviewers.LoadGithub(ctx, gh); err != nil {
-		log.Printf("failed to load reviewers: %v", err)
-		return err
+		return fmt.Errorf("failed to load reviewers: %v", err)
 	}
-	l := logFn(ctx, w)
-	if err := data.FetchData(gerctx, gh, ger, l, 7, false, false); err != nil {
-		log.Printf("failed to fetch data: %v", err)
-		return err
+	ger := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
+
+	if err := data.FetchData(ctx, gh, ger, log.Printf, 7, false, false); err != nil {
+		return fmt.Errorf("failed to fetch data: %v", err)
 	}
 
 	var output bytes.Buffer
@@ -265,10 +256,10 @@ func update(ctx context.Context, w http.ResponseWriter, _ *http.Request) error {
 	var html bytes.Buffer
 	godash.PrintHTML(&html, output.String())
 
-	if err := writePage(ctx, kind, html.Bytes()); err != nil {
+	if err := writePage(kind, html.Bytes()); err != nil {
 		return err
 	}
-	return writeCache(ctx, "gzdata", &data)
+	return writeCache("gzdata", &data)
 }
 
 func newTransport(ctx context.Context) http.RoundTripper {

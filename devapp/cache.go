@@ -7,7 +7,6 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
-	"context"
 	"encoding/gob"
 	"fmt"
 	"log"
@@ -19,9 +18,8 @@ import (
 // A Cache contains serialized data for dashboards.
 type Cache struct {
 	// Value contains a gzipped gob'd serialization of the object
-	// to be cached. It must be []byte to avail ourselves of the
-	// datastore's 1 MB size limit.
-	Value []byte `datastore:"value,noindex"`
+	// to be cached.
+	Value []byte
 }
 
 var (
@@ -48,15 +46,7 @@ func unpackCache(cache *Cache, data interface{}) error {
 	return nil
 }
 
-func loadCache(ctx context.Context, name string, data interface{}) error {
-	cache, err := getCache(ctx, name)
-	if err != nil {
-		return err
-	}
-	return unpackCache(cache, data)
-}
-
-func writeCache(ctx context.Context, name string, data interface{}) error {
+func writeCache(name string, data interface{}) error {
 	var cache Cache
 	var cacheout bytes.Buffer
 	cachegz := gzip.NewWriter(&cacheout)
@@ -69,17 +59,17 @@ func writeCache(ctx context.Context, name string, data interface{}) error {
 	}
 	cache.Value = cacheout.Bytes()
 	log.Printf("Cache %q update finished; writing %d bytes", name, cacheout.Len())
-	return putCache(ctx, name, &cache)
+	return putCache(name, &cache)
 }
 
-func putCache(_ context.Context, name string, c *Cache) error {
+func putCache(name string, c *Cache) error {
 	dstoreMu.Lock()
 	defer dstoreMu.Unlock()
 	dstore[name] = c
 	return nil
 }
 
-func getCache(_ context.Context, name string) (*Cache, error) {
+func getCache(name string) (*Cache, error) {
 	dstoreMu.Lock()
 	defer dstoreMu.Unlock()
 	cache, ok := dstore[name]

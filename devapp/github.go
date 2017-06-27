@@ -5,7 +5,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -25,7 +24,7 @@ var (
 	githubOnce    sync.Once
 )
 
-func getTokenFromFile(ctx context.Context) (string, error) {
+func getTokenFromFile() (string, error) {
 	githubOnce.Do(func() {
 		const short = ".github-issue-token"
 		filename := filepath.Clean(os.Getenv("HOME") + "/" + short)
@@ -62,7 +61,7 @@ it at any time.`
 	return githubToken, githubOnceErr
 }
 
-func getToken(ctx context.Context) (string, error) {
+func getToken() (string, error) {
 	if metadata.OnGCE() {
 		// Re-use maintner-github-token until this is migrated to using the maintner API.
 		token, err := metadata.ProjectAttributeValue("maintner-github-token")
@@ -70,5 +69,5 @@ func getToken(ctx context.Context) (string, error) {
 			return token, nil
 		}
 	}
-	return getTokenFromFile(ctx)
+	return getTokenFromFile()
 }
