@@ -119,6 +119,10 @@ type gopherbot struct {
 	ghc    *github.Client
 	corpus *maintner.Corpus
 	gorepo *maintner.GitHubRepo
+
+	// maxIssueMod is the latest modification time of all Go
+	// github issues. It's updated at the end of the run of tasks.
+	maxIssueMod time.Time
 }
 
 var tasks = []struct {
@@ -134,6 +138,7 @@ var tasks = []struct {
 	{"close stale WaitingForInfo", (*gopherbot).closeStaleWaitingForInfo},
 	{"cl2issue", (*gopherbot).cl2issue},
 	{"check cherry picks", (*gopherbot).checkCherryPicks},
+	{"update needs", (*gopherbot).updateNeeds},
 }
 
 func (b *gopherbot) initCorpus() {
@@ -159,11 +164,38 @@ func (b *gopherbot) doTasks(ctx context.Context) error {
 			return err
 		}
 	}
+
+	// Update b.maxIssueMod.
+	b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		if t := gi.LastModified(); t.After(b.maxIssueMod) {
+			b.maxIssueMod = t
+		}
+		return nil
+	})
+
 	return nil
 }
 
 func (b *gopherbot) addLabel(ctx context.Context, gi *maintner.GitHubIssue, label string) error {
+	if *dryRun {
+		return nil
+	}
 	_, _, err := b.ghc.Issues.AddLabelsToIssue(ctx, "golang", "go", int(gi.Number), []string{label})
+	return err
+}
+
+// removeLabel makes an API call to GitHub to remove the provided
+// label from the issue.
+// If issue did not have the label already (or the label didn't
+// exist), removeLabel returns nil.
+func (b *gopherbot) removeLabel(ctx context.Context, gi *maintner.GitHubIssue, label string) error {
+	if *dryRun {
+		return nil
+	}
+	_, err := b.ghc.Issues.RemoveLabelForIssue(ctx, "golang", "go", int(gi.Number), label)
+	if ge, ok := err.(*github.ErrorResponse); ok && ge.Response != nil && ge.Response.StatusCode == http.StatusNotFound {
+		return nil
+	}
 	return err
 }
 
@@ -501,6 +533,71 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 		})
 	})
 	return nil
+}
+
+// canonicalLabelName returns "needsfix" for "needs-fix" or "NeedsFix"
+// in prep for future label renaming.
+func canonicalLabelName(s string) string {
+	return strings.Replace(strings.ToLower(s), "-", "", -1)
+}
+
+// If an issue has multiple "needs" labels, remove all but the most recent.
+// These were originally called NeedsFix, NeedsDecision, and NeedsInvestigation,
+// but are being renamed to "needs-foo".
+func (b *gopherbot) updateNeeds(ctx context.Context) error {
+	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		if !gi.LastModified().After(b.maxIssueMod) {
+			// Already processed on previous iteration.
+			return nil
+		}
+		if gi.Closed {
+			return nil
+		}
+
+		var labels map[string]int // lowercase no-hyphen "needsfix" -> position
+		var pos, maxPos int
+		gi.ForeachEvent(func(e *maintner.GitHubIssueEvent) error {
+			var add bool
+			switch e.Type {
+			case "labeled":
+				add = true
+			case "unlabeled":
+			default:
+				return nil
+			}
+			if !strings.HasPrefix(e.Label, "Needs") && !strings.HasPrefix(e.Label, "needs-") {
+				return nil
+			}
+			key := canonicalLabelName(e.Label)
+			pos++
+			if labels == nil {
+				labels = make(map[string]int)
+			}
+			if add {
+				labels[key] = pos
+				maxPos = pos
+			} else {
+				delete(labels, key)
+			}
+			return nil
+		})
+		if len(labels) <= 1 {
+			return nil
+		}
+
+		for _, lab := range gi.Labels {
+			key := canonicalLabelName(lab.Name)
+			if !strings.HasPrefix(key, "needs") || labels[key] == maxPos {
+				continue
+			}
+			printIssue("updateneeds", gi)
+			fmt.Printf("\t... removing label %q\n", lab.Name)
+			if err := b.removeLabel(ctx, gi, lab.Name); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // errStopIteration is used to stop iteration over issues or comments.

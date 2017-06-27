@@ -212,8 +212,22 @@ type GitHubIssue struct {
 	commentsUpdatedTil time.Time                   // max comment modtime seen
 	commentsSyncedAsOf time.Time                   // as of server's Date header
 	comments           map[int64]*GitHubComment    // by comment.ID
+	eventMaxTime       time.Time                   // latest time of any event in events map
 	eventsSyncedAsOf   time.Time                   // as of server's Date header
 	events             map[int64]*GitHubIssueEvent // by event.ID
+}
+
+// LastModified reports the most recent time that any known metadata was updated.
+// In contrast to the Updated field, LastModified includes comments and events.
+func (gi *GitHubIssue) LastModified() time.Time {
+	ret := gi.Updated
+	if gi.commentsUpdatedTil.After(ret) {
+		ret = gi.commentsUpdatedTil
+	}
+	if gi.eventMaxTime.After(ret) {
+		ret = gi.eventMaxTime
+	}
+	return ret
 }
 
 // HasEvent reports whether there's any GitHubIssueEvent in this
@@ -1159,7 +1173,11 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 		if gi.events == nil {
 			gi.events = make(map[int64]*GitHubIssueEvent)
 		}
-		gi.events[emut.Id] = gr.newGithubEvent(emut)
+		gie := gr.newGithubEvent(emut)
+		gi.events[emut.Id] = gie
+		if gie.Created.After(gi.eventMaxTime) {
+			gi.eventMaxTime = gie.Created
+		}
 	}
 	if m.EventStatus != nil && m.EventStatus.ServerDate != nil {
 		if serverDate, err := ptypes.Timestamp(m.EventStatus.ServerDate); err == nil {
