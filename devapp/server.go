@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"path"
 	"sync"
 )
 
@@ -24,8 +25,16 @@ func newServer(mux *http.ServeMux, staticDir string) *server {
 		staticDir: staticDir,
 	}
 	s.mux.Handle("/", http.FileServer(http.Dir(s.staticDir)))
+	s.mux.HandleFunc("/favicon.ico", s.handleFavicon)
 	s.mux.HandleFunc("/release", handleRelease)
 	return s
+}
+
+func (s *server) handleFavicon(w http.ResponseWriter, r *http.Request) {
+	// Need to specify content type for consistent tests, without this it's
+	// determined from mime.types on the box the test is running on
+	w.Header().Set("Content-Type", "image/x-icon")
+	http.ServeFile(w, r, path.Join(s.staticDir, "/favicon.ico"))
 }
 
 // ServeHTTP satisfies the http.Handler interface.
