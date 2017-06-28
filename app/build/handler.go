@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -1024,7 +1025,7 @@ func builderKey(c appengine.Context, builder string) string {
 func logErr(w http.ResponseWriter, r *http.Request, err error) {
 	contextForRequest(r).Errorf("Error: %v", err)
 	w.WriteHeader(http.StatusInternalServerError)
-	fmt.Fprint(w, "Error: ", err)
+	fmt.Fprint(w, "Error: ", html.EscapeString(err.Error()))
 }
 
 func contextForRequest(r *http.Request) appengine.Context {
