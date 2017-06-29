@@ -1234,37 +1234,39 @@ func (gr *GitHubRepo) sync(ctx context.Context, token string, loop bool) error {
 	if tr, ok := hc.Transport.(*http.Transport); ok {
 		defer tr.CloseIdleConnections()
 	}
-	hc.Transport = &httpcache.Transport{
-		Transport:           hc.Transport,
+	directTransport := hc.Transport
+	cachingTransport := &httpcache.Transport{
+		Transport:           directTransport,
 		Cache:               &githubCache{Cache: httpcache.NewMemoryCache()},
 		MarkCachedResponses: true, // adds "X-From-Cache: 1" response header.
 	}
 
 	p := &githubRepoPoller{
-		c:     gr.github.c,
-		token: token,
-		gr:    gr,
-		ghc:   github.NewClient(hc),
+		c:             gr.github.c,
+		token:         token,
+		gr:            gr,
+		githubDirect:  github.NewClient(&http.Client{Transport: directTransport}),
+		githubCaching: github.NewClient(&http.Client{Transport: cachingTransport}),
 	}
 	activityCh := gr.github.c.activityChan("github:" + gr.id.String())
-	var unfetchedActivity bool // got webhook update, but haven't seen new data yet
+	var expectChanges bool // got webhook update, but haven't seen new data yet
 	var sleepDelay time.Duration
 	for {
 		prevLastUpdate := p.lastUpdate
-		err := p.sync(ctx)
+		err := p.sync(ctx, expectChanges)
 		if err == context.Canceled || !loop {
 			return err
 		}
 		sawChanges := !p.lastUpdate.Equal(prevLastUpdate)
 		if sawChanges {
-			unfetchedActivity = false
+			expectChanges = false
 		}
 		// If we got woken up by a webhook, sometimes
 		// immediately polling Github for the data results in
 		// a cache hit saying nothing's changed. Don't believe
 		// it. Polling quickly with exponential backoff until
 		// we see what we're expecting.
-		if unfetchedActivity {
+		if expectChanges {
 			if sleepDelay == 0 {
 				sleepDelay = 1 * time.Second
 			} else {
@@ -1273,7 +1275,7 @@ func (gr *GitHubRepo) sync(ctx context.Context, token string, loop bool) error {
 					sleepDelay = 15 * time.Minute
 				}
 			}
-			p.logf("unfetched activity; re-polling in %v", sleepDelay)
+			p.logf("expect changes; re-polling in %v", sleepDelay)
 		} else {
 			sleepDelay = 15 * time.Minute
 		}
@@ -1285,7 +1287,7 @@ func (gr *GitHubRepo) sync(ctx context.Context, token string, loop bool) error {
 			return ctx.Err()
 		case <-activityCh:
 			timer.Stop()
-			unfetchedActivity = true
+			expectChanges = true
 			sleepDelay = 0
 		case <-timer.C:
 		}
@@ -1295,11 +1297,12 @@ func (gr *GitHubRepo) sync(ctx context.Context, token string, loop bool) error {
 // A githubRepoPoller updates the Corpus (gr.c) to have the latest
 // version of the Github repo rp, using the Github client ghc.
 type githubRepoPoller struct {
-	c          *Corpus // shortcut for gr.github.c
-	gr         *GitHubRepo
-	ghc        *github.Client
-	token      string
-	lastUpdate time.Time // modified by sync
+	c             *Corpus // shortcut for gr.github.c
+	gr            *GitHubRepo
+	token         string
+	lastUpdate    time.Time // modified by sync
+	githubCaching *github.Client
+	githubDirect  *github.Client // not caching
 }
 
 func (p *githubRepoPoller) Owner() string { return p.gr.id.Owner }
@@ -1309,9 +1312,9 @@ func (p *githubRepoPoller) logf(format string, args ...interface{}) {
 	log.Printf("sync github "+p.gr.id.String()+": "+format, args...)
 }
 
-func (p *githubRepoPoller) sync(ctx context.Context) error {
+func (p *githubRepoPoller) sync(ctx context.Context, expectChanges bool) error {
 	p.logf("Beginning sync.")
-	if err := p.syncIssues(ctx); err != nil {
+	if err := p.syncIssues(ctx, expectChanges); err != nil {
 		return err
 	}
 	if err := p.syncComments(ctx); err != nil {
@@ -1390,7 +1393,7 @@ func (p *githubRepoPoller) syncLabels(ctx context.Context) error {
 }
 
 func (p *githubRepoPoller) getMilestonePage(ctx context.Context, page int) ([]interface{}, *github.Response, error) {
-	ms, res, err := p.ghc.Issues.ListMilestones(ctx, p.Owner(), p.Repo(), &github.MilestoneListOptions{
+	ms, res, err := p.githubCaching.Issues.ListMilestones(ctx, p.Owner(), p.Repo(), &github.MilestoneListOptions{
 		State:       "all",
 		ListOptions: github.ListOptions{Page: page},
 	})
@@ -1405,7 +1408,7 @@ func (p *githubRepoPoller) getMilestonePage(ctx context.Context, page int) ([]in
 }
 
 func (p *githubRepoPoller) getLabelPage(ctx context.Context, page int) ([]interface{}, *github.Response, error) {
-	ls, res, err := p.ghc.Issues.ListLabels(ctx, p.Owner(), p.Repo(), &github.ListOptions{
+	ls, res, err := p.githubCaching.Issues.ListLabels(ctx, p.Owner(), p.Repo(), &github.ListOptions{
 		Page: page,
 	})
 	if err != nil {
@@ -1457,14 +1460,18 @@ func (p *githubRepoPoller) foreachItem(
 	}
 }
 
-func (p *githubRepoPoller) syncIssues(ctx context.Context) error {
+func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) error {
 	c := p.gr.github.c
 	page := 1
 	seen := make(map[int64]bool)
 	keepGoing := true
 	owner, repo := p.gr.id.Owner, p.gr.id.Repo
 	for keepGoing {
-		issues, res, err := p.ghc.Issues.ListByRepo(ctx, owner, repo, &github.IssueListByRepoOptions{
+		ghc := p.githubCaching
+		if expectChanges {
+			ghc = p.githubDirect
+		}
+		issues, res, err := ghc.Issues.ListByRepo(ctx, owner, repo, &github.IssueListByRepoOptions{
 			State:     "all",
 			Sort:      "updated",
 			Direction: "desc",
@@ -1564,7 +1571,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context) error {
 		p.logf("remaining issues: %v", missing)
 		for _, num := range missing {
 			p.logf("getting issue %v ...", num)
-			issue, _, err := p.ghc.Issues.Get(ctx, owner, repo, int(num))
+			issue, _, err := p.githubDirect.Issues.Get(ctx, owner, repo, int(num))
 			if ge, ok := err.(*github.ErrorResponse); ok && ge.Message == "Not Found" {
 				mp := &maintpb.Mutation{
 					GithubIssue: &maintpb.GithubIssueMutation{
@@ -1638,7 +1645,7 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 	owner, repo := p.gr.id.Owner, p.gr.id.Repo
 	morePages := true // at least try the first. might be empty.
 	for morePages {
-		ics, res, err := p.ghc.Issues.ListComments(ctx, owner, repo, int(issueNum), &github.IssueListCommentsOptions{
+		ics, res, err := p.githubDirect.Issues.ListComments(ctx, owner, repo, int(issueNum), &github.IssueListCommentsOptions{
 			Since:       since,
 			Direction:   "asc",
 			Sort:        "updated",
