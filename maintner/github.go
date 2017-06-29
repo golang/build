@@ -117,6 +117,18 @@ func (gr *GitHubRepo) ID() GithubRepoID { return gr.id }
 // Issue returns the the provided issue number, or nil if it's not known.
 func (gr *GitHubRepo) Issue(n int32) *GitHubIssue { return gr.issues[n] }
 
+// ForeachLabel calls fn for each label in the repo, in unsorted order.
+//
+// Iteration ends if fn returns an error, with that error.
+func (gr *GitHubRepo) ForeachLabel(fn func(*GitHubLabel) error) error {
+	for _, lb := range gr.labels {
+		if err := fn(lb); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ForeachIssue calls fn for each issue in the repo.
 //
 // If fn returns an error, iteration ends and ForeachIssue returns
@@ -219,6 +231,9 @@ type GitHubIssue struct {
 
 // LastModified reports the most recent time that any known metadata was updated.
 // In contrast to the Updated field, LastModified includes comments and events.
+//
+// TODO(bradfitz): this seems to not be working, at least events
+// aren't updating it. Investigate.
 func (gi *GitHubIssue) LastModified() time.Time {
 	ret := gi.Updated
 	if gi.commentsUpdatedTil.After(ret) {

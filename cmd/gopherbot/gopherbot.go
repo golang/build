@@ -32,6 +32,13 @@ var (
 	daemon = flag.Bool("daemon", false, "run in daemon mode")
 )
 
+// GitHub Label IDs for the golang/go repo.
+const (
+	needsDecisionID      = 373401956
+	needsFixID           = 373399998
+	needsInvestigationID = 373402289
+)
+
 func getGithubToken() (string, error) {
 	if metadata.OnGCE() {
 		for _, key := range []string{"gopherbot-github-token", "maintner-github-token"} {
@@ -546,15 +553,24 @@ func canonicalLabelName(s string) string {
 // but are being renamed to "needs-foo".
 func (b *gopherbot) updateNeeds(ctx context.Context) error {
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if !gi.LastModified().After(b.maxIssueMod) {
-			// Already processed on previous iteration.
-			return nil
-		}
 		if gi.Closed {
 			return nil
 		}
+		var numNeeds int
+		if gi.Labels[needsDecisionID] != nil {
+			numNeeds++
+		}
+		if gi.Labels[needsFixID] != nil {
+			numNeeds++
+		}
+		if gi.Labels[needsInvestigationID] != nil {
+			numNeeds++
+		}
+		if numNeeds <= 1 {
+			return nil
+		}
 
-		var labels map[string]int // lowercase no-hyphen "needsfix" -> position
+		labels := map[string]int{} // lowercase no-hyphen "needsfix" -> position
 		var pos, maxPos int
 		gi.ForeachEvent(func(e *maintner.GitHubIssueEvent) error {
 			var add bool
@@ -570,9 +586,6 @@ func (b *gopherbot) updateNeeds(ctx context.Context) error {
 			}
 			key := canonicalLabelName(e.Label)
 			pos++
-			if labels == nil {
-				labels = make(map[string]int)
-			}
 			if add {
 				labels[key] = pos
 				maxPos = pos
@@ -585,6 +598,8 @@ func (b *gopherbot) updateNeeds(ctx context.Context) error {
 			return nil
 		}
 
+		// Remove any label that's not the newest (added in
+		// last position).
 		for _, lab := range gi.Labels {
 			key := canonicalLabelName(lab.Name)
 			if !strings.HasPrefix(key, "needs") || labels[key] == maxPos {
