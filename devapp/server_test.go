@@ -46,3 +46,27 @@ func TestHSTSHeaderSet(t *testing.T) {
 		t.Errorf("missing Strict-Transport-Security header; headers = %v", w.Header())
 	}
 }
+
+func TestRandomHelpWantedIssue(t *testing.T) {
+	req := httptest.NewRequest("GET", "/imfeelinglucky", nil)
+	w := httptest.NewRecorder()
+	testServer.ServeHTTP(w, req)
+	if w.Code != http.StatusSeeOther {
+		t.Errorf("w.Code = %d; want %d", w.Code, http.StatusSeeOther)
+	}
+	if g, w := w.Header().Get("Location"), issuesURLBase; g != w {
+		t.Errorf("Location header = %q; want %q", g, w)
+	}
+
+	testServer.cMu.Lock()
+	testServer.helpWantedIssues = []int32{42}
+	testServer.cMu.Unlock()
+	w = httptest.NewRecorder()
+	testServer.ServeHTTP(w, req)
+	if w.Code != http.StatusSeeOther {
+		t.Errorf("w.Code = %d; want %d", w.Code, http.StatusSeeOther)
+	}
+	if g, w := w.Header().Get("Location"), issuesURLBase+"42"; g != w {
+		t.Errorf("Location header = %q; want %q", g, w)
+	}
+}

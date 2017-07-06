@@ -216,7 +216,7 @@ func (c *Corpus) Initialize(ctx context.Context, src MutationSource) error {
 	}
 	c.mutationSource = src
 	log.Printf("Loading data from log %T ...", src)
-	return c.update(ctx)
+	return c.update(ctx, nil)
 }
 
 // ErrSplit is returned when the the client notices the leader's
@@ -235,20 +235,38 @@ var ErrSplit = errors.New("maintner: leader server's history split, process out 
 // access of the corpus, including other Update calls.
 func (c *Corpus) Update(ctx context.Context) error {
 	if c.mutationSource == nil {
-		panic("Update called with call to Initialize")
+		panic("Update called without call to Initialize")
 	}
 	if c.sawErrSplit {
-		panic("Update called after previous Update call returned ErrSplit")
+		panic("Update called after previous call returned ErrSplit")
 	}
 	log.Printf("Updating data from log %T ...", c.mutationSource)
-	err := c.update(ctx)
+	err := c.update(ctx, nil)
 	if err == ErrSplit {
 		c.sawErrSplit = true
 	}
 	return err
 }
 
-func (c *Corpus) update(ctx context.Context) error {
+// UpdateWithLocker behaves just like Update, but holds lk when processing
+// mutation events.
+func (c *Corpus) UpdateWithLocker(ctx context.Context, lk sync.Locker) error {
+	if c.mutationSource == nil {
+		panic("UpdateWithLocker called without call to Initialize")
+	}
+	if c.sawErrSplit {
+		panic("UpdateWithLocker called after previous call returned ErrSplit")
+	}
+	log.Printf("Updating data from log %T ...", c.mutationSource)
+	err := c.update(ctx, lk)
+	if err == ErrSplit {
+		c.sawErrSplit = true
+	}
+	return err
+}
+
+// lk optionally specifies a locker to use while processing mutations.
+func (c *Corpus) update(ctx context.Context, lk sync.Locker) error {
 	src := c.mutationSource
 	ch := src.GetMutations(ctx)
 	done := ctx.Done()
@@ -270,7 +288,13 @@ func (c *Corpus) update(ctx context.Context) error {
 				log.Printf("Reloaded data from log %T.", src)
 				return nil
 			}
+			if lk != nil {
+				lk.Lock()
+			}
 			c.processMutationLocked(e.Mutation)
+			if lk != nil {
+				lk.Unlock()
+			}
 		}
 	}
 }

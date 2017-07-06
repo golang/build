@@ -3,7 +3,7 @@
 ## Local development
 
 ```sh
-$ make devapp
+$ go build
 $ ./devapp
 ```
 

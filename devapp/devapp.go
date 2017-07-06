@@ -14,6 +14,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -47,10 +48,14 @@ func main() {
 		staticDir      = flag.String("static-dir", "./static/", "location of static directory relative to binary location")
 	)
 	flag.Parse()
+	rand.Seed(time.Now().UnixNano())
 
 	go updateLoop(*updateInterval)
 
 	s := newServer(http.NewServeMux(), *staticDir)
+	ctx := context.Background()
+	s.initCorpus(ctx)
+	go s.corpusUpdateLoop(ctx)
 
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {

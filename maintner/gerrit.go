@@ -271,6 +271,38 @@ func (cl *GerritCL) References(ref GitHubIssueRef) bool {
 	return false
 }
 
+// OwnerID returns the ID of the CL’s owner. It will return -1 on error.
+func (cl *GerritCL) OwnerID() int {
+	// Meta commits caused by the owner of a change have an email of the form
+	// <user id>@<uuid of gerrit server>.
+	m := cl.firstMetaCommit()
+	if m == nil {
+		return -1
+	}
+	email := m.Author.Email()
+	idx := strings.Index(email, "@")
+	if idx == -1 {
+		return -1
+	}
+	id, err := strconv.Atoi(email[:idx])
+	if err != nil {
+		return -1
+	}
+	return id
+}
+
+func (cl *GerritCL) firstMetaCommit() *GitCommit {
+	m := cl.Meta
+	for {
+		if m == nil || len(m.Parents) == 0 {
+			break
+		}
+
+		m = m.Parents[0] // Meta commits don’t have more than one parent.
+	}
+	return m
+}
+
 func (cl *GerritCL) updateGithubIssueRefs() {
 	gp := cl.Project
 	gerrit := gp.gerrit

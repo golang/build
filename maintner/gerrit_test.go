@@ -124,3 +124,26 @@ func TestGetGerritMessage(t *testing.T) {
 		}
 	}
 }
+
+func TestOwnerID(t *testing.T) {
+	cl := &GerritCL{}
+	if cl.OwnerID() != -1 {
+		t.Errorf("cl.OwnerID() = %d; want %d", cl.OwnerID(), -1)
+	}
+
+	cl = &GerritCL{
+		Meta: &GitCommit{
+			Parents: []*GitCommit{
+				&GitCommit{
+					Author: &GitPerson{
+						Str: "Rick Sanchez <137@62eb7196-b449-3ce5-99f1-c037f21e1705>",
+					},
+				},
+			},
+		},
+	}
+
+	if cl.OwnerID() != 137 {
+		t.Errorf("cl.OwnerID() = %d; want %d", cl.OwnerID(), 137)
+	}
+}
