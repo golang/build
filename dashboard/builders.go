@@ -262,6 +262,14 @@ var Hosts = map[string]*HostConfig{
 		env:            []string{"GOROOT_BOOTSTRAP=/root/go-solaris-amd64-bootstrap"},
 		ReverseAliases: []string{"solaris-amd64-smartosbuildlet"},
 	},
+	"host-solaris-oracle-amd64-oraclerel": &HostConfig{
+		Notes:       "Oracle Solaris amd64 Release System",
+		Owner:       "shawn.walker@oracle.com",
+		OwnerGithub: "binarycrusader",
+		IsReverse:   true,
+		ExpectNum:   1,
+		env:         []string{"GOROOT_BOOTSTRAP=/opt/local/go-solaris-amd64-bootstrap"},
+	},
 	"host-solaris-oracle-shawn": &HostConfig{
 		Notes:       "Oracle Solaris amd64 Development System",
 		Owner:       "shawn.walker@oracle.com",
@@ -1112,6 +1120,11 @@ func init() {
 		Name:     "solaris-amd64-oracledev",
 		HostType: "host-solaris-oracle-shawn",
 		Notes:    "Oracle Solaris development version",
+	})
+	addBuilder(BuildConfig{
+		Name:     "solaris-amd64-oraclerel",
+		HostType: "host-solaris-oracle-amd64-oraclerel",
+		Notes:    "Oracle Solaris release version",
 	})
 	addBuilder(BuildConfig{
 		Name:     "solaris-amd64-smartosbuildlet",
