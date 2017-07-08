@@ -23,6 +23,9 @@ import (
 // Github activity, and Gerrit activity and metadata since the
 // beginning of the project.
 //
+// Use Corpus.Update to keep the corpus up-to-date. If you do this, you must
+// hold the read lock if reading and updating concurrently.
+//
 // The initial call to Get will download approximately 350-400 MB of
 // data into a directory "golang-maintner" under your operating
 // system's user cache directory. Subsequent calls will only download

@@ -64,7 +64,7 @@ type Corpus struct {
 }
 
 // RLock grabs the corpus's read lock. Grabbing the read lock prevents
-// any concurrent writes from mutation the corpus. This is only
+// any concurrent writes from mutating the corpus. This is only
 // necessary if the application is querying the corpus and calling its
 // Update method concurrently.
 func (c *Corpus) RLock() { c.mu.RLock() }
@@ -249,8 +249,9 @@ var ErrSplit = errors.New("maintner: leader server's history split, process out 
 // the context expires.
 // If Update returns ErrSplit, the corpus can longer be updated.
 //
-// Update must not be called concurrently with any other method or
-// access of the corpus, including other Update calls.
+// Update must not be called concurrently with any other Update calls. If
+// reading the corpus concurrently while the corpus is updating, you must hold
+// the read lock using Corpus.RLock.
 func (c *Corpus) Update(ctx context.Context) error {
 	if c.mutationSource == nil {
 		panic("Update called without call to Initialize")
