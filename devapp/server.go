@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
@@ -28,20 +29,23 @@ type server struct {
 	cMu              sync.RWMutex // Used to protect the fields below.
 	corpus           *maintner.Corpus
 	helpWantedIssues []int32
+	userMapping      map[int]*maintner.GitHubUser // Gerrit Owner ID => GitHub user
+	activities       []activity                   // All contribution activities
 }
 
 func newServer(mux *http.ServeMux, staticDir string) *server {
 	s := &server{
-		mux:       mux,
-		staticDir: staticDir,
+		mux:         mux,
+		staticDir:   staticDir,
+		userMapping: map[int]*maintner.GitHubUser{},
 	}
 	s.mux.Handle("/", http.FileServer(http.Dir(s.staticDir)))
 	s.mux.HandleFunc("/favicon.ico", s.handleFavicon)
 	s.mux.HandleFunc("/release", handleRelease)
-	s.mux.HandleFunc("/gophercon", s.handleGopherCon)
 	for _, p := range []string{"/imfeelinghelpful", "/imfeelinglucky"} {
 		s.mux.HandleFunc(p, s.handleRandomHelpWantedIssue)
 	}
+	s.mux.HandleFunc("/_/activities", s.handleActivities)
 	return s
 }
 
@@ -64,6 +68,8 @@ func (s *server) corpusUpdateLoop(ctx context.Context) {
 	for {
 		log.Println("Updating help wanted issues ...")
 		s.updateHelpWantedIssues()
+		log.Println("Updating activities ...")
+		s.updateActivities()
 		err := s.corpus.UpdateWithLocker(ctx, &s.cMu)
 		if err != nil {
 			if err == maintner.ErrSplit {
@@ -86,8 +92,9 @@ func (s *server) corpusUpdateLoop(ctx context.Context) {
 }
 
 const (
-	labelIDHelpWanted = 150880243
-	issuesURLBase     = "https://github.com/golang/go/issues/"
+	labelIDHelpWanted         = 150880243
+	issuesURLBase             = "https://github.com/golang/go/issues/"
+	issueNumGerritUserMapping = 20945 // Special sign-up issue.
 )
 
 func (s *server) updateHelpWantedIssues() {
@@ -95,7 +102,7 @@ func (s *server) updateHelpWantedIssues() {
 	defer s.cMu.Unlock()
 	repo := s.corpus.GitHub().Repo("golang", "go")
 	if repo == nil {
-		log.Printf(`s.corpus.GitHub().Repo("golang", "go") == nil`)
+		log.Println(`s.corpus.GitHub().Repo("golang", "go") = nil`)
 		return
 	}
 
@@ -110,6 +117,93 @@ func (s *server) updateHelpWantedIssues() {
 		return nil
 	})
 	s.helpWantedIssues = ids
+}
+
+// intFromStr returns the last integer within s, allowing for non-numeric
+// characters to be present.
+func intFromStr(s string) (int, bool) {
+	var (
+		foundNum bool
+		r, p     int
+	)
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] >= '0' && s[i] <= '9' {
+			foundNum = true
+			r += r*10 + int(s[i]-'0')
+			p++
+		} else if foundNum {
+			return r, true
+		}
+	}
+	if foundNum {
+		return r, true
+	}
+	return 0, false
+}
+
+// Keep these in sync with the frontend JS.
+const (
+	activityTypeRegister     = "REGISTER"
+	activityTypeCreateChange = "CREATE_CHANGE"
+	activityTypeAmendChange  = "AMEND_CHANGE"
+)
+
+// An activity represents something a contributor has done. e.g. register on
+// the GitHub issue, create a change, amend a change, etc.
+type activity struct {
+	Type    string    `json:"type"`
+	Created time.Time `json:"created"`
+	User    string    `json:"gitHubUser"`
+}
+
+func (s *server) updateActivities() {
+	// TODO(andybons): This is a lot of redundant work for every little change.
+	// Remember current state.
+	s.cMu.Lock()
+	defer s.cMu.Unlock()
+	repo := s.corpus.GitHub().Repo("golang", "go")
+	if repo == nil {
+		log.Println(`s.corpus.GitHub().Repo("golang", "go") = nil`)
+		return
+	}
+	issue := repo.Issue(issueNumGerritUserMapping)
+	if issue == nil {
+		log.Printf("repo.Issue(%d) = nil", issueNumGerritUserMapping)
+		return
+	}
+	issue.ForeachComment(func(c *maintner.GitHubComment) error {
+		id, ok := intFromStr(c.Body)
+		if !ok {
+			return fmt.Errorf("intFromStr(%q) = %v", c.Body, ok)
+		}
+		s.userMapping[id] = c.User
+
+		var latest time.Time
+		if len(s.activities) == 0 {
+			s.activities = []activity{}
+		} else {
+			latest = s.activities[len(s.activities)-1].Created
+		}
+		if c.Created.After(latest) {
+			s.activities = append(s.activities, activity{
+				Type:    activityTypeRegister,
+				Created: c.Created,
+				User:    c.User.Login,
+			})
+		}
+		return nil
+	})
+}
+
+func (s *server) handleActivities(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	result := struct {
+		Activities []activity `json:"activities"`
+	}{s.activities}
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		log.Printf("Encode(%+v) = %v", result, err)
+		return
+	}
 }
 
 func (s *server) handleRandomHelpWantedIssue(w http.ResponseWriter, r *http.Request) {

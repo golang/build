@@ -70,3 +70,29 @@ func TestRandomHelpWantedIssue(t *testing.T) {
 		t.Errorf("Location header = %q; want %q", g, w)
 	}
 }
+
+func TestIntFromStr(t *testing.T) {
+	testcases := []struct {
+		s string
+		i int
+	}{
+		{"123", 123},
+		{"User ID: 98403", 98403},
+		{"1234 User 5431 ID", 5431},
+		{"Stardate 153.2415", 2415},
+	}
+	for _, tc := range testcases {
+		r, ok := intFromStr(tc.s)
+		if !ok {
+			t.Errorf("intFromStr(%q) = %v", tc.s, ok)
+		}
+		if r != tc.i {
+			t.Errorf("intFromStr(%q) = %d; want %d", tc.s, r, tc.i)
+		}
+	}
+	noInt := "hello there"
+	r, ok := intFromStr(noInt)
+	if ok {
+		t.Errorf("intFromStr(%q) = %v; want false", noInt, ok)
+	}
+}
