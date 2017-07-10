@@ -318,6 +318,7 @@ func main() {
 
 		go findWorkLoop(workc)
 		go findTryWorkLoop()
+		go reportMetrics(context.Background())
 		// TODO(cmang): gccgo will need its own findWorkLoop
 	}
 

@@ -26,6 +26,7 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/datastore"
+	monapi "cloud.google.com/go/monitoring/apiv3"
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
@@ -63,6 +64,7 @@ var (
 	errTryDeps     error // non-nil if try bots are disabled
 	gerritClient   *gerrit.Client
 	storageClient  *storage.Client
+	metricsClient  *monapi.MetricClient
 	inStaging      bool // are we running in the staging project? (named -dev)
 
 	initGCECalled bool
@@ -128,6 +130,11 @@ func initGCE() error {
 		storageClient, err = storage.NewClient(ctx)
 		if err != nil {
 			log.Fatalf("storage.NewClient: %v", err)
+		}
+
+		metricsClient, err = monapi.NewMetricClient(ctx)
+		if err != nil {
+			log.Fatalf("monapi.NewMetricClient: %v", err)
 		}
 	}
 

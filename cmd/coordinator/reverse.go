@@ -361,6 +361,18 @@ func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 	fmt.Fprintf(w, "<b>Reverse pool machine detail</b><ul>%s</ul>", buf.Bytes())
 }
 
+// hostTypeCount iterates through the running reverse buildlets, and
+// constructs a count of running buildlets per hostType.
+func (p *reverseBuildletPool) hostTypeCount() map[string]int {
+	total := map[string]int{}
+	p.mu.Lock()
+	for _, b := range p.buildlets {
+		total[b.hostType]++
+	}
+	p.mu.Unlock()
+	return total
+}
+
 func (p *reverseBuildletPool) String() string {
 	// This doesn't currently show up anywhere, so ignore it for now.
 	return "TODO: some reverse buildlet summary"

@@ -20,10 +20,13 @@ import (
 	"text/template"
 	"time"
 
+	monapi "cloud.google.com/go/monitoring/apiv3"
 	"golang.org/x/build/buildenv"
+	"golang.org/x/build/cmd/coordinator/metrics"
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
 	dm "google.golang.org/api/deploymentmanager/v2"
+	monpb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 var (
@@ -32,6 +35,7 @@ var (
 	staging      = flag.Bool("staging", false, "If true, buildenv.Staging will be used to provide default configuration values. Otherwise, buildenv.Production is used.")
 	makeClusters = flag.String("make-clusters", "go,buildlets", "comma-separated list of clusters to create. Empty means none.")
 	makeDisks    = flag.Bool("make-basepin", false, "Create the basepin disk images for all builders, then stop. Does not create the VM.")
+	makeMetrics  = flag.Bool("make-metrics", false, "Create the Stackdriver metrics for buildlet monitoring.")
 
 	computeService    *compute.Service
 	deploymentService *dm.Service
@@ -122,6 +126,12 @@ func main() {
 		err := createCluster(c)
 		if err != nil {
 			log.Fatalf("Error creating Kubernetes cluster %q: %v", c.Name, err)
+		}
+	}
+
+	if *makeMetrics {
+		if err := createMetrics(); err != nil {
+			log.Fatalf("could not create metrics: %v", err)
 		}
 	}
 }
@@ -307,5 +317,26 @@ func makeBasepinDisks(svc *compute.Service) error {
 			log.Fatalf("failed to create: %v", err)
 		}
 	}
+	return nil
+}
+
+// createMetrics creates the Stackdriver metric types required to monitor
+// buildlets on Stackdriver.
+func createMetrics() error {
+	ctx := context.Background()
+	c, err := monapi.NewMetricClient(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, m := range metrics.Metrics {
+		if _, err = c.CreateMetricDescriptor(ctx, &monpb.CreateMetricDescriptorRequest{
+			Name:             m.DescriptorPath(buildEnv.ProjectName),
+			MetricDescriptor: m.Descriptor,
+		}); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
