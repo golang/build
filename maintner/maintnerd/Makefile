@@ -19,6 +19,10 @@ ca-certificates.crt:
 	docker cp $(DOCKER_CTR_build0):/etc/ssl/certs/$@ $@
 	docker rm $(DOCKER_CTR_build0)
 
+update-deps:
+	go install golang.org/x/build/cmd/gitlock
+	gitlock --update=Dockerfile.0 golang.org/x/build/maintner/maintnerd
+
 docker-prod: Dockerfile maintnerd ca-certificates.crt
 	docker build --force-rm --tag=gcr.io/symbolic-datum-552/maintnerd:$(VERSION) .
 docker-dev: Dockerfile maintnerd ca-certificates.crt

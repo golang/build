@@ -4,37 +4,42 @@
 FROM golang:1.8
 LABEL maintainer "golang-dev@googlegroups.com"
 
-RUN go get -d cloud.google.com/go/compute/metadata && \
-    cd /go/src/cloud.google.com/go/compute/metadata && \
-    git reset --hard cd0da878c66091060d2e7403abd62192b3e387e0
+# BEGIN deps (run `make update-deps` to update)
 
-RUN go get -d golang.org/x/time/rate && \
-    cd /go/src/golang.org/x/time/rate && \
-    git reset --hard f51c12702a4d776e4c1fa9b0fabab841babae631
+# Repo cloud.google.com/go at 2f1da5d (2017-05-01)
+RUN go get -d cloud.google.com/go/compute/metadata &&\
+    (cd /go/src/cloud.google.com/go && git reset --hard 2f1da5d762c81a12c516bfb8a9ede96f42750361)
 
-RUN go get -d golang.org/x/oauth2 && \
-    cd /go/src/golang.org/x/oauth2 && \
-    git reset --hard 314dd2c0bf3ebd592ec0d20847d27e79d0dbe8dd
+# Repo github.com/bradfitz/go-smtpd at deb6d62 (2017-04-04)
+RUN go get -d github.com/bradfitz/go-smtpd/smtpd &&\
+    (cd /go/src/github.com/bradfitz/go-smtpd && git reset --hard deb6d623762522f8ad4a55b952001e4215a76cf4)
 
-RUN go get -d github.com/bradfitz/go-smtpd/smtpd && \
-    cd /go/src/github.com/bradfitz/go-smtpd/smtpd && \
-    git reset --hard deb6d623762522f8ad4a55b952001e4215a76cf4
+# Repo github.com/jellevandenhooff/dkim at f50fe3d (2015-03-30)
+RUN go get -d github.com/jellevandenhooff/dkim &&\
+    (cd /go/src/github.com/jellevandenhooff/dkim && git reset --hard f50fe3d243e1a9c9369eea29813517f3af190518)
 
-RUN go get -d github.com/jellevandenhooff/dkim && \
-    cd /go/src/github.com/jellevandenhooff/dkim && \
-    git reset --hard f50fe3d243e1a9c9369eea29813517f3af190518
+# Repo go4.org at 034d17a (2017-05-25)
+RUN go get -d go4.org/types &&\
+    (cd /go/src/go4.org && git reset --hard 034d17a462f7b2dcd1a4a73553ec5357ff6e6c6e)
 
-RUN go get -d golang.org/x/crypto/acme/autocert && \
-    cd /go/src/golang.org/x/crypto/acme/autocert && \
-    git reset --hard 573951cbe80bb6352881271bb276f48749eab6f4
+# Repo golang.org/x/crypto at 0fe9631 (2017-05-16)
+RUN go get -d golang.org/x/crypto/acme `#and 2 other pkgs` &&\
+    (cd /go/src/golang.org/x/crypto && git reset --hard 0fe963104e9d1877082f8fb38f816fcd97eb1d10)
 
-RUN go get -d go4.org/types && \
-    cd /go/src/go4.org && \
-    git reset --hard d7e10a7752d55a1f81e384fe49a6a5b417a9a6dd
+# Repo golang.org/x/net at f01ecb6 (2017-07-11)
+RUN go get -d golang.org/x/net/context `#and 2 other pkgs` &&\
+    (cd /go/src/golang.org/x/net && git reset --hard f01ecb60fe3835d80d9a0b7b2bf24b228c89260e)
 
-RUN go get -d github.com/googleapis/gax-go && \
-	cd /go/src/github.com/googleapis/gax-go && \
-	git reset --hard 9af46dd5a1713e8b5cd71106287eba3cefdde50b
+# Optimization to speed up iterative development, not necessary for correctness:
+RUN go install cloud.google.com/go/compute/metadata \
+	github.com/bradfitz/go-smtpd/smtpd \
+	github.com/jellevandenhooff/dkim \
+	go4.org/types \
+	golang.org/x/crypto/acme \
+	golang.org/x/crypto/acme/autocert \
+	golang.org/x/net/context \
+	golang.org/x/net/context/ctxhttp
+# END deps
 
 COPY . /go/src/golang.org/x/build/
 

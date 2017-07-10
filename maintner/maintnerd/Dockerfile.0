@@ -4,47 +4,149 @@
 FROM golang:1.8
 LABEL maintainer "golang-dev@googlegroups.com"
 
-RUN go get -d golang.org/x/oauth2 && \
-    cd /go/src/golang.org/x/oauth2 && git reset --hard 314dd2c0bf3ebd592ec0d20847d27e79d0dbe8dd
+# BEGIN deps (run `make update-deps` to update)
 
-RUN go get -d golang.org/x/net/context && \
-    cd /go/src/golang.org/x/net && git reset --hard 5602c733f70afc6dcec6766be0d5034d4c4f14de
+# Repo cloud.google.com/go at 2f1da5d (2017-05-01)
+RUN go get -d cloud.google.com/go/compute/metadata `#and 6 other pkgs` &&\
+    (cd /go/src/cloud.google.com/go && git reset --hard 2f1da5d762c81a12c516bfb8a9ede96f42750361)
 
-RUN go get -d github.com/google/go-github/github && \
-    cd /go/src/github.com/google/go-github && git reset --hard 6896997c7c9fe603fb9d2e8e92303bb18481e60a
+# Repo github.com/golang/protobuf at 6a1fa94 (2017-06-22)
+RUN go get -d github.com/golang/protobuf/proto `#and 6 other pkgs` &&\
+    (cd /go/src/github.com/golang/protobuf && git reset --hard 6a1fa9404c0aebf36c879bc50152edcc953910d2)
 
-RUN go get -d github.com/gregjones/httpcache && \
-    cd /go/src/github.com/gregjones/httpcache && git reset --hard d02018f006d98f58512bf3adfc171d88d17626df
+# Repo github.com/google/go-github at e8d4666 (2017-04-25)
+RUN go get -d github.com/google/go-github/github &&\
+    (cd /go/src/github.com/google/go-github && git reset --hard e8d46665e050742f457a58088b1e6b794b2ae966)
 
-RUN go get -d go4.org/types && \
-    cd /go/src/go4.org && git reset --hard 7ce08ca145dbe0e66a127c447b80ee7914f3e4f9
+# Repo github.com/google/go-querystring at 53e6ce1 (2017-01-11)
+RUN go get -d github.com/google/go-querystring/query &&\
+    (cd /go/src/github.com/google/go-querystring && git reset --hard 53e6ce116135b80d037921a7fdd5138cf32d7a8a)
 
-RUN go get -d golang.org/x/sync/errgroup && \
-    cd /go/src/golang.org/x/sync && git reset --hard 5a06fca2c336a4b2b2fcb45702e8c47621b2aa2c
+# Repo github.com/googleapis/gax-go at da06d19 (2016-11-07)
+RUN go get -d github.com/googleapis/gax-go &&\
+    (cd /go/src/github.com/googleapis/gax-go && git reset --hard da06d194a00e19ce00d9011a13931c3f6f6887c7)
 
-RUN go get -d github.com/golang/protobuf/proto && \
-    cd /go/src/github.com/golang/protobuf && git reset --hard 2bba0603135d7d7f5cb73b2125beeda19c09f4ef
+# Repo github.com/gregjones/httpcache at 0d2297f (2017-04-24)
+RUN go get -d github.com/gregjones/httpcache &&\
+    (cd /go/src/github.com/gregjones/httpcache && git reset --hard 0d2297f241a3503b4d464cd434e6d1490ec76e9a)
 
-RUN go get -d cloud.google.com/go/storage && \
-    cd /go/src/cloud.google.com/go && git reset --hard 2f1da5d762c81a12c516bfb8a9ede96f42750361
+# Repo go4.org at 034d17a (2017-05-25)
+RUN go get -d go4.org/types &&\
+    (cd /go/src/go4.org && git reset --hard 034d17a462f7b2dcd1a4a73553ec5357ff6e6c6e)
 
-RUN go get golang.org/x/crypto/acme/autocert && \
-    cd /go/src/golang.org/x/crypto && git reset --hard c7af5bf2638a1164f2eb5467c39c6cffbd13a02e
+# Repo golang.org/x/crypto at 0fe9631 (2017-05-16)
+RUN go get -d golang.org/x/crypto/acme `#and 2 other pkgs` &&\
+    (cd /go/src/golang.org/x/crypto && git reset --hard 0fe963104e9d1877082f8fb38f816fcd97eb1d10)
 
-RUN go get grpc.go4.org && \
-    cd /go/src/grpc.go4.org && git reset --hard 11d0a25b491971beb5a4625ea7856a3c4afaafa5
+# Repo golang.org/x/net at f01ecb6 (2017-07-11)
+RUN go get -d golang.org/x/net/context `#and 8 other pkgs` &&\
+    (cd /go/src/golang.org/x/net && git reset --hard f01ecb60fe3835d80d9a0b7b2bf24b228c89260e)
 
-# Optimization to speed COPY+go install steps later. This go install
-# isn't required for correctness.
-RUN go install golang.org/x/oauth2 \
-        golang.org/x/net/context \
-        github.com/google/go-github/github \
-        github.com/gregjones/httpcache \
-        go4.org/types \
-        golang.org/x/sync/errgroup \
-        github.com/golang/protobuf/proto \
-        cloud.google.com/go/storage \
-        golang.org/x/crypto/acme/autocert
+# Repo golang.org/x/oauth2 at ad516a2 (2017-05-10)
+RUN go get -d golang.org/x/oauth2 `#and 5 other pkgs` &&\
+    (cd /go/src/golang.org/x/oauth2 && git reset --hard ad516a297a9f2a74ecc244861b298c94bdd28b9d)
+
+# Repo golang.org/x/sync at 457c582 (2016-07-15)
+RUN go get -d golang.org/x/sync/errgroup &&\
+    (cd /go/src/golang.org/x/sync && git reset --hard 457c5828408160d6a47e17645169cf8fa20218c4)
+
+# Repo golang.org/x/text at cfdf022 (2017-07-06)
+RUN go get -d golang.org/x/text/secure/bidirule `#and 4 other pkgs` &&\
+    (cd /go/src/golang.org/x/text && git reset --hard cfdf022e86b4ecfb646e1efbd7db175dd623a8fa)
+
+# Repo google.golang.org/api at 16ab375 (2017-03-21)
+RUN go get -d google.golang.org/api/gensupport `#and 9 other pkgs` &&\
+    (cd /go/src/google.golang.org/api && git reset --hard 16ab375f94503bfa0d19db78e96bffbe1a34354f)
+
+# Repo google.golang.org/genproto at aa2eb68 (2017-06-01)
+RUN go get -d google.golang.org/genproto/googleapis/api/annotations `#and 3 other pkgs` &&\
+    (cd /go/src/google.golang.org/genproto && git reset --hard aa2eb687b4d3e17154372564ad8d6bf11c3cf21f)
+
+# Repo google.golang.org/grpc at 41d9b6e (2017-07-05)
+RUN go get -d google.golang.org/grpc `#and 15 other pkgs` &&\
+    (cd /go/src/google.golang.org/grpc && git reset --hard 41d9b6ea2a6335f3a22074ed35c0542c9da1baf4)
+
+# Repo grpc.go4.org at 11d0a25 (2017-06-09)
+RUN go get -d grpc.go4.org `#and 11 other pkgs` &&\
+    (cd /go/src/grpc.go4.org && git reset --hard 11d0a25b491971beb5a4625ea7856a3c4afaafa5)
+
+# Optimization to speed up iterative development, not necessary for correctness:
+RUN go install cloud.google.com/go/compute/metadata \
+	cloud.google.com/go/iam \
+	cloud.google.com/go/internal \
+	cloud.google.com/go/internal/optional \
+	cloud.google.com/go/internal/version \
+	cloud.google.com/go/storage \
+	github.com/golang/protobuf/proto \
+	github.com/golang/protobuf/protoc-gen-go/descriptor \
+	github.com/golang/protobuf/ptypes \
+	github.com/golang/protobuf/ptypes/any \
+	github.com/golang/protobuf/ptypes/duration \
+	github.com/golang/protobuf/ptypes/timestamp \
+	github.com/google/go-github/github \
+	github.com/google/go-querystring/query \
+	github.com/googleapis/gax-go \
+	github.com/gregjones/httpcache \
+	go4.org/types \
+	golang.org/x/crypto/acme \
+	golang.org/x/crypto/acme/autocert \
+	golang.org/x/net/context \
+	golang.org/x/net/context/ctxhttp \
+	golang.org/x/net/http2 \
+	golang.org/x/net/http2/hpack \
+	golang.org/x/net/idna \
+	golang.org/x/net/internal/timeseries \
+	golang.org/x/net/lex/httplex \
+	golang.org/x/net/trace \
+	golang.org/x/oauth2 \
+	golang.org/x/oauth2/google \
+	golang.org/x/oauth2/internal \
+	golang.org/x/oauth2/jws \
+	golang.org/x/oauth2/jwt \
+	golang.org/x/sync/errgroup \
+	golang.org/x/text/secure/bidirule \
+	golang.org/x/text/transform \
+	golang.org/x/text/unicode/bidi \
+	golang.org/x/text/unicode/norm \
+	google.golang.org/api/gensupport \
+	google.golang.org/api/googleapi \
+	google.golang.org/api/googleapi/internal/uritemplates \
+	google.golang.org/api/googleapi/transport \
+	google.golang.org/api/internal \
+	google.golang.org/api/iterator \
+	google.golang.org/api/option \
+	google.golang.org/api/storage/v1 \
+	google.golang.org/api/transport \
+	google.golang.org/genproto/googleapis/api/annotations \
+	google.golang.org/genproto/googleapis/iam/v1 \
+	google.golang.org/genproto/googleapis/rpc/status \
+	google.golang.org/grpc \
+	google.golang.org/grpc/codes \
+	google.golang.org/grpc/credentials \
+	google.golang.org/grpc/credentials/oauth \
+	google.golang.org/grpc/grpclb/grpc_lb_v1 \
+	google.golang.org/grpc/grpclog \
+	google.golang.org/grpc/internal \
+	google.golang.org/grpc/keepalive \
+	google.golang.org/grpc/metadata \
+	google.golang.org/grpc/naming \
+	google.golang.org/grpc/peer \
+	google.golang.org/grpc/stats \
+	google.golang.org/grpc/status \
+	google.golang.org/grpc/tap \
+	google.golang.org/grpc/transport \
+	grpc.go4.org \
+	grpc.go4.org/codes \
+	grpc.go4.org/credentials \
+	grpc.go4.org/grpclog \
+	grpc.go4.org/internal \
+	grpc.go4.org/metadata \
+	grpc.go4.org/naming \
+	grpc.go4.org/peer \
+	grpc.go4.org/stats \
+	grpc.go4.org/tap \
+	grpc.go4.org/transport
+# END deps
 
 COPY . /go/src/golang.org/x/build/
 

@@ -4,37 +4,61 @@
 FROM golang:1.8
 LABEL maintainer "golang-dev@googlegroups.com"
 
-RUN go get -d cloud.google.com/go/compute/metadata && \
-    cd /go/src/cloud.google.com/go/compute/metadata && \
-    git reset --hard cd0da878c66091060d2e7403abd62192b3e387e0
+# BEGIN deps (run `make update-deps` to update)
 
-RUN go get -d golang.org/x/oauth2 && \
-    cd /go/src/golang.org/x/oauth2 && \
-    git reset --hard 314dd2c0bf3ebd592ec0d20847d27e79d0dbe8dd
+# Repo cloud.google.com/go at 2f1da5d (2017-05-01)
+RUN go get -d cloud.google.com/go/compute/metadata &&\
+    (cd /go/src/cloud.google.com/go && git reset --hard 2f1da5d762c81a12c516bfb8a9ede96f42750361)
 
-RUN go get -d github.com/golang/protobuf/proto && \
-    cd /go/src/github.com/golang/protobuf/proto && \
-    git reset --hard 18c9bb3261723cd5401db4d0c9fbc5c3b6c70fe8
+# Repo github.com/golang/protobuf at 6a1fa94 (2017-06-22)
+RUN go get -d github.com/golang/protobuf/proto `#and 5 other pkgs` &&\
+    (cd /go/src/github.com/golang/protobuf && git reset --hard 6a1fa9404c0aebf36c879bc50152edcc953910d2)
 
-RUN go get -d github.com/google/go-github/github && \
-    cd /go/src/github.com/google/go-github/github && \
-    git reset --hard e8d46665e050742f457a58088b1e6b794b2ae966
+# Repo github.com/google/go-github at e8d4666 (2017-04-25)
+RUN go get -d github.com/google/go-github/github &&\
+    (cd /go/src/github.com/google/go-github && git reset --hard e8d46665e050742f457a58088b1e6b794b2ae966)
 
-RUN go get -d github.com/googleapis/gax-go && \
-    cd /go/src/github.com/googleapis/gax-go && \
-    git reset --hard 9af46dd5a1713e8b5cd71106287eba3cefdde50b
+# Repo github.com/google/go-querystring at 53e6ce1 (2017-01-11)
+RUN go get -d github.com/google/go-querystring/query &&\
+    (cd /go/src/github.com/google/go-querystring && git reset --hard 53e6ce116135b80d037921a7fdd5138cf32d7a8a)
 
-RUN go get -d golang.org/x/sync/errgroup && \
-    cd /go/src/golang.org/x/sync/errgroup && \
-    git reset --hard 457c5828408160d6a47e17645169cf8fa20218c4
+# Repo github.com/gregjones/httpcache at 0d2297f (2017-04-24)
+RUN go get -d github.com/gregjones/httpcache &&\
+    (cd /go/src/github.com/gregjones/httpcache && git reset --hard 0d2297f241a3503b4d464cd434e6d1490ec76e9a)
 
-RUN go get -d github.com/gregjones/httpcache && \
-    cd /go/src/github.com/gregjones/httpcache && \
-    git reset --hard d02018f006d98f58512bf3adfc171d88d17626df
+# Repo go4.org at 034d17a (2017-05-25)
+RUN go get -d go4.org/types &&\
+    (cd /go/src/go4.org && git reset --hard 034d17a462f7b2dcd1a4a73553ec5357ff6e6c6e)
 
-RUN go get -d go4.org/types && \
-    cd /go/src/go4.org && \
-    git reset --hard 7ce08ca145dbe0e66a127c447b80ee7914f3e4f9
+# Repo golang.org/x/net at f01ecb6 (2017-07-11)
+RUN go get -d golang.org/x/net/context `#and 2 other pkgs` &&\
+    (cd /go/src/golang.org/x/net && git reset --hard f01ecb60fe3835d80d9a0b7b2bf24b228c89260e)
+
+# Repo golang.org/x/oauth2 at ad516a2 (2017-05-10)
+RUN go get -d golang.org/x/oauth2 `#and 2 other pkgs` &&\
+    (cd /go/src/golang.org/x/oauth2 && git reset --hard ad516a297a9f2a74ecc244861b298c94bdd28b9d)
+
+# Repo golang.org/x/sync at 457c582 (2016-07-15)
+RUN go get -d golang.org/x/sync/errgroup &&\
+    (cd /go/src/golang.org/x/sync && git reset --hard 457c5828408160d6a47e17645169cf8fa20218c4)
+
+# Optimization to speed up iterative development, not necessary for correctness:
+RUN go install cloud.google.com/go/compute/metadata \
+	github.com/golang/protobuf/proto \
+	github.com/golang/protobuf/ptypes \
+	github.com/golang/protobuf/ptypes/any \
+	github.com/golang/protobuf/ptypes/duration \
+	github.com/golang/protobuf/ptypes/timestamp \
+	github.com/google/go-github/github \
+	github.com/google/go-querystring/query \
+	github.com/gregjones/httpcache \
+	go4.org/types \
+	golang.org/x/net/context \
+	golang.org/x/net/context/ctxhttp \
+	golang.org/x/oauth2 \
+	golang.org/x/oauth2/internal \
+	golang.org/x/sync/errgroup
+# END deps
 
 COPY . /go/src/golang.org/x/build/
 

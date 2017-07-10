@@ -14,6 +14,10 @@ gitmirror: build0
 	docker cp $(DOCKER_CTR_build0):/go/bin/$@ $@
 	docker rm $(DOCKER_CTR_build0)
 
+update-deps:
+	go install golang.org/x/build/cmd/gitlock
+	gitlock --update=Dockerfile.0 golang.org/x/build/cmd/gitmirror
+
 docker-prod: Dockerfile gitmirror
 	docker build --force-rm --tag=gcr.io/symbolic-datum-552/gitmirror:$(VERSION) .
 docker-dev: Dockerfile gitmirror

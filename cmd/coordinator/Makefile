@@ -20,6 +20,10 @@ dev-upload: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=linux-amd64 --file=go:golang.org/x/build/cmd/coordinator --public dev-go-builder-data/coordinator
 
+update-deps:
+	go install golang.org/x/build/cmd/gitlock
+	gitlock --update=Dockerfile.0 golang.org/x/build/cmd/coordinator
+
 VERSION=v1
 DOCKER_IMAGE_build0=build0/coordinator:latest
 DOCKER_CTR_build0=coordinator-build0
