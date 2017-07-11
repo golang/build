@@ -7,15 +7,19 @@ import anita
 import ftplib
 import sys
 
-def find_latest_release(arch):
+def find_latest_release(branch, arch):
   """Find the latest NetBSD-current release for the given arch.
+
+  Args:
+    branch: the NetBSD branch (e.g. HEAD, netbsd-8).
+    arch: the architecture (e.g. amd64).
 
   Returns:
     the full path to the release.
   """
   conn = ftplib.FTP('nyftp.netbsd.org')
   conn.login()
-  conn.cwd('/pub/NetBSD-daily/HEAD')
+  conn.cwd('/pub/NetBSD-daily/%s' % branch)
   releases = conn.nlst()
   releases.sort(reverse=True)
   for r in releases:
@@ -24,7 +28,8 @@ def find_latest_release(arch):
       next
     has_arch = [a for a in archs if a.endswith(arch)]
     if has_arch:
-      return "ftp://nyftp.netbsd.org/pub/NetBSD-daily/HEAD/%s/" % has_arch[0]
+      # nyftp.n.o does not offer https :(
+      return "http://nyftp.netbsd.org/pub/NetBSD-daily/%s/%s/" % (branch, has_arch[0])
 
 
 arch = sys.argv[1]
@@ -56,9 +61,9 @@ EOF""",
 !route add default \`ifconfig vioif0 | awk '/inet / { print \$2 }' | sed 's/[0-9]*$/1/'\` -ifp vioif0
 EOF""",
     "dhcpcd",
-    "env PKG_PATH=https://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add bash curl dhcpcd" % (arch, release),
-    "env PKG_PATH=https://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add git-base" % (arch, release),
-    "env PKG_PATH=https://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add mozilla-rootcerts go14" % (arch, release),
+    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add bash curl dhcpcd" % (arch, release),
+    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add git-base" % (arch, release),
+    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add mozilla-rootcerts go14" % (arch, release),
     """ed /etc/fstab << EOF
 H
 %s/wd0/sd0/
@@ -72,7 +77,7 @@ EOF""",
 
 a = anita.Anita(
     # TODO(bsiegert) use latest
-    anita.URL("https://cdn.NetBSD.org/pub/NetBSD/NetBSD-7.1_RC1/%s/" % arch),
+    anita.URL(find_latest_release("netbsd-8", arch)),
     workdir="work-NetBSD-%s" % arch,
     disk_size="4G",
     memory_size = "1G",
