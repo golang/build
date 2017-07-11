@@ -581,6 +581,9 @@ var windowsData = map[string]string{
 <Property Id="LicenseAccepted">1</Property>
 <Icon Id="gopher.ico" SourceFile="images\gopher.ico"/>
 <Property Id="ARPPRODUCTICON" Value="gopher.ico" />
+<Property Id="EXISTING_GOLANG_INSTALLED">
+  <RegistrySearch Id="installed" Type="raw" Root="HKCU" Key="Software\GoProgrammingLanguage" Name="installed" />
+</Property>
 <Media Id='1' Cabinet="go.cab" EmbedCab="yes" CompressionLevel="high" />
 <Condition Message="Windows XP (with Service Pack 2) or greater required.">
      (VersionNT >= 501 AND (WindowsBuild > 2600 OR ServicePackLevel >= 2))
@@ -697,9 +700,86 @@ var windowsData = map[string]string{
 <WixVariable Id="WixUIBannerBmp" Value="images\Banner.jpg" />
 <WixVariable Id="WixUIDialogBmp" Value="images\Dialog.jpg" />
 <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
-<UIRef Id="WixUI_InstallDir" />
+<UIRef Id="Golang_InstallDir" />
 
 </Product>
+<Fragment>
+  <!--
+    The installer steps are modified so we can get user confirmation to uninstall an existing golang installation.
+
+    WelcomeDlg  [not installed]  =>                  LicenseAgreementDlg => InstallDirDlg  ..
+                [installed]      => OldVersionDlg => LicenseAgreementDlg => InstallDirDlg  ..
+  -->
+  <UI Id="Golang_InstallDir">
+    <!-- style -->
+    <TextStyle Id="WixUI_Font_Normal" FaceName="Tahoma" Size="8" />
+    <TextStyle Id="WixUI_Font_Bigger" FaceName="Tahoma" Size="12" />
+    <TextStyle Id="WixUI_Font_Title" FaceName="Tahoma" Size="9" Bold="yes" />
+
+    <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
+    <Property Id="WixUI_Mode" Value="InstallDir" />
+
+    <!-- dialogs -->
+    <DialogRef Id="BrowseDlg" />
+    <DialogRef Id="DiskCostDlg" />
+    <DialogRef Id="ErrorDlg" />
+    <DialogRef Id="FatalError" />
+    <DialogRef Id="FilesInUse" />
+    <DialogRef Id="MsiRMFilesInUse" />
+    <DialogRef Id="PrepareDlg" />
+    <DialogRef Id="ProgressDlg" />
+    <DialogRef Id="ResumeDlg" />
+    <DialogRef Id="UserExit" />
+    <Dialog Id="OldVersionDlg" Width="240" Height="95" Title="[ProductName] Setup" NoMinimize="yes">
+      <Control Id="Text" Type="Text" X="28" Y="15" Width="194" Height="50">
+        <Text>A previous version of Go Programming Language is currently installed. By continuing the installation this version will be uninstalled. Do you want to continue?</Text>
+      </Control>
+      <Control Id="Exit" Type="PushButton" X="123" Y="67" Width="62" Height="17"
+        Default="yes" Cancel="yes" Text="No, Exit">
+        <Publish Event="EndDialog" Value="Exit">1</Publish>
+      </Control>
+      <Control Id="Next" Type="PushButton" X="55" Y="67" Width="62" Height="17" Text="Yes, Uninstall">
+        <Publish Event="EndDialog" Value="Return">1</Publish>
+      </Control>
+    </Dialog>
+
+    <!-- wizard steps -->
+    <Publish Dialog="BrowseDlg" Control="OK" Event="DoAction" Value="WixUIValidatePath" Order="3">1</Publish>
+    <Publish Dialog="BrowseDlg" Control="OK" Event="SpawnDialog" Value="InvalidDirDlg" Order="4"><![CDATA[NOT WIXUI_DONTVALIDATEPATH AND WIXUI_INSTALLDIR_VALID<>"1"]]></Publish>
+
+    <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" Order="999">1</Publish>
+
+    <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="OldVersionDlg"><![CDATA[EXISTING_GOLANG_INSTALLED << "#1"]]> </Publish>
+    <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="LicenseAgreementDlg"><![CDATA[NOT (EXISTING_GOLANG_INSTALLED << "#1")]]></Publish>
+
+    <Publish Dialog="OldVersionDlg" Control="Next" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+
+    <Publish Dialog="LicenseAgreementDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg">1</Publish>
+    <Publish Dialog="LicenseAgreementDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg">LicenseAccepted = "1"</Publish>
+
+    <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="LicenseAgreementDlg">1</Publish>
+    <Publish Dialog="InstallDirDlg" Control="Next" Event="SetTargetPath" Value="[WIXUI_INSTALLDIR]" Order="1">1</Publish>
+    <Publish Dialog="InstallDirDlg" Control="Next" Event="DoAction" Value="WixUIValidatePath" Order="2">NOT WIXUI_DONTVALIDATEPATH</Publish>
+    <Publish Dialog="InstallDirDlg" Control="Next" Event="SpawnDialog" Value="InvalidDirDlg" Order="3"><![CDATA[NOT WIXUI_DONTVALIDATEPATH AND WIXUI_INSTALLDIR_VALID<>"1"]]></Publish>
+    <Publish Dialog="InstallDirDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Order="4">WIXUI_DONTVALIDATEPATH OR WIXUI_INSTALLDIR_VALID="1"</Publish>
+    <Publish Dialog="InstallDirDlg" Control="ChangeFolder" Property="_BrowseProperty" Value="[WIXUI_INSTALLDIR]" Order="1">1</Publish>
+    <Publish Dialog="InstallDirDlg" Control="ChangeFolder" Event="SpawnDialog" Value="BrowseDlg" Order="2">1</Publish>
+
+    <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="InstallDirDlg" Order="1">NOT Installed</Publish>
+    <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="MaintenanceTypeDlg" Order="2">Installed AND NOT PATCH</Publish>
+    <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="2">Installed AND PATCH</Publish>
+
+    <Publish Dialog="MaintenanceWelcomeDlg" Control="Next" Event="NewDialog" Value="MaintenanceTypeDlg">1</Publish>
+
+    <Publish Dialog="MaintenanceTypeDlg" Control="RepairButton" Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
+    <Publish Dialog="MaintenanceTypeDlg" Control="RemoveButton" Event="NewDialog" Value="VerifyReadyDlg">1</Publish>
+    <Publish Dialog="MaintenanceTypeDlg" Control="Back" Event="NewDialog" Value="MaintenanceWelcomeDlg">1</Publish>
+
+    <Property Id="ARPNOMODIFY" Value="1" />
+  </UI>
+
+  <UIRef Id="WixUI_Common" />
+</Fragment>
 </Wix>
 `,
 
