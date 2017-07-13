@@ -27,6 +27,7 @@ a:visited {
 }
 .Site-content {
   border-right: 1px solid #3a3939;
+  overflow: hidden;
   padding: 1.5em;
   width: 60%;
 }
@@ -38,6 +39,10 @@ a:visited {
 .Site-logo {
   height: 60px;
   margin-right: 2em;
+}
+.Site-pointsTitle,
+.Site-points {
+  text-align: center;
 }
 .Site-pointsTitle {
   font-size: 4vh;
@@ -55,9 +60,9 @@ a:visited {
   flex-wrap: wrap;
 }
 .AvatarGroup-avatar {
-  height: 5vh;
+  height: 6vh;
   margin: 0 .5em .5em 0;
-  width: 5vh;
+  width: 6vh;
 }
 .Activity {
   align-items: flex-start;
@@ -182,7 +187,7 @@ a:visited {
     Object.keys(avatarMap).forEach(k => {
       const el = avatarMap[k];
       el.classList.add('AvatarGroup-avatar');
-      avatarGroupEl.appendChild(el);
+      avatarGroupEl.insertBefore(el, avatarGroupEl.firstChild);
     });
   }
 
