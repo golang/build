@@ -18,7 +18,7 @@ a:visited {
   display: flex;
   flex-direction: column;
   font: 14px 'Helvetica-Neue', Helvetica, sans-serif;
-  min-height: 100vh;
+  height: 100vh;
   text-rendering: optimizeLegibility;
 }
 .Site-body {
@@ -33,6 +33,7 @@ a:visited {
 .Site-activity {
   background-color: #323232;
   flex: 1;
+  overflow: scroll;
 }
 .Site-logo {
   height: 60px;
@@ -96,7 +97,7 @@ a:visited {
   <div class="Site-body">
     <main class="Site-content">
       <div class="Site-pointsTitle">Total points</div>
-      <div class="Site-points">123</div>
+      <div class="Site-points js-totalPoints">0</div>
       <div class="AvatarGroup js-avatarGroup"></div>
     </main>
     <aside class="Site-activity js-activityList"></aside>
@@ -130,21 +131,37 @@ a:visited {
   const ActivityType = {
     AMEND_CHANGE: 'AMEND_CHANGE',
     CREATE_CHANGE: 'CREATE_CHANGE',
+    MERGE_CHANGE: 'MERGE_CHANGE',
     REGISTER: 'REGISTER',
   };
 
   const iconMap = {};
   iconMap.AMEND_CHANGE = '👍';
   iconMap.CREATE_CHANGE = '👏';
+  iconMap.MERGE_CHANGE = '🤘';
   iconMap.REGISTER = '🎉';
 
-  fetch('/_/activities').then(resp => {
-    resp.json().then(obj => {
-      processAll(obj.activities);
+  let lastUpdateMs = 0;
+  getActivities(lastUpdateMs);
+  startUpdateLoop();
+
+  function getActivities(since) {
+    const url = `/_/activities?since=${since}`;
+    fetch(url).then(resp => {
+      resp.json().then(obj => {
+        processAll(obj.activities);
+        updatePoints(obj.totalPoints);
+      });
+    }).catch(err => {
+      console.error(err);
     });
-  }).catch(err => {
-    alert(err);
-  });
+  }
+
+  function startUpdateLoop() {
+    window.setInterval(() => {
+      getActivities(lastUpdateMs);
+    }, 5000);
+  }
 
   // Username => img element.
   let avatarMap = {};
@@ -156,14 +173,21 @@ a:visited {
         avatarMap[activity.gitHubUser] = createAvatarEl(activity.gitHubUser);
       }
       const activityEl = createActivityEl(activity);
-      activityListEl.appendChild(activityEl);
+      activityListEl.insertBefore(activityEl, activityListEl.firstChild);
     });
+    if (activities.length > 0) {
+      lastUpdateMs = new Date(activities[activities.length - 1].created).getTime();
+    }
     const avatarGroupEl = document.querySelector('.js-avatarGroup');
     Object.keys(avatarMap).forEach(k => {
       const el = avatarMap[k];
       el.classList.add('AvatarGroup-avatar');
       avatarGroupEl.appendChild(el);
     });
+  }
+
+  function updatePoints(points) {
+    document.querySelector('.js-totalPoints').textContent = points;
   }
 
   function createAvatarEl(username) {
@@ -190,18 +214,16 @@ a:visited {
       case ActivityType.CREATE_CHANGE:
       return `${username} just created a change!`;
 
+      case ActivityType.MERGE_CHANGE:
+      return `${username} just merged a change!`;
+
       case ActivityType.REGISTER:
       return `${username} just registered!`;
     }
   }
 
-  const pointMap = {};
-  pointMap.AMEND_CHANGE = 2;
-  pointMap.CREATE_CHANGE = 2;
-  pointMap.REGISTER = 1;
-
-  function activityPoints(type) {
-    return `+${pointMap[type]} Point` + (pointMap[type] > 1 ? 's' : '');
+  function pointsStr(points) {
+    return `+${points} Point` + (points > 1 ? 's' : '');
   }
 
   function createActivityEl(activity) {
@@ -213,7 +235,7 @@ a:visited {
     tmpl.content.querySelector('.js-body').textContent =
         activityBody(activity.type, activity.gitHubUser);
     tmpl.content.querySelector('.js-points').textContent =
-        activityPoints(activity.type);
+        pointsStr(activity.points);
     return document.importNode(tmpl.content, true);
   }
 })();

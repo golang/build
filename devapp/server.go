@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"net/http"
 	"path"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -31,6 +32,7 @@ type server struct {
 	helpWantedIssues []int32
 	userMapping      map[int]*maintner.GitHubUser // Gerrit Owner ID => GitHub user
 	activities       []activity                   // All contribution activities
+	totalPoints      int
 }
 
 func newServer(mux *http.ServeMux, staticDir string) *server {
@@ -145,7 +147,15 @@ const (
 	activityTypeRegister     = "REGISTER"
 	activityTypeCreateChange = "CREATE_CHANGE"
 	activityTypeAmendChange  = "AMEND_CHANGE"
+	activityTypeMergeChange  = "MERGE_CHANGE"
 )
+
+var pointsPerActivity = map[string]int{
+	activityTypeRegister:     1,
+	activityTypeCreateChange: 2,
+	activityTypeAmendChange:  2,
+	activityTypeMergeChange:  3,
+}
 
 // An activity represents something a contributor has done. e.g. register on
 // the GitHub issue, create a change, amend a change, etc.
@@ -153,11 +163,10 @@ type activity struct {
 	Type    string    `json:"type"`
 	Created time.Time `json:"created"`
 	User    string    `json:"gitHubUser"`
+	Points  int       `json:"points"`
 }
 
 func (s *server) updateActivities() {
-	// TODO(andybons): This is a lot of redundant work for every little change.
-	// Remember current state.
 	s.cMu.Lock()
 	defer s.cMu.Unlock()
 	repo := s.corpus.GitHub().Repo("golang", "go")
@@ -170,35 +179,103 @@ func (s *server) updateActivities() {
 		log.Printf("repo.Issue(%d) = nil", issueNumGerritUserMapping)
 		return
 	}
+	latest := issue.Created
+	if len(s.activities) > 0 {
+		latest = s.activities[len(s.activities)-1].Created
+	}
+
+	var newActivities []activity
 	issue.ForeachComment(func(c *maintner.GitHubComment) error {
+		if !c.Created.After(latest) {
+			return nil
+		}
 		id, ok := intFromStr(c.Body)
 		if !ok {
 			return fmt.Errorf("intFromStr(%q) = %v", c.Body, ok)
 		}
 		s.userMapping[id] = c.User
 
-		var latest time.Time
-		if len(s.activities) == 0 {
-			s.activities = []activity{}
-		} else {
-			latest = s.activities[len(s.activities)-1].Created
-		}
-		if c.Created.After(latest) {
-			s.activities = append(s.activities, activity{
-				Type:    activityTypeRegister,
-				Created: c.Created,
-				User:    c.User.Login,
-			})
-		}
+		newActivities = append(newActivities, activity{
+			Type:    activityTypeRegister,
+			Created: c.Created,
+			User:    c.User.Login,
+			Points:  pointsPerActivity[activityTypeRegister],
+		})
+		s.totalPoints += pointsPerActivity[activityTypeRegister]
 		return nil
 	})
+
+	s.corpus.Gerrit().ForeachProjectUnsorted(func(p *maintner.GerritProject) error {
+		p.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
+			if !cl.Commit.CommitTime.After(latest) {
+				return nil
+			}
+			user := s.userMapping[cl.OwnerID()]
+			if user == nil {
+				return nil
+			}
+
+			newActivities = append(newActivities, activity{
+				Type:    activityTypeCreateChange,
+				Created: cl.Created,
+				User:    user.Login,
+				Points:  pointsPerActivity[activityTypeCreateChange],
+			})
+			s.totalPoints += pointsPerActivity[activityTypeCreateChange]
+			if cl.Version > 1 {
+				newActivities = append(newActivities, activity{
+					Type:    activityTypeAmendChange,
+					Created: cl.Commit.CommitTime,
+					User:    user.Login,
+					Points:  pointsPerActivity[activityTypeAmendChange],
+				})
+				s.totalPoints += pointsPerActivity[activityTypeAmendChange]
+			}
+			if cl.Status == "merged" {
+				newActivities = append(newActivities, activity{
+					Type:    activityTypeMergeChange,
+					Created: cl.Commit.CommitTime,
+					User:    user.Login,
+					Points:  pointsPerActivity[activityTypeMergeChange],
+				})
+				s.totalPoints += pointsPerActivity[activityTypeMergeChange]
+			}
+			return nil
+		})
+		return nil
+	})
+
+	sort.Sort(byCreated(newActivities))
+	s.activities = append(s.activities, newActivities...)
 }
 
+type byCreated []activity
+
+func (a byCreated) Len() int           { return len(a) }
+func (a byCreated) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a byCreated) Less(i, j int) bool { return a[i].Created.Before(a[j].Created) }
+
 func (s *server) handleActivities(w http.ResponseWriter, r *http.Request) {
+	i, _ := strconv.Atoi(r.FormValue("since"))
+	since := time.Unix(int64(i)/1000, 0)
+
+	recentActivity := []activity{}
+	for _, a := range s.activities {
+		if a.Created.After(since) {
+			recentActivity = append(recentActivity, a)
+		}
+	}
+
+	s.cMu.RLock()
+	defer s.cMu.RUnlock()
 	w.Header().Set("Content-Type", "application/json")
 	result := struct {
-		Activities []activity `json:"activities"`
-	}{s.activities}
+		Activities  []activity `json:"activities"`
+		TotalPoints int        `json:"totalPoints"`
+	}{
+		Activities:  recentActivity,
+		TotalPoints: s.totalPoints,
+	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		log.Printf("Encode(%+v) = %v", result, err)
 		return
