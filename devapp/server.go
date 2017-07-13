@@ -119,18 +119,17 @@ func (s *server) updateHelpWantedIssues() {
 	s.helpWantedIssues = ids
 }
 
-// intFromStr returns the last integer within s, allowing for non-numeric
+// intFromStr returns the first integer within s, allowing for non-numeric
 // characters to be present.
 func intFromStr(s string) (int, bool) {
 	var (
 		foundNum bool
-		r, p     int
+		r        int
 	)
-	for i := len(s) - 1; i >= 0; i-- {
+	for i := 0; i < len(s); i++ {
 		if s[i] >= '0' && s[i] <= '9' {
 			foundNum = true
-			r += r*10 + int(s[i]-'0')
-			p++
+			r = r*10 + int(s[i]-'0')
 		} else if foundNum {
 			return r, true
 		}

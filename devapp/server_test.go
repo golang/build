@@ -78,8 +78,8 @@ func TestIntFromStr(t *testing.T) {
 	}{
 		{"123", 123},
 		{"User ID: 98403", 98403},
-		{"1234 User 5431 ID", 5431},
-		{"Stardate 153.2415", 2415},
+		{"1234 User 5431 ID", 1234},
+		{"Stardate 153.2415", 153},
 	}
 	for _, tc := range testcases {
 		r, ok := intFromStr(tc.s)
@@ -91,7 +91,7 @@ func TestIntFromStr(t *testing.T) {
 		}
 	}
 	noInt := "hello there"
-	r, ok := intFromStr(noInt)
+	_, ok := intFromStr(noInt)
 	if ok {
 		t.Errorf("intFromStr(%q) = %v; want false", noInt, ok)
 	}
