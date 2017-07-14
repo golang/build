@@ -122,9 +122,9 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		env:                []string{"CC=clang"},
 	},
-	"host-netbsd-71": &HostConfig{
-		VMImage:            "netbsd-amd64-71",
-		Notes:              "NetBSD 7.1RC1; GCE VM is built from script in build/env/netbsd-amd64",
+	"host-netbsd-8branch": &HostConfig{
+		VMImage:            "netbsd-amd64-8branch",
+		Notes:              "NetBSD 8.? from the netbsd-8 branch; GCE VM is built from script in build/env/netbsd-amd64",
 		machineType:        "n1-highcpu-2",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.netbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64.tar.gz",
@@ -956,13 +956,15 @@ func init() {
 		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})
 	addBuilder(BuildConfig{
-		Name:     "netbsd-amd64-71",
-		HostType: "host-netbsd-71",
+		Name:      "netbsd-amd64-8branch",
+		HostType:  "host-netbsd-8branch",
+		MaxAtOnce: 1,
 	})
 	addBuilder(BuildConfig{
-		Name:     "netbsd-386-71",
-		HostType: "host-netbsd-71",
-		env:      []string{"GOARCH=386", "GOHOSTARCH=386"},
+		Name:      "netbsd-386-8branch",
+		HostType:  "host-netbsd-8branch",
+		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
+		MaxAtOnce: 1,
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-386",
