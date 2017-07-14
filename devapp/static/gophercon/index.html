@@ -58,6 +58,7 @@ a:visited {
 .AvatarGroup {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
 }
 .AvatarGroup-avatar {
   height: 6vh;
@@ -173,22 +174,21 @@ a:visited {
 
   function processAll(activities) {
     const activityListEl = document.querySelector('.js-activityList');
+    const avatarGroupEl = document.querySelector('.js-avatarGroup');
     activities.forEach(activity => {
       if (!avatarMap[activity.gitHubUser]) {
-        avatarMap[activity.gitHubUser] = createAvatarEl(activity.gitHubUser);
+        const el = createAvatarEl(activity.gitHubUser);
+        el.classList.add('AvatarGroup-avatar');
+        avatarMap[activity.gitHubUser] = el;
       }
+      avatarGroupEl.insertBefore(avatarMap[activity.gitHubUser],
+          avatarGroupEl.firstChild);
       const activityEl = createActivityEl(activity);
       activityListEl.insertBefore(activityEl, activityListEl.firstChild);
     });
     if (activities.length > 0) {
       lastUpdateMs = new Date(activities[activities.length - 1].created).getTime();
     }
-    const avatarGroupEl = document.querySelector('.js-avatarGroup');
-    Object.keys(avatarMap).forEach(k => {
-      const el = avatarMap[k];
-      el.classList.add('AvatarGroup-avatar');
-      avatarGroupEl.insertBefore(el, avatarGroupEl.firstChild);
-    });
   }
 
   function updatePoints(points) {
