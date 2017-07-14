@@ -347,6 +347,29 @@ func (c *Client) QueryChanges(ctx context.Context, q string, opts ...QueryChange
 	return changes, err
 }
 
+// GetChange returns information about a single change.
+// For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#get-change
+// If the change doesn't exist, the error will be ErrChangeNotExist.
+func (c *Client) GetChange(ctx context.Context, changeID int32, opts ...QueryChangesOpt) (*ChangeInfo, error) {
+	var opt QueryChangesOpt
+	switch len(opts) {
+	case 0:
+	case 1:
+		opt = opts[0]
+	default:
+		return nil, errors.New("only 1 option struct supported")
+	}
+	change := new(ChangeInfo)
+	err := c.do(ctx, change, "GET", "/changes/"+strconv.Itoa(int(changeID)), urlValues{
+		"n": condInt(opt.N),
+		"o": opt.Fields,
+	})
+	if he, ok := err.(*HTTPError); ok && he.Res.StatusCode == 404 {
+		return nil, ErrChangeNotExist
+	}
+	return change, err
+}
+
 // GetChangeDetail retrieves a change with labels, detailed labels, detailed
 // accounts, and messages.
 // For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#get-change-detail
@@ -476,6 +499,11 @@ func (c *Client) CreateProject(ctx context.Context, name string, p ...ProjectInp
 // It is not necessarily returned unless a method is documented as
 // returning it.
 var ErrProjectNotExist = errors.New("gerrit: requested project does not exist")
+
+// ErrChangeNotExist is returned when a change doesn't exist.
+// It is not necessarily returned unless a method is documented as
+// returning it.
+var ErrChangeNotExist = errors.New("gerrit: requested change does not exist")
 
 // GetProjectInfo returns info about a project.
 // If the project doesn't exist, the error will be ErrProjectNotExist.
