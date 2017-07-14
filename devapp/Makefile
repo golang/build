@@ -2,7 +2,13 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-VERSION=latest
+# Set dirty suffix depending on output of "git status".
+DIRTY = ""
+ifneq ($(shell git status --porcelain -- .),)
+  DIRTY = "-tainted"
+endif
+VERSION ?= `git show --format='%h' --no-patch`$(DIRTY)
+
 DOCKER_IMAGE_build0=build0/devapp:latest
 DOCKER_CTR_build0=devapp-build0
 
@@ -26,12 +32,12 @@ update-deps:
 docker-prod: Dockerfile devapp ca-certificates.crt
 	docker build --force-rm --tag=gcr.io/symbolic-datum-552/devapp:$(VERSION) .
 docker-dev: Dockerfile devapp ca-certificates.crt
-	docker build --force-rm --tag=gcr.io/go-dashboard-dev/devapp:latest .
+	docker build --force-rm --tag=gcr.io/go-dashboard-dev/devapp:$(VERSION) .
 
 push-prod: docker-prod
 	gcloud docker -- push gcr.io/symbolic-datum-552/devapp:$(VERSION)
 push-dev: docker-dev
-	gcloud docker -- push gcr.io/go-dashboard-dev/devapp:latest
+	gcloud docker -- push gcr.io/go-dashboard-dev/devapp:$(VERSION)
 
 .PHONY: clean
 clean:
