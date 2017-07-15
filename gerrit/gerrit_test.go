@@ -139,7 +139,7 @@ func TestGetChange(t *testing.T) {
 	}))
 	defer s.Close()
 	c := NewClient(s.URL, NoAuth)
-	info, err := c.GetChange(context.Background(), 48330, QueryChangesOpt{
+	info, err := c.GetChange(context.Background(), "48330", QueryChangesOpt{
 		Fields: []string{"MESSAGES"},
 	})
 	if err != nil {
@@ -170,7 +170,7 @@ func TestGetChangeError(t *testing.T) {
 	}))
 	defer s.Close()
 	c := NewClient(s.URL, NoAuth)
-	_, err := c.GetChange(context.Background(), 99999, QueryChangesOpt{
+	_, err := c.GetChange(context.Background(), "99999", QueryChangesOpt{
 		Fields: []string{"MESSAGES"},
 	})
 	if err != ErrChangeNotExist {
