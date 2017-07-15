@@ -96,7 +96,7 @@ func (s *server) corpusUpdateLoop(ctx context.Context) {
 const (
 	labelIDHelpWanted         = 150880243
 	issuesURLBase             = "https://github.com/golang/go/issues/"
-	issueNumGerritUserMapping = 20945 // Special sign-up issue.
+	issueNumGerritUserMapping = 21017 // Special sign-up issue.
 )
 
 func (s *server) updateHelpWantedIssues() {
