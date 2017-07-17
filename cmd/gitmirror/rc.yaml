@@ -11,6 +11,9 @@ spec:
       name: gitmirror
       labels:
         app: gitmirror
+      annotations:
+        container.seccomp.security.alpha.kubernetes.io/gitmirror: docker/default
+        container.apparmor.security.beta.kubernetes.io/gitmirror: runtime/default
     spec:
       volumes:
       - name: cache-volume

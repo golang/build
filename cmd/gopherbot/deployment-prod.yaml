@@ -8,6 +8,9 @@ spec:
     metadata:
       labels:
         app: gopherbot
+      annotations:
+        container.seccomp.security.alpha.kubernetes.io/gopherbot: docker/default
+        container.apparmor.security.beta.kubernetes.io/gopherbot: runtime/default
     spec:
       volumes:
       - name: cache-volume

@@ -8,6 +8,9 @@ spec:
     metadata:
       labels:
         app: pubsubhelper
+      annotations:
+        container.seccomp.security.alpha.kubernetes.io/pubsubhelper: docker/default
+        container.apparmor.security.beta.kubernetes.io/pubsubhelper: runtime/default
     spec:
       volumes:
       - name: pv-autocert-cache

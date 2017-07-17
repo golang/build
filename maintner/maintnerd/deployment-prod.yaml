@@ -8,6 +8,9 @@ spec:
     metadata:
       labels:
         app: maintner
+      annotations:
+        container.seccomp.security.alpha.kubernetes.io/maintnerd: docker/default
+        container.apparmor.security.beta.kubernetes.io/maintnerd: runtime/default
     spec:
       volumes:
       - name: pv-maintner-cache
