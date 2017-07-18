@@ -129,6 +129,18 @@ func (gr *GitHubRepo) ForeachLabel(fn func(*GitHubLabel) error) error {
 	return nil
 }
 
+// ForeachMilestone calls fn for each milestone in the repo, in unsorted order.
+//
+// Iteration ends if fn returns an error, with that error.
+func (gr *GitHubRepo) ForeachMilestone(fn func(*GitHubMilestone) error) error {
+	for _, m := range gr.milestones {
+		if err := fn(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ForeachIssue calls fn for each issue in the repo.
 //
 // If fn returns an error, iteration ends and ForeachIssue returns

@@ -7,7 +7,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -21,13 +20,10 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/autocertcache"
-	"golang.org/x/build/gerrit"
-	"golang.org/x/build/godash"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/http2"
 )
@@ -44,15 +40,13 @@ func main() {
 		listen         = flag.String("listen", "localhost:6343", "listen address")
 		devTLSPort     = flag.Int("dev-tls-port", 0, "if non-zero, port number to run localhost self-signed TLS server")
 		autocertBucket = flag.String("autocert-bucket", "", "if non-empty, listen on port 443 and serve a LetsEncrypt TLS cert using this Google Cloud Storage bucket as a cache")
-		updateInterval = flag.Duration("update-interval", 5*time.Minute, "how often to update the dashboard data")
 		staticDir      = flag.String("static-dir", "./static/", "location of static directory relative to binary location")
+		templateDir    = flag.String("template-dir", "./templates/", "location of templates directory relative to binary location")
 	)
 	flag.Parse()
 	rand.Seed(time.Now().UnixNano())
 
-	go updateLoop(*updateInterval)
-
-	s := newServer(http.NewServeMux(), *staticDir)
+	s := newServer(http.NewServeMux(), *staticDir, *templateDir)
 	ctx := context.Background()
 	s.initCorpus(ctx)
 	go s.corpusUpdateLoop(ctx)
@@ -81,16 +75,6 @@ func main() {
 	}
 
 	log.Fatal(<-errc)
-}
-
-func updateLoop(interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	for {
-		if err := update(); err != nil {
-			log.Printf("update: %v", err)
-		}
-		<-ticker.C
-	}
 }
 
 func redirectHTTP(w http.ResponseWriter, r *http.Request) {
@@ -170,71 +154,4 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 	tc.SetKeepAlive(true)
 	tc.SetKeepAlivePeriod(3 * time.Minute)
 	return tc, nil
-}
-
-type countTransport struct {
-	http.RoundTripper
-	count int64
-}
-
-func (ct *countTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	atomic.AddInt64(&ct.count, 1)
-	return ct.RoundTripper.RoundTrip(req)
-}
-
-func (ct *countTransport) Count() int64 {
-	return atomic.LoadInt64(&ct.count)
-}
-
-func update() error {
-	log.Printf("Updating dashboard data...")
-	token, err := getToken()
-	if err != nil {
-		return err
-	}
-	gzdata, _ := getCache("gzdata")
-
-	ctx := context.Background()
-	ct := &countTransport{newTransport(ctx), 0}
-	gh := godash.NewGitHubClient("golang/go", token, ct)
-	defer func() {
-		log.Printf("Sent %d requests to GitHub", ct.Count())
-	}()
-
-	data, err := parseData(gzdata)
-	if err != nil {
-		return err
-	}
-
-	if err := data.Reviewers.LoadGithub(ctx, gh); err != nil {
-		return fmt.Errorf("failed to load reviewers: %v", err)
-	}
-	ger := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
-
-	if err := data.FetchData(ctx, gh, ger, log.Printf, 7, false, false); err != nil {
-		return fmt.Errorf("failed to fetch data: %v", err)
-	}
-
-	var output bytes.Buffer
-	const kind = "release"
-	fmt.Fprintf(&output, "Go %s dashboard\n", kind)
-	fmt.Fprintf(&output, "%v\n\n", time.Now().UTC().Format(time.UnixDate))
-	fmt.Fprintf(&output, "HOWTO\n\n")
-	data.PrintIssues(&output)
-	var html bytes.Buffer
-	godash.PrintHTML(&html, output.String())
-
-	if err := writePage(kind, html.Bytes()); err != nil {
-		return err
-	}
-	return writeCache("gzdata", &data)
-}
-
-func newTransport(ctx context.Context) http.RoundTripper {
-	dline, ok := ctx.Deadline()
-	t := &http.Transport{}
-	if ok {
-		t.ResponseHeaderTimeout = time.Until(dline)
-	}
-	return t
 }

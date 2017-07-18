@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-var testServer = newServer(http.DefaultServeMux, "./static/")
+var testServer = newServer(http.DefaultServeMux, "./static/", "./templates/")
 
 func TestStaticAssetsFound(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
@@ -68,31 +68,5 @@ func TestRandomHelpWantedIssue(t *testing.T) {
 	}
 	if g, w := w.Header().Get("Location"), issuesURLBase+"42"; g != w {
 		t.Errorf("Location header = %q; want %q", g, w)
-	}
-}
-
-func TestIntFromStr(t *testing.T) {
-	testcases := []struct {
-		s string
-		i int
-	}{
-		{"123", 123},
-		{"User ID: 98403", 98403},
-		{"1234 User 5431 ID", 1234},
-		{"Stardate 153.2415", 153},
-	}
-	for _, tc := range testcases {
-		r, ok := intFromStr(tc.s)
-		if !ok {
-			t.Errorf("intFromStr(%q) = %v", tc.s, ok)
-		}
-		if r != tc.i {
-			t.Errorf("intFromStr(%q) = %d; want %d", tc.s, r, tc.i)
-		}
-	}
-	noInt := "hello there"
-	_, ok := intFromStr(noInt)
-	if ok {
-		t.Errorf("intFromStr(%q) = %v; want false", noInt, ok)
 	}
 }

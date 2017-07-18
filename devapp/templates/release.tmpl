@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Go Release Dashboard</title>
+<meta name=viewport content="width=device-width,minimum-scale=1,maximum-scale=1">
+<style>
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+body {
+  font: 13px monospace;
+  padding: 1rem;
+}
+a:link,
+a:visited {
+  color: #00c;
+}
+.CountSummary {
+  font-weight: bold;
+  list-style: none;
+  margin: .5em 0 1em;
+}
+.Header {
+  font-weight: bold;
+}
+.Section {
+  border-top: 1px solid #aaa;
+  padding-bottom: 2em;
+}
+.Section-title {
+  margin: .5em 0;
+}
+.Item {
+  display: flex;
+}
+.Item-num {
+  margin-left: 4ch;
+  min-width: 12ch;
+}
+.DirTitle {
+  margin: 1em 0 .25em;
+}
+</style>
+<header class="Header">
+  <div>Release dashboard</div>
+  <div>{{.LastUpdated}}</div>
+</header>
+<main>
+<ul class="CountSummary">
+{{range .Sections}}
+  <li><a href="#{{.Title}}">{{.Count}} {{.Title}}</a></li>
+{{end}}
+</ul>
+{{range .Sections}}
+  <section class="Section">
+    <h3 class="Section-title" id="{{.Title}}">{{.Title}}</h3>
+    {{range .Groups}}
+      {{if .Dir}}<h4 class="DirTitle">{{.Dir}}</h4>{{end}}
+      {{range .Items}}
+        {{$i := .Issue}}
+        {{if $i}}
+          <div class="Item">
+            <a class="Item-num" href="https://golang.org/issue/{{.Issue.Number}}" target="_blank">#{{.Issue.Number}}</a>
+            <span class="Item-title">{{.Issue.Title}}</span>
+          </div>
+        {{end}}
+        {{range .CLs}}
+          <div class="Item">
+            <span class="Item-num">
+              {{if $i}}⤷{{end}} <a href="https://golang.org/cl/{{.Number}}" target="_blank">CL {{.Number}}</a>
+            </span>
+            <span class="Item-title">{{if $i}}⤷{{end}} {{.Subject}}</span>
+          </div>
+        {{end}}
+      {{end}}
+    {{end}}
+  </section>
+{{end}}
+</main>

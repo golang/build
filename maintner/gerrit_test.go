@@ -147,3 +147,21 @@ func TestOwnerID(t *testing.T) {
 		t.Errorf("cl.OwnerID() = %d; want %d", cl.OwnerID(), 137)
 	}
 }
+
+func TestSubject(t *testing.T) {
+	cl := &GerritCL{}
+	if w, e := cl.Subject(), ""; w != e {
+		t.Errorf("cl.Subject() = %q; want %q", w, e)
+	}
+
+	testcases := []struct{ msg, subject string }{
+		{"maintner: slurp up all the things", "maintner: slurp up all the things"},
+		{"cmd/go: build stuff\n\nand do other stuff, too.", "cmd/go: build stuff"},
+	}
+	for _, tc := range testcases {
+		cl = &GerritCL{Commit: &GitCommit{Msg: tc.msg}}
+		if cl.Subject() != tc.subject {
+			t.Errorf("cl.Subject() = %q; want %q", cl.Subject(), tc.subject)
+		}
+	}
+}

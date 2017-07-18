@@ -6,13 +6,12 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
 	"math/rand"
 	"net/http"
 	"path"
-	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -24,31 +23,42 @@ import (
 // A server is an http.Handler that serves content within staticDir at root and
 // the dynamically-generated dashboards at their respective endpoints.
 type server struct {
-	mux       *http.ServeMux
-	staticDir string
+	mux         *http.ServeMux
+	staticDir   string
+	templateDir string
 
 	cMu              sync.RWMutex // Used to protect the fields below.
 	corpus           *maintner.Corpus
+	repo             *maintner.GitHubRepo
 	helpWantedIssues []int32
-	userMapping      map[int]*maintner.GitHubUser // Gerrit Owner ID => GitHub user
-	activities       []activity                   // All contribution activities
-	totalPoints      int
+	data             releaseData
+
+	// GopherCon-specific fields. Must still hold cMu when reading/writing these.
+	userMapping map[int]*maintner.GitHubUser // Gerrit Owner ID => GitHub user
+	activities  []activity                   // All contribution activities
+	totalPoints int
 }
 
-func newServer(mux *http.ServeMux, staticDir string) *server {
+func newServer(mux *http.ServeMux, staticDir, templateDir string) *server {
 	s := &server{
 		mux:         mux,
 		staticDir:   staticDir,
+		templateDir: templateDir,
 		userMapping: map[int]*maintner.GitHubUser{},
 	}
 	s.mux.Handle("/", http.FileServer(http.Dir(s.staticDir)))
 	s.mux.HandleFunc("/favicon.ico", s.handleFavicon)
-	s.mux.HandleFunc("/release", handleRelease)
+	s.mux.HandleFunc("/release", s.withTemplate("/release.tmpl", s.handleRelease))
 	for _, p := range []string{"/imfeelinghelpful", "/imfeelinglucky"} {
 		s.mux.HandleFunc(p, s.handleRandomHelpWantedIssue)
 	}
 	s.mux.HandleFunc("/_/activities", s.handleActivities)
 	return s
+}
+
+func (s *server) withTemplate(tmpl string, fn func(*template.Template, http.ResponseWriter, *http.Request)) http.HandlerFunc {
+	t := template.Must(template.ParseFiles(path.Join(s.templateDir, tmpl)))
+	return func(w http.ResponseWriter, r *http.Request) { fn(t, w, r) }
 }
 
 // initCorpus fetches a full maintner corpus, overwriting any existing data.
@@ -60,6 +70,10 @@ func (s *server) initCorpus(ctx context.Context) error {
 		return fmt.Errorf("godata.Get: %v", err)
 	}
 	s.corpus = corpus
+	s.repo = s.corpus.GitHub().Repo("golang", "go")
+	if s.repo == nil {
+		return fmt.Errorf(`s.corpus.GitHub().Repo("golang", "go") = nil`)
+	}
 	return nil
 }
 
@@ -72,6 +86,9 @@ func (s *server) corpusUpdateLoop(ctx context.Context) {
 		s.updateHelpWantedIssues()
 		log.Println("Updating activities ...")
 		s.updateActivities()
+		s.cMu.Lock()
+		s.data.dirty = true
+		s.cMu.Unlock()
 		err := s.corpus.UpdateWithLocker(ctx, &s.cMu)
 		if err != nil {
 			if err == maintner.ErrSplit {
@@ -94,192 +111,26 @@ func (s *server) corpusUpdateLoop(ctx context.Context) {
 }
 
 const (
-	labelIDHelpWanted         = 150880243
-	issuesURLBase             = "https://github.com/golang/go/issues/"
-	issueNumGerritUserMapping = 21017 // Special sign-up issue.
+	issuesURLBase = "https://golang.org/issue/"
+
+	labelHelpWanted = "HelpWanted"
 )
 
 func (s *server) updateHelpWantedIssues() {
 	s.cMu.Lock()
 	defer s.cMu.Unlock()
-	repo := s.corpus.GitHub().Repo("golang", "go")
-	if repo == nil {
-		log.Println(`s.corpus.GitHub().Repo("golang", "go") = nil`)
-		return
-	}
 
-	ids := []int32{}
-	repo.ForeachIssue(func(i *maintner.GitHubIssue) error {
+	var ids []int32
+	s.repo.ForeachIssue(func(i *maintner.GitHubIssue) error {
 		if i.Closed {
 			return nil
 		}
-		if _, ok := i.Labels[labelIDHelpWanted]; ok {
+		if i.HasLabel(labelHelpWanted) {
 			ids = append(ids, i.Number)
 		}
 		return nil
 	})
 	s.helpWantedIssues = ids
-}
-
-// intFromStr returns the first integer within s, allowing for non-numeric
-// characters to be present.
-func intFromStr(s string) (int, bool) {
-	var (
-		foundNum bool
-		r        int
-	)
-	for i := 0; i < len(s); i++ {
-		if s[i] >= '0' && s[i] <= '9' {
-			foundNum = true
-			r = r*10 + int(s[i]-'0')
-		} else if foundNum {
-			return r, true
-		}
-	}
-	if foundNum {
-		return r, true
-	}
-	return 0, false
-}
-
-// Keep these in sync with the frontend JS.
-const (
-	activityTypeRegister     = "REGISTER"
-	activityTypeCreateChange = "CREATE_CHANGE"
-	activityTypeAmendChange  = "AMEND_CHANGE"
-	activityTypeMergeChange  = "MERGE_CHANGE"
-)
-
-var pointsPerActivity = map[string]int{
-	activityTypeRegister:     1,
-	activityTypeCreateChange: 2,
-	activityTypeAmendChange:  2,
-	activityTypeMergeChange:  3,
-}
-
-// An activity represents something a contributor has done. e.g. register on
-// the GitHub issue, create a change, amend a change, etc.
-type activity struct {
-	Type    string    `json:"type"`
-	Created time.Time `json:"created"`
-	User    string    `json:"gitHubUser"`
-	Points  int       `json:"points"`
-}
-
-func (s *server) updateActivities() {
-	s.cMu.Lock()
-	defer s.cMu.Unlock()
-	repo := s.corpus.GitHub().Repo("golang", "go")
-	if repo == nil {
-		log.Println(`s.corpus.GitHub().Repo("golang", "go") = nil`)
-		return
-	}
-	issue := repo.Issue(issueNumGerritUserMapping)
-	if issue == nil {
-		log.Printf("repo.Issue(%d) = nil", issueNumGerritUserMapping)
-		return
-	}
-	latest := issue.Created
-	if len(s.activities) > 0 {
-		latest = s.activities[len(s.activities)-1].Created
-	}
-
-	var newActivities []activity
-	issue.ForeachComment(func(c *maintner.GitHubComment) error {
-		if !c.Created.After(latest) {
-			return nil
-		}
-		id, ok := intFromStr(c.Body)
-		if !ok {
-			return fmt.Errorf("intFromStr(%q) = %v", c.Body, ok)
-		}
-		s.userMapping[id] = c.User
-
-		newActivities = append(newActivities, activity{
-			Type:    activityTypeRegister,
-			Created: c.Created,
-			User:    c.User.Login,
-			Points:  pointsPerActivity[activityTypeRegister],
-		})
-		s.totalPoints += pointsPerActivity[activityTypeRegister]
-		return nil
-	})
-
-	s.corpus.Gerrit().ForeachProjectUnsorted(func(p *maintner.GerritProject) error {
-		p.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
-			if !cl.Commit.CommitTime.After(latest) {
-				return nil
-			}
-			user := s.userMapping[cl.OwnerID()]
-			if user == nil {
-				return nil
-			}
-
-			newActivities = append(newActivities, activity{
-				Type:    activityTypeCreateChange,
-				Created: cl.Created,
-				User:    user.Login,
-				Points:  pointsPerActivity[activityTypeCreateChange],
-			})
-			s.totalPoints += pointsPerActivity[activityTypeCreateChange]
-			if cl.Version > 1 {
-				newActivities = append(newActivities, activity{
-					Type:    activityTypeAmendChange,
-					Created: cl.Commit.CommitTime,
-					User:    user.Login,
-					Points:  pointsPerActivity[activityTypeAmendChange],
-				})
-				s.totalPoints += pointsPerActivity[activityTypeAmendChange]
-			}
-			if cl.Status == "merged" {
-				newActivities = append(newActivities, activity{
-					Type:    activityTypeMergeChange,
-					Created: cl.Commit.CommitTime,
-					User:    user.Login,
-					Points:  pointsPerActivity[activityTypeMergeChange],
-				})
-				s.totalPoints += pointsPerActivity[activityTypeMergeChange]
-			}
-			return nil
-		})
-		return nil
-	})
-
-	sort.Sort(byCreated(newActivities))
-	s.activities = append(s.activities, newActivities...)
-}
-
-type byCreated []activity
-
-func (a byCreated) Len() int           { return len(a) }
-func (a byCreated) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a byCreated) Less(i, j int) bool { return a[i].Created.Before(a[j].Created) }
-
-func (s *server) handleActivities(w http.ResponseWriter, r *http.Request) {
-	i, _ := strconv.Atoi(r.FormValue("since"))
-	since := time.Unix(int64(i)/1000, 0)
-
-	recentActivity := []activity{}
-	for _, a := range s.activities {
-		if a.Created.After(since) {
-			recentActivity = append(recentActivity, a)
-		}
-	}
-
-	s.cMu.RLock()
-	defer s.cMu.RUnlock()
-	w.Header().Set("Content-Type", "application/json")
-	result := struct {
-		Activities  []activity `json:"activities"`
-		TotalPoints int        `json:"totalPoints"`
-	}{
-		Activities:  recentActivity,
-		TotalPoints: s.totalPoints,
-	}
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		log.Printf("Encode(%+v) = %v", result, err)
-		return
-	}
 }
 
 func (s *server) handleRandomHelpWantedIssue(w http.ResponseWriter, r *http.Request) {
@@ -306,41 +157,4 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000; preload")
 	}
 	s.mux.ServeHTTP(w, r)
-}
-
-var (
-	pageStoreMu sync.Mutex
-	pageStore   = map[string][]byte{}
-)
-
-func getPage(name string) ([]byte, error) {
-	pageStoreMu.Lock()
-	defer pageStoreMu.Unlock()
-	p, ok := pageStore[name]
-	if ok {
-		return p, nil
-	}
-	return nil, fmt.Errorf("page key %s not found", name)
-}
-
-func writePage(key string, content []byte) error {
-	pageStoreMu.Lock()
-	defer pageStoreMu.Unlock()
-	pageStore[key] = content
-	return nil
-}
-
-func servePage(w http.ResponseWriter, r *http.Request, key string) {
-	b, err := getPage(key)
-	if err != nil {
-		log.Printf("getPage(%q) = %v", key, err)
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(b)
-}
-
-func handleRelease(w http.ResponseWriter, r *http.Request) {
-	servePage(w, r, "release")
 }

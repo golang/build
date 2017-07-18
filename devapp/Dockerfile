@@ -6,4 +6,5 @@ LABEL maintainer "golang-dev@googlegroups.com"
 COPY ca-certificates.crt /etc/ssl/certs/
 COPY devapp /
 COPY static /static
+COPY templates /templates
 ENTRYPOINT ["/devapp"]
