@@ -3,8 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Package godash generates dashboards about issues and CLs in the Go
-// Github and Gerrit projects. There is a user-friendly interface in
-// the godash command-line tool at golang.org/x/build/cmd/godash
+// Github and Gerrit projects.
 package godash
 
 import (
