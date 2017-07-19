@@ -210,8 +210,10 @@ type GerritCL struct {
 	// Project is the project this CL is part of.
 	Project *GerritProject
 
-	// Number is the CL number on the Gerrit
-	// server. (e.g. 1, 2, 3)
+	// Number is the CL number on the Gerrit server (e.g. 1, 2, 3). Gerrit CL
+	// numbers are sparse (CL N does not guarantee that CL N-1 exists) and
+	// Gerrit issues CL's out of order - it may issue CL N, then CL (N - 18),
+	// then CL (N - 40).
 	Number int32
 
 	Created time.Time

@@ -189,8 +189,6 @@ type gopherbot struct {
 	// github issues. It's updated at the end of the run of tasks.
 	maxIssueMod       time.Time
 	knownContributors map[string]bool
-	// Most recent CL processed by the contributor congratulation script
-	mostRecentCL int32
 }
 
 var tasks = []struct {
@@ -763,23 +761,20 @@ var congratsEpoch = time.Date(2017, 6, 17, 0, 0, 0, 0, time.UTC)
 
 func (b *gopherbot) congratulateNewContributors(ctx context.Context) error {
 	cls := make(map[string]*maintner.GerritCL)
-	newHighestCL := b.mostRecentCL
 	b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
 		if gp.Server() != "go.googlesource.com" {
 			return nil
 		}
 		return gp.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
+			// CLs can be returned by maintner in any order. Note also that
+			// Gerrit CL numbers are sparse (CL N does not guarantee that CL N-1
+			// exists) and Gerrit issues CL's out of order - it may issue CL N,
+			// then CL (N - 18), then CL (N - 40).
 			if b.knownContributors == nil {
 				b.knownContributors = make(map[string]bool)
 			}
 			if cl.Commit == nil {
 				return nil
-			}
-			if cl.Number <= b.mostRecentCL {
-				return nil
-			}
-			if cl.Number > newHighestCL {
-				newHighestCL = cl.Number
 			}
 			email := cl.Commit.Author.Str
 			if b.knownContributors[email] {
@@ -839,7 +834,6 @@ func (b *gopherbot) congratulateNewContributors(ctx context.Context) error {
 		}
 		b.knownContributors[email] = true
 	}
-	b.mostRecentCL = newHighestCL
 	return nil
 }
 
