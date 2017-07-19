@@ -764,30 +764,35 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-gce93",
 		HostType: "host-freebsd-93-gce",
+		TryOnly:  true, // disable builds until FreeBSD on GCE is fixed
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-gce101",
 		HostType:          "host-freebsd-101-gce",
-		TryBot:            true,
+		TryBot:            false, // was true; disabled due to FreeBSD GCE issues
+		TryOnly:           true,  // disable builds until FreeBSD on GCE is fixed
 		numTestHelpers:    2,
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-110",
 		HostType: "host-freebsd-110",
+		TryBot:   true,
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-race",
-		HostType: "host-freebsd-101-gce", // TODO(bradfitz): switch to FreeBSD 11? test first.
+		HostType: "host-freebsd-110",
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-386-gce101",
 		HostType: "host-freebsd-101-gce",
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386"},
+		TryOnly:  true, // disable builds until FreeBSD on GCE is fixed
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-386-110",
 		HostType: "host-freebsd-110",
+		TryOnly:  true, // disable builds until FreeBSD on GCE is fixed
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
@@ -961,24 +966,30 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:      "openbsd-386-60",
 		HostType:  "host-openbsd-386-60",
-		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
+		MaxAtOnce: 2,    // arbitrary, just not unlimited; delete when we have proper scheduler
+		TryOnly:   true, // TODO: remove this once OpenBSD works on GCE again.
 	})
 	addBuilder(BuildConfig{
 		Name:      "netbsd-amd64-8branch",
 		HostType:  "host-netbsd-8branch",
 		MaxAtOnce: 1,
+		TryBot:    false,
+		TryOnly:   true, // don't do regular builds until NetBSD runs again; Issues 19339, 19652, 20852
 	})
 	addBuilder(BuildConfig{
 		Name:      "netbsd-386-8branch",
 		HostType:  "host-netbsd-8branch",
 		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
 		MaxAtOnce: 1,
+		TryBot:    false,
+		TryOnly:   true, // don't do regular builds until NetBSD runs again; Issues 19339, 19652, 20852
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-386",
 		HostType:       "host-plan9-386-gce",
 		numTestHelpers: 1,
-		MaxAtOnce:      2, // arbitrary, just not unlimited; delete when we have proper scheduler
+		MaxAtOnce:      2,    // arbitrary, just not unlimited; delete when we have proper scheduler
+		TryOnly:        true, // TODO: remove this once Plan 9 works on GCE again.
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2008",
