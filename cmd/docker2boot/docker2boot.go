@@ -149,7 +149,7 @@ func main() {
 	// Docker normally provides these etc files, so they're not in
 	// the export and we have to include them ourselves.
 	writeFile(filepath.Join(mntDir, "etc", "hosts"), "127.0.0.1\tlocalhost\n")
-	writeFile(filepath.Join(mntDir, "etc", "resolve.conf"), "nameserver 8.8.8.8\n")
+	writeFile(filepath.Join(mntDir, "etc", "resolv.conf"), "nameserver 8.8.8.8\n")
 
 	// Append the source image id & docker version to /etc/issue.
 	issue, err := ioutil.ReadFile("/etc/issue")
