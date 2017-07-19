@@ -1,8 +1,26 @@
+# Go Build Tools
+
 This subrepository holds the source for various packages and tools that support
-development of the Go programming language.
+Go's build system and the development of the Go programming language.
 
-To submit changes to this repository, see http://golang.org/doc/contribute.html.
+## Download/Install
 
+The easiest way to download this package is to run `go get -u
+golang.org/x/build/...`. You can also manually git clone the repository to
+`$GOPATH/src/golang.org/x/build`.
+
+## Report Issues / Send Patches
+
+This repository uses Gerrit for code changes. To learn how to submit changes to
+this repository, see https://golang.org/doc/contribute.html.
+
+The main issue tracker for the blog is located at
+https://github.com/golang/go/issues. Prefix your issue with "x/build:" in the
+subject line, so it is easy to find.
+
+### Code Layout
+
+```
 app/: the App Engine code that runs https://build.golang.org/ and
       stores which builds have passed or failed. It is responsible for
       knowing which post-submit builds still need to be done. (It doesn't know
@@ -40,10 +58,12 @@ env/:     configuration files describing the environment of builders and related
           binaries.
 
 types/:   a Go package contain common types used by other pieces.
+```
 
+### Adding a Go Builder
 
-If you wish to run a Go builder, please email golang-dev@googlegroups.com first.
-There is documentation at https://golang.org/wiki/DashboardBuilders but
-depending on the type of builder, we may want to run it ourselves, after you
-prepare an environment description (resulting in a VM image) of it. See the env
-directory.
+If you wish to run a Go builder, please email
+[golang-dev@googlegroups.com](mailto:golang-dev@googlegroups.com) first. There
+is documentation at https://golang.org/wiki/DashboardBuilders, but depending
+on the type of builder, we may want to run it ourselves, after you prepare an
+environment description (resulting in a VM image) of it. See the env directory.
