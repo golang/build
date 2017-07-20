@@ -48,6 +48,11 @@ const (
 	needsInvestigationID = 373402289
 )
 
+// Label names (that are used in multiple places).
+const (
+	frozenDueToAge = "FrozenDueToAge"
+)
+
 func getGithubToken() (string, error) {
 	if metadata.OnGCE() {
 		for _, key := range []string{"gopherbot-github-token", "maintner-github-token"} {
@@ -389,7 +394,7 @@ func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		return b.addLabel(ctx, gi, "FrozenDueToAge")
+		return b.addLabel(ctx, gi, frozenDueToAge)
 	})
 }
 
@@ -638,7 +643,7 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 			}
 			for _, ref := range cl.GitHubIssueRefs {
 				gi := ref.Repo.Issue(ref.Number)
-				if gi == nil || gi.Closed {
+				if gi == nil || gi.HasLabel(frozenDueToAge) {
 					continue
 				}
 				hasComment := false
