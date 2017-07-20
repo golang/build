@@ -200,6 +200,7 @@ var tasks = []struct {
 	{"set subrepo milestones", (*gopherbot).setSubrepoMilestones},
 	{"set gccgo milestones", (*gopherbot).setGccgoMilestones},
 	{"label build issues", (*gopherbot).labelBuildIssues},
+	{"label mobile issues", (*gopherbot).labelMobileIssues},
 	{"label documentation issues", (*gopherbot).labelDocumentationIssues},
 	{"close stale WaitingForInfo", (*gopherbot).closeStaleWaitingForInfo},
 	{"cl2issue", (*gopherbot).cl2issue},
@@ -501,6 +502,19 @@ func (b *gopherbot) labelBuildIssues(ctx context.Context) error {
 			return nil
 		}
 		return b.addLabel(ctx, gi, "Builders")
+	})
+}
+
+func (b *gopherbot) labelMobileIssues(ctx context.Context) error {
+	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		if gi.Closed || !strings.HasPrefix(gi.Title, "x/mobile") || gi.HasLabel("mobile") || gi.HasEvent("unlabeled") {
+			return nil
+		}
+		printIssue("label-mobile", gi)
+		if *dryRun {
+			return nil
+		}
+		return b.addLabel(ctx, gi, "mobile")
 	})
 }
 
