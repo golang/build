@@ -38,6 +38,7 @@ var modes = map[string]handler{
 	"github-groups":      {(*statsClient).githubGroups, "print stats on github groups"},
 	"github-issue-close": {(*statsClient).githubIssueCloseStats, "print stats on github closed issues"},
 	"gerrit-cls":         {(*statsClient).gerritCLStats, "print stats on opened gerrit CLs"},
+	"workshop-stats":     {(*statsClient).workshopStats, "print stats from contributor workshop"},
 }
 
 func modeSummary() string {
@@ -774,6 +775,94 @@ func sortedStrMapKeys(m map[string]int) []string {
 	}
 	sort.Strings(ret)
 	return ret
+}
+
+func (sc *statsClient) workshopStats() {
+	const workshopIssue = 21017
+	loc, err := time.LoadLocation("America/Denver")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "loading location failed: %v", err)
+		os.Exit(2)
+	}
+	workshopStartDate := time.Date(2017, time.July, 15, 0, 0, 0, 0, loc)
+
+	// The key is the string representation of the gerrit ID.
+	// The value is the string for the GitHub login.
+	contributors := map[string]string{}
+
+	// Get all the contributors from comments on the issue.
+	sc.corpus().GitHub().Repo("golang", "go").Issue(workshopIssue).ForeachComment(func(c *maintner.GitHubComment) error {
+		contributors[strings.TrimSpace(c.Body)] = c.User.Login
+		return nil
+	})
+	fmt.Printf("Number of registrations: %d\n", len(contributors))
+
+	// Store the already known contributors before the workshop.
+	knownContributors := map[string]struct{}{}
+
+	type projectStats struct {
+		name      string
+		openedCLs []string // Gerrit IDs of owners of opened CLs
+		mergedCLs []string // Gerrit IDs of owners of merged CLs
+	}
+	ps := []projectStats{}
+
+	// Get all the CLs during the time of the workshop and after.
+	sc.corpus().Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+		p := projectStats{
+			name: gp.Project(),
+		}
+		gp.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
+			ownerID := fmt.Sprintf("%d", cl.OwnerID())
+			// Make sure it was made after the workshop started
+			// otherwise save as a known contributor.
+			if cl.Created.After(workshopStartDate) {
+				if _, ok := contributors[ownerID]; ok {
+					p.openedCLs = append(p.openedCLs, ownerID)
+					if cl.Status == "merged" {
+						p.mergedCLs = append(p.mergedCLs, ownerID)
+					}
+				}
+			} else {
+				knownContributors[ownerID] = struct{}{}
+			}
+			return nil
+		})
+
+		// Return early if no one contributed to that project.
+		if len(p.openedCLs) == 0 && len(p.mergedCLs) == 0 {
+			return nil
+		}
+
+		ps = append(ps, p)
+		return nil
+	})
+
+	sort.Slice(ps, func(i, j int) bool { return ps[i].name < ps[j].name })
+	for _, p := range ps {
+		var newOpened, newMerged int
+
+		// Determine the first time contributors.
+		for _, id := range p.openedCLs {
+			if _, ok := knownContributors[id]; !ok {
+				newOpened++
+			}
+		}
+		for _, id := range p.mergedCLs {
+			if _, ok := knownContributors[id]; !ok {
+				newMerged++
+			}
+		}
+
+		// Ignore repos where only past contributors had patches merged.
+		if newOpened != 0 || newMerged != 0 {
+			fmt.Printf(`%s:
+	Total Opened CLs: %d
+	Total Merged CLs: %d
+	New Contributors Opened CLs: %d
+	New Contributors Merged CLs: %d`+"\n", p.name, len(p.openedCLs), len(p.mergedCLs), newOpened, newMerged)
+		}
+	}
 }
 
 func getGithubToken() (string, error) {
