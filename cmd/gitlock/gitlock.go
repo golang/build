@@ -140,8 +140,9 @@ func main() {
 			comment = fmt.Sprintf(" `#and %d other pkgs`", n)
 		}
 		fmt.Fprintf(out, "# Repo %s at %s (%s)\n", repoName, hash[:7], ymd)
+		fmt.Fprintf(out, "ENV REV=%s\n", hash)
 		fmt.Fprintf(out, "RUN go get -d %s%s &&\\\n", gitDirPkgs[gitDir][0], comment)
-		fmt.Fprintf(out, "    (cd /go/src/%s && git reset --hard %s)\n\n", repoName, hash)
+		fmt.Fprintf(out, "    (cd /go/src/%s && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)\n\n", repoName)
 	}
 
 	fmt.Fprintf(out, "# Optimization to speed up iterative development, not necessary for correctness:\n")
