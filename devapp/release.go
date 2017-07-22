@@ -25,6 +25,9 @@ const (
 	prefixDev      = "[dev."
 )
 
+// titleDirs returns a slice of prefix directories contained in a title. For
+// devapp,maintner: my cool new change, it will return ["devapp", "maintner"].
+// If there is no dir prefix, it will return nil.
 func titleDirs(title string) []string {
 	if i := strings.Index(title, "\n"); i >= 0 {
 		title = title[:i]
@@ -32,7 +35,7 @@ func titleDirs(title string) []string {
 	title = strings.TrimSpace(title)
 	i := strings.Index(title, ":")
 	if i < 0 {
-		return []string{""}
+		return nil
 	}
 	var (
 		b bytes.Buffer
@@ -103,11 +106,11 @@ type milestone struct {
 	major, minor int
 }
 
-type milestones []milestone
+type milestonesByGoVersion []milestone
 
-func (x milestones) Len() int      { return len(x) }
-func (x milestones) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
-func (x milestones) Less(i, j int) bool {
+func (x milestonesByGoVersion) Len() int      { return len(x) }
+func (x milestonesByGoVersion) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
+func (x milestonesByGoVersion) Less(i, j int) bool {
 	a, b := x[i], x[j]
 	if a.major != b.major {
 		return a.major < b.major
@@ -133,8 +136,13 @@ func (s *server) updateReleaseData() {
 			for _, r := range cl.GitHubIssueRefs {
 				issueToCLs[r.Number] = append(issueToCLs[r.Number], cl)
 			}
-			for _, d := range titleDirs(cl.Subject()) {
-				dirToCLs[d] = append(dirToCLs[d], cl)
+			dirs := titleDirs(cl.Subject())
+			if len(dirs) == 0 {
+				dirToCLs[""] = append(dirToCLs[""], cl)
+			} else {
+				for _, d := range dirs {
+					dirToCLs[d] = append(dirToCLs[d], cl)
+				}
 			}
 			return nil
 		})
@@ -145,8 +153,13 @@ func (s *server) updateReleaseData() {
 	s.repo.ForeachIssue(func(issue *maintner.GitHubIssue) error {
 		// Issues in active milestones.
 		if !issue.Closed && issue.Milestone != nil && !issue.Milestone.Closed {
-			for _, d := range titleDirs(issue.Title) {
-				dirToIssues[d] = append(dirToIssues[d], issue)
+			dirs := titleDirs(issue.Title)
+			if len(dirs) == 0 {
+				dirToIssues[""] = append(dirToIssues[""], issue)
+			} else {
+				for _, d := range dirs {
+					dirToIssues[d] = append(dirToIssues[d], issue)
+				}
 			}
 		}
 		return nil
@@ -301,7 +314,7 @@ func (s *server) allMilestones() []milestone {
 		})
 		return nil
 	})
-	sort.Sort(milestones(ms))
+	sort.Sort(milestonesByGoVersion(ms))
 	return ms
 }
 

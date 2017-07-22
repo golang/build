@@ -70,7 +70,7 @@ func (s *server) initCorpus(ctx context.Context) error {
 		return fmt.Errorf("godata.Get: %v", err)
 	}
 	s.corpus = corpus
-	s.repo = s.corpus.GitHub().Repo("golang", "go")
+	s.repo = s.corpus.GitHub().Repo("golang", "go") // The golang/go repo.
 	if s.repo == nil {
 		return fmt.Errorf(`s.corpus.GitHub().Repo("golang", "go") = nil`)
 	}

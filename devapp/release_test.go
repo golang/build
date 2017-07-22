@@ -11,6 +11,7 @@ func TestTitleDir(t *testing.T) {
 		title string
 		dirs  []string
 	}{
+		{"no title dir", nil},
 		{"  cmd/compile   ,  cmd/go: do awesome things", []string{"cmd/compile", "cmd/go"}},
 		{"cmd/compile: cleanup MOVaddr code generation", []string{"cmd/compile"}},
 		{`cmd/asm, cmd/internal/obj/s390x, math: add "test under mask" instructions`,
