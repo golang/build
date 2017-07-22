@@ -8,6 +8,7 @@ package dashboard
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,6 +30,7 @@ var Hosts = map[string]*HostConfig{
 		KubeImage:       "linux-x86-std-kube:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:     "root",
 	},
 	"host-linux-armhf-cross": &HostConfig{
 		Notes:           "Kubernetes container on GKE built from env/crosscompile/linux-armhf-jessie",
@@ -42,7 +44,12 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
-
+	"host-linux-amd64-localdev": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   0,
+		Notes:       "for localhost development of buildlets/gomote/coordinator only",
+		SSHUsername: os.Getenv("USER"),
+	},
 	"host-nacl-kube": &HostConfig{
 		Notes:           "Kubernetes container on GKE.",
 		KubeImage:       "linux-x86-nacl:latest",
@@ -74,10 +81,12 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
 	"host-linux-arm-scaleway": &HostConfig{
-		IsReverse:      true,
-		ExpectNum:      50,
-		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
-		ReverseAliases: []string{"linux-arm", "linux-arm-arm5"},
+		IsReverse:       true,
+		HermeticReverse: true,
+		ExpectNum:       50,
+		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+		ReverseAliases:  []string{"linux-arm", "linux-arm-arm5"},
+		SSHUsername:     "root",
 	},
 	"host-linux-arm5spacemonkey": &HostConfig{
 		IsReverse:      true,
@@ -92,6 +101,7 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-60.tar.gz",
 		Notes:              "OpenBSD 6.0; GCE VM is built from script in build/env/openbsd-amd64",
+		SSHUsername:        "gopher",
 	},
 	"host-openbsd-386-60": &HostConfig{
 		VMImage:            "openbsd-386-60",
@@ -99,12 +109,14 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-60.tar.gz",
 		Notes:              "OpenBSD 6.0; GCE VM is built from script in build/env/openbsd-386",
+		SSHUsername:        "gopher",
 	},
 	"host-freebsd-93-gce": &HostConfig{
 		VMImage:            "freebsd-amd64-gce93",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
+		SSHUsername:        "gopher",
 	},
 	"host-freebsd-101-gce": &HostConfig{
 		VMImage:            "freebsd-amd64-gce101",
@@ -113,6 +125,7 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64", // TODO(bradfitz): why was this http instead of https?
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		env:                []string{"CC=clang"},
+		SSHUsername:        "gopher",
 	},
 	"host-freebsd-110": &HostConfig{
 		VMImage:            "freebsd-amd64-110",
@@ -121,6 +134,7 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64", // TODO(bradfitz): why was this http instead of https?
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		env:                []string{"CC=clang"},
+		SSHUsername:        "gopher",
 	},
 	"host-netbsd-8branch": &HostConfig{
 		VMImage:            "netbsd-amd64-8branch",
@@ -128,9 +142,10 @@ var Hosts = map[string]*HostConfig{
 		machineType:        "n1-highcpu-2",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.netbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64.tar.gz",
+		SSHUsername:        "gopher",
 	},
 	"host-plan9-386-gce": &HostConfig{
-		VMImage:            "plan9-386-v4",
+		VMImage:            "plan9-386-v5",
 		Notes:              "Plan 9 from 0intro; GCE VM is built from script in build/env/plan9-386",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.plan9-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-plan9-386.tar.gz",
@@ -185,7 +200,9 @@ var Hosts = map[string]*HostConfig{
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
 		},
-		ReverseAliases: []string{"darwin-amd64-10_8"},
+		ReverseAliases:  []string{"darwin-amd64-10_8"},
+		SSHUsername:     "gopher",
+		HermeticReverse: false, // TODO: make it so, like 10.12
 	},
 	"host-darwin-10_10": &HostConfig{
 		IsReverse: true,
@@ -194,7 +211,9 @@ var Hosts = map[string]*HostConfig{
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
 		},
-		ReverseAliases: []string{"darwin-amd64-10_10"},
+		ReverseAliases:  []string{"darwin-amd64-10_10"},
+		SSHUsername:     "gopher",
+		HermeticReverse: false, // TODO: make it so, like 10.12
 	},
 	"host-darwin-10_11": &HostConfig{
 		IsReverse: true,
@@ -203,7 +222,9 @@ var Hosts = map[string]*HostConfig{
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
 		},
-		ReverseAliases: []string{"darwin-amd64-10_11"},
+		ReverseAliases:  []string{"darwin-amd64-10_11"},
+		SSHUsername:     "gopher",
+		HermeticReverse: false, // TODO: make it so, like 10.12
 	},
 	"host-darwin-10_12": &HostConfig{
 		IsReverse: true,
@@ -212,7 +233,9 @@ var Hosts = map[string]*HostConfig{
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
 		},
-		ReverseAliases: []string{"darwin-amd64-10_12"},
+		ReverseAliases:  []string{"darwin-amd64-10_12"},
+		SSHUsername:     "gopher",
+		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
 	},
 	"host-linux-s390x": &HostConfig{
 		Notes:          "run by IBM",
@@ -222,31 +245,39 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"linux-s390x-ibm"},
 	},
 	"host-linux-ppc64-osu": &HostConfig{
-		Notes:          "Debian jessie; run by Go team on osuosl.org",
-		IsReverse:      true,
-		ExpectNum:      5,
-		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
-		ReverseAliases: []string{"linux-ppc64-buildlet"},
+		Notes:           "Debian jessie; run by Go team on osuosl.org",
+		IsReverse:       true,
+		ExpectNum:       5,
+		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		ReverseAliases:  []string{"linux-ppc64-buildlet"},
+		SSHUsername:     "debian",
+		HermeticReverse: false, // TODO: use rundockerbuildlet like arm64
 	},
 	"host-linux-ppc64le-osu": &HostConfig{
-		Notes:          "Debian jessie; run by Go team on osuosl.org",
-		IsReverse:      true,
-		ExpectNum:      5,
-		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
-		ReverseAliases: []string{"linux-ppc64le-buildlet"},
+		Notes:           "Debian jessie; run by Go team on osuosl.org",
+		IsReverse:       true,
+		ExpectNum:       5,
+		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		ReverseAliases:  []string{"linux-ppc64le-buildlet"},
+		SSHUsername:     "debian",
+		HermeticReverse: false, // TODO: use rundockerbuildlet like arm64
 	},
 	"host-linux-arm64-linaro": &HostConfig{
-		Notes:          "Ubuntu xenial; run by Go team, from linaro",
-		IsReverse:      true,
-		ExpectNum:      5,
-		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
-		ReverseAliases: []string{"linux-arm64-buildlet"},
+		Notes:           "Ubuntu xenial; run by Go team, from linaro",
+		IsReverse:       true,
+		HermeticReverse: true,
+		ExpectNum:       5,
+		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		ReverseAliases:  []string{"linux-arm64-buildlet"},
+		SSHUsername:     "root",
 	},
 	"host-linux-arm64-packet": &HostConfig{
-		Notes:     "On 96 core packet.net host (Xenial) in Docker containers (Jessie); run by Go team. See x/build/env/linux-arm64/packet",
-		IsReverse: true,
-		ExpectNum: 20,
-		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		Notes:           "On 96 core packet.net host (Xenial) in Docker containers (Jessie); run by Go team. See x/build/env/linux-arm64/packet",
+		IsReverse:       true,
+		HermeticReverse: true,
+		ExpectNum:       20,
+		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		SSHUsername:     "root",
 	},
 	"host-solaris-amd64": &HostConfig{
 		Notes:          "run by Go team on Joyent, on a SmartOS 'infrastructure container'",
@@ -401,7 +432,8 @@ type HostConfig struct {
 	RegularDisk bool   // if true, use spinning disk instead of SSD
 
 	// ReverseOptions:
-	ExpectNum int // expected number of reverse buildlets of this type
+	ExpectNum       int  // expected number of reverse buildlets of this type
+	HermeticReverse bool // whether reverse buildlet has fresh env per conn
 
 	// Optional base env. GOROOT_BOOTSTRAP should go here if the buildlet
 	// has Go 1.4+ baked in somewhere.
@@ -414,6 +446,8 @@ type HostConfig struct {
 	Owner       string // optional email of owner; "bradfitz@golang.org", empty means golang-dev
 	OwnerGithub string // optional GitHub username of owner
 	Notes       string // notes for humans
+
+	SSHUsername string // username to ssh as, empty means not supported
 
 	// ReverseAliases lists alternate names for this buildlet
 	// config, for older clients doing a reverse dial into the
@@ -736,7 +770,23 @@ func (c *HostConfig) PoolName() string {
 	case c.IsKube():
 		return "Kubernetes container"
 	}
-	return "??"
+	panic("unknown builder type")
+}
+
+// IsHermetic reports whether this host config gets a fresh
+// environment (including /usr, /var, etc) for each execution. This is
+// true for VMs, GKE, and reverse buildlets running their containers
+// running in Docker, but false on some reverse buildlets.
+func (c *HostConfig) IsHermetic() bool {
+	switch {
+	case c.IsReverse:
+		return c.HermeticReverse
+	case c.IsGCE():
+		return true
+	case c.IsKube():
+		return true
+	}
+	panic("unknown builder type")
 }
 
 // GCENumCPU reports the number of GCE CPUs this buildlet requires.
@@ -1172,6 +1222,12 @@ func init() {
 			"GOHOSTARCH=amd64",
 			"CC_FOR_TARGET=s390x-linux-gnu-gcc",
 		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-amd64-localdev",
+		HostType: "host-linux-amd64-localdev",
+		Notes:    "for localhost development only",
+		TryOnly:  true,
 	})
 }
 

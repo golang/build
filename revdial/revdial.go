@@ -234,29 +234,87 @@ type conn struct {
 	w         *bufio.Writer
 	unregConn func(id uint32) // called with wmu held
 
-	mu     sync.Mutex
-	cond   *sync.Cond
-	buf    []byte // unread data
-	eof    bool   // remote side closed
-	closed bool   // our side closed (with Close)
+	mu        sync.Mutex
+	cond      *sync.Cond
+	buf       []byte // unread data
+	eof       bool   // remote side closed
+	closed    bool   // our side closed (with Close)
+	rdeadline time.Time
+	wdeadline time.Time
+	rtimer    *time.Timer
+	wtimer    *time.Timer
 }
 
 var errUnsupported = errors.New("revdial: unsupported Conn operation")
 
-func (c *conn) SetDeadline(t time.Time) error      { return errUnsupported }
-func (c *conn) SetReadDeadline(t time.Time) error  { return errUnsupported }
-func (c *conn) SetWriteDeadline(t time.Time) error { return errUnsupported }
-func (c *conn) LocalAddr() net.Addr                { return fakeAddr{} }
-func (c *conn) RemoteAddr() net.Addr               { return fakeAddr{} }
+func (c *conn) LocalAddr() net.Addr  { return fakeAddr{} }
+func (c *conn) RemoteAddr() net.Addr { return fakeAddr{} }
+
+func (c *conn) SetDeadline(t time.Time) error {
+	rerr := c.SetReadDeadline(t)
+	werr := c.SetWriteDeadline(t)
+	if rerr != nil {
+		return rerr
+	}
+	return werr
+}
+
+func (c *conn) SetWriteDeadline(t time.Time) error {
+	defer c.cond.Signal()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return errors.New("SetWriteDeadline called on closed connection")
+	}
+	c.stopWriteTimerLocked()
+	c.wdeadline = t
+	now := time.Now()
+	if t.After(now) {
+		c.wtimer = time.AfterFunc(t.Sub(now), c.cond.Broadcast)
+	}
+	return nil
+}
+
+func (c *conn) SetReadDeadline(t time.Time) error {
+	defer c.cond.Signal()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return errors.New("SetReadDeadline called on closed connection")
+	}
+	c.stopReadTimerLocked()
+	c.rdeadline = t
+	now := time.Now()
+	if t.After(now) {
+		c.rtimer = time.AfterFunc(t.Sub(now), c.cond.Broadcast)
+	}
+	return nil
+}
+
+func (c *conn) stopReadTimerLocked() {
+	if c.rtimer != nil {
+		c.rtimer.Stop()
+		c.rtimer = nil
+	}
+}
+
+func (c *conn) stopWriteTimerLocked() {
+	if c.wtimer != nil {
+		c.wtimer.Stop()
+		c.wtimer = nil
+	}
+}
 
 func (c *conn) Close() error {
+	defer c.cond.Broadcast()
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
 		return nil
 	}
+	c.stopReadTimerLocked()
+	c.stopWriteTimerLocked()
 	c.closed = true
-	c.cond.Signal()
 	c.mu.Unlock()
 
 	c.wmu.Lock()
@@ -273,37 +331,52 @@ func (d *Dialer) unregConn(id uint32) {
 }
 
 func (c *conn) peerWrite(p []byte) (n int, err error) {
+	defer c.cond.Signal()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	defer c.cond.Signal()
 	// TODO(bradfitz): bound this, like http2's buffer/pipe code
 	c.buf = append(c.buf, p...)
 	return len(p), nil
 }
 
 func (c *conn) peerClose() {
+	defer c.cond.Broadcast()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	defer c.cond.Broadcast()
 	c.eof = true
 }
 
+var errDeadline net.Error = deadlineError{}
+
+type deadlineError struct{}
+
+func (deadlineError) Error() string   { return "revdial: Read/Write deadline expired" }
+func (deadlineError) Temporary() bool { return false }
+func (deadlineError) Timeout() bool   { return true }
+
 func (c *conn) Read(p []byte) (n int, err error) {
+	defer c.cond.Signal() // for when writers block
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	defer c.cond.Signal() // for when writers block
-	for len(c.buf) == 0 && !c.eof && !c.closed {
+	for {
+		n = copy(p, c.buf)
+		c.buf = c.buf[:copy(c.buf, c.buf[n:])] // slide down
+		if dl := c.rdeadline; !dl.IsZero() {
+			if time.Now().After(dl) {
+				return n, errDeadline
+			}
+		}
+		if c.closed {
+			return n, errors.New("revdial: Read on closed connection")
+		}
+		if len(c.buf) == 0 && c.eof {
+			return n, io.EOF
+		}
+		if n > 0 || len(p) == 0 {
+			return n, nil
+		}
 		c.cond.Wait()
 	}
-	if c.closed {
-		return 0, errors.New("revdial: Read on closed connection")
-	}
-	if len(c.buf) == 0 && c.eof {
-		return 0, io.EOF
-	}
-	n = copy(p, c.buf)
-	c.buf = c.buf[:copy(c.buf, c.buf[n:])] // slide down
-	return n, nil
 }
 
 func (c *conn) Write(p []byte) (n int, err error) {
@@ -312,28 +385,58 @@ func (c *conn) Write(p []byte) (n int, err error) {
 		c.mu.Unlock()
 		return 0, errors.New("revdial: Write on Closed conn")
 	}
+	dl := c.wdeadline
+	if !dl.IsZero() && time.Now().After(dl) {
+		c.mu.Unlock()
+		// TODO: better write deadline support. do it per chunk, push it down
+		// to underlying net.Conn (which involves changing API to let caller
+		// supply a net.Conn)
+		return 0, errDeadline
+	}
 	c.mu.Unlock()
 
-	const max = 0xffff // max chunk size
-	for len(p) > 0 {
-		chunk := p
-		if len(chunk) > max {
-			chunk = chunk[:max]
-		}
-		c.wmu.Lock()
-		err = writeFrame(c, frame{
-			command: frameWrite,
-			connID:  c.id,
-			payload: chunk,
-		})
-		c.wmu.Unlock()
-		if err != nil {
-			return n, err
-		}
-		n += len(chunk)
-		p = p[len(chunk):]
+	var timeout <-chan time.Time
+	if !dl.IsZero() {
+		timer := time.NewTimer(dl.Sub(time.Now()))
+		defer timer.Stop()
+		timeout = timer.C
 	}
-	return n, nil
+	type result struct {
+		n   int
+		err error
+	}
+	res := make(chan result, 1)
+	go func() {
+		const max = 0xffff // max chunk size
+		n := 0
+		for len(p) > 0 {
+			chunk := p
+			if len(chunk) > max {
+				chunk = chunk[:max]
+			}
+			c.wmu.Lock()
+			err = writeFrame(c, frame{
+				command: frameWrite,
+				connID:  c.id,
+				payload: chunk,
+			})
+			c.wmu.Unlock()
+			if err != nil {
+				res <- result{n, err}
+				return
+			}
+			n += len(chunk)
+			p = p[len(chunk):]
+		}
+		res <- result{n: n}
+	}()
+	select {
+	case v := <-res:
+		return v.n, v.err
+	case <-timeout:
+		println("timeout for " + dl.String())
+		return 0, errDeadline
+	}
 }
 
 type frameType uint8

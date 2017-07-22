@@ -321,6 +321,7 @@ func main() {
 	}
 
 	go listenAndServeTLS()
+	go listenAndServeSSH() // ssh proxy to remote buildlets; remote.go
 
 	ticker := time.NewTicker(1 * time.Minute)
 	for {

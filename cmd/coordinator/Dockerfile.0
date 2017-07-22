@@ -12,6 +12,16 @@ ENV REV=76d607c4e7a2b9df49f1d1a58a3f3d2dd2614704
 RUN go get -d cloud.google.com/go/compute/metadata `#and 10 other pkgs` &&\
     (cd /go/src/cloud.google.com/go && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
+# Repo github.com/anmitsu/go-shlex at 648efa6 (2016-10-02)
+ENV REV=648efa622239a2f6ff949fed78ee37b48d499ba4
+RUN go get -d github.com/anmitsu/go-shlex &&\
+    (cd /go/src/github.com/anmitsu/go-shlex && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
+
+# Repo github.com/gliderlabs/ssh at f892d8d (2017-07-20)
+ENV REV=f892d8d851ee02773306439f70af0843395eb9c4
+RUN go get -d github.com/gliderlabs/ssh &&\
+    (cd /go/src/github.com/gliderlabs/ssh && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
+
 # Repo github.com/golang/protobuf at 0a4f71a (2017-07-11)
 ENV REV=0a4f71a498b7c4812f64969510bcb4eca251e33a
 RUN go get -d github.com/golang/protobuf/proto `#and 9 other pkgs` &&\
@@ -22,14 +32,19 @@ ENV REV=84ed26760e7f6f80887a2fbfb50db3cc415d2cea
 RUN go get -d github.com/googleapis/gax-go &&\
     (cd /go/src/github.com/googleapis/gax-go && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
+# Repo github.com/kr/pty at 2c10821 (2017-03-07)
+ENV REV=2c10821df3c3cf905230d078702dfbe9404c9b23
+RUN go get -d github.com/kr/pty &&\
+    (cd /go/src/github.com/kr/pty && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
+
 # Repo go4.org at 034d17a (2017-05-25)
 ENV REV=034d17a462f7b2dcd1a4a73553ec5357ff6e6c6e
 RUN go get -d go4.org/syncutil &&\
     (cd /go/src/go4.org && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/crypto at 94c6142 (2017-07-20)
-ENV REV=94c6142ae57b8dc154f6e1813c921a6c85f505cd
-RUN go get -d golang.org/x/crypto/acme `#and 2 other pkgs` &&\
+# Repo golang.org/x/crypto at 6914964 (2017-07-20)
+ENV REV=6914964337150723782436d56b3f21610a74ce7b
+RUN go get -d golang.org/x/crypto/acme `#and 6 other pkgs` &&\
     (cd /go/src/golang.org/x/crypto && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
 # Repo golang.org/x/net at ab54850 (2017-07-21)
@@ -67,8 +82,8 @@ ENV REV=b0a3dcfcd1a9bd48e63634bd8802960804cf8315
 RUN go get -d google.golang.org/genproto/googleapis/api/annotations `#and 10 other pkgs` &&\
     (cd /go/src/google.golang.org/genproto && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo google.golang.org/grpc at 0c41876 (2017-07-21)
-ENV REV=0c41876308d45bc82e587965971e28be659a1aca
+# Repo google.golang.org/grpc at 6495e8d (2017-07-21)
+ENV REV=6495e8dfeb47dc61ff4c392ba6369fa3f15cdc1b
 RUN go get -d google.golang.org/grpc `#and 15 other pkgs` &&\
     (cd /go/src/google.golang.org/grpc && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -93,6 +108,8 @@ RUN go install cloud.google.com/go/compute/metadata \
 	cloud.google.com/go/internal/version \
 	cloud.google.com/go/monitoring/apiv3 \
 	cloud.google.com/go/storage \
+	github.com/anmitsu/go-shlex \
+	github.com/gliderlabs/ssh \
 	github.com/golang/protobuf/proto \
 	github.com/golang/protobuf/protoc-gen-go/descriptor \
 	github.com/golang/protobuf/ptypes \
@@ -103,9 +120,14 @@ RUN go install cloud.google.com/go/compute/metadata \
 	github.com/golang/protobuf/ptypes/timestamp \
 	github.com/golang/protobuf/ptypes/wrappers \
 	github.com/googleapis/gax-go \
+	github.com/kr/pty \
 	go4.org/syncutil \
 	golang.org/x/crypto/acme \
 	golang.org/x/crypto/acme/autocert \
+	golang.org/x/crypto/curve25519 \
+	golang.org/x/crypto/ed25519 \
+	golang.org/x/crypto/ed25519/internal/edwards25519 \
+	golang.org/x/crypto/ssh \
 	golang.org/x/net/context \
 	golang.org/x/net/context/ctxhttp \
 	golang.org/x/net/http2 \

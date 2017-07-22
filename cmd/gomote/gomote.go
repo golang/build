@@ -35,6 +35,7 @@ To list the subcommands, run "gomote" without arguments:
     puttar     extract a tar.gz to a buildlet
     rm         delete files or directories
     run        run a command on a buildlet
+    ssh        ssh to a buildlet
 
 To list all the builder types available, run "create" with no arguments:
 
@@ -150,6 +151,7 @@ func registerCommands() {
 	registerCommand("puttar", "extract a tar.gz to a buildlet", putTar)
 	registerCommand("rm", "delete files or directories", rm)
 	registerCommand("run", "run a command on a buildlet", run)
+	registerCommand("ssh", "ssh to a buildlet", ssh)
 }
 
 func main() {

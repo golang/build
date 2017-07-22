@@ -38,6 +38,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
@@ -69,7 +70,8 @@ var (
 //    7: version bumps while debugging revdial hang (Issue 12816)
 //    8: mac screensaver disabled
 //   11: move from self-signed cert to LetsEncrypt (Issue 16442)
-const buildletVersion = 11
+//   15: ssh support
+const buildletVersion = 15
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -202,6 +204,7 @@ func main() {
 	http.Handle("/workdir", requireAuth(handleWorkDir))
 	http.Handle("/status", requireAuth(handleStatus))
 	http.Handle("/ls", requireAuth(handleLs))
+	http.Handle("/connect-ssh", requireAuth(handleConnectSSH))
 
 	if !isReverse {
 		listenForCoordinator()
@@ -527,10 +530,7 @@ func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		log.Printf("Walk error: %v", err)
-		// Decent way to signal failure to the caller, since it'll break
-		// the chunked response, rather than have a valid EOF.
-		conn, _, _ := w.(http.Hijacker).Hijack()
-		conn.Close()
+		panic(http.ErrAbortHandler)
 	}
 	tw.Close()
 	zw.Close()
@@ -1230,6 +1230,147 @@ func handleLs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func handleConnectSSH(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "requires POST method", http.StatusBadRequest)
+		return
+	}
+	if r.ContentLength != 0 {
+		http.Error(w, "requires zero Content-Length", http.StatusBadRequest)
+		return
+	}
+	sshUser := r.Header.Get("X-Go-Ssh-User")
+	authKey := r.Header.Get("X-Go-Authorized-Key")
+	if sshUser != "" && authKey != "" {
+		if err := appendSSHAuthorizedKey(sshUser, authKey); err != nil {
+			http.Error(w, "adding ssh authorized key: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
+	sshConn, err := net.Dial("tcp", "localhost:22")
+	if err != nil {
+		sshServerOnce.Do(startSSHServer)
+		sshConn, err = net.Dial("tcp", "localhost:22")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+	}
+	defer sshConn.Close()
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		log.Printf("conn can't hijack for ssh proxy; HTTP/2 enabled by default?")
+		http.Error(w, "conn can't hijack", http.StatusInternalServerError)
+		return
+	}
+	conn, _, err := hj.Hijack()
+	if err != nil {
+		log.Printf("ssh hijack error: %v", err)
+		http.Error(w, "ssh hijack error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer conn.Close()
+	fmt.Fprintf(conn, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: ssh\r\nConnection: Upgrade\r\n\r\n")
+	errc := make(chan error, 1)
+	go func() {
+		_, err := io.Copy(sshConn, conn)
+		errc <- err
+	}()
+	go func() {
+		_, err := io.Copy(conn, sshConn)
+		errc <- err
+	}()
+	<-errc
+}
+
+var sshServerOnce sync.Once
+
+func startSSHServer() {
+	if inLinuxContainer() {
+		startSSHServerLinux()
+		return
+	}
+
+	log.Printf("start ssh server: don't know how to start SSH server on this host type")
+}
+
+// inLinuxContainer reports whether it looks like we're on Linux running inside a container.
+func inLinuxContainer() bool {
+	if runtime.GOOS != "linux" {
+		return false
+	}
+	if numProcs() >= 4 {
+		// There should 1 process running (this buildlet
+		// binary) if we're in Docker. Maybe 2 if something
+		// else is happening. But if there are 4 or more,
+		// we'll be paranoid and assuming we're running on a
+		// user or host system and don't want to start an ssh
+		// server.
+		return false
+	}
+	// TODO: use a more explicit env variable or on-disk signal
+	// that we're in a Go buildlet Docker image. But for now, this
+	// seems to be consistently true:
+	fi, err := os.Stat("/usr/local/bin/stage0")
+	return err == nil && fi.Mode().IsRegular()
+}
+
+func startSSHServerLinux() {
+	log.Printf("start ssh server for linux")
+
+	// First, create the privsep directory, otherwise we get a successful cmd.Start,
+	// but this error message and then an exit:
+	//    Missing privilege separation directory: /var/run/sshd
+	if err := os.MkdirAll("/var/run/sshd", 0700); err != nil {
+		log.Printf("creating /var/run/sshd: %v", err)
+		return
+	}
+
+	// The scaleway Docker images don't have ssh host keys in
+	// their image, at least as of 2017-07-23. So make them first.
+	// These are the types sshd -D complains about currently.
+	if runtime.GOARCH == "arm" {
+		for _, keyType := range []string{"rsa", "dsa", "ed25519", "ecdsa"} {
+			file := "/etc/ssh/ssh_host_" + keyType + "_key"
+			if _, err := os.Stat(file); err == nil {
+				continue
+			}
+			out, err := exec.Command("/usr/bin/ssh-keygen", "-f", file, "-N", "", "-t", keyType).CombinedOutput()
+			log.Printf("ssh-keygen of type %s: err=%v, %s\n", err, out)
+		}
+	}
+
+	cmd := exec.Command("/usr/sbin/sshd", "-D")
+	err := cmd.Start()
+	if err != nil {
+		log.Printf("starting sshd: %v", err)
+		return
+	}
+	log.Printf("sshd started.")
+	for i := 0; i < 40; i++ {
+		time.Sleep(10 * time.Millisecond * time.Duration(i+1))
+		c, err := net.Dial("tcp", "localhost:22")
+		if err == nil {
+			c.Close()
+			log.Printf("sshd connected.")
+			return
+		}
+	}
+	log.Printf("timeout waiting for sshd to come up")
+}
+
+func numProcs() int {
+	n := 0
+	fis, _ := ioutil.ReadDir("/proc")
+	for _, fi := range fis {
+		if _, err := strconv.Atoi(fi.Name()); err == nil {
+			n++
+		}
+	}
+	return n
+}
+
 func fileSHA1(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -1305,7 +1446,7 @@ func (pw *plan9LogWriter) Write(p []byte) (n int, err error) {
 
 func requireTrailerSupport() {
 	// Depend on a symbol that was added after HTTP Trailer support was
-	// implemented (4b96409 Dec 29 2014)j so that this function will fail
+	// implemented (4b96409 Dec 29 2014) so that this function will fail
 	// to compile without Trailer support.
 	// bufio.Reader.Discard was added by ee2ecc4 Jan 7 2015.
 	var r bufio.Reader
@@ -1393,4 +1534,54 @@ func makeBSDFilesystemFast() {
 		return
 	}
 	log.Printf("Remounted / with async,noatime.")
+}
+
+func appendSSHAuthorizedKey(sshUser, authKey string) error {
+	var homeRoot string
+	switch runtime.GOOS {
+	case "darwin":
+		homeRoot = "/Users"
+	case "windows", "plan9":
+		return fmt.Errorf("ssh not supported on %v", runtime.GOOS)
+	default:
+		homeRoot = "/home"
+		if runtime.GOOS == "freebsd" {
+			if fi, err := os.Stat("/usr/home/" + sshUser); err == nil && fi.IsDir() {
+				homeRoot = "/usr/home"
+			}
+		}
+		if sshUser == "root" {
+			homeRoot = "/"
+		}
+	}
+	sshDir := filepath.Join(homeRoot, sshUser, ".ssh")
+	if err := os.MkdirAll(sshDir, 0700); err != nil {
+		return err
+	}
+	if err := os.Chmod(sshDir, 0700); err != nil {
+		return err
+	}
+	authFile := filepath.Join(sshDir, "authorized_keys")
+	exist, err := ioutil.ReadFile(authFile)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if strings.Contains(string(exist), authKey) {
+		return nil
+	}
+	f, err := os.OpenFile(authFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "%s\n", authKey); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if runtime.GOOS == "freebsd" {
+		exec.Command("/usr/sbin/chown", "-R", sshUser, sshDir).Run()
+	}
+	return nil
 }

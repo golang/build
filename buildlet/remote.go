@@ -229,9 +229,13 @@ func NewCoordinatorClientFromFlags() (*CoordinatorClient, error) {
 		return nil, errors.New("RegisterFlags not called")
 	}
 	inst := build.ProdCoordinator
-	if buildenv.FromFlags() == buildenv.Staging {
+	env := buildenv.FromFlags()
+	if env == buildenv.Staging {
 		inst = build.StagingCoordinator
+	} else if env == buildenv.Development {
+		inst = "localhost:8119"
 	}
+
 	if gomoteUserFlag == "" {
 		return nil, errors.New("user flag must be specified")
 	}

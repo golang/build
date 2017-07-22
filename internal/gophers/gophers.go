@@ -1544,3 +1544,14 @@ func init() {
 	addPerson("Фахриддин Балтаев", "faxriddinjon@gmail.com", "@faxriddin")
 	addPerson("张嵩", "zs349596@gmail.com", "@zs1379")
 }
+
+// GithubOfGomoteUser returns the GitHub username for the provided gomote user.
+func GithubOfGomoteUser(gomoteUser string) (githubUser string) {
+	switch gomoteUser {
+	case "austin":
+		return "aclements"
+	case "herbie":
+		return "cybrcodr"
+	}
+	return gomoteUser
+}

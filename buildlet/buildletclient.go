@@ -116,6 +116,12 @@ func (c *Client) SetHTTPClient(httpClient *http.Client) {
 	c.httpClient = httpClient
 }
 
+// SetDialer sets the function that creates a new connection to the buildlet.
+// By default, net.Dial is used.
+func (c *Client) SetDialer(dialer func() (net.Conn, error)) {
+	c.dialer = dialer
+}
+
 // defaultDialer returns the net/http package's default Dial function.
 // Notably, this sets TCP keep-alive values, so when we kill VMs
 // (whose TCP stacks stop replying, forever), we don't leak file
@@ -132,10 +138,11 @@ type Client struct {
 	ipPort         string // required, unless remoteBuildlet+baseURL is set
 	tls            KeyPair
 	httpClient     *http.Client
-	baseURL        string // optional baseURL (used by remote buildlets)
-	authUser       string // defaults to "gomote", if password is non-empty
-	password       string // basic auth password or empty for none
-	remoteBuildlet string // non-empty if for remote buildlets
+	dialer         func() (net.Conn, error) // nil means to use net.Dial
+	baseURL        string                   // optional baseURL (used by remote buildlets)
+	authUser       string                   // defaults to "gomote", if password is non-empty
+	password       string                   // basic auth password or empty for none
+	remoteBuildlet string                   // non-empty if for remote buildlets
 
 	closeFuncs  []func() // optional extra code to run on close
 	releaseMode bool
@@ -743,6 +750,53 @@ func (c *Client) ListDir(dir string, opts ListDirOpts, fn func(DirEntry)) error 
 		fn(DirEntry{line: line})
 	}
 	return sc.Err()
+}
+
+func (c *Client) getDialer() func() (net.Conn, error) {
+	if c.dialer != nil {
+		return c.dialer
+	}
+	return c.dialWithNetDial
+}
+
+func (c *Client) dialWithNetDial() (net.Conn, error) {
+	// TODO: contexts? the tedious part will be adding it to
+	// revdial.Dial. For now just do a 5 second timeout. Probably
+	// fine. This is currently only used for ssh connections.
+	d := net.Dialer{Timeout: 5 * time.Second}
+	return d.Dial("tcp", c.ipPort)
+}
+
+// ConnectSSH opens an SSH connection to the buildlet for the given username.
+// The authorizedPubKey must be a line from an ~/.ssh/authorized_keys file
+// and correspond to the private key to be used to communicate over the net.Conn.
+func (c *Client) ConnectSSH(user, authorizedPubKey string) (net.Conn, error) {
+	conn, err := c.getDialer()()
+	if err != nil {
+		return nil, fmt.Errorf("error dialing HTTP connection before SSH upgrade: %v", err)
+	}
+	req, err := http.NewRequest("POST", "/connect-ssh", nil)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	req.Header.Add("X-Go-Ssh-User", user)
+	req.Header.Add("X-Go-Authorized-Key", authorizedPubKey)
+	if err := req.Write(conn); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("writing /connect-ssh HTTP request failed: %v", err)
+	}
+	bufr := bufio.NewReader(conn)
+	res, err := http.ReadResponse(bufr, req)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("reading /connect-ssh response: %v", err)
+	}
+	if res.StatusCode != http.StatusSwitchingProtocols {
+		slurp, _ := ioutil.ReadAll(res.Body)
+		return nil, fmt.Errorf("unexpected /connect-ssh response: %v, %s", res.Status, slurp)
+	}
+	return conn, nil
 }
 
 func condRun(fn func()) {

@@ -10,6 +10,9 @@ spec:
     - port: 443
       targetPort: 443
       name: https
+    - port: 2222
+      targetPort: 2222
+      name: ssh
   selector:
     app: coordinator
   type: LoadBalancer

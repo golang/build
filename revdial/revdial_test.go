@@ -13,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/net/nettest"
 )
 
 func TestDialer(t *testing.T) {
@@ -225,4 +227,76 @@ func TestServerEOFKillsConns(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Error("timeout waiting for Done channel")
 	}
+}
+
+func TestConnAgainstNetTest(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("testing in short mode")
+	}
+	t.Logf("warning: the revdial's SetWriteDeadline support is not complete; some tests involving write deadlines known to be flaky")
+	nettest.TestConn(t, func() (c1, c2 net.Conn, stop func(), err error) {
+		tln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+			return
+		}
+		cc, err := net.Dial("tcp", tln.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+			return
+		}
+		sc, err := tln.Accept()
+		if err != nil {
+			t.Fatal(err)
+			return
+		}
+
+		rd := NewDialer(bufio.NewReadWriter(
+			bufio.NewReader(sc),
+			bufio.NewWriter(sc),
+		), ioutil.NopCloser(nil))
+
+		rl := NewListener(bufio.NewReadWriter(
+			bufio.NewReader(cc),
+			bufio.NewWriter(cc),
+		))
+
+		c1c := make(chan interface{}, 1)
+		c2c := make(chan interface{}, 1)
+		go func() {
+			c, err := rd.Dial()
+			if err != nil {
+				c1c <- err
+				return
+			}
+			c1c <- c
+		}()
+		go func() {
+			c, err := rl.Accept()
+			if err != nil {
+				c2c <- err
+				return
+			}
+			c2c <- c
+		}()
+		switch v := (<-c1c).(type) {
+		case net.Conn:
+			c1 = v
+		case error:
+			t.Fatalf("revdial.Dial: %v", v)
+		}
+		switch v := (<-c2c).(type) {
+		case net.Conn:
+			c2 = v
+		case error:
+			t.Fatalf("revdial.Accept: %v", v)
+		}
+
+		stop = func() {
+			tln.Close()
+			cc.Close()
+			sc.Close()
+		}
+		return
+	})
 }

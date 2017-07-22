@@ -518,6 +518,7 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	})
+	client.SetDialer(revDialer.Dial)
 	client.SetDescription(fmt.Sprintf("reverse peer %s/%s for host type %v", hostname, r.RemoteAddr, hostType))
 
 	var isDead struct {

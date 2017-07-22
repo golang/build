@@ -36,14 +36,9 @@ coordinator: build0
 	docker cp $(DOCKER_CTR_build0):/go/bin/$@ $@
 	docker rm $(DOCKER_CTR_build0)
 
-ca-certificates.crt:
-	docker create --name $(DOCKER_CTR_build0) $(DOCKER_IMAGE_build0)
-	docker cp $(DOCKER_CTR_build0):/etc/ssl/certs/$@ $@
-	docker rm $(DOCKER_CTR_build0)
-
-docker-prod: Dockerfile coordinator ca-certificates.crt
+docker-prod: Dockerfile coordinator
 	docker build --force-rm --tag=gcr.io/symbolic-datum-552/coordinator:$(VERSION) .
-docker-dev: Dockerfile coordinator ca-certificates.crt
+docker-dev: Dockerfile coordinator
 	docker build --force-rm --tag=gcr.io/go-dashboard-dev/coordinator:latest .
 
 push-prod: docker-prod

@@ -19,3 +19,15 @@ It has been tested with QEMU 1.4.2 to 2.2.0, as provided with:
 
 Also, due to an ATA bug affecting QEMU 1.6 and 1.7, the
 Plan 9 CD can't be booted with these versions.
+
+To create the image:
+
+Then:
+  $ gsutil cp -a public-read plan9-386-gce.tar.gz gs://go-builder-data/plan9-386-gce.tar.gz
+
+Then:
+  $ gcloud compute --project symbolic-datum-552 images create plan9-386-v5 --source-uri gs://go-builder-data/plan9-386-gce.tar.gz
+
+And optional optimization for faster boots:
+  $ go install golang.org/x/build/cmd/coordinator/buildongce
+  $ buildongce -make-basepin

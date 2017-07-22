@@ -240,12 +240,14 @@ var possibleEnvs = map[string]*Environment{
 var (
 	registeredFlags bool
 	stagingFlag     bool
+	localDevFlag    bool
 )
 
 // RegisterFlags registers the "staging" flag. It is required if FromFlags is used.
 func RegisterFlags() {
 	if !registeredFlags {
 		flag.BoolVar(&stagingFlag, "staging", false, "use the staging build coordinator and buildlets")
+		flag.BoolVar(&localDevFlag, "localdev", false, "use the localhost in-development coordinator")
 		registeredFlags = true
 	}
 }
@@ -255,6 +257,9 @@ func RegisterFlags() {
 func FromFlags() *Environment {
 	if !registeredFlags {
 		panic("FromFlags called without RegisterFlags")
+	}
+	if localDevFlag {
+		return Development
 	}
 	if stagingFlag {
 		return Staging

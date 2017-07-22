@@ -19,6 +19,7 @@ spec:
         ports:
         - containerPort: 80
         - containerPort: 443
+        - containerPort: 2222 # ssh proxy port
         resources:
           requests:
             cpu: "1"
