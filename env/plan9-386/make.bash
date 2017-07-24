@@ -220,6 +220,9 @@ expect -exact "term% "
 send "echo fshalt >>/cfg/helix/cpustart\n"
 
 expect -exact "term% "
+send "echo sed /exec/d \\\$home/lib/profile >\\\$home/lib/profile.new && mv \\\$home/lib/profile.new \\\$home/lib/profile\n"
+
+expect -exact "term% "
 send "auth/wrkey\n"
 
 expect -exact "authid: "
