@@ -26,6 +26,7 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/datastore"
+	gcperr "cloud.google.com/go/errors"
 	monapi "cloud.google.com/go/monitoring/apiv3"
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/buildenv"
@@ -65,7 +66,8 @@ var (
 	gerritClient   *gerrit.Client
 	storageClient  *storage.Client
 	metricsClient  *monapi.MetricClient
-	inStaging      bool // are we running in the staging project? (named -dev)
+	inStaging      bool           // are we running in the staging project? (named -dev)
+	errorsClient   *gcperr.Client // Stackdriver errors client
 
 	initGCECalled bool
 )
@@ -144,6 +146,16 @@ func initGCE() error {
 			log.Printf("Error creating datastore client: %v", err)
 		} else {
 			log.Fatalf("Error creating datastore client: %v", err)
+		}
+	}
+
+	// don't send dev errors to Stackdriver.
+	if *mode != "dev" {
+		useLogging := true
+		errorsClient, err = gcperr.NewClient(ctx, buildEnv.ProjectName, "coordinator", "", useLogging)
+		if err != nil {
+			// don't exit, we still want to run coordinator
+			log.Printf("Error creating errors client: %v", err)
 		}
 	}
 

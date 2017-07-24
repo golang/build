@@ -1526,7 +1526,9 @@ func (st *buildStatus) build() error {
 	bc, err := pool.GetBuildlet(st.ctx, st.conf.HostType, st)
 	sp.Done(err)
 	if err != nil {
-		return fmt.Errorf("failed to get a buildlet: %v", err)
+		err = fmt.Errorf("failed to get a buildlet: %v", err)
+		go st.reportErr(err)
+		return err
 	}
 	atomic.StoreInt32(&st.hasBuildlet, 1)
 	defer bc.Close()
@@ -1767,6 +1769,8 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *crossCompileConfig) (
 	kubeBC, err := kubePool.GetBuildlet(ctx, config.Buildlet, st)
 	sp.Done(err)
 	if err != nil {
+		err = fmt.Errorf("cross-compile and snapshot: failed to get a buildlet: %v", err)
+		go st.reportErr(err)
 		return err
 	}
 	defer kubeBC.Close()
@@ -1930,6 +1934,22 @@ func (st *buildStatus) writeSnapshot(bc *buildlet.Client) (err error) {
 	}
 
 	return wr.Close()
+}
+
+// reportErr reports an error to Stackdriver.
+func (st *buildStatus) reportErr(err error) {
+	if errorsClient == nil {
+		// errorsClient is nil in dev environments.
+		return
+	}
+
+	var noRequest *http.Request
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = fmt.Errorf("buildID: %v, name: %s, hostType: %s, error: %v", st.buildID, st.conf.Name, st.conf.HostType, err)
+	errorsClient.Report(ctx, noRequest, err)
+
 }
 
 func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
