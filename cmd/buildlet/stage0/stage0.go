@@ -184,7 +184,8 @@ func awaitNetwork() bool {
 		}
 		failAfter := time.Since(t0)
 		if now := time.Now(); now.After(lastSpam.Add(5 * time.Second)) {
-			log.Printf("network still down; probe failure took %v", failAfter.Round(time.Second/10))
+			const round = time.Second / 10
+			log.Printf("network still down; probe failure took %v", failAfter/round*round)
 			lastSpam = now
 		}
 		time.Sleep(1 * time.Second)
