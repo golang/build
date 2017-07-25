@@ -54,13 +54,15 @@ func main() {
 		configureSerialLogOutput()
 	}
 	log.SetPrefix("stage0: ")
-	log.Printf("bootstrap binary running.")
 	flag.Parse()
 
 	if *untarFile != "" {
+		log.Printf("running in untar mode, untarring %q to %q", *untarFile, *untarDestDir)
 		untarMode()
+		log.Printf("done untarring; exiting")
 		return
 	}
+	log.Printf("bootstrap binary running")
 
 	switch osArch {
 	case "linux/arm":
