@@ -5,13 +5,31 @@
 package main
 
 import (
+	"log"
 	"os"
 	"syscall"
 	"unsafe"
+
+	"github.com/tarm/serial"
 )
 
 func init() {
 	killProcessTree = killProcessTreeWindows
+	configureSerialLogOutput = configureSerialLogOutputWindows
+}
+
+func configureSerialLogOutputWindows() {
+	c := &serial.Config{Name: "COM1", Baud: 9600}
+	s, err := serial.OpenPort(c)
+	if err != nil {
+		// Oh well, we tried. This empirically works
+		// on Windows on GCE.
+		// We can log here anyway and hope somebody sees it
+		// in a GUI console:
+		log.Printf("serial.OpenPort: %v", err)
+		return
+	}
+	log.SetOutput(s)
 }
 
 // the system process tree

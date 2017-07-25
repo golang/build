@@ -40,8 +40,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tarm/serial"
-
 	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/envutil"
@@ -91,7 +89,11 @@ func defaultListenAddr() string {
 	return ":80"
 }
 
-var osHalt func() // set by some machines
+// Functionality set non-nil by some platforms:
+var (
+	osHalt                   func()
+	configureSerialLogOutput func()
+)
 
 func main() {
 	switch os.Getenv("GO_BUILDER_ENV") {
@@ -110,10 +112,7 @@ func main() {
 		}
 	case "windows":
 		if onGCE {
-			c := &serial.Config{Name: "COM1", Baud: 9600}
-			if s, err := serial.OpenPort(c); err == nil {
-				log.SetOutput(s)
-			}
+			configureSerialLogOutput()
 		}
 	}
 
