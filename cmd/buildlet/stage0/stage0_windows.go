@@ -6,17 +6,22 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/tarm/serial"
 )
 
 func init() {
 	configureSerialLogOutput = configureSerialLogOutputWindows
+	closeSerialLogOutput = closeSerialLogOutputWindows
 }
+
+var com1 *serial.Port
 
 func configureSerialLogOutputWindows() {
 	c := &serial.Config{Name: "COM1", Baud: 9600}
-	s, err := serial.OpenPort(c)
+	var err error
+	com1, err = serial.OpenPort(c)
 	if err != nil {
 		// Oh well, we tried. This empirically works
 		// on Windows on GCE.
@@ -25,5 +30,13 @@ func configureSerialLogOutputWindows() {
 		log.Printf("serial.OpenPort: %v", err)
 		return
 	}
-	log.SetOutput(s)
+	log.SetOutput(com1)
+}
+
+func closeSerialLogOutputWindows() {
+	if com1 != nil {
+		com1.Close()
+		com1 = nil
+		log.SetOutput(os.Stderr)
+	}
 }

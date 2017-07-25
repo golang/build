@@ -41,9 +41,13 @@ var (
 	untarDestDir = flag.String("untar-dest-dir", "", "destination directory to untar --untar-file to")
 )
 
-// configureSerialLogOutput is set non-nil on some platforms to configure
-// log output to go to the serial console.
-var configureSerialLogOutput func()
+// configureSerialLogOutput and closeSerialLogOutput are set non-nil
+// on some platforms to configure log output to go to the serial
+// console and to close the serial port, respectively.
+var (
+	configureSerialLogOutput func()
+	closeSerialLogOutput     func()
+)
 
 func main() {
 	if configureSerialLogOutput != nil {
@@ -148,7 +152,16 @@ func main() {
 	case "solaris/amd64":
 		cmd.Args = append(cmd.Args, legacyReverseBuildletArgs("solaris-amd64-smartosbuildlet")...)
 	}
+	// Release the serial port (if we opened it) so the buildlet
+	// process can open & write to it. At least on Windows, only
+	// one process can have it open.
+	if closeSerialLogOutput != nil {
+		closeSerialLogOutput()
+	}
 	if err := cmd.Run(); err != nil {
+		if configureSerialLogOutput != nil {
+			configureSerialLogOutput()
+		}
 		sleepFatalf("Error running buildlet: %v", err)
 	}
 }
