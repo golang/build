@@ -14,7 +14,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,7 +29,7 @@ import (
 // This lets us be lazy and put the stage0 start-up in rc.local where
 // it might race with the network coming up, rather than write proper
 // upstart+systemd+init scripts:
-var networkWait = flag.Duration("network-wait", 0, "if non-zero, the time to wait for the network to come up.")
+var networkWait = flag.Duration("network-wait", 0, "if zero, a default is used if needed")
 
 const osArch = runtime.GOOS + "/" + runtime.GOARCH
 
@@ -41,7 +41,16 @@ var (
 	untarDestDir = flag.String("untar-dest-dir", "", "destination directory to untar --untar-file to")
 )
 
+// configureSerialLogOutput is set non-nil on some platforms to configure
+// log output to go to the serial console.
+var configureSerialLogOutput func()
+
 func main() {
+	if configureSerialLogOutput != nil {
+		configureSerialLogOutput()
+	}
+	log.SetPrefix("stage0: ")
+	log.Printf("bootstrap binary running.")
 	flag.Parse()
 
 	if *untarFile != "" {
@@ -157,15 +166,47 @@ func legacyReverseBuildletArgs(builder string) []string {
 // awaitNetwork reports whether the network came up within 30 seconds,
 // determined somewhat arbitrarily via a DNS lookup for google.com.
 func awaitNetwork() bool {
-	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(time.Second) {
-		if addrs, _ := net.LookupIP("google.com"); len(addrs) > 0 {
+	timeout := 30 * time.Second
+	if runtime.GOOS == "windows" {
+		timeout = 5 * time.Minute // empirically slower sometimes?
+	}
+	if *networkWait != 0 {
+		timeout = *networkWait
+	}
+	deadline := time.Now().Add(timeout)
+	var lastSpam time.Time
+	log.Printf("waiting for network.")
+	for time.Now().Before(deadline) {
+		t0 := time.Now()
+		if isNetworkUp() {
 			log.Printf("network is up.")
 			return true
 		}
-		log.Printf("waiting for network...")
+		failAfter := time.Since(t0)
+		if now := time.Now(); now.After(lastSpam.Add(5 * time.Second)) {
+			log.Printf("network still down; probe failure took %v", failAfter.Round(time.Second/10))
+			lastSpam = now
+		}
+		time.Sleep(1 * time.Second)
 	}
 	log.Printf("gave up waiting for network")
 	return false
+}
+
+func isNetworkUp() bool {
+	const probeURL = "http://farmer.golang.org/netcheck" // 404 is fine.
+	c := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			DisableKeepAlives: true,
+		},
+	}
+	res, err := c.Get(probeURL)
+	if err != nil {
+		return false
+	}
+	res.Body.Close()
+	return true
 }
 
 func buildletURL() string {
@@ -210,24 +251,28 @@ func sleepFatalf(format string, args ...interface{}) {
 }
 
 func download(file, url string) error {
-	log.Printf("Downloading %s to %s ...\n", url, file)
-	deadline := time.Now().Add(*networkWait)
-	for {
+	log.Printf("downloading %s to %s ...\n", url, file)
+	const maxTry = 3
+	var lastErr error
+	for try := 1; try <= maxTry; try++ {
+		if try > 1 {
+			// network should be up by now per awaitNetwork, so just retry
+			// shortly a few time on errors.
+			time.Sleep(2)
+		}
 		err := httpdl.Download(file, url)
 		if err == nil {
-			fi, _ := os.Stat(file)
-			log.Printf("Downloaded %s (%d bytes)", file, fi.Size())
+			fi, err := os.Stat(file)
+			if err != nil {
+				return err
+			}
+			log.Printf("downloaded %s (%d bytes)", file, fi.Size())
 			return nil
 		}
-		// TODO(bradfitz): delete this whole download function
-		// and move this functionality into a "WaitNetwork"
-		// function somewhere?
-		if time.Now().Before(deadline) {
-			time.Sleep(1 * time.Second)
-			continue
-		}
-		return err
+		lastErr = err
+		log.Printf("try %d/%d download failure: %v", try, maxTry, err)
 	}
+	return lastErr
 }
 
 func aptGetInstall(pkgs ...string) {
