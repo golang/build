@@ -6,15 +6,9 @@ The provisioning happens in two stages:
   - [sysprep.ps1](./sysprep.ps1): Downloads and unpacks dependencies, disabled unneeded Windows features (eg UAC)
   - [startup.ps1](./startup.ps1): Creates and configures user for unattended login to launch the buildlet
 
-## Prerequisite: Setup a firewall rule
-Allow traffic to instances tagged `allow-dev-access` on tcp:80, tcp:3389
+## Prerequisite: Access internal network
 
-```bash
-# restrict this down to your local network
-source_range=0.0.0.0/0
-
-gcloud compute firewall-rules create --allow=tcp:80,tcp:3389 --target-tags allow-dev-access --source-ranges $source_range allow-dev-access
-```
+The scripts assume the internal GCP network is accessible. To do this, create a linux VM in the project and SSH into the machine or use a VPN like [sshuttle](https://github.com/apenwarr/sshuttle).
 
 ## Examples/Tools
 
@@ -41,7 +35,8 @@ external_ip=$(gcloud compute instances describe golang-buildlet-test --project=$
 ./test_buildlet.bash $external_ip
 ```
 
-### Troubleshoot via RDP
+### Troubleshoot via remote access
 ```bash
-./connect.bash <instance_name>
+./rdp.bash <instance_name>
+./telnet.bash <instance_name>
 ```

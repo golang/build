@@ -9,9 +9,9 @@ set -e -u
 declare -A public_images
 
 public_images=( 
-         ['server-2016-v2']='windows-server-2016-dc-core-v20170214'
-         ['server-2008r2-v2']='windows-server-2008-r2-dc-v20170214' 
-         ['server-2012r2-v2']='windows-server-2012-r2-dc-core-v20170214'
+         ['server-2016-v3']='windows-server-2016-dc-core-v20170711'
+         ['server-2008r2-v3']='windows-server-2008-r2-dc-v20170711' 
+         ['server-2012r2-v3']='windows-server-2012-r2-dc-core-v20170711'
        )
 
 mkdir -p out
@@ -20,7 +20,7 @@ for image in "${!public_images[@]}"; do
     prefix=$image
     base_image=${public_images[$image]}
 
-    BASE_IMAGE="$base_image" IMAGE_PROJECT='windows-cloud' ./build.bash "$prefix" |& tee "out/${base_image}.txt" &
+    CAPTURE_IMAGE=true BASE_IMAGE="$base_image" IMAGE_PROJECT='windows-cloud' ./build.bash "$prefix" |& tee "out/${base_image}.txt" &
 done
 
 

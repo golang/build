@@ -4,6 +4,31 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
+#
+# Creates a new windows VM running the buildlet
+#
+
+# SPINNING UP A TEST INSTANCE
+# Create a windows instance and bakes the buildlet into the startup.
+#
+# PROJECT_ID=[your GCP project] BASE_IMAGE=windows-server-2012-r2-dc-v20170711 IMAGE_PROJECT=windows-cloud ./build.bash
+# PROJECT_ID=[your GCP project] ./rdp.bash
+
+# CREATED AN IMAGE FOR BUILDER DASHBOARD
+# Creates an image and validates it for use in the dashboard.
+#
+# Steps:
+#  - Create new VM
+#  - Run startup.ps1, restart
+#  - Wait till buildlet process is up
+#  - Stop VM
+#  - Capture image
+#  - Create a new VM from the image
+#  - Wait till buildlet process is up
+#  - Run ./test_buildlet.bash
+#
+# PROJECT_ID=[your GCP project] BASE_IMAGE=windows-server-2012-r2-dc-v20170711 IMAGE_PROJECT=windows-cloud CAPTURE_IMAGE=true ./build.bash
+
 set -eu
 
 ZONE="us-central1-f"
@@ -15,14 +40,15 @@ MACHINE_TYPE="n1-standard-4"
 BUILDLET_IMAGE="windows-amd64-${IMAGE_NAME}"
 IMAGE_PROJECT=$IMAGE_PROJECT
 BASE_IMAGE=$BASE_IMAGE
+CAPTURE_IMAGE="${CAPTURE_IMAGE-false}"
 
 function wait_for_buildlet() {
-  external_ip=$1
+  ip=$1
   seconds=5
 
-  echo "Waiting for buildlet at ${external_ip} to become responsive"
-  until curl "http://${external_ip}" 2>/dev/null; do
-    echo "retrying ${external_ip} in ${seconds} seconds"
+  echo "Waiting for buildlet at ${ip} to become responsive"
+  until curl "http://${ip}" 2>/dev/null; do
+    echo "retrying ${ip} in ${seconds} seconds"
     sleep "${seconds}"
   done
 }
@@ -45,16 +71,20 @@ gcloud compute instances create --machine-type="$MACHINE_TYPE" "$INSTANCE_NAME" 
         --image "$BASE_IMAGE" --image-project "$IMAGE_PROJECT" \
         --project="$PROJECT_ID" --zone="$ZONE" \
         --metadata="buildlet-binary-url=https://storage.googleapis.com/go-builder-data/buildlet.windows-amd64" \
-        --metadata-from-file=sysprep-specialize-script-ps1=sysprep.ps1,windows-startup-script-ps1=startup.ps1 --tags=allow-dev-access 
+        --metadata-from-file=windows-startup-script-ps1=startup.ps1
 
 echo ""
-echo "Fetch logs with:"
+echo "Follow logs with:"
 echo ""
-echo gcloud compute instances get-serial-port-output "$INSTANCE_NAME" --zone="$ZONE" --project="$PROJECT_ID" 
+echo gcloud compute instances tail-serial-port-output "$INSTANCE_NAME" --zone="$ZONE" --project="$PROJECT_ID" 
 echo ""
-external_ip=$(gcloud compute instances describe "$INSTANCE_NAME" --project="$PROJECT_ID" --zone="$ZONE" --format="value(networkInterfaces[0].accessConfigs[0].natIP)")
+ip=$(gcloud compute instances describe "$INSTANCE_NAME" --project="$PROJECT_ID" --zone="$ZONE" --format="value(networkInterfaces[0].networkIP)")
 
-wait_for_buildlet "$external_ip"
+wait_for_buildlet "$ip"
+
+if [ ! "$CAPTURE_IMAGE" = "true" ]; then
+  exit 0
+fi
 
 #
 # 2. Image base instance
@@ -77,9 +107,9 @@ yes "Y" | gcloud compute instances delete "$INSTANCE_NAME" --project="$PROJECT_I
 echo "Creating new machine with image"
 gcloud compute instances create --machine-type="$MACHINE_TYPE" --image "$BUILDLET_IMAGE" "$TEST_INSTANCE_NAME" \
        --project="$PROJECT_ID" --metadata="buildlet-binary-url=https://storage.googleapis.com/go-builder-data/buildlet.windows-amd64" \
-       --tags=allow-dev-access --zone="$ZONE"
+       --zone="$ZONE"
 
-test_image_ip=$(gcloud compute instances describe "$TEST_INSTANCE_NAME" --project="$PROJECT_ID" --zone="$ZONE" --format="value(networkInterfaces[0].accessConfigs[0].natIP)")
+test_image_ip=$(gcloud compute instances describe "$TEST_INSTANCE_NAME" --project="$PROJECT_ID" --zone="$ZONE" --format="value(networkInterfaces[0].networkIP)")
 wait_for_buildlet "$test_image_ip"
 
 echo "Performing test build"
