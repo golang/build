@@ -49,7 +49,6 @@ type VMOpts struct {
 	Meta map[string]string
 
 	// DeleteIn optionally specifies a duration at which
-
 	// to delete the VM.
 	DeleteIn time.Duration
 
@@ -65,6 +64,15 @@ type VMOpts struct {
 	// OnInstanceCreated optionally specifies a hook to run synchronously
 	// after the computeService.Instances.Get call.
 	OnGotInstanceInfo func()
+
+	// OnBeginBuildletProbe optionally specifies a hook to run synchronously
+	// before StartNewVM tries to hit buildletURL to see if it's up yet.
+	OnBeginBuildletProbe func(buildletURL string)
+
+	// OnEndBuildletProbe optionally specifies a hook to run synchronously
+	// after StartNewVM tries to hit the buildlet's URL to see if it's up.
+	// The hook parameters are the return values from http.Get.
+	OnEndBuildletProbe func(*http.Response, error)
 
 	// FallbackToFullPrice optionally specifies a hook to return a new
 	// GCE instance name if the first one failed to launch
@@ -272,7 +280,13 @@ OpLoop:
 	try := 0
 	for time.Now().Before(deadline) {
 		try++
+		if fn := opts.OnBeginBuildletProbe; fn != nil {
+			fn(buildletURL)
+		}
 		res, err := impatientClient.Get(buildletURL)
+		if fn := opts.OnEndBuildletProbe; fn != nil {
+			fn(res, err)
+		}
 		if err != nil {
 			time.Sleep(1 * time.Second)
 			continue
