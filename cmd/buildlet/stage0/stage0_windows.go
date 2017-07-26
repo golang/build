@@ -5,6 +5,7 @@
 package main
 
 import (
+	"io"
 	"log"
 	"os"
 
@@ -30,7 +31,7 @@ func configureSerialLogOutputWindows() {
 		log.Printf("serial.OpenPort: %v", err)
 		return
 	}
-	log.SetOutput(com1)
+	log.SetOutput(io.MultiWriter(com1, os.Stderr))
 }
 
 func closeSerialLogOutputWindows() {
