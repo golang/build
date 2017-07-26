@@ -3,22 +3,18 @@
 This subrepository holds the source for various packages and tools that support
 Go's build system and the development of the Go programming language.
 
-## Download/Install
-
-The easiest way to download this package is to run `go get -u
-golang.org/x/build/...`. You can also manually git clone the repository to
-`$GOPATH/src/golang.org/x/build`.
-
 ## Report Issues / Send Patches
 
-This repository uses Gerrit for code changes. To learn how to submit changes to
-this repository, see https://golang.org/doc/contribute.html.
+This repository uses Gerrit for code changes. To contribute, see
+https://golang.org/doc/contribute.html.
 
 The main issue tracker for the blog is located at
-https://github.com/golang/go/issues. Prefix your issue with "x/build:" in the
-subject line, so it is easy to find.
+https://github.com/golang/go/issues. Prefix your issue with
+"`x/build/DIR: `" in the subject line.
 
-### Code Layout
+## Overview
+
+The main components of the Go build system are:
 
 ```
 app/: the App Engine code that runs https://build.golang.org/ and
@@ -67,3 +63,5 @@ If you wish to run a Go builder, please email
 is documentation at https://golang.org/wiki/DashboardBuilders, but depending
 on the type of builder, we may want to run it ourselves, after you prepare an
 environment description (resulting in a VM image) of it. See the env directory.
+
+[.](https://http2.golang.org/reqinfo)
