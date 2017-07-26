@@ -16,45 +16,107 @@ https://github.com/golang/go/issues. Prefix your issue with
 
 The main components of the Go build system are:
 
-```
-app/: the App Engine code that runs https://build.golang.org/ and
-      stores which builds have passed or failed. It is responsible for
-      knowing which post-submit builds still need to be done. (It doesn't know
-      anyting about trybot builds that need to be done)
-      It doesn't execute any builds itself. See the coordinator.
+* The **dashboard**, in [app/](https://dev.golang.org/dir/build/app), serves
+  https://build.golang.org/. It runs on App Engine and holds the state for
+  which builds passed or failed, and stores the build failure logs for
+  post-submit failures. (Trybot build failure logs are stored elsewhere).
+  The dashboard does not execute any builds on its own.
 
-buildenv/: variables with details of the production environment vs the
-           staging environment.
 
-cmd/:
+* The **coordinator**, in
+  [cmd/coordinator/](https://dev.golang.org/dir/build/cmd/coordinator/),
+  serves https://farmer.golang.org/. It runs on GKE and coordinates the
+  whole build system. It finds work to do (both pre-submit "TryBot" work,
+  and post-submit work) and executes builds, allocating machines to run the
+  builds. It is the owner of all machines.
 
-  buildlet/: HTTP server that runs on a VM and is told what to write to disk
-           and what command to run. This is cross-compiled to different architectures
-           and is the first program run when a builder VM comes up. It then
-           is contacted by the coordinator to do a build. Not all builders use
-           the buildlet (at least not yet).
+* The Go package in [buildenv/](https://dev.golang.org/dir/build/buildenv/)
+  contains constants for where the dashboard and coordinator run, for prod,
+  staging, and local development.
 
-  builder/: gobuilder, a Go continuous build client. The original Go builder program.
+* The **buildlet**, in
+  [cmd/buildlet/](https://dev.golang.org/dir/build/cmd/buildlet/), is the
+  HTTP server that runs on each worker machine to execute builds on the
+  coordinator's behalf. This runs on every possible GOOS/GOARCH value. The
+  buildlet binaries are stored on Google Cloud Storage and fetched
+  per-build, so we can update the buildlet binary independently of the
+  underlying machine images. The buildlet is the most insecure server
+  possible: it has HTTP handlers to read & write arbitrary content to disk,
+  and to execute any file on disk. It also has an SSH tunnel handler. The
+  buildlet must never be exposed to the Internet. The coordinator provisions
+  buildlets in one of three ways:
 
-  coordinator/: daemon that runs on CoreOS on Google Compute Engine and manages
-          builds using Docker containers and/or VMs as needed.
+  1. by creating VMs on Google Compute Engine (GCE) with custom images
+  configured to fetch & run the buildlet on boot, listening on port 80 in a
+  private network.
+  
+  2. by creating Linux Kubernetes containers on Google Container Engine
+  (GKE), with Kubernetes PODs configured to fetch & run the buildlet on
+  start, also in a private network.
 
-  retrybuilds/: a Go client program to delete build results from the dashboard (app)
+  3. by taking buildlets out of a pool of connected, dedicated machines. The
+  buildlet can run in either *listen mode* (as on GCE and GKE) or in
+  *reverse mode*. In reverse mode, the buildlet connects out to
+  https://farmer.golang.org/ and registers itself with the coordinator. The
+  TCP connection is then logically reversed (using
+  [revdial](https://dev.golang.org/dir/build/revdial/) and when the
+  coordinator needs to do a build, it makes HTTP requests to the coordinator
+  over the already-open TCP connection.
 
-  upload/:  a Go program to upload to Google Cloud Storage. used by Makefiles elsewhere.
+  These three pools can be viewed at the coordinator's
+  http://farmer.golang.org/#pools
 
-  gitmirror/: a daemon that watches for new commits to the Go repository and
-              its sub-repositories, and notifies the dashboard of those commits,
-              as well as syncing them to GitHub. It also serves tarballs to
-              the coordinator.
 
-dashboard/: the configuration of the various build configs and host configs.
+* The [env/](https://dev.golang.org/dir/build/env/) directory describes
+  build environments. It contains scripts to create VM images, Dockerfiles
+  to create Kubernetes containers, and instructions and tools for dedicated
+  machines.
 
-env/:     configuration files describing the environment of builders and related
-          binaries.
 
-types/:   a Go package contain common types used by other pieces.
-```
+* **maintner** in [maintner/](https://dev.golang.org/dir/build/maintner) is
+  a library for slurping all of Go's GitHub and Gerrit state into memory.
+  The daemon **maintnerd** in
+  [maintner/maintnerd/](https://dev.golang.org/dir/build/maintner/maintnerd)
+  runs on GKE and serves https://maintner.golang.org/. The daemon watches
+  GitHub and Gerrit and apps to a mutation log whenever it sees new
+  activity. The logs are stored on GCS and served to clients.
+
+
+* The [godata package](https://godoc.org/golang.org/x/build/maintner/godata)
+  in [maintner/godata/](https://dev.golang.org/dir/build/maintner/godata)
+  provides a trivial API to let anybody write programs against
+  Go's maintner corpus (all of our GitHub and Gerrit history), live up
+  to the second. It takes a few seconds to load into memory and a few hundred
+  MB of RAM after it downloads the mutation log from the network.
+
+
+* **pubsubhelper** in
+  [cmd/pubsubhelper/](https://dev.golang.org/dir/build/cmd/pubsubhelper/) is
+  a dependency of maintnerd. It runs an HTTP server to receive Webhook
+  updates from GitHub on new activity and an SMTP server to receive new
+  activity emails from Gerrit. It then is a pubsub system for maintnerd to
+  subscribe to.
+
+
+* The **gitmirror** server in
+  [cmd/gitmirror/](https://dev.golang.org/dir/build/cmd/gitmirror) mirrors
+  Gerrit to GitHub, and also serves a mirror of the Gerrit code to the
+  coordinator for builds, so we don't overwhelm Gerrit and blow our quota.
+
+
+* The Go **gopherbot** bot logic runs on GKE. The code is in
+  [cmd/gopherbot](https://dev.golang.org/dir/build/cmd/gopherbot). It
+  depends on maintner via the godata package.
+
+
+* The **developer dashboard** at https://dev.golang.org/ runs on GKE.
+  Its code is in [devapp/](https://dev.golang.org/dir/build/devapp/).
+  It also depends on maintner via the godata package.
+
+
+* **cmd/retrybuilds**: a Go client program to delete build results from the
+    dashboard
+
 
 ### Adding a Go Builder
 
@@ -64,4 +126,3 @@ is documentation at https://golang.org/wiki/DashboardBuilders, but depending
 on the type of builder, we may want to run it ourselves, after you prepare an
 environment description (resulting in a VM image) of it. See the env directory.
 
-[.](https://http2.golang.org/reqinfo)
