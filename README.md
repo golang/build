@@ -92,10 +92,11 @@ The main components of the Go build system are:
 
 * **pubsubhelper** in
   [cmd/pubsubhelper/](https://dev.golang.org/dir/build/cmd/pubsubhelper/) is
-  a dependency of maintnerd. It runs an HTTP server to receive Webhook
-  updates from GitHub on new activity and an SMTP server to receive new
-  activity emails from Gerrit. It then is a pubsub system for maintnerd to
-  subscribe to.
+  a dependency of maintnerd. It runs on GKE, is available at
+  https://pubsubhelper.golang.org/, and runs an HTTP server to receive
+  Webhook updates from GitHub on new activity and an SMTP server to receive
+  new activity emails from Gerrit. It then is a pubsub system for maintnerd
+  to subscribe to.
 
 
 * The **gitmirror** server in
