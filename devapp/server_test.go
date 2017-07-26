@@ -70,3 +70,36 @@ func TestRandomHelpWantedIssue(t *testing.T) {
 		t.Errorf("Location header = %q; want %q", g, w)
 	}
 }
+
+func TestHandleDirRedirect(t *testing.T) {
+	tests := []struct {
+		path string
+		ref  string
+		want string
+	}{
+		{"/dir/build", "", "https://github.com/golang/build/tree/master/"},
+		{"/dir/build/", "", "https://github.com/golang/build/tree/master/"},
+		{"/dir/build", "https://go.googlesource.com/", "https://go.googlesource.com/build/+/master/"},
+		{"/dir/build/", "https://go.googlesource.com/", "https://go.googlesource.com/build/+/master/"},
+		{"/dir/build/maintner", "", "https://github.com/golang/build/tree/master/maintner"},
+		{"/dir/build/maintner/", "", "https://github.com/golang/build/tree/master/maintner"},
+		{"/dir/build/maintner", "https://go.googlesource.com/", "https://go.googlesource.com/build/+/master/maintner"},
+		{"/dir/build/maintner/", "https://go.googlesource.com/", "https://go.googlesource.com/build/+/master/maintner"},
+	}
+	for _, tt := range tests {
+		req := httptest.NewRequest("GET", tt.path, nil)
+		if tt.ref != "" {
+			req.Header.Set("Referer", tt.ref)
+		}
+		w := httptest.NewRecorder()
+		testServer.ServeHTTP(w, req)
+		if w.Code != http.StatusFound {
+			t.Errorf("for %q from %q, got code %d, want %d", tt.path, tt.ref, w.Code, http.StatusFound)
+			continue
+		}
+		got := w.Header().Get("Location")
+		if got != tt.want {
+			t.Errorf("for %q from %q, got %q; want %q", tt.path, tt.ref, got, tt.want)
+		}
+	}
+}

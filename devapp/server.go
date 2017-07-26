@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"path"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,6 +50,7 @@ func newServer(mux *http.ServeMux, staticDir, templateDir string) *server {
 	s.mux.Handle("/", http.FileServer(http.Dir(s.staticDir)))
 	s.mux.HandleFunc("/favicon.ico", s.handleFavicon)
 	s.mux.HandleFunc("/release", s.withTemplate("/release.tmpl", s.handleRelease))
+	s.mux.HandleFunc("/dir/", handleDirRedirect)
 	for _, p := range []string{"/imfeelinghelpful", "/imfeelinglucky"} {
 		s.mux.HandleFunc(p, s.handleRandomHelpWantedIssue)
 	}
@@ -157,4 +159,40 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000; preload")
 	}
 	s.mux.ServeHTTP(w, r)
+}
+
+// handleDirRedirect accepts requests of the form:
+//     /dir/REPO/some/dir/
+// And redirects them to either:
+//     https://github.com/golang/REPO/tree/master/some/dir/
+// or:
+//     https://go.googlesource.com/REPO/+/master/some/dir/
+// ... depending on the Referer. This is so we can make links
+// in Markdown docs that are clickable on both GitHub and
+// in the go.googlesource.com viewer. If detection fails, we
+// default to GitHub.
+func handleDirRedirect(w http.ResponseWriter, r *http.Request) {
+	useGoog := strings.Contains(r.Referer(), "googlesource.com")
+	path := r.URL.Path
+	if !strings.HasPrefix(path, "/dir/") {
+		http.Error(w, "bad mux", http.StatusInternalServerError)
+		return
+	}
+	path = strings.TrimPrefix(path, "/dir/")
+	// path is now "REPO/some/dir/"
+	var repo string
+	slash := strings.IndexByte(path, '/')
+	if slash == -1 {
+		repo, path = path, ""
+	} else {
+		repo, path = path[:slash], path[slash+1:]
+	}
+	path = strings.TrimSuffix(path, "/")
+	var target string
+	if useGoog {
+		target = fmt.Sprintf("https://go.googlesource.com/%s/+/master/%s", repo, path)
+	} else {
+		target = fmt.Sprintf("https://github.com/golang/%s/tree/master/%s", repo, path)
+	}
+	http.Redirect(w, r, target, http.StatusFound)
 }
