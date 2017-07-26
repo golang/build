@@ -31,13 +31,18 @@ update-deps:
 
 docker-prod: Dockerfile devapp ca-certificates.crt
 	docker build --force-rm --tag=gcr.io/symbolic-datum-552/devapp:$(VERSION) .
-docker-dev: Dockerfile devapp ca-certificates.crt
+docker-staging: Dockerfile devapp ca-certificates.crt
 	docker build --force-rm --tag=gcr.io/go-dashboard-dev/devapp:$(VERSION) .
 
 push-prod: docker-prod
 	gcloud docker -- push gcr.io/symbolic-datum-552/devapp:$(VERSION)
-push-dev: docker-dev
+push-staging: docker-staging
 	gcloud docker -- push gcr.io/go-dashboard-dev/devapp:$(VERSION)
+
+deploy-prod: push-prod
+	kubectl set image deployment/devapp-deployment devapp=gcr.io/symbolic-datum-552/devapp:$(VERSION)
+deploy-staging: push-staging
+	kubectl set image deployment/devapp-deployment devapp=gcr.io/go-dashboard-dev/devapp:$(VERSION)
 
 .PHONY: clean
 clean:
