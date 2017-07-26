@@ -17,6 +17,7 @@ import (
 
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/dashboard"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
@@ -24,6 +25,7 @@ import (
 
 var (
 	hostType     = flag.String("host", "host-windows-amd64-2012", "host type to create")
+	vmImage      = flag.String("override-image", "", "if non-empty, an alternate GCE VM image to use, overriding the one defined for the given host")
 	serial       = flag.Bool("serial", true, "watch serial")
 	pauseAfterUp = flag.Bool("pause-after-up", false, "pause for a few seconds (enough to SIGSTOP) after WorkDir returns")
 )
@@ -36,6 +38,18 @@ var (
 func main() {
 	buildenv.RegisterFlags()
 	flag.Parse()
+
+	hconf, ok := dashboard.Hosts[*hostType]
+	if !ok {
+		log.Fatalf("unknown host type %q", *hostType)
+	}
+	if !hconf.IsGCE() {
+		log.Fatalf("host type %q is not a GCE host type", *hostType)
+	}
+	if *vmImage != "" {
+		hconf.VMImage = *vmImage
+	}
+
 	ts, err := google.DefaultTokenSource(context.Background())
 	if err != nil {
 		log.Fatal(err)
@@ -43,8 +57,8 @@ func main() {
 	env = buildenv.FromFlags()
 	computeSvc, _ = compute.New(oauth2.NewClient(context.TODO(), ts))
 
-	name := fmt.Sprintf("buildlet-debug-%d", time.Now().Unix())
-	log.Printf("Creating %s", name)
+	name := fmt.Sprintf("debug-temp-%d", time.Now().Unix())
+	log.Printf("Creating %s (with VM image %q)", name, hconf.VMImage)
 	c, err := buildlet.StartNewVM(ts, name, *hostType, buildlet.VMOpts{
 		Zone:                env.Zone,
 		ProjectID:           env.ProjectName,
