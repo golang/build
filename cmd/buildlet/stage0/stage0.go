@@ -49,6 +49,8 @@ var (
 	closeSerialLogOutput     func()
 )
 
+var timeStart = time.Now()
+
 func main() {
 	if configureSerialLogOutput != nil {
 		configureSerialLogOutput()
@@ -88,6 +90,9 @@ func main() {
 	if !awaitNetwork() {
 		sleepFatalf("network didn't become reachable")
 	}
+	timeNetwork := time.Now()
+	netDelay := prettyDuration(timeNetwork.Sub(timeStart))
+	log.Printf("network up after %v", netDelay)
 
 	// Note: we name it ".exe" for Windows, but the name also
 	// works fine on Linux, etc.
@@ -101,6 +106,8 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+	downloadDelay := prettyDuration(time.Since(timeNetwork))
+	log.Printf("downloaded buildlet in %v", downloadDelay)
 
 	env := os.Environ()
 	if isUnix() && os.Getuid() == 0 {
@@ -111,6 +118,8 @@ func main() {
 			env = append(env, "HOME=/root")
 		}
 	}
+	env = append(env, fmt.Sprintf("GO_STAGE0_NET_DELAY=%v", netDelay))
+	env = append(env, fmt.Sprintf("GO_STAGE0_DL_DELAY=%v", downloadDelay))
 
 	cmd := exec.Command(target)
 	cmd.Stdout = os.Stdout
@@ -194,13 +203,13 @@ func awaitNetwork() bool {
 	for time.Now().Before(deadline) {
 		t0 := time.Now()
 		if isNetworkUp() {
-			log.Printf("network is up.")
 			return true
 		}
 		failAfter := time.Since(t0)
 		if now := time.Now(); now.After(lastSpam.Add(5 * time.Second)) {
-			const round = time.Second / 10
-			log.Printf("network still down; probe failure took %v", failAfter/round*round)
+			log.Printf("network still down for %v; probe failure took %v",
+				prettyDuration(time.Since(timeStart)),
+				prettyDuration(failAfter))
 			lastSpam = now
 		}
 		time.Sleep(1 * time.Second)
@@ -209,6 +218,9 @@ func awaitNetwork() bool {
 	return false
 }
 
+// isNetworkUp reports whether the network is up by hitting an
+// known-up HTTP server. It might block for a few seconds before
+// returning an answer.
 func isNetworkUp() bool {
 	const probeURL = "http://farmer.golang.org/netcheck" // 404 is fine.
 	c := &http.Client{
@@ -359,4 +371,9 @@ func untarMode() {
 	if err := untar.Untar(f, *untarDestDir); err != nil {
 		log.Fatalf("Untarring %q to %q: %v", *untarFile, *untarDestDir, err)
 	}
+}
+
+func prettyDuration(d time.Duration) time.Duration {
+	const round = time.Second / 10
+	return d / round * round
 }
