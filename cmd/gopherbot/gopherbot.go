@@ -625,8 +625,8 @@ func (b *gopherbot) checkCherryPicks(ctx context.Context) error {
 	return nil
 }
 
-// Write "CL https://golang.org/issue/NNNN mentions this issue" on
-// Github when a new Gerrit CL references a Github issue.
+// cl2issue writes "Change https://golang.org/issue/NNNN mentions this issue"\
+// and the change summary on GitHub when a new Gerrit change references a GitHub issue.
 func (b *gopherbot) cl2issue(ctx context.Context) error {
 	monthAgo := time.Now().Add(-30 * 24 * time.Hour)
 	b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
@@ -647,7 +647,7 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 					continue
 				}
 				hasComment := false
-				substr := fmt.Sprintf("%d mentions this issue.", cl.Number)
+				substr := fmt.Sprintf("%d mentions this issue", cl.Number)
 				gi.ForeachComment(func(c *maintner.GitHubComment) error {
 					if strings.Contains(c.Body, substr) {
 						hasComment = true
@@ -660,7 +660,8 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 					if *dryRun {
 						return nil
 					}
-					if err := b.addGitHubComment(ctx, "golang", "go", gi.Number, fmt.Sprintf("CL https://golang.org/cl/%d mentions this issue.", cl.Number)); err != nil {
+					msg := fmt.Sprintf("Change https://golang.org/cl/%d mentions this issue: `%s`", cl.Number, cl.Commit.Summary())
+					if err := b.addGitHubComment(ctx, "golang", "go", gi.Number, msg); err != nil {
 						return err
 					}
 				}

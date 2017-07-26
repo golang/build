@@ -99,6 +99,16 @@ func (gc *GitCommit) hasAncestor(ancestor *GitCommit, checked map[*GitCommit]boo
 	return false
 }
 
+// Summary returns the first line of the commit message.
+func (gc *GitCommit) Summary() string {
+	s := gc.Msg
+	if i := strings.IndexByte(s, '\n'); i != -1 {
+		s = s[:i]
+	}
+	s = strings.TrimSpace(s)
+	return s
+}
+
 // GitPerson is a person in a git commit.
 type GitPerson struct {
 	Str string // "Foo Bar <foo@bar.com>"
