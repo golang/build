@@ -160,13 +160,6 @@ var Hosts = map[string]*HostConfig{
 		machineType: "n1-highcpu-4",
 		env:         []string{"GO_TEST_TIMEOUT_SCALE=2"},
 	},
-	"host-windows-gce": &HostConfig{
-		VMImage:            "windows-buildlet-v2",
-		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
-		RegularDisk:        true,
-	},
 	"host-windows-amd64-2008": &HostConfig{
 		VMImage:            "windows-amd64-server-2008r2-v3",
 		machineType:        "n1-highcpu-4",
@@ -639,7 +632,7 @@ func (c *BuildConfig) BuildSubrepos() bool {
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
 		"openbsd-386-60", "openbsd-amd64-60",
 		"plan9-386",
-		"windows-386-gce", "windows-amd64-2008", "windows-386-2008":
+		"windows-amd64-2016", "windows-386-2008":
 		return true
 	case "darwin-amd64-10_12":
 		// Don't build subrepos on Sierra until
@@ -764,20 +757,18 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-gce93",
 		HostType: "host-freebsd-93-gce",
-		TryOnly:  true, // disable builds until FreeBSD on GCE is fixed
+		TryOnly:  true, // disable builds until GCE bugfix deployed
 	})
 	addBuilder(BuildConfig{
-		Name:              "freebsd-amd64-gce101",
-		HostType:          "host-freebsd-101-gce",
-		TryBot:            false, // was true; disabled due to FreeBSD GCE issues
-		TryOnly:           true,  // disable builds until FreeBSD on GCE is fixed
-		numTestHelpers:    2,
+		Name:     "freebsd-amd64-gce101",
+		HostType: "host-freebsd-101-gce",
+		TryOnly:  true, // disable builds until GCE bugfix deployed
+	})
+	addBuilder(BuildConfig{
+		Name:              "freebsd-amd64-110",
+		HostType:          "host-freebsd-110",
+		TryBot:            true,
 		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
-		Name:     "freebsd-amd64-110",
-		HostType: "host-freebsd-110",
-		TryBot:   true,
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-race",
@@ -992,17 +983,15 @@ func init() {
 		TryOnly:        true, // TODO: remove this once Plan 9 works on GCE again.
 	})
 	addBuilder(BuildConfig{
-		Name:              "windows-amd64-2008",
-		HostType:          "host-windows-amd64-2008",
-		env:               []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
-		TryBot:            false, // Disabled until new Windows builders reliably come up quickly
-		numTryTestHelpers: 5,
+		Name:     "windows-amd64-2008",
+		HostType: "host-windows-amd64-2008",
+		env:      []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-386-2008",
 		HostType:          "host-windows-amd64-2008",
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
-		TryBot:            false, // Disabled until new Windows builders reliably come up quickly
+		TryBot:            true,
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
@@ -1011,32 +1000,17 @@ func init() {
 		env:      []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
-		Name:     "windows-amd64-2016",
-		HostType: "host-windows-amd64-2016",
-		env:      []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		Name:              "windows-amd64-2016",
+		HostType:          "host-windows-amd64-2016",
+		env:               []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		TryBot:            true,
+		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-race",
 		HostType: "host-windows-amd64-2008",
 		Notes:    "Only runs -race tests (./race.bat)",
 		env:      []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
-	})
-	addBuilder(BuildConfig{
-		Name:              "windows-386-gce",
-		HostType:          "host-windows-gce",
-		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
-		TryBot:            true,
-		numTestHelpers:    1,
-		numTryTestHelpers: 5,
-	})
-	// Temporary trybot until windows-amd64-20xx are fixed to boot reliably & quickly.
-	addBuilder(BuildConfig{
-		Name:              "windows-amd64-gce",
-		HostType:          "host-windows-gce",
-		env:               []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
-		TryBot:            true,
-		TryOnly:           true,
-		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
 		Name:     "darwin-amd64-10_8",
