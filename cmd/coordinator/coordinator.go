@@ -12,9 +12,7 @@
 package main // import "golang.org/x/build/cmd/coordinator"
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"crypto/sha1"
@@ -1890,7 +1888,7 @@ func (st *buildStatus) writeGoSource() error {
 func (st *buildStatus) writeGoSourceTo(bc *buildlet.Client) error {
 	// Write the VERSION file.
 	sp := st.CreateSpan("write_version_tar")
-	if err := bc.PutTar(versionTgz(st.Rev), "go"); err != nil {
+	if err := bc.PutTar(buildgo.VersionTgz(st.Rev), "go"); err != nil {
 		return sp.Done(fmt.Errorf("writing VERSION tgz: %v", err))
 	}
 
@@ -3285,34 +3283,6 @@ func (st *buildStatus) logs() string {
 
 func (st *buildStatus) Write(p []byte) (n int, err error) {
 	return st.output.Write(p)
-}
-
-// versionTgz returns an io.Reader of a *.tar.gz file containing only
-// a VERSION file containing the contents of the provided rev string.
-func versionTgz(rev string) io.Reader {
-	var buf bytes.Buffer
-	zw := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(zw)
-
-	// Writing to a bytes.Buffer should never fail, so check
-	// errors with an explosion:
-	check := func(err error) {
-		if err != nil {
-			panic("previously assumed to never fail: " + err.Error())
-		}
-	}
-
-	contents := fmt.Sprintf("devel " + rev)
-	check(tw.WriteHeader(&tar.Header{
-		Name: "VERSION",
-		Mode: 0644,
-		Size: int64(len(contents)),
-	}))
-	_, err := io.WriteString(tw, contents)
-	check(err)
-	check(tw.Close())
-	check(zw.Close())
-	return bytes.NewReader(buf.Bytes())
 }
 
 func useGitMirror() bool {
