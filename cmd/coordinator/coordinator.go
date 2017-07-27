@@ -89,8 +89,12 @@ var Version string // set by linker -X
 // finishes before destroying buildlets.
 const devPause = false
 
-// stagingTryWork is a debug option to enable or disable running trybot work in staging.
-// If enabled, only open CLs containing "Run-StagingTryBot" in a comment will be run.
+// stagingTryWork is a debug option to enable or disable running
+// trybot work in staging.
+//
+// If enabled, only open CLs containing "DO NOT SUBMIT" and "STAGING"
+// in their commit message (in addition to being marked Run-TryBot+1)
+// will be run.
 const stagingTryWork = true
 
 var (
@@ -104,7 +108,7 @@ var (
 
 // LOCK ORDER:
 //   statusMu, buildStatus.mu, trySet.mu
-// (Other locks, such as subrepoHead.Mutex or the remoteBuildlet mutex should
+// (Other locks, such as the remoteBuildlet mutex should
 // not be used along with other locks)
 
 var (
@@ -713,7 +717,6 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 
 	var goRevisions []string // revisions of repo "go", branch "master" revisions
 	seenSubrepo := make(map[string]bool)
-	var setGoRepoHead bool
 	for _, br := range bs.Revisions {
 		if br.Repo == "grpc-review" {
 			// Skip the grpc repo. It's only for reviews
@@ -723,18 +726,9 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 		awaitSnapshot := false
 		if br.Repo == "go" {
 			if br.Branch == "master" {
-				if !setGoRepoHead {
-					// First Go revision on page; update repo head.
-					setRepoHead(br.Repo, br.Revision)
-					setGoRepoHead = true
-				}
 				goRevisions = append(goRevisions, br.Revision)
 			}
 		} else {
-			// The dashboard provides only the head revision for
-			// each sub-repo; store it in subrepoHead for later use.
-			setRepoHead(br.Repo, br.Revision)
-
 			// If this is the first time we've seen this sub-repo
 			// in this loop, then br.GoRevision is the go repo
 			// HEAD.  To save resources, we only build subrepos
@@ -822,7 +816,7 @@ func findTryWorkLoop() {
 	if errTryDeps != nil {
 		return
 	}
-	ticker := time.NewTicker(60 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	for {
 		if err := findTryWork(); err != nil {
 			log.Printf("failed to find trybot work: %v", err)
@@ -832,59 +826,46 @@ func findTryWorkLoop() {
 }
 
 func findTryWork() error {
-	query := "label:Run-TryBot=1 label:TryBot-Result=0 status:open"
 	if inStaging && !stagingTryWork {
 		return nil
 	}
-	if inStaging {
-		query = `comment:"Run-StagingTryBot" label:TryBot-Result=0 status:open`
-	}
-	cis, err := gerritClient.QueryChanges(context.Background(), query, gerrit.QueryChangesOpt{
-		Fields: []string{"CURRENT_REVISION", "CURRENT_COMMIT", "CURRENT_FILES"},
-	})
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second) // should be milliseconds
+	defer cancel()
+	tryRes, err := maintnerClient.GoFindTryWork(ctx, &apipb.GoFindTryWorkRequest{ForStaging: inStaging})
 	if err != nil {
 		return err
 	}
 
+	now := time.Now()
+
 	statusMu.Lock()
 	defer statusMu.Unlock()
 
-	tryList = make([]tryKey, 0, len(cis))
-	wanted := map[tryKey]bool{}
-	for _, ci := range cis {
-		if ci.ChangeID == "" || ci.CurrentRevision == "" {
-			log.Printf("Warning: skipping incomplete %#v", ci)
+	tryList = tryList[:0]
+	for _, work := range tryRes.Waiting {
+		if work.ChangeId == "" || work.Commit == "" {
+			log.Printf("Warning: skipping incomplete %#v", work)
 			continue
 		}
-		if ci.Project == "build" || ci.Project == "grpc-review" {
+		if work.Project == "build" || work.Project == "grpc-review" {
 			// Skip trybot request in build repo.
 			// Also skip grpc-review, which is only for reviews for now.
 			continue
 		}
-		key := tryKey{
-			Project:  ci.Project,
-			Branch:   ci.Branch,
-			ChangeID: ci.ChangeID,
-			Commit:   ci.CurrentRevision,
-		}
+		key := tryWorkItemKey(work)
 		tryList = append(tryList, key)
-		wanted[key] = true
-		if _, ok := tries[key]; ok {
+		if ts, ok := tries[key]; ok {
 			// already in progress
+			ts.wantedAsOf = now
 			continue
+		} else {
+			ts := newTrySet(work)
+			ts.wantedAsOf = now
+			tries[key] = ts
 		}
-		ts, err := newTrySet(key, ci)
-		if err != nil {
-			if err == errHeadUnknown {
-				continue // benign transient error
-			}
-			log.Printf("Error creating trySet for %v: %v", key, err)
-			continue
-		}
-		tries[key] = ts
 	}
 	for k, ts := range tries {
-		if !wanted[k] {
+		if ts.wantedAsOf != now {
 			delete(tries, k)
 			go ts.cancelBuilds()
 		}
@@ -914,7 +895,11 @@ type trySet struct {
 	// immutable
 	tryKey
 	tryID string // "T" + 9 random hex
-	ci    *gerrit.ChangeInfo
+
+	// wantedAsOf is guarded by statusMu and is used by
+	// findTryWork. It records the last time this tryKey was still
+	// wanted.
+	wantedAsOf time.Time
 
 	// mu guards state and errMsg
 	// See LOCK ORDER comment above.
@@ -941,41 +926,49 @@ func (ts trySetState) clone() trySetState {
 
 var errHeadUnknown = errors.New("Cannot create trybot set without a known Go head (transient error)")
 
-// newTrySet creates a new trySet group of builders for a given key,
-// the (Change-ID, Commit, Repo) tuple.
-// ci must contain the gerrit ChangeInfo for this change, and it must be fetched with the "CURRENT_REVISION" and "CURRENT_COMMIT" fields.
+func tryWorkItemKey(work *apipb.GerritTryWorkItem) tryKey {
+	return tryKey{
+		Project:  work.Project,
+		Branch:   work.Branch,
+		ChangeID: work.ChangeId,
+		Commit:   work.Commit,
+	}
+}
+
+// newTrySet creates a new trySet group of builders for a given
+// work item, the (Project, Branch, Change-ID, Commit) tuple.
 // It also starts goroutines for each build.
-// This will fail if the current Go repo HEAD is unknown.
 //
 // Must hold statusMu.
-func newTrySet(key tryKey, ci *gerrit.ChangeInfo) (*trySet, error) {
-	goHead := getRepoHead("go")
-	if key.Project != "go" && goHead == "" {
-		// We don't know the go HEAD yet (but we will)
-		// so don't create this trySet yet as we don't
-		// know which Go revision to build against.
-		return nil, errHeadUnknown
-	}
-
+func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	builders := tryBuilders
+	key := tryWorkItemKey(work)
 	if key.Project != "go" {
 		builders = subTryBuilders
 	}
-
 	log.Printf("Starting new trybot set for %v", key)
 	ts := &trySet{
 		tryKey: key,
 		tryID:  "T" + randHex(9),
-		ci:     ci,
 		trySetState: trySetState{
 			remain: len(builders),
 			builds: make([]*buildStatus, len(builders)),
 		},
 	}
 
+	// For now, for subrepos, we only support building one repo.
+	// TODO: Issue 17626: test subrepos against Go master and past two
+	// releases. But to save resources, we'll probably only want
+	// to do that for linux-amd64 (the Kubernetes cheap builder) to
+	// not blow up usage? Or maybe it doesn't matter.
+	var goRev string
+	if len(work.GoCommit) > 0 {
+		goRev = work.GoCommit[0]
+	}
+
 	go ts.notifyStarting()
 	for i, bconf := range builders {
-		brev := tryKeyToBuilderRev(bconf.Name, key)
+		brev := tryKeyToBuilderRev(bconf.Name, key, goRev)
 		bs, err := newBuild(brev)
 		if err != nil {
 			log.Printf("can't create build for %q: %v", brev, err)
@@ -985,12 +978,14 @@ func newTrySet(key tryKey, ci *gerrit.ChangeInfo) (*trySet, error) {
 		status[brev] = bs
 		ts.builds[i] = bs
 		go bs.start() // acquires statusMu itself, so in a goroutine
-		go ts.awaitTryBuild(i, bconf, bs)
+		go ts.awaitTryBuild(i, bconf, bs, brev)
 	}
-	return ts, nil
+	return ts
 }
 
-func tryKeyToBuilderRev(builder string, key tryKey) buildgo.BuilderRev {
+// Note: called in some paths where statusMu is held; do not make RPCs.
+func tryKeyToBuilderRev(builder string, key tryKey, goRev string) buildgo.BuilderRev {
+	// This function is called from within newTrySet, holding statusMu, s
 	if key.Project == "go" {
 		return buildgo.BuilderRev{
 			Name: builder,
@@ -999,7 +994,7 @@ func tryKeyToBuilderRev(builder string, key tryKey) buildgo.BuilderRev {
 	}
 	return buildgo.BuilderRev{
 		Name:    builder,
-		Rev:     getRepoHead("go"),
+		Rev:     goRev,
 		SubName: key.Project,
 		SubRev:  key.Commit,
 	}
@@ -1041,7 +1036,7 @@ func (ts *trySet) notifyStarting() {
 //
 // If the build fails without getting to the end, it sleeps and
 // reschedules it, as long as it's still wanted.
-func (ts *trySet) awaitTryBuild(idx int, bconf dashboard.BuildConfig, bs *buildStatus) {
+func (ts *trySet) awaitTryBuild(idx int, bconf dashboard.BuildConfig, bs *buildStatus, brev buildgo.BuilderRev) {
 	for {
 	WaitCh:
 		for {
@@ -1072,7 +1067,6 @@ func (ts *trySet) awaitTryBuild(idx int, bconf dashboard.BuildConfig, bs *buildS
 		if !ts.wanted() {
 			return
 		}
-		brev := tryKeyToBuilderRev(bconf.Name, ts.tryKey)
 		bs, _ = newBuild(brev)
 		bs.trySet = ts
 		go bs.start()
@@ -1168,7 +1162,8 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 				numFail, len(ts.builds), errMsg)
 		}
 		if len(benchResults) > 0 {
-			msg += fmt.Sprintf("\nBenchmark results are available at:\nhttps://perf.golang.org/search?q=cl:%d+try:%s", ts.ci.ChangeNumber, ts.tryID)
+			// TODO: restore this functionality
+			// msg += fmt.Sprintf("\nBenchmark results are available at:\nhttps://perf.golang.org/search?q=cl:%d+try:%s", ts.ci.ChangeNumber, ts.tryID)
 		}
 		if err := gerritClient.SetReview(context.Background(), ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
 			Message: msg,
@@ -1342,20 +1337,7 @@ func (st *buildStatus) buildletPool() BuildletPool {
 
 // parentRev returns the parent of this build's commit (but only if this build comes from a trySet).
 func (st *buildStatus) parentRev() (pbr buildgo.BuilderRev, err error) {
-	// TODO(quentin): Support non-try commits by asking maintnerd
-	// (at which point this no longer needs to be a method on buildStatus).
-	pbr = st.BuilderRev // copy
-	rev := st.trySet.ci.Revisions[st.trySet.ci.CurrentRevision]
-	if rev.Commit == nil {
-		err = fmt.Errorf("commit information missing for revision %q", st.trySet.ci.CurrentRevision)
-		return
-	}
-	if len(rev.Commit.Parents) == 0 {
-		// TODO(quentin): Log?
-		err = errors.New("commit has no parent")
-		return
-	}
-	pbr.Rev = rev.Commit.Parents[0].CommitID
+	err = errors.New("TODO: query maintner")
 	return
 }
 
@@ -2476,7 +2458,10 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 			continue
 		}
 		// Fetch the HEAD revision by default.
-		rev := getRepoHead(repo)
+		rev, err := getRepoHead(repo)
+		if err != nil {
+			return nil, err
+		}
 		if rev == "" {
 			rev = "master" // should happen rarely; ok if it does.
 		}
@@ -2515,18 +2500,21 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 // It is safe to call this on a nil trySet.
 func (ts *trySet) affectedPkgs() (pkgs []string) {
 	// TODO(quentin): Support non-try commits by asking maintnerd for the affected files.
-	if ts == nil || ts.ci == nil {
+	if ts == nil {
 		return
 	}
-	rev := ts.ci.Revisions[ts.ci.CurrentRevision]
-	for p := range rev.Files {
-		if strings.HasPrefix(p, "src/") {
-			pkg := path.Dir(p[len("src/"):])
-			if pkg != "" {
-				pkgs = append(pkgs, pkg)
+	// TODO(bradfitz): query maintner for this. Old logic with a *gerrit.ChangeInfo was:
+	/*
+		rev := ts.ci.Revisions[ts.ci.CurrentRevision]
+			for p := range rev.Files {
+				if strings.HasPrefix(p, "src/") {
+					pkg := path.Dir(p[len("src/"):])
+					if pkg != "" {
+						pkgs = append(pkgs, pkg)
+					}
+				}
 			}
-		}
-	}
+	*/
 	return
 }
 
@@ -2547,7 +2535,10 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	var benches []*buildgo.BenchmarkItem
 	if st.shouldBench() {
 		sp := st.CreateSpan("enumerate_benchmarks")
-		rev := getRepoHead("benchmarks")
+		rev, err := getRepoHead("benchmarks")
+		if err != nil {
+			return nil, err
+		}
 		if rev == "" {
 			rev = "master" // should happen rarely; ok if it does.
 		}
@@ -2732,6 +2723,7 @@ func (st *buildStatus) uploadBenchResults(ctx context.Context, files []*benchFil
 	return nil
 }
 
+// TODO: what is a bench file?
 type benchFile struct {
 	name string
 	out  bytes.Buffer
@@ -2741,24 +2733,30 @@ func (st *buildStatus) benchFiles() []*benchFile {
 	if !st.shouldBench() {
 		return nil
 	}
-	// We know rev and rev.Commit.Parents[0] exist because BenchmarkItem.buildParent has checked.
-	rev := st.trySet.ci.Revisions[st.trySet.ci.CurrentRevision]
-	ps := rev.PatchSetNumber
-	benchFiles := []*benchFile{
-		{name: "orig.txt"},
-		{name: fmt.Sprintf("ps%d.txt", ps)},
-	}
-	fmt.Fprintf(&benchFiles[0].out, "cl: %d\nps: %d\ntry: %s\nbuildlet: %s\nbranch: %s\nrepo: https://go.googlesource.com/%s\n",
-		st.trySet.ci.ChangeNumber, ps, st.trySet.tryID,
-		st.Name, st.trySet.ci.Branch, st.trySet.ci.Project,
-	)
-	if inStaging {
-		benchFiles[0].out.WriteString("staging: true\n")
-	}
-	benchFiles[1].out.Write(benchFiles[0].out.Bytes())
-	fmt.Fprintf(&benchFiles[0].out, "commit: %s\n", rev.Commit.Parents[0].CommitID)
-	fmt.Fprintf(&benchFiles[1].out, "commit: %s\n", st.BuilderRev.Rev)
-	return benchFiles
+	// TODO: renable benchmarking. Or do it outside of the coordinator, if we end up
+	// making the coordinator into just a gomote proxy + scheduler.
+	// Old logic was:
+	/*
+		// We know rev and rev.Commit.Parents[0] exist because BenchmarkItem.buildParent has checked.
+		rev := st.trySet.ci.Revisions[st.trySet.ci.CurrentRevision]
+		ps := rev.PatchSetNumber
+		benchFiles := []*benchFile{
+			{name: "orig.txt"},
+			{name: fmt.Sprintf("ps%d.txt", ps)},
+		}
+		fmt.Fprintf(&benchFiles[0].out, "cl: %d\nps: %d\ntry: %s\nbuildlet: %s\nbranch: %s\nrepo: https://go.googlesource.com/%s\n",
+			st.trySet.ci.ChangeNumber, ps, st.trySet.tryID,
+			st.Name, st.trySet.ci.Branch, st.trySet.ci.Project,
+		)
+		if inStaging {
+			benchFiles[0].out.WriteString("staging: true\n")
+		}
+		benchFiles[1].out.Write(benchFiles[0].out.Bytes())
+		fmt.Fprintf(&benchFiles[0].out, "commit: %s\n", rev.Commit.Parents[0].CommitID)
+		fmt.Fprintf(&benchFiles[1].out, "commit: %s\n", st.BuilderRev.Rev)
+		return benchFiles
+	*/
+	return nil
 }
 
 const (
@@ -3290,28 +3288,25 @@ func useGitMirror() bool {
 
 var nl = []byte("\n")
 
-// repoHead contains the hashes of the latest master HEAD
-// for each sub-repo. It is populated by findWork.
-// TODO: replace with a maintner gRPC call.
-var repoHead = struct {
-	sync.Mutex
-	m map[string]string // [repo]hash (["go"]"d3adb33f")
-}{m: map[string]string{}}
-
 // getRepoHead returns the commit hash of the latest master HEAD
 // for the given repo ("go", "tools", "sys", etc).
-func getRepoHead(repo string) string {
-	repoHead.Lock()
-	defer repoHead.Unlock()
-	return repoHead.m[repo]
-}
-
-// getRepoHead sets the commit hash of the latest master HEAD
-// for the given repo ("go", "tools", "sys", etc).
-func setRepoHead(repo, head string) {
-	repoHead.Lock()
-	defer repoHead.Unlock()
-	repoHead.m[repo] = head
+func getRepoHead(repo string) (string, error) {
+	// This gRPC call should only take a couple milliseconds, but set some timeout
+	// to catch network problems. 5 seconds is overkill.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	res, err := maintnerClient.GetRef(ctx, &apipb.GetRefRequest{
+		GerritServer:  "go.googlesource.com",
+		GerritProject: repo,
+		Ref:           "refs/heads/master",
+	})
+	if err != nil {
+		return "", fmt.Errorf("looking up ref for %q: %v", repo, err)
+	}
+	if res.Value == "" {
+		return "", fmt.Errorf("no master ref found for %q", repo)
+	}
+	return res.Value, nil
 }
 
 // newFailureLogBlob creates a new object to record a public failure log.

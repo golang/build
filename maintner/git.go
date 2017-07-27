@@ -73,6 +73,13 @@ type GitCommit struct {
 	Files      []*maintpb.GitDiffTreeFile
 }
 
+func (gc *GitCommit) String() string {
+	if gc == nil {
+		return "<nil *GitCommit>"
+	}
+	return fmt.Sprintf("{GitCommit %s}", gc.Hash)
+}
+
 // HasAncestor reports whether gc contains the provided ancestor
 // commit in gc's history.
 func (gc *GitCommit) HasAncestor(ancestor *GitCommit) bool {

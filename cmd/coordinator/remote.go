@@ -23,7 +23,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -572,7 +571,7 @@ func handleIncomingSSHPostAuth(s ssh.Session) {
 
 	log.Printf("ssh to %s: starting ssh -p %d for %s@localhost", inst, localProxyPort, sshUser)
 	var cmd *exec.Cmd
-	switch runtime.GOOS {
+	switch bconf.GOOS() {
 	default:
 		cmd = exec.Command("ssh",
 			"-p", strconv.Itoa(localProxyPort),

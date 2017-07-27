@@ -20,8 +20,58 @@ message HasAncestorResponse {
   bool unknown_commit = 2;
 }
 
+
+message GetRefRequest {
+  string ref = 1;  // "HEAD", "refs/heads/master", etc.
+
+  // Either gerrit_server & gerrit_project must be specified, or
+  // github. Currently only Gerrit is supported.
+  string gerrit_server = 2;   // "go.googlesource.com"
+  string gerrit_project = 3;  // "go"
+
+  // TODO: github, if/when needed.
+}
+
+message GetRefResponse {
+  string value = 1; // git commit, or empty string on miss
+}
+
+message GoFindTryWorkRequest {
+  // for_staging says whether this is a trybot request for the staging
+  // cluster. When using staging, the comment "Run-StagingTryBot"
+  // is used instead of label:Run-TryBot=1.
+  bool for_staging = 1;
+}
+
+message GoFindTryWorkResponse {
+  // waiting are the Gerrit CLs wanting a trybot run and not yet with results.
+  // These might already be running.
+  repeated GerritTryWorkItem waiting = 1;
+}
+
+message GerritTryWorkItem {
+  string project = 1;    // "go", "net", etc. (Gerrit Project)
+  string branch = 2;     // "master"
+  string change_id = 3;  // "I1a27695838409259d1586a0adfa9f92bccf7ceba"
+  string commit = 4;     // "ecf3dffc81dc21408fb02159af352651882a8383"
+
+  // go_commit is set for subrepos and is the Go commit(s) to test against.
+  // go_branch is a branch name of go_commit, for showing to users when
+  // a try set fails.
+  repeated string go_commit = 5;  // "4833e920c1d7f6b23458e6ff3c73951fcf754219"
+  repeated string go_branch = 6;  // "master", "release-branch.go1.8", etc
+}
+
 service MaintnerService {
   // HasAncestor reports whether one commit contains another commit
   // in its git history.
   rpc HasAncestor(HasAncestorRequest) returns (HasAncestorResponse);
+
+  // GetRef returns information about a git ref.
+  rpc GetRef(GetRefRequest) returns (GetRefResponse);
+
+  // Go-specific methods:
+
+  // GoFindTryWork finds trybot work for the coordinator to build & test.
+  rpc GoFindTryWork(GoFindTryWorkRequest) returns (GoFindTryWorkResponse);
 }

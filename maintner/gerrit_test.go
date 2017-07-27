@@ -165,3 +165,36 @@ func TestSubject(t *testing.T) {
 		}
 	}
 }
+
+func TestLineValue(t *testing.T) {
+	tests := []struct {
+		all, prefix, want string
+	}{
+		{
+			all:    "foo:  value ",
+			prefix: "foo:",
+			want:   "value",
+		},
+		{
+			all:    "foo:  value\n",
+			prefix: "foo:",
+			want:   "value",
+		},
+		{
+			all:    "bar: other\nfoo:  value\n",
+			prefix: "foo:",
+			want:   "value",
+		},
+		{
+			all:    "notfoo: other\nfoo:  value\n",
+			prefix: "foo:",
+			want:   "value",
+		},
+	}
+	for _, tt := range tests {
+		got := lineValue(tt.all, tt.prefix)
+		if got != tt.want {
+			t.Errorf("lineValue(%q, %q) = %q; want %q", tt.all, tt.prefix, got, tt.want)
+		}
+	}
+}

@@ -105,6 +105,15 @@ type GerritProject struct {
 	ref map[string]GitHash
 }
 
+// Ref returns a non-change ref, such as "HEAD", "refs/heads/master",
+// or "refs/tags/v0.8.0",
+// Change refs of the form "refs/changes/*" are not supported.
+// The returned hash is the zero value (an empty string) if the ref
+// does not exist.
+func (gp *GerritProject) Ref(ref string) GitHash {
+	return gp.ref[ref]
+}
+
 func (gp *GerritProject) gitDir() string {
 	return filepath.Join(gp.gerrit.c.getDataDir(), url.PathEscape(gp.proj))
 }
@@ -280,6 +289,49 @@ func (cl *GerritCL) References(ref GitHubIssueRef) bool {
 		}
 	}
 	return false
+}
+
+// Branch returns the CL's branch, with any "refs/heads/" prefix removed.
+func (cl *GerritCL) Branch() string {
+	meta := cl.Meta
+	for meta != nil && len(meta.Parents) == 1 {
+		meta = meta.Parents[0]
+	}
+	return lineValue(meta.Msg, "Branch:")
+}
+
+// lineValue extracts a value from an RFC 822-style "key: value" series of lines.
+// If all is,
+//    foo: bar
+//    bar: baz
+// lineValue(all, "foo:") returns "bar". It trims any whitespace.
+// The prefix is case sensitive and must include the colon.
+func lineValue(all, prefix string) string {
+	for {
+		i := strings.Index(all, prefix)
+		if i == -1 {
+			return ""
+		}
+		if i > 0 && all[i-1] != '\n' && all[i-1] != '\r' {
+			all = all[i+len(prefix):]
+			continue
+		}
+		val := all[i+len(prefix):]
+		if nl := strings.IndexByte(val, '\n'); nl != -1 {
+			val = val[:nl]
+		}
+		return strings.TrimSpace(val)
+	}
+}
+
+// ChangeID returns the Gerrit "Change-Id: Ixxxx" line's Ixxxx
+// value from the gc.Msg, if any.
+func (gc *GerritCL) ChangeID() string {
+	id := lineValue(gc.Commit.Msg, "Change-Id:")
+	if strings.HasPrefix(id, "I") && len(id) == 41 {
+		return id
+	}
+	return ""
 }
 
 // OwnerID returns the ID of the CL’s owner. It will return -1 on error.
@@ -568,14 +620,14 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 			// GerritCL object.
 			var backwardMessages []*GerritMessage
 			gp.foreachCommitParent(cl.Meta.Hash, func(gc *GitCommit) error {
+				if oldMeta != nil && gc.Hash == oldMeta.Hash {
+					return errStopIteration
+				}
 				if status := getGerritStatus(gc); status != "" && foundStatus == "" {
 					foundStatus = status
 				}
 				if message := gp.getGerritMessage(gc); message != nil {
 					backwardMessages = append(backwardMessages, message)
-				}
-				if oldMeta != nil && gc.Hash == oldMeta.Hash {
-					return errStopIteration
 				}
 				return nil
 			})
