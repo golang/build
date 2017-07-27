@@ -865,7 +865,6 @@ func findTryWork() error {
 			Branch:   ci.Branch,
 			ChangeID: ci.ChangeID,
 			Commit:   ci.CurrentRevision,
-			Repo:     ci.Project,
 		}
 		tryList = append(tryList, key)
 		wanted[key] = true
@@ -897,7 +896,6 @@ type tryKey struct {
 	Branch   string // master
 	ChangeID string // I1a27695838409259d1586a0adfa9f92bccf7ceba
 	Commit   string // ecf3dffc81dc21408fb02159af352651882a8383
-	Repo     string // "go"
 }
 
 // ChangeTriple returns the Gerrit (project, branch, change-ID) triple
@@ -951,7 +949,7 @@ var errHeadUnknown = errors.New("Cannot create trybot set without a known Go hea
 // Must hold statusMu.
 func newTrySet(key tryKey, ci *gerrit.ChangeInfo) (*trySet, error) {
 	goHead := getRepoHead("go")
-	if key.Repo != "go" && goHead == "" {
+	if key.Project != "go" && goHead == "" {
 		// We don't know the go HEAD yet (but we will)
 		// so don't create this trySet yet as we don't
 		// know which Go revision to build against.
@@ -959,7 +957,7 @@ func newTrySet(key tryKey, ci *gerrit.ChangeInfo) (*trySet, error) {
 	}
 
 	builders := tryBuilders
-	if key.Repo != "go" {
+	if key.Project != "go" {
 		builders = subTryBuilders
 	}
 
@@ -992,7 +990,7 @@ func newTrySet(key tryKey, ci *gerrit.ChangeInfo) (*trySet, error) {
 }
 
 func tryKeyToBuilderRev(builder string, key tryKey) buildgo.BuilderRev {
-	if key.Repo == "go" {
+	if key.Project == "go" {
 		return buildgo.BuilderRev{
 			Name: builder,
 			Rev:  key.Commit,
@@ -1001,7 +999,7 @@ func tryKeyToBuilderRev(builder string, key tryKey) buildgo.BuilderRev {
 	return buildgo.BuilderRev{
 		Name:    builder,
 		Rev:     getRepoHead("go"),
-		SubName: key.Repo,
+		SubName: key.Project,
 		SubRev:  key.Commit,
 	}
 }
@@ -3293,6 +3291,7 @@ var nl = []byte("\n")
 
 // repoHead contains the hashes of the latest master HEAD
 // for each sub-repo. It is populated by findWork.
+// TODO: replace with a maintner gRPC call.
 var repoHead = struct {
 	sync.Mutex
 	m map[string]string // [repo]hash (["go"]"d3adb33f")
