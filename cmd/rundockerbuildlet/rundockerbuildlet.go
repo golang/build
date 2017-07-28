@@ -89,18 +89,14 @@ func checkFix() error {
 			continue
 		}
 		if strings.HasPrefix(status, "Exited") {
-			if out, err := exec.Command("docker", "rm", container).CombinedOutput(); err != nil {
-				log.Printf("error running docker rm %s: %v, %s", container, err, out)
-				continue
-			}
-			log.Printf("Removed container %s (%s)", container, name)
+			removeContainer(container)
 		}
 		running[name] = strings.HasPrefix(status, "Up")
 	}
 
 	for num := 1; num <= *numInst; num++ {
 		var name string
-		if scalewayMeta != nil {
+		if scalewayMeta != nil && scalewayMeta.Hostname != "" {
 			// The -name passed to 'docker run' should match the
 			// c1 instance hostname for debugability.
 			// There should only be one running container per c1 instance.
@@ -111,6 +107,30 @@ func checkFix() error {
 		if running[name] {
 			continue
 		}
+
+		// Just in case we have a container that exists but is not "running"
+		// check if it exists and remove it before creating a new one.
+		out, err = exec.Command("docker", "ps", "-a", "--filter", "name="+name, "--format", "{{.CreatedAt}}").Output()
+		if err == nil && len(bytes.TrimSpace(out)) > 0 {
+			// The format for the output is the create time and date:
+			// 2017-07-24 17:07:39 +0000 UTC
+			// To avoid a race with a container that is "Created" but not yet running
+			// check how long ago the container was created.
+			// If it's longer than minute, remove it.
+			created, err := time.Parse("2006-01-02 15:04:05 -0700 MST", strings.TrimSpace(string(out)))
+			if err != nil {
+				log.Printf("converting output %q for container %s to time failed: %v", out, name, err)
+				continue
+			}
+			dur := time.Since(created)
+			if dur.Minutes() > 0 {
+				removeContainer(name)
+			}
+
+			log.Printf("Container %s is already being created, duration %s", name, dur.String())
+			continue
+		}
+
 		log.Printf("Creating %s ...", name)
 		keyFile := fmt.Sprintf("/tmp/buildkey%02d/gobuildkey", num)
 		if err := os.MkdirAll(filepath.Dir(keyFile), 0700); err != nil {
@@ -155,4 +175,12 @@ func initScalewayMeta() {
 	if err := json.NewDecoder(res.Body).Decode(scalewayMeta); err != nil {
 		log.Fatalf("invalid JSON from scaleway metadata URL %s: %v", metaURL, err)
 	}
+}
+
+func removeContainer(container string) {
+	if out, err := exec.Command("docker", "rm", "-f", container).CombinedOutput(); err != nil {
+		log.Printf("error running docker rm -f %s: %v, %s", container, err, out)
+		return
+	}
+	log.Printf("Removed container %s", container)
 }
