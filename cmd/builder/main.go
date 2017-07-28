@@ -25,9 +25,8 @@ import (
 )
 
 const (
-	gofrontendImportPath = "code.google.com/p/gofrontend"
-	mkdirPerm            = 0750
-	waitInterval         = 30 * time.Second // time to wait before checking for new revs
+	mkdirPerm    = 0750
+	waitInterval = 30 * time.Second // time to wait before checking for new revs
 )
 
 type Builder struct {
@@ -41,24 +40,15 @@ type Builder struct {
 }
 
 var (
-	doBuild       = flag.Bool("build", true, "Build and test packages")
-	doBench       = flag.Bool("bench", false, "Run benchmarks")
 	buildroot     = flag.String("buildroot", defaultBuildRoot(), "Directory under which to build")
 	dashboard     = flag.String("dashboard", "https://build.golang.org", "Dashboard app base path")
 	buildRevision = flag.String("rev", "", "Build specified revision and exit")
 	buildCmd      = flag.String("cmd", filepath.Join(".", allCmd), "Build command (specify relative to go/src/)")
-	buildTool     = flag.String("tool", "go", "Tool to build.")
 	gcPath        = flag.String("gcpath", "go.googlesource.com/go", "Path to download gc from")
-	gccPath       = flag.String("gccpath", "https://github.com/mirrors/gcc.git", "Path to download gcc from")
-	gccOpts       = flag.String("gccopts", "", "Command-line options to pass to `make` when building gccgo")
-	benchPath     = flag.String("benchpath", "golang.org/x/benchmarks/bench", "Path to download benchmarks from")
 	failAll       = flag.Bool("fail", false, "fail all builds")
 	parallel      = flag.Bool("parallel", false, "Build multiple targets in parallel")
 	buildTimeout  = flag.Duration("buildTimeout", 60*time.Minute, "Maximum time to wait for builds and tests")
 	cmdTimeout    = flag.Duration("cmdTimeout", 10*time.Minute, "Maximum time to wait for an external command")
-	benchNum      = flag.Int("benchnum", 5, "Run each benchmark that many times")
-	benchTime     = flag.Duration("benchtime", 5*time.Second, "Benchmarking time for a single benchmark run")
-	benchMem      = flag.Int("benchmem", 64, "Approx RSS value to aim at in benchmarks, in MB")
 	fileLock      = flag.String("filelock", "", "File to lock around benchmaring (synchronizes several builders)")
 	verbose       = flag.Bool("v", false, "verbose")
 	report        = flag.Bool("report", true, "whether to report results to the dashboard")
@@ -67,7 +57,6 @@ var (
 
 var (
 	allCmd  = "all" + suffix
-	makeCmd = "make" + suffix
 	naclCmd = "nacltest.bash" // nacl support is linux only
 	raceCmd = "race" + suffix
 	suffix  = defaultSuffix()
@@ -130,7 +119,7 @@ func main() {
 
 	benchMutex = MakeFileMutex(*fileLock)
 
-	rr, err := repoForTool()
+	rr, err := vcs.RepoRootForImportPath(*gcPath, *verbose)
 	if err != nil {
 		log.Fatal("Error finding repository:", err)
 	}
@@ -199,11 +188,6 @@ func main() {
 			log.Fatal("Build error.")
 		}
 		return
-	}
-
-	if !*doBuild && !*doBench {
-		fmt.Fprintf(os.Stderr, "Nothing to do, exiting (specify either -build or -bench or both)\n")
-		os.Exit(2)
 	}
 
 	// go continuous build mode
@@ -338,18 +322,10 @@ func (b *Builder) builderEnv(name string) (builderEnv, error) {
 	}
 	b.goos = s[0]
 	b.goarch = s[1]
-
-	switch *buildTool {
-	case "go":
-		return &goEnv{
-			goos:   s[0],
-			goarch: s[1],
-		}, nil
-	case "gccgo":
-		return &gccgoEnv{}, nil
-	default:
-		return nil, fmt.Errorf("unsupported build tool: %s", *buildTool)
-	}
+	return &goEnv{
+		goos:   s[0],
+		goarch: s[1],
+	}, nil
 }
 
 // buildCmd returns the build command to invoke.
@@ -371,14 +347,8 @@ func (b *Builder) buildCmd() string {
 // and builds or benchmarks it if one is found.
 // It returns true if a build/benchmark was attempted.
 func (b *Builder) buildOrBench() bool {
-	var kinds []string
-	if *doBuild {
-		kinds = append(kinds, "build-go-commit")
-	}
-	if *doBench {
-		kinds = append(kinds, "benchmark-go-commit")
-	}
-	kind, hash, benchs, err := b.todo(kinds, "", "")
+	kinds := []string{"build-go-commit"}
+	kind, hash, err := b.todo(kinds, "", "")
 	if err != nil {
 		log.Println(err)
 		return false
@@ -389,11 +359,6 @@ func (b *Builder) buildOrBench() bool {
 	switch kind {
 	case "build-go-commit":
 		if err := b.buildHash(hash); err != nil {
-			log.Println(err)
-		}
-		return true
-	case "benchmark-go-commit":
-		if err := b.benchHash(hash, benchs); err != nil {
 			log.Println(err)
 		}
 		return true
@@ -430,9 +395,9 @@ func (b *Builder) buildHash(hash string) error {
 		return fmt.Errorf("recordResult: %s", err)
 	}
 
-	if *buildTool == "go" && *subrepos {
+	if *subrepos {
 		// build sub-repositories
-		goRoot := filepath.Join(workpath, *buildTool)
+		goRoot := filepath.Join(workpath, "go")
 		goPath := workpath
 		b.buildSubrepos(goRoot, goPath, hash)
 	}
@@ -477,10 +442,8 @@ func (b *Builder) buildRepoOnHash(workpath, hash, cmd string) (buildLog string, 
 
 	// go's build command is a script relative to the srcDir, whereas
 	// gccgo's build command is usually "make check-go" in the srcDir.
-	if *buildTool == "go" {
-		if !filepath.IsAbs(cmd) {
-			cmd = filepath.Join(srcDir, cmd)
-		}
+	if !filepath.IsAbs(cmd) {
+		cmd = filepath.Join(srcDir, cmd)
 	}
 
 	// naive splitting of command from its arguments:
@@ -511,7 +474,7 @@ func (b *Builder) buildRepoOnHash(workpath, hash, cmd string) (buildLog string, 
 // and fails it if one is found.
 // It returns true if a build was "attempted".
 func (b *Builder) failBuild() bool {
-	_, hash, _, err := b.todo([]string{"build-go-commit"}, "", "")
+	_, hash, err := b.todo([]string{"build-go-commit"}, "", "")
 	if err != nil {
 		log.Println(err)
 		return false
@@ -531,7 +494,7 @@ func (b *Builder) failBuild() bool {
 func (b *Builder) buildSubrepos(goRoot, goPath, goHash string) {
 	for _, pkg := range dashboardPackages("subrepo") {
 		// get the latest todo for this package
-		_, hash, _, err := b.todo([]string{"build-package"}, pkg, goHash)
+		_, hash, err := b.todo([]string{"build-package"}, pkg, goHash)
 		if err != nil {
 			log.Printf("buildSubrepos %s: %v", pkg, err)
 			continue
@@ -604,19 +567,6 @@ func (b *Builder) buildSubrepo(goRoot, goPath, pkg, hash string) (string, error)
 	err = run(exec.Command(goTool, "test", "-short", pkg+"/..."),
 		runTimeout(*buildTimeout), runEnv(env), allOutput(&outbuf), runDir(goPath))
 	return outbuf.String(), err
-}
-
-// repoForTool returns the correct RepoRoot for the buildTool, or an error if
-// the tool is unknown.
-func repoForTool() (*vcs.RepoRoot, error) {
-	switch *buildTool {
-	case "go":
-		return vcs.RepoRootForImportPath(*gcPath, *verbose)
-	case "gccgo":
-		return vcs.RepoRootForImportPath(gofrontendImportPath, *verbose)
-	default:
-		return nil, fmt.Errorf("unknown build tool: %s", *buildTool)
-	}
 }
 
 func isFile(name string) bool {

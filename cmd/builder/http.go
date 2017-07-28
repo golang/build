@@ -95,8 +95,8 @@ func dash(meth, cmd string, args url.Values, req, resp interface{}) error {
 	return nil
 }
 
-// todo returns the next hash to build or benchmark.
-func (b *Builder) todo(kinds []string, pkg, goHash string) (kind, rev string, benchs []string, err error) {
+// todo returns the next hash to build.
+func (b *Builder) todo(kinds []string, pkg, goHash string) (kind, rev string, err error) {
 	args := url.Values{
 		"builder":     {b.name},
 		"packagePath": {pkg},
@@ -108,8 +108,7 @@ func (b *Builder) todo(kinds []string, pkg, goHash string) (kind, rev string, be
 	var resp *struct {
 		Kind string
 		Data struct {
-			Hash        string
-			PerfResults []string
+			Hash string
 		}
 	}
 	if err = dash("GET", "todo", args, nil, &resp); err != nil {
@@ -123,7 +122,7 @@ func (b *Builder) todo(kinds []string, pkg, goHash string) (kind, rev string, be
 	}
 	for _, k := range kinds {
 		if k == resp.Kind {
-			return resp.Kind, resp.Data.Hash, resp.Data.PerfResults, nil
+			return resp.Kind, resp.Data.Hash, nil
 		}
 	}
 	err = fmt.Errorf("expecting Kinds %q, got %q", kinds, resp.Kind)
@@ -146,36 +145,6 @@ func (b *Builder) recordResult(ok bool, pkg, hash, goHash, buildLog string, runT
 	}
 	args := url.Values{"key": {b.key}, "builder": {b.name}}
 	return dash("POST", "result", args, req, nil)
-}
-
-// Result of running a single benchmark on a single commit.
-type PerfResult struct {
-	Builder   string
-	Benchmark string
-	Hash      string
-	OK        bool
-	Metrics   []PerfMetric
-	Artifacts []PerfArtifact
-}
-
-type PerfMetric struct {
-	Type string
-	Val  uint64
-}
-
-type PerfArtifact struct {
-	Type string
-	Body string
-}
-
-// recordPerfResult sends benchmarking results to the dashboard
-func (b *Builder) recordPerfResult(req *PerfResult) error {
-	if !*report {
-		return nil
-	}
-	req.Builder = b.name
-	args := url.Values{"key": {b.key}, "builder": {b.name}}
-	return dash("POST", "perf-result", args, req, nil)
 }
 
 func dashboardPackages(kind string) []string {

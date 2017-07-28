@@ -6,7 +6,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/xml"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,7 +16,7 @@ import (
 	"golang.org/x/tools/go/vcs"
 )
 
-// Repo represents a mercurial repository.
+// Repo represents a git repository.
 type Repo struct {
 	Path   string
 	Master *vcs.RepoRoot
@@ -111,46 +110,7 @@ func (r *Repo) Pull() error {
 	})
 }
 
-// Log returns the changelog for this repository.
-func (r *Repo) Log() ([]HgLog, error) {
-	if err := r.Pull(); err != nil {
-		return nil, err
-	}
-	r.Lock()
-	defer r.Unlock()
-
-	var logStruct struct {
-		Log []HgLog
-	}
-	err := timeout(*cmdTimeout, func() error {
-		data, err := r.Master.VCS.Log(r.Path, xmlLogTemplate)
-		if err != nil {
-			return err
-		}
-
-		// We have a commit with description that contains 0x1b byte.
-		// Mercurial does not escape it, but xml.Unmarshal does not accept it.
-		data = bytes.Replace(data, []byte{0x1b}, []byte{'?'}, -1)
-
-		err = xml.Unmarshal([]byte("<Top>"+string(data)+"</Top>"), &logStruct)
-		if err != nil {
-			return fmt.Errorf("unmarshal %s log: %v", r.Master.VCS, err)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	for i, log := range logStruct.Log {
-		// Let's pretend there can be only one parent.
-		if log.Parent != "" && strings.Contains(log.Parent, " ") {
-			logStruct.Log[i].Parent = strings.Split(log.Parent, " ")[0]
-		}
-	}
-	return logStruct.Log, nil
-}
-
-// FullHash returns the full hash for the given Git or Mercurial revision.
+// FullHash returns the full hash for the given Git revision.
 func (r *Repo) FullHash(rev string) (string, error) {
 	r.Lock()
 	defer r.Unlock()
@@ -192,34 +152,3 @@ func (r *Repo) FullHash(rev string) (string, error) {
 	}
 	return hash, nil
 }
-
-// HgLog represents a single Mercurial revision.
-type HgLog struct {
-	Hash   string
-	Author string
-	Date   string
-	Desc   string
-	Parent string
-	Branch string
-	Files  string
-
-	// Internal metadata
-	added bool
-	bench bool // needs to be benchmarked?
-}
-
-// xmlLogTemplate is a template to pass to Mercurial to make
-// hg log print the log in valid XML for parsing with xml.Unmarshal.
-// Can not escape branches and files, because it crashes python with:
-// AttributeError: 'NoneType' object has no attribute 'replace'
-const xmlLogTemplate = `
-        <Log>
-        <Hash>{node|escape}</Hash>
-        <Parent>{p1node}</Parent>
-        <Author>{author|escape}</Author>
-        <Date>{date|rfc3339date}</Date>
-        <Desc>{desc|escape}</Desc>
-        <Branch>{branches}</Branch>
-        <Files>{files}</Files>
-        </Log>
-`
