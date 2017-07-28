@@ -224,7 +224,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
-	apipb.RegisterMaintnerServiceServer(grpcServer, &apiService{c: corpus})
+	apipb.RegisterMaintnerServiceServer(grpcServer, apiService{corpus})
 	http.Handle("/apipb.MaintnerService/", grpcServer)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

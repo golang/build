@@ -96,7 +96,7 @@ func callGetRef(args []string) error {
 		return err
 	}
 	if res.Value == "" {
-		log.Fatalf("ref not found")
+		return errors.New("ref not found")
 	}
 	fmt.Println(res.Value)
 	return nil

@@ -17,6 +17,9 @@ import (
 // apiService implements apipb.MaintnerServiceServer using the Corpus c.
 type apiService struct {
 	c *maintner.Corpus
+	// There really shouldn't be any more fields here.
+	// All state should be in c.
+	// A bool like "in staging" should just be a global flag.
 }
 
 func (s apiService) HasAncestor(ctx context.Context, req *apipb.HasAncestorRequest) (*apipb.HasAncestorResponse, error) {

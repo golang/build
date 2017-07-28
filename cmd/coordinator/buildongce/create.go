@@ -278,6 +278,9 @@ func makeBasepinDisks(svc *compute.Service) error {
 
 	need := make(map[string]*compute.Image) // keys like "https://www.googleapis.com/compute/v1/projects/symbolic-datum-552/global/images/linux-buildlet-arm"
 	for _, im := range imList.Items {
+		if strings.Contains(im.SelfLink, "-debug") {
+			continue
+		}
 		need[im.SelfLink] = im
 	}
 
