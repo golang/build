@@ -18,5 +18,4 @@ echo "Connecting to instance ${INSTANCE_NAME}"
 echo ""
 echo "When prompted for password, use: ${password}"
 echo ""
-telnet -l ${username} ${ip}
-
+ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no gopher@${ip}

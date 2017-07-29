@@ -101,18 +101,29 @@ Set-Service -Name 'IKEEXT' -StartupType 'Disabled'
 Set-Service -Name 'RemoteRegistry' -StartupType 'Disabled'
 Set-Service -Name 'lmhosts' -StartupType 'Disabled'
 
-# Enable Telnet
-Write-Host "installing telnet"
-Install-WindowsFeature -Name 'Telnet-Server'
-Set-Service -Name 'TlntSvr' -StartupType 'Automatic'
-
 # Download buildlet
 Write-Host "downloading stage0"
-$url = "https://storage.googleapis.com/go-builder-data/buildlet-stage0.windows-amd64"
 $builder_dir = "C:\golang"
 $bootstrap_exe_path = "$builder_dir\bootstrap.exe"
 mkdir $builder_dir
-Get-FileFromUrl -URL $url -Output $bootstrap_exe_path
+Get-FileFromUrl -URL 'https://storage.googleapis.com/go-builder-data/buildlet-stage0.windows-amd64' -Output $bootstrap_exe_path
+
+# OpenSSH
+Write-Host "downloading OpenSSH"
+$openssh_tar = "$builder_dir\openssh.tar.gz"
+Get-FileFromUrl -URL 'https://storage.googleapis.com/godev/openssh-0.0.18.0.tar.gz' -Output "$openssh_tar"
+Write-Host "extracting OpenSSH"
+$extract_args=@("--untar-file=$openssh_tar", "--untar-dest-dir=$builder_dir")
+& $bootstrap_exe_path $extract_args 
+Write-Host "Installing OpenSSH"
+$openssh_dir = "$builder_dir\OpenSSH-Win32"
+cd $openssh_dir
+& "$openssh_dir\install-sshd.ps1"
+& "$openssh_dir\ssh-keygen.exe" "-A"
+& "$openssh_dir\FixHostFilePermissions.ps1" -Confirm:$false
+
+Set-Service -Name 'sshd' -StartupType 'Automatic'
+Set-Service -Name 'ssh-agent' -StartupType 'Automatic'
 
 # Download and unpack dependencies
 Write-Host "downloading dependencies"
@@ -144,11 +155,6 @@ net localgroup administrators $buildlet_user /ADD
 Write-Host "setting stage0 to run on start"
 $bootstrap_cmd = "cmd /k ""cd $builder_dir && $bootstrap_exe_path"""
 New-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Buildlet" -PropertyType ExpandString -Value $bootstrap_cmd -Force
-
-# Disable NTLM and enable streaming mode for telnet
-Write-Host "setting telnet config"
-tlntadmn config sec=-NTLM
-tlntadmn config mode=stream
 
 # Setup autologon and reboot
 $RegPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"

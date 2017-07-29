@@ -2,10 +2,6 @@
 
 Windows images are built by creating and configuring VMs in GCP then capturing the image to the GCP Project.
 
-The provisioning happens in two stages:
-  - [sysprep.ps1](./sysprep.ps1): Downloads and unpacks dependencies, disabled unneeded Windows features (eg UAC)
-  - [startup.ps1](./startup.ps1): Creates and configures user for unattended login to launch the buildlet
-
 ## Prerequisite: Access internal network
 
 The scripts assume the internal GCP network is accessible. To do this, create a linux VM in the project and SSH into the machine or use a VPN like [sshuttle](https://github.com/apenwarr/sshuttle).
@@ -38,5 +34,5 @@ external_ip=$(gcloud compute instances describe golang-buildlet-test --project=$
 ### Troubleshoot via remote access
 ```bash
 ./rdp.bash <instance_name>
-./telnet.bash <instance_name>
+./ssh.bash <instance_name>
 ```
