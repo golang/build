@@ -176,19 +176,19 @@ var Hosts = map[string]*HostConfig{
 		env:         []string{"GO_TEST_TIMEOUT_SCALE=2"},
 	},
 	"host-windows-amd64-2008": &HostConfig{
-		VMImage:            "windows-amd64-server-2008r2-v3",
+		VMImage:            "windows-amd64-server-2008r2-v4",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 	},
 	"host-windows-amd64-2012": &HostConfig{
-		VMImage:            "windows-amd64-server-2012r2-v3",
+		VMImage:            "windows-amd64-server-2012r2-v4",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 	},
 	"host-windows-amd64-2016": &HostConfig{
-		VMImage:            "windows-amd64-server-2016-v3",
+		VMImage:            "windows-amd64-server-2016-v4",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",

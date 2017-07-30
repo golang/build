@@ -580,12 +580,17 @@ func handleIncomingSSHPostAuth(s ssh.Session) {
 			"-i", sshPrivateKeyFile,
 			sshUser+"@localhost")
 	case "windows":
+		// TODO(jrjohnson,bradfitz): figure out SSH public key auth on Windows (ACL issues?)
+		// and make this path more like the default case agbove.
 		fmt.Fprintf(s, "# Windows user/pass: gopher/gopher\n")
 		if ipErr != nil {
 			fmt.Fprintf(s, "# Failed to get IP out of %q: %v\n", rb.buildlet.IPPort(), err)
 			return
 		}
-		cmd = exec.Command("telnet", ip)
+		cmd = exec.Command("ssh",
+			"-o", "UserKnownHostsFile=/dev/null",
+			"-o", "StrictHostKeyChecking=no",
+			"gopher@"+ip)
 	case "plan9":
 		fmt.Fprintf(s, "# Plan9 user/pass: glenda/glenda123\n")
 		if ipErr != nil {
