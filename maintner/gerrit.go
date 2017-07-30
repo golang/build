@@ -90,12 +90,13 @@ func (g *Gerrit) ForeachProjectUnsorted(fn func(*GerritProject) error) error {
 
 // GerritProject represents a single Gerrit project.
 type GerritProject struct {
-	gerrit *Gerrit
-	proj   string // "go.googlesource.com/net"
-	cls    map[int32]*GerritCL
-	remote map[gerritCLVersion]GitHash
-	need   map[GitHash]bool
-	commit map[GitHash]*GitCommit
+	gerrit          *Gerrit
+	proj            string // "go.googlesource.com/net"
+	cls             map[int32]*GerritCL
+	remote          map[gerritCLVersion]GitHash
+	need            map[GitHash]bool
+	commit          map[GitHash]*GitCommit
+	numLabelChanges int // meta commits with "Label:" updates
 
 	// ref are the non-change refs with keys like "HEAD",
 	// "refs/heads/master", "refs/tags/v0.8.0", etc.
@@ -116,6 +117,14 @@ func (gp *GerritProject) Ref(ref string) GitHash {
 
 func (gp *GerritProject) gitDir() string {
 	return filepath.Join(gp.gerrit.c.getDataDir(), url.PathEscape(gp.proj))
+}
+
+// NumLabelChanges returns the number of times vote labels have
+// changed in this project. This number is monotonically increasing.
+// This is not guaranteed to be accurate; it might overcount.
+// It will not undercount.
+func (gp *GerritProject) NumLabelChanges() int {
+	return gp.numLabelChanges
 }
 
 // ServerSlashProject returns the server and project together, such as
@@ -620,6 +629,9 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 			// GerritCL object.
 			var backwardMessages []*GerritMessage
 			gp.foreachCommitParent(cl.Meta.Hash, func(gc *GitCommit) error {
+				if strings.Contains(gc.Msg, "\nLabel: ") {
+					gp.numLabelChanges++
+				}
 				if oldMeta != nil && gc.Hash == oldMeta.Hash {
 					return errStopIteration
 				}

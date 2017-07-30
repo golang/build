@@ -6,9 +6,11 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
@@ -49,17 +51,34 @@ func TestGetRef(t *testing.T) {
 	}
 }
 
+var hitGerrit = flag.Bool("hit_gerrit", false, "query production Gerrit in TestFindTryWork")
+
 func TestFindTryWork(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	if !*hitGerrit {
+		t.Skip("skipping without flag --hit_gerrit")
+	}
 	c := getGoData(t)
 	s := apiService{c}
 	req := &apipb.GoFindTryWorkRequest{}
+	t0 := time.Now()
 	res, err := s.GoFindTryWork(context.Background(), req)
+	d0 := time.Since(t0)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	// Just for interactive debugging. This is using live data.
 	// The stable tests are in TestTryWorkItem and TestTryBotStatus.
 	t.Logf("Current: %v", res)
+
+	t1 := time.Now()
+	res, err = s.GoFindTryWork(context.Background(), req)
+	d1 := time.Since(t1)
+	t.Logf("Latency: %v, then %v", d0, d1)
+	t.Logf("Cached: %v, %v", res, err)
 }
 
 func TestTryBotStatus(t *testing.T) {

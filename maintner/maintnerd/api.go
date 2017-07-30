@@ -9,7 +9,10 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
+	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 )
@@ -107,34 +110,76 @@ func (s apiService) GetRef(ctx context.Context, req *apipb.GetRefRequest) (*apip
 	return res, nil
 }
 
+var tryCache struct {
+	sync.Mutex
+	forNumChanges int       // number of label changes in project val is valid for
+	lastPoll      time.Time // of gerrit
+	val           *apipb.GoFindTryWorkResponse
+}
+
+var tryBotGerrit = gerrit.NewClient("https://go-review.googlesource.com/", gerrit.NoAuth)
+
 func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkRequest) (*apipb.GoFindTryWorkResponse, error) {
+	tryCache.Lock()
+	defer tryCache.Unlock()
+
 	s.c.RLock()
 	defer s.c.RUnlock()
-	res := new(apipb.GoFindTryWorkResponse)
 
-	goProj := s.c.Gerrit().Project("go.googlesource.com", "go")
-
+	// Count the number of vote label changes over time. If it's
+	// the same as the last query, return a cached result without
+	// hitting Gerrit.
+	var sumChanges int
 	s.c.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
-		gp.ForeachOpenCL(func(cl *maintner.GerritCL) error {
-			try, done := tryBotStatus(cl, req.ForStaging)
-			if !try || done {
-				return nil
-			}
-			work := tryWorkItem(cl)
-			if work.Project != "go" {
-				// Trybot on a subrepo.
-				//
-				// TODO: for Issue 17626, we need to append
-				// master and the past two releases, but for
-				// now we'll just do master.
-				work.GoBranch = append(work.GoBranch, "master")
-				work.GoCommit = append(work.GoCommit, goProj.Ref("refs/heads/master").String())
-			}
-			res.Waiting = append(res.Waiting, work)
+		if gp.Server() != "go.googlesource.com" {
 			return nil
-		})
+		}
+		sumChanges += gp.NumLabelChanges()
 		return nil
 	})
+
+	now := time.Now()
+	const maxPollInterval = 15 * time.Second
+	if tryCache.val != nil &&
+		(tryCache.forNumChanges == sumChanges ||
+			tryCache.lastPoll.After(now.Add(-maxPollInterval))) {
+		return tryCache.val, nil
+	}
+
+	tryCache.lastPoll = now
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	const query = "label:Run-TryBot=1 label:TryBot-Result=0 status:open"
+	cis, err := tryBotGerrit.QueryChanges(ctx, query, gerrit.QueryChangesOpt{
+		Fields: []string{"CURRENT_REVISION", "CURRENT_COMMIT"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	tryCache.forNumChanges = sumChanges
+
+	res := new(apipb.GoFindTryWorkResponse)
+	goProj := s.c.Gerrit().Project("go.googlesource.com", "go")
+
+	for _, ci := range cis {
+		cl := s.c.Gerrit().Project("go.googlesource.com", ci.Project).CL(int32(ci.ChangeNumber))
+		work := tryWorkItem(cl)
+		if ci.CurrentRevision != "" {
+			// In case maintner is behind.
+			work.Commit = ci.CurrentRevision
+		}
+		if work.Project != "go" {
+			// Trybot on a subrepo.
+			//
+			// TODO: for Issue 17626, we need to append
+			// master and the past two releases, but for
+			// now we'll just do master.
+			work.GoBranch = append(work.GoBranch, "master")
+			work.GoCommit = append(work.GoCommit, goProj.Ref("refs/heads/master").String())
+		}
+		res.Waiting = append(res.Waiting, work)
+	}
 
 	// Sort in some stable order.
 	//
@@ -147,5 +192,6 @@ func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkR
 	sort.Slice(res.Waiting, func(i, j int) bool {
 		return res.Waiting[i].Commit < res.Waiting[j].Commit
 	})
+	tryCache.val = res
 	return res, nil
 }
