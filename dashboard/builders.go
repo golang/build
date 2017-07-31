@@ -967,7 +967,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "linux-arm",
 		HostType:          "host-linux-arm-scaleway",
-		TryBot:            true,
+		TryBot:            false, // TODO: temporary due to Issue 21237
 		FlakyNet:          true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 7,
@@ -977,6 +977,7 @@ func init() {
 		Notes:         "runs make.bash on real ARM hardware, but does not run tests",
 		HostType:      "host-linux-arm-scaleway",
 		StopAfterMake: true,
+		TryBot:        false, // TODO: temporary due to Issue 21237
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-arm-arm5spacemonkey",
