@@ -26,14 +26,16 @@ import (
 )
 
 var (
-	token   = flag.String("token", "", "API token. If empty, the file is read from $HOME/keys/go-scaleway.token. Googlers on the Go team can get the value from http://go/golang-scaleway-token")
-	org     = flag.String("org", "1f34701d-668b-441b-bf08-0b13544e99de", "Organization ID (default is bradfitz@golang.org's account)")
-	image   = flag.String("image", "e488d5e3-d278-47a7-8f7d-1154e1f61dc9", "Disk image ID; default is the snapshot we made last")
-	num     = flag.Int("n", 0, "Number of servers to create; if zero, defaults to a value as a function of --staging")
-	tags    = flag.String("tags", "", "Comma-separated list of tags. The build key tags should be of the form 'buildkey_linux-arm_HEXHEXHEXHEXHEX'. If empty, it's automatic.")
-	staging = flag.Bool("staging", false, "If true, deploy staging instances (with staging names and tags) instead of prod.")
-	listAll = flag.Bool("list-all", false, "If true, list all (prod, staging, other) current Scaleway servers and stop without making changes.")
-	list    = flag.Bool("list", false, "If true, list all prod (or staging, if -staging) servers, including missing ones.")
+	token       = flag.String("token", "", "API token. If empty, the file is read from $HOME/keys/go-scaleway.token. Googlers on the Go team can get the value from http://go/golang-scaleway-token")
+	org         = flag.String("org", "1f34701d-668b-441b-bf08-0b13544e99de", "Organization ID (default is bradfitz@golang.org's account)")
+	image       = flag.String("image", "e488d5e3-d278-47a7-8f7d-1154e1f61dc9", "Disk image ID; default is the snapshot we made last")
+	num         = flag.Int("n", 0, "Number of servers to create; if zero, defaults to a value as a function of --staging")
+	tags        = flag.String("tags", "", "Comma-separated list of tags. The build key tags should be of the form 'buildkey_linux-arm_HEXHEXHEXHEXHEX'. If empty, it's automatic.")
+	staging     = flag.Bool("staging", false, "If true, deploy staging instances (with staging names and tags) instead of prod.")
+	listAll     = flag.Bool("list-all", false, "If true, list all (prod, staging, other) current Scaleway servers and stop without making changes.")
+	list        = flag.Bool("list", false, "If true, list all prod (or staging, if -staging) servers, including missing ones.")
+	fixInterval = flag.Duration("fix-interval", 10*time.Minute, "Interval to wait before running again (only applies to daemon mode)")
+	daemonMode  = flag.Bool("daemon", false, "Run in daemon mode in a loop")
 )
 
 const (
@@ -71,6 +73,17 @@ func main() {
 		*token = strings.TrimSpace(string(slurp))
 	}
 
+	// Loop over checkServers() in daemon mode.
+	for {
+		checkServers()
+		if !*daemonMode {
+			return
+		}
+		time.Sleep(*fixInterval)
+	}
+}
+
+func checkServers() {
 	cl := &Client{Token: *token}
 	serverList, err := cl.Servers()
 	if err != nil {
@@ -154,7 +167,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("Doing req %q for token %q", body, *token)
+		log.Printf("Doing req %q", body)
 		req, err := http.NewRequest("POST", scalewayAPIBase+"/servers", bytes.NewReader(body))
 		if err != nil {
 			log.Fatal(err)
