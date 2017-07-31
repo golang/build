@@ -108,7 +108,7 @@ $bootstrap_exe_path = "$builder_dir\bootstrap.exe"
 mkdir $builder_dir
 Get-FileFromUrl -URL 'https://storage.googleapis.com/go-builder-data/buildlet-stage0.windows-amd64' -Output $bootstrap_exe_path
 
-# OpenSSH
+# OpenSSH (from https://github.com/PowerShell/Win32-OpenSSH/releases)
 Write-Host "downloading OpenSSH"
 $openssh_tar = "$builder_dir\openssh.tar.gz"
 Get-FileFromUrl -URL 'https://storage.googleapis.com/go-builder-data/win32-openssh-0.0.18.0.tar.gz' -Output "$openssh_tar"
