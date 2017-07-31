@@ -222,6 +222,17 @@ func initGorootBootstrap() {
 	os.Setenv("GOROOT_BOOTSTRAP", filepath.Join(*workDir, "go1.4"))
 
 	if runtime.GOOS == "solaris" && runtime.GOARCH == "amd64" {
+		gbenv := os.Getenv("GO_BUILDER_ENV")
+		if strings.Contains(gbenv, "oracle") {
+			// Oracle Solaris; not OpenSolaris-based or
+			// Illumos-based.  Do nothing.
+			return
+		}
+
+		// Assume this is an OpenSolaris-based machine or a
+		// SmartOS/Illumos machine before GOOS=="illumos" split.  For
+		// these machines, the old Joyent builders need to get the
+		// bootstrap and some config fixed.
 		os.Setenv("PATH", os.Getenv("PATH")+":/opt/local/bin")
 		downloadBootstrapGoroot("/root/go-solaris-amd64-bootstrap", "https://storage.googleapis.com/go-builder-data/gobootstrap-solaris-amd64.tar.gz")
 	}

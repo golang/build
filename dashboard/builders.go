@@ -292,7 +292,7 @@ var Hosts = map[string]*HostConfig{
 		OwnerGithub: "binarycrusader",
 		IsReverse:   true,
 		ExpectNum:   1,
-		env:         []string{"GOROOT_BOOTSTRAP=/opt/local/go-solaris-amd64-bootstrap"},
+		env:         []string{"GOROOT_BOOTSTRAP=/opt/golang/go-solaris-amd64-bootstrap"},
 	},
 	"host-solaris-oracle-shawn": &HostConfig{
 		Notes:       "Oracle Solaris amd64 Development System",
@@ -300,7 +300,7 @@ var Hosts = map[string]*HostConfig{
 		OwnerGithub: "binarycrusader",
 		IsReverse:   true,
 		ExpectNum:   1,
-		env:         []string{"GOROOT_BOOTSTRAP=/opt/local/go-solaris-amd64-bootstrap"},
+		env:         []string{"GOROOT_BOOTSTRAP=/opt/golang/go-solaris-amd64-bootstrap"},
 	},
 	"host-linux-mips": &HostConfig{
 		Notes:       "Run by Brendan Kirby, imgtec.com",
