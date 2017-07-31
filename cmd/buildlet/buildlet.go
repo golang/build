@@ -1615,8 +1615,10 @@ func appendSSHAuthorizedKey(sshUser, authKey string) error {
 	switch runtime.GOOS {
 	case "darwin":
 		homeRoot = "/Users"
-	case "windows", "plan9":
+	case "plan9":
 		return fmt.Errorf("ssh not supported on %v", runtime.GOOS)
+	case "windows":
+		homeRoot = `C:\Users`
 	default:
 		homeRoot = "/home"
 		if runtime.GOOS == "freebsd" {
@@ -1656,6 +1658,11 @@ func appendSSHAuthorizedKey(sshUser, authKey string) error {
 	}
 	if runtime.GOOS == "freebsd" {
 		exec.Command("/usr/sbin/chown", "-R", sshUser, sshDir).Run()
+	}
+	if runtime.GOOS == "windows" {
+		if res, err := exec.Command("icacls.exe", authFile, "/grant", `NT SERVICE\sshd:(R)`).CombinedOutput(); err != nil {
+			return fmt.Errorf("setting permissions on authorized_keys with: %v\n%s.", err, res)
+		}
 	}
 	return nil
 }
