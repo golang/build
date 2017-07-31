@@ -111,7 +111,7 @@ Get-FileFromUrl -URL 'https://storage.googleapis.com/go-builder-data/buildlet-st
 # OpenSSH
 Write-Host "downloading OpenSSH"
 $openssh_tar = "$builder_dir\openssh.tar.gz"
-Get-FileFromUrl -URL 'https://storage.googleapis.com/godev/openssh-0.0.18.0.tar.gz' -Output "$openssh_tar"
+Get-FileFromUrl -URL 'https://storage.googleapis.com/go-builder-data/win32-openssh-0.0.18.0.tar.gz' -Output "$openssh_tar"
 Write-Host "extracting OpenSSH"
 $extract_args=@("--untar-file=$openssh_tar", "--untar-dest-dir=$builder_dir")
 & $bootstrap_exe_path $extract_args 
@@ -131,8 +131,8 @@ $dep_dir = "C:\godep"
 $gcc32_tar = "$dep_dir\gcc32.tar.gz"
 $gcc64_tar = "$dep_dir\gcc64.tar.gz"
 mkdir $dep_dir
-Get-FileFromUrl -URL "https://storage.googleapis.com/godev/gcc5-1-tdm32.tar.gz" -Output "$gcc32_tar"
-Get-FileFromUrl -URL "https://storage.googleapis.com/godev/gcc5-1-tdm64.tar.gz" -Output "$gcc64_tar"
+Get-FileFromUrl -URL "https://storage.googleapis.com/go-builder-data/gcc5-1-tdm32.tar.gz" -Output "$gcc32_tar"
+Get-FileFromUrl -URL "https://storage.googleapis.com/go-builder-data/gcc5-1-tdm64.tar.gz" -Output "$gcc64_tar"
 
 # Extract GCC
 Write-Host "extracting dependencies"
