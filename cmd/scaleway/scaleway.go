@@ -26,7 +26,7 @@ import (
 )
 
 var (
-	token   = flag.String("token", "", "API token")
+	token   = flag.String("token", "", "API token. If empty, the file is read from $HOME/keys/go-scaleway.token. Googlers on the Go team can get the value from http://go/golang-scaleway-token")
 	org     = flag.String("org", "1f34701d-668b-441b-bf08-0b13544e99de", "Organization ID (default is bradfitz@golang.org's account)")
 	image   = flag.String("image", "e488d5e3-d278-47a7-8f7d-1154e1f61dc9", "Disk image ID; default is the snapshot we made last")
 	num     = flag.Int("n", 0, "Number of servers to create; if zero, defaults to a value as a function of --staging")
@@ -63,6 +63,9 @@ func main() {
 		file := filepath.Join(os.Getenv("HOME"), "keys/go-scaleway.token")
 		slurp, err := ioutil.ReadFile(file)
 		if err != nil {
+			if os.IsNotExist(err) {
+				log.Fatalf("No --token flag specified and token file %s does not exist. Googlers on the Go team can access get it via http://go/golang-scaleway-token", file)
+			}
 			log.Fatalf("No --token specified and error reading backup token file: %v", err)
 		}
 		*token = strings.TrimSpace(string(slurp))
