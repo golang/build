@@ -20,12 +20,12 @@ update-deps:
 
 docker-prod: Dockerfile gitmirror
 	docker build --force-rm --tag=gcr.io/symbolic-datum-552/gitmirror:$(VERSION) .
-docker-dev: Dockerfile gitmirror
+docker-staging: Dockerfile gitmirror
 	docker build --force-rm --tag=gcr.io/go-dashboard-dev/gitmirror:latest .
 
 push-prod: docker-prod
 	gcloud docker -- push gcr.io/symbolic-datum-552/gitmirror:$(VERSION)
-push-dev: docker-dev
+push-staging: docker-staging
 	gcloud docker -- push gcr.io/go-dashboard-dev/gitmirror:latest
 
 .PHONY: clean

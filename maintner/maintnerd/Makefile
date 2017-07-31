@@ -25,12 +25,12 @@ update-deps:
 
 docker-prod: Dockerfile maintnerd ca-certificates.crt
 	docker build --force-rm --tag=gcr.io/symbolic-datum-552/maintnerd:$(VERSION) .
-docker-dev: Dockerfile maintnerd ca-certificates.crt
+docker-staging: Dockerfile maintnerd ca-certificates.crt
 	docker build --force-rm --tag=gcr.io/go-dashboard-dev/maintnerd:latest .
 
 push-prod: docker-prod
 	gcloud docker -- push gcr.io/symbolic-datum-552/maintnerd:$(VERSION)
-push-dev: docker-dev
+push-staging: docker-staging
 	gcloud docker -- push gcr.io/go-dashboard-dev/maintnerd:latest
 
 .PHONY: clean

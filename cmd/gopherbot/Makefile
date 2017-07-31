@@ -25,12 +25,12 @@ update-deps:
 
 docker-prod: Dockerfile gopherbot ca-certificates.crt
 	docker build --force-rm --tag=gcr.io/symbolic-datum-552/gopherbot:$(VERSION) .
-docker-dev: Dockerfile gopherbot ca-certificates.crt
+docker-staging: Dockerfile gopherbot ca-certificates.crt
 	docker build --force-rm --tag=gcr.io/go-dashboard-dev/gopherbot:latest .
 
 push-prod: docker-prod
 	gcloud docker -- push gcr.io/symbolic-datum-552/gopherbot:$(VERSION)
-push-dev: docker-dev
+push-staging: docker-staging
 	gcloud docker -- push gcr.io/go-dashboard-dev/gopherbot:latest
 
 .PHONY: clean
