@@ -171,51 +171,51 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 <h2>Running</h2>
 <p>{{printf "%d" .Total}} total builds; {{printf "%d" .ActiveBuilds}} active. Uptime {{printf "%s" .Uptime}}. Version {{.Version}}.
 
-<h2 id=trybots><a href='#trybots'>🔗</a> Active Trybot Runs</h2>
+<h2 id=trybots>Active Trybot Runs <a href='#trybots'>¶</a></h2>
 {{- if .TrybotsErr}}
 <b>trybots disabled:</b>: {{.TrybotsErr}}
 {{else}}
 {{.Trybots}}
 {{end}}
 
-<h2 id=remote><a href='#remote'>🔗</a> Remote buildlets</h3>
+<h2 id=remote>Remote buildlets <a href='#remote'>¶</a></h3>
 {{.RemoteBuildlets}}
 
-<h2 id=pools><a href='#pools'>🔗</a> Buildlet pools</h2>
+<h2 id=pools>Buildlet pools <a href='#pools'>¶</a></h2>
 <ul>
-<li>{{.GCEPoolStatus}}</li>
-<li>{{.KubePoolStatus}}</li>
-<li>{{.ReversePoolStatus}}</li>
+	<li>{{.GCEPoolStatus}}</li>
+	<li>{{.KubePoolStatus}}</li>
+	<li>{{.ReversePoolStatus}}</li>
 </ul>
 
-<h2 id=active><a href='#active'>🔗</a> Active builds</h2>
+<h2 id=active>Active builds <a href='#active'>¶</a></h2>
 <ul>
-{{range .Active}}
-<li><pre>{{.HTMLStatusLine}}</pre></li>
-{{end}}
+	{{range .Active}}
+	<li><pre>{{.HTMLStatusLine}}</pre></li>
+	{{end}}
 </ul>
 
-<h2 id=pending><a href='#pending'>🔗</a> Pending builds</h2>
+<h2 id=pending>Pending builds <a href='#pending'>¶</a></h2>
 <ul>
-{{range .Pending}}
-<li><pre>{{.HTMLStatusLine}}</pre></li>
-{{end}}
+	{{range .Pending}}
+	<li><pre>{{.HTMLStatusLine}}</pre></li>
+	{{end}}
 </ul>
 
-<h2 id=completed><a href='#completed'>🔗</a> Recently completed</h2>
+<h2 id=completed>Recently completed <a href='#completed'>¶</a></h2>
 <ul>
-{{range .Recent}}
-<li><span>{{.HTMLStatusLine_done}}</span></li>
-{{end}}
+	{{range .Recent}}
+	<li><span>{{.HTMLStatusLine_done}}</span></li>
+	{{end}}
 </ul>
 
-<h2 id=disk><a href='#disk'>🔗</a> Disk Space</h2>
+<h2 id=disk>Disk Space <a href='#disk'>¶</a></h2>
 <pre>{{.DiskFree}}</pre>
 
-<h2 id=disk><a href='#fd'>🔗</a> File Descriptors</h2>
+<h2 id=fd>File Descriptors <a href='#fd'>¶</a></h2>
 <p>{{.NumFD}}</p>
 
-<h2 id=disk><a href='#goroutines'>🔗</a> Goroutines</h2>
+<h2 id=goroutines>Goroutines <a href='#goroutines'>¶</a></h2>
 <p>{{.NumGoroutine}} <a href='/debug/goroutines'>goroutines</a></p>
 
 </body>
@@ -235,9 +235,24 @@ body {
 	margin: 0;
 }
 
-h1, h2 { color: #375EAB; }
+h1, h2, h1 > a, h2 > a, h1 > a:visited, h2 > a:visited { 
+	color: #375EAB; 
+}
 h1 { font-size: 24px; }
 h2 { font-size: 20px; }
+
+h1 > a, h2 > a {
+	display: none;
+	text-decoration: none;
+}
+
+h1:hover > a, h2:hover > a {
+	display: inline;
+}
+
+h1 > a:hover, h2 > a:hover {
+	text-decoration: underline;
+}
 
 pre {
 	font-family: monospace;
