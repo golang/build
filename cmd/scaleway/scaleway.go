@@ -64,7 +64,7 @@ func main() {
 		slurp, err := ioutil.ReadFile(file)
 		if err != nil {
 			if os.IsNotExist(err) {
-				log.Fatalf("No --token flag specified and token file %s does not exist. Googlers on the Go team can access get it via http://go/golang-scaleway-token", file)
+				log.Fatalf("No --token flag specified and token file %s does not exist. Googlers on the Go team can get it via http://go/golang-scaleway-token", file)
 			}
 			log.Fatalf("No --token specified and error reading backup token file: %v", err)
 		}
