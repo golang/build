@@ -177,3 +177,27 @@ func TestGetChangeError(t *testing.T) {
 		t.Errorf("expected ErrChangeNotExist, got %v", err)
 	}
 }
+
+func TestTimeStampMarshalJson(t *testing.T) {
+	ts := TimeStamp(time.Date(1888, 6, 24, 6, 8, 30, 123456789, time.FixedZone("+1", 3600)))
+	b, err := ts.MarshalJSON()
+	if err != nil {
+		t.Errorf("unexpected err %v", err)
+	}
+	expected := `"1888-06-24 05:08:30.123456789"`
+	if string(b) != expected {
+		t.Errorf("expected %q, got %q", expected, b)
+	}
+}
+
+func TestTimeStampUnmarshalJson(t *testing.T) {
+	var ts TimeStamp
+	err := ts.UnmarshalJSON([]byte(`"1888-06-24 05:08:30.123456789"`))
+	if err != nil {
+		t.Errorf("unexpected err %v", err)
+	}
+	expected := time.Date(1888, 6, 24, 5, 8, 30, 123456789, time.UTC)
+	if !ts.Time().Equal(expected) {
+		t.Errorf("expected %v, got %v", expected, ts.Time())
+	}
+}
