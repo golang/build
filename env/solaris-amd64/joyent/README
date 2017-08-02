@@ -1,3 +1,13 @@
+This is currently how we run the "solaris-amd64" builder but it's
+really illumos and once we have GOOS=illumos vs GOOS=solaris split
+(https://golang.org/issue/52630), then this will need work to rebuild
+the images.
+
+This runs on Joyent:
+
+   Username: gobuild
+   Password: http://go/golang-joyent
+
 To create a working image:
 
 * Create a new Infrastructure Container instance from the "base-64" image
