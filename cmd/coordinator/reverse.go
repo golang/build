@@ -495,8 +495,10 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 
 	// For older builders using the buildlet's -reverse flag only,
 	// collapse their builder modes down into a singular hostType.
+	legacyNote := ""
 	if hostType == "" {
 		hostType = mapBuilderToHostType(modes)
+		legacyNote = fmt.Sprintf(" (mapped from legacy modes %q)", modes)
 	}
 
 	conn, bufrw, err := w.(http.Hijacker).Hijack()
@@ -506,7 +508,8 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 	}
 
 	revDialer := revdial.NewDialer(bufrw, conn)
-	log.Printf("Registering reverse buildlet %q (%s) for host type %v", hostname, r.RemoteAddr, hostType)
+	log.Printf("Registering reverse buildlet %q (%s) for host type %v%s",
+		hostname, r.RemoteAddr, hostType, legacyNote)
 
 	(&http.Response{StatusCode: http.StatusSwitchingProtocols, Proto: "HTTP/1.1"}).Write(conn)
 
