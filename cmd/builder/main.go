@@ -17,7 +17,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
@@ -49,10 +48,10 @@ var (
 	parallel      = flag.Bool("parallel", false, "Build multiple targets in parallel")
 	buildTimeout  = flag.Duration("buildTimeout", 60*time.Minute, "Maximum time to wait for builds and tests")
 	cmdTimeout    = flag.Duration("cmdTimeout", 10*time.Minute, "Maximum time to wait for an external command")
-	fileLock      = flag.String("filelock", "", "File to lock around benchmaring (synchronizes several builders)")
-	verbose       = flag.Bool("v", false, "verbose")
-	report        = flag.Bool("report", true, "whether to report results to the dashboard")
-	subrepos      = flag.Bool("subrepos", true, "whether to build subrepos")
+
+	verbose  = flag.Bool("v", false, "verbose")
+	report   = flag.Bool("report", true, "whether to report results to the dashboard")
+	subrepos = flag.Bool("subrepos", true, "whether to build subrepos")
 )
 
 var (
@@ -61,49 +60,9 @@ var (
 	raceCmd = "race" + suffix
 	suffix  = defaultSuffix()
 	exeExt  = defaultExeExt()
-
-	benchCPU      = CpuList([]int{1})
-	benchAffinity = CpuList([]int{})
-	benchMutex    *FileMutex // Isolates benchmarks from other activities
 )
 
-// CpuList is used as flag.Value for -benchcpu flag.
-type CpuList []int
-
-func (cl *CpuList) String() string {
-	str := ""
-	for _, cpu := range *cl {
-		if str == "" {
-			str = strconv.Itoa(cpu)
-		} else {
-			str += fmt.Sprintf(",%v", cpu)
-		}
-	}
-	return str
-}
-
-func (cl *CpuList) Set(str string) error {
-	*cl = []int{}
-	for _, val := range strings.Split(str, ",") {
-		val = strings.TrimSpace(val)
-		if val == "" {
-			continue
-		}
-		cpu, err := strconv.Atoi(val)
-		if err != nil || cpu <= 0 {
-			return fmt.Errorf("%v is a bad value for GOMAXPROCS", val)
-		}
-		*cl = append(*cl, cpu)
-	}
-	if len(*cl) == 0 {
-		*cl = append(*cl, 1)
-	}
-	return nil
-}
-
 func main() {
-	flag.Var(&benchCPU, "benchcpu", "Comma-delimited list of GOMAXPROCS values for benchmarking")
-	flag.Var(&benchAffinity, "benchaffinity", "Comma-delimited list of affinity values for benchmarking")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: %s goos-goarch...\n", os.Args[0])
 		flag.PrintDefaults()
@@ -116,8 +75,6 @@ func main() {
 
 	vcs.ShowCmd = *verbose
 	vcs.Verbose = *verbose
-
-	benchMutex = MakeFileMutex(*fileLock)
 
 	rr, err := vcs.RepoRootForImportPath(*gcPath, *verbose)
 	if err != nil {
@@ -192,7 +149,6 @@ func main() {
 
 	// go continuous build mode
 	// check for new commits and build them
-	benchMutex.RLock()
 	for {
 		built := false
 		t := time.Now()
@@ -200,7 +156,7 @@ func main() {
 			done := make(chan bool)
 			for _, b := range builders {
 				go func(b *Builder) {
-					done <- b.buildOrBench()
+					done <- b.build()
 				}(b)
 			}
 			for _ = range builders {
@@ -208,15 +164,13 @@ func main() {
 			}
 		} else {
 			for _, b := range builders {
-				built = b.buildOrBench() || built
+				built = b.build() || built
 			}
 		}
 		// sleep if there was nothing to build
-		benchMutex.RUnlock()
 		if !built {
 			time.Sleep(waitInterval)
 		}
-		benchMutex.RLock()
 		// sleep if we're looping too fast.
 		dt := time.Now().Sub(t)
 		if dt < waitInterval {
@@ -343,10 +297,10 @@ func (b *Builder) buildCmd() string {
 	return *buildCmd
 }
 
-// buildOrBench checks for a new commit for this builder
+// build checks for a new commit for this builder
 // and builds or benchmarks it if one is found.
 // It returns true if a build/benchmark was attempted.
-func (b *Builder) buildOrBench() bool {
+func (b *Builder) build() bool {
 	kinds := []string{"build-go-commit"}
 	kind, hash, err := b.todo(kinds, "", "")
 	if err != nil {
@@ -550,7 +504,7 @@ func (b *Builder) buildSubrepo(goRoot, goPath, pkg, hash string) (string, error)
 	}
 	outbuf.Reset()
 
-	// hg update to the specified hash
+	// git update to the specified hash
 	pkgmaster, err := vcs.RepoRootForImportPath(pkg, *verbose)
 	if err != nil {
 		return "", fmt.Errorf("Error finding subrepo (%s): %s", pkg, err)
