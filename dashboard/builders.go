@@ -1087,38 +1087,6 @@ func init() {
 		Name:     "darwin-amd64-10_12",
 		HostType: "host-darwin-10_12",
 	})
-
-	addBuilder(BuildConfig{
-		Name:  "android-arm-sdk19",
-		Notes: "Android ARM device running android-19 (KitKat 4.4), attatched to Mac Mini",
-		env:   []string{"GOOS=android", "GOARCH=arm"},
-	})
-	addBuilder(BuildConfig{
-		Name:  "android-arm64-sdk21",
-		Notes: "Android arm64 device using the android-21 toolchain, attatched to Mac Mini",
-		env:   []string{"GOOS=android", "GOARCH=arm64"},
-	})
-	addBuilder(BuildConfig{
-		Name:  "android-386-sdk21",
-		Notes: "Android 386 device using the android-21 toolchain, attatched to Mac Mini",
-		env:   []string{"GOOS=android", "GOARCH=386"},
-	})
-	addBuilder(BuildConfig{
-		Name:  "android-amd64-sdk21",
-		Notes: "Android amd64 device using the android-21 toolchain, attatched to Mac Mini",
-		env:   []string{"GOOS=android", "GOARCH=amd64"},
-	})
-	addBuilder(BuildConfig{
-		Name:  "darwin-arm-a5ios",
-		Notes: "iPhone 4S (A5 processor), via a Mac Mini; owned by crawshaw",
-		env:   []string{"GOARCH=arm", "GOHOSTARCH=amd64"},
-	})
-	addBuilder(BuildConfig{
-		Name:  "darwin-arm64-a7ios",
-		Notes: "iPad Mini 3 (A7 processor), via a Mac Mini; owned by crawshaw",
-		env:   []string{"GOARCH=arm64", "GOHOSTARCH=amd64"},
-	})
-
 	addBuilder(BuildConfig{
 		Name:     "darwin-arm-a1549ios",
 		HostType: "host-darwin-amd64-eliasnaur-ios",
@@ -1150,7 +1118,6 @@ func init() {
 			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-arm64/bin/clang",
 		},
 	})
-
 	addBuilder(BuildConfig{
 		Name:     "solaris-amd64-oracledev",
 		HostType: "host-solaris-oracle-shawn",
@@ -1231,27 +1198,11 @@ func init() {
 	})
 }
 
-func (c BuildConfig) isMobile() bool {
-	return strings.HasPrefix(c.Name, "android-") || strings.HasPrefix(c.Name, "darwin-arm")
-}
-
 // addBuilder adds c to the Builders map after doing some sanity
 // checks.
 func addBuilder(c BuildConfig) {
 	if c.Name == "" {
 		panic("empty name")
-	}
-	if c.isMobile() && c.HostType == "" {
-		htyp := "host-" + c.Name
-		if _, ok := Hosts[htyp]; !ok {
-			Hosts[htyp] = &HostConfig{
-				HostType:           htyp,
-				IsReverse:          true,
-				goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-darwin-amd64.tar.gz",
-				ReverseAliases:     []string{c.Name},
-			}
-			c.HostType = htyp
-		}
 	}
 	if c.HostType == "" {
 		panic(fmt.Sprintf("missing HostType for builder %q", c.Name))
