@@ -8,6 +8,13 @@
 // developed and tested locally, the stage0 instead looks for the
 // META_BUILDLET_BINARY_URL environment to have a URL to the buildlet
 // binary.
+//
+// The stage0 binary is typically baked into the VM or container
+// images or manually copied to dedicated once and is typically never
+// auto-updated. Changes to this binary should be rare, as it's
+// difficult and slow to roll out. Any per-host-type logic to do at
+// start-up should be done in x/build/cmd/buildlet instead, which is
+// re-downloaded once per build, and rolls out easily.
 package main
 
 import (
@@ -125,12 +132,20 @@ func main() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = env
-	switch buildenv := os.Getenv("GO_BUILDER_ENV"); buildenv {
+
+	// buildEnv is set by some builders. It's increasingly set by new ones.
+	// It predates the buildtype-vs-hosttype split, so the values aren't
+	// always host types, but they're often host types. They should probably
+	// be host types in the future, or we can introduce GO_BUILD_HOST_TYPE
+	// to be explicit and kill off GO_BUILDER_ENV.
+	buildEnv := os.Getenv("GO_BUILDER_ENV")
+
+	switch buildEnv {
 	case "linux-arm-arm5spacemonkey":
-		cmd.Args = append(cmd.Args, legacyReverseBuildletArgs(buildenv)...)
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-arm5spacemonkey")...)
 	case "host-linux-arm-scaleway":
 		scalewayArgs := append(
-			legacyReverseBuildletArgs(buildenv),
+			reverseHostTypeArgs(buildEnv),
 			"--hostname="+os.Getenv("HOSTNAME"),
 		)
 		cmd.Args = append(cmd.Args,
@@ -140,13 +155,13 @@ func main() {
 	switch osArch {
 	case "linux/s390x":
 		cmd.Args = append(cmd.Args, "--workdir=/data/golang/workdir")
-		cmd.Args = append(cmd.Args, legacyReverseBuildletArgs("linux-s390x-ibm")...)
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-s390x")...)
 	case "linux/arm64":
-		switch v := os.Getenv("GO_BUILDER_ENV"); v {
+		switch buildEnv {
 		case "host-linux-arm64-packet", "host-linux-arm64-linaro":
 			hostname := os.Getenv("HOSTNAME") // if empty, docker container name is used
 			cmd.Args = append(cmd.Args,
-				"--reverse-type="+v,
+				"--reverse-type="+buildEnv,
 				"--workdir=/workdir",
 				"--hostname="+hostname,
 				"--halt=false",
@@ -157,11 +172,23 @@ func main() {
 			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
 		}
 	case "linux/ppc64":
-		cmd.Args = append(cmd.Args, legacyReverseBuildletArgs("linux-ppc64-buildlet")...)
+		// Assume OSU (osuosl.org) host type for now. If we get more, use
+		// GO_BUILD_HOST_TYPE (see above) and check that.
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-ppc64-osu")...)
 	case "linux/ppc64le":
-		cmd.Args = append(cmd.Args, legacyReverseBuildletArgs("linux-ppc64le-buildlet")...)
+		// Assume OSU (osuosl.org) host type for now. If we get more, use
+		// GO_BUILD_HOST_TYPE (see above) and check that.
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-ppc64le-osu")...)
 	case "solaris/amd64":
-		cmd.Args = append(cmd.Args, legacyReverseBuildletArgs("solaris-amd64-smartosbuildlet")...)
+		if buildEnv != "" {
+			// Explicit value given. Treat it like a host type.
+			cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+		} else {
+			// If there's no value, assume it's the old Joyent builders,
+			// which are currently GOOS=solaris, but will be illumos after
+			// golang.org/issue/20603.
+			cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-solaris-amd64")...)
+		}
 	}
 	// Release the serial port (if we opened it) so the buildlet
 	// process can open & write to it. At least on Windows, only
@@ -177,12 +204,13 @@ func main() {
 	}
 }
 
-// legacyReverseBuildletArgs passes builder as the deprecated --reverse flag.
-// New code should use --reverse-type instead.
-func legacyReverseBuildletArgs(builder string) []string {
+// reverseHostTypeArgs returns the default arguments for the buildlet
+// for the provided host type. (one of the keys of the
+// x/build/dashboard.Hosts map)
+func reverseHostTypeArgs(hostType string) []string {
 	return []string{
 		"--halt=false",
-		"--reverse=" + builder,
+		"--reverse-type=" + hostType,
 		"--coordinator=farmer.golang.org:443",
 	}
 }
