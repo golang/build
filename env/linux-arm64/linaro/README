@@ -5,6 +5,11 @@ r2-a25:
      $ ssh -i ~/keys/id_ed25519_golang1 linaro@64.28.99.28
      (key: http://go/golang-ssh-key)
 
+Filing tickets:
+
+    https://servicedesk.linaro.org/servicedesk/customer/user/requests
+    (user/pass: http://go/golang-linaro)
+
 Machine details:
 
   linaro@r2-a25:~# cat /proc/cpuinfo | grep process | wc -l
