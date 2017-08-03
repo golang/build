@@ -34,6 +34,7 @@ import (
 	"golang.org/x/build/cmd/coordinator/spanlog"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/buildstats"
 	"golang.org/x/build/internal/lru"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -174,6 +175,10 @@ func initGCE() error {
 		log.Printf("TryBot builders disabled due to error: %v", errTryDeps)
 	} else {
 		log.Printf("TryBot builders enabled.")
+	}
+
+	if *mode != "dev" {
+		go syncBuildStatsLoop(buildEnv)
 	}
 
 	go gcePool.pollQuotaLoop()
@@ -643,4 +648,22 @@ func readGCSFile(name string) ([]byte, error) {
 	}
 	defer r.Close()
 	return ioutil.ReadAll(r)
+}
+
+// syncBuildStatsLoop runs forever in its own goroutine and syncs the
+// coordinator's datastore Build & Span entities to BigQuery
+// periodically.
+func syncBuildStatsLoop(env *buildenv.Environment) {
+	ticker := time.NewTicker(5 * time.Minute)
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		if err := buildstats.SyncBuilds(ctx, env); err != nil {
+			log.Printf("buildstats: SyncBuilds: %v", err)
+		}
+		if err := buildstats.SyncSpans(ctx, env); err != nil {
+			log.Printf("buildstats: SyncSpans: %v", err)
+		}
+		cancel()
+		<-ticker.C
+	}
 }
