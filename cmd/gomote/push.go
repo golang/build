@@ -187,8 +187,30 @@ func push(args []string) error {
 	var toDel []string
 	for rel := range remote {
 		if rel == "VERSION" {
-			// Don't delete this. It's harmless, and necessary.
-			// Clients can overwrite it if they want.
+			// Don't delete this. It's harmless, and
+			// necessary. Clients can overwrite it if they
+			// want. But if there's no VERSION file there,
+			// make.bash/bat assumes there's a git repo in
+			// place, but there's not only not a git repo
+			// there with gomote, but there's no git tool
+			// available either.
+			continue
+		}
+		// Also don't delete the auto-generated files from cmd/dist.
+		// Otherwise gomote users can't gomote push + gomote run make.bash
+		// and then iteratively:
+		// -- hack locally
+		// -- gomote push
+		// -- gomote run go test -v ...
+		// Because the go test would fail remotely without
+		// these files if they were deleted by gomote push.
+		switch rel {
+		case "src/cmd/cgo/zdefaultcc.go",
+			"src/cmd/go/internal/cfg/zdefaultcc.go",
+			"src/cmd/go/internal/cfg/zosarch.go",
+			"src/cmd/internal/objabi/zbootstrap.go",
+			"src/go/build/zcgo.go",
+			"src/runtime/internal/sys/zversion.go":
 			continue
 		}
 		if isGitIgnored(rel) {
