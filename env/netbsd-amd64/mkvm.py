@@ -86,7 +86,7 @@ child = a.boot()
 anita.login(child)
 
 for cmd in commands:
-  anita.shell_cmd(child, cmd, 1200)
+  anita.shell_cmd(child, cmd, 3600)
 
 # Sometimes, the halt command times out, even though it has completed
 # successfully.
