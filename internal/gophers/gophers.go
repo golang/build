@@ -319,7 +319,6 @@ func init() {
 	addPerson("Charles Weill", "weill@google.com", "@cweill")
 	addPerson("Charlie Dorian", "cldorian@gmail.com", "@cldorian")
 	addPerson("Cheng-Lung Sung", "clsung@gmail.com", "@clsung")
-	addPerson("Cherry Zhang", "cherryyz@google.com")
 	addPerson("Cherry Zhang", "cherryyz@google.com", "@cherrymui")
 	addPerson("Chew Choon Keat", "choonkeat@gmail.com", "@choonkeat")
 	addPerson("Chintan Sheth", "shethchintan7@gmail.com")
@@ -542,9 +541,7 @@ func init() {
 	addPerson("Florian Weimer", "fw@deneb.enyo.de", "@fweimer")
 	addPerson("Florin Patan", "florinpatan@gmail.com", "@dlsniper")
 	addPerson("Ford Hurley", "ford.hurley@gmail.com", "@fordhurley")
-	addPerson("Francesc Campoy Flores", "campoy@golang.org")
-	addPerson("Francesc Campoy", "campoy@golang.org", "@campoy")
-	addPerson("Francesc Campoy", "campoy@google.com")
+	addPerson("Francesc Campoy", "campoy@golang.org", "campoy@google.com", "@campoy")
 	addPerson("Francisco Claude", "fclaude@recoded.cl", "@fclaude")
 	addPerson("Francisco Souza", "franciscossouza@gmail.com", "@fsouza")
 	addPerson("Frank Rehwinkel", "frankrehwinkel@gmail.com")
@@ -615,7 +612,7 @@ func init() {
 	addPerson("Hsin Tsao", "tsao@google.com", "@lazyhackeratwork")
 	addPerson("HuKeping", "hukeping@huawei.com", "@HuKeping")
 	addPerson("Hugues Bruant", "hugues.bruant@gmail.com", "@huguesb")
-	addPerson("Hyang-Ah Hana Kim", "hyangah@gmail.com", "hakim@google.com")
+	addPerson("Hyang-Ah Hana Kim", "hyangah@gmail.com", "hakim@google.com", "@hyangah")
 	addPerson("Håvard Haugen", "havard.haugen@gmail.com", "@osocurioso")
 	addPerson("INADA Naoki", "songofacandy@gmail.com", "@methane")
 	addPerson("Ian Gudger", "ian@loosescre.ws")
@@ -964,8 +961,7 @@ func init() {
 	addPerson("Michael Lewis", "mikelikespie@gmail.com", "@mikelikespie")
 	addPerson("Michael MacInnis", "michael.p.macinnis@gmail.com", "@michaelmacinnis")
 	addPerson("Michael Marineau", "michael.marineau@coreos.com", "mike@marineau.org", "@marineam")
-	addPerson("Michael Matloob", "matloob@golang.org", "@matloob")
-	addPerson("Michael Matloob", "matloob@google.com", "@matloob")
+	addPerson("Michael Matloob", "matloob@golang.org", "matloob@google.com", "@matloob")
 	addPerson("Michael McConville", "momcconville@gmail.com")
 	addPerson("Michael McGreevy", "mcgreevy@golang.org", "@mcgreevy")
 	addPerson("Michael Munday", "munday@ca.ibm.com", "@mundaym")
@@ -1534,7 +1530,6 @@ func init() {
 	addPerson("wheelcomplex yin", "wheelcomplex@gmail.com")
 	addPerson("woodsaj", "awoods@raintank.io", "@woodsaj")
 	addPerson("xiezhenye", "xiezhenye@gmail.com")
-	addPerson("xufei_Alex", "badgangkiller@gmail.com")
 	addPerson("xufei_Alex", "badgangkiller@gmail.com", "@knightXun")
 	addPerson("yanyiwu", "wuyanyi09@gmail.com")
 	addPerson("yazver", "ya.zver@gmail.com")
@@ -1550,10 +1545,38 @@ func GithubOfGomoteUser(gomoteUser string) (githubUser string) {
 	switch gomoteUser {
 	case "austin":
 		return "aclements"
+	case "cbro":
+		return "broady"
+	case "cherryyz":
+		return "cherrymui"
+	case "cmang":
+		return "paranoiacblack"
+	case "gri":
+		return "griesemer"
+	case "hakim":
+		return "hyangah"
 	case "herbie":
 		return "cybrcodr"
 	case "iant":
 		return "ianlancetaylor"
+	case "jbd":
+		return "rakyll"
+	case "khr":
+		return "randall77"
+	case "lazard":
+		return "davidlazar"
+	case "pjw":
+		return "pjweinbgo"
+	case "r":
+		return "robpike"
+	case "rstambler":
+		return "stamblerre"
+	case "sameer":
+		return "Sajmani"
+	case "shadams":
+		return "adams-sarah"
+	case "spf":
+		return "spf13"
 	}
 	return gomoteUser
 }
