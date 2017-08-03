@@ -1552,6 +1552,8 @@ func GithubOfGomoteUser(gomoteUser string) (githubUser string) {
 		return "aclements"
 	case "herbie":
 		return "cybrcodr"
+	case "iant":
+		return "ianlancetaylor"
 	}
 	return gomoteUser
 }
