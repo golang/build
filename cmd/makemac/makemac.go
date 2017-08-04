@@ -28,6 +28,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -48,6 +49,7 @@ func usage() {
 var (
 	flagStatus = flag.Bool("status", false, "print status only")
 	flagAuto   = flag.Bool("auto", false, "Automatically create & destroy as needed, reacting to https://farmer.golang.org/status/reverse.json status.")
+	flagListen = flag.String("listen", ":8713", "HTTP status port; used by auto mode only")
 )
 
 func main() {
@@ -83,7 +85,7 @@ func main() {
 		return
 	}
 
-	err = state.CreateMac(ctx, minor)
+	_, err = state.CreateMac(ctx, minor)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -91,17 +93,41 @@ func main() {
 
 // State is the state of the world.
 type State struct {
-	mu sync.Mutex
+	mu sync.Mutex `json:"-"`
 
 	Hosts  map[string]int    // IP address -> running Mac VM count (including 0)
-	VMHost map[string]string // "mac_10_8_host2b" => "10.0.0.0"
+	VMHost map[string]string // "mac_10_8_host02b" => "10.0.0.0"
 	HostIP map[string]string // "host-5" -> "10.0.0.0"
-	VMInfo map[string]VMInfo // "mac_10_8_host2b" => ...
+	VMInfo map[string]VMInfo // "mac_10_8_host02b" => ...
+
+	// VMOfSlot maps from a "slot name" to the VMWare VM name.
+	//
+	// A slot name is a tuple of (host number, "a"|"b"), where "a"
+	// and "b" are the two possible guests that can run per host.
+	// This slot name of the form "macstadium_host02b" is what's
+	// reported as the host name to the coordinator.
+	//
+	// The map value is the VMWare vm name, such as "mac_10_8_host02b",
+	// and is the map key of VMHost and VMInfo above.
+	VMOfSlot map[string]string // "macstadium_host02b" => "mac_10_8_host02b"
 }
 
 type VMInfo struct {
 	IP       string
 	BootTime time.Time
+
+	// SlotName is the name of a place where we can run a VM.
+	// As of 2017-08-04 we have 20 slots total over 10 physical
+	// machines. (Two VMs per physical Mac Mini running ESXi)
+	// We use slot names of the form "macstadium_host02b"
+	// with a %02d digit host number and suffix 'a' and 'b'
+	// for which VM it is on that host.
+	//
+	// This slot name is also the name passed to the build
+	// coordinator as the coordinator's "host name". (which exists
+	// both for debugging, and for monitoring last-seen/uptime of
+	// dedicated builders.)
+	SlotName string
 }
 
 func (st *State) NumCreatableVMs() int {
@@ -117,7 +143,7 @@ func (st *State) NumCreatableVMs() int {
 }
 
 // CreateMac creates an Mac VM running OS X 10.<minor>.
-func (st *State) CreateMac(ctx context.Context, minor int) (err error) {
+func (st *State) CreateMac(ctx context.Context, minor int) (slotName string, err error) {
 	// TODO(bradfitz): return VM name, update state, etc.
 
 	st.mu.Lock()
@@ -132,13 +158,13 @@ func (st *State) CreateMac(ctx context.Context, minor int) (err error) {
 	case 10, 11, 12:
 		guestType = "darwin14_64Guest"
 	default:
-		return fmt.Errorf("unsupported makemac minor OS X version %d", minor)
+		return "", fmt.Errorf("unsupported makemac minor OS X version %d", minor)
 	}
 
 	builderType := fmt.Sprintf("darwin-amd64-10_%d", minor)
 	key, err := ioutil.ReadFile(filepath.Join(os.Getenv("HOME"), "keys", builderType))
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Find the top-level datastore directory hosting the vmdk COW disk for
@@ -146,14 +172,15 @@ func (st *State) CreateMac(ctx context.Context, minor int) (err error) {
 	// with a "_1", "_2", etc suffix. Search for it.
 	netAppDir, err := findFrozenDir(ctx, minor)
 	if err != nil {
-		return fmt.Errorf("failed to find osx_%d_frozen base directory: %v", minor, err)
+		return "", fmt.Errorf("failed to find osx_%d_frozen base directory: %v", minor, err)
 	}
 
 	hostNum, hostWhich, err := st.pickHost()
 	if err != nil {
-		return err
+		return "", err
 	}
-	name := fmt.Sprintf("mac_10_%v_host%d%s", minor, hostNum, hostWhich)
+	name := fmt.Sprintf("mac_10_%v_host%02d%s", minor, hostNum, hostWhich)
+	slotName = fmt.Sprintf("macstadium_host%02d%s", hostNum, hostWhich)
 
 	if err := govc(ctx, "vm.create",
 		"-m", "4096",
@@ -166,7 +193,7 @@ func (st *State) CreateMac(ctx context.Context, minor int) (err error) {
 		"-ds", fmt.Sprintf("BOOT_%d", hostNum),
 		name,
 	); err != nil {
-		return err
+		return "", err
 	}
 	defer func() {
 		if err != nil {
@@ -185,11 +212,11 @@ func (st *State) CreateMac(ctx context.Context, minor int) (err error) {
 		"-e", "guestinfo.name="+name,
 		"-vm", name,
 	); err != nil {
-		return err
+		return "", err
 	}
 
 	if err := govc(ctx, "device.usb.add", "-vm", name); err != nil {
-		return err
+		return "", err
 	}
 
 	if err := govc(ctx, "vm.disk.attach",
@@ -199,14 +226,14 @@ func (st *State) CreateMac(ctx context.Context, minor int) (err error) {
 		"-ds=Pure1-1",
 		"-disk", fmt.Sprintf("%s/osx_%d_frozen.vmdk", netAppDir, minor),
 	); err != nil {
-		return err
+		return "", err
 	}
 
 	if err := govc(ctx, "vm.power", "-on", name); err != nil {
-		return err
+		return "", err
 	}
 	log.Printf("Success.")
-	return nil
+	return slotName, nil
 }
 
 // govc runs "govc <args...>" and ignores its output, unless there's an error.
@@ -248,11 +275,11 @@ func (st *State) pickHost() (hostNum int, hostWhich string, err error) {
 }
 
 // whichAInUse reports whether a VM is running on the provided hostNum named
-// with suffix "_host<n>a".
+// with suffix "_host<%02d>a", hostnum.
 //
 // st.mu must be held
 func (st *State) whichAInUse(hostNum int) bool {
-	suffix := fmt.Sprintf("_host%da", hostNum)
+	suffix := fmt.Sprintf("_host%02da", hostNum)
 	for name := range st.VMHost {
 		if strings.HasSuffix(name, suffix) {
 			return true
@@ -264,10 +291,11 @@ func (st *State) whichAInUse(hostNum int) bool {
 // getStat queries govc to find the current state of the hosts and VMs.
 func getState(ctx context.Context) (*State, error) {
 	st := &State{
-		VMHost: make(map[string]string),
-		Hosts:  make(map[string]int),
-		HostIP: make(map[string]string),
-		VMInfo: make(map[string]VMInfo),
+		VMHost:   make(map[string]string),
+		Hosts:    make(map[string]int),
+		HostIP:   make(map[string]string),
+		VMInfo:   make(map[string]VMInfo),
+		VMOfSlot: make(map[string]string),
 	}
 
 	var hosts elementList
@@ -287,23 +315,40 @@ func getState(ctx context.Context) (*State, error) {
 		return nil, fmt.Errorf("Reading /MacStadium-ATL/vm: %v", err)
 	}
 	for _, h := range vms.Elements {
-		if h.Object.Self.Type == "VirtualMachine" {
-			name := path.Base(h.Path)
-			hostID := h.Object.Runtime.Host.Value
-			hostIP := st.HostIP[hostID]
-			st.VMHost[name] = hostIP
-			if hostIP != "" && strings.HasPrefix(name, "mac_10_") {
-				st.Hosts[hostIP]++
-				var bootTime time.Time
-				if bt := h.Object.Summary.Runtime.BootTime; bt != "" {
-					bootTime, _ = time.Parse(time.RFC3339, bt)
-				}
-				vi := VMInfo{
-					IP:       hostIP,
-					BootTime: bootTime,
-				}
-				st.VMInfo[name] = vi
+		if h.Object.Self.Type != "VirtualMachine" {
+			continue
+		}
+		name := path.Base(h.Path)
+		hostID := h.Object.Runtime.Host.Value
+		hostIP := st.HostIP[hostID]
+		st.VMHost[name] = hostIP
+		if hostIP != "" && strings.HasPrefix(name, "mac_10_") {
+			st.Hosts[hostIP]++
+			var bootTime time.Time
+			if bt := h.Object.Summary.Runtime.BootTime; bt != "" {
+				bootTime, _ = time.Parse(time.RFC3339, bt)
 			}
+
+			var slotName string
+			if p := strings.Index(name, "_host"); p != -1 {
+				slotName = "macstadium" + name[p:] // macstadium_host02a
+
+				if exist := st.VMOfSlot[slotName]; exist != "" {
+					// Should never happen, but just in case.
+					log.Printf("ERROR: existing VM %q found in slot %q; destroying later VM %q", exist, slotName, name)
+					err := govc(ctx, "vm.destroy", name)
+					log.Printf("vm.destroy(%q) = %v", name, err)
+				} else {
+					st.VMOfSlot[slotName] = name // macstadium_host02a => mac_10_8_host02a
+				}
+			}
+
+			vi := VMInfo{
+				IP:       hostIP,
+				BootTime: bootTime,
+				SlotName: slotName,
+			}
+			st.VMInfo[name] = vi
 		}
 	}
 
@@ -371,21 +416,89 @@ func findFrozenDir(ctx context.Context, minor int) (string, error) {
 	return "", os.ErrNotExist
 }
 
+const autoAdjustTimeout = 5 * time.Minute
+
+var status struct {
+	sync.Mutex
+	lastCheck time.Time
+	lastLog   string
+	lastState *State
+}
+
+func init() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		status.Lock()
+		defer status.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		// TODO: probably more status, as needed.
+		res := &struct {
+			LastCheck string
+			LastLog   string
+			LastState *State
+		}{
+			LastCheck: status.lastCheck.UTC().Format(time.RFC3339),
+			LastLog:   status.lastLog,
+			LastState: status.lastState,
+		}
+		j, _ := json.MarshalIndent(res, "", "\t")
+		w.Write(j)
+	})
+}
+
+func dedupLogf(format string, args ...interface{}) {
+	s := fmt.Sprintf(format, args...)
+	status.Lock()
+	defer status.Unlock()
+	if s == status.lastLog {
+		return
+	}
+	status.lastLog = s
+	log.Print(s)
+}
+
 func autoLoop() {
+	if addr := *flagListen; addr != "" {
+		go func() {
+			if err := http.ListenAndServe(*flagListen, nil); err != nil {
+				log.Fatalf("ListenAndServe: %v", err)
+			}
+		}()
+	}
 	for {
+		timer := time.AfterFunc(autoAdjustTimeout, watchdogFail)
 		autoAdjust()
+		timer.Stop()
 		time.Sleep(2 * time.Second)
 	}
 }
 
+func watchdogFail() {
+	stacks := make([]byte, 1<<20)
+	stacks = stacks[:runtime.Stack(stacks, true)]
+	log.Fatalf("timeout after %v waiting for autoAdjust(). stacks:\n%s", stacks)
+}
+
 func autoAdjust() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	status.Lock()
+	status.lastCheck = time.Now()
+	status.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), autoAdjustTimeout)
 	defer cancel()
+
 	st, err := getState(ctx)
 	if err != nil {
 		log.Printf("getting VMWare state: %v", err)
 		return
 	}
+	defer func() {
+		// Set status.lastState once we're now longer using it.
+		if st != nil {
+			status.Lock()
+			status.lastState = st
+			status.Unlock()
+		}
+	}()
 
 	req, _ := http.NewRequest("GET", "https://farmer.golang.org/status/reverse.json", nil)
 	req = req.WithContext(ctx)
@@ -397,7 +510,7 @@ func autoAdjust() {
 	defer res.Body.Close()
 	var rstat types.ReverseBuilderStatus
 	if err := json.NewDecoder(res.Body).Decode(&rstat); err != nil {
-		log.Printf("Decoding reverse.json: %v", err)
+		log.Printf("decoding reverse.json: %v", err)
 		return
 	}
 
@@ -422,44 +535,70 @@ func autoAdjust() {
 			continue
 		}
 		rh := revHost[name]
+		if rh == nil {
+			// Look it up by its slot name instead.
+			rh = revHost[vi.SlotName]
+		}
 		if rh == nil { //  || (!rh.Busy && rh.ConnectedSec > 50 && rh.HostType == "host-darwin-10_12") {
-			// Unknown or too old. Kill it:
-			log.Printf("Destroying VM %q...", name)
+			log.Printf("Destroying VM %q unknown to coordinator...", name)
 			err := govc(ctx, "vm.destroy", name)
 			log.Printf("vm.destroy(%q) = %v", name, err)
 			dirty = true
 		}
 	}
-	if dirty {
-		st, err = getState(ctx)
-		if err != nil {
-			log.Fatal(err)
+	for {
+		if dirty {
+			st, err = getState(ctx)
+			if err != nil {
+				log.Printf("getState: %v", err)
+				return
+			}
 		}
+		canCreate := st.NumCreatableVMs()
+		if canCreate <= 0 {
+			dedupLogf("All Mac VMs running.")
+			return
+		}
+		ver := wantedMacVersionNext(&rstat)
+
+		if ver == 0 {
+			dedupLogf("Have capacity for %d more Mac VMs, but none requested by coordinator.", canCreate)
+			return
+		}
+		dedupLogf("Have capacity for %d more Mac VMs; creating requested 10.%d ...", canCreate, ver)
+		slotName, err := st.CreateMac(ctx, ver)
+		if err != nil {
+			log.Printf("Error creating 10.%d: %v", ver, err)
+			return
+		}
+		log.Printf("Created 10.%d VM on %q", ver, slotName)
+		dirty = true
 	}
-	canCreate := st.NumCreatableVMs()
-	if canCreate == 0 {
-		log.Printf("All good.")
-		return
-	}
-	log.Printf("can create %v VMs", canCreate)
+}
+
+// wantedMacVersionNext returns the macOS 10.x version to create next,
+// or 0 to not make anything. It gets the latest reverse buildlet
+// status from the coordinator.
+func wantedMacVersionNext(rstat *types.ReverseBuilderStatus) int {
+	// TODO: improve this logic at some point, probably when the
+	// coordinator has a proper scheduler (Issue 19178) and when
+	// the coordinator keeps 1 of each builder type ready to go.
+	// For now just use the static configuration in
+	// dashboard/builders.go of how many are expected, which ends
+	// up in ReverseBuilderStatus.
 	for hostType, hostStatus := range rstat.HostTypes {
 		if !strings.HasPrefix(hostType, "host-darwin-10_") {
 			continue
 		}
-		ver, _ := strconv.Atoi(strings.TrimPrefix(hostType, "host-darwin-10_"))
-		if ver == 0 {
-			break
+		ver, err := strconv.Atoi(strings.TrimPrefix(hostType, "host-darwin-10_"))
+		if err != nil {
+			log.Printf("ERROR: unexpected host type %q", hostType)
+			continue
 		}
 		want := hostStatus.Expect - hostStatus.Connected
-		for want > 0 && canCreate > 0 {
-			log.Printf("Creating Mac 10.%v ...", ver)
-			err := st.CreateMac(ctx, ver)
-			log.Printf("CreateMac(%v) = %v", ver, err)
-			if err != nil {
-				return
-			}
-			want--
-			canCreate--
+		if want > 0 {
+			return ver
 		}
 	}
+	return 0
 }

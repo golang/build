@@ -1497,7 +1497,31 @@ func configureMacStadium() {
 	}
 	*reverse = "darwin-amd64-" + major + "_" + minor
 	*coordinator = "farmer.golang.org:443"
-	*hostname = vmwareGetInfo("guestinfo.name")
+
+	// guestName is set by cmd/makemac to something like
+	// "mac_10_10_host01b" or "mac_10_12_host01a", which encodes
+	// three things: the mac OS version of the guest VM, which
+	// physical machine it's on (1 to 10, currently) and which of
+	// two possible VMs on that host is running (a or b). For
+	// monitoring purposes, we want stable hostnames and don't
+	// care which OS version is currently running (which changes
+	// constantly), so normalize these to only have the host
+	// number and side (a or b), without the OS version. The
+	// buildlet will report the OS version to the coordinator
+	// anyway. We could in theory do this normalization in the
+	// coordinator, but we don't want to put buildlet-specific
+	// knowledge there, and this file already contains a bunch of
+	// buildlet host-specific configuration, so normalize it here.
+	guestName := vmwareGetInfo("guestinfo.name") // "mac_10_12_host01a"
+	hostPos := strings.Index(guestName, "_host")
+	if hostPos == -1 {
+		// Assume cmd/makemac changed its conventions.
+		// Maybe all this normalization belongs there anyway,
+		// but normalizing here is a safer first step.
+		*hostname = guestName
+	} else {
+		*hostname = "macstadium" + guestName[hostPos:] // "macstadium_host01a"
+	}
 }
 
 func disableMacScreensaver() {
