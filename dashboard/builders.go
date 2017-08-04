@@ -805,36 +805,38 @@ func (c *BuildConfig) NumTestHelpers(isTry bool) int {
 
 func init() {
 	addBuilder(BuildConfig{
-		Name:     "freebsd-amd64-gce93",
-		HostType: "host-freebsd-93-gce",
-		TryOnly:  true, // disable builds until GCE bugfix deployed
+		Name:      "freebsd-amd64-gce93",
+		HostType:  "host-freebsd-93-gce",
+		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})
 	addBuilder(BuildConfig{
-		Name:     "freebsd-amd64-gce101",
-		HostType: "host-freebsd-101-gce",
-		TryOnly:  true, // disable builds until GCE bugfix deployed
+		Name:      "freebsd-amd64-gce101",
+		HostType:  "host-freebsd-101-gce",
+		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-110",
 		HostType:          "host-freebsd-110",
 		TryBot:            true,
 		numTryTestHelpers: 4,
+		MaxAtOnce:         2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})
 	addBuilder(BuildConfig{
-		Name:     "freebsd-amd64-race",
-		HostType: "host-freebsd-110",
+		Name:      "freebsd-amd64-race",
+		HostType:  "host-freebsd-110",
+		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})
 	addBuilder(BuildConfig{
-		Name:     "freebsd-386-gce101",
-		HostType: "host-freebsd-101-gce",
-		env:      []string{"GOARCH=386", "GOHOSTARCH=386"},
-		TryOnly:  true, // disable builds until FreeBSD on GCE is fixed
+		Name:      "freebsd-386-gce101",
+		HostType:  "host-freebsd-101-gce",
+		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
+		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})
 	addBuilder(BuildConfig{
-		Name:     "freebsd-386-110",
-		HostType: "host-freebsd-110",
-		TryOnly:  true, // disable builds until FreeBSD on GCE is fixed
-		env:      []string{"GOARCH=386", "GOHOSTARCH=386"},
+		Name:      "freebsd-386-110",
+		HostType:  "host-freebsd-110",
+		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
+		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-386",
@@ -1007,8 +1009,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:      "openbsd-386-60",
 		HostType:  "host-openbsd-386-60",
-		MaxAtOnce: 2,    // arbitrary, just not unlimited; delete when we have proper scheduler
-		TryOnly:   true, // TODO: remove this once OpenBSD works on GCE again.
+		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})
 	addBuilder(BuildConfig{
 		Name:      "netbsd-amd64-8branch",
@@ -1029,8 +1030,7 @@ func init() {
 		Name:           "plan9-386",
 		HostType:       "host-plan9-386-gce",
 		numTestHelpers: 1,
-		MaxAtOnce:      2,    // arbitrary, just not unlimited; delete when we have proper scheduler
-		TryOnly:        true, // TODO: remove this once Plan 9 works on GCE again.
+		MaxAtOnce:      2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-2008",
