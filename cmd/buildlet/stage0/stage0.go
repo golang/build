@@ -26,6 +26,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
@@ -73,6 +74,7 @@ func main() {
 	}
 	log.Printf("bootstrap binary running")
 
+	var isMacStadiumVM bool
 	switch osArch {
 	case "linux/arm":
 		switch env := os.Getenv("GO_BUILDER_ENV"); env {
@@ -92,6 +94,15 @@ func main() {
 		initOregonStatePPC64()
 	case "linux/ppc64le":
 		initOregonStatePPC64le()
+	case "darwin/amd64":
+		// The MacStadium builders' baked-in stage0.sh
+		// bootstrap file doesn't set GO_BUILDER_ENV
+		// unfortunately, so use the filename it runs its
+		// downloaded bootstrap URL to determine whether we're
+		// in that environment.
+		isMacStadiumVM = len(os.Args) > 0 && strings.HasSuffix(os.Args[0], "run-builder")
+		log.Printf("isMacStadiumVM = %v", isMacStadiumVM)
+		os.Setenv("GO_BUILDER_ENV", "macstadium_vm")
 	}
 
 	if !awaitNetwork() {
@@ -101,6 +112,7 @@ func main() {
 	netDelay := prettyDuration(timeNetwork.Sub(timeStart))
 	log.Printf("network up after %v", netDelay)
 
+Download:
 	// Note: we name it ".exe" for Windows, but the name also
 	// works fine on Linux, etc.
 	target := filepath.FromSlash("./buildlet.exe")
@@ -196,12 +208,32 @@ func main() {
 	if closeSerialLogOutput != nil {
 		closeSerialLogOutput()
 	}
-	if err := cmd.Run(); err != nil {
+	err := cmd.Run()
+	if isMacStadiumVM {
+		if err != nil {
+			log.Printf("error running buildlet: %v", err)
+			log.Printf("restarting in 2 seconds.")
+			time.Sleep(2 * time.Second) // in case we're spinning, slow it down
+		} else {
+			log.Printf("buildlet process exited; restarting.")
+		}
+		// Some of the MacStadium VM environments reuse their
+		// environment. Re-download the buildlet (if it
+		// changed-- httpdl does conditional downloading) and
+		// then re-run. At least on Sierra we never get this
+		// far because the buildlet will halt the machine
+		// before we get here. (and then cmd/makemac will
+		// recreate the VM)
+		// But if we get here, restart the process.
+		goto Download
+	}
+	if err != nil {
 		if configureSerialLogOutput != nil {
 			configureSerialLogOutput()
 		}
 		sleepFatalf("Error running buildlet: %v", err)
 	}
+
 }
 
 // reverseHostTypeArgs returns the default arguments for the buildlet
@@ -280,6 +312,8 @@ func buildletURL() string {
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64le"
 	case "solaris/amd64":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.solaris-amd64"
+	case "darwin/amd64":
+		return "https://storage.googleapis.com/go-builder-data/buildlet.darwin-amd64"
 	}
 	// The buildlet download URL is located in an env var
 	// when the buildlet is not running on GCE, or is running

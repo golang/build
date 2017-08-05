@@ -50,6 +50,7 @@ var (
 	flagStatus = flag.Bool("status", false, "print status only")
 	flagAuto   = flag.Bool("auto", false, "Automatically create & destroy as needed, reacting to https://farmer.golang.org/status/reverse.json status.")
 	flagListen = flag.String("listen", ":8713", "HTTP status port; used by auto mode only")
+	flagNuke   = flag.Bool("destroy-all", false, "immediately destroy all running Mac VMs")
 )
 
 func main() {
@@ -61,6 +62,9 @@ func main() {
 	if *flagAuto {
 		numArg++
 	}
+	if *flagNuke {
+		numArg++
+	}
 	if numArg != 1 {
 		usage()
 	}
@@ -68,12 +72,22 @@ func main() {
 		autoLoop()
 		return
 	}
+	ctx := context.Background()
+	if *flagNuke {
+		state, err := getState(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := state.DestroyAllMacs(ctx); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	minor, err := strconv.Atoi(flag.Arg(0))
 	if err != nil && !*flagStatus {
 		usage()
 	}
 
-	ctx := context.Background()
 	state, err := getState(ctx)
 	if err != nil {
 		log.Fatal(err)
@@ -130,6 +144,8 @@ type VMInfo struct {
 	SlotName string
 }
 
+// NumCreatableVMs returns the number of VMs that can be created given
+// the current capacity.
 func (st *State) NumCreatableVMs() int {
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -140,6 +156,36 @@ func (st *State) NumCreatableVMs() int {
 		}
 	}
 	return n
+}
+
+// NumMacVMsOfVersion reports how many VMs are running Mac OS X 10.<ver>.
+func (st *State) NumMacVMsOfVersion(ver int) int {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	prefix := fmt.Sprintf("mac_10_%v_", ver)
+	n := 0
+	for name := range st.VMInfo {
+		if strings.HasPrefix(name, prefix) {
+			n++
+		}
+	}
+	return n
+}
+
+// DestroyAllMacs runs "govc vm.destroy" on each running Mac VM.
+func (st *State) DestroyAllMacs(ctx context.Context) error {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	var ret error
+	for name := range st.VMInfo {
+		log.Printf("destroying %s ...", name)
+		err := govc(ctx, "vm.destroy", name)
+		log.Printf("vm.destroy(%q) = %v", name, err)
+		if err != nil && ret == nil {
+			ret = err
+		}
+	}
+	return ret
 }
 
 // CreateMac creates an Mac VM running OS X 10.<minor>.
@@ -430,6 +476,16 @@ func init() {
 		status.Lock()
 		defer status.Unlock()
 		w.Header().Set("Content-Type", "application/json")
+
+		// Locking the lastState shouldn't matter since we
+		// currently only set status.lastState once the
+		// *Status is no longer in use, but lock it anyway, in
+		// case usage changes in the future.
+		if st := status.lastState; st != nil {
+			st.mu.Lock()
+			defer st.mu.Unlock()
+		}
+
 		// TODO: probably more status, as needed.
 		res := &struct {
 			LastCheck string
@@ -559,7 +615,7 @@ func autoAdjust() {
 			dedupLogf("All Mac VMs running.")
 			return
 		}
-		ver := wantedMacVersionNext(&rstat)
+		ver := wantedMacVersionNext(st, &rstat)
 
 		if ver == 0 {
 			dedupLogf("Have capacity for %d more Mac VMs, but none requested by coordinator.", canCreate)
@@ -579,7 +635,7 @@ func autoAdjust() {
 // wantedMacVersionNext returns the macOS 10.x version to create next,
 // or 0 to not make anything. It gets the latest reverse buildlet
 // status from the coordinator.
-func wantedMacVersionNext(rstat *types.ReverseBuilderStatus) int {
+func wantedMacVersionNext(st *State, rstat *types.ReverseBuilderStatus) int {
 	// TODO: improve this logic at some point, probably when the
 	// coordinator has a proper scheduler (Issue 19178) and when
 	// the coordinator keeps 1 of each builder type ready to go.
@@ -595,7 +651,7 @@ func wantedMacVersionNext(rstat *types.ReverseBuilderStatus) int {
 			log.Printf("ERROR: unexpected host type %q", hostType)
 			continue
 		}
-		want := hostStatus.Expect - hostStatus.Connected
+		want := hostStatus.Expect - st.NumMacVMsOfVersion(ver)
 		if want > 0 {
 			return ver
 		}

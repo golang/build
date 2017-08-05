@@ -34,10 +34,6 @@ buildlet.darwin-amd64: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
 
-buildlet.darwin-amd64.gz: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --gzip --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
-
 buildlet.freebsd-amd64: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
