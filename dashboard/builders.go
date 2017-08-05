@@ -1211,12 +1211,14 @@ func init() {
 		TryOnly:  true,
 	})
 	addBuilder(BuildConfig{
-		Name:     "dragonfly-amd64",
-		HostType: "host-dragonfly-amd64-tdfbsd",
+		Name:         "dragonfly-amd64",
+		HostType:     "host-dragonfly-amd64-tdfbsd",
+		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
-		Name:     "freebsd-arm",
-		HostType: "host-freebsd-arm-paulzhol",
+		Name:         "freebsd-arm",
+		HostType:     "host-freebsd-arm-paulzhol",
+		SkipSnapshot: true,
 		env: []string{
 			"GOARM=7",
 			"CGO_ENABLED=1",
