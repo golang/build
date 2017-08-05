@@ -147,12 +147,14 @@ var Hosts = map[string]*HostConfig{
 	"host-dragonfly-amd64-tdfbsd": &HostConfig{
 		IsReverse:      true,
 		ExpectNum:      1,
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		ReverseAliases: []string{"dragonfly-amd64"},
 		OwnerGithub:    "tdfbsd",
 	},
 	"host-freebsd-arm-paulzhol": &HostConfig{
 		IsReverse:      true,
 		ExpectNum:      1,
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/home/paulzhol/go1.4"},
 		ReverseAliases: []string{"freebsd-arm-paulzhol"},
 		OwnerGithub:    "paulzhol",
 	},
