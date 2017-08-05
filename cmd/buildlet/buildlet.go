@@ -217,7 +217,13 @@ func main() {
 	}
 }
 
+var inheritedGorootBootstrap string
+
 func initGorootBootstrap() {
+	// Remember any GOROOT_BOOTSTRAP to use as a backup in handleExec
+	// if $WORKDIR/go1.4 ends up not existing.
+	inheritedGorootBootstrap = os.Getenv("GOROOT_BOOTSTRAP")
+
 	// Default if not otherwise configured in dashboard/builders.go:
 	os.Setenv("GOROOT_BOOTSTRAP", filepath.Join(*workDir, "go1.4"))
 
@@ -845,6 +851,13 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 
 	env := append(baseEnv(goarch), r.PostForm["env"]...)
 	env = envutil.Dedup(runtime.GOOS == "windows", env)
+
+	// Prefer buildlet process's inherited GOROOT_BOOTSTRAP if
+	// there was one and the one we're about to use doesn't exist.
+	if v := getEnv(env, "GOROOT_BOOTSTRAP"); v != "" && inheritedGorootBootstrap != "" && pathNotExist(v) {
+		env = envutil.Dedup(runtime.GOOS == "windows", append(env,
+			"GOROOT_BOOTSTRAP="+inheritedGorootBootstrap))
+	}
 	env = setPathEnv(env, r.PostForm["path"], *workDir)
 
 	cmd := exec.Command(absCmd, r.PostForm["cmdArg"]...)
@@ -888,6 +901,32 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set(hdrProcessState, state)
 	log.Printf("[%p] Run = %s, after %v", cmd, state, time.Since(t0))
+}
+
+// pathNotExist reports whether path does not exist.
+func pathNotExist(path string) bool {
+	_, err := os.Stat(path)
+	return os.IsNotExist(err)
+}
+
+func getEnv(env []string, key string) string {
+	for _, kv := range env {
+		if len(kv) <= len(key) || kv[len(key)] != '=' {
+			continue
+		}
+		if runtime.GOOS == "windows" {
+			// Case insensitive.
+			if strings.EqualFold(kv[:len(key)], key) {
+				return kv[len(key)+1:]
+			}
+		} else {
+			// Case sensitive.
+			if kv[:len(key)] == key {
+				return kv[len(key)+1:]
+			}
+		}
+	}
+	return ""
 }
 
 // setPathEnv returns a copy of the provided environment with any existing
