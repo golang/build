@@ -144,6 +144,18 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
+	"host-dragonfly-amd64-tdfbsd": &HostConfig{
+		IsReverse:      true,
+		ExpectNum:      1,
+		ReverseAliases: []string{"dragonfly-amd64"},
+		OwnerGithub:    "tdfbsd",
+	},
+	"host-freebsd-arm-paulzhol": &HostConfig{
+		IsReverse:      true,
+		ExpectNum:      1,
+		ReverseAliases: []string{"freebsd-arm-paulzhol"},
+		OwnerGithub:    "paulzhol",
+	},
 	"host-plan9-386-gce": &HostConfig{
 		VMImage:            "plan9-386-v5",
 		Notes:              "Plan 9 from 0intro; GCE VM is built from script in build/env/plan9-386",
@@ -1196,6 +1208,19 @@ func init() {
 		Notes:    "for localhost development only",
 		TryOnly:  true,
 	})
+	addBuilder(BuildConfig{
+		Name:     "dragonfly-amd64",
+		HostType: "host-dragonfly-amd64-tdfbsd",
+	})
+	addBuilder(BuildConfig{
+		Name:     "freebsd-arm",
+		HostType: "host-freebsd-arm-paulzhol",
+		env: []string{
+			"GOARM=7",
+			"CGO_ENABLED=1",
+		},
+	})
+
 }
 
 // addBuilder adds c to the Builders map after doing some sanity
