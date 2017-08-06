@@ -260,8 +260,11 @@ func devBuilderKey(builder string) string {
 }
 
 func homedir() string {
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		return os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
+	case "plan9":
+		return os.Getenv("home")
 	}
 	home := os.Getenv("HOME")
 	if home != "" {
