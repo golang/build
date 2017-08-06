@@ -154,6 +154,7 @@ var Hosts = map[string]*HostConfig{
 	"host-freebsd-arm-paulzhol": &HostConfig{
 		IsReverse:      true,
 		ExpectNum:      1,
+		Notes:          "Cubiboard2 1Gb RAM dual-core Cortex-A7 (Allwinner A20), FreeBSD 11.1-RELEASE",
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/home/paulzhol/go1.4"},
 		ReverseAliases: []string{"freebsd-arm-paulzhol"},
 		OwnerGithub:    "paulzhol",
