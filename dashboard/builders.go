@@ -1216,7 +1216,7 @@ func init() {
 		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
-		Name:         "freebsd-arm",
+		Name:         "freebsd-arm-paulzhol",
 		HostType:     "host-freebsd-arm-paulzhol",
 		SkipSnapshot: true,
 		env: []string{
