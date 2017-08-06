@@ -50,6 +50,12 @@ var Hosts = map[string]*HostConfig{
 		Notes:       "for localhost development of buildlets/gomote/coordinator only",
 		SSHUsername: os.Getenv("USER"),
 	},
+	"host-nacl-arm-davecheney": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   1,
+		Notes:       "Raspberry Pi 3",
+		OwnerGithub: "davecheney",
+	},
 	"host-nacl-kube": &HostConfig{
 		Notes:           "Kubernetes container on GKE.",
 		KubeImage:       "linux-x86-nacl:latest",
@@ -158,6 +164,17 @@ var Hosts = map[string]*HostConfig{
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/home/paulzhol/go1.4"},
 		ReverseAliases: []string{"freebsd-arm-paulzhol"},
 		OwnerGithub:    "paulzhol",
+	},
+	"host-plan9-arm-0intro": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   1,
+		Notes:       "Raspberry Pi 3 Model B, Plan 9 from Bell Labs",
+		OwnerGithub: "0intro",
+	},
+	"host-plan9-amd64-0intro": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   1,
+		OwnerGithub: "0intro",
 	},
 	"host-plan9-386-gce": &HostConfig{
 		VMImage:            "plan9-386-v5",
@@ -1225,6 +1242,21 @@ func init() {
 			"CGO_ENABLED=1",
 		},
 	})
+	addBuilder(BuildConfig{
+		Name:         "plan9-arm",
+		HostType:     "host-plan9-arm-0intro",
+		SkipSnapshot: true,
+	})
+	addBuilder(BuildConfig{
+		Name:         "nacl-arm",
+		HostType:     "host-nacl-arm-davecheney",
+		SkipSnapshot: true,
+	})
+	addBuilder(BuildConfig{
+		Name:         "plan9-amd64-9front",
+		HostType:     "host-plan9-amd64-0intro",
+		SkipSnapshot: true,
+	})
 
 }
 
@@ -1238,7 +1270,7 @@ func addBuilder(c BuildConfig) {
 		panic(fmt.Sprintf("missing HostType for builder %q", c.Name))
 	}
 	if _, dup := Builders[c.Name]; dup {
-		panic("dup name")
+		panic("dup name " + c.Name)
 	}
 	if _, ok := Hosts[c.HostType]; !ok {
 		panic(fmt.Sprintf("undefined HostType %q for builder %q", c.HostType, c.Name))
