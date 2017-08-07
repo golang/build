@@ -107,7 +107,7 @@ func main() {
 
 // State is the state of the world.
 type State struct {
-	mu sync.Mutex `json:"-"`
+	mu sync.Mutex
 
 	Hosts  map[string]int    // IP address -> running Mac VM count (including 0)
 	VMHost map[string]string // "mac_10_8_host02b" => "10.0.0.0"
@@ -531,7 +531,8 @@ func autoLoop() {
 func watchdogFail() {
 	stacks := make([]byte, 1<<20)
 	stacks = stacks[:runtime.Stack(stacks, true)]
-	log.Fatalf("timeout after %v waiting for autoAdjust(). stacks:\n%s", stacks)
+	log.Fatalf("timeout after %v waiting for autoAdjust(). stacks:\n%s",
+		autoAdjustTimeout, stacks)
 }
 
 func autoAdjust() {
