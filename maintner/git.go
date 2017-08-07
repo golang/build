@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -71,6 +72,7 @@ type GitCommit struct {
 	CommitTime time.Time
 	Msg        string // Commit message subject and body
 	Files      []*maintpb.GitDiffTreeFile
+	GerritMeta *GerritMeta // non-nil if it's a Gerrit NoteDB meta commit
 }
 
 func (gc *GitCommit) String() string {
@@ -114,6 +116,24 @@ func (gc *GitCommit) Summary() string {
 	}
 	s = strings.TrimSpace(s)
 	return s
+}
+
+// SameDiffStat reports whether gc has the same diff stat numbers as b.
+// If either is unknown, false is returned.
+func (gc *GitCommit) SameDiffStat(b *GitCommit) bool {
+	if len(gc.Files) != len(b.Files) {
+		return false
+	}
+	for i, af := range gc.Files {
+		bf := b.Files[i]
+		if af == nil || bf == nil {
+			return false
+		}
+		if *af != *bf {
+			return false
+		}
+	}
+	return true
 }
 
 // GitPerson is a person in a git commit.
@@ -340,6 +360,7 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*GitCommit, error)
 	for _, f := range gc.Files {
 		f.File = c.str(f.File) // intern the string
 	}
+	sort.Slice(gc.Files, func(i, j int) bool { return gc.Files[i].File < gc.Files[j].File })
 	parents := 0
 	err := foreachLine(hdr, func(ln []byte) error {
 		if bytes.HasPrefix(ln, parentSpace) {

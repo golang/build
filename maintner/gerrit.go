@@ -211,6 +211,21 @@ func (gp *GerritProject) CL(number int32) *GerritCL {
 	return gp.cls[number]
 }
 
+// GitCommit returns the provided git commit, or nil if it's unknown.
+func (gp *GerritProject) GitCommit(hash string) *GitCommit {
+	if len(hash) != 40 {
+		// TODO: support prefix lookups. build a trie. But
+		// for now just avoid panicking in gitHashFromHexStr.
+		return nil
+	}
+	var buf [20]byte
+	_, err := decodeHexStr(buf[:], hash)
+	if err != nil {
+		return nil
+	}
+	return gp.commit[GitHash(buf[:])]
+}
+
 func (gp *GerritProject) logf(format string, args ...interface{}) {
 	log.Printf("gerrit "+gp.proj+": "+format, args...)
 }
@@ -247,7 +262,8 @@ type GerritCL struct {
 	// Meta is the head of the most recent Gerrit "meta" commit
 	// for this CL. This is guaranteed to be a linear history
 	// back to a CL-specific root commit for this meta branch.
-	Meta *GitCommit
+	Meta        *GitCommit
+	MetaCommits []*GitCommit // in order, from root to Meta
 
 	// Status will be "merged", "abandoned", "new", or "draft".
 	Status string
@@ -257,6 +273,11 @@ type GerritCL struct {
 
 	// Messages contains all of the messages for this CL, in sorted order.
 	Messages []*GerritMessage
+}
+
+// GerritMetaCommit represents a GitCommit in the Gerrit "NoteDb" format.
+type GerritMetaCommit struct {
+	*GitCommit
 }
 
 // GerritMessage is a Gerrit reply that is attached to the CL as a whole, and
@@ -302,11 +323,8 @@ func (cl *GerritCL) References(ref GitHubIssueRef) bool {
 
 // Branch returns the CL's branch, with any "refs/heads/" prefix removed.
 func (cl *GerritCL) Branch() string {
-	meta := cl.Meta
-	for meta != nil && len(meta.Parents) == 1 {
-		meta = meta.Parents[0]
-	}
-	return lineValue(meta.Msg, "Branch:")
+	branch, _ := lineValue(cl.firstMetaCommit().Msg, "Branch:")
+	return branch
 }
 
 // lineValue extracts a value from an RFC 822-style "key: value" series of lines.
@@ -315,28 +333,35 @@ func (cl *GerritCL) Branch() string {
 //    bar: baz
 // lineValue(all, "foo:") returns "bar". It trims any whitespace.
 // The prefix is case sensitive and must include the colon.
-func lineValue(all, prefix string) string {
+func lineValue(all, prefix string) (value, rest string) {
+	orig := all
+	consumed := 0
 	for {
 		i := strings.Index(all, prefix)
 		if i == -1 {
-			return ""
+			return "", ""
 		}
 		if i > 0 && all[i-1] != '\n' && all[i-1] != '\r' {
 			all = all[i+len(prefix):]
+			consumed += i + len(prefix)
 			continue
 		}
 		val := all[i+len(prefix):]
+		consumed += i + len(prefix)
 		if nl := strings.IndexByte(val, '\n'); nl != -1 {
-			val = val[:nl]
+			consumed += nl + 1
+			val = val[:nl+1]
+		} else {
+			consumed = len(orig)
 		}
-		return strings.TrimSpace(val)
+		return strings.TrimSpace(val), orig[consumed:]
 	}
 }
 
 // ChangeID returns the Gerrit "Change-Id: Ixxxx" line's Ixxxx
 // value from the gc.Msg, if any.
 func (gc *GerritCL) ChangeID() string {
-	id := lineValue(gc.Commit.Msg, "Change-Id:")
+	id, _ := lineValue(gc.Commit.Msg, "Change-Id:")
 	if strings.HasPrefix(id, "I") && len(id) == 41 {
 		return id
 	}
@@ -378,12 +403,10 @@ func (cl *GerritCL) firstMetaCommit() *GitCommit {
 	m := cl.Meta
 	for {
 		if m == nil || len(m.Parents) == 0 {
-			break
+			return m
 		}
-
 		m = m.Parents[0] // Meta commits don’t have more than one parent.
 	}
-	return m
 }
 
 func (cl *GerritCL) updateGithubIssueRefs() {
@@ -539,18 +562,43 @@ func (gp *GerritProject) foreachCommitParent(hash GitHash, f func(*GitCommit) er
 //
 // Corpus.mu must be held.
 func (gp *GerritProject) getGerritMessage(commit *GitCommit) *GerritMessage {
-	start := strings.Index(commit.Msg, "\nPatch Set ")
-	if start == -1 {
+	const existVerPhrase = "\nPatch Set "
+	const newVerPhrase = "\nUploaded patch set "
+
+	startExist := strings.Index(commit.Msg, existVerPhrase)
+	startNew := strings.Index(commit.Msg, newVerPhrase)
+	var start int
+	var phrase string
+	switch {
+	case startExist == -1 && startNew == -1:
 		return nil
+	case startExist == -1 || (startNew != -1 && startNew < startExist):
+		phrase = newVerPhrase
+		start = startNew
+	case startNew == -1 || (startExist != -1 && startExist < startNew):
+		phrase = existVerPhrase
+		start = startExist
 	}
-	numStart := start + len("\nPatch Set ")
+
+	numStart := start + len(phrase)
 	colon := strings.IndexByte(commit.Msg[numStart:], ':')
 	if colon == -1 {
 		return nil
 	}
-	version, err := strconv.ParseInt(commit.Msg[numStart:numStart+colon], 10, 32)
+	num := commit.Msg[numStart : numStart+colon]
+	if strings.Contains(num, "\n") || strings.Contains(num, ".") {
+		// Spanned lines. Didn't match expected comment form
+		// we care about (comments with vote changes), like:
+		//
+		//    Uploaded patch set 5: Some-Vote=+2
+		//
+		// For now, treat such meta updates (new uploads only)
+		// as not comments.
+		return nil
+	}
+	version, err := strconv.ParseInt(num, 10, 32)
 	if err != nil {
-		gp.logf("unexpected patch set number in %s; err: %v", commit.Hash, err)
+		gp.logf("for phrase %q at %d, unexpected patch set number in %s; err: %v, message: %s", phrase, start, commit.Hash, err, commit.Msg)
 		return nil
 	}
 	start++
@@ -628,6 +676,7 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 			// in reverse order and then flip the array before setting on the
 			// GerritCL object.
 			var backwardMessages []*GerritMessage
+			var backwardMeta []*GitCommit
 			gp.foreachCommitParent(cl.Meta.Hash, func(gc *GitCommit) error {
 				if strings.Contains(gc.Msg, "\nLabel: ") {
 					gp.numLabelChanges++
@@ -635,6 +684,13 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 				if oldMeta != nil && gc.Hash == oldMeta.Hash {
 					return errStopIteration
 				}
+				if gc.GerritMeta == nil {
+					gc.GerritMeta = &GerritMeta{
+						Commit: gc,
+						CL:     cl,
+					}
+				}
+				backwardMeta = append(backwardMeta, gc)
 				if status := getGerritStatus(gc); status != "" && foundStatus == "" {
 					foundStatus = status
 				}
@@ -653,6 +709,9 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 			}
 			reverseGerritMessages(backwardMessages)
 			cl.Messages = append(cl.Messages, backwardMessages...)
+			for i := len(backwardMeta) - 1; i >= 0; i-- {
+				cl.MetaCommits = append(cl.MetaCommits, backwardMeta[i])
+			}
 		} else {
 			cl.Commit = gc
 			cl.Version = clv.Version
@@ -1066,4 +1125,152 @@ func (gp *GerritProject) check() error {
 		}
 	}
 	return nil
+}
+
+// GerritMeta represents a Git commit in the Gerrit NoteDb meta
+// format.
+type GerritMeta struct {
+	// Commit points up to the git commit for this Gerrit NoteDB meta commit.
+	Commit *GitCommit
+
+	// CL is the Gerrit CL this metadata is for.
+	CL *GerritCL
+}
+
+// Footer returns the "key: value" lines at the base of the commit.
+func (m *GerritMeta) Footer() string {
+	i := strings.LastIndex(m.Commit.Msg, "\n\n")
+	if i == -1 {
+		return ""
+	}
+	return m.Commit.Msg[i+2:]
+}
+
+// LabelVotes returns a map from label name to voter email to their vote.
+//
+// This is relatively expensive to call compared to other methods in maintner.
+// It is not currently cached.
+func (m *GerritMeta) LabelVotes() map[string]map[string]int8 {
+	if m == nil {
+		panic("nil *GerritMeta")
+	}
+	if m.CL == nil {
+		panic("GerritMeta has nil CL field")
+	}
+	// To calculate votes as the time of the 'm' meta commit,
+	// we need to consider the meta commits before it.
+	// Let's see which number in the (linear) meta history
+	// we are.
+	ourIndex := -1
+	for i, mc := range m.CL.MetaCommits {
+		if mc.GerritMeta == m {
+			ourIndex = i
+			break
+		}
+	}
+	if ourIndex == -1 {
+		panic("LabelVotes called on GerritMeta not in its m.CL.MetaCommits slice")
+	}
+	labels := map[string]map[string]int8{}
+
+	history := m.CL.MetaCommits[:ourIndex+1]
+	var lastCommit string
+	for _, mc := range history {
+		log.Printf("For CL %v, mc %v", m.CL.Number, mc.GerritMeta)
+		footer := mc.GerritMeta.Footer()
+		isNew := strings.Contains(footer, "\nTag: autogenerated:gerrit:newPatchSet\n")
+		email := mc.Author.Email()
+		if isNew {
+			commit, _ := lineValue(footer, "Commit: ")
+			if commit != "" {
+				// TODO: implement Gerrit's vote copying. For example,
+				// label.Label-Name.copyAllScoresIfNoChange defaults to true (as it is with Go's server)
+				// https://gerrit-review.googlesource.com/Documentation/config-labels.html#label_copyAllScoresIfNoChange
+				// We don't have the information in Maintner to do this, though.
+				// One approximation is:
+				if lastCommit != "" {
+					oldCommit := m.CL.Project.GitCommit(lastCommit)
+					newCommit := m.CL.Project.GitCommit(commit)
+					if !oldCommit.SameDiffStat(newCommit) {
+						// TODO: this should really use
+						// the Gerrit server's project
+						// config, including the
+						// All-Projects config, but
+						// that's not in Maintner
+						// either.
+						delete(labels, "Run-TryBot")
+						delete(labels, "TryBot-Result")
+					}
+				}
+				lastCommit = commit
+			}
+		}
+
+		remain := footer
+		for len(remain) > 0 {
+			var labelEqVal string
+			labelEqVal, remain = lineValue(remain, "Label: ")
+			if labelEqVal != "" {
+				label, value, whose := parseGerritLabelValue(labelEqVal)
+				if label != "" {
+					if whose == "" {
+						whose = email
+					}
+					if label[0] == '-' {
+						label = label[1:]
+						if m := labels[label]; m != nil {
+							delete(m, whose)
+						}
+					} else {
+						m := labels[label]
+						if m == nil {
+							m = make(map[string]int8)
+							labels[label] = m
+						}
+						m[whose] = value
+
+					}
+				}
+			}
+		}
+	}
+
+	return labels
+}
+
+// parseGerritLabelValue parses a Gerrit NoteDb "Label: ..." value.
+// It can take forms and return values such as:
+//
+//     "Run-TryBot=+1" => ("Run-TryBot", 1, "")
+//     "-Run-TryBot" => ("-Run-TryBot", 0, "")
+//     "-Run-TryBot " => ("-Run-TryBot", 0, "")
+//     "Run-TryBot=+1 Brad Fitzpatrick <5065@62eb7196-b449-3ce5-99f1-c037f21e1705>" =>
+//           ("Run-TryBot", 1, "5065@62eb7196-b449-3ce5-99f1-c037f21e1705")
+//     "-TryBot-Result Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>" =>
+//           ("-TryBot-Result", 0, "5976@62eb7196-b449-3ce5-99f1-c037f21e1705")
+func parseGerritLabelValue(v string) (label string, value int8, whose string) {
+	space := strings.IndexByte(v, ' ')
+	if space != -1 {
+		v, whose = v[:space], v[space+1:]
+		if i := strings.IndexByte(whose, '<'); i == -1 {
+			whose = ""
+		} else {
+			whose = whose[i+1:]
+			if i := strings.IndexByte(whose, '>'); i == -1 {
+				whose = ""
+			} else {
+				whose = whose[:i]
+			}
+		}
+	}
+	v = strings.TrimSpace(v)
+	if eq := strings.IndexByte(v, '='); eq == -1 {
+		label = v
+	} else {
+		label = v[:eq]
+		if n, err := strconv.ParseInt(v[eq+1:], 10, 8); err == nil {
+			value = int8(n)
+		}
+	}
+	return
 }
