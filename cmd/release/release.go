@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// TODO(adg): add flag so that we can choose to run make.bash only
-
 // Command release builds a Go release.
 package main
 
@@ -198,7 +196,7 @@ var builds = []*Build{
 	{
 		OS:      "windows",
 		Arch:    "386",
-		Builder: "windows-386-gce",
+		Builder: "windows-386-2008",
 	},
 	{
 		OS:      "windows",
