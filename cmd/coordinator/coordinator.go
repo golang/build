@@ -1178,6 +1178,16 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 }
 
 func skipBuild(br buildgo.BuilderRev) bool {
+	if br.Name == "freebsd-arm-paulzhol" {
+		// This was a fragile little machine with limited memory.
+		// Only run a few of the core subrepos for now while
+		// we figure out what's killing it.
+		switch br.SubName {
+		case "sys", "net":
+			return false
+		}
+		return true
+	}
 	switch br.SubName {
 	case "build", // has external deps
 		"exp",    // always broken, depends on mobile which is broken

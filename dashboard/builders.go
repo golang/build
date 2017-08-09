@@ -698,6 +698,7 @@ func (c *BuildConfig) BuildSubrepos() bool {
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
 		"openbsd-386-60", "openbsd-amd64-60",
 		"plan9-386",
+		"freebsd-arm-paulzhol",
 		"windows-amd64-2016", "windows-386-2008":
 		return true
 	case "darwin-amd64-10_12":
@@ -919,12 +920,13 @@ func init() {
 			},
 		})
 	}
-	addMiscCompile("", "^(linux-arm64|linux-mips64.*|nacl-arm|solaris-amd64|freebsd-arm|darwin-386)$")
-	// TODO(bradfitz): add linux-mips* (or just make a "-mips" suffix builder) to add 32-bit
-	// mips, once that port is finished.
-	addMiscCompile("-ppc", "^(linux-ppc64|linux-ppc64le)$")
-	addMiscCompile("-netbsd", "^netbsd-")
-	addMiscCompile("-plan9", "^plan9-")
+	addMiscCompile("", "^(linux-arm64|nacl-arm|solaris-amd64|darwin-386)$") // 4 ports
+	addMiscCompile("-mips", "^linux-mips")                                  // 4
+	addMiscCompile("-ppc", "^linux-ppc64")                                  // 2
+	addMiscCompile("-plan9", "^plan9-")                                     // 3
+	addMiscCompile("-freebsd", "^freebsd-")                                 // 3
+	addMiscCompile("-netbsd", "^netbsd-")                                   // 3
+	addMiscCompile("-openbsd", "^openbsd-")                                 // 3
 
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-nocgo",
