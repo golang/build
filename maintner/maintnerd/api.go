@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"errors"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -164,6 +165,10 @@ func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkR
 
 	for _, ci := range cis {
 		cl := s.c.Gerrit().Project("go.googlesource.com", ci.Project).CL(int32(ci.ChangeNumber))
+		if cl == nil {
+			log.Printf("nil Gerrit CL %v", ci.ChangeNumber)
+			continue
+		}
 		work := tryWorkItem(cl)
 		if ci.CurrentRevision != "" {
 			// In case maintner is behind.
