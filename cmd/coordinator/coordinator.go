@@ -1183,7 +1183,7 @@ func skipBuild(br buildgo.BuilderRev) bool {
 		// Only run a few of the core subrepos for now while
 		// we figure out what's killing it.
 		switch br.SubName {
-		case "sys", "net":
+		case "", "sys", "net":
 			return false
 		}
 		return true
