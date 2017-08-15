@@ -4,7 +4,7 @@
 
 The makemac command starts OS X VMs for the builders.
 
-## Deploying
+## Deploying `makemac`
 
 ```
 * On Linux,
@@ -15,5 +15,18 @@ The makemac command starts OS X VMs for the builders.
 
 On that host,
   * sudo systemctl restart makemac
+  $ sudo journalctl -f -u makemac     # watch it
+```
+
+## Updating `makemac.service`
+
+```
+* On Linux,
+  $ scp -i ~/.ssh/id_ed25519_golang1 cmd/makemac/makemac.service gopher@macstadiumd.golang.org:makemac.service
+
+On that host,
+  $ sudo mv makemac.service /etc/systemd/system/makemac.service
+  $ sudo systemctl daemon-reload
+  $ sudo systemctl restart makemac
   $ sudo journalctl -f -u makemac     # watch it
 ```
