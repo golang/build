@@ -133,7 +133,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if baseURL := req.URL.Path[:baseURLLen]; req.URL.Path == baseURL+"/" {
 		// Redirect "/owner/repo/" to "/owner/repo".
 		if req.URL.RawQuery != "" {
-			baseURL = "?" + req.URL.RawQuery
+			baseURL += "?" + req.URL.RawQuery
 		}
 		http.Redirect(w, req, baseURL, http.StatusFound)
 		return
