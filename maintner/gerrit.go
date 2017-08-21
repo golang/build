@@ -818,7 +818,7 @@ func (gp *GerritProject) sync(ctx context.Context, loop bool) error {
 		if !loop {
 			return nil
 		}
-		timer := time.NewTimer(15 * time.Minute)
+		timer := time.NewTimer(5 * time.Minute)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
