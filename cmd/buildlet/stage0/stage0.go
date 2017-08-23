@@ -155,6 +155,7 @@ Download:
 	switch buildEnv {
 	case "linux-arm-arm5spacemonkey":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-arm5spacemonkey")...)
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
 	case "host-linux-arm-scaleway":
 		scalewayArgs := append(
 			reverseHostTypeArgs(buildEnv),
