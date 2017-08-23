@@ -46,7 +46,7 @@ type File struct {
 //   go1.5beta2.src.tar.gz
 //   go1.5.1.linux-386.tar.gz
 //   go1.5.windows-amd64.msi
-var fileRe = regexp.MustCompile(`^(go[a-z0-9-.]+)\.(src|([a-z0-9]+)-([a-z0-9]+)(?:-([a-z0-9.]+))?)\.(tar\.gz|zip|pkg|msi)$`)
+var fileRe = regexp.MustCompile(`^(go[a-z0-9-.]+)\.(src|([a-z0-9]+)-([a-z0-9]+)(?:-([a-z0-9.]+))?)\.(tar\.gz|zip|pkg|msi)(.asc)?$`)
 
 func upload(files []string) error {
 	ctx := context.Background()
@@ -84,12 +84,18 @@ func uploadFile(ctx context.Context, c *storage.Client, b *Build, version, filen
 		return err
 	}
 	base := filepath.Base(filename)
-	checksum := fmt.Sprintf("%x", sha256.Sum256(file))
 
 	// Upload file to Google Cloud Storage.
 	if err := putObject(ctx, c, base, file); err != nil {
 		return fmt.Errorf("uploading %q: %v", base, err)
 	}
+
+	if strings.HasSuffix(base, ".asc") {
+		// Don't add asc files to the download page, just upload it.
+		return nil
+	}
+
+	checksum := fmt.Sprintf("%x", sha256.Sum256(file))
 	// Upload file.sha256.
 	if err := putObject(ctx, c, base+".sha256", []byte(checksum)); err != nil {
 		return fmt.Errorf("uploading %q: %v", base+".sha256", err)
@@ -129,7 +135,6 @@ func uploadFile(ctx context.Context, c *storage.Client, b *Build, version, filen
 		return fmt.Errorf("upload failed: %v\n%s", resp.Status, b)
 	}
 	return nil
-
 }
 
 func putObject(ctx context.Context, c *storage.Client, name string, body []byte) error {
