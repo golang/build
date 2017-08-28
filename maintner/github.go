@@ -34,14 +34,14 @@ import (
 // package for responses fulfilled from cache due to a 304 from the server.
 const xFromCache = "X-From-Cache"
 
-// GithubRepoID is a github org & repo, lowercase.
-type GithubRepoID struct {
+// GitHubRepoID is a github org & repo, lowercase.
+type GitHubRepoID struct {
 	Owner, Repo string
 }
 
-func (id GithubRepoID) String() string { return id.Owner + "/" + id.Repo }
+func (id GitHubRepoID) String() string { return id.Owner + "/" + id.Repo }
 
-func (id GithubRepoID) valid() bool {
+func (id GitHubRepoID) valid() bool {
 	if id.Owner == "" || id.Repo == "" {
 		// TODO: more validation. whatever github requires.
 		return false
@@ -53,14 +53,14 @@ func (id GithubRepoID) valid() bool {
 type GitHub struct {
 	c     *Corpus
 	users map[int64]*GitHubUser
-	repos map[GithubRepoID]*GitHubRepo
+	repos map[GitHubRepoID]*GitHubRepo
 }
 
 // ForeachRepo calls fn serially for each GithubRepo, stopping if fn
 // returns an error. The function is called with lexically increasing
 // repo IDs.
 func (g *GitHub) ForeachRepo(fn func(*GitHubRepo) error) error {
-	var ids []GithubRepoID
+	var ids []GitHubRepoID
 	for id := range g.repos {
 		ids = append(ids, id)
 	}
@@ -80,14 +80,14 @@ func (g *GitHub) ForeachRepo(fn func(*GitHubRepo) error) error {
 
 // Repo returns the repo if it's known. Otherwise it returns nil.
 func (g *GitHub) Repo(owner, repo string) *GitHubRepo {
-	return g.repos[GithubRepoID{owner, repo}]
+	return g.repos[GitHubRepoID{owner, repo}]
 }
 
 func (g *GitHub) getOrCreateRepo(owner, repo string) *GitHubRepo {
 	if g == nil {
 		panic("cannot call methods on nil GitHub")
 	}
-	id := GithubRepoID{owner, repo}
+	id := GitHubRepoID{owner, repo}
 	if !id.valid() {
 		return nil
 	}
@@ -106,13 +106,13 @@ func (g *GitHub) getOrCreateRepo(owner, repo string) *GitHubRepo {
 
 type GitHubRepo struct {
 	github     *GitHub
-	id         GithubRepoID
+	id         GitHubRepoID
 	issues     map[int32]*GitHubIssue // num -> issue
 	milestones map[int64]*GitHubMilestone
 	labels     map[int64]*GitHubLabel
 }
 
-func (gr *GitHubRepo) ID() GithubRepoID { return gr.id }
+func (gr *GitHubRepo) ID() GitHubRepoID { return gr.id }
 
 // Issue returns the the provided issue number, or nil if it's not known.
 func (gr *GitHubRepo) Issue(n int32) *GitHubIssue { return gr.issues[n] }
@@ -595,7 +595,7 @@ func (c *Corpus) initGithub() {
 	}
 	c.github = &GitHub{
 		c:     c,
-		repos: map[GithubRepoID]*GitHubRepo{},
+		repos: map[GitHubRepoID]*GitHubRepo{},
 	}
 }
 

@@ -139,7 +139,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	req = stripPrefix(req, baseURLLen)
-	h.serveIssues(w, req, maintner.GithubRepoID{Owner: owner, Repo: repo})
+	h.serveIssues(w, req, maintner.GitHubRepoID{Owner: owner, Repo: repo})
 }
 
 var indexHTML = template.Must(template.New("").Parse(`<html>
@@ -164,7 +164,7 @@ var indexHTML = template.Must(template.New("").Parse(`<html>
 // serveIndex serves the index page, which lists all available repositories.
 func (h *handler) serveIndex(w http.ResponseWriter, req *http.Request) {
 	type repo struct {
-		RepoID maintner.GithubRepoID
+		RepoID maintner.GitHubRepoID
 		Count  uint64 // Issues count.
 	}
 	var repos []repo
@@ -208,7 +208,7 @@ func countIssues(r *maintner.GitHubRepo) (uint64, error) {
 }
 
 // serveIssues serves issues for repository id.
-func (h *handler) serveIssues(w http.ResponseWriter, req *http.Request, id maintner.GithubRepoID) {
+func (h *handler) serveIssues(w http.ResponseWriter, req *http.Request, id maintner.GitHubRepoID) {
 	if h.c.GitHub().Repo(id.Owner, id.Repo) == nil {
 		http.Error(w, fmt.Sprintf("404 Not Found\n\nrepository %q not found", id), http.StatusNotFound)
 		return
