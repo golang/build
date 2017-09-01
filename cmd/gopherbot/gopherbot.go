@@ -796,7 +796,10 @@ func (b *gopherbot) congratulateNewContributors(ctx context.Context) error {
 			if cl.Commit == nil {
 				return nil
 			}
-			email := cl.Commit.Author.Str
+			email := cl.Commit.Author.Email()
+			if email == "" {
+				email = cl.Commit.Author.Str
+			}
 			if b.knownContributors[email] {
 				return nil
 			}
