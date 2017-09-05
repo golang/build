@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ReplicationController
 metadata:
-  name: gitmirror-rc
+  name: gitmirror-deployment
 spec:
   replicas: 2
   selector:

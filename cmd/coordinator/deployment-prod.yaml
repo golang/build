@@ -13,7 +13,7 @@ spec:
     spec:
       containers:
       - name: coordinator
-        image: gcr.io/symbolic-datum-552/coordinator:v1
+        image: gcr.io/symbolic-datum-552/coordinator:latest
         imagePullPolicy: Always
         command: ["/coordinator"]
         ports:

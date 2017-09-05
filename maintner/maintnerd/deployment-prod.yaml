@@ -1,13 +1,13 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: maintner-deployment
+  name: maintnerd-deployment
 spec:
   replicas: 1 # MUST BE 1 FOR NOW
   template:
     metadata:
       labels:
-        app: maintner
+        app: maintnerd
       annotations:
         container.seccomp.security.alpha.kubernetes.io/maintnerd: docker/default
         container.apparmor.security.beta.kubernetes.io/maintnerd: runtime/default

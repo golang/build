@@ -2,7 +2,12 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-VERSION=v2.0.1
+MUTABLE_VERSION ?= latest
+VERSION ?= $(shell git rev-parse --short HEAD)
+
+IMAGE_STAGING := gcr.io/go-dashboard-dev/pubsubhelper
+IMAGE_PROD := gcr.io/symbolic-datum-552/pubsubhelper
+
 DOCKER_IMAGE_build0=build0/pubsubhelper:latest
 DOCKER_CTR_build0=pubsubhelper-build0
 
@@ -24,17 +29,23 @@ update-deps:
 	gitlock --update=Dockerfile.0 golang.org/x/build/cmd/pubsubhelper
 
 docker-prod: Dockerfile pubsubhelper ca-certificates.crt
-	docker build --force-rm --tag=gcr.io/symbolic-datum-552/pubsubhelper:$(VERSION) .
+	docker build --force-rm --tag=$(IMAGE_PROD):$(VERSION) .
+	docker tag $(IMAGE_PROD):$(VERSION) $(IMAGE_PROD):$(MUTABLE_VERSION)
 docker-staging: Dockerfile pubsubhelper ca-certificates.crt
-	docker build --force-rm --tag=gcr.io/go-dashboard-dev/pubsubhelper:latest .
+	docker build --force-rm --tag=$(IMAGE_STAGING):$(VERSION) .
+	docker tag $(IMAGE_STAGING):$(VERSION) $(IMAGE_STAGING):$(MUTABLE_VERSION)
 
 push-prod: docker-prod
-	gcloud docker -- push gcr.io/symbolic-datum-552/pubsubhelper:$(VERSION)
+	gcloud docker -- push $(IMAGE_PROD):$(MUTABLE_VERSION)
+	gcloud docker -- push $(IMAGE_PROD):$(VERSION)
 push-staging: docker-staging
-	gcloud docker -- push gcr.io/go-dashboard-dev/pubsubhelper:latest
+	gcloud docker -- push $(IMAGE_STAGING):$(MUTABLE_VERSION)
+	gcloud docker -- push $(IMAGE_STAGING):$(VERSION)
 
 deploy-prod: push-prod
-	kubectl set image deployment/pubsubhelper-deployment pubsubhelper=gcr.io/symbolic-datum-552/pubsubhelper:$(VERSION)
+	kubectl set image deployment/pubsubhelper-deployment pubsubhelper=$(IMAGE_PROD):$(VERSION)
+deploy-staging: push-staging
+	kubectl set image deployment/pubsubhelper-deployment pubsubhelper=$(IMAGE_STAGING):$(VERSION)
 
 .PHONY: clean
 clean:
