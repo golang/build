@@ -19,9 +19,9 @@ spec:
           fsType: ext4
       containers:
       - name: pubsubhelper
-        image: gcr.io/symbolic-datum-552/pubsubhelper:v1
+        image: gcr.io/symbolic-datum-552/pubsubhelper:v2.0.1
         imagePullPolicy: Always
-        command: ["/go/bin/pubsubhelper"]
+        command: ["/pubsubhelper"]
         volumeMounts:
         - mountPath: /autocert-cache
           name: pv-autocert-cache

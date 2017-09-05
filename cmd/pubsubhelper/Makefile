@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-VERSION=v2
+VERSION=v2.0.1
 DOCKER_IMAGE_build0=build0/pubsubhelper:latest
 DOCKER_CTR_build0=pubsubhelper-build0
 
@@ -32,6 +32,9 @@ push-prod: docker-prod
 	gcloud docker -- push gcr.io/symbolic-datum-552/pubsubhelper:$(VERSION)
 push-staging: docker-staging
 	gcloud docker -- push gcr.io/go-dashboard-dev/pubsubhelper:latest
+
+deploy-prod: push-prod
+	kubectl set image deployment/pubsubhelper-deployment pubsubhelper=gcr.io/symbolic-datum-552/pubsubhelper:$(VERSION)
 
 .PHONY: clean
 clean:

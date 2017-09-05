@@ -246,17 +246,13 @@ var (
 
 func (e *env) Close() error {
 	if e.tooBig {
-		log.Printf("ignoring too-large email from %q", e.from)
+		log.Printf("Ignoring too-large email from %q", e.from)
 		return nil
 	}
 	from := e.from.Email()
 	bodyBytes := e.body.Bytes()
-	if !bytes.Contains(e.body.Bytes(), dkimSignatureHeader) {
-		log.Printf("ignoring unsigned (~spam) email from %q", from)
-		return nil
-	}
-	if e.from.Hostname() != "gerritcodereview.bounces.google.com" {
-		log.Printf("ignoring signed, non-Gerrit email from %q", from)
+	if !bytes.Contains(bodyBytes, dkimSignatureHeader) {
+		log.Printf("Ignoring unsigned (~spam) email from %q", from)
 		return nil
 	}
 
@@ -273,14 +269,18 @@ func (e *env) Close() error {
 		log.Printf("Email from %q didn't pass DKIM verifications: %v", from, err)
 		return nil
 	}
-	if ve.Signature.Domain != "google.com" {
-		log.Printf("ignoring DKIM-verified gerrit email from non-Google domain %q", ve.Signature.Domain)
+	if !strings.HasSuffix(ve.Signature.Domain, "google.com") {
+		log.Printf("Ignoring DKIM-verified Gerrit email from non-Google domain %q", ve.Signature.Domain)
 		return nil
 	}
 	tp := textproto.NewReader(bufio.NewReader(bytes.NewReader(headerBytes)))
 	hdr, err := tp.ReadMIMEHeader()
 	if err != nil {
 		log.Printf("Ignoring ReadMIMEHeader error: %v    from email:\n%s", err, headerBytes)
+		return nil
+	}
+	if e.from.Hostname() != "gerritcodereview.bounces.google.com" {
+		log.Printf("Ignoring signed, DKIM-verified, non-Gerrit email from %q:\n%s", from, bodyBytes)
 		return nil
 	}
 	changeNum, _ := strconv.Atoi(hdr.Get("X-Gerrit-Change-Number"))
