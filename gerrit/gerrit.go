@@ -210,11 +210,19 @@ type ChangeInfo struct {
 	MoreChanges bool `json:"_more_changes"`
 }
 
+// AccountInfo is a Gerrit data structure. It's used both for getting the details
+// for a single account, as well as for querying multiple accounts.
 type AccountInfo struct {
 	NumericID int64  `json:"_account_id"`
 	Name      string `json:"name,omitempty"`
 	Email     string `json:"email,omitempty"`
 	Username  string `json:"username,omitempty"`
+
+	// MoreAccounts is set on the last account from QueryAccounts if
+	// the result set is truncated by an 'n' parameter (or has more).
+	MoreAccounts bool `json:"_more_accounts"`
+
+	// TODO: "avatars" is also returned, but not added here yet (add if required)
 }
 
 func (ai *AccountInfo) Equal(v *AccountInfo) bool {
@@ -548,6 +556,47 @@ func (c *Client) GetAccountInfo(ctx context.Context, accountID string) (AccountI
 	var res AccountInfo
 	err := c.do(ctx, &res, "GET", fmt.Sprintf("/accounts/%s", accountID))
 	return res, err
+}
+
+// QueryAccountsOpt are options for QueryAccounts.
+type QueryAccountsOpt struct {
+	// N is the number of results to return.
+	// If 0, the 'n' parameter is not sent to Gerrit.
+	N int
+
+	// Start is the number of results to skip (useful in pagination).
+	// To figure out if there are more results, the last AccountInfo struct
+	// in the last call to QueryAccounts will have the field MoreAccounts=true.
+	// If 0, the 'S' parameter is not sent to Gerrit.
+	Start int
+
+	// Fields are optional fields to also return.
+	// Example strings include "DETAILS", "ALL_EMAILS".
+	// By default, only the account IDs are returned.
+	// For a complete list, see:
+	// https://gerrit-review.googlesource.com/Documentation/rest-api-accounts.html#query-account
+	Fields []string
+}
+
+// QueryAccounts queries accounts. The q parameter is a Gerrit search query.
+// For the API call and query syntax, see https://gerrit-review.googlesource.com/Documentation/rest-api-accounts.html#query-account
+func (c *Client) QueryAccounts(ctx context.Context, q string, opts ...QueryAccountsOpt) ([]*AccountInfo, error) {
+	var opt QueryAccountsOpt
+	switch len(opts) {
+	case 0:
+	case 1:
+		opt = opts[0]
+	default:
+		return nil, errors.New("only 1 option struct supported")
+	}
+	var changes []*AccountInfo
+	err := c.do(ctx, &changes, "GET", "/accounts/", urlValues{
+		"q": {q},
+		"n": condInt(opt.N),
+		"o": opt.Fields,
+		"S": condInt(opt.Start),
+	})
+	return changes, err
 }
 
 // GetProjects returns a map of all projects on the Gerrit server.

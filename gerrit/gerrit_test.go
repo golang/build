@@ -178,6 +178,64 @@ func TestGetChangeError(t *testing.T) {
 	}
 }
 
+var queryAccountsResponse = []byte(`)]}'
+[
+  {
+    "_account_id": 1,
+    "name": "John Doe",
+    "email": "john@doe.com"
+  },
+  {
+    "_account_id": 2,
+    "name": "Jane Doe",
+    "email": "jane@doe.com",
+    "_more_accounts": true
+  }
+]`)
+
+func TestQueryAccounts(t *testing.T) {
+	hitServer := false
+	uri := ""
+
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitServer = true
+		uri = r.URL.RequestURI()
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		w.WriteHeader(200)
+		w.Write(queryAccountsResponse)
+	}))
+	defer s.Close()
+	c := NewClient(s.URL, NoAuth)
+	info, err := c.QueryAccounts(context.Background(), "is:active", QueryAccountsOpt{
+		Fields: []string{"DETAILS"},
+		N:      2,
+	})
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	if !hitServer {
+		t.Errorf("expected to hit test server, didn't")
+	}
+	if want := "/accounts/?n=2&o=DETAILS&q=is%3Aactive"; uri != want {
+		t.Errorf("expected RequestURI to be %q, got %q", want, uri)
+	}
+	if len(info) != 2 {
+		t.Errorf("expected accounts length to be 2, got %d", len(info))
+	}
+	if info[0].NumericID != 1 || info[0].Name != "John Doe" || info[0].Email != "john@doe.com" {
+		t.Errorf("expected to match John Doe in account, got %s", info[0])
+	}
+	if info[1].NumericID != 2 || info[1].Name != "Jane Doe" || info[1].Email != "jane@doe.com" {
+		t.Errorf("expected to match Jane Doe in account, got %s", info[1])
+	}
+	if info[0].MoreAccounts {
+		t.Errorf("expected to MoreAccounts to be false for John Doe")
+	}
+	if !info[1].MoreAccounts {
+		t.Errorf("expected to MoreAccounts to be true for Jane Doe")
+	}
+}
+
 func TestTimeStampMarshalJson(t *testing.T) {
 	ts := TimeStamp(time.Date(1888, 6, 24, 6, 8, 30, 123456789, time.FixedZone("+1", 3600)))
 	b, err := ts.MarshalJSON()
