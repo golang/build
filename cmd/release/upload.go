@@ -11,16 +11,19 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/option"
 )
 
@@ -56,70 +59,112 @@ func upload(files []string) error {
 	}
 	defer c.Close()
 
+	var sitePayloads []*File
+	var uploaded []string
 	for _, name := range files {
+		fileBytes, err := ioutil.ReadFile(name)
+		if err != nil {
+			return fmt.Errorf("ioutil.ReadFile(%q): %v", name, err)
+		}
 		base := filepath.Base(name)
-		log.Printf("Uploading %v", base)
+		log.Printf("Uploading %v to GCS ...", base)
 		m := fileRe.FindStringSubmatch(base)
 		if m == nil {
 			return fmt.Errorf("unrecognized file: %q", base)
 		}
-		var b Build
-		version := m[1]
-		if m[2] == "src" {
-			b.Source = true
-		} else {
-			b.OS = m[3]
-			b.Arch = m[4]
+		checksum := fmt.Sprintf("%x", sha256.Sum256(fileBytes))
+
+		// Upload file to Google Cloud Storage.
+		if err := putObject(ctx, c, base, fileBytes); err != nil {
+			return fmt.Errorf("uploading %q: %v", name, err)
 		}
-		if err := uploadFile(ctx, c, &b, version, name); err != nil {
-			return err
+		uploaded = append(uploaded, base)
+
+		if strings.HasSuffix(base, ".asc") {
+			// Don't add asc files to the download page, just upload it.
+			continue
+		}
+
+		// Upload file.sha256.
+		fname := base + ".sha256"
+		if err := putObject(ctx, c, fname, []byte(checksum)); err != nil {
+			return fmt.Errorf("uploading %q: %v", base+".sha256", err)
+		}
+		uploaded = append(uploaded, fname)
+
+		var kind string
+		switch {
+		case m[2] == "src":
+			kind = "source"
+		case strings.HasSuffix(base, ".tar.gz"), strings.HasSuffix(base, ".zip"):
+			kind = "archive"
+		case strings.HasSuffix(base, ".msi"), strings.HasSuffix(base, ".pkg"):
+			kind = "installer"
+		}
+		f := &File{
+			Filename:       base,
+			Version:        m[1],
+			OS:             m[3],
+			Arch:           m[4],
+			ChecksumSHA256: checksum,
+			Size:           int64(len(fileBytes)),
+			Kind:           kind,
+		}
+		sitePayloads = append(sitePayloads, f)
+	}
+
+	log.Println("Waiting for edge cache ...")
+	if err := waitForEdgeCache(uploaded); err != nil {
+		return fmt.Errorf("waitForEdgeCache(%+v): %v", uploaded, err)
+	}
+
+	log.Println("Uploading payloads to golang.org ...")
+	for _, f := range sitePayloads {
+		if err := updateSite(f); err != nil {
+			return fmt.Errorf("updateSite(%+v): %v", f, err)
 		}
 	}
 	return nil
 }
 
-func uploadFile(ctx context.Context, c *storage.Client, b *Build, version, filename string) error {
-	file, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return err
+func waitForEdgeCache(uploaded []string) error {
+	var g errgroup.Group
+	for _, u := range uploaded {
+		fname := u
+		g.Go(func() error {
+			// Add some jitter so that dozens of requests are not hitting the
+			// endpoint at once.
+			time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+			t := time.Tick(5 * time.Second)
+			var retries int
+			for {
+				url := "https://redirector.gvt1.com/edgedl/go/" + fname
+				resp, err := http.Head(url)
+				if err != nil {
+					if retries < 3 {
+						retries++
+						<-t
+						continue
+					}
+					return fmt.Errorf("http.Head(%q): %v", url, err)
+				}
+				retries = 0
+				defer resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					log.Printf("%s is ready to go!", url)
+					break
+				}
+				<-t
+			}
+			return nil
+		})
 	}
-	base := filepath.Base(filename)
+	return g.Wait()
+}
 
-	// Upload file to Google Cloud Storage.
-	if err := putObject(ctx, c, base, file); err != nil {
-		return fmt.Errorf("uploading %q: %v", base, err)
-	}
-
-	if strings.HasSuffix(base, ".asc") {
-		// Don't add asc files to the download page, just upload it.
-		return nil
-	}
-
-	checksum := fmt.Sprintf("%x", sha256.Sum256(file))
-	// Upload file.sha256.
-	if err := putObject(ctx, c, base+".sha256", []byte(checksum)); err != nil {
-		return fmt.Errorf("uploading %q: %v", base+".sha256", err)
-	}
-
+func updateSite(f *File) error {
 	// Post file details to golang.org.
-	var kind string
-	switch {
-	case b.Source:
-		kind = "source"
-	case strings.HasSuffix(base, ".tar.gz"), strings.HasSuffix(base, ".zip"):
-		kind = "archive"
-	case strings.HasSuffix(base, ".msi"), strings.HasSuffix(base, ".pkg"):
-		kind = "installer"
-	}
-	req, err := json.Marshal(File{
-		Filename:       base,
-		Version:        version,
-		OS:             b.OS,
-		Arch:           b.Arch,
-		ChecksumSHA256: checksum,
-		Size:           int64(len(file)),
-		Kind:           kind,
-	})
+	req, err := json.Marshal(f)
 	if err != nil {
 		return err
 	}

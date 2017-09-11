@@ -18,12 +18,14 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/build"
 	"golang.org/x/build/buildenv"
@@ -54,6 +56,7 @@ var (
 
 func main() {
 	flag.Parse()
+	rand.Seed(time.Now().UnixNano())
 
 	if *uploadMode {
 		if err := upload(flag.Args()); err != nil {
