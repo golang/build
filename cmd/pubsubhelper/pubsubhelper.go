@@ -62,9 +62,10 @@ func main() {
 	go func() {
 		log.Printf("running pubsubhelper on %s", *smtpListen)
 		s := &smtpd.Server{
-			Addr:        *smtpListen,
-			OnNewMail:   onNewMail,
-			ReadTimeout: time.Minute,
+			Addr:            *smtpListen,
+			OnNewMail:       onNewMail,
+			OnNewConnection: onNewConnection,
+			ReadTimeout:     time.Minute,
 		}
 		err := s.ListenAndServe()
 		errc <- fmt.Errorf("SMTP ListenAndServe: %v", err)
@@ -402,4 +403,9 @@ func onNewMail(c smtpd.Connection, from smtpd.MailAddress) (smtpd.Envelope, erro
 		from: from,
 		conn: c,
 	}, nil
+}
+
+func onNewConnection(c smtpd.Connection) error {
+	log.Printf("smtpd: new connection from %v", c.Addr())
+	return nil
 }

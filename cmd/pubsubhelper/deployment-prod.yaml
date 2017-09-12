@@ -19,7 +19,7 @@ spec:
           fsType: ext4
       containers:
       - name: pubsubhelper
-        image: gcr.io/symbolic-datum-552/pubsubhelper:v2.0.1
+        image: gcr.io/symbolic-datum-552/pubsubhelper:latest
         imagePullPolicy: Always
         command: ["/pubsubhelper"]
         volumeMounts:
