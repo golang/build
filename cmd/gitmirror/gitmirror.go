@@ -79,6 +79,17 @@ var httpClient = &http.Client{
 
 var gerritClient = gerrit.NewClient(goBase, gerrit.NoAuth)
 
+var (
+	// gitLogFn returns the list of unseen Commits on a Repo,
+	// typically by shelling out to `git log`.
+	// gitLogFn is a global var so we can stub it out for tests.
+	gitLogFn = gitLog
+
+	// gitRemotesFn returns a slice of remote branches known to the git repo.
+	// gitRemotesFn is a global var so we can stub it out for tests.
+	gitRemotesFn = gitRemotes
+)
+
 func main() {
 	flag.Parse()
 
@@ -587,7 +598,7 @@ func (r *Repo) updateDashboard() (err error) {
 	if err := r.update(true); err != nil {
 		return err
 	}
-	remotes, err := r.remotes()
+	remotes, err := gitRemotesFn(r)
 	if err != nil {
 		return err
 	}
@@ -763,7 +774,7 @@ func (r *Repo) postCommit(c *Commit) error {
 // update looks for new commits and branches,
 // and updates the commits and branches maps.
 func (r *Repo) update(noisy bool) error {
-	remotes, err := r.remotes()
+	remotes, err := gitRemotesFn(r)
 	if err != nil {
 		return err
 	}
@@ -777,7 +788,7 @@ func (r *Repo) update(noisy bool) error {
 			// only log commits down to the known head.
 			revspec = b.Head.Hash + ".." + revspec
 		}
-		log, err := r.log("--topo-order", revspec)
+		log, err := gitLogFn(r, "--topo-order", revspec)
 		if err != nil {
 			return err
 		}
@@ -831,7 +842,11 @@ func (r *Repo) update(noisy bool) error {
 		}
 
 		// Update branch head, or add newly discovered branch.
-		head := log[0]
+		// If we had already seen log[0], eg. on a different branch,
+		// we would never have linked it in the loop above.
+		// We therefore fetch the commit from r.commits to ensure we have
+		// the right address.
+		head := r.commits[log[0].Hash]
 		if b != nil {
 			// Known branch; update head.
 			b.Head = head
@@ -929,9 +944,9 @@ func (r *Repo) mergeBase(a, b string) (string, error) {
 	return string(bytes.TrimSpace(out)), nil
 }
 
-// remotes returns a slice of remote branches known to the git repo.
+// gitRemotes returns a slice of remote branches known to the git repo.
 // It always puts "origin/master" first.
-func (r *Repo) remotes() ([]string, error) {
+func gitRemotes(r *Repo) ([]string, error) {
 	if *branches != "" {
 		return strings.Split(*branches, ","), nil
 	}
@@ -969,9 +984,9 @@ const logFormat = `--format=format:` + logBoundary + `%H
 const logBoundary = `_-_- magic boundary -_-_`
 const fileBoundary = `_-_- file boundary -_-_`
 
-// log runs "git log" with the supplied arguments
+// gitLog runs "git log" with the supplied arguments
 // and parses the output into Commit values.
-func (r *Repo) log(dir string, args ...string) ([]*Commit, error) {
+func gitLog(r *Repo, dir string, args ...string) ([]*Commit, error) {
 	args = append([]string{"log", "--date=rfc", "--name-only", "--parents", logFormat}, args...)
 	if r.path == "" && *filter != "" {
 		paths := strings.Split(*filter, ",")
