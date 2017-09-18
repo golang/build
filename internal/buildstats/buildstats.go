@@ -55,7 +55,8 @@ func SyncBuilds(ctx context.Context, env *buildenv.Environment) error {
 		if err != nil {
 			return fmt.Errorf("InferSchema: %v", err)
 		}
-		meta, err = buildsTable.Update(ctx, bigquery.TableMetadataToUpdate{Schema: schema})
+		blindWrite := ""
+		meta, err = buildsTable.Update(ctx, bigquery.TableMetadataToUpdate{Schema: schema}, blindWrite)
 		if err != nil {
 			return fmt.Errorf("table.Update schema: %v", err)
 		}
@@ -197,7 +198,8 @@ func SyncSpans(ctx context.Context, env *buildenv.Environment) error {
 		if err != nil {
 			return fmt.Errorf("InferSchema: %v", err)
 		}
-		meta, err := table.Update(ctx, bigquery.TableMetadataToUpdate{Schema: schema})
+		blindWrite := ""
+		meta, err := table.Update(ctx, bigquery.TableMetadataToUpdate{Schema: schema}, blindWrite)
 		if err != nil {
 			return fmt.Errorf("table.Update schema: %v", err)
 		}
