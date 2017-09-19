@@ -110,9 +110,9 @@ func TestRevNotFound(t *testing.T) {
 // our linked list (parent <=> child) of commits, and update
 // the Repo's map of commits correctly.
 func TestUpdate(t *testing.T) {
-	oldNetwork := network
+	oldNetwork := *network
 	defer func() {
-		network = oldNetwork
+		*network = oldNetwork
 	}()
 
 	*network = false
