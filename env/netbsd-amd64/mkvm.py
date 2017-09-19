@@ -28,8 +28,7 @@ def find_latest_release(branch, arch):
       next
     has_arch = [a for a in archs if a.endswith(arch)]
     if has_arch:
-      # nyftp.n.o does not offer https :(
-      return "http://nyftp.netbsd.org/pub/NetBSD-daily/%s/%s/" % (branch, has_arch[0])
+      return "https://nyftp.netbsd.org/pub/NetBSD-daily/%s/%s/" % (branch, has_arch[0])
 
 
 arch = sys.argv[1]
@@ -57,11 +56,10 @@ commands = [
 )
 EOF""",
     """cat > /etc/ifconfig.vioif0 << EOF
-!/usr/pkg/sbin/dhcpcd vioif0
-!route add default \`ifconfig vioif0 | awk '/inet / { print \$2 }' | sed 's/[0-9]*$/1/'\` -ifp vioif0
+!dhcpcd
 EOF""",
     "dhcpcd",
-    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add bash curl dhcpcd" % (arch, release),
+    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add bash curl" % (arch, release),
     "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add git-base" % (arch, release),
     "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add mozilla-rootcerts go14" % (arch, release),
     """ed /etc/fstab << EOF
@@ -76,7 +74,6 @@ EOF""",
 
 
 a = anita.Anita(
-    # TODO(bsiegert) use latest
     anita.URL(find_latest_release("netbsd-8", arch)),
     workdir="work-NetBSD-%s" % arch,
     disk_size="4G",
