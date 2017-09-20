@@ -165,13 +165,13 @@ func (s *server) updateReleaseData() {
 		return nil
 	})
 
-	s.data.Sections = nil
+	s.data.release.Sections = nil
 	s.appendOpenIssues(dirToIssues, issueToCLs)
 	s.appendPendingCLs(dirToCLs)
 	s.appendPendingProposals(issueToCLs)
 	s.appendClosedIssues()
-	s.data.LastUpdated = time.Now().UTC().Format(time.UnixDate)
-	s.data.dirty = false
+	s.data.release.LastUpdated = time.Now().UTC().Format(time.UnixDate)
+	s.data.release.dirty = false
 }
 
 // requires s.cMu be locked.
@@ -213,7 +213,7 @@ func (s *server) appendOpenIssues(dirToIssues map[string][]*maintner.GitHubIssue
 				Items: items,
 			})
 		}
-		s.data.Sections = append(s.data.Sections, section{
+		s.data.release.Sections = append(s.data.release.Sections, section{
 			Title:  m.title,
 			Count:  issueCount,
 			Groups: issueGroups,
@@ -241,7 +241,7 @@ func (s *server) appendPendingCLs(dirToCLs map[string][]*maintner.GerritCL) {
 			clGroups = append(clGroups, g)
 		}
 	}
-	s.data.Sections = append(s.data.Sections, section{
+	s.data.release.Sections = append(s.data.release.Sections, section{
 		Title:  "Pending CLs",
 		Count:  clCount,
 		Groups: clGroups,
@@ -264,7 +264,7 @@ func (s *server) appendPendingProposals(issueToCLs map[int32][]*maintner.GerritC
 		return nil
 	})
 	sort.Sort(itemsBySummary(proposals.Items))
-	s.data.Sections = append(s.data.Sections, section{
+	s.data.release.Sections = append(s.data.release.Sections, section{
 		Title:  "Pending Proposals",
 		Count:  len(proposals.Items),
 		Groups: []group{proposals},
@@ -287,7 +287,7 @@ func (s *server) appendClosedIssues() {
 		return nil
 	})
 	sort.Sort(itemsBySummary(closed.Items))
-	s.data.Sections = append(s.data.Sections, section{
+	s.data.release.Sections = append(s.data.release.Sections, section{
 		Title:  "Closed Last Week",
 		Count:  len(closed.Items),
 		Groups: []group{closed},
@@ -322,7 +322,7 @@ func (s *server) allMilestones() []milestone {
 func (s *server) handleRelease(t *template.Template, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	s.cMu.RLock()
-	dirty := s.data.dirty
+	dirty := s.data.release.dirty
 	s.cMu.RUnlock()
 	if dirty {
 		s.updateReleaseData()
@@ -330,7 +330,7 @@ func (s *server) handleRelease(t *template.Template, w http.ResponseWriter, r *h
 
 	s.cMu.RLock()
 	defer s.cMu.RUnlock()
-	if err := t.Execute(w, s.data); err != nil {
+	if err := t.Execute(w, s.data.release); err != nil {
 		log.Printf("t.Execute(w, nil) = %v", err)
 		return
 	}

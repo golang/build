@@ -32,12 +32,17 @@ type server struct {
 	corpus           *maintner.Corpus
 	repo             *maintner.GitHubRepo
 	helpWantedIssues []int32
-	data             releaseData
+	data             pageData
 
 	// GopherCon-specific fields. Must still hold cMu when reading/writing these.
 	userMapping map[int]*maintner.GitHubUser // Gerrit Owner ID => GitHub user
 	activities  []activity                   // All contribution activities
 	totalPoints int
+}
+
+type pageData struct {
+	release releaseData
+	reviews reviewsData
 }
 
 func newServer(mux *http.ServeMux, staticDir, templateDir string) *server {
@@ -50,6 +55,7 @@ func newServer(mux *http.ServeMux, staticDir, templateDir string) *server {
 	s.mux.Handle("/", http.FileServer(http.Dir(s.staticDir)))
 	s.mux.HandleFunc("/favicon.ico", s.handleFavicon)
 	s.mux.HandleFunc("/release", s.withTemplate("/release.tmpl", s.handleRelease))
+	s.mux.HandleFunc("/reviews", s.withTemplate("/reviews.tmpl", s.handleReviews))
 	s.mux.HandleFunc("/dir/", handleDirRedirect)
 	for _, p := range []string{"/imfeelinghelpful", "/imfeelinglucky"} {
 		s.mux.HandleFunc(p, s.handleRandomHelpWantedIssue)
@@ -89,7 +95,8 @@ func (s *server) corpusUpdateLoop(ctx context.Context) {
 		log.Println("Updating activities ...")
 		s.updateActivities()
 		s.cMu.Lock()
-		s.data.dirty = true
+		s.data.release.dirty = true
+		s.data.reviews.dirty = true
 		s.cMu.Unlock()
 		err := s.corpus.UpdateWithLocker(ctx, &s.cMu)
 		if err != nil {
