@@ -105,7 +105,7 @@ Label: Code-Review=+2
 	},
 	{
 		in: `Create change
-                
+
 Uploaded patch set 1: Run-TryBot+1.
 
 Patch-set: 1
@@ -120,24 +120,24 @@ Groups: 8776f8d725c001456037e8888a72885d46cd6744
 Reviewer: Keith Randall <5200@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Rick Hudson <5186@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Austin Clements <5167@62eb7196-b449-3ce5-99f1-c037f21e1705>
-Label: Run-TryBot=+1    
-Private: false  
+Label: Run-TryBot=+1
+Private: false
 Work-in-progress: false
 `,
 		want: "Uploaded patch set 1: Run-TryBot+1.",
 	},
 	{
 		in: `Uploaded patch set 1.
-        
+
 Patch-set: 1
 `,
 		wantNil: true,
 	},
 	{
 		in: `Create change
-    
+
 Uploaded patch set 1.
-    
+
 Patch-set: 1
 Change-id: I3799148a111f1ab6bfee24c9e03e6ebbf9e9595b
 Subject: net: make error messages consistent for invalid ports
@@ -150,7 +150,7 @@ Groups: 8a7de7048dc194d5e6f761add433b915beebb2e0
 	{
 		in: `Create patch set 7
 
-Uploaded patch set 7.: Commit message was updated 
+Uploaded patch set 7.: Commit message was updated
 
 Patch-set: 7
 Subject: cmd/vet: -lostcancel: check for discarded result of context.WithCancel
@@ -174,9 +174,9 @@ func TestGetGerritMessage(t *testing.T) {
 		msg := gp.getGerritMessage(gc)
 		if msg == nil != tt.wantNil {
 			if tt.wantNil {
-				t.Errorf("%d. getGerritMessage returned item; want nil")
+				t.Errorf("%d. getGerritMessage returned item; want nil", i)
 			} else {
-				t.Errorf("%d. getGerritMessage = nil; want a message")
+				t.Errorf("%d. getGerritMessage = nil; want a message", i)
 			}
 			continue
 		}
@@ -196,26 +196,32 @@ func TestGetGerritMessage(t *testing.T) {
 	}
 }
 
-func TestOwnerID(t *testing.T) {
-	cl := &GerritCL{}
-	if cl.OwnerID() != -1 {
-		t.Errorf("cl.OwnerID() = %d; want %d", cl.OwnerID(), -1)
-	}
-
-	cl = &GerritCL{
-		Meta: &GitCommit{
-			Parents: []*GitCommit{
-				&GitCommit{
-					Author: &GitPerson{
-						Str: "Rick Sanchez <137@62eb7196-b449-3ce5-99f1-c037f21e1705>",
+func TestOwnerNameAndID(t *testing.T) {
+	testCases := []struct {
+		cl        *GerritCL
+		OwnerID   int
+		OwnerName string
+	}{
+		{&GerritCL{}, -1, ""},
+		{&GerritCL{
+			Meta: &GitCommit{
+				Parents: []*GitCommit{
+					&GitCommit{
+						Author: &GitPerson{
+							Str: "Rick Sanchez <137@62eb7196-b449-3ce5-99f1-c037f21e1705>",
+						},
 					},
 				},
 			},
-		},
+		}, 137, "Rick Sanchez"},
 	}
-
-	if cl.OwnerID() != 137 {
-		t.Errorf("cl.OwnerID() = %d; want %d", cl.OwnerID(), 137)
+	for _, tc := range testCases {
+		if got := tc.cl.OwnerID(); got != tc.OwnerID {
+			t.Errorf("cl.OwnerID() = %d; want %d", got, tc.OwnerID)
+		}
+		if got := tc.cl.OwnerName(); got != tc.OwnerName {
+			t.Errorf("cl.OwnerName() = %q; want %q", got, tc.OwnerName)
+		}
 	}
 }
 

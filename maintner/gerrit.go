@@ -359,13 +359,22 @@ func lineValue(all, prefix string) (value, rest string) {
 }
 
 // ChangeID returns the Gerrit "Change-Id: Ixxxx" line's Ixxxx
-// value from the gc.Msg, if any.
-func (gc *GerritCL) ChangeID() string {
-	id, _ := lineValue(gc.Commit.Msg, "Change-Id:")
+// value from the cl.Msg, if any.
+func (cl *GerritCL) ChangeID() string {
+	id, _ := lineValue(cl.Commit.Msg, "Change-Id:")
 	if strings.HasPrefix(id, "I") && len(id) == 41 {
 		return id
 	}
 	return ""
+}
+
+// OwnerName returns the name of the CL’s owner or an empty string on error.
+func (cl *GerritCL) OwnerName() string {
+	m := cl.firstMetaCommit()
+	if m == nil {
+		return ""
+	}
+	return m.Author.Name()
 }
 
 // OwnerID returns the ID of the CL’s owner. It will return -1 on error.
@@ -401,12 +410,10 @@ func (cl *GerritCL) Subject() string {
 
 func (cl *GerritCL) firstMetaCommit() *GitCommit {
 	m := cl.Meta
-	for {
-		if m == nil || len(m.Parents) == 0 {
-			return m
-		}
+	for m != nil && len(m.Parents) > 0 {
 		m = m.Parents[0] // Meta commits don’t have more than one parent.
 	}
+	return m
 }
 
 func (cl *GerritCL) updateGithubIssueRefs() {
