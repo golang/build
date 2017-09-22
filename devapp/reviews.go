@@ -127,19 +127,3 @@ func (s *server) updateReviewsData() {
 	s.data.reviews.TotalChanges = totalChanges
 	s.data.reviews.dirty = false
 }
-
-func (c *change) OwnerName() string {
-	m := c.firstMetaCommit()
-	if m == nil {
-		return ""
-	}
-	return m.Author.Name()
-}
-
-func (c *change) firstMetaCommit() *maintner.GitCommit {
-	m := c.Meta
-	for m != nil && len(m.Parents) > 0 {
-		m = m.Parents[0] // Meta commits don’t have more than one parent.
-	}
-	return m
-}
