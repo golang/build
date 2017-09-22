@@ -22,6 +22,15 @@ a:link,
 a:visited {
   color: #00c;
 }
+header {
+  border-bottom: 1px solid #666;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+}
+.header-subtitle {
+  color: #666;
+  font-size: .9em;
+}
 .row {
   display: flex;
   white-space: nowrap;
@@ -42,6 +51,12 @@ a:visited {
 }
 </style>
 <body>
+<header>
+<strong>{{.TotalChanges}} open changes</strong>
+<div class="header-subtitle">
+  Excluding those with “DO NOT REVIEW” and “DO NOT SUBMIT” in the change description
+</div>
+</header>
 {{range .Projects}}
   {{if .Changes}}
 		<h3>{{.Project}}</h3>
