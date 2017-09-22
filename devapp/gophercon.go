@@ -111,6 +111,11 @@ func (s *server) updateActivities() {
 
 	s.corpus.Gerrit().ForeachProjectUnsorted(func(p *maintner.GerritProject) error {
 		p.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
+			// TODO(golang.org/issue/21984)
+			if cl.Commit == nil {
+				log.Printf("Got CL with nil Commit field: %+v", cl)
+				return nil
+			}
 			if !cl.Commit.CommitTime.After(latest) {
 				return nil
 			}
