@@ -69,6 +69,7 @@ type GitCommit struct {
 	Author     *GitPerson
 	AuthorTime time.Time
 	Committer  *GitPerson
+	Reviewer   *GitPerson
 	CommitTime time.Time
 	Msg        string // Commit message subject and body
 	Files      []*maintpb.GitDiffTreeFile
@@ -208,8 +209,8 @@ func (c *Corpus) syncGitCommits(ctx context.Context, conf polledGitCommits, loop
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			// TODO: temporary vs permanent failure? reschedule? fail hard?
-			// For now just loop with a sleep.
+				// TODO: temporary vs permanent failure? reschedule? fail hard?
+				// For now just loop with a sleep.
 			case <-time.After(5 * time.Second):
 			}
 		}
@@ -354,6 +355,19 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*GitCommit, error)
 		Parents: make([]*GitCommit, 0, bytes.Count(hdr, parentSpace)),
 		Msg:     c.strb(msg),
 	}
+
+	// The commit message contains the reviewer email address. Sample commit message:
+	// Update patch set 1
+	//
+	// Patch Set 1: Code-Review+2
+	//
+	// Patch-set: 1
+	// Reviewer: Ian Lance Taylor <5206@62eb7196-b449-3ce5-99f1-c037f21e1705>
+	// Label: Code-Review=+2
+	if reviewer, _ := lineValue(c.strb(msg), "Reviewer: "); reviewer != "" {
+		gc.Reviewer = &GitPerson{Str: reviewer}
+	}
+
 	if commit.DiffTree != nil {
 		gc.Files = commit.DiffTree.File
 	}

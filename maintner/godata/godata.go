@@ -53,12 +53,12 @@ func Get(ctx context.Context) (*maintner.Corpus, error) {
 
 // Dir returns the directory containing the cached mutation logs.
 func Dir() string {
-	return filepath.Join(xdgCacheDir(), "golang-maintner")
+	return filepath.Join(XdgCacheDir(), "golang-maintner")
 }
 
-// xdgCacheDir returns the XDG Base Directory Specification cache
+// XdgCacheDir returns the XDG Base Directory Specification cache
 // directory.
-func xdgCacheDir() string {
+func XdgCacheDir() string {
 	cache := os.Getenv("XDG_CACHE_HOME")
 	if cache != "" {
 		return cache
