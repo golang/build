@@ -599,10 +599,10 @@ func (c *Corpus) initGithub() {
 	}
 }
 
-// TrackGithub registers the named Github repo as a repo to
+// TrackGitHub registers the named GitHub repo as a repo to
 // watch and append to the mutation log. Only valid in leader mode.
 // The token is the auth token to use to make API calls.
-func (c *Corpus) TrackGithub(owner, repo, token string) {
+func (c *Corpus) TrackGitHub(owner, repo, token string) {
 	if c.mutationLogger == nil {
 		panic("can't TrackGerrit in non-leader mode")
 	}

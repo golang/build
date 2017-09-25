@@ -166,7 +166,7 @@ func main() {
 			if err != nil {
 				log.Fatalf("getting github token: %v", err)
 			}
-			corpus.TrackGithub(splits[0], splits[1], token)
+			corpus.TrackGitHub(splits[0], splits[1], token)
 		}
 	}
 	if *watchGerrit != "" {
