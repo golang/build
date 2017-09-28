@@ -435,9 +435,22 @@ func (c *Client) SetReview(ctx context.Context, changeID, revision string, revie
 }
 
 // AbandonChange abandons the given change.
-func (c *Client) AbandonChange(ctx context.Context, changeID string) error {
+// For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#abandon-change
+// The changeID is https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-id
+// The input for the call is https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#abandon-input
+func (c *Client) AbandonChange(ctx context.Context, changeID string, message ...string) error {
+	var msg string
+	if len(message) > 1 {
+		panic("invalid use of multiple message inputs")
+	}
+	if len(message) == 1 {
+		msg = message[0]
+	}
+	b := struct {
+		Message string `json:"message,omitempty"`
+	}{msg}
 	var change ChangeInfo
-	return c.do(ctx, &change, "POST", "/changes/"+changeID+"/abandon")
+	return c.do(ctx, &change, "POST", "/changes/"+changeID+"/abandon", reqBody{&b})
 }
 
 // ProjectInput contains the options for creating a new project.
