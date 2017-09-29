@@ -22,6 +22,19 @@ type project struct {
 	Changes []*change
 }
 
+// ReviewServer returns the hostname of the review server for a googlesource repo,
+// e.g. "go-review.googlesource.com" for a "go.googlesource.com" server. For a
+// non-googlesource.com server, it will return an empty string.
+func (p *project) ReviewServer() string {
+	const d = ".googlesource.com"
+	s := p.Server()
+	i := strings.Index(s, d)
+	if i == -1 {
+		return ""
+	}
+	return s[:i] + "-review" + d
+}
+
 type change struct {
 	*maintner.GerritCL
 	LastUpdate          time.Time

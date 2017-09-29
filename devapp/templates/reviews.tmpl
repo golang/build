@@ -56,15 +56,21 @@ header {
 <div class="header-subtitle">
   Excluding those with “DO NOT REVIEW” and “DO NOT SUBMIT” in the change description
 </div>
+<div class="header-subtitle">
+  <a href="https://go.googlesource.com/build/+/master/devapp/reviews.go">Source code</a>
+</div>
 </header>
-{{range .Projects}}
+{{range $p := .Projects}}
   {{if .Changes}}
 		<h3>{{.Project}}</h3>
 		{{range .Changes}}
 		<div class="row">
 			<div class="date">{{.FormattedLastUpdate}}</div>
       <a class="owner" href="?owner={{.OwnerName}}">{{.OwnerName}}</a>
-      <a class="change" href="https://golang.org/cl/{{.Number}}" target="_blank">{{.Number}} {{.Subject}}</a>
+      <span class="change">
+        <a href="https://{{$p.ReviewServer}}/{{.Number}}" target="_blank">{{.Number}}</a>
+        {{.Subject}}
+      </span>
     </div>
 		{{end}}
 	{{end}}
