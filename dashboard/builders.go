@@ -1122,16 +1122,16 @@ func init() {
 		HostType: "host-darwin-10_12",
 	})
 	addBuilder(BuildConfig{
-		Name:     "darwin-arm-a1457ios",
+		Name:     "darwin-arm-a1428ios",
 		HostType: "host-darwin-amd64-eliasnaur-ios",
-		Notes:    "iPhone 5s (model A1457), via a Mac Mini; owned by elias.naur",
-		env:      []string{"GOARCH=arm"},
+		Notes:    "iPhone 5 (model A1428), via a Mac Mini; owned by elias.naur",
+		env:      []string{"GOARCH=arm", "GOIOS_DEVICE_ID=608470ed34dc459328dd4cfa35ca5757b9c65222"},
 	})
 	addBuilder(BuildConfig{
-		Name:     "darwin-arm64-a1457ios",
+		Name:     "darwin-arm64-a1549ios",
 		HostType: "host-darwin-amd64-eliasnaur-ios",
-		Notes:    "iPhone 5s (model A1457), via a Mac Mini; owned by elias.naur",
-		env:      []string{"GOARCH=arm64"},
+		Notes:    "iPhone 6 (model A1549), via a Mac Mini; owned by elias.naur",
+		env:      []string{"GOARCH=arm64", "GOIOS_DEVICE_ID=e5d8bf44318afed071f97d479c3e5456be8b8c17"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "android-arm-wiko-fever",
