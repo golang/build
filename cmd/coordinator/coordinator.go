@@ -544,8 +544,25 @@ func handleTryStatus(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Change-ID: <a href='https://go-review.googlesource.com/#/q/%s'>%s</a><br>\n", ts.ChangeID, ts.ChangeID)
 	fmt.Fprintf(w, "Commit: <a href='https://go-review.googlesource.com/#/q/%s'>%s</a><br>\n", ts.Commit, ts.Commit)
 	fmt.Fprintf(w, "<p>Builds remain: %d</p>\n", tss.remain)
-	fmt.Fprintf(w, "<p>Builds failed: %v</p>\n", tss.failed)
-	fmt.Fprintf(w, "<p>Builds</p><table cellpadding=5 border=1>\n")
+	fmt.Fprintf(w, "<p>Builds</p>\n")
+	fmt.Fprintf(w, "<table cellpadding=5 border=0>\n")
+	for _, bs := range tss.builds {
+		var status string
+		bs.mu.Lock()
+		if !bs.done.IsZero() {
+			if bs.succeeded {
+				status = "pass"
+			} else {
+				status = "<b>FAIL</b>"
+			}
+		} else {
+			status = fmt.Sprintf("<i>running</i> %.1f min", time.Since(bs.startTime).Minutes())
+		}
+		bs.mu.Unlock()
+		fmt.Fprintf(w, "<tr><td>%s</td><td>%s</td></tr>\n", bs.Name, status)
+	}
+	fmt.Fprintf(w, "</table>\n")
+	fmt.Fprintf(w, "<p>Full Detail</p><table cellpadding=5 border=1>\n")
 	for _, bs := range tss.builds {
 		status := "<i>(running)</i>"
 		bs.mu.Lock()
