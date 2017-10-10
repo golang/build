@@ -281,6 +281,7 @@ func shouldMirror(name string) bool {
 		"playground",
 		"proposal",
 		"review",
+		"scratch",
 		"sync",
 		"sys",
 		"talks",
