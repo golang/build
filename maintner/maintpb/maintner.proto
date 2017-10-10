@@ -60,6 +60,8 @@ message GithubIssueMutation {
   BoolChange closed = 19;
   BoolChange locked = 25;
 
+  bool pull_request = 28;  // true is the issue is a Pull Request
+
   google.protobuf.Timestamp closed_at = 21;
   GithubUser closed_by = 22;
 

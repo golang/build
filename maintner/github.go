@@ -217,21 +217,22 @@ func (r GitHubIssueRef) String() string { return fmt.Sprintf("%s#%d", r.Repo.ID(
 // for all fields.
 // See https://developer.github.com/v3/issues/#get-a-single-issue
 type GitHubIssue struct {
-	ID        int64
-	Number    int32
-	NotExist  bool // if true, rest of fields should be ignored.
-	Closed    bool
-	Locked    bool
-	User      *GitHubUser
-	Assignees []*GitHubUser
-	Created   time.Time
-	Updated   time.Time
-	ClosedAt  time.Time
-	ClosedBy  *GitHubUser
-	Title     string
-	Body      string
-	Milestone *GitHubMilestone       // nil for unknown, noMilestone for none
-	Labels    map[int64]*GitHubLabel // label ID => label
+	ID          int64
+	Number      int32
+	NotExist    bool // if true, rest of fields should be ignored.
+	Closed      bool
+	Locked      bool
+	PullRequest bool // if true, this issue is a Pull Request. All PRs are issues, but not all issues are PRs.
+	User        *GitHubUser
+	Assignees   []*GitHubUser
+	Created     time.Time
+	Updated     time.Time
+	ClosedAt    time.Time
+	ClosedBy    *GitHubUser
+	Title       string
+	Body        string
+	Milestone   *GitHubMilestone       // nil for unknown, noMilestone for none
+	Labels      map[int64]*GitHubLabel // label ID => label
 
 	commentsUpdatedTil time.Time                   // max comment modtime seen
 	commentsSyncedAsOf time.Time                   // as of server's Date header
@@ -795,9 +796,10 @@ func (d githubIssueDiffer) verbose() bool {
 func (d githubIssueDiffer) Diff() *maintpb.GithubIssueMutation {
 	var changed bool
 	m := &maintpb.GithubIssueMutation{
-		Owner:  d.gr.id.Owner,
-		Repo:   d.gr.id.Repo,
-		Number: int32(d.b.GetNumber()),
+		Owner:       d.gr.id.Owner,
+		Repo:        d.gr.id.Repo,
+		Number:      int32(d.b.GetNumber()),
+		PullRequest: d.b.IsPullRequest(),
 	}
 	for _, f := range issueDiffMethods {
 		if f(d, m) {
@@ -1134,6 +1136,9 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 	}
 	if b := m.Locked; b != nil {
 		gi.Locked = b.Val
+	}
+	if m.PullRequest {
+		gi.PullRequest = true
 	}
 
 	gi.Assignees = c.github.setAssigneesFromProto(gi.Assignees, m.Assignees, m.DeletedAssignees)
