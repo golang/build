@@ -276,7 +276,7 @@ func setGoConfig() {
 		log.Fatalf("can't set both --config and --watch-gerrit")
 	}
 	*pubsub = "https://pubsubhelper.golang.org"
-	*watchGithub = "golang/go"
+	*watchGithub = "golang/go,golang/scratch"
 
 	gerrc := gerrit.NewClient("https://go-review.googlesource.com/", gerrit.NoAuth)
 	projs, err := gerrc.ListProjects(context.Background())
