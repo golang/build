@@ -38,9 +38,9 @@ push-staging: docker-staging
 	gcloud docker -- push $(IMAGE_STAGING):$(VERSION)
 
 deploy-prod: push-prod
-	kubectl set image deployment/gitmirror-deployment gitmirror=$(IMAGE_PROD):$(VERSION)
+	kubectl rolling-update gitmirror-rc --image=$(IMAGE_PROD):$(VERSION)
 deploy-staging: push-staging
-	kubectl set image deployment/gitmirror-deployment gitmirror=$(IMAGE_STAGING):$(VERSION)
+	kubectl rolling-update gitmirror-rc --image=$(IMAGE_STAGING):$(VERSION)
 
 .PHONY: clean
 clean:
