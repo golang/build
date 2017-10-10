@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: maintner
+  name: maintnerd
 spec:
   ports:
     - port: 80
@@ -11,6 +11,6 @@ spec:
       targetPort: 443
       name: https
   selector:
-    app: maintner
+    app: maintnerd
   type: LoadBalancer
   loadBalancerIP: 35.188.67.38
