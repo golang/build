@@ -1565,6 +1565,8 @@ func GithubOfGomoteUser(gomoteUser string) (githubUser string) {
 		return "rakyll"
 	case "joetsai":
 		return "dsnet"
+	case "jrjohnson":
+		return "johnsonj"
 	case "khr":
 		return "randall77"
 	case "lazard":
