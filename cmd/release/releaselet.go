@@ -701,6 +701,7 @@ var windowsData = map[string]string{
 <WixVariable Id="WixUIDialogBmp" Value="images\Dialog.jpg" />
 <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
 <UIRef Id="Golang_InstallDir" />
+<UIRef Id="WixUI_ErrorProgressText" />
 
 </Product>
 <Fragment>
