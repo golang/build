@@ -528,7 +528,6 @@ var tmplFuncs = template.FuncMap{
 	"builderSpans":      builderSpans,
 	"builderSubheading": builderSubheading,
 	"builderTitle":      builderTitle,
-	"repoURL":           repoURL,
 	"shortDesc":         shortDesc,
 	"shortHash":         shortHash,
 	"shortUser":         shortUser,
@@ -652,18 +651,6 @@ func shortUser(user string) string {
 		return user[:i]
 	}
 	return user
-}
-
-// repoURL returns the URL of a change at a Google Code repository or subrepo.
-func repoURL(dashboard, hash, packagePath string) (string, error) {
-	if packagePath == "" {
-		if dashboard == "Gccgo" {
-			return "https://github.com/golang/gofrontend/commit/" + hash, nil
-		}
-		return "https://github.com/golang/go/commit/" + hash, nil
-	}
-	repo := strings.TrimPrefix(packagePath, "golang.org/x/")
-	return "https://github.com/golang/" + repo + "/commit/" + hash, nil
 }
 
 // tail returns the trailing n lines of s.

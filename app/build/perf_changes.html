@@ -5,7 +5,7 @@
     <link rel="stylesheet" href="/static/style.css"/>
 </head>
 <body>
-   <header id="topbar">   
+   <header id="topbar">
     <h1>Go Dashboard</h1>
     <nav>
       <a href="{{$.Dashboard.Prefix}}/">Test</a>
@@ -14,7 +14,7 @@
     </nav>
     <div class="clear"></div>
   </header>
- 
+
   <div class="page">
     <div class="build-container">
       <table class="build">
@@ -34,7 +34,7 @@
                 {{if $c.IsSummary}}
                   <td class="hash">tip vs {{$c.ParentHash}}</td>
                 {{else}}
-                  <td class="hash"><a href="{{repoURL $.Dashboard.Name $c.Hash ""}}">{{shortHash $c.Hash}}</a></td>
+                  <td class="hash"><a href="https://go-review.googlesource.com/q/{{$c.Hash}}">{{shortHash $c.Hash}}</a></td>
                 {{end}}
                 <td class="numresults">{{$c.NumResults}}</td>
             {{else}}

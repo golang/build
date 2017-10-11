@@ -93,16 +93,16 @@
         <tr class="commit">
         {{if $i}}
           <td>&nbsp;</td>
-        {{if $h}} 
-          <td class="hash"><a href="{{repoURL $.Dashboard.Name $h ""}}">{{shortHash $h}}</a></td>
+        {{if $h}}
+          <td class="hash"><a href="https://go-review.googlesource.com/q/{{$h}}">{{shortHash $h}}</a></td>
         {{end}}
           <td>&nbsp;</td>
           <td>&nbsp;</td>
           <td>&nbsp;</td>
         {{else}}
-          <td class="hash"><a href="{{repoURL $.Dashboard.Name $c.Hash $.Package.Path}}">{{shortHash $c.Hash}}</a></td>
-        {{if $h}} 
-          <td class="hash"><a href="{{repoURL $.Dashboard.Name $h ""}}">{{shortHash $h}}</a></td>
+          <td class="hash"><a href="https://go-review.googlesource.com/q/{{$c.Hash}}">{{shortHash $c.Hash}}</a></td>
+        {{if $h}}
+          <td class="hash"><a href="https://go-review.googlesource.com/q/{{$h}}">{{shortHash $h}}</a></td>
         {{end}}
           <td class="user" title="{{$c.User}}">{{shortUser $c.User}}</td>
           <td class="time">{{$c.Time.Format "02 Jan 15:04"}}</td>
@@ -147,7 +147,7 @@
     {{if .Packages}}
       <h2>
         Sub-repositories at {{.Name}}
-        <small>(<a href="{{repoURL $.Dashboard.Name .Tag.Hash ""}}">{{shortHash .Tag.Hash}}</a>)</small>
+        <small>(<a href="https://go-review.googlesource.com/q/{{.Tag.Hash}}">{{shortHash .Tag.Hash}}</a>)</small>
       </h2>
 
       <table class="build">
@@ -187,7 +187,7 @@
         <td><a title="{{.Package.Path}}" href="?repo={{.Package.Path}}">{{.Package.Name}}</a></td>
         <td class="hash">
           {{$h := $pkg.Commit.Hash}}
-          <a href="{{repoURL $.Dashboard.Name $h $pkg.Commit.PackagePath}}">{{shortHash $h}}</a>
+          <a href="https://go-review.googlesource.com/q/{{$h}}">{{shortHash $h}}</a>
         </td>
         {{with $pkg.Commit}}
           <td class="user" title="{{.User}}">{{shortUser .User}}</td>
