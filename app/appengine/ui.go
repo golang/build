@@ -11,6 +11,7 @@ package build
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -22,11 +23,12 @@ import (
 
 	"golang.org/x/build/types"
 
-	"cache"
+	"golang.org/x/build/app/cache"
 
-	"appengine"
-	"appengine/datastore"
-	"appengine/memcache"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/datastore"
+	"google.golang.org/appengine/log"
+	"google.golang.org/appengine/memcache"
 )
 
 func init() {
@@ -174,11 +176,11 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 	buf.WriteTo(w)
 }
 
-func listBranches(c appengine.Context) (branches []string) {
+func listBranches(c context.Context) (branches []string) {
 	var commits []*Commit
 	_, err := datastore.NewQuery("Commit").Distinct().Project("Branch").GetAll(c, &commits)
 	if err != nil {
-		c.Errorf("listBranches: %v", err)
+		log.Errorf(c, "listBranches: %v", err)
 		return
 	}
 	for _, c := range commits {
@@ -279,7 +281,7 @@ type Pagination struct {
 
 // dashCommits gets a slice of the latest Commits to the current dashboard.
 // If page > 0 it paginates by commitsPerPage.
-func dashCommits(c appengine.Context, pkg *Package, page int, branch string) ([]*Commit, error) {
+func dashCommits(c context.Context, pkg *Package, page int, branch string) ([]*Commit, error) {
 	offset := page * commitsPerPage
 	q := datastore.NewQuery("Commit").
 		Ancestor(pkg.Key(c)).
@@ -296,7 +298,7 @@ func dashCommits(c appengine.Context, pkg *Package, page int, branch string) ([]
 }
 
 // fetchCommits gets a slice of the specific commit hashes
-func fetchCommits(c appengine.Context, pkg *Package, hashes []string) ([]*Commit, error) {
+func fetchCommits(c context.Context, pkg *Package, hashes []string) ([]*Commit, error) {
 	var out []*Commit
 	var keys []*datastore.Key
 	for _, hash := range hashes {
@@ -412,7 +414,7 @@ type PackageState struct {
 
 // GetTagState fetches the results for all Go subrepos at the specified Tag.
 // (Kind is "tip" or "release"; name is like "release-branch.go1.4".)
-func GetTagState(c appengine.Context, kind, name string) (*TagState, error) {
+func GetTagState(c context.Context, kind, name string) (*TagState, error) {
 	tag, err := GetTag(c, kind, name)
 	if err != nil {
 		return nil, err
@@ -425,7 +427,7 @@ func GetTagState(c appengine.Context, kind, name string) (*TagState, error) {
 	for _, pkg := range pkgs {
 		com, err := pkg.LastCommit(c)
 		if err != nil {
-			c.Warningf("%v: no Commit found: %v", pkg, err)
+			log.Warningf(c, "%v: no Commit found: %v", pkg, err)
 			continue
 		}
 		st.Packages = append(st.Packages, &PackageState{pkg, com})
@@ -456,7 +458,7 @@ func buildingKey(hash, goHash, builder string) string {
 
 // populateBuildingURLs populates each commit in Commits' buildingURLs map with the
 // URLs of builds which are currently in progress.
-func (td *uiTemplateData) populateBuildingURLs(ctx appengine.Context) {
+func (td *uiTemplateData) populateBuildingURLs(ctx context.Context) {
 	// need are memcache keys: "building|<hash>|<gohash>|<builder>"
 	// The hash is of the main "go" repo, or the subrepo commit hash.
 	// The gohash is empty for the main repo, else it's the Go hash.
@@ -495,7 +497,7 @@ func (td *uiTemplateData) populateBuildingURLs(ctx appengine.Context) {
 	m, err := memcache.GetMulti(ctx, need)
 	if err != nil {
 		// oh well. this is a cute non-critical feature anyway.
-		ctx.Debugf("GetMulti of building keys: %v", err)
+		log.Debugf(ctx, "GetMulti of building keys: %v", err)
 		return
 	}
 	for k, it := range m {
@@ -519,7 +521,7 @@ func (td *uiTemplateData) populateBuildingURLs(ctx appengine.Context) {
 }
 
 var uiTemplate = template.Must(
-	template.New("ui.html").Funcs(tmplFuncs).ParseFiles("build/ui.html"),
+	template.New("ui.html").Funcs(tmplFuncs).ParseFiles("ui.html"),
 )
 
 var tmplFuncs = template.FuncMap{

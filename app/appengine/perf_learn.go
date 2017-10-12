@@ -13,8 +13,9 @@ import (
 	"net/http"
 	"sort"
 
-	"appengine"
-	"appengine/datastore"
+	"golang.org/x/net/context"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/datastore"
 )
 
 func init() {
@@ -135,7 +136,7 @@ func perfLearnHandler(w http.ResponseWriter, r *http.Request) {
 		for k, v := range noise {
 			noiseLevels = append(noiseLevels, k+v)
 		}
-		tx := func(c appengine.Context) error {
+		tx := func(c context.Context) error {
 			pc, err := GetPerfConfig(c, r)
 			if err != nil {
 				return err
@@ -162,7 +163,7 @@ func perfLearnHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 var perfLearnTemplate = template.Must(
-	template.New("perf_learn.html").Funcs(tmplFuncs).ParseFiles("build/perf_learn.html"),
+	template.New("perf_learn.html").Funcs(tmplFuncs).ParseFiles("perf_learn.html"),
 )
 
 type perfLearnData struct {

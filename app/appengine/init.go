@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"appengine"
-	"appengine/datastore"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/datastore"
 
-	"cache"
-	"key"
+	"golang.org/x/build/app/cache"
+	"golang.org/x/build/app/key"
 )
 
 func initHandler(w http.ResponseWriter, r *http.Request) {

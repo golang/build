@@ -21,12 +21,13 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"appengine"
-	"appengine/datastore"
-	"appengine/memcache"
-
-	"cache"
-	"key"
+	"golang.org/x/build/app/cache"
+	"golang.org/x/build/app/key"
+	"golang.org/x/net/context"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/datastore"
+	"google.golang.org/appengine/log"
+	"google.golang.org/appengine/memcache"
 )
 
 const (
@@ -108,7 +109,7 @@ func commitHandler(r *http.Request) (interface{}, error) {
 		return nil, fmt.Errorf("reading Body: %v", err)
 	}
 	if !bytes.Contains(body, needsBenchmarkingBytes) {
-		c.Warningf("old builder detected at %v", r.RemoteAddr)
+		log.Warningf(c, "old builder detected at %v", r.RemoteAddr)
 		return nil, fmt.Errorf("rejecting old builder request, body does not contain %s: %q", needsBenchmarkingBytes, body)
 	}
 	if err := json.Unmarshal(body, com); err != nil {
@@ -119,7 +120,7 @@ func commitHandler(r *http.Request) (interface{}, error) {
 		return nil, fmt.Errorf("validating Commit: %v", err)
 	}
 	defer cache.Tick(c)
-	tx := func(c appengine.Context) error {
+	tx := func(c context.Context) error {
 		return addCommit(c, com)
 	}
 	return nil, datastore.RunInTransaction(c, tx, nil)
@@ -129,7 +130,7 @@ var needsBenchmarkingBytes = []byte(`"NeedsBenchmarking"`)
 
 // addCommit adds the Commit entity to the datastore and updates the tip Tag.
 // It must be run inside a datastore transaction.
-func addCommit(c appengine.Context, com *Commit) error {
+func addCommit(c context.Context, com *Commit) error {
 	var ec Commit // existing commit
 	isUpdate := false
 	err := datastore.Get(c, com.Key(c), &ec)
@@ -335,7 +336,7 @@ func todoHandler(r *http.Request) (interface{}, error) {
 // If provided with non-empty packagePath and goHash args, it scans the first
 // 20 Commits in Num-descending order for the specified packagePath and
 // returns the first that doesn't have a Result for this builder and goHash.
-func buildTodo(c appengine.Context, builder, packagePath, goHash string) (*Commit, error) {
+func buildTodo(c context.Context, builder, packagePath, goHash string) (*Commit, error) {
 	p, err := GetPackage(c, packagePath)
 	if err != nil {
 		return nil, err
@@ -390,7 +391,7 @@ func buildTodo(c appengine.Context, builder, packagePath, goHash string) (*Commi
 	for _, pkg := range pkgs {
 		com, err := pkg.LastCommit(c)
 		if err != nil {
-			c.Warningf("%v: no Commit found: %v", pkg, err)
+			log.Warningf(c, "%v: no Commit found: %v", pkg, err)
 			continue
 		}
 		if com.Result(builder, tag.Hash) == nil {
@@ -402,7 +403,7 @@ func buildTodo(c appengine.Context, builder, packagePath, goHash string) (*Commi
 }
 
 // perfTodo returns the next Commit to be benchmarked (or nil if none available).
-func perfTodo(c appengine.Context, builder string) (*Commit, error) {
+func perfTodo(c context.Context, builder string) (*Commit, error) {
 	p := &Package{}
 	todo := &PerfTodo{Builder: builder}
 	err := datastore.Get(c, todo.Key(c), todo)
@@ -448,9 +449,9 @@ func perfTodo(c appengine.Context, builder string) (*Commit, error) {
 }
 
 // buildPerfTodo creates PerfTodo for the builder with all commits. In a transaction.
-func buildPerfTodo(c appengine.Context, builder string) (*PerfTodo, error) {
+func buildPerfTodo(c context.Context, builder string) (*PerfTodo, error) {
 	todo := &PerfTodo{Builder: builder}
-	tx := func(c appengine.Context) error {
+	tx := func(c context.Context) error {
 		err := datastore.Get(c, todo.Key(c), todo)
 		if err != nil && err != datastore.ErrNoSuchEntity {
 			return fmt.Errorf("fetching PerfTodo: %v", err)
@@ -499,7 +500,7 @@ func buildPerfTodo(c appengine.Context, builder string) (*PerfTodo, error) {
 	return todo, datastore.RunInTransaction(c, tx, nil)
 }
 
-func removeCommitFromPerfTodo(c appengine.Context, builder string, num int) error {
+func removeCommitFromPerfTodo(c context.Context, builder string, num int) error {
 	todo := &PerfTodo{Builder: builder}
 	err := datastore.Get(c, todo.Key(c), todo)
 	if err != nil && err != datastore.ErrNoSuchEntity {
@@ -604,7 +605,7 @@ func resultHandler(r *http.Request) (interface{}, error) {
 		}
 		res.LogHash = hash
 	}
-	tx := func(c appengine.Context) error {
+	tx := func(c context.Context) error {
 		// check Package exists
 		if _, err := GetPackage(c, res.PackagePath); err != nil {
 			return fmt.Errorf("GetPackage: %v", err)
@@ -669,7 +670,7 @@ func perfResultHandler(r *http.Request) (interface{}, error) {
 		}
 		req.Artifacts[i].Body = hash
 	}
-	tx := func(c appengine.Context) error {
+	tx := func(c context.Context) error {
 		return addPerfResult(c, r, req)
 	}
 	return nil, datastore.RunInTransaction(c, tx, nil)
@@ -678,7 +679,7 @@ func perfResultHandler(r *http.Request) (interface{}, error) {
 // addPerfResult creates PerfResult and updates Commit, PerfTodo,
 // PerfMetricRun and PerfConfig.
 // MUST be called from inside a transaction.
-func addPerfResult(c appengine.Context, r *http.Request, req *PerfRequest) error {
+func addPerfResult(c context.Context, r *http.Request, req *PerfRequest) error {
 	// check Package exists
 	p, err := GetPackage(c, "")
 	if err != nil {
@@ -745,7 +746,7 @@ func addPerfResult(c appengine.Context, r *http.Request, req *PerfRequest) error
 }
 
 // MUST be called from inside a transaction.
-func checkPerfChanges(c appengine.Context, r *http.Request, com *Commit, builder string, res *PerfResult) error {
+func checkPerfChanges(c context.Context, r *http.Request, com *Commit, builder string, res *PerfResult) error {
 	pc, err := GetPerfConfig(c, r)
 	if err != nil {
 		return err
@@ -811,7 +812,7 @@ func checkPerfChanges(c appengine.Context, r *http.Request, com *Commit, builder
 	return nil
 }
 
-func comparePerfResults(c appengine.Context, pc *PerfConfig, builder string, prevRes, res *PerfResult) error {
+func comparePerfResults(c context.Context, pc *PerfConfig, builder string, prevRes, res *PerfResult) error {
 	changes := significantPerfChanges(pc, builder, prevRes, res)
 	if len(changes) == 0 {
 		return nil
@@ -869,7 +870,7 @@ func clearResultsHandler(r *http.Request) (interface{}, error) {
 	c := contextForRequest(r)
 	defer cache.Tick(c)
 	pkg := (&Package{}).Key(c) // TODO(adg): support clearing sub-repos
-	err := datastore.RunInTransaction(c, func(c appengine.Context) error {
+	err := datastore.RunInTransaction(c, func(c context.Context) error {
 		var coms []*Commit
 		keys, err := datastore.NewQuery("Commit").
 			Ancestor(pkg).
@@ -958,12 +959,12 @@ func AuthHandler(h dashHandler) http.HandlerFunc {
 		// Write JSON response.
 		dashResp := &dashResponse{Response: resp}
 		if err != nil {
-			c.Errorf("%v", err)
+			log.Errorf(c, "%v", err)
 			dashResp.Error = err.Error()
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if err = json.NewEncoder(w).Encode(dashResp); err != nil {
-			c.Criticalf("encoding response: %v", err)
+			log.Criticalf(c, "encoding response: %v", err)
 		}
 	}
 }
@@ -1002,7 +1003,7 @@ func validHash(hash string) bool {
 	return hash != ""
 }
 
-func validKey(c appengine.Context, key, builder string) bool {
+func validKey(c context.Context, key, builder string) bool {
 	if isMasterKey(c, key) {
 		return true
 	}
@@ -1012,23 +1013,24 @@ func validKey(c appengine.Context, key, builder string) bool {
 	return key == builderKey(c, builder)
 }
 
-func isMasterKey(c appengine.Context, k string) bool {
+func isMasterKey(c context.Context, k string) bool {
 	return appengine.IsDevAppServer() || k == key.Secret(c)
 }
 
-func builderKey(c appengine.Context, builder string) string {
+func builderKey(c context.Context, builder string) string {
 	h := hmac.New(md5.New, []byte(key.Secret(c)))
 	h.Write([]byte(builder))
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 func logErr(w http.ResponseWriter, r *http.Request, err error) {
-	contextForRequest(r).Errorf("Error: %v", err)
+	c := contextForRequest(r)
+	log.Errorf(c, "Error: %v", err)
 	w.WriteHeader(http.StatusInternalServerError)
 	fmt.Fprint(w, "Error: ", html.EscapeString(err.Error()))
 }
 
-func contextForRequest(r *http.Request) appengine.Context {
+func contextForRequest(r *http.Request) context.Context {
 	return dashboardForRequest(r).Context(appengine.NewContext(r))
 }
 

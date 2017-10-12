@@ -11,6 +11,7 @@ package build
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,8 +22,9 @@ import (
 	"strings"
 	"time"
 
-	"appengine"
-	"appengine/datastore"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/datastore"
+	"google.golang.org/appengine/log"
 )
 
 func init() {
@@ -243,7 +245,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 		*r = origReq
 	}()
 	for i, t := range testRequests {
-		c.Infof("running test %d %s vals='%q' req='%q' res='%q'", i, t.path, t.vals, t.req, t.res)
+		log.Infof(c, "running test %d %s vals='%q' req='%q' res='%q'", i, t.path, t.vals, t.req, t.res)
 		errorf := func(format string, args ...interface{}) {
 			fmt.Fprintf(w, "%d %s: ", i, t.path)
 			fmt.Fprintf(w, format, args...)
@@ -280,7 +282,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 			errorf(rec.Body.String())
 			return
 		}
-		c.Infof("response='%v'", rec.Body.String())
+		log.Infof(c, "response='%v'", rec.Body.String())
 		resp := new(dashResponse)
 
 		// If we're expecting a *Todo value,
@@ -356,7 +358,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "PASS\nYou should see only one mail notification (for 0003/linux-386) in the dev_appserver logs.")
 }
 
-func nukeEntities(c appengine.Context, kinds []string) error {
+func nukeEntities(c context.Context, kinds []string) error {
 	if !appengine.IsDevAppServer() {
 		return errors.New("can't nuke production data")
 	}

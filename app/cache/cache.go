@@ -9,13 +9,14 @@ package cache
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/gob"
 	"fmt"
 	"net/http"
 	"time"
 
-	"appengine"
-	"appengine/memcache"
+	"google.golang.org/appengine/log"
+	"google.golang.org/appengine/memcache"
 )
 
 // TimeKey specifies the memcache entity that keeps the logical datastore time.
@@ -29,10 +30,10 @@ const (
 func newTime() uint64 { return uint64(time.Now().Unix()) << 32 }
 
 // Now returns the current logical datastore time to use for cache lookups.
-func Now(c appengine.Context) uint64 {
+func Now(c context.Context) uint64 {
 	t, err := memcache.Increment(c, TimeKey, 0, newTime())
 	if err != nil {
-		c.Errorf("cache.Now: %v", err)
+		log.Errorf(c, "cache.Now: %v", err)
 		return 0
 	}
 	return t
@@ -40,10 +41,10 @@ func Now(c appengine.Context) uint64 {
 
 // Tick sets the current logical datastore time to a never-before-used time
 // and returns that time. It should be called to invalidate the cache.
-func Tick(c appengine.Context) uint64 {
+func Tick(c context.Context) uint64 {
 	t, err := memcache.Increment(c, TimeKey, 1, newTime())
 	if err != nil {
-		c.Errorf("cache.Tick: %v", err)
+		log.Errorf(c, "cache.Tick: %v", err)
 		return 0
 	}
 	return t
@@ -52,26 +53,26 @@ func Tick(c appengine.Context) uint64 {
 // Get fetches data for name at time now from memcache and unmarshals it into
 // value. It reports whether it found the cache record and logs any errors to
 // the admin console.
-func Get(c appengine.Context, r *http.Request, now uint64, name string, value interface{}) bool {
+func Get(c context.Context, r *http.Request, now uint64, name string, value interface{}) bool {
 	if now == 0 || r.FormValue(nocache) != "" {
 		return false
 	}
 	key := fmt.Sprintf("%s.%d", name, now)
 	_, err := gzipGobCodec.Get(c, key, value)
 	if err == nil {
-		c.Debugf("cache hit %q", key)
+		log.Debugf(c, "cache hit %q", key)
 		return true
 	}
-	c.Debugf("cache miss %q", key)
+	log.Debugf(c, "cache miss %q", key)
 	if err != memcache.ErrCacheMiss {
-		c.Errorf("get cache %q: %v", key, err)
+		log.Errorf(c, "get cache %q: %v", key, err)
 	}
 	return false
 }
 
 // Set puts value into memcache under name at time now.
 // It logs any errors to the admin console.
-func Set(c appengine.Context, r *http.Request, now uint64, name string, value interface{}) {
+func Set(c context.Context, r *http.Request, now uint64, name string, value interface{}) {
 	if now == 0 || r.FormValue(nocache) != "" {
 		return
 	}
@@ -82,7 +83,7 @@ func Set(c appengine.Context, r *http.Request, now uint64, name string, value in
 		Expiration: expiry,
 	})
 	if err != nil {
-		c.Errorf("set cache %q: %v", key, err)
+		log.Errorf(c, "set cache %q: %v", key, err)
 	}
 }
 

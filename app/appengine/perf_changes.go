@@ -14,8 +14,8 @@ import (
 	"sort"
 	"strconv"
 
-	"appengine"
-	"appengine/datastore"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/datastore"
 )
 
 func init() {
@@ -221,7 +221,7 @@ type uiPerfConfigElem struct {
 }
 
 var perfChangesTemplate = template.Must(
-	template.New("perf_changes.html").Funcs(tmplFuncs).ParseFiles("build/perf_changes.html"),
+	template.New("perf_changes.html").Funcs(tmplFuncs).ParseFiles("perf_changes.html"),
 )
 
 type perfChangesData struct {

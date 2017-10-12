@@ -11,8 +11,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"appengine"
-	"appengine/datastore"
+	"golang.org/x/net/context"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/datastore"
 )
 
 func init() {
@@ -45,7 +46,7 @@ func updateBenchmark(w http.ResponseWriter, r *http.Request) {
 
 	ncommit := 0
 	nrun := 0
-	tx := func(c appengine.Context) error {
+	tx := func(c context.Context) error {
 		var cr *CommitRun
 		for _, hash := range hashes {
 			// Update Commit.

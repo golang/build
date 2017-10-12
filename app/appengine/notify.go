@@ -8,6 +8,7 @@ package build
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
@@ -18,10 +19,11 @@ import (
 	"strings"
 	"text/template"
 
-	"appengine"
-	"appengine/datastore"
-	"appengine/delay"
-	"appengine/urlfetch"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/datastore"
+	"google.golang.org/appengine/delay"
+	"google.golang.org/appengine/log"
+	"google.golang.org/appengine/urlfetch"
 )
 
 const (
@@ -50,7 +52,7 @@ var ignoreFailure = map[string]bool{
 //
 // This must be run in a datastore transaction, and the provided *Commit must
 // have been retrieved from the datastore within that transaction.
-func notifyOnFailure(c appengine.Context, com *Commit, builder string) error {
+func notifyOnFailure(c context.Context, com *Commit, builder string) error {
 	if ignoreFailure[builder] {
 		return nil
 	}
@@ -79,8 +81,8 @@ func notifyOnFailure(c appengine.Context, com *Commit, builder string) error {
 			return err
 		}
 		if nr := next.Result(builder, ""); nr != nil && !nr.OK {
-			c.Debugf("commit ok: %#v\nresult: %#v", com, cr)
-			c.Debugf("next commit broken: %#v\nnext result:%#v", next, nr)
+			log.Debugf(c, "commit ok: %#v\nresult: %#v", com, cr)
+			log.Debugf(c, "next commit broken: %#v\nnext result:%#v", next, nr)
 			broken = next
 		}
 	} else {
@@ -96,8 +98,8 @@ func notifyOnFailure(c appengine.Context, com *Commit, builder string) error {
 			return err
 		}
 		if pr := prev.Result(builder, ""); pr != nil && pr.OK {
-			c.Debugf("commit broken: %#v\nresult: %#v", com, cr)
-			c.Debugf("previous commit ok: %#v\nprevious result:%#v", prev, pr)
+			log.Debugf(c, "commit broken: %#v\nresult: %#v", com, cr)
+			log.Debugf(c, "previous commit ok: %#v\nprevious result:%#v", prev, pr)
 			broken = com
 		}
 	}
@@ -112,7 +114,7 @@ func notifyOnFailure(c appengine.Context, com *Commit, builder string) error {
 }
 
 // firstMatch executes the query q and loads the first entity into v.
-func firstMatch(c appengine.Context, q *datastore.Query, v interface{}) error {
+func firstMatch(c context.Context, q *datastore.Query, v interface{}) error {
 	t := q.Limit(1).Run(c)
 	_, err := t.Next(v)
 	if err == datastore.Done {
@@ -124,12 +126,12 @@ func firstMatch(c appengine.Context, q *datastore.Query, v interface{}) error {
 var (
 	notifyLater = delay.Func("notify", notify)
 	notifyTmpl  = template.Must(template.New("notify.txt").
-			Funcs(template.FuncMap(tmplFuncs)).ParseFiles("build/notify.txt"))
+			Funcs(template.FuncMap(tmplFuncs)).ParseFiles("notify.txt"))
 )
 
 // notify tries to update the CL for the given Commit with a failure message.
 // If it doesn't succeed, it sends a failure email to golang-dev.
-func notify(c appengine.Context, com *Commit, builder, logHash string) {
+func notify(c context.Context, com *Commit, builder, logHash string) {
 	var msg bytes.Buffer
 	err := notifyTmpl.Execute(&msg, struct {
 		Builder  string
@@ -137,19 +139,19 @@ func notify(c appengine.Context, com *Commit, builder, logHash string) {
 		Hostname string
 	}{builder, logHash, domain})
 	if err != nil {
-		c.Criticalf("couldn't render template: %v", err)
+		log.Criticalf(c, "couldn't render template: %v", err)
 		return
 	}
 	if err := postGerritMessage(c, com, msg.String()); err != nil {
-		c.Errorf("couldn't post to gerrit: %v", err)
+		log.Errorf(c, "couldn't post to gerrit: %v", err)
 	}
 }
 
 // postGerritMessage posts a message to the code review thread for the given
 // Commit.
-func postGerritMessage(c appengine.Context, com *Commit, message string) error {
+func postGerritMessage(c context.Context, com *Commit, message string) error {
 	if appengine.IsDevAppServer() {
-		c.Infof("Skiping update of Gerrit review for %v with message: %v", com, message)
+		log.Infof(c, "Skiping update of Gerrit review for %v with message: %v", com, message)
 		return nil
 	}
 	// Get change ID using commit hash.
@@ -203,7 +205,7 @@ func init() {
 }
 
 // MUST be called from inside a transaction.
-func sendPerfFailMail(c appengine.Context, builder string, res *PerfResult) error {
+func sendPerfFailMail(c context.Context, builder string, res *PerfResult) error {
 	com := &Commit{Hash: res.CommitHash}
 	if err := datastore.Get(c, com.Key(c), com); err != nil {
 		return err
@@ -224,18 +226,18 @@ func sendPerfFailMail(c appengine.Context, builder string, res *PerfResult) erro
 
 // commonNotify MUST!!! be called from within a transaction inside which
 // the provided Commit entity was retrieved from the datastore.
-func commonNotify(c appengine.Context, com *Commit, builder, logHash string) error {
+func commonNotify(c context.Context, com *Commit, builder, logHash string) error {
 	if com.Num == 0 || com.Desc == "" {
 		stk := make([]byte, 10000)
 		n := runtime.Stack(stk, false)
 		stk = stk[:n]
-		c.Errorf("refusing to notify with com=%+v\n%s", *com, string(stk))
+		log.Errorf(c, "refusing to notify with com=%+v\n%s", *com, string(stk))
 		return fmt.Errorf("misuse of commonNotify")
 	}
 	if com.FailNotificationSent {
 		return nil
 	}
-	c.Infof("%s is broken commit; notifying", com.Hash)
+	log.Infof(c, "%s is broken commit; notifying", com.Hash)
 	notifyLater.Call(c, com, builder, logHash) // add task to queue
 	com.FailNotificationSent = true
 	return putCommit(c, com)
@@ -277,11 +279,11 @@ var (
 	sendPerfMailTmpl  = template.Must(
 		template.New("perf_notify.txt").
 			Funcs(template.FuncMap(tmplFuncs)).
-			ParseFiles("build/perf_notify.txt"),
+			ParseFiles("perf_notify.txt"),
 	)
 )
 
-func sendPerfMailFunc(c appengine.Context, com *Commit, prevCommitHash, builder string, changes []*PerfChange) {
+func sendPerfMailFunc(c context.Context, com *Commit, prevCommitHash, builder string, changes []*PerfChange) {
 	// Sort the changes into the right order.
 	var benchmarks []*PerfChangeBenchmark
 	for _, ch := range changes {
@@ -312,11 +314,11 @@ func sendPerfMailFunc(c appengine.Context, com *Commit, prevCommitHash, builder 
 		"Builder": builder, "Hostname": domain, "Url": u, "Benchmarks": benchmarks,
 	})
 	if err != nil {
-		c.Errorf("rendering perf mail template: %v", err)
+		log.Errorf(c, "rendering perf mail template: %v", err)
 		return
 	}
 
 	if err := postGerritMessage(c, com, body.String()); err != nil {
-		c.Errorf("posting to gerrit: %v", err)
+		log.Errorf(c, "posting to gerrit: %v", err)
 	}
 }

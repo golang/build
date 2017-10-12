@@ -7,13 +7,14 @@
 package build
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 
-	"appengine"
-	"appengine/datastore"
+	"google.golang.org/appengine/datastore"
+	"google.golang.org/appengine/log"
 )
 
 var knownTags = map[string]string{
@@ -32,7 +33,7 @@ func splitBench(benchProcs string) (string, int) {
 	return ss[0], procs
 }
 
-func dashPerfCommits(c appengine.Context, page int) ([]*Commit, error) {
+func dashPerfCommits(c context.Context, page int) ([]*Commit, error) {
 	q := datastore.NewQuery("Commit").
 		Ancestor((&Package{}).Key(c)).
 		Order("-Num").
@@ -76,13 +77,13 @@ func isPerfFailed(res *PerfResult, builder string) bool {
 // without lots of duplicate accesses to datastore.
 // It allows to iterate over newer or older results for some base commit.
 type PerfResultCache struct {
-	c       appengine.Context
+	c       context.Context
 	newer   bool
 	iter    *datastore.Iterator
 	results map[int]*PerfResult
 }
 
-func MakePerfResultCache(c appengine.Context, com *Commit, newer bool) *PerfResultCache {
+func MakePerfResultCache(c context.Context, com *Commit, newer bool) *PerfResultCache {
 	p := &Package{}
 	q := datastore.NewQuery("PerfResult").Ancestor(p.Key(c)).Limit(100)
 	if newer {
@@ -128,7 +129,7 @@ func (rc *PerfResultCache) Next(commitNum int) (*PerfResult, error) {
 		return nil, fmt.Errorf("fetching perf results: %v", err)
 	}
 	if (rc.newer && res.CommitNum < commitNum) || (!rc.newer && res.CommitNum > commitNum) {
-		rc.c.Errorf("PerfResultCache.Next: bad commit num")
+		log.Errorf(rc.c, "PerfResultCache.Next: bad commit num")
 	}
 	rc.results[res.CommitNum] = res
 	return res, nil

@@ -15,8 +15,8 @@ import (
 	"strconv"
 	"strings"
 
-	"appengine"
-	"appengine/datastore"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/datastore"
 )
 
 func init() {
@@ -215,5 +215,5 @@ func (l uiPerfDetailMetrics) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
 func (l uiPerfDetailMetrics) Less(i, j int) bool { return l[i].Name < l[j].Name }
 
 var uiPerfDetailTemplate = template.Must(
-	template.New("perf_detail.html").Funcs(tmplFuncs).ParseFiles("build/perf_detail.html"),
+	template.New("perf_detail.html").Funcs(tmplFuncs).ParseFiles("perf_detail.html"),
 )

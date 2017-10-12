@@ -9,8 +9,9 @@ package build
 import (
 	"sync"
 
-	"appengine"
-	"appengine/datastore"
+	"golang.org/x/net/context"
+	"google.golang.org/appengine/datastore"
+	"google.golang.org/appengine/log"
 )
 
 // A global map of rarely-changing configuration values.
@@ -35,7 +36,7 @@ type configEntity struct {
 
 // Config returns the value for the given key
 // or the empty string if no such key exists.
-func Config(c appengine.Context, key string) string {
+func Config(c context.Context, key string) string {
 	config.RLock()
 	v, ok := config.m[key]
 	config.RUnlock()
@@ -55,7 +56,7 @@ func Config(c appengine.Context, key string) string {
 	k := datastore.NewKey(c, "Config", key, 0, nil)
 	ent := configEntity{}
 	if err := datastore.Get(c, k, &ent); err != nil {
-		c.Errorf("Get Config: %v", err)
+		log.Errorf(c, "Get Config: %v", err)
 		return ""
 	}
 	// Don't return or cache the dummy value.
@@ -69,24 +70,24 @@ func Config(c appengine.Context, key string) string {
 // initConfig is invoked by the initHandler to create an entity for each key in
 // configKeys. This makes it easy to edit the configuration values using the
 // Datastore Viewer in the App Engine dashboard.
-func initConfig(c appengine.Context) {
+func initConfig(c context.Context) {
 	for _, key := range configKeys {
-		err := datastore.RunInTransaction(c, func(c appengine.Context) error {
+		err := datastore.RunInTransaction(c, func(c context.Context) error {
 			k := datastore.NewKey(c, "Config", key, 0, nil)
 			ent := configEntity{}
 			if err := datastore.Get(c, k, &ent); err == nil {
-				c.Infof("huh? %v", key)
+				log.Infof(c, "huh? %v", key)
 				return nil
 			} else if err != datastore.ErrNoSuchEntity {
 				return err
 			}
 			ent.Value = configDummy
 			_, err := datastore.Put(c, k, &ent)
-			c.Infof("BLAH BLAH %v", key)
+			log.Infof(c, "BLAH BLAH %v", key)
 			return err
 		}, nil)
 		if err != nil {
-			c.Errorf("initConfig %v: %v", key, err)
+			log.Errorf(c, "initConfig %v: %v", key, err)
 		}
 	}
 }

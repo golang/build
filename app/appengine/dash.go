@@ -7,10 +7,11 @@
 package build
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
-	"appengine"
+	"google.golang.org/appengine"
 )
 
 func handleFunc(path string, h http.HandlerFunc) {
@@ -53,7 +54,7 @@ func dashboardForRequest(r *http.Request) *Dashboard {
 
 // Context returns a namespaced context for this dashboard, or panics if it
 // fails to create a new context.
-func (d *Dashboard) Context(c appengine.Context) appengine.Context {
+func (d *Dashboard) Context(c context.Context) context.Context {
 	if d.Namespace == "" {
 		return c
 	}

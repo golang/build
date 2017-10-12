@@ -7,10 +7,11 @@
 package key
 
 import (
+	"context"
 	"sync"
 
-	"appengine"
-	"appengine/datastore"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/datastore"
 )
 
 var theKey struct {
@@ -22,11 +23,11 @@ type builderKey struct {
 	Secret string
 }
 
-func (k *builderKey) Key(c appengine.Context) *datastore.Key {
+func (k *builderKey) Key(c context.Context) *datastore.Key {
 	return datastore.NewKey(c, "BuilderKey", "root", 0, nil)
 }
 
-func Secret(c appengine.Context) string {
+func Secret(c context.Context) string {
 	// check with rlock
 	theKey.RLock()
 	k := theKey.Secret

@@ -13,8 +13,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"appengine"
-	"appengine/datastore"
+	"google.golang.org/appengine"
+	"google.golang.org/appengine/datastore"
 )
 
 func init() {
@@ -244,7 +244,7 @@ func perfGraphHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 var perfGraphTemplate = template.Must(
-	template.New("perf_graph.html").ParseFiles("build/perf_graph.html"),
+	template.New("perf_graph.html").ParseFiles("perf_graph.html"),
 )
 
 type perfGraphData struct {

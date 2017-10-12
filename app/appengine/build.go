@@ -9,6 +9,7 @@ package build
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -19,10 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"appengine"
-	"appengine/datastore"
+	"google.golang.org/appengine/datastore"
 
-	"cache"
+	"golang.org/x/build/app/cache"
 
 	"golang.org/x/build/internal/loghash"
 )
@@ -44,7 +44,7 @@ func (p *Package) String() string {
 	return fmt.Sprintf("%s: %q", p.Path, p.Name)
 }
 
-func (p *Package) Key(c appengine.Context) *datastore.Key {
+func (p *Package) Key(c context.Context) *datastore.Key {
 	key := p.Path
 	if key == "" {
 		key = "go"
@@ -53,7 +53,7 @@ func (p *Package) Key(c appengine.Context) *datastore.Key {
 }
 
 // LastCommit returns the most recent Commit for this Package.
-func (p *Package) LastCommit(c appengine.Context) (*Commit, error) {
+func (p *Package) LastCommit(c context.Context) (*Commit, error) {
 	var commits []*Commit
 	_, err := datastore.NewQuery("Commit").
 		Ancestor(p.Key(c)).
@@ -70,7 +70,7 @@ func (p *Package) LastCommit(c appengine.Context) (*Commit, error) {
 }
 
 // GetPackage fetches a Package by path from the datastore.
-func GetPackage(c appengine.Context, path string) (*Package, error) {
+func GetPackage(c context.Context, path string) (*Package, error) {
 	p := &Package{Path: path}
 	err := datastore.Get(c, p.Key(c), p)
 	if err == datastore.ErrNoSuchEntity {
@@ -116,7 +116,7 @@ type Commit struct {
 	buildingURLs map[builderAndGoHash]string
 }
 
-func (com *Commit) Key(c appengine.Context) *datastore.Key {
+func (com *Commit) Key(c context.Context) *datastore.Key {
 	if com.Hash == "" {
 		panic("tried Key on Commit with empty Hash")
 	}
@@ -135,7 +135,7 @@ func (c *Commit) Valid() error {
 	return nil
 }
 
-func putCommit(c appengine.Context, com *Commit) error {
+func putCommit(c context.Context, com *Commit) error {
 	if err := com.Valid(); err != nil {
 		return fmt.Errorf("putting Commit: %v", err)
 	}
@@ -154,7 +154,7 @@ const maxResults = 1000
 
 // AddResult adds the denormalized Result data to the Commit's ResultData field.
 // It must be called from inside a datastore transaction.
-func (com *Commit) AddResult(c appengine.Context, r *Result) error {
+func (com *Commit) AddResult(c context.Context, r *Result) error {
 	if err := datastore.Get(c, com.Key(c), com); err != nil {
 		return fmt.Errorf("getting Commit: %v", err)
 	}
@@ -191,7 +191,7 @@ func (com *Commit) RemoveResult(r *Result) {
 
 // AddPerfResult remembers that the builder has run the benchmark on the commit.
 // It must be called from inside a datastore transaction.
-func (com *Commit) AddPerfResult(c appengine.Context, builder, benchmark string) error {
+func (com *Commit) AddPerfResult(c context.Context, builder, benchmark string) error {
 	if err := datastore.Get(c, com.Key(c), com); err != nil {
 		return fmt.Errorf("getting Commit: %v", err)
 	}
@@ -307,7 +307,7 @@ type CommitRun struct {
 	NeedsBenchmarking []bool      `datastore:",noindex"`
 }
 
-func (cr *CommitRun) Key(c appengine.Context) *datastore.Key {
+func (cr *CommitRun) Key(c context.Context) *datastore.Key {
 	p := Package{Path: cr.PackagePath}
 	key := strconv.Itoa(cr.StartCommitNum)
 	return datastore.NewKey(c, "CommitRun", key, 0, p.Key(c))
@@ -315,7 +315,7 @@ func (cr *CommitRun) Key(c appengine.Context) *datastore.Key {
 
 // GetCommitRun loads and returns CommitRun that contains information
 // for commit commitNum.
-func GetCommitRun(c appengine.Context, commitNum int) (*CommitRun, error) {
+func GetCommitRun(c context.Context, commitNum int) (*CommitRun, error) {
 	cr := &CommitRun{StartCommitNum: commitNum / PerfRunLength * PerfRunLength}
 	err := datastore.Get(c, cr.Key(c), cr)
 	if err != nil && err != datastore.ErrNoSuchEntity {
@@ -331,7 +331,7 @@ func GetCommitRun(c appengine.Context, commitNum int) (*CommitRun, error) {
 	return cr, nil
 }
 
-func (cr *CommitRun) AddCommit(c appengine.Context, com *Commit) error {
+func (cr *CommitRun) AddCommit(c context.Context, com *Commit) error {
 	if com.Num < cr.StartCommitNum || com.Num >= cr.StartCommitNum+PerfRunLength {
 		return fmt.Errorf("AddCommit: commit num %v out of range [%v, %v)",
 			com.Num, cr.StartCommitNum, cr.StartCommitNum+PerfRunLength)
@@ -353,7 +353,7 @@ func (cr *CommitRun) AddCommit(c appengine.Context, com *Commit) error {
 // GetCommits returns [startCommitNum, startCommitNum+n) commits.
 // Commits information is partial (obtained from CommitRun),
 // do not store them back into datastore.
-func GetCommits(c appengine.Context, startCommitNum, n int) ([]*Commit, error) {
+func GetCommits(c context.Context, startCommitNum, n int) ([]*Commit, error) {
 	if startCommitNum < 0 || n <= 0 {
 		return nil, fmt.Errorf("GetCommits: invalid args (%v, %v)", startCommitNum, n)
 	}
@@ -436,7 +436,7 @@ type Result struct {
 	RunTime int64 // time to build+test in nanoseconds
 }
 
-func (r *Result) Key(c appengine.Context) *datastore.Key {
+func (r *Result) Key(c context.Context) *datastore.Key {
 	p := Package{Path: r.PackagePath}
 	key := r.Builder + "|" + r.PackagePath + "|" + r.Hash + "|" + r.GoHash
 	return datastore.NewKey(c, "Result", key, 0, p.Key(c))
@@ -477,7 +477,7 @@ type ParsedPerfResult struct {
 	Artifacts map[string]string
 }
 
-func (r *PerfResult) Key(c appengine.Context) *datastore.Key {
+func (r *PerfResult) Key(c context.Context) *datastore.Key {
 	p := Package{Path: r.PackagePath}
 	key := r.CommitHash
 	return datastore.NewKey(c, "PerfResult", key, 0, p.Key(c))
@@ -561,7 +561,7 @@ type PerfMetricRun struct {
 	Vals           []int64 `datastore:",noindex"`
 }
 
-func (m *PerfMetricRun) Key(c appengine.Context) *datastore.Key {
+func (m *PerfMetricRun) Key(c context.Context) *datastore.Key {
 	p := Package{Path: m.PackagePath}
 	key := m.Builder + "|" + m.Benchmark + "|" + m.Metric + "|" + strconv.Itoa(m.StartCommitNum)
 	return datastore.NewKey(c, "PerfMetricRun", key, 0, p.Key(c))
@@ -569,7 +569,7 @@ func (m *PerfMetricRun) Key(c appengine.Context) *datastore.Key {
 
 // GetPerfMetricRun loads and returns PerfMetricRun that contains information
 // for commit commitNum.
-func GetPerfMetricRun(c appengine.Context, builder, benchmark, metric string, commitNum int) (*PerfMetricRun, error) {
+func GetPerfMetricRun(c context.Context, builder, benchmark, metric string, commitNum int) (*PerfMetricRun, error) {
 	startCommitNum := commitNum / PerfRunLength * PerfRunLength
 	m := &PerfMetricRun{Builder: builder, Benchmark: benchmark, Metric: metric, StartCommitNum: startCommitNum}
 	err := datastore.Get(c, m.Key(c), m)
@@ -582,7 +582,7 @@ func GetPerfMetricRun(c appengine.Context, builder, benchmark, metric string, co
 	return m, nil
 }
 
-func (m *PerfMetricRun) AddMetric(c appengine.Context, commitNum int, v uint64) error {
+func (m *PerfMetricRun) AddMetric(c context.Context, commitNum int, v uint64) error {
 	if commitNum < m.StartCommitNum || commitNum >= m.StartCommitNum+PerfRunLength {
 		return fmt.Errorf("AddMetric: CommitNum %v out of range [%v, %v)",
 			commitNum, m.StartCommitNum, m.StartCommitNum+PerfRunLength)
@@ -596,7 +596,7 @@ func (m *PerfMetricRun) AddMetric(c appengine.Context, commitNum int, v uint64) 
 
 // GetPerfMetricsForCommits returns perf metrics for builder/benchmark/metric
 // and commits [startCommitNum, startCommitNum+n).
-func GetPerfMetricsForCommits(c appengine.Context, builder, benchmark, metric string, startCommitNum, n int) ([]uint64, error) {
+func GetPerfMetricsForCommits(c context.Context, builder, benchmark, metric string, startCommitNum, n int) ([]uint64, error) {
 	if startCommitNum < 0 || n <= 0 {
 		return nil, fmt.Errorf("GetPerfMetricsForCommits: invalid args (%v, %v)", startCommitNum, n)
 	}
@@ -657,14 +657,14 @@ type PerfConfig struct {
 	noise map[string]float64
 }
 
-func PerfConfigKey(c appengine.Context) *datastore.Key {
+func PerfConfigKey(c context.Context) *datastore.Key {
 	p := Package{}
 	return datastore.NewKey(c, "PerfConfig", "PerfConfig", 0, p.Key(c))
 }
 
 const perfConfigCacheKey = "perf-config"
 
-func GetPerfConfig(c appengine.Context, r *http.Request) (*PerfConfig, error) {
+func GetPerfConfig(c context.Context, r *http.Request) (*PerfConfig, error) {
 	pc := new(PerfConfig)
 	now := cache.Now(c)
 	if cache.Get(c, r, now, perfConfigCacheKey, pc) {
@@ -703,7 +703,7 @@ func (pc *PerfConfig) NoiseLevel(builder, benchmark, metric string) float64 {
 
 // UpdatePerfConfig updates the PerfConfig entity with results of benchmarking.
 // Returns whether it's a benchmark that we have not yet seem on the builder.
-func UpdatePerfConfig(c appengine.Context, r *http.Request, req *PerfRequest) (newBenchmark bool, err error) {
+func UpdatePerfConfig(c context.Context, r *http.Request, req *PerfRequest) (newBenchmark bool, err error) {
 	pc, err := GetPerfConfig(c, r)
 	if err != nil {
 		return false, err
@@ -820,14 +820,14 @@ type PerfTodo struct {
 	CommitNums  []int `datastore:",noindex"` // LIFO queue of commits to benchmark.
 }
 
-func (todo *PerfTodo) Key(c appengine.Context) *datastore.Key {
+func (todo *PerfTodo) Key(c context.Context) *datastore.Key {
 	p := Package{Path: todo.PackagePath}
 	key := todo.Builder
 	return datastore.NewKey(c, "PerfTodo", key, 0, p.Key(c))
 }
 
 // AddCommitToPerfTodo adds the commit to all existing PerfTodo entities.
-func AddCommitToPerfTodo(c appengine.Context, com *Commit) error {
+func AddCommitToPerfTodo(c context.Context, com *Commit) error {
 	var todos []*PerfTodo
 	_, err := datastore.NewQuery("PerfTodo").
 		Ancestor((&Package{}).Key(c)).
@@ -863,7 +863,7 @@ func (l *Log) Text() ([]byte, error) {
 	return b, nil
 }
 
-func PutLog(c appengine.Context, text string) (hash string, err error) {
+func PutLog(c context.Context, text string) (hash string, err error) {
 	b := new(bytes.Buffer)
 	z, _ := gzip.NewWriterLevel(b, gzip.BestCompression)
 	io.WriteString(z, text)
@@ -889,7 +889,7 @@ func (t *Tag) String() string {
 	return t.Name
 }
 
-func (t *Tag) Key(c appengine.Context) *datastore.Key {
+func (t *Tag) Key(c context.Context) *datastore.Key {
 	p := &Package{}
 	s := t.Kind
 	if t.Kind == "release" {
@@ -912,14 +912,14 @@ func (t *Tag) Valid() error {
 }
 
 // Commit returns the Commit that corresponds with this Tag.
-func (t *Tag) Commit(c appengine.Context) (*Commit, error) {
+func (t *Tag) Commit(c context.Context) (*Commit, error) {
 	com := &Commit{Hash: t.Hash}
 	err := datastore.Get(c, com.Key(c), com)
 	return com, err
 }
 
 // GetTag fetches a Tag by name from the datastore.
-func GetTag(c appengine.Context, kind, name string) (*Tag, error) {
+func GetTag(c context.Context, kind, name string) (*Tag, error) {
 	t := &Tag{Kind: kind, Name: name}
 	if err := datastore.Get(c, t.Key(c), t); err != nil {
 		return nil, err
@@ -932,7 +932,7 @@ func GetTag(c appengine.Context, kind, name string) (*Tag, error) {
 
 // Packages returns packages of the specified kind.
 // Kind must be one of "external" or "subrepo".
-func Packages(c appengine.Context, kind string) ([]*Package, error) {
+func Packages(c context.Context, kind string) ([]*Package, error) {
 	switch kind {
 	case "external", "subrepo":
 	default:
