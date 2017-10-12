@@ -733,6 +733,23 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 		knownToDashboard[b] = true
 	}
 
+	// Before, we just sent all the possible work to workc,
+	// which then kicks off lots of goroutines that fight over
+	// available buildlets, with the result that we run a random
+	// subset of the possible work. But really we want to run
+	// the newest possible work, so that lines at the top of the
+	// build dashboard are filled in before lines below.
+	// It's a bit hard to push that preference all the way through
+	// this code base, but we can tilt the scales a little by only
+	// sending one job to workc for each different builder
+	// on each findWork call. The findWork calls happen every
+	// 15 seconds, so we will now only kick off one build of
+	// a particular host type (for example, darwin-arm64) every
+	// 15 seconds, but they should be skewed toward new work.
+	// This depends on the build dashboard sending back the list
+	// of empty slots newest first (matching the order on the main screen).
+	sent := map[string]bool{}
+
 	var goRevisions []string // revisions of repo "go", branch "master" revisions
 	seenSubrepo := make(map[string]bool)
 	for _, br := range bs.Revisions {
@@ -803,7 +820,12 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 			if skipBuild(rev) {
 				continue
 			}
-			if !isBuilding(rev) {
+
+			// The !sent[builder] here is a clumsy attempt at priority scheduling
+			// and probably should be replaced at some point with a better solution.
+			// See golang.org/issue/19178 and the long comment above.
+			if !isBuilding(rev) && !sent[builder] {
+				sent[builder] = true
 				work <- rev
 			}
 		}
