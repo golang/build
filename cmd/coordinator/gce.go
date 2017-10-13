@@ -26,7 +26,7 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/datastore"
-	gcperr "cloud.google.com/go/errors"
+	"cloud.google.com/go/errorreporting"
 	monapi "cloud.google.com/go/monitoring/apiv3"
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/buildenv"
@@ -67,8 +67,8 @@ var (
 	gerritClient   *gerrit.Client
 	storageClient  *storage.Client
 	metricsClient  *monapi.MetricClient
-	inStaging      bool           // are we running in the staging project? (named -dev)
-	errorsClient   *gcperr.Client // Stackdriver errors client
+	inStaging      bool                   // are we running in the staging project? (named -dev)
+	errorsClient   *errorreporting.Client // Stackdriver errors client
 
 	initGCECalled bool
 )
@@ -116,8 +116,7 @@ func initGCE() error {
 		}
 
 		if !hasComputeScope() {
-			return errors.New("The coordinator is not running with access to read and write Compute resources. VM support disabled.")
-
+			return errors.New("coordinator is not running with access to read and write Compute resources. VM support disabled")
 		}
 
 		if value, err := metadata.ProjectAttributeValue("farmer-run-bench"); err == nil {
@@ -152,8 +151,9 @@ func initGCE() error {
 
 	// don't send dev errors to Stackdriver.
 	if *mode != "dev" {
-		useLogging := true
-		errorsClient, err = gcperr.NewClient(ctx, buildEnv.ProjectName, "coordinator", "", useLogging)
+		errorsClient, err = errorreporting.NewClient(ctx, buildEnv.ProjectName, errorreporting.Config{
+			ServiceName: "coordinator",
+		})
 		if err != nil {
 			// don't exit, we still want to run coordinator
 			log.Printf("Error creating errors client: %v", err)
@@ -304,7 +304,7 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 
 	var (
 		needDelete   bool
-		createSpan   spanlog.Span = lg.CreateSpan("create_gce_instance", instName)
+		createSpan   = lg.CreateSpan("create_gce_instance", instName)
 		waitBuildlet spanlog.Span // made after create is done
 		curSpan      = createSpan // either instSpan or waitBuildlet
 	)

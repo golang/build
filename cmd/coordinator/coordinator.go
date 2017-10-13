@@ -44,6 +44,7 @@ import (
 	"go4.org/syncutil"
 	"grpc.go4.org"
 
+	"cloud.google.com/go/errorreporting"
 	"cloud.google.com/go/storage"
 	"golang.org/x/build"
 	"golang.org/x/build/autocertcache"
@@ -1970,13 +1971,11 @@ func (st *buildStatus) reportErr(err error) {
 		return
 	}
 
-	var noRequest *http.Request
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	err = fmt.Errorf("buildID: %v, name: %s, hostType: %s, error: %v", st.buildID, st.conf.Name, st.conf.HostType, err)
-	errorsClient.Report(ctx, noRequest, err)
-
+	errorsClient.ReportSync(ctx, errorreporting.Entry{Error: err})
 }
 
 func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {

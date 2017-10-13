@@ -36,7 +36,7 @@ func SyncBuilds(ctx context.Context, env *buildenv.Environment) error {
 		if Verbose {
 			log.Printf("Creating table Builds...")
 		}
-		err = buildsTable.Create(ctx)
+		err = buildsTable.Create(ctx, nil)
 		if err == nil {
 			meta, err = buildsTable.Metadata(ctx)
 		}
@@ -178,7 +178,7 @@ func SyncSpans(ctx context.Context, env *buildenv.Environment) error {
 	meta, err := table.Metadata(ctx)
 	if ae, ok := err.(*googleapi.Error); ok && ae.Code == 404 {
 		log.Printf("Creating table Spans...")
-		err = table.Create(ctx)
+		err = table.Create(ctx, nil)
 		if err == nil {
 			meta, err = table.Metadata(ctx)
 		}
