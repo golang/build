@@ -9,8 +9,8 @@ LABEL maintainer "golang-dev@googlegroups.com"
 
 # BEGIN deps (run `make update-deps` to update)
 
-# Repo cloud.google.com/go at da30b6d (2017-09-23)
-ENV REV=da30b6d6aeb462b223228cc0b4e7952cba499d90
+# Repo cloud.google.com/go at ba25346 (2017-10-13)
+ENV REV=ba2534604a6c2b8854d680e50f9132cade92d02f
 RUN go get -d cloud.google.com/go/compute/metadata `#and 6 other pkgs` &&\
     (cd /go/src/cloud.google.com/go && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -44,18 +44,18 @@ ENV REV=034d17a462f7b2dcd1a4a73553ec5357ff6e6c6e
 RUN go get -d go4.org/types &&\
     (cd /go/src/go4.org && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/crypto at 847319b (2017-09-25)
-ENV REV=847319b7fc94cab682988f93da778204da164588
+# Repo golang.org/x/crypto at 9419663 (2017-09-30)
+ENV REV=9419663f5a44be8b34ca85f08abc5fe1be11f8a3
 RUN go get -d golang.org/x/crypto/acme `#and 2 other pkgs` &&\
     (cd /go/src/golang.org/x/crypto && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/net at 0744d00 (2017-09-22)
-ENV REV=0744d001aa8470aaa53df28d32e5ceeb8af9bd70
+# Repo golang.org/x/net at a04bdac (2017-10-04)
+ENV REV=a04bdaca5b32abe1c069418fb7088ae607de5bd0
 RUN go get -d golang.org/x/net/context `#and 8 other pkgs` &&\
     (cd /go/src/golang.org/x/net && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/oauth2 at 13449ad (2017-09-12)
-ENV REV=13449ad91cb26cb47661c1b080790392170385fd
+# Repo golang.org/x/oauth2 at bb50c06 (2017-09-28)
+ENV REV=bb50c06baba3d0c76f9d125c0719093e315b5b44
 RUN go get -d golang.org/x/oauth2 `#and 5 other pkgs` &&\
     (cd /go/src/golang.org/x/oauth2 && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -64,23 +64,23 @@ ENV REV=f52d1811a62927559de87708c8913c1650ce4f26
 RUN go get -d golang.org/x/sync/errgroup &&\
     (cd /go/src/golang.org/x/sync && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/text at 1cbadb4 (2017-09-15)
-ENV REV=1cbadb444a806fd9430d14ad08967ed91da4fa0a
+# Repo golang.org/x/text at c01e476 (2017-10-13)
+ENV REV=c01e4764d870b77f8abe5096ee19ad20d80e8075
 RUN go get -d golang.org/x/text/secure/bidirule `#and 4 other pkgs` &&\
     (cd /go/src/golang.org/x/text && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo google.golang.org/api at cec5cc0 (2017-09-24)
-ENV REV=cec5cc05d57604ba2d2eaaf5381d3248fac4814d
+# Repo google.golang.org/api at b02deba (2017-10-13)
+ENV REV=b02deba8ecc515109e445c1cd35cc85cc08500d8
 RUN go get -d google.golang.org/api/gensupport `#and 9 other pkgs` &&\
     (cd /go/src/google.golang.org/api && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo google.golang.org/genproto at 1e559d0 (2017-09-18)
-ENV REV=1e559d0a00eef8a9a43151db4665280bd8dd5886
+# Repo google.golang.org/genproto at f676e0f (2017-10-03)
+ENV REV=f676e0f3ac6395ff1a529ae59a6670878a8371a6
 RUN go get -d google.golang.org/genproto/googleapis/api/annotations `#and 3 other pkgs` &&\
     (cd /go/src/google.golang.org/genproto && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo google.golang.org/grpc at d4b75eb (2017-09-21)
-ENV REV=d4b75ebd4f9f8c4a2b1cdadbdbe0d7920431ccca
+# Repo google.golang.org/grpc at c209cdf (2017-10-12)
+ENV REV=c209cdff16049a924bef4aa5c6f7588f0b42b2fa
 RUN go get -d google.golang.org/grpc `#and 17 other pkgs` &&\
     (cd /go/src/google.golang.org/grpc && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -155,4 +155,4 @@ RUN go install cloud.google.com/go/compute/metadata \
 
 COPY . /go/src/golang.org/x/build/
 
-RUN go install golang.org/x/build/cmd/gerritbot
+RUN go install -ldflags "-linkmode=external -extldflags '-static -pthread'" golang.org/x/build/cmd/gerritbot

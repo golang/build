@@ -12,7 +12,7 @@ DOCKER_IMAGE_build0=build0/gerritbot:latest
 DOCKER_CTR_build0=gerritbot-build0
 
 build0: *.go Dockerfile.0
-	docker build --force-rm -f Dockerfile.0 --tag=$(DOCKER_IMAGE_build0) ../
+	docker build --force-rm -f Dockerfile.0 --tag=$(DOCKER_IMAGE_build0) ../..
 
 gerritbot: build0
 	docker create --name $(DOCKER_CTR_build0) $(DOCKER_IMAGE_build0)
