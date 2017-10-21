@@ -14,6 +14,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # libc6-dev-i386 gcc-multilib: for 32-bit builds
 # procps lsof psmisc: misc basic tools
 # libgles2-mesa-dev libopenal-dev fonts-droid-fallback: required by x/mobile repo
+# upx: executable compressor, needed to test for go binaries compatibility
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
 	ca-certificates \
@@ -32,6 +33,7 @@ RUN apt-get update && apt-get install -y \
 	libgles2-mesa-dev \
 	libopenal-dev \
 	fonts-droid-fallback \
+	upx \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /go1.4-amd64 \
