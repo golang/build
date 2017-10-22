@@ -11,7 +11,7 @@
 # SPINNING UP A TEST INSTANCE
 # Create a windows instance and bakes the buildlet into the startup.
 #
-# PROJECT_ID=[your GCP project] BASE_IMAGE=windows-server-2012-r2-dc-v20170711 IMAGE_PROJECT=windows-cloud ./build.bash
+# PROJECT_ID=[your GCP project] BASE_IMAGE=windows-server-2012-r2-dc-v20171010 IMAGE_PROJECT=windows-cloud ./build.bash
 # PROJECT_ID=[your GCP project] ./rdp.bash
 
 # CREATED AN IMAGE FOR BUILDER DASHBOARD
@@ -27,7 +27,7 @@
 #  - Wait till buildlet process is up
 #  - Run ./test_buildlet.bash
 #
-# PROJECT_ID=[your GCP project] BASE_IMAGE=windows-server-2012-r2-dc-v20170711 IMAGE_PROJECT=windows-cloud CAPTURE_IMAGE=true ./build.bash
+# PROJECT_ID=[your GCP project] BASE_IMAGE=windows-server-2012-r2-dc-v20171010 IMAGE_PROJECT=windows-cloud CAPTURE_IMAGE=true ./build.bash
 
 set -eu
 
@@ -65,7 +65,7 @@ yes "Y" | gcloud compute images delete "$BUILDLET_IMAGE" --project="$PROJECT_ID"
 
 #
 # 1. Create base instance
-# 
+#
 echo "Creating target instance"
 gcloud compute instances create --machine-type="$MACHINE_TYPE" "$INSTANCE_NAME" \
         --image "$BASE_IMAGE" --image-project "$IMAGE_PROJECT" \
@@ -76,7 +76,7 @@ gcloud compute instances create --machine-type="$MACHINE_TYPE" "$INSTANCE_NAME" 
 echo ""
 echo "Follow logs with:"
 echo ""
-echo gcloud compute instances tail-serial-port-output "$INSTANCE_NAME" --zone="$ZONE" --project="$PROJECT_ID" 
+echo gcloud compute instances tail-serial-port-output "$INSTANCE_NAME" --zone="$ZONE" --project="$PROJECT_ID"
 echo ""
 ip=$(gcloud compute instances describe "$INSTANCE_NAME" --project="$PROJECT_ID" --zone="$ZONE" --format="value(networkInterfaces[0].networkIP)")
 

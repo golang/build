@@ -13,7 +13,7 @@ Builds a buildlet from the BASE_IMAGE and sets it up with  and  An image is capt
 
 ```bash
 export PROJECT_ID=YOUR_GCP_PROJECT
-export BASE_IMAGE=windows-server-2016-dc-core-v20170214
+export BASE_IMAGE=windows-server-2016-dc-core-v20171010
 export IMAGE_PROJECT=windows-cloud
 
 ./build.bash
@@ -21,7 +21,7 @@ export IMAGE_PROJECT=windows-cloud
 
 ### Build all targets
 ```bash
-./make.bash
+PROJECT_ID=YOUR_GCP_PROJECT ./make.bash
 ```
 
 ### Build/test golang

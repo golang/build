@@ -8,10 +8,10 @@ set -e -u
 
 declare -A public_images
 
-public_images=( 
-         ['server-2016-v4']='windows-server-2016-dc-core-v20170711'
-         ['server-2008r2-v4']='windows-server-2008-r2-dc-v20170711' 
-         ['server-2012r2-v4']='windows-server-2012-r2-dc-core-v20170711'
+public_images=(
+         ['server-2016-v5']='windows-server-2016-dc-core-v20171010'
+         ['server-2008r2-v5']='windows-server-2008-r2-dc-v20171010'
+         ['server-2012r2-v5']='windows-server-2012-r2-dc-core-v20171010'
        )
 
 mkdir -p out

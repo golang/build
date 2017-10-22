@@ -7,7 +7,7 @@
 set -ue
 
 hostname="$1"
-BUILDLET="windows-amd64-gce@${hostname}"
+BUILDLET="windows-amd64-2012@${hostname}"
 
 echo "Pushing go1.4, go1.9beta2 to buildlet"
 gomote puttar -url https://storage.googleapis.com/golang/go1.9beta2.src.tar.gz "$BUILDLET"
