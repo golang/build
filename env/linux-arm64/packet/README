@@ -7,20 +7,22 @@ Machines:
 
 golang-builder-1:
 
-     $ ssh -i ~/keys/id_ed25519_golang1 root@147.75.92.14
+     $ ssh -i ~/keys/id_ed25519_golang1 root@147.75.74.194
      (key: http://go/golang-ssh-key)
 
 Machine details:
 
-  root@golang-builder-1:~# cat /proc/cpuinfo | grep process | wc -l
+  root@go-builder:~# cat /proc/cpuinfo | grep process | wc -l
   96
  
-  root@golang-builder-1:~# free
+  root@go-builder:~/packet# free
                 total        used        free      shared  buff/cache   available
-  Mem:      131965860      517648   130994136       12936      454076   130589404
-  Swap:       3321056           0     3321056
+  Mem:       32876144     1091236    30183828       17852     1601080    31052836
+  Swap:       2441980           0     2441980
 
-  root@golang-builder-1:~# lsb_release  -a
+
+
+  root@go-builder:~# lsb_release  -a
   No LSB modules are available.
   Distributor ID: Ubuntu
   Description:  Ubuntu 16.04.2 LTS
@@ -29,24 +31,22 @@ Machine details:
 
 
 
-But each machine is setup like:
+But each machine is setup like (from within build/env/linux-arm64):
 
    # local
-   $ scp -i ~/keys/id_ed25519_golang1 -r .. root@147.75.92.14:~
+   $ scp -i ~/keys/id_ed25519_golang1 -r . root@147.75.74.194:~
+
+   $ GOARCH=arm64 GOOS=linux CGO_ENABLED=0 go build golang.org/x/build/cmd/rundockerbuildlet && \
+     scp -i ~/keys/id_ed25519_golang1 rundockerbuildlet root@147.75.74.194:/usr/local/bin
 
    # on packet box
-   $ apt-get install docker.io
+   $ apt-get update && apt-get install docker.io
 
-   $ build.sh (with Dockerfile in same directory)
+   $ cd packet && ./build.sh (with Dockerfile in same directory)
 
-   $ echo "<BUILDER KEY>" > /etc/gobuild.key
-   
-   # local 
-   $ GOARCH=arm64 GOOS=linux CGO_ENABLED=0 go install golang.org/x/build/cmd/rundockerbuildlet && \
-     scp -i ~/keys/id_ed25519_golang1 ~/bin/linux_arm64/rundockerbuildlet root@147.75.92.14:/usr/local/bin
+   $ echo "<BUILDER KEY>" > /etc/gobuild.key # see go/go-builder-notes
 
-   # on packet box
-   $ scp -i ~/keys/id_ed25519_golang1 rundockerbuildlet.service root@147.75.92.14:/etc/systemd/user/
+   $ cp rundockerbuildlet.service /etc/systemd/user/
 
    $ systemctl enable /etc/systemd/user/rundockerbuildlet.service
    $ systemctl start rundockerbuildlet.service
