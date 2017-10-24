@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
 
@@ -32,6 +34,15 @@ const (
 	projectID     = "999119582588"
 	storageBucket = "golang"
 )
+
+var publicACL = []storage.ACLRule{
+	{Entity: storage.AllUsers, Role: storage.RoleReader},
+	// If you don't give the owners access, the web UI seems to
+	// have a bug and doesn't have access to see that it's public,
+	// so won't render the "Shared Publicly" link. So we do that,
+	// even though it's dumb and unnecessary otherwise:
+	{Entity: storage.ACLEntity("project-owners-" + projectID), Role: storage.RoleOwner},
+}
 
 // File represents a file on the golang.org downloads page.
 // It should be kept in sync with the download code in x/tools/godoc/dl.
@@ -59,25 +70,28 @@ func upload(files []string) error {
 	}
 	defer c.Close()
 
+	files, err = expandFiles(ctx, c, files)
+	if err != nil {
+		return err
+	}
+
+	files = chooseBestFiles(files)
+
 	var sitePayloads []*File
 	var uploaded []string
 	for _, name := range files {
-		fileBytes, err := ioutil.ReadFile(name)
-		if err != nil {
-			return fmt.Errorf("ioutil.ReadFile(%q): %v", name, err)
-		}
 		base := filepath.Base(name)
 		log.Printf("Uploading %v to GCS ...", base)
 		m := fileRe.FindStringSubmatch(base)
 		if m == nil {
 			return fmt.Errorf("unrecognized file: %q", base)
 		}
-		checksum := fmt.Sprintf("%x", sha256.Sum256(fileBytes))
 
-		// Upload file to Google Cloud Storage.
-		if err := putObject(ctx, c, base, fileBytes); err != nil {
+		checksum, size, err := uploadArtifact(ctx, c, name)
+		if err != nil {
 			return fmt.Errorf("uploading %q: %v", name, err)
 		}
+
 		uploaded = append(uploaded, base)
 
 		if strings.HasSuffix(base, ".asc") {
@@ -107,7 +121,7 @@ func upload(files []string) error {
 			OS:             m[3],
 			Arch:           m[4],
 			ChecksumSHA256: checksum,
-			Size:           int64(len(fileBytes)),
+			Size:           size,
 			Kind:           kind,
 		}
 		sitePayloads = append(sitePayloads, f)
@@ -184,14 +198,7 @@ func updateSite(f *File) error {
 
 func putObject(ctx context.Context, c *storage.Client, name string, body []byte) error {
 	wr := c.Bucket(storageBucket).Object(name).NewWriter(ctx)
-	wr.ACL = []storage.ACLRule{
-		{Entity: storage.AllUsers, Role: storage.RoleReader},
-		// If you don't give the owners access, the web UI seems to
-		// have a bug and doesn't have access to see that it's public,
-		// so won't render the "Shared Publicly" link. So we do that,
-		// even though it's dumb and unnecessary otherwise:
-		{Entity: storage.ACLEntity("project-owners-" + projectID), Role: storage.RoleOwner},
-	}
+	wr.ACL = publicACL
 	if _, err := wr.Write(body); err != nil {
 		return err
 	}
@@ -209,4 +216,113 @@ func storageClient(ctx context.Context) (*storage.Client, error) {
 		return nil, err
 	}
 	return storage.NewClient(ctx, option.WithTokenSource(config.TokenSource(ctx)))
+}
+
+// expandFiles expands any "/..." paths in GCS URIs to include files in its subtree.
+func expandFiles(ctx context.Context, storageClient *storage.Client, files []string) ([]string, error) {
+	var expanded []string
+	for _, f := range files {
+		if !(strings.HasPrefix(f, "gs://") && strings.HasSuffix(f, "/...")) {
+			expanded = append(expanded, f)
+			continue
+		}
+		bucket, path := gcsParts(f)
+
+		iter := storageClient.Bucket(bucket).Objects(ctx, &storage.Query{
+			Prefix: strings.TrimSuffix(path, "..."), // Retain trailing "/" (if present).
+		})
+		for {
+			attrs, err := iter.Next()
+			if err == iterator.Done {
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+			if filepath.Ext(attrs.Name) == ".sha256" {
+				// Ignore sha256 files.
+				continue
+			}
+			expanded = append(expanded, fmt.Sprintf("gs://%s/%s", attrs.Bucket, attrs.Name))
+		}
+	}
+	return expanded, nil
+}
+
+// gcsParts splits a GCS URI (e.g., "gs://bucket/path/to/object") into its bucket and path parts:
+// ("bucket", "path/to/object")
+//
+// It assumes its input a well-formed GCS URI.
+func gcsParts(uri string) (bucket, path string) {
+	parts := strings.SplitN(strings.TrimPrefix(uri, "gs://"), "/", 2)
+	return parts[0], parts[1]
+}
+
+func chooseBestFiles(files []string) []string {
+	// map from basename to filepath/GCS URI.
+	best := make(map[string]string)
+	for _, f := range files {
+		base := filepath.Base(f)
+		if _, ok := best[base]; !ok {
+			best[base] = f
+			continue
+		}
+
+		// Overwrite existing only if the new entry is signed.
+		if strings.HasPrefix(f, "gs://") && strings.Contains(f, "/signed/") {
+			best[base] = f
+		}
+	}
+
+	var out []string
+	for _, path := range best {
+		out = append(out, path)
+	}
+	sort.Strings(out) // for prettier printing.
+	return out
+}
+
+func uploadArtifact(ctx context.Context, storageClient *storage.Client, path string) (checksum string, size int64, err error) {
+	if strings.HasPrefix(path, "gs://") {
+		return uploadArtifactGCS(ctx, storageClient, path)
+	}
+	return uploadArtifactLocal(ctx, storageClient, path)
+}
+
+func uploadArtifactGCS(ctx context.Context, storageClient *storage.Client, path string) (checksum string, size int64, err error) {
+	bucket, path := gcsParts(path)
+	base := filepath.Base(path)
+	src := storageClient.Bucket(bucket).Object(path)
+	dst := storageClient.Bucket(storageBucket).Object(base)
+
+	r, err := storageClient.Bucket(bucket).Object(path + ".sha256").NewReader(ctx)
+	if err != nil {
+		return "", -1, fmt.Errorf("could not get sha256: %v", err)
+	}
+	checksumBytes, err := ioutil.ReadAll(r)
+	if err != nil {
+		return "", -1, fmt.Errorf("could not get sha256: %v", err)
+	}
+	copier := dst.CopierFrom(src)
+	copier.ACL = publicACL
+	attrs, err := copier.Run(ctx)
+	if err != nil {
+		return "", -1, err
+	}
+	return string(checksumBytes), attrs.Size, nil
+}
+
+func uploadArtifactLocal(ctx context.Context, storageClient *storage.Client, path string) (checksum string, size int64, err error) {
+	base := filepath.Base(path)
+
+	fileBytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		return "", -1, fmt.Errorf("ioutil.ReadFile: %v", err)
+	}
+	// Upload file to Google Cloud Storage.
+	if err := putObject(ctx, storageClient, base, fileBytes); err != nil {
+		return "", -1, err
+	}
+	checksum = fmt.Sprintf("%x", sha256.Sum256(fileBytes))
+	return checksum, int64(len(fileBytes)), nil
 }
