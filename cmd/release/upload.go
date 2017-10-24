@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -142,6 +143,18 @@ func upload(files []string) error {
 }
 
 func waitForEdgeCache(uploaded []string) error {
+	if *uploadKick != "" {
+		args := strings.Fields(*uploadKick)
+		log.Printf("Running %v...", args)
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Stdout = os.Stderr // Don't print to stdout.
+		cmd.Stderr = os.Stderr
+		// Don't wait for the command to finish.
+		if err := cmd.Start(); err != nil {
+			log.Printf("Couldn't start edge cache update command: %v", err)
+		}
+	}
+
 	var g errgroup.Group
 	for _, u := range uploaded {
 		fname := u
