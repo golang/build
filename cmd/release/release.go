@@ -174,6 +174,9 @@ var builds = []*Build{
 		Arch:    "arm",
 		Builder: "linux-arm",
 		Goarm:   6, // for compatibility with all Raspberry Pi models.
+		// The tests take too long for the release packaging.
+		// Much of the time the whole buildlet times out.
+		MakeOnly: true,
 	},
 	{
 		OS:      "linux",
