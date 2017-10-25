@@ -242,6 +242,8 @@ func push(args []string) error {
 	}
 
 	var toSend []string
+	notHave := 0
+	const maxNotHavePrint = 5
 	for rel, inf := range local {
 		switch rel {
 		case "VERSION.cache", "src/runtime/internal/sys/zversion.go", "src/cmd/internal/objabi/zbootstrap.go",
@@ -259,7 +261,9 @@ func push(args []string) error {
 		}
 		rem, ok := remote[rel]
 		if !ok {
-			log.Printf("Remote doesn't have %q", rel)
+			if notHave++; notHave < maxNotHavePrint {
+				log.Printf("Remote doesn't have %q", rel)
+			}
 			toSend = append(toSend, rel)
 			continue
 		}
@@ -267,6 +271,9 @@ func push(args []string) error {
 			log.Printf("Remote's %s digest is %q; want %q", rel, rem.Digest(), inf.sha1)
 			toSend = append(toSend, rel)
 		}
+	}
+	if notHave > maxNotHavePrint {
+		log.Printf("Remote doesn't have %d files (only showed %d).", notHave, maxNotHavePrint)
 	}
 	if _, hasVersion := remote["VERSION"]; !hasVersion {
 		log.Printf("Remote lacks a VERSION file; sending a fake one")
