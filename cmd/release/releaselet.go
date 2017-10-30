@@ -47,6 +47,7 @@ func main() {
 		os.RemoveAll("go/pkg/linux_amd64")
 		os.RemoveAll("go/pkg/tool/linux_amd64")
 	}
+	os.RemoveAll("go/pkg/obj")
 	var err error
 	switch runtime.GOOS {
 	case "windows":
