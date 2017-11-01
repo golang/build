@@ -323,7 +323,7 @@ func getConnectedMachines() map[string]*revtype.ReverseBuilder {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		log.Fatal("getting %s: %s", reverseURL, res.Status)
+		log.Fatalf("getting %s: %s", reverseURL, res.Status)
 	}
 	var jres revtype.ReverseBuilderStatus
 	if err := json.NewDecoder(res.Body).Decode(&jres); err != nil {

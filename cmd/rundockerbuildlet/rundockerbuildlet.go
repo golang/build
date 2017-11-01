@@ -41,7 +41,7 @@ func main() {
 
 	key, err := ioutil.ReadFile(*keyFile)
 	if err != nil {
-		log.Fatalf("error reading build key from --key=%s: %v", keyFile, err)
+		log.Fatalf("error reading build key from --key=%s: %v", *keyFile, err)
 	}
 	buildKey = bytes.TrimSpace(key)
 

@@ -1387,7 +1387,7 @@ func startSSHServerLinux() {
 				continue
 			}
 			out, err := exec.Command("/usr/bin/ssh-keygen", "-f", file, "-N", "", "-t", keyType).CombinedOutput()
-			log.Printf("ssh-keygen of type %s: err=%v, %s\n", err, out)
+			log.Printf("ssh-keygen of type %s: err=%v, %s\n", keyType, err, out)
 		}
 	}
 

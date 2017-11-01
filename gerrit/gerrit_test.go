@@ -223,10 +223,10 @@ func TestQueryAccounts(t *testing.T) {
 		t.Errorf("expected accounts length to be 2, got %d", len(info))
 	}
 	if info[0].NumericID != 1 || info[0].Name != "John Doe" || info[0].Email != "john@doe.com" {
-		t.Errorf("expected to match John Doe in account, got %s", info[0])
+		t.Errorf("expected to match John Doe in account, got %v", info[0])
 	}
 	if info[1].NumericID != 2 || info[1].Name != "Jane Doe" || info[1].Email != "jane@doe.com" {
-		t.Errorf("expected to match Jane Doe in account, got %s", info[1])
+		t.Errorf("expected to match Jane Doe in account, got %v", info[1])
 	}
 	if info[0].MoreAccounts {
 		t.Errorf("expected to MoreAccounts to be false for John Doe")
