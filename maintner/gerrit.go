@@ -369,11 +369,20 @@ func lineValue(all, prefix string) (value, rest string) {
 // ChangeID returns the Gerrit "Change-Id: Ixxxx" line's Ixxxx
 // value from the cl.Msg, if any.
 func (cl *GerritCL) ChangeID() string {
-	id, _ := lineValue(cl.Commit.Msg, "Change-Id:")
+	id := cl.Footer("Change-Id")
 	if strings.HasPrefix(id, "I") && len(id) == 41 {
 		return id
 	}
 	return ""
+}
+
+// Footer returns the value of a line of the form <key>: value from
+// the CL’s commit message. The key is case-sensitive.
+// An empty string is returned if there is no value for key.
+func (cl *GerritCL) Footer(key string) string {
+	// TODO: git footers are treated as multimaps. Account for this.
+	v, _ := lineValue(cl.Commit.Msg, key+":")
+	return v
 }
 
 // OwnerName returns the name of the CL’s owner or an empty string on error.

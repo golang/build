@@ -14,6 +14,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -31,8 +32,9 @@ import (
 var (
 	listen          = flag.String("listen", "localhost:6343", "listen address")
 	autocertBucket  = flag.String("autocert-bucket", "", "if non-empty, listen on port 443 and serve a LetsEncrypt TLS cert using this Google Cloud Storage bucket as a cache")
-	githubTokenFile = flag.String("github-token-file", filepath.Join(os.Getenv("HOME"), ".gerritbot", "github-token"), `File to load GitHub token from. File should only contain the token text`)
-	gerritTokenFile = flag.String("gerrit-token-file", filepath.Join(os.Getenv("HOME"), ".gerritbot", "gerrit-token"), `File to load Gerrit token from. File should be of form <git-email>:<token>`)
+	workspace       = flag.String("workspace", defaultWorkspace(), "where git repos and temporary worktrees are created")
+	githubTokenFile = flag.String("github-token-file", filepath.Join(defaultWorkspace(), "github-token"), "file to load GitHub token from; should only contain the token text")
+	gerritTokenFile = flag.String("gerrit-token-file", filepath.Join(defaultWorkspace(), "gerrit-token"), "file to load Gerrit token from; should be of form <git-email>:<token>")
 )
 
 func main() {
@@ -48,14 +50,44 @@ func main() {
 	})
 }
 
+func defaultWorkspace() string {
+	return filepath.Join(home(), ".gerritbot")
+}
+
+func home() string {
+	h := os.Getenv("HOME")
+	if h != "" {
+		return h
+	}
+	u, err := user.Current()
+	if err != nil {
+		log.Fatalf("user.Current(): %v", err)
+	}
+	return u.HomeDir
+}
+
 func handleIndex(w http.ResponseWriter, r *http.Request) {
 	r.Header.Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintln(w, "Hello, GerritBot! 🤖")
 }
 
+const (
+	prefixGitFooterLastRev = "GitHub-Last-Rev"
+	prefixGitFooterPR      = "GitHub-Pull-Request"
+)
+
 var (
-	mu     sync.RWMutex
-	corpus *maintner.Corpus
+	gitHubRepoWhitelist = map[string]bool{
+		"golang/scratch": true,
+	}
+	gerritProjectWhitelist = map[string]bool{
+		"scratch": true,
+	}
+
+	// mu protects the vars below it.
+	mu          sync.RWMutex
+	corpus      *maintner.Corpus
+	importedPRs = map[string]*maintner.GerritCL{} // GitHub owner/repo#n -> Gerrit CL
 )
 
 // initCorpus fetches a full maintner corpus, overwriting any existing data.
@@ -98,18 +130,88 @@ func corpusUpdateLoop(ctx context.Context) {
 }
 
 func checkPullRequests() {
-	mu.RLock()
-	defer mu.RUnlock()
-	repo := corpus.GitHub().Repo("golang", "scratch")
-	if err := repo.ForeachIssue(func(issue *maintner.GitHubIssue) error {
-		if issue.Closed || !issue.PullRequest {
+	mu.Lock()
+	defer mu.Unlock()
+	corpus.Gerrit().ForeachProjectUnsorted(func(p *maintner.GerritProject) error {
+		pname := p.Project()
+		if !gerritProjectWhitelist[pname] {
 			return nil
 		}
-		// TODO(andybons): Process Pull Request.
-		return nil
+		return p.ForeachOpenCL(func(cl *maintner.GerritCL) error {
+			prv := cl.Footer(prefixGitFooterPR)
+			if prv == "" {
+				return nil
+			}
+			importedPRs[prv] = cl
+			return nil
+		})
+	})
+
+	if err := corpus.GitHub().ForeachRepo(func(ghr *maintner.GitHubRepo) error {
+		id := ghr.ID()
+		if !gitHubRepoWhitelist[id.Owner+"/"+id.Repo] {
+			return nil
+		}
+		return ghr.ForeachIssue(func(issue *maintner.GitHubIssue) error {
+			if issue.Closed || !issue.PullRequest {
+				return nil
+			}
+			return processPullRequest(id, issue)
+		})
 	}); err != nil {
-		log.Printf("repo.ForeachIssue(...): %v", err)
+		log.Printf("corpus.GitHub().ForeachRepo(...): %v", err)
 	}
+}
+
+func processPullRequest(id maintner.GitHubRepoID, issue *maintner.GitHubIssue) error {
+	log.Printf("Processing PR %s/%s#%d...", id.Owner, id.Repo, issue.Number)
+	ctx := context.Background()
+	issueNum := int(issue.Number)
+	pr, err := pullRequestInfo(ctx, id, issueNum)
+	if err != nil {
+		return fmt.Errorf("pullRequestInfo(ctx, %q, %d): %v", id, issue.Number, err)
+	}
+	cl := importedPRs[gitHubPRValue(id, issueNum)]
+	if cl == nil {
+		// Import PR to a new Gerrit Change.
+		return nil
+	}
+	if pr.GetCommits() != 1 {
+		// Post message to GitHub (only once) saying to squash.
+		return nil
+	}
+	lastRev := cl.Footer(prefixGitFooterLastRev)
+	if lastRev == "" {
+		log.Printf("Imported CL https://go-review.googlesource.com/q/%s does not have %s footer; skipping",
+			cl.ChangeID(), prefixGitFooterLastRev)
+		return nil
+	}
+	log.Printf("%+v", pr.Head.GetSHA())
+	if pr.Head.GetSHA() == lastRev {
+		log.Printf("Change https://go-review.googlesource.com/q/%s is up to date; nothing to do.",
+			cl.ChangeID())
+		// Nothing to do. Change is up to date.
+		return nil
+	}
+	// Import PR to existing Gerrit Change.
+	return nil
+}
+
+func pullRequestInfo(ctx context.Context, id maintner.GitHubRepoID, number int) (*github.PullRequest, error) {
+	ghc, err := gitHubClient()
+	if err != nil {
+		return nil, fmt.Errorf("gitHubClient(): %v", err)
+	}
+	pr, _, err := ghc.PullRequests.Get(ctx, id.Owner, id.Repo, number)
+	if err != nil {
+		return nil, fmt.Errorf("ghc.PullRequests().Get(ctc, %q, %q, %d): %v",
+			id.Owner, id.Repo, number, err)
+	}
+	return pr, nil
+}
+
+func gitHubPRValue(id maintner.GitHubRepoID, number int) string {
+	return fmt.Sprintf("%s/%s#%d", id.Owner, id.Repo, number)
 }
 
 func postGitHubMessage(ctx context.Context, owner, repo string, issueNum int, msg string) error {
