@@ -80,7 +80,7 @@ type group struct {
 
 type item struct {
 	Issue *maintner.GitHubIssue
-	CLs   []*maintner.GerritCL
+	CLs   []*gerritCL
 }
 
 type itemsBySummary []item
@@ -121,27 +121,63 @@ func (x milestonesByGoVersion) Less(i, j int) bool {
 	return a.title < b.title
 }
 
+var annotationRE = regexp.MustCompile(`(?m)^R=(.+)\b`)
+
+type gerritCL struct {
+	*maintner.GerritCL
+	Closed    bool
+	Milestone string
+}
+
 func (s *server) updateReleaseData() {
 	log.Println("Updating release data ...")
 	s.cMu.Lock()
 	defer s.cMu.Unlock()
 
-	dirToCLs := map[string][]*maintner.GerritCL{}
-	issueToCLs := map[int32][]*maintner.GerritCL{}
+	dirToCLs := map[string][]*gerritCL{}
+	issueToCLs := map[int32][]*gerritCL{}
 	s.corpus.Gerrit().ForeachProjectUnsorted(func(p *maintner.GerritProject) error {
 		p.ForeachOpenCL(func(cl *maintner.GerritCL) error {
 			if strings.HasPrefix(cl.Subject(), prefixDev) {
 				return nil
 			}
+
+			var (
+				closed        bool
+				closedVersion int32
+				milestone     string
+			)
+			for _, m := range cl.Messages {
+				if closed && closedVersion < m.Version {
+					closed = false
+				}
+				sm := annotationRE.FindStringSubmatch(m.Message)
+				if sm == nil {
+					continue
+				}
+				val := sm[1]
+				if val == "close" || val == "closed" {
+					closedVersion = m.Version
+					closed = true
+				} else if milestoneRE.MatchString(val) {
+					milestone = val
+				}
+			}
+			gcl := &gerritCL{
+				GerritCL:  cl,
+				Closed:    closed,
+				Milestone: milestone,
+			}
+
 			for _, r := range cl.GitHubIssueRefs {
-				issueToCLs[r.Number] = append(issueToCLs[r.Number], cl)
+				issueToCLs[r.Number] = append(issueToCLs[r.Number], gcl)
 			}
 			dirs := titleDirs(cl.Subject())
 			if len(dirs) == 0 {
-				dirToCLs[""] = append(dirToCLs[""], cl)
+				dirToCLs[""] = append(dirToCLs[""], gcl)
 			} else {
 				for _, d := range dirs {
-					dirToCLs[d] = append(dirToCLs[d], cl)
+					dirToCLs[d] = append(dirToCLs[d], gcl)
 				}
 			}
 			return nil
@@ -175,7 +211,7 @@ func (s *server) updateReleaseData() {
 }
 
 // requires s.cMu be locked.
-func (s *server) appendOpenIssues(dirToIssues map[string][]*maintner.GitHubIssue, issueToCLs map[int32][]*maintner.GerritCL) {
+func (s *server) appendOpenIssues(dirToIssues map[string][]*maintner.GitHubIssue, issueToCLs map[int32][]*gerritCL) {
 	var issueDirs []string
 	for d := range dirToIssues {
 		issueDirs = append(issueDirs, d)
@@ -222,7 +258,7 @@ func (s *server) appendOpenIssues(dirToIssues map[string][]*maintner.GitHubIssue
 }
 
 // requires s.cMu be locked.
-func (s *server) appendPendingCLs(dirToCLs map[string][]*maintner.GerritCL) {
+func (s *server) appendPendingCLs(dirToCLs map[string][]*gerritCL) {
 	var clDirs []string
 	for d := range dirToCLs {
 		clDirs = append(clDirs, d)
@@ -249,7 +285,7 @@ func (s *server) appendPendingCLs(dirToCLs map[string][]*maintner.GerritCL) {
 }
 
 // requires s.cMu be locked.
-func (s *server) appendPendingProposals(issueToCLs map[int32][]*maintner.GerritCL) {
+func (s *server) appendPendingProposals(issueToCLs map[int32][]*gerritCL) {
 	var proposals group
 	s.repo.ForeachIssue(func(issue *maintner.GitHubIssue) error {
 		if issue.Closed {

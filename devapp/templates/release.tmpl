@@ -66,12 +66,14 @@ a:visited {
           </div>
         {{end}}
         {{range .CLs}}
-          <div class="Item">
-            <span class="Item-num">
-              {{if $i}}⤷{{end}} <a href="https://golang.org/cl/{{.Number}}" target="_blank">CL {{.Number}}</a>
-            </span>
-            <span class="Item-title">{{if $i}}⤷{{end}} {{.Subject}}</span>
-          </div>
+          {{if not .Closed}}
+            <div class="Item">
+              <span class="Item-num">
+                {{if $i}}⤷{{end}} <a href="https://golang.org/cl/{{.Number}}" target="_blank">CL {{.Number}}</a>
+              </span>
+              <span class="Item-title">{{if $i}}⤷{{end}} {{.Subject}}</span>
+            </div>
+          {{end}}
         {{end}}
       {{end}}
     {{end}}
