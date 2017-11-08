@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -127,6 +128,19 @@ type gerritCL struct {
 	*maintner.GerritCL
 	Closed    bool
 	Milestone string
+}
+
+// ReviewURL returns the code review address of cl.
+func (cl *gerritCL) ReviewURL() string {
+	s := cl.Project.Server()
+	if s == "go.googlesource.com" {
+		return fmt.Sprintf("https://golang.org/cl/%d", cl.Number)
+	}
+	subd := strings.TrimSuffix(s, ".googlesource.com")
+	if subd == s {
+		return ""
+	}
+	return fmt.Sprintf("https://%s-review.googlesource.com/%d", subd, cl.Number)
 }
 
 func (s *server) updateReleaseData() {
