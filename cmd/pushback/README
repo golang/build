@@ -1,6 +1,8 @@
-This service runs as a Google Managed VM.
+This service runs on Google App Engine flexible
 
-Deploy with ./deploy.bash.
+Deploy with:
+
+    gcloud app deploy --project symbolic-datum-552 --no-promote app.yaml
 
 Then use the Cloud Console to set the new version as the default,
 and delete the old instance (lest it keep running):
