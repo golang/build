@@ -6,8 +6,8 @@ LABEL maintainer "golang-dev@googlegroups.com"
 
 # BEGIN deps (run `make update-deps` to update)
 
-# Repo cloud.google.com/go at 4b5faa4 (2017-09-21)
-ENV REV=4b5faa47331c50b3f75616de199da5fea9c50bea
+# Repo cloud.google.com/go at ba25346 (2017-10-13)
+ENV REV=ba2534604a6c2b8854d680e50f9132cade92d02f
 RUN go get -d cloud.google.com/go/compute/metadata `#and 6 other pkgs` &&\
     (cd /go/src/cloud.google.com/go && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -16,8 +16,8 @@ ENV REV=130e6b02ab059e7b717a096f397c5b60111cae74
 RUN go get -d github.com/golang/protobuf/proto `#and 6 other pkgs` &&\
     (cd /go/src/github.com/golang/protobuf && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo github.com/google/go-github at 61bf8a6 (2017-09-20)
-ENV REV=61bf8a6a2009b7fb88173ed454c77fb8013b8852
+# Repo github.com/google/go-github at c004bf0 (2017-10-08)
+ENV REV=c004bf0c02fcab9d87a7f2e2f002fd008bf0784c
 RUN go get -d github.com/google/go-github/github &&\
     (cd /go/src/github.com/google/go-github && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -41,18 +41,18 @@ ENV REV=034d17a462f7b2dcd1a4a73553ec5357ff6e6c6e
 RUN go get -d go4.org/types &&\
     (cd /go/src/go4.org && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/crypto at 7d9177d (2017-09-16)
-ENV REV=7d9177d70076375b9a59c8fde23d52d9c4a7ecd5
+# Repo golang.org/x/crypto at 9419663 (2017-09-30)
+ENV REV=9419663f5a44be8b34ca85f08abc5fe1be11f8a3
 RUN go get -d golang.org/x/crypto/acme `#and 2 other pkgs` &&\
     (cd /go/src/golang.org/x/crypto && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/net at 0744d00 (2017-09-22)
-ENV REV=0744d001aa8470aaa53df28d32e5ceeb8af9bd70
+# Repo golang.org/x/net at 01c1902 (2017-11-02)
+ENV REV=01c190206fbdffa42f334f4b2bf2220f50e64920
 RUN go get -d golang.org/x/net/context `#and 8 other pkgs` &&\
     (cd /go/src/golang.org/x/net && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/oauth2 at 13449ad (2017-09-12)
-ENV REV=13449ad91cb26cb47661c1b080790392170385fd
+# Repo golang.org/x/oauth2 at bb50c06 (2017-09-28)
+ENV REV=bb50c06baba3d0c76f9d125c0719093e315b5b44
 RUN go get -d golang.org/x/oauth2 `#and 5 other pkgs` &&\
     (cd /go/src/golang.org/x/oauth2 && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -61,23 +61,23 @@ ENV REV=f52d1811a62927559de87708c8913c1650ce4f26
 RUN go get -d golang.org/x/sync/errgroup &&\
     (cd /go/src/golang.org/x/sync && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/text at 1cbadb4 (2017-09-15)
-ENV REV=1cbadb444a806fd9430d14ad08967ed91da4fa0a
+# Repo golang.org/x/text at c01e476 (2017-10-13)
+ENV REV=c01e4764d870b77f8abe5096ee19ad20d80e8075
 RUN go get -d golang.org/x/text/secure/bidirule `#and 4 other pkgs` &&\
     (cd /go/src/golang.org/x/text && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo google.golang.org/api at 513727a (2017-09-22)
-ENV REV=513727a0f0db0404fd7639c243a29e466bed6ca4
+# Repo google.golang.org/api at b02deba (2017-10-13)
+ENV REV=b02deba8ecc515109e445c1cd35cc85cc08500d8
 RUN go get -d google.golang.org/api/gensupport `#and 9 other pkgs` &&\
     (cd /go/src/google.golang.org/api && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo google.golang.org/genproto at 1e559d0 (2017-09-18)
-ENV REV=1e559d0a00eef8a9a43151db4665280bd8dd5886
+# Repo google.golang.org/genproto at f676e0f (2017-10-03)
+ENV REV=f676e0f3ac6395ff1a529ae59a6670878a8371a6
 RUN go get -d google.golang.org/genproto/googleapis/api/annotations `#and 3 other pkgs` &&\
     (cd /go/src/google.golang.org/genproto && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo google.golang.org/grpc at d4b75eb (2017-09-21)
-ENV REV=d4b75ebd4f9f8c4a2b1cdadbdbe0d7920431ccca
+# Repo google.golang.org/grpc at c209cdf (2017-10-12)
+ENV REV=c209cdff16049a924bef4aa5c6f7588f0b42b2fa
 RUN go get -d google.golang.org/grpc `#and 17 other pkgs` &&\
     (cd /go/src/google.golang.org/grpc && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
