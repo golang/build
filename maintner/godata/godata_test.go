@@ -60,6 +60,42 @@ func TestGerritForeachNonChangeRef(t *testing.T) {
 	})
 }
 
+// In the past, some Gerrit ref changes came before the git in the log.
+// This tests that we handle Gerrit meta changes that happen before
+// the referenced git commit is known.
+func TestGerritOutOfOrderMetaChanges(t *testing.T) {
+	c := getGoData(t)
+
+	// Merged:
+	goProj := c.Gerrit().Project("go.googlesource.com", "go")
+	cl := goProj.CL(38634)
+	if cl == nil {
+		t.Fatal("CL 38634 not found")
+	}
+	if g, w := cl.Status, "merged"; g != w {
+		t.Errorf("CL status = %q; want %q", g, w)
+	}
+
+	// Deleted:
+	gddo := c.Gerrit().Project("go.googlesource.com", "gddo")
+	cl = gddo.CL(37452)
+	if cl == nil {
+		t.Fatal("CL 37452 not found")
+	}
+	t.Logf("Got: %+v", *cl)
+}
+
+func TestGerritSkipPrivateCLs(t *testing.T) {
+	c := getGoData(t)
+	proj := c.Gerrit().Project("go.googlesource.com", "gddo")
+	proj.ForeachOpenCL(func(cl *maintner.GerritCL) error {
+		if cl.Number == 37452 {
+			t.Error("unexpected private CL 37452")
+		}
+		return nil
+	})
+}
+
 func TestGitAncestor(t *testing.T) {
 	c := getGoData(t)
 	tests := []struct {

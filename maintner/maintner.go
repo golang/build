@@ -265,6 +265,11 @@ func (c *Corpus) UpdateWithLocker(ctx context.Context, lk sync.Locker) error {
 	return err
 }
 
+type noopLocker struct{}
+
+func (noopLocker) Lock()   {}
+func (noopLocker) Unlock() {}
+
 // lk optionally specifies a locker to use while processing mutations.
 func (c *Corpus) update(ctx context.Context, lk sync.Locker) error {
 	src := c.mutationSource
@@ -272,6 +277,9 @@ func (c *Corpus) update(ctx context.Context, lk sync.Locker) error {
 	done := ctx.Done()
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if lk == nil {
+		lk = noopLocker{}
+	}
 	for {
 		select {
 		case <-done:
@@ -285,16 +293,15 @@ func (c *Corpus) update(ctx context.Context, lk sync.Locker) error {
 			}
 			if e.End {
 				c.didInit = true
+				lk.Lock()
+				c.finishProcessing()
+				lk.Unlock()
 				log.Printf("Reloaded data from log %T.", src)
 				return nil
 			}
-			if lk != nil {
-				lk.Lock()
-			}
+			lk.Lock()
 			c.processMutationLocked(e.Mutation)
-			if lk != nil {
-				lk.Unlock()
-			}
+			lk.Unlock()
 		}
 	}
 }
@@ -332,6 +339,14 @@ func (c *Corpus) processMutationLocked(m *maintpb.Mutation) {
 	if gm := m.Gerrit; gm != nil {
 		c.processGerritMutation(gm)
 	}
+}
+
+// finishProcessing fixes up invariants and data structures before
+// returning the Corpus from the Update loop back to the user.
+//
+// c.mu must be held.
+func (c *Corpus) finishProcessing() {
+	c.gerrit.finishProcessing()
 }
 
 // SyncLoop runs forever (until an error or context expiration) and

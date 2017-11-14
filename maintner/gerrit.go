@@ -97,6 +97,7 @@ type GerritProject struct {
 	need            map[GitHash]bool
 	commit          map[GitHash]*GitCommit
 	numLabelChanges int // meta commits with "Label:" updates
+	dirtyCL         map[*GerritCL]struct{}
 
 	// ref are the non-change refs with keys like "HEAD",
 	// "refs/heads/master", "refs/tags/v0.8.0", etc.
@@ -176,7 +177,7 @@ func (gp *GerritProject) ForeachNonChangeRef(fn func(ref string, hash GitHash) e
 func (gp *GerritProject) ForeachOpenCL(fn func(*GerritCL) error) error {
 	var s []*GerritCL
 	for _, cl := range gp.cls {
-		if cl.Status != "new" {
+		if cl.Status != "new" || cl.Private {
 			continue
 		}
 		s = append(s, cl)
@@ -267,6 +268,13 @@ type GerritCL struct {
 
 	// Status will be "merged", "abandoned", "new", or "draft".
 	Status string
+
+	// Private indicates whether this is a private CL.
+	// Empirically, it seems that one meta commit of private CLs is
+	// sometimes visible to everybody, even when the rest of the details
+	// and later meta commits are not. In general, if you see this
+	// being set to true, treat this CL as if it doesn't exist.
+	Private bool
 
 	// GitHubIssueRefs are parsed references to GitHub issues.
 	GitHubIssueRefs []GitHubIssueRef
@@ -533,7 +541,6 @@ func getGerritStatus(commit *GitCommit) string {
 	return ""
 }
 
-var errStopIteration = errors.New("stop iteration")
 var errTooManyParents = errors.New("maintner: too many commit parents")
 
 // foreachCommitParent walks a commit's parents, calling f for each commit until
@@ -643,6 +650,20 @@ func reverseGerritMessages(ss []*GerritMessage) {
 func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 	c := gp.gerrit.c
 
+	for _, commitp := range gm.Commits {
+		gc, err := c.processGitCommit(commitp)
+		if err != nil {
+			gp.logf("error processing commit %q: %v", commitp.Sha1, err)
+			continue
+		}
+		gp.commit[gc.Hash] = gc
+		delete(gp.need, gc.Hash)
+
+		for _, p := range gc.Parents {
+			gp.markNeededCommit(p.Hash)
+		}
+	}
+
 	for _, refp := range gm.Refs {
 		refName := refp.Ref
 		hash := c.gitHashFromHexStr(refp.Sha1)
@@ -675,50 +696,10 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 		clv := gerritCLVersion{int32(clNum64), version}
 		gp.remote[clv] = hash
 		cl := gp.getOrCreateCL(clv.CLNumber)
-		if clv.Version == 0 {
-			oldMeta := cl.Meta
+
+		if clv.Version == 0 { // is a meta commit
+			gp.noteDirtyCL(cl) // needs processing at end of sync
 			cl.Meta = gc
-			foundStatus := ""
-			// Walk from the newest commit backwards, so we store the messages
-			// in reverse order and then flip the array before setting on the
-			// GerritCL object.
-			var backwardMessages []*GerritMessage
-			var backwardMeta []*GitCommit
-			gp.foreachCommitParent(cl.Meta.Hash, func(gc *GitCommit) error {
-				if strings.Contains(gc.Msg, "\nLabel: ") {
-					gp.numLabelChanges++
-				}
-				if oldMeta != nil && gc.Hash == oldMeta.Hash {
-					return errStopIteration
-				}
-				if gc.GerritMeta == nil {
-					gc.GerritMeta = &GerritMeta{
-						Commit: gc,
-						CL:     cl,
-					}
-				}
-				backwardMeta = append(backwardMeta, gc)
-				if status := getGerritStatus(gc); status != "" && foundStatus == "" {
-					foundStatus = status
-				}
-				if message := gp.getGerritMessage(gc); message != nil {
-					backwardMessages = append(backwardMessages, message)
-				}
-				return nil
-			})
-			if foundStatus != "" {
-				cl.Status = foundStatus
-			} else if cl.Status == "" {
-				cl.Status = "new"
-			}
-			if cl.Created.IsZero() || gc.CommitTime.Before(cl.Created) {
-				cl.Created = gc.CommitTime
-			}
-			reverseGerritMessages(backwardMessages)
-			cl.Messages = append(cl.Messages, backwardMessages...)
-			for i := len(backwardMeta) - 1; i >= 0; i-- {
-				cl.MetaCommits = append(cl.MetaCommits, backwardMeta[i])
-			}
 		} else {
 			cl.Commit = gc
 			cl.Version = clv.Version
@@ -728,19 +709,87 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 			gp.logf("Ref %+v => %v", clv, hash)
 		}
 	}
+}
 
-	for _, commitp := range gm.Commits {
-		gc, err := c.processGitCommit(commitp)
-		if err != nil {
-			gp.logf("error processing commit %q: %v", commitp.Sha1, err)
-			continue
-		}
-		gp.commit[gc.Hash] = gc
-		delete(gp.need, gc.Hash)
+// noteDirtyCL notes a CL that needs further processing before the corpus
+// is returned to the user.
+//
+// called with Corpus.mu Locked
+func (gp *GerritProject) noteDirtyCL(cl *GerritCL) {
+	if gp.dirtyCL == nil {
+		gp.dirtyCL = make(map[*GerritCL]struct{})
+	}
+	gp.dirtyCL[cl] = struct{}{}
+}
 
-		for _, p := range gc.Parents {
-			gp.markNeededCommit(p.Hash)
+// called with Corpus.mu Locked
+func (gp *GerritProject) finishProcessing() {
+	for cl := range gp.dirtyCL {
+		gp.finishProcessingCL(cl)
+	}
+	gp.dirtyCL = nil
+}
+
+// called with Corpus.mu Locked
+func (gp *GerritProject) finishProcessingCL(cl *GerritCL) {
+	c := gp.gerrit.c
+
+	labelChanges := 0
+	foundStatus := ""
+
+	// Walk from the newest commit backwards, so we store the messages
+	// in reverse order and then flip the array before setting on the
+	// GerritCL object.
+	var backwardMessages []*GerritMessage
+	var backwardMeta []*GitCommit
+
+	gc, ok := c.gitCommit[cl.Meta.Hash]
+	if !ok {
+		log.Printf("WARNING: GerritProject(%q).finishProcessingCL failed to find CL %v hash %s",
+			gp.ServerSlashProject(), cl.Number, cl.Meta.Hash)
+		return
+	}
+
+	gp.foreachCommitParent(cl.Meta.Hash, func(gc *GitCommit) error {
+		if strings.Contains(gc.Msg, "\nLabel: ") {
+			labelChanges++
 		}
+		if strings.Contains(gc.Msg, "\nPrivate: true\n") {
+			cl.Private = true
+		}
+		if gc.GerritMeta == nil {
+			gc.GerritMeta = &GerritMeta{
+				Commit: gc,
+				CL:     cl,
+			}
+		}
+		if foundStatus == "" {
+			foundStatus = getGerritStatus(gc)
+		}
+		backwardMeta = append(backwardMeta, gc)
+		if message := gp.getGerritMessage(gc); message != nil {
+			backwardMessages = append(backwardMessages, message)
+		}
+		return nil
+	})
+
+	gp.numLabelChanges = labelChanges
+
+	if foundStatus != "" {
+		cl.Status = foundStatus
+	} else if cl.Status == "" {
+		cl.Status = "new"
+	}
+
+	if cl.Created.IsZero() || gc.CommitTime.Before(cl.Created) {
+		cl.Created = gc.CommitTime
+	}
+	reverseGerritMessages(backwardMessages)
+	cl.Messages = backwardMessages
+
+	cl.MetaCommits = cl.MetaCommits[:0]
+	for i := len(backwardMeta) - 1; i >= 0; i-- {
+		cl.MetaCommits = append(cl.MetaCommits, backwardMeta[i])
 	}
 }
 
@@ -1112,6 +1161,14 @@ func (g *Gerrit) check() error {
 		}
 	}
 	return nil
+}
+
+// called with its Corpus.mu locked. (called by
+// Corpus.finishProcessing; read comment there)
+func (g *Gerrit) finishProcessing() {
+	for _, gp := range g.projects {
+		gp.finishProcessing()
+	}
 }
 
 func (gp *GerritProject) check() error {
