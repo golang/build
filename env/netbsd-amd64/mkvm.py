@@ -57,6 +57,7 @@ commands = [
 EOF""",
     """cat > /etc/ifconfig.vioif0 << EOF
 !dhcpcd
+mtu 1460
 EOF""",
     "dhcpcd",
     "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add bash curl" % (arch, release),
