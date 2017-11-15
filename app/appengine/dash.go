@@ -202,4 +202,5 @@ var hiddenBranches = map[string]bool{
 	"release-branch.go1.4": true,
 	"release-branch.go1.5": true,
 	"release-branch.go1.6": true,
+	"release-branch.go1.7": true,
 }
