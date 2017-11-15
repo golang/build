@@ -1006,7 +1006,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "linux-arm",
 		HostType:          "host-linux-arm-scaleway",
-		TryBot:            true,
+		TryBot:            false, // Issue 22748, Issue 22749
 		FlakyNet:          true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 7,
