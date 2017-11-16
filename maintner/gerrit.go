@@ -371,7 +371,7 @@ func lineValue(all, prefix string) (value, rest string) {
 // ChangeID returns the Gerrit "Change-Id: Ixxxx" line's Ixxxx
 // value from the cl.Msg, if any.
 func (cl *GerritCL) ChangeID() string {
-	id := cl.Footer("Change-Id")
+	id := cl.Footer("Change-Id:")
 	if strings.HasPrefix(id, "I") && len(id) == 41 {
 		return id
 	}
@@ -379,11 +379,15 @@ func (cl *GerritCL) ChangeID() string {
 }
 
 // Footer returns the value of a line of the form <key>: value from
-// the CL’s commit message. The key is case-sensitive.
+// the CL’s commit message. The key is case-sensitive and must end in
+// a colon.
 // An empty string is returned if there is no value for key.
 func (cl *GerritCL) Footer(key string) string {
+	if len(key) == 0 || key[len(key)-1] != ':' {
+		panic("Footer key does not end in colon")
+	}
 	// TODO: git footers are treated as multimaps. Account for this.
-	v, _ := lineValue(cl.Commit.Msg, key+":")
+	v, _ := lineValue(cl.Commit.Msg, key)
 	return v
 }
 
@@ -1174,6 +1178,9 @@ func (g *Gerrit) check() error {
 // called with its Corpus.mu locked. (called by
 // Corpus.finishProcessing; read comment there)
 func (g *Gerrit) finishProcessing() {
+	if g == nil {
+		return
+	}
 	for _, gp := range g.projects {
 		gp.finishProcessing()
 	}
@@ -1192,7 +1199,7 @@ func (gp *GerritProject) check() error {
 		}
 		for _, pc := range gc.Parents {
 			if _, ok := gp.commit[pc.Hash]; !ok {
-				return fmt.Errorf("git commit %q exits but its parent %q does not", gc.Hash, pc.Hash)
+				return fmt.Errorf("git commit %q exists but its parent %q does not", gc.Hash, pc.Hash)
 			}
 		}
 	}

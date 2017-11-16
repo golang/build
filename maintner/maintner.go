@@ -115,6 +115,21 @@ func (c *Corpus) Check() error {
 	if err := c.Gerrit().check(); err != nil {
 		return fmt.Errorf("gerrit: %v", err)
 	}
+
+	for hash, gc := range c.gitCommit {
+		if gc.Committer == placeholderCommitter {
+			return fmt.Errorf("corpus git commit %v has placeholder committer", hash)
+		}
+		if gc.Hash != hash {
+			return fmt.Errorf("git commit for key %q had GitCommit.Hash %q", hash, gc.Hash)
+		}
+		for _, pc := range gc.Parents {
+			if _, ok := c.gitCommit[pc.Hash]; !ok {
+				return fmt.Errorf("git commit %q exists but its parent %q does not", gc.Hash, pc.Hash)
+			}
+		}
+	}
+
 	return nil
 }
 

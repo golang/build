@@ -99,7 +99,7 @@ func (gc *GitCommit) hasAncestor(ancestor *GitCommit, checked map[*GitCommit]boo
 			panic("nil parent")
 		}
 		if pc.Committer == placeholderCommitter {
-			panic("found placeholder")
+			log.Printf("WARNING: hasAncestor(%q, %q) found parent %q with placeholder parent", gc.Hash, ancestor.Hash, pc.Hash)
 		}
 		if pc.Hash == ancestor.Hash || pc.hasAncestor(ancestor, checked) {
 			checked[gc] = true

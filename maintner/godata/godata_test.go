@@ -108,6 +108,12 @@ func TestGitAncestor(t *testing.T) {
 		{"8f06e217eac10bae4993ca371ade35fecd26270e", "22f1b56dab29d397d2bdbdd603d85e60fb678089", true},
 		{"22f1b56dab29d397d2bdbdd603d85e60fb678089", "8f06e217eac10bae4993ca371ade35fecd26270e", false},
 
+		// Was crashing. Issue 22753.
+		{"3a181dc7bc8fd0c61d6090a85f87c934f1874802", "f65abf6ddc8d1f3d403a9195fd74eaffa022b07f", true},
+		// The reverse of the above, to try to reproduce the
+		// panic if I got the order backwards:
+		{"f65abf6ddc8d1f3d403a9195fd74eaffa022b07f", "3a181dc7bc8fd0c61d6090a85f87c934f1874802", false},
+
 		// Same on both sides:
 		{"0bb0b61d6a85b2a1a33dcbc418089656f2754d32", "0bb0b61d6a85b2a1a33dcbc418089656f2754d32", false},
 		{"3b5637ff2bd5c03479780995e7a35c48222157c1", "3b5637ff2bd5c03479780995e7a35c48222157c1", false},
