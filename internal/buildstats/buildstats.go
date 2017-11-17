@@ -70,7 +70,7 @@ func SyncBuilds(ctx context.Context, env *buildenv.Environment) error {
 		}
 	}
 
-	q := bq.Query("SELECT MAX(EndTime) FROM [" + env.ProjectName + ":builds.Builds]")
+	q := bq.Query("SELECT MAX(EndTime) FROM builds.Builds")
 	it, err := q.Read(ctx)
 	if err != nil {
 		return fmt.Errorf("Read: %v", err)
@@ -163,7 +163,9 @@ func SyncBuilds(ctx context.Context, env *buildenv.Environment) error {
 		}
 		err = up.Put(ctx, rows)
 		log.Printf("buildstats: Build sync put %d rows, up to %v. error = %v", len(rows), maxPut, err)
-		return err
+		if err != nil {
+			return err
+		}
 	}
 }
 
@@ -214,7 +216,7 @@ func SyncSpans(ctx context.Context, env *buildenv.Environment) error {
 		}
 	}
 
-	q := bq.Query("SELECT MAX(EndTime) FROM [" + env.ProjectName + ":builds.Spans]")
+	q := bq.Query("SELECT MAX(EndTime) FROM builds.Spans")
 	it, err := q.Read(ctx)
 	if err != nil {
 		return fmt.Errorf("Read: %v", err)

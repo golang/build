@@ -169,9 +169,16 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 			// logs a lot. Don't count these resources, I
 			// assume. We weren't before (when the
 			// log.Printf below was firing) anyway.
+			// TODO: clean these in cleanupOldPods once they're
+			// over a certain age (few hours?). why aren't they already?
+			continue
+		case api.PodFailed:
+			// These were also spamming logs.
+			// TODO: clean these in cleanupOldPods once they're
+			// over a certain age (few days?).
 			continue
 		default:
-			log.Printf("Pod in unknown state (%q); ignoring", pod.Status.Phase)
+			log.Printf("Pod %s in unknown state (%q); ignoring", pod.ObjectMeta.Name, pod.Status.Phase)
 			continue
 		}
 		for _, c := range pod.Spec.Containers {
