@@ -96,7 +96,7 @@ type GerritProject struct {
 	remote          map[gerritCLVersion]GitHash
 	need            map[GitHash]bool
 	commit          map[GitHash]*GitCommit
-	numLabelChanges int // meta commits with "Label:" updates
+	numLabelChanges int // incremented (too many times) by meta commits with "Label:" updates
 	dirtyCL         map[*GerritCL]struct{}
 
 	// ref are the non-change refs with keys like "HEAD",
@@ -120,11 +120,13 @@ func (gp *GerritProject) gitDir() string {
 	return filepath.Join(gp.gerrit.c.getDataDir(), url.PathEscape(gp.proj))
 }
 
-// NumLabelChanges returns the number of times vote labels have
+// NumLabelChanges is an inaccurate count the number of times vote labels have
 // changed in this project. This number is monotonically increasing.
-// This is not guaranteed to be accurate; it might overcount.
+// This is not guaranteed to be accurate; it definitely overcounts, but it
+// at least increments when changes are made.
 // It will not undercount.
 func (gp *GerritProject) NumLabelChanges() int {
+	// TODO: rename this method.
 	return gp.numLabelChanges
 }
 
@@ -743,7 +745,6 @@ func (gp *GerritProject) finishProcessing() {
 func (gp *GerritProject) finishProcessingCL(cl *GerritCL) {
 	c := gp.gerrit.c
 
-	labelChanges := 0
 	foundStatus := ""
 
 	// Walk from the newest commit backwards, so we store the messages
@@ -761,7 +762,7 @@ func (gp *GerritProject) finishProcessingCL(cl *GerritCL) {
 
 	gp.foreachCommitParent(cl.Meta.Hash, func(gc *GitCommit) error {
 		if strings.Contains(gc.Msg, "\nLabel: ") {
-			labelChanges++
+			gp.numLabelChanges++
 		}
 		if strings.Contains(gc.Msg, "\nPrivate: true\n") {
 			cl.Private = true
@@ -781,8 +782,6 @@ func (gp *GerritProject) finishProcessingCL(cl *GerritCL) {
 		}
 		return nil
 	})
-
-	gp.numLabelChanges = labelChanges
 
 	if foundStatus != "" {
 		cl.Status = foundStatus
