@@ -313,6 +313,7 @@ func (c *Corpus) addMutation(m *maintpb.Mutation) {
 	}
 	c.mu.Lock()
 	c.processMutationLocked(m)
+	c.finishProcessing()
 	c.mu.Unlock()
 
 	if c.mutationLogger == nil {

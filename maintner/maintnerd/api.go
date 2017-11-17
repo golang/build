@@ -141,6 +141,7 @@ func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkR
 
 	now := time.Now()
 	const maxPollInterval = 15 * time.Second
+
 	if tryCache.val != nil &&
 		(tryCache.forNumChanges == sumChanges ||
 			tryCache.lastPoll.After(now.Add(-maxPollInterval))) {
@@ -198,5 +199,9 @@ func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkR
 		return res.Waiting[i].Commit < res.Waiting[j].Commit
 	})
 	tryCache.val = res
+
+	log.Printf("maintnerd: GetTryWork: for label changes of %d, cached %d trywork items.",
+		sumChanges, len(res.Waiting))
+
 	return res, nil
 }
