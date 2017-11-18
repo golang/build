@@ -895,10 +895,15 @@ func init() {
 		numTestHelpers: 6, // As of 2017/05/16, 3 helpers are needed for tests and 3 more for benchmarks to complete in 5m.
 		RunBench:       true,
 	})
-	addBuilder(BuildConfig{
-		Name:     "linux-amd64-alpine",
-		HostType: "host-linux-x86-alpine",
-	})
+
+	const testAlpine = false // Issue 22689 (hide all red builders), Issue 19938 (get Alpine passing)
+	if testAlpine {
+		addBuilder(BuildConfig{
+			Name:     "linux-amd64-alpine",
+			HostType: "host-linux-x86-alpine",
+		})
+	}
+
 	// Add the -vetall builder. The builder name suffix "-vetall" is recognized by cmd/dist/test.go
 	// to only run the "go vet std cmd" test and no others.
 	addBuilder(BuildConfig{
