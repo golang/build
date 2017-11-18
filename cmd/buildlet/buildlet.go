@@ -715,6 +715,13 @@ func untar(r io.Reader, dir string) (err error) {
 			log.Printf("tar reading error: %v", err)
 			return badRequest("tar error: " + err.Error())
 		}
+		if f.Typeflag == tar.TypeXGlobalHeader {
+			// golang.org/issue/22748: git archive exports
+			// a global header ('g') which after Go 1.9
+			// (for a bit?) contained an empty filename.
+			// Ignore it.
+			continue
+		}
 		if !validRelPath(f.Name) {
 			return badRequest(fmt.Sprintf("tar file contained invalid name %q", f.Name))
 		}
