@@ -32,17 +32,18 @@ import (
 var (
 	listen          = flag.String("listen", "localhost:6343", "listen address")
 	autocertBucket  = flag.String("autocert-bucket", "", "if non-empty, listen on port 443 and serve a LetsEncrypt TLS cert using this Google Cloud Storage bucket as a cache")
-	workspace       = flag.String("workspace", defaultWorkspace(), "where git repos and temporary worktrees are created")
-	githubTokenFile = flag.String("github-token-file", filepath.Join(defaultWorkspace(), "github-token"), "file to load GitHub token from; should only contain the token text")
-	gerritTokenFile = flag.String("gerrit-token-file", filepath.Join(defaultWorkspace(), "gerrit-token"), "file to load Gerrit token from; should be of form <git-email>:<token>")
+	workdir         = flag.String("workdir", defaultWorkdir(), "where git repos and temporary worktrees are created")
+	githubTokenFile = flag.String("github-token-file", filepath.Join(defaultWorkdir(), "github-token"), "file to load GitHub token from; should only contain the token text")
+	gerritTokenFile = flag.String("gerrit-token-file", filepath.Join(defaultWorkdir(), "gerrit-token"), "file to load Gerrit token from; should be of form <git-email>:<token>")
 )
 
 func main() {
 	flag.Parse()
 
 	ctx := context.Background()
-	initCorpus(ctx)
-	go corpusUpdateLoop(ctx)
+	b := newBot()
+	b.initCorpus(ctx)
+	go b.corpusUpdateLoop(ctx)
 
 	https.ListenAndServe(http.HandlerFunc(handleIndex), &https.Options{
 		Addr:                *listen,
@@ -50,7 +51,8 @@ func main() {
 	})
 }
 
-func defaultWorkspace() string {
+func defaultWorkdir() string {
+	// TODO(andybons): Use os.UserCacheDir (issue 22536) when it's available.
 	return filepath.Join(home(), ".gerritbot")
 }
 
@@ -72,30 +74,41 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 const (
+	// Footer that contains the last revision from GitHub that was successfully
+	// imported to Gerrit.
 	prefixGitFooterLastRev = "GitHub-Last-Rev"
-	prefixGitFooterPR      = "GitHub-Pull-Request"
+
+	// Footer containing the GitHub PR associated with the Gerrit Change.
+	prefixGitFooterPR = "GitHub-Pull-Request"
 )
 
 var (
-	gitHubRepoWhitelist = map[string]bool{
+	// GitHub repos we accept PRs for, mirroring them into Gerrit CLs.
+	githubRepoWhitelist = map[string]bool{
 		"golang/scratch": true,
 	}
+	// Gerrit projects we accept PRs for.
 	gerritProjectWhitelist = map[string]bool{
 		"scratch": true,
 	}
-
-	// mu protects the vars below it.
-	mu          sync.RWMutex
-	corpus      *maintner.Corpus
-	importedPRs = map[string]*maintner.GerritCL{} // GitHub owner/repo#n -> Gerrit CL
 )
 
+type bot struct {
+	sync.RWMutex
+	corpus      *maintner.Corpus
+	importedPRs map[string]*maintner.GerritCL // GitHub owner/repo#n -> Gerrit CL
+}
+
+func newBot() *bot {
+	return &bot{importedPRs: map[string]*maintner.GerritCL{}}
+}
+
 // initCorpus fetches a full maintner corpus, overwriting any existing data.
-func initCorpus(ctx context.Context) error {
-	mu.Lock()
-	defer mu.Unlock()
+func (b *bot) initCorpus(ctx context.Context) error {
+	b.Lock()
+	defer b.Unlock()
 	var err error
-	corpus, err = godata.Get(ctx)
+	b.corpus, err = godata.Get(ctx)
 	if err != nil {
 		return fmt.Errorf("godata.Get: %v", err)
 	}
@@ -104,15 +117,15 @@ func initCorpus(ctx context.Context) error {
 
 // corpusUpdateLoop continuously updates the server’s corpus until ctx’s Done
 // channel is closed.
-func corpusUpdateLoop(ctx context.Context) {
+func (b *bot) corpusUpdateLoop(ctx context.Context) {
 	log.Println("Starting corpus update loop ...")
 	for {
-		checkPullRequests()
-		err := corpus.UpdateWithLocker(ctx, &mu)
+		b.checkPullRequests()
+		err := b.corpus.UpdateWithLocker(ctx, &b.RWMutex)
 		if err != nil {
 			if err == maintner.ErrSplit {
 				log.Println("Corpus out of sync. Re-fetching corpus.")
-				initCorpus(ctx)
+				b.initCorpus(ctx)
 			} else {
 				log.Printf("corpus.Update: %v; sleeping 15s", err)
 				time.Sleep(15 * time.Second)
@@ -129,10 +142,10 @@ func corpusUpdateLoop(ctx context.Context) {
 	}
 }
 
-func checkPullRequests() {
-	mu.Lock()
-	defer mu.Unlock()
-	corpus.Gerrit().ForeachProjectUnsorted(func(p *maintner.GerritProject) error {
+func (b *bot) checkPullRequests() {
+	b.Lock()
+	defer b.Unlock()
+	b.corpus.Gerrit().ForeachProjectUnsorted(func(p *maintner.GerritProject) error {
 		pname := p.Project()
 		if !gerritProjectWhitelist[pname] {
 			return nil
@@ -142,36 +155,57 @@ func checkPullRequests() {
 			if prv == "" {
 				return nil
 			}
-			importedPRs[prv] = cl
+			b.importedPRs[prv] = cl
 			return nil
 		})
 	})
 
-	if err := corpus.GitHub().ForeachRepo(func(ghr *maintner.GitHubRepo) error {
+	if err := b.corpus.GitHub().ForeachRepo(func(ghr *maintner.GitHubRepo) error {
 		id := ghr.ID()
-		if !gitHubRepoWhitelist[id.Owner+"/"+id.Repo] {
+		if !githubRepoWhitelist[id.Owner+"/"+id.Repo] {
 			return nil
 		}
 		return ghr.ForeachIssue(func(issue *maintner.GitHubIssue) error {
 			if issue.Closed || !issue.PullRequest {
 				return nil
 			}
-			return processPullRequest(id, issue)
+			return b.processPullRequest(&prInfo{
+				owner:  id.Owner,
+				repo:   id.Repo,
+				number: int(issue.Number),
+			})
 		})
 	}); err != nil {
 		log.Printf("corpus.GitHub().ForeachRepo(...): %v", err)
 	}
 }
 
-func processPullRequest(id maintner.GitHubRepoID, issue *maintner.GitHubIssue) error {
-	log.Printf("Processing PR %s/%s#%d...", id.Owner, id.Repo, issue.Number)
+type prInfo struct {
+	owner, repo string
+	number      int
+}
+
+// String returns text referencing a Pull Request that will be automatically
+// converted into a link by GitHub.
+func (i *prInfo) String() string {
+	return fmt.Sprintf("%s/%s#%d", i.owner, i.repo, i.number)
+}
+
+// processPullRequest is the entry point to the state machine of mirroring a PR
+// with Gerrit. PRs that are up to date with their respective Gerrit changes are
+// skipped, and any with a squashed commit SHA unequal to its Gerrit equivalent
+// are imported. Those that have no associated Gerrit changes will result in one
+// being created.
+// TODO(andybons): Document comment mirroring once that is implemented.
+// b's RWMutex read-write lock must be held.
+func (b *bot) processPullRequest(info *prInfo) error {
 	ctx := context.Background()
-	issueNum := int(issue.Number)
-	pr, err := pullRequestInfo(ctx, id, issueNum)
+	log.Printf("Processing PR %s...", info)
+	pr, err := getFullPR(ctx, info)
 	if err != nil {
-		return fmt.Errorf("pullRequestInfo(ctx, %q, %d): %v", id, issue.Number, err)
+		return fmt.Errorf("getFullPR(ctx, %q): %v", info, err)
 	}
-	cl := importedPRs[gitHubPRValue(id, issueNum)]
+	cl := b.importedPRs[info.String()]
 	if cl == nil {
 		// Import PR to a new Gerrit Change.
 		return nil
@@ -197,25 +231,21 @@ func processPullRequest(id maintner.GitHubRepoID, issue *maintner.GitHubIssue) e
 	return nil
 }
 
-func pullRequestInfo(ctx context.Context, id maintner.GitHubRepoID, number int) (*github.PullRequest, error) {
-	ghc, err := gitHubClient()
+func getFullPR(ctx context.Context, info *prInfo) (*github.PullRequest, error) {
+	ghc, err := githubClient()
 	if err != nil {
-		return nil, fmt.Errorf("gitHubClient(): %v", err)
+		return nil, fmt.Errorf("githubClient(): %v", err)
 	}
-	pr, _, err := ghc.PullRequests.Get(ctx, id.Owner, id.Repo, number)
+	pr, _, err := ghc.PullRequests.Get(ctx, info.owner, info.repo, info.number)
 	if err != nil {
 		return nil, fmt.Errorf("ghc.PullRequests().Get(ctc, %q, %q, %d): %v",
-			id.Owner, id.Repo, number, err)
+			info.owner, info.repo, info.number, err)
 	}
 	return pr, nil
 }
 
-func gitHubPRValue(id maintner.GitHubRepoID, number int) string {
-	return fmt.Sprintf("%s/%s#%d", id.Owner, id.Repo, number)
-}
-
 func postGitHubMessage(ctx context.Context, owner, repo string, issueNum int, msg string) error {
-	c, err := gitHubClient()
+	c, err := githubClient()
 	if err != nil {
 		return fmt.Errorf("getGitHubClient(): %v", err)
 	}
@@ -226,8 +256,8 @@ func postGitHubMessage(ctx context.Context, owner, repo string, issueNum int, ms
 	return nil
 }
 
-func gitHubClient() (*github.Client, error) {
-	token, err := gitHubToken()
+func githubClient() (*github.Client, error) {
+	token, err := githubToken()
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +266,7 @@ func gitHubClient() (*github.Client, error) {
 	return github.NewClient(tc), nil
 }
 
-func gitHubToken() (string, error) {
+func githubToken() (string, error) {
 	if metadata.OnGCE() {
 		token, err := metadata.ProjectAttributeValue("maintner-github-token")
 		if err == nil {
