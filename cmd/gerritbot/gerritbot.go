@@ -13,7 +13,9 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -76,10 +78,10 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 const (
 	// Footer that contains the last revision from GitHub that was successfully
 	// imported to Gerrit.
-	prefixGitFooterLastRev = "GitHub-Last-Rev"
+	prefixGitFooterLastRev = "GitHub-Last-Rev:"
 
 	// Footer containing the GitHub PR associated with the Gerrit Change.
-	prefixGitFooterPR = "GitHub-Pull-Request"
+	prefixGitFooterPR = "GitHub-Pull-Request:"
 )
 
 var (
@@ -169,26 +171,23 @@ func (b *bot) checkPullRequests() {
 			if issue.Closed || !issue.PullRequest {
 				return nil
 			}
-			return b.processPullRequest(&prInfo{
-				owner:  id.Owner,
-				repo:   id.Repo,
-				number: int(issue.Number),
-			})
+			ctx := context.Background()
+			pr, err := getFullPR(ctx, id.Owner, id.Repo, int(issue.Number))
+			if err != nil {
+				return fmt.Errorf("getFullPR(ctx, %q, %q, %d): %v", id.Owner, id.Repo, issue.Number, err)
+			}
+			return b.processPullRequest(ctx, pr)
 		})
 	}); err != nil {
 		log.Printf("corpus.GitHub().ForeachRepo(...): %v", err)
 	}
 }
 
-type prInfo struct {
-	owner, repo string
-	number      int
-}
-
-// String returns text referencing a Pull Request that will be automatically
+// prShortLink returns text referencing a Pull Request that will be automatically
 // converted into a link by GitHub.
-func (i *prInfo) String() string {
-	return fmt.Sprintf("%s/%s#%d", i.owner, i.repo, i.number)
+func prShortLink(pr *github.PullRequest) string {
+	repo := pr.GetBase().GetRepo()
+	return fmt.Sprintf("%s/%s#%d", repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber())
 }
 
 // processPullRequest is the entry point to the state machine of mirroring a PR
@@ -198,16 +197,13 @@ func (i *prInfo) String() string {
 // being created.
 // TODO(andybons): Document comment mirroring once that is implemented.
 // b's RWMutex read-write lock must be held.
-func (b *bot) processPullRequest(info *prInfo) error {
-	ctx := context.Background()
-	log.Printf("Processing PR %s...", info)
-	pr, err := getFullPR(ctx, info)
-	if err != nil {
-		return fmt.Errorf("getFullPR(ctx, %q): %v", info, err)
-	}
-	cl := b.importedPRs[info.String()]
+func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) error {
+	log.Printf("Processing PR %s ...", pr.GetHTMLURL())
+	cl := b.importedPRs[prShortLink(pr)]
 	if cl == nil {
-		// Import PR to a new Gerrit Change.
+		if err := createGerritChangeFromPR(pr); err != nil {
+			return fmt.Errorf("createGerritChangeFromPR(%v): %v", prShortLink(pr), err)
+		}
 		return nil
 	}
 	if pr.GetCommits() != 1 {
@@ -220,7 +216,6 @@ func (b *bot) processPullRequest(info *prInfo) error {
 			cl.ChangeID(), prefixGitFooterLastRev)
 		return nil
 	}
-	log.Printf("%+v", pr.Head.GetSHA())
 	if pr.Head.GetSHA() == lastRev {
 		log.Printf("Change https://go-review.googlesource.com/q/%s is up to date; nothing to do.",
 			cl.ChangeID())
@@ -231,15 +226,92 @@ func (b *bot) processPullRequest(info *prInfo) error {
 	return nil
 }
 
-func getFullPR(ctx context.Context, info *prInfo) (*github.PullRequest, error) {
+const gerritHostBase = "https://go.googlesource.com/"
+
+func createGerritChangeFromPR(pr *github.PullRequest) error {
+	githubRepo := pr.GetBase().GetRepo()
+	gerritRepo := gerritHostBase + githubRepo.GetName() // GitHub repo name should match Gerrit repo name.
+	repoDir := filepath.Join(reposRoot(), url.PathEscape(gerritRepo))
+
+	if _, err := os.Stat(repoDir); os.IsNotExist(err) {
+		commitHook := filepath.Join(repoDir, "/hooks/commit-msg")
+
+		cmds := []*exec.Cmd{
+			exec.Command("git", "clone", "--bare", gerritRepo, repoDir),
+			exec.Command("curl", "-Lo", commitHook, "https://gerrit-review.googlesource.com/tools/hooks/commit-msg"),
+			exec.Command("chmod", "+x", commitHook),
+			exec.Command("git", "-C", repoDir, "remote", "add", "github", githubRepo.GetGitURL()),
+		}
+		for _, c := range cmds {
+			log.Printf("Executing %v", c.Args)
+			if b, err := c.CombinedOutput(); err != nil {
+				return fmt.Errorf("running %v: %s", c.Args, b)
+			}
+		}
+	}
+
+	worktree := fmt.Sprintf("worktree_%s_%s_%d", githubRepo.GetOwner().GetLogin(), githubRepo.GetName(), pr.GetNumber())
+	worktreeDir := filepath.Join(*workdir, "tmp", worktree)
+	// workTreeDir is created by the `git worktree add` command.
+	defer func() {
+		log.Println("Cleaning up...")
+		for _, c := range []*exec.Cmd{
+			exec.Command("git", "-C", worktreeDir, "checkout", "master"),
+			exec.Command("git", "-C", worktreeDir, "branch", "-D", prShortLink(pr)),
+			exec.Command("rm", "-rf", worktreeDir),
+			exec.Command("git", "-C", repoDir, "worktree", "prune"),
+			exec.Command("git", "-C", repoDir, "branch", "-D", worktree),
+		} {
+			log.Printf("Executing %v", c.Args)
+			if b, err := c.CombinedOutput(); err != nil {
+				log.Printf("running %v: %s", c.Args, b)
+			}
+		}
+	}()
+	for _, c := range []*exec.Cmd{
+		exec.Command("rm", "-rf", worktreeDir),
+		exec.Command("git", "-C", repoDir, "worktree", "prune"),
+		exec.Command("git", "-C", repoDir, "worktree", "add", worktreeDir),
+		exec.Command("git", "-C", worktreeDir, "pull", "origin", "master"),
+	} {
+		log.Printf("Executing %v", c.Args)
+		if b, err := c.CombinedOutput(); err != nil {
+			return fmt.Errorf("running %v: %s", c.Args, b)
+		}
+	}
+
+	commitMsg := fmt.Sprintf("%s\n\n%s\n\n%s %s\n%s %s\n",
+		pr.GetTitle(),
+		pr.GetBody(),
+		prefixGitFooterLastRev, pr.Head.GetSHA(),
+		prefixGitFooterPR, prShortLink(pr))
+	for _, c := range []*exec.Cmd{
+		exec.Command("git", "-C", worktreeDir, "fetch", "github", fmt.Sprintf("pull/%d/head", pr.GetNumber())),
+		exec.Command("git", "-C", worktreeDir, "checkout", pr.Base.GetSHA(), "-b", prShortLink(pr)),
+		exec.Command("git", "-C", worktreeDir, "merge", "FETCH_HEAD"),
+		exec.Command("git", "-C", worktreeDir, "commit", "--amend", "-m", commitMsg),
+		exec.Command("git", "-C", worktreeDir, "push", "origin", "HEAD:refs/for/"+pr.GetBase().GetRef()),
+	} {
+		log.Printf("Executing %v", c.Args)
+		if b, err := c.CombinedOutput(); err != nil {
+			return fmt.Errorf("running %v: %s", c.Args, b)
+		}
+	}
+	return nil
+}
+
+func reposRoot() string {
+	return filepath.Join(*workdir, "repos")
+}
+
+func getFullPR(ctx context.Context, owner, repo string, number int) (*github.PullRequest, error) {
 	ghc, err := githubClient()
 	if err != nil {
 		return nil, fmt.Errorf("githubClient(): %v", err)
 	}
-	pr, _, err := ghc.PullRequests.Get(ctx, info.owner, info.repo, info.number)
+	pr, _, err := ghc.PullRequests.Get(ctx, owner, repo, number)
 	if err != nil {
-		return nil, fmt.Errorf("ghc.PullRequests().Get(ctc, %q, %q, %d): %v",
-			info.owner, info.repo, info.number, err)
+		return nil, fmt.Errorf("ghc.PullRequests().Get(ctc, %q, %q, %d): %v", owner, repo, number, err)
 	}
 	return pr, nil
 }
