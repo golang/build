@@ -8,6 +8,9 @@
 set -e
 set -u
 
+readonly VERSION="6.2"
+readonly RELNO="${VERSION/./}"
+
 readonly ARCH="${ARCH:-amd64}"
 readonly MIRROR="${MIRROR:-ftp.usa.openbsd.org}"
 
@@ -16,11 +19,11 @@ if [[ "${ARCH}" != "amd64" && "${ARCH}" != "i386" ]]; then
   exit 1
 fi
 
-readonly ISO="install60-${ARCH}.iso"
-readonly ISO_PATCHED="install60-${ARCH}-patched.iso"
+readonly ISO="install${RELNO}-${ARCH}.iso"
+readonly ISO_PATCHED="install${RELNO}-${ARCH}-patched.iso"
 
 if [[ ! -f "${ISO}" ]]; then
-  curl -o "${ISO}" "http://${MIRROR}/pub/OpenBSD/6.0/${ARCH}/install60.iso"
+  curl -o "${ISO}" "http://${MIRROR}/pub/OpenBSD/${VERSION}/${ARCH}/install${RELNO}.iso"
 fi
 
 function cleanup() {
@@ -32,7 +35,7 @@ function cleanup() {
 	rm -f etc/rc.local
 	rm -f install.site
 	rm -f random.seed
-	rm -f site60.tgz
+	rm -f site${RELNO}.tgz
 	rmdir etc
 }
 
@@ -41,11 +44,11 @@ trap cleanup EXIT INT
 # XXX: Download and save bash, curl, and their dependencies too?
 # Currently we download them from the network during the install process.
 
-# Create custom site60.tgz set.
+# Create custom siteXX.tgz set.
 mkdir -p etc
 cat >install.site <<EOF
 #!/bin/sh
-env PKG_PATH=http://${MIRROR}/pub/OpenBSD/6.0/packages/${ARCH} \
+env PKG_PATH=http://${MIRROR}/pub/OpenBSD/${VERSION}/packages/${ARCH} \
   pkg_add -iv bash curl git
 
 echo 'set tty com0' > boot.conf
@@ -55,15 +58,8 @@ cat >etc/rc.local <<EOF
 (
   set -x
 
-  # GCE network configuration seems broken on OpenBSD 6.0,
-  # fix up routing using a high priority route...
-  GW=\$(route -n show | awk '/default/ { print \$2 }')
-  IP=\$(ifconfig vio0 | awk '/inet/ { print \$2 }')
-  pkill dhclient
-  route flush
-  ifconfig vio0 \${IP}/8
-  route add -priority 2 10.0.0.0/8 \${GW}
-  route add default \${GW}
+  echo "Remounting root with softdep,noatime..."
+  mount -o softdep,noatime,update /
 
   echo "starting buildlet script"
   netstat -rn
@@ -77,12 +73,14 @@ cat >etc/rc.local <<EOF
     exec /buildlet
   )
   echo "giving up"
-  sleep 10
-  halt -p
+  (
+    sleep 10
+    halt -p
+  )&
 )
 EOF
 chmod +x install.site
-tar -zcvf site60.tgz install.site etc/rc.local
+tar -zcvf site${RELNO}.tgz install.site etc/rc.local
 
 # Autoinstall script.
 cat >auto_install.conf <<EOF
@@ -118,7 +116,7 @@ echo 'set tty com0' > boot.conf
 dd if=/dev/urandom of=random.seed bs=4096 count=1
 cp "${ISO}" "${ISO_PATCHED}"
 growisofs -M "${ISO_PATCHED}" -l -R -graft-points \
-  /6.0/${ARCH}/site60.tgz=site60.tgz \
+  /${VERSION}/${ARCH}/site${RELNO}.tgz=site${RELNO}.tgz \
   /auto_install.conf=auto_install.conf \
   /disklabel.template=disklabel.template \
   /etc/boot.conf=boot.conf \
@@ -147,13 +145,21 @@ expect timeout { exit 1 } "# "
 send "mount /dev/cd0c /mnt\n"
 send "cp /mnt/auto_install.conf /mnt/disklabel.template /\n"
 send "umount /mnt\n"
-# Avoid a race with DHCP configuration by sleeping briefly.
-send "echo -n \"1256\na\n\tsleep 5\n.\nw\nq\n\" | ed install.sub\n"
 send "exit\n"
 
 expect timeout { exit 1 } "CONGRATULATIONS!"
 
-expect timeout { exit 1 } eof
+# There is some form of race condition with OpenBSD 6.2 MP
+# and qemu, which can result in init(1) failing to run /bin/sh
+# the first time around...
+expect {
+  timeout { exit 1 }
+  "Enter pathname of shell or RETURN for sh:" {
+    send "\nexit\n"
+    expect timeout { exit 1 } eof
+  }
+  eof
+}
 EOF
 
 # Create Compute Engine disk image.
