@@ -348,7 +348,6 @@ var inKube, _ = strconv.ParseBool(os.Getenv("IN_KUBERNETES"))
 // If not running on GCE, it falls back to using environment variables
 // for local development.
 func metadataValue(key string) string {
-
 	// The common case (on GCE, but not in Kubernetes):
 	if metadata.OnGCE() && !inKube {
 		v, err := metadata.InstanceAttributeValue(key)
@@ -853,6 +852,23 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 
 	env := append(baseEnv(goarch), r.PostForm["env"]...)
+
+	// Set TMPDIR in the child process and clean up after it.
+	// Do this at least for Solaris (golang.org/issue/22798)
+	// because Solaris reuses its disk per run (for now). The other builders
+	// generally run in their own containers/VMs and thus don't leak.
+	// Ideally Solaris would do the same and we wouldn't need this.
+	if builder := getEnv(env, "GO_BUILDER_NAME"); builder == "solaris-amd64-smartosbuildlet" {
+		childTmp, err := ioutil.TempDir("", "buildlet-exec")
+		if err != nil {
+			// Not critical. Not worth dying over. (at least for now)
+			log.Printf("failed to create a temp directory: %v", err)
+		} else {
+			env = append(env, "TMPDIR="+childTmp)
+			defer os.RemoveAll(childTmp)
+		}
+	}
+
 	env = envutil.Dedup(runtime.GOOS == "windows", env)
 
 	// Prefer buildlet process's inherited GOROOT_BOOTSTRAP if

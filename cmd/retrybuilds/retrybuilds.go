@@ -105,6 +105,7 @@ func fixTheFlakes() {
 
 var flakePhrases = []string{
 	"No space left on device",
+	"no space left on device", // solaris case apparently
 	"fatal error: error in backend: IO failure on output stream",
 	"Boffset: unknown state 0",
 	"Bseek: unknown state 0",
