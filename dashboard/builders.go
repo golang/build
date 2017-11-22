@@ -1058,7 +1058,6 @@ func init() {
 		HostType:  "host-netbsd-8branch",
 		MaxAtOnce: 1,
 		TryBot:    false,
-		TryOnly:   true, // don't do regular builds until NetBSD runs again; Issues 19339, 19652, 20852
 	})
 	addBuilder(BuildConfig{
 		Name:      "netbsd-386-8branch",
@@ -1066,7 +1065,7 @@ func init() {
 		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
 		MaxAtOnce: 1,
 		TryBot:    false,
-		TryOnly:   true, // don't do regular builds until NetBSD runs again; Issues 19339, 19652, 20852
+		TryOnly:   true, // don't do regular builds until NetBSD runs again; Issues 19339, 19652, 20852; CL 78619
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-386",
