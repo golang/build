@@ -34,6 +34,10 @@ a:visited {
 .Item {
   display: flex;
 }
+.Item-blocker:before {
+  content: '★';
+  position: absolute;
+}
 .Item-num {
   margin-left: 4ch;
   min-width: 12ch;
@@ -60,7 +64,7 @@ a:visited {
       {{range .Items}}
         {{$i := .Issue}}
         {{if $i}}
-          <div class="Item">
+          <div class="Item{{if .ReleaseBlocker}} Item-blocker{{end}}">
             <a class="Item-num" href="https://golang.org/issue/{{.Issue.Number}}" target="_blank">#{{.Issue.Number}}</a>
             <span class="Item-title">{{.Issue.Title}}</span>
           </div>

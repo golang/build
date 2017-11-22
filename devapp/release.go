@@ -84,6 +84,13 @@ type item struct {
 	CLs   []*gerritCL
 }
 
+func (i *item) ReleaseBlocker() bool {
+	if i.Issue == nil {
+		return false
+	}
+	return i.Issue.HasLabel("release-blocker")
+}
+
 type itemsBySummary []item
 
 func (x itemsBySummary) Len() int           { return len(x) }
