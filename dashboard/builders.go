@@ -117,6 +117,25 @@ var Hosts = map[string]*HostConfig{
 		Notes:              "OpenBSD 6.0; GCE VM is built from script in build/env/openbsd-386",
 		SSHUsername:        "gopher",
 	},
+	"host-openbsd-amd64-62": &HostConfig{
+		VMImage:            "openbsd-amd64-62",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-60.tar.gz",
+		Notes:              "OpenBSD 6.2; GCE VM is built from script in build/env/openbsd-amd64",
+		SSHUsername:        "gopher",
+	},
+	// Currently broken: See comments on CL 79055.
+	/*
+		"host-openbsd-386-62": &HostConfig{
+				VMImage:            "openbsd-386-62",
+				machineType:        "n1-highcpu-4",
+				buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
+				goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-60.tar.gz",
+				Notes:              "OpenBSD 6.2; GCE VM is built from script in build/env/openbsd-386",
+				SSHUsername:        "gopher",
+			},
+	*/
 	"host-freebsd-93-gce": &HostConfig{
 		VMImage:            "freebsd-amd64-gce93",
 		machineType:        "n1-highcpu-4",
@@ -700,6 +719,8 @@ func (c *BuildConfig) BuildSubrepos() bool {
 		"freebsd-386-110", "freebsd-amd64-110",
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
 		"openbsd-386-60", "openbsd-amd64-60",
+		"openbsd-386-62", "openbsd-amd64-62",
+		"netbsd-amd64-8branch",
 		"plan9-386",
 		"freebsd-arm-paulzhol",
 		"windows-amd64-2016", "windows-386-2008":
@@ -1052,6 +1073,13 @@ func init() {
 		Name:      "openbsd-386-60",
 		HostType:  "host-openbsd-386-60",
 		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
+	})
+	addBuilder(BuildConfig{
+		Name:              "openbsd-amd64-62",
+		HostType:          "host-openbsd-amd64-62",
+		TryBot:            false, // not yet.
+		numTestHelpers:    0,
+		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
 		Name:      "netbsd-amd64-8branch",
