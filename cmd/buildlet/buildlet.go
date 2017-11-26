@@ -95,6 +95,7 @@ func defaultListenAddr() string {
 var (
 	osHalt                   func()
 	configureSerialLogOutput func()
+	setOSRlimit              func() error
 )
 
 func main() {
@@ -133,6 +134,13 @@ func main() {
 	switch runtime.GOOS {
 	case "openbsd", "freebsd", "netbsd":
 		makeBSDFilesystemFast()
+	}
+	if setOSRlimit != nil {
+		err := setOSRlimit()
+		if err != nil {
+			log.Fatalf("setOSRLimit: %v", err)
+		}
+		log.Printf("set OS rlimits.")
 	}
 
 	if *reverse != "" && *reverseType != "" {
