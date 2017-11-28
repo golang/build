@@ -144,7 +144,7 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-freebsd-10_3": &HostConfig{
-		VMImage:            "freebsd-amd64-103",
+		VMImage:            "freebsd-amd64-103-b",
 		Notes:              "FreeBSD 10.3; GCE VM is built from script in build/env/freebsd-amd64",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64", // TODO(bradfitz): why was this http instead of https?
@@ -153,7 +153,7 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-freebsd-11_1": &HostConfig{
-		VMImage:            "freebsd-amd64-111",
+		VMImage:            "freebsd-amd64-111-b",
 		Notes:              "FreeBSD 11.1; GCE VM is built from script in build/env/freebsd-amd64",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64", // TODO(bradfitz): why was this http instead of https?
