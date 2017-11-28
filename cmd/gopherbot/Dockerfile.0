@@ -6,18 +6,18 @@ LABEL maintainer "golang-dev@googlegroups.com"
 
 # BEGIN deps (run `make update-deps` to update)
 
-# Repo cloud.google.com/go at 76d607c (2017-07-20)
-ENV REV=76d607c4e7a2b9df49f1d1a58a3f3d2dd2614704
+# Repo cloud.google.com/go at ba25346 (2017-10-13)
+ENV REV=ba2534604a6c2b8854d680e50f9132cade92d02f
 RUN go get -d cloud.google.com/go/compute/metadata &&\
     (cd /go/src/cloud.google.com/go && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo github.com/golang/protobuf at 0a4f71a (2017-07-11)
-ENV REV=0a4f71a498b7c4812f64969510bcb4eca251e33a
+# Repo github.com/golang/protobuf at 130e6b0 (2017-09-20)
+ENV REV=130e6b02ab059e7b717a096f397c5b60111cae74
 RUN go get -d github.com/golang/protobuf/proto `#and 5 other pkgs` &&\
     (cd /go/src/github.com/golang/protobuf && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo github.com/google/go-github at e062a8c (2017-07-19)
-ENV REV=e062a8cd852f0fb981c8c9f837c214c4d1031870
+# Repo github.com/google/go-github at 471e67c (2017-11-16)
+ENV REV=471e67c93cdd36a5f7c9bba5d6d11665ba12147d
 RUN go get -d github.com/google/go-github/github &&\
     (cd /go/src/github.com/google/go-github && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -26,8 +26,8 @@ ENV REV=53e6ce116135b80d037921a7fdd5138cf32d7a8a
 RUN go get -d github.com/google/go-querystring/query &&\
     (cd /go/src/github.com/google/go-querystring && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo github.com/gregjones/httpcache at 0d2297f (2017-04-24)
-ENV REV=0d2297f241a3503b4d464cd434e6d1490ec76e9a
+# Repo github.com/gregjones/httpcache at 316c5e0 (2017-09-20)
+ENV REV=316c5e0ff04e0ce21cfae9fbbb2ab39c7fc74e71
 RUN go get -d github.com/gregjones/httpcache &&\
     (cd /go/src/github.com/gregjones/httpcache && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -36,18 +36,18 @@ ENV REV=034d17a462f7b2dcd1a4a73553ec5357ff6e6c6e
 RUN go get -d go4.org/types &&\
     (cd /go/src/go4.org && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/net at ab54850 (2017-07-21)
-ENV REV=ab5485076ff3407ad2d02db054635913f017b0ed
+# Repo golang.org/x/net at 01c1902 (2017-11-02)
+ENV REV=01c190206fbdffa42f334f4b2bf2220f50e64920
 RUN go get -d golang.org/x/net/context `#and 2 other pkgs` &&\
     (cd /go/src/golang.org/x/net && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/oauth2 at b53b38a (2017-07-19)
-ENV REV=b53b38ad8a6435bd399ea76d0fa74f23149cca4e
+# Repo golang.org/x/oauth2 at bb50c06 (2017-09-28)
+ENV REV=bb50c06baba3d0c76f9d125c0719093e315b5b44
 RUN go get -d golang.org/x/oauth2 `#and 2 other pkgs` &&\
     (cd /go/src/golang.org/x/oauth2 && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/sync at 457c582 (2016-07-15)
-ENV REV=457c5828408160d6a47e17645169cf8fa20218c4
+# Repo golang.org/x/sync at f52d181 (2017-05-17)
+ENV REV=f52d1811a62927559de87708c8913c1650ce4f26
 RUN go get -d golang.org/x/sync/errgroup &&\
     (cd /go/src/golang.org/x/sync && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
