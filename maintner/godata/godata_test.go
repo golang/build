@@ -28,6 +28,9 @@ var (
 )
 
 func getGoData(tb testing.TB) *maintner.Corpus {
+	if testing.Short() {
+		tb.Skip("not running tests requiring large download in short mode")
+	}
 	corpusMu.Lock()
 	defer corpusMu.Unlock()
 	if corpusCache != nil {
