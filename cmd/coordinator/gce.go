@@ -297,6 +297,7 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 	}
 
 	instName := "buildlet-" + strings.TrimPrefix(hostType, "host-") + "-rn" + randHex(7)
+	instName = strings.Replace(instName, "_", "-", -1) // Issue 22905; can't use underscores in GCE VMs
 	p.setInstanceUsed(instName, true)
 
 	gceBuildletSpan := lg.CreateSpan("create_gce_buildlet", instName)
