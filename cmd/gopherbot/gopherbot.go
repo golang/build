@@ -642,6 +642,9 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 				return nil
 			}
 			for _, ref := range cl.GitHubIssueRefs {
+				if id := ref.Repo.ID(); id.Owner != "golang" || id.Repo != "go" {
+					continue
+				}
 				gi := ref.Repo.Issue(ref.Number)
 				if gi == nil || gi.HasLabel(frozenDueToAge) {
 					continue
