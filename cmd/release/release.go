@@ -192,13 +192,13 @@ var builds = []*Build{
 	{
 		OS:      "freebsd",
 		Arch:    "386",
-		Builder: "freebsd-386-110",
+		Builder: "freebsd-386-11_1",
 	},
 	{
 		OS:      "freebsd",
 		Arch:    "amd64",
 		Race:    true,
-		Builder: "freebsd-amd64-110",
+		Builder: "freebsd-amd64-11_1",
 	},
 	{
 		OS:      "windows",
