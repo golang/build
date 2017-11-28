@@ -50,7 +50,7 @@ case $1 in
 ;;
 *)
   echo "Usage: $0 <version>"
-  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 11.0"
+  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 11.0 11.1"
   exit 1
 esac
 
@@ -67,7 +67,20 @@ fi
 
 cp FreeBSD-${VERSION:?}-RELEASE-amd64${VERSION_TRAILER}.raw disk.raw
 
-mkdir -p iso/etc iso/usr/local/etc/rc.d
+mkdir -p iso/boot iso/etc iso/usr/local/etc/rc.d
+
+cat >iso/boot/loader.conf <<EOF
+autoboot_delay="-1"
+beastie_disable="YES"
+loader_logo="none"
+hw.memtest.tests="0"
+console="comconsole,vidconsole"
+hw.vtnet.csum_disable=1
+hw.vtnet.mq_disable=1
+kern.timecounter.hardware=ACPI-safe
+aesni_load="YES"
+nvme_load="YES"
+EOF
 
 cat >iso/etc/rc.conf <<EOF
 hostname="buildlet"
@@ -91,7 +104,7 @@ stop_cmd=""
 
 buildlet_start()
 {
-	PATH=/bin:/usr/bin:/usr/local/bin; export PATH
+	PATH=/bin:/sbin:/usr/bin:/usr/local/bin; export PATH
 	echo "starting buildlet script"
 	netstat -rn
 	cat /etc/resolv.conf
@@ -117,6 +130,7 @@ set -x
 mkdir -p /usr/local/etc/rc.d/
 cp /mnt/usr/local/etc/rc.d/buildlet /usr/local/etc/rc.d/buildlet
 chmod +x /usr/local/etc/rc.d/buildlet
+cp /mnt/boot/loader.conf /boot/loader.conf
 cp /mnt/etc/rc.conf /etc/rc.conf
 adduser -f - <<ADDUSEREOF
 gopher::::::Gopher Gopherson::/bin/sh:gopher
@@ -125,7 +139,6 @@ pw user mod gopher -G wheel
 
 # Enable serial console early in boot process.
 echo '-h' > /boot.conf
-echo 'console="comconsole"' >> /boot/loader.conf
 EOF
 
 genisoimage -r -o config.iso iso/
