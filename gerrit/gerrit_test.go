@@ -173,6 +173,9 @@ func TestGetChangeError(t *testing.T) {
 	_, err := c.GetChange(context.Background(), "99999", QueryChangesOpt{
 		Fields: []string{"MESSAGES"},
 	})
+	if !hitServer {
+		t.Errorf("expected to hit test server, didn't")
+	}
 	if err != ErrChangeNotExist {
 		t.Errorf("expected ErrChangeNotExist, got %v", err)
 	}
