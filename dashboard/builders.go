@@ -143,18 +143,18 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
-	"host-freebsd-101-gce": &HostConfig{
-		VMImage:            "freebsd-amd64-gce101",
-		Notes:              "FreeBSD 10.1; GCE VM is built from script in build/env/freebsd-amd64",
+	"host-freebsd-10_3": &HostConfig{
+		VMImage:            "freebsd-amd64-103",
+		Notes:              "FreeBSD 10.3; GCE VM is built from script in build/env/freebsd-amd64",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64", // TODO(bradfitz): why was this http instead of https?
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		env:                []string{"CC=clang"},
 		SSHUsername:        "gopher",
 	},
-	"host-freebsd-110": &HostConfig{
-		VMImage:            "freebsd-amd64-110",
-		Notes:              "FreeBSD 11.0; GCE VM is built from script in build/env/freebsd-amd64",
+	"host-freebsd-11_1": &HostConfig{
+		VMImage:            "freebsd-amd64-111",
+		Notes:              "FreeBSD 11.1; GCE VM is built from script in build/env/freebsd-amd64",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64", // TODO(bradfitz): why was this http instead of https?
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
@@ -715,8 +715,9 @@ func (c *BuildConfig) BuildSubrepos() bool {
 		"darwin-amd64-10_10",
 		"darwin-amd64-10_11",
 		"darwin-386-10_11",
-		"freebsd-386-gce101", "freebsd-amd64-gce101",
-		"freebsd-386-110", "freebsd-amd64-110",
+		"freebsd-amd64-93",
+		"freebsd-386-10_3", "freebsd-amd64-10_3",
+		"freebsd-386-11_1", "freebsd-amd64-11_1",
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
 		"openbsd-386-60", "openbsd-amd64-60",
 		"openbsd-386-62", "openbsd-amd64-62",
@@ -864,34 +865,36 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:      "freebsd-amd64-gce93",
 		HostType:  "host-freebsd-93-gce",
+		TryOnly:   true,  // don't run regular build...
+		TryBot:    false, // .. and don't be a trybot. Only for gomote.
+		MaxAtOnce: 2,     // arbitrary, just not unlimited; delete when we have proper scheduler
+	})
+	addBuilder(BuildConfig{
+		Name:      "freebsd-amd64-10_3",
+		HostType:  "host-freebsd-10_3",
 		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})
 	addBuilder(BuildConfig{
-		Name:      "freebsd-amd64-gce101",
-		HostType:  "host-freebsd-101-gce",
-		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
-	})
-	addBuilder(BuildConfig{
-		Name:              "freebsd-amd64-110",
-		HostType:          "host-freebsd-110",
+		Name:              "freebsd-amd64-11_1",
+		HostType:          "host-freebsd-11_1",
 		TryBot:            true,
 		numTryTestHelpers: 4,
 		MaxAtOnce:         2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})
 	addBuilder(BuildConfig{
 		Name:      "freebsd-amd64-race",
-		HostType:  "host-freebsd-110",
+		HostType:  "host-freebsd-11_1",
 		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})
 	addBuilder(BuildConfig{
-		Name:      "freebsd-386-gce101",
-		HostType:  "host-freebsd-101-gce",
+		Name:      "freebsd-386-10_3",
+		HostType:  "host-freebsd-10_3",
 		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
 		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})
 	addBuilder(BuildConfig{
-		Name:      "freebsd-386-110",
-		HostType:  "host-freebsd-110",
+		Name:      "freebsd-386-11_1",
+		HostType:  "host-freebsd-11_1",
 		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
 		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
 	})

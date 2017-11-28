@@ -9,7 +9,7 @@
 # SSH is enabled, and a user gopher, password gopher, is created.
 
 # Only tested on Ubuntu 16.04.
-# Requires packages: qemu expect mkisofs
+# Requires packages: qemu expect genisoimage
 
 set -e
 
@@ -41,6 +41,12 @@ case $1 in
   readonly VERSION_TRAILER=
   readonly DNS_LOOKUP=drill
   readonly SHA256=f9f7fcac1acfe210979a72e0642a70fcf9c9381cc1884e966eac8381c724158c
+  ;;
+11.1)
+  readonly VERSION=11.1
+  readonly VERSION_TRAILER=
+  readonly DNS_LOOKUP=drill
+  readonly SHA256=233c6b269a29c1ce38bb4eb861251d1c74643846c1de937b8e31cc0316632bc0
 ;;
 *)
   echo "Usage: $0 <version>"
@@ -122,7 +128,7 @@ echo '-h' > /boot.conf
 echo 'console="comconsole"' >> /boot/loader.conf
 EOF
 
-mkisofs -r -o config.iso iso/
+genisoimage -r -o config.iso iso/
 # TODO(wathiede): remove sleep
 sleep 2
 
