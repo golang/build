@@ -14,7 +14,7 @@
 set -e -x
 
 ANITA_VERSION=1.41
-ARCH=amd64
+ARCH=i386
 # The release that the packages have been built for.
 RELEASE=8.0_2017Q2
 
@@ -42,7 +42,7 @@ cd anita-${ANITA_VERSION}
 python setup.py build
 cd ..
 
-env PYTHONPATH=${PWD}/anita-${ANITA_VERSION} python mkvm.py ${ARCH} ${RELEASE}
+env PYTHONPATH=${PWD}/anita-${ANITA_VERSION} python ../netbsd-amd64/mkvm.py ${ARCH} ${RELEASE}
 
 echo "Archiving wd0.img (this may take a while)"
 ${TAR} -Szcf netbsd-${ARCH}-${RELEASE}.tar.gz --transform s,${WORKDIR}/wd0.img,disk.raw, ${WORKDIR}/wd0.img
