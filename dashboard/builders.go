@@ -546,7 +546,8 @@ type BuildConfig struct {
 	// MaxAtOnce optionally specifies a cap of how many builds of
 	// this type can run at once. Zero means unlimited. This is a
 	// temporary measure until the build scheduler
-	// (golang.org/issue/19178) is done.
+	// (golang.org/issue/19178) is done, at which point this field
+	// should be deleted.
 	MaxAtOnce int
 
 	// SkipSnapshot, if true, means to not fetch a tarball
@@ -878,36 +879,36 @@ func init() {
 		HostType:  "host-freebsd-93-gce",
 		TryOnly:   true,  // don't run regular build...
 		TryBot:    false, // .. and don't be a trybot. Only for gomote.
-		MaxAtOnce: 2,     // arbitrary, just not unlimited; delete when we have proper scheduler
+		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
 		Name:      "freebsd-amd64-10_3",
 		HostType:  "host-freebsd-10_3",
-		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
+		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-11_1",
 		HostType:          "host-freebsd-11_1",
 		TryBot:            true,
 		numTryTestHelpers: 4,
-		MaxAtOnce:         2, // arbitrary, just not unlimited; delete when we have proper scheduler
+		MaxAtOnce:         2,
 	})
 	addBuilder(BuildConfig{
 		Name:      "freebsd-amd64-race",
 		HostType:  "host-freebsd-11_1",
-		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
+		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
 		Name:      "freebsd-386-10_3",
 		HostType:  "host-freebsd-10_3",
 		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
-		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
+		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
 		Name:      "freebsd-386-11_1",
 		HostType:  "host-freebsd-11_1",
 		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
-		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
+		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-386",
@@ -1066,6 +1067,7 @@ func init() {
 		Name:           "nacl-386",
 		HostType:       "host-nacl-kube",
 		TryBot:         true,
+		MaxAtOnce:      2,
 		numTestHelpers: 3,
 		env:            []string{"GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
@@ -1073,27 +1075,30 @@ func init() {
 		Name:           "nacl-amd64p32",
 		HostType:       "host-nacl-kube",
 		TryBot:         true,
+		MaxAtOnce:      2,
 		numTestHelpers: 3,
 		env:            []string{"GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-60",
 		HostType:          "host-openbsd-amd64-60",
-		TryBot:            true,
+		TryBot:            false,
+		MaxAtOnce:         1,
 		numTestHelpers:    2,
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
 		Name:      "openbsd-386-60",
 		HostType:  "host-openbsd-386-60",
-		MaxAtOnce: 2, // arbitrary, just not unlimited; delete when we have proper scheduler
+		MaxAtOnce: 1,
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-62",
 		HostType:          "host-openbsd-amd64-62",
-		TryBot:            false, // not yet.
+		TryBot:            true,
 		numTestHelpers:    0,
 		numTryTestHelpers: 5,
+		MaxAtOnce:         1,
 	})
 	addBuilder(BuildConfig{
 		Name:      "netbsd-amd64-8branch",
@@ -1107,13 +1112,12 @@ func init() {
 		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
 		MaxAtOnce: 1,
 		TryBot:    false,
-		TryOnly:   true, // don't do regular builds until issues 19339, 20852, 22914 are fixed
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-386",
 		HostType:       "host-plan9-386-gce",
 		numTestHelpers: 1,
-		MaxAtOnce:      2, // arbitrary, just not unlimited; delete when we have proper scheduler
+		MaxAtOnce:      2,
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-2008",
@@ -1124,13 +1128,15 @@ func init() {
 		Name:              "windows-386-2008",
 		HostType:          "host-windows-amd64-2008",
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		MaxAtOnce:         2,
 		TryBot:            true,
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
-		Name:     "windows-amd64-2012",
-		HostType: "host-windows-amd64-2012",
-		env:      []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		Name:      "windows-amd64-2012",
+		HostType:  "host-windows-amd64-2012",
+		env:       []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2016",
