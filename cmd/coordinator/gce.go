@@ -549,10 +549,10 @@ func (p *gceBuildletPool) cleanZoneVMs(zone string) error {
 			// Defensive. Not seen in practice.
 			continue
 		}
-		sawDeleteAt := false
+		var sawDeleteAt bool
+		var deleteReason string
 		for _, it := range inst.Metadata.Items {
 			if it.Key == "delete-at" {
-				sawDeleteAt = true
 				if it.Value == nil {
 					log.Printf("missing delete-at value; ignoring")
 					continue
@@ -560,22 +560,37 @@ func (p *gceBuildletPool) cleanZoneVMs(zone string) error {
 				unixDeadline, err := strconv.ParseInt(*it.Value, 10, 64)
 				if err != nil {
 					log.Printf("invalid delete-at value %q seen; ignoring", it.Value)
+					continue
 				}
-				if err == nil && time.Now().Unix() > unixDeadline {
-					log.Printf("Deleting expired VM %q in zone %q ...", inst.Name, zone)
-					deleteVM(zone, inst.Name)
+				sawDeleteAt = true
+				if time.Now().Unix() > unixDeadline {
+					deleteReason = "delete-at expiration"
 				}
 			}
 		}
+		isBuildlet := strings.HasPrefix(inst.Name, "buildlet-")
+
+		if isBuildlet && !sawDeleteAt && !p.instanceUsed(inst.Name) {
+			createdAt, _ := time.Parse(time.RFC3339Nano, inst.CreationTimestamp)
+			if createdAt.Before(time.Now().Add(-3 * time.Hour)) {
+				deleteReason = fmt.Sprintf("no delete-at, created at %s", inst.CreationTimestamp)
+			}
+		}
+
 		// Delete buildlets (things we made) from previous
 		// generations. Only deleting things starting with "buildlet-"
 		// is a historical restriction, but still fine for paranoia.
-		if sawDeleteAt && strings.HasPrefix(inst.Name, "buildlet-") && !p.instanceUsed(inst.Name) {
+		if deleteReason == "" && sawDeleteAt && isBuildlet && !p.instanceUsed(inst.Name) {
 			if _, ok := deletedVMCache.Get(inst.Name); !ok {
-				log.Printf("Deleting VM %q in zone %q from an earlier coordinator generation ...", inst.Name, zone)
-				deleteVM(zone, inst.Name)
+				deleteReason = "from earlier coordinator generation"
 			}
 		}
+
+		if deleteReason != "" {
+			log.Printf("deleting VM %q in zone %q; %s ...", inst.Name, zone, deleteReason)
+			deleteVM(zone, inst.Name)
+		}
+
 	}
 	return nil
 }
