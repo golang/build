@@ -6,18 +6,18 @@ LABEL maintainer "golang-dev@googlegroups.com"
 
 # BEGIN deps (run `make update-deps` to update)
 
-# Repo cloud.google.com/go at da30b6d (2017-09-23)
-ENV REV=da30b6d6aeb462b223228cc0b4e7952cba499d90
+# Repo cloud.google.com/go at 2d3a665 (2017-11-01)
+ENV REV=2d3a6656c17a60b0815b7e06ab0be04eacb6e613
 RUN go get -d cloud.google.com/go/compute/metadata `#and 6 other pkgs` &&\
     (cd /go/src/cloud.google.com/go && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo github.com/golang/protobuf at 130e6b0 (2017-09-20)
-ENV REV=130e6b02ab059e7b717a096f397c5b60111cae74
+# Repo github.com/golang/protobuf at 1e59b77 (2017-11-13)
+ENV REV=1e59b77b52bf8e4b449a57e6f79f21226d571845
 RUN go get -d github.com/golang/protobuf/proto `#and 6 other pkgs` &&\
     (cd /go/src/github.com/golang/protobuf && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo github.com/google/go-github at c004bf0 (2017-10-08)
-ENV REV=c004bf0c02fcab9d87a7f2e2f002fd008bf0784c
+# Repo github.com/google/go-github at a89ea1c (2017-11-25)
+ENV REV=a89ea1cdf79929726a9416663609269ada774da0
 RUN go get -d github.com/google/go-github/github &&\
     (cd /go/src/github.com/google/go-github && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -31,8 +31,8 @@ ENV REV=317e0006254c44a0ac427cc52a0e083ff0b9622f
 RUN go get -d github.com/googleapis/gax-go &&\
     (cd /go/src/github.com/googleapis/gax-go && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo github.com/gregjones/httpcache at 316c5e0 (2017-09-20)
-ENV REV=316c5e0ff04e0ce21cfae9fbbb2ab39c7fc74e71
+# Repo github.com/gregjones/httpcache at 2bcd89a (2017-11-19)
+ENV REV=2bcd89a1743fd4b373f7370ce8ddc14dfbd18229
 RUN go get -d github.com/gregjones/httpcache &&\
     (cd /go/src/github.com/gregjones/httpcache && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -41,44 +41,44 @@ ENV REV=034d17a462f7b2dcd1a4a73553ec5357ff6e6c6e
 RUN go get -d go4.org/types &&\
     (cd /go/src/go4.org && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/crypto at 847319b (2017-09-25)
-ENV REV=847319b7fc94cab682988f93da778204da164588
+# Repo golang.org/x/crypto at 94eea52 (2017-11-28)
+ENV REV=94eea52f7b742c7cbe0b03b22f0c4c8631ece122
 RUN go get -d golang.org/x/crypto/acme `#and 2 other pkgs` &&\
     (cd /go/src/golang.org/x/crypto && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/net at 0744d00 (2017-09-22)
-ENV REV=0744d001aa8470aaa53df28d32e5ceeb8af9bd70
+# Repo golang.org/x/net at 6921abc (2017-11-28)
+ENV REV=6921abc35dffd00438a0c020584ce560108737ea
 RUN go get -d golang.org/x/net/context `#and 8 other pkgs` &&\
     (cd /go/src/golang.org/x/net && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/oauth2 at 13449ad (2017-09-12)
-ENV REV=13449ad91cb26cb47661c1b080790392170385fd
+# Repo golang.org/x/oauth2 at f95fa95 (2017-11-17)
+ENV REV=f95fa95eaa936d9d87489b15d1d18b97c1ba9c28
 RUN go get -d golang.org/x/oauth2 `#and 5 other pkgs` &&\
     (cd /go/src/golang.org/x/oauth2 && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/sync at f52d181 (2017-05-17)
-ENV REV=f52d1811a62927559de87708c8913c1650ce4f26
+# Repo golang.org/x/sync at fd80eb9 (2017-11-01)
+ENV REV=fd80eb99c8f653c847d294a001bdf2a3a6f768f5
 RUN go get -d golang.org/x/sync/errgroup &&\
     (cd /go/src/golang.org/x/sync && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/text at 1cbadb4 (2017-09-15)
-ENV REV=1cbadb444a806fd9430d14ad08967ed91da4fa0a
+# Repo golang.org/x/text at 572a2b1 (2017-11-28)
+ENV REV=572a2b141f625f4360cf42a41a43622067e0510b
 RUN go get -d golang.org/x/text/secure/bidirule `#and 4 other pkgs` &&\
     (cd /go/src/golang.org/x/text && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo google.golang.org/api at cec5cc0 (2017-09-24)
-ENV REV=cec5cc05d57604ba2d2eaaf5381d3248fac4814d
+# Repo google.golang.org/api at b804618 (2017-11-25)
+ENV REV=b804618854e387dc7fdd9e50496183ddcbb4b120
 RUN go get -d google.golang.org/api/gensupport `#and 9 other pkgs` &&\
     (cd /go/src/google.golang.org/api && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo google.golang.org/genproto at 1e559d0 (2017-09-18)
-ENV REV=1e559d0a00eef8a9a43151db4665280bd8dd5886
+# Repo google.golang.org/genproto at 7f0da29 (2017-11-23)
+ENV REV=7f0da29060c682909f650ad8ed4e515bd74fa12a
 RUN go get -d google.golang.org/genproto/googleapis/api/annotations `#and 3 other pkgs` &&\
     (cd /go/src/google.golang.org/genproto && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo google.golang.org/grpc at d4b75eb (2017-09-21)
-ENV REV=d4b75ebd4f9f8c4a2b1cdadbdbe0d7920431ccca
-RUN go get -d google.golang.org/grpc `#and 17 other pkgs` &&\
+# Repo google.golang.org/grpc at 1e1a47f (2017-11-28)
+ENV REV=1e1a47f0f28f70686674869a7dee0f1096d86919
+RUN go get -d google.golang.org/grpc `#and 22 other pkgs` &&\
     (cd /go/src/google.golang.org/grpc && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
 # Repo grpc.go4.org at 11d0a25 (2017-06-09)
@@ -138,9 +138,11 @@ RUN go install cloud.google.com/go/compute/metadata \
 	google.golang.org/genproto/googleapis/rpc/status \
 	google.golang.org/grpc \
 	google.golang.org/grpc/balancer \
+	google.golang.org/grpc/balancer/roundrobin \
 	google.golang.org/grpc/codes \
 	google.golang.org/grpc/connectivity \
 	google.golang.org/grpc/credentials \
+	google.golang.org/grpc/encoding \
 	google.golang.org/grpc/grpclb/grpc_lb_v1/messages \
 	google.golang.org/grpc/grpclog \
 	google.golang.org/grpc/internal \
@@ -149,6 +151,9 @@ RUN go install cloud.google.com/go/compute/metadata \
 	google.golang.org/grpc/naming \
 	google.golang.org/grpc/peer \
 	google.golang.org/grpc/resolver \
+	google.golang.org/grpc/resolver/dns \
+	google.golang.org/grpc/resolver/manual \
+	google.golang.org/grpc/resolver/passthrough \
 	google.golang.org/grpc/stats \
 	google.golang.org/grpc/status \
 	google.golang.org/grpc/tap \
