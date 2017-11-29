@@ -99,10 +99,17 @@ type bot struct {
 	sync.RWMutex
 	corpus      *maintner.Corpus
 	importedPRs map[string]*maintner.GerritCL // GitHub owner/repo#n -> Gerrit CL
+
+	// CLs that have been created on Gerrit for GitHub PRs but are not yet
+	// reflected in the maintner corpus yet.
+	pendingCLs map[string]bool // GitHub owner/repo#n -> true
 }
 
 func newBot() *bot {
-	return &bot{importedPRs: map[string]*maintner.GerritCL{}}
+	return &bot{
+		importedPRs: map[string]*maintner.GerritCL{},
+		pendingCLs:  map[string]bool{},
+	}
 }
 
 // initCorpus fetches a full maintner corpus, overwriting any existing data.
@@ -199,11 +206,28 @@ func prShortLink(pr *github.PullRequest) string {
 // b's RWMutex read-write lock must be held.
 func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) error {
 	log.Printf("Processing PR %s ...", pr.GetHTMLURL())
-	cl := b.importedPRs[prShortLink(pr)]
+	shortLink := prShortLink(pr)
+	cl := b.importedPRs[shortLink]
+	if cl != nil && b.pendingCLs[shortLink] {
+		delete(b.pendingCLs, shortLink)
+	}
+	if b.pendingCLs[shortLink] {
+		return nil
+	}
+
 	if cl == nil {
-		if err := createGerritChangeFromPR(pr); err != nil {
-			return fmt.Errorf("createGerritChangeFromPR(%v): %v", prShortLink(pr), err)
+		gcl, err := gerritChangeForPR(pr)
+		if err != nil {
+			return fmt.Errorf("gerritChangeForPR(%+v): %v", pr, err)
 		}
+		if gcl != nil {
+			b.pendingCLs[shortLink] = true
+			return nil
+		}
+		if err := createGerritChangeFromPR(pr); err != nil {
+			return fmt.Errorf("createGerritChangeFromPR(%v): %v", shortLink, err)
+		}
+		b.pendingCLs[shortLink] = true
 		return nil
 	}
 	if pr.GetCommits() != 1 {
@@ -219,11 +243,29 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 	if pr.Head.GetSHA() == lastRev {
 		log.Printf("Change https://go-review.googlesource.com/q/%s is up to date; nothing to do.",
 			cl.ChangeID())
-		// Nothing to do. Change is up to date.
 		return nil
 	}
 	// Import PR to existing Gerrit Change.
 	return nil
+}
+
+// gerritChangeForPR returns the Gerrit Change info associated with the given PR.
+// If no change exists for pr, it returns nil (with a nil error).
+func gerritChangeForPR(pr *github.PullRequest) (*gerrit.ChangeInfo, error) {
+	c, err := gerritClient()
+	if err != nil {
+		return nil, fmt.Errorf("gerritClient(): %v", err)
+	}
+	q := fmt.Sprintf(`is:open "%s %s"`, prefixGitFooterPR, prShortLink(pr))
+	cs, err := c.QueryChanges(context.Background(), q)
+	if err != nil {
+		return nil, fmt.Errorf("c.QueryChanges(ctx, %q): %v", q, err)
+	}
+	if len(cs) == 0 {
+		return nil, nil
+	}
+	// Return the first result no matter what.
+	return cs[0], nil
 }
 
 const gerritHostBase = "https://go.googlesource.com/"
