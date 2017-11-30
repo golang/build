@@ -42,8 +42,17 @@ var (
 func main() {
 	flag.Parse()
 
+	ghc, err := githubClient()
+	if err != nil {
+		log.Fatalf("githubClient(): %v", err)
+	}
+	gc, err := gerritClient()
+	if err != nil {
+		log.Fatalf("gerritClient(): %v", err)
+	}
+	b := newBot(ghc, gc)
+
 	ctx := context.Background()
-	b := newBot()
 	b.initCorpus(ctx)
 	go b.corpusUpdateLoop(ctx)
 
@@ -68,6 +77,70 @@ func home() string {
 		log.Fatalf("user.Current(): %v", err)
 	}
 	return u.HomeDir
+}
+
+func githubClient() (*github.Client, error) {
+	token, err := githubToken()
+	if err != nil {
+		return nil, err
+	}
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
+	tc := oauth2.NewClient(context.Background(), ts)
+	return github.NewClient(tc), nil
+}
+
+func githubToken() (string, error) {
+	if metadata.OnGCE() {
+		token, err := metadata.ProjectAttributeValue("maintner-github-token")
+		if err == nil {
+			return token, nil
+		}
+	}
+	slurp, err := ioutil.ReadFile(*githubTokenFile)
+	if err != nil {
+		return "", err
+	}
+	tok := strings.TrimSpace(string(slurp))
+	if len(tok) == 0 {
+		return "", fmt.Errorf("token from file %q cannot be empty", *githubTokenFile)
+	}
+	return tok, nil
+}
+
+func gerritClient() (*gerrit.Client, error) {
+	username, token, err := gerritAuth()
+	if err != nil {
+		return nil, err
+	}
+	c := gerrit.NewClient("https://go-review.googlesource.com", gerrit.BasicAuth(username, token))
+	return c, nil
+}
+
+func gerritAuth() (string, string, error) {
+	var slurp string
+	if metadata.OnGCE() {
+		var err error
+		slurp, err = metadata.ProjectAttributeValue("gobot-password")
+		if err != nil {
+			log.Printf(`Error retrieving Project Metadata "gobot-password": %v`, err)
+		}
+	}
+	if len(slurp) == 0 {
+		slurpBytes, err := ioutil.ReadFile(*gerritTokenFile)
+		if err != nil {
+			return "", "", err
+		}
+		slurp = string(slurpBytes)
+	}
+	f := strings.SplitN(strings.TrimSpace(slurp), ":", 2)
+	if len(f) == 1 {
+		// Assume the whole thing is the token.
+		return "git-gobot.golang.org", f[0], nil
+	}
+	if len(f) != 2 || f[0] == "" || f[1] == "" {
+		return "", "", fmt.Errorf("expected Gerrit token to be of form <git-email>:<token>")
+	}
+	return f[0], f[1], nil
 }
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -96,19 +169,24 @@ var (
 )
 
 type bot struct {
-	sync.RWMutex
-	corpus      *maintner.Corpus
-	importedPRs map[string]*maintner.GerritCL // GitHub owner/repo#n -> Gerrit CL
+	githubClient *github.Client
+	gerritClient *gerrit.Client
+
+	sync.RWMutex // Protects all fields below
+	corpus       *maintner.Corpus
+	importedPRs  map[string]*maintner.GerritCL // GitHub owner/repo#n -> Gerrit CL
 
 	// CLs that have been created on Gerrit for GitHub PRs but are not yet
 	// reflected in the maintner corpus yet.
 	pendingCLs map[string]bool // GitHub owner/repo#n -> true
 }
 
-func newBot() *bot {
+func newBot(githubClient *github.Client, gerritClient *gerrit.Client) *bot {
 	return &bot{
-		importedPRs: map[string]*maintner.GerritCL{},
-		pendingCLs:  map[string]bool{},
+		githubClient: githubClient,
+		gerritClient: gerritClient,
+		importedPRs:  map[string]*maintner.GerritCL{},
+		pendingCLs:   map[string]bool{},
 	}
 }
 
@@ -179,7 +257,7 @@ func (b *bot) checkPullRequests() {
 				return nil
 			}
 			ctx := context.Background()
-			pr, err := getFullPR(ctx, id.Owner, id.Repo, int(issue.Number))
+			pr, err := b.getFullPR(ctx, id.Owner, id.Repo, int(issue.Number))
 			if err != nil {
 				return fmt.Errorf("getFullPR(ctx, %q, %q, %d): %v", id.Owner, id.Repo, issue.Number, err)
 			}
@@ -215,8 +293,19 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 		return nil
 	}
 
+	if pr.GetCommits() == 0 {
+		// Um. Wat?
+		return fmt.Errorf("pr has 0 commits")
+	}
+	if pr.GetCommits() > 1 {
+		repo := pr.GetBase().GetRepo()
+		return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(),
+			fmt.Sprintf("Head %v has %d commits. Please squash your commits into one.",
+				pr.Head.GetSHA(), pr.GetCommits()))
+	}
+
 	if cl == nil {
-		gcl, err := gerritChangeForPR(pr)
+		gcl, err := b.gerritChangeForPR(pr)
 		if err != nil {
 			return fmt.Errorf("gerritChangeForPR(%+v): %v", pr, err)
 		}
@@ -230,10 +319,7 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 		b.pendingCLs[shortLink] = true
 		return nil
 	}
-	if pr.GetCommits() != 1 {
-		// Post message to GitHub (only once) saying to squash.
-		return nil
-	}
+
 	lastRev := cl.Footer(prefixGitFooterLastRev)
 	if lastRev == "" {
 		log.Printf("Imported CL https://go-review.googlesource.com/q/%s does not have %s footer; skipping",
@@ -251,13 +337,9 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 
 // gerritChangeForPR returns the Gerrit Change info associated with the given PR.
 // If no change exists for pr, it returns nil (with a nil error).
-func gerritChangeForPR(pr *github.PullRequest) (*gerrit.ChangeInfo, error) {
-	c, err := gerritClient()
-	if err != nil {
-		return nil, fmt.Errorf("gerritClient(): %v", err)
-	}
+func (b *bot) gerritChangeForPR(pr *github.PullRequest) (*gerrit.ChangeInfo, error) {
 	q := fmt.Sprintf(`is:open "%s %s"`, prefixGitFooterPR, prShortLink(pr))
-	cs, err := c.QueryChanges(context.Background(), q)
+	cs, err := b.gerritClient.QueryChanges(context.Background(), q)
 	if err != nil {
 		return nil, fmt.Errorf("c.QueryChanges(ctx, %q): %v", q, err)
 	}
@@ -266,6 +348,21 @@ func gerritChangeForPR(pr *github.PullRequest) (*gerrit.ChangeInfo, error) {
 	}
 	// Return the first result no matter what.
 	return cs[0], nil
+}
+
+// downloadRef calls the Gerrit API to retrieve the ref (such as refs/changes/16/81116/1)
+// of the most recent patch set of the change with changeID.
+func (b *bot) downloadRef(ctx context.Context, changeID string) (string, error) {
+	opt := gerrit.QueryChangesOpt{Fields: []string{"CURRENT_REVISION"}}
+	ch, err := b.gerritClient.GetChange(ctx, changeID, opt)
+	if err != nil {
+		return "", fmt.Errorf("c.GetChange(ctx, %q, %+v): %v", changeID, opt, err)
+	}
+	rev, ok := ch.Revisions[ch.CurrentRevision]
+	if !ok {
+		return "", fmt.Errorf("revisions[current_revision] is not present in %+v", ch)
+	}
+	return rev.Ref, nil
 }
 
 const gerritHostBase = "https://go.googlesource.com/"
@@ -346,109 +443,50 @@ func reposRoot() string {
 	return filepath.Join(*workdir, "repos")
 }
 
-func getFullPR(ctx context.Context, owner, repo string, number int) (*github.PullRequest, error) {
-	ghc, err := githubClient()
-	if err != nil {
-		return nil, fmt.Errorf("githubClient(): %v", err)
-	}
-	pr, _, err := ghc.PullRequests.Get(ctx, owner, repo, number)
+func (b *bot) getFullPR(ctx context.Context, owner, repo string, number int) (*github.PullRequest, error) {
+	pr, resp, err := b.githubClient.PullRequests.Get(ctx, owner, repo, number)
+	defer closeGitHubResp(resp)
 	if err != nil {
 		return nil, fmt.Errorf("ghc.PullRequests().Get(ctc, %q, %q, %d): %v", owner, repo, number, err)
 	}
 	return pr, nil
 }
 
-func postGitHubMessage(ctx context.Context, owner, repo string, issueNum int, msg string) error {
-	c, err := githubClient()
-	if err != nil {
-		return fmt.Errorf("getGitHubClient(): %v", err)
+func closeGitHubResp(resp *github.Response) {
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
 	}
+}
+
+// postGitHubMessage posts the given message to the given issue. This is likely not the method
+// you are looking to use. To ensure that duplicate messages are not posted, use postGitHubMessageNoDup.
+func (b *bot) postGitHubMessage(ctx context.Context, owner, repo string, issueNum int, msg string) error {
 	cmt := &github.IssueComment{Body: github.String(msg)}
-	if _, _, err := c.Issues.CreateComment(ctx, owner, repo, issueNum, cmt); err != nil {
-		return fmt.Errorf("c.Issues.CreateComment(ctx, %q, %q, %d, %+v): %v", owner, repo, issueNum, cmt, err)
+	_, resp, err := b.githubClient.Issues.CreateComment(ctx, owner, repo, issueNum, cmt)
+	defer closeGitHubResp(resp)
+	if err != nil {
+		return fmt.Errorf("b.githubClient.Issues.CreateComment(ctx, %q, %q, %d, %+v): %v", owner, repo, issueNum, cmt, err)
 	}
 	return nil
 }
 
-func githubClient() (*github.Client, error) {
-	token, err := githubToken()
-	if err != nil {
-		return nil, err
+// postGitHubMessageNoDup ensures that the message being posted on an issue does not already have the
+// same exact content.
+func (b *bot) postGitHubMessageNoDup(ctx context.Context, owner, repo string, issueNum int, msg string) error {
+	opts := &github.IssueListCommentsOptions{
+		ListOptions: github.ListOptions{
+			PerPage: 1000,
+		},
 	}
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
-	tc := oauth2.NewClient(context.Background(), ts)
-	return github.NewClient(tc), nil
-}
-
-func githubToken() (string, error) {
-	if metadata.OnGCE() {
-		token, err := metadata.ProjectAttributeValue("maintner-github-token")
-		if err == nil {
-			return token, nil
+	comments, res, err := b.githubClient.Issues.ListComments(ctx, owner, repo, issueNum, opts)
+	defer closeGitHubResp(res)
+	if err != nil {
+		return fmt.Errorf("b.githubClient.Issues.ListComments(%q, %q, %d, %+v): %v", owner, repo, issueNum, opts, err)
+	}
+	for _, ic := range comments {
+		if ic.GetBody() == msg {
+			return nil
 		}
 	}
-	slurp, err := ioutil.ReadFile(*githubTokenFile)
-	if err != nil {
-		return "", err
-	}
-	tok := strings.TrimSpace(string(slurp))
-	if len(tok) == 0 {
-		return "", fmt.Errorf("token from file %q cannot be empty", *githubTokenFile)
-	}
-	return tok, nil
-}
-
-// downloadRef calls the Gerrit API to retrieve the ref of the most recent
-// patch set of the change with changeID.
-func downloadRef(ctx context.Context, changeID string) (string, error) {
-	c, err := gerritClient()
-	if err != nil {
-		return "", fmt.Errorf("getGerritClient(): %v", err)
-	}
-	opt := gerrit.QueryChangesOpt{Fields: []string{"CURRENT_REVISION"}}
-	ch, err := c.GetChange(ctx, changeID, opt)
-	if err != nil {
-		return "", fmt.Errorf("c.GetChange(ctx, %q, %+v): %v", changeID, opt, err)
-	}
-	rev, ok := ch.Revisions[ch.CurrentRevision]
-	if !ok {
-		return "", fmt.Errorf("revisions[current_revision] is not present in %+v", ch)
-	}
-	return rev.Ref, nil
-}
-
-func gerritClient() (*gerrit.Client, error) {
-	username, token, err := gerritAuth()
-	if err != nil {
-		return nil, err
-	}
-	c := gerrit.NewClient("https://go-review.googlesource.com", gerrit.BasicAuth(username, token))
-	return c, nil
-}
-
-func gerritAuth() (string, string, error) {
-	var slurp string
-	if metadata.OnGCE() {
-		var err error
-		slurp, err = metadata.ProjectAttributeValue("gobot-password")
-		if err != nil {
-			log.Printf(`Error retrieving Project Metadata "gobot-password": %v`, err)
-		}
-	}
-	if len(slurp) == 0 {
-		slurpBytes, err := ioutil.ReadFile(*gerritTokenFile)
-		if err != nil {
-			return "", "", err
-		}
-		slurp = string(slurpBytes)
-	}
-	f := strings.SplitN(strings.TrimSpace(slurp), ":", 2)
-	if len(f) == 1 {
-		// Assume the whole thing is the token.
-		return "git-gobot.golang.org", f[0], nil
-	}
-	if len(f) != 2 || f[0] == "" || f[1] == "" {
-		return "", "", fmt.Errorf("expected Gerrit token to be of form <git-email>:<token>")
-	}
-	return f[0], f[1], nil
+	return b.postGitHubMessage(ctx, owner, repo, issueNum, msg)
 }
