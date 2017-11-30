@@ -175,7 +175,7 @@ func (b *bot) checkPullRequests() {
 			return nil
 		}
 		return ghr.ForeachIssue(func(issue *maintner.GitHubIssue) error {
-			if issue.Closed || !issue.PullRequest {
+			if issue.Closed || !issue.PullRequest || !issue.HasLabel("cla: yes") {
 				return nil
 			}
 			ctx := context.Background()
