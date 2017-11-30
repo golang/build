@@ -164,9 +164,9 @@ var Hosts = map[string]*HostConfig{
 	"host-netbsd-amd64-8branch": &HostConfig{
 		VMImage:            "netbsd-amd64-8branch",
 		Notes:              "NetBSD 8.? from the netbsd-8 branch; GCE VM is built from script in build/env/netbsd-amd64",
-		machineType:        "n1-highcpu-2",
+		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.netbsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64.tar.gz",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64-2da6b33.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	// Note: the netbsd-386 host VM image never gets networking up. So we don't use this for now.
@@ -174,7 +174,7 @@ var Hosts = map[string]*HostConfig{
 	"host-netbsd-386-8branch": &HostConfig{
 		VMImage:            "netbsd-386-8branch-a",
 		Notes:              "NetBSD 8.? from the netbsd-8 branch; GCE VM is built from script in build/env/netbsd-386",
-		machineType:        "n1-highcpu-2",
+		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.netbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-386.tar.gz",
 		SSHUsername:        "gopher",
@@ -1107,9 +1107,14 @@ func init() {
 		TryBot:    false,
 	})
 	addBuilder(BuildConfig{
-		Name:      "netbsd-386-8branch",
-		HostType:  "host-netbsd-amd64-8branch", // Using 64-bit kernel until networking fixed: https://github.com/golang/go/issues/20852#issuecomment-347698956
-		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
+		Name:     "netbsd-386-8branch",
+		HostType: "host-netbsd-amd64-8branch", // Using 64-bit kernel until networking fixed: https://github.com/golang/go/issues/20852#issuecomment-347698956
+		env: []string{
+			"GOARCH=386",
+			// Note that setting GOHOSTARCH=386 causes a CPU spin on a 64-bit kernel.
+			// Removed for now. See https://github.com/golang/go/issues/20852#issuecomment-348106484
+			// "GOHOSTARCH=386",
+		},
 		MaxAtOnce: 1,
 		TryBot:    false,
 	})
