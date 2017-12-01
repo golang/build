@@ -1375,6 +1375,10 @@ func startSSHServer() {
 		startSSHServerLinux()
 		return
 	}
+	if runtime.GOOS == "netbsd" {
+		startSSHServerNetBSD()
+		return
+	}
 
 	log.Printf("start ssh server: don't know how to start SSH server on this host type")
 }
@@ -1432,6 +1436,21 @@ func startSSHServerLinux() {
 		return
 	}
 	log.Printf("sshd started.")
+	waitLocalSSH()
+}
+
+func startSSHServerNetBSD() {
+	cmd := exec.Command("/etc/rc.d/sshd", "start")
+	err := cmd.Start()
+	if err != nil {
+		log.Printf("starting sshd: %v", err)
+		return
+	}
+	log.Printf("sshd started.")
+	waitLocalSSH()
+}
+
+func waitLocalSSH() {
 	for i := 0; i < 40; i++ {
 		time.Sleep(10 * time.Millisecond * time.Duration(i+1))
 		c, err := net.Dial("tcp", "localhost:22")

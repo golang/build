@@ -63,6 +63,8 @@ EOF""",
     "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add bash curl" % (arch, release),
     "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add git-base" % (arch, release),
     "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add mozilla-rootcerts go14" % (arch, release),
+    # Interactive debugging tools for users using gomote ssh:
+    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add emacs25-nox11 vim screen" % (arch, release),
     """ed /etc/fstab << EOF
 H
 %s/wd0/sd0/
@@ -70,6 +72,9 @@ wq
 EOF""",
     "touch /etc/openssl/openssl.cnf",
     "/usr/pkg/sbin/mozilla-rootcerts install",
+    "echo sshd=yes >> /etc/rc.conf",
+    "echo PermitRootLogin without-password >> /etc/ssh/sshd_config",
+    "/etc/rc.d/sshd restart",
     "sync; shutdown -hp now",
 ]
 
