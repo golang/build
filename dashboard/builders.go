@@ -1104,6 +1104,7 @@ func init() {
 		Name:      "netbsd-amd64-8branch",
 		HostType:  "host-netbsd-amd64-8branch",
 		MaxAtOnce: 1,
+		TryOnly:   true, // disabled until CPU spins fixed; Issue 22968
 		TryBot:    false,
 	})
 	addBuilder(BuildConfig{
