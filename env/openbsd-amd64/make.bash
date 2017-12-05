@@ -128,7 +128,7 @@ qemu-img create -f raw disk.raw 10G
 
 # Run the installer to create the disk image.
 expect <<EOF
-set timeout 600
+set timeout 1800
 
 spawn qemu-system-x86_64 -nographic -smp 2 \
   -drive if=virtio,file=disk.raw,format=raw -cdrom "${ISO_PATCHED}" \

@@ -125,17 +125,14 @@ var Hosts = map[string]*HostConfig{
 		Notes:              "OpenBSD 6.2; GCE VM is built from script in build/env/openbsd-amd64",
 		SSHUsername:        "gopher",
 	},
-	// Currently broken: See comments on CL 79055.
-	/*
-		"host-openbsd-386-62": &HostConfig{
-				VMImage:            "openbsd-386-62",
-				machineType:        "n1-highcpu-4",
-				buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
-				goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-60.tar.gz",
-				Notes:              "OpenBSD 6.2; GCE VM is built from script in build/env/openbsd-386",
-				SSHUsername:        "gopher",
-			},
-	*/
+	"host-openbsd-386-62": &HostConfig{
+		VMImage:            "openbsd-386-62-a",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-60.tar.gz",
+		Notes:              "OpenBSD 6.2; GCE VM is built from script in build/env/openbsd-386",
+		SSHUsername:        "gopher",
+	},
 	"host-freebsd-93-gce": &HostConfig{
 		VMImage:            "freebsd-amd64-gce93",
 		machineType:        "n1-highcpu-4",
@@ -1090,6 +1087,11 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:      "openbsd-386-60",
 		HostType:  "host-openbsd-386-60",
+		MaxAtOnce: 1,
+	})
+	addBuilder(BuildConfig{
+		Name:      "openbsd-386-62",
+		HostType:  "host-openbsd-386-62",
 		MaxAtOnce: 1,
 	})
 	addBuilder(BuildConfig{
