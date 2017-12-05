@@ -155,6 +155,9 @@ const (
 
 	// Footer containing the GitHub PR associated with the Gerrit Change.
 	prefixGitFooterPR = "GitHub-Pull-Request:"
+
+	// Footer containing the Gerrit Change ID.
+	prefixGitFooterChangeID = "Change-Id:"
 )
 
 var (
@@ -176,9 +179,9 @@ type bot struct {
 	corpus       *maintner.Corpus
 	importedPRs  map[string]*maintner.GerritCL // GitHub owner/repo#n -> Gerrit CL
 
-	// CLs that have been created on Gerrit for GitHub PRs but are not yet
+	// CLs that have been created/updated on Gerrit for GitHub PRs but are not yet
 	// reflected in the maintner corpus yet.
-	pendingCLs map[string]bool // GitHub owner/repo#n -> true
+	pendingCLs map[string]string // GitHub owner/repo#n -> latest GitHub SHA
 }
 
 func newBot(githubClient *github.Client, gerritClient *gerrit.Client) *bot {
@@ -186,7 +189,7 @@ func newBot(githubClient *github.Client, gerritClient *gerrit.Client) *bot {
 		githubClient: githubClient,
 		gerritClient: gerritClient,
 		importedPRs:  map[string]*maintner.GerritCL{},
-		pendingCLs:   map[string]bool{},
+		pendingCLs:   map[string]string{},
 	}
 }
 
@@ -286,10 +289,14 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 	log.Printf("Processing PR %s ...", pr.GetHTMLURL())
 	shortLink := prShortLink(pr)
 	cl := b.importedPRs[shortLink]
-	if cl != nil && b.pendingCLs[shortLink] {
+	var lastRev string
+	if cl != nil {
+		lastRev = cl.Footer(prefixGitFooterLastRev)
+	}
+	if cl != nil && b.pendingCLs[shortLink] == lastRev {
 		delete(b.pendingCLs, shortLink)
 	}
-	if b.pendingCLs[shortLink] {
+	if b.pendingCLs[shortLink] != "" {
 		return nil
 	}
 
@@ -297,11 +304,11 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 		// Um. Wat?
 		return fmt.Errorf("pr has 0 commits")
 	}
+	prHeadSHA := pr.Head.GetSHA()
 	if pr.GetCommits() > 1 {
 		repo := pr.GetBase().GetRepo()
 		return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(),
-			fmt.Sprintf("Head %v has %d commits. Please squash your commits into one.",
-				pr.Head.GetSHA(), pr.GetCommits()))
+			fmt.Sprintf("Head %v has %d commits. Please squash your commits into one.", prHeadSHA, pr.GetCommits()))
 	}
 
 	if cl == nil {
@@ -310,17 +317,16 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 			return fmt.Errorf("gerritChangeForPR(%+v): %v", pr, err)
 		}
 		if gcl != nil {
-			b.pendingCLs[shortLink] = true
+			b.pendingCLs[shortLink] = prHeadSHA
 			return nil
 		}
-		if err := createGerritChangeFromPR(pr); err != nil {
-			return fmt.Errorf("createGerritChangeFromPR(%v): %v", shortLink, err)
+		if err := importGerritChangeFromPR(pr, nil); err != nil {
+			return fmt.Errorf("importGerritChangeFromPR(%v, nil): %v", shortLink, err)
 		}
-		b.pendingCLs[shortLink] = true
+		b.pendingCLs[shortLink] = prHeadSHA
 		return nil
 	}
 
-	lastRev := cl.Footer(prefixGitFooterLastRev)
 	if lastRev == "" {
 		log.Printf("Imported CL https://go-review.googlesource.com/q/%s does not have %s footer; skipping",
 			cl.ChangeID(), prefixGitFooterLastRev)
@@ -332,6 +338,10 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 		return nil
 	}
 	// Import PR to existing Gerrit Change.
+	if err := importGerritChangeFromPR(pr, cl); err != nil {
+		return fmt.Errorf("importGerritChangeFromPR(%v, %v): %v", shortLink, cl, err)
+	}
+	b.pendingCLs[shortLink] = prHeadSHA
 	return nil
 }
 
@@ -367,7 +377,9 @@ func (b *bot) downloadRef(ctx context.Context, changeID string) (string, error) 
 
 const gerritHostBase = "https://go.googlesource.com/"
 
-func createGerritChangeFromPR(pr *github.PullRequest) error {
+// importGerritChangeFromPR mirrors the latest state of pr to cl. If cl is nil,
+// then a new Gerrit Change is created.
+func importGerritChangeFromPR(pr *github.PullRequest, cl *maintner.GerritCL) error {
 	githubRepo := pr.GetBase().GetRepo()
 	gerritRepo := gerritHostBase + githubRepo.GetName() // GitHub repo name should match Gerrit repo name.
 	repoDir := filepath.Join(reposRoot(), url.PathEscape(gerritRepo))
@@ -424,6 +436,9 @@ func createGerritChangeFromPR(pr *github.PullRequest) error {
 		pr.GetBody(),
 		prefixGitFooterLastRev, pr.Head.GetSHA(),
 		prefixGitFooterPR, prShortLink(pr))
+	if cl != nil {
+		commitMsg += fmt.Sprintf("%s %s\n", prefixGitFooterChangeID, cl.ChangeID())
+	}
 	for _, c := range []*exec.Cmd{
 		exec.Command("git", "-C", worktreeDir, "fetch", "github", fmt.Sprintf("pull/%d/head", pr.GetNumber())),
 		exec.Command("git", "-C", worktreeDir, "checkout", pr.Base.GetSHA(), "-b", prShortLink(pr)),
