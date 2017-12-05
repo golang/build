@@ -173,7 +173,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:              "NetBSD 8.? from the netbsd-8 branch; GCE VM is built from script in build/env/netbsd-386",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.netbsd-386",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-386.tar.gz",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-386-0b3b511.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-dragonfly-amd64-tdfbsd": &HostConfig{
@@ -1112,7 +1112,7 @@ func init() {
 		Name:      "netbsd-386-8branch",
 		HostType:  "host-netbsd-386-8branch",
 		MaxAtOnce: 1,
-		TryOnly:   false, // disabled until networking works; https://github.com/golang/go/issues/20852#issuecomment-348373687
+		TryOnly:   true, // disabled until binary packages are available; https://github.com/golang/go/issues/20852#issuecomment-349409393
 		TryBot:    false,
 	})
 	addBuilder(BuildConfig{
