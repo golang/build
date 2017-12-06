@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
@@ -44,6 +45,16 @@ func (c change) TextLine() string {
 func main() {
 	flag.Parse()
 
+	// Releases are every 6 months. Walk forward by 6 month increments to next release.
+	cutoff := time.Date(2016, time.August, 1, 00, 00, 00, 0, time.UTC)
+	now := time.Now()
+	for cutoff.Before(now) {
+		cutoff = cutoff.AddDate(0, 6, 0)
+	}
+
+	// Previous release was 6 months earlier.
+	cutoff = cutoff.AddDate(0, -6, 0)
+
 	var existingHTML []byte
 	if *exclFile != "" {
 		var err error
@@ -65,6 +76,10 @@ func main() {
 		}
 		gp.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
 			if cl.Status != "merged" {
+				return nil
+			}
+			if cl.Commit.CommitTime.Before(cutoff) {
+				// Was in a previous release; not for this one.
 				return nil
 			}
 			relnote := clRelNote(cl)
