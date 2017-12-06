@@ -71,7 +71,9 @@ var (
 //    8: mac screensaver disabled
 //   11: move from self-signed cert to LetsEncrypt (Issue 16442)
 //   15: ssh support
-const buildletVersion = 15
+//   16: make macstadium builders always haltEntireOS
+//   17: make macstadium halts use sudo
+const buildletVersion = 17
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -1160,7 +1162,7 @@ func doHalt() {
 	case "darwin":
 		if os.Getenv("GO_BUILDER_ENV") == "macstadium_vm" {
 			// Fast, sloppy, unsafe, because we're never reusing this VM again.
-			err = exec.Command("/sbin/halt", "-n", "-q", "-l").Run()
+			err = exec.Command("/usr/bin/sudo", "/sbin/halt", "-n", "-q", "-l").Run()
 		} else {
 			err = errors.New("not respecting -halt flag on macOS in unknown environment")
 		}
@@ -1565,7 +1567,7 @@ func killProcessTreeUnix(p *os.Process) error {
 // configureMacStadium configures the buildlet flags for use on a Mac
 // VM running on MacStadium under VMWare.
 func configureMacStadium() {
-	*haltEntireOS = false // for now
+	*haltEntireOS = true
 
 	// TODO: setup RAM disk for tmp and set *workDir
 
@@ -1581,12 +1583,6 @@ func configureMacStadium() {
 		log.Fatalf("unsupported sw_vers version %q", version)
 	}
 	major, minor := m[1], m[2] // "10", "12"
-	if minor == "12" {
-		// macOS Sierra wedges its network stack if it runs
-		// all.bash a few times in a row. Reboot between each
-		// build.
-		*haltEntireOS = true
-	}
 	*reverse = "darwin-amd64-" + major + "_" + minor
 	*coordinator = "farmer.golang.org:443"
 
