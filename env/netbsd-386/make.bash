@@ -16,7 +16,7 @@ set -e -x
 ANITA_VERSION=1.41
 ARCH=i386
 # The release that the packages have been built for.
-RELEASE=8.0_2017Q2
+RELEASE=8.0_2017Q3
 
 # Must use GNU tar. On NetBSD, tar is BSD tar and gtar is GNU.
 TAR=tar

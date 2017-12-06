@@ -169,7 +169,7 @@ var Hosts = map[string]*HostConfig{
 	// Note: the netbsd-386 host VM image never gets networking up. So we don't use this for now.
 	// See https://github.com/golang/go/issues/20852#issuecomment-347698956
 	"host-netbsd-386-8branch": &HostConfig{
-		VMImage:            "netbsd-386-8branch-b",
+		VMImage:            "netbsd-386-8branch-c",
 		Notes:              "NetBSD 8.? from the netbsd-8 branch; GCE VM is built from script in build/env/netbsd-386",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.netbsd-386",
@@ -1112,7 +1112,6 @@ func init() {
 		Name:      "netbsd-386-8branch",
 		HostType:  "host-netbsd-386-8branch",
 		MaxAtOnce: 1,
-		TryOnly:   true, // disabled until binary packages are available; https://github.com/golang/go/issues/20852#issuecomment-349409393
 		TryBot:    false,
 	})
 	addBuilder(BuildConfig{
