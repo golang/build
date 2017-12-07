@@ -577,6 +577,13 @@ type BuildConfig struct {
 	// not run for that commit.
 	GoDeps []string
 
+	// ShouldRunDistTest optionally specifies a function which
+	// controls whether a test (a name from "go tool dist test
+	// -list") is run. The isTry value is true for trybot runs.
+	// A few general special cases are handled in
+	// cmd/coordinator's in buildStatus.shouldSkipTest.
+	ShouldRunDistTest func(distTestName string, isTry bool) bool
+
 	// numTestHelpers is the number of _additional_ buildlets
 	// past the first one to help out with sharded tests.
 	// For trybots, the numTryHelpers value is used, unless it's
@@ -719,10 +726,9 @@ func (c *BuildConfig) BuildSubrepos() bool {
 	}
 	// TODO(adg,bradfitz): expand this as required
 	switch c.Name {
-	case "darwin-amd64-10_8",
-		"darwin-amd64-10_10",
-		"darwin-amd64-10_11",
+	case "darwin-amd64-10_11",
 		"darwin-386-10_11",
+		// TODO: add darwin-amd64-10_12 when we have a build scheduler
 		"freebsd-amd64-93",
 		"freebsd-386-10_3", "freebsd-amd64-10_3",
 		"freebsd-386-11_1", "freebsd-amd64-11_1",
@@ -735,11 +741,6 @@ func (c *BuildConfig) BuildSubrepos() bool {
 		"freebsd-arm-paulzhol",
 		"windows-amd64-2016", "windows-386-2008":
 		return true
-	case "darwin-amd64-10_12":
-		// Don't build subrepos on Sierra until
-		// https://github.com/golang/go/issues/18751#issuecomment-274955794
-		// is addressed.
-		return false
 	default:
 		return false
 	}
@@ -887,6 +888,7 @@ func init() {
 		Name:              "freebsd-amd64-11_1",
 		HostType:          "host-freebsd-11_1",
 		TryBot:            true,
+		ShouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
 		MaxAtOnce:         2,
 	})
@@ -902,14 +904,16 @@ func init() {
 		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
-		Name:      "freebsd-386-11_1",
-		HostType:  "host-freebsd-11_1",
-		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
-		MaxAtOnce: 2,
+		Name:              "freebsd-386-11_1",
+		HostType:          "host-freebsd-11_1",
+		ShouldRunDistTest: noTestDir,
+		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		MaxAtOnce:         2,
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-386",
 		HostType:          "host-linux-kubestd",
+		ShouldRunDistTest: fasterTrybots,
 		TryBot:            true,
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		numTestHelpers:    1,
@@ -990,7 +994,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:        "linux-amd64-ssacheck",
 		HostType:    "host-linux-kubestd",
-		TryBot:      true,
+		TryBot:      false, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
 		CompileOnly: true,
 		Notes:       "SSA internal checks enabled",
 		env:         []string{"GO_GCFLAGS=-d=ssa/check/on,dclstack"},
@@ -1001,7 +1005,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:                "linux-amd64-racecompile",
 		HostType:            "host-linux-kubestd",
-		TryBot:              true,
+		TryBot:              false, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
 		CompileOnly:         true,
 		SkipSnapshot:        true,
 		StopAfterMake:       true,
@@ -1015,6 +1019,7 @@ func init() {
 		Name:              "linux-amd64-race",
 		HostType:          "host-linux-kubestd",
 		TryBot:            true,
+		ShouldRunDistTest: fasterTrybots,
 		numTestHelpers:    2,
 		numTryTestHelpers: 5,
 	})
@@ -1079,40 +1084,46 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-60",
 		HostType:          "host-openbsd-amd64-60",
+		ShouldRunDistTest: noTestDir,
 		TryBot:            false,
 		MaxAtOnce:         1,
 		numTestHelpers:    2,
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
-		Name:      "openbsd-386-60",
-		HostType:  "host-openbsd-386-60",
-		MaxAtOnce: 1,
+		Name:              "openbsd-386-60",
+		HostType:          "host-openbsd-386-60",
+		ShouldRunDistTest: noTestDir,
+		MaxAtOnce:         1,
 	})
 	addBuilder(BuildConfig{
-		Name:      "openbsd-386-62",
-		HostType:  "host-openbsd-386-62",
-		MaxAtOnce: 1,
+		Name:              "openbsd-386-62",
+		HostType:          "host-openbsd-386-62",
+		ShouldRunDistTest: noTestDir,
+		MaxAtOnce:         1,
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-62",
 		HostType:          "host-openbsd-amd64-62",
+		ShouldRunDistTest: noTestDir,
 		TryBot:            true,
 		numTestHelpers:    0,
 		numTryTestHelpers: 5,
 		MaxAtOnce:         1,
 	})
 	addBuilder(BuildConfig{
-		Name:      "netbsd-amd64-8branch",
-		HostType:  "host-netbsd-amd64-8branch",
-		MaxAtOnce: 1,
-		TryBot:    false,
+		Name:              "netbsd-amd64-8branch",
+		HostType:          "host-netbsd-amd64-8branch",
+		ShouldRunDistTest: noTestDir,
+		MaxAtOnce:         1,
+		TryBot:            false,
 	})
 	addBuilder(BuildConfig{
-		Name:      "netbsd-386-8branch",
-		HostType:  "host-netbsd-386-8branch",
-		MaxAtOnce: 1,
-		TryBot:    false,
+		Name:              "netbsd-386-8branch",
+		HostType:          "host-netbsd-386-8branch",
+		ShouldRunDistTest: noTestDir,
+		MaxAtOnce:         1,
+		TryBot:            false,
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-386",
@@ -1121,27 +1132,31 @@ func init() {
 		MaxAtOnce:      2,
 	})
 	addBuilder(BuildConfig{
-		Name:     "windows-amd64-2008",
-		HostType: "host-windows-amd64-2008",
-		env:      []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		Name:              "windows-amd64-2008",
+		HostType:          "host-windows-amd64-2008",
+		ShouldRunDistTest: noTestDir,
+		env:               []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-386-2008",
 		HostType:          "host-windows-amd64-2008",
+		ShouldRunDistTest: fasterTrybots,
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		MaxAtOnce:         2,
 		TryBot:            true,
-		numTryTestHelpers: 5,
+		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
-		Name:      "windows-amd64-2012",
-		HostType:  "host-windows-amd64-2012",
-		env:       []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
-		MaxAtOnce: 2,
+		Name:              "windows-amd64-2012",
+		HostType:          "host-windows-amd64-2012",
+		ShouldRunDistTest: noTestDir,
+		env:               []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		MaxAtOnce:         2,
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2016",
 		HostType:          "host-windows-amd64-2016",
+		ShouldRunDistTest: fasterTrybots,
 		env:               []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
 		TryBot:            true,
 		numTryTestHelpers: 5,
@@ -1153,29 +1168,39 @@ func init() {
 		env:      []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
-		Name:     "darwin-amd64-10_8",
-		HostType: "host-darwin-10_8",
+		Name:              "darwin-amd64-10_8",
+		HostType:          "host-darwin-10_8",
+		ShouldRunDistTest: noTestDir,
 	})
 	addBuilder(BuildConfig{
-		Name:     "darwin-amd64-10_10",
-		HostType: "host-darwin-10_10",
+		Name:              "darwin-amd64-10_10",
+		HostType:          "host-darwin-10_10",
+		ShouldRunDistTest: noTestDir,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_11",
 		HostType:          "host-darwin-10_11",
 		TryBot:            true,
+		ShouldRunDistTest: noTestDir,
 		numTestHelpers:    2,
 		numTryTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
-		Name:      "darwin-386-10_11",
-		HostType:  "host-darwin-10_11",
-		MaxAtOnce: 1,
-		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
+		Name:              "darwin-386-10_11",
+		HostType:          "host-darwin-10_11",
+		ShouldRunDistTest: noTestDir,
+		MaxAtOnce:         1,
+		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
-		Name:     "darwin-amd64-10_12",
-		HostType: "host-darwin-10_12",
+		Name:              "darwin-amd64-10_12",
+		HostType:          "host-darwin-10_12",
+		ShouldRunDistTest: noTestDir,
+	})
+	addBuilder(BuildConfig{
+		Name:              "darwin-amd64-race",
+		HostType:          "host-darwin-10_11",
+		ShouldRunDistTest: noTestDir,
 	})
 	addBuilder(BuildConfig{
 		Name:     "darwin-arm-a1428ios",
@@ -1287,9 +1312,10 @@ func init() {
 		TryOnly:  true,
 	})
 	addBuilder(BuildConfig{
-		Name:         "dragonfly-amd64",
-		HostType:     "host-dragonfly-amd64-tdfbsd",
-		SkipSnapshot: true,
+		Name:              "dragonfly-amd64",
+		HostType:          "host-dragonfly-amd64-tdfbsd",
+		ShouldRunDistTest: noTestDir,
+		SkipSnapshot:      true,
 	})
 	addBuilder(BuildConfig{
 		Name:         "freebsd-arm-paulzhol",
@@ -1361,4 +1387,22 @@ func TrybotBuilderNames() []string {
 	}
 	sort.Strings(ret)
 	return ret
+}
+
+// fasterTrybots is a ShouldRunDistTest policy function.
+// It skips (returns false) the test/ directory tests for trybots.
+func fasterTrybots(distTest string, isTry bool) bool {
+	if isTry && strings.HasPrefix(distTest, "test:") {
+		return false // skip test
+	}
+	return true
+}
+
+// noTestDir is a ShouldRunDistTest policy function.
+// It skips (returns false) the test/ directory tests for all builds.
+func noTestDir(distTest string, isTry bool) bool {
+	if strings.HasPrefix(distTest, "test:") {
+		return false // skip test
+	}
+	return true
 }

@@ -2057,6 +2057,11 @@ func (st *buildStatus) shouldSkipTest(testName string) bool {
 	case "api":
 		return st.isTry() && st.Name != "linux-amd64"
 	}
+	if st.conf.ShouldRunDistTest != nil {
+		if !st.conf.ShouldRunDistTest(testName, st.isTry()) {
+			return true
+		}
+	}
 	return false
 }
 
