@@ -25,27 +25,22 @@ case $1 in
 9.3)
   readonly VERSION=9.3
   readonly VERSION_TRAILER="-20140711-r268512"
-  readonly DNS_LOOKUP=dig
   readonly SHA256=4737218995ae056207c68f3105c0fbe655c32e8b76d2160ebfb1bba56dd5196f
 ;;
 
 10.3)
   readonly VERSION=10.3
   readonly VERSION_TRAILER=
-  # BIND replaced by unbound on FreeBSD 10, so drill(1) is the new dig(1)
-  readonly DNS_LOOKUP=drill
   readonly SHA256=1d710ba643bf6a8ce5bff5a9d69b1657ccff83dd1f2df711d9b4e02f9aab7d06
 ;;
 11.0)
   readonly VERSION=11.0
   readonly VERSION_TRAILER=
-  readonly DNS_LOOKUP=drill
   readonly SHA256=f9f7fcac1acfe210979a72e0642a70fcf9c9381cc1884e966eac8381c724158c
   ;;
 11.1)
   readonly VERSION=11.1
   readonly VERSION_TRAILER=
-  readonly DNS_LOOKUP=drill
   readonly SHA256=233c6b269a29c1ce38bb4eb861251d1c74643846c1de937b8e31cc0316632bc0
 ;;
 *)
@@ -68,63 +63,12 @@ fi
 cp FreeBSD-${VERSION:?}-RELEASE-amd64${VERSION_TRAILER}.raw disk.raw
 
 mkdir -p iso/boot iso/etc iso/usr/local/etc/rc.d
+cp loader.conf iso/boot
+cp rc.conf iso/etc
+cp buildlet iso/usr/local/etc/rc.d
 
-cat >iso/boot/loader.conf <<EOF
-autoboot_delay="-1"
-beastie_disable="YES"
-loader_logo="none"
-hw.memtest.tests="0"
-console="comconsole,vidconsole"
-hw.vtnet.csum_disable=1
-hw.vtnet.mq_disable=1
-kern.timecounter.hardware=ACPI-safe
-aesni_load="YES"
-nvme_load="YES"
-EOF
-
-cat >iso/etc/rc.conf <<EOF
-hostname="buildlet"
-ifconfig_vtnet0="SYNCDHCP mtu 1460"
-sshd_enable="YES"
-buildlet_enable="YES"
-EOF
-
-cat >iso/usr/local/etc/rc.d/buildlet <<EOF
+cat >iso/install.sh <<'EOF'
 #!/bin/sh
-
-# PROVIDE: buildlet
-# REQUIRE: sshd
-# BEFORE: securelevel
-
-. /etc/rc.subr
-
-name="buildlet"
-start_cmd="\${name}_start"
-stop_cmd=""
-
-buildlet_start()
-{
-	PATH=/bin:/sbin:/usr/bin:/usr/local/bin; export PATH
-	echo "starting buildlet script"
-	netstat -rn
-	cat /etc/resolv.conf
-	${DNS_LOOKUP:?} metadata.google.internal
-	(
-	 set -e
-	 export PATH="\$PATH:/usr/local/bin"
-	 /usr/local/bin/curl -o /buildlet \$(/usr/local/bin/curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/buildlet-binary-url)
-	 chmod +x /buildlet
-	 exec /buildlet
-	 echo "giving up"
-	 sleep 10
-	)
-	poweroff
-}
-load_rc_config \$name
-run_rc_command "\$1"
-EOF
-
-cat >iso/install.sh <<EOF
 set -x
 
 mkdir -p /usr/local/etc/rc.d/
@@ -148,7 +92,7 @@ sleep 2
 # TODO(wathiede): set serial output so we can track boot on GCE.
 expect <<EOF
 set timeout 600
-spawn qemu-system-x86_64 -display curses -smp 2 -drive if=virtio,file=disk.raw,cache=none -cdrom config.iso -net nic,model=virtio -net user
+spawn qemu-system-x86_64 -display curses -smp 2 -m 1G -drive if=virtio,file=disk.raw,cache=none -cdrom config.iso -net nic,model=virtio -net user
 
 # Speed-up boot by going in to single user mode.
 expect "Welcome to FreeBSD"
