@@ -1063,7 +1063,10 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "linux-arm-arm5spacemonkey",
 		HostType: "host-linux-arm5spacemonkey",
-		env:      []string{"GOARM=5"},
+		env: []string{
+			"GOARM=5",
+			"GO_TEST_TIMEOUT_SCALE=4", // arm is normally 2; double that.
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "nacl-386",
