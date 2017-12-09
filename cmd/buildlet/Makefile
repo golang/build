@@ -19,6 +19,7 @@ compile:
 	GOOS=linux GOARCH=s390x go install golang.org/x/build/cmd/buildlet
 	GOOS=darwin GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
 	GOOS=windows GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
+	GOOS=windows GOARCH=386 go install golang.org/x/build/cmd/buildlet
 	GOOS=freebsd GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
 	GOOS=netbsd GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
 	GOOS=openbsd GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
@@ -67,6 +68,10 @@ buildlet.plan9-386: FORCE
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
 
 buildlet.windows-amd64: FORCE buildlet_windows.go
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+
+buildlet.windows-386: FORCE buildlet_windows.go
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
 

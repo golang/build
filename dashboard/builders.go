@@ -254,6 +254,21 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
+	// We only test Windows XP on 32-bit, because only less than
+	// 1% of XP users ever had 64-bit XP, according to numbers
+	// found online. And we test XP at all because it's the oldest
+	// Windows we claim to support, so let's see if it remains
+	// true, until we decide to not support it.
+	"host-windows-386-xp": &HostConfig{
+		Notes:       "VMware instance run by Brad. No cgo. XP SP3.",
+		OwnerGithub: "bradfitz",
+		IsReverse:   true,
+		ExpectNum:   1,
+		env: []string{
+			"CGO_ENABLED=0",
+			`GOROOT_BOOTSTRAP=C:\Documents and Settings\winxp\go1.4`,
+		},
+	},
 	"host-darwin-10_8": &HostConfig{
 		IsReverse: true,
 		ExpectNum: 1,
@@ -1169,6 +1184,11 @@ func init() {
 		HostType: "host-windows-amd64-2008",
 		Notes:    "Only runs -race tests (./race.bat)",
 		env:      []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+	})
+	addBuilder(BuildConfig{
+		Name:      "windows-386-xp",
+		HostType:  "host-windows-386-xp",
+		MaxAtOnce: 1, // only one anyway
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_8",
