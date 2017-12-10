@@ -1186,9 +1186,18 @@ func init() {
 		env:      []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
-		Name:      "windows-386-xp",
-		HostType:  "host-windows-386-xp",
-		MaxAtOnce: 1, // only one anyway
+		Name:         "windows-386-xp",
+		HostType:     "host-windows-386-xp",
+		MaxAtOnce:    1, // only one anyway
+		SkipSnapshot: true,
+		ShouldRunDistTest: func(distTest string, isTry bool) bool {
+			if strings.Contains(distTest, "vendor/github.com/google/pprof") {
+				// Not worth it. And broken.
+				// See golang.org/issue/22594.
+				return false
+			}
+			return true
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_8",
