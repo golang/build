@@ -122,7 +122,7 @@ func (s *server) corpusUpdateLoop(ctx context.Context) {
 const (
 	issuesURLBase = "https://golang.org/issue/"
 
-	labelHelpWanted = "HelpWanted"
+	labelHelpWantedID = 150880243
 )
 
 func (s *server) updateHelpWantedIssues() {
@@ -134,7 +134,7 @@ func (s *server) updateHelpWantedIssues() {
 		if i.Closed {
 			return nil
 		}
-		if i.HasLabel(labelHelpWanted) {
+		if i.HasLabelID(labelHelpWantedID) {
 			ids = append(ids, i.Number)
 		}
 		return nil

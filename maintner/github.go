@@ -333,6 +333,12 @@ func (gi *GitHubIssue) HasLabel(label string) bool {
 	return false
 }
 
+// HasLabelID returns whether the issue has a label with the given ID.
+func (gi *GitHubIssue) HasLabelID(id int64) bool {
+	_, ok := gi.Labels[id]
+	return ok
+}
+
 func (gi *GitHubIssue) getCreatedAt() time.Time {
 	if gi == nil {
 		return time.Time{}
