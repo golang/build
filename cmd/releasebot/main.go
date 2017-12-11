@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Releasebot manages the process of defining, packaging, and publishing Go releases.
-// It is a work in progress; right now it only handles minor (point) releases,
+// It is a work in progress; right now it only handles beta and minor (point) releases,
 // but eventually we want it to handle major releases too.
 //
 // Release process
@@ -31,9 +31,8 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/build/gerrit"
-
 	"github.com/google/go-github/github"
+	"golang.org/x/build/gerrit"
 )
 
 var releaseTargets = []string{
@@ -53,27 +52,41 @@ var releaseTargets = []string{
 
 var githubCherryPickApprovers = map[string]bool{
 	"aclements":      true,
+	"andybons":       true,
 	"bradfitz":       true,
 	"broady":         true,
 	"ianlancetaylor": true,
 	"rsc":            true,
 }
 
+var releaseModes = map[string]bool{
+	"beta":              true,
+	"release-candidate": true,
+	"final":             true,
+	"close-milestone":   true,
+}
+
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: releasebot go1.8.5 go1.9.2\n")
+	fmt.Fprintln(os.Stderr, "usage: releasebot -mode [release mode] go1.8.5 go1.9.2 go1.10")
+	fmt.Fprintln(os.Stderr, "Release modes:")
+	fmt.Fprintln(os.Stderr)
+	for m := range releaseModes {
+		fmt.Fprintln(os.Stderr, m)
+	}
 	os.Exit(2)
 }
 
 func main() {
-	modeFlag := flag.String("mode", "release-candidate", "release mode (release-candidate, final, close-milestone)")
+	modeFlag := flag.String("mode", "", "release mode (beta, release-candidate, final, close-milestone)")
 	flag.Usage = usage
 	flag.Parse()
-	if flag.NArg() == 0 {
+	if *modeFlag == "" || !releaseModes[*modeFlag] || flag.NArg() == 0 {
 		usage()
 	}
 
 	http.DefaultTransport = newLogger(http.DefaultTransport)
 
+	checkForGitCodereview()
 	loadGithubAuth()
 	loadGerritAuth()
 	loadGCSAuth()
@@ -89,8 +102,10 @@ Args:
 		for _, m := range miles {
 			if strings.ToLower(m.GetTitle()) == release {
 				w := &Work{Milestone: m}
+				w.BetaRelease = *modeFlag == "beta"
 				w.FinalRelease = *modeFlag == "final"
 				w.CloseMilestone = *modeFlag == "close-milestone"
+				w.setVersion(release)
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
@@ -104,6 +119,17 @@ Args:
 	wg.Wait()
 }
 
+// checkForGitCodereview exits the program if git-codereview is not installed
+// in the user's path.
+func checkForGitCodereview() {
+	cmd := exec.Command("which", "-s", "git-codereview")
+	if err := cmd.Run(); err != nil {
+		log.Fatal("could not find git-codereivew: ", cmd.Args, ": ", err, "\n\n"+
+			"Please install it via go get golang.org/x/review/git-codereview\n"+
+			"to use this program.")
+	}
+}
+
 // Work collects all the work state for managing a particular release.
 // The intent is that the code could be used in a setting where one program
 // is managing multiple releases, although the current releasebot command line
@@ -114,6 +140,7 @@ type Work struct {
 	runDir   string
 	extraEnv []string
 
+	BetaRelease    bool // this is the beta release; always cut from master
 	FinalRelease   bool // this is the actual release
 	CloseMilestone bool // release is done; close the issues and milestone
 
@@ -212,6 +239,9 @@ func (w *Work) run(args ...string) {
 // runs of side-effect-free commands like "git cat-file commit HEAD".
 func (w *Work) runOut(args ...string) []byte {
 	cmd := exec.Command(args[0], args[1:]...)
+	// Make Git editor a no-op so that git codereview submit -i does not pop up
+	// an editor.
+	cmd.Env = []string{"EDITOR=true"}
 	cmd.Dir = w.runDir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -236,9 +266,12 @@ Again:
 	try++
 	w.log.Printf("$ %s\n", strings.Join(args, " "))
 	cmd := exec.Command(args[0], args[1:]...)
+	// Make Git editor a no-op so that git codereview submit -i does not pop up
+	// an editor.
+	cmd.Env = append(os.Environ(), "EDITOR=true")
 	cmd.Dir = w.runDir
 	if len(w.extraEnv) > 0 {
-		cmd.Env = append(os.Environ(), w.extraEnv...)
+		cmd.Env = append(cmd.Env, w.extraEnv...)
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil && try < maxTry {
@@ -258,13 +291,17 @@ func (w *Work) doRelease() {
 
 	w.log.Printf("starting")
 
+	w.gitCheckout()
+	if w.BetaRelease {
+		w.buildReleases()
+		return
+	}
+
 	w.findIssues()
 	w.findCLs()
-	w.gitCheckout()
 	w.queryGerritCLs()
 
 	if w.CloseMilestone {
-		w.Version = strings.ToLower(w.Milestone.GetTitle())
 		_, err := w.runErr("git", "rev-parse", w.Version)
 		if err != nil {
 			w.logError(nil, fmt.Sprintf("cannot close milestone: did not find %s tag in Git repo", w.Version))
@@ -297,6 +334,10 @@ func (w *Work) doRelease() {
 }
 
 func (w *Work) updateSummary() {
+	if w.BetaRelease {
+		return
+	}
+
 	w.summary.Lock()
 	defer w.summary.Unlock()
 
@@ -365,9 +406,6 @@ func (w *Work) updateSummary() {
 	fmt.Fprintf(&md, "\n## Log\n\n    ")
 	md.WriteString(strings.Replace(w.logBuf.String(), "\n", "\n    ", -1))
 	fmt.Fprintf(&md, "\n\n")
-
-	//	fmt.Printf("-------------------\n")
-	//	fmt.Printf("%s\n", md.String())
 
 	body := wrapStatus(w.Milestone, md.String())
 	_, _, err := githubClient.Issues.Edit(context.TODO(), projectOwner, projectRepo, w.ReleaseIssue.GetNumber(), &github.IssueRequest{
@@ -496,7 +534,7 @@ func (w *Work) writeVersion() {
 	desc += "Change-Id: " + changeID + "\n"
 
 	w.run("git", "commit", "-m", desc, "../VERSION")
-	w.run("git", "mail", "-trybot", "HEAD")
+	w.run("git", "codereview", "mail", "-trybot", "HEAD")
 	change := w.topGerritCL()
 	w.CLs = append(w.CLs, &CL{
 		Title:           version + rc,
@@ -595,12 +633,14 @@ func (w *Work) buildReleases() {
 	w.printReleaseTable(&md)
 	md.WriteString(signature())
 
-	println("POSTING")
-	com := findGithubComment(w.ReleaseIssue.GetNumber(), "## "+w.Version+" ")
-	if com != nil {
-		updateGithubComment(w.ReleaseIssue.GetNumber(), com, md.String())
-	} else {
-		postGithubComment(w.ReleaseIssue.GetNumber(), md.String())
+	if !w.BetaRelease {
+		println("POSTING")
+		com := findGithubComment(w.ReleaseIssue.GetNumber(), "## "+w.Version+" ")
+		if com != nil {
+			updateGithubComment(w.ReleaseIssue.GetNumber(), com, md.String())
+		} else {
+			postGithubComment(w.ReleaseIssue.GetNumber(), md.String())
+		}
 	}
 
 	println("TAGGING")

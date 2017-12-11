@@ -6,16 +6,62 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"golang.org/x/build/gerrit"
 )
+
+// setVersion takes the given release string of the form "go1.X" and sets the
+// Version field of w based on w.ReleaseType. For instance, if release is "go1.10"
+// and w.ReleaseType is beta, then w.Version will be set to "go1.10betaN" where N
+// is the next available number using go.googlesource.com/go's tags.
+func (w *Work) setVersion(release string) {
+	if !w.BetaRelease {
+		w.Version = release
+		return
+	}
+
+	resp, err := http.Get("https://go.googlesource.com/go/+refs?format=JSON")
+	if err != nil {
+		w.log.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		w.log.Fatalf("got non 2XX response code: %v", resp.Status)
+	}
+
+	// ref name -> values we don't care about
+	var refs map[string]struct{}
+	// Strip the JSON Hijack prefix so that we get valid input.
+	if _, err := resp.Body.Read(make([]byte, len(")]}'\n"))); err != nil {
+		w.log.Fatal(err)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&refs); err != nil {
+		w.log.Fatal(err)
+	}
+	prefix := "refs/tags/" + release + "beta"
+	var maxN int
+	for ref := range refs {
+		if !strings.HasPrefix(ref, prefix) {
+			continue
+		}
+
+		n, _ := strconv.Atoi(ref[len(prefix):])
+		if n > maxN {
+			maxN = n
+		}
+	}
+	w.Version = fmt.Sprintf("%sbeta%d", release, maxN+1)
+}
 
 // gitCheckout sets up a fresh git checkout in which to work,
 // in $HOME/go-releasebot-work/<release>/gitwork
@@ -27,11 +73,16 @@ import (
 // On return, w.runDir has been set to gitwork/src,
 // to allow commands like "./make.bash".
 func (w *Work) gitCheckout() {
-	shortRel := strings.ToLower(w.Milestone.GetTitle())
-	shortRel = shortRel[:strings.LastIndex(shortRel, ".")]
-	w.ReleaseBranch = "release-branch." + shortRel
-	//TODO: move to go-releasebot-work
-	w.Dir = filepath.Join(os.Getenv("HOME"), "go-releasebot-work/"+strings.ToLower(w.Milestone.GetTitle()))
+	if w.BetaRelease {
+		w.ReleaseBranch = "master"
+		w.VersionCommit = "master"
+	} else {
+		shortRel := strings.ToLower(w.Milestone.GetTitle())
+		shortRel = shortRel[:strings.LastIndex(shortRel, ".")]
+		w.ReleaseBranch = "release-branch." + shortRel
+	}
+	// TODO: move to go-releasebot-work
+	w.Dir = filepath.Join(os.Getenv("HOME"), "go-releasebot-work/"+strings.ToLower(w.Version))
 	w.log.Printf("working in %s\n", w.Dir)
 	if err := os.MkdirAll(w.Dir, 0777); err != nil {
 		w.log.Panic(err)
@@ -56,14 +107,13 @@ func (w *Work) gitCheckout() {
 	}
 	w.run("git", "clone", "--reference", mirror, "-b", w.ReleaseBranch, "https://go.googlesource.com/go", gitDir)
 	w.runDir = gitDir
-	w.run("git", "change", "relwork")
+	w.run("git", "codereview", "change", "relwork")
 	w.run("git", "config", "gc.auto", "0") // don't throw away refs we fetch
 	w.runDir = filepath.Join(gitDir, "src")
 
-	version := strings.ToLower(w.Milestone.GetTitle())
-	_, err := w.runErr("git", "rev-parse", version)
+	_, err := w.runErr("git", "rev-parse", w.Version)
 	if err == nil && !w.CloseMilestone {
-		w.logError(nil, fmt.Sprintf("%s tag already exists in Go repository!", version))
+		w.logError(nil, fmt.Sprintf("%s tag already exists in Go repository!", w.Version))
 		w.log.Panic("already released")
 	}
 	if err != nil && w.CloseMilestone {
@@ -268,7 +318,7 @@ func (w *Work) cherryPickCLs() {
 
 		// Push to Gerrit.
 		if change == nil {
-			w.run("git", "mail", "-trybot", "HEAD")
+			w.run("git", "codereview", "mail", "-trybot", "HEAD")
 			change = w.topGerritCL()
 		}
 		cl.ReleaseBranchCL = change.ChangeNumber
@@ -289,8 +339,8 @@ func (w *Work) cherryPickCLs() {
 func (w *Work) gitTagVersion() {
 	w.runDir = filepath.Join(w.Dir, "gitwork")
 	if w.FinalRelease {
-		w.run("git", "submit", "-i") // EDITOR=true so submits everything
-		w.run("git", "sync")
+		w.run("git", "codereview", "submit", "-i")
+		w.run("git", "codereview", "sync")
 	}
 
 	out, err := w.runErr("git", "tag", w.Version)
