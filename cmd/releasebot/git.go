@@ -221,7 +221,7 @@ func (w *Work) cherryPickCLs() {
 			w.run("git", "cherry-pick", "--abort")
 			continue
 		}
-		w.run("git", "commit", "--amend") // commit hook puts [release-branch] prefix in
+		w.run("git", "commit", "--amend", "--no-edit") // commit hook puts [release-branch] prefix in
 
 		// Search Gerrit to find any pre-existing CL we'd be updating by doing a git mail.
 		// If one exists and it has the same parent, tree, and commit message as our local

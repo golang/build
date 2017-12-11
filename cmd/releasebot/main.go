@@ -71,8 +71,6 @@ func main() {
 	if flag.NArg() == 0 {
 		usage()
 	}
-	// Make git editor a no-op to allow commands like "git commit --amend".
-	os.Setenv("EDITOR", "true")
 
 	http.DefaultTransport = newLogger(http.DefaultTransport)
 
