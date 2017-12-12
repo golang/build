@@ -45,6 +45,11 @@ type BuildRevision struct {
 	// Branch is the branch of this commit, e.g. "master" or "dev.ssa".
 	Branch string `json:"branch"`
 
+	// GoBranch is the branch of the GoRevision, for subrepos.
+	// It is empty for the main repo.
+	// Otherwise it's of the form "master", "release-branch.go1.8", etc.
+	GoBranch string `json:"goBranch,omitempty"`
+
 	// Author is the author of this commit in standard git form
 	// "Name <email>".
 	Author string `json:"author"`

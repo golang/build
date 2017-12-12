@@ -244,10 +244,17 @@ func jsonHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 	for _, ts := range data.TagState {
 		for _, pkgState := range ts.Packages {
 			goRev := ts.Tag.Hash
+			goBranch := ts.Name
+			if goBranch == "tip" {
+				// Normalize old hg terminology into
+				// our git branch name.
+				goBranch = "master"
+			}
 			rev := types.BuildRevision{
 				Repo:       pkgState.Package.Name,
 				GoRevision: goRev,
 				Results:    make([]string, len(data.Builders)),
+				GoBranch:   goBranch,
 			}
 			commitToBuildRevision(pkgState.Commit, &rev)
 			for i, b := range res.Builders {
