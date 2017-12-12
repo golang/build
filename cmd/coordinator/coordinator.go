@@ -786,7 +786,7 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 				continue
 			}
 			builder := bs.Builders[i]
-			if skipBranchForBuilder(br.Repo, br.Branch, builder) {
+			if skipBranchForBuilder(br.Repo, br.Branch, br.GoBranch, builder) {
 				continue
 			}
 
@@ -837,7 +837,7 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 		if builderInfo.TryOnly || knownToDashboard[b] {
 			continue
 		}
-		if skipBranchForBuilder("go", "master", b) {
+		if skipBranchForBuilder("go", "master", "master", b) {
 			continue
 		}
 		for _, rev := range goRevisions {
@@ -3420,7 +3420,13 @@ func randHex(n int) string {
 	return fmt.Sprintf("%x", buf)[:n]
 }
 
-func skipBranchForBuilder(repo, branch, builder string) bool {
+// repo is "go", "net", etc.
+// branch is the branch of the repo (usually "master").
+// goGranch is non-empty for a non-"go" repo, and is the branch of Go the subrepo is being tested at.
+// builder is a build config name.
+func skipBranchForBuilder(repo, branch, goBranch, builder string) bool {
+	// TODO: move this policy into a new BuildConfig policy func
+	// in dashboard/builders.go.
 	if strings.HasPrefix(builder, "darwin-") {
 		switch builder {
 		case "darwin-amd64-10_8", "darwin-amd64-10_10", "darwin-amd64-10_11",
@@ -3439,6 +3445,14 @@ func skipBranchForBuilder(repo, branch, builder string) bool {
 				"release-branch.go1":
 				return true
 			}
+		}
+	}
+	// NetBSD support was resurrected during the Go 1.10 dev cycle.
+	// Skip subrepo builds against Go 1.8 and Go 1.9. Failures there aren't interesting.
+	if strings.HasPrefix(builder, "netbsd-") {
+		switch goBranch {
+		case "release-branch.go1.8", "release-branch.go1.9":
+			return true
 		}
 	}
 	return false
