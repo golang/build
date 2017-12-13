@@ -155,10 +155,6 @@ func push(args []string) error {
 		if rel == "" {
 			return nil
 		}
-		if strings.HasPrefix(rel, "test/") && isDotArchChar(rel) {
-			// Skip test/bench/shootout/spectral-norm.6, etc.
-			return nil
-		}
 		if fi.IsDir() {
 			switch rel {
 			case ".git", "pkg", "bin":
@@ -381,15 +377,4 @@ func fileSHA1(path string) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("%x", s1.Sum(nil)), nil
-}
-
-func isDotArchChar(path string) bool {
-	if len(path) < 2 || path[len(path)-2] != '.' {
-		return false
-	}
-	switch path[len(path)-1] {
-	case '6', '8', '5', '7', '9':
-		return true
-	}
-	return false
 }
