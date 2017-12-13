@@ -262,6 +262,11 @@ type GerritCL struct {
 	// Previous versions are available via GerritProject.remote.
 	Commit *GitCommit
 
+	// branch is a cache of the latest "Branch: " value seen from
+	// MetaCommits' commit message values, stripped of any
+	// "refs/heads/" prefix. It's usually "master".
+	branch string
+
 	// Meta is the head of the most recent Gerrit "meta" commit
 	// for this CL. This is guaranteed to be a linear history
 	// back to a CL-specific root commit for this meta branch.
@@ -332,9 +337,17 @@ func (cl *GerritCL) References(ref GitHubIssueRef) bool {
 }
 
 // Branch returns the CL's branch, with any "refs/heads/" prefix removed.
-func (cl *GerritCL) Branch() string {
-	branch, _ := lineValue(cl.firstMetaCommit().Msg, "Branch:")
-	return branch
+func (cl *GerritCL) Branch() string { return cl.branch }
+
+func (cl *GerritCL) updateBranch() {
+	for i := len(cl.MetaCommits) - 1; i >= 0; i-- {
+		mc := cl.MetaCommits[i]
+		branch, _ := lineValue(mc.Msg, "Branch:")
+		if branch != "" {
+			cl.branch = strings.TrimPrefix(branch, "refs/heads/")
+			return
+		}
+	}
 }
 
 // lineValue extracts a value from an RFC 822-style "key: value" series of lines.
@@ -803,6 +816,7 @@ func (gp *GerritProject) finishProcessingCL(cl *GerritCL) {
 	for i := len(backwardMeta) - 1; i >= 0; i-- {
 		cl.MetaCommits = append(cl.MetaCommits, backwardMeta[i])
 	}
+	cl.updateBranch()
 }
 
 // clSliceContains reports whether cls contains cl.

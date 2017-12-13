@@ -154,3 +154,31 @@ func BenchmarkGitAncestor(b *testing.B) {
 		}
 	}
 }
+
+// Issue 23007: a Gerrit CL can switch branches. Make sure we handle that.
+func TestGerritCLChangingBranches(t *testing.T) {
+	c := getGoData(t)
+
+	tests := []struct {
+		server, project string
+		cl              int32
+		want            string
+	}{
+		// Changed branch in the middle:
+		// (Unsubmitted at the time of this test, so if it changes back, this test
+		// may break.)
+		{"go.googlesource.com", "go", 33776, "master"},
+
+		// Submitted to boringcrypto:
+		{"go.googlesource.com", "go", 82138, "dev.boringcrypto"},
+		// Submitted to master:
+		{"go.googlesource.com", "go", 83578, "master"},
+	}
+
+	for _, tt := range tests {
+		cl := c.Gerrit().Project(tt.server, tt.project).CL(tt.cl)
+		if got := cl.Branch(); got != tt.want {
+			t.Errorf("%q, %q, CL %d = branch %q; want %q", tt.server, tt.project, tt.cl, got, tt.want)
+		}
+	}
+}
