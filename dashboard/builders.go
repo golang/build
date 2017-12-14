@@ -1082,6 +1082,13 @@ func init() {
 			"GOARM=5",
 			"GO_TEST_TIMEOUT_SCALE=4", // arm is normally 2; double that.
 		},
+		ShouldRunDistTest: func(distTest string, isTry bool) bool {
+			if strings.Contains(distTest, "vendor/github.com/google/pprof") {
+				// Not worth it. And broken.
+				return false
+			}
+			return true
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "nacl-386",
@@ -1113,12 +1120,26 @@ func init() {
 		HostType:          "host-openbsd-386-60",
 		ShouldRunDistTest: noTestDir,
 		MaxAtOnce:         1,
+		env: []string{
+			// cmd/go takes ~192 seconds on openbsd-386
+			// now, which is over the 180 second default
+			// dist test timeout. So, bump this builder
+			// up:
+			"GO_TEST_TIMEOUT_SCALE=2",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-386-62",
 		HostType:          "host-openbsd-386-62",
 		ShouldRunDistTest: noTestDir,
 		MaxAtOnce:         1,
+		env: []string{
+			// cmd/go takes ~192 seconds on openbsd-386
+			// now, which is over the 180 second default
+			// dist test timeout. So, bump this builder
+			// up:
+			"GO_TEST_TIMEOUT_SCALE=2",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-62",
