@@ -1217,7 +1217,7 @@ func init() {
 				// See golang.org/issue/22594.
 				return false
 			}
-			return true
+			return noTestDir(distTest, isTry)
 		},
 	})
 	addBuilder(BuildConfig{
