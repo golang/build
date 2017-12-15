@@ -463,6 +463,14 @@ type GitHubComment struct {
 	Body    string
 }
 
+// GitHubDismissedReview is the contents of a dismissed review event. For more
+// details, see https://developer.github.com/v3/issues/events/.
+type GitHubDismissedReviewEvent struct {
+	ReviewID         int64
+	State            int64 // No docs, but observed values are 30 and 40.
+	DismissalMessage string
+}
+
 type GitHubIssueEvent struct {
 	// TODO: this struct is a little wide. change it to an interface
 	// instead?  Maybe later, if memory profiling suggests it would help.
@@ -478,6 +486,13 @@ type GitHubIssueEvent struct {
 	// * closed
 	// * referenced
 	// * renamed
+	// * reopened
+	// * comment_deleted
+	// * head_ref_restored
+	// * base_ref_changed
+	// * subscribed
+	// * mentioned
+	// * review_requested, review_request_removed, review_dismissed
 	Type string
 
 	// OtherJSON optionally contains a JSON object of Github's API
@@ -495,6 +510,10 @@ type GitHubIssueEvent struct {
 	Milestone           string      // for type: "milestoned", "demilestoned"
 	From, To            string      // for type: "renamed"
 	CommitID, CommitURL string      // for type: "closed", "referenced" ... ?
+
+	Reviewer        *GitHubUser
+	ReviewRequester *GitHubUser
+	DismissedReview *GitHubDismissedReviewEvent
 }
 
 func (e *GitHubIssueEvent) Proto() *maintpb.GithubIssueEvent {
@@ -535,6 +554,19 @@ func (e *GitHubIssueEvent) Proto() *maintpb.GithubIssueEvent {
 		}
 		p.Commit = c
 	}
+	if e.Reviewer != nil {
+		p.ReviewerId = e.Reviewer.ID
+	}
+	if e.ReviewRequester != nil {
+		p.ReviewRequesterId = e.ReviewRequester.ID
+	}
+	if e.DismissedReview != nil {
+		p.DismissedReview = &maintpb.GithubDismissedReviewEvent{
+			ReviewId:         e.DismissedReview.ReviewID,
+			State:            e.DismissedReview.State,
+			DismissalMessage: e.DismissedReview.DismissalMessage,
+		}
+	}
 	return p
 }
 
@@ -544,13 +576,15 @@ var rxGithubCommitURL = regexp.MustCompile(`^https://api\.github\.com/repos/([^/
 func (r *GitHubRepo) newGithubEvent(p *maintpb.GithubIssueEvent) *GitHubIssueEvent {
 	g := r.github
 	e := &GitHubIssueEvent{
-		ID:       p.Id,
-		Type:     p.EventType,
-		Actor:    g.getOrCreateUserID(p.ActorId),
-		Assignee: g.getOrCreateUserID(p.AssigneeId),
-		Assigner: g.getOrCreateUserID(p.AssignerId),
-		From:     p.RenameFrom,
-		To:       p.RenameTo,
+		ID:              p.Id,
+		Type:            p.EventType,
+		Actor:           g.getOrCreateUserID(p.ActorId),
+		Assignee:        g.getOrCreateUserID(p.AssigneeId),
+		Assigner:        g.getOrCreateUserID(p.AssignerId),
+		Reviewer:        g.getOrCreateUserID(p.ReviewerId),
+		ReviewRequester: g.getOrCreateUserID(p.ReviewRequesterId),
+		From:            p.RenameFrom,
+		To:              p.RenameTo,
 	}
 	if p.Created != nil {
 		e.Created, _ = ptypes.Timestamp(p.Created)
@@ -571,6 +605,13 @@ func (r *GitHubRepo) newGithubEvent(p *maintpb.GithubIssueEvent) *GitHubIssueEve
 		if c.Owner != "" && c.Repo != "" {
 			// TODO: this field is dumb. break it down.
 			e.CommitURL = "https://api.github.com/repos/" + c.Owner + "/" + c.Repo + "/commits/" + c.CommitId
+		}
+	}
+	if d := p.DismissedReview; d != nil {
+		e.DismissedReview = &GitHubDismissedReviewEvent{
+			ReviewID:         d.ReviewId,
+			State:            d.State,
+			DismissalMessage: d.DismissalMessage,
 		}
 	}
 	return e
@@ -1938,6 +1979,8 @@ func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
 		getUser("actor", &e.Actor)
 		getUser("assignee", &e.Assignee)
 		getUser("assigner", &e.Assigner)
+		getUser("requested_reviewer", &e.Reviewer)
+		getUser("review_requester", &e.ReviewRequester)
 
 		if lm, ok := em["label"].(map[string]interface{}); ok {
 			delete(em, "label")
@@ -1963,6 +2006,15 @@ func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
 				return nil, err
 			}
 			e.Created = e.Created.UTC()
+		}
+		if dr, ok := em["dismissed_review"]; ok {
+			delete(em, "dismissed_review")
+			drm := dr.(map[string]interface{})
+			dro := &GitHubDismissedReviewEvent{}
+			dro.ReviewID = jint64(drm["review_id"])
+			dro.State = jint64(drm["state"])
+			dro.DismissalMessage, _ = drm["dismissal_message"].(string)
+			e.DismissedReview = dro
 		}
 
 		otherJSON, _ := json.Marshal(em)

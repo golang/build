@@ -129,10 +129,25 @@ message GithubIssueEvent {
   string rename_from = 11;
   string rename_to = 12;
 
+  int64 reviewer_id = 13;
+  int64 review_requester_id = 14;
+  // Contents of a dismissed review event, see dismissed_review in
+  // https://developer.github.com/v3/issues/events/ for more info
+  GithubDismissedReviewEvent dismissed_review = 15;
+
   // other_json is usually empty. If Github adds event types or fields
   // in the future, this captures those added fields. If non-empty it
   // will be a JSON object with the fields that weren't understood.
   bytes other_json = 10;
+}
+
+// Contents of a dismissed review event - when someone leaves a
+// review requesting changes and someone else dismisses it. See
+// https://developer.github.com/v3/issues/events for more information.
+message GithubDismissedReviewEvent {
+  int64 review_id = 1; // ID of the review being dismissed
+  int64 state = 2; // No docs, observed values were 30 and 40.
+  string dismissal_message = 3;
 }
 
 message GithubCommit {
