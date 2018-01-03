@@ -257,7 +257,7 @@ func push(args []string) error {
 		}
 		rem, ok := remote[rel]
 		if !ok {
-			if notHave++; notHave < maxNotHavePrint {
+			if notHave++; notHave <= maxNotHavePrint {
 				log.Printf("Remote doesn't have %q", rel)
 			}
 			toSend = append(toSend, rel)
