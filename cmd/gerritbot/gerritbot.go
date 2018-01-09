@@ -297,20 +297,15 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 		delete(b.pendingCLs, shortLink)
 	}
 	if b.pendingCLs[shortLink] != "" {
+		log.Printf("Changes for PR %s have yet to be mirrored in the maintner corpus. Skipping for now.", shortLink)
 		return nil
 	}
-
 	if pr.GetCommits() == 0 {
 		// Um. Wat?
 		return fmt.Errorf("pr has 0 commits")
 	}
-	prHeadSHA := pr.Head.GetSHA()
-	if pr.GetCommits() > 1 {
-		repo := pr.GetBase().GetRepo()
-		return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(),
-			fmt.Sprintf("Head %v has %d commits. Please squash your commits into one.", prHeadSHA, pr.GetCommits()))
-	}
 
+	prHeadSHA := pr.Head.GetSHA()
 	if cl == nil {
 		gcl, err := b.gerritChangeForPR(pr)
 		if err != nil {
@@ -320,7 +315,7 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 			b.pendingCLs[shortLink] = prHeadSHA
 			return nil
 		}
-		if err := importGerritChangeFromPR(pr, nil); err != nil {
+		if err := b.importGerritChangeFromPR(ctx, pr, nil); err != nil {
 			return fmt.Errorf("importGerritChangeFromPR(%v, nil): %v", shortLink, err)
 		}
 		b.pendingCLs[shortLink] = prHeadSHA
@@ -338,7 +333,7 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 		return nil
 	}
 	// Import PR to existing Gerrit Change.
-	if err := importGerritChangeFromPR(pr, cl); err != nil {
+	if err := b.importGerritChangeFromPR(ctx, pr, cl); err != nil {
 		return fmt.Errorf("importGerritChangeFromPR(%v, %v): %v", shortLink, cl, err)
 	}
 	b.pendingCLs[shortLink] = prHeadSHA
@@ -379,7 +374,7 @@ const gerritHostBase = "https://go.googlesource.com/"
 
 // importGerritChangeFromPR mirrors the latest state of pr to cl. If cl is nil,
 // then a new Gerrit Change is created.
-func importGerritChangeFromPR(pr *github.PullRequest, cl *maintner.GerritCL) error {
+func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullRequest, cl *maintner.GerritCL) error {
 	githubRepo := pr.GetBase().GetRepo()
 	gerritRepo := gerritHostBase + githubRepo.GetName() // GitHub repo name should match Gerrit repo name.
 	repoDir := filepath.Join(reposRoot(), url.PathEscape(gerritRepo))
@@ -443,7 +438,8 @@ func importGerritChangeFromPR(pr *github.PullRequest, cl *maintner.GerritCL) err
 		exec.Command("git", "-C", worktreeDir, "fetch", "github", fmt.Sprintf("pull/%d/head", pr.GetNumber())),
 		exec.Command("git", "-C", worktreeDir, "checkout", pr.Base.GetSHA(), "-b", prShortLink(pr)),
 		exec.Command("git", "-C", worktreeDir, "merge", "FETCH_HEAD"),
-		exec.Command("git", "-C", worktreeDir, "commit", "--amend", "-m", commitMsg),
+		exec.Command("git", "-C", worktreeDir, "reset", "--soft", fmt.Sprintf("HEAD~%d", pr.GetCommits())),
+		exec.Command("git", "-C", worktreeDir, "commit", "-m", commitMsg),
 		exec.Command("git", "-C", worktreeDir, "push", "origin", "HEAD:refs/for/"+pr.GetBase().GetRef()),
 	} {
 		log.Printf("Executing %v", c.Args)
@@ -451,7 +447,11 @@ func importGerritChangeFromPR(pr *github.PullRequest, cl *maintner.GerritCL) err
 			return fmt.Errorf("running %v: %s", c.Args, b)
 		}
 	}
-	return nil
+	repo := pr.GetBase().GetRepo()
+	msg := fmt.Sprintf(`This PR (HEAD: %v) has been imported to Gerrit for code review.
+
+Please visit https://go-review.googlesource.com/c/%s/+/%d to see it`, pr.Head.GetSHA(), cl.Project.Project(), cl.Number)
+	return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg)
 }
 
 func reposRoot() string {
