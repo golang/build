@@ -301,6 +301,9 @@ type GerritMetaCommit struct {
 // Maintner does very little parsing or formatting of a Message body. Messages
 // are stored the same way they are stored in the API.
 type GerritMessage struct {
+	// Meta is the commit containing the message.
+	Meta *GitCommit
+
 	// Version is the patch set version this message was sent on.
 	Version int32
 
@@ -431,6 +434,22 @@ func (cl *GerritCL) OwnerID() int {
 		return -1
 	}
 	return id
+}
+
+// Owner returns the author of the first commit to the CL. It returns nil on error.
+func (cl *GerritCL) Owner() *GitPerson {
+	// The owner of a change is a numeric ID that can have more than one email
+	// associated with it, but the email associated with the very first upload is
+	// designated as the owner of the change by Gerrit.
+	hash, ok := cl.Project.remote[gerritCLVersion{CLNumber: cl.Number, Version: 1}]
+	if !ok {
+		return nil
+	}
+	commit, ok := cl.Project.commit[hash]
+	if !ok {
+		return nil
+	}
+	return commit.Author
 }
 
 // Subject returns the first line of the latest commit message.
@@ -660,6 +679,7 @@ func (gp *GerritProject) getGerritMessage(commit *GitCommit) *GerritMessage {
 		l = l + i + 1
 	}
 	return &GerritMessage{
+		Meta:    commit,
 		Author:  commit.Author,
 		Date:    commit.CommitTime,
 		Message: v,

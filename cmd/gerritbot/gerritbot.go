@@ -327,6 +327,17 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 			cl.ChangeID(), prefixGitFooterLastRev)
 		return nil
 	}
+
+	repo := pr.GetBase().GetRepo()
+	for _, m := range cl.Messages {
+		if m.Author.Email() == cl.Owner().Email() {
+			continue
+		}
+		msg := fmt.Sprintf("%s has posted review comments [at golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d#message-%s).",
+			m.Author.Name(), cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
+		b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg)
+	}
+
 	if pr.Head.GetSHA() == lastRev {
 		log.Printf("Change https://go-review.googlesource.com/q/%s is up to date; nothing to do.",
 			cl.ChangeID())
