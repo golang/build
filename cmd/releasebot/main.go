@@ -122,7 +122,7 @@ Args:
 // checkForGitCodereview exits the program if git-codereview is not installed
 // in the user's path.
 func checkForGitCodereview() {
-	cmd := exec.Command("which", "-s", "git-codereview")
+	cmd := exec.Command("which", "git-codereview")
 	if err := cmd.Run(); err != nil {
 		log.Fatal("could not find git-codereivew: ", cmd.Args, ": ", err, "\n\n"+
 			"Please install it via go get golang.org/x/review/git-codereview\n"+
