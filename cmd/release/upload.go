@@ -165,7 +165,7 @@ func waitForEdgeCache(uploaded []string) error {
 			t := time.Tick(5 * time.Second)
 			var retries int
 			for {
-				url := "https://redirector.gvt1.com/edgedl/go/" + fname
+				url := "https://dl.google.com/go/" + fname
 				resp, err := http.Head(url)
 				if err != nil {
 					if retries < 3 {
