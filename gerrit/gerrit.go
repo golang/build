@@ -152,6 +152,13 @@ func (c *Client) do(ctx context.Context, dst interface{}, method, path string, o
 	return json.NewDecoder(br).Decode(dst)
 }
 
+// Possible values for the ChangeInfo Status field.
+const (
+	ChangeStatusNew       = "NEW"
+	ChangeStatusAbandoned = "ABANDONED"
+	ChangeStatusMerged    = "MERGED"
+)
+
 // ChangeInfo is a Gerrit data structure.
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-info
 type ChangeInfo struct {

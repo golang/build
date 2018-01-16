@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -235,6 +236,7 @@ func (b *bot) corpusUpdateLoop(ctx context.Context) {
 func (b *bot) checkPullRequests() {
 	b.Lock()
 	defer b.Unlock()
+	b.importedPRs = map[string]*maintner.GerritCL{}
 	b.corpus.Gerrit().ForeachProjectUnsorted(func(p *maintner.GerritProject) error {
 		pname := p.Project()
 		if !gerritProjectWhitelist[pname] {
@@ -252,10 +254,17 @@ func (b *bot) checkPullRequests() {
 
 	if err := b.corpus.GitHub().ForeachRepo(func(ghr *maintner.GitHubRepo) error {
 		id := ghr.ID()
-		if !githubRepoWhitelist[id.Owner+"/"+id.Repo] {
+		ownerRepo := id.Owner + "/" + id.Repo
+		if !githubRepoWhitelist[ownerRepo] {
 			return nil
 		}
 		return ghr.ForeachIssue(func(issue *maintner.GitHubIssue) error {
+			if issue.PullRequest && issue.Closed {
+				// Clean up any reference of closed CLs within pendingCLs.
+				shortLink := fmt.Sprintf("%s#%d", ownerRepo, issue.Number)
+				delete(b.pendingCLs, shortLink)
+				return nil
+			}
 			if issue.Closed || !issue.PullRequest || !issue.HasLabel("cla: yes") {
 				return nil
 			}
@@ -280,10 +289,10 @@ func prShortLink(pr *github.PullRequest) string {
 
 // processPullRequest is the entry point to the state machine of mirroring a PR
 // with Gerrit. PRs that are up to date with their respective Gerrit changes are
-// skipped, and any with a squashed commit SHA unequal to its Gerrit equivalent
-// are imported. Those that have no associated Gerrit changes will result in one
-// being created.
-// TODO(andybons): Document comment mirroring once that is implemented.
+// skipped, and any with a HEAD commit SHA unequal to its Gerrit equivalent are
+// imported. If the Gerrit change associated with a PR has been merged, the PR
+// is closed. Those that have no associated open or merged Gerrit changes will
+// result in one being created.
 // b's RWMutex read-write lock must be held.
 func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) error {
 	log.Printf("Processing PR %s ...", pr.GetHTMLURL())
@@ -311,6 +320,11 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 		if err != nil {
 			return fmt.Errorf("gerritChangeForPR(%+v): %v", pr, err)
 		}
+		if gcl != nil && gcl.Status != "NEW" {
+			if err := b.closePR(ctx, pr, gcl); err != nil {
+				return fmt.Errorf("b.closePR(ctx, %+v, %+v): %v", pr, gcl, err)
+			}
+		}
 		if gcl != nil {
 			b.pendingCLs[shortLink] = prHeadSHA
 			return nil
@@ -333,7 +347,7 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 		if m.Author.Email() == cl.Owner().Email() {
 			continue
 		}
-		msg := fmt.Sprintf("%s has posted review comments [at golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d#message-%s).",
+		msg := fmt.Sprintf("%s has posted review comments at [golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d#message-%s).",
 			m.Author.Name(), cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
 		b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg)
 	}
@@ -352,9 +366,11 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 }
 
 // gerritChangeForPR returns the Gerrit Change info associated with the given PR.
-// If no change exists for pr, it returns nil (with a nil error).
+// If no change exists for pr, it returns nil (with a nil error). If multiple
+// changes exist it will return the first open change, and if no open changes
+// are available, the first closed change is returned.
 func (b *bot) gerritChangeForPR(pr *github.PullRequest) (*gerrit.ChangeInfo, error) {
-	q := fmt.Sprintf(`is:open "%s %s"`, prefixGitFooterPR, prShortLink(pr))
+	q := fmt.Sprintf(`"%s %s"`, prefixGitFooterPR, prShortLink(pr))
 	cs, err := b.gerritClient.QueryChanges(context.Background(), q)
 	if err != nil {
 		return nil, fmt.Errorf("c.QueryChanges(ctx, %q): %v", q, err)
@@ -362,8 +378,38 @@ func (b *bot) gerritChangeForPR(pr *github.PullRequest) (*gerrit.ChangeInfo, err
 	if len(cs) == 0 {
 		return nil, nil
 	}
-	// Return the first result no matter what.
+	for _, c := range cs {
+		if c.Status == gerrit.ChangeStatusNew {
+			return c, nil
+		}
+	}
+	// All associated changes are closed. It doesn’t matter which one is returned.
 	return cs[0], nil
+}
+
+// closePR closes pr using the information from the given Gerrit change.
+func (b *bot) closePR(ctx context.Context, pr *github.PullRequest, ch *gerrit.ChangeInfo) error {
+	msg := fmt.Sprintf(`This PR is being closed because [golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d) has been %s.`,
+		ch.ChangeNumber, ch.Project, ch.ChangeNumber, strings.ToLower(ch.Status))
+	if ch.Status != gerrit.ChangeStatusAbandoned && ch.Status != gerrit.ChangeStatusMerged {
+		return fmt.Errorf("invalid status for closed Gerrit change: %q", ch.Status)
+	}
+
+	repo := pr.GetBase().GetRepo()
+	if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg); err != nil {
+		return fmt.Errorf("postGitHubMessageNoDup: %v", err)
+	}
+
+	req := &github.IssueRequest{
+		State: github.String("closed"),
+	}
+	_, resp, err := b.githubClient.Issues.Edit(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), req)
+	defer closeGitHubResp(resp)
+	if err != nil {
+		return fmt.Errorf("b.githubClient.Issues.Edit(ctx, %q, %q, %d, %+v): %v",
+			repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), req, err)
+	}
+	return nil
 }
 
 // downloadRef calls the Gerrit API to retrieve the ref (such as refs/changes/16/81116/1)
@@ -382,6 +428,8 @@ func (b *bot) downloadRef(ctx context.Context, changeID string) (string, error) 
 }
 
 const gerritHostBase = "https://go.googlesource.com/"
+
+var gerritChangeRE = regexp.MustCompile(`https:\/\/go-review\.googlesource\.com\/#\/c\/\w+\/\+\/\d+`)
 
 // importGerritChangeFromPR mirrors the latest state of pr to cl. If cl is nil,
 // then a new Gerrit Change is created.
@@ -451,17 +499,25 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		exec.Command("git", "-C", worktreeDir, "merge", "FETCH_HEAD"),
 		exec.Command("git", "-C", worktreeDir, "reset", "--soft", fmt.Sprintf("HEAD~%d", pr.GetCommits())),
 		exec.Command("git", "-C", worktreeDir, "commit", "-m", commitMsg),
-		exec.Command("git", "-C", worktreeDir, "push", "origin", "HEAD:refs/for/"+pr.GetBase().GetRef()),
 	} {
 		log.Printf("Executing %v", c.Args)
 		if b, err := c.CombinedOutput(); err != nil {
 			return fmt.Errorf("running %v: %s", c.Args, b)
 		}
 	}
+	cmd := exec.Command("git", "-C", worktreeDir, "push", "origin", "HEAD:refs/for/"+pr.GetBase().GetRef())
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("running %v: %s", cmd.Args, out)
+	}
+	changeURL := gerritChangeRE.Find(out)
+	if changeURL == nil {
+		return fmt.Errorf("could not find change URL in command output: %q", out)
+	}
 	repo := pr.GetBase().GetRepo()
 	msg := fmt.Sprintf(`This PR (HEAD: %v) has been imported to Gerrit for code review.
 
-Please visit https://go-review.googlesource.com/c/%s/+/%d to see it`, pr.Head.GetSHA(), cl.Project.Project(), cl.Number)
+Please visit %s to see it`, pr.Head.GetSHA(), changeURL)
 	return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg)
 }
 
