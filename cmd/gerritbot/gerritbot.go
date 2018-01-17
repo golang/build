@@ -449,7 +449,7 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		for _, c := range cmds {
 			log.Printf("Executing %v", c.Args)
 			if b, err := c.CombinedOutput(); err != nil {
-				return fmt.Errorf("running %v: %s", c.Args, b)
+				return fmt.Errorf("running %v: output: %s; err: %v", c.Args, b, err)
 			}
 		}
 	}
@@ -468,7 +468,7 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		} {
 			log.Printf("Executing %v", c.Args)
 			if b, err := c.CombinedOutput(); err != nil {
-				log.Printf("running %v: %s", c.Args, b)
+				log.Printf("running %v: output: %s; err: %v", c.Args, b, err)
 			}
 		}
 	}()
@@ -480,7 +480,7 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 	} {
 		log.Printf("Executing %v", c.Args)
 		if b, err := c.CombinedOutput(); err != nil {
-			return fmt.Errorf("running %v: %s", c.Args, b)
+			return fmt.Errorf("running %v: output: %s; err: %v", c.Args, b, err)
 		}
 	}
 
@@ -501,13 +501,13 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 	} {
 		log.Printf("Executing %v", c.Args)
 		if b, err := c.CombinedOutput(); err != nil {
-			return fmt.Errorf("running %v: %s", c.Args, b)
+			return fmt.Errorf("running %v: output: %s; err: %v", c.Args, b, err)
 		}
 	}
 	cmd := exec.Command("git", "-C", worktreeDir, "push", "origin", "HEAD:refs/for/"+pr.GetBase().GetRef())
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("running %v: %s", cmd.Args, out)
+		return fmt.Errorf("running %v: output: %s; err: %v", cmd.Args, out, err)
 	}
 	changeURL := gerritChangeRE.Find(out)
 	if changeURL == nil {
