@@ -403,8 +403,7 @@ func (b *bot) closePR(ctx context.Context, pr *github.PullRequest, ch *gerrit.Ch
 	req := &github.IssueRequest{
 		State: github.String("closed"),
 	}
-	_, resp, err := b.githubClient.Issues.Edit(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), req)
-	defer closeGitHubResp(resp)
+	_, _, err := b.githubClient.Issues.Edit(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), req)
 	if err != nil {
 		return fmt.Errorf("b.githubClient.Issues.Edit(ctx, %q, %q, %d, %+v): %v",
 			repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), req, err)
@@ -526,26 +525,18 @@ func reposRoot() string {
 }
 
 func (b *bot) getFullPR(ctx context.Context, owner, repo string, number int) (*github.PullRequest, error) {
-	pr, resp, err := b.githubClient.PullRequests.Get(ctx, owner, repo, number)
-	defer closeGitHubResp(resp)
+	pr, _, err := b.githubClient.PullRequests.Get(ctx, owner, repo, number)
 	if err != nil {
 		return nil, fmt.Errorf("ghc.PullRequests().Get(ctc, %q, %q, %d): %v", owner, repo, number, err)
 	}
 	return pr, nil
 }
 
-func closeGitHubResp(resp *github.Response) {
-	if resp != nil && resp.Body != nil {
-		resp.Body.Close()
-	}
-}
-
 // postGitHubMessage posts the given message to the given issue. This is likely not the method
 // you are looking to use. To ensure that duplicate messages are not posted, use postGitHubMessageNoDup.
 func (b *bot) postGitHubMessage(ctx context.Context, owner, repo string, issueNum int, msg string) error {
 	cmt := &github.IssueComment{Body: github.String(msg)}
-	_, resp, err := b.githubClient.Issues.CreateComment(ctx, owner, repo, issueNum, cmt)
-	defer closeGitHubResp(resp)
+	_, _, err := b.githubClient.Issues.CreateComment(ctx, owner, repo, issueNum, cmt)
 	if err != nil {
 		return fmt.Errorf("b.githubClient.Issues.CreateComment(ctx, %q, %q, %d, %+v): %v", owner, repo, issueNum, cmt, err)
 	}
@@ -560,8 +551,7 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, owner, repo string, is
 			PerPage: 1000,
 		},
 	}
-	comments, res, err := b.githubClient.Issues.ListComments(ctx, owner, repo, issueNum, opts)
-	defer closeGitHubResp(res)
+	comments, _, err := b.githubClient.Issues.ListComments(ctx, owner, repo, issueNum, opts)
 	if err != nil {
 		return fmt.Errorf("b.githubClient.Issues.ListComments(%q, %q, %d, %+v): %v", owner, repo, issueNum, opts, err)
 	}
