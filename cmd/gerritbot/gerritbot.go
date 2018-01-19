@@ -38,11 +38,14 @@ var (
 	workdir         = flag.String("workdir", defaultWorkdir(), "where git repos and temporary worktrees are created")
 	githubTokenFile = flag.String("github-token-file", filepath.Join(defaultWorkdir(), "github-token"), "file to load GitHub token from; should only contain the token text")
 	gerritTokenFile = flag.String("gerrit-token-file", filepath.Join(defaultWorkdir(), "gerrit-token"), "file to load Gerrit token from; should be of form <git-email>:<token>")
+	gitcookiesFile  = flag.String("gitcookies-file", "", "if non-empty, write a git http cookiefile to this location using compute metadata")
 )
 
 func main() {
 	flag.Parse()
-
+	if err := writeCookiesFile(); err != nil {
+		log.Fatalf("writeCookiesFile(): %v", err)
+	}
 	ghc, err := githubClient()
 	if err != nil {
 		log.Fatalf("githubClient(): %v", err)
@@ -78,6 +81,25 @@ func home() string {
 		log.Fatalf("user.Current(): %v", err)
 	}
 	return u.HomeDir
+}
+
+func writeCookiesFile() error {
+	if *gitcookiesFile == "" {
+		return nil
+	}
+	log.Printf("Writing git http cookies file %q ...", *gitcookiesFile)
+	if !metadata.OnGCE() {
+		return fmt.Errorf("cannot write git http cookies file %q from metadata: not on GCE", *gitcookiesFile)
+	}
+	k := "gerritbot-gitcookies"
+	cookies, err := metadata.ProjectAttributeValue(k)
+	if cookies == "" {
+		return fmt.Errorf("metadata.ProjectAttribtueValue(%q) returned an empty value", k)
+	}
+	if err != nil {
+		return fmt.Errorf("metadata.ProjectAttribtueValue(%q): %v", k, err)
+	}
+	return ioutil.WriteFile(*gitcookiesFile, []byte(cookies), 0600)
 }
 
 func githubClient() (*github.Client, error) {
@@ -430,6 +452,14 @@ const gerritHostBase = "https://go.googlesource.com/"
 
 var gerritChangeRE = regexp.MustCompile(`https:\/\/go-review\.googlesource\.com\/#\/c\/\w+\/\+\/\d+`)
 
+func runCmd(c *exec.Cmd) error {
+	log.Printf("Executing %v", c.Args)
+	if b, err := c.CombinedOutput(); err != nil {
+		return fmt.Errorf("running %v: output: %s; err: %v", c.Args, b, err)
+	}
+	return nil
+}
+
 // importGerritChangeFromPR mirrors the latest state of pr to cl. If cl is nil,
 // then a new Gerrit Change is created.
 func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullRequest, cl *maintner.GerritCL) error {
@@ -447,9 +477,8 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 			exec.Command("git", "-C", repoDir, "remote", "add", "github", githubRepo.GetGitURL()),
 		}
 		for _, c := range cmds {
-			log.Printf("Executing %v", c.Args)
-			if b, err := c.CombinedOutput(); err != nil {
-				return fmt.Errorf("running %v: output: %s; err: %v", c.Args, b, err)
+			if err := runCmd(c); err != nil {
+				return err
 			}
 		}
 	}
@@ -466,9 +495,8 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 			exec.Command("git", "-C", repoDir, "worktree", "prune"),
 			exec.Command("git", "-C", repoDir, "branch", "-D", worktree),
 		} {
-			log.Printf("Executing %v", c.Args)
-			if b, err := c.CombinedOutput(); err != nil {
-				log.Printf("running %v: output: %s; err: %v", c.Args, b, err)
+			if err := runCmd(c); err != nil {
+				log.Print(err)
 			}
 		}
 	}()
@@ -478,9 +506,8 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		exec.Command("git", "-C", repoDir, "worktree", "add", worktreeDir),
 		exec.Command("git", "-C", worktreeDir, "pull", "origin", "master"),
 	} {
-		log.Printf("Executing %v", c.Args)
-		if b, err := c.CombinedOutput(); err != nil {
-			return fmt.Errorf("running %v: output: %s; err: %v", c.Args, b, err)
+		if err := runCmd(c); err != nil {
+			return err
 		}
 	}
 
@@ -496,16 +523,32 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		exec.Command("git", "-C", worktreeDir, "fetch", "github", fmt.Sprintf("pull/%d/head", pr.GetNumber())),
 		exec.Command("git", "-C", worktreeDir, "checkout", pr.Base.GetSHA(), "-b", prShortLink(pr)),
 		exec.Command("git", "-C", worktreeDir, "merge", "FETCH_HEAD"),
-		exec.Command("git", "-C", worktreeDir, "reset", "--soft", fmt.Sprintf("HEAD~%d", pr.GetCommits())),
-		exec.Command("git", "-C", worktreeDir, "commit", "-m", commitMsg),
 	} {
-		log.Printf("Executing %v", c.Args)
-		if b, err := c.CombinedOutput(); err != nil {
-			return fmt.Errorf("running %v: output: %s; err: %v", c.Args, b, err)
+		if err := runCmd(c); err != nil {
+			return err
 		}
 	}
-	cmd := exec.Command("git", "-C", worktreeDir, "push", "origin", "HEAD:refs/for/"+pr.GetBase().GetRef())
+
+	cmd := exec.Command("git", "-C", worktreeDir, "show", "--no-patch", "--format='%an <%ae>'", fmt.Sprintf("HEAD~%d", pr.GetCommits()-1))
+	log.Printf("Executing %v", cmd.Args)
 	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("running %v: output: %s; err: %v", cmd.Args, out, err)
+	}
+	author := strings.TrimSpace(string(out))
+
+	for _, c := range []*exec.Cmd{
+		exec.Command("git", "-C", worktreeDir, "reset", "--soft", fmt.Sprintf("HEAD~%d", pr.GetCommits())),
+		exec.Command("git", "-C", worktreeDir, "commit", "--author", author, "-m", commitMsg),
+	} {
+		if err := runCmd(c); err != nil {
+			return err
+		}
+	}
+
+	cmd = exec.Command("git", "-C", worktreeDir, "push", "origin", "HEAD:refs/for/"+pr.GetBase().GetRef())
+	log.Printf("Executing %v", cmd.Args)
+	out, err = cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("running %v: output: %s; err: %v", cmd.Args, out, err)
 	}

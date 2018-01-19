@@ -19,19 +19,14 @@ gerritbot: build0
 	docker cp $(DOCKER_CTR_build0):/go/bin/$@ $@
 	docker rm $(DOCKER_CTR_build0)
 
-ca-certificates.crt:
-	docker create --name $(DOCKER_CTR_build0) $(DOCKER_IMAGE_build0)
-	docker cp $(DOCKER_CTR_build0):/etc/ssl/certs/$@ $@
-	docker rm $(DOCKER_CTR_build0)
-
 update-deps:
 	go install golang.org/x/build/cmd/gitlock
 	gitlock --update=Dockerfile.0 golang.org/x/build/cmd/gerritbot
 
-docker-prod: Dockerfile gerritbot ca-certificates.crt
+docker-prod: Dockerfile gerritbot
 	docker build --force-rm --tag=$(IMAGE_PROD):$(VERSION) .
 	docker tag $(IMAGE_PROD):$(VERSION) $(IMAGE_PROD):$(MUTABLE_VERSION)
-docker-staging: Dockerfile gerritbot ca-certificates.crt
+docker-staging: Dockerfile gerritbot
 	docker build --force-rm --tag=$(IMAGE_STAGING):$(VERSION) .
 	docker tag $(IMAGE_STAGING):$(VERSION) $(IMAGE_STAGING):$(MUTABLE_VERSION)
 
@@ -48,4 +43,3 @@ deploy-staging: push-staging
 .PHONY: clean
 clean:
 	$(RM) gerritbot
-	$(RM) ca-certificates.crt
