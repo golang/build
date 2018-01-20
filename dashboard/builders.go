@@ -1274,6 +1274,7 @@ func init() {
 		env: []string{
 			"GOARCH=arm",
 			"GOARM=7",
+			"GOANDROID_ADB_FLAGS=-d", // Run on device
 			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-arm/bin/clang",
 		},
 	})
@@ -1283,7 +1284,28 @@ func init() {
 		Notes:    "Android Wiko Fever phone running Android 6.0, via a Mac Mini",
 		env: []string{
 			"GOARCH=arm64",
+			"GOANDROID_ADB_FLAGS=-d", // Run on device
 			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-arm64/bin/clang",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "android-386-emulator",
+		HostType: "host-darwin-amd64-eliasnaur-android",
+		Notes:    "Android emulator, via a Mac Mini",
+		env: []string{
+			"GOARCH=386",
+			"GOANDROID_ADB_FLAGS=-e", // Run on emulator
+			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-386/bin/clang",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "android-amd64-emulator",
+		HostType: "host-darwin-amd64-eliasnaur-android",
+		Notes:    "Android emulator, via a Mac Mini",
+		env: []string{
+			"GOARCH=amd64",
+			"GOANDROID_ADB_FLAGS=-e", // Run on emulator
+			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-amd64/bin/clang",
 		},
 	})
 	addBuilder(BuildConfig{
