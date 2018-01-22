@@ -515,7 +515,7 @@ func (w *Work) writeVersion() {
 	rc = fmt.Sprintf("rc%d", n)
 
 	if w.FinalRelease {
-		if !haveExisting {
+		if n-1 > 0 && !haveExisting {
 			w.logError(nil, fmt.Sprintf("cannot issue final release - code has changed since %src%d", version, n-1))
 			return
 		}

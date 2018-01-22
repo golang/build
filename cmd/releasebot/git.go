@@ -302,15 +302,16 @@ func (w *Work) cherryPickCLs() {
 		if change != nil && labelValue(change, "TryBot-Result") >= +1 {
 			w.log.Printf("found trybot OK on Gerrit; skipping make.bash")
 		} else {
-			_, err = w.runErr("./make.bash")
+			b, err := w.runErr("./make.bash")
 			if err != nil {
 				w.logError(cl, fmt.Sprintf("make.bash after git cherry-pick failed:\n\n"+
 					"    git fetch origin %s\n"+
 					"    git checkout %s\n"+
 					"    git fetch origin %s\n"+
 					"    git cherry-pick %s\n"+
-					"    ./make.bash\n",
-					lastRef, lastCommit, cl.Ref, cl.Commit))
+					"    ./make.bash: %v\n",
+					lastRef, lastCommit, cl.Ref, cl.Commit, err))
+				w.log.Printf("./make.bash: %v: %s", err, b)
 				w.run("git", "reset", "--hard", "HEAD^")
 				continue
 			}
