@@ -6,8 +6,8 @@ LABEL maintainer "golang-dev@googlegroups.com"
 
 # BEGIN deps (run `make update-deps` to update)
 
-# Repo cloud.google.com/go at 76d607c (2017-07-20)
-ENV REV=76d607c4e7a2b9df49f1d1a58a3f3d2dd2614704
+# Repo cloud.google.com/go at 1d0c2da (2018-01-30)
+ENV REV=1d0c2da40456a9b47f5376165f275424acc15c09
 RUN go get -d cloud.google.com/go/compute/metadata &&\
     (cd /go/src/cloud.google.com/go && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -26,13 +26,13 @@ ENV REV=034d17a462f7b2dcd1a4a73553ec5357ff6e6c6e
 RUN go get -d go4.org/types &&\
     (cd /go/src/go4.org && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/crypto at 94c6142 (2017-07-20)
-ENV REV=94c6142ae57b8dc154f6e1813c921a6c85f505cd
+# Repo golang.org/x/crypto at 1875d0a (2018-01-27)
+ENV REV=1875d0a70c90e57f11972aefd42276df65e895b9
 RUN go get -d golang.org/x/crypto/acme `#and 2 other pkgs` &&\
     (cd /go/src/golang.org/x/crypto && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/net at ab54850 (2017-07-21)
-ENV REV=ab5485076ff3407ad2d02db054635913f017b0ed
+# Repo golang.org/x/net at 0ed95ab (2018-01-24)
+ENV REV=0ed95abb35c445290478a5348a7b38bb154135fd
 RUN go get -d golang.org/x/net/context `#and 2 other pkgs` &&\
     (cd /go/src/golang.org/x/net && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 

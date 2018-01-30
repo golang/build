@@ -72,8 +72,26 @@ Maintner is short for "maintainer."
 	}
 }
 
+var autocertManager *autocert.Manager
+
 func main() {
 	flag.Parse()
+
+	if *autocertDomain != "" {
+		if *autocertBucket == "" {
+			log.Fatalf("using --autocert requires --autocert-bucket.")
+		}
+		sc, err := storage.NewClient(context.Background())
+		if err != nil {
+			log.Fatalf("Creating autocert cache, storage.NewClient: %v", err)
+		}
+		autocertManager = &autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist(*autocertDomain),
+			Cache:      autocertcache.NewGoogleCloudStorageCache(sc, *autocertBucket),
+		}
+	}
+
 	if *dataDir == "" {
 		*dataDir = filepath.Join(os.Getenv("HOME"), "var", "maintnerd")
 		if *bucket == "" {
@@ -256,7 +274,11 @@ func main() {
 		go func() { errc <- fmt.Errorf("Corpus.SyncLoop = %v", corpus.SyncLoop(ctx)) }()
 	}
 	if ln != nil {
-		go func() { errc <- fmt.Errorf("http.Serve = %v", http.Serve(ln, nil)) }()
+		var handler http.Handler = http.DefaultServeMux
+		if autocertManager != nil {
+			handler = autocertManager.HTTPHandler(handler)
+		}
+		go func() { errc <- fmt.Errorf("http.Serve = %v", http.Serve(ln, handler)) }()
 	}
 	if *autocertDomain != "" {
 		go func() { errc <- serveAutocertTLS() }()
@@ -355,17 +377,8 @@ func serveAutocertTLS() error {
 		return err
 	}
 	defer ln.Close()
-	sc, err := storage.NewClient(context.Background())
-	if err != nil {
-		return fmt.Errorf("storage.NewClient: %v", err)
-	}
-	m := autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(*autocertDomain),
-		Cache:      autocertcache.NewGoogleCloudStorageCache(sc, *autocertBucket),
-	}
 	config := &tls.Config{
-		GetCertificate: m.GetCertificate,
+		GetCertificate: autocertManager.GetCertificate,
 		NextProtos:     []string{"h2", "http/1.1"},
 	}
 	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)

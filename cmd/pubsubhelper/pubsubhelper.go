@@ -70,13 +70,13 @@ func main() {
 		err := s.ListenAndServe()
 		errc <- fmt.Errorf("SMTP ListenAndServe: %v", err)
 	}()
+	m := &autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist(*acmeDomain),
+	}
 	go func() {
 		if *acmeDomain == "" {
 			return
-		}
-		m := autocert.Manager{
-			Prompt:     autocert.AcceptTOS,
-			HostPolicy: autocert.HostWhitelist(*acmeDomain),
 		}
 		if _, err := os.Stat("/autocert-cache"); err == nil {
 			m.Cache = autocert.DirCache("/autocert-cache")
@@ -101,6 +101,7 @@ func main() {
 			ReadHeaderTimeout: 10 * time.Second,
 			WriteTimeout:      5 * time.Minute,
 			IdleTimeout:       5 * time.Minute,
+			Handler:           m.HTTPHandler(http.DefaultServeMux),
 		}
 		err := s.ListenAndServe()
 		errc <- fmt.Errorf("HTTP ListenAndServe: %v", err)
