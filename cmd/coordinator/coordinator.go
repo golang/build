@@ -174,18 +174,8 @@ func serveTLS(ln net.Listener) {
 		NextProtos: []string{"http/1.1"},
 	}
 
-	if bucket := buildEnv.AutoCertCacheBucket; bucket != "" {
-		m := autocert.Manager{
-			Prompt: autocert.AcceptTOS,
-			HostPolicy: func(_ context.Context, host string) error {
-				if !strings.HasSuffix(host, ".golang.org") {
-					return fmt.Errorf("bogus host %q", host)
-				}
-				return nil
-			},
-			Cache: autocertcache.NewGoogleCloudStorageCache(storageClient, bucket),
-		}
-		config.GetCertificate = m.GetCertificate
+	if autocertManager != nil {
+		config.GetCertificate = autocertManager.GetCertificate
 	} else {
 		certPEM, err := readGCSFile("farmer-cert.pem")
 		if err != nil {
@@ -240,6 +230,9 @@ func (fn loggerFunc) CreateSpan(event string, optText ...string) spanlog.Span {
 	return createSpan(fn, event, optText...)
 }
 
+// autocertManager is non-nil if LetsEncrypt is in use.
+var autocertManager *autocert.Manager
+
 func main() {
 	flag.Parse()
 
@@ -256,6 +249,22 @@ func main() {
 	} else {
 		if *mode == "" {
 			*mode = "prod"
+		}
+	}
+
+	if bucket := buildEnv.AutoCertCacheBucket; bucket != "" {
+		if storageClient == nil {
+			log.Fatalf("expected storage client to be non-nil")
+		}
+		autocertManager = &autocert.Manager{
+			Prompt: autocert.AcceptTOS,
+			HostPolicy: func(_ context.Context, host string) error {
+				if !strings.HasSuffix(host, ".golang.org") {
+					return fmt.Errorf("bogus host %q", host)
+				}
+				return nil
+			},
+			Cache: autocertcache.NewGoogleCloudStorageCache(storageClient, bucket),
 		}
 	}
 
@@ -296,7 +305,11 @@ func main() {
 		if *mode == "dev" {
 			return
 		}
-		err := http.ListenAndServe(":80", httpRouter{})
+		var handler http.Handler = httpRouter{}
+		if autocertManager != nil {
+			handler = autocertManager.HTTPHandler(handler)
+		}
+		err := http.ListenAndServe(":80", handler)
 		if err != nil {
 			log.Fatalf("http.ListenAndServe:80: %v", err)
 		}
