@@ -559,7 +559,10 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 	repo := pr.GetBase().GetRepo()
 	msg := fmt.Sprintf(`This PR (HEAD: %v) has been imported to Gerrit for code review.
 
-Please visit %s to see it`, pr.Head.GetSHA(), changeURL)
+Please visit %s to see it.
+
+Tip: You can toggle comments on/off from GerritBot using the %s slash command (e.g. %s)`,
+		pr.Head.GetSHA(), changeURL, "`comments`", "`/comments off`")
 	return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg)
 }
 
@@ -587,8 +590,14 @@ func (b *bot) postGitHubMessage(ctx context.Context, owner, repo string, issueNu
 }
 
 // postGitHubMessageNoDup ensures that the message being posted on an issue does not already have the
-// same exact content.
+// same exact content. These comments can be toggled by the user via a slash command /comments {on|off}
+// at the beginning of a message.
 func (b *bot) postGitHubMessageNoDup(ctx context.Context, owner, repo string, issueNum int, msg string) error {
+	issue, _, err := b.githubClient.Issues.Get(ctx, owner, repo, issueNum)
+	if err != nil {
+		return fmt.Errorf("b.githubClient.Issues.Get(%q, %q, %d): %v", owner, repo, issueNum, err)
+	}
+	ownerID := issue.GetUser().GetID()
 	opts := &github.IssueListCommentsOptions{
 		ListOptions: github.ListOptions{
 			PerPage: 1000,
@@ -598,10 +607,21 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, owner, repo string, is
 	if err != nil {
 		return fmt.Errorf("b.githubClient.Issues.ListComments(%q, %q, %d, %+v): %v", owner, repo, issueNum, opts, err)
 	}
+	var noComment bool
 	for _, ic := range comments {
-		if ic.GetBody() == msg {
+		b := ic.GetBody()
+		if b == msg {
 			return nil
 		}
+		if ic.GetUser().GetID() == ownerID && strings.HasPrefix(b, "/comments ") {
+			noComment = strings.HasPrefix(b, "/comments off")
+			if strings.HasPrefix(b, "/comments on") {
+				noComment = false
+			}
+		}
+	}
+	if noComment {
+		return nil
 	}
 	return b.postGitHubMessage(ctx, owner, repo, issueNum, msg)
 }

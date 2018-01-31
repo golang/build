@@ -4,7 +4,7 @@
 
 # Note that OpenSSH 6.5+ is required for the Github SSH private key, which requires
 # at least Debian Jessie (not Wheezy). This uses Jessie:
-FROM golang:1.8
+FROM golang:1.9.3
 LABEL maintainer "golang-dev@googlegroups.com"
 
 # BEGIN deps (run `make update-deps` to update)
