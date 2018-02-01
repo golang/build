@@ -25,6 +25,7 @@ import (
 var (
 	ignorePrefixFlag = flag.String("ignore", "golang.org/x/build", "comma-separated list of package prefixes to ignore")
 	updateFile       = flag.String("update", "", "if non-empty, the Dockerfile to update. must have \"# BEGIN deps\" and \"# END deps\" lines.")
+	tags             = flag.String("tags", "", "space-separated tags to pass on to 'go list -tags=XXX target'")
 )
 
 var ignorePrefixes []string
@@ -81,7 +82,7 @@ func main() {
 	header, footer := parseDockerFile()
 
 	depOut, err := exec.Command("go", "list",
-		"-tags=h2demo", // for golang.org/x/net/http2/h2demo; TODO: make a flag? meh.
+		"-tags="+*tags,
 		"-f", "{{range .Deps}}{{.}}\n{{end}}", mainPkg).Output()
 	if err != nil {
 		log.Fatalf("listing deps of %q: %v", mainPkg, formatExecErr(err))
