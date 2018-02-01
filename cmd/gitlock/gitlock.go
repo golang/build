@@ -80,7 +80,9 @@ func main() {
 	mainPkg := flag.Arg(0) // not necessary "package main", but almost certainly.
 	header, footer := parseDockerFile()
 
-	depOut, err := exec.Command("go", "list", "-f", "{{range .Deps}}{{.}}\n{{end}}", mainPkg).Output()
+	depOut, err := exec.Command("go", "list",
+		"-tags=h2demo", // for golang.org/x/net/http2/h2demo; TODO: make a flag? meh.
+		"-f", "{{range .Deps}}{{.}}\n{{end}}", mainPkg).Output()
 	if err != nil {
 		log.Fatalf("listing deps of %q: %v", mainPkg, formatExecErr(err))
 	}
