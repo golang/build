@@ -43,7 +43,7 @@ func handleGithubWebhook(w http.ResponseWriter, r *http.Request) {
 	back, _ := json.MarshalIndent(payload, "", "\t")
 	log.Printf("github verified webhook: %s", back)
 
-	if payload.Repository == nil || payload.Issue == nil {
+	if payload.Repository == nil || (payload.Issue == nil && payload.PullRequest == nil) {
 		// Ignore.
 		return
 	}
@@ -55,15 +55,24 @@ func handleGithubWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	owner, repo := f[0], f[1]
 
+	var issueNumber int
+	if payload.Issue != nil {
+		issueNumber = payload.Issue.Number
+	}
+	var prNumber int
+	if payload.PullRequest != nil {
+		prNumber = payload.PullRequest.Number
+	}
+
 	publish(&pubsubtypes.Event{
 		GitHub: &pubsubtypes.GitHubEvent{
-			Action:      payload.Action,
-			RepoOwner:   owner,
-			Repo:        repo,
-			IssueNumber: payload.Issue.Number,
+			Action:            payload.Action,
+			RepoOwner:         owner,
+			Repo:              repo,
+			IssueNumber:       issueNumber,
+			PullRequestNumber: prNumber,
 		},
 	})
-
 }
 
 // validate compares the signature in the request header with the body.
@@ -108,9 +117,10 @@ func validateGithubRequest(w http.ResponseWriter, r *http.Request) (body []byte,
 }
 
 type githubWebhookPayload struct {
-	Action     string            `json:"action"`
-	Repository *githubRepository `json:"repository"`
-	Issue      *githubIssue      `json:"issue"`
+	Action      string             `json:"action"`
+	Repository  *githubRepository  `json:"repository"`
+	Issue       *githubIssue       `json:"issue"`
+	PullRequest *githubPullRequest `json:"pull_request"`
 }
 
 type githubRepository struct {
@@ -120,4 +130,9 @@ type githubRepository struct {
 type githubIssue struct {
 	URL    string `json:"url"`    // https://api.github.com/repos/baxterthehacker/public-repo/issues/2
 	Number int    `json:"number"` // 2
+}
+
+type githubPullRequest struct {
+	URL    string `json:"url"`    // https://api.github.com/repos/baxterthehacker/public-repo/pulls/8
+	Number int    `json:"number"` // 8
 }

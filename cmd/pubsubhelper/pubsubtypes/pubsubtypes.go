@@ -47,8 +47,9 @@ type GerritEvent struct {
 }
 
 type GitHubEvent struct {
-	Action      string
-	RepoOwner   string // "golang"
-	Repo        string // "go"
-	IssueNumber int    `json:",omitempty"`
+	Action            string
+	RepoOwner         string // "golang"
+	Repo              string // "go"
+	IssueNumber       int    `json:",omitempty"`
+	PullRequestNumber int    `json:",omitempty"`
 }
