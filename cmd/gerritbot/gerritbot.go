@@ -183,16 +183,38 @@ const (
 	prefixGitFooterChangeID = "Change-Id:"
 )
 
-var (
-	// GitHub repos we accept PRs for, mirroring them into Gerrit CLs.
-	githubRepoWhitelist = map[string]bool{
-		"golang/scratch": true,
-	}
-	// Gerrit projects we accept PRs for.
-	gerritProjectWhitelist = map[string]bool{
-		"scratch": true,
-	}
-)
+// Gerrit projects we accept PRs for.
+var gerritProjectWhitelist = map[string]bool{
+	"benchmarks":     true,
+	"blog":           true,
+	"arch":           true,
+	"build":          true,
+	"crypto":         true,
+	"debug":          true,
+	"example":        true,
+	"exp":            true,
+	"gddo":           true,
+	"go":             true,
+	"image":          true,
+	"mobile":         true,
+	"net":            true,
+	"oauth2":         true,
+	"perf":           true,
+	"playground":     true,
+	"proposal":       true,
+	"review":         true,
+	"scratch":        true,
+	"sublime-build":  true,
+	"sublime-config": true,
+	"sync":           true,
+	"sys":            true,
+	"talks":          true,
+	"term":           true,
+	"text":           true,
+	"time":           true,
+	"tools":          true,
+	"tour":           true,
+}
 
 type bot struct {
 	githubClient *github.Client
@@ -276,14 +298,13 @@ func (b *bot) checkPullRequests() {
 
 	if err := b.corpus.GitHub().ForeachRepo(func(ghr *maintner.GitHubRepo) error {
 		id := ghr.ID()
-		ownerRepo := id.Owner + "/" + id.Repo
-		if !githubRepoWhitelist[ownerRepo] {
+		if id.Owner != "golang" || !gerritProjectWhitelist[id.Repo] {
 			return nil
 		}
 		return ghr.ForeachIssue(func(issue *maintner.GitHubIssue) error {
 			if issue.PullRequest && issue.Closed {
 				// Clean up any reference of closed CLs within pendingCLs.
-				shortLink := fmt.Sprintf("%s#%d", ownerRepo, issue.Number)
+				shortLink := fmt.Sprintf("%s#%d", id.Owner+"/"+id.Repo, issue.Number)
 				delete(b.pendingCLs, shortLink)
 				return nil
 			}
