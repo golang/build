@@ -380,7 +380,7 @@ func (b *gopherbot) addGerritComment(ctx context.Context, changeID, comment stri
 func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 	tooOld := time.Now().Add(-365 * 24 * time.Hour)
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if !gi.Closed || gi.Locked {
+		if !gi.Closed || gi.PullRequest || gi.Locked {
 			return nil
 		}
 		if gi.Updated.After(tooOld) {
@@ -403,7 +403,7 @@ func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 // to get into an edit war with a human.
 func (b *gopherbot) labelProposals(ctx context.Context) error {
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed {
+		if gi.Closed || gi.PullRequest {
 			return nil
 		}
 		if !strings.HasPrefix(gi.Title, "proposal:") && !strings.HasPrefix(gi.Title, "Proposal:") {
@@ -436,7 +436,7 @@ func (b *gopherbot) labelProposals(ctx context.Context) error {
 
 func (b *gopherbot) setSubrepoMilestones(ctx context.Context) error {
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || !gi.Milestone.IsNone() || gi.HasEvent("demilestoned") || gi.HasEvent("milestoned") {
+		if gi.Closed || gi.PullRequest || !gi.Milestone.IsNone() || gi.HasEvent("demilestoned") || gi.HasEvent("milestoned") {
 			return nil
 		}
 		if !strings.HasPrefix(gi.Title, "x/") {
@@ -480,7 +480,7 @@ func (b *gopherbot) setSubrepoMilestones(ctx context.Context) error {
 
 func (b *gopherbot) setGccgoMilestones(ctx context.Context) error {
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || !gi.Milestone.IsNone() || gi.HasEvent("demilestoned") || gi.HasEvent("milestoned") {
+		if gi.Closed || gi.PullRequest || !gi.Milestone.IsNone() || gi.HasEvent("demilestoned") || gi.HasEvent("milestoned") {
 			return nil
 		}
 		if !strings.Contains(gi.Title, "gccgo") { // TODO: better gccgo bug report heuristic?
@@ -499,7 +499,7 @@ func (b *gopherbot) setGccgoMilestones(ctx context.Context) error {
 
 func (b *gopherbot) labelBuildIssues(ctx context.Context) error {
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || !strings.HasPrefix(gi.Title, "x/build") || gi.HasLabel("Builders") || gi.HasEvent("unlabeled") {
+		if gi.Closed || gi.PullRequest || !strings.HasPrefix(gi.Title, "x/build") || gi.HasLabel("Builders") || gi.HasEvent("unlabeled") {
 			return nil
 		}
 		printIssue("label-builders", gi)
@@ -512,7 +512,7 @@ func (b *gopherbot) labelBuildIssues(ctx context.Context) error {
 
 func (b *gopherbot) labelMobileIssues(ctx context.Context) error {
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || !strings.HasPrefix(gi.Title, "x/mobile") || gi.HasLabel("mobile") || gi.HasEvent("unlabeled") {
+		if gi.Closed || gi.PullRequest || !strings.HasPrefix(gi.Title, "x/mobile") || gi.HasLabel("mobile") || gi.HasEvent("unlabeled") {
 			return nil
 		}
 		printIssue("label-mobile", gi)
@@ -525,7 +525,7 @@ func (b *gopherbot) labelMobileIssues(ctx context.Context) error {
 
 func (b *gopherbot) labelDocumentationIssues(ctx context.Context) error {
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || !isDocumentationTitle(gi.Title) || gi.HasLabel("Documentation") || gi.HasEvent("unlabeled") {
+		if gi.Closed || gi.PullRequest || !isDocumentationTitle(gi.Title) || gi.HasLabel("Documentation") || gi.HasEvent("unlabeled") {
 			return nil
 		}
 		printIssue("label-documentation", gi)
@@ -540,7 +540,7 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 	const waitingForInfo = "WaitingForInfo"
 	now := time.Now()
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || !gi.HasLabel("WaitingForInfo") {
+		if gi.Closed || gi.PullRequest || !gi.HasLabel("WaitingForInfo") {
 			return nil
 		}
 		var waitStart time.Time
@@ -646,7 +646,7 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 					continue
 				}
 				gi := ref.Repo.Issue(ref.Number)
-				if gi == nil || gi.HasLabel(frozenDueToAge) {
+				if gi == nil || gi.PullRequest || gi.HasLabel(frozenDueToAge) {
 					continue
 				}
 				hasComment := false
@@ -686,7 +686,7 @@ func canonicalLabelName(s string) string {
 // but are being renamed to "needs-foo".
 func (b *gopherbot) updateNeeds(ctx context.Context) error {
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed {
+		if gi.Closed || gi.PullRequest {
 			return nil
 		}
 		var numNeeds int
