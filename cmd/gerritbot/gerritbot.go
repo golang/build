@@ -561,7 +561,8 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 
 Please visit %s to see it.
 
-Tip: You can toggle comments on/off from GerritBot using the %s slash command (e.g. %s)`,
+Tip: You can toggle comments from me using the %s slash command (e.g. %s)
+See the [Wiki page](https://golang.org/wiki/GerritBot) for more info`,
 		pr.Head.GetSHA(), changeURL, "`comments`", "`/comments off`")
 	return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg)
 }
