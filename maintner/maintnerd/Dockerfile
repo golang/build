@@ -32,4 +32,4 @@ RUN mkdir -p ~/.ssh/ \
 
 COPY ca-certificates.crt /etc/ssl/certs/
 COPY maintnerd /
-ENTRYPOINT ["/tini", "/maintnerd"]
+ENTRYPOINT ["/tini", "--", "/maintnerd"]
