@@ -290,6 +290,39 @@ func main() {
 	log.Fatal(<-errc)
 }
 
+// Projects to watch when using the "go" config.
+var goGitHubProjects = []string{
+	"golang/arch",
+	"golang/benchmarks",
+	"golang/blog",
+	"golang/build",
+	"golang/crypto",
+	"golang/debug",
+	"golang/example",
+	"golang/exp",
+	"golang/gddo",
+	"golang/go",
+	"golang/image",
+	"golang/mobile",
+	"golang/net",
+	"golang/oauth2",
+	"golang/perf",
+	"golang/playground",
+	"golang/proposal",
+	"golang/review",
+	"golang/scratch",
+	"golang/sublime-build",
+	"golang/sublime-config",
+	"golang/sync",
+	"golang/sys",
+	"golang/talks",
+	"golang/term",
+	"golang/text",
+	"golang/time",
+	"golang/tools",
+	"golang/tour",
+}
+
 func setGoConfig() {
 	if *watchGithub != "" {
 		log.Fatalf("can't set both --config and --watch-github")
@@ -298,7 +331,7 @@ func setGoConfig() {
 		log.Fatalf("can't set both --config and --watch-gerrit")
 	}
 	*pubsub = "https://pubsubhelper.golang.org"
-	*watchGithub = "golang/go,golang/scratch"
+	*watchGithub = strings.Join(goGitHubProjects, ",")
 
 	gerrc := gerrit.NewClient("https://go-review.googlesource.com/", gerrit.NoAuth)
 	projs, err := gerrc.ListProjects(context.Background())
