@@ -21,7 +21,7 @@ spec:
       - name: maintnerd
         image: gcr.io/symbolic-datum-552/maintnerd:latest
         imagePullPolicy: Always
-        command: ["/maintnerd", "--config=go", "--bucket=golang-maintner-log", "--verbose", "--data-dir=/cache", "--listen=:80", "--autocert=maintner.golang.org", "--autocert-bucket=golang-maintner-autocert"]
+        command: ["/tini", "/maintnerd", "--config=go", "--bucket=golang-maintner-log", "--verbose", "--data-dir=/cache", "--listen=:80", "--autocert=maintner.golang.org", "--autocert-bucket=golang-maintner-autocert"]
         volumeMounts:
         - mountPath: /cache
           name: pv-maintner-cache
