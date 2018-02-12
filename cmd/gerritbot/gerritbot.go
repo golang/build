@@ -390,11 +390,15 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 		if m.Author.Email() == cl.Owner().Email() {
 			continue
 		}
-		msg := fmt.Sprintf(`%s has posted review comments at [golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d#message-%s).
+		msg := fmt.Sprintf(`Message from %s:
 
+%s
+
+---
+Please don’t reply on this GitHub thread. Visit [golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d#message-%s).
 After addressing review feedback, remember to
 [publish your drafts](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it)!`,
-			m.Author.Name(), cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
+			m.Author.Name(), m.Message, cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
 		b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg)
 	}
 
