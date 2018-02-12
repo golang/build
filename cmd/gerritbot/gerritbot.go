@@ -379,27 +379,14 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 		return nil
 	}
 
+	if err := b.syncGerritCommentsToGitHub(ctx, pr, cl); err != nil {
+		return fmt.Errorf("syncGerritCommentsToGitHub: %v", err)
+	}
+
 	if lastRev == "" {
 		log.Printf("Imported CL https://go-review.googlesource.com/q/%s does not have %s footer; skipping",
 			cl.ChangeID(), prefixGitFooterLastRev)
 		return nil
-	}
-
-	repo := pr.GetBase().GetRepo()
-	for _, m := range cl.Messages {
-		if m.Author.Email() == cl.Owner().Email() {
-			continue
-		}
-		msg := fmt.Sprintf(`Message from %s:
-
-%s
-
----
-Please don’t reply on this GitHub thread. Visit [golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d#message-%s).
-After addressing review feedback, remember to
-[publish your drafts](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it)!`,
-			m.Author.Name(), m.Message, cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
-		b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg)
 	}
 
 	if pr.Head.GetSHA() == lastRev {
@@ -412,6 +399,27 @@ After addressing review feedback, remember to
 		return fmt.Errorf("importGerritChangeFromPR(%v, %v): %v", shortLink, cl, err)
 	}
 	b.pendingCLs[shortLink] = prHeadSHA
+	return nil
+}
+
+func (b *bot) syncGerritCommentsToGitHub(ctx context.Context, pr *github.PullRequest, cl *maintner.GerritCL) error {
+	repo := pr.GetBase().GetRepo()
+	for _, m := range cl.Messages {
+		if m.Author.Email() == cl.Owner().Email() {
+			continue
+		}
+		msg := fmt.Sprintf(`Message from %s:
+
+%s
+
+---
+Please don’t reply on this GitHub thread. Visit [golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d#message-%s).
+After addressing review feedback, remember to [publish your drafts](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it)!`,
+			m.Author.Name(), m.Message, cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
+		if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg); err != nil {
+			return fmt.Errorf("postGitHubMessageNoDup: %v", err)
+		}
+	}
 	return nil
 }
 
@@ -621,30 +629,72 @@ func (b *bot) postGitHubMessage(ctx context.Context, owner, repo string, issueNu
 // postGitHubMessageNoDup ensures that the message being posted on an issue does not already have the
 // same exact content. These comments can be toggled by the user via a slash command /comments {on|off}
 // at the beginning of a message.
-func (b *bot) postGitHubMessageNoDup(ctx context.Context, owner, repo string, issueNum int, msg string) error {
-	issue, _, err := b.githubClient.Issues.Get(ctx, owner, repo, issueNum)
-	if err != nil {
-		return fmt.Errorf("b.githubClient.Issues.Get(%q, %q, %d): %v", owner, repo, issueNum, err)
+// TODO(andybons): This logic is shared by gopherbot. Consolidate it somewhere.
+func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issueNum int, msg string) error {
+	gr := b.corpus.GitHub().Repo(org, repo)
+	if gr == nil {
+		return fmt.Errorf("unknown github repo %s/%s", org, repo)
 	}
-	ownerID := issue.GetUser().GetID()
-	opts := &github.IssueListCommentsOptions{
-		ListOptions: github.ListOptions{
-			PerPage: 1000,
-		},
-	}
-	comments, _, err := b.githubClient.Issues.ListComments(ctx, owner, repo, issueNum, opts)
-	if err != nil {
-		return fmt.Errorf("b.githubClient.Issues.ListComments(%q, %q, %d, %+v): %v", owner, repo, issueNum, opts, err)
-	}
+	var since time.Time
 	var noComment bool
-	for _, ic := range comments {
-		b := ic.GetBody()
-		if b == msg {
+	var ownerID int64
+	if gi := gr.Issue(int32(issueNum)); gi != nil {
+		ownerID = gi.User.ID
+		var dup bool
+		gi.ForeachComment(func(c *maintner.GitHubComment) error {
+			since = c.Updated
+			// TODO: check for exact match?
+			if strings.Contains(c.Body, msg) {
+				dup = true
+				return nil
+			}
+			if c.User.ID == ownerID && strings.HasPrefix(c.Body, "/comments ") {
+				if strings.HasPrefix(c.Body, "/comments off") {
+					noComment = true
+				} else if strings.HasPrefix(c.Body, "/comments on") {
+					noComment = false
+				}
+			}
+			return nil
+		})
+		if dup {
+			// Comment's already been posted. Nothing to do.
 			return nil
 		}
-		if ic.GetUser().GetID() == ownerID && strings.HasPrefix(b, "/comments ") {
-			noComment = strings.HasPrefix(b, "/comments off")
-			if strings.HasPrefix(b, "/comments on") {
+	}
+	// See if there is a dup comment from when GerritBot last got
+	// its data from maintner.
+	ics, _, err := b.githubClient.Issues.ListComments(ctx, org, repo, int(issueNum), &github.IssueListCommentsOptions{
+		Since:       since,
+		ListOptions: github.ListOptions{PerPage: 1000},
+	})
+	if err != nil {
+		return err
+	}
+	for _, ic := range ics {
+		if strings.Contains(ic.GetBody(), msg) {
+			// Dup.
+			return nil
+		}
+	}
+
+	if ownerID == 0 {
+		issue, _, err := b.githubClient.Issues.Get(ctx, org, repo, issueNum)
+		if err != nil {
+			return err
+		}
+		ownerID = int64(issue.GetUser().GetID())
+	}
+	for _, ic := range ics {
+		if strings.Contains(ic.GetBody(), msg) {
+			// Dup.
+			return nil
+		}
+		body := ic.GetBody()
+		if int64(ic.GetUser().GetID()) == ownerID && strings.HasPrefix(body, "/comments ") {
+			if strings.HasPrefix(body, "/comments off") {
+				noComment = true
+			} else if strings.HasPrefix(body, "/comments on") {
 				noComment = false
 			}
 		}
@@ -652,5 +702,8 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, owner, repo string, is
 	if noComment {
 		return nil
 	}
-	return b.postGitHubMessage(ctx, owner, repo, issueNum, msg)
+	_, _, err = b.githubClient.Issues.CreateComment(ctx, org, repo, int(issueNum), &github.IssueComment{
+		Body: github.String(msg),
+	})
+	return err
 }
