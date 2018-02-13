@@ -557,8 +557,7 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 	}
 	for _, c := range []*exec.Cmd{
 		exec.Command("git", "-C", worktreeDir, "fetch", "github", fmt.Sprintf("pull/%d/head", pr.GetNumber())),
-		exec.Command("git", "-C", worktreeDir, "checkout", pr.Base.GetSHA(), "-b", prShortLink(pr)),
-		exec.Command("git", "-C", worktreeDir, "merge", "FETCH_HEAD"),
+		exec.Command("git", "-C", worktreeDir, "checkout", "-b", prShortLink(pr), "FETCH_HEAD"),
 	} {
 		if err := runCmd(c); err != nil {
 			return err
