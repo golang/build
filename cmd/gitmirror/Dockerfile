@@ -10,7 +10,16 @@ RUN apt-get update && apt-get install -y \
 	ca-certificates \
 	git-core \
 	openssh-client \
+	gnupg \
 	&& rm -rf /var/lib/apt/lists/*
+
+# See https://github.com/golang/go/issues/23705
+ENV TINI_VERSION v0.16.1
+ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
+ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini.asc /tini.asc
+RUN gpg --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 595E85A6B1B4779EA4DAAEC70B588DFF0527A9B7 \
+ && gpg --verify /tini.asc
+RUN chmod +x /tini
 
 # Add Github.com's known_hosts entries, so git push calls later don't
 # prompt, and don't need to have their strict host key checking
@@ -22,4 +31,4 @@ RUN mkdir -p ~/.ssh/ \
 	&& chmod 0600 ~/.ssh/known_hosts
 
 COPY gitmirror /
-ENTRYPOINT ["/gitmirror"]
+ENTRYPOINT ["/tini", "--", "/gitmirror"]
