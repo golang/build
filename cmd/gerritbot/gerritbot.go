@@ -216,13 +216,26 @@ var gerritProjectWhitelist = map[string]bool{
 	"tour":           true,
 }
 
+type cachedPullRequest struct {
+	pr   *github.PullRequest
+	etag string
+}
+
 type bot struct {
 	githubClient *github.Client
 	gerritClient *gerrit.Client
 
 	sync.RWMutex // Protects all fields below
 	corpus       *maintner.Corpus
-	importedPRs  map[string]*maintner.GerritCL // GitHub owner/repo#n -> Gerrit CL
+
+	// importedPRs and cachedPRs should share the same method for determining keys
+	// given the same Pull Request, as the presence of a key in the former determined
+	// whether it should remain in the latter.
+	importedPRs map[string]*maintner.GerritCL // GitHub owner/repo#n -> Gerrit CL
+
+	// Pull Requests that have been cached locally since maintner doesn’t support
+	// PRs and this is used to make conditional requests to the API.
+	cachedPRs map[string]*cachedPullRequest // GitHub owner/repo#n -> GitHub Pull Request
 
 	// CLs that have been created/updated on Gerrit for GitHub PRs but are not yet
 	// reflected in the maintner corpus yet.
@@ -235,6 +248,7 @@ func newBot(githubClient *github.Client, gerritClient *gerrit.Client) *bot {
 		gerritClient: gerritClient,
 		importedPRs:  map[string]*maintner.GerritCL{},
 		pendingCLs:   map[string]string{},
+		cachedPRs:    map[string]*cachedPullRequest{},
 	}
 }
 
@@ -296,6 +310,13 @@ func (b *bot) checkPullRequests() {
 		})
 	})
 
+	// Remove any cached PRs that are no longer being checked.
+	for k := range b.cachedPRs {
+		if b.importedPRs[k] == nil {
+			delete(b.cachedPRs, k)
+		}
+	}
+
 	if err := b.corpus.GitHub().ForeachRepo(func(ghr *maintner.GitHubRepo) error {
 		id := ghr.ID()
 		if id.Owner != "golang" || !gerritProjectWhitelist[id.Repo] {
@@ -304,7 +325,7 @@ func (b *bot) checkPullRequests() {
 		return ghr.ForeachIssue(func(issue *maintner.GitHubIssue) error {
 			if issue.PullRequest && issue.Closed {
 				// Clean up any reference of closed CLs within pendingCLs.
-				shortLink := fmt.Sprintf("%s#%d", id.Owner+"/"+id.Repo, issue.Number)
+				shortLink := githubShortLink(id.Owner, id.Repo, int(issue.Number))
 				delete(b.pendingCLs, shortLink)
 				return nil
 			}
@@ -323,11 +344,17 @@ func (b *bot) checkPullRequests() {
 	}
 }
 
-// prShortLink returns text referencing a Pull Request that will be automatically
-// converted into a link by GitHub.
+// prShortLink returns text referencing an Issue or Pull Request that will be
+// automatically converted into a link by GitHub.
+func githubShortLink(owner, repo string, number int) string {
+	return fmt.Sprintf("%s#%d", owner+"/"+repo, number)
+}
+
+// prShortLink returns text referencing the given Pull Request that will be
+// automatically converted into a link by GitHub.
 func prShortLink(pr *github.PullRequest) string {
 	repo := pr.GetBase().GetRepo()
-	return fmt.Sprintf("%s/%s#%d", repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber())
+	return githubShortLink(repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber())
 }
 
 // processPullRequest is the entry point to the state machine of mirroring a PR
@@ -461,11 +488,12 @@ func (b *bot) closePR(ctx context.Context, pr *github.PullRequest, ch *gerrit.Ch
 	req := &github.IssueRequest{
 		State: github.String("closed"),
 	}
-	_, _, err := b.githubClient.Issues.Edit(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), req)
+	_, resp, err := b.githubClient.Issues.Edit(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), req)
 	if err != nil {
 		return fmt.Errorf("b.githubClient.Issues.Edit(ctx, %q, %q, %d, %+v): %v",
 			repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), req, err)
 	}
+	logGitHubRateLimits(resp)
 	return nil
 }
 
@@ -606,22 +634,62 @@ func reposRoot() string {
 	return filepath.Join(*workdir, "repos")
 }
 
+// getFullPR retrieves a Pull Request via GitHub’s API.
+// b's RWMutex read-write lock must be held.
 func (b *bot) getFullPR(ctx context.Context, owner, repo string, number int) (*github.PullRequest, error) {
-	pr, _, err := b.githubClient.PullRequests.Get(ctx, owner, repo, number)
+	shortLink := githubShortLink(owner, repo, number)
+	cpr := b.cachedPRs[shortLink]
+	var etag string
+	if cpr != nil {
+		etag = cpr.etag
+		log.Printf("Retrieving PR %s from GitHub using Etag %q ...", shortLink, etag)
+	} else {
+		log.Printf("Retrieving PR %s from GitHub without an Etag ...", shortLink)
+	}
+
+	u := fmt.Sprintf("repos/%v/%v/pulls/%d", owner, repo, number)
+	req, err := b.githubClient.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
-		return nil, fmt.Errorf("ghc.PullRequests().Get(ctc, %q, %q, %d): %v", owner, repo, number, err)
+		return nil, fmt.Errorf("b.githubClient.NewRequest(%q, %q, nil): %v", http.MethodGet, u, err)
+	}
+	if etag != "" {
+		req.Header.Add("If-None-Match", etag)
+	}
+
+	pr := new(github.PullRequest)
+	resp, err := b.githubClient.Do(ctx, req, pr)
+	logGitHubRateLimits(resp)
+	if err != nil {
+		if resp.StatusCode == http.StatusNotModified {
+			log.Println("Returning cached version of", shortLink)
+			return cpr.pr, nil
+		}
+		return nil, fmt.Errorf("b.githubClient.Do: %v", err)
+	}
+
+	b.cachedPRs[shortLink] = &cachedPullRequest{
+		etag: resp.Header.Get("Etag"),
+		pr:   pr,
 	}
 	return pr, nil
+}
+
+func logGitHubRateLimits(resp *github.Response) {
+	if resp == nil {
+		return
+	}
+	log.Printf("GitHub: %d/%d calls remaining; Reset in %v", resp.Rate.Remaining, resp.Rate.Limit, resp.Rate.Reset.Sub(time.Now()))
 }
 
 // postGitHubMessage posts the given message to the given issue. This is likely not the method
 // you are looking to use. To ensure that duplicate messages are not posted, use postGitHubMessageNoDup.
 func (b *bot) postGitHubMessage(ctx context.Context, owner, repo string, issueNum int, msg string) error {
 	cmt := &github.IssueComment{Body: github.String(msg)}
-	_, _, err := b.githubClient.Issues.CreateComment(ctx, owner, repo, issueNum, cmt)
+	_, resp, err := b.githubClient.Issues.CreateComment(ctx, owner, repo, issueNum, cmt)
 	if err != nil {
 		return fmt.Errorf("b.githubClient.Issues.CreateComment(ctx, %q, %q, %d, %+v): %v", owner, repo, issueNum, cmt, err)
 	}
+	logGitHubRateLimits(resp)
 	return nil
 }
 
@@ -663,13 +731,14 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 	}
 	// See if there is a dup comment from when GerritBot last got
 	// its data from maintner.
-	ics, _, err := b.githubClient.Issues.ListComments(ctx, org, repo, int(issueNum), &github.IssueListCommentsOptions{
+	ics, resp, err := b.githubClient.Issues.ListComments(ctx, org, repo, int(issueNum), &github.IssueListCommentsOptions{
 		Since:       since,
 		ListOptions: github.ListOptions{PerPage: 1000},
 	})
 	if err != nil {
 		return err
 	}
+	logGitHubRateLimits(resp)
 	for _, ic := range ics {
 		if strings.Contains(ic.GetBody(), msg) {
 			// Dup.
@@ -678,10 +747,11 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 	}
 
 	if ownerID == 0 {
-		issue, _, err := b.githubClient.Issues.Get(ctx, org, repo, issueNum)
+		issue, resp, err := b.githubClient.Issues.Get(ctx, org, repo, issueNum)
 		if err != nil {
 			return err
 		}
+		logGitHubRateLimits(resp)
 		ownerID = int64(issue.GetUser().GetID())
 	}
 	for _, ic := range ics {
@@ -701,8 +771,12 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 	if noComment {
 		return nil
 	}
-	_, _, err = b.githubClient.Issues.CreateComment(ctx, org, repo, int(issueNum), &github.IssueComment{
+	_, resp, err = b.githubClient.Issues.CreateComment(ctx, org, repo, int(issueNum), &github.IssueComment{
 		Body: github.String(msg),
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	logGitHubRateLimits(resp)
+	return nil
 }
