@@ -16,7 +16,7 @@ spec:
       - name: gerritbot
         image: gcr.io/symbolic-datum-552/gerritbot:latest
         imagePullPolicy: Always
-        command: ["/gerritbot", "-listen=:80", "-autocert-bucket=golang-gerritbot-autocert", "-gitcookies-file=/gitcookies"]
+        command: ["/tini", "--", "/gerritbot", "-listen=:80", "-autocert-bucket=golang-gerritbot-autocert", "-gitcookies-file=/gitcookies"]
         ports:
         - containerPort: 80
         - containerPort: 443
