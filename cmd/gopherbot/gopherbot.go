@@ -17,7 +17,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -190,9 +189,6 @@ type gopherbot struct {
 	corpus *maintner.Corpus
 	gorepo *maintner.GitHubRepo
 
-	// maxIssueMod is the latest modification time of all Go
-	// github issues. It's updated at the end of the run of tasks.
-	maxIssueMod       time.Time
 	knownContributors map[string]bool
 }
 
@@ -237,14 +233,6 @@ func (b *gopherbot) doTasks(ctx context.Context) error {
 			return err
 		}
 	}
-
-	// Update b.maxIssueMod.
-	b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if t := gi.LastModified(); t.After(b.maxIssueMod) {
-			b.maxIssueMod = t
-		}
-		return nil
-	})
 
 	return nil
 }
@@ -817,6 +805,11 @@ func (b *gopherbot) congratulateNewContributors(ctx context.Context) error {
 		})
 	})
 	for email, cl := range cls {
+		// See golang.org/issue/23865
+		if cl.Branch() == "refs/meta/config" {
+			b.knownContributors[email] = true
+			continue
+		}
 		if cl.Commit == nil || cl.Commit.CommitTime.Before(congratsEpoch) {
 			b.knownContributors[email] = true
 			continue
@@ -854,9 +847,9 @@ func (b *gopherbot) congratulateNewContributors(ctx context.Context) error {
 		opts := &gerritCommentOpts{
 			OldPhrases: congratulatoryMessages,
 		}
-		err := b.addGerritComment(ctx, strconv.Itoa(int(cl.Number)), congratulatoryMessages[0], opts)
+		err := b.addGerritComment(ctx, cl.ChangeID(), congratulatoryMessages[0], opts)
 		if err != nil {
-			return err
+			return fmt.Errorf("could not add comment to golang.org/cl/%d: %v", cl.Number, err)
 		}
 		b.knownContributors[email] = true
 	}
