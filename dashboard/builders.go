@@ -1231,11 +1231,11 @@ func init() {
 		ShouldRunDistTest: noTestDir,
 	})
 	addBuilder(BuildConfig{
-		Name:               "darwin-amd64-10_11",
-		HostType:           "host-darwin-10_11",
-		TryBot:             false, // disabled until Macs fixed; https://golang.org/issue/23859
-		ShouldRunDist4Test: noTestDir,
-		numTryTestHelpers:  3,
+		Name:              "darwin-amd64-10_11",
+		HostType:          "host-darwin-10_11",
+		TryBot:            false, // disabled until Macs fixed; https://golang.org/issue/23859
+		ShouldRunDistTest: noTestDir,
+		numTryTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-386-10_11",
