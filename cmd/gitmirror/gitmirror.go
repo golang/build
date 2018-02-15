@@ -1077,7 +1077,12 @@ func (r *Repo) fetch() (err error) {
 	})
 }
 
-// push runs "git push -f --mirror dest" in the repository root.
+// push effectively runs "git push -f --mirror dest" in the repository
+// root, but does things in smaller batches of refs, to work around
+// performance problems we saw in the past. (They might have been
+// fixed by later version of git; they seemed to only affect the HTTP
+// transport, but not ssh)
+//
 // It tries three times, just in case it failed because of a transient error.
 func (r *Repo) push() (err error) {
 	n := 0
