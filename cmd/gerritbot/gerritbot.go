@@ -185,9 +185,9 @@ const (
 
 // Gerrit projects we accept PRs for.
 var gerritProjectWhitelist = map[string]bool{
+	"arch":           true,
 	"benchmarks":     true,
 	"blog":           true,
-	"arch":           true,
 	"build":          true,
 	"crypto":         true,
 	"debug":          true,
@@ -568,7 +568,27 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		exec.Command("rm", "-rf", worktreeDir),
 		exec.Command("git", "-C", repoDir, "worktree", "prune"),
 		exec.Command("git", "-C", repoDir, "worktree", "add", worktreeDir),
-		exec.Command("git", "-C", worktreeDir, "pull", "origin", "master"),
+		exec.Command("git", "-C", worktreeDir, "fetch", "origin", "+master:master"),
+		exec.Command("git", "-C", worktreeDir, "fetch", "github", fmt.Sprintf("pull/%d/head", pr.GetNumber())),
+	} {
+		if err := runCmd(c); err != nil {
+			return err
+		}
+	}
+
+	mergeBaseSHA, err := cmdOut(exec.Command("git", "-C", worktreeDir, "merge-base", "master", "FETCH_HEAD"))
+	if err != nil {
+		return err
+	}
+
+	author, err := cmdOut(exec.Command("git", "-C", worktreeDir, "diff-tree", "--always", "--no-patch", "--format=%an <%ae>", "FETCH_HEAD"))
+	if err != nil {
+		return err
+	}
+
+	for _, c := range []*exec.Cmd{
+		exec.Command("git", "-C", worktreeDir, "checkout", "-B", prShortLink(pr), mergeBaseSHA),
+		exec.Command("git", "-C", worktreeDir, "merge", "--squash", "--no-commit", "FETCH_HEAD"),
 	} {
 		if err := runCmd(c); err != nil {
 			return err
@@ -584,24 +604,6 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		commitMsg += fmt.Sprintf("%s %s\n", prefixGitFooterChangeID, cl.ChangeID())
 	}
 	for _, c := range []*exec.Cmd{
-		exec.Command("git", "-C", worktreeDir, "fetch", "github", fmt.Sprintf("pull/%d/head", pr.GetNumber())),
-		exec.Command("git", "-C", worktreeDir, "checkout", "-b", prShortLink(pr), "FETCH_HEAD"),
-	} {
-		if err := runCmd(c); err != nil {
-			return err
-		}
-	}
-
-	cmd := exec.Command("git", "-C", worktreeDir, "show", "--no-patch", "--format='%an <%ae>'", fmt.Sprintf("HEAD~%d", pr.GetCommits()-1))
-	log.Printf("Executing %v", cmd.Args)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("running %v: output: %s; err: %v", cmd.Args, out, err)
-	}
-	author := strings.TrimSpace(string(out))
-
-	for _, c := range []*exec.Cmd{
-		exec.Command("git", "-C", worktreeDir, "reset", "--soft", fmt.Sprintf("HEAD~%d", pr.GetCommits())),
 		exec.Command("git", "-C", worktreeDir, "commit", "--author", author, "-m", commitMsg),
 	} {
 		if err := runCmd(c); err != nil {
@@ -609,14 +611,12 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		}
 	}
 
-	cmd = exec.Command("git", "-C", worktreeDir, "push", "origin", "HEAD:refs/for/"+pr.GetBase().GetRef())
-	log.Printf("Executing %v", cmd.Args)
-	out, err = cmd.CombinedOutput()
+	out, err := cmdOut(exec.Command("git", "-C", worktreeDir, "push", "origin", "HEAD:refs/for/"+pr.GetBase().GetRef()))
 	if err != nil {
-		return fmt.Errorf("running %v: output: %s; err: %v", cmd.Args, out, err)
+		return nil
 	}
-	changeURL := gerritChangeRE.Find(out)
-	if changeURL == nil {
+	changeURL := gerritChangeRE.FindString(out)
+	if changeURL == "" {
 		return fmt.Errorf("could not find change URL in command output: %q", out)
 	}
 	repo := pr.GetBase().GetRepo()
@@ -628,6 +628,15 @@ Tip: You can toggle comments from me using the %s slash command (e.g. %s)
 See the [Wiki page](https://golang.org/wiki/GerritBot) for more info`,
 		pr.Head.GetSHA(), changeURL, "`comments`", "`/comments off`")
 	return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg)
+}
+
+func cmdOut(cmd *exec.Cmd) (string, error) {
+	log.Printf("Executing %v", cmd.Args)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("running %v: output: %s; err: %v", cmd.Args, out, err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 func reposRoot() string {
