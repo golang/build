@@ -29,6 +29,7 @@ import (
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/autocertcache"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/gitauth"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
 	"golang.org/x/build/maintner/maintnerd/apipb"
@@ -134,6 +135,9 @@ func main() {
 		log.Printf("Synced from https://maintner.golang.org/logs.")
 		setGoConfig()
 	case "go":
+		if err := gitauth.Init(); err != nil {
+			log.Fatalf("gitauth: %v", err)
+		}
 		setGoConfig()
 	case "godata":
 		setGodataConfig()

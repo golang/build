@@ -38,6 +38,7 @@ import (
 	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/gitauth"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
 )
@@ -92,6 +93,9 @@ var (
 
 func main() {
 	flag.Parse()
+	if err := gitauth.Init(); err != nil {
+		log.Fatalf("gitauth: %v", err)
+	}
 
 	if *dashFlag == "" && metadata.OnGCE() {
 		project, err := metadata.ProjectID()
