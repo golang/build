@@ -9,8 +9,9 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
-	"io"
+	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 )
@@ -36,13 +37,12 @@ func main() {
 		if err := os.Mkdir(filepath.Dir(path), 0755); err != nil {
 			failf("os.Mkdir: %v", err)
 		}
-		f, err := os.Create(path)
-		if err != nil {
-			failf("os.Create: %v", err)
+		if err := ioutil.WriteFile(path, buf.Bytes(), 0666); err != nil {
+			failf("ioutil.WriteFile: %v", err)
 		}
-		defer f.Close()
-		if _, err := io.Copy(f, &buf); err != nil {
-			failf("could not write to file: %v", err)
+		fmt.Println("Wrote", path)
+		if err := exec.Command("gofmt", "-w", path).Run(); err != nil {
+			failf("could not gofmt file %q: %v", path, err)
 		}
 	}
 }
@@ -56,27 +56,27 @@ func failf(format string, args ...interface{}) {
 }
 
 var mainTmpl = template.Must(template.New("main").Parse(`// Copyright {{.Year}} The Go Authors. All rights reserved.
-	// Use of this source code is governed by a BSD-style
-	// license that can be found in the LICENSE file.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 
-	// The {{.Version}} command runs the go command from {{.Version}}.
-	//
-	// To install, run:
-	//
-	//     $ go get golang.org/x/build/version/{{.Version}}
-	//     $ {{.Version}} download
-	//
-	// And then use the {{.Version}} command as if it were your normal go
-	// command.
-	//
-	// See the release notes at https://golang.org/doc/{{.Version}}
-	//
-	// File bugs at https://golang.org/issues/new
-	package main
+// The {{.Version}} command runs the go command from {{.Version}}.
+//
+// To install, run:
+//
+//     $ go get golang.org/x/build/version/{{.Version}}
+//     $ {{.Version}} download
+//
+// And then use the {{.Version}} command as if it were your normal go
+// command.
+//
+// See the release notes at https://golang.org/doc/{{.Version}}
+//
+// File bugs at https://golang.org/issues/new
+package main
 
-	import "golang.org/x/build/version"
+import "golang.org/x/build/version"
 
-	func main() {
-		version.Run("{{.Version}}")
-	}
+func main() {
+	version.Run("{{.Version}}")
+}
 `))
