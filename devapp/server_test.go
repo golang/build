@@ -59,7 +59,34 @@ func TestRandomHelpWantedIssue(t *testing.T) {
 	}
 
 	testServer.cMu.Lock()
-	testServer.helpWantedIssues = []int32{42}
+	testServer.helpWantedIssues = []issueData{{id: 42}}
+	testServer.cMu.Unlock()
+	w = httptest.NewRecorder()
+	testServer.ServeHTTP(w, req)
+	if w.Code != http.StatusSeeOther {
+		t.Errorf("w.Code = %d; want %d", w.Code, http.StatusSeeOther)
+	}
+	if g, w := w.Header().Get("Location"), issuesURLBase+"42"; g != w {
+		t.Errorf("Location header = %q; want %q", g, w)
+	}
+}
+
+func TestRandomFilteredHelpWantedIssue(t *testing.T) {
+	req := httptest.NewRequest("GET", "/imfeelinglucky?pkg=foo", nil)
+	w := httptest.NewRecorder()
+	testServer.ServeHTTP(w, req)
+	if w.Code != http.StatusSeeOther {
+		t.Errorf("w.Code = %d; want %d", w.Code, http.StatusSeeOther)
+	}
+	if g, w := w.Header().Get("Location"), issuesURLBase; g != w {
+		t.Errorf("Location header = %q; want %q", g, w)
+	}
+
+	testServer.cMu.Lock()
+	testServer.helpWantedIssues = []issueData{
+		{id: 41, titlePrefix: "not/foo: bar"},
+		{id: 42, titlePrefix: "foo/bar: baz"},
+	}
 	testServer.cMu.Unlock()
 	w = httptest.NewRecorder()
 	testServer.ServeHTTP(w, req)

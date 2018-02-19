@@ -31,13 +31,18 @@ type server struct {
 	cMu              sync.RWMutex // Used to protect the fields below.
 	corpus           *maintner.Corpus
 	repo             *maintner.GitHubRepo
-	helpWantedIssues []int32
+	helpWantedIssues []issueData
 	data             pageData
 
 	// GopherCon-specific fields. Must still hold cMu when reading/writing these.
 	userMapping map[int]*maintner.GitHubUser // Gerrit Owner ID => GitHub user
 	activities  []activity                   // All contribution activities
 	totalPoints int
+}
+
+type issueData struct {
+	id          int32
+	titlePrefix string
 }
 
 type pageData struct {
@@ -129,17 +134,18 @@ func (s *server) updateHelpWantedIssues() {
 	s.cMu.Lock()
 	defer s.cMu.Unlock()
 
-	var ids []int32
+	var issues []issueData
 	s.repo.ForeachIssue(func(i *maintner.GitHubIssue) error {
 		if i.Closed {
 			return nil
 		}
 		if i.HasLabelID(labelHelpWantedID) {
-			ids = append(ids, i.Number)
+			prefix := strings.SplitN(i.Title, ":", 2)[0]
+			issues = append(issues, issueData{id: i.Number, titlePrefix: prefix})
 		}
 		return nil
 	})
-	s.helpWantedIssues = ids
+	s.helpWantedIssues = issues
 }
 
 func (s *server) handleRandomHelpWantedIssue(w http.ResponseWriter, r *http.Request) {
@@ -149,8 +155,32 @@ func (s *server) handleRandomHelpWantedIssue(w http.ResponseWriter, r *http.Requ
 		http.Redirect(w, r, issuesURLBase, http.StatusSeeOther)
 		return
 	}
-	rid := s.helpWantedIssues[rand.Intn(len(s.helpWantedIssues))]
+	pkgs := r.URL.Query().Get("pkg")
+	var rid int32
+	if pkgs == "" {
+		rid = s.helpWantedIssues[rand.Intn(len(s.helpWantedIssues))].id
+	} else {
+		filtered := s.filteredHelpWantedIssues(strings.Split(pkgs, ",")...)
+		if len(filtered) == 0 {
+			http.Redirect(w, r, issuesURLBase, http.StatusSeeOther)
+			return
+		}
+		rid = filtered[rand.Intn(len(filtered))].id
+	}
 	http.Redirect(w, r, issuesURLBase+strconv.Itoa(int(rid)), http.StatusSeeOther)
+}
+
+func (s *server) filteredHelpWantedIssues(pkgs ...string) []issueData {
+	var issues []issueData
+	for _, i := range s.helpWantedIssues {
+		for _, p := range pkgs {
+			if strings.HasPrefix(i.titlePrefix, p) {
+				issues = append(issues, i)
+				break
+			}
+		}
+	}
+	return issues
 }
 
 func (s *server) handleFavicon(w http.ResponseWriter, r *http.Request) {
