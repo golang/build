@@ -259,7 +259,7 @@ type GerritCL struct {
 	Version int32
 
 	// Commit is the git commit of the latest version of this CL.
-	// Previous versions are available via GerritProject.remote.
+	// Previous versions are available via CommitAtVersion.
 	Commit *GitCommit
 
 	// branch is a cache of the latest "Branch: " value seen from
@@ -461,6 +461,19 @@ func (cl *GerritCL) Subject() string {
 		return cl.Commit.Msg[:i]
 	}
 	return cl.Commit.Msg
+}
+
+// CommitAtVersion returns the git commit of the specifid version of this CL.
+// It returns nil if version is not in the range [1, cl.Version].
+func (cl *GerritCL) CommitAtVersion(version int32) *GitCommit {
+	if version < 1 || version > cl.Version {
+		return nil
+	}
+	hash, ok := cl.Project.remote[gerritCLVersion{CLNumber: cl.Number, Version: version}]
+	if !ok {
+		return nil
+	}
+	return cl.Project.commit[hash]
 }
 
 func (cl *GerritCL) firstMetaCommit() *GitCommit {

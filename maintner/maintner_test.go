@@ -162,7 +162,7 @@ func TestNewMutationsFromIssue(t *testing.T) {
 
 func TestNewAssigneesHandlesNil(t *testing.T) {
 	users := []*github.User{
-		&github.User{Login: github.String("foo"), ID: github.Int(3)},
+		&github.User{Login: github.String("foo"), ID: github.Int64(3)},
 	}
 	got := newAssignees(nil, users)
 	want := []*maintpb.GithubUser{&maintpb.GithubUser{
@@ -202,7 +202,7 @@ func TestAssigneesDeleted(t *testing.T) {
 
 	mutation := gr.newMutationFromIssue(issue, &github.Issue{
 		Number:    github.Int(3),
-		Assignees: []*github.User{&github.User{ID: github.Int(int(u2.ID))}},
+		Assignees: []*github.User{&github.User{ID: github.Int64(u2.ID)}},
 	})
 	c.addMutation(mutation)
 	gi := gr.issues[3]
