@@ -164,8 +164,6 @@ Download:
 		cmd.Args = append(cmd.Args,
 			scalewayArgs...,
 		)
-	case "host-windows-386-xp":
-		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-windows-386-xp")...)
 	}
 	switch osArch {
 	case "linux/s390x":
@@ -304,8 +302,6 @@ func buildletURL() string {
 	switch os.Getenv("GO_BUILDER_ENV") {
 	case "linux-arm-arm5spacemonkey":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-arm-arm5"
-	case "host-windows-386-xp":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.windows-386"
 	}
 	switch osArch {
 	case "linux/s390x":
