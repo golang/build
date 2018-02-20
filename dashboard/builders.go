@@ -1224,6 +1224,8 @@ func init() {
 		Name:              "darwin-amd64-10_8",
 		HostType:          "host-darwin-10_8",
 		ShouldRunDistTest: noTestDir,
+		TryOnly:           true, // but not in trybot set, so effectively disabled
+		TryBot:            false,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_10",
