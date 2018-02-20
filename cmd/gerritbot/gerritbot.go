@@ -513,10 +513,6 @@ func (b *bot) downloadRef(ctx context.Context, changeID string) (string, error) 
 	return rev.Ref, nil
 }
 
-const gerritHostBase = "https://go.googlesource.com/"
-
-var gerritChangeRE = regexp.MustCompile(`https:\/\/go-review\.googlesource\.com\/#\/c\/\w+\/\+\/\d+`)
-
 func runCmd(c *exec.Cmd) error {
 	log.Printf("Executing %v", c.Args)
 	if b, err := c.CombinedOutput(); err != nil {
@@ -524,6 +520,11 @@ func runCmd(c *exec.Cmd) error {
 	}
 	return nil
 }
+
+const gerritHostBase = "https://go.googlesource.com/"
+
+// gerritChangeRE matches the URL to the Change within the git output when pushing to Gerrit.
+var gerritChangeRE = regexp.MustCompile(`https:\/\/go-review\.googlesource\.com\/#\/c\/\w+\/\+\/\d+`)
 
 // importGerritChangeFromPR mirrors the latest state of pr to cl. If cl is nil,
 // then a new Gerrit Change is created.
@@ -590,22 +591,7 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 	for _, c := range []*exec.Cmd{
 		exec.Command("git", "-C", worktreeDir, "checkout", "-B", prShortLink(pr), mergeBaseSHA),
 		exec.Command("git", "-C", worktreeDir, "merge", "--squash", "--no-commit", "FETCH_HEAD"),
-	} {
-		if err := runCmd(c); err != nil {
-			return err
-		}
-	}
-
-	commitMsg := fmt.Sprintf("%s\n\n%s\n\n%s %s\n%s %s\n",
-		pr.GetTitle(),
-		pr.GetBody(),
-		prefixGitFooterLastRev, pr.Head.GetSHA(),
-		prefixGitFooterPR, prShortLink(pr))
-	if cl != nil {
-		commitMsg += fmt.Sprintf("%s %s\n", prefixGitFooterChangeID, cl.ChangeID())
-	}
-	for _, c := range []*exec.Cmd{
-		exec.Command("git", "-C", worktreeDir, "commit", "--author", author, "-m", commitMsg),
+		exec.Command("git", "-C", worktreeDir, "commit", "--author", author, "-m", commitMessage(pr, cl)),
 	} {
 		if err := runCmd(c); err != nil {
 			return err
@@ -629,6 +615,35 @@ Tip: You can toggle comments from me using the %s slash command (e.g. %s)
 See the [Wiki page](https://golang.org/wiki/GerritBot) for more info`,
 		pr.Head.GetSHA(), changeURL, "`comments`", "`/comments off`")
 	return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg)
+}
+
+var changeIdentRE = regexp.MustCompile(`(?m)^Change-Id: (I[0-9a-fA-F]{40})\n?`)
+
+// commitMessage returns the text used when creating the squashed commit for pr.
+// A non-nil cl indicates that pr is associated with an existing Gerrit Change.
+func commitMessage(pr *github.PullRequest, cl *maintner.GerritCL) string {
+	prBody := pr.GetBody()
+	var changeID string
+	if cl != nil {
+		changeID = cl.ChangeID()
+	} else {
+		sms := changeIdentRE.FindStringSubmatch(prBody)
+		if sms != nil {
+			changeID = sms[1]
+			prBody = strings.Replace(prBody, sms[0], "", -1)
+		}
+	}
+
+	msg := fmt.Sprintf("%s\n\n%s\n\n%s %s\n%s %s\n",
+		pr.GetTitle(),
+		prBody,
+		prefixGitFooterLastRev, pr.Head.GetSHA(),
+		prefixGitFooterPR, prShortLink(pr))
+
+	if changeID != "" {
+		msg += fmt.Sprintf("%s %s\n", prefixGitFooterChangeID, changeID)
+	}
+	return msg
 }
 
 func cmdOut(cmd *exec.Cmd) (string, error) {
