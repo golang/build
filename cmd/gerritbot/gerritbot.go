@@ -214,6 +214,7 @@ var gerritProjectWhitelist = map[string]bool{
 	"time":           true,
 	"tools":          true,
 	"tour":           true,
+	"vgo":            true,
 }
 
 type cachedPullRequest struct {
