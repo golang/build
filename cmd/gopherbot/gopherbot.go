@@ -199,7 +199,7 @@ var tasks = []struct {
 	{"freeze old issues", (*gopherbot).freezeOldIssues},
 	{"label proposals", (*gopherbot).labelProposals},
 	{"set subrepo milestones", (*gopherbot).setSubrepoMilestones},
-	{"set gccgo milestones", (*gopherbot).setGccgoMilestones},
+	{"set misc milestones", (*gopherbot).setMiscMilestones},
 	{"label build issues", (*gopherbot).labelBuildIssues},
 	{"label mobile issues", (*gopherbot).labelMobileIssues},
 	{"label documentation issues", (*gopherbot).labelDocumentationIssues},
@@ -466,22 +466,32 @@ func (b *gopherbot) setSubrepoMilestones(ctx context.Context) error {
 	})
 }
 
-func (b *gopherbot) setGccgoMilestones(ctx context.Context) error {
+func (b *gopherbot) setMiscMilestones(ctx context.Context) error {
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
 		if gi.Closed || gi.PullRequest || !gi.Milestone.IsNone() || gi.HasEvent("demilestoned") || gi.HasEvent("milestoned") {
 			return nil
 		}
-		if !strings.Contains(gi.Title, "gccgo") { // TODO: better gccgo bug report heuristic?
-			return nil
+		if strings.Contains(gi.Title, "gccgo") { // TODO: better gccgo bug report heuristic?
+			printIssue("misc-milestone-gccgo", gi)
+			if *dryRun {
+				return nil
+			}
+			_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(gi.Number), &github.IssueRequest{
+				Milestone: github.Int(23), // "Gccgo"
+			})
+			return err
 		}
-		printIssue("gccgo-milestone", gi)
-		if *dryRun {
-			return nil
+		if strings.HasPrefix(gi.Title, "x/vgo") {
+			printIssue("misc-milestone-vgo", gi)
+			if *dryRun {
+				return nil
+			}
+			_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(gi.Number), &github.IssueRequest{
+				Milestone: github.Int(71), // "vgo"
+			})
+			return err
 		}
-		_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(gi.Number), &github.IssueRequest{
-			Milestone: github.Int(23), // "Gccgo"
-		})
-		return err
+		return nil
 	})
 }
 
