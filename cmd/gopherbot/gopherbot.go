@@ -437,11 +437,9 @@ func (b *gopherbot) setSubrepoMilestones(ctx context.Context) error {
 		if sp := strings.IndexByte(pkg, ' '); sp >= 0 {
 			pkg = pkg[:sp]
 		}
-		if strings.HasPrefix(pkg, "x/arch") {
-			return nil
-		}
 		switch pkg {
 		case "",
+			"x/arch",
 			"x/crypto/chacha20poly1305",
 			"x/crypto/curve25519",
 			"x/crypto/poly1305",
@@ -453,6 +451,9 @@ func (b *gopherbot) setSubrepoMilestones(ctx context.Context) error {
 			"x/text/unicode/norm",
 			"x/text/width":
 			// These get vendored in. Don't mess with them.
+			return nil
+		case "x/vgo":
+			// Handled by setMiscMilestones
 			return nil
 		}
 		printIssue("subrepo-unreleased", gi)
