@@ -196,6 +196,7 @@ var gerritProjectWhitelist = map[string]bool{
 	"gddo":           true,
 	"go":             true,
 	"image":          true,
+	"lint":           true,
 	"mobile":         true,
 	"net":            true,
 	"oauth2":         true,

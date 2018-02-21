@@ -279,6 +279,7 @@ func shouldMirror(name string) bool {
 		"go",
 		"gofrontend",
 		"image",
+		"lint",
 		"mobile",
 		"net",
 		"oauth2",

@@ -307,6 +307,7 @@ var goGitHubProjects = []string{
 	"golang/gddo",
 	"golang/go",
 	"golang/image",
+	"golang/lint",
 	"golang/mobile",
 	"golang/net",
 	"golang/oauth2",
