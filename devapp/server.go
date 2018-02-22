@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
+	"golang.org/x/build/status/statusserver"
 )
 
 // A server is an http.Handler that serves content within staticDir at root and
@@ -62,6 +63,10 @@ func newServer(mux *http.ServeMux, staticDir, templateDir string) *server {
 	s.mux.HandleFunc("/release", s.withTemplate("/release.tmpl", s.handleRelease))
 	s.mux.HandleFunc("/reviews", s.withTemplate("/reviews.tmpl", s.handleReviews))
 	s.mux.HandleFunc("/dir/", handleDirRedirect)
+
+	ss := statusserver.NewHandler()
+	ss.Register(s.mux) // at /status
+
 	for _, p := range []string{"/imfeelinghelpful", "/imfeelinglucky"} {
 		s.mux.HandleFunc(p, s.handleRandomHelpWantedIssue)
 	}

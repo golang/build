@@ -1,8 +1,11 @@
 # Copyright 2017 The Go Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
-FROM golang:1.8
+
+FROM golang:1.10
 LABEL maintainer "golang-dev@googlegroups.com"
+
+ENV CGO_ENABLED=0
 
 # BEGIN deps (run `make update-deps` to update)
 
@@ -152,4 +155,4 @@ RUN go install cloud.google.com/go/compute/metadata \
 
 COPY . /go/src/golang.org/x/build/
 
-RUN go install -ldflags "-linkmode=external -extldflags '-static -pthread'" golang.org/x/build/devapp
+RUN go install golang.org/x/build/devapp
