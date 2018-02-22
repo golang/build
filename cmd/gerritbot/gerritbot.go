@@ -57,9 +57,7 @@ func main() {
 	b := newBot(ghc, gc)
 
 	ctx := context.Background()
-	if err := b.initCorpus(ctx); err != nil {
-		log.Fatalf("b.initCorpus(): %v", err)
-	}
+	b.initCorpus(ctx)
 	go b.corpusUpdateLoop(ctx)
 
 	https.ListenAndServe(http.HandlerFunc(handleIndex), &https.Options{
@@ -257,15 +255,14 @@ func newBot(githubClient *github.Client, gerritClient *gerrit.Client) *bot {
 }
 
 // initCorpus fetches a full maintner corpus, overwriting any existing data.
-func (b *bot) initCorpus(ctx context.Context) error {
+func (b *bot) initCorpus(ctx context.Context) {
 	b.Lock()
 	defer b.Unlock()
 	var err error
 	b.corpus, err = godata.Get(ctx)
 	if err != nil {
-		return fmt.Errorf("godata.Get: %v", err)
+		log.Fatalf("godata.Get: %v", err)
 	}
-	return nil
 }
 
 // corpusUpdateLoop continuously updates the server’s corpus until ctx’s Done
@@ -278,11 +275,7 @@ func (b *bot) corpusUpdateLoop(ctx context.Context) {
 		if err != nil {
 			if err == maintner.ErrSplit {
 				log.Println("Corpus out of sync. Re-fetching corpus.")
-				if err := b.initCorpus(ctx); err != nil {
-					log.Printf("b.initCorpus(): %v; sleeping 15s", err)
-					time.Sleep(15 * time.Second)
-					continue
-				}
+				b.initCorpus(ctx)
 			} else {
 				log.Printf("corpus.Update: %v; sleeping 15s", err)
 				time.Sleep(15 * time.Second)
