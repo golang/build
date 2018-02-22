@@ -57,7 +57,9 @@ func main() {
 	b := newBot(ghc, gc)
 
 	ctx := context.Background()
-	b.initCorpus(ctx)
+	if err := b.initCorpus(ctx); err != nil {
+		log.Fatalf("b.initCorpus(): %v", err)
+	}
 	go b.corpusUpdateLoop(ctx)
 
 	https.ListenAndServe(http.HandlerFunc(handleIndex), &https.Options{
@@ -276,7 +278,11 @@ func (b *bot) corpusUpdateLoop(ctx context.Context) {
 		if err != nil {
 			if err == maintner.ErrSplit {
 				log.Println("Corpus out of sync. Re-fetching corpus.")
-				b.initCorpus(ctx)
+				if err := b.initCorpus(ctx); err != nil {
+					log.Printf("b.initCorpus(): %v; sleeping 15s", err)
+					time.Sleep(15 * time.Second)
+					continue
+				}
 			} else {
 				log.Printf("corpus.Update: %v; sleeping 15s", err)
 				time.Sleep(15 * time.Second)
