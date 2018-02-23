@@ -131,6 +131,7 @@ message GithubIssueEvent {
 
   int64 reviewer_id = 13;
   int64 review_requester_id = 14;
+  GithubTeam team_reviewer = 16;
   // Contents of a dismissed review event, see dismissed_review in
   // https://developer.github.com/v3/issues/events/ for more info
   GithubDismissedReviewEvent dismissed_review = 15;
@@ -139,6 +140,8 @@ message GithubIssueEvent {
   // in the future, this captures those added fields. If non-empty it
   // will be a JSON object with the fields that weren't understood.
   bytes other_json = 10;
+
+  // Next tag: 17.
 }
 
 // Contents of a dismissed review event - when someone leaves a
@@ -178,6 +181,11 @@ message GithubIssueCommentMutation {
 message GithubUser {
   int64 id = 1;
   string login = 2;
+}
+
+message GithubTeam {
+  int64 id = 1;
+  string slug = 2;
 }
 
 message GitMutation {

@@ -35,7 +35,7 @@ import (
 // package for responses fulfilled from cache due to a 304 from the server.
 const xFromCache = "X-From-Cache"
 
-// GitHubRepoID is a github org & repo, lowercase.
+// GitHubRepoID is a GitHub org & repo, lowercase.
 type GitHubRepoID struct {
 	Owner, Repo string
 }
@@ -44,7 +44,7 @@ func (id GitHubRepoID) String() string { return id.Owner + "/" + id.Repo }
 
 func (id GitHubRepoID) valid() bool {
 	if id.Owner == "" || id.Repo == "" {
-		// TODO: more validation. whatever github requires.
+		// TODO: more validation. whatever GitHub requires.
 		return false
 	}
 	return true
@@ -54,10 +54,11 @@ func (id GitHubRepoID) valid() bool {
 type GitHub struct {
 	c     *Corpus
 	users map[int64]*GitHubUser
+	teams map[int64]*GitHubTeam
 	repos map[GitHubRepoID]*GitHubRepo
 }
 
-// ForeachRepo calls fn serially for each GithubRepo, stopping if fn
+// ForeachRepo calls fn serially for each GitHubRepo, stopping if fn
 // returns an error. The function is called with lexically increasing
 // repo IDs.
 func (g *GitHub) ForeachRepo(fn func(*GitHubRepo) error) error {
@@ -195,11 +196,21 @@ func (g *GitHubRepo) getOrCreateLabel(id int64) *GitHubLabel {
 	return lb
 }
 
-// GitHubUser represents a github user.
+// GitHubUser represents a GitHub user.
 // It is a subset of https://developer.github.com/v3/users/#get-a-single-user
 type GitHubUser struct {
 	ID    int64
 	Login string
+}
+
+// GitHubTeam represents a GitHub team.
+// It is a subset of https://developer.github.com/v3/orgs/teams/#get-team
+type GitHubTeam struct {
+	ID int64
+
+	// Slug is a URL-friendly representation of the team name.
+	// It is unique across a GitHub organization.
+	Slug string
 }
 
 // GitHubIssueRef is a reference to an issue (or pull request) number
@@ -212,7 +223,7 @@ type GitHubIssueRef struct {
 
 func (r GitHubIssueRef) String() string { return fmt.Sprintf("%s#%d", r.Repo.ID(), r.Number) }
 
-// GitHubIssue represents a github issue.
+// GitHubIssue represents a GitHub issue.
 // This is maintner's in-memory representation. It differs slightly
 // from the API's *github.Issue type, notably in the lack of pointers
 // for all fields.
@@ -496,7 +507,7 @@ type GitHubIssueEvent struct {
 	// * review_requested, review_request_removed, review_dismissed
 	Type string
 
-	// OtherJSON optionally contains a JSON object of Github's API
+	// OtherJSON optionally contains a JSON object of GitHub's API
 	// response for any fields maintner was unable to extract at
 	// the time. It is empty if maintner supported all the fields
 	// when the mutation was created.
@@ -513,6 +524,7 @@ type GitHubIssueEvent struct {
 	CommitID, CommitURL string      // for type: "closed", "referenced" ... ?
 
 	Reviewer        *GitHubUser
+	TeamReviewer    *GitHubTeam
 	ReviewRequester *GitHubUser
 	DismissedReview *GitHubDismissedReviewEvent
 }
@@ -558,6 +570,12 @@ func (e *GitHubIssueEvent) Proto() *maintpb.GithubIssueEvent {
 	if e.Reviewer != nil {
 		p.ReviewerId = e.Reviewer.ID
 	}
+	if e.TeamReviewer != nil {
+		p.TeamReviewer = &maintpb.GithubTeam{
+			Id:   e.TeamReviewer.ID,
+			Slug: e.TeamReviewer.Slug,
+		}
+	}
 	if e.ReviewRequester != nil {
 		p.ReviewRequesterId = e.ReviewRequester.ID
 	}
@@ -583,6 +601,7 @@ func (r *GitHubRepo) newGithubEvent(p *maintpb.GithubIssueEvent) *GitHubIssueEve
 		Assignee:        g.getOrCreateUserID(p.AssigneeId),
 		Assigner:        g.getOrCreateUserID(p.AssignerId),
 		Reviewer:        g.getOrCreateUserID(p.ReviewerId),
+		TeamReviewer:    g.getTeam(p.TeamReviewer),
 		ReviewRequester: g.getOrCreateUserID(p.ReviewRequesterId),
 		From:            p.RenameFrom,
 		To:              p.RenameTo,
@@ -718,6 +737,28 @@ func (g *GitHub) getOrCreateUserID(id int64) *GitHubUser {
 	return u
 }
 
+// g.c.mu must be held
+func (g *GitHub) getTeam(pt *maintpb.GithubTeam) *GitHubTeam {
+	if pt == nil {
+		return nil
+	}
+	if g.teams == nil {
+		g.teams = make(map[int64]*GitHubTeam)
+	}
+
+	t := g.teams[pt.Id]
+	if t == nil {
+		t = &GitHubTeam{
+			ID: pt.Id,
+		}
+		g.teams[pt.Id] = t
+	}
+	if pt.Slug != "" {
+		t.Slug = pt.Slug
+	}
+	return t
+}
+
 // newGithubUserProto creates a GithubUser with the minimum diff between
 // existing and g. The return value is nil if there were no changes. existing
 // may also be nil.
@@ -835,8 +876,8 @@ func (g *GitHub) setAssigneesFromProto(existing []*GitHubUser, new []*maintpb.Gi
 }
 
 // githubIssueDiffer generates a minimal diff (protobuf mutation) to
-// get a Github Issue from its in-memory state 'a' to the current
-// github API state 'b'.
+// get a GitHub Issue from its in-memory state 'a' to the current
+// GitHub API state 'b'.
 type githubIssueDiffer struct {
 	gr *GitHubRepo
 	a  *GitHubIssue  // may be nil if no current state
@@ -1049,7 +1090,7 @@ func (d githubIssueDiffer) diffLockedState(m *maintpb.GithubIssueMutation) bool 
 
 // newMutationFromIssue generates a GithubIssueMutation using the
 // smallest possible diff between a (the state we have in memory in
-// the corpus) and b (the current github API state).
+// the corpus) and b (the current GitHub API state).
 //
 // If newMutationFromIssue returns nil, the provided github.Issue is no newer
 // than the data we have in the corpus. 'a'. may be nil.
@@ -1312,7 +1353,7 @@ func (c *githubCache) Set(urlKey string, res []byte) {
 	}
 }
 
-// sync checks for new changes on a single Github repository and
+// sync checks for new changes on a single GitHub repository and
 // updates the Corpus with any changes. If loop is true, it runs
 // forever.
 func (gr *GitHubRepo) sync(ctx context.Context, token string, loop bool) error {
@@ -1352,7 +1393,7 @@ func (gr *GitHubRepo) sync(ctx context.Context, token string, loop bool) error {
 			expectChanges = false
 		}
 		// If we got woken up by a webhook, sometimes
-		// immediately polling Github for the data results in
+		// immediately polling GitHub for the data results in
 		// a cache hit saying nothing's changed. Don't believe
 		// it. Polling quickly with exponential backoff until
 		// we see what we're expecting.
@@ -1385,7 +1426,7 @@ func (gr *GitHubRepo) sync(ctx context.Context, token string, loop bool) error {
 }
 
 // A githubRepoPoller updates the Corpus (gr.c) to have the latest
-// version of the Github repo rp, using the Github client ghc.
+// version of the GitHub repo rp, using the GitHub client ghc.
 type githubRepoPoller struct {
 	c             *Corpus // shortcut for gr.github.c
 	gr            *GitHubRepo
@@ -1938,13 +1979,13 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 	return nil
 }
 
-// parseGithubEvents parses the JSON array of github events in r.  It
+// parseGithubEvents parses the JSON array of GitHub events in r.  It
 // does this the very manual way (using map[string]interface{})
 // instead of using nice types because https://golang.org/issue/15314
 // isn't implemented yet and also because even if it were implemented,
 // this code still wants to preserve any unknown fields to store in
 // the "OtherJSON" field for future updates of the code to parse. (If
-// Github adds new Event types in the future, we want to archive them,
+// GitHub adds new Event types in the future, we want to archive them,
 // even if we don't understand them)
 func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
 	var jevents []map[string]interface{}
@@ -2030,6 +2071,18 @@ func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
 			}
 			dro.DismissalMessage, _ = drm["dismissal_message"].(string)
 			e.DismissedReview = dro
+		}
+		if rt, ok := em["requested_team"]; ok {
+			delete(em, "requested_team")
+			rtm, ok := rt.(map[string]interface{})
+			if !ok {
+				log.Printf("got value %+v for 'requested_team' field, wanted a map with 'id' and 'slug' fields", rt)
+			} else {
+				t := &GitHubTeam{}
+				t.ID = jint64(rtm["id"])
+				t.Slug, _ = rtm["slug"].(string)
+				e.TeamReviewer = t
+			}
 		}
 
 		otherJSON, _ := json.Marshal(em)
