@@ -24,6 +24,7 @@ import (
 
 	"golang.org/x/build/maintner/maintpb"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 )
 
 // Corpus holds all of a project's metadata.
@@ -50,6 +51,8 @@ type Corpus struct {
 	gerrit             *Gerrit
 	watchedGithubRepos []watchedGithubRepo
 	watchedGerritRepos []watchedGerritRepo
+	githubLimiter      *rate.Limiter
+
 	// git-specific:
 	lastGitCount  time.Time // last time of log spam about loading status
 	pollGitDirs   []polledGitCommits

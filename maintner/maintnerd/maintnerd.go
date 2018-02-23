@@ -35,24 +35,26 @@ import (
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/http2"
-	"grpc.go4.org"
+	"golang.org/x/time/rate"
+	grpc "grpc.go4.org"
 )
 
 var (
-	listen         = flag.String("listen", "localhost:6343", "listen address")
-	devTLSPort     = flag.Int("dev-tls-port", 0, "if non-zero, port number to run localhost self-signed TLS server")
-	autocertDomain = flag.String("autocert", "", "if non-empty, listen on port 443 and serve a LetsEncrypt TLS cert on this domain")
-	autocertBucket = flag.String("autocert-bucket", "", "if non-empty, Google Cloud Storage bucket to store LetsEncrypt cache in")
-	syncQuit       = flag.Bool("sync-and-quit", false, "sync once and quit; don't run a server")
-	initQuit       = flag.Bool("init-and-quit", false, "load the mutation log and quit; don't run a server")
-	verbose        = flag.Bool("verbose", false, "enable verbose debug output")
-	genMut         = flag.Bool("generate-mutations", true, "whether this instance should read from upstream git/gerrit/github and generate new mutations to the end of the log. This requires network access and only one instance can be generating mutation")
-	watchGithub    = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
-	watchGerrit    = flag.String("watch-gerrit", "", `Comma-separated list of Gerrit projects to watch, each of form "hostname/project" (e.g. "go.googlesource.com/go")`)
-	pubsub         = flag.String("pubsub", "", "If non-empty, the golang.org/x/build/cmd/pubsubhelper URL scheme and hostname, without path")
-	config         = flag.String("config", "", "If non-empty, the name of a pre-defined config. Valid options are 'go' to be the primary Go server; 'godata' to run the server locally using the godata package, and 'devgo' to act like 'go', but mirror from godata at start-up.")
-	dataDir        = flag.String("data-dir", "", "Local directory to write protobuf files to (default $HOME/var/maintnerd)")
-	debug          = flag.Bool("debug", false, "Print debug logging information")
+	listen          = flag.String("listen", "localhost:6343", "listen address")
+	devTLSPort      = flag.Int("dev-tls-port", 0, "if non-zero, port number to run localhost self-signed TLS server")
+	autocertDomain  = flag.String("autocert", "", "if non-empty, listen on port 443 and serve a LetsEncrypt TLS cert on this domain")
+	autocertBucket  = flag.String("autocert-bucket", "", "if non-empty, Google Cloud Storage bucket to store LetsEncrypt cache in")
+	syncQuit        = flag.Bool("sync-and-quit", false, "sync once and quit; don't run a server")
+	initQuit        = flag.Bool("init-and-quit", false, "load the mutation log and quit; don't run a server")
+	verbose         = flag.Bool("verbose", false, "enable verbose debug output")
+	genMut          = flag.Bool("generate-mutations", true, "whether this instance should read from upstream git/gerrit/github and generate new mutations to the end of the log. This requires network access and only one instance can be generating mutation")
+	watchGithub     = flag.String("watch-github", "", "Comma-separated list of owner/repo pairs to slurp")
+	watchGerrit     = flag.String("watch-gerrit", "", `Comma-separated list of Gerrit projects to watch, each of form "hostname/project" (e.g. "go.googlesource.com/go")`)
+	pubsub          = flag.String("pubsub", "", "If non-empty, the golang.org/x/build/cmd/pubsubhelper URL scheme and hostname, without path")
+	config          = flag.String("config", "", "If non-empty, the name of a pre-defined config. Valid options are 'go' to be the primary Go server; 'godata' to run the server locally using the godata package, and 'devgo' to act like 'go', but mirror from godata at start-up.")
+	dataDir         = flag.String("data-dir", "", "Local directory to write protobuf files to (default $HOME/var/maintnerd)")
+	debug           = flag.Bool("debug", false, "Print debug logging information")
+	githubRateLimit = flag.Int("github-rate", 10, "Rate to limit GitHub requests (in queries per second, 0 is treated as unlimited)")
 
 	bucket         = flag.String("bucket", "", "if non-empty, Google Cloud Storage bucket to use for log storage")
 	migrateGCSFlag = flag.Bool("migrate-disk-to-gcs", false, "[dev] If true, migrate from disk-based logs to GCS logs on start-up, then quit.")
@@ -179,6 +181,10 @@ func main() {
 	corpus.SetVerbose(*verbose)
 
 	if *watchGithub != "" {
+		if *githubRateLimit > 0 {
+			limit := rate.Every(time.Second / time.Duration(*githubRateLimit))
+			corpus.SetGitHubLimiter(rate.NewLimiter(limit, *githubRateLimit))
+		}
 		for _, pair := range strings.Split(*watchGithub, ",") {
 			splits := strings.SplitN(pair, "/", 2)
 			if len(splits) != 2 || splits[1] == "" {

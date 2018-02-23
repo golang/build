@@ -28,6 +28,7 @@ import (
 	"golang.org/x/build/maintner/maintpb"
 	"golang.org/x/oauth2"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 )
 
 // xFromCache is the synthetic response header added by the httpcache
@@ -645,6 +646,13 @@ func (c *Corpus) initGithub() {
 		c:     c,
 		repos: map[GitHubRepoID]*GitHubRepo{},
 	}
+}
+
+// GitHubLimiter sets a limiter that controls the rate of requests made
+// to GitHub APIs. If nil, requests are not limited. Only valid in leader mode.
+// The limiter must only be set before Sync or SyncLoop is called.
+func (c *Corpus) SetGitHubLimiter(l *rate.Limiter) {
+	c.githubLimiter = l
 }
 
 // TrackGitHub registers the named GitHub repo as a repo to
@@ -1314,6 +1322,9 @@ func (gr *GitHubRepo) sync(ctx context.Context, token string, loop bool) error {
 		defer tr.CloseIdleConnections()
 	}
 	directTransport := hc.Transport
+	if gr.github.c.githubLimiter != nil {
+		directTransport = limitTransport{gr.github.c.githubLimiter, hc.Transport}
+	}
 	cachingTransport := &httpcache.Transport{
 		Transport:           directTransport,
 		Cache:               &githubCache{Cache: httpcache.NewMemoryCache()},
@@ -2142,4 +2153,20 @@ func (c *Corpus) parseGithubRefs(gerritProj string, commitMsg string) []GitHubIs
 		refs = append(refs, GitHubIssueRef{gr, int32(num)})
 	}
 	return refs
+}
+
+type limitTransport struct {
+	limiter *rate.Limiter
+	base    http.RoundTripper
+}
+
+func (t limitTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	limiter := t.limiter
+	// NOTE(cbro): limiter should not be nil, but check defensively.
+	if limiter != nil {
+		if err := limiter.Wait(r.Context()); err != nil {
+			return nil, err
+		}
+	}
+	return t.base.RoundTrip(r)
 }
