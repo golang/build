@@ -146,8 +146,9 @@ message GithubIssueEvent {
 // https://developer.github.com/v3/issues/events for more information.
 message GithubDismissedReviewEvent {
   int64 review_id = 1; // ID of the review being dismissed
-  int64 state = 2; // No docs, observed values were 30 and 40.
+  reserved 2; // Old int64 "state" field. Do not use.
   string dismissal_message = 3;
+  string state = 4; // commented, approved, changes_requested
 }
 
 message GithubCommit {

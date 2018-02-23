@@ -467,7 +467,7 @@ type GitHubComment struct {
 // details, see https://developer.github.com/v3/issues/events/.
 type GitHubDismissedReviewEvent struct {
 	ReviewID         int64
-	State            int64 // No docs, but observed values are 30 and 40.
+	State            string // commented, approved, changes_requested
 	DismissalMessage string
 }
 
@@ -2012,7 +2012,11 @@ func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
 			drm := dr.(map[string]interface{})
 			dro := &GitHubDismissedReviewEvent{}
 			dro.ReviewID = jint64(drm["review_id"])
-			dro.State = jint64(drm["state"])
+			if state, ok := drm["state"].(string); ok {
+				dro.State = state
+			} else {
+				log.Printf("got type %T for 'state' field, expected string in %+v", drm["state"], drm)
+			}
 			dro.DismissalMessage, _ = drm["dismissal_message"].(string)
 			e.DismissedReview = dro
 		}
