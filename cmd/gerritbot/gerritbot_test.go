@@ -57,6 +57,7 @@ func TestCommitMessage(t *testing.T) {
 
 Body text
 
+Change-Id: I8ef4fc7aa2b40846583a9cbf175d75d023b5564e
 GitHub-Last-Rev: deadbeef
 GitHub-Pull-Request: golang/go#42
 `,
@@ -69,9 +70,9 @@ GitHub-Pull-Request: golang/go#42
 
 Body text
 
+Change-Id: If751ce3ffa3a4d5e00a3138211383d12cb6b23fc
 GitHub-Last-Rev: deadbeef
 GitHub-Pull-Request: golang/go#42
-Change-Id: If751ce3ffa3a4d5e00a3138211383d12cb6b23fc
 `,
 		},
 		{
@@ -81,11 +82,9 @@ Change-Id: If751ce3ffa3a4d5e00a3138211383d12cb6b23fc
 			nil,
 			`cmd/gerritbot: change with change ID in body text
 
-
-
+Change-Id: I30e0a6ec666a06eae3e8444490d96fabcab3333e
 GitHub-Last-Rev: deadbeef
 GitHub-Pull-Request: golang/go#42
-Change-Id: I30e0a6ec666a06eae3e8444490d96fabcab3333e
 `,
 		},
 		{
@@ -97,16 +96,22 @@ Change-Id: I30e0a6ec666a06eae3e8444490d96fabcab3333e
 
 Change-Id: I30e0a6ec666a06eae3e8444490d96fabcab3333e
 
+Change-Id: If751ce3ffa3a4d5e00a3138211383d12cb6b23fc
 GitHub-Last-Rev: deadbeef
 GitHub-Pull-Request: golang/go#42
-Change-Id: If751ce3ffa3a4d5e00a3138211383d12cb6b23fc
 `,
 		},
 	}
 
 	for _, tc := range testCases {
-		if diff := cmp.Diff(commitMessage(tc.pr, tc.cl), tc.expected); diff != "" {
-			t.Errorf("%s: got unexpected commit message (-got +want)\n%s", tc.desc, diff)
-		}
+		t.Run(tc.desc, func(t *testing.T) {
+			msg, err := commitMessage(tc.pr, tc.cl)
+			if err != nil {
+				t.Fatalf("got unexpected error from commitMessage: %v", err)
+			}
+			if diff := cmp.Diff(msg, tc.expected); diff != "" {
+				t.Errorf("got unexpected commit message (-got +want)\n%s", diff)
+			}
+		})
 	}
 }
