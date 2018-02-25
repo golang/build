@@ -572,11 +572,12 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 			}
 		}
 	}()
+	prBaseRef := pr.GetBase().GetRef()
 	for _, c := range []*exec.Cmd{
 		exec.Command("rm", "-rf", worktreeDir),
 		exec.Command("git", "-C", repoDir, "worktree", "prune"),
 		exec.Command("git", "-C", repoDir, "worktree", "add", worktreeDir),
-		exec.Command("git", "-C", worktreeDir, "fetch", "origin", "+master:master"),
+		exec.Command("git", "-C", worktreeDir, "fetch", "origin", fmt.Sprintf("+%s:%s", prBaseRef, prBaseRef)),
 		exec.Command("git", "-C", worktreeDir, "fetch", "github", fmt.Sprintf("pull/%d/head", pr.GetNumber())),
 	} {
 		if err := runCmd(c); err != nil {
@@ -584,7 +585,7 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		}
 	}
 
-	mergeBaseSHA, err := cmdOut(exec.Command("git", "-C", worktreeDir, "merge-base", "master", "FETCH_HEAD"))
+	mergeBaseSHA, err := cmdOut(exec.Command("git", "-C", worktreeDir, "merge-base", prBaseRef, "FETCH_HEAD"))
 	if err != nil {
 		return err
 	}
@@ -608,7 +609,7 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		}
 	}
 
-	out, err := cmdOut(exec.Command("git", "-C", worktreeDir, "push", "origin", "HEAD:refs/for/"+pr.GetBase().GetRef()))
+	out, err := cmdOut(exec.Command("git", "-C", worktreeDir, "push", "origin", "HEAD:refs/for/"+prBaseRef))
 	if err != nil {
 		return nil
 	}
