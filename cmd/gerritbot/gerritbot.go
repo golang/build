@@ -41,6 +41,7 @@ var (
 	githubTokenFile = flag.String("github-token-file", filepath.Join(defaultWorkdir(), "github-token"), "file to load GitHub token from; should only contain the token text")
 	gerritTokenFile = flag.String("gerrit-token-file", filepath.Join(defaultWorkdir(), "gerrit-token"), "file to load Gerrit token from; should be of form <git-email>:<token>")
 	gitcookiesFile  = flag.String("gitcookies-file", "", "if non-empty, write a git http cookiefile to this location using compute metadata")
+	dryRun          = flag.Bool("dry-run", false, "print out mutating actions but don’t perform any")
 )
 
 func main() {
@@ -243,7 +244,7 @@ type bot struct {
 
 	// CLs that have been created/updated on Gerrit for GitHub PRs but are not yet
 	// reflected in the maintner corpus yet.
-	pendingCLs map[string]string // GitHub owner/repo#n -> latest GitHub SHA
+	pendingCLs map[string]string // GitHub owner/repo#n -> Commit message from PR
 }
 
 func newBot(githubClient *github.Client, gerritClient *gerrit.Client) *bot {
@@ -371,11 +372,8 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 	log.Printf("Processing PR %s ...", pr.GetHTMLURL())
 	shortLink := prShortLink(pr)
 	cl := b.importedPRs[shortLink]
-	var lastRev string
-	if cl != nil {
-		lastRev = cl.Footer(prefixGitFooterLastRev)
-	}
-	if cl != nil && b.pendingCLs[shortLink] == lastRev {
+
+	if cl != nil && b.pendingCLs[shortLink] == cl.Commit.Msg {
 		delete(b.pendingCLs, shortLink)
 	}
 	if b.pendingCLs[shortLink] != "" {
@@ -387,7 +385,11 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 		return fmt.Errorf("pr has 0 commits")
 	}
 
-	prHeadSHA := pr.Head.GetSHA()
+	cmsg, err := commitMessage(pr, cl)
+	if err != nil {
+		return fmt.Errorf("commitMessage: %v", err)
+	}
+
 	if cl == nil {
 		gcl, err := b.gerritChangeForPR(pr)
 		if err != nil {
@@ -399,13 +401,13 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 			}
 		}
 		if gcl != nil {
-			b.pendingCLs[shortLink] = prHeadSHA
+			b.pendingCLs[shortLink] = cmsg
 			return nil
 		}
 		if err := b.importGerritChangeFromPR(ctx, pr, nil); err != nil {
 			return fmt.Errorf("importGerritChangeFromPR(%v, nil): %v", shortLink, err)
 		}
-		b.pendingCLs[shortLink] = prHeadSHA
+		b.pendingCLs[shortLink] = cmsg
 		return nil
 	}
 
@@ -413,13 +415,7 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 		return fmt.Errorf("syncGerritCommentsToGitHub: %v", err)
 	}
 
-	if lastRev == "" {
-		log.Printf("Imported CL https://go-review.googlesource.com/q/%s does not have %s footer; skipping",
-			cl.ChangeID(), prefixGitFooterLastRev)
-		return nil
-	}
-
-	if pr.Head.GetSHA() == lastRev {
+	if cmsg == cl.Commit.Msg {
 		log.Printf("Change https://go-review.googlesource.com/q/%s is up to date; nothing to do.",
 			cl.ChangeID())
 		return nil
@@ -428,11 +424,15 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 	if err := b.importGerritChangeFromPR(ctx, pr, cl); err != nil {
 		return fmt.Errorf("importGerritChangeFromPR(%v, %v): %v", shortLink, cl, err)
 	}
-	b.pendingCLs[shortLink] = prHeadSHA
+	b.pendingCLs[shortLink] = cmsg
 	return nil
 }
 
 func (b *bot) syncGerritCommentsToGitHub(ctx context.Context, pr *github.PullRequest, cl *maintner.GerritCL) error {
+	if *dryRun {
+		log.Printf("[dry run] would sync Gerrit comments to %v", prShortLink(pr))
+		return nil
+	}
 	repo := pr.GetBase().GetRepo()
 	for _, m := range cl.Messages {
 		if m.Author.Email() == cl.Owner().Email() {
@@ -477,6 +477,10 @@ func (b *bot) gerritChangeForPR(pr *github.PullRequest) (*gerrit.ChangeInfo, err
 
 // closePR closes pr using the information from the given Gerrit change.
 func (b *bot) closePR(ctx context.Context, pr *github.PullRequest, ch *gerrit.ChangeInfo) error {
+	if *dryRun {
+		log.Printf("[dry run] would close PR %v", prShortLink(pr))
+		return nil
+	}
 	msg := fmt.Sprintf(`This PR is being closed because [golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d) has been %s.`,
 		ch.ChangeNumber, ch.Project, ch.ChangeNumber, strings.ToLower(ch.Status))
 	if ch.Status != gerrit.ChangeStatusAbandoned && ch.Status != gerrit.ChangeStatusMerged {
@@ -531,6 +535,10 @@ var gerritChangeRE = regexp.MustCompile(`https:\/\/go-review\.googlesource\.com\
 // importGerritChangeFromPR mirrors the latest state of pr to cl. If cl is nil,
 // then a new Gerrit Change is created.
 func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullRequest, cl *maintner.GerritCL) error {
+	if *dryRun {
+		log.Printf("[dry run] import Gerrit Change from PR %v", prShortLink(pr))
+		return nil
+	}
 	githubRepo := pr.GetBase().GetRepo()
 	gerritRepo := gerritHostBase + githubRepo.GetName() // GitHub repo name should match Gerrit repo name.
 	repoDir := filepath.Join(reposRoot(), url.PathEscape(gerritRepo))
@@ -721,18 +729,6 @@ func logGitHubRateLimits(resp *github.Response) {
 		return
 	}
 	log.Printf("GitHub: %d/%d calls remaining; Reset in %v", resp.Rate.Remaining, resp.Rate.Limit, resp.Rate.Reset.Sub(time.Now()))
-}
-
-// postGitHubMessage posts the given message to the given issue. This is likely not the method
-// you are looking to use. To ensure that duplicate messages are not posted, use postGitHubMessageNoDup.
-func (b *bot) postGitHubMessage(ctx context.Context, owner, repo string, issueNum int, msg string) error {
-	cmt := &github.IssueComment{Body: github.String(msg)}
-	_, resp, err := b.githubClient.Issues.CreateComment(ctx, owner, repo, issueNum, cmt)
-	if err != nil {
-		return fmt.Errorf("b.githubClient.Issues.CreateComment(ctx, %q, %q, %d, %+v): %v", owner, repo, issueNum, cmt, err)
-	}
-	logGitHubRateLimits(resp)
-	return nil
 }
 
 // postGitHubMessageNoDup ensures that the message being posted on an issue does not already have the
