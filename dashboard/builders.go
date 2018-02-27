@@ -1095,6 +1095,7 @@ func init() {
 		Name:              "openbsd-amd64-60",
 		HostType:          "host-openbsd-amd64-60",
 		ShouldRunDistTest: noTestDir,
+		TryOnly:           true, // disabled by default; Go 1.11+ don't support it anymore
 		TryBot:            false,
 		MaxAtOnce:         1,
 		numTestHelpers:    2,
@@ -1104,6 +1105,8 @@ func init() {
 		Name:              "openbsd-386-60",
 		HostType:          "host-openbsd-386-60",
 		ShouldRunDistTest: noTestDir,
+		TryOnly:           true, // disabled by default; Go 1.11+ don't support it anymore
+		TryBot:            false,
 		MaxAtOnce:         1,
 		env: []string{
 			// cmd/go takes ~192 seconds on openbsd-386
