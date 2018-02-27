@@ -62,9 +62,7 @@ func main() {
 		go func() {
 			handler := http.Handler(s)
 			if *autocertBucket != "" {
-				handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					redirectHTTP(w, r, s)
-				})
+				handler = http.HandlerFunc(redirectHTTP)
 			}
 			errc <- fmt.Errorf("http.Serve = %v", http.Serve(ln, handler))
 		}()
@@ -79,19 +77,11 @@ func main() {
 	log.Fatal(<-errc)
 }
 
-func redirectHTTP(w http.ResponseWriter, r *http.Request, h http.Handler) {
+func redirectHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.TLS != nil || r.Host == "" {
 		http.NotFound(w, r)
 		return
 	}
-
-	// Serve /status directly, without a forced redirect.
-	// This lets monitoring avoid a dependency on LetsEncrypt being up.
-	if strings.HasPrefix(r.RequestURI, "/status") {
-		h.ServeHTTP(w, r)
-		return
-	}
-
 	http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusFound)
 }
 
