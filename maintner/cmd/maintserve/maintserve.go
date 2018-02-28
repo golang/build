@@ -198,7 +198,7 @@ func (h *handler) serveIndex(w http.ResponseWriter, req *http.Request) {
 func countIssues(r *maintner.GitHubRepo) (uint64, error) {
 	var issues uint64
 	err := r.ForeachIssue(func(i *maintner.GitHubIssue) error {
-		if i.NotExist {
+		if i.NotExist || i.PullRequest {
 			return nil
 		}
 		issues++
