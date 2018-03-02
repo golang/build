@@ -18,6 +18,7 @@ import (
 	"crypto/sha1"
 	"crypto/tls"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -42,7 +43,7 @@ import (
 	"time"
 
 	"go4.org/syncutil"
-	"grpc.go4.org"
+	grpc "grpc.go4.org"
 
 	"cloud.google.com/go/errorreporting"
 	"cloud.google.com/go/storage"
@@ -297,7 +298,8 @@ func main() {
 	http.HandleFunc("/temporarylogs", handleLogs)
 	http.HandleFunc("/reverse", handleReverse)
 	http.HandleFunc("/style.css", handleStyleCSS)
-	http.HandleFunc("/try", handleTryStatus)
+	http.HandleFunc("/try", serveTryStatus(false))
+	http.HandleFunc("/try.json", serveTryStatus(true))
 	http.HandleFunc("/status/reverse.json", reversePool.ServeReverseStatusJSON)
 	http.Handle("/buildlet/create", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletCreate)))
 	http.Handle("/buildlet/list", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletList)))
@@ -541,19 +543,89 @@ func (s byAge) Len() int           { return len(s) }
 func (s byAge) Less(i, j int) bool { return s[i].startTime.Before(s[j].startTime) }
 func (s byAge) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
-func handleTryStatus(w http.ResponseWriter, r *http.Request) {
-	ts := trySetOfCommitPrefix(r.FormValue("commit"))
+func serveTryStatus(json bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ts := trySetOfCommitPrefix(r.FormValue("commit"))
+		var tss trySetState
+		if ts != nil {
+			ts.mu.Lock()
+			tss = ts.trySetState.clone()
+			ts.mu.Unlock()
+		}
+		if json {
+			serveTryStatusJSON(w, ts, tss)
+			return
+		}
+		serveTryStatusHTML(w, ts, tss)
+	}
+}
+
+// tss is a clone that does not require ts' lock.
+func serveTryStatusJSON(w http.ResponseWriter, ts *trySet, tss trySetState) {
+	var resp struct {
+		Success bool        `json:"success"`
+		Error   string      `json:"error,omitempty"`
+		Payload interface{} `json:"payload,omitempty"`
+	}
+	if ts == nil {
+		var buf bytes.Buffer
+		resp.Error = "TryBot result not found (already done, invalid, or not yet discovered from Gerrit). Check Gerrit for results."
+		if err := json.NewEncoder(&buf).Encode(resp); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		w.Header().Set("Content-Type", "application/json")
+		io.Copy(w, &buf)
+		return
+	}
+	type litebuild struct {
+		Name      string    `json:"name"`
+		StartTime time.Time `json:"startTime"`
+		Done      bool      `json:"done"`
+		Succeeded bool      `json:"succeeded"`
+	}
+	var result struct {
+		ChangeID string      `json:"changeId"`
+		Commit   string      `json:"commit"`
+		Builds   []litebuild `json:"builds"`
+	}
+	result.Commit = ts.Commit
+	result.ChangeID = ts.ChangeID
+
+	for _, bs := range tss.builds {
+		var lb litebuild
+		bs.mu.Lock()
+		lb.Name = bs.Name
+		lb.StartTime = bs.startTime
+		if !bs.done.IsZero() {
+			lb.Done = true
+			lb.Succeeded = bs.succeeded
+		}
+		bs.mu.Unlock()
+		result.Builds = append(result.Builds, lb)
+	}
+	resp.Success = true
+	resp.Payload = result
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(resp); err != nil {
+		log.Printf("Could not encode JSON response: %v", err)
+		http.Error(w, "error encoding JSON", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(buf.Bytes())
+}
+
+// tss is a clone that does not require ts' lock.
+func serveTryStatusHTML(w http.ResponseWriter, ts *trySet, tss trySetState) {
 	if ts == nil {
 		http.Error(w, "TryBot result not found (already done, invalid, or not yet discovered from Gerrit). Check Gerrit for results.", http.StatusNotFound)
 		return
 	}
-	ts.mu.Lock()
-	tss := ts.trySetState.clone()
-	ts.mu.Unlock()
-
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, "<html><head><title>trybot status</title></head><body>[<a href='/'>overall status</a>] &gt; %s\n", ts.ChangeID)
-
+	fmt.Fprintf(w, "<!DOCTYPE html><title>trybot status</title>")
+	fmt.Fprintf(w, "[<a href='/'>overall status</a>] &gt; %s\n", ts.ChangeID)
 	fmt.Fprintf(w, "<h1>trybot status</h1>")
 	fmt.Fprintf(w, "Change-ID: <a href='https://go-review.googlesource.com/#/q/%s'>%s</a><br>\n", ts.ChangeID, ts.ChangeID)
 	fmt.Fprintf(w, "Commit: <a href='https://go-review.googlesource.com/#/q/%s'>%s</a><br>\n", ts.Commit, ts.Commit)
@@ -593,7 +665,7 @@ func handleTryStatus(w http.ResponseWriter, r *http.Request) {
 			status,
 			bs.HTMLStatusLine())
 	}
-	fmt.Fprintf(w, "</table></body></html>")
+	fmt.Fprintf(w, "</table>")
 }
 
 func trySetOfCommitPrefix(commitPrefix string) *trySet {

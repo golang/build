@@ -5,8 +5,14 @@
 package main
 
 import (
+	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"golang.org/x/build/internal/buildgo"
 )
 
 func TestPartitionGoTests(t *testing.T) {
@@ -17,5 +23,65 @@ func TestPartitionGoTests(t *testing.T) {
 	sets := partitionGoTests("", in)
 	for i, set := range sets {
 		t.Logf("set %d = \"-run=^(%s)$\"", i, strings.Join(set, "|"))
+	}
+}
+
+func TestTryStatusJSON(t *testing.T) {
+	testCases := []struct {
+		desc   string
+		ts     *trySet
+		tss    trySetState
+		status int
+		body   string
+	}{
+		{
+			"nil trySet",
+			nil,
+			trySetState{},
+			http.StatusNotFound,
+			`{"success":false,"error":"TryBot result not found (already done, invalid, or not yet discovered from Gerrit). Check Gerrit for results."}` + "\n",
+		},
+		{"non-nil trySet",
+			&trySet{
+				tryKey: tryKey{
+					Commit:   "deadbeef",
+					ChangeID: "Ifoo",
+				},
+			},
+			trySetState{
+				builds: []*buildStatus{
+					{
+						BuilderRev: buildgo.BuilderRev{Name: "linux"},
+						startTime:  time.Time{}.Add(24 * time.Hour),
+						done:       time.Time{}.Add(48 * time.Hour),
+						succeeded:  true,
+					},
+					{
+						BuilderRev: buildgo.BuilderRev{Name: "macOS"},
+						startTime:  time.Time{}.Add(24 * time.Hour),
+					},
+				},
+			},
+			http.StatusOK,
+			`{"success":true,"payload":{"changeId":"Ifoo","commit":"deadbeef","builds":[{"name":"linux","startTime":"0001-01-02T00:00:00Z","done":true,"succeeded":true},{"name":"macOS","startTime":"0001-01-02T00:00:00Z","done":false,"succeeded":false}]}}` + "\n"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			serveTryStatusJSON(w, tc.ts, tc.tss)
+			resp := w.Result()
+			if got, want := resp.StatusCode, tc.status; got != want {
+				t.Errorf("response status code: got %d; want %d", got, want)
+			}
+			defer resp.Body.Close()
+			b, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("ioutil.ReadAll: %v", err)
+			}
+			if got, want := string(b), tc.body; got != want {
+				t.Errorf("body: got\n%v\nwant\n%v", got, want)
+			}
+		})
 	}
 }
