@@ -553,7 +553,7 @@ func serveTryStatus(json bool) http.HandlerFunc {
 			ts.mu.Unlock()
 		}
 		if json {
-			serveTryStatusJSON(w, ts, tss)
+			serveTryStatusJSON(w, r, ts, tss)
 			return
 		}
 		serveTryStatusHTML(w, ts, tss)
@@ -561,7 +561,12 @@ func serveTryStatus(json bool) http.HandlerFunc {
 }
 
 // tss is a clone that does not require ts' lock.
-func serveTryStatusJSON(w http.ResponseWriter, ts *trySet, tss trySetState) {
+func serveTryStatusJSON(w http.ResponseWriter, r *http.Request, ts *trySet, tss trySetState) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if r.Method == "OPTIONS" {
+		// This is likely a pre-flight CORS request.
+		return
+	}
 	var resp struct {
 		Success bool        `json:"success"`
 		Error   string      `json:"error,omitempty"`
@@ -574,9 +579,9 @@ func serveTryStatusJSON(w http.ResponseWriter, ts *trySet, tss trySetState) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.WriteHeader(http.StatusNotFound)
 		w.Header().Set("Content-Type", "application/json")
-		io.Copy(w, &buf)
+		w.WriteHeader(http.StatusNotFound)
+		w.Write(buf.Bytes())
 		return
 	}
 	type litebuild struct {

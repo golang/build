@@ -29,19 +29,30 @@ func TestPartitionGoTests(t *testing.T) {
 func TestTryStatusJSON(t *testing.T) {
 	testCases := []struct {
 		desc   string
+		method string
 		ts     *trySet
 		tss    trySetState
 		status int
 		body   string
 	}{
 		{
+			"pre-flight CORS header",
+			"OPTIONS",
+			nil,
+			trySetState{},
+			http.StatusOK,
+			``,
+		},
+		{
 			"nil trySet",
+			"GET",
 			nil,
 			trySetState{},
 			http.StatusNotFound,
 			`{"success":false,"error":"TryBot result not found (already done, invalid, or not yet discovered from Gerrit). Check Gerrit for results."}` + "\n",
 		},
 		{"non-nil trySet",
+			"GET",
 			&trySet{
 				tryKey: tryKey{
 					Commit:   "deadbeef",
@@ -69,8 +80,16 @@ func TestTryStatusJSON(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			serveTryStatusJSON(w, tc.ts, tc.tss)
+			r, err := http.NewRequest(tc.method, "", nil)
+			if err != nil {
+				t.Fatalf("could not create http.Request: %v", err)
+			}
+			serveTryStatusJSON(w, r, tc.ts, tc.tss)
 			resp := w.Result()
+			hdr := "Access-Control-Allow-Origin"
+			if got, want := resp.Header.Get(hdr), "*"; got != want {
+				t.Errorf("unexpected %q header: got %q; want %q", hdr, got, want)
+			}
 			if got, want := resp.StatusCode, tc.status; got != want {
 				t.Errorf("response status code: got %d; want %d", got, want)
 			}
