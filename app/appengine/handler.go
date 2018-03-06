@@ -8,6 +8,7 @@ package build
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/md5"
 	"encoding/json"
@@ -23,7 +24,6 @@ import (
 
 	"golang.org/x/build/app/cache"
 	"golang.org/x/build/app/key"
-	"golang.org/x/net/context"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/log"

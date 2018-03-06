@@ -1,6 +1,7 @@
 package kubernetes_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,7 +10,6 @@ import (
 
 	"golang.org/x/build/kubernetes"
 	"golang.org/x/build/kubernetes/api"
-	"golang.org/x/net/context"
 )
 
 type handlers []func(w http.ResponseWriter, r *http.Request) error

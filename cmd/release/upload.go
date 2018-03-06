@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -23,7 +24,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/iterator"

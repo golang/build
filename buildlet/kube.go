@@ -5,6 +5,7 @@
 package buildlet
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"log"
@@ -16,7 +17,6 @@ import (
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/kubernetes"
 	"golang.org/x/build/kubernetes/api"
-	"golang.org/x/net/context"
 	"golang.org/x/net/context/ctxhttp"
 )
 

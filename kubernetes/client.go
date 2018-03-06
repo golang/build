@@ -8,6 +8,7 @@ package kubernetes
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,7 +21,6 @@ import (
 	"time"
 
 	"golang.org/x/build/kubernetes/api"
-	"golang.org/x/net/context"
 	"golang.org/x/net/context/ctxhttp"
 )
 

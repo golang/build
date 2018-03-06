@@ -12,6 +12,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/md5"
 	"flag"
 	"fmt"
@@ -28,7 +29,6 @@ import (
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/auth"
 	"golang.org/x/build/envutil"
-	"golang.org/x/net/context"
 	"google.golang.org/api/option"
 )
 
