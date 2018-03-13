@@ -45,7 +45,7 @@ func main() {
 }
 
 func run() error {
-	if err := mime.AddExtensionType(".woff2", "application/font-woff"); err != nil {
+	if err := mime.AddExtensionType(".woff2", "font/woff2"); err != nil {
 		return err
 	}
 
