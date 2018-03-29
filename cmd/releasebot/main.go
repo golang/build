@@ -637,7 +637,7 @@ func (w *Work) buildReleases() {
 		println("POSTING")
 		com := findGithubComment(w.ReleaseIssue.GetNumber(), "## "+w.Version+" ")
 		if com != nil {
-			updateGithubComment(w.ReleaseIssue.GetNumber(), com, md.String())
+			updateGithubComment(com, md.String())
 		} else {
 			postGithubComment(w.ReleaseIssue.GetNumber(), md.String())
 		}
