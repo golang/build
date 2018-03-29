@@ -337,7 +337,7 @@ func findGithubComment(number int, prefix string) *github.IssueComment {
 }
 
 func updateGithubComment(number int, com *github.IssueComment, body string) error {
-	_, _, err := githubClient.Issues.EditComment(context.TODO(), projectOwner, projectRepo, number, &github.IssueComment{
+	_, _, err := githubClient.Issues.EditComment(context.TODO(), projectOwner, projectRepo, int64(number), &github.IssueComment{
 		ID:   com.ID,
 		Body: &body,
 	})
