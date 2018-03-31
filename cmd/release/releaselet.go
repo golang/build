@@ -586,8 +586,8 @@ var windowsData = map[string]string{
   <RegistrySearch Id="installed" Type="raw" Root="HKCU" Key="Software\GoProgrammingLanguage" Name="installed" />
 </Property>
 <Media Id='1' Cabinet="go.cab" EmbedCab="yes" CompressionLevel="high" />
-<Condition Message="Windows XP (with Service Pack 2) or greater required.">
-     (VersionNT >= 501 AND (WindowsBuild > 2600 OR ServicePackLevel >= 2))
+<Condition Message="Windows 7 (with Service Pack 1) or greater required.">
+     (VersionNT > 601) OR (VersionNT = 601 AND ServicePackLevel >= 1)
 </Condition>
 <MajorUpgrade AllowDowngrades="yes" />
 <SetDirectory Id="INSTALLDIRROOT" Value="[%SYSTEMDRIVE]"/>
@@ -672,6 +672,19 @@ var windowsData = map[string]string{
         Permanent="no"
         System="yes"
         Value="[INSTALLDIR]" />
+    <Environment
+        Id="UserGoPath"
+        Action="create"
+        Name="GOPATH"
+        Permanent="no"
+        Value="%USERPROFILE%\go" />
+	<Environment
+        Id="UserGoPathEntry"
+        Action="set"
+        Part="last"
+        Name="PATH"
+        Permanent="no"
+        Value="%GOPATH%\bin" />
     <RemoveFolder
         Id="GoEnvironmentEntries"
         On="uninstall" />
