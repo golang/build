@@ -271,6 +271,7 @@ func windowsMSI() error {
 		"-arch", msArch(),
 		"-dGoVersion="+version,
 		"-dWixGoVersion="+wixVersion(version),
+		"-dIsWinXPSupported="+wixIsWinXPSupported(version),
 		"-dArch="+runtime.GOARCH,
 		"-dSourceDir="+goDir,
 		filepath.Join(win, "installer.wxs"),
@@ -451,6 +452,23 @@ func wixVersion(v string) string {
 	return m[1]
 }
 
+// wixIsWinXPSupported checks if Windows XP
+// support is expected from the specified version.
+// (WinXP is no longer supported after Go v1.11)
+func wixIsWinXPSupported(v string) bool {
+	ver := wixVersion(v)
+	parts := strings.Split(ver, ".")
+	if major := int(parts[0]); major <= 1 {
+		if len(parts) < 2 {
+			return false
+		}
+		if minor := int(parts[1]); minor <= 10 {
+			return true
+		}
+	}
+	return false
+}
+
 const storageBase = "https://storage.googleapis.com/go-builder-data/release/"
 
 // writeDataFiles writes the files in the provided map to the provided base
@@ -586,9 +604,15 @@ var windowsData = map[string]string{
   <RegistrySearch Id="installed" Type="raw" Root="HKCU" Key="Software\GoProgrammingLanguage" Name="installed" />
 </Property>
 <Media Id='1' Cabinet="go.cab" EmbedCab="yes" CompressionLevel="high" />
-<Condition Message="Windows 7 (with Service Pack 1) or greater required.">
-     (VersionNT > 601) OR (VersionNT = 601 AND ServicePackLevel >= 1)
-</Condition>
+<?if $(var.IsWinXPSupported) = true ?>
+    <Condition Message="Windows XP (with Service Pack 2) or greater required."> 
+        (VersionNT >= 501 AND (WindowsBuild > 2600 OR ServicePackLevel >= 2)) 
+    </Condition>
+<?else?>
+    <Condition Message="Windows 7 (with Service Pack 1) or greater required.">
+        ((VersionNT > 601) OR (VersionNT = 601 AND ServicePackLevel >= 1))
+    </Condition>
+<?endif?>
 <MajorUpgrade AllowDowngrades="yes" />
 <SetDirectory Id="INSTALLDIRROOT" Value="[%SYSTEMDRIVE]"/>
 
