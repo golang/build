@@ -672,6 +672,19 @@ var windowsData = map[string]string{
         Permanent="no"
         System="yes"
         Value="[INSTALLDIR]" />
+    <Environment
+        Id="UserGoPath"
+        Action="create"
+        Name="GOPATH"
+        Permanent="no"
+        Value="%USERPROFILE%\go" />
+    <Environment
+        Id="UserGoPathEntry"
+        Action="set"
+        Part="last"
+        Name="PATH"
+        Permanent="no"
+        Value="%GOPATH%\bin" />
     <RemoveFolder
         Id="GoEnvironmentEntries"
         On="uninstall" />
