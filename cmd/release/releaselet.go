@@ -272,7 +272,7 @@ func windowsMSI() error {
 		"-arch", msArch(),
 		"-dGoVersion="+version,
 		"-dWixGoVersion="+wixVersion(version),
-		"-dIsWinXPSupported="+wixIsWinXPSupported(version),
+		fmt.Sprintf("-dIsWinXPSupported=%v", wixIsWinXPSupported(version)),
 		"-dArch="+runtime.GOARCH,
 		"-dSourceDir="+goDir,
 		filepath.Join(win, "installer.wxs"),
@@ -459,11 +459,11 @@ func wixVersion(v string) string {
 func wixIsWinXPSupported(v string) bool {
 	ver := wixVersion(v)
 	parts := strings.Split(ver, ".")
-	if major := strconv.Atoi(parts[0]); major <= 1 {
+	if major, _ := strconv.Atoi(parts[0]); major <= 1 {
 		if len(parts) < 2 {
 			return true
 		}
-		if minor := strconv.Atoi(parts[1]); minor <= 10 {
+		if minor, _ := strconv.Atoi(parts[1]); minor <= 10 {
 			return true
 		}
 	}
