@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -458,11 +459,11 @@ func wixVersion(v string) string {
 func wixIsWinXPSupported(v string) bool {
 	ver := wixVersion(v)
 	parts := strings.Split(ver, ".")
-	if major := int(parts[0]); major <= 1 {
+	if major := strconv.Atoi(parts[0]); major <= 1 {
 		if len(parts) < 2 {
 			return true
 		}
-		if minor := int(parts[1]); minor <= 10 {
+		if minor := strconv.Atoi(parts[1]); minor <= 10 {
 			return true
 		}
 	}
