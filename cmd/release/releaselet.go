@@ -460,7 +460,7 @@ func wixIsWinXPSupported(v string) bool {
 	parts := strings.Split(ver, ".")
 	if major := int(parts[0]); major <= 1 {
 		if len(parts) < 2 {
-			return false
+			return true
 		}
 		if minor := int(parts[1]); minor <= 10 {
 			return true
