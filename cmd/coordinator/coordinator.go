@@ -622,21 +622,38 @@ func serveTryStatusJSON(w http.ResponseWriter, r *http.Request, ts *trySet, tss 
 	w.Write(buf.Bytes())
 }
 
+// Styles unique to the trybot status page.
+const tryStatusCSS = `
+<style>
+p {
+	line-height: 1.15em;
+}
+
+table {
+	font-size: 11pt;
+}
+</style>
+`
+
 // tss is a clone that does not require ts' lock.
 func serveTryStatusHTML(w http.ResponseWriter, ts *trySet, tss trySetState) {
 	if ts == nil {
 		http.Error(w, "TryBot result not found (already done, invalid, or not yet discovered from Gerrit). Check Gerrit for results.", http.StatusNotFound)
 		return
 	}
+	buf := new(bytes.Buffer)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, "<!DOCTYPE html><title>trybot status</title>")
-	fmt.Fprintf(w, "[<a href='/'>overall status</a>] &gt; %s\n", ts.ChangeID)
-	fmt.Fprintf(w, "<h1>trybot status</h1>")
-	fmt.Fprintf(w, "Change-ID: <a href='https://go-review.googlesource.com/#/q/%s'>%s</a><br>\n", ts.ChangeID, ts.ChangeID)
-	fmt.Fprintf(w, "Commit: <a href='https://go-review.googlesource.com/#/q/%s'>%s</a><br>\n", ts.Commit, ts.Commit)
-	fmt.Fprintf(w, "<p>Builds remain: %d</p>\n", tss.remain)
-	fmt.Fprintf(w, "<p>Builds</p>\n")
-	fmt.Fprintf(w, "<table cellpadding=5 border=0>\n")
+	buf.WriteString("<!DOCTYPE html><head><title>trybot status</title>")
+	buf.WriteString(`<link rel="stylesheet" href="/style.css"/>`)
+	buf.WriteString(tryStatusCSS)
+	buf.WriteString("</head><body>")
+	fmt.Fprintf(buf, "[<a href='/'>homepage</a>] &gt; %s\n", ts.ChangeID)
+	fmt.Fprintf(buf, "<h1>Trybot Status</h1>")
+	fmt.Fprintf(buf, "<p>Change-ID: <a href='https://go-review.googlesource.com/#/q/%s'>%s</a><br />\n", ts.ChangeID, ts.ChangeID)
+	fmt.Fprintf(buf, "Commit: <a href='https://go-review.googlesource.com/#/q/%s'>%s</a></p>\n", ts.Commit, ts.Commit)
+	fmt.Fprintf(buf, "<p>Builds remaining: %d</p>\n", tss.remain)
+	fmt.Fprintf(buf, "<h4>Builds</h4>\n")
+	fmt.Fprintf(buf, "<table cellpadding=5 border=0>\n")
 	for _, bs := range tss.builds {
 		var status string
 		bs.mu.Lock()
@@ -647,13 +664,13 @@ func serveTryStatusHTML(w http.ResponseWriter, ts *trySet, tss trySetState) {
 				status = "<b>FAIL</b>"
 			}
 		} else {
-			status = fmt.Sprintf("<i>running</i> %.1f min", time.Since(bs.startTime).Minutes())
+			status = fmt.Sprintf("<i>running</i> %s", time.Since(bs.startTime).Round(time.Second))
 		}
 		bs.mu.Unlock()
-		fmt.Fprintf(w, "<tr><td>%s</td><td>%s</td></tr>\n", bs.Name, status)
+		fmt.Fprintf(buf, "<tr><td>&#8226; %s</td><td>%s</td></tr>\n", bs.Name, status)
 	}
-	fmt.Fprintf(w, "</table>\n")
-	fmt.Fprintf(w, "<p>Full Detail</p><table cellpadding=5 border=1>\n")
+	fmt.Fprintf(buf, "</table>\n")
+	fmt.Fprintf(buf, "<h4>Full Detail</h4><table cellpadding=5 border=1>\n")
 	for _, bs := range tss.builds {
 		status := "<i>(running)</i>"
 		bs.mu.Lock()
@@ -665,12 +682,13 @@ func serveTryStatusHTML(w http.ResponseWriter, ts *trySet, tss trySetState) {
 			}
 		}
 		bs.mu.Unlock()
-		fmt.Fprintf(w, "<tr valign=top><td align=left>%s</td><td align=center>%s</td><td><pre>%s</pre></td></tr>\n",
+		fmt.Fprintf(buf, "<tr valign=top><td align=left>%s</td><td align=center>%s</td><td><pre>%s</pre></td></tr>\n",
 			bs.Name,
 			status,
 			bs.HTMLStatusLine())
 	}
-	fmt.Fprintf(w, "</table>")
+	fmt.Fprintf(buf, "</table>")
+	w.Write(buf.Bytes())
 }
 
 func trySetOfCommitPrefix(commitPrefix string) *trySet {
@@ -3390,7 +3408,7 @@ func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
 	if t.IsZero() {
 		t = st.startTime
 	}
-	fmt.Fprintf(&buf, ", %v ago", time.Since(t))
+	fmt.Fprintf(&buf, ", %v ago", time.Since(t).Round(time.Second))
 	if full {
 		buf.WriteByte('\n')
 		st.writeEventsLocked(&buf, true)
