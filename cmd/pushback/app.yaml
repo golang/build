@@ -1,6 +1,0 @@
-service: pushback
-runtime: go
-env: flex
-
-manual_scaling:
-  instances: 1
