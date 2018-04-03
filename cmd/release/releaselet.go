@@ -606,8 +606,8 @@ var windowsData = map[string]string{
 </Property>
 <Media Id='1' Cabinet="go.cab" EmbedCab="yes" CompressionLevel="high" />
 <?if $(var.IsWinXPSupported) = true ?>
-    <Condition Message="Windows XP (with Service Pack 2) or greater required."> 
-        (VersionNT >= 501 AND (WindowsBuild > 2600 OR ServicePackLevel >= 2)) 
+    <Condition Message="Windows XP (with Service Pack 2) or greater required.">
+        (VersionNT >= 501 AND (WindowsBuild > 2600 OR ServicePackLevel >= 2))
     </Condition>
 <?else?>
     <Condition Message="Windows 7 (with Service Pack 1) or greater required.">
