@@ -5,7 +5,7 @@ import (
 )
 
 func TestWixVersionMajor(t *testing.T) {
-	major, minor, build := wixVersion("go1")
+	major, minor, patch := wixVersion("go1")
 
 	if major != 1 {
 		t.Fatalf("Incorrect major version: %v", major)
@@ -15,13 +15,13 @@ func TestWixVersionMajor(t *testing.T) {
 		t.Fatalf("Incorrect minor version: %v", minor)
 	}
 
-	if build != 0 {
-		t.Fatalf("Incorrect build version: %v", build)
+	if patch != 0 {
+		t.Fatalf("Incorrect patch version: %v", patch)
 	}
 }
 
 func TestWixVersionMajorMinor(t *testing.T) {
-	major, minor, build := wixVersion("go1.34")
+	major, minor, patch := wixVersion("go1.34")
 
 	if major != 1 {
 		t.Fatalf("Incorrect major version: %v", major)
@@ -31,13 +31,13 @@ func TestWixVersionMajorMinor(t *testing.T) {
 		t.Fatalf("Incorrect minor version: %v", minor)
 	}
 
-	if build != 0 {
-		t.Fatalf("Incorrect build version: %v", build)
+	if patch != 0 {
+		t.Fatalf("Incorrect patch version: %v", patch)
 	}
 }
 
 func TestWixVersionMajorMinorBuild(t *testing.T) {
-	major, minor, build := wixVersion("go1.34.7")
+	major, minor, patch := wixVersion("go1.34.7")
 
 	if major != 1 {
 		t.Fatalf("Incorrect major version: %v", major)
@@ -47,8 +47,8 @@ func TestWixVersionMajorMinorBuild(t *testing.T) {
 		t.Fatalf("Incorrect minor version: %v", minor)
 	}
 
-	if build != 7 {
-		t.Fatalf("Incorrect build version: %v", build)
+	if patch != 7 {
+		t.Fatalf("Incorrect patch version: %v", patch)
 	}
 }
 

@@ -267,13 +267,13 @@ func windowsMSI() error {
 	}
 
 	// Build package.
-	verMajor, verMinor, verBuild := wixVersion(version)
+	verMajor, verMinor, verPatch := wixVersion(version)
 
 	if err := runDir(win, filepath.Join(wix, "candle"),
 		"-nologo",
 		"-arch", msArch(),
 		"-dGoVersion="+version,
-		fmt.Sprintf("-dWixGoVersion=%v.%v.%v", verMajor, verMinor, verBuild),
+		fmt.Sprintf("-dWixGoVersion=%v.%v.%v", verMajor, verMinor, verPatch),
 		fmt.Sprintf("-dIsWinXPSupported=%v", wixIsWinXPSupported(version)),
 		"-dArch="+runtime.GOARCH,
 		"-dSourceDir="+goDir,
@@ -442,9 +442,9 @@ func ext() string {
 var versionRe = regexp.MustCompile(`^go(\d+(\.\d+)*)`)
 
 // wixVersion splits a Go version string such as "go1.9" or "go1.10.2" (as matched by versionRe)
-// into its three parts: major, minor, and patch/build.
+// into its three parts: major, minor, and patch
 // It's based on the Git tag.
-func wixVersion(v string) (major, minor, build int) {
+func wixVersion(v string) (major, minor, patch int) {
 	m := versionRe.FindStringSubmatch(v)
 	if m == nil {
 		return
@@ -457,7 +457,7 @@ func wixVersion(v string) (major, minor, build int) {
 			minor, _ = strconv.Atoi(parts[1])
 
 			if len(parts) >= 3 {
-				build, _ = strconv.Atoi(parts[2])
+				patch, _ = strconv.Atoi(parts[2])
 			}
 		}
 	}
@@ -466,7 +466,7 @@ func wixVersion(v string) (major, minor, build int) {
 
 // wixIsWinXPSupported checks if Windows XP
 // support is expected from the specified version.
-// (WinXP is no longer supported after Go v1.11)
+// (WinXP is no longer supported starting Go v1.11)
 func wixIsWinXPSupported(v string) bool {
 	major, minor, _ := wixVersion(v)
 	if major > 1 {
