@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -266,11 +267,14 @@ func windowsMSI() error {
 	}
 
 	// Build package.
+	verMajor, verMinor, verPatch := wixVersion(version)
+
 	if err := runDir(win, filepath.Join(wix, "candle"),
 		"-nologo",
 		"-arch", msArch(),
 		"-dGoVersion="+version,
-		"-dWixGoVersion="+wixVersion(version),
+		fmt.Sprintf("-dWixGoVersion=%v.%v.%v", verMajor, verMinor, verPatch),
+		fmt.Sprintf("-dIsWinXPSupported=%v", wixIsWinXPSupported(version)),
 		"-dArch="+runtime.GOARCH,
 		"-dSourceDir="+goDir,
 		filepath.Join(win, "installer.wxs"),
@@ -437,18 +441,41 @@ func ext() string {
 
 var versionRe = regexp.MustCompile(`^go(\d+(\.\d+)*)`)
 
-// The Microsoft installer requires version format major.minor.build
-// (http://msdn.microsoft.com/en-us/library/aa370859%28v=vs.85%29.aspx).
-// Where the major and minor field has a maximum value of 255 and build 65535.
-// The official Go version format is goMAJOR.MINOR.PATCH at $GOROOT/VERSION.
-// It's based on the Mercurial tag. Remove prefix and suffix to make the
-// installer happy.
-func wixVersion(v string) string {
+// wixVersion splits a Go version string such as "go1.9" or "go1.10.2" (as matched by versionRe)
+// into its three parts: major, minor, and patch
+// It's based on the Git tag.
+func wixVersion(v string) (major, minor, patch int) {
 	m := versionRe.FindStringSubmatch(v)
 	if m == nil {
-		return "0.0.0"
+		return
 	}
-	return m[1]
+	parts := strings.Split(m[1], ".")
+	if len(parts) >= 1 {
+		major, _ = strconv.Atoi(parts[0])
+
+		if len(parts) >= 2 {
+			minor, _ = strconv.Atoi(parts[1])
+
+			if len(parts) >= 3 {
+				patch, _ = strconv.Atoi(parts[2])
+			}
+		}
+	}
+	return
+}
+
+// wixIsWinXPSupported checks if Windows XP
+// support is expected from the specified version.
+// (WinXP is no longer supported starting Go v1.11)
+func wixIsWinXPSupported(v string) bool {
+	major, minor, _ := wixVersion(v)
+	if major > 1 {
+		return false
+	}
+	if minor >= 11 {
+		return false
+	}
+	return true
 }
 
 const storageBase = "https://storage.googleapis.com/go-builder-data/release/"
@@ -586,9 +613,15 @@ var windowsData = map[string]string{
   <RegistrySearch Id="installed" Type="raw" Root="HKCU" Key="Software\GoProgrammingLanguage" Name="installed" />
 </Property>
 <Media Id='1' Cabinet="go.cab" EmbedCab="yes" CompressionLevel="high" />
-<Condition Message="Windows XP (with Service Pack 2) or greater required.">
-     (VersionNT >= 501 AND (WindowsBuild > 2600 OR ServicePackLevel >= 2))
-</Condition>
+<?if $(var.IsWinXPSupported) = true ?>
+    <Condition Message="Windows XP (with Service Pack 2) or greater required.">
+        (VersionNT >= 501 AND (WindowsBuild > 2600 OR ServicePackLevel >= 2))
+    </Condition>
+<?else?>
+    <Condition Message="Windows 7 (with Service Pack 1) or greater required.">
+        ((VersionNT > 601) OR (VersionNT = 601 AND ServicePackLevel >= 1))
+    </Condition>
+<?endif?>
 <MajorUpgrade AllowDowngrades="yes" />
 <SetDirectory Id="INSTALLDIRROOT" Value="[%SYSTEMDRIVE]"/>
 
