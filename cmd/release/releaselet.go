@@ -267,12 +267,13 @@ func windowsMSI() error {
 	}
 
 	// Build package.
-	parts := wixVersion(version)
+	verMajor, verMinor, verBuild := wixVersion(version)
+
 	if err := runDir(win, filepath.Join(wix, "candle"),
 		"-nologo",
 		"-arch", msArch(),
 		"-dGoVersion="+version,
-		fmt.Sprintf("-dWixGoVersion=%v.%v.%v", parts[0], parts[1], parts[2]),
+		fmt.Sprintf("-dWixGoVersion=%v.%v.%v", verMajor, verMinor, verBuild),
 		fmt.Sprintf("-dIsWinXPSupported=%v", wixIsWinXPSupported(version)),
 		"-dArch="+runtime.GOARCH,
 		"-dSourceDir="+goDir,
@@ -446,19 +447,19 @@ var versionRe = regexp.MustCompile(`^go(?:(\d+)(?:\.(\d+))?(?:\.(\d+))?)+`)
 // The official Go version format is goMAJOR.MINOR.PATCH at $GOROOT/VERSION.
 // It's based on the Mercurial tag. Remove prefix and suffix to make the
 // installer happy.
-func wixVersion(v string) (parts [3]int) {
+func wixVersion(v string) (major, minor, build int) {
 	m := versionRe.FindStringSubmatch(v)
 	if m == nil {
 		return
 	}
 	if len(m) > 1 {
-		parts[0], _ = strconv.Atoi(m[1])
+		major, _ = strconv.Atoi(m[1])
 
 		if len(m) > 2 {
-			parts[1], _ = strconv.Atoi(m[2])
+			minor, _ = strconv.Atoi(m[2])
 
 			if len(m) > 3 {
-				parts[2], _ = strconv.Atoi(m[3])
+				build, _ = strconv.Atoi(m[3])
 			}
 		}
 	}
@@ -469,11 +470,11 @@ func wixVersion(v string) (parts [3]int) {
 // support is expected from the specified version.
 // (WinXP is no longer supported after Go v1.11)
 func wixIsWinXPSupported(v string) bool {
-	parts := wixVersion(v)
-	if parts[0] > 1 {
+	major, minor, _ := wixVersion(v)
+	if major > 1 {
 		return false
 	}
-	if parts[1] >= 11 {
+	if minor >= 11 {
 		return false
 	}
 	return true
