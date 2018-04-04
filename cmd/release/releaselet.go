@@ -439,27 +439,25 @@ func ext() string {
 	return ""
 }
 
-var versionRe = regexp.MustCompile(`^go(?:(\d+)(?:\.(\d+))?(?:\.(\d+))?)+`)
+var versionRe = regexp.MustCompile(`^go(\d+(\.\d+)*)`)
 
-// The Microsoft installer requires version format major.minor.build
-// (http://msdn.microsoft.com/en-us/library/aa370859%28v=vs.85%29.aspx).
-// Where the major and minor field has a maximum value of 255 and build 65535.
-// The official Go version format is goMAJOR.MINOR.PATCH at $GOROOT/VERSION.
-// It's based on the Mercurial tag. Remove prefix and suffix to make the
-// installer happy.
+// wixVersion splits a Go version string such as "go1.9" or "go1.10.2" (as matched by versionRe)
+// into its three parts: major, minor, and patch/build.
+// It's based on the Git tag.
 func wixVersion(v string) (major, minor, build int) {
 	m := versionRe.FindStringSubmatch(v)
 	if m == nil {
 		return
 	}
-	if len(m) > 1 {
-		major, _ = strconv.Atoi(m[1])
+	parts := strings.Split(m[1], ".")
+	if len(parts) >= 1 {
+		major, _ = strconv.Atoi(parts[0])
 
-		if len(m) > 2 {
-			minor, _ = strconv.Atoi(m[2])
+		if len(parts) >= 2 {
+			minor, _ = strconv.Atoi(parts[1])
 
-			if len(m) > 3 {
-				build, _ = strconv.Atoi(m[3])
+			if len(parts) >= 3 {
+				build, _ = strconv.Atoi(parts[2])
 			}
 		}
 	}
