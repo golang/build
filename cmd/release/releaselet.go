@@ -438,7 +438,7 @@ func ext() string {
 	return ""
 }
 
-var versionRe = regexp.MustCompile(`^go(\d+\.?)+`)
+var versionRe = regexp.MustCompile(`^go(?:(\d+)(?:\.(\d+))?(?:\.(\d+))?)+`)
 
 // The Microsoft installer requires version format major.minor.build
 // (http://msdn.microsoft.com/en-us/library/aa370859%28v=vs.85%29.aspx).
@@ -452,13 +452,13 @@ func wixVersion(v string) (parts [3]int) {
 		return
 	}
 	if len(m) > 1 {
-		parts[0], _ = strconv.Atoi(strings.TrimSuffix(m[1], "."))
+		parts[0], _ = strconv.Atoi(m[1])
 
 		if len(m) > 2 {
-			parts[1], _ = strconv.Atoi(strings.TrimSuffix(m[2], "."))
+			parts[1], _ = strconv.Atoi(m[2])
 
 			if len(m) > 3 {
-				parts[2], _ = strconv.Atoi(strings.TrimSuffix(m[3], "."))
+				parts[2], _ = strconv.Atoi(m[3])
 			}
 		}
 	}
