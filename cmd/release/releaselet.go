@@ -267,11 +267,12 @@ func windowsMSI() error {
 	}
 
 	// Build package.
+	parts := wixVersion(version)
 	if err := runDir(win, filepath.Join(wix, "candle"),
 		"-nologo",
 		"-arch", msArch(),
 		"-dGoVersion="+version,
-		"-dWixGoVersion="+wixVersion(version),
+		fmt.Sprintf("-dWixGoVersion=%v.%v.%v", parts[0], parts[1], parts[2]),
 		fmt.Sprintf("-dIsWinXPSupported=%v", wixIsWinXPSupported(version)),
 		"-dArch="+runtime.GOARCH,
 		"-dSourceDir="+goDir,
@@ -437,7 +438,7 @@ func ext() string {
 	return ""
 }
 
-var versionRe = regexp.MustCompile(`^go(\d+(\.\d+)*)`)
+var versionRe = regexp.MustCompile(`^go(\d+\.?)+`)
 
 // The Microsoft installer requires version format major.minor.build
 // (http://msdn.microsoft.com/en-us/library/aa370859%28v=vs.85%29.aspx).
@@ -445,29 +446,35 @@ var versionRe = regexp.MustCompile(`^go(\d+(\.\d+)*)`)
 // The official Go version format is goMAJOR.MINOR.PATCH at $GOROOT/VERSION.
 // It's based on the Mercurial tag. Remove prefix and suffix to make the
 // installer happy.
-func wixVersion(v string) string {
+func wixVersion(v string) (parts [3]int) {
 	m := versionRe.FindStringSubmatch(v)
 	if m == nil {
-		return "0.0.0"
+		return
 	}
-	return m[1]
+	if len(m) > 1 {
+		parts[0], _ = strconv.Atoi(strings.TrimSuffix(m[1], "."))
+	}
+	if len(m) > 2 {
+		parts[1], _ = strconv.Atoi(strings.TrimSuffix(m[2], "."))
+	}
+	if len(m) > 3 {
+		parts[2], _ = strconv.Atoi(strings.TrimSuffix(m[3], "."))
+	}
+	return
 }
 
 // wixIsWinXPSupported checks if Windows XP
 // support is expected from the specified version.
 // (WinXP is no longer supported after Go v1.11)
 func wixIsWinXPSupported(v string) bool {
-	ver := wixVersion(v)
-	parts := strings.Split(ver, ".")
-	if major, _ := strconv.Atoi(parts[0]); major <= 1 {
-		if len(parts) < 2 {
-			return true
-		}
-		if minor, _ := strconv.Atoi(parts[1]); minor <= 10 {
-			return true
-		}
+	parts := wixVersion(v)
+	if parts[0] > 1 {
+		return false
 	}
-	return false
+	if parts[1] >= 11 {
+		return false
+	}
+	return true
 }
 
 const storageBase = "https://storage.googleapis.com/go-builder-data/release/"
