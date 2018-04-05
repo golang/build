@@ -2517,6 +2517,7 @@ var fixedTestDuration = map[string]Seconds{
 	"test:4_5":                               10,
 	"codewalk":                               2.42,
 	"api":                                    7.38,
+
 	"go_test_bench:compress/bzip2":    3.059513602,
 	"go_test_bench:image/jpeg":        3.143345345,
 	"go_test_bench:encoding/hex":      3.182452293,
