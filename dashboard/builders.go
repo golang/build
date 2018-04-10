@@ -1072,6 +1072,17 @@ func init() {
 				// Not worth it. And broken.
 				return false
 			}
+			if distTest == "api" {
+				// Broken on this build config (Issue
+				// 24754), and not worth it on slow
+				// builder. It's covered by other
+				// builders anyway.
+				return false
+			}
+			if strings.HasPrefix(distTest, "test:") {
+				// Slow, and not worth it on slow builder.
+				return false
+			}
 			return true
 		},
 	})
