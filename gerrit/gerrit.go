@@ -441,6 +441,44 @@ func (c *Client) SetReview(ctx context.Context, changeID, revision string, revie
 		reqBody{review})
 }
 
+// HashtagsInput is the request body used when modifying a CL's hashtags.
+//
+// See https://gerrit-documentation.storage.googleapis.com/Documentation/2.15.1/rest-api-changes.html#hashtags-input
+type HashtagsInput struct {
+	Add    []string `json:"add"`
+	Remove []string `json:"remove"`
+}
+
+// SetHashtags modifies the hashtags for a CL, supporting both adding
+// and removing hashtags in one request. On success it returns the new
+// set of hashtags.
+//
+// See https://gerrit-documentation.storage.googleapis.com/Documentation/2.15.1/rest-api-changes.html#set-hashtags
+func (c *Client) SetHashtags(ctx context.Context, changeID string, hashtags HashtagsInput) ([]string, error) {
+	var res []string
+	err := c.do(ctx, &res, "POST", fmt.Sprintf("/changes/%s/hashtags", changeID), reqBody{hashtags})
+	return res, err
+}
+
+// AddHashtags is a wrapper around SetHashtags that only supports adding tags.
+func (c *Client) AddHashtags(ctx context.Context, changeID string, tags ...string) ([]string, error) {
+	return c.SetHashtags(ctx, changeID, HashtagsInput{Add: tags})
+}
+
+// RemoveHashtags is a wrapper around SetHashtags that only supports removing tags.
+func (c *Client) RemoveHashtags(ctx context.Context, changeID string, tags ...string) ([]string, error) {
+	return c.SetHashtags(ctx, changeID, HashtagsInput{Remove: tags})
+}
+
+// GetHashtags returns a CL's current hashtags.
+//
+// See https://gerrit-documentation.storage.googleapis.com/Documentation/2.15.1/rest-api-changes.html#get-hashtags
+func (c *Client) GetHashtags(ctx context.Context, changeID string) ([]string, error) {
+	var res []string
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/changes/%s/hashtags", changeID))
+	return res, err
+}
+
 // AbandonChange abandons the given change.
 // For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#abandon-change
 // The changeID is https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-id
