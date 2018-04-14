@@ -4,7 +4,7 @@
 
 # Note that OpenSSH 6.5+ is required for the Github SSH private key, which requires
 # at least Debian Jessie (not Wheezy). This uses Jessie:
-FROM golang:1.8
+FROM golang:1.10
 LABEL maintainer "golang-dev@googlegroups.com"
 
 # BEGIN deps (run `make update-deps` to update)
@@ -54,6 +54,11 @@ ENV REV=fd80eb99c8f653c847d294a001bdf2a3a6f768f5
 RUN go get -d golang.org/x/sync/errgroup &&\
     (cd /go/src/golang.org/x/sync && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
+# Repo golang.org/x/time at 26559e0 (2018-03-14)
+ENV REV=26559e0f760e39c24d730d3224364aef164ee23f
+RUN go get -d golang.org/x/time/rate &&\
+    (cd /go/src/golang.org/x/time && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
+
 # Optimization to speed up iterative development, not necessary for correctness:
 RUN go install cloud.google.com/go/compute/metadata \
 	github.com/golang/protobuf/proto \
@@ -69,7 +74,8 @@ RUN go install cloud.google.com/go/compute/metadata \
 	golang.org/x/net/context/ctxhttp \
 	golang.org/x/oauth2 \
 	golang.org/x/oauth2/internal \
-	golang.org/x/sync/errgroup
+	golang.org/x/sync/errgroup \
+	golang.org/x/time/rate
 # END deps
 
 COPY . /go/src/golang.org/x/build/

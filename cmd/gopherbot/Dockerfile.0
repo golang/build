@@ -51,6 +51,11 @@ ENV REV=f52d1811a62927559de87708c8913c1650ce4f26
 RUN go get -d golang.org/x/sync/errgroup &&\
     (cd /go/src/golang.org/x/sync && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
+# Repo golang.org/x/time at 26559e0 (2018-03-14)
+ENV REV=26559e0f760e39c24d730d3224364aef164ee23f
+RUN go get -d golang.org/x/time/rate &&\
+    (cd /go/src/golang.org/x/time && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
+
 # Optimization to speed up iterative development, not necessary for correctness:
 RUN go install cloud.google.com/go/compute/metadata \
 	github.com/golang/protobuf/proto \
@@ -66,10 +71,10 @@ RUN go install cloud.google.com/go/compute/metadata \
 	golang.org/x/net/context/ctxhttp \
 	golang.org/x/oauth2 \
 	golang.org/x/oauth2/internal \
-	golang.org/x/sync/errgroup
+	golang.org/x/sync/errgroup \
+	golang.org/x/time/rate
 # END deps
 
 COPY . /go/src/golang.org/x/build/
 
 RUN go install -ldflags "-linkmode=external -extldflags '-static -pthread'" golang.org/x/build/cmd/gopherbot
-
