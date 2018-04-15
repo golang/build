@@ -5,7 +5,10 @@
 package godata
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -220,5 +223,37 @@ func TestGerritCLChangingBranches(t *testing.T) {
 		if got := cl.Branch(); got != tt.want {
 			t.Errorf("%q, %q, CL %d = branch %q; want %q", tt.server, tt.project, tt.cl, got, tt.want)
 		}
+	}
+}
+
+func TestGerritHashTags(t *testing.T) {
+	c := getGoData(t)
+	cl := c.Gerrit().Project("go.googlesource.com", "go").CL(81778)
+	want := `added "bar, foo" = "bar,foo"
+removed "bar" = "foo"
+removed "foo" = ""
+added "bar, foo" = "bar,foo"
+removed "bar" = "foo"
+added "bar" = "bar,foo"
+added "blarf, quux" removed "foo" = "bar,quux,blarf"
+removed "bar" = "quux,blarf"
+`
+
+	var log bytes.Buffer
+	for _, meta := range cl.Metas {
+		added, removed, ok := meta.HashtagEdits()
+		if ok {
+			if added != "" {
+				fmt.Fprintf(&log, "added %q ", added)
+			}
+			if removed != "" {
+				fmt.Fprintf(&log, "removed %q ", removed)
+			}
+			fmt.Fprintf(&log, "= %q\n", meta.Hashtags())
+		}
+	}
+	got := log.String()
+	if !strings.HasPrefix(got, want) {
+		t.Errorf("got:\n%s\n\nwant prefix:\n%s", got, want)
 	}
 }
