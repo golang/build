@@ -197,23 +197,27 @@ func TestGetGerritMessage(t *testing.T) {
 }
 
 func TestOwnerNameAndID(t *testing.T) {
+	cl := &GerritCL{}
+	cl.Meta = &GerritMeta{
+		CL: cl,
+		Commit: &GitCommit{
+			Parents: []*GitCommit{
+				&GitCommit{
+					Author: &GitPerson{
+						Str: "Rick Sanchez <137@62eb7196-b449-3ce5-99f1-c037f21e1705>",
+					},
+				},
+			},
+		},
+	}
+
 	testCases := []struct {
 		cl        *GerritCL
 		OwnerID   int
 		OwnerName string
 	}{
 		{&GerritCL{}, -1, ""},
-		{&GerritCL{
-			Meta: &GitCommit{
-				Parents: []*GitCommit{
-					&GitCommit{
-						Author: &GitPerson{
-							Str: "Rick Sanchez <137@62eb7196-b449-3ce5-99f1-c037f21e1705>",
-						},
-					},
-				},
-			},
-		}, 137, "Rick Sanchez"},
+		{cl, 137, "Rick Sanchez"},
 	}
 	for _, tc := range testCases {
 		if got := tc.cl.OwnerID(); got != tc.OwnerID {

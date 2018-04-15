@@ -633,7 +633,7 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 			return nil
 		}
 		return gp.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
-			if cl.Meta == nil || cl.Meta.AuthorTime.Before(monthAgo) {
+			if cl.Meta.Commit.AuthorTime.Before(monthAgo) {
 				// If the CL was last updated over a
 				// month ago, assume (as an
 				// optimization) that gopherbot

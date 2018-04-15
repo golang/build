@@ -199,6 +199,9 @@ func (gp *GerritProject) ForeachOpenCL(fn func(*GerritCL) error) error {
 // that error.
 func (gp *GerritProject) ForeachCLUnsorted(fn func(*GerritCL) error) error {
 	for _, cl := range gp.cls {
+		if !cl.complete() {
+			continue
+		}
 		if err := fn(cl); err != nil {
 			return err
 		}
@@ -211,7 +214,10 @@ func (gp *GerritProject) ForeachCLUnsorted(fn func(*GerritCL) error) error {
 // CL numbers are shared across all projects on a Gerrit server, so you can get
 // nil unless you have the GerritProject containing that CL.
 func (gp *GerritProject) CL(number int32) *GerritCL {
-	return gp.cls[number]
+	if cl := gp.cls[number]; cl.complete() {
+		return cl
+	}
+	return nil
 }
 
 // GitCommit returns the provided git commit, or nil if it's unknown.
@@ -260,6 +266,7 @@ type GerritCL struct {
 
 	// Commit is the git commit of the latest version of this CL.
 	// Previous versions are available via CommitAtVersion.
+	// Commit is always non-nil.
 	Commit *GitCommit
 
 	// branch is a cache of the latest "Branch: " value seen from
@@ -270,8 +277,14 @@ type GerritCL struct {
 	// Meta is the head of the most recent Gerrit "meta" commit
 	// for this CL. This is guaranteed to be a linear history
 	// back to a CL-specific root commit for this meta branch.
-	Meta        *GitCommit
-	MetaCommits []*GitCommit // in order, from root to Meta
+	// Meta will always be non-nil.
+	Meta *GerritMeta
+
+	// Metas contains the history of Meta commits, from the oldest (root)
+	// to the most recent. The last item in the slice is the same
+	// value as the GerritCL.Meta field.
+	// The Metas slice will always contain at least 1 element.
+	Metas []*GerritMeta
 
 	// Status will be "merged", "abandoned", "new", or "draft".
 	Status string
@@ -290,9 +303,8 @@ type GerritCL struct {
 	Messages []*GerritMessage
 }
 
-// GerritMetaCommit represents a GitCommit in the Gerrit "NoteDb" format.
-type GerritMetaCommit struct {
-	*GitCommit
+func (cl *GerritCL) complete() bool {
+	return cl != nil && cl.Meta != nil && cl.Commit != nil
 }
 
 // GerritMessage is a Gerrit reply that is attached to the CL as a whole, and
@@ -343,9 +355,9 @@ func (cl *GerritCL) References(ref GitHubIssueRef) bool {
 func (cl *GerritCL) Branch() string { return cl.branch }
 
 func (cl *GerritCL) updateBranch() {
-	for i := len(cl.MetaCommits) - 1; i >= 0; i-- {
-		mc := cl.MetaCommits[i]
-		branch, _ := lineValue(mc.Msg, "Branch:")
+	for i := len(cl.Metas) - 1; i >= 0; i-- {
+		mc := cl.Metas[i]
+		branch, _ := lineValue(mc.Commit.Msg, "Branch:")
 		if branch != "" {
 			cl.branch = strings.TrimPrefix(branch, "refs/heads/")
 			return
@@ -478,10 +490,14 @@ func (cl *GerritCL) CommitAtVersion(version int32) *GitCommit {
 
 func (cl *GerritCL) firstMetaCommit() *GitCommit {
 	m := cl.Meta
-	for m != nil && len(m.Parents) > 0 {
-		m = m.Parents[0] // Meta commits don’t have more than one parent.
+	if m == nil { // TODO: Can this actually happen, besides in one of the contrived tests? Remove?
+		return nil
 	}
-	return m
+	c := m.Commit
+	for c != nil && len(c.Parents) > 0 {
+		c = c.Parents[0] // Meta commits don’t have more than one parent.
+	}
+	return c
 }
 
 func (cl *GerritCL) updateGithubIssueRefs() {
@@ -760,7 +776,10 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 
 		if clv.Version == 0 { // is a meta commit
 			gp.noteDirtyCL(cl) // needs processing at end of sync
-			cl.Meta = gc
+			cl.Meta = &GerritMeta{
+				Commit: gc,
+				CL:     cl,
+			}
 		} else {
 			cl.Commit = gc
 			cl.Version = clv.Version
@@ -801,16 +820,16 @@ func (gp *GerritProject) finishProcessingCL(cl *GerritCL) {
 	// in reverse order and then flip the array before setting on the
 	// GerritCL object.
 	var backwardMessages []*GerritMessage
-	var backwardMeta []*GitCommit
+	var backwardMeta []*GerritMeta
 
-	gc, ok := c.gitCommit[cl.Meta.Hash]
+	gc, ok := c.gitCommit[cl.Meta.Commit.Hash]
 	if !ok {
 		log.Printf("WARNING: GerritProject(%q).finishProcessingCL failed to find CL %v hash %s",
-			gp.ServerSlashProject(), cl.Number, cl.Meta.Hash)
+			gp.ServerSlashProject(), cl.Number, cl.Meta.Commit.Hash)
 		return
 	}
 
-	gp.foreachCommitParent(cl.Meta.Hash, func(gc *GitCommit) error {
+	gp.foreachCommitParent(cl.Meta.Commit.Hash, func(gc *GitCommit) error {
 		if strings.Contains(gc.Msg, "\nLabel: ") {
 			gp.numLabelChanges++
 		}
@@ -826,7 +845,7 @@ func (gp *GerritProject) finishProcessingCL(cl *GerritCL) {
 		if foundStatus == "" {
 			foundStatus = getGerritStatus(gc)
 		}
-		backwardMeta = append(backwardMeta, gc)
+		backwardMeta = append(backwardMeta, gc.GerritMeta)
 		if message := gp.getGerritMessage(gc); message != nil {
 			backwardMessages = append(backwardMessages, message)
 		}
@@ -845,9 +864,9 @@ func (gp *GerritProject) finishProcessingCL(cl *GerritCL) {
 	reverseGerritMessages(backwardMessages)
 	cl.Messages = backwardMessages
 
-	cl.MetaCommits = cl.MetaCommits[:0]
+	cl.Metas = cl.Metas[:0]
 	for i := len(backwardMeta) - 1; i >= 0; i-- {
-		cl.MetaCommits = append(cl.MetaCommits, backwardMeta[i])
+		cl.Metas = append(cl.Metas, backwardMeta[i])
 	}
 	cl.updateBranch()
 }
@@ -1288,24 +1307,24 @@ func (m *GerritMeta) LabelVotes() map[string]map[string]int8 {
 	// Let's see which number in the (linear) meta history
 	// we are.
 	ourIndex := -1
-	for i, mc := range m.CL.MetaCommits {
-		if mc.GerritMeta == m {
+	for i, mc := range m.CL.Metas {
+		if mc == m {
 			ourIndex = i
 			break
 		}
 	}
 	if ourIndex == -1 {
-		panic("LabelVotes called on GerritMeta not in its m.CL.MetaCommits slice")
+		panic("LabelVotes called on GerritMeta not in its m.CL.Metas slice")
 	}
 	labels := map[string]map[string]int8{}
 
-	history := m.CL.MetaCommits[:ourIndex+1]
+	history := m.CL.Metas[:ourIndex+1]
 	var lastCommit string
 	for _, mc := range history {
-		log.Printf("For CL %v, mc %v", m.CL.Number, mc.GerritMeta)
-		footer := mc.GerritMeta.Footer()
+		log.Printf("For CL %v, mc %v", m.CL.Number, mc)
+		footer := mc.Footer()
 		isNew := strings.Contains(footer, "\nTag: autogenerated:gerrit:newPatchSet\n")
-		email := mc.Author.Email()
+		email := mc.Commit.Author.Email()
 		if isNew {
 			commit, _ := lineValue(footer, "Commit: ")
 			if commit != "" {

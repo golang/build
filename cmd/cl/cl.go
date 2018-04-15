@@ -206,7 +206,7 @@ func main() {
 	var projectLen, authorLen, reviewerLen int
 	for _, cl := range cls {
 		projectLen = max(projectLen, len(cl.gerritCL.Project.Project()))
-		authorLen = max(authorLen, len(cl.gerritCL.Meta.Author.Email()))
+		authorLen = max(authorLen, len(cl.gerritCL.Meta.Commit.Author.Email()))
 		if cl.reviewerEmail != "" {
 			reviewerLen = max(reviewerLen, len(cl.reviewerEmail))
 		}
@@ -245,36 +245,36 @@ func updateReviewStatus(cl *CL, gerritAccounts *GerritAccounts) {
 
 	cl.scores = map[string]int{}
 
-	authorEmail, err := gerritAccounts.LookupByGerritEmail(cl.gerritCL.MetaCommits[0].Author.Email(), true)
+	authorEmail, err := gerritAccounts.LookupByGerritEmail(cl.gerritCL.Metas[0].Commit.Author.Email(), true)
 	if err != nil {
 		return // We can't resolve the author.
 	}
 
 	// Find the initial reviewer, and the first responder (always exclude the author in both cases).
 	// Also update the scores map.
-	for _, metaCommit := range cl.gerritCL.MetaCommits {
+	for _, meta := range cl.gerritCL.Metas {
 		if firstResponder == "" {
-			responder, err := gerritAccounts.LookupByGerritEmail(metaCommit.Author.Email(), true)
+			responder, err := gerritAccounts.LookupByGerritEmail(meta.Commit.Author.Email(), true)
 			if err == nil && responder.Email != authorEmail.Email {
 				firstResponder = responder.Email
 			}
 		}
 
-		if metaCommit.Reviewer == nil {
+		if meta.Commit.Reviewer == nil {
 			continue
 		}
 
-		reviewer, err := gerritAccounts.LookupByGerritEmail(metaCommit.Reviewer.Email(), true)
+		reviewer, err := gerritAccounts.LookupByGerritEmail(meta.Commit.Reviewer.Email(), true)
 		if err != nil {
 			continue
 		}
 
-		codeReviewIdx := strings.Index(metaCommit.Msg, tagCodeReview)
+		codeReviewIdx := strings.Index(meta.Commit.Msg, tagCodeReview)
 
 		if codeReviewIdx > 0 {
 			prefix := len(tagCodeReview)
 			// Extract and convert the point(s). This line takes the form "Label: Code-Review=+1".
-			val, err := strconv.Atoi(metaCommit.Msg[codeReviewIdx+prefix : codeReviewIdx+prefix+2])
+			val, err := strconv.Atoi(meta.Commit.Msg[codeReviewIdx+prefix : codeReviewIdx+prefix+2])
 			if err == nil {
 				cl.scores[reviewer.Email] = val
 			}
@@ -321,24 +321,24 @@ func updateReviewStatus(cl *CL, gerritAccounts *GerritAccounts) {
 	// Now that we know who the reviewer is,
 	// figure out whether the CL is in need of review
 	// (or else is waiting for the author to do more work).
-	for _, metaCommit := range cl.gerritCL.MetaCommits {
-		if metaCommit.Author == nil { // Happens for Gerrit-generated messages.
+	for _, meta := range cl.gerritCL.Metas {
+		if meta.Commit.Author == nil { // Happens for Gerrit-generated messages.
 			continue
 		}
 
-		accountInfo, err := gerritAccounts.LookupByGerritEmail(metaCommit.Author.Email(), true)
+		accountInfo, err := gerritAccounts.LookupByGerritEmail(meta.Commit.Author.Email(), true)
 		if err != nil {
 			continue
 		}
 
-		if strings.Contains(metaCommit.Msg, "Uploaded patch set ") || accountInfo.Email != cl.reviewerEmail {
+		if strings.Contains(meta.Commit.Msg, "Uploaded patch set ") || accountInfo.Email != cl.reviewerEmail {
 			cl.needsReview = true
-			cl.needsReviewChanged = metaCommit.CommitTime
+			cl.needsReviewChanged = meta.Commit.CommitTime
 		}
 
 		if accountInfo.Email == cl.reviewerEmail {
 			cl.needsReview = false
-			cl.needsReviewChanged = metaCommit.CommitTime
+			cl.needsReviewChanged = meta.Commit.CommitTime
 		}
 	}
 
@@ -359,7 +359,7 @@ func authorString(cl *CL, gerritAccounts *GerritAccounts, n int) string {
 		suffix = "*"
 	}
 
-	first := cl.gerritCL.Meta
+	first := cl.gerritCL.Meta.Commit
 
 	for first.Parents != nil && len(first.Parents) > 0 {
 		first = first.Parents[0]
