@@ -349,12 +349,17 @@ func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 	}
 	sort.Strings(typs)
 
-	io.WriteString(w, "<b>Reverse pool summary</b><ul>")
+	io.WriteString(w, "<b>Reverse pool summary</b> (in use / total)<ul>")
 	if len(typs) == 0 {
 		io.WriteString(w, "<li>no connections</li>")
 	}
 	for _, typ := range typs {
-		fmt.Fprintf(w, "<li>%s: %d/%d</li>", typ, inUse[typ], total[typ])
+		if dashboard.Hosts[typ] != nil && total[typ] < dashboard.Hosts[typ].ExpectNum {
+			fmt.Fprintf(w, "<li>%s: %d/%d (%d missing)</li>",
+				typ, inUse[typ], total[typ], dashboard.Hosts[typ].ExpectNum-total[typ])
+		} else {
+			fmt.Fprintf(w, "<li>%s: %d/%d</li>", typ, inUse[typ], total[typ])
+		}
 	}
 	io.WriteString(w, "</ul>")
 
