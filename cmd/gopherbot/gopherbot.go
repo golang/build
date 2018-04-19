@@ -225,6 +225,7 @@ var tasks = []struct {
 	{"check cherry picks", (*gopherbot).checkCherryPicks},
 	{"update needs", (*gopherbot).updateNeeds},
 	{"congratulate new contributors", (*gopherbot).congratulateNewContributors},
+	{"un-wait CLs", (*gopherbot).unwaitCLs},
 }
 
 func (b *gopherbot) initCorpus() {
@@ -848,6 +849,84 @@ func (b *gopherbot) congratulateNewContributors(ctx context.Context) error {
 		}
 		b.knownContributors[email] = true
 	}
+	return nil
+}
+
+// unwaitCLs removes wait-* hashtags from CLs.
+func (b *gopherbot) unwaitCLs(ctx context.Context) error {
+	return b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+		if gp.Server() != "go.googlesource.com" {
+			return nil
+		}
+		return gp.ForeachOpenCL(func(cl *maintner.GerritCL) error {
+			tags := cl.Meta.Hashtags()
+			if tags.Len() == 0 {
+				return nil
+			}
+			// If the CL is tagged "wait-author", remove
+			// that tag if the author has replied since
+			// the last time the "wait-author" tag was
+			// added.
+			if tags.Contains("wait-author") {
+				// Figure out othe last index at which "wait-author" was added.
+				waitAuthorIndex := -1
+				for i := len(cl.Metas) - 1; i >= 0; i-- {
+					if cl.Metas[i].HashtagsAdded().Contains("wait-author") {
+						waitAuthorIndex = i
+						break
+					}
+				}
+
+				// Find the author has replied since
+				author := cl.Metas[0].Commit.Author.Str
+				hasReplied := false
+				for _, m := range cl.Metas[waitAuthorIndex+1:] {
+					if m.Commit.Author.Str == author {
+						hasReplied = true
+						break
+					}
+				}
+				if hasReplied {
+					log.Printf("https://golang.org/cl/%d -- remove wait-author; reply from %s", cl.Number, author)
+					err := b.onLatestCL(ctx, cl, func() error {
+						if *dryRun {
+							log.Printf("[dry run] would remove hashtag 'wait-author' from CL %d", cl.Number)
+							return nil
+						}
+						_, err := b.gerrit.RemoveHashtags(ctx, fmt.Sprint(cl.Number), "wait-author")
+						if err != nil {
+							log.Printf("https://golang.org/cl/%d: error removing wait-author: %v", cl.Number, err)
+							return err
+						}
+						log.Printf("https://golang.org/cl/%d: removed wait-author", cl.Number)
+						return nil
+					})
+					if err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		})
+	})
+}
+
+// onLatestCL checks whether cl's metadata is in sync with Gerrit's
+// upstream data and, if so, returns f(). If it's out of sync, it does
+// nothing more and returns nil.
+func (b *gopherbot) onLatestCL(ctx context.Context, cl *maintner.GerritCL, f func() error) error {
+	ci, err := b.gerrit.GetChangeDetail(ctx, fmt.Sprint(cl.Number), gerrit.QueryChangesOpt{Fields: []string{"MESSAGES"}})
+	if err != nil {
+		return err
+	}
+	if len(ci.Messages) == 0 {
+		log.Printf("onLatestCL: CL %v has no messages. Odd. Ignoring.")
+		return nil
+	}
+	if ci.Messages[len(ci.Messages)-1].ID == cl.Meta.Commit.Hash.String() {
+		return f()
+	}
+	log.Printf("onLatestCL: maintner metadata for CL %d is behind; skipping action for now.", cl.Number)
 	return nil
 }
 
