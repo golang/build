@@ -117,6 +117,9 @@ func (s *server) updateReviewsData() {
 			if strings.Contains(cl.Commit.Msg, "DO NOT REVIEW") || strings.Contains(cl.Commit.Msg, "DO NOT SUBMIT") {
 				return nil
 			}
+			if cl.Meta.Hashtags().Contains("wait-author") {
+				return nil
+			}
 			c := &change{GerritCL: cl}
 			c.LastUpdate = cl.Commit.CommitTime
 			if len(cl.Messages) > 0 {
