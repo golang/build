@@ -56,7 +56,7 @@ func getGithubToken() (string, error) {
 	if metadata.OnGCE() {
 		for _, key := range []string{"gopherbot-github-token", "maintner-github-token"} {
 			token, err := metadata.ProjectAttributeValue(key)
-			if err == nil {
+			if token != "" && err == nil {
 				return token, nil
 			}
 		}
@@ -77,8 +77,8 @@ func getGerritAuth() (username string, password string, err error) {
 	if metadata.OnGCE() {
 		for _, key := range []string{"gopherbot-gerrit-token", "maintner-gerrit-token", "gobot-password"} {
 			slurp, err = metadata.ProjectAttributeValue(key)
-			if len(slurp) != 0 {
-				continue
+			if slurp != "" && err == nil {
+				break
 			}
 		}
 	}
