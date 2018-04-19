@@ -52,6 +52,19 @@ const (
 	frozenDueToAge = "FrozenDueToAge"
 )
 
+// GitHub Milestone IDs for the golang/go repo.
+var (
+	proposal   = milestone{30, "Proposal"}
+	unreleased = milestone{22, "Unreleased"}
+	gccgo      = milestone{23, "Gccgo"}
+	vgo        = milestone{71, "vgo"}
+)
+
+type milestone struct {
+	ID   int
+	Name string
+}
+
 func getGithubToken() (string, error) {
 	if metadata.OnGCE() {
 		for _, key := range []string{"gopherbot-github-token", "maintner-github-token"} {
@@ -117,6 +130,10 @@ func getGithubClient() (*github.Client, error) {
 func getGerritClient() (*gerrit.Client, error) {
 	username, token, err := getGerritAuth()
 	if err != nil {
+		if *dryRun {
+			c := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
+			return c, nil
+		}
 		return nil, err
 	}
 	c := gerrit.NewClient("https://go-review.googlesource.com", gerrit.BasicAuth(username, token))
@@ -239,6 +256,7 @@ func (b *gopherbot) doTasks(ctx context.Context) error {
 
 func (b *gopherbot) addLabel(ctx context.Context, gi *maintner.GitHubIssue, label string) error {
 	if *dryRun {
+		printIssue("label-"+label, gi)
 		return nil
 	}
 	_, _, err := b.ghc.Issues.AddLabelsToIssue(ctx, "golang", "go", int(gi.Number), []string{label})
@@ -251,12 +269,24 @@ func (b *gopherbot) addLabel(ctx context.Context, gi *maintner.GitHubIssue, labe
 // exist), removeLabel returns nil.
 func (b *gopherbot) removeLabel(ctx context.Context, gi *maintner.GitHubIssue, label string) error {
 	if *dryRun {
+		printIssue("unlabel-"+label, gi)
 		return nil
 	}
 	_, err := b.ghc.Issues.RemoveLabelForIssue(ctx, "golang", "go", int(gi.Number), label)
 	if ge, ok := err.(*github.ErrorResponse); ok && ge.Response != nil && ge.Response.StatusCode == http.StatusNotFound {
 		return nil
 	}
+	return err
+}
+
+func (b *gopherbot) setMilestone(ctx context.Context, gi *maintner.GitHubIssue, m milestone) error {
+	if *dryRun {
+		printIssue("milestone-"+m.Name, gi)
+		return nil
+	}
+	_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(gi.Number), &github.IssueRequest{
+		Milestone: github.Int(m.ID),
+	})
 	return err
 }
 
@@ -299,7 +329,7 @@ func (b *gopherbot) addGitHubComment(ctx context.Context, org, repo string, issu
 		}
 	}
 	if *dryRun {
-		log.Printf("[dry run] would add comment to github.com/%s/%s/issues/%d: %v", org, repo, issueNum, msg)
+		log.Printf("[dry-run] would add comment to github.com/%s/%s/issues/%d: %v", org, repo, issueNum, msg)
 		return nil
 	}
 	_, _, err = b.ghc.Issues.CreateComment(ctx, org, repo, int(issueNum), &github.IssueComment{
@@ -324,6 +354,10 @@ var emptyGerritCommentOpts gerritCommentOpts
 func (b *gopherbot) addGerritComment(ctx context.Context, changeID, comment string, opts *gerritCommentOpts) error {
 	if b == nil {
 		panic("nil gopherbot")
+	}
+	if *dryRun {
+		log.Printf("[dry-run] would add comment to golang.org/cl/%s: %v", changeID, comment)
+		return nil
 	}
 	if opts == nil {
 		opts = &emptyGerritCommentOpts
@@ -399,23 +433,14 @@ func (b *gopherbot) labelProposals(ctx context.Context) error {
 		}
 		// Add Milestone if missing:
 		if gi.Milestone.IsNone() && !gi.HasEvent("milestoned") && !gi.HasEvent("demilestoned") {
-			printIssue("proposal-milestone", gi)
-			if !*dryRun {
-				_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(gi.Number), &github.IssueRequest{
-					Milestone: github.Int(30), // "Proposal"
-				})
-				if err != nil {
-					return err
-				}
+			if err := b.setMilestone(ctx, gi, proposal); err != nil {
+				return err
 			}
 		}
 		// Add Proposal label if missing:
 		if !gi.HasLabel("Proposal") && !gi.HasEvent("unlabeled") {
-			printIssue("proposal-label", gi)
-			if !*dryRun {
-				if err := b.addLabel(ctx, gi, "Proposal"); err != nil {
-					return err
-				}
+			if err := b.addLabel(ctx, gi, "Proposal"); err != nil {
+				return err
 			}
 		}
 		return nil
@@ -456,14 +481,7 @@ func (b *gopherbot) setSubrepoMilestones(ctx context.Context) error {
 			// Handled by setMiscMilestones
 			return nil
 		}
-		printIssue("subrepo-unreleased", gi)
-		if *dryRun {
-			return nil
-		}
-		_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(gi.Number), &github.IssueRequest{
-			Milestone: github.Int(22), // "Unreleased"
-		})
-		return err
+		return b.setMilestone(ctx, gi, unreleased)
 	})
 }
 
@@ -473,24 +491,10 @@ func (b *gopherbot) setMiscMilestones(ctx context.Context) error {
 			return nil
 		}
 		if strings.Contains(gi.Title, "gccgo") { // TODO: better gccgo bug report heuristic?
-			printIssue("misc-milestone-gccgo", gi)
-			if *dryRun {
-				return nil
-			}
-			_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(gi.Number), &github.IssueRequest{
-				Milestone: github.Int(23), // "Gccgo"
-			})
-			return err
+			return b.setMilestone(ctx, gi, gccgo)
 		}
 		if strings.HasPrefix(gi.Title, "x/vgo") {
-			printIssue("misc-milestone-vgo", gi)
-			if *dryRun {
-				return nil
-			}
-			_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(gi.Number), &github.IssueRequest{
-				Milestone: github.Int(71), // "vgo"
-			})
-			return err
+			return b.setMilestone(ctx, gi, vgo)
 		}
 		return nil
 	})
@@ -499,10 +503,6 @@ func (b *gopherbot) setMiscMilestones(ctx context.Context) error {
 func (b *gopherbot) labelBuildIssues(ctx context.Context) error {
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
 		if gi.Closed || gi.PullRequest || !strings.HasPrefix(gi.Title, "x/build") || gi.HasLabel("Builders") || gi.HasEvent("unlabeled") {
-			return nil
-		}
-		printIssue("label-builders", gi)
-		if *dryRun {
 			return nil
 		}
 		return b.addLabel(ctx, gi, "Builders")
@@ -514,10 +514,6 @@ func (b *gopherbot) labelMobileIssues(ctx context.Context) error {
 		if gi.Closed || gi.PullRequest || !strings.HasPrefix(gi.Title, "x/mobile") || gi.HasLabel("mobile") || gi.HasEvent("unlabeled") {
 			return nil
 		}
-		printIssue("label-mobile", gi)
-		if *dryRun {
-			return nil
-		}
 		return b.addLabel(ctx, gi, "mobile")
 	})
 }
@@ -525,10 +521,6 @@ func (b *gopherbot) labelMobileIssues(ctx context.Context) error {
 func (b *gopherbot) labelDocumentationIssues(ctx context.Context) error {
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
 		if gi.Closed || gi.PullRequest || !isDocumentationTitle(gi.Title) || gi.HasLabel("Documentation") || gi.HasEvent("unlabeled") {
-			return nil
-		}
-		printIssue("label-documentation", gi)
-		if *dryRun {
 			return nil
 		}
 		return b.addLabel(ctx, gi, "Documentation")
@@ -659,9 +651,6 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 				})
 				if !hasComment {
 					printIssue("cl2issue", gi)
-					if *dryRun {
-						return nil
-					}
 					msg := fmt.Sprintf("Change https://golang.org/cl/%d mentions this issue: `%s`", cl.Number, cl.Commit.Summary())
 					if err := b.addGitHubComment(ctx, "golang", "go", gi.Number, msg); err != nil {
 						return err
@@ -847,11 +836,6 @@ func (b *gopherbot) congratulateNewContributors(ctx context.Context) error {
 		}
 
 		if foundMessage {
-			b.knownContributors[email] = true
-			continue
-		}
-		if *dryRun {
-			log.Printf("[dry run] would add comment to golang.org/cl/%d, congratulating %s on their first commit (committed on %v)", cl.Number, cl.Commit.Author.Str, cl.Commit.CommitTime)
 			b.knownContributors[email] = true
 			continue
 		}
