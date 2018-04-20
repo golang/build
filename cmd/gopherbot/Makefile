@@ -19,11 +19,11 @@ docker-image: Dockerfile *.go
 	docker tag $(IMAGE_PROD):$(VERSION) $(IMAGE_STAGING):$(MUTABLE_VERSION)
 
 push-prod: docker-image
-	gcloud docker -- push $(IMAGE_PROD):$(MUTABLE_VERSION)
-	gcloud docker -- push $(IMAGE_PROD):$(VERSION)
+	docker push $(IMAGE_PROD):$(MUTABLE_VERSION)
+	docker push $(IMAGE_PROD):$(VERSION)
 push-staging: docker-image
-	gcloud docker -- push $(IMAGE_STAGING):$(MUTABLE_VERSION)
-	gcloud docker -- push $(IMAGE_STAGING):$(VERSION)
+	docker push $(IMAGE_STAGING):$(MUTABLE_VERSION)
+	docker push $(IMAGE_STAGING):$(VERSION)
 
 deploy-prod: push-prod
 	kubectl set image deployment/gopherbot-deployment gopherbot=$(IMAGE_PROD):$(VERSION)

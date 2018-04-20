@@ -11,15 +11,15 @@ usage:
 
 staging: Dockerfile
 	docker build -t $(STAGING_REPO)/$(IMAGE_NAME):latest .
-	gcloud docker -- push $(STAGING_REPO)/$(IMAGE_NAME):latest
+	docker push $(STAGING_REPO)/$(IMAGE_NAME):latest
 
 prod: Dockerfile
 	docker build -t $(PROD_REPO)/$(IMAGE_NAME):latest .
-	gcloud docker -- push $(PROD_REPO)/$(IMAGE_NAME):latest
+	docker push $(PROD_REPO)/$(IMAGE_NAME):latest
 
 # You must provide a REPO=your-repo-name arg when you make
 # this target. REPO is the name of the Docker repository
 # that will be prefixed to the name of the image being built.
 dev: Dockerfile
 	docker build -t $(REPO)/$(IMAGE_NAME):latest .
-	gcloud docker -- push $(REPO)/$(IMAGE_NAME):latest
+	docker push $(REPO)/$(IMAGE_NAME):latest

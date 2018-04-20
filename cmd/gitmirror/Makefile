@@ -31,11 +31,11 @@ docker-staging: Dockerfile gitmirror
 	docker tag $(IMAGE_STAGING):$(VERSION) $(IMAGE_STAGING):$(MUTABLE_VERSION)
 
 push-prod: docker-prod
-	gcloud docker -- push $(IMAGE_PROD):$(MUTABLE_VERSION)
-	gcloud docker -- push $(IMAGE_PROD):$(VERSION)
+	docker push $(IMAGE_PROD):$(MUTABLE_VERSION)
+	docker push $(IMAGE_PROD):$(VERSION)
 push-staging: docker-staging
-	gcloud docker -- push $(IMAGE_STAGING):$(MUTABLE_VERSION)
-	gcloud docker -- push $(IMAGE_STAGING):$(VERSION)
+	docker push $(IMAGE_STAGING):$(MUTABLE_VERSION)
+	docker push $(IMAGE_STAGING):$(VERSION)
 
 deploy-prod: push-prod
 	kubectl rolling-update gitmirror-rc --image=$(IMAGE_PROD):$(VERSION)

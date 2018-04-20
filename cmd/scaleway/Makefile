@@ -29,9 +29,9 @@ docker-dev: Dockerfile scaleway ca-certificates.crt
 	docker build --force-rm --tag=gcr.io/go-dashboard-dev/scaleway:latest .
 
 push-prod: docker-prod
-	gcloud docker -- push gcr.io/symbolic-datum-552/scaleway:$(VERSION)
+	docker push gcr.io/symbolic-datum-552/scaleway:$(VERSION)
 push-dev: docker-dev
-	gcloud docker -- push gcr.io/go-dashboard-dev/scaleway:latest
+	docker push gcr.io/go-dashboard-dev/scaleway:latest
 
 .PHONY: clean
 clean:
