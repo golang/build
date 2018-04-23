@@ -1030,7 +1030,7 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 		}
 		var backportComment *maintner.GitHubComment
 		if err := gi.ForeachComment(func(c *maintner.GitHubComment) error {
-			if strings.HasPrefix(c.Body, "Backport issues opened") {
+			if strings.HasPrefix(c.Body, "Backport issue(s) opened") {
 				backportComment = nil
 				return errStopIteration
 			}
@@ -1071,9 +1071,9 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			openedIssues = append(openedIssues, fmt.Sprintf("#%d (%s)", id, rel))
+			openedIssues = append(openedIssues, fmt.Sprintf("#%d (for %s)", id, rel))
 		}
-		return b.addGitHubComment(ctx, "golang", "go", gi.Number, fmt.Sprintf("Backport issue(s) opened: %s.\n\nRemember to create the cherry-pick CL(s) as soon as the patch is ready, according to https://golang.org/wiki/MinorReleases.", strings.Join(openedIssues, ", ")))
+		return b.addGitHubComment(ctx, "golang", "go", gi.Number, fmt.Sprintf("Backport issue(s) opened: %s.\n\nRemember to create the cherry-pick CL(s) as soon as the patch is submitted to master, according to https://golang.org/wiki/MinorReleases.", strings.Join(openedIssues, ", ")))
 	})
 }
 
