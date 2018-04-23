@@ -200,6 +200,7 @@ func main() {
 			log.Printf("got corpus update after %v", time.Since(t0))
 			break
 		}
+		lastTask = ""
 	}
 }
 
