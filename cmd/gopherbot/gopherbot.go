@@ -64,7 +64,7 @@ var (
 )
 
 type milestone struct {
-	ID   int
+	ID   int64
 	Name string
 }
 
@@ -236,6 +236,7 @@ var tasks = []struct {
 	{"congratulate new contributors", (*gopherbot).congratulateNewContributors},
 	{"un-wait CLs", (*gopherbot).unwaitCLs},
 	{"open cherry pick issues", (*gopherbot).openCherryPickIssues},
+	{"apply minor release milestones", (*gopherbot).setMinorMilestones},
 }
 
 func (b *gopherbot) initCorpus() {
@@ -296,7 +297,7 @@ func (b *gopherbot) setMilestone(ctx context.Context, gi *maintner.GitHubIssue, 
 		return nil
 	}
 	_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(gi.Number), &github.IssueRequest{
-		Milestone: github.Int(m.ID),
+		Milestone: github.Int(int(m.ID)),
 	})
 	return err
 }
@@ -1075,6 +1076,70 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 		}
 		return b.addGitHubComment(ctx, "golang", "go", gi.Number, fmt.Sprintf("Backport issue(s) opened: %s.\n\nRemember to create the cherry-pick CL(s) as soon as the patch is submitted to master, according to https://golang.org/wiki/MinorReleases.", strings.Join(openedIssues, ", ")))
 	})
+}
+
+// setMinorMilestones applies the latest minor release milestone to issue
+// with [1.X backport] in the title.
+func (b *gopherbot) setMinorMilestones(ctx context.Context) error {
+	majorReleases, err := b.getMajorReleases(ctx)
+	if err != nil {
+		return err
+	}
+	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		if gi.Closed || gi.PullRequest || !gi.Milestone.IsNone() || gi.HasEvent("demilestoned") || gi.HasEvent("milestoned") {
+			return nil
+		}
+		var majorRel string
+		for _, r := range majorReleases {
+			if strings.Contains(gi.Title, "backport") && strings.HasSuffix(gi.Title, "["+r+" backport]") {
+				majorRel = r
+			}
+		}
+		if majorRel == "" {
+			return nil
+		}
+		m, err := b.getMinorMilestoneForMajor(ctx, majorRel)
+		if err != nil {
+			// Fail silently, the milestone might not exist yet.
+			log.Printf("Failed to apply minor release milestone to issue %d: %v", gi.Number, err)
+			return nil
+		}
+		return b.setMilestone(ctx, gi, m)
+	})
+}
+
+// getMinorMilestoneForMajor returns the latest open minor release milestone
+// for a given major release series.
+func (b *gopherbot) getMinorMilestoneForMajor(ctx context.Context, majorRel string) (milestone, error) {
+	var res milestone
+	var minorVers int
+	titlePrefix := "Go" + majorRel + "."
+	if err := b.gorepo.ForeachMilestone(func(m *maintner.GitHubMilestone) error {
+		if m.Closed {
+			return nil
+		}
+		if !strings.HasPrefix(m.Title, titlePrefix) {
+			return nil
+		}
+		n, err := strconv.Atoi(strings.TrimPrefix(m.Title, titlePrefix))
+		if err != nil {
+			return nil
+		}
+		if n > minorVers {
+			res = milestone{
+				ID:   m.ID,
+				Name: m.Title,
+			}
+			minorVers = n
+		}
+		return nil
+	}); err != nil {
+		return milestone{}, err
+	}
+	if minorVers == 0 {
+		return milestone{}, errors.New("no minor milestone found for release series " + majorRel)
+	}
+	return res, nil
 }
 
 func blockqoute(s string) string {
