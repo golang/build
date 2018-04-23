@@ -267,8 +267,8 @@ func (b *gopherbot) doTasks(ctx context.Context) error {
 }
 
 func (b *gopherbot) addLabel(ctx context.Context, gi *maintner.GitHubIssue, label string) error {
+	printIssue("label-"+label, gi)
 	if *dryRun {
-		printIssue("label-"+label, gi)
 		return nil
 	}
 	_, _, err := b.ghc.Issues.AddLabelsToIssue(ctx, "golang", "go", int(gi.Number), []string{label})
@@ -280,8 +280,8 @@ func (b *gopherbot) addLabel(ctx context.Context, gi *maintner.GitHubIssue, labe
 // If issue did not have the label already (or the label didn't
 // exist), removeLabel returns nil.
 func (b *gopherbot) removeLabel(ctx context.Context, gi *maintner.GitHubIssue, label string) error {
+	printIssue("unlabel-"+label, gi)
 	if *dryRun {
-		printIssue("unlabel-"+label, gi)
 		return nil
 	}
 	_, err := b.ghc.Issues.RemoveLabelForIssue(ctx, "golang", "go", int(gi.Number), label)
@@ -292,8 +292,8 @@ func (b *gopherbot) removeLabel(ctx context.Context, gi *maintner.GitHubIssue, l
 }
 
 func (b *gopherbot) setMilestone(ctx context.Context, gi *maintner.GitHubIssue, m milestone) error {
+	printIssue("milestone-"+m.Name, gi)
 	if *dryRun {
-		printIssue("milestone-"+m.Name, gi)
 		return nil
 	}
 	_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(gi.Number), &github.IssueRequest{
