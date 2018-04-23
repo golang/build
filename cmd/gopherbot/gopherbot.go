@@ -55,7 +55,7 @@ const (
 	frozenDueToAge = "FrozenDueToAge"
 )
 
-// GitHub Milestone IDs for the golang/go repo.
+// GitHub Milestone numbers for the golang/go repo.
 var (
 	proposal   = milestone{30, "Proposal"}
 	unreleased = milestone{22, "Unreleased"}
@@ -64,8 +64,8 @@ var (
 )
 
 type milestone struct {
-	ID   int64
-	Name string
+	Number int
+	Name   string
 }
 
 func getGithubToken() (string, error) {
@@ -297,7 +297,7 @@ func (b *gopherbot) setMilestone(ctx context.Context, gi *maintner.GitHubIssue, 
 		return nil
 	}
 	_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(gi.Number), &github.IssueRequest{
-		Milestone: github.Int(int(m.ID)),
+		Milestone: github.Int(m.Number),
 	})
 	return err
 }
@@ -1127,8 +1127,8 @@ func (b *gopherbot) getMinorMilestoneForMajor(ctx context.Context, majorRel stri
 		}
 		if n > minorVers {
 			res = milestone{
-				ID:   m.ID,
-				Name: m.Title,
+				Number: int(m.Number),
+				Name:   m.Title,
 			}
 			minorVers = n
 		}
