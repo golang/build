@@ -1025,7 +1025,7 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 				return err
 			}
 		}
-		if gi.Closed || gi.PullRequest {
+		if gi.HasLabel(frozenDueToAge) || gi.PullRequest {
 			return nil
 		}
 		var backportComment *maintner.GitHubComment
