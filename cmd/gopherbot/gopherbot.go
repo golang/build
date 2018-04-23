@@ -351,11 +351,10 @@ func (b *gopherbot) addGitHubComment(ctx context.Context, org, repo string, issu
 }
 
 // createGitHubIssue returns the number of the created issue, or 4242 in dry-run mode.
-func (b *gopherbot) createGitHubIssue(ctx context.Context, title, msg string, labels []string) (int, error) {
-	var since time.Time
+// baseEvent is the timestamp of the event causing this action, and is used for de-duplication.
+func (b *gopherbot) createGitHubIssue(ctx context.Context, title, msg string, labels []string, baseEvent time.Time) (int, error) {
 	var dup int
 	b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		since = gi.Updated
 		// TODO: check for gopherbot as author? check for exact match?
 		// This seems fine for now.
 		if gi.Title == title {
@@ -371,8 +370,8 @@ func (b *gopherbot) createGitHubIssue(ctx context.Context, title, msg string, la
 	// See if there is a dup issue from when gopherbot last got its data from maintner.
 	is, _, err := b.ghc.Issues.ListByRepo(ctx, "golang", "go", &github.IssueListByRepoOptions{
 		State:       "all",
-		Since:       since,
-		ListOptions: github.ListOptions{PerPage: 1000},
+		ListOptions: github.ListOptions{PerPage: 100},
+		Since:       baseEvent,
 	})
 	if err != nil {
 		return 0, err
@@ -1068,7 +1067,7 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 				fmt.Sprintf("%s [%s backport]", gi.Title, rel),
 				fmt.Sprintf("@%s requested issue #%d to be considered for backport to the next %s minor release.\n\n%s\n",
 					backportComment.User.Login, gi.Number, rel, blockqoute(backportComment.Body)),
-				[]string{"CherryPickCandidate"})
+				[]string{"CherryPickCandidate"}, backportComment.Created)
 			if err != nil {
 				return err
 			}
