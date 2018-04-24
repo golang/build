@@ -65,6 +65,8 @@ EOF""",
     "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add mozilla-rootcerts go14" % (arch, release),
     # Interactive debugging tools for users using gomote ssh:
     "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add emacs25-nox11 vim screen" % (arch, release),
+    # For https://golang.org/issue/24354
+    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add clang cmake" % (arch, release),
     """ed /etc/fstab << EOF
 H
 %s/wd0/sd0/
@@ -80,7 +82,7 @@ EOF""",
 
 
 a = anita.Anita(
-    anita.URL(find_latest_release("netbsd-8", arch)),
+    anita.URL('https://cdn.netbsd.org/pub/NetBSD/NetBSD-8.0_RC1/%s/' % arch),
     workdir="work-NetBSD-%s" % arch,
     disk_size="4G",
     memory_size = "1G",
