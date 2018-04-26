@@ -948,7 +948,7 @@ func (b *gopherbot) onLatestCL(ctx context.Context, cl *maintner.GerritCL, f fun
 		return err
 	}
 	if len(ci.Messages) == 0 {
-		log.Printf("onLatestCL: CL %v has no messages. Odd. Ignoring.")
+		log.Printf("onLatestCL: CL %d has no messages. Odd. Ignoring.", cl.Number)
 		return nil
 	}
 	if ci.Messages[len(ci.Messages)-1].ID == cl.Meta.Commit.Hash.String() {
