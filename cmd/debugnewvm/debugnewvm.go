@@ -72,7 +72,9 @@ func main() {
 		hconf.VMImage = *vmImage
 	}
 
-	ts, err := google.DefaultTokenSource(context.Background())
+	ts, err := google.DefaultTokenSource(context.Background(),
+		"https://www.googleapis.com/auth/cloud-platform",
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
