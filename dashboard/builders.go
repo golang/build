@@ -158,23 +158,23 @@ var Hosts = map[string]*HostConfig{
 		env:                []string{"CC=clang"},
 		SSHUsername:        "gopher",
 	},
-	"host-netbsd-amd64-8branch": &HostConfig{
-		VMImage:            "netbsd-amd64-8branch-b",
-		Notes:              "NetBSD 8.? from the netbsd-8 branch; GCE VM is built from script in build/env/netbsd-amd64",
+	"host-netbsd-amd64-8_0": &HostConfig{
+		VMImage:            "netbsd-amd64-8-0-2018q1",
+		Notes:              "NetBSD 8.0RC1; GCE VM is built from script in build/env/netbsd-amd64",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.netbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64-2da6b33.tar.gz",
 		SSHUsername:        "root",
 	},
-	// Note: the netbsd-386 host VM image never gets networking up. So we don't use this for now.
-	// See https://github.com/golang/go/issues/20852#issuecomment-347698956
-	"host-netbsd-386-8branch": &HostConfig{
-		VMImage:            "netbsd-386-8branch-c",
-		Notes:              "NetBSD 8.? from the netbsd-8 branch; GCE VM is built from script in build/env/netbsd-386",
+	// Note: the netbsd-386 host hangs during the ../test phase of all.bash,
+	// so we don't use this for now. (See the netbsd-386-8 BuildConfig below.)
+	"host-netbsd-386-8_0": &HostConfig{
+		VMImage:            "netbsd-386-8-0-2018q1",
+		Notes:              "NetBSD 8.0RC1; GCE VM is built from script in build/env/netbsd-386",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.netbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-386-0b3b511.tar.gz",
-		SSHUsername:        "gopher",
+		SSHUsername:        "root",
 	},
 	"host-dragonfly-amd64-tdfbsd": &HostConfig{
 		IsReverse:      true,
@@ -735,8 +735,8 @@ func (c *BuildConfig) BuildSubrepos() bool {
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
 		"openbsd-386-60", "openbsd-amd64-60",
 		"openbsd-386-62", "openbsd-amd64-62",
-		"netbsd-amd64-8branch",
-		"netbsd-386-8branch",
+		"netbsd-amd64-8_0",
+		"netbsd-386-8_0",
 		"plan9-386",
 		"freebsd-arm-paulzhol",
 		"windows-amd64-2016", "windows-386-2008":
@@ -1150,18 +1150,21 @@ func init() {
 		MaxAtOnce:         1,
 	})
 	addBuilder(BuildConfig{
-		Name:              "netbsd-amd64-8branch",
-		HostType:          "host-netbsd-amd64-8branch",
+		Name:              "netbsd-amd64-8_0",
+		HostType:          "host-netbsd-amd64-8_0",
 		ShouldRunDistTest: noTestDir,
 		MaxAtOnce:         1,
 		TryBot:            false,
 	})
 	addBuilder(BuildConfig{
-		Name:              "netbsd-386-8branch",
-		HostType:          "host-netbsd-386-8branch",
+		Name:              "netbsd-386-8_0",
+		HostType:          "host-netbsd-386-8_0",
 		ShouldRunDistTest: noTestDir,
 		MaxAtOnce:         1,
-		TryBot:            false,
+		// This builder currently hangs in the “../test” phase of all.bash.
+		// (https://golang.org/issue/25206)
+		TryOnly: true,  // Disable regular builds.
+		TryBot:  false, // Disable trybots.
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-386",
