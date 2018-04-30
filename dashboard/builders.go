@@ -1173,7 +1173,15 @@ func init() {
 		Name:              "windows-amd64-2008",
 		HostType:          "host-windows-amd64-2008",
 		ShouldRunDistTest: noTestDir,
-		env:               []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		env: []string{
+			"GOARCH=amd64",
+			"GOHOSTARCH=amd64",
+			// cmd/go takes ~188 seconds on windows-amd64
+			// now, which is over the 180 second default
+			// dist test timeout. So, bump this builder
+			// up:
+			"GO_TEST_TIMEOUT_SCALE=2",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-386-2008",
@@ -1188,14 +1196,30 @@ func init() {
 		Name:              "windows-amd64-2012",
 		HostType:          "host-windows-amd64-2012",
 		ShouldRunDistTest: noTestDir,
-		env:               []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
-		MaxAtOnce:         2,
+		env: []string{
+			"GOARCH=amd64",
+			"GOHOSTARCH=amd64",
+			// cmd/go takes ~188 seconds on windows-amd64
+			// now, which is over the 180 second default
+			// dist test timeout. So, bump this builder
+			// up:
+			"GO_TEST_TIMEOUT_SCALE=2",
+		},
+		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2016",
 		HostType:          "host-windows-amd64-2016",
 		ShouldRunDistTest: fasterTrybots,
-		env:               []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		env: []string{
+			"GOARCH=amd64",
+			"GOHOSTARCH=amd64",
+			// cmd/go takes ~188 seconds on windows-amd64
+			// now, which is over the 180 second default
+			// dist test timeout. So, bump this builder
+			// up:
+			"GO_TEST_TIMEOUT_SCALE=2",
+		},
 		TryBot:            true,
 		numTryTestHelpers: 5,
 	})
@@ -1203,7 +1227,14 @@ func init() {
 		Name:     "windows-amd64-race",
 		HostType: "host-windows-amd64-2008",
 		Notes:    "Only runs -race tests (./race.bat)",
-		env:      []string{"GOARCH=amd64", "GOHOSTARCH=amd64"},
+		env: []string{
+			"GOARCH=amd64",
+			"GOHOSTARCH=amd64",
+			// cmd/go takes ~188 seconds on windows-amd64
+			// now, which is over the 180 second default
+			// dist test timeout. So, bump this builder
+			// up:
+			"GO_TEST_TIMEOUT_SCALE=2"},
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_8",
