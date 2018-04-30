@@ -237,6 +237,7 @@ var tasks = []struct {
 	{"un-wait CLs", (*gopherbot).unwaitCLs},
 	{"open cherry pick issues", (*gopherbot).openCherryPickIssues},
 	{"apply minor release milestones", (*gopherbot).setMinorMilestones},
+	{"close cherry pick issues", (*gopherbot).closeCherryPickIssues},
 }
 
 func (b *gopherbot) initCorpus() {
@@ -392,6 +393,15 @@ func (b *gopherbot) createGitHubIssue(ctx context.Context, title, msg string, la
 		Labels: &labels,
 	})
 	return i.GetNumber(), err
+}
+
+func (b *gopherbot) closeGitHubIssue(ctx context.Context, number int32) error {
+	if *dryRun {
+		log.Printf("[dry-run] would close golang.org/issue/%v", number)
+		return nil
+	}
+	_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(number), &github.IssueRequest{State: github.String("closed")})
+	return err
 }
 
 type gerritCommentOpts struct {
@@ -629,17 +639,12 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 		}
 
 		printIssue("close-stale-waiting-for-info", gi)
-		if *dryRun {
-			return nil
-		}
-
 		// TODO: write a task that reopens issues if the OP speaks up.
 		if err := b.addGitHubComment(ctx, "golang", "go", gi.Number,
 			"Timed out in state WaitingForInfo. Closing.\n\n(I am just a bot, though. Please speak up if this is a mistake or you have the requested information.)"); err != nil {
 			return err
 		}
-		_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(gi.Number), &github.IssueRequest{State: github.String("closed")})
-		return err
+		return b.closeGitHubIssue(ctx, gi.Number)
 	})
 
 }
@@ -648,7 +653,7 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 // and the change summary on GitHub when a new Gerrit change references a GitHub issue.
 func (b *gopherbot) cl2issue(ctx context.Context) error {
 	monthAgo := time.Now().Add(-30 * 24 * time.Hour)
-	b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+	return b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
 		if gp.Server() != "go.googlesource.com" {
 			return nil
 		}
@@ -688,7 +693,6 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 			return nil
 		})
 	})
-	return nil
 }
 
 // canonicalLabelName returns "needsfix" for "needs-fix" or "NeedsFix"
@@ -1139,6 +1143,53 @@ func (b *gopherbot) getMinorMilestoneForMajor(ctx context.Context, majorRel stri
 		return milestone{}, errors.New("no minor milestone found for release series " + majorRel)
 	}
 	return res, nil
+}
+
+// closeCherryPickIssues closes cherry-pick issues when CLs are merged to
+// release branches, as GitHub only does that on merge to master.
+func (b *gopherbot) closeCherryPickIssues(ctx context.Context) error {
+	openCherryPickIssues := make(map[int32]*maintner.GitHubIssue) // by GitHub Issue Number
+	b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		if gi.Closed || gi.PullRequest || gi.NotExist || gi.Milestone.IsNone() {
+			return nil
+		}
+		if strings.Count(gi.Milestone.Title, ".") == 2 { // minor release
+			openCherryPickIssues[gi.Number] = gi
+		}
+		return nil
+	})
+	monthAgo := time.Now().Add(-30 * 24 * time.Hour)
+	return b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+		if gp.Server() != "go.googlesource.com" {
+			return nil
+		}
+		return gp.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
+			if cl.Commit.CommitTime.Before(monthAgo) {
+				// If the CL was last updated over a month ago, assume (as an
+				// optimization) that gopherbot already processed this CL.
+				return nil
+			}
+			if cl.Status != "merged" || cl.Private || !strings.HasPrefix(cl.Branch(), "release-branch") {
+				return nil
+			}
+			for _, ref := range cl.GitHubIssueRefs {
+				if id := ref.Repo.ID(); id.Owner != "golang" || id.Repo != "go" {
+					continue
+				}
+				gi, ok := openCherryPickIssues[ref.Number]
+				if !ok {
+					continue
+				}
+				printIssue("close-cherry-pick", gi)
+				if err := b.addGitHubComment(ctx, "golang", "go", gi.Number, fmt.Sprintf(
+					"Closed by merging %s to %s.", cl.Commit.Hash, cl.Branch())); err != nil {
+					return err
+				}
+				return b.closeGitHubIssue(ctx, gi.Number)
+			}
+			return nil
+		})
+	})
 }
 
 func blockqoute(s string) string {
