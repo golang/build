@@ -48,13 +48,14 @@ var publicACL = []storage.ACLRule{
 // File represents a file on the golang.org downloads page.
 // It should be kept in sync with the download code in x/tools/godoc/dl.
 type File struct {
-	Filename       string
-	OS             string
-	Arch           string
-	Version        string
-	ChecksumSHA256 string
-	Size           int64
-	Kind           string // "archive", "installer", "source"
+	Filename       string `json:"filename"`
+	OS             string `json:"os"`
+	Arch           string `json:"arch"`
+	Version        string `json:"version"`
+	Checksum       string `json:"-"` // SHA1; deprecated
+	ChecksumSHA256 string `json:"sha256"`
+	Size           int64  `json:"size"`
+	Kind           string `json:"kind"` // "archive", "installer", "source"
 }
 
 // fileRe matches the files created by the release tool, such as:
