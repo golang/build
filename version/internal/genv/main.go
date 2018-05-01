@@ -33,7 +33,7 @@ func main() {
 		}{time.Now().Year(), version}); err != nil {
 			failf("mainTmpl.execute: %v", err)
 		}
-		path := filepath.Join(os.Getenv("GOPATH"), "src/golang.org/x/build/version", version, version+".go")
+		path := filepath.Join(os.Getenv("GOPATH"), "src/golang.org/x/build/version", version, "main.go")
 		if err := os.Mkdir(filepath.Dir(path), 0755); err != nil {
 			failf("os.Mkdir: %v", err)
 		}
