@@ -7,6 +7,7 @@ package owners
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 )
@@ -57,6 +58,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(e); err != nil {
 		http.Error(w, "unable to encode response", http.StatusInternalServerError)
+		// TODO: increment expvar for monitoring.
+		log.Printf("unable to encode owners response: %v", err)
 		return
 	}
 	w.Write(buf.Bytes())
