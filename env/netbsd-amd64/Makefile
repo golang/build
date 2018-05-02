@@ -15,3 +15,6 @@ create-image-staging:
 
 create-image-prod:
 	gcloud compute --project symbolic-datum-552 images create netbsd-amd64-8-0-2018q1 --source-uri gs://go-builder-data/vm-image-netbsd-amd64-8.0_2018Q1.tar.gz
+
+clean:
+	rm -rf netbsd-*.tar.gz work-NetBSD-* anita-*.tar.gz anita-*/
