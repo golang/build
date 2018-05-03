@@ -18,11 +18,12 @@ func TestMatch(t *testing.T) {
 		{
 			"crypto/chacha20poly1305/chacha20poly1305.go",
 			&Entry{
-				Primary: []Owner{filippo},
+				Primary:   []Owner{filippo},
+				Secondary: []Owner{agl},
 			},
 		},
 		{
-			"go/src/archive/tar/a.go",
+			"go/src/archive/zip/a.go",
 			&Entry{
 				Primary:   []Owner{joetsai},
 				Secondary: []Owner{bradfitz},
