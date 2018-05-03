@@ -468,7 +468,7 @@ func init() {
 
 // A HostConfig describes the available ways to obtain buildlets of
 // different types. Some host configs can server multiple
-// builders. For example, a host config of "host-linux-kube-std" can
+// builders. For example, a host config of "host-linux-kubestd" can
 // serve linux-amd64, linux-amd64-race, linux-386, linux-386-387, etc.
 type HostConfig struct {
 	// HostType is the unique name of this host config. It is also
@@ -530,7 +530,7 @@ type BuildConfig struct {
 
 	// HostType is the required key into the Hosts map, describing
 	// the type of host this build will run on.
-	// For example, "host-linux-kube-std".
+	// For example, "host-linux-kubestd".
 	HostType string
 
 	Notes string // notes for humans
