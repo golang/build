@@ -105,9 +105,8 @@ func init() {
 	addPerson("Aishraj", "aishraj@users.noreply.github.com", "@aishraj")
 	addPerson("Akihiko Odaki", "akihiko.odaki.4i@stu.hosei.ac.jp")
 	addPerson("Akihiro Suda", "suda.kyoto@gmail.com", "@AkihiroSuda")
-	addPerson("Alan Donovan", "adonovan@google.com")
-	addPerson("Alan Donovan", "adonovan@google.com", "@alandonovan")
-	addPerson("Alan Donovan", "alan@alandonovan.net", "@adonovan")
+	addPerson("Alan Donovan", "adonovan@google.com", "@alandonovan") // work profile
+	addPerson("Alan Donovan", "alan@alandonovan.net", "@adonovan")   // personal profile
 	addPerson("Alan Gardner", "alanctgardner@gmail.com")
 	addPerson("Alan Shreve", "alan@inconshreveable.com", "@inconshreveable")
 	addPerson("Albert Smith", "albert@horde.today")
