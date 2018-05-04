@@ -17,6 +17,7 @@ import (
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 	"google.golang.org/api/compute/v1"
 )
 
@@ -83,8 +84,8 @@ type VMOpts struct {
 
 // StartNewVM boots a new VM on GCE and returns a buildlet client
 // configured to speak to it.
-func StartNewVM(ts oauth2.TokenSource, instName, hostType string, opts VMOpts) (*Client, error) {
-	computeService, _ := compute.New(oauth2.NewClient(context.TODO(), ts))
+func StartNewVM(creds *google.Credentials, instName, hostType string, opts VMOpts) (*Client, error) {
+	computeService, _ := compute.New(oauth2.NewClient(context.TODO(), creds.TokenSource))
 
 	hconf, ok := dashboard.Hosts[hostType]
 	if !ok {

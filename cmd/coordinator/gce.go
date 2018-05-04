@@ -40,7 +40,6 @@ import (
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
-	oauth2api "google.golang.org/api/oauth2/v2"
 )
 
 func init() {
@@ -62,7 +61,7 @@ var (
 
 	dsClient       *datastore.Client
 	computeService *compute.Service
-	tokenSource    oauth2.TokenSource
+	gcpCreds       *google.Credentials
 	errTryDeps     error // non-nil if try bots are disabled
 	gerritClient   *gerrit.Client
 	storageClient  *storage.Client
@@ -160,7 +159,7 @@ func initGCE() error {
 		}
 	}
 
-	tokenSource, err = google.DefaultTokenSource(ctx, oauth2api.UserinfoEmailScope, compute.CloudPlatformScope)
+	gcpCreds, err = buildEnv.Credentials(ctx)
 	if err != nil {
 		if *mode == "dev" {
 			// don't try to do anything else with GCE, as it will likely fail
@@ -168,7 +167,7 @@ func initGCE() error {
 		}
 		log.Fatalf("failed to get a token source: %v", err)
 	}
-	oAuthHTTPClient = oauth2.NewClient(ctx, tokenSource)
+	oAuthHTTPClient = oauth2.NewClient(ctx, gcpCreds.TokenSource)
 	computeService, _ = compute.New(oAuthHTTPClient)
 	errTryDeps = checkTryBuildDeps()
 	if errTryDeps != nil {
@@ -311,7 +310,7 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 	)
 
 	log.Printf("Creating GCE VM %q for %s", instName, hostType)
-	bc, err = buildlet.StartNewVM(tokenSource, instName, hostType, buildlet.VMOpts{
+	bc, err = buildlet.StartNewVM(gcpCreds, instName, hostType, buildlet.VMOpts{
 		ProjectID:   buildEnv.ProjectName,
 		Zone:        buildEnv.Zone,
 		Description: fmt.Sprintf("Go Builder for %s", hostType),

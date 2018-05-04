@@ -13,8 +13,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"text/template"
@@ -23,7 +21,7 @@ import (
 	monapi "cloud.google.com/go/monitoring/apiv3"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/cmd/coordinator/metrics"
-	"golang.org/x/oauth2/google"
+	"golang.org/x/oauth2"
 	compute "google.golang.org/api/compute/v1"
 	dm "google.golang.org/api/deploymentmanager/v2"
 	monpb "google.golang.org/genproto/googleapis/monitoring/v3"
@@ -96,21 +94,13 @@ func main() {
 		buildEnv.ProjectName = *proj
 	}
 
-	// Brad is sick of google.DefaultClient giving him the
-	// permissions from the instance via the metadata service. Use
-	// the service account from disk if it exists instead:
-	keyFile := filepath.Join(os.Getenv("HOME"), "keys", buildEnv.ProjectName+".key.json")
-	if _, err := os.Stat(keyFile); err == nil {
-		log.Printf("Using service account from %s", keyFile)
-		os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", keyFile)
-	}
-
-	oauthClient, err = google.DefaultClient(context.Background(), compute.CloudPlatformScope, compute.ComputeScope, compute.DevstorageFullControlScope)
+	ctx := context.Background()
+	creds, err := buildEnv.Credentials(ctx)
 	if err != nil {
 		log.Fatalf("could not create oAuth client: %v", err)
 	}
 
-	computeService, err = compute.New(oauthClient)
+	computeService, err = compute.New(oauth2.NewClient(ctx, creds.TokenSource))
 	if err != nil {
 		log.Fatalf("could not create client for Google Compute Engine: %v", err)
 	}

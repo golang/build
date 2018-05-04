@@ -7,9 +7,17 @@
 package buildenv
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strings"
+
+	"golang.org/x/oauth2/google"
+	compute "google.golang.org/api/compute/v1"
+	oauth2api "google.golang.org/api/oauth2/v2"
 )
 
 const (
@@ -140,6 +148,41 @@ func (e Environment) DashBase() string {
 		return e.DashURL
 	}
 	return Production.DashURL
+}
+
+// Credentials returns the credentials required to access the GCP environment.
+func (e Environment) Credentials(ctx context.Context) (*google.Credentials, error) {
+	scopes := []string{
+		// Cloud Platform should include all others, but the
+		// old code duplicated compute and the storage full
+		// control scopes, so I leave them here for now. They
+		// predated the all-encompassing "cloud platform"
+		// scope anyway.
+		// TODO: remove compute and DevstorageFullControlScope once verified to work
+		// without.
+		compute.CloudPlatformScope,
+		compute.ComputeScope,
+		compute.DevstorageFullControlScope,
+
+		// The coordinator needed the userinfo email scope for
+		// reporting to the perf dashboard running on App
+		// Engine at one point. The perf dashboard is down at
+		// the moment, but when it's back up we'll need this,
+		// and if we do other authenticated requests to App
+		// Engine apps, this would be useful.
+		oauth2api.UserinfoEmailScope,
+	}
+
+	// Prefer any "$HOME/keys/$PROJECT.key.json" file first.
+	keyFile := filepath.Join(os.Getenv("HOME"), "keys", e.ProjectName+".key.json")
+	if _, err := os.Stat(keyFile); err == nil {
+		jcred, err := ioutil.ReadFile(keyFile)
+		if err != nil {
+			return nil, err
+		}
+		return google.CredentialsFromJSON(ctx, jcred, scopes...)
+	}
+	return google.FindDefaultCredentials(ctx, scopes...)
 }
 
 // ByProjectID returns an Environment for the specified

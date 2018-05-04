@@ -58,7 +58,7 @@ func initKube() error {
 		buildEnv.KubeBuild.Name,
 		gke.OptZone(buildEnv.Zone),
 		gke.OptProject(buildEnv.ProjectName),
-		gke.OptTokenSource(tokenSource))
+		gke.OptTokenSource(gcpCreds.TokenSource))
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func initKube() error {
 		buildEnv.KubeTools.Name,
 		gke.OptZone(buildEnv.Zone),
 		gke.OptProject(buildEnv.ProjectName),
-		gke.OptTokenSource(tokenSource))
+		gke.OptTokenSource(gcpCreds.TokenSource))
 	if err != nil {
 		return err
 	}

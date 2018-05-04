@@ -22,8 +22,8 @@ ENV REV=3d95f1a04b0e599e90f3493a39350ecb90ce6686
 RUN go get -d github.com/gliderlabs/ssh &&\
     (cd /go/src/github.com/gliderlabs/ssh && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo github.com/golang/protobuf at 9255415 (2018-01-25)
-ENV REV=925541529c1fa6821df4e44ce2723319eb2be768
+# Repo github.com/golang/protobuf at bbd03ef (2018-02-02)
+ENV REV=bbd03ef6da3a115852eaf24c8a1c46aeb39aa175
 RUN go get -d github.com/golang/protobuf/proto `#and 9 other pkgs` &&\
     (cd /go/src/github.com/golang/protobuf && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -37,23 +37,23 @@ ENV REV=95d05c1eef33a45bd58676b6ce28d105839b8d0b
 RUN go get -d github.com/kr/pty &&\
     (cd /go/src/github.com/kr/pty && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo go4.org at 034d17a (2017-05-25)
-ENV REV=034d17a462f7b2dcd1a4a73553ec5357ff6e6c6e
+# Repo go4.org at fba789b (2018-01-03)
+ENV REV=fba789b7e39ba524b9e60c45c37a50fae63a2a09
 RUN go get -d go4.org/syncutil &&\
     (cd /go/src/go4.org && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/crypto at 1875d0a (2018-01-27)
-ENV REV=1875d0a70c90e57f11972aefd42276df65e895b9
+# Repo golang.org/x/crypto at 613d6ea (2018-05-01)
+ENV REV=613d6eafa307c6881a737a3c35c0e312e8d3a8c5
 RUN go get -d golang.org/x/crypto/acme `#and 8 other pkgs` &&\
     (cd /go/src/golang.org/x/crypto && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/net at 0ed95ab (2018-01-24)
-ENV REV=0ed95abb35c445290478a5348a7b38bb154135fd
-RUN go get -d golang.org/x/net/context `#and 8 other pkgs` &&\
+# Repo golang.org/x/net at a35a21d (2018-04-16)
+ENV REV=a35a21de978d84ffc92f010a153705b170b2f9d1
+RUN go get -d golang.org/x/net/context `#and 9 other pkgs` &&\
     (cd /go/src/golang.org/x/net && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/oauth2 at 30785a2 (2018-01-04)
-ENV REV=30785a2c434e431ef7c507b54617d6a951d5f2b4
+# Repo golang.org/x/oauth2 at cdc340f (2018-05-03)
+ENV REV=cdc340f7c179dbbfa4afd43b7614e8fcadde4269
 RUN go get -d golang.org/x/oauth2 `#and 5 other pkgs` &&\
     (cd /go/src/golang.org/x/oauth2 && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -67,8 +67,8 @@ ENV REV=fd80eb99c8f653c847d294a001bdf2a3a6f768f5
 RUN go get -d golang.org/x/sync/semaphore &&\
     (cd /go/src/golang.org/x/sync && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/text at e19ae14 (2017-12-27)
-ENV REV=e19ae1496984b1c655b8044a65c0300a3c878dd3
+# Repo golang.org/x/text at b7ef84a (2018-03-02)
+ENV REV=b7ef84aaf62aa3e70962625c80a571ae7c17cb40
 RUN go get -d golang.org/x/text/secure/bidirule `#and 4 other pkgs` &&\
     (cd /go/src/golang.org/x/text && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -141,6 +141,7 @@ RUN go install cloud.google.com/go/bigquery \
 	golang.org/x/crypto/ssh \
 	golang.org/x/net/context \
 	golang.org/x/net/context/ctxhttp \
+	golang.org/x/net/http/httpguts \
 	golang.org/x/net/http2 \
 	golang.org/x/net/http2/hpack \
 	golang.org/x/net/idna \
