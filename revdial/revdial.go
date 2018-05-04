@@ -118,9 +118,6 @@ func (d *Dialer) closeWithError(err error) error {
 	closeErr := d.closer.Close()
 	close(d.donec)
 
-	if err == errDialerClosed || err == nil {
-		return closeErr
-	}
 	return closeErr
 }
 
