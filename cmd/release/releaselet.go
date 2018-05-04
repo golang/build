@@ -57,6 +57,13 @@ func main() {
 	var err error
 	switch runtime.GOOS {
 	case "windows":
+		// Clean up .exe~ files; golang.org/issue/23894
+		filepath.Walk("go", func(path string, fi os.FileInfo, err error) error {
+			if strings.HasSuffix(path, ".exe~") {
+				os.Remove(path)
+			}
+			return nil
+		})
 		err = windowsMSI()
 	case "darwin":
 		err = darwinPKG()
