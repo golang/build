@@ -50,9 +50,10 @@ The main components of the Go build system are:
   configured to fetch & run the buildlet on boot, listening on port 80 in a
   private network.
   
-  2. by creating Linux Kubernetes containers on Google Container Engine
-  (GKE), with Kubernetes PODs configured to fetch & run the buildlet on
-  start, also in a private network.
+  2. by running Linux containers (on either Google Kubernetes Engine
+  or GCE with the Container-Optimized OS image), with the container
+  images configured to fetch & run the buildlet on start, also
+  listening on port 80 in a private network.
 
   3. by taking buildlets out of a pool of connected, dedicated machines. The
   buildlet can run in either *listen mode* (as on GCE and GKE) or in

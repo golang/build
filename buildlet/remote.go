@@ -114,7 +114,7 @@ func (cc *CoordinatorClient) CreateBuildlet(builderType string) (*Client, error)
 }
 
 type RemoteBuildlet struct {
-	HostType    string // "host-linux-kubestd"
+	HostType    string // "host-linux-jessie"
 	BuilderType string // "linux-386-387"
 	Name        string // "buildlet-adg-openbsd-386-2"
 	Created     time.Time

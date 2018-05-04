@@ -399,11 +399,10 @@ func handleDebugWatcher(w http.ResponseWriter, r *http.Request) {
 func stagingClusterBuilders() map[string]dashboard.BuildConfig {
 	m := map[string]dashboard.BuildConfig{}
 	for _, name := range []string{
-		"linux-arm",
-		"linux-arm-arm5spacemonkey",
 		"linux-amd64",
-		"linux-386-387",
-		"windows-386-gce",
+		"linux-amd64-sid",
+		"linux-amd64-clang",
+		"nacl-amd64p32",
 	} {
 		if c, ok := dashboard.Builders[name]; ok {
 			m[name] = c
@@ -471,9 +470,6 @@ func mayBuildRev(rev buildgo.BuilderRev) bool {
 		return false
 	}
 	if buildConf.IsReverse() && !reversePool.CanBuild(buildConf.HostType) {
-		return false
-	}
-	if buildConf.IsContainer() && kubeErr != nil {
 		return false
 	}
 	return true
@@ -800,7 +796,15 @@ func workaroundFlush(w http.ResponseWriter) {
 func findWorkLoop(work chan<- buildgo.BuilderRev) {
 	// Useful for debugging a single run:
 	if inStaging && false {
-		//work <- buildgo.BuilderRev{name: "linux-arm", rev: "c9778ec302b2e0e0d6027e1e0fca892e428d9657", subName: "tools", subRev: "ac303766f5f240c1796eeea3dc9bf34f1261aa35"}
+		const debugSubrepo = false
+		if debugSubrepo {
+			work <- buildgo.BuilderRev{
+				Name:    "linux-arm",
+				Rev:     "c9778ec302b2e0e0d6027e1e0fca892e428d9657",
+				SubName: "tools",
+				SubRev:  "ac303766f5f240c1796eeea3dc9bf34f1261aa35",
+			}
+		}
 		const debugArm = false
 		if debugArm {
 			for !reversePool.CanBuild("host-linux-arm") {
@@ -810,8 +814,9 @@ func findWorkLoop(work chan<- buildgo.BuilderRev) {
 			log.Printf("ARM machine(s) registered.")
 			work <- buildgo.BuilderRev{Name: "linux-arm", Rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
 		} else {
-			work <- buildgo.BuilderRev{Name: "windows-amd64-2008", Rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
-			work <- buildgo.BuilderRev{Name: "windows-386-gce", Rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
+			work <- buildgo.BuilderRev{Name: "linux-amd64", Rev: "9b16b9c7f95562bb290f5015324a345be855894d"}
+			work <- buildgo.BuilderRev{Name: "linux-amd64-sid", Rev: "9b16b9c7f95562bb290f5015324a345be855894d"}
+			work <- buildgo.BuilderRev{Name: "linux-amd64-clang", Rev: "9b16b9c7f95562bb290f5015324a345be855894d"}
 		}
 
 		// Still run findWork but ignore what it does.
@@ -1383,7 +1388,7 @@ type BuildletPool interface {
 	// GetBuildlet returns a new buildlet client.
 	//
 	// The hostType is the key into the dashboard.Hosts
-	// map (such as "host-linux-kubestd"), NOT the buidler type
+	// map (such as "host-linux-jessie"), NOT the buidler type
 	// ("linux-386").
 	//
 	// Users of GetBuildlet must both call Client.Close when done
@@ -1441,7 +1446,11 @@ func poolForConf(conf dashboard.BuildConfig) BuildletPool {
 	case conf.IsVM():
 		return gcePool
 	case conf.IsContainer():
-		return kubePool // Kubernetes
+		if buildEnv.PreferContainersOnCOS || kubeErr != nil {
+			return gcePool // it also knows how to do containers.
+		} else {
+			return kubePool
+		}
 	case conf.IsReverse():
 		return reversePool
 	default:
@@ -1792,6 +1801,12 @@ func (st *buildStatus) buildRecord() *types.BuildRecord {
 		Builder:   st.Name,
 		OS:        st.conf.GOOS(),
 		Arch:      st.conf.GOARCH(),
+	}
+
+	// Log whether we used COS, so we can do queries to analyze
+	// Kubernetes vs COS performance for containers.
+	if st.conf.IsContainer() && poolForConf(st.conf) == gcePool {
+		rec.ContainerHost = "cos"
 	}
 
 	st.mu.Lock()

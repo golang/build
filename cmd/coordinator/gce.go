@@ -310,11 +310,8 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 	)
 
 	log.Printf("Creating GCE VM %q for %s", instName, hostType)
-	bc, err = buildlet.StartNewVM(gcpCreds, instName, hostType, buildlet.VMOpts{
-		ProjectID:   buildEnv.ProjectName,
-		Zone:        buildEnv.Zone,
-		Description: fmt.Sprintf("Go Builder for %s", hostType),
-		DeleteIn:    deleteIn,
+	bc, err = buildlet.StartNewVM(gcpCreds, buildEnv, instName, hostType, buildlet.VMOpts{
+		DeleteIn: deleteIn,
 		OnInstanceRequested: func() {
 			log.Printf("GCE VM %q now booting", instName)
 		},
@@ -549,7 +546,7 @@ func (p *gceBuildletPool) cleanZoneVMs(zone string) error {
 				}
 				unixDeadline, err := strconv.ParseInt(*it.Value, 10, 64)
 				if err != nil {
-					log.Printf("invalid delete-at value %q seen; ignoring", it.Value)
+					log.Printf("invalid delete-at value %q seen; ignoring", *it.Value)
 					continue
 				}
 				sawDeleteAt = true

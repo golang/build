@@ -104,3 +104,8 @@ func TestTryStatusJSON(t *testing.T) {
 		})
 	}
 }
+
+func TestStagingClusterBuilders(t *testing.T) {
+	// Just test that it doesn't panic:
+	stagingClusterBuilders()
+}

@@ -87,16 +87,17 @@ type SpanRecord struct {
 // BuildRecord is the datastore entity we write both at the beginning
 // and end of a build. Some fields are not updated until the end.
 type BuildRecord struct {
-	ID        string
-	ProcessID string
-	StartTime time.Time
-	IsTry     bool // is trybot run
-	GoRev     string
-	Rev       string // same as GoRev for repo "go"
-	Repo      string // "go", "net", etc.
-	Builder   string // "linux-amd64-foo"
-	OS        string // "linux"
-	Arch      string // "amd64"
+	ID            string
+	ProcessID     string
+	StartTime     time.Time
+	IsTry         bool // is trybot run
+	GoRev         string
+	Rev           string // same as GoRev for repo "go"
+	Repo          string // "go", "net", etc.
+	Builder       string // "linux-amd64-foo"
+	ContainerHost string // "" means GKE; "cos" means Container-Optimized OS
+	OS            string // "linux"
+	Arch          string // "amd64"
 
 	EndTime    time.Time
 	Seconds    float64

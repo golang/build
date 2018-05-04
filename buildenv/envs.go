@@ -86,6 +86,14 @@ type Environment struct {
 	// KubeTools is the Kubernetes config for the tools cluster.
 	KubeTools KubeConfig
 
+	// PreferContainersOnCOS controls whether we do most builds on
+	// Google's Container-Optimized OS Linux image running on a VM
+	// rather than using Kubernetes for builds. This does not
+	// affect cross-compiled builds just running make.bash. Those
+	// still use Kubernetes for now.
+	// See https://golang.org/issue/25108.
+	PreferContainersOnCOS bool
+
 	// DashURL is the base URL of the build dashboard, ending in a slash.
 	DashURL string
 
@@ -259,18 +267,19 @@ func ByProjectID(projectID string) *Environment {
 // For local dev, override the project with the program's flag to set
 // a custom project.
 var Staging = &Environment{
-	ProjectName:   "go-dashboard-dev",
-	ProjectNumber: 302018677728,
-	IsProd:        true,
-	Zone:          "us-central1-f",
-	ZonesToClean:  []string{"us-central1-a", "us-central1-b", "us-central1-f"},
-	StaticIP:      "104.154.113.235",
-	MachineType:   "n1-standard-1",
+	ProjectName:           "go-dashboard-dev",
+	ProjectNumber:         302018677728,
+	IsProd:                true,
+	Zone:                  "us-central1-f",
+	ZonesToClean:          []string{"us-central1-a", "us-central1-b", "us-central1-f"},
+	StaticIP:              "104.154.113.235",
+	MachineType:           "n1-standard-1",
+	PreferContainersOnCOS: true,
 	KubeBuild: KubeConfig{
 		MinNodes:    1,
-		MaxNodes:    2,
+		MaxNodes:    1, // auto-scaling disabled
 		Name:        "buildlets",
-		MachineType: "n1-standard-8",
+		MachineType: "n1-standard-4", // only used for make.bash due to PreferContainersOnCOS
 	},
 	KubeTools: KubeConfig{
 		MinNodes:    3,
@@ -290,22 +299,23 @@ var Staging = &Environment{
 // Production defines the environment that the coordinator and build
 // infrastructure is deployed to for production usage at build.golang.org.
 var Production = &Environment{
-	ProjectName:   "symbolic-datum-552",
-	ProjectNumber: 872405196845,
-	IsProd:        true,
-	Zone:          "us-central1-f",
-	ZonesToClean:  []string{"us-central1-f"},
-	StaticIP:      "107.178.219.46",
-	MachineType:   "n1-standard-4",
+	ProjectName:           "symbolic-datum-552",
+	ProjectNumber:         872405196845,
+	IsProd:                true,
+	Zone:                  "us-central1-f",
+	ZonesToClean:          []string{"us-central1-f"},
+	StaticIP:              "107.178.219.46",
+	MachineType:           "n1-standard-4",
+	PreferContainersOnCOS: true,
 	KubeBuild: KubeConfig{
-		MinNodes:    5,
-		MaxNodes:    5, // auto-scaling disabled
+		MinNodes:    2,
+		MaxNodes:    2, // auto-scaling disabled
 		Name:        "buildlets",
-		MachineType: "n1-standard-32",
+		MachineType: "n1-standard-4", // only used for make.bash due to PreferContainersOnCOS
 	},
 	KubeTools: KubeConfig{
-		MinNodes:    3,
-		MaxNodes:    3,
+		MinNodes:    4,
+		MaxNodes:    4,
 		Name:        "go",
 		MachineType: "n1-standard-4",
 	},

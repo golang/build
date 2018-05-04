@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/build/buildenv"
@@ -33,10 +35,13 @@ func apiGate() {
 
 // VMOpts control how new VMs are started.
 type VMOpts struct {
-	// Zone is the GCE zone to create the VM in. Required.
+	// Zone is the GCE zone to create the VM in.
+	// Optional; defaults to provided build environment's zone.
 	Zone string
 
-	// ProjectID is the GCE project ID. Required.
+	// ProjectID is the GCE project ID (e.g. "foo-bar-123", not
+	// the numeric ID).
+	// Optional; defaults to provided build environment's project ID ("name").
 	ProjectID string
 
 	// TLS optionally specifies the TLS keypair to use.
@@ -51,6 +56,8 @@ type VMOpts struct {
 
 	// DeleteIn optionally specifies a duration at which
 	// to delete the VM.
+	// If zero, a reasonable default is used.
+	// Negative means no deletion timeout.
 	DeleteIn time.Duration
 
 	// OnInstanceRequested optionally specifies a hook to run synchronously
@@ -78,15 +85,29 @@ type VMOpts struct {
 
 // StartNewVM boots a new VM on GCE and returns a buildlet client
 // configured to speak to it.
-func StartNewVM(creds *google.Credentials, instName, hostType string, opts VMOpts) (*Client, error) {
-	computeService, _ := compute.New(oauth2.NewClient(context.TODO(), creds.TokenSource))
+func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instName, hostType string, opts VMOpts) (*Client, error) {
+	ctx := context.TODO()
+	computeService, _ := compute.New(oauth2.NewClient(ctx, creds.TokenSource))
+
+	if opts.Description == "" {
+		opts.Description = fmt.Sprintf("Go Builder for %s", hostType)
+	}
+	if opts.ProjectID == "" {
+		opts.ProjectID = buildEnv.ProjectName
+	}
+	if opts.Zone == "" {
+		opts.Zone = buildEnv.Zone
+	}
+	if opts.DeleteIn == 0 {
+		opts.DeleteIn = 30 * time.Minute
+	}
 
 	hconf, ok := dashboard.Hosts[hostType]
 	if !ok {
 		return nil, fmt.Errorf("invalid host type %q", hostType)
 	}
-	if !hconf.IsVM() {
-		return nil, fmt.Errorf("host type %q is not a GCE host type", hostType)
+	if !hconf.IsVM() && !hconf.IsContainer() {
+		return nil, fmt.Errorf("host %q is type %q; want either a VM or container type", hostType, hconf.PoolName())
 	}
 
 	zone := opts.Zone
@@ -120,6 +141,15 @@ func StartNewVM(creds *google.Credentials, instName, hostType string, opts VMOpt
 		}
 	}
 
+	srcImage := "https://www.googleapis.com/compute/v1/projects/" + projectID + "/global/images/" + hconf.VMImage
+	if hconf.IsContainer() {
+		var err error
+		srcImage, err = cosImage(ctx, computeService)
+		if err != nil {
+			return nil, fmt.Errorf("error find Container-Optimized OS image: %v", err)
+		}
+	}
+
 	instance := &compute.Instance{
 		Name:        instName,
 		Description: opts.Description,
@@ -131,7 +161,7 @@ func StartNewVM(creds *google.Credentials, instName, hostType string, opts VMOpt
 				Type:       "PERSISTENT",
 				InitializeParams: &compute.AttachedDiskInitializeParams{
 					DiskName:    instName,
-					SourceImage: "https://www.googleapis.com/compute/v1/projects/" + projectID + "/global/images/" + hconf.VMImage,
+					SourceImage: srcImage,
 					DiskType:    diskType,
 				},
 			},
@@ -160,6 +190,22 @@ func StartNewVM(creds *google.Credentials, instName, hostType string, opts VMOpt
 		// code that might be useful to partially resurrect.
 		Scheduling: &compute.Scheduling{Preemptible: false},
 	}
+
+	// Container builders use the COS image, which defaults to
+	// logging to Cloud Logging, which requires the default
+	// service account. So enable it when needed.
+	// TODO: reduce this scope in the future, when we go wild with IAM.
+	if hconf.IsContainer() {
+		instance.ServiceAccounts = []*compute.ServiceAccount{
+			{
+				// This funky email address is the
+				// "default service account" for GCE VMs:
+				Email:  fmt.Sprintf("%v-compute@developer.gserviceaccount.com", buildEnv.ProjectNumber),
+				Scopes: []string{compute.CloudPlatformScope},
+			},
+		}
+	}
+
 	addMeta := func(key, value string) {
 		instance.Metadata.Items = append(instance.Metadata.Items, &compute.MetadataItems{
 			Key:   key,
@@ -177,8 +223,27 @@ func StartNewVM(creds *google.Credentials, instName, hostType string, opts VMOpt
 		addMeta("tls-key", opts.TLS.KeyPEM)
 		addMeta("password", opts.TLS.Password())
 	}
+	if hconf.IsContainer() {
+		addMeta("gce-container-declaration", fmt.Sprintf(`spec:
+  containers:
+    - name: buildlet
+      image: 'gcr.io/%s/%s'
+      volumeMounts:
+        - name: tmpfs-0
+          mountPath: /workdir
+      securityContext:
+        privileged: true
+      stdin: false
+      tty: false
+  restartPolicy: Always
+  volumes:
+    - name: tmpfs-0
+      emptyDir:
+        medium: Memory
+`, opts.ProjectID, hconf.ContainerImage))
+	}
 
-	if opts.DeleteIn != 0 {
+	if opts.DeleteIn > 0 {
 		// In case the VM gets away from us (generally: if the
 		// coordinator dies while a build is running), then we
 		// set this attribute of when it should be killed so
@@ -373,4 +438,44 @@ func instanceIPs(inst *compute.Instance) (intIP, extIP string) {
 		}
 	}
 	return
+}
+
+var (
+	cosListMu      sync.Mutex
+	cosCachedTime  time.Time
+	cosCachedImage string
+)
+
+// cosImage returns the GCP VM image name of the latest stable
+// Container-Optimized OS image. It caches results for 15 minutes.
+func cosImage(ctx context.Context, svc *compute.Service) (string, error) {
+	const cacheDuration = 15 * time.Minute
+	cosListMu.Lock()
+	defer cosListMu.Unlock()
+	if cosCachedImage != "" && cosCachedTime.After(time.Now().Add(-cacheDuration)) {
+		return cosCachedImage, nil
+	}
+
+	imList, err := svc.Images.List("cos-cloud").Filter(`(family eq "cos-stable")`).Context(ctx).Do()
+	if err != nil {
+		return "", err
+	}
+	if imList.NextPageToken != "" {
+		return "", fmt.Errorf("too many images; pagination not supported")
+	}
+	ims := imList.Items
+	if len(ims) == 0 {
+		return "", errors.New("no image found")
+	}
+	sort.Slice(ims, func(i, j int) bool {
+		if ims[i].Deprecated == nil && ims[j].Deprecated != nil {
+			return true
+		}
+		return ims[i].CreationTimestamp > ims[j].CreationTimestamp
+	})
+
+	im := ims[0].SelfLink
+	cosCachedImage = im
+	cosCachedTime = time.Now()
+	return im, nil
 }

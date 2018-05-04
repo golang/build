@@ -26,10 +26,10 @@ import (
 )
 
 var (
-	hostType     = flag.String("host", "", "host type to create")
-	vmImage      = flag.String("override-image", "", "if non-empty, an alternate GCE VM image to use, overriding the one defined for the given host")
-	serial       = flag.Bool("serial", true, "watch serial")
-	pauseAfterUp = flag.Bool("pause-after-up", false, "pause for a few seconds (enough to SIGSTOP) after WorkDir returns")
+	hostType      = flag.String("host", "", "host type to create")
+	overrideImage = flag.String("override-image", "", "if non-empty, an alternate GCE VM image or container image to use, depending on the host type")
+	serial        = flag.Bool("serial", true, "watch serial")
+	pauseAfterUp  = flag.Duration("pause-after-up", 0, "pause for this duration before buildlet is destroyed")
 
 	runBuild = flag.String("run-build", "", "optional builder name to run all.bash for")
 	buildRev = flag.String("rev", "master", "if --run-build is specified, the git hash or branch name to build")
@@ -64,11 +64,19 @@ func main() {
 	if !ok {
 		log.Fatalf("unknown host type %q", *hostType)
 	}
-	if !hconf.IsVM() {
-		log.Fatalf("host type %q is not a GCE host type", *hostType)
+	if !hconf.IsVM() && !hconf.IsContainer() {
+		log.Fatalf("host type %q is type %q; want a VM or container host type", *hostType, hconf.PoolName())
 	}
-	if *vmImage != "" {
-		hconf.VMImage = *vmImage
+	if img := *overrideImage; img != "" {
+		if hconf.IsContainer() {
+			hconf.ContainerImage = img
+		} else {
+			hconf.VMImage = img
+		}
+	}
+	vmImageSummary := hconf.VMImage
+	if hconf.IsContainer() {
+		vmImageSummary = fmt.Sprintf("cos-stable, running %v", hconf.ContainerImage)
 	}
 
 	env = buildenv.FromFlags()
@@ -81,11 +89,9 @@ func main() {
 	computeSvc, _ = compute.New(oauth2.NewClient(ctx, creds.TokenSource))
 
 	name := fmt.Sprintf("debug-temp-%d", time.Now().Unix())
-	log.Printf("Creating %s (with VM image %q)", name, hconf.VMImage)
-	bc, err := buildlet.StartNewVM(creds, name, *hostType, buildlet.VMOpts{
-		Zone:                env.Zone,
-		ProjectID:           env.ProjectName,
-		DeleteIn:            15 * time.Minute,
+
+	log.Printf("Creating %s (with VM image %q)", name, vmImageSummary)
+	bc, err := buildlet.StartNewVM(creds, env, name, *hostType, buildlet.VMOpts{
 		OnInstanceRequested: func() { log.Printf("instance requested") },
 		OnInstanceCreated: func() {
 			log.Printf("instance created")
@@ -154,9 +160,9 @@ func main() {
 		}
 	}
 
-	if *pauseAfterUp {
-		log.Printf("Shutting down in 5 seconds...")
-		time.Sleep(5 * time.Second)
+	if *pauseAfterUp != 0 {
+		log.Printf("Sleeping for %v before shutting down...", *pauseAfterUp)
+		time.Sleep(*pauseAfterUp)
 	}
 	if err := bc.Close(); err != nil {
 		log.Fatalf("Close: %v", err)
