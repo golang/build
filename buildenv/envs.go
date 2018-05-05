@@ -51,6 +51,11 @@ type Environment struct {
 	// This field may be overridden as necessary without impacting other fields.
 	ProjectName string
 
+	// ProjectNumber is the GCP project's number, as visible in the admin console.
+	// This is used for things such as constructing the "email" of the default
+	// service account.
+	ProjectNumber int64
+
 	// The IsProd flag indicates whether production functionality should be
 	// enabled. When true, GCE and Kubernetes builders are enabled and the
 	// coordinator serves on 443. Otherwise, GCE and Kubernetes builders are
@@ -210,12 +215,13 @@ func ByProjectID(projectID string) *Environment {
 // For local dev, override the project with the program's flag to set
 // a custom project.
 var Staging = &Environment{
-	ProjectName:  "go-dashboard-dev",
-	IsProd:       true,
-	Zone:         "us-central1-f",
-	ZonesToClean: []string{"us-central1-a", "us-central1-b", "us-central1-f"},
-	StaticIP:     "104.154.113.235",
-	MachineType:  "n1-standard-1",
+	ProjectName:   "go-dashboard-dev",
+	ProjectNumber: 302018677728,
+	IsProd:        true,
+	Zone:          "us-central1-f",
+	ZonesToClean:  []string{"us-central1-a", "us-central1-b", "us-central1-f"},
+	StaticIP:      "104.154.113.235",
+	MachineType:   "n1-standard-1",
 	KubeBuild: KubeConfig{
 		MinNodes:    1,
 		MaxNodes:    2,
@@ -240,12 +246,13 @@ var Staging = &Environment{
 // Production defines the environment that the coordinator and build
 // infrastructure is deployed to for production usage at build.golang.org.
 var Production = &Environment{
-	ProjectName:  "symbolic-datum-552",
-	IsProd:       true,
-	Zone:         "us-central1-f",
-	ZonesToClean: []string{"us-central1-f"},
-	StaticIP:     "107.178.219.46",
-	MachineType:  "n1-standard-4",
+	ProjectName:   "symbolic-datum-552",
+	ProjectNumber: 872405196845,
+	IsProd:        true,
+	Zone:          "us-central1-f",
+	ZonesToClean:  []string{"us-central1-f"},
+	StaticIP:      "107.178.219.46",
+	MachineType:   "n1-standard-4",
 	KubeBuild: KubeConfig{
 		MinNodes:    5,
 		MaxNodes:    5, // auto-scaling disabled
