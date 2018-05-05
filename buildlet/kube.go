@@ -70,7 +70,7 @@ type PodOpts struct {
 // configured to speak to it.
 func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, hostType string, opts PodOpts) (*Client, error) {
 	conf, ok := dashboard.Hosts[hostType]
-	if !ok || conf.KubeImage == "" {
+	if !ok || conf.ContainerImage == "" {
 		return nil, fmt.Errorf("invalid builder type %q", hostType)
 	}
 	pod := &api.Pod{
@@ -92,7 +92,7 @@ func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, hostT
 			Containers: []api.Container{
 				{
 					Name:            "buildlet",
-					Image:           imageID(opts.ImageRegistry, conf.KubeImage),
+					Image:           imageID(opts.ImageRegistry, conf.ContainerImage),
 					ImagePullPolicy: api.PullAlways,
 					Resources: api.ResourceRequirements{
 						Requests: api.ResourceList{

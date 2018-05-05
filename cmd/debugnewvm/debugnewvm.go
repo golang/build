@@ -64,7 +64,7 @@ func main() {
 	if !ok {
 		log.Fatalf("unknown host type %q", *hostType)
 	}
-	if !hconf.IsGCE() {
+	if !hconf.IsVM() {
 		log.Fatalf("host type %q is not a GCE host type", *hostType)
 	}
 	if *vmImage != "" {

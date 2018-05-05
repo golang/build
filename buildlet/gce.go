@@ -91,7 +91,7 @@ func StartNewVM(creds *google.Credentials, instName, hostType string, opts VMOpt
 	if !ok {
 		return nil, fmt.Errorf("invalid host type %q", hostType)
 	}
-	if !hconf.IsGCE() {
+	if !hconf.IsVM() {
 		return nil, fmt.Errorf("host type %q is not a GCE host type", hostType)
 	}
 

@@ -207,7 +207,7 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 
 func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg logger) (*buildlet.Client, error) {
 	hconf, ok := dashboard.Hosts[hostType]
-	if !ok || !hconf.IsKube() {
+	if !ok || !hconf.IsContainer() {
 		return nil, fmt.Errorf("kubepool: invalid host type %q", hostType)
 	}
 	if kubeErr != nil {

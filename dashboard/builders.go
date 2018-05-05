@@ -27,20 +27,20 @@ var Builders = map[string]BuildConfig{}
 var Hosts = map[string]*HostConfig{
 	"host-linux-kubestd": &HostConfig{
 		Notes:           "Kubernetes container on GKE.",
-		KubeImage:       "linux-x86-std-kube:latest",
+		ContainerImage:  "linux-x86-std-kube:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
 	"host-linux-armhf-cross": &HostConfig{
 		Notes:           "Kubernetes container on GKE built from env/crosscompile/linux-armhf-jessie",
-		KubeImage:       "linux-armhf-jessie:latest",
+		ContainerImage:  "linux-armhf-jessie:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
 	"host-linux-armel-cross": &HostConfig{
 		Notes:           "Kubernetes container on GKE built from env/crosscompile/linux-armel-stretch",
-		KubeImage:       "linux-armel-stretch:latest",
+		ContainerImage:  "linux-armel-stretch:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
@@ -58,31 +58,31 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-nacl-kube": &HostConfig{
 		Notes:           "Kubernetes container on GKE.",
-		KubeImage:       "linux-x86-nacl:latest",
+		ContainerImage:  "linux-x86-nacl:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
 	"host-s390x-cross-kube": &HostConfig{
 		Notes:           "Kubernetes container on GKE.",
-		KubeImage:       "linux-s390x-stretch:latest",
+		ContainerImage:  "linux-s390x-stretch:latest",
 		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
 	"host-linux-x86-alpine": &HostConfig{
 		Notes:           "Kubernetes alpine container on GKE.",
-		KubeImage:       "linux-x86-alpine:latest",
+		ContainerImage:  "linux-x86-alpine:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64-static",
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/lib/go"},
 	},
 	"host-linux-clang": &HostConfig{
 		Notes:           "Kubernetes container on GKE with clang.",
-		KubeImage:       "linux-x86-clang:latest",
+		ContainerImage:  "linux-x86-clang:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
 	"host-linux-sid": &HostConfig{
 		Notes:           "Debian sid, updated occasionally.",
-		KubeImage:       "linux-x86-sid:latest",
+		ContainerImage:  "linux-x86-sid:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
@@ -451,16 +451,16 @@ func init() {
 		if c.VMImage != "" {
 			nSet++
 		}
-		if c.KubeImage != "" {
+		if c.ContainerImage != "" {
 			nSet++
 		}
 		if c.IsReverse {
 			nSet++
 		}
 		if nSet != 1 {
-			panic(fmt.Sprintf("exactly one of VMImage, KubeImage, IsReverse must be set for host %q; got %v", key, nSet))
+			panic(fmt.Sprintf("exactly one of VMImage, ContainerImage, IsReverse must be set for host %q; got %v", key, nSet))
 		}
-		if c.buildletURLTmpl == "" && (c.VMImage != "" || c.KubeImage != "") {
+		if c.buildletURLTmpl == "" && (c.VMImage != "" || c.ContainerImage != "") {
 			panic(fmt.Sprintf("missing buildletURLTmpl for host type %q", key))
 		}
 	}
@@ -484,9 +484,9 @@ type HostConfig struct {
 	buildletURLTmpl string
 
 	// Exactly 1 of these must be set:
-	VMImage   string // e.g. "openbsd-amd64-60"
-	KubeImage string // e.g. "linux-buildlet-std:latest" (suffix after "gcr.io/<PROJ>/")
-	IsReverse bool   // if true, only use the reverse buildlet pool
+	VMImage        string // e.g. "openbsd-amd64-60"
+	ContainerImage string // e.g. "linux-buildlet-std:latest" (suffix after "gcr.io/<PROJ>/")
+	IsReverse      bool   // if true, only use the reverse buildlet pool
 
 	// GCE options, if VMImage != ""
 	machineType string // optional GCE instance type
@@ -606,11 +606,11 @@ func (c *BuildConfig) Env() []string {
 
 func (c *BuildConfig) IsReverse() bool { return c.hostConf().IsReverse }
 
-func (c *BuildConfig) IsKube() bool { return c.hostConf().IsKube() }
-func (c *HostConfig) IsKube() bool  { return c.KubeImage != "" }
+func (c *BuildConfig) IsContainer() bool { return c.hostConf().IsContainer() }
+func (c *HostConfig) IsContainer() bool  { return c.ContainerImage != "" }
 
-func (c *BuildConfig) IsGCE() bool { return c.hostConf().IsGCE() }
-func (c *HostConfig) IsGCE() bool  { return c.VMImage != "" }
+func (c *BuildConfig) IsVM() bool { return c.hostConf().IsVM() }
+func (c *HostConfig) IsVM() bool  { return c.VMImage != "" }
 
 func (c *BuildConfig) GOOS() string { return c.Name[:strings.Index(c.Name, "-")] }
 
@@ -833,9 +833,9 @@ func (c *HostConfig) PoolName() string {
 	switch {
 	case c.IsReverse:
 		return "Reverse (dedicated machine/VM)"
-	case c.IsGCE():
+	case c.IsVM():
 		return "GCE VM"
-	case c.IsKube():
+	case c.IsContainer():
 		return "Kubernetes container"
 	}
 	panic("unknown builder type")
@@ -849,9 +849,9 @@ func (c *HostConfig) IsHermetic() bool {
 	switch {
 	case c.IsReverse:
 		return c.HermeticReverse
-	case c.IsGCE():
+	case c.IsVM():
 		return true
-	case c.IsKube():
+	case c.IsContainer():
 		return true
 	}
 	panic("unknown builder type")
@@ -1459,7 +1459,7 @@ func addBuilder(c BuildConfig) {
 	}
 
 	types := 0
-	for _, fn := range []func() bool{c.IsReverse, c.IsKube, c.IsGCE} {
+	for _, fn := range []func() bool{c.IsReverse, c.IsContainer, c.IsVM} {
 		if fn() {
 			types++
 		}

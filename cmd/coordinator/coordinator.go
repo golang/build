@@ -473,7 +473,7 @@ func mayBuildRev(rev buildgo.BuilderRev) bool {
 	if buildConf.IsReverse() && !reversePool.CanBuild(buildConf.HostType) {
 		return false
 	}
-	if buildConf.IsKube() && kubeErr != nil {
+	if buildConf.IsContainer() && kubeErr != nil {
 		return false
 	}
 	return true
@@ -1438,9 +1438,9 @@ func poolForConf(conf dashboard.BuildConfig) BuildletPool {
 		return testPoolHook(conf)
 	}
 	switch {
-	case conf.IsGCE():
+	case conf.IsVM():
 		return gcePool
-	case conf.IsKube():
+	case conf.IsContainer():
 		return kubePool // Kubernetes
 	case conf.IsReverse():
 		return reversePool
