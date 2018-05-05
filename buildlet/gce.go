@@ -74,12 +74,6 @@ type VMOpts struct {
 	// after StartNewVM tries to hit the buildlet's URL to see if it's up.
 	// The hook parameters are the return values from http.Get.
 	OnEndBuildletProbe func(*http.Response, error)
-
-	// FallbackToFullPrice optionally specifies a hook to return a new
-	// GCE instance name if the first one failed to launch
-	// as preemptible. (If you use the same name, GCE complains about
-	// resources already existing, even if it failed to be created)
-	FallbackToFullPrice func() (newInstname string)
 }
 
 // StartNewVM boots a new VM on GCE and returns a buildlet client
@@ -106,8 +100,6 @@ func StartNewVM(creds *google.Credentials, instName, hostType string, opts VMOpt
 		return nil, errors.New("buildlet: missing required ProjectID option")
 	}
 
-	usePreempt := false
-Try:
 	prefix := "https://www.googleapis.com/compute/v1/projects/" + projectID
 	machType := prefix + "/zones/" + zone + "/machineTypes/" + hconf.MachineType()
 	diskType := "https://www.googleapis.com/compute/v1/projects/" + projectID + "/zones/" + zone + "/diskTypes/pd-ssd"
@@ -158,9 +150,15 @@ Try:
 				Network:       prefix + "/global/networks/default",
 			},
 		},
-		Scheduling: &compute.Scheduling{
-			Preemptible: usePreempt,
-		},
+
+		// Prior to git rev 1b1e086fd, we used preemptible
+		// instances, as we were helping test the feature. It was
+		// removed after git rev a23395d because we hadn't been
+		// using it for some time. Our VMs are so short-lived that
+		// the feature doesn't really help anyway. But if we ever
+		// find we want it again, this comment is here to point to
+		// code that might be useful to partially resurrect.
+		Scheduling: &compute.Scheduling{Preemptible: false},
 	}
 	addMeta := func(key, value string) {
 		instance.Metadata.Items = append(instance.Metadata.Items, &compute.MetadataItems{
@@ -218,13 +216,6 @@ OpLoop:
 			if op.Error != nil {
 				for _, operr := range op.Error.Errors {
 					log.Printf("failed to create instance %s in zone %s: %v", instName, zone, operr.Code)
-					if operr.Code == "ZONE_RESOURCE_POOL_EXHAUSTED" && usePreempt && opts.FallbackToFullPrice != nil {
-						oldName := instName
-						usePreempt = false
-						instName = opts.FallbackToFullPrice()
-						log.Printf("buildlet/gce: retrying without preempt with name %q (previously: %q)", instName, oldName)
-						goto Try
-					}
 					// TODO: catch Code=="QUOTA_EXCEEDED" and "Message" and return
 					// a known error value/type.
 					return nil, fmt.Errorf("Error creating instance: %+v", operr)

@@ -318,15 +318,6 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 		OnInstanceRequested: func() {
 			log.Printf("GCE VM %q now booting", instName)
 		},
-		FallbackToFullPrice: func() string {
-			lg.LogEventTime("gce_fallback_to_full_price", "for "+instName)
-			p.setInstanceUsed(instName, false)
-			newName := instName + "-f"
-			log.Printf("Gave up on preemptible %q; now booting %q", instName, newName)
-			instName = newName
-			p.setInstanceUsed(instName, true)
-			return newName
-		},
 		OnInstanceCreated: func() {
 			needDelete = true
 
