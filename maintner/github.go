@@ -1281,7 +1281,7 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 		}
 		if cmut.Updated != nil {
 			gc.Updated, _ = ptypes.Timestamp(cmut.Updated)
-			gc.Created = gc.Created.UTC()
+			gc.Updated = gc.Updated.UTC()
 		}
 		if cmut.Body != "" {
 			gc.Body = cmut.Body
