@@ -90,7 +90,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/compile/": {
 		Primary:   []Owner{khr, gri},
-		Secondary: []Owner{mdempsky},
+		Secondary: []Owner{josharian, mdempsky},
 	},
 	"go/src/cmd/compile/amd64": {
 		Primary:   []Owner{khr},
@@ -106,19 +106,19 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/compile/mips": {
 		Primary:   []Owner{khr},
-		Secondary: []Owner{josharian, rsc, drchase, cherryyz},
+		Secondary: []Owner{rsc, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/mips64": {
 		Primary:   []Owner{khr},
-		Secondary: []Owner{josharian, rsc, drchase, cherryyz},
+		Secondary: []Owner{rsc, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/ppc64": {
 		Primary:   []Owner{khr},
-		Secondary: []Owner{josharian, rsc, drchase, cherryyz},
+		Secondary: []Owner{rsc, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/s390x": {
 		Primary:   []Owner{khr},
-		Secondary: []Owner{josharian, rsc, drchase, cherryyz},
+		Secondary: []Owner{rsc, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/x86": {
 		Primary:   []Owner{khr},
@@ -133,7 +133,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{josharian, mdempsky, rsc},
 	},
 	"go/src/cmd/compile/internal/ssa": {
-		Primary: []Owner{khr},
+		Primary:   []Owner{khr},
+		Secondary: []Owner{josharian},
 	},
 	"go/src/cmd/doc": {
 		Primary: []Owner{r},
@@ -239,7 +240,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{martisch},
 	},
 	"go/src/go/ast": {
-		Primary: []Owner{gri},
+		Primary:   []Owner{gri},
+		Secondary: []Owner{josharian},
 	},
 	"go/src/go/build": {
 		Primary: []Owner{rsc},
@@ -286,7 +288,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{gri},
 	},
 	"go/src/internal/bytealg": {
-		Primary: []Owner{khr},
+		Primary:   []Owner{khr},
+		Secondary: []Owner{josharian},
 	},
 	"go/src/internal/cpu": {
 		Primary: []Owner{khr},
@@ -307,7 +310,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{bradfitz},
 	},
 	"go/src/internal/testenv": {
-		Primary: []Owner{bradfitz, iant, josharian},
+		Primary:   []Owner{bradfitz, iant},
+		Secondary: []Owner{josharian},
 	},
 	"go/src/log": {
 		Primary: []Owner{r},
@@ -320,7 +324,11 @@ var entries = map[string]*Entry{
 	},
 	"go/src/math/bits": {
 		Primary:   []Owner{gri},
-		Secondary: []Owner{khr},
+		Secondary: []Owner{khr, josharian},
+	},
+	"go/src/math/rand": {
+		Primary:   []Owner{gri, rsc},
+		Secondary: []Owner{josharian},
 	},
 	"go/src/mime": {
 		Primary: []Owner{bradfitz},
@@ -417,7 +425,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/runtime": {
 		Primary:   []Owner{austin, rsc, rlh, khr},
-		Secondary: []Owner{iant, dvyukov},
+		Secondary: []Owner{iant, dvyukov, josharian},
 	},
 	"go/src/runtime/cgo": {
 		Primary: []Owner{iant},
@@ -458,7 +466,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/testing": {
 		Primary:   []Owner{},
-		Secondary: []Owner{mpvl},
+		Secondary: []Owner{mpvl, josharian},
 	},
 	"go/src/testing/quick": {
 		Primary:   []Owner{},
@@ -529,6 +537,10 @@ var entries = map[string]*Entry{
 		Primary: []Owner{bradfitz},
 	},
 
+	"review/": {
+		Secondary: []Owner{josharian},
+	},
+
 	"sync/": {
 		Primary: []Owner{bcmills},
 	},
@@ -544,6 +556,9 @@ var entries = map[string]*Entry{
 		Primary: []Owner{mpvl},
 	},
 
+	"tools/cmd/compilebench": {
+		Secondary: []Owner{josharian},
+	},
 	"tools/cmd/bundle": {
 		Primary: []Owner{adonovan},
 	},
@@ -552,6 +567,10 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{bradfitz, gri},
 	},
 	"tools/cmd/goimports": {
-		Primary: []Owner{bradfitz, josharian},
+		Primary:   []Owner{bradfitz},
+		Secondary: []Owner{josharian},
+	},
+	"tools/cmd/toolstash": {
+		Secondary: []Owner{josharian},
 	},
 }
