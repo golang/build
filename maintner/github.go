@@ -67,7 +67,7 @@ func (g *GitHub) ForeachRepo(fn func(*GitHubRepo) error) error {
 		ids = append(ids, id)
 	}
 	sort.Slice(ids, func(i, j int) bool {
-		if ids[i].Owner < ids[i].Owner {
+		if ids[i].Owner < ids[j].Owner {
 			return true
 		}
 		return ids[i].Owner == ids[j].Owner && ids[i].Repo < ids[j].Repo
