@@ -8,12 +8,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
-	"sort"
 	"strings"
 	"text/template"
 	"time"
@@ -21,25 +18,16 @@ import (
 	monapi "cloud.google.com/go/monitoring/apiv3"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/cmd/coordinator/metrics"
-	"golang.org/x/oauth2"
-	compute "google.golang.org/api/compute/v1"
+	"golang.org/x/build/internal/buildgo"
 	dm "google.golang.org/api/deploymentmanager/v2"
+	"google.golang.org/api/option"
 	monpb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 var (
-	proj = flag.String("project", "", "Optional name of the Google Cloud Platform project to create the infrastructure in. If empty, the project defined in golang.org/x/build/buildenv is used, for either production or staging (if the -staging flag is used)")
-
-	staging      = flag.Bool("staging", false, "If true, buildenv.Staging will be used to provide default configuration values. Otherwise, buildenv.Production is used.")
 	makeClusters = flag.String("make-clusters", "go,buildlets", "comma-separated list of clusters to create. Empty means none.")
 	makeDisks    = flag.Bool("make-basepin", false, "Create the basepin disk images for all builders, then stop. Does not create the VM.")
 	makeMetrics  = flag.Bool("make-metrics", false, "Create the Stackdriver metrics for buildlet monitoring.")
-
-	computeService    *compute.Service
-	deploymentService *dm.Service
-	oauthClient       *http.Client
-	err               error
-	buildEnv          *buildenv.Environment
 )
 
 // Deployment Manager V2 manifest for creating a Google Container Engine
@@ -83,75 +71,34 @@ resources:
 */
 
 func main() {
-	buildEnv = buildenv.Production
-
+	buildenv.RegisterStagingFlag()
 	flag.Parse()
 
-	if *staging {
-		buildEnv = buildenv.Staging
-	}
-	if *proj != "" {
-		buildEnv.ProjectName = *proj
-	}
-
+	buildEnv := buildenv.FromFlags()
 	ctx := context.Background()
-	creds, err := buildEnv.Credentials(ctx)
-	if err != nil {
-		log.Fatalf("could not create oAuth client: %v", err)
-	}
 
-	computeService, err = compute.New(oauth2.NewClient(ctx, creds.TokenSource))
+	bgc, err := buildgo.NewClient(ctx, buildEnv)
 	if err != nil {
-		log.Fatalf("could not create client for Google Compute Engine: %v", err)
+		log.Fatalf("could not create client: %v", err)
 	}
 
 	if *makeDisks {
-		if err := makeBasepinDisks(computeService); err != nil {
+		if err := bgc.MakeBasepinDisks(ctx); err != nil {
 			log.Fatalf("could not create basepin disks: %v", err)
 		}
 		return
 	}
 
 	for _, c := range []*buildenv.KubeConfig{&buildEnv.KubeBuild, &buildEnv.KubeTools} {
-		err := createCluster(c)
+		err := createCluster(bgc, c)
 		if err != nil {
 			log.Fatalf("Error creating Kubernetes cluster %q: %v", c.Name, err)
 		}
 	}
 
 	if *makeMetrics {
-		if err := createMetrics(); err != nil {
+		if err := createMetrics(bgc); err != nil {
 			log.Fatalf("could not create metrics: %v", err)
-		}
-	}
-}
-
-func awaitOp(svc *compute.Service, op *compute.Operation) error {
-	opName := op.Name
-	log.Printf("Waiting on operation %v", opName)
-	for {
-		time.Sleep(2 * time.Second)
-		op, err := svc.ZoneOperations.Get(buildEnv.ProjectName, buildEnv.Zone, opName).Do()
-		if err != nil {
-			return fmt.Errorf("Failed to get op %s: %v", opName, err)
-		}
-		switch op.Status {
-		case "PENDING", "RUNNING":
-			log.Printf("Waiting on operation %v", opName)
-			continue
-		case "DONE":
-			if op.Error != nil {
-				var last error
-				for _, operr := range op.Error.Errors {
-					log.Printf("Error: %+v", operr)
-					last = fmt.Errorf("%v", operr)
-				}
-				return last
-			}
-			log.Printf("Success. %+v", op)
-			return nil
-		default:
-			return fmt.Errorf("Unknown status %q: %+v", op.Status, op)
 		}
 	}
 }
@@ -171,16 +118,13 @@ func wantClusterCreate(name string) bool {
 	return false
 }
 
-func createCluster(kube *buildenv.KubeConfig) error {
+func createCluster(bgc *buildgo.Client, kube *buildenv.KubeConfig) error {
 	if !wantClusterCreate(kube.Name) {
 		log.Printf("skipping kubernetes cluster %q per flag", kube.Name)
 		return nil
 	}
 	log.Printf("Creating Kubernetes cluster: %v", kube.Name)
-	deploymentService, err = dm.New(oauthClient)
-	if err != nil {
-		return fmt.Errorf("could not create client for Google Cloud Deployment Manager: %v", err)
-	}
+	deploySvc, _ := dm.New(bgc.Client)
 
 	if kube.MaxNodes == 0 || kube.MinNodes == 0 {
 		return fmt.Errorf("MaxNodes/MinNodes values cannot be 0")
@@ -193,7 +137,7 @@ func createCluster(kube *buildenv.KubeConfig) error {
 
 	var result bytes.Buffer
 	err = tpl.Execute(&result, deploymentTemplateData{
-		Env:      buildEnv,
+		Env:      bgc.Env,
 		Kube:     kube,
 		Password: randomPassword(),
 	})
@@ -209,7 +153,7 @@ func createCluster(kube *buildenv.KubeConfig) error {
 			},
 		},
 	}
-	op, err := deploymentService.Deployments.Insert(buildEnv.ProjectName, deployment).Do()
+	op, err := deploySvc.Deployments.Insert(bgc.Env.ProjectName, deployment).Do()
 	if err != nil {
 		return fmt.Errorf("Failed to create cluster with Deployment Manager: %v", err)
 	}
@@ -218,7 +162,7 @@ func createCluster(kube *buildenv.KubeConfig) error {
 OpLoop:
 	for {
 		time.Sleep(2 * time.Second)
-		op, err := deploymentService.Operations.Get(buildEnv.ProjectName, opName).Do()
+		op, err := deploySvc.Operations.Get(bgc.Env.ProjectName, opName).Do()
 		if err != nil {
 			return fmt.Errorf("Failed to get op %s: %v", opName, err)
 		}
@@ -249,82 +193,18 @@ func randomPassword() string {
 	return fmt.Sprintf("%x", buf)
 }
 
-func makeBasepinDisks(svc *compute.Service) error {
-	// Try to find it by name.
-	imList, err := svc.Images.List(buildEnv.ProjectName).Do()
-	if err != nil {
-		return fmt.Errorf("Error listing images for %s: %v", buildEnv.ProjectName, err)
-	}
-	if imList.NextPageToken != "" {
-		return errors.New("too many images; pagination not supported")
-	}
-	diskList, err := svc.Disks.List(buildEnv.ProjectName, buildEnv.Zone).Do()
-	if err != nil {
-		return err
-	}
-	if diskList.NextPageToken != "" {
-		return errors.New("too many disks; pagination not supported (yet?)")
-	}
-
-	need := make(map[string]*compute.Image) // keys like "https://www.googleapis.com/compute/v1/projects/symbolic-datum-552/global/images/linux-buildlet-arm"
-	for _, im := range imList.Items {
-		if strings.Contains(im.SelfLink, "-debug") {
-			continue
-		}
-		need[im.SelfLink] = im
-	}
-
-	for _, d := range diskList.Items {
-		if !strings.HasPrefix(d.Name, "basepin-") {
-			continue
-		}
-		if si, ok := need[d.SourceImage]; ok && d.SourceImageId == fmt.Sprint(si.Id) {
-			log.Printf("Have %s: %s (%v)\n", d.Name, d.SourceImage, d.SourceImageId)
-			delete(need, d.SourceImage)
-		}
-	}
-
-	var needed []string
-	for imageName := range need {
-		needed = append(needed, imageName)
-	}
-	sort.Strings(needed)
-	for _, n := range needed {
-		log.Printf("Need %v", n)
-	}
-	for i, imName := range needed {
-		im := need[imName]
-		log.Printf("(%d/%d) Creating %s ...", i+1, len(needed), im.Name)
-		op, err := svc.Disks.Insert(buildEnv.ProjectName, buildEnv.Zone, &compute.Disk{
-			Description:   "zone-cached basepin image of " + im.Name,
-			Name:          "basepin-" + im.Name + "-" + fmt.Sprint(im.Id),
-			SizeGb:        im.DiskSizeGb,
-			SourceImage:   im.SelfLink,
-			SourceImageId: fmt.Sprint(im.Id),
-			Type:          "https://www.googleapis.com/compute/v1/projects/" + buildEnv.ProjectName + "/zones/" + buildEnv.Zone + "/diskTypes/pd-ssd",
-		}).Do()
-		if err != nil {
-			return err
-		}
-		if err := awaitOp(svc, op); err != nil {
-			log.Fatalf("failed to create: %v", err)
-		}
-	}
-	return nil
-}
-
 // createMetrics creates the Stackdriver metric types required to monitor
 // buildlets on Stackdriver.
-func createMetrics() error {
+func createMetrics(bgc *buildgo.Client) error {
 	ctx := context.Background()
-	c, err := monapi.NewMetricClient(ctx)
+	c, err := monapi.NewMetricClient(ctx, option.WithCredentials(bgc.Creds))
 	if err != nil {
 		return err
 	}
 
 	for _, m := range metrics.Metrics {
 		if _, err = c.CreateMetricDescriptor(ctx, &monpb.CreateMetricDescriptorRequest{
-			Name:             m.DescriptorPath(buildEnv.ProjectName),
+			Name:             m.DescriptorPath(bgc.Env.ProjectName),
 			MetricDescriptor: m.Descriptor,
 		}); err != nil {
 			return err
