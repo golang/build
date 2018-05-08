@@ -26,6 +26,8 @@ push-staging: docker-image
 	docker push $(IMAGE_STAGING):$(VERSION)
 
 deploy-prod: push-prod
-	kubectl set image deployment/gopherbot-deployment gopherbot=$(IMAGE_PROD):$(VERSION)
+	go install golang.org/x/build/cmd/xb
+	xb --prod kubectl set image deployment/gopherbot-deployment gopherbot=$(IMAGE_PROD):$(VERSION)
 deploy-staging: push-staging
-	kubectl set image deployment/gopherbot-deployment gopherbot=$(IMAGE_STAGING):$(VERSION)
+	go install golang.org/x/build/cmd/xb
+	xb --staging kubectl set image deployment/gopherbot-deployment gopherbot=$(IMAGE_STAGING):$(VERSION)
