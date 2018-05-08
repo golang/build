@@ -22,6 +22,19 @@ type Entry struct {
 	Secondary []Owner `json:"secondary,omitempty"`
 }
 
+type Request struct {
+	Payload struct {
+		Paths []string `json:"paths"`
+	} `json:"payload"`
+	Version int `json:"v"` // API version
+}
+
+type Response struct {
+	Payload struct {
+		Entries map[string]*Entry `json:"entries"` // paths in request -> Entry
+	} `json:"payload"`
+}
+
 // match takes a path consisting of the repo name and full path of a file or
 // directory within that repo and returns the deepest Entry match in the file
 // hierarchy for the given resource.
@@ -38,25 +51,45 @@ func match(path string) *Entry {
 // URLPathPrefix is the prefix that should be used when registering Handler.
 const URLPathPrefix = "/owners/"
 
-// Handler serves Entry structs as JSON responses given a URL path of a repo and
-// file. For example, /owners/go/src/archive/tar/reader.go should return a
-// single Entry for that file or 404 if it can't find an owner.
-// TODO: Ability to POST a list of paths to match.
+// Handler takes one or more paths and returns a map of each to a matching
+// Entry struct. If no Entry is matched for the path, the value for the key
+// is nil.
 func Handler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	p := r.URL.Path
-	if strings.HasPrefix(p, URLPathPrefix) {
-		p = r.URL.Path[len(URLPathPrefix):]
-	}
-	e := match(p)
-	if e == nil {
-		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	var (
+		resp  Response
+		paths []string
+	)
+	switch r.Method {
+	case "GET":
+		p := r.URL.Path
+		if strings.HasPrefix(p, URLPathPrefix) {
+			paths = append(paths, r.URL.Path[len(URLPathPrefix):])
+		}
+	case "POST":
+		var req Request
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "unable to decode request", http.StatusInternalServerError)
+			// TODO: increment expvar for monitoring.
+			log.Printf("unable to decode owners request: %v", err)
+			return
+		}
+		paths = append(paths, req.Payload.Paths...)
+	case "OPTIONS":
+		// Likely a CORS preflight request; leave resp.Payload empty.
+	default:
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
 
+	resp.Payload.Entries = make(map[string]*Entry)
+	for _, p := range paths {
+		resp.Payload.Entries[p] = match(p)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(e); err != nil {
+	if err := json.NewEncoder(&buf).Encode(resp); err != nil {
 		http.Error(w, "unable to encode response", http.StatusInternalServerError)
 		// TODO: increment expvar for monitoring.
 		log.Printf("unable to encode owners response: %v", err)
