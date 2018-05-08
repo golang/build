@@ -125,8 +125,8 @@ cd $openssh_dir
 Set-Service -Name 'sshd' -StartupType 'Automatic'
 Set-Service -Name 'ssh-agent' -StartupType 'Automatic'
 
-# Download and unpack dependencies
-Write-Host "downloading dependencies"
+# Download and unpack GCC
+Write-Host "downloading GCC"
 $dep_dir = "C:\godep"
 $gcc32_tar = "$dep_dir\gcc32.tar.gz"
 $gcc64_tar = "$dep_dir\gcc64.tar.gz"
@@ -134,8 +134,7 @@ mkdir $dep_dir
 Get-FileFromUrl -URL "https://storage.googleapis.com/go-builder-data/gcc5-1-tdm32.tar.gz" -Output "$gcc32_tar"
 Get-FileFromUrl -URL "https://storage.googleapis.com/go-builder-data/gcc5-1-tdm64.tar.gz" -Output "$gcc64_tar"
 
-# Extract GCC
-Write-Host "extracting dependencies"
+Write-Host "extracting GCC"
 $extract32_args=@("--untar-file=$gcc32_tar", "--untar-dest-dir=$dep_dir")
 & $bootstrap_exe_path $extract32_args 
 $extract64_args=@("--untar-file=$gcc64_tar", "--untar-dest-dir=$dep_dir")
@@ -143,6 +142,15 @@ $extract64_args=@("--untar-file=$gcc64_tar", "--untar-dest-dir=$dep_dir")
 
 $builder_dir = "C:\golang"
 $bootstrap_exe_path = "$builder_dir\bootstrap.exe"
+
+# Download and install Visual Studio Build Tools (MSVC)
+# https://docs.microsoft.com/en-us/visualstudio/install/build-tools-container
+Write-Host "downloading Visual Studio Build Tools"
+$vs_buildtools = "$builder_dir\vs_buildtools.exe"
+Get-FileFromUrl -URL "https://aka.ms/vs/15/release/vs_buildtools.exe" -Output "$vs_buildtools"
+
+Write-Host "installing Visual Studio Build Tools"
+& $vs_buildtools --quiet --wait --norestart --nocache --installPath "$dep_dir\vs" --all
 
 # Create a buildlet user
 Write-Host "creating buildlet user"
