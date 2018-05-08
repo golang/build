@@ -48,6 +48,7 @@ var (
 	mikioh       = gh("mikioh")
 	minux        = gh("minux")
 	mpvl         = gh("mpvl")
+	mvdan        = gh("mvdan")
 	mwhudson     = gh("mwhudson")
 	r            = gh("robpike")
 	rlh          = gh("RLH")
@@ -137,7 +138,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{josharian},
 	},
 	"go/src/cmd/doc": {
-		Primary: []Owner{r},
+		Primary:   []Owner{r},
+		Secondary: []Owner{mvdan},
 	},
 	"go/src/cmd/link": {
 		Primary:   []Owner{cherryyz, rsc, mdempsky, iant},
@@ -151,7 +153,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/vet": {
 		Primary:   []Owner{adonovan},
-		Secondary: []Owner{josharian},
+		Secondary: []Owner{josharian, mvdan},
 	},
 	"go/src/compress/bzip2": {
 		Primary:   []Owner{joetsai},
@@ -479,10 +481,12 @@ var entries = map[string]*Entry{
 		Primary: []Owner{gri},
 	},
 	"go/src/text/template": {
-		Primary: []Owner{r},
+		Primary:   []Owner{r},
+		Secondary: []Owner{mvdan},
 	},
 	"go/src/text/template/parse": {
-		Primary: []Owner{r},
+		Primary:   []Owner{r},
+		Secondary: []Owner{mvdan},
 	},
 	"go/src/time": {
 		Primary: []Owner{rsc},
@@ -569,6 +573,9 @@ var entries = map[string]*Entry{
 	"tools/cmd/goimports": {
 		Primary:   []Owner{bradfitz},
 		Secondary: []Owner{josharian},
+	},
+	"tools/cmd/stringer": {
+		Secondary: []Owner{mvdan},
 	},
 	"tools/cmd/toolstash": {
 		Secondary: []Owner{josharian},
