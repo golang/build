@@ -103,6 +103,7 @@ func init() {
 	addPerson("Adin Scannell", "ascannell@google.com")
 	addPerson("Adrian O'Grady", "elpollouk@gmail.com", "@elpollouk")
 	addPerson("Agis Anastasopoulos", "agis.anast@gmail.com", "@agis")
+	addPerson("Agniva De Sarker", "agniva.quicksilver@gmail.com", "@agnivade")
 	addPerson("Ahmet Alp Balkan", "ahmetb@google.com", "@ahmetb")
 	addPerson("Ahmy Yulrizka", "yulrizka@gmail.com", "@yulrizka")
 	addPerson("Aiden Scandella", "ai@uber.com", "@sectioneight")

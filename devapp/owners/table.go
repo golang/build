@@ -22,6 +22,7 @@ func gh(githubUsername string) Owner {
 var (
 	adonovan     = gh("alandonovan")
 	agl          = gh("agl")
+	agnivade     = gh("agnivade")
 	alexbrainman = gh("alexbrainman")
 	andybons     = gh("andybons")
 	austin       = gh("aclements")
@@ -568,7 +569,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/cmd/godoc": {
 		Primary:   []Owner{andybons},
-		Secondary: []Owner{bradfitz, gri},
+		Secondary: []Owner{agnivade, bradfitz, gri},
 	},
 	"tools/cmd/goimports": {
 		Primary:   []Owner{bradfitz},
