@@ -15,6 +15,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # procps lsof psmisc: misc basic tools
 # libgles2-mesa-dev libopenal-dev fonts-droid-fallback: required by x/mobile repo
 # upx: executable compressor, needed to test for go binaries compatibility
+# qemu-user: QEMU (machine emulator and virtualizer) user-space emulation
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
 	ca-certificates \
@@ -34,6 +35,7 @@ RUN apt-get update && apt-get install -y \
 	libopenal-dev \
 	fonts-droid-fallback \
 	upx \
+	qemu-user \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /go1.4-amd64 \
