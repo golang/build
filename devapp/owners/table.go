@@ -518,7 +518,8 @@ var entries = map[string]*Entry{
 	},
 
 	"mobile/": {
-		Primary: []Owner{eliasnaur},
+		Primary:   []Owner{eliasnaur},
+		Secondary: []Owner{hyangah},
 	},
 
 	"net/": {
