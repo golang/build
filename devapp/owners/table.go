@@ -33,6 +33,7 @@ var (
 	danderson    = gh("danderson")
 	drchase      = gh("dr2chase")
 	dvyukov      = gh("dvyukov")
+	eliasnaur    = gh("eliasnaur")
 	filippo      = gh("FiloSottile")
 	gri          = gh("griesemer")
 	hyangah      = gh("hyangah")
@@ -514,6 +515,10 @@ var entries = map[string]*Entry{
 	"gollvm/": {
 		Primary:   []Owner{thanm},
 		Secondary: []Owner{cherryyz},
+	},
+
+	"mobile/": {
+		Primary: []Owner{eliasnaur},
 	},
 
 	"net/": {
