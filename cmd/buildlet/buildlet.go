@@ -162,8 +162,8 @@ func main() {
 	if onGCE {
 		fixMTU()
 	}
-	if *workDir == "" && runtime.GOOS == "linux" {
-		setLinuxWorkdirToTmpfs()
+	if *workDir == "" && setWorkdirToTmpfs != nil {
+		setWorkdirToTmpfs()
 	}
 	if *workDir == "" {
 		switch runtime.GOOS {
@@ -1716,15 +1716,10 @@ func appendSSHAuthorizedKey(sshUser, authKey string) error {
 	return nil
 }
 
-// setLinuxWorkdirToTmpfs sets the *workDir (--workdir) flag to /workdir
+// setWorkdirToTmpfs sets the *workDir (--workdir) flag to /workdir
 // if the flag is empty and /workdir is a tmpfs mount, as it is on the various
 // hosts that use rundockerbuildlet.
-func setLinuxWorkdirToTmpfs() {
-	if *workDir != "" {
-		return
-	}
-	mounts, _ := ioutil.ReadFile("/proc/mounts")
-	if bytes.Contains(mounts, []byte("\ntmpfs /workdir tmpfs ")) {
-		*workDir = "/workdir"
-	}
-}
+//
+// It is set non-nil on operating systems where the functionality is
+// needed & available. Currently we only use it on Linux.
+var setWorkdirToTmpfs func()
