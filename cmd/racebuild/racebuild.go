@@ -19,6 +19,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -173,7 +174,16 @@ func main() {
 	}
 
 	// Start build on all platforms in parallel.
-	g, ctx := errgroup.WithContext(context.Background())
+	// On interrupt, destroy any in-flight builders before exiting.
+	ctx, cancel := context.WithCancel(context.Background())
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt)
+	go func() {
+		<-shutdown
+		cancel()
+	}()
+
+	g, ctx := errgroup.WithContext(ctx)
 	for _, p := range platforms {
 		if !platformEnabled[p.Name()] {
 			continue
@@ -209,7 +219,7 @@ func (p *Platform) Name() string {
 func (p *Platform) Build(ctx context.Context) error {
 	// Create gomote instance (or reuse an existing instance for debugging).
 	var lastErr error
-	for i := 0; p.Inst == "" && i < 10; i++ {
+	for p.Inst == "" {
 		inst, err := p.Gomote(ctx, "create", p.Type)
 		if err != nil {
 			select {
@@ -228,9 +238,6 @@ func (p *Platform) Build(ctx context.Context) error {
 		}
 		p.Inst = strings.Trim(string(inst), " \t\n")
 		defer p.Gomote(context.Background(), "destroy", p.Inst)
-	}
-	if p.Inst == "" {
-		return lastErr
 	}
 	log.Printf("%s: using instance %v", p.Name(), p.Inst)
 
