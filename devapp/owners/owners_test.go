@@ -59,11 +59,11 @@ func TestHandler(t *testing.T) {
 		paths   []string
 		entries map[string]*Entry
 	}{
-		{"PUT", "/owners/go/src/archive/zip/a.go", http.StatusMethodNotAllowed, nil, nil},
-		{"GET", "/owners/go/src/archive/zip/a.go", http.StatusOK, nil,
-			map[string]*Entry{"go/src/archive/zip/a.go": {Primary: []Owner{joetsai}, Secondary: []Owner{bradfitz}}},
-		},
-		{"GET", "/owners/nonexistent/path", http.StatusOK, nil,
+		{"PUT", "/owners/", http.StatusMethodNotAllowed, nil, nil},
+		{"OPTIONS", "/owners/", http.StatusOK, nil, nil},
+		{
+			"POST", "/owners/", http.StatusOK,
+			[]string{"nonexistent/path"},
 			map[string]*Entry{"nonexistent/path": nil},
 		},
 		{
@@ -122,7 +122,7 @@ func TestHandler(t *testing.T) {
 			t.Errorf("status code: got %v; want %v", got, want)
 		}
 
-		if tc.code != http.StatusOK {
+		if tc.code != http.StatusOK || tc.method == "OPTIONS" {
 			continue
 		}
 		var oResp Response

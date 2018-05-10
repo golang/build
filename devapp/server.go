@@ -63,7 +63,7 @@ func newServer(mux *http.ServeMux, staticDir, templateDir string) *server {
 	s.mux.HandleFunc("/release", s.withTemplate("/release.tmpl", s.handleRelease))
 	s.mux.HandleFunc("/reviews", s.withTemplate("/reviews.tmpl", s.handleReviews))
 	s.mux.HandleFunc("/dir/", handleDirRedirect)
-	s.mux.HandleFunc(owners.URLPathPrefix, owners.Handler)
+	s.mux.HandleFunc("/owners/", owners.Handler)
 	for _, p := range []string{"/imfeelinghelpful", "/imfeelinglucky"} {
 		s.mux.HandleFunc(p, s.handleRandomHelpWantedIssue)
 	}
