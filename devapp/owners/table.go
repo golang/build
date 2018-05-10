@@ -59,6 +59,7 @@ var (
 	thanm        = gh("thanm")
 	tklauser     = gh("tklauser")
 	tombergan    = gh("tombergan")
+	ysmolsky     = gh("ysmolsky")
 )
 
 // entries is a map of <repo name>/<path> to Owner entries.
@@ -575,7 +576,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/cmd/godoc": {
 		Primary:   []Owner{andybons},
-		Secondary: []Owner{agnivade, bradfitz, gri},
+		Secondary: []Owner{agnivade, bradfitz, gri, ysmolsky},
 	},
 	"tools/cmd/goimports": {
 		Primary:   []Owner{bradfitz},
@@ -586,5 +587,8 @@ var entries = map[string]*Entry{
 	},
 	"tools/cmd/toolstash": {
 		Secondary: []Owner{josharian},
+	},
+	"playground": {
+		Secondary: []Owner{ysmolsky},
 	},
 }

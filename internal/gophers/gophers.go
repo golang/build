@@ -1435,6 +1435,7 @@ func init() {
 	addPerson("Yoon", "learder@gmail.com")
 	addPerson("Yoshiyuki Kanno", "nekotaroh@gmail.com", "@mocchira")
 	addPerson("Yuki Yugui Sonoda", "yugui@google.com")
+	addPerson("Yury Smolsky", "yury@smolsky.by", "@ysmolsky")
 	addPerson("Yusuke Kagiwada", "block.rxckin.beats@gmail.com", "@Jxck")
 	addPerson("Yuusei Kuwana", "kuwana@kumama.org", "@kumama")
 	addPerson("Yuval Pavel Zholkover", "paulzhol@gmail.com", "@paulzhol")
