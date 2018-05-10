@@ -5,6 +5,7 @@
 package main
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
 	"html/template"
@@ -196,6 +197,14 @@ func (s *server) handleFavicon(w http.ResponseWriter, r *http.Request) {
 func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.TLS != nil {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000; preload")
+	}
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		gzw := &gzipResponseWriter{Writer: gz, ResponseWriter: w}
+		s.mux.ServeHTTP(gzw, r)
+		return
 	}
 	s.mux.ServeHTTP(w, r)
 }
