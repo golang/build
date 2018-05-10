@@ -11,6 +11,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -21,12 +22,14 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
+
+	"golang.org/x/sync/errgroup"
 )
 
 var (
-	flagGoroot = flag.String("goroot", "", "path to Go repository to update (required)")
-	flagRev    = flag.String("rev", "", "llvm compiler-rt git revision from http://llvm.org/git/compiler-rt.git (required)")
+	flagGoroot    = flag.String("goroot", "", "path to Go repository to update (required)")
+	flagRev       = flag.String("rev", "", "llvm compiler-rt git revision from http://llvm.org/git/compiler-rt.git (required)")
+	flagPlatforms = flag.String("platforms", "all", `comma-separated platforms (such as "linux/amd64") to rebuild, or "all"`)
 )
 
 // TODO: use buildlet package instead of calling out to gomote.
@@ -101,12 +104,57 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 	},
 }
 
+func init() {
+	// Ensure that there are no duplicate platform entries.
+	seen := make(map[string]bool)
+	for _, p := range platforms {
+		if seen[p.Name()] {
+			log.Fatal("Duplicate platforms entry for %s.", p.Name())
+		}
+		seen[p.Name()] = true
+	}
+}
+
+var platformEnabled = make(map[string]bool)
+
+func parsePlatformsFlag() {
+	if *flagPlatforms == "all" {
+		for _, p := range platforms {
+			platformEnabled[p.Name()] = true
+		}
+		return
+	}
+
+	var invalid []string
+	for _, name := range strings.Split(*flagPlatforms, ",") {
+		for _, p := range platforms {
+			if name == p.Name() {
+				platformEnabled[name] = true
+				break
+			}
+		}
+		if !platformEnabled[name] {
+			invalid = append(invalid, name)
+		}
+	}
+
+	if len(invalid) > 0 {
+		var msg bytes.Buffer
+		fmt.Fprintf(&msg, "Unrecognized platforms: %q. Supported platforms are:\n", invalid)
+		for _, p := range platforms {
+			fmt.Fprintf(&msg, "\t%s/%s\n", p.OS, p.Arch)
+		}
+		log.Fatal(&msg)
+	}
+}
+
 func main() {
 	flag.Parse()
 	if *flagRev == "" || *flagGoroot == "" {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
+	parsePlatformsFlag()
 
 	// Update revision in the README file.
 	// Do this early to check goroot correctness.
@@ -125,33 +173,23 @@ func main() {
 	}
 
 	// Start build on all platforms in parallel.
-	var wg sync.WaitGroup
-	wg.Add(len(platforms))
+	g, ctx := errgroup.WithContext(context.Background())
 	for _, p := range platforms {
-		p := p
-		go func() {
-			defer wg.Done()
-			p.Err = p.Build()
-			if p.Err != nil {
-				p.Err = fmt.Errorf("failed: %v", p.Err)
-				log.Printf("%v: %v", p.Name, p.Err)
-			}
-		}()
-	}
-	wg.Wait()
-
-	// Duplicate results, they can get lost in the log.
-	ok := true
-	log.Printf("---")
-	for _, p := range platforms {
-		if p.Err == nil {
-			log.Printf("%v: ok", p.Name)
+		if !platformEnabled[p.Name()] {
 			continue
 		}
-		ok = false
-		log.Printf("%v: %v", p.Name, p.Err)
+
+		p := p
+		g.Go(func() error {
+			if err := p.Build(ctx); err != nil {
+				return fmt.Errorf("%v failed: %v", p.Name(), err)
+			}
+			return nil
+		})
 	}
-	if !ok {
+
+	if err := g.Wait(); err != nil {
+		log.Println(err)
 		os.Exit(1)
 	}
 }
@@ -159,50 +197,45 @@ func main() {
 type Platform struct {
 	OS     string
 	Arch   string
-	Name   string // something for logging
 	Type   string // gomote instance type
 	Inst   string // actual gomote instance name
-	Err    error
-	Log    *os.File
 	Script string
 }
 
-func (p *Platform) Build() error {
-	p.Name = fmt.Sprintf("%v-%v", p.OS, p.Arch)
+func (p *Platform) Name() string {
+	return fmt.Sprintf("%v/%v", p.OS, p.Arch)
+}
 
-	// Open log file.
-	var err error
-	p.Log, err = ioutil.TempFile("", p.Name)
-	if err != nil {
-		return fmt.Errorf("failed to create log file: %v", err)
-	}
-	defer p.Log.Close()
-	log.Printf("%v: logging to %v", p.Name, p.Log.Name())
-
+func (p *Platform) Build(ctx context.Context) error {
 	// Create gomote instance (or reuse an existing instance for debugging).
-	if p.Inst == "" {
-		// Creation sometimes fails with transient errors like:
-		// "buildlet didn't come up at http://10.240.0.13 in 3m0s".
-		var createErr error
-		for i := 0; i < 10; i++ {
-			inst, err := p.Gomote("create", p.Type)
-			if err != nil {
+	var lastErr error
+	for i := 0; p.Inst == "" && i < 10; i++ {
+		inst, err := p.Gomote(ctx, "create", p.Type)
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				if lastErr != nil {
+					return lastErr
+				}
+				return err
+			default:
+				// Creation sometimes fails with transient errors like:
+				// "buildlet didn't come up at http://10.240.0.13 in 3m0s".
 				log.Printf("%v: instance creation failed, retrying", p.Name)
-				createErr = err
+				lastErr = err
 				continue
 			}
-			p.Inst = strings.Trim(string(inst), " \t\n")
-			break
 		}
-		if p.Inst == "" {
-			return createErr
-		}
+		p.Inst = strings.Trim(string(inst), " \t\n")
+		defer p.Gomote(context.Background(), "destroy", p.Inst)
 	}
-	defer p.Gomote("destroy", p.Inst)
-	log.Printf("%s: using instance %v", p.Name, p.Inst)
+	if p.Inst == "" {
+		return lastErr
+	}
+	log.Printf("%s: using instance %v", p.Name(), p.Inst)
 
 	// put14
-	if _, err := p.Gomote("put14", p.Inst); err != nil {
+	if _, err := p.Gomote(ctx, "put14", p.Inst); err != nil {
 		return err
 	}
 
@@ -223,16 +256,16 @@ func (p *Platform) Build() error {
 	if p.OS == "windows" {
 		targetName = "script.bat"
 	}
-	if _, err := p.Gomote("put", "-mode=0700", p.Inst, script.Name(), targetName); err != nil {
+	if _, err := p.Gomote(ctx, "put", "-mode=0700", p.Inst, script.Name(), targetName); err != nil {
 		return err
 	}
-	if _, err := p.Gomote("run", "-e=REV="+*flagRev, p.Inst, targetName); err != nil {
+	if _, err := p.Gomote(ctx, "run", "-e=REV="+*flagRev, p.Inst, targetName); err != nil {
 		return err
 	}
 
 	// The script is supposed to leave updated runtime at that path. Copy it out.
 	syso := fmt.Sprintf("race_%v_%s.syso", p.OS, p.Arch)
-	targz, err := p.Gomote("gettar", "-dir=go/src/runtime/race/"+syso, p.Inst)
+	targz, err := p.Gomote(ctx, "gettar", "-dir=go/src/runtime/race/"+syso, p.Inst)
 	if err != nil {
 		return err
 	}
@@ -242,7 +275,7 @@ func (p *Platform) Build() error {
 		return fmt.Errorf("%v", err)
 	}
 
-	log.Printf("%v: build completed", p.Name)
+	log.Printf("%v: build completed", p.Name())
 	return nil
 }
 
@@ -270,16 +303,24 @@ func (p *Platform) WriteSyso(sysof string, targz []byte) error {
 	return nil
 }
 
-func (p *Platform) Gomote(args ...string) ([]byte, error) {
-	log.Printf("%v: gomote %v", p.Name, args)
-	fmt.Fprintf(p.Log, "$ gomote %v\n", args)
-	output, err := exec.Command("gomote", args...).CombinedOutput()
-	if err != nil || args[0] != "gettar" {
-		p.Log.Write(output)
-	}
-	fmt.Fprintf(p.Log, "\n\n")
+func (p *Platform) Gomote(ctx context.Context, args ...string) ([]byte, error) {
+	log.Printf("%v: gomote %v", p.Name(), args)
+	output, err := exec.CommandContext(ctx, "gomote", args...).CombinedOutput()
+
 	if err != nil {
-		err = fmt.Errorf("gomote %v failed: %v", args, err)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+		log.Printf("%v: gomote %v failed:\n%s", p.Name(), args, output)
+		return nil, err
 	}
-	return output, err
+
+	logData := output
+	if args[0] == "gettar" {
+		logData = []byte("<output elided>")
+	}
+	log.Printf("%v: gomote %v succeeded:\n%s", p.Name(), args, logData)
+	return output, nil
 }
