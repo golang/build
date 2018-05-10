@@ -80,6 +80,21 @@ cp compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/race
 			`,
 	},
 	&Platform{
+		OS:   "netbsd",
+		Arch: "amd64",
+		Type: "netbsd-amd64-8_0",
+		Script: `#!/usr/bin/env bash
+set -e
+git clone https://go.googlesource.com/go
+git clone http://llvm.org/git/compiler-rt.git
+(cd compiler-rt && git checkout $REV)
+(cd compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
+cp compiler-rt/lib/tsan/go/race_netbsd_amd64.syso go/src/runtime/race
+# TODO(#24322): Uncomment to test the syso file before accepting it.
+# (cd go/src && ./race.bash)
+			`,
+	},
+	&Platform{
 		OS:   "windows",
 		Arch: "amd64",
 		Type: "windows-amd64-race",
