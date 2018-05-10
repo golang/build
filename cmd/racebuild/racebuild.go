@@ -4,7 +4,7 @@
 
 // racebuild builds the race runtime (syso files) on all supported OSes using gomote.
 // Usage:
-//	$ racebuild -rev <llvm_revision> -goroot <path_to_go_repo>
+//	$ racebuild -rev <llvm_git_revision> -goroot <path_to_go_repo>
 package main
 
 import (
