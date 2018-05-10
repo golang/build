@@ -305,22 +305,53 @@ func (p *Platform) WriteSyso(sysof string, targz []byte) error {
 
 func (p *Platform) Gomote(ctx context.Context, args ...string) ([]byte, error) {
 	log.Printf("%v: gomote %v", p.Name(), args)
-	output, err := exec.CommandContext(ctx, "gomote", args...).CombinedOutput()
 
-	if err != nil {
+	cmd := exec.CommandContext(ctx, "gomote", args...)
+	outBuf := new(bytes.Buffer)
+
+	// Combine stderr and stdout for everything except gettar: gettar's output is
+	// huge, so we only want to log stderr for it.
+	errBuf := outBuf
+	if args[0] == "gettar" {
+		errBuf = new(bytes.Buffer)
+	}
+
+	cmd.Stdout = outBuf
+	cmd.Stderr = errBuf
+	run := cmd.Run
+	if len(platformEnabled) == 1 {
+		// If building only one platform, stream gomote output to os.Stderr.
+		r, w := io.Pipe()
+		errTee := io.TeeReader(r, cmd.Stderr)
+		if cmd.Stdout == cmd.Stderr {
+			cmd.Stdout = w
+		}
+		cmd.Stderr = w
+
+		run = func() (err error) {
+			go func() {
+				err = cmd.Run()
+				w.Close()
+			}()
+			io.Copy(os.Stderr, errTee)
+			return
+		}
+	}
+
+	if err := run(); err != nil {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
 		}
-		log.Printf("%v: gomote %v failed:\n%s", p.Name(), args, output)
+		log.Printf("%v: gomote %v failed:\n%s", p.Name(), args, errBuf)
 		return nil, err
 	}
 
-	logData := output
-	if args[0] == "gettar" {
-		logData = []byte("<output elided>")
+	if errBuf.Len() == 0 {
+		log.Printf("%v: gomote %v succeeded: <no output>", p.Name(), args)
+	} else {
+		log.Printf("%v: gomote %v succeeded:\n%s", p.Name(), args, errBuf)
 	}
-	log.Printf("%v: gomote %v succeeded:\n%s", p.Name(), args, logData)
-	return output, nil
+	return outBuf.Bytes(), nil
 }
