@@ -116,6 +116,12 @@ cp compiler-rt/lib/tsan/go/race_netbsd_amd64.syso go/src/runtime/race
 		Arch: "amd64",
 		Type: "windows-amd64-race",
 		Script: `
+@"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\chocolatey\bin"
+choco install git -y
+if %errorlevel% neq 0 exit /b %errorlevel%
+choco install mingw -y
+if %errorlevel% neq 0 exit /b %errorlevel%
+call refreshenv
 git clone https://go.googlesource.com/go
 if %errorlevel% neq 0 exit /b %errorlevel%
 git clone http://llvm.org/git/compiler-rt.git
