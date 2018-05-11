@@ -62,6 +62,12 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
+	"host-js-wasm": &HostConfig{
+		Notes:           "Container with node.js for testing js/wasm.",
+		ContainerImage:  "js-wasm:latest",
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+	},
 	"host-s390x-cross-kube": &HostConfig{
 		Notes:           "Container with s390x cross-compiler.",
 		ContainerImage:  "linux-s390x-stretch:latest",
@@ -1119,6 +1125,17 @@ func init() {
 		MaxAtOnce:         2,
 		numTryTestHelpers: 3,
 		env:               []string{"GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
+	})
+	addBuilder(BuildConfig{
+		Name:              "js-wasm",
+		HostType:          "host-js-wasm",
+		TryBot:            false,
+		MaxAtOnce:         2,
+		numTryTestHelpers: 0,
+		env: []string{
+			"GOOS=js", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
+			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-60",
