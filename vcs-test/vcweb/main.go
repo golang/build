@@ -69,7 +69,7 @@ func main() {
 	handler := logger(http.HandlerFunc(loadAndHandle))
 
 	// If running under systemd, listen on 80 and 443 and serve TLS.
-	if listeners, _ := activation.Listeners(true); len(listeners) == 2 {
+	if listeners, _ := activation.Listeners(); len(listeners) == 2 {
 		// Want listeners[0] is port 80, listeners[1] is port 443.
 		// There's no guaranteed order of the listeners!
 		// Sometimes we get 80, 443; other times we get 443, 80.
