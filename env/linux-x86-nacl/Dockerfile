@@ -18,8 +18,8 @@ RUN apt-get update && apt-get install -y \
 	lib32stdc++6 \
 	&& ( \
 		cd /usr/bin \
-		&& curl -s -O https://storage.googleapis.com/nativeclient-mirror/nacl/nacl_sdk/44.0.2403.157/naclsdk_linux.tar.bz2 \
-		&& tar xjf naclsdk_linux.tar.bz2 --strip-components=2 pepper_44/tools/sel_ldr_x86_32 pepper_44/tools/sel_ldr_x86_64 \
+		&& curl -s -O https://storage.googleapis.com/nativeclient-mirror/nacl/nacl_sdk/trunk.544461/naclsdk_linux.tar.bz2 \
+		&& tar xjf naclsdk_linux.tar.bz2 --strip-components=2 pepper_67/tools/sel_ldr_x86_32 pepper_67/tools/sel_ldr_x86_64 \
 		&& rm naclsdk_linux.tar.bz2 \
 	) \
 	&& apt-get purge -y bzip2 \
