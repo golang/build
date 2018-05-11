@@ -52,7 +52,7 @@ cp compiler-rt/lib/tsan/go/race_freebsd_amd64.syso go/src/runtime/race
 	&Platform{
 		OS:   "darwin",
 		Arch: "amd64",
-		Type: "darwin-amd64-10_10",
+		Type: "darwin-amd64-10_12",
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
