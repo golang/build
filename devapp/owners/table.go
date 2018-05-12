@@ -545,9 +545,6 @@ var entries = map[string]*Entry{
 	"net/ipv6": {
 		Primary: []Owner{mikioh, iant},
 	},
-	"net/lex": {
-		Primary: []Owner{bradfitz},
-	},
 
 	"review/": {
 		Secondary: []Owner{josharian},
