@@ -30,6 +30,7 @@ var (
 	bradfitz     = gh("bradfitz")
 	cbro         = gh("broady")
 	cherryyz     = gh("cherrymui")
+	dsh          = gh("shurcooL")
 	danderson    = gh("danderson")
 	drchase      = gh("dr2chase")
 	dvyukov      = gh("dvyukov")
@@ -506,6 +507,11 @@ var entries = map[string]*Entry{
 	},
 	"go/src/unsafe": {
 		Primary: []Owner{gri},
+	},
+
+	"build/maintner/cmd/maintserve": {
+		Primary:   []Owner{dsh},
+		Secondary: []Owner{andybons},
 	},
 
 	"gofrontend/": {
