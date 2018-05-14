@@ -25,9 +25,16 @@ var Builders = map[string]BuildConfig{}
 // Hosts contains the names and configs of all the types of
 // buildlets. They can be VMs, containers, or dedicated machines.
 var Hosts = map[string]*HostConfig{
-	"host-linux-kubestd": &HostConfig{
+	"host-linux-jessie": &HostConfig{
 		Notes:           "Debian Jessie, our standard Linux container image.",
-		ContainerImage:  "linux-x86-std-kube:latest",
+		ContainerImage:  "linux-x86-jessie:latest",
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:     "root",
+	},
+	"host-linux-stretch": &HostConfig{
+		Notes:           "Debian Stretch",
+		ContainerImage:  "linux-x86-stretch:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
@@ -474,7 +481,7 @@ func init() {
 
 // A HostConfig describes the available ways to obtain buildlets of
 // different types. Some host configs can server multiple
-// builders. For example, a host config of "host-linux-kubestd" can
+// builders. For example, a host config of "host-linux-jessie" can
 // serve linux-amd64, linux-amd64-race, linux-386, linux-386-387, etc.
 type HostConfig struct {
 	// HostType is the unique name of this host config. It is also
@@ -536,7 +543,7 @@ type BuildConfig struct {
 
 	// HostType is the required key into the Hosts map, describing
 	// the type of host this build will run on.
-	// For example, "host-linux-kubestd".
+	// For example, "host-linux-jessie".
 	HostType string
 
 	Notes string // notes for humans
@@ -925,7 +932,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-386",
-		HostType:          "host-linux-kubestd",
+		HostType:          "host-linux-jessie",
 		ShouldRunDistTest: fasterTrybots,
 		TryBot:            true,
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
@@ -935,12 +942,12 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "linux-386-387",
 		Notes:    "GO386=387",
-		HostType: "host-linux-kubestd",
+		HostType: "host-linux-jessie",
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386", "GO386=387"},
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-amd64",
-		HostType:          "host-linux-kubestd",
+		HostType:          "host-linux-jessie",
 		TryBot:            true,
 		MaxAtOnce:         3,
 		numTestHelpers:    1,
@@ -960,7 +967,7 @@ func init() {
 	// to only run the "go vet std cmd" test and no others.
 	addBuilder(BuildConfig{
 		Name:           "misc-vet-vetall",
-		HostType:       "host-linux-kubestd",
+		HostType:       "host-linux-jessie",
 		Notes:          "Runs vet over the standard library.",
 		TryBot:         true,
 		numTestHelpers: 5,
@@ -969,7 +976,7 @@ func init() {
 	addMiscCompile := func(suffix, rx string) {
 		addBuilder(BuildConfig{
 			Name:        "misc-compile" + suffix,
-			HostType:    "host-linux-kubestd",
+			HostType:    "host-linux-jessie",
 			TryBot:      true,
 			TryOnly:     true,
 			CompileOnly: true,
@@ -990,7 +997,7 @@ func init() {
 
 	addBuilder(BuildConfig{
 		Name:      "linux-amd64-nocgo",
-		HostType:  "host-linux-kubestd",
+		HostType:  "host-linux-jessie",
 		MaxAtOnce: 1,
 		Notes:     "cgo disabled",
 		env: []string{
@@ -1004,13 +1011,13 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:      "linux-amd64-noopt",
 		Notes:     "optimizations and inlining disabled",
-		HostType:  "host-linux-kubestd",
+		HostType:  "host-linux-jessie",
 		env:       []string{"GO_GCFLAGS=-N -l"},
 		MaxAtOnce: 1,
 	})
 	addBuilder(BuildConfig{
 		Name:        "linux-amd64-ssacheck",
-		HostType:    "host-linux-kubestd",
+		HostType:    "host-linux-jessie",
 		MaxAtOnce:   1,
 		TryBot:      false, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
 		CompileOnly: true,
@@ -1022,7 +1029,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:                "linux-amd64-racecompile",
-		HostType:            "host-linux-kubestd",
+		HostType:            "host-linux-jessie",
 		TryBot:              false, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
 		MaxAtOnce:           1,
 		CompileOnly:         true,
@@ -1036,7 +1043,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-amd64-race",
-		HostType:          "host-linux-kubestd",
+		HostType:          "host-linux-jessie",
 		TryBot:            true,
 		MaxAtOnce:         1,
 		ShouldRunDistTest: fasterTrybots,
@@ -1069,6 +1076,12 @@ func init() {
 		HostType:  "host-linux-sid",
 		MaxAtOnce: 1,
 		Notes:     "Debian sid (unstable)",
+	})
+	addBuilder(BuildConfig{
+		Name:      "linux-amd64-stretch",
+		HostType:  "host-linux-stretch",
+		MaxAtOnce: 1,
+		Notes:     "Debian Stretch",
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-arm",
