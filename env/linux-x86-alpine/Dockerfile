@@ -6,6 +6,8 @@
 # Docker tag gcr.io/go-dashboard-dev/linux-x86-alpine (staging)
 # and gcr.io/symbolic-datum-552/linux-x86-alpine (prod)
 
+FROM golang/buildlet-stage0 AS stage0
+
 FROM alpine:3.5
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
@@ -25,7 +27,8 @@ RUN apk add --no-cache \
 	procps \
 	strace
 
-RUN curl -o /usr/local/bin/stage0 https://storage.googleapis.com/go-builder-data/buildlet-stage0.linux-amd64-static
-RUN chmod +x /usr/local/bin/stage0
+COPY --from=stage0 /go/bin/stage0 /usr/local/bin/stage0
 
 ENV GOROOT_BOOTSTRAP=/usr/lib/go
+
+CMD ["/usr/local/bin/stage0"]

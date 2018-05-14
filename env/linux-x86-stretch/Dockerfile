@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
+FROM golang/buildlet-stage0 AS stage0
+
 FROM debian:stretch
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
@@ -49,7 +51,6 @@ RUN mkdir -p /go1.4-amd64 \
 		/go1.4/test \
 	&& find /go1.4 -type d -name testdata | xargs rm -rf
 
-RUN curl -o /usr/local/bin/stage0 https://storage.googleapis.com/go-builder-data/buildlet-stage0.linux-amd64-kube \
-	&& chmod +x /usr/local/bin/stage0
+COPY --from=stage0 /go/bin/stage0 /usr/local/bin/stage0
 
 CMD ["/usr/local/bin/stage0"]
