@@ -1084,6 +1084,13 @@ func init() {
 		Notes:     "Debian Stretch",
 	})
 	addBuilder(BuildConfig{
+		Name:      "linux-amd64-longtest",
+		HostType:  "host-linux-stretch",
+		MaxAtOnce: 1,
+		Notes:     "Debian Stretch with go test -short=false",
+		env:       []string{"GO_TEST_SHORT=0"},
+	})
+	addBuilder(BuildConfig{
 		Name:              "linux-arm",
 		HostType:          "host-linux-arm-scaleway",
 		TryBot:            false, // Issue 22748, Issue 22749
