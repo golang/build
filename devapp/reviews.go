@@ -117,7 +117,8 @@ func (s *server) updateReviewsData() {
 			if strings.Contains(cl.Commit.Msg, "DO NOT REVIEW") || strings.Contains(cl.Commit.Msg, "DO NOT SUBMIT") {
 				return nil
 			}
-			if cl.Meta.Hashtags().Contains("wait-author") {
+			tags := cl.Meta.Hashtags()
+			if tags.Contains("wait-author") || tags.Contains("wait-release") {
 				return nil
 			}
 			c := &change{GerritCL: cl}
