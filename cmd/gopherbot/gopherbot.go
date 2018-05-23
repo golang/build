@@ -41,6 +41,8 @@ var (
 	// "git-youremail@yourcompany.com=password". Copy and paste that to the
 	// token file with a colon in between the email and password.
 	gerritTokenFile = flag.String("gerrit-token-file", filepath.Join(os.Getenv("HOME"), "keys", "gerrit-gobot"), `File to load Gerrit token from. File should be of form <git-email>:<token>`)
+
+	onlyRun = flag.String("only-run", "", "if non-empty, the name of a task to run. Mostly for debugging, but tasks (like 'kicktrain') may choose to only run in explicit mode")
 )
 
 // GitHub Label IDs for the golang/go repo.
@@ -59,6 +61,7 @@ const (
 var (
 	proposal   = milestone{30, "Proposal"}
 	unreleased = milestone{22, "Unreleased"}
+	unplanned  = milestone{6, "Unplanned"}
 	gccgo      = milestone{23, "Gccgo"}
 	vgo        = milestone{71, "vgo"}
 )
@@ -223,6 +226,7 @@ var tasks = []struct {
 	name string
 	fn   func(*gopherbot, context.Context) error
 }{
+	{"kicktrain", (*gopherbot).getOffKickTrain},
 	{"freeze old issues", (*gopherbot).freezeOldIssues},
 	{"label proposals", (*gopherbot).labelProposals},
 	{"set subrepo milestones", (*gopherbot).setSubrepoMilestones},
@@ -258,6 +262,9 @@ func (b *gopherbot) initCorpus() {
 
 func (b *gopherbot) doTasks(ctx context.Context) error {
 	for _, task := range tasks {
+		if *onlyRun != "" && task.name != *onlyRun {
+			continue
+		}
 		if err := task.fn(b, ctx); err != nil {
 			log.Printf("%s: %v", task.name, err)
 			return err
@@ -456,6 +463,83 @@ func (b *gopherbot) addGerritComment(ctx context.Context, changeID, comment stri
 	return b.gerrit.SetReview(ctx, changeID, rev, gerrit.ReviewInput{
 		Message: comment,
 	})
+}
+
+// Move any issue to "Unplanned" if it looks like it keeps getting kicked along between releases.
+func (b *gopherbot) getOffKickTrain(ctx context.Context) error {
+	// We only run this task if it was explicitly requested via
+	// the --only-run flag.
+	if *onlyRun == "" {
+		return nil
+	}
+	type match struct {
+		url   string
+		title string
+		gi    *maintner.GitHubIssue
+	}
+	var matches []match
+	b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		if gi.PullRequest || gi.Closed || gi.NotExist {
+			return nil
+		}
+		curMilestone := gi.Milestone.Title
+		if !strings.HasPrefix(curMilestone, "Go1.") || strings.Count(curMilestone, ".") != 1 {
+			return nil
+		}
+		if gi.HasLabel("release-blocker") || gi.HasLabel("Security") {
+			return nil
+		}
+		if len(gi.Assignees) > 0 {
+			return nil
+		}
+		was := map[string]bool{}
+		gi.ForeachEvent(func(e *maintner.GitHubIssueEvent) error {
+			if e.Type == "milestoned" {
+				switch e.Milestone {
+				case "Unreleased", "Unplanned", "Proposal":
+					return nil
+				}
+				if strings.Count(e.Milestone, ".") > 1 {
+					return nil
+				}
+				ms := strings.TrimSuffix(e.Milestone, "Maybe")
+				ms = strings.TrimSuffix(ms, "Early")
+				was[ms] = true
+			}
+			return nil
+		})
+		if len(was) > 2 {
+			var mss []string
+			for ms := range was {
+				mss = append(mss, ms)
+			}
+			sort.Slice(mss, func(i, j int) bool {
+				if len(mss[i]) == len(mss[j]) {
+					return mss[i] < mss[j]
+				}
+				return len(mss[i]) < len(mss[j])
+			})
+			matches = append(matches, match{
+				url:   fmt.Sprintf("https://golang.org/issue/%d", gi.Number),
+				title: fmt.Sprintf("%s - %v", gi.Title, mss),
+				gi:    gi,
+			})
+		}
+		return nil
+	})
+	sort.Slice(matches, func(i, j int) bool {
+		return matches[i].title < matches[j].title
+	})
+	fmt.Printf("%d issues:\n", len(matches))
+	for _, m := range matches {
+		fmt.Printf("%-30s - %s\n", m.url, m.title)
+		if !*dryRun {
+			if err := b.setMilestone(ctx, m.gi, unplanned); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // freezeOldIssues locks any issue that's old and closed.
