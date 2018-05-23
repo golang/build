@@ -987,13 +987,15 @@ func init() {
 			},
 		})
 	}
-	addMiscCompile("", "^(linux-arm64|nacl-arm|solaris-amd64|darwin-386)$") // 4 ports
-	addMiscCompile("-mips", "^linux-mips")                                  // 4
-	addMiscCompile("-ppc", "^linux-ppc64")                                  // 2
-	addMiscCompile("-plan9", "^plan9-")                                     // 3
-	addMiscCompile("-freebsd", "^freebsd-")                                 // 3
-	addMiscCompile("-netbsd", "^netbsd-")                                   // 3
-	addMiscCompile("-openbsd", "^openbsd-")                                 // 3
+	addMiscCompile("", "^(linux-arm64|linux-s390x|solaris-amd64|darwin-386)$") // 4 ports
+	addMiscCompile("-mobile", "(^android|darwin-arm64)")                       // 5 ports
+	addMiscCompile("-nacl", "^nacl")                                           // 3
+	addMiscCompile("-mips", "^linux-mips")                                     // 4
+	addMiscCompile("-ppc", "^linux-ppc64")                                     // 2
+	addMiscCompile("-plan9", "^plan9-")                                        // 3
+	addMiscCompile("-freebsd", "^freebsd-")                                    // 3
+	addMiscCompile("-netbsd", "^netbsd-")                                      // 3
+	addMiscCompile("-openbsd", "^openbsd-")                                    // 3
 
 	addBuilder(BuildConfig{
 		Name:      "linux-amd64-nocgo",
