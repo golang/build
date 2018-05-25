@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y \
 	openssh-server \
 	git \
 	mercurial \
+	subversion \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /go1.4-amd64 \
