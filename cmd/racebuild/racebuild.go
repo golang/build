@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -30,8 +31,12 @@ import (
 var (
 	flagGoroot    = flag.String("goroot", "", "path to Go repository to update (required)")
 	flagRev       = flag.String("rev", "", "llvm compiler-rt git revision from http://llvm.org/git/compiler-rt.git (required)")
+	flagGoRev     = flag.String("gorev", "HEAD", "Go repository revision to use; HEAD is relative to --goroot")
 	flagPlatforms = flag.String("platforms", "all", `comma-separated platforms (such as "linux/amd64") to rebuild, or "all"`)
 )
+
+// goRev is the resolved commit ID of flagGoRev.
+var goRev string
 
 // TODO: use buildlet package instead of calling out to gomote.
 var platforms = []*Platform{
@@ -42,6 +47,9 @@ var platforms = []*Platform{
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
+pushd go
+git checkout $GOREV
+popd
 git clone http://llvm.org/git/compiler-rt.git
 (cd compiler-rt && git checkout $REV)
 (cd compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
@@ -56,6 +64,9 @@ cp compiler-rt/lib/tsan/go/race_freebsd_amd64.syso go/src/runtime/race
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
+pushd go
+git checkout $GOREV
+popd
 git clone http://llvm.org/git/compiler-rt.git
 (cd compiler-rt && git checkout $REV)
 (cd compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
@@ -72,6 +83,9 @@ set -e
 apt-get update
 apt-get install -y git g++
 git clone https://go.googlesource.com/go
+pushd go
+git checkout $GOREV
+popd
 git clone http://llvm.org/git/compiler-rt.git
 (cd compiler-rt && git checkout $REV)
 (cd compiler-rt/lib/tsan/go && ./buildgo.sh)
@@ -88,6 +102,9 @@ set -e
 apt-get update
 apt-get install -y git g++
 git clone https://go.googlesource.com/go
+pushd go
+git checkout $GOREV
+popd
 git clone http://llvm.org/git/compiler-rt.git
 (cd compiler-rt && git checkout $REV)
 (cd compiler-rt/lib/tsan/go && ./buildgo.sh)
@@ -103,6 +120,9 @@ cp compiler-rt/lib/tsan/go/race_linux_ppc64le.syso go/src/runtime/race
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
+pushd go
+git checkout $GOREV
+popd
 git clone http://llvm.org/git/compiler-rt.git
 (cd compiler-rt && git checkout $REV)
 (cd compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
@@ -119,11 +139,15 @@ cp compiler-rt/lib/tsan/go/race_netbsd_amd64.syso go/src/runtime/race
 @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\chocolatey\bin"
 choco install git -y
 if %errorlevel% neq 0 exit /b %errorlevel%
-choco install mingw -y
+choco install mingw --version 5.3.0 -y
 if %errorlevel% neq 0 exit /b %errorlevel%
 call refreshenv
 git clone https://go.googlesource.com/go
 if %errorlevel% neq 0 exit /b %errorlevel%
+cd go
+git checkout %GOREV%
+if %errorlevel% neq 0 exit /b %errorlevel%
+cd ..
 git clone http://llvm.org/git/compiler-rt.git
 if %errorlevel% neq 0 exit /b %errorlevel%
 cd compiler-rt
@@ -189,27 +213,21 @@ func parsePlatformsFlag() {
 
 func main() {
 	flag.Parse()
-	if *flagRev == "" || *flagGoroot == "" {
+	if *flagRev == "" || *flagGoroot == "" || *flagGoRev == "" {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 	parsePlatformsFlag()
 
-	// Update revision in the README file.
-	// Do this early to check goroot correctness.
-	readmeFile := filepath.Join(*flagGoroot, "src", "runtime", "race", "README")
-	readme, err := ioutil.ReadFile(readmeFile)
+	cmd := exec.Command("git", "rev-parse", *flagGoRev)
+	cmd.Dir = *flagGoroot
+	cmd.Stderr = os.Stderr
+	out, err := cmd.Output()
 	if err != nil {
-		log.Fatalf("bad -goroot? %v", err)
+		log.Fatal("%s failed: %v", strings.Join(cmd.Args, " "), err)
 	}
-	readmeRev := regexp.MustCompile("Current runtime is built on rev ([0-9,a-z]+)\\.").FindSubmatchIndex(readme)
-	if readmeRev == nil {
-		log.Fatalf("failed to find current revision in src/runtime/race/README")
-	}
-	readme = bytes.Replace(readme, readme[readmeRev[2]:readmeRev[3]], []byte(*flagRev), -1)
-	if err := ioutil.WriteFile(readmeFile, readme, 0640); err != nil {
-		log.Fatalf("failed to write README file: %v", err)
-	}
+	goRev = string(bytes.TrimSpace(out))
+	log.Printf("using Go revision: %s", goRev)
 
 	// Start build on all platforms in parallel.
 	// On interrupt, destroy any in-flight builders before exiting.
@@ -232,13 +250,12 @@ func main() {
 			if err := p.Build(ctx); err != nil {
 				return fmt.Errorf("%v failed: %v", p.Name(), err)
 			}
-			return nil
+			return p.UpdateReadme()
 		})
 	}
 
 	if err := g.Wait(); err != nil {
-		log.Println(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 }
 
@@ -252,6 +269,11 @@ type Platform struct {
 
 func (p *Platform) Name() string {
 	return fmt.Sprintf("%v/%v", p.OS, p.Arch)
+}
+
+// Basename returns the name of the output file relative to src/runtime/race.
+func (p *Platform) Basename() string {
+	return fmt.Sprintf("race_%v_%s.syso", p.OS, p.Arch)
 }
 
 func (p *Platform) Build(ctx context.Context) error {
@@ -304,12 +326,12 @@ func (p *Platform) Build(ctx context.Context) error {
 	if _, err := p.Gomote(ctx, "put", "-mode=0700", p.Inst, script.Name(), targetName); err != nil {
 		return err
 	}
-	if _, err := p.Gomote(ctx, "run", "-e=REV="+*flagRev, p.Inst, targetName); err != nil {
+	if _, err := p.Gomote(ctx, "run", "-e=REV="+*flagRev, "-e=GOREV="+goRev, p.Inst, targetName); err != nil {
 		return err
 	}
 
 	// The script is supposed to leave updated runtime at that path. Copy it out.
-	syso := fmt.Sprintf("race_%v_%s.syso", p.OS, p.Arch)
+	syso := p.Basename()
 	targz, err := p.Gomote(ctx, "gettar", "-dir=go/src/runtime/race/"+syso, p.Inst)
 	if err != nil {
 		return err
@@ -346,6 +368,41 @@ func (p *Platform) WriteSyso(sysof string, targz []byte) error {
 		return fmt.Errorf("failed to write race runtime: %v", err)
 	}
 	return nil
+}
+
+var readmeMu sync.Mutex
+
+func (p *Platform) UpdateReadme() error {
+	readmeMu.Lock()
+	defer readmeMu.Unlock()
+
+	readmeFile := filepath.Join(*flagGoroot, "src", "runtime", "race", "README")
+	readme, err := ioutil.ReadFile(readmeFile)
+	if err != nil {
+		log.Fatalf("bad -goroot? %v", err)
+	}
+
+	syso := p.Basename()
+	const (
+		readmeTmpl = "%s built with LLVM %s and Go %s."
+		commitRE   = "[0-9a-f]+"
+	)
+
+	// TODO(bcmills): Extract the C++ toolchain version from the .syso file and
+	// record it in the README.
+	updatedLine := fmt.Sprintf(readmeTmpl, syso, *flagRev, goRev)
+
+	lineRE, err := regexp.Compile("^" + fmt.Sprintf(readmeTmpl, regexp.QuoteMeta(syso), commitRE, commitRE) + "$")
+	if err != nil {
+		return err
+	}
+	if lineRE.Match(readme) {
+		readme = lineRE.ReplaceAll(readme, []byte(updatedLine))
+	} else {
+		readme = append(append(readme, []byte(updatedLine)...), '\n')
+	}
+
+	return ioutil.WriteFile(readmeFile, readme, 0640)
 }
 
 func (p *Platform) Gomote(ctx context.Context, args ...string) ([]byte, error) {
