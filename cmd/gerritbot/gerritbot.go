@@ -321,7 +321,7 @@ func (b *bot) checkPullRequests() {
 		}
 	}
 
-	if err := b.corpus.GitHub().ForeachRepo(func(ghr *maintner.GitHubRepo) error {
+	b.corpus.GitHub().ForeachRepo(func(ghr *maintner.GitHubRepo) error {
 		id := ghr.ID()
 		if id.Owner != "golang" || !gerritProjectWhitelist[id.Repo] {
 			return nil
@@ -339,13 +339,16 @@ func (b *bot) checkPullRequests() {
 			ctx := context.Background()
 			pr, err := b.getFullPR(ctx, id.Owner, id.Repo, int(issue.Number))
 			if err != nil {
-				return fmt.Errorf("getFullPR(ctx, %q, %q, %d): %v", id.Owner, id.Repo, issue.Number, err)
+				log.Printf("getFullPR(ctx, %q, %q, %d): %v", id.Owner, id.Repo, issue.Number, err)
+				return nil
 			}
-			return b.processPullRequest(ctx, pr)
+			if err := b.processPullRequest(ctx, pr); err != nil {
+				log.Printf("processPullRequest: %v", err)
+				return nil
+			}
+			return nil
 		})
-	}); err != nil {
-		log.Printf("corpus.GitHub().ForeachRepo(...): %v", err)
-	}
+	})
 }
 
 // prShortLink returns text referencing an Issue or Pull Request that will be
@@ -379,10 +382,6 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 	if b.pendingCLs[shortLink] != "" {
 		log.Printf("Changes for PR %s have yet to be mirrored in the maintner corpus. Skipping for now.", shortLink)
 		return nil
-	}
-	if pr.GetCommits() == 0 {
-		// Um. Wat?
-		return fmt.Errorf("pr has 0 commits")
 	}
 
 	cmsg, err := commitMessage(pr, cl)
