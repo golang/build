@@ -416,6 +416,16 @@ type ReviewInput struct {
 	// Comments contains optional per-line comments to post.
 	// The map key is a file path (such as "src/foo/bar.go").
 	Comments map[string][]CommentInput `json:"comments,omitempty"`
+
+	// Reviewers optionally specifies new reviewers to add to the change.
+	Reviewers []ReviewerInput `json:"reviewers,omitempty"`
+}
+
+// ReviewerInput contains information for adding a reviewer to a change.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#reviewer-input
+type ReviewerInput struct {
+	Reviewer int64  `json:"reviewer"`        // ID of account to be added as reviewer
+	State    string `json:"state,omitempty"` // REVIEWER or CC (default: REVIEWER)
 }
 
 // CommentInput contains information for creating an inline comment.
