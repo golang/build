@@ -34,6 +34,7 @@ type Response struct {
 	Payload struct {
 		Entries map[string]*Entry `json:"entries"` // paths in request -> Entry
 	} `json:"payload"`
+	Error string `json:"error,omitempty"`
 }
 
 // match takes a path consisting of the repo name and full path of a file or
@@ -54,6 +55,7 @@ func match(path string) *Entry {
 // is nil.
 func Handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
 
 	switch r.Method {
 	case "GET":
@@ -62,7 +64,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	case "POST":
 		var req Request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "unable to decode request", http.StatusInternalServerError)
+			jsonError(w, "unable to decode request", http.StatusBadRequest)
 			// TODO: increment expvar for monitoring.
 			log.Printf("unable to decode owners request: %v", err)
 			return
@@ -73,10 +75,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		for _, p := range req.Payload.Paths {
 			resp.Payload.Entries[p] = match(p)
 		}
-		w.Header().Set("Content-Type", "application/json")
 		var buf bytes.Buffer
 		if err := json.NewEncoder(&buf).Encode(resp); err != nil {
-			http.Error(w, "unable to encode response", http.StatusInternalServerError)
+			jsonError(w, "unable to encode response", http.StatusInternalServerError)
 			// TODO: increment expvar for monitoring.
 			log.Printf("unable to encode owners response: %v", err)
 			return
@@ -85,9 +86,20 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	case "OPTIONS":
 		// Likely a CORS preflight request; leave resp.Payload empty.
 	default:
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		jsonError(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
+}
+
+func jsonError(w http.ResponseWriter, text string, code int) {
+	w.WriteHeader(code)
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(Response{Error: text}); err != nil {
+		// TODO: increment expvar for monitoring.
+		log.Printf("unable to encode error response: %v", err)
+		return
+	}
+	w.Write(buf.Bytes())
 }
 
 func serveIndex(w http.ResponseWriter, r *http.Request) {

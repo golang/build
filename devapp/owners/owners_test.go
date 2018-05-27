@@ -54,25 +54,24 @@ func TestMatch(t *testing.T) {
 func TestHandler(t *testing.T) {
 	testCases := []struct {
 		method  string
-		path    string
 		code    int
 		paths   []string
 		entries map[string]*Entry
 	}{
-		{"PUT", "/owners/", http.StatusMethodNotAllowed, nil, nil},
-		{"OPTIONS", "/owners/", http.StatusOK, nil, nil},
+		{"PUT", http.StatusMethodNotAllowed, nil, nil},
+		{"OPTIONS", http.StatusOK, nil, nil},
 		{
-			"POST", "/owners/", http.StatusOK,
+			"POST", http.StatusOK,
 			[]string{"nonexistent/path"},
 			map[string]*Entry{"nonexistent/path": nil},
 		},
 		{
-			"POST", "/owners/", http.StatusOK,
+			"POST", http.StatusOK,
 			[]string{"go/src/archive/zip/a.go"},
 			map[string]*Entry{"go/src/archive/zip/a.go": {Primary: []Owner{joetsai}, Secondary: []Owner{bradfitz}}},
 		},
 		{
-			"POST", "/owners/", http.StatusOK,
+			"POST", http.StatusOK,
 			[]string{
 				"go/src/archive/zip/a.go",
 				"go/src/archive/zip/b.go",
@@ -83,7 +82,7 @@ func TestHandler(t *testing.T) {
 			},
 		},
 		{
-			"POST", "/owners/", http.StatusOK,
+			"POST", http.StatusOK,
 			[]string{
 				"go/src/archive/zip/a.go",
 				"crypto/chacha20poly1305/chacha20poly1305.go",
@@ -110,7 +109,7 @@ func TestHandler(t *testing.T) {
 			rStr = "<empty>"
 		}
 		t.Logf("Request: %v", rStr)
-		req, err := http.NewRequest(tc.method, tc.path, &buf)
+		req, err := http.NewRequest(tc.method, "/owners/", &buf)
 		if err != nil {
 			t.Errorf("http.NewRequest: %v", err)
 			continue
@@ -129,9 +128,47 @@ func TestHandler(t *testing.T) {
 		if err := json.NewDecoder(resp.Body).Decode(&oResp); err != nil {
 			t.Errorf("json decode: %v", err)
 		}
-
-		if diff := cmp.Diff(oResp.Payload.Entries, tc.entries); diff != "" {
-			t.Errorf("%s %s: (-got +want)\n%s", tc.method, tc.path, diff)
+		if oResp.Error != "" {
+			t.Errorf("got unexpected error in response: %q", oResp.Error)
 		}
+		if diff := cmp.Diff(oResp.Payload.Entries, tc.entries); diff != "" {
+			t.Errorf("%s: (-got +want)\n%s", tc.method, diff)
+		}
+	}
+}
+
+func TestIndex(t *testing.T) {
+	req, err := http.NewRequest("GET", "/owners/", nil)
+	if err != nil {
+		t.Fatalf("http.NewRequest: %v", err)
+	}
+	w := httptest.NewRecorder()
+	Handler(w, req)
+	resp := w.Result()
+	if got, want := resp.StatusCode, http.StatusOK; got != want {
+		t.Errorf("status code: got %v; want %v", got, want)
+	}
+}
+
+func TestBadRequest(t *testing.T) {
+	req, err := http.NewRequest("POST", "/owners/", bytes.NewBufferString("malformed json"))
+	if err != nil {
+		t.Fatalf("http.NewRequest: %v", err)
+	}
+	w := httptest.NewRecorder()
+	Handler(w, req)
+	resp := w.Result()
+	if got, want := resp.StatusCode, http.StatusBadRequest; got != want {
+		t.Errorf("status code: got %v; want %v", got, want)
+	}
+	if got, want := resp.Header.Get("Content-Type"), "application/json"; got != want {
+		t.Errorf("Content-Type: got %q; want %q", got, want)
+	}
+	var oResp Response
+	if err := json.NewDecoder(resp.Body).Decode(&oResp); err != nil {
+		t.Fatalf("could not decode response: %v", err)
+	}
+	if got, want := oResp.Error, "unable to decode request"; got != want {
+		t.Errorf("response error text: got %q; want %q", got, want)
 	}
 }
