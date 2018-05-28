@@ -608,9 +608,12 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		}
 	}
 
-	out, err := cmdOut(exec.Command("git", "-C", worktreeDir, "push", "origin", "HEAD:refs/for/"+prBaseRef))
+	// nokeycheck is specified to avoid failing silently when a review is created
+	// with what appears to be a private key. Since there are cases where a user
+	// would want a private key checked in (tests).
+	out, err := cmdOut(exec.Command("git", "-C", worktreeDir, "push", "-o", "nokeycheck", "origin", "HEAD:refs/for/"+prBaseRef))
 	if err != nil {
-		return nil
+		return fmt.Errorf("could not create change: %v", err)
 	}
 	changeURL := gerritChangeRE.FindString(out)
 	if changeURL == "" {
