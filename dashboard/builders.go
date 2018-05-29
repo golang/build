@@ -1090,7 +1090,12 @@ func init() {
 		HostType:  "host-linux-stretch",
 		MaxAtOnce: 1,
 		Notes:     "Debian Stretch with go test -short=false",
-		env:       []string{"GO_TEST_SHORT=0"},
+		env: []string{
+			"GO_TEST_SHORT=0",
+			// runtime takes ~190 seconds in long mode, which is over
+			// the 180 seconds default timeout.
+			"GO_TEST_TIMEOUT_SCALE=2",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-arm",
