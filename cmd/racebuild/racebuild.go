@@ -392,7 +392,7 @@ func (p *Platform) UpdateReadme() error {
 	// record it in the README.
 	updatedLine := fmt.Sprintf(readmeTmpl, syso, *flagRev, goRev)
 
-	lineRE, err := regexp.Compile("^" + fmt.Sprintf(readmeTmpl, regexp.QuoteMeta(syso), commitRE, commitRE) + "$")
+	lineRE, err := regexp.Compile("(?m)^" + fmt.Sprintf(readmeTmpl, regexp.QuoteMeta(syso), commitRE, commitRE) + "$")
 	if err != nil {
 		return err
 	}
