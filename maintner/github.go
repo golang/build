@@ -2084,6 +2084,7 @@ func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
 				e.TeamReviewer = t
 			}
 		}
+		delete(em, "node_id") // not sure what it is, but don't need to store it
 
 		otherJSON, _ := json.Marshal(em)
 		e.OtherJSON = string(otherJSON)
@@ -2091,7 +2092,7 @@ func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
 			e.OtherJSON = ""
 		}
 		if e.OtherJSON != "" {
-			log.Fatalf("Unknown fields in event: %s", e.OtherJSON)
+			log.Printf("warning: storing unknown field(s) in GitHub event: %s", e.OtherJSON)
 		}
 		evts = append(evts, e)
 	}
