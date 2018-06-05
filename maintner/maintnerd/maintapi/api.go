@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+// Package maintapi exposes a gRPC maintner service for a given corpus.
+package maintapi
 
 import (
 	"context"
@@ -17,6 +18,11 @@ import (
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 )
+
+// NewAPIService creates a gRPC Server that serves the Maintner API for the given corpus.
+func NewAPIService(corpus *maintner.Corpus) apipb.MaintnerServiceServer {
+	return apiService{corpus}
+}
 
 // apiService implements apipb.MaintnerServiceServer using the Corpus c.
 type apiService struct {

@@ -33,6 +33,8 @@ import (
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
 	"golang.org/x/build/maintner/maintnerd/apipb"
+	"golang.org/x/build/maintner/maintnerd/gcslog"
+	"golang.org/x/build/maintner/maintnerd/maintapi"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/http2"
 	"golang.org/x/time/rate"
@@ -155,15 +157,14 @@ func main() {
 	if *genMut {
 		if *bucket != "" {
 			ctx := context.Background()
-			gl, err := newGCSLog(ctx, *bucket)
+			gl, err := gcslog.NewGCSLog(ctx, *bucket)
 			if err != nil {
 				log.Fatalf("newGCSLog: %v", err)
 			}
-			http.HandleFunc("/logs", gl.serveJSONLogsIndex)
-			http.HandleFunc("/logs/", gl.serveLogFile)
+			gl.RegisterHandlers(http.DefaultServeMux)
 			if *migrateGCSFlag {
 				diskLog := maintner.NewDiskMutationLogger(*dataDir)
-				if err := gl.copyFrom(diskLog); err != nil {
+				if err := gl.CopyFrom(diskLog); err != nil {
 					log.Fatalf("migrate: %v", err)
 				}
 				log.Printf("Success.")
@@ -252,7 +253,7 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
-	apipb.RegisterMaintnerServiceServer(grpcServer, apiService{corpus})
+	apipb.RegisterMaintnerServiceServer(grpcServer, maintapi.NewAPIService(corpus))
 	http.Handle("/apipb.MaintnerService/", grpcServer)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
