@@ -304,6 +304,17 @@ func buildletURL() string {
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-arm-arm5"
 	}
 	switch osArch {
+	case "linux/amd64":
+		// Issue 25760: the s390x cross-compile builder is
+		// working under Kubernetes (which sets
+		// IN_KUBERNETES=1 in the env), but isn't working when
+		// run under Docker in COS (a Container-Optimized OS
+		// VM on GCE). Maybe something is hiding the GCE
+		// metadata service from the COS container now. As a
+		// test, just hard code the s390x builder:
+		if os.Getenv("GOARCH") == "s390x" {
+			return "https://storage.googleapis.com/go-builder-data/buildlet.linux-amd64"
+		}
 	case "linux/s390x":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-s390x"
 	case "linux/arm64":
