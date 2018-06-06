@@ -34,7 +34,10 @@ func loadGCSAuth() {
 	if err != nil {
 		log.Fatalf("cannot write to %s: %v", releaseBucket, err)
 	}
-	client.Bucket(releaseBucket).Object(name).Delete(ctx)
+	err = client.Bucket(releaseBucket).Object(name).Delete(ctx)
+	if err != nil {
+		log.Fatalf("cannot delete from %s: %v", releaseBucket, err)
+	}
 
 	gcsClient = client
 }

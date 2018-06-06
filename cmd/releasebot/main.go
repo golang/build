@@ -5,17 +5,13 @@
 // Releasebot manages the process of defining, packaging, and publishing Go releases.
 // It is a work in progress; right now it only handles beta and minor (point) releases,
 // but eventually we want it to handle major releases too.
-//
-// Release process
-//
-//
 package main
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha1"
 	"crypto/sha256"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -31,8 +27,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/go-github/github"
-	"golang.org/x/build/gerrit"
+	"golang.org/x/build/maintner"
 )
 
 var releaseTargets = []string{
@@ -50,24 +45,13 @@ var releaseTargets = []string{
 	"linux-ppc64le",
 }
 
-var githubCherryPickApprovers = map[string]bool{
-	"aclements":      true,
-	"andybons":       true,
-	"bradfitz":       true,
-	"broady":         true,
-	"ianlancetaylor": true,
-	"rsc":            true,
-}
-
 var releaseModes = map[string]bool{
-	"beta":              true,
-	"release-candidate": true,
-	"final":             true,
-	"close-milestone":   true,
+	"prepare": true,
+	"release": true,
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: releasebot -mode [release mode] go1.8.5 go1.9.2 go1.10")
+	fmt.Fprintln(os.Stderr, "usage: releasebot -mode <release mode> [-dry-run] go1.8.5")
 	fmt.Fprintln(os.Stderr, "Release modes:")
 	fmt.Fprintln(os.Stderr)
 	for m := range releaseModes {
@@ -76,8 +60,11 @@ func usage() {
 	os.Exit(2)
 }
 
+var dryRun bool // only perform pre-flight checks, only log to terminal
+
 func main() {
-	modeFlag := flag.String("mode", "", "release mode (beta, release-candidate, final, close-milestone)")
+	modeFlag := flag.String("mode", "", "release mode (prepare, release)")
+	flag.BoolVar(&dryRun, "dry-run", false, "only perform pre-flight checks, only log to terminal")
 	flag.Usage = usage
 	flag.Parse()
 	if *modeFlag == "" || !releaseModes[*modeFlag] || flag.NArg() == 0 {
@@ -87,36 +74,67 @@ func main() {
 	http.DefaultTransport = newLogger(http.DefaultTransport)
 
 	checkForGitCodereview()
+	loadMaintner()
+	loadGomoteUser()
 	loadGithubAuth()
-	loadGerritAuth()
 	loadGCSAuth()
 
-	miles, err := loadMilestones()
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	var wg sync.WaitGroup
-Args:
 	for _, release := range flag.Args() {
-		for _, m := range miles {
-			if strings.ToLower(m.GetTitle()) == release {
-				w := &Work{Milestone: m}
-				w.BetaRelease = *modeFlag == "beta"
-				w.FinalRelease = *modeFlag == "final"
-				w.CloseMilestone = *modeFlag == "close-milestone"
-				w.setVersion(release)
+		errFoundMilestone := errors.New("found milestone")
+		err := goRepo.ForeachMilestone(func(m *maintner.GitHubMilestone) error {
+			if strings.ToLower(m.Title) == release {
+				nextM, err := nextMilestone(m)
+				if err != nil {
+					return err
+				}
+				w := &Work{
+					Milestone:     m,
+					NextMilestone: nextM,
+				}
+				w.Prepare = *modeFlag == "prepare"
+				w.Version = release
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
 					w.doRelease()
 				}()
-				continue Args
+				return errFoundMilestone
 			}
+			return nil
+		})
+		if err != nil && err != errFoundMilestone {
+			log.Printf("error looking for release %s: %v", release, err)
 		}
-		log.Printf("cannot find release %s", release)
+		if err == nil {
+			log.Printf("cannot find release %s", release)
+		}
 	}
 	wg.Wait()
+}
+
+func nextMilestone(m *maintner.GitHubMilestone) (*maintner.GitHubMilestone, error) {
+	titleParts := strings.Split(m.Title, ".")
+	n, err := strconv.Atoi(titleParts[len(titleParts)-1])
+	if err != nil {
+		return nil, err
+	}
+	titleParts[len(titleParts)-1] = strconv.Itoa(n + 1)
+	newTitle := strings.Join(titleParts, ".")
+	var res *maintner.GitHubMilestone
+	err = goRepo.ForeachMilestone(func(m *maintner.GitHubMilestone) error {
+		if m.Title == newTitle {
+			res = m
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if res == nil {
+		return res, fmt.Errorf("no next milestone found with title %q", newTitle)
+	}
+	return res, nil
 }
 
 // checkForGitCodereview exits the program if git-codereview is not installed
@@ -130,6 +148,24 @@ func checkForGitCodereview() {
 	}
 }
 
+var gomoteUser string
+
+func loadGomoteUser() {
+	tokenPath := filepath.Join(os.Getenv("HOME"), ".config/gomote")
+	files, _ := ioutil.ReadDir(tokenPath)
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		name := file.Name()
+		if strings.HasSuffix(name, ".token") && strings.HasPrefix(name, "user-") {
+			gomoteUser = strings.TrimPrefix(strings.TrimSuffix(name, ".token"), "user-")
+			return
+		}
+	}
+	log.Fatal("missing gomote token - cannot build releases.\n**FIX**: Download https://build-dot-golang-org.appspot.com/key?builder=user-YOURNAME\nand store in ~/.config/gomote/user-YOURNAME.token")
+}
+
 // Work collects all the work state for managing a particular release.
 // The intent is that the code could be used in a setting where one program
 // is managing multiple releases, although the current releasebot command line
@@ -140,24 +176,18 @@ type Work struct {
 	runDir   string
 	extraEnv []string
 
-	BetaRelease    bool // this is the beta release; always cut from master
-	FinalRelease   bool // this is the actual release
-	CloseMilestone bool // release is done; close the issues and milestone
+	Prepare bool // create the release commit and submit it for review
 
-	Milestone     *github.Milestone // Github milestone
-	ReleaseIssue  *github.Issue     // Release status issue
+	Milestone     *maintner.GitHubMilestone
+	NextMilestone *maintner.GitHubMilestone // Next minor milestone
+	ReleaseIssue  int                       // Release status issue number
 	ReleaseBranch string
-	Picks         []*github.Issue // Issues marked cherry-pick-approved
-	OtherIssues   []*github.Issue // Other issues
-	Dir           string          // work directory
-	CLs           []*CL
-	Errors        []*Error
+	Dir           string // work directory
+	Errors        []string
 	ReleaseBinary string
 	Version       string
 	VersionCommit string
-	VersionChange *gerrit.ChangeInfo
 
-	summary     sync.Mutex
 	releaseMu   sync.Mutex
 	ReleaseInfo map[string]*ReleaseInfo // map and info protected by releaseMu
 }
@@ -176,49 +206,22 @@ type ReleaseOutput struct {
 	Error  string
 }
 
-// A CL holds the state for a single CL that is to be copied into the release.
-type CL struct {
-	Num                 int
-	Approver            string
-	Gerrit              *gerrit.ChangeInfo
-	Error               string
-	Ref                 string
-	Commit              string
-	Title               string
-	Order               int
-	Issues              []int
-	Prereq              []int
-	ReleaseBranchCL     int
-	ReleaseBranchGerrit *gerrit.ChangeInfo
-	Errors              []*Error
-}
-
-// An Error is a problem to highlight on the status page.
-type Error struct {
-	CL  *CL
-	Msg string
-}
-
 // logError records an error.
 // The error is always shown in the "PROBLEMS WITH RELEASE"
 // section at the top of the status page.
 // If cl is not nil, the error is also shown in that CL's summary.
-func (w *Work) logError(cl *CL, msg string) {
-	e := &Error{cl, msg}
-	w.Errors = append(w.Errors, e)
-	if cl != nil {
-		cl.Errors = append(cl.Errors, e)
-	}
+func (w *Work) logError(msg string, a ...interface{}) {
+	w.Errors = append(w.Errors, fmt.Sprintf(msg, a...))
 }
 
-// recover should be deferred at the top of each goroutine using a Work
-// (as in "defer w.recover()"). It catches and logs panics and lets the
-// overall work continue executing.
-func (w *Work) recover() {
+// finally should be deferred at the top of each goroutine using a Work
+// (as in "defer w.finally()"). It catches and logs panics and posts
+// the log.
+func (w *Work) finally() {
 	if err := recover(); err != nil {
 		w.log.Printf("\n\nPANIC: %v\n\n%s", err, debug.Stack())
 	}
-	w.updateSummary()
+	w.postSummary()
 }
 
 // run runs the command and requires that it succeeds.
@@ -283,123 +286,99 @@ Again:
 func (w *Work) doRelease() {
 	w.logBuf = new(bytes.Buffer)
 	w.log = log.New(io.MultiWriter(os.Stdout, w.logBuf), "", log.LstdFlags)
-	defer w.recover()
-
-	if w.Milestone.GetClosedIssues() > 0 {
-		w.logError(nil, fmt.Sprintf("%s milestone has closed issues", w.Milestone.GetTitle()))
-	}
+	defer w.finally()
 
 	w.log.Printf("starting")
 
+	w.checkSpelling()
+	w.checkReleaseBlockers()
 	w.gitCheckout()
-	if w.BetaRelease {
-		w.buildReleases()
+	w.checkDocs()
+	w.findOrCreateReleaseIssue()
+	if len(w.Errors) > 0 && !dryRun {
+		w.logError("**Found errors during release. Stopping!**")
 		return
 	}
 
-	w.findIssues()
-	w.findCLs()
-	w.queryGerritCLs()
-
-	if w.CloseMilestone {
-		_, err := w.runErr("git", "rev-parse", w.Version)
-		if err != nil {
-			w.logError(nil, fmt.Sprintf("cannot close milestone: did not find %s tag in Git repo", w.Version))
+	if w.Prepare {
+		changeID := w.writeVersion()
+		w.nextStepsPrepare(changeID)
+	} else {
+		w.checkVersion()
+		// TODO: check build.golang.org
+		if len(w.Errors) > 0 {
+			w.logError("**Found errors during release. Stopping!**")
 			return
 		}
-		w.closeIssues()
+		w.gitTagVersion()
+		w.buildReleases()
+		w.pushIssues()
 		w.closeMilestone()
-		w.updateSummary()
-		return
+		w.nextStepsRelease()
 	}
-
-	w.gitFetchCLs()
-	w.orderCLs()
-	w.updateSummary()
-	w.cherryPickCLs()
-	w.checkDocs()
-	w.updateSummary()
-	if w.FinalRelease && len(w.Errors)+len(w.OtherIssues) > 0 {
-		w.logError(nil, "**Found errors during final release. Stopping!**")
-		return
-	}
-	w.writeVersion()
-	if w.FinalRelease && len(w.Errors)+len(w.OtherIssues) > 0 {
-		w.logError(nil, "**Found errors during final release. Stopping!**")
-		return
-	}
-	w.updateSummary()
-	w.buildReleases()
-	w.updateSummary()
 }
 
-func (w *Work) updateSummary() {
-	if w.BetaRelease {
+func (w *Work) checkSpelling() {
+	if w.Version != strings.ToLower(w.Version) {
+		w.logError("release name should be lowercase: %q", w.Version)
+	}
+	if strings.Contains(w.Version, " ") {
+		w.logError("release name should not contain any spaces: %q", w.Version)
+	}
+	if !strings.HasPrefix(w.Version, "go") {
+		w.logError("release name should have 'go' prefix: %q", w.Version)
+	}
+}
+
+func (w *Work) checkReleaseBlockers() {
+	if err := goRepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		if gi.Milestone == nil || gi.Milestone.Title != w.Milestone.Title {
+			return nil
+		}
+		if !gi.Closed && gi.HasLabel("release-blocker") {
+			w.logError("open issue #%d is tagged release-blocker", gi.Number)
+		}
+		return nil
+	}); err != nil {
+		w.logError("error checking release-blockers: %v", err.Error())
 		return
 	}
+}
 
-	w.summary.Lock()
-	defer w.summary.Unlock()
+func (w *Work) nextStepsPrepare(changeID string) {
+	w.log.Printf(`
 
-	// TODO: Show relevant issue labels.
+The release is ready.
+
+Please review and submit https://go-review.googlesource.com/q/%s
+after making sure its tests pass and then run the release stage.
+
+`, changeID)
+}
+
+func (w *Work) nextStepsRelease() {
+	w.log.Printf(`
+
+The release run is complete! Refer to the playbook for the next steps.
+
+Thanks for riding with releasebot today.
+
+`)
+}
+
+func (w *Work) postSummary() {
 	var md bytes.Buffer
 
 	if len(w.Errors) > 0 {
 		fmt.Fprintf(&md, "## PROBLEMS WITH RELEASE\n\n")
 		for _, e := range w.Errors {
 			fmt.Fprintf(&md, "  - ")
-			if e.CL != nil {
-				fmt.Fprintf(&md, "%s: ", mdChangeLink(e.CL.Num))
-			}
-			fmt.Fprintf(&md, "%s\n", strings.Replace(strings.TrimRight(e.Msg, "\n"), "\n", "\n    ", -1))
+			fmt.Fprintf(&md, "%s\n", strings.Replace(strings.TrimRight(e, "\n"), "\n", "\n    ", -1))
 		}
 	}
 
-	if len(w.OtherIssues) > 0 {
-		fmt.Fprintf(&md, "## ISSUES MISSING FIXES\n\n")
-		for _, issue := range w.OtherIssues {
-			fmt.Fprintf(&md, "  - #%d %s\n", issue.GetNumber(), mdEscape(issue.GetTitle()))
-		}
-	}
-
-	fmt.Fprintf(&md, "\n## Issues with fixes\n\n")
-	for _, issue := range w.Picks {
-		fmt.Fprintf(&md, "  - #%d %s\n", issue.GetNumber(), mdEscape(issue.GetTitle()))
-		for _, cl := range w.CLs {
-			for _, n := range cl.Issues {
-				if n == issue.GetNumber() {
-					fmt.Fprintf(&md, "    - %s per %s; %s\n", mdChangeLink(cl.Num), cl.Approver, mdEscape(cl.Title))
-				}
-			}
-		}
-	}
-
-	fmt.Fprintf(&md, "\n## Changes on release branch\n\n")
-	for _, cl := range w.CLs {
-		desc := ""
-		if rcl := cl.ReleaseBranchCL; rcl == cl.Num {
-			desc = mdChangeLink(rcl) + " (new for release-branch)"
-		} else if rcl != 0 {
-			desc = mdChangeLink(rcl) + " (cherry-pick of " + mdChangeLink(cl.Num) + ")"
-		} else {
-			desc = "**CL missing** for cherry-pick of " + mdChangeLink(cl.Num)
-		}
-		fmt.Fprintf(&md, "  - %s (for", desc)
-		for _, n := range cl.Issues {
-			fmt.Fprintf(&md, " #%d", n)
-		}
-		fmt.Fprintf(&md, ")\n")
-		if cl.Title != "" {
-			fmt.Fprintf(&md, "    - %s\n", mdEscape(cl.Title))
-		}
-		for _, e := range cl.Errors {
-			fmt.Fprintf(&md, "    - **ERROR**: %s\n", strings.Replace(strings.TrimRight(e.Msg, "\n"), "\n", "\n      ", -1))
-		}
-	}
-
-	if w.Version != "" && w.VersionChange != nil {
-		fmt.Fprintf(&md, "\n## Latest build: %s\n", mdEscape(w.Version))
-		fmt.Fprintf(&md, "\n    git fetch origin %s &&\n    git checkout %s\n\n", w.VersionChange.Revisions[w.VersionChange.CurrentRevision].Ref, w.VersionCommit)
+	if !w.Prepare {
+		fmt.Fprintf(&md, "\n## Latest build: %s\n\n", mdEscape(w.Version))
 		w.printReleaseTable(&md)
 	}
 
@@ -407,16 +386,19 @@ func (w *Work) updateSummary() {
 	md.WriteString(strings.Replace(w.logBuf.String(), "\n", "\n    ", -1))
 	fmt.Fprintf(&md, "\n\n")
 
-	body := wrapStatus(w.Milestone, md.String())
-	_, _, err := githubClient.Issues.Edit(context.TODO(), projectOwner, projectRepo, w.ReleaseIssue.GetNumber(), &github.IssueRequest{
-		Body: &body,
-	})
+	body := md.String()
+	fmt.Printf("%s", body)
+	if dryRun {
+		return
+	}
+	err := postGithubComment(w.ReleaseIssue, body)
 	if err != nil {
-		fmt.Printf("updating issue: %v\n", err)
+		fmt.Printf("error posting update comment: %v\n", err)
 	}
 }
 
 func (w *Work) printReleaseTable(md *bytes.Buffer) {
+	// TODO: print sha256
 	w.releaseMu.Lock()
 	defer w.releaseMu.Unlock()
 	for _, target := range releaseTargets {
@@ -443,106 +425,49 @@ func (w *Work) printReleaseTable(md *bytes.Buffer) {
 	}
 }
 
-func wrapStatus(m *github.Milestone, md string) string {
-	return fmt.Sprintf("# %s release status\n\n%s\n%s", strings.Replace(m.GetTitle(), "Go", "Go ", -1), strings.TrimSpace(md), signature())
-}
-
-func signature() string {
-	return fmt.Sprintf("\n— golang.org/x/build/cmd/releasebot, %v UTC\n", time.Now().UTC().Format(time.Stamp))
-}
-
 func (w *Work) checkDocs() {
 	// Check that we've documented the release.
-	version := strings.ToLower(w.Milestone.GetTitle())
+	version := strings.ToLower(w.Milestone.Title)
 	data, err := ioutil.ReadFile(filepath.Join(w.runDir, "../doc/devel/release.html"))
 	if err != nil {
 		w.log.Panic(err)
 	}
 	if !strings.Contains(string(data), "\n<p>\n"+version+" (released ") {
-		w.logError(nil, "doc/devel/release.html does not document "+version)
+		w.logError("doc/devel/release.html does not document " + version)
 	}
 }
 
-func (w *Work) writeVersion() {
-	changeID := fmt.Sprintf("I%x", sha1.Sum([]byte(fmt.Sprintf("cmd/pointrelease-version-%s", w.Milestone.GetTitle()))))
+func (w *Work) writeVersion() (changeID string) {
+	changeID = fmt.Sprintf("I%x", sha1.Sum([]byte(fmt.Sprintf("cmd/pointrelease-version-%s", w.Milestone.Title))))
 
-	version := strings.ToLower(w.Milestone.GetTitle())
-	rc := ""
+	version := strings.ToLower(w.Milestone.Title)
 
-	haveExisting := false
-	n := 0
-	if change := w.findGerritChangeForReleaseBranch(changeID); change != nil {
-		w.runOut("git", "fetch", "origin", change.Revisions[change.CurrentRevision].Ref)
-		out, _ := w.runErr("git", "show", change.CurrentRevision+":VERSION")
-		v := strings.TrimSpace(string(out))
-		i := strings.Index(v, "rc")
-		if i < 0 && !w.FinalRelease {
-			w.log.Panic("bad existing VERSION " + v)
-		}
-		var n int
-		var err error
-		if i >= 0 {
-			n, err = strconv.Atoi(v[i+2:])
-			if err != nil {
-				w.log.Panic("bad existing VERSION " + v)
-			}
-		}
-
-		_, parent := w.treeAndParentOfCommit(change.CurrentRevision)
-		for i := len(w.CLs) - 1; i >= 0; i-- {
-			cl := w.CLs[i]
-			if cl.ReleaseBranchGerrit != nil {
-				if cl.ReleaseBranchGerrit.CurrentRevision == parent {
-					haveExisting = true
-					if !w.FinalRelease || n == 0 {
-						w.log.Printf("reusing %s for VERSION", change.Revisions[change.CurrentRevision].Ref)
-						w.run("git", "reset", "--hard", change.CurrentRevision)
-						w.Version = v
-						w.VersionCommit = change.CurrentRevision
-						w.VersionChange = change
-						w.CLs = append(w.CLs, &CL{
-							Title:           version + rc,
-							ReleaseBranchCL: change.ChangeNumber,
-						})
-						return
-					}
-				}
-				break
-			}
-		}
-	}
-	n++
-	rc = fmt.Sprintf("rc%d", n)
-
-	if w.FinalRelease {
-		if n-1 > 0 && !haveExisting {
-			w.logError(nil, fmt.Sprintf("cannot issue final release - code has changed since %src%d", version, n-1))
-			return
-		}
-		rc = ""
-	}
-
-	err := ioutil.WriteFile(filepath.Join(w.runDir, "../VERSION"), []byte(version+rc), 0666)
+	err := ioutil.WriteFile(filepath.Join(w.runDir, "../VERSION"), []byte(version), 0666)
 	if err != nil {
 		w.log.Panic(err)
 	}
 
 	desc := version + "\n\n"
-	if rc != "" {
-		desc += "TESTING: " + version + rc + "\n\nDO NOT REVIEW\n\n"
-	}
 	desc += "Change-Id: " + changeID + "\n"
 
 	w.run("git", "commit", "-m", desc, "../VERSION")
-	w.run("git", "codereview", "mail", "-trybot", "HEAD")
-	change := w.topGerritCL()
-	w.CLs = append(w.CLs, &CL{
-		Title:           version + rc,
-		ReleaseBranchCL: change.ChangeNumber,
-	})
-	w.Version = version + rc
-	w.VersionCommit = change.CurrentRevision
-	w.VersionChange = change
+	if dryRun {
+		fmt.Printf("\n### VERSION commit\n\n%s\n", w.runOut("git", "show", "HEAD"))
+	} else {
+		w.run("git", "codereview", "mail", "-trybot", "HEAD")
+	}
+	return
+}
+
+// checkVersion makes sure that the version commit has been submitted.
+func (w *Work) checkVersion() {
+	ver, err := ioutil.ReadFile(filepath.Join(w.runDir, "../VERSION"))
+	if err != nil {
+		w.log.Panic(err)
+	}
+	if string(ver) != w.Version {
+		w.logError("VERSION is %q; want %q. Did you run prepare and submit the CL?", string(ver), w.Version)
+	}
 }
 
 func (w *Work) buildReleaseBinary() {
@@ -559,12 +484,6 @@ func (w *Work) buildReleaseBinary() {
 }
 
 func (w *Work) buildReleases() {
-	token := filepath.Join(os.Getenv("HOME"), ".config/gomote/user-release.token")
-	if _, err := os.Stat(token); err != nil {
-		w.logError(nil, fmt.Sprintf("missing %s - cannot build releases.\n**FIX**: Download https://build-dot-golang-org.appspot.com/key?builder=user-release\nand store in %s", mdEscape(token), mdEscape(token)))
-		return
-	}
-
 	w.buildReleaseBinary()
 	if err := os.MkdirAll(filepath.Join(w.Dir, "release"), 0777); err != nil {
 		w.log.Panic(err)
@@ -588,12 +507,11 @@ func (w *Work) buildReleases() {
 				if err := recover(); err != nil {
 					stk := strings.TrimSpace(string(debug.Stack()))
 					msg := fmt.Sprintf("PANIC: %v\n\n    %s\n", mdEscape(fmt.Sprint(err)), strings.Replace(stk, "\n", "\n    ", -1))
-					w.logError(nil, msg)
+					w.logError(msg)
 					w.log.Printf("\n\nBuilding %s: PANIC: %v\n\n%s", target, err, debug.Stack())
 					w.releaseMu.Lock()
 					w.ReleaseInfo[target].Msg = msg
 					w.releaseMu.Unlock()
-					w.updateSummary()
 				}
 			}()
 			w.buildRelease(target)
@@ -602,49 +520,17 @@ func (w *Work) buildReleases() {
 	wg.Wait()
 
 	// Check for release errors and stop if any.
-	if w.FinalRelease {
-		w.releaseMu.Lock()
-		for _, target := range releaseTargets {
-			for _, out := range w.ReleaseInfo[target].Outputs {
-				if out.Error != "" || len(w.Errors)+len(w.OtherIssues) > 0 {
-					w.logError(nil, "RELEASE BUILD FAILED; NOT ISSUING RELEASE\n")
-					w.releaseMu.Unlock()
-					// Delete the release builds, in case we change something
-					// before the next attempt. (For non-final releases, a change
-					// would bump the release candidate number, but there's no
-					// release candidate number here.)
-					files, _ := filepath.Glob(filepath.Join(w.runDir, w.Version+".[a-z]*"))
-					for _, f := range files {
-						os.Remove(f)
-					}
-					return
-				}
+	w.releaseMu.Lock()
+	for _, target := range releaseTargets {
+		for _, out := range w.ReleaseInfo[target].Outputs {
+			if out.Error != "" || len(w.Errors) > 0 {
+				w.logError("RELEASE BUILD FAILED\n")
+				w.releaseMu.Unlock()
+				return
 			}
 		}
-		w.releaseMu.Unlock()
-		// TODO: Wait for Gerrit CL to have a +2?
-		w.gitTagVersion()
-		return
 	}
-
-	var md bytes.Buffer
-	fmt.Fprintf(&md, "## %s pre-release distributions\n\n", w.Version)
-	fmt.Fprintf(&md, "%s distributions are now available for testing:\n\n", w.Version)
-	w.printReleaseTable(&md)
-	md.WriteString(signature())
-
-	if !w.BetaRelease {
-		println("POSTING")
-		com := findGithubComment(w.ReleaseIssue.GetNumber(), "## "+w.Version+" ")
-		if com != nil {
-			updateGithubComment(com, md.String())
-		} else {
-			postGithubComment(w.ReleaseIssue.GetNumber(), md.String())
-		}
-	}
-
-	println("TAGGING")
-	w.gitTagVersion()
+	w.releaseMu.Unlock()
 }
 
 // buildRelease builds the release packaging for a given target.
@@ -691,7 +577,7 @@ func (w *Work) buildRelease(target string) {
 		w.log.Printf("release %s: already have %v; not rebuilding files", target, files)
 	} else {
 		for failures := 0; ; {
-			out, err := w.runErr(w.ReleaseBinary, "-target", target, "-user", "release", "-version", w.Version, "-rev", w.VersionCommit, "-tools", w.ReleaseBranch, "-net", w.ReleaseBranch)
+			out, err := w.runErr(w.ReleaseBinary, "-target", target, "-user", gomoteUser, "-version", w.Version, "-rev", w.VersionCommit, "-tools", w.ReleaseBranch, "-net", w.ReleaseBranch)
 			// Exit code from release binary is apparently unreliable.
 			// Look to see if the files we expected were created instead.
 			failed := false
@@ -715,9 +601,12 @@ func (w *Work) buildRelease(target string) {
 				}
 				return
 			}
-			w.updateSummary()
 			time.Sleep(1 * time.Minute)
 		}
+	}
+
+	if dryRun {
+		return
 	}
 
 	for _, out := range outs {
@@ -737,6 +626,10 @@ func (w *Work) buildRelease(target string) {
 // of the target file. This is needed for the release signing process
 // and also displayed on the eventual download page.
 func (w *Work) uploadStagingRelease(target string, out *ReleaseOutput) error {
+	if dryRun {
+		return errors.New("attempted write operation in dry-run mode")
+	}
+
 	src := filepath.Join(w.runDir, out.File)
 	h := sha256.New()
 	f, err := os.Open(src)

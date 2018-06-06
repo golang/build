@@ -5,14 +5,8 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 )
-
-// mdChangeLink returns the markdown for a link to CL n.
-func mdChangeLink(n int) string {
-	return fmt.Sprintf("[CL %d](https://golang.org/cl/%d)", n, n)
-}
 
 // mdEscape escapes text so that it does not have any special meaning in Markdown.
 func mdEscape(text string) string {
