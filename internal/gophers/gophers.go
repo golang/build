@@ -1590,6 +1590,8 @@ func GithubOfGomoteUser(gomoteUser string) (githubUser string) {
 		return "adams-sarah"
 	case "spf":
 		return "spf13"
+	case "valsorda":
+		return "FiloSottile"
 	}
 	return gomoteUser
 }
