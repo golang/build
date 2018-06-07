@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -26,6 +27,9 @@ func main() {
 		usage()
 	}
 	for _, version := range os.Args[1:] {
+		if !strings.HasPrefix(version, "go") {
+			failf("version names should have the 'go' prefix")
+		}
 		var buf bytes.Buffer
 		if err := mainTmpl.Execute(&buf, struct {
 			Year    int
