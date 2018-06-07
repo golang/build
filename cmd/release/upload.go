@@ -24,10 +24,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"golang.org/x/oauth2/google"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/iterator"
-	"google.golang.org/api/option"
 )
 
 const (
@@ -66,7 +64,7 @@ var fileRe = regexp.MustCompile(`^(go[a-z0-9-.]+)\.(src|([a-z0-9]+)-([a-z0-9]+)(
 
 func upload(files []string) error {
 	ctx := context.Background()
-	c, err := storageClient(ctx)
+	c, err := storage.NewClient(ctx)
 	if err != nil {
 		return err
 	}
@@ -217,19 +215,6 @@ func putObject(ctx context.Context, c *storage.Client, name string, body []byte)
 		return err
 	}
 	return wr.Close()
-}
-
-func storageClient(ctx context.Context) (*storage.Client, error) {
-	file := filepath.Join(os.Getenv("HOME"), "keys", "golang-org.service.json")
-	blob, err := ioutil.ReadFile(file)
-	if err != nil {
-		return nil, err
-	}
-	config, err := google.JWTConfigFromJSON(blob, storage.ScopeReadWrite)
-	if err != nil {
-		return nil, err
-	}
-	return storage.NewClient(ctx, option.WithTokenSource(config.TokenSource(ctx)))
 }
 
 // expandFiles expands any "/..." paths in GCS URIs to include files in its subtree.
