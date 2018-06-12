@@ -316,7 +316,7 @@ func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 	// total maps from a host type to the number of machines which are
 	// capable of that role.
 	total := make(map[string]int)
-	for typ, host := range dashboard.Hosts[typ] {
+	for typ, host := range dashboard.Hosts {
 		if host.ExpectNum > 0 {
 			total[typ] = 0
 		}
