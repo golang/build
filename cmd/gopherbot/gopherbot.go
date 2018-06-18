@@ -7,6 +7,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -22,9 +23,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"cloud.google.com/go/compute/metadata"
 	"github.com/google/go-github/github"
+	"go4.org/strutil"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
@@ -242,6 +245,7 @@ var tasks = []struct {
 	{"open cherry pick issues", (*gopherbot).openCherryPickIssues},
 	{"apply minor release milestones", (*gopherbot).setMinorMilestones},
 	{"close cherry pick issues", (*gopherbot).closeCherryPickIssues},
+	{"apply labels from comments", (*gopherbot).applyLabelsFromComments},
 }
 
 func (b *gopherbot) initCorpus() {
@@ -275,11 +279,17 @@ func (b *gopherbot) doTasks(ctx context.Context) error {
 }
 
 func (b *gopherbot) addLabel(ctx context.Context, gi *maintner.GitHubIssue, label string) error {
-	printIssue("label-"+label, gi)
-	if *dryRun {
+	return b.addLabels(ctx, gi, []string{label})
+}
+
+func (b *gopherbot) addLabels(ctx context.Context, gi *maintner.GitHubIssue, labels []string) error {
+	for _, label := range labels {
+		printIssue("label-"+label, gi)
+	}
+	if *dryRun || len(labels) == 0 {
 		return nil
 	}
-	_, _, err := b.ghc.Issues.AddLabelsToIssue(ctx, "golang", "go", int(gi.Number), []string{label})
+	_, _, err := b.ghc.Issues.AddLabelsToIssue(ctx, "golang", "go", int(gi.Number), labels)
 	return err
 }
 
@@ -1274,6 +1284,211 @@ func (b *gopherbot) closeCherryPickIssues(ctx context.Context) error {
 			return nil
 		})
 	})
+}
+
+type labelCommand struct {
+	action  string    // "add" or "remove"
+	label   string    // the label name
+	created time.Time // creation time of the comment containing the command
+	noop    bool      // whether to apply the command or not
+}
+
+// applyLabelsFromComments looks within open GitHub issues for commands to add or
+// remove labels. Anyone can use the /label <label> or /unlabel <label> commands.
+func (b *gopherbot) applyLabelsFromComments(ctx context.Context) error {
+	allLabels := make(map[string]string) // lowercase label name -> proper casing
+	b.gorepo.ForeachLabel(func(gl *maintner.GitHubLabel) error {
+		allLabels[strings.ToLower(gl.Name)] = gl.Name
+		return nil
+	})
+
+	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		if gi.Closed {
+			return nil
+		}
+
+		var cmds []labelCommand
+
+		cmds = append(cmds, labelCommandsFromBody(gi.Body, gi.Created)...)
+		gi.ForeachComment(func(gc *maintner.GitHubComment) error {
+			cmds = append(cmds, labelCommandsFromBody(gc.Body, gc.Created)...)
+			return nil
+		})
+
+		for i, c := range cmds {
+			// Does the label even exist? If so, use the proper capitalization.
+			// If it doesn't exist, the command is a no-op.
+			if l, ok := allLabels[c.label]; ok {
+				cmds[i].label = l
+			} else {
+				cmds[i].noop = true
+				continue
+			}
+
+			// If any action has been taken on the label since the comment containing
+			// the command to add or remove it, then it should be a no-op.
+			gi.ForeachEvent(func(ge *maintner.GitHubIssueEvent) error {
+				if (ge.Type == "unlabeled" || ge.Type == "labeled") &&
+					strings.ToLower(ge.Label) == c.label &&
+					ge.Created.After(c.created) {
+					cmds[i].noop = true
+					return errStopIteration
+				}
+				return nil
+			})
+		}
+
+		toAdd, toRemove := mutationsFromCommands(cmds)
+		if err := b.addLabels(ctx, gi, toAdd); err != nil {
+			log.Printf("Unable to add labels (%v) to issue %d: %v", toAdd, gi.Number, err)
+		}
+		for _, l := range toRemove {
+			if err := b.removeLabel(ctx, gi, l); err != nil {
+				log.Printf("Unable to remove label (%v) from issue %d: %v", l, gi.Number, err)
+			}
+		}
+
+		return nil
+	})
+}
+
+// labelCommandsFromBody returns a slice of commands inferred by the given body text.
+// The format of commands is:
+// @gopherbot[,] [please] [add|remove] <label>[{,|;} label... and remove <label>...]
+// Omission of add or remove will default to adding a label.
+func labelCommandsFromBody(body string, created time.Time) []labelCommand {
+	if !strutil.ContainsFold(body, "@gopherbot") {
+		return nil
+	}
+	var cmds []labelCommand
+	lines := strings.Split(body, "\n")
+	for _, l := range lines {
+		if !strutil.ContainsFold(l, "@gopherbot") {
+			continue
+		}
+		l = strings.ToLower(l)
+		scanner := bufio.NewScanner(strings.NewReader(l))
+		scanner.Split(bufio.ScanWords)
+		var (
+			add      strings.Builder
+			remove   strings.Builder
+			inRemove bool
+		)
+		for scanner.Scan() {
+			switch scanner.Text() {
+			case "@gopherbot", "@gopherbot,", "@gopherbot:", "please", "and", "label", "labels":
+				continue
+			case "add":
+				inRemove = false
+				continue
+			case "remove", "unlabel":
+				inRemove = true
+				continue
+			}
+
+			if inRemove {
+				remove.WriteString(scanner.Text())
+				remove.WriteString(" ") // preserve whitespace within labels
+			} else {
+				add.WriteString(scanner.Text())
+				add.WriteString(" ") // preserve whitespace within labels
+			}
+		}
+		if add.Len() > 0 {
+			cmds = append(cmds, labelCommands(add.String(), "add", created)...)
+		}
+		if remove.Len() > 0 {
+			cmds = append(cmds, labelCommands(remove.String(), "remove", created)...)
+		}
+	}
+	return cmds
+}
+
+// labelCommands returns a slice of commands for the given action and string of
+// text following commands like @gopherbot add/remove.
+func labelCommands(s, action string, created time.Time) []labelCommand {
+	var cmds []labelCommand
+	f := func(c rune) bool {
+		return c != '-' && !unicode.IsLetter(c) && !unicode.IsNumber(c) && !unicode.IsSpace(c)
+	}
+	for _, label := range strings.FieldsFunc(s, f) {
+		label = strings.TrimSpace(label)
+		if label == "" {
+			continue
+		}
+		cmds = append(cmds, labelCommand{action: action, label: label, created: created})
+	}
+	return cmds
+}
+
+// mutationsFromCommands returns two sets of labels to add and remove based on
+// the given cmds.
+func mutationsFromCommands(cmds []labelCommand) (add, remove []string) {
+	// Split the labels into what to add and what to remove.
+	// Account for two opposing commands that have yet to be applied canceling
+	// each other out.
+	var (
+		toAdd    map[string]bool
+		toRemove map[string]bool
+	)
+	for _, c := range cmds {
+		if c.noop {
+			continue
+		}
+		switch c.action {
+		case "add":
+			if toRemove[c.label] {
+				delete(toRemove, c.label)
+				continue
+			}
+			if toAdd == nil {
+				toAdd = make(map[string]bool)
+			}
+			toAdd[c.label] = true
+		case "remove":
+			if toAdd[c.label] {
+				delete(toAdd, c.label)
+				continue
+			}
+			if toRemove == nil {
+				toRemove = make(map[string]bool)
+			}
+			toRemove[c.label] = true
+		default:
+			log.Printf("Invalid label action type: %q", c.action)
+		}
+	}
+
+	for l := range toAdd {
+		if toAdd[l] && !labelChangeBlacklisted(l, "add") {
+			add = append(add, l)
+		}
+	}
+
+	for l := range toRemove {
+		if toRemove[l] && !labelChangeBlacklisted(l, "remove") {
+			remove = append(remove, l)
+		}
+	}
+	return add, remove
+}
+
+// labelChangeBlacklisted returns true if an action on the given label is
+// forbidden via gopherbot.
+func labelChangeBlacklisted(label, action string) bool {
+	if action == "remove" && label == "Security" {
+		return true
+	}
+	for _, prefix := range []string{
+		"CherryPick",
+		"cla:",
+		"Proposal-",
+	} {
+		if strings.HasPrefix(label, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func blockqoute(s string) string {
