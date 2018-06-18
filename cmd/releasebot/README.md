@@ -4,10 +4,10 @@ Command releasebot runs a Go release.
 
 The release happens in two stages:
 
-* the `prepare` stage checks preconditions, makes the release commit and mails it for review;
-* the `release` stage runs after the release commit is merged, and it tags, builds and cleans up the release.
+* the `prepare` stage checks preconditions, and if needed makes the release commit and mails it for review;
+* the `release` stage runs after the release commit (if any) is merged, and it tags, builds and cleans up the release.
 
-At the moment only minor releases are supported.
+At the moment only minor and beta releases are supported.
 
 ## Permissions
 

@@ -19,10 +19,6 @@ import (
 // $HOME/go-releasebot-work/<release>/gitmirror,
 // to use as an object cache to speed future checkouts.
 func (w *Work) gitCheckout() {
-	shortRel := strings.ToLower(w.Milestone.Title)
-	shortRel = shortRel[:strings.LastIndex(shortRel, ".")]
-	w.ReleaseBranch = "release-branch." + shortRel
-
 	w.Dir = filepath.Join(os.Getenv("HOME"), "go-releasebot-work/"+strings.ToLower(w.Version))
 	w.log.Printf("working in %s\n", w.Dir)
 	if err := os.MkdirAll(w.Dir, 0777); err != nil {
@@ -65,6 +61,7 @@ func (w *Work) gitTagVersion() {
 	out = r.runOut("git", "show", w.VersionCommit)
 	fmt.Printf("About to tag the following commit as %s:\n\n%s\n\nOk? (y/n) ", w.Version, out)
 	if dryRun {
+		fmt.Println("dry-run")
 		return
 	}
 	var response string

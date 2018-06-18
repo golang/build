@@ -51,7 +51,7 @@ var releaseModes = map[string]bool{
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: releasebot -mode <release mode> [-dry-run] go1.8.5")
+	fmt.Fprintln(os.Stderr, "usage: releasebot -mode <release mode> [-dry-run] {go1.8.5|go1.10beta2}")
 	fmt.Fprintln(os.Stderr, "Release modes:")
 	fmt.Fprintln(os.Stderr)
 	for m := range releaseModes {
@@ -81,6 +81,20 @@ func main() {
 
 	var wg sync.WaitGroup
 	for _, release := range flag.Args() {
+		if strings.Contains(release, "beta") {
+			w := &Work{
+				Prepare:     *modeFlag == "prepare",
+				Version:     release,
+				BetaRelease: true,
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				w.doRelease()
+			}()
+			continue
+		}
+
 		errFoundMilestone := errors.New("found milestone")
 		err := goRepo.ForeachMilestone(func(m *maintner.GitHubMilestone) error {
 			if strings.ToLower(m.Title) == release {
@@ -91,9 +105,9 @@ func main() {
 				w := &Work{
 					Milestone:     m,
 					NextMilestone: nextM,
+					Prepare:       *modeFlag == "prepare",
+					Version:       release,
 				}
-				w.Prepare = *modeFlag == "prepare"
-				w.Version = release
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
@@ -174,12 +188,11 @@ type Work struct {
 	logBuf *bytes.Buffer
 	log    *log.Logger
 
-	Prepare bool // create the release commit and submit it for review
+	Prepare     bool // create the release commit and submit it for review
+	BetaRelease bool
 
-	Milestone     *maintner.GitHubMilestone
-	NextMilestone *maintner.GitHubMilestone // Next minor milestone
-	ReleaseIssue  int                       // Release status issue number
-	ReleaseBranch string
+	ReleaseIssue  int    // Release status issue number
+	ReleaseBranch string // "master" for beta releases
 	Dir           string // work directory ($HOME/go-releasebot-work/<release>)
 	Errors        []string
 	ReleaseBinary string
@@ -188,6 +201,10 @@ type Work struct {
 
 	releaseMu   sync.Mutex
 	ReleaseInfo map[string]*ReleaseInfo // map and info protected by releaseMu
+
+	// Properties set for minor releases only.
+	Milestone     *maintner.GitHubMilestone
+	NextMilestone *maintner.GitHubMilestone // Next minor milestone
 }
 
 // ReleaseInfo describes a release build for a specific target.
@@ -283,30 +300,48 @@ func (w *Work) doRelease() {
 
 	w.log.Printf("starting")
 
+	if w.BetaRelease {
+		w.ReleaseBranch = "master"
+	} else {
+		shortRel := strings.ToLower(w.Milestone.Title)
+		shortRel = shortRel[:strings.LastIndex(shortRel, ".")]
+		w.ReleaseBranch = "release-branch." + shortRel
+	}
+
 	w.checkSpelling()
-	w.checkReleaseBlockers()
 	w.gitCheckout()
-	w.checkDocs()
+	if !w.BetaRelease {
+		w.checkReleaseBlockers()
+		w.checkDocs()
+	} else {
+		// TODO: go tool api -allow_new false
+	}
 	w.findOrCreateReleaseIssue()
 	if len(w.Errors) > 0 && !dryRun {
 		w.logError("**Found errors during release. Stopping!**")
 		return
 	}
 
-	if w.Prepare {
+	if w.Prepare && w.BetaRelease {
+		w.nextStepsBeta()
+	} else if w.Prepare {
 		changeID := w.writeVersion()
 		w.nextStepsPrepare(changeID)
 	} else {
-		w.checkVersion()
 		// TODO: check build.golang.org
+		if !w.BetaRelease {
+			w.checkVersion()
+		}
 		if len(w.Errors) > 0 {
 			w.logError("**Found errors during release. Stopping!**")
 			return
 		}
 		w.gitTagVersion()
 		w.buildReleases()
-		w.pushIssues()
-		w.closeMilestone()
+		if !w.BetaRelease {
+			w.pushIssues()
+			w.closeMilestone()
+		}
 		w.nextStepsRelease()
 	}
 }
@@ -347,6 +382,14 @@ Please review and submit https://go-review.googlesource.com/q/%s
 after making sure its tests pass and then run the release stage.
 
 `, changeID)
+}
+
+func (w *Work) nextStepsBeta() {
+	w.log.Printf(`
+
+The release is ready. Run with mode=release to execute it.
+
+`)
 }
 
 func (w *Work) nextStepsRelease() {

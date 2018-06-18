@@ -73,8 +73,8 @@ func loadGithubAuth() {
 // for the given milestone.
 // If you change this function, releasebot will not be able to find an
 // existing tracking issue using the old name and will create a new one.
-func releaseStatusTitle(m *maintner.GitHubMilestone) string {
-	return "all: " + strings.Replace(m.Title, "Go", "Go ", -1) + " release status"
+func (w *Work) releaseStatusTitle() string {
+	return "all: " + strings.Replace(w.Version, "go", "Go ", -1) + " release status"
 }
 
 type tokenSource oauth2.Token
@@ -84,13 +84,13 @@ func (t *tokenSource) Token() (*oauth2.Token, error) {
 }
 
 func (w *Work) findOrCreateReleaseIssue() {
-	w.log.Printf("Release status issue title: %q", releaseStatusTitle(w.Milestone))
+	w.log.Printf("Release status issue title: %q", w.releaseStatusTitle())
 	if dryRun {
 		return
 	}
 	if w.ReleaseIssue == 0 {
-		title := releaseStatusTitle(w.Milestone)
-		body := fmt.Sprintf("Issue tracking the %s release by releasebot.", w.Milestone.Title)
+		title := w.releaseStatusTitle()
+		body := fmt.Sprintf("Issue tracking the %s release by releasebot.", w.Version)
 		num, err := w.createGitHubIssue(title, body)
 		if err != nil {
 			w.log.Panic(err)
@@ -116,11 +116,14 @@ func (w *Work) createGitHubIssue(title, msg string) (int, error) {
 	if dup != 0 {
 		return dup, nil
 	}
-	is, _, err := githubClient.Issues.ListByRepo(context.TODO(), "golang", "go", &github.IssueListByRepoOptions{
+	opts := &github.IssueListByRepoOptions{
 		State:       "all",
 		ListOptions: github.ListOptions{PerPage: 100},
-		Milestone:   strconv.Itoa(int(w.Milestone.Number)),
-	})
+	}
+	if !w.BetaRelease {
+		opts.Milestone = strconv.Itoa(int(w.Milestone.Number))
+	}
+	is, _, err := githubClient.Issues.ListByRepo(context.TODO(), "golang", "go", opts)
 	if err != nil {
 		return 0, err
 	}
@@ -130,11 +133,14 @@ func (w *Work) createGitHubIssue(title, msg string) (int, error) {
 			return i.GetNumber(), nil
 		}
 	}
-	i, _, err := githubClient.Issues.Create(context.TODO(), "golang", "go", &github.IssueRequest{
-		Title:     github.String(title),
-		Body:      github.String(msg),
-		Milestone: github.Int(int(w.Milestone.Number)),
-	})
+	copts := &github.IssueRequest{
+		Title: github.String(title),
+		Body:  github.String(msg),
+	}
+	if !w.BetaRelease {
+		copts.Milestone = github.Int(int(w.Milestone.Number))
+	}
+	i, _, err := githubClient.Issues.Create(context.TODO(), "golang", "go", copts)
 	return i.GetNumber(), err
 }
 
@@ -144,7 +150,7 @@ func (w *Work) pushIssues() {
 		if gi.Milestone == nil || gi.Milestone.Title != w.Milestone.Title {
 			return nil
 		}
-		if gi.Closed || gi.Title == releaseStatusTitle(w.Milestone) {
+		if gi.Closed || gi.Title == w.releaseStatusTitle() {
 			return nil
 		}
 		w.log.Printf("changing milestone of issue %d to %s", gi.Number, w.NextMilestone.Title)
