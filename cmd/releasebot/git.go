@@ -18,8 +18,6 @@ import (
 // gitCheckout also creates a clean checkout in
 // $HOME/go-releasebot-work/<release>/gitmirror,
 // to use as an object cache to speed future checkouts.
-// On return, w.runDir has been set to gitwork/src,
-// to allow commands like "./make.bash".
 func (w *Work) gitCheckout() {
 	shortRel := strings.ToLower(w.Milestone.Title)
 	shortRel = shortRel[:strings.LastIndex(shortRel, ".")]
@@ -33,28 +31,26 @@ func (w *Work) gitCheckout() {
 
 	// Check out a local mirror to work-mirror, to speed future checkouts for this point release.
 	mirror := filepath.Join(w.Dir, "gitmirror")
+	r := w.runner(mirror)
 	if _, err := os.Stat(mirror); err != nil {
-		w.run("git", "clone", "https://go.googlesource.com/go", mirror)
-		w.runDir = mirror
-		w.run("git", "config", "gc.auto", "0") // don't throw away refs we fetch
+		w.runner(w.Dir).run("git", "clone", "https://go.googlesource.com/go", mirror)
+		r.run("git", "config", "gc.auto", "0") // don't throw away refs we fetch
 	} else {
-		w.runDir = mirror
-		w.run("git", "fetch", "origin", "master")
+		r.run("git", "fetch", "origin", "master")
 	}
-	w.run("git", "fetch", "origin", w.ReleaseBranch)
+	r.run("git", "fetch", "origin", w.ReleaseBranch)
 
 	// Clone real Gerrit, but using local mirror for most objects.
 	gitDir := filepath.Join(w.Dir, "gitwork")
 	if err := os.RemoveAll(gitDir); err != nil {
 		w.log.Panic(err)
 	}
-	w.run("git", "clone", "--reference", mirror, "-b", w.ReleaseBranch, "https://go.googlesource.com/go", gitDir)
-	w.runDir = gitDir
-	w.run("git", "codereview", "change", "relwork")
-	w.run("git", "config", "gc.auto", "0") // don't throw away refs we fetch
-	w.runDir = filepath.Join(gitDir, "src")
+	w.runner(w.Dir).run("git", "clone", "--reference", mirror, "-b", w.ReleaseBranch, "https://go.googlesource.com/go", gitDir)
+	r = w.runner(gitDir)
+	r.run("git", "codereview", "change", "relwork")
+	r.run("git", "config", "gc.auto", "0") // don't throw away refs we fetch
 
-	_, err := w.runErr("git", "rev-parse", w.Version)
+	_, err := r.runErr("git", "rev-parse", w.Version)
 	if err == nil {
 		w.logError("%s tag already exists in Go repository!", w.Version)
 		w.log.Panic("already released")
@@ -63,10 +59,10 @@ func (w *Work) gitCheckout() {
 
 // gitTagVersion tags the release candidate or release in Git.
 func (w *Work) gitTagVersion() {
-	w.runDir = filepath.Join(w.Dir, "gitwork")
-	out := w.runOut("git", "rev-parse", "HEAD")
+	r := w.runner(filepath.Join(w.Dir, "gitwork"))
+	out := r.runOut("git", "rev-parse", "HEAD")
 	w.VersionCommit = strings.TrimSpace(string(out))
-	out = w.runOut("git", "show", w.VersionCommit)
+	out = r.runOut("git", "show", w.VersionCommit)
 	fmt.Printf("About to tag the following commit as %s:\n\n%s\n\nOk? (y/n) ", w.Version, out)
 	if dryRun {
 		return
@@ -79,10 +75,10 @@ func (w *Work) gitTagVersion() {
 	if response != "y" {
 		w.log.Panic("stopped")
 	}
-	out, err = w.runErr("git", "tag", w.Version, w.VersionCommit)
+	out, err = r.runErr("git", "tag", w.Version, w.VersionCommit)
 	if err != nil {
 		w.logError("git tag failed: %s\n%s", err, out)
 		return
 	}
-	w.run("git", "push", "origin", w.Version)
+	r.run("git", "push", "origin", w.Version)
 }

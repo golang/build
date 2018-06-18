@@ -171,10 +171,8 @@ func loadGomoteUser() {
 // is managing multiple releases, although the current releasebot command line
 // only accepts a single release.
 type Work struct {
-	logBuf   *bytes.Buffer
-	log      *log.Logger
-	runDir   string
-	extraEnv []string
+	logBuf *bytes.Buffer
+	log    *log.Logger
 
 	Prepare bool // create the release commit and submit it for review
 
@@ -182,7 +180,7 @@ type Work struct {
 	NextMilestone *maintner.GitHubMilestone // Next minor milestone
 	ReleaseIssue  int                       // Release status issue number
 	ReleaseBranch string
-	Dir           string // work directory
+	Dir           string // work directory ($HOME/go-releasebot-work/<release>)
 	Errors        []string
 	ReleaseBinary string
 	Version       string
@@ -224,14 +222,28 @@ func (w *Work) finally() {
 	w.postSummary()
 }
 
+type runner struct {
+	w        *Work
+	dir      string
+	extraEnv []string
+}
+
+func (w *Work) runner(dir string, env ...string) *runner {
+	return &runner{
+		w:        w,
+		dir:      dir,
+		extraEnv: env,
+	}
+}
+
 // run runs the command and requires that it succeeds.
 // If not, it logs the failure and aborts the work.
 // It logs the command line.
-func (w *Work) run(args ...string) {
-	out, err := w.runErr(args...)
+func (r *runner) run(args ...string) {
+	out, err := r.runErr(args...)
 	if err != nil {
-		w.log.Printf("command failed: %s\n%s", err, out)
-		panic("cmd")
+		r.w.log.Printf("command failed: %s\n%s", err, out)
+		panic("command failed")
 	}
 }
 
@@ -240,47 +252,28 @@ func (w *Work) run(args ...string) {
 // It does not log the command line except in case of failure.
 // Not logging these commands avoids filling the log with
 // runs of side-effect-free commands like "git cat-file commit HEAD".
-func (w *Work) runOut(args ...string) []byte {
+func (r *runner) runOut(args ...string) []byte {
 	cmd := exec.Command(args[0], args[1:]...)
-	// Make Git editor a no-op so that git codereview submit -i does not pop up
-	// an editor.
-	cmd.Env = []string{"EDITOR=true"}
-	cmd.Dir = w.runDir
+	cmd.Dir = r.dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		w.log.Printf("$ %s\n", strings.Join(args, " "))
-		w.log.Printf("command failed: %s\n%s", err, out)
-		panic("cmd")
+		r.w.log.Printf("$ %s\n", strings.Join(args, " "))
+		r.w.log.Printf("command failed: %s\n%s", err, out)
+		panic("command failed")
 	}
 	return out
 }
 
 // runErr runs the given command and returns the output and status (error).
 // It logs the command line.
-// It retries certain known-flaky commands automatically.
-func (w *Work) runErr(args ...string) ([]byte, error) {
-	maxTry := 1
-	try := 0
-	// Gerrit sometimes returns 502 errors from git fetch
-	if len(args) >= 2 && args[0] == "git" && args[1] == "fetch" {
-		maxTry = 3
-	}
-Again:
-	try++
-	w.log.Printf("$ %s\n", strings.Join(args, " "))
+func (r *runner) runErr(args ...string) ([]byte, error) {
+	r.w.log.Printf("$ %s\n", strings.Join(args, " "))
 	cmd := exec.Command(args[0], args[1:]...)
-	// Make Git editor a no-op so that git codereview submit -i does not pop up
-	// an editor.
-	cmd.Env = append(os.Environ(), "EDITOR=true")
-	cmd.Dir = w.runDir
-	if len(w.extraEnv) > 0 {
-		cmd.Env = append(cmd.Env, w.extraEnv...)
+	cmd.Dir = r.dir
+	if len(r.extraEnv) > 0 {
+		cmd.Env = append(os.Environ(), r.extraEnv...)
 	}
-	out, err := cmd.CombinedOutput()
-	if err != nil && try < maxTry {
-		goto Again
-	}
-	return out, err
+	return cmd.CombinedOutput()
 }
 
 func (w *Work) doRelease() {
@@ -428,7 +421,7 @@ func (w *Work) printReleaseTable(md *bytes.Buffer) {
 func (w *Work) checkDocs() {
 	// Check that we've documented the release.
 	version := strings.ToLower(w.Milestone.Title)
-	data, err := ioutil.ReadFile(filepath.Join(w.runDir, "../doc/devel/release.html"))
+	data, err := ioutil.ReadFile(filepath.Join(w.Dir, "gitwork", "doc/devel/release.html"))
 	if err != nil {
 		w.log.Panic(err)
 	}
@@ -442,7 +435,7 @@ func (w *Work) writeVersion() (changeID string) {
 
 	version := strings.ToLower(w.Milestone.Title)
 
-	err := ioutil.WriteFile(filepath.Join(w.runDir, "../VERSION"), []byte(version), 0666)
+	err := ioutil.WriteFile(filepath.Join(w.Dir, "gitwork", "VERSION"), []byte(version), 0666)
 	if err != nil {
 		w.log.Panic(err)
 	}
@@ -450,18 +443,19 @@ func (w *Work) writeVersion() (changeID string) {
 	desc := version + "\n\n"
 	desc += "Change-Id: " + changeID + "\n"
 
-	w.run("git", "commit", "-m", desc, "../VERSION")
+	r := w.runner(filepath.Join(w.Dir, "gitwork"))
+	r.run("git", "commit", "-m", desc, "VERSION")
 	if dryRun {
-		fmt.Printf("\n### VERSION commit\n\n%s\n", w.runOut("git", "show", "HEAD"))
+		fmt.Printf("\n### VERSION commit\n\n%s\n", r.runOut("git", "show", "HEAD"))
 	} else {
-		w.run("git", "codereview", "mail", "-trybot", "HEAD")
+		r.run("git", "codereview", "mail", "-trybot", "HEAD")
 	}
 	return
 }
 
 // checkVersion makes sure that the version commit has been submitted.
 func (w *Work) checkVersion() {
-	ver, err := ioutil.ReadFile(filepath.Join(w.runDir, "../VERSION"))
+	ver, err := ioutil.ReadFile(filepath.Join(w.Dir, "gitwork", "VERSION"))
 	if err != nil {
 		w.log.Panic(err)
 	}
@@ -478,8 +472,8 @@ func (w *Work) buildReleaseBinary() {
 	if err := os.MkdirAll(gopath, 0777); err != nil {
 		w.log.Panic(err)
 	}
-	w.extraEnv = append(w.extraEnv, "GOPATH="+gopath, "GOBIN="+filepath.Join(gopath, "bin"))
-	w.run("go", "get", "golang.org/x/build/cmd/release")
+	r := w.runner(w.Dir, "GOPATH="+gopath, "GOBIN="+filepath.Join(gopath, "bin"))
+	r.run("go", "get", "golang.org/x/build/cmd/release")
 	w.ReleaseBinary = filepath.Join(gopath, "bin/release")
 }
 
@@ -488,7 +482,6 @@ func (w *Work) buildReleases() {
 	if err := os.MkdirAll(filepath.Join(w.Dir, "release"), 0777); err != nil {
 		w.log.Panic(err)
 	}
-	w.runDir = filepath.Join(w.Dir, "release")
 	w.ReleaseInfo = make(map[string]*ReleaseInfo)
 
 	var wg sync.WaitGroup
@@ -564,7 +557,7 @@ func (w *Work) buildRelease(target string) {
 			Suffix: strings.TrimPrefix(file, prefix),
 		}
 		outs = append(outs, out)
-		_, err := os.Stat(filepath.Join(w.runDir, file))
+		_, err := os.Stat(filepath.Join(w.Dir, "release", file))
 		if err != nil {
 			haveFiles = false
 		}
@@ -576,14 +569,17 @@ func (w *Work) buildRelease(target string) {
 	if haveFiles {
 		w.log.Printf("release %s: already have %v; not rebuilding files", target, files)
 	} else {
-		for failures := 0; ; {
-			out, err := w.runErr(w.ReleaseBinary, "-target", target, "-user", gomoteUser, "-version", w.Version, "-rev", w.VersionCommit, "-tools", w.ReleaseBranch, "-net", w.ReleaseBranch)
+		failures := 0
+		for {
+			out, err := w.runner(filepath.Join(w.Dir, "release"), "GOPATH="+filepath.Join(w.Dir, "gopath")).runErr(
+				w.ReleaseBinary, "-target", target, "-user", gomoteUser, "-version", w.Version, "-rev", w.VersionCommit,
+				"-tools", w.ReleaseBranch, "-net", w.ReleaseBranch)
 			// Exit code from release binary is apparently unreliable.
 			// Look to see if the files we expected were created instead.
 			failed := false
 			w.releaseMu.Lock()
 			for _, out := range outs {
-				if _, err := os.Stat(filepath.Join(w.runDir, out.File)); err != nil {
+				if _, err := os.Stat(filepath.Join(w.Dir, "release", out.File)); err != nil {
 					failed = true
 				}
 			}
@@ -630,7 +626,7 @@ func (w *Work) uploadStagingRelease(target string, out *ReleaseOutput) error {
 		return errors.New("attempted write operation in dry-run mode")
 	}
 
-	src := filepath.Join(w.runDir, out.File)
+	src := filepath.Join(w.Dir, "release", out.File)
 	h := sha256.New()
 	f, err := os.Open(src)
 	if err != nil {
