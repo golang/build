@@ -988,7 +988,6 @@ func init() {
 		})
 	}
 	addMiscCompile("", "^(linux-arm64|linux-s390x|solaris-amd64|darwin-386)$") // 4 ports
-	addMiscCompile("-mobile", "(^android|darwin-arm64)")                       // 5 ports
 	addMiscCompile("-nacl", "^nacl")                                           // 3
 	addMiscCompile("-mips", "^linux-mips")                                     // 4
 	addMiscCompile("-ppc", "^linux-ppc64")                                     // 2
@@ -996,6 +995,8 @@ func init() {
 	addMiscCompile("-freebsd", "^freebsd-")                                    // 3
 	addMiscCompile("-netbsd", "^netbsd-")                                      // 3
 	addMiscCompile("-openbsd", "^openbsd-")                                    // 3
+	// TODO: Issue 25963, get the misc-compile trybots for mobile working, and then:
+	// addMiscCompile("-mobile", "(^android|darwin-arm64)")                       // 5 ports
 
 	addBuilder(BuildConfig{
 		Name:      "linux-amd64-nocgo",
