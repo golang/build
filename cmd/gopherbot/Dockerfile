@@ -4,6 +4,8 @@
 FROM golang:1.10 AS build
 LABEL maintainer "golang-dev@googlegroups.com"
 
+ENV CGO_ENABLED=0
+
 # BEGIN deps (run `make update-deps` to update)
 
 # Repo cloud.google.com/go at ba25346 (2017-10-13)
@@ -77,7 +79,7 @@ RUN go install cloud.google.com/go/compute/metadata \
 
 COPY . /go/src/golang.org/x/build/
 
-RUN go install -ldflags "-linkmode=external -extldflags '-static -pthread'" golang.org/x/build/cmd/gopherbot
+RUN go install golang.org/x/build/cmd/gopherbot
 
 
 FROM scratch
