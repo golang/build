@@ -283,26 +283,89 @@ func (b *gopherbot) addLabel(ctx context.Context, gi *maintner.GitHubIssue, labe
 }
 
 func (b *gopherbot) addLabels(ctx context.Context, gi *maintner.GitHubIssue, labels []string) error {
+	var toAdd []string
 	for _, label := range labels {
+		if gi.HasLabel(label) {
+			log.Printf("Issue %d already has label %q; no need to send request to add it", gi.Number, label)
+			continue
+		}
 		printIssue("label-"+label, gi)
+		toAdd = append(toAdd, label)
 	}
-	if *dryRun || len(labels) == 0 {
+
+	if *dryRun || len(toAdd) == 0 {
 		return nil
 	}
-	_, _, err := b.ghc.Issues.AddLabelsToIssue(ctx, "golang", "go", int(gi.Number), labels)
+
+	return addLabelsToIssue(ctx, b.ghc.Issues, int(gi.Number), toAdd)
+}
+
+// addLabelsToIssue adds labels to the issue in golang/go with the given issueNum.
+// TODO: Proper stubs via interfaces.
+var addLabelsToIssue = func(ctx context.Context, issues *github.IssuesService, issueNum int, labels []string) error {
+	_, _, err := issues.AddLabelsToIssue(ctx, "golang", "go", issueNum, labels)
 	return err
 }
 
-// removeLabel makes an API call to GitHub to remove the provided
-// label from the issue.
-// If issue did not have the label already (or the label didn't
-// exist), removeLabel returns nil.
+// removeLabel removes the label from the given issue in golang/go.
 func (b *gopherbot) removeLabel(ctx context.Context, gi *maintner.GitHubIssue, label string) error {
-	printIssue("unlabel-"+label, gi)
-	if *dryRun {
+	return b.removeLabels(ctx, gi, []string{label})
+}
+
+func (b *gopherbot) removeLabels(ctx context.Context, gi *maintner.GitHubIssue, labels []string) error {
+	var removeLabels bool
+	for _, l := range labels {
+		if !gi.HasLabel(l) {
+			log.Printf("Issue %d (in maintner) does not have label %q; no need to send request to remove it", gi.Number, l)
+			continue
+		}
+		printIssue("label-"+l, gi)
+		removeLabels = true
+	}
+
+	if *dryRun || !removeLabels {
 		return nil
 	}
-	_, err := b.ghc.Issues.RemoveLabelForIssue(ctx, "golang", "go", int(gi.Number), label)
+
+	ghLabels, err := labelsForIssue(ctx, b.ghc.Issues, int(gi.Number))
+	if err != nil {
+		return err
+	}
+	toRemove := make(map[string]bool)
+	for _, l := range labels {
+		toRemove[l] = true
+	}
+
+	for _, l := range ghLabels {
+		if toRemove[l] {
+			if err := removeLabelFromIssue(ctx, b.ghc.Issues, int(gi.Number), l); err != nil {
+				log.Printf("Could not remove label %q from issue %d: %v", l, gi.Number, err)
+				continue
+			}
+		}
+	}
+	return nil
+}
+
+// labelsForIssue returns all labels for the given issue in the golang/go repo.
+// TODO: Proper stubs via interfaces.
+var labelsForIssue = func(ctx context.Context, issues *github.IssuesService, issueNum int) ([]string, error) {
+	ghLabels, _, err := issues.ListLabelsByIssue(ctx, "golang", "go", issueNum, &github.ListOptions{PerPage: 100})
+	if err != nil {
+		return nil, fmt.Errorf("could not list labels for golang/go#%d: %v", issueNum, err)
+	}
+	var labels []string
+	for _, l := range ghLabels {
+		labels = append(labels, l.GetName())
+	}
+	return labels, nil
+}
+
+// removeLabelForIssue removes the given label from golang/go with the given issueNum.
+// If the issue did not have the label already (or the label didn't exist), return nil.
+// TODO: Proper stubs via interfaces.
+var removeLabelFromIssue = func(ctx context.Context, issues *github.IssuesService, issueNum int, label string) error {
+	_, err := issues.RemoveLabelForIssue(ctx, "golang", "go", issueNum, label)
 	if ge, ok := err.(*github.ErrorResponse); ok && ge.Response != nil && ge.Response.StatusCode == http.StatusNotFound {
 		return nil
 	}
@@ -1342,10 +1405,8 @@ func (b *gopherbot) applyLabelsFromComments(ctx context.Context) error {
 		if err := b.addLabels(ctx, gi, toAdd); err != nil {
 			log.Printf("Unable to add labels (%v) to issue %d: %v", toAdd, gi.Number, err)
 		}
-		for _, l := range toRemove {
-			if err := b.removeLabel(ctx, gi, l); err != nil {
-				log.Printf("Unable to remove label (%v) from issue %d: %v", l, gi.Number, err)
-			}
+		if err := b.removeLabels(ctx, gi, toRemove); err != nil {
+			log.Printf("Unable to remove labels (%v) from issue %d: %v", toRemove, gi.Number, err)
 		}
 
 		return nil
