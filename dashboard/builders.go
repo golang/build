@@ -1157,9 +1157,11 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "js-wasm",
 		HostType:          "host-js-wasm",
-		TryBot:            false,
-		MaxAtOnce:         2,
-		numTryTestHelpers: 0,
+		TryBot:            true,
+		numTryTestHelpers: 4,
+		GoDeps: []string{
+			"3dced519cbabc213df369d9112206986e62687fa", // first passing commit
+		},
 		env: []string{
 			"GOOS=js", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
 			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
