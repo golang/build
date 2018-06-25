@@ -45,17 +45,22 @@ func (w *Work) gitCheckout() {
 	r = w.runner(gitDir)
 	r.run("git", "codereview", "change", "relwork")
 	r.run("git", "config", "gc.auto", "0") // don't throw away refs we fetch
+}
 
-	_, err := r.runErr("git", "rev-parse", w.Version)
-	if err == nil {
-		w.logError("%s tag already exists in Go repository!", w.Version)
-		w.log.Panic("already released")
-	}
+// gitTagExists returns whether git git tag is already present in the repository.
+func (w *Work) gitTagExists() bool {
+	_, err := w.runner(filepath.Join(w.Dir, "gitwork")).runErr("git", "rev-parse", w.Version)
+	return err == nil
 }
 
 // gitTagVersion tags the release candidate or release in Git.
 func (w *Work) gitTagVersion() {
 	r := w.runner(filepath.Join(w.Dir, "gitwork"))
+	if w.gitTagExists() {
+		out := r.runOut("git", "rev-parse", w.Version)
+		w.VersionCommit = strings.TrimSpace(string(out))
+		w.log.Printf("Git tag already exists (%s), resuming release.", w.VersionCommit)
+	}
 	out := r.runOut("git", "rev-parse", "HEAD")
 	w.VersionCommit = strings.TrimSpace(string(out))
 	out = r.runOut("git", "show", w.VersionCommit)

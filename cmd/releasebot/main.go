@@ -310,11 +310,18 @@ func (w *Work) doRelease() {
 
 	w.checkSpelling()
 	w.gitCheckout()
-	if !w.BetaRelease {
+	// In release mode we carry on even if the tag exists, in case we
+	// need to resume a failed build.
+	if w.Prepare && w.gitTagExists() {
+		w.logError("%s tag already exists in Go repository!", w.Version)
+		w.logError("**Found errors during release. Stopping!**")
+		return
+	}
+	if w.BetaRelease {
+		// TODO: go tool api -allow_new false
+	} else {
 		w.checkReleaseBlockers()
 		w.checkDocs()
-	} else {
-		// TODO: go tool api -allow_new false
 	}
 	w.findOrCreateReleaseIssue()
 	if len(w.Errors) > 0 && !dryRun {
@@ -322,11 +329,13 @@ func (w *Work) doRelease() {
 		return
 	}
 
-	if w.Prepare && w.BetaRelease {
-		w.nextStepsBeta()
-	} else if w.Prepare {
-		changeID := w.writeVersion()
-		w.nextStepsPrepare(changeID)
+	if w.Prepare {
+		if w.BetaRelease {
+			w.nextStepsBeta()
+		} else {
+			changeID := w.writeVersion()
+			w.nextStepsPrepare(changeID)
+		}
 	} else {
 		// TODO: check build.golang.org
 		if !w.BetaRelease {
