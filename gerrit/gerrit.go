@@ -414,6 +414,16 @@ func (c *Client) GetChangeDetail(ctx context.Context, changeID string, opts ...Q
 	return &change, nil
 }
 
+// ListFiles retrieves a map of filenames to FileInfo's for the given change ID and revision.
+// For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-files
+func (c *Client) ListFiles(ctx context.Context, changeID, revision string) (map[string]*FileInfo, error) {
+	var m map[string]*FileInfo
+	if err := c.do(ctx, &m, "GET", "/changes/"+changeID+"/revisions/"+revision+"/files"); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // ReviewInput contains information for adding a review to a revision.
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#review-input
 type ReviewInput struct {
@@ -431,7 +441,9 @@ type ReviewInput struct {
 // ReviewerInput contains information for adding a reviewer to a change.
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#reviewer-input
 type ReviewerInput struct {
-	Reviewer int64  `json:"reviewer"`        // ID of account to be added as reviewer
+	// Reviewer is the ID of the account to be added as reviewer.
+	// See https://gerrit-review.googlesource.com/Documentation/rest-api-accounts.html#account-id
+	Reviewer string `json:"reviewer"`
 	State    string `json:"state,omitempty"` // REVIEWER or CC (default: REVIEWER)
 }
 
@@ -456,6 +468,24 @@ func (c *Client) SetReview(ctx context.Context, changeID, revision string, revie
 	var res reviewInfo
 	return c.do(ctx, &res, "POST", fmt.Sprintf("/changes/%s/revisions/%s/review", changeID, revision),
 		reqBody{review})
+}
+
+// ReviewerInfo contains information about reviewers of a change.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#reviewer-info
+type ReviewerInfo struct {
+	AccountInfo
+	Approvals map[string]string `json:"approvals"`
+}
+
+// ListReviewers returns all reviewers on a change.
+// For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-reviewers
+// The changeID is https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-id
+func (c *Client) ListReviewers(ctx context.Context, changeID string) ([]ReviewerInfo, error) {
+	var res []ReviewerInfo
+	if err := c.do(ctx, &res, "GET", fmt.Sprintf("/changes/%s/reviewers", changeID)); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 // HashtagsInput is the request body used when modifying a CL's hashtags.

@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/go-github/github"
+	"golang.org/x/build/devapp/owners"
 	"golang.org/x/build/maintner"
 )
 
@@ -299,6 +301,108 @@ func TestRemoveLabels(t *testing.T) {
 		}
 		if diff := cmp.Diff(removed, tc.removed); diff != "" {
 			t.Errorf("%s: labels removed differ: (-got, +want)\n%s", tc.desc, diff)
+		}
+	}
+}
+
+func TestHumanReviewersInMetas(t *testing.T) {
+	testCases := []struct {
+		commitMsg string
+		hasHuman  bool
+	}{
+		{`Patch-set: 6
+Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
+`,
+			true,
+		},
+		{`Patch-set: 6
+CC: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
+`,
+			true,
+		},
+		{`Patch-set: 6
+Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
+`,
+			false,
+		},
+		{`Patch-set: 6
+Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
+CC: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
+`,
+			true,
+		},
+		{`Patch-set: 6
+Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
+Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
+`,
+			true,
+		},
+	}
+
+	for _, tc := range testCases {
+		metas := []*maintner.GerritMeta{
+			{Commit: &maintner.GitCommit{Msg: tc.commitMsg}},
+		}
+		if got, want := humanReviewersInMetas(metas), tc.hasHuman; got != want {
+			t.Errorf("Unexpected result for meta commit message: got %v; want %v for\n%s", got, want, tc.commitMsg)
+		}
+	}
+}
+
+func TestMergeOwnersEntries(t *testing.T) {
+	var (
+		andybons = owners.Owner{GitHubUsername: "andybons", GerritEmail: "andybons@golang.org"}
+		bradfitz = owners.Owner{GitHubUsername: "bradfitz", GerritEmail: "bradfitz@golang.org"}
+		filippo  = owners.Owner{GitHubUsername: "filippo", GerritEmail: "filippo@golang.org"}
+	)
+	testCases := []struct {
+		desc    string
+		entries []*owners.Entry
+		result  *owners.Entry
+	}{
+		{
+			"no entries",
+			nil,
+			&owners.Entry{},
+		},
+		{
+			"primary merge",
+			[]*owners.Entry{
+				{Primary: []owners.Owner{andybons}},
+				{Primary: []owners.Owner{bradfitz}},
+			},
+			&owners.Entry{
+				Primary: []owners.Owner{andybons, bradfitz},
+			},
+		},
+		{
+			"secondary merge",
+			[]*owners.Entry{
+				{Secondary: []owners.Owner{andybons}},
+				{Secondary: []owners.Owner{filippo}},
+			},
+			&owners.Entry{
+				Secondary: []owners.Owner{andybons, filippo},
+			},
+		},
+		{
+			"promote from secondary to primary",
+			[]*owners.Entry{
+				{Primary: []owners.Owner{andybons, filippo}},
+				{Secondary: []owners.Owner{filippo}},
+			},
+			&owners.Entry{
+				Primary: []owners.Owner{andybons, filippo},
+			},
+		},
+	}
+	cmpFn := func(a, b owners.Owner) bool {
+		return a.GitHubUsername < b.GitHubUsername
+	}
+	for _, tc := range testCases {
+		got := mergeOwnersEntries(tc.entries)
+		if diff := cmp.Diff(got, tc.result, cmpopts.SortSlices(cmpFn)); diff != "" {
+			t.Errorf("%s: final entry results differ: (-got, +want)\n%s", tc.desc, diff)
 		}
 	}
 }

@@ -403,6 +403,22 @@ func lineValue(all, prefix string) (value, rest string) {
 	}
 }
 
+// WorkInProgress reports whether the CL has its Work-in-progress bit set, per
+// https://gerrit-review.googlesource.com/Documentation/intro-user.html#wip
+func (cl *GerritCL) WorkInProgress() bool {
+	var wip bool
+	for _, m := range cl.Metas {
+		v, _ := lineValue(m.Commit.Msg, "Work-in-progress:")
+		switch v {
+		case "true":
+			wip = true
+		case "false":
+			wip = false
+		}
+	}
+	return wip
+}
+
 // ChangeID returns the Gerrit "Change-Id: Ixxxx" line's Ixxxx
 // value from the cl.Msg, if any.
 func (cl *GerritCL) ChangeID() string {

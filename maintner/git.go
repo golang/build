@@ -376,7 +376,7 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*GitCommit, error)
 	}
 	sort.Slice(gc.Files, func(i, j int) bool { return gc.Files[i].File < gc.Files[j].File })
 	parents := 0
-	err := foreachLine(hdr, func(ln []byte) error {
+	err := ForeachLine(hdr, func(ln []byte) error {
 		if bytes.HasPrefix(ln, parentSpace) {
 			parents++
 			parentHash := c.gitHashFromHex(ln[len(parentSpace):])
@@ -462,7 +462,8 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*GitCommit, error)
 // calls f on each non-empty line in v, without the trailing \n. the
 // final line need not include a trailing \n. Returns first non-nil
 // error returned by f.
-func foreachLine(v []byte, f func([]byte) error) error {
+// TODO: this is too generalized to be in the maintner package. Move it out.
+func ForeachLine(v []byte, f func([]byte) error) error {
 	for len(v) > 0 {
 		i := bytes.IndexByte(v, '\n')
 		if i < 0 {
@@ -472,6 +473,25 @@ func foreachLine(v []byte, f func([]byte) error) error {
 			return err
 		}
 		v = v[i+1:]
+	}
+	return nil
+}
+
+// string variant of ForeachLine.
+// calls f on each non-empty line in s, without the trailing \n. the
+// final line need not include a trailing \n. Returns first non-nil
+// error returned by f.
+// TODO: this is too generalized to be in the maintner package. Move it out.
+func ForeachLineStr(s string, f func(string) error) error {
+	for len(s) > 0 {
+		i := strings.IndexByte(s, '\n')
+		if i < 0 {
+			return f(s)
+		}
+		if err := f(s[:i]); err != nil {
+			return err
+		}
+		s = s[i+1:]
 	}
 	return nil
 }

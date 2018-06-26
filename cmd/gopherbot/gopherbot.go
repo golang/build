@@ -8,6 +8,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -28,6 +29,7 @@ import (
 	"cloud.google.com/go/compute/metadata"
 	"github.com/google/go-github/github"
 	"go4.org/strutil"
+	"golang.org/x/build/devapp/owners"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
@@ -156,6 +158,20 @@ func init() {
 	}
 }
 
+type gerritChange struct {
+	project string
+	num     int32
+}
+
+func (c gerritChange) ID() string {
+	// https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-id
+	return fmt.Sprintf("%s~%d", c.project, c.num)
+}
+
+func (c gerritChange) String() string {
+	return c.ID()
+}
+
 func main() {
 	flag.Parse()
 
@@ -168,7 +184,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	bot := &gopherbot{ghc: ghc, gerrit: gerritc}
+	bot := &gopherbot{
+		ghc:    ghc,
+		gerrit: gerritc,
+		deletedChanges: map[gerritChange]bool{
+			{"crypto", 35958}: true,
+		},
+	}
 	bot.initCorpus()
 
 	ctx := context.Background()
@@ -218,6 +240,10 @@ type gopherbot struct {
 
 	knownContributors map[string]bool
 
+	// Until golang.org/issue/22635 is fixed, keep a map of changes that were deleted
+	// to prevent calls to Gerrit that will always 404.
+	deletedChanges map[gerritChange]bool
+
 	releases struct {
 		sync.Mutex
 		lastUpdate time.Time
@@ -247,6 +273,7 @@ var tasks = []struct {
 	{"apply minor release milestones", (*gopherbot).setMinorMilestones},
 	{"close cherry pick issues", (*gopherbot).closeCherryPickIssues},
 	{"apply labels from comments", (*gopherbot).applyLabelsFromComments},
+	{"assign reviewers to CLs", (*gopherbot).assignReviewersToCLs},
 }
 
 func (b *gopherbot) initCorpus() {
@@ -1589,6 +1616,227 @@ func labelChangeBlacklisted(label, action string) bool {
 		}
 	}
 	return false
+}
+
+// assignReviewersToCLs looks for CLs with no humans in the reviewer or cc fields
+// that have been open for a short amount of time (enough of a signal that the
+// author does not intend to add anyone to the review), then assigns reviewers/ccs
+// using the golang.org/s/owners API.
+func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
+	const tagNoOwners = "no-owners"
+	b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+		if gp.Project() == "scratch" || gp.Server() != "go.googlesource.com" {
+			return nil
+		}
+		gp.ForeachOpenCL(func(cl *maintner.GerritCL) error {
+			if cl.Private || cl.WorkInProgress() || time.Now().Sub(cl.Created) < 10*time.Minute {
+				return nil
+			}
+			tags := cl.Meta.Hashtags()
+			if tags.Contains(tagNoOwners) {
+				return nil
+			}
+
+			gc := gerritChange{gp.Project(), cl.Number}
+			if b.deletedChanges[gc] {
+				return nil
+			}
+			if strutil.ContainsFold(cl.Commit.Msg, "do not submit") || strutil.ContainsFold(cl.Commit.Msg, "do not review") {
+				return nil
+			}
+
+			if b.humanReviewersOnChange(ctx, gc, cl) {
+				return nil
+			}
+
+			changeURL := fmt.Sprintf("https://go-review.googlesource.com/c/%s/+/%d\n", gp.Project(), cl.Number)
+			log.Printf("No reviewers or cc: %s", changeURL)
+			files, err := b.gerrit.ListFiles(ctx, gc.ID(), cl.Commit.Hash.String())
+			if err != nil {
+				log.Printf("Could not get change %+v: %v", gc, err)
+				if httpErr, ok := err.(*gerrit.HTTPError); ok && httpErr.Res.StatusCode == http.StatusNotFound {
+					b.deletedChanges[gc] = true
+				}
+				return nil
+			}
+
+			var paths []string
+			for f := range files {
+				if f == "/COMMIT_MSG" {
+					continue
+				}
+				paths = append(paths, gp.Project()+"/"+f)
+			}
+
+			entries, err := getCodeOwners(ctx, paths)
+			if err != nil {
+				log.Printf("Could not get owners for change %s: %v", changeURL, err)
+				return nil
+			}
+
+			merged := mergeOwnersEntries(entries)
+			if len(merged.Primary) == 0 && len(merged.Secondary) == 0 {
+				// No owners found for the change. Add the #no-owners tag.
+				log.Printf("Adding no-owners tag to change %s...", changeURL)
+				if *dryRun {
+					return nil
+				}
+				if _, err := b.gerrit.AddHashtags(ctx, gc.ID(), tagNoOwners); err != nil {
+					log.Printf("Could not add hashtag to change %q: %v", gc.ID(), err)
+					return nil
+				}
+				return nil
+			}
+
+			// Assign reviewers.
+			var review gerrit.ReviewInput
+			for _, owner := range merged.Primary {
+				review.Reviewers = append(review.Reviewers, gerrit.ReviewerInput{Reviewer: owner.GerritEmail})
+			}
+			for _, owner := range merged.Secondary {
+				review.Reviewers = append(review.Reviewers, gerrit.ReviewerInput{Reviewer: owner.GerritEmail, State: "CC"})
+			}
+			log.Printf("[dry run] Would set review on %s: %+v", changeURL, review)
+			if *dryRun {
+				return nil
+			}
+			if err := b.gerrit.SetReview(ctx, gc.ID(), "current", review); err != nil {
+				log.Printf("Could not set review for change %q: %v", gc.ID(), err)
+				return nil
+			}
+			return nil
+		})
+		return nil
+	})
+	return nil
+}
+
+// humanReviewersOnChange returns true if there are (or were any) human reviewers in the given change.
+// The gerritChange passed must be used because it’s used as a key to deletedChanges and the ID returned
+// by cl.ChangeID() can be associated with multiple changes (cherry-picks, for example).
+func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritChange, cl *maintner.GerritCL) bool {
+	if found := humanReviewersInMetas(cl.Metas); found {
+		return true
+	}
+
+	reviewers, err := b.gerrit.ListReviewers(ctx, change.ID())
+	if err != nil {
+		if httpErr, ok := err.(*gerrit.HTTPError); ok && httpErr.Res.StatusCode == http.StatusNotFound {
+			b.deletedChanges[change] = true
+		}
+		log.Printf("Could not list reviewers on change %q: %v", change.ID(), err)
+		return true
+	}
+
+	const (
+		gobotID     = 5976
+		gerritbotID = 12446
+	)
+	for _, r := range reviewers {
+		if r.NumericID != gobotID && r.NumericID != gerritbotID {
+			return true
+		}
+	}
+	return false
+}
+
+func humanReviewersInMetas(metas []*maintner.GerritMeta) bool {
+	// Emails as they appear in maintner (<numeric ID>@<instance ID>)
+	var (
+		gobotEmail     = "5976@62eb7196-b449-3ce5-99f1-c037f21e1705"
+		gerritbotEmail = "12446@62eb7196-b449-3ce5-99f1-c037f21e1705"
+
+		hasHuman bool
+	)
+	for _, m := range metas {
+		if !strings.Contains(m.Commit.Msg, "Reviewer:") && !strings.Contains(m.Commit.Msg, "CC:") {
+			continue
+		}
+
+		err := maintner.ForeachLineStr(m.Commit.Msg, func(ln string) error {
+			if !strings.HasPrefix(ln, "Reviewer:") && !strings.HasPrefix(ln, "CC:") {
+				return nil
+			}
+			if !strings.Contains(ln, gobotEmail) && !strings.Contains(ln, gerritbotEmail) {
+				// A human is already on the change.
+				hasHuman = true
+				return errStopIteration
+			}
+			return nil
+		})
+		if err != nil && err != errStopIteration {
+			log.Printf("humanReviewersInMetas: got unexpected error from maintner.ForeachLineStr: %v", err)
+			return hasHuman
+		}
+	}
+	return hasHuman
+}
+
+func getCodeOwners(ctx context.Context, paths []string) ([]*owners.Entry, error) {
+	oReq := owners.Request{Version: 1}
+	oReq.Payload.Paths = paths
+
+	b, err := json.Marshal(oReq)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest("POST", "https://dev.golang.org/owners/", bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var oResp owners.Response
+	if err := json.NewDecoder(resp.Body).Decode(&oResp); err != nil {
+		return nil, fmt.Errorf("could not decode owners response: %v", err)
+	}
+	if oResp.Error != "" {
+		return nil, fmt.Errorf("error from dev.golang.org/owners endpoint: %v", oResp.Error)
+	}
+	var entries []*owners.Entry
+	for _, entry := range oResp.Payload.Entries {
+		if entry == nil {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	return entries, nil
+}
+
+// mergeOwnersEntries takes multiple owners.Entry structs and aggregates all
+// primary and secondary users into a single entry.
+// If a user is a primary in one entry but secondary on another, they are
+// primary in the returned entry.
+// The resulting order of the entries is non-deterministic.
+func mergeOwnersEntries(entries []*owners.Entry) *owners.Entry {
+	var result owners.Entry
+	pm := make(map[owners.Owner]bool)
+	for _, e := range entries {
+		for _, o := range e.Primary {
+			pm[o] = true
+		}
+	}
+	sm := make(map[owners.Owner]bool)
+	for _, e := range entries {
+		for _, o := range e.Secondary {
+			if !pm[o] {
+				sm[o] = true
+			}
+		}
+	}
+	for o := range pm {
+		result.Primary = append(result.Primary, o)
+	}
+	for o := range sm {
+		result.Secondary = append(result.Secondary, o)
+	}
+	return &result
 }
 
 func blockqoute(s string) string {

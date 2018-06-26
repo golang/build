@@ -1,25 +1,25 @@
 # Copyright 2017 The Go Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
-FROM golang:1.10 AS build
+FROM golang:1.11 AS build
 LABEL maintainer "golang-dev@googlegroups.com"
 
 ENV CGO_ENABLED=0
 
 # BEGIN deps (run `make update-deps` to update)
 
-# Repo cloud.google.com/go at d0195c2 (2018-08-16)
-ENV REV=d0195c2919dd698efd742e4a4c92cfcab64252a0
+# Repo cloud.google.com/go at 07eee00 (2018-09-01)
+ENV REV=07eee00ee8a4df61bb7b10aa7bcc26b467abacf1
 RUN go get -d cloud.google.com/go/compute/metadata &&\
     (cd /go/src/cloud.google.com/go && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo github.com/golang/protobuf at 89a0c16 (2018-08-04)
-ENV REV=89a0c16f4dc2a70c0ed864d8ef64878f24fdaa51
+# Repo github.com/golang/protobuf at b27b920 (2018-08-20)
+ENV REV=b27b920f9e71b439b873b17bf99f56467623814a
 RUN go get -d github.com/golang/protobuf/proto `#and 5 other pkgs` &&\
     (cd /go/src/github.com/golang/protobuf && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo github.com/google/go-github at dae5b87 (2018-08-10)
-ENV REV=dae5b8767170392dd51fafc89da6605faa51a1c2
+# Repo github.com/google/go-github at 7a180b5 (2018-09-01)
+ENV REV=7a180b5eed10c86fc54bcc274753eb35717931db
 RUN go get -d github.com/google/go-github/github &&\
     (cd /go/src/github.com/google/go-github && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
@@ -33,18 +33,18 @@ ENV REV=9cad4c3443a7200dd6400aef47183728de563a38
 RUN go get -d github.com/gregjones/httpcache &&\
     (cd /go/src/github.com/gregjones/httpcache && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo go4.org at 417644f (2018-08-09)
-ENV REV=417644f6feb5ed3a356ca5d6d8e3a3fac7dfd33f
+# Repo go4.org at 034d17a (2017-05-25)
+ENV REV=034d17a462f7b2dcd1a4a73553ec5357ff6e6c6e
 RUN go get -d go4.org/strutil `#and 2 other pkgs` &&\
     (cd /go/src/go4.org && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/net at aaf6012 (2018-08-16)
-ENV REV=aaf60122140d3fcf75376d319f0554393160eb50
+# Repo golang.org/x/net at 8a410e7 (2018-08-26)
+ENV REV=8a410e7b638dca158bf9e766925842f6651ff828
 RUN go get -d golang.org/x/net/context `#and 2 other pkgs` &&\
     (cd /go/src/golang.org/x/net && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
-# Repo golang.org/x/oauth2 at 3d292e4 (2018-07-24)
-ENV REV=3d292e4d0cdc3a0113e6d207bb137145ef1de42f
+# Repo golang.org/x/oauth2 at d2e6202 (2018-08-21)
+ENV REV=d2e6202438beef2727060aa7cabdd924d92ebfd9
 RUN go get -d golang.org/x/oauth2 `#and 2 other pkgs` &&\
     (cd /go/src/golang.org/x/oauth2 && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
 
