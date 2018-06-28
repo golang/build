@@ -1,5 +1,5 @@
 runtime: go
-api_version: go1.8
+api_version: go1.9
 
 handlers:
 - url: /static
