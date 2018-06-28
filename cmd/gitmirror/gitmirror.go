@@ -256,10 +256,11 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 	reposMu.Lock()
 	defer reposMu.Unlock()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, "<html><body><pre>\a")
+	fmt.Fprint(w, "<html><body><pre>")
 	for _, r := range repos {
 		fmt.Fprintf(w, "<a href='/debug/watcher/%s'>%s</a> - %s\n", r.name(), r.name(), r.statusLine())
 	}
+	fmt.Fprint(w, "</pre></body></html>")
 }
 
 // shouldMirror reports whether the named repo should be mirrored from
