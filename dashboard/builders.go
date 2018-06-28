@@ -1155,9 +1155,26 @@ func init() {
 		env:               []string{"GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
-		Name:              "js-wasm",
-		HostType:          "host-js-wasm",
-		TryBot:            true,
+		Name:     "js-wasm",
+		HostType: "host-js-wasm",
+		TryBot:   true,
+		ShouldRunDistTest: func(distTest string, isTry bool) bool {
+			if isTry {
+				if strings.HasPrefix(distTest, "test:") {
+					return false
+				}
+				if strings.Contains(distTest, "/internal/") ||
+					strings.Contains(distTest, "vendor/golang.org/x/arch") {
+					return false
+				}
+				switch distTest {
+				case "cmd/go", "nolibgcc:crypto/x509":
+					return false
+				}
+				return true
+			}
+			return true
+		},
 		numTryTestHelpers: 4,
 		GoDeps: []string{
 			"3dced519cbabc213df369d9112206986e62687fa", // first passing commit
