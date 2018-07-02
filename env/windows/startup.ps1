@@ -74,20 +74,21 @@ while(-Not (Test-NetConnection 8.8.8.8 -Port 53 | ? { $_.TcpTestSucceeded })) {
   sleep 3
 }
 
-# Disable password complexity, automatic updates, windows firewall, error reporting, and UAC
+# Disable password complexity, automatic updates, windows defender, windows firewall, error reporting, and UAC
 # 
-# - Updated interrupt the builds later. 
-# - We don't care about security since this isn't going to be Internet-facing. 
+# - Update can interrupt the builds
+# - We don't care about security since this isn't going to be Internet-facing
 # - No ports will ever be accessible externally
 # - We can be trusted to run as a real Administrator
 Write-Host "disabling security features"
 Disable-PasswordComplexity
-New-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Name NoAutoUpdate -Value 1 -Force | Out-Null
-new-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting" -Name Disabled -Value 1 -Force | Out-Null
-new-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting" -Name DontShowUI -Value 1 -Force | Out-Null
+New-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Name NoAutoUpdate -Value 1 -Force | Out-Null
+new-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting" -Name Disabled -Value 1 -Force | Out-Null
+new-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting" -Name DontShowUI -Value 1 -Force | Out-Null
+New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\policies\system" -Name EnableLUA -PropertyType DWord -Value 0 -Force | Out-Null
 netsh advfirewall set allprofiles state off
 netsh firewall set opmode mode=disable profile=ALL
-New-ItemProperty -Path HKLM:Software\Microsoft\Windows\CurrentVersion\policies\system -Name EnableLUA -PropertyType DWord -Value 0 -Force | Out-Null
+Uninstall-WindowsFeature -Name Windows-Defender
 
 # Disable unwanted services
 Write-Host "disabling unused services"
