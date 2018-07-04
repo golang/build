@@ -364,7 +364,7 @@ func (c *Client) QueryChanges(ctx context.Context, q string, opts ...QueryChange
 		"q": {q},
 		"n": condInt(opt.N),
 		"o": opt.Fields,
-		"S": condInt(opt.Start), 
+		"S": condInt(opt.Start),
 	})
 	return changes, err
 }
