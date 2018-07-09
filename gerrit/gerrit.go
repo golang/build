@@ -327,6 +327,12 @@ type QueryChangesOpt struct {
 	// If 0, the 'n' parameter is not sent to Gerrit.
 	N int
 
+	// Start is the number of results to skip (useful in pagination).
+	// To figure out if there are more results, the last ChangeInfo struct
+	// in the last call to QueryChanges will have the field MoreAccounts=true.
+	// If 0, the 'S' parameter is not sent to Gerrit.
+	Start int
+
 	// Fields are optional fields to also return.
 	// Example strings include "ALL_REVISIONS", "LABELS", "MESSAGES".
 	// For a complete list, see:
@@ -358,6 +364,7 @@ func (c *Client) QueryChanges(ctx context.Context, q string, opts ...QueryChange
 		"q": {q},
 		"n": condInt(opt.N),
 		"o": opt.Fields,
+		"S": condInt(opt.Start),
 	})
 	return changes, err
 }
