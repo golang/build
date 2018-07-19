@@ -145,6 +145,9 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{r},
 		Secondary: []Owner{mvdan},
 	},
+	"go/src/cmd/go": {
+		Primary: []Owner{bcmills, rsc, iant},
+	},
 	"go/src/cmd/link": {
 		Primary:   []Owner{cherryyz, rsc, mdempsky, iant},
 		Secondary: []Owner{mwhudson},
