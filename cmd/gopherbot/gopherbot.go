@@ -808,6 +808,7 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 
 // cl2issue writes "Change https://golang.org/issue/NNNN mentions this issue"\
 // and the change summary on GitHub when a new Gerrit change references a GitHub issue.
+// It also labels the issue as "has-cl".
 func (b *gopherbot) cl2issue(ctx context.Context) error {
 	monthAgo := time.Now().Add(-30 * 24 * time.Hour)
 	return b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
@@ -843,6 +844,19 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 					printIssue("cl2issue", gi)
 					msg := fmt.Sprintf("Change https://golang.org/cl/%d mentions this issue: `%s`", cl.Number, cl.Commit.Summary())
 					if err := b.addGitHubComment(ctx, "golang", "go", gi.Number, msg); err != nil {
+						return err
+					}
+				}
+				needsHasCLLabel := !gi.HasLabel("has-cl")
+				gi.ForeachEvent(func(c *maintner.GitHubIssueEvent) error {
+					if c.Type == "unlabeled" && c.Label == "has-cl" {
+						needsHasCLLabel = false
+						return errStopIteration
+					}
+					return nil
+				})
+				if needsHasCLLabel {
+					if err := b.addLabel(ctx, gi, "has-cl"); err != nil {
 						return err
 					}
 				}
