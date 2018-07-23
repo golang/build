@@ -223,7 +223,7 @@ func TestParseGithubEvents(t *testing.T) {
     "id": 1000077586,
     "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1000077586",
     "actor": {
-      "login": "shurcooL",
+      "login": "dmitshur",
       "id": 1924134
     },
     "event": "unassigned",
@@ -231,7 +231,7 @@ func TestParseGithubEvents(t *testing.T) {
     "commit_url": null,
     "created_at": "2017-03-15T00:31:42Z",
     "assignee": {
-      "login": "shurcooL",
+      "login": "dmitshur",
       "id": 1924134
     },
     "assigner": {
@@ -245,11 +245,11 @@ func TestParseGithubEvents(t *testing.T) {
 				Created: t3339("2017-03-15T00:31:42Z"),
 				Actor: &GitHubUser{
 					ID:    1924134,
-					Login: "shurcooL",
+					Login: "dmitshur",
 				},
 				Assignee: &GitHubUser{
 					ID:    1924134,
-					Login: "shurcooL",
+					Login: "dmitshur",
 				},
 				Assigner: &GitHubUser{
 					ID:    2621,
@@ -503,7 +503,7 @@ func TestParseGithubEvents(t *testing.T) {
 		var c Corpus
 		c.initGithub()
 		c.github.getOrCreateUserID(2621).Login = "bradfitz"
-		c.github.getOrCreateUserID(1924134).Login = "shurcooL"
+		c.github.getOrCreateUserID(1924134).Login = "dmitshur"
 		gr := c.github.getOrCreateRepo("foowner", "bar")
 		e2 := gr.newGithubEvent(gotp)
 

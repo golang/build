@@ -30,7 +30,7 @@ var (
 	bradfitz     = gh("bradfitz")
 	cbro         = gh("broady")
 	cherryyz     = gh("cherrymui")
-	dsh          = gh("shurcooL")
+	dmitshur     = gh("dmitshur")
 	danderson    = gh("danderson")
 	drchase      = gh("dr2chase")
 	dvyukov      = gh("dvyukov")
@@ -513,7 +513,7 @@ var entries = map[string]*Entry{
 	},
 
 	"build/maintner/cmd/maintserve": {
-		Primary:   []Owner{dsh},
+		Primary:   []Owner{dmitshur},
 		Secondary: []Owner{andybons},
 	},
 
