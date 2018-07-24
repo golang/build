@@ -267,6 +267,12 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
+	"host-windows-arm-iotcore": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   1,
+		OwnerGithub: "jordanrh1",
+		env:         []string{"GOROOT_BOOTSTRAP=C:\\Data\\Go"},
+	},
 	"host-darwin-10_8": &HostConfig{
 		IsReverse: true,
 		ExpectNum: 0,
@@ -1320,6 +1326,14 @@ func init() {
 			// dist test timeout. So, bump this builder
 			// up:
 			"GO_TEST_TIMEOUT_SCALE=2"},
+	})
+	addBuilder(BuildConfig{
+		Name:     "windows-arm",
+		HostType: "host-windows-arm-iotcore",
+		env: []string{
+			"GOARM=7",
+			"GO_TEST_TIMEOUT_SCALE=2",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_8",
