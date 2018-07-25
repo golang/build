@@ -453,6 +453,16 @@ var Hosts = map[string]*HostConfig{
 			"GOHOSTARCH=amd64",
 		},
 	},
+	"host-darwin-amd64-zenly-ios": &HostConfig{
+		Notes:       "MacBook Pro hosted by Zenly, running the ios reverse buildlet",
+		OwnerGithub: "znly",
+		IsReverse:   true,
+		ExpectNum:   1,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/local/Cellar/1.10.3/libexec",
+			"GOHOSTARCH=amd64",
+		},
+	},
 }
 
 func init() {
@@ -1382,6 +1392,24 @@ func init() {
 		HostType: "host-darwin-amd64-eliasnaur-ios",
 		Notes:    "iPhone 6 (model A1586), via a Mac Mini; owned by elias.naur",
 		env:      []string{"GOARCH=arm64"},
+	})
+	addBuilder(BuildConfig{
+		Name:     "darwin-arm-mg912baios",
+		HostType: "host-darwin-amd64-zenly-ios",
+		Notes:    "iPhone 5C (model MG912B/A), via a MacBook Pro; owned by zenly",
+		env: []string{
+			"GOARCH=arm",
+			"GOIOS_DEVICE_ID=8e5c23a5d0843d1ffe164ea0b2f2500599c3ebff",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "darwin-arm64-mn4m2zdaios",
+		HostType: "host-darwin-amd64-zenly-ios",
+		Notes:    "iPhone 7+ (model MN4M2ZD/A), via a MacBook Pro; owned by zenly",
+		env: []string{
+			"GOARCH=arm64",
+			"GOIOS_DEVICE_ID=5ec20fafe317e1c8ff51efc6d508cf19808474a2",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "android-arm-wiko-fever",
