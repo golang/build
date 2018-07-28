@@ -95,11 +95,11 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/compile/": {
 		Primary:   []Owner{khr, gri},
-		Secondary: []Owner{josharian, mdempsky},
+		Secondary: []Owner{josharian, mdempsky, martisch},
 	},
 	"go/src/cmd/compile/amd64": {
 		Primary:   []Owner{khr},
-		Secondary: []Owner{josharian, rsc, drchase, cherryyz},
+		Secondary: []Owner{josharian, rsc, drchase, cherryyz, martisch},
 	},
 	"go/src/cmd/compile/arm": {
 		Primary:   []Owner{khr},
@@ -127,7 +127,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/compile/x86": {
 		Primary:   []Owner{khr},
-		Secondary: []Owner{josharian, rsc, drchase, cherryyz},
+		Secondary: []Owner{josharian, rsc, drchase, cherryyz, martisch},
 	},
 	"go/src/cmd/compile/internal/syntax": {
 		Primary:   []Owner{gri},
@@ -139,7 +139,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/compile/internal/ssa": {
 		Primary:   []Owner{khr},
-		Secondary: []Owner{josharian},
+		Secondary: []Owner{josharian, martisch},
 	},
 	"go/src/cmd/doc": {
 		Primary:   []Owner{r},
@@ -301,7 +301,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{josharian},
 	},
 	"go/src/internal/cpu": {
-		Primary: []Owner{khr},
+		Primary: []Owner{khr, martisch},
 	},
 	"go/src/internal/singleflight": {
 		Primary: []Owner{bradfitz, iant},
@@ -434,7 +434,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/runtime": {
 		Primary:   []Owner{austin, rsc, rlh, khr},
-		Secondary: []Owner{iant, dvyukov, josharian},
+		Secondary: []Owner{iant, dvyukov, josharian, martisch},
 	},
 	"go/src/runtime/cgo": {
 		Primary: []Owner{iant},
