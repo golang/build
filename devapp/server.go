@@ -60,6 +60,7 @@ func newServer(mux *http.ServeMux, staticDir, templateDir string) *server {
 		userMapping: map[int]*maintner.GitHubUser{},
 	}
 	s.mux.Handle("/", http.FileServer(http.Dir(s.staticDir)))
+	s.mux.HandleFunc("/healthz", handleHealthz)
 	s.mux.HandleFunc("/favicon.ico", s.handleFavicon)
 	s.mux.HandleFunc("/release", s.withTemplate("/release.tmpl", s.handleRelease))
 	s.mux.HandleFunc("/reviews", s.withTemplate("/reviews.tmpl", s.handleReviews))
@@ -184,6 +185,11 @@ func (s *server) filteredHelpWantedIssues(pkgs ...string) []issueData {
 		}
 	}
 	return issues
+}
+
+func handleHealthz(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
 }
 
 func (s *server) handleFavicon(w http.ResponseWriter, r *http.Request) {

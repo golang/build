@@ -78,6 +78,10 @@ func main() {
 }
 
 func redirectHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/healthz" {
+		handleHealthz(w, r)
+		return
+	}
 	if r.TLS != nil || r.Host == "" {
 		http.NotFound(w, r)
 		return
