@@ -762,6 +762,7 @@ func (c *BuildConfig) BuildSubrepos() bool {
 		"freebsd-386-10_3", "freebsd-amd64-10_3",
 		"freebsd-386-11_1", "freebsd-amd64-11_1",
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
+		"linux-s390x-ibm",
 		"openbsd-386-60", "openbsd-amd64-60",
 		"openbsd-386-62", "openbsd-amd64-62",
 		"netbsd-amd64-8_0",
