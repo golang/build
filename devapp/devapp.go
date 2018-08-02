@@ -48,14 +48,16 @@ func main() {
 
 	s := newServer(http.NewServeMux(), *staticDir, *templateDir)
 	ctx := context.Background()
-	s.initCorpus(ctx)
+	if err := s.initCorpus(ctx); err != nil {
+		log.Fatalf("Could not init corpus: %v", err)
+	}
 	go s.corpusUpdateLoop(ctx)
 
 	ln, err := net.Listen("tcp", *listen)
 	if err != nil {
-		log.Fatalf("Error listening on %s: %v\n", *listen, err)
+		log.Fatalf("Error listening on %s: %v", *listen, err)
 	}
-	log.Printf("Listening on %s\n", ln.Addr())
+	log.Printf("Listening on %s", ln.Addr())
 
 	errc := make(chan error)
 	if ln != nil {
