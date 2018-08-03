@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -59,6 +60,13 @@ func GitCookieFileAuth(file string) Auth {
 	return &gitCookieFileAuth{file: file}
 }
 
+func netrcPath() string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(os.Getenv("USERPROFILE"), "_netrc")
+	}
+	return filepath.Join(os.Getenv("HOME"), ".netrc")
+}
+
 type gitCookiesAuth struct{}
 
 func (gitCookiesAuth) setAuth(c *Client, r *http.Request) {
@@ -66,11 +74,11 @@ func (gitCookiesAuth) setAuth(c *Client, r *http.Request) {
 	// now tells users to store this information.
 	git := exec.Command("git", "config", "http.cookiefile")
 	git.Stderr = os.Stderr
-	gitOut, err := git.Output()
-	if err != nil {
-		log.Printf("git config http.cookiefile failed: %s", err)
-		return
-	}
+
+	// Ignore a failure here, git will exit(1) if no cookies are
+	// present and prevent the netrc from being read below.
+	gitOut, _ := git.Output()
+
 	cookieFile := strings.TrimSpace(string(gitOut))
 	if len(cookieFile) != 0 {
 		auth := &gitCookieFileAuth{file: cookieFile}
@@ -90,7 +98,8 @@ func (gitCookiesAuth) setAuth(c *Client, r *http.Request) {
 	// used to tell users to store the information, until the passwords
 	// got so long that old versions of curl couldn't handle them.
 	host := url.Host
-	data, _ := ioutil.ReadFile(filepath.Join(os.Getenv("HOME"), ".netrc"))
+	netrc := netrcPath()
+	data, _ := ioutil.ReadFile(netrc)
 	for _, line := range strings.Split(string(data), "\n") {
 		if i := strings.Index(line, "#"); i >= 0 {
 			line = line[:i]
@@ -101,6 +110,7 @@ func (gitCookiesAuth) setAuth(c *Client, r *http.Request) {
 			return
 		}
 	}
+	log.Printf("no authentication configured for Gerrit; tried both git config http.cookiefile and %s", netrc)
 }
 
 type gitCookieFileAuth struct {
