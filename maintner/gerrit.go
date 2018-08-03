@@ -214,7 +214,7 @@ func (gp *GerritProject) ForeachCLUnsorted(fn func(*GerritCL) error) error {
 // CL numbers are shared across all projects on a Gerrit server, so you can get
 // nil unless you have the GerritProject containing that CL.
 func (gp *GerritProject) CL(number int32) *GerritCL {
-	if cl := gp.cls[number]; cl.complete() {
+	if cl := gp.cls[number]; cl != nil && cl.complete() {
 		return cl
 	}
 	return nil
@@ -258,6 +258,7 @@ type GerritCL struct {
 	// then CL (N - 40).
 	Number int32
 
+	// Created is the CL creation time.
 	Created time.Time
 
 	// Version is the number of versions of the patchset for this
@@ -303,8 +304,13 @@ type GerritCL struct {
 	Messages []*GerritMessage
 }
 
+// complete reports whether cl is complete.
+// A CL is considered complete if its Meta and Commit fields are non-nil,
+// and the Metas slice contains at least 1 element.
 func (cl *GerritCL) complete() bool {
-	return cl != nil && cl.Meta != nil && cl.Commit != nil
+	return cl.Meta != nil &&
+		len(cl.Metas) >= 1 &&
+		cl.Commit != nil
 }
 
 // GerritMessage is a Gerrit reply that is attached to the CL as a whole, and
@@ -421,22 +427,20 @@ func (cl *GerritCL) Footer(key string) string {
 
 // OwnerName returns the name of the CL’s owner or an empty string on error.
 func (cl *GerritCL) OwnerName() string {
-	m := cl.firstMetaCommit()
-	if m == nil {
+	if !cl.complete() {
 		return ""
 	}
-	return m.Author.Name()
+	return cl.Metas[0].Commit.Author.Name()
 }
 
 // OwnerID returns the ID of the CL’s owner. It will return -1 on error.
 func (cl *GerritCL) OwnerID() int {
-	// Meta commits caused by the owner of a change have an email of the form
-	// <user id>@<uuid of gerrit server>.
-	m := cl.firstMetaCommit()
-	if m == nil {
+	if !cl.complete() {
 		return -1
 	}
-	email := m.Author.Email()
+	// Meta commits caused by the owner of a change have an email of the form
+	// <user id>@<uuid of gerrit server>.
+	email := cl.Metas[0].Commit.Author.Email()
 	idx := strings.Index(email, "@")
 	if idx == -1 {
 		return -1
@@ -486,18 +490,6 @@ func (cl *GerritCL) CommitAtVersion(version int32) *GitCommit {
 		return nil
 	}
 	return cl.Project.commit[hash]
-}
-
-func (cl *GerritCL) firstMetaCommit() *GitCommit {
-	m := cl.Meta
-	if m == nil { // TODO: Can this actually happen, besides in one of the contrived tests? Remove?
-		return nil
-	}
-	c := m.Commit
-	for c != nil && len(c.Parents) > 0 {
-		c = c.Parents[0] // Meta commits don’t have more than one parent.
-	}
-	return c
 }
 
 func (cl *GerritCL) updateGithubIssueRefs() {
@@ -619,24 +611,23 @@ func getGerritStatus(commit *GitCommit) string {
 
 var errTooManyParents = errors.New("maintner: too many commit parents")
 
-// foreachCommitParent walks a commit's parents, calling f for each commit until
-// an error is returned from f or a commit has no parent.
+// foreachCommit walks an entire linear git history, starting at commit itself,
+// and iterating over all of its parents. commit must be non-nil.
+// f is called for each commit until an error is returned from f, or a commit has no parent.
 //
-// foreachCommitParent returns errTooManyParents (and stops processing) if a commit
+// foreachCommit returns errTooManyParents (and stops processing) if a commit
 // has more than one parent.
+// An error is returned if a commit has a parent that cannot be found.
 //
 // Corpus.mu must be held.
-func (gp *GerritProject) foreachCommitParent(hash GitHash, f func(*GitCommit) error) error {
+func (gp *GerritProject) foreachCommit(commit *GitCommit, f func(*GitCommit) error) error {
 	c := gp.gerrit.c
-	commit := c.gitCommit[hash]
 	for {
-		if commit == nil {
-			return nil
-		}
 		if err := f(commit); err != nil {
 			return err
 		}
-		if commit.Parents == nil || len(commit.Parents) == 0 {
+		if len(commit.Parents) == 0 {
+			// No parents, we're at the end of the linear history.
 			return nil
 		}
 		if len(commit.Parents) > 1 {
@@ -644,6 +635,9 @@ func (gp *GerritProject) foreachCommitParent(hash GitHash, f func(*GitCommit) er
 		}
 		parentHash := commit.Parents[0].Hash // meta tree has no merge commits
 		commit = c.gitCommit[parentHash]
+		if commit == nil {
+			return fmt.Errorf("parent commit %v not found", parentHash)
+		}
 	}
 }
 
@@ -723,6 +717,13 @@ func reverseGerritMessages(ss []*GerritMessage) {
 	}
 }
 
+func reverseGerritMetas(ss []*GerritMeta) {
+	for i := len(ss)/2 - 1; i >= 0; i-- {
+		opp := len(ss) - 1 - i
+		ss[i], ss[opp] = ss[opp], ss[i]
+	}
+}
+
 // called with c.mu Locked
 func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 	c := gp.gerrit.c
@@ -775,8 +776,8 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 		cl := gp.getOrCreateCL(clv.CLNumber)
 
 		if clv.Version == 0 { // is a meta commit
-			gp.noteDirtyCL(cl) // needs processing at end of sync
 			cl.Meta = newGerritMeta(gc, cl)
+			gp.noteDirtyCL(cl) // needs processing at end of sync
 		} else {
 			cl.Commit = gc
 			cl.Version = clv.Version
@@ -790,9 +791,13 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 
 // noteDirtyCL notes a CL that needs further processing before the corpus
 // is returned to the user.
+// cl.Meta must be non-nil.
 //
 // called with Corpus.mu Locked
 func (gp *GerritProject) noteDirtyCL(cl *GerritCL) {
+	if cl.Meta == nil {
+		panic("noteDirtyCL given a GerritCL with a nil Meta field")
+	}
 	if gp.dirtyCL == nil {
 		gp.dirtyCL = make(map[*GerritCL]struct{})
 	}
@@ -802,31 +807,35 @@ func (gp *GerritProject) noteDirtyCL(cl *GerritCL) {
 // called with Corpus.mu Locked
 func (gp *GerritProject) finishProcessing() {
 	for cl := range gp.dirtyCL {
+		// All dirty CLs have non-nil Meta, so it's safe to call finishProcessingCL.
 		gp.finishProcessingCL(cl)
 	}
 	gp.dirtyCL = nil
 }
 
+// finishProcessingCL fixes up invariants before the cl can be returned back to the user.
+// cl.Meta must be non-nil.
+//
 // called with Corpus.mu Locked
 func (gp *GerritProject) finishProcessingCL(cl *GerritCL) {
 	c := gp.gerrit.c
 
-	foundStatus := ""
-
-	// Walk from the newest commit backwards, so we store the messages
-	// in reverse order and then flip the array before setting on the
-	// GerritCL object.
-	var backwardMessages []*GerritMessage
-	var backwardMeta []*GerritMeta
-
-	gc, ok := c.gitCommit[cl.Meta.Commit.Hash]
+	mostRecentMetaCommit, ok := c.gitCommit[cl.Meta.Commit.Hash]
 	if !ok {
 		log.Printf("WARNING: GerritProject(%q).finishProcessingCL failed to find CL %v hash %s",
 			gp.ServerSlashProject(), cl.Number, cl.Meta.Commit.Hash)
 		return
 	}
 
-	gp.foreachCommitParent(cl.Meta.Commit.Hash, func(gc *GitCommit) error {
+	foundStatus := ""
+
+	// Walk from the newest meta commit backwards, so we store the messages
+	// in reverse order and then flip the array before setting on the
+	// GerritCL object.
+	var backwardMessages []*GerritMessage
+	var backwardMetas []*GerritMeta
+
+	err := gp.foreachCommit(mostRecentMetaCommit, func(gc *GitCommit) error {
 		if strings.Contains(gc.Msg, "\nLabel: ") {
 			gp.numLabelChanges++
 		}
@@ -839,12 +848,17 @@ func (gp *GerritProject) finishProcessingCL(cl *GerritCL) {
 		if foundStatus == "" {
 			foundStatus = getGerritStatus(gc)
 		}
-		backwardMeta = append(backwardMeta, gc.GerritMeta)
+		backwardMetas = append(backwardMetas, gc.GerritMeta)
 		if message := gp.getGerritMessage(gc); message != nil {
 			backwardMessages = append(backwardMessages, message)
 		}
 		return nil
 	})
+	if err != nil {
+		log.Printf("WARNING: GerritProject(%q).finishProcessingCL failed to walk CL %v meta history: %v",
+			gp.ServerSlashProject(), cl.Number, err)
+		return
+	}
 
 	if foundStatus != "" {
 		cl.Status = foundStatus
@@ -852,16 +866,14 @@ func (gp *GerritProject) finishProcessingCL(cl *GerritCL) {
 		cl.Status = "new"
 	}
 
-	if cl.Created.IsZero() || gc.CommitTime.Before(cl.Created) {
-		cl.Created = gc.CommitTime
-	}
 	reverseGerritMessages(backwardMessages)
 	cl.Messages = backwardMessages
 
-	cl.Metas = cl.Metas[:0]
-	for i := len(backwardMeta) - 1; i >= 0; i-- {
-		cl.Metas = append(cl.Metas, backwardMeta[i])
-	}
+	reverseGerritMetas(backwardMetas)
+	cl.Metas = backwardMetas
+
+	cl.Created = cl.Metas[0].Commit.CommitTime
+
 	cl.updateBranch()
 }
 
