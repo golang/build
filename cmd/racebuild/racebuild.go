@@ -172,7 +172,7 @@ func init() {
 	seen := make(map[string]bool)
 	for _, p := range platforms {
 		if seen[p.Name()] {
-			log.Fatal("Duplicate platforms entry for %s.", p.Name())
+			log.Fatalf("Duplicate platforms entry for %s.", p.Name())
 		}
 		seen[p.Name()] = true
 	}
@@ -224,7 +224,7 @@ func main() {
 	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
 	if err != nil {
-		log.Fatal("%s failed: %v", strings.Join(cmd.Args, " "), err)
+		log.Fatalf("%s failed: %v", strings.Join(cmd.Args, " "), err)
 	}
 	goRev = string(bytes.TrimSpace(out))
 	log.Printf("using Go revision: %s", goRev)
@@ -291,7 +291,7 @@ func (p *Platform) Build(ctx context.Context) error {
 			default:
 				// Creation sometimes fails with transient errors like:
 				// "buildlet didn't come up at http://10.240.0.13 in 3m0s".
-				log.Printf("%v: instance creation failed, retrying", p.Name)
+				log.Printf("%v: instance creation failed, retrying", p.Name())
 				lastErr = err
 				continue
 			}
