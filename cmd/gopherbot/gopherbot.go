@@ -806,7 +806,7 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 
 }
 
-// cl2issue writes "Change https://golang.org/issue/NNNN mentions this issue"\
+// cl2issue writes "Change https://golang.org/issue/NNNN by 'author' mentions this issue"\
 // and the change summary on GitHub when a new Gerrit change references a GitHub issue.
 func (b *gopherbot) cl2issue(ctx context.Context) error {
 	monthAgo := time.Now().Add(-30 * 24 * time.Hour)
@@ -831,7 +831,7 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 					continue
 				}
 				hasComment := false
-				substr := fmt.Sprintf("%d mentions this issue", cl.Number)
+				substr := fmt.Sprintf("Change https://golang.org/cl/%d by %s mentions this issue: `%s`", cl.Number)
 				gi.ForeachComment(func(c *maintner.GitHubComment) error {
 					if strings.Contains(c.Body, substr) {
 						hasComment = true
@@ -841,7 +841,11 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 				})
 				if !hasComment {
 					printIssue("cl2issue", gi)
-					msg := fmt.Sprintf("Change https://golang.org/cl/%d mentions this issue: `%s`", cl.Number, cl.Commit.Summary())
+<<<<<<< HEAD
+					msg := fmt.Sprintf("Change https://golang.org/cl/%d by %s mentions this issue: `%s`", cl.Number, strings.Split("cl.Commit.Author", "<")[0], cl.Commit.Summary())
+=======
+					msg := fmt.Sprintf("Change https://golang.org/cl/%d by @%s mentions this issue: `%s`", cl.Number, cl.Commit.Author, cl.Commit.Summary())
+>>>>>>> 04e54a31def4afb0784d367372b9736182f2e172
 					if err := b.addGitHubComment(ctx, "golang", "go", gi.Number, msg); err != nil {
 						return err
 					}
