@@ -54,7 +54,7 @@ func main() {
 	switch cmd {
 	case "kubectl":
 		env := getEnv()
-		curCtx := cmdStrOutput("kubectl", "config", "current-context")
+		curCtx := kubeCurrentContext()
 		wantCtx := fmt.Sprintf("gke_%s_%s_go", env.ProjectName, env.Zone)
 		if curCtx != wantCtx {
 			log.SetFlags(0)
@@ -73,6 +73,29 @@ func main() {
 	}
 }
 
+func kubeCurrentContext() string {
+	kubectl, err := exec.LookPath("kubectl")
+	if err != nil {
+		log.SetFlags(0)
+		log.Fatalf("No kubectl in path.")
+	}
+	// Get current context, but ignore errors, as kubectl returns an error
+	// if there's no context.
+	out, err := exec.Command(kubectl, "config", "current-context").Output()
+	if err != nil {
+		var stderr string
+		if ee, ok := err.(*exec.ExitError); ok {
+			stderr = string(ee.Stderr)
+		}
+		if strings.Contains(stderr, "current-context is not set") {
+			return ""
+		}
+		log.Printf("Failed to run 'kubectl config current-context': %v, %s", err, stderr)
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
 func getEnv() *buildenv.Environment {
 	if *prod == *staging {
 		log.Fatalf("must specify exactly one of --prod or --staging")
@@ -81,22 +104,6 @@ func getEnv() *buildenv.Environment {
 		return buildenv.Production
 	}
 	return buildenv.Staging
-}
-
-func cmdStrOutput(cmd string, args ...string) string {
-	out, err := exec.Command(cmd, args...).Output()
-	if err != nil {
-		var stderr []byte
-		if ee, ok := err.(*exec.ExitError); ok {
-			stderr = ee.Stderr
-		}
-		log.Fatalf("error running %s %v: %v, %s", cmd, args, err, stderr)
-	}
-	ret := strings.TrimSpace(string(out))
-	if ret == "" {
-		log.Fatalf("expected output from %s %v; got nothing", cmd, args)
-	}
-	return ret
 }
 
 var expectedGoLayerVersion = map[string]string{
