@@ -298,6 +298,7 @@ type GerritCL struct {
 	Private bool
 
 	// GitHubIssueRefs are parsed references to GitHub issues.
+	// Multiple references to the same issue are deduplicated.
 	GitHubIssueRefs []GitHubIssueRef
 
 	// Messages contains all of the messages for this CL, in sorted order.

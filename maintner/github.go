@@ -2155,6 +2155,8 @@ func makeGithubResponse(res *http.Response) *github.Response {
 
 var rxReferences = regexp.MustCompile(`(?:\b([\w\-]+)/([\w\-]+))?\#(\d+)\b`)
 
+// parseGithubRefs parses references to GitHub issues from commit message commitMsg.
+// Multiple references to the same issue are deduplicated.
 func (c *Corpus) parseGithubRefs(gerritProj string, commitMsg string) []GitHubIssueRef {
 	// Use of rxReferences by itself caused this function to take 20% of the CPU time.
 	// TODO(bradfitz): stop using regexps here.
@@ -2203,10 +2205,23 @@ func (c *Corpus) parseGithubRefs(gerritProj string, commitMsg string) []GitHubIs
 				continue
 			}
 		}
-		gr := github.getOrCreateRepo(owner, repo)
-		refs = append(refs, GitHubIssueRef{gr, int32(num)})
+		ref := GitHubIssueRef{github.getOrCreateRepo(owner, repo), int32(num)}
+		if contains(refs, ref) {
+			continue
+		}
+		refs = append(refs, ref)
 	}
 	return refs
+}
+
+// contains reports whether refs contains the reference ref.
+func contains(refs []GitHubIssueRef, ref GitHubIssueRef) bool {
+	for _, r := range refs {
+		if r == ref {
+			return true
+		}
+	}
+	return false
 }
 
 type limitTransport struct {

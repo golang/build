@@ -573,6 +573,8 @@ func TestParseGithubRefs(t *testing.T) {
 		{"go.googlesource.com/go", "Fixes golang/go#1234", []string{"golang/go#1234"}},
 		{"go.googlesource.com/go", "Fixes golang/go#1234\n", []string{"golang/go#1234"}},
 		{"go.googlesource.com/go", "Fixes golang/go#1234.", []string{"golang/go#1234"}},
+		{"go.googlesource.com/go", "Mention issue #1234 a second time.\n\nFixes #1234.", []string{"golang/go#1234"}},
+		{"go.googlesource.com/go", "Mention issue #1234 a second time.\n\nFixes #1234.\nUpdates #1235.", []string{"golang/go#1234", "golang/go#1235"}},
 		{"go.googlesource.com/net", "Fixes golang/go#1234.", []string{"golang/go#1234"}},
 		{"go.googlesource.com/net", "Fixes #1234", nil},
 	}
