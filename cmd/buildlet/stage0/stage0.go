@@ -117,7 +117,7 @@ Download:
 	// works fine on Linux, etc.
 	target := filepath.FromSlash("./buildlet.exe")
 	if err := download(target, buildletURL()); err != nil {
-		sleepFatalf("Downloading %s: %v", buildletURL, err)
+		sleepFatalf("Downloading %s: %v", buildletURL(), err)
 	}
 
 	if runtime.GOOS != "windows" {
