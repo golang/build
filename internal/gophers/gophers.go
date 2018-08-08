@@ -466,7 +466,7 @@ func init() {
 	addPerson("Dirk Gadsden", "dirk@esherido.com", "@dirk")
 	addPerson("Diwaker Gupta", "diwakergupta@gmail.com", "@diwakergupta")
 	addPerson("Dmitri Popov", "operator@cv.dp-net.com", "@pin")
-	addPerson("Dmitri Shuralyov", "dmitri@shuralyov.com", "shurcool@gmail.com", "@dmitshur")
+	addPerson("Dmitri Shuralyov", "dmitshur@golang.org", "dmitri@shuralyov.com", "shurcool@gmail.com", "@dmitshur")
 	addPerson("Dmitriy Dudkin", "dudkin.dmitriy@gmail.com", "@tmwh")
 	addPerson("Dmitry Chestnykh", "dchest@gmail.com", "@dchest")
 	addPerson("Dmitry Pokidov", "dooman87@gmail.com")
