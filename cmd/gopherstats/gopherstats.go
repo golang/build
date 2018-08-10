@@ -257,7 +257,7 @@ func (sc *statsClient) githubGroups() {
 
 		ps := new(personSet)
 		teams[teamName] = ps
-		users, _, err := sc.ghc.Organizations.ListTeamMembers(ctx, t.GetID(), &github.OrganizationListTeamMembersOptions{
+		users, _, err := sc.ghc.Teams.ListTeamMembers(ctx, t.GetID(), &github.TeamListTeamMembersOptions{
 			ListOptions: github.ListOptions{PerPage: 1000},
 		})
 		if err != nil {
