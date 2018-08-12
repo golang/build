@@ -190,6 +190,9 @@ expect -exact "term% "
 send "echo aux/randfs -m /dev >>/cfg/helix/cpustart\n"
 
 expect -exact "term% "
+send "echo kill timesync '|' rc >>/cfg/helix/cpustart\n"
+
+expect -exact "term% "
 send "echo >>/cfg/helix/cpustart\n"
 
 expect -exact "term% "
