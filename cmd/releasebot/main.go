@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Releasebot manages the process of defining, packaging, and publishing Go releases.
-// It is a work in progress; right now it only handles beta and minor (point) releases,
-// but eventually we want it to handle major releases too.
+// Releasebot manages the process of defining, packaging, and publishing Go
+// releases. It is a work in progress; right now it only handles beta, rc and
+// minor (point) releases, but eventually we want it to handle major releases too.
 package main
 
 import (
@@ -51,7 +51,7 @@ var releaseModes = map[string]bool{
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: releasebot -mode <release mode> [-dry-run] {go1.8.5|go1.10beta2}")
+	fmt.Fprintln(os.Stderr, "usage: releasebot -mode <release mode> [-dry-run] {go1.8.5|go1.10beta2|go1.11rc1}")
 	fmt.Fprintln(os.Stderr, "Release modes:")
 	fmt.Fprintln(os.Stderr)
 	for m := range releaseModes {
@@ -81,11 +81,12 @@ func main() {
 
 	var wg sync.WaitGroup
 	for _, release := range flag.Args() {
-		if strings.Contains(release, "beta") {
+		if strings.Contains(release, "beta") || strings.Contains(release, "rc") {
 			w := &Work{
 				Prepare:     *modeFlag == "prepare",
 				Version:     release,
-				BetaRelease: true,
+				BetaRelease: strings.Contains(release, "beta"),
+				RCRelease:   strings.Contains(release, "rc"),
 			}
 			wg.Add(1)
 			go func() {
@@ -190,6 +191,7 @@ type Work struct {
 
 	Prepare     bool // create the release commit and submit it for review
 	BetaRelease bool
+	RCRelease   bool
 
 	ReleaseIssue  int    // Release status issue number
 	ReleaseBranch string // "master" for beta releases
@@ -302,9 +304,11 @@ func (w *Work) doRelease() {
 
 	if w.BetaRelease {
 		w.ReleaseBranch = "master"
+	} else if w.RCRelease {
+		shortRel := strings.Split(w.Version, "rc")[0]
+		w.ReleaseBranch = "release-branch." + shortRel
 	} else {
-		shortRel := strings.ToLower(w.Milestone.Title)
-		shortRel = shortRel[:strings.LastIndex(shortRel, ".")]
+		shortRel := w.Version[:strings.LastIndex(w.Version, ".")]
 		w.ReleaseBranch = "release-branch." + shortRel
 	}
 
@@ -317,8 +321,8 @@ func (w *Work) doRelease() {
 		w.logError("**Found errors during release. Stopping!**")
 		return
 	}
-	if w.BetaRelease {
-		// TODO: go tool api -allow_new false
+	if w.BetaRelease || w.RCRelease {
+		// TODO: go tool api -allow_new=false
 	} else {
 		w.checkReleaseBlockers()
 		w.checkDocs()
@@ -347,7 +351,7 @@ func (w *Work) doRelease() {
 		}
 		w.gitTagVersion()
 		w.buildReleases()
-		if !w.BetaRelease {
+		if !w.BetaRelease && !w.RCRelease {
 			w.pushIssues()
 			w.closeMilestone()
 		}
@@ -388,7 +392,7 @@ func (w *Work) nextStepsPrepare(changeID string) {
 The release is ready.
 
 Please review and submit https://go-review.googlesource.com/q/%s
-after making sure its tests pass and then run the release stage.
+after making sure its TryBot pass and then run the release stage.
 
 `, changeID)
 }
@@ -472,30 +476,28 @@ func (w *Work) printReleaseTable(md *bytes.Buffer) {
 
 func (w *Work) checkDocs() {
 	// Check that we've documented the release.
-	version := strings.ToLower(w.Milestone.Title)
 	data, err := ioutil.ReadFile(filepath.Join(w.Dir, "gitwork", "doc/devel/release.html"))
 	if err != nil {
 		w.log.Panic(err)
 	}
-	if !strings.Contains(string(data), "\n<p>\n"+version+" (released ") {
-		w.logError("doc/devel/release.html does not document " + version)
+	if !strings.Contains(string(data), "\n<p>\n"+w.Version+" (released ") {
+		w.logError("doc/devel/release.html does not document " + w.Version)
 	}
 }
 
 func (w *Work) writeVersion() (changeID string) {
-	changeID = fmt.Sprintf("I%x", sha1.Sum([]byte(fmt.Sprintf("cmd/pointrelease-version-%s", w.Milestone.Title))))
+	changeID = fmt.Sprintf("I%x", sha1.Sum([]byte(fmt.Sprintf("cmd/release-version-%s", w.Version))))
 
-	version := strings.ToLower(w.Milestone.Title)
-
-	err := ioutil.WriteFile(filepath.Join(w.Dir, "gitwork", "VERSION"), []byte(version), 0666)
+	err := ioutil.WriteFile(filepath.Join(w.Dir, "gitwork", "VERSION"), []byte(w.Version), 0666)
 	if err != nil {
 		w.log.Panic(err)
 	}
 
-	desc := version + "\n\n"
+	desc := w.Version + "\n\n"
 	desc += "Change-Id: " + changeID + "\n"
 
 	r := w.runner(filepath.Join(w.Dir, "gitwork"))
+	r.run("git", "add", "VERSION")
 	r.run("git", "commit", "-m", desc, "VERSION")
 	if dryRun {
 		fmt.Printf("\n### VERSION commit\n\n%s\n", r.runOut("git", "show", "HEAD"))

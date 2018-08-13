@@ -120,7 +120,7 @@ func (w *Work) createGitHubIssue(title, msg string) (int, error) {
 		State:       "all",
 		ListOptions: github.ListOptions{PerPage: 100},
 	}
-	if !w.BetaRelease {
+	if !w.BetaRelease && !w.RCRelease {
 		opts.Milestone = strconv.Itoa(int(w.Milestone.Number))
 	}
 	is, _, err := githubClient.Issues.ListByRepo(context.TODO(), "golang", "go", opts)
@@ -137,7 +137,7 @@ func (w *Work) createGitHubIssue(title, msg string) (int, error) {
 		Title: github.String(title),
 		Body:  github.String(msg),
 	}
-	if !w.BetaRelease {
+	if !w.BetaRelease && !w.RCRelease {
 		copts.Milestone = github.Int(int(w.Milestone.Number))
 	}
 	i, _, err := githubClient.Issues.Create(context.TODO(), "golang", "go", copts)
