@@ -1334,10 +1334,10 @@ func handleConnectSSH(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	sshConn, err := net.Dial("tcp", "localhost:22")
+	sshConn, err := net.Dial("tcp", "localhost:"+sshPort())
 	if err != nil {
 		sshServerOnce.Do(startSSHServer)
-		sshConn, err = net.Dial("tcp", "localhost:22")
+		sshConn, err = net.Dial("tcp", "localhost:"+sshPort())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
@@ -1370,8 +1370,23 @@ func handleConnectSSH(w http.ResponseWriter, r *http.Request) {
 	<-errc
 }
 
+// sshPort returns the port to use for the local SSH server.
+func sshPort() string {
+	// runningInCOS is whether we're running under GCE's Container-Optimized OS (COS).
+	const runningInCOS = runtime.GOOS == "linux" && runtime.GOARCH == "amd64"
+
+	if runningInCOS {
+		// If running in COS, we can't use port 22, as the system's sshd is already using it.
+		// Our container runs in the system network namespace, not isolated as is typical
+		// in Docker or Kubernetes. So use another high port. See https://golang.org/issue/26969.
+		return "2200"
+	}
+	return "22"
+}
+
 var sshServerOnce sync.Once
 
+// startSSHServer starts an SSH server.
 func startSSHServer() {
 	if inLinuxContainer() {
 		startSSHServerLinux()
@@ -1406,6 +1421,7 @@ func inLinuxContainer() bool {
 	return err == nil && fi.Mode().IsRegular()
 }
 
+// startSSHServerLinux starts an SSH server on a Linux system.
 func startSSHServerLinux() {
 	log.Printf("start ssh server for linux")
 
@@ -1431,7 +1447,7 @@ func startSSHServerLinux() {
 		}
 	}
 
-	cmd := exec.Command("/usr/sbin/sshd", "-D")
+	cmd := exec.Command("/usr/sbin/sshd", "-D", "-p", sshPort())
 	err := cmd.Start()
 	if err != nil {
 		log.Printf("starting sshd: %v", err)
@@ -1452,10 +1468,11 @@ func startSSHServerNetBSD() {
 	waitLocalSSH()
 }
 
+// waitLocalSSH waits for sshd to start accepting connections.
 func waitLocalSSH() {
 	for i := 0; i < 40; i++ {
 		time.Sleep(10 * time.Millisecond * time.Duration(i+1))
-		c, err := net.Dial("tcp", "localhost:22")
+		c, err := net.Dial("tcp", "localhost:"+sshPort())
 		if err == nil {
 			c.Close()
 			log.Printf("sshd connected.")

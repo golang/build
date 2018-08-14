@@ -32,7 +32,7 @@ import (
 // mode is either a BuildConfig or HostConfig name (map key in x/build/dashboard/builders.go)
 func keyForMode(mode string) (string, error) {
 	if isDevReverseMode() {
-		return string(devBuilderKey(mode)), nil
+		return devBuilderKey(mode), nil
 	}
 	if os.Getenv("GO_BUILDER_ENV") == "macstadium_vm" {
 		infoKey := "guestinfo.key-" + mode
