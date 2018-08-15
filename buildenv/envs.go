@@ -10,10 +10,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
-	"log"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"golang.org/x/oauth2/google"
@@ -164,14 +160,12 @@ func (e Environment) DashBase() string {
 	return Production.DashURL
 }
 
-// Credentials returns the credentials required to access the GCP environment.
-//
-// It tries to use, in order:
-//
-//   - the file $HOME/keys/$PROJECT_NAME.key.json
-//   - the file $HOME/.config/gcloud/legacy_credentials/$ANYTHING@google.com/adc.json
-//   - the Application Default Credentials (i.e. GCE metadata service, etc)
+// Credentials returns the credentials required to access the GCP environment
+// with the necessary scopes.
 func (e Environment) Credentials(ctx context.Context) (*google.Credentials, error) {
+	// TODO: this method used to do much more. maybe remove it
+	// when TODO below is addressed, pushing scopes to caller? Or
+	// add a Scopes func/method somewhere instead?
 	scopes := []string{
 		// Cloud Platform should include all others, but the
 		// old code duplicated compute and the storage full
@@ -192,54 +186,7 @@ func (e Environment) Credentials(ctx context.Context) (*google.Credentials, erro
 		// Engine apps, this would be useful.
 		oauth2api.UserinfoEmailScope,
 	}
-
-	// Prefer any "$HOME/keys/$PROJECT.key.json" file first.
-	keyFile := filepath.Join(os.Getenv("HOME"), "keys", e.ProjectName+".key.json")
-	if _, err := os.Stat(keyFile); err == nil {
-		log.Printf("Using credentials from %s", keyFile)
-		jcred, err := ioutil.ReadFile(keyFile)
-		if err != nil {
-			return nil, err
-		}
-		return google.CredentialsFromJSON(ctx, jcred, scopes...)
-	}
-
-	// Then prefer a gcloud @google.com user.
-	if n := findGoogUserJSON(); n != "" {
-		jsonData, err := ioutil.ReadFile(n)
-		if err != nil {
-			return nil, err
-		}
-		creds, err := google.CredentialsFromJSON(ctx, jsonData, scopes...)
-		if err != nil {
-			log.Printf("gobuild.NewClient: error loading google user credentials from %s: %v", n, err)
-			return nil, err
-		}
-		log.Printf("Using credentials from %s", n)
-		return creds, nil
-	}
-
-	creds, err := google.FindDefaultCredentials(ctx, scopes...)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("Using Application Default Credentials")
-	return creds, nil
-}
-
-// findGoogUserJSON walks the gcloud config directory and returns the filename of
-// $HOME/.config/gcloud/legacy_credentials/USER@google.com/adc.json
-// for the first USER found with such a file. On miss it returns the empty string.
-func findGoogUserJSON() (jsonFile string) {
-	gcloud := filepath.Join(os.Getenv("HOME"), ".config/gcloud")
-	filepath.Walk(gcloud, func(path string, fi os.FileInfo, err error) error {
-		if jsonFile == "" && err == nil && fi.Mode().IsRegular() && strings.HasSuffix(path, "@google.com/adc.json") &&
-			strings.HasPrefix(path, filepath.Join(gcloud, "legacy_credentials")+"/") {
-			jsonFile = path
-		}
-		return nil
-	})
-	return
+	return google.FindDefaultCredentials(ctx, scopes...)
 }
 
 // ByProjectID returns an Environment for the specified

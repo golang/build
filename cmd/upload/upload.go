@@ -27,9 +27,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"golang.org/x/build/auth"
 	"golang.org/x/build/envutil"
-	"google.golang.org/api/option"
 )
 
 var (
@@ -98,13 +96,8 @@ tar entry filename beginning with the prefix "go/".
 		}
 	}
 
-	ts, err := auth.ProjectTokenSource(proj, storage.ScopeReadWrite)
-	if err != nil {
-		log.Fatalf("Failed to get an OAuth2 token source: %v", err)
-	}
-
 	ctx := context.Background()
-	storageClient, err := storage.NewClient(ctx, option.WithTokenSource(ts))
+	storageClient, err := storage.NewClient(ctx)
 	if err != nil {
 		log.Fatalf("storage.NewClient: %v", err)
 	}
