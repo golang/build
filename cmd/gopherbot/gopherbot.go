@@ -635,7 +635,7 @@ func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 		if *dryRun {
 			return nil
 		}
-		_, err := b.ghc.Issues.Lock(ctx, "golang", "go", int(gi.Number))
+		_, err := b.ghc.Issues.Lock(ctx, "golang", "go", int(gi.Number), nil)
 		if err != nil {
 			return err
 		}
