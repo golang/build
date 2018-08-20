@@ -21,12 +21,13 @@ Also, due to an ATA bug affecting QEMU 1.6 and 1.7, the
 Plan 9 CD can't be booted with these versions.
 
 To create the image:
+  $ ./make.bash
 
 Then:
   $ gsutil cp -a public-read plan9-386-gce.tar.gz gs://go-builder-data/plan9-386-gce.tar.gz
 
 Then:
-  $ gcloud compute --project symbolic-datum-552 images create plan9-386-v5 --source-uri gs://go-builder-data/plan9-386-gce.tar.gz
+  $ gcloud compute --project symbolic-datum-552 images create plan9-386-v6 --source-uri gs://go-builder-data/plan9-386-gce.tar.gz
 
 To test the image before deploying it to prod, use x/build/cmd/debugnewvm.
 
