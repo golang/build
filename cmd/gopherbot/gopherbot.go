@@ -230,6 +230,7 @@ var tasks = []struct {
 	fn   func(*gopherbot, context.Context) error
 }{
 	{"kicktrain", (*gopherbot).getOffKickTrain},
+	{"unwait-release", (*gopherbot).unwaitRelease},
 	{"freeze old issues", (*gopherbot).freezeOldIssues},
 	{"label proposals", (*gopherbot).labelProposals},
 	{"set subrepo milestones", (*gopherbot).setSubrepoMilestones},
@@ -611,6 +612,37 @@ func (b *gopherbot) getOffKickTrain(ctx context.Context) error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+// unwaitRelease changes any Gerrit CL with hashtag "wait-release"
+// into "ex-wait-release". This is run manually (with --only-run)
+// at the opening of a release cycle.
+func (b *gopherbot) unwaitRelease(ctx context.Context) error {
+	// We only run this task if it was explicitly requested via
+	// the --only-run flag.
+	if *onlyRun == "" {
+		return nil
+	}
+	cis, err := b.gerrit.QueryChanges(ctx, "hashtag:wait-release status:open")
+	if err != nil {
+		return nil
+	}
+	for _, ci := range cis {
+		if *dryRun {
+			log.Printf("[dry run] would remove hashtag 'wait-release' from CL %d", ci.ChangeNumber)
+			continue
+		}
+		_, err := b.gerrit.SetHashtags(ctx, ci.ID, gerrit.HashtagsInput{
+			Add:    []string{"ex-wait-release"},
+			Remove: []string{"wait-release"},
+		})
+		if err != nil {
+			log.Printf("https://golang.org/cl/%d: modifying hash tags: %v", ci.ChangeNumber, err)
+			return err
+		}
+		log.Printf("https://golang.org/cl/%d: removed wait-release", ci.ChangeNumber)
 	}
 	return nil
 }
