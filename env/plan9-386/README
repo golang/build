@@ -28,6 +28,7 @@ Then:
 Then:
   $ gcloud compute --project symbolic-datum-552 images create plan9-386-v5 --source-uri gs://go-builder-data/plan9-386-gce.tar.gz
 
-And optional optimization for faster boots:
-  $ go install golang.org/x/build/cmd/coordinator/buildongce
-  $ buildongce -make-basepin
+To test the image before deploying it to prod, use x/build/cmd/debugnewvm.
+
+Then update x/build/dashboard/builders.go with the new image version
+(e.g. "plan9-386-v5" to "plan9-386-v6").
