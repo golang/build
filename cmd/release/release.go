@@ -34,7 +34,7 @@ import (
 )
 
 var (
-	target = flag.String("target", "", "If specified, build specific target platform ('linux-amd64')")
+	target = flag.String("target", "", "If specified, build specific target platform (e.g. 'linux-amd64'). Default is to build all.")
 	watch  = flag.Bool("watch", false, "Watch the build. Only compatible with -target")
 
 	rev       = flag.String("rev", "", "Go revision to build")
@@ -153,6 +153,7 @@ func (b *Build) String() string {
 }
 
 func (b *Build) toolDir() string { return "go/pkg/tool/" + b.OS + "_" + b.Arch }
+func (b *Build) pkgDir() string  { return "go/pkg/" + b.OS + "_" + b.Arch }
 
 func (b *Build) logf(format string, args ...interface{}) {
 	format = fmt.Sprintf("%v: %s", b, format)
@@ -436,7 +437,17 @@ func (b *Build) make() error {
 	if err := client.RemoveAll(addPrefix(goDir, postBuildCleanFiles)...); err != nil {
 		return err
 	}
+	// Users don't need the api checker binary pre-built. It's
+	// used by tests, but all.bash builds it first.
 	if err := client.RemoveAll(b.toolDir() + "/api"); err != nil {
+		return err
+	}
+	// Remove go/pkg/${GOOS}_${GOARCH}/cmd. This saves a bunch of
+	// space, and users don't typically rebuild cmd/compile,
+	// cmd/link, etc. If they want to, they still can, but they'll
+	// have to pay the cost of rebuilding dependent libaries. No
+	// need to ship them just in case.
+	if err := client.RemoveAll(b.pkgDir() + "/cmd"); err != nil {
 		return err
 	}
 
