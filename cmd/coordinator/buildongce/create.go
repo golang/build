@@ -74,6 +74,7 @@ func main() {
 	buildenv.RegisterStagingFlag()
 	flag.Parse()
 
+	buildenv.CheckUserCredentials()
 	buildEnv := buildenv.FromFlags()
 	ctx := context.Background()
 

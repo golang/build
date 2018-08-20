@@ -82,6 +82,7 @@ func main() {
 	env = buildenv.FromFlags()
 	ctx := context.Background()
 
+	buildenv.CheckUserCredentials()
 	creds, err := env.Credentials(ctx)
 	if err != nil {
 		log.Fatal(err)

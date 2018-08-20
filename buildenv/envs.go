@@ -10,6 +10,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/oauth2/google"
@@ -327,4 +330,13 @@ func FromFlags() *Environment {
 		return Staging
 	}
 	return Production
+}
+
+// CheckUserCredentials warns if the gcloud Application Default Credentials file doesn't exist
+// and says how to log in properly.
+func CheckUserCredentials() {
+	adcJSON := filepath.Join(os.Getenv("HOME"), ".config/gcloud/application_default_credentials.json")
+	if _, err := os.Stat(adcJSON); os.IsNotExist(err) {
+		log.Printf("warning: file %s does not exist; did you run 'gcloud auth application-default login' ? (The 'application-default' part matters, confusingly.)", adcJSON)
+	}
 }

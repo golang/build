@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/datastore"
+	"golang.org/x/build/buildenv"
 )
 
 func usage() {
@@ -39,6 +40,7 @@ func main() {
 		os.Exit(0)
 	}
 
+	buildenv.CheckUserCredentials()
 	ctx := context.Background()
 	client, err := datastore.NewClient(ctx, "golang-org")
 	if err != nil {

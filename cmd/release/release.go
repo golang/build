@@ -60,6 +60,7 @@ func main() {
 	rand.Seed(time.Now().UnixNano())
 
 	if *uploadMode {
+		buildenv.CheckUserCredentials()
 		if err := upload(flag.Args()); err != nil {
 			log.Fatal(err)
 		}

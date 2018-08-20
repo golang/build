@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/build/buildenv"
 	"golang.org/x/build/maintner"
 )
 
@@ -73,6 +74,7 @@ func main() {
 
 	http.DefaultTransport = newLogger(http.DefaultTransport)
 
+	buildenv.CheckUserCredentials()
 	checkForGitCodereview()
 	loadMaintner()
 	loadGomoteUser()
