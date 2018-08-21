@@ -91,19 +91,16 @@ func main() {
 			Prompt:     autocert.AcceptTOS,
 			HostPolicy: autocert.HostWhitelist("vcs-test.golang.org"),
 		}
-		mRSA := autocert.Manager{
-			Client:     &acme.Client{DirectoryURL: dir},
-			Cache:      autocertcache.NewGoogleCloudStorageCache(client, "vcs-test-autocert-rsa"),
-			Prompt:     autocert.AcceptTOS,
-			HostPolicy: autocert.HostWhitelist("vcs-test.golang.org"),
-			ForceRSA:   true,
-		}
 		s := &http.Server{
 			Addr:    ":https",
 			Handler: handler,
 			TLSConfig: &tls.Config{
 				MinVersion:     tls.VersionSSL30,
-				GetCertificate: fallbackSNI(mRSA.GetCertificate, m.GetCertificate, "vcs-test.golang.org"),
+				GetCertificate: fallbackSNI(m.GetCertificate, "vcs-test.golang.org"),
+				NextProtos: []string{
+					"h2", "http/1.1", // enable HTTP/2
+					acme.ALPNProto, // enable tls-alpn ACME challenges
+				},
 			},
 		}
 
@@ -173,7 +170,7 @@ func overview(w http.ResponseWriter, r *http.Request) {
 	tw.Flush()
 }
 
-func fallbackSNI(getCertRSA, getCert func(*tls.ClientHelloInfo) (*tls.Certificate, error), host string) func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+func fallbackSNI(getCert func(*tls.ClientHelloInfo) (*tls.Certificate, error), host string) func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 		saveHello(hello)
 		if hello.ServerName == "" {
@@ -181,20 +178,7 @@ func fallbackSNI(getCertRSA, getCert func(*tls.ClientHelloInfo) (*tls.Certificat
 			hello = &h
 			hello.ServerName = host
 		}
-		var cert *tls.Certificate
-		var err error
-		if len(hello.SupportedVersions) > 0 && hello.SupportedVersions[0] >= tls.VersionTLS12 {
-			cert, err = getCert(hello)
-			if strings.HasSuffix(hello.ServerName, ".acme.invalid") && err != nil {
-				cert, err = getCertRSA(hello)
-			}
-		} else {
-			cert, err = getCertRSA(hello)
-		}
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "getCert: %v\n", err)
-		}
-		return cert, err
+		return getCert(hello)
 	}
 }
 
