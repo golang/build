@@ -14,7 +14,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
+	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
 	oauth2api "google.golang.org/api/oauth2/v2"
@@ -189,7 +191,13 @@ func (e Environment) Credentials(ctx context.Context) (*google.Credentials, erro
 		// Engine apps, this would be useful.
 		oauth2api.UserinfoEmailScope,
 	}
-	return google.FindDefaultCredentials(ctx, scopes...)
+	creds, err := google.FindDefaultCredentials(ctx, scopes...)
+	if err != nil {
+		CheckUserCredentials()
+		return nil, err
+	}
+	creds.TokenSource = diagnoseFailureTokenSource{creds.TokenSource}
+	return creds, nil
 }
 
 // ByProjectID returns an Environment for the specified
@@ -332,11 +340,31 @@ func FromFlags() *Environment {
 	return Production
 }
 
+// warnCredsOnce guards CheckUserCredentials spamming stderr. Once is enough.
+var warnCredsOnce sync.Once
+
 // CheckUserCredentials warns if the gcloud Application Default Credentials file doesn't exist
 // and says how to log in properly.
 func CheckUserCredentials() {
 	adcJSON := filepath.Join(os.Getenv("HOME"), ".config/gcloud/application_default_credentials.json")
 	if _, err := os.Stat(adcJSON); os.IsNotExist(err) {
-		log.Printf("warning: file %s does not exist; did you run 'gcloud auth application-default login' ? (The 'application-default' part matters, confusingly.)", adcJSON)
+		warnCredsOnce.Do(func() {
+			log.Printf("warning: file %s does not exist; did you run 'gcloud auth application-default login' ? (The 'application-default' part matters, confusingly.)", adcJSON)
+		})
 	}
+}
+
+// diagnoseFailureTokenSource is an oauth2.TokenSource wrapper that,
+// upon failure, diagnoses why the token acquistion might've failed.
+type diagnoseFailureTokenSource struct {
+	ts oauth2.TokenSource
+}
+
+func (ts diagnoseFailureTokenSource) Token() (*oauth2.Token, error) {
+	t, err := ts.ts.Token()
+	if err != nil {
+		CheckUserCredentials()
+		return nil, err
+	}
+	return t, nil
 }
