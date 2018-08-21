@@ -36,9 +36,6 @@ func main() {
 	if err := godoc(); err != nil {
 		log.Fatal(err)
 	}
-	if err := blog(); err != nil {
-		log.Fatal(err)
-	}
 	if err := tour(); err != nil {
 		log.Fatal(err)
 	}
@@ -94,20 +91,6 @@ func godoc() error {
 		dst,
 		filepath.FromSlash("gopath/bin/"+archDir()+"/godoc"+ext()),
 	)
-}
-
-const blogPath = "golang.org/x/blog"
-
-var blogContent = []string{
-	"content",
-	"template",
-}
-
-func blog() error {
-	// Copy blog content to $GOROOT/blog.
-	blogSrc := filepath.Join("gopath/src", blogPath)
-	contentDir := filepath.FromSlash("go/blog")
-	return cpAllDir(contentDir, blogSrc, blogContent...)
 }
 
 const tourPath = "golang.org/x/tour"

@@ -40,7 +40,6 @@ var (
 	rev       = flag.String("rev", "", "Go revision to build")
 	toolsRev  = flag.String("tools", "", "Tools revision to build")
 	tourRev   = flag.String("tour", "master", "Tour revision to include")
-	blogRev   = flag.String("blog", "master", "Blog revision to include")
 	netRev    = flag.String("net", "master", "Net revision to include")
 	version   = flag.String("version", "", "Version string (go1.5.2)")
 	user      = flag.String("user", username(), "coordinator username, appended to 'user-'")
@@ -239,7 +238,6 @@ var builds = []*Build{
 
 const (
 	toolsRepo = "golang.org/x/tools"
-	blogRepo  = "golang.org/x/blog"
 	tourRepo  = "golang.org/x/tour"
 )
 
@@ -307,7 +305,6 @@ func (b *Build) make() error {
 	}{
 		{"go", *rev},
 		{"tools", *toolsRev},
-		{"blog", *blogRev},
 		{"tour", *tourRev},
 		{"net", *netRev},
 	} {
