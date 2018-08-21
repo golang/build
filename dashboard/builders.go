@@ -216,7 +216,7 @@ var Hosts = map[string]*HostConfig{
 		OwnerGithub: "0intro",
 	},
 	"host-plan9-386-gce": &HostConfig{
-		VMImage:            "plan9-386-v5",
+		VMImage:            "plan9-386-v6",
 		Notes:              "Plan 9 from 0intro; GCE VM is built from script in build/env/plan9-386",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.plan9-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-plan9-386.tar.gz",
