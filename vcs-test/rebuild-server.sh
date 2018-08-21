@@ -11,6 +11,7 @@ gcloud compute instances create vcs-test --zone=us-central1-a \
 	--image-project debian-cloud --image-family debian-9 \
 	--machine-type n1-standard-1 \
 	--service-account=vcs-test@symbolic-datum-552.iam.gserviceaccount.com \
+	--scopes cloud-platform \
 	--tags=allow-ssh,http-server,https-server
 
 while sleep 5 && ! gcloud compute ssh vcs-test -- date; do
@@ -20,7 +21,7 @@ done
 gcloud compute ssh vcs-test -- sudo -n bash -c \''
 	mkdir -p /home/vcweb/svn
 	chown -R uucp:uucp /home/vcweb
-	chown -R 777 /home/vcweb
+	chmod -R 777 /home/vcweb
 	apt-get update
 	apt-get install -y mercurial fossil bzr git apache2 ed subversion libapache2-mod-svn
 	perl -pie 's/80/8888/' /etc/apache2/ports.conf
