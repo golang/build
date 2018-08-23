@@ -109,7 +109,14 @@ var tourPackages = []string{
 	"wc",
 }
 
+// TODO: Remove after Go 1.13 is released, and Go 1.11 is no longer supported.
 func tour() error {
+	_, version, _ := environ()
+	verMajor, verMinor, _ := splitVersion(version)
+	if verMajor > 1 || verMinor >= 12 {
+		return nil // Only include the tour in go1.11.x and earlier releases.
+	}
+
 	tourSrc := filepath.Join("gopath/src", tourPath)
 	contentDir := filepath.FromSlash("go/misc/tour")
 
@@ -262,7 +269,7 @@ func windowsMSI() error {
 	}
 
 	// Build package.
-	verMajor, verMinor, verPatch := wixVersion(version)
+	verMajor, verMinor, verPatch := splitVersion(version)
 
 	if err := runDir(win, filepath.Join(wix, "candle"),
 		"-nologo",
@@ -436,10 +443,10 @@ func ext() string {
 
 var versionRe = regexp.MustCompile(`^go(\d+(\.\d+)*)`)
 
-// wixVersion splits a Go version string such as "go1.9" or "go1.10.2" (as matched by versionRe)
+// splitVersion splits a Go version string such as "go1.9" or "go1.10.2" (as matched by versionRe)
 // into its three parts: major, minor, and patch
 // It's based on the Git tag.
-func wixVersion(v string) (major, minor, patch int) {
+func splitVersion(v string) (major, minor, patch int) {
 	m := versionRe.FindStringSubmatch(v)
 	if m == nil {
 		return
@@ -463,7 +470,7 @@ func wixVersion(v string) (major, minor, patch int) {
 // support is expected from the specified version.
 // (WinXP is no longer supported starting Go v1.11)
 func wixIsWinXPSupported(v string) bool {
-	major, minor, _ := wixVersion(v)
+	major, minor, _ := splitVersion(v)
 	if major > 1 {
 		return false
 	}
@@ -837,7 +844,7 @@ var windowsData = map[string]string{
 // +build ignore. This is called by releaselet_test.go with an
 // environment variable set, which func main above recognizes.
 func runSelfTests() {
-	// Test wixVersion.
+	// Test splitVersion.
 	for _, tt := range []struct {
 		v                   string
 		major, minor, patch int
@@ -846,9 +853,9 @@ func runSelfTests() {
 		{"go1.34", 1, 34, 0},
 		{"go1.34.7", 1, 34, 7},
 	} {
-		major, minor, patch := wixVersion(tt.v)
+		major, minor, patch := splitVersion(tt.v)
 		if major != tt.major || minor != tt.minor || patch != tt.patch {
-			log.Fatalf("wixVersion(%q) = %v, %v, %v; want %v, %v, %v",
+			log.Fatalf("splitVersion(%q) = %v, %v, %v; want %v, %v, %v",
 				tt.v, major, minor, patch, tt.major, tt.minor, tt.patch)
 		}
 	}
