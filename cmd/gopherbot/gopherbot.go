@@ -221,7 +221,7 @@ type gopherbot struct {
 	releases struct {
 		sync.Mutex
 		lastUpdate time.Time
-		major      []string // last two releases, like: "1.9", "1.10"
+		major      []string // last two releases and the next upcoming release, like: "1.9", "1.10", "1.11"
 	}
 }
 
@@ -1150,8 +1150,8 @@ func (b *gopherbot) onLatestCL(ctx context.Context, cl *maintner.GerritCL, f fun
 	return nil
 }
 
-// getMajorReleases returns the two most recent major Go 1.x releases,
-// formatted like []string{"1.9", "1.10"}.
+// getMajorReleases returns the two most recent major Go 1.x releases, and
+// the next upcoming release, sorted and formatted like []string{"1.9", "1.10", "1.11"}.
 func (b *gopherbot) getMajorReleases(ctx context.Context) ([]string, error) {
 	b.releases.Lock()
 	defer b.releases.Unlock()
@@ -1201,11 +1201,16 @@ func (b *gopherbot) getMajorReleases(ctx context.Context) ([]string, error) {
 	}
 	sort.Slice(majorReleases, func(i, j int) bool {
 		ii, _ := strconv.Atoi(majorReleases[i][2:])
-		jj, _ := strconv.Atoi(majorReleases[i][2:])
+		jj, _ := strconv.Atoi(majorReleases[j][2:])
 		return ii < jj
 	})
+	// Include the next release in the list of major releases.
+	lastRelease := majorReleases[len(majorReleases)-1]
+	lastReleaseVersion, _ := strconv.Atoi(lastRelease[2:])
+	nextRelease := lastRelease[:2] + strconv.Itoa(lastReleaseVersion+1)
+	majorReleases = append(majorReleases, nextRelease)
 	b.releases.lastUpdate = time.Now()
-	b.releases.major = majorReleases[len(majorReleases)-2:]
+	b.releases.major = majorReleases[len(majorReleases)-3:]
 	return b.releases.major, nil
 }
 
@@ -1251,7 +1256,9 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 			}
 		}
 		if len(selectedReleases) == 0 {
-			selectedReleases = majorReleases
+			// Only backport to major releases unless explicitly
+			// asked to backport to the upcoming release.
+			selectedReleases = majorReleases[:len(majorReleases)-1]
 		}
 		var openedIssues []string
 		for _, rel := range selectedReleases {
