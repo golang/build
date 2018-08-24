@@ -463,6 +463,13 @@ var Hosts = map[string]*HostConfig{
 			"GOHOSTARCH=amd64",
 		},
 	},
+	"host-aix-ppc64-osuosl": &HostConfig{
+		Notes:       "AIX 7.2 VM on OSU; run by Tony Reix",
+		OwnerGithub: "trex58",
+		IsReverse:   true,
+		ExpectNum:   1,
+		env:         []string{"GOROOT_BOOTSTRAP=/opt/freeware/lib/golang"},
+	},
 }
 
 func init() {
@@ -1560,6 +1567,10 @@ func init() {
 		Name:         "plan9-amd64-9front",
 		HostType:     "host-plan9-amd64-0intro",
 		SkipSnapshot: true,
+	})
+	addBuilder(BuildConfig{
+		Name:     "aix-ppc64",
+		HostType: "host-aix-ppc64-osuosl",
 	})
 
 }
