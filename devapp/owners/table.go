@@ -232,7 +232,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/encoding/json": {
 		Primary:   []Owner{rsc},
-		Secondary: []Owner{joetsai, bradfitz},
+		Secondary: []Owner{joetsai, bradfitz, mvdan},
 	},
 	"go/src/encoding/xml": {
 		Primary: []Owner{rsc},
