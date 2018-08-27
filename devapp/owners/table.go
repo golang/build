@@ -317,6 +317,10 @@ var entries = map[string]*Entry{
 	"go/src/internal/singleflight": {
 		Primary: []Owner{bradfitz, iant},
 	},
+	"go/src/internal/syscall/unix": {
+		Primary:   []Owner{iant, bradfitz},
+		Secondary: []Owner{tklauser},
+	},
 	"go/src/internal/syscall/windows": {
 		Primary:   []Owner{alexbrainman},
 		Secondary: []Owner{bradfitz},
@@ -483,7 +487,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{rsc, iant, dvyukov, austin, rlh},
 	},
 	"go/src/syscall": {
-		Primary: []Owner{iant, bradfitz},
+		Primary:   []Owner{iant, bradfitz},
+		Secondary: []Owner{tklauser},
 	},
 	"go/src/testing": {
 		Primary:   []Owner{},
