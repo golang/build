@@ -85,6 +85,8 @@ var (
 	processID        = "P" + randHex(9)
 )
 
+var sched = NewScheduler()
+
 var Version string // set by linker -X
 
 // devPause is a debug option to pause for 5 minutes after the build
@@ -1391,6 +1393,12 @@ type BuildletPool interface {
 	// and highPriorityOpt.
 	GetBuildlet(ctx context.Context, hostType string, lg logger) (*buildlet.Client, error)
 
+	// HasCapacity reports whether the buildlet pool has
+	// quota/capacity to create a buildlet of the provided host
+	// type. This should return as fast as possible and err on
+	// the side of returning false.
+	HasCapacity(hostType string) bool
+
 	String() string // TODO(bradfitz): more status stuff
 }
 
@@ -1683,7 +1691,12 @@ func (st *buildStatus) build() error {
 
 	sp = st.CreateSpan("get_buildlet")
 	pool := st.buildletPool()
-	bc, err := pool.GetBuildlet(st.ctx, st.conf.HostType, st)
+	bc, err := sched.GetBuildlet(st.ctx, st, &SchedItem{
+		HostType:   st.conf.HostType,
+		IsTry:      st.trySet != nil,
+		Pool:       pool,
+		BuilderRev: st.BuilderRev,
+	})
 	sp.Done(err)
 	if err != nil {
 		err = fmt.Errorf("failed to get a buildlet: %v", err)
@@ -1932,7 +1945,12 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *crossCompileConfig) (
 	ctx, cancel := context.WithCancel(st.ctx)
 	defer cancel()
 	sp := st.CreateSpan("get_buildlet_cross")
-	kubeBC, err := kubePool.GetBuildlet(ctx, config.Buildlet, st)
+	kubeBC, err := sched.GetBuildlet(ctx, st, &SchedItem{
+		HostType:   config.Buildlet,
+		IsTry:      st.trySet != nil,
+		Pool:       kubePool,
+		BuilderRev: st.BuilderRev,
+	})
 	sp.Done(err)
 	if err != nil {
 		err = fmt.Errorf("cross-compile and snapshot: failed to get a buildlet: %v", err)

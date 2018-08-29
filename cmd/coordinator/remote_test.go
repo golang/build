@@ -56,6 +56,8 @@ func (tp *TestBuildletPool) Remove(hostType string) {
 
 func (tp *TestBuildletPool) String() string { return "test" }
 
+func (tp *TestBuildletPool) HasCapacity(string) bool { return true }
+
 var testPool = &TestBuildletPool{}
 
 func TestHandleBuildletCreateWrongMethod(t *testing.T) {

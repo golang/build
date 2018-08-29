@@ -258,6 +258,21 @@ func (p *reverseBuildletPool) updateWaiterCounter(hostType string, delta int) {
 	p.waiters[hostType] += delta
 }
 
+func (p *reverseBuildletPool) HasCapacity(hostType string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, b := range p.buildlets {
+		if b.hostType != hostType {
+			continue
+		}
+		if b.inUse {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg logger) (*buildlet.Client, error) {
 	p.updateWaiterCounter(hostType, 1)
 	defer p.updateWaiterCounter(hostType, -1)
