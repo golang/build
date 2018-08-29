@@ -343,28 +343,21 @@ func main() {
 	go listenAndServeTLS()
 	go listenAndServeSSH() // ssh proxy to remote buildlets; remote.go
 
-	ticker := time.NewTicker(1 * time.Minute)
 	for {
-		select {
-		case work := <-workc:
-			if !mayBuildRev(work) {
-				if inStaging {
-					if _, ok := dashboard.Builders[work.Name]; ok && logCantBuildStaging.Allow() {
-						log.Printf("may not build %v; skipping", work)
-					}
+		work := <-workc
+		if !mayBuildRev(work) {
+			if inStaging {
+				if _, ok := dashboard.Builders[work.Name]; ok && logCantBuildStaging.Allow() {
+					log.Printf("may not build %v; skipping", work)
 				}
-				continue
 			}
-			st, err := newBuild(work)
-			if err != nil {
-				log.Printf("Bad build work params %v: %v", work, err)
-			} else {
-				st.start()
-			}
-		case <-ticker.C:
-			if numCurrentBuilds() == 0 && time.Now().After(processStartTime.Add(10*time.Minute)) {
-				// TODO: halt the whole machine to kill the VM or something
-			}
+			continue
+		}
+		st, err := newBuild(work)
+		if err != nil {
+			log.Printf("Bad build work params %v: %v", work, err)
+		} else {
+			st.start()
 		}
 	}
 }
