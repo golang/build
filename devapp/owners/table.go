@@ -43,6 +43,7 @@ var (
 	joetsai      = gh("dsnet")
 	josharian    = gh("josharian")
 	kardianos    = gh("kardianos")
+	kevinburke   = gh("kevinburke")
 	khr          = gh("randall77")
 	martisch     = gh("martisch")
 	matloob      = gh("matloob")
@@ -199,14 +200,15 @@ var entries = map[string]*Entry{
 	},
 	"go/src/crypto/tls": {
 		Primary:   []Owner{filippo},
-		Secondary: []Owner{agl, rsc},
+		Secondary: []Owner{agl, rsc, kevinburke},
 	},
 	"go/src/crypto/x509": {
 		Primary:   []Owner{filippo},
 		Secondary: []Owner{agl, rsc},
 	},
 	"go/src/database/sql": {
-		Primary: []Owner{bradfitz, kardianos},
+		Primary:   []Owner{bradfitz, kardianos},
+		Secondary: []Owner{kevinburke},
 	},
 	"go/src/debug/dwarf": {
 		Primary: []Owner{austin},
@@ -410,7 +412,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{iant},
 	},
 	"go/src/os/user": {
-		Primary: []Owner{bradfitz},
+		Primary:   []Owner{bradfitz},
+		Secondary: []Owner{kevinburke},
 	},
 	"go/src/path": {
 		Primary: []Owner{r, rsc},
@@ -556,7 +559,7 @@ var entries = map[string]*Entry{
 	},
 
 	"review/": {
-		Secondary: []Owner{josharian},
+		Secondary: []Owner{josharian, kevinburke},
 	},
 
 	"sync/": {
@@ -582,7 +585,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/cmd/godoc": {
 		Primary:   []Owner{andybons},
-		Secondary: []Owner{agnivade, bradfitz, gri, ysmolsky},
+		Secondary: []Owner{agnivade, bradfitz, gri, ysmolsky, kevinburke},
 	},
 	"tools/cmd/goimports": {
 		Primary:   []Owner{bradfitz},
