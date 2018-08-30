@@ -23,7 +23,7 @@ import (
 	"golang.org/x/build/maintner"
 )
 
-const issueNumGerritUserMapping = 21017 // Special sign-up issue.
+const issueNumGerritUserMapping = 27373 // Special sign-up issue.
 
 // intFromStr returns the first integer within s, allowing for non-numeric
 // characters to be present.
