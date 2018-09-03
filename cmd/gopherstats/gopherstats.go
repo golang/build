@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -25,7 +26,46 @@ import (
 	"golang.org/x/oauth2"
 )
 
-var mode = flag.String("mode", "", "mode to run in. Valid values:\n\n"+modeSummary())
+var (
+	mode      = flag.String("mode", "", "mode to run in. Valid values:\n\n"+modeSummary())
+	startTime = newTimeFlag("from", "1900-01-01", "start of time range for the 'range-stats' mode")
+	endTime   = newTimeFlag("to", "2100-01-01", "end of time range for the 'range-stats' mode")
+	timeZone  = flag.String("tz", "US/Pacific", "timezone to use for time values")
+)
+
+func newTimeFlag(name, defVal, desc string) *time.Time {
+	var t time.Time
+	tf := (*timeFlag)(&t)
+	if err := tf.Set(defVal); err != nil {
+		panic(err.Error())
+	}
+	flag.Var(tf, name, desc)
+	return &t
+}
+
+type timeFlag time.Time
+
+func (t *timeFlag) String() string { return time.Time(*t).String() }
+func (t *timeFlag) Set(v string) error {
+	loc, err := time.LoadLocation(*timeZone)
+	if err != nil {
+		return err
+	}
+	for _, pat := range []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02T15:04:05",
+		"2006-01-02T15:04",
+		"2006-01-02",
+	} {
+		parsedTime, err := time.ParseInLocation(pat, v, loc)
+		if err == nil {
+			*t = timeFlag(parsedTime)
+			return nil
+		}
+	}
+	return fmt.Errorf("unrecognized RFC3339 or prefix %q", v)
+}
 
 type handler struct {
 	fn   func(*statsClient)
@@ -33,12 +73,14 @@ type handler struct {
 }
 
 var modes = map[string]handler{
-	"find-github-email":  {(*statsClient).findGithubEmails, "discover mappings between github usernames and emails"},
-	"gerrit-groups":      {(*statsClient).gerritGroups, "print stats on gerrit groups"},
-	"github-groups":      {(*statsClient).githubGroups, "print stats on github groups"},
-	"github-issue-close": {(*statsClient).githubIssueCloseStats, "print stats on github closed issues"},
-	"gerrit-cls":         {(*statsClient).gerritCLStats, "print stats on opened gerrit CLs"},
-	"workshop-stats":     {(*statsClient).workshopStats, "print stats from contributor workshop"},
+	"find-github-email":   {(*statsClient).findGithubEmails, "discover mappings between github usernames and emails"},
+	"gerrit-groups":       {(*statsClient).gerritGroups, "print stats on gerrit groups"},
+	"github-groups":       {(*statsClient).githubGroups, "print stats on github groups"},
+	"github-issue-close":  {(*statsClient).githubIssueCloseStats, "print stats on github issues closes by quarter (googler-vs-not, unique numbers)"},
+	"gerrit-cls":          {(*statsClient).gerritCLStats, "print stats on opened gerrit CLs by quarter"},
+	"workshop-stats":      {(*statsClient).workshopStats, "print stats from contributor workshop"},
+	"find-gerrit-gophers": {(*statsClient).findGerritGophers, "discover mappings between internal/gopher entries and Gerrit IDs"},
+	"range-stats":         {(*statsClient).rangeStats, "show various summaries of activity in the flag-provided time range"},
 }
 
 func modeSummary() string {
@@ -55,10 +97,31 @@ func modeSummary() string {
 }
 
 type statsClient struct {
-	ghc   *github.Client
-	gerrc *gerrit.Client
+	lazyGitHub *github.Client
+	lazyGerrit *gerrit.Client
 
 	corpusCache *maintner.Corpus
+}
+
+func (sc *statsClient) github() *github.Client {
+	if sc.lazyGitHub != nil {
+		return sc.lazyGitHub
+	}
+	ghc, err := getGithubClient()
+	if err != nil {
+		log.Fatal(err)
+	}
+	sc.lazyGitHub = ghc
+	return ghc
+}
+
+func (sc *statsClient) gerrit() *gerrit.Client {
+	if sc.lazyGerrit != nil {
+		return sc.lazyGerrit
+	}
+	gerrc := gerrit.NewClient("https://go-review.googlesource.com", gerrit.GitCookieFileAuth(filepath.Join(os.Getenv("HOME"), ".gitcookies")))
+	sc.lazyGerrit = gerrc
+	return gerrc
 }
 
 func (sc *statsClient) corpus() *maintner.Corpus {
@@ -87,30 +150,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	ghc, err := getGithubClient()
-	if err != nil {
-		log.Fatal(err)
-	}
-	gerrc := gerrit.NewClient("https://go-review.googlesource.com", gerrit.GitCookieFileAuth(filepath.Join(os.Getenv("HOME"), ".gitcookies")))
-
-	sc := &statsClient{
-		ghc:   ghc,
-		gerrc: gerrc,
-	}
+	sc := &statsClient{}
 	h.fn(sc)
 }
 
 func (sc *statsClient) gerritGroups() {
 	ctx := context.Background()
+	gerrc := sc.gerrit()
 
-	groups, err := sc.gerrc.GetGroups(ctx)
+	groups, err := gerrc.GetGroups(ctx)
 	if err != nil {
 		log.Fatalf("Gerrit.GetGroups: %v", err)
 	}
 	for name, gi := range groups {
 		switch name {
-		case "approvers", "may-start-trybots", "gophers":
-			members, err := sc.gerrc.GetGroupMembers(ctx, gi.ID)
+		case "admins", "approvers", "may-start-trybots", "gophers",
+			"may-abandon-changes",
+			"may-forge-author-identity", "osp-team",
+			"release-managers":
+			members, err := gerrc.GetGroupMembers(ctx, gi.ID)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -241,7 +299,8 @@ func (s *personSet) add(p *gophers.Person) {
 
 func (sc *statsClient) githubGroups() {
 	ctx := context.Background()
-	teamList, _, err := sc.ghc.Repositories.ListTeams(ctx, "golang", "go", nil)
+	ghc := sc.github()
+	teamList, _, err := ghc.Repositories.ListTeams(ctx, "golang", "go", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -257,7 +316,7 @@ func (sc *statsClient) githubGroups() {
 
 		ps := new(personSet)
 		teams[teamName] = ps
-		users, _, err := sc.ghc.Teams.ListTeamMembers(ctx, t.GetID(), &github.TeamListTeamMembersOptions{
+		users, _, err := ghc.Teams.ListTeamMembers(ctx, t.GetID(), &github.TeamListTeamMembersOptions{
 			ListOptions: github.ListOptions{PerPage: 1000},
 		})
 		if err != nil {
@@ -689,10 +748,51 @@ Ross Light
 
 var discoverGoRepo = flag.String("discovery-go-repo", "go", "github.com/golang repo to discovery email addreses from")
 
+func (sc *statsClient) findGerritGophers() {
+	gerrc := sc.gerrit()
+	log.Printf("find gerrit gophers")
+	gerritEmails := map[string]int{}
+
+	const suffix = "@62eb7196-b449-3ce5-99f1-c037f21e1705"
+
+	sc.corpus().Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+		return gp.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
+			for _, meta := range cl.Metas {
+				who := meta.Commit.Author.Email()
+				if strings.HasSuffix(who, suffix) {
+					gerritEmails[who]++
+				}
+			}
+			return nil
+		})
+	})
+
+	var emails []string
+	for k := range gerritEmails {
+		emails = append(emails, k)
+	}
+	sort.Slice(emails, func(i, j int) bool {
+		return gerritEmails[emails[j]] < gerritEmails[emails[i]]
+	})
+	for _, email := range emails {
+		p := gophers.GetPerson(email)
+		if p == nil {
+			ai, err := gerrc.GetAccountInfo(context.Background(), strings.TrimSuffix(email, suffix))
+			if err != nil {
+				log.Printf("Looking up %s: %v", email, err)
+				continue
+			}
+			fmt.Printf("addPerson(%q, %q, %q)\n", ai.Name, ai.Email, email)
+		}
+	}
+
+}
+
 func (sc *statsClient) findGithubEmails() {
+	ghc := sc.github()
 	seen := map[string]bool{}
 	for page := 1; page < 500; page++ {
-		commits, _, err := sc.ghc.Repositories.ListCommits(context.Background(), "golang", *discoverGoRepo, &github.CommitsListOptions{
+		commits, _, err := ghc.Repositories.ListCommits(context.Background(), "golang", *discoverGoRepo, &github.CommitsListOptions{
 			ListOptions: github.ListOptions{Page: page, PerPage: 1000},
 		})
 		if err != nil {
@@ -863,6 +963,165 @@ func (sc *statsClient) workshopStats() {
 	New Contributors Merged CLs: %d`+"\n", p.name, len(p.openedCLs), len(p.mergedCLs), newOpened, newMerged)
 		}
 	}
+}
+
+func (sc *statsClient) rangeStats() {
+	var (
+		newCLs                    = map[*gophers.Person]int{}
+		commentsOnOtherCLs        = map[*gophers.Person]int{}
+		githubIssuesCreated       = map[*gophers.Person]int{}
+		githubUniqueIssueComments = map[*gophers.Person]int{} // non-owner
+		githubUniqueIssueEvents   = map[*gophers.Person]int{} // non-owner
+		uniqueFilesEdited         = map[*gophers.Person]int{}
+		uniqueDirsEdited          = map[*gophers.Person]int{}
+	)
+
+	t1 := *startTime
+	t2 := *endTime
+
+	sc.corpus().GitHub().ForeachRepo(func(r *maintner.GitHubRepo) error {
+		if r.ID().Owner != "golang" {
+			return nil
+		}
+		return r.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+			if gi.User == nil {
+				return nil
+			}
+			owner := gophers.GetPerson("@" + gi.User.Login)
+			if gi.Created.After(t1) && gi.Created.Before(t2) {
+				if owner == nil {
+					log.Printf("No owner for golang.org/issue/%d (%q)", gi.Number, gi.User.Login)
+				} else if !owner.Bot {
+					githubIssuesCreated[owner]++
+				}
+			}
+
+			sawCommenter := map[*gophers.Person]bool{}
+			gi.ForeachComment(func(gc *maintner.GitHubComment) error {
+				if gc.User == nil || gc.User.ID == gi.User.ID {
+					return nil
+				}
+				if gc.Created.After(t1) && gc.Created.Before(t2) {
+					commenter := gophers.GetPerson("@" + gc.User.Login)
+					if commenter == nil || sawCommenter[commenter] || commenter.Bot {
+						return nil
+					}
+					sawCommenter[commenter] = true
+					githubUniqueIssueComments[commenter]++
+				}
+				return nil
+			})
+
+			sawEventer := map[*gophers.Person]bool{}
+			gi.ForeachEvent(func(gc *maintner.GitHubIssueEvent) error {
+				if gc.Actor == nil || gc.Actor.ID == gi.User.ID {
+					return nil
+				}
+				if gc.Created.After(t1) && gc.Created.Before(t2) {
+					eventer := gophers.GetPerson("@" + gc.Actor.Login)
+					if eventer == nil || sawEventer[eventer] || eventer.Bot {
+						return nil
+					}
+					sawEventer[eventer] = true
+					githubUniqueIssueEvents[eventer]++
+				}
+				return nil
+			})
+
+			return nil
+		})
+	})
+
+	type projectFile struct {
+		gp   *maintner.GerritProject
+		file string
+	}
+	var fileTouched = map[*gophers.Person]map[projectFile]bool{}
+	var dirTouched = map[*gophers.Person]map[projectFile]bool{}
+
+	sc.corpus().Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+		if gp.Server() != "go.googlesource.com" {
+			return nil
+		}
+		return gp.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
+			owner := gophers.GetPerson(cl.Commit.Author.Email())
+			if cl.Created.After(t1) && cl.Created.Before(t2) {
+				newCLs[owner]++
+			}
+
+			if ct := cl.Commit.CommitTime; ct.After(t1) && ct.Before(t2) && cl.Status == "merged" {
+				email := cl.Commit.Author.Email() // gerrit-y email
+				who := gophers.GetPerson(email)
+				if who != nil {
+					if fileTouched[who] == nil {
+						fileTouched[who] = map[projectFile]bool{}
+					}
+					if dirTouched[who] == nil {
+						dirTouched[who] = map[projectFile]bool{}
+					}
+					for _, diff := range cl.Commit.Files {
+						if strings.Contains(diff.File, "vendor/") {
+							continue
+						}
+						fileTouched[who][projectFile{gp, diff.File}] = true
+						dirTouched[who][projectFile{gp, path.Dir(diff.File)}] = true
+					}
+				}
+			}
+
+			saw := map[*gophers.Person]bool{}
+			for _, meta := range cl.Metas {
+				t := meta.Commit.CommitTime
+				if t.Before(t1) || t.After(t2) {
+					continue
+				}
+				email := meta.Commit.Author.Email() // gerrit-y email
+				who := gophers.GetPerson(email)
+				if who == owner || who == nil || saw[who] || who.Bot {
+					continue
+				}
+				saw[who] = true
+				commentsOnOtherCLs[who]++
+			}
+			return nil
+		})
+	})
+
+	for p, m := range fileTouched {
+		uniqueFilesEdited[p] = len(m)
+	}
+	for p, m := range dirTouched {
+		uniqueDirsEdited[p] = len(m)
+	}
+
+	top(newCLs, "CLs created:", 20)
+	top(commentsOnOtherCLs, "Unique non-self CLs commented on:", 20)
+
+	top(githubIssuesCreated, "GitHub issues created:", 20)
+	top(githubUniqueIssueComments, "Unique GitHub issues commented on:", 20)
+	top(githubUniqueIssueEvents, "Unique GitHub issues acted on:", 20)
+
+	top(uniqueFilesEdited, "Unique files edited:", 20)
+	top(uniqueDirsEdited, "Unique directories edited:", 20)
+}
+
+func top(m map[*gophers.Person]int, title string, n int) {
+	var kk []*gophers.Person
+	for k := range m {
+		if k == nil {
+			continue
+		}
+		kk = append(kk, k)
+	}
+	sort.Slice(kk, func(i, j int) bool { return m[kk[j]] < m[kk[i]] })
+	fmt.Println(title)
+	for i, k := range kk {
+		if i == n {
+			break
+		}
+		fmt.Printf(" %5d %s\n", m[k], k.Name)
+	}
+	fmt.Println()
 }
 
 func getGithubToken() (string, error) {
