@@ -23,7 +23,7 @@ readonly ISO="install${RELNO}-${ARCH}.iso"
 readonly ISO_PATCHED="install${RELNO}-${ARCH}-patched.iso"
 
 if [[ ! -f "${ISO}" ]]; then
-  curl -o "${ISO}" "http://${MIRROR}/pub/OpenBSD/${VERSION}/${ARCH}/install${RELNO}.iso"
+  curl -o "${ISO}" "https://${MIRROR}/pub/OpenBSD/${VERSION}/${ARCH}/install${RELNO}.iso"
 fi
 
 function cleanup() {
