@@ -144,6 +144,7 @@ send "s\n"
 expect timeout { exit 1 } "# "
 send "mount /dev/cd0c /mnt\n"
 send "cp /mnt/auto_install.conf /mnt/disklabel.template /\n"
+send "chmod a+r /disklabel.template\n"
 send "umount /mnt\n"
 send "exit\n"
 
