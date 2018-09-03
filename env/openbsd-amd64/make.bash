@@ -8,7 +8,7 @@
 set -e
 set -u
 
-readonly VERSION="6.2"
+readonly VERSION="6.3"
 readonly RELNO="${VERSION/./}"
 
 readonly ARCH="${ARCH:-amd64}"
