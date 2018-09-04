@@ -222,6 +222,10 @@ var entries = map[string]*Entry{
 	"go/src/encoding": {
 		Primary: []Owner{rsc},
 	},
+	"go/src/encoding/asn1": {
+		Primary:   []Owner{filippo},
+		Secondary: []Owner{agl},
+	},
 	"go/src/encoding/binary": {
 		Primary: []Owner{gri},
 	},
