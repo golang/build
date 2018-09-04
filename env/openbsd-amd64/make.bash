@@ -8,7 +8,7 @@
 set -e
 set -u
 
-readonly VERSION="6.2"
+readonly VERSION="6.3"
 readonly RELNO="${VERSION/./}"
 
 readonly ARCH="${ARCH:-amd64}"
@@ -23,7 +23,7 @@ readonly ISO="install${RELNO}-${ARCH}.iso"
 readonly ISO_PATCHED="install${RELNO}-${ARCH}-patched.iso"
 
 if [[ ! -f "${ISO}" ]]; then
-  curl -o "${ISO}" "http://${MIRROR}/pub/OpenBSD/${VERSION}/${ARCH}/install${RELNO}.iso"
+  curl -o "${ISO}" "https://${MIRROR}/pub/OpenBSD/${VERSION}/${ARCH}/install${RELNO}.iso"
 fi
 
 function cleanup() {
@@ -32,7 +32,7 @@ function cleanup() {
 	rm -f boot.conf
 	rm -f disk.raw
 	rm -f disklabel.template
-	rm -f etc/rc.local
+	rm -f etc/{installurl,rc.local}
 	rm -f install.site
 	rm -f random.seed
 	rm -f site${RELNO}.tgz
@@ -48,12 +48,15 @@ trap cleanup EXIT INT
 mkdir -p etc
 cat >install.site <<EOF
 #!/bin/sh
-env PKG_PATH=http://${MIRROR}/pub/OpenBSD/${VERSION}/packages/${ARCH} \
-  pkg_add -iv bash curl git
+syspatch
+pkg_add -iv bash curl git
 
 echo 'set tty com0' > boot.conf
 EOF
 
+cat >etc/installurl <<EOF
+https://${MIRROR}/pub/OpenBSD
+EOF
 cat >etc/rc.local <<EOF
 (
   set -x
@@ -80,7 +83,7 @@ cat >etc/rc.local <<EOF
 )
 EOF
 chmod +x install.site
-tar -zcvf site${RELNO}.tgz install.site etc/rc.local
+tar -zcvf site${RELNO}.tgz install.site etc/{installurl,rc.local}
 
 # Autoinstall script.
 cat >auto_install.conf <<EOF
@@ -144,6 +147,7 @@ send "s\n"
 expect timeout { exit 1 } "# "
 send "mount /dev/cd0c /mnt\n"
 send "cp /mnt/auto_install.conf /mnt/disklabel.template /\n"
+send "chmod a+r /disklabel.template\n"
 send "umount /mnt\n"
 send "exit\n"
 
