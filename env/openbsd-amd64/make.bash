@@ -32,7 +32,7 @@ function cleanup() {
 	rm -f boot.conf
 	rm -f disk.raw
 	rm -f disklabel.template
-	rm -f etc/rc.local
+	rm -f etc/{installurl,rc.local}
 	rm -f install.site
 	rm -f random.seed
 	rm -f site${RELNO}.tgz
@@ -48,12 +48,15 @@ trap cleanup EXIT INT
 mkdir -p etc
 cat >install.site <<EOF
 #!/bin/sh
-env PKG_PATH=http://${MIRROR}/pub/OpenBSD/${VERSION}/packages/${ARCH} \
-  pkg_add -iv bash curl git
+syspatch
+pkg_add -iv bash curl git
 
 echo 'set tty com0' > boot.conf
 EOF
 
+cat >etc/installurl <<EOF
+https://${MIRROR}/pub/OpenBSD
+EOF
 cat >etc/rc.local <<EOF
 (
   set -x
@@ -80,7 +83,7 @@ cat >etc/rc.local <<EOF
 )
 EOF
 chmod +x install.site
-tar -zcvf site${RELNO}.tgz install.site etc/rc.local
+tar -zcvf site${RELNO}.tgz install.site etc/{installurl,rc.local}
 
 # Autoinstall script.
 cat >auto_install.conf <<EOF
