@@ -37,6 +37,7 @@ var (
 	eliasnaur    = gh("eliasnaur")
 	filippo      = gh("FiloSottile")
 	gri          = gh("griesemer")
+	hanwen       = gh("hanwen")
 	hyangah      = gh("hyangah")
 	iant         = gh("ianlancetaylor")
 	jbd          = gh("rakyll")
@@ -74,6 +75,10 @@ var entries = map[string]*Entry{
 	"crypto/": {
 		Primary:   []Owner{filippo},
 		Secondary: []Owner{agl},
+	},
+	"crypto/ssh/": {
+		Primary:   []Owner{hanwen},
+		Secondary: []Owner{filippo},
 	},
 
 	"go/": {
