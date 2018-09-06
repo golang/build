@@ -156,7 +156,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/link": {
 		Primary:   []Owner{cherryyz, rsc, mdempsky, iant},
-		Secondary: []Owner{mwhudson},
+		Secondary: []Owner{mwhudson, thanm},
 	},
 	"go/src/cmd/pprof": {
 		Primary: []Owner{hyangah},
@@ -216,7 +216,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{kevinburke},
 	},
 	"go/src/debug/dwarf": {
-		Primary: []Owner{austin},
+		Primary:   []Owner{austin},
+		Secondary: []Owner{thanm},
 	},
 	"go/src/debug/elf": {
 		Primary: []Owner{iant},
