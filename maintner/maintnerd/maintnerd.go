@@ -309,6 +309,7 @@ var goGitHubProjects = []string{
 	"golang/build",
 	"golang/crypto",
 	"golang/debug",
+	"golang/dl",
 	"golang/example",
 	"golang/exp",
 	"golang/gddo",

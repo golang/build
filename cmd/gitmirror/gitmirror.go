@@ -230,7 +230,13 @@ func runGitMirror() error {
 				// Repo already picked up by dashboard list.
 				continue
 			}
-			go startRepo(name, "golang.org/x/"+name, false)
+			path := "golang.org/x/" + name
+			if name == "dl" {
+				// This subrepo is different from others in that
+				// it doesn't use the /x/ path element.
+				path = "golang.org/" + name
+			}
+			go startRepo(name, path, false)
 		}
 	}
 
@@ -274,6 +280,7 @@ func shouldMirror(name string) bool {
 		"build",
 		"crypto",
 		"debug",
+		"dl",
 		"example",
 		"exp",
 		"gddo",

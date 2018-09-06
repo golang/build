@@ -194,6 +194,7 @@ var gerritProjectWhitelist = map[string]bool{
 	"build":          true,
 	"crypto":         true,
 	"debug":          true,
+	"dl":             true,
 	"example":        true,
 	"exp":            true,
 	"gddo":           true,
