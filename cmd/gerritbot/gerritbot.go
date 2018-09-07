@@ -530,7 +530,7 @@ func runCmd(c *exec.Cmd) error {
 const gerritHostBase = "https://go.googlesource.com/"
 
 // gerritChangeRE matches the URL to the Change within the git output when pushing to Gerrit.
-var gerritChangeRE = regexp.MustCompile(`https:\/\/go-review\.googlesource\.com\/#\/c\/\w+\/\+\/\d+`)
+var gerritChangeRE = regexp.MustCompile(`https:\/\/go-review\.googlesource\.com\/c\/\w+\/\+\/\d+`)
 
 // importGerritChangeFromPR mirrors the latest state of pr to cl. If cl is nil,
 // then a new Gerrit Change is created.

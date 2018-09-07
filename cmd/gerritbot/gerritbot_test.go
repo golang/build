@@ -115,3 +115,19 @@ GitHub-Pull-Request: golang/go#42
 		})
 	}
 }
+
+// Test that gerritChangeRE matches the URL to the Change within
+// the git output from Gerrit after successfully creating a new CL.
+// Whenever Gerrit changes the Change URL format in its output,
+// we need to update gerritChangeRE and this test accordingly.
+//
+// See https://golang.org/issue/27561.
+func TestFindChangeURL(t *testing.T) {
+	// Sample git output from Gerrit, extracted from production logs on 2018/09/07.
+	const out = "remote: \rremote: Processing changes: new: 1 (\\)\rremote: Processing changes: new: 1 (|)\rremote: Processing changes: refs: 1, new: 1 (|)\rremote: Processing changes: refs: 1, new: 1 (|)        \rremote: Processing changes: refs: 1, new: 1, done            \nremote: \nremote: SUCCESS        \nremote: \nremote: New Changes:        \nremote:   https://go-review.googlesource.com/c/dl/+/134117 remove blank line from codereview.cfg        \nTo https://go.googlesource.com/dl\n * [new branch]      HEAD -> refs/for/master"
+	got := gerritChangeRE.FindString(out)
+	want := "https://go-review.googlesource.com/c/dl/+/134117"
+	if got != want {
+		t.Errorf("could not find change URL in command output: %q\n\ngot %q, want %q", out, got, want)
+	}
+}
