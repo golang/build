@@ -9,7 +9,7 @@
 # SSH is enabled, and a user gopher, password gopher, is created.
 
 # Only tested on Ubuntu 16.04.
-# Requires packages: qemu expect genisoimage
+# Requires packages: qemu expect sgabios genisoimage
 
 set -e
 
@@ -33,6 +33,11 @@ case $1 in
   readonly VERSION_TRAILER=
   readonly SHA256=1d710ba643bf6a8ce5bff5a9d69b1657ccff83dd1f2df711d9b4e02f9aab7d06
 ;;
+10.4)
+  readonly VERSION=10.4
+  readonly VERSION_TRAILER=
+  readonly SHA256=8d1ff92e74a70f1ec039a465467f19abd7892331403ef1d4952d271adddab625
+;;
 11.0)
   readonly VERSION=11.0
   readonly VERSION_TRAILER=
@@ -43,9 +48,14 @@ case $1 in
   readonly VERSION_TRAILER=
   readonly SHA256=233c6b269a29c1ce38bb4eb861251d1c74643846c1de937b8e31cc0316632bc0
 ;;
+11.2)
+  readonly VERSION=11.2
+  readonly VERSION_TRAILER=
+  readonly SHA256=d8638aecbb13bdc891e17187f3932fe477f5655846bdaad8fecd60614de9312c
+;;
 *)
   echo "Usage: $0 <version>"
-  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 11.0 11.1"
+  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 10.4 11.0 11.1 11.2"
   exit 1
 esac
 
@@ -65,6 +75,7 @@ cp FreeBSD-${VERSION:?}-RELEASE-amd64${VERSION_TRAILER}.raw disk.raw
 mkdir -p iso/boot iso/etc iso/usr/local/etc/rc.d
 cp loader.conf iso/boot
 cp rc.conf iso/etc
+cp sysctl.conf iso/etc
 cp buildlet iso/usr/local/etc/rc.d
 
 cat >iso/install.sh <<'EOF'
@@ -76,6 +87,7 @@ cp /mnt/usr/local/etc/rc.d/buildlet /usr/local/etc/rc.d/buildlet
 chmod +x /usr/local/etc/rc.d/buildlet
 cp /mnt/boot/loader.conf /boot/loader.conf
 cp /mnt/etc/rc.conf /etc/rc.conf
+cat /mnt/etc/sysctl.conf >> /etc/sysctl.conf
 adduser -f - <<ADDUSEREOF
 gopher::::::Gopher Gopherson::/bin/sh:gopher
 ADDUSEREOF
@@ -89,32 +101,69 @@ genisoimage -r -o config.iso iso/
 # TODO(wathiede): remove sleep
 sleep 2
 
-# TODO(wathiede): set serial output so we can track boot on GCE.
-expect <<EOF
-set timeout 600
-spawn qemu-system-x86_64 -display curses -smp 2 -m 1G -drive if=virtio,file=disk.raw,cache=none -cdrom config.iso -net nic,model=virtio -net user
+expect <<'EOF'
+set prompt "root@.*:~ #[ ]"
+set timeout -1
 
-# Speed-up boot by going in to single user mode.
-expect "Welcome to FreeBSD"
+spawn qemu-system-x86_64 -nographic -option-rom sgabios.bin -m 1G -drive if=virtio,file=disk.raw,format=raw,cache=none -cdrom config.iso -net nic,model=virtio -net user
+set qemu_pid $spawn_id
+
+# boot with serial console enabled
+expect -ex "Welcome to FreeBSD"
 sleep 2
-send "\n"
-
-expect "login:"
+expect -ex "ape to loader prompt"
+send "3\n"
+expect -ex "Type '?' for a list of commands, 'help' for more detailed help."
+send "set console=\"comconsole\"\n"
 sleep 1
-send "root\n"
+send "boot\n"
 
-expect "root@:~ # "
-sleep 1
-send "dhclient vtnet0\n"
+# wait for login prompt
+set timeout 120
+expect {
+    "\nlogin: " {
+        send "root\n"
+        sleep 1
+    }
+    timeout     { exit 2 }
+}
 
-expect "root@:~ # "
+expect -re $prompt
 sleep 1
 send "mount_cd9660 /dev/cd0 /mnt\nsh /mnt/install.sh\n"
 
-expect "root@:~ # "
+expect -re $prompt
+sleep 1
+
+# generate SSH keys
+send "service sshd keygen\n"
+expect -re "Generating .+ host key."
+sleep 1
+
+expect -re $prompt
+sleep 1
+set timeout -1
+# download updates
+send "env PAGER=cat freebsd-update fetch --not-running-from-cron\n"
+expect {
+    "The following files will be updated as part of updating to" {
+        sleep 2
+        expect -re $prompt
+        send "freebsd-update install\n"
+        expect "Installing updates... done."
+        sleep 1
+        send "\n"
+    }
+
+    "No updates needed to update system to" {
+        sleep 1
+        send "\n"
+    }
+}
+
+expect -re $prompt
 sleep 1
 send "pkg install bash curl git\n"
-
 expect "Do you want to fetch and install it now"
 sleep 1
 send "y\n"
@@ -123,11 +172,12 @@ expect "Proceed with this action"
 sleep 1
 send "y\n"
 
-expect "root@:~ # "
+expect -re $prompt
 sleep 1
 send "poweroff\n"
 expect "All buffers synced."
-sleep 5
+
+wait -i $qemu_pid
 EOF
 
 # Create Compute Engine disk image.
