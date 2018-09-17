@@ -108,16 +108,31 @@ func TestGerritMetaNonNil(t *testing.T) {
 		var maxCL int32
 		gp.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
 			if cl.Meta == nil {
-				t.Errorf("%s: enumerated CL %d has nil Meta", gp.ServerSlashProject(), cl.Number)
+				t.Errorf("%s: ForeachCLUnsorted-enumerated CL %d has nil Meta", gp.ServerSlashProject(), cl.Number)
 			}
 			if len(cl.Metas) == 0 {
-				t.Errorf("%s: enumerated CL %d has empty Metas", gp.ServerSlashProject(), cl.Number)
+				t.Errorf("%s: ForeachCLUnsorted-enumerated CL %d has empty Metas", gp.ServerSlashProject(), cl.Number)
 			}
 			if cl.Commit == nil {
-				t.Errorf("%s: enumerated CL %d has nil Commit", gp.ServerSlashProject(), cl.Number)
+				t.Errorf("%s: ForeachCLUnsorted-enumerated CL %d has nil Commit", gp.ServerSlashProject(), cl.Number)
 			}
 			if cl.Number > maxCL {
 				maxCL = cl.Number
+			}
+			return nil
+		})
+		gp.ForeachOpenCL(func(cl *maintner.GerritCL) error {
+			if cl.Meta == nil {
+				t.Errorf("%s: ForeachOpenCL-enumerated CL %d has nil Meta", gp.ServerSlashProject(), cl.Number)
+			}
+			if len(cl.Metas) == 0 {
+				t.Errorf("%s: ForeachOpenCL-enumerated CL %d has empty Metas", gp.ServerSlashProject(), cl.Number)
+			}
+			if cl.Commit == nil {
+				t.Errorf("%s: ForeachOpenCL-enumerated CL %d has nil Commit", gp.ServerSlashProject(), cl.Number)
+			}
+			if cl.Number > maxCL {
+				t.Fatalf("%s: ForeachOpenCL-enumerated CL %d higher than max CL %d from ForeachCLUnsorted", gp.ServerSlashProject(), cl.Number, maxCL)
 			}
 			return nil
 		})

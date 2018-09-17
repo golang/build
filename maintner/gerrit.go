@@ -179,7 +179,7 @@ func (gp *GerritProject) ForeachNonChangeRef(fn func(ref string, hash GitHash) e
 func (gp *GerritProject) ForeachOpenCL(fn func(*GerritCL) error) error {
 	var s []*GerritCL
 	for _, cl := range gp.cls {
-		if cl.Status != "new" || cl.Private {
+		if !cl.complete() || cl.Status != "new" || cl.Private {
 			continue
 		}
 		s = append(s, cl)
@@ -193,7 +193,7 @@ func (gp *GerritProject) ForeachOpenCL(fn func(*GerritCL) error) error {
 	return nil
 }
 
-// ForeachCLUnsorted calls fn for each CL in the repo, in any order
+// ForeachCLUnsorted calls fn for each CL in the repo, in any order.
 //
 // If fn returns an error, iteration ends and ForeachCLUnsorted returns with
 // that error.
