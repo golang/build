@@ -152,7 +152,7 @@ func main() {
 			log.Fatal(err)
 		}
 	default:
-		log.Fatalf("unknown --copnfig=%s", *config)
+		log.Fatalf("unknown --config=%s", *config)
 	}
 	if *genMut {
 		if *bucket != "" {

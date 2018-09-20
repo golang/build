@@ -679,7 +679,7 @@ func (c *Corpus) SetGitHubLimiter(l *rate.Limiter) {
 // The token is the auth token to use to make API calls.
 func (c *Corpus) TrackGitHub(owner, repo, token string) {
 	if c.mutationLogger == nil {
-		panic("can't TrackGerrit in non-leader mode")
+		panic("can't TrackGitHub in non-leader mode")
 	}
 
 	c.mu.Lock()
