@@ -162,6 +162,14 @@ var Hosts = map[string]*HostConfig{
 		env:                []string{"CC=clang"},
 		SSHUsername:        "gopher",
 	},
+	"host-freebsd-10_4": &HostConfig{
+		VMImage:            "freebsd-amd64-104",
+		Notes:              "FreeBSD 10.4; GCE VM is built from script in build/env/freebsd-amd64",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
+		SSHUsername:        "gopher",
+	},
 	"host-freebsd-11_1": &HostConfig{
 		VMImage:            "freebsd-amd64-111-b",
 		Notes:              "FreeBSD 11.1; GCE VM is built from script in build/env/freebsd-amd64",
@@ -169,6 +177,14 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64", // TODO(bradfitz): why was this http instead of https?
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		env:                []string{"CC=clang"},
+		SSHUsername:        "gopher",
+	},
+	"host-freebsd-11_2": &HostConfig{
+		VMImage:            "freebsd-amd64-112",
+		Notes:              "FreeBSD 11.2; GCE VM is built from script in build/env/freebsd-amd64",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-netbsd-amd64-8_0": &HostConfig{
@@ -760,7 +776,7 @@ func (c *BuildConfig) BuildSubrepos() bool {
 	if !c.SplitMakeRun() {
 		return false
 	}
-	// TODO(adg,bradfitz): expand this as required
+	// TODO(bradfitz,dmitshur): move this into BuildConfig bools, rather than this Name switch.
 	switch c.Name {
 	case "darwin-amd64-10_11",
 		"darwin-386-10_11",
@@ -768,6 +784,8 @@ func (c *BuildConfig) BuildSubrepos() bool {
 		"freebsd-amd64-93",
 		"freebsd-386-10_3", "freebsd-amd64-10_3",
 		"freebsd-386-11_1", "freebsd-amd64-11_1",
+		"freebsd-386-10_4", "freebsd-amd64-10_4",
+		"freebsd-386-11_2", "freebsd-amd64-11_2",
 		"linux-386", "linux-amd64", "linux-amd64-nocgo",
 		"linux-s390x-ibm",
 		"openbsd-386-60", "openbsd-amd64-60",
@@ -929,9 +947,22 @@ func init() {
 		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
+		Name:      "freebsd-amd64-10_4",
+		HostType:  "host-freebsd-10_4",
+		MaxAtOnce: 2,
+	})
+	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-11_1",
 		HostType:          "host-freebsd-11_1",
 		TryBot:            true,
+		ShouldRunDistTest: fasterTrybots,
+		numTryTestHelpers: 4,
+		MaxAtOnce:         2,
+	})
+	addBuilder(BuildConfig{
+		Name:              "freebsd-amd64-11_2",
+		HostType:          "host-freebsd-11_2",
+		TryBot:            false, // not yet. once we see it's passing regularly.
 		ShouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
 		MaxAtOnce:         2,
@@ -948,8 +979,21 @@ func init() {
 		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
+		Name:      "freebsd-386-10_4",
+		HostType:  "host-freebsd-10_4",
+		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
+		MaxAtOnce: 2,
+	})
+	addBuilder(BuildConfig{
 		Name:              "freebsd-386-11_1",
 		HostType:          "host-freebsd-11_1",
+		ShouldRunDistTest: noTestDir,
+		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		MaxAtOnce:         2,
+	})
+	addBuilder(BuildConfig{
+		Name:              "freebsd-386-11_2",
+		HostType:          "host-freebsd-11_2",
 		ShouldRunDistTest: noTestDir,
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		MaxAtOnce:         2,
