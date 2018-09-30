@@ -30,6 +30,8 @@ func SyncBuilds(ctx context.Context, env *buildenv.Environment) error {
 	if err != nil {
 		return err
 	}
+	defer bq.Close()
+
 	buildsTable := bq.Dataset("builds").Table("Builds")
 	meta, err := buildsTable.Metadata(ctx)
 	if ae, ok := err.(*googleapi.Error); ok && ae.Code == 404 {
@@ -104,6 +106,7 @@ func SyncBuilds(ctx context.Context, env *buildenv.Environment) error {
 	if err != nil {
 		return fmt.Errorf("datastore.NewClient: %v", err)
 	}
+	defer ds.Close()
 
 	up := buildsTable.Uploader()
 
@@ -176,6 +179,8 @@ func SyncSpans(ctx context.Context, env *buildenv.Environment) error {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer bq.Close()
+
 	table := bq.Dataset("builds").Table("Spans")
 	meta, err := table.Metadata(ctx)
 	if ae, ok := err.(*googleapi.Error); ok && ae.Code == 404 {
@@ -247,6 +252,7 @@ func SyncSpans(ctx context.Context, env *buildenv.Environment) error {
 	if err != nil {
 		return fmt.Errorf("datastore.NewClient: %v", err)
 	}
+	defer ds.Close()
 
 	up := table.Uploader()
 
