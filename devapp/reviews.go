@@ -114,7 +114,9 @@ func (s *server) updateReviewsData() {
 	s.corpus.Gerrit().ForeachProjectUnsorted(func(p *maintner.GerritProject) error {
 		proj := &project{GerritProject: p}
 		p.ForeachOpenCL(func(cl *maintner.GerritCL) error {
-			if strings.Contains(cl.Commit.Msg, "DO NOT REVIEW") || strings.Contains(cl.Commit.Msg, "DO NOT SUBMIT") {
+			if cl.WorkInProgress() ||
+				strings.Contains(cl.Commit.Msg, "DO NOT REVIEW") ||
+				strings.Contains(cl.Commit.Msg, "DO NOT SUBMIT") {
 				return nil
 			}
 			tags := cl.Meta.Hashtags()
