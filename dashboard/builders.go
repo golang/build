@@ -146,6 +146,22 @@ var Hosts = map[string]*HostConfig{
 		Notes:              "OpenBSD 6.2; GCE VM is built from script in build/env/openbsd-386",
 		SSHUsername:        "gopher",
 	},
+	"host-openbsd-amd64-64": &HostConfig{
+		VMImage:            "openbsd-amd64-64-snap1",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64-64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-64.tar.gz",
+		Notes:              "OpenBSD 6.4 snapshot from Oct 4, 2018; GCE VM is built from script in build/env/openbsd-amd64",
+		SSHUsername:        "gopher",
+	},
+	"host-openbsd-386-64": &HostConfig{
+		VMImage:            "openbsd-386-64-snap1",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386-64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-64.tar.gz",
+		Notes:              "OpenBSD 6.4 snapshot from Oct 4, 2018; GCE VM is built from script in build/env/openbsd-386",
+		SSHUsername:        "gopher",
+	},
 	"host-freebsd-93-gce": &HostConfig{
 		VMImage:            "freebsd-amd64-gce93",
 		machineType:        "n1-highcpu-4",
@@ -1313,6 +1329,21 @@ func init() {
 		TryBot:            true,
 		numTestHelpers:    0,
 		numTryTestHelpers: 5,
+		MaxAtOnce:         1,
+	})
+	addBuilder(BuildConfig{
+		Name:              "openbsd-amd64-64",
+		HostType:          "host-openbsd-amd64-64",
+		ShouldRunDistTest: noTestDir,
+		TryBot:            false,
+		numTestHelpers:    0,
+		numTryTestHelpers: 5,
+		MaxAtOnce:         1,
+	})
+	addBuilder(BuildConfig{
+		Name:              "openbsd-386-64",
+		HostType:          "host-openbsd-386-64",
+		ShouldRunDistTest: noTestDir,
 		MaxAtOnce:         1,
 	})
 	addBuilder(BuildConfig{

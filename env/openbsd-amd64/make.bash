@@ -8,8 +8,9 @@
 set -e
 set -u
 
-readonly VERSION="6.3"
+readonly VERSION="6.4"
 readonly RELNO="${VERSION/./}"
+readonly SNAPSHOT=false
 
 readonly ARCH="${ARCH:-amd64}"
 readonly MIRROR="${MIRROR:-ftp.usa.openbsd.org}"
@@ -23,7 +24,11 @@ readonly ISO="install${RELNO}-${ARCH}.iso"
 readonly ISO_PATCHED="install${RELNO}-${ARCH}-patched.iso"
 
 if [[ ! -f "${ISO}" ]]; then
-  curl -o "${ISO}" "https://${MIRROR}/pub/OpenBSD/${VERSION}/${ARCH}/install${RELNO}.iso"
+  DIR="${VERSION}"
+  if [[ "$SNAPSHOT" = true ]]; then
+    DIR="snapshots"
+  fi
+  curl -o "${ISO}" "https://${MIRROR}/pub/OpenBSD/${DIR}/${ARCH}/install${RELNO}.iso"
 fi
 
 function cleanup() {
@@ -45,11 +50,14 @@ trap cleanup EXIT INT
 # Currently we download them from the network during the install process.
 
 # Create custom siteXX.tgz set.
+if [[ "$SNAPSHOT" = true ]]; then
+  PKG_ADD_OPTIONS="-D snap"
+fi
 mkdir -p etc
 cat >install.site <<EOF
 #!/bin/sh
 syspatch
-pkg_add -iv bash curl git
+pkg_add -iv ${PKG_ADD_OPTIONS} bash curl git
 
 echo 'set tty com0' > boot.conf
 EOF
