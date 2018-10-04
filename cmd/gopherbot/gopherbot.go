@@ -274,6 +274,7 @@ var tasks = []struct {
 	{"close cherry pick issues", (*gopherbot).closeCherryPickIssues},
 	{"apply labels from comments", (*gopherbot).applyLabelsFromComments},
 	{"assign reviewers to CLs", (*gopherbot).assignReviewersToCLs},
+	{"abandon scratch reviews", (*gopherbot).abandonScratchReviews},
 }
 
 func (b *gopherbot) initCorpus() {
@@ -1696,10 +1697,11 @@ func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 			for _, owner := range merged.Secondary {
 				review.Reviewers = append(review.Reviewers, gerrit.ReviewerInput{Reviewer: owner.GerritEmail, State: "CC"})
 			}
-			log.Printf("[dry run] Would set review on %s: %+v", changeURL, review)
 			if *dryRun {
+				log.Printf("[dry run] Would set review on %s: %+v", changeURL, review)
 				return nil
 			}
+			log.Printf("Setting review on %s: %+v", changeURL, review)
 			if err := b.gerrit.SetReview(ctx, gc.ID(), "current", review); err != nil {
 				log.Printf("Could not set review for change %q: %v", gc.ID(), err)
 				return nil
@@ -1709,6 +1711,31 @@ func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 		return nil
 	})
 	return nil
+}
+
+// abandonScratchReviews abandons Gerrit CLs in the "scratch" project if they've been open for over a week.
+func (b *gopherbot) abandonScratchReviews(ctx context.Context) error {
+	tooOld := time.Now().Add(-24 * time.Hour * 7)
+	return b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+		if gp.Project() != "scratch" || gp.Server() != "go.googlesource.com" {
+			return nil
+		}
+		return gp.ForeachOpenCL(func(cl *maintner.GerritCL) error {
+			if !cl.Meta.Commit.CommitTime.Before(tooOld) {
+				return nil
+			}
+			if *dryRun {
+				log.Printf("[dry-run] would've closed scratch CL https://golang.org/cl/%d ...", cl.Number)
+				return nil
+			}
+			log.Printf("closing scratch CL https://golang.org/cl/%d ...", cl.Number)
+			err := b.gerrit.AbandonChange(ctx, fmt.Sprint(cl.Number), "Auto-abandoning old scratch review.")
+			if err != nil && strings.Contains(err.Error(), "404 Not Found") {
+				return nil
+			}
+			return err
+		})
+	})
 }
 
 // humanReviewersOnChange returns true if there are (or were any) human reviewers in the given change.
