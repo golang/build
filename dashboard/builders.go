@@ -187,6 +187,14 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
+	"host-freebsd-12_0": &HostConfig{
+		VMImage:            "freebsd-amd64-120a8",
+		Notes:              "FreeBSD 12.0alpha8; GCE VM is built from script in build/env/freebsd-amd64",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
+		SSHUsername:        "gopher",
+	},
 	"host-netbsd-amd64-8_0": &HostConfig{
 		VMImage:            "netbsd-amd64-8-0-2018q1",
 		Notes:              "NetBSD 8.0RC1; GCE VM is built from script in build/env/netbsd-amd64",
@@ -962,6 +970,14 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-11_2",
 		HostType:          "host-freebsd-11_2",
+		TryBot:            false, // not yet. once we see it's passing regularly.
+		ShouldRunDistTest: fasterTrybots,
+		numTryTestHelpers: 4,
+		MaxAtOnce:         2,
+	})
+	addBuilder(BuildConfig{
+		Name:              "freebsd-amd64-12_0",
+		HostType:          "host-freebsd-12_0",
 		TryBot:            false, // not yet. once we see it's passing regularly.
 		ShouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
