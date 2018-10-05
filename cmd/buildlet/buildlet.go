@@ -104,6 +104,8 @@ func main() {
 	switch os.Getenv("GO_BUILDER_ENV") {
 	case "macstadium_vm":
 		configureMacStadium()
+	case "linux-arm-arm5spacemonkey":
+		initBaseUnixEnv() // Issue 28041
 	}
 	onGCE := metadata.OnGCE()
 	switch runtime.GOOS {
@@ -1740,3 +1742,12 @@ func appendSSHAuthorizedKey(sshUser, authKey string) error {
 // It is set non-nil on operating systems where the functionality is
 // needed & available. Currently we only use it on Linux.
 var setWorkdirToTmpfs func()
+
+func initBaseUnixEnv() {
+	if os.Getenv("USER") == "" {
+		os.Setenv("USER", "root")
+	}
+	if os.Getenv("HOME") == "" {
+		os.Setenv("HOME", "/root")
+	}
+}
