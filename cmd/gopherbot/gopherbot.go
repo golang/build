@@ -1675,7 +1675,8 @@ func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 				return nil
 			}
 
-			merged := mergeOwnersEntries(entries)
+			authorEmail := cl.Commit.Author.Email()
+			merged := mergeOwnersEntries(entries, authorEmail)
 			if len(merged.Primary) == 0 && len(merged.Secondary) == 0 {
 				// No owners found for the change. Add the #no-owners tag.
 				log.Printf("Adding no-owners tag to change %s...", changeURL)
@@ -1840,8 +1841,10 @@ func getCodeOwners(ctx context.Context, paths []string) ([]*owners.Entry, error)
 // primary and secondary users into a single entry.
 // If a user is a primary in one entry but secondary on another, they are
 // primary in the returned entry.
+// If a users email matches the authorEmail, the the user is omitted from the
+// result.
 // The resulting order of the entries is non-deterministic.
-func mergeOwnersEntries(entries []*owners.Entry) *owners.Entry {
+func mergeOwnersEntries(entries []*owners.Entry, authorEmail string) *owners.Entry {
 	var result owners.Entry
 	pm := make(map[owners.Owner]bool)
 	for _, e := range entries {
@@ -1858,10 +1861,14 @@ func mergeOwnersEntries(entries []*owners.Entry) *owners.Entry {
 		}
 	}
 	for o := range pm {
-		result.Primary = append(result.Primary, o)
+		if o.GerritEmail != authorEmail {
+			result.Primary = append(result.Primary, o)
+		}
 	}
 	for o := range sm {
-		result.Secondary = append(result.Secondary, o)
+		if o.GerritEmail != authorEmail {
+			result.Secondary = append(result.Secondary, o)
+		}
 	}
 	return &result
 }

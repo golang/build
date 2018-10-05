@@ -204,7 +204,7 @@ func TestAddLabels(t *testing.T) {
 			"some labels already present in maintner",
 			&maintner.GitHubIssue{
 				Labels: map[int64]*maintner.GitHubLabel{
-					0: &maintner.GitHubLabel{Name: "NeedsDecision"},
+					0: {Name: "NeedsDecision"},
 				},
 			},
 			[]string{"foo", "NeedsDecision"},
@@ -214,7 +214,7 @@ func TestAddLabels(t *testing.T) {
 			"all labels already present in maintner",
 			&maintner.GitHubIssue{
 				Labels: map[int64]*maintner.GitHubLabel{
-					0: &maintner.GitHubLabel{Name: "NeedsDecision"},
+					0: {Name: "NeedsDecision"},
 				},
 			},
 			[]string{"NeedsDecision"},
@@ -265,7 +265,7 @@ func TestRemoveLabels(t *testing.T) {
 			"basic remove",
 			&maintner.GitHubIssue{
 				Labels: map[int64]*maintner.GitHubLabel{
-					0: &maintner.GitHubLabel{Name: "NeedsFix"},
+					0: {Name: "NeedsFix"},
 				},
 			},
 			[]string{"NeedsFix"},
@@ -281,7 +281,7 @@ func TestRemoveLabels(t *testing.T) {
 			"label not present in GitHub",
 			&maintner.GitHubIssue{
 				Labels: map[int64]*maintner.GitHubLabel{
-					0: &maintner.GitHubLabel{Name: "foo"},
+					0: {Name: "foo"},
 				},
 			},
 			[]string{"foo"},
@@ -356,13 +356,15 @@ func TestMergeOwnersEntries(t *testing.T) {
 		filippo  = owners.Owner{GitHubUsername: "filippo", GerritEmail: "filippo@golang.org"}
 	)
 	testCases := []struct {
-		desc    string
-		entries []*owners.Entry
-		result  *owners.Entry
+		desc        string
+		entries     []*owners.Entry
+		authorEmail string
+		result      *owners.Entry
 	}{
 		{
 			"no entries",
 			nil,
+			"",
 			&owners.Entry{},
 		},
 		{
@@ -371,6 +373,7 @@ func TestMergeOwnersEntries(t *testing.T) {
 				{Primary: []owners.Owner{andybons}},
 				{Primary: []owners.Owner{bradfitz}},
 			},
+			"",
 			&owners.Entry{
 				Primary: []owners.Owner{andybons, bradfitz},
 			},
@@ -381,6 +384,7 @@ func TestMergeOwnersEntries(t *testing.T) {
 				{Secondary: []owners.Owner{andybons}},
 				{Secondary: []owners.Owner{filippo}},
 			},
+			"",
 			&owners.Entry{
 				Secondary: []owners.Owner{andybons, filippo},
 			},
@@ -391,8 +395,29 @@ func TestMergeOwnersEntries(t *testing.T) {
 				{Primary: []owners.Owner{andybons, filippo}},
 				{Secondary: []owners.Owner{filippo}},
 			},
+			"",
 			&owners.Entry{
 				Primary: []owners.Owner{andybons, filippo},
+			},
+		},
+		{
+			"primary filter",
+			[]*owners.Entry{
+				{Primary: []owners.Owner{filippo, andybons}},
+			},
+			filippo.GerritEmail,
+			&owners.Entry{
+				Primary: []owners.Owner{andybons},
+			},
+		},
+		{
+			"secondary filter",
+			[]*owners.Entry{
+				{Secondary: []owners.Owner{filippo, andybons}},
+			},
+			filippo.GerritEmail,
+			&owners.Entry{
+				Secondary: []owners.Owner{andybons},
 			},
 		},
 	}
@@ -400,7 +425,7 @@ func TestMergeOwnersEntries(t *testing.T) {
 		return a.GitHubUsername < b.GitHubUsername
 	}
 	for _, tc := range testCases {
-		got := mergeOwnersEntries(tc.entries)
+		got := mergeOwnersEntries(tc.entries, tc.authorEmail)
 		if diff := cmp.Diff(got, tc.result, cmpopts.SortSlices(cmpFn)); diff != "" {
 			t.Errorf("%s: final entry results differ: (-got, +want)\n%s", tc.desc, diff)
 		}
