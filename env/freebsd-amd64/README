@@ -3,7 +3,7 @@ FreeBSD builder, booting up to run the buildlet.
 
 make.bash should be run on a Linux box with qemu and a few additional packages.
 on ubuntu 16.04 / debian 9 install:
-  apt-get install qemu-system-x86 sgabios expect genisoimage
+  apt-get install qemu-system-x86 qemu-utils sgabios expect genisoimage
 
 After it completes, it creates a file freebsd-amd64-gce101.tar.gz
 

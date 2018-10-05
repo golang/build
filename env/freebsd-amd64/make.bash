@@ -9,37 +9,39 @@
 # SSH is enabled, and a user gopher, password gopher, is created.
 
 # Only tested on Ubuntu 16.04.
-# Requires packages: qemu expect sgabios genisoimage
+# Requires packages: qemu qemu-img expect sgabios genisoimage
 
 set -e
 
 function download_image() {
-  local release_url=ftp://ftp.freebsd.org/pub/FreeBSD/releases/VM-IMAGES/${VERSION:?}-RELEASE/amd64/Latest
-  local img_filename=FreeBSD-${VERSION:?}-RELEASE-amd64${VERSION_TRAILER}.raw.xz
-  curl -O ${release_url}/${img_filename}
+  local img_dir=releases
+  [ ${IS_SNAPSHOT:-0} -eq 1 ] && img_dir=snapshots
+  local url=ftp://ftp.freebsd.org/pub/FreeBSD/${img_dir}/VM-IMAGES/${VERSION:?}/amd64/Latest
+  local img_filename=FreeBSD-${VERSION:?}-amd64${VERSION_TRAILER}.raw.xz
+  curl -O ${url}/${img_filename}
   echo "${SHA256}  ${img_filename}" | sha256sum -c -
-  xz -d FreeBSD-${VERSION:?}-RELEASE-amd64${VERSION_TRAILER}.raw.xz
+  xz -d FreeBSD-${VERSION:?}-amd64${VERSION_TRAILER}.raw.xz
 }
 
 case $1 in
 9.3)
-  readonly VERSION=9.3
+  readonly VERSION=9.3-RELEASE
   readonly VERSION_TRAILER="-20140711-r268512"
   readonly SHA256=4737218995ae056207c68f3105c0fbe655c32e8b76d2160ebfb1bba56dd5196f
 ;;
 
 10.3)
-  readonly VERSION=10.3
+  readonly VERSION=10.3-RELEASE
   readonly VERSION_TRAILER=
   readonly SHA256=1d710ba643bf6a8ce5bff5a9d69b1657ccff83dd1f2df711d9b4e02f9aab7d06
 ;;
 10.4)
-  readonly VERSION=10.4
+  readonly VERSION=10.4-RELEASE
   readonly VERSION_TRAILER=
   readonly SHA256=8d1ff92e74a70f1ec039a465467f19abd7892331403ef1d4952d271adddab625
 ;;
 11.0)
-  readonly VERSION=11.0
+  readonly VERSION=11.0-RELEASE
   readonly VERSION_TRAILER=
   readonly SHA256=f9f7fcac1acfe210979a72e0642a70fcf9c9381cc1884e966eac8381c724158c
   ;;
@@ -49,28 +51,35 @@ case $1 in
   readonly SHA256=233c6b269a29c1ce38bb4eb861251d1c74643846c1de937b8e31cc0316632bc0
 ;;
 11.2)
-  readonly VERSION=11.2
+  readonly VERSION=11.2-RELEASE
   readonly VERSION_TRAILER=
   readonly SHA256=d8638aecbb13bdc891e17187f3932fe477f5655846bdaad8fecd60614de9312c
 ;;
+12.0)
+  readonly VERSION=12.0-ALPHA8
+  readonly IS_SNAPSHOT=1
+  readonly VERSION_TRAILER=
+  readonly SHA256=11c69e6511e754a81b0b7c7c35b5fb4eee4c24a9231f77d494cb2e4ac0958576
+;;
 *)
   echo "Usage: $0 <version>"
-  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 10.4 11.0 11.1 11.2"
+  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 10.4 11.0 11.1 11.2 12.0"
   exit 1
 esac
 
-readonly IMAGE=freebsd-amd64-${VERSION/\./}.tar.gz
+IMAGE=freebsd-amd64-${VERSION/-RELEASE/}.tar.gz
+readonly IMAGE=${IMAGE/\./}
 
 if [ $(tput cols) -lt 80 ]; then
 	echo "Running qemu with curses display requires a window 80 columns or larger or expect(1) won't work correctly."
 	exit 1
 fi
 
-if ! [ -e FreeBSD-${VERSION:?}-RELEASE-amd64.raw ]; then
+if ! [ -e FreeBSD-${VERSION:?}-amd64.raw ]; then
   download_image
 fi
 
-cp FreeBSD-${VERSION:?}-RELEASE-amd64${VERSION_TRAILER}.raw disk.raw
+qemu-img create -f qcow2 -b FreeBSD-${VERSION:?}-amd64${VERSION_TRAILER}.raw disk.qcow2
 
 mkdir -p iso/boot iso/etc iso/usr/local/etc/rc.d
 cp loader.conf iso/boot
@@ -101,11 +110,11 @@ genisoimage -r -o config.iso iso/
 # TODO(wathiede): remove sleep
 sleep 2
 
-expect <<'EOF'
+env DOWNLOAD_UPDATES=$((1-IS_SNAPSHOT)) expect <<'EOF'
 set prompt "root@.*:~ #[ ]"
 set timeout -1
 
-spawn qemu-system-x86_64 -nographic -option-rom sgabios.bin -m 1G -drive if=virtio,file=disk.raw,format=raw,cache=none -cdrom config.iso -net nic,model=virtio -net user
+spawn qemu-system-x86_64 -nographic -option-rom sgabios.bin -m 1G -drive if=virtio,file=disk.qcow2,format=qcow2,cache=none -cdrom config.iso -net nic,model=virtio -net user
 set qemu_pid $spawn_id
 
 # boot with serial console enabled
@@ -144,21 +153,29 @@ expect -re $prompt
 sleep 1
 set timeout -1
 # download updates
-send "env PAGER=cat freebsd-update fetch --not-running-from-cron\n"
-expect {
-    "The following files will be updated as part of updating to" {
-        sleep 2
-        expect -re $prompt
-        send "freebsd-update install\n"
-        expect "Installing updates... done."
-        sleep 1
-        send "\n"
-    }
+if {$::env(DOWNLOAD_UPDATES)} {
+    send "env PAGER=cat freebsd-update fetch --not-running-from-cron\n"
 
-    "No updates needed to update system to" {
-        sleep 1
-        send "\n"
+    expect {
+        "The following files will be updated as part of updating to" {
+            sleep 2
+            expect -re $prompt
+            send "freebsd-update install\n"
+            expect "Installing updates... done."
+            sleep 1
+            send "\n"
+        }
+
+        "No updates needed to update system to" {
+            sleep 1
+            send "\n"
+        }
+
+        "No mirrors remaining, giving up." { exit 3 }
     }
+} else {
+    puts "skipping updates"
+    send "\n"
 }
 
 expect -re $prompt
@@ -182,6 +199,7 @@ EOF
 
 # Create Compute Engine disk image.
 echo "Archiving disk.raw as ${IMAGE:?}... (this may take a while)"
+qemu-img convert -f qcow2 -O raw -t none -T none disk.qcow2 disk.raw
 tar -Szcf ${IMAGE:?} disk.raw
 
 echo "Done. GCE image is ${IMAGE:?}"
