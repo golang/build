@@ -29,7 +29,7 @@ To list the subcommands, run "gomote" without arguments:
     list       list active buildlets
     ls         list the contents of a directory on a buildlet
     ping       test whether a buildlet is alive and reachable
-    push       sync the repo of your pwd to the buildlet
+    push       sync your GOROOT directory to the buildlet
     put        put files on a buildlet
     put14      put Go 1.4 in place
     puttar     extract a tar.gz to a buildlet
@@ -145,7 +145,7 @@ func registerCommands() {
 	registerCommand("ls", "list the contents of a directory on a buildlet", ls)
 	registerCommand("list", "list active buildlets", list)
 	registerCommand("ping", "test whether a buildlet is alive and reachable ", ping)
-	registerCommand("push", "sync the repo of your pwd to the buildlet", push)
+	registerCommand("push", "sync your GOROOT directory to the buildlet", push)
 	registerCommand("put", "put files on a buildlet", put)
 	registerCommand("put14", "put Go 1.4 in place", put14)
 	registerCommand("puttar", "extract a tar.gz to a buildlet", putTar)
