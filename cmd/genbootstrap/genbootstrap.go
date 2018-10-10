@@ -14,6 +14,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -24,17 +25,21 @@ import (
 var skipBuild = flag.Bool("skip_build", false, "skip bootstrap.bash step; useful during development of cleaning code")
 
 func usage() {
-	log.Fatalf("Usage: genbootstrap GOOS/GOARCH")
+	fmt.Fprintln(os.Stderr, "Usage: genbootstrap GOOS/GOARCH")
+	flag.PrintDefaults()
 }
 
 func main() {
+	flag.Usage = usage
 	flag.Parse()
 	if flag.NArg() != 1 {
-		usage()
+		flag.Usage()
+		os.Exit(2)
 	}
 	f := strings.Split(flag.Arg(0), "/")
 	if len(f) != 2 {
-		usage()
+		flag.Usage()
+		os.Exit(2)
 	}
 	goos, goarch := f[0], f[1]
 	if os.Getenv("GOROOT") == "" {
