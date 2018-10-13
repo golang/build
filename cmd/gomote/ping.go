@@ -13,7 +13,7 @@ import (
 func ping(args []string) error {
 	fs := flag.NewFlagSet("ping", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "create usage: gomote ping <instance>")
+		fmt.Fprintln(os.Stderr, "ping usage: gomote ping <instance>")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}

@@ -18,7 +18,7 @@ import (
 func run(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "create usage: gomote run [run-opts] <instance> <cmd> [args...]")
+		fmt.Fprintln(os.Stderr, "run usage: gomote run [run-opts] <instance> <cmd> [args...]")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}

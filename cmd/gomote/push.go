@@ -29,7 +29,7 @@ func push(args []string) error {
 	var dryRun bool
 	fs.BoolVar(&dryRun, "dry-run", false, "print what would be done only")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "create usage: gomote push <instance>")
+		fmt.Fprintln(os.Stderr, "push usage: gomote push <instance>")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}

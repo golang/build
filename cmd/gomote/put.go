@@ -22,7 +22,7 @@ import (
 func putTar(args []string) error {
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "create usage: gomote puttar [put-opts] <buildlet-name> [tar.gz file or '-' for stdin]")
+		fmt.Fprintln(os.Stderr, "puttar usage: gomote puttar [put-opts] <buildlet-name> [tar.gz file or '-' for stdin]")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
@@ -90,7 +90,7 @@ func putTar(args []string) error {
 func put14(args []string) error {
 	fs := flag.NewFlagSet("put14", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "create usage: gomote put14 <buildlet-name>")
+		fmt.Fprintln(os.Stderr, "put14 usage: gomote put14 <buildlet-name>")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
@@ -115,7 +115,7 @@ func put14(args []string) error {
 func put(args []string) error {
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "create usage: gomote put [put-opts] <buildlet-name> <source or '-' for stdin> [destination]")
+		fmt.Fprintln(os.Stderr, "put usage: gomote put [put-opts] <buildlet-name> <source or '-' for stdin> [destination]")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}

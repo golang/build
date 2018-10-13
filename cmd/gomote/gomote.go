@@ -45,7 +45,7 @@ To list all the builder types available, run "create" with no arguments:
 The "gomote run" command has many of its own flags:
 
   $ gomote run -h
-  create usage: gomote run [run-opts] <instance> <cmd> [args...]
+  run usage: gomote run [run-opts] <instance> <cmd> [args...]
     -builderenv string
           Optional alternate builder to act like. Must share the same
           underlying buildlet host type, or it's an error. For
