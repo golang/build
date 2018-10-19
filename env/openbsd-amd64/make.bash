@@ -50,6 +50,7 @@ trap cleanup EXIT INT
 # Currently we download them from the network during the install process.
 
 # Create custom siteXX.tgz set.
+PKG_ADD_OPTIONS=""
 if [[ "$SNAPSHOT" = true ]]; then
   PKG_ADD_OPTIONS="-D snap"
 fi
