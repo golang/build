@@ -1058,9 +1058,9 @@ type trySet struct {
 
 type trySetState struct {
 	remain       int
-	failed       []string // build names
+	failed       []string // builder names, with optional " ($branch)" suffix
 	builds       []*buildStatus
-	benchResults []string // builder names
+	benchResults []string // builder names, with optional " ($branch)" suffix
 }
 
 func (ts trySetState) clone() trySetState {
@@ -1100,33 +1100,66 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		tryID:  "T" + randHex(9),
 		trySetState: trySetState{
 			remain: len(builders),
-			builds: make([]*buildStatus, len(builders)),
+			builds: make([]*buildStatus, 0, len(builders)),
 		},
 	}
 
-	// For now, for subrepos, we only support building one repo.
-	// TODO: Issue 17626: test subrepos against Go master and past two
-	// releases. But to save resources, we'll probably only want
-	// to do that for linux-amd64 (the Kubernetes cheap builder) to
-	// not blow up usage? Or maybe it doesn't matter.
+	// GoCommit is non-empty for x/* repos (aka "subrepos"). It
+	// is the Go revision to use to build & test the x/* repo
+	// with. The first element is the master branch. We test the
+	// master branch against all the normal builders configured to
+	// do subrepos (subTryBuilders above). Any GoCommit values past
+	// the first are for older release branches, but we use a limited
+	// subset of builders for those.
 	var goRev string
 	if len(work.GoCommit) > 0 {
 		goRev = work.GoCommit[0]
 	}
 
+	addBuilderToSet := func(bs *buildStatus, brev buildgo.BuilderRev) {
+		bs.trySet = ts
+		status[brev] = bs
+
+		idx := len(ts.builds)
+		ts.builds = append(ts.builds, bs)
+		go bs.start() // acquires statusMu itself, so in a goroutine
+		go ts.awaitTryBuild(idx, bs, brev)
+	}
+
 	go ts.notifyStarting()
-	for i, bconf := range builders {
+	for _, bconf := range builders {
 		brev := tryKeyToBuilderRev(bconf.Name, key, goRev)
 		bs, err := newBuild(brev)
 		if err != nil {
 			log.Printf("can't create build for %q: %v", brev, err)
 			continue
 		}
-		bs.trySet = ts
-		status[brev] = bs
-		ts.builds[i] = bs
-		go bs.start() // acquires statusMu itself, so in a goroutine
-		go ts.awaitTryBuild(i, bconf, bs, brev)
+		addBuilderToSet(bs, brev)
+	}
+
+	// Defensive check that the input is well-formed and each GoCommit
+	// has a GoBranch.
+	if len(work.GoBranch) < len(work.GoCommit) {
+		log.Printf("WARNING: len(GoBranch) of %d != len(GoCommit) of %d", len(work.GoBranch), len(work.GoCommit))
+		work.GoCommit = work.GoCommit[:len(work.GoBranch)]
+	}
+
+	// If there's more than one GoCommit, that means this is an x/* repo
+	// and we're testing against previous releases of Go.
+	for i, goRev := range work.GoCommit {
+		if i == 0 {
+			// Skip the i==0 element, which is handled above.
+			continue
+		}
+		branch := work.GoBranch[i]
+		brev := tryKeyToBuilderRev("linux-amd64", key, goRev)
+		bs, err := newBuild(brev)
+		if err != nil {
+			log.Printf("can't create build for %q: %v", brev, err)
+			continue
+		}
+		bs.goBranch = branch
+		addBuilderToSet(bs, brev)
 	}
 	return ts
 }
@@ -1184,7 +1217,7 @@ func (ts *trySet) notifyStarting() {
 //
 // If the build fails without getting to the end, it sleeps and
 // reschedules it, as long as it's still wanted.
-func (ts *trySet) awaitTryBuild(idx int, bconf dashboard.BuildConfig, bs *buildStatus, brev buildgo.BuilderRev) {
+func (ts *trySet) awaitTryBuild(idx int, bs *buildStatus, brev buildgo.BuilderRev) {
 	for {
 	WaitCh:
 		for {
@@ -1202,7 +1235,7 @@ func (ts *trySet) awaitTryBuild(idx int, bconf dashboard.BuildConfig, bs *buildS
 		}
 
 		if bs.hasEvent(eventDone) || bs.hasEvent(eventSkipBuildMissingDep) {
-			ts.noteBuildComplete(bconf, bs)
+			ts.noteBuildComplete(bs)
 			return
 		}
 
@@ -1241,7 +1274,7 @@ func (ts *trySet) cancelBuilds() {
 	// TODO(bradfitz): implement
 }
 
-func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus) {
+func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 	bs.mu.Lock()
 	succeeded := bs.succeeded
 	var buildLog string
@@ -1253,12 +1286,12 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 
 	ts.mu.Lock()
 	if hasBenchResults {
-		ts.benchResults = append(ts.benchResults, bs.Name)
+		ts.benchResults = append(ts.benchResults, bs.NameAndBranch())
 	}
 	ts.remain--
 	remain := ts.remain
 	if !succeeded {
-		ts.failed = append(ts.failed, bconf.Name)
+		ts.failed = append(ts.failed, bs.NameAndBranch())
 	}
 	numFail := len(ts.failed)
 	benchResults := append([]string(nil), ts.benchResults...)
@@ -1282,7 +1315,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 		bs.failURL = failLogURL
 		bs.mu.Unlock()
 		ts.mu.Lock()
-		fmt.Fprintf(&ts.errMsg, "Failed on %s: %s\n", bs.Name, failLogURL)
+		fmt.Fprintf(&ts.errMsg, "Failed on %s: %s\n", bs.NameAndBranch(), failLogURL)
 		ts.mu.Unlock()
 
 		if numFail == 1 && remain > 0 {
@@ -1292,7 +1325,7 @@ func (ts *trySet) noteBuildComplete(bconf dashboard.BuildConfig, bs *buildStatus
 						"This change failed on %s:\n"+
 						"See %s\n\n"+
 						"Consult https://build.golang.org/ to see whether it's a new failure. Other builds still in progress; subsequent failure notices suppressed until final report.",
-					bs.Name, failLogURL),
+					bs.NameAndBranch(), failLogURL),
 			}); err != nil {
 				log.Printf("Failed to call Gerrit: %v", err)
 				return
@@ -3251,6 +3284,7 @@ type buildStatus struct {
 	// Immutable:
 	buildgo.BuilderRev
 	buildID   string // "B" + 9 random hex
+	goBranch  string // non-empty for subrepo trybots if not go master branch
 	conf      dashboard.BuildConfig
 	startTime time.Time // actually time of newBuild (~same thing); TODO(bradfitz): rename this createTime
 	trySet    *trySet   // or nil
@@ -3273,6 +3307,13 @@ type buildStatus struct {
 	startedPinging  bool             // started pinging the go dashboard
 	events          []eventAndTime
 	useSnapshotMemo *bool // if non-nil, memoized result of useSnapshot
+}
+
+func (st *buildStatus) NameAndBranch() string {
+	if st.goBranch != "" {
+		return fmt.Sprintf("%s (go branch %s)", st.Name, st.goBranch)
+	}
+	return st.Name
 }
 
 func (st *buildStatus) setDone(succeeded bool) {
