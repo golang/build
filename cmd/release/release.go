@@ -236,16 +236,6 @@ var builds = []*Build{
 	},
 }
 
-const (
-	toolsRepo = "golang.org/x/tools"
-	tourRepo  = "golang.org/x/tour"
-)
-
-var toolPaths = []string{
-	"golang.org/x/tools/cmd/godoc",
-	"golang.org/x/tour/gotour",
-}
-
 var preBuildCleanFiles = []string{
 	".gitattributes",
 	".github",
@@ -309,6 +299,9 @@ func (b *Build) make() error {
 		{"net", *netRev},
 	} {
 		if b.Source && r.repo != "go" {
+			continue
+		}
+		if r.repo == "tour" && !versionIncludesTour(*version) {
 			continue
 		}
 		dir := goDir
@@ -426,6 +419,12 @@ func (b *Build) make() error {
 		}
 	}
 
+	toolPaths := []string{
+		"golang.org/x/tools/cmd/godoc",
+	}
+	if versionIncludesTour(*version) {
+		toolPaths = append(toolPaths, "golang.org/x/tour")
+	}
 	b.logf("Building %v.", strings.Join(toolPaths, ", "))
 	if err := runGo(append([]string{"install"}, toolPaths...)...); err != nil {
 		return err
@@ -726,4 +725,14 @@ func setGOARCH(env []string, goarch string) []string {
 		return env
 	}
 	return append(env, wantKV)
+}
+
+// versionIncludesTour reports whether the provided Go version (of the
+// form "go1.N" or "go1.N.M" includes the Go tour binary.
+func versionIncludesTour(goVer string) bool {
+	// We don't do releases of Go 1.9 and earlier, so this only
+	// needs to recognize the two current past releases. From Go
+	// 1.12 and on, we won't ship the tour binary (see CL 131156).
+	return strings.HasPrefix(goVer, "go1.10.") ||
+		strings.HasPrefix(goVer, "go1.11.")
 }

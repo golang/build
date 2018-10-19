@@ -131,10 +131,10 @@ func tour() error {
 		return err
 	}
 
-	// Copy gotour binary to tool directory as "tour"; invoked as "go tool tour".
+	// Copy the tour binary to the tool directory, invoked as "go tool tour".
 	return cp(
 		filepath.FromSlash("go/pkg/tool/"+runtime.GOOS+"_"+runtime.GOARCH+"/tour"+ext()),
-		filepath.FromSlash("gopath/bin/"+archDir()+"/gotour"+ext()),
+		filepath.FromSlash("gopath/bin/"+archDir()+"/tour"+ext()),
 	)
 }
 
