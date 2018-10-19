@@ -1650,7 +1650,7 @@ func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 				return nil
 			}
 
-			changeURL := fmt.Sprintf("https://go-review.googlesource.com/c/%s/+/%d\n", gp.Project(), cl.Number)
+			changeURL := fmt.Sprintf("https://go-review.googlesource.com/c/%s/+/%d", gp.Project(), cl.Number)
 			log.Printf("No reviewers or cc: %s", changeURL)
 			files, err := b.gerrit.ListFiles(ctx, gc.ID(), cl.Commit.Hash.String())
 			if err != nil {
