@@ -262,3 +262,79 @@ func TestTimeStampUnmarshalJson(t *testing.T) {
 		t.Errorf("expected %v, got %v", expected, ts.Time())
 	}
 }
+
+// taken from https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#list-tags
+var exampleProjectTagsResponse = []byte(`  )]}'
+  [
+    {
+      "ref": "refs/tags/v1.0",
+      "revision": "49ce77fdcfd3398dc0dedbe016d1a425fd52d666",
+      "object": "1624f5af8ae89148d1a3730df8c290413e3dcf30",
+      "message": "Annotated tag",
+      "tagger": {
+        "name": "David Pursehouse",
+        "email": "david.pursehouse@sonymobile.com",
+        "date": "2014-10-06 07:35:03.000000000",
+        "tz": 540
+      }
+    },
+    {
+      "ref": "refs/tags/v2.0",
+      "revision": "1624f5af8ae89148d1a3730df8c290413e3dcf30"
+    }
+  ]
+`)
+
+func TestGetProjectTags(t *testing.T) {
+	hitServer := false
+	path := ""
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitServer = true
+		path = r.URL.Path
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		w.WriteHeader(200)
+		w.Write(exampleProjectTagsResponse)
+	}))
+	defer s.Close()
+	c := NewClient(s.URL, NoAuth)
+	tags, err := c.GetProjectTags(context.Background(), "go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hitServer {
+		t.Errorf("expected to hit test server, didn't")
+	}
+	if path != "/projects/go/tags/" {
+		t.Errorf("expected Path to be '/projects/go/tags/', got %s", path)
+	}
+	expectedTags := map[string]TagInfo{
+		"refs/tags/v1.0": TagInfo{
+			Ref:      "refs/tags/v1.0",
+			Revision: "49ce77fdcfd3398dc0dedbe016d1a425fd52d666",
+			Object:   "1624f5af8ae89148d1a3730df8c290413e3dcf30",
+			Message:  "Annotated tag",
+			Tagger: &GitPersonInfo{
+				Name:     "David Pursehouse",
+				Email:    "david.pursehouse@sonymobile.com",
+				Date:     TimeStamp(time.Date(2014, 10, 6, 7, 35, 3, 0, time.UTC)),
+				TZOffset: 540,
+			},
+		},
+		"refs/tags/v2.0": TagInfo{
+			Ref:      "refs/tags/v2.0",
+			Revision: "1624f5af8ae89148d1a3730df8c290413e3dcf30",
+		},
+	}
+	if len(tags) != len(expectedTags) {
+		t.Errorf("expected %d tags, got %d", len(expectedTags), len(tags))
+	}
+	for ref, tag := range tags {
+		expectedTag, found := expectedTags[ref]
+		if !found {
+			t.Errorf("unexpected tag %q", ref)
+		}
+		if !tag.Equal(&expectedTag) {
+			t.Errorf("tags don't match (expected %#v and got %#v)", expectedTag, tag)
+		}
+	}
+}

@@ -307,6 +307,17 @@ type GitPersonInfo struct {
 	TZOffset int       `json:"tz"`
 }
 
+func (gpi *GitPersonInfo) Equal(v *GitPersonInfo) bool {
+	if gpi == nil {
+		if gpi != v {
+			return false
+		}
+		return true
+	}
+	return gpi.Name == v.Name && gpi.Email == v.Email && gpi.Date == v.Date &&
+		gpi.TZOffset == v.TZOffset
+}
+
 type FileInfo struct {
 	Status        string `json:"status"`
 	Binary        bool   `json:"binary"`
@@ -647,6 +658,70 @@ func (c *Client) GetProjectBranches(ctx context.Context, name string) (map[strin
 	m := map[string]BranchInfo{}
 	for _, bi := range res {
 		m[bi.Ref] = bi
+	}
+	return m, nil
+}
+
+// WebLinkInfo is information about a web link.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#web-link-info
+type WebLinkInfo struct {
+	Name     string `json:"name"`
+	URL      string `json:"url"`
+	ImageURL string `json:"image_url"`
+}
+
+func (wli *WebLinkInfo) Equal(v *WebLinkInfo) bool {
+	if wli == nil || v == nil {
+		return false
+	}
+	return wli.Name == v.Name && wli.URL == v.URL && wli.ImageURL == v.ImageURL
+}
+
+// TagInfo is information about a tag.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#tag-info
+type TagInfo struct {
+	Ref       string         `json:"ref"`
+	Revision  string         `json:"revision"`
+	Object    string         `json:"object,omitempty"`
+	Message   string         `json:"message,omitempty"`
+	Tagger    *GitPersonInfo `json:"tagger,omitempty"`
+	Created   TimeStamp      `json:"created,omitempty"`
+	CanDelete bool           `json:"can_delete"`
+	WebLinks  []WebLinkInfo  `json:"web_links,omitempty"`
+}
+
+func (ti *TagInfo) Equal(v *TagInfo) bool {
+	if ti == nil || v == nil {
+		return false
+	}
+	if ti.Ref != v.Ref || ti.Revision != v.Revision || ti.Object != v.Object ||
+		ti.Message != v.Message || ti.Created != v.Created || ti.CanDelete != v.CanDelete {
+		return false
+	}
+	if !ti.Tagger.Equal(v.Tagger) {
+		return false
+	}
+	if len(ti.WebLinks) != len(v.WebLinks) {
+		return false
+	}
+	for i := range ti.WebLinks {
+		if !ti.WebLinks[i].Equal(&v.WebLinks[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// GetProjectTags returns a project's tags.
+func (c *Client) GetProjectTags(ctx context.Context, name string) (map[string]TagInfo, error) {
+	var res []TagInfo
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/tags/", name))
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]TagInfo{}
+	for _, ti := range res {
+		m[ti.Ref] = ti
 	}
 	return m, nil
 }
