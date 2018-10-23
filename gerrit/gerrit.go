@@ -314,7 +314,7 @@ func (gpi *GitPersonInfo) Equal(v *GitPersonInfo) bool {
 		}
 		return true
 	}
-	return gpi.Name == v.Name && gpi.Email == v.Email && gpi.Date == v.Date &&
+	return gpi.Name == v.Name && gpi.Email == v.Email && gpi.Date.Equal(v.Date) &&
 		gpi.TZOffset == v.TZOffset
 }
 
@@ -648,7 +648,8 @@ type BranchInfo struct {
 	CanDelete bool   `json:"can_delete"`
 }
 
-// GetProjectBranches returns a project's branches.
+// GetProjectBranches returns the branches for the project name. The branches are stored in a map
+// keyed by reference.
 func (c *Client) GetProjectBranches(ctx context.Context, name string) (map[string]BranchInfo, error) {
 	var res []BranchInfo
 	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/", name))
@@ -695,7 +696,7 @@ func (ti *TagInfo) Equal(v *TagInfo) bool {
 		return false
 	}
 	if ti.Ref != v.Ref || ti.Revision != v.Revision || ti.Object != v.Object ||
-		ti.Message != v.Message || ti.Created != v.Created || ti.CanDelete != v.CanDelete {
+		ti.Message != v.Message || !ti.Created.Equal(v.Created) || ti.CanDelete != v.CanDelete {
 		return false
 	}
 	if !ti.Tagger.Equal(v.Tagger) {
@@ -712,7 +713,8 @@ func (ti *TagInfo) Equal(v *TagInfo) bool {
 	return true
 }
 
-// GetProjectTags returns a project's tags.
+// GetProjectTags returns the tags for the project name. The tags are stored in a map keyed by
+// reference.
 func (c *Client) GetProjectTags(ctx context.Context, name string) (map[string]TagInfo, error) {
 	var res []TagInfo
 	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/tags/", name))
@@ -787,6 +789,10 @@ func (c *Client) GetProjects(ctx context.Context, branch string) (map[string]*Pr
 }
 
 type TimeStamp time.Time
+
+func (ts TimeStamp) Equal(v TimeStamp) bool {
+	return ts.Time().Equal(v.Time())
+}
 
 // Gerrit's timestamp layout is like time.RFC3339Nano, but with a space instead of the "T",
 // and without a timezone (it's always in UTC).
