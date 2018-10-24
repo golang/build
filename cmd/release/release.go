@@ -246,11 +246,6 @@ var preBuildCleanFiles = []string{
 	"misc/makerelease",
 }
 
-var postBuildCleanFiles = []string{
-	"VERSION.cache",
-	"pkg/bootstrap",
-}
-
 func (b *Build) buildlet() (*buildlet.Client, error) {
 	b.logf("Creating buildlet.")
 	bc, err := coordClient.CreateBuildlet(b.Builder)
@@ -428,6 +423,29 @@ func (b *Build) make() error {
 	b.logf("Building %v.", strings.Join(toolPaths, ", "))
 	if err := runGo(append([]string{"install"}, toolPaths...)...); err != nil {
 		return err
+	}
+
+	// postBuildCleanFiles are the list of files to remove in the go/ directory
+	// after things have been built.
+	postBuildCleanFiles := []string{
+		"VERSION.cache",
+		"pkg/bootstrap",
+	}
+
+	// Remove race detector *.syso files for other GOOS/GOARCHes (except for the source release).
+	if !b.Source {
+		okayRace := fmt.Sprintf("race_%s_%s.syso", b.OS, b.Arch)
+		err := client.ListDir(".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
+			name := strings.TrimPrefix(ent.Name(), "go/")
+			if strings.HasPrefix(name, "src/runtime/race/race_") &&
+				strings.HasSuffix(name, ".syso") &&
+				path.Base(name) != okayRace {
+				postBuildCleanFiles = append(postBuildCleanFiles, name)
+			}
+		})
+		if err != nil {
+			return fmt.Errorf("enumerating files to clean race syso files: %v", err)
+		}
 	}
 
 	b.logf("Cleaning goroot (post-build).")
