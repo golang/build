@@ -43,7 +43,6 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/build/buildlet"
-	"golang.org/x/build/envutil"
 	"golang.org/x/build/internal/httpdl"
 	"golang.org/x/build/pargzip"
 )
@@ -73,7 +72,8 @@ var (
 //   15: ssh support
 //   16: make macstadium builders always haltEntireOS
 //   17: make macstadium halts use sudo
-const buildletVersion = 17
+//   18: set TMPDIR and GOCACHE
+const buildletVersion = 18
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -98,6 +98,13 @@ var (
 	osHalt                   func()
 	configureSerialLogOutput func()
 	setOSRlimit              func() error
+)
+
+// If non-empty, the $TMPDIR and $GOCACHE environment variables to use
+// for child processes.
+var (
+	processTmpDirEnv  string
+	processGoCacheEnv string
 )
 
 func main() {
@@ -133,8 +140,8 @@ func main() {
 		*rebootOnHalt = true
 	}
 
-	// Optimize emphemeral filesystems. Prefer speed over safety, since these machines
-	// will be gone soon.
+	// Optimize emphemeral filesystems. Prefer speed over safety,
+	// since these VMs only last for the duration of one build.
 	switch runtime.GOOS {
 	case "openbsd", "freebsd", "netbsd":
 		makeBSDFilesystemFast()
@@ -197,6 +204,15 @@ func main() {
 	if _, err := os.Lstat(*workDir); err != nil {
 		log.Fatalf("invalid --workdir %q: %v", *workDir, err)
 	}
+
+	// Set up and clean $TMPDIR and $GOCACHE directories.
+	if runtime.GOOS != "windows" && runtime.GOOS != "plan9" {
+		processTmpDirEnv = filepath.Join(*workDir, "tmp")
+		processGoCacheEnv = filepath.Join(*workDir, "gocache")
+		removeAllAndMkdir(processTmpDirEnv)
+		removeAllAndMkdir(processGoCacheEnv)
+	}
+
 	initGorootBootstrap()
 
 	http.HandleFunc("/", handleRoot)
@@ -872,29 +888,17 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 
 	env := append(baseEnv(goarch), r.PostForm["env"]...)
 
-	// Set TMPDIR in the child process and clean up after it.
-	// Do this at least for Solaris (golang.org/issue/22798)
-	// because Solaris reuses its disk per run (for now). The other builders
-	// generally run in their own containers/VMs and thus don't leak.
-	// Ideally Solaris would do the same and we wouldn't need this.
-	if builder := getEnv(env, "GO_BUILDER_NAME"); builder == "solaris-amd64-smartosbuildlet" {
-		childTmp, err := ioutil.TempDir("", "buildlet-exec")
-		if err != nil {
-			// Not critical. Not worth dying over. (at least for now)
-			log.Printf("failed to create a temp directory: %v", err)
-		} else {
-			env = append(env, "TMPDIR="+childTmp)
-			defer os.RemoveAll(childTmp)
-		}
+	if v := processTmpDirEnv; v != "" {
+		env = append(env, "TMPDIR="+v)
 	}
-
-	env = envutil.Dedup(runtime.GOOS == "windows", env)
+	if v := processGoCacheEnv; v != "" {
+		env = append(env, "GOCACHE="+v)
+	}
 
 	// Prefer buildlet process's inherited GOROOT_BOOTSTRAP if
 	// there was one and the one we're about to use doesn't exist.
 	if v := getEnv(env, "GOROOT_BOOTSTRAP"); v != "" && inheritedGorootBootstrap != "" && pathNotExist(v) {
-		env = envutil.Dedup(runtime.GOOS == "windows", append(env,
-			"GOROOT_BOOTSTRAP="+inheritedGorootBootstrap))
+		env = append(env, "GOROOT_BOOTSTRAP="+inheritedGorootBootstrap)
 	}
 	env = setPathEnv(env, r.PostForm["path"], *workDir)
 
@@ -1133,7 +1137,6 @@ func doHalt() {
 			log.Printf("Error running reboot: %v", err)
 		}
 		os.Exit(0)
-
 	}
 	if !*haltEntireOS {
 		log.Printf("Ending buildlet process due to halt.")
@@ -1749,5 +1752,16 @@ func initBaseUnixEnv() {
 	}
 	if os.Getenv("HOME") == "" {
 		os.Setenv("HOME", "/root")
+	}
+}
+
+// removeAllAndMkdir calls os.RemoveAll and then os.Mkdir on the given
+// dir, failing the process if either step fails.
+func removeAllAndMkdir(dir string) {
+	if err := os.RemoveAll(dir); err != nil {
+		log.Fatal(err)
+	}
+	if err := os.Mkdir(dir, 0755); err != nil {
+		log.Fatal(err)
 	}
 }
