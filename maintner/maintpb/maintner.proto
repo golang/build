@@ -73,6 +73,11 @@ message GithubIssueMutation {
 
   repeated GithubIssueEvent event = 26;  // new events to add
   GithubIssueSyncStatus event_status = 27;
+
+  repeated GithubReview review = 29;  // new reviews to add
+  GithubIssueSyncStatus review_status = 30;
+
+  // Next tag: 31
 }
 
 // BoolChange represents a change to a boolean value.
@@ -158,6 +163,27 @@ message GithubCommit {
   string owner = 1;     // "golang"
   string repo = 2;      // "go"
   string commit_id = 3; // "0beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33"
+}
+
+// Contents of a pull request review - when someone
+// comments, requests changes, or approves changes
+// on a pull request. See
+// https://developer.github.com/v3/pulls/reviews/ for more information.
+message GithubReview {
+  // Required:
+  int64 id = 1;
+
+  int64 actor_id = 2;
+  google.protobuf.Timestamp created = 3;  // time of the event
+  string body = 4;                        // body of the review comment
+  string state = 5;  // COMMENTED, APPROVED, CHANGES_REQUESTED
+  string commit_id = 6;
+  string actor_association = 7;
+
+  // other_json is usually empty.
+  bytes other_json = 8;
+
+  // Next tag: 9
 }
 
 // GithubIssueSyncStatus notes where syncing is at for comments
