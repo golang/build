@@ -4,17 +4,7 @@
 
 // The go1.8rc3 command runs the go command from go1.8rc3.
 //
-// To install, run:
-//
-//     $ go get golang.org/x/build/version/go1.8rc3
-//     $ go1.8rc3 download
-//
-// And then use the go1.8rc3 command as if it were your normal go
-// command.
-//
-// See the release notes at https://beta.golang.org/doc/go1.8
-//
-// File bugs at https://golang.org/issues/new
+// Deprecated: Use https://godoc.org/golang.org/dl/go1.8rc3 instead.
 package main
 
 import "golang.org/x/build/version"

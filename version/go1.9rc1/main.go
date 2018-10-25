@@ -4,17 +4,7 @@
 
 // The go1.9rc1 command runs the go command from go1.9rc1.
 //
-// To install, run:
-//
-//     $ go get golang.org/x/build/version/go1.9rc1
-//     $ go1.9rc1 download
-//
-// And then use the go1.9rc1 command as if it were your normal go
-// command.
-//
-// See the release notes at https://tip.golang.org/doc/go1.9
-//
-// File bugs at https://golang.org/issues/new
+// Deprecated: Use https://godoc.org/golang.org/dl/go1.9rc1 instead.
 package main
 
 import "golang.org/x/build/version"

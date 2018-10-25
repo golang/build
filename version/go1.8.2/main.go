@@ -4,17 +4,7 @@
 
 // The go1.8.2 command runs the go command from go1.8.2.
 //
-// To install, run:
-//
-//     $ go get golang.org/x/build/version/go1.8.2
-//     $ go1.8.2 download
-//
-// And then use the go1.8.2 command as if it were your normal go
-// command.
-//
-// See the release notes at https://golang.org/doc/go1.8
-//
-// File bugs at https://golang.org/issues/new
+// Deprecated: Use https://godoc.org/golang.org/dl/go1.8.2 instead.
 package main
 
 import "golang.org/x/build/version"

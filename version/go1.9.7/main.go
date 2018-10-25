@@ -4,17 +4,7 @@
 
 // The go1.9.7 command runs the go command from go1.9.7.
 //
-// To install, run:
-//
-//     $ go get golang.org/x/build/version/go1.9.7
-//     $ go1.9.7 download
-//
-// And then use the go1.9.7 command as if it were your normal go
-// command.
-//
-// See the release notes at https://golang.org/doc/go1.9.7
-//
-// File bugs at https://golang.org/issues/new
+// Deprecated: Use https://godoc.org/golang.org/dl/go1.9.7 instead.
 package main
 
 import "golang.org/x/build/version"
