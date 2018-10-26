@@ -147,11 +147,11 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-amd64-64": &HostConfig{
-		VMImage:            "openbsd-amd64-64",
+		VMImage:            "openbsd-amd64-64-v2",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64-64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-64.tar.gz",
-		Notes:              "OpenBSD 6.4; GCE VM is built from script in build/env/openbsd-amd64",
+		Notes:              "OpenBSD 6.4 with hw.smt=1; GCE VM is built from script in build/env/openbsd-amd64",
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-386-64": &HostConfig{

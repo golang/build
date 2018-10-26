@@ -37,7 +37,7 @@ function cleanup() {
 	rm -f boot.conf
 	rm -f disk.raw
 	rm -f disklabel.template
-	rm -f etc/{installurl,rc.local}
+	rm -f etc/{installurl,rc.local,sysctl.conf}
 	rm -f install.site
 	rm -f random.seed
 	rm -f site${RELNO}.tgz
@@ -91,8 +91,11 @@ cat >etc/rc.local <<EOF
   )&
 )
 EOF
+cat >etc/sysctl.conf <<EOF
+hw.smt=1
+EOF
 chmod +x install.site
-tar -zcvf site${RELNO}.tgz install.site etc/{installurl,rc.local}
+tar -zcvf site${RELNO}.tgz install.site etc/{installurl,rc.local,sysctl.conf}
 
 # Autoinstall script.
 cat >auto_install.conf <<EOF
