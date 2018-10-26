@@ -50,7 +50,7 @@ func list(args []string) error {
 // As a special case, if name contains '@', the name is expected to be
 // of the form <build-config-name>@ip[:port]. For example,
 // "windows-amd64-race@10.0.0.1".
-func clientAndConf(name string) (bc *buildlet.Client, conf dashboard.BuildConfig, err error) {
+func clientAndConf(name string) (bc *buildlet.Client, conf *dashboard.BuildConfig, err error) {
 	var ok bool
 
 	if strings.Contains(name, "@") {

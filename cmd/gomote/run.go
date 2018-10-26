@@ -42,7 +42,7 @@ func run(args []string) error {
 	}
 	name, cmd := fs.Arg(0), fs.Arg(1)
 
-	var conf dashboard.BuildConfig
+	var conf *dashboard.BuildConfig
 
 	bc, conf, err := clientAndConf(name)
 	if err != nil {

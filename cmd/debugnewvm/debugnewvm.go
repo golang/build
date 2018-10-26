@@ -44,7 +44,7 @@ func main() {
 	buildenv.RegisterFlags()
 	flag.Parse()
 
-	var bconf dashboard.BuildConfig
+	var bconf *dashboard.BuildConfig
 	if *runBuild != "" {
 		var ok bool
 		bconf, ok = dashboard.Builders[*runBuild]

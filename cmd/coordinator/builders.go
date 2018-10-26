@@ -15,7 +15,7 @@ import (
 func handleBuilders(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
 	if err := buildersTmpl.Execute(&buf, struct {
-		Builders map[string]dashboard.BuildConfig
+		Builders map[string]*dashboard.BuildConfig
 		Hosts    map[string]*dashboard.HostConfig
 	}{dashboard.Builders, dashboard.Hosts}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -20,7 +20,7 @@ import (
 // The keys are like "darwin-amd64" or "linux-386-387".
 // This map should not be modified by other packages.
 // Initialization happens below, via calls to addBuilder.
-var Builders = map[string]BuildConfig{}
+var Builders = map[string]*BuildConfig{}
 
 // Hosts contains the names and configs of all the types of
 // buildlets. They can be VMs, containers, or dedicated machines.
@@ -1695,7 +1695,7 @@ func addBuilder(c BuildConfig) {
 		panic(fmt.Sprintf("build config %q host type inconsistent (must be Reverse, Image, or VM)", c.Name))
 	}
 
-	Builders[c.Name] = c
+	Builders[c.Name] = &c
 }
 
 // TrybotBuilderNames returns the names of the builder configs

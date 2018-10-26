@@ -41,7 +41,7 @@ func (b *BenchmarkItem) Name() string {
 }
 
 // buildGo1 builds the Go 1 benchmarks.
-func buildGo1(conf dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer) (remoteErr, err error) {
+func buildGo1(conf *dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer) (remoteErr, err error) {
 	workDir, err := bc.WorkDir()
 	if err != nil {
 		return nil, err
@@ -67,7 +67,7 @@ func buildGo1(conf dashboard.BuildConfig, bc *buildlet.Client, goroot string, w 
 }
 
 // buildPkg builds a package's benchmarks.
-func buildPkg(conf dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer, pkg, name string) (remoteErr, err error) {
+func buildPkg(conf *dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer, pkg, name string) (remoteErr, err error) {
 	workDir, err := bc.WorkDir()
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func buildPkg(conf dashboard.BuildConfig, bc *buildlet.Client, goroot string, w 
 }
 
 // buildXBenchmark builds a benchmark from x/benchmarks.
-func buildXBenchmark(sl spanlog.Logger, conf dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer, rev, pkg, name string) (remoteErr, err error) {
+func buildXBenchmark(sl spanlog.Logger, conf *dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer, rev, pkg, name string) (remoteErr, err error) {
 	workDir, err := bc.WorkDir()
 	if err != nil {
 		return nil, err
@@ -198,7 +198,7 @@ func (gb GoBuilder) EnumerateBenchmarks(bc *buildlet.Client, benchmarksRev strin
 // runOneBenchBinary runs a binary on the buildlet and writes its output to w with a trailing newline.
 //
 // TODO: this signature is too big. Make it a method of something?
-func runOneBenchBinary(conf dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot, dir, binaryPath string, args []string) (remoteErr, err error) {
+func runOneBenchBinary(conf *dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot, dir, binaryPath string, args []string) (remoteErr, err error) {
 	defer w.Write([]byte{'\n'})
 	workDir, err := bc.WorkDir()
 	if err != nil {
@@ -226,7 +226,7 @@ func runOneBenchBinary(conf dashboard.BuildConfig, bc *buildlet.Client, w io.Wri
 	})
 }
 
-func buildRev(buildEnv *buildenv.Environment, sl spanlog.Logger, conf dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot string, br BuilderRev) error {
+func buildRev(buildEnv *buildenv.Environment, sl spanlog.Logger, conf *dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot string, br BuilderRev) error {
 	if br.SnapshotExists(context.TODO(), buildEnv) {
 		return bc.PutTarFromURL(br.SnapshotURL(buildEnv), goroot)
 	}
@@ -257,7 +257,7 @@ func buildRev(buildEnv *buildenv.Environment, sl spanlog.Logger, conf dashboard.
 // Build output is sent to w. Benchmark output is stored in b.output.
 // revs must contain exactly two revs. The first rev is assumed to be present in "go", and the second will be placed into "go-parent".
 // TODO(quentin): Support len(revs) != 2.
-func (b *BenchmarkItem) Run(buildEnv *buildenv.Environment, sl spanlog.Logger, conf dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, revs []BuilderRev) (remoteErr, err error) {
+func (b *BenchmarkItem) Run(buildEnv *buildenv.Environment, sl spanlog.Logger, conf *dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, revs []BuilderRev) (remoteErr, err error) {
 	// Ensure we have a built parent repo.
 	if err := bc.ListDir("go-parent", buildlet.ListDirOpts{}, func(buildlet.DirEntry) {}); err != nil {
 		pbr := revs[1]

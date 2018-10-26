@@ -124,8 +124,8 @@ var (
 )
 
 var (
-	tryBuilders    []dashboard.BuildConfig // for testing the go repo
-	subTryBuilders []dashboard.BuildConfig // for testing sub-repos
+	tryBuilders    []*dashboard.BuildConfig // for testing the go repo
+	subTryBuilders []*dashboard.BuildConfig // for testing sub-repos
 )
 
 var maintnerClient apipb.MaintnerServiceClient
@@ -391,8 +391,8 @@ func handleDebugWatcher(w http.ResponseWriter, r *http.Request) {
 	watcherProxy.ServeHTTP(w, r)
 }
 
-func stagingClusterBuilders() map[string]dashboard.BuildConfig {
-	m := map[string]dashboard.BuildConfig{}
+func stagingClusterBuilders() map[string]*dashboard.BuildConfig {
+	m := map[string]*dashboard.BuildConfig{}
 	for _, name := range []string{
 		"linux-amd64",
 		"linux-amd64-sid",
@@ -1470,9 +1470,9 @@ func GetBuildlets(ctx context.Context, pool BuildletPool, n int, hostType string
 	return ch
 }
 
-var testPoolHook func(dashboard.BuildConfig) BuildletPool
+var testPoolHook func(*dashboard.BuildConfig) BuildletPool
 
-func poolForConf(conf dashboard.BuildConfig) BuildletPool {
+func poolForConf(conf *dashboard.BuildConfig) BuildletPool {
 	if testPoolHook != nil {
 		return testPoolHook(conf)
 	}
@@ -3285,7 +3285,7 @@ type buildStatus struct {
 	buildgo.BuilderRev
 	buildID   string // "B" + 9 random hex
 	goBranch  string // non-empty for subrepo trybots if not go master branch
-	conf      dashboard.BuildConfig
+	conf      *dashboard.BuildConfig
 	startTime time.Time // actually time of newBuild (~same thing); TODO(bradfitz): rename this createTime
 	trySet    *trySet   // or nil
 

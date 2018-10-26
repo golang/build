@@ -89,7 +89,7 @@ func (br *BuilderRev) SnapshotExists(ctx context.Context, buildEnv *buildenv.Env
 type GoBuilder struct {
 	spanlog.Logger
 	BuilderRev
-	Conf dashboard.BuildConfig
+	Conf *dashboard.BuildConfig
 	// Goroot is a Unix-style path relative to the work directory of the builder (e.g. "go").
 	Goroot string
 }

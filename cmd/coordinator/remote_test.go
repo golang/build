@@ -88,7 +88,7 @@ func TestHandleBuildletCreateOldVersion(t *testing.T) {
 }
 
 func addBuilder(name string) {
-	dashboard.Builders[name] = dashboard.BuildConfig{
+	dashboard.Builders[name] = &dashboard.BuildConfig{
 		Name:     name,
 		HostType: "test-host",
 		Notes:    "Dummy client for testing",
@@ -119,7 +119,7 @@ func TestHandleBuildletCreate(t *testing.T) {
 	log.SetOutput(tlogger{t})
 	defer log.SetOutput(os.Stderr)
 	addBuilder(buildName)
-	testPoolHook = func(_ dashboard.BuildConfig) BuildletPool { return testPool }
+	testPoolHook = func(_ *dashboard.BuildConfig) BuildletPool { return testPool }
 	defer func() {
 		removeBuilder(buildName)
 		testPoolHook = nil
