@@ -1224,10 +1224,15 @@ func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// If we nuked the work directory, recreate it.
-	if err := os.MkdirAll(*workDir, 0755); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	// If we nuked the work directory (or tmp or gocache), recreate them.
+	for _, dir := range []string{*workDir, processTmpDirEnv, processGoCacheEnv} {
+		if dir == "" {
+			continue
+		}
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
