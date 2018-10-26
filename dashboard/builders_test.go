@@ -22,11 +22,18 @@ func TestOSARCHAccessors(t *testing.T) {
 }
 
 func TestListTrybots(t *testing.T) {
-	tryBots := TrybotBuilderNames()
-	t.Logf("Builders:")
-	for _, name := range tryBots {
-		t.Logf("  - %s", name)
+	forProj := func(proj string) {
+		t.Run(proj, func(t *testing.T) {
+			tryBots := TryBuildersForProject(proj)
+			t.Logf("Builders:")
+			for _, conf := range tryBots {
+				t.Logf("  - %s", conf.Name)
+			}
+		})
 	}
+	forProj("go")
+	forProj("net")
+	forProj("sys")
 }
 
 func TestHostConfigsAllUsed(t *testing.T) {

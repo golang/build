@@ -611,10 +611,10 @@ type BuildConfig struct {
 
 	Notes string // notes for humans
 
-	TryBot      bool // be a trybot
-	TryOnly     bool // only used for trybots, and not regular builds
-	CompileOnly bool // if true, compile tests, but don't run them
-	FlakyNet    bool // network tests are flaky (try anyway, but ignore some failures)
+	tryBot      func(proj string) bool // if non-nil, policy func for whether trybots enabled. nil means off.
+	TryOnly     bool                   // only used for trybots, and not regular builds
+	CompileOnly bool                   // if true, compile tests, but don't run them
+	FlakyNet    bool                   // network tests are flaky (try anyway, but ignore some failures)
 
 	// MaxAtOnce optionally specifies a cap of how many builds of
 	// this type can run at once. Zero means unlimited. This is a
@@ -796,7 +796,7 @@ func (c *BuildConfig) SplitMakeRun() bool {
 	return false
 }
 
-func (c *BuildConfig) BuildSubrepos() bool {
+func (c *BuildConfig) buildSubrepos() bool {
 	if !c.SplitMakeRun() {
 		return false
 	}
@@ -823,6 +823,15 @@ func (c *BuildConfig) BuildSubrepos() bool {
 	default:
 		return false
 	}
+}
+
+// BuildRepo reports whether we should do post-submit builds of the provided
+// repo ("go", "sys", "net", etc).
+func (c *BuildConfig) BuildRepo(repo string) bool {
+	if repo == "go" {
+		return true
+	}
+	return c.buildSubrepos()
 }
 
 // AllScriptArgs returns the set of arguments that should be passed to the
@@ -957,12 +966,46 @@ func (c *BuildConfig) NumTestHelpers(isTry bool) int {
 	return c.numTestHelpers
 }
 
+// defaultTrySet returns a trybot policy function that reports whether
+// a project should use trybots. All the default projects are included,
+// plus any given in extraProj.
+func defaultTrySet(extraProj ...string) func(proj string) bool {
+	return func(proj string) bool {
+		if proj == "go" {
+			return true
+		}
+		for _, p := range extraProj {
+			if proj == p {
+				return true
+			}
+		}
+		switch proj {
+		case "grpc-review", "build", "exp", "mobile", "term", "oauth2":
+			return false
+		}
+		return true
+	}
+}
+
+// explicitTrySet returns a trybot policy function that reports
+// whether a project should use trybots. Only the provided projects in
+// projs are enabled.
+func explicitTrySet(projs ...string) func(proj string) bool {
+	return func(proj string) bool {
+		for _, p := range projs {
+			if proj == p {
+				return true
+			}
+		}
+		return false
+	}
+}
+
 func init() {
 	addBuilder(BuildConfig{
 		Name:      "freebsd-amd64-gce93",
 		HostType:  "host-freebsd-93-gce",
-		TryOnly:   true,  // don't run regular build...
-		TryBot:    false, // .. and don't be a trybot. Only for gomote.
+		TryOnly:   true, // don't run regular build...
 		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
@@ -973,12 +1016,13 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:      "freebsd-amd64-10_4",
 		HostType:  "host-freebsd-10_4",
+		tryBot:    explicitTrySet("sys"),
 		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-11_1",
 		HostType:          "host-freebsd-11_1",
-		TryBot:            true,
+		tryBot:            nil,
 		ShouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
 		MaxAtOnce:         2,
@@ -986,7 +1030,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-11_2",
 		HostType:          "host-freebsd-11_2",
-		TryBot:            false, // not yet. once we see it's passing regularly.
+		tryBot:            explicitTrySet("sys"),
 		ShouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
 		MaxAtOnce:         2,
@@ -994,7 +1038,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-12_0",
 		HostType:          "host-freebsd-12_0",
-		TryBot:            false, // not yet. once we see it's passing regularly.
+		tryBot:            defaultTrySet(),
 		ShouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
 		MaxAtOnce:         2,
@@ -1013,6 +1057,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:      "freebsd-386-10_4",
 		HostType:  "host-freebsd-10_4",
+		tryBot:    explicitTrySet("sys"),
 		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
 		MaxAtOnce: 2,
 	})
@@ -1034,7 +1079,7 @@ func init() {
 		Name:              "linux-386",
 		HostType:          "host-linux-jessie",
 		ShouldRunDistTest: fasterTrybots,
-		TryBot:            true,
+		tryBot:            defaultTrySet(),
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		numTestHelpers:    1,
 		numTryTestHelpers: 3,
@@ -1048,7 +1093,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "linux-amd64",
 		HostType:          "host-linux-jessie",
-		TryBot:            true,
+		tryBot:            defaultTrySet(),
 		MaxAtOnce:         3,
 		numTestHelpers:    1,
 		numTryTestHelpers: 4,
@@ -1069,7 +1114,7 @@ func init() {
 		Name:           "misc-vet-vetall",
 		HostType:       "host-linux-jessie",
 		Notes:          "Runs vet over the standard library.",
-		TryBot:         true,
+		tryBot:         defaultTrySet(),
 		numTestHelpers: 5,
 	})
 
@@ -1077,7 +1122,7 @@ func init() {
 		addBuilder(BuildConfig{
 			Name:        "misc-compile" + suffix,
 			HostType:    "host-linux-jessie",
-			TryBot:      true,
+			tryBot:      defaultTrySet(),
 			TryOnly:     true,
 			CompileOnly: true,
 			Notes:       "Runs buildall.sh to cross-compile std packages for " + rx + ", but doesn't run any tests.",
@@ -1122,7 +1167,7 @@ func init() {
 		Name:        "linux-amd64-ssacheck",
 		HostType:    "host-linux-jessie",
 		MaxAtOnce:   1,
-		TryBot:      false, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
+		tryBot:      nil, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
 		CompileOnly: true,
 		Notes:       "SSA internal checks enabled",
 		env:         []string{"GO_GCFLAGS=-d=ssa/check/on,dclstack"},
@@ -1133,7 +1178,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:                "linux-amd64-racecompile",
 		HostType:            "host-linux-jessie",
-		TryBot:              false, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
+		tryBot:              nil, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
 		MaxAtOnce:           1,
 		CompileOnly:         true,
 		SkipSnapshot:        true,
@@ -1147,7 +1192,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "linux-amd64-race",
 		HostType:          "host-linux-jessie",
-		TryBot:            true,
+		tryBot:            defaultTrySet(),
 		MaxAtOnce:         1,
 		ShouldRunDistTest: fasterTrybots,
 		numTestHelpers:    1,
@@ -1201,7 +1246,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "linux-arm",
 		HostType:          "host-linux-arm-scaleway",
-		TryBot:            false, // Issue 22748, Issue 22749
+		tryBot:            nil, // Issue 22748, Issue 22749
 		FlakyNet:          true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 7,
@@ -1241,7 +1286,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "nacl-386",
 		HostType:          "host-nacl-kube",
-		TryBot:            true,
+		tryBot:            defaultTrySet(),
 		MaxAtOnce:         2,
 		numTryTestHelpers: 3,
 		env:               []string{"GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
@@ -1249,7 +1294,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "nacl-amd64p32",
 		HostType:          "host-nacl-kube",
-		TryBot:            true,
+		tryBot:            defaultTrySet(),
 		MaxAtOnce:         2,
 		numTryTestHelpers: 3,
 		env:               []string{"GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
@@ -1257,7 +1302,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "js-wasm",
 		HostType: "host-js-wasm",
-		TryBot:   true,
+		tryBot:   explicitTrySet("go"),
 		ShouldRunDistTest: func(distTest string, isTry bool) bool {
 			if isTry {
 				if strings.HasPrefix(distTest, "test:") {
@@ -1289,7 +1334,7 @@ func init() {
 		HostType:          "host-openbsd-amd64-60",
 		ShouldRunDistTest: noTestDir,
 		TryOnly:           true, // disabled by default; Go 1.11+ don't support it anymore
-		TryBot:            false,
+		tryBot:            nil,
 		MaxAtOnce:         1,
 		numTestHelpers:    2,
 		numTryTestHelpers: 5,
@@ -1299,7 +1344,7 @@ func init() {
 		HostType:          "host-openbsd-386-60",
 		ShouldRunDistTest: noTestDir,
 		TryOnly:           true, // disabled by default; Go 1.11+ don't support it anymore
-		TryBot:            false,
+		tryBot:            nil,
 		MaxAtOnce:         1,
 		env: []string{
 			// cmd/go takes ~192 seconds on openbsd-386
@@ -1326,7 +1371,7 @@ func init() {
 		Name:              "openbsd-amd64-62",
 		HostType:          "host-openbsd-amd64-62",
 		ShouldRunDistTest: noTestDir,
-		TryBot:            true,
+		tryBot:            defaultTrySet(),
 		numTestHelpers:    0,
 		numTryTestHelpers: 5,
 		MaxAtOnce:         1,
@@ -1335,7 +1380,7 @@ func init() {
 		Name:              "openbsd-amd64-64",
 		HostType:          "host-openbsd-amd64-64",
 		ShouldRunDistTest: noTestDir,
-		TryBot:            false,
+		tryBot:            nil,
 		numTestHelpers:    0,
 		numTryTestHelpers: 5,
 		MaxAtOnce:         1,
@@ -1343,6 +1388,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-386-64",
 		HostType:          "host-openbsd-386-64",
+		tryBot:            explicitTrySet("sys"),
 		ShouldRunDistTest: noTestDir,
 		MaxAtOnce:         1,
 	})
@@ -1351,7 +1397,7 @@ func init() {
 		HostType:          "host-netbsd-amd64-8_0",
 		ShouldRunDistTest: noTestDir,
 		MaxAtOnce:         1,
-		TryBot:            false,
+		tryBot:            explicitTrySet("sys"),
 	})
 	addBuilder(BuildConfig{
 		Name:              "netbsd-386-8_0",
@@ -1360,8 +1406,8 @@ func init() {
 		MaxAtOnce:         1,
 		// This builder currently hangs in the “../test” phase of all.bash.
 		// (https://golang.org/issue/25206)
-		TryOnly: true,  // Disable regular builds.
-		TryBot:  false, // Disable trybots.
+		TryOnly: true, // Disable regular builds.
+		tryBot:  nil,  // Disable trybots.
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-386",
@@ -1389,7 +1435,7 @@ func init() {
 		ShouldRunDistTest: fasterTrybots,
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		MaxAtOnce:         2,
-		TryBot:            true,
+		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
@@ -1420,7 +1466,7 @@ func init() {
 			// up:
 			"GO_TEST_TIMEOUT_SCALE=2",
 		},
-		TryBot:            true,
+		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
@@ -1449,7 +1495,7 @@ func init() {
 		HostType:          "host-darwin-10_8",
 		ShouldRunDistTest: noTestDir,
 		TryOnly:           true, // but not in trybot set, so effectively disabled
-		TryBot:            false,
+		tryBot:            nil,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_10",
@@ -1459,7 +1505,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_11",
 		HostType:          "host-darwin-10_11",
-		TryBot:            false, // disabled until Macs fixed; https://golang.org/issue/23859
+		tryBot:            nil, // disabled until Macs fixed; https://golang.org/issue/23859
 		ShouldRunDistTest: noTestDir,
 		numTryTestHelpers: 3,
 	})
@@ -1698,19 +1744,6 @@ func addBuilder(c BuildConfig) {
 	Builders[c.Name] = &c
 }
 
-// TrybotBuilderNames returns the names of the builder configs
-// with the TryBot field set true.
-func TrybotBuilderNames() []string {
-	var ret []string
-	for name, conf := range Builders {
-		if conf.TryBot {
-			ret = append(ret, name)
-		}
-	}
-	sort.Strings(ret)
-	return ret
-}
-
 // fasterTrybots is a ShouldRunDistTest policy function.
 // It skips (returns false) the test/ directory tests for trybots.
 func fasterTrybots(distTest string, isTry bool) bool {
@@ -1727,4 +1760,20 @@ func noTestDir(distTest string, isTry bool) bool {
 		return false // skip test
 	}
 	return true
+}
+
+// TryBuildersForProject returns the builders that should run as part of
+// a TryBot set for the given project.
+// The project argument is of the form "go", "net", "sys", etc.
+func TryBuildersForProject(proj string) []*BuildConfig {
+	var confs []*BuildConfig
+	for _, conf := range Builders {
+		if conf.tryBot != nil && conf.tryBot(proj) {
+			confs = append(confs, conf)
+		}
+	}
+	sort.Slice(confs, func(i, j int) bool {
+		return confs[i].Name < confs[j].Name
+	})
+	return confs
 }

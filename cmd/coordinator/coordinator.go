@@ -123,22 +123,7 @@ var (
 	tryList    []tryKey
 )
 
-var (
-	tryBuilders    []*dashboard.BuildConfig // for testing the go repo
-	subTryBuilders []*dashboard.BuildConfig // for testing sub-repos
-)
-
 var maintnerClient apipb.MaintnerServiceClient
-
-func initTryBuilders() {
-	for _, name := range dashboard.TrybotBuilderNames() {
-		conf := dashboard.Builders[name]
-		tryBuilders = append(tryBuilders, conf)
-		if conf.BuildSubrepos() {
-			subTryBuilders = append(subTryBuilders, conf)
-		}
-	}
-}
 
 const (
 	maxStatusDone = 30
@@ -334,7 +319,6 @@ func main() {
 		if inStaging {
 			dashboard.Builders = stagingClusterBuilders()
 		}
-		initTryBuilders()
 
 		go findWorkLoop(workc)
 		go findTryWorkLoop()
@@ -903,8 +887,7 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 				// Not managed by the coordinator, or a trybot-only one.
 				continue
 			}
-			if br.Repo != "go" && !builderInfo.BuildSubrepos() {
-				// This builder can't build subrepos; skip.
+			if !builderInfo.BuildRepo(br.Repo) {
 				continue
 			}
 
@@ -1089,11 +1072,8 @@ func tryWorkItemKey(work *apipb.GerritTryWorkItem) tryKey {
 //
 // Must hold statusMu.
 func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
-	builders := tryBuilders
 	key := tryWorkItemKey(work)
-	if key.Project != "go" {
-		builders = subTryBuilders
-	}
+	builders := dashboard.TryBuildersForProject(key.Project)
 	log.Printf("Starting new trybot set for %v", key)
 	ts := &trySet{
 		tryKey: key,
