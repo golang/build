@@ -318,6 +318,15 @@ func (gpi *GitPersonInfo) Equal(v *GitPersonInfo) bool {
 		gpi.TZOffset == v.TZOffset
 }
 
+// Possible values for the FileInfo Status field.
+const (
+	FileInfoAdded     = "A"
+	FileInfoDeleted   = "D"
+	FileInfoRenamed   = "R"
+	FileInfoCopied    = "C"
+	FileInfoRewritten = "W"
+)
+
 type FileInfo struct {
 	Status        string `json:"status"`
 	Binary        bool   `json:"binary"`
