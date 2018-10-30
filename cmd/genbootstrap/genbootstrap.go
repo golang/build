@@ -87,13 +87,7 @@ func main() {
 			return nil
 		}
 		switch pkgrel {
-		case "cmd",
-			"database", "database.a",
-			"image", "image.a",
-			"net.a",
-			"net",
-			"runtime/cgo.a",
-			"vendor/golang.org/x/net":
+		case "cmd":
 			return remove()
 		}
 		switch rel {
@@ -104,12 +98,6 @@ func main() {
 			"misc/cgo",
 			"misc/chrome",
 			"misc/swig",
-			"src/cmd",
-			"src/net",
-			"src/runtime/cgo",
-			"src/database",
-			"src/image",
-			"src/vendor/golang.org/x/net",
 			"test":
 			return remove()
 		}
