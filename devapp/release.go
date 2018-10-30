@@ -80,8 +80,9 @@ type group struct {
 }
 
 type item struct {
-	Issue *maintner.GitHubIssue
-	CLs   []*gerritCL
+	Issue            *maintner.GitHubIssue
+	CLs              []*gerritCL
+	FirstPerformance bool // set if this item is the first item which is labeled "performance"
 }
 
 func (i *item) ReleaseBlocker() bool {
@@ -93,9 +94,18 @@ func (i *item) ReleaseBlocker() bool {
 
 type itemsBySummary []item
 
-func (x itemsBySummary) Len() int           { return len(x) }
-func (x itemsBySummary) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
-func (x itemsBySummary) Less(i, j int) bool { return itemSummary(x[i]) < itemSummary(x[j]) }
+func (x itemsBySummary) Len() int      { return len(x) }
+func (x itemsBySummary) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
+func (x itemsBySummary) Less(i, j int) bool {
+	// Sort performance issues to the end.
+	pi := x[i].Issue != nil && x[i].Issue.HasLabel("Performance")
+	pj := x[j].Issue != nil && x[j].Issue.HasLabel("Performance")
+	if pi != pj {
+		return !pi
+	}
+	// Otherwise sort by the item summary.
+	return itemSummary(x[i]) < itemSummary(x[j])
+}
 
 func itemSummary(it item) string {
 	if it.Issue != nil {
@@ -265,6 +275,12 @@ func (s *server) appendOpenIssues(dirToIssues map[string][]*maintner.GitHubIssue
 				continue
 			}
 			sort.Sort(itemsBySummary(items))
+			for idx := range items {
+				if items[idx].Issue.HasLabel("Performance") {
+					items[idx].FirstPerformance = true
+					break
+				}
+			}
 			issueGroups = append(issueGroups, group{
 				Dir:   d,
 				Items: items,

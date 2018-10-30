@@ -31,6 +31,9 @@ a:visited {
 .Section-title {
   margin: .5em 0;
 }
+.Performance-separator {
+  margin-left:4ch;
+}
 .Item {
   display: flex;
 }
@@ -62,6 +65,7 @@ a:visited {
     {{range .Groups}}
       {{if .Dir}}<h4 class="DirTitle">{{.Dir}}</h4>{{end}}
       {{range .Items}}
+	{{if .FirstPerformance}}<h5 class="Performance-separator">performance</h5>{{end}}
         {{$i := .Issue}}
         {{if $i}}
           <div class="Item{{if .ReleaseBlocker}} Item-blocker{{end}}">
