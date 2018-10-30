@@ -8,6 +8,8 @@ package maintapi
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"log"
 	"sort"
 	"strings"
@@ -210,4 +212,128 @@ func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkR
 		sumChanges, len(res.Waiting))
 
 	return res, nil
+}
+
+// ListGoReleases lists Go releases. A release is considered to exist
+// if a tag for it exists.
+func (s apiService) ListGoReleases(ctx context.Context, req *apipb.ListGoReleasesRequest) (*apipb.ListGoReleasesResponse, error) {
+	s.c.RLock()
+	defer s.c.RUnlock()
+	goProj := s.c.Gerrit().Project("go.googlesource.com", "go")
+	releases, err := supportedGoReleases(goProj)
+	if err != nil {
+		return nil, err
+	}
+	return &apipb.ListGoReleasesResponse{
+		Releases: releases,
+	}, nil
+}
+
+// nonChangeRefLister is implemented by *maintner.GerritProject,
+// or something that acts like it for testing.
+type nonChangeRefLister interface {
+	// ForeachNonChangeRef calls fn for each git ref on the server that is
+	// not a change (code review) ref. In general, these correspond to
+	// submitted changes. fn is called serially with sorted ref names.
+	// Iteration stops with the first non-nil error returned by fn.
+	ForeachNonChangeRef(fn func(ref string, hash maintner.GitHash) error) error
+}
+
+// supportedGoReleases returns the latest patches of releases
+// that are considered supported per policy.
+func supportedGoReleases(goProj nonChangeRefLister) ([]*apipb.GoRelease, error) {
+	type majorMinor struct {
+		Major, Minor int32
+	}
+	type tag struct {
+		Patch  int32
+		Name   string
+		Commit maintner.GitHash
+	}
+	type branch struct {
+		Name   string
+		Commit maintner.GitHash
+	}
+	tags := make(map[majorMinor]tag)
+	branches := make(map[majorMinor]branch)
+
+	// Iterate over Go tags and release branches. Find the latest patch
+	// for each major-minor pair, and fill in the appropriate fields.
+	err := goProj.ForeachNonChangeRef(func(ref string, hash maintner.GitHash) error {
+		switch {
+		case strings.HasPrefix(ref, "refs/tags/go"):
+			// Tag.
+			tagName := ref[len("refs/tags/"):]
+			var major, minor, patch int32
+			_, err := fmt.Sscanf(tagName, "go%d.%d.%d", &major, &minor, &patch)
+			if err == io.ErrUnexpectedEOF {
+				// Do nothing.
+			} else if err != nil {
+				return nil
+			}
+			if t, ok := tags[majorMinor{major, minor}]; ok && patch <= t.Patch {
+				// This patch version is not newer than what we've already seen, skip it.
+				return nil
+			}
+			tags[majorMinor{major, minor}] = tag{
+				Patch:  patch,
+				Name:   tagName,
+				Commit: hash,
+			}
+
+		case strings.HasPrefix(ref, "refs/heads/release-branch.go"):
+			// Release branch.
+			branchName := ref[len("refs/heads/"):]
+			var major, minor int32
+			_, err := fmt.Sscanf(branchName, "release-branch.go%d.%d", &major, &minor)
+			if err == io.ErrUnexpectedEOF {
+				// Do nothing.
+			} else if err != nil {
+				return nil
+			}
+			branches[majorMinor{major, minor}] = branch{
+				Name:   branchName,
+				Commit: hash,
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Releases are considered only to exist if they've been tagged.
+	var rs []*apipb.GoRelease
+	for v, t := range tags {
+		b := branches[v]
+		rs = append(rs, &apipb.GoRelease{
+			Major:        v.Major,
+			Minor:        v.Minor,
+			Patch:        t.Patch,
+			TagName:      t.Name,
+			TagCommit:    t.Commit.String(),
+			BranchName:   b.Name,
+			BranchCommit: b.Commit.String(),
+		})
+	}
+
+	// Sort by version. Latest first.
+	sort.Slice(rs, func(i, j int) bool {
+		x1, y1, z1 := rs[i].Major, rs[i].Minor, rs[i].Patch
+		x2, y2, z2 := rs[j].Major, rs[j].Minor, rs[j].Patch
+		if x1 != x2 {
+			return x1 > x2
+		}
+		if y1 != y2 {
+			return y1 > y2
+		}
+		return z1 > z2
+	})
+
+	// Per policy, only the latest two releases are considered supported.
+	if len(rs) > 2 {
+		rs = rs[:2]
+	}
+
+	return rs, nil
 }

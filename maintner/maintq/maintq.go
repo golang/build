@@ -50,9 +50,10 @@ func main() {
 	mc = apipb.NewMaintnerServiceClient(cc)
 
 	cmdFunc := map[string]func(args []string) error{
-		"has-ancestor": callHasAncestor,
-		"get-ref":      callGetRef,
-		"try-work":     callTryWork,
+		"has-ancestor":  callHasAncestor,
+		"get-ref":       callGetRef,
+		"try-work":      callTryWork,
+		"list-releases": callListReleases,
 	}
 	log.SetFlags(0)
 	if flag.NArg() == 0 || cmdFunc[flag.Arg(0)] == nil {
@@ -61,7 +62,7 @@ func main() {
 			cmds = append(cmds, cmd)
 		}
 		sort.Strings(cmds)
-		log.Fatalf(`Usage: maintq %q ...`, cmds)
+		log.Fatalf(`Usage: maintq %v ...`, cmds)
 	}
 	if err := cmdFunc[flag.Arg(0)](flag.Args()[1:]); err != nil {
 		log.Fatal(err)
@@ -112,5 +113,19 @@ func callTryWork(args []string) error {
 		return err
 	}
 	fmt.Println(res)
+	return nil
+}
+
+func callListReleases(args []string) error {
+	if len(args) != 0 {
+		return errors.New("Usage: maintq list-releases")
+	}
+	res, err := mc.ListGoReleases(ctx, &apipb.ListGoReleasesRequest{})
+	if err != nil {
+		return err
+	}
+	for _, r := range res.Releases {
+		fmt.Println(r)
+	}
 	return nil
 }
