@@ -184,7 +184,10 @@ expect -exact "term% "
 send "echo echo remove 10.0.0.0 /104 10.0.0.0 '>'/net/iproute >>/cfg/helix/cpurc\n"
 
 expect -exact "term% "
-send "echo ramfs -u >>/cfg/helix/cpustart\n"
+send "echo ramfs -su >>/cfg/helix/cpustart\n"
+
+expect -exact "term% "
+send "echo mount -c /srv/ramfs /tmp >>/cfg/helix/cpustart\n"
 
 expect -exact "term% "
 send "echo aux/randfs -m /dev >>/cfg/helix/cpustart\n"
