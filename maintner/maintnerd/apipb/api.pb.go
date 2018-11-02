@@ -271,7 +271,6 @@ type GoRelease struct {
 	TagName   string `protobuf:"bytes,4,opt,name=tag_name,json=tagName" json:"tag_name,omitempty"`
 	TagCommit string `protobuf:"bytes,5,opt,name=tag_commit,json=tagCommit" json:"tag_commit,omitempty"`
 	// Release branch information for this major-minor version pair.
-	// Empty if the corresponding release branch doesn't exist.
 	BranchName   string `protobuf:"bytes,6,opt,name=branch_name,json=branchName" json:"branch_name,omitempty"`
 	BranchCommit string `protobuf:"bytes,7,opt,name=branch_commit,json=branchCommit" json:"branch_commit,omitempty"`
 }
@@ -361,8 +360,9 @@ type MaintnerServiceClient interface {
 	GetRef(ctx context.Context, in *GetRefRequest, opts ...grpc.CallOption) (*GetRefResponse, error)
 	// GoFindTryWork finds trybot work for the coordinator to build & test.
 	GoFindTryWork(ctx context.Context, in *GoFindTryWorkRequest, opts ...grpc.CallOption) (*GoFindTryWorkResponse, error)
-	// ListGoReleases lists Go releases. A release is considered to exist
-	// if a tag for it exists.
+	// ListGoReleases lists Go releases. A release is considered to exist for
+	// each git tag named "goX", "goX.Y", or "goX.Y.Z", as long as it has a
+	// corresponding "release-branch.goX" or "release-branch.goX.Y" release branch.
 	ListGoReleases(ctx context.Context, in *ListGoReleasesRequest, opts ...grpc.CallOption) (*ListGoReleasesResponse, error)
 }
 
@@ -420,8 +420,9 @@ type MaintnerServiceServer interface {
 	GetRef(context.Context, *GetRefRequest) (*GetRefResponse, error)
 	// GoFindTryWork finds trybot work for the coordinator to build & test.
 	GoFindTryWork(context.Context, *GoFindTryWorkRequest) (*GoFindTryWorkResponse, error)
-	// ListGoReleases lists Go releases. A release is considered to exist
-	// if a tag for it exists.
+	// ListGoReleases lists Go releases. A release is considered to exist for
+	// each git tag named "goX", "goX.Y", or "goX.Y.Z", as long as it has a
+	// corresponding "release-branch.goX" or "release-branch.goX.Y" release branch.
 	ListGoReleases(context.Context, *ListGoReleasesRequest) (*ListGoReleasesResponse, error)
 }
 

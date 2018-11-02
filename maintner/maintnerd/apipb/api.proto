@@ -79,7 +79,6 @@ message GoRelease {
   string tag_commit = 5;     // "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac"
 
   // Release branch information for this major-minor version pair.
-  // Empty if the corresponding release branch doesn't exist.
   string branch_name = 6;    // "release-branch.go1.11", etc.
   string branch_commit = 7;  // most recent commit on the release branch, e.g., "edb6c16b9b62ed8586d2e3e422911d646095b7e5"
 }
@@ -97,7 +96,8 @@ service MaintnerService {
   // GoFindTryWork finds trybot work for the coordinator to build & test.
   rpc GoFindTryWork(GoFindTryWorkRequest) returns (GoFindTryWorkResponse);
 
-  // ListGoReleases lists Go releases. A release is considered to exist
-  // if a tag for it exists.
+  // ListGoReleases lists Go releases. A release is considered to exist for
+  // each git tag named "goX", "goX.Y", or "goX.Y.Z", as long as it has a
+  // corresponding "release-branch.goX" or "release-branch.goX.Y" release branch.
   rpc ListGoReleases(ListGoReleasesRequest) returns (ListGoReleasesResponse);
 }

@@ -258,6 +258,9 @@ func TestSupportedGoReleases(t *testing.T) {
 					{"refs/heads/release-branch.go1.42", gitHash("362986e7a4b5edc911ed55324c37106c40abe3fb")},
 					{"refs/heads/release-branch.go2", gitHash("cfbe0f14bcbf1e773f8dd9a968c80cf0b9238c59")},
 					{"refs/heads/release-branch.go1.2", gitHash("6523e1eb33ef792df04e08462ed332b95311261e")},
+
+					// It doesn't count as a release if there's no corresponding release-branch.go1.43 release branch.
+					{"refs/tags/go1.43", gitHash("3aa7f7065ecf717b1dd6512bb7a9f40625fc8cb5")},
 				},
 			},
 			want: []*apipb.GoRelease{

@@ -302,10 +302,16 @@ func supportedGoReleases(goProj nonChangeRefLister) ([]*apipb.GoRelease, error) 
 		return nil, err
 	}
 
-	// Releases are considered only to exist if they've been tagged.
+	// A release is considered to exist for each git tag named "goX", "goX.Y", or "goX.Y.Z",
+	// as long as it has a corresponding "release-branch.goX" or "release-branch.goX.Y" release branch.
 	var rs []*apipb.GoRelease
 	for v, t := range tags {
-		b := branches[v]
+		b, ok := branches[v]
+		if !ok {
+			// In the unlikely case a tag exists but there's no release branch for it,
+			// don't consider it a release. This way, callers won't have to do this work.
+			continue
+		}
 		rs = append(rs, &apipb.GoRelease{
 			Major:        v.Major,
 			Minor:        v.Minor,
