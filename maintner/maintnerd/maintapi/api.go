@@ -172,6 +172,11 @@ func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkR
 	res := new(apipb.GoFindTryWorkResponse)
 	goProj := s.c.Gerrit().Project("go.googlesource.com", "go")
 
+	supportedReleases, err := supportedGoReleases(goProj)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, ci := range cis {
 		cl := s.c.Gerrit().Project("go.googlesource.com", ci.Project).CL(int32(ci.ChangeNumber))
 		if cl == nil {
@@ -184,13 +189,13 @@ func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkR
 			work.Commit = ci.CurrentRevision
 		}
 		if work.Project != "go" {
-			// Trybot on a subrepo.
-			//
-			// TODO: for Issue 17626, we need to append
-			// master and the past two releases, but for
-			// now we'll just do master.
+			// Trybot on a subrepo. Append master and the supported releases.
 			work.GoBranch = append(work.GoBranch, "master")
 			work.GoCommit = append(work.GoCommit, goProj.Ref("refs/heads/master").String())
+			for _, r := range supportedReleases {
+				work.GoBranch = append(work.GoBranch, r.BranchName)
+				work.GoCommit = append(work.GoCommit, r.BranchCommit)
+			}
 		}
 		res.Waiting = append(res.Waiting, work)
 	}
