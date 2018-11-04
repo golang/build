@@ -1286,7 +1286,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "nacl-386",
 		HostType:          "host-nacl-kube",
-		tryBot:            defaultTrySet(),
+		tryBot:            explicitTrySet("go"),
 		MaxAtOnce:         2,
 		numTryTestHelpers: 3,
 		env:               []string{"GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
@@ -1294,7 +1294,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "nacl-amd64p32",
 		HostType:          "host-nacl-kube",
-		tryBot:            defaultTrySet(),
+		tryBot:            explicitTrySet("go"),
 		MaxAtOnce:         2,
 		numTryTestHelpers: 3,
 		env:               []string{"GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
