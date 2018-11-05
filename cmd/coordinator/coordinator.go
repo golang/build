@@ -607,6 +607,11 @@ p {
 table {
 	font-size: 11pt;
 }
+
+.nobr {
+	white-space: nowrap;
+}
+
 </style>
 `
 
@@ -642,7 +647,8 @@ func serveTryStatusHTML(w http.ResponseWriter, ts *trySet, tss trySetState) {
 			status = fmt.Sprintf("<i>running</i> %s", time.Since(bs.startTime).Round(time.Second))
 		}
 		bs.mu.Unlock()
-		fmt.Fprintf(buf, "<tr><td>&#8226; %s</td><td>%s</td></tr>\n", bs.Name, status)
+		fmt.Fprintf(buf, "<tr><td class='nobr'>&#8226; %s</td><td>%s</td></tr>\n",
+			html.EscapeString(bs.NameAndBranch()), status)
 	}
 	fmt.Fprintf(buf, "</table>\n")
 	fmt.Fprintf(buf, "<h4>Full Detail</h4><table cellpadding=5 border=1>\n")
@@ -3291,6 +3297,15 @@ type buildStatus struct {
 
 func (st *buildStatus) NameAndBranch() string {
 	if st.goBranch != "" {
+		// For the common and currently-only case of
+		// "release-branch.go1.15" say "linux-amd64 (Go 1.15.x)"
+		const releasePrefix = "release-branch.go"
+		if strings.HasPrefix(st.goBranch, releasePrefix) {
+			return fmt.Sprintf("%s (Go %s.x)", st.Name, strings.TrimPrefix(st.goBranch, releasePrefix))
+		}
+		// But if we ever support building other branches,
+		// fall back to something verbose until we add a
+		// special case:
 		return fmt.Sprintf("%s (go branch %s)", st.Name, st.goBranch)
 	}
 	return st.Name
