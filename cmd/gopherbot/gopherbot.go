@@ -33,7 +33,9 @@ import (
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
+	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/oauth2"
+	"grpc.go4.org"
 )
 
 var (
@@ -151,6 +153,14 @@ func getGerritClient() (*gerrit.Client, error) {
 	return c, nil
 }
 
+func getMaintnerClient() (apipb.MaintnerServiceClient, error) {
+	cc, err := grpc.NewClient(nil, "https://maintner.golang.org")
+	if err != nil {
+		return nil, err
+	}
+	return apipb.NewMaintnerServiceClient(cc), nil
+}
+
 func init() {
 	flag.Usage = func() {
 		os.Stderr.WriteString("gopherbot runs Go's gopherbot role account on GitHub and Gerrit.\n\n")
@@ -179,14 +189,19 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	gerritc, err := getGerritClient()
+	gerrit, err := getGerritClient()
+	if err != nil {
+		log.Fatal(err)
+	}
+	mc, err := getMaintnerClient()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	bot := &gopherbot{
 		ghc:    ghc,
-		gerrit: gerritc,
+		gerrit: gerrit,
+		mc:     mc,
 		deletedChanges: map[gerritChange]bool{
 			{"crypto", 35958}: true,
 		},
@@ -235,6 +250,7 @@ func main() {
 type gopherbot struct {
 	ghc    *github.Client
 	gerrit *gerrit.Client
+	mc     apipb.MaintnerServiceClient
 	corpus *maintner.Corpus
 	gorepo *maintner.GitHubRepo
 
@@ -1183,63 +1199,35 @@ func (b *gopherbot) onLatestCL(ctx context.Context, cl *maintner.GerritCL, f fun
 func (b *gopherbot) getMajorReleases(ctx context.Context) ([]string, error) {
 	b.releases.Lock()
 	defer b.releases.Unlock()
+
 	if expiry := b.releases.lastUpdate.Add(time.Hour); time.Now().Before(expiry) {
 		return b.releases.major, nil
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequest("GET", "https://golang.org/dl/?mode=json", nil)
+	resp, err := b.mc.ListGoReleases(ctx, &apipb.ListGoReleasesRequest{})
 	if err != nil {
 		return nil, err
 	}
-	res, err := http.DefaultClient.Do(req.WithContext(ctx))
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-	var releases []struct {
-		Version string `json:"version"`
-		Stable  bool   `json:"stable"`
-	}
-	if err := json.NewDecoder(res.Body).Decode(&releases); err != nil {
-		return nil, err
-	}
-	seen := make(map[string]bool)
+	rs := resp.Releases // Supported Go releases, sorted with latest first.
+
 	var majorReleases []string
-	for _, r := range releases {
-		if !r.Stable {
-			continue
-		}
-		parts := strings.Split(r.Version, ".")
-		if len(parts) < 2 {
-			return nil, fmt.Errorf("invalid version: %s", r.Version)
-		}
-		if parts[0] != "go1" {
-			continue
-		}
-		if _, err := strconv.Atoi(parts[1]); err != nil {
-			return nil, fmt.Errorf("invalid version: %s", r.Version)
-		}
-		major := strings.TrimPrefix(parts[0], "go") + "." + parts[1]
-		if seen[major] {
-			continue
-		}
-		seen[major] = true
-		majorReleases = append(majorReleases, major)
+	for i := len(rs) - 1; i >= 0; i-- {
+		x, y := rs[i].Major, rs[i].Minor
+		majorReleases = append(majorReleases, fmt.Sprintf("%d.%d", x, y))
 	}
-	sort.Slice(majorReleases, func(i, j int) bool {
-		ii, _ := strconv.Atoi(majorReleases[i][2:])
-		jj, _ := strconv.Atoi(majorReleases[j][2:])
-		return ii < jj
-	})
 	// Include the next release in the list of major releases.
-	lastRelease := majorReleases[len(majorReleases)-1]
-	lastReleaseVersion, _ := strconv.Atoi(lastRelease[2:])
-	nextRelease := lastRelease[:2] + strconv.Itoa(lastReleaseVersion+1)
-	majorReleases = append(majorReleases, nextRelease)
+	if len(rs) > 0 {
+		// Assume the next release will bump the minor version.
+		nextX, nextY := rs[0].Major, rs[0].Minor+1
+		majorReleases = append(majorReleases, fmt.Sprintf("%d.%d", nextX, nextY))
+	}
+
+	b.releases.major = majorReleases
 	b.releases.lastUpdate = time.Now()
-	b.releases.major = majorReleases[len(majorReleases)-3:]
-	return b.releases.major, nil
+
+	return majorReleases, nil
 }
 
 // openCherryPickIssues opens CherryPickCandidate issues for backport when
