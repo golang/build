@@ -1183,7 +1183,7 @@ func (b *gopherbot) onLatestCL(ctx context.Context, cl *maintner.GerritCL, f fun
 func (b *gopherbot) getMajorReleases(ctx context.Context) ([]string, error) {
 	b.releases.Lock()
 	defer b.releases.Unlock()
-	if b.releases.lastUpdate.After(time.Now().Add(time.Hour)) {
+	if expiry := b.releases.lastUpdate.Add(time.Hour); time.Now().Before(expiry) {
 		return b.releases.major, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
