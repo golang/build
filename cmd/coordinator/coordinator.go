@@ -664,7 +664,7 @@ func serveTryStatusHTML(w http.ResponseWriter, ts *trySet, tss trySetState) {
 		}
 		bs.mu.Unlock()
 		fmt.Fprintf(buf, "<tr valign=top><td align=left>%s</td><td align=center>%s</td><td><pre>%s</pre></td></tr>\n",
-			bs.Name,
+			html.EscapeString(bs.NameAndBranch()),
 			status,
 			bs.HTMLStatusLine())
 	}
