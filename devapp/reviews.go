@@ -71,7 +71,7 @@ func (s *server) handleReviews(t *template.Template, w http.ResponseWriter, r *h
 		for _, p := range s.data.reviews.Projects {
 			var cs []*change
 			for _, c := range p.Changes {
-				if c.OwnerName() == ownerFilter {
+				if o := c.Owner(); o != nil && o.Name() == ownerFilter {
 					cs = append(cs, c)
 					totalChanges++
 				}
@@ -115,6 +115,7 @@ func (s *server) updateReviewsData() {
 		proj := &project{GerritProject: p}
 		p.ForeachOpenCL(func(cl *maintner.GerritCL) error {
 			if cl.WorkInProgress() ||
+				cl.Owner() == nil ||
 				strings.Contains(cl.Commit.Msg, "DO NOT REVIEW") ||
 				strings.Contains(cl.Commit.Msg, "DO NOT SUBMIT") {
 				return nil

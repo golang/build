@@ -442,14 +442,6 @@ func (cl *GerritCL) Footer(key string) string {
 	return v
 }
 
-// OwnerName returns the name of the CL’s owner or an empty string on error.
-func (cl *GerritCL) OwnerName() string {
-	if !cl.complete() {
-		return ""
-	}
-	return cl.Metas[0].Commit.Author.Name()
-}
-
 // OwnerID returns the ID of the CL’s owner. It will return -1 on error.
 func (cl *GerritCL) OwnerID() int {
 	if !cl.complete() {
