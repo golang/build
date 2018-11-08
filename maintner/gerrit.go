@@ -335,9 +335,9 @@ type GerritMessage struct {
 	// the git commit).
 	Date time.Time
 
-	// Author returns the author of the commit. This takes the form "Kevin Burke
-	// <13437@62eb7196-b449-3ce5-99f1-c037f21e1705>", where the number before
-	// the '@' sign is your Gerrit user ID, and the UUID after the '@' sign
+	// Author returns the author of the commit. This takes the form "Gerrit User
+	// 13437 <13437@62eb7196-b449-3ce5-99f1-c037f21e1705>", where the number
+	// before the '@' sign is your Gerrit user ID, and the UUID after the '@' sign
 	// seems to be the same for all commits for the same Gerrit server, across
 	// projects.
 	//

@@ -21,6 +21,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -246,15 +247,19 @@ type bot struct {
 	// CLs that have been created/updated on Gerrit for GitHub PRs but are not yet
 	// reflected in the maintner corpus yet.
 	pendingCLs map[string]string // GitHub owner/repo#n -> Commit message from PR
+
+	// Cache of Gerrit Account IDs to AccountInfo structs.
+	cachedGerritAccounts map[int]*gerrit.AccountInfo // 1234 -> Detailed Account Info
 }
 
 func newBot(githubClient *github.Client, gerritClient *gerrit.Client) *bot {
 	return &bot{
-		githubClient: githubClient,
-		gerritClient: gerritClient,
-		importedPRs:  map[string]*maintner.GerritCL{},
-		pendingCLs:   map[string]string{},
-		cachedPRs:    map[string]*cachedPullRequest{},
+		githubClient:         githubClient,
+		gerritClient:         gerritClient,
+		importedPRs:          map[string]*maintner.GerritCL{},
+		pendingCLs:           map[string]string{},
+		cachedPRs:            map[string]*cachedPullRequest{},
+		cachedGerritAccounts: map[int]*gerrit.AccountInfo{},
 	}
 }
 
@@ -371,7 +376,7 @@ func prShortLink(pr *github.PullRequest) string {
 // imported. If the Gerrit change associated with a PR has been merged, the PR
 // is closed. Those that have no associated open or merged Gerrit changes will
 // result in one being created.
-// b's RWMutex read-write lock must be held.
+// b.RWMutex must be Lock'ed.
 func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) error {
 	log.Printf("Processing PR %s ...", pr.GetHTMLURL())
 	shortLink := prShortLink(pr)
@@ -428,6 +433,46 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 	return nil
 }
 
+// gerritMessageAuthorID returns the Gerrit Account ID of the author of m.
+func gerritMessageAuthorID(m *maintner.GerritMessage) (int, error) {
+	email := m.Author.Email()
+	if strings.Index(email, "@") == -1 {
+		return -1, fmt.Errorf("message author email %q does not contain '@' character", email)
+	}
+	i, err := strconv.Atoi(strings.Split(email, "@")[0])
+	if err != nil {
+		return -1, fmt.Errorf("strconv.Atoi: %v (email: %q)", err, email)
+	}
+	return i, nil
+}
+
+// gerritMessageAuthorName returns a message author's display name. To prevent a
+// thundering herd of redundant comments created by posting a different message
+// via postGitHubMessageNoDup in syncGerritCommentsToGitHub, it will only return
+// the correct display name for messages posted after a hard-coded date.
+// b.RWMutex must be Lock'ed.
+func (b *bot) gerritMessageAuthorName(ctx context.Context, m *maintner.GerritMessage) (string, error) {
+	t := time.Date(2018, time.November, 9, 0, 0, 0, 0, time.UTC)
+	if m.Date.Before(t) {
+		return m.Author.Name(), nil
+	}
+	id, err := gerritMessageAuthorID(m)
+	if err != nil {
+		return "", fmt.Errorf("gerritMessageAuthorID: %v", err)
+	}
+	account := b.cachedGerritAccounts[id]
+	if account != nil {
+		return account.Name, nil
+	}
+	ai, err := b.gerritClient.GetAccountInfo(ctx, strconv.Itoa(id))
+	if err != nil {
+		return "", fmt.Errorf("b.gerritClient.GetAccountInfo: %v", err)
+	}
+	b.cachedGerritAccounts[id] = &ai
+	return ai.Name, nil
+}
+
+// b.RWMutex must be Lock'ed.
 func (b *bot) syncGerritCommentsToGitHub(ctx context.Context, pr *github.PullRequest, cl *maintner.GerritCL) error {
 	if *dryRun {
 		log.Printf("[dry run] would sync Gerrit comments to %v", prShortLink(pr))
@@ -435,8 +480,16 @@ func (b *bot) syncGerritCommentsToGitHub(ctx context.Context, pr *github.PullReq
 	}
 	repo := pr.GetBase().GetRepo()
 	for _, m := range cl.Messages {
-		if m.Author.Email() == cl.Owner().Email() {
+		id, err := gerritMessageAuthorID(m)
+		if err != nil {
+			return fmt.Errorf("gerritMessageAuthorID: %v", err)
+		}
+		if id == cl.OwnerID() {
 			continue
+		}
+		authorName, err := b.gerritMessageAuthorName(ctx, m)
+		if err != nil {
+			return fmt.Errorf("b.gerritMessageAuthorName: %v", err)
 		}
 		msg := fmt.Sprintf(`Message from %s:
 
@@ -445,7 +498,7 @@ func (b *bot) syncGerritCommentsToGitHub(ctx context.Context, pr *github.PullReq
 ---
 Please don’t reply on this GitHub thread. Visit [golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d#message-%s).
 After addressing review feedback, remember to [publish your drafts](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it)!`,
-			m.Author.Name(), m.Message, cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
+			authorName, m.Message, cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
 		if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg); err != nil {
 			return fmt.Errorf("postGitHubMessageNoDup: %v", err)
 		}
@@ -696,7 +749,7 @@ func reposRoot() string {
 }
 
 // getFullPR retrieves a Pull Request via GitHub’s API.
-// b's RWMutex read-write lock must be held.
+// b.RWMutex must be Lock'ed.
 func (b *bot) getFullPR(ctx context.Context, owner, repo string, number int) (*github.PullRequest, error) {
 	shortLink := githubShortLink(owner, repo, number)
 	cpr := b.cachedPRs[shortLink]
