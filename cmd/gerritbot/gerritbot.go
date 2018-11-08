@@ -609,10 +609,17 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		}
 	}
 
+	var pushOpts string
+	if cl == nil {
+		// Add this informational message only on CL creation.
+		msg := fmt.Sprintf("This Gerrit CL corresponds to GitHub PR %s.\n\nAuthor: %s", prShortLink(pr), author)
+		pushOpts = "%m=" + url.QueryEscape(msg)
+	}
+
 	// nokeycheck is specified to avoid failing silently when a review is created
 	// with what appears to be a private key. Since there are cases where a user
 	// would want a private key checked in (tests).
-	out, err := cmdOut(exec.Command("git", "-C", worktreeDir, "push", "-o", "nokeycheck", "origin", "HEAD:refs/for/"+prBaseRef))
+	out, err := cmdOut(exec.Command("git", "-C", worktreeDir, "push", "-o", "nokeycheck", "origin", "HEAD:refs/for/"+prBaseRef+pushOpts))
 	if err != nil {
 		return fmt.Errorf("could not create change: %v", err)
 	}
