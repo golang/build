@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// The buzzkill binary removes a code snippet from play.golang.org given its URL
+// The rmplaysnippet binary removes a code snippet from play.golang.org given its URL
 // or ID.
 package main
 
@@ -50,7 +50,7 @@ func main() {
 	k := datastore.NameKey("Snippet", snippetID, nil)
 	if err := client.Delete(ctx, k); err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to delete Snippet with ID %q: %v\n", snippetID, err)
-		fmt.Fprintf(os.Stderr, "buzzkill requires Application Default Credentials.\n")
+		fmt.Fprintf(os.Stderr, "rmplaysnippet requires Application Default Credentials.\n")
 		fmt.Fprintf(os.Stderr, "Did you run `gcloud auth application-default login`?\n")
 		os.Exit(1)
 	}
