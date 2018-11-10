@@ -814,6 +814,7 @@ func (c *BuildConfig) buildSubrepos() bool {
 		"linux-s390x-ibm",
 		"openbsd-386-60", "openbsd-amd64-60",
 		"openbsd-386-62", "openbsd-amd64-62",
+		"openbsd-386-64", "openbsd-amd64-64",
 		"netbsd-amd64-8_0",
 		"netbsd-386-8_0",
 		"plan9-386",
