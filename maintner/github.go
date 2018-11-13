@@ -240,7 +240,7 @@ type GitHubIssue struct {
 	Created     time.Time
 	Updated     time.Time
 	ClosedAt    time.Time
-	ClosedBy    *GitHubUser
+	ClosedBy    *GitHubUser // TODO(dmitshur): Implement (see golang.org/issue/28745).
 	Title       string
 	Body        string
 	Milestone   *GitHubMilestone       // nil for unknown, noMilestone for none
