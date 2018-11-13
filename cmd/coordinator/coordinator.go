@@ -1085,7 +1085,6 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		tryKey: key,
 		tryID:  "T" + randHex(9),
 		trySetState: trySetState{
-			remain: len(builders),
 			builds: make([]*buildStatus, 0, len(builders)),
 		},
 	}
@@ -1108,6 +1107,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 
 		idx := len(ts.builds)
 		ts.builds = append(ts.builds, bs)
+		ts.remain++
 		go bs.start() // acquires statusMu itself, so in a goroutine
 		go ts.awaitTryBuild(idx, bs, brev)
 	}
