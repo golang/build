@@ -835,6 +835,43 @@ func (c *BuildConfig) BuildRepo(repo string) bool {
 	return c.buildSubrepos()
 }
 
+// BuildBranch reports whether we should do post-submit builds of the provided
+// branch.
+// repo is "go", "sys", "net", etc.
+// branch is the branch of the repo (usually "master").
+// goBranch is non-empty for a non-"go" repo, and is the branch of Go the subrepo is being tested at.
+func (c *BuildConfig) BuildBranch(repo, branch, goBranch string) bool {
+	if strings.HasPrefix(c.Name, "darwin-") {
+		switch c.Name {
+		case "darwin-amd64-10_8", "darwin-amd64-10_10", "darwin-amd64-10_11",
+			"darwin-386-10_8", "darwin-386-10_10", "darwin-386-10_11":
+			// OS X before Sierra can build any branch.
+			// (We've never had a 10.9 builder.)
+		default:
+			// Sierra or after, however, requires the 1.7 branch:
+			switch branch {
+			case "release-branch.go1.6",
+				"release-branch.go1.5",
+				"release-branch.go1.4",
+				"release-branch.go1.3",
+				"release-branch.go1.2",
+				"release-branch.go1.1",
+				"release-branch.go1":
+				return false
+			}
+		}
+	}
+	// NetBSD support was resurrected during the Go 1.10 dev cycle.
+	// Skip subrepo builds against Go 1.8 and Go 1.9. Failures there aren't interesting.
+	if strings.HasPrefix(c.Name, "netbsd-") {
+		switch goBranch {
+		case "release-branch.go1.8", "release-branch.go1.9":
+			return false
+		}
+	}
+	return true
+}
+
 // AllScriptArgs returns the set of arguments that should be passed to the
 // all.bash-equivalent script. Usually empty.
 func (c *BuildConfig) AllScriptArgs() []string {
