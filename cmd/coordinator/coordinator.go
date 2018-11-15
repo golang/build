@@ -2218,11 +2218,26 @@ func (st *buildStatus) shouldSkipTest(testName string) bool {
 	return false
 }
 
-func (st *buildStatus) newTestSet(names []string, benchmarks []*buildgo.BenchmarkItem) *testSet {
+// newTestSet returns a new testSet given the dist test names (strings from "go tool dist test -list")
+// and benchmark items.
+func (st *buildStatus) newTestSet(distTestNames []string, benchmarks []*buildgo.BenchmarkItem) (*testSet, error) {
 	set := &testSet{
-		st: st,
+		st:         st,
+		needsXRepo: map[string]string{},
 	}
-	for _, name := range names {
+	for _, name := range distTestNames {
+		// The misc-vetall builder's "vet/*" tests are special: they require golang.org/x/tools
+		// in $GOPATH. So figure out the latest master HEAD git rev for x/tools so we can
+		// populate it later across all sharded builders at the same revision.
+		if strings.HasPrefix(name, "vet/") && set.needsXRepo["tools"] == "" {
+			// TODO: we'll probably need to make this handle branches later. Or maybe we
+			// should just disable misc-vetall on non-master branches.
+			rev, err := getRepoHead("tools")
+			if err != nil {
+				return nil, fmt.Errorf("failed to get master git rev for x/tools: %v", err)
+			}
+			set.needsXRepo["tools"] = rev
+		}
 		set.items = append(set.items, &testItem{
 			set:      set,
 			name:     name,
@@ -2242,7 +2257,7 @@ func (st *buildStatus) newTestSet(names []string, benchmarks []*buildgo.Benchmar
 			done:     make(chan token),
 		})
 	}
-	return set
+	return set, nil
 }
 
 func partitionGoTests(builderName string, tests []string) (sets [][]string) {
@@ -2712,11 +2727,10 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	defer func() { sp.Done(err) }()
 	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 		Output: st,
-		// TODO(adg): remove vendor experiment variable after Go 1.6
 		ExtraEnv: append(st.conf.Env(),
 			"GOROOT="+goroot,
 			"GOPATH="+gopath,
-			"GO15VENDOREXPERIMENT=1"),
+		),
 		Path: []string{"$WORKDIR/go/bin", "$PATH"},
 		Args: []string{"test", "-short", subrepoPrefix + st.SubName + "/..."},
 	})
@@ -2775,7 +2789,10 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 			benches = b
 		}
 	}
-	set := st.newTestSet(testNames, benches)
+	set, err := st.newTestSet(testNames, benches)
+	if err != nil {
+		return nil, err
+	}
 	st.LogEventTime("starting_tests", fmt.Sprintf("%d tests", len(set.items)))
 	startTime := time.Now()
 
@@ -2783,7 +2800,12 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	if err != nil {
 		return nil, fmt.Errorf("error discovering workdir for main buildlet, %s: %v", st.bc.Name(), err)
 	}
+	if err := set.fetchGOPATHDeps(st, st.bc); err != nil {
+		return nil, err
+	}
+
 	mainBuildletGoroot := st.conf.FilePathJoin(workDir, "go")
+	mainBuildletGopath := st.conf.FilePathJoin(workDir, "gopath")
 
 	// We use our original buildlet to run the tests in order, to
 	// make the streaming somewhat smooth and not incredibly
@@ -2805,7 +2827,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 				}
 				continue
 			}
-			st.runTestsOnBuildlet(st.bc, tis, mainBuildletGoroot)
+			st.runTestsOnBuildlet(st.bc, tis, mainBuildletGoroot, mainBuildletGopath)
 		}
 		st.LogEventTime("main_buildlet_broken", st.bc.Name())
 	}()
@@ -2831,15 +2853,20 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 					log.Printf("error discovering workdir for helper %s: %v", bc.Name(), err)
 					return
 				}
+				if err := set.fetchGOPATHDeps(st, bc); err != nil {
+					log.Printf("error populating GOPATH for helper %s: %v", bc.Name(), err)
+					return
+				}
 				st.LogEventTime("test_helper_set_up", bc.Name())
 				goroot := st.conf.FilePathJoin(workDir, "go")
+				gopath := st.conf.FilePathJoin(workDir, "gopath")
 				for !bc.IsBroken() {
 					tis, ok := set.testsToRunBiggestFirst()
 					if !ok {
 						st.LogEventTime("no_new_tests_remain", bc.Name())
 						return
 					}
-					st.runTestsOnBuildlet(bc, tis, goroot)
+					st.runTestsOnBuildlet(bc, tis, goroot, gopath)
 				}
 				st.LogEventTime("test_helper_is_broken", bc.Name())
 			}(helper)
@@ -3017,8 +3044,8 @@ func execTimeout(testNames []string) time.Duration {
 	return 20 * time.Minute
 }
 
-// runTestsOnBuildlet runs tis on bc, using the optional goroot environment variable.
-func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, goroot string) {
+// runTestsOnBuildlet runs tis on bc, using the optional goroot & gopath environment variables.
+func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, goroot, gopath string) {
 	names := make([]string, len(tis))
 	for i, ti := range tis {
 		names[i] = ti.name
@@ -3063,12 +3090,15 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 			// fail when dist tries to run the binary in dir "$GOROOT/src", since
 			// "$GOROOT/src" + "./go.exe" doesn't exist. Perhaps LookPath should return
 			// an absolute path.
-			Dir:      ".",
-			Output:   &buf, // see "maybe stream lines" TODO below
-			ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot),
-			Timeout:  timeout,
-			Path:     []string{"$WORKDIR/go/bin", "$PATH"},
-			Args:     args,
+			Dir:    ".",
+			Output: &buf, // see "maybe stream lines" TODO below
+			ExtraEnv: append(st.conf.Env(),
+				"GOROOT="+goroot,
+				"GOPATH="+gopath,
+			),
+			Timeout: timeout,
+			Path:    []string{"$WORKDIR/go/bin", "$PATH"},
+			Args:    args,
 		})
 	}
 	execDuration := time.Since(t0)
@@ -3116,9 +3146,22 @@ type testSet struct {
 	st    *buildStatus
 	items []*testItem
 
+	// needsXRepo is the set of x/$REPO repos needed in $GOPATH
+	// and which git rev that repo should be fetched at.
+	needsXRepo map[string]string // "net" => "88d92db4c548972d942ac2a3531a8a9a34c82ca6"
+
 	mu           sync.Mutex
 	inOrder      [][]*testItem
 	biggestFirst [][]*testItem
+}
+
+func (s *testSet) fetchGOPATHDeps(sl spanlog.Logger, bc *buildlet.Client) error {
+	for repo, rev := range s.needsXRepo {
+		if err := buildgo.FetchSubrepo(sl, bc, repo, rev); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // cancelAll cancels all pending tests.
