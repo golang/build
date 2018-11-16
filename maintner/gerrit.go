@@ -1326,8 +1326,33 @@ func (m *GerritMeta) Footer() string {
 
 // Hashtags returns the current set of hashtags.
 func (m *GerritMeta) Hashtags() GerritHashtags {
-	tags, _ := lineValue(m.Footer(), "Hashtags: ")
-	return GerritHashtags(tags)
+	messages := make([]string, 0)
+	messages = gatherAllParentsMessages(m.Commit.Parents)
+	messages = append(messages, m.Commit.Msg)
+	var tags []string
+	for _, m := range messages {
+		i := strings.LastIndex(m, "\n\n")
+		if i == -1 {
+			continue
+		}
+		v, _ := lineValue(m[i+2:], "Hashtags: ")
+		// TODO: only add if not already present
+		// Probably need to shift adding and removing logic here too.
+		tags = append(tags, v)
+	}
+
+	return GerritHashtags(strings.Join(tags, " "))
+}
+
+func gatherAllParentsMessages(commits []*GitCommit) (messages []string) {
+	for _, c := range commits {
+		if len(c.Parents) > 0 {
+			messages = append(messages, gatherAllParentsMessages(c.Parents)...)
+		}
+		messages = append(messages, c.Msg)
+	}
+
+	return
 }
 
 // ActionTag returns the Gerrit "Tag" value from the meta commit.
