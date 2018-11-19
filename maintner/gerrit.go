@@ -1326,28 +1326,41 @@ func (m *GerritMeta) Footer() string {
 
 // Hashtags returns the current set of hashtags.
 func (m *GerritMeta) Hashtags() GerritHashtags {
-	messages := gatherAllParentsMessages(m.Commit.Parents, make(map[GerritHashtags]bool))
+	// We go through all the patch sets in the current project
+	// in order to get a state of the tags that were attached to or removed
+	// from the current gerrit issue.
+	tagStates := gatherAllParentsMessages(m.Commit.Parents)
+
+	// Lastly we parse the last commit's message and add a final update
+	// to the tag state.
 	added, removed := hashAddedOrRemoved(m.Commit.Msg)
-	messages[added] = true
-	messages[removed] = false
+	tagStates[added] = true
+	tagStates[removed] = false
 	var tags []string
-	for k, v := range messages {
+	for k, v := range tagStates {
+		// Add all the tags that ended up in true state.
 		if v {
 			tags = append(tags, string(k))
 		}
 	}
+
+	// Sort them to make the output deterministic.
+	sort.Strings(tags)
 	return GerritHashtags(strings.Join(tags, " "))
 }
 
 // gatherAllParentsMessages gathers all the tags from parent commits
-// starting from the first commit working backwards.
-// The result will be a map of tags that are added and removed during
-// the parsing process. This function represents a state machine for
-// the tags parsed from commit messages.
-func gatherAllParentsMessages(commits []*GitCommit, tags map[GerritHashtags]bool) map[GerritHashtags]bool {
+// starting from the first commit working forwards.
+// The result will be a map of tags with two possible states.
+// true: this tag ends up being added to the current gerrint CL.
+// false: this tag ended up as being removed from the CL thus, we can ignore it.
+func gatherAllParentsMessages(commits []*GitCommit) (tags map[GerritHashtags]bool) {
+	if tags == nil {
+		tags = make(map[GerritHashtags]bool, 0)
+	}
 	for _, c := range commits {
 		if len(c.Parents) > 0 {
-			tags = gatherAllParentsMessages(c.Parents, tags)
+			tags = gatherAllParentsMessages(c.Parents)
 		}
 		added, removed := hashAddedOrRemoved(c.Msg)
 		tags[added] = true
