@@ -1334,8 +1334,8 @@ func (m *GerritMeta) Hashtags() GerritHashtags {
 	// Lastly we parse the last commit's message and add a final update
 	// to the tag state.
 	added, removed := hashAddedOrRemoved(m.Commit.Msg)
-	tagStates[added] = true
-	tagStates[removed] = false
+	added.Foreach(func(t string) { tagStates[t] = true })
+	removed.Foreach(func(t string) { tagStates[t] = false })
 	var tags []string
 	for k, v := range tagStates {
 		// Add all the tags that ended up in true state.
@@ -1354,17 +1354,17 @@ func (m *GerritMeta) Hashtags() GerritHashtags {
 // The result will be a map of tags with two possible states.
 // true: this tag ends up being added to the current gerrint CL.
 // false: this tag ended up as being removed from the CL thus, we can ignore it.
-func gatherAllParentsMessages(commits []*GitCommit) (tags map[GerritHashtags]bool) {
+func gatherAllParentsMessages(commits []*GitCommit) (tags map[string]bool) {
 	if tags == nil {
-		tags = make(map[GerritHashtags]bool, 0)
+		tags = make(map[string]bool, 0)
 	}
 	for _, c := range commits {
 		if len(c.Parents) > 0 {
 			tags = gatherAllParentsMessages(c.Parents)
 		}
 		added, removed := hashAddedOrRemoved(c.Msg)
-		tags[added] = true
-		tags[removed] = false
+		added.Foreach(func(t string) { tags[t] = true })
+		removed.Foreach(func(t string) { tags[t] = false })
 	}
 	return tags
 }

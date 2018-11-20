@@ -421,7 +421,7 @@ var hashtagTestMultipleCommits = []struct {
 				Msg: `
 Update patch set 1
 
-Hashtag added: wait-author ex-wait-release
+Hashtags added: wait-author, ex-wait-release
 Hashtag removed: wait-release
 
 Patch-set: 1
@@ -463,7 +463,7 @@ Label: Code-Review=+1
 				},
 			},
 		},
-		want: GerritHashtags("wait-author ex-wait-release"),
+		want: GerritHashtags("ex-wait-release wait-author"),
 	},
 	{
 		meta: &GerritMeta{
