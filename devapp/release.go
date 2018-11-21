@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -24,7 +25,13 @@ const (
 
 	prefixProposal = "proposal:"
 	prefixDev      = "[dev."
+
+	// The title of the current release milestone in GitHub.
+	curMilestoneTitle = "Go1.12"
 )
+
+// The start date of the current release milestone.
+var curMilestoneStart = time.Date(2018, 8, 20, 0, 0, 0, 0, time.UTC)
 
 // titleDirs returns a slice of prefix directories contained in a title. For
 // devapp,maintner: my cool new change, it will return ["devapp", "maintner"].
@@ -61,8 +68,9 @@ func titleDirs(title string) []string {
 }
 
 type releaseData struct {
-	LastUpdated string
-	Sections    []section
+	LastUpdated  string
+	Sections     []section
+	BurndownJSON template.JS
 
 	// dirty is set if this data needs to be updated due to a corpus change.
 	dirty bool
@@ -160,6 +168,19 @@ func (cl *gerritCL) ReviewURL() string {
 	return fmt.Sprintf("https://%s-review.googlesource.com/%d", subd, cl.Number)
 }
 
+// burndownData is encoded to JSON and embedded in the page for use when
+// rendering a burndown chart using JavaScript.
+type burndownData struct {
+	Milestone string          `json:"milestone"`
+	Entries   []burndownEntry `json:"entries"`
+}
+
+type burndownEntry struct {
+	DateStr  string `json:"dateStr"` // "12-25"
+	Open     int    `json:"open"`
+	Blockers int    `json:"blockers"`
+}
+
 func (s *server) updateReleaseData() {
 	log.Println("Updating release data ...")
 	s.cMu.Lock()
@@ -217,21 +238,54 @@ func (s *server) updateReleaseData() {
 	})
 
 	dirToIssues := map[string][]*maintner.GitHubIssue{}
+	var curMilestoneIssues []*maintner.GitHubIssue
 	s.repo.ForeachIssue(func(issue *maintner.GitHubIssue) error {
-		// Issues in active milestones.
-		if !issue.Closed && issue.Milestone != nil && !issue.Milestone.Closed {
-			dirs := titleDirs(issue.Title)
-			if len(dirs) == 0 {
-				dirToIssues[""] = append(dirToIssues[""], issue)
-			} else {
-				for _, d := range dirs {
-					dirToIssues[d] = append(dirToIssues[d], issue)
-				}
+		// Only include issues in active milestones.
+		if issue.Milestone.IsUnknown() || issue.Milestone.Closed || issue.Milestone.IsNone() {
+			return nil
+		}
+
+		if issue.Milestone.Title == curMilestoneTitle {
+			curMilestoneIssues = append(curMilestoneIssues, issue)
+		}
+
+		// Only open issues are displayed on the page using dirToIssues.
+		if issue.Closed {
+			return nil
+		}
+
+		dirs := titleDirs(issue.Title)
+		if len(dirs) == 0 {
+			dirToIssues[""] = append(dirToIssues[""], issue)
+		} else {
+			for _, d := range dirs {
+				dirToIssues[d] = append(dirToIssues[d], issue)
 			}
 		}
 		return nil
 	})
 
+	bd := burndownData{Milestone: curMilestoneTitle}
+	for t, now := curMilestoneStart, time.Now(); t.Before(now); t = t.Add(24 * time.Hour) {
+		var e burndownEntry
+		for _, issue := range curMilestoneIssues {
+			if issue.Created.After(t) || (issue.Closed && issue.ClosedAt.Before(t)) {
+				continue
+			}
+			if issue.HasLabel("release-blocker") {
+				e.Blockers++
+			}
+			e.Open++
+		}
+		e.DateStr = t.Format("01-02")
+		bd.Entries = append(bd.Entries, e)
+	}
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(bd); err != nil {
+		log.Printf("json.Encode: %v", err)
+	}
+	s.data.release.BurndownJSON = template.JS(buf.String())
 	s.data.release.Sections = nil
 	s.appendOpenIssues(dirToIssues, issueToCLs)
 	s.appendPendingCLs(dirToCLs)

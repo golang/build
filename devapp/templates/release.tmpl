@@ -22,7 +22,14 @@ a:visited {
   margin: .5em 0 1em;
 }
 .Header {
+  display: flex;
+  flex-wrap: wrap;
   font-weight: bold;
+  justify-content: space-between;
+}
+.BurndownChart {
+  height: 250px;
+  width: 500px;
 }
 .Section {
   border-top: 1px solid #aaa;
@@ -50,15 +57,20 @@ a:visited {
 }
 </style>
 <header class="Header">
-  <div>Release dashboard</div>
-  <div>{{.LastUpdated}}</div>
+  <div class="Header-left">
+    <div>Release dashboard</div>
+    <div>{{.LastUpdated}}</div>
+    <ul class="CountSummary">
+    {{range .Sections}}
+      <li><a href="#{{.Title}}">{{.Count}} {{.Title}}</a></li>
+    {{end}}
+    </ul>
+  </div>
+  <div class="BurndownChart">
+    <canvas class="js-burndownChart"></canvas>
+  </div>
 </header>
 <main>
-<ul class="CountSummary">
-{{range .Sections}}
-  <li><a href="#{{.Title}}">{{.Count}} {{.Title}}</a></li>
-{{end}}
-</ul>
 {{range .Sections}}
   <section class="Section">
     <h3 class="Section-title" id="{{.Title}}">{{.Title}}</h3>
@@ -88,3 +100,54 @@ a:visited {
   </section>
 {{end}}
 </main>
+<script src="/js/Chart.min.js"></script>
+<script>
+const data = {{.BurndownJSON}}
+new Chart(document.querySelector('.js-burndownChart'), {
+  type: 'line',
+  data: {
+    labels: data.entries.map(d => d.dateStr),
+    datasets: [
+      {
+        label: `${data.milestone} total issues`,
+        data: data.entries.map(d => d.open),
+        backgroundColor: 'transparent',
+        borderColor: 'rgba(54, 162, 235, 0.8)',
+        pointRadius: 0,
+      },
+      {
+        label: `${data.milestone} release blocking`,
+        data: data.entries.map(d => d.blockers),
+        backgroundColor: 'rgba(0,0,0,0)',
+        borderColor: 'rgba(255, 99, 132, 0.8)',
+        pointRadius: 0,
+      },
+    ],
+  },
+  options: {
+    animation: {
+      duration: 0,
+    },
+    title: {
+      display: true,
+      text: `${data.milestone} Issues`,
+      position: 'left',
+    },
+    legend: {
+      display: false,
+    },
+    tooltips: {
+      intersect: false,
+    },
+    scales: {
+      yAxes: [
+        {
+          ticks: {
+            beginAtZero: true,
+          },
+        },
+      ],
+    },
+  },
+});
+</script>
