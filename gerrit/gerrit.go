@@ -296,6 +296,7 @@ type ChangeMessageInfo struct {
 	Author         *AccountInfo `json:"author"`
 	Time           TimeStamp    `json:"date"`
 	Message        string       `json:"message"`
+	Tag            string       `json:"tag,omitempty"`
 	RevisionNumber int          `json:"_revision_number"`
 }
 
