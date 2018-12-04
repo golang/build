@@ -1752,6 +1752,9 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "aix-ppc64",
 		HostType: "host-aix-ppc64-osuosl",
+		env: []string{
+			"PATH=/opt/freeware/bin:/usr/bin:/etc:/usr/sbin:/usr/ucb:/usr/bin/X11:/sbin:/usr/java7_64/jre/bin:/usr/java7_64/bin",
+		},
 	})
 
 }
