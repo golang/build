@@ -364,7 +364,7 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*GitCommit, error)
 	// Patch-set: 1
 	// Reviewer: Ian Lance Taylor <5206@62eb7196-b449-3ce5-99f1-c037f21e1705>
 	// Label: Code-Review=+2
-	if reviewer, _ := lineValue(c.strb(msg), "Reviewer: "); reviewer != "" {
+	if reviewer := lineValue(c.strb(msg), "Reviewer: "); reviewer != "" {
 		gc.Reviewer = &GitPerson{Str: reviewer}
 	}
 
