@@ -1527,8 +1527,9 @@ func init() {
 			"GO_TEST_TIMEOUT_SCALE=2"},
 	})
 	addBuilder(BuildConfig{
-		Name:     "windows-arm",
-		HostType: "host-windows-arm-iotcore",
+		Name:         "windows-arm",
+		HostType:     "host-windows-arm-iotcore",
+		SkipSnapshot: true,
 		env: []string{
 			"GOARM=7",
 			"GO_TEST_TIMEOUT_SCALE=2",
