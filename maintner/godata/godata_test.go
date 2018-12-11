@@ -7,6 +7,7 @@ package godata
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -289,7 +290,11 @@ func getGerritAuth() (username string, password string, err error) {
 		}
 	}
 	if slurp == "" {
-		slurp = os.Getenv("TEST_GERRIT_AUTH")
+		var ok bool
+		slurp, ok = os.LookupEnv("TEST_GERRIT_AUTH")
+		if !ok {
+			return "", "", errors.New("environment variable TEST_GERRIT_AUTH is not set")
+		}
 	}
 	f := strings.SplitN(strings.TrimSpace(slurp), ":", 2)
 	if len(f) == 1 {
