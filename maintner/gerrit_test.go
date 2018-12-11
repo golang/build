@@ -243,54 +243,78 @@ func TestSubject(t *testing.T) {
 	}
 }
 
-func TestLineValue(t *testing.T) {
+func TestLineValueOK(t *testing.T) {
 	tests := []struct {
 		all, prefix, want, wantRest string
+		wantOK                      bool
 	}{
 		{
 			all:      "foo:  value ",
 			prefix:   "foo:",
 			want:     "value",
 			wantRest: "",
+			wantOK:   true,
 		},
 		{
 			all:      "foo:  value\n",
 			prefix:   "foo:",
 			want:     "value",
 			wantRest: "",
+			wantOK:   true,
+		},
+		{
+			all:      "foo:\n",
+			prefix:   "foo:",
+			want:     "",
+			wantRest: "",
+			wantOK:   true,
+		},
+		{
+			all:      "bar:\n",
+			prefix:   "foo:",
+			want:     "",
+			wantRest: "",
+			wantOK:   false,
 		},
 		{
 			all:      "bar: other\nfoo:  value\n",
 			prefix:   "foo:",
 			want:     "value",
 			wantRest: "",
+			wantOK:   true,
 		},
 		{
 			all:      "notfoo: other\nfoo:  value\n",
 			prefix:   "foo:",
 			want:     "value",
 			wantRest: "",
+			wantOK:   true,
 		},
 		{
 			all:      "Foo: bar\nLabel: Vote=+1\nLabel: Vote=+2\n",
 			prefix:   "Label: ",
 			want:     "Vote=+1",
 			wantRest: "Label: Vote=+2\n",
+			wantOK:   true,
 		},
 		{
 			all:      "Label: Vote=+2\n",
 			prefix:   "Label: ",
 			want:     "Vote=+2",
 			wantRest: "",
+			wantOK:   true,
 		},
 	}
 	for _, tt := range tests {
-		got, gotRest := lineValue(tt.all, tt.prefix)
+		got, gotRest, gotOK := lineValueOK(tt.all, tt.prefix)
 		if got != tt.want {
-			t.Errorf("lineValue(%q, %q) returned value %q; want %q", tt.all, tt.prefix, got, tt.want)
+			t.Errorf("lineValueOK(%q, %q) returned value %q; want %q", tt.all, tt.prefix, got, tt.want)
 		}
 		if gotRest != tt.wantRest {
-			t.Errorf("lineValue(%q, %q) returned rest %q; want %q", tt.all, tt.prefix, gotRest, tt.wantRest)
+			t.Errorf("lineValueOK(%q, %q) returned rest %q; want %q", tt.all, tt.prefix, gotRest, tt.wantRest)
+		}
+		if gotOK != tt.wantOK {
+			t.Errorf("lineValueOK(%q, %q) returned ok %v; want %v", tt.all, tt.prefix, gotOK, tt.wantOK)
 		}
 	}
 }
