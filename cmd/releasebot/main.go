@@ -52,12 +52,7 @@ var releaseModes = map[string]bool{
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: releasebot -mode <release mode> [-dry-run] {go1.8.5|go1.10beta2|go1.11rc1}")
-	fmt.Fprintln(os.Stderr, "Release modes:")
-	fmt.Fprintln(os.Stderr)
-	for m := range releaseModes {
-		fmt.Fprintln(os.Stderr, m)
-	}
+	fmt.Fprintln(os.Stderr, "usage: releasebot -mode {prepare|release} [-security] [-dry-run] {go1.8.5|go1.10beta2|go1.11rc1}")
 	os.Exit(2)
 }
 
@@ -66,6 +61,7 @@ var dryRun bool // only perform pre-flight checks, only log to terminal
 func main() {
 	modeFlag := flag.String("mode", "", "release mode (prepare, release)")
 	flag.BoolVar(&dryRun, "dry-run", false, "only perform pre-flight checks, only log to terminal")
+	security := flag.Bool("security", false, "cut a security release from the internal Gerrit")
 	flag.Usage = usage
 	flag.Parse()
 	if *modeFlag == "" || !releaseModes[*modeFlag] || flag.NArg() == 0 {
@@ -84,6 +80,10 @@ func main() {
 	var wg sync.WaitGroup
 	for _, release := range flag.Args() {
 		if strings.Contains(release, "beta") || strings.Contains(release, "rc") {
+			if *security {
+				log.Printf("error: only minor releases are supported in security mode")
+				usage()
+			}
 			w := &Work{
 				Prepare:     *modeFlag == "prepare",
 				Version:     release,
@@ -110,6 +110,7 @@ func main() {
 					NextMilestone: nextM,
 					Prepare:       *modeFlag == "prepare",
 					Version:       release,
+					Security:      *security,
 				}
 				wg.Add(1)
 				go func() {
@@ -194,6 +195,7 @@ type Work struct {
 	Prepare     bool // create the release commit and submit it for review
 	BetaRelease bool
 	RCRelease   bool
+	Security    bool // cut a security release from the internal Gerrit
 
 	ReleaseIssue  int    // Release status issue number
 	ReleaseBranch string // "master" for beta releases
@@ -312,6 +314,9 @@ func (w *Work) doRelease() {
 	} else {
 		shortRel := w.Version[:strings.LastIndex(w.Version, ".")]
 		w.ReleaseBranch = "release-branch." + shortRel
+		if w.Security {
+			w.ReleaseBranch += "-security"
+		}
 	}
 
 	w.checkSpelling()
@@ -326,7 +331,9 @@ func (w *Work) doRelease() {
 	if w.BetaRelease || w.RCRelease {
 		// TODO: go tool api -allow_new=false
 	} else {
-		w.checkReleaseBlockers()
+		if !w.Security {
+			w.checkReleaseBlockers()
+		}
 		w.checkDocs()
 	}
 	w.findOrCreateReleaseIssue()
@@ -389,6 +396,18 @@ func (w *Work) checkReleaseBlockers() {
 }
 
 func (w *Work) nextStepsPrepare(changeID string) {
+	if w.Security {
+		w.log.Printf(`
+
+The release is ready.
+
+Please review and submit https://team-review.git.corp.google.com/q/%s
+after testing it with all.bash and then run the release stage.
+
+`, changeID)
+		return
+	}
+
 	w.log.Printf(`
 
 The release is ready.
@@ -439,7 +458,8 @@ func (w *Work) postSummary() {
 
 	body := md.String()
 	fmt.Printf("%s", body)
-	if dryRun {
+	// Avoid the risk of leaking sensitive test failures on security releases.
+	if dryRun || w.Security {
 		return
 	}
 	err := postGithubComment(w.ReleaseIssue, body)
@@ -503,8 +523,10 @@ func (w *Work) writeVersion() (changeID string) {
 	r.run("git", "commit", "-m", desc, "VERSION")
 	if dryRun {
 		fmt.Printf("\n### VERSION commit\n\n%s\n", r.runOut("git", "show", "HEAD"))
+	} else if w.Security {
+		r.run("git", "codereview", "mail")
 	} else {
-		r.run("git", "codereview", "mail", "-trybot", "HEAD")
+		r.run("git", "codereview", "mail", "-trybot")
 	}
 	return
 }
@@ -539,6 +561,22 @@ func (w *Work) buildReleases() {
 		w.log.Panic(err)
 	}
 	w.ReleaseInfo = make(map[string]*ReleaseInfo)
+
+	if w.Security {
+		fmt.Printf(`
+
+Please download
+
+	https://team.git.corp.google.com/golang/go-private/+archive/%s.tar.gz
+
+to %s and press enter.
+`, w.VersionCommit, filepath.Join(w.Dir, w.VersionCommit+".tar.gz"))
+
+		_, err := fmt.Scanln()
+		if err != nil {
+			w.log.Panic(err)
+		}
+	}
 
 	var wg sync.WaitGroup
 	for _, target := range releaseTargets {
@@ -627,9 +665,15 @@ func (w *Work) buildRelease(target string) {
 	} else {
 		failures := 0
 		for {
-			out, err := w.runner(filepath.Join(w.Dir, "release"), "GOPATH="+filepath.Join(w.Dir, "gopath")).runErr(
-				w.ReleaseBinary, "-target", target, "-user", gomoteUser, "-version", w.Version, "-rev", w.VersionCommit,
-				"-tools", w.ReleaseBranch, "-net", w.ReleaseBranch)
+			releaseBranch := strings.TrimSuffix(w.ReleaseBranch, "-security")
+			args := []string{w.ReleaseBinary, "-target", target, "-user", gomoteUser,
+				"-version", w.Version, "-tools", releaseBranch, "-net", releaseBranch}
+			if w.Security {
+				args = append(args, "-tarball", filepath.Join(w.Dir, w.VersionCommit+".tar.gz"))
+			} else {
+				args = append(args, "-rev", w.VersionCommit)
+			}
+			out, err := w.runner(filepath.Join(w.Dir, "release"), "GOPATH="+filepath.Join(w.Dir, "gopath")).runErr(args...)
 			// Exit code from release binary is apparently unreliable.
 			// Look to see if the files we expected were created instead.
 			failed := false

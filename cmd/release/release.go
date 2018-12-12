@@ -37,7 +37,8 @@ var (
 	target = flag.String("target", "", "If specified, build specific target platform (e.g. 'linux-amd64'). Default is to build all.")
 	watch  = flag.Bool("watch", false, "Watch the build. Only compatible with -target")
 
-	rev       = flag.String("rev", "", "Go revision to build")
+	rev       = flag.String("rev", "", "Go revision to build, alternative to -tarball")
+	tarball   = flag.String("tarball", "", "Go tree tarball to build, alternative to -rev")
 	toolsRev  = flag.String("tools", "", "Tools revision to build")
 	tourRev   = flag.String("tour", "master", "Tour revision to include")
 	netRev    = flag.String("net", "master", "Net revision to include")
@@ -70,8 +71,8 @@ func main() {
 		log.Fatalf("couldn't find releaselet source: %v", err)
 	}
 
-	if *rev == "" {
-		log.Fatal("must specify -rev flag")
+	if (*rev == "" && *tarball == "") || (*rev != "" && *tarball != "") {
+		log.Fatal("must specify one of -rev and -tarball")
 	}
 	if *toolsRev == "" {
 		log.Fatal("must specify -tools flag")
@@ -285,24 +286,38 @@ func (b *Build) make() error {
 		goPath = "gopath"
 		go14   = "go1.4"
 	)
+	if *tarball != "" {
+		tarFile, err := os.Open(*tarball)
+		if err != nil {
+			b.logf("failed to open tarball %q: %v", *tarball, err)
+			return err
+		}
+		if err := client.PutTar(tarFile, goDir); err != nil {
+			b.logf("failed to put tarball %q into dir %q: %v", *tarball, goDir, err)
+			return err
+		}
+		tarFile.Close()
+	} else {
+		tar := "https://go.googlesource.com/go/+archive/" + *rev + ".tar.gz"
+		if err := client.PutTarFromURL(tar, goDir); err != nil {
+			b.logf("failed to put tarball %q into dir %q: %v", tar, goDir, err)
+			return err
+		}
+	}
 	for _, r := range []struct {
 		repo, rev string
 	}{
-		{"go", *rev},
 		{"tools", *toolsRev},
 		{"tour", *tourRev},
 		{"net", *netRev},
 	} {
-		if b.Source && r.repo != "go" {
+		if b.Source {
 			continue
 		}
 		if r.repo == "tour" && !versionIncludesTour(*version) {
 			continue
 		}
-		dir := goDir
-		if r.repo != "go" {
-			dir = goPath + "/src/golang.org/x/" + r.repo
-		}
+		dir := goPath + "/src/golang.org/x/" + r.repo
 		tar := "https://go.googlesource.com/" + r.repo + "/+archive/" + r.rev + ".tar.gz"
 		if err := client.PutTarFromURL(tar, dir); err != nil {
 			b.logf("failed to put tarball %q into dir %q: %v", tar, dir, err)
