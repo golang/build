@@ -64,7 +64,7 @@ func main() {
 	security := flag.Bool("security", false, "cut a security release from the internal Gerrit")
 	flag.Usage = usage
 	flag.Parse()
-	if *modeFlag == "" || !releaseModes[*modeFlag] || flag.NArg() == 0 {
+	if *modeFlag == "" || !releaseModes[*modeFlag] || flag.NArg() != 1 {
 		usage()
 	}
 
@@ -77,58 +77,48 @@ func main() {
 	loadGithubAuth()
 	loadGCSAuth()
 
-	var wg sync.WaitGroup
-	for _, release := range flag.Args() {
-		if strings.Contains(release, "beta") || strings.Contains(release, "rc") {
-			if *security {
-				log.Printf("error: only minor releases are supported in security mode")
-				usage()
+	release := flag.Arg(0)
+
+	if strings.Contains(release, "beta") || strings.Contains(release, "rc") {
+		if *security {
+			log.Printf("error: only minor releases are supported in security mode")
+			usage()
+		}
+		w := &Work{
+			Prepare:     *modeFlag == "prepare",
+			Version:     release,
+			BetaRelease: strings.Contains(release, "beta"),
+			RCRelease:   strings.Contains(release, "rc"),
+		}
+		w.doRelease()
+		return
+	}
+
+	errFoundMilestone := errors.New("found milestone")
+	err := goRepo.ForeachMilestone(func(m *maintner.GitHubMilestone) error {
+		if strings.ToLower(m.Title) == release {
+			nextM, err := nextMilestone(m)
+			if err != nil {
+				return err
 			}
 			w := &Work{
-				Prepare:     *modeFlag == "prepare",
-				Version:     release,
-				BetaRelease: strings.Contains(release, "beta"),
-				RCRelease:   strings.Contains(release, "rc"),
+				Milestone:     m,
+				NextMilestone: nextM,
+				Prepare:       *modeFlag == "prepare",
+				Version:       release,
+				Security:      *security,
 			}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				w.doRelease()
-			}()
-			continue
+			w.doRelease()
+			return errFoundMilestone
 		}
-
-		errFoundMilestone := errors.New("found milestone")
-		err := goRepo.ForeachMilestone(func(m *maintner.GitHubMilestone) error {
-			if strings.ToLower(m.Title) == release {
-				nextM, err := nextMilestone(m)
-				if err != nil {
-					return err
-				}
-				w := &Work{
-					Milestone:     m,
-					NextMilestone: nextM,
-					Prepare:       *modeFlag == "prepare",
-					Version:       release,
-					Security:      *security,
-				}
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					w.doRelease()
-				}()
-				return errFoundMilestone
-			}
-			return nil
-		})
-		if err != nil && err != errFoundMilestone {
-			log.Printf("error looking for release %s: %v", release, err)
-		}
-		if err == nil {
-			log.Printf("cannot find release %s", release)
-		}
+		return nil
+	})
+	if err != nil && err != errFoundMilestone {
+		log.Fatalf("error looking for release %s: %v", release, err)
 	}
-	wg.Wait()
+	if err == nil {
+		log.Fatalf("cannot find release %s", release)
+	}
 }
 
 func nextMilestone(m *maintner.GitHubMilestone) (*maintner.GitHubMilestone, error) {
