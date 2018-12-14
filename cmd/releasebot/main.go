@@ -333,14 +333,21 @@ func (w *Work) doRelease() {
 	}
 
 	if w.Prepare {
+		var changeID string
+		if !w.BetaRelease {
+			changeID = w.writeVersion()
+		}
+
+		// Run the all.bash tests on the builders.
+		w.VersionCommit = w.gitHeadCommit()
+		w.buildReleases()
+
 		if w.BetaRelease {
 			w.nextStepsBeta()
 		} else {
-			changeID := w.writeVersion()
 			w.nextStepsPrepare(changeID)
 		}
 	} else {
-		// TODO: check build.golang.org
 		if !w.BetaRelease {
 			w.checkVersion()
 		}
@@ -392,7 +399,7 @@ func (w *Work) nextStepsPrepare(changeID string) {
 The release is ready.
 
 Please review and submit https://team-review.git.corp.google.com/q/%s
-after testing it with all.bash and then run the release stage.
+and then run the release stage.
 
 `, changeID)
 		return
@@ -403,7 +410,7 @@ after testing it with all.bash and then run the release stage.
 The release is ready.
 
 Please review and submit https://go-review.googlesource.com/q/%s
-after making sure its TryBot pass and then run the release stage.
+and then run the release stage.
 
 `, changeID)
 }
@@ -547,7 +554,7 @@ func (w *Work) buildReleaseBinary() {
 
 func (w *Work) buildReleases() {
 	w.buildReleaseBinary()
-	if err := os.MkdirAll(filepath.Join(w.Dir, "release"), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Join(w.Dir, "release", w.VersionCommit), 0777); err != nil {
 		w.log.Panic(err)
 	}
 	w.ReleaseInfo = make(map[string]*ReleaseInfo)
@@ -610,19 +617,18 @@ to %s and press enter.
 	w.releaseMu.Unlock()
 }
 
-// buildRelease builds the release packaging for a given target.
-// Because the "release" program can be flaky, it tries up to five times.
-// The release files are written to the current release directory
-// ($HOME/go-releasebot-work/go1.2.3/release).
-// If files for the current version are already present in that
-// directory, they are reused instead of being rebuilt.
-// buildRelease then uploads the release packaging to the
-// gs://golang-release-staging bucket, along with
-// files containing the SHA256 hash of the releases,
-// for eventual use by the download page.
+// buildRelease builds the release packaging for a given target. Because the
+// "release" program can be flaky, it tries up to five times. The release files
+// are written to the current release directory
+// ($HOME/go-releasebot-work/go1.2.3/release/COMMIT_HASH). If files for the
+// current version commit are already present in that directory, they are reused
+// instead of being rebuilt. In release mode, buildRelease then uploads the
+// release packaging to the gs://golang-release-staging bucket, along with files
+// containing the SHA256 hash of the releases, for eventual use by the download page.
 func (w *Work) buildRelease(target string) {
 	log.Printf("BUILDRELEASE %s %s\n", w.Version, target)
 	defer log.Printf("DONE BUILDRELEASE %s\n", target)
+	releaseDir := filepath.Join(w.Dir, "release", w.VersionCommit)
 	prefix := fmt.Sprintf("%s.%s.", w.Version, target)
 	var files []string
 	switch {
@@ -641,7 +647,7 @@ func (w *Work) buildRelease(target string) {
 			Suffix: strings.TrimPrefix(file, prefix),
 		}
 		outs = append(outs, out)
-		_, err := os.Stat(filepath.Join(w.Dir, "release", file))
+		_, err := os.Stat(filepath.Join(releaseDir, file))
 		if err != nil {
 			haveFiles = false
 		}
@@ -663,13 +669,13 @@ func (w *Work) buildRelease(target string) {
 			} else {
 				args = append(args, "-rev", w.VersionCommit)
 			}
-			out, err := w.runner(filepath.Join(w.Dir, "release"), "GOPATH="+filepath.Join(w.Dir, "gopath")).runErr(args...)
+			out, err := w.runner(releaseDir, "GOPATH="+filepath.Join(w.Dir, "gopath")).runErr(args...)
 			// Exit code from release binary is apparently unreliable.
 			// Look to see if the files we expected were created instead.
 			failed := false
 			w.releaseMu.Lock()
 			for _, out := range outs {
-				if _, err := os.Stat(filepath.Join(w.Dir, "release", out.File)); err != nil {
+				if _, err := os.Stat(filepath.Join(releaseDir, out.File)); err != nil {
 					failed = true
 				}
 			}
@@ -691,7 +697,7 @@ func (w *Work) buildRelease(target string) {
 		}
 	}
 
-	if dryRun {
+	if dryRun || w.Prepare {
 		return
 	}
 
@@ -716,7 +722,7 @@ func (w *Work) uploadStagingRelease(target string, out *ReleaseOutput) error {
 		return errors.New("attempted write operation in dry-run mode")
 	}
 
-	src := filepath.Join(w.Dir, "release", out.File)
+	src := filepath.Join(w.Dir, "release", w.VersionCommit, out.File)
 	h := sha256.New()
 	f, err := os.Open(src)
 	if err != nil {
