@@ -669,6 +669,12 @@ func (w *Work) buildRelease(target string) {
 			} else {
 				args = append(args, "-rev", w.VersionCommit)
 			}
+			// The prepare step will run the tests on a commit that has the same
+			// tree (but maybe different message) as the one that the release
+			// step will process, so we can skip tests the second time.
+			if !w.Prepare {
+				args = append(args, "-skip_tests")
+			}
 			out, err := w.runner(releaseDir, "GOPATH="+filepath.Join(w.Dir, "gopath")).runErr(args...)
 			// Exit code from release binary is apparently unreliable.
 			// Look to see if the files we expected were created instead.
