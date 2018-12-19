@@ -1092,9 +1092,8 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	// is the Go revision to use to build & test the x/* repo
 	// with. The first element is the master branch. We test the
 	// master branch against all the normal builders configured to
-	// do subrepos (subTryBuilders above). Any GoCommit values past
-	// the first are for older release branches, but we use a limited
-	// subset of builders for those.
+	// do subrepos. Any GoCommit values past the first are for older
+	// release branches, but we use a limited subset of builders for those.
 	var goRev string
 	if len(work.GoCommit) > 0 {
 		goRev = work.GoCommit[0]
