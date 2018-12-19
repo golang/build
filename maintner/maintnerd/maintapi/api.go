@@ -189,9 +189,9 @@ func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkR
 			work.Commit = ci.CurrentRevision
 		}
 		if work.Project != "go" {
-			// Trybot on a subrepo. Append master and the supported releases.
-			work.GoBranch = append(work.GoBranch, "master")
-			work.GoCommit = append(work.GoCommit, goProj.Ref("refs/heads/master").String())
+			// Trybot on a subrepo. Set the Go fields to master and the supported releases.
+			work.GoBranch = []string{"master"}
+			work.GoCommit = []string{goProj.Ref("refs/heads/master").String()}
 			for _, r := range supportedReleases {
 				work.GoBranch = append(work.GoBranch, r.BranchName)
 				work.GoCommit = append(work.GoCommit, r.BranchCommit)
