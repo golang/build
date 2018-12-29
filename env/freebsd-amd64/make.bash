@@ -56,10 +56,9 @@ case $1 in
   readonly SHA256=d8638aecbb13bdc891e17187f3932fe477f5655846bdaad8fecd60614de9312c
 ;;
 12.0)
-  readonly VERSION=12.0-ALPHA8
-  readonly IS_SNAPSHOT=1
+  readonly VERSION=12.0-RELEASE
   readonly VERSION_TRAILER=
-  readonly SHA256=11c69e6511e754a81b0b7c7c35b5fb4eee4c24a9231f77d494cb2e4ac0958576
+  readonly SHA256=9eb70a552f5395819904ed452a02e5805743459dbb1912ebafe4c9ae5de5eb53
 ;;
 *)
   echo "Usage: $0 <version>"
@@ -180,7 +179,7 @@ if {$::env(DOWNLOAD_UPDATES)} {
 
 expect -re $prompt
 sleep 1
-send "pkg install bash curl git\n"
+send "pkg install bash curl git gdb\n"
 expect "Do you want to fetch and install it now"
 sleep 1
 send "y\n"

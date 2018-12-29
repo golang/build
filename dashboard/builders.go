@@ -204,8 +204,8 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-freebsd-12_0": &HostConfig{
-		VMImage:            "freebsd-amd64-120a8",
-		Notes:              "FreeBSD 12.0alpha8; GCE VM is built from script in build/env/freebsd-amd64",
+		VMImage:            "freebsd-amd64-120-v1",
+		Notes:              "FreeBSD 12.0; GCE VM is built from script in build/env/freebsd-amd64",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
