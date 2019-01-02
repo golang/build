@@ -517,6 +517,10 @@ func TestParseGithubEvents(t *testing.T) {
 	t.Logf("Tested event types: %q", eventTypes)
 }
 
+func TestParseMultipleGithubEvents(t *testing.T) {
+
+}
+
 func TestParseGitHubReviews(t *testing.T) {
 	tests := []struct {
 		name string                // test
@@ -530,7 +534,7 @@ func TestParseGitHubReviews(t *testing.T) {
 				"id": 123456,
 				"node_id": "548913adsafas84asdf48a",
 				"user": {
-					"login": "bradfitz", 
+					"login": "bradfitz",
 					"id": 2621
 				},
 				"body": "I approve this commit",
@@ -577,7 +581,7 @@ func TestParseGitHubReviews(t *testing.T) {
 				"id": 123456,
 				"node_id": "548913adsafas84asdf48a",
 				"user": {
-					"login": "bradfitz", 
+					"login": "bradfitz",
 					"id": 2621
 				},
 				"body": "I approve this commit",
