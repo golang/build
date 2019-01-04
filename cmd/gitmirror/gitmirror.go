@@ -1529,8 +1529,15 @@ func parseRefs(cmd *exec.Cmd) (map[string]string, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
+	var line int
 	for bs.Scan() {
+		line++
 		f := strings.Fields(bs.Text())
+		if len(f) < 2 {
+			log.Printf("WARNING: skipping bogus ref line %d, %q (report this to https://golang.org/issue/29560)", line, bs.Text())
+			log.Printf("         refHash so far: %d entries, %s\n", condTrunc(fmt.Sprintf("%q", refHash), 500))
+			continue
+		}
 		refHash[f[1]] = f[0]
 	}
 	if err := bs.Err(); err != nil {
@@ -1570,4 +1577,11 @@ func handleDebugEnv(w http.ResponseWriter, r *http.Request) {
 	for _, kv := range os.Environ() {
 		fmt.Fprintf(w, "%s\n", kv)
 	}
+}
+
+func condTrunc(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "...(truncated)"
 }
