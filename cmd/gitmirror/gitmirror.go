@@ -1535,7 +1535,7 @@ func parseRefs(cmd *exec.Cmd) (map[string]string, error) {
 		f := strings.Fields(bs.Text())
 		if len(f) < 2 {
 			log.Printf("WARNING: skipping bogus ref line %d, %q (report this to https://golang.org/issue/29560)", line, bs.Text())
-			log.Printf("         refHash so far: %d entries, %s\n", condTrunc(fmt.Sprintf("%q", refHash), 500))
+			log.Printf("         refHash so far: %d entries, %s\n", len(refHash), condTrunc(fmt.Sprintf("%q", refHash), 500))
 			continue
 		}
 		refHash[f[1]] = f[0]
