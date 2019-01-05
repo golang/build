@@ -332,14 +332,15 @@ type ApprovalInfo struct {
 // obtained by adding o parameters as described at:
 // https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-changes
 type RevisionInfo struct {
-	Draft          bool                  `json:"draft"`
-	PatchSetNumber int                   `json:"_number"`
-	Created        TimeStamp             `json:"created"`
-	Uploader       *AccountInfo          `json:"uploader"`
-	Ref            string                `json:"ref"`
-	Fetch          map[string]*FetchInfo `json:"fetch"`
-	Commit         *CommitInfo           `json:"commit"`
-	Files          map[string]*FileInfo  `json:"files"`
+	Draft             bool                  `json:"draft"`
+	PatchSetNumber    int                   `json:"_number"`
+	Created           TimeStamp             `json:"created"`
+	Uploader          *AccountInfo          `json:"uploader"`
+	Ref               string                `json:"ref"`
+	Fetch             map[string]*FetchInfo `json:"fetch"`
+	Commit            *CommitInfo           `json:"commit"`
+	Files             map[string]*FileInfo  `json:"files"`
+	MessageWithFooter string                `json:"messageWithFooter"`
 	// TODO: more
 }
 
