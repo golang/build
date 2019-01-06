@@ -65,6 +65,7 @@ func (w *Work) gitTagVersion() {
 		out := r.runOut("git", "rev-parse", w.Version)
 		w.VersionCommit = strings.TrimSpace(string(out))
 		w.log.Printf("Git tag already exists (%s), resuming release.", w.VersionCommit)
+		return
 	}
 	out := r.runOut("git", "rev-parse", "HEAD")
 	w.VersionCommit = strings.TrimSpace(string(out))

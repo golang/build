@@ -612,6 +612,9 @@ var entries = map[string]*Entry{
 	"tools/cmd/toolstash": {
 		Secondary: []Owner{josharian},
 	},
+	"tools/go/packages": {
+		Primary: []Owner{matloob},
+	},
 	"playground": {
 		Secondary: []Owner{ysmolsky},
 	},
