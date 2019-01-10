@@ -90,3 +90,10 @@ func (w *Work) gitTagVersion() {
 	}
 	r.run("git", "push", "origin", w.Version)
 }
+
+// gitHeadCommit returns the hash of the HEAD commit.
+func (w *Work) gitHeadCommit() string {
+	r := w.runner(filepath.Join(w.Dir, "gitwork"))
+	out := r.runOut("git", "rev-parse", "HEAD")
+	return strings.TrimSpace(string(out))
+}
