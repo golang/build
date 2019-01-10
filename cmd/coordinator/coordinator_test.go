@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"golang.org/x/build/internal/buildgo"
+	"golang.org/x/build/maintner/maintnerd/apipb"
 )
 
 func TestPartitionGoTests(t *testing.T) {
@@ -110,4 +111,26 @@ func TestTryStatusJSON(t *testing.T) {
 func TestStagingClusterBuilders(t *testing.T) {
 	// Just test that it doesn't panic:
 	stagingClusterBuilders()
+}
+
+// tests that we don't test Go 1.10 for the build repo
+func TestNewTrySetBuildRepoGo110(t *testing.T) {
+	testingKnobSkipBuilds = true
+
+	work := &apipb.GerritTryWorkItem{
+		Project:  "build",
+		Branch:   "master",
+		ChangeId: "I6f05da2186b38dc8056081252563a82c50f0ce05",
+		Commit:   "a62e6a3ab11cc9cc2d9e22a50025dd33fc35d22f",
+		GoCommit: []string{"a2e79571a9d3dbe3cf10dcaeb1f9c01732219869", "e39e43d7349555501080133bb426f1ead4b3ef97", "f5ff72d62301c4e9d0a78167fab5914ca12919bd"},
+		GoBranch: []string{"master", "release-branch.go1.11", "release-branch.go1.10"},
+	}
+	ts := newTrySet(work)
+	for i, bs := range ts.builds {
+		v := bs.NameAndBranch()
+		if strings.Contains(v, "Go 1.10.x") {
+			t.Errorf("unexpected builder: %v", v)
+		}
+		t.Logf("build[%d]: %s", i, v)
+	}
 }

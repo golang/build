@@ -841,6 +841,15 @@ func (c *BuildConfig) BuildRepo(repo string) bool {
 // branch is the branch of the repo (usually "master").
 // goBranch is non-empty for a non-"go" repo, and is the branch of Go the subrepo is being tested at.
 func (c *BuildConfig) BuildBranch(repo, branch, goBranch string) bool {
+	// Don't try to build oauth2 or build before Go 1.11. These
+	// repos require modules.
+	switch repo {
+	case "oauth2", "build":
+		if branch == "release-branch.go1.10" || goBranch == "release-branch.go1.10" {
+			return false
+		}
+	}
+
 	if strings.HasPrefix(c.Name, "darwin-") {
 		switch c.Name {
 		case "darwin-amd64-10_8", "darwin-amd64-10_10", "darwin-amd64-10_11",
@@ -1023,8 +1032,9 @@ func defaultTrySet(extraProj ...string) func(proj string) bool {
 				return true
 			}
 		}
+		// TODO: remove items from this set once these repos have go.mod files:
 		switch proj {
-		case "grpc-review", "build", "exp", "mobile", "term", "oauth2":
+		case "grpc-review", "exp", "mobile", "term":
 			return false
 		}
 		return true

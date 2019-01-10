@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-module-proxy
+  annotations:
+    cloud.google.com/load-balancer-type: "Internal"
+spec:
+  type: NodePort
+  ports:
+    - name: module-proxy
+      port: 3000
+      targetPort: 3000
+      nodePort: 30156
+      protocol: TCP
+  selector:
+    app: athens
+
+# TODO(bradfitz): migrate (destroy & recreate) symbolic-datum-552 to get it off legacy networking
+# so we can use an internal LoadBalancer with a static internal IP instead, and then:
+#
+#spec:
+#  type: LoadBalancer
+#  loadBalancerIP: "10.240.0.we-cant-do-this-because-symbolic-datum-552-is-using-legacy-networking"
+#  loadBalancerSourceRanges:
+#  - "10.0.0.0/8"
+#  ports:
+#    - port: 3000
+#      targetPort: 3000
+#  selector:
+#    app: athens
