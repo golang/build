@@ -517,8 +517,64 @@ func TestParseGithubEvents(t *testing.T) {
 	t.Logf("Tested event types: %q", eventTypes)
 }
 
-func TestParseMultipleGithubEvents(t *testing.T) {
+var multipleEvents = `[{
+    "id": 1000014895,
+    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1000014895",
+    "actor": {
+      "login": "bradfitz",
+      "id": 2621
+    },
+    "event": "unlocked",
+    "commit_id": null,
+    "commit_url": null,
+    "created_at": "2017-03-14T23:26:21Z"
+},
+{
+    "id": 1006107803,
+    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1006107803",
+    "actor": {
+      "login": "bradfitz",
+      "id": 2622
+    },
+    "event": "renamed",
+    "commit_id": null,
+    "commit_url": null,
+    "created_at": "2017-03-20T02:53:43Z",
+    "rename": {
+      "from": "test-2",
+      "to": "test-2 new name"
+    }
+},
+{
+    "id": 1006940931,
+    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1006940931",
+    "actor": {
+      "login": "bradfitz",
+      "id": 2623
+    },
+    "event": "closed",
+    "commit_id": "e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
+    "commit_url": "https://api.github.com/repos/bradfitz/go-issue-mirror/commits/e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
+    "created_at": "2017-03-21T23:40:33Z"
+}]`
 
+func TestParseMultipleGithubEvents(t *testing.T) {
+	evts, err := parseGithubEvents(strings.NewReader(multipleEvents))
+	if err != nil {
+		t.Errorf("error was not expected: %s\n", err.Error())
+	}
+	if len(evts) != 3 {
+		t.Errorf("there should have been three events. was: %d\n", len(evts))
+	}
+	if evts[0].Type != "unlocked" {
+		t.Errorf("the first event should have been unlocked. was: %s\n", evts[0].Type)
+	}
+	if evts[1].Type != "renamed" {
+		t.Errorf("the first event should have been renamed. was: %s\n", evts[0].Type)
+	}
+	if evts[2].Type != "closed" {
+		t.Errorf("the first event should have been closed. was: %s\n", evts[0].Type)
+	}
 }
 
 func TestParseGitHubReviews(t *testing.T) {
