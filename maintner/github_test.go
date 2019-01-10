@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -519,47 +520,6 @@ func TestParseGithubEvents(t *testing.T) {
 	t.Logf("Tested event types: %q", eventTypes)
 }
 
-var multipleEvents = `[{
-    "id": 1000014895,
-    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1000014895",
-    "actor": {
-      "login": "bradfitz",
-      "id": 2621
-    },
-    "event": "unlocked",
-    "commit_id": null,
-    "commit_url": null,
-    "created_at": "2017-03-14T23:26:21Z"
-},
-{
-    "id": 1006107803,
-    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1006107803",
-    "actor": {
-      "login": "bradfitz",
-      "id": 2622
-    },
-    "event": "renamed",
-    "commit_id": null,
-    "commit_url": null,
-    "created_at": "2017-03-20T02:53:43Z",
-    "rename": {
-      "from": "test-2",
-      "to": "test-2 new name"
-    }
-},
-{
-    "id": 1006940931,
-    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/1006940931",
-    "actor": {
-      "login": "bradfitz",
-      "id": 2623
-    },
-    "event": "closed",
-    "commit_id": "e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
-    "commit_url": "https://api.github.com/repos/bradfitz/go-issue-mirror/commits/e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
-    "created_at": "2017-03-21T23:40:33Z"
-}]`
-
 func TestParseMultipleGithubEvents(t *testing.T) {
 	content, err := ioutil.ReadFile(filepath.Join("fixtures", "TestParseMultipleGithubEvents.json"))
 	if err != nil {
@@ -575,6 +535,33 @@ func TestParseMultipleGithubEvents(t *testing.T) {
 	lastEvent := evts[len(evts)-1]
 	if lastEvent.Type != "closed" {
 		t.Errorf("the last event's type should have been closed. was: %s\n", lastEvent.Type)
+	}
+}
+
+func TestParseMultipleGithubEventsWithForeach(t *testing.T) {
+	issue := &GitHubIssue{
+		PullRequest: true,
+		events: map[int64]*GitHubIssueEvent{
+			0: &GitHubIssueEvent{
+				Type: "labelled",
+			},
+			1: &GitHubIssueEvent{
+				Type: "milestone",
+			},
+			2: &GitHubIssueEvent{
+				Type: "closed",
+			},
+		},
+	}
+	eventTypes := []string{"closed", "labelled", "milestone"}
+	gatheredTypes := make([]string, 0)
+	issue.ForeachEvent(func(e *GitHubIssueEvent) error {
+		gatheredTypes = append(gatheredTypes, e.Type)
+		return nil
+	})
+	sort.Sort(sort.StringSlice(gatheredTypes))
+	if !reflect.DeepEqual(eventTypes, gatheredTypes) {
+		t.Fatalf("want event types: %v; got: %v\n", eventTypes, gatheredTypes)
 	}
 }
 
