@@ -6,6 +6,8 @@ package maintner
 
 import (
 	"fmt"
+	"io/ioutil"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -559,21 +561,20 @@ var multipleEvents = `[{
 }]`
 
 func TestParseMultipleGithubEvents(t *testing.T) {
-	evts, err := parseGithubEvents(strings.NewReader(multipleEvents))
+	content, err := ioutil.ReadFile(filepath.Join("fixtures", "TestParseMultipleGithubEvents.json"))
+	if err != nil {
+		t.Errorf("error while loading fixture: %s\n", err.Error())
+	}
+	evts, err := parseGithubEvents(strings.NewReader(string(content)))
 	if err != nil {
 		t.Errorf("error was not expected: %s\n", err.Error())
 	}
-	if len(evts) != 3 {
+	if len(evts) != 7 {
 		t.Errorf("there should have been three events. was: %d\n", len(evts))
 	}
-	if evts[0].Type != "unlocked" {
-		t.Errorf("the first event should have been unlocked. was: %s\n", evts[0].Type)
-	}
-	if evts[1].Type != "renamed" {
-		t.Errorf("the first event should have been renamed. was: %s\n", evts[0].Type)
-	}
-	if evts[2].Type != "closed" {
-		t.Errorf("the first event should have been closed. was: %s\n", evts[0].Type)
+	lastEvent := evts[len(evts)-1]
+	if lastEvent.Type != "closed" {
+		t.Errorf("the last event's type should have been closed. was: %s\n", lastEvent.Type)
 	}
 }
 
