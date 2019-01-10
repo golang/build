@@ -559,7 +559,7 @@ func TestParseMultipleGithubEventsWithForeach(t *testing.T) {
 		gatheredTypes = append(gatheredTypes, e.Type)
 		return nil
 	})
-	sort.Sort(sort.StringSlice(gatheredTypes))
+	sort.Strings(gatheredTypes)
 	if !reflect.DeepEqual(eventTypes, gatheredTypes) {
 		t.Fatalf("want event types: %v; got: %v\n", eventTypes, gatheredTypes)
 	}
