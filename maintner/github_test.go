@@ -5,6 +5,7 @@
 package maintner
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -575,6 +576,7 @@ func TestSyncEvents(t *testing.T) {
 	c.github.getOrCreateUserID(1924134).Login = "dmitshur"
 	gr := c.github.getOrCreateRepo("foowner", "bar")
 	issue := &GitHubIssue{
+		ID:          1001,
 		PullRequest: true,
 		events: map[int64]*GitHubIssueEvent{
 			0: &GitHubIssueEvent{
@@ -605,7 +607,11 @@ func TestSyncEvents(t *testing.T) {
 		githubDirect:  github.NewClient(server.Client()),
 		githubCaching: github.NewClient(server.Client()),
 	}
-	fmt.Println(p)
+	ctx := context.Background()
+	err := p.syncEventsOnIssue(ctx, int32(issue.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestParseGitHubReviews(t *testing.T) {
