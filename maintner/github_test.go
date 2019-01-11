@@ -576,6 +576,7 @@ type ClientMock struct {
 func (c *ClientMock) Do(req *http.Request) (*http.Response, error) {
 	content, _ := ioutil.ReadFile(filepath.Join("fixtures", "TestParseMultipleGithubEvents.json"))
 	headers := make(http.Header, 0)
+	// TODO: use append format instead which doesn't allocate on heap.
 	headers["Date"] = []string{time.Now().Format("Mon Jan _2 15:04:05 2006")}
 	return &http.Response{
 		Body:       ioutil.NopCloser(bytes.NewReader(content)),
