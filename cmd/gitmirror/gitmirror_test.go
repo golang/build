@@ -59,7 +59,14 @@ func (f *fakeCmd) CommandContext(ctx context.Context, cmd string, args ...string
 	return exec.CommandContext(ctx, "echo", append([]string{cmd}, args...)...)
 }
 
+func mustHaveGit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("skipping; git not in PATH")
+	}
+}
+
 func TestRev(t *testing.T) {
+	mustHaveGit(t)
 	f := &fakeCmd{}
 	testHookArchiveCmd = f.CommandContext
 	defer func() { testHookArchiveCmd = nil }()
@@ -81,6 +88,7 @@ func TestRev(t *testing.T) {
 }
 
 func TestRevNotFound(t *testing.T) {
+	mustHaveGit(t)
 	f := &fakeCmd{}
 	f2 := &fakeCmd{}
 	testHookArchiveCmd = f.CommandContext
