@@ -7,6 +7,8 @@ package maintner
 import (
 	"fmt"
 	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/google/go-github/github"
 
 	"golang.org/x/build/maintner/maintpb"
 )
@@ -563,6 +566,46 @@ func TestParseMultipleGithubEventsWithForeach(t *testing.T) {
 	if !reflect.DeepEqual(eventTypes, gatheredTypes) {
 		t.Fatalf("want event types: %v; got: %v\n", eventTypes, gatheredTypes)
 	}
+}
+
+func TestSyncEvents(t *testing.T) {
+	var c Corpus
+	c.initGithub()
+	c.github.getOrCreateUserID(2621).Login = "bradfitz"
+	c.github.getOrCreateUserID(1924134).Login = "dmitshur"
+	gr := c.github.getOrCreateRepo("foowner", "bar")
+	issue := &GitHubIssue{
+		PullRequest: true,
+		events: map[int64]*GitHubIssueEvent{
+			0: &GitHubIssueEvent{
+				Type: "labelled",
+			},
+			1: &GitHubIssueEvent{
+				Type: "milestone",
+			},
+			2: &GitHubIssueEvent{
+				Type: "closed",
+			},
+		},
+	}
+	gotp := issue.events[0].Proto()
+	gr.newGithubEvent(gotp)
+	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		// Test request parameters
+		// equals(t, req.URL.String(), "/some/path")
+		// Send response to be tested
+		rw.Write([]byte(`OK`))
+	}))
+	// Close the server when test finishes
+	defer server.Close()
+	p := &githubRepoPoller{
+		c:             &c,
+		token:         "asdf",
+		gr:            gr,
+		githubDirect:  github.NewClient(server.Client()),
+		githubCaching: github.NewClient(server.Client()),
+	}
+	fmt.Println(p)
 }
 
 func TestParseGitHubReviews(t *testing.T) {
