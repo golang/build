@@ -2002,6 +2002,10 @@ func (p *githubRepoPoller) issueNumbersWithStaleEventSync() (issueNums []int32) 
 	return issueNums
 }
 
+type httpClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 func (p *githubRepoPoller) syncEvents(ctx context.Context) error {
 	for {
 		nums := p.issueNumbersWithStaleEventSync()
@@ -2011,7 +2015,7 @@ func (p *githubRepoPoller) syncEvents(ctx context.Context) error {
 		remain := len(nums)
 		for _, num := range nums {
 			p.logf("event sync: %d issues remaining; syncing issue %v", remain, num)
-			if err := p.syncEventsOnIssue(ctx, num); err != nil {
+			if err := p.syncEventsOnIssue(ctx, num, http.DefaultClient); err != nil {
 				p.logf("event sync on issue %d: %v", num, err)
 				return err
 			}
@@ -2020,7 +2024,7 @@ func (p *githubRepoPoller) syncEvents(ctx context.Context) error {
 	}
 }
 
-func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32) error {
+func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32, client httpClient) error {
 	const perPage = 100
 	p.c.mu.RLock()
 	gi := p.gr.issues[issueNum]
@@ -2052,7 +2056,7 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 			ctx, cancel := context.WithTimeout(ctx, time.Minute)
 			defer cancel()
 			req = req.WithContext(ctx)
-			res, err := http.DefaultClient.Do(req)
+			res, err := client.Do(req)
 			if err != nil {
 				log.Printf("Fetching %s: %v", u, err)
 				return nil, nil, err

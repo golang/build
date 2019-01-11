@@ -5,6 +5,7 @@
 package maintner
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -569,6 +570,21 @@ func TestParseMultipleGithubEventsWithForeach(t *testing.T) {
 	}
 }
 
+type ClientMock struct {
+}
+
+func (c *ClientMock) Do(req *http.Request) (*http.Response, error) {
+	content, _ := ioutil.ReadFile(filepath.Join("fixtures", "TestParseMultipleGithubEvents.json"))
+	headers := make(http.Header, 0)
+	headers["Date"] = []string{time.Now().Format("Mon Jan _2 15:04:05 2006")}
+	return &http.Response{
+		Body:       ioutil.NopCloser(bytes.NewReader(content)),
+		Status:     "OK",
+		StatusCode: http.StatusOK,
+		Header:     headers,
+	}, nil
+}
+
 func TestSyncEvents(t *testing.T) {
 	var c Corpus
 	c.initGithub()
@@ -590,13 +606,13 @@ func TestSyncEvents(t *testing.T) {
 			},
 		},
 	}
-	gotp := issue.events[0].Proto()
-	gr.newGithubEvent(gotp)
+	// gotp := issue.events[0].Proto()
+	// e2 := gr.newGithubEvent(gotp)
+	gr.issues = map[int32]*GitHubIssue{
+		1001: issue,
+	}
 	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		// Test request parameters
-		// equals(t, req.URL.String(), "/some/path")
-		// Send response to be tested
-		rw.Write([]byte(`OK`))
+		rw.Write([]byte("OK"))
 	}))
 	// Close the server when test finishes
 	defer server.Close()
@@ -608,7 +624,7 @@ func TestSyncEvents(t *testing.T) {
 		githubCaching: github.NewClient(server.Client()),
 	}
 	ctx := context.Background()
-	err := p.syncEventsOnIssue(ctx, int32(issue.ID))
+	err := p.syncEventsOnIssue(ctx, int32(issue.ID), &ClientMock{})
 	if err != nil {
 		t.Fatal(err)
 	}
