@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build linux
+
 // The coordinator runs the majority of the Go build system.
 //
 // It is responsible for finding build work and executing it,
