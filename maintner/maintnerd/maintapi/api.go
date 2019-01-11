@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -244,6 +246,10 @@ type nonChangeRefLister interface {
 	ForeachNonChangeRef(fn func(ref string, hash maintner.GitHash) error) error
 }
 
+// releaseBranchRx matches things of the form "release-branch.go1.5" or "release-branch.go2",
+// but not things like "release-branch.go1.10-security".
+var releaseBranchRx = regexp.MustCompile(`^release-branch\.go(\d{1,2})(?:\.(\d{1,3}))?$`)
+
 // supportedGoReleases returns the latest patches of releases
 // that are considered supported per policy.
 func supportedGoReleases(goProj nonChangeRefLister) ([]*apipb.GoRelease, error) {
@@ -289,14 +295,16 @@ func supportedGoReleases(goProj nonChangeRefLister) ([]*apipb.GoRelease, error) 
 		case strings.HasPrefix(ref, "refs/heads/release-branch.go"):
 			// Release branch.
 			branchName := ref[len("refs/heads/"):]
-			var major, minor int32
-			_, err := fmt.Sscanf(branchName, "release-branch.go%d.%d", &major, &minor)
-			if err == io.ErrUnexpectedEOF {
-				// Do nothing.
-			} else if err != nil {
+			m := releaseBranchRx.FindStringSubmatch(branchName)
+			if m == nil {
 				return nil
 			}
-			branches[majorMinor{major, minor}] = branch{
+			var major, minor int
+			major, _ = strconv.Atoi(m[1])
+			if len(m) > 2 {
+				minor, _ = strconv.Atoi(m[2])
+			}
+			branches[majorMinor{int32(major), int32(minor)}] = branch{
 				Name:   branchName,
 				Commit: hash,
 			}
