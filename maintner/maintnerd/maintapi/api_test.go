@@ -115,7 +115,6 @@ func TestTryBotStatus(t *testing.T) {
 		}
 		*cl = old // restore
 	}
-
 }
 
 func TestTryWorkItem(t *testing.T) {
@@ -185,8 +184,8 @@ func TestSupportedGoReleases(t *testing.T) {
 					{"refs/heads/release-branch.go1.1", gitHash("1d6d8fca241bb611af51e265c1b5a2e9ae904702")},
 					{"refs/heads/release-branch.go1.10", gitHash("e97b7d68f107ff60152f5bd5701e0286f221ee93")},
 					{"refs/heads/release-branch.go1.11", gitHash("97781d2ed116d2cd9cb870d0b84fc0ec598c9abc")},
-					{"refs/heads/release-branch.go1.10-security", gitHash("e97b7d68f107ff60152f5bd5701e0286f221ee93")},
-					{"refs/heads/release-branch.go1.11-security", gitHash("97781d2ed116d2cd9cb870d0b84fc0ec598c9abc")},
+					{"refs/heads/release-branch.go1.10-security", gitHash("25ca8f49c3fc4a68daff7a23ab613e3453be5cda")},
+					{"refs/heads/release-branch.go1.11-security", gitHash("90c896448691b5edb0ab11110f37234f63cd28ed")},
 					{"refs/heads/release-branch.go1.2", gitHash("43d00b0942c1c6f43993ac71e1eea48e62e22b8d")},
 					{"refs/heads/release-branch.r59", gitHash("5d9765785dff74784bbdad43f7847b6825509032")},
 					{"refs/heads/release-branch.r60", gitHash("394b383a1ee0ac3fec5e453a7dbe590d3ce6d6b0")},

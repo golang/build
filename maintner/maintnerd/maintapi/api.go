@@ -8,12 +8,8 @@ package maintapi
 import (
 	"context"
 	"errors"
-	"fmt"
-	"io"
 	"log"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +17,7 @@ import (
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/maintnerd/apipb"
+	"golang.org/x/build/maintner/maintnerd/maintapi/version"
 )
 
 // NewAPIService creates a gRPC Server that serves the Maintner API for the given corpus.
@@ -221,6 +218,31 @@ func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkR
 	return res, nil
 }
 
+// parseTagVersion parses the major-minor-patch version triplet
+// from goX, goX.Y, or goX.Y.Z tag names,
+// and reports whether the tag name is valid.
+//
+// Tags with suffixes like "go1.2beta3" or "go1.2rc1" are rejected.
+//
+// For example, "go1" is parsed as version 1.0.0,
+// "go1.2" is parsed as version 1.2.0,
+// and "go1.2.3" is parsed as version 1.2.3.
+func parseTagVersion(tagName string) (major, minor, patch int32, ok bool) {
+	maj, min, pat, ok := version.ParseTag(tagName)
+	return int32(maj), int32(min), int32(pat), ok
+}
+
+// parseReleaseBranchVersion parses the major-minor version pair
+// from release-branch.goX or release-branch.goX.Y release branch names,
+// and reports whether the release branch name is valid.
+//
+// For example, "release-branch.go1" is parsed as version 1.0,
+// and "release-branch.go1.2" is parsed as version 1.2.
+func parseReleaseBranchVersion(branchName string) (major, minor int32, ok bool) {
+	maj, min, ok := version.ParseReleaseBranch(branchName)
+	return int32(maj), int32(min), ok
+}
+
 // ListGoReleases lists Go releases. A release is considered to exist
 // if a tag for it exists.
 func (s apiService) ListGoReleases(ctx context.Context, req *apipb.ListGoReleasesRequest) (*apipb.ListGoReleasesResponse, error) {
@@ -245,10 +267,6 @@ type nonChangeRefLister interface {
 	// Iteration stops with the first non-nil error returned by fn.
 	ForeachNonChangeRef(fn func(ref string, hash maintner.GitHash) error) error
 }
-
-// releaseBranchRx matches things of the form "release-branch.go1.5" or "release-branch.go2",
-// but not things like "release-branch.go1.10-security".
-var releaseBranchRx = regexp.MustCompile(`^release-branch\.go(\d{1,2})(?:\.(\d{1,3}))?$`)
 
 // supportedGoReleases returns the latest patches of releases
 // that are considered supported per policy.
@@ -275,11 +293,8 @@ func supportedGoReleases(goProj nonChangeRefLister) ([]*apipb.GoRelease, error) 
 		case strings.HasPrefix(ref, "refs/tags/go"):
 			// Tag.
 			tagName := ref[len("refs/tags/"):]
-			var major, minor, patch int32
-			_, err := fmt.Sscanf(tagName, "go%d.%d.%d", &major, &minor, &patch)
-			if err == io.ErrUnexpectedEOF {
-				// Do nothing.
-			} else if err != nil {
+			major, minor, patch, ok := parseTagVersion(tagName)
+			if !ok {
 				return nil
 			}
 			if t, ok := tags[majorMinor{major, minor}]; ok && patch <= t.Patch {
@@ -295,16 +310,11 @@ func supportedGoReleases(goProj nonChangeRefLister) ([]*apipb.GoRelease, error) 
 		case strings.HasPrefix(ref, "refs/heads/release-branch.go"):
 			// Release branch.
 			branchName := ref[len("refs/heads/"):]
-			m := releaseBranchRx.FindStringSubmatch(branchName)
-			if m == nil {
+			major, minor, ok := parseReleaseBranchVersion(branchName)
+			if !ok {
 				return nil
 			}
-			var major, minor int
-			major, _ = strconv.Atoi(m[1])
-			if len(m) > 2 {
-				minor, _ = strconv.Atoi(m[2])
-			}
-			branches[majorMinor{int32(major), int32(minor)}] = branch{
+			branches[majorMinor{major, minor}] = branch{
 				Name:   branchName,
 				Commit: hash,
 			}
