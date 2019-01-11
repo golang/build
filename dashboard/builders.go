@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"golang.org/x/build/buildenv"
+	"golang.org/x/build/types"
 )
 
 // Builders are the different build configurations.
@@ -616,6 +617,15 @@ type BuildConfig struct {
 	CompileOnly bool                   // if true, compile tests, but don't run them
 	FlakyNet    bool                   // network tests are flaky (try anyway, but ignore some failures)
 
+	// MinimumGoVersion optionally specifies the minimum Go version
+	// this builder is allowed to use. It can be useful for skipping
+	// builders that are too new and no longer support some supported
+	// Go versions. It doesn't need to be set for builders that support
+	// all supported Go versions.
+	//
+	// Note: This field currently has effect on trybot runs only.
+	MinimumGoVersion types.MajorMinor
+
 	// MaxAtOnce optionally specifies a cap of how many builds of
 	// this type can run at once. Zero means unlimited. This is a
 	// temporary measure until the build scheduler
@@ -1092,6 +1102,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-12_0",
 		HostType:          "host-freebsd-12_0",
+		MinimumGoVersion:  types.MajorMinor{1, 11},
 		tryBot:            defaultTrySet(),
 		ShouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
@@ -1433,6 +1444,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-64",
 		HostType:          "host-openbsd-amd64-64",
+		MinimumGoVersion:  types.MajorMinor{1, 11},
 		ShouldRunDistTest: noTestDir,
 		tryBot:            defaultTrySet(),
 		numTestHelpers:    0,

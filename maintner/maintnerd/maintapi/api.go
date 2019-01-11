@@ -8,6 +8,7 @@ package maintapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"sort"
 	"strings"
@@ -168,14 +169,13 @@ func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkR
 	}
 	tryCache.forNumChanges = sumChanges
 
-	res := new(apipb.GoFindTryWorkResponse)
 	goProj := s.c.Gerrit().Project("go.googlesource.com", "go")
-
 	supportedReleases, err := supportedGoReleases(goProj)
 	if err != nil {
 		return nil, err
 	}
 
+	res := new(apipb.GoFindTryWorkResponse)
 	for _, ci := range cis {
 		cl := s.c.Gerrit().Project("go.googlesource.com", ci.Project).CL(int32(ci.ChangeNumber))
 		if cl == nil {
@@ -187,13 +187,32 @@ func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkR
 			// In case maintner is behind.
 			work.Commit = ci.CurrentRevision
 		}
-		if work.Project != "go" {
+		if work.Project == "go" {
+			// Trybot on Go repo. Set the GoVersion field based on branch name.
+			if work.Branch == "master" {
+				latest := supportedReleases[0]
+				work.GoVersion = []*apipb.MajorMinor{{latest.Major, latest.Minor}}
+			} else if major, minor, ok := parseReleaseBranchVersion(work.Branch); ok {
+				// A release branch like release-branch.goX.Y.
+				// Use the major-minor Go version determined from the branch name.
+				work.GoVersion = []*apipb.MajorMinor{{major, minor}}
+			} else {
+				// A branch that is neither master nor release-branch.goX.Y.
+				// I don't see a straightforward way to compute its version,
+				// so use the latest Go release until we need to do more.
+				latest := supportedReleases[0]
+				work.GoVersion = []*apipb.MajorMinor{{latest.Major, latest.Minor}}
+			}
+		} else {
 			// Trybot on a subrepo. Set the Go fields to master and the supported releases.
-			work.GoBranch = []string{"master"}
 			work.GoCommit = []string{goProj.Ref("refs/heads/master").String()}
+			work.GoBranch = []string{"master"}
+			latest := supportedReleases[0]
+			work.GoVersion = []*apipb.MajorMinor{{latest.Major, latest.Minor}}
 			for _, r := range supportedReleases {
-				work.GoBranch = append(work.GoBranch, r.BranchName)
 				work.GoCommit = append(work.GoCommit, r.BranchCommit)
+				work.GoBranch = append(work.GoBranch, r.BranchName)
+				work.GoVersion = append(work.GoVersion, &apipb.MajorMinor{r.Major, r.Minor})
 			}
 		}
 		res.Waiting = append(res.Waiting, work)
@@ -268,8 +287,9 @@ type nonChangeRefLister interface {
 	ForeachNonChangeRef(fn func(ref string, hash maintner.GitHash) error) error
 }
 
-// supportedGoReleases returns the latest patches of releases
-// that are considered supported per policy.
+// supportedGoReleases returns the latest patches of releases that are
+// considered supported per policy. Sorted by version with latest first.
+// The returned list will be empty if and only if the error is non-nil.
 func supportedGoReleases(goProj nonChangeRefLister) ([]*apipb.GoRelease, error) {
 	type majorMinor struct {
 		Major, Minor int32
@@ -360,9 +380,10 @@ func supportedGoReleases(goProj nonChangeRefLister) ([]*apipb.GoRelease, error) 
 	})
 
 	// Per policy, only the latest two releases are considered supported.
-	if len(rs) > 2 {
-		rs = rs[:2]
+	// Return an error if there aren't at least two releases, so callers
+	// don't have to check for empty list.
+	if len(rs) < 2 {
+		return nil, fmt.Errorf("there was a problem finding supported Go releases")
 	}
-
-	return rs, nil
+	return rs[:2], nil
 }

@@ -1103,6 +1103,22 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		goRev = work.GoCommit[0]
 	}
 
+	// Defensive check that the input is well-formed.
+	// Each GoCommit should have a GoBranch and a GoVersion.
+	// There should always be at least one GoVersion.
+	if len(work.GoBranch) < len(work.GoCommit) {
+		log.Printf("WARNING: len(GoBranch) of %d != len(GoCommit) of %d", len(work.GoBranch), len(work.GoCommit))
+		work.GoCommit = work.GoCommit[:len(work.GoBranch)]
+	}
+	if len(work.GoVersion) < len(work.GoCommit) {
+		log.Printf("WARNING: len(GoVersion) of %d != len(GoCommit) of %d", len(work.GoVersion), len(work.GoCommit))
+		work.GoCommit = work.GoCommit[:len(work.GoVersion)]
+	}
+	if len(work.GoVersion) == 0 {
+		log.Print("WARNING: len(GoVersion) is zero, want at least one")
+		work.GoVersion = []*apipb.MajorMinor{{}}
+	}
+
 	addBuilderToSet := func(bs *buildStatus, brev buildgo.BuilderRev) {
 		bs.trySet = ts
 		status[brev] = bs
@@ -1121,6 +1137,10 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		go ts.notifyStarting()
 	}
 	for _, bconf := range builders {
+		goVersion := types.MajorMinor{int(work.GoVersion[0].Major), int(work.GoVersion[0].Minor)}
+		if goVersion.Less(bconf.MinimumGoVersion) {
+			continue
+		}
 		brev := tryKeyToBuilderRev(bconf.Name, key, goRev)
 		bs, err := newBuild(brev)
 		if err != nil {
@@ -1128,13 +1148,6 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 			continue
 		}
 		addBuilderToSet(bs, brev)
-	}
-
-	// Defensive check that the input is well-formed and each GoCommit
-	// has a GoBranch.
-	if len(work.GoBranch) < len(work.GoCommit) {
-		log.Printf("WARNING: len(GoBranch) of %d != len(GoCommit) of %d", len(work.GoBranch), len(work.GoCommit))
-		work.GoCommit = work.GoCommit[:len(work.GoBranch)]
 	}
 
 	// linuxBuilder is the standard builder we run for when testing x/* repos against
@@ -1150,6 +1163,10 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		}
 		branch := work.GoBranch[i]
 		if !linuxBuilder.BuildBranch(key.Project, "master", branch) {
+			continue
+		}
+		goVersion := types.MajorMinor{int(work.GoVersion[i].Major), int(work.GoVersion[i].Minor)}
+		if goVersion.Less(linuxBuilder.MinimumGoVersion) {
 			continue
 		}
 		brev := tryKeyToBuilderRev(linuxBuilder.Name, key, goRev)

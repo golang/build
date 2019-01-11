@@ -51,7 +51,7 @@ message GoFindTryWorkResponse {
 
 message GerritTryWorkItem {
   string project = 1;    // "go", "net", etc. (Gerrit Project)
-  string branch = 2;     // "master"
+  string branch = 2;     // "master", "release-branch.go1.8", etc.
   string change_id = 3;  // "I1a27695838409259d1586a0adfa9f92bccf7ceba"
   string commit = 4;     // "ecf3dffc81dc21408fb02159af352651882a8383"
 
@@ -59,7 +59,17 @@ message GerritTryWorkItem {
   // go_branch is a branch name of go_commit, for showing to users when
   // a try set fails.
   repeated string go_commit = 5;  // "4833e920c1d7f6b23458e6ff3c73951fcf754219"
-  repeated string go_branch = 6;  // "master", "release-branch.go1.8", etc
+  repeated string go_branch = 6;  // "master", "release-branch.go1.8", etc.
+
+  // go_version specifies the major and minor version of the targeted Go toolchain.
+  // For Go repo, it contains exactly one element.
+  // For subrepos, it contains elements that correspond to go_commit.
+  repeated MajorMinor go_version = 7;
+}
+
+message MajorMinor {
+  int32 major = 1;
+  int32 minor = 2;
 }
 
 // By default, ListGoReleases returns only the latest patches
@@ -67,7 +77,7 @@ message GerritTryWorkItem {
 message ListGoReleasesRequest {}
 
 message ListGoReleasesResponse {
-  // Releases are Go releases, sorted with latest release first.
+  // Releases are Go releases, sorted by version with latest first.
   repeated GoRelease releases = 1;
 }
 
