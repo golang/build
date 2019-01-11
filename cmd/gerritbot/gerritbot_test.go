@@ -5,6 +5,7 @@
 package main
 
 import (
+	"os/exec"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -43,6 +44,9 @@ Change-Id: If751ce3ffa3a4d5e00a3138211383d12cb6b23fc
 }
 
 func TestCommitMessage(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("skipping; 'git' not in PATH")
+	}
 	testCases := []struct {
 		desc     string
 		pr       *github.PullRequest
