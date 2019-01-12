@@ -7,6 +7,7 @@ package maintner
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -571,51 +572,56 @@ func TestParseMultipleGithubEventsWithForeach(t *testing.T) {
 }
 
 type ClientMock struct {
+	err        error
+	status     string
+	statusCode int
 }
 
+var timesDoWasCalled = 0
+
 func (c *ClientMock) Do(req *http.Request) (*http.Response, error) {
+	timesDoWasCalled++
 	content, _ := ioutil.ReadFile(filepath.Join("fixtures", "TestParseMultipleGithubEvents.json"))
 	headers := make(http.Header, 0)
-	// TODO: use append format instead which doesn't allocate on heap.
-	headers["Date"] = []string{time.Now().Format("Mon Jan _2 15:04:05 2006")}
+	t := time.Now()
+	var b []byte
+	headers["Date"] = []string{string(t.AppendFormat(b, "Mon Jan _2 15:04:05 2006"))}
 	return &http.Response{
 		Body:       ioutil.NopCloser(bytes.NewReader(content)),
-		Status:     "OK",
-		StatusCode: http.StatusOK,
+		Status:     c.status,
+		StatusCode: c.statusCode,
 		Header:     headers,
-	}, nil
+	}, c.err
+}
+
+type MockLogger struct {
+}
+
+var eventLog = make([]string, 0)
+
+func (m *MockLogger) Log(mut *maintpb.Mutation) error {
+	for _, e := range mut.GithubIssue.Event {
+		eventLog = append(eventLog, e.EventType)
+	}
+	return nil
 }
 
 func TestSyncEvents(t *testing.T) {
 	var c Corpus
 	c.initGithub()
-	c.github.getOrCreateUserID(2621).Login = "bradfitz"
-	c.github.getOrCreateUserID(1924134).Login = "dmitshur"
+	c.mutationLogger = &MockLogger{}
 	gr := c.github.getOrCreateRepo("foowner", "bar")
 	issue := &GitHubIssue{
 		ID:          1001,
 		PullRequest: true,
-		events: map[int64]*GitHubIssueEvent{
-			0: &GitHubIssueEvent{
-				Type: "labelled",
-			},
-			1: &GitHubIssueEvent{
-				Type: "milestone",
-			},
-			2: &GitHubIssueEvent{
-				Type: "closed",
-			},
-		},
+		events:      map[int64]*GitHubIssueEvent{},
 	}
-	// gotp := issue.events[0].Proto()
-	// e2 := gr.newGithubEvent(gotp)
 	gr.issues = map[int32]*GitHubIssue{
 		1001: issue,
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		rw.Write([]byte("OK"))
 	}))
-	// Close the server when test finishes
 	defer server.Close()
 	p := &githubRepoPoller{
 		c:             &c,
@@ -624,11 +630,69 @@ func TestSyncEvents(t *testing.T) {
 		githubDirect:  github.NewClient(server.Client()),
 		githubCaching: github.NewClient(server.Client()),
 	}
-	ctx := context.Background()
-	err := p.syncEventsOnIssue(ctx, int32(issue.ID), &ClientMock{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Run("successful sync", func(t2 *testing.T) {
+		timesDoWasCalled = 0
+		ctx := context.Background()
+		err := p.syncEventsOnIssue(ctx, int32(issue.ID), &ClientMock{
+			status:     "OK",
+			statusCode: http.StatusOK,
+			err:        nil,
+		})
+		if err != nil {
+			t2.Error(err)
+		}
+		want := []string{"labeled", "labeled", "labeled", "labeled", "labeled", "milestoned", "closed"}
+		if !reflect.DeepEqual(want, eventLog) {
+			t2.Errorf("want: %v; got: %v\n", want, eventLog)
+		}
+
+		wantTimesCalled := 1
+		if timesDoWasCalled != wantTimesCalled {
+			t.Errorf("client.Do should have been called %d times. got: %d\n", wantTimesCalled, timesDoWasCalled)
+		}
+	})
+	t.Run("retry logic on failed request", func(t2 *testing.T) {
+		timesDoWasCalled = 0
+		ctx := context.Background()
+		err := p.syncEventsOnIssue(ctx, int32(issue.ID), &ClientMock{
+			status:     "Retry Error",
+			statusCode: http.StatusInternalServerError,
+			err:        nil,
+		})
+		if err == nil {
+			t2.Error("was expecting error after try counts ran out.")
+		}
+		want := "https://api.github.com/repos/foowner/bar/issues/1001/events?per_page=100&page=1: Retry Error"
+		if err.Error() != want {
+			t2.Errorf("want: %s, got: %s\n", want, err.Error())
+		}
+
+		wantTimesCalled := 3
+		if timesDoWasCalled != wantTimesCalled {
+			t.Errorf("client.Do should have been called %d times. got: %d\n", wantTimesCalled, timesDoWasCalled)
+		}
+	})
+	t.Run("do not retry general failure", func(t2 *testing.T) {
+		timesDoWasCalled = 0
+		ctx := context.Background()
+		err := p.syncEventsOnIssue(ctx, int32(issue.ID), &ClientMock{
+			status:     "Retry Error",
+			statusCode: http.StatusInternalServerError,
+			err:        errors.New("panic"),
+		})
+		if err == nil {
+			t2.Error("was expecting error after try counts ran out.")
+		}
+		want := "panic"
+		if err.Error() != want {
+			t2.Errorf("want: %s, got: %s\n", want, err.Error())
+		}
+
+		wantTimesCalled := 1
+		if timesDoWasCalled != wantTimesCalled {
+			t.Errorf("client.Do should have been called %d times. got: %d\n", wantTimesCalled, timesDoWasCalled)
+		}
+	})
 }
 
 func TestParseGitHubReviews(t *testing.T) {

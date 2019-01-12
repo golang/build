@@ -2056,15 +2056,33 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 			ctx, cancel := context.WithTimeout(ctx, time.Minute)
 			defer cancel()
 			req = req.WithContext(ctx)
-			res, err := client.Do(req)
-			if err != nil {
-				log.Printf("Fetching %s: %v", u, err)
-				return nil, nil, err
+
+			tryCount := 0
+			maxTries := 3
+			waitTime := 500 * time.Millisecond
+			var res *http.Response
+			var err error
+
+			for tryCount < maxTries {
+				res, err = client.Do(req)
+				if err != nil {
+					// We don't want to retry this error.
+					log.Printf("Error fetching %s: %v", u, err)
+					return nil, nil, err
+				}
+
+				log.Printf("Fetching %s: %v", u, res.Status)
+				if res.StatusCode != http.StatusOK {
+					log.Printf("Error fetching %s: %v: %+v. Tries left: %d\n", u, res.Status, res.Header, maxTries-tryCount)
+					tryCount++
+					time.Sleep(waitTime)
+				} else if res.StatusCode == http.StatusOK {
+					break
+				}
 			}
-			log.Printf("Fetching %s: %v", u, res.Status)
+
 			if res.StatusCode != http.StatusOK {
-				log.Printf("Fetching %s: %v: %+v", u, res.Status, res.Header)
-				// TODO: rate limiting, etc.
+				log.Println("No more tries left.")
 				return nil, nil, fmt.Errorf("%s: %v", u, res.Status)
 			}
 			evts, err := parseGithubEvents(res.Body)
