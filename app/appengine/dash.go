@@ -204,10 +204,12 @@ var gccgoDash = &Dashboard{
 // This also prevents the builder infrastructure
 // from testing sub-repos against these branches.
 var hiddenBranches = map[string]bool{
-	"release-branch.go1.4": true,
-	"release-branch.go1.5": true,
-	"release-branch.go1.6": true,
-	"release-branch.go1.7": true,
-	"release-branch.go1.8": true,
-	"release-branch.go1.9": true,
+	"release-branch.go1.4":           true,
+	"release-branch.go1.5":           true,
+	"release-branch.go1.6":           true,
+	"release-branch.go1.7":           true,
+	"release-branch.go1.8":           true,
+	"release-branch.go1.9":           true,
+	"release-branch.go1.10-security": true,
+	"release-branch.go1.11-security": true,
 }
