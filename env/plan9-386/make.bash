@@ -142,6 +142,12 @@ expect -exact "term% "
 send "mv /tmp/plan9.ini /n/9fat/plan9.ini\n"
 
 expect -exact "term% "
+send "sed /^\\\*nomp'='/d /n/9fat/plan9.ini >/tmp/plan9.ini\n"
+
+expect -exact "term% "
+send "mv /tmp/plan9.ini /n/9fat/plan9.ini\n"
+
+expect -exact "term% "
 send "sed s/9pcf/9pccpuf/ /n/9fat/plan9.ini >/tmp/plan9.ini\n"
 
 expect -exact "term% "
