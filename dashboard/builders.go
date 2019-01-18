@@ -256,7 +256,7 @@ var Hosts = map[string]*HostConfig{
 		OwnerGithub: "0intro",
 	},
 	"host-plan9-386-gce": &HostConfig{
-		VMImage:            "plan9-386-v8",
+		VMImage:            "plan9-386-v7",
 		Notes:              "Plan 9 from 0intro; GCE VM is built from script in build/env/plan9-386",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.plan9-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-plan9-386.tar.gz",
@@ -1468,6 +1468,14 @@ func init() {
 		HostType:       "host-plan9-386-gce",
 		numTestHelpers: 1,
 		MaxAtOnce:      2,
+		ShouldRunDistTest: func(distTestName string, isTry bool) bool {
+			switch distTestName {
+			case "api",
+				"go_test:cmd/go": // takes over 20 minutes without working SMP
+				return false
+			}
+			return true
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2008",
