@@ -284,7 +284,7 @@ var Hosts = map[string]*HostConfig{
 		// only use 1, but we hope that 1 will be more powerful
 		// and we'll stop timing out on tests.
 		machineType: "n1-highcpu-4",
-		env:         []string{"GO_TEST_TIMEOUT_SCALE=2"},
+		env:         []string{"GO_TEST_TIMEOUT_SCALE=3"},
 	},
 	"host-windows-amd64-2008": &HostConfig{
 		VMImage:            "windows-amd64-server-2008r2-v7",
