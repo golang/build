@@ -31,7 +31,8 @@ var (
 	serial        = flag.Bool("serial", true, "watch serial")
 	pauseAfterUp  = flag.Duration("pause-after-up", 0, "pause for this duration before buildlet is destroyed")
 
-	runBuild = flag.String("run-build", "", "optional builder name to run all.bash for")
+	runBuild = flag.String("run-build", "", "optional builder name to run all.bash or make.bash for")
+	makeOnly = flag.Bool("make-only", false, "if a --run-build builder name is given, this controls whether make.bash or all.bash is run")
 	buildRev = flag.String("rev", "master", "if --run-build is specified, the git hash or branch name to build")
 )
 
@@ -144,20 +145,26 @@ func main() {
 			log.Fatalf("Putting VERSION file: %v", err)
 		}
 
-		allScript := bconf.AllScript()
-		log.Printf("Running %s ...", allScript)
-		remoteErr, err := bc.Exec(path.Join("go", allScript), buildlet.ExecOpts{
+		script := bconf.AllScript()
+		if *makeOnly {
+			script = bconf.MakeScript()
+		}
+		t0 := time.Now()
+		log.Printf("Running %s ...", script)
+		remoteErr, err := bc.Exec(path.Join("go", script), buildlet.ExecOpts{
 			Output:   os.Stdout,
 			ExtraEnv: bconf.Env(),
 			Debug:    true,
 			Args:     bconf.AllScriptArgs(),
 		})
 		if err != nil {
-			log.Fatalf("error trying to run %s: %v", allScript, err)
+			log.Fatalf("error trying to run %s: %v", script, err)
 		}
 		if remoteErr != nil {
-			log.Printf("remote failure running %s: %v", allScript, remoteErr)
+			log.Printf("remote failure running %s: %v", script, remoteErr)
 			buildFailed = true
+		} else {
+			log.Printf("ran %s in %v", script, time.Since(t0).Round(time.Second))
 		}
 	}
 
