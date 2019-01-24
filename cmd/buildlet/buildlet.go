@@ -524,6 +524,9 @@ func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "requires GET method", http.StatusBadRequest)
 		return
 	}
+	if !mkdirAllWorkdir(w) {
+		return
+	}
 	dir := r.FormValue("dir")
 	if !validRelativeDir(dir) {
 		http.Error(w, "bogus dir", http.StatusBadRequest)
@@ -584,6 +587,9 @@ func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleWriteTGZ(w http.ResponseWriter, r *http.Request) {
+	if !mkdirAllWorkdir(w) {
+		return
+	}
 	urlParam, _ := url.ParseQuery(r.URL.RawQuery)
 	baseDir := *workDir
 	if dir := urlParam.Get("dir"); dir != "" {
@@ -840,6 +846,19 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 		// We need trailers, only available in HTTP/1.1 or HTTP/2.
 		http.Error(w, "HTTP/1.1 or higher required", http.StatusBadRequest)
 		return
+	}
+	// Create *workDir and (if needed) tmp and gocache.
+	if !mkdirAllWorkdir(w) {
+		return
+	}
+	for _, dir := range []string{processTmpDirEnv, processGoCacheEnv} {
+		if dir == "" {
+			continue
+		}
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.Header().Set("Trailer", hdrProcessState) // declare it so we can set it
@@ -1229,16 +1248,18 @@ func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// If we nuked the work directory (or tmp or gocache), recreate them.
-	for _, dir := range []string{*workDir, processTmpDirEnv, processGoCacheEnv} {
-		if dir == "" {
-			continue
-		}
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+}
+
+// mkdirAllWorkdir reports whether *workDir either exists or was created.
+// If it returns false, it also writes an HTTP 500 error to w.
+// This is used by callers to verify *workDir exists, even if it might've been
+// deleted previously.
+func mkdirAllWorkdir(w http.ResponseWriter) bool {
+	if err := os.MkdirAll(*workDir, 0755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return false
 	}
+	return true
 }
 
 func handleWorkDir(w http.ResponseWriter, r *http.Request) {
@@ -1278,6 +1299,9 @@ func handleLs(w http.ResponseWriter, r *http.Request) {
 
 	if !validRelativeDir(dir) {
 		http.Error(w, "bogus dir", http.StatusBadRequest)
+		return
+	}
+	if !mkdirAllWorkdir(w) {
 		return
 	}
 	base := filepath.Join(*workDir, filepath.FromSlash(dir))

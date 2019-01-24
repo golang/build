@@ -532,7 +532,7 @@ func (b *Build) make() error {
 	}
 
 	// And verify there's no other top-level stuff besides the "go" directory:
-	if err := checkTopLevelDirs(client); err != nil {
+	if err := b.checkTopLevelDirs(client); err != nil {
 		return fmt.Errorf("verifying no unwanted top-level directories: %v", err)
 	}
 
@@ -544,15 +544,15 @@ func (b *Build) make() error {
 
 // checkTopLevelDirs checks that all files under client's "."
 // ($WORKDIR) are are under "go/".
-func checkTopLevelDirs(client *buildlet.Client) error {
+func (b *Build) checkTopLevelDirs(client *buildlet.Client) error {
 	var badFileErr error // non-nil once an unexpected file/dir is found
 	if err := client.ListDir(".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
-		if badFileErr != nil {
-			return
-		}
 		name := ent.Name()
 		if !(strings.HasPrefix(name, "go/") || strings.HasPrefix(name, `go\`)) {
-			badFileErr = fmt.Errorf("unexpected filename %q found after cleaning", name)
+			b.logf("unexpected file: %q", name)
+			if badFileErr == nil {
+				badFileErr = fmt.Errorf("unexpected filename %q found after cleaning", name)
+			}
 		}
 	}); err != nil {
 		return err
