@@ -342,6 +342,7 @@ type RevisionInfo struct {
 	Commit            *CommitInfo           `json:"commit"`
 	Files             map[string]*FileInfo  `json:"files"`
 	MessageWithFooter string                `json:"messageWithFooter"`
+	Kind              string                `json:"kind"`
 	// TODO: more
 }
 
