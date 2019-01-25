@@ -47,22 +47,39 @@ func ListenAndServe(handler http.Handler, opt *Options) error {
 	if err != nil {
 		return fmt.Errorf(`net.Listen("tcp", %q): %v`, opt.Addr, err)
 	}
+	defer ln.Close()
 
+	if opt.AutocertCacheBucket == "" {
+		err := http.Serve(ln, handler)
+		ln.Close()
+		return fmt.Errorf("http.Serve = %v", err)
+	}
+
+	// handler is served primarily via HTTPS, so just redirect HTTP to HTTPS.
+	redirect := &http.Server{
+		Addr:    ln.Addr().String(),
+		Handler: http.HandlerFunc(redirectToHTTPS),
+	}
 	errc := make(chan error)
 	go func() {
-		var h http.Handler
-		if opt.AutocertCacheBucket != "" {
-			// handler is served primarily via HTTPS, so just redirect HTTP to HTTPS.
-			h = http.HandlerFunc(redirectToHTTPS)
-		} else {
-			h = handler
-		}
-		errc <- fmt.Errorf("http.Serve = %v", http.Serve(ln, h))
+		err := redirect.Serve(ln)
+		errc <- fmt.Errorf("http.Serve = %v", err)
 	}()
-	if opt.AutocertCacheBucket != "" {
-		go func() { errc <- serveAutocertTLS(handler, opt.AutocertCacheBucket) }()
-	}
-	return <-errc
+
+	ctx, cancel := context.WithCancel(context.TODO())
+	go func() {
+		errc <- serveAutocertTLS(ctx, handler, opt.AutocertCacheBucket)
+	}()
+
+	// Wait for the first error.
+	err = <-errc
+
+	// Stop the other handler (whichever it may be) and wait for it to return.
+	redirect.Close()
+	cancel()
+	<-errc
+
+	return err
 }
 
 // redirectToHTTPS will redirect to the https version of the URL requested. If
@@ -80,13 +97,30 @@ func redirectToHTTPS(w http.ResponseWriter, r *http.Request) {
 // for its autocert cache. It will only serve on domains of the form *.golang.org.
 //
 // serveAutocertTLS always returns a non-nil error.
-func serveAutocertTLS(h http.Handler, bucket string) error {
+func serveAutocertTLS(ctx context.Context, h http.Handler, bucket string) error {
 	ln, err := net.Listen("tcp", ":443")
 	if err != nil {
 		return err
 	}
 	defer ln.Close()
-	sc, err := storage.NewClient(context.Background())
+
+	ctx, cancel := context.WithCancel(ctx)
+	server := &http.Server{
+		Addr:    ln.Addr().String(),
+		Handler: h,
+	}
+	done := make(chan struct{})
+	go func() {
+		<-ctx.Done()
+		server.Close()
+		close(done)
+	}()
+	defer func() {
+		cancel()
+		<-done
+	}()
+
+	sc, err := storage.NewClient(ctx)
 	if err != nil {
 		return fmt.Errorf("storage.NewClient: %v", err)
 	}
@@ -107,10 +141,6 @@ func serveAutocertTLS(h http.Handler, bucket string) error {
 		NextProtos:     []string{"h2", "http/1.1"},
 	}
 	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)
-	server := &http.Server{
-		Addr:    ln.Addr().String(),
-		Handler: h,
-	}
 	if err := http2.ConfigureServer(server, nil); err != nil {
 		return fmt.Errorf("http2.ConfigureServer: %v", err)
 	}
