@@ -64,10 +64,11 @@ func main() {
 	b.initCorpus(ctx)
 	go b.corpusUpdateLoop(ctx)
 
-	https.ListenAndServe(http.HandlerFunc(handleIndex), &https.Options{
+	err = https.ListenAndServe(http.HandlerFunc(handleIndex), &https.Options{
 		Addr:                *listen,
 		AutocertCacheBucket: *autocertBucket,
 	})
+	log.Fatalln(err)
 }
 
 func defaultWorkdir() string {
