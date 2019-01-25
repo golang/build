@@ -304,7 +304,8 @@ func shouldMirror(name string) bool {
 		"tools",
 		"tour",
 		"vgo",
-		"website":
+		"website",
+		"xerrors":
 		return true
 	}
 	// Else, see if it appears to be a subrepo:
