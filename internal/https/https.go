@@ -49,10 +49,14 @@ func ListenAndServe(handler http.Handler, opt *Options) error {
 	errc := make(chan error)
 	if ln != nil {
 		go func() {
+			var h http.Handler
 			if opt.AutocertCacheBucket != "" {
-				handler = http.HandlerFunc(redirectToHTTPS)
+				// handler is served primarily via HTTPS, so just redirect HTTP to HTTPS.
+				h = http.HandlerFunc(redirectToHTTPS)
+			} else {
+				h = handler
 			}
-			errc <- fmt.Errorf("http.Serve = %v", http.Serve(ln, handler))
+			errc <- fmt.Errorf("http.Serve = %v", http.Serve(ln, h))
 		}()
 	}
 	if opt.AutocertCacheBucket != "" {
