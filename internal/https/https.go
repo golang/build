@@ -37,6 +37,8 @@ var defaultOptions = &Options{
 
 // ListenAndServe serves the given handler by HTTPS (and HTTP, redirecting to
 // HTTPS) using the provided options.
+//
+// ListenAndServe always returns a non-nil error.
 func ListenAndServe(handler http.Handler, opt *Options) error {
 	if opt == nil {
 		opt = defaultOptions
@@ -47,14 +49,16 @@ func ListenAndServe(handler http.Handler, opt *Options) error {
 	}
 
 	errc := make(chan error)
-	if ln != nil {
-		go func() {
-			if opt.AutocertCacheBucket != "" {
-				handler = http.HandlerFunc(redirectToHTTPS)
-			}
-			errc <- fmt.Errorf("http.Serve = %v", http.Serve(ln, handler))
-		}()
-	}
+	go func() {
+		var h http.Handler
+		if opt.AutocertCacheBucket != "" {
+			// handler is served primarily via HTTPS, so just redirect HTTP to HTTPS.
+			h = http.HandlerFunc(redirectToHTTPS)
+		} else {
+			h = handler
+		}
+		errc <- fmt.Errorf("http.Serve = %v", http.Serve(ln, h))
+	}()
 	if opt.AutocertCacheBucket != "" {
 		go func() { errc <- serveAutocertTLS(handler, opt.AutocertCacheBucket) }()
 	}
@@ -74,6 +78,8 @@ func redirectToHTTPS(w http.ResponseWriter, r *http.Request) {
 
 // serveAutocertTLS serves the handler h on port 443 using the given GCS bucket
 // for its autocert cache. It will only serve on domains of the form *.golang.org.
+//
+// serveAutocertTLS always returns a non-nil error.
 func serveAutocertTLS(h http.Handler, bucket string) error {
 	ln, err := net.Listen("tcp", ":443")
 	if err != nil {

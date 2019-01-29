@@ -184,6 +184,10 @@ func listBranches(c context.Context) (branches []string) {
 		return
 	}
 	for _, c := range commits {
+		if strings.HasPrefix(c.Branch, "release-branch.go") &&
+			strings.HasSuffix(c.Branch, "-security") {
+			continue
+		}
 		branches = append(branches, c.Branch)
 	}
 	return

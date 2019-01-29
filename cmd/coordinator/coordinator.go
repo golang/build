@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build linux
+
 // The coordinator runs the majority of the Go build system.
 //
 // It is responsible for finding build work and executing it,
@@ -45,6 +47,7 @@ import (
 	"go4.org/syncutil"
 	grpc "grpc.go4.org"
 
+	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/errorreporting"
 	"cloud.google.com/go/storage"
 	"golang.org/x/build"
@@ -983,9 +986,8 @@ func findTryWork() error {
 			log.Printf("Warning: skipping incomplete %#v", work)
 			continue
 		}
-		if work.Project == "build" || work.Project == "grpc-review" {
-			// Skip trybot request in build repo.
-			// Also skip grpc-review, which is only for reviews for now.
+		if work.Project == "grpc-review" {
+			// Skip grpc-review, which is only for reviews for now.
 			continue
 		}
 		key := tryWorkItemKey(work)
@@ -1071,6 +1073,8 @@ func tryWorkItemKey(work *apipb.GerritTryWorkItem) tryKey {
 	}
 }
 
+var testingKnobSkipBuilds bool
+
 // newTrySet creates a new trySet group of builders for a given
 // work item, the (Project, Branch, Change-ID, Commit) tuple.
 // It also starts goroutines for each build.
@@ -1099,6 +1103,22 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		goRev = work.GoCommit[0]
 	}
 
+	// Defensive check that the input is well-formed.
+	// Each GoCommit should have a GoBranch and a GoVersion.
+	// There should always be at least one GoVersion.
+	if len(work.GoBranch) < len(work.GoCommit) {
+		log.Printf("WARNING: len(GoBranch) of %d != len(GoCommit) of %d", len(work.GoBranch), len(work.GoCommit))
+		work.GoCommit = work.GoCommit[:len(work.GoBranch)]
+	}
+	if len(work.GoVersion) < len(work.GoCommit) {
+		log.Printf("WARNING: len(GoVersion) of %d != len(GoCommit) of %d", len(work.GoVersion), len(work.GoCommit))
+		work.GoCommit = work.GoCommit[:len(work.GoVersion)]
+	}
+	if len(work.GoVersion) == 0 {
+		log.Print("WARNING: len(GoVersion) is zero, want at least one")
+		work.GoVersion = []*apipb.MajorMinor{{}}
+	}
+
 	addBuilderToSet := func(bs *buildStatus, brev buildgo.BuilderRev) {
 		bs.trySet = ts
 		status[brev] = bs
@@ -1106,12 +1126,21 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		idx := len(ts.builds)
 		ts.builds = append(ts.builds, bs)
 		ts.remain++
+		if testingKnobSkipBuilds {
+			return
+		}
 		go bs.start() // acquires statusMu itself, so in a goroutine
 		go ts.awaitTryBuild(idx, bs, brev)
 	}
 
-	go ts.notifyStarting()
+	if !testingKnobSkipBuilds {
+		go ts.notifyStarting()
+	}
 	for _, bconf := range builders {
+		goVersion := types.MajorMinor{int(work.GoVersion[0].Major), int(work.GoVersion[0].Minor)}
+		if goVersion.Less(bconf.MinimumGoVersion) {
+			continue
+		}
 		brev := tryKeyToBuilderRev(bconf.Name, key, goRev)
 		bs, err := newBuild(brev)
 		if err != nil {
@@ -1121,12 +1150,9 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		addBuilderToSet(bs, brev)
 	}
 
-	// Defensive check that the input is well-formed and each GoCommit
-	// has a GoBranch.
-	if len(work.GoBranch) < len(work.GoCommit) {
-		log.Printf("WARNING: len(GoBranch) of %d != len(GoCommit) of %d", len(work.GoBranch), len(work.GoCommit))
-		work.GoCommit = work.GoCommit[:len(work.GoBranch)]
-	}
+	// linuxBuilder is the standard builder we run for when testing x/* repos against
+	// the past two Go releases.
+	linuxBuilder := dashboard.Builders["linux-amd64"]
 
 	// If there's more than one GoCommit, that means this is an x/* repo
 	// and we're testing against previous releases of Go.
@@ -1136,7 +1162,14 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 			continue
 		}
 		branch := work.GoBranch[i]
-		brev := tryKeyToBuilderRev("linux-amd64", key, goRev)
+		if !linuxBuilder.BuildBranch(key.Project, "master", branch) {
+			continue
+		}
+		goVersion := types.MajorMinor{int(work.GoVersion[i].Major), int(work.GoVersion[i].Minor)}
+		if goVersion.Less(linuxBuilder.MinimumGoVersion) {
+			continue
+		}
+		brev := tryKeyToBuilderRev(linuxBuilder.Name, key, goRev)
 		bs, err := newBuild(brev)
 		if err != nil {
 			log.Printf("can't create build for %q: %v", brev, err)
@@ -1342,6 +1375,9 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 	}
 }
 
+// skipBuild reports whether the br build should be skipped.
+//
+// TODO(bradfitz): move this policy func into dashboard/builders.go in its own CL sometime.
 func skipBuild(br buildgo.BuilderRev) bool {
 	if br.Name == "freebsd-arm-paulzhol" {
 		// This was a fragile little machine with limited memory.
@@ -1354,11 +1390,20 @@ func skipBuild(br buildgo.BuilderRev) bool {
 		return true
 	}
 	switch br.SubName {
-	case "build", // has external deps
-		"exp",    // always broken, depends on mobile which is broken
+	case "oauth2", "build":
+		// The oauth2 and build repos are our guinea pigs for
+		// testing using modules. But they currently only work
+		// inside the GCP network.
+		// TODO: once we proxy through the module proxy from
+		// reverse buildlets' localhost:3000 to
+		// authenticated+TLS farmer.golang.org to the GKE
+		// service, then we can use modules less
+		// conditionally.
+		bc, ok := dashboard.Builders[br.Name]
+		return !ok || bc.IsReverse()
+	case "exp", // always broken, depends on mobile which is broken
 		"mobile", // always broken (gl, etc). doesn't compile.
-		"term",   // no code yet in repo: "warning: "golang.org/x/term/..." matched no packages"
-		"oauth2": // has external deps
+		"term":   // no code yet in repo,
 		return true
 	case "perf":
 		if br.Name == "linux-amd64-nocgo" {
@@ -2688,10 +2733,11 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		return nil, nil
 	}
 
-	// Recursively fetch the repo and its dependencies.
-	// Dependencies are always fetched at master, which isn't
-	// great but the dashboard data model doesn't track
-	// sub-repo dependencies. TODO(adg): fix this somehow??
+	// Recursively fetch the repo and their golang.org/x/*
+	// dependencies. Dependencies are always fetched at master,
+	// which isn't great but the dashboard data model doesn't
+	// track non-golang.org/x/* dependencies. For those, we
+	// require on the code under test to be using Go modules.
 	for i := 0; i < len(toFetch); i++ {
 		repo := toFetch[i]
 		if fetched[repo] {
@@ -2723,15 +2769,68 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 
 	sp := st.CreateSpan("running_subrepo_tests", st.SubName)
 	defer func() { sp.Done(err) }()
+
+	goProxy, err := st.moduleProxy()
+	if err != nil {
+		return nil, err
+	}
+	var go111Module, dir string
+	if goProxy != "" {
+		go111Module = "on"
+		dir = "gopath/src/golang.org/x/" + st.SubName
+	}
+
 	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 		Output: st,
+		Dir:    dir,
 		ExtraEnv: append(st.conf.Env(),
 			"GOROOT="+goroot,
 			"GOPATH="+gopath,
+			"GO111MODULE="+go111Module,
+			"GOPROXY="+goProxy,
 		),
 		Path: []string{"$WORKDIR/go/bin", "$PATH"},
 		Args: []string{"test", "-short", subrepoPrefix + st.SubName + "/..."},
 	})
+}
+
+// moduleProxy returns the GOPROXY environment value to use for this
+// build's tests. If non-empty, GO111MODULE=on is included in the
+// environment as well. Returning two zero values means to not
+// configure the environment values.
+//
+// We go through a GCP-project-internal module proxy ("GOPROXY") to
+// eliminate load on the origin servers. Our builder VMs are ephemeral
+// and only run for the duration of one build. They also often don't
+// have all the VCS tools installed (or even available: there is no
+// git for plan9).
+func (bs *buildStatus) moduleProxy() (string, error) {
+	switch bs.SubName {
+	case "oauth2", "build":
+		// The two repos we're starting with for testing.
+	default:
+		return "", nil
+	}
+	// If we're running on localhost, just use the current environment's value.
+	if buildEnv == nil || !buildEnv.IsProd {
+		return os.Getenv("GOPROXY"), nil
+	}
+
+	// We run a NodePort service on each GKE node
+	// (cmd/coordinator/module-proxy-service.yaml) on port 30156
+	// that maps to the Athens service. We could round robin over
+	// all the GKE nodes' IPs if we wanted, but the coordinator is
+	// running on GKE so our node by definition is up, so just use it.
+	// It won't be much traffic.
+	// TODO: migrate to a GKE internal load balancer with an internal static IP
+	// once we migrate symbolic-datum-552 off a Legacy VPC network to the modern
+	// scheme that supports internal static IPs.
+	gkeNodeIP, err := metadata.Get("instance/network-interfaces/0/ip")
+	if err != nil || gkeNodeIP == "" {
+		log.Printf("WARNING: failed to discover local GCE node's IP: %v; disabling GOPROXY", err)
+		return "", nil
+	}
+	return "http://" + gkeNodeIP + ":30156", nil
 }
 
 // affectedPkgs returns the name of every package affected by this commit.

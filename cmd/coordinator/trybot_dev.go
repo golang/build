@@ -7,6 +7,7 @@
 // Compile it into the binary by running go install -tags=dev, then load the
 // dummy data at /try-dev in your browser.
 
+// +build linux
 // +build dev
 
 package main

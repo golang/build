@@ -153,3 +153,16 @@ func (s *ReverseBuilderStatus) Host(hostType string) *ReverseHostStatus {
 	s.HostTypes[hostType] = hs
 	return hs
 }
+
+// MajorMinor is a major-minor version pair.
+type MajorMinor struct {
+	Major, Minor int
+}
+
+// Less reports whether a is less than b.
+func (a MajorMinor) Less(b MajorMinor) bool {
+	if a.Major != b.Major {
+		return a.Major < b.Major
+	}
+	return a.Minor < b.Minor
+}

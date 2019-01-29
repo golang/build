@@ -810,6 +810,11 @@ func untar(r io.Reader, dir string) (err error) {
 				return err
 			}
 			madeDir[abs] = true
+		case mode&os.ModeSymlink != 0:
+			// TODO: ignore these for now. They were breaking x/build tests.
+			// Implement these if/when we ever have a test that needs them.
+			// But maybe we'd have to skip creating them on Windows for some builders
+			// without permissions.
 		default:
 			return badRequest(fmt.Sprintf("tar file entry %s contained unsupported file type %v", f.Name, mode))
 		}

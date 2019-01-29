@@ -296,6 +296,7 @@ type ChangeMessageInfo struct {
 	Author         *AccountInfo `json:"author"`
 	Time           TimeStamp    `json:"date"`
 	Message        string       `json:"message"`
+	Tag            string       `json:"tag,omitempty"`
 	RevisionNumber int          `json:"_revision_number"`
 }
 
@@ -341,6 +342,7 @@ type RevisionInfo struct {
 	Commit            *CommitInfo           `json:"commit"`
 	Files             map[string]*FileInfo  `json:"files"`
 	MessageWithFooter string                `json:"messageWithFooter"`
+	Kind              string                `json:"kind"`
 	// TODO: more
 }
 

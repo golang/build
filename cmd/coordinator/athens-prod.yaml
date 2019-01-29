@@ -1,0 +1,37 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: athens-deployment
+spec:
+  template:
+    metadata:
+      labels:
+        app: athens
+      annotations:
+        container.seccomp.security.alpha.kubernetes.io/athens: docker/default
+        container.apparmor.security.beta.kubernetes.io/athens: runtime/default
+    spec:
+      volumes:
+      - name: cache-volume
+        emptyDir: {}
+      containers:
+      - name: athens
+        image: gomods/athens:v0.2.0
+        imagePullPolicy: Always
+        command: ["/bin/athens-proxy", "-config_file=/config/config.toml"]
+        volumeMounts:
+        - mountPath: "/athens-cache"
+          name: cache-volume
+        env:
+        - name: GO_ENV
+          value: "production"
+        - name: ATHENS_STORAGE_TYPE
+          value: "disk"
+        - name: ATHENS_DISK_STORAGE_ROOT
+          value: "/athens-cache"
+        ports:
+        - containerPort: 3000
+        resources:
+          requests:
+            cpu: "1"
+            memory: "2Gi"

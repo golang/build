@@ -6,7 +6,7 @@ set -e
 
 # Download Plan 9
 if ! sha1sum -c plan9-gce.iso.sha1; then
-  curl --fail -O http://9legacy.org/download/go/2016-10-17/plan9-gce.iso.bz2
+  curl --fail -O http://9legacy.org/download/go/2018-11-30/plan9-gce.iso.bz2
   bunzip2 plan9-gce.iso.bz2
   sha1sum -c plan9-gce.iso.sha1
 fi
