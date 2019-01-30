@@ -30,6 +30,7 @@ var (
 	overrideImage = flag.String("override-image", "", "if non-empty, an alternate GCE VM image or container image to use, depending on the host type")
 	serial        = flag.Bool("serial", true, "watch serial")
 	pauseAfterUp  = flag.Duration("pause-after-up", 0, "pause for this duration before buildlet is destroyed")
+	sleepSec      = flag.Int("sleep-test-secs", 0, "number of seconds to sleep when buildlet comes up, to test time source; OpenBSD only for now")
 
 	runBuild = flag.String("run-build", "", "optional builder name to run all.bash or make.bash for")
 	makeOnly = flag.Bool("make-only", false, "if a --run-build builder name is given, this controls whether make.bash or all.bash is run")
@@ -59,6 +60,9 @@ func main() {
 
 	if *hostType == "" {
 		log.Fatalf("missing --host (or --run-build)")
+	}
+	if *sleepSec != 0 && !strings.Contains(*hostType, "openbsd") {
+		log.Fatalf("The --sleep-test-secs is currently only supported for openbsd hosts.")
 	}
 
 	hconf, ok := dashboard.Hosts[*hostType]
@@ -118,6 +122,19 @@ func main() {
 	}
 	dir, err := bc.WorkDir()
 	log.Printf("WorkDir: %v, %v", dir, err)
+
+	if *sleepSec > 0 {
+		bc.Exec("sysctl", buildlet.ExecOpts{
+			Output:      os.Stdout,
+			SystemLevel: true,
+			Args:        []string{"kern.timecounter.hardware"},
+		})
+		bc.Exec("bash", buildlet.ExecOpts{
+			Output:      os.Stdout,
+			SystemLevel: true,
+			Args:        []string{"-c", "rdate -p -v time.nist.gov; sleep " + fmt.Sprint(*sleepSec) + "; rdate -p -v time.nist.gov"},
+		})
+	}
 
 	var buildFailed bool
 	if *runBuild != "" {

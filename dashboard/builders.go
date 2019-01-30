@@ -149,6 +149,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-openbsd-amd64-64": &HostConfig{
 		VMImage:            "openbsd-amd64-64-190129a",
+		MinCPUPlatform:     "Intel Skylake", // for better TSC? Maybe? see Issue 29223. builds faster at least.
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64-64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-64.tar.gz",
@@ -566,8 +567,9 @@ type HostConfig struct {
 	IsReverse      bool   // if true, only use the reverse buildlet pool
 
 	// GCE options, if VMImage != ""
-	machineType string // optional GCE instance type
-	RegularDisk bool   // if true, use spinning disk instead of SSD
+	machineType    string // optional GCE instance type
+	RegularDisk    bool   // if true, use spinning disk instead of SSD
+	MinCPUPlatform string // optional; https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform
 
 	// ReverseOptions:
 	ExpectNum       int  // expected number of reverse buildlets of this type
