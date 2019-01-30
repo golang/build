@@ -93,6 +93,7 @@ cat >etc/rc.local <<EOF
 EOF
 cat >etc/sysctl.conf <<EOF
 hw.smt=1
+kern.timecounter.hardware=tsc
 EOF
 chmod +x install.site
 tar -zcvf site${RELNO}.tgz install.site etc/{installurl,rc.local,sysctl.conf}
