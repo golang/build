@@ -9,7 +9,7 @@ if ! git diff-index HEAD --quiet || ! git diff-files --quiet; then
   VERSION=$VERSION-dirty
   dirty=1
 fi
-if [ -n "$dirty" ] || [ -z "$(git remote -v)"] || [ -n "$(git rev-list '@{upstream}..HEAD')" ]; then
+if [ -n "$dirty" ] || [ -n "$(git rev-list '@{upstream}..HEAD')" ]; then
   VERSION=$VERSION-$USER-$(date -u +%Y-%m-%dT%H:%M:%SZ)
 fi
 echo "$VERSION"
