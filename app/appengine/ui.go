@@ -16,20 +16,25 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"golang.org/x/build/types"
-
 	"golang.org/x/build/app/cache"
+	"golang.org/x/build/types"
 
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/log"
 	"google.golang.org/appengine/memcache"
 )
+
+// isDevAppServer is whether we're running locally with dev_appserver.py.
+// This is the documented way to check which environment we're running in, per:
+//   https://cloud.google.com/appengine/docs/standard/python/tools/using-local-server#detecting_application_runtime_environment
+var isDevAppServer = !strings.HasPrefix(os.Getenv("SERVER_SOFTWARE"), "Google App Engine/")
 
 func init() {
 	handleFunc("/", uiHandler)
@@ -107,6 +112,9 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 			s, err := GetTagState(c, "tip", "")
 			if err != nil {
 				if err == datastore.ErrNoSuchEntity {
+					if isDevAppServer {
+						goto BuildData
+					}
 					err = fmt.Errorf("tip tag not found")
 				}
 				logErr(w, r, err)
@@ -132,6 +140,7 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+	BuildData:
 		p := &Pagination{}
 		if len(commits) == commitsPerPage {
 			p.Next = page + 1
@@ -305,6 +314,20 @@ func dashCommits(c context.Context, pkg *Package, page int, branch string) ([]*C
 	var commits []*Commit
 	_, err := q.Limit(commitsPerPage).Offset(offset).
 		GetAll(c, &commits)
+
+	// If we're running locally and don't have data, return some test data.
+	// This lets people hack on the UI without setting up gitmirror & friends.
+	if len(commits) == 0 && isDevAppServer && err == nil {
+		commits = []*Commit{
+			{
+				Hash:       "7d7c6a97f815e9279d08cfaea7d5efb5e90695a8",
+				ParentHash: "",
+				Num:        1,
+				User:       "bwk",
+				Desc:       "hello, world",
+			},
+		}
+	}
 	return commits, err
 }
 
@@ -332,6 +355,10 @@ func commitBuilders(commits []*Commit) []string {
 		for _, r := range commit.Results() {
 			builders[r.Builder] = true
 		}
+	}
+	// In dev_appserver mode, add some dummy data:
+	if len(builders) == 0 && isDevAppServer {
+		return []string{"linux-amd64", "linux-amd64-nocgo", "linux-amd64-race", "windows-386", "windows-amd64"}
 	}
 	k := keys(builders)
 	sort.Sort(builderOrder(k))
@@ -536,16 +563,17 @@ var uiTemplate = template.Must(
 )
 
 var tmplFuncs = template.FuncMap{
-	"buildDashboards":   buildDashboards,
-	"builderOS":         builderOS,
-	"builderSpans":      builderSpans,
-	"builderSubheading": builderSubheading,
-	"builderTitle":      builderTitle,
-	"shortDesc":         shortDesc,
-	"shortHash":         shortHash,
-	"shortUser":         shortUser,
-	"tail":              tail,
-	"unsupported":       unsupported,
+	"buildDashboards":    buildDashboards,
+	"builderOS":          builderOS,
+	"builderSpans":       builderSpans,
+	"builderSubheading":  builderSubheading,
+	"builderSubheading2": builderSubheading2,
+	"builderTitle":       builderTitle,
+	"shortDesc":          shortDesc,
+	"shortHash":          shortHash,
+	"shortUser":          shortUser,
+	"tail":               tail,
+	"unsupported":        unsupported,
 }
 
 func splitDash(s string) (string, string) {
@@ -583,26 +611,19 @@ func builderSubheading(s string) string {
 	if isRace(s) {
 		return builderOS(s)
 	}
-	arch := builderArch(s)
-	switch arch {
-	case "amd64":
-		return "x64"
-	}
-	return arch
+	return builderArch(s)
 }
 
-// builderArchChar returns the architecture letter for a builder string
-func builderArchChar(s string) string {
-	arch := builderArch(s)
-	switch arch {
-	case "386":
-		return "8"
-	case "amd64":
-		return "6"
-	case "arm":
-		return "5"
+// builderSubheading2 returns any third part of a hyphenated builder name.
+// For instance, for "linux-amd64-nocgo", it returns "nocgo".
+// For race builders it returns the empty string.
+func builderSubheading2(s string) string {
+	if isRace(s) {
+		return ""
 	}
-	return arch
+	_, secondThird := splitDash(s)
+	_, third := splitDash(secondThird)
+	return third
 }
 
 type builderSpan struct {
