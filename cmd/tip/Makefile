@@ -16,7 +16,7 @@ usage:
 
 update-deps:
 	go install golang.org/x/build/cmd/gitlock
-	gitlock --update=Dockerfile --ignore=NONE --tags=autocert golang.org/x/tools/cmd/tip
+	gitlock --update=Dockerfile --ignore=NONE golang.org/x/tools/cmd/tip
 
 docker-image: Dockerfile *.go
 	docker build --force-rm -f Dockerfile --tag=$(IMAGE_PROD):$(VERSION) .

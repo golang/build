@@ -38,14 +38,6 @@ var (
 	autoCertCacheBucket = flag.String("autocert-bucket", "", "if non-empty, the Google Cloud Storage bucket in which to store the LetsEncrypt cache")
 )
 
-// Hooks that are set non-nil in cert.go if the "autocert" build tag
-// is used.
-var (
-	certInit    func()
-	runHTTPS    func(http.Handler) error
-	wrapHTTPMux func(http.Handler) http.Handler
-)
-
 func main() {
 	flag.Parse()
 

@@ -2,14 +2,6 @@
 // Use of this source code is governed by the Apache 2.0
 // license that can be found in the LICENSE file.
 
-// +build autocert
-
-// This file contains autocert and cloud.google.com/go/storage
-// dependencies we want to hide by default from the Go build system,
-// which currently doesn't know how to fetch non-golang.org/x/*
-// dependencies. The Dockerfile builds the production binary
-// with this code using --tags=autocert.
-
 package main
 
 import (
@@ -24,15 +16,9 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 )
 
-func init() {
-	runHTTPS = runHTTPSAutocert
-	certInit = certInitAutocert
-	wrapHTTPMux = wrapHTTPMuxAutocert
-}
-
 var autocertManager *autocert.Manager
 
-func certInitAutocert() {
+func certInit() {
 	var cache autocert.Cache
 	if b := *autoCertCacheBucket; b != "" {
 		sc, err := storage.NewClient(context.Background())
@@ -48,7 +34,7 @@ func certInitAutocert() {
 	}
 }
 
-func runHTTPSAutocert(h http.Handler) error {
+func runHTTPS(h http.Handler) error {
 	s := &http.Server{
 		Addr:    ":https",
 		Handler: h,
@@ -59,6 +45,6 @@ func runHTTPSAutocert(h http.Handler) error {
 	return s.ListenAndServeTLS("", "")
 }
 
-func wrapHTTPMuxAutocert(h http.Handler) http.Handler {
+func wrapHTTPMux(h http.Handler) http.Handler {
 	return autocertManager.HTTPHandler(h)
 }
