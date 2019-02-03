@@ -1193,7 +1193,7 @@ func (d githubIssueDiffer) diffLockedState(m *maintpb.GithubIssueMutation) bool 
 // the corpus) and b (the current GitHub API state).
 //
 // If newMutationFromIssue returns nil, the provided github.Issue is no newer
-// than the data we have in the corpus. 'a'. may be nil.
+// than the data we have in the corpus. 'a' may be nil.
 func (r *GitHubRepo) newMutationFromIssue(a *GitHubIssue, b *github.Issue) *maintpb.Mutation {
 	if b == nil || b.Number == nil {
 		panic(fmt.Sprintf("github issue with nil number: %#v", b))
@@ -1715,7 +1715,6 @@ func (p *githubRepoPoller) foreachItem(
 }
 
 func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) error {
-	c := p.gr.github.c
 	page := 1
 	seen := make(map[int64]bool)
 	keepGoing := true
@@ -1767,12 +1766,12 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 			seen[id] = true
 
 			var mp *maintpb.Mutation
-			c.mu.RLock()
+			p.c.mu.RLock()
 			{
 				gi := p.gr.issues[int32(*is.Number)]
 				mp = p.gr.newMutationFromIssue(gi, is)
 			}
-			c.mu.RUnlock()
+			p.c.mu.RUnlock()
 
 			if mp == nil {
 				continue
@@ -1794,7 +1793,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 
 			changes++
 			p.logf("changed issue %d: %s", is.GetNumber(), is.GetTitle())
-			c.addMutation(mp)
+			p.c.addMutation(mp)
 			p.lastUpdate = time.Now()
 		}
 
@@ -1812,9 +1811,9 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 			}
 		}
 
-		c.mu.RLock()
+		p.c.mu.RLock()
 		num := len(p.gr.issues)
-		c.mu.RUnlock()
+		p.c.mu.RUnlock()
 		p.logf("After page %d: %v issues, %v changes, %v issues in memory", page, len(issues), changes, num)
 
 		page++
@@ -1835,7 +1834,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 						NotExist: true,
 					},
 				}
-				c.addMutation(mp)
+				p.c.addMutation(mp)
 				continue
 			} else if err != nil {
 				return err
@@ -1845,7 +1844,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 				continue
 			}
 			p.logf("modified issue %d: %s", issue.GetNumber(), issue.GetTitle())
-			c.addMutation(mp)
+			p.c.addMutation(mp)
 			p.lastUpdate = time.Now()
 		}
 	}
