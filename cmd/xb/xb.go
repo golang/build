@@ -108,6 +108,7 @@ func getEnv() *buildenv.Environment {
 
 var expectedGoLayerVersion = map[string]string{
 	"golang:1.10": "go version go1.10.2 linux/amd64",
+	"golang:1.11": "go version go1.11.5 linux/amd64",
 }
 
 func validateGoDockerVersion(layer, want string) {
