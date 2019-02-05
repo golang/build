@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -18,14 +19,47 @@ import (
 	"golang.org/x/build/maintner/maintnerd/apipb"
 )
 
+type Seconds float64
+
+func (s Seconds) Duration() time.Duration {
+	return time.Duration(float64(s) * float64(time.Second))
+}
+
+var fixedTestDuration = map[string]Seconds{
+	"go_test:a": 1,
+	"go_test:b": 1.5,
+	"go_test:c": 2,
+	"go_test:d": 2.50,
+	"go_test:e": 3,
+	"go_test:f": 3.5,
+	"go_test:g": 4,
+	"go_test:h": 4.5,
+	"go_test:i": 5,
+	"go_test:j": 5.5,
+	"go_test:k": 6.5,
+}
+
 func TestPartitionGoTests(t *testing.T) {
 	var in []string
 	for name := range fixedTestDuration {
 		in = append(in, name)
 	}
-	sets := partitionGoTests("", in)
-	for i, set := range sets {
-		t.Logf("set %d = \"-run=^(%s)$\"", i, strings.Join(set, "|"))
+	testDuration := func(builder, testName string) time.Duration {
+		if s, ok := fixedTestDuration[testName]; ok {
+			return s.Duration()
+		}
+		return 3 * time.Second
+	}
+	sets := partitionGoTests(testDuration, "", in)
+	want := [][]string{
+		{"go_test:a", "go_test:b", "go_test:c", "go_test:d", "go_test:e"},
+		{"go_test:f", "go_test:g"},
+		{"go_test:h", "go_test:i"},
+		{"go_test:j"},
+		{"go_test:k"},
+	}
+	if !reflect.DeepEqual(sets, want) {
+		t.Errorf(" got: %v\nwant: %v", sets, want)
 	}
 }
 

@@ -151,9 +151,10 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 	}
 
 	instance := &compute.Instance{
-		Name:        instName,
-		Description: opts.Description,
-		MachineType: machType,
+		Name:           instName,
+		Description:    opts.Description,
+		MachineType:    machType,
+		MinCpuPlatform: hconf.MinCPUPlatform,
 		Disks: []*compute.AttachedDisk{
 			{
 				AutoDelete: true,

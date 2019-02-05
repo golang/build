@@ -74,6 +74,7 @@
         <th {{if .Unsupported}}class="unsupported"{{end}} colspan="{{.N}}">{{.OS}}</th>
     {{end}}
       </tr>
+
       <tr>
     {{if $.Package.Path}}
         <th class="result arch">repo</th>
@@ -88,7 +89,18 @@
         <th class="result arch{{if (unsupported .)}} unsupported{{end}}" title="{{.}}">{{builderSubheading .}}</th>
     {{end}}
       </tr>
-    {{range $c := $.Commits}}
+
+      <tr class='subheading2'>
+        <th>&nbsp;</th>
+        <th></th>
+        <th></th>
+        <th></th>
+    {{range $.Builders}}
+        <th class="result arch{{if (unsupported .)}} unsupported{{end}}" title="{{.}}">{{builderSubheading2 .}}</th>
+    {{end}}
+      </tr>
+
+      {{range $c := $.Commits}}
       {{range $i, $h := $c.ResultGoHashes}}
         <tr class="commit">
         {{if $i}}

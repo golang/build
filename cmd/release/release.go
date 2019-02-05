@@ -477,7 +477,15 @@ func (b *Build) make() error {
 	// cmd/link, etc. If they want to, they still can, but they'll
 	// have to pay the cost of rebuilding dependent libaries. No
 	// need to ship them just in case.
-	if err := client.RemoveAll(b.pkgDir() + "/cmd"); err != nil {
+	//
+	// Also remove go/pkg/${GOOS}_${GOARCH}_{dynlink,shared,testcshared_shared}
+	// per Issue 20038.
+	if err := client.RemoveAll(
+		b.pkgDir()+"/cmd",
+		b.pkgDir()+"_dynlink",
+		b.pkgDir()+"_shared",
+		b.pkgDir()+"_testcshared_shared",
+	); err != nil {
 		return err
 	}
 

@@ -203,6 +203,12 @@ table thead tr {
 .build .user {
   max-width: 50px;
 }
+
+tr.subheading2 th {
+  max-width: 4em;
+  overflow: hidden;
+  word-wrap: none;
+}
  
 .good   { text-decoration: none; color: #000000; border: 2px solid #00E700}
 .bad    { text-decoration: none; text-shadow: 1px 1px 0 #000000; color: #FFFFFF; background: #E70000;}
