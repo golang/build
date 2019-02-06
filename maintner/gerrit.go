@@ -489,9 +489,6 @@ func (cl *GerritCL) Owner() *GitPerson {
 
 // Subject returns the first line of the latest commit message.
 func (cl *GerritCL) Subject() string {
-	if cl.Commit == nil {
-		return ""
-	}
 	if i := strings.Index(cl.Commit.Msg, "\n"); i >= 0 {
 		return cl.Commit.Msg[:i]
 	}
