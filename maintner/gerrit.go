@@ -487,10 +487,11 @@ func (cl *GerritCL) Owner() *GitPerson {
 	return commit.Author
 }
 
-// Subject returns the first line of the latest commit message.
+// Subject returns the subject of the latest commit message.
+// The subject is separated from the body by a blank line.
 func (cl *GerritCL) Subject() string {
-	if i := strings.Index(cl.Commit.Msg, "\n"); i >= 0 {
-		return cl.Commit.Msg[:i]
+	if i := strings.Index(cl.Commit.Msg, "\n\n"); i >= 0 {
+		return strings.Replace(cl.Commit.Msg[:i], "\n", " ", -1)
 	}
 	return cl.Commit.Msg
 }
