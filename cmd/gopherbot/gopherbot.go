@@ -882,7 +882,7 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 
 }
 
-// cl2issue writes "Change https://golang.org/issue/NNNN mentions this issue"\
+// cl2issue writes "Change https://golang.org/cl/NNNN mentions this issue"
 // and the change summary on GitHub when a new Gerrit change references a GitHub issue.
 func (b *gopherbot) cl2issue(ctx context.Context) error {
 	monthAgo := time.Now().Add(-30 * 24 * time.Hour)
