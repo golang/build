@@ -52,9 +52,7 @@ func main() {
 		log.Fatalf("Unknown %v value: %q", k, os.Getenv(k))
 	}
 
-	if certInit != nil {
-		certInit()
-	}
+	certInit()
 
 	p := &Proxy{builder: b}
 	go p.run()
@@ -63,22 +61,11 @@ func main() {
 	log.Printf("Starting up tip server for builder %q", os.Getenv(k))
 
 	errc := make(chan error, 1)
-
 	go func() {
-		var httpMux http.Handler = mux
-		if wrapHTTPMux != nil {
-			httpMux = wrapHTTPMux(httpMux)
-		}
-		errc <- http.ListenAndServe(":8080", httpMux)
+		errc <- http.ListenAndServe(":8080", wrapHTTPMux(mux))
 	}()
 	if *autoCertDomain != "" {
-		if runHTTPS == nil {
-			errc <- errors.New("can't use --autocert without building binary with the autocert build tag")
-		} else {
-			go func() {
-				errc <- runHTTPS(mux)
-			}()
-		}
+		go func() { errc <- runHTTPS(mux) }()
 		log.Printf("Listening on port 443 with LetsEncrypt support on domain %q", *autoCertDomain)
 	}
 	if err := <-errc; err != nil {
