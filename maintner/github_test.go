@@ -575,13 +575,17 @@ type ClientMock struct {
 	err        error
 	status     string
 	statusCode int
+	fixture    string
 }
 
 var timesDoWasCalled = 0
 
 func (c *ClientMock) Do(req *http.Request) (*http.Response, error) {
+	if len(c.fixture) < 1 {
+		c.fixture = "TestParseMultipleGithubEvents.json"
+	}
 	timesDoWasCalled++
-	content, _ := ioutil.ReadFile(filepath.Join("fixtures", "TestParseMultipleGithubEvents.json"))
+	content, _ := ioutil.ReadFile(filepath.Join("fixtures", c.fixture))
 	headers := make(http.Header, 0)
 	t := time.Now()
 	var b []byte
@@ -631,12 +635,14 @@ func TestSyncEvents(t *testing.T) {
 		githubCaching: github.NewClient(server.Client()),
 	}
 	t.Run("successful sync", func(t2 *testing.T) {
+		defer func() { eventLog = make([]string, 0) }()
 		timesDoWasCalled = 0
 		ctx := context.Background()
 		err := p.syncEventsOnIssue(ctx, int32(issue.ID), &ClientMock{
 			status:     "OK",
 			statusCode: http.StatusOK,
 			err:        nil,
+			fixture:    "TestParseMultipleGithubEvents.json",
 		})
 		if err != nil {
 			t2.Error(err)
@@ -651,13 +657,40 @@ func TestSyncEvents(t *testing.T) {
 			t.Errorf("client.Do should have been called %d times. got: %d\n", wantTimesCalled, timesDoWasCalled)
 		}
 	})
+	t.Run("successful sync missing milestones", func(t2 *testing.T) {
+		defer func() { eventLog = make([]string, 0) }()
+		timesDoWasCalled = 0
+		ctx := context.Background()
+		err := p.syncEventsOnIssue(ctx, int32(issue.ID), &ClientMock{
+			status:     "OK",
+			statusCode: http.StatusOK,
+			err:        nil,
+			fixture:    "TestMissingMilestoneEvents.json",
+		})
+		if err != nil {
+			t2.Error(err)
+		}
+		want := []string{"mentioned", "subscribed", "mentioned", "subscribed", "assigned", "labeled", "labeled", "milestoned", "renamed", "demilestoned", "milestoned"}
+		sort.Strings(want)
+		sort.Strings(eventLog)
+		if !reflect.DeepEqual(want, eventLog) {
+			t2.Errorf("want: %v; got: %v\n", want, eventLog)
+		}
+
+		wantTimesCalled := 1
+		if timesDoWasCalled != wantTimesCalled {
+			t.Errorf("client.Do should have been called %d times. got: %d\n", wantTimesCalled, timesDoWasCalled)
+		}
+	})
 	t.Run("retry logic on failed request", func(t2 *testing.T) {
+		defer func() { eventLog = make([]string, 0) }()
 		timesDoWasCalled = 0
 		ctx := context.Background()
 		err := p.syncEventsOnIssue(ctx, int32(issue.ID), &ClientMock{
 			status:     "Retry Error",
 			statusCode: http.StatusInternalServerError,
 			err:        nil,
+			fixture:    "TestParseMultipleGithubEvents.json",
 		})
 		if err == nil {
 			t2.Error("was expecting error after try counts ran out.")
@@ -673,12 +706,14 @@ func TestSyncEvents(t *testing.T) {
 		}
 	})
 	t.Run("do not retry general failure", func(t2 *testing.T) {
+		defer func() { eventLog = make([]string, 0) }()
 		timesDoWasCalled = 0
 		ctx := context.Background()
 		err := p.syncEventsOnIssue(ctx, int32(issue.ID), &ClientMock{
 			status:     "Retry Error",
 			statusCode: http.StatusInternalServerError,
 			err:        errors.New("panic"),
+			fixture:    "TestParseMultipleGithubEvents.json",
 		})
 		if err == nil {
 			t2.Error("was expecting error after try counts ran out.")
@@ -689,6 +724,60 @@ func TestSyncEvents(t *testing.T) {
 		}
 
 		wantTimesCalled := 1
+		if timesDoWasCalled != wantTimesCalled {
+			t.Errorf("client.Do should have been called %d times. got: %d\n", wantTimesCalled, timesDoWasCalled)
+		}
+	})
+}
+
+func TestSyncMultipleConsecutiveEvents(t *testing.T) {
+	var c Corpus
+	c.initGithub()
+	c.mutationLogger = &MockLogger{}
+	gr := c.github.getOrCreateRepo("foowner", "bar")
+	issue := &GitHubIssue{
+		ID:          1001,
+		PullRequest: true,
+		events:      map[int64]*GitHubIssueEvent{},
+	}
+	gr.issues = map[int32]*GitHubIssue{
+		1001: issue,
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		rw.Write([]byte("OK"))
+	}))
+	defer server.Close()
+	p := &githubRepoPoller{
+		c:             &c,
+		token:         "asdf",
+		gr:            gr,
+		githubDirect:  github.NewClient(server.Client()),
+		githubCaching: github.NewClient(server.Client()),
+	}
+	t.Run("successful sync", func(t2 *testing.T) {
+		defer func() { eventLog = make([]string, 0) }()
+		timesDoWasCalled = 0
+		ctx := context.Background()
+		for i := 1; i < 5; i++ {
+			fixture := fmt.Sprintf("TestParseMultipleGithubEvents_p%d.json", i)
+			cm := ClientMock{
+				status:     "OK",
+				statusCode: http.StatusOK,
+				err:        nil,
+				fixture:    fixture,
+			}
+			err := p.syncEventsOnIssue(ctx, int32(issue.ID), &cm)
+			if err != nil {
+				t2.Fatal(err)
+			}
+		}
+
+		want := []string{"labeled", "labeled", "labeled", "labeled", "labeled", "milestoned", "closed"}
+		if !reflect.DeepEqual(want, eventLog) {
+			t2.Errorf("want: %v; got: %v\n", want, eventLog)
+		}
+
+		wantTimesCalled := 4
 		if timesDoWasCalled != wantTimesCalled {
 			t.Errorf("client.Do should have been called %d times. got: %d\n", wantTimesCalled, timesDoWasCalled)
 		}

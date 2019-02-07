@@ -5,6 +5,7 @@
 package maintner
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -208,6 +209,45 @@ func TestAssigneesDeleted(t *testing.T) {
 	gi := gr.issues[3]
 	if len(gi.Assignees) != 1 || gi.Assignees[0].ID != u2.ID {
 		t.Errorf("expected u1 to be deleted, got %v", gi.Assignees)
+	}
+}
+
+func TestSync(t *testing.T) {
+	c := new(Corpus)
+	assignees := []*GitHubUser{u1, u2}
+	issue := &GitHubIssue{
+		Number:    3,
+		User:      u1,
+		Body:      "some body",
+		Created:   t2,
+		Updated:   t2,
+		Assignees: assignees,
+	}
+	gr := &GitHubRepo{
+		id: GitHubRepoID{"golang", "go"},
+		issues: map[int32]*GitHubIssue{
+			3: issue,
+		},
+	}
+	c.github = &GitHub{
+		users: map[int64]*GitHubUser{
+			u1.ID: u1,
+		},
+		repos: map[GitHubRepoID]*GitHubRepo{
+			GitHubRepoID{"golang", "go"}: gr,
+		},
+	}
+
+	mutation := gr.newMutationFromIssue(issue, &github.Issue{
+		Number:    github.Int(3),
+		Assignees: []*github.User{&github.User{ID: github.Int64(u2.ID)}},
+	})
+	c.addMutation(mutation)
+	// gi := gr.issues[3]
+	ctx := context.Background()
+	err := c.sync(ctx, false)
+	if err != nil {
+		t.Fatal("error: ", err)
 	}
 }
 
