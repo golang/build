@@ -230,6 +230,7 @@ func TestSubject(t *testing.T) {
 		{"maintner: slurp up all the things", "maintner: slurp up all the things"},
 		{"cmd/go: build stuff\n\nand do other stuff, too.", "cmd/go: build stuff"},
 		{"cmd/go: build lots\nof stuff\n\nand do other stuff, too.", "cmd/go: build lots of stuff"}, // Subject is separated from body by a blank line.
+		{"cmd/go: build lots\nof stuff", "cmd/go: build lots of stuff"},
 	}
 	for _, tc := range testcases {
 		cl := &GerritCL{Commit: &GitCommit{Msg: tc.msg}}

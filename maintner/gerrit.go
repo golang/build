@@ -493,7 +493,7 @@ func (cl *GerritCL) Subject() string {
 	if i := strings.Index(cl.Commit.Msg, "\n\n"); i >= 0 {
 		return strings.Replace(cl.Commit.Msg[:i], "\n", " ", -1)
 	}
-	return cl.Commit.Msg
+	return strings.Replace(cl.Commit.Msg, "\n", " ", -1)
 }
 
 // CommitAtVersion returns the git commit of the specifid version of this CL.
