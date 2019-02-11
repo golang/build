@@ -1179,8 +1179,8 @@ func (b *gopherbot) unwaitCLs(ctx context.Context) error {
 	})
 }
 
-// onLatestCL checks whether cl's metadata is in sync with Gerrit's
-// upstream data and, if so, returns f(). If it's out of sync, it does
+// onLatestCL checks whether cl's metadata is up to date with Gerrit's
+// upstream data and, if so, returns f(). If it's out of date, it does
 // nothing more and returns nil.
 func (b *gopherbot) onLatestCL(ctx context.Context, cl *maintner.GerritCL, f func() error) error {
 	ci, err := b.gerrit.GetChangeDetail(ctx, fmt.Sprint(cl.Number), gerrit.QueryChangesOpt{Fields: []string{"MESSAGES"}})
@@ -1191,8 +1191,15 @@ func (b *gopherbot) onLatestCL(ctx context.Context, cl *maintner.GerritCL, f fun
 		log.Printf("onLatestCL: CL %d has no messages. Odd. Ignoring.", cl.Number)
 		return nil
 	}
-	if ci.Messages[len(ci.Messages)-1].ID == cl.Meta.Commit.Hash.String() {
-		return f()
+	latestGerritID := ci.Messages[len(ci.Messages)-1].ID
+	// Check all metas and not just the latest, because there are some meta commits
+	// that don't have a corresponding message in the Gerrit REST API response.
+	for i := len(cl.Metas) - 1; i >= 0; i-- {
+		metaHash := cl.Metas[i].Commit.Hash.String()
+		if metaHash == latestGerritID {
+			// latestGerritID is contained by maintner metadata for this CL, so run f().
+			return f()
+		}
 	}
 	log.Printf("onLatestCL: maintner metadata for CL %d is behind; skipping action for now.", cl.Number)
 	return nil
