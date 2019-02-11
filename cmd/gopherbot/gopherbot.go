@@ -1136,7 +1136,7 @@ func (b *gopherbot) unwaitCLs(ctx context.Context) error {
 			// the last time the "wait-author" tag was
 			// added.
 			if tags.Contains("wait-author") {
-				// Figure out othe last index at which "wait-author" was added.
+				// Figure out the last index at which "wait-author" was added.
 				waitAuthorIndex := -1
 				for i := len(cl.Metas) - 1; i >= 0; i-- {
 					if cl.Metas[i].HashtagsAdded().Contains("wait-author") {
@@ -1145,17 +1145,17 @@ func (b *gopherbot) unwaitCLs(ctx context.Context) error {
 					}
 				}
 
-				// Find the author has replied since
-				author := cl.Metas[0].Commit.Author.Str
+				// Find out whether the author has replied since.
+				authorEmail := cl.Metas[0].Commit.Author.Email() // Equivalent to "{{cl.OwnerID}}@62eb7196-b449-3ce5-99f1-c037f21e1705".
 				hasReplied := false
 				for _, m := range cl.Metas[waitAuthorIndex+1:] {
-					if m.Commit.Author.Str == author {
+					if m.Commit.Author.Email() == authorEmail {
 						hasReplied = true
 						break
 					}
 				}
 				if hasReplied {
-					log.Printf("https://golang.org/cl/%d -- remove wait-author; reply from %s", cl.Number, author)
+					log.Printf("https://golang.org/cl/%d -- remove wait-author; reply from %s", cl.Number, cl.Owner())
 					err := b.onLatestCL(ctx, cl, func() error {
 						if *dryRun {
 							log.Printf("[dry run] would remove hashtag 'wait-author' from CL %d", cl.Number)
