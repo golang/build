@@ -345,6 +345,15 @@ func (b *Build) make() error {
 
 	if b.Source {
 		b.logf("Skipping build.")
+
+		// Remove unwanted top-level directories and verify only "go" remains:
+		if err := client.RemoveAll("tmp", "gocache"); err != nil {
+			return err
+		}
+		if err := b.checkTopLevelDirs(client); err != nil {
+			return fmt.Errorf("verifying no unwanted top-level directories: %v", err)
+		}
+
 		return b.fetchTarball(client)
 	}
 
