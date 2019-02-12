@@ -524,7 +524,7 @@ func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "requires GET method", http.StatusBadRequest)
 		return
 	}
-	if !mkdirAllWorkdir(w) {
+	if !mkdirAllWorkdirOr500(w) {
 		return
 	}
 	dir := r.FormValue("dir")
@@ -587,7 +587,7 @@ func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleWriteTGZ(w http.ResponseWriter, r *http.Request) {
-	if !mkdirAllWorkdir(w) {
+	if !mkdirAllWorkdirOr500(w) {
 		return
 	}
 	urlParam, _ := url.ParseQuery(r.URL.RawQuery)
@@ -848,7 +848,7 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Create *workDir and (if needed) tmp and gocache.
-	if !mkdirAllWorkdir(w) {
+	if !mkdirAllWorkdirOr500(w) {
 		return
 	}
 	for _, dir := range []string{processTmpDirEnv, processGoCacheEnv} {
@@ -1250,11 +1250,11 @@ func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// mkdirAllWorkdir reports whether *workDir either exists or was created.
+// mkdirAllWorkdirOr500 reports whether *workDir either exists or was created.
 // If it returns false, it also writes an HTTP 500 error to w.
 // This is used by callers to verify *workDir exists, even if it might've been
 // deleted previously.
-func mkdirAllWorkdir(w http.ResponseWriter) bool {
+func mkdirAllWorkdirOr500(w http.ResponseWriter) bool {
 	if err := os.MkdirAll(*workDir, 0755); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return false
@@ -1297,11 +1297,11 @@ func handleLs(w http.ResponseWriter, r *http.Request) {
 	digest, _ := strconv.ParseBool(r.FormValue("digest"))
 	skip := r.Form["skip"] // '/'-separated relative dirs
 
-	if !validRelativeDir(dir) {
-		http.Error(w, "bogus dir", http.StatusBadRequest)
+	if !mkdirAllWorkdirOr500(w) {
 		return
 	}
-	if !mkdirAllWorkdir(w) {
+	if !validRelativeDir(dir) {
+		http.Error(w, "bogus dir", http.StatusBadRequest)
 		return
 	}
 	base := filepath.Join(*workDir, filepath.FromSlash(dir))
