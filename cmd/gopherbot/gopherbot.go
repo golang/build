@@ -701,7 +701,7 @@ func (b *gopherbot) unwaitRelease(ctx context.Context) error {
 func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 	tooOld := time.Now().Add(-365 * 24 * time.Hour)
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if !gi.Closed || gi.PullRequest || gi.Locked {
+		if gi.NotExist || !gi.Closed || gi.PullRequest || gi.Locked {
 			return nil
 		}
 		if gi.Updated.After(tooOld) {
@@ -712,7 +712,11 @@ func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 			return nil
 		}
 		_, err := b.ghc.Issues.Lock(ctx, "golang", "go", int(gi.Number), nil)
-		if err != nil {
+		if ge, ok := err.(*github.ErrorResponse); ok && ge.Response.StatusCode == http.StatusNotFound {
+			// It's rare, but an issue can become 404 on GitHub. See golang.org/issue/30182.
+			// Nothing to do since the issue is gone.
+			return nil
+		} else if err != nil {
 			return err
 		}
 		return b.addLabel(ctx, gi, frozenDueToAge)
