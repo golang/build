@@ -2836,11 +2836,6 @@ func parseOutputAndBanner(b []byte) (banner string, out []byte) {
 // (A communication error)
 const maxTestExecErrors = 3
 
-func execTimeout(testNames []string) time.Duration {
-	// TODO(bradfitz): something smarter probably.
-	return 20 * time.Minute
-}
-
 // runTestsOnBuildlet runs tis on bc, using the optional goroot & gopath environment variables.
 func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, goroot, gopath string) {
 	names := make([]string, len(tis))
@@ -2871,7 +2866,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 	args = append(args, names...)
 	var buf bytes.Buffer
 	t0 := time.Now()
-	timeout := execTimeout(names)
+	timeout := st.conf.DistTestsExecTimeout(names)
 	var remoteErr, err error
 	if ti := tis[0]; ti.bench != nil {
 		pbr, perr := st.parentRev()

@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/types"
@@ -681,6 +682,8 @@ type BuildConfig struct {
 
 	env           []string // extra environment ("key=value") pairs
 	allScriptArgs []string
+
+	testHostConf *HostConfig // override HostConfig for testing, at least for now
 }
 
 func (c *BuildConfig) Env() []string {
@@ -720,7 +723,42 @@ func (c *BuildConfig) FilePathJoin(x ...string) string {
 	return strings.Join(x, "/")
 }
 
+// DistTestsExecTimeout returns how long the coordinator should wait
+// for a cmd/dist test execution to run the provided dist test names.
+func (c *BuildConfig) DistTestsExecTimeout(distTests []string) time.Duration {
+	// TODO: consider using distTests? We never did before, but
+	// now we have the TestStats in the coordinator. Pass in a
+	// *buildstats.TestStats and use historical data times some
+	// fudge factor? For now just use the old 20 minute limit
+	// we've used since 2014, but scale it by the
+	// GO_TEST_TIMEOUT_SCALE for the super slow builders which
+	// struggle with, say, the cgo tests. (which should be broken
+	// up into separate dist tests or shards, like the test/ dir
+	// was)
+	d := 20 * time.Minute
+	d *= time.Duration(c.timeoutScale())
+	return d
+}
+
+// timeoutScale returns this builder's GO_TEST_TIMEOUT_SCALE value, or 1.
+func (c *BuildConfig) timeoutScale() int {
+	const pfx = "GO_TEST_TIMEOUT_SCALE="
+	for _, env := range [][]string{c.env, c.hostConf().env} {
+		for _, kv := range env {
+			if strings.HasPrefix(kv, pfx) {
+				if n, err := strconv.Atoi(kv[len(pfx):]); err == nil && n > 0 {
+					return n
+				}
+			}
+		}
+	}
+	return 1
+}
+
 func (c *BuildConfig) hostConf() *HostConfig {
+	if c.testHostConf != nil {
+		return c.testHostConf
+	}
 	if c, ok := Hosts[c.HostType]; ok {
 		return c
 	}
