@@ -41,6 +41,14 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
+	"host-linux-stretch-vmx": &HostConfig{
+		Notes:           "Debian Stretch w/ Nested Virtualization (VMX CPU bit) enabled, for testing",
+		ContainerImage:  "linux-x86-stretch:latest",
+		NestedVirt:      true,
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:     "root",
+	},
 	"host-linux-armhf-cross": &HostConfig{
 		Notes:           "Debian Jessie with armhf cross-compiler, built from env/crosscompile/linux-armhf-jessie",
 		ContainerImage:  "linux-armhf-jessie:latest",
@@ -575,6 +583,9 @@ type HostConfig struct {
 	// ReverseOptions:
 	ExpectNum       int  // expected number of reverse buildlets of this type
 	HermeticReverse bool // whether reverse buildlet has fresh env per conn
+
+	// Container image options, if ContainerImage != "":
+	NestedVirt bool // container requires VMX nested virtualization
 
 	// Optional base env. GOROOT_BOOTSTRAP should go here if the buildlet
 	// has Go 1.4+ baked in somewhere.
@@ -1203,6 +1214,13 @@ func init() {
 		numTestHelpers:    1,
 		numTryTestHelpers: 4,
 		RunBench:          true,
+	})
+	addBuilder(BuildConfig{
+		Name:      "linux-amd64-vmx",
+		HostType:  "host-linux-stretch-vmx",
+		MaxAtOnce: 1,
+		TryOnly:   true, // don't run regular build
+		tryBot:    nil,  // and don't run trybots (only gomote)
 	})
 
 	const testAlpine = false // Issue 22689 (hide all red builders), Issue 19938 (get Alpine passing)
