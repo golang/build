@@ -10,7 +10,7 @@ import (
 )
 
 func TestTipRedirects(t *testing.T) {
-	mux := newServeMux(&Proxy{builder: &godocBuilder{}})
+	mux := newServeMux(&Proxy{builder: &golangorgBuilder{}})
 	req := httptest.NewRequest("GET", "http://example.com/foo?bar=baz", nil)
 	req.Header.Set("X-Forwarded-Proto", "http")
 	w := httptest.NewRecorder()
