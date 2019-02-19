@@ -154,8 +154,8 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 			// Virtualization reaches GA it'll just become a boolean we
 			// can set in our compute.Instance creation request and this
 			// license opt-in mechanism will be unnecessary.
-			const coxVMXImage = "cos-stable-72-11316-136-0-vmx"
-			srcImage = "https://www.googleapis.com/compute/v1/projects/" + projectID + "/global/images/" + coxVMXImage
+			const cosVMXImage = "cros-kvm-2"
+			srcImage = "https://www.googleapis.com/compute/v1/projects/" + projectID + "/global/images/" + cosVMXImage
 		} else {
 			var err error
 			srcImage, err = cosImage(ctx, computeService)
