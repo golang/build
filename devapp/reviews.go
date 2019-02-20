@@ -116,8 +116,7 @@ func (s *server) updateReviewsData() {
 		p.ForeachOpenCL(func(cl *maintner.GerritCL) error {
 			if cl.WorkInProgress() ||
 				cl.Owner() == nil ||
-				strings.Contains(cl.Commit.Msg, "DO NOT REVIEW") ||
-				strings.Contains(cl.Commit.Msg, "DO NOT SUBMIT") {
+				strings.Contains(cl.Commit.Msg, "DO NOT REVIEW") {
 				return nil
 			}
 			tags := cl.Meta.Hashtags()
