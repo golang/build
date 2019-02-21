@@ -1550,6 +1550,10 @@ func (gr *GitHubRepo) sync(ctx context.Context, token string, loop bool) error {
 	}
 }
 
+type httpClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 // A githubRepoPoller updates the Corpus (gr.c) to have the latest
 // version of the GitHub repo rp, using the GitHub client ghc.
 type githubRepoPoller struct {
@@ -2006,10 +2010,6 @@ func (p *githubRepoPoller) issueNumbersWithStaleEventSync() (issueNums []int32) 
 		return issueNums[i] < issueNums[j]
 	})
 	return issueNums
-}
-
-type httpClient interface {
-	Do(req *http.Request) (*http.Response, error)
 }
 
 func (p *githubRepoPoller) syncEvents(ctx context.Context) error {
