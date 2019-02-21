@@ -243,7 +243,6 @@ func TestSync(t *testing.T) {
 		Assignees: []*github.User{&github.User{ID: github.Int64(u2.ID)}},
 	})
 	c.addMutation(mutation)
-	// gi := gr.issues[3]
 	ctx := context.Background()
 	err := c.sync(ctx, false)
 	if err != nil {
