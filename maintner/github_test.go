@@ -527,9 +527,9 @@ func TestParseGithubEvents(t *testing.T) {
 }
 
 func TestParseMultipleGithubEvents(t *testing.T) {
-	content, err := ioutil.ReadFile(filepath.Join("fixtures", "TestParseMultipleGithubEvents.json"))
+	content, err := ioutil.ReadFile(filepath.Join("testdata", "TestParseMultipleGithubEvents.json"))
 	if err != nil {
-		t.Errorf("error while loading fixture: %s\n", err.Error())
+		t.Errorf("error while loading testdata: %s\n", err.Error())
 	}
 	evts, err := parseGithubEvents(strings.NewReader(string(content)))
 	if err != nil {
@@ -575,17 +575,17 @@ type ClientMock struct {
 	err        error
 	status     string
 	statusCode int
-	fixture    string
+	testdata   string
 }
 
 var timesDoWasCalled = 0
 
 func (c *ClientMock) Do(req *http.Request) (*http.Response, error) {
-	if len(c.fixture) < 1 {
-		c.fixture = "TestParseMultipleGithubEvents.json"
+	if len(c.testdata) < 1 {
+		c.testdata = "TestParseMultipleGithubEvents.json"
 	}
 	timesDoWasCalled++
-	content, _ := ioutil.ReadFile(filepath.Join("fixtures", c.fixture))
+	content, _ := ioutil.ReadFile(filepath.Join("testdata", c.testdata))
 	headers := make(http.Header, 0)
 	t := time.Now()
 	var b []byte
@@ -629,7 +629,7 @@ func TestSyncEvents(t *testing.T) {
 	defer server.Close()
 	p := &githubRepoPoller{
 		c:             &c,
-		token:         "asdf",
+		token:         "foobar",
 		gr:            gr,
 		githubDirect:  github.NewClient(server.Client()),
 		githubCaching: github.NewClient(server.Client()),
@@ -638,12 +638,13 @@ func TestSyncEvents(t *testing.T) {
 		defer func() { eventLog = make([]string, 0) }()
 		timesDoWasCalled = 0
 		ctx := context.Background()
-		err := p.syncEventsOnIssue(ctx, int32(issue.ID), &ClientMock{
+		p.client = &ClientMock{
 			status:     "OK",
 			statusCode: http.StatusOK,
 			err:        nil,
-			fixture:    "TestParseMultipleGithubEvents.json",
-		})
+			testdata:   "TestParseMultipleGithubEvents.json",
+		}
+		err := p.syncEventsOnIssue(ctx, int32(issue.ID))
 		if err != nil {
 			t2.Error(err)
 		}
@@ -661,12 +662,13 @@ func TestSyncEvents(t *testing.T) {
 		defer func() { eventLog = make([]string, 0) }()
 		timesDoWasCalled = 0
 		ctx := context.Background()
-		err := p.syncEventsOnIssue(ctx, int32(issue.ID), &ClientMock{
+		p.client = &ClientMock{
 			status:     "OK",
 			statusCode: http.StatusOK,
 			err:        nil,
-			fixture:    "TestMissingMilestoneEvents.json",
-		})
+			testdata:   "TestMissingMilestoneEvents.json",
+		}
+		err := p.syncEventsOnIssue(ctx, int32(issue.ID))
 		if err != nil {
 			t2.Error(err)
 		}
@@ -686,12 +688,13 @@ func TestSyncEvents(t *testing.T) {
 		defer func() { eventLog = make([]string, 0) }()
 		timesDoWasCalled = 0
 		ctx := context.Background()
-		err := p.syncEventsOnIssue(ctx, int32(issue.ID), &ClientMock{
+		p.client = &ClientMock{
 			status:     "Retry Error",
 			statusCode: http.StatusInternalServerError,
 			err:        nil,
-			fixture:    "TestParseMultipleGithubEvents.json",
-		})
+			testdata:   "TestParseMultipleGithubEvents.json",
+		}
+		err := p.syncEventsOnIssue(ctx, int32(issue.ID))
 		if err == nil {
 			t2.Error("was expecting error after try counts ran out.")
 		}
@@ -709,12 +712,13 @@ func TestSyncEvents(t *testing.T) {
 		defer func() { eventLog = make([]string, 0) }()
 		timesDoWasCalled = 0
 		ctx := context.Background()
-		err := p.syncEventsOnIssue(ctx, int32(issue.ID), &ClientMock{
+		p.client = &ClientMock{
 			status:     "Retry Error",
 			statusCode: http.StatusInternalServerError,
 			err:        errors.New("panic"),
-			fixture:    "TestParseMultipleGithubEvents.json",
-		})
+			testdata:   "TestParseMultipleGithubEvents.json",
+		}
+		err := p.syncEventsOnIssue(ctx, int32(issue.ID))
 		if err == nil {
 			t2.Error("was expecting error after try counts ran out.")
 		}
@@ -749,7 +753,7 @@ func TestSyncMultipleConsecutiveEvents(t *testing.T) {
 	defer server.Close()
 	p := &githubRepoPoller{
 		c:             &c,
-		token:         "asdf",
+		token:         "foobar",
 		gr:            gr,
 		githubDirect:  github.NewClient(server.Client()),
 		githubCaching: github.NewClient(server.Client()),
@@ -759,14 +763,14 @@ func TestSyncMultipleConsecutiveEvents(t *testing.T) {
 		timesDoWasCalled = 0
 		ctx := context.Background()
 		for i := 1; i < 5; i++ {
-			fixture := fmt.Sprintf("TestParseMultipleGithubEvents_p%d.json", i)
-			cm := ClientMock{
+			testdata := fmt.Sprintf("TestParseMultipleGithubEvents_p%d.json", i)
+			p.client = &ClientMock{
 				status:     "OK",
 				statusCode: http.StatusOK,
 				err:        nil,
-				fixture:    fixture,
+				testdata:   testdata,
 			}
-			err := p.syncEventsOnIssue(ctx, int32(issue.ID), &cm)
+			err := p.syncEventsOnIssue(ctx, int32(issue.ID))
 			if err != nil {
 				t2.Fatal(err)
 			}

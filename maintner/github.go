@@ -35,6 +35,10 @@ import (
 // package for responses fulfilled from cache due to a 304 from the server.
 const xFromCache = "X-From-Cache"
 
+// githubThrottleWaitTime is the amount of time to wait re-trying a github
+// throttle error.
+const githubThrottleWaitTime = 500 * time.Millisecond
+
 // GitHubRepoID is a GitHub org & repo, lowercase.
 type GitHubRepoID struct {
 	Owner, Repo string
@@ -1498,6 +1502,7 @@ func (gr *GitHubRepo) sync(ctx context.Context, token string, loop bool) error {
 		gr:            gr,
 		githubDirect:  github.NewClient(&http.Client{Transport: directTransport}),
 		githubCaching: github.NewClient(&http.Client{Transport: cachingTransport}),
+		client:        http.DefaultClient,
 	}
 	activityCh := gr.github.c.activityChan("github:" + gr.id.String())
 	var expectChanges bool // got webhook update, but haven't seen new data yet
@@ -1554,6 +1559,7 @@ type githubRepoPoller struct {
 	lastUpdate    time.Time // modified by sync
 	githubCaching *github.Client
 	githubDirect  *github.Client // not caching
+	client        httpClient     // the client used to poll github
 }
 
 func (p *githubRepoPoller) Owner() string { return p.gr.id.Owner }
@@ -2015,7 +2021,7 @@ func (p *githubRepoPoller) syncEvents(ctx context.Context) error {
 		remain := len(nums)
 		for _, num := range nums {
 			p.logf("event sync: %d issues remaining; syncing issue %v", remain, num)
-			if err := p.syncEventsOnIssue(ctx, num, http.DefaultClient); err != nil {
+			if err := p.syncEventsOnIssue(ctx, num); err != nil {
 				p.logf("event sync on issue %d: %v", num, err)
 				return err
 			}
@@ -2024,7 +2030,7 @@ func (p *githubRepoPoller) syncEvents(ctx context.Context) error {
 	}
 }
 
-func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32, client httpClient) error {
+func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32) error {
 	const perPage = 100
 	p.c.mu.RLock()
 	gi := p.gr.issues[issueNum]
@@ -2059,30 +2065,29 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 
 			tryCount := 0
 			maxTries := 3
-			waitTime := 500 * time.Millisecond
 			var res *http.Response
 			var err error
 
 			for tryCount < maxTries {
-				res, err = client.Do(req)
+				res, err = p.client.Do(req)
 				if err != nil {
 					// We don't want to retry this error.
-					log.Printf("Error fetching %s: %v", u, err)
+					p.logf("Error fetching %s: %v", u, err)
 					return nil, nil, err
 				}
 
-				log.Printf("Fetching %s: %v", u, res.Status)
+				p.logf("Fetching %s: %v", u, res.Status)
 				if res.StatusCode != http.StatusOK {
-					log.Printf("Error fetching %s: %v: %+v. Tries left: %d\n", u, res.Status, res.Header, maxTries-tryCount)
+					p.logf("Error fetching %s: %v: %+v. Tries left: %d\n", u, res.Status, res.Header, maxTries-tryCount)
 					tryCount++
-					time.Sleep(waitTime)
+					time.Sleep(githubThrottleWaitTime)
 				} else if res.StatusCode == http.StatusOK {
 					break
 				}
 			}
 
 			if res.StatusCode != http.StatusOK {
-				log.Println("No more tries left.")
+				p.logf("No more tries left for github polling.")
 				return nil, nil, fmt.Errorf("%s: %v", u, res.Status)
 			}
 			evts, err := parseGithubEvents(res.Body)
