@@ -1378,9 +1378,10 @@ func (b *gopherbot) closeCherryPickIssues(ctx context.Context) error {
 		if gi.Closed || gi.PullRequest || gi.NotExist || gi.Milestone.IsNone() || gi.HasEvent("reopened") {
 			return nil
 		}
-		if strings.Count(gi.Milestone.Title, ".") == 2 { // minor release
-			cherryPickIssues[gi.Number] = gi
+		if !strings.HasPrefix(gi.Milestone.Title, "Go") {
+			return nil
 		}
+		cherryPickIssues[gi.Number] = gi
 		return nil
 	})
 	monthAgo := time.Now().Add(-30 * 24 * time.Hour)
@@ -1394,15 +1395,21 @@ func (b *gopherbot) closeCherryPickIssues(ctx context.Context) error {
 				// optimization) that gopherbot already processed this CL.
 				return nil
 			}
-			if cl.Status != "merged" || cl.Private || !strings.HasPrefix(cl.Branch(), "release-branch") {
+			if cl.Status != "merged" || cl.Private || !strings.HasPrefix(cl.Branch(), "release-branch.") {
 				return nil
 			}
+			clBranchVersion := cl.Branch()[len("release-branch."):] // "go1.11" or "go1.12".
 			for _, ref := range cl.GitHubIssueRefs {
 				if id := ref.Repo.ID(); id.Owner != "golang" || id.Repo != "go" {
 					continue
 				}
 				gi, ok := cherryPickIssues[ref.Number]
 				if !ok {
+					continue
+				}
+				if !strutil.HasPrefixFold(gi.Milestone.Title, clBranchVersion) {
+					// This issue's milestone (e.g., "Go1.11.6", "Go1.12", "Go1.12.1", etc.)
+					// doesn't match the CL branch goX.Y version, so skip it.
 					continue
 				}
 				printIssue("close-cherry-pick", gi)
