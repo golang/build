@@ -710,14 +710,6 @@ var windowsData = map[string]string{
         System="yes"
         Value="[INSTALLDIR]bin" />
     <Environment
-        Id="GoRoot"
-        Action="set"
-        Part="all"
-        Name="GOROOT"
-        Permanent="no"
-        System="yes"
-        Value="[INSTALLDIR]" />
-    <Environment
         Id="UserGoPath"
         Action="create"
         Name="GOPATH"
