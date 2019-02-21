@@ -585,7 +585,8 @@ type HostConfig struct {
 	HermeticReverse bool // whether reverse buildlet has fresh env per conn
 
 	// Container image options, if ContainerImage != "":
-	NestedVirt bool // container requires VMX nested virtualization
+	NestedVirt    bool   // container requires VMX nested virtualization
+	KonletVMImage string // optional VM image (containing konlet) to use instead of default
 
 	// Optional base env. GOROOT_BOOTSTRAP should go here if the buildlet
 	// has Go 1.4+ baked in somewhere.
@@ -1048,6 +1049,17 @@ func (c *HostConfig) PoolName() string {
 		return "Container"
 	}
 	panic("unknown builder type")
+}
+
+// ContainerVMImage returns the base VM name (not the fully qualified
+// URL resource name of the VM) that starts the konlet program that
+// pulls & runs a container. This method is only applicable when
+// c.IsContainer() is true.
+func (c *HostConfig) ContainerVMImage() string {
+	if c.KonletVMImage != "" {
+		return c.KonletVMImage
+	}
+	return "debian-stretch-vmx"
 }
 
 // IsHermetic reports whether this host config gets a fresh

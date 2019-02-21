@@ -146,16 +146,7 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 	if hconf.IsContainer() {
 		if hconf.NestedVirt {
 			minCPU = "Intel Haswell" // documented minimum from https://cloud.google.com/compute/docs/instances/enable-nested-virtualization-vm-instances
-			// TODO: use some variant of cosImage that finds our local
-			// forked copy of cos-stable with the VMX license added. For
-			// now, I just manually once ran:
-			//   gcloud compute images create cos-stable-72-11316-136-0-vmx --source-image=cos-stable-72-11316-136-0 --source-image-project=cos-cloud --licenses=https://www.googleapis.com/compute/v1/projects/vm-options/global/licenses/enable-vmx
-			// And we'll use that version for now. Perhaps when Nested
-			// Virtualization reaches GA it'll just become a boolean we
-			// can set in our compute.Instance creation request and this
-			// license opt-in mechanism will be unnecessary.
-			const cosVMXImage = "cros-kvm-2"
-			srcImage = "https://www.googleapis.com/compute/v1/projects/" + projectID + "/global/images/" + cosVMXImage
+			srcImage = "https://www.googleapis.com/compute/v1/projects/" + projectID + "/global/images/" + hconf.ContainerVMImage()
 		} else {
 			var err error
 			srcImage, err = cosImage(ctx, computeService)
