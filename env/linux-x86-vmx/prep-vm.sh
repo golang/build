@@ -23,6 +23,7 @@ install konlet/scripts/get_metadata_value /usr/share/google
 mkdir -p /usr/share/gce-containers
 install konlet/scripts/konlet-startup /usr/share/gce-containers/konlet-startup
 install konlet/scripts/konlet-startup.service /etc/systemd/system
+chmod -x /etc/systemd/system/konlet-startup.service
 systemctl enable /etc/systemd/system/konlet-startup.service
 systemctl start konlet-startup
 

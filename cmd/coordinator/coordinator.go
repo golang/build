@@ -1594,6 +1594,10 @@ func (st *buildStatus) expectedBuildletStartDuration() time.Duration {
 	pool := st.buildletPool()
 	switch pool.(type) {
 	case *gceBuildletPool:
+		if strings.HasPrefix(st.Name, "android-") {
+			// about a minute for buildlet + minute for Android emulator to be usable
+			return 2 * time.Minute
+		}
 		return time.Minute
 	case *reverseBuildletPool:
 		goos, arch := st.conf.GOOS(), st.conf.GOARCH()

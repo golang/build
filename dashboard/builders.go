@@ -530,6 +530,15 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:   1,
 		env:         []string{"GOROOT_BOOTSTRAP=/opt/freeware/lib/golang"},
 	},
+	"host-android-amd64-emu": &HostConfig{
+		Notes:           "Debian Buster w/ Android SDK + emulator (use nested virt)",
+		ContainerImage:  "android-amd64-emu:ba38cc4f0c38",
+		KonletVMImage:   "android-amd64-emu",
+		NestedVirt:      true,
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:     "root",
+	},
 }
 
 func init() {
@@ -860,10 +869,13 @@ func (c *BuildConfig) SplitMakeRun() bool {
 		// These we've verified to work.
 		return true
 	}
-	// TODO(bradfitz): make androidtest.bash and iotest.bash work
-	// too. And buildall.bash should really just be N small
-	// container jobs instead of a "buildall.bash". Then we can
-	// delete this whole method.
+	if c.GOOS() == "android" && c.HostType == "host-android-amd64-emu" {
+		return true
+	}
+	// TODO(bradfitz): make iotest.bash work too. And
+	// buildall.bash should really just be N small container jobs
+	// instead of a "buildall.bash". Then we can delete this whole
+	// method.
 	return false
 }
 
@@ -873,7 +885,9 @@ func (c *BuildConfig) buildSubrepos() bool {
 	}
 	// TODO(bradfitz,dmitshur): move this into BuildConfig bools, rather than this Name switch.
 	switch c.Name {
-	case "darwin-amd64-10_11",
+	case "android-amd64-emu",
+		"android-386-emu",
+		"darwin-amd64-10_11",
 		"darwin-386-10_11",
 		// TODO: add darwin-amd64-10_12 when we have a build scheduler
 		"freebsd-amd64-93",
@@ -1729,6 +1743,34 @@ func init() {
 			"GOARCH=arm64",
 			"GOANDROID_ADB_FLAGS=-d", // Run on device
 			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-arm64/bin/clang",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "android-386-emu",
+		HostType: "host-android-amd64-emu", // same amd64 host is used for 386 builder
+		Notes:    "Android emulator on GCE",
+		TryOnly:  true, // but not in trybot set for now
+		tryBot:   nil,
+		env: []string{
+			"GOARCH=386",
+			"GOOS=android",
+			"GOHOSTARCH=amd64",
+			"GOHOSTOS=linux",
+			"CGO_ENABLED=1",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "android-amd64-emu",
+		HostType: "host-android-amd64-emu",
+		Notes:    "Android emulator on GCE",
+		TryOnly:  true, // but not in trybot set for now
+		tryBot:   nil,
+		env: []string{
+			"GOARCH=amd64",
+			"GOOS=android",
+			"GOHOSTARCH=amd64",
+			"GOHOSTOS=linux",
+			"CGO_ENABLED=1",
 		},
 	})
 	addBuilder(BuildConfig{
