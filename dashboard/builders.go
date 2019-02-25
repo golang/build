@@ -393,6 +393,15 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:     "debian",
 		HermeticReverse: false, // TODO: use rundockerbuildlet like arm64
 	},
+	"host-linux-ppc64le-power9-osu": &HostConfig{
+		Notes:           "Debian jessie; run by IBM",
+		OwnerGithub:     "ceseo",
+		IsReverse:       true,
+		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		ReverseAliases:  []string{"linux-ppc64le-power9osu"},
+		SSHUsername:     "debian",
+		HermeticReverse: false, // TODO: use rundockerbuildlet like arm64
+	},
 	"host-linux-arm64-linaro": &HostConfig{
 		Notes:           "Ubuntu xenial; run by Go team, from linaro",
 		IsReverse:       true,
@@ -1764,6 +1773,11 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "linux-ppc64le-buildlet",
 		HostType: "host-linux-ppc64le-osu",
+		FlakyNet: true,
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-ppc64le-power9osu",
+		HostType: "host-linux-ppc64le-power9-osu",
 		FlakyNet: true,
 	})
 	addBuilder(BuildConfig{
