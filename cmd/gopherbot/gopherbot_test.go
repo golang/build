@@ -228,7 +228,7 @@ func TestAddLabels(t *testing.T) {
 		// since some test cases may skip calls to it.
 		added = nil
 
-		if err := b.addLabels(nil, tc.gi, tc.labels); err != nil {
+		if err := b.addLabels(context.Background(), tc.gi, tc.labels); err != nil {
 			t.Errorf("%s: b.addLabels got unexpected error: %v", tc.desc, err)
 			continue
 		}
@@ -295,7 +295,7 @@ func TestRemoveLabels(t *testing.T) {
 		// since some test cases may skip calls to it.
 		removed = nil
 
-		if err := b.removeLabels(nil, tc.gi, tc.toRemove); err != nil {
+		if err := b.removeLabels(context.Background(), tc.gi, tc.toRemove); err != nil {
 			t.Errorf("%s: b.addLabels got unexpected error: %v", tc.desc, err)
 			continue
 		}

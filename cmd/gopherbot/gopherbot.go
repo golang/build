@@ -93,7 +93,7 @@ func getGithubToken() (string, error) {
 	}
 	f := strings.SplitN(strings.TrimSpace(string(slurp)), ":", 2)
 	if len(f) != 2 || f[0] == "" || f[1] == "" {
-		return "", fmt.Errorf("Expected token %q to be of form <username>:<token>", slurp)
+		return "", fmt.Errorf("expected token %q to be of form <username>:<token>", slurp)
 	}
 	return f[1], nil
 }
@@ -122,7 +122,7 @@ func getGerritAuth() (username string, password string, err error) {
 		return "git-gobot.golang.org", f[0], nil
 	}
 	if len(f) != 2 || f[0] == "" || f[1] == "" {
-		return "", "", fmt.Errorf("Expected Gerrit token %q to be of form <git-email>:<token>", slurp)
+		return "", "", fmt.Errorf("expected Gerrit token %q to be of form <git-email>:<token>", slurp)
 	}
 	return f[0], f[1], nil
 }
@@ -1326,7 +1326,7 @@ func (b *gopherbot) setMinorMilestones(ctx context.Context) error {
 		if majorRel == "" {
 			return nil
 		}
-		m, err := b.getMinorMilestoneForMajor(ctx, majorRel)
+		m, err := b.getMinorMilestoneForMajor(majorRel)
 		if err != nil {
 			// Fail silently, the milestone might not exist yet.
 			log.Printf("Failed to apply minor release milestone to issue %d: %v", gi.Number, err)
@@ -1338,7 +1338,7 @@ func (b *gopherbot) setMinorMilestones(ctx context.Context) error {
 
 // getMinorMilestoneForMajor returns the latest open minor release milestone
 // for a given major release series.
-func (b *gopherbot) getMinorMilestoneForMajor(ctx context.Context, majorRel string) (milestone, error) {
+func (b *gopherbot) getMinorMilestoneForMajor(majorRel string) (milestone, error) {
 	var res milestone
 	var minorVers int
 	titlePrefix := "Go" + majorRel + "."
@@ -1631,7 +1631,7 @@ func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 			return nil
 		}
 		gp.ForeachOpenCL(func(cl *maintner.GerritCL) error {
-			if cl.Private || cl.WorkInProgress() || time.Now().Sub(cl.Created) < 10*time.Minute {
+			if cl.Private || cl.WorkInProgress() || time.Since(cl.Created) < 10*time.Minute {
 				return nil
 			}
 			tags := cl.Meta.Hashtags()
