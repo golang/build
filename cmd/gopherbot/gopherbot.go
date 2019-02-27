@@ -211,19 +211,19 @@ func main() {
 	ctx := context.Background()
 	for {
 		t0 := time.Now()
-		err := bot.doTasks(ctx)
-		if err != nil {
+		taskErrors := bot.doTasks(ctx)
+		for _, err := range taskErrors {
 			log.Print(err)
 		}
 		botDur := time.Since(t0)
 		log.Printf("gopherbot ran in %v", botDur)
 		if !*daemon {
-			if err != nil {
+			if len(taskErrors) > 0 {
 				os.Exit(1)
 			}
 			return
 		}
-		if err != nil {
+		if len(taskErrors) > 0 {
 			log.Printf("sleeping 30s after previous error.")
 			time.Sleep(30 * time.Second)
 		}
@@ -309,18 +309,20 @@ func (b *gopherbot) initCorpus() {
 	b.gorepo = repo
 }
 
-func (b *gopherbot) doTasks(ctx context.Context) error {
+// doTasks performs tasks in sequence. It doesn't stop if
+// if encounters an error, but reports errors at the end.
+func (b *gopherbot) doTasks(ctx context.Context) []error {
+	var errs []error
 	for _, task := range tasks {
 		if *onlyRun != "" && task.name != *onlyRun {
 			continue
 		}
-		if err := task.fn(b, ctx); err != nil {
-			log.Printf("%s: %v", task.name, err)
-			return err
+		err := task.fn(b, ctx)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %v", task.name, err))
 		}
 	}
-
-	return nil
+	return errs
 }
 
 func (b *gopherbot) addLabel(ctx context.Context, gi *maintner.GitHubIssue, label string) error {
