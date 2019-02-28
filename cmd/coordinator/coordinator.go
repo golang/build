@@ -1401,9 +1401,17 @@ func skipBuild(br buildgo.BuilderRev) bool {
 		// conditionally.
 		bc, ok := dashboard.Builders[br.Name]
 		return !ok || bc.IsReverse()
-	case "exp", // always broken, depends on mobile which is broken
-		"mobile", // always broken (gl, etc). doesn't compile.
-		"term":   // no code yet in repo,
+	case "mobile":
+		if strings.HasPrefix(br.Name, "android-") {
+			return false
+		}
+		return true
+	case "exp":
+		if strings.HasPrefix(br.Name, "android-") || br.Name == "linux-amd64" {
+			return false
+		}
+		return true
+	case "term": // no code yet in repo
 		return true
 	case "perf":
 		if br.Name == "linux-amd64-nocgo" {
@@ -2482,6 +2490,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	}
 
 	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+		Debug:  true, // make buildlet print extra debug in output for failures
 		Output: st,
 		Dir:    dir,
 		ExtraEnv: append(st.conf.Env(),

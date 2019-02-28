@@ -1758,7 +1758,10 @@ func init() {
 		Name:     "android-amd64-emu",
 		HostType: "host-android-amd64-emu",
 		Notes:    "Android emulator on GCE",
-		tryBot:   nil, // not yet; TODO: collect timing, deciding test sharding size
+		tryBot: func(proj string) bool {
+			// Only for mobile repo for now, not "go":
+			return proj == "mobile"
+		},
 		env: []string{
 			"GOARCH=amd64",
 			"GOOS=android",
