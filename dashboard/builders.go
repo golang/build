@@ -842,9 +842,6 @@ func (c *BuildConfig) AllScript() string {
 	if strings.HasPrefix(c.Name, "nacl-") {
 		return "src/nacltest.bash"
 	}
-	if strings.HasPrefix(c.Name, "android-") {
-		return "src/androidtest.bash"
-	}
 	if strings.HasPrefix(c.Name, "darwin-arm") {
 		return "src/iostest.bash"
 	}
@@ -869,10 +866,7 @@ func (c *BuildConfig) SplitMakeRun() bool {
 		// These we've verified to work.
 		return true
 	}
-	if c.GOOS() == "android" && c.HostType == "host-android-amd64-emu" {
-		return true
-	}
-	// TODO(bradfitz): make iotest.bash work too. And
+	// TODO(bradfitz): make iostest.bash work too. And
 	// buildall.bash should really just be N small container jobs
 	// instead of a "buildall.bash". Then we can delete this whole
 	// method.
@@ -1730,9 +1724,10 @@ func init() {
 		Notes:    "Android Wiko Fever phone running Android 6.0, via a Mac Mini",
 		env: []string{
 			"GOARCH=arm",
-			"GOARM=7",
-			"GOANDROID_ADB_FLAGS=-d", // Run on device
-			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-arm/bin/clang",
+			"GOOS=android",
+			"GOHOSTARCH=amd64",
+			"GOHOSTOS=linux",
+			"CGO_ENABLED=1",
 		},
 	})
 	addBuilder(BuildConfig{
@@ -1741,8 +1736,10 @@ func init() {
 		Notes:    "Android Wiko Fever phone running Android 6.0, via a Mac Mini",
 		env: []string{
 			"GOARCH=arm64",
-			"GOANDROID_ADB_FLAGS=-d", // Run on device
-			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-arm64/bin/clang",
+			"GOOS=android",
+			"GOHOSTARCH=amd64",
+			"GOHOSTOS=linux",
+			"CGO_ENABLED=1",
 		},
 	})
 	addBuilder(BuildConfig{
@@ -1768,26 +1765,6 @@ func init() {
 			"GOHOSTARCH=amd64",
 			"GOHOSTOS=linux",
 			"CGO_ENABLED=1",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:     "android-386-emulator",
-		HostType: "host-darwin-amd64-eliasnaur-android",
-		Notes:    "Android emulator, via a Mac Mini",
-		env: []string{
-			"GOARCH=386",
-			"GOANDROID_ADB_FLAGS=-e", // Run on emulator
-			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-386/bin/clang",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:     "android-amd64-emulator",
-		HostType: "host-darwin-amd64-eliasnaur-android",
-		Notes:    "Android emulator, via a Mac Mini",
-		env: []string{
-			"GOARCH=amd64",
-			"GOANDROID_ADB_FLAGS=-e", // Run on emulator
-			"CC_FOR_TARGET=/Users/elias/android-ndk-standalone-amd64/bin/clang",
 		},
 	})
 	addBuilder(BuildConfig{
