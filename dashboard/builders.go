@@ -1749,8 +1749,6 @@ func init() {
 		Name:     "android-386-emu",
 		HostType: "host-android-amd64-emu", // same amd64 host is used for 386 builder
 		Notes:    "Android emulator on GCE",
-		TryOnly:  true, // but not in trybot set for now
-		tryBot:   nil,
 		env: []string{
 			"GOARCH=386",
 			"GOOS=android",
@@ -1763,8 +1761,7 @@ func init() {
 		Name:     "android-amd64-emu",
 		HostType: "host-android-amd64-emu",
 		Notes:    "Android emulator on GCE",
-		TryOnly:  true, // but not in trybot set for now
-		tryBot:   nil,
+		tryBot:   nil, // not yet; TODO: collect timing, deciding test sharding size
 		env: []string{
 			"GOARCH=amd64",
 			"GOOS=android",
