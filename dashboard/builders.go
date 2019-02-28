@@ -920,43 +920,40 @@ func (c *BuildConfig) BuildRepo(repo string) bool {
 // branch is the branch of the repo (usually "master").
 // goBranch is non-empty for a non-"go" repo, and is the branch of Go the subrepo is being tested at.
 func (c *BuildConfig) BuildBranch(repo, branch, goBranch string) bool {
-	// Don't try to build oauth2 or build before Go 1.11. These
-	// repos require modules.
-	switch repo {
-	case "oauth2", "build":
-		if branch == "release-branch.go1.10" || goBranch == "release-branch.go1.10" {
+	// Don't build old branches.
+	const minGo1x = 11
+	if strings.HasPrefix(goBranch, "release-branch.go1") {
+		if v, _ := strconv.Atoi(strings.TrimPrefix(goBranch, "release-branch.go1.")); v < minGo1x {
+			return false
+		}
+	}
+	if strings.HasPrefix(branch, "release-branch.go1") {
+		if v, _ := strconv.Atoi(strings.TrimPrefix(branch, "release-branch.go1.")); v < minGo1x {
 			return false
 		}
 	}
 
-	if strings.HasPrefix(c.Name, "darwin-") {
-		switch c.Name {
-		case "darwin-amd64-10_8", "darwin-amd64-10_10", "darwin-amd64-10_11",
-			"darwin-386-10_8", "darwin-386-10_10", "darwin-386-10_11":
-			// OS X before Sierra can build any branch.
-			// (We've never had a 10.9 builder.)
-		default:
-			// Sierra or after, however, requires the 1.7 branch:
-			switch branch {
-			case "release-branch.go1.6",
-				"release-branch.go1.5",
-				"release-branch.go1.4",
-				"release-branch.go1.3",
-				"release-branch.go1.2",
-				"release-branch.go1.1",
-				"release-branch.go1":
+	// Skip Android builds on release branches prior to Go 1.13.
+	// We changed it from using androidtest.bash to the normal
+	// cmd/dist-based flow and we don't want to teach the build
+	// system exactly which revs everywhere use which path.
+	// Instead, just skip Android stuff on release branches.
+	// Android basically only lives at head anyway.
+	if strings.HasPrefix(c.Name, "android-") {
+		if strings.HasPrefix(branch, "dev.") {
+			return false
+		}
+		b := goBranch
+		if b == "" {
+			b = branch
+		}
+		if strings.HasPrefix(b, "release-branch.go1.") {
+			if v, _ := strconv.Atoi(strings.TrimPrefix(b, "release-branch.go1.")); v < 13 {
 				return false
 			}
 		}
 	}
-	// NetBSD support was resurrected during the Go 1.10 dev cycle.
-	// Skip subrepo builds against Go 1.8 and Go 1.9. Failures there aren't interesting.
-	if strings.HasPrefix(c.Name, "netbsd-") {
-		switch goBranch {
-		case "release-branch.go1.8", "release-branch.go1.9":
-			return false
-		}
-	}
+
 	// Build dev.boringcrypto branches only on linux/amd64 and windows/386 (see golang.org/issue/26791).
 	if repo == "go" && (branch == "dev.boringcrypto" || strings.HasPrefix(branch, "dev.boringcrypto.")) {
 		if c.Name != "linux-amd64" && c.Name != "windows-386-2008" {
