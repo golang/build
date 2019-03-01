@@ -532,7 +532,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-android-amd64-emu": &HostConfig{
 		Notes:           "Debian Buster w/ Android SDK + emulator (use nested virt)",
-		ContainerImage:  "android-amd64-emu:ba38cc4f0c38",
+		ContainerImage:  "android-amd64-emu:bff27c0c9263",
 		KonletVMImage:   "android-amd64-emu",
 		NestedVirt:      true,
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",

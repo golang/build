@@ -10,7 +10,12 @@ MAINTAINER golang-dev <golang-dev@googlegroups.com>
 ENV DEBIAN_FRONTEND noninteractive
 
 ENV GO_BUILDER_ENV android-amd64-emu
-ENV PATH="${PATH}:/android/sdk/platform-tools"
+
+# For gomobile tests
+ENV ANDROID_HOME=/android/sdk
+ENV CGO_CFLAGS=-I/android/openal-headers
+
+ENV PATH="${PATH}:${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/build-tools/27.0.3:/android/gradle/bin"
 ENV CC_FOR_android_386=/android/sdk/ndk-bundle/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android26-clang
 ENV CC_FOR_android_amd64=/android/sdk/ndk-bundle/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
 
@@ -71,10 +76,14 @@ RUN yes | /android/sdk/tools/bin/sdkmanager --licenses \
 # Gradle for gomobile
 RUN curl -L -o /android/gradle-5.2.1-bin.zip https://services.gradle.org/distributions/gradle-5.2.1-bin.zip \
 	&& unzip -d /android /android/gradle-5.2.1-bin.zip \
-	&& rm /android/gradle-5.2.1-bin.zip
+	&& rm /android/gradle-5.2.1-bin.zip \
+	&& mv /android/gradle-5.2.1 /android/gradle
 
 # Create emulator
 RUN echo no | /android/sdk/tools/bin/avdmanager create avd --force --name android-avd --package "system-images;android-26;default;x86_64"
+
+RUN mkdir /android/openal-headers
+RUN cp -a /usr/include/AL /android/openal-headers/
 
 COPY --from=stage0 /go/bin/stage0 /usr/local/bin/stage0
 
