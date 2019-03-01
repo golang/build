@@ -98,3 +98,60 @@ func TestHostConfigsAllUsed(t *testing.T) {
 		}
 	}
 }
+
+func TestSubrepoTrybots(t *testing.T) {
+	bc := Builders["linux-amd64"]
+
+	for _, tt := range []struct {
+		repo, branch, goBranch string
+		want                   bool
+	}{
+		{"mobile", "master", "release-branch.go1.10", false},
+		{"mobile", "master", "release-branch.go1.11", false},
+		{"mobile", "master", "release-branch.go1.12", false}, // requires Go 1.13+
+		{"mobile", "master", "release-branch.go1.13", true},
+		{"mobile", "master", "master", true},
+
+		{"net", "master", "release-branch.go1.10", false}, // too old
+		{"net", "master", "release-branch.go1.11", true},
+		{"net", "master", "release-branch.go1.12", true},
+		{"net", "master", "release-branch.go1.13", true},
+	} {
+		got := bc.BuildBranch(tt.repo, tt.branch, tt.goBranch)
+		if got != tt.want {
+			t.Errorf("BuildBranch(%q, %q, %q) = %v; want %v", tt.repo, tt.branch, tt.goBranch, got, tt.want)
+		}
+	}
+}
+
+func TestBuildConfigBuildRepo(t *testing.T) {
+	tests := []struct {
+		builder string
+		repo    string
+		want    bool
+	}{
+		// The physical ARM Androids only run x/mobile (and "go"):
+		{"android-arm-wiko-fever", "go", true},
+		{"android-arm-wiko-fever", "mobile", true},
+		{"android-arm64-wiko-fever", "mobile", true},
+		{"android-arm64-wiko-fever", "net", false},
+
+		// But the emulators run all:
+		{"android-amd64-emu", "mobile", true},
+		{"android-386-emu", "mobile", true},
+		{"android-amd64-emu", "net", true},
+		{"android-386-emu", "net", true},
+		{"android-amd64-emu", "go", true},
+		{"android-386-emu", "go", true},
+	}
+	for _, tt := range tests {
+		bc, ok := Builders[tt.builder]
+		if !ok {
+			t.Fatalf("unknown builder %q", tt.builder)
+		}
+		got := bc.BuildRepo(tt.repo)
+		if got != tt.want {
+			t.Errorf("%s: BuildRepo(%q) = %v; want %v", tt.builder, tt.repo, got, tt.want)
+		}
+	}
+}

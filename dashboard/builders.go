@@ -911,6 +911,9 @@ func (c *BuildConfig) BuildRepo(repo string) bool {
 	if repo == "go" {
 		return true
 	}
+	if repo == "mobile" && strings.HasPrefix(c.Name, "android-") {
+		return true
+	}
 	return c.buildSubrepos()
 }
 
@@ -939,7 +942,7 @@ func (c *BuildConfig) BuildBranch(repo, branch, goBranch string) bool {
 	// system exactly which revs everywhere use which path.
 	// Instead, just skip Android stuff on release branches.
 	// Android basically only lives at head anyway.
-	if strings.HasPrefix(c.Name, "android-") {
+	if strings.HasPrefix(c.Name, "android-") || repo == "mobile" {
 		if strings.HasPrefix(branch, "dev.") {
 			return false
 		}
