@@ -1739,32 +1739,37 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:     "android-arm-wiko-fever",
+		Name:     "darwin-amd64-wikofever",
 		HostType: "host-darwin-amd64-eliasnaur-android",
-		Notes:    "Android Wiko Fever phone running Android 6.0, via a Mac Mini",
+		Notes:    "Same as android-arm*-wikofever but without GOOS set, for running x/mobile tests.",
 		PostSubmitBuildPolicy: func(repo string) bool {
-			return repo == "go" || repo == "mobile"
+			return repo == "mobile"
 		},
 		env: []string{
-			"GOARCH=arm",
-			"GOOS=android",
-			"GOHOSTARCH=amd64",
-			"GOHOSTOS=linux",
 			"CGO_ENABLED=1",
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:     "android-arm64-wiko-fever",
+		Name:     "android-arm-wikofever",
 		HostType: "host-darwin-amd64-eliasnaur-android",
 		Notes:    "Android Wiko Fever phone running Android 6.0, via a Mac Mini",
-		PostSubmitBuildPolicy: func(repo string) bool {
-			return repo == "go" || repo == "mobile"
+		env: []string{
+			"GOARCH=arm",
+			"GOOS=android",
+			"GOHOSTARCH=amd64",
+			"GOHOSTOS=darwin",
+			"CGO_ENABLED=1",
 		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "android-arm64-wikofever",
+		HostType: "host-darwin-amd64-eliasnaur-android",
+		Notes:    "Android Wiko Fever phone running Android 6.0, via a Mac Mini",
 		env: []string{
 			"GOARCH=arm64",
 			"GOOS=android",
 			"GOHOSTARCH=amd64",
-			"GOHOSTOS=linux",
+			"GOHOSTOS=darwin",
 			"CGO_ENABLED=1",
 		},
 	})

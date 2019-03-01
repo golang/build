@@ -131,11 +131,17 @@ func TestBuildConfigBuildRepo(t *testing.T) {
 		repo    string
 		want    bool
 	}{
-		// The physical ARM Androids only run x/mobile (and "go"):
-		{"android-arm-wiko-fever", "go", true},
-		{"android-arm-wiko-fever", "mobile", true},
-		{"android-arm64-wiko-fever", "mobile", true},
-		{"android-arm64-wiko-fever", "net", false},
+		// The physical ARM Androids only runs "go":
+		{"android-arm-wikofever", "go", true},
+		{"android-arm-wikofever", "mobile", false},
+		{"android-arm64-wikofever", "mobile", false},
+		{"android-arm64-wikofever", "net", false},
+
+		// A GOOS=darwin variant of the physical ARM Androids
+		// runs x/mobile and nothing else:
+		{"darwin-amd64-wikofever", "mobile", true},
+		{"darwin-amd64-wikofever", "go", false},
+		{"darwin-amd64-wikofever", "net", false},
 
 		// But the emulators run all:
 		{"android-amd64-emu", "mobile", true},
