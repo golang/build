@@ -650,6 +650,11 @@ type BuildConfig struct {
 	CompileOnly bool                   // if true, compile tests, but don't run them
 	FlakyNet    bool                   // network tests are flaky (try anyway, but ignore some failures)
 
+	// PostSubmitBuildPolicy optionally specifies whether this
+	// builder does post-submit builds for the given repo ("go",
+	// "net", etc). If nil, a default policy is used.
+	PostSubmitBuildPolicy func(repo string) bool
+
 	// MinimumGoVersion optionally specifies the minimum Go version
 	// this builder is allowed to use. It can be useful for skipping
 	// builders that are too new and no longer support some supported
@@ -879,9 +884,7 @@ func (c *BuildConfig) buildSubrepos() bool {
 	}
 	// TODO(bradfitz,dmitshur): move this into BuildConfig bools, rather than this Name switch.
 	switch c.Name {
-	case "android-amd64-emu",
-		"android-386-emu",
-		"darwin-amd64-10_11",
+	case "darwin-amd64-10_11",
 		"darwin-386-10_11",
 		// TODO: add darwin-amd64-10_12 when we have a build scheduler
 		"freebsd-amd64-93",
@@ -908,10 +911,10 @@ func (c *BuildConfig) buildSubrepos() bool {
 // BuildRepo reports whether we should do post-submit builds of the provided
 // repo ("go", "sys", "net", etc).
 func (c *BuildConfig) BuildRepo(repo string) bool {
-	if repo == "go" {
-		return true
+	if p := c.PostSubmitBuildPolicy; p != nil {
+		return p(repo)
 	}
-	if repo == "mobile" && strings.HasPrefix(c.Name, "android-") {
+	if repo == "go" {
 		return true
 	}
 	return c.buildSubrepos()
@@ -1378,6 +1381,23 @@ func init() {
 		Notes:     "Debian sid (unstable)",
 	})
 	addBuilder(BuildConfig{
+		Name:     "linux-amd64-androidemu",
+		HostType: "host-android-amd64-emu",
+		env: []string{
+			"GOARCH=amd64",
+			"GOOS=linux",
+			"CGO_ENABLED=1",
+		},
+		tryBot: func(proj string) bool {
+			// Only for mobile repo for now, not "go":
+			return proj == "mobile"
+		},
+		PostSubmitBuildPolicy: func(repo string) bool {
+			return repo == "mobile"
+		},
+		Notes: "Runs GOOS=linux but with the Android emulator attached, for running x/mobile host tests.",
+	})
+	addBuilder(BuildConfig{
 		Name:      "linux-amd64-stretch",
 		HostType:  "host-linux-stretch",
 		MaxAtOnce: 1,
@@ -1722,6 +1742,9 @@ func init() {
 		Name:     "android-arm-wiko-fever",
 		HostType: "host-darwin-amd64-eliasnaur-android",
 		Notes:    "Android Wiko Fever phone running Android 6.0, via a Mac Mini",
+		PostSubmitBuildPolicy: func(repo string) bool {
+			return repo == "go" || repo == "mobile"
+		},
 		env: []string{
 			"GOARCH=arm",
 			"GOOS=android",
@@ -1734,6 +1757,9 @@ func init() {
 		Name:     "android-arm64-wiko-fever",
 		HostType: "host-darwin-amd64-eliasnaur-android",
 		Notes:    "Android Wiko Fever phone running Android 6.0, via a Mac Mini",
+		PostSubmitBuildPolicy: func(repo string) bool {
+			return repo == "go" || repo == "mobile"
+		},
 		env: []string{
 			"GOARCH=arm64",
 			"GOOS=android",
@@ -1746,6 +1772,13 @@ func init() {
 		Name:     "android-386-emu",
 		HostType: "host-android-amd64-emu", // same amd64 host is used for 386 builder
 		Notes:    "Android emulator on GCE",
+		PostSubmitBuildPolicy: func(repo string) bool {
+			switch repo {
+			case "blog", "talks", "review", "tour":
+				return false
+			}
+			return true
+		},
 		env: []string{
 			"GOARCH=386",
 			"GOOS=android",
@@ -1761,6 +1794,13 @@ func init() {
 		tryBot: func(proj string) bool {
 			// Only for mobile repo for now, not "go":
 			return proj == "mobile"
+		},
+		PostSubmitBuildPolicy: func(repo string) bool {
+			switch repo {
+			case "blog", "talks", "review", "tour":
+				return false
+			}
+			return true
 		},
 		env: []string{
 			"GOARCH=amd64",

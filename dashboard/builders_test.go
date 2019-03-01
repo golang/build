@@ -5,6 +5,7 @@
 package dashboard
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -153,5 +154,16 @@ func TestBuildConfigBuildRepo(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("%s: BuildRepo(%q) = %v; want %v", tt.builder, tt.repo, got, tt.want)
 		}
+	}
+}
+
+func TestAndroidTrybots(t *testing.T) {
+	var got []string
+	for _, bc := range TryBuildersForProject("mobile") {
+		got = append(got, bc.Name)
+	}
+	want := []string{"android-amd64-emu", "linux-amd64-androidemu"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf(" got: %q\nwant: %q\n", got, want)
 	}
 }
