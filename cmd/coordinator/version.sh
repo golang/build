@@ -5,11 +5,12 @@
 # license that can be found in the LICENSE file.
 
 VERSION=$(git rev-parse HEAD)
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 if ! git diff-index HEAD --quiet || ! git diff-files --quiet; then
   VERSION=$VERSION-dirty
   dirty=1
 fi
-if [ -n "$dirty" ] || [ -n "$(git rev-list '@{upstream}..HEAD')" ]; then
+if [ -n "$dirty" ] || [ -z "$(git config --get-all "branch.${CURRENT_BRANCH}.remote")" ] || [ -n "$(git rev-list '@{upstream}..HEAD')" ]; then
   VERSION=$VERSION-$USER-$(date -u +%Y-%m-%dT%H:%M:%SZ)
 fi
 echo "$VERSION"
