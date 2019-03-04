@@ -1102,6 +1102,10 @@ func (sc *statsClient) rangeStats() {
 				email := cl.Commit.Author.Email() // gerrit-y email
 				who := gophers.GetPerson(email)
 				if who != nil {
+					if len(cl.Commit.Files) > 20 {
+						// Probably just a cleanup or moving files, skip this CL.
+						return nil
+					}
 					if fileTouched[who] == nil {
 						fileTouched[who] = map[projectFile]bool{}
 					}
@@ -1143,15 +1147,15 @@ func (sc *statsClient) rangeStats() {
 		uniqueDirsEdited[p] = len(m)
 	}
 
-	top(newCLs, "CLs created:", 20)
-	top(commentsOnOtherCLs, "Unique non-self CLs commented on:", 20)
+	top(newCLs, "CLs created:", 40)
+	top(commentsOnOtherCLs, "Unique non-self CLs commented on:", 40)
 
-	top(githubIssuesCreated, "GitHub issues created:", 20)
-	top(githubUniqueIssueComments, "Unique GitHub issues commented on:", 20)
-	top(githubUniqueIssueEvents, "Unique GitHub issues acted on:", 20)
+	top(githubIssuesCreated, "GitHub issues created:", 40)
+	top(githubUniqueIssueComments, "Unique GitHub issues commented on:", 40)
+	top(githubUniqueIssueEvents, "Unique GitHub issues acted on:", 40)
 
-	top(uniqueFilesEdited, "Unique files edited:", 20)
-	top(uniqueDirsEdited, "Unique directories edited:", 20)
+	top(uniqueFilesEdited, "Unique files edited:", 40)
+	top(uniqueDirsEdited, "Unique directories edited:", 40)
 }
 
 func top(m map[*gophers.Person]int, title string, n int) {
