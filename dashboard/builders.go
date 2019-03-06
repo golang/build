@@ -749,7 +749,7 @@ func (c *BuildConfig) ModulesEnv(repo string) (env []string) {
 		env = append(env, "GO_BUILDER_SET_GOPROXY=coordinator")
 	}
 	switch repo {
-	case "oauth2", "build":
+	case "oauth2", "build", "website":
 		env = append(env, "GO111MODULE=on")
 	}
 	return
