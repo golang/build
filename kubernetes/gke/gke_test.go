@@ -115,6 +115,9 @@ func TestDialService(t *testing.T) {
 }
 
 func foreachCluster(t *testing.T, fn func(*container.Cluster, *kubernetes.Client)) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
 	if !metadata.OnGCE() {
 		t.Skip("not on GCE; skipping")
 	}
