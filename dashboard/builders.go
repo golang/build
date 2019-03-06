@@ -1228,7 +1228,11 @@ func init() {
 		HostType:          "host-linux-jessie",
 		ShouldRunDistTest: fasterTrybots,
 		tryBot:            defaultTrySet(),
-		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		env: []string{
+			"GOARCH=386",
+			"GOHOSTARCH=386",
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
 		numTestHelpers:    1,
 		numTryTestHelpers: 3,
 	})
@@ -1239,9 +1243,12 @@ func init() {
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386", "GO386=387"},
 	})
 	addBuilder(BuildConfig{
-		Name:              "linux-amd64",
-		HostType:          "host-linux-jessie",
-		tryBot:            defaultTrySet(),
+		Name:     "linux-amd64",
+		HostType: "host-linux-jessie",
+		tryBot:   defaultTrySet(),
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
 		MaxAtOnce:         3,
 		numTestHelpers:    1,
 		numTryTestHelpers: 4,
@@ -1305,6 +1312,7 @@ func init() {
 		Notes:     "cgo disabled",
 		env: []string{
 			"CGO_ENABLED=0",
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
 			// This USER=root was required for Docker-based builds but probably isn't required
 			// in the VM anymore, since the buildlet probably already has this in its environment.
 			// (It was required because without cgo, it couldn't find the username)

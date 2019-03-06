@@ -914,14 +914,17 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 		f.Flush()
 	}
 
+	postEnv := r.PostForm["env"]
+
 	goarch := "amd64" // unless we find otherwise
-	for _, pair := range r.PostForm["env"] {
-		if hasPrefixFold(pair, "GOARCH=") {
-			goarch = pair[len("GOARCH="):]
-		}
+	if v := getEnv(postEnv, "GOARCH"); v != "" {
+		goarch = v
+	}
+	if v, _ := strconv.ParseBool(getEnv(postEnv, "GO_DISABLE_OUTBOUND_NETWORK")); v {
+		disableOutboundNetwork()
 	}
 
-	env := append(baseEnv(goarch), r.PostForm["env"]...)
+	env := append(baseEnv(goarch), postEnv...)
 
 	if v := processTmpDirEnv; v != "" {
 		env = append(env, "TMPDIR="+v)
@@ -1849,5 +1852,30 @@ func checkAndroidEmulator() error {
 		return androidEmuErr
 	default:
 		return nil
+	}
+}
+
+var disableNetOnce sync.Once
+
+func disableOutboundNetwork() {
+	if runtime.GOOS != "linux" {
+		return
+	}
+	disableNetOnce.Do(disableOutboundNetworkLinux)
+}
+
+func disableOutboundNetworkLinux() {
+	const iptables = "/sbin/iptables"
+	const vcsTestGolangOrgIP = "35.184.38.56" // vcs-test.golang.org
+	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "1", "-m", "state", "--state", "NEW", "-d", vcsTestGolangOrgIP, "-p", "tcp", "-j", "ACCEPT"))
+	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "2", "-m", "state", "--state", "NEW", "-d", "10.0.0.0/8", "-p", "tcp", "-j", "ACCEPT"))
+	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "3", "-m", "state", "--state", "NEW", "-p", "tcp", "--dport", "443", "-j", "REJECT", "--reject-with", "icmp-host-prohibited"))
+	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "3", "-m", "state", "--state", "NEW", "-p", "tcp", "--dport", "22", "-j", "REJECT", "--reject-with", "icmp-host-prohibited"))
+}
+
+func runOrLog(cmd *exec.Cmd) {
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("failed to run %s: %v, %s", cmd.Args, err, out)
 	}
 }
