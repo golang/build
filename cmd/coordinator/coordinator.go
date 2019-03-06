@@ -2479,51 +2479,52 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	sp := st.CreateSpan("running_subrepo_tests", st.SubName)
 	defer func() { sp.Done(err) }()
 
-	goProxy, err := st.moduleProxy()
-	if err != nil {
-		return nil, err
-	}
-	var go111Module, dir string
-	if goProxy != "" {
-		go111Module = "on"
-		dir = "gopath/src/golang.org/x/" + st.SubName
+	env := append(st.conf.Env(),
+		"GOROOT="+goroot,
+		"GOPATH="+gopath,
+		"GOPROXY="+moduleProxy(),
+	)
+	if v, ok := st.go111Module(); ok {
+		env = append(env, "GO111MODULE="+v)
 	}
 
 	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
-		Debug:  true, // make buildlet print extra debug in output for failures
-		Output: st,
-		Dir:    dir,
-		ExtraEnv: append(st.conf.Env(),
-			"GOROOT="+goroot,
-			"GOPATH="+gopath,
-			"GO111MODULE="+go111Module,
-			"GOPROXY="+goProxy,
-		),
-		Path: []string{"$WORKDIR/go/bin", "$PATH"},
-		Args: []string{"test", "-short", subrepoPrefix + st.SubName + "/..."},
+		Debug:    true, // make buildlet print extra debug in output for failures
+		Output:   st,
+		Dir:      "gopath/src/golang.org/x/" + st.SubName,
+		ExtraEnv: env,
+		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+		Args:     []string{"test", "-short", subrepoPrefix + st.SubName + "/..."},
 	})
 }
 
-// moduleProxy returns the GOPROXY environment value to use for this
-// build's tests. If non-empty, GO111MODULE=on is included in the
-// environment as well. Returning two zero values means to not
-// configure the environment values.
+// go111Module() returns the GO111MODULE environment value to use for this
+// build's tests.
+//
+// If ok=false, the tests should use whatever is set in the builder's
+// environment.
+func (st *buildStatus) go111Module() (value string, ok bool) {
+	switch st.SubName {
+	case "oauth2", "build":
+		return "on", true // Force module mode.
+	default:
+		return "", false // Use the builder's default behavior, whatever that is.
+	}
+}
+
+// moduleProxy returns the GOPROXY environment value to use for module-enabled
+// tests.
 //
 // We go through a GCP-project-internal module proxy ("GOPROXY") to
 // eliminate load on the origin servers. Our builder VMs are ephemeral
 // and only run for the duration of one build. They also often don't
 // have all the VCS tools installed (or even available: there is no
 // git for plan9).
-func (bs *buildStatus) moduleProxy() (string, error) {
-	switch bs.SubName {
-	case "oauth2", "build":
-		// The two repos we're starting with for testing.
-	default:
-		return "", nil
-	}
+func moduleProxy() string {
 	// If we're running on localhost, just use the current environment's value.
 	if buildEnv == nil || !buildEnv.IsProd {
-		return os.Getenv("GOPROXY"), nil
+		// If empty, use installed VCS tools as usual to fetch modules.
+		return os.Getenv("GOPROXY")
 	}
 
 	// We run a NodePort service on each GKE node
@@ -2537,10 +2538,13 @@ func (bs *buildStatus) moduleProxy() (string, error) {
 	// scheme that supports internal static IPs.
 	gkeNodeIP, err := metadata.Get("instance/network-interfaces/0/ip")
 	if err != nil || gkeNodeIP == "" {
+		// Explicitly disable module downloads: otherwise, we end up trying to run
+		// 'git' on hosts that don't have it installed, and the failure messages are
+		// unpleasant.
 		log.Printf("WARNING: failed to discover local GCE node's IP: %v; disabling GOPROXY", err)
-		return "", nil
+		return "off"
 	}
-	return "http://" + gkeNodeIP + ":30156", nil
+	return "http://" + gkeNodeIP + ":30156"
 }
 
 // affectedPkgs returns the name of every package affected by this commit.
@@ -2616,6 +2620,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 
 	mainBuildletGoroot := st.conf.FilePathJoin(workDir, "go")
 	mainBuildletGopath := st.conf.FilePathJoin(workDir, "gopath")
+	goproxy := set.goProxy()
 
 	// We use our original buildlet to run the tests in order, to
 	// make the streaming somewhat smooth and not incredibly
@@ -2637,7 +2642,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 				}
 				continue
 			}
-			st.runTestsOnBuildlet(st.bc, tis, mainBuildletGoroot, mainBuildletGopath)
+			st.runTestsOnBuildlet(st.bc, tis, mainBuildletGoroot, mainBuildletGopath, goproxy)
 		}
 		st.LogEventTime("main_buildlet_broken", st.bc.Name())
 	}()
@@ -2676,7 +2681,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 						st.LogEventTime("no_new_tests_remain", bc.Name())
 						return
 					}
-					st.runTestsOnBuildlet(bc, tis, goroot, gopath)
+					st.runTestsOnBuildlet(bc, tis, goroot, gopath, goproxy)
 				}
 				st.LogEventTime("test_helper_is_broken", bc.Name())
 			}(helper)
@@ -2850,7 +2855,7 @@ func parseOutputAndBanner(b []byte) (banner string, out []byte) {
 const maxTestExecErrors = 3
 
 // runTestsOnBuildlet runs tis on bc, using the optional goroot & gopath environment variables.
-func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, goroot, gopath string) {
+func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, goroot, gopath, goproxy string) {
 	names := make([]string, len(tis))
 	for i, ti := range tis {
 		names[i] = ti.name
@@ -2888,6 +2893,13 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 			remoteErr, err = ti.bench.Run(buildEnv, st, st.conf, bc, &buf, []buildgo.BuilderRev{st.BuilderRev, pbr})
 		}
 	} else {
+		env := append(st.conf.Env(),
+			"GOROOT="+goroot,
+			"GOPATH="+gopath,
+		)
+		if goproxy != "" {
+			env = append(env, "GOPROXY="+goproxy)
+		}
 		remoteErr, err = bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 			// We set Dir to "." instead of the default ("go/bin") so when the dist tests
 			// try to run os/exec.Command("go", "test", ...), the LookPath of "go" doesn't
@@ -2895,15 +2907,12 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 			// fail when dist tries to run the binary in dir "$GOROOT/src", since
 			// "$GOROOT/src" + "./go.exe" doesn't exist. Perhaps LookPath should return
 			// an absolute path.
-			Dir:    ".",
-			Output: &buf, // see "maybe stream lines" TODO below
-			ExtraEnv: append(st.conf.Env(),
-				"GOROOT="+goroot,
-				"GOPATH="+gopath,
-			),
-			Timeout: timeout,
-			Path:    []string{"$WORKDIR/go/bin", "$PATH"},
-			Args:    args,
+			Dir:      ".",
+			Output:   &buf, // see "maybe stream lines" TODO below
+			ExtraEnv: env,
+			Timeout:  timeout,
+			Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+			Args:     args,
 		})
 	}
 	execDuration := time.Since(t0)
@@ -2968,6 +2977,15 @@ func (s *testSet) fetchGOPATHDeps(sl spanlog.Logger, bc *buildlet.Client) error 
 		}
 	}
 	return nil
+}
+
+// goProxy returns the GOPROXY environment value to set for tests in the main
+// repo.
+func (s *testSet) goProxy() string {
+	if len(s.needsXRepo) == 0 {
+		return "off"
+	}
+	return moduleProxy()
 }
 
 // cancelAll cancels all pending tests.
