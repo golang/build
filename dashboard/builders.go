@@ -1273,18 +1273,24 @@ func init() {
 	// Add the -vetall builder. The builder name suffix "-vetall" is recognized by cmd/dist/test.go
 	// to only run the "go vet std cmd" test and no others.
 	addBuilder(BuildConfig{
-		Name:           "misc-vet-vetall",
-		HostType:       "host-linux-jessie",
-		Notes:          "Runs vet over the standard library.",
-		tryBot:         defaultTrySet(),
+		Name:     "misc-vet-vetall",
+		HostType: "host-linux-jessie",
+		Notes:    "Runs vet over the standard library.",
+		tryBot:   defaultTrySet(),
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
 		numTestHelpers: 5,
 	})
 
 	addMiscCompile := func(suffix, rx string) {
 		addBuilder(BuildConfig{
-			Name:        "misc-compile" + suffix,
-			HostType:    "host-linux-jessie",
-			tryBot:      defaultTrySet(),
+			Name:     "misc-compile" + suffix,
+			HostType: "host-linux-jessie",
+			tryBot:   defaultTrySet(),
+			env: []string{
+				"GO_DISABLE_OUTBOUND_NETWORK=1",
+			},
 			TryOnly:     true,
 			CompileOnly: true,
 			Notes:       "Runs buildall.sh to cross-compile std packages for " + rx + ", but doesn't run any tests.",
@@ -1320,10 +1326,13 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:      "linux-amd64-noopt",
-		Notes:     "optimizations and inlining disabled",
-		HostType:  "host-linux-jessie",
-		env:       []string{"GO_GCFLAGS=-N -l"},
+		Name:     "linux-amd64-noopt",
+		Notes:    "optimizations and inlining disabled",
+		HostType: "host-linux-jessie",
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+			"GO_GCFLAGS=-N -l",
+		},
 		MaxAtOnce: 1,
 	})
 	addBuilder(BuildConfig{
@@ -1333,7 +1342,10 @@ func init() {
 		tryBot:      nil, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
 		CompileOnly: true,
 		Notes:       "SSA internal checks enabled",
-		env:         []string{"GO_GCFLAGS=-d=ssa/check/on,dclstack"},
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+			"GO_GCFLAGS=-d=ssa/check/on,dclstack",
+		},
 		GoDeps: []string{
 			"f65abf6ddc8d1f3d403a9195fd74eaffa022b07f", // adds dclstack
 		},
@@ -1348,6 +1360,9 @@ func init() {
 		StopAfterMake:       true,
 		InstallRacePackages: []string{"cmd/compile"},
 		Notes:               "race-enabled cmd/compile",
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
 		GoDeps: []string{
 			"22f1b56dab29d397d2bdbdd603d85e60fb678089", // adds cmd/compile -c; Issue 20222
 		},
@@ -1360,6 +1375,9 @@ func init() {
 		ShouldRunDistTest: fasterTrybots,
 		numTestHelpers:    1,
 		numTryTestHelpers: 5,
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:      "linux-386-clang",
@@ -1395,6 +1413,7 @@ func init() {
 			"GOARCH=amd64",
 			"GOOS=linux",
 			"CGO_ENABLED=1",
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
 		tryBot: func(proj string) bool {
 			// Only for mobile repo for now, not "go":
@@ -1410,6 +1429,9 @@ func init() {
 		HostType:  "host-linux-stretch",
 		MaxAtOnce: 1,
 		Notes:     "Debian Stretch",
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:      "linux-amd64-longtest",
@@ -1507,6 +1529,7 @@ func init() {
 		env: []string{
 			"GOOS=js", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
 			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
 	})
 	addBuilder(BuildConfig{
