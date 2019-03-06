@@ -936,6 +936,9 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 		if builderInfo.TryOnly || knownToDashboard[b] {
 			continue
 		}
+		if !builderInfo.BuildRepo("go") {
+			continue
+		}
 		if !builderInfo.BuildBranch("go", "master", "") {
 			continue
 		}
