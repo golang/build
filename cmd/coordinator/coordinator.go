@@ -211,6 +211,25 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 	return tc, nil
 }
 
+// httpRouter is the coordinator's mux, routing traffic to one of
+// three locations:
+//   1) a buildlet, from gomote clients (if X-Buildlet-Proxy is set)
+//   2) our module proxy cache on GKE (if X-Proxy-Service == module-cache)
+//   3) traffic to the coordinator itself (the default)
+type httpRouter struct{}
+
+func (httpRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Buildlet-Proxy") != "" {
+		requireBuildletProxyAuth(http.HandlerFunc(proxyBuildletHTTP)).ServeHTTP(w, r)
+		return
+	}
+	if r.Header.Get("X-Proxy-Service") == "module-cache" {
+		requireBuildletProxyAuth(http.HandlerFunc(proxyModuleCache)).ServeHTTP(w, r)
+		return
+	}
+	http.DefaultServeMux.ServeHTTP(w, r)
+}
+
 type loggerFunc func(event string, optText ...string)
 
 func (fn loggerFunc) LogEventTime(event string, optText ...string) {
