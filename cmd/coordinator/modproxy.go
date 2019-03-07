@@ -11,17 +11,17 @@ import (
 	"strings"
 )
 
-// proxyModuleCache proxies from https://farmer.golang.org (with Auth
-// & a magic header, as handled by coordinator.go's httpRouter type)
-// to Go's private module proxy server running on GKE. The module proxy protocol
-// does not define authentication, so we do it ourselves.
+// proxyModuleCache proxies from https://farmer.golang.org (with a
+// magic header, as handled by coordinator.go's httpRouter type) to
+// Go's private module proxy server running on GKE. The module proxy
+// protocol does not define authentication, so we do it ourselves.
 //
 // The complete path is the buildlet listens on localhost:3000 to run
 // an unauthenticated module proxy server for the cmd/go binary to use
 // via GOPROXY=http://localhost:3000. That localhost:3000 server
 // proxies it to https://farmer.golang.org with auth headers and a
 // sentinel X-Proxy-Service:module-cache header. Then coordinator.go's
-// httpRouter sends it here after the auth has been checked.
+// httpRouter sends it here.
 //
 // This code then does the final reverse proxy, sent without auth.
 //
@@ -29,14 +29,28 @@ import (
 //
 //   cmd/go -> localhost:3000 -> buildlet -> coordinator --> GKE server
 func proxyModuleCache(w http.ResponseWriter, r *http.Request) {
+	if r.TLS == nil {
+		http.Error(w, "https required", http.StatusBadRequest)
+		return
+	}
+	builder, pass, ok := r.BasicAuth()
+	if !ok {
+		http.Error(w, "missing required authentication", http.StatusBadRequest)
+		return
+	}
+	if !strings.Contains(builder, "-") || builderKey(builder) != pass {
+		http.Error(w, "bad username or password", http.StatusUnauthorized)
+		return
+	}
+
 	target := moduleProxy()
 	if !strings.HasPrefix(target, "http") {
-		http.Error(w, "module proxy not configured", 500)
+		http.Error(w, "module proxy not configured", http.StatusInternalServerError)
 		return
 	}
 	backend, err := url.Parse(target)
 	if err != nil {
-		http.Error(w, "module proxy misconfigured", 500)
+		http.Error(w, "module proxy misconfigured", http.StatusInternalServerError)
 		return
 	}
 	// TODO: maybe only create this once early. But probably doesn't matter.

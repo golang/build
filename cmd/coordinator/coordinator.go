@@ -224,7 +224,7 @@ func (httpRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Header.Get("X-Proxy-Service") == "module-cache" {
-		requireBuildletProxyAuth(http.HandlerFunc(proxyModuleCache)).ServeHTTP(w, r)
+		proxyModuleCache(w, r)
 		return
 	}
 	http.DefaultServeMux.ServeHTTP(w, r)
