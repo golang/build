@@ -7,6 +7,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -29,7 +30,7 @@ import (
 //
 // In summary:
 //
-//   cmd/go -> localhost:3000 -> buildlet -> coordinator --> GKE server
+//   cmd/go -> localhost:3000 -> buildlet -> coordinator -> GKE server
 func proxyModuleCache(w http.ResponseWriter, r *http.Request) {
 	if r.TLS == nil {
 		http.Error(w, "https required", http.StatusBadRequest)
@@ -45,13 +46,15 @@ func proxyModuleCache(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	target := moduleProxy()
-	if !strings.HasPrefix(target, "http") {
-		http.Error(w, "module proxy not configured", http.StatusInternalServerError)
+	targetURL := moduleProxy()
+	if !strings.HasPrefix(targetURL, "http") {
+		log.Printf("unsupported GOPROXY backend value %q; not proxying", targetURL)
+		http.Error(w, "no GOPROXY backend available", http.StatusInternalServerError)
 		return
 	}
-	backend, err := url.Parse(target)
+	backend, err := url.Parse(targetURL)
 	if err != nil {
+		log.Printf("failed to parse GOPROXY value as URL: %v", err)
 		http.Error(w, "module proxy misconfigured", http.StatusInternalServerError)
 		return
 	}

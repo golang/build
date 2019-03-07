@@ -69,16 +69,22 @@ func ParseReleaseBranch(branchName string) (major, minor int, ok bool) {
 		// so reject if we see one.
 		return 0, 0, false
 	}
-	v := strings.SplitN(branchName[len(prefix):], ".", 3)
-	if len(v) > 2 {
+	dottedNum := branchName[len(prefix):] // "1", "1.1", "2", "2.5"
+	numDot := strings.Count(dottedNum, ".")
+	if numDot > 1 {
 		return 0, 0, false
 	}
-	major, ok = parse0To999(v[0])
+	majorStr, minorStr := dottedNum, ""
+	if numDot == 1 {
+		dot := strings.Index(dottedNum, ".")
+		majorStr, minorStr = dottedNum[:dot], dottedNum[dot+1:]
+	}
+	major, ok = parse0To999(majorStr)
 	if !ok || major == 0 {
 		return 0, 0, false
 	}
-	if len(v) == 2 {
-		minor, ok = parse0To999(v[1])
+	if numDot > 0 {
+		minor, ok = parse0To999(minorStr)
 		if !ok {
 			return 0, 0, false
 		}

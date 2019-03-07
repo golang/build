@@ -158,3 +158,12 @@ func TestParse0To999(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestAllocs(t *testing.T) {
+	got := testing.AllocsPerRun(1000, func() {
+		ParseReleaseBranch("release-branch.go1.5")
+	})
+	if got > 0 {
+		t.Fatalf("unexpected %v allocation(s)", got)
+	}
+}

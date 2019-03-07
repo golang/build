@@ -5,7 +5,7 @@
 package dashboard
 
 import (
-	"reflect"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -70,19 +70,289 @@ func TestDistTestsExecTimeout(t *testing.T) {
 	}
 }
 
-func TestListTrybots(t *testing.T) {
-	forProj := func(proj string) {
-		t.Run(proj, func(t *testing.T) {
-			tryBots := TryBuildersForProject(proj)
-			t.Logf("Builders:")
-			for _, conf := range tryBots {
-				t.Logf("  - %s", conf.Name)
+// TestTrybots tests that a given repo & its branch yields the provided
+// complete set of builders. See also: TestBuilders, which tests both trybots
+// and post-submit builders, both at arbitrary branches.
+func TestTrybots(t *testing.T) {
+	tests := []struct {
+		repo   string // "go", "net", etc
+		branch string // of repo
+		want   []string
+	}{
+		{
+			repo:   "go",
+			branch: "master",
+			want: []string{
+				"freebsd-amd64-12_0",
+				"js-wasm",
+				"linux-386",
+				"linux-amd64",
+				"linux-amd64-race",
+				"misc-compile",
+				"misc-compile-freebsd",
+				"misc-compile-mips",
+				"misc-compile-nacl",
+				"misc-compile-netbsd",
+				"misc-compile-openbsd",
+				"misc-compile-plan9",
+				"misc-compile-ppc",
+				"misc-vet-vetall",
+				"nacl-386",
+				"nacl-amd64p32",
+				"openbsd-amd64-64",
+				"windows-386-2008",
+				"windows-amd64-2016",
+			},
+		},
+		{
+			repo:   "go",
+			branch: "release-branch.go1.12",
+			want: []string{
+				"freebsd-amd64-10_3",
+				"freebsd-amd64-12_0",
+				"js-wasm",
+				"linux-386",
+				"linux-amd64",
+				"linux-amd64-race",
+				"misc-compile",
+				"misc-compile-freebsd",
+				"misc-compile-mips",
+				"misc-compile-nacl",
+				"misc-compile-netbsd",
+				"misc-compile-openbsd",
+				"misc-compile-plan9",
+				"misc-compile-ppc",
+				"misc-vet-vetall",
+				"nacl-386",
+				"nacl-amd64p32",
+				"openbsd-amd64-64",
+				"windows-386-2008",
+				"windows-amd64-2016",
+			},
+		},
+		{
+			repo:   "mobile",
+			branch: "master",
+			want: []string{
+				"android-amd64-emu",
+				"linux-amd64-androidemu",
+			},
+		},
+		{
+			repo:   "sys",
+			branch: "master",
+			want: []string{
+				"freebsd-386-11_2",
+				"freebsd-amd64-11_2",
+				"freebsd-amd64-12_0",
+				"linux-386",
+				"linux-amd64",
+				"netbsd-amd64-8_0",
+				"openbsd-386-64",
+				"openbsd-amd64-64",
+				"windows-386-2008",
+				"windows-amd64-2016",
+			},
+		},
+	}
+	for i, tt := range tests {
+		if tt.branch == "" || tt.repo == "" {
+			t.Errorf("incomplete test entry %d", i)
+			return
+		}
+		t.Run(fmt.Sprintf("%s/%s", tt.repo, tt.branch), func(t *testing.T) {
+			var got []string
+			goBranch := tt.branch // hard-code the common case for now
+			for _, bc := range TryBuildersForProject(tt.repo, tt.branch, goBranch) {
+				got = append(got, bc.Name)
+			}
+			m := map[string]bool{}
+			for _, b := range tt.want {
+				m[b] = true
+			}
+			for _, b := range got {
+				if _, ok := m[b]; !ok {
+					t.Errorf("got unexpected %q", b)
+				}
+				delete(m, b)
+			}
+			for b := range m {
+				t.Errorf("missing expected %q", b)
 			}
 		})
 	}
-	forProj("go")
-	forProj("net")
-	forProj("sys")
+}
+
+// TestBuilderConfig whether a given builder and repo at different
+// branches is either a post-submit builder, trybot, neither, or both.
+func TestBuilderConfig(t *testing.T) {
+	// builderConfigWant is bitmask of 4 different things to assert are wanted:
+	// - being a post-submit builder
+	// - NOT being a post-submit builder
+	// - being a trybot builder
+	// - NOT being a post-submit builder
+	type want uint8
+	const (
+		isTrybot want = 1 << iota
+		notTrybot
+		isBuilder  // post-submit
+		notBuilder // not post-submit
+
+		none     = notTrybot + notBuilder
+		both     = isTrybot + isBuilder
+		onlyPost = notTrybot + isBuilder
+	)
+
+	type builderAndRepo struct {
+		testName string
+		builder  string
+		repo     string
+		branch   string
+		goBranch string
+	}
+	// builder may end in "@go1.N" (as alias for "@release-branch.go1.N") or "@branch-name".
+	// repo may end in "@1.N" (as alias for "@release-branch.go1.N")
+	b := func(builder, repo string) builderAndRepo {
+		br := builderAndRepo{
+			testName: builder + "," + repo,
+			builder:  builder,
+			goBranch: "master",
+			repo:     repo,
+			branch:   "master",
+		}
+		if strings.Contains(builder, "@") {
+			f := strings.SplitN(builder, "@", 2)
+			br.builder = f[0]
+			br.goBranch = f[1]
+		}
+		if strings.Contains(repo, "@") {
+			f := strings.SplitN(repo, "@", 2)
+			br.repo = f[0]
+			br.branch = f[1]
+		}
+		expandBranch := func(s *string) {
+			if strings.HasPrefix(*s, "go1.") {
+				*s = "release-branch." + *s
+			} else if strings.HasPrefix(*s, "1.") {
+				*s = "release-branch.go" + *s
+			}
+		}
+		expandBranch(&br.branch)
+		expandBranch(&br.goBranch)
+		if br.repo == "go" {
+			br.branch = br.goBranch
+		}
+		return br
+	}
+	tests := []struct {
+		br   builderAndRepo
+		want want
+	}{
+		{b("linux-amd64", "go"), both},
+		{b("linux-amd64", "net"), both},
+		{b("linux-amd64", "sys"), both},
+
+		// The mobile repo requires Go 1.13+.
+		{b("android-amd64-emu", "go"), onlyPost},
+		{b("android-amd64-emu", "mobile"), both},
+		{b("android-amd64-emu", "mobile@1.10"), none},
+		{b("android-amd64-emu", "mobile@1.11"), none},
+		{b("android-amd64-emu@go1.10", "mobile"), none},
+		{b("android-amd64-emu@go1.11", "mobile"), none},
+		{b("android-amd64-emu@go1.12", "mobile"), none},
+		{b("android-amd64-emu@go1.13", "mobile"), both},
+		{b("android-amd64-emu", "mobile@1.13"), both},
+
+		{b("android-386-emu", "go"), onlyPost},
+		{b("android-386-emu", "mobile"), onlyPost},
+		{b("android-386-emu", "mobile@1.10"), none},
+		{b("android-386-emu", "mobile@1.11"), none},
+		{b("android-386-emu@go1.10", "mobile"), none},
+		{b("android-386-emu@go1.11", "mobile"), none},
+		{b("android-386-emu@go1.12", "mobile"), none},
+		{b("android-386-emu@go1.13", "mobile"), onlyPost},
+		{b("android-386-emu", "mobile@1.13"), onlyPost},
+
+		{b("linux-amd64", "net"), both},
+		{b("linux-amd64", "net@1.12"), both},
+		{b("linux-amd64@go1.12", "net@1.12"), both},
+		{b("linux-amd64", "net@1.11"), both},
+		{b("linux-amd64", "net@1.11"), both},
+		{b("linux-amd64", "net@1.10"), none},   // too old
+		{b("linux-amd64@go1.10", "net"), none}, // too old
+		{b("linux-amd64@go1.11", "net"), both},
+		{b("linux-amd64@go1.11", "net@1.11"), both},
+		{b("linux-amd64@go1.12", "net@1.12"), both},
+
+		// go1.12.html: "Go 1.12 is the last release that is
+		// supported on FreeBSD 10.x [... and 11.1]"
+		{b("freebsd-amd64-10_3", "go"), none},
+		{b("freebsd-amd64-10_3", "net"), none},
+		{b("freebsd-amd64-11_1", "go"), none},
+		{b("freebsd-amd64-11_1", "net"), none},
+		{b("freebsd-amd64-10_3@go1.12", "go"), both},
+		{b("freebsd-amd64-10_3@go1.12", "net@1.12"), both},
+		{b("freebsd-amd64-10_3@go1.11", "go"), both},
+		{b("freebsd-amd64-10_3@go1.11", "net@1.11"), both},
+		{b("freebsd-amd64-11_1@go1.13", "go"), none},
+		{b("freebsd-amd64-11_1@go1.13", "net@1.12"), none},
+		{b("freebsd-amd64-11_1@go1.12", "go"), isBuilder},
+		{b("freebsd-amd64-11_1@go1.12", "net@1.12"), isBuilder},
+		{b("freebsd-amd64-11_1@go1.11", "go"), isBuilder},
+		{b("freebsd-amd64-11_1@go1.11", "net@1.11"), isBuilder},
+
+		// The physical ARM Androids only runs "go":
+		// They run on GOOS=android mode which is not
+		// interesting for x/mobile. The interesting tests run
+		// on the darwin-amd64-wikofever below where
+		// GOOS=darwin.
+		{b("android-arm-wikofever", "go"), isBuilder},
+		{b("android-arm-wikofever", "mobile"), notBuilder},
+		{b("android-arm64-wikofever", "go"), isBuilder},
+		{b("android-arm64-wikofever", "mobile"), notBuilder},
+		{b("android-arm64-wikofever", "net"), notBuilder},
+
+		// A GOOS=darwin variant of the physical ARM Androids
+		// runs x/mobile and nothing else:
+		{b("darwin-amd64-wikofever", "mobile"), isBuilder},
+		{b("darwin-amd64-wikofever", "go"), notBuilder},
+		{b("darwin-amd64-wikofever", "net"), notBuilder},
+
+		// But the emulators run all:
+		{b("android-amd64-emu", "mobile"), isBuilder},
+		{b("android-386-emu", "mobile"), isBuilder},
+		{b("android-amd64-emu", "net"), isBuilder},
+		{b("android-386-emu", "net"), isBuilder},
+		{b("android-amd64-emu", "go"), isBuilder},
+		{b("android-386-emu", "go"), isBuilder},
+	}
+	for _, tt := range tests {
+		t.Run(tt.br.testName, func(t *testing.T) {
+			bc, ok := Builders[tt.br.builder]
+			if !ok {
+				t.Fatalf("unknown builder %q", tt.br.builder)
+			}
+			gotPost := bc.BuildsRepoPostSubmit(tt.br.repo, tt.br.branch, tt.br.goBranch)
+			if tt.want&isBuilder != 0 && !gotPost {
+				t.Errorf("not a post-submit builder, but expected")
+			}
+			if tt.want&notBuilder != 0 && gotPost {
+				t.Errorf("unexpectedly a post-submit builder")
+			}
+
+			gotTry := bc.BuildsRepoTryBot(tt.br.repo, tt.br.branch, tt.br.goBranch)
+			if tt.want&isTrybot != 0 && !gotTry {
+				t.Errorf("not trybot, but expected")
+			}
+			if tt.want&notTrybot != 0 && gotTry {
+				t.Errorf("unexpectedly a trybot")
+			}
+
+			if t.Failed() {
+				t.Logf("For: %+v", tt.br)
+			}
+		})
+	}
 }
 
 func TestHostConfigsAllUsed(t *testing.T) {
@@ -97,79 +367,5 @@ func TestHostConfigsAllUsed(t *testing.T) {
 			// this an error for now.
 			t.Logf("warning: host type %q is not referenced from any build config", hostType)
 		}
-	}
-}
-
-func TestSubrepoTrybots(t *testing.T) {
-	bc := Builders["linux-amd64"]
-
-	for _, tt := range []struct {
-		repo, branch, goBranch string
-		want                   bool
-	}{
-		{"mobile", "master", "release-branch.go1.10", false},
-		{"mobile", "master", "release-branch.go1.11", false},
-		{"mobile", "master", "release-branch.go1.12", false}, // requires Go 1.13+
-		{"mobile", "master", "release-branch.go1.13", true},
-		{"mobile", "master", "master", true},
-
-		{"net", "master", "release-branch.go1.10", false}, // too old
-		{"net", "master", "release-branch.go1.11", true},
-		{"net", "master", "release-branch.go1.12", true},
-		{"net", "master", "release-branch.go1.13", true},
-	} {
-		got := bc.BuildBranch(tt.repo, tt.branch, tt.goBranch)
-		if got != tt.want {
-			t.Errorf("BuildBranch(%q, %q, %q) = %v; want %v", tt.repo, tt.branch, tt.goBranch, got, tt.want)
-		}
-	}
-}
-
-func TestBuildConfigBuildRepo(t *testing.T) {
-	tests := []struct {
-		builder string
-		repo    string
-		want    bool
-	}{
-		// The physical ARM Androids only runs "go":
-		{"android-arm-wikofever", "go", true},
-		{"android-arm-wikofever", "mobile", false},
-		{"android-arm64-wikofever", "mobile", false},
-		{"android-arm64-wikofever", "net", false},
-
-		// A GOOS=darwin variant of the physical ARM Androids
-		// runs x/mobile and nothing else:
-		{"darwin-amd64-wikofever", "mobile", true},
-		{"darwin-amd64-wikofever", "go", false},
-		{"darwin-amd64-wikofever", "net", false},
-
-		// But the emulators run all:
-		{"android-amd64-emu", "mobile", true},
-		{"android-386-emu", "mobile", true},
-		{"android-amd64-emu", "net", true},
-		{"android-386-emu", "net", true},
-		{"android-amd64-emu", "go", true},
-		{"android-386-emu", "go", true},
-	}
-	for _, tt := range tests {
-		bc, ok := Builders[tt.builder]
-		if !ok {
-			t.Fatalf("unknown builder %q", tt.builder)
-		}
-		got := bc.BuildRepo(tt.repo)
-		if got != tt.want {
-			t.Errorf("%s: BuildRepo(%q) = %v; want %v", tt.builder, tt.repo, got, tt.want)
-		}
-	}
-}
-
-func TestAndroidTrybots(t *testing.T) {
-	var got []string
-	for _, bc := range TryBuildersForProject("mobile") {
-		got = append(got, bc.Name)
-	}
-	want := []string{"android-amd64-emu", "linux-amd64-androidemu"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf(" got: %q\nwant: %q\n", got, want)
 	}
 }

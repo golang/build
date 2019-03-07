@@ -45,7 +45,6 @@ import (
 	"go4.org/syncutil"
 	grpc "grpc.go4.org"
 
-	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/errorreporting"
 	"cloud.google.com/go/storage"
 	"golang.org/x/build"
@@ -907,17 +906,13 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 			}
 			builder := bs.Builders[i]
 			builderInfo, ok := dashboard.Builders[builder]
-			if !ok || builderInfo.TryOnly {
+			if !ok {
 				// Not managed by the coordinator, or a trybot-only one.
 				continue
 			}
-			if !builderInfo.BuildRepo(br.Repo) {
+			if !builderInfo.BuildsRepoPostSubmit(br.Repo, br.Branch, br.GoBranch) {
 				continue
 			}
-			if !builderInfo.BuildBranch(br.Repo, br.Branch, br.GoBranch) {
-				continue
-			}
-
 			var rev buildgo.BuilderRev
 			if br.Repo == "go" {
 				rev = buildgo.BuilderRev{
@@ -935,9 +930,6 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 					continue
 				}
 			}
-			if skipBuild(rev) {
-				continue
-			}
 
 			// The !sent[builder] here is a clumsy attempt at priority scheduling
 			// and probably should be replaced at some point with a better solution.
@@ -952,18 +944,13 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 	// And to bootstrap new builders, see if we have any builders
 	// that the dashboard doesn't know about.
 	for b, builderInfo := range dashboard.Builders {
-		if builderInfo.TryOnly || knownToDashboard[b] {
-			continue
-		}
-		if !builderInfo.BuildRepo("go") {
-			continue
-		}
-		if !builderInfo.BuildBranch("go", "master", "") {
+		if knownToDashboard[b] ||
+			!builderInfo.BuildsRepoPostSubmit("go", "master", "master") {
 			continue
 		}
 		for _, rev := range goRevisions {
 			br := buildgo.BuilderRev{Name: b, Rev: rev}
-			if !skipBuild(br) && !isBuilding(br) {
+			if !isBuilding(br) {
 				work <- br
 			}
 		}
@@ -1104,7 +1091,8 @@ var testingKnobSkipBuilds bool
 // Must hold statusMu.
 func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	key := tryWorkItemKey(work)
-	builders := dashboard.TryBuildersForProject(key.Project)
+	goBranch := key.Branch // assume same as repo's branch for now
+	builders := dashboard.TryBuildersForProject(key.Project, key.Branch, goBranch)
 	log.Printf("Starting new trybot set for %v", key)
 	ts := &trySet{
 		tryKey: key,
@@ -1184,7 +1172,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 			continue
 		}
 		branch := work.GoBranch[i]
-		if !linuxBuilder.BuildBranch(key.Project, "master", branch) {
+		if !linuxBuilder.BuildsRepoTryBot(key.Project, "master", branch) {
 			continue
 		}
 		goVersion := types.MajorMinor{int(work.GoVersion[i].Major), int(work.GoVersion[i].Minor)}
@@ -1395,60 +1383,6 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 			return
 		}
 	}
-}
-
-// skipBuild reports whether the br build should be skipped.
-//
-// TODO(bradfitz): move this policy func into dashboard/builders.go in its own CL sometime.
-func skipBuild(br buildgo.BuilderRev) bool {
-	if br.Name == "freebsd-arm-paulzhol" {
-		// This was a fragile little machine with limited memory.
-		// Only run a few of the core subrepos for now while
-		// we figure out what's killing it.
-		switch br.SubName {
-		case "", "sys", "net":
-			return false
-		}
-		return true
-	}
-	switch br.SubName {
-	case "oauth2", "build":
-		// The oauth2 and build repos are our guinea pigs for
-		// testing using modules. But they currently only work
-		// inside the GCP network.
-		// TODO: once we proxy through the module proxy from
-		// reverse buildlets' localhost:3000 to
-		// authenticated+TLS farmer.golang.org to the GKE
-		// service, then we can use modules less
-		// conditionally.
-		bc, ok := dashboard.Builders[br.Name]
-		return !ok || bc.IsReverse()
-	case "mobile":
-		if strings.HasPrefix(br.Name, "android-") {
-			return false
-		}
-		return true
-	case "exp":
-		if strings.HasPrefix(br.Name, "android-") || br.Name == "linux-amd64" {
-			return false
-		}
-		return true
-	case "term": // no code yet in repo
-		return true
-	case "perf":
-		if br.Name == "linux-amd64-nocgo" {
-			// The "perf" repo requires sqlite, which
-			// requires cgo. Skip the no-cgo builder.
-			return true
-		}
-	case "net":
-		if br.Name == "darwin-amd64-10_8" || br.Name == "darwin-386-10_8" {
-			// One of the tests seems to panic the kernel
-			// and kill our buildlet which goes in a loop.
-			return true
-		}
-	}
-	return false
 }
 
 type eventTimeLogger interface {
@@ -2504,12 +2438,9 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	env := append(st.conf.Env(),
 		"GOROOT="+goroot,
 		"GOPATH="+gopath,
-		"GOPROXY="+moduleProxy(),
+		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
 	)
-	if v, ok := st.go111Module(); ok {
-		env = append(env, "GO111MODULE="+v)
-	}
-
+	env = append(env, st.conf.ModulesEnv(st.SubName)...)
 	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 		Debug:    true, // make buildlet print extra debug in output for failures
 		Output:   st,
@@ -2520,20 +2451,6 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	})
 }
 
-// go111Module() returns the GO111MODULE environment value to use for this
-// build's tests.
-//
-// If ok=false, the tests should use whatever is set in the builder's
-// environment.
-func (st *buildStatus) go111Module() (value string, ok bool) {
-	switch st.SubName {
-	case "oauth2", "build":
-		return "on", true // Force module mode.
-	default:
-		return "", false // Use the builder's default behavior, whatever that is.
-	}
-}
-
 // moduleProxy returns the GOPROXY environment value to use for module-enabled
 // tests.
 //
@@ -2542,13 +2459,19 @@ func (st *buildStatus) go111Module() (value string, ok bool) {
 // and only run for the duration of one build. They also often don't
 // have all the VCS tools installed (or even available: there is no
 // git for plan9).
+//
+// moduleProxy in prod mode (when running on GKE) returns an http
+// URL to the current GKE pod's IP with a Kubernetes NodePort service
+// port that forwards to the internal Athens module proxy cache
+// service we run on GKE.
+//
+// In localhost dev mode it just returns the value of GOPROXY.
 func moduleProxy() string {
 	// If we're running on localhost, just use the current environment's value.
 	if buildEnv == nil || !buildEnv.IsProd {
 		// If empty, use installed VCS tools as usual to fetch modules.
 		return os.Getenv("GOPROXY")
 	}
-
 	// We run a NodePort service on each GKE node
 	// (cmd/coordinator/module-proxy-service.yaml) on port 30156
 	// that maps to the Athens service. We could round robin over
@@ -2558,14 +2481,6 @@ func moduleProxy() string {
 	// TODO: migrate to a GKE internal load balancer with an internal static IP
 	// once we migrate symbolic-datum-552 off a Legacy VPC network to the modern
 	// scheme that supports internal static IPs.
-	gkeNodeIP, err := metadata.Get("instance/network-interfaces/0/ip")
-	if err != nil || gkeNodeIP == "" {
-		// Explicitly disable module downloads: otherwise, we end up trying to run
-		// 'git' on hosts that don't have it installed, and the failure messages are
-		// unpleasant.
-		log.Printf("WARNING: failed to discover local GCE node's IP: %v; disabling GOPROXY", err)
-		return "off"
-	}
 	return "http://" + gkeNodeIP + ":30156"
 }
 
@@ -2642,7 +2557,6 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 
 	mainBuildletGoroot := st.conf.FilePathJoin(workDir, "go")
 	mainBuildletGopath := st.conf.FilePathJoin(workDir, "gopath")
-	goproxy := set.goProxy()
 
 	// We use our original buildlet to run the tests in order, to
 	// make the streaming somewhat smooth and not incredibly
@@ -2664,7 +2578,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 				}
 				continue
 			}
-			st.runTestsOnBuildlet(st.bc, tis, mainBuildletGoroot, mainBuildletGopath, goproxy)
+			st.runTestsOnBuildlet(st.bc, tis, mainBuildletGoroot, mainBuildletGopath)
 		}
 		st.LogEventTime("main_buildlet_broken", st.bc.Name())
 	}()
@@ -2703,7 +2617,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 						st.LogEventTime("no_new_tests_remain", bc.Name())
 						return
 					}
-					st.runTestsOnBuildlet(bc, tis, goroot, gopath, goproxy)
+					st.runTestsOnBuildlet(bc, tis, goroot, gopath)
 				}
 				st.LogEventTime("test_helper_is_broken", bc.Name())
 			}(helper)
@@ -2877,7 +2791,7 @@ func parseOutputAndBanner(b []byte) (banner string, out []byte) {
 const maxTestExecErrors = 3
 
 // runTestsOnBuildlet runs tis on bc, using the optional goroot & gopath environment variables.
-func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, goroot, gopath, goproxy string) {
+func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, goroot, gopath string) {
 	names := make([]string, len(tis))
 	for i, ti := range tis {
 		names[i] = ti.name
@@ -2918,10 +2832,10 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 		env := append(st.conf.Env(),
 			"GOROOT="+goroot,
 			"GOPATH="+gopath,
+			"GOPROXY="+moduleProxy(),
 		)
-		if goproxy != "" {
-			env = append(env, "GOPROXY="+goproxy)
-		}
+		env = append(env, st.conf.ModulesEnv("go")...)
+
 		remoteErr, err = bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 			// We set Dir to "." instead of the default ("go/bin") so when the dist tests
 			// try to run os/exec.Command("go", "test", ...), the LookPath of "go" doesn't
@@ -2999,15 +2913,6 @@ func (s *testSet) fetchGOPATHDeps(sl spanlog.Logger, bc *buildlet.Client) error 
 		}
 	}
 	return nil
-}
-
-// goProxy returns the GOPROXY environment value to set for tests in the main
-// repo.
-func (s *testSet) goProxy() string {
-	if len(s.needsXRepo) == 0 {
-		return "off"
-	}
-	return moduleProxy()
 }
 
 // cancelAll cancels all pending tests.
