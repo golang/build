@@ -23,6 +23,8 @@ Machine setup:
 
 	$ echo "<BUILDER KEY>" > /etc/gobuild.key > /root/.gobuildkey
 
+	$ apt-get remove --purge unattended-upgrades
+
 	$ systemctl enable /etc/systemd/user/rundockerbuildlet.service
 	$ systemctl start rundockerbuildlet.service
 
