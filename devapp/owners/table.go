@@ -273,7 +273,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{gri},
 	},
 	"go/src/go/doc": {
-		Primary: []Owner{gri},
+		Primary:   []Owner{gri},
+		Secondary: []Owner{agnivade},
 	},
 	"go/src/go/format": {
 		Primary: []Owner{gri},
