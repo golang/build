@@ -402,15 +402,6 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:     "debian",
 		HermeticReverse: false, // TODO: use rundockerbuildlet like arm64
 	},
-	"host-linux-arm64-linaro": &HostConfig{
-		Notes:           "Ubuntu xenial; run by Go team, from linaro",
-		IsReverse:       true,
-		HermeticReverse: true,
-		ExpectNum:       5,
-		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
-		ReverseAliases:  []string{"linux-arm64-buildlet"},
-		SSHUsername:     "root",
-	},
 	"host-linux-arm64-packet": &HostConfig{
 		Notes:           "On 96 core packet.net host (Xenial) in Docker containers (Jessie); run by Go team. See x/build/env/linux-arm64/packet",
 		IsReverse:       true,
@@ -1876,14 +1867,9 @@ func init() {
 		FlakyNet: true,
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-arm64-buildlet",
-		HostType: "host-linux-arm64-linaro",
-		FlakyNet: true,
-	})
-	addBuilder(BuildConfig{
 		Name:     "linux-arm64-packet",
 		HostType: "host-linux-arm64-packet",
-		FlakyNet: true, // unknown; just copied from the linaro one
+		FlakyNet: true, // maybe not flaky, but here conservatively
 	})
 	addBuilder(BuildConfig{
 		Name:         "linux-mips",
