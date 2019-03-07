@@ -73,7 +73,8 @@ var (
 //   16: make macstadium builders always haltEntireOS
 //   17: make macstadium halts use sudo
 //   18: set TMPDIR and GOCACHE
-const buildletVersion = 18
+//   21: GO_BUILDER_SET_GOPROXY=coordinator support
+const buildletVersion = 21
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -926,6 +927,18 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 
 	env := append(baseEnv(goarch), postEnv...)
 
+	// Setup an localhost HTTP server to proxy module cache, if requested by environment.
+	if goproxyHandler != nil && getEnv(postEnv, "GO_BUILDER_SET_GOPROXY") == "coordinator" {
+		ln, err := net.Listen("tcp", "localhost:0")
+		if err != nil {
+			http.Error(w, "failed to listen on localhost for GOPROXY=coordinator: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer ln.Close()
+		srv := &http.Server{Handler: goproxyHandler}
+		go srv.Serve(ln)
+		env = append(env, fmt.Sprintf("GOPROXY=http://localhost:%d", ln.Addr().(*net.TCPAddr).Port))
+	}
 	if v := processTmpDirEnv; v != "" {
 		env = append(env, "TMPDIR="+v)
 	}

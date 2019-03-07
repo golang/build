@@ -17,6 +17,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -69,6 +70,34 @@ func isDevReverseMode() bool {
 	return !strings.HasPrefix(*coordinator, "farmer.golang.org")
 }
 
+// proxyToCoordinatorHandler is a GOPROXY proxy, proxying to
+// https://farmer.golang.org while adding HTTP basic auth (of the
+// reverse buildlet type & its key) and the
+// X-Proxy-Service:module-cache header.
+type proxyToCoordinatorHandler struct {
+	user, pass string
+	rp         *httputil.ReverseProxy
+}
+
+func (h *proxyToCoordinatorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	outReq := r.WithContext(r.Context())
+	outReq.SetBasicAuth(h.user, h.pass)
+	outReq.Header.Set("X-Proxy-Service", "module-cache")
+	h.rp.ServeHTTP(w, outReq)
+}
+
+// goproxyHandler is non-nil for reverse buildlets.
+var goproxyHandler *proxyToCoordinatorHandler
+
+func newProxyToCoordinatorHandler(user, pass string) *proxyToCoordinatorHandler {
+	u, _ := url.Parse("https://farmer.golang.org")
+	return &proxyToCoordinatorHandler{
+		user: user,
+		pass: pass,
+		rp:   httputil.NewSingleHostReverseProxy(u),
+	}
+}
+
 func dialCoordinator() error {
 	devMode := isDevReverseMode()
 
@@ -87,6 +116,7 @@ func dialCoordinator() error {
 			}
 			keys = append(keys, key)
 		}
+		goproxyHandler = newProxyToCoordinatorHandler(modes[0], keys[0])
 	} else {
 		// New way.
 		key, err := keyForMode(*reverseType)
@@ -94,6 +124,7 @@ func dialCoordinator() error {
 			log.Fatalf("failed to find key for %s: %v", *reverseType, err)
 		}
 		keys = append(keys, key)
+		goproxyHandler = newProxyToCoordinatorHandler(*reverseType, key)
 	}
 
 	caCert := build.ProdCoordinatorCA
