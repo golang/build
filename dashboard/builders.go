@@ -970,6 +970,10 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 	if !c.SplitMakeRun() {
 		return false
 	}
+	if repo == "mobile" {
+		// Mobile is opt-in.
+		return false
+	}
 	return true
 }
 
@@ -1195,8 +1199,11 @@ func init() {
 		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
-		Name:      "freebsd-386-10_3",
-		HostType:  "host-freebsd-10_3",
+		Name:     "freebsd-386-10_3",
+		HostType: "host-freebsd-10_3",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return goBranch == "release-branch.go1.11" || goBranch == "release-branch.go1.12"
+		},
 		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
 		MaxAtOnce: 2,
 	})
@@ -1241,8 +1248,11 @@ func init() {
 		numTryTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-386-387",
-		Notes:    "GO386=387",
+		Name:  "linux-386-387",
+		Notes: "GO386=387",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "go" || (repo == "crypto" && branch == "master" && goBranch == "master")
+		},
 		HostType: "host-linux-jessie",
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386", "GO386=387"},
 	})
@@ -1331,9 +1341,10 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-amd64-noopt",
-		Notes:    "optimizations and inlining disabled",
-		HostType: "host-linux-jessie",
+		Name:       "linux-amd64-noopt",
+		Notes:      "optimizations and inlining disabled",
+		HostType:   "host-linux-jessie",
+		buildsRepo: onlyGo,
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 			"GO_GCFLAGS=-N -l",
@@ -1344,6 +1355,7 @@ func init() {
 		Name:        "linux-amd64-ssacheck",
 		HostType:    "host-linux-jessie",
 		MaxAtOnce:   1,
+		buildsRepo:  onlyGo,
 		tryBot:      nil, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
 		CompileOnly: true,
 		Notes:       "SSA internal checks enabled",
@@ -1444,6 +1456,7 @@ func init() {
 		HostType:     "host-linux-stretch",
 		MaxAtOnce:    1,
 		Notes:        "Debian Stretch with go test -short=false",
+		buildsRepo:   onlyGo,
 		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
 			"GO_TEST_SHORT=0",
@@ -1473,6 +1486,9 @@ func init() {
 			"GOARM=5",
 			"GO_TEST_TIMEOUT_SCALE=4", // arm is normally 2; double that.
 		},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return branch == "master" && goBranch == "master"
+		},
 		ShouldRunDistTest: func(distTest string, isTry bool) bool {
 			if strings.Contains(distTest, "vendor/github.com/google/pprof") {
 				// Not worth it. And broken.
@@ -1495,6 +1511,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "nacl-386",
 		HostType:          "host-nacl-kube",
+		buildsRepo:        onlyGo,
 		tryBot:            explicitTrySet("go"),
 		MaxAtOnce:         2,
 		numTryTestHelpers: 3,
@@ -1503,6 +1520,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "nacl-amd64p32",
 		HostType:          "host-nacl-kube",
+		buildsRepo:        onlyGo,
 		tryBot:            explicitTrySet("go"),
 		MaxAtOnce:         2,
 		numTryTestHelpers: 3,
@@ -1512,6 +1530,9 @@ func init() {
 		Name:     "js-wasm",
 		HostType: "host-js-wasm",
 		tryBot:   explicitTrySet("go"),
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "go" || (branch == "master" && goBranch == "master")
+		},
 		ShouldRunDistTest: func(distTest string, isTry bool) bool {
 			if isTry {
 				if strings.HasPrefix(distTest, "test:") {
@@ -1975,6 +1996,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:         "nacl-arm",
 		HostType:     "host-nacl-arm-davecheney",
+		buildsRepo:   onlyGo,
 		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{

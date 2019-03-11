@@ -252,6 +252,16 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "net"), both},
 		{b("linux-amd64", "sys"), both},
 
+		// Don't test all subrepos on all the builders.
+		{b("linux-amd64-ssacheck", "net"), none},
+		{b("linux-amd64-ssacheck@go1.10", "net"), none},
+		{b("linux-amd64-noopt@go1.11", "net"), none},
+		{b("linux-386-387@go1.11", "net"), none},
+		{b("linux-386-387@go1.11", "go"), onlyPost},
+		{b("linux-386-387", "crypto"), onlyPost},
+		{b("linux-arm-arm5spacemonkey@go1.11", "net"), none},
+		{b("linux-arm-arm5spacemonkey@go1.12", "net"), none},
+
 		// The mobile repo requires Go 1.13+.
 		{b("android-amd64-emu", "go"), onlyPost},
 		{b("android-amd64-emu", "mobile"), both},
@@ -286,6 +296,8 @@ func TestBuilderConfig(t *testing.T) {
 
 		// go1.12.html: "Go 1.12 is the last release that is
 		// supported on FreeBSD 10.x [... and 11.1]"
+		{b("freebsd-386-10_3", "go"), none},
+		{b("freebsd-386-10_3", "net"), none},
 		{b("freebsd-amd64-10_3", "go"), none},
 		{b("freebsd-amd64-10_3", "net"), none},
 		{b("freebsd-amd64-11_1", "go"), none},
@@ -300,6 +312,8 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-amd64-11_1@go1.12", "net@1.12"), isBuilder},
 		{b("freebsd-amd64-11_1@go1.11", "go"), isBuilder},
 		{b("freebsd-amd64-11_1@go1.11", "net@1.11"), isBuilder},
+
+		{b("linux-amd64-nocgo", "mobile"), none},
 
 		// The physical ARM Androids only runs "go":
 		// They run on GOOS=android mode which is not
@@ -325,6 +339,16 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-386-emu", "net"), isBuilder},
 		{b("android-amd64-emu", "go"), isBuilder},
 		{b("android-386-emu", "go"), isBuilder},
+
+		{b("nacl-386", "go"), both},
+		{b("nacl-386", "net"), none},
+		{b("nacl-amd64p32", "go"), both},
+		{b("nacl-amd64p32", "net"), none},
+
+		// Only test tip for js/wasm:
+		{b("js-wasm", "go"), both},
+		{b("js-wasm", "net"), onlyPost},
+		{b("js-wasm@go1.12", "net"), none},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {
