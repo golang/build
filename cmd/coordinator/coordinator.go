@@ -798,7 +798,6 @@ func workaroundFlush(w http.ResponseWriter) {
 
 // findWorkLoop polls https://build.golang.org/?mode=json looking for new work
 // for the main dashboard. It does not support gccgo.
-// TODO(bradfitz): it also currently does not support subrepos.
 func findWorkLoop(work chan<- buildgo.BuilderRev) {
 	// Useful for debugging a single run:
 	if inStaging && false {
@@ -907,7 +906,7 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 			builder := bs.Builders[i]
 			builderInfo, ok := dashboard.Builders[builder]
 			if !ok {
-				// Not managed by the coordinator, or a trybot-only one.
+				// Not managed by the coordinator.
 				continue
 			}
 			if !builderInfo.BuildsRepoPostSubmit(br.Repo, br.Branch, br.GoBranch) {
@@ -916,12 +915,12 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 			var rev buildgo.BuilderRev
 			if br.Repo == "go" {
 				rev = buildgo.BuilderRev{
-					Name: bs.Builders[i],
+					Name: builder,
 					Rev:  br.Revision,
 				}
 			} else {
 				rev = buildgo.BuilderRev{
-					Name:    bs.Builders[i],
+					Name:    builder,
 					Rev:     br.GoRevision,
 					SubName: br.Repo,
 					SubRev:  br.Revision,
@@ -2441,13 +2440,23 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
 	)
 	env = append(env, st.conf.ModulesEnv(st.SubName)...)
+
+	args := []string{"test"}
+	if !st.conf.IsLongTest() {
+		args = append(args, "-short")
+	}
+	if st.conf.IsRace() {
+		args = append(args, "-race")
+	}
+	args = append(args, subrepoPrefix+st.SubName+"/...")
+
 	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 		Debug:    true, // make buildlet print extra debug in output for failures
 		Output:   st,
 		Dir:      "gopath/src/golang.org/x/" + st.SubName,
 		ExtraEnv: env,
 		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
-		Args:     []string{"test", "-short", subrepoPrefix + st.SubName + "/..."},
+		Args:     args,
 	})
 }
 

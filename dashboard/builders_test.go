@@ -147,6 +147,7 @@ func TestTrybots(t *testing.T) {
 				"freebsd-amd64-12_0",
 				"linux-386",
 				"linux-amd64",
+				"linux-amd64-race",
 				"netbsd-amd64-8_0",
 				"openbsd-386-64",
 				"openbsd-amd64-64",
@@ -345,10 +346,39 @@ func TestBuilderConfig(t *testing.T) {
 		{b("nacl-amd64p32", "go"), both},
 		{b("nacl-amd64p32", "net"), none},
 
-		// Only test tip for js/wasm:
+		// Only test tip for js/wasm, and only for some repos:
 		{b("js-wasm", "go"), both},
+		{b("js-wasm", "arch"), onlyPost},
+		{b("js-wasm", "crypto"), onlyPost},
+		{b("js-wasm", "sys"), onlyPost},
 		{b("js-wasm", "net"), onlyPost},
 		{b("js-wasm@go1.12", "net"), none},
+		{b("js-wasm", "benchmarks"), none},
+		{b("js-wasm", "debug"), none},
+		{b("js-wasm", "mobile"), none},
+		{b("js-wasm", "perf"), none},
+		{b("js-wasm", "talks"), none},
+		{b("js-wasm", "tools"), none},
+		{b("js-wasm", "tour"), none},
+		{b("js-wasm", "website"), none},
+
+		// Race builders. Linux for all, GCE buidlers for
+		// post-submit, and only post-submit for "go" for
+		// Darwin (limited resources).
+		{b("linux-amd64-race", "go"), both},
+		{b("linux-amd64-race", "net"), both},
+		{b("windows-amd64-race", "go"), onlyPost},
+		{b("windows-amd64-race", "net"), onlyPost},
+		{b("freebsd-amd64-race", "go"), onlyPost},
+		{b("freebsd-amd64-race", "net"), onlyPost},
+		{b("darwin-amd64-race", "go"), onlyPost},
+		{b("darwin-amd64-race", "net"), none},
+
+		// Long test.
+		{b("linux-amd64-longtest", "go"), onlyPost},
+		{b("linux-amd64-longtest", "net"), onlyPost},
+		{b("linux-amd64-longtest@go1.12", "go"), onlyPost},
+		{b("linux-amd64-longtest@go1.12", "net"), none},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {
@@ -391,5 +421,14 @@ func TestHostConfigsAllUsed(t *testing.T) {
 			// this an error for now.
 			t.Logf("warning: host type %q is not referenced from any build config", hostType)
 		}
+	}
+}
+
+// tests that goBranch is optional for repo == "go"
+func TestBuildsRepoAtAllImplicitGoBranch(t *testing.T) {
+	builder := Builders["android-amd64-emu"]
+	got := builder.buildsRepoAtAll("go", "master", "")
+	if !got {
+		t.Error("got = false; want true")
 	}
 }

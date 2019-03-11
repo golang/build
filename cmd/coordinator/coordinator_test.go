@@ -8,6 +8,7 @@ package main
 
 import (
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -15,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/build/buildenv"
 	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 )
@@ -167,5 +169,32 @@ func TestNewTrySetBuildRepoGo110(t *testing.T) {
 			t.Errorf("unexpected builder: %v", v)
 		}
 		t.Logf("build[%d]: %s", i, v)
+	}
+}
+
+func TestFindWork(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	defer func(old *buildenv.Environment) { buildEnv = old }(buildEnv)
+	buildEnv = buildenv.Production
+	defer func() { buildgo.TestHookSnapshotExists = nil }()
+	buildgo.TestHookSnapshotExists = func(br *buildgo.BuilderRev) bool {
+		if strings.Contains(br.Name, "android") {
+			log.Printf("snapshot check for %+v", br)
+		}
+		return false
+	}
+
+	c := make(chan buildgo.BuilderRev, 1000)
+	go func() {
+		defer close(c)
+		err := findWork(c)
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+	for br := range c {
+		t.Logf("Got: %v", br)
 	}
 }

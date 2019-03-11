@@ -652,7 +652,7 @@ type BuildConfig struct {
 	// buildsRepo optionally specifies whether this
 	// builder does builds (of any type) for the given repo ("go",
 	// "net", etc) and its branch ("master", "release-branch.go1.12").
-	// If nil, a default policy is used.
+	// If nil, a default policy is used. (see buildsRepoAtAll for details)
 	// goBranch is the branch of "go" to build against. If repo == "go",
 	// goBranch == branch.
 	buildsRepo func(repo, branch, goBranch string) bool
@@ -840,6 +840,10 @@ func (c *BuildConfig) IsRace() bool {
 	return strings.HasSuffix(c.Name, "-race")
 }
 
+func (c *BuildConfig) IsLongTest() bool {
+	return strings.HasSuffix(c.Name, "-longtest")
+}
+
 func (c *BuildConfig) GoInstallRacePackages() []string {
 	if c.InstallRacePackages != nil {
 		return append([]string(nil), c.InstallRacePackages...)
@@ -929,7 +933,25 @@ func (c *BuildConfig) BuildsRepoTryBot(repo, branch, goBranch string) bool {
 // repo ("go", "sys", "net", etc). This applies to both post-submit
 // and trybot builds. Use BuildsRepoPostSubmit for only post-submit
 // or BuildsRepoTryBot for trybots.
+//
+// The branch is the branch of repo ("master",
+// "release-branch.go1.12", etc); it is required. The goBranch is the
+// branch of Go itself. It's required if repo != "go". When repo ==
+// "go", the goBranch defaults to the value of branch.
 func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
+	if goBranch == "" {
+		if repo == "go" {
+			goBranch = branch
+		} else {
+			panic("missing goBranch")
+		}
+	}
+	if branch == "" {
+		panic("missing branch")
+	}
+	if repo == "" {
+		panic("missing repo")
+	}
 	// Don't build old branches.
 	const minGo1x = 11
 	if strings.HasPrefix(goBranch, "release-branch.go1") && !atLeastGo1(goBranch, minGo1x) {
@@ -1388,7 +1410,6 @@ func init() {
 		Name:              "linux-amd64-race",
 		HostType:          "host-linux-jessie",
 		tryBot:            defaultTrySet(),
-		buildsRepo:        onlyGo,
 		MaxAtOnce:         1,
 		ShouldRunDistTest: fasterTrybots,
 		numTestHelpers:    1,
@@ -1452,11 +1473,13 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:         "linux-amd64-longtest",
-		HostType:     "host-linux-stretch",
-		MaxAtOnce:    1,
-		Notes:        "Debian Stretch with go test -short=false",
-		buildsRepo:   onlyGo,
+		Name:      "linux-amd64-longtest",
+		HostType:  "host-linux-stretch",
+		MaxAtOnce: 1,
+		Notes:     "Debian Stretch with go test -short=false",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "go" || (branch == "master" && goBranch == "master")
+		},
 		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
 			"GO_TEST_SHORT=0",
@@ -1531,7 +1554,14 @@ func init() {
 		HostType: "host-js-wasm",
 		tryBot:   explicitTrySet("go"),
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return repo == "go" || (branch == "master" && goBranch == "master")
+			switch repo {
+			case "go":
+				return true
+			case "mobile", "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
+				return false
+			default:
+				return branch == "master" && goBranch == "master"
+			}
 		},
 		ShouldRunDistTest: func(distTest string, isTry bool) bool {
 			if isTry {
@@ -1712,10 +1742,9 @@ func init() {
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
-		Name:       "windows-amd64-race",
-		HostType:   "host-windows-amd64-2008",
-		Notes:      "Only runs -race tests (./race.bat)",
-		buildsRepo: onlyGo,
+		Name:     "windows-amd64-race",
+		HostType: "host-windows-amd64-2008",
+		Notes:    "Only runs -race tests (./race.bat)",
 		env: []string{
 			"GOARCH=amd64",
 			"GOHOSTARCH=amd64",
