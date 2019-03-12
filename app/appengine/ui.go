@@ -42,7 +42,7 @@ func init() {
 
 // uiHandler draws the build status page.
 func uiHandler(w http.ResponseWriter, r *http.Request) {
-	d := dashboardForRequest(r)
+	d := goDash
 	c := d.Context(appengine.NewContext(r))
 	now := cache.Now(c)
 	key := "build-ui"
@@ -207,7 +207,7 @@ func listBranches(c context.Context) (branches []string) {
 //    hash builder failure-url
 func failuresHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 	w.Header().Set("Content-Type", "text/plain")
-	d := dashboardForRequest(r)
+	d := goDash
 	for _, c := range data.Commits {
 		for _, b := range data.Builders {
 			res := c.Result(b, "")
@@ -223,7 +223,7 @@ func failuresHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateDat
 // jsonHandler is https://build.golang.org/?mode=json
 // The output is a types.BuildStatus JSON object.
 func jsonHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
-	d := dashboardForRequest(r)
+	d := goDash
 
 	// cell returns one of "" (no data), "ok", or a failure URL.
 	cell := func(res *Result) string {
@@ -444,6 +444,15 @@ type TagState struct {
 	Packages []*PackageState
 }
 
+// Branch returns the git branch name, converting from the old
+// terminology we used from Go's hg days into git terminology.
+func (ts *TagState) Branch() string {
+	if ts.Name == "tip" {
+		return "master"
+	}
+	return ts.Name
+}
+
 // PackageState represents the state of a Package at a Tag.
 type PackageState struct {
 	Package *Package
@@ -563,17 +572,15 @@ var uiTemplate = template.Must(
 )
 
 var tmplFuncs = template.FuncMap{
-	"buildDashboards":    buildDashboards,
-	"builderOS":          builderOS,
 	"builderSpans":       builderSpans,
 	"builderSubheading":  builderSubheading,
 	"builderSubheading2": builderSubheading2,
-	"builderTitle":       builderTitle,
 	"shortDesc":          shortDesc,
 	"shortHash":          shortHash,
 	"shortUser":          shortUser,
 	"tail":               tail,
 	"unsupported":        unsupported,
+	"isUntested":         isUntested,
 }
 
 func splitDash(s string) (string, string) {
@@ -648,16 +655,6 @@ func builderSpans(s []string) []builderSpan {
 		s = s[i:]
 	}
 	return sp
-}
-
-// builderTitle formats "linux-amd64-foo" as "linux amd64 foo".
-func builderTitle(s string) string {
-	return strings.Replace(s, "-", " ", -1)
-}
-
-// buildDashboards returns the known public dashboards.
-func buildDashboards() []*Dashboard {
-	return dashboards
 }
 
 // shortDesc returns the first line of a description.

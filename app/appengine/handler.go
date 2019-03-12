@@ -92,14 +92,10 @@ func commitHandler(r *http.Request) (interface{}, error) {
 		return nil, errors.New("can only POST commits with master key")
 	}
 
-	// For now, the commit watcher doesn't support gccgo.
-	// TODO(adg,cmang): remove this exception when gccgo is supported.
-	if dashboardForRequest(r) != gccgoDash {
-		v, _ := strconv.Atoi(r.FormValue("version"))
-		if v != watcherVersion {
-			return nil, fmt.Errorf("rejecting POST from commit watcher; need version %v instead of %v",
-				watcherVersion, v)
-		}
+	v, _ := strconv.Atoi(r.FormValue("version"))
+	if v != watcherVersion {
+		return nil, fmt.Errorf("rejecting POST from commit watcher; need version %v instead of %v",
+			watcherVersion, v)
 	}
 
 	// POST request
@@ -577,14 +573,10 @@ func resultHandler(r *http.Request) (interface{}, error) {
 		return nil, errBadMethod(r.Method)
 	}
 
-	// For now, the gccgo builders are using the old stuff.
-	// TODO(adg,cmang): remove this exception when gccgo is updated.
-	if dashboardForRequest(r) != gccgoDash {
-		v, _ := strconv.Atoi(r.FormValue("version"))
-		if v != builderVersion {
-			return nil, fmt.Errorf("rejecting POST from builder; need version %v instead of %v",
-				builderVersion, v)
-		}
+	v, _ := strconv.Atoi(r.FormValue("version"))
+	if v != builderVersion {
+		return nil, fmt.Errorf("rejecting POST from builder; need version %v instead of %v",
+			builderVersion, v)
 	}
 
 	c := contextForRequest(r)
@@ -1031,7 +1023,7 @@ func logErr(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func contextForRequest(r *http.Request) context.Context {
-	return dashboardForRequest(r).Context(appengine.NewContext(r))
+	return goDash.Context(appengine.NewContext(r))
 }
 
 // limitStringLength essentially does return s[:max],

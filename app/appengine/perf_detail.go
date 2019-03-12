@@ -24,7 +24,7 @@ func init() {
 }
 
 func perfDetailUIHandler(w http.ResponseWriter, r *http.Request) {
-	d := dashboardForRequest(r)
+	d := goDash
 	c := d.Context(appengine.NewContext(r))
 	pc, err := GetPerfConfig(c, r)
 	if err != nil {
