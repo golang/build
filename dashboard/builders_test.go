@@ -314,6 +314,12 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-amd64-11_1@go1.11", "go"), isBuilder},
 		{b("freebsd-amd64-11_1@go1.11", "net@1.11"), isBuilder},
 
+		// FreeBSD 12.0
+		{b("freebsd-amd64-12_0", "go"), both},
+		{b("freebsd-amd64-12_0", "net"), both},
+		{b("freebsd-386-12_0", "go"), onlyPost},
+		{b("freebsd-386-12_0", "net"), onlyPost},
+
 		{b("linux-amd64-nocgo", "mobile"), none},
 
 		// The physical ARM Androids only runs "go":

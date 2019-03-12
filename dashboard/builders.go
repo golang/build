@@ -1216,6 +1216,14 @@ func init() {
 		MaxAtOnce:         2,
 	})
 	addBuilder(BuildConfig{
+		Name:              "freebsd-386-12_0",
+		HostType:          "host-freebsd-12_0",
+		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		ShouldRunDistTest: fasterTrybots,
+		numTryTestHelpers: 4,
+		MaxAtOnce:         2,
+	})
+	addBuilder(BuildConfig{
 		Name:      "freebsd-amd64-race",
 		HostType:  "host-freebsd-11_1",
 		MaxAtOnce: 2,
