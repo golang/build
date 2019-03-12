@@ -333,6 +333,11 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-wikofever", "go"), notBuilder},
 		{b("darwin-amd64-wikofever", "net"), notBuilder},
 
+		// Mobile builders that run with GOOS=linux/darwin and have
+		// a device attached.
+		{b("linux-amd64-androidemu", "mobile"), both},
+		{b("darwin-amd64-wikofever", "mobile"), onlyPost},
+
 		// But the emulators run all:
 		{b("android-amd64-emu", "mobile"), isBuilder},
 		{b("android-386-emu", "mobile"), isBuilder},
