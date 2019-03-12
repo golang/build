@@ -45,7 +45,6 @@ import (
 	"go4.org/syncutil"
 	grpc "grpc.go4.org"
 
-	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/errorreporting"
 	"cloud.google.com/go/storage"
 	"golang.org/x/build"
@@ -209,6 +208,25 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 	tc.SetKeepAlive(true)
 	tc.SetKeepAlivePeriod(3 * time.Minute)
 	return tc, nil
+}
+
+// httpRouter is the coordinator's mux, routing traffic to one of
+// three locations:
+//   1) a buildlet, from gomote clients (if X-Buildlet-Proxy is set)
+//   2) our module proxy cache on GKE (if X-Proxy-Service == module-cache)
+//   3) traffic to the coordinator itself (the default)
+type httpRouter struct{}
+
+func (httpRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Buildlet-Proxy") != "" {
+		requireBuildletProxyAuth(http.HandlerFunc(proxyBuildletHTTP)).ServeHTTP(w, r)
+		return
+	}
+	if r.Header.Get("X-Proxy-Service") == "module-cache" {
+		proxyModuleCache(w, r)
+		return
+	}
+	http.DefaultServeMux.ServeHTTP(w, r)
 }
 
 type loggerFunc func(event string, optText ...string)
@@ -780,7 +798,6 @@ func workaroundFlush(w http.ResponseWriter) {
 
 // findWorkLoop polls https://build.golang.org/?mode=json looking for new work
 // for the main dashboard. It does not support gccgo.
-// TODO(bradfitz): it also currently does not support subrepos.
 func findWorkLoop(work chan<- buildgo.BuilderRev) {
 	// Useful for debugging a single run:
 	if inStaging && false {
@@ -888,26 +905,22 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 			}
 			builder := bs.Builders[i]
 			builderInfo, ok := dashboard.Builders[builder]
-			if !ok || builderInfo.TryOnly {
-				// Not managed by the coordinator, or a trybot-only one.
+			if !ok {
+				// Not managed by the coordinator.
 				continue
 			}
-			if !builderInfo.BuildRepo(br.Repo) {
+			if !builderInfo.BuildsRepoPostSubmit(br.Repo, br.Branch, br.GoBranch) {
 				continue
 			}
-			if !builderInfo.BuildBranch(br.Repo, br.Branch, br.GoBranch) {
-				continue
-			}
-
 			var rev buildgo.BuilderRev
 			if br.Repo == "go" {
 				rev = buildgo.BuilderRev{
-					Name: bs.Builders[i],
+					Name: builder,
 					Rev:  br.Revision,
 				}
 			} else {
 				rev = buildgo.BuilderRev{
-					Name:    bs.Builders[i],
+					Name:    builder,
 					Rev:     br.GoRevision,
 					SubName: br.Repo,
 					SubRev:  br.Revision,
@@ -915,9 +928,6 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 				if awaitSnapshot && !rev.SnapshotExists(context.TODO(), buildEnv) {
 					continue
 				}
-			}
-			if skipBuild(rev) {
-				continue
 			}
 
 			// The !sent[builder] here is a clumsy attempt at priority scheduling
@@ -933,15 +943,13 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 	// And to bootstrap new builders, see if we have any builders
 	// that the dashboard doesn't know about.
 	for b, builderInfo := range dashboard.Builders {
-		if builderInfo.TryOnly || knownToDashboard[b] {
-			continue
-		}
-		if !builderInfo.BuildBranch("go", "master", "") {
+		if knownToDashboard[b] ||
+			!builderInfo.BuildsRepoPostSubmit("go", "master", "master") {
 			continue
 		}
 		for _, rev := range goRevisions {
 			br := buildgo.BuilderRev{Name: b, Rev: rev}
-			if !skipBuild(br) && !isBuilding(br) {
+			if !isBuilding(br) {
 				work <- br
 			}
 		}
@@ -1082,7 +1090,8 @@ var testingKnobSkipBuilds bool
 // Must hold statusMu.
 func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	key := tryWorkItemKey(work)
-	builders := dashboard.TryBuildersForProject(key.Project)
+	goBranch := key.Branch // assume same as repo's branch for now
+	builders := dashboard.TryBuildersForProject(key.Project, key.Branch, goBranch)
 	log.Printf("Starting new trybot set for %v", key)
 	ts := &trySet{
 		tryKey: key,
@@ -1162,7 +1171,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 			continue
 		}
 		branch := work.GoBranch[i]
-		if !linuxBuilder.BuildBranch(key.Project, "master", branch) {
+		if !linuxBuilder.BuildsRepoTryBot(key.Project, "master", branch) {
 			continue
 		}
 		goVersion := types.MajorMinor{int(work.GoVersion[i].Major), int(work.GoVersion[i].Minor)}
@@ -1375,52 +1384,6 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 	}
 }
 
-// skipBuild reports whether the br build should be skipped.
-//
-// TODO(bradfitz): move this policy func into dashboard/builders.go in its own CL sometime.
-func skipBuild(br buildgo.BuilderRev) bool {
-	if br.Name == "freebsd-arm-paulzhol" {
-		// This was a fragile little machine with limited memory.
-		// Only run a few of the core subrepos for now while
-		// we figure out what's killing it.
-		switch br.SubName {
-		case "", "sys", "net":
-			return false
-		}
-		return true
-	}
-	switch br.SubName {
-	case "oauth2", "build":
-		// The oauth2 and build repos are our guinea pigs for
-		// testing using modules. But they currently only work
-		// inside the GCP network.
-		// TODO: once we proxy through the module proxy from
-		// reverse buildlets' localhost:3000 to
-		// authenticated+TLS farmer.golang.org to the GKE
-		// service, then we can use modules less
-		// conditionally.
-		bc, ok := dashboard.Builders[br.Name]
-		return !ok || bc.IsReverse()
-	case "exp", // always broken, depends on mobile which is broken
-		"mobile", // always broken (gl, etc). doesn't compile.
-		"term":   // no code yet in repo,
-		return true
-	case "perf":
-		if br.Name == "linux-amd64-nocgo" {
-			// The "perf" repo requires sqlite, which
-			// requires cgo. Skip the no-cgo builder.
-			return true
-		}
-	case "net":
-		if br.Name == "darwin-amd64-10_8" || br.Name == "darwin-386-10_8" {
-			// One of the tests seems to panic the kernel
-			// and kill our buildlet which goes in a loop.
-			return true
-		}
-	}
-	return false
-}
-
 type eventTimeLogger interface {
 	LogEventTime(event string, optText ...string)
 }
@@ -1594,6 +1557,10 @@ func (st *buildStatus) expectedBuildletStartDuration() time.Duration {
 	pool := st.buildletPool()
 	switch pool.(type) {
 	case *gceBuildletPool:
+		if strings.HasPrefix(st.Name, "android-") {
+			// about a minute for buildlet + minute for Android emulator to be usable
+			return 2 * time.Minute
+		}
 		return time.Minute
 	case *reverseBuildletPool:
 		goos, arch := st.conf.GOOS(), st.conf.GOARCH()
@@ -2467,52 +2434,53 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	sp := st.CreateSpan("running_subrepo_tests", st.SubName)
 	defer func() { sp.Done(err) }()
 
-	goProxy, err := st.moduleProxy()
-	if err != nil {
-		return nil, err
+	env := append(st.conf.Env(),
+		"GOROOT="+goroot,
+		"GOPATH="+gopath,
+		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
+	)
+	env = append(env, st.conf.ModulesEnv(st.SubName)...)
+
+	args := []string{"test"}
+	if !st.conf.IsLongTest() {
+		args = append(args, "-short")
 	}
-	var go111Module, dir string
-	if goProxy != "" {
-		go111Module = "on"
-		dir = "gopath/src/golang.org/x/" + st.SubName
+	if st.conf.IsRace() {
+		args = append(args, "-race")
 	}
+	args = append(args, subrepoPrefix+st.SubName+"/...")
 
 	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
-		Output: st,
-		Dir:    dir,
-		ExtraEnv: append(st.conf.Env(),
-			"GOROOT="+goroot,
-			"GOPATH="+gopath,
-			"GO111MODULE="+go111Module,
-			"GOPROXY="+goProxy,
-		),
-		Path: []string{"$WORKDIR/go/bin", "$PATH"},
-		Args: []string{"test", "-short", subrepoPrefix + st.SubName + "/..."},
+		Debug:    true, // make buildlet print extra debug in output for failures
+		Output:   st,
+		Dir:      "gopath/src/golang.org/x/" + st.SubName,
+		ExtraEnv: env,
+		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+		Args:     args,
 	})
 }
 
-// moduleProxy returns the GOPROXY environment value to use for this
-// build's tests. If non-empty, GO111MODULE=on is included in the
-// environment as well. Returning two zero values means to not
-// configure the environment values.
+// moduleProxy returns the GOPROXY environment value to use for module-enabled
+// tests.
 //
 // We go through a GCP-project-internal module proxy ("GOPROXY") to
 // eliminate load on the origin servers. Our builder VMs are ephemeral
 // and only run for the duration of one build. They also often don't
 // have all the VCS tools installed (or even available: there is no
 // git for plan9).
-func (bs *buildStatus) moduleProxy() (string, error) {
-	switch bs.SubName {
-	case "oauth2", "build":
-		// The two repos we're starting with for testing.
-	default:
-		return "", nil
-	}
+//
+// moduleProxy in prod mode (when running on GKE) returns an http
+// URL to the current GKE pod's IP with a Kubernetes NodePort service
+// port that forwards to the internal Athens module proxy cache
+// service we run on GKE.
+//
+// In localhost dev mode it just returns the value of GOPROXY.
+func moduleProxy() string {
 	// If we're running on localhost, just use the current environment's value.
 	if buildEnv == nil || !buildEnv.IsProd {
-		return os.Getenv("GOPROXY"), nil
+		// If empty, use installed VCS tools as usual to fetch modules.
+		return os.Getenv("GOPROXY")
 	}
-
 	// We run a NodePort service on each GKE node
 	// (cmd/coordinator/module-proxy-service.yaml) on port 30156
 	// that maps to the Athens service. We could round robin over
@@ -2522,12 +2490,7 @@ func (bs *buildStatus) moduleProxy() (string, error) {
 	// TODO: migrate to a GKE internal load balancer with an internal static IP
 	// once we migrate symbolic-datum-552 off a Legacy VPC network to the modern
 	// scheme that supports internal static IPs.
-	gkeNodeIP, err := metadata.Get("instance/network-interfaces/0/ip")
-	if err != nil || gkeNodeIP == "" {
-		log.Printf("WARNING: failed to discover local GCE node's IP: %v; disabling GOPROXY", err)
-		return "", nil
-	}
-	return "http://" + gkeNodeIP + ":30156", nil
+	return "http://" + gkeNodeIP + ":30156"
 }
 
 // affectedPkgs returns the name of every package affected by this commit.
@@ -2836,11 +2799,6 @@ func parseOutputAndBanner(b []byte) (banner string, out []byte) {
 // (A communication error)
 const maxTestExecErrors = 3
 
-func execTimeout(testNames []string) time.Duration {
-	// TODO(bradfitz): something smarter probably.
-	return 20 * time.Minute
-}
-
 // runTestsOnBuildlet runs tis on bc, using the optional goroot & gopath environment variables.
 func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, goroot, gopath string) {
 	names := make([]string, len(tis))
@@ -2871,7 +2829,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 	args = append(args, names...)
 	var buf bytes.Buffer
 	t0 := time.Now()
-	timeout := execTimeout(names)
+	timeout := st.conf.DistTestsExecTimeout(names)
 	var remoteErr, err error
 	if ti := tis[0]; ti.bench != nil {
 		pbr, perr := st.parentRev()
@@ -2880,6 +2838,13 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 			remoteErr, err = ti.bench.Run(buildEnv, st, st.conf, bc, &buf, []buildgo.BuilderRev{st.BuilderRev, pbr})
 		}
 	} else {
+		env := append(st.conf.Env(),
+			"GOROOT="+goroot,
+			"GOPATH="+gopath,
+			"GOPROXY="+moduleProxy(),
+		)
+		env = append(env, st.conf.ModulesEnv("go")...)
+
 		remoteErr, err = bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 			// We set Dir to "." instead of the default ("go/bin") so when the dist tests
 			// try to run os/exec.Command("go", "test", ...), the LookPath of "go" doesn't
@@ -2887,15 +2852,12 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 			// fail when dist tries to run the binary in dir "$GOROOT/src", since
 			// "$GOROOT/src" + "./go.exe" doesn't exist. Perhaps LookPath should return
 			// an absolute path.
-			Dir:    ".",
-			Output: &buf, // see "maybe stream lines" TODO below
-			ExtraEnv: append(st.conf.Env(),
-				"GOROOT="+goroot,
-				"GOPATH="+gopath,
-			),
-			Timeout: timeout,
-			Path:    []string{"$WORKDIR/go/bin", "$PATH"},
-			Args:    args,
+			Dir:      ".",
+			Output:   &buf, // see "maybe stream lines" TODO below
+			ExtraEnv: env,
+			Timeout:  timeout,
+			Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+			Args:     args,
 		})
 	}
 	execDuration := time.Since(t0)

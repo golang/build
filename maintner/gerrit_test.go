@@ -226,19 +226,29 @@ func TestOwnerID(t *testing.T) {
 }
 
 func TestSubject(t *testing.T) {
-	cl := &GerritCL{}
-	if w, e := cl.Subject(), ""; w != e {
-		t.Errorf("cl.Subject() = %q; want %q", w, e)
-	}
-
 	testcases := []struct{ msg, subject string }{
 		{"maintner: slurp up all the things", "maintner: slurp up all the things"},
 		{"cmd/go: build stuff\n\nand do other stuff, too.", "cmd/go: build stuff"},
+		{"cmd/go: build lots\nof stuff\n\nand do other stuff, too.", "cmd/go: build lots of stuff"}, // Subject is separated from body by a blank line.
+		{"cmd/go: build lots\nof stuff", "cmd/go: build lots of stuff"},
 	}
 	for _, tc := range testcases {
-		cl = &GerritCL{Commit: &GitCommit{Msg: tc.msg}}
+		cl := &GerritCL{Commit: &GitCommit{Msg: tc.msg}}
 		if cl.Subject() != tc.subject {
 			t.Errorf("cl.Subject() = %q; want %q", cl.Subject(), tc.subject)
+		}
+	}
+}
+
+func TestChangeID(t *testing.T) {
+	testcases := []struct{ msg, changeID string }{
+		{"maintner: slurp up all the things", ""},
+		{"cmd/go: build stuff\n\nChange-Id: I7d3850e6774403c5d4ae15ca94c31c2f46f4ffa3", "I7d3850e6774403c5d4ae15ca94c31c2f46f4ffa3"},
+	}
+	for _, tc := range testcases {
+		cl := &GerritCL{Commit: &GitCommit{Msg: tc.msg}}
+		if cl.ChangeID() != tc.changeID {
+			t.Errorf("cl.ChangeID() = %q; want %q", cl.ChangeID(), tc.changeID)
 		}
 	}
 }

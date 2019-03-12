@@ -12,20 +12,17 @@ package main // import "golang.org/x/build/cmd/updatecontrib"
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"golang.org/x/text/collate"
@@ -50,52 +47,66 @@ func main() {
 
 	all := gitAuthorEmails() // call first (it will reset CONTRIBUTORS)
 	c := file("CONTRIBUTORS")
-	errors := &bytes.Buffer{}
+	var actions, warnings, errors bytes.Buffer
 	for _, who := range all {
 		// Skip exact emails that are present in CONTRIBUTORS file.
 		if c.Contains(&acLine{email: who.email}) {
 			continue
 		}
 		if !validName(who.name) {
-			ghUser, err := fetchGitHubInfo(who)
-			if err != nil || ghUser == nil {
-				fmt.Fprintf(errors, "Error fetching GitHub name for %s: %v\n", who.Debug(), err)
+			ghUser, err := FetchGitHubInfo(who)
+			if err != nil {
+				fmt.Fprintf(&errors, "Error fetching GitHub name for %s: %v\n", who.Debug(), err)
 				continue
 			}
-			ghName := ghUser.Name
-			if v, ok := nameFix[ghName]; ok {
-				ghName = v
+			if ghUser == nil {
+				fmt.Fprintf(&warnings, "There is no GitHub user associated with %s, skipping\n", who.Debug())
+				continue
 			}
-			if ((ghName == ghUser.Login || ghName == "") && who.name == ghUser.Login) ||
-				useGitHubName[ghUser.Login] {
-				ghName = fmt.Sprintf("GitHub User @%s (%d)", ghUser.Login, ghUser.ID)
-			}
-			if validName(ghName) {
-				log.Printf("Using GitHub name %q for %s", ghName, who.Debug())
-				who.name = ghName
+			if validName(ghUser.Name) {
+				// Use the GitHub name since it looks valid.
+				fmt.Fprintf(&actions, "Used GitHub name %q for %s\n", ghUser.Name, who.Debug())
+				who.name = ghUser.Name
+			} else if (ghUser.Name == ghUser.Login || ghUser.Name == "") && who.name == ghUser.Login {
+				// Special case: if the GitHub name is the same as the GitHub username or empty,
+				// and who.name is the GitHub username, then use "GitHub User @<username> (<ID>)" form.
+				fmt.Fprintf(&actions, "Used GitHub User @%s (%d) form for %s\n", ghUser.Login, ghUser.ID, who.Debug())
+				who.name = fmt.Sprintf("GitHub User @%s (%d)", ghUser.Login, ghUser.ID)
 			} else {
-				fmt.Fprintf(errors, "Invalid-looking name (@%s, %s) %v\n", ghUser.Login, ghUser.Name, who.Debug())
+				fmt.Fprintf(&warnings, "Found invalid-looking name %q for GitHub user @%s, skipping %v\n", ghUser.Name, ghUser.Login, who.Debug())
 				continue
 			}
 		}
 		if !c.Contains(who) {
 			c.addLine(who)
+			fmt.Fprintf(&actions, "Added %s <%s>\n", who.name, who.firstEmail())
 		} else {
 			// The name exists, but with a different email. We don't update lines automatically. (TODO)
 			// We'll need to update "GitHub User" names when they provide a better one.
 		}
-		log.Printf("Add %s <%s>\n", who.name, who.firstEmail())
+	}
+	if actions.Len() > 0 {
+		fmt.Println("Actions taken (relative to CONTRIBUTORS at origin/master):")
+		lines := strings.SplitAfter(actions.String(), "\n")
+		sort.Strings(lines)
+		os.Stdout.WriteString(strings.Join(lines, ""))
 	}
 	err := sortACFile("CONTRIBUTORS")
 	if err != nil {
 		log.Fatalf("Error sorting CONTRIBUTORS file: %v", err)
 	}
 	if errors.Len() > 0 {
-		log.Printf("Exiting with error.")
+		log.Printf("\nExiting with errors:")
 		lines := strings.SplitAfter(errors.String(), "\n")
 		sort.Strings(lines)
 		os.Stderr.WriteString(strings.Join(lines, ""))
 		os.Exit(1)
+	}
+	if warnings.Len() > 0 {
+		log.Printf("\nExiting with warnings:")
+		lines := strings.SplitAfter(warnings.String(), "\n")
+		sort.Strings(lines)
+		os.Stderr.WriteString(strings.Join(lines, ""))
 	}
 }
 
@@ -105,121 +116,6 @@ func validName(name string) bool {
 		return valid
 	}
 	return strings.Contains(name, " ")
-}
-
-func fetchGitHubUserID(who *acLine) (string, error) {
-	org, repo := githubOrgRepo(who.firstRepo)
-
-	cacheDir, err := githubCacheDir()
-	if err != nil {
-		return "", err
-	}
-	cacheFile := filepath.Join(cacheDir, fmt.Sprintf("%s-%s-%s-id", org, repo, who.firstCommit))
-	if slurp, err := ioutil.ReadFile(cacheFile); err == nil {
-		return string(slurp), nil
-	}
-
-	jsonURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/commits/%s", org, repo, who.firstCommit)
-	req, _ := http.NewRequest("GET", jsonURL, nil)
-	if token, err := ioutil.ReadFile(githubTokenFile()); err == nil {
-		req.Header.Set("Authorization", "token "+strings.TrimSpace(string(token)))
-	}
-	var jres struct {
-		Author struct {
-			ID int
-		}
-	}
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return "", fmt.Errorf("%s: %v", jsonURL, res.Status)
-	}
-	if err := json.NewDecoder(res.Body).Decode(&jres); err != nil {
-		return "", fmt.Errorf("%s: %v", jsonURL, err)
-	}
-	if jres.Author.ID == 0 {
-		return "", nil // not a registered GitHub user
-	}
-
-	os.MkdirAll(cacheDir, 0700)
-	ioutil.WriteFile(cacheFile, []byte(strconv.Itoa(jres.Author.ID)), 0600)
-
-	return strconv.Itoa(jres.Author.ID), nil
-}
-
-// GitHubInfo is a subset of the GH API info.
-type GitHubInfo struct {
-	ID    int
-	Name  string
-	Login string
-}
-
-func fetchGitHubInfo(who *acLine) (*GitHubInfo, error) {
-	id, err := fetchGitHubUserID(who)
-	if err != nil {
-		return nil, err
-	}
-	if id == "" {
-		return nil, fmt.Errorf("failed to fetch GitHub user ID for %v", who)
-	}
-
-	cacheDir, err := githubCacheDir()
-	if err != nil {
-		return nil, err
-	}
-	cacheFile := filepath.Join(cacheDir, fmt.Sprintf("user-id-%s", id))
-	if slurp, err := ioutil.ReadFile(cacheFile); err == nil {
-		res := &GitHubInfo{}
-		if err := json.Unmarshal(slurp, res); err != nil {
-			return nil, fmt.Errorf("%s: %v", cacheFile, err)
-		}
-		return res, nil
-	}
-
-	jsonURL := fmt.Sprintf("https://api.github.com/user/%s", id) // undocumented but it works
-	req, _ := http.NewRequest("GET", jsonURL, nil)
-	if token, err := ioutil.ReadFile(githubTokenFile()); err == nil {
-		req.Header.Set("Authorization", "token "+strings.TrimSpace(string(token)))
-	}
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return nil, fmt.Errorf("%s: %v", jsonURL, res.Status)
-	}
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %v", jsonURL, err)
-	}
-	jres := &GitHubInfo{}
-	if err := json.Unmarshal(body, jres); err != nil {
-		return nil, fmt.Errorf("%s: %v", jsonURL, err)
-	}
-	if jres.ID == 0 {
-		return nil, fmt.Errorf("%s: malformed response", jsonURL)
-	}
-
-	os.MkdirAll(cacheDir, 0700)
-	ioutil.WriteFile(cacheFile, body, 0600)
-
-	return jres, nil
-}
-
-func githubCacheDir() (string, error) {
-	userCacheDir, err := os.UserCacheDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(userCacheDir, "updatecontrib-github"), nil
-}
-
-func githubTokenFile() string {
-	return filepath.Join(os.Getenv("HOME"), ".github-updatecontrib-token")
 }
 
 type acFile struct {
@@ -322,20 +218,6 @@ func (w *acLine) Debug() string {
 		githubOrg, githubRepo, w.firstCommit, repos)
 }
 
-// Given an import path (from the forms in the repos global variable),
-// returns the github org and repo.
-func githubOrgRepo(repo string) (githubOrg, githubRepo string) {
-	switch repo {
-	case "go":
-		return "golang", "go"
-	case "google.golang.org/api":
-		return "google", "google-api-go-client"
-	case "cloud.google.com/go":
-		return "GoogleCloudPlatform", "google-cloud-go"
-	}
-	return "golang", path.Base(repo)
-}
-
 var emailRx = regexp.MustCompile(`<[^>]+>`)
 
 func file(name string) *acFile {
@@ -402,6 +284,16 @@ var repos = []string{
 	"golang.org/x/tour",
 	"golang.org/x/vgo",
 	"golang.org/x/website",
+	"golang.org/x/xerrors",
+}
+
+// githubOrgRepo takes an import path (from the forms in the repos global variable)
+// and returns the GitHub org and repo.
+func githubOrgRepo(repo string) (githubOrg, githubRepo string) {
+	if repo == "go" {
+		return "golang", "go"
+	}
+	return "golang", strings.TrimSuffix(path.Base(repo), ".git")
 }
 
 func gitAuthorEmails() []*acLine {
@@ -426,14 +318,15 @@ func gitAuthorEmails() []*acLine {
 				}
 			}
 		}
-		if repo == "go" {
-			exec.Command("git", "checkout", "origin/master", "--", "CONTRIBUTORS").Run()
-			exec.Command("git", "reset").Run()
-		}
 		cmd := exec.Command("git", "fetch")
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
 			log.Fatalf("Error updating repo %q: %v, %s", repo, err, out)
+		}
+		if repo == "go" {
+			// Initialize CONTRIBUTORS file to latest copy from origin/master.
+			exec.Command("git", "checkout", "origin/master", "--", "CONTRIBUTORS").Run()
+			exec.Command("git", "reset").Run()
 		}
 
 		cmd = exec.Command("git", "log", "--format=%ae/%h/%an", "origin/master") //, "HEAD@{5 years ago}..HEAD")
@@ -489,6 +382,8 @@ func gitAuthorEmails() []*acLine {
 			log.Fatal(err)
 		}
 	}
+	log.Printf("Done processing all repos.")
+	log.Println()
 	return ret
 }
 
@@ -592,10 +487,6 @@ func uselessCommit(commit string) bool {
 	return false
 }
 
-// Some GitHub users don't have a decent name anywhere. Force use of the "GitHub User @foo" name.
-// TODO: override or warn when they add a good name.
-var useGitHubName = map[string]bool{}
-
 var skipEmail = map[string]bool{
 	"noreply-gerritcodereview@google.com": true,
 	// Easter egg commits.
@@ -611,6 +502,7 @@ var skipEmail = map[string]bool{
 // For example, "named Gopher": "Named Gopher".
 var nameFix = map[string]string{
 	"Emmanuel T Odeke": "Emmanuel Odeke", // to prevent a duplicate "Emmanuel T Odeke <emmanuel@orijtech.com>" entry, since "Emmanuel Odeke <emm.odeke@gmail.com> <odeke@ualberta.ca>" already exists
+	"fREW Schmidt":     "Frew Schmidt",   // to use a normalized name capitalization, based on seeing it used on Medium and LinkedIn
 }
 
 // emailFix is a map of email -> new email replacements to make.

@@ -35,6 +35,7 @@ var (
 	drchase      = gh("dr2chase")
 	dvyukov      = gh("dvyukov")
 	eliasnaur    = gh("eliasnaur")
+	empijei      = gh("empijei")
 	filippo      = gh("FiloSottile")
 	gri          = gh("griesemer")
 	hanwen       = gh("hanwen")
@@ -50,6 +51,7 @@ var (
 	matloob      = gh("matloob")
 	mdempsky     = gh("mdempsky")
 	mdlayher     = gh("mdlayher")
+	mikesamuel   = gh("mikesamuel")
 	mikioh       = gh("mikioh")
 	minux        = gh("minux")
 	mpvl         = gh("mpvl")
@@ -271,7 +273,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{gri},
 	},
 	"go/src/go/doc": {
-		Primary: []Owner{gri},
+		Primary:   []Owner{gri},
+		Secondary: []Owner{agnivade},
 	},
 	"go/src/go/format": {
 		Primary: []Owner{gri},
@@ -300,6 +303,10 @@ var entries = map[string]*Entry{
 	"go/src/go/types": {
 		Primary:   []Owner{gri},
 		Secondary: []Owner{adonovan},
+	},
+	"go/src/html/template": {
+		Primary:   []Owner{mikesamuel},
+		Secondary: []Owner{empijei},
 	},
 	"go/src/image": {
 		Primary:   []Owner{},

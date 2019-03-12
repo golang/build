@@ -70,6 +70,7 @@ var (
 	metricsClient  *monapi.MetricClient
 	inStaging      bool                   // are we running in the staging project? (named -dev)
 	errorsClient   *errorreporting.Client // Stackdriver errors client
+	gkeNodeIP      string
 
 	initGCECalled bool
 )
@@ -105,6 +106,12 @@ func initGCE() error {
 		if err != nil || projectZone == "" {
 			return fmt.Errorf("failed to get current GCE zone: %v", err)
 		}
+
+		gkeNodeIP, err = metadata.Get("instance/network-interfaces/0/ip")
+		if err != nil {
+			return fmt.Errorf("failed to get current instance IP: %v", err)
+		}
+
 		// Convert the zone from "projects/1234/zones/us-central1-a" to "us-central1-a".
 		projectZone = path.Base(projectZone)
 		buildEnv.Zone = projectZone

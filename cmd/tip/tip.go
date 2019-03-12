@@ -44,17 +44,15 @@ func main() {
 	const k = "TIP_BUILDER"
 	var b Builder
 	switch os.Getenv(k) {
-	case "godoc":
-		b = godocBuilder{}
+	case "golangorg":
+		b = golangorgBuilder{}
 	case "talks":
 		b = talksBuilder{}
 	default:
 		log.Fatalf("Unknown %v value: %q", k, os.Getenv(k))
 	}
 
-	if certInit != nil {
-		certInit()
-	}
+	certInit()
 
 	p := &Proxy{builder: b}
 	go p.run()
@@ -63,22 +61,11 @@ func main() {
 	log.Printf("Starting up tip server for builder %q", os.Getenv(k))
 
 	errc := make(chan error, 1)
-
 	go func() {
-		var httpMux http.Handler = mux
-		if wrapHTTPMux != nil {
-			httpMux = wrapHTTPMux(httpMux)
-		}
-		errc <- http.ListenAndServe(":8080", httpMux)
+		errc <- http.ListenAndServe(":8080", wrapHTTPMux(mux))
 	}()
 	if *autoCertDomain != "" {
-		if runHTTPS == nil {
-			errc <- errors.New("can't use --autocert without building binary with the autocert build tag")
-		} else {
-			go func() {
-				errc <- runHTTPS(mux)
-			}()
-		}
+		go func() { errc <- runHTTPS(mux) }()
 		log.Printf("Listening on port 443 with LetsEncrypt support on domain %q", *autoCertDomain)
 	}
 	if err := <-errc; err != nil {
@@ -88,14 +75,14 @@ func main() {
 }
 
 // Proxy implements the tip.golang.org server: a reverse-proxy
-// that builds and runs godoc instances showing the latest docs.
+// that builds and runs golangorg instances showing the latest docs.
 type Proxy struct {
 	builder Builder
 
 	mu       sync.Mutex // protects following fields
 	proxy    http.Handler
 	cur      string    // signature of gorepo+toolsrepo
-	cmd      *exec.Cmd // live godoc instance, or nil for none
+	cmd      *exec.Cmd // live golangorg instance, or nil for none
 	side     string
 	hostport string // host and port of the live instance
 	err      error
@@ -115,7 +102,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Redirect the old beta.golang.org URL to tip.golang.org,
 	// just in case there are old links out there to
 	// beta.golang.org. (We used to run a "temporary" beta.golang.org
-	// GCE VM running godoc where "temporary" lasted two years.
+	// GCE VM running golangorg where "temporary" lasted two years.
 	// So it lasted so long, there are probably links to it out there.)
 	if r.Host == "beta.golang.org" {
 		u := *r.URL

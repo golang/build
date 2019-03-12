@@ -35,6 +35,7 @@ RUN apt-get update && apt-get install -y \
 	libopenal-dev \
 	fonts-droid \
 	openssh-server \
+	iptables \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /go1.4-amd64 \

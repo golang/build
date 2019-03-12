@@ -1010,7 +1010,7 @@ func TestForeachRepo(t *testing.T) {
 			return nil
 		})
 
-		if !reflect.DeepEqual(tt.wantErr, err) {
+		if !equalError(tt.wantErr, err) {
 			t.Errorf("%s: ForeachReview errs differ. got: %s, want: %s", tt.name, err, tt.wantErr)
 		}
 
@@ -1020,6 +1020,12 @@ func TestForeachRepo(t *testing.T) {
 	}
 
 	t.Log("Tested Reviews")
+}
+
+// equalError reports whether errors a and b are considered equal.
+// They're equal if both are nil, or both are not nil and a.Error() == b.Error().
+func equalError(a, b error) bool {
+	return a == nil && b == nil || a != nil && b != nil && a.Error() == b.Error()
 }
 
 func TestCacheableURL(t *testing.T) {

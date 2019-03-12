@@ -90,7 +90,7 @@
     {{end}}
       </tr>
 
-      <tr class='subheading2'>
+      <tr class="subheading2">
         <th>&nbsp;</th>
         <th></th>
         <th></th>
@@ -192,6 +192,16 @@
         <th></th>
         {{range $.Builders}}
           <th class="result arch{{if (unsupported .)}} unsupported{{end}}" title="{{.}}">{{builderSubheading .}}</th>
+        {{end}}
+      </tr>
+      <tr class="subheading2">
+        <th>&nbsp;</th>
+        <th></th>
+        <th></th>
+        <th></th>
+        <th></th>
+        {{range $.Builders}}
+          <th class="result arch{{if (unsupported .)}} unsupported{{end}}" title="{{.}}">{{builderSubheading2 .}}</th>
         {{end}}
       </tr>
     {{range $pkg := .Packages}}

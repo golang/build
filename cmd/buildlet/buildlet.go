@@ -73,7 +73,8 @@ var (
 //   16: make macstadium builders always haltEntireOS
 //   17: make macstadium halts use sudo
 //   18: set TMPDIR and GOCACHE
-const buildletVersion = 18
+//   21: GO_BUILDER_SET_GOPROXY=coordinator support
+const buildletVersion = 21
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -108,12 +109,15 @@ var (
 )
 
 func main() {
-	switch os.Getenv("GO_BUILDER_ENV") {
+	builderEnv := os.Getenv("GO_BUILDER_ENV")
+
+	switch builderEnv {
 	case "macstadium_vm":
 		configureMacStadium()
 	case "linux-arm-arm5spacemonkey":
 		initBaseUnixEnv() // Issue 28041
 	}
+
 	onGCE := metadata.OnGCE()
 	switch runtime.GOOS {
 	case "plan9":
@@ -132,6 +136,10 @@ func main() {
 
 	log.Printf("buildlet starting.")
 	flag.Parse()
+
+	if builderEnv == "android-amd64-emu" {
+		startAndroidEmulator()
+	}
 
 	if *reverse == "solaris-amd64-smartosbuildlet" {
 		// These machines were setup without GO_BUILDER_ENV
@@ -524,6 +532,9 @@ func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "requires GET method", http.StatusBadRequest)
 		return
 	}
+	if !mkdirAllWorkdirOr500(w) {
+		return
+	}
 	dir := r.FormValue("dir")
 	if !validRelativeDir(dir) {
 		http.Error(w, "bogus dir", http.StatusBadRequest)
@@ -584,6 +595,9 @@ func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleWriteTGZ(w http.ResponseWriter, r *http.Request) {
+	if !mkdirAllWorkdirOr500(w) {
+		return
+	}
 	urlParam, _ := url.ParseQuery(r.URL.RawQuery)
 	baseDir := *workDir
 	if dir := urlParam.Get("dir"); dir != "" {
@@ -841,6 +855,23 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "HTTP/1.1 or higher required", http.StatusBadRequest)
 		return
 	}
+	// Create *workDir and (if needed) tmp and gocache.
+	if !mkdirAllWorkdirOr500(w) {
+		return
+	}
+	for _, dir := range []string{processTmpDirEnv, processGoCacheEnv} {
+		if dir == "" {
+			continue
+		}
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if err := checkAndroidEmulator(); err != nil {
+		http.Error(w, "android emulator not running: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Trailer", hdrProcessState) // declare it so we can set it
 
@@ -884,15 +915,30 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 		f.Flush()
 	}
 
+	postEnv := r.PostForm["env"]
+
 	goarch := "amd64" // unless we find otherwise
-	for _, pair := range r.PostForm["env"] {
-		if hasPrefixFold(pair, "GOARCH=") {
-			goarch = pair[len("GOARCH="):]
-		}
+	if v := getEnv(postEnv, "GOARCH"); v != "" {
+		goarch = v
+	}
+	if v, _ := strconv.ParseBool(getEnv(postEnv, "GO_DISABLE_OUTBOUND_NETWORK")); v {
+		disableOutboundNetwork()
 	}
 
-	env := append(baseEnv(goarch), r.PostForm["env"]...)
+	env := append(baseEnv(goarch), postEnv...)
 
+	// Setup an localhost HTTP server to proxy module cache, if requested by environment.
+	if goproxyHandler != nil && getEnv(postEnv, "GO_BUILDER_SET_GOPROXY") == "coordinator" {
+		ln, err := net.Listen("tcp", "localhost:0")
+		if err != nil {
+			http.Error(w, "failed to listen on localhost for GOPROXY=coordinator: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer ln.Close()
+		srv := &http.Server{Handler: goproxyHandler}
+		go srv.Serve(ln)
+		env = append(env, fmt.Sprintf("GOPROXY=http://localhost:%d", ln.Addr().(*net.TCPAddr).Port))
+	}
 	if v := processTmpDirEnv; v != "" {
 		env = append(env, "TMPDIR="+v)
 	}
@@ -1229,16 +1275,18 @@ func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// If we nuked the work directory (or tmp or gocache), recreate them.
-	for _, dir := range []string{*workDir, processTmpDirEnv, processGoCacheEnv} {
-		if dir == "" {
-			continue
-		}
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+}
+
+// mkdirAllWorkdirOr500 reports whether *workDir either exists or was created.
+// If it returns false, it also writes an HTTP 500 error to w.
+// This is used by callers to verify *workDir exists, even if it might've been
+// deleted previously.
+func mkdirAllWorkdirOr500(w http.ResponseWriter) bool {
+	if err := os.MkdirAll(*workDir, 0755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return false
 	}
+	return true
 }
 
 func handleWorkDir(w http.ResponseWriter, r *http.Request) {
@@ -1276,6 +1324,9 @@ func handleLs(w http.ResponseWriter, r *http.Request) {
 	digest, _ := strconv.ParseBool(r.FormValue("digest"))
 	skip := r.Form["skip"] // '/'-separated relative dirs
 
+	if !mkdirAllWorkdirOr500(w) {
+		return
+	}
 	if !validRelativeDir(dir) {
 		http.Error(w, "bogus dir", http.StatusBadRequest)
 		return
@@ -1773,5 +1824,71 @@ func removeAllAndMkdir(dir string) {
 	}
 	if err := os.Mkdir(dir, 0755); err != nil {
 		log.Fatal(err)
+	}
+}
+
+var (
+	androidEmuDead = make(chan error) // closed on death
+	androidEmuErr  error              // set prior to channel close
+)
+
+func startAndroidEmulator() {
+	cmd := exec.Command("/android/sdk/emulator/emulator",
+		"@android-avd",
+		"-no-audio",
+		"-no-window",
+		"-no-boot-anim",
+		"-no-snapshot-save",
+		"-wipe-data", // required to prevent a hang with -no-window when recovering from a snapshot?
+	)
+	log.Printf("running Android emulator: %v", cmd.Args)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		log.Fatalf("failed to start Android emulator: %v", err)
+	}
+	go func() {
+		err := cmd.Wait()
+		if err == nil {
+			err = errors.New("exited without error")
+		}
+		androidEmuErr = err
+		close(androidEmuDead)
+	}()
+}
+
+// checkAndroidEmulator returns an error if this machine is an Android builder
+// and the Android emulator process has exited.
+func checkAndroidEmulator() error {
+	select {
+	case <-androidEmuDead:
+		return androidEmuErr
+	default:
+		return nil
+	}
+}
+
+var disableNetOnce sync.Once
+
+func disableOutboundNetwork() {
+	if runtime.GOOS != "linux" {
+		return
+	}
+	disableNetOnce.Do(disableOutboundNetworkLinux)
+}
+
+func disableOutboundNetworkLinux() {
+	const iptables = "/sbin/iptables"
+	const vcsTestGolangOrgIP = "35.184.38.56" // vcs-test.golang.org
+	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "1", "-m", "state", "--state", "NEW", "-d", vcsTestGolangOrgIP, "-p", "tcp", "-j", "ACCEPT"))
+	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "2", "-m", "state", "--state", "NEW", "-d", "10.0.0.0/8", "-p", "tcp", "-j", "ACCEPT"))
+	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "3", "-m", "state", "--state", "NEW", "-p", "tcp", "--dport", "443", "-j", "REJECT", "--reject-with", "icmp-host-prohibited"))
+	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "3", "-m", "state", "--state", "NEW", "-p", "tcp", "--dport", "22", "-j", "REJECT", "--reject-with", "icmp-host-prohibited"))
+}
+
+func runOrLog(cmd *exec.Cmd) {
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("failed to run %s: %v, %s", cmd.Args, err, out)
 	}
 }

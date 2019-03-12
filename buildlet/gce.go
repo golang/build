@@ -142,11 +142,17 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 	}
 
 	srcImage := "https://www.googleapis.com/compute/v1/projects/" + projectID + "/global/images/" + hconf.VMImage
+	minCPU := hconf.MinCPUPlatform
 	if hconf.IsContainer() {
-		var err error
-		srcImage, err = cosImage(ctx, computeService)
-		if err != nil {
-			return nil, fmt.Errorf("error find Container-Optimized OS image: %v", err)
+		if hconf.NestedVirt {
+			minCPU = "Intel Haswell" // documented minimum from https://cloud.google.com/compute/docs/instances/enable-nested-virtualization-vm-instances
+			srcImage = "https://www.googleapis.com/compute/v1/projects/" + projectID + "/global/images/" + hconf.ContainerVMImage()
+		} else {
+			var err error
+			srcImage, err = cosImage(ctx, computeService)
+			if err != nil {
+				return nil, fmt.Errorf("error find Container-Optimized OS image: %v", err)
+			}
 		}
 	}
 
@@ -154,7 +160,7 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 		Name:           instName,
 		Description:    opts.Description,
 		MachineType:    machType,
-		MinCpuPlatform: hconf.MinCPUPlatform,
+		MinCpuPlatform: minCPU,
 		Disks: []*compute.AttachedDisk{
 			{
 				AutoDelete: true,

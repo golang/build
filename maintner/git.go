@@ -161,6 +161,9 @@ func (p *GitPerson) Name() string {
 	return strings.TrimSpace(p.Str[:i])
 }
 
+// String implements fmt.Stringer.
+func (p *GitPerson) String() string { return p.Str }
+
 // requires c.mu be held for writing.
 func (c *Corpus) enqueueCommitLocked(h GitHash) {
 	if _, ok := c.gitCommit[h]; ok {

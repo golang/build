@@ -93,7 +93,7 @@ func getGithubToken() (string, error) {
 	}
 	f := strings.SplitN(strings.TrimSpace(string(slurp)), ":", 2)
 	if len(f) != 2 || f[0] == "" || f[1] == "" {
-		return "", fmt.Errorf("Expected token %q to be of form <username>:<token>", slurp)
+		return "", fmt.Errorf("expected token %q to be of form <username>:<token>", slurp)
 	}
 	return f[1], nil
 }
@@ -122,7 +122,7 @@ func getGerritAuth() (username string, password string, err error) {
 		return "git-gobot.golang.org", f[0], nil
 	}
 	if len(f) != 2 || f[0] == "" || f[1] == "" {
-		return "", "", fmt.Errorf("Expected Gerrit token %q to be of form <git-email>:<token>", slurp)
+		return "", "", fmt.Errorf("expected Gerrit token %q to be of form <git-email>:<token>", slurp)
 	}
 	return f[0], f[1], nil
 }
@@ -211,19 +211,19 @@ func main() {
 	ctx := context.Background()
 	for {
 		t0 := time.Now()
-		err := bot.doTasks(ctx)
-		if err != nil {
+		taskErrors := bot.doTasks(ctx)
+		for _, err := range taskErrors {
 			log.Print(err)
 		}
 		botDur := time.Since(t0)
 		log.Printf("gopherbot ran in %v", botDur)
 		if !*daemon {
-			if err != nil {
+			if len(taskErrors) > 0 {
 				os.Exit(1)
 			}
 			return
 		}
-		if err != nil {
+		if len(taskErrors) > 0 {
 			log.Printf("sleeping 30s after previous error.")
 			time.Sleep(30 * time.Second)
 		}
@@ -309,18 +309,20 @@ func (b *gopherbot) initCorpus() {
 	b.gorepo = repo
 }
 
-func (b *gopherbot) doTasks(ctx context.Context) error {
+// doTasks performs tasks in sequence. It doesn't stop if
+// if encounters an error, but reports errors at the end.
+func (b *gopherbot) doTasks(ctx context.Context) []error {
+	var errs []error
 	for _, task := range tasks {
 		if *onlyRun != "" && task.name != *onlyRun {
 			continue
 		}
-		if err := task.fn(b, ctx); err != nil {
-			log.Printf("%s: %v", task.name, err)
-			return err
+		err := task.fn(b, ctx)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %v", task.name, err))
 		}
 	}
-
-	return nil
+	return errs
 }
 
 func (b *gopherbot) addLabel(ctx context.Context, gi *maintner.GitHubIssue, label string) error {
@@ -701,7 +703,7 @@ func (b *gopherbot) unwaitRelease(ctx context.Context) error {
 func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 	tooOld := time.Now().Add(-365 * 24 * time.Hour)
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if !gi.Closed || gi.PullRequest || gi.Locked {
+		if gi.NotExist || !gi.Closed || gi.PullRequest || gi.Locked {
 			return nil
 		}
 		if gi.Updated.After(tooOld) {
@@ -712,7 +714,11 @@ func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 			return nil
 		}
 		_, err := b.ghc.Issues.Lock(ctx, "golang", "go", int(gi.Number), nil)
-		if err != nil {
+		if ge, ok := err.(*github.ErrorResponse); ok && ge.Response.StatusCode == http.StatusNotFound {
+			// It's rare, but an issue can become 404 on GitHub. See golang.org/issue/30182.
+			// Nothing to do since the issue is gone.
+			return nil
+		} else if err != nil {
 			return err
 		}
 		return b.addLabel(ctx, gi, frozenDueToAge)
@@ -882,7 +888,7 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 
 }
 
-// cl2issue writes "Change https://golang.org/issue/NNNN mentions this issue"\
+// cl2issue writes "Change https://golang.org/cl/NNNN mentions this issue"
 // and the change summary on GitHub when a new Gerrit change references a GitHub issue.
 func (b *gopherbot) cl2issue(ctx context.Context) error {
 	monthAgo := time.Now().Add(-30 * 24 * time.Hour)
@@ -1132,7 +1138,7 @@ func (b *gopherbot) unwaitCLs(ctx context.Context) error {
 			// the last time the "wait-author" tag was
 			// added.
 			if tags.Contains("wait-author") {
-				// Figure out othe last index at which "wait-author" was added.
+				// Figure out the last index at which "wait-author" was added.
 				waitAuthorIndex := -1
 				for i := len(cl.Metas) - 1; i >= 0; i-- {
 					if cl.Metas[i].HashtagsAdded().Contains("wait-author") {
@@ -1141,17 +1147,17 @@ func (b *gopherbot) unwaitCLs(ctx context.Context) error {
 					}
 				}
 
-				// Find the author has replied since
-				author := cl.Metas[0].Commit.Author.Str
+				// Find out whether the author has replied since.
+				authorEmail := cl.Metas[0].Commit.Author.Email() // Equivalent to "{{cl.OwnerID}}@62eb7196-b449-3ce5-99f1-c037f21e1705".
 				hasReplied := false
 				for _, m := range cl.Metas[waitAuthorIndex+1:] {
-					if m.Commit.Author.Str == author {
+					if m.Commit.Author.Email() == authorEmail {
 						hasReplied = true
 						break
 					}
 				}
 				if hasReplied {
-					log.Printf("https://golang.org/cl/%d -- remove wait-author; reply from %s", cl.Number, author)
+					log.Printf("https://golang.org/cl/%d -- remove wait-author; reply from %s", cl.Number, cl.Owner())
 					err := b.onLatestCL(ctx, cl, func() error {
 						if *dryRun {
 							log.Printf("[dry run] would remove hashtag 'wait-author' from CL %d", cl.Number)
@@ -1175,8 +1181,8 @@ func (b *gopherbot) unwaitCLs(ctx context.Context) error {
 	})
 }
 
-// onLatestCL checks whether cl's metadata is in sync with Gerrit's
-// upstream data and, if so, returns f(). If it's out of sync, it does
+// onLatestCL checks whether cl's metadata is up to date with Gerrit's
+// upstream data and, if so, returns f(). If it's out of date, it does
 // nothing more and returns nil.
 func (b *gopherbot) onLatestCL(ctx context.Context, cl *maintner.GerritCL, f func() error) error {
 	ci, err := b.gerrit.GetChangeDetail(ctx, fmt.Sprint(cl.Number), gerrit.QueryChangesOpt{Fields: []string{"MESSAGES"}})
@@ -1187,8 +1193,15 @@ func (b *gopherbot) onLatestCL(ctx context.Context, cl *maintner.GerritCL, f fun
 		log.Printf("onLatestCL: CL %d has no messages. Odd. Ignoring.", cl.Number)
 		return nil
 	}
-	if ci.Messages[len(ci.Messages)-1].ID == cl.Meta.Commit.Hash.String() {
-		return f()
+	latestGerritID := ci.Messages[len(ci.Messages)-1].ID
+	// Check all metas and not just the latest, because there are some meta commits
+	// that don't have a corresponding message in the Gerrit REST API response.
+	for i := len(cl.Metas) - 1; i >= 0; i-- {
+		metaHash := cl.Metas[i].Commit.Hash.String()
+		if metaHash == latestGerritID {
+			// latestGerritID is contained by maintner metadata for this CL, so run f().
+			return f()
+		}
 	}
 	log.Printf("onLatestCL: maintner metadata for CL %d is behind; skipping action for now.", cl.Number)
 	return nil
@@ -1313,7 +1326,7 @@ func (b *gopherbot) setMinorMilestones(ctx context.Context) error {
 		if majorRel == "" {
 			return nil
 		}
-		m, err := b.getMinorMilestoneForMajor(ctx, majorRel)
+		m, err := b.getMinorMilestoneForMajor(majorRel)
 		if err != nil {
 			// Fail silently, the milestone might not exist yet.
 			log.Printf("Failed to apply minor release milestone to issue %d: %v", gi.Number, err)
@@ -1325,7 +1338,7 @@ func (b *gopherbot) setMinorMilestones(ctx context.Context) error {
 
 // getMinorMilestoneForMajor returns the latest open minor release milestone
 // for a given major release series.
-func (b *gopherbot) getMinorMilestoneForMajor(ctx context.Context, majorRel string) (milestone, error) {
+func (b *gopherbot) getMinorMilestoneForMajor(majorRel string) (milestone, error) {
 	var res milestone
 	var minorVers int
 	titlePrefix := "Go" + majorRel + "."
@@ -1365,9 +1378,10 @@ func (b *gopherbot) closeCherryPickIssues(ctx context.Context) error {
 		if gi.Closed || gi.PullRequest || gi.NotExist || gi.Milestone.IsNone() || gi.HasEvent("reopened") {
 			return nil
 		}
-		if strings.Count(gi.Milestone.Title, ".") == 2 { // minor release
-			cherryPickIssues[gi.Number] = gi
+		if !strings.HasPrefix(gi.Milestone.Title, "Go") {
+			return nil
 		}
+		cherryPickIssues[gi.Number] = gi
 		return nil
 	})
 	monthAgo := time.Now().Add(-30 * 24 * time.Hour)
@@ -1381,15 +1395,21 @@ func (b *gopherbot) closeCherryPickIssues(ctx context.Context) error {
 				// optimization) that gopherbot already processed this CL.
 				return nil
 			}
-			if cl.Status != "merged" || cl.Private || !strings.HasPrefix(cl.Branch(), "release-branch") {
+			if cl.Status != "merged" || cl.Private || !strings.HasPrefix(cl.Branch(), "release-branch.") {
 				return nil
 			}
+			clBranchVersion := cl.Branch()[len("release-branch."):] // "go1.11" or "go1.12".
 			for _, ref := range cl.GitHubIssueRefs {
 				if id := ref.Repo.ID(); id.Owner != "golang" || id.Repo != "go" {
 					continue
 				}
 				gi, ok := cherryPickIssues[ref.Number]
 				if !ok {
+					continue
+				}
+				if !strutil.HasPrefixFold(gi.Milestone.Title, clBranchVersion) {
+					// This issue's milestone (e.g., "Go1.11.6", "Go1.12", "Go1.12.1", etc.)
+					// doesn't match the CL branch goX.Y version, so skip it.
 					continue
 				}
 				printIssue("close-cherry-pick", gi)
@@ -1618,7 +1638,7 @@ func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 			return nil
 		}
 		gp.ForeachOpenCL(func(cl *maintner.GerritCL) error {
-			if cl.Private || cl.WorkInProgress() || time.Now().Sub(cl.Created) < 10*time.Minute {
+			if cl.Private || cl.WorkInProgress() || time.Since(cl.Created) < 10*time.Minute {
 				return nil
 			}
 			tags := cl.Meta.Hashtags()

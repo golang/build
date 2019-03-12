@@ -22,7 +22,7 @@ spec:
         - name: TMPDIR
           value: /build
         - name: TIP_BUILDER
-          value: godoc
+          value: golangorg
         volumeMounts:
         - mountPath: /build
           name: cache-volume

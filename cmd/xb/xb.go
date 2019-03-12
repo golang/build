@@ -108,6 +108,7 @@ func getEnv() *buildenv.Environment {
 
 var expectedGoLayerVersion = map[string]string{
 	"golang:1.10": "go version go1.10.2 linux/amd64",
+	"golang:1.11": "go version go1.11.5 linux/amd64",
 }
 
 func validateGoDockerVersion(layer, want string) {
@@ -146,8 +147,11 @@ func runDocker() {
 			case "golang/buildlet-stage0":
 				log.Printf("building dependent layer %q", layer)
 				buildStage0Container()
-			case "debian:stretch":
-				// TODO: validate version of stretch
+			case "debian:jessie", "debian:stretch", "debian:buster":
+				// TODO: validate version? probably doesn't matter, as they're
+				// pretty frozen and just get security/bug updates, and most of
+				// our Dockerfiles start with apt-get update && upgrade steps
+				// anyway.
 			default:
 				log.Fatalf("unsupported layer %q; don't know how to validate or build", layer)
 			}

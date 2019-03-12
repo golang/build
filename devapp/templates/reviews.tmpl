@@ -9,11 +9,11 @@
   padding: 0;
 }
 body {
-  font: 13px monospace;
+  font: 13px system-ui, sans-serif;
   padding: 1rem;
 }
-h3 {
-  padding: 10px 0 0;
+h2 {
+  margin: 1em 0 .35em;
 }
 h3:first-of-type {
   padding: 0
@@ -31,8 +31,36 @@ header {
   color: #666;
   font-size: .9em;
 }
+.filters {
+  display: block;
+  margin: 1em 0;
+}
+.filter-input {
+  font: inherit;
+  width: 30em;
+}
+.how-to {
+  cursor: pointer;
+  margin-top: 1em;
+  max-width: 40em;
+}
+.how-to-container {
+  padding: 0 1em;
+}
+.how-to ul {
+  list-style: none;
+  margin-top: .5em;
+}
+.how-to li {
+  margin: .25em 1em .75em;
+}
+.examples li {
+  margin: .25em 1em;
+}
 .row {
+  border-bottom: 1px solid #f1f2f3;
   display: flex;
+  padding: .5em 0;
   white-space: nowrap;
 }
 .date {
@@ -45,33 +73,155 @@ header {
   text-overflow: ellipsis;
   padding-right: 1em;
 }
-.change {
+.icons,
+.number {
+  flex-shrink: 0;
+}
+.icons {
+  height: 20px;
+  margin-right: 1.5em;
+  text-align: right;
+  width: 7em;
+}
+.number {
+  margin-right: 1.5em;
+  text-align: right;
+  width: 6ch;
+}
+.subject {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.pill,
+.pill:link,
+.pill:visited {
+  color: #000;
+  display: inline-block;
+  border-radius: 2px;
+  padding: 2px 5px;
+  text-decoration: none;
+}
+.plus-two:link,
+.plus-two:visited,
+.minus-two:link,
+.minus-two:visited {
+  color: #fff;
+}
+.plus-two {
+  background-color: #2e7d32;
+}
+.plus-one {
+  background-color: #dcedc8;
+}
+.minus-two {
+  background-color: #b71c1c;
+}
+.no-human-comments {
+  background-color: #e0e0e0;
+}
+[hidden] {
+  display: none;
+}
 </style>
-<body>
 <header>
-<strong>{{.TotalChanges}} open changes</strong>
-<div class="header-subtitle">
-  Excluding those marked WIP, having hashtags "wait-author", "wait-release", or description containing "DO NOT REVIEW" or "DO NOT SUBMIT".
-</div>
-<div class="header-subtitle">
-  <a href="https://go.googlesource.com/build/+/master/devapp/reviews.go">Source code</a>
-</div>
+  <strong>{{.TotalChanges}} open changes</strong>
+  <div class="header-subtitle">
+    Excluding those marked WIP, having hashtags "wait-author", "wait-release", "wait-issue", or description containing "DO NOT REVIEW".
+  </div>
+  <div class="header-subtitle">
+    <a href="https://go.googlesource.com/build/+/master/devapp/reviews.go">Source code</a>
+  </div>
 </header>
+<div class="filters">
+  <label class="filter-label">Filter: <input class="filter-input js-filter-input" type="text"></label>
+  <details class="how-to">
+    <summary>Filters How-to</summary>
+    <div class="how-to-container">
+      <ul>
+        <li>You can filter on any displayed field below, along with a few other fields not shown, such as reviewer.
+        <li>Exclude terms by prefixing them with a <code>-</code>.
+        <li>The <code>t:</code> operator is short for "tag" and coincides with the colored tags you see in the rows below.
+        <li>Supported tag values include "Changes without a human comment" (<code>t:attn</code>) and <code>Code-Review</code>
+            label values (<code>t:-2</code>, <code>t:+1</code>, and <code>t:+2</code>).
+        <li>All terms use substring matching, meaning that you can type <code>reviewer:iant</code> instead of <code>reviewer:iant@golang.org</code>
+        <li>The following operators are supported: <code>t:, repo:, reviewer:, cc:, involves:, and owner:</code>
+      </ul>
+        Examples:
+        <ul>
+          <li><a href="?q=reviewer%3Abradfitz+repo%3Anet">http2 changes in the net repo where brad is a reviewer</a>
+          <li><a href="?q=-involves%3Aaustin+runtime%3A">runtime changes that don't involve austin</a>
+        </ul>
+    </div>
+  </details>
+</div>
 {{range $p := .Projects}}
   {{if .Changes}}
-		<h3>{{.Project}}</h3>
-		{{range .Changes}}
-		<div class="row">
-			<div class="date">{{.FormattedLastUpdate}}</div>
-      <a class="owner" href="?owner={{.Owner.Name}}">{{.Owner.Name}}</a>
-      <span class="change">
-        <a href="https://{{$p.ReviewServer}}/{{.Number}}" target="_blank">{{.Number}}</a>
-        {{.Subject}}
-      </span>
-    </div>
-		{{end}}
+    <section hidden>
+      <h2>{{.Project}}</h2>
+      {{range .Changes}}
+        <div class="row" data-terms="{{.SearchTerms}}">
+          <span class="date">{{.FormattedLastUpdate}}</span>
+          <span class="owner">{{.Owner.Name}}</span>
+          <span class="icons">
+            {{if .NoHumanComments}}<a class="pill no-human-comments" href="?q=t%3Aattn" title="Has no human comments">→</a>{{end}}
+            {{if .HasMinusTwo}}️<a class="pill minus-two" href="?q=t%3A-2" title="Code-Review: -2">-2</a>{{end}}
+            {{if .HasPlusOne}}<a class="pill plus-one" href="?q=t%3A%2B1" title="Code-Review: +1">+1</a>{{end}}
+            {{if .HasPlusTwo}}<a class="pill plus-two" href="?q=t%3A%2B2" title="Code-Review: +2">+2</a>{{end}}
+          </span>
+          <a class="number" href="https://{{$p.ReviewServer}}/{{.Number}}" target="_blank">{{.Number}}</a>
+          <span class="subject">
+            {{.Subject}}
+          </span>
+        </div>
+      {{end}}
+    </section>
 	{{end}}
 {{end}}
+<script>
+function filter(query) {
+  console.time('filter');
+  query = query.toLowerCase();
+  document.querySelectorAll('.row').forEach(el => {
+    const terms = el.dataset.terms;
+    const queryTerms = query.split(' ');
+    let match = true;
+    for (let i = 0; i < queryTerms.length; i++) {
+      let q = queryTerms[i].trim();
+      if (q.length === 0 || q === '-') { continue; }
+      if (q.startsWith('-')) {
+        match = match && !terms.includes(q.substr(1));
+      } else {
+        match = match && terms.includes(q);
+      }
+    }
+    el.hidden = !match;
+  });
+  document.querySelectorAll('section').forEach(el => {
+    el.hidden = el.querySelectorAll('.row:not([hidden])').length === 0;
+  });
+  console.timeEnd('filter');
+}
+
+let debounceTimerId = null;
+const filterInputEl = document.querySelector('.js-filter-input')
+filterInputEl.addEventListener('keyup', e => {
+  const q = e.target.value.trim();
+  let url = new URL(window.location.href);
+  if (!!q) {
+    url.searchParams.set('q', q);
+  } else {
+    url.searchParams.delete('q');
+  }
+  window.history.replaceState({}, null, url.toString());
+
+  if (debounceTimerId) {
+    window.clearTimeout(debounceTimerId);
+    debounceTimerId = null;
+  }
+  debounceTimerId = window.setTimeout(() => { filter(q); }, 200);
+});
+
+const initialQuery = (new URL(window.location.href)).searchParams.get('q') || '';
+filterInputEl.value = initialQuery;
+filter(initialQuery);
+</script>

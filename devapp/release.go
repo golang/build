@@ -27,11 +27,11 @@ const (
 	prefixDev      = "[dev."
 
 	// The title of the current release milestone in GitHub.
-	curMilestoneTitle = "Go1.12"
+	curMilestoneTitle = "Go1.13"
 )
 
 // The start date of the current release milestone.
-var curMilestoneStart = time.Date(2018, 8, 20, 0, 0, 0, 0, time.UTC)
+var curMilestoneStart = time.Date(2019, 2, 26, 0, 0, 0, 0, time.UTC)
 
 // titleDirs returns a slice of prefix directories contained in a title. For
 // devapp,maintner: my cool new change, it will return ["devapp", "maintner"].
@@ -151,8 +151,9 @@ var annotationRE = regexp.MustCompile(`(?m)^R=(.+)\b`)
 
 type gerritCL struct {
 	*maintner.GerritCL
-	Closed    bool
-	Milestone string
+	NoPrefixTitle string // CL title without the directory prefix (e.g., "improve ListenAndServe" without leading "net/http: ").
+	Closed        bool
+	Milestone     string
 }
 
 // ReviewURL returns the code review address of cl.
@@ -195,6 +196,7 @@ func (s *server) updateReleaseData() {
 			}
 
 			var (
+				pkgs, title   = ParsePrefixedChangeTitle(projectRoot(p), cl.Subject())
 				closed        bool
 				closedVersion int32
 				milestone     string
@@ -216,20 +218,20 @@ func (s *server) updateReleaseData() {
 				}
 			}
 			gcl := &gerritCL{
-				GerritCL:  cl,
-				Closed:    closed,
-				Milestone: milestone,
+				GerritCL:      cl,
+				NoPrefixTitle: title,
+				Closed:        closed,
+				Milestone:     milestone,
 			}
 
 			for _, r := range cl.GitHubIssueRefs {
 				issueToCLs[r.Number] = append(issueToCLs[r.Number], gcl)
 			}
-			dirs := titleDirs(cl.Subject())
-			if len(dirs) == 0 {
+			if len(pkgs) == 0 {
 				dirToCLs[""] = append(dirToCLs[""], gcl)
 			} else {
-				for _, d := range dirs {
-					dirToCLs[d] = append(dirToCLs[d], gcl)
+				for _, p := range pkgs {
+					dirToCLs[p] = append(dirToCLs[p], gcl)
 				}
 			}
 			return nil
@@ -293,6 +295,38 @@ func (s *server) updateReleaseData() {
 	s.appendClosedIssues()
 	s.data.release.LastUpdated = time.Now().UTC().Format(time.UnixDate)
 	s.data.release.dirty = false
+}
+
+// projectRoot returns the import path corresponding to the repo root
+// of the Gerrit project p. For golang.org/x subrepos, the golang.org
+// part is omitted for previty.
+func projectRoot(p *maintner.GerritProject) string {
+	switch p.Server() {
+	case "go.googlesource.com":
+		switch subrepo := p.Project(); subrepo {
+		case "go":
+			// Main Go repo.
+			return ""
+		case "dl":
+			// dl is a special subrepo, there's no /x/ in its import path.
+			return "golang.org/dl"
+		case "gddo":
+			// There is no golang.org/x/gddo vanity import path, and
+			// the canonical import path for gddo is on GitHub.
+			return "github.com/golang/gddo"
+		default:
+			// For brevity, use x/subrepo rather than golang.org/x/subrepo.
+			return "x/" + subrepo
+		}
+	case "code.googlesource.com":
+		switch p.Project() {
+		case "gocloud":
+			return "cloud.google.com/go"
+		case "google-api-go-client":
+			return "google.golang.org/api"
+		}
+	}
+	return p.ServerSlashProject()
 }
 
 // requires s.cMu be locked.

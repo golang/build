@@ -79,9 +79,9 @@ func main() {
 			hconf.VMImage = img
 		}
 	}
-	vmImageSummary := hconf.VMImage
+	vmImageSummary := fmt.Sprintf("%q", hconf.VMImage)
 	if hconf.IsContainer() {
-		vmImageSummary = fmt.Sprintf("cos-stable, running %v", hconf.ContainerImage)
+		vmImageSummary = fmt.Sprintf("%q, running container %q", hconf.ContainerVMImage(), hconf.ContainerImage)
 	}
 
 	env = buildenv.FromFlags()
@@ -96,7 +96,7 @@ func main() {
 
 	name := fmt.Sprintf("debug-temp-%d", time.Now().Unix())
 
-	log.Printf("Creating %s (with VM image %q)", name, vmImageSummary)
+	log.Printf("Creating %s (with VM image %s)", name, vmImageSummary)
 	bc, err := buildlet.StartNewVM(creds, env, name, *hostType, buildlet.VMOpts{
 		OnInstanceRequested: func() { log.Printf("instance requested") },
 		OnInstanceCreated: func() {

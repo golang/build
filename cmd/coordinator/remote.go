@@ -265,19 +265,6 @@ func remoteBuildletStatus() string {
 	return buf.String()
 }
 
-// httpRouter separates out HTTP traffic being proxied
-// to buildlets on behalf of remote clients from traffic
-// destined for the coordinator itself (the default).
-type httpRouter struct{}
-
-func (httpRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("X-Buildlet-Proxy") != "" {
-		requireBuildletProxyAuth(http.HandlerFunc(proxyBuildletHTTP)).ServeHTTP(w, r)
-	} else {
-		http.DefaultServeMux.ServeHTTP(w, r)
-	}
-}
-
 func proxyBuildletHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.TLS == nil {
 		http.Error(w, "https required", http.StatusBadRequest)
