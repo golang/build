@@ -1,10 +1,5 @@
 module golang.org/x/build/maintner/cmd/maintserve
 
-// TODO: Require a future pseudo-version of golang.org/x/build module
-//       where maintserve has been carved out.
-//       Can't do that now because that pseudo-version doesn't exist yet;
-//       it's being created in this very change.
-
 require (
 	dmitri.shuralyov.com/app/changes v0.0.0-20181114035150-5af16e21babb
 	dmitri.shuralyov.com/html/belt v0.0.0-20180602232347-f7d459c86be0 // indirect
@@ -42,6 +37,7 @@ require (
 	github.com/sourcegraph/annotate v0.0.0-20160123013949-f4cad6c6324d // indirect
 	github.com/sourcegraph/syntaxhighlight v0.0.0-20170531221838-bd320f5d308e // indirect
 	github.com/stretchr/testify v1.3.0 // indirect
+	golang.org/x/build v0.0.0-20190313234014-6d820572de7c
 	golang.org/x/sys v0.0.0-20190312061237-fead79001313 // indirect
 	golang.org/x/tools v0.0.0-20190313193421-dbad8e90c91b // indirect
 	sourcegraph.com/sourcegraph/go-diff v0.5.0 // indirect
