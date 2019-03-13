@@ -749,6 +749,10 @@ func (c *BuildConfig) ModulesEnv(repo string) (env []string) {
 		env = append(env, "GO_BUILDER_SET_GOPROXY=coordinator")
 	}
 	switch repo {
+	case "go":
+		if !c.OutboundNetworkAllowed() {
+			env = append(env, "GOPROXY=off")
+		}
 	case "oauth2", "build", "website":
 		env = append(env, "GO111MODULE=on")
 	}
@@ -842,6 +846,13 @@ func (c *BuildConfig) IsRace() bool {
 
 func (c *BuildConfig) IsLongTest() bool {
 	return strings.HasSuffix(c.Name, "-longtest")
+}
+
+// OutboundNetworkAllowed reports whether this builder should be
+// allowed to make outbound network requests. This is only enforced
+// on some builders. (Currently most Linux ones)
+func (c *BuildConfig) OutboundNetworkAllowed() bool {
+	return c.Name == "misc-vet-vetall" || c.IsLongTest()
 }
 
 func (c *BuildConfig) GoInstallRacePackages() []string {
