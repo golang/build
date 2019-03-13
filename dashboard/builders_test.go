@@ -320,6 +320,14 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-386-12_0", "go"), onlyPost},
 		{b("freebsd-386-12_0", "net"), onlyPost},
 
+		// AIX starts at Go 1.12
+		{b("aix-ppc64", "go"), onlyPost},
+		{b("aix-ppc64", "net"), onlyPost},
+		{b("aix-ppc64@go1.12", "go"), onlyPost},
+		{b("aix-ppc64@go1.12", "net"), onlyPost},
+		{b("aix-ppc64@go1.11", "go"), none},
+		{b("aix-ppc64@go1.11", "net"), none},
+
 		{b("linux-amd64-nocgo", "mobile"), none},
 
 		// The physical ARM Androids only runs "go":

@@ -965,11 +965,16 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 	}
 	// Don't build old branches.
 	const minGo1x = 11
-	if strings.HasPrefix(goBranch, "release-branch.go1") && !atLeastGo1(goBranch, minGo1x) {
-		return false
-	}
-	if strings.HasPrefix(branch, "release-branch.go1") && !atLeastGo1(branch, minGo1x) {
-		return false
+	for _, b := range []string{branch, goBranch} {
+		if bmaj, bmin, ok := version.ParseReleaseBranch(b); ok {
+			if bmaj != 1 || bmin < minGo1x {
+				return false
+			}
+			bmm := types.MajorMinor{bmaj, bmin}
+			if bmm.Less(c.MinimumGoVersion) {
+				return false
+			}
+		}
 	}
 
 	// Build dev.boringcrypto branches only on linux/amd64 and windows/386 (see golang.org/issue/26791).
@@ -2053,8 +2058,9 @@ func init() {
 		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
-		Name:     "aix-ppc64",
-		HostType: "host-aix-ppc64-osuosl",
+		Name:             "aix-ppc64",
+		HostType:         "host-aix-ppc64-osuosl",
+		MinimumGoVersion: types.MajorMinor{1, 12},
 		env: []string{
 			"PATH=/opt/freeware/bin:/usr/bin:/etc:/usr/sbin:/usr/ucb:/usr/bin/X11:/sbin:/usr/java7_64/jre/bin:/usr/java7_64/bin",
 		},
