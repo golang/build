@@ -1101,17 +1101,6 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		},
 	}
 
-	// GoCommit is non-empty for x/* repos (aka "subrepos"). It
-	// is the Go revision to use to build & test the x/* repo
-	// with. The first element is the master branch. We test the
-	// master branch against all the normal builders configured to
-	// do subrepos. Any GoCommit values past the first are for older
-	// release branches, but we use a limited subset of builders for those.
-	var goRev string
-	if len(work.GoCommit) > 0 {
-		goRev = work.GoCommit[0]
-	}
-
 	// Defensive check that the input is well-formed.
 	// Each GoCommit should have a GoBranch and a GoVersion.
 	// There should always be at least one GoVersion.
@@ -1126,6 +1115,19 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	if len(work.GoVersion) == 0 {
 		log.Print("WARNING: len(GoVersion) is zero, want at least one")
 		work.GoVersion = []*apipb.MajorMinor{{}}
+	}
+
+	// GoCommit is non-empty for x/* repos (aka "subrepos"). It
+	// is the Go revision to use to build & test the x/* repo
+	// with. The first element is the master branch. We test the
+	// master branch against all the normal builders configured to
+	// do subrepos. Any GoCommit values past the first are for older
+	// release branches, but we use a limited subset of builders for those.
+	var goRev string
+	for i, branch := range work.GoBranch {
+		if branch == work.Branch {
+			goRev = work.GoCommit[i]
+		}
 	}
 
 	addBuilderToSet := func(bs *buildStatus, brev buildgo.BuilderRev) {
@@ -1159,34 +1161,38 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		addBuilderToSet(bs, brev)
 	}
 
-	// linuxBuilder is the standard builder we run for when testing x/* repos against
-	// the past two Go releases.
-	linuxBuilder := dashboard.Builders["linux-amd64"]
+	// For subrepos on the "master" branch, test against prior releases of Go too.
+	if key.Project != "go" && key.Branch == "master" {
+		// linuxBuilder is the standard builder we run for when testing x/* repos against
+		// the past two Go releases.
+		linuxBuilder := dashboard.Builders["linux-amd64"]
 
-	// If there's more than one GoCommit, that means this is an x/* repo
-	// and we're testing against previous releases of Go.
-	for i, goRev := range work.GoCommit {
-		if i == 0 {
-			// Skip the i==0 element, which is handled above.
-			continue
+		// If there's more than one GoCommit, that means this is an x/* repo
+		// and we're testing against previous releases of Go.
+		for i, goRev := range work.GoCommit {
+			if i == 0 {
+				// Skip the i==0 element, which is handled above.
+				continue
+			}
+			branch := work.GoBranch[i]
+			if !linuxBuilder.BuildsRepoTryBot(key.Project, "master", branch) {
+				continue
+			}
+			goVersion := types.MajorMinor{int(work.GoVersion[i].Major), int(work.GoVersion[i].Minor)}
+			if goVersion.Less(linuxBuilder.MinimumGoVersion) {
+				continue
+			}
+			brev := tryKeyToBuilderRev(linuxBuilder.Name, key, goRev)
+			bs, err := newBuild(brev)
+			if err != nil {
+				log.Printf("can't create build for %q: %v", brev, err)
+				continue
+			}
+			bs.goBranch = branch
+			addBuilderToSet(bs, brev)
 		}
-		branch := work.GoBranch[i]
-		if !linuxBuilder.BuildsRepoTryBot(key.Project, "master", branch) {
-			continue
-		}
-		goVersion := types.MajorMinor{int(work.GoVersion[i].Major), int(work.GoVersion[i].Minor)}
-		if goVersion.Less(linuxBuilder.MinimumGoVersion) {
-			continue
-		}
-		brev := tryKeyToBuilderRev(linuxBuilder.Name, key, goRev)
-		bs, err := newBuild(brev)
-		if err != nil {
-			log.Printf("can't create build for %q: %v", brev, err)
-			continue
-		}
-		bs.goBranch = branch
-		addBuilderToSet(bs, brev)
 	}
+
 	return ts
 }
 
