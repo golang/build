@@ -67,6 +67,7 @@ func main() {
 	http.Handle("/svn/", svnHandler())
 	http.Handle("/fossil/", fossilHandler())
 	http.Handle("/bzr/", bzrHandler())
+	http.Handle("/insecure/", insecureRedirectHandler())
 
 	handler := logger(http.HandlerFunc(loadAndHandle))
 
