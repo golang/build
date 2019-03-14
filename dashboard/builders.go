@@ -993,21 +993,6 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 		}
 	}
 
-	if repo == "exp" {
-		if !strings.HasPrefix(c.Name, "android-") && c.Name != "linux-amd64" {
-			return false
-		}
-	}
-	if repo == "term" {
-		// no code yet in repo
-		return false
-	}
-	if repo == "perf" && c.Name == "linux-amd64-nocgo" {
-		// The "perf" repo requires sqlite, which
-		// requires cgo. Skip the no-cgo builder.
-		return false
-	}
-
 	if p := c.buildsRepo; p != nil {
 		return p(repo, branch, goBranch)
 	}
@@ -1017,7 +1002,13 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 	if !c.SplitMakeRun() {
 		return false
 	}
-	if repo == "mobile" {
+	switch repo {
+	case "go":
+		return true
+	case "term":
+		// no code yet in repo
+		return false
+	case "mobile":
 		// Mobile is opt-in.
 		return false
 	}
@@ -1161,9 +1152,8 @@ func defaultTrySet(extraProj ...string) func(proj, branch, goBranch string) bool
 				return true
 			}
 		}
-		// TODO: remove items from this set once these repos have go.mod files:
 		switch proj {
-		case "grpc-review", "exp", "mobile", "term":
+		case "grpc-review":
 			return false
 		}
 		return true
@@ -1386,6 +1376,16 @@ func init() {
 		HostType:  "host-linux-jessie",
 		MaxAtOnce: 1,
 		Notes:     "cgo disabled",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			switch repo {
+			case "perf":
+				// Requires sqlite, which requires cgo.
+				return false
+			case "mobile":
+				return false
+			}
+			return true
+		},
 		env: []string{
 			"CGO_ENABLED=0",
 			"GO_DISABLE_OUTBOUND_NETWORK=1",

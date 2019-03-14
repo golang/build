@@ -155,6 +155,19 @@ func TestTrybots(t *testing.T) {
 				"windows-amd64-2016",
 			},
 		},
+		{
+			repo:   "exp",
+			branch: "master",
+			want: []string{
+				"freebsd-amd64-12_0",
+				"linux-386",
+				"linux-amd64",
+				"linux-amd64-race",
+				"openbsd-amd64-64",
+				"windows-386-2008",
+				"windows-amd64-2016",
+			},
+		},
 	}
 	for i, tt := range tests {
 		if tt.branch == "" || tt.repo == "" {
@@ -398,6 +411,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-longtest", "net"), onlyPost},
 		{b("linux-amd64-longtest@go1.12", "go"), onlyPost},
 		{b("linux-amd64-longtest@go1.12", "net"), none},
+
+		// Experimental exp repo.
+		{b("linux-amd64", "exp"), both},
+		{b("windows-386-2008", "exp"), both},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {
