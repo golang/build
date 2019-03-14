@@ -38,6 +38,15 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-stretch": &HostConfig{
 		Notes:           "Debian Stretch",
 		ContainerImage:  "linux-x86-stretch:latest",
+		machineType:     "n1-standard-4", // 4 vCPUs, 15 GB mem
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:     "root",
+	},
+	"host-linux-stretch-morecpu": &HostConfig{
+		Notes:           "Debian Stretch, but on n1-highcpu-8",
+		ContainerImage:  "linux-x86-stretch:latest",
+		machineType:     "n1-highcpu-8", // 16 vCPUs, 14.4 GB mem
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
@@ -1498,7 +1507,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:      "linux-amd64-longtest",
-		HostType:  "host-linux-stretch",
+		HostType:  "host-linux-stretch-morecpu",
 		MaxAtOnce: 1,
 		Notes:     "Debian Stretch with go test -short=false",
 		buildsRepo: func(repo, branch, goBranch string) bool {
@@ -1507,9 +1516,7 @@ func init() {
 		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
 			"GO_TEST_SHORT=0",
-			// runtime takes ~190 seconds in long mode, which is over
-			// the 180 seconds default timeout.
-			"GO_TEST_TIMEOUT_SCALE=2",
+			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
 	})
 	addBuilder(BuildConfig{
