@@ -1678,17 +1678,27 @@ func init() {
 		ShouldRunDistTest: noTestDir,
 		MaxAtOnce:         1,
 	})
+	netBSDDistTestPolicy := func(distTest string, isTry bool) bool {
+		// Skip the test directory (slow, and adequately
+		// covered by other builders), and skip the "reboot"
+		// test, which takes more disk space on /tmp than the
+		// NetBSD image had as of 2019-03-13. (Issue 30839)
+		if strings.HasPrefix(distTest, "test:") || distTest == "reboot" {
+			return false
+		}
+		return true
+	}
 	addBuilder(BuildConfig{
 		Name:              "netbsd-amd64-8_0",
 		HostType:          "host-netbsd-amd64-8_0",
-		ShouldRunDistTest: noTestDir,
+		ShouldRunDistTest: netBSDDistTestPolicy,
 		MaxAtOnce:         1,
 		tryBot:            explicitTrySet("sys"),
 	})
 	addBuilder(BuildConfig{
 		Name:              "netbsd-386-8_0",
 		HostType:          "host-netbsd-386-8_0",
-		ShouldRunDistTest: noTestDir,
+		ShouldRunDistTest: netBSDDistTestPolicy,
 		MaxAtOnce:         1,
 		// This builder currently hangs in the “../test” phase of all.bash.
 		// (https://golang.org/issue/25206)
