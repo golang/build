@@ -21,14 +21,16 @@ compile:
 	GOOS=windows GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
 	GOOS=windows GOARCH=386 go install golang.org/x/build/cmd/buildlet
 	GOOS=freebsd GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
+	GOOS=netbsd GOARCH=386 go install golang.org/x/build/cmd/buildlet
 	GOOS=netbsd GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
+	GOOS=netbsd GOARCH=arm go install golang.org/x/build/cmd/buildlet
 	GOOS=openbsd GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
 	GOOS=openbsd GOARCH=386 go install golang.org/x/build/cmd/buildlet
 	GOOS=plan9 GOARCH=386 go install golang.org/x/build/cmd/buildlet
 	GOOS=solaris GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
 
 # buildlet.all is compiles & uploads all targets.
-buildlet.all: FORCE buildlet.darwin-amd64 buildlet.freebsd-amd64 buildlet.linux-amd64 buildlet.netbsd-amd64 buildlet.openbsd-amd64 buildlet.openbsd-386 buildlet.plan9-386 buildlet.windows-amd64 buildlet.windows-arm buildlet.linux-arm buildlet.linux-arm-arm5 buildlet.linux-arm64 buildlet.linux-mips buildlet.linux-mipsle buildlet.linux-mips64 buildlet.linux-mips64le buildlet.linux-ppc64 buildlet.linux-ppc64le buildlet.linux-s390x buildlet.solaris-amd64
+buildlet.all: FORCE buildlet.darwin-amd64 buildlet.freebsd-amd64 buildlet.linux-amd64 buildlet.netbsd-386 buildlet.netbsd-amd64 buildlet.netbsd-arm buildlet.openbsd-amd64 buildlet.openbsd-386 buildlet.plan9-386 buildlet.windows-amd64 buildlet.windows-arm buildlet.linux-arm buildlet.linux-arm-arm5 buildlet.linux-arm64 buildlet.linux-mips buildlet.linux-mipsle buildlet.linux-mips64 buildlet.linux-mips64le buildlet.linux-ppc64 buildlet.linux-ppc64le buildlet.linux-s390x buildlet.solaris-amd64
 	echo "done"
 
 buildlet.darwin-amd64: FORCE
@@ -48,6 +50,10 @@ buildlet.linux-amd64-static: FORCE
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false --static go-builder-data/$@
 
 buildlet.netbsd-amd64: FORCE
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+
+buildlet.netbsd-arm: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
 
