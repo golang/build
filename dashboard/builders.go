@@ -2059,9 +2059,10 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:         "plan9-arm",
-		HostType:     "host-plan9-arm-0intro",
-		SkipSnapshot: true,
+		Name:              "plan9-arm",
+		HostType:          "host-plan9-arm-0intro",
+		ShouldRunDistTest: noTestDir,
+		SkipSnapshot:      true,
 	})
 	addBuilder(BuildConfig{
 		Name:         "nacl-arm",
@@ -2070,9 +2071,10 @@ func init() {
 		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
-		Name:         "plan9-amd64-9front",
-		HostType:     "host-plan9-amd64-0intro",
-		SkipSnapshot: true,
+		Name:              "plan9-amd64-9front",
+		HostType:          "host-plan9-amd64-0intro",
+		ShouldRunDistTest: noTestDir,
+		SkipSnapshot:      true,
 	})
 	addBuilder(BuildConfig{
 		Name:             "aix-ppc64",
@@ -2120,16 +2122,21 @@ func addBuilder(c BuildConfig) {
 // fasterTrybots is a ShouldRunDistTest policy function.
 // It skips (returns false) the test/ directory tests for trybots.
 func fasterTrybots(distTest string, isTry bool) bool {
-	if isTry && strings.HasPrefix(distTest, "test:") {
-		return false // skip test
+	if isTry {
+		if strings.HasPrefix(distTest, "test:") ||
+			distTest == "reboot" {
+			return false // skip test
+		}
 	}
 	return true
 }
 
 // noTestDir is a ShouldRunDistTest policy function.
-// It skips (returns false) the test/ directory tests for all builds.
+// It skips (returns false) the test/ directory tests for all builds,
+// as well as the "reboot" test that tests that recompiling Go with
+// the just-built Go works.
 func noTestDir(distTest string, isTry bool) bool {
-	if strings.HasPrefix(distTest, "test:") {
+	if strings.HasPrefix(distTest, "test:") || distTest == "reboot" {
 		return false // skip test
 	}
 	return true
