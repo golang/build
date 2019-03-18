@@ -1821,6 +1821,7 @@ func init() {
 		Name:              "darwin-amd64-10_11",
 		HostType:          "host-darwin-10_11",
 		tryBot:            nil, // disabled until Macs fixed; https://golang.org/issue/23859
+		buildsRepo:        onlyGo,
 		ShouldRunDistTest: noTestDir,
 		numTryTestHelpers: 3,
 	})

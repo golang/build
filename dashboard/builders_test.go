@@ -415,6 +415,14 @@ func TestBuilderConfig(t *testing.T) {
 		// Experimental exp repo.
 		{b("linux-amd64", "exp"), both},
 		{b("windows-386-2008", "exp"), both},
+
+		// Only use latest macOS for subrepos, and only amd64:
+		{b("darwin-amd64-10_12", "net"), onlyPost},
+		{b("darwin-amd64-10_12@go1.11", "net"), onlyPost},
+		{b("darwin-amd64-10_11", "net"), none},
+		{b("darwin-amd64-10_11@go1.11", "net"), none},
+		{b("darwin-amd64-10_11@go1.12", "net"), none},
+		{b("darwin-386-10_11@go1.11", "net"), none},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {
