@@ -315,7 +315,7 @@ func main() {
 		if *mode == "dev" {
 			return
 		}
-		var handler http.Handler = httpRouter{}
+		var handler http.Handler = httpToHTTPSRedirector{}
 		if autocertManager != nil {
 			handler = autocertManager.HTTPHandler(handler)
 		}
@@ -367,6 +367,17 @@ func main() {
 			st.start()
 		}
 	}
+}
+
+// httpToHTTPSRedirector redirects all requests from http to https.
+type httpToHTTPSRedirector struct{}
+
+func (httpToHTTPSRedirector) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Connection", "close")
+	u := *req.URL
+	u.Scheme = "https"
+	u.Host = req.Host
+	http.Redirect(w, req, u.String(), http.StatusMovedPermanently)
 }
 
 // watcherProxy is the proxy which forwards from
