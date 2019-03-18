@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build linux
+// +build linux darwin
 
 // Code interacting with Google Compute Engine (GCE) and
 // a GCE implementation of the BuildletPool interface.
