@@ -8,6 +8,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"text/template"
 
@@ -15,15 +16,27 @@ import (
 )
 
 func handleBuilders(w http.ResponseWriter, r *http.Request) {
-	var buf bytes.Buffer
-	if err := buildersTmpl.Execute(&buf, struct {
+	data := struct {
 		Builders map[string]*dashboard.BuildConfig
 		Hosts    map[string]*dashboard.HostConfig
-	}{dashboard.Builders, dashboard.Hosts}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	}{dashboard.Builders, dashboard.Hosts}
+	if r.FormValue("mode") == "json" {
+		j, err := json.MarshalIndent(data, "", "\t")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(j)
+	} else {
+		var buf bytes.Buffer
+		if err := buildersTmpl.Execute(&buf, data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		buf.WriteTo(w)
 	}
-	buf.WriteTo(w)
 }
 
 var buildersTmpl = template.Must(template.New("builders").Parse(`

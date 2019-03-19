@@ -7,6 +7,7 @@
 package main
 
 import (
+	"bytes"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -196,5 +197,16 @@ func TestFindWork(t *testing.T) {
 	}()
 	for br := range c {
 		t.Logf("Got: %v", br)
+	}
+}
+
+func TestBuildersJSON(t *testing.T) {
+	rec := httptest.NewRecorder()
+	handleBuilders(rec, httptest.NewRequest("GET", "https://farmer.tld/builders?mode=json", nil))
+	res := rec.Result()
+	if res.Header.Get("Content-Type") != "application/json" || res.StatusCode != 200 {
+		var buf bytes.Buffer
+		res.Write(&buf)
+		t.Error(buf.String())
 	}
 }

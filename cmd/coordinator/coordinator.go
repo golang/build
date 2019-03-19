@@ -2213,36 +2213,12 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 		return
 	}
 	for _, test := range strings.Fields(buf.String()) {
-		if st.shouldSkipTest(test) {
+		if !st.conf.ShouldRunDistTest(test, st.isTry()) {
 			continue
 		}
 		names = append(names, test)
 	}
 	return names, nil, nil
-}
-
-// shouldSkipTest reports whether this test should be skipped.  We
-// only do this for slow builders running redundant tests. (That is,
-// tests which have identical behavior across different ports)
-func (st *buildStatus) shouldSkipTest(testName string) bool {
-	if inStaging && st.Name == "linux-arm" && false {
-		if strings.HasPrefix(testName, "go_test:") && testName < "go_test:runtime" {
-			return true
-		}
-	}
-	switch testName {
-	case "vet/all":
-		// Old vetall test name, before the sharding in CL 37572.
-		return true
-	case "api":
-		return st.isTry() && st.Name != "linux-amd64"
-	}
-	if st.conf.ShouldRunDistTest != nil {
-		if !st.conf.ShouldRunDistTest(testName, st.isTry()) {
-			return true
-		}
-	}
-	return false
 }
 
 // newTestSet returns a new testSet given the dist test names (strings from "go tool dist test -list")

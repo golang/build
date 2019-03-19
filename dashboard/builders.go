@@ -726,12 +726,10 @@ type BuildConfig struct {
 	// not run for that commit.
 	GoDeps []string
 
-	// ShouldRunDistTest optionally specifies a function which
-	// controls whether a test (a name from "go tool dist test
-	// -list") is run. The isTry value is true for trybot runs.
-	// A few general special cases are handled in
-	// cmd/coordinator's in buildStatus.shouldSkipTest.
-	ShouldRunDistTest func(distTestName string, isTry bool) bool
+	// shouldRunDistTest optionally specifies a function to
+	// override the BuildConfig.ShouldRunDistTest method's
+	// default behavior.
+	shouldRunDistTest func(distTest string, isTry bool) bool
 
 	// numTestHelpers is the number of _additional_ buildlets
 	// past the first one to help out with sharded tests.
@@ -953,6 +951,27 @@ func (c *BuildConfig) BuildsRepoPostSubmit(repo, branch, goBranch string) bool {
 // ("master", "release-branch.go1.12") as a trybot.
 func (c *BuildConfig) BuildsRepoTryBot(repo, branch, goBranch string) bool {
 	return c.tryBot != nil && c.tryBot(repo, branch, goBranch) && c.buildsRepoAtAll(repo, branch, goBranch)
+}
+
+// ShouldRunDistTest reports whether the named cmd/dist test should be
+// run for this build config. The isTry parameter is whether this is
+// for a trybot (pre-submit) run.
+//
+// In general, this returns true, unless a builder has configured it
+// otherwise. Certain portable, slow tests are only run on fast builders in
+// trybot mode.
+func (c *BuildConfig) ShouldRunDistTest(distTest string, isTry bool) bool {
+	// TODO: add a table of tests in builders_test.go.
+	if c.shouldRunDistTest != nil {
+		return c.shouldRunDistTest(distTest, isTry)
+	}
+	if distTest == "api" {
+		// This test is slow and has the same behavior
+		// everywhere, so only run it on our fastest buidler
+		// (linux-amd64) when in trybot mode.
+		return !isTry || c.Name == "linux-amd64"
+	}
+	return true
 }
 
 // buildsRepoAtAll reports whether we should do builds of the provided
@@ -1214,7 +1233,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return goBranch == "release-branch.go1.11" || goBranch == "release-branch.go1.12"
 		},
-		ShouldRunDistTest: fasterTrybots,
+		shouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
 		MaxAtOnce:         2,
 	})
@@ -1222,7 +1241,7 @@ func init() {
 		Name:              "freebsd-amd64-11_2",
 		HostType:          "host-freebsd-11_2",
 		tryBot:            explicitTrySet("sys"),
-		ShouldRunDistTest: fasterTrybots,
+		shouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
 		MaxAtOnce:         2,
 	})
@@ -1232,7 +1251,7 @@ func init() {
 		MinimumGoVersion: types.MajorMinor{1, 11},
 		tryBot:           defaultTrySet("sys"),
 
-		ShouldRunDistTest: fasterTrybots,
+		shouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
 		MaxAtOnce:         2,
 	})
@@ -1240,7 +1259,7 @@ func init() {
 		Name:              "freebsd-386-12_0",
 		HostType:          "host-freebsd-12_0",
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
-		ShouldRunDistTest: fasterTrybots,
+		shouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
 		MaxAtOnce:         2,
 	})
@@ -1270,7 +1289,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "freebsd-386-11_1",
 		HostType:          "host-freebsd-11_1",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return goBranch == "release-branch.go1.11" || goBranch == "release-branch.go1.12"
 		},
@@ -1280,7 +1299,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "freebsd-386-11_2",
 		HostType:          "host-freebsd-11_2",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		tryBot:            explicitTrySet("sys"),
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		MaxAtOnce:         2,
@@ -1288,7 +1307,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "linux-386",
 		HostType:          "host-linux-jessie",
-		ShouldRunDistTest: fasterTrybots,
+		shouldRunDistTest: fasterTrybots,
 		tryBot:            defaultTrySet(),
 		env: []string{
 			"GOARCH=386",
@@ -1450,7 +1469,7 @@ func init() {
 		HostType:          "host-linux-jessie",
 		tryBot:            defaultTrySet(),
 		MaxAtOnce:         1,
-		ShouldRunDistTest: fasterTrybots,
+		shouldRunDistTest: fasterTrybots,
 		numTestHelpers:    1,
 		numTryTestHelpers: 5,
 		env: []string{
@@ -1549,7 +1568,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return branch == "master" && goBranch == "master"
 		},
-		ShouldRunDistTest: func(distTest string, isTry bool) bool {
+		shouldRunDistTest: func(distTest string, isTry bool) bool {
 			if strings.Contains(distTest, "vendor/github.com/google/pprof") {
 				// Not worth it. And broken.
 				return false
@@ -1600,7 +1619,7 @@ func init() {
 				return branch == "master" && goBranch == "master"
 			}
 		},
-		ShouldRunDistTest: func(distTest string, isTry bool) bool {
+		shouldRunDistTest: func(distTest string, isTry bool) bool {
 			if isTry {
 				if strings.HasPrefix(distTest, "test:") {
 					return false
@@ -1630,7 +1649,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-60",
 		HostType:          "host-openbsd-amd64-60",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		tryOnly:           true, // disabled by default; Go 1.11+ don't support it anymore
 		tryBot:            nil,
 		MaxAtOnce:         1,
@@ -1640,7 +1659,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-386-60",
 		HostType:          "host-openbsd-386-60",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		tryOnly:           true, // disabled by default; Go 1.11+ don't support it anymore
 		tryBot:            nil,
 		MaxAtOnce:         1,
@@ -1655,7 +1674,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-386-62",
 		HostType:          "host-openbsd-386-62",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		MaxAtOnce:         1,
 		env: []string{
 			// cmd/go takes ~192 seconds on openbsd-386
@@ -1668,7 +1687,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-62",
 		HostType:          "host-openbsd-amd64-62",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		tryBot:            nil,
 		numTestHelpers:    0,
 		numTryTestHelpers: 5,
@@ -1678,7 +1697,7 @@ func init() {
 		Name:              "openbsd-amd64-64",
 		HostType:          "host-openbsd-amd64-64",
 		MinimumGoVersion:  types.MajorMinor{1, 11},
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		tryBot:            defaultTrySet(),
 		numTestHelpers:    0,
 		numTryTestHelpers: 5,
@@ -1688,7 +1707,7 @@ func init() {
 		Name:              "openbsd-386-64",
 		HostType:          "host-openbsd-386-64",
 		tryBot:            explicitTrySet("sys"),
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		MaxAtOnce:         1,
 	})
 	netBSDDistTestPolicy := func(distTest string, isTry bool) bool {
@@ -1704,14 +1723,14 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "netbsd-amd64-8_0",
 		HostType:          "host-netbsd-amd64-8_0",
-		ShouldRunDistTest: netBSDDistTestPolicy,
+		shouldRunDistTest: netBSDDistTestPolicy,
 		MaxAtOnce:         1,
 		tryBot:            explicitTrySet("sys"),
 	})
 	addBuilder(BuildConfig{
 		Name:              "netbsd-386-8_0",
 		HostType:          "host-netbsd-386-8_0",
-		ShouldRunDistTest: netBSDDistTestPolicy,
+		shouldRunDistTest: netBSDDistTestPolicy,
 		MaxAtOnce:         1,
 		// This builder currently hangs in the “../test” phase of all.bash.
 		// (https://golang.org/issue/25206)
@@ -1721,7 +1740,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "netbsd-arm-bsiegert",
 		HostType:          "host-netbsd-arm-bsiegert",
-		ShouldRunDistTest: netBSDDistTestPolicy,
+		shouldRunDistTest: netBSDDistTestPolicy,
 		MaxAtOnce:         1,
 		tryBot:            nil,
 		env: []string{
@@ -1734,7 +1753,7 @@ func init() {
 		HostType:       "host-plan9-386-gce",
 		numTestHelpers: 1,
 		MaxAtOnce:      2,
-		ShouldRunDistTest: func(distTestName string, isTry bool) bool {
+		shouldRunDistTest: func(distTestName string, isTry bool) bool {
 			switch distTestName {
 			case "api",
 				"go_test:cmd/go": // takes over 20 minutes without working SMP
@@ -1746,7 +1765,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2008",
 		HostType:          "host-windows-amd64-2008",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		buildsRepo:        onlyGo,
 		env: []string{
 			"GOARCH=amd64",
@@ -1761,7 +1780,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "windows-386-2008",
 		HostType:          "host-windows-amd64-2008",
-		ShouldRunDistTest: fasterTrybots,
+		shouldRunDistTest: fasterTrybots,
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		MaxAtOnce:         2,
 		tryBot:            defaultTrySet(),
@@ -1770,7 +1789,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2012",
 		HostType:          "host-windows-amd64-2012",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		buildsRepo:        onlyGo,
 		env: []string{
 			"GOARCH=amd64",
@@ -1786,7 +1805,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2016",
 		HostType:          "host-windows-amd64-2016",
-		ShouldRunDistTest: fasterTrybots,
+		shouldRunDistTest: fasterTrybots,
 		env: []string{
 			"GOARCH=amd64",
 			"GOHOSTARCH=amd64",
@@ -1824,14 +1843,14 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_8",
 		HostType:          "host-darwin-10_8",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		tryOnly:           true, // but not in trybot set, so effectively disabled
 		tryBot:            nil,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_10",
 		HostType:          "host-darwin-10_10",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		buildsRepo:        onlyGo,
 	})
 	addBuilder(BuildConfig{
@@ -1839,13 +1858,13 @@ func init() {
 		HostType:          "host-darwin-10_11",
 		tryBot:            nil, // disabled until Macs fixed; https://golang.org/issue/23859
 		buildsRepo:        onlyGo,
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		numTryTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-386-10_11",
 		HostType:          "host-darwin-10_11",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		buildsRepo:        onlyGo,
 		MaxAtOnce:         1,
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
@@ -1853,12 +1872,12 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_12",
 		HostType:          "host-darwin-10_12",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-race",
 		HostType:          "host-darwin-10_12",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		buildsRepo:        onlyGo,
 	})
 	addBuilder(BuildConfig{
@@ -2054,13 +2073,13 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "dragonfly-amd64",
 		HostType:          "host-dragonfly-amd64-tdfbsd",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		SkipSnapshot:      true,
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-arm-paulzhol",
 		HostType:          "host-freebsd-arm-paulzhol",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		SkipSnapshot:      true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// This was a fragile little machine with limited memory.
@@ -2080,7 +2099,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "plan9-arm",
 		HostType:          "host-plan9-arm-0intro",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		SkipSnapshot:      true,
 	})
 	addBuilder(BuildConfig{
@@ -2092,7 +2111,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "plan9-amd64-9front",
 		HostType:          "host-plan9-amd64-0intro",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		SkipSnapshot:      true,
 	})
 	addBuilder(BuildConfig{
@@ -2138,7 +2157,7 @@ func addBuilder(c BuildConfig) {
 	Builders[c.Name] = &c
 }
 
-// fasterTrybots is a ShouldRunDistTest policy function.
+// fasterTrybots is a shouldRunDistTest policy function.
 // It skips (returns false) the test/ directory tests for trybots.
 func fasterTrybots(distTest string, isTry bool) bool {
 	if isTry {
@@ -2150,7 +2169,7 @@ func fasterTrybots(distTest string, isTry bool) bool {
 	return true
 }
 
-// noTestDir is a ShouldRunDistTest policy function.
+// noTestDir is a shouldRunDistTest policy function.
 // It skips (returns false) the test/ directory tests for all builds,
 // as well as the "reboot" test that tests that recompiling Go with
 // the just-built Go works.
