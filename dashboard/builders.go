@@ -250,6 +250,12 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-386-0b3b511.tar.gz",
 		SSHUsername:        "root",
 	},
+	"host-netbsd-arm-bsiegert": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   1,
+		env:         []string{"GOROOT_BOOTSTRAP=/usr/pkg/go112"},
+		OwnerGithub: "bsiegert",
+	},
 	"host-dragonfly-amd64-tdfbsd": &HostConfig{
 		IsReverse:      true,
 		ExpectNum:      1,
@@ -1711,6 +1717,17 @@ func init() {
 		// (https://golang.org/issue/25206)
 		tryOnly: true, // Disable regular builds.
 		tryBot:  nil,  // Disable trybots.
+	})
+	addBuilder(BuildConfig{
+		Name:              "netbsd-arm-bsiegert",
+		HostType:          "host-netbsd-arm-bsiegert",
+		ShouldRunDistTest: netBSDDistTestPolicy,
+		MaxAtOnce:         1,
+		tryBot:            nil,
+		env: []string{
+			// The machine is slow.
+			"GO_TEST_TIMEOUT_SCALE=10",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-386",
