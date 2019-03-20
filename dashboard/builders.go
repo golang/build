@@ -2058,9 +2058,10 @@ func init() {
 		SkipSnapshot:      true,
 	})
 	addBuilder(BuildConfig{
-		Name:         "freebsd-arm-paulzhol",
-		HostType:     "host-freebsd-arm-paulzhol",
-		SkipSnapshot: true,
+		Name:              "freebsd-arm-paulzhol",
+		HostType:          "host-freebsd-arm-paulzhol",
+		ShouldRunDistTest: noTestDir,
+		SkipSnapshot:      true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// This was a fragile little machine with limited memory.
 			// Only run a few of the core subrepos for now while
