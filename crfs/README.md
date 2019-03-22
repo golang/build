@@ -2,6 +2,12 @@
 
 Discussion: https://github.com/golang/go/issues/30829
 
+# Moved
+
+This project has moved to https://github.com/google/crfs
+
+It's more widely applicable than just for use by Go's build system.
+
 ## Overview
 
 **CRFS** is a read-only FUSE filesystem that lets you mount a
