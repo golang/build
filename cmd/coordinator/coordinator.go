@@ -2225,23 +2225,10 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 // and benchmark items.
 func (st *buildStatus) newTestSet(testStats *buildstats.TestStats, distTestNames []string, benchmarks []*buildgo.BenchmarkItem) (*testSet, error) {
 	set := &testSet{
-		st:         st,
-		needsXRepo: map[string]string{},
-		testStats:  testStats,
+		st:        st,
+		testStats: testStats,
 	}
 	for _, name := range distTestNames {
-		// The misc-vetall builder's "vet/*" tests are special: they require golang.org/x/tools
-		// in $GOPATH. So figure out the latest master HEAD git rev for x/tools so we can
-		// populate it later across all sharded builders at the same revision.
-		if strings.HasPrefix(name, "vet/") && set.needsXRepo["tools"] == "" {
-			// TODO: we'll probably need to make this handle branches later. Or maybe we
-			// should just disable misc-vetall on non-master branches.
-			rev, err := getRepoHead("tools")
-			if err != nil {
-				return nil, fmt.Errorf("failed to get master git rev for x/tools: %v", err)
-			}
-			set.needsXRepo["tools"] = rev
-		}
 		set.items = append(set.items, &testItem{
 			set:      set,
 			name:     name,
@@ -2553,9 +2540,6 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	if err != nil {
 		return nil, fmt.Errorf("error discovering workdir for main buildlet, %s: %v", st.bc.Name(), err)
 	}
-	if err := set.fetchGOPATHDeps(st, st.bc); err != nil {
-		return nil, err
-	}
 
 	mainBuildletGoroot := st.conf.FilePathJoin(workDir, "go")
 	mainBuildletGopath := st.conf.FilePathJoin(workDir, "gopath")
@@ -2604,10 +2588,6 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 				workDir, err := bc.WorkDir()
 				if err != nil {
 					log.Printf("error discovering workdir for helper %s: %v", bc.Name(), err)
-					return
-				}
-				if err := set.fetchGOPATHDeps(st, bc); err != nil {
-					log.Printf("error populating GOPATH for helper %s: %v", bc.Name(), err)
 					return
 				}
 				st.LogEventTime("test_helper_set_up", bc.Name())
@@ -2899,22 +2879,9 @@ type testSet struct {
 	items     []*testItem
 	testStats *buildstats.TestStats
 
-	// needsXRepo is the set of x/$REPO repos needed in $GOPATH
-	// and which git rev that repo should be fetched at.
-	needsXRepo map[string]string // "net" => "88d92db4c548972d942ac2a3531a8a9a34c82ca6"
-
 	mu           sync.Mutex
 	inOrder      [][]*testItem
 	biggestFirst [][]*testItem
-}
-
-func (s *testSet) fetchGOPATHDeps(sl spanlog.Logger, bc *buildlet.Client) error {
-	for repo, rev := range s.needsXRepo {
-		if err := buildgo.FetchSubrepo(sl, bc, repo, rev); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // cancelAll cancels all pending tests.
