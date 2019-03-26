@@ -842,7 +842,8 @@ func (c *BuildConfig) hostConf() *HostConfig {
 	panic(fmt.Sprintf("missing buildlet config for buildlet %q", c.Name))
 }
 
-// BuildletBinaryURL returns the public URL of this builder's buildlet.
+// GoBootstrapURL returns the URL of a built Go 1.4+ tar.gz for the
+// build configuration type c, or empty string if there isn't one.
 func (c *BuildConfig) GoBootstrapURL(e *buildenv.Environment) string {
 	return strings.Replace(c.hostConf().goBootstrapURLTmpl, "$BUCKET", e.BuildletBucket, 1)
 }
@@ -935,7 +936,7 @@ func (c *BuildConfig) IsTryOnly() bool { return c.tryOnly }
 
 func (c *BuildConfig) NeedsGoProxy() bool { return c.needsGoProxy }
 
-// BuildsRepoTryBot reports whether the build configuration type c
+// BuildsRepoPostSubmit reports whether the build configuration type c
 // should build the given repo ("go", "net", etc) and branch
 // ("master", "release-branch.go1.12") as a post-submit build
 // that shows up on https://build.golang.org/.
