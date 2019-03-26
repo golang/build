@@ -47,15 +47,25 @@ func usage() {
 }
 
 var (
-	flagStatus = flag.Bool("status", false, "print status only")
-	flagAuto   = flag.Bool("auto", false, "Automatically create & destroy as needed, reacting to https://farmer.golang.org/status/reverse.json status.")
-	flagListen = flag.String("listen", ":8713", "HTTP status port; used by auto mode only")
-	flagNuke   = flag.Bool("destroy-all", false, "immediately destroy all running Mac VMs")
+	flagStatus   = flag.Bool("status", false, "print status only")
+	flagAuto     = flag.Bool("auto", false, "Automatically create & destroy as needed, reacting to https://farmer.golang.org/status/reverse.json status.")
+	flagListen   = flag.String("listen", ":8713", "HTTP status port; used by auto mode only")
+	flagNuke     = flag.Bool("destroy-all", false, "immediately destroy all running Mac VMs")
+	flagBaseDisk = flag.Int("base-disk", 0, "debug mode: if non-zero, print base disk of macOS 10.<value> VM and exit")
 )
 
 func main() {
 	flag.Parse()
 	numArg := flag.NArg()
+	ctx := context.Background()
+	if *flagBaseDisk != 0 {
+		baseDisk, err := findBaseDisk(ctx, *flagBaseDisk)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(baseDisk)
+		return
+	}
 	if *flagStatus {
 		numArg++
 	}
@@ -72,7 +82,6 @@ func main() {
 		autoLoop()
 		return
 	}
-	ctx := context.Background()
 	if *flagNuke {
 		state, err := getState(ctx)
 		if err != nil {
@@ -201,24 +210,41 @@ func (st *State) CreateMac(ctx context.Context, minor int) (slotName string, err
 		guestType = "darwin12_64Guest"
 	case 9:
 		guestType = "darwin13_64Guest"
-	case 10, 11, 12:
+	case 10:
 		guestType = "darwin14_64Guest"
+	case 11:
+		guestType = "darwin15_64Guest"
+	case 12:
+		guestType = "darwin16_64Guest"
+	case 13:
+		// High Sierra. Requires vSphere 6.7.
+		// https://www.virtuallyghetto.com/2018/04/new-vsphere-6-7-apis-worth-checking-out.html
+		guestType = "darwin17_64Guest"
+	case 14:
+		// Mojave. Requires vSphere 6.7.
+		// https://www.virtuallyghetto.com/2018/04/new-vsphere-6-7-apis-worth-checking-out.html
+		guestType = "darwin18_64Guest"
 	default:
 		return "", fmt.Errorf("unsupported makemac minor OS X version %d", minor)
 	}
 
 	builderType := fmt.Sprintf("darwin-amd64-10_%d", minor)
+
+	// Up to 10.12 we used the deprecated buildlet --reverse mode, instead of --reverse-type.
+	// Starting with 10.14 (and 10.13 if we ever make a High Sierra image), we're switching
+	// to the non-deprecated mode.
+	if minor >= 13 {
+		builderType = fmt.Sprintf("host-darwin-10_%d", minor)
+	}
+
 	key, err := ioutil.ReadFile(filepath.Join(os.Getenv("HOME"), "keys", builderType))
 	if err != nil {
 		return "", err
 	}
 
-	// Find the top-level datastore directory hosting the vmdk COW disk for
-	// the linked clone. This is usually named "osx_9_frozen", but may be named
-	// with a "_1", "_2", etc suffix. Search for it.
-	netAppDir, err := findFrozenDir(ctx, minor)
+	baseDisk, err := findBaseDisk(ctx, minor)
 	if err != nil {
-		return "", fmt.Errorf("failed to find osx_%d_frozen base directory: %v", minor, err)
+		return "", fmt.Errorf("failed to find osx_%d_frozen base disk: %v", minor, err)
 	}
 
 	hostNum, hostWhich, err := st.pickHost()
@@ -270,7 +296,7 @@ func (st *State) CreateMac(ctx context.Context, minor int) (slotName string, err
 		"-link=true",
 		"-persist=false",
 		"-ds=Pure1-1",
-		"-disk", fmt.Sprintf("%s/osx_%d_frozen.vmdk", netAppDir, minor),
+		"-disk", baseDisk,
 	); err != nil {
 		return "", err
 	}
@@ -437,29 +463,62 @@ func govcJSONDecode(ctx context.Context, dst interface{}, args ...string) error 
 		return err
 	}
 	err = json.NewDecoder(stdout).Decode(dst)
-	cmd.Process.Kill() // usually unnecessary
 	if werr := cmd.Wait(); werr != nil && err == nil {
 		err = werr
 	}
 	return err
 }
 
-// findFrozenDir returns the name of the top-level directory on the
-// Pure1-1 shared datastore containing a directory starting with
-// "osx_<minor>_frozen". It might be that just that, or have a suffix
-// like "_1" or "_2".
-func findFrozenDir(ctx context.Context, minor int) (string, error) {
-	out, err := exec.CommandContext(ctx, "govc", "datastore.ls", "-ds=Pure1-1").Output()
+// findBaseDisk returns the path of the vmdk of the most recent
+// snapshot of the osx_$(minor)_frozen VM.
+func findBaseDisk(ctx context.Context, minor int) (string, error) {
+	vmName := fmt.Sprintf("osx_%d_frozen", minor)
+	out, err := exec.CommandContext(ctx, "govc", "vm.info", "-json", vmName).Output()
 	if err != nil {
 		return "", err
 	}
-	prefix := fmt.Sprintf("osx_%d_frozen", minor)
-	for _, dir := range strings.Fields(string(out)) {
-		if strings.HasPrefix(dir, prefix) {
-			return dir, nil
+	var ret struct {
+		VirtualMachines []struct {
+			Layout struct {
+				Snapshot []struct {
+					SnapshotFile []string
+				}
+			}
 		}
 	}
-	return "", os.ErrNotExist
+	if err := json.Unmarshal(out, &ret); err != nil {
+		return "", fmt.Errorf("failed to parse vm.info JSON to find base disk: %v", err)
+	}
+	if n := len(ret.VirtualMachines); n != 1 {
+		if n == 0 {
+			return "", fmt.Errorf("VM %s not found", vmName)
+		}
+		return "", fmt.Errorf("len(ret.VirtualMachines) = %d; want 1 in JSON to find base disk: %v", n, err)
+	}
+	vm := ret.VirtualMachines[0]
+	if len(vm.Layout.Snapshot) < 1 {
+		return "", fmt.Errorf("VM %s does not have any snapshots. Needs at least one.", vmName)
+	}
+	ss := vm.Layout.Snapshot[len(vm.Layout.Snapshot)-1] // most recent snapshot is last in list
+
+	// Now find the first vmdk file, without its [datastore] prefix. The files are listed like:
+	/*
+	   "SnapshotFile": [
+	     "[Pure1-1] osx_14_frozen/osx_14_frozen-Snapshot2.vmsn",
+	     "[Pure1-1] osx_14_frozen/osx_14_frozen_15.vmdk",
+	     "[Pure1-1] osx_14_frozen/osx_14_frozen_15-000001.vmdk"
+	   ]
+	*/
+	for _, f := range ss.SnapshotFile {
+		if strings.HasSuffix(f, ".vmdk") {
+			i := strings.Index(f, "] ")
+			if i == -1 {
+				return "", fmt.Errorf("unexpected vmdk line %q in SnapshotFile", f)
+			}
+			return f[i+2:], nil
+		}
+	}
+	return "", fmt.Errorf("no VMDK found in snapshot for %v", vmName)
 }
 
 const autoAdjustTimeout = 5 * time.Minute
@@ -472,33 +531,10 @@ var status struct {
 }
 
 func init() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		status.Lock()
-		defer status.Unlock()
-		w.Header().Set("Content-Type", "application/json")
-
-		// Locking the lastState shouldn't matter since we
-		// currently only set status.lastState once the
-		// *Status is no longer in use, but lock it anyway, in
-		// case usage changes in the future.
-		if st := status.lastState; st != nil {
-			st.mu.Lock()
-			defer st.mu.Unlock()
-		}
-
-		// TODO: probably more status, as needed.
-		res := &struct {
-			LastCheck string
-			LastLog   string
-			LastState *State
-		}{
-			LastCheck: status.lastCheck.UTC().Format(time.RFC3339),
-			LastLog:   status.lastLog,
-			LastState: status.lastState,
-		}
-		j, _ := json.MarshalIndent(res, "", "\t")
-		w.Write(j)
-	})
+	http.HandleFunc("/stage0/", handleStage0)
+	http.HandleFunc("/buildlet.darwin-amd64", handleBuildlet)
+	http.Handle("/", onlyAtRoot{http.HandlerFunc(handleStatus)}) // legacy status location
+	http.HandleFunc("/status", handleStatus)
 }
 
 func dedupLogf(format string, args ...interface{}) {
@@ -658,4 +694,132 @@ func wantedMacVersionNext(st *State, rstat *types.ReverseBuilderStatus) int {
 		}
 	}
 	return 0
+}
+
+func handleStatus(w http.ResponseWriter, r *http.Request) {
+	status.Lock()
+	defer status.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+
+	// Locking the lastState shouldn't matter since we
+	// currently only set status.lastState once the
+	// *Status is no longer in use, but lock it anyway, in
+	// case usage changes in the future.
+	if st := status.lastState; st != nil {
+		st.mu.Lock()
+		defer st.mu.Unlock()
+	}
+
+	// TODO: probably more status, as needed.
+	res := &struct {
+		LastCheck string
+		LastLog   string
+		LastState *State
+	}{
+		LastCheck: status.lastCheck.UTC().Format(time.RFC3339),
+		LastLog:   status.lastLog,
+		LastState: status.lastState,
+	}
+	j, _ := json.MarshalIndent(res, "", "\t")
+	w.Write(j)
+}
+
+// handleStage0 serves the shell script for buildlets to run on boot, based
+// on their macOS version.
+//
+// Starting with the macOS 10.14 (Mojave) image, their baked-in stage0.sh
+// script does:
+//
+//    while true; do (curl http://10.50.0.2:8713/stage0/$(sw_vers -productVersion)| sh); sleep 5; done
+func handleStage0(w http.ResponseWriter, r *http.Request) {
+	// ver will be like "10.14.4"
+	// Nothing currently uses this, but it might be useful in the future.
+	ver := strings.TrimPrefix(r.RequestURI, "/stage0/")
+	_ = ver
+
+	fmt.Fprintf(w, "set -e\nset -x\n")
+	fmt.Fprintf(w, "export GO_BUILDER_ENV=macstadium_vm\n")
+	fmt.Fprintf(w, "curl -o buildlet http://10.50.0.2:8713/buildlet.darwin-amd64\n")
+	fmt.Fprintf(w, "chmod +x buildlet; ./buildlet")
+}
+
+func handleBuildlet(w http.ResponseWriter, r *http.Request) {
+	bin, err := getLatestMacBuildlet(r.Context())
+	if err != nil {
+		log.Printf("error getting buildlet from GCS: %v", err)
+		http.Error(w, "error getting buildlet from GCS", 500)
+	}
+	w.Header().Set("Content-Length", fmt.Sprint(len(bin)))
+	w.Write(bin)
+}
+
+// buildlet binary caching by its last seen ETag from HEAD responses
+var (
+	buildletMu   sync.Mutex
+	lastEtag     string
+	lastBuildlet []byte // last buildlet binary for lastEtag
+)
+
+func getLatestMacBuildlet(ctx context.Context) (bin []byte, err error) {
+	req, _ := http.NewRequest("HEAD", "https://storage.googleapis.com/go-builder-data/buildlet.darwin-amd64", nil)
+	req = req.WithContext(ctx)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("%s from HEAD to %s", res.Status, req.URL)
+	}
+	etag := res.Header.Get("Etag")
+	if etag == "" {
+		return nil, fmt.Errorf("HEAD of %s lacked ETag", req.URL)
+	}
+
+	buildletMu.Lock()
+	if etag == lastEtag {
+		bin = lastBuildlet
+		log.Printf("served cached buildlet of %s", etag)
+		buildletMu.Unlock()
+		return bin, nil
+	}
+	buildletMu.Unlock()
+
+	log.Printf("fetching buildlet from GCS...")
+	req, _ = http.NewRequest("GET", "https://storage.googleapis.com/go-builder-data/buildlet.darwin-amd64", nil)
+	req = req.WithContext(ctx)
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("%s from GET to %s", res.Status, req.URL)
+	}
+	etag = res.Header.Get("Etag")
+	log.Printf("fetched buildlet from GCS with etag %s", etag)
+	if etag == "" {
+		return nil, fmt.Errorf("GET of %s lacked ETag", req.URL)
+	}
+	slurp, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	buildletMu.Lock()
+	defer buildletMu.Unlock()
+	lastEtag = etag
+	lastBuildlet = slurp
+	return lastBuildlet, nil
+}
+
+// onlyAtRoot is an http.Handler wrapper that enforces that it's
+// called at /, else it serves a 404.
+type onlyAtRoot struct{ h http.Handler }
+
+func (h onlyAtRoot) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	h.h.ServeHTTP(w, r)
 }

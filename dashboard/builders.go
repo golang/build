@@ -353,7 +353,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_10": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 1,
+		ExpectNum: 3,
 		Notes:     "MacStadium OS X 10.10 VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
@@ -364,7 +364,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_11": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 17,
+		ExpectNum: 7,
 		Notes:     "MacStadium OS X 10.11 VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
@@ -375,12 +375,22 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_12": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 2,
+		ExpectNum: 3,
 		Notes:     "MacStadium OS X 10.12 VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
 		},
 		ReverseAliases:  []string{"darwin-amd64-10_12"},
+		SSHUsername:     "gopher",
+		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
+	},
+	"host-darwin-10_14": &HostConfig{
+		IsReverse: true,
+		ExpectNum: 7,
+		Notes:     "MacStadium macOS Mojave (10.14) VM under VMWare ESXi",
+		env: []string{
+			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.12.1
+		},
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
 	},
@@ -1202,10 +1212,10 @@ func explicitTrySet(projs ...string) func(proj, branch, goBranch string) bool {
 
 func init() {
 	addBuilder(BuildConfig{
-		Name:      "freebsd-amd64-gce93",
-		HostType:  "host-freebsd-93-gce",
-		tryOnly:   true, // don't run regular build...
-		MaxAtOnce: 2,
+		Name:       "freebsd-amd64-gce93",
+		HostType:   "host-freebsd-93-gce",
+		buildsRepo: disabledBuilder,
+		MaxAtOnce:  2,
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-10_3",
@@ -1340,11 +1350,10 @@ func init() {
 		RunBench:          true,
 	})
 	addBuilder(BuildConfig{
-		Name:      "linux-amd64-vmx",
-		HostType:  "host-linux-stretch-vmx",
-		MaxAtOnce: 1,
-		tryOnly:   true, // don't run regular build
-		tryBot:    nil,  // and don't run trybots (only gomote)
+		Name:       "linux-amd64-vmx",
+		HostType:   "host-linux-stretch-vmx",
+		MaxAtOnce:  1,
+		buildsRepo: disabledBuilder,
 	})
 
 	const testAlpine = false // Issue 22689 (hide all red builders), Issue 19938 (get Alpine passing)
@@ -1653,8 +1662,7 @@ func init() {
 		Name:              "openbsd-amd64-60",
 		HostType:          "host-openbsd-amd64-60",
 		shouldRunDistTest: noTestDir,
-		tryOnly:           true, // disabled by default; Go 1.11+ don't support it anymore
-		tryBot:            nil,
+		buildsRepo:        disabledBuilder,
 		MaxAtOnce:         1,
 		numTestHelpers:    2,
 		numTryTestHelpers: 5,
@@ -1663,8 +1671,7 @@ func init() {
 		Name:              "openbsd-386-60",
 		HostType:          "host-openbsd-386-60",
 		shouldRunDistTest: noTestDir,
-		tryOnly:           true, // disabled by default; Go 1.11+ don't support it anymore
-		tryBot:            nil,
+		buildsRepo:        disabledBuilder,
 		MaxAtOnce:         1,
 		env: []string{
 			// cmd/go takes ~192 seconds on openbsd-386
@@ -1737,8 +1744,7 @@ func init() {
 		MaxAtOnce:         1,
 		// This builder currently hangs in the “../test” phase of all.bash.
 		// (https://golang.org/issue/25206)
-		tryOnly: true, // Disable regular builds.
-		tryBot:  nil,  // Disable trybots.
+		buildsRepo: disabledBuilder,
 	})
 	addBuilder(BuildConfig{
 		Name:              "netbsd-arm-bsiegert",
@@ -1847,14 +1853,18 @@ func init() {
 		Name:              "darwin-amd64-10_8",
 		HostType:          "host-darwin-10_8",
 		shouldRunDistTest: noTestDir,
-		tryOnly:           true, // but not in trybot set, so effectively disabled
-		tryBot:            nil,
+		buildsRepo:        disabledBuilder,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_10",
 		HostType:          "host-darwin-10_10",
 		shouldRunDistTest: noTestDir,
-		buildsRepo:        onlyGo,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// https://tip.golang.org/doc/go1.12 says:
+			// "Go 1.12 is the last release that will run on macOS 10.10 Yosemite."
+			major, minor, ok := version.ParseReleaseBranch(branch)
+			return repo == "go" && ok && major == 1 && minor <= 12
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_11",
@@ -1875,6 +1885,11 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_12",
 		HostType:          "host-darwin-10_12",
+		shouldRunDistTest: noTestDir,
+	})
+	addBuilder(BuildConfig{
+		Name:              "darwin-amd64-10_14",
+		HostType:          "host-darwin-10_14",
 		shouldRunDistTest: noTestDir,
 	})
 	addBuilder(BuildConfig{
@@ -2212,3 +2227,6 @@ func atLeastGo1(branch string, min int) bool {
 
 // onlyGo is a common buildsRepo policy value that only builds the main "go" repo.
 func onlyGo(repo, branch, goBranch string) bool { return repo == "go" }
+
+// disabledBuilder is a buildsRepo policy function that always return false.
+func disabledBuilder(repo, branch, goBranch string) bool { return false }

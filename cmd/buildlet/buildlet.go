@@ -1666,7 +1666,11 @@ func configureMacStadium() {
 		log.Fatalf("unsupported sw_vers version %q", version)
 	}
 	major, minor := m[1], m[2] // "10", "12"
-	*reverse = "darwin-amd64-" + major + "_" + minor
+	if m, _ := strconv.Atoi(minor); m >= 13 {
+		*reverseType = "host-darwin-10_" + minor
+	} else {
+		*reverse = "darwin-amd64-" + major + "_" + minor
+	}
 	*coordinator = "farmer.golang.org:443"
 
 	// guestName is set by cmd/makemac to something like

@@ -426,6 +426,16 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-10_11@go1.11", "net"), none},
 		{b("darwin-amd64-10_11@go1.12", "net"), none},
 		{b("darwin-386-10_11@go1.11", "net"), none},
+
+		{b("darwin-amd64-10_14", "go"), onlyPost},
+		{b("darwin-amd64-10_12", "go"), onlyPost},
+		{b("darwin-amd64-10_11", "go"), onlyPost},
+		{b("darwin-amd64-10_10", "go"), none},
+		{b("darwin-amd64-10_10@go1.12", "go"), onlyPost},
+		{b("darwin-amd64-10_10@go1.11", "go"), onlyPost},
+		{b("darwin-386-10_11", "go"), onlyPost},
+		{b("darwin-386-10_11@go1.12", "go"), onlyPost},
+		{b("darwin-386-10_11@go1.11", "go"), onlyPost},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {
