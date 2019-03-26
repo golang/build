@@ -1357,11 +1357,13 @@ func init() {
 	// Add the -vetall builder. The builder name suffix "-vetall" is recognized by cmd/dist/test.go
 	// to only run the "go vet std cmd" test and no others.
 	addBuilder(BuildConfig{
-		Name:       "misc-vet-vetall",
-		HostType:   "host-linux-jessie",
-		Notes:      "Runs vet over the standard library.",
-		buildsRepo: onlyGo,
-		tryBot:     defaultTrySet(),
+		Name:     "misc-vet-vetall",
+		HostType: "host-linux-jessie",
+		Notes:    "Runs vet over the standard library.",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "go" && branch == "master"
+		},
+		tryBot: defaultTrySet(),
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},

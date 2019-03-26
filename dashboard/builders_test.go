@@ -122,7 +122,6 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-openbsd",
 				"misc-compile-plan9",
 				"misc-compile-ppc",
-				"misc-vet-vetall",
 				"nacl-386",
 				"nacl-amd64p32",
 				"openbsd-amd64-64",
@@ -265,6 +264,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "go"), both},
 		{b("linux-amd64", "net"), both},
 		{b("linux-amd64", "sys"), both},
+
+		{b("misc-vet-vetall", "go"), both},
+		{b("misc-vet-vetall@go1.11", "go"), none},
+		{b("misc-vet-vetall@go1.12", "go"), none},
 
 		// Don't test all subrepos on all the builders.
 		{b("linux-amd64-ssacheck", "net"), none},
