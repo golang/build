@@ -41,6 +41,7 @@ var (
 	hanwen       = gh("hanwen")
 	hyangah      = gh("hyangah")
 	iant         = gh("ianlancetaylor")
+	iancottrell  = gh("ianthehat")
 	jbd          = gh("rakyll")
 	joetsai      = gh("dsnet")
 	josharian    = gh("josharian")
@@ -60,6 +61,7 @@ var (
 	r            = gh("robpike")
 	rlh          = gh("RLH")
 	rsc          = gh("rsc")
+	rstambler    = gh("stamblerre")
 	sameer       = gh("Sajmani")
 	thanm        = gh("thanm")
 	tklauser     = gh("tklauser")
@@ -613,6 +615,9 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{bradfitz},
 		Secondary: []Owner{josharian},
 	},
+	"tools/cmd/gopls": {
+		Primary: []Owner{rstambler, iancottrell},
+	},
 	"tools/cmd/stringer": {
 		Secondary: []Owner{mvdan},
 	},
@@ -621,6 +626,9 @@ var entries = map[string]*Entry{
 	},
 	"tools/go/packages": {
 		Primary: []Owner{matloob},
+	},
+	"tools/internal/lsp": {
+		Primary: []Owner{rstambler, iancottrell},
 	},
 	"playground": {
 		Secondary: []Owner{ysmolsky},
