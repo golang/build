@@ -1852,13 +1852,13 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_8",
 		HostType:          "host-darwin-10_8",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: macTestPolicy,
 		buildsRepo:        disabledBuilder,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_10",
 		HostType:          "host-darwin-10_10",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: macTestPolicy,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// https://tip.golang.org/doc/go1.12 says:
 			// "Go 1.12 is the last release that will run on macOS 10.10 Yosemite."
@@ -1871,13 +1871,13 @@ func init() {
 		HostType:          "host-darwin-10_11",
 		tryBot:            nil, // disabled until Macs fixed; https://golang.org/issue/23859
 		buildsRepo:        onlyGo,
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: macTestPolicy,
 		numTryTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-386-10_11",
 		HostType:          "host-darwin-10_11",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: macTestPolicy,
 		buildsRepo:        onlyGo,
 		MaxAtOnce:         1,
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
@@ -1885,17 +1885,17 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_12",
 		HostType:          "host-darwin-10_12",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: macTestPolicy,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_14",
 		HostType:          "host-darwin-10_14",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: macTestPolicy,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-race",
 		HostType:          "host-darwin-10_12",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: macTestPolicy,
 		buildsRepo:        onlyGo,
 	})
 	addBuilder(BuildConfig{
@@ -2230,3 +2230,29 @@ func onlyGo(repo, branch, goBranch string) bool { return repo == "go" }
 
 // disabledBuilder is a buildsRepo policy function that always return false.
 func disabledBuilder(repo, branch, goBranch string) bool { return false }
+
+// macTestPolicy is the test policy for Macs.
+//
+// We have limited Mac resources. It's not worth wasting time testing
+// portable things on them. That is, if there's a slow test that will
+// still fail slowly on another builder where we have more resources
+// (like linux-amd64), then there's no point testing it redundantly on
+// the Macs.
+func macTestPolicy(distTest string, isTry bool) bool {
+	if strings.HasPrefix(distTest, "test:") {
+		return false
+	}
+	switch distTest {
+	case "reboot", "api", "doc_progs",
+		"wiki", "bench_go1", "codewalk":
+		return false
+	}
+	if isTry {
+		switch distTest {
+		case "runtime:cpu124", "race", "moved_goroot":
+			return false
+		}
+		// TODO: more. Look at bigquery results once we have more data.
+	}
+	return true
+}
