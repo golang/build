@@ -30,7 +30,7 @@ func ssh(args []string) error {
 		fs.Usage()
 	}
 	name := fs.Arg(0)
-	_, _, err := clientAndConf(name)
+	_, err := remoteClient(name)
 	if err != nil {
 		return err
 	}
