@@ -1656,6 +1656,10 @@ func configureMacStadium() {
 
 	disableMacScreensaver()
 
+	// Enable developer mode for runtime tests. (Issue 31123)
+	// Best effort; ignore any error.
+	exec.Command("/usr/sbin/DevToolsSecurity", "-enable").Run()
+
 	version, err := exec.Command("sw_vers", "-productVersion").Output()
 	if err != nil {
 		log.Fatalf("failed to find sw_vers -productVersion: %v", err)
