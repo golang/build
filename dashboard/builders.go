@@ -1339,7 +1339,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64",
-		HostType: "host-linux-jessie",
+		HostType: "host-linux-stretch",
 		tryBot:   defaultTrySet(),
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
