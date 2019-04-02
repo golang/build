@@ -489,3 +489,49 @@ func TestBuildsRepoAtAllImplicitGoBranch(t *testing.T) {
 		t.Error("got = false; want true")
 	}
 }
+
+func TestShouldRunDistTest(t *testing.T) {
+	type buildMode int
+	const (
+		tryMode    buildMode = 0
+		postSubmit buildMode = 1
+	)
+
+	tests := []struct {
+		builder string
+		test    string
+		mode    buildMode
+		want    bool
+	}{
+		{"linux-amd64", "api", postSubmit, true},
+		{"linux-amd64", "api", tryMode, true},
+
+		{"linux-amd64", "reboot", tryMode, true},
+		{"linux-amd64-race", "reboot", tryMode, false},
+
+		{"darwin-amd64-10_10", "test:foo", postSubmit, false},
+		{"darwin-amd64-10_11", "test:foo", postSubmit, false},
+		{"darwin-amd64-10_12", "test:foo", postSubmit, false},
+		{"darwin-amd64-10_14", "test:foo", postSubmit, false},
+		{"darwin-amd64-10_14", "test:foo", postSubmit, false},
+		{"darwin-amd64-10_14", "reboot", postSubmit, false},
+		{"darwin-amd64-10_14", "api", postSubmit, false},
+		{"darwin-amd64-10_14", "codewalk", postSubmit, false},
+	}
+	for _, tt := range tests {
+		bc, ok := Builders[tt.builder]
+		if !ok {
+			t.Errorf("unknown builder %q", tt.builder)
+			continue
+		}
+		isTry := tt.mode == tryMode
+		if isTry && !bc.BuildsRepoTryBot("go", "master", "master") {
+			t.Errorf("builder %q is not a trybot, so can't run test %q in try mode", tt.builder, tt.test)
+			continue
+		}
+		got := bc.ShouldRunDistTest(tt.test, isTry)
+		if got != tt.want {
+			t.Errorf("%q.ShouldRunDistTest(%q, try %v) = %v; want %v", tt.builder, tt.test, isTry, got, tt.want)
+		}
+	}
+}

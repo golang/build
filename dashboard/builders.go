@@ -972,7 +972,6 @@ func (c *BuildConfig) BuildsRepoTryBot(repo, branch, goBranch string) bool {
 // otherwise. Certain portable, slow tests are only run on fast builders in
 // trybot mode.
 func (c *BuildConfig) ShouldRunDistTest(distTest string, isTry bool) bool {
-	// TODO: add a table of tests in builders_test.go.
 	if c.shouldRunDistTest != nil {
 		return c.shouldRunDistTest(distTest, isTry)
 	}
