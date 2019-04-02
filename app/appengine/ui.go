@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"golang.org/x/build/app/cache"
+	"golang.org/x/build/dashboard"
 	"golang.org/x/build/types"
 
 	"google.golang.org/appengine"
@@ -356,9 +357,14 @@ func commitBuilders(commits []*Commit) []string {
 			builders[r.Builder] = true
 		}
 	}
-	// In dev_appserver mode, add some dummy data:
-	if len(builders) == 0 && isDevAppServer {
-		return []string{"linux-amd64", "linux-amd64-nocgo", "linux-amd64-race", "windows-386", "windows-amd64"}
+	// Add all known builders from the builder configuration too.
+	// We want to see columns even if there are no results so we
+	// can identify missing builders. (Issue 19930)
+	for name, bc := range dashboard.Builders {
+		if !bc.BuildsRepoPostSubmit("go", "master", "master") {
+			continue
+		}
+		builders[name] = true
 	}
 	k := keys(builders)
 	sort.Sort(builderOrder(k))
@@ -366,6 +372,7 @@ func commitBuilders(commits []*Commit) []string {
 }
 
 func keys(m map[string]bool) (s []string) {
+	s = make([]string, 0, len(m))
 	for k := range m {
 		s = append(s, k)
 	}
