@@ -1338,6 +1338,8 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 	benchResults := append([]string(nil), ts.benchResults...)
 	ts.mu.Unlock()
 
+	const failureFooter = "Consult https://build.golang.org/ to see whether they are new failures. Keep in mind that TryBots currently test *exactly* your git commit, without rebasing. If your commit's git parent is old, the failure might've already been fixed."
+
 	if !succeeded {
 		s1 := sha1.New()
 		io.WriteString(s1, buildLog)
@@ -1365,7 +1367,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 					"Build is still in progress...\n"+
 						"This change failed on %s:\n"+
 						"See %s\n\n"+
-						"Consult https://build.golang.org/ to see whether it's a new failure. Other builds still in progress; subsequent failure notices suppressed until final report.",
+						"Other builds still in progress; subsequent failure notices suppressed until final report. "+failureFooter,
 					bs.NameAndBranch(), failLogURL),
 			}); err != nil {
 				log.Printf("Failed to call Gerrit: %v", err)
@@ -1380,7 +1382,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 			ts.mu.Lock()
 			errMsg := ts.errMsg.String()
 			ts.mu.Unlock()
-			score, msg = -1, fmt.Sprintf("%d of %d TryBots failed:\n%s\nConsult https://build.golang.org/ to see whether they are new failures.",
+			score, msg = -1, fmt.Sprintf("%d of %d TryBots failed:\n%s\n"+failureFooter,
 				numFail, len(ts.builds), errMsg)
 		}
 		if len(benchResults) > 0 {
