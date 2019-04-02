@@ -445,16 +445,8 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-solaris-oracle-amd64-oraclerel": &HostConfig{
 		Notes:       "Oracle Solaris amd64 Release System",
-		Owner:       "shawn.walker@oracle.com",
-		OwnerGithub: "binarycrusader",
-		IsReverse:   true,
-		ExpectNum:   1,
-		env:         []string{"GOROOT_BOOTSTRAP=/opt/golang/go-solaris-amd64-bootstrap"},
-	},
-	"host-solaris-oracle-shawn": &HostConfig{
-		Notes:       "Oracle Solaris amd64 Development System",
-		Owner:       "shawn.walker@oracle.com",
-		OwnerGithub: "binarycrusader",
+		Owner:       "", // TODO: find current owner
+		OwnerGithub: "", // TODO: find current owner
 		IsReverse:   true,
 		ExpectNum:   1,
 		env:         []string{"GOROOT_BOOTSTRAP=/opt/golang/go-solaris-amd64-bootstrap"},
@@ -2008,11 +2000,6 @@ func init() {
 			"GOHOSTOS=linux",
 			"CGO_ENABLED=1",
 		},
-	})
-	addBuilder(BuildConfig{
-		Name:     "solaris-amd64-oracledev",
-		HostType: "host-solaris-oracle-shawn",
-		Notes:    "Oracle Solaris development version",
 	})
 	addBuilder(BuildConfig{
 		Name:     "solaris-amd64-oraclerel",
