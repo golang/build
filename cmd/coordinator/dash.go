@@ -105,7 +105,7 @@ func recordResult(br buildgo.BuilderRev, ok bool, buildLog string, runTime time.
 		"RunTime":     runTime,
 	}
 	if br.IsSubrepo() {
-		req["PackagePath"] = subrepoPrefix + br.SubName
+		req["PackagePath"] = importPathOfRepo(br.SubName)
 		req["Hash"] = br.SubRev
 		req["GoHash"] = br.Rev
 	}

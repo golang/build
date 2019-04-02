@@ -67,8 +67,6 @@ import (
 )
 
 const (
-	subrepoPrefix = "golang.org/x/"
-
 	// eventDone is a build event name meaning the build was
 	// completed (either successfully or with remote errors).
 	// Notably, it is NOT included for network/communication
@@ -2347,7 +2345,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	// findDeps uses 'go list' on the checked out repo to find its
 	// dependencies, and adds any not-yet-fetched deps to toFetched.
 	findDeps := func(repo string) (rErr, err error) {
-		repoPath := subrepoPrefix + repo
+		repoPath := importPathOfRepo(repo)
 		var buf bytes.Buffer
 		rErr, err = st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 			Output:   &buf,
@@ -2363,10 +2361,10 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 			return rErr, nil
 		}
 		for _, p := range strings.Fields(buf.String()) {
-			if !strings.HasPrefix(p, subrepoPrefix) || strings.HasPrefix(p, repoPath) {
+			if !strings.HasPrefix(p, "golang.org/x/") || strings.HasPrefix(p, repoPath) {
 				continue
 			}
-			repo = strings.TrimPrefix(p, subrepoPrefix)
+			repo = strings.TrimPrefix(p, "golang.org/x/")
 			if i := strings.Index(repo, "/"); i >= 0 {
 				repo = repo[:i]
 			}
@@ -2428,7 +2426,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	if st.conf.IsRace() {
 		args = append(args, "-race")
 	}
-	args = append(args, subrepoPrefix+st.SubName+"/...")
+	args = append(args, importPathOfRepo(st.SubName)+"/...")
 
 	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 		Debug:    true, // make buildlet print extra debug in output for failures
@@ -3352,4 +3350,19 @@ func randHex(n int) string {
 		log.Fatalf("randHex: %v", err)
 	}
 	return fmt.Sprintf("%x", buf)[:n]
+}
+
+// importPathOfRepo returns the Go import path corresponding to the
+// root of the given repo (Gerrit project). Because it's a Go import
+// path, it always has forward slashes and no trailing slash.
+//
+// For example:
+//   "net"    -> "golang.org/x/net"
+//   "crypto" -> "golang.org/x/crypto"
+//   "dl"     -> "golang.org/dl"
+func importPathOfRepo(repo string) string {
+	if repo == "dl" {
+		return "golang.org/dl"
+	}
+	return "golang.org/x/" + repo
 }
