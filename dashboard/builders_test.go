@@ -441,6 +441,26 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "exp"), both},
 		{b("linux-amd64@go1.11", "exp"), none},
 		{b("linux-amd64@go1.12", "exp"), none},
+
+		// plan9 only lives at master. We don't support any past releases.
+		{b("plan9-386", "go"), onlyPost},
+		{b("plan9-386@go1.11", "go"), none},
+		{b("plan9-386@go1.12", "go"), none},
+		{b("plan9-386", "net"), onlyPost},
+		{b("plan9-386@go1.11", "net"), none},
+		{b("plan9-386@go1.12", "net"), none},
+		{b("plan9-amd64-9front", "go"), onlyPost},
+		{b("plan9-amd64-9front@go1.11", "go"), none},
+		{b("plan9-amd64-9front@go1.12", "go"), none},
+		{b("plan9-amd64-9front", "net"), onlyPost},
+		{b("plan9-amd64-9front@go1.11", "net"), none},
+		{b("plan9-amd64-9front@go1.12", "net"), none},
+		{b("plan9-arm", "go"), onlyPost},
+		{b("plan9-arm@go1.11", "go"), none},
+		{b("plan9-arm@go1.12", "go"), none},
+		{b("plan9-arm", "net"), onlyPost},
+		{b("plan9-arm@go1.11", "net"), none},
+		{b("plan9-arm@go1.12", "net"), none},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {

@@ -1745,8 +1745,8 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:           "plan9-386",
 		HostType:       "host-plan9-386-gce",
-		numTestHelpers: 1,
 		MaxAtOnce:      2,
+		numTestHelpers: 1,
 		shouldRunDistTest: func(distTestName string, isTry bool) bool {
 			switch distTestName {
 			case "api",
@@ -1755,6 +1755,7 @@ func init() {
 			}
 			return true
 		},
+		buildsRepo: onlyMaster,
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2008",
@@ -2085,8 +2086,9 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "plan9-arm",
 		HostType:          "host-plan9-arm-0intro",
-		shouldRunDistTest: noTestDir,
 		SkipSnapshot:      true,
+		shouldRunDistTest: noTestDir,
+		buildsRepo:        onlyMaster,
 	})
 	addBuilder(BuildConfig{
 		Name:         "nacl-arm",
@@ -2097,8 +2099,9 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "plan9-amd64-9front",
 		HostType:          "host-plan9-amd64-0intro",
-		shouldRunDistTest: noTestDir,
 		SkipSnapshot:      true,
+		shouldRunDistTest: noTestDir,
+		buildsRepo:        onlyMaster,
 	})
 	addBuilder(BuildConfig{
 		Name:             "aix-ppc64",
@@ -2195,6 +2198,9 @@ func atLeastGo1(branch string, min int) bool {
 
 // onlyGo is a common buildsRepo policy value that only builds the main "go" repo.
 func onlyGo(repo, branch, goBranch string) bool { return repo == "go" }
+
+// onlyMaster is a common buildsRepo policy value that only builds things on the master branch.
+func onlyMaster(repo, branch, goBranch string) bool { return branch == "master" && goBranch == "master" }
 
 // disabledBuilder is a buildsRepo policy function that always return false.
 func disabledBuilder(repo, branch, goBranch string) bool { return false }
