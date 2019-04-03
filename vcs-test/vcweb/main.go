@@ -68,6 +68,7 @@ func main() {
 	http.Handle("/fossil/", fossilHandler())
 	http.Handle("/bzr/", bzrHandler())
 	http.Handle("/insecure/", insecureRedirectHandler())
+	http.Handle("/auth/", newAuthHandler(http.Dir(filepath.Join(*dir, "auth"))))
 
 	handler := logger(http.HandlerFunc(loadAndHandle))
 

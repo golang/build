@@ -18,6 +18,7 @@ func insecureRedirectHandler() http.Handler {
 func insecureRedirectDispatch(w http.ResponseWriter, r *http.Request) {
 	if !strings.HasPrefix(r.URL.Path, "/insecure/") {
 		http.Error(w, "path does not start with /insecure/", http.StatusInternalServerError)
+		return
 	}
 
 	url := *r.URL
