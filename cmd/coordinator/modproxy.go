@@ -43,6 +43,7 @@ func proxyModuleCache(w http.ResponseWriter, r *http.Request) {
 	}
 	if !strings.Contains(builder, "-") || builderKey(builder) != pass {
 		http.Error(w, "bad username or password", http.StatusUnauthorized)
+		log.Printf("modproxy: sending 401 Unauthorized due to invalid key for builder %q", builder)
 		return
 	}
 
@@ -60,6 +61,12 @@ func proxyModuleCache(w http.ResponseWriter, r *http.Request) {
 	}
 	// TODO: maybe only create this once early. But probably doesn't matter.
 	rp := httputil.NewSingleHostReverseProxy(backend)
+	rp.ModifyResponse = func(res *http.Response) error {
+		if res.StatusCode/100 != 2 {
+			log.Printf("modproxy: proxying HTTP %s response from backend for builder %s, %s %s", res.Status, builder, r.Method, r.RequestURI)
+		}
+		return nil
+	}
 	r.Header.Del("Authorization")
 	r.Header.Del("X-Proxy-Service")
 	rp.ServeHTTP(w, r)
