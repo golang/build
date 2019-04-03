@@ -512,16 +512,6 @@ var Hosts = map[string]*HostConfig{
 			"GOOS=android",
 		},
 	},
-	"host-darwin-amd64-eliasnaur-ios": &HostConfig{
-		Notes:       "Mac Mini hosted by Elias Naur, running the ios reverse buildlet",
-		OwnerGithub: "eliasnaur",
-		IsReverse:   true,
-		ExpectNum:   1,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
-			"GOHOSTARCH=amd64",
-		},
-	},
 	"host-darwin-amd64-zenly-ios": &HostConfig{
 		Notes:       "MacBook Pro hosted by Zenly, running the ios reverse buildlet",
 		OwnerGithub: "znly",
@@ -1892,18 +1882,6 @@ func init() {
 		HostType:          "host-darwin-10_12",
 		shouldRunDistTest: macTestPolicy,
 		buildsRepo:        onlyGo,
-	})
-	addBuilder(BuildConfig{
-		Name:     "darwin-arm-a1428ios",
-		HostType: "host-darwin-amd64-eliasnaur-ios",
-		Notes:    "iPhone 6 (model A1586), via a Mac Mini; owned by elias.naur",
-		env:      []string{"GOARCH=arm"},
-	})
-	addBuilder(BuildConfig{
-		Name:     "darwin-arm64-a1549ios",
-		HostType: "host-darwin-amd64-eliasnaur-ios",
-		Notes:    "iPhone 6 (model A1586), via a Mac Mini; owned by elias.naur",
-		env:      []string{"GOARCH=arm64"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "darwin-arm-mg912baios",
