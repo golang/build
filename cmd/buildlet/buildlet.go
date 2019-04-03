@@ -74,7 +74,8 @@ var (
 //   17: make macstadium halts use sudo
 //   18: set TMPDIR and GOCACHE
 //   21: GO_BUILDER_SET_GOPROXY=coordinator support
-const buildletVersion = 21
+//   22: TrimSpace the reverse buildlet's gobuildkey contents
+const buildletVersion = 22
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {

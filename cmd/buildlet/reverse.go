@@ -63,7 +63,7 @@ func keyForMode(mode string) (string, error) {
 			return "", fmt.Errorf("cannot read key file %q: %v", keyPath, err)
 		}
 	}
-	return string(key), nil
+	return strings.TrimSpace(string(key)), nil
 }
 
 func isDevReverseMode() bool {

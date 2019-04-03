@@ -41,6 +41,14 @@ func proxyModuleCache(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing required authentication", http.StatusBadRequest)
 		return
 	}
+
+	// For old buildlets that didn't TrimSpace their gobuildkey
+	// file contents (Issue 30749), remove the space here too.
+	// Once all buildlets are upgraded to version 22 or higher
+	// this can be removed. They should all auto-update, but some
+	// are misconfigured and don't.
+	pass = strings.TrimSpace(pass)
+
 	if !strings.Contains(builder, "-") || builderKey(builder) != pass {
 		log.Printf("modproxy: sending 401 Unauthorized due to invalid key for builder %q", builder)
 		http.Error(w, "bad username or password", http.StatusUnauthorized)
