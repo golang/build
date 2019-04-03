@@ -42,8 +42,8 @@ func proxyModuleCache(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !strings.Contains(builder, "-") || builderKey(builder) != pass {
-		http.Error(w, "bad username or password", http.StatusUnauthorized)
 		log.Printf("modproxy: sending 401 Unauthorized due to invalid key for builder %q", builder)
+		http.Error(w, "bad username or password", http.StatusUnauthorized)
 		return
 	}
 
