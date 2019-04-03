@@ -1010,6 +1010,10 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 			if bmm.Less(c.MinimumGoVersion) {
 				return false
 			}
+			if repo == "exp" {
+				// Don't test exp against release branches; it's experimental.
+				return false
+			}
 		}
 	}
 

@@ -436,6 +436,11 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-386-10_11", "go"), onlyPost},
 		{b("darwin-386-10_11@go1.12", "go"), onlyPost},
 		{b("darwin-386-10_11@go1.11", "go"), onlyPost},
+
+		// exp is experimental; it only tests against master.
+		{b("linux-amd64", "exp"), both},
+		{b("linux-amd64@go1.11", "exp"), none},
+		{b("linux-amd64@go1.12", "exp"), none},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {
