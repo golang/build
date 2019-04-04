@@ -1800,6 +1800,18 @@ func (st *buildStatus) build() error {
 	} else if err != nil {
 		doneMsg = "comm error: " + err.Error()
 	}
+	// If a build fails multiple times due to communication
+	// problems with the buildlet, assume something's wrong with
+	// the buildlet or machine and fail the build, rather than
+	// looping forever. This promotes the err (communication
+	// error) to a remoteErr (an error that occurred remotely and
+	// is terminal).
+	if rerr := st.repeatedCommunicationError(err); rerr != nil {
+		remoteErr = rerr
+		err = nil
+		doneMsg = "communication error to buildlet (promoted to terminal error): " + rerr.Error()
+		fmt.Fprintf(st, "\n%s\n", doneMsg)
+	}
 	if err != nil {
 		// Return the error *before* we create the magic
 		// "done" event. (which the try coordinator looks for)
@@ -1950,6 +1962,10 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 		remoteErr, err = st.runTests(st.getHelpers())
 	}
 
+	if err == errBuildletsGone {
+		// Don't wrap this error. TODO: use xerrors.
+		return nil, errBuildletsGone
+	}
 	if err != nil {
 		return nil, fmt.Errorf("runTests: %v", err)
 	}
@@ -2496,6 +2512,8 @@ func (ts *trySet) affectedPkgs() (pkgs []string) {
 	return
 }
 
+var errBuildletsGone = errors.New("runTests: dist test failed: all buildlets had network errors or timeouts, yet tests remain")
+
 // runTests is only called for builders which support a split make/run
 // (should be everything, at least soon). Currently (2015-05-27) iOS
 // and Android and Nacl do not.
@@ -2630,7 +2648,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 				st.LogEventTime("still_waiting_on_test", ti.name)
 			case <-buildletsGone:
 				set.cancelAll()
-				return nil, fmt.Errorf("dist test failed: all buildlets had network errors or timeouts, yet tests remain")
+				return nil, errBuildletsGone
 			}
 		}
 
@@ -3287,6 +3305,26 @@ func (st *buildStatus) logs() string {
 
 func (st *buildStatus) Write(p []byte) (n int, err error) {
 	return st.output.Write(p)
+}
+
+// repeatedCommunicationError takes a buildlet execution error (a
+// network/communication error, as opposed to a remote execution that
+// ran and had a non-zero exit status and we heard about) and
+// conditionally promotes it to a terminal error. If this returns a
+// non-nil value, the execErr should be considered terminal with the
+// returned error.
+func (st *buildStatus) repeatedCommunicationError(execErr error) error {
+	if execErr == nil {
+		return nil
+	}
+	// For now, only do this for plan9, which is flaky (Issue 31261)
+	if strings.HasPrefix(st.Name, "plan9-") && execErr == errBuildletsGone {
+		// TODO: give it two tries at least later (store state
+		// somewhere; global map?). But for now we're going to
+		// only give it one try.
+		return fmt.Errorf("network error promoted to terminal error: %v", execErr)
+	}
+	return nil
 }
 
 func useGitMirror() bool {
