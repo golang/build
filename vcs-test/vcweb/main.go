@@ -42,6 +42,7 @@ func usage() {
 }
 
 var isLoadDir = map[string]bool{
+	"auth":   true,
 	"go":     true,
 	"git":    true,
 	"hg":     true,

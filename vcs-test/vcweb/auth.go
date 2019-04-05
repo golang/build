@@ -113,5 +113,5 @@ func (h *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.FileServer(h.dir).ServeHTTP(w, r)
+	http.StripPrefix("/auth/", http.FileServer(h.dir)).ServeHTTP(w, r)
 }
