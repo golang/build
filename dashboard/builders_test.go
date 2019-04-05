@@ -158,11 +158,8 @@ func TestTrybots(t *testing.T) {
 			repo:   "exp",
 			branch: "master",
 			want: []string{
-				"freebsd-amd64-12_0",
-				"linux-386",
 				"linux-amd64",
 				"linux-amd64-race",
-				"openbsd-amd64-64",
 				"windows-386-2008",
 				"windows-amd64-2016",
 			},
@@ -415,9 +412,26 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-longtest@go1.12", "go"), onlyPost},
 		{b("linux-amd64-longtest@go1.12", "net"), none},
 
-		// Experimental exp repo.
+		// Experimental exp repo runs in very few places.
 		{b("linux-amd64", "exp"), both},
+		{b("linux-amd64-race", "exp"), both},
+		{b("linux-amd64-longtest", "exp"), onlyPost},
 		{b("windows-386-2008", "exp"), both},
+		{b("windows-amd64-2016", "exp"), both},
+		{b("darwin-amd64-10_12", "exp"), onlyPost},
+		{b("darwin-amd64-10_14", "exp"), onlyPost},
+		// ... but not on most others:
+		{b("freebsd-386-11_2", "exp"), none},
+		{b("freebsd-386-12_0", "exp"), none},
+		{b("freebsd-amd64-11_2", "exp"), none},
+		{b("freebsd-amd64-12_0", "exp"), none},
+		{b("openbsd-amd64-62", "exp"), none},
+		{b("openbsd-amd64-64", "exp"), none},
+		{b("js-wasm", "exp"), none},
+
+		// exp is experimental; it doesn't test against release branches.
+		{b("linux-amd64@go1.11", "exp"), none},
+		{b("linux-amd64@go1.12", "exp"), none},
 
 		// Only use latest macOS for subrepos, and only amd64:
 		{b("darwin-amd64-10_12", "net"), onlyPost},
@@ -436,11 +450,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-386-10_11", "go"), onlyPost},
 		{b("darwin-386-10_11@go1.12", "go"), onlyPost},
 		{b("darwin-386-10_11@go1.11", "go"), onlyPost},
-
-		// exp is experimental; it only tests against master.
-		{b("linux-amd64", "exp"), both},
-		{b("linux-amd64@go1.11", "exp"), none},
-		{b("linux-amd64@go1.12", "exp"), none},
 
 		// plan9 only lives at master. We don't support any past releases.
 		{b("plan9-386", "go"), onlyPost},
@@ -461,6 +470,12 @@ func TestBuilderConfig(t *testing.T) {
 		{b("plan9-arm", "net"), onlyPost},
 		{b("plan9-arm@go1.11", "net"), none},
 		{b("plan9-arm@go1.12", "net"), none},
+
+		// x/net master with Go 1.11 doesn't work on our builders
+		// on 32-bit FreeBSD. Remove distracting red from the dashboard
+		// that'll never be fixed.
+		{b("freebsd-386-11_2@go1.11", "net"), none},
+		{b("freebsd-386-12_0@go1.11", "net"), none},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {

@@ -1013,27 +1013,34 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 			return false
 		}
 	}
-
+	if repo != "go" && !c.SplitMakeRun() {
+		return false
+	}
 	if p := c.buildsRepo; p != nil {
 		return p(repo, branch, goBranch)
 	}
-	if repo == "go" {
-		return true
-	}
-	if !c.SplitMakeRun() {
-		return false
-	}
+	return defaultBuildsRepoPolicy(repo, branch, goBranch)
+}
+
+func defaultBuildsRepoPolicy(repo, branch, goBranch string) bool {
 	switch repo {
 	case "go":
 		return true
 	case "term":
 		// no code yet in repo
 		return false
-	case "mobile":
-		// Mobile is opt-in.
+	case "mobile", "exp":
+		// mobile and exp are opt-in.
 		return false
 	}
 	return true
+}
+
+func defaultPlusExp(repo, branch, goBranch string) bool {
+	if repo == "exp" {
+		return true
+	}
+	return defaultBuildsRepoPolicy(repo, branch, goBranch)
 }
 
 // AllScriptArgs returns the set of arguments that should be passed to the
@@ -1256,6 +1263,12 @@ func init() {
 		HostType:          "host-freebsd-12_0",
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		shouldRunDistTest: fasterTrybots,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			if repo == "net" && branch == "master" && goBranch == "release-branch.go1.11" {
+				return false
+			}
+			return defaultBuildsRepoPolicy(repo, branch, goBranch)
+		},
 		numTryTestHelpers: 4,
 		MaxAtOnce:         2,
 	})
@@ -1296,9 +1309,15 @@ func init() {
 		Name:              "freebsd-386-11_2",
 		HostType:          "host-freebsd-11_2",
 		shouldRunDistTest: noTestDir,
-		tryBot:            explicitTrySet("sys"),
-		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
-		MaxAtOnce:         2,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			if repo == "net" && branch == "master" && goBranch == "release-branch.go1.11" {
+				return false
+			}
+			return defaultBuildsRepoPolicy(repo, branch, goBranch)
+		},
+		tryBot:    explicitTrySet("sys"),
+		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
+		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-386",
@@ -1323,9 +1342,10 @@ func init() {
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386", "GO386=387"},
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-amd64",
-		HostType: "host-linux-stretch",
-		tryBot:   defaultTrySet(),
+		Name:       "linux-amd64",
+		HostType:   "host-linux-stretch",
+		tryBot:     defaultTrySet(),
+		buildsRepo: defaultPlusExp,
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
@@ -1465,6 +1485,7 @@ func init() {
 		Name:              "linux-amd64-race",
 		HostType:          "host-linux-jessie",
 		tryBot:            defaultTrySet(),
+		buildsRepo:        defaultPlusExp,
 		MaxAtOnce:         1,
 		shouldRunDistTest: fasterTrybots,
 		numTestHelpers:    1,
@@ -1610,7 +1631,7 @@ func init() {
 			switch repo {
 			case "go":
 				return true
-			case "mobile", "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
+			case "mobile", "exp", "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
 				return false
 			default:
 				return branch == "master" && goBranch == "master"
@@ -1775,6 +1796,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "windows-386-2008",
 		HostType:          "host-windows-amd64-2008",
+		buildsRepo:        defaultPlusExp,
 		shouldRunDistTest: fasterTrybots,
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		MaxAtOnce:         2,
@@ -1800,6 +1822,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2016",
 		HostType:          "host-windows-amd64-2016",
+		buildsRepo:        defaultPlusExp,
 		shouldRunDistTest: fasterTrybots,
 		env: []string{
 			"GOARCH=amd64",
@@ -1872,11 +1895,13 @@ func init() {
 		Name:              "darwin-amd64-10_12",
 		HostType:          "host-darwin-10_12",
 		shouldRunDistTest: macTestPolicy,
+		buildsRepo:        defaultPlusExp,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_14",
 		HostType:          "host-darwin-10_14",
 		shouldRunDistTest: macTestPolicy,
+		buildsRepo:        defaultPlusExp,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-race",
