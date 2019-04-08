@@ -1540,10 +1540,10 @@ func init() {
 		Notes: "Runs GOOS=linux but with the Android emulator attached, for running x/mobile host tests.",
 	})
 	addBuilder(BuildConfig{
-		Name:      "linux-amd64-stretch",
-		HostType:  "host-linux-stretch",
-		MaxAtOnce: 1,
-		Notes:     "Debian Stretch",
+		Name:      "linux-amd64-jessie",
+		HostType:  "host-linux-jessie",
+		MaxAtOnce: 5,
+		Notes:     "Debian Jessie. The normal 'linux-amd64' builder is stretch. We use Jessie for our release builds due to https://golang.org/issue/31293",
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},

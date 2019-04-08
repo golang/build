@@ -164,7 +164,7 @@ func (b *Build) logf(format string, args ...interface{}) {
 var builds = []*Build{
 	{
 		Source:  true,
-		Builder: "linux-amd64",
+		Builder: "linux-amd64-jessie", // using Jessie for at least [Go 1.11, Go 1.13] due to golang.org/issue/31336
 	},
 	{
 		OS:      "linux",
