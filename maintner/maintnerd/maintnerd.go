@@ -337,6 +337,7 @@ var goGitHubProjects = []string{
 	"golang/vgo",
 	"golang/website",
 	"golang/xerrors",
+	"protocolbuffers/protobuf-go",
 }
 
 func setGoConfig() {

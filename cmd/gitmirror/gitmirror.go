@@ -196,9 +196,9 @@ func runGitMirror() error {
 		url := goBase + name
 		var dst string
 		if *mirror {
-			if shouldMirror(name) {
+			dst = shouldMirrorTo(name)
+			if dst != "" {
 				log.Printf("Starting mirror of subrepo %s", name)
-				dst = "git@github.com:golang/" + name + ".git"
 			} else {
 				log.Printf("Not mirroring repo %s", name)
 			}
@@ -231,10 +231,13 @@ func runGitMirror() error {
 				continue
 			}
 			path := "golang.org/x/" + name
-			if name == "dl" {
+			switch name {
+			case "dl":
 				// This subrepo is different from others in that
 				// it doesn't use the /x/ path element.
 				path = "golang.org/" + name
+			case "protobuf":
+				path = "google.golang.org/" + name
 			}
 			go startRepo(name, path, false)
 		}
@@ -269,9 +272,9 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "</pre></body></html>")
 }
 
-// shouldMirror reports whether the named repo should be mirrored from
-// Gerrit to Github.
-func shouldMirror(name string) bool {
+// shouldMirrorTo returns the Github repository the named repo should be
+// mirrored to or "" if it should not be mirrored.
+func shouldMirrorTo(name string) (dst string) {
 	switch name {
 	case
 		"arch",
@@ -306,16 +309,23 @@ func shouldMirror(name string) bool {
 		"vgo",
 		"website",
 		"xerrors":
-		return true
+		// Mirror this.
+	case "protobuf":
+		return "git@github.com:protocolbuffers/protobuf-go.git"
+	default:
+		// Else, see if it appears to be a subrepo:
+		r, err := httpClient.Get("https://golang.org/x/" + name)
+		if err != nil {
+			log.Printf("repo %v doesn't seem to exist: %v", name, err)
+			return ""
+		}
+		r.Body.Close()
+		if r.StatusCode/100 != 2 {
+			return ""
+		}
+		// Mirror this.
 	}
-	// Else, see if it appears to be a subrepo:
-	r, err := httpClient.Get("https://golang.org/x/" + name)
-	if err != nil {
-		log.Printf("repo %v doesn't seem to exist: %v", name, err)
-		return false
-	}
-	r.Body.Close()
-	return r.StatusCode/100 == 2
+	return "git@github.com:golang/" + name + ".git"
 }
 
 // a statusEntry is a status string at a specific time.
