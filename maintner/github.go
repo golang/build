@@ -1690,6 +1690,9 @@ func (p *githubRepoPoller) foreachItem(
 		}
 		items, res, err := getPage(ctx, page)
 		if err != nil {
+			if canRetry(ctx, err) {
+				continue
+			}
 			return err
 		}
 		if len(items) == 0 {
@@ -1734,6 +1737,9 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 			},
 		})
 		if err != nil {
+			if canRetry(ctx, err) {
+				continue
+			}
 			return err
 		}
 		// See https://developer.github.com/v3/activity/events/ for X-Poll-Interval:
@@ -1824,7 +1830,15 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 		p.logf("remaining issues: %v", missing)
 		for _, num := range missing {
 			p.logf("getting issue %v ...", num)
-			issue, _, err := p.githubDirect.Issues.Get(ctx, owner, repo, int(num))
+			var issue *github.Issue
+			var err error
+			for {
+				issue, _, err = p.githubDirect.Issues.Get(ctx, owner, repo, int(num))
+				if canRetry(ctx, err) {
+					continue
+				}
+				break
+			}
 			if ge, ok := err.(*github.ErrorResponse); ok && ge.Message == "Not Found" {
 				mp := &maintpb.Mutation{
 					GithubIssue: &maintpb.GithubIssueMutation{
@@ -1904,10 +1918,10 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 			Sort:        "updated",
 			ListOptions: github.ListOptions{PerPage: 100},
 		})
-		// TODO: use res.Rate.* (https://godoc.org/github.com/google/go-github/github#Rate) to sleep
-		// and retry if we're out of tokens. Probably need to make an HTTP RoundTripper that does
-		// that automatically.
 		if err != nil {
+			if canRetry(ctx, err) {
+				continue
+			}
 			return err
 		}
 		serverDate, err := http.ParseTime(res.Header.Get("Date"))
@@ -2057,10 +2071,11 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 				return nil, nil, err
 			}
 			log.Printf("Fetching %s: %v", u, res.Status)
-			if res.StatusCode != http.StatusOK {
+			ghResp := makeGithubResponse(res)
+			if err := github.CheckResponse(res); err != nil {
 				log.Printf("Fetching %s: %v: %+v", u, res.Status, res.Header)
-				// TODO: rate limiting, etc.
-				return nil, nil, fmt.Errorf("%s: %v", u, res.Status)
+				log.Printf("GitHub error %s: %v", u, ghResp)
+				return nil, nil, err
 			}
 			evts, err := parseGithubEvents(res.Body)
 			if err != nil {
@@ -2077,7 +2092,7 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 			sdp, _ := ptypes.TimestampProto(serverDate.UTC())
 			mut.GithubIssue.EventStatus = &maintpb.GithubIssueSyncStatus{ServerDate: sdp}
 
-			return is, makeGithubResponse(res), err
+			return is, ghResp, err
 		},
 		func(v interface{}) error {
 			ge := v.(*GitHubIssueEvent)
@@ -2299,10 +2314,11 @@ func (p *githubRepoPoller) syncReviewsOnPullRequest(ctx context.Context, issueNu
 				return nil, nil, err
 			}
 			log.Printf("Fetching %s: %v", u, res.Status)
-			if res.StatusCode != http.StatusOK {
+			ghResp := makeGithubResponse(res)
+			if err := github.CheckResponse(res); err != nil {
 				log.Printf("Fetching %s: %v: %+v", u, res.Status, res.Header)
-				// TODO: rate limiting, etc.
-				return nil, nil, fmt.Errorf("%s: %v", u, res.Status)
+				log.Printf("GitHub error %s: %v", u, ghResp)
+				return nil, nil, err
 			}
 			evts, err := parseGithubReviews(res.Body)
 			if err != nil {
@@ -2319,7 +2335,7 @@ func (p *githubRepoPoller) syncReviewsOnPullRequest(ctx context.Context, issueNu
 			sdp, _ := ptypes.TimestampProto(serverDate.UTC())
 			mut.GithubIssue.ReviewStatus = &maintpb.GithubIssueSyncStatus{ServerDate: sdp}
 
-			return is, makeGithubResponse(res), err
+			return is, ghResp, err
 		},
 		func(v interface{}) error {
 			ge := v.(*GitHubReview)
@@ -2438,9 +2454,31 @@ func jint64(v interface{}) int64 {
 	}
 }
 
+// copy of go-github's parseRate, basically.
+func parseRate(r *http.Response) github.Rate {
+	var rate github.Rate
+	// Note: even though the header names below are not canonical (the
+	// canonical form would be X-Ratelimit-Limit), this particular
+	// casing is what GitHub returns. See headerRateRemaining in
+	// package go-github.
+	if limit := r.Header.Get("X-RateLimit-Limit"); limit != "" {
+		rate.Limit, _ = strconv.Atoi(limit)
+	}
+	if remaining := r.Header.Get("X-RateLimit-Remaining"); remaining != "" {
+		rate.Remaining, _ = strconv.Atoi(remaining)
+	}
+	if reset := r.Header.Get("X-RateLimit-Reset"); reset != "" {
+		if v, _ := strconv.ParseInt(reset, 10, 64); v != 0 {
+			rate.Reset = github.Timestamp{time.Unix(v, 0)}
+		}
+	}
+	return rate
+}
+
 // Copy of go-github's func newResponse, basically.
 func makeGithubResponse(res *http.Response) *github.Response {
 	gr := &github.Response{Response: res}
+	gr.Rate = parseRate(res)
 	for _, lv := range res.Header["Link"] {
 		for _, link := range strings.Split(lv, ",") {
 			segs := strings.Split(strings.TrimSpace(link), ";")
@@ -2564,4 +2602,25 @@ func (t limitTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		}
 	}
 	return t.base.RoundTrip(r)
+}
+
+func canRetry(ctx context.Context, err error) bool {
+	switch e := err.(type) {
+	case *github.RateLimitError:
+		log.Printf("GitHub rate limit error: %s, waiting until %s", e.Message, e.Rate.Reset.Time)
+		ctx, cancel := context.WithDeadline(ctx, e.Rate.Reset.Time)
+		defer cancel()
+		<-ctx.Done()
+		return ctx.Err() != context.Canceled
+	case *github.AbuseRateLimitError:
+		if e.RetryAfter != nil {
+			log.Printf("GitHub rate abuse error: %s, waiting for %s", e.Message, *e.RetryAfter)
+			ctx, cancel := context.WithTimeout(ctx, *e.RetryAfter)
+			defer cancel()
+			<-ctx.Done()
+			return ctx.Err() != context.Canceled
+		}
+		log.Printf("GitHub rate abuse error: %s", e.Message)
+	}
+	return false
 }
