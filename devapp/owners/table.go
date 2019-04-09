@@ -30,6 +30,7 @@ var (
 	bradfitz     = gh("bradfitz")
 	cbro         = gh("broady")
 	cherryyz     = gh("cherrymui")
+	cnoellekb    = gh("cnoellekb")
 	dmitshur     = gh("dmitshur")
 	danderson    = gh("danderson")
 	drchase      = gh("dr2chase")
@@ -42,6 +43,7 @@ var (
 	hyangah      = gh("hyangah")
 	iant         = gh("ianlancetaylor")
 	iancottrell  = gh("ianthehat")
+	jayconrod    = gh("jayconrod")
 	jbd          = gh("rakyll")
 	joetsai      = gh("dsnet")
 	josharian    = gh("josharian")
@@ -156,7 +158,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mvdan},
 	},
 	"go/src/cmd/go": {
-		Primary: []Owner{bcmills, rsc, iant},
+		Primary:   []Owner{bcmills, jayconrod},
+		Secondary: []Owner{rsc, iant},
 	},
 	"go/src/cmd/link": {
 		Primary:   []Owner{cherryyz, rsc, mdempsky, iant},
@@ -632,5 +635,9 @@ var entries = map[string]*Entry{
 	},
 	"playground": {
 		Secondary: []Owner{ysmolsky},
+	},
+	"website": {
+		Primary:   []Owner{dmitshur},
+		Secondary: []Owner{cnoellekb, andybons},
 	},
 }
