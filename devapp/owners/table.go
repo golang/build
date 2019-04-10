@@ -74,20 +74,20 @@ var (
 // entries is a map of <repo name>/<path> to Owner entries.
 // It should not be modified at runtime.
 var entries = map[string]*Entry{
-	"arch/": {
+	"arch": {
 		Primary: []Owner{cherryyz},
 	},
 
-	"crypto/": {
+	"crypto": {
 		Primary:   []Owner{filippo},
 		Secondary: []Owner{agl},
 	},
-	"crypto/ssh/": {
+	"crypto/ssh": {
 		Primary:   []Owner{hanwen},
 		Secondary: []Owner{filippo},
 	},
 
-	"go/": {
+	"go": {
 		Primary: []Owner{rsc, iant, bradfitz},
 	},
 	"go/src/archive/tar": {
@@ -105,7 +105,7 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{},
 		Secondary: []Owner{bradfitz, iant},
 	},
-	"go/src/cmd/compile/": {
+	"go/src/cmd/compile": {
 		Primary:   []Owner{khr, gri},
 		Secondary: []Owner{josharian, mdempsky, martisch},
 	},
@@ -547,22 +547,22 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{andybons},
 	},
 
-	"gofrontend/": {
+	"gofrontend": {
 		Primary:   []Owner{iant},
 		Secondary: []Owner{thanm},
 	},
 
-	"gollvm/": {
+	"gollvm": {
 		Primary:   []Owner{thanm},
 		Secondary: []Owner{cherryyz},
 	},
 
-	"mobile/": {
+	"mobile": {
 		Primary:   []Owner{eliasnaur},
 		Secondary: []Owner{hyangah},
 	},
 
-	"net/": {
+	"net": {
 		Primary:   []Owner{mikioh},
 		Secondary: []Owner{bradfitz, iant},
 	},
@@ -585,11 +585,11 @@ var entries = map[string]*Entry{
 		Primary: []Owner{mikioh, iant},
 	},
 
-	"review/": {
+	"review": {
 		Secondary: []Owner{josharian, kevinburke},
 	},
 
-	"sync/": {
+	"sync": {
 		Primary: []Owner{bcmills},
 	},
 
@@ -600,7 +600,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{alexbrainman, bradfitz},
 	},
 
-	"text/": {
+	"text": {
 		Primary: []Owner{mpvl},
 	},
 

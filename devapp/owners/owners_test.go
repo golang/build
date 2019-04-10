@@ -20,6 +20,12 @@ func TestMatch(t *testing.T) {
 		entry *Entry
 	}{
 		{
+			"sync",
+			&Entry{
+				Primary: []Owner{bcmills},
+			},
+		},
+		{
 			"crypto/chacha20poly1305/chacha20poly1305.go",
 			&Entry{
 				Primary:   []Owner{filippo},
@@ -31,6 +37,13 @@ func TestMatch(t *testing.T) {
 			&Entry{
 				Primary:   []Owner{joetsai},
 				Secondary: []Owner{bradfitz},
+			},
+		},
+		{
+			"go/src/cmd/compile",
+			&Entry{
+				Primary:   []Owner{khr, gri},
+				Secondary: []Owner{josharian, mdempsky, martisch},
 			},
 		},
 		{
