@@ -401,6 +401,10 @@ func (b *Build) make() error {
 		return fmt.Errorf("Build failed: %v\nOutput:\n%v", remoteErr, out)
 	}
 
+	if err := b.checkRelocations(client); err != nil {
+		return err
+	}
+
 	goCmd := path.Join(goDir, "bin/go")
 	if b.OS == "windows" {
 		goCmd += ".exe"
@@ -698,6 +702,32 @@ func (b *Build) writeFile(name string, r io.Reader) error {
 		}
 	}
 	b.logf("Wrote %q.", name)
+	return nil
+}
+
+// checkRelocations runs readelf on pkg/linux_amd64/runtime/cgo.a and makes sure
+// we don't see R_X86_64_REX_GOTPCRELX. See issue 31293.
+func (b *Build) checkRelocations(client *buildlet.Client) error {
+	if b.OS != "linux" || b.Arch != "amd64" {
+		return nil
+	}
+	var out bytes.Buffer
+	file := fmt.Sprintf("go/pkg/linux_%s/runtime/cgo.a", b.Arch)
+	remoteErr, err := client.Exec("readelf", buildlet.ExecOpts{
+		Output:      &out,
+		Args:        []string{"-r", "--wide", file},
+		SystemLevel: true, // look for readelf in system's PATH
+	})
+	if err != nil {
+		return fmt.Errorf("failed to run readelf: %v", err)
+	}
+	got := out.String()
+	if strings.Contains(got, "R_X86_64_REX_GOTPCRELX") {
+		return fmt.Errorf("%s contained a R_X86_64_REX_GOTPCRELX relocation", file)
+	}
+	if !strings.Contains(got, "R_X86_64_GOTPCREL") {
+		return fmt.Errorf("%s did not contain a R_X86_64_GOTPCREL relocation; remoteErr=%v, %s", file, remoteErr, got)
+	}
 	return nil
 }
 
