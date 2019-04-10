@@ -35,7 +35,6 @@ var (
 	danderson    = gh("danderson")
 	drchase      = gh("dr2chase")
 	dvyukov      = gh("dvyukov")
-	eliasnaur    = gh("eliasnaur")
 	empijei      = gh("empijei")
 	filippo      = gh("FiloSottile")
 	gri          = gh("griesemer")
@@ -555,7 +554,6 @@ var entries = map[string]*Entry{
 	},
 
 	"mobile": {
-		Primary:   []Owner{eliasnaur},
 		Secondary: []Owner{hyangah},
 	},
 
