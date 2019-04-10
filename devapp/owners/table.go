@@ -87,9 +87,6 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{filippo},
 	},
 
-	"go": {
-		Primary: []Owner{rsc, iant, bradfitz},
-	},
 	"go/src/archive/tar": {
 		Primary: []Owner{joetsai},
 	},

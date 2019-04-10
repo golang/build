@@ -47,10 +47,7 @@ func TestMatch(t *testing.T) {
 			},
 		},
 		{
-			"go/path/with/no/owners",
-			&Entry{
-				Primary: []Owner{rsc, iant, bradfitz},
-			},
+			"go/path/with/no/owners", nil,
 		},
 		{
 			"nonexistentrepo/foo/bar", nil,
