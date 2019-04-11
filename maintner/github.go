@@ -35,10 +35,6 @@ import (
 // package for responses fulfilled from cache due to a 304 from the server.
 const xFromCache = "X-From-Cache"
 
-// githubThrottleWaitTime is the amount of time to wait re-trying a github
-// throttle error.
-const githubThrottleWaitTime = 500 * time.Millisecond
-
 // GitHubRepoID is a GitHub org & repo, lowercase.
 type GitHubRepoID struct {
 	Owner, Repo string
@@ -2061,34 +2057,19 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 			ctx, cancel := context.WithTimeout(ctx, time.Minute)
 			defer cancel()
 			req = req.WithContext(ctx)
-
-			tryCount := 0
-			maxTries := 3
-			var res *http.Response
-			var err error
-
-			for tryCount < maxTries {
-				res, err = p.client.Do(req)
-				if err != nil {
-					// We don't want to retry this error.
-					p.logf("Error fetching %s: %v", u, err)
-					return nil, nil, err
-				}
-
-				p.logf("Fetching %s: %v", u, res.Status)
-				if res.StatusCode != http.StatusOK {
-					p.logf("Error fetching %s: %v: %+v. Tries left: %d\n", u, res.Status, res.Header, maxTries-tryCount)
-					tryCount++
-					time.Sleep(githubThrottleWaitTime)
-				} else if res.StatusCode == http.StatusOK {
-					break
-				}
+			res, err := p.client.Do(req)
+			if err != nil {
+				log.Printf("Fetching %s: %v", u, err)
+				return nil, nil, err
 			}
+			log.Printf("Fetching %s: %v", u, res.Status)
 
 			if res.StatusCode != http.StatusOK {
-				p.logf("No more tries left for github polling.")
+				log.Printf("Fetching %s: %v: %+v", u, res.Status, res.Header)
+				// TODO: rate limiting, etc.
 				return nil, nil, fmt.Errorf("%s: %v", u, res.Status)
 			}
+
 			evts, err := parseGithubEvents(res.Body)
 			if err != nil {
 				return nil, nil, fmt.Errorf("%s: parse github events: %v", u, err)

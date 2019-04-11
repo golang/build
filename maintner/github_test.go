@@ -7,7 +7,6 @@ package maintner
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -677,54 +676,6 @@ func TestSyncEvents(t *testing.T) {
 		sort.Strings(eventLog)
 		if !reflect.DeepEqual(want, eventLog) {
 			t2.Errorf("want: %v; got: %v\n", want, eventLog)
-		}
-
-		wantTimesCalled := 1
-		if timesDoWasCalled != wantTimesCalled {
-			t.Errorf("client.Do should have been called %d times. got: %d\n", wantTimesCalled, timesDoWasCalled)
-		}
-	})
-	t.Run("retry logic on failed request", func(t2 *testing.T) {
-		defer func() { eventLog = make([]string, 0) }()
-		timesDoWasCalled = 0
-		ctx := context.Background()
-		p.client = &ClientMock{
-			status:     "Retry Error",
-			statusCode: http.StatusInternalServerError,
-			err:        nil,
-			testdata:   "TestParseMultipleGithubEvents.json",
-		}
-		err := p.syncEventsOnIssue(ctx, int32(issue.ID))
-		if err == nil {
-			t2.Error("was expecting error after try counts ran out.")
-		}
-		want := "https://api.github.com/repos/foowner/bar/issues/1001/events?per_page=100&page=1: Retry Error"
-		if err.Error() != want {
-			t2.Errorf("want: %s, got: %s\n", want, err.Error())
-		}
-
-		wantTimesCalled := 3
-		if timesDoWasCalled != wantTimesCalled {
-			t.Errorf("client.Do should have been called %d times. got: %d\n", wantTimesCalled, timesDoWasCalled)
-		}
-	})
-	t.Run("do not retry general failure", func(t2 *testing.T) {
-		defer func() { eventLog = make([]string, 0) }()
-		timesDoWasCalled = 0
-		ctx := context.Background()
-		p.client = &ClientMock{
-			status:     "Retry Error",
-			statusCode: http.StatusInternalServerError,
-			err:        errors.New("panic"),
-			testdata:   "TestParseMultipleGithubEvents.json",
-		}
-		err := p.syncEventsOnIssue(ctx, int32(issue.ID))
-		if err == nil {
-			t2.Error("was expecting error after try counts ran out.")
-		}
-		want := "panic"
-		if err.Error() != want {
-			t2.Errorf("want: %s, got: %s\n", want, err.Error())
 		}
 
 		wantTimesCalled := 1
