@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build linux
+// +build linux darwin
 
 // Code interacting with build.golang.org ("the dashboard").
 
@@ -105,7 +105,7 @@ func recordResult(br buildgo.BuilderRev, ok bool, buildLog string, runTime time.
 		"RunTime":     runTime,
 	}
 	if br.IsSubrepo() {
-		req["PackagePath"] = subrepoPrefix + br.SubName
+		req["PackagePath"] = importPathOfRepo(br.SubName)
 		req["Hash"] = br.SubRev
 		req["GoHash"] = br.Rev
 	}

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build linux
+// +build linux darwin
 
 package main
 
@@ -41,7 +41,16 @@ func proxyModuleCache(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing required authentication", http.StatusBadRequest)
 		return
 	}
+
+	// For old buildlets that didn't TrimSpace their gobuildkey
+	// file contents (Issue 30749), remove the space here too.
+	// Once all buildlets are upgraded to version 22 or higher
+	// this can be removed. They should all auto-update, but some
+	// are misconfigured and don't.
+	pass = strings.TrimSpace(pass)
+
 	if !strings.Contains(builder, "-") || builderKey(builder) != pass {
+		log.Printf("modproxy: sending 401 Unauthorized due to invalid key for builder %q", builder)
 		http.Error(w, "bad username or password", http.StatusUnauthorized)
 		return
 	}
@@ -60,6 +69,12 @@ func proxyModuleCache(w http.ResponseWriter, r *http.Request) {
 	}
 	// TODO: maybe only create this once early. But probably doesn't matter.
 	rp := httputil.NewSingleHostReverseProxy(backend)
+	rp.ModifyResponse = func(res *http.Response) error {
+		if res.StatusCode/100 != 2 {
+			log.Printf("modproxy: proxying HTTP %s response from backend for builder %s, %s %s", res.Status, builder, r.Method, r.RequestURI)
+		}
+		return nil
+	}
 	r.Header.Del("Authorization")
 	r.Header.Del("X-Proxy-Service")
 	rp.ServeHTTP(w, r)

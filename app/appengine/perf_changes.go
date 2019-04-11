@@ -24,7 +24,7 @@ func init() {
 
 // perfSummaryHandler draws the main benchmarking page.
 func perfChangesHandler(w http.ResponseWriter, r *http.Request) {
-	d := dashboardForRequest(r)
+	d := goDash
 	c := d.Context(appengine.NewContext(r))
 
 	page, _ := strconv.Atoi(r.FormValue("page"))

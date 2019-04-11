@@ -11,6 +11,20 @@ Then visit http://localhost:6343
 
 ## Deployment
 
+### First-time setup
+
+Install the `docker`, `kubectl`, and `gcloud` utilities.
+
+Verify that `docker run hello-world` works without `sudo`. (You may need to run
+`sudo adduser $USER docker`, then either log out and back in or run `newgrp
+docker`.)
+
+Then run:
+
+```sh
+$ gcloud auth configure-docker
+```
+
 ### Staging
 
 ```sh

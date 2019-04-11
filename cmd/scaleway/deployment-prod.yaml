@@ -12,6 +12,7 @@ spec:
         container.seccomp.security.alpha.kubernetes.io/scaleway: docker/default
         container.apparmor.security.beta.kubernetes.io/scaleway: runtime/default
     spec:
+      restartPolicy: Always
       volumes:
         - name: secrets-volume
           secret:
@@ -25,7 +26,7 @@ spec:
         - name: scaleway
           image: gcr.io/symbolic-datum-552/scaleway:latest
           imagePullPolicy: Always
-          command: ["/scaleway", "-daemon"]
+          command: ["/scaleway", "-daemon", "-token-dir=/keys"]
           volumeMounts:
             - name: secrets-volume
               mountPath: /keys

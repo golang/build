@@ -122,7 +122,6 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-openbsd",
 				"misc-compile-plan9",
 				"misc-compile-ppc",
-				"misc-vet-vetall",
 				"nacl-386",
 				"nacl-amd64p32",
 				"openbsd-amd64-64",
@@ -151,6 +150,16 @@ func TestTrybots(t *testing.T) {
 				"netbsd-amd64-8_0",
 				"openbsd-386-64",
 				"openbsd-amd64-64",
+				"windows-386-2008",
+				"windows-amd64-2016",
+			},
+		},
+		{
+			repo:   "exp",
+			branch: "master",
+			want: []string{
+				"linux-amd64",
+				"linux-amd64-race",
 				"windows-386-2008",
 				"windows-amd64-2016",
 			},
@@ -253,6 +262,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "net"), both},
 		{b("linux-amd64", "sys"), both},
 
+		{b("misc-vet-vetall", "go"), both},
+		{b("misc-vet-vetall@go1.11", "go"), none},
+		{b("misc-vet-vetall@go1.12", "go"), none},
+
 		// Don't test all subrepos on all the builders.
 		{b("linux-amd64-ssacheck", "net"), none},
 		{b("linux-amd64-ssacheck@go1.10", "net"), none},
@@ -313,6 +326,20 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-amd64-11_1@go1.12", "net@1.12"), isBuilder},
 		{b("freebsd-amd64-11_1@go1.11", "go"), isBuilder},
 		{b("freebsd-amd64-11_1@go1.11", "net@1.11"), isBuilder},
+
+		// FreeBSD 12.0
+		{b("freebsd-amd64-12_0", "go"), both},
+		{b("freebsd-amd64-12_0", "net"), both},
+		{b("freebsd-386-12_0", "go"), onlyPost},
+		{b("freebsd-386-12_0", "net"), onlyPost},
+
+		// AIX starts at Go 1.12
+		{b("aix-ppc64", "go"), onlyPost},
+		{b("aix-ppc64", "net"), onlyPost},
+		{b("aix-ppc64@go1.12", "go"), onlyPost},
+		{b("aix-ppc64@go1.12", "net"), onlyPost},
+		{b("aix-ppc64@go1.11", "go"), none},
+		{b("aix-ppc64@go1.11", "net"), none},
 
 		{b("linux-amd64-nocgo", "mobile"), none},
 
@@ -384,6 +411,71 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-longtest", "net"), onlyPost},
 		{b("linux-amd64-longtest@go1.12", "go"), onlyPost},
 		{b("linux-amd64-longtest@go1.12", "net"), none},
+
+		// Experimental exp repo runs in very few places.
+		{b("linux-amd64", "exp"), both},
+		{b("linux-amd64-race", "exp"), both},
+		{b("linux-amd64-longtest", "exp"), onlyPost},
+		{b("windows-386-2008", "exp"), both},
+		{b("windows-amd64-2016", "exp"), both},
+		{b("darwin-amd64-10_12", "exp"), onlyPost},
+		{b("darwin-amd64-10_14", "exp"), onlyPost},
+		// ... but not on most others:
+		{b("freebsd-386-11_2", "exp"), none},
+		{b("freebsd-386-12_0", "exp"), none},
+		{b("freebsd-amd64-11_2", "exp"), none},
+		{b("freebsd-amd64-12_0", "exp"), none},
+		{b("openbsd-amd64-62", "exp"), none},
+		{b("openbsd-amd64-64", "exp"), none},
+		{b("js-wasm", "exp"), none},
+
+		// exp is experimental; it doesn't test against release branches.
+		{b("linux-amd64@go1.11", "exp"), none},
+		{b("linux-amd64@go1.12", "exp"), none},
+
+		// Only use latest macOS for subrepos, and only amd64:
+		{b("darwin-amd64-10_12", "net"), onlyPost},
+		{b("darwin-amd64-10_12@go1.11", "net"), onlyPost},
+		{b("darwin-amd64-10_11", "net"), none},
+		{b("darwin-amd64-10_11@go1.11", "net"), none},
+		{b("darwin-amd64-10_11@go1.12", "net"), none},
+		{b("darwin-386-10_11@go1.11", "net"), none},
+
+		{b("darwin-amd64-10_14", "go"), onlyPost},
+		{b("darwin-amd64-10_12", "go"), onlyPost},
+		{b("darwin-amd64-10_11", "go"), onlyPost},
+		{b("darwin-amd64-10_10", "go"), none},
+		{b("darwin-amd64-10_10@go1.12", "go"), onlyPost},
+		{b("darwin-amd64-10_10@go1.11", "go"), onlyPost},
+		{b("darwin-386-10_11", "go"), onlyPost},
+		{b("darwin-386-10_11@go1.12", "go"), onlyPost},
+		{b("darwin-386-10_11@go1.11", "go"), onlyPost},
+
+		// plan9 only lives at master. We don't support any past releases.
+		{b("plan9-386", "go"), onlyPost},
+		{b("plan9-386@go1.11", "go"), none},
+		{b("plan9-386@go1.12", "go"), none},
+		{b("plan9-386", "net"), onlyPost},
+		{b("plan9-386@go1.11", "net"), none},
+		{b("plan9-386@go1.12", "net"), none},
+		{b("plan9-amd64-9front", "go"), onlyPost},
+		{b("plan9-amd64-9front@go1.11", "go"), none},
+		{b("plan9-amd64-9front@go1.12", "go"), none},
+		{b("plan9-amd64-9front", "net"), onlyPost},
+		{b("plan9-amd64-9front@go1.11", "net"), none},
+		{b("plan9-amd64-9front@go1.12", "net"), none},
+		{b("plan9-arm", "go"), onlyPost},
+		{b("plan9-arm@go1.11", "go"), none},
+		{b("plan9-arm@go1.12", "go"), none},
+		{b("plan9-arm", "net"), onlyPost},
+		{b("plan9-arm@go1.11", "net"), none},
+		{b("plan9-arm@go1.12", "net"), none},
+
+		// x/net master with Go 1.11 doesn't work on our builders
+		// on 32-bit FreeBSD. Remove distracting red from the dashboard
+		// that'll never be fixed.
+		{b("freebsd-386-11_2@go1.11", "net"), none},
+		{b("freebsd-386-12_0@go1.11", "net"), none},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {
@@ -435,5 +527,51 @@ func TestBuildsRepoAtAllImplicitGoBranch(t *testing.T) {
 	got := builder.buildsRepoAtAll("go", "master", "")
 	if !got {
 		t.Error("got = false; want true")
+	}
+}
+
+func TestShouldRunDistTest(t *testing.T) {
+	type buildMode int
+	const (
+		tryMode    buildMode = 0
+		postSubmit buildMode = 1
+	)
+
+	tests := []struct {
+		builder string
+		test    string
+		mode    buildMode
+		want    bool
+	}{
+		{"linux-amd64", "api", postSubmit, true},
+		{"linux-amd64", "api", tryMode, true},
+
+		{"linux-amd64", "reboot", tryMode, true},
+		{"linux-amd64-race", "reboot", tryMode, false},
+
+		{"darwin-amd64-10_10", "test:foo", postSubmit, false},
+		{"darwin-amd64-10_11", "test:foo", postSubmit, false},
+		{"darwin-amd64-10_12", "test:foo", postSubmit, false},
+		{"darwin-amd64-10_14", "test:foo", postSubmit, false},
+		{"darwin-amd64-10_14", "test:foo", postSubmit, false},
+		{"darwin-amd64-10_14", "reboot", postSubmit, false},
+		{"darwin-amd64-10_14", "api", postSubmit, false},
+		{"darwin-amd64-10_14", "codewalk", postSubmit, false},
+	}
+	for _, tt := range tests {
+		bc, ok := Builders[tt.builder]
+		if !ok {
+			t.Errorf("unknown builder %q", tt.builder)
+			continue
+		}
+		isTry := tt.mode == tryMode
+		if isTry && !bc.BuildsRepoTryBot("go", "master", "master") {
+			t.Errorf("builder %q is not a trybot, so can't run test %q in try mode", tt.builder, tt.test)
+			continue
+		}
+		got := bc.ShouldRunDistTest(tt.test, isTry)
+		if got != tt.want {
+			t.Errorf("%q.ShouldRunDistTest(%q, try %v) = %v; want %v", tt.builder, tt.test, isTry, got, tt.want)
+		}
 	}
 }

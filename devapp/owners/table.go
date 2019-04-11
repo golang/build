@@ -30,6 +30,7 @@ var (
 	bradfitz     = gh("bradfitz")
 	cbro         = gh("broady")
 	cherryyz     = gh("cherrymui")
+	cnoellekb    = gh("cnoellekb")
 	dmitshur     = gh("dmitshur")
 	danderson    = gh("danderson")
 	drchase      = gh("dr2chase")
@@ -41,6 +42,8 @@ var (
 	hanwen       = gh("hanwen")
 	hyangah      = gh("hyangah")
 	iant         = gh("ianlancetaylor")
+	iancottrell  = gh("ianthehat")
+	jayconrod    = gh("jayconrod")
 	jbd          = gh("rakyll")
 	joetsai      = gh("dsnet")
 	josharian    = gh("josharian")
@@ -60,6 +63,7 @@ var (
 	r            = gh("robpike")
 	rlh          = gh("RLH")
 	rsc          = gh("rsc")
+	rstambler    = gh("stamblerre")
 	sameer       = gh("Sajmani")
 	thanm        = gh("thanm")
 	tklauser     = gh("tklauser")
@@ -70,22 +74,19 @@ var (
 // entries is a map of <repo name>/<path> to Owner entries.
 // It should not be modified at runtime.
 var entries = map[string]*Entry{
-	"arch/": {
+	"arch": {
 		Primary: []Owner{cherryyz},
 	},
 
-	"crypto/": {
+	"crypto": {
 		Primary:   []Owner{filippo},
 		Secondary: []Owner{agl},
 	},
-	"crypto/ssh/": {
+	"crypto/ssh": {
 		Primary:   []Owner{hanwen},
 		Secondary: []Owner{filippo},
 	},
 
-	"go/": {
-		Primary: []Owner{rsc, iant, bradfitz},
-	},
 	"go/src/archive/tar": {
 		Primary: []Owner{joetsai},
 	},
@@ -101,7 +102,7 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{},
 		Secondary: []Owner{bradfitz, iant},
 	},
-	"go/src/cmd/compile/": {
+	"go/src/cmd/compile": {
 		Primary:   []Owner{khr, gri},
 		Secondary: []Owner{josharian, mdempsky, martisch},
 	},
@@ -154,7 +155,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mvdan},
 	},
 	"go/src/cmd/go": {
-		Primary: []Owner{bcmills, rsc, iant},
+		Primary:   []Owner{bcmills, jayconrod},
+		Secondary: []Owner{rsc, iant},
 	},
 	"go/src/cmd/link": {
 		Primary:   []Owner{cherryyz, rsc, mdempsky, iant},
@@ -542,22 +544,22 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{andybons},
 	},
 
-	"gofrontend/": {
+	"gofrontend": {
 		Primary:   []Owner{iant},
 		Secondary: []Owner{thanm},
 	},
 
-	"gollvm/": {
+	"gollvm": {
 		Primary:   []Owner{thanm},
 		Secondary: []Owner{cherryyz},
 	},
 
-	"mobile/": {
+	"mobile": {
 		Primary:   []Owner{eliasnaur},
 		Secondary: []Owner{hyangah},
 	},
 
-	"net/": {
+	"net": {
 		Primary:   []Owner{mikioh},
 		Secondary: []Owner{bradfitz, iant},
 	},
@@ -580,11 +582,11 @@ var entries = map[string]*Entry{
 		Primary: []Owner{mikioh, iant},
 	},
 
-	"review/": {
+	"review": {
 		Secondary: []Owner{josharian, kevinburke},
 	},
 
-	"sync/": {
+	"sync": {
 		Primary: []Owner{bcmills},
 	},
 
@@ -595,7 +597,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{alexbrainman, bradfitz},
 	},
 
-	"text/": {
+	"text": {
 		Primary: []Owner{mpvl},
 	},
 
@@ -613,6 +615,9 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{bradfitz},
 		Secondary: []Owner{josharian},
 	},
+	"tools/cmd/gopls": {
+		Primary: []Owner{rstambler, iancottrell},
+	},
 	"tools/cmd/stringer": {
 		Secondary: []Owner{mvdan},
 	},
@@ -622,7 +627,14 @@ var entries = map[string]*Entry{
 	"tools/go/packages": {
 		Primary: []Owner{matloob},
 	},
+	"tools/internal/lsp": {
+		Primary: []Owner{rstambler, iancottrell},
+	},
 	"playground": {
 		Secondary: []Owner{ysmolsky},
+	},
+	"website": {
+		Primary:   []Owner{dmitshur},
+		Secondary: []Owner{cnoellekb, andybons},
 	},
 }

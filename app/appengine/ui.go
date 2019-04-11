@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"golang.org/x/build/app/cache"
+	"golang.org/x/build/dashboard"
 	"golang.org/x/build/types"
 
 	"google.golang.org/appengine"
@@ -42,7 +43,7 @@ func init() {
 
 // uiHandler draws the build status page.
 func uiHandler(w http.ResponseWriter, r *http.Request) {
-	d := dashboardForRequest(r)
+	d := goDash
 	c := d.Context(appengine.NewContext(r))
 	now := cache.Now(c)
 	key := "build-ui"
@@ -139,6 +140,25 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 				tagState = append(tagState, s)
 			}
 		}
+		// Sort tagState in reverse lexical order by name so higher
+		// numbered release branches show first for subrepos
+		// https://build.golang.org/ after master. We want the subrepo
+		// order to be "master, release-branch.go1.12,
+		// release-branch.go1.11" so they're in order by date (newest
+		// first). If we weren't already at two digit minor versions we'd
+		// need to parse the branch name, but we can be lazy now
+		// and just do a string compare.
+		sort.Slice(tagState, func(i, j int) bool { // is item 'i' less than item 'j'?
+			ni, nj := tagState[i].Name, tagState[j].Name
+			switch {
+			case ni == "master":
+				return true // an i of "master" is always first
+			case nj == "master":
+				return false // if i wasn't "master", it can't be less than j's "master"
+			default:
+				return ni > nj // "release-branch.go1.12" > "release-branch.go1.11", so 1.12 sorts earlier
+			}
+		})
 
 	BuildData:
 		p := &Pagination{}
@@ -207,7 +227,7 @@ func listBranches(c context.Context) (branches []string) {
 //    hash builder failure-url
 func failuresHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 	w.Header().Set("Content-Type", "text/plain")
-	d := dashboardForRequest(r)
+	d := goDash
 	for _, c := range data.Commits {
 		for _, b := range data.Builders {
 			res := c.Result(b, "")
@@ -223,7 +243,7 @@ func failuresHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateDat
 // jsonHandler is https://build.golang.org/?mode=json
 // The output is a types.BuildStatus JSON object.
 func jsonHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
-	d := dashboardForRequest(r)
+	d := goDash
 
 	// cell returns one of "" (no data), "ok", or a failure URL.
 	cell := func(res *Result) string {
@@ -356,9 +376,14 @@ func commitBuilders(commits []*Commit) []string {
 			builders[r.Builder] = true
 		}
 	}
-	// In dev_appserver mode, add some dummy data:
-	if len(builders) == 0 && isDevAppServer {
-		return []string{"linux-amd64", "linux-amd64-nocgo", "linux-amd64-race", "windows-386", "windows-amd64"}
+	// Add all known builders from the builder configuration too.
+	// We want to see columns even if there are no results so we
+	// can identify missing builders. (Issue 19930)
+	for name, bc := range dashboard.Builders {
+		if !bc.BuildsRepoPostSubmit("go", "master", "master") {
+			continue
+		}
+		builders[name] = true
 	}
 	k := keys(builders)
 	sort.Sort(builderOrder(k))
@@ -366,6 +391,7 @@ func commitBuilders(commits []*Commit) []string {
 }
 
 func keys(m map[string]bool) (s []string) {
+	s = make([]string, 0, len(m))
 	for k := range m {
 		s = append(s, k)
 	}
@@ -442,6 +468,15 @@ type TagState struct {
 	Name     string // "tip", "release-branch.go1.4", etc
 	Tag      *Commit
 	Packages []*PackageState
+}
+
+// Branch returns the git branch name, converting from the old
+// terminology we used from Go's hg days into git terminology.
+func (ts *TagState) Branch() string {
+	if ts.Name == "tip" {
+		return "master"
+	}
+	return ts.Name
 }
 
 // PackageState represents the state of a Package at a Tag.
@@ -563,17 +598,15 @@ var uiTemplate = template.Must(
 )
 
 var tmplFuncs = template.FuncMap{
-	"buildDashboards":    buildDashboards,
-	"builderOS":          builderOS,
 	"builderSpans":       builderSpans,
 	"builderSubheading":  builderSubheading,
 	"builderSubheading2": builderSubheading2,
-	"builderTitle":       builderTitle,
 	"shortDesc":          shortDesc,
 	"shortHash":          shortHash,
 	"shortUser":          shortUser,
 	"tail":               tail,
 	"unsupported":        unsupported,
+	"isUntested":         isUntested,
 }
 
 func splitDash(s string) (string, string) {
@@ -648,16 +681,6 @@ func builderSpans(s []string) []builderSpan {
 		s = s[i:]
 	}
 	return sp
-}
-
-// builderTitle formats "linux-amd64-foo" as "linux amd64 foo".
-func builderTitle(s string) string {
-	return strings.Replace(s, "-", " ", -1)
-}
-
-// buildDashboards returns the known public dashboards.
-func buildDashboards() []*Dashboard {
-	return dashboards
 }
 
 // shortDesc returns the first line of a description.

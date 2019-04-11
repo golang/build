@@ -18,6 +18,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # libgles2-mesa-dev libopenal-dev fonts-droid: required by x/mobile repo
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
+	netbase \
 	ca-certificates \
 	curl \
 	gdb \
@@ -39,6 +40,7 @@ RUN apt-get update && apt-get install -y \
 	mercurial \
 	subversion \
 	iptables \
+	swig \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /go1.4-amd64 \

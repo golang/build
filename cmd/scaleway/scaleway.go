@@ -26,7 +26,8 @@ import (
 )
 
 var (
-	token       = flag.String("token", "", "API token. If empty, the file is read from $HOME/keys/go-scaleway.token. Googlers on the Go team can get the value from http://go/golang-scaleway-token")
+	tokenDir    = flag.String("token-dir", filepath.Join(os.Getenv("HOME"), "keys"), "directory to read gobuilder-staging.key, gobuilder-master.key and go-scaleway.token from.")
+	token       = flag.String("token", "", "API token. If empty, the file is read from $(token-dir)/go-scaleway.token. Googlers on the Go team can get the value from http://go/golang-scaleway-token")
 	org         = flag.String("org", "1f34701d-668b-441b-bf08-0b13544e99de", "Organization ID (default is bradfitz@golang.org's account)")
 	image       = flag.String("image", "e488d5e3-d278-47a7-8f7d-1154e1f61dc9", "Disk image ID; default is the snapshot we made last")
 	num         = flag.Int("n", 0, "Number of servers to create; if zero, defaults to a value as a function of --staging")
@@ -62,7 +63,7 @@ func main() {
 		}
 	}
 	if *token == "" {
-		file := filepath.Join(os.Getenv("HOME"), "keys/go-scaleway.token")
+		file := filepath.Join(*tokenDir, "go-scaleway.token")
 		slurp, err := ioutil.ReadFile(file)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -74,6 +75,9 @@ func main() {
 	}
 
 	// Loop over checkServers() in daemon mode.
+	if *daemonMode {
+		log.Printf("scaleway instance checker daemon running.")
+	}
 	for {
 		checkServers()
 		if !*daemonMode {
@@ -84,6 +88,9 @@ func main() {
 }
 
 func checkServers() {
+	timer := time.AfterFunc(5*time.Minute, func() { panic("Timeout running checkServers.") })
+	defer timer.Stop()
+
 	cl := &Client{Token: *token}
 	serverList, err := cl.Servers()
 	if err != nil {
@@ -307,7 +314,7 @@ func (ip *IP) String() string {
 // defaultBuilderTags returns the default value of the "tags" flag.
 // It returns a comma-separated list of builder tags (each of the form buildkey_$(BUILDER)_$(SECRETHEX)).
 func defaultBuilderTags(baseKeyFile string) string {
-	keyFile := filepath.Join(os.Getenv("HOME"), "keys", baseKeyFile)
+	keyFile := filepath.Join(*tokenDir, baseKeyFile)
 	slurp, err := ioutil.ReadFile(keyFile)
 	if err != nil {
 		log.Fatal(err)

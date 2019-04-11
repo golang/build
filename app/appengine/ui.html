@@ -26,9 +26,6 @@
 
     <form action="." method="GET">
     <nav class="dashboards">
-      {{range buildDashboards}}
-        <a href="{{.Prefix}}/">{{.Name}}</a>
-      {{end}}
       {{if not (eq .Branch "")}}
       <label>
         <select name="branch" onchange="this.form.submit()">
@@ -120,9 +117,9 @@
           <td class="time">{{$c.Time.Format "02 Jan 15:04"}}</td>
           <td class="desc" title="{{$c.Desc}}">{{shortDesc $c.Desc}}</td>
         {{end}}
-          {{range $.Builders}}
+          {{range $builderName := $.Builders}}
             <td class="result{{if (unsupported .)}} unsupported{{end}}">
-              {{with $c.Result . $h}}
+              {{with $c.Result $builderName $h}}
                 {{if .BuildingURL}}
                   <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" height=16 width=16 border=0></a>
                 {{else if .OK}}
@@ -156,9 +153,10 @@
 
   {{range $.TagState}}
     {{$goHash := .Tag.Hash}}
+    {{$goBranch := .Branch}}
     {{if .Packages}}
       <h2>
-        Sub-repositories at {{.Name}}
+        golang.org/x repos at Go {{$goBranch}}
         <small>(<a href="https://go-review.googlesource.com/q/{{.Tag.Hash}}">{{shortHash .Tag.Hash}}</a>)</small>
       </h2>
 
@@ -216,18 +214,22 @@
           <td class="time">{{.Time.Format "02 Jan 15:04"}}</td>
           <td class="desc" title="{{.Desc}}">{{shortDesc .Desc}}</td>
         {{end}}
-        {{range $.Builders}}
+        {{range $builderName := $.Builders}}
           <td class="result{{if (unsupported .)}} unsupported{{end}}">
-            {{with $pkg.Commit.Result . $goHash}}
-              {{if .BuildingURL}}
-                <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" height=16 width=16 border=0></a>
-              {{else if .OK}}
-                <span class="ok">ok</span>
-              {{else}}
-                <a href="{{$.Dashboard.Prefix}}/log/{{.LogHash}}" class="fail">fail</a>
-              {{end}}
+            {{if isUntested $builderName $pkg.Package.Name "master" $goBranch}}
+              •
             {{else}}
-              &nbsp;
+              {{with $pkg.Commit.Result $builderName $goHash}}
+                {{if .BuildingURL}}
+                  <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" height=16 width=16 border=0></a>
+                {{else if .OK}}
+                  <span class="ok">ok</span>
+                {{else}}
+                  <a href="{{$.Dashboard.Prefix}}/log/{{.LogHash}}" class="fail">fail</a>
+                {{end}}
+              {{else}}
+                &nbsp;
+              {{end}}
             {{end}}
           </td>
         {{end}}

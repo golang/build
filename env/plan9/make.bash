@@ -4,6 +4,32 @@
 
 set -e
 
+arch=$1
+platform=$2
+
+if [ ! $# -eq 2 ]; then
+	echo 'usage: make.bash [ 386 | amd64 ] [ qemu | gce ]' 2>&1
+	exit 1
+fi
+
+if [ "$arch" != 386 ] && [ "$arch" != amd64 ]; then
+	echo 'supported architectures are 386 and amd64' 2>&1
+	exit 1
+fi
+
+case "$platform" in
+	qemu)
+		disk=sd00
+		;;
+	gce)
+		disk=sd01
+		;;
+	*)
+		echo 'supported platforms are qemu and gce' 2>&1
+		exit 1
+		;;
+esac
+
 # Download Plan 9
 if ! sha1sum -c plan9-gce.iso.sha1; then
   curl --fail -O http://9legacy.org/download/go/2018-11-30/plan9-gce.iso.bz2
@@ -133,42 +159,6 @@ expect -timeout 600 -exact "term% "
 send "\n"
 
 expect -exact "term% "
-send "9fat:\n"
-
-expect -exact "term% "
-send "sed /^debugboot'='/d /n/9fat/plan9.ini >/tmp/plan9.ini\n"
-
-expect -exact "term% "
-send "mv /tmp/plan9.ini /n/9fat/plan9.ini\n"
-
-expect -exact "term% "
-send "sed s/9pcf/9pccpuf/ /n/9fat/plan9.ini >/tmp/plan9.ini\n"
-
-expect -exact "term% "
-send "mv /tmp/plan9.ini /n/9fat/plan9.ini\n"
-
-expect -exact "term% "
-send "cp /386/9pccpuf /n/9fat\n"
-
-expect -exact "term% "
-send "sed s/sd00/sd01/ /n/9fat/plan9.ini >/tmp/plan9.ini\n"
-
-expect -exact "term% "
-send "mv /tmp/plan9.ini /n/9fat/plan9.ini\n"
-
-expect -exact "term% "
-send "unmount /n/9fat\n"
-
-expect -exact "term% "
-send "fossil/conf /dev/sd00/fossil | sed s/sd00/sd01/ >/tmp/fossil.conf\n"
-
-expect -exact "term% "
-send "fossil/conf -w /dev/sd00/fossil /tmp/fossil.conf\n"
-
-expect -exact "term% "
-send "rm /tmp/fossil.conf\n"
-
-expect -exact "term% "
 send "mkdir /cfg/helix\n"
 
 expect -exact "term% "
@@ -250,10 +240,118 @@ expect -exact "done halting"
 exit
 EOF
 
+if [ "$arch" == "amd64" ]; then
+	expect <<EOF
+	spawn qemu-system-i386 -machine accel=kvm -nographic -net user -net nic,model=virtio -m 1024 -vga none -drive if=none,id=hd,file=disk.raw -device virtio-scsi-pci,id=scsi -device scsi-hd,drive=hd -cdrom plan9-gce.iso -boot c
+
+	expect -exact "Plan 9"
+	sleep 5
+
+	# Need to wait for the kernel to boot.
+	expect -timeout 600 -exact "term% "
+	send "\n"
+
+	expect -exact "term% "
+	send "echo 'aux/listen1 tcp!*!17007 /bin/exportfs -a &' >>/cfg/helix/cpurc\n"
+
+	expect -exact "term% "
+	send "echo 'aux/listen1 tcp!*!17010 /bin/cpu -R &' >>/cfg/helix/cpurc\n"
+
+	expect -exact "term% "
+	send "mkdir /usr/glenda/bin/amd64\n"
+
+	expect -exact "term% "
+	send "9fat:\n"
+
+	expect -exact "term% "
+	send "cp /amd64/9k10cpuf /n/9fat\n"
+
+	expect -exact "term% "
+	send "sed s/9pcf/9k10cpuf/ /n/9fat/plan9.ini >/tmp/plan9.ini\n"
+
+	expect -exact "term% "
+	send "mv /tmp/plan9.ini /n/9fat/plan9.ini\n"
+
+	expect -exact "term% "
+	send "sed s/sd00/$disk/ /n/9fat/plan9.ini >/tmp/plan9.ini\n"
+
+	expect -exact "term% "
+	send "mv /tmp/plan9.ini /n/9fat/plan9.ini\n"
+
+	expect -exact "term% "
+	send "unmount /n/9fat\n"
+
+	expect -exact "term% "
+	send "fossil/conf /dev/sd00/fossil | sed s/sd00/$disk/ >/tmp/fossil.conf\n"
+
+	expect -exact "term% "
+	send "fossil/conf -w /dev/sd00/fossil /tmp/fossil.conf\n"
+
+	expect -exact "term% "
+	send "rm /tmp/fossil.conf\n"
+
+	expect -exact "term% "
+	send "fshalt\n"
+
+	expect -exact "done halting"
+EOF
+else
+	expect <<EOF
+	spawn qemu-system-i386 -machine accel=kvm -nographic -net user -net nic,model=virtio -m 1024 -vga none -drive if=none,id=hd,file=disk.raw -device virtio-scsi-pci,id=scsi -device scsi-hd,drive=hd -cdrom plan9-gce.iso -boot c
+
+	expect -exact "Plan 9"
+	sleep 5
+
+	# Need to wait for the kernel to boot.
+	expect -timeout 600 -exact "term% "
+	send "\n"
+
+	expect -exact "term% "
+	send "9fat:\n"
+
+	expect -exact "term% "
+	send "cp /386/9pccpuf /n/9fat\n"
+
+	expect -exact "term% "
+	send "sed s/9pcf/9pccpuf/ /n/9fat/plan9.ini >/tmp/plan9.ini\n"
+
+	expect -exact "term% "
+	send "mv /tmp/plan9.ini /n/9fat/plan9.ini\n"
+
+	expect -exact "term% "
+	send "sed s/sd00/$disk/ /n/9fat/plan9.ini >/tmp/plan9.ini\n"
+
+	expect -exact "term% "
+	send "mv /tmp/plan9.ini /n/9fat/plan9.ini\n"
+
+	expect -exact "term% "
+	send "unmount /n/9fat\n"
+
+	expect -exact "term% "
+	send "fossil/conf /dev/sd00/fossil | sed s/sd00/$disk/ >/tmp/fossil.conf\n"
+
+	expect -exact "term% "
+	send "fossil/conf -w /dev/sd00/fossil /tmp/fossil.conf\n"
+
+	expect -exact "term% "
+	send "rm /tmp/fossil.conf\n"
+
+	expect -exact "term% "
+	send "fshalt\n"
+
+	expect -exact "done halting"
+EOF
+fi
+
 echo
+
+if [ "$platform" == qemu ]; then
+	echo "Done. QEMU image is disk.raw."
+	exit
+fi
 
 # Create Compute Engine disk image.
 echo "Archiving disk.raw... (this may take a while)"
-tar -Szcf plan9-386-gce.tar.gz disk.raw
+tar -Szcf plan9-$arch-gce.tar.gz disk.raw
 
-echo "Done. GCE image is plan9-386-gce.tar.gz."
+echo "Done. GCE image is plan9-$arch-gce.tar.gz."

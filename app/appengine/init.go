@@ -18,7 +18,7 @@ import (
 )
 
 func initHandler(w http.ResponseWriter, r *http.Request) {
-	d := dashboardForRequest(r)
+	d := goDash
 	c := d.Context(appengine.NewContext(r))
 	defer cache.Tick(c)
 	for _, p := range d.Packages {

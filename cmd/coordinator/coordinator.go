@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build linux
+// +build linux darwin
 
 // The coordinator runs the majority of the Go build system.
 //
@@ -67,8 +67,6 @@ import (
 )
 
 const (
-	subrepoPrefix = "golang.org/x/"
-
 	// eventDone is a build event name meaning the build was
 	// completed (either successfully or with remote errors).
 	// Notably, it is NOT included for network/communication
@@ -315,7 +313,7 @@ func main() {
 		if *mode == "dev" {
 			return
 		}
-		var handler http.Handler = httpRouter{}
+		var handler http.Handler = httpToHTTPSRedirector{}
 		if autocertManager != nil {
 			handler = autocertManager.HTTPHandler(handler)
 		}
@@ -367,6 +365,17 @@ func main() {
 			st.start()
 		}
 	}
+}
+
+// httpToHTTPSRedirector redirects all requests from http to https.
+type httpToHTTPSRedirector struct{}
+
+func (httpToHTTPSRedirector) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Connection", "close")
+	u := *req.URL
+	u.Scheme = "https"
+	u.Host = req.Host
+	http.Redirect(w, req, u.String(), http.StatusMovedPermanently)
 }
 
 // watcherProxy is the proxy which forwards from
@@ -1101,17 +1110,6 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		},
 	}
 
-	// GoCommit is non-empty for x/* repos (aka "subrepos"). It
-	// is the Go revision to use to build & test the x/* repo
-	// with. The first element is the master branch. We test the
-	// master branch against all the normal builders configured to
-	// do subrepos. Any GoCommit values past the first are for older
-	// release branches, but we use a limited subset of builders for those.
-	var goRev string
-	if len(work.GoCommit) > 0 {
-		goRev = work.GoCommit[0]
-	}
-
 	// Defensive check that the input is well-formed.
 	// Each GoCommit should have a GoBranch and a GoVersion.
 	// There should always be at least one GoVersion.
@@ -1126,6 +1124,19 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	if len(work.GoVersion) == 0 {
 		log.Print("WARNING: len(GoVersion) is zero, want at least one")
 		work.GoVersion = []*apipb.MajorMinor{{}}
+	}
+
+	// GoCommit is non-empty for x/* repos (aka "subrepos"). It
+	// is the Go revision to use to build & test the x/* repo
+	// with. The first element is the master branch. We test the
+	// master branch against all the normal builders configured to
+	// do subrepos. Any GoCommit values past the first are for older
+	// release branches, but we use a limited subset of builders for those.
+	var goRev string
+	for i, branch := range work.GoBranch {
+		if branch == work.Branch {
+			goRev = work.GoCommit[i]
+		}
 	}
 
 	addBuilderToSet := func(bs *buildStatus, brev buildgo.BuilderRev) {
@@ -1159,34 +1170,38 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		addBuilderToSet(bs, brev)
 	}
 
-	// linuxBuilder is the standard builder we run for when testing x/* repos against
-	// the past two Go releases.
-	linuxBuilder := dashboard.Builders["linux-amd64"]
+	// For subrepos on the "master" branch, test against prior releases of Go too.
+	if key.Project != "go" && key.Branch == "master" {
+		// linuxBuilder is the standard builder we run for when testing x/* repos against
+		// the past two Go releases.
+		linuxBuilder := dashboard.Builders["linux-amd64"]
 
-	// If there's more than one GoCommit, that means this is an x/* repo
-	// and we're testing against previous releases of Go.
-	for i, goRev := range work.GoCommit {
-		if i == 0 {
-			// Skip the i==0 element, which is handled above.
-			continue
+		// If there's more than one GoCommit, that means this is an x/* repo
+		// and we're testing against previous releases of Go.
+		for i, goRev := range work.GoCommit {
+			if i == 0 {
+				// Skip the i==0 element, which is handled above.
+				continue
+			}
+			branch := work.GoBranch[i]
+			if !linuxBuilder.BuildsRepoTryBot(key.Project, "master", branch) {
+				continue
+			}
+			goVersion := types.MajorMinor{int(work.GoVersion[i].Major), int(work.GoVersion[i].Minor)}
+			if goVersion.Less(linuxBuilder.MinimumGoVersion) {
+				continue
+			}
+			brev := tryKeyToBuilderRev(linuxBuilder.Name, key, goRev)
+			bs, err := newBuild(brev)
+			if err != nil {
+				log.Printf("can't create build for %q: %v", brev, err)
+				continue
+			}
+			bs.goBranch = branch
+			addBuilderToSet(bs, brev)
 		}
-		branch := work.GoBranch[i]
-		if !linuxBuilder.BuildsRepoTryBot(key.Project, "master", branch) {
-			continue
-		}
-		goVersion := types.MajorMinor{int(work.GoVersion[i].Major), int(work.GoVersion[i].Minor)}
-		if goVersion.Less(linuxBuilder.MinimumGoVersion) {
-			continue
-		}
-		brev := tryKeyToBuilderRev(linuxBuilder.Name, key, goRev)
-		bs, err := newBuild(brev)
-		if err != nil {
-			log.Printf("can't create build for %q: %v", brev, err)
-			continue
-		}
-		bs.goBranch = branch
-		addBuilderToSet(bs, brev)
 	}
+
 	return ts
 }
 
@@ -1323,6 +1338,8 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 	benchResults := append([]string(nil), ts.benchResults...)
 	ts.mu.Unlock()
 
+	const failureFooter = "Consult https://build.golang.org/ to see whether they are new failures. Keep in mind that TryBots currently test *exactly* your git commit, without rebasing. If your commit's git parent is old, the failure might've already been fixed."
+
 	if !succeeded {
 		s1 := sha1.New()
 		io.WriteString(s1, buildLog)
@@ -1350,7 +1367,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 					"Build is still in progress...\n"+
 						"This change failed on %s:\n"+
 						"See %s\n\n"+
-						"Consult https://build.golang.org/ to see whether it's a new failure. Other builds still in progress; subsequent failure notices suppressed until final report.",
+						"Other builds still in progress; subsequent failure notices suppressed until final report. "+failureFooter,
 					bs.NameAndBranch(), failLogURL),
 			}); err != nil {
 				log.Printf("Failed to call Gerrit: %v", err)
@@ -1365,7 +1382,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 			ts.mu.Lock()
 			errMsg := ts.errMsg.String()
 			ts.mu.Unlock()
-			score, msg = -1, fmt.Sprintf("%d of %d TryBots failed:\n%s\nConsult https://build.golang.org/ to see whether they are new failures.",
+			score, msg = -1, fmt.Sprintf("%d of %d TryBots failed:\n%s\n"+failureFooter,
 				numFail, len(ts.builds), errMsg)
 		}
 		if len(benchResults) > 0 {
@@ -2196,7 +2213,7 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 		return
 	}
 	for _, test := range strings.Fields(buf.String()) {
-		if st.shouldSkipTest(test) {
+		if !st.conf.ShouldRunDistTest(test, st.isTry()) {
 			continue
 		}
 		names = append(names, test)
@@ -2204,51 +2221,14 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 	return names, nil, nil
 }
 
-// shouldSkipTest reports whether this test should be skipped.  We
-// only do this for slow builders running redundant tests. (That is,
-// tests which have identical behavior across different ports)
-func (st *buildStatus) shouldSkipTest(testName string) bool {
-	if inStaging && st.Name == "linux-arm" && false {
-		if strings.HasPrefix(testName, "go_test:") && testName < "go_test:runtime" {
-			return true
-		}
-	}
-	switch testName {
-	case "vet/all":
-		// Old vetall test name, before the sharding in CL 37572.
-		return true
-	case "api":
-		return st.isTry() && st.Name != "linux-amd64"
-	}
-	if st.conf.ShouldRunDistTest != nil {
-		if !st.conf.ShouldRunDistTest(testName, st.isTry()) {
-			return true
-		}
-	}
-	return false
-}
-
 // newTestSet returns a new testSet given the dist test names (strings from "go tool dist test -list")
 // and benchmark items.
 func (st *buildStatus) newTestSet(testStats *buildstats.TestStats, distTestNames []string, benchmarks []*buildgo.BenchmarkItem) (*testSet, error) {
 	set := &testSet{
-		st:         st,
-		needsXRepo: map[string]string{},
-		testStats:  testStats,
+		st:        st,
+		testStats: testStats,
 	}
 	for _, name := range distTestNames {
-		// The misc-vetall builder's "vet/*" tests are special: they require golang.org/x/tools
-		// in $GOPATH. So figure out the latest master HEAD git rev for x/tools so we can
-		// populate it later across all sharded builders at the same revision.
-		if strings.HasPrefix(name, "vet/") && set.needsXRepo["tools"] == "" {
-			// TODO: we'll probably need to make this handle branches later. Or maybe we
-			// should just disable misc-vetall on non-master branches.
-			rev, err := getRepoHead("tools")
-			if err != nil {
-				return nil, fmt.Errorf("failed to get master git rev for x/tools: %v", err)
-			}
-			set.needsXRepo["tools"] = rev
-		}
 		set.items = append(set.items, &testItem{
 			set:      set,
 			name:     name,
@@ -2367,7 +2347,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	// findDeps uses 'go list' on the checked out repo to find its
 	// dependencies, and adds any not-yet-fetched deps to toFetched.
 	findDeps := func(repo string) (rErr, err error) {
-		repoPath := subrepoPrefix + repo
+		repoPath := importPathOfRepo(repo)
 		var buf bytes.Buffer
 		rErr, err = st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 			Output:   &buf,
@@ -2383,10 +2363,10 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 			return rErr, nil
 		}
 		for _, p := range strings.Fields(buf.String()) {
-			if !strings.HasPrefix(p, subrepoPrefix) || strings.HasPrefix(p, repoPath) {
+			if !strings.HasPrefix(p, "golang.org/x/") || strings.HasPrefix(p, repoPath) {
 				continue
 			}
-			repo = strings.TrimPrefix(p, subrepoPrefix)
+			repo = strings.TrimPrefix(p, "golang.org/x/")
 			if i := strings.Index(repo, "/"); i >= 0 {
 				repo = repo[:i]
 			}
@@ -2448,7 +2428,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	if st.conf.IsRace() {
 		args = append(args, "-race")
 	}
-	args = append(args, subrepoPrefix+st.SubName+"/...")
+	args = append(args, importPathOfRepo(st.SubName)+"/...")
 
 	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 		Debug:    true, // make buildlet print extra debug in output for failures
@@ -2560,9 +2540,6 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	if err != nil {
 		return nil, fmt.Errorf("error discovering workdir for main buildlet, %s: %v", st.bc.Name(), err)
 	}
-	if err := set.fetchGOPATHDeps(st, st.bc); err != nil {
-		return nil, err
-	}
 
 	mainBuildletGoroot := st.conf.FilePathJoin(workDir, "go")
 	mainBuildletGopath := st.conf.FilePathJoin(workDir, "gopath")
@@ -2611,10 +2588,6 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 				workDir, err := bc.WorkDir()
 				if err != nil {
 					log.Printf("error discovering workdir for helper %s: %v", bc.Name(), err)
-					return
-				}
-				if err := set.fetchGOPATHDeps(st, bc); err != nil {
-					log.Printf("error populating GOPATH for helper %s: %v", bc.Name(), err)
 					return
 				}
 				st.LogEventTime("test_helper_set_up", bc.Name())
@@ -2906,22 +2879,9 @@ type testSet struct {
 	items     []*testItem
 	testStats *buildstats.TestStats
 
-	// needsXRepo is the set of x/$REPO repos needed in $GOPATH
-	// and which git rev that repo should be fetched at.
-	needsXRepo map[string]string // "net" => "88d92db4c548972d942ac2a3531a8a9a34c82ca6"
-
 	mu           sync.Mutex
 	inOrder      [][]*testItem
 	biggestFirst [][]*testItem
-}
-
-func (s *testSet) fetchGOPATHDeps(sl spanlog.Logger, bc *buildlet.Client) error {
-	for repo, rev := range s.needsXRepo {
-		if err := buildgo.FetchSubrepo(sl, bc, repo, rev); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // cancelAll cancels all pending tests.
@@ -3392,4 +3352,19 @@ func randHex(n int) string {
 		log.Fatalf("randHex: %v", err)
 	}
 	return fmt.Sprintf("%x", buf)[:n]
+}
+
+// importPathOfRepo returns the Go import path corresponding to the
+// root of the given repo (Gerrit project). Because it's a Go import
+// path, it always has forward slashes and no trailing slash.
+//
+// For example:
+//   "net"    -> "golang.org/x/net"
+//   "crypto" -> "golang.org/x/crypto"
+//   "dl"     -> "golang.org/dl"
+func importPathOfRepo(repo string) string {
+	if repo == "dl" {
+		return "golang.org/dl"
+	}
+	return "golang.org/x/" + repo
 }

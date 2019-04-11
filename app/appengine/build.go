@@ -20,11 +20,10 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/appengine/datastore"
-
 	"golang.org/x/build/app/cache"
-
+	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/loghash"
+	"google.golang.org/appengine/datastore"
 )
 
 const (
@@ -35,8 +34,8 @@ const (
 // A Package describes a package that is listed on the dashboard.
 type Package struct {
 	Kind    string // "subrepo", "external", or empty for the main Go tree
-	Name    string
-	Path    string // (empty for the main Go tree)
+	Name    string // "Go", "arch", "net", ...
+	Path    string // empty for the main Go tree, else "golang.org/x/foo"
 	NextNum int    // Num of the next head Commit
 }
 
@@ -242,6 +241,31 @@ func (c *Commit) Result(builder, goHash string) *Result {
 		}
 	}
 	return nil
+}
+
+// isUntested reports whether a cell in the build.golang.org grid is
+// an untested configuration.
+//
+// repo is "go", "net", etc.
+// branch is the branch of repo "master" or "release-branch.go1.12"
+// goBranch applies only if repo != "go" and is of form "master" or "release-branch.go1.N"
+//
+// As a special case, "tip" is an alias for "master", since this app
+// still uses a bunch of hg terms from when we used hg.
+func isUntested(builder, repo, branch, goBranch string) bool {
+	if branch == "tip" {
+		branch = "master"
+	}
+	if goBranch == "tip" {
+		goBranch = "master"
+	}
+	bc, ok := dashboard.Builders[builder]
+	if !ok {
+		// Not managed by coordinator. Might be an old-style builder.
+		// TODO: remove this once the old-style builders are all dead.
+		return false
+	}
+	return !bc.BuildsRepoPostSubmit(repo, branch, goBranch)
 }
 
 // Results returns the build Results for this Commit.
@@ -875,7 +899,7 @@ func PutLog(c context.Context, text string) (hash string, err error) {
 }
 
 // A Tag is used to keep track of the most recent Go weekly and release tags.
-// Typically there will be one Tag entity for each kind of hg tag.
+// Typically there will be one Tag entity for each kind of git tag.
 type Tag struct {
 	Kind string // "release", or "tip"
 	Name string // the tag itself (for example: "release.r60")

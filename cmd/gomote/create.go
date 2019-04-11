@@ -5,21 +5,70 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
 
 	"golang.org/x/build/buildlet"
-	"golang.org/x/build/dashboard"
 )
 
-func vmTypes() (s []string) {
-	for k := range dashboard.Builders {
-		s = append(s, k)
+type builderType struct {
+	Name      string
+	IsReverse bool
+	ExpectNum int
+}
+
+func builders() (bt []builderType) {
+	type builderInfo struct {
+		HostType string
 	}
-	sort.Strings(s)
+	type hostInfo struct {
+		IsReverse      bool
+		ExpectNum      int
+		ContainerImage string
+		VMImage        string
+	}
+	// resj is the response JSON from the builders.
+	var resj struct {
+		Builders map[string]builderInfo
+		Hosts    map[string]hostInfo
+	}
+	res, err := http.Get("https://farmer.golang.org/builders?mode=json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		log.Fatalf("fetching builder types: %s", res.Status)
+	}
+	if err := json.NewDecoder(res.Body).Decode(&resj); err != nil {
+		log.Fatalf("decoding builder types: %v", err)
+	}
+	for b, bi := range resj.Builders {
+		if strings.HasPrefix(b, "misc-compile") {
+			continue
+		}
+		hi, ok := resj.Hosts[bi.HostType]
+		if !ok {
+			continue
+		}
+		if !hi.IsReverse && hi.ContainerImage == "" && hi.VMImage == "" {
+			continue
+		}
+		bt = append(bt, builderType{
+			Name:      b,
+			IsReverse: hi.IsReverse,
+			ExpectNum: hi.ExpectNum,
+		})
+	}
+	sort.Slice(bt, func(i, j int) bool {
+		return bt[i].Name < bt[j].Name
+	})
 	return
 }
 
@@ -30,8 +79,16 @@ func create(args []string) error {
 		fmt.Fprintln(os.Stderr, "create usage: gomote create [create-opts] <type>")
 		fs.PrintDefaults()
 		fmt.Fprintln(os.Stderr, "\nValid types:")
-		for _, t := range vmTypes() {
-			fmt.Fprintf(os.Stderr, "  * %s\n", t)
+		for _, bt := range builders() {
+			var warn string
+			if bt.IsReverse {
+				if bt.ExpectNum > 0 {
+					warn = fmt.Sprintf("   [limited capacity: %d machines]", bt.ExpectNum)
+				} else {
+					warn = "   [limited capacity]"
+				}
+			}
+			fmt.Fprintf(os.Stderr, "  * %s%s\n", bt.Name, warn)
 		}
 		os.Exit(1)
 	}
@@ -45,23 +102,6 @@ func create(args []string) error {
 		fs.Usage()
 	}
 	builderType := fs.Arg(0)
-	_, ok := dashboard.Builders[builderType]
-	if !ok {
-		var valid []string
-		var prefixMatch []string
-		for k := range dashboard.Builders {
-			valid = append(valid, k)
-			if strings.HasPrefix(k, builderType) {
-				prefixMatch = append(prefixMatch, k)
-			}
-		}
-		if len(prefixMatch) == 1 {
-			builderType = prefixMatch[0]
-		} else {
-			sort.Strings(valid)
-			return fmt.Errorf("Invalid builder type %q. Valid options include: %q", builderType, valid)
-		}
-	}
 
 	cc, err := buildlet.NewCoordinatorClientFromFlags()
 	if err != nil {

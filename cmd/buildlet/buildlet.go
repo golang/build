@@ -74,7 +74,8 @@ var (
 //   17: make macstadium halts use sudo
 //   18: set TMPDIR and GOCACHE
 //   21: GO_BUILDER_SET_GOPROXY=coordinator support
-const buildletVersion = 21
+//   22: TrimSpace the reverse buildlet's gobuildkey contents
+const buildletVersion = 22
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -1655,6 +1656,7 @@ func configureMacStadium() {
 	// TODO: setup RAM disk for tmp and set *workDir
 
 	disableMacScreensaver()
+	enableMacDeveloperMode()
 
 	version, err := exec.Command("sw_vers", "-productVersion").Output()
 	if err != nil {
@@ -1666,7 +1668,11 @@ func configureMacStadium() {
 		log.Fatalf("unsupported sw_vers version %q", version)
 	}
 	major, minor := m[1], m[2] // "10", "12"
-	*reverse = "darwin-amd64-" + major + "_" + minor
+	if m, _ := strconv.Atoi(minor); m >= 13 {
+		*reverseType = "host-darwin-10_" + minor
+	} else {
+		*reverse = "darwin-amd64-" + major + "_" + minor
+	}
 	*coordinator = "farmer.golang.org:443"
 
 	// guestName is set by cmd/makemac to something like
@@ -1700,6 +1706,30 @@ func disableMacScreensaver() {
 	if err != nil {
 		log.Printf("disabling screensaver: %v", err)
 	}
+}
+
+// enableMacDeveloperMode enables developer mode on macOS for the
+// runtime tests. (Issue 31123)
+//
+// It is best effort; errors are logged but otherwise ignored.
+func enableMacDeveloperMode() {
+	// Macs are configured with password-less sudo. Without sudo we get prompts
+	// that "SampleTools wants to make changes" that block the buildlet from starting.
+	// But oddly, not via gomote. Only during startup. The environment must be different
+	// enough that in one case macOS asks for permission (because it can use the GUI?)
+	// and in the gomote case (where the environment is largley scrubbed) it can't do
+	// the GUI dialog somehow and must just try to do it anyway and finds that passwordless
+	// sudo works. But using sudo seems to make it always work.
+	// For extra paranoia, use a context to not block start-up.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, "/usr/bin/sudo", "/usr/sbin/DevToolsSecurity", "-enable").CombinedOutput()
+	if err != nil {
+		log.Printf("Error enabling developer mode: %v, %s", err, out)
+		return
+	}
+	log.Printf("DevToolsSecurity: %s", out)
 }
 
 func vmwareGetInfo(key string) string {

@@ -1,4 +1,16 @@
-$HOME/go1.4
+Install VMWare tools daemon.
+
+  - you should be able to do this from the vSphere UI, but I got errors with Mojave.
+  - backup plan: https://my.vmware.com/web/vmware/details?productId=742&downloadGroup=VMTOOLS1032
+    and then copy the darwin.iso to the host and install it manually.
+  - open security preferences and click "Allow" on blocked software install from VMware
+  - reboot
+  - make sure you can run and see:
+
+    $ /Library/Application Support/VMware Tools/vmware-tools-daemon --cmd "info-get guestinfo.name"
+    No value value
+
+Add $HOME/go1.4
 
 System Preferences > Software Update > off
 
@@ -8,27 +20,35 @@ System Preferences > Energy Saver > never sleep
 
 System Preferences > Sharing > enable ssh (for later)
 
-curl -o stage0.sh https://....
+Create executable $HOME/stage0.sh with:
 
-chmod +x stage0.sh
+   #!/bin/bash
+   while true; do (curl -v http://10.50.0.2:8713/stage0/$(sw_ver -productVersion) | sh); sleep 5; done
 
-Automator > Create application > Run shell Script > "open -b com.apple.terminal $HOME/stage0.sh", save to desktop
+Automator:
+
+    File > New > Application
+    [+] Run shell script
+    [ open -a Terminal.app $HOME/stage0.sh ]
+    Save to desktop as "run-builder"
 
 System Preferences > Users & Groups > auto-login "gopher" user, run Desktop/run-builder (automator app)
 
-passwordless sudo
+passwordless sudo:
+
+   sudo visudo
+   Change line from:
+    %admin ALL=(ALL) ALL
+   to:
+    %admin ALL=(ALL) NOPASSWD: ALL
 
 install xcode
   (as of 10.10 or 10.9, running git first time will propt for install;
    before that, need to find old xcode version)
 
-sudo visudo
-Change line from:
-  %admin ALL=(ALL) ALL
-to:
-  %admin ALL=(ALL) NOPASSWD: ALL
+verbose boot: (text instead of apple image)
 
-verbose boot:
+    sudo nvram boot-args="-v"
 
 run-builder-darwin-10_11.sh
 

@@ -42,6 +42,7 @@ func usage() {
 }
 
 var isLoadDir = map[string]bool{
+	"auth":   true,
 	"go":     true,
 	"git":    true,
 	"hg":     true,
@@ -67,6 +68,8 @@ func main() {
 	http.Handle("/svn/", svnHandler())
 	http.Handle("/fossil/", fossilHandler())
 	http.Handle("/bzr/", bzrHandler())
+	http.Handle("/insecure/", insecureRedirectHandler())
+	http.Handle("/auth/", newAuthHandler(http.Dir(filepath.Join(*dir, "auth"))))
 
 	handler := logger(http.HandlerFunc(loadAndHandle))
 

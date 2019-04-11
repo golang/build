@@ -43,7 +43,18 @@ func list(args []string) error {
 	return nil
 }
 
-// clientAndConfig returns a buildlet.Client and its build config for
+// remoteClient returns a buildlet.Client for a named remote buildlet
+// (a buildlet connection owned by the build coordinator).
+//
+// As a special case, if name contains '@', the name is expected to be
+// of the form <build-config-name>@ip[:port]. For example,
+// "windows-amd64-race@10.0.0.1".
+func remoteClient(name string) (*buildlet.Client, error) {
+	bc, _, err := clientAndCondConf(name, false)
+	return bc, err
+}
+
+// clientAndConf returns a buildlet.Client and its build config for
 // a named remote buildlet (a buildlet connection owned by the build
 // coordinator).
 //
@@ -51,8 +62,10 @@ func list(args []string) error {
 // of the form <build-config-name>@ip[:port]. For example,
 // "windows-amd64-race@10.0.0.1".
 func clientAndConf(name string) (bc *buildlet.Client, conf *dashboard.BuildConfig, err error) {
-	var ok bool
+	return clientAndCondConf(name, true)
+}
 
+func clientAndCondConf(name string, withConf bool) (bc *buildlet.Client, conf *dashboard.BuildConfig, err error) {
 	if strings.Contains(name, "@") {
 		f := strings.SplitN(name, "@", 2)
 		if len(f) != 2 {
@@ -60,10 +73,13 @@ func clientAndConf(name string) (bc *buildlet.Client, conf *dashboard.BuildConfi
 			return
 		}
 		builderType := f[0]
-		conf, ok = dashboard.Builders[builderType]
-		if !ok {
-			err = fmt.Errorf("unknown builder type %q (name %q)", builderType, name)
-			return
+		if withConf {
+			var ok bool
+			conf, ok = dashboard.Builders[builderType]
+			if !ok {
+				err = fmt.Errorf("unknown builder type %q (name %q)", builderType, name)
+				return
+			}
 		}
 		ipPort := f[1]
 		if !strings.Contains(ipPort, ":") {
@@ -82,14 +98,12 @@ func clientAndConf(name string) (bc *buildlet.Client, conf *dashboard.BuildConfi
 	if err != nil {
 		return
 	}
+	var builderType string
+	var ok bool
 	for _, rb := range rbs {
 		if rb.Name == name {
-			conf, ok = dashboard.Builders[rb.BuilderType]
-			if !ok {
-				err = fmt.Errorf("builder %q exists, but unknown builder type %q", name, rb.BuilderType)
-				return
-			}
-			break
+			ok = true
+			builderType = rb.BuilderType
 		}
 	}
 	if !ok {
@@ -101,5 +115,11 @@ func clientAndConf(name string) (bc *buildlet.Client, conf *dashboard.BuildConfi
 	if err != nil {
 		return
 	}
+
+	conf, ok = dashboard.Builders[builderType]
+	if !ok {
+		log.Fatalf("Builder type %q not known to this gomote binary. Update your gomote binary. TODO: teach gomote to fetch build configs from the server (Issue 30929)", builderType)
+	}
+
 	return bc, conf, nil
 }

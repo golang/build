@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build linux
+// +build linux darwin
 
 package main
 
@@ -237,8 +237,8 @@ body {
 	margin: 0;
 }
 
-h1, h2, h1 > a, h2 > a, h1 > a:visited, h2 > a:visited { 
-	color: #375EAB; 
+h1, h2, h1 > a, h2 > a, h1 > a:visited, h2 > a:visited {
+	color: #375EAB;
 }
 h1 { font-size: 24px; }
 h2 { font-size: 20px; }

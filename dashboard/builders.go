@@ -38,6 +38,15 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-stretch": &HostConfig{
 		Notes:           "Debian Stretch",
 		ContainerImage:  "linux-x86-stretch:latest",
+		machineType:     "n1-standard-4", // 4 vCPUs, 15 GB mem
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:     "root",
+	},
+	"host-linux-stretch-morecpu": &HostConfig{
+		Notes:           "Debian Stretch, but on n1-highcpu-8",
+		ContainerImage:  "linux-x86-stretch:latest",
+		machineType:     "n1-highcpu-8", // 16 vCPUs, 14.4 GB mem
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
@@ -241,6 +250,12 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-386-0b3b511.tar.gz",
 		SSHUsername:        "root",
 	},
+	"host-netbsd-arm-bsiegert": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   1,
+		env:         []string{"GOROOT_BOOTSTRAP=/usr/pkg/go112"},
+		OwnerGithub: "bsiegert",
+	},
 	"host-dragonfly-amd64-tdfbsd": &HostConfig{
 		IsReverse:      true,
 		ExpectNum:      1,
@@ -338,7 +353,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_10": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 1,
+		ExpectNum: 3,
 		Notes:     "MacStadium OS X 10.10 VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
@@ -349,7 +364,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_11": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 17,
+		ExpectNum: 7,
 		Notes:     "MacStadium OS X 10.11 VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
@@ -360,12 +375,22 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_12": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 2,
+		ExpectNum: 3,
 		Notes:     "MacStadium OS X 10.12 VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
 		},
 		ReverseAliases:  []string{"darwin-amd64-10_12"},
+		SSHUsername:     "gopher",
+		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
+	},
+	"host-darwin-10_14": &HostConfig{
+		IsReverse: true,
+		ExpectNum: 7,
+		Notes:     "MacStadium macOS Mojave (10.14) VM under VMWare ESXi",
+		env: []string{
+			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.12.1
+		},
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
 	},
@@ -420,23 +445,15 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-solaris-oracle-amd64-oraclerel": &HostConfig{
 		Notes:       "Oracle Solaris amd64 Release System",
-		Owner:       "shawn.walker@oracle.com",
-		OwnerGithub: "binarycrusader",
-		IsReverse:   true,
-		ExpectNum:   1,
-		env:         []string{"GOROOT_BOOTSTRAP=/opt/golang/go-solaris-amd64-bootstrap"},
-	},
-	"host-solaris-oracle-shawn": &HostConfig{
-		Notes:       "Oracle Solaris amd64 Development System",
-		Owner:       "shawn.walker@oracle.com",
-		OwnerGithub: "binarycrusader",
+		Owner:       "", // TODO: find current owner
+		OwnerGithub: "", // TODO: find current owner
 		IsReverse:   true,
 		ExpectNum:   1,
 		env:         []string{"GOROOT_BOOTSTRAP=/opt/golang/go-solaris-amd64-bootstrap"},
 	},
 	"host-linux-mips": &HostConfig{
-		Notes:       "Run by Brendan Kirby, imgtec.com",
-		OwnerGithub: "MIPSbkirby",
+		Notes:       "", // once ran by Brendan Kirby (@MIPSbkirby), imgtec.com; email bounces
+		OwnerGithub: "",
 		IsReverse:   true,
 		ExpectNum:   1,
 		env: []string{
@@ -448,8 +465,8 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"linux-mips"},
 	},
 	"host-linux-mipsle": &HostConfig{
-		Notes:       "Run by Brendan Kirby, imgtec.com",
-		OwnerGithub: "MIPSbkirby",
+		Notes:       "", // once ran by Brendan Kirby (@MIPSbkirby), imgtec.com; email bounces
+		OwnerGithub: "",
 		IsReverse:   true,
 		ExpectNum:   1,
 		env: []string{
@@ -460,8 +477,8 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"linux-mipsle"},
 	},
 	"host-linux-mips64": &HostConfig{
-		Notes:       "Run by Brendan Kirby, imgtec.com",
-		OwnerGithub: "MIPSbkirby",
+		Notes:       "", // once ran by Brendan Kirby (@MIPSbkirby), imgtec.com; email bounces
+		OwnerGithub: "",
 		IsReverse:   true,
 		ExpectNum:   1,
 		env: []string{
@@ -473,8 +490,8 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"linux-mips64"},
 	},
 	"host-linux-mips64le": &HostConfig{
-		Notes:       "Run by Brendan Kirby, imgtec.com",
-		OwnerGithub: "MIPSbkirby",
+		Notes:       "", // once ran by Brendan Kirby (@MIPSbkirby), imgtec.com; email bounces
+		OwnerGithub: "",
 		IsReverse:   true,
 		ExpectNum:   1,
 		env: []string{
@@ -493,16 +510,6 @@ var Hosts = map[string]*HostConfig{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
 			"GOHOSTARCH=amd64",
 			"GOOS=android",
-		},
-	},
-	"host-darwin-amd64-eliasnaur-ios": &HostConfig{
-		Notes:       "Mac Mini hosted by Elias Naur, running the ios reverse buildlet",
-		OwnerGithub: "eliasnaur",
-		IsReverse:   true,
-		ExpectNum:   1,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
-			"GOHOSTARCH=amd64",
 		},
 	},
 	"host-darwin-amd64-zenly-ios": &HostConfig{
@@ -711,12 +718,10 @@ type BuildConfig struct {
 	// not run for that commit.
 	GoDeps []string
 
-	// ShouldRunDistTest optionally specifies a function which
-	// controls whether a test (a name from "go tool dist test
-	// -list") is run. The isTry value is true for trybot runs.
-	// A few general special cases are handled in
-	// cmd/coordinator's in buildStatus.shouldSkipTest.
-	ShouldRunDistTest func(distTestName string, isTry bool) bool
+	// shouldRunDistTest optionally specifies a function to
+	// override the BuildConfig.ShouldRunDistTest method's
+	// default behavior.
+	shouldRunDistTest func(distTest string, isTry bool) bool
 
 	// numTestHelpers is the number of _additional_ buildlets
 	// past the first one to help out with sharded tests.
@@ -749,6 +754,10 @@ func (c *BuildConfig) ModulesEnv(repo string) (env []string) {
 		env = append(env, "GO_BUILDER_SET_GOPROXY=coordinator")
 	}
 	switch repo {
+	case "go":
+		if !c.OutboundNetworkAllowed() {
+			env = append(env, "GOPROXY=off")
+		}
 	case "oauth2", "build", "website":
 		env = append(env, "GO111MODULE=on")
 	}
@@ -825,7 +834,8 @@ func (c *BuildConfig) hostConf() *HostConfig {
 	panic(fmt.Sprintf("missing buildlet config for buildlet %q", c.Name))
 }
 
-// BuildletBinaryURL returns the public URL of this builder's buildlet.
+// GoBootstrapURL returns the URL of a built Go 1.4+ tar.gz for the
+// build configuration type c, or empty string if there isn't one.
 func (c *BuildConfig) GoBootstrapURL(e *buildenv.Environment) string {
 	return strings.Replace(c.hostConf().goBootstrapURLTmpl, "$BUCKET", e.BuildletBucket, 1)
 }
@@ -842,6 +852,13 @@ func (c *BuildConfig) IsRace() bool {
 
 func (c *BuildConfig) IsLongTest() bool {
 	return strings.HasSuffix(c.Name, "-longtest")
+}
+
+// OutboundNetworkAllowed reports whether this builder should be
+// allowed to make outbound network requests. This is only enforced
+// on some builders. (Currently most Linux ones)
+func (c *BuildConfig) OutboundNetworkAllowed() bool {
+	return c.Name == "misc-vet-vetall" || c.IsLongTest()
 }
 
 func (c *BuildConfig) GoInstallRacePackages() []string {
@@ -911,7 +928,7 @@ func (c *BuildConfig) IsTryOnly() bool { return c.tryOnly }
 
 func (c *BuildConfig) NeedsGoProxy() bool { return c.needsGoProxy }
 
-// BuildsRepoTryBot reports whether the build configuration type c
+// BuildsRepoPostSubmit reports whether the build configuration type c
 // should build the given repo ("go", "net", etc) and branch
 // ("master", "release-branch.go1.12") as a post-submit build
 // that shows up on https://build.golang.org/.
@@ -927,6 +944,26 @@ func (c *BuildConfig) BuildsRepoPostSubmit(repo, branch, goBranch string) bool {
 // ("master", "release-branch.go1.12") as a trybot.
 func (c *BuildConfig) BuildsRepoTryBot(repo, branch, goBranch string) bool {
 	return c.tryBot != nil && c.tryBot(repo, branch, goBranch) && c.buildsRepoAtAll(repo, branch, goBranch)
+}
+
+// ShouldRunDistTest reports whether the named cmd/dist test should be
+// run for this build config. The isTry parameter is whether this is
+// for a trybot (pre-submit) run.
+//
+// In general, this returns true, unless a builder has configured it
+// otherwise. Certain portable, slow tests are only run on fast builders in
+// trybot mode.
+func (c *BuildConfig) ShouldRunDistTest(distTest string, isTry bool) bool {
+	if c.shouldRunDistTest != nil {
+		return c.shouldRunDistTest(distTest, isTry)
+	}
+	if distTest == "api" {
+		// This test is slow and has the same behavior
+		// everywhere, so only run it on our fastest buidler
+		// (linux-amd64) when in trybot mode.
+		return !isTry || c.Name == "linux-amd64"
+	}
+	return true
 }
 
 // buildsRepoAtAll reports whether we should do builds of the provided
@@ -954,11 +991,20 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 	}
 	// Don't build old branches.
 	const minGo1x = 11
-	if strings.HasPrefix(goBranch, "release-branch.go1") && !atLeastGo1(goBranch, minGo1x) {
-		return false
-	}
-	if strings.HasPrefix(branch, "release-branch.go1") && !atLeastGo1(branch, minGo1x) {
-		return false
+	for _, b := range []string{branch, goBranch} {
+		if bmaj, bmin, ok := version.ParseReleaseBranch(b); ok {
+			if bmaj != 1 || bmin < minGo1x {
+				return false
+			}
+			bmm := types.MajorMinor{bmaj, bmin}
+			if bmm.Less(c.MinimumGoVersion) {
+				return false
+			}
+			if repo == "exp" {
+				// Don't test exp against release branches; it's experimental.
+				return false
+			}
+		}
 	}
 
 	// Build dev.boringcrypto branches only on linux/amd64 and windows/386 (see golang.org/issue/26791).
@@ -967,36 +1013,34 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 			return false
 		}
 	}
-
-	if repo == "exp" {
-		if !strings.HasPrefix(c.Name, "android-") && c.Name != "linux-amd64" {
-			return false
-		}
-	}
-	if repo == "term" {
-		// no code yet in repo
+	if repo != "go" && !c.SplitMakeRun() {
 		return false
 	}
-	if repo == "perf" && c.Name == "linux-amd64-nocgo" {
-		// The "perf" repo requires sqlite, which
-		// requires cgo. Skip the no-cgo builder.
-		return false
-	}
-
 	if p := c.buildsRepo; p != nil {
 		return p(repo, branch, goBranch)
 	}
-	if repo == "go" {
+	return defaultBuildsRepoPolicy(repo, branch, goBranch)
+}
+
+func defaultBuildsRepoPolicy(repo, branch, goBranch string) bool {
+	switch repo {
+	case "go":
 		return true
-	}
-	if !c.SplitMakeRun() {
+	case "term":
+		// no code yet in repo
 		return false
-	}
-	if repo == "mobile" {
-		// Mobile is opt-in.
+	case "mobile", "exp":
+		// mobile and exp are opt-in.
 		return false
 	}
 	return true
+}
+
+func defaultPlusExp(repo, branch, goBranch string) bool {
+	if repo == "exp" {
+		return true
+	}
+	return defaultBuildsRepoPolicy(repo, branch, goBranch)
 }
 
 // AllScriptArgs returns the set of arguments that should be passed to the
@@ -1136,9 +1180,8 @@ func defaultTrySet(extraProj ...string) func(proj, branch, goBranch string) bool
 				return true
 			}
 		}
-		// TODO: remove items from this set once these repos have go.mod files:
 		switch proj {
-		case "grpc-review", "exp", "mobile", "term":
+		case "grpc-review":
 			return false
 		}
 		return true
@@ -1161,10 +1204,10 @@ func explicitTrySet(projs ...string) func(proj, branch, goBranch string) bool {
 
 func init() {
 	addBuilder(BuildConfig{
-		Name:      "freebsd-amd64-gce93",
-		HostType:  "host-freebsd-93-gce",
-		tryOnly:   true, // don't run regular build...
-		MaxAtOnce: 2,
+		Name:       "freebsd-amd64-gce93",
+		HostType:   "host-freebsd-93-gce",
+		buildsRepo: disabledBuilder,
+		MaxAtOnce:  2,
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-10_3",
@@ -1193,7 +1236,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return goBranch == "release-branch.go1.11" || goBranch == "release-branch.go1.12"
 		},
-		ShouldRunDistTest: fasterTrybots,
+		shouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
 		MaxAtOnce:         2,
 	})
@@ -1201,7 +1244,7 @@ func init() {
 		Name:              "freebsd-amd64-11_2",
 		HostType:          "host-freebsd-11_2",
 		tryBot:            explicitTrySet("sys"),
-		ShouldRunDistTest: fasterTrybots,
+		shouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
 		MaxAtOnce:         2,
 	})
@@ -1211,7 +1254,21 @@ func init() {
 		MinimumGoVersion: types.MajorMinor{1, 11},
 		tryBot:           defaultTrySet("sys"),
 
-		ShouldRunDistTest: fasterTrybots,
+		shouldRunDistTest: fasterTrybots,
+		numTryTestHelpers: 4,
+		MaxAtOnce:         2,
+	})
+	addBuilder(BuildConfig{
+		Name:              "freebsd-386-12_0",
+		HostType:          "host-freebsd-12_0",
+		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		shouldRunDistTest: fasterTrybots,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			if repo == "net" && branch == "master" && goBranch == "release-branch.go1.11" {
+				return false
+			}
+			return defaultBuildsRepoPolicy(repo, branch, goBranch)
+		},
 		numTryTestHelpers: 4,
 		MaxAtOnce:         2,
 	})
@@ -1241,7 +1298,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "freebsd-386-11_1",
 		HostType:          "host-freebsd-11_1",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return goBranch == "release-branch.go1.11" || goBranch == "release-branch.go1.12"
 		},
@@ -1251,15 +1308,21 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "freebsd-386-11_2",
 		HostType:          "host-freebsd-11_2",
-		ShouldRunDistTest: noTestDir,
-		tryBot:            explicitTrySet("sys"),
-		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
-		MaxAtOnce:         2,
+		shouldRunDistTest: noTestDir,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			if repo == "net" && branch == "master" && goBranch == "release-branch.go1.11" {
+				return false
+			}
+			return defaultBuildsRepoPolicy(repo, branch, goBranch)
+		},
+		tryBot:    explicitTrySet("sys"),
+		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
+		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-386",
 		HostType:          "host-linux-jessie",
-		ShouldRunDistTest: fasterTrybots,
+		shouldRunDistTest: fasterTrybots,
 		tryBot:            defaultTrySet(),
 		env: []string{
 			"GOARCH=386",
@@ -1279,9 +1342,10 @@ func init() {
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386", "GO386=387"},
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-amd64",
-		HostType: "host-linux-jessie",
-		tryBot:   defaultTrySet(),
+		Name:       "linux-amd64",
+		HostType:   "host-linux-stretch",
+		tryBot:     defaultTrySet(),
+		buildsRepo: defaultPlusExp,
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
@@ -1291,11 +1355,10 @@ func init() {
 		RunBench:          true,
 	})
 	addBuilder(BuildConfig{
-		Name:      "linux-amd64-vmx",
-		HostType:  "host-linux-stretch-vmx",
-		MaxAtOnce: 1,
-		tryOnly:   true, // don't run regular build
-		tryBot:    nil,  // and don't run trybots (only gomote)
+		Name:       "linux-amd64-vmx",
+		HostType:   "host-linux-stretch-vmx",
+		MaxAtOnce:  1,
+		buildsRepo: disabledBuilder,
 	})
 
 	const testAlpine = false // Issue 22689 (hide all red builders), Issue 19938 (get Alpine passing)
@@ -1309,11 +1372,13 @@ func init() {
 	// Add the -vetall builder. The builder name suffix "-vetall" is recognized by cmd/dist/test.go
 	// to only run the "go vet std cmd" test and no others.
 	addBuilder(BuildConfig{
-		Name:       "misc-vet-vetall",
-		HostType:   "host-linux-jessie",
-		Notes:      "Runs vet over the standard library.",
-		buildsRepo: onlyGo,
-		tryBot:     defaultTrySet(),
+		Name:     "misc-vet-vetall",
+		HostType: "host-linux-jessie",
+		Notes:    "Runs vet over the standard library.",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "go" && branch == "master"
+		},
+		tryBot: defaultTrySet(),
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
@@ -1353,6 +1418,16 @@ func init() {
 		HostType:  "host-linux-jessie",
 		MaxAtOnce: 1,
 		Notes:     "cgo disabled",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			switch repo {
+			case "perf":
+				// Requires sqlite, which requires cgo.
+				return false
+			case "mobile":
+				return false
+			}
+			return true
+		},
 		env: []string{
 			"CGO_ENABLED=0",
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
@@ -1410,8 +1485,9 @@ func init() {
 		Name:              "linux-amd64-race",
 		HostType:          "host-linux-jessie",
 		tryBot:            defaultTrySet(),
+		buildsRepo:        defaultPlusExp,
 		MaxAtOnce:         1,
-		ShouldRunDistTest: fasterTrybots,
+		shouldRunDistTest: fasterTrybots,
 		numTestHelpers:    1,
 		numTryTestHelpers: 5,
 		env: []string{
@@ -1464,17 +1540,17 @@ func init() {
 		Notes: "Runs GOOS=linux but with the Android emulator attached, for running x/mobile host tests.",
 	})
 	addBuilder(BuildConfig{
-		Name:      "linux-amd64-stretch",
-		HostType:  "host-linux-stretch",
-		MaxAtOnce: 1,
-		Notes:     "Debian Stretch",
+		Name:      "linux-amd64-jessie",
+		HostType:  "host-linux-jessie",
+		MaxAtOnce: 5,
+		Notes:     "Debian Jessie. The normal 'linux-amd64' builder is stretch. We use Jessie for our release builds due to https://golang.org/issue/31293",
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
 	})
 	addBuilder(BuildConfig{
 		Name:      "linux-amd64-longtest",
-		HostType:  "host-linux-stretch",
+		HostType:  "host-linux-stretch-morecpu",
 		MaxAtOnce: 1,
 		Notes:     "Debian Stretch with go test -short=false",
 		buildsRepo: func(repo, branch, goBranch string) bool {
@@ -1483,9 +1559,7 @@ func init() {
 		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
 			"GO_TEST_SHORT=0",
-			// runtime takes ~190 seconds in long mode, which is over
-			// the 180 seconds default timeout.
-			"GO_TEST_TIMEOUT_SCALE=2",
+			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
 	})
 	addBuilder(BuildConfig{
@@ -1512,7 +1586,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return branch == "master" && goBranch == "master"
 		},
-		ShouldRunDistTest: func(distTest string, isTry bool) bool {
+		shouldRunDistTest: func(distTest string, isTry bool) bool {
 			if strings.Contains(distTest, "vendor/github.com/google/pprof") {
 				// Not worth it. And broken.
 				return false
@@ -1557,13 +1631,13 @@ func init() {
 			switch repo {
 			case "go":
 				return true
-			case "mobile", "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
+			case "mobile", "exp", "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
 				return false
 			default:
 				return branch == "master" && goBranch == "master"
 			}
 		},
-		ShouldRunDistTest: func(distTest string, isTry bool) bool {
+		shouldRunDistTest: func(distTest string, isTry bool) bool {
 			if isTry {
 				if strings.HasPrefix(distTest, "test:") {
 					return false
@@ -1593,9 +1667,8 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-60",
 		HostType:          "host-openbsd-amd64-60",
-		ShouldRunDistTest: noTestDir,
-		tryOnly:           true, // disabled by default; Go 1.11+ don't support it anymore
-		tryBot:            nil,
+		shouldRunDistTest: noTestDir,
+		buildsRepo:        disabledBuilder,
 		MaxAtOnce:         1,
 		numTestHelpers:    2,
 		numTryTestHelpers: 5,
@@ -1603,9 +1676,8 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-386-60",
 		HostType:          "host-openbsd-386-60",
-		ShouldRunDistTest: noTestDir,
-		tryOnly:           true, // disabled by default; Go 1.11+ don't support it anymore
-		tryBot:            nil,
+		shouldRunDistTest: noTestDir,
+		buildsRepo:        disabledBuilder,
 		MaxAtOnce:         1,
 		env: []string{
 			// cmd/go takes ~192 seconds on openbsd-386
@@ -1618,7 +1690,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-386-62",
 		HostType:          "host-openbsd-386-62",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		MaxAtOnce:         1,
 		env: []string{
 			// cmd/go takes ~192 seconds on openbsd-386
@@ -1631,7 +1703,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-62",
 		HostType:          "host-openbsd-amd64-62",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		tryBot:            nil,
 		numTestHelpers:    0,
 		numTryTestHelpers: 5,
@@ -1641,7 +1713,7 @@ func init() {
 		Name:              "openbsd-amd64-64",
 		HostType:          "host-openbsd-amd64-64",
 		MinimumGoVersion:  types.MajorMinor{1, 11},
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		tryBot:            defaultTrySet(),
 		numTestHelpers:    0,
 		numTryTestHelpers: 5,
@@ -1651,32 +1723,52 @@ func init() {
 		Name:              "openbsd-386-64",
 		HostType:          "host-openbsd-386-64",
 		tryBot:            explicitTrySet("sys"),
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		MaxAtOnce:         1,
 	})
+	netBSDDistTestPolicy := func(distTest string, isTry bool) bool {
+		// Skip the test directory (slow, and adequately
+		// covered by other builders), and skip the "reboot"
+		// test, which takes more disk space on /tmp than the
+		// NetBSD image had as of 2019-03-13. (Issue 30839)
+		if strings.HasPrefix(distTest, "test:") || distTest == "reboot" {
+			return false
+		}
+		return true
+	}
 	addBuilder(BuildConfig{
 		Name:              "netbsd-amd64-8_0",
 		HostType:          "host-netbsd-amd64-8_0",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: netBSDDistTestPolicy,
 		MaxAtOnce:         1,
 		tryBot:            explicitTrySet("sys"),
 	})
 	addBuilder(BuildConfig{
 		Name:              "netbsd-386-8_0",
 		HostType:          "host-netbsd-386-8_0",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: netBSDDistTestPolicy,
 		MaxAtOnce:         1,
 		// This builder currently hangs in the “../test” phase of all.bash.
 		// (https://golang.org/issue/25206)
-		tryOnly: true, // Disable regular builds.
-		tryBot:  nil,  // Disable trybots.
+		buildsRepo: disabledBuilder,
+	})
+	addBuilder(BuildConfig{
+		Name:              "netbsd-arm-bsiegert",
+		HostType:          "host-netbsd-arm-bsiegert",
+		shouldRunDistTest: netBSDDistTestPolicy,
+		MaxAtOnce:         1,
+		tryBot:            nil,
+		env: []string{
+			// The machine is slow.
+			"GO_TEST_TIMEOUT_SCALE=10",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-386",
 		HostType:       "host-plan9-386-gce",
-		numTestHelpers: 1,
 		MaxAtOnce:      2,
-		ShouldRunDistTest: func(distTestName string, isTry bool) bool {
+		numTestHelpers: 1,
+		shouldRunDistTest: func(distTestName string, isTry bool) bool {
 			switch distTestName {
 			case "api",
 				"go_test:cmd/go": // takes over 20 minutes without working SMP
@@ -1684,11 +1776,12 @@ func init() {
 			}
 			return true
 		},
+		buildsRepo: onlyMaster,
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2008",
 		HostType:          "host-windows-amd64-2008",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		buildsRepo:        onlyGo,
 		env: []string{
 			"GOARCH=amd64",
@@ -1703,7 +1796,8 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "windows-386-2008",
 		HostType:          "host-windows-amd64-2008",
-		ShouldRunDistTest: fasterTrybots,
+		buildsRepo:        defaultPlusExp,
+		shouldRunDistTest: fasterTrybots,
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		MaxAtOnce:         2,
 		tryBot:            defaultTrySet(),
@@ -1712,7 +1806,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2012",
 		HostType:          "host-windows-amd64-2012",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		buildsRepo:        onlyGo,
 		env: []string{
 			"GOARCH=amd64",
@@ -1728,7 +1822,8 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2016",
 		HostType:          "host-windows-amd64-2016",
-		ShouldRunDistTest: fasterTrybots,
+		buildsRepo:        defaultPlusExp,
+		shouldRunDistTest: fasterTrybots,
 		env: []string{
 			"GOARCH=amd64",
 			"GOHOSTARCH=amd64",
@@ -1766,27 +1861,32 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_8",
 		HostType:          "host-darwin-10_8",
-		ShouldRunDistTest: noTestDir,
-		tryOnly:           true, // but not in trybot set, so effectively disabled
-		tryBot:            nil,
+		shouldRunDistTest: macTestPolicy,
+		buildsRepo:        disabledBuilder,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_10",
 		HostType:          "host-darwin-10_10",
-		ShouldRunDistTest: noTestDir,
-		buildsRepo:        onlyGo,
+		shouldRunDistTest: macTestPolicy,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// https://tip.golang.org/doc/go1.12 says:
+			// "Go 1.12 is the last release that will run on macOS 10.10 Yosemite."
+			major, minor, ok := version.ParseReleaseBranch(branch)
+			return repo == "go" && ok && major == 1 && minor <= 12
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_11",
 		HostType:          "host-darwin-10_11",
 		tryBot:            nil, // disabled until Macs fixed; https://golang.org/issue/23859
-		ShouldRunDistTest: noTestDir,
+		buildsRepo:        onlyGo,
+		shouldRunDistTest: macTestPolicy,
 		numTryTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-386-10_11",
 		HostType:          "host-darwin-10_11",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: macTestPolicy,
 		buildsRepo:        onlyGo,
 		MaxAtOnce:         1,
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
@@ -1794,25 +1894,20 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_12",
 		HostType:          "host-darwin-10_12",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: macTestPolicy,
+		buildsRepo:        defaultPlusExp,
+	})
+	addBuilder(BuildConfig{
+		Name:              "darwin-amd64-10_14",
+		HostType:          "host-darwin-10_14",
+		shouldRunDistTest: macTestPolicy,
+		buildsRepo:        defaultPlusExp,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-race",
 		HostType:          "host-darwin-10_12",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: macTestPolicy,
 		buildsRepo:        onlyGo,
-	})
-	addBuilder(BuildConfig{
-		Name:     "darwin-arm-a1428ios",
-		HostType: "host-darwin-amd64-eliasnaur-ios",
-		Notes:    "iPhone 6 (model A1586), via a Mac Mini; owned by elias.naur",
-		env:      []string{"GOARCH=arm"},
-	})
-	addBuilder(BuildConfig{
-		Name:     "darwin-arm64-a1549ios",
-		HostType: "host-darwin-amd64-eliasnaur-ios",
-		Notes:    "iPhone 6 (model A1586), via a Mac Mini; owned by elias.naur",
-		env:      []string{"GOARCH=arm64"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "darwin-arm-mg912baios",
@@ -1915,11 +2010,6 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:     "solaris-amd64-oracledev",
-		HostType: "host-solaris-oracle-shawn",
-		Notes:    "Oracle Solaris development version",
-	})
-	addBuilder(BuildConfig{
 		Name:     "solaris-amd64-oraclerel",
 		HostType: "host-solaris-oracle-amd64-oraclerel",
 		Notes:    "Oracle Solaris release version",
@@ -1995,13 +2085,14 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "dragonfly-amd64",
 		HostType:          "host-dragonfly-amd64-tdfbsd",
-		ShouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDir,
 		SkipSnapshot:      true,
 	})
 	addBuilder(BuildConfig{
-		Name:         "freebsd-arm-paulzhol",
-		HostType:     "host-freebsd-arm-paulzhol",
-		SkipSnapshot: true,
+		Name:              "freebsd-arm-paulzhol",
+		HostType:          "host-freebsd-arm-paulzhol",
+		shouldRunDistTest: noTestDir,
+		SkipSnapshot:      true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// This was a fragile little machine with limited memory.
 			// Only run a few of the core subrepos for now while
@@ -2018,9 +2109,11 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:         "plan9-arm",
-		HostType:     "host-plan9-arm-0intro",
-		SkipSnapshot: true,
+		Name:              "plan9-arm",
+		HostType:          "host-plan9-arm-0intro",
+		SkipSnapshot:      true,
+		shouldRunDistTest: noTestDir,
+		buildsRepo:        onlyMaster,
 	})
 	addBuilder(BuildConfig{
 		Name:         "nacl-arm",
@@ -2029,13 +2122,16 @@ func init() {
 		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
-		Name:         "plan9-amd64-9front",
-		HostType:     "host-plan9-amd64-0intro",
-		SkipSnapshot: true,
+		Name:              "plan9-amd64-9front",
+		HostType:          "host-plan9-amd64-0intro",
+		SkipSnapshot:      true,
+		shouldRunDistTest: noTestDir,
+		buildsRepo:        onlyMaster,
 	})
 	addBuilder(BuildConfig{
-		Name:     "aix-ppc64",
-		HostType: "host-aix-ppc64-osuosl",
+		Name:             "aix-ppc64",
+		HostType:         "host-aix-ppc64-osuosl",
+		MinimumGoVersion: types.MajorMinor{1, 12},
 		env: []string{
 			"PATH=/opt/freeware/bin:/usr/bin:/etc:/usr/sbin:/usr/ucb:/usr/bin/X11:/sbin:/usr/java7_64/jre/bin:/usr/java7_64/bin",
 		},
@@ -2075,19 +2171,24 @@ func addBuilder(c BuildConfig) {
 	Builders[c.Name] = &c
 }
 
-// fasterTrybots is a ShouldRunDistTest policy function.
+// fasterTrybots is a shouldRunDistTest policy function.
 // It skips (returns false) the test/ directory tests for trybots.
 func fasterTrybots(distTest string, isTry bool) bool {
-	if isTry && strings.HasPrefix(distTest, "test:") {
-		return false // skip test
+	if isTry {
+		if strings.HasPrefix(distTest, "test:") ||
+			distTest == "reboot" {
+			return false // skip test
+		}
 	}
 	return true
 }
 
-// noTestDir is a ShouldRunDistTest policy function.
-// It skips (returns false) the test/ directory tests for all builds.
+// noTestDir is a shouldRunDistTest policy function.
+// It skips (returns false) the test/ directory tests for all builds,
+// as well as the "reboot" test that tests that recompiling Go with
+// the just-built Go works.
 func noTestDir(distTest string, isTry bool) bool {
-	if strings.HasPrefix(distTest, "test:") {
+	if strings.HasPrefix(distTest, "test:") || distTest == "reboot" {
 		return false // skip test
 	}
 	return true
@@ -2122,3 +2223,35 @@ func atLeastGo1(branch string, min int) bool {
 
 // onlyGo is a common buildsRepo policy value that only builds the main "go" repo.
 func onlyGo(repo, branch, goBranch string) bool { return repo == "go" }
+
+// onlyMaster is a common buildsRepo policy value that only builds things on the master branch.
+func onlyMaster(repo, branch, goBranch string) bool { return branch == "master" && goBranch == "master" }
+
+// disabledBuilder is a buildsRepo policy function that always return false.
+func disabledBuilder(repo, branch, goBranch string) bool { return false }
+
+// macTestPolicy is the test policy for Macs.
+//
+// We have limited Mac resources. It's not worth wasting time testing
+// portable things on them. That is, if there's a slow test that will
+// still fail slowly on another builder where we have more resources
+// (like linux-amd64), then there's no point testing it redundantly on
+// the Macs.
+func macTestPolicy(distTest string, isTry bool) bool {
+	if strings.HasPrefix(distTest, "test:") {
+		return false
+	}
+	switch distTest {
+	case "reboot", "api", "doc_progs",
+		"wiki", "bench_go1", "codewalk":
+		return false
+	}
+	if isTry {
+		switch distTest {
+		case "runtime:cpu124", "race", "moved_goroot":
+			return false
+		}
+		// TODO: more. Look at bigquery results once we have more data.
+	}
+	return true
+}
