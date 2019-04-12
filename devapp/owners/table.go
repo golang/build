@@ -60,7 +60,6 @@ var (
 	mvdan        = gh("mvdan")
 	mwhudson     = gh("mwhudson")
 	r            = gh("robpike")
-	rlh          = gh("RLH")
 	rsc          = gh("rsc")
 	rstambler    = gh("stamblerre")
 	sameer       = gh("Sajmani")
@@ -458,7 +457,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{rsc},
 	},
 	"go/src/runtime": {
-		Primary:   []Owner{austin, rsc, rlh, khr},
+		Primary:   []Owner{austin, rsc, khr},
 		Secondary: []Owner{iant, dvyukov, martisch},
 	},
 	"go/src/runtime/cgo": {
@@ -490,10 +489,10 @@ var entries = map[string]*Entry{
 		Primary: []Owner{rsc, gri, iant, bradfitz},
 	},
 	"go/src/sync": {
-		Primary: []Owner{rsc, iant, dvyukov, austin, rlh},
+		Primary: []Owner{rsc, iant, dvyukov, austin},
 	},
 	"go/src/sync/atomic": {
-		Primary: []Owner{rsc, iant, dvyukov, austin, rlh},
+		Primary: []Owner{rsc, iant, dvyukov, austin},
 	},
 	"go/src/syscall": {
 		Primary:   []Owner{iant, bradfitz},
@@ -554,7 +553,7 @@ var entries = map[string]*Entry{
 	},
 
 	"mobile": {
-		Secondary: []Owner{hyangah},
+		Primary: []Owner{hyangah},
 	},
 
 	"net": {
