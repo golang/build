@@ -459,7 +459,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/runtime": {
 		Primary:   []Owner{austin, rsc, rlh, khr},
-		Secondary: []Owner{iant, dvyukov, josharian, martisch},
+		Secondary: []Owner{iant, dvyukov, martisch},
 	},
 	"go/src/runtime/cgo": {
 		Primary: []Owner{iant},
