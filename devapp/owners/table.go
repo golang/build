@@ -76,6 +76,14 @@ var entries = map[string]*Entry{
 		Primary: []Owner{cherryyz},
 	},
 
+	"build": {
+		Primary: []Owner{dmitshur, bradfitz, andybons},
+	},
+	"build/maintner/cmd/maintserve": {
+		Primary:   []Owner{dmitshur},
+		Secondary: []Owner{andybons},
+	},
+
 	"crypto": {
 		Primary:   []Owner{filippo},
 		Secondary: []Owner{agl},
@@ -83,6 +91,15 @@ var entries = map[string]*Entry{
 	"crypto/ssh": {
 		Primary:   []Owner{hanwen},
 		Secondary: []Owner{filippo},
+	},
+
+	"debug": {
+		Secondary: []Owner{hyangah, khr},
+	},
+
+	"gccgo": {
+		Primary:   []Owner{iant},
+		Secondary: []Owner{thanm, cherryyz},
 	},
 
 	"go/src/archive/tar": {
@@ -99,6 +116,9 @@ var entries = map[string]*Entry{
 	"go/src/bytes": {
 		Primary:   []Owner{},
 		Secondary: []Owner{bradfitz, iant},
+	},
+	"go/src/cmd/asm": {
+		Primary: []Owner{cherryyz},
 	},
 	"go/src/cmd/compile": {
 		Primary:   []Owner{khr, gri},
@@ -287,6 +307,11 @@ var entries = map[string]*Entry{
 	},
 	"go/src/go/internal/gcimporter": {
 		Primary: []Owner{gri},
+	},
+	// go/packages doesn't exist yet, but x/tools/go/packages has been proposed to
+	// move there and many issues already refer to the new path.
+	"go/src/go/packages": {
+		Primary: []Owner{matloob},
 	},
 	"go/src/go/parser": {
 		Primary: []Owner{gri},
@@ -537,11 +562,6 @@ var entries = map[string]*Entry{
 		Primary: []Owner{gri},
 	},
 
-	"build/maintner/cmd/maintserve": {
-		Primary:   []Owner{dmitshur},
-		Secondary: []Owner{andybons},
-	},
-
 	"gofrontend": {
 		Primary:   []Owner{iant},
 		Secondary: []Owner{thanm},
@@ -626,6 +646,9 @@ var entries = map[string]*Entry{
 	},
 	"tools/internal/lsp": {
 		Primary: []Owner{rstambler, iancottrell},
+	},
+	"tools": {
+		Primary: []Owner{iancottrell},
 	},
 	"playground": {
 		Secondary: []Owner{ysmolsky},
