@@ -231,13 +231,10 @@ func runGitMirror() error {
 				continue
 			}
 			path := "golang.org/x/" + name
-			switch name {
-			case "dl":
+			if name == "dl" {
 				// This subrepo is different from others in that
 				// it doesn't use the /x/ path element.
 				path = "golang.org/" + name
-			case "protobuf":
-				path = "google.golang.org/" + name
 			}
 			go startRepo(name, path, false)
 		}
@@ -296,7 +293,6 @@ func shouldMirror(name string) bool {
 		"oauth2",
 		"playground",
 		"proposal",
-		"protobuf",
 		"review",
 		"scratch",
 		"sync",

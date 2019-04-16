@@ -209,7 +209,6 @@ var gerritProjectWhitelist = map[string]bool{
 	"perf":           true,
 	"playground":     true,
 	"proposal":       true,
-	"protobuf":       true,
 	"review":         true,
 	"scratch":        true,
 	"sublime-build":  true,
