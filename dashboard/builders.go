@@ -1768,6 +1768,7 @@ func init() {
 		HostType:       "host-plan9-386-gce",
 		MaxAtOnce:      2,
 		numTestHelpers: 1,
+		tryOnly:        true, // disable it for now; Issue 31261, Issue 29801
 		shouldRunDistTest: func(distTestName string, isTry bool) bool {
 			switch distTestName {
 			case "api",

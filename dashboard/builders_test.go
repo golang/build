@@ -451,11 +451,12 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-386-10_11@go1.12", "go"), onlyPost},
 		{b("darwin-386-10_11@go1.11", "go"), onlyPost},
 
-		// plan9 only lives at master. We don't support any past releases.
-		{b("plan9-386", "go"), onlyPost},
+		// plan9 only lived at master. We didn't support any past releases.
+		// But it's off for now as it's always failing.
+		{b("plan9-386", "go"), none},  // temporarily disabled
+		{b("plan9-386", "net"), none}, // temporarily disabled
 		{b("plan9-386@go1.11", "go"), none},
 		{b("plan9-386@go1.12", "go"), none},
-		{b("plan9-386", "net"), onlyPost},
 		{b("plan9-386@go1.11", "net"), none},
 		{b("plan9-386@go1.12", "net"), none},
 		{b("plan9-amd64-9front", "go"), onlyPost},
