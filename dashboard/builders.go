@@ -1989,11 +1989,12 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:     "android-amd64-emu",
-		HostType: "host-android-amd64-emu",
-		Notes:    "Android emulator on GCE",
+		Name:              "android-amd64-emu",
+		HostType:          "host-android-amd64-emu",
+		Notes:             "Android emulator on GCE",
+		numTryTestHelpers: 3,
 		tryBot: func(repo, branch, goBranch string) bool {
-			return repo == "mobile" && atLeastGo1(branch, 13) && atLeastGo1(goBranch, 13)
+			return (repo == "go" || repo == "mobile") && atLeastGo1(branch, 13) && atLeastGo1(goBranch, 13)
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {

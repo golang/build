@@ -83,6 +83,7 @@ func TestTrybots(t *testing.T) {
 			repo:   "go",
 			branch: "master",
 			want: []string{
+				"android-amd64-emu",
 				"freebsd-amd64-12_0",
 				"js-wasm",
 				"linux-386",
@@ -277,7 +278,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-arm-arm5spacemonkey@go1.12", "net"), none},
 
 		// The mobile repo requires Go 1.13+.
-		{b("android-amd64-emu", "go"), onlyPost},
+		{b("android-amd64-emu", "go"), both},
 		{b("android-amd64-emu", "mobile"), both},
 		{b("android-amd64-emu", "mobile@1.10"), none},
 		{b("android-amd64-emu", "mobile@1.11"), none},
