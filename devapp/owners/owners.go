@@ -174,7 +174,7 @@ body {
 </style>
 <header class="header">
 	Alter these entries at
-	<a href="https://go.googlesource.com/build/+/master/devapp/owners/"
+	<a href="https://go.googlesource.com/build/+/master/devapp/owners"
 		target="_blank" rel="noopener">golang.org/x/build/devapp/owners</a>
 </header>
 <main>
