@@ -4,6 +4,10 @@
 
 FROM golang/buildlet-stage0 AS stage0
 
+# A stage to build just the Delve binary.
+FROM golang:1.12-stretch as delvebuild
+RUN go get github.com/go-delve/delve/cmd/dlv
+
 FROM debian:stretch
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
@@ -58,5 +62,6 @@ RUN mkdir -p /go1.4-amd64 \
 	&& find /go1.4 -type d -name testdata | xargs rm -rf
 
 COPY --from=stage0 /go/bin/stage0 /usr/local/bin/stage0
+COPY --from=delvebuild /go/bin/dlv /usr/local/bin/dlv
 
 CMD ["/usr/local/bin/stage0"]
