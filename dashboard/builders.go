@@ -2137,6 +2137,15 @@ func init() {
 		env: []string{
 			"PATH=/opt/freeware/bin:/usr/bin:/etc:/usr/sbin:/usr/ucb:/usr/bin/X11:/sbin:/usr/java7_64/jre/bin:/usr/java7_64/bin",
 		},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			switch repo {
+			case "net":
+				// The x/net package wasn't working in Go 1.12; AIX folk plan to have
+				// it ready by Go 1.13. See https://golang.org/issue/31564#issuecomment-484786144
+				return atLeastGo1(branch, 13) && atLeastGo1(goBranch, 13)
+			}
+			return atLeastGo1(branch, 12) && atLeastGo1(goBranch, 12)
+		},
 	})
 
 }
