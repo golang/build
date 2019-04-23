@@ -45,6 +45,9 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 		if atomic.LoadInt32(&st.hasBuildlet) != 0 {
 			data.ActiveBuilds++
 			data.Active = append(data.Active, st)
+			if st.conf.IsReverse() {
+				data.ActiveReverse++
+			}
 		} else {
 			data.Pending = append(data.Pending, st)
 		}
@@ -140,6 +143,7 @@ func diskFree() string {
 type statusData struct {
 	Total             int // number of total builds (including those waiting for a buildlet)
 	ActiveBuilds      int // number of running builds (subset of Total with a buildlet)
+	ActiveReverse     int // subset of ActiveBuilds that are reverse buildlets
 	NumFD             int
 	NumGoroutine      int
 	Uptime            time.Duration
@@ -171,7 +175,7 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 </header>
 
 <h2>Running</h2>
-<p>{{printf "%d" .Total}} total builds; {{printf "%d" .ActiveBuilds}} active. Uptime {{printf "%s" .Uptime}}. Version {{.Version}}.
+<p>{{printf "%d" .Total}} total builds; {{printf "%d" .ActiveBuilds}} active ({{.ActiveReverse}} reverse). Uptime {{printf "%s" .Uptime}}. Version {{.Version}}.
 
 <h2 id=trybots>Active Trybot Runs <a href='#trybots'>¶</a></h2>
 {{- if .TrybotsErr}}

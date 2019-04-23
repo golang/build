@@ -22,5 +22,5 @@ spec:
         - containerPort: 2222 # ssh proxy port
         resources:
           requests:
-            cpu: "1"
-            memory: "2Gi"
+            cpu: "2"
+            memory: "4Gi"

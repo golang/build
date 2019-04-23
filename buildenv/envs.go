@@ -123,9 +123,15 @@ type Environment struct {
 	SnapBucket string
 
 	// MaxBuilds is the maximum number of concurrent builds that
-	// can run. Zero means unlimit. This is typically only used
+	// can run. Zero means unlimited. This is typically only used
 	// in a development or staging environment.
 	MaxBuilds int
+
+	// MaxReverseBuilds is the maximum number of concurrent builds
+	// that can be run for reverse buildlets. Zero means unlimited.
+	// This is being used to mitigate revdial memory consumption
+	// problems in issue 31639.
+	MaxReverseBuilds int
 
 	// AutoCertCacheBucket is the GCS bucket to use for the
 	// golang.org/x/crypto/acme/autocert (LetsEncrypt) cache.
@@ -285,6 +291,7 @@ var Production = &Environment{
 	LogBucket:           "go-build-log",
 	SnapBucket:          "go-build-snap",
 	AutoCertCacheBucket: "farmer-golang-org-autocert-cache",
+	MaxReverseBuilds:    10,
 }
 
 var Development = &Environment{

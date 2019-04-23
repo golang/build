@@ -446,6 +446,17 @@ func numCurrentBuildsOfType(typ string) (n int) {
 	return
 }
 
+func numCurrentReverseBuilds() (n int) {
+	statusMu.Lock()
+	defer statusMu.Unlock()
+	for _, bs := range status {
+		if bs.conf.IsReverse() {
+			n++
+		}
+	}
+	return
+}
+
 func isBuilding(work buildgo.BuilderRev) bool {
 	statusMu.Lock()
 	defer statusMu.Unlock()
@@ -465,14 +476,18 @@ func mayBuildRev(rev buildgo.BuilderRev) bool {
 	if isBuilding(rev) {
 		return false
 	}
-	if buildEnv.MaxBuilds > 0 && numCurrentBuilds() >= buildEnv.MaxBuilds {
-		return false
-	}
 	buildConf, ok := dashboard.Builders[rev.Name]
 	if !ok {
 		if logUnknownBuilder.Allow() {
 			log.Printf("unknown builder %q", rev.Name)
 		}
+		return false
+	}
+	if buildEnv.MaxBuilds > 0 && numCurrentBuilds() >= buildEnv.MaxBuilds {
+		return false
+	}
+	if buildEnv.MaxReverseBuilds > 0 && buildConf.IsReverse() && numCurrentReverseBuilds() >= buildEnv.MaxReverseBuilds {
+		// Issue 31639.
 		return false
 	}
 	if buildConf.MaxAtOnce > 0 && numCurrentBuildsOfType(rev.Name) >= buildConf.MaxAtOnce {
