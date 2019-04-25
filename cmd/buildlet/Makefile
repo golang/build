@@ -11,6 +11,8 @@ FORCE:
 compile:
 	GOOS=aix GOARCH=ppc64 go install golang.org/x/build/cmd/buildlet
 	GOOS=darwin GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
+	GOOS=dragonfly GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
+	GOOS=freebsd GOARCH=arm go install golang.org/x/build/cmd/buildlet
 	GOOS=freebsd GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
 	GOOS=linux GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
 	GOOS=linux GOARCH=arm go install golang.org/x/build/cmd/buildlet
@@ -23,6 +25,7 @@ compile:
 	GOOS=netbsd GOARCH=386 go install golang.org/x/build/cmd/buildlet
 	GOOS=netbsd GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
 	GOOS=netbsd GOARCH=arm go install golang.org/x/build/cmd/buildlet
+	GOOS=openbsd GOARCH=arm go install golang.org/x/build/cmd/buildlet
 	GOOS=openbsd GOARCH=386 go install golang.org/x/build/cmd/buildlet
 	GOOS=openbsd GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
 	GOOS=plan9 GOARCH=386 go install golang.org/x/build/cmd/buildlet
@@ -39,6 +42,14 @@ buildlet.aix-ppc64: FORCE
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
 
 buildlet.darwin-amd64: FORCE
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+
+buildlet.dragonfly-amd64: FORCE
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+
+buildlet.freebsd-arm: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
 
@@ -66,6 +77,10 @@ buildlet.netbsd-386: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
 
+buildlet.openbsd-arm: FORCE
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+
 buildlet.openbsd-amd64: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
@@ -75,6 +90,14 @@ buildlet.openbsd-386: FORCE
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
 
 buildlet.plan9-386: FORCE
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+
+buildlet.plan9-arm: FORCE
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+
+buildlet.plan9-amd64: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
 

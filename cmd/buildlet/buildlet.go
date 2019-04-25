@@ -75,7 +75,8 @@ var (
 //   18: set TMPDIR and GOCACHE
 //   21: GO_BUILDER_SET_GOPROXY=coordinator support
 //   22: TrimSpace the reverse buildlet's gobuildkey contents
-const buildletVersion = 22
+//   23: revdial v2
+const buildletVersion = 23
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {

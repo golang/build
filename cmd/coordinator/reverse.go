@@ -41,13 +41,13 @@ import (
 	"net"
 	"net/http"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/revdial"
+	revdialv2 "golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
 )
 
@@ -483,6 +483,19 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 	hostType := r.Header.Get("X-Go-Host-Type")
 	modes := r.Header["X-Go-Builder-Type"] // old way
 	gobuildkeys := r.Header["X-Go-Builder-Key"]
+	buildletVersion := r.Header.Get("X-Go-Builder-Version")
+	revDialVersion := r.Header.Get("X-Revdial-Version")
+
+	switch revDialVersion {
+	case "":
+		// Old.
+		revDialVersion = "1"
+	case "2":
+		// Current.
+	default:
+		http.Error(w, "unknown revdial version", http.StatusBadRequest)
+		return
+	}
 
 	// Convert the new argument style (X-Go-Host-Type) into the
 	// old way, to minimize changes in the rest of this code.
@@ -506,20 +519,6 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Silently pretend that "gomacmini-*.local" doesn't want to do darwin-amd64-10_10 and
-	// darwin-386-10_10 anymore.
-	// TODO(bradfitz): remove this hack after we reconfigure those machines.
-	if strings.HasPrefix(hostname, "gomacmini-") && strings.HasSuffix(hostname, ".local") {
-		var filtered []string
-		for _, m := range modes {
-			if m == "darwin-amd64-10_10" || m == "darwin-386-10_10" {
-				continue
-			}
-			filtered = append(filtered, m)
-		}
-		modes = filtered
-	}
-
 	// For older builders using the buildlet's -reverse flag only,
 	// collapse their builder modes down into a singular hostType.
 	legacyNote := ""
@@ -534,21 +533,40 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	revDialer := revdial.NewDialer(bufrw, conn)
-	log.Printf("Registering reverse buildlet %q (%s) for host type %v%s",
-		hostname, r.RemoteAddr, hostType, legacyNote)
+	if err := (&http.Response{StatusCode: http.StatusSwitchingProtocols, Proto: "HTTP/1.1"}).Write(conn); err != nil {
+		log.Printf("error writing upgrade response to reverse buildlet %s (%s) at %s: %v", hostname, hostType, r.RemoteAddr, err)
+		conn.Close()
+		return
+	}
 
-	(&http.Response{StatusCode: http.StatusSwitchingProtocols, Proto: "HTTP/1.1"}).Write(conn)
+	log.Printf("Registering reverse buildlet %q (%s) for host type %v %s; buildletVersion=%v; revDialVersion=%v",
+		hostname, r.RemoteAddr, hostType, legacyNote, buildletVersion, revDialVersion)
+
+	var dialer func(context.Context) (net.Conn, error)
+	var revDialerDone <-chan struct{}
+	switch revDialVersion {
+	case "1":
+		revDialer := revdial.NewDialer(bufrw, conn)
+		revDialerDone = revDialer.Done()
+		dialer = func(ctx context.Context) (net.Conn, error) {
+			// ignoring context.
+			return revDialer.Dial()
+		}
+	case "2":
+		revDialer := revdialv2.NewDialer(conn, "/revdial")
+		revDialerDone = revDialer.Done()
+		dialer = revDialer.Dial
+	}
 
 	client := buildlet.NewClient(hostname, buildlet.NoKeyPair)
 	client.SetHTTPClient(&http.Client{
 		Transport: &http.Transport{
-			Dial: func(network, addr string) (net.Conn, error) {
-				return revDialer.Dial()
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer(ctx)
 			},
 		},
 	})
-	client.SetDialer(revDialer.Dial)
+	client.SetDialer(dialer)
 	client.SetDescription(fmt.Sprintf("reverse peer %s/%s for host type %v", hostname, r.RemoteAddr, hostType))
 
 	var isDead struct {
@@ -567,7 +585,7 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 	// conn) detects that the remote went away, close the buildlet
 	// client proactively show
 	go func() {
-		<-revDialer.Done()
+		<-revDialerDone
 		isDead.Lock()
 		defer isDead.Unlock()
 		if !isDead.v {
@@ -592,7 +610,7 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	b := &reverseBuildlet{
 		hostname:  hostname,
-		version:   r.Header.Get("X-Go-Builder-Version"),
+		version:   buildletVersion,
 		hostType:  hostType,
 		client:    client,
 		conn:      conn,

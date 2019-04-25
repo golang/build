@@ -8,6 +8,7 @@ package buildlet // import "golang.org/x/build/buildlet"
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,7 +23,6 @@ import (
 	"sync"
 	"time"
 
-	"context"
 	"golang.org/x/oauth2"
 )
 
@@ -117,8 +117,14 @@ func (c *Client) SetHTTPClient(httpClient *http.Client) {
 }
 
 // SetDialer sets the function that creates a new connection to the buildlet.
-// By default, net.Dial is used.
-func (c *Client) SetDialer(dialer func() (net.Conn, error)) {
+// By default, net.Dialer.DialContext is used.
+//
+// TODO(bradfitz): this is only used for ssh connections to buildlets,
+// which previously required the client to do its own net.Dial +
+// upgrade request. But now that the net/http client supports
+// read/write bodies for protocol upgrades, we could change how ssh
+// works and delete this.
+func (c *Client) SetDialer(dialer func(context.Context) (net.Conn, error)) {
 	c.dialer = dialer
 }
 
@@ -138,11 +144,11 @@ type Client struct {
 	ipPort         string // required, unless remoteBuildlet+baseURL is set
 	tls            KeyPair
 	httpClient     *http.Client
-	dialer         func() (net.Conn, error) // nil means to use net.Dial
-	baseURL        string                   // optional baseURL (used by remote buildlets)
-	authUser       string                   // defaults to "gomote", if password is non-empty
-	password       string                   // basic auth password or empty for none
-	remoteBuildlet string                   // non-empty if for remote buildlets
+	dialer         func(context.Context) (net.Conn, error) // nil means to use net.Dialer.DialContext
+	baseURL        string                                  // optional baseURL (used by remote buildlets)
+	authUser       string                                  // defaults to "gomote", if password is non-empty
+	password       string                                  // basic auth password or empty for none
+	remoteBuildlet string                                  // non-empty if for remote buildlets
 
 	closeFuncs  []func() // optional extra code to run on close
 	releaseMode bool
@@ -752,29 +758,30 @@ func (c *Client) ListDir(dir string, opts ListDirOpts, fn func(DirEntry)) error 
 	return sc.Err()
 }
 
-func (c *Client) getDialer() func() (net.Conn, error) {
+func (c *Client) getDialer() func(context.Context) (net.Conn, error) {
 	if c.dialer != nil {
 		return c.dialer
 	}
 	return c.dialWithNetDial
 }
 
-func (c *Client) dialWithNetDial() (net.Conn, error) {
-	// TODO: contexts? the tedious part will be adding it to
-	// revdial.Dial. For now just do a 5 second timeout. Probably
-	// fine. This is currently only used for ssh connections.
-	d := net.Dialer{Timeout: 5 * time.Second}
-	return d.Dial("tcp", c.ipPort)
+func (c *Client) dialWithNetDial(ctx context.Context) (net.Conn, error) {
+	var d net.Dialer
+	return d.DialContext(ctx, "tcp", c.ipPort)
 }
 
 // ConnectSSH opens an SSH connection to the buildlet for the given username.
 // The authorizedPubKey must be a line from an ~/.ssh/authorized_keys file
 // and correspond to the private key to be used to communicate over the net.Conn.
 func (c *Client) ConnectSSH(user, authorizedPubKey string) (net.Conn, error) {
-	conn, err := c.getDialer()()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := c.getDialer()(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error dialing HTTP connection before SSH upgrade: %v", err)
 	}
+	deadline, _ := ctx.Deadline()
+	conn.SetDeadline(deadline)
 	req, err := http.NewRequest("POST", "/connect-ssh", nil)
 	if err != nil {
 		conn.Close()
@@ -794,8 +801,10 @@ func (c *Client) ConnectSSH(user, authorizedPubKey string) (net.Conn, error) {
 	}
 	if res.StatusCode != http.StatusSwitchingProtocols {
 		slurp, _ := ioutil.ReadAll(res.Body)
+		conn.Close()
 		return nil, fmt.Errorf("unexpected /connect-ssh response: %v, %s", res.Status, slurp)
 	}
+	conn.SetDeadline(time.Time{})
 	return conn, nil
 }
 
