@@ -142,6 +142,7 @@ func TestTrybots(t *testing.T) {
 			repo:   "sys",
 			branch: "master",
 			want: []string{
+				"android-amd64-emu",
 				"freebsd-386-11_2",
 				"freebsd-amd64-11_2",
 				"freebsd-amd64-12_0",
@@ -287,6 +288,13 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-amd64-emu@go1.12", "mobile"), none},
 		{b("android-amd64-emu@go1.13", "mobile"), both},
 		{b("android-amd64-emu", "mobile@1.13"), both},
+		{b("android-amd64-emu", "crypto"), both},
+		{b("android-amd64-emu", "net"), both},
+		{b("android-amd64-emu", "sync"), both},
+		{b("android-amd64-emu", "sys"), both},
+		{b("android-amd64-emu", "text"), both},
+		{b("android-amd64-emu", "time"), both},
+		{b("android-amd64-emu", "tools"), both},
 
 		{b("android-386-emu", "go"), onlyPost},
 		{b("android-386-emu", "mobile"), onlyPost},

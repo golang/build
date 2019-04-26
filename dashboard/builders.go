@@ -1994,7 +1994,11 @@ func init() {
 		Notes:             "Android emulator on GCE",
 		numTryTestHelpers: 3,
 		tryBot: func(repo, branch, goBranch string) bool {
-			return (repo == "go" || repo == "mobile") && atLeastGo1(branch, 13) && atLeastGo1(goBranch, 13)
+			switch repo {
+			case "go", "mobile", "sys", "net", "tools", "crypto", "sync", "text", "time":
+				return atLeastGo1(branch, 13) && atLeastGo1(goBranch, 13)
+			}
+			return false
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
