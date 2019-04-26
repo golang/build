@@ -17,3 +17,4 @@ spec:
     app: coordinator
   type: LoadBalancer
   loadBalancerIP: 107.178.219.46
+  externalTrafficPolicy: Local
