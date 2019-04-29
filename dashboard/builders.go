@@ -1885,8 +1885,8 @@ func init() {
 		numTryTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
-		Name:              "darwin-386-10_11",
-		HostType:          "host-darwin-10_11",
+		Name:              "darwin-386-10_14",
+		HostType:          "host-darwin-10_14",
 		shouldRunDistTest: macTestPolicy,
 		buildsRepo:        onlyGo,
 		MaxAtOnce:         1,
