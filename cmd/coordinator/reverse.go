@@ -53,16 +53,31 @@ import (
 
 const minBuildletVersion = 1
 
-var reversePool = new(reverseBuildletPool)
+var reversePool = &reverseBuildletPool{
+	oldInUse: make(map[*buildlet.Client]bool),
+}
+
+const maxOldRevdialUsers = 10
 
 type token struct{}
 
 type reverseBuildletPool struct {
-	mu sync.Mutex // guards all fields, including fields of *reverseBuildlet
+	// mu guards all 4 fields below and also fields of
+	// *reverseBuildlet in buildlets
+	mu sync.Mutex
+
+	// buildlets are the currently connected buildlets.
 	// TODO: switch to a map[hostType][]buildlets or map of set.
 	buildlets []*reverseBuildlet
-	wakeChan  map[string]chan token // hostType => best-effort wake-up chan when buildlet free
-	waiters   map[string]int        // hostType => number waiters blocked in GetBuildlet
+
+	wakeChan map[string]chan token // hostType => best-effort wake-up chan when buildlet free
+
+	waiters map[string]int // hostType => number waiters blocked in GetBuildlet
+
+	// oldInUse tracks which buildlets with the old revdial code are currently in use.
+	// These are a liability due to runaway memory issues (Issue 31639) so
+	// we bound how many can be running at once. Fortunately there aren't many left.
+	oldInUse map[*buildlet.Client]bool
 }
 
 func (p *reverseBuildletPool) ServeReverseStatusJSON(w http.ResponseWriter, r *http.Request) {
@@ -126,9 +141,15 @@ func (p *reverseBuildletPool) tryToGrab(hostType string) (bc *buildlet.Client, b
 			busy++
 			continue
 		}
+		if b.isOldRevDial && len(p.oldInUse) >= maxOldRevdialUsers {
+			continue
+		}
 		// Found an unused match.
 		b.inUse = true
 		b.inUseTime = time.Now()
+		if b.isOldRevDial {
+			p.oldInUse[b.client] = true
+		}
 		return b.client, 0
 	}
 	return nil, busy
@@ -162,6 +183,7 @@ func (p *reverseBuildletPool) noteBuildletAvailable(hostType string) {
 func (p *reverseBuildletPool) nukeBuildlet(victim *buildlet.Client) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	delete(p.oldInUse, victim)
 	for i, rb := range p.buildlets {
 		if rb.client == victim {
 			defer rb.conn.Close()
@@ -345,10 +367,12 @@ func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 	p.mu.Lock()
 	buildlets := append([]*reverseBuildlet(nil), p.buildlets...)
 	sort.Sort(byTypeThenHostname(buildlets))
+	numInUse := 0
 	for _, b := range buildlets {
 		machStatus := "<i>idle</i>"
 		if b.inUse {
 			machStatus = "working"
+			numInUse++
 		}
 		fmt.Fprintf(&buf, "<li>%s (%s) version %s, %s: connected %s, %s for %s</li>\n",
 			b.hostname,
@@ -363,6 +387,8 @@ func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 			inUse[b.hostType]++
 		}
 	}
+	numOldInUse := len(p.oldInUse)
+	numConnected := len(buildlets)
 	p.mu.Unlock()
 
 	var typs []string
@@ -371,7 +397,13 @@ func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 	}
 	sort.Strings(typs)
 
-	io.WriteString(w, "<b>Reverse pool summary</b> (in use / total)<ul>")
+	io.WriteString(w, "<b>Reverse pool stats</b><ul>")
+	fmt.Fprintf(w, "<li>Buildlets connected: %d</li>\n", numConnected)
+	fmt.Fprintf(w, "<li>Buildlets in use: %d</li>\n", numInUse)
+	fmt.Fprintf(w, "<li>Old revdial buildlets in use: %d</li>\n", numOldInUse)
+	io.WriteString(w, "</ul>")
+
+	io.WriteString(w, "<b>Reverse pool by host type</b> (in use / total)<ul>")
 	if len(typs) == 0 {
 		io.WriteString(w, "<li>no connections</li>")
 	}
@@ -450,7 +482,8 @@ type reverseBuildlet struct {
 	// It doesn't have to be a complete DNS name.
 	hostname string
 	// version is the reverse buildlet's version.
-	version string
+	version      string
+	isOldRevDial bool // version 22 or under: using the v1 revdial package (Issue 31639)
 
 	// sessRand is the unique random number for every unique buildlet session.
 	sessRand string
@@ -609,13 +642,14 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now()
 	b := &reverseBuildlet{
-		hostname:  hostname,
-		version:   buildletVersion,
-		hostType:  hostType,
-		client:    client,
-		conn:      conn,
-		inUseTime: now,
-		regTime:   now,
+		hostname:     hostname,
+		version:      buildletVersion,
+		isOldRevDial: status.Version < 23,
+		hostType:     hostType,
+		client:       client,
+		conn:         conn,
+		inUseTime:    now,
+		regTime:      now,
 	}
 	reversePool.addBuildlet(b)
 	registerBuildlet(modes) // testing only
