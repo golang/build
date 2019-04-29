@@ -60,7 +60,7 @@ buildlet.netbsd-amd64: FORCE
 
 buildlet.netbsd-arm: FORCE
 	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+	upload --verbose --extraenv=GOARM=7 --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
 
 buildlet.netbsd-386: FORCE
 	go install golang.org/x/build/cmd/upload
