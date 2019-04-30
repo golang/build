@@ -77,12 +77,6 @@ var Hosts = map[string]*HostConfig{
 		Notes:       "for localhost development of buildlets/gomote/coordinator only",
 		SSHUsername: os.Getenv("USER"),
 	},
-	"host-nacl-arm-davecheney": &HostConfig{
-		IsReverse:   true,
-		ExpectNum:   1,
-		Notes:       "Raspberry Pi 3",
-		OwnerGithub: "davecheney",
-	},
 	"host-nacl-kube": &HostConfig{
 		Notes:           "Container with Native Client binaries.",
 		ContainerImage:  "linux-x86-nacl:latest",
@@ -243,7 +237,7 @@ var Hosts = map[string]*HostConfig{
 	// Note: the netbsd-386 host hangs during the ../test phase of all.bash,
 	// so we don't use this for now. (See the netbsd-386-8 BuildConfig below.)
 	"host-netbsd-386-8_0": &HostConfig{
-		VMImage:            "netbsd-386-8-0-2018q1",
+		VMImage:            "netbsd-i386-8-0-2018q1",
 		Notes:              "NetBSD 8.0RC1; GCE VM is built from script in build/env/netbsd-386",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.netbsd-386",
@@ -1609,7 +1603,6 @@ func init() {
 		Name:              "nacl-386",
 		HostType:          "host-nacl-kube",
 		buildsRepo:        onlyGo,
-		tryBot:            explicitTrySet("go"),
 		MaxAtOnce:         2,
 		numTryTestHelpers: 3,
 		env:               []string{"GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
@@ -1748,8 +1741,7 @@ func init() {
 		HostType:          "host-netbsd-386-8_0",
 		shouldRunDistTest: netBSDDistTestPolicy,
 		MaxAtOnce:         1,
-		// This builder currently hangs in the “../test” phase of all.bash.
-		// (https://golang.org/issue/25206)
+		// This builder currently hangs in the runtime tests; Issue 31726.
 		buildsRepo: disabledBuilder,
 	})
 	addBuilder(BuildConfig{
@@ -1903,6 +1895,13 @@ func init() {
 		HostType:          "host-darwin-10_14",
 		shouldRunDistTest: macTestPolicy,
 		buildsRepo:        defaultPlusExp,
+	})
+	addBuilder(BuildConfig{
+		Name:              "darwin-amd64-nocgo",
+		HostType:          "host-darwin-10_14",
+		MaxAtOnce:         1,
+		shouldRunDistTest: noTestDir,
+		env:               []string{"CGO_ENABLED=0"},
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-race",
@@ -2120,12 +2119,6 @@ func init() {
 		SkipSnapshot:      true,
 		shouldRunDistTest: noTestDir,
 		buildsRepo:        onlyMaster,
-	})
-	addBuilder(BuildConfig{
-		Name:         "nacl-arm",
-		HostType:     "host-nacl-arm-davecheney",
-		buildsRepo:   onlyGo,
-		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
 		Name:              "plan9-amd64-9front",

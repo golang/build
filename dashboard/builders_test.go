@@ -98,7 +98,6 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-plan9",
 				"misc-compile-ppc",
 				"misc-vet-vetall",
-				"nacl-386",
 				"nacl-amd64p32",
 				"openbsd-amd64-64",
 				"windows-386-2008",
@@ -123,7 +122,6 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-openbsd",
 				"misc-compile-plan9",
 				"misc-compile-ppc",
-				"nacl-386",
 				"nacl-amd64p32",
 				"openbsd-amd64-64",
 				"windows-386-2008",
@@ -342,6 +340,12 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-386-12_0", "go"), onlyPost},
 		{b("freebsd-386-12_0", "net"), onlyPost},
 
+		// NetBSD
+		{b("netbsd-amd64-8_0", "go"), onlyPost},
+		{b("netbsd-amd64-8_0", "net"), onlyPost},
+		{b("netbsd-386-8_0", "go"), none},
+		{b("netbsd-386-8_0", "net"), none},
+
 		// AIX starts at Go 1.12
 		{b("aix-ppc64", "go"), onlyPost},
 		{b("aix-ppc64", "net"), onlyPost},
@@ -383,7 +387,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-amd64-emu", "go"), isBuilder},
 		{b("android-386-emu", "go"), isBuilder},
 
-		{b("nacl-386", "go"), both},
+		{b("nacl-386", "go"), onlyPost},
 		{b("nacl-386", "net"), none},
 		{b("nacl-amd64p32", "go"), both},
 		{b("nacl-amd64p32", "net"), none},
