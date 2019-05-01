@@ -525,6 +525,15 @@ var Hosts = map[string]*HostConfig{
 			"GOROOT_BOOTSTRAP=/var/mobile/go-darwin-arm64-bootstrap",
 		},
 	},
+	"host-android-arm64-corellium-android": &HostConfig{
+		Notes:       "Virtual Android devices hosted by Zenly on Corellium",
+		OwnerGithub: "znly",
+		IsReverse:   true,
+		ExpectNum:   3,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/data/data/com.termux/files/home/go-android-arm64-bootstrap",
+		},
+	},
 	"host-aix-ppc64-osuosl": &HostConfig{
 		Notes:       "AIX 7.2 VM on OSU; run by Tony Reix",
 		OwnerGithub: "trex58",
@@ -1940,6 +1949,14 @@ func init() {
 		Name:     "darwin-arm64-corellium",
 		HostType: "host-darwin-arm64-corellium-ios",
 		Notes:    "Virtual iPhone SE running on Corellium; owned by zenly",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "go" && branch == "master" && goBranch == "master"
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "android-arm64-corellium",
+		HostType: "host-android-arm64-corellium-android",
+		Notes:    "Virtual Android running on Corellium; owned by zenly",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && branch == "master" && goBranch == "master"
 		},
