@@ -1962,6 +1962,19 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
+		Name:     "android-arm-corellium",
+		HostType: "host-android-arm64-corellium-android",
+		Notes:    "Virtual Android running on Corellium; owned by zenly",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "go" && branch == "master" && goBranch == "master"
+		},
+		env: []string{
+			"CGO_ENABLED=1",
+			"GOHOSTARCH=arm",
+			"GOARCH=arm",
+		},
+	})
+	addBuilder(BuildConfig{
 		Name:     "darwin-amd64-wikofever",
 		HostType: "host-darwin-amd64-eliasnaur-android",
 		Notes:    "Same as android-arm*-wikofever but without GOOS set, for running x/mobile tests.",

@@ -371,6 +371,7 @@ func TestBuilderConfig(t *testing.T) {
 		// Virtual mobiledevices
 		{b("darwin-arm64-corellium", "go"), isBuilder},
 		{b("android-arm64-corellium", "go"), isBuilder},
+		{b("android-arm-corellium", "go"), isBuilder},
 
 		// A GOOS=darwin variant of the physical ARM Androids
 		// runs x/mobile and nothing else:
