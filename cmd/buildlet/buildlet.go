@@ -943,7 +943,13 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 	env = setPathEnv(env, r.PostForm["path"], *workDir)
 
-	cmd := exec.Command(absCmd, r.PostForm["cmdArg"]...)
+	var cmd *exec.Cmd
+	if needsBashWrapper(absCmd) {
+		cmd = exec.Command("bash", absCmd)
+	} else {
+		cmd = exec.Command(absCmd)
+	}
+	cmd.Args = append(cmd.Args, r.PostForm["cmdArg"]...)
 	cmd.Dir = dir
 	cmdOutput := flushWriter{w}
 	cmd.Stdout = cmdOutput
@@ -984,6 +990,17 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set(hdrProcessState, state)
 	log.Printf("[%p] Run = %s, after %v", cmd, state, time.Since(t0))
+}
+
+// needsBashWrappers reports whether the given command needs to
+// run through bash.
+func needsBashWrapper(cmd string) bool {
+	if !strings.HasSuffix(cmd, ".bash") {
+		return false
+	}
+	// The mobile platforms can't execute shell scripts directly.
+	ismobile := runtime.GOOS == "android" || runtime.GOOS == "darwin" && (runtime.GOARCH == "arm" || runtime.GOARCH == "arm64")
+	return ismobile
 }
 
 // pathNotExist reports whether path does not exist.
