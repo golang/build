@@ -905,7 +905,7 @@ func (c *BuildConfig) AllScript() string {
 	if strings.HasPrefix(c.Name, "nacl-") {
 		return "src/nacltest.bash"
 	}
-	if strings.HasPrefix(c.Name, "darwin-arm") {
+	if strings.HasPrefix(c.Name, "darwin-arm") && !strings.Contains(c.Name, "corellium") {
 		return "src/iostest.bash"
 	}
 	if strings.HasPrefix(c.Name, "misc-compile") {
