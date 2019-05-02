@@ -7,10 +7,9 @@ MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
 ENV DEBIAN_FRONTEND noninteractive
 
-# Add node.js to run the js/wasm tests.
-RUN apt-get update && apt-get install -y \
-	--no-install-recommends \
-	nodejs \
-	&& rm -rf /var/lib/apt/lists/*
+
+RUN (curl -sL https://deb.nodesource.com/setup_12.x | bash -) && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
 
 CMD ["/usr/local/bin/stage0"]
