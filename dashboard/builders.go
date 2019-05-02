@@ -763,7 +763,7 @@ func (c *BuildConfig) Env() []string {
 // ("go", "oauth2", "net", etc).
 func (c *BuildConfig) ModulesEnv(repo string) (env []string) {
 	if c.IsReverse() && repo != "go" {
-		env = append(env, "GO_BUILDER_SET_GOPROXY=coordinator")
+		env = append(env, "GOPROXY=https://proxy.golang.org")
 	}
 	switch repo {
 	case "go":

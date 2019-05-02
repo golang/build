@@ -11,71 +11,37 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strings"
 )
 
-// proxyModuleCache proxies from https://farmer.golang.org (with a
-// magic header, as handled by coordinator.go's httpRouter type) to
-// Go's private module proxy server running on GKE. The module proxy
-// protocol does not define authentication, so we do it ourselves.
-//
-// The complete path is the buildlet listens on localhost:3000 to run
-// an unauthenticated module proxy server for the cmd/go binary to use
-// via GOPROXY=http://localhost:3000. That localhost:3000 server
-// proxies it to https://farmer.golang.org with auth headers and a
-// sentinel X-Proxy-Service:module-cache header. Then coordinator.go's
-// httpRouter sends it here.
-//
-// This code then does the final reverse proxy, sent without auth.
-//
-// In summary:
-//
-//   cmd/go -> localhost:3000 -> buildlet -> coordinator -> GKE server
-func proxyModuleCache(w http.ResponseWriter, r *http.Request) {
-	if r.TLS == nil {
-		http.Error(w, "https required", http.StatusBadRequest)
-		return
-	}
-	builder, pass, ok := r.BasicAuth()
-	if !ok {
-		http.Error(w, "missing required authentication", http.StatusBadRequest)
-		return
-	}
+var proxyGolangOrg *httputil.ReverseProxy // initialized just below
 
-	// For old buildlets that didn't TrimSpace their gobuildkey
-	// file contents (Issue 30749), remove the space here too.
-	// Once all buildlets are upgraded to version 22 or higher
-	// this can be removed. They should all auto-update, but some
-	// are misconfigured and don't.
-	pass = strings.TrimSpace(pass)
-
-	if !strings.Contains(builder, "-") || builderKey(builder) != pass {
-		log.Printf("modproxy: sending 401 Unauthorized due to invalid key for builder %q", builder)
-		http.Error(w, "bad username or password", http.StatusUnauthorized)
-		return
-	}
-
-	targetURL := moduleProxy()
-	if !strings.HasPrefix(targetURL, "http") {
-		log.Printf("unsupported GOPROXY backend value %q; not proxying", targetURL)
-		http.Error(w, "no GOPROXY backend available", http.StatusInternalServerError)
-		return
-	}
-	backend, err := url.Parse(targetURL)
+func init() {
+	u, err := url.Parse("https://proxy.golang.org")
 	if err != nil {
-		log.Printf("failed to parse GOPROXY value as URL: %v", err)
-		http.Error(w, "module proxy misconfigured", http.StatusInternalServerError)
-		return
+		log.Fatal(err)
 	}
-	// TODO: maybe only create this once early. But probably doesn't matter.
-	rp := httputil.NewSingleHostReverseProxy(backend)
+	rp := httputil.NewSingleHostReverseProxy(u)
 	rp.ModifyResponse = func(res *http.Response) error {
-		if res.StatusCode/100 != 2 {
-			log.Printf("modproxy: proxying HTTP %s response from backend for builder %s, %s %s", res.Status, builder, r.Method, r.RequestURI)
+		r := res.Request
+		if res.StatusCode/100 != 2 && r != nil {
+			log.Printf("modproxy: proxying HTTP %s response from backend for %s, %s %s", res.Status, r.RemoteAddr, r.Method, r.RequestURI)
 		}
 		return nil
 	}
-	r.Header.Del("Authorization")
-	r.Header.Del("X-Proxy-Service")
-	rp.ServeHTTP(w, r)
+	proxyGolangOrg = rp
+}
+
+func listenAndServeInternalModuleProxy() {
+	err := http.ListenAndServe(":8123", http.HandlerFunc(proxyModuleCache))
+	log.Fatalf("error running internal module proxy: %v", err)
+}
+
+// proxyModuleCache proxies requests to https://proxy.golang.org/
+func proxyModuleCache(w http.ResponseWriter, r *http.Request) {
+	// Delete any Host header so it's the one sent to the backend
+	// is proxy.golang.org by the default ReverseProxy.Director
+	// setting the URL.Host. (Host takes priority for Host header,
+	// if present)
+	r.Host = ""
+	proxyGolangOrg.ServeHTTP(w, r)
 }

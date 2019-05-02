@@ -221,8 +221,11 @@ func (httpRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		requireBuildletProxyAuth(http.HandlerFunc(proxyBuildletHTTP)).ServeHTTP(w, r)
 		return
 	}
+	// TODO: delete this check in a few weeks from 2019-05-02:
 	if r.Header.Get("X-Proxy-Service") == "module-cache" {
-		proxyModuleCache(w, r)
+		user, _, _ := r.BasicAuth()
+		log.Printf("modproxy: buildlet %q is still hitting old endpoint", user)
+		http.Error(w, "service turned down", 500)
 		return
 	}
 	http.DefaultServeMux.ServeHTTP(w, r)
@@ -341,6 +344,7 @@ func main() {
 			dashboard.Builders = stagingClusterBuilders()
 		}
 
+		go listenAndServeInternalModuleProxy()
 		go findWorkLoop(workc)
 		go findTryWorkLoop()
 		go reportMetrics(context.Background())
@@ -2461,16 +2465,13 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 // moduleProxy returns the GOPROXY environment value to use for module-enabled
 // tests.
 //
-// We go through a GCP-project-internal module proxy ("GOPROXY") to
-// eliminate load on the origin servers. Our builder VMs are ephemeral
-// and only run for the duration of one build. They also often don't
-// have all the VCS tools installed (or even available: there is no
-// git for plan9).
+// We go through an internal (10.0.0.0/8) proxy that then hits
+// https://proxy.golang.org/ so we're still able to firewall
+// non-internal outbound connections on builder nodes.
 //
-// moduleProxy in prod mode (when running on GKE) returns an http
+// This moduleProxy func in prod mode (when running on GKE) returns an http
 // URL to the current GKE pod's IP with a Kubernetes NodePort service
-// port that forwards to the internal Athens module proxy cache
-// service we run on GKE.
+// port that forwards back to the coordinator's 8123. See comment below.
 //
 // In localhost dev mode it just returns the value of GOPROXY.
 func moduleProxy() string {
@@ -2480,15 +2481,15 @@ func moduleProxy() string {
 		return os.Getenv("GOPROXY")
 	}
 	// We run a NodePort service on each GKE node
-	// (cmd/coordinator/module-proxy-service.yaml) on port 30156
-	// that maps to the Athens service. We could round robin over
-	// all the GKE nodes' IPs if we wanted, but the coordinator is
-	// running on GKE so our node by definition is up, so just use it.
-	// It won't be much traffic.
+	// (cmd/coordinator/module-proxy-service.yaml) on port 30157
+	// that maps back the coordinator's port 8123. (We could round
+	// robin over all the GKE nodes' IPs if we wanted, but the
+	// coordinator is running on GKE so our node by definition is
+	// up, so just use it. It won't be much traffic.)
 	// TODO: migrate to a GKE internal load balancer with an internal static IP
 	// once we migrate symbolic-datum-552 off a Legacy VPC network to the modern
 	// scheme that supports internal static IPs.
-	return "http://" + gkeNodeIP + ":30156"
+	return "http://" + gkeNodeIP + ":30157"
 }
 
 // affectedPkgs returns the name of every package affected by this commit.
