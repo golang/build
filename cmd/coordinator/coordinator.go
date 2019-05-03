@@ -221,13 +221,6 @@ func (httpRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		requireBuildletProxyAuth(http.HandlerFunc(proxyBuildletHTTP)).ServeHTTP(w, r)
 		return
 	}
-	// TODO: delete this check in a few weeks from 2019-05-02:
-	if r.Header.Get("X-Proxy-Service") == "module-cache" {
-		user, _, _ := r.BasicAuth()
-		log.Printf("modproxy: buildlet %q is still hitting old endpoint", user)
-		http.Error(w, "service turned down", 500)
-		return
-	}
 	http.DefaultServeMux.ServeHTTP(w, r)
 }
 
