@@ -110,6 +110,7 @@ new Chart(document.querySelector('.js-burndownChart'), {
     datasets: [
       {
         label: `${data.milestone} total issues`,
+        yAxisID: 'total',
         data: data.entries.map(d => d.open),
         backgroundColor: 'transparent',
         borderColor: 'rgba(54, 162, 235, 0.8)',
@@ -117,6 +118,7 @@ new Chart(document.querySelector('.js-burndownChart'), {
       },
       {
         label: `${data.milestone} release blocking`,
+        yAxisID: 'release-blocking',
         data: data.entries.map(d => d.blockers),
         backgroundColor: 'rgba(0,0,0,0)',
         borderColor: 'rgba(255, 99, 132, 0.8)',
@@ -142,9 +144,18 @@ new Chart(document.querySelector('.js-burndownChart'), {
     scales: {
       yAxes: [
         {
+          id: 'total',
           ticks: {
             beginAtZero: true,
           },
+          position: 'left',
+        },
+        {
+          id: 'release-blocking',
+          ticks: {
+            beginAtZero: true,
+          },
+          position: 'right',
         },
       ],
     },
