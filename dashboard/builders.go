@@ -1970,7 +1970,6 @@ func init() {
 		},
 		env: []string{
 			"CGO_ENABLED=1",
-			"GOHOSTARCH=arm",
 			"GOARCH=arm",
 		},
 	})
