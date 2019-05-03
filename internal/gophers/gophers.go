@@ -17,8 +17,8 @@ type Person struct {
 	Github  string   // "FooBar" (orig case, no '@')
 	Gerrit  string   // "foo@bar.com" (lowercase)
 	Emails  []string // all lower
-	Googler bool
-	Bot     bool
+	Googler bool     // whether person is (or was) a Googler; determined via heuristics
+	Bot     bool     // whether it's a known bot (GopherBot, Gerrit Bot)
 }
 
 func strSliceContains(ss []string, s string) bool {
