@@ -1058,7 +1058,7 @@ func defaultPlusExp(repo, branch, goBranch string) bool {
 // AllScriptArgs returns the set of arguments that should be passed to the
 // all.bash-equivalent script. Usually empty.
 func (c *BuildConfig) AllScriptArgs() []string {
-	if strings.HasPrefix(c.Name, "darwin-arm") {
+	if strings.HasPrefix(c.Name, "darwin-arm") && !strings.Contains(c.Name, "corellium") {
 		return []string{"-restart"}
 	}
 	return append([]string(nil), c.allScriptArgs...)
