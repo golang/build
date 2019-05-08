@@ -11,6 +11,7 @@ if ! git diff-index HEAD --quiet || ! git diff-files --quiet; then
   dirty=1
 fi
 if [ -n "$dirty" ] || [ -z "$(git config --get-all "branch.${CURRENT_BRANCH}.remote")" ] || [ -n "$(git rev-list '@{upstream}..HEAD')" ]; then
-  VERSION=$VERSION-$USER-$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  # Append -user-20190509T023926
+  VERSION=$VERSION-$USER-$(git show --quiet --pretty=%cI HEAD | perl -npe 's/[^\dT]//g;$_=substr($_,0,15)')
 fi
 echo "$VERSION"

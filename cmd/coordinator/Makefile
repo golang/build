@@ -20,40 +20,30 @@ dev-upload: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=linux-amd64 --file=go:golang.org/x/build/cmd/coordinator --public dev-go-builder-data/coordinator
 
-update-deps:
-	go install golang.org/x/build/cmd/gitlock
-	gitlock --update=Dockerfile.0 golang.org/x/build/cmd/coordinator
-
-MUTABLE_VERSION ?= latest
-VERSION ?= $(shell git rev-parse --short HEAD)
+MUTABLE_VERSION := latest
+VERSION := $(shell ./version.sh)
 
 IMAGE_STAGING := gcr.io/go-dashboard-dev/coordinator
 IMAGE_PROD := gcr.io/symbolic-datum-552/coordinator
 
-DOCKER_IMAGE_build0=build0/coordinator:latest
-DOCKER_CTR_build0=coordinator-build0
+DOCKER_IMAGE=golang/coordinator
 
-build0: *.go Dockerfile.0
-	docker build --force-rm -f Dockerfile.0 --build-arg "version=$$(./version.sh)" --tag=$(DOCKER_IMAGE_build0) ../..
+docker: *.go Dockerfile
+	docker build --force-rm -f Dockerfile --build-arg "version=$(VERSION)" --tag=$(DOCKER_IMAGE):$(VERSION) ../..
 
-coordinator: build0
-	docker create --name $(DOCKER_CTR_build0) $(DOCKER_IMAGE_build0)
-	docker cp $(DOCKER_CTR_build0):/go/bin/$@ $@
-	docker rm $(DOCKER_CTR_build0)
-
-docker-prod: Dockerfile coordinator
-	docker build --force-rm --tag=$(IMAGE_PROD):$(VERSION) .
-	docker tag $(IMAGE_PROD):$(VERSION) $(IMAGE_PROD):$(MUTABLE_VERSION)
-docker-staging: Dockerfile coordinator
-	docker build --force-rm --tag=$(IMAGE_STAGING):$(VERSION) .
-	docker tag $(IMAGE_STAGING):$(VERSION) $(IMAGE_STAGING):$(MUTABLE_VERSION)
+docker-prod: docker
+	docker tag $(DOCKER_IMAGE):$(VERSION) $(IMAGE_PROD):$(VERSION)
+	docker tag $(DOCKER_IMAGE):$(VERSION) $(IMAGE_PROD):$(MUTABLE_VERSION)
+docker-staging: docker
+	docker tag $(DOCKER_IMAGE):$(VERSION) $(IMAGE_STAGING):$(VERSION)
+	docker tag $(DOCKER_IMAGE):$(VERSION) $(IMAGE_STAGING):$(MUTABLE_VERSION)
 
 push-prod: docker-prod
-	docker push $(IMAGE_PROD):$(MUTABLE_VERSION)
 	docker push $(IMAGE_PROD):$(VERSION)
+	docker push $(IMAGE_PROD):$(MUTABLE_VERSION)
 push-staging: docker-staging
-	docker push $(IMAGE_STAGING):$(MUTABLE_VERSION)
 	docker push $(IMAGE_STAGING):$(VERSION)
+	docker push $(IMAGE_STAGING):$(MUTABLE_VERSION)
 
 deploy-prod: push-prod
 	go install golang.org/x/build/cmd/xb
@@ -61,7 +51,3 @@ deploy-prod: push-prod
 deploy-staging: push-staging
 	go install golang.org/x/build/cmd/xb
 	xb --staging kubectl set image deployment/coordinator-deployment coordinator=$(IMAGE_STAGING):$(VERSION)
-
-clean: FORCE
-	$(RM) coordinator
-	$(RM) ca-certificates.crt
