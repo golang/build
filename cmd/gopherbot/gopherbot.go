@@ -208,7 +208,13 @@ func main() {
 		gerrit: gerrit,
 		mc:     mc,
 		deletedChanges: map[gerritChange]bool{
-			{"crypto", 35958}: true,
+			{"crypto", 35958}:  true,
+			{"scratch", 71730}: true,
+			{"scratch", 71850}: true,
+			{"scratch", 72090}: true,
+			{"scratch", 72091}: true,
+			{"scratch", 72110}: true,
+			{"scratch", 72131}: true,
 		},
 	}
 	bot.initCorpus()
@@ -1806,7 +1812,7 @@ func (b *gopherbot) abandonScratchReviews(ctx context.Context) error {
 			return nil
 		}
 		return gp.ForeachOpenCL(func(cl *maintner.GerritCL) error {
-			if !cl.Meta.Commit.CommitTime.Before(tooOld) {
+			if b.deletedChanges[gerritChange{gp.Project(), cl.Number}] || !cl.Meta.Commit.CommitTime.Before(tooOld) {
 				return nil
 			}
 			if *dryRun {
