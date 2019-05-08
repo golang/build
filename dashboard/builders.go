@@ -2179,11 +2179,21 @@ func init() {
 		buildsRepo:        onlyMaster,
 	})
 	addBuilder(BuildConfig{
-		Name:              "plan9-amd64-9front",
-		HostType:          "host-plan9-amd64-0intro",
-		SkipSnapshot:      true,
-		shouldRunDistTest: noTestDir,
-		buildsRepo:        onlyMaster,
+		Name:         "plan9-amd64-9front",
+		HostType:     "host-plan9-amd64-0intro",
+		SkipSnapshot: true,
+		shouldRunDistTest: func(distTestName string, isTry bool) bool {
+			if !noTestDir(distTestName, isTry) {
+				return false
+			}
+			switch distTestName {
+			case "api",
+				"go_test:cmd/go": // takes over 20 minutes without working SMP
+				return false
+			}
+			return true
+		},
+		buildsRepo: onlyMaster,
 	})
 	addBuilder(BuildConfig{
 		Name:             "aix-ppc64",
