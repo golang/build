@@ -774,7 +774,7 @@ func (c *Client) dialWithNetDial(ctx context.Context) (net.Conn, error) {
 // The authorizedPubKey must be a line from an ~/.ssh/authorized_keys file
 // and correspond to the private key to be used to communicate over the net.Conn.
 func (c *Client) ConnectSSH(user, authorizedPubKey string) (net.Conn, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	conn, err := c.getDialer()(ctx)
 	if err != nil {
