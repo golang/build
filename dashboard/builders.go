@@ -113,6 +113,12 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
+	"host-linux-fedora": &HostConfig{
+		Notes:           "Fedora 30",
+		ContainerImage:  "linux-x86-fedora:latest",
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/goboot"},
+	},
 	"host-linux-arm-scaleway": &HostConfig{
 		IsReverse:       true,
 		HermeticReverse: true,
@@ -1532,6 +1538,12 @@ func init() {
 		HostType:  "host-linux-sid",
 		MaxAtOnce: 1,
 		Notes:     "Debian sid (unstable)",
+	})
+	addBuilder(BuildConfig{
+		Name:      "linux-amd64-fedora",
+		HostType:  "host-linux-fedora",
+		MaxAtOnce: 1,
+		Notes:     "Fedora",
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-androidemu",

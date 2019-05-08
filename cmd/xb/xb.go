@@ -116,7 +116,9 @@ func runDocker() {
 		}
 		layers := fromLayers(file)
 		for _, layer := range layers {
-			if strings.HasPrefix(layer, "golang:") || strings.HasPrefix(layer, "debian:") {
+			if strings.HasPrefix(layer, "golang:") ||
+				strings.HasPrefix(layer, "debian:") ||
+				strings.HasPrefix(layer, "fedora:") {
 				continue
 			}
 			switch layer {
