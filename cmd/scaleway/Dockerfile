@@ -5,21 +5,25 @@
 FROM golang:1.12-stretch AS build
 LABEL maintainer "golang-dev@googlegroups.com"
 
-# BEGIN deps (run `make update-deps` to update)
+ENV GO111MODULE=on
+ENV GOPROXY=https://proxy.golang.org
 
-# Repo go4.org at ce4c26f (2019-02-17)
-ENV REV=ce4c26f7be8eb27dc77f996b08d286dd80bc4a01
-RUN go get -d go4.org/types &&\
-    (cd /go/src/go4.org && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
+RUN mkdir /gocache
+ENV GOCACHE /gocache
 
-# Optimization to speed up iterative development, not necessary for correctness:
+COPY go.mod /go/src/golang.org/x/build/go.mod
+COPY go.sum /go/src/golang.org/x/build/go.sum
+
+WORKDIR /go/src/golang.org/x/build
+
+# Optimization for iterative docker build speed, not necessary for correctness:
+# TODO: write a tool to make writing Go module-friendly Dockerfiles easier.
 RUN go install go4.org/types
-# END deps.
 
 COPY . /go/src/golang.org/x/build/
 
-RUN go install -ldflags "-X 'main.Version=$version'" golang.org/x/build/cmd/scaleway
-
+# Install binary to /go/bin:
+RUN go install golang.org/x/build/cmd/scaleway
 
 FROM debian:stretch
 

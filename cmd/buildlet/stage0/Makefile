@@ -14,10 +14,6 @@ usage: FORCE
 
 FORCE:
 
-update-deps:
-	go install golang.org/x/build/cmd/gitlock
-	gitlock --update=Dockerfile golang.org/x/build/cmd/buildlet/stage0
-
 docker: Dockerfile
 	go install golang.org/x/build/cmd/xb
 	xb docker build --force-rm -f Dockerfile --tag=golang/buildlet-stage0 ../../..
