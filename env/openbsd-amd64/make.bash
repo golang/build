@@ -8,12 +8,12 @@
 set -e
 set -u
 
-readonly VERSION="6.4"
+readonly VERSION="6.5"
 readonly RELNO="${VERSION/./}"
 readonly SNAPSHOT=false
 
 readonly ARCH="${ARCH:-amd64}"
-readonly MIRROR="${MIRROR:-ftp.usa.openbsd.org}"
+readonly MIRROR="${MIRROR:-cdn.openbsd.org}"
 
 if [[ "${ARCH}" != "amd64" && "${ARCH}" != "i386" ]]; then
   echo "ARCH must be amd64 or i386"
@@ -119,6 +119,7 @@ Use (A)uto layout, (E)dit auto layout, or create (C)ustom layout = auto
 URL to autopartitioning template for disklabel = file://disklabel.template
 Set name(s) = +* -x* -game* -man* done
 Directory does not contain SHA256.sig. Continue without verification = yes
+Location of sets = cd0
 EOF
 
 # Disklabel template.
