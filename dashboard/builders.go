@@ -282,6 +282,11 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:   1,
 		OwnerGithub: "0intro",
 	},
+	"host-plan9-386-0intro": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   1,
+		OwnerGithub: "0intro",
+	},
 	"host-plan9-386-gce": &HostConfig{
 		VMImage:            "plan9-386-v7",
 		Notes:              "Plan 9 from 0intro; GCE VM is built from script in build/env/plan9-386",
@@ -2181,6 +2186,23 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:         "plan9-amd64-9front",
 		HostType:     "host-plan9-amd64-0intro",
+		SkipSnapshot: true,
+		shouldRunDistTest: func(distTestName string, isTry bool) bool {
+			if !noTestDir(distTestName, isTry) {
+				return false
+			}
+			switch distTestName {
+			case "api",
+				"go_test:cmd/go": // takes over 20 minutes without working SMP
+				return false
+			}
+			return true
+		},
+		buildsRepo: onlyMaster,
+	})
+	addBuilder(BuildConfig{
+		Name:         "plan9-386-0intro",
+		HostType:     "host-plan9-386-0intro",
 		SkipSnapshot: true,
 		shouldRunDistTest: func(distTestName string, isTry bool) bool {
 			if !noTestDir(distTestName, isTry) {
