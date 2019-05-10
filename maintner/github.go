@@ -1845,7 +1845,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 				}
 				break
 			}
-			if ge, ok := err.(*github.ErrorResponse); ok && ge.Message == "Not Found" {
+			if isTombstoneError(err) {
 				mp := &maintpb.Mutation{
 					GithubIssue: &maintpb.GithubIssueMutation{
 						Owner:    owner,
@@ -1858,6 +1858,22 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 				continue
 			} else if err != nil {
 				return err
+			}
+			// If issue.RepositoryURL doesn't match the request URL, this indicates
+			// the issue has been transferred to another repository and should be
+			// tombstoned.
+			if !strings.HasSuffix(*issue.RepositoryURL, "/"+owner+"/"+repo) {
+				mp := &maintpb.Mutation{
+					GithubIssue: &maintpb.GithubIssueMutation{
+						Owner:    owner,
+						Repo:     repo,
+						Number:   num,
+						NotExist: true,
+					},
+				}
+				p.logf("tombstoning issue %d: %s", issue.GetNumber(), issue.GetTitle())
+				p.c.addMutation(mp)
+				continue
 			}
 			mp := p.gr.newMutationFromIssue(nil, issue)
 			if mp == nil {
@@ -1924,7 +1940,20 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 			Sort:        "updated",
 			ListOptions: github.ListOptions{PerPage: 100},
 		})
-		if err != nil {
+
+		if isTombstoneError(err) {
+			mp := &maintpb.Mutation{
+				GithubIssue: &maintpb.GithubIssueMutation{
+					Owner:    owner,
+					Repo:     repo,
+					Number:   issueNum,
+					NotExist: true,
+				},
+			}
+			p.logf("tombstoning issue %d: %s", issueNum, issue.Title)
+			p.c.addMutation(mp)
+			return nil
+		} else if err != nil {
 			if canRetry(ctx, err) {
 				continue
 			}
@@ -2075,6 +2104,13 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 			if err != nil {
 				log.Printf("Fetching %s: %v", u, err)
 				return nil, nil, err
+			} else if res.StatusCode == http.StatusNotFound ||
+				(res.StatusCode == http.StatusMovedPermanently && res.Header.Get("Location") == "") {
+				// A 404 or 301 with Location header = "" indicates the issue
+				// has been transferred to another repository and should be tombstoned.
+				mut.GetGithubIssue().NotExist = true
+				p.logf("tombstoning issue %d: %s", issueNum, gi.Title)
+				return nil, makeGithubResponse(res), nil
 			}
 			log.Printf("Fetching %s: %v", u, res.Status)
 			ghResp := makeGithubResponse(res)
@@ -2628,6 +2664,25 @@ func canRetry(ctx context.Context, err error) bool {
 			return ctx.Err() != context.Canceled
 		}
 		log.Printf("GitHub rate abuse error: %s", e.Message)
+	}
+	return false
+}
+
+func isTombstoneError(err error) bool {
+	// A 404 or a 301 with Location Header == "" indicates the
+	// Issue has been transferred to another repository and should be tombstoned.
+	// Currently net/http.Client treats 301s with no Location header as an
+	// error, so we need to treat and parse it as such
+	//
+	// Furthermore, if an issue is delted the api returns 410 (Gone) and needs
+	// to be tombstoned.
+	if ge, ok := err.(*github.ErrorResponse); ok {
+		return ge.Response.StatusCode == http.StatusNotFound ||
+			ge.Response.StatusCode == http.StatusGone
+	} else if ue, ok := err.(*url.Error); ok {
+		// TODO(colnnelson): replace this with a better check when net/http
+		// has been patched
+		return ue.Err.Error() == "301 response missing Location header"
 	}
 	return false
 }
