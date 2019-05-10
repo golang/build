@@ -8,10 +8,6 @@ VERSION ?= $(shell git rev-parse --short HEAD)
 IMAGE_STAGING := gcr.io/go-dashboard-dev/gopherbot
 IMAGE_PROD := gcr.io/symbolic-datum-552/gopherbot
 
-update-deps:
-	go install golang.org/x/build/cmd/gitlock
-	gitlock --update=Dockerfile golang.org/x/build/cmd/gopherbot
-
 docker-image: Dockerfile *.go
 	docker build --force-rm -f Dockerfile --tag=$(IMAGE_PROD):$(VERSION) ../..
 	docker tag $(IMAGE_PROD):$(VERSION) $(IMAGE_PROD):$(MUTABLE_VERSION)
