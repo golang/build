@@ -870,7 +870,7 @@ func (c *BuildConfig) IsLongTest() bool {
 // allowed to make outbound network requests. This is only enforced
 // on some builders. (Currently most Linux ones)
 func (c *BuildConfig) OutboundNetworkAllowed() bool {
-	return c.Name == "misc-vet-vetall" || c.IsLongTest()
+	return c.IsLongTest()
 }
 
 func (c *BuildConfig) GoInstallRacePackages() []string {
@@ -1381,22 +1381,11 @@ func init() {
 		})
 	}
 
-	// Add the -vetall builder. The builder name suffix "-vetall" is recognized by cmd/dist/test.go
-	// to only run the "go vet std cmd" test and no others.
-	addBuilder(BuildConfig{
-		Name:     "misc-vet-vetall",
-		HostType: "host-linux-jessie",
-		Notes:    "Runs vet over the standard library.",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return repo == "go" && branch == "master"
-		},
-		tryBot: defaultTrySet(),
-		env: []string{
-			"GO_DISABLE_OUTBOUND_NETWORK=1",
-		},
-		numTestHelpers: 5,
-	})
-
+	// addMiscCompile adds a misc-compile builder that runs
+	// buildall.bash on a subset of platforms matching the egrep
+	// pattern rx. The pattern is matched against the "go tool
+	// dist list" name, but with hyphens instead of forward
+	// slashes ("linux-amd64", etc).
 	addMiscCompile := func(suffix, rx string) {
 		addBuilder(BuildConfig{
 			Name:     "misc-compile" + suffix,
@@ -1407,23 +1396,28 @@ func init() {
 			},
 			tryOnly:     true,
 			CompileOnly: true,
-			Notes:       "Runs buildall.sh to cross-compile std packages for " + rx + ", but doesn't run any tests.",
+			Notes:       "Runs buildall.sh to cross-compile & vet std+cmd packages for " + rx + ", but doesn't run any tests.",
 			allScriptArgs: []string{
 				// Filtering pattern to buildall.bash:
 				rx,
 			},
 		})
 	}
-	addMiscCompile("", "^(linux-arm64|linux-s390x|solaris-amd64|darwin-386)$") // 4 ports
-	addMiscCompile("-nacl", "^nacl")                                           // 3
-	addMiscCompile("-mips", "^linux-mips")                                     // 4
-	addMiscCompile("-ppc", "^linux-ppc64")                                     // 2
-	addMiscCompile("-plan9", "^plan9-")                                        // 3
-	addMiscCompile("-freebsd", "^freebsd-")                                    // 3
-	addMiscCompile("-netbsd", "^netbsd-")                                      // 3
-	addMiscCompile("-openbsd", "^openbsd-")                                    // 3
-	// TODO: Issue 25963, get the misc-compile trybots for mobile working, and then:
-	// addMiscCompile("-mobile", "(^android|darwin-arm64)")                       // 5 ports
+	addMiscCompile("-linuxarm", "^linux-arm")        // 2: arm, arm64
+	addMiscCompile("-darwin", "^darwin")             // 4: 386, amd64 + iOS: armb, arm64
+	addMiscCompile("-nacl", "^nacl")                 // 3: arm, 386, amd64p32
+	addMiscCompile("-mips", "^linux-mips")           // 4: mips, mipsle, mips64, mips64le
+	addMiscCompile("-ppc", "^(linux-ppc64|aix-)")    // 3: linux-ppc64{,le}, aix-ppc64
+	addMiscCompile("-solaris", "^(solaris|illumos)") // 2: both amd64
+	addMiscCompile("-plan9", "^plan9-")              // 3: amd64, 386, arm
+	addMiscCompile("-freebsd", "^freebsd-(386|arm)") // 2: 386, arm (amd64 already trybot)
+	addMiscCompile("-netbsd", "^netbsd-")            // 4: amd64, 386, arm, arm64
+	addMiscCompile("-openbsd", "^openbsd-")          // 4: amd64, 386, arm, arm64
+	// And 3 that don't fit above:
+	addMiscCompile("-other", "^(windows-arm|linux-s390x|dragonfly-amd64)$")
+	// TODO: Issue 25963, get the misc-compile trybots for
+	// subrepos too, so "mobile" can at least be included as a
+	// misc-compile for ^android- and ^darwin-arm.
 
 	addBuilder(BuildConfig{
 		Name:      "linux-amd64-nocgo",
