@@ -292,6 +292,7 @@ func shouldMirrorTo(name string) (dst string) {
 		"image",
 		"lint",
 		"mobile",
+		"mod",
 		"net",
 		"oauth2",
 		"playground",

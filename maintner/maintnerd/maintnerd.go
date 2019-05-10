@@ -317,6 +317,7 @@ var goGitHubProjects = []string{
 	"golang/image",
 	"golang/lint",
 	"golang/mobile",
+	"golang/mod",
 	"golang/net",
 	"golang/oauth2",
 	"golang/perf",
