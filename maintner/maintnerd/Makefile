@@ -31,8 +31,3 @@ deploy-prod: push-prod
 deploy-staging: push-staging
 	go install golang.org/x/build/cmd/xb
 	xb --staging kubectl set image deployment/maintnerd-deployment maintnerd=$(IMAGE_STAGING):$(VERSION)
-
-.PHONY: clean
-clean:
-	$(RM) maintnerd
-	$(RM) ca-certificates.crt
