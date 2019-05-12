@@ -357,32 +357,14 @@ func TestBuilderConfig(t *testing.T) {
 
 		{b("linux-amd64-nocgo", "mobile"), none},
 
-		// The physical ARM Androids only runs "go":
-		// They run on GOOS=android mode which is not
-		// interesting for x/mobile. The interesting tests run
-		// on the darwin-amd64-wikofever below where
-		// GOOS=darwin.
-		{b("android-arm-wikofever", "go"), isBuilder},
-		{b("android-arm-wikofever", "mobile"), notBuilder},
-		{b("android-arm64-wikofever", "go"), isBuilder},
-		{b("android-arm64-wikofever", "mobile"), notBuilder},
-		{b("android-arm64-wikofever", "net"), notBuilder},
-
 		// Virtual mobiledevices
 		{b("darwin-arm64-corellium", "go"), isBuilder},
 		{b("android-arm64-corellium", "go"), isBuilder},
 		{b("android-arm-corellium", "go"), isBuilder},
 
-		// A GOOS=darwin variant of the physical ARM Androids
-		// runs x/mobile and nothing else:
-		{b("darwin-amd64-wikofever", "mobile"), isBuilder},
-		{b("darwin-amd64-wikofever", "go"), notBuilder},
-		{b("darwin-amd64-wikofever", "net"), notBuilder},
-
 		// Mobile builders that run with GOOS=linux/darwin and have
 		// a device attached.
 		{b("linux-amd64-androidemu", "mobile"), both},
-		{b("darwin-amd64-wikofever", "mobile"), onlyPost},
 
 		// But the emulators run all:
 		{b("android-amd64-emu", "mobile"), isBuilder},

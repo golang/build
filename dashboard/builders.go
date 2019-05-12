@@ -506,17 +506,6 @@ var Hosts = map[string]*HostConfig{
 		},
 		ReverseAliases: []string{"linux-mips64le"},
 	},
-	"host-darwin-amd64-eliasnaur-android": &HostConfig{
-		Notes:       "Mac Mini hosted by Elias Naur, running the android reverse buildlet",
-		OwnerGithub: "eliasnaur",
-		IsReverse:   true,
-		ExpectNum:   1,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
-			"GOHOSTARCH=amd64",
-			"GOOS=android",
-		},
-	},
 	"host-darwin-amd64-zenly-ios": &HostConfig{
 		Notes:       "MacBook Pro hosted by Zenly, running the ios reverse buildlet",
 		OwnerGithub: "znly",
@@ -1988,47 +1977,6 @@ func init() {
 		env: []string{
 			"CGO_ENABLED=1",
 			"GOARCH=arm",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:     "darwin-amd64-wikofever",
-		HostType: "host-darwin-amd64-eliasnaur-android",
-		Notes:    "Same as android-arm*-wikofever but without GOOS set, for running x/mobile tests.",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return repo == "mobile" && branch == "master" && goBranch == "master"
-		},
-		env: []string{
-			"CGO_ENABLED=1",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:     "android-arm-wikofever",
-		HostType: "host-darwin-amd64-eliasnaur-android",
-		Notes:    "Android Wiko Fever phone running Android 6.0, via a Mac Mini",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return repo == "go" && branch == "master" && goBranch == "master"
-		},
-		env: []string{
-			"GOARCH=arm",
-			"GOOS=android",
-			"GOHOSTARCH=amd64",
-			"GOHOSTOS=darwin",
-			"CGO_ENABLED=1",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:     "android-arm64-wikofever",
-		HostType: "host-darwin-amd64-eliasnaur-android",
-		Notes:    "Android Wiko Fever phone running Android 6.0, via a Mac Mini",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return repo == "go" && branch == "master" && goBranch == "master"
-		},
-		env: []string{
-			"GOARCH=arm64",
-			"GOOS=android",
-			"GOHOSTARCH=amd64",
-			"GOHOSTOS=darwin",
-			"CGO_ENABLED=1",
 		},
 	})
 	addBuilder(BuildConfig{
