@@ -60,6 +60,7 @@ func (b golangorgBuilder) Init(logger *log.Logger, dir, hostport string, heads m
 	install.Env = append(os.Environ(),
 		"GOROOT="+goDir,
 		"GO111MODULE=on",
+		"GOPROXY=https://proxy.golang.org",
 		"GOBIN="+binDir,
 	)
 	if err := install.Run(); err != nil {

@@ -56,7 +56,10 @@ func main() {
 
 	p := &Proxy{builder: b}
 	go p.run()
-	mux := newServeMux(p)
+	mux := newServeMux(p, serveOptions{
+		// Redirect to HTTPS only if we're actually serving HTTPS.
+		RedirectToHTTPS: *autoCertDomain != "",
+	})
 
 	log.Printf("Starting up tip server for builder %q", os.Getenv(k))
 
@@ -253,9 +256,19 @@ func (p *Proxy) poll() {
 	p.cmd = cmd
 }
 
-func newServeMux(p *Proxy) http.Handler {
+type serveOptions struct {
+	// RedirectToHTTPS controls whether requests served
+	// over HTTP should be redirected to HTTPS.
+	RedirectToHTTPS bool
+}
+
+func newServeMux(p *Proxy, opt serveOptions) http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("/", httpsOnlyHandler{p})
+	if opt.RedirectToHTTPS {
+		mux.Handle("/", httpsOnlyHandler{p})
+	} else {
+		mux.Handle("/", p)
+	}
 	mux.HandleFunc("/_ah/health", p.serveHealthCheck)
 	return mux
 }
