@@ -76,7 +76,8 @@ var (
 //   21: GO_BUILDER_SET_GOPROXY=coordinator support
 //   22: TrimSpace the reverse buildlet's gobuildkey contents
 //   23: revdial v2
-const buildletVersion = 23
+//   24: removeAllIncludingReadonly
+const buildletVersion = 24
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -1260,7 +1261,7 @@ func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
 	for _, p := range paths {
 		log.Printf("Removing %s", p)
 		fullDir := filepath.Join(*workDir, filepath.FromSlash(p))
-		err := os.RemoveAll(fullDir)
+		err := removeAllIncludingReadonly(fullDir)
 		if p == "." && err != nil {
 			// If workDir is a mountpoint and/or contains a binary
 			// using it, we can get a "Device or resource busy" error.
@@ -1861,6 +1862,30 @@ func removeAllAndMkdir(dir string) {
 	if err := os.Mkdir(dir, 0755); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// removeAllIncludingReadonly is like os.RemoveAll except that it'll
+// also try to change permissions to work around permission errors
+// when deleting.
+func removeAllIncludingReadonly(dir string) error {
+	err := os.RemoveAll(dir)
+	if err == nil || !os.IsPermission(err) ||
+		runtime.GOOS == "windows" || // different filesystem permission model; also our windows builders our emphermal single-use VMs anyway
+		runtime.GOOS == "plan9" { // untested, different enough to conservatively skip code below
+		return err
+	}
+	// Make a best effort (ignoring errors) attempt to make all
+	// files and directories writable before we try to delete them
+	// all again.
+	filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
+		const ownerWritable = 0200
+		if err != nil || fi.Mode().Perm()&ownerWritable != 0 {
+			return nil
+		}
+		os.Chmod(path, fi.Mode().Perm()|ownerWritable)
+		return nil
+	})
+	return os.RemoveAll(dir)
 }
 
 var (
