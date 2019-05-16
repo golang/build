@@ -160,6 +160,11 @@ var goPackages = []*Package{
 		Name: "tour",
 		Path: "golang.org/x/tour",
 	},
+	{
+		Kind: "subrepo",
+		Name: "website",
+		Path: "golang.org/x/website",
+	},
 }
 
 // hiddenBranches specifies branches that

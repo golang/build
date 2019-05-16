@@ -266,6 +266,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "go"), both},
 		{b("linux-amd64", "net"), both},
 		{b("linux-amd64", "sys"), both},
+		{b("linux-amd64", "website"), both},
 
 		// Don't test all subrepos on all the builders.
 		{b("linux-amd64-ssacheck", "net"), none},
