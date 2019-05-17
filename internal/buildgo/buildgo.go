@@ -184,8 +184,8 @@ func FetchSubrepo(sl spanlog.Logger, bc *buildlet.Client, repo, rev string) erro
 }
 
 // VersionTgz returns an io.Reader of a *.tar.gz file containing only
-// a VERSION file containing the contents of the provided rev string.
-func VersionTgz(rev string) io.Reader {
+// a VERSION file containing the contents of the provided ver string.
+func VersionTgz(ver string) io.Reader {
 	var buf bytes.Buffer
 	zw := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(zw)
@@ -198,13 +198,12 @@ func VersionTgz(rev string) io.Reader {
 		}
 	}
 
-	contents := fmt.Sprintf("devel " + rev)
 	check(tw.WriteHeader(&tar.Header{
 		Name: "VERSION",
 		Mode: 0644,
-		Size: int64(len(contents)),
+		Size: int64(len(ver)),
 	}))
-	_, err := io.WriteString(tw, contents)
+	_, err := io.WriteString(tw, ver)
 	check(err)
 	check(tw.Close())
 	check(zw.Close())

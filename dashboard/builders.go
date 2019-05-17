@@ -66,8 +66,14 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
 	"host-linux-armel-cross": &HostConfig{
-		Notes:           "Debian Jessie with armel cross-compiler, from env/crosscompile/linux-armel-stretch",
+		Notes:           "Debian Stretch with armel cross-compiler, from env/crosscompile/linux-armel-stretch",
 		ContainerImage:  "linux-armel-stretch:latest",
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+	},
+	"host-linux-mips64le-cross": &HostConfig{
+		Notes:           "Debian Stretch with mips64el cross-compiler, from env/linux-mips64le-cross",
+		ContainerImage:  "linux-mips64le-cross:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
@@ -504,17 +510,26 @@ var Hosts = map[string]*HostConfig{
 		},
 		ReverseAliases: []string{"linux-mips64"},
 	},
-	"host-linux-mips64le": &HostConfig{
-		Notes:       "", // once ran by Brendan Kirby (@MIPSbkirby), imgtec.com; email bounces
-		OwnerGithub: "",
-		IsReverse:   true,
-		ExpectNum:   1,
+	"host-linux-mips64le-qemu": &HostConfig{
+		ContainerImage: "linux-mips64le-qemu:latest",
+		Notes:          "qemu-system-mips64el -M malta -cpu 5KEc -m 1024, on GCE, with make.bash cross-compiled from amd64",
+		// buildletURLTmpl should have this value, but it's
+		// currently hard-coded by the buildlet/stage0 binary,
+		// as we don't yet have a way to pass metadata down to
+		// the qemu guest stage0. So this is the value that's
+		// used, but not because it's defined here.
+		// TODO: plumb through the metadata down to the qemu
+		// guest if we ever want to have some
+		// experimental/staging version of this buildlet.
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-mips64le",
+		// TODO: enable c2-standard-4, once available. See:
+		// https://cloud.google.com/blog/products/compute/introducing-compute-and-memory-optimized-vms-for-google-compute-engine
+		// machineType:     "c2-standard-4",
+		SSHUsername: "gopher",
 		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mips64le",
 			"GOARCH=mips64le",
 			"GOHOSTARCH=mips64le",
 		},
-		ReverseAliases: []string{"linux-mips64le"},
 	},
 	"host-darwin-amd64-zenly-ios": &HostConfig{
 		Notes:       "MacBook Pro hosted by Zenly, running the ios reverse buildlet",
@@ -715,6 +730,14 @@ type BuildConfig struct {
 
 	// RunBench causes the coordinator to run benchmarks on this buildlet type.
 	RunBench bool
+
+	// DisableTestGrouping optionally prevents the coordinator
+	// from running multple dist test at once. This can be used on
+	// CPU-bound slow builders to see result output more
+	// incrementally and be able to get timing data that doesn't
+	// mix together test time along with another package's test
+	// compilation time.
+	DisableTestGrouping bool
 
 	// StopAfterMake causes the build to stop after the make
 	// script completes, returning its result as the result of the
@@ -2085,9 +2108,35 @@ func init() {
 		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
-		Name:         "linux-mips64le",
-		HostType:     "host-linux-mips64le",
-		SkipSnapshot: true,
+		Name:                "linux-mips64le",
+		HostType:            "host-linux-mips64le-qemu",
+		MaxAtOnce:           1,
+		DisableTestGrouping: true,
+		numTestHelpers:      5,
+		shouldRunDistTest: func(distTestName string, isTry bool) bool {
+			switch distTestName {
+			case "api", "reboot",
+				"doc_progs",
+				"wiki", "bench_go1", "codewalk",
+				"cgo_fortran",
+				"osusergo",
+				"runtime:cpu124",
+				"testasan",
+				"race", "cmd_go_test_terminal",
+				"testsanitizers/mnsan",
+				"go_test:cmd/go":
+				return false
+			}
+			if strings.HasPrefix(distTestName, "test:") {
+				return false
+			}
+			return true
+		},
+		GoDeps: []string{
+			// cmd/dist: support using cross-compiled std test binaries for slow builders
+			// https://golang.og/cl/178399
+			"7a567a631f48f19817a4c9a221e9951ffebfa8cb",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-s390x-ibm",

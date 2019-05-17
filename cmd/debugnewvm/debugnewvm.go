@@ -161,7 +161,7 @@ func main() {
 		}
 
 		// Push a synthetic VERSION file to prevent git usage:
-		if err := bc.PutTar(buildgo.VersionTgz(*buildRev), "go"); err != nil {
+		if err := bc.PutTar(buildgo.VersionTgz("devel "+*buildRev), "go"); err != nil {
 			bc.Close()
 			log.Fatalf("Putting VERSION file: %v", err)
 		}

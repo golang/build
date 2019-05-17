@@ -18,6 +18,8 @@ compile:
 	GOOS=linux GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
 	GOOS=linux GOARCH=arm go install golang.org/x/build/cmd/buildlet
 	GOOS=linux GOARCH=arm64 go install golang.org/x/build/cmd/buildlet
+	GOOS=linux GOARCH=mips go install golang.org/x/build/cmd/buildlet
+	GOOS=linux GOARCH=mipsle go install golang.org/x/build/cmd/buildlet
 	GOOS=linux GOARCH=mips64 go install golang.org/x/build/cmd/buildlet
 	GOOS=linux GOARCH=mips64le go install golang.org/x/build/cmd/buildlet
 	GOOS=linux GOARCH=ppc64 go install golang.org/x/build/cmd/buildlet

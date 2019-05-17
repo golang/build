@@ -1,0 +1,56 @@
+Notes on how to create or update the kernel, initrd, and base VM disk.
+
+These 32-bit MIPS instructions give a basic overview of the process:
+https://markuta.com/how-to-build-a-mips-qemu-image-on-debian/
+
+Some extra flag tweaks are required for 64-bit mips:
+https://gmplib.org/~tege/qemu.html
+
+For the install kernel+initrd:
+
+  http://ftp.debian.org/debian/dists/stable/main/installer-mips64el/current/images/malta/netboot/initrd.gz
+  http://ftp.debian.org/debian/dists/stable/main/installer-mips64el/current/images/malta/netboot/vmlinux-4.9.0-9-5kc-malta
+
+Then in Debian installer:
+
+  - no root password
+  - user gopher
+  - ssh server
+
+Then shut it down and copy its kernel+initrd out:
+
+bradfitz@go:~/qemu/mips64$ sudo qemu-nbd -c /dev/nbd0 hda.img
+bradfitz@go:~/qemu/mips64$ sudo mount /dev/nbd0p1 /mnt/nbd/
+bradfitz@go:~/qemu/mips64$ cp -r /mnt/nbd/boot .
+bradfitz@go:~/qemu/mips64$ sudo umount /mnt/nbd/
+bradfitz@go:~/qemu/mips64$ sudo qemu-nbd -d /dev/nbd0
+/dev/nbd0 disconnected
+
+Then boot it, log in, and change /etc/network/interfaces from enp0s11
+to enp0s19.
+
+And apt-get install gcc strace libc6-dev strace
+
+Then shut down and upload the kernel, initrd, and hda.img disk to
+GCS with x/build/cmd/upload.
+
+
+Things to do:
+
+* fix buildid mismatch between crosscompile & qemu worlds
+* disable vet in std tests (too much CPU used)
+
+Things to try:
+
+* SMP:
+  https://www.mips.com/blog/how-to-run-smp-linux-in-qemu-on-a-mips64-release-6-cpu/
+  https://github.com/v8mips/v8mips/wiki/Running-tests-with-qemu-user-mode-for-R6
+  $ qemu-system-mips64el -cpu I6400 -M malta -smp 8 -vga std –serial stdio -device virtio-keyboard-pci -kernel vmlinux -drive file=rootfs.ext2,format=raw -append "root=/dev/sda clocksource=GIC console=tty0"
+
+* Try user mode with a test exec wrapper (like js/nacl/etc) instead of
+  system-level?
+
+* c2-standard-4 VM types, once available (UPDATE: now whitelisted for
+  symbolic-datum-552, but they're not in us-central1-f yet; so we'd
+  need to teach buildlet/gce.go to be able to build some VM types in
+  different zones)

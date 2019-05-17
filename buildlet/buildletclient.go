@@ -644,7 +644,7 @@ func (c *Client) Status() (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	resp, err := c.doHeaderTimeout(req, 10*time.Second) // plenty of time
+	resp, err := c.doHeaderTimeout(req, 20*time.Second) // plenty of time
 	if err != nil {
 		return Status{}, err
 	}

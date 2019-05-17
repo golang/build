@@ -120,6 +120,12 @@ func main() {
 	case "linux-arm-arm5spacemonkey":
 		initBaseUnixEnv() // Issue 28041
 	}
+	switch runtime.GOARCH {
+	case "mips64le", "mips64", "mipsle", "mips":
+		// We hit the 10 second limit under qemu previously. :(
+		// The other limits look fine.
+		http.DefaultTransport.(*http.Transport).TLSHandshakeTimeout = 30 * time.Second
+	}
 
 	onGCE := metadata.OnGCE()
 	switch runtime.GOOS {

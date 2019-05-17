@@ -1731,11 +1731,14 @@ func (st *buildStatus) build() error {
 	snapshotExists := st.useSnapshot()
 	sp.Done(nil)
 
-	if config := st.getCrossCompileConfig(); !snapshotExists && config != nil {
-		if err := st.crossCompileMakeAndSnapshot(config); err != nil {
-			return err
+	if config := st.getCrossCompileConfig(); config != nil {
+		if !snapshotExists {
+			if err := st.crossCompileMakeAndSnapshot(config); err != nil {
+				return err
+			}
 		}
 		st.forceSnapshotUsage()
+		st.getHelpers()
 	}
 
 	sp = st.CreateSpan("get_buildlet")
@@ -1983,8 +1986,19 @@ type crossCompileConfig struct {
 	CCForTarget        string
 	GOARM              string
 	AlwaysCrossCompile bool
+
+	// BuildTests cross-compiles all the standard library
+	// packages' tests, leaving the pkg.test binary in each std
+	// package directory. This is recognized by cmd/dist when
+	// GO_BUILDER_NAME is set and when only one test is being run
+	// with dist at a time. (So BuildConfig.DisableTestGrouping
+	// must also be set true).
+	// It requires xargs (from Debian package findutils) be
+	// installed on the VM.
+	BuildTests bool
 }
 
+// TODO: move this into dashboard/builders.go.
 var crossCompileConfigs = map[string]*crossCompileConfig{
 	"linux-arm": {
 		Buildlet:           "host-linux-armhf-cross",
@@ -1997,6 +2011,12 @@ var crossCompileConfigs = map[string]*crossCompileConfig{
 		CCForTarget:        "arm-linux-gnueabi-gcc",
 		GOARM:              "5",
 		AlwaysCrossCompile: true,
+	},
+	"linux-mips64le": {
+		Buildlet:           "host-linux-mips64le-cross",
+		CCForTarget:        "mips64el-linux-gnuabi64-gcc",
+		AlwaysCrossCompile: true,
+		BuildTests:         true,
 	},
 }
 
@@ -2033,12 +2053,19 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *crossCompileConfig) (
 
 	goos, goarch := st.conf.GOOS(), st.conf.GOARCH()
 
+	var buildTests string
+	if config.BuildTests {
+		buildTests = `($WORKDIR/go/bin/go list -f '{{if or .TestGoFiles .XTestGoFiles }}{{.Dir}}{{end}}' std | ` +
+			`xargs --max-procs=4 --max-args=1 -I % bash -c 'cd %; echo %; $WORKDIR/go/bin/go test -c -vet=off') &&`
+	}
+
 	remoteErr, err := kubeBC.Exec("/bin/bash", buildlet.ExecOpts{
 		SystemLevel: true,
 		Args: []string{
 			"-c",
 			"cd $WORKDIR/go/src && " +
 				"./make.bash && " +
+				buildTests +
 				"cd .. && " +
 				"mv bin/*_*/* bin && " +
 				"rmdir bin/*_* && " +
@@ -2122,7 +2149,14 @@ func (st *buildStatus) writeGoSource() error {
 func (st *buildStatus) writeGoSourceTo(bc *buildlet.Client) error {
 	// Write the VERSION file.
 	sp := st.CreateSpan("write_version_tar")
-	if err := bc.PutTar(buildgo.VersionTgz(st.Rev), "go"); err != nil {
+	version := "devel " + st.Rev
+	if cc := st.getCrossCompileConfig(); cc != nil {
+		// Something that doesn't start with "devel ".
+		// Otherwise the cmd/go build caching doesn't end up
+		// with the same buildids between the host & target.
+		version = "go.devel." + st.Rev
+	}
+	if err := bc.PutTar(buildgo.VersionTgz(version), "go"); err != nil {
 		return sp.Done(fmt.Errorf("writing VERSION tgz: %v", err))
 	}
 
@@ -2289,6 +2323,9 @@ func partitionGoTests(testDuration func(string, string) time.Duration, builderNa
 	var curSet []string
 	var curDur time.Duration
 
+	bc, _ := dashboard.Builders[builderName]
+	disableGrouping := bc != nil && bc.DisableTestGrouping
+
 	flush := func() {
 		if len(curSet) > 0 {
 			sets = append(sets, curSet)
@@ -2303,6 +2340,9 @@ func partitionGoTests(testDuration func(string, string) time.Duration, builderNa
 		}
 		curSet = append(curSet, testName)
 		curDur += d
+		if disableGrouping {
+			flush()
+		}
 	}
 
 	flush()
