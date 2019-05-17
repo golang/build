@@ -1140,13 +1140,19 @@ func (c *HostConfig) PoolName() string {
 
 // ContainerVMImage returns the base VM name (not the fully qualified
 // URL resource name of the VM) that starts the konlet program that
-// pulls & runs a container. This method is only applicable when
-// c.IsContainer() is true.
+// pulls & runs a container.
+// The empty string means that no particular VM image is required
+// and the caller can run this container in any host.
+//
+// This method is only applicable when c.IsContainer() is true.
 func (c *HostConfig) ContainerVMImage() string {
 	if c.KonletVMImage != "" {
 		return c.KonletVMImage
 	}
-	return "debian-stretch-vmx"
+	if c.NestedVirt {
+		return "debian-stretch-vmx"
+	}
+	return ""
 }
 
 // IsHermetic reports whether this host config gets a fresh

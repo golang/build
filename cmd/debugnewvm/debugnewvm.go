@@ -81,7 +81,11 @@ func main() {
 	}
 	vmImageSummary := fmt.Sprintf("%q", hconf.VMImage)
 	if hconf.IsContainer() {
-		vmImageSummary = fmt.Sprintf("%q, running container %q", hconf.ContainerVMImage(), hconf.ContainerImage)
+		containerHost := hconf.ContainerVMImage()
+		if containerHost == "" {
+			containerHost = "default container host"
+		}
+		vmImageSummary = fmt.Sprintf("%s, running container %q", containerHost, hconf.ContainerImage)
 	}
 
 	env = buildenv.FromFlags()
