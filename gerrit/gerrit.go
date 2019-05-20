@@ -848,7 +848,7 @@ func (c *Client) QueryAccounts(ctx context.Context, q string, opts ...QueryAccou
 // GetProjects returns a map of all projects on the Gerrit server.
 func (c *Client) GetProjects(ctx context.Context, branch string) (map[string]*ProjectInfo, error) {
 	mp := make(map[string]*ProjectInfo)
-	err := c.do(ctx, &mp, "GET", fmt.Sprintf("?b=%s&format=JSON", branch))
+	err := c.do(ctx, &mp, "GET", fmt.Sprintf("/projects/?b=%s&format=JSON", branch))
 	return mp, err
 }
 
