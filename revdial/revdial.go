@@ -15,6 +15,13 @@
 // sequestered machine connect out to a public machine. Both sides
 // then use revdial and the public machine can become a client for the
 // NATed machine.
+//
+// Deprecated: this package should not be used and actually can no
+// longer be used: half of its code has been deleted as it's no longer
+// in use. We kept the half still needed by cmd/coordinator for old
+// buildlet clients, but the new buildlet no longer uses this.
+// Instead, callers should use the revdial/v2 version that is based on
+// a different design without the flow control issues.
 package revdial
 
 /*
@@ -128,8 +135,7 @@ func (d *Dialer) conn(id uint32) (*conn, error) {
 }
 
 var (
-	errRole   = errors.New("revdial: invalid frame type received for role")
-	errConnID = errors.New("revdial: invalid connection ID")
+	errRole = errors.New("revdial: invalid frame type received for role")
 )
 
 func (d *Dialer) onFrame(f frame) error {
@@ -244,8 +250,6 @@ type conn struct {
 	rtimer    *time.Timer
 	wtimer    *time.Timer
 }
-
-var errUnsupported = errors.New("revdial: unsupported Conn operation")
 
 func (c *conn) LocalAddr() net.Addr  { return fakeAddr{} }
 func (c *conn) RemoteAddr() net.Addr { return fakeAddr{} }
@@ -397,7 +401,7 @@ func (c *conn) Write(p []byte) (n int, err error) {
 
 	var timeout <-chan time.Time
 	if !dl.IsZero() {
-		timer := time.NewTimer(dl.Sub(time.Now()))
+		timer := time.NewTimer(time.Until(dl))
 		defer timer.Stop()
 		timeout = timer.C
 	}
@@ -506,168 +510,6 @@ func readFrames(br *bufio.Reader, of onFramer) error {
 			return err
 		}
 	}
-}
-
-// NewListener returns a new Listener, accepting connections which
-// arrive from rw.
-func NewListener(rw *bufio.ReadWriter) *Listener {
-	ln := &Listener{
-		connc: make(chan net.Conn, 8), // arbitrary
-		conns: map[uint32]*conn{},
-		rw:    rw,
-	}
-	go func() {
-		err := readFrames(rw.Reader, ln)
-		ln.mu.Lock()
-		defer ln.mu.Unlock()
-		if ln.closed {
-			return
-		}
-		if err == nil {
-			err = errors.New("revdial: Listener.readFrames terminated with success")
-		}
-		ln.readErr = err
-		for _, c := range ln.conns {
-			c.peerClose()
-		}
-		go ln.Close()
-	}()
-	return ln
-}
-
-var _ net.Listener = (*Listener)(nil)
-
-// Listener is a net.Listener, returning new connections which arrive
-// from a corresponding Dialer.
-type Listener struct {
-	rw    *bufio.ReadWriter
-	connc chan net.Conn
-
-	mu      sync.Mutex // guards below, closing connc, and writing to rw
-	readErr error
-	conns   map[uint32]*conn
-	closed  bool
-}
-
-// Closed reports whether the listener has been closed.
-func (ln *Listener) Closed() bool {
-	ln.mu.Lock()
-	defer ln.mu.Unlock()
-	return ln.closed
-}
-
-// Accept blocks and returns a new connections, or an error.
-func (ln *Listener) Accept() (net.Conn, error) {
-	c, ok := <-ln.connc
-	if !ok {
-		ln.mu.Lock()
-		err := ln.readErr
-		ln.mu.Unlock()
-		if err != nil {
-			return nil, fmt.Errorf("revdial: Listener closed; %v", err)
-		}
-		return nil, ErrListenerClosed
-	}
-	return c, nil
-}
-
-// ErrListenerClosed is returned by Accept after Close has been called.
-var ErrListenerClosed = errors.New("revdial: Listener closed")
-
-// Close closes the Listener, making future Accept calls return an
-// error.
-func (ln *Listener) Close() error {
-	ln.mu.Lock()
-	defer ln.mu.Unlock()
-	if ln.closed {
-		return nil
-	}
-	ln.closed = true
-	close(ln.connc)
-	return nil
-}
-
-// Addr returns a dummy address. This exists only to conform to the
-// net.Listener interface.
-func (ln *Listener) Addr() net.Addr { return fakeAddr{} }
-
-func (ln *Listener) closeConn(id uint32) error {
-	ln.mu.Lock()
-	c, ok := ln.conns[id]
-	if ok {
-		delete(ln.conns, id)
-	}
-	ln.mu.Unlock()
-	if ok {
-		c.peerClose()
-	}
-	return nil
-}
-
-func (ln *Listener) newConn(id uint32) error {
-	ln.mu.Lock()
-	if _, dup := ln.conns[id]; dup {
-		ln.mu.Unlock()
-		return errors.New("revdial: peer newConn with already-open connID")
-	}
-	c := &conn{
-		id:        id,
-		wmu:       &ln.mu,
-		w:         ln.rw.Writer,
-		unregConn: ln.unregConn,
-	}
-	c.cond = sync.NewCond(&c.mu)
-	ln.conns[id] = c
-	ln.mu.Unlock()
-	ln.connc <- c
-	return nil
-}
-
-func (ln *Listener) unregConn(id uint32) {
-	// Do nothing, unlike the outbound side.
-}
-
-func (ln *Listener) conn(id uint32) (*conn, error) {
-	ln.mu.Lock()
-	defer ln.mu.Unlock()
-	c, ok := ln.conns[id]
-	if !ok {
-		return nil, fmt.Errorf("revdial.Listener saw reference to unknown conn %v", id)
-	}
-	return c, nil
-}
-
-func (ln *Listener) onFrame(f frame) error {
-	switch f.command {
-	case frameNewConn:
-		return ln.newConn(f.connID)
-	case frameCloseConn:
-		return ln.closeConn(f.connID)
-	case frameWrite:
-		c, err := ln.conn(f.connID)
-		if err != nil {
-			// Ignore writes on bogus conn IDs; assume it
-			// just recently closed.
-			return nil
-		}
-		if _, err := c.peerWrite(f.payload); err != nil {
-			c.mu.Lock()
-			closed := c.closed
-			c.mu.Unlock()
-			if closed {
-				// Conn is now closed. Assume error
-				// was "io: read/write on closed pipe"
-				// and it was just data in-flight
-				// while this side closed. So, don't abort
-				// the frame-reading loop.
-				return nil
-			}
-			return err
-		}
-	default:
-		// Ignore unknown frame types.
-	}
-	return nil
 }
 
 type fakeAddr struct{}
