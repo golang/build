@@ -292,6 +292,7 @@ var tasks = []struct {
 	{"apply labels from comments", (*gopherbot).applyLabelsFromComments},
 	{"assign reviewers to CLs", (*gopherbot).assignReviewersToCLs},
 	{"abandon scratch reviews", (*gopherbot).abandonScratchReviews},
+	{"access", (*gopherbot).whoNeedsAccess},
 }
 
 func (b *gopherbot) initCorpus() {
@@ -1755,6 +1756,71 @@ func (b *gopherbot) abandonScratchReviews(ctx context.Context) error {
 			return err
 		})
 	})
+}
+
+func (b *gopherbot) whoNeedsAccess(ctx context.Context) error {
+	// We only run this task if it was explicitly requested via
+	// the --only-run flag.
+	if *onlyRun == "" {
+		return nil
+	}
+	level := map[int64]int{} // gerrit id -> 1 for try, 2 for submit
+	ais, err := b.gerrit.GetGroupMembers(ctx, "may-start-trybots")
+	if err != nil {
+		return err
+	}
+	for _, ai := range ais {
+		level[ai.NumericID] = 1
+	}
+	ais, err = b.gerrit.GetGroupMembers(ctx, "approvers")
+	if err != nil {
+		return err
+	}
+	for _, ai := range ais {
+		level[ai.NumericID] = 2
+	}
+
+	quarterAgo := time.Now().Add(-90 * 24 * time.Hour)
+	missing := map[string]int{} // "only level N: $WHO" -> number of CLs for that user
+	err = b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+		if gp.Server() != "go.googlesource.com" {
+			return nil
+		}
+		return gp.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
+			if cl.Meta.Commit.AuthorTime.Before(quarterAgo) {
+				return nil
+			}
+			authorID := int64(cl.OwnerID())
+			if authorID == -1 {
+				return nil
+			}
+			if level[authorID] == 2 {
+				return nil
+			}
+			missing[fmt.Sprintf("only level %d: %v", level[authorID], cl.Commit.Author)]++
+			return nil
+		})
+	})
+	if err != nil {
+		return err
+	}
+	var people []string
+	for who := range missing {
+		people = append(people, who)
+	}
+	sort.Slice(people, func(i, j int) bool { return missing[people[j]] < missing[people[i]] })
+	fmt.Println("Number of CLs created in last 90 days | Access (0=none, 1=trybots) | Author")
+	for i, who := range people {
+		num := missing[who]
+		if num < 3 {
+			break
+		}
+		fmt.Printf("%3d: %s\n", num, who)
+		if i == 20 {
+			break
+		}
+	}
+	return nil
 }
 
 // humanReviewersOnChange returns true if there are (or were any) human reviewers in the given change.
