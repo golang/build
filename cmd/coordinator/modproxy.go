@@ -23,7 +23,7 @@ func init() {
 	rp := httputil.NewSingleHostReverseProxy(u)
 	rp.ModifyResponse = func(res *http.Response) error {
 		r := res.Request
-		if res.StatusCode/100 != 2 && r != nil {
+		if res.StatusCode/100 != 2 && res.StatusCode != 410 && r != nil {
 			log.Printf("modproxy: proxying HTTP %s response from backend for %s, %s %s", res.Status, r.RemoteAddr, r.Method, r.RequestURI)
 		}
 		return nil
