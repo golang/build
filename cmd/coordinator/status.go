@@ -9,6 +9,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"html"
 	"html/template"
 	"io"
 	"net/http"
@@ -17,29 +18,359 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/build/dashboard"
 )
+
+// status
+type statusLevel int
+
+const (
+	// levelInfo is an informational text that's not an error,
+	// such as "coordinator just started recently, waiting to
+	// start health check"
+	levelInfo statusLevel = iota
+	// levelWarn is a non-critical error, such as "missing 1 of 50
+	// of ARM machines"
+	levelWarn
+	// levelError is something that should be fixed sooner, such
+	// as "all Macs are gone".
+	levelError
+)
+
+func (l statusLevel) String() string {
+	switch l {
+	case levelInfo:
+		return "Info"
+	case levelWarn:
+		return "Warn"
+	case levelError:
+		return "Error"
+	}
+	return ""
+}
+
+type levelText struct {
+	Level statusLevel
+	Text  string
+}
+
+func (lt levelText) AsHTML() template.HTML {
+	switch lt.Level {
+	case levelInfo:
+		return template.HTML(html.EscapeString(lt.Text))
+	case levelWarn:
+		return template.HTML(fmt.Sprintf("<span style='color: orange'>%s</span>", html.EscapeString(lt.Text)))
+	case levelError:
+		return template.HTML(fmt.Sprintf("<span style='color: red'><b>%s</b></span>", html.EscapeString(lt.Text)))
+	}
+	return ""
+}
+
+type checkWriter struct {
+	Out []levelText
+}
+
+func (w *checkWriter) error(s string)                       { w.Out = append(w.Out, levelText{levelError, s}) }
+func (w *checkWriter) errorf(a string, args ...interface{}) { w.error(fmt.Sprintf(a, args...)) }
+func (w *checkWriter) info(s string)                        { w.Out = append(w.Out, levelText{levelInfo, s}) }
+func (w *checkWriter) infof(a string, args ...interface{})  { w.info(fmt.Sprintf(a, args...)) }
+func (w *checkWriter) warn(s string)                        { w.Out = append(w.Out, levelText{levelWarn, s}) }
+func (w *checkWriter) warnf(a string, args ...interface{})  { w.warn(fmt.Sprintf(a, args...)) }
+func (w *checkWriter) hasErrors() bool {
+	for _, v := range w.Out {
+		if v.Level == levelError {
+			return true
+		}
+	}
+	return false
+}
+
+type healthChecker struct {
+	ID     string
+	Title  string
+	EnvURL string
+	Check  func(*checkWriter)
+}
+
+func (hc *healthChecker) DoCheck() *checkWriter {
+	cw := new(checkWriter)
+	hc.Check(cw)
+	return cw
+}
+
+var (
+	healthCheckers    []*healthChecker
+	healthCheckerByID = map[string]*healthChecker{}
+)
+
+func addHealthChecker(hc *healthChecker) {
+	if _, dup := healthCheckerByID[hc.ID]; dup {
+		panic("duplicate health checker ID " + hc.ID)
+	}
+	healthCheckers = append(healthCheckers, hc)
+	healthCheckerByID[hc.ID] = hc
+	http.Handle("/status/"+hc.ID, healthCheckerHandler(hc))
+}
+
+func init() {
+	addHealthChecker(newMacHealthChecker())
+	addHealthChecker(newScalewayHealthChecker())
+	addHealthChecker(newPacketHealthChecker())
+	addHealthChecker(newOSUPPC64Checker())
+	addHealthChecker(newOSUPPC64leChecker())
+	addHealthChecker(newJoyentChecker())
+}
+
+func newMacHealthChecker() *healthChecker {
+	var hosts []string
+	for i := 1; i <= 10; i++ {
+		for _, suf := range []string{"a", "b"} {
+			name := fmt.Sprintf("macstadium_host%02d%s", i, suf)
+			hosts = append(hosts, name)
+		}
+	}
+	checkHosts := reverseHostChecker(hosts)
+
+	// And check that the makemac daemon is listening.
+	var makeMac struct {
+		sync.Mutex
+		lastErr   error
+		lastCheck time.Time // currently unused
+	}
+	setMakeMacErr := func(err error) {
+		makeMac.Lock()
+		defer makeMac.Unlock()
+		makeMac.lastErr = err
+		makeMac.lastCheck = time.Now()
+	}
+	go func() {
+		c := &http.Client{Timeout: 15 * time.Second}
+		for {
+			res, err := c.Get("http://macstadiumd.golang.org:8713")
+			if err != nil {
+				setMakeMacErr(err)
+			} else {
+				res.Body.Close()
+				if res.StatusCode != 200 {
+					setMakeMacErr(fmt.Errorf("HTTP status %v", res.Status))
+				} else if res.Header.Get("Content-Type") != "application/json" {
+					setMakeMacErr(fmt.Errorf("unexpected content-type %q", res.Header.Get("Content-Type")))
+				} else {
+					setMakeMacErr(nil)
+				}
+			}
+			time.Sleep(15 * time.Second)
+		}
+	}()
+	return &healthChecker{
+		ID:     "macs",
+		Title:  "MacStadium Mac VMs",
+		EnvURL: "https://github.com/golang/build/tree/master/env/darwin/macstadium",
+		Check: func(w *checkWriter) {
+			// Check hosts.
+			checkHosts(w)
+			// Check makemac daemon.
+			makeMac.Lock()
+			defer makeMac.Unlock()
+			if makeMac.lastErr != nil {
+				w.errorf("makemac daemon: %v", makeMac.lastErr)
+			}
+			return
+		},
+	}
+}
+
+func newJoyentChecker() *healthChecker {
+	return &healthChecker{
+		ID:     "joyent",
+		Title:  "Joyent solaris/amd64 machines",
+		EnvURL: "https://github.com/golang/build/tree/master/env/solaris-amd64/joyent",
+		Check: func(cw *checkWriter) {
+			p := reversePool
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			n := 0
+			for _, b := range p.buildlets {
+				if b.hostType == "host-solaris-amd64" {
+					n++
+				}
+			}
+			want := dashboard.Hosts["host-solaris-amd64"].ExpectNum
+			if n < want {
+				cw.errorf("%d connected; want %d", n, want)
+			}
+		},
+	}
+}
+
+func newScalewayHealthChecker() *healthChecker {
+	var hosts []string
+	for i := 1; i <= 50; i++ {
+		name := fmt.Sprintf("scaleway-prod-%02d", i)
+		hosts = append(hosts, name)
+	}
+	return &healthChecker{
+		ID:     "scaleway",
+		Title:  "Scaleway linux/arm machines",
+		EnvURL: "https://github.com/golang/build/tree/master/env/linux-arm/scaleway",
+		Check:  reverseHostChecker(hosts),
+	}
+}
+
+func newPacketHealthChecker() *healthChecker {
+	var hosts []string
+	for i := 1; i <= 20; i++ {
+		name := fmt.Sprintf("packet%02d", i)
+		hosts = append(hosts, name)
+	}
+	return &healthChecker{
+		ID:     "packet",
+		Title:  "Packet linux/arm64 machines",
+		EnvURL: "https://github.com/golang/build/tree/master/env/linux-arm64/packet",
+		Check:  reverseHostChecker(hosts),
+	}
+}
+
+func newOSUPPC64Checker() *healthChecker {
+	var hosts []string
+	for i := 1; i <= 5; i++ {
+		name := fmt.Sprintf("go-be-%v", i)
+		hosts = append(hosts, name)
+	}
+	return &healthChecker{
+		ID:     "osuppc64",
+		Title:  "OSU linux/ppc64 machines",
+		EnvURL: "https://github.com/golang/build/tree/master/env/linux-ppc64/osuosl",
+		Check:  reverseHostChecker(hosts),
+	}
+}
+
+func newOSUPPC64leChecker() *healthChecker {
+	var hosts []string
+	for i := 1; i <= 5; i++ {
+		name := fmt.Sprintf("go-le-%v", i)
+		hosts = append(hosts, name)
+	}
+	return &healthChecker{
+		ID:     "osuppc64le",
+		Title:  "OSU linux/ppc64le machines",
+		EnvURL: "https://github.com/golang/build/tree/master/env/linux-ppc64le/osuosl",
+		Check:  reverseHostChecker(hosts),
+	}
+}
+
+func reverseHostChecker(hosts []string) func(cw *checkWriter) {
+	const recentThreshold = 2 * time.Minute // let VMs be away 2 minutes; assume ~1 minute bootup + slop
+	checkStart := time.Now().Add(recentThreshold)
+
+	hostSet := map[string]bool{}
+	for _, v := range hosts {
+		hostSet[v] = true
+	}
+
+	return func(cw *checkWriter) {
+		p := reversePool
+		p.mu.Lock()
+		defer p.mu.Unlock()
+
+		now := time.Now()
+		wantGoodSince := now.Add(-recentThreshold)
+		numMissing := 0
+		numGood := 0
+		// Check last good times
+		for _, host := range hosts {
+			lastGood, ok := p.hostLastGood[host]
+			if ok && lastGood.After(wantGoodSince) {
+				numGood++
+				continue
+			}
+			if now.Before(checkStart) {
+				cw.infof("%s not yet connected", host)
+				continue
+			}
+			if ok {
+				cw.warnf("%s missing, not seen for %v", host, time.Now().Sub(lastGood).Round(time.Second))
+			} else {
+				cw.warnf("%s missing, never seen (at least %v)", host, uptime())
+			}
+			numMissing++
+		}
+		if numMissing > 0 {
+			sum := numMissing + numGood
+			percentMissing := float64(numMissing) / float64(sum)
+			msg := fmt.Sprintf("%d machines missing, %.0f%% of capacity", numMissing, percentMissing*100)
+			if percentMissing >= 0.15 {
+				cw.error(msg)
+			} else {
+				cw.warn(msg)
+			}
+		}
+
+		// And check that we don't have more than 1
+		// connected of any type.
+		count := map[string]int{}
+		for _, b := range p.buildlets {
+			if hostSet[b.hostname] {
+				count[b.hostname]++
+			}
+		}
+		for name, n := range count {
+			if n > 1 {
+				cw.errorf("%q is connected from %v machines", name, n)
+			}
+		}
+
+		return
+	}
+}
+
+func healthCheckerHandler(hc *healthChecker) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cw := new(checkWriter)
+		hc.Check(cw)
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		if cw.hasErrors() {
+			w.WriteHeader(500)
+		} else {
+			w.WriteHeader(200)
+		}
+		if len(cw.Out) == 0 {
+			io.WriteString(w, "ok\n")
+			return
+		}
+		fmt.Fprintf(w, "# %q status: %s\n", hc.ID, hc.Title)
+		if hc.EnvURL != "" {
+			fmt.Fprintf(w, "# Notes: %v\n", hc.EnvURL)
+		}
+		for _, v := range cw.Out {
+			fmt.Fprintf(w, "%s: %s\n", v.Level, v.Text)
+		}
+	})
+}
+
+func uptime() time.Duration { return time.Now().Sub(processStartTime).Round(time.Second) }
 
 func handleStatus(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
-	round := func(t time.Duration) time.Duration {
-		return t / time.Second * time.Second
-	}
 	df := diskFree()
 
 	statusMu.Lock()
 	data := statusData{
-		Total:        len(status),
-		Uptime:       round(time.Now().Sub(processStartTime)),
-		Recent:       append([]*buildStatus{}, statusDone...),
-		DiskFree:     df,
-		Version:      Version,
-		NumFD:        fdCount(),
-		NumGoroutine: runtime.NumGoroutine(),
+		Total:          len(status),
+		Uptime:         uptime(),
+		Recent:         append([]*buildStatus{}, statusDone...),
+		DiskFree:       df,
+		Version:        Version,
+		NumFD:          fdCount(),
+		NumGoroutine:   runtime.NumGoroutine(),
+		HealthCheckers: healthCheckers,
 	}
 	for _, st := range status {
 		if atomic.LoadInt32(&st.hasBuildlet) != 0 {
@@ -158,6 +489,7 @@ type statusData struct {
 	RemoteBuildlets   template.HTML
 	DiskFree          string
 	Version           string
+	HealthCheckers    []*healthChecker
 }
 
 var statusTmpl = template.Must(template.New("status").Parse(`
@@ -176,6 +508,18 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 
 <h2>Running</h2>
 <p>{{printf "%d" .Total}} total builds; {{printf "%d" .ActiveBuilds}} active ({{.ActiveReverse}} reverse). Uptime {{printf "%s" .Uptime}}. Version {{.Version}}.
+
+<h2 id=health>Health <a href='#health'>¶</a></h2>
+<ul>{{range .HealthCheckers}}
+  <li><a href="/status/{{.ID}}">{{.Title}}</a>{{if .EnvURL}} [<a href="{{.EnvURL}}">docs</a>]{{end -}}: {{with .DoCheck.Out}}
+      <ul>
+        {{- range .}}
+          <li>{{ .AsHTML}}</li>
+        {{- end}}
+      </ul>
+    {{else}}ok{{end}}
+  </li>
+{{end}}</ul>
 
 <h2 id=trybots>Active Trybot Runs <a href='#trybots'>¶</a></h2>
 {{- if .TrybotsErr}}

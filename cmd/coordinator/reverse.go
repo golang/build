@@ -54,7 +54,8 @@ import (
 const minBuildletVersion = 1
 
 var reversePool = &reverseBuildletPool{
-	oldInUse: make(map[*buildlet.Client]bool),
+	oldInUse:     make(map[*buildlet.Client]bool),
+	hostLastGood: make(map[string]time.Time),
 }
 
 const maxOldRevdialUsers = 10
@@ -62,7 +63,7 @@ const maxOldRevdialUsers = 10
 type token struct{}
 
 type reverseBuildletPool struct {
-	// mu guards all 4 fields below and also fields of
+	// mu guards all 5 fields below and also fields of
 	// *reverseBuildlet in buildlets
 	mu sync.Mutex
 
@@ -78,6 +79,8 @@ type reverseBuildletPool struct {
 	// These are a liability due to runaway memory issues (Issue 31639) so
 	// we bound how many can be running at once. Fortunately there aren't many left.
 	oldInUse map[*buildlet.Client]bool
+
+	hostLastGood map[string]time.Time
 }
 
 func (p *reverseBuildletPool) ServeReverseStatusJSON(w http.ResponseWriter, r *http.Request) {
@@ -213,6 +216,7 @@ func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 		panic("previous health check still running")
 	}
 	if b.inUse {
+		p.hostLastGood[b.hostname] = time.Now()
 		p.mu.Unlock()
 		return true // skip busy buildlets
 	}
@@ -252,7 +256,9 @@ func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 	}
 	b.inUse = false
 	b.inHealthCheck = false
-	b.inUseTime = time.Now()
+	now := time.Now()
+	b.inUseTime = now
+	p.hostLastGood[b.hostname] = now
 	go p.noteBuildletAvailable(b.hostType)
 	return true
 }
@@ -472,6 +478,7 @@ func (p *reverseBuildletPool) addBuildlet(b *reverseBuildlet) {
 	defer p.noteBuildletAvailable(b.hostType)
 	defer p.mu.Unlock()
 	p.buildlets = append(p.buildlets, b)
+	p.hostLastGood[b.hostname] = time.Now()
 	go p.healthCheckBuildletLoop(b)
 }
 

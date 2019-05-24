@@ -3212,6 +3212,9 @@ func (st *buildStatus) HTMLStatusLine() template.HTML      { return st.htmlStatu
 func (st *buildStatus) HTMLStatusLine_done() template.HTML { return st.htmlStatusLine(false) }
 
 func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
+	if st == nil {
+		return "[nil]"
+	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
