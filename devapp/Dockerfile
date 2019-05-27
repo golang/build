@@ -38,6 +38,20 @@ COPY . /go/src/golang.org/x/build/
 RUN go install golang.org/x/build/devapp
 
 FROM debian:stretch
+
+# netbase and ca-certificates are needed for dialing TLS.
+# The rest are useful for debugging if somebody needs to exec into the container.
+RUN apt-get update && apt-get install -y \
+	--no-install-recommends \
+	netbase \
+	ca-certificates \
+	curl \
+	strace \
+	procps \
+	lsof \
+	psmisc \
+	&& rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /go/bin/devapp /
 COPY devapp/static /static
 COPY devapp/templates /templates
