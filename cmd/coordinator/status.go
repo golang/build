@@ -127,7 +127,8 @@ func init() {
 
 func newMacHealthChecker() *healthChecker {
 	var hosts []string
-	for i := 1; i <= 10; i++ {
+	const numMacHosts = 10 // physical Mac minis, not reverse buildlet connections
+	for i := 1; i <= numMacHosts; i++ {
 		for _, suf := range []string{"a", "b"} {
 			name := fmt.Sprintf("macstadium_host%02d%s", i, suf)
 			hosts = append(hosts, name)
@@ -179,12 +180,13 @@ func newMacHealthChecker() *healthChecker {
 			if makeMac.lastErr != nil {
 				w.errorf("makemac daemon: %v", makeMac.lastErr)
 			}
-			return
 		},
 	}
 }
 
 func newJoyentChecker() *healthChecker {
+	const hostType = "host-solaris-amd64"
+	want := expectedHosts(hostType)
 	return &healthChecker{
 		ID:     "joyent",
 		Title:  "Joyent solaris/amd64 machines",
@@ -195,11 +197,10 @@ func newJoyentChecker() *healthChecker {
 			defer p.mu.Unlock()
 			n := 0
 			for _, b := range p.buildlets {
-				if b.hostType == "host-solaris-amd64" {
+				if b.hostType == hostType {
 					n++
 				}
 			}
-			want := dashboard.Hosts["host-solaris-amd64"].ExpectNum
 			if n < want {
 				cw.errorf("%d connected; want %d", n, want)
 			}
@@ -207,9 +208,17 @@ func newJoyentChecker() *healthChecker {
 	}
 }
 
+func expectedHosts(hostType string) int {
+	hc, ok := dashboard.Hosts[hostType]
+	if !ok {
+		panic(fmt.Sprintf("unknown host type %q", hostType))
+	}
+	return hc.ExpectNum
+}
+
 func newScalewayHealthChecker() *healthChecker {
 	var hosts []string
-	for i := 1; i <= 50; i++ {
+	for i := 1; i <= expectedHosts("host-linux-arm-scaleway"); i++ {
 		name := fmt.Sprintf("scaleway-prod-%02d", i)
 		hosts = append(hosts, name)
 	}
@@ -223,7 +232,7 @@ func newScalewayHealthChecker() *healthChecker {
 
 func newPacketHealthChecker() *healthChecker {
 	var hosts []string
-	for i := 1; i <= 20; i++ {
+	for i := 1; i <= expectedHosts("host-linux-arm64-packet"); i++ {
 		name := fmt.Sprintf("packet%02d", i)
 		hosts = append(hosts, name)
 	}
@@ -237,7 +246,7 @@ func newPacketHealthChecker() *healthChecker {
 
 func newOSUPPC64Checker() *healthChecker {
 	var hosts []string
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= expectedHosts("host-linux-ppc64-osu"); i++ {
 		name := fmt.Sprintf("go-be-%v", i)
 		hosts = append(hosts, name)
 	}
@@ -251,7 +260,7 @@ func newOSUPPC64Checker() *healthChecker {
 
 func newOSUPPC64leChecker() *healthChecker {
 	var hosts []string
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= expectedHosts("host-linux-ppc64le-osu"); i++ {
 		name := fmt.Sprintf("go-le-%v", i)
 		hosts = append(hosts, name)
 	}
@@ -323,8 +332,6 @@ func reverseHostChecker(hosts []string) func(cw *checkWriter) {
 				cw.errorf("%q is connected from %v machines", name, n)
 			}
 		}
-
-		return
 	}
 }
 
@@ -352,7 +359,7 @@ func healthCheckerHandler(hc *healthChecker) http.Handler {
 	})
 }
 
-func uptime() time.Duration { return time.Now().Sub(processStartTime).Round(time.Second) }
+func uptime() time.Duration { return time.Since(processStartTime).Round(time.Second) }
 
 func handleStatus(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
