@@ -48,7 +48,7 @@ const (
 
 func main() {
 	flag.Parse()
-	if *tags == "" {
+	if *tags == "" && !*listAll { // Tags aren't needed if -list-all flag is set.
 		if *staging {
 			*tags = defaultBuilderTags("gobuilder-staging.key")
 		} else {
