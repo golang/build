@@ -448,6 +448,12 @@ var Hosts = map[string]*HostConfig{
 		env:            []string{"GOROOT_BOOTSTRAP=/root/go-solaris-amd64-bootstrap", "HOME=/root"},
 		ReverseAliases: []string{"solaris-amd64-smartosbuildlet"},
 	},
+	"host-illumos-amd64-joyent": &HostConfig{
+		Notes:     "run by Go team on Joyent, on a SmartOS 'infrastructure container'",
+		IsReverse: true,
+		ExpectNum: 1,
+		env:       []string{"GOROOT_BOOTSTRAP=/root/goboot", "HOME=/root"},
+	},
 	"host-solaris-oracle-amd64-oraclerel": &HostConfig{
 		Notes:       "Oracle Solaris amd64 Release System",
 		Owner:       "", // TODO: find current owner
@@ -2033,6 +2039,10 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "solaris-amd64-smartosbuildlet",
 		HostType: "host-solaris-amd64",
+	})
+	addBuilder(BuildConfig{
+		Name:     "illumos-amd64-joyent",
+		HostType: "host-illumos-amd64-joyent",
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-ppc64-buildlet",

@@ -193,15 +193,17 @@ Download:
 		// GO_BUILD_HOST_TYPE (see above) and check that.
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-ppc64le-osu")...)
 	case "solaris/amd64":
-		if buildEnv != "" {
-			// Explicit value given. Treat it like a host type.
-			cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
-		} else {
-			// If there's no value, assume it's the old Joyent builders,
-			// which are currently GOOS=solaris, but will be illumos after
-			// golang.org/issue/20603.
-			cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-solaris-amd64")...)
+		hostType := buildEnv
+		if hostType == "" {
+			hostType = "host-solaris-amd64"
 		}
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(hostType)...)
+	case "illumos/amd64":
+		hostType := buildEnv
+		if hostType == "" {
+			hostType = "host-illumos-amd64-joyent"
+		}
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(hostType)...)
 	}
 	// Release the serial port (if we opened it) so the buildlet
 	// process can open & write to it. At least on Windows, only
@@ -325,6 +327,8 @@ func buildletURL() string {
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64le"
 	case "solaris/amd64":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.solaris-amd64"
+	case "illumos/amd64":
+		return "https://storage.googleapis.com/go-builder-data/buildlet.illumos-amd64"
 	case "darwin/amd64":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.darwin-amd64"
 	}

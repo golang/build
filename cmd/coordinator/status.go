@@ -127,7 +127,8 @@ func init() {
 	addHealthChecker(newPacketHealthChecker())
 	addHealthChecker(newOSUPPC64Checker())
 	addHealthChecker(newOSUPPC64leChecker())
-	addHealthChecker(newJoyentChecker())
+	addHealthChecker(newJoyentSolarisChecker())
+	addHealthChecker(newJoyentIllumosChecker())
 	addHealthChecker(newBasepinChecker())
 }
 
@@ -209,27 +210,39 @@ func newMacHealthChecker() *healthChecker {
 	}
 }
 
-func newJoyentChecker() *healthChecker {
-	const hostType = "host-solaris-amd64"
-	want := expectedHosts(hostType)
+func newJoyentSolarisChecker() *healthChecker {
 	return &healthChecker{
-		ID:     "joyent",
+		ID:     "joyent-solaris",
 		Title:  "Joyent solaris/amd64 machines",
 		EnvURL: "https://github.com/golang/build/tree/master/env/solaris-amd64/joyent",
-		Check: func(cw *checkWriter) {
-			p := reversePool
-			p.mu.Lock()
-			defer p.mu.Unlock()
-			n := 0
-			for _, b := range p.buildlets {
-				if b.hostType == hostType {
-					n++
-				}
+		Check:  hostTypeChecker("host-solaris-amd64"),
+	}
+}
+
+func newJoyentIllumosChecker() *healthChecker {
+	return &healthChecker{
+		ID:     "joyent-illumos",
+		Title:  "Joyent illumos/amd64 machines",
+		EnvURL: "https://github.com/golang/build/tree/master/env/illumos-amd64-joyent",
+		Check:  hostTypeChecker("host-illumos-amd64-joyent"),
+	}
+}
+
+func hostTypeChecker(hostType string) func(cw *checkWriter) {
+	want := expectedHosts(hostType)
+	return func(cw *checkWriter) {
+		p := reversePool
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		n := 0
+		for _, b := range p.buildlets {
+			if b.hostType == hostType {
+				n++
 			}
-			if n < want {
-				cw.errorf("%d connected; want %d", n, want)
-			}
-		},
+		}
+		if n < want {
+			cw.errorf("%d connected; want %d", n, want)
+		}
 	}
 }
 
