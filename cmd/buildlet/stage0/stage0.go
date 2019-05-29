@@ -379,35 +379,41 @@ func download(file, url string) error {
 }
 
 func aptGetInstall(pkgs ...string) {
+	t0 := time.Now()
 	args := append([]string{"--yes", "install"}, pkgs...)
 	cmd := exec.Command("apt-get", args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		log.Fatalf("error running apt-get install: %s", out)
 	}
+	log.Printf("stage0: apt-get installed %q in %v", pkgs, time.Since(t0).Round(time.Second/10))
 }
 
 func initBootstrapDir(destDir, tgzCache string) {
+	t0 := time.Now()
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		log.Fatal(err)
 	}
-	// TODO(bradfitz): rewrite this to use Go instead of curl+tar
-	// if this ever gets used on platforms besides Unix. For
-	// Windows and Plan 9 we bake in the bootstrap tarball into
-	// the image anyway. So this works for now. Solaris might require
-	// tweaking to use gtar instead or something.
 	latestURL := fmt.Sprintf("https://storage.googleapis.com/go-builder-data/gobootstrap-%s-%s.tar.gz",
 		runtime.GOOS, runtime.GOARCH)
-	curl := exec.Command("/usr/bin/curl", "-R", "-o", tgzCache, "-z", tgzCache, latestURL)
-	out, err := curl.CombinedOutput()
-	if err != nil {
-		log.Fatalf("curl error fetching %s to %s: %s", latestURL, out, err)
+	if err := httpdl.Download(tgzCache, latestURL); err != nil {
+		log.Fatalf("dowloading %s to %s: %v", latestURL, tgzCache, err)
 	}
+	log.Printf("synced %s to %s in %v", latestURL, tgzCache, time.Since(t0).Round(time.Second/10))
+
+	t1 := time.Now()
+	// TODO(bradfitz): rewrite this to use Go instead of shelling
+	// out to tar? if this ever gets used on platforms besides
+	// Unix. For Windows and Plan 9 we bake in the bootstrap
+	// tarball into the image anyway. So this works for now.
+	// Solaris might require tweaking to use gtar instead or
+	// something.
 	tar := exec.Command("tar", "zxf", tgzCache)
 	tar.Dir = destDir
-	out, err = tar.CombinedOutput()
+	out, err := tar.CombinedOutput()
 	if err != nil {
 		log.Fatalf("error untarring %s to %s: %s", tgzCache, destDir, out)
 	}
+	log.Printf("untarred %s to %s in %v", tgzCache, destDir, time.Since(t1).Round(time.Second/10))
 }
 
 func initOregonStatePPC64() {
