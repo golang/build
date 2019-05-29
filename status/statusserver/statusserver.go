@@ -112,8 +112,11 @@ func (h *Handler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	case r.Header.Get("Content-Type") != "application/x-www-form-urlencoded":
 		http.Error(w, "request requires Content-Type x-www-form-urlencoded", http.StatusBadRequest)
 		return
-	case r.ContentLength > 0 && r.ContentLength <= 1<<20:
-		http.Error(w, "request requires explicit Content-Length under 1MB", http.StatusBadRequest)
+	case r.ContentLength < 0:
+		http.Error(w, "request requires explicit Content-Length", http.StatusBadRequest)
+		return
+	case r.ContentLength > 1<<20:
+		http.Error(w, "request Content-Length should not exceed 1 MiB", http.StatusBadRequest)
 		return
 	}
 	wantToken, err := status.UpdateToken()
