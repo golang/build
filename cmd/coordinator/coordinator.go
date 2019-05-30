@@ -3292,7 +3292,7 @@ func (st *buildStatus) writeEventsLocked(w io.Writer, htmlMode bool) {
 		text := evt.text
 		if htmlMode {
 			if e == "running_exec" {
-				e = fmt.Sprintf("<a href='%s'>%s</a>", st.logsURLLocked(), e)
+				e = fmt.Sprintf("<a href='%s'>%s</a>", html.EscapeString(st.logsURLLocked()), e)
 			}
 			e = "<b>" + e + "</b>"
 			text = "<i>" + html.EscapeString(text) + "</i>"
