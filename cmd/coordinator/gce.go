@@ -191,7 +191,7 @@ func initGCE() error {
 	}
 
 	go gcePool.pollQuotaLoop()
-	go createBasepinDisks()
+	go createBasepinDisks(context.Background())
 	return nil
 }
 
@@ -701,29 +701,33 @@ func syncBuildStatsLoop(env *buildenv.Environment) {
 	}
 }
 
-// createBasepinDisks runs in the background on start-up and does a
-// best effort creation of zone-local copies of VM disk images, to
+// createBasepinDisks creates zone-local copies of VM disk images, to
 // speed up VM creations in the future.
 //
 // Other than a list call, this a no-op unless new VM images were
 // added or updated recently.
-func createBasepinDisks() {
+func createBasepinDisks(ctx context.Context) {
 	if !metadata.OnGCE() || (buildEnv != buildenv.Production && buildEnv != buildenv.Staging) {
 		return
 	}
-	t0 := time.Now()
-	ctx := context.Background()
-	bgc, err := buildgo.NewClient(ctx, buildEnv)
-	if err != nil {
-		log.Printf("basepin: NewClient: %v", err)
+	for {
+		t0 := time.Now()
+		bgc, err := buildgo.NewClient(ctx, buildEnv)
+		if err != nil {
+			log.Printf("basepin: NewClient: %v", err)
+			return
+		}
+		log.Printf("basepin: creating basepin disks...")
+		err = bgc.MakeBasepinDisks(ctx)
+		d := time.Since(t0).Round(time.Second / 10)
+		if err != nil {
+			basePinErr.Store(err.Error())
+			log.Printf("basepin: error creating basepin disks, after %v: %v", d, err)
+			time.Sleep(5 * time.Minute)
+			continue
+		}
+		basePinErr.Store("")
+		log.Printf("basepin: created basepin disks after %v", d)
 		return
 	}
-	log.Printf("basepin: creating basepin disks...")
-	err = bgc.MakeBasepinDisks(ctx)
-	d := time.Since(t0).Round(time.Second) / 10
-	if err != nil {
-		log.Printf("basepin: error creating basepin disks, after %v: %v", d, err)
-		return
-	}
-	log.Printf("basepin: created basepin disks after %v", d)
 }

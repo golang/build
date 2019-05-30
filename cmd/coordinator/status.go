@@ -116,6 +116,11 @@ func addHealthChecker(hc *healthChecker) {
 	http.Handle("/status/"+hc.ID, healthCheckerHandler(hc))
 }
 
+// basePinErr is the status of the start-up time basepin disk creation
+// in gce.go. It's of type string; nil means no result yet, empty
+// string means success, and non-empty means an error.
+var basePinErr atomic.Value
+
 func init() {
 	addHealthChecker(newMacHealthChecker())
 	addHealthChecker(newScalewayHealthChecker())
@@ -123,6 +128,26 @@ func init() {
 	addHealthChecker(newOSUPPC64Checker())
 	addHealthChecker(newOSUPPC64leChecker())
 	addHealthChecker(newJoyentChecker())
+	addHealthChecker(newBasepinChecker())
+}
+
+func newBasepinChecker() *healthChecker {
+	return &healthChecker{
+		ID:     "basepin",
+		Title:  "VM snapshots",
+		EnvURL: "https://golang.org/issue/21305",
+		Check: func(w *checkWriter) {
+			v := basePinErr.Load()
+			if v == nil {
+				w.warnf("still running")
+				return
+			}
+			if v == "" {
+				return
+			}
+			w.error(v.(string))
+		},
+	}
 }
 
 func newMacHealthChecker() *healthChecker {
