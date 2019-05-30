@@ -452,7 +452,11 @@ var Hosts = map[string]*HostConfig{
 		Notes:     "run by Go team on Joyent, on a SmartOS 'infrastructure container'",
 		IsReverse: true,
 		ExpectNum: 1,
-		env:       []string{"GOROOT_BOOTSTRAP=/root/goboot", "HOME=/root"},
+		env: []string{
+			"GOROOT_BOOTSTRAP=/root/goboot",
+			"HOME=/root",
+			"PATH=/usr/sbin:/usr/bin:/opt/local/bin", // gcc is in /opt/local/bin
+		},
 	},
 	"host-solaris-oracle-amd64-oraclerel": &HostConfig{
 		Notes:       "Oracle Solaris amd64 Release System",
