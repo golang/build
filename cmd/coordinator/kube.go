@@ -77,6 +77,7 @@ func initKube() error {
 	sourcecache.RegisterGitMirrorDial(func(ctx context.Context) (net.Conn, error) {
 		return goKubeClient.DialServicePort(ctx, "gitmirror", "")
 	})
+	go monitorGitMirror() // requires goKubeClient
 
 	go kubePool.pollCapacityLoop()
 	return nil

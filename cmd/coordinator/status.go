@@ -7,7 +7,9 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"html"
 	"html/template"
@@ -15,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -92,7 +95,7 @@ func (w *checkWriter) hasErrors() bool {
 type healthChecker struct {
 	ID     string
 	Title  string
-	EnvURL string
+	DocURL string
 	Check  func(*checkWriter)
 }
 
@@ -130,13 +133,14 @@ func init() {
 	addHealthChecker(newJoyentSolarisChecker())
 	addHealthChecker(newJoyentIllumosChecker())
 	addHealthChecker(newBasepinChecker())
+	addHealthChecker(newGitMirrorChecker())
 }
 
 func newBasepinChecker() *healthChecker {
 	return &healthChecker{
 		ID:     "basepin",
 		Title:  "VM snapshots",
-		EnvURL: "https://golang.org/issue/21305",
+		DocURL: "https://golang.org/issue/21305",
 		Check: func(w *checkWriter) {
 			v := basePinErr.Load()
 			if v == nil {
@@ -147,6 +151,73 @@ func newBasepinChecker() *healthChecker {
 				return
 			}
 			w.error(v.(string))
+		},
+	}
+}
+
+var lastGitMirrorErrors atomic.Value // of []string
+
+func monitorGitMirror() {
+	for {
+		lastGitMirrorErrors.Store(gitMirrorErrors())
+		time.Sleep(30 * time.Second)
+	}
+}
+
+// $1 is repo; $2 is error message
+var gitMirrorLineRx = regexp.MustCompile(`/debug/watcher/([\w-]+).?>.+</a> - (.*)`)
+
+func gitMirrorErrors() (errs []string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, _ := http.NewRequest("GET", "http://gitmirror/", nil)
+	req = req.WithContext(ctx)
+	res, err := watcherProxy.Transport.RoundTrip(req)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return []string{res.Status}
+	}
+	// TODO: add a JSON mode to gitmirror so we don't need to parse HTML.
+	// This works for now. We control its output.
+	bs := bufio.NewScanner(res.Body)
+	for bs.Scan() {
+		// Lines look like:
+		//    <html><body><pre><a href='/debug/watcher/arch'>arch</a> - ok
+		// or:
+		//    <a href='/debug/watcher/arch'>arch</a> - ok
+		// (See https://farmer.golang.org/debug/watcher/)
+		line := bs.Text()
+		if strings.HasSuffix(line, " - ok") {
+			continue
+		}
+		m := gitMirrorLineRx.FindStringSubmatch(line)
+		if m == nil {
+			if strings.Contains(line, "</html>") {
+				break
+			}
+			return []string{fmt.Sprintf("error parsing line %q", line)}
+		}
+		errs = append(errs, fmt.Sprintf("repo %s: %s"))
+	}
+	if err := bs.Err(); err != nil {
+		errs = append(errs, err.Error())
+	}
+	return errs
+}
+
+func newGitMirrorChecker() *healthChecker {
+	return &healthChecker{
+		ID:     "gitmirror",
+		Title:  "Git mirroring",
+		DocURL: "https://github.com/golang/build/tree/master/cmd/gitmirror",
+		Check: func(w *checkWriter) {
+			ee, _ := lastGitMirrorErrors.Load().([]string)
+			for _, v := range ee {
+				w.error(v)
+			}
 		},
 	}
 }
@@ -196,7 +267,7 @@ func newMacHealthChecker() *healthChecker {
 	return &healthChecker{
 		ID:     "macs",
 		Title:  "MacStadium Mac VMs",
-		EnvURL: "https://github.com/golang/build/tree/master/env/darwin/macstadium",
+		DocURL: "https://github.com/golang/build/tree/master/env/darwin/macstadium",
 		Check: func(w *checkWriter) {
 			// Check hosts.
 			checkHosts(w)
@@ -214,7 +285,7 @@ func newJoyentSolarisChecker() *healthChecker {
 	return &healthChecker{
 		ID:     "joyent-solaris",
 		Title:  "Joyent solaris/amd64 machines",
-		EnvURL: "https://github.com/golang/build/tree/master/env/solaris-amd64/joyent",
+		DocURL: "https://github.com/golang/build/tree/master/env/solaris-amd64/joyent",
 		Check:  hostTypeChecker("host-solaris-amd64"),
 	}
 }
@@ -223,7 +294,7 @@ func newJoyentIllumosChecker() *healthChecker {
 	return &healthChecker{
 		ID:     "joyent-illumos",
 		Title:  "Joyent illumos/amd64 machines",
-		EnvURL: "https://github.com/golang/build/tree/master/env/illumos-amd64-joyent",
+		DocURL: "https://github.com/golang/build/tree/master/env/illumos-amd64-joyent",
 		Check:  hostTypeChecker("host-illumos-amd64-joyent"),
 	}
 }
@@ -263,7 +334,7 @@ func newScalewayHealthChecker() *healthChecker {
 	return &healthChecker{
 		ID:     "scaleway",
 		Title:  "Scaleway linux/arm machines",
-		EnvURL: "https://github.com/golang/build/tree/master/env/linux-arm/scaleway",
+		DocURL: "https://github.com/golang/build/tree/master/env/linux-arm/scaleway",
 		Check:  reverseHostChecker(hosts),
 	}
 }
@@ -277,7 +348,7 @@ func newPacketHealthChecker() *healthChecker {
 	return &healthChecker{
 		ID:     "packet",
 		Title:  "Packet linux/arm64 machines",
-		EnvURL: "https://github.com/golang/build/tree/master/env/linux-arm64/packet",
+		DocURL: "https://github.com/golang/build/tree/master/env/linux-arm64/packet",
 		Check:  reverseHostChecker(hosts),
 	}
 }
@@ -291,7 +362,7 @@ func newOSUPPC64Checker() *healthChecker {
 	return &healthChecker{
 		ID:     "osuppc64",
 		Title:  "OSU linux/ppc64 machines",
-		EnvURL: "https://github.com/golang/build/tree/master/env/linux-ppc64/osuosl",
+		DocURL: "https://github.com/golang/build/tree/master/env/linux-ppc64/osuosl",
 		Check:  reverseHostChecker(hosts),
 	}
 }
@@ -305,7 +376,7 @@ func newOSUPPC64leChecker() *healthChecker {
 	return &healthChecker{
 		ID:     "osuppc64le",
 		Title:  "OSU linux/ppc64le machines",
-		EnvURL: "https://github.com/golang/build/tree/master/env/linux-ppc64le/osuosl",
+		DocURL: "https://github.com/golang/build/tree/master/env/linux-ppc64le/osuosl",
 		Check:  reverseHostChecker(hosts),
 	}
 }
@@ -388,8 +459,8 @@ func healthCheckerHandler(hc *healthChecker) http.Handler {
 			return
 		}
 		fmt.Fprintf(w, "# %q status: %s\n", hc.ID, hc.Title)
-		if hc.EnvURL != "" {
-			fmt.Fprintf(w, "# Notes: %v\n", hc.EnvURL)
+		if hc.DocURL != "" {
+			fmt.Fprintf(w, "# Notes: %v\n", hc.DocURL)
 		}
 		for _, v := range cw.Out {
 			fmt.Fprintf(w, "%s: %s\n", v.Level, v.Text)
@@ -556,7 +627,7 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 
 <h2 id=health>Health <a href='#health'>¶</a></h2>
 <ul>{{range .HealthCheckers}}
-  <li><a href="/status/{{.ID}}">{{.Title}}</a>{{if .EnvURL}} [<a href="{{.EnvURL}}">docs</a>]{{end -}}: {{with .DoCheck.Out}}
+  <li><a href="/status/{{.ID}}">{{.Title}}</a>{{if .DocURL}} [<a href="{{.DocURL}}">docs</a>]{{end -}}: {{with .DoCheck.Out}}
       <ul>
         {{- range .}}
           <li>{{ .AsHTML}}</li>
