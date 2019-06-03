@@ -2045,8 +2045,9 @@ func init() {
 		HostType: "host-solaris-amd64",
 	})
 	addBuilder(BuildConfig{
-		Name:     "illumos-amd64-joyent",
-		HostType: "host-illumos-amd64-joyent",
+		Name:             "illumos-amd64-joyent",
+		HostType:         "host-illumos-amd64-joyent",
+		MinimumGoVersion: types.MajorMinor{1, 13},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-ppc64-buildlet",

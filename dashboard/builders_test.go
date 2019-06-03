@@ -357,6 +357,16 @@ func TestBuilderConfig(t *testing.T) {
 		{b("aix-ppc64@go1.11", "go"), none},
 		{b("aix-ppc64@go1.11", "net"), none},
 
+		// Illumos starts at Go 1.13
+		{b("illumos-amd64-joyent", "go"), onlyPost},
+		{b("illumos-amd64-joyent", "net"), onlyPost},
+		{b("illumos-amd64-joyent", "sys"), onlyPost},
+		{b("illumos-amd64-joyent@1.13", "go"), onlyPost},
+		{b("illumos-amd64-joyent@1.12", "go"), none},
+		{b("illumos-amd64-joyent@1.12", "sys"), none},
+		{b("illumos-amd64-joyent@1.11", "go"), none},
+		{b("illumos-amd64-joyent@1.11", "sys"), none},
+
 		{b("linux-amd64-nocgo", "mobile"), none},
 
 		// Virtual mobiledevices
