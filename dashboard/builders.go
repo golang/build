@@ -2194,7 +2194,7 @@ func init() {
 				// it ready by Go 1.13. See https://golang.org/issue/31564#issuecomment-484786144
 				return atLeastGo1(branch, 13) && atLeastGo1(goBranch, 13)
 			}
-			return atLeastGo1(branch, 12) && atLeastGo1(goBranch, 12)
+			return atLeastGo1(branch, 12) && atLeastGo1(goBranch, 12) && defaultBuildsRepoPolicy(repo, branch, goBranch)
 		},
 	})
 
