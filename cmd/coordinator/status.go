@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"html"
 	"html/template"
@@ -236,31 +237,21 @@ func newMacHealthChecker() *healthChecker {
 	// And check that the makemac daemon is listening.
 	var makeMac struct {
 		sync.Mutex
-		lastErr   error
-		lastCheck time.Time // currently unused
+		lastCheck  time.Time // currently unused
+		lastErrors []string
+		lastWarns  []string
 	}
-	setMakeMacErr := func(err error) {
+	setMakeMacStatus := func(errs, warns []string) {
 		makeMac.Lock()
 		defer makeMac.Unlock()
-		makeMac.lastErr = err
 		makeMac.lastCheck = time.Now()
+		makeMac.lastErrors = errs
+		makeMac.lastWarns = warns
 	}
 	go func() {
-		c := &http.Client{Timeout: 15 * time.Second}
 		for {
-			res, err := c.Get("http://macstadiumd.golang.org:8713")
-			if err != nil {
-				setMakeMacErr(err)
-			} else {
-				res.Body.Close()
-				if res.StatusCode != 200 {
-					setMakeMacErr(fmt.Errorf("HTTP status %v", res.Status))
-				} else if res.Header.Get("Content-Type") != "application/json" {
-					setMakeMacErr(fmt.Errorf("unexpected content-type %q", res.Header.Get("Content-Type")))
-				} else {
-					setMakeMacErr(nil)
-				}
-			}
+			errs, warns := fetchMakeMacStatus()
+			setMakeMacStatus(errs, warns)
 			time.Sleep(15 * time.Second)
 		}
 	}()
@@ -274,11 +265,37 @@ func newMacHealthChecker() *healthChecker {
 			// Check makemac daemon.
 			makeMac.Lock()
 			defer makeMac.Unlock()
-			if makeMac.lastErr != nil {
-				w.errorf("makemac daemon: %v", makeMac.lastErr)
+			for _, v := range makeMac.lastWarns {
+				w.warnf("makemac daemon: %v", v)
+			}
+			for _, v := range makeMac.lastErrors {
+				w.errorf("makemac daemon: %v", v)
 			}
 		},
 	}
+}
+
+func fetchMakeMacStatus() (errs, warns []string) {
+	c := &http.Client{Timeout: 15 * time.Second}
+	res, err := c.Get("http://macstadiumd.golang.org:8713")
+	if err != nil {
+		return []string{fmt.Sprintf("failed to fetch status: %v", err)}, nil
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return []string{fmt.Sprintf("HTTP status %v", res.Status)}, nil
+	}
+	if res.Header.Get("Content-Type") != "application/json" {
+		return []string{fmt.Sprintf("unexpected content-type %q; want JSON", res.Header.Get("Content-Type"))}, nil
+	}
+	var resj struct {
+		Errors   []string
+		Warnings []string
+	}
+	if err := json.NewDecoder(res.Body).Decode(&resj); err != nil {
+		return []string{fmt.Sprintf("reading status response body: %v", err)}, nil
+	}
+	return resj.Errors, resj.Warnings
 }
 
 func newJoyentSolarisChecker() *healthChecker {
