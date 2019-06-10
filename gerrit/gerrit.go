@@ -341,7 +341,7 @@ type RevisionInfo struct {
 	Fetch             map[string]*FetchInfo `json:"fetch"`
 	Commit            *CommitInfo           `json:"commit"`
 	Files             map[string]*FileInfo  `json:"files"`
-	MessageWithFooter string                `json:"messageWithFooter"`
+	CommitWithFooters string                `json:"commit_with_footers"`
 	Kind              string                `json:"kind"`
 	// TODO: more
 }
