@@ -750,6 +750,13 @@ func (b *gopherbot) labelProposals(ctx context.Context) error {
 				return err
 			}
 		}
+
+		// Remove NeedsDecision if exists
+		if gi.HasLabel("NeedsDecision") {
+			if err := b.removeLabel(ctx, gi, "NeedsDecision"); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 }
