@@ -195,13 +195,13 @@ func gitMirrorErrors() (errs []string) {
 			continue
 		}
 		m := gitMirrorLineRx.FindStringSubmatch(line)
-		if m == nil {
+		if len(m) != 3 {
 			if strings.Contains(line, "</html>") {
 				break
 			}
 			return []string{fmt.Sprintf("error parsing line %q", line)}
 		}
-		errs = append(errs, fmt.Sprintf("repo %s: %s"))
+		errs = append(errs, fmt.Sprintf("repo %s: %s", m[1], m[2]))
 	}
 	if err := bs.Err(); err != nil {
 		errs = append(errs, err.Error())
