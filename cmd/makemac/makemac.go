@@ -501,7 +501,7 @@ func findBaseDisk(ctx context.Context, minor int) (string, error) {
 	}
 	vm := ret.VirtualMachines[0]
 	if len(vm.Layout.Snapshot) < 1 {
-		return "", fmt.Errorf("VM %s does not have any snapshots. Needs at least one.", vmName)
+		return "", fmt.Errorf("VM %s does not have any snapshots; needs at least one", vmName)
 	}
 	ss := vm.Layout.Snapshot[len(vm.Layout.Snapshot)-1] // most recent snapshot is last in list
 
@@ -860,6 +860,9 @@ func isFileSystemReadOnly() bool {
 	bs := bufio.NewScanner(f)
 	for bs.Scan() {
 		f := strings.Fields(bs.Text())
+		if len(f) < 4 {
+			continue
+		}
 		mountPoint, state := f[1], f[3]
 		if mountPoint == "/" {
 			return strings.HasPrefix(state, "ro,")
