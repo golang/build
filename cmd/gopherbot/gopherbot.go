@@ -1988,7 +1988,7 @@ func isDocumentationTitle(t string) bool {
 	if strings.Contains(t, "godoc:") { // in x/tools, or the dozen places people file it as
 		return false
 	}
-	return strings.Contains(t, "document") ||
+	return strings.Contains(t, "documentation") ||
 		strings.Contains(t, "docs ")
 }
 
