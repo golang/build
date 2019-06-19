@@ -273,8 +273,6 @@ func (m *MajorMinor) GetMinor() int32 {
 	return 0
 }
 
-// By default, ListGoReleases returns only the latest patches
-// of releases that are considered supported per policy.
 type ListGoReleasesRequest struct {
 }
 
@@ -284,7 +282,6 @@ func (*ListGoReleasesRequest) ProtoMessage()               {}
 func (*ListGoReleasesRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{8} }
 
 type ListGoReleasesResponse struct {
-	// Releases are Go releases, sorted by version with latest first.
 	Releases []*GoRelease `protobuf:"bytes,1,rep,name=releases" json:"releases,omitempty"`
 }
 
@@ -397,9 +394,16 @@ type MaintnerServiceClient interface {
 	GetRef(ctx context.Context, in *GetRefRequest, opts ...grpc.CallOption) (*GetRefResponse, error)
 	// GoFindTryWork finds trybot work for the coordinator to build & test.
 	GoFindTryWork(ctx context.Context, in *GoFindTryWorkRequest, opts ...grpc.CallOption) (*GoFindTryWorkResponse, error)
-	// ListGoReleases lists Go releases. A release is considered to exist for
-	// each git tag named "goX", "goX.Y", or "goX.Y.Z", as long as it has a
-	// corresponding "release-branch.goX" or "release-branch.goX.Y" release branch.
+	// ListGoReleases lists Go releases sorted by version with latest first.
+	//
+	// A release is considered to exist for each git tag named "goX", "goX.Y", or
+	// "goX.Y.Z", as long as it has a corresponding "release-branch.goX" or
+	// "release-branch.goX.Y" release branch.
+	//
+	// ListGoReleases returns only the latest patch versions of releases which
+	// are considered supported per policy. For example, Go 1.12.6 and 1.11.11.
+	// The response is guaranteed to have two versions, otherwise an error
+	// is returned.
 	ListGoReleases(ctx context.Context, in *ListGoReleasesRequest, opts ...grpc.CallOption) (*ListGoReleasesResponse, error)
 }
 
@@ -457,9 +461,16 @@ type MaintnerServiceServer interface {
 	GetRef(context.Context, *GetRefRequest) (*GetRefResponse, error)
 	// GoFindTryWork finds trybot work for the coordinator to build & test.
 	GoFindTryWork(context.Context, *GoFindTryWorkRequest) (*GoFindTryWorkResponse, error)
-	// ListGoReleases lists Go releases. A release is considered to exist for
-	// each git tag named "goX", "goX.Y", or "goX.Y.Z", as long as it has a
-	// corresponding "release-branch.goX" or "release-branch.goX.Y" release branch.
+	// ListGoReleases lists Go releases sorted by version with latest first.
+	//
+	// A release is considered to exist for each git tag named "goX", "goX.Y", or
+	// "goX.Y.Z", as long as it has a corresponding "release-branch.goX" or
+	// "release-branch.goX.Y" release branch.
+	//
+	// ListGoReleases returns only the latest patch versions of releases which
+	// are considered supported per policy. For example, Go 1.12.6 and 1.11.11.
+	// The response is guaranteed to have two versions, otherwise an error
+	// is returned.
 	ListGoReleases(context.Context, *ListGoReleasesRequest) (*ListGoReleasesResponse, error)
 }
 
