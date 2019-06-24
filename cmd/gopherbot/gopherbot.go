@@ -52,6 +52,10 @@ var (
 	onlyRun = flag.String("only-run", "", "if non-empty, the name of a task to run. Mostly for debugging, but tasks (like 'kicktrain') may choose to only run in explicit mode")
 )
 
+const (
+	gopherbotGitHubID = 8566911
+)
+
 // GitHub Label IDs for the golang/go repo.
 const (
 	needsDecisionID      = 373401956
@@ -751,14 +755,34 @@ func (b *gopherbot) labelProposals(ctx context.Context) error {
 			}
 		}
 
-		// Remove NeedsDecision if exists
-		if gi.HasLabel("NeedsDecision") {
+		// Remove NeedsDecision label if exists:
+		if gi.HasLabel("NeedsDecision") && !gopherbotRemovedLabel(gi, "NeedsDecision") {
 			if err := b.removeLabel(ctx, gi, "NeedsDecision"); err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+}
+
+// gopherbotRemovedLabel reports whether gopherbot has
+// previously removed label in the GitHub issue gi.
+//
+// Note that until golang.org/issue/28226 is resolved,
+// there's a brief delay before maintner catches up on
+// GitHub issue events and learns that it has happened.
+func gopherbotRemovedLabel(gi *maintner.GitHubIssue, label string) bool {
+	var hasRemoved bool
+	gi.ForeachEvent(func(e *maintner.GitHubIssueEvent) error {
+		if e.Actor != nil && e.Actor.ID == gopherbotGitHubID &&
+			e.Type == "unlabeled" &&
+			e.Label == label {
+			hasRemoved = true
+			return errStopIteration
+		}
+		return nil
+	})
+	return hasRemoved
 }
 
 func (b *gopherbot) setSubrepoMilestones(ctx context.Context) error {
