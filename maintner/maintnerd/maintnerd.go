@@ -351,7 +351,7 @@ func setGoConfig() {
 	*pubsub = "https://pubsubhelper.golang.org"
 	*watchGithub = strings.Join(goGitHubProjects, ",")
 
-	gerrc := gerrit.NewClient("https://go-review.googlesource.com/", gerrit.NoAuth)
+	gerrc := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
 	projs, err := gerrc.ListProjects(context.Background())
 	if err != nil {
 		log.Fatalf("error listing Go's gerrit projects: %v", err)

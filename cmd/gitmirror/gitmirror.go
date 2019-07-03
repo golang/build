@@ -78,7 +78,7 @@ var httpClient = &http.Client{
 	Timeout: 30 * time.Second, // overkill
 }
 
-var gerritClient = gerrit.NewClient(goBase, gerrit.NoAuth)
+var gerritClient = gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
 
 var (
 	// gitLogFn returns the list of unseen Commits on a Repo,
@@ -225,7 +225,11 @@ func runGitMirror() error {
 		go startRepo(name, path, true)
 	}
 	if *mirror {
-		for name := range gerritMetaMap() {
+		gerritRepos, err := gerritMetaMap()
+		if err != nil {
+			return fmt.Errorf("gerritMetaMap: %v", err)
+		}
+		for name := range gerritRepos {
 			if seen[name] {
 				// Repo already picked up by dashboard list.
 				continue
@@ -1427,7 +1431,12 @@ func repoTickler(repo string) chan bool {
 func pollGerritAndTickle() {
 	last := map[string]string{} // repo -> last seen hash
 	for {
-		for repo, hash := range gerritMetaMap() {
+		gerritRepos, err := gerritMetaMap()
+		if err != nil {
+			log.Printf("pollGerritAndTickle: gerritMetaMap failed, skipping: %v", err)
+			gerritRepos = nil
+		}
+		for repo, hash := range gerritRepos {
 			if hash != last[repo] {
 				last[repo] = hash
 				select {
@@ -1493,13 +1502,12 @@ func subscribeToMaintnerAndTickle() error {
 
 // gerritMetaMap returns the map from repo name (e.g. "go") to its
 // latest master hash.
-// The returned map is nil on any transient error.
-func gerritMetaMap() map[string]string {
+func gerritMetaMap() (map[string]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	meta, err := gerritClient.GetProjects(ctx, "master")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("gerritClient.GetProjects: %v", err)
 	}
 	m := map[string]string{}
 	for repo, v := range meta {
@@ -1507,7 +1515,7 @@ func gerritMetaMap() map[string]string {
 			m[repo] = master
 		}
 	}
-	return m
+	return m, nil
 }
 
 func (r *Repo) getLocalRefs() (map[string]string, error) {

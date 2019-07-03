@@ -27,7 +27,7 @@ import (
 
 // Client is a Gerrit client.
 type Client struct {
-	url  string // URL prefix, e.g. "https://go-review.googlesource.com/a" (without trailing slash)
+	url  string // URL prefix, e.g. "https://go-review.googlesource.com" (without trailing slash)
 	auth Auth
 
 	// HTTPClient optionally specifies an HTTP client to use
@@ -37,7 +37,7 @@ type Client struct {
 
 // NewClient returns a new Gerrit client with the given URL prefix
 // and authentication mode.
-// The url should be just the scheme and hostname.
+// The url should be just the scheme and hostname. For example, "https://go-review.googlesource.com".
 // If auth is nil, a default is used, or requests are made unauthenticated.
 func NewClient(url string, auth Auth) *Client {
 	if auth == nil {
