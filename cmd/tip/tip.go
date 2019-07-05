@@ -78,17 +78,18 @@ func main() {
 }
 
 // Proxy implements the tip.golang.org server: a reverse-proxy
-// that builds and runs golangorg instances showing the latest docs.
+// that builds and runs golangorg instances showing the latest
+// Go website and standard library documentation.
 type Proxy struct {
 	builder Builder
 
 	mu       sync.Mutex // protects following fields
 	proxy    http.Handler
-	cur      string    // signature of gorepo+toolsrepo
+	cur      string    // signature of gorepo+websiterepo
 	cmd      *exec.Cmd // live golangorg instance, or nil for none
 	side     string
 	hostport string // host and port of the live instance
-	err      error
+	err      error  // non-nil when there's a problem
 }
 
 type Builder interface {
@@ -254,6 +255,7 @@ func (p *Proxy) poll() {
 		p.cmd.Process.Kill()
 	}
 	p.cmd = cmd
+	p.err = nil // If we get this far, the process started successfully. Clear the error.
 }
 
 type serveOptions struct {
