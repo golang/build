@@ -29,6 +29,12 @@ func (b golangorgBuilder) Signature(heads map[string]string) string {
 }
 
 func (b golangorgBuilder) Init(logger *log.Logger, dir, hostport string, heads map[string]string) (*exec.Cmd, error) {
+	if _, ok := heads["go"]; !ok {
+		return nil, fmt.Errorf("missing HEAD revision for 'go' repo")
+	}
+	if _, ok := heads["website"]; !ok {
+		return nil, fmt.Errorf("missing HEAD revision for 'website' repo")
+	}
 	goDir := filepath.Join(dir, "go")
 	websiteDir := filepath.Join(dir, "website")
 	logger.Printf("checking out go repo ...")

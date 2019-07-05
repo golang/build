@@ -302,7 +302,7 @@ func checkout(repo, hash, path string) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return fmt.Errorf("mkdir: %v", err)
 		}
-		if err := runErr(exec.Command("git", "clone", "--depth", "1", repo, path)); err != nil {
+		if err := runErr(exec.Command("git", "clone", "--depth", "1", "--", repo, path)); err != nil {
 			return fmt.Errorf("clone: %v", err)
 		}
 	} else if err != nil {
@@ -315,7 +315,7 @@ func checkout(repo, hash, path string) error {
 	if err := runErr(cmd); err != nil {
 		return fmt.Errorf("fetch: %v", err)
 	}
-	cmd = exec.Command("git", "reset", "--hard", hash)
+	cmd = exec.Command("git", "reset", "--hard", hash, "--")
 	cmd.Dir = path
 	if err := runErr(cmd); err != nil {
 		return fmt.Errorf("reset: %v", err)
@@ -334,6 +334,8 @@ var timeoutClient = &http.Client{Timeout: 10 * time.Second}
 // latest master hash.
 // The returned map is nil on any transient error.
 func gerritMetaMap() map[string]string {
+	// TODO(dmitshur): Replace with a Gerrit client implementation like in gitmirror.
+
 	res, err := timeoutClient.Get(metaURL)
 	if err != nil {
 		log.Printf("Error getting Gerrit meta map: %v", err)
