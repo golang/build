@@ -82,7 +82,7 @@ EOF""",
 
 
 a = anita.Anita(
-    anita.URL('https://cdn.netbsd.org/pub/NetBSD/NetBSD-8.0_RC1/%s/' % arch),
+    anita.URL('https://cdn.netbsd.org/pub/NetBSD/NetBSD-8.1/%s/' % arch),
     workdir="work-NetBSD-%s" % arch,
     disk_size="4G",
     memory_size = "1G",
