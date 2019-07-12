@@ -11,10 +11,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"html/template"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
@@ -97,7 +99,13 @@ type healthChecker struct {
 	ID     string
 	Title  string
 	DocURL string
-	Check  func(*checkWriter)
+
+	// Check writes the health check status to a checkWriter.
+	//
+	// It's called when rendering the HTML page, so expensive
+	// operations (network calls, etc.) should be done in a
+	// separate goroutine and Check should report their results.
+	Check func(*checkWriter)
 }
 
 func (hc *healthChecker) DoCheck() *checkWriter {
@@ -135,6 +143,7 @@ func init() {
 	addHealthChecker(newJoyentIllumosChecker())
 	addHealthChecker(newBasepinChecker())
 	addHealthChecker(newGitMirrorChecker())
+	addHealthChecker(newTipGolangOrgChecker())
 }
 
 func newBasepinChecker() *healthChecker {
@@ -222,6 +231,68 @@ func newGitMirrorChecker() *healthChecker {
 		},
 	}
 }
+
+func newTipGolangOrgChecker() *healthChecker {
+	// tipError is the status of the tip.golang.org website.
+	// It's of type string; nil means no result yet, empty
+	// string means success, and non-empty means an error.
+	var tipError atomic.Value
+	go func() {
+		for {
+			tipError.Store(fetchTipGolangOrgError())
+			time.Sleep(30 * time.Second)
+		}
+	}()
+	return &healthChecker{
+		ID:     "tip",
+		Title:  "tip.golang.org website",
+		DocURL: "https://github.com/golang/build/tree/master/cmd/tip",
+		Check: func(w *checkWriter) {
+			e, ok := tipError.Load().(string)
+			if !ok {
+				w.warn("still checking")
+			} else if e != "" {
+				w.error(e)
+			}
+		},
+	}
+}
+
+// fetchTipGolangOrgError fetches the error= value from https://tip.golang.org/_tipstatus.
+func fetchTipGolangOrgError() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, _ := http.NewRequest(http.MethodGet, "https://tip.golang.org/_tipstatus", nil)
+	req = req.WithContext(ctx)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err.Error()
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return resp.Status
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err.Error()
+	}
+	var e string
+	err = foreachLine(b, func(s []byte) error {
+		if !bytes.HasPrefix(s, []byte("error=")) {
+			return nil
+		}
+		e = string(s[len("error="):])
+		return errFound
+	})
+	if err != errFound {
+		return "missing error= line"
+	} else if e != "<nil>" {
+		return "_tipstatus page reports error: " + e
+	}
+	return ""
+}
+
+var errFound = errors.New("error= line was found")
 
 func newMacHealthChecker() *healthChecker {
 	var hosts []string
@@ -785,3 +856,20 @@ table thead tr {
 	background: #fff !important;
 }
 `
+
+// foreachLine calls f on each line in v, without the trailing '\n'.
+// The final line need not include a trailing '\n'.
+// Returns first non-nil error returned by f.
+func foreachLine(v []byte, f func([]byte) error) error {
+	for len(v) > 0 {
+		i := bytes.IndexByte(v, '\n')
+		if i < 0 {
+			return f(v)
+		}
+		if err := f(v[:i]); err != nil {
+			return err
+		}
+		v = v[i+1:]
+	}
+	return nil
+}
