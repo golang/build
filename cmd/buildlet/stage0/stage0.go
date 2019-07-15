@@ -329,6 +329,8 @@ func buildletURL() string {
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-mips64"
 	case "linux/mips64le":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-mips64le"
+	case "linux/riscv64":
+		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-riscv64"
 	case "linux/ppc64":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64"
 	case "linux/ppc64le":

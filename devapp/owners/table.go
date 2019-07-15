@@ -144,6 +144,10 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{khr},
 		Secondary: []Owner{rsc, drchase, cherryyz},
 	},
+	"go/src/cmd/compile/riscv64": {
+		Primary:   []Owner{khr},
+		Secondary: []Owner{rsc, drchase, cherryyz},
+	},
 	"go/src/cmd/compile/ppc64": {
 		Primary:   []Owner{khr},
 		Secondary: []Owner{rsc, drchase, cherryyz},

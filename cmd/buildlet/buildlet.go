@@ -121,7 +121,7 @@ func main() {
 		initBaseUnixEnv() // Issue 28041
 	}
 	switch runtime.GOARCH {
-	case "mips64le", "mips64", "mipsle", "mips":
+	case "mips64le", "mips64", "mipsle", "mips", "riscv64":
 		// We hit the 10 second limit under qemu previously. :(
 		// The other limits look fine.
 		http.DefaultTransport.(*http.Transport).TLSHandshakeTimeout = 30 * time.Second

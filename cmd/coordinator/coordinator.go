@@ -2018,6 +2018,12 @@ var crossCompileConfigs = map[string]*crossCompileConfig{
 		AlwaysCrossCompile: true,
 		BuildTests:         true,
 	},
+	"linux-riscv64": {
+		Buildlet:           "host-linux-riscv64-cross",
+		CCForTarget:        "riscv64-linux-gnu-gcc",
+		AlwaysCrossCompile: true,
+		BuildTests:         true,
+	},
 }
 
 func (st *buildStatus) crossCompileMakeAndSnapshot(config *crossCompileConfig) (err error) {

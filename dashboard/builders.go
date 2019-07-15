@@ -77,6 +77,12 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
+	"host-linux-riscv64-cross": &HostConfig{
+		Notes:           "Debian Buster with riscv64 cross-compiler, from env/linux-riscv64-cross",
+		ContainerImage:  "linux-riscv64-cross:latest",
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+	},
 	"host-linux-amd64-localdev": &HostConfig{
 		IsReverse:   true,
 		ExpectNum:   0,
@@ -509,6 +515,19 @@ var Hosts = map[string]*HostConfig{
 			"GO_TEST_TIMEOUT_SCALE=4",
 		},
 		ReverseAliases: []string{"linux-mips64"},
+	},
+	"host-linux-riscv64": &HostConfig{
+		Notes:       "",
+		OwnerGithub: "",
+		IsReverse:   true,
+		ExpectNum:   1,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-riscv64",
+			"GOARCH=riscv64",
+			"GOHOSTARCH=riscv64",
+			"GO_TEST_TIMEOUT_SCALE=4",
+		},
+		ReverseAliases: []string{"linux-riscv64"},
 	},
 	"host-linux-mips64le-qemu": &HostConfig{
 		ContainerImage: "linux-mips64le-qemu:latest",
@@ -1448,6 +1467,7 @@ func init() {
 	addMiscCompile("-mips", "^linux-mips")           // 4: mips, mipsle, mips64, mips64le
 	addMiscCompile("-ppc", "^(linux-ppc64|aix-)")    // 3: linux-ppc64{,le}, aix-ppc64
 	addMiscCompile("-solaris", "^(solaris|illumos)") // 2: both amd64
+	addMiscCompile("-riscv", "^linux-riscv")         // 1: riscv64. Maybe riscv32 in the future
 	addMiscCompile("-plan9", "^plan9-")              // 3: amd64, 386, arm
 	addMiscCompile("-freebsd", "^freebsd-(386|arm)") // 2: 386, arm (amd64 already trybot)
 	addMiscCompile("-netbsd", "^netbsd-")            // 4: amd64, 386, arm, arm64
@@ -2105,6 +2125,11 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:         "linux-mips64",
 		HostType:     "host-linux-mips64",
+		SkipSnapshot: true,
+	})
+	addBuilder(BuildConfig{
+		Name:         "linux-riscv64",
+		HostType:     "host-linux-riscv64",
 		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
