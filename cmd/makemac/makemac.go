@@ -245,7 +245,7 @@ func (st *State) CreateMac(ctx context.Context, minor int) (slotName string, err
 
 	baseDisk, err := findBaseDisk(ctx, minor)
 	if err != nil {
-		return "", fmt.Errorf("failed to find osx_%d_frozen base disk: %v", minor, err)
+		return "", fmt.Errorf("failed to find osx_%d_frozen_nfs base disk: %v", minor, err)
 	}
 
 	hostNum, hostWhich, err := st.pickHost()
@@ -296,7 +296,7 @@ func (st *State) CreateMac(ctx context.Context, minor int) (slotName string, err
 		"-vm", name,
 		"-link=true",
 		"-persist=false",
-		"-ds=Pure1-1",
+		"-ds=GGLGLN-A-001-STV1",
 		"-disk", baseDisk,
 	); err != nil {
 		return "", err
@@ -474,9 +474,9 @@ func govcJSONDecode(ctx context.Context, dst interface{}, args ...string) error 
 }
 
 // findBaseDisk returns the path of the vmdk of the most recent
-// snapshot of the osx_$(minor)_frozen VM.
+// snapshot of the osx_$(minor)_frozen_nfs VM.
 func findBaseDisk(ctx context.Context, minor int) (string, error) {
-	vmName := fmt.Sprintf("osx_%d_frozen", minor)
+	vmName := fmt.Sprintf("osx_%d_frozen_nfs", minor)
 	out, err := exec.CommandContext(ctx, "govc", "vm.info", "-json", vmName).Output()
 	if err != nil {
 		return "", err
@@ -508,9 +508,9 @@ func findBaseDisk(ctx context.Context, minor int) (string, error) {
 	// Now find the first vmdk file, without its [datastore] prefix. The files are listed like:
 	/*
 	   "SnapshotFile": [
-	     "[Pure1-1] osx_14_frozen/osx_14_frozen-Snapshot2.vmsn",
-	     "[Pure1-1] osx_14_frozen/osx_14_frozen_15.vmdk",
-	     "[Pure1-1] osx_14_frozen/osx_14_frozen_15-000001.vmdk"
+	     "[GGLGLN-A-001-STV1] osx_14_frozen_nfs/osx_14_frozen_nfs-Snapshot2.vmsn",
+	     "[GGLGLN-A-001-STV1] osx_14_frozen_nfs/osx_14_frozen_nfs_15.vmdk",
+	     "[GGLGLN-A-001-STV1] osx_14_frozen_nfs/osx_14_frozen_nfs_15-000001.vmdk"
 	   ]
 	*/
 	for _, f := range ss.SnapshotFile {
