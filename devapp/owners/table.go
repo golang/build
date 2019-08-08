@@ -67,6 +67,7 @@ var (
 	tklauser     = gh("tklauser")
 	tombergan    = gh("tombergan")
 	ysmolsky     = gh("ysmolsky")
+	x1ddos       = gh("x1ddos")
 )
 
 // entries is a map of <repo name>/<path> to Owner entries.
@@ -87,6 +88,13 @@ var entries = map[string]*Entry{
 	"crypto": {
 		Primary:   []Owner{filippo},
 		Secondary: []Owner{agl},
+	},
+	"crypto/acme": {
+		Primary: []Owner{filippo, x1ddos},
+	},
+	"crypto/acme/autocert": {
+		Primary:   []Owner{bradfitz, x1ddos},
+		Secondary: []Owner{filippo},
 	},
 	"crypto/ssh": {
 		Primary:   []Owner{hanwen},
