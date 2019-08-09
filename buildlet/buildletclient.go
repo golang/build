@@ -704,6 +704,15 @@ func (de DirEntry) Name() string {
 	return f[1]
 }
 
+// Perm returns the permission bits in string form, e.g., "drw-rw-rw".
+func (de DirEntry) Perm() string {
+	i := strings.IndexByte(de.line, '\t')
+	if i == -1 {
+		return ""
+	}
+	return de.line[:i]
+}
+
 func (de DirEntry) Digest() string {
 	f := strings.Split(de.line, "\t")
 	if len(f) < 5 {
@@ -730,6 +739,7 @@ type ListDirOpts struct {
 
 // ListDir lists the contents of a directory.
 // The fn callback is run for each entry.
+// The directory dir itself is not included.
 func (c *Client) ListDir(dir string, opts ListDirOpts, fn func(DirEntry)) error {
 	param := url.Values{
 		"dir":       {dir},

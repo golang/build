@@ -689,7 +689,7 @@ func (w *Work) buildRelease(target string) {
 			if !failed {
 				break
 			}
-			w.log.Printf("release %s: %s\n%s", target, err, out)
+			w.log.Printf("release %s:\nerror from cmd/release binary = %v\noutput from cmd/release binary:\n%s", target, err, out)
 			if failures++; failures >= 3 {
 				w.log.Printf("release %s: too many failures\n", target)
 				for _, out := range outs {

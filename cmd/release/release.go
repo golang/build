@@ -254,7 +254,7 @@ func (b *Build) make() error {
 		return err
 	}
 
-	// Push source to buildlet
+	// Push source to buildlet.
 	b.logf("Pushing source to buildlet.")
 	const (
 		goDir  = "go"
@@ -331,8 +331,12 @@ func (b *Build) make() error {
 		if err := b.checkTopLevelDirs(client); err != nil {
 			return fmt.Errorf("verifying no unwanted top-level directories: %v", err)
 		}
+		if err := b.checkPerm(client); err != nil {
+			return fmt.Errorf("verifying file permissions: %v", err)
+		}
 
-		return b.fetchTarball(client)
+		finalFilename := *version + "." + b.String() + ".tar.gz"
+		return b.fetchTarball(client, finalFilename)
 	}
 
 	// Set up build environment.
@@ -353,24 +357,17 @@ func (b *Build) make() error {
 		env = append(env, fmt.Sprintf("CGO_LDFLAGS=-march=armv%d", b.Goarm))
 	}
 
-	// Execute build
-	b.logf("Building.")
+	// Execute build (make.bash only first).
+	b.logf("Building (make.bash only).")
 	out := new(bytes.Buffer)
-	script := bc.AllScript()
-	scriptArgs := bc.AllScriptArgs()
-	if *skipTests || b.MakeOnly {
-		script = bc.MakeScript()
-		scriptArgs = bc.MakeScriptArgs()
-	}
-	all := filepath.Join(goDir, script)
 	var execOut io.Writer = out
 	if *watch && *target != "" {
 		execOut = io.MultiWriter(out, os.Stdout)
 	}
-	remoteErr, err := client.Exec(all, buildlet.ExecOpts{
+	remoteErr, err := client.Exec(filepath.Join(goDir, bc.MakeScript()), buildlet.ExecOpts{
 		Output:   execOut,
 		ExtraEnv: env,
-		Args:     scriptArgs,
+		Args:     bc.MakeScriptArgs(),
 	})
 	if err != nil {
 		return err
@@ -498,18 +495,43 @@ func (b *Build) make() error {
 
 	cleanFiles := []string{"releaselet.go", goPath, go14, "tmp", "gocache"}
 
+	// So far, we've run make.bash. We want to create the release archive next.
+	// Since the release archive hasn't been tested yet, place it in a temporary
+	// location. After all.bash runs successfully (or gets explicitly skipped),
+	// we'll move the release archive to its final location.
+	type releaseFile struct {
+		Untested string // Temporary location of the file before the release has been tested.
+		Final    string // Final location where to move the file after the release has been tested.
+	}
+	var releases []releaseFile
+	tempFile := func(ext string) string {
+		tempDir, err := ioutil.TempDir("", "")
+		if err != nil {
+			log.Fatal(err)
+		}
+		return filepath.Join(tempDir, *version+"."+b.String()+ext+".untested")
+	}
+
 	switch b.OS {
 	case "darwin":
-		filename := *version + "." + b.String() + ".pkg"
-		if err := b.fetchFile(client, filename, "pkg"); err != nil {
+		untested := tempFile(".pkg")
+		if err := b.fetchFile(client, untested, "pkg"); err != nil {
 			return err
 		}
+		releases = append(releases, releaseFile{
+			Untested: untested,
+			Final:    *version + "." + b.String() + ".pkg",
+		})
 		cleanFiles = append(cleanFiles, "pkg")
 	case "windows":
-		filename := *version + "." + b.String() + ".msi"
-		if err := b.fetchFile(client, filename, "msi"); err != nil {
+		untested := tempFile(".msi")
+		if err := b.fetchFile(client, untested, "msi"); err != nil {
 			return err
 		}
+		releases = append(releases, releaseFile{
+			Untested: untested,
+			Final:    *version + "." + b.String() + ".msi",
+		})
 		cleanFiles = append(cleanFiles, "msi")
 	}
 
@@ -525,10 +547,70 @@ func (b *Build) make() error {
 		return fmt.Errorf("verifying no unwanted top-level directories: %v", err)
 	}
 
-	if b.OS == "windows" {
-		return b.fetchZip(client)
+	if err := b.checkPerm(client); err != nil {
+		return fmt.Errorf("verifying file permissions: %v", err)
 	}
-	return b.fetchTarball(client)
+
+	switch b.OS {
+	default:
+		untested := tempFile(".tar.gz")
+		if err := b.fetchTarball(client, untested); err != nil {
+			return fmt.Errorf("fetching and writing tarball: %v", err)
+		}
+		releases = append(releases, releaseFile{
+			Untested: untested,
+			Final:    *version + "." + b.String() + ".tar.gz",
+		})
+	case "windows":
+		untested := tempFile(".zip")
+		if err := b.fetchZip(client, untested); err != nil {
+			return fmt.Errorf("fetching and writing zip: %v", err)
+		}
+		releases = append(releases, releaseFile{
+			Untested: untested,
+			Final:    *version + "." + b.String() + ".zip",
+		})
+	}
+
+	// Execute build (all.bash) if running tests.
+	if *skipTests || b.MakeOnly {
+		b.logf("Skipping all.bash tests.")
+	} else {
+		if u := bc.GoBootstrapURL(buildEnv); u != "" {
+			b.logf("Installing go1.4 (second time, for all.bash).")
+			if err := client.PutTarFromURL(u, go14); err != nil {
+				return err
+			}
+		}
+
+		b.logf("Building (all.bash to ensure tests pass).")
+		out := new(bytes.Buffer)
+		var execOut io.Writer = out
+		if *watch && *target != "" {
+			execOut = io.MultiWriter(out, os.Stdout)
+		}
+		remoteErr, err := client.Exec(filepath.Join(goDir, bc.AllScript()), buildlet.ExecOpts{
+			Output:   execOut,
+			ExtraEnv: env,
+			Args:     bc.AllScriptArgs(),
+		})
+		if err != nil {
+			return err
+		}
+		if remoteErr != nil {
+			return fmt.Errorf("Build failed: %v\nOutput:\n%v", remoteErr, out)
+		}
+	}
+
+	// If we get this far, the all.bash tests have passed (or been skipped).
+	// Move untested release files to their final locations.
+	for _, r := range releases {
+		b.logf("Moving %q to %q.", r.Untested, r.Final)
+		if err := os.Rename(r.Untested, r.Final); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // checkTopLevelDirs checks that all files under client's "."
@@ -549,17 +631,56 @@ func (b *Build) checkTopLevelDirs(client *buildlet.Client) error {
 	return badFileErr
 }
 
-func (b *Build) fetchTarball(client *buildlet.Client) error {
+// checkPerm checks that files in client's $WORKDIR/go directory
+// have expected permissions.
+func (b *Build) checkPerm(client *buildlet.Client) error {
+	var badPermErr error // non-nil once an unexpected perm is found
+	checkPerm := func(ent buildlet.DirEntry, allowed ...string) {
+		for _, p := range allowed {
+			if ent.Perm() == p {
+				return
+			}
+		}
+		b.logf("unexpected file %q perm: %q", ent.Name(), ent.Perm())
+		if badPermErr == nil {
+			badPermErr = fmt.Errorf("unexpected file %q perm %q found", ent.Name(), ent.Perm())
+		}
+	}
+	if err := client.ListDir("go", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
+		switch b.OS {
+		default:
+			checkPerm(ent, "drwxr-xr-x", "-rw-r--r--", "-rwxr-xr-x")
+		case "windows":
+			checkPerm(ent, "drwxrwxrwx", "-rw-rw-rw-")
+		}
+	}); err != nil {
+		return err
+	}
+	if !b.Source {
+		if err := client.ListDir("go/bin", buildlet.ListDirOpts{}, func(ent buildlet.DirEntry) {
+			switch b.OS {
+			default:
+				checkPerm(ent, "-rwxr-xr-x")
+			case "windows":
+				checkPerm(ent, "-rw-rw-rw-")
+			}
+		}); err != nil {
+			return err
+		}
+	}
+	return badPermErr
+}
+
+func (b *Build) fetchTarball(client *buildlet.Client, dest string) error {
 	b.logf("Downloading tarball.")
 	tgz, err := client.GetTar(context.Background(), ".")
 	if err != nil {
 		return err
 	}
-	filename := *version + "." + b.String() + ".tar.gz"
-	return b.writeFile(filename, tgz)
+	return b.writeFile(dest, tgz)
 }
 
-func (b *Build) fetchZip(client *buildlet.Client) error {
+func (b *Build) fetchZip(client *buildlet.Client, dest string) error {
 	b.logf("Downloading tarball and re-compressing as zip.")
 
 	tgz, err := client.GetTar(context.Background(), ".")
@@ -568,8 +689,7 @@ func (b *Build) fetchZip(client *buildlet.Client) error {
 	}
 	defer tgz.Close()
 
-	filename := *version + "." + b.String() + ".zip"
-	f, err := os.Create(filename)
+	f, err := os.Create(dest)
 	if err != nil {
 		return err
 	}
@@ -580,8 +700,7 @@ func (b *Build) fetchZip(client *buildlet.Client) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-
-	b.logf("Wrote %q.", filename)
+	b.logf("Wrote %q.", dest)
 	return nil
 }
 
