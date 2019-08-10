@@ -14,7 +14,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	gobuild "go/build"
 	"io"
 	"io/ioutil"
 	"log"
@@ -32,6 +31,8 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 )
+
+//go:generate go run makestatic.go
 
 var (
 	target = flag.String("target", "", "If specified, build specific target platform (e.g. 'linux-amd64'). Default is to build all.")
@@ -65,10 +66,6 @@ func main() {
 			log.Fatal(err)
 		}
 		return
-	}
-
-	if err := findReleaselet(); err != nil {
-		log.Fatalf("couldn't find releaselet source: %v", err)
 	}
 
 	if (*rev == "" && *tarball == "") || (*rev != "" && *tarball != "") {
@@ -107,28 +104,6 @@ func main() {
 		log.Fatalf("no targets matched %q", *target)
 	}
 	wg.Wait()
-}
-
-var releaselet = "releaselet.go"
-
-func findReleaselet() error {
-	// First try the working directory.
-	if _, err := os.Stat(releaselet); err == nil {
-		return nil
-	}
-
-	// Then, try to locate the release command in the workspace.
-	const importPath = "golang.org/x/build/cmd/release"
-	pkg, err := gobuild.Import(importPath, "", gobuild.FindOnly)
-	if err != nil {
-		return fmt.Errorf("finding %q: %v", importPath, err)
-	}
-	r := filepath.Join(pkg.Dir, releaselet)
-	if _, err := os.Stat(r); err != nil {
-		return err
-	}
-	releaselet = r
-	return nil
 }
 
 type Build struct {
@@ -509,12 +484,7 @@ func (b *Build) make() error {
 	}
 
 	b.logf("Pushing and running releaselet.")
-	f, err := os.Open(releaselet)
-	if err != nil {
-		return err
-	}
-	err = client.Put(f, "releaselet.go", 0666)
-	f.Close()
+	err = client.Put(strings.NewReader(releaselet), "releaselet.go", 0666)
 	if err != nil {
 		return err
 	}
