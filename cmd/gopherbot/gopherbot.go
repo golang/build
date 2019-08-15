@@ -284,7 +284,7 @@ var tasks = []struct {
 	{"label build issues", (*gopherbot).labelBuildIssues},
 	{"label mobile issues", (*gopherbot).labelMobileIssues},
 	{"label documentation issues", (*gopherbot).labelDocumentationIssues},
-	{"label gopls issues", (*gopherbot).labelGoplsIssues},
+	{"handle gopls issues", (*gopherbot).handleGoplsIssues},
 	{"close stale WaitingForInfo", (*gopherbot).closeStaleWaitingForInfo},
 	{"cl2issue", (*gopherbot).cl2issue},
 	{"update needs", (*gopherbot).updateNeeds},
@@ -865,12 +865,23 @@ func (b *gopherbot) labelDocumentationIssues(ctx context.Context) error {
 	})
 }
 
-func (b *gopherbot) labelGoplsIssues(ctx context.Context) error {
+// handleGoplsIssues labels and asks for additional information on gopls issues.
+//
+// This is necessary because gopls issues often require additional information to diagnose,
+// and we don't ask for this information in the Go issue template.
+func (b *gopherbot) handleGoplsIssues(ctx context.Context) error {
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
 		if gi.Closed || gi.PullRequest || !isGoplsTitle(gi.Title) || gi.HasLabel("gopls") || gi.HasEvent("unlabeled") {
 			return nil
 		}
-		return b.addLabel(ctx, gi, "gopls")
+		if err := b.addLabel(ctx, gi, "gopls"); err != nil {
+			return err
+		}
+		// Request more information from the user.
+		const comment = "Thank you for filing a gopls issue! Please take a look at the " +
+			"[Troubleshooting](https://github.com/golang/go/wiki/gopls#troubleshooting) section of the gopls Wiki page, " +
+			"and make sure that you have provided all of the relevant information here."
+		return b.addGitHubComment(ctx, "golang", "go", gi.Number, comment)
 	})
 }
 
