@@ -418,7 +418,7 @@ func NewRepo(srcURL, dstURL, importPath string, dash bool) (*Repo, error) {
 	needClone := true
 	if r.shouldTryReuseGitDir(dstURL) {
 		r.setStatus("reusing git dir; running git fetch")
-		cmd := exec.Command("git", "fetch", "origin")
+		cmd := exec.Command("git", "fetch", "--prune", "origin")
 		cmd.Dir = r.root
 		r.logf("running git fetch")
 		t0 := time.Now()
@@ -1090,7 +1090,7 @@ func (r *Repo) fetch() (err error) {
 		if n > 1 {
 			r.setStatus(fmt.Sprintf("running git fetch origin, attempt %d", n))
 		}
-		cmd := exec.Command("git", "fetch", "origin")
+		cmd := exec.Command("git", "fetch", "--prune", "origin")
 		cmd.Dir = r.root
 		if out, err := cmd.CombinedOutput(); err != nil {
 			err = fmt.Errorf("%v\n\n%s", err, out)
