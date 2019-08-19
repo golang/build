@@ -10,7 +10,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha1"
@@ -448,7 +447,14 @@ func NewRepo(srcURL, dstURL, importPath string, dash bool) (*Repo, error) {
 
 	if r.mirror {
 		r.setStatus("adding dest remote")
-		if err := r.addRemote("dest", dstURL); err != nil {
+		if err := r.addRemote("dest", dstURL,
+			// We want to include only the refs/heads/* and refs/tags/* namespaces
+			// in the GitHub mirrors. They correspond to published branches and tags.
+			// Leave out internal Gerrit namespaces such as refs/changes/*,
+			// refs/users/*, etc., because they're not helpful on github.com/golang.
+			"push = +refs/heads/*:refs/heads/*",
+			"push = +refs/tags/*:refs/tags/*",
+		); err != nil {
 			r.setStatus("failed to add dest")
 			return nil, fmt.Errorf("adding remote: %v", err)
 		}
@@ -564,7 +570,7 @@ func (r *Repo) shouldTryReuseGitDir(dstURL string) bool {
 	return false
 }
 
-func (r *Repo) addRemote(name, url string) error {
+func (r *Repo) addRemote(name, url string, opts ...string) error {
 	gitConfig := filepath.Join(r.root, "config")
 	f, err := os.OpenFile(gitConfig, os.O_WRONLY|os.O_APPEND, os.ModePerm)
 	if err != nil {
@@ -574,6 +580,13 @@ func (r *Repo) addRemote(name, url string) error {
 	if err != nil {
 		f.Close()
 		return err
+	}
+	for _, o := range opts {
+		_, err := fmt.Fprintf(f, "\t%s\n", o)
+		if err != nil {
+			f.Close()
+			return err
+		}
 	}
 	return f.Close()
 }
@@ -1101,12 +1114,7 @@ func (r *Repo) fetch() (err error) {
 	})
 }
 
-// push effectively runs "git push -f --mirror dest" in the repository
-// root, but does things in smaller batches of refs, to work around
-// performance problems we saw in the past. (They might have been
-// fixed by later version of git; they seemed to only affect the HTTP
-// transport, but not ssh)
-//
+// push runs "git push -f --mirror dest" in the repository root.
 // It tries three times, just in case it failed because of a transient error.
 func (r *Repo) push() (err error) {
 	n := 0
@@ -1123,69 +1131,13 @@ func (r *Repo) push() (err error) {
 		if n > 1 {
 			r.setStatus(fmt.Sprintf("syncing to github, attempt %d", n))
 		}
-		r.setStatus("sync: fetching local refs")
-		local, err := r.getLocalRefs()
-		if err != nil {
-			r.logf("failed to get local refs: %v", err)
+		cmd := exec.Command("git", "push", "-f", "--mirror", "dest")
+		cmd.Dir = r.root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			err = fmt.Errorf("%v\n\n%s", err, out)
+			r.logf("git push failed: %v", err)
 			return err
 		}
-		r.setStatus(fmt.Sprintf("sync: got %d local refs", len(local)))
-
-		r.setStatus("sync: fetching remote refs")
-		remote, err := r.getRemoteRefs("dest")
-		if err != nil {
-			r.logf("failed to get remote refs: %v", err)
-			return err
-		}
-		r.setStatus(fmt.Sprintf("sync: got %d remote refs", len(remote)))
-
-		var pushRefs []string
-		for ref, hash := range local {
-			if strings.Contains(ref, "refs/users/") ||
-				strings.Contains(ref, "refs/cache-auto") ||
-				strings.Contains(ref, "refs/changes/") {
-				continue
-			}
-			if remote[ref] != hash {
-				pushRefs = append(pushRefs, ref)
-			}
-		}
-		sort.Slice(pushRefs, func(i, j int) bool {
-			p1 := priority[refType(pushRefs[i])]
-			p2 := priority[refType(pushRefs[j])]
-			if p1 != p2 {
-				return p1 > p2
-			}
-			return pushRefs[i] <= pushRefs[j]
-		})
-		if len(pushRefs) == 0 {
-			r.setStatus("nothing to sync")
-			return nil
-		}
-		for len(pushRefs) > 0 {
-			r.setStatus(fmt.Sprintf("%d refs to push; pushing batch", len(pushRefs)))
-			r.logf("%d refs remain to sync to github", len(pushRefs))
-			args := []string{"push", "-f", "dest"}
-			n := 0
-			for _, ref := range pushRefs {
-				args = append(args, "+"+local[ref]+":"+ref)
-				n++
-				if n == 200 {
-					break
-				}
-			}
-			pushRefs = pushRefs[n:]
-			cmd := exec.Command("git", args...)
-			cmd.Dir = r.root
-			cmd.Stderr = os.Stderr
-			out, err := cmd.Output()
-			if err != nil {
-				r.logf("git push failed, running git %s: %s", args, out)
-				r.setStatus("git push failure")
-				return err
-			}
-		}
-		r.setStatus("sync complete")
 		return nil
 	})
 }
@@ -1518,72 +1470,6 @@ func gerritMetaMap() (map[string]string, error) {
 	return m, nil
 }
 
-func (r *Repo) getLocalRefs() (map[string]string, error) {
-	cmd := exec.Command("git", "show-ref")
-	cmd.Dir = r.root
-	return parseRefs(cmd)
-}
-
-// getRemoteRefs tells you which references are available in the remote
-// named dest, and returns a map of refs to the matching commit, e.g.
-// "refs/heads/master" => "6b27048ae5e6ad1ef927e72e437531493de612fe".
-func (r *Repo) getRemoteRefs(dest string) (map[string]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "ls-remote", dest)
-	cmd.Dir = r.root
-	return parseRefs(cmd)
-}
-
-func parseRefs(cmd *exec.Cmd) (map[string]string, error) {
-	refHash := map[string]string{}
-	var errBuf bytes.Buffer
-	if cmd.Stderr == nil {
-		cmd.Stderr = &errBuf
-	}
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	bs := bufio.NewScanner(out)
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-	var line int
-	for bs.Scan() {
-		line++
-		f := strings.Fields(bs.Text())
-		if len(f) < 2 {
-			log.Printf("WARNING: skipping bogus ref line %d, %q (report this to https://golang.org/issue/29560)", line, bs.Text())
-			log.Printf("         refHash so far: %d entries, %s\n", len(refHash), condTrunc(fmt.Sprintf("%q", refHash), 500))
-			continue
-		}
-		refHash[f[1]] = f[0]
-	}
-	if err := bs.Err(); err != nil {
-		go cmd.Wait() // prevent zombies
-		return nil, err
-	}
-	if err := cmd.Wait(); err != nil {
-		return nil, fmt.Errorf("wait err: %v, stderr: %s", err, errBuf.Bytes())
-	}
-	return refHash, nil
-}
-
-func refType(s string) string {
-	s = strings.TrimPrefix(s, "refs/")
-	if i := strings.IndexByte(s, '/'); i != -1 {
-		return s[:i]
-	}
-	return s
-}
-
-var priority = map[string]int{
-	"heads":   5,
-	"tags":    4,
-	"changes": 3,
-}
-
 // GET /debug/goroutines
 func handleDebugGoroutines(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -1597,11 +1483,4 @@ func handleDebugEnv(w http.ResponseWriter, r *http.Request) {
 	for _, kv := range os.Environ() {
 		fmt.Fprintf(w, "%s\n", kv)
 	}
-}
-
-func condTrunc(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "...(truncated)"
 }

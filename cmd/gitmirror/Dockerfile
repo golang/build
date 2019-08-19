@@ -34,7 +34,7 @@ WORKDIR /go/src/golang.org/x/build/
 COPY . /go/src/golang.org/x/build/
 RUN go install golang.org/x/build/cmd/gitmirror
 
-FROM debian:stretch
+FROM debian:buster
 LABEL maintainer "golang-dev@googlegroups.com"
 
 # For interacting with the Go source & subrepos
