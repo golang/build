@@ -6,7 +6,7 @@
 // new commits and reports them to the build dashboard.
 //
 // It also serves tarballs over HTTP for the build system, and pushes
-// new commits to Github.
+// new commits to GitHub.
 package main
 
 import (
@@ -276,7 +276,7 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "</pre></body></html>")
 }
 
-// shouldMirrorTo returns the Github repository the named repo should be
+// shouldMirrorTo returns the GitHub repository the named repo should be
 // mirrored to or "" if it should not be mirrored.
 func shouldMirrorTo(name string) (dst string) {
 	switch name {
