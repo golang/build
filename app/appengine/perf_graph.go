@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build appengine
-
-package build
+package main
 
 import (
 	"bytes"
@@ -16,10 +14,6 @@ import (
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
 )
-
-func init() {
-	handleFunc("/perfgraph", perfGraphHandler)
-}
 
 func perfGraphHandler(w http.ResponseWriter, r *http.Request) {
 	d := goDash

@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build appengine
-
-package build
+package main
 
 // TODO(adg): test authentication
 // TODO(adg): refactor to use appengine/aetest instead
@@ -26,10 +24,6 @@ import (
 	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/log"
 )
-
-func init() {
-	handleFunc("/buildtest", testHandler)
-}
 
 var testEntityKinds = []string{
 	"Package",

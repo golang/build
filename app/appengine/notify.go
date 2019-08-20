@@ -2,14 +2,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build appengine
-
-package build
+package main
 
 import (
 	"bytes"
 	"context"
-	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -198,10 +195,6 @@ func postGerritMessage(c context.Context, com *Commit, message string) error {
 		return fmt.Errorf("posting message: %s\n%s", resp.Status, body)
 	}
 	return nil
-}
-
-func init() {
-	gob.Register(&Commit{}) // for delay
 }
 
 // MUST be called from inside a transaction.
