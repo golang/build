@@ -38,6 +38,8 @@ var (
 	target = flag.String("target", "", "If specified, build specific target platform (e.g. 'linux-amd64'). Default is to build all.")
 	watch  = flag.Bool("watch", false, "Watch the build. Only compatible with -target")
 
+	stagingDir = flag.String("staging_dir", "", "If specified, use this as the staging directory for untested release artifacts. Default is the system temporary directory.")
+
 	rev       = flag.String("rev", "", "Go revision to build, alternative to -tarball")
 	tarball   = flag.String("tarball", "", "Go tree tarball to build, alternative to -rev")
 	toolsRev  = flag.String("tools", "", "Tools revision to build")
@@ -504,17 +506,21 @@ func (b *Build) make() error {
 		Final    string // Final location where to move the file after the release has been tested.
 	}
 	var releases []releaseFile
-	tempFile := func(ext string) string {
-		tempDir, err := ioutil.TempDir("", "")
+	stagingDir := *stagingDir
+	if stagingDir == "" {
+		var err error
+		stagingDir, err = ioutil.TempDir("", "")
 		if err != nil {
 			log.Fatal(err)
 		}
-		return filepath.Join(tempDir, *version+"."+b.String()+ext+".untested")
+	}
+	stagingFile := func(ext string) string {
+		return filepath.Join(stagingDir, *version+"."+b.String()+ext+".untested")
 	}
 
 	switch b.OS {
 	case "darwin":
-		untested := tempFile(".pkg")
+		untested := stagingFile(".pkg")
 		if err := b.fetchFile(client, untested, "pkg"); err != nil {
 			return err
 		}
@@ -524,7 +530,7 @@ func (b *Build) make() error {
 		})
 		cleanFiles = append(cleanFiles, "pkg")
 	case "windows":
-		untested := tempFile(".msi")
+		untested := stagingFile(".msi")
 		if err := b.fetchFile(client, untested, "msi"); err != nil {
 			return err
 		}
@@ -553,7 +559,7 @@ func (b *Build) make() error {
 
 	switch b.OS {
 	default:
-		untested := tempFile(".tar.gz")
+		untested := stagingFile(".tar.gz")
 		if err := b.fetchTarball(client, untested); err != nil {
 			return fmt.Errorf("fetching and writing tarball: %v", err)
 		}
@@ -562,7 +568,7 @@ func (b *Build) make() error {
 			Final:    *version + "." + b.String() + ".tar.gz",
 		})
 	case "windows":
-		untested := tempFile(".zip")
+		untested := stagingFile(".zip")
 		if err := b.fetchZip(client, untested); err != nil {
 			return fmt.Errorf("fetching and writing zip: %v", err)
 		}
