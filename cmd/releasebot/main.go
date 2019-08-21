@@ -338,9 +338,13 @@ func (w *Work) doRelease() {
 			changeID = w.writeVersion()
 		}
 
-		// Run the all.bash tests on the builders.
+		// Create release archives and run all.bash tests on the builders.
 		w.VersionCommit = w.gitHeadCommit()
 		w.buildReleases()
+		if len(w.Errors) > 0 {
+			w.logError("**Found errors during release. Stopping!**")
+			return
+		}
 
 		if w.BetaRelease {
 			w.nextStepsBeta()
@@ -355,8 +359,16 @@ func (w *Work) doRelease() {
 			w.logError("**Found errors during release. Stopping!**")
 			return
 		}
+
+		// Create and push the Git tag for the release, then create or reuse release archives.
+		// (Tests are skipped here since they ran during the prepare mode.)
 		w.gitTagVersion()
 		w.buildReleases()
+		if len(w.Errors) > 0 {
+			w.logError("**Found errors during release. Stopping!**")
+			return
+		}
+
 		if !w.BetaRelease && !w.RCRelease {
 			w.pushIssues()
 			w.closeMilestone()
@@ -452,6 +464,10 @@ func (w *Work) postSummary() {
 	fmt.Fprintf(&md, "\n## Log\n\n    ")
 	md.WriteString(strings.Replace(w.logBuf.String(), "\n", "\n    ", -1))
 	fmt.Fprintf(&md, "\n\n")
+
+	if len(w.Errors) > 0 {
+		fmt.Fprintf(&md, "There were problems with the release, see above for details.\n")
+	}
 
 	body := md.String()
 	fmt.Printf("%s", body)
