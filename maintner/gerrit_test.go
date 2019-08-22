@@ -559,20 +559,3 @@ func TestGerritHashtagsLen(t *testing.T) {
 		}
 	}
 }
-
-func TestGerritURL(t *testing.T) {
-	tests := []struct {
-		set  int32
-		want string
-	}{
-		{0, "https://golang.org/cl/0"},
-		{1238812784, "https://golang.org/cl/1238812784"},
-	}
-	for _, tt := range tests {
-		cl := &GerritCL{Number: tt.set}
-		got := cl.URL().String()
-		if got != tt.want {
-			t.Errorf("For set %d, url = %#v; want %v", tt.set, got, tt.want)
-		}
-	}
-}

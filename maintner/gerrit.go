@@ -509,16 +509,6 @@ func (cl *GerritCL) CommitAtVersion(version int32) *GitCommit {
 	return cl.Project.commit[hash]
 }
 
-// URL returns the absolute url of the CL.
-func (cl *GerritCL) URL() *url.URL {
-	s := fmt.Sprintf("https://golang.org/cl/%d", cl.Number)
-	u, err := url.Parse(s)
-	if err != nil {
-		return &url.URL{}
-	}
-	return u
-}
-
 func (cl *GerritCL) updateGithubIssueRefs() {
 	gp := cl.Project
 	gerrit := gp.gerrit

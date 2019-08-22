@@ -915,7 +915,7 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 				// already processed this issue.
 				return nil
 			}
-			prefix := fmt.Sprintf("Change %s", cl.URL().String())
+			prefix := fmt.Sprintf("Change https://golang.org/cl/%d", cl.Number)
 			for _, ref := range cl.GitHubIssueRefs {
 				if id := ref.Repo.ID(); id.Owner != "golang" || id.Repo != "go" {
 					continue
