@@ -190,6 +190,7 @@ type Work struct {
 	ReleaseIssue  int    // Release status issue number
 	ReleaseBranch string // "master" for beta releases
 	Dir           string // work directory ($HOME/go-releasebot-work/<release>)
+	StagingDir    string // staging directory (a temporary directory inside <work>/release-staging)
 	Errors        []string
 	ReleaseBinary string
 	Version       string
@@ -573,9 +574,14 @@ func (w *Work) buildReleases() {
 	if err := os.MkdirAll(filepath.Join(w.Dir, "release", w.VersionCommit), 0777); err != nil {
 		w.log.Panic(err)
 	}
-	if err := os.MkdirAll(filepath.Join(w.Dir, "release-staging", w.VersionCommit), 0777); err != nil {
+	if err := os.MkdirAll(filepath.Join(w.Dir, "release-staging"), 0777); err != nil {
 		w.log.Panic(err)
 	}
+	stagingDir, err := ioutil.TempDir(filepath.Join(w.Dir, "release-staging"), w.VersionCommit+"_")
+	if err != nil {
+		w.log.Panic(err)
+	}
+	w.StagingDir = stagingDir
 	w.ReleaseInfo = make(map[string]*ReleaseInfo)
 
 	if w.Security {
@@ -638,8 +644,8 @@ to %s and press enter.
 
 // buildRelease builds the release packaging for a given target. Because the
 // "release" program can be flaky, it tries up to five times. The release files
-// are first written to a release-staging directory
-// ($HOME/go-releasebot-work/go1.2.3/release-staging/COMMIT_HASH),
+// are first written to a staging directory specified in w.StagingDir
+// (a temporary directory inside $HOME/go-releasebot-work/go1.2.3/release-staging),
 // then after the all.bash tests complete successfully (or get skipped),
 // they get moved to the final release directory
 // ($HOME/go-releasebot-work/go1.2.3/release/COMMIT_HASH).
@@ -687,7 +693,7 @@ func (w *Work) buildRelease(target string) {
 			releaseBranch := strings.TrimSuffix(w.ReleaseBranch, "-security")
 			args := []string{w.ReleaseBinary, "-target", target, "-user", gomoteUser,
 				"-version", w.Version, "-tools", releaseBranch, "-net", releaseBranch,
-				"-staging_dir", filepath.Join(w.Dir, "release-staging", w.VersionCommit)}
+				"-staging_dir", w.StagingDir}
 			if w.Security {
 				args = append(args, "-tarball", filepath.Join(w.Dir, w.VersionCommit+".tar.gz"))
 			} else {

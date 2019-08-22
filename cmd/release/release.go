@@ -509,7 +509,7 @@ func (b *Build) make() error {
 	stagingDir := *stagingDir
 	if stagingDir == "" {
 		var err error
-		stagingDir, err = ioutil.TempDir("", "")
+		stagingDir, err = ioutil.TempDir("", "go-release-staging_")
 		if err != nil {
 			log.Fatal(err)
 		}
