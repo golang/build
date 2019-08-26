@@ -1914,9 +1914,11 @@ func init() {
 		Name:              "darwin-386-10_14",
 		HostType:          "host-darwin-10_14",
 		shouldRunDistTest: macTestPolicy,
-		buildsRepo:        onlyGo,
-		MaxAtOnce:         1,
-		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "go" && atLeastGo1(branch, 13)
+		},
+		MaxAtOnce: 1,
+		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_12",

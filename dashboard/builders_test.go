@@ -467,8 +467,8 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-10_10@go1.12", "go"), onlyPost},
 		{b("darwin-amd64-10_10@go1.11", "go"), onlyPost},
 		{b("darwin-386-10_14", "go"), onlyPost},
-		{b("darwin-386-10_14@go1.12", "go"), onlyPost},
-		{b("darwin-386-10_14@go1.11", "go"), onlyPost},
+		{b("darwin-386-10_14@go1.12", "go"), none},
+		{b("darwin-386-10_14@go1.13", "go"), onlyPost},
 
 		// plan9 only lived at master. We didn't support any past releases.
 		// But it's off for now as it's always failing.
