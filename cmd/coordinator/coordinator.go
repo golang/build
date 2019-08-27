@@ -2012,12 +2012,6 @@ var crossCompileConfigs = map[string]*crossCompileConfig{
 		GOARM:              "5",
 		AlwaysCrossCompile: true,
 	},
-	"linux-mips64le": {
-		Buildlet:           "host-linux-mips64le-cross",
-		CCForTarget:        "mips64el-linux-gnuabi64-gcc",
-		AlwaysCrossCompile: true,
-		BuildTests:         true,
-	},
 	"linux-riscv64": {
 		Buildlet:           "host-linux-riscv64-cross",
 		CCForTarget:        "riscv64-linux-gnu-gcc",
