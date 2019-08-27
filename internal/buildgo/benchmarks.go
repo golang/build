@@ -230,7 +230,7 @@ func buildRev(buildEnv *buildenv.Environment, sl spanlog.Logger, conf *dashboard
 	if br.SnapshotExists(context.TODO(), buildEnv) {
 		return bc.PutTarFromURL(br.SnapshotURL(buildEnv), goroot)
 	}
-	if err := bc.PutTar(VersionTgz(br.Rev), goroot); err != nil {
+	if err := bc.PutTar(VersionTgz("devel "+br.Rev), goroot); err != nil {
 		return err
 	}
 	srcTar, err := sourcecache.GetSourceTgz(sl, "go", br.Rev)

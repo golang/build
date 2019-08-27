@@ -18,6 +18,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -285,14 +286,13 @@ func awaitNetwork() bool {
 // known-up HTTP server. It might block for a few seconds before
 // returning an answer.
 func isNetworkUp() bool {
-	const probeURL = "http://farmer.golang.org/netcheck" // 404 is fine.
-	c := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			DisableKeepAlives: true,
-		},
-	}
-	res, err := c.Get(probeURL)
+	const probeURL = "http://farmer.golang.org/netcheck" // 404 or redirect is fine
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	tr := &http.Transport{DisableKeepAlives: true}
+	req, _ := http.NewRequest("GET", probeURL, nil)
+	req = req.WithContext(ctx)
+	res, err := tr.RoundTrip(req)
 	if err != nil {
 		return false
 	}
@@ -321,6 +321,8 @@ func buildletURL() string {
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-s390x"
 	case "linux/arm64":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-arm64"
+	case "linux/riscv64":
+		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-riscv64"
 	case "linux/ppc64":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64"
 	case "linux/ppc64le":

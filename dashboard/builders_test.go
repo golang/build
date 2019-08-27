@@ -95,6 +95,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-solaris",
 				"misc-compile-freebsd",
 				"misc-compile-mips",
+				"misc-compile-riscv",
 				"misc-compile-nacl",
 				"misc-compile-netbsd",
 				"misc-compile-openbsd",

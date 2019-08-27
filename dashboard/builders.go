@@ -66,8 +66,14 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
 	"host-linux-armel-cross": &HostConfig{
-		Notes:           "Debian Jessie with armel cross-compiler, from env/crosscompile/linux-armel-stretch",
+		Notes:           "Debian Stretch with armel cross-compiler, from env/crosscompile/linux-armel-stretch",
 		ContainerImage:  "linux-armel-stretch:latest",
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+	},
+	"host-linux-riscv64-cross": &HostConfig{
+		Notes:           "Debian Buster with riscv64 cross-compiler, from env/linux-riscv64-cross",
+		ContainerImage:  "linux-riscv64-cross:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
@@ -504,6 +510,19 @@ var Hosts = map[string]*HostConfig{
 		},
 		ReverseAliases: []string{"linux-mips64"},
 	},
+	"host-linux-riscv64": &HostConfig{
+		Notes:       "",
+		OwnerGithub: "",
+		IsReverse:   true,
+		ExpectNum:   1,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-riscv64",
+			"GOARCH=riscv64",
+			"GOHOSTARCH=riscv64",
+			"GO_TEST_TIMEOUT_SCALE=8",
+		},
+		ReverseAliases: []string{"linux-riscv64"},
+	},
 	"host-linux-mips64le": &HostConfig{
 		Notes:       "", // once ran by Brendan Kirby (@MIPSbkirby), imgtec.com; email bounces
 		OwnerGithub: "",
@@ -715,6 +734,14 @@ type BuildConfig struct {
 
 	// RunBench causes the coordinator to run benchmarks on this buildlet type.
 	RunBench bool
+
+	// DisableTestGrouping optionally prevents the coordinator
+	// from running multple dist test at once. This can be used on
+	// CPU-bound slow builders to see result output more
+	// incrementally and be able to get timing data that doesn't
+	// mix together test time along with another package's test
+	// compilation time.
+	DisableTestGrouping bool
 
 	// StopAfterMake causes the build to stop after the make
 	// script completes, returning its result as the result of the
@@ -1425,6 +1452,7 @@ func init() {
 	addMiscCompile("-mips", "^linux-mips")           // 4: mips, mipsle, mips64, mips64le
 	addMiscCompile("-ppc", "^(linux-ppc64|aix-)")    // 3: linux-ppc64{,le}, aix-ppc64
 	addMiscCompile("-solaris", "^(solaris|illumos)") // 2: both amd64
+	addMiscCompile("-riscv", "^linux-riscv")         // 1: riscv64. Maybe riscv32 in the future
 	addMiscCompile("-plan9", "^plan9-")              // 3: amd64, 386, arm
 	addMiscCompile("-freebsd", "^freebsd-(386|arm)") // 2: 386, arm (amd64 already trybot)
 	addMiscCompile("-netbsd", "^netbsd-")            // 4: amd64, 386, arm, arm64
@@ -2084,6 +2112,11 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:         "linux-mips64",
 		HostType:     "host-linux-mips64",
+		SkipSnapshot: true,
+	})
+	addBuilder(BuildConfig{
+		Name:         "linux-riscv64",
+		HostType:     "host-linux-riscv64",
 		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
