@@ -5,7 +5,9 @@
 // TODO(adg): packages at weekly/release
 // TODO(adg): some means to register new packages
 
-package main
+// +build appengine
+
+package build
 
 import (
 	"bytes"
@@ -14,6 +16,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,6 +31,15 @@ import (
 	"google.golang.org/appengine/log"
 	"google.golang.org/appengine/memcache"
 )
+
+// isDevAppServer is whether we're running locally with dev_appserver.py.
+// This is the documented way to check which environment we're running in, per:
+//   https://cloud.google.com/appengine/docs/standard/python/tools/using-local-server#detecting_application_runtime_environment
+var isDevAppServer = !strings.HasPrefix(os.Getenv("SERVER_SOFTWARE"), "Google App Engine/")
+
+func init() {
+	handleFunc("/", uiHandler)
+}
 
 // uiHandler draws the build status page.
 func uiHandler(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +113,7 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 			s, err := GetTagState(c, "tip", "")
 			if err != nil {
 				if err == datastore.ErrNoSuchEntity {
-					if appengine.IsDevAppServer() {
+					if isDevAppServer {
 						goto BuildData
 					}
 					err = fmt.Errorf("tip tag not found")
@@ -325,7 +337,7 @@ func dashCommits(c context.Context, pkg *Package, page int, branch string) ([]*C
 
 	// If we're running locally and don't have data, return some test data.
 	// This lets people hack on the UI without setting up gitmirror & friends.
-	if len(commits) == 0 && appengine.IsDevAppServer() && err == nil {
+	if len(commits) == 0 && isDevAppServer && err == nil {
 		commits = []*Commit{
 			{
 				Hash:       "7d7c6a97f815e9279d08cfaea7d5efb5e90695a8",

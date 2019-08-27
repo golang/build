@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+// +build appengine
+
+package build
 
 import (
 	"encoding/json"
@@ -10,10 +12,13 @@ import (
 	"net/http"
 
 	"context"
-
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
 )
+
+func init() {
+	handleFunc("/updatebenchmark", updateBenchmark)
+}
 
 func updateBenchmark(w http.ResponseWriter, r *http.Request) {
 	if !appengine.IsDevAppServer() {

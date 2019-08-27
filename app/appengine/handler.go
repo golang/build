@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+// +build appengine
+
+package build
 
 import (
 	"bytes"
@@ -967,6 +969,25 @@ func keyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	c := contextForRequest(r)
 	fmt.Fprint(w, builderKey(c, builder))
+}
+
+func init() {
+	// admin handlers
+	handleFunc("/init", initHandler)
+	handleFunc("/key", keyHandler)
+
+	// authenticated handlers
+	handleFunc("/building", AuthHandler(buildingHandler))
+	handleFunc("/clear-results", AuthHandler(clearResultsHandler))
+	handleFunc("/commit", AuthHandler(commitHandler))
+	handleFunc("/packages", AuthHandler(packagesHandler))
+	handleFunc("/perf-result", AuthHandler(perfResultHandler))
+	handleFunc("/result", AuthHandler(resultHandler))
+	handleFunc("/tag", AuthHandler(tagHandler))
+	handleFunc("/todo", AuthHandler(todoHandler))
+
+	// public handlers
+	handleFunc("/log/", logHandler)
 }
 
 func validHash(hash string) bool {
