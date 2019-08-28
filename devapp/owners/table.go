@@ -13,10 +13,10 @@ func gh(githubUsername string) Owner {
 	if p == nil {
 		panic(githubUsername + " not found")
 	}
-	if len(p.Emails) == 0 {
+	if p.Gerrit == "" {
 		panic("person with GitHub username " + githubUsername + " must have at least one email")
 	}
-	return Owner{GitHubUsername: githubUsername, GerritEmail: p.Emails[0]}
+	return Owner{GitHubUsername: githubUsername, GerritEmail: p.Gerrit}
 }
 
 var (
