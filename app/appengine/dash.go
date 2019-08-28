@@ -2,16 +2,45 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build appengine
-
-package build
+package main
 
 import (
 	"context"
+	"encoding/gob"
 	"net/http"
 
 	"google.golang.org/appengine"
 )
+
+func main() {
+	gob.Register(&Commit{}) // needed for google.golang.org/appengine/delay
+
+	// admin handlers
+	handleFunc("/init", initHandler)
+	handleFunc("/key", keyHandler)
+
+	// authenticated handlers
+	handleFunc("/building", AuthHandler(buildingHandler))
+	handleFunc("/clear-results", AuthHandler(clearResultsHandler))
+	handleFunc("/commit", AuthHandler(commitHandler))
+	handleFunc("/packages", AuthHandler(packagesHandler))
+	handleFunc("/perf-result", AuthHandler(perfResultHandler))
+	handleFunc("/result", AuthHandler(resultHandler))
+	handleFunc("/tag", AuthHandler(tagHandler))
+	handleFunc("/todo", AuthHandler(todoHandler))
+
+	// public handlers
+	handleFunc("/", uiHandler)
+	handleFunc("/log/", logHandler)
+	handleFunc("/perf", perfChangesHandler)
+	handleFunc("/perfdetail", perfDetailUIHandler)
+	handleFunc("/perfgraph", perfGraphHandler)
+	handleFunc("/updatebenchmark", updateBenchmark)
+	handleFunc("/buildtest", testHandler)
+	handleFunc("/perflearn", perfLearnHandler)
+
+	appengine.Main()
+}
 
 func handleFunc(path string, h http.HandlerFunc) {
 	http.Handle(path, hstsHandler(h))

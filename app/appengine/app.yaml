@@ -1,15 +1,14 @@
-runtime: go
-api_version: go1.9
+runtime: go111
 service: build
 
 handlers:
   - url: /static
-    static_dir: static
+    static_dir: app/appengine/static
     secure: always
   - url: /(init|buildtest|key|perflearn|_ah/queue/go/delay)
-    script: _go_app
+    script: auto
     login: admin
     secure: always
   - url: /.*
-    script: _go_app
+    script: auto
     secure: always
