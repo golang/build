@@ -288,6 +288,8 @@ func main() {
 		log.Fatalf("Unknown mode: %q", *mode)
 	}
 
+	addHealthCheckers(context.Background())
+
 	cc, err := grpc.NewClient(http.DefaultClient, "https://maintner.golang.org")
 	if err != nil {
 		log.Fatal(err)

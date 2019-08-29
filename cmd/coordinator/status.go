@@ -134,7 +134,7 @@ func addHealthChecker(hc *healthChecker) {
 // string means success, and non-empty means an error.
 var basePinErr atomic.Value
 
-func init() {
+func addHealthCheckers(ctx context.Context) {
 	addHealthChecker(newMacHealthChecker())
 	addHealthChecker(newScalewayHealthChecker())
 	addHealthChecker(newPacketHealthChecker())
@@ -144,7 +144,7 @@ func init() {
 	addHealthChecker(newJoyentIllumosChecker())
 	addHealthChecker(newBasepinChecker())
 	addHealthChecker(newGitMirrorChecker())
-	addHealthChecker(newTipGolangOrgChecker())
+	addHealthChecker(newTipGolangOrgChecker(ctx))
 }
 
 func newBasepinChecker() *healthChecker {
@@ -233,14 +233,14 @@ func newGitMirrorChecker() *healthChecker {
 	}
 }
 
-func newTipGolangOrgChecker() *healthChecker {
+func newTipGolangOrgChecker(ctx context.Context) *healthChecker {
 	// tipError is the status of the tip.golang.org website.
 	// It's of type string; nil means no result yet, empty
 	// string means success, and non-empty means an error.
 	var tipError atomic.Value
 	go func() {
 		for {
-			tipError.Store(fetchTipGolangOrgError())
+			tipError.Store(fetchTipGolangOrgError(ctx))
 			time.Sleep(30 * time.Second)
 		}
 	}()
@@ -260,8 +260,8 @@ func newTipGolangOrgChecker() *healthChecker {
 }
 
 // fetchTipGolangOrgError fetches the error= value from https://tip.golang.org/_tipstatus.
-func fetchTipGolangOrgError() string {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func fetchTipGolangOrgError(ctx context.Context) string {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, _ := http.NewRequest(http.MethodGet, "https://tip.golang.org/_tipstatus", nil)
 	req = req.WithContext(ctx)

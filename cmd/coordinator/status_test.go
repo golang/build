@@ -7,6 +7,7 @@
 package main
 
 import (
+	"context"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -38,13 +39,15 @@ func TestFriendlyDuration(t *testing.T) {
 	}
 }
 
-func init() {
+func TestHandleStatus_HealthFormatting(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	addHealthCheckers(ctx)
 	addHealthChecker(&healthChecker{
 		ID:    "allgood",
 		Title: "All Good Test",
 		Check: func(*checkWriter) {},
 	})
-
 	addHealthChecker(&healthChecker{
 		ID:    "errortest",
 		Title: "Error Test",
@@ -54,9 +57,7 @@ func init() {
 			cw.error("test-error")
 		},
 	})
-}
 
-func TestHandleStatus_HealthFormatting(t *testing.T) {
 	statusMu.Lock()
 	for k := range status {
 		delete(status, k)
