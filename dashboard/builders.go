@@ -780,7 +780,7 @@ func (c *BuildConfig) ModulesEnv(repo string) (env []string) {
 		if !c.OutboundNetworkAllowed() {
 			env = append(env, "GOPROXY=off")
 		}
-	case "oauth2", "build", "website":
+	case "oauth2", "build", "perf", "website":
 		env = append(env, "GO111MODULE=on")
 	}
 	return
