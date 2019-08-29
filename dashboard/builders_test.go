@@ -295,6 +295,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-amd64-emu", "text"), both},
 		{b("android-amd64-emu", "time"), both},
 		{b("android-amd64-emu", "tools"), both},
+		{b("android-amd64-emu", "website"), none},
 
 		{b("android-386-emu", "go"), onlyPost},
 		{b("android-386-emu", "mobile"), onlyPost},

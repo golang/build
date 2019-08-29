@@ -1997,7 +1997,7 @@ func init() {
 		Notes:    "Android emulator on GCE",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
-			case "blog", "talks", "review", "tour":
+			case "blog", "talks", "review", "tour", "website":
 				return false
 			}
 			return atLeastGo1(branch, 13) && atLeastGo1(goBranch, 13)
@@ -2024,7 +2024,7 @@ func init() {
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
-			case "blog", "talks", "review", "tour":
+			case "blog", "talks", "review", "tour", "website":
 				return false
 			}
 			return atLeastGo1(branch, 13) && atLeastGo1(goBranch, 13)
