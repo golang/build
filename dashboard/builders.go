@@ -1355,7 +1355,7 @@ func init() {
 		env: []string{
 			"GOARCH=386",
 			"GOHOSTARCH=386",
-			"GO_DISABLE_OUTBOUND_NETWORK=0", // TODO(golang.org/issue/33928): Temporarily disabled to let GCS through; change back to 1.
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
 		numTestHelpers:    1,
 		numTryTestHelpers: 3,
@@ -1375,7 +1375,7 @@ func init() {
 		tryBot:     defaultTrySet(),
 		buildsRepo: defaultPlusExp,
 		env: []string{
-			"GO_DISABLE_OUTBOUND_NETWORK=0", // TODO(golang.org/issue/33928): Temporarily disabled to let GCS through; change back to 1.
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
 		MaxAtOnce:         3,
 		numTestHelpers:    1,
@@ -1408,7 +1408,7 @@ func init() {
 			HostType: "host-linux-jessie",
 			tryBot:   defaultTrySet(),
 			env: []string{
-				"GO_DISABLE_OUTBOUND_NETWORK=0", // TODO(golang.org/issue/33928): Temporarily disabled to let GCS through; change back to 1.
+				"GO_DISABLE_OUTBOUND_NETWORK=1",
 			},
 			tryOnly:     true,
 			CompileOnly: true,
@@ -1451,7 +1451,7 @@ func init() {
 		},
 		env: []string{
 			"CGO_ENABLED=0",
-			"GO_DISABLE_OUTBOUND_NETWORK=0", // TODO(golang.org/issue/33928): Temporarily disabled to let GCS through; change back to 1.
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
 			// This USER=root was required for Docker-based builds but probably isn't required
 			// in the VM anymore, since the buildlet probably already has this in its environment.
 			// (It was required because without cgo, it couldn't find the username)
@@ -1464,7 +1464,7 @@ func init() {
 		HostType:   "host-linux-jessie",
 		buildsRepo: onlyGo,
 		env: []string{
-			"GO_DISABLE_OUTBOUND_NETWORK=0", // TODO(golang.org/issue/33928): Temporarily disabled to let GCS through; change back to 1.
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
 			"GO_GCFLAGS=-N -l",
 		},
 		MaxAtOnce: 1,
@@ -1478,7 +1478,7 @@ func init() {
 		CompileOnly: true,
 		Notes:       "SSA internal checks enabled",
 		env: []string{
-			"GO_DISABLE_OUTBOUND_NETWORK=0", // TODO(golang.org/issue/33928): Temporarily disabled to let GCS through; change back to 1.
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
 			"GO_GCFLAGS=-d=ssa/check/on,dclstack",
 		},
 		GoDeps: []string{
@@ -1496,7 +1496,7 @@ func init() {
 		InstallRacePackages: []string{"cmd/compile"},
 		Notes:               "race-enabled cmd/compile",
 		env: []string{
-			"GO_DISABLE_OUTBOUND_NETWORK=0", // TODO(golang.org/issue/33928): Temporarily disabled to let GCS through; change back to 1.
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
 		GoDeps: []string{
 			"22f1b56dab29d397d2bdbdd603d85e60fb678089", // adds cmd/compile -c; Issue 20222
@@ -1512,7 +1512,7 @@ func init() {
 		numTestHelpers:    1,
 		numTryTestHelpers: 5,
 		env: []string{
-			"GO_DISABLE_OUTBOUND_NETWORK=0", // TODO(golang.org/issue/33928): Temporarily disabled to let GCS through; change back to 1.
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
 	})
 	addBuilder(BuildConfig{
@@ -1555,7 +1555,7 @@ func init() {
 			"GOARCH=amd64",
 			"GOOS=linux",
 			"CGO_ENABLED=1",
-			"GO_DISABLE_OUTBOUND_NETWORK=0", // TODO(golang.org/issue/33928): Temporarily disabled to let GCS through; change back to 1.
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
 		tryBot: func(repo, branch, goBranch string) bool {
 			// Only for mobile repo for now, not "go":
@@ -1572,7 +1572,7 @@ func init() {
 		MaxAtOnce: 5,
 		Notes:     "Debian Jessie. The normal 'linux-amd64' builder is stretch. We use Jessie for our release builds due to https://golang.org/issue/31293",
 		env: []string{
-			"GO_DISABLE_OUTBOUND_NETWORK=0", // TODO(golang.org/issue/33928): Temporarily disabled to let GCS through; change back to 1.
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
 	})
 	addBuilder(BuildConfig{
@@ -1693,7 +1693,7 @@ func init() {
 		env: []string{
 			"GOOS=js", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
 			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
-			"GO_DISABLE_OUTBOUND_NETWORK=0", // TODO(golang.org/issue/33928): Temporarily disabled to let GCS through; change back to 1.
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
 	})
 	addBuilder(BuildConfig{

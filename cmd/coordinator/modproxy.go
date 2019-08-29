@@ -2,34 +2,16 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build go1.13
 // +build linux darwin
 
 package main
 
 import (
+	"io"
 	"log"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 )
-
-var proxyGolangOrg *httputil.ReverseProxy // initialized just below
-
-func init() {
-	u, err := url.Parse("https://proxy.golang.org")
-	if err != nil {
-		log.Fatal(err)
-	}
-	rp := httputil.NewSingleHostReverseProxy(u)
-	rp.ModifyResponse = func(res *http.Response) error {
-		r := res.Request
-		if res.StatusCode/100 != 2 && res.StatusCode != 410 && r != nil {
-			log.Printf("modproxy: proxying HTTP %s response from backend for %s, %s %s", res.Status, r.RemoteAddr, r.Method, r.RequestURI)
-		}
-		return nil
-	}
-	proxyGolangOrg = rp
-}
 
 func listenAndServeInternalModuleProxy() {
 	err := http.ListenAndServe(":8123", http.HandlerFunc(proxyModuleCache))
@@ -38,10 +20,32 @@ func listenAndServeInternalModuleProxy() {
 
 // proxyModuleCache proxies requests to https://proxy.golang.org/
 func proxyModuleCache(w http.ResponseWriter, r *http.Request) {
-	// Delete any Host header so it's the one sent to the backend
-	// is proxy.golang.org by the default ReverseProxy.Director
-	// setting the URL.Host. (Host takes priority for Host header,
-	// if present)
-	r.Host = ""
-	proxyGolangOrg.ServeHTTP(w, r)
+	proxyURL(w, r, "https://proxy.golang.org")
+}
+
+func proxyURL(w http.ResponseWriter, r *http.Request, baseURL string) {
+	outReq, err := http.NewRequest("GET", baseURL+r.RequestURI, nil)
+	if err != nil {
+		http.Error(w, "invalid URL", http.StatusBadRequest)
+		return
+	}
+	outReq = outReq.WithContext(r.Context())
+	outReq.Header = r.Header.Clone()
+	res, err := http.DefaultClient.Do(outReq)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer res.Body.Close()
+	for k, vv := range res.Header {
+		for _, v := range vv {
+			w.Header().Add(k, v)
+		}
+	}
+	if res.StatusCode/100 != 2 && res.StatusCode != 410 {
+		log.Printf("modproxy: proxying HTTP %s response from backend for %s, %s %s", res.Status, r.RemoteAddr, r.Method, r.RequestURI)
+	}
+
+	w.WriteHeader(res.StatusCode)
+	io.Copy(w, res.Body)
 }
