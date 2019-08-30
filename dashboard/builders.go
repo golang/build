@@ -259,6 +259,12 @@ var Hosts = map[string]*HostConfig{
 		Notes:              "OpenBSD 6.4; GCE VM is built from script in build/env/openbsd-386",
 		SSHUsername:        "gopher",
 	},
+	"host-openbsd-arm-joelsing": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   1,
+		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+		OwnerGithub: "4a6f656c",
+	},
 	"host-freebsd-93-gce": &HostConfig{
 		VMImage:            "freebsd-amd64-gce93",
 		machineType:        "n1-highcpu-4",
@@ -1882,6 +1888,17 @@ func init() {
 		tryBot:            explicitTrySet("sys"),
 		shouldRunDistTest: noTestDir,
 		MaxAtOnce:         1,
+	})
+	addBuilder(BuildConfig{
+		Name:              "openbsd-arm-jsing",
+		HostType:          "host-openbsd-arm-joelsing",
+		shouldRunDistTest: noTestDir,
+		MaxAtOnce:         1,
+		tryBot:            nil,
+		env: []string{
+			// The machine is slow.
+			"GO_TEST_TIMEOUT_SCALE=5",
+		},
 	})
 	netBSDDistTestPolicy := func(distTest string, isTry bool) bool {
 		// Skip the test directory (slow, and adequately
