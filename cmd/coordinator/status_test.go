@@ -7,7 +7,6 @@
 package main
 
 import (
-	"bytes"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -100,21 +99,5 @@ func TestHandleStatus_HealthFormatting(t *testing.T) {
 	}
 	if t.Failed() {
 		t.Logf("Got: %s", got)
-	}
-}
-
-func TestForeachLineAllocs(t *testing.T) {
-	v := bytes.Repeat([]byte(`line 1
-line 2
-line 3
-
-
-after two blank lines
-last line`), 1000)
-	allocs := testing.AllocsPerRun(1000, func() {
-		foreachLine(v, func([]byte) error { return nil })
-	})
-	if allocs > 0.1 {
-		t.Errorf("allocs = %v", allocs)
 	}
 }

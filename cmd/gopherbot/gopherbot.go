@@ -31,6 +31,7 @@ import (
 	"go4.org/strutil"
 	"golang.org/x/build/devapp/owners"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/foreach"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
 	"golang.org/x/build/maintner/maintnerd/apipb"
@@ -1907,7 +1908,7 @@ func humanReviewersInMetas(metas []*maintner.GerritMeta) bool {
 			continue
 		}
 
-		err := maintner.ForeachLineStr(m.Commit.Msg, func(ln string) error {
+		err := foreach.LineStr(m.Commit.Msg, func(ln string) error {
 			if !strings.HasPrefix(ln, "Reviewer:") && !strings.HasPrefix(ln, "CC:") {
 				return nil
 			}
@@ -1919,7 +1920,7 @@ func humanReviewersInMetas(metas []*maintner.GerritMeta) bool {
 			return nil
 		})
 		if err != nil && err != errStopIteration {
-			log.Printf("humanReviewersInMetas: got unexpected error from maintner.ForeachLineStr: %v", err)
+			log.Printf("humanReviewersInMetas: got unexpected error from foreach.LineStr: %v", err)
 			return hasHuman
 		}
 	}

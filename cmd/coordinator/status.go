@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/foreach"
 )
 
 // status
@@ -277,7 +278,7 @@ func fetchTipGolangOrgError() string {
 		return err.Error()
 	}
 	var e string
-	err = foreachLine(b, func(s []byte) error {
+	err = foreach.Line(b, func(s []byte) error {
 		if !bytes.HasPrefix(s, []byte("error=")) {
 			return nil
 		}
@@ -856,20 +857,3 @@ table thead tr {
 	background: #fff !important;
 }
 `
-
-// foreachLine calls f on each line in v, without the trailing '\n'.
-// The final line need not include a trailing '\n'.
-// Returns first non-nil error returned by f.
-func foreachLine(v []byte, f func([]byte) error) error {
-	for len(v) > 0 {
-		i := bytes.IndexByte(v, '\n')
-		if i < 0 {
-			return f(v)
-		}
-		if err := f(v[:i]); err != nil {
-			return err
-		}
-		v = v[i+1:]
-	}
-	return nil
-}

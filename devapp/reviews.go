@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/build/internal/foreach"
 	"golang.org/x/build/internal/gophers"
 	"golang.org/x/build/maintner"
 )
@@ -216,7 +217,7 @@ func searchTermsFromReviewerFields(cl *maintner.GerritCL) []string {
 			!strings.Contains(m.Commit.Msg, "Removed:") {
 			continue
 		}
-		maintner.ForeachLineStr(m.Commit.Msg, func(ln string) error {
+		foreach.LineStr(m.Commit.Msg, func(ln string) error {
 			if !strings.HasPrefix(ln, "Reviewer:") &&
 				!strings.HasPrefix(ln, "CC:") &&
 				!strings.HasPrefix(ln, "Removed:") {

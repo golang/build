@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/build/internal/foreach"
 	"golang.org/x/build/maintner/maintpb"
 )
 
@@ -379,7 +380,7 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*GitCommit, error)
 	}
 	sort.Slice(gc.Files, func(i, j int) bool { return gc.Files[i].File < gc.Files[j].File })
 	parents := 0
-	err := ForeachLine(hdr, func(ln []byte) error {
+	err := foreach.Line(hdr, func(ln []byte) error {
 		if bytes.HasPrefix(ln, parentSpace) {
 			parents++
 			parentHash := c.gitHashFromHex(ln[len(parentSpace):])
@@ -460,43 +461,6 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*GitCommit, error)
 		}
 	}
 	return gc, nil
-}
-
-// calls f on each non-empty line in v, without the trailing \n. the
-// final line need not include a trailing \n. Returns first non-nil
-// error returned by f.
-// TODO: this is too generalized to be in the maintner package. Move it out.
-func ForeachLine(v []byte, f func([]byte) error) error {
-	for len(v) > 0 {
-		i := bytes.IndexByte(v, '\n')
-		if i < 0 {
-			return f(v)
-		}
-		if err := f(v[:i]); err != nil {
-			return err
-		}
-		v = v[i+1:]
-	}
-	return nil
-}
-
-// string variant of ForeachLine.
-// calls f on each non-empty line in s, without the trailing \n. the
-// final line need not include a trailing \n. Returns first non-nil
-// error returned by f.
-// TODO: this is too generalized to be in the maintner package. Move it out.
-func ForeachLineStr(s string, f func(string) error) error {
-	for len(s) > 0 {
-		i := strings.IndexByte(s, '\n')
-		if i < 0 {
-			return f(s)
-		}
-		if err := f(s[:i]); err != nil {
-			return err
-		}
-		s = s[i+1:]
-	}
-	return nil
 }
 
 // parsePerson parses an "author" or "committer" value from "git cat-file -p COMMIT"
