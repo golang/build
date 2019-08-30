@@ -46,7 +46,7 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-stretch-morecpu": &HostConfig{
 		Notes:           "Debian Stretch, but on n1-highcpu-8",
 		ContainerImage:  "linux-x86-stretch:latest",
-		machineType:     "n1-highcpu-8", // 16 vCPUs, 14.4 GB mem
+		machineType:     "n1-highcpu-16", // 16 vCPUs, 14.4 GB mem
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
