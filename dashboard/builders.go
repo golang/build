@@ -1421,7 +1421,6 @@ func init() {
 	}
 	addMiscCompile("-linuxarm", "^linux-arm")        // 2: arm, arm64
 	addMiscCompile("-darwin", "^darwin")             // 4: 386, amd64 + iOS: armb, arm64
-	addMiscCompile("-nacl", "^nacl")                 // 3: arm, 386, amd64p32
 	addMiscCompile("-mips", "^linux-mips")           // 4: mips, mipsle, mips64, mips64le
 	addMiscCompile("-ppc", "^(linux-ppc64|aix-)")    // 3: linux-ppc64{,le}, aix-ppc64
 	addMiscCompile("-solaris", "^(solaris|illumos)") // 2: both amd64
@@ -1634,17 +1633,23 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:              "nacl-386",
-		HostType:          "host-nacl-kube",
-		buildsRepo:        onlyGo,
+		Name:     "nacl-386",
+		HostType: "host-nacl-kube",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// nacl support is removed in Go 1.14.
+			return repo == "go" && !atLeastGo1(goBranch, 14)
+		},
 		MaxAtOnce:         2,
 		numTryTestHelpers: 3,
 		env:               []string{"GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
-		Name:              "nacl-amd64p32",
-		HostType:          "host-nacl-kube",
-		buildsRepo:        onlyGo,
+		Name:     "nacl-amd64p32",
+		HostType: "host-nacl-kube",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// nacl support is removed in Go 1.14.
+			return repo == "go" && !atLeastGo1(goBranch, 14)
+		},
 		tryBot:            explicitTrySet("go"),
 		MaxAtOnce:         2,
 		numTryTestHelpers: 3,
