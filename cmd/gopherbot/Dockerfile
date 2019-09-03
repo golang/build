@@ -27,6 +27,7 @@ COPY gerrit /go/src/golang.org/x/build/gerrit
 RUN go install golang.org/x/build/gerrit
 COPY maintner /go/src/golang.org/x/build/maintner
 COPY cmd/pubsubhelper /go/src/golang.org/x/build/cmd/pubsubhelper
+COPY internal/foreach /go/src/golang.org/x/build/internal/foreach
 RUN go install golang.org/x/build/maintner/maintnerd/apipb
 RUN go install golang.org/x/build/maintner/godata
 

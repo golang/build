@@ -756,8 +756,8 @@ func (b *gopherbot) labelProposals(ctx context.Context) error {
 			}
 		}
 
-		// Remove NeedsDecision label if exists:
-		if gi.HasLabel("NeedsDecision") && !gopherbotRemovedLabel(gi, "NeedsDecision") {
+		// Remove NeedsDecision label if exists, but not for Go 2 issues:
+		if !isGo2Issue(gi) && gi.HasLabel("NeedsDecision") && !gopherbotRemovedLabel(gi, "NeedsDecision") {
 			if err := b.removeLabel(ctx, gi, "NeedsDecision"); err != nil {
 				return err
 			}
@@ -784,6 +784,18 @@ func gopherbotRemovedLabel(gi *maintner.GitHubIssue, label string) bool {
 		return nil
 	})
 	return hasRemoved
+}
+
+// isGo2Issue reports whether gi seems like it's about Go 2, based on either labels or its title.
+func isGo2Issue(gi *maintner.GitHubIssue) bool {
+	if gi.HasLabel("Go2") {
+		return true
+	}
+	if !strings.Contains(gi.Title, "2") {
+		// Common case.
+		return false
+	}
+	return strings.Contains(gi.Title, "Go 2") || strings.Contains(gi.Title, "go2") || strings.Contains(gi.Title, "Go2")
 }
 
 func (b *gopherbot) setSubrepoMilestones(ctx context.Context) error {
