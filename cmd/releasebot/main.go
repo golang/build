@@ -516,7 +516,7 @@ func (w *Work) checkDocs() {
 	if err != nil {
 		w.log.Panic(err)
 	}
-	if !strings.Contains(string(data), "\n<p>\n"+w.Version+" (released ") {
+	if !strings.Contains(string(data), w.Version+" (released ") {
 		w.logError("doc/devel/release.html does not document " + w.Version)
 	}
 }
