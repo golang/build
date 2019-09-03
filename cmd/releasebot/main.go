@@ -302,12 +302,27 @@ func (w *Work) doRelease() {
 	} else if w.RCRelease {
 		shortRel := strings.Split(w.Version, "rc")[0]
 		w.ReleaseBranch = "release-branch." + shortRel
-	} else {
+	} else if strings.Count(w.Version, ".") == 1 {
+		// Major release like "go1.X".
+		if w.Security {
+			// TODO(dmitshur): move this error check to happen earlier
+			w.logError("%s is a major version, it cannot be a security release.", w.Version)
+			w.logError("**Found errors during release. Stopping!**")
+			return
+		}
+		w.ReleaseBranch = "release-branch." + w.Version
+	} else if strings.Count(w.Version, ".") == 2 {
+		// Minor release or security release like "go1.X.Y".
 		shortRel := w.Version[:strings.LastIndex(w.Version, ".")]
 		w.ReleaseBranch = "release-branch." + shortRel
 		if w.Security {
 			w.ReleaseBranch += "-security"
 		}
+	} else {
+		// TODO(dmitshur): move this error check to happen earlier
+		w.logError("Cannot understand version %q.", w.Version)
+		w.logError("**Found errors during release. Stopping!**")
+		return
 	}
 
 	w.checkSpelling()
@@ -511,14 +526,34 @@ func (w *Work) printReleaseTable(md *bytes.Buffer) {
 }
 
 func (w *Work) checkDocs() {
-	// Check that we've documented the release.
-	data, err := ioutil.ReadFile(filepath.Join(w.Dir, "gitwork", "doc/devel/release.html"))
+	// Check that the major version is listed on the project page.
+	data, err := ioutil.ReadFile(filepath.Join(w.Dir, "gitwork", "doc/contrib.html"))
+	if err != nil {
+		w.log.Panic(err)
+	}
+	major := major(w.Version)
+	if !strings.Contains(string(data), major) {
+		w.logError("doc/contrib.html does not list major version %s", major)
+	}
+
+	// Check that the release is listed on the release history page.
+	data, err = ioutil.ReadFile(filepath.Join(w.Dir, "gitwork", "doc/devel/release.html"))
 	if err != nil {
 		w.log.Panic(err)
 	}
 	if !strings.Contains(string(data), w.Version+" (released ") {
-		w.logError("doc/devel/release.html does not document " + w.Version)
+		w.logError("doc/devel/release.html does not document %s", w.Version)
 	}
+}
+
+// major takes a go version like "go1.5", "go1.5.1", "go1.5.2", etc.,
+// and returns the corresponding major version like "go1.5".
+func major(v string) string {
+	if strings.Count(v, ".") != 2 {
+		// No minor component to drop, return as is.
+		return v
+	}
+	return v[:strings.LastIndex(v, ".")]
 }
 
 func (w *Work) writeVersion() (changeID string) {
