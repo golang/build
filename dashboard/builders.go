@@ -466,56 +466,6 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:   1,
 		env:         []string{"GOROOT_BOOTSTRAP=/opt/golang/go-solaris-amd64-bootstrap"},
 	},
-	"host-linux-mips": &HostConfig{
-		Notes:       "", // once ran by Brendan Kirby (@MIPSbkirby), imgtec.com; email bounces
-		OwnerGithub: "",
-		IsReverse:   true,
-		ExpectNum:   1,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mips",
-			"GOARCH=mips",
-			"GOHOSTARCH=mips",
-			"GO_TEST_TIMEOUT_SCALE=4",
-		},
-		ReverseAliases: []string{"linux-mips"},
-	},
-	"host-linux-mipsle": &HostConfig{
-		Notes:       "", // once ran by Brendan Kirby (@MIPSbkirby), imgtec.com; email bounces
-		OwnerGithub: "",
-		IsReverse:   true,
-		ExpectNum:   1,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mipsle",
-			"GOARCH=mipsle",
-			"GOHOSTARCH=mipsle",
-		},
-		ReverseAliases: []string{"linux-mipsle"},
-	},
-	"host-linux-mips64": &HostConfig{
-		Notes:       "", // once ran by Brendan Kirby (@MIPSbkirby), imgtec.com; email bounces
-		OwnerGithub: "",
-		IsReverse:   true,
-		ExpectNum:   1,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mips64",
-			"GOARCH=mips64",
-			"GOHOSTARCH=mips64",
-			"GO_TEST_TIMEOUT_SCALE=4",
-		},
-		ReverseAliases: []string{"linux-mips64"},
-	},
-	"host-linux-mips64le": &HostConfig{
-		Notes:       "", // once ran by Brendan Kirby (@MIPSbkirby), imgtec.com; email bounces
-		OwnerGithub: "",
-		IsReverse:   true,
-		ExpectNum:   1,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap-mips64le",
-			"GOARCH=mips64le",
-			"GOHOSTARCH=mips64le",
-		},
-		ReverseAliases: []string{"linux-mips64le"},
-	},
 	"host-darwin-amd64-zenly-ios": &HostConfig{
 		Notes:       "MacBook Pro hosted by Zenly, running the ios reverse buildlet",
 		OwnerGithub: "znly",
@@ -2084,26 +2034,6 @@ func init() {
 		Name:     "linux-arm64-packet",
 		HostType: "host-linux-arm64-packet",
 		FlakyNet: true, // maybe not flaky, but here conservatively
-	})
-	addBuilder(BuildConfig{
-		Name:         "linux-mips",
-		HostType:     "host-linux-mips",
-		SkipSnapshot: true,
-	})
-	addBuilder(BuildConfig{
-		Name:         "linux-mipsle",
-		HostType:     "host-linux-mipsle",
-		SkipSnapshot: true,
-	})
-	addBuilder(BuildConfig{
-		Name:         "linux-mips64",
-		HostType:     "host-linux-mips64",
-		SkipSnapshot: true,
-	})
-	addBuilder(BuildConfig{
-		Name:         "linux-mips64le",
-		HostType:     "host-linux-mips64le",
-		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-s390x-ibm",
