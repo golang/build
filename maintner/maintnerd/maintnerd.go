@@ -58,7 +58,7 @@ var (
 	debug           = flag.Bool("debug", false, "Print debug logging information")
 	githubRateLimit = flag.Int("github-rate", 10, "Rate to limit GitHub requests (in queries per second, 0 is treated as unlimited)")
 
-	bucket         = flag.String("bucket", "", "if non-empty, Google Cloud Storage bucket to use for log storage")
+	bucket         = flag.String("bucket", "", "if non-empty, Google Cloud Storage bucket to use for log storage. If the bucket name contains a \"/\", the part after the slash will be a prefix for the segments.")
 	migrateGCSFlag = flag.Bool("migrate-disk-to-gcs", false, "[dev] If true, migrate from disk-based logs to GCS logs on start-up, then quit.")
 )
 
