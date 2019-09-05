@@ -564,7 +564,7 @@ func (w *Work) buildReleaseBinary() {
 	if err := os.MkdirAll(gopath, 0777); err != nil {
 		w.log.Panic(err)
 	}
-	r := w.runner(w.Dir, "GOPATH="+gopath, "GOBIN="+filepath.Join(gopath, "bin"))
+	r := w.runner(w.Dir, "GO111MODULE=off", "GOPATH="+gopath, "GOBIN="+filepath.Join(gopath, "bin"))
 	r.run("go", "get", "golang.org/x/build/cmd/release")
 	w.ReleaseBinary = filepath.Join(gopath, "bin/release")
 }
