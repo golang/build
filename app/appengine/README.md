@@ -20,11 +20,11 @@ dev_appserver.py --enable_host_checking=false --host=0.0.0.0 --port=8080 .
 
 ```sh
 gcloud config set project golang-org
-gcloud app deploy app.yaml
+GO111MODULE=on gcloud app deploy app.yaml
 ```
 
 or, to not affect your gcloud state, use:
 
 ```
-gcloud app --account=username@google.com --project=golang-org deploy app.yaml
+GO111MODULE=on gcloud app --account=username@google.com --project=golang-org deploy app.yaml
 ```
