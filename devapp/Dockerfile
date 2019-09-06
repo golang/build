@@ -2,11 +2,10 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.12 AS builder
+FROM golang:1.13 AS builder
 LABEL maintainer "golang-dev@googlegroups.com"
 
 ENV GO111MODULE=on
-ENV GOPROXY=https://proxy.golang.org
 
 RUN mkdir /gocache
 ENV GOCACHE /gocache
@@ -25,6 +24,7 @@ COPY cmd/pubsubhelper/pubsubtypes /go/src/golang.org/x/build/cmd/pubsubhelper/pu
 RUN go install golang.org/x/build/cmd/pubsubhelper/pubsubtypes
 COPY autocertcache /go/src/golang.org/x/build/autocertcache
 RUN go install golang.org/x/build/autocertcache
+COPY internal /go/src/golang.org/x/build/internal
 COPY maintner /go/src/golang.org/x/build/maintner
 RUN go install golang.org/x/build/maintner/godata
 
