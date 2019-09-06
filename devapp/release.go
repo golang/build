@@ -27,11 +27,11 @@ const (
 	prefixDev      = "[dev."
 
 	// The title of the current release milestone in GitHub.
-	curMilestoneTitle = "Go1.13"
+	curMilestoneTitle = "Go1.14"
 )
 
 // The start date of the current release milestone.
-var curMilestoneStart = time.Date(2019, 2, 26, 0, 0, 0, 0, time.UTC)
+var curMilestoneStart = time.Date(2019, 8, 27, 0, 0, 0, 0, time.UTC)
 
 // titleDirs returns a slice of prefix directories contained in a title. For
 // devapp,maintner: my cool new change, it will return ["devapp", "maintner"].
