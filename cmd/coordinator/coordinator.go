@@ -2372,6 +2372,12 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		return nil, fmt.Errorf("failed to determine go env GOMOD value: %v", err)
 	}
 
+	// patterns defines import path patterns to provide to 'go test'.
+	// The starting default value is "golang.org/x/{repo}/...".
+	patterns := []string{
+		importPathOfRepo(st.SubName) + "/...",
+	}
+
 	// The next large step diverges into two code paths,
 	// one for module mode and another for GOPATH mode.
 	//
@@ -2419,7 +2425,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 				return nil, fmt.Errorf("exec go list on buildlet: %v", err)
 			}
 			if rErr != nil {
-				fmt.Fprintf(st, "go list error:\n%s", &buf)
+				fmt.Fprintf(st, "go list error: %v\noutput:\n%s", rErr, &buf)
 				return rErr, nil
 			}
 			for _, p := range strings.Fields(buf.String()) {
@@ -2469,7 +2475,35 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 			}
 		}
 
-		// TODO(dmitshur): Allow dashboard to filter out directories to test. See golang.org/issue/34190.
+		// The dashboard offers control over what packages to test in GOPATH mode.
+		// Compute a list of packages by calling 'go list'. See golang.org/issue/34190.
+		{
+			repoPath := importPathOfRepo(st.SubName)
+			var buf bytes.Buffer
+			sp := st.CreateSpan("listing_subrepo_packages", st.SubName)
+			rErr, err := st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+				Output:   &buf,
+				Dir:      "gopath/src/" + repoPath,
+				ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath),
+				Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+				Args:     []string{"list", repoPath + "/..."},
+			})
+			sp.Done(firstNonNil(err, rErr))
+			if err != nil {
+				return nil, fmt.Errorf("exec go list on buildlet: %v", err)
+			}
+			if rErr != nil {
+				fmt.Fprintf(st, "go list error: %v\noutput:\n%s", rErr, &buf)
+				return rErr, nil
+			}
+			patterns = nil
+			for _, importPath := range strings.Fields(buf.String()) {
+				if !st.conf.ShouldTestPackageInGOPATHMode(importPath) {
+					continue
+				}
+				patterns = append(patterns, importPath)
+			}
+		}
 	}
 
 	// TODO(dmitshur): For some subrepos, test in both modes. See golang.org/issue/30233.
@@ -2491,7 +2525,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	if st.conf.IsRace() {
 		args = append(args, "-race")
 	}
-	args = append(args, importPathOfRepo(st.SubName)+"/...")
+	args = append(args, patterns...)
 
 	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 		Debug:    true, // make buildlet print extra debug in output for failures
@@ -2525,6 +2559,16 @@ func (st *buildStatus) goMod(importPath, goroot, gopath string) (string, error) 
 	}
 	err = json.Unmarshal(buf.Bytes(), &env)
 	return env.GoMod, err
+}
+
+// firstNonNil returns the first non-nil error, or nil otherwise.
+func firstNonNil(errs ...error) error {
+	for _, e := range errs {
+		if e != nil {
+			return e
+		}
+	}
+	return nil
 }
 
 // moduleProxy returns the GOPROXY environment value to use for module-enabled

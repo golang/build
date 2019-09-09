@@ -733,7 +733,30 @@ func (c *BuildConfig) ModulesEnv(repo string) (env []string) {
 	case "oauth2", "build", "perf", "website":
 		env = append(env, "GO111MODULE=on")
 	}
-	return
+	return env
+}
+
+// ShouldTestPackageInGOPATHMode is used to control whether the package
+// with the specified import path should be tested in GOPATH mode.
+//
+// When running tests for all golang.org/* repositories in GOPATH mode,
+// this method is called repeatedly with the full import path of each
+// package that is found and is being considered for testing in GOPATH
+// mode. It's not used and has no effect on import paths in the main
+// "go" repository. It has no effect on tests done in module mode.
+//
+// When considering making changes here, keep the release policy in mind:
+//
+// 	https://golang.org/doc/devel/release.html#policy
+//
+func (*BuildConfig) ShouldTestPackageInGOPATHMode(importPath string) bool {
+	if importPath == "golang.org/x/tools/gopls" ||
+		strings.HasPrefix(importPath, "golang.org/x/tools/gopls/") {
+		// Don't test golang.org/x/tools/gopls/... in GOPATH mode.
+		return false
+	}
+	// Test everything else in GOPATH mode as usual.
+	return true
 }
 
 func (c *BuildConfig) IsReverse() bool { return c.hostConf().IsReverse }
