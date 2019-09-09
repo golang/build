@@ -2404,12 +2404,13 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		}
 
 		// findDeps uses 'go list' on the checked out repo to find its
-		// dependencies, and adds any not-yet-fetched deps to toFetched.
+		// dependencies, and adds any not-yet-fetched deps to toFetch.
 		findDeps := func(repo string) (rErr, err error) {
 			repoPath := importPathOfRepo(repo)
 			var buf bytes.Buffer
 			rErr, err = st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 				Output:   &buf,
+				Dir:      "gopath/src/" + repoPath,
 				ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath),
 				Path:     []string{"$WORKDIR/go/bin", "$PATH"},
 				Args:     []string{"list", "-f", `{{range .Deps}}{{printf "%v\n" .}}{{end}}`, repoPath + "/..."},
@@ -2422,10 +2423,11 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 				return rErr, nil
 			}
 			for _, p := range strings.Fields(buf.String()) {
-				if !strings.HasPrefix(p, "golang.org/x/") || strings.HasPrefix(p, repoPath) {
+				if !strings.HasPrefix(p, "golang.org/x/") ||
+					p == repoPath || strings.HasPrefix(p, repoPath+"/") {
 					continue
 				}
-				repo = strings.TrimPrefix(p, "golang.org/x/")
+				repo := strings.TrimPrefix(p, "golang.org/x/")
 				if i := strings.Index(repo, "/"); i >= 0 {
 					repo = repo[:i]
 				}
@@ -2494,7 +2496,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
 		Debug:    true, // make buildlet print extra debug in output for failures
 		Output:   st,
-		Dir:      "gopath/src/golang.org/x/" + st.SubName,
+		Dir:      "gopath/src/" + importPathOfRepo(st.SubName),
 		ExtraEnv: env,
 		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
 		Args:     args,
