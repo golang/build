@@ -23,6 +23,7 @@ COPY gerrit /go/src/golang.org/x/build/gerrit
 RUN go install golang.org/x/build/gerrit
 COPY buildenv /go/src/golang.org/x/build/buildenv
 RUN go install golang.org/x/build/buildenv
+COPY internal/foreach /go/src/golang.org/x/build/internal/foreach
 COPY maintner /go/src/golang.org/x/build/maintner
 COPY cmd/pubsubhelper /go/src/golang.org/x/build/cmd/pubsubhelper
 RUN go install golang.org/x/build/maintner/maintnerd/apipb
@@ -31,7 +32,6 @@ RUN go install golang.org/x/build/maintner/godata
 COPY . /go/src/golang.org/x/build/
 WORKDIR /go/src/golang.org/x/build/
 
-COPY . /go/src/golang.org/x/build/
 RUN go install golang.org/x/build/cmd/gitmirror
 
 FROM debian:buster

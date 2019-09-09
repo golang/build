@@ -16,7 +16,7 @@ COPY go.sum /go/src/golang.org/x/build/go.sum
 WORKDIR /go/src/golang.org/x/build
 
 # Optimization for iterative docker build speed, not necessary for correctness:
-# TODO: write a tool to make writing Go module-friendly Dockerfiles easier.
+# TODO: write a tool to make writing Go module-friendly Dockerfiles easier (golang.org/issue/34192)
 RUN go install cloud.google.com/go/storage
 RUN go install golang.org/x/net/http2
 RUN go install golang.org/x/crypto/acme/autocert
@@ -29,12 +29,7 @@ COPY maintner /go/src/golang.org/x/build/maintner
 RUN go install golang.org/x/build/maintner/godata
 
 COPY . /go/src/golang.org/x/build/
-
 # Install binary to /go/bin:
-RUN go install golang.org/x/build/devapp
-
-COPY . /go/src/golang.org/x/build/
-
 RUN go install golang.org/x/build/devapp
 
 FROM debian:stretch
