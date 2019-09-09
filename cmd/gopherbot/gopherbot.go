@@ -285,6 +285,7 @@ var tasks = []struct {
 	{"label build issues", (*gopherbot).labelBuildIssues},
 	{"label mobile issues", (*gopherbot).labelMobileIssues},
 	{"label documentation issues", (*gopherbot).labelDocumentationIssues},
+	{"label tools issues", (*gopherbot).labelToolsIssues},
 	{"handle gopls issues", (*gopherbot).handleGoplsIssues},
 	{"close stale WaitingForInfo", (*gopherbot).closeStaleWaitingForInfo},
 	{"cl2issue", (*gopherbot).cl2issue},
@@ -875,6 +876,15 @@ func (b *gopherbot) labelDocumentationIssues(ctx context.Context) error {
 			return nil
 		}
 		return b.addLabel(ctx, gi, "Documentation")
+	})
+}
+
+func (b *gopherbot) labelToolsIssues(ctx context.Context) error {
+	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		if gi.Closed || gi.PullRequest || !strings.HasPrefix(gi.Title, "x/tools") || gi.HasLabel("Tools") || gi.HasEvent("unlabeled") {
+			return nil
+		}
+		return b.addLabel(ctx, gi, "Tools")
 	})
 }
 
