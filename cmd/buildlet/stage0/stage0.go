@@ -164,6 +164,9 @@ Download:
 		cmd.Args = append(cmd.Args,
 			scalewayArgs...,
 		)
+	case "host-linux-mipsle-mengzhuo":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
 	}
 	switch osArch {
 	case "linux/s390x":
@@ -290,6 +293,7 @@ func isNetworkUp() bool {
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
 			DisableKeepAlives: true,
+			Proxy:             http.ProxyFromEnvironment,
 		},
 	}
 	res, err := c.Get(probeURL)
@@ -325,6 +329,8 @@ func buildletURL() string {
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64"
 	case "linux/ppc64le":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64le"
+	case "linux/mips64le":
+		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-mips64le"
 	case "solaris/amd64":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.solaris-amd64"
 	case "illumos/amd64":

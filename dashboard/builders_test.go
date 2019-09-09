@@ -315,6 +315,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64@go1.11", "net@1.11"), both},
 		{b("linux-amd64@go1.12", "net@1.12"), both},
 
+		{b("linux-mips64le-mengzhuo", "go"), onlyPost},
+		{b("linux-mips64le-mengzhuo", "sys"), onlyPost},
+		{b("linux-mips64le-mengzhuo", "net"), onlyPost},
+
 		// go1.12.html: "Go 1.12 is the last release that is
 		// supported on FreeBSD 10.x [... and 11.1]"
 		{b("freebsd-386-10_3", "go"), none},

@@ -50,6 +50,10 @@ buildlet-stage0.linux-s390x: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
 
+buildlet-stage0.linux-mips64le: FORCE
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
+
 # macstadium uploads all the darwin-amd64 stage0 binary as three
 # different filenames, which is used by four different Mac VM images.
 # See the env/darwin/macstadium/** files for details.

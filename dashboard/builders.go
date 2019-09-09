@@ -466,6 +466,16 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:   1,
 		env:         []string{"GOROOT_BOOTSTRAP=/opt/golang/go-solaris-amd64-bootstrap"},
 	},
+	"host-linux-mipsle-mengzhuo": &HostConfig{
+		Notes:       "Loongson 3A Box hosted by Meng Zhuo",
+		OwnerGithub: "mengzhuo",
+		IsReverse:   true,
+		ExpectNum:   1,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/lib/golang",
+			"GOMIPS64=hardfloat",
+		},
+	},
 	"host-darwin-amd64-zenly-ios": &HostConfig{
 		Notes:       "MacBook Pro hosted by Zenly, running the ios reverse buildlet",
 		OwnerGithub: "znly",
@@ -2057,6 +2067,19 @@ func init() {
 		Name:     "linux-arm64-packet",
 		HostType: "host-linux-arm64-packet",
 		FlakyNet: true, // maybe not flaky, but here conservatively
+	})
+	addBuilder(BuildConfig{
+		FlakyNet: true,
+		HostType: "host-linux-mipsle-mengzhuo",
+		Name:     "linux-mips64le-mengzhuo",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			switch repo {
+			case "go", "net", "sys":
+				return branch == "master" && goBranch == "master"
+			default:
+				return false
+			}
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-s390x-ibm",
