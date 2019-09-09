@@ -2357,6 +2357,26 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	goroot := st.conf.FilePathJoin(workDir, "go")
 	gopath := st.conf.FilePathJoin(workDir, "gopath")
 
+	// Check out the provided sub-repo to the buildlet's workspace.
+	// Need to do this first, so we can run go env GOMOD in it.
+	err = buildgo.FetchSubrepo(st, st.bc, st.SubName, st.SubRev)
+	if err != nil {
+		return nil, err
+	}
+
+	// Determine if we're invoked in module mode.
+	// If using module mode, the absolute path to the go.mod of the main module.
+	// If using GOPATH mode, the empty string.
+	goMod, err := st.goMod(importPathOfRepo(st.SubName), goroot, gopath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine go env GOMOD value: %v", err)
+	}
+	if goMod != "" {
+		fmt.Fprintf(st, "testing in module mode; GOMOD=%s\n\n", goMod)
+	} else {
+		fmt.Fprintf(st, "testing in GOPATH mode\n\n")
+	}
+
 	fetched := map[string]bool{}
 	toFetch := []string{st.SubName}
 
@@ -2399,9 +2419,9 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		return nil, nil
 	}
 
-	// Recursively fetch the repo and their golang.org/x/*
-	// dependencies. Dependencies are always fetched at master,
-	// which isn't great but the dashboard data model doesn't
+	// Recursively fetch the golang.org/x/* dependencies.
+	// Dependencies are always fetched at master, which
+	// isn't great but the dashboard data model doesn't
 	// track non-golang.org/x/* dependencies. For those, we
 	// require on the code under test to be using Go modules.
 	for i := 0; i < len(toFetch); i++ {
@@ -2417,12 +2437,14 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		if rev == "" {
 			rev = "master" // should happen rarely; ok if it does.
 		}
-		// For the repo under test, choose that specific revision.
 		if i == 0 {
-			rev = st.SubRev
-		}
-		if err := fetch(repo, rev); err != nil {
-			return nil, err
+			// The repo under test has already been fetched earlier,
+			// just need to mark it as fetched.
+			fetched[repo] = true
+		} else {
+			if err := fetch(repo, rev); err != nil {
+				return nil, err
+			}
 		}
 		if rErr, err := findDeps(repo); err != nil {
 			return nil, err
@@ -2460,6 +2482,30 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
 		Args:     args,
 	})
+}
+
+// goMod determines and reports the value of go env GOMOD
+// for the given import path, GOROOT, and GOPATH values.
+// It uses module-specific environment variables from st.conf.ModulesEnv.
+func (st *buildStatus) goMod(importPath, goroot, gopath string) (string, error) {
+	var buf bytes.Buffer
+	rErr, err := st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+		Output:   &buf,
+		Dir:      "gopath/src/" + importPath,
+		ExtraEnv: append(append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath), st.conf.ModulesEnv(st.SubName)...),
+		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+		Args:     []string{"env", "-json", "GOMOD"},
+	})
+	if err != nil {
+		return "", fmt.Errorf("exec go env on buildlet: %v", err)
+	} else if rErr != nil {
+		return "", fmt.Errorf("go env error: %v\noutput:\n%s", rErr, &buf)
+	}
+	var env struct {
+		GoMod string
+	}
+	err = json.Unmarshal(buf.Bytes(), &env)
+	return env.GoMod, err
 }
 
 // moduleProxy returns the GOPROXY environment value to use for module-enabled
