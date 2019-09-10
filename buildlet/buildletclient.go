@@ -696,6 +696,7 @@ func (de DirEntry) String() string {
 	return de.line
 }
 
+// Name returns the relative path to the file, such as "src/net/http/" or "src/net/http/jar.go".
 func (de DirEntry) Name() string {
 	f := strings.Split(de.line, "\t")
 	if len(f) < 2 {
@@ -704,7 +705,7 @@ func (de DirEntry) Name() string {
 	return f[1]
 }
 
-// Perm returns the permission bits in string form, e.g., "drw-rw-rw".
+// Perm returns the permission bits in string form, such as "-rw-r--r--" or "drwxr-xr-x".
 func (de DirEntry) Perm() string {
 	i := strings.IndexByte(de.line, '\t')
 	if i == -1 {
@@ -713,6 +714,17 @@ func (de DirEntry) Perm() string {
 	return de.line[:i]
 }
 
+// IsDir reports whether de describes a directory. That is,
+// it tests for the os.ModeDir bit being set in de.Perm().
+func (de DirEntry) IsDir() bool {
+	if len(de.line) == 0 {
+		return false
+	}
+	return de.line[0] == 'd'
+}
+
+// Digest returns the SHA-1 digest of the file, such as "da39a3ee5e6b4b0d3255bfef95601890afd80709".
+// It returns the empty string if the digest isn't included.
 func (de DirEntry) Digest() string {
 	f := strings.Split(de.line, "\t")
 	if len(f) < 5 {

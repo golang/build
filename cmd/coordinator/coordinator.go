@@ -2372,11 +2372,17 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		return nil, fmt.Errorf("failed to determine go env GOMOD value: %v", err)
 	}
 
-	// patterns defines import path patterns to provide to 'go test'.
-	// The starting default value is "golang.org/x/{repo}/...".
-	patterns := []string{
-		importPathOfRepo(st.SubName) + "/...",
+	// A goTestRun represents a single invocation of the 'go test' command.
+	type goTestRun struct {
+		Dir      string   // Directory where 'go test' should be executed.
+		Patterns []string // Import path patterns to provide to 'go test'.
 	}
+	// The default behavior is to test the pattern "golang.org/x/{repo}/..."
+	// in the repository root.
+	testRuns := []goTestRun{{
+		Dir:      "gopath/src/" + importPathOfRepo(st.SubName),
+		Patterns: []string{importPathOfRepo(st.SubName) + "/..."},
+	}}
 
 	// The next large step diverges into two code paths,
 	// one for module mode and another for GOPATH mode.
@@ -2389,7 +2395,34 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 
 		// No need to place the repo's dependencies into a GOPATH workspace.
 
-		// TODO(dmitshur): Look for inner modules, test them too. See golang.org/issue/32528.
+		// Look for inner modules, in order to test them too. See golang.org/issue/32528.
+		repoPath := importPathOfRepo(st.SubName)
+		sp := st.CreateSpan("listing_subrepo_modules", st.SubName)
+		err = st.bc.ListDir("gopath/src/"+repoPath, buildlet.ListDirOpts{Recursive: true}, func(e buildlet.DirEntry) {
+			goModFile := path.Base(e.Name()) == "go.mod" && !e.IsDir()
+			if !goModFile {
+				return
+			}
+			// Found a go.mod file in a subdirectory, which indicates the root of a module.
+			modulePath := path.Join(repoPath, path.Dir(e.Name()))
+			if modulePath == repoPath {
+				// This is the go.mod file at the repository root.
+				// It's already a part of testRuns, so skip it.
+				return
+			} else if ignoredByGoTool(modulePath) || isVendored(modulePath) {
+				// go.mod file is in a directory we're not looking to support, so skip it.
+				return
+			}
+			// Add an additional test run entry that will test this entire module.
+			testRuns = append(testRuns, goTestRun{
+				Dir:      "gopath/src/" + modulePath,
+				Patterns: []string{modulePath + "/..."},
+			})
+		})
+		sp.Done(err)
+		if err != nil {
+			return nil, err
+		}
 
 	} else {
 		fmt.Fprintf(st, "testing in GOPATH mode\n\n")
@@ -2496,12 +2529,12 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 				fmt.Fprintf(st, "go list error: %v\noutput:\n%s", rErr, &buf)
 				return rErr, nil
 			}
-			patterns = nil
+			testRuns[0].Patterns = nil
 			for _, importPath := range strings.Fields(buf.String()) {
 				if !st.conf.ShouldTestPackageInGOPATHMode(importPath) {
 					continue
 				}
-				patterns = append(patterns, importPath)
+				testRuns[0].Patterns = append(testRuns[0].Patterns, importPath)
 			}
 		}
 	}
@@ -2525,16 +2558,41 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	if st.conf.IsRace() {
 		args = append(args, "-race")
 	}
-	args = append(args, patterns...)
 
-	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
-		Debug:    true, // make buildlet print extra debug in output for failures
-		Output:   st,
-		Dir:      "gopath/src/" + importPathOfRepo(st.SubName),
-		ExtraEnv: env,
-		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
-		Args:     args,
-	})
+	var remoteErrors []error
+	for _, tr := range testRuns {
+		rErr, err := st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+			Debug:    true, // make buildlet print extra debug in output for failures
+			Output:   st,
+			Dir:      tr.Dir,
+			ExtraEnv: env,
+			Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+			Args:     append(args, tr.Patterns...),
+		})
+		if err != nil {
+			// A network/communication error. Give up here;
+			// the caller can retry as it sees fit.
+			return nil, err
+		} else if rErr != nil {
+			// An error occurred remotely and is terminal, but we want to
+			// keep testing other packages and report their failures too,
+			// rather than stopping short.
+			remoteErrors = append(remoteErrors, rErr)
+		}
+	}
+	if len(remoteErrors) == 1 {
+		return remoteErrors[0], nil
+	} else if len(remoteErrors) > 1 {
+		var b strings.Builder
+		for i, e := range remoteErrors {
+			if i != 0 {
+				b.WriteString("; ")
+			}
+			b.WriteString(e.Error())
+		}
+		return errors.New(b.String()), nil
+	}
+	return nil, nil
 }
 
 // goMod determines and reports the value of go env GOMOD
@@ -2559,6 +2617,34 @@ func (st *buildStatus) goMod(importPath, goroot, gopath string) (string, error) 
 	}
 	err = json.Unmarshal(buf.Bytes(), &env)
 	return env.GoMod, err
+}
+
+// ignoredByGoTool reports whether the given import path corresponds
+// to a directory that would be ignored by the go tool.
+//
+// The logic of the go tool for ignoring directories is documented at
+// https://golang.org/cmd/go/#hdr-Package_lists_and_patterns:
+//
+// 	Directory and file names that begin with "." or "_" are ignored
+// 	by the go tool, as are directories named "testdata".
+//
+func ignoredByGoTool(importPath string) bool {
+	for _, el := range strings.Split(importPath, "/") {
+		if strings.HasPrefix(el, ".") || strings.HasPrefix(el, "_") || el == "testdata" {
+			return true
+		}
+	}
+	return false
+}
+
+// isVendored reports whether the given import path corresponds
+// to a Go package that is inside a vendor directory.
+//
+// The logic for what is considered a vendor directory is documented at
+// https://golang.org/cmd/go/#hdr-Vendor_Directories.
+func isVendored(importPath string) bool {
+	return strings.HasPrefix(importPath, "vendor/") ||
+		strings.Contains(importPath, "/vendor/")
 }
 
 // firstNonNil returns the first non-nil error, or nil otherwise.
@@ -3414,7 +3500,6 @@ func (st *buildStatus) writeEventsLocked(w io.Writer, htmlMode bool) {
 	if st.isRunningLocked() {
 		fmt.Fprintf(w, " %7s (now)\n", fmt.Sprintf("+%0.1fs", time.Since(lastT).Seconds()))
 	}
-
 }
 
 func (st *buildStatus) logs() string {
