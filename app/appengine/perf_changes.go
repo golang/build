@@ -215,7 +215,7 @@ type uiPerfConfigElem struct {
 }
 
 var perfChangesTemplate = template.Must(
-	template.New("perf_changes.html").Funcs(tmplFuncs).ParseFiles("app/appengine/perf_changes.html"),
+	template.New("perf_changes.html").Funcs(tmplFuncs).ParseFiles(templateFile("perf_changes.html")),
 )
 
 type perfChangesData struct {

@@ -238,7 +238,7 @@ func perfGraphHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 var perfGraphTemplate = template.Must(
-	template.New("perf_graph.html").ParseFiles("app/appengine/perf_graph.html"),
+	template.New("perf_graph.html").ParseFiles(templateFile("perf_graph.html")),
 )
 
 type perfGraphData struct {

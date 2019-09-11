@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/gob"
 	"net/http"
+	"sort"
+	"strings"
 
 	"google.golang.org/appengine"
 )
@@ -196,19 +198,19 @@ var goPackages = []*Package{
 	},
 }
 
-// hiddenBranches specifies branches that
-// should not be displayed on the build dashboard.
-// This also prevents the builder infrastructure
-// from testing sub-repos against these branches.
-var hiddenBranches = map[string]bool{
-	"release-branch.go1.4":           true,
-	"release-branch.go1.5":           true,
-	"release-branch.go1.6":           true,
-	"release-branch.go1.7":           true,
-	"release-branch.go1.8":           true,
-	"release-branch.go1.9":           true,
-	"release-branch.go1.10":          true,
-	"release-branch.go1.10-security": true,
-	"release-branch.go1.11-security": true,
-	"release-branch.go1.11":          true,
+// supportedReleaseBranches returns a slice containing the most recent two non-security release branches
+// contained in branches.
+func supportedReleaseBranches(branches []string) (supported []string) {
+	for _, b := range branches {
+		if !strings.HasPrefix(b, "release-branch.go1.") ||
+			len(b) != len("release-branch.go1.nn") { // assumes nn in range [10, 99]
+			continue
+		}
+		supported = append(supported, b)
+	}
+	sort.Strings(supported)
+	if len(supported) > 2 {
+		supported = supported[len(supported)-2:]
+	}
+	return supported
 }

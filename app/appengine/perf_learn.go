@@ -157,7 +157,7 @@ func perfLearnHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 var perfLearnTemplate = template.Must(
-	template.New("perf_learn.html").Funcs(tmplFuncs).ParseFiles("app/appengine/perf_learn.html"),
+	template.New("perf_learn.html").Funcs(tmplFuncs).ParseFiles(templateFile("perf_learn.html")),
 )
 
 type perfLearnData struct {

@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -110,13 +112,7 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			tagState = []*TagState{s}
-			for _, b := range branches {
-				if !strings.HasPrefix(b, "release-branch.") {
-					continue
-				}
-				if hiddenBranches[b] {
-					continue
-				}
+			for _, b := range supportedReleaseBranches(branches) {
 				s, err := GetTagState(c, "release", b)
 				if err == datastore.ErrNoSuchEntity {
 					continue
@@ -582,7 +578,7 @@ func (td *uiTemplateData) populateBuildingURLs(ctx context.Context) {
 }
 
 var uiTemplate = template.Must(
-	template.New("ui.html").Funcs(tmplFuncs).ParseFiles("app/appengine/ui.html"),
+	template.New("ui.html").Funcs(tmplFuncs).ParseFiles(templateFile("ui.html")),
 )
 
 var tmplFuncs = template.FuncMap{
@@ -705,4 +701,16 @@ func tail(n int, s string) string {
 		return s
 	}
 	return strings.Join(lines[len(lines)-n:], "\n")
+}
+
+// templateFile returns the path to the provided HTML template file,
+// conditionally prepending a relative path depending on the
+// environment.
+func templateFile(base string) string {
+	// In tests the current directory is ".", but in prod it's up
+	// two levels. So just look to see if it's in . first.
+	if _, err := os.Stat(base); err == nil {
+		return base
+	}
+	return filepath.Join("app/appengine", base)
 }

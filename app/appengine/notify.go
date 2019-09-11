@@ -123,7 +123,7 @@ func firstMatch(c context.Context, q *datastore.Query, v interface{}) error {
 var (
 	notifyLater = delay.Func("notify", notify)
 	notifyTmpl  = template.Must(template.New("notify.txt").
-			Funcs(template.FuncMap(tmplFuncs)).ParseFiles("app/appengine/notify.txt"))
+			Funcs(template.FuncMap(tmplFuncs)).ParseFiles(templateFile("notify.txt")))
 )
 
 // notify tries to update the CL for the given Commit with a failure message.
@@ -272,7 +272,7 @@ var (
 	sendPerfMailTmpl  = template.Must(
 		template.New("perf_notify.txt").
 			Funcs(template.FuncMap(tmplFuncs)).
-			ParseFiles("app/appengine/perf_notify.txt"),
+			ParseFiles(templateFile("perf_notify.txt")),
 	)
 )
 
