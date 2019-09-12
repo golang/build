@@ -12,6 +12,7 @@ import (
 	"golang.org/x/build/gerrit"
 )
 
+// Person represents a person.
 type Person struct {
 	Name    string   // "Foo Bar"
 	Github  string   // "FooBar" (orig case, no '@')
@@ -63,10 +64,27 @@ func (p *Person) mergeIDs(ids ...string) {
 // keys are "@lowercasegithub", "lowercase name", "lowercase@email.com".
 var idToPerson = map[string]*Person{}
 
+// GetPerson looks up a person by id and returns one if found,
+// or nil otherwise.
+//
+// The id is case insensitive, and may be one of:
+//
+// • full name (for example, "Dmitri Shuralyov")
+//
+// • GitHub username (for example, "@dmitshur"), leading '@' is mandatory
+//
+// • Gerrit <account ID>@<instance ID> (for example, "6005@62eb7196-b449-3ce5-99f1-c037f21e1705")
+//
+// • email (for example, "dmitshur@golang.org")
+//
+// Only exact matches are supported.
+//
 func GetPerson(id string) *Person {
 	return idToPerson[strings.ToLower(id)]
 }
 
+// GetGerritPerson looks up a person from the Gerrit account ai.
+// It uses the name and email in the Gerrit account for the lookup.
 func GetGerritPerson(ai gerrit.AccountInfo) *Person {
 	if p := GetPerson(ai.Name); p != nil {
 		return p
