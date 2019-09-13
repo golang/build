@@ -175,6 +175,12 @@ func (gb GoBuilder) runConcurrentGoBuildStdCmd(bc *buildlet.Client, w io.Writer)
 	return nil, nil
 }
 
+// FetchSubrepo checks out the go.googlesource.com repository
+// repo (for example, "net" or "oauth2") at git revision rev,
+// and places it into the buildlet's GOPATH workspace.
+//
+// The GOPATH workspace is assumed to be the "gopath" directory
+// in the buildlet's work directory.
 func FetchSubrepo(sl spanlog.Logger, bc *buildlet.Client, repo, rev string) error {
 	tgz, err := sourcecache.GetSourceTgz(sl, repo, rev)
 	if err != nil {

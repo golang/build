@@ -2218,7 +2218,7 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 		args = append(args, "--compile-only")
 	}
 	var buf bytes.Buffer
-	remoteErr, err = st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+	remoteErr, err = st.bc.Exec("go/bin/go", buildlet.ExecOpts{
 		Output:      &buf,
 		ExtraEnv:    append(st.conf.Env(), "GOROOT="+goroot),
 		OnStartExec: func() { st.LogEventTime("discovering_tests") },
@@ -2372,6 +2372,8 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		return nil, fmt.Errorf("failed to determine go env GOMOD value: %v", err)
 	}
 
+	// TODO(dmitshur): For some subrepos, test in both module and GOPATH modes. See golang.org/issue/30233.
+
 	// A goTestRun represents a single invocation of the 'go test' command.
 	type goTestRun struct {
 		Dir      string   // Directory where 'go test' should be executed.
@@ -2427,119 +2429,44 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	} else {
 		fmt.Fprintf(st, "testing in GOPATH mode\n\n")
 
-		// Recursively fetch the golang.org/x/* dependencies.
-		// Dependencies are always fetched at master, which
-		// isn't great but the dashboard data model doesn't
-		// track non-golang.org/x/* dependencies. For those, we
-		// require on the code under test to be using Go modules.
-
-		fetched := map[string]bool{}
-		toFetch := []string{st.SubName}
-
-		// fetch checks out the provided sub-repo to the buildlet's workspace.
-		fetch := func(repo, rev string) error {
-			fetched[repo] = true
-			return buildgo.FetchSubrepo(st, st.bc, repo, rev)
-		}
-
-		// findDeps uses 'go list' on the checked out repo to find its
-		// dependencies, and adds any not-yet-fetched deps to toFetch.
-		findDeps := func(repo string) (rErr, err error) {
-			repoPath := importPathOfRepo(repo)
-			var buf bytes.Buffer
-			rErr, err = st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
-				Output:   &buf,
-				Dir:      "gopath/src/" + repoPath,
-				ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath),
-				Path:     []string{"$WORKDIR/go/bin", "$PATH"},
-				Args:     []string{"list", "-f", `{{range .Deps}}{{printf "%v\n" .}}{{end}}`, repoPath + "/..."},
-			})
-			if err != nil {
-				return nil, fmt.Errorf("exec go list on buildlet: %v", err)
-			}
-			if rErr != nil {
-				fmt.Fprintf(st, "go list error: %v\noutput:\n%s", rErr, &buf)
-				return rErr, nil
-			}
-			for _, p := range strings.Fields(buf.String()) {
-				if !strings.HasPrefix(p, "golang.org/x/") ||
-					p == repoPath || strings.HasPrefix(p, repoPath+"/") {
-					continue
-				}
-				repo := strings.TrimPrefix(p, "golang.org/x/")
-				if i := strings.Index(repo, "/"); i >= 0 {
-					repo = repo[:i]
-				}
-				if !fetched[repo] {
-					toFetch = append(toFetch, repo)
-				}
-			}
-			return nil, nil
-		}
-
-		for i := 0; i < len(toFetch); i++ {
-			repo := toFetch[i]
-			if fetched[repo] {
-				continue
-			}
-			// Fetch the HEAD revision by default.
-			rev, err := getRepoHead(repo)
-			if err != nil {
-				return nil, err
-			}
-			if rev == "" {
-				rev = "master" // should happen rarely; ok if it does.
-			}
-			if i == 0 {
-				// The repo under test has already been fetched earlier,
-				// just need to mark it as fetched.
-				fetched[repo] = true
-			} else {
-				if err := fetch(repo, rev); err != nil {
-					return nil, err
-				}
-			}
-			if rErr, err := findDeps(repo); err != nil {
-				return nil, err
-			} else if rErr != nil {
-				// An issue with the package may cause "go list" to
-				// fail and this is a legimiate build error.
-				return rErr, nil
-			}
+		// Place the repo's dependencies into the GOPATH workspace.
+		if rErr, err := st.fetchDependenciesToGOPATHWorkspace(goroot, gopath); err != nil {
+			return nil, err
+		} else if rErr != nil {
+			return rErr, nil
 		}
 
 		// The dashboard offers control over what packages to test in GOPATH mode.
 		// Compute a list of packages by calling 'go list'. See golang.org/issue/34190.
-		{
-			repoPath := importPathOfRepo(st.SubName)
-			var buf bytes.Buffer
-			sp := st.CreateSpan("listing_subrepo_packages", st.SubName)
-			rErr, err := st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
-				Output:   &buf,
-				Dir:      "gopath/src/" + repoPath,
-				ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath),
-				Path:     []string{"$WORKDIR/go/bin", "$PATH"},
-				Args:     []string{"list", repoPath + "/..."},
-			})
-			sp.Done(firstNonNil(err, rErr))
-			if err != nil {
-				return nil, fmt.Errorf("exec go list on buildlet: %v", err)
+		repoPath := importPathOfRepo(st.SubName)
+		var buf bytes.Buffer
+		sp := st.CreateSpan("listing_subrepo_packages", st.SubName)
+		rErr, err := st.bc.Exec("go/bin/go", buildlet.ExecOpts{
+			Output:   &buf,
+			Dir:      "gopath/src/" + repoPath,
+			ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath),
+			Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+			Args:     []string{"list", repoPath + "/..."},
+		})
+		sp.Done(firstNonNil(err, rErr))
+		if err != nil {
+			return nil, fmt.Errorf("exec go list on buildlet: %v", err)
+		}
+		if rErr != nil {
+			fmt.Fprintf(st, "go list error: %v\noutput:\n%s", rErr, &buf)
+			return rErr, nil
+		}
+		testRuns[0].Patterns = nil
+		for _, importPath := range strings.Fields(buf.String()) {
+			if !st.conf.ShouldTestPackageInGOPATHMode(importPath) {
+				continue
 			}
-			if rErr != nil {
-				fmt.Fprintf(st, "go list error: %v\noutput:\n%s", rErr, &buf)
-				return rErr, nil
-			}
-			testRuns[0].Patterns = nil
-			for _, importPath := range strings.Fields(buf.String()) {
-				if !st.conf.ShouldTestPackageInGOPATHMode(importPath) {
-					continue
-				}
-				testRuns[0].Patterns = append(testRuns[0].Patterns, importPath)
-			}
+			testRuns[0].Patterns = append(testRuns[0].Patterns, importPath)
 		}
 	}
 
-	// TODO(dmitshur): For some subrepos, test in both modes. See golang.org/issue/30233.
+	// Finally, execute all of the test runs.
+	// If any fail, keep going so that all test results are included in the output.
 
 	sp := st.CreateSpan("running_subrepo_tests", st.SubName)
 	defer func() { sp.Done(err) }()
@@ -2561,7 +2488,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 
 	var remoteErrors []error
 	for _, tr := range testRuns {
-		rErr, err := st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+		rErr, err := st.bc.Exec("go/bin/go", buildlet.ExecOpts{
 			Debug:    true, // make buildlet print extra debug in output for failures
 			Output:   st,
 			Dir:      tr.Dir,
@@ -2580,17 +2507,8 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 			remoteErrors = append(remoteErrors, rErr)
 		}
 	}
-	if len(remoteErrors) == 1 {
-		return remoteErrors[0], nil
-	} else if len(remoteErrors) > 1 {
-		var b strings.Builder
-		for i, e := range remoteErrors {
-			if i != 0 {
-				b.WriteString("; ")
-			}
-			b.WriteString(e.Error())
-		}
-		return errors.New(b.String()), nil
+	if len(remoteErrors) > 0 {
+		return multiError(remoteErrors), nil
 	}
 	return nil, nil
 }
@@ -2600,7 +2518,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 // It uses module-specific environment variables from st.conf.ModulesEnv.
 func (st *buildStatus) goMod(importPath, goroot, gopath string) (string, error) {
 	var buf bytes.Buffer
-	rErr, err := st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+	rErr, err := st.bc.Exec("go/bin/go", buildlet.ExecOpts{
 		Output:   &buf,
 		Dir:      "gopath/src/" + importPath,
 		ExtraEnv: append(append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath), st.conf.ModulesEnv(st.SubName)...),
@@ -2617,6 +2535,94 @@ func (st *buildStatus) goMod(importPath, goroot, gopath string) (string, error) 
 	}
 	err = json.Unmarshal(buf.Bytes(), &env)
 	return env.GoMod, err
+}
+
+// fetchRepoDependenciesToGOPATHWorkspace recursively fetches
+// the golang.org/x/* dependencies of repo st.SubName
+// and places them into the buildlet's GOPATH workspace.
+// The st.SubName repo itself must already be there.
+//
+// Dependencies are always fetched at master, which
+// isn't great but the dashboard data model doesn't
+// track non-golang.org/x/* dependencies. For those, we
+// require on the code under test to be using Go modules.
+func (st *buildStatus) fetchDependenciesToGOPATHWorkspace(goroot, gopath string) (remoteErr, err error) {
+	fetched := map[string]bool{}
+	toFetch := []string{st.SubName}
+
+	// fetch checks out the provided sub-repo to the buildlet's workspace.
+	fetch := func(repo, rev string) error {
+		fetched[repo] = true
+		return buildgo.FetchSubrepo(st, st.bc, repo, rev)
+	}
+
+	// findDeps uses 'go list' on the checked out repo to find its
+	// dependencies, and adds any not-yet-fetched deps to toFetch.
+	findDeps := func(repo string) (rErr, err error) {
+		repoPath := importPathOfRepo(repo)
+		var buf bytes.Buffer
+		rErr, err = st.bc.Exec("go/bin/go", buildlet.ExecOpts{
+			Output:   &buf,
+			Dir:      "gopath/src/" + repoPath,
+			ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath),
+			Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+			Args:     []string{"list", "-f", `{{range .Deps}}{{printf "%v\n" .}}{{end}}`, repoPath + "/..."},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("exec go list on buildlet: %v", err)
+		}
+		if rErr != nil {
+			fmt.Fprintf(st, "go list error: %v\noutput:\n%s", rErr, &buf)
+			return rErr, nil
+		}
+		for _, p := range strings.Fields(buf.String()) {
+			if !strings.HasPrefix(p, "golang.org/x/") ||
+				p == repoPath || strings.HasPrefix(p, repoPath+"/") {
+				continue
+			}
+			repo := strings.TrimPrefix(p, "golang.org/x/")
+			if i := strings.Index(repo, "/"); i >= 0 {
+				repo = repo[:i]
+			}
+			if !fetched[repo] {
+				toFetch = append(toFetch, repo)
+			}
+		}
+		return nil, nil
+	}
+
+	for i := 0; i < len(toFetch); i++ {
+		repo := toFetch[i]
+		if fetched[repo] {
+			continue
+		}
+		// Fetch the HEAD revision by default.
+		rev, err := getRepoHead(repo)
+		if err != nil {
+			return nil, err
+		}
+		if rev == "" {
+			rev = "master" // should happen rarely; ok if it does.
+		}
+		if i == 0 {
+			// The repo under test has already been fetched earlier,
+			// just need to mark it as fetched.
+			fetched[repo] = true
+		} else {
+			if err := fetch(repo, rev); err != nil {
+				return nil, err
+			}
+		}
+		if rErr, err := findDeps(repo); err != nil {
+			return nil, err
+		} else if rErr != nil {
+			// An issue with the package may cause "go list" to
+			// fail and this is a legimiate build error.
+			return rErr, nil
+		}
+	}
+
+	return nil, nil
 }
 
 // ignoredByGoTool reports whether the given import path corresponds
@@ -2655,6 +2661,27 @@ func firstNonNil(errs ...error) error {
 		}
 	}
 	return nil
+}
+
+// multiError is a concatentation of multiple errors.
+// There must be one or more errors, and all must be non-nil.
+type multiError []error
+
+// Error concatentates all error strings into a single string,
+// using a semicolon and space as a separator.
+func (m multiError) Error() string {
+	if len(m) == 1 {
+		return m[0].Error()
+	}
+
+	var b strings.Builder
+	for i, e := range m {
+		if i != 0 {
+			b.WriteString("; ")
+		}
+		b.WriteString(e.Error())
+	}
+	return b.String()
 }
 
 // moduleProxy returns the GOPROXY environment value to use for module-enabled
@@ -3034,7 +3061,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 		)
 		env = append(env, st.conf.ModulesEnv("go")...)
 
-		remoteErr, err = bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+		remoteErr, err = bc.Exec("go/bin/go", buildlet.ExecOpts{
 			// We set Dir to "." instead of the default ("go/bin") so when the dist tests
 			// try to run os/exec.Command("go", "test", ...), the LookPath of "go" doesn't
 			// return "./go.exe" (which exists in the current directory: "go/bin") and then
