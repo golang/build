@@ -404,25 +404,25 @@ func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 	}
 	sort.Strings(typs)
 
-	io.WriteString(w, "<b>Reverse pool stats</b><ul>")
+	io.WriteString(w, "<b>Reverse pool stats</b><ul>\n")
 	fmt.Fprintf(w, "<li>Buildlets connected: %d</li>\n", numConnected)
 	fmt.Fprintf(w, "<li>Buildlets in use: %d</li>\n", numInUse)
 	fmt.Fprintf(w, "<li>Old revdial buildlets in use: %d</li>\n", numOldInUse)
 	io.WriteString(w, "</ul>")
 
-	io.WriteString(w, "<b>Reverse pool by host type</b> (in use / total)<ul>")
+	io.WriteString(w, "<b>Reverse pool by host type</b> (in use / total)<ul>\n")
 	if len(typs) == 0 {
-		io.WriteString(w, "<li>no connections</li>")
+		io.WriteString(w, "<li>no connections</li>\n")
 	}
 	for _, typ := range typs {
 		if dashboard.Hosts[typ] != nil && total[typ] < dashboard.Hosts[typ].ExpectNum {
-			fmt.Fprintf(w, "<li>%s: %d/%d (%d missing)</li>",
+			fmt.Fprintf(w, "<li>%s: %d/%d (%d missing)</li>\n",
 				typ, inUse[typ], total[typ], dashboard.Hosts[typ].ExpectNum-total[typ])
 		} else {
-			fmt.Fprintf(w, "<li>%s: %d/%d</li>", typ, inUse[typ], total[typ])
+			fmt.Fprintf(w, "<li>%s: %d/%d</li>\n", typ, inUse[typ], total[typ])
 		}
 	}
-	io.WriteString(w, "</ul>")
+	io.WriteString(w, "</ul>\n")
 
 	fmt.Fprintf(w, "<b>Reverse pool machine detail</b><ul>%s</ul>", buf.Bytes())
 }
