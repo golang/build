@@ -2080,9 +2080,10 @@ func init() {
 		FlakyNet: true, // maybe not flaky, but here conservatively
 	})
 	addBuilder(BuildConfig{
-		FlakyNet: true,
-		HostType: "host-linux-mipsle-mengzhuo",
-		Name:     "linux-mips64le-mengzhuo",
+		FlakyNet:     true,
+		HostType:     "host-linux-mipsle-mengzhuo",
+		Name:         "linux-mips64le-mengzhuo",
+		SkipSnapshot: true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
 			case "go", "net", "sys":
