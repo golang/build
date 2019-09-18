@@ -765,6 +765,17 @@ func (*BuildConfig) ShouldTestPackageInGOPATHMode(importPath string) bool {
 		// Don't test golang.org/x/tools/gopls/... in GOPATH mode.
 		return false
 	}
+	if importPath == "golang.org/x/net/http2/h2demo" {
+		// Don't test golang.org/x/net/http2/h2demo in GOPATH mode.
+		//
+		// It was never tested before golang.org/issue/34361 because it
+		// had a +build h2demo constraint. But that build constraint is
+		// being removed, so explicitly skip testing it in GOPATH mode.
+		//
+		// The package is supported only in module mode now, since
+		// it requires third-party dependencies.
+		return false
+	}
 	// Test everything else in GOPATH mode as usual.
 	return true
 }
