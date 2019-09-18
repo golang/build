@@ -27,11 +27,50 @@ import (
 )
 
 var (
-	mode      = flag.String("mode", "", "mode to run in. Valid values:\n\n"+modeSummary())
-	startTime = newTimeFlag("from", "1900-01-01", "start of time range for the 'range-stats' mode")
-	endTime   = newTimeFlag("to", "2100-01-01", "end of time range for the 'range-stats' mode")
-	timeZone  = flag.String("tz", "US/Pacific", "timezone to use for time values")
+	mode           = flag.String("mode", "", "mode to run in. Valid values:\n\n"+modeSummary())
+	startTime      = newTimeFlag("from", "1900-01-01", "start of time range for the 'range-stats' mode")
+	endTime        = newTimeFlag("to", "2100-01-01", "end of time range for the 'range-stats' mode")
+	timeZone       = flag.String("tz", "US/Pacific", "timezone to use for time values")
+	gerritProjects = newStringSetFlag("projects", "", "set of Gerrit projects to include; empty means all")
 )
+
+type stringSetFlag map[string]bool
+
+func newStringSetFlag(name string, defVal string, desc string) *stringSetFlag {
+	var s stringSetFlag
+	s.Set(defVal)
+	flag.Var(&s, name, desc)
+	return &s
+}
+
+func (s *stringSetFlag) Includes(p string) bool {
+	if len(*s) == 0 {
+		return true
+	}
+	return (*s)[p]
+}
+
+func (s *stringSetFlag) Set(v string) error {
+	if v == "" {
+		*s = nil
+		return nil
+	}
+	elms := strings.Split(v, ",")
+	*s = make(map[string]bool, len(elms))
+	for _, e := range elms {
+		(*s)[e] = true
+	}
+	return nil
+}
+
+func (s *stringSetFlag) String() string {
+	var elms []string
+	for e := range *s {
+		elms = append(elms, e)
+	}
+	sort.Strings(elms)
+	return strings.Join(elms, ",")
+}
 
 func newTimeFlag(name, defVal, desc string) *time.Time {
 	var t time.Time
@@ -365,127 +404,127 @@ const githubGoApprovers20170106 = `
 @0intro
 0intro
 David du Colombier
- 
+
 @4ad
 4ad
 Aram Hăvărneanu
- 
+
 @adams-sarah
 adams-sarah
 Sarah Adams
- 
+
 @adg
 adg Owner
 Andrew Gerrand
- 
+
 @alexbrainman
 alexbrainman
 Alex Brainman
- 
+
 @ality
 ality
 Anthony Martin
- 
+
 @campoy
 campoy
 Francesc Campoy
- 
+
 @DanielMorsing
 DanielMorsing
 Daniel Morsing
- 
+
 @davecheney
 davecheney
 Dave Cheney
- 
+
 @davidlazar
 davidlazar
 David Lazar
- 
+
 @dvyukov
 dvyukov
 Dmitry Vyukov
- 
+
 @eliasnaur
 eliasnaur
 Elias Naur
- 
+
 @hanwen
 hanwen
 Han-Wen Nienhuys
- 
+
 @josharian
 josharian
 Josh Bleecher Snyder
- 
+
 @jpoirier
 jpoirier
 Joseph Poirier
- 
+
 @kardianos
 kardianos
 Daniel Theophanes
- 
+
 @martisch
 martisch
 Martin Möhrmann
- 
+
 @matloob
 matloob
 Michael Matloob
- 
+
 @mdempsky
 mdempsky
 Matthew Dempsky
- 
+
 @mikioh
 mikioh
 Mikio Hara
- 
+
 @minux
 minux
 Minux Ma
- 
+
 @mwhudson
 mwhudson
 Michael Hudson-Doyle
- 
+
 @neild
 neild
 Damien Neil
- 
+
 @niemeyer
 niemeyer
 Gustavo Niemeyer
- 
+
 @odeke-em
 odeke-em
 Emmanuel T Odeke
- 
+
 @quentinmit
 quentinmit Owner
 Quentin Smith
- 
+
 @rakyll
 rakyll
 jbd@
- 
+
 @remyoudompheng
 remyoudompheng
 Rémy Oudompheng
- 
+
 @rminnich
 rminnich
 ron minnich
- 
+
 @rogpeppe
 rogpeppe
 Roger Peppe
- 
+
 @rui314
 rui314
 Rui Ueyama
- 
+
 @thanm
 thanm
 Than McIntosh
@@ -495,258 +534,268 @@ const githubGoAssignees20170106 = `
 @crawshaw
 crawshaw Team maintainer
 David Crawshaw
- 
+
 @0intro
 0intro
 David du Colombier
- 
+
 @4ad
 4ad
 Aram Hăvărneanu
- 
+
 @adams-sarah
 adams-sarah
 Sarah Adams
- 
+
 @alexbrainman
 alexbrainman
 Alex Brainman
- 
+
 @alexcesaro
 alexcesaro
 Alexandre Cesaro
- 
+
 @ality
 ality
 Anthony Martin
- 
+
 @artyom
 artyom
 Artyom Pervukhin
- 
+
 @bcmills
 bcmills
 Bryan C. Mills
- 
+
 @billotosyr
 billotosyr
- 
+
 @brtzsnr
 brtzsnr
 Alexandru Moșoi
- 
+
 @bsiegert
 bsiegert
 Benny Siegert
- 
+
 @c4milo
 c4milo
 Camilo Aguilar
- 
+
 @carl-mastrangelo
 carl-mastrangelo
 Carl Mastrangelo
- 
+
 @cespare
 cespare
 Caleb Spare
- 
+
 @DanielMorsing
 DanielMorsing
 Daniel Morsing
- 
+
 @davecheney
 davecheney
 Dave Cheney
- 
+
 @dominikh
 dominikh
 Dominik Honnef
- 
+
 @dskinner
 dskinner
 Daniel Skinner
- 
+
 @dsnet
 dsnet
 Joe Tsai
- 
+
 @dspezia
 dspezia
 Didier Spezia
- 
+
 @eliasnaur
 eliasnaur
 Elias Naur
- 
+
 @emergencybutter
 emergencybutter
 Arnaud
- 
+
 @evandbrown
 evandbrown
 Evan Brown
- 
+
 @fatih
 fatih
 Fatih Arslan
- 
+
 @garyburd
 garyburd
 Gary Burd
- 
+
 @hanwen
 hanwen
 Han-Wen Nienhuys
- 
+
 @jeffallen
 jeffallen
 Jeff R. Allen
- 
+
 @johanbrandhorst
 johanbrandhorst
 Johan Brandhorst
- 
+
 @josharian
 josharian
 Josh Bleecher Snyder
- 
+
 @jtsylve
 jtsylve
 Joe Sylve
- 
+
 @kardianos
 kardianos
 Daniel Theophanes
- 
+
 @kytrinyx
 kytrinyx
 Katrina Owen
- 
+
 @marete
 marete
 Brian Gitonga Marete
- 
+
 @martisch
 martisch
 Martin Möhrmann
- 
+
 @mattn
 mattn
 mattn
- 
+
 @mdempsky
 mdempsky
 Matthew Dempsky
- 
+
 @mdlayher
 mdlayher
 Matt Layher
- 
+
 @mikioh
 mikioh
 Mikio Hara
- 
+
 @millerresearch
 millerresearch
 Richard Miller
- 
+
 @minux
 minux
 Minux Ma
- 
+
 @mundaym
 mundaym
 Michael Munday
- 
+
 @mwhudson
 mwhudson
 Michael Hudson-Doyle
- 
+
 @myitcv
 myitcv
 Paul Jolly
- 
+
 @neelance
 neelance
 Richard Musiol
- 
+
 @niemeyer
 niemeyer
 Gustavo Niemeyer
- 
+
 @nodirt
 nodirt
 Nodir Turakulov
- 
+
 @rahulchaudhry
 rahulchaudhry
 Rahul Chaudhry
- 
+
 @rauls5382
 rauls5382
 Raul Silvera
- 
+
 @remyoudompheng
 remyoudompheng
 Rémy Oudompheng
- 
+
 @rhysh
 rhysh
 Rhys Hiltner
- 
+
 @rogpeppe
 rogpeppe
 Roger Peppe
- 
+
 @rsc
 rsc Owner
 Russ Cox
- 
+
 @rui314
 rui314
 Rui Ueyama
- 
+
 @sbinet
 sbinet
 Sebastien Binet
- 
+
 @shawnps
 shawnps
 Shawn Smith
- 
+
 @thanm
 thanm
 Than McIntosh
- 
+
 @titanous
 titanous
 Jonathan Rudenberg
- 
+
 @tombergan
 tombergan
- 
+
 @tzneal
 tzneal
 Todd
- 
+
 @vstefanovic
 vstefanovic
- 
+
 @wathiede
 wathiede
 Bill
- 
+
 @x1ddos
 x1ddos
 alex
- 
+
 @zombiezen
 zombiezen
 Ross Light
 `
 
 var discoverGoRepo = flag.String("discovery-go-repo", "go", "github.com/golang repo to discovery email addreses from")
+
+func foreachProjectUnsorted(g *maintner.Gerrit, f func(gp *maintner.GerritProject) error) {
+	g.ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+		if !gerritProjects.Includes(gp.Project()) {
+			log.Printf("skipping project %s", gp.Project())
+			return nil
+		}
+		return f(gp)
+	})
+}
 
 func (sc *statsClient) findGerritGophers() {
 	gerrc := sc.gerrit()
@@ -755,7 +804,7 @@ func (sc *statsClient) findGerritGophers() {
 
 	const suffix = "@62eb7196-b449-3ce5-99f1-c037f21e1705"
 
-	sc.corpus().Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+	foreachProjectUnsorted(sc.corpus().Gerrit(), func(gp *maintner.GerritProject) error {
 		return gp.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
 			for _, meta := range cl.Metas {
 				who := meta.Commit.Author.Email()
@@ -826,7 +875,7 @@ func (sc *statsClient) gerritCLStats() {
 	printedUnknown := map[string]bool{}
 	perQuarterUniq := map[string]*personSet{}
 
-	sc.corpus().Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+	foreachProjectUnsorted(sc.corpus().Gerrit(), func(gp *maintner.GerritProject) error {
 		gp.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
 			q := quarter(cl.Created)
 			perQuarter[q]++
@@ -908,7 +957,7 @@ func (sc *statsClient) workshopStats() {
 	ps := []projectStats{}
 
 	// Get all the CLs during the time of the workshop and after.
-	sc.corpus().Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+	foreachProjectUnsorted(sc.corpus().Gerrit(), func(gp *maintner.GerritProject) error {
 		p := projectStats{
 			name: gp.Project(),
 		}
@@ -1039,7 +1088,7 @@ func (sc *statsClient) rangeStats() {
 	var fileTouched = map[*gophers.Person]map[projectFile]bool{}
 	var dirTouched = map[*gophers.Person]map[projectFile]bool{}
 
-	sc.corpus().Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+	foreachProjectUnsorted(sc.corpus().Gerrit(), func(gp *maintner.GerritProject) error {
 		if gp.Server() != "go.googlesource.com" {
 			return nil
 		}
