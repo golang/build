@@ -1709,6 +1709,12 @@ func labelChangeBlacklisted(label, action string) bool {
 	return false
 }
 
+// assignReviewersOptOut lists contributors who have opted out from
+// having reviewers automatically added to their CLs.
+var assignReviewersOptOut = map[string]bool{
+	"mdempsky@google.com": true,
+}
+
 // assignReviewersToCLs looks for CLs with no humans in the reviewer or cc fields
 // that have been open for a short amount of time (enough of a signal that the
 // author does not intend to add anyone to the review), then assigns reviewers/ccs
@@ -1721,6 +1727,9 @@ func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 		}
 		gp.ForeachOpenCL(func(cl *maintner.GerritCL) error {
 			if cl.Private || cl.WorkInProgress() || time.Since(cl.Created) < 10*time.Minute {
+				return nil
+			}
+			if assignReviewersOptOut[cl.Owner().Email()] {
 				return nil
 			}
 
