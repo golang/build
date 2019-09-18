@@ -1723,6 +1723,14 @@ func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 			if cl.Private || cl.WorkInProgress() || time.Since(cl.Created) < 10*time.Minute {
 				return nil
 			}
+
+			// Don't auto-assign reviewers to CLs on shared branches;
+			// the presumption is that developers there will know which
+			// reviewers to assign.
+			if strings.HasPrefix(cl.Branch(), "dev.") {
+				return nil
+			}
+
 			tags := cl.Meta.Hashtags()
 			if tags.Contains(tagNoOwners) {
 				return nil
