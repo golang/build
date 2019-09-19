@@ -66,7 +66,6 @@ var (
 	thanm        = gh("thanm")
 	tklauser     = gh("tklauser")
 	tombergan    = gh("tombergan")
-	ysmolsky     = gh("ysmolsky")
 	x1ddos       = gh("x1ddos")
 )
 
@@ -642,7 +641,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/cmd/godoc": {
 		Primary:   []Owner{andybons},
-		Secondary: []Owner{agnivade, bradfitz, gri, ysmolsky, kevinburke},
+		Secondary: []Owner{agnivade, bradfitz, gri, kevinburke},
 	},
 	"tools/cmd/goimports": {
 		Primary:   []Owner{bradfitz},
@@ -668,7 +667,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{matloob},
 	},
 	"playground": {
-		Secondary: []Owner{ysmolsky},
+		Secondary: []Owner{},
 	},
 	"website": {
 		Primary:   []Owner{dmitshur},
