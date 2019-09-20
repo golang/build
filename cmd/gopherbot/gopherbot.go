@@ -908,7 +908,7 @@ func (b *gopherbot) handleGoplsIssues(ctx context.Context) error {
 		}
 		// Request more information from the user.
 		const comment = "Thank you for filing a gopls issue! Please take a look at the " +
-			"[Troubleshooting](https://github.com/golang/go/wiki/gopls#troubleshooting) section of the gopls Wiki page, " +
+			"[Troubleshooting guide](https://github.com/golang/tools/blob/master/gopls/doc/troubleshooting.md#troubleshooting), " +
 			"and make sure that you have provided all of the relevant information here."
 		return b.addGitHubComment(ctx, "golang", "go", gi.Number, comment)
 	})
