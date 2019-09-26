@@ -741,7 +741,7 @@ func commitMessage(pr *github.PullRequest, cl *maintner.GerritCL) (string, error
 	}
 
 	var msg bytes.Buffer
-	fmt.Fprintf(&msg, "%s\n\n%s\n\n", pr.GetTitle(), prBody)
+	fmt.Fprintf(&msg, "%s\n\n%s\n\n", cleanTitle(pr.GetTitle()), prBody)
 	fmt.Fprintf(&msg, "%s %s\n", prefixGitFooterChangeID, changeID)
 	fmt.Fprintf(&msg, "%s %s\n", prefixGitFooterLastRev, pr.Head.GetSHA())
 	fmt.Fprintf(&msg, "%s %s\n", prefixGitFooterPR, prShortLink(pr))
@@ -754,6 +754,19 @@ func commitMessage(pr *github.PullRequest, cl *maintner.GerritCL) (string, error
 		return "", fmt.Errorf("could not execute command %v: %v", cmd.Args, err)
 	}
 	return string(out), nil
+}
+
+var xRemove = regexp.MustCompile(`^x/\w+/`)
+
+// cleanTitle removes "x/foo/" from the beginning of t.
+// It's a common mistake that people make in their PR titles (since we
+// use that convention for issues, but not PRs) and it's better to just fix
+// it here rather than ask everybody to fix it manually.
+func cleanTitle(t string) string {
+	if strings.HasPrefix(t, "x/") {
+		return xRemove.ReplaceAllString(t, "")
+	}
+	return t
 }
 
 // genChangeID returns a new Gerrit Change ID using the Pull Request’s ID.

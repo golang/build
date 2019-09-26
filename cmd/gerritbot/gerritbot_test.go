@@ -68,7 +68,7 @@ GitHub-Pull-Request: golang/go#42
 		},
 		{
 			"change with Change-Id",
-			newPullRequest("cmd/gerritbot: change with change ID", "Body text"),
+			newPullRequest("x/build/cmd/gerritbot: change with change ID", "Body text"),
 			newMaintnerCL(),
 			`cmd/gerritbot: change with change ID
 
