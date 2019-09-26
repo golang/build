@@ -30,7 +30,6 @@ RUN go install golang.org/x/build/maintner/maintnerd/apipb
 RUN go install golang.org/x/build/maintner/godata
 
 COPY . /go/src/golang.org/x/build/
-WORKDIR /go/src/golang.org/x/build/
 
 RUN go install golang.org/x/build/cmd/gitmirror
 

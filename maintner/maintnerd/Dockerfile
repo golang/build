@@ -26,7 +26,6 @@ RUN go install golang.org/x/time/rate
 RUN go install grpc.go4.org
 
 COPY . /go/src/golang.org/x/build/
-WORKDIR /go/src/golang.org/x/build/
 
 RUN go install golang.org/x/build/maintner/maintnerd
 

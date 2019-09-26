@@ -203,7 +203,9 @@ func (p *Proxy) poll() {
 
 	dir := filepath.Join(os.TempDir(), "tip", newSide)
 	if err := os.MkdirAll(dir, 0755); err != nil {
+		p.mu.Lock()
 		p.err = err
+		p.mu.Unlock()
 		return
 	}
 	hostport := "localhost:8081"
@@ -256,6 +258,7 @@ func (p *Proxy) poll() {
 	}
 	p.cmd = cmd
 	p.err = nil // If we get this far, the process started successfully. Clear the error.
+	logger.Printf("success; starting to serve on side %v", newSide)
 }
 
 type serveOptions struct {

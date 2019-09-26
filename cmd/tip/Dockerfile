@@ -9,6 +9,8 @@ ENV GOCACHE /gocache
 COPY go.mod /go/src/golang.org/x/build/go.mod
 COPY go.sum /go/src/golang.org/x/build/go.sum
 
+WORKDIR /go/src/golang.org/x/build
+
 # Optimization for iterative docker build speed, not necessary for correctness:
 # TODO: write a tool to make writing Go module-friendly Dockerfiles easier.
 RUN go install golang.org/x/crypto/acme/autocert
