@@ -63,6 +63,7 @@ func (b golangorgBuilder) Init(logger *log.Logger, dir, hostport string, heads m
 	install := exec.Command(goBin, "install", "golang.org/x/website/cmd/golangorg")
 	install.Stdout = logWriter
 	install.Stderr = logWriter
+	install.Dir = websiteDir
 	install.Env = append(os.Environ(),
 		"GOROOT="+goDir,
 		"GO111MODULE=on",
