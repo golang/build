@@ -441,9 +441,9 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-longtest", "exp"), onlyPost},
 		{b("windows-386-2008", "exp"), both},
 		{b("windows-amd64-2016", "exp"), both},
-		{b("darwin-amd64-10_12", "exp"), onlyPost},
 		{b("darwin-amd64-10_14", "exp"), onlyPost},
 		// ... but not on most others:
+		{b("darwin-amd64-10_12", "exp"), none},
 		{b("freebsd-386-11_2", "exp"), none},
 		{b("freebsd-386-12_0", "exp"), none},
 		{b("freebsd-amd64-11_2", "exp"), none},
