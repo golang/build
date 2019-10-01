@@ -102,7 +102,8 @@ type BuildRecord struct {
 	EndTime    time.Time
 	Seconds    float64
 	Result     string // empty string, "ok", "fail"
-	FailureURL string `datastore:",noindex"`
+	FailureURL string `datastore:",noindex"` // deprecated; use LogURL
+	LogURL     string `datastore:",noindex"`
 
 	// TODO(bradfitz): log which reverse buildlet we got?
 	// Buildlet string

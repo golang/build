@@ -673,17 +673,16 @@ func serveTryStatusHTML(w http.ResponseWriter, ts *trySet, tss trySetState) {
 			if bs.succeeded {
 				status = "pass"
 			} else {
-				if u := bs.failURL; u != "" {
-					status = fmt.Sprintf("<a href='%s'><b>FAIL</b></a>", html.EscapeString(u))
-				} else {
-					status = "<b>FAIL</b>"
-				}
+				status = "<b>FAIL</b>"
 			}
 		} else {
 			status = fmt.Sprintf("<i>running</i> %s", time.Since(bs.startTime).Round(time.Second))
 		}
+		if u := bs.logURL; u != "" {
+			status = fmt.Sprintf(`<a href="%s">%s</a>`, html.EscapeString(u), status)
+		}
 		bs.mu.Unlock()
-		fmt.Fprintf(buf, "<tr><td class='nobr'>&#8226; %s</td><td>%s</td></tr>\n",
+		fmt.Fprintf(buf, "<tr><td class=\"nobr\">&#8226; %s</td><td>%s</td></tr>\n",
 			html.EscapeString(bs.NameAndBranch()), status)
 	}
 	fmt.Fprintf(buf, "</table>\n")
@@ -1323,12 +1322,11 @@ func (ts *trySet) cancelBuilds() {
 
 func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 	bs.mu.Lock()
-	succeeded := bs.succeeded
-	var buildLog string
-	if !succeeded {
-		buildLog = bs.output.String()
-	}
-	hasBenchResults := bs.hasBenchResults
+	var (
+		succeeded       = bs.succeeded
+		buildLog        = bs.output.String()
+		hasBenchResults = bs.hasBenchResults
+	)
 	bs.mu.Unlock()
 
 	ts.mu.Lock()
@@ -1346,25 +1344,26 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 
 	const failureFooter = "Consult https://build.golang.org/ to see whether they are new failures. Keep in mind that TryBots currently test *exactly* your git commit, without rebasing. If your commit's git parent is old, the failure might've already been fixed."
 
-	if !succeeded {
-		s1 := sha1.New()
-		io.WriteString(s1, buildLog)
-		objName := fmt.Sprintf("%s/%s_%x.log", bs.Rev[:8], bs.Name, s1.Sum(nil)[:4])
-		wr, failLogURL := newFailureLogBlob(objName)
-		if _, err := io.WriteString(wr, buildLog); err != nil {
-			log.Printf("Failed to write to GCS: %v", err)
-			return
-		}
-		if err := wr.Close(); err != nil {
-			log.Printf("Failed to write to GCS: %v", err)
-			return
-		}
+	s1 := sha1.New()
+	io.WriteString(s1, buildLog)
+	objName := fmt.Sprintf("%s/%s_%x.log", bs.Rev[:8], bs.Name, s1.Sum(nil)[:4])
+	wr, logURL := newBuildLogBlob(objName)
+	if _, err := io.WriteString(wr, buildLog); err != nil {
+		log.Printf("Failed to write to GCS: %v", err)
+		return
+	}
+	if err := wr.Close(); err != nil {
+		log.Printf("Failed to write to GCS: %v", err)
+		return
+	}
 
-		bs.mu.Lock()
-		bs.failURL = failLogURL
-		bs.mu.Unlock()
+	bs.mu.Lock()
+	bs.logURL = logURL
+	bs.mu.Unlock()
+
+	if !succeeded {
 		ts.mu.Lock()
-		fmt.Fprintf(&ts.errMsg, "Failed on %s: %s\n", bs.NameAndBranch(), failLogURL)
+		fmt.Fprintf(&ts.errMsg, "Failed on %s: %s\n", bs.NameAndBranch(), logURL)
 		ts.mu.Unlock()
 
 		if numFail == 1 && remain > 0 {
@@ -1374,7 +1373,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 						"This change failed on %s:\n"+
 						"See %s\n\n"+
 						"Other builds still in progress; subsequent failure notices suppressed until final report. "+failureFooter,
-					bs.NameAndBranch(), failLogURL),
+					bs.NameAndBranch(), logURL),
 			}); err != nil {
 				log.Printf("Failed to call Gerrit: %v", err)
 				return
@@ -1831,9 +1830,8 @@ func (st *buildStatus) build() error {
 	}
 
 	if st.trySet == nil {
-		var buildLog string
+		buildLog := st.logs()
 		if remoteErr != nil {
-			buildLog = st.logs()
 			// If we just have the line-or-so little
 			// banner at top, that means we didn't get any
 			// interesting output from the remote side, so
@@ -1884,7 +1882,7 @@ func (st *buildStatus) buildRecord() *types.BuildRecord {
 	// TODO: buildlet instance name
 	if !st.done.IsZero() {
 		rec.EndTime = st.done
-		rec.FailureURL = st.failURL
+		rec.LogURL = st.logURL
 		rec.Seconds = rec.EndTime.Sub(rec.StartTime).Seconds()
 		if st.succeeded {
 			rec.Result = "ok"
@@ -3291,7 +3289,7 @@ type buildStatus struct {
 	hasBenchResults bool // set by runTests, may only be used when build() returns.
 
 	mu              sync.Mutex       // guards following
-	failURL         string           // if non-empty, permanent URL of failure
+	logURL          string           // if non-empty, permanent URL of log
 	bc              *buildlet.Client // nil initially, until pool returns one
 	done            time.Time        // finished running
 	succeeded       bool             // set when done
@@ -3489,8 +3487,8 @@ func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
 }
 
 func (st *buildStatus) logsURLLocked() string {
-	if st.failURL != "" {
-		return st.failURL
+	if st.logURL != "" {
+		return st.logURL
 	}
 	var urlPrefix string
 	if buildEnv == buildenv.Production {
@@ -3584,10 +3582,10 @@ func getRepoHead(repo string) (string, error) {
 	return res.Value, nil
 }
 
-// newFailureLogBlob creates a new object to record a public failure log.
+// newBuildLogBlob creates a new object to record a public build log.
 // The objName should be a Google Cloud Storage object name.
 // When developing on localhost, the WriteCloser may be of a different type.
-func newFailureLogBlob(objName string) (obj io.WriteCloser, url_ string) {
+func newBuildLogBlob(objName string) (obj io.WriteCloser, url_ string) {
 	if *mode == "dev" {
 		// TODO(bradfitz): write to disk or something, or
 		// something testable. Maybe memory.
@@ -3597,7 +3595,7 @@ func newFailureLogBlob(objName string) (obj io.WriteCloser, url_ string) {
 		}{
 			os.Stderr,
 			ioutil.NopCloser(nil),
-		}, "devmode://fail-log/" + objName
+		}, "devmode://build-log/" + objName
 	}
 	if storageClient == nil {
 		panic("nil storageClient in newFailureBlob")
