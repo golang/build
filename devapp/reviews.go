@@ -134,6 +134,7 @@ func (s *server) updateReviewsData() {
 			{"scratch", 72091}: true,
 			{"scratch", 72110}: true,
 			{"scratch", 72131}: true,
+			{"tools", 93515}:   true,
 		}
 	)
 	s.corpus.Gerrit().ForeachProjectUnsorted(func(p *maintner.GerritProject) error {
