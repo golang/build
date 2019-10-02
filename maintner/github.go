@@ -1498,6 +1498,7 @@ func (gr *GitHubRepo) sync(ctx context.Context, token string, loop bool) error {
 		gr:            gr,
 		githubDirect:  github.NewClient(&http.Client{Transport: directTransport}),
 		githubCaching: github.NewClient(&http.Client{Transport: cachingTransport}),
+		client:        http.DefaultClient,
 	}
 	activityCh := gr.github.c.activityChan("github:" + gr.id.String())
 	var expectChanges bool // got webhook update, but haven't seen new data yet
@@ -1545,6 +1546,10 @@ func (gr *GitHubRepo) sync(ctx context.Context, token string, loop bool) error {
 	}
 }
 
+type httpClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 // A githubRepoPoller updates the Corpus (gr.c) to have the latest
 // version of the GitHub repo rp, using the GitHub client ghc.
 type githubRepoPoller struct {
@@ -1554,6 +1559,7 @@ type githubRepoPoller struct {
 	lastUpdate    time.Time // modified by sync
 	githubCaching *github.Client
 	githubDirect  *github.Client // not caching
+	client        httpClient     // the client used to poll github
 }
 
 func (p *githubRepoPoller) Owner() string { return p.gr.id.Owner }
@@ -2065,7 +2071,7 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 			ctx, cancel := context.WithTimeout(ctx, time.Minute)
 			defer cancel()
 			req = req.WithContext(ctx)
-			res, err := http.DefaultClient.Do(req)
+			res, err := p.client.Do(req)
 			if err != nil {
 				log.Printf("Fetching %s: %v", u, err)
 				return nil, nil, err
@@ -2077,6 +2083,7 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 				log.Printf("GitHub error %s: %v", u, ghResp)
 				return nil, nil, err
 			}
+
 			evts, err := parseGithubEvents(res.Body)
 			if err != nil {
 				return nil, nil, fmt.Errorf("%s: parse github events: %v", u, err)

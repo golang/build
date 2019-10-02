@@ -1,0 +1,29 @@
+[{
+    "id": 1943494698,
+    "node_id": "MDExOkNsb3NlZEV2ZW50MTk0MzQ5NDY5OA==",
+    "url": "https://api.github.com/repos/golang/go/issues/events/1943494698",
+    "actor": {
+    "login": "ianlancetaylor",
+    "id": 3194333,
+    "node_id": "MDQ6VXNlcjMxOTQzMzM=",
+    "avatar_url": "https://avatars2.githubusercontent.com/u/3194333?v=4",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/ianlancetaylor",
+    "html_url": "https://github.com/ianlancetaylor",
+    "followers_url": "https://api.github.com/users/ianlancetaylor/followers",
+    "following_url": "https://api.github.com/users/ianlancetaylor/following{/other_user}",
+    "gists_url": "https://api.github.com/users/ianlancetaylor/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/ianlancetaylor/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/ianlancetaylor/subscriptions",
+    "organizations_url": "https://api.github.com/users/ianlancetaylor/orgs",
+    "repos_url": "https://api.github.com/users/ianlancetaylor/repos",
+    "events_url": "https://api.github.com/users/ianlancetaylor/events{/privacy}",
+    "received_events_url": "https://api.github.com/users/ianlancetaylor/received_events",
+    "type": "User",
+    "site_admin": false
+    },
+    "event": "closed",
+    "commit_id": null,
+    "commit_url": null,
+    "created_at": "2018-11-02T17:27:53Z"
+}]

@@ -5,14 +5,22 @@
 package maintner
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/google/go-github/github"
 
 	"golang.org/x/build/maintner/maintpb"
 )
@@ -515,6 +523,220 @@ func TestParseGithubEvents(t *testing.T) {
 	}
 
 	t.Logf("Tested event types: %q", eventTypes)
+}
+
+func TestParseMultipleGithubEvents(t *testing.T) {
+	content, err := ioutil.ReadFile(filepath.Join("testdata", "TestParseMultipleGithubEvents.json"))
+	if err != nil {
+		t.Errorf("error while loading testdata: %s\n", err.Error())
+	}
+	evts, err := parseGithubEvents(strings.NewReader(string(content)))
+	if err != nil {
+		t.Errorf("error was not expected: %s\n", err.Error())
+	}
+	if len(evts) != 7 {
+		t.Errorf("there should have been three events. was: %d\n", len(evts))
+	}
+	lastEvent := evts[len(evts)-1]
+	if lastEvent.Type != "closed" {
+		t.Errorf("the last event's type should have been closed. was: %s\n", lastEvent.Type)
+	}
+}
+
+func TestParseMultipleGithubEventsWithForeach(t *testing.T) {
+	issue := &GitHubIssue{
+		PullRequest: true,
+		events: map[int64]*GitHubIssueEvent{
+			0: &GitHubIssueEvent{
+				Type: "labelled",
+			},
+			1: &GitHubIssueEvent{
+				Type: "milestone",
+			},
+			2: &GitHubIssueEvent{
+				Type: "closed",
+			},
+		},
+	}
+	eventTypes := []string{"closed", "labelled", "milestone"}
+	gatheredTypes := make([]string, 0)
+	issue.ForeachEvent(func(e *GitHubIssueEvent) error {
+		gatheredTypes = append(gatheredTypes, e.Type)
+		return nil
+	})
+	sort.Strings(gatheredTypes)
+	if !reflect.DeepEqual(eventTypes, gatheredTypes) {
+		t.Fatalf("want event types: %v; got: %v\n", eventTypes, gatheredTypes)
+	}
+}
+
+type ClientMock struct {
+	err        error
+	status     string
+	statusCode int
+	testdata   string
+}
+
+var timesDoWasCalled = 0
+
+func (c *ClientMock) Do(req *http.Request) (*http.Response, error) {
+	if len(c.testdata) < 1 {
+		c.testdata = "TestParseMultipleGithubEvents.json"
+	}
+	timesDoWasCalled++
+	content, _ := ioutil.ReadFile(filepath.Join("testdata", c.testdata))
+	headers := make(http.Header, 0)
+	t := time.Now()
+	var b []byte
+	headers["Date"] = []string{string(t.AppendFormat(b, "Mon Jan _2 15:04:05 2006"))}
+	return &http.Response{
+		Body:       ioutil.NopCloser(bytes.NewReader(content)),
+		Status:     c.status,
+		StatusCode: c.statusCode,
+		Header:     headers,
+	}, c.err
+}
+
+type MockLogger struct {
+}
+
+var eventLog = make([]string, 0)
+
+func (m *MockLogger) Log(mut *maintpb.Mutation) error {
+	for _, e := range mut.GithubIssue.Event {
+		eventLog = append(eventLog, e.EventType)
+	}
+	return nil
+}
+
+func TestSyncEvents(t *testing.T) {
+	var c Corpus
+	c.initGithub()
+	c.mutationLogger = &MockLogger{}
+	gr := c.github.getOrCreateRepo("foowner", "bar")
+	issue := &GitHubIssue{
+		ID:          1001,
+		PullRequest: true,
+		events:      map[int64]*GitHubIssueEvent{},
+	}
+	gr.issues = map[int32]*GitHubIssue{
+		1001: issue,
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		rw.Write([]byte("OK"))
+	}))
+	defer server.Close()
+	p := &githubRepoPoller{
+		c:             &c,
+		token:         "foobar",
+		gr:            gr,
+		githubDirect:  github.NewClient(server.Client()),
+		githubCaching: github.NewClient(server.Client()),
+	}
+	t.Run("successful sync", func(t2 *testing.T) {
+		defer func() { eventLog = make([]string, 0) }()
+		timesDoWasCalled = 0
+		ctx := context.Background()
+		p.client = &ClientMock{
+			status:     "OK",
+			statusCode: http.StatusOK,
+			err:        nil,
+			testdata:   "TestParseMultipleGithubEvents.json",
+		}
+		err := p.syncEventsOnIssue(ctx, int32(issue.ID))
+		if err != nil {
+			t2.Error(err)
+		}
+		want := []string{"labeled", "labeled", "labeled", "labeled", "labeled", "milestoned", "closed"}
+		if !reflect.DeepEqual(want, eventLog) {
+			t2.Errorf("want: %v; got: %v\n", want, eventLog)
+		}
+
+		wantTimesCalled := 1
+		if timesDoWasCalled != wantTimesCalled {
+			t.Errorf("client.Do should have been called %d times. got: %d\n", wantTimesCalled, timesDoWasCalled)
+		}
+	})
+	t.Run("successful sync missing milestones", func(t2 *testing.T) {
+		defer func() { eventLog = make([]string, 0) }()
+		timesDoWasCalled = 0
+		ctx := context.Background()
+		p.client = &ClientMock{
+			status:     "OK",
+			statusCode: http.StatusOK,
+			err:        nil,
+			testdata:   "TestMissingMilestoneEvents.json",
+		}
+		err := p.syncEventsOnIssue(ctx, int32(issue.ID))
+		if err != nil {
+			t2.Error(err)
+		}
+		want := []string{"mentioned", "subscribed", "mentioned", "subscribed", "assigned", "labeled", "labeled", "milestoned", "renamed", "demilestoned", "milestoned"}
+		sort.Strings(want)
+		sort.Strings(eventLog)
+		if !reflect.DeepEqual(want, eventLog) {
+			t2.Errorf("want: %v; got: %v\n", want, eventLog)
+		}
+
+		wantTimesCalled := 1
+		if timesDoWasCalled != wantTimesCalled {
+			t.Errorf("client.Do should have been called %d times. got: %d\n", wantTimesCalled, timesDoWasCalled)
+		}
+	})
+}
+
+func TestSyncMultipleConsecutiveEvents(t *testing.T) {
+	var c Corpus
+	c.initGithub()
+	c.mutationLogger = &MockLogger{}
+	gr := c.github.getOrCreateRepo("foowner", "bar")
+	issue := &GitHubIssue{
+		ID:          1001,
+		PullRequest: true,
+		events:      map[int64]*GitHubIssueEvent{},
+	}
+	gr.issues = map[int32]*GitHubIssue{
+		1001: issue,
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		rw.Write([]byte("OK"))
+	}))
+	defer server.Close()
+	p := &githubRepoPoller{
+		c:             &c,
+		token:         "foobar",
+		gr:            gr,
+		githubDirect:  github.NewClient(server.Client()),
+		githubCaching: github.NewClient(server.Client()),
+	}
+	t.Run("successful sync", func(t2 *testing.T) {
+		defer func() { eventLog = make([]string, 0) }()
+		timesDoWasCalled = 0
+		ctx := context.Background()
+		for i := 1; i < 5; i++ {
+			testdata := fmt.Sprintf("TestParseMultipleGithubEvents_p%d.json", i)
+			p.client = &ClientMock{
+				status:     "OK",
+				statusCode: http.StatusOK,
+				err:        nil,
+				testdata:   testdata,
+			}
+			err := p.syncEventsOnIssue(ctx, int32(issue.ID))
+			if err != nil {
+				t2.Fatal(err)
+			}
+		}
+
+		want := []string{"labeled", "labeled", "labeled", "labeled", "labeled", "milestoned", "closed"}
+		if !reflect.DeepEqual(want, eventLog) {
+			t2.Errorf("want: %v; got: %v\n", want, eventLog)
+		}
+
+		wantTimesCalled := 4
+		if timesDoWasCalled != wantTimesCalled {
+			t.Errorf("client.Do should have been called %d times. got: %d\n", wantTimesCalled, timesDoWasCalled)
+		}
+	})
 }
 
 func TestParseGitHubReviews(t *testing.T) {
