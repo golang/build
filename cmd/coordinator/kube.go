@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build go1.13
 // +build linux darwin
 
 package main
@@ -77,6 +78,7 @@ func initKube() error {
 	sourcecache.RegisterGitMirrorDial(func(ctx context.Context) (net.Conn, error) {
 		return goKubeClient.DialServicePort(ctx, "gitmirror", "")
 	})
+	go monitorGitMirror() // requires goKubeClient
 
 	go kubePool.pollCapacityLoop()
 	return nil

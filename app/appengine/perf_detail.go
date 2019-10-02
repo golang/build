@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build appengine
-
-package build
+package main
 
 import (
 	"bytes"
@@ -18,10 +16,6 @@ import (
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
 )
-
-func init() {
-	handleFunc("/perfdetail", perfDetailUIHandler)
-}
 
 func perfDetailUIHandler(w http.ResponseWriter, r *http.Request) {
 	d := goDash
@@ -215,5 +209,5 @@ func (l uiPerfDetailMetrics) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
 func (l uiPerfDetailMetrics) Less(i, j int) bool { return l[i].Name < l[j].Name }
 
 var uiPerfDetailTemplate = template.Must(
-	template.New("perf_detail.html").Funcs(tmplFuncs).ParseFiles("perf_detail.html"),
+	template.New("perf_detail.html").Funcs(tmplFuncs).ParseFiles(templateFile("perf_detail.html")),
 )

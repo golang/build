@@ -44,13 +44,15 @@ a:visited {
 .Item {
   display: flex;
 }
-.Item-blocker:before {
-  content: '★';
-  position: absolute;
-}
 .Item-num {
-  margin-left: 4ch;
+  margin-left: 1ch;
   min-width: 12ch;
+}
+.Mark {
+  width: 3ch;
+  height: 1ch;
+  text-align: center;
+  vertical-align: middle;
 }
 .DirTitle {
   margin: 1em 0 .25em;
@@ -80,7 +82,16 @@ a:visited {
 	{{if .FirstPerformance}}<h5 class="Performance-separator">performance</h5>{{end}}
         {{$i := .Issue}}
         {{if $i}}
-          <div class="Item{{if .ReleaseBlocker}} Item-blocker{{end}}">
+          <div class="Item">
+            {{if .CurrentBlocker}}
+              <div class="Mark" title="{{.Issue.Milestone.Title}} release blocker">★</div>
+            {{else if .ReleaseBlocker}}
+              <div class="Mark" title="Release blocker">✩</div>
+            {{else if .EarlyInCycle}}
+              <div class="Mark" title="Early In Cycle">&#x23F1;&#xE0100;</div>
+            {{else}}
+              <div class="Mark"> </div>
+            {{end}}
             <a class="Item-num" href="https://golang.org/issue/{{.Issue.Number}}" target="_blank">#{{.Issue.Number}}</a>
             <span class="Item-title">{{.Issue.Title}}</span>
           </div>
@@ -88,6 +99,7 @@ a:visited {
         {{range .CLs}}
           {{if not .Closed}}
             <div class="Item">
+              <div class="Mark"></div>
               <span class="Item-num">
                 {{if $i}}⤷{{end}} <a href="{{.ReviewURL}}" target="_blank">CL {{.Number}}</a>
               </span>
@@ -110,6 +122,7 @@ new Chart(document.querySelector('.js-burndownChart'), {
     datasets: [
       {
         label: `${data.milestone} total issues`,
+        yAxisID: 'total',
         data: data.entries.map(d => d.open),
         backgroundColor: 'transparent',
         borderColor: 'rgba(54, 162, 235, 0.8)',
@@ -117,6 +130,7 @@ new Chart(document.querySelector('.js-burndownChart'), {
       },
       {
         label: `${data.milestone} release blocking`,
+        yAxisID: 'release-blocking',
         data: data.entries.map(d => d.blockers),
         backgroundColor: 'rgba(0,0,0,0)',
         borderColor: 'rgba(255, 99, 132, 0.8)',
@@ -142,9 +156,18 @@ new Chart(document.querySelector('.js-burndownChart'), {
     scales: {
       yAxes: [
         {
+          id: 'total',
           ticks: {
             beginAtZero: true,
           },
+          position: 'left',
+        },
+        {
+          id: 'release-blocking',
+          ticks: {
+            beginAtZero: true,
+          },
+          position: 'right',
         },
       ],
     },

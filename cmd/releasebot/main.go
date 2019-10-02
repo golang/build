@@ -190,6 +190,7 @@ type Work struct {
 	ReleaseIssue  int    // Release status issue number
 	ReleaseBranch string // "master" for beta releases
 	Dir           string // work directory ($HOME/go-releasebot-work/<release>)
+	StagingDir    string // staging directory (a temporary directory inside <work>/release-staging)
 	Errors        []string
 	ReleaseBinary string
 	Version       string
@@ -301,12 +302,27 @@ func (w *Work) doRelease() {
 	} else if w.RCRelease {
 		shortRel := strings.Split(w.Version, "rc")[0]
 		w.ReleaseBranch = "release-branch." + shortRel
-	} else {
+	} else if strings.Count(w.Version, ".") == 1 {
+		// Major release like "go1.X".
+		if w.Security {
+			// TODO(dmitshur): move this error check to happen earlier
+			w.logError("%s is a major version, it cannot be a security release.", w.Version)
+			w.logError("**Found errors during release. Stopping!**")
+			return
+		}
+		w.ReleaseBranch = "release-branch." + w.Version
+	} else if strings.Count(w.Version, ".") == 2 {
+		// Minor release or security release like "go1.X.Y".
 		shortRel := w.Version[:strings.LastIndex(w.Version, ".")]
 		w.ReleaseBranch = "release-branch." + shortRel
 		if w.Security {
 			w.ReleaseBranch += "-security"
 		}
+	} else {
+		// TODO(dmitshur): move this error check to happen earlier
+		w.logError("Cannot understand version %q.", w.Version)
+		w.logError("**Found errors during release. Stopping!**")
+		return
 	}
 
 	w.checkSpelling()
@@ -338,9 +354,13 @@ func (w *Work) doRelease() {
 			changeID = w.writeVersion()
 		}
 
-		// Run the all.bash tests on the builders.
+		// Create release archives and run all.bash tests on the builders.
 		w.VersionCommit = w.gitHeadCommit()
 		w.buildReleases()
+		if len(w.Errors) > 0 {
+			w.logError("**Found errors during release. Stopping!**")
+			return
+		}
 
 		if w.BetaRelease {
 			w.nextStepsBeta()
@@ -355,8 +375,16 @@ func (w *Work) doRelease() {
 			w.logError("**Found errors during release. Stopping!**")
 			return
 		}
+
+		// Create and push the Git tag for the release, then create or reuse release archives.
+		// (Tests are skipped here since they ran during the prepare mode.)
 		w.gitTagVersion()
 		w.buildReleases()
+		if len(w.Errors) > 0 {
+			w.logError("**Found errors during release. Stopping!**")
+			return
+		}
+
 		if !w.BetaRelease && !w.RCRelease {
 			w.pushIssues()
 			w.closeMilestone()
@@ -453,6 +481,10 @@ func (w *Work) postSummary() {
 	md.WriteString(strings.Replace(w.logBuf.String(), "\n", "\n    ", -1))
 	fmt.Fprintf(&md, "\n\n")
 
+	if len(w.Errors) > 0 {
+		fmt.Fprintf(&md, "There were problems with the release, see above for details.\n")
+	}
+
 	body := md.String()
 	fmt.Printf("%s", body)
 	// Avoid the risk of leaking sensitive test failures on security releases.
@@ -494,14 +526,34 @@ func (w *Work) printReleaseTable(md *bytes.Buffer) {
 }
 
 func (w *Work) checkDocs() {
-	// Check that we've documented the release.
-	data, err := ioutil.ReadFile(filepath.Join(w.Dir, "gitwork", "doc/devel/release.html"))
+	// Check that the major version is listed on the project page.
+	data, err := ioutil.ReadFile(filepath.Join(w.Dir, "gitwork", "doc/contrib.html"))
 	if err != nil {
 		w.log.Panic(err)
 	}
-	if !strings.Contains(string(data), "\n<p>\n"+w.Version+" (released ") {
-		w.logError("doc/devel/release.html does not document " + w.Version)
+	major := major(w.Version)
+	if !strings.Contains(string(data), major) {
+		w.logError("doc/contrib.html does not list major version %s", major)
 	}
+
+	// Check that the release is listed on the release history page.
+	data, err = ioutil.ReadFile(filepath.Join(w.Dir, "gitwork", "doc/devel/release.html"))
+	if err != nil {
+		w.log.Panic(err)
+	}
+	if !strings.Contains(string(data), w.Version+" (released ") {
+		w.logError("doc/devel/release.html does not document %s", w.Version)
+	}
+}
+
+// major takes a go version like "go1.5", "go1.5.1", "go1.5.2", etc.,
+// and returns the corresponding major version like "go1.5".
+func major(v string) string {
+	if strings.Count(v, ".") != 2 {
+		// No minor component to drop, return as is.
+		return v
+	}
+	return v[:strings.LastIndex(v, ".")]
 }
 
 func (w *Work) writeVersion() (changeID string) {
@@ -547,7 +599,7 @@ func (w *Work) buildReleaseBinary() {
 	if err := os.MkdirAll(gopath, 0777); err != nil {
 		w.log.Panic(err)
 	}
-	r := w.runner(w.Dir, "GOPATH="+gopath, "GOBIN="+filepath.Join(gopath, "bin"))
+	r := w.runner(w.Dir, "GO111MODULE=off", "GOPATH="+gopath, "GOBIN="+filepath.Join(gopath, "bin"))
 	r.run("go", "get", "golang.org/x/build/cmd/release")
 	w.ReleaseBinary = filepath.Join(gopath, "bin/release")
 }
@@ -557,6 +609,14 @@ func (w *Work) buildReleases() {
 	if err := os.MkdirAll(filepath.Join(w.Dir, "release", w.VersionCommit), 0777); err != nil {
 		w.log.Panic(err)
 	}
+	if err := os.MkdirAll(filepath.Join(w.Dir, "release-staging"), 0777); err != nil {
+		w.log.Panic(err)
+	}
+	stagingDir, err := ioutil.TempDir(filepath.Join(w.Dir, "release-staging"), w.VersionCommit+"_")
+	if err != nil {
+		w.log.Panic(err)
+	}
+	w.StagingDir = stagingDir
 	w.ReleaseInfo = make(map[string]*ReleaseInfo)
 
 	if w.Security {
@@ -619,11 +679,15 @@ to %s and press enter.
 
 // buildRelease builds the release packaging for a given target. Because the
 // "release" program can be flaky, it tries up to five times. The release files
-// are written to the current release directory
-// ($HOME/go-releasebot-work/go1.2.3/release/COMMIT_HASH). If files for the
-// current version commit are already present in that directory, they are reused
-// instead of being rebuilt. In release mode, buildRelease then uploads the
-// release packaging to the gs://golang-release-staging bucket, along with files
+// are first written to a staging directory specified in w.StagingDir
+// (a temporary directory inside $HOME/go-releasebot-work/go1.2.3/release-staging),
+// then after the all.bash tests complete successfully (or get skipped),
+// they get moved to the final release directory
+// ($HOME/go-releasebot-work/go1.2.3/release/COMMIT_HASH).
+//
+// If files for the current version commit are already present in the release directory,
+// they are reused instead of being rebuilt. In release mode, buildRelease then uploads
+// the release packaging to the gs://golang-release-staging bucket, along with files
 // containing the SHA256 hash of the releases, for eventual use by the download page.
 func (w *Work) buildRelease(target string) {
 	log.Printf("BUILDRELEASE %s %s\n", w.Version, target)
@@ -663,7 +727,8 @@ func (w *Work) buildRelease(target string) {
 		for {
 			releaseBranch := strings.TrimSuffix(w.ReleaseBranch, "-security")
 			args := []string{w.ReleaseBinary, "-target", target, "-user", gomoteUser,
-				"-version", w.Version, "-tools", releaseBranch, "-net", releaseBranch}
+				"-version", w.Version, "-tools", releaseBranch, "-net", releaseBranch,
+				"-staging_dir", w.StagingDir}
 			if w.Security {
 				args = append(args, "-tarball", filepath.Join(w.Dir, w.VersionCommit+".tar.gz"))
 			} else {
@@ -689,7 +754,7 @@ func (w *Work) buildRelease(target string) {
 			if !failed {
 				break
 			}
-			w.log.Printf("release %s: %s\n%s", target, err, out)
+			w.log.Printf("release %s:\nerror from cmd/release binary = %v\noutput from cmd/release binary:\n%s", target, err, out)
 			if failures++; failures >= 3 {
 				w.log.Printf("release %s: too many failures\n", target)
 				for _, out := range outs {

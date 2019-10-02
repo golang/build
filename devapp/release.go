@@ -27,11 +27,11 @@ const (
 	prefixDev      = "[dev."
 
 	// The title of the current release milestone in GitHub.
-	curMilestoneTitle = "Go1.13"
+	curMilestoneTitle = "Go1.14"
 )
 
 // The start date of the current release milestone.
-var curMilestoneStart = time.Date(2019, 2, 26, 0, 0, 0, 0, time.UTC)
+var curMilestoneStart = time.Date(2019, 8, 27, 0, 0, 0, 0, time.UTC)
 
 // titleDirs returns a slice of prefix directories contained in a title. For
 // devapp,maintner: my cool new change, it will return ["devapp", "maintner"].
@@ -100,11 +100,25 @@ func (i *item) ReleaseBlocker() bool {
 	return i.Issue.HasLabel("release-blocker")
 }
 
+func (i *item) CurrentBlocker() bool {
+	return i.Issue.Milestone.Title == curMilestoneTitle && i.ReleaseBlocker()
+}
+
+func (i *item) EarlyInCycle() bool {
+	return !i.ReleaseBlocker() && i.Issue.HasLabel("early-in-cycle")
+}
+
 type itemsBySummary []item
 
 func (x itemsBySummary) Len() int      { return len(x) }
 func (x itemsBySummary) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
 func (x itemsBySummary) Less(i, j int) bool {
+	// Sort release-blocker issues to the front
+	ri := x[i].Issue != nil && x[i].Issue.HasLabel("release-blocker")
+	rj := x[j].Issue != nil && x[j].Issue.HasLabel("release-blocker")
+	if ri != rj {
+		return ri
+	}
 	// Sort performance issues to the end.
 	pi := x[i].Issue != nil && x[i].Issue.HasLabel("Performance")
 	pj := x[j].Issue != nil && x[j].Issue.HasLabel("Performance")

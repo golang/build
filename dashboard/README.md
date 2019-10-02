@@ -5,3 +5,13 @@
 # golang.org/x/build/dashboard
 
 Package dashboard contains shared configuration and logic used by various pieces of the Go continuous build system.
+
+## Deploying
+
+When adding or removing builders, or changing a builder's build policy
+(which repos/branches get tested), you need to deploy the
+`x/build/cmd/coordinator` binary. Additionally, you usually want to
+re-deploy the `x/build/app/appengine` code to update
+https://build.golang.org/. The latter is only for humans (forcing
+columns to show up and adding the little black dots on cells that
+aren't built), but doesn't affect what gets built.

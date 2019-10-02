@@ -2,32 +2,28 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.11
+FROM golang:1.12 AS build
 LABEL maintainer "golang-dev@googlegroups.com"
 
-ENV CGO_ENABLED=0
+ENV GO111MODULE=on
+ENV GOPROXY=https://proxy.golang.org
 
-# BEGIN deps (run `make update-deps` to update)
+RUN mkdir /gocache
+ENV GOCACHE /gocache
 
-# Repo cloud.google.com/go at 5c31045 (2018-05-08)
-ENV REV=5c31045bc3f4855c97f997a1940dfefc1598aa2d
-RUN go get -d cloud.google.com/go/compute/metadata &&\
-    (cd /go/src/cloud.google.com/go && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
+COPY go.mod /go/src/golang.org/x/build/go.mod
+COPY go.sum /go/src/golang.org/x/build/go.sum
 
-# Repo golang.org/x/net at d11bb6c (2018-05-07)
-ENV REV=d11bb6cd8e3c4e60239c9cb20ef68586d74500d0
-RUN go get -d golang.org/x/net/context `#and 2 other pkgs` &&\
-    (cd /go/src/golang.org/x/net && (git cat-file -t $REV 2>/dev/null || git fetch -q origin $REV) && git reset --hard $REV)
+WORKDIR /go/src/golang.org/x/build
 
-# Optimization to speed up iterative development, not necessary for correctness:
-RUN go install cloud.google.com/go/compute/metadata \
-	golang.org/x/net/context \
-	golang.org/x/net/context/ctxhttp
-# END deps.
+# Optimization for iterative docker build speed, not necessary for correctness:
+# TODO: write a tool to make writing Go module-friendly Dockerfiles easier.
+RUN go install cloud.google.com/go/compute/metadata
 
 COPY . /go/src/golang.org/x/build/
 
-# Install static binary to /go/bin/stage0
+# Install binary to /go/bin/stage0
 RUN go install golang.org/x/build/cmd/buildlet/stage0
 
-
+FROM golang:1.12
+COPY --from=build /go/bin/stage0 /go/bin/stage0

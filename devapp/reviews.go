@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/build/internal/foreach"
 	"golang.org/x/build/internal/gophers"
 	"golang.org/x/build/maintner"
 )
@@ -117,11 +118,36 @@ func (s *server) updateReviewsData() {
 	var (
 		projects     []*project
 		totalChanges int
+
+		excludedProjects = map[string]bool{
+			"gocloud":              true,
+			"google-api-go-client": true,
+		}
+		deletedChanges = map[struct {
+			proj string
+			num  int32
+		}]bool{
+			{"crypto", 35958}:  true,
+			{"scratch", 71730}: true,
+			{"scratch", 71850}: true,
+			{"scratch", 72090}: true,
+			{"scratch", 72091}: true,
+			{"scratch", 72110}: true,
+			{"scratch", 72131}: true,
+			{"tools", 93515}:   true,
+		}
 	)
 	s.corpus.Gerrit().ForeachProjectUnsorted(func(p *maintner.GerritProject) error {
+		if excludedProjects[p.Project()] {
+			return nil
+		}
 		proj := &project{GerritProject: p}
 		p.ForeachOpenCL(func(cl *maintner.GerritCL) error {
-			if cl.WorkInProgress() ||
+			if deletedChanges[struct {
+				proj string
+				num  int32
+			}{p.Project(), cl.Number}] ||
+				cl.WorkInProgress() ||
 				cl.Owner() == nil ||
 				strings.Contains(cl.Commit.Msg, "DO NOT REVIEW") {
 				return nil
@@ -216,7 +242,7 @@ func searchTermsFromReviewerFields(cl *maintner.GerritCL) []string {
 			!strings.Contains(m.Commit.Msg, "Removed:") {
 			continue
 		}
-		maintner.ForeachLineStr(m.Commit.Msg, func(ln string) error {
+		foreach.LineStr(m.Commit.Msg, func(ln string) error {
 			if !strings.HasPrefix(ln, "Reviewer:") &&
 				!strings.HasPrefix(ln, "CC:") &&
 				!strings.HasPrefix(ln, "Removed:") {

@@ -164,6 +164,9 @@ Download:
 		cmd.Args = append(cmd.Args,
 			scalewayArgs...,
 		)
+	case "host-linux-mipsle-mengzhuo":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
 	}
 	switch osArch {
 	case "linux/s390x":
@@ -193,15 +196,17 @@ Download:
 		// GO_BUILD_HOST_TYPE (see above) and check that.
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-ppc64le-osu")...)
 	case "solaris/amd64":
-		if buildEnv != "" {
-			// Explicit value given. Treat it like a host type.
-			cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
-		} else {
-			// If there's no value, assume it's the old Joyent builders,
-			// which are currently GOOS=solaris, but will be illumos after
-			// golang.org/issue/20603.
-			cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-solaris-amd64")...)
+		hostType := buildEnv
+		if hostType == "" {
+			hostType = "host-solaris-amd64"
 		}
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(hostType)...)
+	case "illumos/amd64":
+		hostType := buildEnv
+		if hostType == "" {
+			hostType = "host-illumos-amd64-joyent"
+		}
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(hostType)...)
 	}
 	// Release the serial port (if we opened it) so the buildlet
 	// process can open & write to it. At least on Windows, only
@@ -288,6 +293,7 @@ func isNetworkUp() bool {
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
 			DisableKeepAlives: true,
+			Proxy:             http.ProxyFromEnvironment,
 		},
 	}
 	res, err := c.Get(probeURL)
@@ -323,8 +329,12 @@ func buildletURL() string {
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64"
 	case "linux/ppc64le":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64le"
+	case "linux/mips64le":
+		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-mips64le"
 	case "solaris/amd64":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.solaris-amd64"
+	case "illumos/amd64":
+		return "https://storage.googleapis.com/go-builder-data/buildlet.illumos-amd64"
 	case "darwin/amd64":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.darwin-amd64"
 	}
@@ -379,35 +389,41 @@ func download(file, url string) error {
 }
 
 func aptGetInstall(pkgs ...string) {
+	t0 := time.Now()
 	args := append([]string{"--yes", "install"}, pkgs...)
 	cmd := exec.Command("apt-get", args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		log.Fatalf("error running apt-get install: %s", out)
 	}
+	log.Printf("stage0: apt-get installed %q in %v", pkgs, time.Since(t0).Round(time.Second/10))
 }
 
 func initBootstrapDir(destDir, tgzCache string) {
+	t0 := time.Now()
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		log.Fatal(err)
 	}
-	// TODO(bradfitz): rewrite this to use Go instead of curl+tar
-	// if this ever gets used on platforms besides Unix. For
-	// Windows and Plan 9 we bake in the bootstrap tarball into
-	// the image anyway. So this works for now. Solaris might require
-	// tweaking to use gtar instead or something.
 	latestURL := fmt.Sprintf("https://storage.googleapis.com/go-builder-data/gobootstrap-%s-%s.tar.gz",
 		runtime.GOOS, runtime.GOARCH)
-	curl := exec.Command("/usr/bin/curl", "-R", "-o", tgzCache, "-z", tgzCache, latestURL)
-	out, err := curl.CombinedOutput()
-	if err != nil {
-		log.Fatalf("curl error fetching %s to %s: %s", latestURL, out, err)
+	if err := httpdl.Download(tgzCache, latestURL); err != nil {
+		log.Fatalf("dowloading %s to %s: %v", latestURL, tgzCache, err)
 	}
+	log.Printf("synced %s to %s in %v", latestURL, tgzCache, time.Since(t0).Round(time.Second/10))
+
+	t1 := time.Now()
+	// TODO(bradfitz): rewrite this to use Go instead of shelling
+	// out to tar? if this ever gets used on platforms besides
+	// Unix. For Windows and Plan 9 we bake in the bootstrap
+	// tarball into the image anyway. So this works for now.
+	// Solaris might require tweaking to use gtar instead or
+	// something.
 	tar := exec.Command("tar", "zxf", tgzCache)
 	tar.Dir = destDir
-	out, err = tar.CombinedOutput()
+	out, err := tar.CombinedOutput()
 	if err != nil {
 		log.Fatalf("error untarring %s to %s: %s", tgzCache, destDir, out)
 	}
+	log.Printf("untarred %s to %s in %v", tgzCache, destDir, time.Since(t1).Round(time.Second/10))
 }
 
 func initOregonStatePPC64() {

@@ -3,7 +3,8 @@
 // license that can be found in the LICENSE file.
 
 // The rmplaysnippet binary removes a code snippet from play.golang.org given its URL
-// or ID.
+// or ID. It will always connect to the production datastore instance, ignoring any
+// local value of DATASTORE_EMULATOR_HOST.
 package main
 
 import (
@@ -11,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/datastore"
 	"golang.org/x/build/buildenv"
@@ -41,13 +43,21 @@ func main() {
 	}
 
 	buildenv.CheckUserCredentials()
-	ctx := context.Background()
+
+	// Don't attempt to connect to a locally-running datastore instance.
+	if err := os.Setenv("DATASTORE_EMULATOR_HOST", ""); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to clear env var DATASTORE_EMULATOR_HOST: %v\n", err)
+		os.Exit(1)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	client, err := datastore.NewClient(ctx, "golang-org")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create Datastore client: %v\n", err)
 		os.Exit(1)
 	}
 	k := datastore.NameKey("Snippet", snippetID, nil)
+	fmt.Printf("Deleting snippet %q ...\n", snippetID)
 	if err := client.Delete(ctx, k); err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to delete Snippet with ID %q: %v\n", snippetID, err)
 		fmt.Fprintf(os.Stderr, "rmplaysnippet requires Application Default Credentials.\n")

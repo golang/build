@@ -83,22 +83,22 @@ func TestTrybots(t *testing.T) {
 			repo:   "go",
 			branch: "master",
 			want: []string{
+				"android-amd64-emu",
 				"freebsd-amd64-12_0",
 				"js-wasm",
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-race",
-				"misc-compile",
+				"misc-compile-other",
+				"misc-compile-darwin",
+				"misc-compile-linuxarm",
+				"misc-compile-solaris",
 				"misc-compile-freebsd",
 				"misc-compile-mips",
-				"misc-compile-nacl",
 				"misc-compile-netbsd",
 				"misc-compile-openbsd",
 				"misc-compile-plan9",
 				"misc-compile-ppc",
-				"misc-vet-vetall",
-				"nacl-386",
-				"nacl-amd64p32",
 				"openbsd-amd64-64",
 				"windows-386-2008",
 				"windows-amd64-2016",
@@ -114,15 +114,16 @@ func TestTrybots(t *testing.T) {
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-race",
-				"misc-compile",
+				"misc-compile-darwin",
 				"misc-compile-freebsd",
+				"misc-compile-linuxarm",
 				"misc-compile-mips",
-				"misc-compile-nacl",
 				"misc-compile-netbsd",
 				"misc-compile-openbsd",
+				"misc-compile-other",
 				"misc-compile-plan9",
 				"misc-compile-ppc",
-				"nacl-386",
+				"misc-compile-solaris",
 				"nacl-amd64p32",
 				"openbsd-amd64-64",
 				"windows-386-2008",
@@ -141,6 +142,7 @@ func TestTrybots(t *testing.T) {
 			repo:   "sys",
 			branch: "master",
 			want: []string{
+				"android-amd64-emu",
 				"freebsd-386-11_2",
 				"freebsd-amd64-11_2",
 				"freebsd-amd64-12_0",
@@ -261,10 +263,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "go"), both},
 		{b("linux-amd64", "net"), both},
 		{b("linux-amd64", "sys"), both},
-
-		{b("misc-vet-vetall", "go"), both},
-		{b("misc-vet-vetall@go1.11", "go"), none},
-		{b("misc-vet-vetall@go1.12", "go"), none},
+		{b("linux-amd64", "website"), both},
 
 		// Don't test all subrepos on all the builders.
 		{b("linux-amd64-ssacheck", "net"), none},
@@ -277,7 +276,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-arm-arm5spacemonkey@go1.12", "net"), none},
 
 		// The mobile repo requires Go 1.13+.
-		{b("android-amd64-emu", "go"), onlyPost},
+		{b("android-amd64-emu", "go"), both},
 		{b("android-amd64-emu", "mobile"), both},
 		{b("android-amd64-emu", "mobile@1.10"), none},
 		{b("android-amd64-emu", "mobile@1.11"), none},
@@ -286,6 +285,14 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-amd64-emu@go1.12", "mobile"), none},
 		{b("android-amd64-emu@go1.13", "mobile"), both},
 		{b("android-amd64-emu", "mobile@1.13"), both},
+		{b("android-amd64-emu", "crypto"), both},
+		{b("android-amd64-emu", "net"), both},
+		{b("android-amd64-emu", "sync"), both},
+		{b("android-amd64-emu", "sys"), both},
+		{b("android-amd64-emu", "text"), both},
+		{b("android-amd64-emu", "time"), both},
+		{b("android-amd64-emu", "tools"), both},
+		{b("android-amd64-emu", "website"), none},
 
 		{b("android-386-emu", "go"), onlyPost},
 		{b("android-386-emu", "mobile"), onlyPost},
@@ -307,6 +314,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64@go1.11", "net"), both},
 		{b("linux-amd64@go1.11", "net@1.11"), both},
 		{b("linux-amd64@go1.12", "net@1.12"), both},
+
+		{b("linux-mips64le-mengzhuo", "go"), onlyPost},
+		{b("linux-mips64le-mengzhuo", "sys"), onlyPost},
+		{b("linux-mips64le-mengzhuo", "net"), onlyPost},
 
 		// go1.12.html: "Go 1.12 is the last release that is
 		// supported on FreeBSD 10.x [... and 11.1]"
@@ -333,37 +344,47 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-386-12_0", "go"), onlyPost},
 		{b("freebsd-386-12_0", "net"), onlyPost},
 
+		// NetBSD
+		{b("netbsd-amd64-8_0", "go"), onlyPost},
+		{b("netbsd-amd64-8_0", "net"), onlyPost},
+		{b("netbsd-386-8_0", "go"), none},
+		{b("netbsd-386-8_0", "net"), none},
+
 		// AIX starts at Go 1.12
 		{b("aix-ppc64", "go"), onlyPost},
 		{b("aix-ppc64", "net"), onlyPost},
+		{b("aix-ppc64", "mobile"), none},
+		{b("aix-ppc64", "exp"), none},
+		{b("aix-ppc64", "term"), none},
 		{b("aix-ppc64@go1.12", "go"), onlyPost},
-		{b("aix-ppc64@go1.12", "net"), onlyPost},
+		{b("aix-ppc64@go1.12", "net"), none},
+		{b("aix-ppc64@go1.12", "mobile"), none},
+		{b("aix-ppc64@go1.13", "net"), onlyPost},
+		{b("aix-ppc64@go1.13", "mobile"), none},
 		{b("aix-ppc64@go1.11", "go"), none},
 		{b("aix-ppc64@go1.11", "net"), none},
+		{b("aix-ppc64@go1.11", "mobile"), none},
+
+		// Illumos starts at Go 1.13
+		{b("illumos-amd64-joyent", "go"), onlyPost},
+		{b("illumos-amd64-joyent", "net"), onlyPost},
+		{b("illumos-amd64-joyent", "sys"), onlyPost},
+		{b("illumos-amd64-joyent@1.13", "go"), onlyPost},
+		{b("illumos-amd64-joyent@1.12", "go"), none},
+		{b("illumos-amd64-joyent@1.12", "sys"), none},
+		{b("illumos-amd64-joyent@1.11", "go"), none},
+		{b("illumos-amd64-joyent@1.11", "sys"), none},
 
 		{b("linux-amd64-nocgo", "mobile"), none},
 
-		// The physical ARM Androids only runs "go":
-		// They run on GOOS=android mode which is not
-		// interesting for x/mobile. The interesting tests run
-		// on the darwin-amd64-wikofever below where
-		// GOOS=darwin.
-		{b("android-arm-wikofever", "go"), isBuilder},
-		{b("android-arm-wikofever", "mobile"), notBuilder},
-		{b("android-arm64-wikofever", "go"), isBuilder},
-		{b("android-arm64-wikofever", "mobile"), notBuilder},
-		{b("android-arm64-wikofever", "net"), notBuilder},
-
-		// A GOOS=darwin variant of the physical ARM Androids
-		// runs x/mobile and nothing else:
-		{b("darwin-amd64-wikofever", "mobile"), isBuilder},
-		{b("darwin-amd64-wikofever", "go"), notBuilder},
-		{b("darwin-amd64-wikofever", "net"), notBuilder},
+		// Virtual mobiledevices
+		{b("darwin-arm64-corellium", "go"), isBuilder},
+		{b("android-arm64-corellium", "go"), isBuilder},
+		{b("android-arm-corellium", "go"), isBuilder},
 
 		// Mobile builders that run with GOOS=linux/darwin and have
 		// a device attached.
 		{b("linux-amd64-androidemu", "mobile"), both},
-		{b("darwin-amd64-wikofever", "mobile"), onlyPost},
 
 		// But the emulators run all:
 		{b("android-amd64-emu", "mobile"), isBuilder},
@@ -373,9 +394,11 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-amd64-emu", "go"), isBuilder},
 		{b("android-386-emu", "go"), isBuilder},
 
-		{b("nacl-386", "go"), both},
+		{b("nacl-386", "go"), none},
+		{b("nacl-386@go1.13", "go"), onlyPost},
 		{b("nacl-386", "net"), none},
-		{b("nacl-amd64p32", "go"), both},
+		{b("nacl-amd64p32", "go"), none},
+		{b("nacl-amd64p32@go1.13", "go"), both},
 		{b("nacl-amd64p32", "net"), none},
 
 		// Only test tip for js/wasm, and only for some repos:
@@ -418,9 +441,9 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-longtest", "exp"), onlyPost},
 		{b("windows-386-2008", "exp"), both},
 		{b("windows-amd64-2016", "exp"), both},
-		{b("darwin-amd64-10_12", "exp"), onlyPost},
 		{b("darwin-amd64-10_14", "exp"), onlyPost},
 		// ... but not on most others:
+		{b("darwin-amd64-10_12", "exp"), none},
 		{b("freebsd-386-11_2", "exp"), none},
 		{b("freebsd-386-12_0", "exp"), none},
 		{b("freebsd-amd64-11_2", "exp"), none},
@@ -439,7 +462,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-10_11", "net"), none},
 		{b("darwin-amd64-10_11@go1.11", "net"), none},
 		{b("darwin-amd64-10_11@go1.12", "net"), none},
-		{b("darwin-386-10_11@go1.11", "net"), none},
+		{b("darwin-386-10_14@go1.11", "net"), none},
 
 		{b("darwin-amd64-10_14", "go"), onlyPost},
 		{b("darwin-amd64-10_12", "go"), onlyPost},
@@ -447,15 +470,16 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-10_10", "go"), none},
 		{b("darwin-amd64-10_10@go1.12", "go"), onlyPost},
 		{b("darwin-amd64-10_10@go1.11", "go"), onlyPost},
-		{b("darwin-386-10_11", "go"), onlyPost},
-		{b("darwin-386-10_11@go1.12", "go"), onlyPost},
-		{b("darwin-386-10_11@go1.11", "go"), onlyPost},
+		{b("darwin-386-10_14", "go"), onlyPost},
+		{b("darwin-386-10_14@go1.12", "go"), none},
+		{b("darwin-386-10_14@go1.13", "go"), onlyPost},
 
-		// plan9 only lives at master. We don't support any past releases.
-		{b("plan9-386", "go"), onlyPost},
+		// plan9 only lived at master. We didn't support any past releases.
+		// But it's off for now as it's always failing.
+		{b("plan9-386", "go"), none},  // temporarily disabled
+		{b("plan9-386", "net"), none}, // temporarily disabled
 		{b("plan9-386@go1.11", "go"), none},
 		{b("plan9-386@go1.12", "go"), none},
-		{b("plan9-386", "net"), onlyPost},
 		{b("plan9-386@go1.11", "net"), none},
 		{b("plan9-386@go1.12", "net"), none},
 		{b("plan9-amd64-9front", "go"), onlyPost},
@@ -572,6 +596,33 @@ func TestShouldRunDistTest(t *testing.T) {
 		got := bc.ShouldRunDistTest(tt.test, isTry)
 		if got != tt.want {
 			t.Errorf("%q.ShouldRunDistTest(%q, try %v) = %v; want %v", tt.builder, tt.test, isTry, got, tt.want)
+		}
+	}
+}
+
+func TestShouldTestPackageInGOPATHMode(t *testing.T) {
+	// This function doesn't change behavior depending on the builder
+	// at this time, so just use a common one.
+	bc, ok := Builders["linux-amd64"]
+	if !ok {
+		t.Fatal("unknown builder")
+	}
+
+	tests := []struct {
+		importPath string
+		want       bool
+	}{
+		{"golang.org/x/image/bmp", true},
+		{"golang.org/x/tools/go/ast/astutil", true},
+		{"golang.org/x/tools/go/packages", true},
+		{"golang.org/x/tools", true}, // Three isn't a package there, but if there was, it should be tested.
+		{"golang.org/x/tools/gopls", false},
+		{"golang.org/x/tools/gopls/internal/foobar", false},
+	}
+	for _, tt := range tests {
+		got := bc.ShouldTestPackageInGOPATHMode(tt.importPath)
+		if got != tt.want {
+			t.Errorf("ShouldTestPackageInGOPATHMode(%q) = %v; want %v", tt.importPath, got, tt.want)
 		}
 	}
 }

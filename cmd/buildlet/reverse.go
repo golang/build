@@ -6,18 +6,16 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/hmac"
 	"crypto/md5"
 	"crypto/tls"
-	"crypto/x509"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -26,8 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/build"
-	"golang.org/x/build/revdial"
+	"golang.org/x/build/revdial/v2"
 )
 
 // mode is either a BuildConfig or HostConfig name (map key in x/build/dashboard/builders.go)
@@ -70,34 +67,6 @@ func isDevReverseMode() bool {
 	return !strings.HasPrefix(*coordinator, "farmer.golang.org")
 }
 
-// proxyToCoordinatorHandler is a GOPROXY proxy, proxying to
-// https://farmer.golang.org while adding HTTP basic auth (of the
-// reverse buildlet type & its key) and the
-// X-Proxy-Service:module-cache header.
-type proxyToCoordinatorHandler struct {
-	user, pass string
-	rp         *httputil.ReverseProxy
-}
-
-func (h *proxyToCoordinatorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	outReq := r.WithContext(r.Context())
-	outReq.SetBasicAuth(h.user, h.pass)
-	outReq.Header.Set("X-Proxy-Service", "module-cache")
-	h.rp.ServeHTTP(w, outReq)
-}
-
-// goproxyHandler is non-nil for reverse buildlets.
-var goproxyHandler *proxyToCoordinatorHandler
-
-func newProxyToCoordinatorHandler(user, pass string) *proxyToCoordinatorHandler {
-	u, _ := url.Parse("https://farmer.golang.org")
-	return &proxyToCoordinatorHandler{
-		user: user,
-		pass: pass,
-		rp:   httputil.NewSingleHostReverseProxy(u),
-	}
-}
-
 func dialCoordinator() error {
 	devMode := isDevReverseMode()
 
@@ -116,7 +85,6 @@ func dialCoordinator() error {
 			}
 			keys = append(keys, key)
 		}
-		goproxyHandler = newProxyToCoordinatorHandler(modes[0], keys[0])
 	} else {
 		// New way.
 		key, err := keyForMode(*reverseType)
@@ -124,59 +92,43 @@ func dialCoordinator() error {
 			log.Fatalf("failed to find key for %s: %v", *reverseType, err)
 		}
 		keys = append(keys, key)
-		goproxyHandler = newProxyToCoordinatorHandler(*reverseType, key)
 	}
 
-	caCert := build.ProdCoordinatorCA
 	addr := *coordinator
 	if addr == "farmer.golang.org" {
 		addr = "farmer.golang.org:443"
 	}
-	if devMode {
-		caCert = build.DevCoordinatorCA
-	}
 
-	var caPool *x509.CertPool
-	if runtime.GOOS == "windows" {
-		// No SystemCertPool on Windows. But we don't run
-		// Windows in reverse mode anyway.  So just don't set
-		// caPool, which will cause tls.Config to use the
-		// system verification.
-	} else {
-		var err error
-		caPool, err = x509.SystemCertPool()
+	dial := func(ctx context.Context) (net.Conn, error) {
+		log.Printf("Dialing coordinator %s ...", addr)
+		t0 := time.Now()
+		tcpConn, err := dialCoordinatorTCP(ctx, addr)
 		if err != nil {
-			return fmt.Errorf("SystemCertPool: %v", err)
+			log.Printf("buildlet: reverse dial coordinator (%q) error after %v: %v", addr, time.Since(t0).Round(time.Second/100), err)
+			return nil, err
 		}
-		// Temporarily accept our own CA. This predates LetsEncrypt.
-		// Our old self-signed cert expires April 4th, 2017.
-		// We can remove this after golang.org/issue/16442 is fixed.
-		if !caPool.AppendCertsFromPEM([]byte(caCert)) {
-			return errors.New("failed to append coordinator CA certificate")
+		log.Printf("Dialed coordinator %s.", addr)
+		serverName := strings.TrimSuffix(addr, ":443")
+		log.Printf("Doing TLS handshake with coordinator (verifying hostname %q)...", serverName)
+		tcpConn.SetDeadline(time.Now().Add(30 * time.Second))
+		config := &tls.Config{
+			ServerName:         serverName,
+			InsecureSkipVerify: devMode,
 		}
+		conn := tls.Client(tcpConn, config)
+		if err := conn.Handshake(); err != nil {
+			return nil, fmt.Errorf("failed to handshake with coordinator: %v", err)
+		}
+		tcpConn.SetDeadline(time.Time{})
+		return conn, nil
 	}
-
-	log.Printf("Dialing coordinator %s ...", addr)
-	tcpConn, err := dialCoordinatorTCP(addr)
+	conn, err := dial(context.Background())
 	if err != nil {
 		return err
 	}
 
-	serverName := strings.TrimSuffix(addr, ":443")
-	log.Printf("Doing TLS handshake with coordinator (verifying hostname %q)...", serverName)
-	tcpConn.SetDeadline(time.Now().Add(30 * time.Second))
-	config := &tls.Config{
-		ServerName:         serverName,
-		RootCAs:            caPool,
-		InsecureSkipVerify: devMode,
-	}
-	conn := tls.Client(tcpConn, config)
-	if err := conn.Handshake(); err != nil {
-		return fmt.Errorf("failed to handshake with coordinator: %v", err)
-	}
-	tcpConn.SetDeadline(time.Time{})
-
 	bufr := bufio.NewReader(conn)
+	bufw := bufio.NewWriter(conn)
 
 	log.Printf("Registering reverse mode with coordinator...")
 	req, err := http.NewRequest("GET", "/reverse", nil)
@@ -192,8 +144,12 @@ func dialCoordinator() error {
 	req.Header["X-Go-Builder-Key"] = keys
 	req.Header.Set("X-Go-Builder-Hostname", *hostname)
 	req.Header.Set("X-Go-Builder-Version", strconv.Itoa(buildletVersion))
-	if err := req.Write(conn); err != nil {
+	req.Header.Set("X-Revdial-Version", "2")
+	if err := req.Write(bufw); err != nil {
 		return fmt.Errorf("coordinator /reverse request failed: %v", err)
+	}
+	if err := bufw.Flush(); err != nil {
+		return fmt.Errorf("coordinator /reverse request flush failed: %v", err)
 	}
 	resp, err := http.ReadResponse(bufr, req)
 	if err != nil {
@@ -206,12 +162,9 @@ func dialCoordinator() error {
 
 	log.Printf("Connected to coordinator; reverse dialing active")
 	srv := &http.Server{}
-	ln := revdial.NewListener(bufio.NewReadWriter(
-		bufio.NewReader(conn),
-		bufio.NewWriter(deadlinePerWriteConn{conn, 60 * time.Second}),
-	))
+	ln := revdial.NewListener(conn, dial)
 	err = srv.Serve(ln)
-	if ln.Closed() {
+	if ln.Closed() { // TODO: this actually wants to know whether an error-free Close was called
 		return nil
 	}
 	return fmt.Errorf("http.Serve on reverse connection complete: %v", err)
@@ -224,8 +177,8 @@ var coordDialer = &net.Dialer{
 
 // dialCoordinatorTCP returns a TCP connection to the coordinator, making
 // a CONNECT request to a proxy as a fallback.
-func dialCoordinatorTCP(addr string) (net.Conn, error) {
-	tcpConn, err := coordDialer.Dial("tcp", addr)
+func dialCoordinatorTCP(ctx context.Context, addr string) (net.Conn, error) {
+	tcpConn, err := coordDialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		// If we had problems connecting to the TCP addr
 		// directly, perhaps there's a proxy in the way. See
@@ -234,20 +187,21 @@ func dialCoordinatorTCP(addr string) (net.Conn, error) {
 		req, _ := http.NewRequest("GET", "https://"+addr, nil)
 		proxyURL, _ := http.ProxyFromEnvironment(req)
 		if proxyURL != nil {
-			return dialCoordinatorViaCONNECT(addr, proxyURL)
+			return dialCoordinatorViaCONNECT(ctx, addr, proxyURL)
 		}
 		return nil, err
 	}
 	return tcpConn, nil
 }
 
-func dialCoordinatorViaCONNECT(addr string, proxy *url.URL) (net.Conn, error) {
+func dialCoordinatorViaCONNECT(ctx context.Context, addr string, proxy *url.URL) (net.Conn, error) {
 	proxyAddr := proxy.Host
 	if proxy.Port() == "" {
 		proxyAddr = net.JoinHostPort(proxyAddr, "80")
 	}
 	log.Printf("dialing proxy %q ...", proxyAddr)
-	c, err := net.Dial("tcp", proxyAddr)
+	var d net.Dialer
+	c, err := d.DialContext(ctx, "tcp", proxyAddr)
 	if err != nil {
 		return nil, fmt.Errorf("dialing proxy %q failed: %v", proxyAddr, err)
 	}
@@ -271,17 +225,6 @@ func dialCoordinatorViaCONNECT(addr string, proxy *url.URL) (net.Conn, error) {
 			br.Buffered(), proxyAddr)
 	}
 	return c, nil
-}
-
-type deadlinePerWriteConn struct {
-	net.Conn
-	writeTimeout time.Duration
-}
-
-func (c deadlinePerWriteConn) Write(p []byte) (n int, err error) {
-	c.Conn.SetWriteDeadline(time.Now().Add(c.writeTimeout))
-	defer c.Conn.SetWriteDeadline(time.Time{})
-	return c.Conn.Write(p)
 }
 
 func devBuilderKey(builder string) string {

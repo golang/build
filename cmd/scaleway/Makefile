@@ -4,10 +4,6 @@
 
 VERSION=latest
 
-update-deps:
-	go install golang.org/x/build/cmd/gitlock
-	gitlock --update=Dockerfile golang.org/x/build/cmd/scaleway
-
 docker: Dockerfile *.go
 	xb docker build -f Dockerfile --force-rm --tag=golang/scaleway:$(VERSION) ../..
 

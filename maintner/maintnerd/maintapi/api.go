@@ -126,7 +126,7 @@ var tryCache struct {
 	val           *apipb.GoFindTryWorkResponse
 }
 
-var tryBotGerrit = gerrit.NewClient("https://go-review.googlesource.com/", gerrit.NoAuth)
+var tryBotGerrit = gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
 
 func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkRequest) (*apipb.GoFindTryWorkResponse, error) {
 	tryCache.Lock()

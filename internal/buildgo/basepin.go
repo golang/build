@@ -56,7 +56,9 @@ func (c *Client) MakeBasepinDisks(ctx context.Context) error {
 			continue
 		}
 		if si, ok := need[d.SourceImage]; ok && d.SourceImageId == fmt.Sprint(si.Id) {
-			log.Printf("Have %s: %s (%v)\n", d.Name, d.SourceImage, d.SourceImageId)
+			if c.Verbose {
+				log.Printf("basepin: have %s: %s (%v)\n", d.Name, d.SourceImage, d.SourceImageId)
+			}
 			delete(need, d.SourceImage)
 		}
 	}
@@ -67,11 +69,11 @@ func (c *Client) MakeBasepinDisks(ctx context.Context) error {
 	}
 	sort.Strings(needed)
 	for _, n := range needed {
-		log.Printf("Need %v", n)
+		log.Printf("basepin: need %v", n)
 	}
 	for i, imName := range needed {
 		im := need[imName]
-		log.Printf("(%d/%d) Creating %s ...", i+1, len(needed), im.Name)
+		log.Printf("basepin: (%d/%d) creating %s ...", i+1, len(needed), im.Name)
 		op, err := svc.Disks.Insert(c.Env.ProjectName, c.Env.Zone, &compute.Disk{
 			Description:   "zone-cached basepin image of " + im.Name,
 			Name:          "basepin-" + im.Name + "-" + fmt.Sprint(im.Id),
@@ -84,9 +86,10 @@ func (c *Client) MakeBasepinDisks(ctx context.Context) error {
 			return err
 		}
 		if err := c.AwaitOp(ctx, op); err != nil {
-			log.Fatalf("failed to create: %v", err)
+			log.Fatalf("basepin: failed to create: %v", err)
 		}
 	}
+	log.Printf("basepin: created %d images", len(needed))
 	return nil
 }
 
@@ -117,7 +120,6 @@ func (c *Client) AwaitOp(ctx context.Context, op *compute.Operation) error {
 				}
 				return last
 			}
-			log.Printf("Success. %+v", op)
 			return nil
 		default:
 			return fmt.Errorf("Unknown status %q: %+v", op.Status, op)

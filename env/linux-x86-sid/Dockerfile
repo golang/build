@@ -4,7 +4,7 @@
 
 FROM golang/buildlet-stage0 AS stage0
 
-FROM debian:sid
+FROM debian:sid-20190326
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
 ENV DEBIAN_FRONTEND noninteractive
@@ -38,6 +38,7 @@ RUN apt-get update && apt-get install -y \
 	fonts-droid-fallback \
 	upx \
 	qemu-user \
+	netbase \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /go1.4-amd64 \

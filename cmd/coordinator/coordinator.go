@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build go1.13
 // +build linux darwin
 
 // The coordinator runs the majority of the Go build system.
@@ -60,6 +61,7 @@ import (
 	"golang.org/x/build/internal/sourcecache"
 	"golang.org/x/build/livelog"
 	"golang.org/x/build/maintner/maintnerd/apipb"
+	revdialv2 "golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
 	"golang.org/x/crypto/acme/autocert"
 	perfstorage "golang.org/x/perf/storage"
@@ -220,10 +222,6 @@ func (httpRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		requireBuildletProxyAuth(http.HandlerFunc(proxyBuildletHTTP)).ServeHTTP(w, r)
 		return
 	}
-	if r.Header.Get("X-Proxy-Service") == "module-cache" {
-		proxyModuleCache(w, r)
-		return
-	}
 	http.DefaultServeMux.ServeHTTP(w, r)
 }
 
@@ -291,6 +289,8 @@ func main() {
 		log.Fatalf("Unknown mode: %q", *mode)
 	}
 
+	addHealthCheckers(context.Background())
+
 	cc, err := grpc.NewClient(http.DefaultClient, "https://maintner.golang.org")
 	if err != nil {
 		log.Fatal(err)
@@ -303,6 +303,7 @@ func main() {
 	http.HandleFunc("/builders", handleBuilders)
 	http.HandleFunc("/temporarylogs", handleLogs)
 	http.HandleFunc("/reverse", handleReverse)
+	http.Handle("/revdial", revdialv2.ConnHandler())
 	http.HandleFunc("/style.css", handleStyleCSS)
 	http.HandleFunc("/try", serveTryStatus(false))
 	http.HandleFunc("/try.json", serveTryStatus(true))
@@ -339,6 +340,7 @@ func main() {
 			dashboard.Builders = stagingClusterBuilders()
 		}
 
+		go listenAndServeInternalModuleProxy()
 		go findWorkLoop(workc)
 		go findTryWorkLoop()
 		go reportMetrics(context.Background())
@@ -465,14 +467,14 @@ func mayBuildRev(rev buildgo.BuilderRev) bool {
 	if isBuilding(rev) {
 		return false
 	}
-	if buildEnv.MaxBuilds > 0 && numCurrentBuilds() >= buildEnv.MaxBuilds {
-		return false
-	}
 	buildConf, ok := dashboard.Builders[rev.Name]
 	if !ok {
 		if logUnknownBuilder.Allow() {
 			log.Printf("unknown builder %q", rev.Name)
 		}
+		return false
+	}
+	if buildEnv.MaxBuilds > 0 && numCurrentBuilds() >= buildEnv.MaxBuilds {
 		return false
 	}
 	if buildConf.MaxAtOnce > 0 && numCurrentBuildsOfType(rev.Name) >= buildConf.MaxAtOnce {
@@ -676,8 +678,11 @@ func serveTryStatusHTML(w http.ResponseWriter, ts *trySet, tss trySetState) {
 		} else {
 			status = fmt.Sprintf("<i>running</i> %s", time.Since(bs.startTime).Round(time.Second))
 		}
+		if u := bs.logURL; u != "" {
+			status = fmt.Sprintf(`<a href="%s">%s</a>`, html.EscapeString(u), status)
+		}
 		bs.mu.Unlock()
-		fmt.Fprintf(buf, "<tr><td class='nobr'>&#8226; %s</td><td>%s</td></tr>\n",
+		fmt.Fprintf(buf, "<tr><td class=\"nobr\">&#8226; %s</td><td>%s</td></tr>\n",
 			html.EscapeString(bs.NameAndBranch()), status)
 	}
 	fmt.Fprintf(buf, "</table>\n")
@@ -1317,12 +1322,11 @@ func (ts *trySet) cancelBuilds() {
 
 func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 	bs.mu.Lock()
-	succeeded := bs.succeeded
-	var buildLog string
-	if !succeeded {
-		buildLog = bs.output.String()
-	}
-	hasBenchResults := bs.hasBenchResults
+	var (
+		succeeded       = bs.succeeded
+		buildLog        = bs.output.String()
+		hasBenchResults = bs.hasBenchResults
+	)
 	bs.mu.Unlock()
 
 	ts.mu.Lock()
@@ -1340,25 +1344,26 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 
 	const failureFooter = "Consult https://build.golang.org/ to see whether they are new failures. Keep in mind that TryBots currently test *exactly* your git commit, without rebasing. If your commit's git parent is old, the failure might've already been fixed."
 
-	if !succeeded {
-		s1 := sha1.New()
-		io.WriteString(s1, buildLog)
-		objName := fmt.Sprintf("%s/%s_%x.log", bs.Rev[:8], bs.Name, s1.Sum(nil)[:4])
-		wr, failLogURL := newFailureLogBlob(objName)
-		if _, err := io.WriteString(wr, buildLog); err != nil {
-			log.Printf("Failed to write to GCS: %v", err)
-			return
-		}
-		if err := wr.Close(); err != nil {
-			log.Printf("Failed to write to GCS: %v", err)
-			return
-		}
+	s1 := sha1.New()
+	io.WriteString(s1, buildLog)
+	objName := fmt.Sprintf("%s/%s_%x.log", bs.Rev[:8], bs.Name, s1.Sum(nil)[:4])
+	wr, logURL := newBuildLogBlob(objName)
+	if _, err := io.WriteString(wr, buildLog); err != nil {
+		log.Printf("Failed to write to GCS: %v", err)
+		return
+	}
+	if err := wr.Close(); err != nil {
+		log.Printf("Failed to write to GCS: %v", err)
+		return
+	}
 
-		bs.mu.Lock()
-		bs.failURL = failLogURL
-		bs.mu.Unlock()
+	bs.mu.Lock()
+	bs.logURL = logURL
+	bs.mu.Unlock()
+
+	if !succeeded {
 		ts.mu.Lock()
-		fmt.Fprintf(&ts.errMsg, "Failed on %s: %s\n", bs.NameAndBranch(), failLogURL)
+		fmt.Fprintf(&ts.errMsg, "Failed on %s: %s\n", bs.NameAndBranch(), logURL)
 		ts.mu.Unlock()
 
 		if numFail == 1 && remain > 0 {
@@ -1368,7 +1373,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 						"This change failed on %s:\n"+
 						"See %s\n\n"+
 						"Other builds still in progress; subsequent failure notices suppressed until final report. "+failureFooter,
-					bs.NameAndBranch(), failLogURL),
+					bs.NameAndBranch(), logURL),
 			}); err != nil {
 				log.Printf("Failed to call Gerrit: %v", err)
 				return
@@ -1800,6 +1805,18 @@ func (st *buildStatus) build() error {
 	} else if err != nil {
 		doneMsg = "comm error: " + err.Error()
 	}
+	// If a build fails multiple times due to communication
+	// problems with the buildlet, assume something's wrong with
+	// the buildlet or machine and fail the build, rather than
+	// looping forever. This promotes the err (communication
+	// error) to a remoteErr (an error that occurred remotely and
+	// is terminal).
+	if rerr := st.repeatedCommunicationError(err); rerr != nil {
+		remoteErr = rerr
+		err = nil
+		doneMsg = "communication error to buildlet (promoted to terminal error): " + rerr.Error()
+		fmt.Fprintf(st, "\n%s\n", doneMsg)
+	}
 	if err != nil {
 		// Return the error *before* we create the magic
 		// "done" event. (which the try coordinator looks for)
@@ -1813,9 +1830,8 @@ func (st *buildStatus) build() error {
 	}
 
 	if st.trySet == nil {
-		var buildLog string
+		buildLog := st.logs()
 		if remoteErr != nil {
-			buildLog = st.logs()
 			// If we just have the line-or-so little
 			// banner at top, that means we didn't get any
 			// interesting output from the remote side, so
@@ -1866,7 +1882,7 @@ func (st *buildStatus) buildRecord() *types.BuildRecord {
 	// TODO: buildlet instance name
 	if !st.done.IsZero() {
 		rec.EndTime = st.done
-		rec.FailureURL = st.failURL
+		rec.LogURL = st.logURL
 		rec.Seconds = rec.EndTime.Sub(rec.StartTime).Seconds()
 		if st.succeeded {
 			rec.Result = "ok"
@@ -1950,6 +1966,10 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 		remoteErr, err = st.runTests(st.getHelpers())
 	}
 
+	if err == errBuildletsGone {
+		// Don't wrap this error. TODO: use xerrors.
+		return nil, errBuildletsGone
+	}
 	if err != nil {
 		return nil, fmt.Errorf("runTests: %v", err)
 	}
@@ -2196,7 +2216,7 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 		args = append(args, "--compile-only")
 	}
 	var buf bytes.Buffer
-	remoteErr, err = st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+	remoteErr, err = st.bc.Exec("go/bin/go", buildlet.ExecOpts{
 		Output:      &buf,
 		ExtraEnv:    append(st.conf.Env(), "GOROOT="+goroot),
 		OnStartExec: func() { st.LogEventTime("discovering_tests") },
@@ -2335,81 +2355,116 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	goroot := st.conf.FilePathJoin(workDir, "go")
 	gopath := st.conf.FilePathJoin(workDir, "gopath")
 
-	fetched := map[string]bool{}
-	toFetch := []string{st.SubName}
-
-	// fetch checks out the provided sub-repo to the buildlet's workspace.
-	fetch := func(repo, rev string) error {
-		fetched[repo] = true
-		return buildgo.FetchSubrepo(st, st.bc, repo, rev)
+	// Check out the provided sub-repo to the buildlet's workspace.
+	// Need to do this first, so we can run go env GOMOD in it.
+	err = buildgo.FetchSubrepo(st, st.bc, st.SubName, st.SubRev)
+	if err != nil {
+		return nil, err
 	}
 
-	// findDeps uses 'go list' on the checked out repo to find its
-	// dependencies, and adds any not-yet-fetched deps to toFetched.
-	findDeps := func(repo string) (rErr, err error) {
-		repoPath := importPathOfRepo(repo)
+	// Determine if we're invoked in module mode.
+	// If using module mode, the absolute path to the go.mod of the main module.
+	// If using GOPATH mode, the empty string.
+	goMod, err := st.goMod(importPathOfRepo(st.SubName), goroot, gopath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine go env GOMOD value: %v", err)
+	}
+
+	// TODO(dmitshur): For some subrepos, test in both module and GOPATH modes. See golang.org/issue/30233.
+
+	// A goTestRun represents a single invocation of the 'go test' command.
+	type goTestRun struct {
+		Dir      string   // Directory where 'go test' should be executed.
+		Patterns []string // Import path patterns to provide to 'go test'.
+	}
+	// The default behavior is to test the pattern "golang.org/x/{repo}/..."
+	// in the repository root.
+	testRuns := []goTestRun{{
+		Dir:      "gopath/src/" + importPathOfRepo(st.SubName),
+		Patterns: []string{importPathOfRepo(st.SubName) + "/..."},
+	}}
+
+	// The next large step diverges into two code paths,
+	// one for module mode and another for GOPATH mode.
+	//
+	// Each path does the ad-hoc work that is needed to
+	// prepare for being able to run 'go test' at the end.
+	//
+	if goMod != "" {
+		fmt.Fprintf(st, "testing in module mode; GOMOD=%s\n\n", goMod)
+
+		// No need to place the repo's dependencies into a GOPATH workspace.
+
+		// Look for inner modules, in order to test them too. See golang.org/issue/32528.
+		repoPath := importPathOfRepo(st.SubName)
+		sp := st.CreateSpan("listing_subrepo_modules", st.SubName)
+		err = st.bc.ListDir("gopath/src/"+repoPath, buildlet.ListDirOpts{Recursive: true}, func(e buildlet.DirEntry) {
+			goModFile := path.Base(e.Name()) == "go.mod" && !e.IsDir()
+			if !goModFile {
+				return
+			}
+			// Found a go.mod file in a subdirectory, which indicates the root of a module.
+			modulePath := path.Join(repoPath, path.Dir(e.Name()))
+			if modulePath == repoPath {
+				// This is the go.mod file at the repository root.
+				// It's already a part of testRuns, so skip it.
+				return
+			} else if ignoredByGoTool(modulePath) || isVendored(modulePath) {
+				// go.mod file is in a directory we're not looking to support, so skip it.
+				return
+			}
+			// Add an additional test run entry that will test this entire module.
+			testRuns = append(testRuns, goTestRun{
+				Dir:      "gopath/src/" + modulePath,
+				Patterns: []string{modulePath + "/..."},
+			})
+		})
+		sp.Done(err)
+		if err != nil {
+			return nil, err
+		}
+
+	} else {
+		fmt.Fprintf(st, "testing in GOPATH mode\n\n")
+
+		// Place the repo's dependencies into the GOPATH workspace.
+		if rErr, err := st.fetchDependenciesToGOPATHWorkspace(goroot, gopath); err != nil {
+			return nil, err
+		} else if rErr != nil {
+			return rErr, nil
+		}
+
+		// The dashboard offers control over what packages to test in GOPATH mode.
+		// Compute a list of packages by calling 'go list'. See golang.org/issue/34190.
+		repoPath := importPathOfRepo(st.SubName)
 		var buf bytes.Buffer
-		rErr, err = st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+		sp := st.CreateSpan("listing_subrepo_packages", st.SubName)
+		rErr, err := st.bc.Exec("go/bin/go", buildlet.ExecOpts{
 			Output:   &buf,
+			Dir:      "gopath/src/" + repoPath,
 			ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath),
 			Path:     []string{"$WORKDIR/go/bin", "$PATH"},
-			Args:     []string{"list", "-f", `{{range .Deps}}{{printf "%v\n" .}}{{end}}`, repoPath + "/..."},
+			Args:     []string{"list", repoPath + "/..."},
 		})
+		sp.Done(firstNonNil(err, rErr))
 		if err != nil {
 			return nil, fmt.Errorf("exec go list on buildlet: %v", err)
 		}
 		if rErr != nil {
-			fmt.Fprintf(st, "go list error:\n%s", &buf)
+			fmt.Fprintf(st, "go list error: %v\noutput:\n%s", rErr, &buf)
 			return rErr, nil
 		}
-		for _, p := range strings.Fields(buf.String()) {
-			if !strings.HasPrefix(p, "golang.org/x/") || strings.HasPrefix(p, repoPath) {
+		testRuns[0].Patterns = nil
+		for _, importPath := range strings.Fields(buf.String()) {
+			if !st.conf.ShouldTestPackageInGOPATHMode(importPath) {
 				continue
 			}
-			repo = strings.TrimPrefix(p, "golang.org/x/")
-			if i := strings.Index(repo, "/"); i >= 0 {
-				repo = repo[:i]
-			}
-			if !fetched[repo] {
-				toFetch = append(toFetch, repo)
-			}
+			testRuns[0].Patterns = append(testRuns[0].Patterns, importPath)
 		}
-		return nil, nil
 	}
 
-	// Recursively fetch the repo and their golang.org/x/*
-	// dependencies. Dependencies are always fetched at master,
-	// which isn't great but the dashboard data model doesn't
-	// track non-golang.org/x/* dependencies. For those, we
-	// require on the code under test to be using Go modules.
-	for i := 0; i < len(toFetch); i++ {
-		repo := toFetch[i]
-		if fetched[repo] {
-			continue
-		}
-		// Fetch the HEAD revision by default.
-		rev, err := getRepoHead(repo)
-		if err != nil {
-			return nil, err
-		}
-		if rev == "" {
-			rev = "master" // should happen rarely; ok if it does.
-		}
-		// For the repo under test, choose that specific revision.
-		if i == 0 {
-			rev = st.SubRev
-		}
-		if err := fetch(repo, rev); err != nil {
-			return nil, err
-		}
-		if rErr, err := findDeps(repo); err != nil {
-			return nil, err
-		} else if rErr != nil {
-			// An issue with the package may cause "go list" to
-			// fail and this is a legimiate build error.
-			return rErr, nil
-		}
-	}
+	// Finally, execute all of the test runs.
+	// If any fail, keep going so that all test results are included in the output.
 
 	sp := st.CreateSpan("running_subrepo_tests", st.SubName)
 	defer func() { sp.Done(err) }()
@@ -2428,31 +2483,215 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	if st.conf.IsRace() {
 		args = append(args, "-race")
 	}
-	args = append(args, importPathOfRepo(st.SubName)+"/...")
 
-	return st.bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
-		Debug:    true, // make buildlet print extra debug in output for failures
-		Output:   st,
-		Dir:      "gopath/src/golang.org/x/" + st.SubName,
-		ExtraEnv: env,
+	var remoteErrors []error
+	for _, tr := range testRuns {
+		rErr, err := st.bc.Exec("go/bin/go", buildlet.ExecOpts{
+			Debug:    true, // make buildlet print extra debug in output for failures
+			Output:   st,
+			Dir:      tr.Dir,
+			ExtraEnv: env,
+			Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+			Args:     append(args, tr.Patterns...),
+		})
+		if err != nil {
+			// A network/communication error. Give up here;
+			// the caller can retry as it sees fit.
+			return nil, err
+		} else if rErr != nil {
+			// An error occurred remotely and is terminal, but we want to
+			// keep testing other packages and report their failures too,
+			// rather than stopping short.
+			remoteErrors = append(remoteErrors, rErr)
+		}
+	}
+	if len(remoteErrors) > 0 {
+		return multiError(remoteErrors), nil
+	}
+	return nil, nil
+}
+
+// goMod determines and reports the value of go env GOMOD
+// for the given import path, GOROOT, and GOPATH values.
+// It uses module-specific environment variables from st.conf.ModulesEnv.
+func (st *buildStatus) goMod(importPath, goroot, gopath string) (string, error) {
+	var buf bytes.Buffer
+	rErr, err := st.bc.Exec("go/bin/go", buildlet.ExecOpts{
+		Output:   &buf,
+		Dir:      "gopath/src/" + importPath,
+		ExtraEnv: append(append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath), st.conf.ModulesEnv(st.SubName)...),
 		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
-		Args:     args,
+		Args:     []string{"env", "-json", "GOMOD"},
 	})
+	if err != nil {
+		return "", fmt.Errorf("exec go env on buildlet: %v", err)
+	} else if rErr != nil {
+		return "", fmt.Errorf("go env error: %v\noutput:\n%s", rErr, &buf)
+	}
+	var env struct {
+		GoMod string
+	}
+	err = json.Unmarshal(buf.Bytes(), &env)
+	return env.GoMod, err
+}
+
+// fetchRepoDependenciesToGOPATHWorkspace recursively fetches
+// the golang.org/x/* dependencies of repo st.SubName
+// and places them into the buildlet's GOPATH workspace.
+// The st.SubName repo itself must already be there.
+//
+// Dependencies are always fetched at master, which
+// isn't great but the dashboard data model doesn't
+// track non-golang.org/x/* dependencies. For those, we
+// require on the code under test to be using Go modules.
+func (st *buildStatus) fetchDependenciesToGOPATHWorkspace(goroot, gopath string) (remoteErr, err error) {
+	fetched := map[string]bool{}
+	toFetch := []string{st.SubName}
+
+	// fetch checks out the provided sub-repo to the buildlet's workspace.
+	fetch := func(repo, rev string) error {
+		fetched[repo] = true
+		return buildgo.FetchSubrepo(st, st.bc, repo, rev)
+	}
+
+	// findDeps uses 'go list' on the checked out repo to find its
+	// dependencies, and adds any not-yet-fetched deps to toFetch.
+	findDeps := func(repo string) (rErr, err error) {
+		repoPath := importPathOfRepo(repo)
+		var buf bytes.Buffer
+		rErr, err = st.bc.Exec("go/bin/go", buildlet.ExecOpts{
+			Output:   &buf,
+			Dir:      "gopath/src/" + repoPath,
+			ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath),
+			Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+			Args:     []string{"list", "-f", `{{range .Deps}}{{printf "%v\n" .}}{{end}}`, repoPath + "/..."},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("exec go list on buildlet: %v", err)
+		}
+		if rErr != nil {
+			fmt.Fprintf(st, "go list error: %v\noutput:\n%s", rErr, &buf)
+			return rErr, nil
+		}
+		for _, p := range strings.Fields(buf.String()) {
+			if !strings.HasPrefix(p, "golang.org/x/") ||
+				p == repoPath || strings.HasPrefix(p, repoPath+"/") {
+				continue
+			}
+			repo := strings.TrimPrefix(p, "golang.org/x/")
+			if i := strings.Index(repo, "/"); i >= 0 {
+				repo = repo[:i]
+			}
+			if !fetched[repo] {
+				toFetch = append(toFetch, repo)
+			}
+		}
+		return nil, nil
+	}
+
+	for i := 0; i < len(toFetch); i++ {
+		repo := toFetch[i]
+		if fetched[repo] {
+			continue
+		}
+		// Fetch the HEAD revision by default.
+		rev, err := getRepoHead(repo)
+		if err != nil {
+			return nil, err
+		}
+		if rev == "" {
+			rev = "master" // should happen rarely; ok if it does.
+		}
+		if i == 0 {
+			// The repo under test has already been fetched earlier,
+			// just need to mark it as fetched.
+			fetched[repo] = true
+		} else {
+			if err := fetch(repo, rev); err != nil {
+				return nil, err
+			}
+		}
+		if rErr, err := findDeps(repo); err != nil {
+			return nil, err
+		} else if rErr != nil {
+			// An issue with the package may cause "go list" to
+			// fail and this is a legimiate build error.
+			return rErr, nil
+		}
+	}
+
+	return nil, nil
+}
+
+// ignoredByGoTool reports whether the given import path corresponds
+// to a directory that would be ignored by the go tool.
+//
+// The logic of the go tool for ignoring directories is documented at
+// https://golang.org/cmd/go/#hdr-Package_lists_and_patterns:
+//
+// 	Directory and file names that begin with "." or "_" are ignored
+// 	by the go tool, as are directories named "testdata".
+//
+func ignoredByGoTool(importPath string) bool {
+	for _, el := range strings.Split(importPath, "/") {
+		if strings.HasPrefix(el, ".") || strings.HasPrefix(el, "_") || el == "testdata" {
+			return true
+		}
+	}
+	return false
+}
+
+// isVendored reports whether the given import path corresponds
+// to a Go package that is inside a vendor directory.
+//
+// The logic for what is considered a vendor directory is documented at
+// https://golang.org/cmd/go/#hdr-Vendor_Directories.
+func isVendored(importPath string) bool {
+	return strings.HasPrefix(importPath, "vendor/") ||
+		strings.Contains(importPath, "/vendor/")
+}
+
+// firstNonNil returns the first non-nil error, or nil otherwise.
+func firstNonNil(errs ...error) error {
+	for _, e := range errs {
+		if e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+// multiError is a concatentation of multiple errors.
+// There must be one or more errors, and all must be non-nil.
+type multiError []error
+
+// Error concatentates all error strings into a single string,
+// using a semicolon and space as a separator.
+func (m multiError) Error() string {
+	if len(m) == 1 {
+		return m[0].Error()
+	}
+
+	var b strings.Builder
+	for i, e := range m {
+		if i != 0 {
+			b.WriteString("; ")
+		}
+		b.WriteString(e.Error())
+	}
+	return b.String()
 }
 
 // moduleProxy returns the GOPROXY environment value to use for module-enabled
 // tests.
 //
-// We go through a GCP-project-internal module proxy ("GOPROXY") to
-// eliminate load on the origin servers. Our builder VMs are ephemeral
-// and only run for the duration of one build. They also often don't
-// have all the VCS tools installed (or even available: there is no
-// git for plan9).
+// We go through an internal (10.0.0.0/8) proxy that then hits
+// https://proxy.golang.org/ so we're still able to firewall
+// non-internal outbound connections on builder nodes.
 //
-// moduleProxy in prod mode (when running on GKE) returns an http
+// This moduleProxy func in prod mode (when running on GKE) returns an http
 // URL to the current GKE pod's IP with a Kubernetes NodePort service
-// port that forwards to the internal Athens module proxy cache
-// service we run on GKE.
+// port that forwards back to the coordinator's 8123. See comment below.
 //
 // In localhost dev mode it just returns the value of GOPROXY.
 func moduleProxy() string {
@@ -2462,15 +2701,15 @@ func moduleProxy() string {
 		return os.Getenv("GOPROXY")
 	}
 	// We run a NodePort service on each GKE node
-	// (cmd/coordinator/module-proxy-service.yaml) on port 30156
-	// that maps to the Athens service. We could round robin over
-	// all the GKE nodes' IPs if we wanted, but the coordinator is
-	// running on GKE so our node by definition is up, so just use it.
-	// It won't be much traffic.
+	// (cmd/coordinator/module-proxy-service.yaml) on port 30157
+	// that maps back the coordinator's port 8123. (We could round
+	// robin over all the GKE nodes' IPs if we wanted, but the
+	// coordinator is running on GKE so our node by definition is
+	// up, so just use it. It won't be much traffic.)
 	// TODO: migrate to a GKE internal load balancer with an internal static IP
 	// once we migrate symbolic-datum-552 off a Legacy VPC network to the modern
 	// scheme that supports internal static IPs.
-	return "http://" + gkeNodeIP + ":30156"
+	return "http://" + gkeNodeIP + ":30157"
 }
 
 // affectedPkgs returns the name of every package affected by this commit.
@@ -2495,6 +2734,8 @@ func (ts *trySet) affectedPkgs() (pkgs []string) {
 	*/
 	return
 }
+
+var errBuildletsGone = errors.New("runTests: dist test failed: all buildlets had network errors or timeouts, yet tests remain")
 
 // runTests is only called for builders which support a split make/run
 // (should be everything, at least soon). Currently (2015-05-27) iOS
@@ -2630,7 +2871,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 				st.LogEventTime("still_waiting_on_test", ti.name)
 			case <-buildletsGone:
 				set.cancelAll()
-				return nil, fmt.Errorf("dist test failed: all buildlets had network errors or timeouts, yet tests remain")
+				return nil, errBuildletsGone
 			}
 		}
 
@@ -2818,7 +3059,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 		)
 		env = append(env, st.conf.ModulesEnv("go")...)
 
-		remoteErr, err = bc.Exec(path.Join("go", "bin", "go"), buildlet.ExecOpts{
+		remoteErr, err = bc.Exec("go/bin/go", buildlet.ExecOpts{
 			// We set Dir to "." instead of the default ("go/bin") so when the dist tests
 			// try to run os/exec.Command("go", "test", ...), the LookPath of "go" doesn't
 			// return "./go.exe" (which exists in the current directory: "go/bin") and then
@@ -3048,7 +3289,7 @@ type buildStatus struct {
 	hasBenchResults bool // set by runTests, may only be used when build() returns.
 
 	mu              sync.Mutex       // guards following
-	failURL         string           // if non-empty, permanent URL of failure
+	logURL          string           // if non-empty, permanent URL of log
 	bc              *buildlet.Client // nil initially, until pool returns one
 	done            time.Time        // finished running
 	succeeded       bool             // set when done
@@ -3198,6 +3439,9 @@ func (st *buildStatus) HTMLStatusLine() template.HTML      { return st.htmlStatu
 func (st *buildStatus) HTMLStatusLine_done() template.HTML { return st.htmlStatusLine(false) }
 
 func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
+	if st == nil {
+		return "[nil]"
+	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
@@ -3225,9 +3469,9 @@ func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
 		state = "<font color='#700000'>failed</font>"
 	}
 	if full {
-		fmt.Fprintf(&buf, "; <a href='%s'>%s</a>; %s", st.logsURLLocked(), state, html.EscapeString(st.bc.String()))
+		fmt.Fprintf(&buf, "; <a href='%s'>%s</a>; %s", html.EscapeString(st.logsURLLocked()), state, html.EscapeString(st.bc.String()))
 	} else {
-		fmt.Fprintf(&buf, "; <a href='%s'>%s</a>", st.logsURLLocked(), state)
+		fmt.Fprintf(&buf, "; <a href='%s'>%s</a>", html.EscapeString(st.logsURLLocked()), state)
 	}
 
 	t := st.done
@@ -3243,6 +3487,9 @@ func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
 }
 
 func (st *buildStatus) logsURLLocked() string {
+	if st.logURL != "" {
+		return st.logURL
+	}
 	var urlPrefix string
 	if buildEnv == buildenv.Production {
 		urlPrefix = "https://farmer.golang.org"
@@ -3268,7 +3515,7 @@ func (st *buildStatus) writeEventsLocked(w io.Writer, htmlMode bool) {
 		text := evt.text
 		if htmlMode {
 			if e == "running_exec" {
-				e = fmt.Sprintf("<a href='%s'>%s</a>", st.logsURLLocked(), e)
+				e = fmt.Sprintf("<a href='%s'>%s</a>", html.EscapeString(st.logsURLLocked()), e)
 			}
 			e = "<b>" + e + "</b>"
 			text = "<i>" + html.EscapeString(text) + "</i>"
@@ -3278,7 +3525,6 @@ func (st *buildStatus) writeEventsLocked(w io.Writer, htmlMode bool) {
 	if st.isRunningLocked() {
 		fmt.Fprintf(w, " %7s (now)\n", fmt.Sprintf("+%0.1fs", time.Since(lastT).Seconds()))
 	}
-
 }
 
 func (st *buildStatus) logs() string {
@@ -3287,6 +3533,26 @@ func (st *buildStatus) logs() string {
 
 func (st *buildStatus) Write(p []byte) (n int, err error) {
 	return st.output.Write(p)
+}
+
+// repeatedCommunicationError takes a buildlet execution error (a
+// network/communication error, as opposed to a remote execution that
+// ran and had a non-zero exit status and we heard about) and
+// conditionally promotes it to a terminal error. If this returns a
+// non-nil value, the execErr should be considered terminal with the
+// returned error.
+func (st *buildStatus) repeatedCommunicationError(execErr error) error {
+	if execErr == nil {
+		return nil
+	}
+	// For now, only do this for plan9, which is flaky (Issue 31261)
+	if strings.HasPrefix(st.Name, "plan9-") && execErr == errBuildletsGone {
+		// TODO: give it two tries at least later (store state
+		// somewhere; global map?). But for now we're going to
+		// only give it one try.
+		return fmt.Errorf("network error promoted to terminal error: %v", execErr)
+	}
+	return nil
 }
 
 func useGitMirror() bool {
@@ -3316,10 +3582,10 @@ func getRepoHead(repo string) (string, error) {
 	return res.Value, nil
 }
 
-// newFailureLogBlob creates a new object to record a public failure log.
+// newBuildLogBlob creates a new object to record a public build log.
 // The objName should be a Google Cloud Storage object name.
 // When developing on localhost, the WriteCloser may be of a different type.
-func newFailureLogBlob(objName string) (obj io.WriteCloser, url_ string) {
+func newBuildLogBlob(objName string) (obj io.WriteCloser, url_ string) {
 	if *mode == "dev" {
 		// TODO(bradfitz): write to disk or something, or
 		// something testable. Maybe memory.
@@ -3329,7 +3595,7 @@ func newFailureLogBlob(objName string) (obj io.WriteCloser, url_ string) {
 		}{
 			os.Stderr,
 			ioutil.NopCloser(nil),
-		}, "devmode://fail-log/" + objName
+		}, "devmode://build-log/" + objName
 	}
 	if storageClient == nil {
 		panic("nil storageClient in newFailureBlob")

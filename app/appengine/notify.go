@@ -2,14 +2,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build appengine
-
-package build
+package main
 
 import (
 	"bytes"
 	"context"
-	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -126,7 +123,7 @@ func firstMatch(c context.Context, q *datastore.Query, v interface{}) error {
 var (
 	notifyLater = delay.Func("notify", notify)
 	notifyTmpl  = template.Must(template.New("notify.txt").
-			Funcs(template.FuncMap(tmplFuncs)).ParseFiles("notify.txt"))
+			Funcs(template.FuncMap(tmplFuncs)).ParseFiles(templateFile("notify.txt")))
 )
 
 // notify tries to update the CL for the given Commit with a failure message.
@@ -198,10 +195,6 @@ func postGerritMessage(c context.Context, com *Commit, message string) error {
 		return fmt.Errorf("posting message: %s\n%s", resp.Status, body)
 	}
 	return nil
-}
-
-func init() {
-	gob.Register(&Commit{}) // for delay
 }
 
 // MUST be called from inside a transaction.
@@ -279,7 +272,7 @@ var (
 	sendPerfMailTmpl  = template.Must(
 		template.New("perf_notify.txt").
 			Funcs(template.FuncMap(tmplFuncs)).
-			ParseFiles("perf_notify.txt"),
+			ParseFiles(templateFile("perf_notify.txt")),
 	)
 )
 

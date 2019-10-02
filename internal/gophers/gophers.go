@@ -12,13 +12,14 @@ import (
 	"golang.org/x/build/gerrit"
 )
 
+// Person represents a person.
 type Person struct {
 	Name    string   // "Foo Bar"
 	Github  string   // "FooBar" (orig case, no '@')
 	Gerrit  string   // "foo@bar.com" (lowercase)
 	Emails  []string // all lower
-	Googler bool
-	Bot     bool
+	Googler bool     // whether person is (or was) a Googler; determined via heuristics
+	Bot     bool     // whether it's a known bot (GopherBot, Gerrit Bot)
 }
 
 func strSliceContains(ss []string, s string) bool {
@@ -63,10 +64,27 @@ func (p *Person) mergeIDs(ids ...string) {
 // keys are "@lowercasegithub", "lowercase name", "lowercase@email.com".
 var idToPerson = map[string]*Person{}
 
+// GetPerson looks up a person by id and returns one if found,
+// or nil otherwise.
+//
+// The id is case insensitive, and may be one of:
+//
+// • full name (for example, "Dmitri Shuralyov")
+//
+// • GitHub username (for example, "@dmitshur"), leading '@' is mandatory
+//
+// • Gerrit <account ID>@<instance ID> (for example, "6005@62eb7196-b449-3ce5-99f1-c037f21e1705")
+//
+// • email (for example, "dmitshur@golang.org")
+//
+// Only exact matches are supported.
+//
 func GetPerson(id string) *Person {
 	return idToPerson[strings.ToLower(id)]
 }
 
+// GetGerritPerson looks up a person from the Gerrit account ai.
+// It uses the name and email in the Gerrit account for the lookup.
 func GetGerritPerson(ai gerrit.AccountInfo) *Person {
 	if p := GetPerson(ai.Name); p != nil {
 		return p
@@ -154,8 +172,7 @@ func init() {
 	addPerson("Aiden Scandella", "sc@ndella.com")
 	addPerson("Ainar Garipov", "gugl.zadolbal@gmail.com", "@ainar-g")
 	addPerson("Aishraj", "aishraj@users.noreply.github.com", "@aishraj")
-	addPerson("Akhil Indurti", "aindurti@gmail.com", "17921@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Akhil Indurti", "aindurti@gmail.com", "@smasher164")
+	addPerson("Akhil Indurti", "aindurti@gmail.com", "contact@akhilindurti.com", "@smasher164", "17921@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Akihiko Odaki", "akihiko.odaki.4i@stu.hosei.ac.jp")
 	addPerson("Akihiro Suda", "suda.kyoto@gmail.com", "13030@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Akihiro Suda", "suda.kyoto@gmail.com", "@AkihiroSuda")
@@ -202,10 +219,9 @@ func init() {
 	addPerson("Alex Skinner", "alex@lx.lc", "6090@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Alex Stoddard", "alex.stoddard@comcast.net")
 	addPerson("Alex Tokarev", "aleksator@gmail.com", "@aleksator")
-	addPerson("Alex Vaghin", "crhyme@google.com")
-	addPerson("Alex Vaghin", "ddos@google.com")
-	addPerson("Alex Vaghin", "ddos@google.com", "6347@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Alex Vaghin", "ddos@google.com", "@x1ddos")
+	addPerson("Alex Vaghin", "ddos@google.com", "alex@cloudware.io", "@x1ddos")
+	addPerson("Alex Vaghin", "crhyme@google.com", "6347@62eb7196-b449-3ce5-99f1-c037f21e1705")
+	addPerson("Alex Vaghin", "alex@cloudware.io", "8870@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Alex Yu", "yu.alex96@gmail.com")
 	addPerson("AlexRudd", "rudd.alex1@gmail.com")
 	addPerson("Alexander A. Klimov", "alexander.klimov@netways.de")
@@ -293,11 +309,7 @@ func init() {
 	addPerson("Andres Erbsen", "andres.erbsen@gmail.com")
 	addPerson("Andrew Austin", "andrewaclt@gmail.com", "@andrewaustin")
 	addPerson("Andrew Benton", "andrewmbenton@gmail.com", "@andrewmbenton")
-	addPerson("Andrew Bonventre", "365204+andybons@users.noreply.github.com")
-	addPerson("Andrew Bonventre", "andybons@golang.org", "22285@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Andrew Bonventre", "andybons@golang.org", "andybons@gmail.com", "@andybons")
-	addPerson("Andrew Bonventre", "andybons@google.com", "10660@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Andrew Bonventre", "hello@obvy.co")
+	addPerson("Andrew Bonventre", "andybons@golang.org", "andybons@gmail.com", "@andybons", "365204+andybons@users.noreply.github.com", "22285@62eb7196-b449-3ce5-99f1-c037f21e1705", "andybons@google.com", "10660@62eb7196-b449-3ce5-99f1-c037f21e1705", "hello@obvy.co")
 	addPerson("Andrew Brampton", "bramp@google.com")
 	addPerson("Andrew Braunstein", "awbraunstein@gmail.com", "@awbraunstein")
 	addPerson("Andrew Ekstedt", "andrew.ekstedt@gmail.com", "6255@62eb7196-b449-3ce5-99f1-c037f21e1705")
@@ -538,10 +550,7 @@ func init() {
 	addPerson("Carl Jackson", "carl@stripe.com", "@carl-stripe")
 	addPerson("Carl Johnson", "me@carlmjohnson.net", "12425@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Carl Johnson", "me@carlmjohnson.net", "@carlmjohnson")
-	addPerson("Carl Mastrangelo", "carl.mastrangelo@gmail.com")
-	addPerson("Carl Mastrangelo", "carlmastrangelo@gmail.com")
-	addPerson("Carl Mastrangelo", "notcarl@google.com", "12225@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Carl Mastrangelo", "notcarl@google.com", "@carl-mastrangelo")
+	addPerson("Carl Mastrangelo", "notcarl@google.com", "@carl-mastrangelo", "carl.mastrangelo@gmail.com", "carlmastrangelo@gmail.com", "12225@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Carlisia Campos", "carlisia@grokkingtech.io", "@carlisia")
 	addPerson("Carlo Alberto Ferraris", "cafxx@strayorange.com", "11500@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Carlo Alberto Ferraris", "cafxx@strayorange.com", "@CAFxX")
@@ -846,8 +855,7 @@ func init() {
 	addPerson("Dirk Gadsden", "dirk@esherido.com", "@dirk")
 	addPerson("Diwaker Gupta", "diwakergupta@gmail.com", "@diwakergupta")
 	addPerson("Dmitri Popov", "operator@cv.dp-net.com", "@pin")
-	addPerson("Dmitri Shuralyov", "dmitshur@golang.org", "6005@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Dmitri Shuralyov", "dmitshur@golang.org", "dmitri@shuralyov.com", "shurcool@gmail.com", "@dmitshur")
+	addPerson("Dmitri Shuralyov", "dmitshur@golang.org", "dmitri@shuralyov.com", "shurcool@gmail.com", "@dmitshur", "6005@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Dmitriy Dudkin", "dudkin.dmitriy@gmail.com", "@tmwh")
 	addPerson("Dmitriy", "dchenk@users.noreply.github.com")
 	addPerson("Dmitry Chestnykh", "dchest@gmail.com", "@dchest")
@@ -929,9 +937,9 @@ func init() {
 	addPerson("Eric Garrido", "ekg@google.com", "@minusnine")
 	addPerson("Eric Hopper", "hopper@omnifarious.org")
 	addPerson("Eric Koleda", "ekoleda+devrel@google.com")
+	addPerson("Eric Lagergren", "ericscottlagergren@gmail.com", "@ericlagergren")
 	addPerson("Eric Lagergren", "eric@ericlagergren.com", "@ericlagergren")
 	addPerson("Eric Lagergren", "ericscottlagergren@gmail.com", "7276@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Eric Lagergren", "ericscottlagergren@gmail.com", "@ericlagergren")
 	addPerson("Eric Milliken", "emilliken@gmail.com", "@emilliken")
 	addPerson("Eric Pauley", "eric@pauley.me", "@ericpauley")
 	addPerson("Eric Ponce", "tricokun@gmail.com", "@trico")
@@ -1000,10 +1008,9 @@ func init() {
 	addPerson("Filip Haglund", "drathier@users.noreply.github.com")
 	addPerson("Filip Ochnik", "filip.ochnik@gmail.com")
 	addPerson("Filip Stanis", "fstanis@google.com")
-	addPerson("Filippo Valsorda", "", "6195@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Filippo Valsorda", "filippo@cloudflare.com")
 	addPerson("Filippo Valsorda", "filippo@golang.org", "11715@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Filippo Valsorda", "filippo@golang.org", "hi@filippo.io", "@FiloSottile")
+	addPerson("Filippo Valsorda", "hi@filippo.io", "@FiloSottile", "filippo@cloudflare.com")
+	addPerson("Filippo Valsorda", "6195@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Firmansyah Adiputra", "frm.adiputra@gmail.com", "@frm-adiputra")
 	addPerson("Florian Forster", "octo@google.com", "@octo")
 	addPerson("Florian Uekermann", "florian@uekermann.me", "13410@62eb7196-b449-3ce5-99f1-c037f21e1705")
@@ -1106,8 +1113,8 @@ func init() {
 	addPerson("Guilherme Rezende", "guilhermebr@gmail.com", "@guilhermebr")
 	addPerson("Guilherme Santos", "guilherme.santos@foodora.com")
 	addPerson("GuilhermeCaruso", "gui.martinscaruso@gmail.com", "@GuilhermeCaruso")
-	addPerson("Guillaume J. Charmes", "gcharmes@magicleap.com")
 	addPerson("Guillaume J. Charmes", "guillaume@charmes.net", "@creack")
+	addPerson("Guillaume J. Charmes", "gcharmes@magicleap.com")
 	addPerson("Guillaume Koenig", "guillaume.edward.koenig@gmail.com")
 	addPerson("Guillaume Leroi", "leroi.g@gmail.com")
 	addPerson("Guillermo López-Anglada", "guillermo.lopez@outlook.com", "@guillermooo")
@@ -1139,9 +1146,9 @@ func init() {
 	addPerson("Hari haran", "hariharan.uno@gmail.com", "@hariharan-uno")
 	addPerson("Hariharan Srinath", "srinathh@gmail.com", "@srinathh")
 	addPerson("Harry Moreno", "morenoh149@gmail.com", "@morenoh149")
+	addPerson("Harshavardhana", "hrshvardhana@gmail.com", "@harshavardhana")
 	addPerson("Harshavardhana", "harsha@minio.io")
 	addPerson("Harshavardhana", "hrshvardhana@gmail.com", "11900@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Harshavardhana", "hrshvardhana@gmail.com", "@harshavardhana")
 	addPerson("Hauke Löffler", "hloeffler@users.noreply.github.com", "@hloeffler")
 	addPerson("He Liu", "liulonnie@gmail.com")
 	addPerson("Hector Chu", "hectorchu@gmail.com", "@hectorchu")
@@ -1419,9 +1426,9 @@ func init() {
 	addPerson("Joe Shaw", "joe@joeshaw.org", "@joeshaw")
 	addPerson("Joe Sylve", "joe.sylve@gmail.com", "11851@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Joe Sylve", "joe.sylve@gmail.com", "@jtsylve")
+	addPerson("Joe Tsai", "joetsai@google.com", "joetsai@digital-static.net", "thebrokentoaster@gmail.com", "@dsnet")
 	addPerson("Joe Tsai", "joetsai@digital-static.net", "8495@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Joe Tsai", "joetsai@google.com", "12850@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Joe Tsai", "joetsai@google.com", "joetsai@digital-static.net", "thebrokentoaster@gmail.com", "@dsnet")
 	addPerson("Joe Tsai", "thebrokentoaster@gmail.com", "9735@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Joel Sing", "joel@sing.id.au", "13640@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Joel Sing", "joel@sing.id.au", "jsing@google.com", "@4a6f656c")
@@ -1799,9 +1806,9 @@ func init() {
 	addPerson("Martin Kunc", "mk@Martins-MacBook-Pro.local")
 	addPerson("Martin Lee", "martin@martinlee.org")
 	addPerson("Martin Lindhe", "martin.j.lindhe@gmail.com", "@martinlindhe")
+	addPerson("Martin Möhrmann", "moehrmann@google.com", "martisch@uos.de", "@martisch")
 	addPerson("Martin Möhrmann", "martisch@uos.de", "5846@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Martin Möhrmann", "moehrmann@google.com", "16006@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Martin Möhrmann", "moehrmann@google.com", "martisch@uos.de", "@martisch")
 	addPerson("Martin Olsen", "github.com@martinolsen.net", "@martinolsen")
 	addPerson("Martin Olsson", "martin@minimum.se", "@mo")
 	addPerson("Martin Probst", "martin@probst.io")
@@ -1856,9 +1863,9 @@ func init() {
 	addPerson("Matthew Broberg", "matthewbbroberg@gmail.com")
 	addPerson("Matthew Byrne", "mjw.byrne@gmail.com")
 	addPerson("Matthew Cottingham", "mattcottingham@gmail.com", "@mattrco")
+	addPerson("Matthew Dempsky", "mdempsky@google.com", "@mdempsky")
 	addPerson("Matthew Dempsky", "matthew@dempsky.org", "8715@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Matthew Dempsky", "mdempsky@google.com", "5440@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Matthew Dempsky", "mdempsky@google.com", "@mdempsky")
 	addPerson("Matthew Denton", "mdenton@skyportsystems.com", "@mdentonSkyport")
 	addPerson("Matthew Endsley", "mendsley@gmail.com")
 	addPerson("Matthew Herrmann", "mherr@google.com")
@@ -2150,9 +2157,9 @@ func init() {
 	addPerson("Paul Chang", "paulchang@google.com", "@pchx")
 	addPerson("Paul Gier", "pgier@redhat.com")
 	addPerson("Paul Hankin", "paulhankin@google.com")
+	addPerson("Paul Jolly", "paul@myitcv.org.uk", "@myitcv")
 	addPerson("Paul Jolly", "paul@myitcv.io", "@myitcv")
 	addPerson("Paul Jolly", "paul@myitcv.org.uk", "16375@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Paul Jolly", "paul@myitcv.org.uk", "@myitcv")
 	addPerson("Paul Lalonde", "paul.a.lalonde@gmail.com", "@paul-lalonde")
 	addPerson("Paul M Furley", "paul@paulfurley.com")
 	addPerson("Paul Marks", "pmarks@google.com", "6050@62eb7196-b449-3ce5-99f1-c037f21e1705")
@@ -2283,8 +2290,8 @@ func init() {
 	addPerson("Rajat Goel", "rajat.goel2010@gmail.com", "@rajatgoel")
 	addPerson("Rajath Agasthya", "rajathagasthya@gmail.com", "24258@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Rajath Agasthya", "rajathagasthya@gmail.com", "@rajathagasthya")
-	addPerson("Ralph Corderoy", "ralph.corderoy@gmail.com", "7020@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Ralph Corderoy", "ralph@inputplus.co.uk")
+	addPerson("Ralph Corderoy", "ralph.corderoy@gmail.com", "7020@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Ralph Corderoy", "ralph@inputplus.co.uk", "10961@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Ralph Corderoy", "ralph@inputplus.co.uk", "@RalphCorderoy")
 	addPerson("Ralph Ligtenberg", "ralph.ligtenberg@gmail.com")
@@ -2294,9 +2301,9 @@ func init() {
 	addPerson("Randy Reddig", "ydnar@shaderlab.com")
 	addPerson("Raph Levien", "raph@google.com", "@raphlinus")
 	addPerson("Raphael Geronimi", "raphael.geronimi@gmail.com", "@rgeronimi")
+	addPerson("Raul Silvera", "rsilvera@google.com", "@rauls5382")
 	addPerson("Raul Silvera", "rauls5382@gmail.com")
 	addPerson("Raul Silvera", "rsilvera@google.com", "10031@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Raul Silvera", "rsilvera@google.com", "@rauls5382")
 	addPerson("RaviTeja", "ravi.tezu@gmail.com")
 	addPerson("Ray Tung", "rtung@thoughtworks.com", "@raytung")
 	addPerson("Raymond Kazlauskas", "raima220@gmail.com", "@Rhymond")
@@ -2459,9 +2466,9 @@ func init() {
 	addPerson("Sebastian Schmidt", "mrschmidt@google.com")
 	addPerson("Sebastian Schuberth", "sschuberth@gmail.com")
 	addPerson("Sebastian Willing", "sewi.de@gmail.com")
+	addPerson("Sebastien Binet", "seb.binet@gmail.com", "@sbinet")
 	addPerson("Sebastien Binet", "binet@cern.ch")
 	addPerson("Sebastien Binet", "seb.binet@gmail.com", "5810@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Sebastien Binet", "seb.binet@gmail.com", "@sbinet")
 	addPerson("Seebs", "seebs@sourcegraph.com", "@seebs")
 	addPerson("Seiji Takahashi", "timaki.st@gmail.com", "15570@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Seiji Takahashi", "timaki.st@gmail.com", "@timakin")
@@ -2666,9 +2673,9 @@ func init() {
 	addPerson("Tipp Moseley", "tipp@google.com", "@tippjammer")
 	addPerson("Tobias Assarsson", "tobias.assarsson@gmail.com")
 	addPerson("Tobias Columbus", "tobias.columbus@gmail.com", "@tc-0")
+	addPerson("Tobias Klauser", "tobias.klauser@gmail.com", "@tklauser")
 	addPerson("Tobias Klauser", "tklauser@distanz.ch", "@tklauser")
 	addPerson("Tobias Klauser", "tobias.klauser@gmail.com", "19560@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Tobias Klauser", "tobias.klauser@gmail.com", "@tklauser")
 	addPerson("Tobias Schottdorf", "tobias.schottdorf@gmail.com")
 	addPerson("Toby Burress", "kurin@google.com")
 	addPerson("Todd Neal", "todd@tneal.org", "12836@62eb7196-b449-3ce5-99f1-c037f21e1705")
@@ -2754,8 +2761,8 @@ func init() {
 	addPerson("Vincenzo Pupillo", "v.pupillo@gmail.com", "24134@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Vinu Rajashekhar", "vinutheraj@gmail.com", "@vinuraja")
 	addPerson("Vishvananda Ishaya", "vishvananda@gmail.com", "@vishvananda")
-	addPerson("Vitor De Mario", "vitor.demario@mendelics.com.br")
 	addPerson("Vitor De Mario", "vitordemario@gmail.com", "@vdemario")
+	addPerson("Vitor De Mario", "vitor.demario@mendelics.com.br")
 	addPerson("Vivek Ayer", "vivek@restlessbandit.com")
 	addPerson("Vivek Sekhar", "vivek@viveksekhar.ca")
 	addPerson("Vlad Krasnov", "vlad@cloudflare.com", "7601@62eb7196-b449-3ce5-99f1-c037f21e1705")
@@ -3096,7 +3103,6 @@ func init() {
 	addPerson("shogo-ma", "choroma194@gmail.com", "@shogo-ma")
 	addPerson("shwsun", "jethro.sun7@gmail.com")
 	addPerson("slene", "vslene@gmail.com")
-	addPerson("smasher164", "contact@akhilindurti.com")
 	addPerson("softctrl", "carlostimoshenkorodrigueslopes@gmail.com")
 	addPerson("soluchok", "isoluchok@gmail.com", "@soluchok")
 	addPerson("spring1843", "yasser@yasser.ca")

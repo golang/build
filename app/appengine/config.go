@@ -2,14 +2,12 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build appengine
-
-package build
+package main
 
 import (
+	"context"
 	"sync"
 
-	"context"
 	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/log"
 )

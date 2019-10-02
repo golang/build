@@ -119,7 +119,7 @@ func TestHandler(t *testing.T) {
 			rStr = "<empty>"
 		}
 		t.Logf("Request: %v", rStr)
-		req, err := http.NewRequest(tc.method, "/owners/", &buf)
+		req, err := http.NewRequest(tc.method, "/owners", &buf)
 		if err != nil {
 			t.Errorf("http.NewRequest: %v", err)
 			continue
@@ -148,7 +148,7 @@ func TestHandler(t *testing.T) {
 }
 
 func TestIndex(t *testing.T) {
-	req, err := http.NewRequest("GET", "/owners/", nil)
+	req, err := http.NewRequest("GET", "/owners", nil)
 	if err != nil {
 		t.Fatalf("http.NewRequest: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestIndex(t *testing.T) {
 }
 
 func TestBadRequest(t *testing.T) {
-	req, err := http.NewRequest("POST", "/owners/", bytes.NewBufferString("malformed json"))
+	req, err := http.NewRequest("POST", "/owners", bytes.NewBufferString("malformed json"))
 	if err != nil {
 		t.Fatalf("http.NewRequest: %v", err)
 	}

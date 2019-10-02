@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main // import "golang.org/x/build/cmd/coordinator/buildongce"
+package main // import "golang.org/x/build/cmd/gcpinit"
 
 import (
 	"bytes"
@@ -26,7 +26,6 @@ import (
 
 var (
 	makeClusters = flag.String("make-clusters", "go,buildlets", "comma-separated list of clusters to create. Empty means none.")
-	makeDisks    = flag.Bool("make-basepin", false, "Create the basepin disk images for all builders, then stop. Does not create the VM.")
 	makeMetrics  = flag.Bool("make-metrics", false, "Create the Stackdriver metrics for buildlet monitoring.")
 )
 
@@ -81,13 +80,6 @@ func main() {
 	bgc, err := buildgo.NewClient(ctx, buildEnv)
 	if err != nil {
 		log.Fatalf("could not create client: %v", err)
-	}
-
-	if *makeDisks {
-		if err := bgc.MakeBasepinDisks(ctx); err != nil {
-			log.Fatalf("could not create basepin disks: %v", err)
-		}
-		return
 	}
 
 	for _, c := range []*buildenv.KubeConfig{&buildEnv.KubeBuild, &buildEnv.KubeTools} {

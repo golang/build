@@ -77,7 +77,17 @@ func archDir() string {
 	return ""
 }
 
+// godoc copies the godoc binary into place for Go 1.12 and earlier.
+//
+// TODO: remove this function once Go 1.14 is released (when Go 1.12
+// is no longer supported).
 func godoc() error {
+	_, version, _ := environ()
+	verMajor, verMinor, _ := splitVersion(version)
+	if verMajor > 1 || verMinor >= 13 {
+		return nil // Only include the godoc binary in go1.12.x and earlier releases; Issue 30029
+	}
+
 	// Pre Go 1.7, the godoc binary is placed here by cmd/go.
 	// After Go 1.7, we need to copy the binary from GOPATH/bin to GOROOT/bin.
 	// TODO(cbro): Remove after Go 1.6 is no longer supported.
@@ -699,14 +709,6 @@ var windowsData = map[string]string{
         Permanent="no"
         System="yes"
         Value="[INSTALLDIR]bin" />
-    <Environment
-        Id="GoRoot"
-        Action="set"
-        Part="all"
-        Name="GOROOT"
-        Permanent="no"
-        System="yes"
-        Value="[INSTALLDIR]" />
     <Environment
         Id="UserGoPath"
         Action="create"

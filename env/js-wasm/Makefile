@@ -12,12 +12,16 @@ usage:
 staging: Dockerfile
 	sed 's|{{REPO}}|'"$(STAGING_REPO)"'|g' Dockerfile > Dockerfile.make
 	docker build -t $(STAGING_REPO)/$(IMAGE_NAME):latest -f Dockerfile.make .
+
+pushstaging: staging
 	docker push $(STAGING_REPO)/$(IMAGE_NAME):latest
 	rm Dockerfile.make
 
 prod: Dockerfile
 	sed 's|{{REPO}}|'"$(PROD_REPO)"'|g' Dockerfile > Dockerfile.make
 	docker build -t $(PROD_REPO)/$(IMAGE_NAME):latest -f Dockerfile.make .
+
+pushprod: prod
 	docker push $(PROD_REPO)/$(IMAGE_NAME):latest
 	rm Dockerfile.make
 

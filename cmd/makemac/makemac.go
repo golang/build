@@ -16,6 +16,7 @@ Usage:
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -244,7 +245,7 @@ func (st *State) CreateMac(ctx context.Context, minor int) (slotName string, err
 
 	baseDisk, err := findBaseDisk(ctx, minor)
 	if err != nil {
-		return "", fmt.Errorf("failed to find osx_%d_frozen base disk: %v", minor, err)
+		return "", fmt.Errorf("failed to find osx_%d_frozen_nfs base disk: %v", minor, err)
 	}
 
 	hostNum, hostWhich, err := st.pickHost()
@@ -295,7 +296,7 @@ func (st *State) CreateMac(ctx context.Context, minor int) (slotName string, err
 		"-vm", name,
 		"-link=true",
 		"-persist=false",
-		"-ds=Pure1-1",
+		"-ds=GGLGLN-A-001-STV1",
 		"-disk", baseDisk,
 	); err != nil {
 		return "", err
@@ -313,6 +314,9 @@ func govc(ctx context.Context, args ...string) error {
 	fmt.Fprintf(os.Stderr, "$ govc %v\n", strings.Join(args, " "))
 	out, err := exec.CommandContext(ctx, "govc", args...).CombinedOutput()
 	if err != nil {
+		if isFileSystemReadOnly() {
+			out = append(out, "; filesystem is read-only"...)
+		}
 		return fmt.Errorf("govc %s ...: %v, %s", args[0], err, out)
 	}
 	return nil
@@ -372,7 +376,7 @@ func getState(ctx context.Context) (*State, error) {
 
 	var hosts elementList
 	if err := govcJSONDecode(ctx, &hosts, "ls", "-json", "/MacStadium-ATL/host/MacMini_Cluster"); err != nil {
-		return nil, fmt.Errorf("Reading /MacStadium-ATL/host/MacMini_Cluster: %v", err)
+		return nil, fmt.Errorf("getState: reading /MacStadium-ATL/host/MacMini_Cluster: %v", err)
 	}
 	for _, h := range hosts.Elements {
 		if h.Object.Self.Type == "HostSystem" {
@@ -384,7 +388,7 @@ func getState(ctx context.Context) (*State, error) {
 
 	var vms elementList
 	if err := govcJSONDecode(ctx, &vms, "ls", "-json", "/MacStadium-ATL/vm"); err != nil {
-		return nil, fmt.Errorf("Reading /MacStadium-ATL/vm: %v", err)
+		return nil, fmt.Errorf("getState: reading /MacStadium-ATL/vm: %v", err)
 	}
 	for _, h := range vms.Elements {
 		if h.Object.Self.Type != "VirtualMachine" {
@@ -470,9 +474,9 @@ func govcJSONDecode(ctx context.Context, dst interface{}, args ...string) error 
 }
 
 // findBaseDisk returns the path of the vmdk of the most recent
-// snapshot of the osx_$(minor)_frozen VM.
+// snapshot of the osx_$(minor)_frozen_nfs VM.
 func findBaseDisk(ctx context.Context, minor int) (string, error) {
-	vmName := fmt.Sprintf("osx_%d_frozen", minor)
+	vmName := fmt.Sprintf("osx_%d_frozen_nfs", minor)
 	out, err := exec.CommandContext(ctx, "govc", "vm.info", "-json", vmName).Output()
 	if err != nil {
 		return "", err
@@ -497,16 +501,16 @@ func findBaseDisk(ctx context.Context, minor int) (string, error) {
 	}
 	vm := ret.VirtualMachines[0]
 	if len(vm.Layout.Snapshot) < 1 {
-		return "", fmt.Errorf("VM %s does not have any snapshots. Needs at least one.", vmName)
+		return "", fmt.Errorf("VM %s does not have any snapshots; needs at least one", vmName)
 	}
 	ss := vm.Layout.Snapshot[len(vm.Layout.Snapshot)-1] // most recent snapshot is last in list
 
 	// Now find the first vmdk file, without its [datastore] prefix. The files are listed like:
 	/*
 	   "SnapshotFile": [
-	     "[Pure1-1] osx_14_frozen/osx_14_frozen-Snapshot2.vmsn",
-	     "[Pure1-1] osx_14_frozen/osx_14_frozen_15.vmdk",
-	     "[Pure1-1] osx_14_frozen/osx_14_frozen_15-000001.vmdk"
+	     "[GGLGLN-A-001-STV1] osx_14_frozen_nfs/osx_14_frozen_nfs-Snapshot2.vmsn",
+	     "[GGLGLN-A-001-STV1] osx_14_frozen_nfs/osx_14_frozen_nfs_15.vmdk",
+	     "[GGLGLN-A-001-STV1] osx_14_frozen_nfs/osx_14_frozen_nfs_15-000001.vmdk"
 	   ]
 	*/
 	for _, f := range ss.SnapshotFile {
@@ -528,6 +532,8 @@ var status struct {
 	lastCheck time.Time
 	lastLog   string
 	lastState *State
+	warnings  []string
+	errors    []string
 }
 
 func init() {
@@ -581,14 +587,20 @@ func autoAdjust() {
 
 	st, err := getState(ctx)
 	if err != nil {
-		log.Printf("getting VMWare state: %v", err)
+		status.Lock()
+		status.errors = []string{err.Error()}
+		status.Unlock()
+		log.Print(err)
 		return
 	}
+	var warnings, errors []string
 	defer func() {
 		// Set status.lastState once we're now longer using it.
 		if st != nil {
 			status.Lock()
 			status.lastState = st
+			status.warnings = warnings
+			status.errors = errors
 			status.Unlock()
 		}
 	}()
@@ -597,12 +609,14 @@ func autoAdjust() {
 	req = req.WithContext(ctx)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
+		errors = append(errors, fmt.Sprintf("getting /status/reverse.json from coordinator: %v", err))
 		log.Printf("getting reverse status: %v", err)
 		return
 	}
 	defer res.Body.Close()
 	var rstat types.ReverseBuilderStatus
 	if err := json.NewDecoder(res.Body).Decode(&rstat); err != nil {
+		errors = append(errors, fmt.Sprintf("decoding /status/reverse.json from coordinator: %v", err))
 		log.Printf("decoding reverse.json: %v", err)
 		return
 	}
@@ -618,6 +632,7 @@ func autoAdjust() {
 	}
 
 	// Destroy running VMs that appear to be dead and not connected to the coordinator.
+	// TODO: do these all concurrently.
 	dirty := false
 	for name, vi := range st.VMInfo {
 		if vi.BootTime.After(time.Now().Add(-3 * time.Minute)) {
@@ -632,18 +647,22 @@ func autoAdjust() {
 			// Look it up by its slot name instead.
 			rh = revHost[vi.SlotName]
 		}
-		if rh == nil { //  || (!rh.Busy && rh.ConnectedSec > 50 && rh.HostType == "host-darwin-10_12") {
+		if rh == nil {
 			log.Printf("Destroying VM %q unknown to coordinator...", name)
 			err := govc(ctx, "vm.destroy", name)
 			log.Printf("vm.destroy(%q) = %v", name, err)
 			dirty = true
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("vm.destroy(%q) = %v", name, err))
+			}
 		}
 	}
 	for {
 		if dirty {
 			st, err = getState(ctx)
 			if err != nil {
-				log.Printf("getState: %v", err)
+				errors = append(errors, err.Error())
+				log.Print(err)
 				return
 			}
 		}
@@ -661,7 +680,9 @@ func autoAdjust() {
 		dedupLogf("Have capacity for %d more Mac VMs; creating requested 10.%d ...", canCreate, ver)
 		slotName, err := st.CreateMac(ctx, ver)
 		if err != nil {
-			log.Printf("Error creating 10.%d: %v", ver, err)
+			errStr := fmt.Sprintf("Error creating 10.%d: %v", ver, err)
+			errors = append(errors, errStr)
+			log.Print(errStr)
 			return
 		}
 		log.Printf("Created 10.%d VM on %q", ver, slotName)
@@ -715,10 +736,14 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 		LastCheck string
 		LastLog   string
 		LastState *State
+		Warnings  []string
+		Errors    []string
 	}{
 		LastCheck: status.lastCheck.UTC().Format(time.RFC3339),
 		LastLog:   status.lastLog,
 		LastState: status.lastState,
+		Warnings:  status.warnings,
+		Errors:    status.errors,
 	}
 	j, _ := json.MarshalIndent(res, "", "\t")
 	w.Write(j)
@@ -822,4 +847,26 @@ func (h onlyAtRoot) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.h.ServeHTTP(w, r)
+}
+
+func isFileSystemReadOnly() bool {
+	f, err := os.Open("/proc/mounts")
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	// Look for line:
+	//    /dev/sda1 / ext4 rw,relatime,errors=remount-ro,data=ordered 0 0
+	bs := bufio.NewScanner(f)
+	for bs.Scan() {
+		f := strings.Fields(bs.Text())
+		if len(f) < 4 {
+			continue
+		}
+		mountPoint, state := f[1], f[3]
+		if mountPoint == "/" {
+			return strings.HasPrefix(state, "ro,")
+		}
+	}
+	return false
 }

@@ -24,6 +24,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/autocertcache"
+	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/http2"
 )
@@ -134,7 +135,10 @@ func serveAutocertTLS(h http.Handler, bucket string) error {
 	}
 	config := &tls.Config{
 		GetCertificate: m.GetCertificate,
-		NextProtos:     []string{"h2", "http/1.1"},
+		NextProtos: []string{
+			"h2", "http/1.1", // enable HTTP/2
+			acme.ALPNProto, // enable tls-alpn ACME challenges
+		},
 	}
 	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)
 	server := &http.Server{

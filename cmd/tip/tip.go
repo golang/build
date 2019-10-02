@@ -56,7 +56,10 @@ func main() {
 
 	p := &Proxy{builder: b}
 	go p.run()
-	mux := newServeMux(p)
+	mux := newServeMux(p, serveOptions{
+		// Redirect to HTTPS only if we're actually serving HTTPS.
+		RedirectToHTTPS: *autoCertDomain != "",
+	})
 
 	log.Printf("Starting up tip server for builder %q", os.Getenv(k))
 
@@ -75,17 +78,18 @@ func main() {
 }
 
 // Proxy implements the tip.golang.org server: a reverse-proxy
-// that builds and runs golangorg instances showing the latest docs.
+// that builds and runs golangorg instances showing the latest
+// Go website and standard library documentation.
 type Proxy struct {
 	builder Builder
 
 	mu       sync.Mutex // protects following fields
 	proxy    http.Handler
-	cur      string    // signature of gorepo+toolsrepo
+	cur      string    // signature of gorepo+websiterepo
 	cmd      *exec.Cmd // live golangorg instance, or nil for none
 	side     string
 	hostport string // host and port of the live instance
-	err      error
+	err      error  // non-nil when there's a problem
 }
 
 type Builder interface {
@@ -199,7 +203,9 @@ func (p *Proxy) poll() {
 
 	dir := filepath.Join(os.TempDir(), "tip", newSide)
 	if err := os.MkdirAll(dir, 0755); err != nil {
+		p.mu.Lock()
 		p.err = err
+		p.mu.Unlock()
 		return
 	}
 	hostport := "localhost:8081"
@@ -251,11 +257,23 @@ func (p *Proxy) poll() {
 		p.cmd.Process.Kill()
 	}
 	p.cmd = cmd
+	p.err = nil // If we get this far, the process started successfully. Clear the error.
+	logger.Printf("success; starting to serve on side %v", newSide)
 }
 
-func newServeMux(p *Proxy) http.Handler {
+type serveOptions struct {
+	// RedirectToHTTPS controls whether requests served
+	// over HTTP should be redirected to HTTPS.
+	RedirectToHTTPS bool
+}
+
+func newServeMux(p *Proxy, opt serveOptions) http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("/", httpsOnlyHandler{p})
+	if opt.RedirectToHTTPS {
+		mux.Handle("/", httpsOnlyHandler{p})
+	} else {
+		mux.Handle("/", p)
+	}
 	mux.HandleFunc("/_ah/health", p.serveHealthCheck)
 	return mux
 }
@@ -289,7 +307,7 @@ func checkout(repo, hash, path string) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return fmt.Errorf("mkdir: %v", err)
 		}
-		if err := runErr(exec.Command("git", "clone", "--depth", "1", repo, path)); err != nil {
+		if err := runErr(exec.Command("git", "clone", "--depth", "1", "--", repo, path)); err != nil {
 			return fmt.Errorf("clone: %v", err)
 		}
 	} else if err != nil {
@@ -302,7 +320,7 @@ func checkout(repo, hash, path string) error {
 	if err := runErr(cmd); err != nil {
 		return fmt.Errorf("fetch: %v", err)
 	}
-	cmd = exec.Command("git", "reset", "--hard", hash)
+	cmd = exec.Command("git", "reset", "--hard", hash, "--")
 	cmd.Dir = path
 	if err := runErr(cmd); err != nil {
 		return fmt.Errorf("reset: %v", err)
@@ -321,6 +339,8 @@ var timeoutClient = &http.Client{Timeout: 10 * time.Second}
 // latest master hash.
 // The returned map is nil on any transient error.
 func gerritMetaMap() map[string]string {
+	// TODO(dmitshur): Replace with a Gerrit client implementation like in gitmirror.
+
 	res, err := timeoutClient.Get(metaURL)
 	if err != nil {
 		log.Printf("Error getting Gerrit meta map: %v", err)

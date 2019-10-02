@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build go1.13
 // +build linux darwin
 
 // Code interacting with Google Compute Engine (GCE) and
@@ -36,6 +37,7 @@ import (
 	"golang.org/x/build/cmd/coordinator/spanlog"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/buildstats"
 	"golang.org/x/build/internal/lru"
 	"golang.org/x/oauth2"
@@ -190,6 +192,7 @@ func initGCE() error {
 	}
 
 	go gcePool.pollQuotaLoop()
+	go createBasepinDisks(context.Background())
 	return nil
 }
 
@@ -696,5 +699,36 @@ func syncBuildStatsLoop(env *buildenv.Environment) {
 		}
 		cancel()
 		<-ticker.C
+	}
+}
+
+// createBasepinDisks creates zone-local copies of VM disk images, to
+// speed up VM creations in the future.
+//
+// Other than a list call, this a no-op unless new VM images were
+// added or updated recently.
+func createBasepinDisks(ctx context.Context) {
+	if !metadata.OnGCE() || (buildEnv != buildenv.Production && buildEnv != buildenv.Staging) {
+		return
+	}
+	for {
+		t0 := time.Now()
+		bgc, err := buildgo.NewClient(ctx, buildEnv)
+		if err != nil {
+			log.Printf("basepin: NewClient: %v", err)
+			return
+		}
+		log.Printf("basepin: creating basepin disks...")
+		err = bgc.MakeBasepinDisks(ctx)
+		d := time.Since(t0).Round(time.Second / 10)
+		if err != nil {
+			basePinErr.Store(err.Error())
+			log.Printf("basepin: error creating basepin disks, after %v: %v", d, err)
+			time.Sleep(5 * time.Minute)
+			continue
+		}
+		basePinErr.Store("")
+		log.Printf("basepin: created basepin disks after %v", d)
+		return
 	}
 }

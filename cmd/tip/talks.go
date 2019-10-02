@@ -24,6 +24,9 @@ func (b talksBuilder) Signature(heads map[string]string) string {
 const talksToolsRev = "8cab8a1319f0be9798e7fe78b15da75e5f94b2e9"
 
 func (b talksBuilder) Init(logger *log.Logger, dir, hostport string, heads map[string]string) (*exec.Cmd, error) {
+	if _, ok := heads["talks"]; !ok {
+		return nil, fmt.Errorf("missing HEAD revision for 'talks' repo")
+	}
 	// TODO: use logger
 	toolsDir := filepath.Join(dir, "gopath/src/golang.org/x/tools")
 	if err := checkout(repoURL+"tools", talksToolsRev, toolsDir); err != nil {

@@ -2,7 +2,9 @@
 
 # golang.org/x/build/cmd/makemac
 
-The makemac command starts OS X VMs for the builders.
+The makemac command manages creating & destroying macOS VMs for the
+builders. See the README in x/build/env/darwin/macstadium for some
+more background.
 
 ## Deploying `makemac`
 
@@ -30,3 +32,12 @@ On that host,
   $ sudo systemctl restart makemac
   $ sudo journalctl -f -u makemac     # watch it
 ```
+
+## Checking that it's running:
+
+```
+$ curl -v http://macstadiumd.golang.org:8713
+```
+
+(Note that URL won't work in a browser due to HSTS requirements on
+ *.golang.org)

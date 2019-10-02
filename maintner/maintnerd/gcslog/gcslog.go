@@ -15,6 +15,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"path"
 	"regexp"
 	"sort"
 	"strconv"
@@ -44,9 +45,10 @@ var _ maintner.MutationSource = &GCSLog{}
 
 // GCSLog logs mutations to GCS.
 type GCSLog struct {
-	sc         *storage.Client
-	bucketName string
-	bucket     *storage.BucketHandle
+	sc            *storage.Client
+	bucketName    string
+	bucket        *storage.BucketHandle
+	segmentPrefix string
 
 	mu         sync.Mutex // guards the following
 	cond       *sync.Cond
@@ -83,6 +85,8 @@ func newGCSLogBase() *GCSLog {
 }
 
 // NewGCSLog creates a GCSLog that logs mutations to a given GCS bucket.
+// If the bucket name contains a "/", the part after the slash will be a
+// prefix for the segments.
 func NewGCSLog(ctx context.Context, bucketName string) (*GCSLog, error) {
 	sc, err := storage.NewClient(ctx)
 	if err != nil {
@@ -90,7 +94,16 @@ func NewGCSLog(ctx context.Context, bucketName string) (*GCSLog, error) {
 	}
 	gl := newGCSLogBase()
 	gl.sc = sc
-	gl.bucketName = bucketName
+
+	bck := bucketName
+	prefix := ""
+	if spl := strings.SplitN(bucketName, "/", 2); len(spl) > 1 {
+		bck = spl[0]
+		prefix = spl[1]
+	}
+
+	gl.bucketName = bck
+	gl.segmentPrefix = prefix
 	gl.bucket = sc.Bucket(bucketName)
 	if err := gl.initLoad(ctx); err != nil {
 		return nil, err
@@ -98,7 +111,8 @@ func NewGCSLog(ctx context.Context, bucketName string) (*GCSLog, error) {
 	return gl, nil
 }
 
-var objnameRx = regexp.MustCompile(`^(\d{4})\.([0-9a-f]{56})\.mutlog$`)
+// objNameRx is used to identify a mutation log file by suffix.
+var objnameRx = regexp.MustCompile(`(\d{4})\.([0-9a-f]{56})\.mutlog$`)
 
 func (gl *GCSLog) initLoad(ctx context.Context) error {
 	it := gl.bucket.Objects(ctx, nil)
@@ -110,6 +124,10 @@ func (gl *GCSLog) initLoad(ctx context.Context) error {
 		}
 		if err != nil {
 			return fmt.Errorf("iterating over %s bucket: %v", gl.bucketName, err)
+		}
+		if !strings.HasPrefix(objAttrs.Name, gl.segmentPrefix) {
+			log.Printf("Ignoring GCS object with invalid prefix %q", objAttrs.Name)
+			continue
 		}
 		m := objnameRx.FindStringSubmatch(objAttrs.Name)
 		if m == nil {
@@ -130,7 +148,7 @@ func (gl *GCSLog) initLoad(ctx context.Context) error {
 			gl.seg[int(n)] = seg
 			log.Printf("seg[%v] = %s", n, seg)
 			if ok {
-				gl.deleteOldSegment(ctx, prevSeg.ObjectName())
+				gl.deleteOldSegment(ctx, gl.objectPath(prevSeg))
 			}
 		}
 	}
@@ -155,7 +173,7 @@ func (gl *GCSLog) initLoad(ctx context.Context) error {
 		return nil
 	}
 
-	r, err := gl.bucket.Object(gl.seg[maxNum].ObjectName()).NewReader(ctx)
+	r, err := gl.bucket.Object(gl.objectPath(gl.seg[maxNum])).NewReader(ctx)
 	if err != nil {
 		return err
 	}
@@ -165,6 +183,10 @@ func (gl *GCSLog) initLoad(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (gl *GCSLog) objectPath(seg gcsLogSegment) string {
+	return path.Join(gl.segmentPrefix, seg.ObjectName())
 }
 
 func (gl *GCSLog) serveLogFile(w http.ResponseWriter, r *http.Request) {
@@ -186,7 +208,7 @@ func (gl *GCSLog) serveLogFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if num != gl.curNum {
-		obj := gl.seg[num].ObjectName()
+		obj := gl.objectPath(gl.seg[num])
 		gl.mu.Unlock()
 		http.Redirect(w, r, "https://storage.googleapis.com/"+gl.bucketName+"/"+obj, http.StatusFound)
 		return
@@ -308,7 +330,7 @@ func (gl *GCSLog) getJSONLogs(startSeg int) (segs []maintner.LogSegmentJSON) {
 			Number: i,
 			Size:   seg.size,
 			SHA224: seg.sha224,
-			URL:    fmt.Sprintf("https://storage.googleapis.com/%s/%s", gl.bucketName, seg.ObjectName()),
+			URL:    fmt.Sprintf("https://storage.googleapis.com/%s/%s", gl.bucketName, gl.objectPath(seg)),
 		})
 	}
 	if gl.logBuf.Len() > 0 {
@@ -413,7 +435,7 @@ func (gl *GCSLog) flushLocked(ctx context.Context) error {
 		sha224: fmt.Sprintf("%x", sha256.Sum224(buf)),
 		size:   int64(len(buf)),
 	}
-	objName := seg.ObjectName()
+	objName := gl.objectPath(seg)
 	log.Printf("flushing %s (%d bytes)", objName, len(buf))
 	err := try(4, time.Second, func() error {
 		w := gl.bucket.Object(objName).NewWriter(ctx)
@@ -444,7 +466,7 @@ func (gl *GCSLog) flushLocked(ctx context.Context) error {
 
 	// Delete any old segment from the same position.
 	if old.sha224 != "" && old.sha224 != seg.sha224 {
-		gl.deleteOldSegment(ctx, old.ObjectName())
+		gl.deleteOldSegment(ctx, gl.objectPath(old))
 	}
 	return nil
 }
@@ -464,7 +486,7 @@ func (gl *GCSLog) objectNames() (names []string) {
 	gl.mu.Lock()
 	defer gl.mu.Unlock()
 	for _, seg := range gl.seg {
-		names = append(names, seg.ObjectName())
+		names = append(names, gl.objectPath(seg))
 	}
 	sort.Strings(names)
 	return

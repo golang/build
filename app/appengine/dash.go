@@ -2,16 +2,47 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build appengine
-
-package build
+package main
 
 import (
 	"context"
+	"encoding/gob"
 	"net/http"
+	"sort"
+	"strings"
 
 	"google.golang.org/appengine"
 )
+
+func main() {
+	gob.Register(&Commit{}) // needed for google.golang.org/appengine/delay
+
+	// admin handlers
+	handleFunc("/init", initHandler)
+	handleFunc("/key", keyHandler)
+
+	// authenticated handlers
+	handleFunc("/building", AuthHandler(buildingHandler))
+	handleFunc("/clear-results", AuthHandler(clearResultsHandler))
+	handleFunc("/commit", AuthHandler(commitHandler))
+	handleFunc("/packages", AuthHandler(packagesHandler))
+	handleFunc("/perf-result", AuthHandler(perfResultHandler))
+	handleFunc("/result", AuthHandler(resultHandler))
+	handleFunc("/tag", AuthHandler(tagHandler))
+	handleFunc("/todo", AuthHandler(todoHandler))
+
+	// public handlers
+	handleFunc("/", uiHandler)
+	handleFunc("/log/", logHandler)
+	handleFunc("/perf", perfChangesHandler)
+	handleFunc("/perfdetail", perfDetailUIHandler)
+	handleFunc("/perfgraph", perfGraphHandler)
+	handleFunc("/updatebenchmark", updateBenchmark)
+	handleFunc("/buildtest", testHandler)
+	handleFunc("/perflearn", perfLearnHandler)
+
+	appengine.Main()
+}
 
 func handleFunc(path string, h http.HandlerFunc) {
 	http.Handle(path, hstsHandler(h))
@@ -160,20 +191,26 @@ var goPackages = []*Package{
 		Name: "tour",
 		Path: "golang.org/x/tour",
 	},
+	{
+		Kind: "subrepo",
+		Name: "website",
+		Path: "golang.org/x/website",
+	},
 }
 
-// hiddenBranches specifies branches that
-// should not be displayed on the build dashboard.
-// This also prevents the builder infrastructure
-// from testing sub-repos against these branches.
-var hiddenBranches = map[string]bool{
-	"release-branch.go1.4":           true,
-	"release-branch.go1.5":           true,
-	"release-branch.go1.6":           true,
-	"release-branch.go1.7":           true,
-	"release-branch.go1.8":           true,
-	"release-branch.go1.9":           true,
-	"release-branch.go1.10":          true,
-	"release-branch.go1.10-security": true,
-	"release-branch.go1.11-security": true,
+// supportedReleaseBranches returns a slice containing the most recent two non-security release branches
+// contained in branches.
+func supportedReleaseBranches(branches []string) (supported []string) {
+	for _, b := range branches {
+		if !strings.HasPrefix(b, "release-branch.go1.") ||
+			len(b) != len("release-branch.go1.nn") { // assumes nn in range [10, 99]
+			continue
+		}
+		supported = append(supported, b)
+	}
+	sort.Strings(supported)
+	if len(supported) > 2 {
+		supported = supported[len(supported)-2:]
+	}
+	return supported
 }

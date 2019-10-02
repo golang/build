@@ -14,10 +14,6 @@ usage: FORCE
 
 FORCE:
 
-update-deps:
-	go install golang.org/x/build/cmd/gitlock
-	gitlock --update=Dockerfile golang.org/x/build/cmd/buildlet/stage0
-
 docker: Dockerfile
 	go install golang.org/x/build/cmd/xb
 	xb docker build --force-rm -f Dockerfile --tag=golang/buildlet-stage0 ../../..
@@ -46,7 +42,15 @@ buildlet-stage0.solaris-amd64: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
 
+buildlet-stage0.illumos-amd64: FORCE
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
+
 buildlet-stage0.linux-s390x: FORCE
+	go install golang.org/x/build/cmd/upload
+	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
+
+buildlet-stage0.linux-mips64le: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
 

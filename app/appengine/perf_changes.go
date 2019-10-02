@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build appengine
-
-package build
+package main
 
 import (
 	"bytes"
@@ -17,10 +15,6 @@ import (
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
 )
-
-func init() {
-	handleFunc("/perf", perfChangesHandler)
-}
 
 // perfSummaryHandler draws the main benchmarking page.
 func perfChangesHandler(w http.ResponseWriter, r *http.Request) {
@@ -221,7 +215,7 @@ type uiPerfConfigElem struct {
 }
 
 var perfChangesTemplate = template.Must(
-	template.New("perf_changes.html").Funcs(tmplFuncs).ParseFiles("perf_changes.html"),
+	template.New("perf_changes.html").Funcs(tmplFuncs).ParseFiles(templateFile("perf_changes.html")),
 )
 
 type perfChangesData struct {

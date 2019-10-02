@@ -1,5 +1,7 @@
 module golang.org/x/build/maintner/cmd/maintserve
 
+go 1.12
+
 require (
 	dmitri.shuralyov.com/app/changes v0.0.0-20181114035150-5af16e21babb
 	dmitri.shuralyov.com/html/belt v0.0.0-20180602232347-f7d459c86be0 // indirect
@@ -42,5 +44,3 @@ require (
 	golang.org/x/tools v0.0.0-20190313193421-dbad8e90c91b // indirect
 	sourcegraph.com/sourcegraph/go-diff v0.5.0 // indirect
 )
-
-replace golang.org/x/build => ../../..

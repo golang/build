@@ -174,7 +174,7 @@ body {
 </style>
 <header class="header">
 	Alter these entries at
-	<a href="https://go.googlesource.com/build/+/master/devapp/owners/"
+	<a href="https://go.googlesource.com/build/+/master/devapp/owners"
 		target="_blank" rel="noopener">golang.org/x/build/devapp/owners</a>
 </header>
 <main>
@@ -188,12 +188,12 @@ body {
 		<span class="path">{{$path}}</span>
 		<span class="primary">
 			{{range .Primary}}
-				<a href="https://github.com/{{.GitHubUsername}}" target="_blank" rel="noopener">{{.GitHubUsername}}</a>
+				<a href="https://github.com/{{.GitHubUsername}}" target="_blank" rel="noopener">@{{.GitHubUsername}}</a>
 			{{end}}
 		</span>
 		<span class="secondary">
 			{{range .Secondary}}
-				<a href="https://github.com/{{.GitHubUsername}}" target="_blank" rel="noopener">{{.GitHubUsername}}</a>
+				<a href="https://github.com/{{.GitHubUsername}}" target="_blank" rel="noopener">@{{.GitHubUsername}}</a>
 			{{end}}
 		</span>
 	</div>

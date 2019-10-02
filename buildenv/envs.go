@@ -101,12 +101,6 @@ type Environment struct {
 	// PerfDataURL is the base URL of the benchmark storage server.
 	PerfDataURL string
 
-	// CoordinatorURL is the location from which the coordinator
-	// binary will be downloaded.
-	// This is only used by cmd/coordinator/buildongce/create.go when
-	// creating the coordinator VM from scratch.
-	CoordinatorURL string
-
 	// CoordinatorName is the hostname of the coordinator instance.
 	CoordinatorName string
 
@@ -123,7 +117,7 @@ type Environment struct {
 	SnapBucket string
 
 	// MaxBuilds is the maximum number of concurrent builds that
-	// can run. Zero means unlimit. This is typically only used
+	// can run. Zero means unlimited. This is typically only used
 	// in a development or staging environment.
 	MaxBuilds int
 
@@ -247,7 +241,6 @@ var Staging = &Environment{
 	},
 	DashURL:         "https://go-dashboard-dev.appspot.com/",
 	PerfDataURL:     "https://perfdata.golang.org",
-	CoordinatorURL:  "https://storage.googleapis.com/dev-go-builder-data/coordinator",
 	CoordinatorName: "farmer",
 	BuildletBucket:  "dev-go-builder-data",
 	LogBucket:       "dev-go-build-log",
@@ -279,7 +272,6 @@ var Production = &Environment{
 	},
 	DashURL:             "https://build.golang.org/",
 	PerfDataURL:         "https://perfdata.golang.org",
-	CoordinatorURL:      "https://storage.googleapis.com/go-builder-data/coordinator",
 	CoordinatorName:     "farmer",
 	BuildletBucket:      "go-builder-data",
 	LogBucket:           "go-build-log",

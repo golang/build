@@ -14,12 +14,8 @@ usage:
 	echo "See Makefile"
 	exit 1
 
-update-deps:
-	go install golang.org/x/build/cmd/gitlock
-	gitlock --update=Dockerfile --ignore=NONE golang.org/x/tools/cmd/tip
-
 docker-image: Dockerfile *.go
-	docker build --force-rm -f Dockerfile --tag=$(IMAGE_PROD):$(VERSION) .
+	docker build --force-rm -f Dockerfile --tag=$(IMAGE_PROD):$(VERSION) ../..
 	docker tag $(IMAGE_PROD):$(VERSION) $(IMAGE_PROD):$(MUTABLE_VERSION)
 	docker tag $(IMAGE_PROD):$(VERSION) $(IMAGE_STAGING):$(VERSION)
 	docker tag $(IMAGE_PROD):$(VERSION) $(IMAGE_STAGING):$(MUTABLE_VERSION)

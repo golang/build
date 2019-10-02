@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,7 +49,7 @@ const (
 
 func main() {
 	flag.Parse()
-	if *tags == "" {
+	if *tags == "" && !*listAll { // Tags aren't needed if -list-all flag is set.
 		if *staging {
 			*tags = defaultBuilderTags("gobuilder-staging.key")
 		} else {
@@ -254,7 +255,7 @@ func (c *Client) serverAction(serverID, action string) error {
 }
 
 func (c *Client) Servers() ([]*Server, error) {
-	req, _ := http.NewRequest("GET", scalewayAPIBase+"/servers", nil)
+	req, _ := http.NewRequest("GET", scalewayAPIBase+"/servers?per_page=100", nil)
 	req.Header.Set("X-Auth-Token", c.Token)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -263,6 +264,10 @@ func (c *Client) Servers() ([]*Server, error) {
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to get Server list: %v", res.Status)
+	}
+	if n, _ := strconv.Atoi(res.Header.Get("X-Total-Count")); n > 100 {
+		// TODO: Get all pages, not just first one. See https://developer.scaleway.com/#header-pagination.
+		return nil, fmt.Errorf("results (%d) don't fit in one page (100) and pagination isn't implemented", n)
 	}
 	var jres struct {
 		Servers []*Server `json:"servers"`

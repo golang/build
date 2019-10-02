@@ -75,7 +75,9 @@ var (
 //   18: set TMPDIR and GOCACHE
 //   21: GO_BUILDER_SET_GOPROXY=coordinator support
 //   22: TrimSpace the reverse buildlet's gobuildkey contents
-const buildletVersion = 22
+//   23: revdial v2
+//   24: removeAllIncludingReadonly
+const buildletVersion = 24
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -928,18 +930,6 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 
 	env := append(baseEnv(goarch), postEnv...)
 
-	// Setup an localhost HTTP server to proxy module cache, if requested by environment.
-	if goproxyHandler != nil && getEnv(postEnv, "GO_BUILDER_SET_GOPROXY") == "coordinator" {
-		ln, err := net.Listen("tcp", "localhost:0")
-		if err != nil {
-			http.Error(w, "failed to listen on localhost for GOPROXY=coordinator: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer ln.Close()
-		srv := &http.Server{Handler: goproxyHandler}
-		go srv.Serve(ln)
-		env = append(env, fmt.Sprintf("GOPROXY=http://localhost:%d", ln.Addr().(*net.TCPAddr).Port))
-	}
 	if v := processTmpDirEnv; v != "" {
 		env = append(env, "TMPDIR="+v)
 	}
@@ -954,7 +944,13 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 	env = setPathEnv(env, r.PostForm["path"], *workDir)
 
-	cmd := exec.Command(absCmd, r.PostForm["cmdArg"]...)
+	var cmd *exec.Cmd
+	if needsBashWrapper(absCmd) {
+		cmd = exec.Command("bash", absCmd)
+	} else {
+		cmd = exec.Command(absCmd)
+	}
+	cmd.Args = append(cmd.Args, r.PostForm["cmdArg"]...)
 	cmd.Dir = dir
 	cmdOutput := flushWriter{w}
 	cmd.Stdout = cmdOutput
@@ -995,6 +991,17 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set(hdrProcessState, state)
 	log.Printf("[%p] Run = %s, after %v", cmd, state, time.Since(t0))
+}
+
+// needsBashWrappers reports whether the given command needs to
+// run through bash.
+func needsBashWrapper(cmd string) bool {
+	if !strings.HasSuffix(cmd, ".bash") {
+		return false
+	}
+	// The mobile platforms can't execute shell scripts directly.
+	ismobile := runtime.GOOS == "android" || runtime.GOOS == "darwin" && (runtime.GOARCH == "arm" || runtime.GOARCH == "arm64")
+	return ismobile
 }
 
 // pathNotExist reports whether path does not exist.
@@ -1254,7 +1261,7 @@ func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
 	for _, p := range paths {
 		log.Printf("Removing %s", p)
 		fullDir := filepath.Join(*workDir, filepath.FromSlash(p))
-		err := os.RemoveAll(fullDir)
+		err := removeAllIncludingReadonly(fullDir)
 		if p == "." && err != nil {
 			// If workDir is a mountpoint and/or contains a binary
 			// using it, we can get a "Device or resource busy" error.
@@ -1855,6 +1862,30 @@ func removeAllAndMkdir(dir string) {
 	if err := os.Mkdir(dir, 0755); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// removeAllIncludingReadonly is like os.RemoveAll except that it'll
+// also try to change permissions to work around permission errors
+// when deleting.
+func removeAllIncludingReadonly(dir string) error {
+	err := os.RemoveAll(dir)
+	if err == nil || !os.IsPermission(err) ||
+		runtime.GOOS == "windows" || // different filesystem permission model; also our windows builders our emphermal single-use VMs anyway
+		runtime.GOOS == "plan9" { // untested, different enough to conservatively skip code below
+		return err
+	}
+	// Make a best effort (ignoring errors) attempt to make all
+	// files and directories writable before we try to delete them
+	// all again.
+	filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
+		const ownerWritable = 0200
+		if err != nil || fi.Mode().Perm()&ownerWritable != 0 {
+			return nil
+		}
+		os.Chmod(path, fi.Mode().Perm()|ownerWritable)
+		return nil
+	})
+	return os.RemoveAll(dir)
 }
 
 var (

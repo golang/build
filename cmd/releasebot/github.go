@@ -84,8 +84,13 @@ func (t *tokenSource) Token() (*oauth2.Token, error) {
 }
 
 func (w *Work) findOrCreateReleaseIssue() {
+	if w.Security {
+		// There is no release status issue for security releases
+		// to avoid the risk of leaking sensitive test failures.
+		return
+	}
 	w.log.Printf("Release status issue title: %q", w.releaseStatusTitle())
-	if dryRun || w.Security {
+	if dryRun {
 		return
 	}
 	if w.ReleaseIssue == 0 {
