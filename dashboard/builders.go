@@ -356,6 +356,13 @@ var Hosts = map[string]*HostConfig{
 		ReverseAliases: []string{"freebsd-arm-paulzhol"},
 		OwnerGithub:    "paulzhol",
 	},
+	"host-freebsd-arm64-dmgk": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   1,
+		Notes:       "AWS EC2 a1.large 2 vCPU 4GiB RAM, FreeBSD 12.1-STABLE",
+		env:         []string{"GOROOT_BOOTSTRAP=/usr/home/builder/gobootstrap"},
+		OwnerGithub: "dmgk",
+	},
 	"host-plan9-arm-0intro": &HostConfig{
 		IsReverse:   true,
 		ExpectNum:   1,
@@ -2280,6 +2287,10 @@ func init() {
 			"GOARM=7",
 			"CGO_ENABLED=1",
 		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "freebsd-arm64-dmgk",
+		HostType: "host-freebsd-arm64-dmgk",
 	})
 	addBuilder(BuildConfig{
 		Name:              "plan9-arm",
