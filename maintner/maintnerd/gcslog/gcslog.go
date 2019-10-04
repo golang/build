@@ -95,16 +95,14 @@ func NewGCSLog(ctx context.Context, bucketName string) (*GCSLog, error) {
 	gl := newGCSLogBase()
 	gl.sc = sc
 
-	bck := bucketName
 	prefix := ""
-	if spl := strings.SplitN(bucketName, "/", 2); len(spl) > 1 {
-		bck = spl[0]
-		prefix = spl[1]
+	if f := strings.SplitN(bucketName, "/", 2); len(f) > 1 {
+		bucketName, prefix = f[0], f[1]
 	}
 
-	gl.bucketName = bck
+	gl.bucketName = bucketName
 	gl.segmentPrefix = prefix
-	gl.bucket = sc.Bucket(bucketName)
+	gl.bucket = sc.Bucket(gl.bucketName)
 	if err := gl.initLoad(ctx); err != nil {
 		return nil, err
 	}
