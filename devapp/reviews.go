@@ -118,36 +118,11 @@ func (s *server) updateReviewsData() {
 	var (
 		projects     []*project
 		totalChanges int
-
-		excludedProjects = map[string]bool{
-			"gocloud":              true,
-			"google-api-go-client": true,
-		}
-		deletedChanges = map[struct {
-			proj string
-			num  int32
-		}]bool{
-			{"crypto", 35958}:  true,
-			{"scratch", 71730}: true,
-			{"scratch", 71850}: true,
-			{"scratch", 72090}: true,
-			{"scratch", 72091}: true,
-			{"scratch", 72110}: true,
-			{"scratch", 72131}: true,
-			{"tools", 93515}:   true,
-		}
 	)
-	s.corpus.Gerrit().ForeachProjectUnsorted(func(p *maintner.GerritProject) error {
-		if excludedProjects[p.Project()] {
-			return nil
-		}
+	s.corpus.Gerrit().ForeachProjectUnsorted(filterProjects(func(p *maintner.GerritProject) error {
 		proj := &project{GerritProject: p}
-		p.ForeachOpenCL(func(cl *maintner.GerritCL) error {
-			if deletedChanges[struct {
-				proj string
-				num  int32
-			}{p.Project(), cl.Number}] ||
-				cl.WorkInProgress() ||
+		p.ForeachOpenCL(withoutDeletedCLs(p, func(cl *maintner.GerritCL) error {
+			if cl.WorkInProgress() ||
 				cl.Owner() == nil ||
 				strings.Contains(cl.Commit.Msg, "DO NOT REVIEW") {
 				return nil
@@ -200,13 +175,13 @@ func (s *server) updateReviewsData() {
 			proj.Changes = append(proj.Changes, c)
 			totalChanges++
 			return nil
-		})
+		}))
 		sort.Slice(proj.Changes, func(i, j int) bool {
 			return proj.Changes[i].LastUpdate.Before(proj.Changes[j].LastUpdate)
 		})
 		projects = append(projects, proj)
 		return nil
-	})
+	}))
 	sort.Slice(projects, func(i, j int) bool {
 		return projects[i].Project() < projects[j].Project()
 	})

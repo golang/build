@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://www.gstatic.com">
+<title>Go Stats</title>
+<style>
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+body {
+  font: 13px system-ui, sans-serif;
+  padding: 1rem;
+}
+.Chart {
+  border: 1px solid #999;
+  height: 400px;
+  padding: 1rem;
+}
+.Chart + .Chart {
+  margin-top: 1rem;
+}
+@media only screen and (min-device-width: 37.5rem) {
+  .ChartsContainer {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(37.5rem, 1fr));
+    grid-gap: 1rem;
+  }
+  .Chart + .Chart {
+    margin-top: 0;
+  }
+}
+</style>
+<header>
+  <h1>Go Stats</h1>
+</header>
+<main>
+  <div class="ChartsContainer js-chartContainer"></div>
+</main>
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+<script>
+  const CHART_DATA = {{.DataJSON}};
+  for (let chart of CHART_DATA.Charts) {
+    const dateColumns = new Set(); // index -> date type
+    for (let i = 0; i < chart.columns.length; i++) {
+      if (chart.columns[i].type === 'date' || chart.columns[i].type === 'datetime') {
+        dateColumns.add(i);
+      }
+    }
+    if (dateColumns.size > 0) {
+      for (let row = 0; row < chart.data.length; row++) {
+        for (let col of dateColumns) {
+          chart.data[row][col] = new Date(chart.data[row][col]);
+        }
+      }
+    }
+  }
+  const data = []; // indexed by charts entry
+  const googCharts = [];  // indexed by charts entry
+
+  google.charts.load('current', {packages:['corechart']});
+  google.charts.setOnLoadCallback(() => {
+    for (let i = 0; i < CHART_DATA.Charts.length; i++) {
+      const chart = CHART_DATA.Charts[i];
+      data[i] = new google.visualization.DataTable();
+      for (let col of chart.columns) {
+        data[i].addColumn(col.type, col.label);
+      }
+      data[i].addRows(chart.data);
+      const containerEl = document.createElement('div');
+      containerEl.classList.add('Chart');
+      document.querySelector('.js-chartContainer').appendChild(containerEl);
+      googCharts[i] = new google.visualization.LineChart(containerEl);
+    }
+    drawCharts();
+  });
+
+  const drawCharts = () => {
+    for (let i = 0; i < CHART_DATA.Charts.length; i++) {
+      googCharts[i].draw(data[i], {
+        title: CHART_DATA.Charts[i].title,
+        chartArea: {width: '100%', height: '80%'},
+        legend: {position: 'top', alignment: 'end'},
+      });
+    }
+  };
+
+  let debounceTimerId;
+  window.addEventListener('resize', e => {
+    if (debounceTimerId != null) {
+      window.clearTimeout(debounceTimerId);
+      debounceTimerId = null;
+    }
+    debounceTimerId = window.setTimeout(() => { drawCharts(); }, 50);
+  });
+</script>
