@@ -82,7 +82,7 @@ header {
   height: 20px;
   margin-right: 1.5em;
   text-align: right;
-  width: 7em;
+  width: 12em;
 }
 .number {
   margin-right: 1.5em;
@@ -114,11 +114,17 @@ header {
 .plus-one {
   background-color: #dcedc8;
 }
+.minus-one {
+  background-color: #fdaeb7;
+}
 .minus-two {
   background-color: #b71c1c;
 }
 .no-human-comments {
   background-color: #e0e0e0;
+}
+.release-milestone {
+  background-color: #a0e8ff;
 }
 [hidden] {
   display: none;
@@ -166,8 +172,12 @@ header {
           <span class="icons">
             {{if .NoHumanComments}}<a class="pill no-human-comments" href="?q=t%3Aattn" title="Has no human comments">→</a>{{end}}
             {{if .HasMinusTwo}}️<a class="pill minus-two" href="?q=t%3A-2" title="Code-Review: -2">-2</a>{{end}}
+            {{if .HasMinusOne}}<a class="pill minus-one" href="?q=t%3A-1" title="Code-Review: -1">-1</a>{{end}}
             {{if .HasPlusOne}}<a class="pill plus-one" href="?q=t%3A%2B1" title="Code-Review: +1">+1</a>{{end}}
             {{if .HasPlusTwo}}<a class="pill plus-two" href="?q=t%3A%2B2" title="Code-Review: +2">+2</a>{{end}}
+            {{if .TryBotMinusOne}}<a class="pill minus-one" href="?q=trybot%3A-1" title="Run-TryBot: -1">🤖-1</a>{{end}}
+            {{if .TryBotPlusOne}}<a class="pill plus-one" href="?q=trybot%3A%2B1" title="Run-TryBot: +1">🤖+1</a>{{end}}
+            {{if .ReleaseMilestone}}<a class="pill release-milestone" href="?q=release%3A{{.ReleaseMilestone}}" title="References an issue in Go{{.ReleaseMilestone}}">{{.ReleaseMilestone}}</a>{{end}}
           </span>
           <a class="number" href="https://{{$p.ReviewServer}}/{{.Number}}" target="_blank">{{.Number}}</a>
           <span class="subject">

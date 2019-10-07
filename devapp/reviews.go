@@ -43,11 +43,15 @@ type change struct {
 	LastUpdate          time.Time
 	FormattedLastUpdate string
 
-	HasPlusTwo      bool
-	HasPlusOne      bool
-	HasMinusTwo     bool
-	NoHumanComments bool
-	SearchTerms     string
+	HasPlusTwo       bool
+	HasPlusOne       bool
+	HasMinusOne      bool
+	HasMinusTwo      bool
+	NoHumanComments  bool
+	TryBotMinusOne   bool
+	TryBotPlusOne    bool
+	SearchTerms      string
+	ReleaseMilestone string
 }
 
 type reviewsData struct {
@@ -146,6 +150,20 @@ func (s *server) updateReviewsData() {
 			if c.NoHumanComments {
 				searchTerms = append(searchTerms, "t:attn")
 			}
+
+			const releaseMilestonePrefix = "Go"
+			for _, ref := range cl.GitHubIssueRefs {
+				issue := ref.Repo.Issue(ref.Number)
+				if issue != nil &&
+					issue.Milestone != nil &&
+					strings.HasPrefix(issue.Milestone.Title, releaseMilestonePrefix) {
+					c.ReleaseMilestone = issue.Milestone.Title[len(releaseMilestonePrefix):]
+				}
+			}
+			if c.ReleaseMilestone != "" {
+				searchTerms = append(searchTerms, "release:"+c.ReleaseMilestone)
+			}
+
 			searchTerms = append(searchTerms, searchTermsFromReviewerFields(cl)...)
 			for label, votes := range cl.Metas[len(cl.Metas)-1].LabelVotes() {
 				for _, val := range votes {
@@ -154,12 +172,25 @@ func (s *server) updateReviewsData() {
 						case -2:
 							c.HasMinusTwo = true
 							searchTerms = append(searchTerms, "t:-2")
+						case -1:
+							c.HasMinusOne = true
+							searchTerms = append(searchTerms, "t:-1")
 						case 1:
 							c.HasPlusOne = true
 							searchTerms = append(searchTerms, "t:+1")
 						case 2:
 							c.HasPlusTwo = true
 							searchTerms = append(searchTerms, "t:+2")
+						}
+					}
+					if label == "TryBot-Result" {
+						switch val {
+						case -1:
+							c.TryBotMinusOne = true
+							searchTerms = append(searchTerms, "trybot:-1")
+						case 1:
+							c.TryBotPlusOne = true
+							searchTerms = append(searchTerms, "trybot:+1")
 						}
 					}
 				}
