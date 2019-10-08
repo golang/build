@@ -178,6 +178,12 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// In the UI, when viewing the master branch of the main
+	// Go repository, hide builders that aren't active on it.
+	if repo == "" && branch == "master" {
+		data.Builders = onlyGoMasterBuilders(data.Builders)
+	}
+
 	// Populate building URLs for the HTML UI only.
 	data.populateBuildingURLs(c)
 
@@ -206,7 +212,7 @@ func listBranches(c context.Context) (branches []string) {
 	return
 }
 
-// failuresHandler is https://build.golang.org/?mode=failures , where it outputs
+// failuresHandler is https://build.golang.org/?mode=failures, where it outputs
 // one line per failure on the front page, in the form:
 //    hash builder failure-url
 func failuresHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
@@ -398,6 +404,20 @@ func keys(m map[string]bool) (s []string) {
 	}
 	sort.Strings(s)
 	return
+}
+
+// onlyGoMasterBuilders returns a subset of all builders that are
+// configured to do post-submit builds on master branch of Go repo.
+func onlyGoMasterBuilders(all []string) []string {
+	var goMaster []string
+	for _, name := range all {
+		bc, ok := dashboard.Builders[name]
+		if !ok || !bc.BuildsRepoPostSubmit("go", "master", "master") {
+			continue
+		}
+		goMaster = append(goMaster, name)
+	}
+	return goMaster
 }
 
 // builderOrder implements sort.Interface, sorting builder names
