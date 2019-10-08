@@ -222,8 +222,8 @@ func TestBuilderConfig(t *testing.T) {
 		branch   string
 		goBranch string
 	}
-	// builder may end in "@go1.N" (as alias for "@release-branch.go1.N") or "@branch-name".
-	// repo may end in "@1.N" (as alias for "@release-branch.go1.N")
+	// builder may end in "@go1.N" or "@1.N" (as alias for "@release-branch.go1.N") or "@branch-name".
+	// repo (other than "go") may end in "@go1.N" or "@1.N" (as alias for "@release-branch.go1.N").
 	b := func(builder, repo string) builderAndRepo {
 		br := builderAndRepo{
 			testName: builder + "," + repo,
@@ -241,6 +241,9 @@ func TestBuilderConfig(t *testing.T) {
 			f := strings.SplitN(repo, "@", 2)
 			br.repo = f[0]
 			br.branch = f[1]
+			if br.repo == "go" {
+				panic(fmt.Errorf(`b(%q, %q): for "go" repo, must use the @%s suffix on the builder, not on the repo`, builder, repo, br.branch))
+			}
 		}
 		expandBranch := func(s *string) {
 			if strings.HasPrefix(*s, "go1.") {
