@@ -93,9 +93,9 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 			logErr(w, r, err)
 			return
 		}
-		builders := commitBuilders(commits)
-
 		branches := listBranches(c)
+		releaseBranches := supportedReleaseBranches(branches)
+		builders := commitBuilders(commits, releaseBranches)
 
 		var tagState []*TagState
 		// Only show sub-repo state on first page of normal repo view.
@@ -112,7 +112,7 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			tagState = []*TagState{s}
-			for _, b := range supportedReleaseBranches(branches) {
+			for _, b := range releaseBranches {
 				s, err := GetTagState(c, "release", b)
 				if err == datastore.ErrNoSuchEntity {
 					continue
@@ -351,9 +351,9 @@ func fetchCommits(c context.Context, pkg *Package, hashes []string) ([]*Commit, 
 	return out, err
 }
 
-// commitBuilders returns the names of the builders that provided
+// commitBuilders returns the names of active builders that provided
 // Results for the provided commits.
-func commitBuilders(commits []*Commit) []string {
+func commitBuilders(commits []*Commit, releaseBranches []string) []string {
 	builders := make(map[string]bool)
 	for _, commit := range commits {
 		for _, r := range commit.Results() {
@@ -364,7 +364,7 @@ func commitBuilders(commits []*Commit) []string {
 	// We want to see columns even if there are no results so we
 	// can identify missing builders. (Issue 19930)
 	for name, bc := range dashboard.Builders {
-		if !bc.BuildsRepoPostSubmit("go", "master", "master") {
+		if !activePostSubmitBuilder(bc, releaseBranches) {
 			continue
 		}
 		builders[name] = true
@@ -372,6 +372,23 @@ func commitBuilders(commits []*Commit) []string {
 	k := keys(builders)
 	sort.Sort(builderOrder(k))
 	return k
+}
+
+// activePostSubmitBuilder reports whether the builder bc
+// is considered to be "active", meaning it's configured
+// to test the Go repository on master branch or at least
+// one of the supported release branches.
+func activePostSubmitBuilder(bc *dashboard.BuildConfig, releaseBranches []string) bool {
+	if bc.BuildsRepoPostSubmit("go", "master", "master") {
+		return true
+	}
+	for _, rb := range releaseBranches {
+		if bc.BuildsRepoPostSubmit("go", rb, rb) {
+			return true
+		}
+	}
+	// TODO(golang.org/issue/34744): This doesn't catch x-repo-only builders yet; adjust further as needed.
+	return false
 }
 
 func keys(m map[string]bool) (s []string) {
