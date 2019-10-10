@@ -412,7 +412,7 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:       5,
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		ReverseAliases:  []string{"linux-ppc64-buildlet"},
-		SSHUsername:     "debian",
+		SSHUsername:     "root",
 		HermeticReverse: false, // TODO: use rundockerbuildlet like arm64
 	},
 	"host-linux-ppc64le-osu": &HostConfig{
@@ -421,7 +421,7 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:       5,
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		ReverseAliases:  []string{"linux-ppc64le-buildlet"},
-		SSHUsername:     "debian",
+		SSHUsername:     "root",
 		HermeticReverse: false, // TODO: use rundockerbuildlet like arm64
 	},
 	"host-linux-ppc64le-power9-osu": &HostConfig{
