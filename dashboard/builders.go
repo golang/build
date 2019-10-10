@@ -430,7 +430,7 @@ var Hosts = map[string]*HostConfig{
 		IsReverse:       true,
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		ReverseAliases:  []string{"linux-ppc64le-power9osu"},
-		SSHUsername:     "debian",
+		SSHUsername:     "root",
 		HermeticReverse: false, // TODO: use rundockerbuildlet like arm64
 	},
 	"host-linux-arm64-packet": &HostConfig{
