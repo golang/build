@@ -141,8 +141,6 @@ func addHealthCheckers(ctx context.Context) {
 	addHealthChecker(newPacketHealthChecker())
 	addHealthChecker(newOSUPPC64Checker())
 	addHealthChecker(newOSUPPC64leChecker())
-	addHealthChecker(newJoyentSolarisChecker())
-	addHealthChecker(newJoyentIllumosChecker())
 	addHealthChecker(newBasepinChecker())
 	addHealthChecker(newGitMirrorChecker())
 	addHealthChecker(newTipGolangOrgChecker(ctx))
@@ -369,24 +367,6 @@ func fetchMakeMacStatus() (errs, warns []string) {
 		return []string{fmt.Sprintf("reading status response body: %v", err)}, nil
 	}
 	return resj.Errors, resj.Warnings
-}
-
-func newJoyentSolarisChecker() *healthChecker {
-	return &healthChecker{
-		ID:     "joyent-solaris",
-		Title:  "Joyent solaris/amd64 machines",
-		DocURL: "https://github.com/golang/build/tree/master/env/solaris-amd64/joyent",
-		Check:  hostTypeChecker("host-solaris-amd64"),
-	}
-}
-
-func newJoyentIllumosChecker() *healthChecker {
-	return &healthChecker{
-		ID:     "joyent-illumos",
-		Title:  "Joyent illumos/amd64 machines",
-		DocURL: "https://github.com/golang/build/tree/master/env/illumos-amd64-joyent",
-		Check:  hostTypeChecker("host-illumos-amd64-joyent"),
-	}
 }
 
 func hostTypeChecker(hostType string) func(cw *checkWriter) {

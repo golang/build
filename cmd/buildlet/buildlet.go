@@ -144,13 +144,6 @@ func main() {
 		startAndroidEmulator()
 	}
 
-	if *reverse == "solaris-amd64-smartosbuildlet" {
-		// These machines were setup without GO_BUILDER_ENV
-		// set in their base image, so do init work here after
-		// flag parsing instead of at top.
-		*rebootOnHalt = true
-	}
-
 	// Optimize emphemeral filesystems. Prefer speed over safety,
 	// since these VMs only last for the duration of one build.
 	switch runtime.GOOS {
@@ -269,21 +262,6 @@ func initGorootBootstrap() {
 	// Default if not otherwise configured in dashboard/builders.go:
 	os.Setenv("GOROOT_BOOTSTRAP", filepath.Join(*workDir, "go1.4"))
 
-	if runtime.GOOS == "solaris" && runtime.GOARCH == "amd64" {
-		gbenv := os.Getenv("GO_BUILDER_ENV")
-		if strings.Contains(gbenv, "oracle") {
-			// Oracle Solaris; not OpenSolaris-based or
-			// Illumos-based.  Do nothing.
-			return
-		}
-
-		// Assume this is an OpenSolaris-based machine or a
-		// SmartOS/Illumos machine before GOOS=="illumos" split.  For
-		// these machines, the old Joyent builders need to get the
-		// bootstrap and some config fixed.
-		os.Setenv("PATH", os.Getenv("PATH")+":/opt/local/bin")
-		downloadBootstrapGoroot("/root/go-solaris-amd64-bootstrap", "https://storage.googleapis.com/go-builder-data/gobootstrap-solaris-amd64.tar.gz")
-	}
 	if runtime.GOOS == "linux" && runtime.GOARCH == "ppc64" {
 		downloadBootstrapGoroot("/usr/local/go-bootstrap", "https://storage.googleapis.com/go-builder-data/gobootstrap-linux-ppc64.tar.gz")
 	}

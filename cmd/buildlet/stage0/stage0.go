@@ -195,17 +195,8 @@ Download:
 		// Assume OSU (osuosl.org) host type for now. If we get more, use
 		// GO_BUILD_HOST_TYPE (see above) and check that.
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-ppc64le-osu")...)
-	case "solaris/amd64":
+	case "solaris/amd64", "illumos/amd64":
 		hostType := buildEnv
-		if hostType == "" {
-			hostType = "host-solaris-amd64"
-		}
-		cmd.Args = append(cmd.Args, reverseHostTypeArgs(hostType)...)
-	case "illumos/amd64":
-		hostType := buildEnv
-		if hostType == "" {
-			hostType = "host-illumos-amd64-joyent"
-		}
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(hostType)...)
 	}
 	// Release the serial port (if we opened it) so the buildlet

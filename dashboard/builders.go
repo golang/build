@@ -441,23 +441,6 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		SSHUsername:     "root",
 	},
-	"host-solaris-amd64": &HostConfig{
-		Notes:          "run by Go team on Joyent, on a SmartOS 'infrastructure container'",
-		IsReverse:      true,
-		ExpectNum:      5,
-		env:            []string{"GOROOT_BOOTSTRAP=/root/go-solaris-amd64-bootstrap", "HOME=/root"},
-		ReverseAliases: []string{"solaris-amd64-smartosbuildlet"},
-	},
-	"host-illumos-amd64-joyent": &HostConfig{
-		Notes:     "run by Go team on Joyent, on a SmartOS 'infrastructure container'",
-		IsReverse: true,
-		ExpectNum: 1,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/root/goboot",
-			"HOME=/root",
-			"PATH=/usr/sbin:/usr/bin:/opt/local/bin", // gcc is in /opt/local/bin
-		},
-	},
 	"host-solaris-oracle-amd64-oraclerel": &HostConfig{
 		Notes:       "Oracle Solaris amd64 Release System",
 		Owner:       "", // TODO: find current owner
@@ -2041,24 +2024,6 @@ func init() {
 		Notes:    "Oracle Solaris release version",
 	})
 	addBuilder(BuildConfig{
-		Name:     "solaris-amd64-smartosbuildlet",
-		HostType: "host-solaris-amd64",
-	})
-	addBuilder(BuildConfig{
-		Name:             "illumos-amd64-joyent",
-		HostType:         "host-illumos-amd64-joyent",
-		MinimumGoVersion: types.MajorMinor{1, 13},
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			if repo == "review" {
-				// '.git/hooks/pre-commit' cannot be executed on this builder,
-				// which causes the x/review tests to fail.
-				// (https://golang.org/issue/32836)
-				return false
-			}
-			return defaultBuildsRepoPolicy(repo, branch, goBranch)
-		},
-	})
-	addBuilder(BuildConfig{
 		Name:     "linux-ppc64-buildlet",
 		HostType: "host-linux-ppc64-osu",
 		FlakyNet: true,
@@ -2304,7 +2269,9 @@ func atLeastGo1(branch string, min int) bool {
 func onlyGo(repo, branch, goBranch string) bool { return repo == "go" }
 
 // onlyMaster is a common buildsRepo policy value that only builds things on the master branch.
-func onlyMaster(repo, branch, goBranch string) bool { return branch == "master" && goBranch == "master" }
+func onlyMaster(repo, branch, goBranch string) bool {
+	return branch == "master" && goBranch == "master"
+}
 
 // disabledBuilder is a buildsRepo policy function that always return false.
 func disabledBuilder(repo, branch, goBranch string) bool { return false }
