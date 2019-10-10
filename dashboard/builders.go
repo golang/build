@@ -1648,9 +1648,6 @@ func init() {
 		},
 		shouldRunDistTest: func(distTest string, isTry bool) bool {
 			if isTry {
-				if strings.HasPrefix(distTest, "test:") {
-					return false
-				}
 				if strings.Contains(distTest, "/internal/") ||
 					strings.Contains(distTest, "vendor/golang.org/x/arch") {
 					return false
@@ -1663,7 +1660,7 @@ func init() {
 			}
 			return true
 		},
-		numTryTestHelpers: 4,
+		numTryTestHelpers: 5,
 		GoDeps: []string{
 			"3dced519cbabc213df369d9112206986e62687fa", // first passing commit
 		},
