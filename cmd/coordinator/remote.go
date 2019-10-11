@@ -316,6 +316,11 @@ func proxyBuildletHTTP(w http.ResponseWriter, r *http.Request) {
 		Director:      func(*http.Request) {}, // nothing
 		Transport:     rb.buildlet.ProxyRoundTripper(),
 		FlushInterval: 500 * time.Millisecond,
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			log.Printf("gomote proxy error for %s: %v", buildletName, err)
+			w.WriteHeader(http.StatusBadGateway)
+			fmt.Fprintf(w, "(golang.org/issue/28365): gomote proxy error: %v", err)
+		},
 	}
 	proxy.ServeHTTP(w, outReq)
 }
