@@ -8,7 +8,12 @@ Filing tickets: https://support.osuosl.org/
 
 Machines:
 
-go-le-1: debian@140.211.168.23
+Large, Ubuntu Bionic:
+
+go-le-bionic-1: ubuntu@140.211.169.171
+
+To-be-returned old Debian (currently buster):
+
 go-le-2: debian@140.211.168.18
 go-le-3: debian@140.211.168.180
 go-le-4: debian@140.211.168.161
@@ -51,12 +56,3 @@ platform        : pSeries
 model           : IBM pSeries (emulated by qemu)
 machine         : CHRP IBM pSeries (emulated by qemu)
 
-debian@go-le-1:~$ uname -a
-Linux go-le-1 3.16.0-4-powerpc64le #1 SMP Debian 3.16.7-ckt25-1 (2016-03-06) ppc64le GNU/Linux
-
-debian@go-le-1:~$ lsb_release  -a
-No LSB modules are available.
-Distributor ID: Debian
-Description:    Debian GNU/Linux 8.4 (jessie)
-Release:        8.4
-Codename:       jessie
