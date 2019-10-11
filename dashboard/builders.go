@@ -1614,7 +1614,7 @@ func init() {
 		HostType: "host-nacl-kube",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// nacl support is removed in Go 1.14.
-			return repo == "go" && !atLeastGo1(goBranch, 14)
+			return repo == "go" && !atLeastGo1(goBranch, 14) && !strings.HasPrefix(goBranch, "dev.")
 		},
 		MaxAtOnce:         2,
 		numTryTestHelpers: 3,
@@ -1625,7 +1625,7 @@ func init() {
 		HostType: "host-nacl-kube",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// nacl support is removed in Go 1.14.
-			return repo == "go" && !atLeastGo1(goBranch, 14)
+			return repo == "go" && !atLeastGo1(goBranch, 14) && !strings.HasPrefix(goBranch, "dev.")
 		},
 		tryBot:            explicitTrySet("go"),
 		MaxAtOnce:         2,

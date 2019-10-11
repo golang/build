@@ -106,6 +106,30 @@ func TestTrybots(t *testing.T) {
 		},
 		{
 			repo:   "go",
+			branch: "dev.link",
+			want: []string{
+				"freebsd-amd64-12_0",
+				"js-wasm",
+				"linux-386",
+				"linux-amd64",
+				"linux-amd64-race",
+				"misc-compile-other",
+				"misc-compile-darwin",
+				"misc-compile-linuxarm",
+				"misc-compile-solaris",
+				"misc-compile-freebsd",
+				"misc-compile-mips",
+				"misc-compile-netbsd",
+				"misc-compile-openbsd",
+				"misc-compile-plan9",
+				"misc-compile-ppc",
+				"openbsd-amd64-64",
+				"windows-386-2008",
+				"windows-amd64-2016",
+			},
+		},
+		{
+			repo:   "go",
 			branch: "release-branch.go1.12",
 			want: []string{
 				"freebsd-amd64-10_3",
@@ -388,9 +412,11 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-386-emu", "go"), isBuilder},
 
 		{b("nacl-386", "go"), none},
+		{b("nacl-386@dev.link", "go"), none},
 		{b("nacl-386@go1.13", "go"), onlyPost},
 		{b("nacl-386", "net"), none},
 		{b("nacl-amd64p32", "go"), none},
+		{b("nacl-amd64p32@dev.link", "go"), none},
 		{b("nacl-amd64p32@go1.13", "go"), both},
 		{b("nacl-amd64p32", "net"), none},
 
