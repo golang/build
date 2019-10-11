@@ -32,6 +32,7 @@ import (
 	"golang.org/x/build/devapp/owners"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/foreach"
+	"golang.org/x/build/internal/gophers"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
 	"golang.org/x/build/maintner/maintnerd/apipb"
@@ -906,7 +907,11 @@ func (b *gopherbot) handleGoplsIssues(ctx context.Context) error {
 		if err := b.addLabel(ctx, gi, "gopls"); err != nil {
 			return err
 		}
-		// Request more information from the user.
+		// Check if the person filing the issue is known through Gerrit.
+		// If not, add a comment directing them to the troubleshooting guide.
+		if person := gophers.GetPerson("@" + gi.User.Login); person != nil {
+			return nil
+		}
 		const comment = "Thank you for filing a gopls issue! Please take a look at the " +
 			"[Troubleshooting guide](https://github.com/golang/tools/blob/master/gopls/doc/troubleshooting.md#troubleshooting), " +
 			"and make sure that you have provided all of the relevant information here."
