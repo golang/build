@@ -382,7 +382,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("aix-ppc64", "net"), onlyPost},
 		{b("aix-ppc64", "mobile"), none},
 		{b("aix-ppc64", "exp"), none},
-		{b("aix-ppc64", "term"), none},
+		{b("aix-ppc64", "term"), onlyPost},
 		{b("aix-ppc64@go1.12", "go"), onlyPost},
 		{b("aix-ppc64@go1.12", "net"), none},
 		{b("aix-ppc64@go1.12", "mobile"), none},

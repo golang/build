@@ -1025,9 +1025,6 @@ func defaultBuildsRepoPolicy(repo, branch, goBranch string) bool {
 	switch repo {
 	case "go":
 		return true
-	case "term":
-		// no code yet in repo
-		return false
 	case "mobile", "exp":
 		// mobile and exp are opt-in.
 		return false
