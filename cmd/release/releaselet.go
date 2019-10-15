@@ -77,15 +77,21 @@ func archDir() string {
 	return ""
 }
 
+// includesGodoc reports whether we should include the godoc binary in this release.
+// We only include it in go1.12.x and earlier releases; see issue 30029.
+func includesGodoc() bool {
+	_, version, _ := environ()
+	verMajor, verMinor, _ := splitVersion(version)
+	return verMajor == 1 && verMinor < 13
+}
+
 // godoc copies the godoc binary into place for Go 1.12 and earlier.
 //
 // TODO: remove this function once Go 1.14 is released (when Go 1.12
 // is no longer supported).
 func godoc() error {
-	_, version, _ := environ()
-	verMajor, verMinor, _ := splitVersion(version)
-	if verMajor > 1 || verMinor >= 13 {
-		return nil // Only include the godoc binary in go1.12.x and earlier releases; Issue 30029
+	if !includesGodoc() {
+		return nil
 	}
 
 	// Pre Go 1.7, the godoc binary is placed here by cmd/go.
@@ -247,6 +253,9 @@ func windowsMSI() error {
 	// Write out windows data that is used by the packaging process.
 	win := filepath.Join(cwd, "windows")
 	defer os.RemoveAll(win)
+	if !includesGodoc() {
+		removeGodocShortcut()
+	}
 	if err := writeDataFiles(windowsData, win); err != nil {
 		return err
 	}
@@ -575,6 +584,13 @@ function installCheck() {
 	"Resources/bg.png": storageBase + "darwin/bg.png",
 }
 
+// removeGodocShortcut removes the GODOC_SHORTCUT part out of the
+// installer.wxs file contents.
+func removeGodocShortcut() {
+	rx := regexp.MustCompile(`(?s)<!--GODOC_SHORTCUT-->.*<!--END_GODOC_SHORTCUT-->`)
+	windowsData["installer.wxs"] = rx.ReplaceAllString(windowsData["installer.wxs"], "")
+}
+
 var windowsData = map[string]string{
 
 	"installer.wxs": `<?xml version="1.0" encoding="UTF-8"?>
@@ -658,6 +674,7 @@ var windowsData = map[string]string{
 <!-- Programs Menu Shortcuts -->
 <DirectoryRef Id="GoProgramShortcutsDir">
   <Component Id="Component_GoProgramShortCuts" Guid="{f5fbfb5e-6c5c-423b-9298-21b0e3c98f4b}">
+    <!--GODOC_SHORTCUT-->
     <Shortcut
         Id="GoDocServerStartMenuShortcut"
         Name="GoDocServer"
@@ -665,7 +682,7 @@ var windowsData = map[string]string{
         Show="minimized"
         Arguments='/c start "Godoc Server http://localhost:6060" "[INSTALLDIR]bin\godoc.exe" -http=localhost:6060 -goroot="[INSTALLDIR]." &amp;&amp; start http://localhost:6060'
         Icon="gopher.ico"
-        Target="[%ComSpec]" />
+        Target="[%ComSpec]" /><!--END_GODOC_SHORTCUT-->
     <Shortcut
         Id="UninstallShortcut"
         Name="Uninstall Go"
@@ -876,6 +893,14 @@ func runSelfTests() {
 		if got != tt.want {
 			log.Fatalf("wixIsWinXPSupported(%q) = %v; want %v", tt.v, got, tt.want)
 		}
+	}
+
+	if !strings.Contains(windowsData["installer.wxs"], "GODOC_SHORTCUT") {
+		log.Fatal("expected GODOC_SHORTCUT to be present")
+	}
+	removeGodocShortcut()
+	if strings.Contains(windowsData["installer.wxs"], "GODOC_SHORTCUT") {
+		log.Fatal("expected GODOC_SHORTCUT to be gone")
 	}
 
 	fmt.Println("ok")
