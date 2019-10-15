@@ -434,7 +434,7 @@ var Hosts = map[string]*HostConfig{
 		HermeticReverse: false, // TODO: use rundockerbuildlet like arm64
 	},
 	"host-linux-arm64-packet": &HostConfig{
-		Notes:           "On 96 core packet.net host (Xenial) in Docker containers (Jessie); run by Go team. See x/build/env/linux-arm64/packet",
+		Notes:           "On 96 core packet.net host (Xenial) in Docker containers (Debian Buster); run by Go team. See x/build/env/linux-arm64/packet",
 		IsReverse:       true,
 		HermeticReverse: true,
 		ExpectNum:       20,

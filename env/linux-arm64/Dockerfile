@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM mickaelguene/arm64-debian:jessie
+FROM debian:buster
 
 ENV DEBIAN_FRONTEND noninteractive
 
