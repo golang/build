@@ -10,7 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -95,12 +97,62 @@ func tryBotStatus(cl *maintner.GerritCL, forStaging bool) (try, done bool) {
 	return
 }
 
-func tryWorkItem(cl *maintner.GerritCL) *apipb.GerritTryWorkItem {
-	return &apipb.GerritTryWorkItem{
+var (
+	tryCommentRx = regexp.MustCompile(`(?m)^TRY=(.*)$`)
+	patchSetRx   = regexp.MustCompile(`^Patch Set (\d{1,4}):`)
+)
+
+func tryWorkItem(cl *maintner.GerritCL, ci *gerrit.ChangeInfo) *apipb.GerritTryWorkItem {
+	work := &apipb.GerritTryWorkItem{
 		Project:  cl.Project.Project(),
 		Branch:   strings.TrimPrefix(cl.Branch(), "refs/heads/"),
 		ChangeId: cl.ChangeID(),
 		Commit:   cl.Commit.Hash.String(),
+	}
+	if ci != nil {
+		if ci.CurrentRevision != "" {
+			// In case maintner is behind.
+			work.Commit = ci.CurrentRevision
+			work.Version = int32(ci.Revisions[ci.CurrentRevision].PatchSetNumber)
+		}
+		// Also include any "TRY=foo" comments (just the "foo"
+		// aprt) from messages that accompany Run-TryBot+1
+		// votes.
+		for _, m := range ci.Messages {
+			// msg is like:
+			//   "Patch Set 2: Run-TryBot+1\n\nTRY=foo2"
+			//   "Patch Set 2: Run-TryBot+1 Code-Review-2"
+			//   "Uploaded patch set 2."
+			//   "Removed Run-TryBot+1 by Brad Fitzpatrick <bradfitz@golang.org>\n"
+			//   "Patch Set 1: Run-TryBot+1\n\nTRY=baz"
+			msg := m.Message
+			if !strings.Contains(msg, "\n\nTRY=") ||
+				!strings.HasPrefix(msg, "Patch Set ") ||
+				!strings.Contains(firstLine(msg), "Run-TryBot+1") {
+				continue
+			}
+			pm := patchSetRx.FindStringSubmatch(msg)
+			var patchSet int
+			if pm != nil {
+				patchSet, _ = strconv.Atoi(pm[1])
+			}
+			if tm := tryCommentRx.FindStringSubmatch(msg); tm != nil && patchSet > 0 {
+				work.TryMessage = append(work.TryMessage, &apipb.TryVoteMessage{
+					Message:  tm[1],
+					AuthorId: m.Author.NumericID,
+					Version:  int32(patchSet),
+				})
+			}
+		}
+	}
+	return work
+}
+
+func firstLine(s string) string {
+	if nl := strings.Index(s, "\n"); nl < 0 {
+		return s
+	} else {
+		return s[:nl]
 	}
 }
 
@@ -160,16 +212,32 @@ func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkR
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
+
+	res, err := goFindTryWork(ctx, tryBotGerrit, s.c)
+	if err != nil {
+		log.Printf("maintnerd: goFindTryWork: %v", err)
+		return nil, err
+	}
+
+	tryCache.val = res
+	tryCache.forNumChanges = sumChanges
+
+	log.Printf("maintnerd: GetTryWork: for label changes of %d, cached %d trywork items.",
+		sumChanges, len(res.Waiting))
+
+	return res, nil
+}
+
+func goFindTryWork(ctx context.Context, gerritc *gerrit.Client, maintc *maintner.Corpus) (*apipb.GoFindTryWorkResponse, error) {
 	const query = "label:Run-TryBot=1 label:TryBot-Result=0 status:open"
-	cis, err := tryBotGerrit.QueryChanges(ctx, query, gerrit.QueryChangesOpt{
-		Fields: []string{"CURRENT_REVISION", "CURRENT_COMMIT"},
+	cis, err := gerritc.QueryChanges(ctx, query, gerrit.QueryChangesOpt{
+		Fields: []string{"CURRENT_REVISION", "CURRENT_COMMIT", "MESSAGES"},
 	})
 	if err != nil {
 		return nil, err
 	}
-	tryCache.forNumChanges = sumChanges
 
-	goProj := s.c.Gerrit().Project("go.googlesource.com", "go")
+	goProj := maintc.Gerrit().Project("go.googlesource.com", "go")
 	supportedReleases, err := supportedGoReleases(goProj)
 	if err != nil {
 		return nil, err
@@ -177,16 +245,12 @@ func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkR
 
 	res := new(apipb.GoFindTryWorkResponse)
 	for _, ci := range cis {
-		cl := s.c.Gerrit().Project("go.googlesource.com", ci.Project).CL(int32(ci.ChangeNumber))
+		cl := maintc.Gerrit().Project("go.googlesource.com", ci.Project).CL(int32(ci.ChangeNumber))
 		if cl == nil {
 			log.Printf("nil Gerrit CL %v", ci.ChangeNumber)
 			continue
 		}
-		work := tryWorkItem(cl)
-		if ci.CurrentRevision != "" {
-			// In case maintner is behind.
-			work.Commit = ci.CurrentRevision
-		}
+		work := tryWorkItem(cl, ci)
 		if work.Project == "go" {
 			// Trybot on Go repo. Set the GoVersion field based on branch name.
 			if work.Branch == "master" {
@@ -229,11 +293,6 @@ func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkR
 	sort.Slice(res.Waiting, func(i, j int) bool {
 		return res.Waiting[i].Commit < res.Waiting[j].Commit
 	})
-	tryCache.val = res
-
-	log.Printf("maintnerd: GetTryWork: for label changes of %d, cached %d trywork items.",
-		sumChanges, len(res.Waiting))
-
 	return res, nil
 }
 

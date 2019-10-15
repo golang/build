@@ -55,6 +55,8 @@ message GerritTryWorkItem {
   string change_id = 3;  // "I1a27695838409259d1586a0adfa9f92bccf7ceba"
   string commit = 4;     // "ecf3dffc81dc21408fb02159af352651882a8383"
 
+  int32 version = 9; // which Gerrit revision number commit is
+
   // go_commit is set for subrepos and is the Go commit(s) to test against.
   // go_branch is a branch name of go_commit, for showing to users when
   // a try set fails.
@@ -65,6 +67,15 @@ message GerritTryWorkItem {
   // For Go repo, it contains exactly one element.
   // For subrepos, it contains elements that correspond to go_commit.
   repeated MajorMinor go_version = 7;
+
+  // try_message is the list of TRY=xxxx messages associated with Run-TryBot votes.
+  repeated TryVoteMessage try_message = 8;
+}
+
+message TryVoteMessage {
+  string message = 1;   // just the part after "TRY=" until end of line, without \n
+  int64  author_id = 2; // Gerrit-internal ID
+  int32  version = 3;   // revision number comment was for
 }
 
 message MajorMinor {
