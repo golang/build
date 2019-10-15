@@ -1916,7 +1916,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-race",
-		HostType:          "host-darwin-10_12",
+		HostType:          "host-darwin-10_14",
 		shouldRunDistTest: macTestPolicy,
 		buildsRepo:        onlyGo,
 	})
