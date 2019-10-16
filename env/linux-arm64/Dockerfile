@@ -8,9 +8,10 @@ ENV DEBIAN_FRONTEND noninteractive
 
 RUN apt-get update && \
     apt-get install --yes \
-          curl gcc strace ca-certificates \
-          procps lsof psmisc
-RUN apt-get install --yes --no-install-recommends openssh-server
+          gcc curl strace \
+          ca-certificates netbase \
+          procps lsof psmisc \
+          openssh-server
 
 RUN mkdir /usr/local/go-bootstrap && \
     curl --silent https://storage.googleapis.com/go-builder-data/gobootstrap-linux-arm64.tar.gz | \
