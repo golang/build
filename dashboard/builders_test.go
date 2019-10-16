@@ -5,7 +5,12 @@
 package dashboard
 
 import (
+	"bytes"
 	"fmt"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -643,5 +648,68 @@ func TestShouldTestPackageInGOPATHMode(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("ShouldTestPackageInGOPATHMode(%q) = %v; want %v", tt.importPath, got, tt.want)
 		}
+	}
+}
+
+func TestSlowBotAliases(t *testing.T) {
+	for term, name := range slowBotAliases {
+		if name == "" {
+			// Empty string means known missing builder.
+			continue
+		}
+		if _, ok := Builders[name]; !ok {
+			t.Errorf("slowbot term %q references unknown builder %q", term, name)
+		}
+	}
+
+	out, err := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "tool", "dist", "list").Output()
+	if err != nil {
+		t.Errorf("dist list: %v", err)
+	}
+	ports := strings.Fields(string(out))
+
+	done := map[string]bool{}
+	var add bytes.Buffer
+	check := func(term string, isArch bool) {
+		if done[term] {
+			return
+		}
+		done[term] = true
+		_, isBuilderName := Builders[term]
+		_, hasAlias := slowBotAliases[term]
+		if !isBuilderName && !hasAlias {
+			prefix := term
+			if isArch {
+				prefix = "linux-" + term
+			}
+			var matches []string
+			for name := range Builders {
+				if strings.HasPrefix(name, prefix) {
+					matches = append(matches, name)
+				}
+			}
+			sort.Strings(matches)
+			t.Errorf("term %q has no match in slowBotAliases", term)
+			if len(matches) == 1 {
+				fmt.Fprintf(&add, "%q: %q,\n", term, matches[0])
+			} else if len(matches) > 1 {
+				t.Errorf("maybe add:  %q: %q,    (matches=%q)", term, matches[len(matches)-1], matches)
+			}
+		}
+	}
+
+	for _, port := range ports {
+		slash := strings.IndexByte(port, '/')
+		if slash == -1 {
+			t.Fatalf("unexpected port %q", port)
+		}
+		goos, goarch := port[:slash], port[slash+1:]
+		check(goos+"-"+goarch, false)
+		check(goos, false)
+		check(goarch, true)
+	}
+
+	if add.Len() > 0 {
+		t.Errorf("Missing items from slowBotAliases:\n%s", add.String())
 	}
 }

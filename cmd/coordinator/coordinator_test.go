@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"golang.org/x/build/buildenv"
+	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 )
@@ -209,5 +210,43 @@ func TestBuildersJSON(t *testing.T) {
 		var buf bytes.Buffer
 		res.Write(&buf)
 		t.Error(buf.String())
+	}
+}
+
+func mustConf(t *testing.T, name string) *dashboard.BuildConfig {
+	conf, ok := dashboard.Builders[name]
+	if !ok {
+		t.Fatalf("unknown builder %q", name)
+	}
+	return conf
+}
+
+func TestSlowBotsFromComments(t *testing.T) {
+	existing := []*dashboard.BuildConfig{mustConf(t, "linux-amd64")}
+	work := &apipb.GerritTryWorkItem{
+		Version: 2,
+		TryMessage: []*apipb.TryVoteMessage{
+			{
+				Version: 1,
+				Message: "ios",
+			},
+			{
+				Version: 2,
+				Message: "arm64, mac aix ",
+			},
+			{
+				Version: 1,
+				Message: "aix",
+			},
+		},
+	}
+	extra := slowBotsFromComments(work, existing)
+	var got []string
+	for _, bc := range extra {
+		got = append(got, bc.Name)
+	}
+	want := []string{"aix-ppc64", "darwin-amd64-10_14", "linux-arm64-packet"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("mismatch:\n got: %q\nwant: %q\n", got, want)
 	}
 }

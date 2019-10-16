@@ -19,6 +19,81 @@ import (
 	"golang.org/x/build/types"
 )
 
+// slowBotAliases maps short names from TRY= comments to which builder to run.
+//
+// TODO: we'll likely expand this, or move it, or change the matching
+// syntax entirely. This is a first draft.
+var slowBotAliases = map[string]string{
+	// Known missing builders:
+	"linux-mips":    "",
+	"linux-mips64":  "",
+	"linux-mipsle":  "",
+	"mips":          "",
+	"mips64":        "",
+	"mipsle":        "",
+	"netbsd-arm64":  "",
+	"openbsd-arm":   "",
+	"openbsd-arm64": "",
+	"nacl-arm":      "",
+
+	"386":            "linux-386",
+	"aix":            "aix-ppc64",
+	"amd64":          "linux-amd64",
+	"amd64p32":       "nacl-amd64p32",
+	"android":        "android-amd64-emu",
+	"android-386":    "android-386-emu",
+	"android-amd64":  "android-amd64-emu",
+	"android-arm":    "android-arm-corellium",
+	"android-arm64":  "android-arm64-corellium",
+	"arm":            "linux-arm",
+	"arm64":          "linux-arm64-packet",
+	"arm64p32":       "nacl-amd64p32",
+	"darwin":         "darwin-amd64-10_14",
+	"darwin-386":     "darwin-386-10_14",
+	"darwin-amd64":   "darwin-amd64-10_14",
+	"darwin-arm":     "darwin-arm-mg912baios",
+	"darwin-arm64":   "darwin-arm64-corellium",
+	"dragonfly":      "dragonfly-amd64",
+	"freebsd":        "freebsd-amd64-12_0",
+	"freebsd-386":    "freebsd-386-12_0",
+	"freebsd-amd64":  "freebsd-amd64-12_0",
+	"freebsd-arm":    "freebsd-arm-paulzhol",
+	"illumos":        "illumos-amd64",
+	"ios":            "darwin-arm64-corellium",
+	"js":             "js-wasm",
+	"linux":          "linux-amd64",
+	"linux-arm64":    "linux-arm64-packet",
+	"linux-mips64le": "linux-mips64le-mengzhuo",
+	"linux-ppc64":    "linux-ppc64-buildlet",
+	"linux-ppc64le":  "linux-ppc64le-buildlet",
+	"linux-s390x":    "linux-s390x-ibm",
+	"mac":            "darwin-amd64-10_14",
+	"macos":          "darwin-amd64-10_14",
+	"mips64le":       "linux-mips64le-mengzhuo",
+	"nacl":           "nacl-amd64p32",
+	"nacl-387":       "nacl-386",
+	"nacl-arm64p32":  "nacl-amd64p32",
+	"netbsd":         "netbsd-amd64-8_0",
+	"netbsd-386":     "netbsd-386-8_0",
+	"netbsd-amd64":   "netbsd-amd64-8_0",
+	"netbsd-arm":     "netbsd-arm-bsiegert",
+	"openbsd":        "openbsd-amd64-64",
+	"openbsd-386":    "openbsd-386-64",
+	"openbsd-amd64":  "openbsd-amd64-64",
+	"plan9":          "plan9-386-0intro",
+	"plan9-386":      "plan9-386-0intro",
+	"plan9-amd64":    "plan9-amd64-9front",
+	"ppc64":          "linux-ppc64-buildlet",
+	"ppc64le":        "linux-ppc64le-buildlet",
+	"s390x":          "linux-s390x-ibm",
+	"solaris":        "solaris-amd64-oraclerel",
+	"solaris-amd64":  "solaris-amd64-oraclerel",
+	"wasm":           "js-wasm",
+	"windows":        "windows-amd64-2016",
+	"windows-386":    "windows-386-2008",
+	"windows-amd64":  "windows-amd64-2016",
+}
+
 // Builders are the different build configurations.
 // The keys are like "darwin-amd64" or "linux-386-387".
 // This map should not be modified by other packages.
@@ -785,6 +860,13 @@ func (c *BuildConfig) GOARCH() string {
 		return arch
 	}
 	return arch[:i]
+}
+
+// MatchesSlowBotTerm reports whether some provided term from a
+// TRY=... comment on a Run-TryBot+1 vote on Gerrit should match this
+// build config.
+func (c *BuildConfig) MatchesSlowBotTerm(term string) bool {
+	return term != "" && (term == c.Name || slowBotAliases[term] == c.Name)
 }
 
 // FilePathJoin is mostly like filepath.Join (without the cleaning) except

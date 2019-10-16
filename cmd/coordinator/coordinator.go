@@ -42,6 +42,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"go4.org/syncutil"
 	grpc "grpc.go4.org"
@@ -1054,7 +1055,8 @@ func (k *tryKey) ChangeTriple() string {
 type trySet struct {
 	// immutable
 	tryKey
-	tryID string // "T" + 9 random hex
+	tryID    string                   // "T" + 9 random hex
+	slowBots []*dashboard.BuildConfig // any opt-in slower builders to run in a trybot run
 
 	// wantedAsOf is guarded by statusMu and is used by
 	// findTryWork. It records the last time this tryKey was still
@@ -1105,7 +1107,11 @@ var testingKnobSkipBuilds bool
 func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	key := tryWorkItemKey(work)
 	goBranch := key.Branch // assume same as repo's branch for now
+
 	builders := dashboard.TryBuildersForProject(key.Project, key.Branch, goBranch)
+	slowBots := slowBotsFromComments(work, builders)
+	builders = append(builders, slowBots...)
+
 	log.Printf("Starting new trybot set for %v", key)
 	ts := &trySet{
 		tryKey: key,
@@ -1113,6 +1119,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		trySetState: trySetState{
 			builds: make([]*buildStatus, 0, len(builders)),
 		},
+		slowBots: slowBots,
 	}
 
 	// Defensive check that the input is well-formed.
@@ -1237,7 +1244,11 @@ func (ts *trySet) state() trySetState {
 // notifyStarting runs in its own goroutine and posts to Gerrit that
 // the trybots have started on the user's CL with a link of where to watch.
 func (ts *trySet) notifyStarting() {
-	msg := "TryBots beginning. Status page: https://farmer.golang.org/try?commit=" + ts.Commit[:8]
+	name := "TryBots"
+	if len(ts.slowBots) > 0 {
+		name = "SlowBots"
+	}
+	msg := name + " beginning. Status page: https://farmer.golang.org/try?commit=" + ts.Commit[:8]
 
 	ctx := context.Background()
 	if ci, err := gerritClient.GetChangeDetail(ctx, ts.ChangeTriple()); err == nil {
@@ -1382,20 +1393,38 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 	}
 
 	if remain == 0 {
-		score, msg := 1, "TryBots are happy."
-		if numFail > 0 {
+		name := "TryBots"
+		if len(ts.slowBots) > 0 {
+			name = "SlowBots"
+		}
+
+		var buf bytes.Buffer
+		var score int
+		if numFail == 0 {
+			score = 1
+			fmt.Fprintf(&buf, "%s are happy.\n", name)
+		} else if numFail > 0 {
+			score = -1
 			ts.mu.Lock()
 			errMsg := ts.errMsg.String()
 			ts.mu.Unlock()
-			score, msg = -1, fmt.Sprintf("%d of %d TryBots failed:\n%s\n"+failureFooter,
-				numFail, len(ts.builds), errMsg)
+			fmt.Fprintf(&buf, "%d of %d %s failed:\n%s\n"+failureFooter,
+				numFail, len(ts.builds), name, errMsg)
 		}
+		if len(ts.slowBots) > 0 {
+			fmt.Fprintf(&buf, "Extra slowbot builds that ran:\n")
+			for _, c := range ts.slowBots {
+				fmt.Fprintf(&buf, "* %s\n", c.Name)
+			}
+		}
+		// TODO: provide a link in the final report that links to a permanent summary page
+		// of which builds ran, and for how long.
 		if len(benchResults) > 0 {
 			// TODO: restore this functionality
 			// msg += fmt.Sprintf("\nBenchmark results are available at:\nhttps://perf.golang.org/search?q=cl:%d+try:%s", ts.ci.ChangeNumber, ts.tryID)
 		}
 		if err := gerritClient.SetReview(context.Background(), ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
-			Message: msg,
+			Message: buf.String(),
 			Labels: map[string]int{
 				"TryBot-Result": score,
 			},
@@ -1857,12 +1886,25 @@ func (st *buildStatus) build() error {
 
 func (st *buildStatus) isTry() bool { return st.trySet != nil }
 
+func (st *buildStatus) isSlowBot() bool {
+	if st.trySet == nil {
+		return false
+	}
+	for _, conf := range st.trySet.slowBots {
+		if st.conf == conf {
+			return true
+		}
+	}
+	return false
+}
+
 func (st *buildStatus) buildRecord() *types.BuildRecord {
 	rec := &types.BuildRecord{
 		ID:        st.buildID,
 		ProcessID: processID,
 		StartTime: st.startTime,
 		IsTry:     st.isTry(),
+		IsExtra:   st.isSlowBot(),
 		GoRev:     st.Rev,
 		Rev:       st.SubRevOrGoRev(),
 		Repo:      st.RepoOrGo(),
@@ -3633,4 +3675,60 @@ func importPathOfRepo(repo string) string {
 		return "golang.org/dl"
 	}
 	return "golang.org/x/" + repo
+}
+
+// slowBotsFromComments looks at the TRY= comments from Gerrit (in
+// work) and returns any addition slow trybot build configuration that
+// should be tested in addition to the ones provided in the existing
+// slice.
+func slowBotsFromComments(work *apipb.GerritTryWorkItem, existing []*dashboard.BuildConfig) (extraBuilders []*dashboard.BuildConfig) {
+	tryMsg := latestTryMessage(work) // "aix, darwin, linux-386-387, arm64"
+	if tryMsg == "" {
+		return nil
+	}
+	if len(tryMsg) > 1<<10 { // arbitrary sanity
+		return nil
+	}
+
+	have := map[string]bool{}
+	for _, bc := range existing {
+		have[bc.Name] = true
+	}
+
+	tryTerms := strings.FieldsFunc(tryMsg, func(c rune) bool {
+		return !unicode.IsLetter(c) && !unicode.IsNumber(c) && c != '-' && c != '_'
+	})
+	for _, bc := range dashboard.Builders {
+		if have[bc.Name] {
+			continue
+		}
+		for _, term := range tryTerms {
+			if bc.MatchesSlowBotTerm(term) {
+				extraBuilders = append(extraBuilders, bc)
+				break
+			}
+		}
+	}
+	sort.Slice(extraBuilders, func(i, j int) bool {
+		return extraBuilders[i].Name < extraBuilders[j].Name
+	})
+	return
+}
+
+func latestTryMessage(work *apipb.GerritTryWorkItem) string {
+	// Prioritize exact version matches first
+	for i := len(work.TryMessage) - 1; i >= 0; i-- {
+		m := work.TryMessage[i]
+		if m.Version == work.Version {
+			return m.Message
+		}
+	}
+	// Otherwise the latest message at all
+	for i := len(work.TryMessage) - 1; i >= 0; i-- {
+		m := work.TryMessage[i]
+		if m.Message != "" {
+			return m.Message
+		}
+	}
+	return ""
 }

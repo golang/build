@@ -91,6 +91,7 @@ type BuildRecord struct {
 	ProcessID     string
 	StartTime     time.Time
 	IsTry         bool // is trybot run
+	IsExtra       bool // is an extra opt-in "slowbot" builder, not on by default
 	GoRev         string
 	Rev           string // same as GoRev for repo "go"
 	Repo          string // "go", "net", etc.
