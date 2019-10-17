@@ -441,6 +441,14 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		SSHUsername:     "root",
 	},
+	"host-illumos-amd64-jclulow": &HostConfig{
+		Notes:       "SmartOS base64@19.1.0 zone",
+		Owner:       "josh@sysmgr.org",
+		OwnerGithub: "jclulow",
+		IsReverse:   true,
+		ExpectNum:   1,
+		SSHUsername: "gobuild",
+	},
 	"host-solaris-oracle-amd64-oraclerel": &HostConfig{
 		Notes:       "Oracle Solaris amd64 Release System",
 		Owner:       "", // TODO: find current owner
@@ -2011,6 +2019,11 @@ func init() {
 			"GOHOSTOS=linux",
 			"CGO_ENABLED=1",
 		},
+	})
+	addBuilder(BuildConfig{
+		Name:             "illumos-amd64",
+		HostType:         "host-illumos-amd64-jclulow",
+		MinimumGoVersion: types.MajorMinor{1, 13},
 	})
 	addBuilder(BuildConfig{
 		Name:     "solaris-amd64-oraclerel",
