@@ -19,16 +19,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
 
 var (
-	image    = flag.String("image", "", "docker image to run; required.")
-	numInst  = flag.Int("n", 1, "number of containers to keep running at once")
-	basename = flag.String("basename", "builder", "prefix before the builder number to use for the container names and host names")
-	memory   = flag.String("memory", "3g", "memory limit flag for docker run")
-	keyFile  = flag.String("key", "/etc/gobuild.key", "go build key file")
+	image      = flag.String("image", "golang/builder", "docker image to run; required.")
+	numInst    = flag.Int("n", 1, "number of containers to keep running at once")
+	basename   = flag.String("basename", "builder", "prefix before the builder number to use for the container names and host names")
+	memory     = flag.String("memory", "3g", "memory limit flag for docker run")
+	keyFile    = flag.String("key", "/etc/gobuild.key", "go build key file")
+	builderEnv = flag.String("env", "", "optional GO_BUILDER_ENV environment variable value to set in the guests")
+	cpu        = flag.Int("cpu", 0, "if non-zero, how many CPUs to assign from the host and pass to docker run --cpuset-cpus")
 )
 
 var (
@@ -49,8 +52,14 @@ func main() {
 		log.Fatalf("docker --image is required")
 	}
 
-	if _, err := os.Stat("/usr/local/bin/oc-metadata"); err == nil {
-		initScalewayMeta()
+	// If we're on linux/arm, see if we're running in a scaleway
+	// image (which contains the oc-metadata command) and, if so,
+	// fetch our instance metadata to make the reported hostname match
+	// the instance hostname.
+	if runtime.GOOS == "linux" && runtime.GOARCH == "arm" {
+		if _, err := os.Stat("/usr/local/bin/oc-metadata"); err == nil {
+			initScalewayMeta()
+		}
 	}
 
 	log.Printf("Started. Will keep %d copies of %s running.", *numInst, *image)
@@ -139,14 +148,21 @@ func checkFix() error {
 		if err := ioutil.WriteFile(keyFile, buildKey, 0600); err != nil {
 			return err
 		}
-		out, err := exec.Command("docker", "run",
+		cmd := exec.Command("docker", "run",
 			"-d",
 			"--memory="+*memory,
 			"--name="+name,
 			"-v", filepath.Dir(keyFile)+":/buildkey/",
 			"-e", "HOSTNAME="+name,
-			"--tmpfs=/workdir:rw,exec",
-			*image).CombinedOutput()
+			"--tmpfs=/workdir:rw,exec")
+		if *builderEnv != "" {
+			cmd.Args = append(cmd.Args, "-e", "GO_BUILDER_ENV="+*builderEnv)
+		}
+		if *cpu > 0 {
+			cmd.Args = append(cmd.Args, fmt.Sprintf("--cpuset-cpus=%d-%d", *cpu*(num-1), *cpu*num-1))
+		}
+		cmd.Args = append(cmd.Args, *image)
+		out, err := cmd.CombinedOutput()
 		if err != nil {
 			log.Printf("Error creating %s: %v, %s", name, err, out)
 			continue

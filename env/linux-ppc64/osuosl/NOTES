@@ -8,7 +8,7 @@ Filing tickets: https://support.osuosl.org/
 
 Machines:
 
-* go-be-xenial-3: (10 GB RAM, 50 GB disk, 10 cores, POWER8)
+* go-be-xenial-3: (20 GB RAM, 50 GB disk, 10 cores, POWER8)
 
   ssh -i ~/.ssh/id_ed25519_golang1 ubuntu@140.211.169.164
   (key from http://go/go-builders-ssh)

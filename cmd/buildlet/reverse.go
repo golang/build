@@ -71,7 +71,10 @@ func dialCoordinator() error {
 	devMode := isDevReverseMode()
 
 	if *hostname == "" {
-		*hostname, _ = os.Hostname()
+		*hostname = os.Getenv("HOSTNAME")
+		if *hostname == "" {
+			*hostname, _ = os.Hostname()
+		}
 	}
 
 	var modes, keys []string

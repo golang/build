@@ -141,6 +141,7 @@ func addHealthCheckers(ctx context.Context) {
 	addHealthChecker(newPacketHealthChecker())
 	addHealthChecker(newOSUPPC64Checker())
 	addHealthChecker(newOSUPPC64leChecker())
+	addHealthChecker(newOSUPPC64lePower9Checker())
 	addHealthChecker(newBasepinChecker())
 	addHealthChecker(newGitMirrorChecker())
 	addHealthChecker(newTipGolangOrgChecker(ctx))
@@ -440,12 +441,26 @@ func newOSUPPC64Checker() *healthChecker {
 func newOSUPPC64leChecker() *healthChecker {
 	var hosts []string
 	for i := 1; i <= expectedHosts("host-linux-ppc64le-osu"); i++ {
-		name := fmt.Sprintf("go-le-%v", i)
+		name := fmt.Sprintf("power_%02d", i)
 		hosts = append(hosts, name)
 	}
 	return &healthChecker{
 		ID:     "osuppc64le",
-		Title:  "OSU linux/ppc64le machines",
+		Title:  "OSU linux/ppc64le POWER8 machines",
+		DocURL: "https://github.com/golang/build/tree/master/env/linux-ppc64le/osuosl",
+		Check:  reverseHostChecker(hosts),
+	}
+}
+
+func newOSUPPC64lePower9Checker() *healthChecker {
+	var hosts []string
+	for i := 1; i <= expectedHosts("host-linux-ppc64le-power9-osu"); i++ {
+		name := fmt.Sprintf("power_%02d", i)
+		hosts = append(hosts, name)
+	}
+	return &healthChecker{
+		ID:     "osuppc64lepower9",
+		Title:  "OSU linux/ppc64le POWER9 machines",
 		DocURL: "https://github.com/golang/build/tree/master/env/linux-ppc64le/osuosl",
 		Check:  reverseHostChecker(hosts),
 	}

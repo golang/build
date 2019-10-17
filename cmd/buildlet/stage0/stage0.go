@@ -92,8 +92,6 @@ func main() {
 		}
 	case "linux/ppc64":
 		initOregonStatePPC64()
-	case "linux/ppc64le":
-		initOregonStatePPC64le()
 	case "darwin/amd64":
 		// The MacStadium builders' baked-in stage0.sh
 		// bootstrap file doesn't set GO_BUILDER_ENV
@@ -167,6 +165,10 @@ Download:
 	case "host-linux-mipsle-mengzhuo":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
+	case "host-linux-ppc64le-power9-osu":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+	case "host-linux-ppc64le-osu": // power8
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	}
 	switch osArch {
 	case "linux/s390x":
@@ -191,10 +193,6 @@ Download:
 		// Assume OSU (osuosl.org) host type for now. If we get more, use
 		// GO_BUILD_HOST_TYPE (see above) and check that.
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-ppc64-osu")...)
-	case "linux/ppc64le":
-		// Assume OSU (osuosl.org) host type for now. If we get more, use
-		// GO_BUILD_HOST_TYPE (see above) and check that.
-		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-ppc64le-osu")...)
 	case "solaris/amd64", "illumos/amd64":
 		hostType := buildEnv
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(hostType)...)
@@ -412,11 +410,6 @@ func initBootstrapDir(destDir, tgzCache string) {
 }
 
 func initOregonStatePPC64() {
-	aptGetInstall("gcc", "strace", "libc6-dev", "gdb")
-	initBootstrapDir("/usr/local/go-bootstrap", "/usr/local/go-bootstrap.tar.gz")
-}
-
-func initOregonStatePPC64le() {
 	aptGetInstall("gcc", "strace", "libc6-dev", "gdb")
 	initBootstrapDir("/usr/local/go-bootstrap", "/usr/local/go-bootstrap.tar.gz")
 }

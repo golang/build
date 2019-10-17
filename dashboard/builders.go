@@ -413,25 +413,22 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		ReverseAliases:  []string{"linux-ppc64-buildlet"},
 		SSHUsername:     "root",
-		HermeticReverse: false, // TODO: use rundockerbuildlet like arm64
+		HermeticReverse: false, // TODO: run in chroots with overlayfs? https://github.com/golang/go/issues/34830#issuecomment-543386764
 	},
 	"host-linux-ppc64le-osu": &HostConfig{
-		Notes:           "Debian jessie; run by Go team on osuosl.org",
+		Notes:           "Debian Buster; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl",
 		IsReverse:       true,
 		ExpectNum:       5,
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
-		ReverseAliases:  []string{"linux-ppc64le-buildlet"},
 		SSHUsername:     "root",
-		HermeticReverse: false, // TODO: use rundockerbuildlet like arm64
+		HermeticReverse: true,
 	},
 	"host-linux-ppc64le-power9-osu": &HostConfig{
-		Notes:           "Debian jessie; run by IBM",
-		OwnerGithub:     "ceseo",
+		Notes:           "Debian Buster; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl",
 		IsReverse:       true,
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
-		ReverseAliases:  []string{"linux-ppc64le-power9osu"},
 		SSHUsername:     "root",
-		HermeticReverse: false, // TODO: use rundockerbuildlet like arm64
+		HermeticReverse: true,
 	},
 	"host-linux-arm64-packet": &HostConfig{
 		Notes:           "On 96 core packet.net host (Xenial) in Docker containers (Debian Buster); run by Go team. See x/build/env/linux-arm64/packet",
