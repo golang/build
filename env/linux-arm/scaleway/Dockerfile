@@ -19,11 +19,6 @@ COPY stage0 /usr/local/bin/stage0
 
 ENV GO_BUILD_KEY_PATH /buildkey/gobuildkey
 ENV GO_BUILD_KEY_DELETE_AFTER_READ true
-
-# Not really, but we're in a container like Kubernetes, and this makes the syscall
-# package happy:
-ENV IN_KUBERNETES 1
-
 ENV GO_BUILDER_ENV host-linux-arm-scaleway
 
 # env specific

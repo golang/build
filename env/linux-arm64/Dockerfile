@@ -23,9 +23,3 @@ RUN curl -o  /usr/local/bin/stage0 https://storage.googleapis.com/go-builder-dat
 
 ENV GO_BUILD_KEY_DELETE_AFTER_READ true
 ENV GO_BUILD_KEY_PATH /buildkey/gobuildkey
-
-# Not really, but we're in a container like Kubernetes, and this makes the syscall
-# package happy:
-ENV IN_KUBERNETES 1
-
-

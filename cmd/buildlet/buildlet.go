@@ -357,7 +357,7 @@ func listenForCoordinator() {
 // registerSignal if non-nil registers shutdown signals with the provided chan.
 var registerSignal func(chan<- os.Signal)
 
-var inKube, _ = strconv.ParseBool(os.Getenv("IN_KUBERNETES"))
+var inKube = os.Getenv("KUBERNETES_SERVICE_HOST") != ""
 
 // metadataValue returns the GCE metadata instance value for the given key.
 // If the metadata is not defined, the returned string is empty.
