@@ -207,7 +207,7 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:      3,
 		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		ReverseAliases: []string{"linux-arm-arm5spacemonkey"},
-		OwnerGithub:    "zeebo",
+		OwnerGithub:    "esnolte", // https://github.com/golang/go/issues/34973#issuecomment-543836871
 	},
 	"host-openbsd-amd64-60": &HostConfig{
 		VMImage:            "openbsd-amd64-60",
