@@ -81,6 +81,22 @@ type reverseBuildletPool struct {
 	// we bound how many can be running at once. Fortunately there aren't many left.
 	oldInUse map[*buildlet.Client]bool
 
+	// hostLastGood tracks when buildlets were last seen to be
+	// healthy. It's only used by the health reporting code (in
+	// status.go). The reason it's a map on reverseBuildletPool
+	// rather than a field on each reverseBuildlet is because we
+	// also want to track the last known health time of buildlets
+	// that aren't currently connected.
+	//
+	// Each buildlet's health is recorded in the map twice, under
+	// two different keys: 1) its reported host name, and 2) its
+	// hostType + ":" + its reported host name. It's recorded both
+	// ways so the status code can check for both globally-unique
+	// hostnames that change host types (e.g. our Macs), as well
+	// as hostnames that aren't globally unique and are expected
+	// to be found with different hostTypes (e.g. our ppc64le
+	// machines as both POWER8 and POWER9 host types, but with the
+	// same names).
 	hostLastGood map[string]time.Time
 }
 
@@ -208,6 +224,14 @@ func (p *reverseBuildletPool) healthCheckBuildletLoop(b *reverseBuildlet) {
 	}
 }
 
+// recordHealthy updates the two map entries in hostLastGood recording
+// that b is healthy.
+func (p *reverseBuildletPool) recordHealthy(b *reverseBuildlet) {
+	t := time.Now()
+	p.hostLastGood[b.hostname] = t
+	p.hostLastGood[b.hostType+":"+b.hostname] = t
+}
+
 func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 	if b.client.IsBroken() {
 		return false
@@ -217,7 +241,7 @@ func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 		panic("previous health check still running")
 	}
 	if b.inUse {
-		p.hostLastGood[b.hostname] = time.Now()
+		p.recordHealthy(b)
 		p.mu.Unlock()
 		return true // skip busy buildlets
 	}
@@ -257,9 +281,8 @@ func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 	}
 	b.inUse = false
 	b.inHealthCheck = false
-	now := time.Now()
-	b.inUseTime = now
-	p.hostLastGood[b.hostname] = now
+	b.inUseTime = time.Now()
+	p.recordHealthy(b)
 	go p.noteBuildletAvailable(b.hostType)
 	return true
 }
@@ -479,7 +502,7 @@ func (p *reverseBuildletPool) addBuildlet(b *reverseBuildlet) {
 	defer p.noteBuildletAvailable(b.hostType)
 	defer p.mu.Unlock()
 	p.buildlets = append(p.buildlets, b)
-	p.hostLastGood[b.hostname] = time.Now()
+	p.recordHealthy(b)
 	go p.healthCheckBuildletLoop(b)
 }
 

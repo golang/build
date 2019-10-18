@@ -427,7 +427,7 @@ func newPacketHealthChecker() *healthChecker {
 func newOSUPPC64Checker() *healthChecker {
 	var hosts []string
 	for i := 1; i <= expectedHosts("host-linux-ppc64-osu"); i++ {
-		name := fmt.Sprintf("go-be-%v", i)
+		name := fmt.Sprintf("host-linux-ppc64-osu:go-be-%v", i)
 		hosts = append(hosts, name)
 	}
 	return &healthChecker{
@@ -441,7 +441,7 @@ func newOSUPPC64Checker() *healthChecker {
 func newOSUPPC64leChecker() *healthChecker {
 	var hosts []string
 	for i := 1; i <= expectedHosts("host-linux-ppc64le-osu"); i++ {
-		name := fmt.Sprintf("power_%02d", i)
+		name := fmt.Sprintf("host-linux-ppc64le-osu:power_%02d", i)
 		hosts = append(hosts, name)
 	}
 	return &healthChecker{
@@ -455,7 +455,7 @@ func newOSUPPC64leChecker() *healthChecker {
 func newOSUPPC64lePower9Checker() *healthChecker {
 	var hosts []string
 	for i := 1; i <= expectedHosts("host-linux-ppc64le-power9-osu"); i++ {
-		name := fmt.Sprintf("power_%02d", i)
+		name := fmt.Sprintf("host-linux-ppc64le-power9-osu:power_%02d", i)
 		hosts = append(hosts, name)
 	}
 	return &healthChecker{
