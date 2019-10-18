@@ -77,7 +77,8 @@ var (
 //   22: TrimSpace the reverse buildlet's gobuildkey contents
 //   23: revdial v2
 //   24: removeAllIncludingReadonly
-const buildletVersion = 24
+//   25: use removeAllIncludingReadonly for all work area cleanup
+const buildletVersion = 25
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -193,12 +194,7 @@ func main() {
 				wdName += "-" + *reverseType
 			}
 			dir := filepath.Join(os.TempDir(), wdName)
-			if err := os.RemoveAll(dir); err != nil { // should be no-op
-				log.Fatal(err)
-			}
-			if err := os.Mkdir(dir, 0755); err != nil {
-				log.Fatal(err)
-			}
+			removeAllAndMkdir(dir)
 			*workDir = dir
 		}
 	}
@@ -1831,10 +1827,10 @@ func initBaseUnixEnv() {
 	}
 }
 
-// removeAllAndMkdir calls os.RemoveAll and then os.Mkdir on the given
+// removeAllAndMkdir calls removeAllIncludingReadonly and then os.Mkdir on the given
 // dir, failing the process if either step fails.
 func removeAllAndMkdir(dir string) {
-	if err := os.RemoveAll(dir); err != nil {
+	if err := removeAllIncludingReadonly(dir); err != nil {
 		log.Fatal(err)
 	}
 	if err := os.Mkdir(dir, 0755); err != nil {
