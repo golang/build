@@ -585,6 +585,23 @@ var Hosts = map[string]*HostConfig{
 	},
 }
 
+// CrossCompileConfig describes how to cross-compile a build on a
+// faster host.
+type CrossCompileConfig struct {
+	// CompileHostType is the host type to use for compilation
+	CompileHostType string
+
+	// CCForTarget is the CC_FOR_TARGET environment variable.
+	CCForTarget string
+
+	// GOARM is any GOARM= environment variable.
+	GOARM string
+
+	// AlwaysCrossCompile controls whether this builder always
+	// cross compiles. Otherwise it's only done for trybot runs.
+	AlwaysCrossCompile bool
+}
+
 func init() {
 	for key, c := range Hosts {
 		if key == "" {
@@ -762,6 +779,10 @@ type BuildConfig struct {
 	// commit to be tested's history. If absent, this builder is
 	// not run for that commit.
 	GoDeps []string
+
+	// CrossCompileConfig optionally specifies whether and how
+	// this build is cross compiled.
+	CrossCompileConfig *CrossCompileConfig
 
 	// shouldRunDistTest optionally specifies a function to
 	// override the BuildConfig.ShouldRunDistTest method's
@@ -1651,8 +1672,14 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:              "linux-arm",
-		HostType:          "host-linux-arm-scaleway",
+		Name:     "linux-arm",
+		HostType: "host-linux-arm-scaleway",
+		CrossCompileConfig: &CrossCompileConfig{
+			CompileHostType:    "host-linux-armhf-cross",
+			CCForTarget:        "arm-linux-gnueabihf-gcc",
+			GOARM:              "7",
+			AlwaysCrossCompile: false,
+		},
 		tryBot:            nil, // Issue 22748, Issue 22749
 		FlakyNet:          true,
 		numTestHelpers:    2,
@@ -1662,11 +1689,19 @@ func init() {
 		Name:          "linux-arm-nativemake",
 		Notes:         "runs make.bash on real ARM hardware, but does not run tests",
 		HostType:      "host-linux-arm-scaleway",
+		tryOnly:       true,
+		tryBot:        nil,
 		StopAfterMake: true,
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-arm-arm5spacemonkey",
 		HostType: "host-linux-arm5spacemonkey",
+		CrossCompileConfig: &CrossCompileConfig{
+			CompileHostType:    "host-linux-armel-cross",
+			CCForTarget:        "arm-linux-gnueabi-gcc",
+			GOARM:              "5",
+			AlwaysCrossCompile: true,
+		},
 		env: []string{
 			"GOARM=5",
 			"GO_TEST_TIMEOUT_SCALE=4", // arm is normally 2; double that.

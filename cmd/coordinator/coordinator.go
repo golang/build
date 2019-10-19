@@ -1684,11 +1684,11 @@ func (st *buildStatus) forceSnapshotUsage() {
 	st.useSnapshotMemo = &truth
 }
 
-func (st *buildStatus) getCrossCompileConfig() *crossCompileConfig {
+func (st *buildStatus) getCrossCompileConfig() *dashboard.CrossCompileConfig {
 	if kubeErr != nil {
 		return nil
 	}
-	config := crossCompileConfigs[st.Name]
+	config := st.conf.CrossCompileConfig
 	if config == nil {
 		return nil
 	}
@@ -2021,29 +2021,7 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 	return nil, nil
 }
 
-type crossCompileConfig struct {
-	Buildlet           string
-	CCForTarget        string
-	GOARM              string
-	AlwaysCrossCompile bool
-}
-
-var crossCompileConfigs = map[string]*crossCompileConfig{
-	"linux-arm": {
-		Buildlet:           "host-linux-armhf-cross",
-		CCForTarget:        "arm-linux-gnueabihf-gcc",
-		GOARM:              "7",
-		AlwaysCrossCompile: false,
-	},
-	"linux-arm-arm5spacemonkey": {
-		Buildlet:           "host-linux-armel-cross",
-		CCForTarget:        "arm-linux-gnueabi-gcc",
-		GOARM:              "5",
-		AlwaysCrossCompile: true,
-	},
-}
-
-func (st *buildStatus) crossCompileMakeAndSnapshot(config *crossCompileConfig) (err error) {
+func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompileConfig) (err error) {
 	// TODO: currently we ditch this buildlet when we're done with
 	// the make.bash & snapshot. For extra speed later, we could
 	// keep it around and use it to "go test -c" each stdlib
@@ -2054,7 +2032,7 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *crossCompileConfig) (
 	defer cancel()
 	sp := st.CreateSpan("get_buildlet_cross")
 	kubeBC, err := sched.GetBuildlet(ctx, st, &SchedItem{
-		HostType:   config.Buildlet,
+		HostType:   config.CompileHostType,
 		IsTry:      st.trySet != nil,
 		Pool:       kubePool,
 		BuilderRev: st.BuilderRev,

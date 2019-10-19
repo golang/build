@@ -713,3 +713,16 @@ func TestSlowBotAliases(t *testing.T) {
 		t.Errorf("Missing items from slowBotAliases:\n%s", add.String())
 	}
 }
+
+func TestCrossCompileConfigs(t *testing.T) {
+	// Verify that Builders.CrossCompileConfig have valid host types.
+	for name, bc := range Builders {
+		cc := bc.CrossCompileConfig
+		if cc == nil {
+			continue
+		}
+		if _, ok := Hosts[cc.CompileHostType]; !ok {
+			t.Errorf("unknown host type %q for builder %q", cc.CompileHostType, name)
+		}
+	}
+}
