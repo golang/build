@@ -2,20 +2,15 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-# Linux builder VM running Debian stretch (i.e. Debian testing)
-# Docker tag gobuilders/linux-armhf-stretch
+# Linux builder VM running Debian, with cross compilers for linux-arm.
+# Docker tag gobuilders/linux-armhf-cross
 
 FROM golang/buildlet-stage0 AS stage0
 
-FROM debian:jessie
+FROM debian:buster
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
 ENV DEBIAN_FRONTEND noninteractive
-
-# Add the Debian cross toolchains repository and key
-COPY emdebian-toolchain-archive.key /tmp/
-RUN echo "deb http://emdebian.org/tools/debian/ jessie main" >> /etc/apt/sources.list \
-	&& apt-key add /tmp/emdebian-toolchain-archive.key
 
 # git-core: for interacting with the Go source & subrepos
 # gcc, libc-dev: for building Go's bootstrap 'dist' prog
