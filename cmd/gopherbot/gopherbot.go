@@ -2086,6 +2086,12 @@ func isDocumentationTitle(t string) bool {
 }
 
 func isGoplsTitle(t string) bool {
+	// If the prefix doesn't contain "gopls" or "lsp",
+	// then it may not be a gopls issue.
+	i := strings.Index(t, ":")
+	if i > -1 {
+		t = t[:i]
+	}
 	return strings.Contains(t, "gopls") || strings.Contains(t, "lsp")
 }
 
