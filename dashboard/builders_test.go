@@ -524,6 +524,14 @@ func TestBuilderConfig(t *testing.T) {
 		// that'll never be fixed.
 		{b("freebsd-386-11_2@go1.11", "net"), none},
 		{b("freebsd-386-12_0@go1.11", "net"), none},
+
+		{b("dragonfly-amd64", "go"), onlyPost},
+		{b("dragonfly-amd64", "net"), onlyPost},
+		{b("dragonfly-amd64@go1.13", "net"), none}, // Dragonfly ABI changes only supported by Go 1.14+
+		{b("dragonfly-amd64@go1.13", "go"), none},  // Dragonfly ABI changes only supported by Go 1.14+
+		{b("dragonfly-amd64-5_6", "go"), onlyPost},
+		{b("dragonfly-amd64-5_6", "net"), onlyPost},
+		{b("dragonfly-amd64-5_6@go1.13", "net"), onlyPost},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {

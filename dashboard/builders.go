@@ -331,6 +331,16 @@ var Hosts = map[string]*HostConfig{
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/pkg/go112"},
 		OwnerGithub: "bsiegert",
 	},
+	// Our DragonFly builder doesn't yet run on GCE
+	// (golang.org/issue/23060), so @bradfitz currently runs the
+	// release version at home, and @tdfbsd runs one somewhere
+	// running the bleeding edge version.
+	"host-dragonfly-amd64-bradfitz": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   1,
+		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+		OwnerGithub: "bradfitz",
+	},
 	"host-dragonfly-amd64-tdfbsd": &HostConfig{
 		IsReverse:      true,
 		ExpectNum:      1,
@@ -2214,8 +2224,14 @@ func init() {
 				// (https://golang.org/issue/32836)
 				return false
 			}
-			return defaultBuildsRepoPolicy(repo, branch, goBranch)
+			return atLeastGo1(goBranch, 14) && defaultBuildsRepoPolicy(repo, branch, goBranch)
 		},
+	})
+	addBuilder(BuildConfig{
+		Name:              "dragonfly-amd64-5_6",
+		HostType:          "host-dragonfly-amd64-bradfitz",
+		shouldRunDistTest: noTestDir,
+		SkipSnapshot:      true,
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-arm-paulzhol",
