@@ -3102,7 +3102,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 			ti.numFail++
 			st.logf("Execution error running %s on %s: %v (numFails = %d)", ti.name, bc, err, ti.numFail)
 			if err == buildlet.ErrTimeout {
-				ti.failf("Test %q ran over %v limit (%v)", ti.name, timeout, execDuration)
+				ti.failf("Test %q ran over %v limit (%v); saw output:\n%s", ti.name, timeout, execDuration, buf.Bytes())
 			} else if ti.numFail >= maxTestExecErrors {
 				ti.failf("Failed to schedule %q test after %d tries.\n", ti.name, maxTestExecErrors)
 			} else {
