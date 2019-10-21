@@ -1682,6 +1682,20 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
+		Name:      "linux-386-longtest",
+		HostType:  "host-linux-stretch-morecpu",
+		MaxAtOnce: 1,
+		Notes:     "Debian Stretch with go test -short=false; to get 32-bit coverage",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "go" || (branch == "master" && goBranch == "master")
+		},
+		needsGoProxy: true, // for cmd/go module tests
+		env: []string{
+			"GO_TEST_SHORT=0",
+			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
+		},
+	})
+	addBuilder(BuildConfig{
 		Name:     "linux-arm",
 		HostType: "host-linux-arm-scaleway",
 		CrossCompileConfig: &CrossCompileConfig{
@@ -1970,6 +1984,20 @@ func init() {
 		},
 		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 5,
+	})
+	addBuilder(BuildConfig{
+		Name:      "windows-amd64-longtest",
+		HostType:  "host-windows-amd64-2016",
+		MaxAtOnce: 1,
+		Notes:     "Windows Server 2016 with go test -short=false",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "go" || (branch == "master" && goBranch == "master")
+		},
+		needsGoProxy: true, // for cmd/go module tests
+		env: []string{
+			"GO_TEST_SHORT=0",
+			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-race",
