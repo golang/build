@@ -1103,7 +1103,9 @@ func (r *Repo) fetch() (err error) {
 		if n > 1 {
 			r.setStatus(fmt.Sprintf("running git fetch origin, attempt %d", n))
 		}
-		cmd := exec.Command("git", "fetch", "--prune", "origin")
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "git", "fetch", "--prune", "origin")
 		cmd.Dir = r.root
 		if out, err := cmd.CombinedOutput(); err != nil {
 			err = fmt.Errorf("%v\n\n%s", err, out)
