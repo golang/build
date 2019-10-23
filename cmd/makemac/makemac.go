@@ -585,15 +585,23 @@ func autoAdjust() {
 	ctx, cancel := context.WithTimeout(context.Background(), autoAdjustTimeout)
 	defer cancel()
 
+	ro := isFileSystemReadOnly()
+
 	st, err := getState(ctx)
 	if err != nil {
 		status.Lock()
+		if ro {
+			status.errors = append(status.errors, "Host filesystem is read-only")
+		}
 		status.errors = []string{err.Error()}
 		status.Unlock()
 		log.Print(err)
 		return
 	}
 	var warnings, errors []string
+	if ro {
+		errors = append(errors, "Host filesystem is read-only")
+	}
 	defer func() {
 		// Set status.lastState once we're now longer using it.
 		if st != nil {
