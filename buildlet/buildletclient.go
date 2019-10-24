@@ -148,7 +148,8 @@ type Client struct {
 	baseURL        string                                  // optional baseURL (used by remote buildlets)
 	authUser       string                                  // defaults to "gomote", if password is non-empty
 	password       string                                  // basic auth password or empty for none
-	remoteBuildlet string                                  // non-empty if for remote buildlets
+	remoteBuildlet string                                  // non-empty if for remote buildlets (used by client)
+	name           string                                  // optional name for debugging, returned by Name
 
 	closeFuncs  []func() // optional extra code to run on close
 	releaseMode bool
@@ -205,7 +206,19 @@ func (c *Client) URL() string {
 
 func (c *Client) IPPort() string { return c.ipPort }
 
+func (c *Client) SetName(name string) { c.name = name }
+
+// Name returns the name of this buildlet.
+// It returns the first non-empty string from the name given to
+// SetName, its remote buildlet name, its ip:port, or "(unnamed-buildlet)" in the case where
+// ip:port is empty because there's a custom dialer.
 func (c *Client) Name() string {
+	if c.name != "" {
+		return c.name
+	}
+	if c.remoteBuildlet != "" {
+		return c.remoteBuildlet
+	}
 	if c.ipPort != "" {
 		return c.ipPort
 	}
@@ -235,9 +248,6 @@ func (c *Client) authUsername() string {
 }
 
 func (c *Client) do(req *http.Request) (*http.Response, error) {
-	if req.Cancel == nil {
-		req.Cancel = c.ctx.Done()
-	}
 	c.initHeartbeatOnce.Do(c.initHeartbeats)
 	if c.password != "" {
 		req.SetBasicAuth(c.authUsername(), c.password)
@@ -305,11 +315,12 @@ func (c *Client) doHeaderTimeout(req *http.Request, max time.Duration) (res *htt
 		err error
 	}
 
-	if req.Cancel != nil {
-		panic("use of Request.Cancel inside the buildlet package is reserved for doHeaderTimeout")
-	}
-	cancelc := make(chan struct{}) // closed to abort
-	req.Cancel = cancelc
+	ctx, cancel := context.WithCancel(req.Context())
+
+	req = req.WithContext(ctx)
+
+	timer := time.NewTimer(max)
+	defer timer.Stop()
 
 	resErrc := make(chan resErr, 1)
 	go func() {
@@ -317,11 +328,8 @@ func (c *Client) doHeaderTimeout(req *http.Request, max time.Duration) (res *htt
 		resErrc <- resErr{res, err}
 	}()
 
-	timer := time.NewTimer(max)
-	defer timer.Stop()
-
 	cleanup := func() {
-		close(cancelc)
+		cancel()
 		if re := <-resErrc; re.res != nil {
 			re.res.Body.Close()
 		}
@@ -329,11 +337,20 @@ func (c *Client) doHeaderTimeout(req *http.Request, max time.Duration) (res *htt
 
 	select {
 	case re := <-resErrc:
-		return re.res, re.err
+		if re.err != nil {
+			cancel()
+			return nil, re.err
+		}
+		// Clean up our cancel context above when the caller
+		// reads to the end of the response body or closes.
+		re.res.Body = onEOFReadCloser{re.res.Body, cancel}
+		return re.res, nil
 	case <-c.peerDead:
+		log.Printf("%s: peer dead with %v, waiting for headers for %v", c.Name(), c.deadErr, req.URL.Path)
 		go cleanup()
 		return nil, c.deadErr
 	case <-timer.C:
+		log.Printf("%s: timeout after %v waiting for headers for %v", c.Name(), max, req.URL.Path)
 		go cleanup()
 		return nil, errHeaderTimeout
 	}
@@ -834,4 +851,22 @@ func condRun(fn func()) {
 	if fn != nil {
 		fn()
 	}
+}
+
+type onEOFReadCloser struct {
+	rc io.ReadCloser
+	fn func()
+}
+
+func (o onEOFReadCloser) Read(p []byte) (n int, err error) {
+	n, err = o.rc.Read(p)
+	if err == io.EOF {
+		o.fn()
+	}
+	return
+}
+
+func (o onEOFReadCloser) Close() error {
+	o.fn()
+	return o.rc.Close()
 }

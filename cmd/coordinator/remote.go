@@ -185,6 +185,7 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 				Expires:     time.Now().Add(remoteBuildletIdleTimeout),
 			}
 			rb.Name = addRemoteBuildlet(rb)
+			bc.SetName(rb.Name)
 			jenc, err := json.MarshalIndent(rb, "", "  ")
 			if err != nil {
 				http.Error(w, err.Error(), 500)
