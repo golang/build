@@ -2292,6 +2292,9 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "freebsd-arm64-dmgk",
 		HostType: "host-freebsd-arm64-dmgk",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return atLeastGo1(goBranch, 14) && defaultBuildsRepoPolicy(repo, branch, goBranch)
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:              "plan9-arm",
