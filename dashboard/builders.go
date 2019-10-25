@@ -58,6 +58,7 @@ var slowBotAliases = map[string]string{
 	"freebsd-386":    "freebsd-386-12_0",
 	"freebsd-amd64":  "freebsd-amd64-12_0",
 	"freebsd-arm":    "freebsd-arm-paulzhol",
+	"freebsd-arm64":  "freebsd-arm64-dmgk",
 	"illumos":        "illumos-amd64",
 	"ios":            "darwin-arm64-corellium",
 	"js":             "js-wasm",
