@@ -1214,6 +1214,38 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		}
 	}
 
+	// For the Go project on the "master" branch,
+	// use the TRY= syntax to test against x repos.
+	if branch := key.Branch; key.Project == "go" && branch == "master" {
+		xrepos := xReposFromComments(work)
+
+		// linuxBuilder is the standard builder as it is the fastest and least expensive.
+		linuxBuilder := dashboard.Builders["linux-amd64"]
+		for _, project := range xrepos {
+			if !linuxBuilder.BuildsRepoTryBot(project, branch, branch) {
+				continue
+			}
+			rev, err := getRepoHead(project)
+			if err != nil {
+				log.Printf("can't determine repo head for %q: %v", project, err)
+				continue
+			}
+			brev := buildgo.BuilderRev{
+				Name:    linuxBuilder.Name,
+				Rev:     goRev,
+				SubName: project,
+				SubRev:  rev,
+			}
+			bs, err := newBuild(brev)
+			if err != nil {
+				log.Printf("can't create build for %q: %v", rev, err)
+				continue
+			}
+			bs.goBranch = branch
+			addBuilderToSet(bs, brev)
+		}
+	}
+
 	return ts
 }
 
@@ -3660,22 +3692,13 @@ func importPathOfRepo(repo string) string {
 // should be tested in addition to the ones provided in the existing
 // slice.
 func slowBotsFromComments(work *apipb.GerritTryWorkItem, existing []*dashboard.BuildConfig) (extraBuilders []*dashboard.BuildConfig) {
-	tryMsg := latestTryMessage(work) // "aix, darwin, linux-386-387, arm64"
-	if tryMsg == "" {
-		return nil
-	}
-	if len(tryMsg) > 1<<10 { // arbitrary sanity
-		return nil
-	}
-
 	have := map[string]bool{}
 	for _, bc := range existing {
 		have[bc.Name] = true
 	}
 
-	tryTerms := strings.FieldsFunc(tryMsg, func(c rune) bool {
-		return !unicode.IsLetter(c) && !unicode.IsNumber(c) && c != '-' && c != '_'
-	})
+	tryTerms := latestTryTerms(work)
+
 	for _, bc := range dashboard.Builders {
 		if have[bc.Name] {
 			continue
@@ -3691,6 +3714,40 @@ func slowBotsFromComments(work *apipb.GerritTryWorkItem, existing []*dashboard.B
 		return extraBuilders[i].Name < extraBuilders[j].Name
 	})
 	return
+}
+
+// xReposFromComments looks at the TRY= comments from Gerrit (in
+// work) and returns any additional subrepos that should be tested.
+// The TRY= comments are expected to be of the format TRY=x/foo,
+// where foo is the name of the subrepo.
+func xReposFromComments(work *apipb.GerritTryWorkItem) (xrepos []string) {
+	have := map[string]bool{}
+	for _, term := range latestTryTerms(work) {
+		if len(term) < len("x/_") || term[:2] != "x/" {
+			continue
+		}
+		xrepo := term[2:]
+		if have[xrepo] {
+			continue
+		}
+		have[xrepo] = true
+		xrepos = append(xrepos, xrepo)
+	}
+	return xrepos
+}
+
+// latestTryTerms returns the terms that follow the TRY= syntax in Gerrit comments.
+func latestTryTerms(work *apipb.GerritTryWorkItem) []string {
+	tryMsg := latestTryMessage(work) // "aix, darwin, linux-386-387, arm64, x/tools"
+	if tryMsg == "" {
+		return nil
+	}
+	if len(tryMsg) > 1<<10 { // arbitrary sanity
+		return nil
+	}
+	return strings.FieldsFunc(tryMsg, func(c rune) bool {
+		return !unicode.IsLetter(c) && !unicode.IsNumber(c) && c != '-' && c != '_' && c != '/'
+	})
 }
 
 func latestTryMessage(work *apipb.GerritTryWorkItem) string {

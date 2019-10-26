@@ -250,3 +250,24 @@ func TestSlowBotsFromComments(t *testing.T) {
 		t.Errorf("mismatch:\n got: %q\nwant: %q\n", got, want)
 	}
 }
+
+func TestSubreposFromComments(t *testing.T) {
+	work := &apipb.GerritTryWorkItem{
+		Version: 2,
+		TryMessage: []*apipb.TryVoteMessage{
+			{
+				Version: 2,
+				Message: "x/build, x/sync x/tools, x/sync",
+			},
+		},
+	}
+	extra := xReposFromComments(work)
+	var got []string
+	for _, name := range extra {
+		got = append(got, name)
+	}
+	want := []string{"build", "sync", "tools"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("mismatch:\n got: %q\nwant: %q\n", got, want)
+	}
+}
