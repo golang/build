@@ -11,7 +11,7 @@ require (
 	github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568 // indirect
 	github.com/gliderlabs/ssh v0.1.1
 	github.com/golang/protobuf v1.3.1
-	github.com/google/go-cmp v0.3.0
+	github.com/google/go-cmp v0.3.2-0.20191028172631-481baca67f93
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7
