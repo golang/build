@@ -1057,6 +1057,7 @@ type trySet struct {
 	tryKey
 	tryID    string                   // "T" + 9 random hex
 	slowBots []*dashboard.BuildConfig // any opt-in slower builders to run in a trybot run
+	xrepos   []*buildStatus           // any opt-in x/ repo builds to run in a trybot run
 
 	// wantedAsOf is guarded by statusMu and is used by
 	// findTryWork. It records the last time this tryKey was still
@@ -1232,7 +1233,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 			}
 			brev := buildgo.BuilderRev{
 				Name:    linuxBuilder.Name,
-				Rev:     goRev,
+				Rev:     work.Commit,
 				SubName: project,
 				SubRev:  rev,
 			}
@@ -1241,7 +1242,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 				log.Printf("can't create build for %q: %v", rev, err)
 				continue
 			}
-			bs.goBranch = branch
+			ts.xrepos = append(ts.xrepos, bs)
 			addBuilderToSet(bs, brev)
 		}
 	}
@@ -1447,6 +1448,12 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 			fmt.Fprintf(&buf, "Extra slowbot builds that ran:\n")
 			for _, c := range ts.slowBots {
 				fmt.Fprintf(&buf, "* %s\n", c.Name)
+			}
+		}
+		if len(ts.xrepos) > 0 {
+			fmt.Fprintf(&buf, "Also tested the following repos:\n")
+			for _, st := range ts.xrepos {
+				fmt.Fprintf(&buf, st.NameAndBranch())
 			}
 		}
 		// TODO: provide a link in the final report that links to a permanent summary page
@@ -3363,6 +3370,11 @@ func (st *buildStatus) NameAndBranch() string {
 		// fall back to something verbose until we add a
 		// special case:
 		return fmt.Sprintf("%s (go branch %s)", st.Name, st.goBranch)
+	}
+	// For an x repo running on a go CL, say
+	// "x/tools (linux-amd64)"
+	if st.SubName != "" {
+		return fmt.Sprintf("x/%s (%s)", st.SubName, st.Name)
 	}
 	return st.Name
 }

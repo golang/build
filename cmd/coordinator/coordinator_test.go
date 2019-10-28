@@ -271,3 +271,41 @@ func TestSubreposFromComments(t *testing.T) {
 		t.Errorf("mismatch:\n got: %q\nwant: %q\n", got, want)
 	}
 }
+
+func TestBuildStatusFormat(t *testing.T) {
+	for i, tt := range []struct {
+		st   *buildStatus
+		want string
+	}{
+		{
+			st: &buildStatus{
+				BuilderRev: buildgo.BuilderRev{
+					Name:    "linux-amd64",
+					SubName: "tools",
+				},
+			},
+			want: "x/tools (linux-amd64)",
+		},
+		{
+			st: &buildStatus{
+				BuilderRev: buildgo.BuilderRev{
+					Name: "darwin-amd64-10_14",
+				},
+			},
+			want: "darwin-amd64-10_14",
+		},
+		{
+			st: &buildStatus{
+				BuilderRev: buildgo.BuilderRev{
+					Name: "darwin-amd64-10_14",
+				},
+				goBranch: "release-branch.go1.15",
+			},
+			want: "darwin-amd64-10_14 (Go 1.15.x)",
+		},
+	} {
+		if got := tt.st.NameAndBranch(); got != tt.want {
+			t.Errorf("%d: NameAndBranch = %q; want %q", i, got, tt.want)
+		}
+	}
+}
