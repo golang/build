@@ -2013,6 +2013,9 @@ func init() {
 		MaxAtOnce: 1,
 		Notes:     "Windows Server 2016 with go test -short=false",
 		buildsRepo: func(repo, branch, goBranch string) bool {
+			if !defaultPlusExp(repo, branch, goBranch) {
+				return false
+			}
 			return repo == "go" || (branch == "master" && goBranch == "master")
 		},
 		needsGoProxy: true, // for cmd/go module tests
