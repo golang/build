@@ -150,11 +150,13 @@ func checkFix() error {
 		}
 		cmd := exec.Command("docker", "run",
 			"-d",
-			"--memory="+*memory,
 			"--name="+name,
 			"-v", filepath.Dir(keyFile)+":/buildkey/",
 			"-e", "HOSTNAME="+name,
 			"--tmpfs=/workdir:rw,exec")
+		if *memory != "" {
+			cmd.Args = append(cmd.Args, "--memory="+*memory)
+		}
 		if *builderEnv != "" {
 			cmd.Args = append(cmd.Args, "-e", "GO_BUILDER_ENV="+*builderEnv)
 		}

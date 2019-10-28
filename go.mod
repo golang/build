@@ -20,7 +20,7 @@ require (
 	github.com/kr/pty v1.1.3
 	github.com/tarm/serial v0.0.0-20180830185346-98f6abe2eb07
 	go4.org v0.0.0-20180809161055-417644f6feb5
-	golang.org/x/crypto v0.0.0-20190424203555-c05e17bb3b2d
+	golang.org/x/crypto v0.0.0-20190510104115-cbcb75029529
 	golang.org/x/net v0.0.0-20190502183928-7f726cade0ab
 	golang.org/x/oauth2 v0.0.0-20190402181905-9f3314589c9a
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852

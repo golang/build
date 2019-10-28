@@ -90,8 +90,6 @@ func main() {
 		default:
 			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
 		}
-	case "linux/ppc64":
-		initOregonStatePPC64()
 	case "darwin/amd64":
 		// The MacStadium builders' baked-in stage0.sh
 		// bootstrap file doesn't set GO_BUILDER_ENV
@@ -169,6 +167,8 @@ Download:
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	case "host-linux-ppc64le-osu": // power8
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+	case "host-linux-ppc64-osu":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	}
 	switch osArch {
 	case "linux/s390x":
@@ -189,10 +189,6 @@ Download:
 		default:
 			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
 		}
-	case "linux/ppc64":
-		// Assume OSU (osuosl.org) host type for now. If we get more, use
-		// GO_BUILD_HOST_TYPE (see above) and check that.
-		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-ppc64-osu")...)
 	case "solaris/amd64", "illumos/amd64":
 		hostType := buildEnv
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(hostType)...)
@@ -407,11 +403,6 @@ func initBootstrapDir(destDir, tgzCache string) {
 		log.Fatalf("error untarring %s to %s: %s", tgzCache, destDir, out)
 	}
 	log.Printf("untarred %s to %s in %v", tgzCache, destDir, time.Since(t1).Round(time.Second/10))
-}
-
-func initOregonStatePPC64() {
-	aptGetInstall("gcc", "strace", "libc6-dev", "gdb")
-	initBootstrapDir("/usr/local/go-bootstrap", "/usr/local/go-bootstrap.tar.gz")
 }
 
 func isUnix() bool {

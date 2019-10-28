@@ -1,0 +1,15 @@
+diff --git a/Makefile.linux b/Makefile.linux
+index 2de23a1..8500cc2 100644
+--- a/Makefile.linux
++++ b/Makefile.linux
+@@ -18,8 +18,10 @@ COMMANDS += containerd-shim containerd-shim-runc-v1
+ 
+ # check GOOS for cross compile builds
+ ifeq ($(GOOS),linux)
++ifneq ($(GOARCH),ppc64)
+ 	GO_GCFLAGS += -buildmode=pie
+ endif
++endif
+ 
+ # amd64 supports go test -race
+ ifeq ($(GOARCH),amd64)

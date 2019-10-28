@@ -14,7 +14,6 @@ package main // import "golang.org/x/build/cmd/buildlet"
 
 import (
 	"archive/tar"
-	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -43,7 +42,6 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/build/buildlet"
-	"golang.org/x/build/internal/httpdl"
 	"golang.org/x/build/pargzip"
 )
 
@@ -257,45 +255,6 @@ func initGorootBootstrap() {
 
 	// Default if not otherwise configured in dashboard/builders.go:
 	os.Setenv("GOROOT_BOOTSTRAP", filepath.Join(*workDir, "go1.4"))
-
-	if runtime.GOOS == "linux" && runtime.GOARCH == "ppc64" {
-		downloadBootstrapGoroot("/usr/local/go-bootstrap", "https://storage.googleapis.com/go-builder-data/gobootstrap-linux-ppc64.tar.gz")
-	}
-}
-
-func downloadBootstrapGoroot(destDir, url string) {
-	tarPath := destDir + ".tar.gz"
-	origInfo, err := os.Stat(tarPath)
-	if err != nil && !os.IsNotExist(err) {
-		log.Fatalf("Checking for tar existence: %v", err)
-	}
-	if err := httpdl.Download(tarPath, url); err != nil {
-		log.Fatalf("Downloading %s to %s: %v", url, tarPath, err)
-	}
-	newInfo, err := os.Stat(tarPath)
-	if err != nil {
-		log.Fatalf("Stat after download: %v", err)
-	}
-	if os.SameFile(origInfo, newInfo) {
-		// The file on disk was unmodified, so we probably untarred it already.
-		return
-	}
-	if err := os.RemoveAll(destDir); err != nil {
-		log.Fatal(err)
-	}
-	if err := os.MkdirAll(destDir, 0755); err != nil {
-		log.Fatal(err)
-	}
-	f, err := os.Open(tarPath)
-	if err != nil {
-		log.Fatalf("Opening after download: %v", err)
-	}
-	defer f.Close()
-	if err := untar(f, destDir); err != nil {
-		os.Remove(tarPath)
-		os.RemoveAll(destDir)
-		log.Fatalf("Untarring %s: %v", url, err)
-	}
 }
 
 func listenForCoordinator() {
@@ -1205,7 +1164,7 @@ func doHalt() {
 			err = errors.New("not respecting -halt flag on macOS in unknown environment")
 		}
 	default:
-		err = errors.New("No system-specific halt command run; will just end buildlet process.")
+		err = errors.New("no system-specific halt command run; will just end buildlet process")
 	}
 	log.Printf("Shutdown: %v", err)
 	log.Printf("Ending buildlet process post-halt")
@@ -1614,15 +1573,6 @@ func (pw *plan9LogWriter) Write(p []byte) (n int, err error) {
 	return pw.w.Write(pw.buf[:n+1])
 }
 
-func requireTrailerSupport() {
-	// Depend on a symbol that was added after HTTP Trailer support was
-	// implemented (4b96409 Dec 29 2014) so that this function will fail
-	// to compile without Trailer support.
-	// bufio.Reader.Discard was added by ee2ecc4 Jan 7 2015.
-	var r bufio.Reader
-	_ = r.Discard
-}
-
 var killProcessTree = killProcessTreeUnix
 
 func killProcessTreeUnix(p *os.Process) error {
@@ -1804,7 +1754,7 @@ func appendSSHAuthorizedKey(sshUser, authKey string) error {
 	}
 	if runtime.GOOS == "windows" {
 		if res, err := exec.Command("icacls.exe", authFile, "/grant", `NT SERVICE\sshd:(R)`).CombinedOutput(); err != nil {
-			return fmt.Errorf("setting permissions on authorized_keys with: %v\n%s.", err, res)
+			return fmt.Errorf("setting permissions on authorized_keys with: %v\n%s", err, res)
 		}
 	}
 	return nil
