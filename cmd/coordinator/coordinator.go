@@ -1453,7 +1453,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 		if len(ts.xrepos) > 0 {
 			fmt.Fprintf(&buf, "Also tested the following repos:\n")
 			for _, st := range ts.xrepos {
-				fmt.Fprintf(&buf, st.NameAndBranch())
+				fmt.Fprintf(&buf, "* %s\n", st.NameAndBranch())
 			}
 		}
 		// TODO: provide a link in the final report that links to a permanent summary page
