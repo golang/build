@@ -25,12 +25,6 @@ import (
 // syntax entirely. This is a first draft.
 var slowBotAliases = map[string]string{
 	// Known missing builders:
-	"linux-mips":    "",
-	"linux-mips64":  "",
-	"linux-mipsle":  "",
-	"mips":          "",
-	"mips64":        "",
-	"mipsle":        "",
 	"netbsd-arm64":  "",
 	"openbsd-arm":   "",
 	"openbsd-arm64": "",
@@ -64,13 +58,19 @@ var slowBotAliases = map[string]string{
 	"js":             "js-wasm",
 	"linux":          "linux-amd64",
 	"linux-arm64":    "linux-arm64-packet",
+	"linux-mips":     "linux-mips-rtrk",
+	"linux-mips64":   "linux-mips64-rtrk",
 	"linux-mips64le": "linux-mips64le-mengzhuo",
+	"linux-mipsle":   "linux-mipsle-rtrk",
 	"linux-ppc64":    "linux-ppc64-buildlet",
 	"linux-ppc64le":  "linux-ppc64le-buildlet",
 	"linux-s390x":    "linux-s390x-ibm",
 	"mac":            "darwin-amd64-10_14",
 	"macos":          "darwin-amd64-10_14",
+	"mips":           "linux-mips-rtrk",
+	"mips64":         "linux-mips64-rtrk",
 	"mips64le":       "linux-mips64le-mengzhuo",
+	"mipsle":         "linux-mipsle-rtrk",
 	"nacl":           "nacl-amd64p32",
 	"nacl-387":       "nacl-386",
 	"nacl-arm64p32":  "nacl-amd64p32",
@@ -554,13 +554,31 @@ var Hosts = map[string]*HostConfig{
 		env:         []string{"GOROOT_BOOTSTRAP=/opt/golang/go-solaris-amd64-bootstrap"},
 	},
 	"host-linux-mipsle-mengzhuo": &HostConfig{
-		Notes:       "Loongson 3A Box hosted by Meng Zhuo",
+		Notes:       "Loongson 3A Box hosted by Meng Zhuo; actually MIPS64 despite the name",
 		OwnerGithub: "mengzhuo",
 		IsReverse:   true,
 		ExpectNum:   1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/lib/golang",
 			"GOMIPS64=hardfloat",
+		},
+	},
+	"host-linux-mips64le-rtrk": &HostConfig{
+		Notes:       "cavium,rhino_utm8 board hosted at RT-RK.com; quad-core cpu, 8GB of ram and 240GB ssd disks.",
+		OwnerGithub: "bogojevic", // and @milanknezevic. https://github.com/golang/go/issues/31217#issuecomment-547004892
+		IsReverse:   true,
+		ExpectNum:   1,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
+		},
+	},
+	"host-linux-mips64-rtrk": &HostConfig{
+		Notes:       "cavium,rhino_utm8 board hosted at RT-RK.com; quad-core cpu, 8GB of ram and 240GB ssd disks.",
+		OwnerGithub: "bogojevic", // and @milanknezevic. https://github.com/golang/go/issues/31217#issuecomment-547004892
+		IsReverse:   true,
+		ExpectNum:   1,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
 		},
 	},
 	"host-darwin-amd64-zenly-ios": &HostConfig{
@@ -2231,17 +2249,63 @@ func init() {
 		FlakyNet: true, // maybe not flaky, but here conservatively
 	})
 	addBuilder(BuildConfig{
-		FlakyNet:     true,
-		HostType:     "host-linux-mipsle-mengzhuo",
-		Name:         "linux-mips64le-mengzhuo",
-		SkipSnapshot: true,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			switch repo {
-			case "go", "net", "sys":
-				return branch == "master" && goBranch == "master"
-			default:
-				return false
-			}
+		FlakyNet:          true,
+		HostType:          "host-linux-mipsle-mengzhuo",
+		Name:              "linux-mips64le-mengzhuo",
+		SkipSnapshot:      true,
+		shouldRunDistTest: mipsDistTestPolicy,
+		buildsRepo:        mipsBuildsRepoPolicy,
+		env: []string{
+			"GOARCH=mips64le",
+			"GOHOSTARCH=mips64le",
+		},
+	})
+	addBuilder(BuildConfig{
+		FlakyNet:          true,
+		HostType:          "host-linux-mips64le-rtrk",
+		Name:              "linux-mips64le-rtrk",
+		SkipSnapshot:      true,
+		shouldRunDistTest: mipsDistTestPolicy,
+		buildsRepo:        mipsBuildsRepoPolicy,
+		env: []string{
+			"GOARCH=mips64le",
+			"GOHOSTARCH=mips64le",
+		},
+	})
+	addBuilder(BuildConfig{
+		FlakyNet:          true,
+		HostType:          "host-linux-mips64le-rtrk",
+		Name:              "linux-mipsle-rtrk",
+		SkipSnapshot:      true,
+		shouldRunDistTest: mipsDistTestPolicy,
+		buildsRepo:        mipsBuildsRepoPolicy,
+		env: []string{
+			"GOARCH=mipsle",
+			"GOHOSTARCH=mipsle",
+		},
+	})
+	addBuilder(BuildConfig{
+		FlakyNet:          true,
+		HostType:          "host-linux-mips64-rtrk",
+		Name:              "linux-mips64-rtrk",
+		SkipSnapshot:      true,
+		shouldRunDistTest: mipsDistTestPolicy,
+		buildsRepo:        mipsBuildsRepoPolicy,
+		env: []string{
+			"GOARCH=mips64",
+			"GOHOSTARCH=mips64",
+		},
+	})
+	addBuilder(BuildConfig{
+		FlakyNet:          true,
+		HostType:          "host-linux-mips64-rtrk",
+		Name:              "linux-mips-rtrk",
+		SkipSnapshot:      true,
+		shouldRunDistTest: mipsDistTestPolicy,
+		buildsRepo:        mipsBuildsRepoPolicy,
+		env: []string{
+			"GOARCH=mips",
+			"GOHOSTARCH=mips",
 		},
 	})
 	addBuilder(BuildConfig{
@@ -2447,6 +2511,27 @@ func ppc64DistTestPolicy(distTest string, isTry bool) bool {
 		return false
 	}
 	return true
+}
+
+// mipsDistTestPolicy is a shouldRunDistTest policy function
+// that's shared by the slow mips builders.
+func mipsDistTestPolicy(distTest string, isTry bool) bool {
+	switch distTest {
+	case "api", "reboot":
+		return false
+	}
+	return true
+}
+
+// mipsBuildsRepoPolicy is a buildsRepo policy function
+// that's shared by the slow mips builders.
+func mipsBuildsRepoPolicy(repo, branch, goBranch string) bool {
+	switch repo {
+	case "go", "net", "sys":
+		return branch == "master" && goBranch == "master"
+	default:
+		return false
+	}
 }
 
 // TryBuildersForProject returns the builders that should run as part of
