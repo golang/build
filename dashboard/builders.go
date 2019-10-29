@@ -2208,19 +2208,22 @@ func init() {
 		Notes:    "Oracle Solaris release version",
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-ppc64-buildlet",
-		HostType: "host-linux-ppc64-osu",
-		FlakyNet: true,
+		Name:              "linux-ppc64-buildlet",
+		HostType:          "host-linux-ppc64-osu",
+		FlakyNet:          true,
+		shouldRunDistTest: ppc64DistTestPolicy,
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-ppc64le-buildlet",
-		HostType: "host-linux-ppc64le-osu",
-		FlakyNet: true,
+		Name:              "linux-ppc64le-buildlet",
+		HostType:          "host-linux-ppc64le-osu",
+		FlakyNet:          true,
+		shouldRunDistTest: ppc64DistTestPolicy,
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-ppc64le-power9osu",
-		HostType: "host-linux-ppc64le-power9-osu",
-		FlakyNet: true,
+		Name:              "linux-ppc64le-power9osu",
+		HostType:          "host-linux-ppc64le-power9-osu",
+		FlakyNet:          true,
+		shouldRunDistTest: ppc64DistTestPolicy,
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-arm64-packet",
@@ -2431,6 +2434,17 @@ func fasterTrybots(distTest string, isTry bool) bool {
 func noTestDir(distTest string, isTry bool) bool {
 	if strings.HasPrefix(distTest, "test:") || distTest == "reboot" {
 		return false // skip test
+	}
+	return true
+}
+
+// ppc64DistTestPolicy is a shouldRunDistTest policy function
+// that's shared by linux-ppc64le, -ppc64le-power9osu, and -ppc64.
+func ppc64DistTestPolicy(distTest string, isTry bool) bool {
+	if distTest == "reboot" {
+		// Skip test. It seems to use a lot of memory?
+		// See https://golang.org/issue/35233.
+		return false
 	}
 	return true
 }
