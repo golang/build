@@ -844,7 +844,7 @@ func (c *BuildConfig) Env() []string {
 	if c.FlakyNet {
 		env = append(env, "GO_BUILDER_FLAKY_NET=1")
 	}
-	env = append(env, c.hostConf().env...)
+	env = append(env, c.HostConfig().env...)
 	return append(env, c.env...)
 }
 
@@ -900,12 +900,12 @@ func (*BuildConfig) ShouldTestPackageInGOPATHMode(importPath string) bool {
 	return true
 }
 
-func (c *BuildConfig) IsReverse() bool { return c.hostConf().IsReverse }
+func (c *BuildConfig) IsReverse() bool { return c.HostConfig().IsReverse }
 
-func (c *BuildConfig) IsContainer() bool { return c.hostConf().IsContainer() }
+func (c *BuildConfig) IsContainer() bool { return c.HostConfig().IsContainer() }
 func (c *HostConfig) IsContainer() bool  { return c.ContainerImage != "" }
 
-func (c *BuildConfig) IsVM() bool { return c.hostConf().IsVM() }
+func (c *BuildConfig) IsVM() bool { return c.HostConfig().IsVM() }
 func (c *HostConfig) IsVM() bool  { return c.VMImage != "" }
 
 func (c *BuildConfig) GOOS() string { return c.Name[:strings.Index(c.Name, "-")] }
@@ -955,7 +955,7 @@ func (c *BuildConfig) DistTestsExecTimeout(distTests []string) time.Duration {
 // timeoutScale returns this builder's GO_TEST_TIMEOUT_SCALE value, or 1.
 func (c *BuildConfig) timeoutScale() int {
 	const pfx = "GO_TEST_TIMEOUT_SCALE="
-	for _, env := range [][]string{c.env, c.hostConf().env} {
+	for _, env := range [][]string{c.env, c.HostConfig().env} {
 		for _, kv := range env {
 			if strings.HasPrefix(kv, pfx) {
 				if n, err := strconv.Atoi(kv[len(pfx):]); err == nil && n > 0 {
@@ -967,7 +967,8 @@ func (c *BuildConfig) timeoutScale() int {
 	return 1
 }
 
-func (c *BuildConfig) hostConf() *HostConfig {
+// HostConfig returns the host configuration of c.
+func (c *BuildConfig) HostConfig() *HostConfig {
 	if c.testHostConf != nil {
 		return c.testHostConf
 	}
@@ -980,7 +981,7 @@ func (c *BuildConfig) hostConf() *HostConfig {
 // GoBootstrapURL returns the URL of a built Go 1.4+ tar.gz for the
 // build configuration type c, or empty string if there isn't one.
 func (c *BuildConfig) GoBootstrapURL(e *buildenv.Environment) string {
-	return strings.Replace(c.hostConf().goBootstrapURLTmpl, "$BUCKET", e.BuildletBucket, 1)
+	return strings.Replace(c.HostConfig().goBootstrapURLTmpl, "$BUCKET", e.BuildletBucket, 1)
 }
 
 // BuildletBinaryURL returns the public URL of this builder's buildlet.
@@ -1240,7 +1241,7 @@ func (c *HostConfig) MachineType() string {
 
 // ShortOwner returns a short human-readable owner.
 func (c BuildConfig) ShortOwner() string {
-	owner := c.hostConf().Owner
+	owner := c.HostConfig().Owner
 	if owner == "" {
 		return "go-dev"
 	}
@@ -1249,7 +1250,7 @@ func (c BuildConfig) ShortOwner() string {
 
 // OwnerGithub returns the Github handle of the owner.
 func (c BuildConfig) OwnerGithub() string {
-	return c.hostConf().OwnerGithub
+	return c.HostConfig().OwnerGithub
 }
 
 // PoolName returns a short summary of the builder's host type for the

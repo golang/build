@@ -139,7 +139,6 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, _, _ := r.BasicAuth()
-	pool := poolForConf(bconf)
 
 	var closeNotify <-chan bool
 	if cn, ok := w.(http.CloseNotifier); ok {
@@ -160,13 +159,17 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	resc := make(chan *buildlet.Client)
 	errc := make(chan error)
 	go func() {
-		bc, err := pool.GetBuildlet(ctx, bconf.HostType, loggerFunc(func(event string, optText ...string) {
+		lgFunc := loggerFunc(func(event string, optText ...string) {
 			var extra string
 			if len(optText) > 0 {
 				extra = " " + optText[0]
 			}
 			log.Printf("creating buildlet %s for %s: %s%s", bconf.HostType, user, event, extra)
-		}))
+		})
+		bc, err := sched.GetBuildlet(ctx, lgFunc, &SchedItem{
+			HostType: bconf.HostType,
+			IsGomote: true,
+		})
 		if bc != nil {
 			resc <- bc
 			return

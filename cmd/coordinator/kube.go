@@ -209,16 +209,6 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 
 }
 
-func (p *kubeBuildletPool) HasCapacity(hostType string) bool {
-	// TODO: implement. But for now we don't care because we only
-	// use the kubePool for the cross-compiled builds and we have
-	// very few hostTypes for those, and only one (ARM) that's
-	// used day-to-day. So it's okay if we lie here and always try
-	// to create buildlets. The scheduler will still give created
-	// buildlets to the highest priority waiter.
-	return true
-}
-
 func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg logger) (*buildlet.Client, error) {
 	hconf, ok := dashboard.Hosts[hostType]
 	if !ok || !hconf.IsContainer() {

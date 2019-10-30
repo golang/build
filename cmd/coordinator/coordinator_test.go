@@ -189,16 +189,14 @@ func TestFindWork(t *testing.T) {
 		return false
 	}
 
-	c := make(chan buildgo.BuilderRev, 1000)
-	go func() {
-		defer close(c)
-		err := findWork(c)
-		if err != nil {
-			t.Error(err)
-		}
-	}()
-	for br := range c {
-		t.Logf("Got: %v", br)
+	addWorkTestHook = func(work buildgo.BuilderRev) {
+		t.Logf("Got: %v", work)
+	}
+	defer func() { addWorkTestHook = nil }()
+
+	err := findWork()
+	if err != nil {
+		t.Error(err)
 	}
 }
 

@@ -423,17 +423,6 @@ func (p *gceBuildletPool) awaitVMCountQuota(ctx context.Context, numCPU int) err
 	}
 }
 
-func (p *gceBuildletPool) HasCapacity(hostType string) bool {
-	hconf, ok := dashboard.Hosts[hostType]
-	if !ok {
-		return false
-	}
-	numCPU := hconf.GCENumCPU()
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.haveQuotaLocked(numCPU)
-}
-
 // haveQuotaLocked reports whether the current GCE quota permits
 // starting numCPU more CPUs.
 //

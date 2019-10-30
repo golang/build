@@ -325,12 +325,9 @@ func main() {
 		}
 	}()
 
-	workc := make(chan buildgo.BuilderRev)
-
 	if *mode == "dev" {
 		// TODO(crawshaw): do more in dev mode
 		gcePool.SetEnabled(*devEnableGCE)
-		http.HandleFunc("/dosomework/", handleDoSomeWork(workc))
 	} else {
 		go gcePool.cleanUpOldVMs()
 		if kubeErr == nil {
@@ -342,7 +339,7 @@ func main() {
 		}
 
 		go listenAndServeInternalModuleProxy()
-		go findWorkLoop(workc)
+		go findWorkLoop()
 		go findTryWorkLoop()
 		go reportMetrics(context.Background())
 		// TODO(cmang): gccgo will need its own findWorkLoop
@@ -351,22 +348,38 @@ func main() {
 	go listenAndServeTLS()
 	go listenAndServeSSH() // ssh proxy to remote buildlets; remote.go
 
-	for {
-		work := <-workc
-		if !mayBuildRev(work) {
-			if inStaging {
-				if _, ok := dashboard.Builders[work.Name]; ok && logCantBuildStaging.Allow() {
-					log.Printf("may not build %v; skipping", work)
-				}
+	select {}
+}
+
+// ignoreAllNewWork, when true, prevents addWork from doing anything.
+// It's sometimes set in staging mode when people are debugging
+// certain paths.
+var ignoreAllNewWork bool
+
+// addWorkTestHook is optionally set by tests.
+var addWorkTestHook func(work buildgo.BuilderRev)
+
+func addWork(work buildgo.BuilderRev) {
+	if f := addWorkTestHook; f != nil {
+		f(work)
+		return
+	}
+	if ignoreAllNewWork || isBuilding(work) {
+		return
+	}
+	if !mayBuildRev(work) {
+		if inStaging {
+			if _, ok := dashboard.Builders[work.Name]; ok && logCantBuildStaging.Allow() {
+				log.Printf("may not build %v; skipping", work)
 			}
-			continue
 		}
-		st, err := newBuild(work)
-		if err != nil {
-			log.Printf("Bad build work params %v: %v", work, err)
-		} else {
-			st.start()
-		}
+		return
+	}
+	st, err := newBuild(work)
+	if err != nil {
+		log.Printf("Bad build work params %v: %v", work, err)
+	} else {
+		st.start()
 	}
 }
 
@@ -811,19 +824,21 @@ func workaroundFlush(w http.ResponseWriter) {
 	w.(http.Flusher).Flush()
 }
 
-// findWorkLoop polls https://build.golang.org/?mode=json looking for new work
-// for the main dashboard. It does not support gccgo.
-func findWorkLoop(work chan<- buildgo.BuilderRev) {
+// findWorkLoop polls https://build.golang.org/?mode=json looking for
+// new post-submit work for the main dashboard. It does not support
+// gccgo. This is separate from trybots, which populates its work from
+// findTryWorkLoop.
+func findWorkLoop() {
 	// Useful for debugging a single run:
 	if inStaging && false {
 		const debugSubrepo = false
 		if debugSubrepo {
-			work <- buildgo.BuilderRev{
+			addWork(buildgo.BuilderRev{
 				Name:    "linux-arm",
 				Rev:     "c9778ec302b2e0e0d6027e1e0fca892e428d9657",
 				SubName: "tools",
 				SubRev:  "ac303766f5f240c1796eeea3dc9bf34f1261aa35",
-			}
+			})
 		}
 		const debugArm = false
 		if debugArm {
@@ -832,31 +847,29 @@ func findWorkLoop(work chan<- buildgo.BuilderRev) {
 				time.Sleep(time.Second)
 			}
 			log.Printf("ARM machine(s) registered.")
-			work <- buildgo.BuilderRev{Name: "linux-arm", Rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"}
+			addWork(buildgo.BuilderRev{Name: "linux-arm", Rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"})
 		} else {
-			work <- buildgo.BuilderRev{Name: "linux-amd64", Rev: "9b16b9c7f95562bb290f5015324a345be855894d"}
-			work <- buildgo.BuilderRev{Name: "linux-amd64-sid", Rev: "9b16b9c7f95562bb290f5015324a345be855894d"}
-			work <- buildgo.BuilderRev{Name: "linux-amd64-clang", Rev: "9b16b9c7f95562bb290f5015324a345be855894d"}
+			addWork(buildgo.BuilderRev{Name: "linux-amd64", Rev: "9b16b9c7f95562bb290f5015324a345be855894d"})
+			addWork(buildgo.BuilderRev{Name: "linux-amd64-sid", Rev: "9b16b9c7f95562bb290f5015324a345be855894d"})
+			addWork(buildgo.BuilderRev{Name: "linux-amd64-clang", Rev: "9b16b9c7f95562bb290f5015324a345be855894d"})
 		}
-
-		// Still run findWork but ignore what it does.
-		ignore := make(chan buildgo.BuilderRev)
-		go func() {
-			for range ignore {
-			}
-		}()
-		work = ignore
+		ignoreAllNewWork = true
 	}
+	// TODO: remove this hard-coded 15 second ticker and instead
+	// do some new streaming gRPC call to maintnerd to subscribe
+	// to new commits.
 	ticker := time.NewTicker(15 * time.Second)
 	for {
-		if err := findWork(work); err != nil {
+		if err := findWork(); err != nil {
 			log.Printf("failed to find new work: %v", err)
 		}
 		<-ticker.C
 	}
 }
 
-func findWork(work chan<- buildgo.BuilderRev) error {
+// findWork polls the https://build.golang.org/ dashboard once to find
+// post-submit work to do. It's called in a loop by findWorkLoop.
+func findWork() error {
 	var bs types.BuildStatus
 	if err := dash("GET", "", url.Values{"mode": {"json"}}, nil, &bs); err != nil {
 		return err
@@ -881,6 +894,7 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 	// 15 seconds, but they should be skewed toward new work.
 	// This depends on the build dashboard sending back the list
 	// of empty slots newest first (matching the order on the main screen).
+	// TODO: delete this code when the scheduler is on by default.
 	sent := map[string]bool{}
 
 	var goRevisions []string // revisions of repo "go", branch "master" revisions
@@ -951,12 +965,18 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 				}
 			}
 
-			// The !sent[builder] here is a clumsy attempt at priority scheduling
-			// and probably should be replaced at some point with a better solution.
-			// See golang.org/issue/19178 and the long comment above.
-			if !isBuilding(rev) && !sent[builder] {
-				sent[builder] = true
-				work <- rev
+			if useScheduler {
+				addWork(rev)
+			} else {
+				// The !sent[builder] here is a clumsy attempt at priority scheduling
+				// and probably should be replaced at some point with a better solution.
+				// See golang.org/issue/19178 and the long comment above.
+				// TODO: delete all this code and the sent map above when the
+				// useScheduler const is removed.
+				if !sent[builder] {
+					sent[builder] = true
+					addWork(rev)
+				}
 			}
 		}
 	}
@@ -969,10 +989,7 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 			continue
 		}
 		for _, rev := range goRevisions {
-			br := buildgo.BuilderRev{Name: b, Rev: rev}
-			if !isBuilding(br) {
-				work <- br
-			}
+			addWork(buildgo.BuilderRev{Name: b, Rev: rev})
 		}
 	}
 	return nil
@@ -1530,18 +1547,12 @@ type BuildletPool interface {
 	// and highPriorityOpt.
 	GetBuildlet(ctx context.Context, hostType string, lg logger) (*buildlet.Client, error)
 
-	// HasCapacity reports whether the buildlet pool has
-	// quota/capacity to create a buildlet of the provided host
-	// type. This should return as fast as possible and err on
-	// the side of returning false.
-	HasCapacity(hostType string) bool
-
 	String() string // TODO(bradfitz): more status stuff
 }
 
-// GetBuildlets creates up to n buildlets and sends them on the returned channel
+// getBuildlets creates up to n buildlets and sends them on the returned channel
 // before closing the channel.
-func GetBuildlets(ctx context.Context, pool BuildletPool, n int, hostType string, lg logger) <-chan *buildlet.Client {
+func getBuildlets(ctx context.Context, n int, schedTmpl *SchedItem, lg logger) <-chan *buildlet.Client {
 	ch := make(chan *buildlet.Client) // NOT buffered
 	var wg sync.WaitGroup
 	wg.Add(n)
@@ -1549,11 +1560,13 @@ func GetBuildlets(ctx context.Context, pool BuildletPool, n int, hostType string
 		go func(i int) {
 			defer wg.Done()
 			sp := lg.CreateSpan("get_helper", fmt.Sprintf("helper %d/%d", i+1, n))
-			bc, err := pool.GetBuildlet(ctx, hostType, lg)
+			schedItem := *schedTmpl // copy; GetBuildlet takes ownership
+			schedItem.IsHelper = i > 0
+			bc, err := sched.GetBuildlet(ctx, lg, &schedItem)
 			sp.Done(err)
 			if err != nil {
 				if err != context.Canceled {
-					log.Printf("failed to get a %s buildlet: %v", hostType, err)
+					log.Printf("failed to get a %s buildlet: %v", schedItem.HostType, err)
 				}
 				return
 			}
@@ -1574,9 +1587,9 @@ func GetBuildlets(ctx context.Context, pool BuildletPool, n int, hostType string
 	return ch
 }
 
-var testPoolHook func(*dashboard.BuildConfig) BuildletPool
+var testPoolHook func(*dashboard.HostConfig) BuildletPool
 
-func poolForConf(conf *dashboard.BuildConfig) BuildletPool {
+func poolForConf(conf *dashboard.HostConfig) BuildletPool {
 	if testPoolHook != nil {
 		return testPoolHook(conf)
 	}
@@ -1589,10 +1602,10 @@ func poolForConf(conf *dashboard.BuildConfig) BuildletPool {
 		} else {
 			return kubePool
 		}
-	case conf.IsReverse():
+	case conf.IsReverse:
 		return reversePool
 	default:
-		panic(fmt.Sprintf("no buildlet pool for builder type %q", conf.Name))
+		panic(fmt.Sprintf("no buildlet pool for host type %q", conf.HostType))
 	}
 }
 
@@ -1641,7 +1654,7 @@ func (st *buildStatus) start() {
 }
 
 func (st *buildStatus) buildletPool() BuildletPool {
-	return poolForConf(st.conf)
+	return poolForConf(st.conf.HostConfig())
 }
 
 // parentRev returns the parent of this build's commit (but only if this build comes from a trySet).
@@ -1721,8 +1734,12 @@ func (st *buildStatus) getHelpers() <-chan *buildlet.Client {
 }
 
 func (st *buildStatus) onceInitHelpersFunc() {
-	pool := st.buildletPool()
-	st.helpers = GetBuildlets(st.ctx, pool, st.conf.NumTestHelpers(st.isTry()), st.conf.HostType, st)
+	schedTmpl := &SchedItem{
+		BuilderRev: st.BuilderRev,
+		HostType:   st.conf.HostType,
+		IsTry:      st.isTry(),
+	}
+	st.helpers = getBuildlets(st.ctx, st.conf.NumTestHelpers(st.isTry()), schedTmpl, st)
 }
 
 // useSnapshot reports whether this type of build uses a snapshot of
@@ -1835,11 +1852,9 @@ func (st *buildStatus) build() error {
 	}
 
 	sp = st.CreateSpan("get_buildlet")
-	pool := st.buildletPool()
 	bc, err := sched.GetBuildlet(st.ctx, st, &SchedItem{
 		HostType:   st.conf.HostType,
 		IsTry:      st.trySet != nil,
-		Pool:       pool,
 		BuilderRev: st.BuilderRev,
 	})
 	sp.Done(err)
@@ -1980,7 +1995,7 @@ func (st *buildStatus) buildRecord() *types.BuildRecord {
 
 	// Log whether we used COS, so we can do queries to analyze
 	// Kubernetes vs COS performance for containers.
-	if st.conf.IsContainer() && poolForConf(st.conf) == gcePool {
+	if st.conf.IsContainer() && poolForConf(st.conf.HostConfig()) == gcePool {
 		rec.ContainerHost = "cos"
 	}
 
@@ -2099,7 +2114,6 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompil
 	kubeBC, err := sched.GetBuildlet(ctx, st, &SchedItem{
 		HostType:   config.CompileHostType,
 		IsTry:      st.trySet != nil,
-		Pool:       kubePool,
 		BuilderRev: st.BuilderRev,
 	})
 	sp.Done(err)

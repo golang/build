@@ -122,7 +122,7 @@ func TestHandleBuildletCreate(t *testing.T) {
 	log.SetOutput(tlogger{t})
 	defer log.SetOutput(os.Stderr)
 	addBuilder(buildName)
-	testPoolHook = func(_ *dashboard.BuildConfig) BuildletPool { return testPool }
+	testPoolHook = func(_ *dashboard.HostConfig) BuildletPool { return testPool }
 	defer func() {
 		removeBuilder(buildName)
 		testPoolHook = nil
