@@ -261,14 +261,14 @@ func TestSubreposFromComments(t *testing.T) {
 			},
 		},
 	}
-	extra := xReposFromComments(work)
-	var got []string
-	for _, name := range extra {
-		got = append(got, name)
+	got := xReposFromComments(work)
+	want := map[string]bool{
+		"build": true,
+		"sync":  true,
+		"tools": true,
 	}
-	want := []string{"build", "sync", "tools"}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("mismatch:\n got: %q\nwant: %q\n", got, want)
+		t.Errorf("mismatch:\n got: %v\nwant: %v\n", got, want)
 	}
 }
 

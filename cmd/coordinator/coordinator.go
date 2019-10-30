@@ -1218,18 +1218,17 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	// For the Go project on the "master" branch,
 	// use the TRY= syntax to test against x repos.
 	if branch := key.Branch; key.Project == "go" && branch == "master" {
-		xrepos := xReposFromComments(work)
-
 		// linuxBuilder is the standard builder as it is the fastest and least expensive.
 		linuxBuilder := dashboard.Builders["linux-amd64"]
-		for _, project := range xrepos {
+
+		addXrepo := func(project string) *buildStatus {
 			if !linuxBuilder.BuildsRepoTryBot(project, branch, branch) {
-				continue
+				return nil
 			}
 			rev, err := getRepoHead(project)
 			if err != nil {
 				log.Printf("can't determine repo head for %q: %v", project, err)
-				continue
+				return nil
 			}
 			brev := buildgo.BuilderRev{
 				Name:    linuxBuilder.Name,
@@ -1240,10 +1239,24 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 			bs, err := newBuild(brev)
 			if err != nil {
 				log.Printf("can't create build for %q: %v", rev, err)
-				continue
+				return nil
 			}
-			ts.xrepos = append(ts.xrepos, bs)
 			addBuilderToSet(bs, brev)
+			return bs
+		}
+
+		// First, add the opt-in x repos.
+		xrepos := xReposFromComments(work)
+		for project := range xrepos {
+			if bs := addXrepo(project); bs != nil {
+				ts.xrepos = append(ts.xrepos, bs)
+			}
+		}
+
+		// Always include x/tools. See golang.org/issue/34348.
+		// Do not add it to the trySet's list of opt-in x repos, however.
+		if !xrepos["tools"] {
+			addXrepo("tools")
 		}
 	}
 
@@ -3732,18 +3745,14 @@ func slowBotsFromComments(work *apipb.GerritTryWorkItem, existing []*dashboard.B
 // work) and returns any additional subrepos that should be tested.
 // The TRY= comments are expected to be of the format TRY=x/foo,
 // where foo is the name of the subrepo.
-func xReposFromComments(work *apipb.GerritTryWorkItem) (xrepos []string) {
-	have := map[string]bool{}
+func xReposFromComments(work *apipb.GerritTryWorkItem) map[string]bool {
+	xrepos := map[string]bool{}
 	for _, term := range latestTryTerms(work) {
 		if len(term) < len("x/_") || term[:2] != "x/" {
 			continue
 		}
 		xrepo := term[2:]
-		if have[xrepo] {
-			continue
-		}
-		have[xrepo] = true
-		xrepos = append(xrepos, xrepo)
+		xrepos[xrepo] = true
 	}
 	return xrepos
 }
