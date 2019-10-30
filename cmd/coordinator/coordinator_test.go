@@ -277,12 +277,46 @@ func TestBuildStatusFormat(t *testing.T) {
 	}{
 		{
 			st: &buildStatus{
+				trySet: &trySet{
+					tryKey: tryKey{
+						Project: "go",
+					},
+				},
 				BuilderRev: buildgo.BuilderRev{
 					Name:    "linux-amd64",
 					SubName: "tools",
 				},
 			},
-			want: "x/tools (linux-amd64)",
+			want: "(x/tools) linux-amd64",
+		},
+		{
+			st: &buildStatus{
+				trySet: &trySet{
+					tryKey: tryKey{
+						Project: "tools",
+					},
+				},
+				BuilderRev: buildgo.BuilderRev{
+					Name:    "linux-amd64",
+					SubName: "tools",
+				},
+				goBranch: "release-branch.go1.15",
+			},
+			want: "linux-amd64 (Go 1.15.x)",
+		},
+		{
+			st: &buildStatus{
+				trySet: &trySet{
+					tryKey: tryKey{
+						Project: "go",
+					},
+				},
+				BuilderRev: buildgo.BuilderRev{
+					Name:    "linux-amd64",
+					SubName: "tools",
+				},
+			},
+			want: "(x/tools) linux-amd64",
 		},
 		{
 			st: &buildStatus{

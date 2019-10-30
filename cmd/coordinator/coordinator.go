@@ -3399,24 +3399,26 @@ type buildStatus struct {
 }
 
 func (st *buildStatus) NameAndBranch() string {
+	result := st.Name
 	if st.goBranch != "" {
 		// For the common and currently-only case of
 		// "release-branch.go1.15" say "linux-amd64 (Go 1.15.x)"
 		const releasePrefix = "release-branch.go"
 		if strings.HasPrefix(st.goBranch, releasePrefix) {
-			return fmt.Sprintf("%s (Go %s.x)", st.Name, strings.TrimPrefix(st.goBranch, releasePrefix))
+			result = fmt.Sprintf("%s (Go %s.x)", st.Name, strings.TrimPrefix(st.goBranch, releasePrefix))
+		} else {
+			// But if we ever support building other branches,
+			// fall back to something verbose until we add a
+			// special case:
+			result = fmt.Sprintf("%s (go branch %s)", st.Name, st.goBranch)
 		}
-		// But if we ever support building other branches,
-		// fall back to something verbose until we add a
-		// special case:
-		return fmt.Sprintf("%s (go branch %s)", st.Name, st.goBranch)
 	}
-	// For an x repo running on a go CL, say
-	// "x/tools (linux-amd64)"
-	if st.SubName != "" {
-		return fmt.Sprintf("x/%s (%s)", st.SubName, st.Name)
+	// For an x repo running on a CL in a different repo,
+	// add a prefix specifying the name of the x repo.
+	if st.SubName != "" && st.trySet != nil && st.SubName != st.trySet.Project {
+		result = "(x/" + st.SubName + ") " + result
 	}
-	return st.Name
+	return result
 }
 
 func (st *buildStatus) setDone(succeeded bool) {
