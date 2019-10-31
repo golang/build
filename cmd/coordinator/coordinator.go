@@ -1346,6 +1346,8 @@ func (ts *trySet) awaitTryBuild(idx int, bs *buildStatus, brev buildgo.BuilderRe
 		// start a new build if the old one appears dead or
 		// hung.
 
+		old := bs
+
 		// Sleep a bit and retry.
 		time.Sleep(30 * time.Second)
 		if !ts.wanted() {
@@ -1353,6 +1355,7 @@ func (ts *trySet) awaitTryBuild(idx int, bs *buildStatus, brev buildgo.BuilderRe
 		}
 		bs, _ = newBuild(brev)
 		bs.trySet = ts
+		bs.goBranch = old.goBranch
 		go bs.start()
 		ts.mu.Lock()
 		ts.builds[idx] = bs
