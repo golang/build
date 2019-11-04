@@ -554,6 +554,7 @@ func init() {
 	addPerson("Carlisia Campos", "carlisia@grokkingtech.io", "@carlisia")
 	addPerson("Carlo Alberto Ferraris", "cafxx@strayorange.com", "11500@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Carlo Alberto Ferraris", "cafxx@strayorange.com", "@CAFxX")
+	addPerson("Carlos Amedee", "carlos@golang.org", "@cagedmantis", "34411@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Carlos C", "uldericofilho@gmail.com", "@ucirello")
 	addPerson("Carlos Castillo", "cookieo9@gmail.com", "5141@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Carlos Castillo", "cookieo9@gmail.com", "@cookieo9")
