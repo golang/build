@@ -229,16 +229,9 @@ func (st *State) CreateMac(ctx context.Context, minor int) (slotName string, err
 		return "", fmt.Errorf("unsupported makemac minor OS X version %d", minor)
 	}
 
-	builderType := fmt.Sprintf("darwin-amd64-10_%d", minor)
+	hostType := fmt.Sprintf("host-darwin-10_%d", minor)
 
-	// Up to 10.12 we used the deprecated buildlet --reverse mode, instead of --reverse-type.
-	// Starting with 10.14 (and 10.13 if we ever make a High Sierra image), we're switching
-	// to the non-deprecated mode.
-	if minor >= 13 {
-		builderType = fmt.Sprintf("host-darwin-10_%d", minor)
-	}
-
-	key, err := ioutil.ReadFile(filepath.Join(os.Getenv("HOME"), "keys", builderType))
+	key, err := ioutil.ReadFile(filepath.Join(os.Getenv("HOME"), "keys", hostType))
 	if err != nil {
 		return "", err
 	}
@@ -281,7 +274,7 @@ func (st *State) CreateMac(ctx context.Context, minor int) (slotName string, err
 		"-e", "smc.present=TRUE",
 		"-e", "ich7m.present=TRUE",
 		"-e", "firmware=efi",
-		"-e", fmt.Sprintf("guestinfo.key-%s=%s", builderType, strings.TrimSpace(string(key))),
+		"-e", fmt.Sprintf("guestinfo.key-%s=%s", hostType, strings.TrimSpace(string(key))),
 		"-e", "guestinfo.name="+name,
 		"-vm", name,
 	); err != nil {
