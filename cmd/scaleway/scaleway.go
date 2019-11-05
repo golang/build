@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -30,7 +31,8 @@ var (
 	tokenDir    = flag.String("token-dir", filepath.Join(os.Getenv("HOME"), "keys"), "directory to read gobuilder-staging.key, gobuilder-master.key and go-scaleway.token from.")
 	token       = flag.String("token", "", "API token. If empty, the file is read from $(token-dir)/go-scaleway.token. Googlers on the Go team can get the value from http://go/golang-scaleway-token")
 	org         = flag.String("org", "1f34701d-668b-441b-bf08-0b13544e99de", "Organization ID (default is bradfitz@golang.org's account)")
-	image       = flag.String("image", "e488d5e3-d278-47a7-8f7d-1154e1f61dc9", "Disk image ID; default is the snapshot we made last")
+	image       = flag.String("image", "13f4c905-3a4b-475a-aaba-a13168e2b6c7", "Disk image ID; default is the snapshot we made last")
+	bootscript  = flag.String("bootscript", "5c8e4527-d166-4844-b6c6-087d7a6f5fb0", "Bootscript ID; empty means to use the default for the image. But our images don't have a correct default.")
 	num         = flag.Int("n", 0, "Number of servers to create; if zero, defaults to a value as a function of --staging")
 	tags        = flag.String("tags", "", "Comma-separated list of tags. The build key tags should be of the form 'buildkey_linux-arm_HEXHEXHEXHEXHEX'. If empty, it's automatic.")
 	staging     = flag.Bool("staging", false, "If true, deploy staging instances (with staging names and tags) instead of prod.")
@@ -38,6 +40,7 @@ var (
 	list        = flag.Bool("list", false, "If true, list all prod (or staging, if -staging) servers, including missing ones.")
 	fixInterval = flag.Duration("fix-interval", 10*time.Minute, "Interval to wait before running again (only applies to daemon mode)")
 	daemonMode  = flag.Bool("daemon", false, "Run in daemon mode in a loop")
+	ipv6        = flag.Bool("ipv6", false, "enable IPv6 on scaleway instances")
 )
 
 const (
@@ -144,9 +147,27 @@ func checkServers() {
 	for i := 1; i <= *num; i++ {
 		name := serverName(i)
 		server := servers[name]
+
+		if server.Image != nil && server.Image.ID != *image {
+			log.Printf("server %s, state %q, running wrong image %s (want %s)", name, server.State, server.Image.ID, *image)
+			switch server.State {
+			case "running":
+				log.Printf("powering off %s ...", name)
+				if err := cl.PowerOff(server.ID); err != nil {
+					log.Printf("PowerOff(%q (%q)): %v", server.ID, name, err)
+				}
+			case "stopped":
+				log.Printf("deleting %s ...", name)
+				if err := cl.Delete(server.ID); err != nil {
+					log.Printf("Delete(%q (%q)): %v", server.ID, name, err)
+				}
+			}
+		}
+
 		if server.Connected != nil {
 			continue
 		}
+
 		if server.State == "running" {
 			if time.Time(server.ModificationDate).Before(time.Now().Add(15 * time.Minute)) {
 				log.Printf("rebooting old running-but-disconnected %q server...", name)
@@ -171,11 +192,15 @@ func checkServers() {
 			Image:          *image,
 			CommercialType: ctype,
 			Tags:           tags,
+			EnableIPV6:     *ipv6,
+			BootType:       "bootscript", // the "local" boot mode doesn't work on C1,
+			Bootscript:     *bootscript,
 		})
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("Doing req %q", body)
+		log.Printf("sending createServerRequest: %s", body)
+		// TODO: update to their new API path format that includes the zone.
 		req, err := http.NewRequest("POST", scalewayAPIBase+"/servers", bytes.NewReader(body))
 		if err != nil {
 			log.Fatal(err)
@@ -186,7 +211,12 @@ func checkServers() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("Create of %v: %v", i, res.Status)
+		if res.StatusCode == http.StatusOK {
+			log.Printf("created %v", i)
+		} else {
+			slurp, _ := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
+			log.Printf("creating number %v, %s: %s", i, res.Status, slurp)
+		}
 		res.Body.Close()
 	}
 
@@ -210,6 +240,9 @@ type createServerRequest struct {
 	Image          string   `json:"image"`
 	CommercialType string   `json:"commercial_type"`
 	Tags           []string `json:"tags"`
+	EnableIPV6     bool     `json:"enable_ipv6,omitempty"`
+	BootType       string   `json:"boot_type,omitempty"` // local, bootscript, rescue; the default of local doesn't work on C1 machines
+	Bootscript     string   `json:"bootscript,omitempty"`
 }
 
 type Client struct {
@@ -221,7 +254,7 @@ type Client struct {
 // This is currently unused. An earlier version of this tool used it briefly before
 // changing to use the reboot action. We might want this later.
 func (c *Client) Delete(serverID string) error {
-	req, _ := http.NewRequest("DELETE", scalewayAPIBase+"/servers/"+serverID, nil)
+	req, _ := http.NewRequest("DELETE", scalewayAPIBase+"/instance/v1/zones/fr-par-1/servers/"+serverID, nil)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Auth-Token", c.Token)
 	res, err := http.DefaultClient.Do(req)
@@ -230,13 +263,18 @@ func (c *Client) Delete(serverID string) error {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("error deleting %s: %v", serverID, res.Status)
+		slurp, _ := ioutil.ReadAll(io.LimitReader(res.Body, 1<<10))
+		return fmt.Errorf("error deleting %s: %v, %s", serverID, res.Status, slurp)
 	}
 	return nil
 }
 
 func (c *Client) PowerOn(serverID string) error {
 	return c.serverAction(serverID, "poweron")
+}
+
+func (c *Client) PowerOff(serverID string) error {
+	return c.serverAction(serverID, "poweroff")
 }
 
 func (c *Client) serverAction(serverID, action string) error {
@@ -325,7 +363,9 @@ func defaultBuilderTags(baseKeyFile string) string {
 		log.Fatal(err)
 	}
 	var tags []string
-	for _, builder := range []string{"linux-arm", "linux-arm-arm5"} {
+	for _, builder := range []string{
+		"host-linux-arm-scaleway",
+	} {
 		h := hmac.New(md5.New, bytes.TrimSpace(slurp))
 		h.Write([]byte(builder))
 		tags = append(tags, fmt.Sprintf("buildkey_%s_%x", builder, h.Sum(nil)))

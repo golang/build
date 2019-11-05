@@ -22,6 +22,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"golang.org/x/build/buildenv"
 )
 
 var (
@@ -32,6 +34,7 @@ var (
 	keyFile    = flag.String("key", "/etc/gobuild.key", "go build key file")
 	builderEnv = flag.String("env", "", "optional GO_BUILDER_ENV environment variable value to set in the guests")
 	cpu        = flag.Int("cpu", 0, "if non-zero, how many CPUs to assign from the host and pass to docker run --cpuset-cpus")
+	pull       = flag.Bool("pull", false, "whether to pull the the --image before each container starting")
 )
 
 var (
@@ -42,24 +45,19 @@ var (
 func main() {
 	flag.Parse()
 
-	key, err := ioutil.ReadFile(*keyFile)
-	if err != nil {
-		log.Fatalf("error reading build key from --key=%s: %v", *keyFile, err)
+	if onScaleway() {
+		*memory = ""
+		*image = "eu.gcr.io/symbolic-datum-552/scaleway-builder"
+		*pull = true
+		*numInst = 1
+		*basename = "scaleway"
+		initScalewayMeta()
 	}
-	buildKey = bytes.TrimSpace(key)
+
+	buildKey = getBuildKey()
 
 	if *image == "" {
 		log.Fatalf("docker --image is required")
-	}
-
-	// If we're on linux/arm, see if we're running in a scaleway
-	// image (which contains the oc-metadata command) and, if so,
-	// fetch our instance metadata to make the reported hostname match
-	// the instance hostname.
-	if runtime.GOOS == "linux" && runtime.GOARCH == "arm" {
-		if _, err := os.Stat("/usr/local/bin/oc-metadata"); err == nil {
-			initScalewayMeta()
-		}
 	}
 
 	log.Printf("Started. Will keep %d copies of %s running.", *numInst, *image)
@@ -69,6 +67,34 @@ func main() {
 		}
 		time.Sleep(time.Second) // TODO: docker wait on the running containers?
 	}
+}
+
+func onScaleway() bool {
+	if *builderEnv == "host-linux-arm-scaleway" {
+		return true
+	}
+	if runtime.GOOS == "linux" && runtime.GOARCH == "arm" {
+		if _, err := os.Stat("/usr/local/bin/oc-metadata"); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func getBuildKey() []byte {
+	key, err := ioutil.ReadFile(*keyFile)
+	if err != nil {
+		if onScaleway() {
+			const prefix = "buildkey_host-linux-arm-scaleway_"
+			for _, tag := range scalewayMeta.Tags {
+				if strings.HasPrefix(tag, prefix) {
+					return []byte(strings.TrimPrefix(tag, prefix))
+				}
+			}
+		}
+		log.Fatalf("error reading build key from --key=%s: %v", *keyFile, err)
+	}
+	return bytes.TrimSpace(key)
 }
 
 func checkFix() error {
@@ -140,6 +166,14 @@ func checkFix() error {
 			continue
 		}
 
+		if *pull {
+			log.Printf("Pulling %s ...", *image)
+			out, err := exec.Command("docker", "pull", *image).CombinedOutput()
+			if err != nil {
+				log.Printf("docker pull %s failed: %v, %s", *image, err, out)
+			}
+		}
+
 		log.Printf("Creating %s ...", name)
 		keyFile := fmt.Sprintf("/tmp/buildkey%02d/gobuildkey", num)
 		if err := os.MkdirAll(filepath.Dir(keyFile), 0700); err != nil {
@@ -157,12 +191,19 @@ func checkFix() error {
 		if *memory != "" {
 			cmd.Args = append(cmd.Args, "--memory="+*memory)
 		}
-		if *builderEnv != "" {
-			cmd.Args = append(cmd.Args, "-e", "GO_BUILDER_ENV="+*builderEnv)
-		}
 		if *cpu > 0 {
 			cmd.Args = append(cmd.Args, fmt.Sprintf("--cpuset-cpus=%d-%d", *cpu*(num-1), *cpu*num-1))
 		}
+		if *builderEnv != "" {
+			cmd.Args = append(cmd.Args, "-e", "GO_BUILDER_ENV="+*builderEnv)
+		}
+		if u := buildletBinaryURL(); u != "" {
+			cmd.Args = append(cmd.Args, "-e", "META_BUILDLET_BINARY_URL="+u)
+		}
+		cmd.Args = append(cmd.Args,
+			"-e", "GO_BUILD_KEY_PATH=/buildkey/gobuildkey",
+			"-e", "GO_BUILD_KEY_DELETE_AFTER_READ=true",
+		)
 		cmd.Args = append(cmd.Args, *image)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -178,6 +219,18 @@ type scalewayMetadata struct {
 	Name     string   `json:"name"`
 	Hostname string   `json:"hostname"`
 	Tags     []string `json:"tags"`
+}
+
+func (m *scalewayMetadata) HasTag(t string) bool {
+	if m == nil {
+		return false
+	}
+	for _, v := range m.Tags {
+		if v == t {
+			return true
+		}
+	}
+	return false
 }
 
 func initScalewayMeta() {
@@ -201,4 +254,16 @@ func removeContainer(container string) {
 		return
 	}
 	log.Printf("Removed container %s", container)
+}
+
+func buildletBinaryURL() string {
+	if !onScaleway() {
+		// Only used for Scaleway currently.
+		return ""
+	}
+	env := buildenv.Production
+	if scalewayMeta.HasTag("staging") {
+		env = buildenv.Staging
+	}
+	return fmt.Sprintf("https://storage.googleapis.com/%s/buildlet.linux-arm", env.BuildletBucket)
 }

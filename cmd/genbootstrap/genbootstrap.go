@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 /*
-The genbootstrap command prepares GO_BOOTSTRAP tarballs suitable for
+The genbootstrap command prepares GOROOT_BOOTSTRAP tarballs suitable for
 use on builders. It's a wrapper around bootstrap.bash. After
 bootstrap.bash produces the full output, genbootstrap trims it up,
 removing unnecessary and unwanted files.
