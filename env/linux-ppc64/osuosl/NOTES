@@ -13,14 +13,6 @@ Machines:
 
   Linux go-be-xenial-3 4.4.0-130-powerpc64-smp #156-Ubuntu SMP Thu Jun 14 09:28:49 UTC 2018 ppc64 ppc64 ppc64 GNU/Linux
 
-* Old machines, to be returned: (currently Debian jessie)
-
-  go-be-1: debian@140.211.168.40
-  go-be-2: debian@140.211.168.41
-  go-be-3: debian@140.211.168.42
-  go-be-4: debian@140.211.168.43
-  go-be-5: debian@140.211.168.44
-
 # Installing Docker on the unsupported ppc64 platform
 
 There are 3 main scripts, in chronological order:
