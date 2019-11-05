@@ -345,15 +345,16 @@ var Hosts = map[string]*HostConfig{
 	"host-dragonfly-amd64-bradfitz": &HostConfig{
 		IsReverse:   true,
 		ExpectNum:   1,
+		Notes:       "DragonFly BSD release version",
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		OwnerGithub: "bradfitz",
 	},
-	"host-dragonfly-amd64-tdfbsd": &HostConfig{
-		IsReverse:      true,
-		ExpectNum:      1,
-		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
-		ReverseAliases: []string{"dragonfly-amd64"},
-		OwnerGithub:    "tdfbsd",
+	"host-dragonfly-amd64-master": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   1,
+		Notes:       "DragonFly BSD master, run by DragonFly team",
+		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+		OwnerGithub: "tuxillo",
 	},
 	"host-freebsd-arm-paulzhol": &HostConfig{
 		IsReverse:      true,
@@ -2334,7 +2335,8 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:              "dragonfly-amd64",
-		HostType:          "host-dragonfly-amd64-tdfbsd",
+		HostType:          "host-dragonfly-amd64-master",
+		Notes:             "DragonFly BSD master, run by DragonFly team",
 		shouldRunDistTest: noTestDir,
 		SkipSnapshot:      true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
@@ -2350,6 +2352,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "dragonfly-amd64-5_6",
 		HostType:          "host-dragonfly-amd64-bradfitz",
+		Notes:             "DragonFly BSD 5.6 release",
 		shouldRunDistTest: noTestDir,
 		SkipSnapshot:      true,
 	})
