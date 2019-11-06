@@ -3518,6 +3518,13 @@ func (st *buildStatus) hasEvent(event string) bool {
 func (st *buildStatus) HTMLStatusLine() template.HTML      { return st.htmlStatusLine(true) }
 func (st *buildStatus) HTMLStatusLine_done() template.HTML { return st.htmlStatusLine(false) }
 
+func strSliceTo(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
+}
+
 func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
 	if st == nil {
 		return "[nil]"
@@ -3527,17 +3534,27 @@ func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
 
 	urlPrefix := "https://go-review.googlesource.com/#/q/"
 
+	if st.Rev == "" {
+		log.Printf("warning: st.Rev is empty")
+	}
+
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "<a href='https://github.com/golang/go/wiki/DashboardBuilders'>%s</a> rev <a href='%s%s'>%s</a>",
-		st.Name, urlPrefix, st.Rev, st.Rev[:8])
+		st.Name, urlPrefix, st.Rev, strSliceTo(st.Rev, 8))
 	if st.IsSubrepo() {
+		if st.SubRev == "" {
+			log.Printf("warning: st.SubRev is empty on subrepo")
+		}
 		fmt.Fprintf(&buf, " (sub-repo %s rev <a href='%s%s'>%s</a>)",
-			st.SubName, urlPrefix, st.SubRev, st.SubRev[:8])
+			st.SubName, urlPrefix, st.SubRev, strSliceTo(st.SubRev, 8))
 	}
 	if ts := st.trySet; ts != nil {
+		if ts.ChangeID == "" {
+			log.Printf("warning: ts.ChangeID is empty")
+		}
 		fmt.Fprintf(&buf, " (<a href='/try?commit=%v'>trybot set</a> for <a href='https://go-review.googlesource.com/#/q/%s'>%s</a>)",
-			ts.Commit[:8],
-			ts.ChangeTriple(), ts.ChangeID[:8])
+			strSliceTo(ts.Commit, 8),
+			ts.ChangeTriple(), strSliceTo(ts.ChangeID, 8))
 	}
 
 	var state string
