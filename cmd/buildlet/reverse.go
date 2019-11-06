@@ -49,13 +49,6 @@ func keyForMode(mode string) (string, error) {
 		os.Remove(keyPath)
 	}
 	if err != nil {
-		if os.IsNotExist(err) && *reverse != "" && !strings.Contains(*reverse, ",") {
-			globalKeyPath := filepath.Join(homedir(), ".gobuildkey")
-			key, err = ioutil.ReadFile(globalKeyPath)
-			if err != nil {
-				return "", fmt.Errorf("cannot read either key file %q or %q: %v", keyPath, globalKeyPath, err)
-			}
-		}
 		if len(key) == 0 || err != nil {
 			return "", fmt.Errorf("cannot read key file %q: %v", keyPath, err)
 		}
@@ -77,24 +70,9 @@ func dialCoordinator() error {
 		}
 	}
 
-	var modes, keys []string
-	if *reverse != "" {
-		// Old way.
-		modes = strings.Split(*reverse, ",")
-		for _, m := range modes {
-			key, err := keyForMode(m)
-			if err != nil {
-				log.Fatalf("failed to find key for %s: %v", m, err)
-			}
-			keys = append(keys, key)
-		}
-	} else {
-		// New way.
-		key, err := keyForMode(*reverseType)
-		if err != nil {
-			log.Fatalf("failed to find key for %s: %v", *reverseType, err)
-		}
-		keys = append(keys, key)
+	key, err := keyForMode(*reverseType)
+	if err != nil {
+		log.Fatalf("failed to find key for %s: %v", *reverseType, err)
 	}
 
 	addr := *coordinator
@@ -138,13 +116,8 @@ func dialCoordinator() error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if *reverse != "" {
-		// Old way.
-		req.Header["X-Go-Builder-Type"] = modes
-	} else {
-		req.Header.Set("X-Go-Host-Type", *reverseType)
-	}
-	req.Header["X-Go-Builder-Key"] = keys
+	req.Header.Set("X-Go-Host-Type", *reverseType)
+	req.Header.Set("X-Go-Builder-Key", key)
 	req.Header.Set("X-Go-Builder-Hostname", *hostname)
 	req.Header.Set("X-Go-Builder-Version", strconv.Itoa(buildletVersion))
 	req.Header.Set("X-Revdial-Version", "2")

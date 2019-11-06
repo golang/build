@@ -200,15 +200,13 @@ var Hosts = map[string]*HostConfig{
 		HermeticReverse: true,
 		ExpectNum:       50,
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
-		ReverseAliases:  []string{"linux-arm", "linux-arm-arm5"},
 		SSHUsername:     "root",
 	},
 	"host-linux-arm5spacemonkey": &HostConfig{
-		IsReverse:      true,
-		ExpectNum:      3,
-		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
-		ReverseAliases: []string{"linux-arm-arm5spacemonkey"},
-		OwnerGithub:    "esnolte", // https://github.com/golang/go/issues/34973#issuecomment-543836871
+		IsReverse:   true,
+		ExpectNum:   3,
+		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+		OwnerGithub: "esnolte", // https://github.com/golang/go/issues/34973#issuecomment-543836871
 	},
 	"host-openbsd-amd64-60": &HostConfig{
 		VMImage:            "openbsd-amd64-60",
@@ -357,12 +355,11 @@ var Hosts = map[string]*HostConfig{
 		OwnerGithub: "tuxillo",
 	},
 	"host-freebsd-arm-paulzhol": &HostConfig{
-		IsReverse:      true,
-		ExpectNum:      1,
-		Notes:          "Cubiboard2 1Gb RAM dual-core Cortex-A7 (Allwinner A20), FreeBSD 11.1-RELEASE",
-		env:            []string{"GOROOT_BOOTSTRAP=/usr/home/paulzhol/go1.4"},
-		ReverseAliases: []string{"freebsd-arm-paulzhol"},
-		OwnerGithub:    "paulzhol",
+		IsReverse:   true,
+		ExpectNum:   1,
+		Notes:       "Cubiboard2 1Gb RAM dual-core Cortex-A7 (Allwinner A20), FreeBSD 11.1-RELEASE",
+		env:         []string{"GOROOT_BOOTSTRAP=/usr/home/paulzhol/go1.4"},
+		OwnerGithub: "paulzhol",
 	},
 	"host-freebsd-arm64-dmgk": &HostConfig{
 		IsReverse:   true,
@@ -452,7 +449,6 @@ var Hosts = map[string]*HostConfig{
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
 		},
-		ReverseAliases:  []string{"darwin-amd64-10_8"},
 		SSHUsername:     "gopher",
 		HermeticReverse: false, // TODO: make it so, like 10.12
 	},
@@ -463,7 +459,6 @@ var Hosts = map[string]*HostConfig{
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
 		},
-		ReverseAliases:  []string{"darwin-amd64-10_10"},
 		SSHUsername:     "gopher",
 		HermeticReverse: false, // TODO: make it so, like 10.12
 	},
@@ -474,7 +469,6 @@ var Hosts = map[string]*HostConfig{
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
 		},
-		ReverseAliases:  []string{"darwin-amd64-10_11"},
 		SSHUsername:     "gopher",
 		HermeticReverse: false, // TODO: make it so, like 10.12
 	},
@@ -485,7 +479,6 @@ var Hosts = map[string]*HostConfig{
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
 		},
-		ReverseAliases:  []string{"darwin-amd64-10_12"},
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
 	},
@@ -500,18 +493,16 @@ var Hosts = map[string]*HostConfig{
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
 	},
 	"host-linux-s390x": &HostConfig{
-		Notes:          "run by IBM",
-		OwnerGithub:    "mundaym",
-		IsReverse:      true,
-		env:            []string{"GOROOT_BOOTSTRAP=/var/buildlet/go-linux-s390x-bootstrap"},
-		ReverseAliases: []string{"linux-s390x-ibm"},
+		Notes:       "run by IBM",
+		OwnerGithub: "mundaym",
+		IsReverse:   true,
+		env:         []string{"GOROOT_BOOTSTRAP=/var/buildlet/go-linux-s390x-bootstrap"},
 	},
 	"host-linux-ppc64-osu": &HostConfig{
 		Notes:           "Debian jessie; run by Go team on osuosl.org",
 		IsReverse:       true,
 		ExpectNum:       5,
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
-		ReverseAliases:  []string{"linux-ppc64-buildlet"},
 		SSHUsername:     "root",
 		HermeticReverse: false, // TODO: run in chroots with overlayfs? https://github.com/golang/go/issues/34830#issuecomment-543386764
 	},
@@ -723,14 +714,6 @@ type HostConfig struct {
 	Notes       string // notes for humans
 
 	SSHUsername string // username to ssh as, empty means not supported
-
-	// ReverseAliases lists alternate names for this buildlet
-	// config, for older clients doing a reverse dial into the
-	// coordinator from outside. This prevents us from updating
-	// 75+ dedicated machines/VMs atomically, switching them to
-	// the new "host-*" names.
-	// This is only applicable if IsReverse.
-	ReverseAliases []string
 }
 
 // A BuildConfig describes how to run a builder.

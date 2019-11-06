@@ -50,7 +50,6 @@ var (
 	rebootOnHalt = flag.Bool("reboot", false, "reboot system in /halt handler.")
 	workDir      = flag.String("workdir", "", "Temporary directory to use. The contents of this directory may be deleted at any time. If empty, TempDir is used to create one.")
 	listenAddr   = flag.String("listen", "AUTO", "address to listen on. Unused in reverse mode. Warning: this service is inherently insecure and offers no protection of its own. Do not expose this port to the world.")
-	reverse      = flag.String("reverse", "", "[deprecated; use --reverse-type instead] if non-empty, go into reverse mode where the buildlet dials the coordinator instead of listening for connections. The value is a comma-separated list of modes, e.g. 'darwin-arm,darwin-amd64-race'")
 	reverseType  = flag.String("reverse-type", "", "if non-empty, go into reverse mode where the buildlet dials the coordinator instead of listening for connections. The value is the dashboard/builders.go Hosts map key, naming a HostConfig. This buildlet will receive work for any BuildConfig specifying this named HostConfig.")
 	coordinator  = flag.String("coordinator", "localhost:8119", "address of coordinator, in production use farmer.golang.org. Only used in reverse mode.")
 	hostname     = flag.String("hostname", "", "hostname to advertise to coordinator for reverse mode; default is actual hostname")
@@ -157,10 +156,7 @@ func main() {
 		log.Printf("set OS rlimits.")
 	}
 
-	if *reverse != "" && *reverseType != "" {
-		log.Fatalf("can't specify both --reverse and --reverse-type")
-	}
-	isReverse := *reverse != "" || *reverseType != ""
+	isReverse := *reverseType != ""
 
 	if *listenAddr == "AUTO" && !isReverse {
 		v := defaultListenAddr()

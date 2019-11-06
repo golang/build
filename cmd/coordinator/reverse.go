@@ -541,14 +541,14 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "buildlet registration requires SSL", http.StatusInternalServerError)
 		return
 	}
-	// Check build keys.
 
-	// modes can be either 1 buildlet type (new way) or builder mode(s) (the old way)
-	hostType := r.Header.Get("X-Go-Host-Type")
-	modes := r.Header["X-Go-Builder-Type"] // old way
-	gobuildkeys := r.Header["X-Go-Builder-Key"]
-	buildletVersion := r.Header.Get("X-Go-Builder-Version")
-	revDialVersion := r.Header.Get("X-Revdial-Version")
+	var (
+		hostType        = r.Header.Get("X-Go-Host-Type")
+		buildKey        = r.Header.Get("X-Go-Builder-Key")
+		buildletVersion = r.Header.Get("X-Go-Builder-Version")
+		revDialVersion  = r.Header.Get("X-Revdial-Version")
+		hostname        = r.Header.Get("X-Go-Builder-Hostname")
+	)
 
 	switch revDialVersion {
 	case "":
@@ -561,34 +561,14 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert the new argument style (X-Go-Host-Type) into the
-	// old way, to minimize changes in the rest of this code.
+	// Check build keys.
 	if hostType != "" {
-		if len(modes) > 0 {
-			http.Error(w, "invalid mix of X-Go-Host-Type and X-Go-Builder-Type", http.StatusBadRequest)
-			return
-		}
-		modes = []string{hostType}
-	}
-	if len(modes) == 0 || len(modes) != len(gobuildkeys) {
-		http.Error(w, fmt.Sprintf("need at least one mode and matching key, got %d/%d", len(modes), len(gobuildkeys)), http.StatusPreconditionFailed)
+		http.Error(w, "missing X-Go-Host-Type; old buildlet binary?", http.StatusBadRequest)
 		return
 	}
-	hostname := r.Header.Get("X-Go-Builder-Hostname")
-
-	for i, m := range modes {
-		if gobuildkeys[i] != builderKey(m) {
-			http.Error(w, fmt.Sprintf("bad key for mode %q", m), http.StatusPreconditionFailed)
-			return
-		}
-	}
-
-	// For older builders using the buildlet's -reverse flag only,
-	// collapse their builder modes down into a singular hostType.
-	legacyNote := ""
-	if hostType == "" {
-		hostType = mapBuilderToHostType(modes)
-		legacyNote = fmt.Sprintf(" (mapped from legacy modes %q)", modes)
+	if buildKey != builderKey(hostType) {
+		http.Error(w, "invalid build key", http.StatusPreconditionFailed)
+		return
 	}
 
 	conn, bufrw, err := w.(http.Hijacker).Hijack()
@@ -603,8 +583,8 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Registering reverse buildlet %q (%s) for host type %v %s; buildletVersion=%v; revDialVersion=%v",
-		hostname, r.RemoteAddr, hostType, legacyNote, buildletVersion, revDialVersion)
+	log.Printf("Registering reverse buildlet %q (%s) for host type %v; buildletVersion=%v; revDialVersion=%v",
+		hostname, r.RemoteAddr, hostType, buildletVersion, revDialVersion)
 
 	var dialer func(context.Context) (net.Conn, error)
 	var revDialerDone <-chan struct{}
@@ -659,8 +639,8 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 	tstatus := time.Now()
 	status, err := client.Status()
 	if err != nil {
-		log.Printf("Reverse connection %s/%s for modes %v did not answer status after %v: %v",
-			hostname, r.RemoteAddr, modes, time.Since(tstatus), err)
+		log.Printf("Reverse connection %s/%s for %s did not answer status after %v: %v",
+			hostname, r.RemoteAddr, hostType, time.Since(tstatus), err)
 		conn.Close()
 		return
 	}
@@ -669,7 +649,7 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		conn.Close()
 		return
 	}
-	log.Printf("Buildlet %s/%s: %+v for %s", hostname, r.RemoteAddr, status, modes)
+	log.Printf("Buildlet %s/%s: %+v for %s", hostname, r.RemoteAddr, status, hostType)
 
 	now := time.Now()
 	b := &reverseBuildlet{
@@ -683,10 +663,7 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		regTime:      now,
 	}
 	reversePool.addBuildlet(b)
-	registerBuildlet(modes) // testing only
 }
-
-var registerBuildlet = func(modes []string) {} // test hook
 
 type byTypeThenHostname []*reverseBuildlet
 
@@ -699,30 +676,4 @@ func (s byTypeThenHostname) Less(i, j int) bool {
 		return bi.hostname < bj.hostname
 	}
 	return ti < tj
-}
-
-// mapBuilderToHostType maps from the user's Request.Header["X-Go-Builder-Type"]
-// mode list down into a single host type, or the empty string if unknown.
-func mapBuilderToHostType(modes []string) string {
-	// First, see if any of the provided modes are a host type.
-	// If so, this is an updated client.
-	for _, v := range modes {
-		if _, ok := dashboard.Hosts[v]; ok {
-			return v
-		}
-	}
-
-	// Else, it's an old client, still speaking in terms of
-	// builder names.  See if any are registered aliases. First
-	// one wins. (There are no ambiguities in the wild.)
-	for hostType, hconf := range dashboard.Hosts {
-		for _, alias := range hconf.ReverseAliases {
-			for _, v := range modes {
-				if v == alias {
-					return hostType
-				}
-			}
-		}
-	}
-	return ""
 }
