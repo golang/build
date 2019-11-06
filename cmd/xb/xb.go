@@ -13,9 +13,9 @@
 // Examples:
 //
 //    xb --staging kubectl ...
+//    xb --prod kubectl ...
+//    xb google-email  # print the @google.com account from gcloud
 //
-// Currently kubectl is the only supported subcommand.
-
 package main // import "golang.org/x/build/cmd/xb"
 
 import (
@@ -25,6 +25,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"golang.org/x/build/buildenv"
@@ -36,10 +37,10 @@ var (
 )
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `xb {prod,staging} <CMD> [<ARGS>...]
+	fmt.Fprintf(os.Stderr, `xb [--prod or --staging] <CMD> [<ARGS>...]
 Example:
-   xb staging kubectl ...
-   xb prod gcloud ...
+   xb --staging kubectl ...
+   xb google-email
 `)
 	os.Exit(1)
 }
@@ -68,6 +69,17 @@ func main() {
 		runCmd()
 	case "docker":
 		runDocker()
+	case "google-email":
+		out, err := exec.Command("gcloud", "config", "configurations", "list").CombinedOutput()
+		if err != nil {
+			log.Fatalf("gcloud: %v, %s", err, out)
+		}
+		googRx := regexp.MustCompile(`\S+@google\.com\b`)
+		e := googRx.FindString(string(out))
+		if e == "" {
+			log.Fatalf("didn't find @google.com address in gcloud config configurations list: %s", out)
+		}
+		fmt.Println(e)
 	default:
 		log.Fatalf("unknown command %q", cmd)
 	}
