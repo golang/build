@@ -1238,7 +1238,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 			}
 			bs, err := newBuild(brev)
 			if err != nil {
-				log.Printf("can't create build for %q: %v", rev, err)
+				log.Printf("can't create x/%s trybot build for go/master commit %s: %v", project, rev, err)
 				return nil
 			}
 			addBuilderToSet(bs, brev)
@@ -1598,6 +1598,10 @@ func newBuild(rev buildgo.BuilderRev) (*buildStatus, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown builder type %q", rev.Name)
 	}
+	if rev.Rev == "" {
+		return nil, fmt.Errorf("required field Rev is empty; got %+v", rev)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	return &buildStatus{
 		buildID:    "B" + randHex(9),
