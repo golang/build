@@ -548,8 +548,8 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-solaris-oracle-amd64-oraclerel": &HostConfig{
 		Notes:       "Oracle Solaris amd64 Release System",
-		Owner:       "", // TODO: find current owner
-		OwnerGithub: "", // TODO: find current owner
+		Owner:       "",
+		OwnerGithub: "rorth", // https://github.com/golang/go/issues/15581#issuecomment-550368581
 		IsReverse:   true,
 		ExpectNum:   1,
 		env:         []string{"GOROOT_BOOTSTRAP=/opt/golang/go-solaris-amd64-bootstrap"},
