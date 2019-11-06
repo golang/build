@@ -51,13 +51,11 @@ func ListenAndServe(handler http.Handler, opt *Options) error {
 
 	if opt.AutocertCacheBucket == "" {
 		err := http.Serve(ln, handler)
-		ln.Close()
 		return fmt.Errorf("http.Serve = %v", err)
 	}
 
 	// handler is served primarily via HTTPS, so just redirect HTTP to HTTPS.
 	redirect := &http.Server{
-		Addr:    ln.Addr().String(),
 		Handler: http.HandlerFunc(redirectToHTTPS),
 	}
 	errc := make(chan error)
@@ -105,10 +103,7 @@ func serveAutocertTLS(ctx context.Context, h http.Handler, bucket string) error 
 	defer ln.Close()
 
 	ctx, cancel := context.WithCancel(ctx)
-	server := &http.Server{
-		Addr:    ln.Addr().String(),
-		Handler: h,
-	}
+	server := &http.Server{Handler: h}
 	done := make(chan struct{})
 	go func() {
 		<-ctx.Done()
