@@ -1024,21 +1024,46 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 	c := gp.gerrit.c
 	gitDir := gp.gitDir()
 
-	fetchCtx, cancel := context.WithTimeout(ctx, time.Minute)
-	cmd := exec.CommandContext(fetchCtx, "git", "fetch", "origin")
+	t0 := time.Now()
+	cmd := exec.CommandContext(ctx, "git", "fetch", "origin")
 	cmd.Dir = gitDir
-	out, err := cmd.CombinedOutput()
-	cancel()
-	if err != nil {
-		return fmt.Errorf("git fetch origin: %v, %s", err, out)
-	}
+	// Enable extra Git tracing in case the fetch hangs.
+	cmd.Env = append(os.Environ(),
+		"GIT_TRACE2_EVENT=1",
+		"GIT_TRACE_CURL_NO_DATA=1",
+	)
+	cmd.Stdout = new(bytes.Buffer)
+	cmd.Stderr = cmd.Stdout
 
+	// The 'git fetch' needs a timeout in case it hangs, but to avoid spurious
+	// timeouts (and live-lock) the timeout should be (at least) an order of
+	// magnitude longer than we expect the operation to actually take. Moreover,
+	// exec.CommandContext sends SIGKILL, which may terminate the command without
+	// giving it a chance to flush useful trace entries, so we'll terminate it
+	// manually instead (see https://golang.org/issue/22757).
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("git fetch origin: %v", err)
+	}
+	timer := time.AfterFunc(10*time.Minute, func() {
+		cmd.Process.Signal(os.Interrupt)
+	})
+	err := cmd.Wait()
+	fetchDuration := time.Since(t0).Round(time.Millisecond)
+	timer.Stop()
+	if err != nil {
+		return fmt.Errorf("git fetch origin: %v after %v, %s", err, fetchDuration, cmd.Stdout)
+	}
+	gp.logf("ran git fetch origin in %v", fetchDuration)
+
+	t0 = time.Now()
 	cmd = exec.CommandContext(ctx, "git", "ls-remote")
 	cmd.Dir = gitDir
-	out, err = cmd.CombinedOutput()
+	out, err := cmd.CombinedOutput()
+	lsRemoteDuration := time.Since(t0).Round(time.Millisecond)
 	if err != nil {
-		return fmt.Errorf("git ls-remote in %s: %v, %s", gitDir, err, out)
+		return fmt.Errorf("git ls-remote in %s: %v after %v, %s", gitDir, err, lsRemoteDuration, out)
 	}
+	gp.logf("ran git ls-remote in %v", lsRemoteDuration)
 
 	var changedRefs []*maintpb.GitRef
 	var toFetch []GitHash
@@ -1176,13 +1201,16 @@ func (gp *GerritProject) fetchHashes(ctx context.Context, hashes []GitHash) erro
 		args = append(args, hash.String())
 	}
 	gp.logf("fetching %v hashes...", len(hashes))
+	t0 := time.Now()
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = gp.gitDir()
-	if out, err := cmd.CombinedOutput(); err != nil {
-		log.Printf("error fetching %d hashes from gerrit project %s: %s", len(hashes), gp.proj, out)
+	out, err := cmd.CombinedOutput()
+	d := time.Since(t0).Round(time.Millisecond)
+	if err != nil {
+		gp.logf("error fetching %d hashes after %v: %s", len(hashes), d, out)
 		return err
 	}
-	gp.logf("fetched %v hashes.", len(hashes))
+	gp.logf("fetched %v hashes in %v", len(hashes), d)
 	return nil
 }
 
