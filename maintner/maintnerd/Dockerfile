@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.12 AS build
+FROM golang:1.13 AS build
 LABEL maintainer "golang-dev@googlegroups.com"
 
 ENV GO111MODULE=on
@@ -30,13 +30,13 @@ COPY . /go/src/golang.org/x/build/
 RUN go install golang.org/x/build/maintner/maintnerd
 
 
-FROM debian:stretch
+FROM debian:buster
 LABEL maintainer "golang-dev@googlegroups.com"
 
 # For interacting with the Go source & subrepos
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
-	ca-certificates \
+	ca-certificates netbase \
 	git-core \
 	openssh-client \
 	gnupg dirmngr \
