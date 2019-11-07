@@ -1537,15 +1537,16 @@ func init() {
 			},
 		})
 	}
-	addMiscCompile("-linuxarm", "^linux-arm")        // 2: arm, arm64
-	addMiscCompile("-darwin", "^darwin")             // 4: 386, amd64 + iOS: armb, arm64
-	addMiscCompile("-mips", "^linux-mips")           // 4: mips, mipsle, mips64, mips64le
-	addMiscCompile("-ppc", "^(linux-ppc64|aix-)")    // 3: linux-ppc64{,le}, aix-ppc64
-	addMiscCompile("-solaris", "^(solaris|illumos)") // 2: both amd64
-	addMiscCompile("-plan9", "^plan9-")              // 3: amd64, 386, arm
-	addMiscCompile("-freebsd", "^freebsd-(386|arm)") // 2: 386, arm (amd64 already trybot)
-	addMiscCompile("-netbsd", "^netbsd-")            // 4: amd64, 386, arm, arm64
-	addMiscCompile("-openbsd", "^openbsd-")          // 4: amd64, 386, arm, arm64
+	addMiscCompile("-linuxarm", "^linux-arm")                // 2: arm, arm64
+	addMiscCompile("-darwin", "^darwin")                     // 4: 386, amd64 + iOS: arm, arm64
+	addMiscCompile("-mips", "^linux-mips")                   // 4: mips, mipsle, mips64, mips64le
+	addMiscCompile("-ppc", "^(linux-ppc64|aix-)")            // 3: linux-ppc64{,le}, aix-ppc64
+	addMiscCompile("-solaris", "^(solaris|illumos)")         // 2: both amd64
+	addMiscCompile("-plan9", "^plan9-")                      // 3: amd64, 386, arm
+	addMiscCompile("-freebsd", `^freebsd-(386|arm|arm64)\b`) // 3: 386, arm, arm64 (amd64 already trybot)
+	addMiscCompile("-netbsd", "^netbsd-")                    // 4: amd64, 386, arm, arm64
+	addMiscCompile("-openbsd", "^openbsd-")                  // 4: amd64, 386, arm, arm64
+	addMiscCompile("-android", `^android-(386|arm|arm64)\b`) // 3: 386, arm, arm64 (amd64 already trybot)
 	// And 3 that don't fit above:
 	addMiscCompile("-other", "^(windows-arm|linux-s390x|dragonfly-amd64)$")
 	// TODO: Issue 25963, get the misc-compile trybots for

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -94,6 +95,7 @@ func TestTrybots(t *testing.T) {
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-race",
+				"misc-compile-android",
 				"misc-compile-other",
 				"misc-compile-darwin",
 				"misc-compile-linuxarm",
@@ -118,6 +120,7 @@ func TestTrybots(t *testing.T) {
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-race",
+				"misc-compile-android",
 				"misc-compile-other",
 				"misc-compile-darwin",
 				"misc-compile-linuxarm",
@@ -143,6 +146,7 @@ func TestTrybots(t *testing.T) {
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-race",
+				"misc-compile-android",
 				"misc-compile-darwin",
 				"misc-compile-freebsd",
 				"misc-compile-linuxarm",
@@ -738,4 +742,59 @@ func TestCrossCompileConfigs(t *testing.T) {
 			t.Errorf("unknown host type %q for builder %q", cc.CompileHostType, name)
 		}
 	}
+}
+
+// TestTryBotsCompileAllPorts verifies that each port (go tool dist list) is covered by
+// either a real trybot or a misc-compile trybot.
+func TestTryBotsCompileAllPorts(t *testing.T) {
+	out, err := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "tool", "dist", "list").Output()
+	if err != nil {
+		t.Errorf("dist list: %v", err)
+	}
+	ports := strings.Fields(string(out))
+
+	done := map[string]bool{}
+	done["nacl-386"] = true // removed in Go 1.14
+	done["nacl-arm"] = true // removed in Go 1.14
+	check := func(goos, goarch string) {
+		goosArch := goos + "-" + goarch
+		if done[goosArch] {
+			return
+		}
+		for _, conf := range Builders {
+			os := conf.GOOS()
+			arch := conf.GOARCH()
+
+			if os == goos && arch == goarch && (conf.tryOnly || conf.tryBot != nil) {
+				done[goosArch] = true
+				break
+			}
+
+			if strings.HasPrefix(conf.Name, "misc-compile-") {
+				re, err := regexp.Compile(conf.allScriptArgs[0])
+				if err != nil {
+					t.Errorf("Invalid misc-compile filtering pattern for builder %q: %q",
+						conf.Name, conf.allScriptArgs[0])
+				}
+
+				if re.MatchString(goosArch) || re.MatchString(goos) {
+					done[goosArch] = true
+					break
+				}
+			}
+		}
+		if _, ok := done[goosArch]; !ok {
+			t.Errorf("Missing trybot or misc-compile trybot: %q", goosArch)
+		}
+
+	}
+
+	for _, port := range ports {
+		slash := strings.IndexByte(port, '/')
+		if slash == -1 {
+			t.Fatalf("unexpected port %q", port)
+		}
+		check(port[:slash], port[slash+1:])
+	}
+
 }
