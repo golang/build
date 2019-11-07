@@ -163,6 +163,14 @@ Download:
 	case "host-linux-mipsle-mengzhuo":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
+	case "host-linux-mips64le-rtrk":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--hostname=${GO_BUILDER_ENV}"))
+	case "host-linux-mips64-rtrk":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--hostname=${GO_BUILDER_ENV}"))
 	case "host-linux-ppc64le-power9-osu":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	case "host-linux-ppc64le-osu": // power8
@@ -308,8 +316,14 @@ func buildletURL() string {
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64"
 	case "linux/ppc64le":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64le"
+	case "linux/mipsle":
+		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-mipsle"
 	case "linux/mips64le":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-mips64le"
+	case "linux/mips":
+		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-mips"
+	case "linux/mips64":
+		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-mips64"
 	case "solaris/amd64":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.solaris-amd64"
 	case "illumos/amd64":
