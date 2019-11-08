@@ -49,6 +49,7 @@ type GCSLog struct {
 	bucketName    string
 	bucket        *storage.BucketHandle
 	segmentPrefix string
+	debug         bool
 
 	mu         sync.Mutex // guards the following
 	cond       *sync.Cond
@@ -279,7 +280,9 @@ func (gl *GCSLog) waitSizeNot(ctx context.Context, v int64) (changed bool) {
 	defer gl.mu.Unlock()
 	for {
 		if curSize := gl.sumSizeLocked(); curSize != v {
-			log.Printf("waitSize fired. from %d => %d", v, curSize)
+			if gl.debug {
+				log.Printf("gcslog: waitSize fired. from %d => %d", v, curSize)
+			}
 			return true
 		}
 		select {
@@ -361,6 +364,11 @@ func (w gcsLogWriter) Write(p []byte) (n int, err error) {
 	}
 	return len(p), nil
 }
+
+// SetDebug controls whether verbose debugging is enabled on this log.
+//
+// It must only be called before it's used.
+func (gl *GCSLog) SetDebug(v bool) { gl.debug = v }
 
 // Log writes m to GCS after the buffer is full or after a periodic flush.
 func (gl *GCSLog) Log(m *maintpb.Mutation) error {

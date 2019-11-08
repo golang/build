@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	_ "net/http/pprof"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -161,6 +162,7 @@ func main() {
 			if err != nil {
 				log.Fatalf("newGCSLog: %v", err)
 			}
+			gl.SetDebug(*debug)
 			gl.RegisterHandlers(http.DefaultServeMux)
 			if *migrateGCSFlag {
 				diskLog := maintner.NewDiskMutationLogger(*dataDir)
@@ -255,6 +257,9 @@ func main() {
 	grpcServer := grpc.NewServer()
 	apipb.RegisterMaintnerServiceServer(grpcServer, maintapi.NewAPIService(corpus))
 	http.Handle("/apipb.MaintnerService/", grpcServer)
+	http.HandleFunc("/debug/goroutines", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/debug/pprof/goroutine?debug=1", http.StatusFound)
+	})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
