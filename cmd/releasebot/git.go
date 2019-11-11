@@ -11,6 +11,13 @@ import (
 	"strings"
 )
 
+const (
+	// publicGoRepoURL contains the Gerrit repository URL.
+	publicGoRepoURL = "https://go.googlesource.com/go"
+	// privateGoRepoURL contains the internal repository URL.
+	privateGoRepoURL = "sso://team/golang/go-private"
+)
+
 // gitCheckout sets up a fresh git checkout in which to work,
 // in $HOME/go-releasebot-work/<release>/gitwork
 // (where <release> is a string like go1.8.5).
@@ -25,9 +32,9 @@ func (w *Work) gitCheckout() {
 		w.log.Panic(err)
 	}
 
-	origin := "https://go.googlesource.com/go"
+	origin := publicGoRepoURL
 	if w.Security {
-		origin = "sso://team/golang/go-private"
+		origin = privateGoRepoURL
 	}
 
 	// Check out a local mirror to work-mirror, to speed future checkouts for this point release.
@@ -47,12 +54,13 @@ func (w *Work) gitCheckout() {
 		w.log.Panic(err)
 	}
 	w.runner(w.Dir).run("git", "clone", "--reference", mirror, "-b", w.ReleaseBranch, origin, gitDir)
+
 	r = w.runner(gitDir)
 	r.run("git", "codereview", "change", "relwork")
 	r.run("git", "config", "gc.auto", "0") // don't throw away refs we fetch
 }
 
-// gitTagExists returns whether git git tag is already present in the repository.
+// gitTagExists returns whether a git tag is already present in the repository.
 func (w *Work) gitTagExists() bool {
 	_, err := w.runner(filepath.Join(w.Dir, "gitwork")).runErr("git", "rev-parse", w.Version)
 	return err == nil
@@ -96,4 +104,22 @@ func (w *Work) gitHeadCommit() string {
 	r := w.runner(filepath.Join(w.Dir, "gitwork"))
 	out := r.runOut("git", "rev-parse", "HEAD")
 	return strings.TrimSpace(string(out))
+}
+
+// gitRemoteBranchCommit returns the hash of the HEAD commit on the branch located
+// on a remote repository. It will return false when the branch does not exist or there
+// is a problem communicating with the remote repository.
+func (w *Work) gitRemoteBranchCommit(repositoryURL, branch string) (string, bool) {
+	out := w.runner(w.Dir).runOut("git", "ls-remote", "--heads", repositoryURL, "refs/heads/"+branch)
+	if len(out) == 0 {
+		return "", false
+	}
+	sha := strings.SplitN(string(out), "\t", 2)[0]
+	return sha, true
+}
+
+// gitCommitExistsInBranch reports whether the commit hash exists in the current branch.
+func (w *Work) gitCommitExistsInBranch(commitSHA string) bool {
+	_, err := w.runner(filepath.Join(w.Dir, "gitwork")).runErr("git", "merge-base", "--is-ancestor", commitSHA, "HEAD")
+	return err == nil
 }
