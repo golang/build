@@ -1735,6 +1735,13 @@ func init() {
 		FlakyNet:          true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 7,
+		shouldRunDistTest: func(distTest string, isTry bool) bool {
+			switch distTest {
+			case "api", "reboot":
+				return false
+			}
+			return true
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:          "linux-arm-nativemake",
