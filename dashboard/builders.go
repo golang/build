@@ -64,6 +64,7 @@ var slowBotAliases = map[string]string{
 	"linux-mipsle":   "linux-mipsle-rtrk",
 	"linux-ppc64":    "linux-ppc64-buildlet",
 	"linux-ppc64le":  "linux-ppc64le-buildlet",
+	"linux-riscv64":  "linux-riscv64-unleashed",
 	"linux-s390x":    "linux-s390x-ibm",
 	"longtest":       "linux-amd64-longtest",
 	"mac":            "darwin-amd64-10_14",
@@ -87,6 +88,7 @@ var slowBotAliases = map[string]string{
 	"plan9-amd64":    "plan9-amd64-9front",
 	"ppc64":          "linux-ppc64-buildlet",
 	"ppc64le":        "linux-ppc64le-buildlet",
+	"riscv64":        "linux-riscv64-unleashed",
 	"s390x":          "linux-s390x-ibm",
 	"solaris":        "solaris-amd64-oraclerel",
 	"solaris-amd64":  "solaris-amd64-oraclerel",
@@ -208,6 +210,13 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:   3,
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		OwnerGithub: "esnolte", // https://github.com/golang/go/issues/34973#issuecomment-543836871
+	},
+	"host-linux-riscv64-unleashed": &HostConfig{
+		Notes:       "SiFive HiFive Unleashed RISC-V board. 8 GB RAM, 4 cores.",
+		IsReverse:   true,
+		ExpectNum:   1,          // for now. Joel's board might join the party later.
+		OwnerGithub: "bradfitz", // at home
+		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
 	},
 	"host-openbsd-amd64-60": &HostConfig{
 		VMImage:            "openbsd-amd64-60",
@@ -2291,6 +2300,26 @@ func init() {
 		env: []string{
 			"GOARCH=mips",
 			"GOHOSTARCH=mips",
+		},
+	})
+	addBuilder(BuildConfig{
+		HostType:     "host-linux-riscv64-unleashed",
+		Name:         "linux-riscv64-unleashed",
+		SkipSnapshot: true,
+		shouldRunDistTest: func(distTest string, isTry bool) bool {
+			switch distTest {
+			case "api", "reboot":
+				return false
+			}
+			return true
+		},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			switch repo {
+			case "go", "net", "sys":
+				return branch == "master" && goBranch == "master"
+			default:
+				return false
+			}
 		},
 	})
 	addBuilder(BuildConfig{

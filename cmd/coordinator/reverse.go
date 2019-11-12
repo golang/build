@@ -562,7 +562,7 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check build keys.
-	if hostType != "" {
+	if hostType == "" {
 		http.Error(w, "missing X-Go-Host-Type; old buildlet binary?", http.StatusBadRequest)
 		return
 	}
