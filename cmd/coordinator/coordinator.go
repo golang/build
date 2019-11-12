@@ -940,7 +940,13 @@ func findWork(work chan<- buildgo.BuilderRev) error {
 					SubName: br.Repo,
 					SubRev:  br.Revision,
 				}
-				if awaitSnapshot && !rev.SnapshotExists(context.TODO(), buildEnv) {
+				if awaitSnapshot &&
+					// If this is a builder that snapshots after
+					// make.bash but the snapshot doesn't yet exist,
+					// then skip. But some builders on slow networks
+					// don't snapshot, so don't wait for them. They'll
+					// need to run make.bash first for x/ repos tests.
+					!builderInfo.SkipSnapshot && !rev.SnapshotExists(context.TODO(), buildEnv) {
 					continue
 				}
 			}
