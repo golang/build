@@ -640,7 +640,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{adonovan},
 	},
 	"tools/cmd/godoc": {
-		Primary:   []Owner{andybons},
+		Primary:   []Owner{dmitshur},
 		Secondary: []Owner{agnivade, bradfitz, gri, kevinburke},
 	},
 	"tools/cmd/goimports": {
@@ -658,6 +658,9 @@ var entries = map[string]*Entry{
 	},
 	"tools/go/packages": {
 		Primary: []Owner{matloob},
+	},
+	"tools/godoc": {
+		Primary: []Owner{dmitshur},
 	},
 	"tools/internal/lsp": {
 		Primary: []Owner{rstambler, iancottrell},
