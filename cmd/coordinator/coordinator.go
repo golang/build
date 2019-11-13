@@ -1593,6 +1593,9 @@ func poolForConf(conf *dashboard.HostConfig) BuildletPool {
 	if testPoolHook != nil {
 		return testPoolHook(conf)
 	}
+	if conf == nil {
+		panic("nil conf")
+	}
 	switch {
 	case conf.IsVM():
 		return gcePool

@@ -9,6 +9,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -26,7 +27,7 @@ import (
 // If false, any GetBuildlet call to the schedule delegates directly
 // to the BuildletPool's GetBuildlet and we make a bunch of callers
 // fight over a mutex and a random one wins, like we used to do it.
-const useScheduler = false
+var useScheduler = false
 
 // The Scheduler prioritizes access to buidlets. It accepts requests
 // for buildlets, starts the creation of buildlets from BuildletPools,
@@ -79,8 +80,9 @@ func (s *Scheduler) matchBuildlet(res getBuildletResult) {
 			return
 		}
 		select {
-		case waiter.res <- res.Client:
+		case ch := <-waiter.wantRes:
 			// Normal happy case. Something gets its buildlet.
+			ch <- res.Client
 			return
 		case <-waiter.ctxDone:
 			// Waiter went away in the tiny window between
@@ -138,6 +140,8 @@ func (l stderrLogger) CreateSpan(event string, optText ...string) spanlog.Span {
 	return createSpan(l, event, optText...)
 }
 
+// getPoolBuildlet is launched as its own goroutine to do a
+// potentially long blocking cal to pool.GetBuildlet.
 func (s *Scheduler) getPoolBuildlet(pool BuildletPool, hostType string) {
 	res := getBuildletResult{
 		Pool:     pool,
@@ -145,21 +149,36 @@ func (s *Scheduler) getPoolBuildlet(pool BuildletPool, hostType string) {
 	}
 	ctx := context.Background() // TODO: make these cancelable and cancel unneeded ones earlier?
 	res.Client, res.Err = pool.GetBuildlet(ctx, hostType, stderrLogger{})
+
+	// This is still slightly racy, but probably ok for now.
+	// (We might invoke the schedule method right after
+	// GetBuildlet returns and dial an extra buildlet, but if so
+	// we'll close it without using it.)
+	s.mu.Lock()
+	s.hostsCreating[res.HostType]--
+	s.mu.Unlock()
+
 	s.matchBuildlet(res)
 }
 
-// matchWaiter returns (and removes from the waiting queue) the highest priority SchedItem
+// matchWaiter returns (and removes from the waiting set) the highest priority SchedItem
 // that matches the provided host type.
 func (s *Scheduler) matchWaiter(hostType string) (_ *SchedItem, ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	waiters := s.waiting[hostType]
+
 	var best *SchedItem
-	for si := range s.waiting[hostType] {
+	for si := range waiters {
 		if best == nil || schedLess(si, best) {
 			best = si
 		}
 	}
-	return best, best != nil
+	if best != nil {
+		delete(waiters, best)
+		return best, true
+	}
+	return nil, false
 }
 
 func (s *Scheduler) removeWaiter(si *SchedItem) {
@@ -170,7 +189,7 @@ func (s *Scheduler) removeWaiter(si *SchedItem) {
 	}
 }
 
-func (s *Scheduler) enqueueWaiter(si *SchedItem) {
+func (s *Scheduler) addWaiter(si *SchedItem) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.waiting[si.HostType]; !ok {
@@ -178,6 +197,12 @@ func (s *Scheduler) enqueueWaiter(si *SchedItem) {
 	}
 	s.waiting[si.HostType][si] = true
 	s.scheduleLocked()
+}
+
+func (s *Scheduler) hasWaiter(si *SchedItem) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.waiting[si.HostType][si]
 }
 
 // schedLess reports whether scheduled item ia is "less" (more
@@ -217,30 +242,44 @@ type SchedItem struct {
 	IsTry              bool
 	IsHelper           bool
 
-	// We set in GetBuildlet:
+	// The following unexported fields are set by the Scheduler in
+	// Scheduler.GetBuildlet.
+
 	s           *Scheduler
 	requestTime time.Time
-	tryFor      string // which user. (user with 1 trybot >> user with 50 trybots)
+	commitTime  time.Time // TODO: populate post-submit commit time from maintnerd
+	branch      string    // TODO: populate from maintnerd
+	tryFor      string    // TODO: which user. (user with 1 trybot >> user with 50 trybots)
 	pool        BuildletPool
 	ctxDone     <-chan struct{}
-	// TODO: track the commit time of the BuilderRev, via call to maintnerd probably
-	// commitTime time.Time
 
-	// res is the result channel, containing either a
-	// *buildlet.Client or an error. It is read by GetBuildlet and
-	// written by assignBuildlet.
-	res chan interface{}
-}
-
-func (si *SchedItem) cancel() {
-	si.s.removeWaiter(si)
+	// wantRes is the unbuffered channel that's passed
+	// synchronously from Scheduler.GetBuildlet to
+	// Scheduler.matchBuildlet. Its value is a channel (whose
+	// buffering doesn't matter) to pass over a *buildlet.Client
+	// just obtained from a BuildletPool. The contract to use
+	// wantRes is that the sender must have a result already
+	// available to send on the inner channel, and the receiver
+	// still wants it (their context hasn't expired).
+	wantRes chan chan<- *buildlet.Client
 }
 
 // GetBuildlet requests a buildlet with the parameters described in si.
 //
 // The provided si must be newly allocated; ownership passes to the scheduler.
 func (s *Scheduler) GetBuildlet(ctx context.Context, lg logger, si *SchedItem) (*buildlet.Client, error) {
-	pool := poolForConf(dashboard.Hosts[si.HostType])
+	// TODO: once we remove the useScheduler const, we can remove
+	// the "lg" logger parameter. We don't need to log anything
+	// during the buildlet creation process anymore because we
+	// don't know which build it'll be for. So all we can say in
+	// the logs for is "Asking for a buildlet" and "Got one",
+	// which the caller already does. I think. Verify that.
+
+	hostConf, ok := dashboard.Hosts[si.HostType]
+	if !ok && testPoolHook == nil {
+		return nil, fmt.Errorf("invalid SchedItem.HostType %q", si.HostType)
+	}
+	pool := poolForConf(hostConf)
 
 	if !useScheduler {
 		return pool.GetBuildlet(ctx, si.HostType, lg)
@@ -249,25 +288,19 @@ func (s *Scheduler) GetBuildlet(ctx context.Context, lg logger, si *SchedItem) (
 	si.pool = pool
 	si.s = s
 	si.requestTime = time.Now()
-	si.res = make(chan interface{}) // NOT buffered
 	si.ctxDone = ctx.Done()
+	si.wantRes = make(chan chan<- *buildlet.Client) // unbuffered
 
-	// TODO: once we remove the useScheduler const, we can
-	// remove the "lg" logger parameter. We don't need to
-	// log anything during the buildlet creation process anymore
-	// because we don't which build it'll be for. So all we can
-	// say in the logs for is "Asking for a buildlet" and "Got
-	// one", which the caller already does. I think. Verify that.
+	s.addWaiter(si)
 
-	s.enqueueWaiter(si)
+	ch := make(chan *buildlet.Client)
 	select {
-	case v := <-si.res:
-		if bc, ok := v.(*buildlet.Client); ok {
-			return bc, nil
-		}
-		return nil, v.(error)
+	case si.wantRes <- ch:
+		// No need to call removeWaiter. If we're here, the
+		// sender has already done so.
+		return <-ch, nil
 	case <-ctx.Done():
-		si.cancel()
+		s.removeWaiter(si)
 		return nil, ctx.Err()
 	}
 }
