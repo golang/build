@@ -1,0 +1,2 @@
+export PATH=$HOME/bin:$HOME/go/bin:$PATH
+export GOROOT_BOOTSTRAP=$HOME/go-darwin-arm64-bootstrap
