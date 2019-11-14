@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
@@ -33,7 +34,7 @@ var useScheduler = false
 // for buildlets, starts the creation of buildlets from BuildletPools,
 // and prioritizes which callers gets them first when they're ready.
 type Scheduler struct {
-	// mu guards waiting and hostsCreating.
+	// mu guards the following fields.
 	mu sync.Mutex
 
 	// waiting contains all the set of callers who are waiting for
@@ -43,6 +44,8 @@ type Scheduler struct {
 	// hostsCreating is the number of GetBuildlet calls currently in flight
 	// to each hostType's respective buildlet pool.
 	hostsCreating map[string]int // hostType -> count
+
+	lastProgress map[string]time.Time // hostType -> time last delivered buildlet
 }
 
 // A getBuildletResult is a buildlet that was just created and is up and
@@ -61,6 +64,7 @@ func NewScheduler() *Scheduler {
 	s := &Scheduler{
 		hostsCreating: make(map[string]int),
 		waiting:       make(map[string]map[*SchedItem]bool),
+		lastProgress:  make(map[string]time.Time),
 	}
 	return s
 }
@@ -83,6 +87,10 @@ func (s *Scheduler) matchBuildlet(res getBuildletResult) {
 		case ch := <-waiter.wantRes:
 			// Normal happy case. Something gets its buildlet.
 			ch <- res.Client
+
+			s.mu.Lock()
+			s.lastProgress[res.HostType] = time.Now()
+			s.mu.Unlock()
 			return
 		case <-waiter.ctxDone:
 			// Waiter went away in the tiny window between
@@ -203,6 +211,64 @@ func (s *Scheduler) hasWaiter(si *SchedItem) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.waiting[si.HostType][si]
+}
+
+type schedulerWaitingState struct {
+	Count  int
+	Newest time.Duration
+	Oldest time.Duration
+}
+
+func (st *schedulerWaitingState) add(si *SchedItem) {
+	st.Count++
+	age := time.Since(si.requestTime).Round(time.Second)
+	if st.Newest == 0 || age < st.Newest {
+		st.Newest = age
+	}
+	if st.Oldest == 0 || age > st.Oldest {
+		st.Oldest = age
+	}
+}
+
+type schedulerHostState struct {
+	HostType     string
+	LastProgress time.Duration
+	Total        schedulerWaitingState
+	Gomote       schedulerWaitingState
+	Try          schedulerWaitingState
+	Regular      schedulerWaitingState
+}
+
+type schedulerState struct {
+	HostTypes []schedulerHostState
+}
+
+func (s *Scheduler) state() (st schedulerState) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for hostType, m := range s.waiting {
+		if len(m) == 0 {
+			continue
+		}
+		var hst schedulerHostState
+		hst.HostType = hostType
+		hst.LastProgress = time.Since(s.lastProgress[hostType]).Round(time.Second)
+		for si := range m {
+			hst.Total.add(si)
+			if si.IsGomote {
+				hst.Gomote.add(si)
+			} else if si.IsTry {
+				hst.Try.add(si)
+			} else {
+				hst.Regular.add(si)
+			}
+		}
+		st.HostTypes = append(st.HostTypes, hst)
+	}
+
+	sort.Slice(st.HostTypes, func(i, j int) bool { return st.HostTypes[i].HostType < st.HostTypes[j].HostType })
+	return st
 }
 
 // schedLess reports whether scheduled item ia is "less" (more

@@ -8,8 +8,11 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -102,4 +105,82 @@ func TestHandleStatus_HealthFormatting(t *testing.T) {
 	if t.Failed() {
 		t.Logf("Got: %s", got)
 	}
+}
+
+func TestStatusSched(t *testing.T) {
+	data := statusData{
+		SchedState: schedulerState{
+			HostTypes: []schedulerHostState{
+				{
+					HostType:     "no-special",
+					LastProgress: 5 * time.Minute,
+					Total:        schedulerWaitingState{Count: 10, Newest: 5 * time.Minute, Oldest: 61 * time.Minute},
+					Regular:      schedulerWaitingState{Count: 1},
+				},
+				{
+					HostType:     "with-try",
+					LastProgress: 5 * time.Minute,
+					Total:        schedulerWaitingState{Count: 3},
+					Try:          schedulerWaitingState{Count: 1, Newest: 2 * time.Second, Oldest: 5 * time.Minute},
+					Regular:      schedulerWaitingState{Count: 2},
+				},
+				{
+					HostType:     "gomote-and-try",
+					LastProgress: 5 * time.Minute,
+					Total:        schedulerWaitingState{Count: 6},
+					Gomote:       schedulerWaitingState{Count: 2, Newest: 3 * time.Second, Oldest: 4 * time.Minute},
+					Try:          schedulerWaitingState{Count: 1},
+					Regular:      schedulerWaitingState{Count: 3},
+				},
+			},
+		},
+	}
+	buf := new(bytes.Buffer)
+	if err := statusTmpl.Execute(buf, data); err != nil {
+		t.Fatal(err)
+	}
+
+	wantMatch := []string{
+		`(?s)<li><b>no-special</b>: 10 waiting \(oldest 1h1m0s, newest 5m0s, progress 5m0s\)\s+</li>`,
+		`<li>try: 1 \(oldest 5m0s, newest 2s\)</li>`,
+		`<li>gomote: 2 \(oldest 4m0s, newest 3s\)</li>`,
+	}
+	for _, rx := range wantMatch {
+		matched, err := regexp.Match(rx, buf.Bytes())
+		if err != nil {
+			t.Errorf("error matching %#q: %v", rx, err)
+			continue
+		}
+		if !matched {
+			t.Errorf("didn't match %#q", rx)
+		}
+	}
+	if t.Failed() {
+		t.Logf("Got: %s", section(buf.Bytes(), "sched"))
+	}
+}
+
+// section returns the section of the status HTML page that starts
+// with <h2 id=$section> and ends with any other ^<h2 line.
+func section(in []byte, section string) []byte {
+	start := "<h2 id=" + section + ">"
+	bs := bufio.NewScanner(bytes.NewReader(in))
+	var out bytes.Buffer
+	var foundStart bool
+	for bs.Scan() {
+		if foundStart {
+			if strings.HasPrefix(bs.Text(), "<h2") {
+				break
+			}
+		} else {
+			if strings.HasPrefix(bs.Text(), start) {
+				foundStart = true
+			} else {
+				continue
+			}
+		}
+		out.Write(bs.Bytes())
+		out.WriteByte('\n')
+	}
+	return out.Bytes()
 }

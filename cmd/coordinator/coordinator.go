@@ -715,7 +715,7 @@ func serveTryStatusHTML(w http.ResponseWriter, ts *trySet, tss trySetState) {
 		fmt.Fprintf(buf, "<tr valign=top><td align=left>%s</td><td align=center>%s</td><td><pre>%s</pre></td></tr>\n",
 			html.EscapeString(bs.NameAndBranch()),
 			status,
-			bs.HTMLStatusLine())
+			bs.HTMLStatusTruncated())
 	}
 	fmt.Fprintf(buf, "</table>")
 	w.Write(buf.Bytes())
@@ -809,7 +809,7 @@ func writeStatusHeader(w http.ResponseWriter, st *buildStatus) {
 	}
 	if len(st.events) > 0 {
 		io.WriteString(w, "\nEvents:\n")
-		st.writeEventsLocked(w, false)
+		st.writeEventsLocked(w, false, 0)
 	}
 	io.WriteString(w, "\nBuild log:\n")
 	workaroundFlush(w)
@@ -1818,6 +1818,34 @@ func (st *buildStatus) checkDep(ctx context.Context, dep string) (have bool, err
 
 var errSkipBuildDueToDeps = errors.New("build was skipped due to missing deps")
 
+func (st *buildStatus) getBuildlet() (*buildlet.Client, error) {
+	schedItem := &SchedItem{
+		HostType:   st.conf.HostType,
+		IsTry:      st.trySet != nil,
+		BuilderRev: st.BuilderRev,
+	}
+	st.mu.Lock()
+	st.schedItem = schedItem
+	st.mu.Unlock()
+
+	sp := st.CreateSpan("get_buildlet")
+	bc, err := sched.GetBuildlet(st.ctx, st, schedItem)
+	sp.Done(err)
+	if err != nil {
+		err = fmt.Errorf("failed to get a buildlet: %v", err)
+		go st.reportErr(err)
+		return nil, err
+	}
+	atomic.StoreInt32(&st.hasBuildlet, 1)
+
+	st.mu.Lock()
+	st.bc = bc
+	st.mu.Unlock()
+	st.LogEventTime("using_buildlet", bc.IPPort())
+
+	return bc, nil
+}
+
 func (st *buildStatus) build() error {
 	if deps := st.conf.GoDeps; len(deps) > 0 {
 		ctx, cancel := context.WithTimeout(st.ctx, 30*time.Second)
@@ -1854,25 +1882,11 @@ func (st *buildStatus) build() error {
 		st.forceSnapshotUsage()
 	}
 
-	sp = st.CreateSpan("get_buildlet")
-	bc, err := sched.GetBuildlet(st.ctx, st, &SchedItem{
-		HostType:   st.conf.HostType,
-		IsTry:      st.trySet != nil,
-		BuilderRev: st.BuilderRev,
-	})
-	sp.Done(err)
+	bc, err := st.getBuildlet()
 	if err != nil {
-		err = fmt.Errorf("failed to get a buildlet: %v", err)
-		go st.reportErr(err)
 		return err
 	}
-	atomic.StoreInt32(&st.hasBuildlet, 1)
 	defer bc.Close()
-	st.mu.Lock()
-	st.bc = bc
-	st.mu.Unlock()
-
-	st.LogEventTime("using_buildlet", bc.IPPort())
 
 	if st.useSnapshot() {
 		sp := st.CreateSpan("write_snapshot_tar")
@@ -1966,6 +1980,8 @@ func (st *buildStatus) build() error {
 	}
 	return nil
 }
+
+func (st *buildStatus) HasBuildlet() bool { return atomic.LoadInt32(&st.hasBuildlet) != 0 }
 
 func (st *buildStatus) isTry() bool { return st.trySet != nil }
 
@@ -3367,8 +3383,8 @@ func (s byTestDuration) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 type eventAndTime struct {
 	t    time.Time
-	evt  string
-	text string
+	evt  string // "get_source", "make_and_test", "make", etc
+	text string // optional detail text
 }
 
 // buildStatus is the status of a build.
@@ -3391,6 +3407,7 @@ type buildStatus struct {
 	hasBenchResults bool // set by runTests, may only be used when build() returns.
 
 	mu              sync.Mutex       // guards following
+	schedItem       *SchedItem       // for the initial buildlet (ignoring helpers for now)
 	logURL          string           // if non-empty, permanent URL of log
 	bc              *buildlet.Client // nil initially, until pool returns one
 	done            time.Time        // finished running
@@ -3544,8 +3561,9 @@ func (st *buildStatus) hasEvent(event string) bool {
 
 // HTMLStatusLine returns the HTML to show within the <pre> block on
 // the main page's list of active builds.
-func (st *buildStatus) HTMLStatusLine() template.HTML      { return st.htmlStatusLine(true) }
-func (st *buildStatus) HTMLStatusLine_done() template.HTML { return st.htmlStatusLine(false) }
+func (st *buildStatus) HTMLStatusLine() template.HTML      { return st.htmlStatus(singleLine) }
+func (st *buildStatus) HTMLStatusTruncated() template.HTML { return st.htmlStatus(truncated) }
+func (st *buildStatus) HTMLStatus() template.HTML          { return st.htmlStatus(full) }
 
 func strSliceTo(s string, n int) string {
 	if len(s) <= n {
@@ -3554,7 +3572,15 @@ func strSliceTo(s string, n int) string {
 	return s[:n]
 }
 
-func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
+type buildStatusDetail int
+
+const (
+	singleLine buildStatusDetail = iota
+	truncated
+	full
+)
+
+func (st *buildStatus) htmlStatus(detail buildStatusDetail) template.HTML {
 	if st == nil {
 		return "[nil]"
 	}
@@ -3588,13 +3614,17 @@ func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
 
 	var state string
 	if st.done.IsZero() {
-		state = "running"
+		if st.HasBuildlet() {
+			state = "running"
+		} else {
+			state = "waiting_for_machine"
+		}
 	} else if st.succeeded {
 		state = "succeeded"
 	} else {
 		state = "<font color='#700000'>failed</font>"
 	}
-	if full {
+	if detail > singleLine {
 		fmt.Fprintf(&buf, "; <a href='%s'>%s</a>; %s", html.EscapeString(st.logsURLLocked()), state, html.EscapeString(st.bc.String()))
 	} else {
 		fmt.Fprintf(&buf, "; <a href='%s'>%s</a>", html.EscapeString(st.logsURLLocked()), state)
@@ -3605,9 +3635,13 @@ func (st *buildStatus) htmlStatusLine(full bool) template.HTML {
 		t = st.startTime
 	}
 	fmt.Fprintf(&buf, ", %v ago", time.Since(t).Round(time.Second))
-	if full {
+	if detail > singleLine {
 		buf.WriteByte('\n')
-		st.writeEventsLocked(&buf, true)
+		lastLines := 0
+		if detail == truncated {
+			lastLines = 3
+		}
+		st.writeEventsLocked(&buf, true, lastLines)
 	}
 	return template.HTML(buf.String())
 }
@@ -3633,10 +3667,20 @@ func (st *buildStatus) logsURLLocked() string {
 }
 
 // st.mu must be held.
-func (st *buildStatus) writeEventsLocked(w io.Writer, htmlMode bool) {
-	var lastT time.Time
-	for _, evt := range st.events {
-		lastT = evt.t
+// If numLines is greater than zero, it's the number of final lines to truncate to.
+func (st *buildStatus) writeEventsLocked(w io.Writer, htmlMode bool, numLines int) {
+	startAt := 0
+	if numLines > 0 {
+		startAt = len(st.events) - numLines
+		if startAt > 0 {
+			io.WriteString(w, "...\n")
+		} else {
+			startAt = 0
+		}
+	}
+
+	for i := startAt; i < len(st.events); i++ {
+		evt := st.events[i]
 		e := evt.evt
 		text := evt.text
 		if htmlMode {
@@ -3648,8 +3692,9 @@ func (st *buildStatus) writeEventsLocked(w io.Writer, htmlMode bool) {
 		}
 		fmt.Fprintf(w, "  %v %s %s\n", evt.t.Format(time.RFC3339), e, text)
 	}
-	if st.isRunningLocked() {
-		fmt.Fprintf(w, " %7s (now)\n", fmt.Sprintf("+%0.1fs", time.Since(lastT).Seconds()))
+	if st.isRunningLocked() && len(st.events) > 0 {
+		lastEvt := st.events[len(st.events)-1]
+		fmt.Fprintf(w, " %7s (now)\n", fmt.Sprintf("+%0.1fs", time.Since(lastEvt.t).Seconds()))
 	}
 }
 
