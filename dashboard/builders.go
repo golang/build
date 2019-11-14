@@ -774,13 +774,6 @@ type BuildConfig struct {
 	// of repos. The callers in coordinator will need updating.
 	MinimumGoVersion types.MajorMinor
 
-	// MaxAtOnce optionally specifies a cap of how many builds of
-	// this type can run at once. Zero means unlimited. This is a
-	// temporary measure until the build scheduler
-	// (golang.org/issue/19178) is done, at which point this field
-	// should be deleted.
-	MaxAtOnce int
-
 	// SkipSnapshot, if true, means to not fetch a tarball
 	// snapshot of the world post-make.bash from the buildlet (and
 	// thus to not write it to Google Cloud Storage). This is
@@ -1354,7 +1347,6 @@ func init() {
 		Name:       "freebsd-amd64-gce93",
 		HostType:   "host-freebsd-93-gce",
 		buildsRepo: disabledBuilder,
-		MaxAtOnce:  2,
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-10_3",
@@ -1365,7 +1357,6 @@ func init() {
 		tryBot: func(repo, branch, goBranch string) bool {
 			return branch == "release-branch.go1.11" || branch == "release-branch.go1.12"
 		},
-		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-10_4",
@@ -1373,8 +1364,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return goBranch == "release-branch.go1.11" || goBranch == "release-branch.go1.12"
 		},
-		tryBot:    nil,
-		MaxAtOnce: 2,
+		tryBot: nil,
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-11_1",
@@ -1385,7 +1375,6 @@ func init() {
 		},
 		shouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
-		MaxAtOnce:         2,
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-11_2",
@@ -1393,7 +1382,6 @@ func init() {
 		tryBot:            explicitTrySet("sys"),
 		shouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
-		MaxAtOnce:         2,
 	})
 	addBuilder(BuildConfig{
 		Name:             "freebsd-amd64-12_0",
@@ -1403,7 +1391,6 @@ func init() {
 
 		shouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
-		MaxAtOnce:         2,
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-386-12_0",
@@ -1417,12 +1404,10 @@ func init() {
 			return defaultBuildsRepoPolicy(repo, branch, goBranch)
 		},
 		numTryTestHelpers: 4,
-		MaxAtOnce:         2,
 	})
 	addBuilder(BuildConfig{
-		Name:      "freebsd-amd64-race",
-		HostType:  "host-freebsd-11_1",
-		MaxAtOnce: 2,
+		Name:     "freebsd-amd64-race",
+		HostType: "host-freebsd-11_1",
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-386-10_3",
@@ -1430,8 +1415,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return goBranch == "release-branch.go1.11" || goBranch == "release-branch.go1.12"
 		},
-		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
-		MaxAtOnce: 2,
+		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-386-10_4",
@@ -1439,8 +1423,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return goBranch == "release-branch.go1.11" || goBranch == "release-branch.go1.12"
 		},
-		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
-		MaxAtOnce: 2,
+		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-386-11_1",
@@ -1449,8 +1432,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return goBranch == "release-branch.go1.11" || goBranch == "release-branch.go1.12"
 		},
-		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
-		MaxAtOnce: 2,
+		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-386-11_2",
@@ -1462,9 +1444,8 @@ func init() {
 			}
 			return defaultBuildsRepoPolicy(repo, branch, goBranch)
 		},
-		tryBot:    explicitTrySet("sys"),
-		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
-		MaxAtOnce: 2,
+		tryBot: explicitTrySet("sys"),
+		env:    []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-386",
@@ -1496,7 +1477,6 @@ func init() {
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
-		MaxAtOnce:         3,
 		numTestHelpers:    1,
 		numTryTestHelpers: 4,
 		RunBench:          true,
@@ -1504,7 +1484,6 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:       "linux-amd64-vmx",
 		HostType:   "host-linux-stretch-vmx",
-		MaxAtOnce:  1,
 		buildsRepo: disabledBuilder,
 	})
 
@@ -1555,10 +1534,9 @@ func init() {
 	// misc-compile for ^android- and ^darwin-arm.
 
 	addBuilder(BuildConfig{
-		Name:      "linux-amd64-nocgo",
-		HostType:  "host-linux-jessie",
-		MaxAtOnce: 1,
-		Notes:     "cgo disabled",
+		Name:     "linux-amd64-nocgo",
+		HostType: "host-linux-jessie",
+		Notes:    "cgo disabled",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
 			case "perf":
@@ -1587,12 +1565,10 @@ func init() {
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 			"GO_GCFLAGS=-N -l",
 		},
-		MaxAtOnce: 1,
 	})
 	addBuilder(BuildConfig{
 		Name:        "linux-amd64-ssacheck",
 		HostType:    "host-linux-jessie",
-		MaxAtOnce:   1,
 		buildsRepo:  onlyGo,
 		tryBot:      nil, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
 		CompileOnly: true,
@@ -1609,7 +1585,6 @@ func init() {
 		Name:                "linux-amd64-racecompile",
 		HostType:            "host-linux-jessie",
 		tryBot:              nil, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
-		MaxAtOnce:           1,
 		CompileOnly:         true,
 		SkipSnapshot:        true,
 		StopAfterMake:       true,
@@ -1627,7 +1602,6 @@ func init() {
 		HostType:          "host-linux-jessie",
 		tryBot:            defaultTrySet(),
 		buildsRepo:        defaultPlusExp,
-		MaxAtOnce:         1,
 		shouldRunDistTest: fasterTrybots,
 		numTestHelpers:    1,
 		numTryTestHelpers: 5,
@@ -1636,37 +1610,32 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:      "linux-386-clang",
-		HostType:  "host-linux-clang",
-		MaxAtOnce: 1,
-		Notes:     "Debian jessie + clang 3.9 instead of gcc",
-		env:       []string{"CC=/usr/bin/clang", "GOHOSTARCH=386"},
+		Name:     "linux-386-clang",
+		HostType: "host-linux-clang",
+		Notes:    "Debian jessie + clang 3.9 instead of gcc",
+		env:      []string{"CC=/usr/bin/clang", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
-		Name:      "linux-amd64-clang",
-		HostType:  "host-linux-clang",
-		MaxAtOnce: 1,
-		Notes:     "Debian jessie + clang 3.9 instead of gcc",
-		env:       []string{"CC=/usr/bin/clang"},
+		Name:     "linux-amd64-clang",
+		HostType: "host-linux-clang",
+		Notes:    "Debian jessie + clang 3.9 instead of gcc",
+		env:      []string{"CC=/usr/bin/clang"},
 	})
 	addBuilder(BuildConfig{
-		Name:      "linux-386-sid",
-		HostType:  "host-linux-sid",
-		Notes:     "Debian sid (unstable)",
-		MaxAtOnce: 1,
-		env:       []string{"GOHOSTARCH=386"},
+		Name:     "linux-386-sid",
+		HostType: "host-linux-sid",
+		Notes:    "Debian sid (unstable)",
+		env:      []string{"GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
-		Name:      "linux-amd64-sid",
-		HostType:  "host-linux-sid",
-		MaxAtOnce: 1,
-		Notes:     "Debian sid (unstable)",
+		Name:     "linux-amd64-sid",
+		HostType: "host-linux-sid",
+		Notes:    "Debian sid (unstable)",
 	})
 	addBuilder(BuildConfig{
-		Name:      "linux-amd64-fedora",
-		HostType:  "host-linux-fedora",
-		MaxAtOnce: 1,
-		Notes:     "Fedora",
+		Name:     "linux-amd64-fedora",
+		HostType: "host-linux-fedora",
+		Notes:    "Fedora",
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-androidemu",
@@ -1687,19 +1656,17 @@ func init() {
 		Notes: "Runs GOOS=linux but with the Android emulator attached, for running x/mobile host tests.",
 	})
 	addBuilder(BuildConfig{
-		Name:      "linux-amd64-jessie",
-		HostType:  "host-linux-jessie",
-		MaxAtOnce: 5,
-		Notes:     "Debian Jessie. The normal 'linux-amd64' builder is stretch. We use Jessie for our release builds due to https://golang.org/issue/31293",
+		Name:     "linux-amd64-jessie",
+		HostType: "host-linux-jessie",
+		Notes:    "Debian Jessie. The normal 'linux-amd64' builder is stretch. We use Jessie for our release builds due to https://golang.org/issue/31293",
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:      "linux-amd64-longtest",
-		HostType:  "host-linux-stretch-morecpu",
-		MaxAtOnce: 1,
-		Notes:     "Debian Stretch with go test -short=false",
+		Name:     "linux-amd64-longtest",
+		HostType: "host-linux-stretch-morecpu",
+		Notes:    "Debian Stretch with go test -short=false",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" || (branch == "master" && goBranch == "master")
 		},
@@ -1710,10 +1677,9 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:      "linux-386-longtest",
-		HostType:  "host-linux-stretch-morecpu",
-		MaxAtOnce: 1,
-		Notes:     "Debian Stretch with go test -short=false; to get 32-bit coverage",
+		Name:     "linux-386-longtest",
+		HostType: "host-linux-stretch-morecpu",
+		Notes:    "Debian Stretch with go test -short=false; to get 32-bit coverage",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" || (branch == "master" && goBranch == "master")
 		},
@@ -1794,7 +1760,6 @@ func init() {
 			// nacl support is removed in Go 1.14.
 			return repo == "go" && !atLeastGo1(goBranch, 14) && !strings.HasPrefix(goBranch, "dev.")
 		},
-		MaxAtOnce:         2,
 		numTryTestHelpers: 3,
 		env:               []string{"GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
@@ -1806,7 +1771,6 @@ func init() {
 			return repo == "go" && !atLeastGo1(goBranch, 14) && !strings.HasPrefix(goBranch, "dev.")
 		},
 		tryBot:            explicitTrySet("go"),
-		MaxAtOnce:         2,
 		numTryTestHelpers: 3,
 		env:               []string{"GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
@@ -1850,7 +1814,6 @@ func init() {
 		HostType:          "host-openbsd-amd64-60",
 		shouldRunDistTest: noTestDir,
 		buildsRepo:        disabledBuilder,
-		MaxAtOnce:         1,
 		numTestHelpers:    2,
 		numTryTestHelpers: 5,
 	})
@@ -1859,7 +1822,6 @@ func init() {
 		HostType:          "host-openbsd-386-60",
 		shouldRunDistTest: noTestDir,
 		buildsRepo:        disabledBuilder,
-		MaxAtOnce:         1,
 		env: []string{
 			// cmd/go takes ~192 seconds on openbsd-386
 			// now, which is over the 180 second default
@@ -1872,7 +1834,6 @@ func init() {
 		Name:              "openbsd-386-62",
 		HostType:          "host-openbsd-386-62",
 		shouldRunDistTest: noTestDir,
-		MaxAtOnce:         1,
 		env: []string{
 			// cmd/go takes ~192 seconds on openbsd-386
 			// now, which is over the 180 second default
@@ -1888,7 +1849,6 @@ func init() {
 		tryBot:            nil,
 		numTestHelpers:    0,
 		numTryTestHelpers: 5,
-		MaxAtOnce:         1,
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-64",
@@ -1898,20 +1858,17 @@ func init() {
 		tryBot:            defaultTrySet(),
 		numTestHelpers:    0,
 		numTryTestHelpers: 5,
-		MaxAtOnce:         1,
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-386-64",
 		HostType:          "host-openbsd-386-64",
 		tryBot:            explicitTrySet("sys"),
 		shouldRunDistTest: noTestDir,
-		MaxAtOnce:         1,
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-arm-jsing",
 		HostType:          "host-openbsd-arm-joelsing",
 		shouldRunDistTest: noTestDir,
-		MaxAtOnce:         1,
 		tryBot:            nil,
 		env: []string{
 			// The machine is slow.
@@ -1932,14 +1889,12 @@ func init() {
 		Name:              "netbsd-amd64-8_0",
 		HostType:          "host-netbsd-amd64-8_0",
 		shouldRunDistTest: netBSDDistTestPolicy,
-		MaxAtOnce:         1,
 		tryBot:            explicitTrySet("sys"),
 	})
 	addBuilder(BuildConfig{
 		Name:              "netbsd-386-8_0",
 		HostType:          "host-netbsd-386-8_0",
 		shouldRunDistTest: netBSDDistTestPolicy,
-		MaxAtOnce:         1,
 		// This builder currently hangs in the runtime tests; Issue 31726.
 		buildsRepo: disabledBuilder,
 	})
@@ -1947,7 +1902,6 @@ func init() {
 		Name:              "netbsd-arm-bsiegert",
 		HostType:          "host-netbsd-arm-bsiegert",
 		shouldRunDistTest: netBSDDistTestPolicy,
-		MaxAtOnce:         1,
 		tryBot:            nil,
 		env: []string{
 			// The machine is slow.
@@ -1957,7 +1911,6 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:           "plan9-386",
 		HostType:       "host-plan9-386-gce",
-		MaxAtOnce:      2,
 		numTestHelpers: 1,
 		tryOnly:        true, // disable it for now; Issue 31261, Issue 29801
 		shouldRunDistTest: func(distTestName string, isTry bool) bool {
@@ -1991,7 +1944,6 @@ func init() {
 		buildsRepo:        defaultPlusExp,
 		shouldRunDistTest: fasterTrybots,
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
-		MaxAtOnce:         2,
 		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 4,
 	})
@@ -2009,7 +1961,6 @@ func init() {
 			// up:
 			"GO_TEST_TIMEOUT_SCALE=2",
 		},
-		MaxAtOnce: 2,
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2016",
@@ -2029,10 +1980,9 @@ func init() {
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
-		Name:      "windows-amd64-longtest",
-		HostType:  "host-windows-amd64-2016",
-		MaxAtOnce: 1,
-		Notes:     "Windows Server 2016 with go test -short=false",
+		Name:     "windows-amd64-longtest",
+		HostType: "host-windows-amd64-2016",
+		Notes:    "Windows Server 2016 with go test -short=false",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			if !defaultPlusExp(repo, branch, goBranch) {
 				return false
@@ -2099,8 +2049,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && atLeastGo1(branch, 13)
 		},
-		MaxAtOnce: 1,
-		env:       []string{"GOARCH=386", "GOHOSTARCH=386"},
+		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_12",
@@ -2116,7 +2065,6 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-nocgo",
 		HostType:          "host-darwin-10_14",
-		MaxAtOnce:         1,
 		shouldRunDistTest: noTestDir,
 		env:               []string{"CGO_ENABLED=0"},
 	})

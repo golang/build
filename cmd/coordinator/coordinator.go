@@ -451,17 +451,6 @@ func numCurrentBuilds() int {
 	return len(status)
 }
 
-func numCurrentBuildsOfType(typ string) (n int) {
-	statusMu.Lock()
-	defer statusMu.Unlock()
-	for rev := range status {
-		if rev.Name == typ {
-			n++
-		}
-	}
-	return
-}
-
 func isBuilding(work buildgo.BuilderRev) bool {
 	statusMu.Lock()
 	defer statusMu.Unlock()
@@ -489,9 +478,6 @@ func mayBuildRev(rev buildgo.BuilderRev) bool {
 		return false
 	}
 	if buildEnv.MaxBuilds > 0 && numCurrentBuilds() >= buildEnv.MaxBuilds {
-		return false
-	}
-	if buildConf.MaxAtOnce > 0 && numCurrentBuildsOfType(rev.Name) >= buildConf.MaxAtOnce {
 		return false
 	}
 	if buildConf.IsReverse() && !reversePool.CanBuild(buildConf.HostType) {
@@ -879,24 +865,6 @@ func findWork() error {
 		knownToDashboard[b] = true
 	}
 
-	// Before, we just sent all the possible work to workc,
-	// which then kicks off lots of goroutines that fight over
-	// available buildlets, with the result that we run a random
-	// subset of the possible work. But really we want to run
-	// the newest possible work, so that lines at the top of the
-	// build dashboard are filled in before lines below.
-	// It's a bit hard to push that preference all the way through
-	// this code base, but we can tilt the scales a little by only
-	// sending one job to workc for each different builder
-	// on each findWork call. The findWork calls happen every
-	// 15 seconds, so we will now only kick off one build of
-	// a particular host type (for example, darwin-arm64) every
-	// 15 seconds, but they should be skewed toward new work.
-	// This depends on the build dashboard sending back the list
-	// of empty slots newest first (matching the order on the main screen).
-	// TODO: delete this code when the scheduler is on by default.
-	sent := map[string]bool{}
-
 	var goRevisions []string // revisions of repo "go", branch "master" revisions
 	seenSubrepo := make(map[string]bool)
 	for _, br := range bs.Revisions {
@@ -965,19 +933,7 @@ func findWork() error {
 				}
 			}
 
-			if useScheduler {
-				addWork(rev)
-			} else {
-				// The !sent[builder] here is a clumsy attempt at priority scheduling
-				// and probably should be replaced at some point with a better solution.
-				// See golang.org/issue/19178 and the long comment above.
-				// TODO: delete all this code and the sent map above when the
-				// useScheduler const is removed.
-				if !sent[builder] {
-					sent[builder] = true
-					addWork(rev)
-				}
-			}
+			addWork(rev)
 		}
 	}
 
@@ -1529,10 +1485,6 @@ type logger interface {
 // buildletTimeoutOpt is a context.Value key for BuildletPool.GetBuildlet.
 type buildletTimeoutOpt struct{} // context Value key; value is time.Duration
 
-// highPriorityOpt is a context.Value key for BuildletPool.GetBuildlet.
-// If its value is true, that means the caller should be prioritized.
-type highPriorityOpt struct{} // value is bool
-
 type BuildletPool interface {
 	// GetBuildlet returns a new buildlet client.
 	//
@@ -1562,7 +1514,7 @@ func getBuildlets(ctx context.Context, n int, schedTmpl *SchedItem, lg logger) <
 			sp := lg.CreateSpan("get_helper", fmt.Sprintf("helper %d/%d", i+1, n))
 			schedItem := *schedTmpl // copy; GetBuildlet takes ownership
 			schedItem.IsHelper = i > 0
-			bc, err := sched.GetBuildlet(ctx, lg, &schedItem)
+			bc, err := sched.GetBuildlet(ctx, &schedItem)
 			sp.Done(err)
 			if err != nil {
 				if err != context.Canceled {
@@ -1829,7 +1781,7 @@ func (st *buildStatus) getBuildlet() (*buildlet.Client, error) {
 	st.mu.Unlock()
 
 	sp := st.CreateSpan("get_buildlet")
-	bc, err := sched.GetBuildlet(st.ctx, st, schedItem)
+	bc, err := sched.GetBuildlet(st.ctx, schedItem)
 	sp.Done(err)
 	if err != nil {
 		err = fmt.Errorf("failed to get a buildlet: %v", err)
@@ -2130,7 +2082,7 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompil
 	ctx, cancel := context.WithCancel(st.ctx)
 	defer cancel()
 	sp := st.CreateSpan("get_buildlet_cross")
-	kubeBC, err := sched.GetBuildlet(ctx, st, &SchedItem{
+	kubeBC, err := sched.GetBuildlet(ctx, &SchedItem{
 		HostType:   config.CompileHostType,
 		IsTry:      st.trySet != nil,
 		BuilderRev: st.BuilderRev,

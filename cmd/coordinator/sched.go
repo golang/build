@@ -21,15 +21,6 @@ import (
 	"golang.org/x/build/internal/buildgo"
 )
 
-// useScheduler controls whether we actually use the scheduler. This
-// is temporarily false during development. Once we're happy with it
-// we'll delete this.
-//
-// If false, any GetBuildlet call to the schedule delegates directly
-// to the BuildletPool's GetBuildlet and we make a bunch of callers
-// fight over a mutex and a random one wins, like we used to do it.
-var useScheduler = true
-
 // The Scheduler prioritizes access to buidlets. It accepts requests
 // for buildlets, starts the creation of buildlets from BuildletPools,
 // and prioritizes which callers gets them first when they're ready.
@@ -333,23 +324,12 @@ type SchedItem struct {
 // GetBuildlet requests a buildlet with the parameters described in si.
 //
 // The provided si must be newly allocated; ownership passes to the scheduler.
-func (s *Scheduler) GetBuildlet(ctx context.Context, lg logger, si *SchedItem) (*buildlet.Client, error) {
-	// TODO: once we remove the useScheduler const, we can remove
-	// the "lg" logger parameter. We don't need to log anything
-	// during the buildlet creation process anymore because we
-	// don't know which build it'll be for. So all we can say in
-	// the logs for is "Asking for a buildlet" and "Got one",
-	// which the caller already does. I think. Verify that.
-
+func (s *Scheduler) GetBuildlet(ctx context.Context, si *SchedItem) (*buildlet.Client, error) {
 	hostConf, ok := dashboard.Hosts[si.HostType]
 	if !ok && testPoolHook == nil {
 		return nil, fmt.Errorf("invalid SchedItem.HostType %q", si.HostType)
 	}
 	pool := poolForConf(hostConf)
-
-	if !useScheduler {
-		return pool.GetBuildlet(ctx, si.HostType, lg)
-	}
 
 	si.pool = pool
 	si.s = s

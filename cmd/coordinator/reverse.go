@@ -287,22 +287,6 @@ func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 	return true
 }
 
-var (
-	highPriorityBuildletMu sync.Mutex
-	highPriorityBuildlet   = make(map[string]chan *buildlet.Client)
-)
-
-func highPriChan(hostType string) chan *buildlet.Client {
-	highPriorityBuildletMu.Lock()
-	defer highPriorityBuildletMu.Unlock()
-	if c, ok := highPriorityBuildlet[hostType]; ok {
-		return c
-	}
-	c := make(chan *buildlet.Client)
-	highPriorityBuildlet[hostType] = c
-	return c
-}
-
 func (p *reverseBuildletPool) updateWaiterCounter(hostType string, delta int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -316,34 +300,21 @@ func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, 
 	p.updateWaiterCounter(hostType, 1)
 	defer p.updateWaiterCounter(hostType, -1)
 	seenErrInUse := false
-	isHighPriority, _ := ctx.Value(highPriorityOpt{}).(bool)
+
 	sp := lg.CreateSpan("wait_static_builder", hostType)
 	for {
 		bc, busy := p.tryToGrab(hostType)
 		if bc != nil {
-			select {
-			case highPriChan(hostType) <- bc:
-				// Somebody else was more important.
-			default:
-				sp.Done(nil)
-				return p.cleanedBuildlet(bc, lg)
-			}
+			sp.Done(nil)
+			return p.cleanedBuildlet(bc, lg)
 		}
 		if busy > 0 && !seenErrInUse {
 			lg.LogEventTime("waiting_machine_in_use")
 			seenErrInUse = true
 		}
-		var highPri chan *buildlet.Client
-		if isHighPriority {
-			highPri = highPriChan(hostType)
-		}
 		select {
 		case <-ctx.Done():
 			return nil, sp.Done(ctx.Err())
-		case bc := <-highPri:
-			sp.Done(nil)
-			return p.cleanedBuildlet(bc, lg)
-
 		case <-time.After(10 * time.Second):
 			// As multiple goroutines can be listening for
 			// the available signal, it must be treated as

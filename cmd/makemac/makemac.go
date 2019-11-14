@@ -695,9 +695,15 @@ func autoAdjust() {
 // or 0 to not make anything. It gets the latest reverse buildlet
 // status from the coordinator.
 func wantedMacVersionNext(st *State, rstat *types.ReverseBuilderStatus) int {
-	// TODO: improve this logic at some point, probably when the
-	// coordinator has a proper scheduler (Issue 19178) and when
-	// the coordinator keeps 1 of each builder type ready to go.
+	// TODO: improve this logic now that the coordinator has a
+	// proper scheduler. Instead, don't create anything
+	// proactively until there's demand from it from the
+	// scheduler. (will need to add that to the coordinator's
+	// status JSON) And maybe add a streaming endpoint to the
+	// coordinator so we don't need to poll every N seconds. Or
+	// just poll every few seconds, perhaps at a lighter endpoint
+	// that only does darwin.
+	//
 	// For now just use the static configuration in
 	// dashboard/builders.go of how many are expected, which ends
 	// up in ReverseBuilderStatus.

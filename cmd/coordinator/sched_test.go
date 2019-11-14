@@ -152,7 +152,7 @@ func (c *getBuildletCall) cancel(t *testing.T, s *Scheduler) { c.ctxCancel() }
 func (c *getBuildletCall) start(t *testing.T, s *Scheduler) {
 	t.Logf("starting buildlet call for SchedItem=%p", c.si)
 	go func() {
-		c.gotClient, c.gotErr = s.GetBuildlet(c.ctx, discardLogger{}, c.si)
+		c.gotClient, c.gotErr = s.GetBuildlet(c.ctx, c.si)
 		close(c.done)
 	}()
 
@@ -222,8 +222,6 @@ func (m poolChan) GetBuildlet(ctx context.Context, hostType string, lg logger) (
 func (poolChan) String() string { return "testing poolChan" }
 
 func TestScheduler(t *testing.T) {
-	defer func(old bool) { useScheduler = old }(useScheduler)
-	useScheduler = true
 	defer func() { testPoolHook = nil }()
 
 	var pool poolChan // initialized per test below

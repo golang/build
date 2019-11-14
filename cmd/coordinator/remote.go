@@ -151,22 +151,10 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	// closed, the pod is destroyed.
 	// TODO: clean this up.
 
-	// Doing a release?
-	if user == "release" || user == "adg" || user == "bradfitz" {
-		ctx = context.WithValue(ctx, highPriorityOpt{}, true)
-	}
-
 	resc := make(chan *buildlet.Client)
 	errc := make(chan error)
 	go func() {
-		lgFunc := loggerFunc(func(event string, optText ...string) {
-			var extra string
-			if len(optText) > 0 {
-				extra = " " + optText[0]
-			}
-			log.Printf("creating buildlet %s for %s: %s%s", bconf.HostType, user, event, extra)
-		})
-		bc, err := sched.GetBuildlet(ctx, lgFunc, &SchedItem{
+		bc, err := sched.GetBuildlet(ctx, &SchedItem{
 			HostType: bconf.HostType,
 			IsGomote: true,
 		})

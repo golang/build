@@ -282,14 +282,13 @@ func goFindTryWork(ctx context.Context, gerritc *gerrit.Client, maintc *maintner
 		res.Waiting = append(res.Waiting, work)
 	}
 
-	// Sort in some stable order.
-	//
-	// TODO: better would be sorting by time the trybot was
-	// requested, or the time of the CL. But we don't return that
-	// (yet?) because the coordinator has never needed it
-	// historically. But if we do a proper scheduler (Issue
-	// 19178), perhaps it would be good data to have in the
-	// coordinator.
+	// Sort in some stable order. The coordinator's scheduler
+	// currently only uses the time the trybot run was requested,
+	// and not the commit time yet, but if two trybot runs are
+	// requested within the coordinator's poll interval, the
+	// earlier commit being first seems fair enough. Plus it's
+	// nice for interactive maintq queries to not have random
+	// orders.
 	sort.Slice(res.Waiting, func(i, j int) bool {
 		return res.Waiting[i].Commit < res.Waiting[j].Commit
 	})
