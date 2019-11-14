@@ -23,12 +23,12 @@ import (
 
 // useScheduler controls whether we actually use the scheduler. This
 // is temporarily false during development. Once we're happy with it
-// we'll delete this const.
+// we'll delete this.
 //
 // If false, any GetBuildlet call to the schedule delegates directly
 // to the BuildletPool's GetBuildlet and we make a bunch of callers
 // fight over a mutex and a random one wins, like we used to do it.
-var useScheduler = false
+var useScheduler = true
 
 // The Scheduler prioritizes access to buidlets. It accepts requests
 // for buildlets, starts the creation of buildlets from BuildletPools,
