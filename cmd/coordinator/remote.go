@@ -296,6 +296,11 @@ func proxyBuildletHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == "POST" && r.URL.Path == "/tcpproxy" {
+		proxyBuildletTCP(w, r, rb)
+		return
+	}
+
 	outReq, err := http.NewRequest(r.Method, rb.buildlet.URL()+r.URL.Path+"?"+r.URL.RawQuery, r.Body)
 	if err != nil {
 		log.Printf("bad proxy request: %v", err)
@@ -315,6 +320,87 @@ func proxyBuildletHTTP(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	proxy.ServeHTTP(w, outReq)
+}
+
+// proxyBuildletTCP handles connecting to and proxying between a
+// backend buildlet VM's TCP port and the client. This is called once
+// it's already authenticated by proxyBuildletHTTP.
+func proxyBuildletTCP(w http.ResponseWriter, r *http.Request, rb *remoteBuildlet) {
+	if r.ProtoMajor > 1 {
+		// TODO: deal with HTTP/2 requests if https://farmer.golang.org enables it later.
+		// Currently it does not, as other handlers Hijack too. We'd need to teach clients
+		// when to explicitly disable HTTP/1, or update the protocols to do read/write
+		// bodies instead of 101 Switching Protocols.
+		http.Error(w, "unexpected HTTP/2 request", http.StatusInternalServerError)
+		return
+	}
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "not a Hijacker", http.StatusInternalServerError)
+		return
+	}
+	// The target port is a header instead of a query parameter for no real reason other
+	// than being consistent with the reverse buildlet registration headers.
+	port, err := strconv.Atoi(r.Header.Get("X-Target-Port"))
+	if err != nil {
+		http.Error(w, "invalid or missing X-Target-Port", http.StatusBadRequest)
+		return
+	}
+	hc, ok := dashboard.Hosts[rb.HostType]
+	if !ok || !hc.IsVM() {
+		// TODO: implement support for non-VM types if/when needed.
+		http.Error(w, fmt.Sprintf("unsupported non-VM host type %q", rb.HostType), http.StatusBadRequest)
+		return
+	}
+	ip, _, err := net.SplitHostPort(rb.buildlet.IPPort())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("unexpected backend ip:port %q", rb.buildlet.IPPort()), http.StatusInternalServerError)
+		return
+	}
+
+	c, err := (&net.Dialer{}).DialContext(r.Context(), "tcp", net.JoinHostPort(ip, fmt.Sprint(port)))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to connect to port %v: %v", port, err), http.StatusInternalServerError)
+		return
+	}
+	defer c.Close()
+
+	// Hijack early so we can check for any unexpected buffered
+	// request data without doing a potentially blocking
+	// r.Body.Read. Also it's nice to be able to WriteString the
+	// response header explicitly. But using w.WriteHeader+w.Flush
+	// would probably also work. Somewhat arbitrary to do it early.
+	cc, buf, err := hj.Hijack()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Hijack: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer cc.Close()
+
+	if buf.Reader.Buffered() != 0 {
+		io.WriteString(cc, "HTTP/1.0 400 Bad Request\r\n\r\nUnexpected buffered data.\n")
+		return
+	}
+
+	// If we send a 101 response with an Upgrade header and a
+	// "Connection: Upgrade" header, that makes net/http's
+	// *Response.isProtocolSwitch() return true, which gives us a
+	// writable Response.Body on the client side, which simplifies
+	// the gomote code.
+	io.WriteString(cc, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: tcpproxy\r\nConnection: upgrade\r\n\r\n")
+
+	errc := make(chan error, 2)
+	// Copy from HTTP client to backend.
+	go func() {
+		_, err := io.Copy(c, cc)
+		errc <- err
+	}()
+	// And copy from backend to the HTTP client.
+	go func() {
+		_, err := io.Copy(cc, c)
+		errc <- err
+	}()
+	<-errc
 }
 
 func requireBuildletProxyAuth(h http.Handler) http.Handler {
