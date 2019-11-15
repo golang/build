@@ -34,7 +34,7 @@ var sourceCache = lru.New(40) // git rev -> []byte
 // repo is go.googlesource.com repo ("go", "net", etc)
 // rev is git revision.
 func GetSourceTgz(sl spanlog.Logger, repo, rev string) (tgz io.Reader, err error) {
-	sp := sl.CreateSpan("get_source")
+	sp := sl.CreateSpan("get_source", repo+"@"+rev)
 	defer func() { sp.Done(err) }()
 
 	key := fmt.Sprintf("%v-%v", repo, rev)
