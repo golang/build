@@ -1526,7 +1526,7 @@ func init() {
 	addMiscCompile("-freebsd", `^freebsd-(386|arm|arm64)\b`) // 3: 386, arm, arm64 (amd64 already trybot)
 	addMiscCompile("-netbsd", "^netbsd-")                    // 4: amd64, 386, arm, arm64
 	addMiscCompile("-openbsd", "^openbsd-")                  // 4: amd64, 386, arm, arm64
-	addMiscCompile("-android", `^android-(386|arm|arm64)\b`) // 3: 386, arm, arm64 (amd64 already trybot)
+
 	// And 3 that don't fit above:
 	addMiscCompile("-other", "^(windows-arm|linux-s390x|dragonfly-amd64)$")
 	// TODO: Issue 25963, get the misc-compile trybots for

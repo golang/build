@@ -95,7 +95,6 @@ func TestTrybots(t *testing.T) {
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-race",
-				"misc-compile-android",
 				"misc-compile-other",
 				"misc-compile-darwin",
 				"misc-compile-linuxarm",
@@ -120,7 +119,6 @@ func TestTrybots(t *testing.T) {
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-race",
-				"misc-compile-android",
 				"misc-compile-other",
 				"misc-compile-darwin",
 				"misc-compile-linuxarm",
@@ -146,7 +144,6 @@ func TestTrybots(t *testing.T) {
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-race",
-				"misc-compile-android",
 				"misc-compile-darwin",
 				"misc-compile-freebsd",
 				"misc-compile-linuxarm",
@@ -757,6 +754,14 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	done["nacl-386"] = true // removed in Go 1.14
 	done["nacl-arm"] = true // removed in Go 1.14
 	check := func(goos, goarch string) {
+		if goos == "android" {
+			// TODO(golang.org/issue/25963): support
+			// compilation-only Android trybots.
+			// buildall.bash doesn't set the environment
+			// up enough for e.g. compiling android-386
+			// from linux-amd64. (Issue #35596 too)
+			return
+		}
 		goosArch := goos + "-" + goarch
 		if done[goosArch] {
 			return
