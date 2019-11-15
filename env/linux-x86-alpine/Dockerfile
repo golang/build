@@ -8,7 +8,7 @@
 
 FROM golang/buildlet-stage0 AS stage0
 
-FROM alpine:3.5
+FROM alpine:3.10
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
 RUN apk add --no-cache \
@@ -24,10 +24,15 @@ RUN apk add --no-cache \
 	go \
 	libc-dev \
 	lsof \
+	openssh \
 	procps \
 	strace
 
-COPY --from=stage0 /go/bin/stage0 /usr/local/bin/stage0
+RUN ssh-keygen -A
+RUN bash -c "(echo ChallengeResponseAuthentication no; echo PasswordAuthentication no; echo PermitRootLogin yes) > /etc/ssh/sshd_config"
+RUN passwd -u root
+
+COPY --from=stage0 /go/bin/stage0.static /usr/local/bin/stage0
 
 ENV GOROOT_BOOTSTRAP=/usr/lib/go
 

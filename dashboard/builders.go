@@ -167,6 +167,7 @@ var Hosts = map[string]*HostConfig{
 		ContainerImage:  "js-wasm:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:     "root",
 	},
 	"host-s390x-cross-kube": &HostConfig{
 		Notes:           "Container with s390x cross-compiler.",
@@ -177,26 +178,30 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-x86-alpine": &HostConfig{
 		Notes:           "Alpine container",
 		ContainerImage:  "linux-x86-alpine:latest",
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64-static",
+		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64-static",
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/lib/go"},
+		SSHUsername:     "root",
 	},
 	"host-linux-clang": &HostConfig{
 		Notes:           "Container with clang.",
 		ContainerImage:  "linux-x86-clang:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:     "root",
 	},
 	"host-linux-sid": &HostConfig{
 		Notes:           "Debian sid, updated occasionally.",
 		ContainerImage:  "linux-x86-sid:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:     "root",
 	},
 	"host-linux-fedora": &HostConfig{
 		Notes:           "Fedora 30",
 		ContainerImage:  "linux-x86-fedora:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/goboot"},
+		SSHUsername:     "root",
 	},
 	"host-linux-arm-scaleway": &HostConfig{
 		IsReverse:       true,

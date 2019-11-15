@@ -1337,14 +1337,27 @@ func handleConnectSSH(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	sshConn, err := net.Dial("tcp", "localhost:"+sshPort())
-	if err != nil {
-		sshServerOnce.Do(startSSHServer)
+	sshServerOnce.Do(startSSHServer)
+
+	var sshConn net.Conn
+	var err error
+
+	// In theory we shouldn't need retries here at all, but the
+	// startSSHServerLinux's use of sshd -D is kinda sketchy and
+	// restarts the process whenever we connect to it, so in case
+	// it's just down between restarts, try a few times. 5 tries
+	// and 5 seconds seems plenty.
+	const maxTries = 5
+	for try := 1; try <= maxTries; try++ {
 		sshConn, err = net.Dial("tcp", "localhost:"+sshPort())
-		if err != nil {
+		if err == nil {
+			break
+		}
+		if try == maxTries {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
+		time.Sleep(time.Second)
 	}
 	defer sshConn.Close()
 	hj, ok := w.(http.Hijacker)
@@ -1450,13 +1463,27 @@ func startSSHServerLinux() {
 		}
 	}
 
-	cmd := exec.Command("/usr/sbin/sshd", "-D", "-p", sshPort())
-	err := cmd.Start()
-	if err != nil {
-		log.Printf("starting sshd: %v", err)
-		return
-	}
-	log.Printf("sshd started.")
+	go func() {
+		for {
+			// TODO: using sshd -D isn't great as it only
+			// handles a single connection and exits.
+			// Maybe run in sshd -i (inetd) mode instead,
+			// and hook that up to the buildlet directly?
+			t0 := time.Now()
+			cmd := exec.Command("/usr/sbin/sshd", "-D", "-p", sshPort(), "-d", "-d")
+			cmd.Stderr = os.Stderr
+			err := cmd.Start()
+			if err != nil {
+				log.Printf("starting sshd: %v", err)
+				return
+			}
+			log.Printf("sshd started.")
+			log.Printf("sshd exited: %v; restarting", cmd.Wait())
+			if d := time.Since(t0); d < time.Second {
+				time.Sleep(time.Second - d)
+			}
+		}
+	}()
 	waitLocalSSH()
 }
 

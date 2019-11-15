@@ -15,11 +15,14 @@ RUN yum -y update && yum -y install \
     patch \
     strace \
     which \
+    openssh-server \
     && true
+
+RUN ssh-keygen -A
 
 RUN mkdir -p /goboot-amd64 \
 	&& ( \
-		curl --silent https://storage.googleapis.com/golang/go1.12.5.linux-amd64.tar.gz | tar -C /goboot-amd64 -zxv \
+		curl --silent https://storage.googleapis.com/golang/go1.13.4.linux-amd64.tar.gz | tar -C /goboot-amd64 -zxv \
 	) \
 	&& mv /goboot-amd64/go /goboot \
 	&& rm -rf /goboot-amd64 \

@@ -2,20 +2,15 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-# Linux builder VM with clang instead of gccc.
+# Linux builder VM with clang instead of gcc.
 # Docker tag gobuilders/linux-x86-clang
 
 FROM golang/buildlet-stage0 AS stage0
 
-FROM debian:jessie
+FROM debian:buster
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
 ENV DEBIAN_FRONTEND noninteractive
-
-COPY sources/clang-deps.list /etc/apt/sources.list.d/
-COPY llvm-snapshot.gpg.key /tmp/
-
-RUN apt-key add /tmp/llvm-snapshot.gpg.key
 
 # strace: optionally used by some net/http tests
 # libc6-dev-i386 gcc-multilib: for 32-bit builds
@@ -24,17 +19,18 @@ RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
 	ca-certificates \
 	curl \
-	clang-3.9 \
+	clang \
 	strace \
 	libc6-dev-i386 \
 	gcc-multilib \
 	procps \
 	lsof \
 	psmisc \
+	openssh-server \
 	&& rm -rf /var/lib/apt/lists/* \
-	&& rm -f /usr/bin/gcc \
-	&& ln -snf /usr/bin/clang-3.9 /usr/bin/clang \
-	&& ln -snf /usr/bin/clang++-3.9 /usr/bin/clang++
+	&& rm -f /usr/bin/gcc
+
+RUN mkdir --mode=0700 /run/sshd
 
 RUN mkdir -p /go1.4-amd64 \
 	&& ( \

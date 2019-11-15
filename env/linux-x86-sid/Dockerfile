@@ -4,7 +4,7 @@
 
 FROM golang/buildlet-stage0 AS stage0
 
-FROM debian:sid-20190326
+FROM debian:sid-20191014
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
 ENV DEBIAN_FRONTEND noninteractive
@@ -39,11 +39,15 @@ RUN apt-get update && apt-get install -y \
 	upx \
 	qemu-user \
 	netbase \
+	openssh-server \
 	&& rm -rf /var/lib/apt/lists/*
+
+# Otherwise we get "Missing privilege separation directory: /run/sshd" ...
+RUN mkdir --mode=0700 /run/sshd
 
 RUN mkdir -p /go1.4-amd64 \
 	&& ( \
-		curl --silent https://storage.googleapis.com/golang/go1.4.linux-amd64.tar.gz | tar -C /go1.4-amd64 -zxv \
+		curl --silent https://storage.googleapis.com/golang/go1.4.3.linux-amd64.tar.gz | tar -C /go1.4-amd64 -zxv \
 	) \
 	&& mv /go1.4-amd64/go /go1.4 \
 	&& rm -rf /go1.4-amd64 \

@@ -130,6 +130,7 @@ func runDocker() {
 		for _, layer := range layers {
 			if strings.HasPrefix(layer, "golang:") ||
 				strings.HasPrefix(layer, "debian:") ||
+				strings.HasPrefix(layer, "alpine:") ||
 				strings.HasPrefix(layer, "fedora:") {
 				continue
 			}
