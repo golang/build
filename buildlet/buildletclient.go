@@ -188,7 +188,7 @@ func (c *Client) String() string {
 
 // RemoteName returns the name of this client's buildlet on the
 // coordinator. If this buildlet isn't a remote buildlet created via
-// a buildlet, this returns the empty string.
+// gomote, this returns the empty string.
 func (c *Client) RemoteName() string {
 	return c.remoteBuildlet
 }
@@ -256,6 +256,37 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 		req.Header.Set("X-Buildlet-Proxy", c.remoteBuildlet)
 	}
 	return c.httpClient.Do(req)
+}
+
+// ProxyTCP connects to the given port on the remote buildlet.
+// The buildlet client must currently be a gomote client (RemoteName != "")
+// and the target type must be a VM type running on GCE. This was primarily
+// created for RDP to Windows machines, but it might get reused for other
+// purposes in the future.
+func (c *Client) ProxyTCP(port int) (io.ReadWriteCloser, error) {
+	if c.RemoteName() == "" {
+		return nil, errors.New("ProxyTCP currently only supports gomote-created buildlets")
+	}
+	req, err := http.NewRequest("POST", c.URL()+"/tcpproxy", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("X-Target-Port", fmt.Sprint(port))
+	res, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode != http.StatusSwitchingProtocols {
+		slurp, _ := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
+		res.Body.Close()
+		return nil, fmt.Errorf("wanted 101 Switching Protocols; unexpected response: %v, %q", res.Status, slurp)
+	}
+	rwc, ok := res.Body.(io.ReadWriteCloser)
+	if !ok {
+		res.Body.Close()
+		return nil, fmt.Errorf("tcpproxy response was not a Writer")
+	}
+	return rwc, nil
 }
 
 // ProxyRoundTripper returns a RoundTripper that sends HTTP requests directly

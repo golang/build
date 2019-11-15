@@ -34,6 +34,7 @@ To list the subcommands, run "gomote" without arguments:
     put14      put Go 1.4 in place
     puttar     extract a tar.gz to a buildlet
     rm         delete files or directories
+    rdp        RDP (Remote Desktop Protocol) to a Windows buildlet
     run        run a command on a buildlet
     ssh        ssh to a buildlet
 
@@ -149,6 +150,7 @@ func registerCommands() {
 	registerCommand("put", "put files on a buildlet", put)
 	registerCommand("put14", "put Go 1.4 in place", put14)
 	registerCommand("puttar", "extract a tar.gz to a buildlet", putTar)
+	registerCommand("rdp", "RDP (Remote Desktop Protocol) to a Windows buildlet", rdp)
 	registerCommand("rm", "delete files or directories", rm)
 	registerCommand("run", "run a command on a buildlet", run)
 	registerCommand("ssh", "ssh to a buildlet", ssh)
