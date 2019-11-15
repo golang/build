@@ -10,18 +10,22 @@ curl -o com.termux.apk "https://f-droid.org/repo/com.termux_77.apk"
 curl -o com.termux.boot.apk "https://f-droid.org/repo/com.termux.boot_7.apk"
 
 adb install com.termux.apk
+
+# Run Termux to set up filesystem.
+adb shell monkey -p com.termux -c android.intent.category.LAUNCHER 1
+
 adb install com.termux.boot.apk
 
 # Run boot app once to enable run-on-boot.
 adb shell monkey -p com.termux.boot -c android.intent.category.LAUNCHER 1
 
-# Run Termux to set up filesystem.
-adb shell monkey -p com.termux -c android.intent.category.LAUNCHER 1
+adb root
 
 # Wait for the Termux filesystem.
-sleep 5
+while adb shell ls /data/data/com.termux/files > /dev/null ; [ $? -ne 0 ]; do
+	sleep 1
+done
 
-adb root
 adb push buildkey /data/data/com.termux/files/home/.gobuildkey-host-android-arm64-corellium-android
 adb push files/exec.sh /data/data/com.termux
 adb push files/clangwrap.go /data/data/com.termux/files/home
