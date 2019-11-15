@@ -845,11 +845,16 @@ func findWorkLoop() {
 	// do some new streaming gRPC call to maintnerd to subscribe
 	// to new commits.
 	ticker := time.NewTicker(15 * time.Second)
-	for {
+	// We wait for the ticker first, before looking for work, to
+	// give findTryWork a head start. Because try work is more
+	// important and the scheduler can't (yet?) preempt an
+	// existing post-submit build to take it over for a trybot, we
+	// want to make sure that reverse buildlets get assigned to
+	// trybots/slowbots first on start-up.
+	for range ticker.C {
 		if err := findWork(); err != nil {
 			log.Printf("failed to find new work: %v", err)
 		}
-		<-ticker.C
 	}
 }
 
