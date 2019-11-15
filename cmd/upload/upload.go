@@ -42,6 +42,7 @@ var (
 	extraEnv      = flag.String("extraenv", "", "comma-separated list of addition KEY=val environment pairs to include in build environment when building a target to upload")
 	installSuffix = flag.String("installsuffix", "", "installsuffix for the go command")
 	static        = flag.Bool("static", false, "compile the binary statically, adds necessary ldflags")
+	goVer         = flag.String("go", "", "optional Go version to use for compilation when using the -file flag to build a Go binary; the Go version is fetched as needed")
 )
 
 // to match uploads to e.g. https://storage.googleapis.com/golang/go1.4-bootstrap-20170531.tar.gz.
@@ -173,7 +174,7 @@ tar entry filename beginning with the prefix "go/".
 		log.Fatalf("Write error: %v", err)
 	}
 	if *verbose {
-		log.Printf("Wrote %v", object)
+		log.Printf("Uploaded %v", object)
 	}
 	os.Exit(0)
 }
@@ -211,7 +212,7 @@ func buildGoTarget() {
 		env = append(env, strings.Split(*extraEnv, ",")...)
 	}
 	env = envutil.Dedup(runtime.GOOS == "windows", env)
-	cmd := exec.Command("go",
+	cmd := exec.Command(goCmd(),
 		"list",
 		"--tags="+*tags,
 		"--installsuffix="+*installSuffix,
@@ -262,6 +263,30 @@ func buildGoTarget() {
 		}
 	}
 	*file = outFile
+}
+
+func goCmd() string {
+	if *goVer == "" {
+		return "go"
+	}
+	v := "go" + strings.TrimPrefix(*goVer, "go")
+	p, err := exec.LookPath(v)
+	if err != nil {
+		log.Printf("%s not found in path; running go get golang.org/dl/%v", v, v)
+		out, err := exec.Command("go", "get", "golang.org/dl/"+v).CombinedOutput()
+		if err != nil {
+			log.Fatalf("%v; %s", err, out)
+		}
+		p, err = exec.LookPath(v)
+		if err != nil {
+			log.Fatalf("%s still not in $PATH after go get golang.org/dl/%v", v, v)
+		}
+	}
+	out, err := exec.Command(p, "download").CombinedOutput()
+	if err != nil {
+		log.Fatalf("downloading %v: %v, %s", *goVer, err, out)
+	}
+	return p
 }
 
 // alreadyUploaded reports whether *file has already been uploaded and the correct contents

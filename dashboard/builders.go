@@ -219,17 +219,19 @@ var Hosts = map[string]*HostConfig{
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
 	},
 	"host-openbsd-amd64-60": &HostConfig{
-		VMImage:            "openbsd-amd64-60",
-		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
+		VMImage:     "openbsd-amd64-60",
+		machineType: "n1-highcpu-4",
+		// OpenBSD 6.0 requires binaries built with Go 1.10, per https://golang.org/wiki/OpenBSD
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64.go1.10",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-60.tar.gz",
 		Notes:              "OpenBSD 6.0; GCE VM is built from script in build/env/openbsd-amd64",
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-386-60": &HostConfig{
-		VMImage:            "openbsd-386-60",
-		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
+		VMImage:     "openbsd-386-60",
+		machineType: "n1-highcpu-4",
+		// OpenBSD 6.0 requires binaries built with Go 1.10, per https://golang.org/wiki/OpenBSD
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386.go1.10",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-60.tar.gz",
 		Notes:              "OpenBSD 6.0; GCE VM is built from script in build/env/openbsd-386",
 		SSHUsername:        "gopher",
@@ -254,7 +256,7 @@ var Hosts = map[string]*HostConfig{
 		VMImage:            "openbsd-amd64-64-190129a",
 		MinCPUPlatform:     "Intel Skylake", // for better TSC? Maybe? see Issue 29223. builds faster at least.
 		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64-64",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
 		Notes:              "OpenBSD 6.4 with hw.smt=1; GCE VM is built from script in build/env/openbsd-amd64",
 		SSHUsername:        "gopher",
@@ -262,7 +264,7 @@ var Hosts = map[string]*HostConfig{
 	"host-openbsd-386-64": &HostConfig{
 		VMImage:            "openbsd-386-64",
 		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386-64",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
 		Notes:              "OpenBSD 6.4; GCE VM is built from script in build/env/openbsd-386",
 		SSHUsername:        "gopher",
