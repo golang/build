@@ -298,53 +298,25 @@ func isNetworkUp() bool {
 }
 
 func buildletURL() string {
+	if v := os.Getenv("META_BUILDLET_BINARY_URL"); v != "" {
+		return v
+	}
+
 	switch os.Getenv("GO_BUILDER_ENV") {
 	case "linux-arm-arm5spacemonkey":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-arm-arm5"
 	}
-	switch osArch {
-	case "linux/amd64":
-		// For the s390x cross-compile builder:
-		if os.Getenv("GOARCH") == "s390x" {
-			return "https://storage.googleapis.com/go-builder-data/buildlet.linux-amd64"
-		}
-	case "linux/s390x":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-s390x"
-	case "linux/arm64":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-arm64"
-	case "linux/ppc64":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64"
-	case "linux/ppc64le":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64le"
-	case "linux/mipsle":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-mipsle"
-	case "linux/mips64le":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-mips64le"
-	case "linux/mips":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-mips"
-	case "linux/mips64":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-mips64"
-	case "solaris/amd64":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.solaris-amd64"
-	case "illumos/amd64":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.illumos-amd64"
-	case "darwin/amd64":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.darwin-amd64"
-	}
-	// The buildlet download URL is located in an env var
-	// when the buildlet is not running on GCE, or is running
-	// on Kubernetes.
-	if !metadata.OnGCE() || os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
-		if v := os.Getenv("META_BUILDLET_BINARY_URL"); v != "" {
+
+	if metadata.OnGCE() {
+		v, err := metadata.InstanceAttributeValue(attr)
+		if err == nil {
 			return v
 		}
-		sleepFatalf("Not on GCE, and no META_BUILDLET_BINARY_URL specified.")
+		sleepFatalf("on GCE, but no META_BUILDLET_BINARY_URL env or instance attribute %q: %v", attr, err)
 	}
-	v, err := metadata.InstanceAttributeValue(attr)
-	if err != nil {
-		sleepFatalf("Failed to look up %q attribute value: %v", attr, err)
-	}
-	return v
+
+	// Fallback:
+	return fmt.Sprintf("https://storage.googleapis.com/go-builder-data/buildlet.%s-%s", runtime.GOOS, runtime.GOARCH)
 }
 
 func sleepFatalf(format string, args ...interface{}) {
