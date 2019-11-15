@@ -735,7 +735,7 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 <h2 id=sched>Scheduler State <a href='#sched'>¶</a></h2>
 <ul>
    {{range .SchedState.HostTypes}}
-       <li><b>{{.HostType}}</b>: {{.Total.Count}} waiting (oldest {{.Total.Oldest}}, newest {{.Total.Newest}}, progress {{.LastProgress}})
+       <li><b>{{.HostType}}</b>: {{.Total.Count}} waiting (oldest {{.Total.Oldest}}, newest {{.Total.Newest}}{{if .LastProgress}}, progress {{.LastProgress}}{{end}})
           {{if or .Gomote.Count .Try.Count}}<ul>
             {{if .Gomote.Count}}<li>gomote: {{.Gomote.Count}} (oldest {{.Gomote.Oldest}}, newest {{.Gomote.Newest}})</li>{{end}}
             {{if .Try.Count}}<li>try: {{.Try.Count}} (oldest {{.Try.Oldest}}, newest {{.Try.Newest}})</li>{{end}}

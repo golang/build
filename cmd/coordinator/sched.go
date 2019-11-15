@@ -244,7 +244,6 @@ func (s *Scheduler) state() (st schedulerState) {
 		}
 		var hst schedulerHostState
 		hst.HostType = hostType
-		hst.LastProgress = time.Since(s.lastProgress[hostType]).Round(time.Second)
 		for si := range m {
 			hst.Total.add(si)
 			if si.IsGomote {
@@ -253,6 +252,12 @@ func (s *Scheduler) state() (st schedulerState) {
 				hst.Try.add(si)
 			} else {
 				hst.Regular.add(si)
+			}
+		}
+		if lp := s.lastProgress[hostType]; !lp.IsZero() {
+			lastProgressAgo := time.Since(lp)
+			if lastProgressAgo < hst.Total.Oldest {
+				hst.LastProgress = lastProgressAgo.Round(time.Second)
 			}
 		}
 		st.HostTypes = append(st.HostTypes, hst)
