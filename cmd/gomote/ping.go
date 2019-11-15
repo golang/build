@@ -13,10 +13,12 @@ import (
 func ping(args []string) error {
 	fs := flag.NewFlagSet("ping", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "ping usage: gomote ping <instance>")
+		fmt.Fprintln(os.Stderr, "ping usage: gomote ping [--status] <instance>")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
+	var status bool
+	fs.BoolVar(&status, "status", false, "print buildlet status")
 	fs.Parse(args)
 
 	if fs.NArg() != 1 {
@@ -27,6 +29,17 @@ func ping(args []string) error {
 	if err != nil {
 		return err
 	}
-	_, err = bc.WorkDir()
-	return err
+	wd, err := bc.WorkDir()
+	if err != nil {
+		return err
+	}
+	if status {
+		fmt.Printf("workdir: %v\n", wd)
+		s, err := bc.Status()
+		if err != nil {
+			return err
+		}
+		fmt.Printf("status: %+v\n", s)
+	}
+	return nil
 }
