@@ -68,6 +68,9 @@ func dialCoordinator() error {
 		if *hostname == "" {
 			*hostname, _ = os.Hostname()
 		}
+		if *hostname == "" {
+			*hostname = "buildlet"
+		}
 	}
 
 	key, err := keyForMode(*reverseType)
