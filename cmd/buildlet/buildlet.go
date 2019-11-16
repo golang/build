@@ -1813,8 +1813,7 @@ func removeAllAndMkdir(dir string) {
 func removeAllIncludingReadonly(dir string) error {
 	err := os.RemoveAll(dir)
 	if err == nil || !os.IsPermission(err) ||
-		runtime.GOOS == "windows" || // different filesystem permission model; also our windows builders our emphermal single-use VMs anyway
-		runtime.GOOS == "plan9" { // untested, different enough to conservatively skip code below
+		runtime.GOOS == "windows" { // different filesystem permission model; also our windows builders are ephemeral single-use VMs anyway
 		return err
 	}
 	// Make a best effort (ignoring errors) attempt to make all
