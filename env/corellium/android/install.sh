@@ -22,7 +22,7 @@ adb shell monkey -p com.termux.boot -c android.intent.category.LAUNCHER 1
 adb root
 
 # Wait for the Termux filesystem.
-while adb shell ls /data/data/com.termux/files > /dev/null ; [ $? -ne 0 ]; do
+while adb shell ls /data/data/com.termux/files/home 2> /dev/null ; [ $? -ne 0 ]; do
 	sleep 1
 done
 
@@ -44,7 +44,7 @@ termux mkdir -p /data/data/com.termux/files/home/tmpdir
 # Run builder at boot.
 termux mkdir -p /data/data/com.termux/files/home/.termux/boot
 adb push files/run-builder-at-boot /data/data/com.termux/files/home/.termux/boot
-termux pkg install -y openssh tmux ndk-multilib clang git golang
+termux pkg install -y openssh tmux ndk-multilib clang git golang lld
 termux go build clangwrap.go
 
 # Move the arm 32-bit sysroot so 32-bit arm binaries use the Android

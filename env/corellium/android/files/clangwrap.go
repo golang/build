@@ -15,6 +15,8 @@ func main() {
 	if os.Getenv("GOARCH") == "arm" {
 		pref := os.Getenv("PREFIX")
 		cmd.Args = append(cmd.Args, "-target", "armv7a-linux-androideabi", "-Qunused-arguments", "-Wl,-rpath-link="+pref+"/../home/arm-linux-androideabi/lib", "-L"+pref+"/../home/arm-linux-androideabi/lib", "-B"+pref+"/../home/arm-linux-androideabi/lib")
+	} else {
+		cmd.Args = append(cmd.Args, "-Qunused-arguments", "-fuse-ld=lld")
 	}
 	cmd.Args = append(cmd.Args, args...)
 	cmd.Stdout = os.Stdout
