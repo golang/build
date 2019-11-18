@@ -225,6 +225,10 @@ func (st *State) CreateMac(ctx context.Context, minor int) (slotName string, err
 		// Mojave. Requires vSphere 6.7.
 		// https://www.virtuallyghetto.com/2018/04/new-vsphere-6-7-apis-worth-checking-out.html
 		guestType = "darwin18_64Guest"
+	case 15:
+		// Catalina. Requires vSphere 6.7 update 3.
+		// https://docs.macstadium.com/docs/vsphere-67-update-3
+		guestType = "darwin19_64Guest"
 	default:
 		return "", fmt.Errorf("unsupported makemac minor OS X version %d", minor)
 	}
