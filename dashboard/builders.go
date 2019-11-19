@@ -481,7 +481,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_11": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 7,
+		ExpectNum: 3,
 		Notes:     "MacStadium OS X 10.11 VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
@@ -501,8 +501,18 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_14": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 7,
+		ExpectNum: 5,
 		Notes:     "MacStadium macOS Mojave (10.14) VM under VMWare ESXi",
+		env: []string{
+			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.12.1
+		},
+		SSHUsername:     "gopher",
+		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
+	},
+	"host-darwin-10_15": &HostConfig{
+		IsReverse: true,
+		ExpectNum: 6,
+		Notes:     "MacStadium macOS Catalina (10.15) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.12.1
 		},
@@ -2066,6 +2076,12 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_14",
 		HostType:          "host-darwin-10_14",
+		shouldRunDistTest: macTestPolicy,
+		buildsRepo:        defaultPlusExp,
+	})
+	addBuilder(BuildConfig{
+		Name:              "darwin-amd64-10_15",
+		HostType:          "host-darwin-10_15",
 		shouldRunDistTest: macTestPolicy,
 		buildsRepo:        defaultPlusExp,
 	})

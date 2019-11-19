@@ -228,7 +228,13 @@ func (st *State) CreateMac(ctx context.Context, minor int) (slotName string, err
 	case 15:
 		// Catalina. Requires vSphere 6.7 update 3.
 		// https://docs.macstadium.com/docs/vsphere-67-update-3
-		guestType = "darwin19_64Guest"
+		// vSphere 6.7 update 3 does not support the guestid `darwin19_64Guest` (which would be
+		// associated with macOS 10.15. It enables the creation of a macOS 10.15 vm via guestid
+		// `darwin18_64Guest`.
+		// TODO: Add a new GOS definition for darwin19_64 (macOS 10.15) in HWV >= 17
+		// https://github.com/vmware/open-vm-tools/commit/6297504ef9e139c68b65afe299136d041d690eeb
+		// TODO: investigate updating the guestid when we upgrade vSphere past version 6.7u3.
+		guestType = "darwin18_64Guest"
 	default:
 		return "", fmt.Errorf("unsupported makemac minor OS X version %d", minor)
 	}

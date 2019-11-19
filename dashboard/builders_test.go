@@ -472,6 +472,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("windows-386-2008", "exp"), both},
 		{b("windows-amd64-2016", "exp"), both},
 		{b("darwin-amd64-10_14", "exp"), onlyPost},
+		{b("darwin-amd64-10_15", "exp"), onlyPost},
 		// ... but not on most others:
 		{b("darwin-amd64-10_12", "exp"), none},
 		{b("freebsd-386-11_2", "exp"), none},
@@ -494,6 +495,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-10_11@go1.12", "net"), none},
 		{b("darwin-386-10_14@go1.11", "net"), none},
 
+		{b("darwin-amd64-10_15", "go"), onlyPost},
 		{b("darwin-amd64-10_14", "go"), onlyPost},
 		{b("darwin-amd64-10_12", "go"), onlyPost},
 		{b("darwin-amd64-10_11", "go"), onlyPost},
@@ -615,10 +617,10 @@ func TestShouldRunDistTest(t *testing.T) {
 		{"darwin-amd64-10_11", "test:foo", postSubmit, false},
 		{"darwin-amd64-10_12", "test:foo", postSubmit, false},
 		{"darwin-amd64-10_14", "test:foo", postSubmit, false},
-		{"darwin-amd64-10_14", "test:foo", postSubmit, false},
 		{"darwin-amd64-10_14", "reboot", postSubmit, false},
 		{"darwin-amd64-10_14", "api", postSubmit, false},
 		{"darwin-amd64-10_14", "codewalk", postSubmit, false},
+		{"darwin-amd64-10_15", "test:foo", postSubmit, false},
 	}
 	for _, tt := range tests {
 		bc, ok := Builders[tt.builder]
@@ -802,4 +804,19 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 		check(port[:slash], port[slash+1:])
 	}
 
+}
+
+// TestExpectedMacstadiumVMCount ensures that only 20 instances of macOS virtual machines
+// are expected at MacStadium.
+// TODO: remove once the scheduler allocates VMs based on demand https://golang.org/issue/35698
+func TestExpectedMacstadiumVMCount(t *testing.T) {
+	got := 0
+	for host, config := range Hosts {
+		if strings.HasPrefix(host, "host-darwin-10_") {
+			got += config.ExpectNum
+		}
+	}
+	if got != 20 {
+		t.Fatalf("macstadium host count: got %d; want 20", got)
+	}
 }
