@@ -1048,9 +1048,10 @@ type trySet struct {
 	// wanted.
 	wantedAsOf time.Time
 
-	// mu guards state and errMsg
+	// mu guards the following fields.
 	// See LOCK ORDER comment above.
-	mu sync.Mutex
+	mu       sync.Mutex
+	canceled bool // try run is no longer wanted and its builds were canceled
 	trySetState
 	errMsg bytes.Buffer
 }
@@ -1361,7 +1362,19 @@ func (ts *trySet) wanted() bool {
 // cancelBuilds run in its own goroutine and cancels this trySet's
 // currently-active builds because they're no longer wanted.
 func (ts *trySet) cancelBuilds() {
-	// TODO(bradfitz): implement
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	// Only cancel the builds once. And note that they're canceled so we
+	// can avoid spamming Gerrit later if they come back as failed.
+	if ts.canceled {
+		return
+	}
+	ts.canceled = true
+
+	for _, bs := range ts.builds {
+		go bs.cancelBuild()
+	}
 }
 
 func (ts *trySet) noteBuildComplete(bs *buildStatus) {
@@ -1384,7 +1397,13 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 	}
 	numFail := len(ts.failed)
 	benchResults := append([]string(nil), ts.benchResults...)
+	canceled := ts.canceled
 	ts.mu.Unlock()
+
+	if canceled {
+		// Be quiet and don't spam Gerrit.
+		return
+	}
 
 	const failureFooter = "Consult https://build.golang.org/ to see whether they are new failures. Keep in mind that TryBots currently test *exactly* your git commit, without rebasing. If your commit's git parent is old, the failure might've already been fixed."
 
@@ -3364,6 +3383,7 @@ type buildStatus struct {
 	hasBenchResults bool // set by runTests, may only be used when build() returns.
 
 	mu              sync.Mutex       // guards following
+	canceled        bool             // whether this build was forcefully canceled, so errors should be ignored
 	schedItem       *SchedItem       // for the initial buildlet (ignoring helpers for now)
 	logURL          string           // if non-empty, permanent URL of log
 	bc              *buildlet.Client // nil initially, until pool returns one
@@ -3398,9 +3418,43 @@ func (st *buildStatus) NameAndBranch() string {
 	return result
 }
 
+// cancelBuild marks a build as no longer wanted, cancels its context,
+// and tears down its buildlet.
+func (st *buildStatus) cancelBuild() {
+	st.mu.Lock()
+	if st.canceled {
+		// Already done. Shouldn't happen currently, but make
+		// it safe for duplicate calls in the future.
+		st.mu.Unlock()
+		return
+	}
+
+	st.canceled = true
+	st.output.Close()
+	// cancel the context, which stops the creation of helper
+	// buildlets, etc. The context isn't plumbed everywhere yet,
+	// so we also forcefully close its buildlet out from under it
+	// to trigger a failure. When we get the failure later, we
+	// just ignore it (knowing that the canceled bit was set
+	// true).
+	st.cancel()
+	bc := st.bc
+	st.mu.Unlock()
+
+	if bc != nil {
+		// closing the buildlet may be slow (up to ~10 seconds
+		// on a wedged buildlet) so run it in its own
+		// goroutine so we're not holding st.mu for too long.
+		bc.Close()
+	}
+}
+
 func (st *buildStatus) setDone(succeeded bool) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	if st.canceled {
+		return
+	}
 	st.succeeded = succeeded
 	st.done = time.Now()
 	st.output.Close()
@@ -3570,7 +3624,9 @@ func (st *buildStatus) htmlStatus(detail buildStatusDetail) template.HTML {
 	}
 
 	var state string
-	if st.done.IsZero() {
+	if st.canceled {
+		state = "canceled"
+	} else if st.done.IsZero() {
 		if st.HasBuildlet() {
 			state = "running"
 		} else {
