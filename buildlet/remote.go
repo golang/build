@@ -5,12 +5,14 @@
 package buildlet
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,6 +24,7 @@ import (
 
 	"golang.org/x/build"
 	"golang.org/x/build/buildenv"
+	"golang.org/x/build/types"
 )
 
 type UserPass struct {
@@ -73,15 +76,28 @@ func (cc *CoordinatorClient) client() (*http.Client, error) {
 // act as either linux-amd64 or linux-386-387.
 //
 // It may expire at any time.
-// To release it, call Client.Destroy.
+// To release it, call Client.Close.
 func (cc *CoordinatorClient) CreateBuildlet(builderType string) (*Client, error) {
+	return cc.CreateBuildletWithStatus(builderType, nil)
+}
+
+const (
+	// GomoteCreateStreamVersion is the gomote protocol version at which JSON streamed responses started.
+	GomoteCreateStreamVersion = "20191119"
+
+	// GomoteCreateMinVersion is the oldest "gomote create" protocol version that's still supported.
+	GomoteCreateMinVersion = "20160922"
+)
+
+// CreateBuildletWithStatus is like CreateBuildlet but accepts an optional status callback.
+func (cc *CoordinatorClient) CreateBuildletWithStatus(builderType string, status func(types.BuildletWaitStatus)) (*Client, error) {
 	hc, err := cc.client()
 	if err != nil {
 		return nil, err
 	}
 	ipPort, _ := cc.instance().TLSHostPort() // must succeed if client did
 	form := url.Values{
-		"version":     {"20160922"}, // checked by cmd/coordinator/remote.go
+		"version":     {GomoteCreateStreamVersion}, // checked by cmd/coordinator/remote.go
 		"builderType": {builderType},
 	}
 	req, _ := http.NewRequest("POST",
@@ -99,18 +115,52 @@ func (cc *CoordinatorClient) CreateBuildlet(builderType string) (*Client, error)
 		slurp, _ := ioutil.ReadAll(res.Body)
 		return nil, fmt.Errorf("%s: %s", res.Status, slurp)
 	}
-	var rb RemoteBuildlet
-	if err := json.NewDecoder(res.Body).Decode(&rb); err != nil {
-		return nil, err
+
+	// TODO: delete this once the server's been deployed with it.
+	// This code only exists for compatibility for a day or two at most.
+	if res.Header.Get("X-Supported-Version") < GomoteCreateStreamVersion {
+		var rb RemoteBuildlet
+		if err := json.NewDecoder(res.Body).Decode(&rb); err != nil {
+			return nil, err
+		}
+		return cc.NamedBuildlet(rb.Name)
 	}
-	if rb.Name == "" {
-		return nil, errors.New("buildlet: failed to create remote buildlet; unexpected missing name in response")
+
+	type msg struct {
+		Error    string                    `json:"error"`
+		Buildlet *RemoteBuildlet           `json:"buildlet"`
+		Status   *types.BuildletWaitStatus `json:"status"`
 	}
-	c, err := cc.NamedBuildlet(rb.Name)
-	if err != nil {
-		return nil, err
+	bs := bufio.NewScanner(res.Body)
+	for bs.Scan() {
+		line := bs.Bytes()
+		var m msg
+		if err := json.Unmarshal(line, &m); err != nil {
+			return nil, err
+		}
+		if m.Error != "" {
+			return nil, errors.New(m.Error)
+		}
+		if m.Buildlet != nil {
+			if m.Buildlet.Name == "" {
+				return nil, fmt.Errorf("buildlet: coordinator's /buildlet/create returned an unnamed buildlet")
+			}
+			return cc.NamedBuildlet(m.Buildlet.Name)
+		}
+		if m.Status != nil {
+			if status != nil {
+				status(*m.Status)
+			}
+			continue
+		}
+		log.Printf("buildlet: unknown message type from coordinator's /buildlet/create endpoint: %q", line)
+		continue
 	}
-	return c, nil
+	err = bs.Err()
+	if err == nil {
+		err = errors.New("buildlet: coordinator's /buildlet/create ended its response stream without a terminal message")
+	}
+	return nil, err
 }
 
 type RemoteBuildlet struct {

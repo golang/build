@@ -41,6 +41,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/gophers"
+	"golang.org/x/build/types"
 	gossh "golang.org/x/crypto/ssh"
 )
 
@@ -123,11 +124,12 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "POST required", 400)
 		return
 	}
-	const serverVersion = "20160922" // sent by cmd/gomote via buildlet/remote.go
-	if version := r.FormValue("version"); version < serverVersion {
-		http.Error(w, fmt.Sprintf("gomote client version %q is too old; predates server version %q", version, serverVersion), 400)
+	clientVersion := r.FormValue("version")
+	if clientVersion < buildlet.GomoteCreateMinVersion {
+		http.Error(w, fmt.Sprintf("gomote client version %q is too old; predates server minimum version %q", clientVersion, buildlet.GomoteCreateMinVersion), 400)
 		return
 	}
+
 	builderType := r.FormValue("builderType")
 	if builderType == "" {
 		http.Error(w, "missing 'builderType' parameter", 400)
@@ -140,32 +142,60 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	user, _, _ := r.BasicAuth()
 
-	var closeNotify <-chan bool
-	if cn, ok := w.(http.CloseNotifier); ok {
-		closeNotify = cn.CloseNotify()
+	w.Header().Set("X-Supported-Version", buildlet.GomoteCreateStreamVersion)
+
+	wantStream := false // streaming JSON updates, one JSON message (type msg) per line
+	if clientVersion >= buildlet.GomoteCreateStreamVersion {
+		wantStream = true
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.(http.Flusher).Flush()
 	}
 
-	ctx := context.WithValue(context.Background(), buildletTimeoutOpt{}, time.Duration(0))
-	ctx, cancel := context.WithCancel(ctx)
-	// NOTE: don't defer close this cancel. If the context is
-	// closed, the pod is destroyed.
-	// TODO: clean this up.
+	si := &SchedItem{
+		HostType: bconf.HostType,
+		IsGomote: true,
+	}
+
+	ctx := r.Context()
+
+	// ticker for sending status updates to client
+	var ticker <-chan time.Time
+	if wantStream {
+		t := time.NewTicker(5 * time.Second)
+		defer t.Stop()
+		ticker = t.C
+	}
 
 	resc := make(chan *buildlet.Client)
 	errc := make(chan error)
+
 	go func() {
-		bc, err := sched.GetBuildlet(ctx, &SchedItem{
-			HostType: bconf.HostType,
-			IsGomote: true,
-		})
+		bc, err := sched.GetBuildlet(ctx, si)
 		if bc != nil {
 			resc <- bc
-			return
+		} else {
+			errc <- err
 		}
-		errc <- err
 	}()
+	// One of these fields is set:
+	type msg struct {
+		Error    string                   `json:"error"`
+		Buildlet *remoteBuildlet          `json:"buildlet"`
+		Status   types.BuildletWaitStatus `json:"status"`
+	}
+	sendJSONLine := func(v interface{}) {
+		jenc, err := json.Marshal(v)
+		if err != nil {
+			log.Fatalf("remote: error marshalling JSON of type %T: %v", v, v)
+		}
+		jenc = append(jenc, '\n')
+		w.Write(jenc)
+		w.(http.Flusher).Flush()
+	}
 	for {
 		select {
+		case <-ticker:
+			sendJSONLine(msg{Status: sched.waiterState(si)})
 		case bc := <-resc:
 			rb := &remoteBuildlet{
 				User:        user,
@@ -177,25 +207,23 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 			}
 			rb.Name = addRemoteBuildlet(rb)
 			bc.SetName(rb.Name)
-			jenc, err := json.MarshalIndent(rb, "", "  ")
-			if err != nil {
-				http.Error(w, err.Error(), 500)
-				log.Print(err)
-				return
-			}
 			log.Printf("created buildlet %v for %v (%s)", rb.Name, rb.User, bc.String())
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			jenc = append(jenc, '\n')
-			w.Write(jenc)
+			if wantStream {
+				// We already set a content-type above before we flushed, so don't
+				// set it again.
+			} else {
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			}
+			sendJSONLine(msg{Buildlet: rb})
 			return
 		case err := <-errc:
-			log.Printf("error creating buildlet: %v", err)
-			http.Error(w, err.Error(), 500)
+			log.Printf("error creating gomote buildlet: %v", err)
+			if wantStream {
+				sendJSONLine(msg{Error: err.Error()})
+			} else {
+				http.Error(w, err.Error(), 500)
+			}
 			return
-		case <-closeNotify:
-			log.Printf("client went away during buildlet create request")
-			cancel()
-			closeNotify = nil // unnecessary, but habit.
 		}
 	}
 }

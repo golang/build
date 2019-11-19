@@ -19,6 +19,7 @@ import (
 	"golang.org/x/build/cmd/coordinator/spanlog"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/buildgo"
+	"golang.org/x/build/types"
 )
 
 // The Scheduler prioritizes access to buidlets. It accepts requests
@@ -265,6 +266,22 @@ func (s *Scheduler) state() (st schedulerState) {
 
 	sort.Slice(st.HostTypes, func(i, j int) bool { return st.HostTypes[i].HostType < st.HostTypes[j].HostType })
 	return st
+}
+
+// waiterState returns tells waiter how many callers are on the line
+// in front of them.
+func (s *Scheduler) waiterState(waiter *SchedItem) (ws types.BuildletWaitStatus) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	m := s.waiting[waiter.HostType]
+	for si := range m {
+		if schedLess(si, waiter) {
+			ws.Ahead++
+		}
+	}
+
+	return ws
 }
 
 // schedLess reports whether scheduled item ia is "less" (more

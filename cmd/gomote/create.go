@@ -13,8 +13,10 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/types"
 )
 
 type builderType struct {
@@ -92,6 +94,9 @@ func create(args []string) error {
 		}
 		os.Exit(1)
 	}
+	var status bool
+	fs.BoolVar(&status, "status", true, "print regular status updates while waiting")
+
 	// TODO(bradfitz): restore this option, and send it to the coordinator:
 	// For now, comment it out so it's not misleading.
 	// var timeout time.Duration
@@ -103,11 +108,16 @@ func create(args []string) error {
 	}
 	builderType := fs.Arg(0)
 
+	t := time.Now()
 	cc, err := buildlet.NewCoordinatorClientFromFlags()
 	if err != nil {
 		return fmt.Errorf("failed to create coordinator client: %v", err)
 	}
-	client, err := cc.CreateBuildlet(builderType)
+	client, err := cc.CreateBuildletWithStatus(builderType, func(st types.BuildletWaitStatus) {
+		if status {
+			fmt.Fprintf(os.Stderr, "# still creating %s after %v; %d requests ahead of you\n", builderType, time.Since(t).Round(time.Second), st.Ahead)
+		}
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create buildlet: %v", err)
 	}

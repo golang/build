@@ -168,3 +168,18 @@ func (a MajorMinor) Less(b MajorMinor) bool {
 	}
 	return a.Minor < b.Minor
 }
+
+// BuildletWaitStatus is the periodic messages we send to "gomote create"
+// clients or show on trybot status pages to tell the user who long
+// they're expected to wait.
+type BuildletWaitStatus struct {
+	Ahead int `json:"ahead"` // number of waiters ahead of this buildlet request
+
+	// TODO: add number of active builds, and number of builds
+	// creating. And for how long. And maybe an estimate of how
+	// long those builds typically take? But recognize which are
+	// dynamic vs static (reverse) builder types and don't say
+	// that "1 is creating" on a reverse buildlet that can't
+	// actually "create" any. (It can just wait for one register
+	// itself)
+}
