@@ -9,6 +9,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -58,7 +59,7 @@ func runBench(out io.Writer, bench, src string, commits []string) error {
 		// Build binaries
 		log.Printf("Building bench binary for rev %s", rev)
 		var buf bytes.Buffer
-		remoteErr, err := bc.Exec(path.Join(dir, "bin", "go"), buildlet.ExecOpts{
+		remoteErr, err := bc.Exec(context.Background(), path.Join(dir, "bin", "go"), buildlet.ExecOpts{
 			Output:   &buf,
 			ExtraEnv: []string{"GOROOT=" + path.Join(workDir, dir)},
 			Args:     []string{"test", "-c"},
@@ -81,7 +82,7 @@ func runBench(out io.Writer, bench, src string, commits []string) error {
 		log.Printf("Starting bench run %d", i)
 		for _, rev := range commits {
 			var buf bytes.Buffer
-			remoteErr, err := bc.Exec(path.Join("go-"+rev, "test/bench/go1/go1.test"), buildlet.ExecOpts{
+			remoteErr, err := bc.Exec(context.Background(), path.Join("go-"+rev, "test/bench/go1/go1.test"), buildlet.ExecOpts{
 				Output: &buf,
 				Args:   []string{"-test.bench", ".", "-test.benchmem"},
 			})

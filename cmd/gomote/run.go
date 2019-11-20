@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -71,7 +72,7 @@ func run(args []string) error {
 	}
 	env = append(env, "GO_DISABLE_OUTBOUND_NETWORK="+fmt.Sprint(firewall))
 
-	remoteErr, execErr := bc.Exec(cmd, buildlet.ExecOpts{
+	remoteErr, execErr := bc.Exec(context.Background(), cmd, buildlet.ExecOpts{
 		Dir:         dir,
 		SystemLevel: sys || strings.HasPrefix(cmd, "/"),
 		Output:      os.Stdout,

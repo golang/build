@@ -366,7 +366,7 @@ func (b *Build) make() error {
 	if *watch && *target != "" {
 		execOut = io.MultiWriter(out, os.Stdout)
 	}
-	remoteErr, err := client.Exec(filepath.Join(goDir, bc.MakeScript()), buildlet.ExecOpts{
+	remoteErr, err := client.Exec(context.Background(), filepath.Join(goDir, bc.MakeScript()), buildlet.ExecOpts{
 		Output:   execOut,
 		ExtraEnv: env,
 		Args:     bc.MakeScriptArgs(),
@@ -396,7 +396,7 @@ func (b *Build) make() error {
 		if len(args) > 0 && args[0] == "run" && hostArch != "" {
 			cmdEnv = setGOARCH(cmdEnv, hostArch)
 		}
-		remoteErr, err := client.Exec(goCmd, buildlet.ExecOpts{
+		remoteErr, err := client.Exec(context.Background(), goCmd, buildlet.ExecOpts{
 			Output:   execOut,
 			Dir:      ".", // root of buildlet work directory
 			Args:     args,
@@ -595,7 +595,7 @@ func (b *Build) make() error {
 		if *watch && *target != "" {
 			execOut = io.MultiWriter(out, os.Stdout)
 		}
-		remoteErr, err := client.Exec(filepath.Join(goDir, bc.AllScript()), buildlet.ExecOpts{
+		remoteErr, err := client.Exec(context.Background(), filepath.Join(goDir, bc.AllScript()), buildlet.ExecOpts{
 			Output:   execOut,
 			ExtraEnv: env,
 			Args:     bc.AllScriptArgs(),
@@ -814,7 +814,7 @@ func (b *Build) checkRelocations(client *buildlet.Client) error {
 	}
 	var out bytes.Buffer
 	file := fmt.Sprintf("go/pkg/linux_%s/runtime/cgo.a", b.Arch)
-	remoteErr, err := client.Exec("readelf", buildlet.ExecOpts{
+	remoteErr, err := client.Exec(context.Background(), "readelf", buildlet.ExecOpts{
 		Output:      &out,
 		Args:        []string{"-r", "--wide", file},
 		SystemLevel: true, // look for readelf in system's PATH

@@ -128,12 +128,12 @@ func main() {
 	log.Printf("WorkDir: %v, %v", dir, err)
 
 	if *sleepSec > 0 {
-		bc.Exec("sysctl", buildlet.ExecOpts{
+		bc.Exec(ctx, "sysctl", buildlet.ExecOpts{
 			Output:      os.Stdout,
 			SystemLevel: true,
 			Args:        []string{"kern.timecounter.hardware"},
 		})
-		bc.Exec("bash", buildlet.ExecOpts{
+		bc.Exec(ctx, "bash", buildlet.ExecOpts{
 			Output:      os.Stdout,
 			SystemLevel: true,
 			Args:        []string{"-c", "rdate -p -v time.nist.gov; sleep " + fmt.Sprint(*sleepSec) + "; rdate -p -v time.nist.gov"},
@@ -172,7 +172,7 @@ func main() {
 		}
 		t0 := time.Now()
 		log.Printf("Running %s ...", script)
-		remoteErr, err := bc.Exec(path.Join("go", script), buildlet.ExecOpts{
+		remoteErr, err := bc.Exec(ctx, path.Join("go", script), buildlet.ExecOpts{
 			Output:   os.Stdout,
 			ExtraEnv: bconf.Env(),
 			Debug:    true,

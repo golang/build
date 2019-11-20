@@ -507,9 +507,6 @@ type ExecOpts struct {
 	// response from the buildlet, but before the output begins
 	// writing to Output.
 	OnStartExec func()
-
-	// Timeout is an optional duration before ErrTimeout is returned.
-	Timeout time.Duration
 }
 
 var ErrTimeout = errors.New("buildlet: timeout waiting for command to complete")
@@ -521,7 +518,10 @@ var ErrTimeout = errors.New("buildlet: timeout waiting for command to complete")
 // were system errors preventing the command from being started or
 // seen to completition. If execErr is non-nil, the remoteErr is
 // meaningless.
-func (c *Client) Exec(cmd string, opts ExecOpts) (remoteErr, execErr error) {
+//
+// If the context's deadline is exceeded, the returned execErr is
+// ErrTimeout.
+func (c *Client) Exec(ctx context.Context, cmd string, opts ExecOpts) (remoteErr, execErr error) {
 	var mode string
 	if opts.SystemLevel {
 		mode = "sys"
@@ -545,6 +545,7 @@ func (c *Client) Exec(cmd string, opts ExecOpts) (remoteErr, execErr error) {
 	if err != nil {
 		return nil, err
 	}
+	req = req.WithContext(ctx)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	// The first thing the buildlet's exec handler does is flush the headers, so
@@ -596,17 +597,16 @@ func (c *Client) Exec(cmd string, opts ExecOpts) (remoteErr, execErr error) {
 			resc <- errs{} // success
 		}
 	}()
-	var timer <-chan time.Time
-	if opts.Timeout > 0 {
-		t := time.NewTimer(opts.Timeout)
-		defer t.Stop()
-		timer = t.C
-	}
 	select {
-	case <-timer:
-		c.MarkBroken()
-		return nil, ErrTimeout
 	case res := <-resc:
+		if res.execErr != nil {
+			c.MarkBroken()
+			if res.execErr == context.DeadlineExceeded {
+				// Historical pre-context value.
+				// TODO: update docs & callers to just use the context value.
+				res.execErr = ErrTimeout
+			}
+		}
 		return res.remoteErr, res.execErr
 	case <-c.peerDead:
 		return nil, c.deadErr

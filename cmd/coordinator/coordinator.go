@@ -2061,7 +2061,7 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 	st.getHelpersReadySoon()
 
 	if !st.useSnapshot() {
-		remoteErr, err = st.goBuilder().RunMake(st.bc, st)
+		remoteErr, err = st.goBuilder().RunMake(st.ctx, st.bc, st)
 		if err != nil {
 			return nil, err
 		}
@@ -2128,7 +2128,7 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompil
 
 	goos, goarch := st.conf.GOOS(), st.conf.GOARCH()
 
-	remoteErr, err := kubeBC.Exec("/bin/bash", buildlet.ExecOpts{
+	remoteErr, err := kubeBC.Exec(st.ctx, "/bin/bash", buildlet.ExecOpts{
 		SystemLevel: true,
 		Args: []string{
 			"-c",
@@ -2175,7 +2175,7 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompil
 func (st *buildStatus) runAllLegacy() (remoteErr, err error) {
 	allScript := st.conf.AllScript()
 	sp := st.CreateSpan("legacy_all_path", allScript)
-	remoteErr, err = st.bc.Exec(path.Join("go", allScript), buildlet.ExecOpts{
+	remoteErr, err = st.bc.Exec(st.ctx, path.Join("go", allScript), buildlet.ExecOpts{
 		Output:   st,
 		ExtraEnv: st.conf.Env(),
 		Debug:    true,
@@ -2310,7 +2310,7 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 		args = append(args, "--compile-only")
 	}
 	var buf bytes.Buffer
-	remoteErr, err = st.bc.Exec("go/bin/go", buildlet.ExecOpts{
+	remoteErr, err = st.bc.Exec(st.ctx, "go/bin/go", buildlet.ExecOpts{
 		Output:      &buf,
 		ExtraEnv:    append(st.conf.Env(), "GOROOT="+goroot),
 		OnStartExec: func() { st.LogEventTime("discovering_tests") },
@@ -2533,7 +2533,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		repoPath := importPathOfRepo(st.SubName)
 		var buf bytes.Buffer
 		sp := st.CreateSpan("listing_subrepo_packages", st.SubName)
-		rErr, err := st.bc.Exec("go/bin/go", buildlet.ExecOpts{
+		rErr, err := st.bc.Exec(st.ctx, "go/bin/go", buildlet.ExecOpts{
 			Output:   &buf,
 			Dir:      "gopath/src/" + repoPath,
 			ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath),
@@ -2580,7 +2580,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 
 	var remoteErrors []error
 	for _, tr := range testRuns {
-		rErr, err := st.bc.Exec("go/bin/go", buildlet.ExecOpts{
+		rErr, err := st.bc.Exec(st.ctx, "go/bin/go", buildlet.ExecOpts{
 			Debug:    true, // make buildlet print extra debug in output for failures
 			Output:   st,
 			Dir:      tr.Dir,
@@ -2610,7 +2610,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 // It uses module-specific environment variables from st.conf.ModulesEnv.
 func (st *buildStatus) goMod(importPath, goroot, gopath string) (string, error) {
 	var buf bytes.Buffer
-	rErr, err := st.bc.Exec("go/bin/go", buildlet.ExecOpts{
+	rErr, err := st.bc.Exec(st.ctx, "go/bin/go", buildlet.ExecOpts{
 		Output:   &buf,
 		Dir:      "gopath/src/" + importPath,
 		ExtraEnv: append(append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath), st.conf.ModulesEnv(st.SubName)...),
@@ -2653,7 +2653,7 @@ func (st *buildStatus) fetchDependenciesToGOPATHWorkspace(goroot, gopath string)
 	findDeps := func(repo string) (rErr, err error) {
 		repoPath := importPathOfRepo(repo)
 		var buf bytes.Buffer
-		rErr, err = st.bc.Exec("go/bin/go", buildlet.ExecOpts{
+		rErr, err = st.bc.Exec(st.ctx, "go/bin/go", buildlet.ExecOpts{
 			Output:   &buf,
 			Dir:      "gopath/src/" + repoPath,
 			ExtraEnv: append(st.conf.Env(), "GOROOT="+goroot, "GOPATH="+gopath),
@@ -3138,12 +3138,16 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 	var buf bytes.Buffer
 	t0 := time.Now()
 	timeout := st.conf.DistTestsExecTimeout(names)
+
+	ctx, cancel := context.WithTimeout(st.ctx, timeout)
+	defer cancel()
+
 	var remoteErr, err error
 	if ti := tis[0]; ti.bench != nil {
 		pbr, perr := st.parentRev()
 		// TODO(quentin): Error if parent commit could not be determined?
 		if perr == nil {
-			remoteErr, err = ti.bench.Run(buildEnv, st, st.conf, bc, &buf, []buildgo.BuilderRev{st.BuilderRev, pbr})
+			remoteErr, err = ti.bench.Run(st.ctx, buildEnv, st, st.conf, bc, &buf, []buildgo.BuilderRev{st.BuilderRev, pbr})
 		}
 	} else {
 		env := append(st.conf.Env(),
@@ -3153,7 +3157,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 		)
 		env = append(env, st.conf.ModulesEnv("go")...)
 
-		remoteErr, err = bc.Exec("go/bin/go", buildlet.ExecOpts{
+		remoteErr, err = bc.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
 			// We set Dir to "." instead of the default ("go/bin") so when the dist tests
 			// try to run os/exec.Command("go", "test", ...), the LookPath of "go" doesn't
 			// return "./go.exe" (which exists in the current directory: "go/bin") and then
@@ -3163,7 +3167,6 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 			Dir:      ".",
 			Output:   &buf, // see "maybe stream lines" TODO below
 			ExtraEnv: env,
-			Timeout:  timeout,
 			Path:     []string{"$WORKDIR/go/bin", "$PATH"},
 			Args:     args,
 		})

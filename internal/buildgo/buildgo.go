@@ -103,10 +103,10 @@ type GoBuilder struct {
 // goroot is relative to the workdir with forward slashes.
 // w is the Writer to send build output to.
 // remoteErr and err are as described at the top of this file.
-func (gb GoBuilder) RunMake(bc *buildlet.Client, w io.Writer) (remoteErr, err error) {
+func (gb GoBuilder) RunMake(ctx context.Context, bc *buildlet.Client, w io.Writer) (remoteErr, err error) {
 	// Build the source code.
 	makeSpan := gb.CreateSpan("make", gb.Conf.MakeScript())
-	remoteErr, err = bc.Exec(path.Join(gb.Goroot, gb.Conf.MakeScript()), buildlet.ExecOpts{
+	remoteErr, err = bc.Exec(ctx, path.Join(gb.Goroot, gb.Conf.MakeScript()), buildlet.ExecOpts{
 		Output:   w,
 		ExtraEnv: append(gb.Conf.Env(), "GOBIN="),
 		Debug:    true,
@@ -125,7 +125,7 @@ func (gb GoBuilder) RunMake(bc *buildlet.Client, w io.Writer) (remoteErr, err er
 	// Need to run "go install -race std" before the snapshot + tests.
 	if pkgs := gb.Conf.GoInstallRacePackages(); len(pkgs) > 0 {
 		sp := gb.CreateSpan("install_race_std")
-		remoteErr, err = bc.Exec(path.Join(gb.Goroot, "bin/go"), buildlet.ExecOpts{
+		remoteErr, err = bc.Exec(ctx, path.Join(gb.Goroot, "bin/go"), buildlet.ExecOpts{
 			Output:   w,
 			ExtraEnv: append(gb.Conf.Env(), "GOBIN="),
 			Debug:    true,
@@ -143,7 +143,7 @@ func (gb GoBuilder) RunMake(bc *buildlet.Client, w io.Writer) (remoteErr, err er
 	}
 
 	if gb.Name == "linux-amd64-racecompile" {
-		return gb.runConcurrentGoBuildStdCmd(bc, w)
+		return gb.runConcurrentGoBuildStdCmd(ctx, bc, w)
 	}
 
 	return nil, nil
@@ -155,9 +155,9 @@ func (gb GoBuilder) RunMake(bc *buildlet.Client, w io.Writer) (remoteErr, err er
 // with -gcflags=-c=8 using a race-enabled cmd/compile (built by
 // caller, runMake, per builder config).
 // The idea is that this might find data races in cmd/compile.
-func (gb GoBuilder) runConcurrentGoBuildStdCmd(bc *buildlet.Client, w io.Writer) (remoteErr, err error) {
+func (gb GoBuilder) runConcurrentGoBuildStdCmd(ctx context.Context, bc *buildlet.Client, w io.Writer) (remoteErr, err error) {
 	span := gb.CreateSpan("go_build_c128_std_cmd")
-	remoteErr, err = bc.Exec(path.Join(gb.Goroot, "bin/go"), buildlet.ExecOpts{
+	remoteErr, err = bc.Exec(ctx, path.Join(gb.Goroot, "bin/go"), buildlet.ExecOpts{
 		Output:   w,
 		ExtraEnv: append(gb.Conf.Env(), "GOBIN="),
 		Debug:    true,
