@@ -323,7 +323,7 @@ func (c *Client) heartbeatLoop() {
 			return
 		case <-time.After(10 * time.Second):
 			t0 := time.Now()
-			if _, err := c.Status(); err != nil {
+			if _, err := c.Status(context.Background()); err != nil {
 				failInARow++
 				if failInARow == 3 {
 					log.Printf("Buildlet %v failed three heartbeats; final error: %v", c, err)
@@ -406,12 +406,12 @@ func (c *Client) doOK(req *http.Request) error {
 // If dir is empty, they're placed at the root of the buildlet's work directory.
 // The dir is created if necessary.
 // The Reader must be of a tar.gz file.
-func (c *Client) PutTar(r io.Reader, dir string) error {
+func (c *Client) PutTar(ctx context.Context, r io.Reader, dir string) error {
 	req, err := http.NewRequest("PUT", c.URL()+"/writetgz?dir="+url.QueryEscape(dir), r)
 	if err != nil {
 		return err
 	}
-	return c.doOK(req)
+	return c.doOK(req.WithContext(ctx))
 }
 
 // PutTarFromURL tells the buildlet to download the tar.gz file from tarURL
@@ -419,7 +419,7 @@ func (c *Client) PutTar(r io.Reader, dir string) error {
 // If dir is empty, they're placed at the root of the buildlet's work directory.
 // The dir is created if necessary.
 // The url must be of a tar.gz file.
-func (c *Client) PutTarFromURL(tarURL, dir string) error {
+func (c *Client) PutTarFromURL(ctx context.Context, tarURL, dir string) error {
 	form := url.Values{
 		"url": {tarURL},
 	}
@@ -428,11 +428,11 @@ func (c *Client) PutTarFromURL(tarURL, dir string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	return c.doOK(req)
+	return c.doOK(req.WithContext(ctx))
 }
 
 // Put writes the provided file to path (relative to workdir) and sets mode.
-func (c *Client) Put(r io.Reader, path string, mode os.FileMode) error {
+func (c *Client) Put(ctx context.Context, r io.Reader, path string, mode os.FileMode) error {
 	param := url.Values{
 		"path": {path},
 		"mode": {fmt.Sprint(int64(mode))},
@@ -441,7 +441,7 @@ func (c *Client) Put(r io.Reader, path string, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	return c.doOK(req)
+	return c.doOK(req.WithContext(ctx))
 }
 
 // GetTar returns a .tar.gz stream of the given directory, relative to the buildlet's work dir.
@@ -614,7 +614,7 @@ func (c *Client) Exec(ctx context.Context, cmd string, opts ExecOpts) (remoteErr
 }
 
 // RemoveAll deletes the provided paths, relative to the work directory.
-func (c *Client) RemoveAll(paths ...string) error {
+func (c *Client) RemoveAll(ctx context.Context, paths ...string) error {
 	if len(paths) == 0 {
 		return nil
 	}
@@ -624,7 +624,7 @@ func (c *Client) RemoveAll(paths ...string) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	return c.doOK(req)
+	return c.doOK(req.WithContext(ctx))
 }
 
 // DestroyVM shuts down the buildlet and destroys the VM instance.
@@ -681,7 +681,7 @@ type Status struct {
 }
 
 // Status returns an Status value describing this buildlet.
-func (c *Client) Status() (Status, error) {
+func (c *Client) Status(ctx context.Context) (Status, error) {
 	select {
 	case <-c.peerDead:
 		return Status{}, c.deadErr
@@ -692,6 +692,7 @@ func (c *Client) Status() (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
+	req = req.WithContext(ctx)
 	resp, err := c.doHeaderTimeout(req, 10*time.Second) // plenty of time
 	if err != nil {
 		return Status{}, err
@@ -712,11 +713,12 @@ func (c *Client) Status() (Status, error) {
 }
 
 // WorkDir returns the absolute path to the buildlet work directory.
-func (c *Client) WorkDir() (string, error) {
+func (c *Client) WorkDir(ctx context.Context) (string, error) {
 	req, err := http.NewRequest("GET", c.URL()+"/workdir", nil)
 	if err != nil {
 		return "", err
 	}
+	req = req.WithContext(ctx)
 	resp, err := c.doHeaderTimeout(req, 10*time.Second) // plenty of time
 	if err != nil {
 		return "", err
@@ -800,7 +802,7 @@ type ListDirOpts struct {
 // ListDir lists the contents of a directory.
 // The fn callback is run for each entry.
 // The directory dir itself is not included.
-func (c *Client) ListDir(dir string, opts ListDirOpts, fn func(DirEntry)) error {
+func (c *Client) ListDir(ctx context.Context, dir string, opts ListDirOpts, fn func(DirEntry)) error {
 	param := url.Values{
 		"dir":       {dir},
 		"recursive": {fmt.Sprint(opts.Recursive)},
@@ -811,7 +813,7 @@ func (c *Client) ListDir(dir string, opts ListDirOpts, fn func(DirEntry)) error 
 	if err != nil {
 		return err
 	}
-	resp, err := c.do(req)
+	resp, err := c.do(req.WithContext(ctx))
 	if err != nil {
 		return err
 	}

@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -29,13 +30,14 @@ func ping(args []string) error {
 	if err != nil {
 		return err
 	}
-	wd, err := bc.WorkDir()
+	ctx := context.Background()
+	wd, err := bc.WorkDir(ctx)
 	if err != nil {
 		return err
 	}
 	if status {
 		fmt.Printf("workdir: %v\n", wd)
-		s, err := bc.Status()
+		s, err := bc.Status(ctx)
 		if err != nil {
 			return err
 		}

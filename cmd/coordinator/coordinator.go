@@ -1866,7 +1866,7 @@ func (st *buildStatus) build() error {
 
 	if st.useSnapshot() {
 		sp := st.CreateSpan("write_snapshot_tar")
-		if err := bc.PutTarFromURL(st.SnapshotURL(buildEnv), "go"); err != nil {
+		if err := bc.PutTarFromURL(st.ctx, st.SnapshotURL(buildEnv), "go"); err != nil {
 			return sp.Done(fmt.Errorf("failed to put snapshot to buildlet: %v", err))
 		}
 		sp.Done(nil)
@@ -2217,7 +2217,7 @@ func (st *buildStatus) writeGoSource() error {
 func (st *buildStatus) writeGoSourceTo(bc *buildlet.Client) error {
 	// Write the VERSION file.
 	sp := st.CreateSpan("write_version_tar")
-	if err := bc.PutTar(buildgo.VersionTgz(st.Rev), "go"); err != nil {
+	if err := bc.PutTar(st.ctx, buildgo.VersionTgz(st.Rev), "go"); err != nil {
 		return sp.Done(fmt.Errorf("writing VERSION tgz: %v", err))
 	}
 
@@ -2226,7 +2226,7 @@ func (st *buildStatus) writeGoSourceTo(bc *buildlet.Client) error {
 		return err
 	}
 	sp = st.CreateSpan("write_go_src_tar")
-	if err := bc.PutTar(srcTar, "go"); err != nil {
+	if err := bc.PutTar(st.ctx, srcTar, "go"); err != nil {
 		return sp.Done(fmt.Errorf("writing tarball from Gerrit: %v", err))
 	}
 	return sp.Done(nil)
@@ -2239,12 +2239,12 @@ func (st *buildStatus) writeBootstrapToolchain() error {
 	}
 	const bootstrapDir = "go1.4" // might be newer; name is the default
 	sp := st.CreateSpan("write_go_bootstrap_tar")
-	return sp.Done(st.bc.PutTarFromURL(u, bootstrapDir))
+	return sp.Done(st.bc.PutTarFromURL(st.ctx, u, bootstrapDir))
 }
 
 func (st *buildStatus) cleanForSnapshot(bc *buildlet.Client) error {
 	sp := st.CreateSpan("clean_for_snapshot")
-	return sp.Done(bc.RemoveAll(
+	return sp.Done(bc.RemoveAll(st.ctx,
 		"go/doc/gopher",
 		"go/pkg/bootstrap",
 	))
@@ -2257,7 +2257,7 @@ func (st *buildStatus) writeSnapshot(bc *buildlet.Client) (err error) {
 	// a couple times at 1 minute. Some buildlets might be far
 	// away on the network, so be more lenient. The timeout mostly
 	// is here to prevent infinite hangs.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(st.ctx, 5*time.Minute)
 	defer cancel()
 
 	tsp := st.CreateSpan("fetch_snapshot_reader_from_buildlet")
@@ -2295,7 +2295,7 @@ func (st *buildStatus) reportErr(err error) {
 }
 
 func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
-	workDir, err := st.bc.WorkDir()
+	workDir, err := st.bc.WorkDir(st.ctx)
 	if err != nil {
 		err = fmt.Errorf("distTestList, WorkDir: %v", err)
 		return
@@ -2441,7 +2441,7 @@ func getTestStats(sl spanlog.Logger) *buildstats.TestStats {
 func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	st.LogEventTime("fetching_subrepo", st.SubName)
 
-	workDir, err := st.bc.WorkDir()
+	workDir, err := st.bc.WorkDir(st.ctx)
 	if err != nil {
 		err = fmt.Errorf("error discovering workdir for helper %s: %v", st.bc.IPPort(), err)
 		return nil, err
@@ -2451,7 +2451,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 
 	// Check out the provided sub-repo to the buildlet's workspace.
 	// Need to do this first, so we can run go env GOMOD in it.
-	err = buildgo.FetchSubrepo(st, st.bc, st.SubName, st.SubRev)
+	err = buildgo.FetchSubrepo(st.ctx, st, st.bc, st.SubName, st.SubRev)
 	if err != nil {
 		return nil, err
 	}
@@ -2492,7 +2492,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		// Look for inner modules, in order to test them too. See golang.org/issue/32528.
 		repoPath := importPathOfRepo(st.SubName)
 		sp := st.CreateSpan("listing_subrepo_modules", st.SubName)
-		err = st.bc.ListDir("gopath/src/"+repoPath, buildlet.ListDirOpts{Recursive: true}, func(e buildlet.DirEntry) {
+		err = st.bc.ListDir(st.ctx, "gopath/src/"+repoPath, buildlet.ListDirOpts{Recursive: true}, func(e buildlet.DirEntry) {
 			goModFile := path.Base(e.Name()) == "go.mod" && !e.IsDir()
 			if !goModFile {
 				return
@@ -2645,7 +2645,7 @@ func (st *buildStatus) fetchDependenciesToGOPATHWorkspace(goroot, gopath string)
 	// fetch checks out the provided sub-repo to the buildlet's workspace.
 	fetch := func(repo, rev string) error {
 		fetched[repo] = true
-		return buildgo.FetchSubrepo(st, st.bc, repo, rev)
+		return buildgo.FetchSubrepo(st.ctx, st, st.bc, repo, rev)
 	}
 
 	// findDeps uses 'go list' on the checked out repo to find its
@@ -2855,7 +2855,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 		if rev == "" {
 			rev = "master" // should happen rarely; ok if it does.
 		}
-		b, err := st.goBuilder().EnumerateBenchmarks(st.bc, rev, st.trySet.affectedPkgs())
+		b, err := st.goBuilder().EnumerateBenchmarks(st.ctx, st.bc, rev, st.trySet.affectedPkgs())
 		sp.Done(err)
 		if err == nil {
 			benches = b
@@ -2871,7 +2871,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	st.LogEventTime("starting_tests", fmt.Sprintf("%d tests", len(set.items)))
 	startTime := time.Now()
 
-	workDir, err := st.bc.WorkDir()
+	workDir, err := st.bc.WorkDir(st.ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error discovering workdir for main buildlet, %s: %v", st.bc.Name(), err)
 	}
@@ -2916,11 +2916,11 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 					defer st.LogEventTime("DEV_HELPER_SLEEP", bc.Name())
 				}
 				st.LogEventTime("got_empty_test_helper", bc.String())
-				if err := bc.PutTarFromURL(st.SnapshotURL(buildEnv), "go"); err != nil {
+				if err := bc.PutTarFromURL(st.ctx, st.SnapshotURL(buildEnv), "go"); err != nil {
 					log.Printf("failed to extract snapshot for helper %s: %v", bc.Name(), err)
 					return
 				}
-				workDir, err := bc.WorkDir()
+				workDir, err := bc.WorkDir(st.ctx)
 				if err != nil {
 					log.Printf("error discovering workdir for helper %s: %v", bc.Name(), err)
 					return

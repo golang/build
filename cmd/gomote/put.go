@@ -6,6 +6,7 @@ package main
 
 import (
 	"archive/tar"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -51,11 +52,13 @@ func putTar(args []string) error {
 		return err
 	}
 
+	ctx := context.Background()
+
 	if tarURL != "" {
 		if fs.NArg() != 1 {
 			fs.Usage()
 		}
-		if err := bc.PutTarFromURL(tarURL, dir); err != nil {
+		if err := bc.PutTarFromURL(ctx, tarURL, dir); err != nil {
 			return err
 		}
 		if rev != "" {
@@ -69,7 +72,7 @@ func putTar(args []string) error {
 			}, int64(version.Len()), version)
 			tgz := vtar.TarGz()
 			defer tgz.Close()
-			return bc.PutTar(tgz, dir)
+			return bc.PutTar(ctx, tgz, dir)
 		}
 		return nil
 	}
@@ -83,7 +86,7 @@ func putTar(args []string) error {
 		defer f.Close()
 		tgz = f
 	}
-	return bc.PutTar(tgz, dir)
+	return bc.PutTar(ctx, tgz, dir)
 }
 
 // put go1.4 in the workdir
@@ -108,7 +111,8 @@ func put14(args []string) error {
 		fmt.Printf("No GoBootstrapURL defined for %q; ignoring. (may be baked into image)\n", name)
 		return nil
 	}
-	return bc.PutTarFromURL(u, "go1.4")
+	ctx := context.Background()
+	return bc.PutTarFromURL(ctx, u, "go1.4")
 }
 
 // put single file
@@ -169,5 +173,6 @@ func put(args []string) error {
 		dest = filepath.Base(src)
 	}
 
-	return bc.Put(r, dest, mode)
+	ctx := context.Background()
+	return bc.Put(ctx, r, dest, mode)
 }

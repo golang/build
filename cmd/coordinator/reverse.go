@@ -250,7 +250,7 @@ func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 	b.inUseTime = time.Now()
 	res := make(chan error, 1)
 	go func() {
-		_, err := b.client.Status()
+		_, err := b.client.Status(context.Background())
 		res <- err
 	}()
 	p.mu.Unlock()
@@ -328,7 +328,7 @@ func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, 
 func (p *reverseBuildletPool) cleanedBuildlet(b *buildlet.Client, lg logger) (*buildlet.Client, error) {
 	// Clean up any files from previous builds.
 	sp := lg.CreateSpan("clean_buildlet", b.String())
-	err := b.RemoveAll(".")
+	err := b.RemoveAll(context.Background(), ".")
 	sp.Done(err)
 	if err != nil {
 		b.Close()
@@ -598,7 +598,7 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 	tstatus := time.Now()
-	status, err := client.Status()
+	status, err := client.Status(context.Background())
 	if err != nil {
 		log.Printf("Reverse connection %s/%s for %s did not answer status after %v: %v",
 			hostname, r.RemoteAddr, hostType, time.Since(tstatus), err)

@@ -181,12 +181,12 @@ func (gb GoBuilder) runConcurrentGoBuildStdCmd(ctx context.Context, bc *buildlet
 //
 // The GOPATH workspace is assumed to be the "gopath" directory
 // in the buildlet's work directory.
-func FetchSubrepo(sl spanlog.Logger, bc *buildlet.Client, repo, rev string) error {
+func FetchSubrepo(ctx context.Context, sl spanlog.Logger, bc *buildlet.Client, repo, rev string) error {
 	tgz, err := sourcecache.GetSourceTgz(sl, repo, rev)
 	if err != nil {
 		return err
 	}
-	return bc.PutTar(tgz, "gopath/src/"+subrepoPrefix+repo)
+	return bc.PutTar(ctx, tgz, "gopath/src/"+subrepoPrefix+repo)
 }
 
 // VersionTgz returns an io.Reader of a *.tar.gz file containing only

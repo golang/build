@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -29,5 +30,6 @@ func rm(args []string) error {
 	if err != nil {
 		return err
 	}
-	return bc.RemoveAll(args...)
+	ctx := context.Background()
+	return bc.RemoveAll(ctx, args...)
 }

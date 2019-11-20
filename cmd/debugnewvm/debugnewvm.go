@@ -124,7 +124,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("StartNewVM: %v", err)
 	}
-	dir, err := bc.WorkDir()
+	dir, err := bc.WorkDir(ctx)
 	log.Printf("WorkDir: %v, %v", dir, err)
 
 	if *sleepSec > 0 {
@@ -146,7 +146,7 @@ func main() {
 		if u := bconf.GoBootstrapURL(env); u != "" {
 			log.Printf("Pushing 'go1.4' Go bootstrap dir ...")
 			const bootstrapDir = "go1.4" // might be newer; name is the default
-			if err := bc.PutTarFromURL(u, bootstrapDir); err != nil {
+			if err := bc.PutTarFromURL(ctx, u, bootstrapDir); err != nil {
 				bc.Close()
 				log.Fatalf("Putting Go bootstrap: %v", err)
 			}
@@ -155,13 +155,13 @@ func main() {
 		// Push Go code
 		log.Printf("Pushing 'go' dir...")
 		goTarGz := "https://go.googlesource.com/go/+archive/" + *buildRev + ".tar.gz"
-		if err := bc.PutTarFromURL(goTarGz, "go"); err != nil {
+		if err := bc.PutTarFromURL(ctx, goTarGz, "go"); err != nil {
 			bc.Close()
 			log.Fatalf("Putting go code: %v", err)
 		}
 
 		// Push a synthetic VERSION file to prevent git usage:
-		if err := bc.PutTar(buildgo.VersionTgz(*buildRev), "go"); err != nil {
+		if err := bc.PutTar(ctx, buildgo.VersionTgz(*buildRev), "go"); err != nil {
 			bc.Close()
 			log.Fatalf("Putting VERSION file: %v", err)
 		}

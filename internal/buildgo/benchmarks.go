@@ -41,13 +41,13 @@ func (b *BenchmarkItem) Name() string {
 }
 
 // buildGo1 builds the Go 1 benchmarks.
-func buildGo1(conf *dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer) (remoteErr, err error) {
-	workDir, err := bc.WorkDir()
+func buildGo1(ctx context.Context, conf *dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer) (remoteErr, err error) {
+	workDir, err := bc.WorkDir(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var found bool
-	if err := bc.ListDir(path.Join(goroot, "test/bench/go1"), buildlet.ListDirOpts{}, func(e buildlet.DirEntry) {
+	if err := bc.ListDir(ctx, path.Join(goroot, "test/bench/go1"), buildlet.ListDirOpts{}, func(e buildlet.DirEntry) {
 		switch e.Name() {
 		case "go1.test", "go1.test.exe":
 			found = true
@@ -58,7 +58,7 @@ func buildGo1(conf *dashboard.BuildConfig, bc *buildlet.Client, goroot string, w
 	if found {
 		return nil, nil
 	}
-	return bc.Exec(context.TODO(), path.Join(goroot, "bin", "go"), buildlet.ExecOpts{
+	return bc.Exec(ctx, path.Join(goroot, "bin", "go"), buildlet.ExecOpts{
 		Output:   w,
 		ExtraEnv: []string{"GOROOT=" + conf.FilePathJoin(workDir, goroot)},
 		Args:     []string{"test", "-c"},
@@ -67,12 +67,12 @@ func buildGo1(conf *dashboard.BuildConfig, bc *buildlet.Client, goroot string, w
 }
 
 // buildPkg builds a package's benchmarks.
-func buildPkg(conf *dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer, pkg, name string) (remoteErr, err error) {
-	workDir, err := bc.WorkDir()
+func buildPkg(ctx context.Context, conf *dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer, pkg, name string) (remoteErr, err error) {
+	workDir, err := bc.WorkDir(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return bc.Exec(context.TODO(), path.Join(goroot, "bin", "go"), buildlet.ExecOpts{
+	return bc.Exec(ctx, path.Join(goroot, "bin", "go"), buildlet.ExecOpts{
 		Output:   w,
 		ExtraEnv: []string{"GOROOT=" + conf.FilePathJoin(workDir, goroot)},
 		Args:     []string{"test", "-c", "-o", conf.FilePathJoin(workDir, goroot, name), pkg},
@@ -80,17 +80,17 @@ func buildPkg(conf *dashboard.BuildConfig, bc *buildlet.Client, goroot string, w
 }
 
 // buildXBenchmark builds a benchmark from x/benchmarks.
-func buildXBenchmark(sl spanlog.Logger, conf *dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer, rev, pkg, name string) (remoteErr, err error) {
-	workDir, err := bc.WorkDir()
+func buildXBenchmark(ctx context.Context, sl spanlog.Logger, conf *dashboard.BuildConfig, bc *buildlet.Client, goroot string, w io.Writer, rev, pkg, name string) (remoteErr, err error) {
+	workDir, err := bc.WorkDir(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := bc.ListDir("gopath/src/golang.org/x/benchmarks", buildlet.ListDirOpts{}, func(buildlet.DirEntry) {}); err != nil {
-		if err := FetchSubrepo(sl, bc, "benchmarks", rev); err != nil {
+	if err := bc.ListDir(ctx, "gopath/src/golang.org/x/benchmarks", buildlet.ListDirOpts{}, func(buildlet.DirEntry) {}); err != nil {
+		if err := FetchSubrepo(ctx, sl, bc, "benchmarks", rev); err != nil {
 			return nil, err
 		}
 	}
-	return bc.Exec(context.TODO(), path.Join(goroot, "bin/go"), buildlet.ExecOpts{
+	return bc.Exec(ctx, path.Join(goroot, "bin/go"), buildlet.ExecOpts{
 		Output: w,
 		ExtraEnv: []string{
 			"GOROOT=" + conf.FilePathJoin(workDir, goroot),
@@ -103,8 +103,8 @@ func buildXBenchmark(sl spanlog.Logger, conf *dashboard.BuildConfig, bc *buildle
 // EnumerateBenchmarks returns a slice of the benchmarks to be run for the built Go distribution found in gb.Goroot.
 // If benchmarksRev is non-empty, it is the revision of x/benchmarks to check out for additional benchmarks.
 // pkgs contains a list of possibly duplicate packages that will be searched for benchmarks.
-func (gb GoBuilder) EnumerateBenchmarks(bc *buildlet.Client, benchmarksRev string, pkgs []string) ([]*BenchmarkItem, error) {
-	workDir, err := bc.WorkDir()
+func (gb GoBuilder) EnumerateBenchmarks(ctx context.Context, bc *buildlet.Client, benchmarksRev string, pkgs []string) ([]*BenchmarkItem, error) {
+	workDir, err := bc.WorkDir(ctx)
 	if err != nil {
 		err = fmt.Errorf("buildBench, WorkDir: %v", err)
 		return nil, err
@@ -112,7 +112,7 @@ func (gb GoBuilder) EnumerateBenchmarks(bc *buildlet.Client, benchmarksRev strin
 
 	// Fetch x/benchmarks
 	if benchmarksRev != "" {
-		if err := FetchSubrepo(gb.Logger, bc, "benchmarks", benchmarksRev); err != nil {
+		if err := FetchSubrepo(ctx, gb.Logger, bc, "benchmarks", benchmarksRev); err != nil {
 			return nil, err
 		}
 	}
@@ -126,7 +126,7 @@ func (gb GoBuilder) EnumerateBenchmarks(bc *buildlet.Client, benchmarksRev strin
 			args:     []string{"-test.bench", re, "-test.benchmem"},
 			preamble: "pkg: test/bench/go1\n",
 			build: func(bc *buildlet.Client, goroot string, w io.Writer) (error, error) {
-				return buildGo1(gb.Conf, bc, goroot, w)
+				return buildGo1(ctx, gb.Conf, bc, goroot, w)
 			},
 		})
 	}
@@ -134,7 +134,7 @@ func (gb GoBuilder) EnumerateBenchmarks(bc *buildlet.Client, benchmarksRev strin
 	// Enumerate x/benchmarks
 	if benchmarksRev != "" {
 		var buf bytes.Buffer
-		remoteErr, err := bc.Exec(context.TODO(), path.Join(gb.Goroot, "bin/go"), buildlet.ExecOpts{
+		remoteErr, err := bc.Exec(ctx, path.Join(gb.Goroot, "bin/go"), buildlet.ExecOpts{
 			Output: &buf,
 			ExtraEnv: []string{
 				"GOROOT=" + gb.Conf.FilePathJoin(workDir, gb.Goroot),
@@ -153,7 +153,7 @@ func (gb GoBuilder) EnumerateBenchmarks(bc *buildlet.Client, benchmarksRev strin
 			name := "bench-" + path.Base(pkg) + ".exe"
 			out = append(out, &BenchmarkItem{
 				binary: name, args: nil, build: func(bc *buildlet.Client, goroot string, w io.Writer) (error, error) {
-					return buildXBenchmark(gb.Logger, gb.Conf, bc, goroot, w, benchmarksRev, pkg, name)
+					return buildXBenchmark(ctx, gb.Logger, gb.Conf, bc, goroot, w, benchmarksRev, pkg, name)
 				}})
 		}
 	}
@@ -188,7 +188,7 @@ func (gb GoBuilder) EnumerateBenchmarks(bc *buildlet.Client, benchmarksRev strin
 				dir:    path.Join(gb.Goroot, "src", pkg),
 				args:   []string{"-test.bench", ".", "-test.benchmem", "-test.run", "^$", "-test.benchtime", "100ms"},
 				build: func(bc *buildlet.Client, goroot string, w io.Writer) (error, error) {
-					return buildPkg(gb.Conf, bc, goroot, w, pkg, name)
+					return buildPkg(ctx, gb.Conf, bc, goroot, w, pkg, name)
 				}})
 		}
 	}
@@ -198,14 +198,14 @@ func (gb GoBuilder) EnumerateBenchmarks(bc *buildlet.Client, benchmarksRev strin
 // runOneBenchBinary runs a binary on the buildlet and writes its output to w with a trailing newline.
 //
 // TODO: this signature is too big. Make it a method of something?
-func runOneBenchBinary(conf *dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot, dir, binaryPath string, args []string) (remoteErr, err error) {
+func runOneBenchBinary(ctx context.Context, conf *dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot, dir, binaryPath string, args []string) (remoteErr, err error) {
 	defer w.Write([]byte{'\n'})
-	workDir, err := bc.WorkDir()
+	workDir, err := bc.WorkDir(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("runOneBenchBinary, WorkDir: %v", err)
 	}
 	// Some benchmarks need GOROOT so they can invoke cmd/go.
-	return bc.Exec(context.TODO(), binaryPath, buildlet.ExecOpts{
+	return bc.Exec(ctx, binaryPath, buildlet.ExecOpts{
 		Output: w,
 		Dir:    dir,
 		Args:   args,
@@ -228,16 +228,16 @@ func runOneBenchBinary(conf *dashboard.BuildConfig, bc *buildlet.Client, w io.Wr
 
 func buildRev(ctx context.Context, buildEnv *buildenv.Environment, sl spanlog.Logger, conf *dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, goroot string, br BuilderRev) error {
 	if br.SnapshotExists(context.TODO(), buildEnv) {
-		return bc.PutTarFromURL(br.SnapshotURL(buildEnv), goroot)
+		return bc.PutTarFromURL(ctx, br.SnapshotURL(buildEnv), goroot)
 	}
-	if err := bc.PutTar(VersionTgz(br.Rev), goroot); err != nil {
+	if err := bc.PutTar(ctx, VersionTgz(br.Rev), goroot); err != nil {
 		return err
 	}
 	srcTar, err := sourcecache.GetSourceTgz(sl, "go", br.Rev)
 	if err != nil {
 		return err
 	}
-	if err := bc.PutTar(srcTar, goroot); err != nil {
+	if err := bc.PutTar(ctx, srcTar, goroot); err != nil {
 		return err
 	}
 	builder := GoBuilder{
@@ -259,7 +259,7 @@ func buildRev(ctx context.Context, buildEnv *buildenv.Environment, sl spanlog.Lo
 // TODO(quentin): Support len(revs) != 2.
 func (b *BenchmarkItem) Run(ctx context.Context, buildEnv *buildenv.Environment, sl spanlog.Logger, conf *dashboard.BuildConfig, bc *buildlet.Client, w io.Writer, revs []BuilderRev) (remoteErr, err error) {
 	// Ensure we have a built parent repo.
-	if err := bc.ListDir("go-parent", buildlet.ListDirOpts{}, func(buildlet.DirEntry) {}); err != nil {
+	if err := bc.ListDir(ctx, "go-parent", buildlet.ListDirOpts{}, func(buildlet.DirEntry) {}); err != nil {
 		pbr := revs[1]
 		sp := sl.CreateSpan("bench_build_parent", bc.Name())
 		err = buildRev(ctx, buildEnv, sl, conf, bc, w, "go-parent", pbr)
@@ -297,7 +297,7 @@ func (b *BenchmarkItem) Run(ctx context.Context, buildEnv *buildenv.Environment,
 			fmt.Fprintf(&c.out, "iteration: %d\nstart-time: %s\n", i, time.Now().UTC().Format(time.RFC3339))
 			binaryPath := path.Join(c.path, b.binary)
 			sp := sl.CreateSpan("run_one_bench", binaryPath)
-			remoteErr, err = runOneBenchBinary(conf, bc, &c.out, c.path, b.dir, binaryPath, b.args)
+			remoteErr, err = runOneBenchBinary(ctx, conf, bc, &c.out, c.path, b.dir, binaryPath, b.args)
 			sp.Done(err)
 			if err != nil || remoteErr != nil {
 				c.out.WriteTo(w)

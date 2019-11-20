@@ -235,6 +235,7 @@ func (b *Build) buildlet() (*buildlet.Client, error) {
 }
 
 func (b *Build) make() error {
+	ctx := context.TODO()
 	bc, ok := dashboard.Builders[b.Builder]
 	if !ok {
 		return fmt.Errorf("unknown builder: %v", bc)
@@ -251,7 +252,7 @@ func (b *Build) make() error {
 	}
 	defer client.Close()
 
-	work, err := client.WorkDir()
+	work, err := client.WorkDir(ctx)
 	if err != nil {
 		return err
 	}
@@ -269,14 +270,14 @@ func (b *Build) make() error {
 			b.logf("failed to open tarball %q: %v", *tarball, err)
 			return err
 		}
-		if err := client.PutTar(tarFile, goDir); err != nil {
+		if err := client.PutTar(ctx, tarFile, goDir); err != nil {
 			b.logf("failed to put tarball %q into dir %q: %v", *tarball, goDir, err)
 			return err
 		}
 		tarFile.Close()
 	} else {
 		tar := "https://go.googlesource.com/go/+archive/" + *rev + ".tar.gz"
-		if err := client.PutTarFromURL(tar, goDir); err != nil {
+		if err := client.PutTarFromURL(ctx, tar, goDir); err != nil {
 			b.logf("failed to put tarball %q into dir %q: %v", tar, goDir, err)
 			return err
 		}
@@ -299,7 +300,7 @@ func (b *Build) make() error {
 		}
 		dir := goPath + "/src/golang.org/x/" + r.repo
 		tar := "https://go.googlesource.com/" + r.repo + "/+archive/" + r.rev + ".tar.gz"
-		if err := client.PutTarFromURL(tar, dir); err != nil {
+		if err := client.PutTarFromURL(ctx, tar, dir); err != nil {
 			b.logf("failed to put tarball %q into dir %q: %v", tar, dir, err)
 			return err
 		}
@@ -307,19 +308,19 @@ func (b *Build) make() error {
 
 	if u := bc.GoBootstrapURL(buildEnv); u != "" && !b.Source {
 		b.logf("Installing go1.4.")
-		if err := client.PutTarFromURL(u, go14); err != nil {
+		if err := client.PutTarFromURL(ctx, u, go14); err != nil {
 			return err
 		}
 	}
 
 	// Write out version file.
 	b.logf("Writing VERSION file.")
-	if err := client.Put(strings.NewReader(*version), "go/VERSION", 0644); err != nil {
+	if err := client.Put(ctx, strings.NewReader(*version), "go/VERSION", 0644); err != nil {
 		return err
 	}
 
 	b.logf("Cleaning goroot (pre-build).")
-	if err := client.RemoveAll(addPrefix(goDir, preBuildCleanFiles)...); err != nil {
+	if err := client.RemoveAll(ctx, addPrefix(goDir, preBuildCleanFiles)...); err != nil {
 		return err
 	}
 
@@ -327,18 +328,18 @@ func (b *Build) make() error {
 		b.logf("Skipping build.")
 
 		// Remove unwanted top-level directories and verify only "go" remains:
-		if err := client.RemoveAll("tmp", "gocache"); err != nil {
+		if err := client.RemoveAll(ctx, "tmp", "gocache"); err != nil {
 			return err
 		}
-		if err := b.checkTopLevelDirs(client); err != nil {
+		if err := b.checkTopLevelDirs(ctx, client); err != nil {
 			return fmt.Errorf("verifying no unwanted top-level directories: %v", err)
 		}
-		if err := b.checkPerm(client); err != nil {
+		if err := b.checkPerm(ctx, client); err != nil {
 			return fmt.Errorf("verifying file permissions: %v", err)
 		}
 
 		finalFilename := *version + "." + b.String() + ".tar.gz"
-		return b.fetchTarball(client, finalFilename)
+		return b.fetchTarball(ctx, client, finalFilename)
 	}
 
 	// Set up build environment.
@@ -443,7 +444,7 @@ func (b *Build) make() error {
 	// Remove race detector *.syso files for other GOOS/GOARCHes (except for the source release).
 	if !b.Source {
 		okayRace := fmt.Sprintf("race_%s_%s.syso", b.OS, b.Arch)
-		err := client.ListDir(".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
+		err := client.ListDir(ctx, ".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
 			name := strings.TrimPrefix(ent.Name(), "go/")
 			if strings.HasPrefix(name, "src/runtime/race/race_") &&
 				strings.HasSuffix(name, ".syso") &&
@@ -457,12 +458,12 @@ func (b *Build) make() error {
 	}
 
 	b.logf("Cleaning goroot (post-build).")
-	if err := client.RemoveAll(addPrefix(goDir, postBuildCleanFiles)...); err != nil {
+	if err := client.RemoveAll(ctx, addPrefix(goDir, postBuildCleanFiles)...); err != nil {
 		return err
 	}
 	// Users don't need the api checker binary pre-built. It's
 	// used by tests, but all.bash builds it first.
-	if err := client.RemoveAll(b.toolDir() + "/api"); err != nil {
+	if err := client.RemoveAll(ctx, b.toolDir()+"/api"); err != nil {
 		return err
 	}
 	// Remove go/pkg/${GOOS}_${GOARCH}/cmd. This saves a bunch of
@@ -473,7 +474,7 @@ func (b *Build) make() error {
 	//
 	// Also remove go/pkg/${GOOS}_${GOARCH}_{dynlink,shared,testcshared_shared}
 	// per Issue 20038.
-	if err := client.RemoveAll(
+	if err := client.RemoveAll(ctx,
 		b.pkgDir()+"/cmd",
 		b.pkgDir()+"_dynlink",
 		b.pkgDir()+"_shared",
@@ -483,13 +484,13 @@ func (b *Build) make() error {
 	}
 
 	b.logf("Pushing and running releaselet.")
-	err = client.Put(strings.NewReader(releaselet), "releaselet.go", 0666)
+	err = client.Put(ctx, strings.NewReader(releaselet), "releaselet.go", 0666)
 	if err != nil {
 		return err
 	}
 	if err := runGo("run", "releaselet.go"); err != nil {
 		log.Printf("releaselet failed: %v", err)
-		client.ListDir(".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
+		client.ListDir(ctx, ".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
 			log.Printf("remote: %v", ent)
 		})
 		return err
@@ -544,23 +545,23 @@ func (b *Build) make() error {
 	// Need to delete everything except the final "go" directory,
 	// as we make the tarball relative to workdir.
 	b.logf("Cleaning workdir.")
-	if err := client.RemoveAll(cleanFiles...); err != nil {
+	if err := client.RemoveAll(ctx, cleanFiles...); err != nil {
 		return err
 	}
 
 	// And verify there's no other top-level stuff besides the "go" directory:
-	if err := b.checkTopLevelDirs(client); err != nil {
+	if err := b.checkTopLevelDirs(ctx, client); err != nil {
 		return fmt.Errorf("verifying no unwanted top-level directories: %v", err)
 	}
 
-	if err := b.checkPerm(client); err != nil {
+	if err := b.checkPerm(ctx, client); err != nil {
 		return fmt.Errorf("verifying file permissions: %v", err)
 	}
 
 	switch b.OS {
 	default:
 		untested := stagingFile(".tar.gz")
-		if err := b.fetchTarball(client, untested); err != nil {
+		if err := b.fetchTarball(ctx, client, untested); err != nil {
 			return fmt.Errorf("fetching and writing tarball: %v", err)
 		}
 		releases = append(releases, releaseFile{
@@ -584,7 +585,7 @@ func (b *Build) make() error {
 	} else {
 		if u := bc.GoBootstrapURL(buildEnv); u != "" {
 			b.logf("Installing go1.4 (second time, for all.bash).")
-			if err := client.PutTarFromURL(u, go14); err != nil {
+			if err := client.PutTarFromURL(ctx, u, go14); err != nil {
 				return err
 			}
 		}
@@ -595,7 +596,7 @@ func (b *Build) make() error {
 		if *watch && *target != "" {
 			execOut = io.MultiWriter(out, os.Stdout)
 		}
-		remoteErr, err := client.Exec(context.Background(), filepath.Join(goDir, bc.AllScript()), buildlet.ExecOpts{
+		remoteErr, err := client.Exec(ctx, filepath.Join(goDir, bc.AllScript()), buildlet.ExecOpts{
 			Output:   execOut,
 			ExtraEnv: env,
 			Args:     bc.AllScriptArgs(),
@@ -621,9 +622,9 @@ func (b *Build) make() error {
 
 // checkTopLevelDirs checks that all files under client's "."
 // ($WORKDIR) are are under "go/".
-func (b *Build) checkTopLevelDirs(client *buildlet.Client) error {
+func (b *Build) checkTopLevelDirs(ctx context.Context, client *buildlet.Client) error {
 	var badFileErr error // non-nil once an unexpected file/dir is found
-	if err := client.ListDir(".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
+	if err := client.ListDir(ctx, ".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
 		name := ent.Name()
 		if !(strings.HasPrefix(name, "go/") || strings.HasPrefix(name, `go\`)) {
 			b.logf("unexpected file: %q", name)
@@ -639,7 +640,7 @@ func (b *Build) checkTopLevelDirs(client *buildlet.Client) error {
 
 // checkPerm checks that files in client's $WORKDIR/go directory
 // have expected permissions.
-func (b *Build) checkPerm(client *buildlet.Client) error {
+func (b *Build) checkPerm(ctx context.Context, client *buildlet.Client) error {
 	var badPermErr error // non-nil once an unexpected perm is found
 	checkPerm := func(ent buildlet.DirEntry, allowed ...string) {
 		for _, p := range allowed {
@@ -652,7 +653,7 @@ func (b *Build) checkPerm(client *buildlet.Client) error {
 			badPermErr = fmt.Errorf("unexpected file %q perm %q found", ent.Name(), ent.Perm())
 		}
 	}
-	if err := client.ListDir("go", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
+	if err := client.ListDir(ctx, "go", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
 		switch b.OS {
 		default:
 			checkPerm(ent, "drwxr-xr-x", "-rw-r--r--", "-rwxr-xr-x")
@@ -663,7 +664,7 @@ func (b *Build) checkPerm(client *buildlet.Client) error {
 		return err
 	}
 	if !b.Source {
-		if err := client.ListDir("go/bin", buildlet.ListDirOpts{}, func(ent buildlet.DirEntry) {
+		if err := client.ListDir(ctx, "go/bin", buildlet.ListDirOpts{}, func(ent buildlet.DirEntry) {
 			switch b.OS {
 			default:
 				checkPerm(ent, "-rwxr-xr-x")
@@ -677,9 +678,9 @@ func (b *Build) checkPerm(client *buildlet.Client) error {
 	return badPermErr
 }
 
-func (b *Build) fetchTarball(client *buildlet.Client, dest string) error {
+func (b *Build) fetchTarball(ctx context.Context, client *buildlet.Client, dest string) error {
 	b.logf("Downloading tarball.")
-	tgz, err := client.GetTar(context.Background(), ".")
+	tgz, err := client.GetTar(ctx, ".")
 	if err != nil {
 		return err
 	}

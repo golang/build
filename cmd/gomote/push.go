@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha1"
 	"errors"
 	"flag"
@@ -73,7 +74,8 @@ func push(args []string) error {
 			"go1.4/src", "go1.4/pkg",
 		},
 	}
-	if err := bc.ListDir(".", lsOpts, func(ent buildlet.DirEntry) {
+	ctx := context.Background()
+	if err := bc.ListDir(ctx, ".", lsOpts, func(ent buildlet.DirEntry) {
 		name := ent.Name()
 		if strings.HasPrefix(name, "go1.4/") {
 			haveGo14 = true
@@ -93,7 +95,7 @@ func push(args []string) error {
 			if dryRun {
 				log.Printf("(Dry-run) Would have pushed go1.4")
 			} else {
-				if err := bc.PutTarFromURL(u, "go1.4"); err != nil {
+				if err := bc.PutTarFromURL(ctx, u, "go1.4"); err != nil {
 					return err
 				}
 			}
@@ -231,7 +233,7 @@ func push(args []string) error {
 			log.Printf("(Dry-run) Would have deleted remote files: %q", withGo)
 		} else {
 			log.Printf("Deleting remote files: %q", withGo)
-			if err := bc.RemoveAll(withGo...); err != nil {
+			if err := bc.RemoveAll(ctx, withGo...); err != nil {
 				return fmt.Errorf("Deleting remote unwanted files: %v", err)
 			}
 		}
@@ -286,7 +288,7 @@ func push(args []string) error {
 			log.Printf("(Dry-run mode; not doing anything.")
 			return nil
 		}
-		if err := bc.PutTar(tgz, "go"); err != nil {
+		if err := bc.PutTar(ctx, tgz, "go"); err != nil {
 			return fmt.Errorf("writing tarball to buildlet: %v", err)
 		}
 	}

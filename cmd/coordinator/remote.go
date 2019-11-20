@@ -628,7 +628,7 @@ func handleIncomingSSHPostAuth(s ssh.Session) {
 			err = <-errc
 		}()
 	}
-	workDir, err := rb.buildlet.WorkDir()
+	workDir, err := rb.buildlet.WorkDir(ctx)
 	if err != nil {
 		fmt.Fprintf(s, "Error getting WorkDir: %v\n", err)
 		return
