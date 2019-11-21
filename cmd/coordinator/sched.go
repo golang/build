@@ -284,15 +284,19 @@ func (s *Scheduler) waiterState(waiter *SchedItem) (ws types.BuildletWaitStatus)
 	return ws
 }
 
-// schedLess reports whether scheduled item ia is "less" (more
-// important) than scheduled item ib.
+// schedLess reports whether the scheduler item ia is "less" (more
+// important) than scheduler item ib.
 func schedLess(ia, ib *SchedItem) bool {
 	// TODO: flesh out this policy more. For now this is much
 	// better than the old random policy.
 	// For example, consider IsHelper? Figure out a policy.
+	// TODO: consider SchedItem.Branch.
+	// TODO: pass in a context to schedLess that includes current time and current
+	// top of various branches. Then we can use that in decisions rather than doing
+	// lookups or locks in a less function.
 
-	// Gomote is most important, then TryBots, then FIFO for
-	// either Gomote/Try, else LIFO for post-submit builds.
+	// Gomote is most important, then TryBots (FIFO for either), then
+	// post-submit builds (LIFO, by commit time)
 	if ia.IsGomote != ib.IsGomote {
 		return ia.IsGomote
 	}
@@ -307,8 +311,11 @@ func schedLess(ia, ib *SchedItem) bool {
 		// time. But time works for now.
 		return ia.requestTime.Before(ib.requestTime)
 	}
-	// Post-submit builds are LIFO.
-	return ib.requestTime.Before(ia.requestTime)
+
+	// Post-submit builds are LIFO by commit time, not necessarily
+	// when the coordinator's findWork loop threw them at the
+	// scheduler.
+	return ia.CommitTime.After(ib.CommitTime)
 }
 
 // SchedItem is a specification of a requested buildlet in its
@@ -320,15 +327,15 @@ type SchedItem struct {
 	IsGomote           bool
 	IsTry              bool
 	IsHelper           bool
+	CommitTime         time.Time
+	Branch             string
 
 	// The following unexported fields are set by the Scheduler in
 	// Scheduler.GetBuildlet.
 
 	s           *Scheduler
 	requestTime time.Time
-	commitTime  time.Time // TODO: populate post-submit commit time from maintnerd
-	branch      string    // TODO: populate from maintnerd
-	tryFor      string    // TODO: which user. (user with 1 trybot >> user with 50 trybots)
+	tryFor      string // TODO: which user. (user with 1 trybot >> user with 50 trybots)
 	pool        BuildletPool
 	ctxDone     <-chan struct{}
 

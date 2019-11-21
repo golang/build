@@ -357,11 +357,24 @@ func main() {
 var ignoreAllNewWork bool
 
 // addWorkTestHook is optionally set by tests.
-var addWorkTestHook func(work buildgo.BuilderRev)
+var addWorkTestHook func(buildgo.BuilderRev, *commitDetail)
+
+type commitDetail struct {
+	CommitTime string // in time.RFC3339 format
+	Branch     string
+}
 
 func addWork(work buildgo.BuilderRev) {
+	addWorkDetail(work, nil)
+}
+
+// addWorkDetail adds some work to (maybe) do, if it's not already
+// enqueued and the builders are configured to run the given repo. The
+// detail argument is optional and used for scheduling. It's currently
+// only used for post-submit builds.
+func addWorkDetail(work buildgo.BuilderRev, detail *commitDetail) {
 	if f := addWorkTestHook; f != nil {
-		f(work)
+		f(work, detail)
 		return
 	}
 	if ignoreAllNewWork || isBuilding(work) {
@@ -375,12 +388,12 @@ func addWork(work buildgo.BuilderRev) {
 		}
 		return
 	}
-	st, err := newBuild(work)
+	st, err := newBuild(work, detail)
 	if err != nil {
 		log.Printf("Bad build work params %v: %v", work, err)
-	} else {
-		st.start()
+		return
 	}
+	st.start()
 }
 
 // httpToHTTPSRedirector redirects all requests from http to https.
@@ -872,12 +885,28 @@ func findWork() error {
 
 	var goRevisions []string // revisions of repo "go", branch "master" revisions
 	seenSubrepo := make(map[string]bool)
+	commitTime := make(map[string]string)   // git rev => "2019-11-20T22:54:54Z" (time.RFC3339 from build.golang.org's JSON)
+	commitBranch := make(map[string]string) // git rev => "master"
+
+	add := func(br buildgo.BuilderRev) {
+		rev := br.SubRev
+		if br.SubRev == "" {
+			rev = br.Rev
+		}
+		addWorkDetail(br, &commitDetail{
+			CommitTime: commitTime[rev],
+			Branch:     commitBranch[rev],
+		})
+	}
+
 	for _, br := range bs.Revisions {
 		if br.Repo == "grpc-review" {
 			// Skip the grpc repo. It's only for reviews
 			// for now (using LetsUseGerrit).
 			continue
 		}
+		commitTime[br.Revision] = br.Date
+		commitBranch[br.Revision] = br.Branch
 		awaitSnapshot := false
 		if br.Repo == "go" {
 			if br.Branch == "master" {
@@ -938,7 +967,7 @@ func findWork() error {
 				}
 			}
 
-			addWork(rev)
+			add(rev)
 		}
 	}
 
@@ -950,7 +979,7 @@ func findWork() error {
 			continue
 		}
 		for _, rev := range goRevisions {
-			addWork(buildgo.BuilderRev{Name: b, Rev: rev})
+			add(buildgo.BuilderRev{Name: b, Rev: rev})
 		}
 	}
 	return nil
@@ -1160,7 +1189,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 			continue
 		}
 		brev := tryKeyToBuilderRev(bconf.Name, key, goRev)
-		bs, err := newBuild(brev)
+		bs, err := newBuild(brev, noCommitDetail)
 		if err != nil {
 			log.Printf("can't create build for %q: %v", brev, err)
 			continue
@@ -1190,7 +1219,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 				continue
 			}
 			brev := tryKeyToBuilderRev(linuxBuilder.Name, key, goRev)
-			bs, err := newBuild(brev)
+			bs, err := newBuild(brev, noCommitDetail)
 			if err != nil {
 				log.Printf("can't create build for %q: %v", brev, err)
 				continue
@@ -1221,7 +1250,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 				SubName: project,
 				SubRev:  rev,
 			}
-			bs, err := newBuild(brev)
+			bs, err := newBuild(brev, noCommitDetail)
 			if err != nil {
 				log.Printf("can't create x/%s trybot build for go/master commit %s: %v", project, rev, err)
 				return nil
@@ -1338,7 +1367,7 @@ func (ts *trySet) awaitTryBuild(idx int, bs *buildStatus, brev buildgo.BuilderRe
 		if !ts.wanted() {
 			return
 		}
-		bs, _ = newBuild(brev)
+		bs, _ = newBuild(brev, noCommitDetail)
 		bs.trySet = ts
 		bs.goBranch = old.goBranch
 		go bs.start()
@@ -1588,7 +1617,12 @@ func poolForConf(conf *dashboard.HostConfig) BuildletPool {
 	}
 }
 
-func newBuild(rev buildgo.BuilderRev) (*buildStatus, error) {
+// noCommitDetail is just a nice name for nil at call sites.
+var noCommitDetail *commitDetail = nil
+
+// newBuild constructs a new *buildStatus from rev and an optional detail.
+// If detail is nil, the scheduler just has less information to work with.
+func newBuild(rev buildgo.BuilderRev, detail *commitDetail) (*buildStatus, error) {
 	// Note: can't acquire statusMu in newBuild, as this is called
 	// from findTryWork -> newTrySet, which holds statusMu.
 
@@ -1600,6 +1634,19 @@ func newBuild(rev buildgo.BuilderRev) (*buildStatus, error) {
 		return nil, fmt.Errorf("required field Rev is empty; got %+v", rev)
 	}
 
+	var branch string
+	var commitTime time.Time
+	if detail != nil {
+		branch = detail.Branch
+		if detail.CommitTime != "" {
+			var err error
+			commitTime, err = time.Parse(time.RFC3339, detail.CommitTime)
+			if err != nil {
+				return nil, fmt.Errorf("invalid commit time %q, for %+v: %err", detail.CommitTime, rev, err)
+			}
+		}
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	return &buildStatus{
 		buildID:    "B" + randHex(9),
@@ -1608,6 +1655,8 @@ func newBuild(rev buildgo.BuilderRev) (*buildStatus, error) {
 		startTime:  time.Now(),
 		ctx:        ctx,
 		cancel:     cancel,
+		commitTime: commitTime,
+		branch:     branch,
 	}, nil
 }
 
@@ -1717,6 +1766,8 @@ func (st *buildStatus) onceInitHelpersFunc() {
 		BuilderRev: st.BuilderRev,
 		HostType:   st.conf.HostType,
 		IsTry:      st.isTry(),
+		CommitTime: st.commitTime,
+		Branch:     st.branch,
 	}
 	st.helpers = getBuildlets(st.ctx, st.conf.NumTestHelpers(st.isTry()), schedTmpl, st)
 }
@@ -1799,6 +1850,8 @@ func (st *buildStatus) getBuildlet() (*buildlet.Client, error) {
 		HostType:   st.conf.HostType,
 		IsTry:      st.trySet != nil,
 		BuilderRev: st.BuilderRev,
+		CommitTime: st.commitTime,
+		Branch:     st.branch,
 	}
 	st.mu.Lock()
 	st.schedItem = schedItem
@@ -2110,6 +2163,8 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompil
 		HostType:   config.CompileHostType,
 		IsTry:      st.trySet != nil,
 		BuilderRev: st.BuilderRev,
+		CommitTime: st.commitTime,
+		Branch:     st.branch,
 	})
 	sp.Done(err)
 	if err != nil {
@@ -3370,11 +3425,13 @@ type eventAndTime struct {
 type buildStatus struct {
 	// Immutable:
 	buildgo.BuilderRev
-	buildID   string // "B" + 9 random hex
-	goBranch  string // non-empty for subrepo trybots if not go master branch
-	conf      *dashboard.BuildConfig
-	startTime time.Time // actually time of newBuild (~same thing); TODO(bradfitz): rename this createTime
-	trySet    *trySet   // or nil
+	buildID    string // "B" + 9 random hex
+	goBranch   string // non-empty for subrepo trybots if not go master branch
+	conf       *dashboard.BuildConfig
+	startTime  time.Time // actually time of newBuild (~same thing)
+	trySet     *trySet   // or nil
+	commitTime time.Time // non-zero for post-submit builders
+	branch     string    // non-empty for post-submit work
 
 	onceInitHelpers sync.Once // guards call of onceInitHelpersFunc
 	helpers         <-chan *buildlet.Client

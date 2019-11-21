@@ -189,8 +189,8 @@ func TestFindWork(t *testing.T) {
 		return false
 	}
 
-	addWorkTestHook = func(work buildgo.BuilderRev) {
-		t.Logf("Got: %v", work)
+	addWorkTestHook = func(work buildgo.BuilderRev, d *commitDetail) {
+		t.Logf("Got: %v, %+v", work, d)
 	}
 	defer func() { addWorkTestHook = nil }()
 

@@ -87,20 +87,24 @@ func TestSchedLess(t *testing.T) {
 		{
 			name: "reg LIFO, less",
 			a: &SchedItem{
-				requestTime: t2,
+				CommitTime:  t2,
+				requestTime: t1, // shouldn't be used
 			},
 			b: &SchedItem{
-				requestTime: t1,
+				CommitTime:  t1,
+				requestTime: t2, // shouldn't be used
 			},
 			want: true,
 		},
 		{
 			name: "reg LIFO, greater",
 			a: &SchedItem{
-				requestTime: t1,
+				CommitTime:  t1,
+				requestTime: t2, // shouldn't be used
 			},
 			b: &SchedItem{
-				requestTime: t2,
+				CommitTime:  t2,
+				requestTime: t1, // shouldn't be used
 			},
 			want: false,
 		},
