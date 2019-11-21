@@ -26,7 +26,6 @@ func main() {
 	handleFunc("/clear-results", AuthHandler(clearResultsHandler))
 	handleFunc("/commit", AuthHandler(commitHandler))
 	handleFunc("/packages", AuthHandler(packagesHandler))
-	handleFunc("/perf-result", AuthHandler(perfResultHandler))
 	handleFunc("/result", AuthHandler(resultHandler))
 	handleFunc("/tag", AuthHandler(tagHandler))
 	handleFunc("/todo", AuthHandler(todoHandler))
@@ -34,12 +33,8 @@ func main() {
 	// public handlers
 	handleFunc("/", uiHandler)
 	handleFunc("/log/", logHandler)
-	handleFunc("/perf", perfChangesHandler)
-	handleFunc("/perfdetail", perfDetailUIHandler)
-	handleFunc("/perfgraph", perfGraphHandler)
 	handleFunc("/updatebenchmark", updateBenchmark)
 	handleFunc("/buildtest", testHandler)
-	handleFunc("/perflearn", perfLearnHandler)
 
 	appengine.Main()
 }

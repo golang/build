@@ -5,7 +5,7 @@ handlers:
   - url: /static
     static_dir: app/appengine/static
     secure: always
-  - url: /(init|buildtest|key|perflearn|_ah/queue/go/delay)
+  - url: /(init|buildtest|key|_ah/queue/go/delay)
     script: auto
     login: admin
     secure: always

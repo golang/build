@@ -5,7 +5,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/md5"
@@ -80,7 +79,6 @@ func commitHandler(r *http.Request) (interface{}, error) {
 		}
 		// Strip potentially large and unnecessary fields.
 		com.ResultData = nil
-		com.PerfResults = nil
 		return com, nil
 	}
 	if r.Method != "POST" {
@@ -102,10 +100,6 @@ func commitHandler(r *http.Request) (interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading Body: %v", err)
 	}
-	if !bytes.Contains(body, needsBenchmarkingBytes) {
-		log.Warningf(c, "old builder detected at %v", r.RemoteAddr)
-		return nil, fmt.Errorf("rejecting old builder request, body does not contain %s: %q", needsBenchmarkingBytes, body)
-	}
 	if err := json.Unmarshal(body, com); err != nil {
 		return nil, fmt.Errorf("unmarshaling body %q: %v", body, err)
 	}
@@ -119,8 +113,6 @@ func commitHandler(r *http.Request) (interface{}, error) {
 	}
 	return nil, datastore.RunInTransaction(c, tx, nil)
 }
-
-var needsBenchmarkingBytes = []byte(`"NeedsBenchmarking"`)
 
 // addCommit adds the Commit entity to the datastore and updates the tip Tag.
 // It must be run inside a datastore transaction.
@@ -209,25 +201,6 @@ func addCommit(c context.Context, com *Commit) error {
 	if err = putCommit(c, com); err != nil {
 		return err
 	}
-	if com.NeedsBenchmarking {
-		// add to CommitRun
-		cr, err := GetCommitRun(c, com.Num)
-		if err != nil {
-			return err
-		}
-		if err = cr.AddCommit(c, com); err != nil {
-			return err
-		}
-		// create PerfResult
-		res := &PerfResult{CommitHash: com.Hash, CommitNum: com.Num}
-		if _, err := datastore.Put(c, res.Key(c), res); err != nil {
-			return fmt.Errorf("putting PerfResult: %v", err)
-		}
-		// Update perf todo if necessary.
-		if err = AddCommitToPerfTodo(c, com); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -285,18 +258,10 @@ func todoHandler(r *http.Request) (interface{}, error) {
 		switch kind {
 		case "build-go-commit":
 			com, err = buildTodo(c, builder, "", "")
-			if com != nil {
-				com.PerfResults = []string{}
-			}
 		case "build-package":
 			packagePath := r.FormValue("packagePath")
 			goHash := r.FormValue("goHash")
 			com, err = buildTodo(c, builder, packagePath, goHash)
-			if com != nil {
-				com.PerfResults = []string{}
-			}
-		case "benchmark-go-commit":
-			com, err = perfTodo(c, builder)
 		}
 		if com != nil || err != nil {
 			if com != nil {
@@ -396,129 +361,6 @@ func buildTodo(c context.Context, builder, packagePath, goHash string) (*Commit,
 	return nil, nil
 }
 
-// perfTodo returns the next Commit to be benchmarked (or nil if none available).
-func perfTodo(c context.Context, builder string) (*Commit, error) {
-	p := &Package{}
-	todo := &PerfTodo{Builder: builder}
-	err := datastore.Get(c, todo.Key(c), todo)
-	if err != nil && err != datastore.ErrNoSuchEntity {
-		return nil, fmt.Errorf("fetching PerfTodo: %v", err)
-	}
-	if err == datastore.ErrNoSuchEntity {
-		todo, err = buildPerfTodo(c, builder)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if len(todo.CommitNums) == 0 {
-		return nil, nil
-	}
-
-	// Have commit to benchmark, fetch it.
-	num := todo.CommitNums[len(todo.CommitNums)-1]
-	t := datastore.NewQuery("Commit").
-		Ancestor(p.Key(c)).
-		Filter("Num =", num).
-		Limit(1).
-		Run(c)
-	com := new(Commit)
-	if _, err := t.Next(com); err != nil {
-		return nil, err
-	}
-	if !com.NeedsBenchmarking {
-		return nil, fmt.Errorf("commit from perf todo queue is not intended for benchmarking")
-	}
-
-	// Remove benchmarks from other builders.
-	var benchs []string
-	for _, b := range com.PerfResults {
-		bb := strings.Split(b, "|")
-		if bb[0] == builder && bb[1] != "meta-done" {
-			benchs = append(benchs, bb[1])
-		}
-	}
-	com.PerfResults = benchs
-
-	return com, nil
-}
-
-// buildPerfTodo creates PerfTodo for the builder with all commits. In a transaction.
-func buildPerfTodo(c context.Context, builder string) (*PerfTodo, error) {
-	todo := &PerfTodo{Builder: builder}
-	tx := func(c context.Context) error {
-		err := datastore.Get(c, todo.Key(c), todo)
-		if err != nil && err != datastore.ErrNoSuchEntity {
-			return fmt.Errorf("fetching PerfTodo: %v", err)
-		}
-		if err == nil {
-			return nil
-		}
-		t := datastore.NewQuery("CommitRun").
-			Ancestor((&Package{}).Key(c)).
-			Order("-StartCommitNum").
-			Run(c)
-		var nums []int
-		var releaseNums []int
-	loop:
-		for {
-			cr := new(CommitRun)
-			if _, err := t.Next(cr); err == datastore.Done {
-				break
-			} else if err != nil {
-				return fmt.Errorf("scanning commit runs for perf todo: %v", err)
-			}
-			for i := len(cr.Hash) - 1; i >= 0; i-- {
-				if !cr.NeedsBenchmarking[i] || cr.Hash[i] == "" {
-					continue // There's nothing to see here. Move along.
-				}
-				num := cr.StartCommitNum + i
-				for k, v := range knownTags {
-					// Releases are benchmarked first, because they are important (and there are few of them).
-					if cr.Hash[i] == v {
-						releaseNums = append(releaseNums, num)
-						if k == "go1" {
-							break loop // Point of no benchmark: test/bench/shootout: update timing.log to Go 1.
-						}
-					}
-				}
-				nums = append(nums, num)
-			}
-		}
-		todo.CommitNums = orderPerfTodo(nums)
-		todo.CommitNums = append(todo.CommitNums, releaseNums...)
-		if _, err = datastore.Put(c, todo.Key(c), todo); err != nil {
-			return fmt.Errorf("putting PerfTodo: %v", err)
-		}
-		return nil
-	}
-	return todo, datastore.RunInTransaction(c, tx, nil)
-}
-
-func removeCommitFromPerfTodo(c context.Context, builder string, num int) error {
-	todo := &PerfTodo{Builder: builder}
-	err := datastore.Get(c, todo.Key(c), todo)
-	if err != nil && err != datastore.ErrNoSuchEntity {
-		return fmt.Errorf("fetching PerfTodo: %v", err)
-	}
-	if err == datastore.ErrNoSuchEntity {
-		return nil
-	}
-	for i := len(todo.CommitNums) - 1; i >= 0; i-- {
-		if todo.CommitNums[i] == num {
-			for ; i < len(todo.CommitNums)-1; i++ {
-				todo.CommitNums[i] = todo.CommitNums[i+1]
-			}
-			todo.CommitNums = todo.CommitNums[:i]
-			_, err = datastore.Put(c, todo.Key(c), todo)
-			if err != nil {
-				return fmt.Errorf("putting PerfTodo: %v", err)
-			}
-			break
-		}
-	}
-	return nil
-}
-
 // packagesHandler returns a list of the non-Go Packages monitored
 // by the dashboard.
 func packagesHandler(r *http.Request) (interface{}, error) {
@@ -615,204 +457,6 @@ func resultHandler(r *http.Request) (interface{}, error) {
 		return notifyOnFailure(c, com, res.Builder)
 	}
 	return nil, datastore.RunInTransaction(c, tx, nil)
-}
-
-// perf-result request payload
-type PerfRequest struct {
-	Builder   string
-	Benchmark string
-	Hash      string
-	OK        bool
-	Metrics   []PerfMetric
-	Artifacts []PerfArtifact
-}
-
-type PerfMetric struct {
-	Type string
-	Val  uint64
-}
-
-type PerfArtifact struct {
-	Type string
-	Body string
-}
-
-// perfResultHandler records a becnhmarking result.
-func perfResultHandler(r *http.Request) (interface{}, error) {
-	defer r.Body.Close()
-	if r.Method != "POST" {
-		return nil, errBadMethod(r.Method)
-	}
-
-	req := new(PerfRequest)
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
-		return nil, fmt.Errorf("decoding Body: %v", err)
-	}
-
-	c := contextForRequest(r)
-	defer cache.Tick(c)
-
-	// store the text files if supplied
-	for i, a := range req.Artifacts {
-		hash, err := PutLog(c, a.Body)
-		if err != nil {
-			return nil, fmt.Errorf("putting Log: %v", err)
-		}
-		req.Artifacts[i].Body = hash
-	}
-	tx := func(c context.Context) error {
-		return addPerfResult(c, r, req)
-	}
-	return nil, datastore.RunInTransaction(c, tx, nil)
-}
-
-// addPerfResult creates PerfResult and updates Commit, PerfTodo,
-// PerfMetricRun and PerfConfig.
-// MUST be called from inside a transaction.
-func addPerfResult(c context.Context, r *http.Request, req *PerfRequest) error {
-	// check Package exists
-	p, err := GetPackage(c, "")
-	if err != nil {
-		return fmt.Errorf("GetPackage: %v", err)
-	}
-	// add result to Commit
-	com := &Commit{Hash: req.Hash}
-	if err := com.AddPerfResult(c, req.Builder, req.Benchmark); err != nil {
-		return fmt.Errorf("AddPerfResult: %v", err)
-	}
-
-	// add the result to PerfResult
-	res := &PerfResult{CommitHash: req.Hash}
-	if err := datastore.Get(c, res.Key(c), res); err != nil {
-		return fmt.Errorf("getting PerfResult: %v", err)
-	}
-	present := res.AddResult(req)
-	if _, err := datastore.Put(c, res.Key(c), res); err != nil {
-		return fmt.Errorf("putting PerfResult: %v", err)
-	}
-
-	// Meta-done denotes that there are no benchmarks left.
-	if req.Benchmark == "meta-done" {
-		// Don't send duplicate emails for the same commit/builder.
-		// And don't send emails about too old commits.
-		if !present && com.Num >= p.NextNum-commitsPerPage {
-			if err := checkPerfChanges(c, r, com, req.Builder, res); err != nil {
-				return err
-			}
-		}
-		if err := removeCommitFromPerfTodo(c, req.Builder, com.Num); err != nil {
-			return nil
-		}
-		return nil
-	}
-
-	// update PerfConfig
-	newBenchmark, err := UpdatePerfConfig(c, r, req)
-	if err != nil {
-		return fmt.Errorf("updating PerfConfig: %v", err)
-	}
-	if newBenchmark {
-		// If this is a new benchmark on the builder, delete PerfTodo.
-		// It will be recreated later with all commits again.
-		todo := &PerfTodo{Builder: req.Builder}
-		err = datastore.Delete(c, todo.Key(c))
-		if err != nil && err != datastore.ErrNoSuchEntity {
-			return fmt.Errorf("deleting PerfTodo: %v", err)
-		}
-	}
-
-	// add perf metrics
-	for _, metric := range req.Metrics {
-		m, err := GetPerfMetricRun(c, req.Builder, req.Benchmark, metric.Type, com.Num)
-		if err != nil {
-			return fmt.Errorf("GetPerfMetrics: %v", err)
-		}
-		if err = m.AddMetric(c, com.Num, metric.Val); err != nil {
-			return fmt.Errorf("AddMetric: %v", err)
-		}
-	}
-
-	return nil
-}
-
-// MUST be called from inside a transaction.
-func checkPerfChanges(c context.Context, r *http.Request, com *Commit, builder string, res *PerfResult) error {
-	pc, err := GetPerfConfig(c, r)
-	if err != nil {
-		return err
-	}
-
-	results := res.ParseData()[builder]
-	rcNewer := MakePerfResultCache(c, com, true)
-	rcOlder := MakePerfResultCache(c, com, false)
-
-	// Check whether we need to send failure notification email.
-	if results["meta-done"].OK {
-		// This one is successful, see if the next is failed.
-		nextRes, err := rcNewer.Next(com.Num)
-		if err != nil {
-			return err
-		}
-		if nextRes != nil && isPerfFailed(nextRes, builder) {
-			sendPerfFailMail(c, builder, nextRes)
-		}
-	} else {
-		// This one is failed, see if the previous is successful.
-		prevRes, err := rcOlder.Next(com.Num)
-		if err != nil {
-			return err
-		}
-		if prevRes != nil && !isPerfFailed(prevRes, builder) {
-			sendPerfFailMail(c, builder, res)
-		}
-	}
-
-	// Now see if there are any performance changes.
-	// Find the previous and the next results for performance comparison.
-	prevRes, err := rcOlder.NextForComparison(com.Num, builder)
-	if err != nil {
-		return err
-	}
-	nextRes, err := rcNewer.NextForComparison(com.Num, builder)
-	if err != nil {
-		return err
-	}
-	if results["meta-done"].OK {
-		// This one is successful, compare with a previous one.
-		if prevRes != nil {
-			if err := comparePerfResults(c, pc, builder, prevRes, res); err != nil {
-				return err
-			}
-		}
-		// Compare a next one with the current.
-		if nextRes != nil {
-			if err := comparePerfResults(c, pc, builder, res, nextRes); err != nil {
-				return err
-			}
-		}
-	} else {
-		// This one is failed, compare a previous one with a next one.
-		if prevRes != nil && nextRes != nil {
-			if err := comparePerfResults(c, pc, builder, prevRes, nextRes); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func comparePerfResults(c context.Context, pc *PerfConfig, builder string, prevRes, res *PerfResult) error {
-	changes := significantPerfChanges(pc, builder, prevRes, res)
-	if len(changes) == 0 {
-		return nil
-	}
-	com := &Commit{Hash: res.CommitHash}
-	if err := datastore.Get(c, com.Key(c), com); err != nil {
-		return fmt.Errorf("getting commit %v: %v", com.Hash, err)
-	}
-	sendPerfMailLater.Call(c, com, prevRes.CommitHash, builder, changes) // add task to queue
-	return nil
 }
 
 // logHandler displays log text for a given hash.

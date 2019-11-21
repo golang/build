@@ -12,7 +12,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"runtime"
-	"sort"
 	"strings"
 	"text/template"
 
@@ -197,26 +196,6 @@ func postGerritMessage(c context.Context, com *Commit, message string) error {
 	return nil
 }
 
-// MUST be called from inside a transaction.
-func sendPerfFailMail(c context.Context, builder string, res *PerfResult) error {
-	com := &Commit{Hash: res.CommitHash}
-	if err := datastore.Get(c, com.Key(c), com); err != nil {
-		return err
-	}
-	logHash := ""
-	parsed := res.ParseData()
-	for _, data := range parsed[builder] {
-		if !data.OK {
-			logHash = data.Artifacts["log"]
-			break
-		}
-	}
-	if logHash == "" {
-		return fmt.Errorf("can not find failed result for commit %v on builder %v", com.Hash, builder)
-	}
-	return commonNotify(c, com, builder, logHash)
-}
-
 // commonNotify MUST!!! be called from within a transaction inside which
 // the provided Commit entity was retrieved from the datastore.
 func commonNotify(c context.Context, com *Commit, builder, logHash string) error {
@@ -234,84 +213,4 @@ func commonNotify(c context.Context, com *Commit, builder, logHash string) error
 	notifyLater.Call(c, com, builder, logHash) // add task to queue
 	com.FailNotificationSent = true
 	return putCommit(c, com)
-}
-
-type PerfChangeBenchmark struct {
-	Name    string
-	Metrics []*PerfChangeMetric
-}
-
-type PerfChangeMetric struct {
-	Name  string
-	Old   uint64
-	New   uint64
-	Delta float64
-}
-
-type PerfChangeBenchmarkSlice []*PerfChangeBenchmark
-
-func (l PerfChangeBenchmarkSlice) Len() int      { return len(l) }
-func (l PerfChangeBenchmarkSlice) Swap(i, j int) { l[i], l[j] = l[j], l[i] }
-func (l PerfChangeBenchmarkSlice) Less(i, j int) bool {
-	b1, p1 := splitBench(l[i].Name)
-	b2, p2 := splitBench(l[j].Name)
-	if b1 != b2 {
-		return b1 < b2
-	}
-	return p1 < p2
-}
-
-type PerfChangeMetricSlice []*PerfChangeMetric
-
-func (l PerfChangeMetricSlice) Len() int           { return len(l) }
-func (l PerfChangeMetricSlice) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
-func (l PerfChangeMetricSlice) Less(i, j int) bool { return l[i].Name < l[j].Name }
-
-var (
-	sendPerfMailLater = delay.Func("sendPerfMail", sendPerfMailFunc)
-	sendPerfMailTmpl  = template.Must(
-		template.New("perf_notify.txt").
-			Funcs(template.FuncMap(tmplFuncs)).
-			ParseFiles(templateFile("perf_notify.txt")),
-	)
-)
-
-func sendPerfMailFunc(c context.Context, com *Commit, prevCommitHash, builder string, changes []*PerfChange) {
-	// Sort the changes into the right order.
-	var benchmarks []*PerfChangeBenchmark
-	for _, ch := range changes {
-		// Find the benchmark.
-		var b *PerfChangeBenchmark
-		for _, b1 := range benchmarks {
-			if b1.Name == ch.Bench {
-				b = b1
-				break
-			}
-		}
-		if b == nil {
-			b = &PerfChangeBenchmark{Name: ch.Bench}
-			benchmarks = append(benchmarks, b)
-		}
-		b.Metrics = append(b.Metrics, &PerfChangeMetric{Name: ch.Metric, Old: ch.Old, New: ch.New, Delta: ch.Diff})
-	}
-	for _, b := range benchmarks {
-		sort.Sort(PerfChangeMetricSlice(b.Metrics))
-	}
-	sort.Sort(PerfChangeBenchmarkSlice(benchmarks))
-
-	u := fmt.Sprintf("https://%v/perfdetail?commit=%v&commit0=%v&kind=builder&builder=%v", domain, com.Hash, prevCommitHash, builder)
-
-	// Prepare mail message (without Commit, for updateCL).
-	var body bytes.Buffer
-	err := sendPerfMailTmpl.Execute(&body, map[string]interface{}{
-		"Builder": builder, "Hostname": domain, "Url": u, "Benchmarks": benchmarks,
-	})
-	if err != nil {
-		log.Errorf(c, "rendering perf mail template: %v", err)
-		return
-	}
-
-	if err := postGerritMessage(c, com, body.String()); err != nil {
-		log.Errorf(c, "posting to gerrit: %v", err)
-	}
 }

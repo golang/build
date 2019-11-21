@@ -60,18 +60,6 @@ func updateBenchmark(w http.ResponseWriter, r *http.Request) {
 			}
 			ncommit++
 
-			// create PerfResult
-			res := &PerfResult{CommitHash: com.Hash, CommitNum: com.Num}
-			err = datastore.Get(c, res.Key(c), res)
-			if err != nil && err != datastore.ErrNoSuchEntity {
-				return fmt.Errorf("fetching PerfResult: %v", err)
-			}
-			if err == datastore.ErrNoSuchEntity {
-				if _, err := datastore.Put(c, res.Key(c), res); err != nil {
-					return fmt.Errorf("putting PerfResult: %v", err)
-				}
-			}
-
 			// Update CommitRun.
 			if cr != nil && cr.StartCommitNum != com.Num/PerfRunLength*PerfRunLength {
 				if _, err := datastore.Put(c, cr.Key(c), cr); err != nil {
