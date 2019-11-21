@@ -603,16 +603,6 @@ func AuthHandler(h dashHandler) http.HandlerFunc {
 	}
 }
 
-func keyHandler(w http.ResponseWriter, r *http.Request) {
-	builder := r.FormValue("builder")
-	if builder == "" {
-		logErr(w, r, errors.New("must supply builder in query string"))
-		return
-	}
-	c := contextForRequest(r)
-	fmt.Fprint(w, builderKey(c, builder))
-}
-
 func validHash(hash string) bool {
 	// TODO(adg): correctly validate a hash
 	return hash != ""

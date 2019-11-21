@@ -19,7 +19,6 @@ func main() {
 
 	// admin handlers
 	handleFunc("/init", initHandler)
-	handleFunc("/key", keyHandler)
 
 	// authenticated handlers
 	handleFunc("/building", AuthHandler(buildingHandler))
