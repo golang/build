@@ -25,6 +25,8 @@ Then run:
 $ gcloud auth configure-docker
 ```
 
+Install the App Engine Go SDK: [instructions](https://cloud.google.com/sdk/docs/quickstart-debian-ubuntu)
+
 ### Staging
 
 ```sh
