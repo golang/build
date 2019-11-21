@@ -2,9 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// TODO(adg): packages at weekly/release
-// TODO(adg): some means to register new packages
-
 package main
 
 import (
@@ -217,14 +214,13 @@ func listBranches(c context.Context) (branches []string) {
 //    hash builder failure-url
 func failuresHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 	w.Header().Set("Content-Type", "text/plain")
-	d := goDash
 	for _, c := range data.Commits {
 		for _, b := range data.Builders {
 			res := c.Result(b, "")
 			if res == nil || res.OK || res.LogHash == "" {
 				continue
 			}
-			url := fmt.Sprintf("https://%v%v/log/%v", r.Host, d.Prefix, res.LogHash)
+			url := fmt.Sprintf("https://%v/log/%v", r.Host, res.LogHash)
 			fmt.Fprintln(w, c.Hash, b, url)
 		}
 	}
@@ -233,8 +229,6 @@ func failuresHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateDat
 // jsonHandler is https://build.golang.org/?mode=json
 // The output is a types.BuildStatus JSON object.
 func jsonHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
-	d := goDash
-
 	// cell returns one of "" (no data), "ok", or a failure URL.
 	cell := func(res *Result) string {
 		switch {
@@ -243,7 +237,7 @@ func jsonHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 		case res.OK:
 			return "ok"
 		}
-		return fmt.Sprintf("https://%v%v/log/%v", r.Host, d.Prefix, res.LogHash)
+		return fmt.Sprintf("https://%v/log/%v", r.Host, res.LogHash)
 	}
 
 	var res types.BuildStatus

@@ -41,9 +41,6 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 	// Create secret key.
 	key.Secret(c)
 
-	// Create dummy config values.
-	initConfig(c)
-
 	// Populate Go 1.4 tag. This is for bootstrapping the new feature of
 	// building sub-repos against the stable release.
 	// TODO(adg): remove this after Go 1.5 is released, at which point the

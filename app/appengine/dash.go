@@ -24,13 +24,10 @@ func main() {
 	handleFunc("/packages", AuthHandler(packagesHandler))
 	handleFunc("/result", AuthHandler(resultHandler))
 	handleFunc("/tag", AuthHandler(tagHandler))
-	handleFunc("/todo", AuthHandler(todoHandler))
 
 	// public handlers
 	handleFunc("/", uiHandler)
 	handleFunc("/log/", logHandler)
-	handleFunc("/updatebenchmark", updateBenchmark)
-	handleFunc("/buildtest", testHandler)
 
 	appengine.Main()
 }
@@ -48,10 +45,12 @@ func hstsHandler(fn http.HandlerFunc) http.Handler {
 }
 
 // Dashboard describes a unique build dashboard.
+//
+// (There used to be more than one dashboard, so this is now somewhat
+// less important than it once was.)
 type Dashboard struct {
-	Name      string     // This dashboard's name (eg, "Go")
-	Namespace string     // This dashboard's namespace (eg, "" (default), "Git")
-	Prefix    string     // The path prefix (no trailing /)
+	Name      string     // This dashboard's name (always "Go" nowadays)
+	Namespace string     // This dashboard's namespace (always "Git" nowadays)
 	Packages  []*Package // The project's packages to build
 }
 
@@ -72,7 +71,6 @@ func (d *Dashboard) Context(ctx context.Context) context.Context {
 var goDash = &Dashboard{
 	Name:      "Go",
 	Namespace: "Git",
-	Prefix:    "",
 	Packages:  goPackages,
 }
 

@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"strconv"
 	"strings"
 	"time"
 
@@ -23,7 +22,6 @@ import (
 
 const (
 	maxDatastoreStringLen = 500
-	PerfRunLength         = 1024
 )
 
 // A Package describes a package that is listed on the dashboard.
@@ -101,12 +99,6 @@ type Commit struct {
 	// The complete data set is stored in Result entities.
 	ResultData []string `datastore:",noindex"`
 
-	// PerfResults holds a set of “builder|benchmark” tuples denoting
-	// what benchmarks have been executed on the commit.
-	PerfResults []string `datastore:",noindex"`
-
-	FailNotificationSent bool
-
 	buildingURLs map[builderAndGoHash]string
 }
 
@@ -181,25 +173,6 @@ func (com *Commit) RemoveResult(r *Result) {
 		rd = append(rd, s)
 	}
 	com.ResultData = rd
-}
-
-// AddPerfResult remembers that the builder has run the benchmark on the commit.
-// It must be called from inside a datastore transaction.
-func (com *Commit) AddPerfResult(c context.Context, builder, benchmark string) error {
-	if err := datastore.Get(c, com.Key(c), com); err != nil {
-		return fmt.Errorf("getting Commit: %v", err)
-	}
-	if !com.NeedsBenchmarking {
-		return fmt.Errorf("trying to add perf result to Commit(%v) that does not require benchmarking", com.Hash)
-	}
-	s := builder + "|" + benchmark
-	for _, v := range com.PerfResults {
-		if v == s {
-			return nil
-		}
-	}
-	com.PerfResults = append(com.PerfResults, s)
-	return putCommit(c, com)
 }
 
 func trim(s []string, n int) []string {
@@ -312,116 +285,6 @@ func reverse(s []string) {
 		j := len(s) - i - 1
 		s[i], s[j] = s[j], s[i]
 	}
-}
-
-// A CommitRun provides summary information for commits [StartCommitNum, StartCommitNum + PerfRunLength).
-// Descendant of Package.
-type CommitRun struct {
-	PackagePath       string // (empty for main repo commits)
-	StartCommitNum    int
-	Hash              []string    `datastore:",noindex"`
-	User              []string    `datastore:",noindex"`
-	Desc              []string    `datastore:",noindex"` // Only first line.
-	Time              []time.Time `datastore:",noindex"`
-	NeedsBenchmarking []bool      `datastore:",noindex"`
-}
-
-func (cr *CommitRun) Key(c context.Context) *datastore.Key {
-	p := Package{Path: cr.PackagePath}
-	key := strconv.Itoa(cr.StartCommitNum)
-	return datastore.NewKey(c, "CommitRun", key, 0, p.Key(c))
-}
-
-// GetCommitRun loads and returns CommitRun that contains information
-// for commit commitNum.
-func GetCommitRun(c context.Context, commitNum int) (*CommitRun, error) {
-	cr := &CommitRun{StartCommitNum: commitNum / PerfRunLength * PerfRunLength}
-	err := datastore.Get(c, cr.Key(c), cr)
-	if err != nil && err != datastore.ErrNoSuchEntity {
-		return nil, fmt.Errorf("getting CommitRun: %v", err)
-	}
-	if len(cr.Hash) != PerfRunLength {
-		cr.Hash = make([]string, PerfRunLength)
-		cr.User = make([]string, PerfRunLength)
-		cr.Desc = make([]string, PerfRunLength)
-		cr.Time = make([]time.Time, PerfRunLength)
-		cr.NeedsBenchmarking = make([]bool, PerfRunLength)
-	}
-	return cr, nil
-}
-
-func (cr *CommitRun) AddCommit(c context.Context, com *Commit) error {
-	if com.Num < cr.StartCommitNum || com.Num >= cr.StartCommitNum+PerfRunLength {
-		return fmt.Errorf("AddCommit: commit num %v out of range [%v, %v)",
-			com.Num, cr.StartCommitNum, cr.StartCommitNum+PerfRunLength)
-	}
-	i := com.Num - cr.StartCommitNum
-	// Be careful with string lengths,
-	// we need to fit 1024 commits into 1 MB.
-	cr.Hash[i] = com.Hash
-	cr.User[i] = shortDesc(com.User)
-	cr.Desc[i] = shortDesc(com.Desc)
-	cr.Time[i] = com.Time
-	cr.NeedsBenchmarking[i] = com.NeedsBenchmarking
-	if _, err := datastore.Put(c, cr.Key(c), cr); err != nil {
-		return fmt.Errorf("putting CommitRun: %v", err)
-	}
-	return nil
-}
-
-// GetCommits returns [startCommitNum, startCommitNum+n) commits.
-// Commits information is partial (obtained from CommitRun),
-// do not store them back into datastore.
-func GetCommits(c context.Context, startCommitNum, n int) ([]*Commit, error) {
-	if startCommitNum < 0 || n <= 0 {
-		return nil, fmt.Errorf("GetCommits: invalid args (%v, %v)", startCommitNum, n)
-	}
-
-	p := &Package{}
-	t := datastore.NewQuery("CommitRun").
-		Ancestor(p.Key(c)).
-		Filter("StartCommitNum >=", startCommitNum/PerfRunLength*PerfRunLength).
-		Order("StartCommitNum").
-		Limit(100).
-		Run(c)
-
-	res := make([]*Commit, n)
-	for {
-		cr := new(CommitRun)
-		_, err := t.Next(cr)
-		if err == datastore.Done {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if cr.StartCommitNum >= startCommitNum+n {
-			break
-		}
-		// Calculate start index for copying.
-		i := 0
-		if cr.StartCommitNum < startCommitNum {
-			i = startCommitNum - cr.StartCommitNum
-		}
-		// Calculate end index for copying.
-		e := PerfRunLength
-		if cr.StartCommitNum+e > startCommitNum+n {
-			e = startCommitNum + n - cr.StartCommitNum
-		}
-		for ; i < e; i++ {
-			com := new(Commit)
-			com.Hash = cr.Hash[i]
-			com.User = cr.User[i]
-			com.Desc = cr.Desc[i]
-			com.Time = cr.Time[i]
-			com.NeedsBenchmarking = cr.NeedsBenchmarking[i]
-			res[cr.StartCommitNum-startCommitNum+i] = com
-		}
-		if e != PerfRunLength {
-			break
-		}
-	}
-	return res, nil
 }
 
 // partsToResult converts a Commit and ResultData substrings to a Result.

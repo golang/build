@@ -227,140 +227,6 @@ func tagHandler(r *http.Request) (interface{}, error) {
 	return nil, err
 }
 
-// Todo is a todoHandler response.
-type Todo struct {
-	Kind string // "build-go-commit" or "build-package"
-	Data interface{}
-}
-
-// todoHandler returns the next action to be performed by a builder.
-// It expects "builder" and "kind" query parameters and returns a *Todo value.
-// Multiple "kind" parameters may be specified.
-func todoHandler(r *http.Request) (interface{}, error) {
-	c := contextForRequest(r)
-	now := cache.Now(c)
-	key := "build-todo-" + r.Form.Encode()
-	var todo *Todo
-	if cache.Get(c, r, now, key, &todo) {
-		// Hack to avoid storing nil in memcache.
-		if todo.Kind == "none" {
-			return nil, nil
-		}
-		return todo, nil
-	}
-	var err error
-	builder := r.FormValue("builder")
-	if builderKeyRevoked(builder) {
-		return nil, fmt.Errorf("builder key revoked; no work given")
-	}
-	for _, kind := range r.Form["kind"] {
-		var com *Commit
-		switch kind {
-		case "build-go-commit":
-			com, err = buildTodo(c, builder, "", "")
-		case "build-package":
-			packagePath := r.FormValue("packagePath")
-			goHash := r.FormValue("goHash")
-			com, err = buildTodo(c, builder, packagePath, goHash)
-		}
-		if com != nil || err != nil {
-			if com != nil {
-				// ResultData can be large and not needed on builder.
-				com.ResultData = []string{}
-			}
-			todo = &Todo{Kind: kind, Data: com}
-			break
-		}
-	}
-	if err == nil {
-		// Hack to avoid storing nil in memcache.
-		if todo == nil {
-			todo = &Todo{Kind: "none"}
-		}
-		cache.Set(c, r, now, key, todo)
-	}
-	// Hack to avoid storing nil in memcache.
-	if todo.Kind == "none" {
-		return nil, nil
-	}
-	return todo, err
-}
-
-// buildTodo returns the next Commit to be built (or nil if none available).
-//
-// If packagePath and goHash are empty, it scans the first 20 Go Commits in
-// Num-descending order and returns the first one it finds that doesn't have a
-// Result for this builder.
-//
-// If provided with non-empty packagePath and goHash args, it scans the first
-// 20 Commits in Num-descending order for the specified packagePath and
-// returns the first that doesn't have a Result for this builder and goHash.
-func buildTodo(c context.Context, builder, packagePath, goHash string) (*Commit, error) {
-	p, err := GetPackage(c, packagePath)
-	if err != nil {
-		return nil, err
-	}
-
-	t := datastore.NewQuery("Commit").
-		Ancestor(p.Key(c)).
-		Limit(commitsPerPage).
-		Order("-Num").
-		Run(c)
-	for {
-		com := new(Commit)
-		if _, err := t.Next(com); err == datastore.Done {
-			break
-		} else if err != nil {
-			return nil, err
-		}
-		if com.Result(builder, goHash) == nil {
-			return com, nil
-		}
-	}
-
-	// Nothing left to do if this is a package (not the Go tree).
-	if packagePath != "" {
-		return nil, nil
-	}
-
-	// If there are no Go tree commits left to build,
-	// see if there are any subrepo commits that need to be built at tip.
-	// If so, ask the builder to build a go tree at the tip commit.
-	// TODO(adg): do the same for "weekly" and "release" tags.
-
-	tag, err := GetTag(c, "tip", "")
-	if err != nil {
-		return nil, err
-	}
-
-	// Check that this Go commit builds OK for this builder.
-	// If not, don't re-build as the subrepos will never get built anyway.
-	com, err := tag.Commit(c)
-	if err != nil {
-		return nil, err
-	}
-	if r := com.Result(builder, ""); r != nil && !r.OK {
-		return nil, nil
-	}
-
-	pkgs, err := Packages(c, "subrepo")
-	if err != nil {
-		return nil, err
-	}
-	for _, pkg := range pkgs {
-		com, err := pkg.LastCommit(c)
-		if err != nil {
-			log.Warningf(c, "%v: no Commit found: %v", pkg, err)
-			continue
-		}
-		if com.Result(builder, tag.Hash) == nil {
-			return tag.Commit(c)
-		}
-	}
-
-	return nil, nil
-}
-
 // packagesHandler returns a list of the non-Go Packages monitored
 // by the dashboard.
 func packagesHandler(r *http.Request) (interface{}, error) {
@@ -600,8 +466,10 @@ func AuthHandler(h dashHandler) http.HandlerFunc {
 	}
 }
 
+// validHash reports whether hash looks like a valid git commit hash.
 func validHash(hash string) bool {
-	// TODO(adg): correctly validate a hash
+	// TODO: correctly validate a hash: check that it's exactly 40
+	// lowercase hex digits. But this is what we historically did:
 	return hash != ""
 }
 
