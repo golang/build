@@ -6,7 +6,6 @@ package main
 
 import (
 	"context"
-	"encoding/gob"
 	"net/http"
 	"sort"
 	"strings"
@@ -15,8 +14,6 @@ import (
 )
 
 func main() {
-	gob.Register(&Commit{}) // needed for google.golang.org/appengine/delay
-
 	// admin handlers
 	handleFunc("/init", initHandler)
 

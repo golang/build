@@ -451,10 +451,7 @@ func resultHandler(r *http.Request) (interface{}, error) {
 		if err := com.AddResult(c, res); err != nil {
 			return fmt.Errorf("AddResult: %v", err)
 		}
-		// Send build failure notifications, if necessary.
-		// Note this must run after the call AddResult, which
-		// populates the Commit's ResultData field.
-		return notifyOnFailure(c, com, res.Builder)
+		return nil
 	}
 	return nil, datastore.RunInTransaction(c, tx, nil)
 }
