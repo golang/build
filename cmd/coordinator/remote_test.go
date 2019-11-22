@@ -14,10 +14,10 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"runtime"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
@@ -109,7 +109,7 @@ func removeBuilder(name string) {
 	testPool.Remove("test-host")
 }
 
-var buildName = runtime.GOOS + "-" + runtime.GOARCH + "-test"
+const buildName = "linux-amd64-test"
 
 type tlogger struct{ t *testing.T }
 
@@ -118,23 +118,60 @@ func (t tlogger) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func TestHandleBuildletCreate(t *testing.T) {
+func TestHandleBuildletCreate_PreStream(t *testing.T) {
 	log.SetOutput(tlogger{t})
 	defer log.SetOutput(os.Stderr)
 	addBuilder(buildName)
+	remoteBuildlets.m = map[string]*remoteBuildlet{}
 	testPoolHook = func(_ *dashboard.HostConfig) BuildletPool { return testPool }
 	defer func() {
+		timeNow = time.Now
 		removeBuilder(buildName)
 		testPoolHook = nil
 	}()
+	timeNow = func() time.Time { return time.Unix(123, 0) }
 	data := url.Values{}
 	data.Set("version", "20160922")
 	data.Set("builderType", buildName)
 	req := httptest.NewRequest("POST", "/buildlet/create", strings.NewReader(data.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("gopher", "fake-not-checked-password") // auth is handled in outer wrapper
 	w := httptest.NewRecorder()
 	handleBuildletCreate(w, req)
 	if w.Code != 200 {
 		t.Fatal("bad code", w.Code, w.Body.String())
+	}
+	want := `{"User":"gopher","Name":"gopher-linux-amd64-test-0","HostType":"test-host","BuilderType":"linux-amd64-test","Created":"1970-01-01T00:02:03Z","Expires":"1970-01-01T00:32:03Z"}`
+	if got := strings.TrimSpace(w.Body.String()); got != want {
+		t.Errorf("unexpected output.\n got: %s\nwant: %s\n", got, want)
+	}
+}
+
+func TestHandleBuildletCreate_Stream(t *testing.T) {
+	log.SetOutput(tlogger{t})
+	defer log.SetOutput(os.Stderr)
+	addBuilder(buildName)
+	remoteBuildlets.m = map[string]*remoteBuildlet{}
+	testPoolHook = func(_ *dashboard.HostConfig) BuildletPool { return testPool }
+	defer func() {
+		timeNow = time.Now
+		removeBuilder(buildName)
+		testPoolHook = nil
+	}()
+	timeNow = func() time.Time { return time.Unix(123, 0) }
+	data := url.Values{}
+	data.Set("version", buildlet.GomoteCreateStreamVersion)
+	data.Set("builderType", buildName)
+	req := httptest.NewRequest("POST", "/buildlet/create", strings.NewReader(data.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth("gopher", "fake-not-checked-password") // auth is handled in outer wrapper
+	w := httptest.NewRecorder()
+	handleBuildletCreate(w, req)
+	if w.Code != 200 {
+		t.Fatal("bad code", w.Code, w.Body.String())
+	}
+	want := `{"buildlet":{"User":"gopher","Name":"gopher-linux-amd64-test-0","HostType":"test-host","BuilderType":"linux-amd64-test","Created":"1970-01-01T00:02:03Z","Expires":"1970-01-01T00:32:03Z"}}`
+	if got := strings.TrimSpace(w.Body.String()); got != want {
+		t.Errorf("unexpected output.\n got: %s\nwant: %s\n", got, want)
 	}
 }

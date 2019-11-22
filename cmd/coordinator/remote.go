@@ -118,6 +118,8 @@ func expireBuildlets() {
 	}
 }
 
+var timeNow = time.Now // for testing
+
 // always wrapped in requireBuildletProxyAuth.
 func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
@@ -179,9 +181,9 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	}()
 	// One of these fields is set:
 	type msg struct {
-		Error    string                   `json:"error"`
-		Buildlet *remoteBuildlet          `json:"buildlet"`
-		Status   types.BuildletWaitStatus `json:"status"`
+		Error    string                    `json:"error,omitempty"`
+		Buildlet *remoteBuildlet           `json:"buildlet,omitempty"`
+		Status   *types.BuildletWaitStatus `json:"status,omitempty"`
 	}
 	sendJSONLine := func(v interface{}) {
 		jenc, err := json.Marshal(v)
@@ -195,26 +197,32 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-ticker:
-			sendJSONLine(msg{Status: sched.waiterState(si)})
+			st := sched.waiterState(si)
+			sendJSONLine(msg{Status: &st})
 		case bc := <-resc:
 			rb := &remoteBuildlet{
 				User:        user,
 				BuilderType: builderType,
 				HostType:    bconf.HostType,
 				buildlet:    bc,
-				Created:     time.Now(),
-				Expires:     time.Now().Add(remoteBuildletIdleTimeout),
+				Created:     timeNow(),
+				Expires:     timeNow().Add(remoteBuildletIdleTimeout),
 			}
 			rb.Name = addRemoteBuildlet(rb)
 			bc.SetName(rb.Name)
 			log.Printf("created buildlet %v for %v (%s)", rb.Name, rb.User, bc.String())
 			if wantStream {
-				// We already set a content-type above before we flushed, so don't
-				// set it again.
+				// We already sent the Content-Type
+				// (and perhaps status update JSON
+				// lines) earlier, so just send the
+				// final JSON update with the result:
+				sendJSONLine(msg{Buildlet: rb})
 			} else {
+				// Legacy client path.
+				// TODO: delete !wantStream support 3-6 months after 2019-11-19.
 				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				sendJSONLine(rb)
 			}
-			sendJSONLine(msg{Buildlet: rb})
 			return
 		case err := <-errc:
 			log.Printf("error creating gomote buildlet: %v", err)
