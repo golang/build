@@ -17,6 +17,7 @@ import (
 
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/loghash"
+	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
 )
 
@@ -44,6 +45,32 @@ func (p *Package) Key(c context.Context) *datastore.Key {
 	return datastore.NewKey(c, "Package", key, 0, nil)
 }
 
+// filterDatastoreError returns err, unless it's just about datastore
+// not being able to load an entity with old legacy struct fields into
+// the Commit type that has since removed those fields.
+func filterDatastoreError(err error) error {
+	if em, ok := err.(*datastore.ErrFieldMismatch); ok {
+		switch em.FieldName {
+		case "NeedsBenchmarking", "TryPatch", "FailNotificationSent":
+			// Removed in CLs 208397 and 208324.
+			return nil
+		}
+	}
+	if me, ok := err.(appengine.MultiError); ok {
+		any := false
+		for i, err := range me {
+			me[i] = filterDatastoreError(err)
+			if me[i] != nil {
+				any = true
+			}
+		}
+		if !any {
+			return nil
+		}
+	}
+	return err
+}
+
 // LastCommit returns the most recent Commit for this Package.
 func (p *Package) LastCommit(c context.Context) (*Commit, error) {
 	var commits []*Commit
@@ -52,6 +79,7 @@ func (p *Package) LastCommit(c context.Context) (*Commit, error) {
 		Order("-Time").
 		Limit(1).
 		GetAll(c, &commits)
+	err = filterDatastoreError(err)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +167,9 @@ const maxResults = 1000
 // AddResult adds the denormalized Result data to the Commit's ResultData field.
 // It must be called from inside a datastore transaction.
 func (com *Commit) AddResult(c context.Context, r *Result) error {
-	if err := datastore.Get(c, com.Key(c), com); err != nil {
+	err := datastore.Get(c, com.Key(c), com)
+	err = filterDatastoreError(err)
+	if err != nil {
 		return fmt.Errorf("getting Commit: %v", err)
 	}
 
@@ -408,6 +438,7 @@ func (t *Tag) Valid() error {
 func (t *Tag) Commit(c context.Context) (*Commit, error) {
 	com := &Commit{Hash: t.Hash}
 	err := datastore.Get(c, com.Key(c), com)
+	err = filterDatastoreError(err)
 	return com, err
 }
 

@@ -114,6 +114,7 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 				if err == datastore.ErrNoSuchEntity {
 					continue
 				}
+				err = filterDatastoreError(err)
 				if err != nil {
 					logErr(w, r, err)
 					return
@@ -195,6 +196,7 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 func listBranches(c context.Context) (branches []string) {
 	var commits []*Commit
 	_, err := datastore.NewQuery("Commit").Distinct().Project("Branch").GetAll(c, &commits)
+	err = filterDatastoreError(err)
 	if err != nil {
 		log.Errorf(c, "listBranches: %v", err)
 		return
@@ -318,6 +320,7 @@ func dashCommits(c context.Context, pkg *Package, page int, branch string) ([]*C
 	var commits []*Commit
 	_, err := q.Limit(commitsPerPage).Offset(offset).
 		GetAll(c, &commits)
+	err = filterDatastoreError(err)
 
 	// If we're running locally and don't have data, return some test data.
 	// This lets people hack on the UI without setting up gitmirror & friends.
@@ -348,6 +351,7 @@ func fetchCommits(c context.Context, pkg *Package, hashes []string) ([]*Commit, 
 		keys = append(keys, commit.Key(c))
 	}
 	err := datastore.GetMulti(c, keys, out)
+	err = filterDatastoreError(err)
 	return out, err
 }
 

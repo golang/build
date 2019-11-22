@@ -170,6 +170,7 @@ func addCommit(c context.Context, com *Commit) error {
 			Filter("Hash =", com.ParentHash).
 			Ancestor(p.Key(c)).
 			Count(c)
+		err = filterDatastoreError(err)
 		if err != nil {
 			return fmt.Errorf("testing for parent Commit: %v", err)
 		}
@@ -374,6 +375,7 @@ func clearResultsHandler(r *http.Request) (interface{}, error) {
 			Order("-Num").
 			Limit(commitsPerPage).
 			GetAll(c, &coms)
+		err = filterDatastoreError(err)
 		if err != nil {
 			return err
 		}

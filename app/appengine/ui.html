@@ -125,7 +125,7 @@
                 {{else if .OK}}
                   <span class="ok">ok</span>
                 {{else}}
-                  <a href="{{$.Dashboard.Prefix}}/log/{{.LogHash}}" class="fail">fail</a>
+                  <a href="/log/{{.LogHash}}" class="fail">fail</a>
                 {{end}}
               {{else}}
                 &nbsp;
@@ -225,7 +225,7 @@
                 {{else if .OK}}
                   <span class="ok">ok</span>
                 {{else}}
-                  <a href="{{$.Dashboard.Prefix}}/log/{{.LogHash}}" class="fail">fail</a>
+                  <a href="/log/{{.LogHash}}" class="fail">fail</a>
                 {{end}}
               {{else}}
                 &nbsp;
