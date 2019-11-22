@@ -194,7 +194,7 @@ var builds = []*Build{
 		OS:      "darwin",
 		Arch:    "amd64",
 		Race:    true,
-		Builder: "darwin-amd64-10_11",
+		Builder: "darwin-amd64-10_15",
 	},
 	{
 		OS:       "linux",
