@@ -698,8 +698,6 @@ func (w *Work) buildRelease(target string) {
 	switch {
 	case strings.HasPrefix(target, "windows-"):
 		files = []string{prefix + "zip", prefix + "msi"}
-	case strings.HasPrefix(target, "darwin-"):
-		files = []string{prefix + "tar.gz", prefix + "pkg"}
 	default:
 		files = []string{prefix + "tar.gz"}
 	}

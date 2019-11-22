@@ -519,18 +519,7 @@ func (b *Build) make() error {
 		return filepath.Join(stagingDir, *version+"."+b.String()+ext+".untested")
 	}
 
-	switch b.OS {
-	case "darwin":
-		untested := stagingFile(".pkg")
-		if err := b.fetchFile(client, untested, "pkg"); err != nil {
-			return err
-		}
-		releases = append(releases, releaseFile{
-			Untested: untested,
-			Final:    *version + "." + b.String() + ".pkg",
-		})
-		cleanFiles = append(cleanFiles, "pkg")
-	case "windows":
+	if b.OS == "windows" {
 		untested := stagingFile(".msi")
 		if err := b.fetchFile(client, untested, "msi"); err != nil {
 			return err
