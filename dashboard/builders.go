@@ -123,7 +123,7 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:     "root",
 	},
 	"host-linux-stretch-morecpu": &HostConfig{
-		Notes:           "Debian Stretch, but on n1-highcpu-8",
+		Notes:           "Debian Stretch, but on n1-highcpu-16",
 		ContainerImage:  "linux-x86-stretch:latest",
 		machineType:     "n1-highcpu-16", // 16 vCPUs, 14.4 GB mem
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
@@ -430,21 +430,37 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-windows-amd64-2008": &HostConfig{
 		VMImage:            "windows-amd64-server-2008r2-v7",
-		machineType:        "n1-highcpu-4",
+		machineType:        "n1-highcpu-4", // 4 vCPUs, 3.6 GB mem
+		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
+		SSHUsername:        "gopher",
+	},
+	"host-windows-amd64-2008-big": &HostConfig{
+		Notes:              "Same as host-windows-amd64-2008, but on n1-highcpu-8",
+		VMImage:            "windows-amd64-server-2008r2-v7",
+		machineType:        "n1-highcpu-8", // 8 vCPUs, 7.2 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2012": &HostConfig{
 		VMImage:            "windows-amd64-server-2012r2-v7",
-		machineType:        "n1-highcpu-4",
+		machineType:        "n1-highcpu-4", // 4 vCPUs, 3.6 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2016": &HostConfig{
 		VMImage:            "windows-amd64-server-2016-v7",
-		machineType:        "n1-highcpu-4",
+		machineType:        "n1-highcpu-4", // 4 vCPUs, 3.6 GB mem
+		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
+		SSHUsername:        "gopher",
+	},
+	"host-windows-amd64-2016-big": &HostConfig{
+		Notes:              "Same as host-windows-amd64-2016, but on n1-highcpu-8",
+		VMImage:            "windows-amd64-server-2016-v7",
+		machineType:        "n1-highcpu-8", // 8 vCPUs, 7.2 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
@@ -1240,7 +1256,7 @@ func (c *HostConfig) MachineType() string {
 		// so their /workdir tmpfs can be larger. The COS
 		// image has no swap, so we want to make sure the
 		// /workdir fits completely in memory.
-		return "n1-standard-4" // 4 CPUs, 15GB RAM
+		return "n1-standard-4" // 4 vCPUs, 15 GB mem
 	}
 	return "n1-highcpu-2"
 }
@@ -1994,7 +2010,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-longtest",
-		HostType: "host-windows-amd64-2016",
+		HostType: "host-windows-amd64-2016-big",
 		Notes:    "Windows Server 2016 with go test -short=false",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			if !defaultPlusExp(repo, branch, goBranch) {
@@ -2010,7 +2026,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-race",
-		HostType: "host-windows-amd64-2008",
+		HostType: "host-windows-amd64-2008-big",
 		Notes:    "Only runs -race tests (./race.bat)",
 		env: []string{
 			"GOARCH=amd64",
