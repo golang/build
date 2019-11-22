@@ -86,12 +86,10 @@ type Commit struct {
 	ParentHash  string
 	Num         int // Internal monotonic counter unique to this package.
 
-	User              string
-	Desc              string `datastore:",noindex"`
-	Time              time.Time
-	NeedsBenchmarking bool
-	TryPatch          bool
-	Branch            string
+	User   string
+	Desc   string `datastore:",noindex"`
+	Time   time.Time
+	Branch string
 
 	// ResultData is the Data string of each build Result for this Commit.
 	// For non-Go commits, only the Results for the current Go tip, weekly,

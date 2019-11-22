@@ -429,10 +429,6 @@ func (s builderOrder) Less(i, j int) bool {
 }
 
 func builderPriority(builder string) (p int) {
-	// Put -temp builders at the end, always.
-	if strings.HasSuffix(builder, "-temp") {
-		defer func() { p += 20 }()
-	}
 	// Group race builders together.
 	if isRace(builder) {
 		return 2
@@ -450,9 +446,6 @@ func isRace(s string) bool {
 }
 
 func unsupported(builder string) bool {
-	if strings.HasSuffix(builder, "-temp") {
-		return true
-	}
 	return unsupportedOS(builderOS(builder))
 }
 
@@ -688,7 +681,7 @@ func builderSpans(s []string) []builderSpan {
 	for len(s) > 0 {
 		i := 1
 		os := builderOSOrRace(s[0])
-		u := unsupportedOS(os) || strings.HasSuffix(s[0], "-temp")
+		u := unsupportedOS(os)
 		for i < len(s) && builderOSOrRace(s[i]) == os {
 			i++
 		}

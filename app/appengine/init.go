@@ -41,19 +41,5 @@ func initHandler(w http.ResponseWriter, r *http.Request) {
 	// Create secret key.
 	key.Secret(c)
 
-	// Populate Go 1.4 tag. This is for bootstrapping the new feature of
-	// building sub-repos against the stable release.
-	// TODO(adg): remove this after Go 1.5 is released, at which point the
-	// build system will pick up on the new release tag automatically.
-	t := &Tag{
-		Kind: "release",
-		Name: "release-branch.go1.4",
-		Hash: "883bc6ed0ea815293fe6309d66f967ea60630e87", // Go 1.4.2
-	}
-	if _, err := datastore.Put(c, t.Key(c), t); err != nil {
-		logErr(w, r, err)
-		return
-	}
-
 	fmt.Fprint(w, "OK")
 }
