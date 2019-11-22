@@ -2379,14 +2379,12 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "plan9-arm",
 		HostType:          "host-plan9-arm-0intro",
-		SkipSnapshot:      true,
 		shouldRunDistTest: noTestDir,
 		buildsRepo:        onlyMaster,
 	})
 	addBuilder(BuildConfig{
-		Name:         "plan9-amd64-9front",
-		HostType:     "host-plan9-amd64-0intro",
-		SkipSnapshot: true,
+		Name:     "plan9-amd64-9front",
+		HostType: "host-plan9-amd64-0intro",
 		shouldRunDistTest: func(distTestName string, isTry bool) bool {
 			if !noTestDir(distTestName, isTry) {
 				return false
@@ -2401,9 +2399,8 @@ func init() {
 		buildsRepo: onlyMaster,
 	})
 	addBuilder(BuildConfig{
-		Name:         "plan9-386-0intro",
-		HostType:     "host-plan9-386-0intro",
-		SkipSnapshot: true,
+		Name:     "plan9-386-0intro",
+		HostType: "host-plan9-386-0intro",
 		shouldRunDistTest: func(distTestName string, isTry bool) bool {
 			if !noTestDir(distTestName, isTry) {
 				return false
