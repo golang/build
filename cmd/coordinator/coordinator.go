@@ -360,8 +360,13 @@ var ignoreAllNewWork bool
 var addWorkTestHook func(buildgo.BuilderRev, *commitDetail)
 
 type commitDetail struct {
+	// CommitTime is the greater of 1 or 2 possible git committer
+	// times: the commit time of the associated BuilderRev.Rev
+	// (for the BuilderRev also passed to addWorkDetail) or
+	// BuilderRev.SubRev (if not empty).
 	CommitTime string // in time.RFC3339 format
-	Branch     string
+
+	Branch string
 }
 
 func addWork(work buildgo.BuilderRev) {
@@ -889,12 +894,16 @@ func findWork() error {
 	commitBranch := make(map[string]string) // git rev => "master"
 
 	add := func(br buildgo.BuilderRev) {
-		rev := br.SubRev
-		if br.SubRev == "" {
-			rev = br.Rev
+		rev := br.Rev
+		ct := commitTime[br.Rev]
+		if br.SubRev != "" {
+			rev = br.SubRev
+			if t := commitTime[rev]; t > ct {
+				ct = t
+			}
 		}
 		addWorkDetail(br, &commitDetail{
-			CommitTime: commitTime[rev],
+			CommitTime: ct,
 			Branch:     commitBranch[rev],
 		})
 	}
@@ -3430,7 +3439,7 @@ type buildStatus struct {
 	conf       *dashboard.BuildConfig
 	startTime  time.Time // actually time of newBuild (~same thing)
 	trySet     *trySet   // or nil
-	commitTime time.Time // non-zero for post-submit builders
+	commitTime time.Time // non-zero for post-submit builders; max of Rev & SubRev's committer time
 	branch     string    // non-empty for post-submit work
 
 	onceInitHelpers sync.Once // guards call of onceInitHelpersFunc

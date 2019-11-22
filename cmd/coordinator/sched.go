@@ -327,8 +327,13 @@ type SchedItem struct {
 	IsGomote           bool
 	IsTry              bool
 	IsHelper           bool
-	CommitTime         time.Time
 	Branch             string
+
+	// CommitTime is the latest commit date of the relevant repos
+	// that make up the work being tested. (For example, x/foo
+	// being tested against master can have either x/foo commit
+	// being newer, or master being newer).
+	CommitTime time.Time
 
 	// The following unexported fields are set by the Scheduler in
 	// Scheduler.GetBuildlet.
