@@ -47,8 +47,7 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
-	"golang.org/x/build/revdial"
-	revdialv2 "golang.org/x/build/revdial/v2"
+	"golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
 )
 
@@ -502,14 +501,14 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		hostType        = r.Header.Get("X-Go-Host-Type")
 		buildKey        = r.Header.Get("X-Go-Builder-Key")
 		buildletVersion = r.Header.Get("X-Go-Builder-Version")
-		revDialVersion  = r.Header.Get("X-Revdial-Version")
 		hostname        = r.Header.Get("X-Go-Builder-Hostname")
 	)
 
-	switch revDialVersion {
+	switch r.Header.Get("X-Revdial-Version") {
 	case "":
 		// Old.
-		revDialVersion = "1"
+		http.Error(w, "buildlet binary is too old", http.StatusBadRequest)
+		return
 	case "2":
 		// Current.
 	default:
@@ -532,7 +531,7 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conn, bufrw, err := w.(http.Hijacker).Hijack()
+	conn, _, err := w.(http.Hijacker).Hijack()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -544,24 +543,12 @@ func handleReverse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Registering reverse buildlet %q (%s) for host type %v; buildletVersion=%v; revDialVersion=%v",
-		hostname, r.RemoteAddr, hostType, buildletVersion, revDialVersion)
+	log.Printf("Registering reverse buildlet %q (%s) for host type %v; buildletVersion=%v",
+		hostname, r.RemoteAddr, hostType, buildletVersion)
 
-	var dialer func(context.Context) (net.Conn, error)
-	var revDialerDone <-chan struct{}
-	switch revDialVersion {
-	case "1":
-		revDialer := revdial.NewDialer(bufrw, conn)
-		revDialerDone = revDialer.Done()
-		dialer = func(ctx context.Context) (net.Conn, error) {
-			// ignoring context.
-			return revDialer.Dial()
-		}
-	case "2":
-		revDialer := revdialv2.NewDialer(conn, "/revdial")
-		revDialerDone = revDialer.Done()
-		dialer = revDialer.Dial
-	}
+	revDialer := revdial.NewDialer(conn, "/revdial")
+	revDialerDone := revDialer.Done()
+	dialer := revDialer.Dial
 
 	client := buildlet.NewClient(hostname, buildlet.NoKeyPair)
 	client.SetHTTPClient(&http.Client{
