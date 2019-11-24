@@ -205,29 +205,6 @@ func addCommit(c context.Context, com *Commit) error {
 	return nil
 }
 
-// tagHandler records a new tag. It reads a JSON-encoded Tag value from the
-// request body and updates the Tag entity for the Kind of tag provided.
-//
-// This handler is used by a gobuilder process in -commit mode.
-func tagHandler(r *http.Request) (interface{}, error) {
-	if r.Method != "POST" {
-		return nil, errBadMethod(r.Method)
-	}
-
-	t := new(Tag)
-	defer r.Body.Close()
-	if err := json.NewDecoder(r.Body).Decode(t); err != nil {
-		return nil, err
-	}
-	if err := t.Valid(); err != nil {
-		return nil, err
-	}
-	c := contextForRequest(r)
-	defer cache.Tick(c)
-	_, err := datastore.Put(c, t.Key(c), t)
-	return nil, err
-}
-
 // packagesHandler returns a list of the non-Go Packages monitored
 // by the dashboard.
 func packagesHandler(r *http.Request) (interface{}, error) {

@@ -18,12 +18,15 @@ func main() {
 	handleFunc("/init", initHandler)
 
 	// authenticated handlers
-	handleFunc("/building", AuthHandler(buildingHandler))
-	handleFunc("/clear-results", AuthHandler(clearResultsHandler))
-	handleFunc("/commit", AuthHandler(commitHandler))
-	handleFunc("/packages", AuthHandler(packagesHandler))
-	handleFunc("/result", AuthHandler(resultHandler))
-	handleFunc("/tag", AuthHandler(tagHandler))
+	handleFunc("/building", AuthHandler(buildingHandler))          // called by coordinator during builds
+	handleFunc("/clear-results", AuthHandler(clearResultsHandler)) // called by x/build/cmd/retrybuilds
+	handleFunc("/result", AuthHandler(resultHandler))              // called by coordinator after build
+
+	// TODO: once we use maintner for finding the git history
+	// instead of having gitmirror mirror it into the dashboard,
+	// then we can delete these two handlers:
+	handleFunc("/commit", AuthHandler(commitHandler))     // called by gitmirror
+	handleFunc("/packages", AuthHandler(packagesHandler)) // called by gitmirror
 
 	// public handlers
 	handleFunc("/", uiHandler)

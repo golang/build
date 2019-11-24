@@ -5,10 +5,6 @@ handlers:
   - url: /static
     static_dir: app/appengine/static
     secure: always
-  - url: /init
-    script: auto
-    login: admin
-    secure: always
   - url: /.*
     script: auto
     secure: always
