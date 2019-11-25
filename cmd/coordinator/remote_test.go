@@ -129,7 +129,7 @@ func TestHandleBuildletCreate_PreStream(t *testing.T) {
 		removeBuilder(buildName)
 		testPoolHook = nil
 	}()
-	timeNow = func() time.Time { return time.Unix(123, 0) }
+	timeNow = func() time.Time { return time.Unix(123, 0).In(time.UTC) }
 	data := url.Values{}
 	data.Set("version", "20160922")
 	data.Set("builderType", buildName)
@@ -158,7 +158,7 @@ func TestHandleBuildletCreate_Stream(t *testing.T) {
 		removeBuilder(buildName)
 		testPoolHook = nil
 	}()
-	timeNow = func() time.Time { return time.Unix(123, 0) }
+	timeNow = func() time.Time { return time.Unix(123, 0).In(time.UTC) }
 	data := url.Values{}
 	data.Set("version", buildlet.GomoteCreateStreamVersion)
 	data.Set("builderType", buildName)

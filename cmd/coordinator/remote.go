@@ -200,13 +200,14 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 			st := sched.waiterState(si)
 			sendJSONLine(msg{Status: &st})
 		case bc := <-resc:
+			now := timeNow()
 			rb := &remoteBuildlet{
 				User:        user,
 				BuilderType: builderType,
 				HostType:    bconf.HostType,
 				buildlet:    bc,
-				Created:     timeNow(),
-				Expires:     timeNow().Add(remoteBuildletIdleTimeout),
+				Created:     now,
+				Expires:     now.Add(remoteBuildletIdleTimeout),
 			}
 			rb.Name = addRemoteBuildlet(rb)
 			bc.SetName(rb.Name)
