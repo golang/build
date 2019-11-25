@@ -31,10 +31,6 @@ type BuildRevision struct {
 	// Revision is the full git hash of the repo.
 	Revision string `json:"revision"`
 
-	// ParentRevisions is the full git hashes of the parents of
-	// Revision.
-	ParentRevisions []string `json:"parentRevisions"`
-
 	// GoRevision is the full git hash of the "go" repo, if Repo is not "go" itself.
 	// Otherwise this is empty.
 	GoRevision string `json:"goRevision,omitempty"`

@@ -2,9 +2,6 @@ runtime: go111
 service: build
 
 handlers:
-  - url: /static
-    static_dir: app/appengine/static
-    secure: always
   - url: /.*
     script: auto
     secure: always

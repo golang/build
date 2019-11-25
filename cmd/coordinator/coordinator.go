@@ -62,6 +62,7 @@ import (
 	"golang.org/x/build/internal/sourcecache"
 	"golang.org/x/build/livelog"
 	"golang.org/x/build/maintner/maintnerd/apipb"
+	"golang.org/x/build/repos"
 	revdialv2 "golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
 	"golang.org/x/crypto/acme/autocert"
@@ -488,6 +489,13 @@ func mayBuildRev(rev buildgo.BuilderRev) bool {
 	if isBuilding(rev) {
 		return false
 	}
+	if rev.SubName != "" {
+		// Don't build repos we don't know about,
+		// so importPathOfRepo won't panic later.
+		if r, ok := repos.ByGerritProject[rev.SubName]; !ok || r.ImportPath == "" || !r.CoordinatorCanBuild {
+			return false
+		}
+	}
 	buildConf, ok := dashboard.Builders[rev.Name]
 	if !ok {
 		if logUnknownBuilder.Allow() {
@@ -904,7 +912,10 @@ func findWorkLoop() {
 // post-submit work to do. It's called in a loop by findWorkLoop.
 func findWork() error {
 	var bs types.BuildStatus
-	if err := dash("GET", "", url.Values{"mode": {"json"}}, nil, &bs); err != nil {
+	if err := dash("GET", "", url.Values{
+		"mode":   {"json"},
+		"branch": {"mixed"},
+	}, nil, &bs); err != nil {
 		return err
 	}
 	knownToDashboard := map[string]bool{} // keys are builder
@@ -933,6 +944,9 @@ func findWork() error {
 	}
 
 	for _, br := range bs.Revisions {
+		if r, ok := repos.ByGerritProject[br.Repo]; !ok || !r.CoordinatorCanBuild {
+			continue
+		}
 		if br.Repo == "grpc-review" {
 			// Skip the grpc repo. It's only for reviews
 			// for now (using LetsUseGerrit).
@@ -1055,8 +1069,7 @@ func findTryWork() error {
 			log.Printf("Warning: skipping incomplete %#v", work)
 			continue
 		}
-		if work.Project == "grpc-review" {
-			// Skip grpc-review, which is only for reviews for now.
+		if r, ok := repos.ByGerritProject[work.Project]; !ok || !r.CoordinatorCanBuild {
 			continue
 		}
 		key := tryWorkItemKey(work)
@@ -3898,18 +3911,25 @@ func randHex(n int) string {
 }
 
 // importPathOfRepo returns the Go import path corresponding to the
-// root of the given repo (Gerrit project). Because it's a Go import
-// path, it always has forward slashes and no trailing slash.
+// root of the given non-"go" repo (Gerrit project). Because it's a Go
+// import path, it always has forward slashes and no trailing slash.
 //
 // For example:
 //   "net"    -> "golang.org/x/net"
 //   "crypto" -> "golang.org/x/crypto"
 //   "dl"     -> "golang.org/dl"
 func importPathOfRepo(repo string) string {
-	if repo == "dl" {
-		return "golang.org/dl"
+	r := repos.ByGerritProject[repo]
+	if r == nil {
+		// mayBuildRev prevents adding work for repos we don't know about,
+		// so this shouldn't happen. If it does, a panic will be useful.
+		panic(fmt.Sprintf("importPathOfRepo(%q) on unknown repo %q", repo, repo))
 	}
-	return "golang.org/x/" + repo
+	if r.ImportPath == "" {
+		// Likewise. This shouldn't happen.
+		panic(fmt.Sprintf("importPathOfRepo(%q) doesn't have an ImportPath", repo))
+	}
+	return r.ImportPath
 }
 
 // slowBotsFromComments looks at the TRY= comments from Gerrit (in

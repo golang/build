@@ -101,6 +101,86 @@ message GoRelease {
   string branch_commit = 7;  // most recent commit on the release branch, e.g., "edb6c16b9b62ed8586d2e3e422911d646095b7e5"
 }
 
+message DashboardRequest {
+  // page is the zero-based page number.
+  // TODO: deprecate, replace with time or commit continuation token.
+  int32 page = 1;
+
+  // repo is which repo to show ("go", "golang.org/x/net", "" means go).
+  string repo = 2;
+
+  // branch specifies which branch to show ("master", "release-branch.go1.13").
+  // Empty means "master".
+  // The special branch value "mixed" means to blend together all branches by commit time.
+  string branch = 3;
+
+  // max_commits specifies the number of commits that are desired.
+  // Zero means to use a default.
+  int32 max_commits = 4;
+}
+
+message DashboardResponse {
+  // commits are the commits to display, starting with the newest.
+  repeated DashCommit commits = 1;
+
+  // commits_truncated is whether the returned commits were truncated.
+  bool commits_truncated = 5;
+
+  // repo_heads contains the current head commit (of their master
+  // branch) for every repo on Go's Gerrit server.
+  repeated DashRepoHead repo_heads = 2;
+
+  repeated string branches = 3;
+
+  // releases is the same content is ListGoReleasesResponse, but with the addition of a "master"
+  // release first, containing the info for the "master" branch, which is just commits[0]
+  // if page 0. But if page != 0, the master head wouldn't be
+  // available otherwise, so we denormalize it a bit here:
+  // It's sorted from newest to oldest (master, release-branch.go1.latest, release-branch.go1.prior)
+  // Only the branch_name and branch_commit fields are guaranteed to be populated.
+  repeated GoRelease releases = 4;
+}
+
+message DashCommit {
+  // commit is the git commit hash ("26957168c4c0cdcc7ca4f0b19d0eb19474d224ac").
+  string commit = 1;
+
+  // author_name is the git author name part ("Foo Bar").
+  string author_name = 2;     // "Foo Bar"
+
+  // author_email is the git author email part ("foo@bar.com").
+  string author_email = 3;    // "foo@bar.com"
+
+  // commit_time_sec is the timestamp of git commit time, in unix seconds.
+  int64 commit_time_sec = 4;
+
+  // title is the git commit's first line ("runtime: fix all the bugs").
+  string title = 5;
+
+  // branch is the branch this commit was queried from ("master", "release-branch.go1.14")/
+  // This is normally redundant but is useful when DashboardRequest.branch == "mixed".
+  string branch = 7;
+
+  // For non-go repos, go_commit_at_time is what the Go master commit was at
+  // the time of DashCommit.commit_time.
+  string go_commit_at_time = 6;
+
+  // For non-go repos, go_commit_latest is the most recent Go master commit that's
+  // older than the the following x/foo commit's commit_time.
+  // If DashCommit is the current HEAD, go_commit_at_time can continue to update.
+  // go_commit_at_time might be the same as go_commit_at_time.
+  string go_commit_latest = 8;
+}
+
+message DashRepoHead {
+  // gerrit_project is Gerrit project name ("net", "go").
+  string gerrit_project = 1;
+
+  // commit is the current top-level commit in that project.
+  // (currently always on the master branch)
+  DashCommit commit = 2;
+}
+
 service MaintnerService {
   // HasAncestor reports whether one commit contains another commit
   // in its git history.
@@ -125,4 +205,10 @@ service MaintnerService {
   // The response is guaranteed to have two versions, otherwise an error
   // is returned.
   rpc ListGoReleases(ListGoReleasesRequest) returns (ListGoReleasesResponse);
+
+  // GetDashboard returns the information for the build.golang.org
+  // dashboard. It does not (at least currently)
+  // contain any pass/fail information; it only contains information on the branches
+  // and commits themselves.
+  rpc GetDashboard(DashboardRequest) returns (DashboardResponse);
 }

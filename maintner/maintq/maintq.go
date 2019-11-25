@@ -14,9 +14,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 
+	"github.com/golang/protobuf/proto"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/net/http2"
 	"grpc.go4.org"
@@ -54,6 +56,7 @@ func main() {
 		"get-ref":       callGetRef,
 		"try-work":      callTryWork,
 		"list-releases": callListReleases,
+		"get-dashboard": callGetDashboard,
 	}
 	log.SetFlags(0)
 	if flag.NArg() == 0 || cmdFunc[flag.Arg(0)] == nil {
@@ -112,8 +115,7 @@ func callTryWork(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(res)
-	return nil
+	return printTextProto(res)
 }
 
 func callListReleases(args []string) error {
@@ -124,8 +126,33 @@ func callListReleases(args []string) error {
 	if err != nil {
 		return err
 	}
-	for _, r := range res.Releases {
-		fmt.Println(r)
+	return printTextProto(res)
+}
+
+func callGetDashboard(args []string) error {
+	req := &apipb.DashboardRequest{}
+
+	fs := flag.NewFlagSet("get-dash-commits", flag.ExitOnError)
+	var page int
+	fs.IntVar(&page, "page", 0, "0-based page number")
+	fs.StringVar(&req.Branch, "branch", "", "branch name; empty means master")
+	fs.StringVar(&req.Repo, "repo", "", "repo name; empty means the main repo, otherwise \"golang.org/*\"")
+	fs.Parse(args)
+	if fs.NArg() != 0 {
+		fs.Usage()
+		os.Exit(2)
 	}
-	return nil
+
+	req.Page = int32(page)
+
+	res, err := mc.GetDashboard(ctx, req)
+	if err != nil {
+		return err
+	}
+	return printTextProto(res)
+}
+
+func printTextProto(m proto.Message) error {
+	tm := proto.TextMarshaler{Compact: false}
+	return tm.Marshal(os.Stdout, m)
 }

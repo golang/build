@@ -84,7 +84,16 @@ func main() {
 		return
 	}
 	if *builder == "" {
-		log.Fatalf("Missing -builder, -redo-flaky, or -loghash flag.")
+		log.Fatalf("Missing -builder, -redo-flaky, -substr, or -loghash flag.")
+	}
+	if *hash == "" {
+		for _, f := range failures() {
+			if f.Builder != *builder {
+				continue
+			}
+			wipe(f.Builder, f.Hash)
+		}
+		return
 	}
 	wipe(*builder, fullHash(*hash))
 }
@@ -175,25 +184,23 @@ func isFlaky(failLog string) bool {
 }
 
 func fullHash(h string) string {
-	if h == "" || len(h) == 40 {
+	if len(h) == 40 {
 		return h
 	}
-	for _, f := range failures() {
-		if strings.HasPrefix(f.Hash, h) {
-			return f.Hash
+	if h != "" {
+		for _, f := range failures() {
+			if strings.HasPrefix(f.Hash, h) {
+				return f.Hash
+			}
 		}
 	}
 	log.Fatalf("invalid hash %q; failed to finds its full hash. Not a recent failure?", h)
 	panic("unreachable")
 }
 
-// hash may be empty
+// wipe wipes the git hash failure for the provided failure.
+// Only the main go repo is currently supported.
 func wipe(builder, hash string) {
-	if hash != "" {
-		log.Printf("Clearing %s, hash %s", builder, hash)
-	} else {
-		log.Printf("Clearing all builds for %s", builder)
-	}
 	vals := url.Values{
 		"builder": {builder},
 		"hash":    {hash},

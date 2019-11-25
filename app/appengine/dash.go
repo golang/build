@@ -6,33 +6,70 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 
+	"golang.org/x/build/maintner/maintnerd/apipb"
+	"golang.org/x/build/repos"
+	"golang.org/x/net/http2"
 	"google.golang.org/appengine"
+	"grpc.go4.org" // simpler, uses x/net/http2.Transport; we use this elsewhere in x/build
 )
 
-func main() {
-	// admin handlers
-	handleFunc("/init", initHandler)
+var maintnerClient = createMaintnerClient()
 
+func main() {
 	// authenticated handlers
 	handleFunc("/building", AuthHandler(buildingHandler))          // called by coordinator during builds
 	handleFunc("/clear-results", AuthHandler(clearResultsHandler)) // called by x/build/cmd/retrybuilds
 	handleFunc("/result", AuthHandler(resultHandler))              // called by coordinator after build
 
-	// TODO: once we use maintner for finding the git history
-	// instead of having gitmirror mirror it into the dashboard,
-	// then we can delete these two handlers:
-	handleFunc("/commit", AuthHandler(commitHandler))     // called by gitmirror
-	handleFunc("/packages", AuthHandler(packagesHandler)) // called by gitmirror
-
 	// public handlers
 	handleFunc("/", uiHandler)
 	handleFunc("/log/", logHandler)
 
+	// We used to use App Engine's static file handling support, declared in app.yaml,
+	// but it's currently broken with dev_appserver.py with the go111 runtime we use.
+	// So just do it ourselves. It doesn't buy us enough to be worth it.
+	fs := http.StripPrefix("/static", http.FileServer(http.Dir(staticDir())))
+	handleFunc("/static/", fs.ServeHTTP)
+	handleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://golang.org/favicon.ico", http.StatusFound)
+	})
+
 	appengine.Main()
+}
+
+func staticDir() string {
+	if pwd, _ := os.Getwd(); strings.HasSuffix(pwd, "app/appengine") {
+		return "static"
+	}
+	return "app/appengine/static"
+}
+
+func createMaintnerClient() apipb.MaintnerServiceClient {
+	addr := os.Getenv("MAINTNER_ADDR") // host[:port]
+	if addr == "" {
+		addr = "maintner.golang.org"
+	}
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			NextProtos:         []string{"h2"},
+			InsecureSkipVerify: strings.HasPrefix(addr, "localhost:"),
+		},
+	}
+	hc := &http.Client{Transport: tr}
+	http2.ConfigureTransport(tr)
+
+	cc, err := grpc.NewClient(hc, "https://"+addr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return apipb.NewMaintnerServiceClient(cc)
 }
 
 func handleFunc(path string, h http.HandlerFunc) {
@@ -52,18 +89,25 @@ func hstsHandler(fn http.HandlerFunc) http.Handler {
 // (There used to be more than one dashboard, so this is now somewhat
 // less important than it once was.)
 type Dashboard struct {
-	Name      string     // This dashboard's name (always "Go" nowadays)
-	Namespace string     // This dashboard's namespace (always "Git" nowadays)
-	Packages  []*Package // The project's packages to build
+	Name     string     // This dashboard's name (always "Go" nowadays)
+	Packages []*Package // The project's packages to build
+}
+
+// packageWithPath returns the Package in d with the provided importPath,
+// or nil if none is found.
+func (d *Dashboard) packageWithPath(importPath string) *Package {
+	for _, p := range d.Packages {
+		if p.Path == importPath {
+			return p
+		}
+	}
+	return nil
 }
 
 // Context returns a namespaced context for this dashboard, or panics if it
 // fails to create a new context.
 func (d *Dashboard) Context(ctx context.Context) context.Context {
-	if d.Namespace == "" {
-		return ctx
-	}
-	n, err := appengine.Namespace(ctx, d.Namespace)
+	n, err := appengine.Namespace(ctx, "Git")
 	if err != nil {
 		panic(err)
 	}
@@ -72,142 +116,25 @@ func (d *Dashboard) Context(ctx context.Context) context.Context {
 
 // goDash is the dashboard for the main go repository.
 var goDash = &Dashboard{
-	Name:      "Go",
-	Namespace: "Git",
-	Packages:  goPackages,
-}
-
-// goPackages is a list of all of the packages built by the main go repository.
-var goPackages = []*Package{
-	{
-		Kind: "go",
-		Name: "Go",
-	},
-	{
-		Kind: "subrepo",
-		Name: "arch",
-		Path: "golang.org/x/arch",
-	},
-	{
-		Kind: "subrepo",
-		Name: "benchmarks",
-		Path: "golang.org/x/benchmarks",
-	},
-	{
-		Kind: "subrepo",
-		Name: "blog",
-		Path: "golang.org/x/blog",
-	},
-	{
-		Kind: "subrepo",
-		Name: "build",
-		Path: "golang.org/x/build",
-	},
-	{
-		Kind: "subrepo",
-		Name: "crypto",
-		Path: "golang.org/x/crypto",
-	},
-	{
-		Kind: "subrepo",
-		Name: "debug",
-		Path: "golang.org/x/debug",
-	},
-	{
-		Kind: "subrepo",
-		Name: "exp",
-		Path: "golang.org/x/exp",
-	},
-	{
-		Kind: "subrepo",
-		Name: "image",
-		Path: "golang.org/x/image",
-	},
-	{
-		Kind: "subrepo",
-		Name: "mobile",
-		Path: "golang.org/x/mobile",
-	},
-	{
-		Kind: "subrepo",
-		Name: "net",
-		Path: "golang.org/x/net",
-	},
-	{
-		Kind: "subrepo",
-		Name: "oauth2",
-		Path: "golang.org/x/oauth2",
-	},
-	{
-		Kind: "subrepo",
-		Name: "perf",
-		Path: "golang.org/x/perf",
-	},
-	{
-		Kind: "subrepo",
-		Name: "review",
-		Path: "golang.org/x/review",
-	},
-	{
-		Kind: "subrepo",
-		Name: "sync",
-		Path: "golang.org/x/sync",
-	},
-	{
-		Kind: "subrepo",
-		Name: "sys",
-		Path: "golang.org/x/sys",
-	},
-	{
-		Kind: "subrepo",
-		Name: "talks",
-		Path: "golang.org/x/talks",
-	},
-	{
-		Kind: "subrepo",
-		Name: "term",
-		Path: "golang.org/x/term",
-	},
-	{
-		Kind: "subrepo",
-		Name: "text",
-		Path: "golang.org/x/text",
-	},
-	{
-		Kind: "subrepo",
-		Name: "time",
-		Path: "golang.org/x/time",
-	},
-	{
-		Kind: "subrepo",
-		Name: "tools",
-		Path: "golang.org/x/tools",
-	},
-	{
-		Kind: "subrepo",
-		Name: "tour",
-		Path: "golang.org/x/tour",
-	},
-	{
-		Kind: "subrepo",
-		Name: "website",
-		Path: "golang.org/x/website",
+	Name: "Go",
+	Packages: []*Package{
+		{Name: "Go"},
 	},
 }
 
-// supportedReleaseBranches returns a slice containing the most recent two non-security release branches
-// contained in branches.
-func supportedReleaseBranches(branches []string) (supported []string) {
-	for _, b := range branches {
-		if !strings.HasPrefix(b, "release-branch.go1.") ||
-			len(b) != len("release-branch.go1.nn") { // assumes nn in range [10, 99]
+func init() {
+	var add []*Package
+	for _, r := range repos.ByGerritProject {
+		if r.HideFromDashboard || !strings.HasPrefix(r.ImportPath, "golang.org/x") || r.GoGerritProject == "" {
 			continue
 		}
-		supported = append(supported, b)
+		add = append(add, &Package{
+			Name: r.GoGerritProject,
+			Path: r.ImportPath,
+		})
 	}
-	sort.Strings(supported)
-	if len(supported) > 2 {
-		supported = supported[len(supported)-2:]
-	}
-	return supported
+	sort.Slice(add, func(i, j int) bool {
+		return add[i].Name < add[j].Name
+	})
+	goDash.Packages = append(goDash.Packages, add...)
 }

@@ -114,7 +114,7 @@
           <td class="hash"><a href="https://go-review.googlesource.com/q/{{$h}}">{{shortHash $h}}</a></td>
         {{end}}
           <td class="user" title="{{$c.User}}">{{shortUser $c.User}}</td>
-          <td class="time">{{$c.Time.Format "02 Jan 15:04"}}</td>
+          <td class="time">{{formatTime $c.Time}}</td>
           <td class="desc" title="{{$c.Desc}}">{{shortDesc $c.Desc}}</td>
         {{end}}
           {{range $builderName := $.Builders}}
@@ -211,7 +211,7 @@
         </td>
         {{with $pkg.Commit}}
           <td class="user" title="{{.User}}">{{shortUser .User}}</td>
-          <td class="time">{{.Time.Format "02 Jan 15:04"}}</td>
+          <td class="time">{{formatTime .Time}}</td>
           <td class="desc" title="{{.Desc}}">{{shortDesc .Desc}}</td>
         {{end}}
         {{range $builderName := $.Builders}}

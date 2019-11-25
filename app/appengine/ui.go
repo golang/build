@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -18,9 +19,12 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/build/app/cache"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/maintner/maintnerd/apipb"
+	"golang.org/x/build/repos"
 	"golang.org/x/build/types"
+	"grpc.go4.org"
+	"grpc.go4.org/codes"
 
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
@@ -28,193 +32,371 @@ import (
 	"google.golang.org/appengine/memcache"
 )
 
-// uiHandler draws the build status page.
+// uiHandler is the HTTP handler for the https://build.golang.org/.
 func uiHandler(w http.ResponseWriter, r *http.Request) {
-	d := goDash
-	c := d.Context(appengine.NewContext(r))
-	now := cache.Now(c)
-	key := "build-ui"
-
-	mode := r.FormValue("mode")
-
-	page, _ := strconv.Atoi(r.FormValue("page"))
-	if page < 0 {
-		page = 0
-	}
-	key += fmt.Sprintf("-page%v", page)
-
-	repo := r.FormValue("repo")
-	if repo != "" {
-		key += "-repo-" + repo
+	view, err := viewForRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
-	branch := r.FormValue("branch")
-	switch branch {
-	case "all":
-		branch = ""
+	dashReq, err := dashboardRequest(view, r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// TODO: if we end up fetching the building state from the
+	// coordinator too, do that concurrently in an
+	// x/sync/errgroup.Group here. But for now we're only doing
+	// one RPC call.
+	ctx := goDash.Context(appengine.NewContext(r))
+	dashRes, err := maintnerClient.GetDashboard(ctx, dashReq)
+	if err != nil {
+		http.Error(w, "maintner.GetDashboard: "+err.Error(), httpStatusOfErr(err))
+		return
+	}
+
+	tb := newUITemplateDataBuilder(view, dashReq, dashRes)
+	data, err := tb.buildTemplateData(ctx)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	view.ServeDashboard(w, r, data)
+}
+
+// dashboardView is something that can render uiTemplateData.
+// See viewForRequest.
+type dashboardView interface {
+	ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiTemplateData)
+}
+
+// viewForRequest selects the dashboardView based on the HTTP
+// request's "mode" parameter. Any error should be considered
+// an HTTP 400 Bad Request.
+func viewForRequest(r *http.Request) (dashboardView, error) {
+	if r.Method != "GET" && r.Method != "HEAD" {
+		return nil, errors.New("unsupported method")
+	}
+	switch r.FormValue("mode") {
+	case "failures":
+		return failuresView{}, nil
+	case "json":
+		return jsonView{}, nil
 	case "":
-		branch = "master"
+		return htmlView{}, nil
 	}
-	if repo != "" || mode == "json" {
-		// Don't filter on branches in sub-repos.
-		// TODO(adg): figure out how to make this work sensibly.
-		// Don't filter on branches in json mode.
-		branch = ""
+	return nil, errors.New("unsupported mode argument")
+}
+
+type commitInPackage struct {
+	packagePath string // "" for Go, else package import path
+	commit      string // git commit hash
+}
+
+// uiTemplateDataBuilder builds the uiTemplateData used by the various
+// dashboardViews. That is, it maps the maintner protobuf response to
+// the data structure needed by the dashboardView/template.
+type uiTemplateDataBuilder struct {
+	view dashboardView
+	req  *apipb.DashboardRequest
+	res  *apipb.DashboardResponse
+
+	// testCommitData, if non-nil, provides an alternate data
+	// source to use for testing instead of making real datastore
+	// calls. The keys are stringified datastore.Keys.
+	testCommitData map[string]*Commit
+}
+
+// newUITemplateDataBuilder returns a new uiTemplateDataBuilder for a
+// given view, dashboard request, and dashboard response from
+// maintner.
+func newUITemplateDataBuilder(view dashboardView, req *apipb.DashboardRequest, res *apipb.DashboardResponse) *uiTemplateDataBuilder {
+	return &uiTemplateDataBuilder{
+		view: view,
+		req:  req,
+		res:  res,
 	}
-	if branch != "" {
-		key += "-branch-" + branch
+}
+
+// getCommitsToLoad returns a set (all values are true) of which commits to load from
+// the datastore.
+func (tb *uiTemplateDataBuilder) getCommitsToLoad() map[commitInPackage]bool {
+	m := make(map[commitInPackage]bool)
+	add := func(packagePath, commit string) {
+		m[commitInPackage{packagePath: packagePath, commit: commit}] = true
 	}
 
-	hashes := r.Form["hash"]
-
-	var data uiTemplateData
-	if len(hashes) > 0 || !cache.Get(c, r, now, key, &data) {
-
-		pkg := &Package{} // empty package is the main repository
-		if repo != "" {
-			var err error
-			pkg, err = GetPackage(c, repo)
-			if err != nil {
-				logErr(w, r, err)
-				return
+	for _, dc := range tb.res.Commits {
+		add(tb.req.Repo, dc.Commit)
+	}
+	// We also want to load the Commits for the x/repo heads.
+	if tb.showXRepoSection() {
+		for _, rh := range tb.res.RepoHeads {
+			if path := repoImportPath(rh); path != "" {
+				add(path, rh.Commit.Commit)
 			}
 		}
-		var commits []*Commit
-		var err error
-		if len(hashes) > 0 {
-			commits, err = fetchCommits(c, pkg, hashes)
-		} else {
-			commits, err = dashCommits(c, pkg, page, branch)
-		}
-		if err != nil {
-			logErr(w, r, err)
-			return
-		}
-		branches := listBranches(c)
-		releaseBranches := supportedReleaseBranches(branches)
-		builders := commitBuilders(commits, releaseBranches)
+	}
+	return m
+}
 
-		var tagState []*TagState
-		// Only show sub-repo state on first page of normal repo view.
-		if pkg.Kind == "" && len(hashes) == 0 && page == 0 && (branch == "" || branch == "master") {
-			s, err := GetTagState(c, "tip", "")
-			if err != nil {
-				if err == datastore.ErrNoSuchEntity {
-					if appengine.IsDevAppServer() {
-						goto BuildData
-					}
-					err = fmt.Errorf("tip tag not found")
-				}
-				logErr(w, r, err)
-				return
+// loadDatastoreCommits loads the commits given in the keys of the
+// want map. The returned map is keyed by the git hash and may not
+// contain items that didn't exist in the datastore. (It is not an
+// error if 1 or all don't exist.)
+func (tb *uiTemplateDataBuilder) loadDatastoreCommits(ctx context.Context, want map[commitInPackage]bool) (map[string]*Commit, error) {
+	ret := map[string]*Commit{}
+
+	// Allow tests to fake what the datastore would've loaded, and
+	// thus also allow tests to be run without a real (or
+	// dev_appserver-based fake) datastore.
+	if m := tb.testCommitData; m != nil {
+		for k := range want {
+			if c, ok := m[k.commit]; ok {
+				ret[k.commit] = c
 			}
-			tagState = []*TagState{s}
-			for _, b := range releaseBranches {
-				s, err := GetTagState(c, "release", b)
-				if err == datastore.ErrNoSuchEntity {
+		}
+		return ret, nil
+	}
+
+	var keys []*datastore.Key
+	for k := range want {
+		key := (&Commit{
+			PackagePath: k.packagePath,
+			Hash:        k.commit,
+		}).Key(ctx)
+		keys = append(keys, key)
+	}
+	commits, err := fetchCommits(ctx, keys)
+	if err != nil {
+		return nil, fmt.Errorf("fetchCommits: %v", err)
+	}
+	for _, c := range commits {
+		ret[c.Hash] = c
+	}
+	return ret, nil
+}
+
+// formatGitAuthor formats the git author name and email (as split by
+// maintner) back into the unified string how they're stored in a git
+// commit, so the shortUser func (used by the HTML template) can parse
+// back out the email part's username later. Maybe we could plumb down
+// the parsed proto into the template later.
+func formatGitAuthor(name, email string) string {
+	name = strings.TrimSpace(name)
+	email = strings.TrimSpace(email)
+	if name != "" && email != "" {
+		return fmt.Sprintf("%s <%s>", name, email)
+	}
+	if name != "" {
+		return name
+	}
+	return "<" + email + ">"
+}
+
+// newCommitInfo returns a new CommitInfo populated for the template
+// data given a repo name and a dashboard commit from that repo, using
+// previously loaded datastore commit info in tb.
+func (tb *uiTemplateDataBuilder) newCommitInfo(dsCommits map[string]*Commit, repo string, dc *apipb.DashCommit) *CommitInfo {
+	ci := &CommitInfo{
+		Hash:        dc.Commit,
+		PackagePath: repo,
+		User:        formatGitAuthor(dc.AuthorName, dc.AuthorEmail),
+		Desc:        cleanTitle(dc.Title, tb.req.Branch),
+		Time:        time.Unix(dc.CommitTimeSec, 0),
+	}
+	if dsc, ok := dsCommits[dc.Commit]; ok {
+		ci.ResultData = dsc.ResultData
+	}
+	// For non-go repos, add the rows for the Go commits that were
+	// at HEAD overlapping in time with dc.Commit.
+	isGo := tb.req.Repo == "" || tb.req.Repo == "go"
+	if !isGo {
+		if dc.GoCommitAtTime != "" {
+			ci.addEmptyResultGoHash(dc.GoCommitAtTime)
+		}
+		if dc.GoCommitLatest != "" && dc.GoCommitLatest != dc.GoCommitAtTime {
+			ci.addEmptyResultGoHash(dc.GoCommitLatest)
+		}
+	}
+	return ci
+}
+
+// showXRepoSection reports whether the dashboard should show the state of the x/foo repos at the bottom of
+// the page in the three branches (master, latest release branch, two releases ago).
+func (tb *uiTemplateDataBuilder) showXRepoSection() bool {
+	return tb.req.Page == 0 &&
+		(tb.req.Branch == "" || tb.req.Branch == "master" || tb.req.Branch == "mixed") &&
+		(tb.req.Repo == "" || tb.req.Repo == "go")
+}
+
+// repoImportPath returns the import path for rh, unless rh is the
+// main "go" repo or is configured to be hidden from the dashboard, in
+// which case it returns the empty string.
+func repoImportPath(rh *apipb.DashRepoHead) string {
+	if rh.GerritProject == "go" {
+		return ""
+	}
+	ri, ok := repos.ByGerritProject[rh.GerritProject]
+	if !ok || ri.HideFromDashboard {
+		return ""
+	}
+	return ri.ImportPath
+}
+
+func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context) (*uiTemplateData, error) {
+	dsCommits, err := tb.loadDatastoreCommits(ctx, tb.getCommitsToLoad())
+	if err != nil {
+		return nil, err
+	}
+
+	var commits []*CommitInfo
+	for _, dc := range tb.res.Commits {
+		ci := tb.newCommitInfo(dsCommits, tb.req.Repo, dc)
+		commits = append(commits, ci)
+	}
+
+	// x/ repo sections at bottom (each is a "TagState", for historical reasons)
+	var xRepoSections []*TagState
+	if tb.showXRepoSection() {
+		for _, gorel := range tb.res.Releases {
+			ts := &TagState{
+				Name: gorel.BranchName,
+				Tag: &CommitInfo{ // only a minimally populated version is needed by the template
+					Hash: gorel.BranchCommit,
+				},
+			}
+			for _, rh := range tb.res.RepoHeads {
+				path := repoImportPath(rh)
+				if path == "" {
 					continue
 				}
-				err = filterDatastoreError(err)
-				if err != nil {
-					logErr(w, r, err)
-					return
-				}
-				tagState = append(tagState, s)
+				ts.Packages = append(ts.Packages, &PackageState{
+					Package: &Package{
+						Name: rh.GerritProject,
+						Path: path,
+					},
+					Commit: tb.newCommitInfo(dsCommits, path, rh.Commit),
+				})
 			}
-		}
-		// Sort tagState in reverse lexical order by name so higher
-		// numbered release branches show first for subrepos
-		// https://build.golang.org/ after master. We want the subrepo
-		// order to be "master, release-branch.go1.12,
-		// release-branch.go1.11" so they're in order by date (newest
-		// first). If we weren't already at two digit minor versions we'd
-		// need to parse the branch name, but we can be lazy now
-		// and just do a string compare.
-		sort.Slice(tagState, func(i, j int) bool { // is item 'i' less than item 'j'?
-			ni, nj := tagState[i].Name, tagState[j].Name
-			switch {
-			case ni == "master":
-				return true // an i of "master" is always first
-			case nj == "master":
-				return false // if i wasn't "master", it can't be less than j's "master"
-			default:
-				return ni > nj // "release-branch.go1.12" > "release-branch.go1.11", so 1.12 sorts earlier
-			}
-		})
-
-	BuildData:
-		p := &Pagination{}
-		if len(commits) == commitsPerPage {
-			p.Next = page + 1
-		}
-		if page > 0 {
-			p.Prev = page - 1
-			p.HasPrev = true
-		}
-
-		data = uiTemplateData{
-			Package:    pkg,
-			Commits:    commits,
-			Builders:   builders,
-			TagState:   tagState,
-			Pagination: p,
-			Branches:   branches,
-			Branch:     branch,
-		}
-		if len(hashes) == 0 {
-			cache.Set(c, r, now, key, &data)
+			sort.Slice(ts.Packages, func(i, j int) bool {
+				return ts.Packages[i].Package.Name < ts.Packages[j].Package.Name
+			})
+			xRepoSections = append(xRepoSections, ts)
 		}
 	}
-	data.Dashboard = d
 
-	switch mode {
-	case "failures":
-		failuresHandler(w, r, &data)
-		return
-	case "json":
-		jsonHandler(w, r, &data)
-		return
+	// Release Branches
+	var releaseBranches []string
+	for _, gr := range tb.res.Releases {
+		if gr.BranchName != "master" {
+			releaseBranches = append(releaseBranches, gr.BranchName)
+		}
 	}
 
-	// In the UI, when viewing the master branch of the main
-	// Go repository, hide builders that aren't active on it.
-	if repo == "" && branch == "master" {
-		data.Builders = onlyGoMasterBuilders(data.Builders)
+	builders := commitBuilders(commits, releaseBranches)
+	data := &uiTemplateData{
+		Dashboard:  goDash,
+		Package:    goDash.packageWithPath(tb.req.Repo),
+		Commits:    commits,
+		Builders:   builders,
+		TagState:   xRepoSections,
+		Pagination: &Pagination{},
+		Branches:   tb.res.Branches,
+		Branch:     tb.req.Branch,
 	}
 
-	// Populate building URLs for the HTML UI only.
-	data.populateBuildingURLs(c)
+	if tb.res.CommitsTruncated {
+		data.Pagination.Next = int(tb.req.Page) + 1
+	}
+	if tb.req.Page > 0 {
+		data.Pagination.Prev = int(tb.req.Page) - 1
+		data.Pagination.HasPrev = true
+	}
 
+	if tb.view == (htmlView{}) {
+		// In the UI, when viewing the master branch of the main
+		// Go repository, hide builders that aren't active on it.
+		if tb.req.Repo == "" && tb.req.Branch == "master" {
+			data.Builders = onlyGoMasterBuilders(data.Builders)
+		}
+
+		// Populate building URLs for the HTML UI only.
+		data.populateBuildingURLs(ctx)
+	}
+
+	return data, nil
+}
+
+// htmlView renders the HTML (default) form of https://build.golang.org/ with no mode parameter.
+type htmlView struct{}
+
+func (htmlView) ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 	var buf bytes.Buffer
-	if err := uiTemplate.Execute(&buf, &data); err != nil {
+	if err := uiTemplate.Execute(&buf, data); err != nil {
 		logErr(w, r, err)
 		return
 	}
 	buf.WriteTo(w)
 }
 
-func listBranches(c context.Context) (branches []string) {
-	var commits []*Commit
-	_, err := datastore.NewQuery("Commit").Distinct().Project("Branch").GetAll(c, &commits)
-	err = filterDatastoreError(err)
-	if err != nil {
-		log.Errorf(c, "listBranches: %v", err)
-		return
-	}
-	for _, c := range commits {
-		if strings.HasPrefix(c.Branch, "release-branch.go") &&
-			strings.HasSuffix(c.Branch, "-security") {
-			continue
+// dashboardRequest is a pure function that maps the provided HTTP
+// request to a maintner DashboardRequest and lightly validates the
+// HTTP request for the root dashboard handler. (It does not validate
+// that, say, branches or repos are valid.)
+// Any returned error is an HTTP 400 Bad Request.
+func dashboardRequest(view dashboardView, r *http.Request) (*apipb.DashboardRequest, error) {
+	page := 0
+	if s := r.FormValue("page"); s != "" {
+		var err error
+		page, err = strconv.Atoi(r.FormValue("page"))
+		if err != nil {
+			return nil, fmt.Errorf("invalid page value %q", s)
 		}
-		branches = append(branches, c.Branch)
+		if page < 0 {
+			return nil, errors.New("negative page")
+		}
 	}
-	return
+
+	repo := r.FormValue("repo") // empty for main go repo, else e.g. "golang.org/x/net"
+
+	branch := r.FormValue("branch")
+	if branch == "" {
+		branch = "master"
+	}
+	return &apipb.DashboardRequest{
+		Page:       int32(page),
+		Branch:     branch,
+		Repo:       repo,
+		MaxCommits: commitsPerPage,
+	}, nil
 }
 
-// failuresHandler is https://build.golang.org/?mode=failures, where it outputs
+// cleanTitle returns a cleaned version of the provided title for
+// users viewing the provided viewBranch.
+func cleanTitle(title, viewBranch string) string {
+	// Don't rewrite anything for master and mixed.
+	if viewBranch == "master" || viewBranch == "mixed" {
+		return title
+	}
+	// Strip the "[release-branch.go1.n]" prefixes from commit messages
+	// when looking at a branch.
+	if strings.HasPrefix(title, "[") {
+		if i := strings.IndexByte(title, ']'); i != -1 {
+			return strings.TrimSpace(title[i+1:])
+		}
+	}
+	return title
+}
+
+// failuresView renders https://build.golang.org/?mode=failures, where it outputs
 // one line per failure on the front page, in the form:
 //    hash builder failure-url
-func failuresHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
+type failuresView struct{}
+
+func (failuresView) ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 	w.Header().Set("Content-Type", "text/plain")
 	for _, c := range data.Commits {
 		for _, b := range data.Builders {
@@ -228,9 +410,11 @@ func failuresHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateDat
 	}
 }
 
-// jsonHandler is https://build.golang.org/?mode=json
+// jsonView renders https://build.golang.org/?mode=json.
 // The output is a types.BuildStatus JSON object.
-func jsonHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
+type jsonView struct{}
+
+func (jsonView) ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 	// cell returns one of "" (no data), "ok", or a failure URL.
 	cell := func(res *Result) string {
 		switch {
@@ -290,12 +474,9 @@ func jsonHandler(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 
 // commitToBuildRevision fills in the fields of BuildRevision rev that
 // are derived from Commit c.
-func commitToBuildRevision(c *Commit, rev *types.BuildRevision) {
+func commitToBuildRevision(c *CommitInfo, rev *types.BuildRevision) {
 	rev.Revision = c.Hash
-	// TODO: A comment may have more than one parent.
-	rev.ParentRevisions = []string{c.ParentHash}
 	rev.Date = c.Time.Format(time.RFC3339)
-	rev.Branch = c.Branch
 	rev.Author = c.User
 	rev.Desc = c.Desc
 }
@@ -305,63 +486,43 @@ type Pagination struct {
 	HasPrev    bool
 }
 
-// dashCommits gets a slice of the latest Commits to the current dashboard.
-// If page > 0 it paginates by commitsPerPage.
-func dashCommits(c context.Context, pkg *Package, page int, branch string) ([]*Commit, error) {
-	offset := page * commitsPerPage
-	q := datastore.NewQuery("Commit").
-		Ancestor(pkg.Key(c)).
-		Order("-Num")
-
-	if branch != "" {
-		q = q.Filter("Branch =", branch)
+// fetchCommits loads any commits that exist given by keys.
+// It is not an error if a commit doesn't exist.
+// Only commits that were found in datastore are returned,
+// in an unspecified order.
+func fetchCommits(ctx context.Context, keys []*datastore.Key) ([]*Commit, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	out := make([]*Commit, len(keys))
+	for i := range keys {
+		out[i] = new(Commit)
 	}
 
-	var commits []*Commit
-	_, err := q.Limit(commitsPerPage).Offset(offset).
-		GetAll(c, &commits)
+	err := datastore.GetMulti(ctx, keys, out)
 	err = filterDatastoreError(err)
-
-	// If we're running locally and don't have data, return some test data.
-	// This lets people hack on the UI without setting up gitmirror & friends.
-	if len(commits) == 0 && appengine.IsDevAppServer() && err == nil {
-		commits = []*Commit{
-			{
-				Hash:       "7d7c6a97f815e9279d08cfaea7d5efb5e90695a8",
-				ParentHash: "",
-				Num:        1,
-				User:       "bwk",
-				Desc:       "hello, world",
-			},
+	err = filterNoSuchEntity(err)
+	if err != nil {
+		return nil, err
+	}
+	filtered := out[:0]
+	for _, c := range out {
+		if c.Valid() { // that is, successfully loaded
+			filtered = append(filtered, c)
 		}
 	}
-	return commits, err
-}
-
-// fetchCommits gets a slice of the specific commit hashes
-func fetchCommits(c context.Context, pkg *Package, hashes []string) ([]*Commit, error) {
-	var out []*Commit
-	var keys []*datastore.Key
-	for _, hash := range hashes {
-		commit := &Commit{
-			Hash:        hash,
-			PackagePath: pkg.Path,
-		}
-		out = append(out, commit)
-		keys = append(keys, commit.Key(c))
-	}
-	err := datastore.GetMulti(c, keys, out)
-	err = filterDatastoreError(err)
-	return out, err
+	return filtered, nil
 }
 
 // commitBuilders returns the names of active builders that provided
 // Results for the provided commits.
-func commitBuilders(commits []*Commit, releaseBranches []string) []string {
+func commitBuilders(commits []*CommitInfo, releaseBranches []string) []string {
 	builders := make(map[string]bool)
 	for _, commit := range commits {
 		for _, r := range commit.Results() {
-			builders[r.Builder] = true
+			if r.Builder != "" {
+				builders[r.Builder] = true
+			}
 		}
 	}
 	// Add all known builders from the builder configuration too.
@@ -475,10 +636,10 @@ var osPriority = map[string]int{
 	"dragonfly": 6,
 }
 
-// TagState represents the state of all Packages at a Tag.
+// TagState represents the state of all Packages at a branch.
 type TagState struct {
-	Name     string // "tip", "release-branch.go1.4", etc
-	Tag      *Commit
+	Name     string      // Go branch name: "master", "release-branch.go1.4", etc
+	Tag      *CommitInfo // current Go commit on the Name branch
 	Packages []*PackageState
 }
 
@@ -491,43 +652,49 @@ func (ts *TagState) Branch() string {
 	return ts.Name
 }
 
-// PackageState represents the state of a Package at a Tag.
+// PackageState represents the state of a Package (x/foo repo) for given Go branch.
 type PackageState struct {
 	Package *Package
-	Commit  *Commit
+	Commit  *CommitInfo
 }
 
-// GetTagState fetches the results for all Go subrepos at the specified Tag.
-// (Kind is "tip" or "release"; name is like "release-branch.go1.4".)
-func GetTagState(c context.Context, kind, name string) (*TagState, error) {
-	tag, err := GetTag(c, kind, name)
-	if err != nil {
-		return nil, err
-	}
-	pkgs, err := Packages(c, "subrepo")
-	if err != nil {
-		return nil, err
-	}
-	st := TagState{Name: tag.String()}
-	for _, pkg := range pkgs {
-		com, err := pkg.LastCommit(c)
-		if err != nil {
-			log.Warningf(c, "%v: no Commit found: %v", pkg, err)
-			continue
+// A CommitInfo is a struct for use by html/template package.
+// It is not stored in the datastore.
+type CommitInfo struct {
+	Hash string
+
+	// ResultData is a copy of the Commit.ResultData field from datastore.
+	ResultData []string
+
+	buildingURLs map[builderAndGoHash]string
+
+	PackagePath string    // (empty for main repo commits)
+	User        string    // "Foo Bar <foo@bar.com>"
+	Desc        string    // git commit title
+	Time        time.Time // commit time
+}
+
+// addEmptyResultGoHash adds an empty result containing goHash to
+// ci.ResultData, unless ci already contains a result for that hash.
+// This is used for non-go repos to show the go commits (both earliest
+// and latest) that correspond to this repo's commit time. We add an
+// empty result so it shows up on the dashboard (both for humans, and
+// in JSON form for the coordinator to pick up as work). Once the
+// coordinator does that work and posts its result, then ResultData
+// will be populate and this turns into a no-op.
+func (ci *CommitInfo) addEmptyResultGoHash(goHash string) {
+	for _, exist := range ci.ResultData {
+		if strings.Contains(exist, goHash) {
+			return
 		}
-		st.Packages = append(st.Packages, &PackageState{pkg, com})
 	}
-	st.Tag, err = tag.Commit(c)
-	if err != nil {
-		return nil, err
-	}
-	return &st, nil
+	ci.ResultData = append(ci.ResultData, (&Result{GoHash: goHash}).Data())
 }
 
 type uiTemplateData struct {
 	Dashboard  *Dashboard
 	Package    *Package
-	Commits    []*Commit
+	Commits    []*CommitInfo
 	Builders   []string
 	TagState   []*TagState
 	Pagination *Pagination
@@ -541,15 +708,22 @@ func buildingKey(hash, goHash, builder string) string {
 	return fmt.Sprintf("building|%v|%v|%v", hash, goHash, builder)
 }
 
+// skipMemcacheForTest, if true, disables memcache operations for use in tests.
+var skipMemcacheForTest = false
+
 // populateBuildingURLs populates each commit in Commits' buildingURLs map with the
 // URLs of builds which are currently in progress.
 func (td *uiTemplateData) populateBuildingURLs(ctx context.Context) {
+	if skipMemcacheForTest {
+		return
+	}
+
 	// need are memcache keys: "building|<hash>|<gohash>|<builder>"
 	// The hash is of the main "go" repo, or the subrepo commit hash.
 	// The gohash is empty for the main repo, else it's the Go hash.
 	var need []string
 
-	commit := map[string]*Commit{} // commit hash -> Commit
+	commit := map[string]*CommitInfo{} // commit hash -> Commit
 
 	// Gather pending commits for main repo.
 	for _, b := range td.Builders {
@@ -619,6 +793,14 @@ var tmplFuncs = template.FuncMap{
 	"tail":               tail,
 	"unsupported":        unsupported,
 	"isUntested":         isUntested,
+	"formatTime":         formatTime,
+}
+
+func formatTime(t time.Time) string {
+	if t.Year() != time.Now().Year() {
+		return t.Format("02 Jan 06")
+	}
+	return t.Format("02 Jan 15:04")
 }
 
 func splitDash(s string) (string, string) {
@@ -741,4 +923,16 @@ func templateFile(base string) string {
 		return base
 	}
 	return filepath.Join("app/appengine", base)
+}
+
+func httpStatusOfErr(err error) int {
+	fmt.Fprintf(os.Stderr, "Got error: %#v, code %v\n", err, grpc.Code(err))
+	switch grpc.Code(err) {
+	case codes.NotFound:
+		return http.StatusNotFound
+	case codes.InvalidArgument:
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
 }

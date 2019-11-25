@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	pathpkg "path"
 	"strings"
-	"time"
 
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/loghash"
@@ -27,10 +27,8 @@ const (
 
 // A Package describes a package that is listed on the dashboard.
 type Package struct {
-	Kind    string // "subrepo", "external", or empty for the main Go tree
-	Name    string // "Go", "arch", "net", ...
-	Path    string // empty for the main Go tree, else "golang.org/x/foo"
-	NextNum int    // Num of the next head Commit
+	Name string // "Go", "arch", "net", ...
+	Path string // empty for the main Go tree, else "golang.org/x/foo"
 }
 
 func (p *Package) String() string {
@@ -49,54 +47,73 @@ func (p *Package) Key(c context.Context) *datastore.Key {
 // not being able to load an entity with old legacy struct fields into
 // the Commit type that has since removed those fields.
 func filterDatastoreError(err error) error {
-	if em, ok := err.(*datastore.ErrFieldMismatch); ok {
-		switch em.FieldName {
-		case "NeedsBenchmarking", "TryPatch", "FailNotificationSent":
-			// Removed in CLs 208397 and 208324.
-			return nil
-		}
-	}
-	if me, ok := err.(appengine.MultiError); ok {
-		any := false
-		for i, err := range me {
-			me[i] = filterDatastoreError(err)
-			if me[i] != nil {
-				any = true
+	return filterAppEngineError(err, func(err error) bool {
+		if em, ok := err.(*datastore.ErrFieldMismatch); ok {
+			switch em.FieldName {
+			case "NeedsBenchmarking", "TryPatch", "FailNotificationSent":
+				// Removed in CLs 208397 and 208324.
+				return true
+			case "PackagePath", "ParentHash", "Num", "User", "Desc", "Time", "Branch", "NextNum":
+				// Removed in move to maintner in CL 208697.
+				return true
 			}
 		}
-		if !any {
+		return false
+	})
+}
+
+// filterNoSuchEntity returns err, unless it's just about datastore
+// not being able to load an entity because it doesn't exist.
+func filterNoSuchEntity(err error) error {
+	return filterAppEngineError(err, func(err error) bool {
+		return err == datastore.ErrNoSuchEntity
+	})
+}
+
+// filterAppEngineError returns err, unless ignore(err) is true,
+// in which case it returns nil. If err is an appengine.MultiError,
+// it returns either nil (if all errors are ignored) or a deep copy
+// with the non-ignored errors.
+func filterAppEngineError(err error, ignore func(error) bool) error {
+	if err == nil || ignore(err) {
+		return nil
+	}
+	if me, ok := err.(appengine.MultiError); ok {
+		me2 := make(appengine.MultiError, 0, len(me))
+		for _, err := range me {
+			if e2 := filterAppEngineError(err, ignore); e2 != nil {
+				me2 = append(me2, e2)
+			}
+		}
+		if len(me2) == 0 {
 			return nil
 		}
+		return me2
 	}
 	return err
 }
 
-// LastCommit returns the most recent Commit for this Package.
-func (p *Package) LastCommit(c context.Context) (*Commit, error) {
-	var commits []*Commit
-	_, err := datastore.NewQuery("Commit").
-		Ancestor(p.Key(c)).
-		Order("-Time").
-		Limit(1).
-		GetAll(c, &commits)
+// getOrMakePackageInTx fetches a Package by path from the datastore,
+// creating it if necessary. It should be run in a transaction.
+func getOrMakePackageInTx(c context.Context, path string) (*Package, error) {
+	p := &Package{Path: path}
+	if path != "" {
+		p.Name = pathpkg.Base(path)
+	} else {
+		p.Name = "Go"
+	}
+	err := datastore.Get(c, p.Key(c), p)
 	err = filterDatastoreError(err)
+	if err == datastore.ErrNoSuchEntity {
+		if _, err := datastore.Put(c, p.Key(c), p); err != nil {
+			return nil, err
+		}
+		return p, nil
+	}
 	if err != nil {
 		return nil, err
 	}
-	if len(commits) != 1 {
-		return nil, datastore.ErrNoSuchEntity
-	}
-	return commits[0], nil
-}
-
-// GetPackage fetches a Package by path from the datastore.
-func GetPackage(c context.Context, path string) (*Package, error) {
-	p := &Package{Path: path}
-	err := datastore.Get(c, p.Key(c), p)
-	if err == datastore.ErrNoSuchEntity {
-		return nil, fmt.Errorf("package %q not found", path)
-	}
-	return p, err
+	return p, nil
 }
 
 type builderAndGoHash struct {
@@ -111,21 +128,12 @@ type builderAndGoHash struct {
 type Commit struct {
 	PackagePath string // (empty for main repo commits)
 	Hash        string
-	ParentHash  string
-	Num         int // Internal monotonic counter unique to this package.
-
-	User   string
-	Desc   string `datastore:",noindex"`
-	Time   time.Time
-	Branch string
 
 	// ResultData is the Data string of each build Result for this Commit.
 	// For non-Go commits, only the Results for the current Go tip, weekly,
 	// and release Tags are stored here. This is purely de-normalized data.
 	// The complete data set is stored in Result entities.
 	ResultData []string `datastore:",noindex"`
-
-	buildingURLs map[builderAndGoHash]string
 }
 
 func (com *Commit) Key(c context.Context) *datastore.Key {
@@ -137,22 +145,15 @@ func (com *Commit) Key(c context.Context) *datastore.Key {
 	return datastore.NewKey(c, "Commit", key, 0, p.Key(c))
 }
 
-func (c *Commit) Valid() error {
-	if !validHash(c.Hash) {
-		return errors.New("invalid Hash")
-	}
-	if c.ParentHash != "" && !validHash(c.ParentHash) { // empty is OK
-		return errors.New("invalid ParentHash")
-	}
-	return nil
+// Valid reports whether the commit is valid.
+func (c *Commit) Valid() bool {
+	// Valid really just means the hash is populated.
+	return validHash(c.Hash)
 }
 
 func putCommit(c context.Context, com *Commit) error {
-	if err := com.Valid(); err != nil {
-		return fmt.Errorf("putting Commit: %v", err)
-	}
-	if com.Num == 0 && com.ParentHash != "0000" { // 0000 is used in tests
-		return fmt.Errorf("putting Commit: invalid Num (must be > 0)")
+	if !com.Valid() {
+		return errors.New("putting Commit: commit is not valid")
 	}
 	if _, err := datastore.Put(c, com.Key(c), com); err != nil {
 		return fmt.Errorf("putting Commit: %v", err)
@@ -168,9 +169,13 @@ const maxResults = 1000
 // It must be called from inside a datastore transaction.
 func (com *Commit) AddResult(c context.Context, r *Result) error {
 	err := datastore.Get(c, com.Key(c), com)
-	err = filterDatastoreError(err)
-	if err != nil {
-		return fmt.Errorf("getting Commit: %v", err)
+	if err == datastore.ErrNoSuchEntity {
+		// If it doesn't exist, we create it below.
+	} else {
+		err = filterDatastoreError(err)
+		if err != nil {
+			return fmt.Errorf("Commit.AddResult, getting Commit: %v", err)
+		}
 	}
 
 	var resultExists bool
@@ -216,17 +221,18 @@ func min(a, b int) int {
 }
 
 // Result returns the build Result for this Commit for the given builder/goHash.
+//
+// For the main Go repo, goHash is the empty string.
 func (c *Commit) Result(builder, goHash string) *Result {
-	for _, r := range c.ResultData {
-		if !strings.HasPrefix(r, builder) {
-			// Avoid strings.SplitN alloc in the common case.
-			continue
-		}
-		p := strings.SplitN(r, "|", 4)
-		if len(p) != 4 || p[0] != builder || p[3] != goHash {
-			continue
-		}
-		return partsToResult(c, p)
+	return result(c.ResultData, c.Hash, c.PackagePath, builder, goHash)
+}
+
+// Result returns the build Result for this commit for the given builder/goHash.
+//
+// For the main Go repo, goHash is the empty string.
+func (c *CommitInfo) Result(builder, goHash string) *Result {
+	if r := result(c.ResultData, c.Hash, c.PackagePath, builder, goHash); r != nil {
+		return r
 	}
 	if u, ok := c.buildingURLs[builderAndGoHash{builder, goHash}]; ok {
 		return &Result{
@@ -235,6 +241,21 @@ func (c *Commit) Result(builder, goHash string) *Result {
 			Hash:        c.Hash,
 			GoHash:      goHash,
 		}
+	}
+	return nil
+}
+
+func result(resultData []string, hash, packagePath, builder, goHash string) *Result {
+	for _, r := range resultData {
+		if !strings.HasPrefix(r, builder) {
+			// Avoid strings.SplitN alloc in the common case.
+			continue
+		}
+		p := strings.SplitN(r, "|", 4)
+		if len(p) != 4 || p[0] != builder || p[3] != goHash {
+			continue
+		}
+		return partsToResult(hash, packagePath, p)
 	}
 	return nil
 }
@@ -265,18 +286,23 @@ func isUntested(builder, repo, branch, goBranch string) bool {
 }
 
 // Results returns the build Results for this Commit.
-func (c *Commit) Results() (results []*Result) {
+func (c *CommitInfo) Results() (results []*Result) {
 	for _, r := range c.ResultData {
 		p := strings.SplitN(r, "|", 4)
 		if len(p) != 4 {
 			continue
 		}
-		results = append(results, partsToResult(c, p))
+		results = append(results, partsToResult(c.Hash, c.PackagePath, p))
 	}
 	return
 }
 
-func (c *Commit) ResultGoHashes() []string {
+// ResultGoHashes, for non-go repos, returns the list of Go hashes that
+// this repo has been (or should be) built at.
+//
+// For the main Go repo it always returns a slice with 1 element: the
+// empty string.
+func (c *CommitInfo) ResultGoHashes() []string {
 	// For the main repo, just return the empty string
 	// (there's no corresponding main repo hash for a main repo Commit).
 	// This function is only really useful for sub-repos.
@@ -315,12 +341,12 @@ func reverse(s []string) {
 	}
 }
 
-// partsToResult converts a Commit and ResultData substrings to a Result.
-func partsToResult(c *Commit, p []string) *Result {
+// partsToResult creates a Result from ResultData substrings.
+func partsToResult(hash, packagePath string, p []string) *Result {
 	return &Result{
 		Builder:     p[0],
-		Hash:        c.Hash,
-		PackagePath: c.PackagePath,
+		Hash:        hash,
+		PackagePath: packagePath,
 		GoHash:      p[3],
 		OK:          p[1] == "true",
 		LogHash:     p[2],
@@ -331,11 +357,11 @@ func partsToResult(c *Commit, p []string) *Result {
 //
 // Each Result entity is a descendant of its associated Package entity.
 type Result struct {
-	PackagePath string // (empty for Go commits)
 	Builder     string // "os-arch[-note]"
+	PackagePath string // (empty for Go commits, else "golang.org/x/foo")
 	Hash        string
 
-	// The Go Commit this was built against (empty for Go commits).
+	// The Go Commit this was built against (when PackagePath != ""; empty for Go commits).
 	GoHash string
 
 	BuildingURL string `datastore:"-"` // non-empty if currently building
@@ -395,86 +421,4 @@ func PutLog(c context.Context, text string) (hash string, err error) {
 	key := datastore.NewKey(c, "Log", hash, 0, nil)
 	_, err = datastore.Put(c, key, &Log{b.Bytes()})
 	return
-}
-
-// A Tag is used to keep track of the most recent Go weekly and release tags.
-// Typically there will be one Tag entity for each kind of git tag.
-type Tag struct {
-	Kind string // "release", or "tip"
-	Name string // the tag itself (for example: "release.r60")
-	Hash string
-}
-
-func (t *Tag) String() string {
-	if t.Kind == "tip" {
-		return "tip"
-	}
-	return t.Name
-}
-
-func (t *Tag) Key(c context.Context) *datastore.Key {
-	p := &Package{}
-	s := t.Kind
-	if t.Kind == "release" {
-		s += "-" + t.Name
-	}
-	return datastore.NewKey(c, "Tag", s, 0, p.Key(c))
-}
-
-func (t *Tag) Valid() error {
-	if t.Kind != "release" && t.Kind != "tip" {
-		return errors.New("invalid Kind")
-	}
-	if t.Kind == "release" && t.Name == "" {
-		return errors.New("release must have Name")
-	}
-	if !validHash(t.Hash) {
-		return errors.New("invalid Hash")
-	}
-	return nil
-}
-
-// Commit returns the Commit that corresponds with this Tag.
-func (t *Tag) Commit(c context.Context) (*Commit, error) {
-	com := &Commit{Hash: t.Hash}
-	err := datastore.Get(c, com.Key(c), com)
-	err = filterDatastoreError(err)
-	return com, err
-}
-
-// GetTag fetches a Tag by name from the datastore.
-func GetTag(c context.Context, kind, name string) (*Tag, error) {
-	t := &Tag{Kind: kind, Name: name}
-	if err := datastore.Get(c, t.Key(c), t); err != nil {
-		return nil, err
-	}
-	if err := t.Valid(); err != nil {
-		return nil, err
-	}
-	return t, nil
-}
-
-// Packages returns packages of the specified kind.
-// Kind must be one of "external" or "subrepo".
-func Packages(c context.Context, kind string) ([]*Package, error) {
-	switch kind {
-	case "external", "subrepo":
-	default:
-		return nil, errors.New(`kind must be one of "external" or "subrepo"`)
-	}
-	var pkgs []*Package
-	q := datastore.NewQuery("Package").Filter("Kind=", kind)
-	for t := q.Run(c); ; {
-		pkg := new(Package)
-		_, err := t.Next(pkg)
-		if err == datastore.Done {
-			break
-		} else if err != nil {
-			return nil, err
-		}
-		if pkg.Path != "" {
-			pkgs = append(pkgs, pkg)
-		}
-	}
-	return pkgs, nil
 }
