@@ -725,6 +725,9 @@ var statusTmpl = template.Must(template.New("status").Parse(`
   </li>
 {{end}}</ul>
 
+<h2 id=remote>Remote buildlets <a href='#remote'>¶</a></h2>
+{{.RemoteBuildlets}}
+
 <h2 id=trybots>Active Trybot Runs <a href='#trybots'>¶</a></h2>
 {{- if .TrybotsErr}}
 <b>trybots disabled:</b>: {{.TrybotsErr}}
@@ -743,9 +746,6 @@ var statusTmpl = template.Must(template.New("status").Parse(`
        </li>
    {{end}}
 </ul>
-
-<h2 id=remote>Remote buildlets <a href='#remote'>¶</a></h2>
-{{.RemoteBuildlets}}
 
 <h2 id=pools>Buildlet pools <a href='#pools'>¶</a></h2>
 <ul>
