@@ -591,6 +591,10 @@ var entries = map[string]*Entry{
 		Primary: []Owner{hyangah},
 	},
 
+	"mod": {
+		Primary: []Owner{bcmills, jayconrod},
+	},
+
 	"net": {
 		Primary:   []Owner{mikioh},
 		Secondary: []Owner{bradfitz, iant},
