@@ -598,12 +598,14 @@ func (r *Repo) Loop() {
 	tickler := repoTickler(r.name())
 	for {
 		if err := r.fetch(); err != nil {
+			r.logf("fetch failed in repo loop: %v", err)
 			r.setErr(err)
 			time.Sleep(10 * time.Second)
 			continue
 		}
 		if r.mirror {
 			if err := r.push(); err != nil {
+				r.logf("push failed in repo loop: %v", err)
 				r.setErr(err)
 				time.Sleep(10 * time.Second)
 				continue
@@ -611,6 +613,7 @@ func (r *Repo) Loop() {
 		}
 		if r.dash {
 			if err := r.updateDashboard(); err != nil {
+				r.logf("updateDashboard failed in repo loop: %v", err)
 				r.setErr(err)
 				time.Sleep(10 * time.Second)
 				continue
