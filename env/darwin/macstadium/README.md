@@ -14,7 +14,7 @@ via:
 
     $ ssh -i ~/keys/id_ed25519_golang1 gopher@macstadiumd.golang.org
 
-(Where `id_ed255519_golang` is available from http://go/go-builders-ssh)
+(Where `id_ed255519_golang1` is available from http://go/go-builders-ssh)
 
 It also runs:
 
@@ -56,6 +56,20 @@ VMware web UI at:
 
 (Alternatively, `ssh -D` to the bastion host to make a SOCKS tunnel
 and configure your browser to send proxy through that SOCKS tunnel.)
+
+## Adding a New Image
+
+When a new version of macOS is released:
+
+* Ensure that the version of vSphere deployed on MacStadium supports the
+  new version of macOS. If it doesn't, either request that MacStadium
+  upgrade the cluster or seek guidance from them about the upgrade path.
+
+* Clone the latest macOS version on vSphere and upgrade that version
+  to the desired macOS version as per the [instructions](vmware-notes.md).
+
+* If a completely new image is required, follow the [images setup notes](image-setup-notes.txt)
+  in order to add a new image.
 
 ## Debugging
 

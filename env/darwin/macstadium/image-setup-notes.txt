@@ -1,3 +1,5 @@
+The Disk should be formatted with a case insensitive file system (default).
+
 Install VMWare tools daemon.
 
   - you should be able to do this from the vSphere UI, but I got errors with Mojave.
@@ -10,7 +12,11 @@ Install VMWare tools daemon.
     $ /Library/Application Support/VMware Tools/vmware-tools-daemon --cmd "info-get guestinfo.name"
     No value value
 
-Add $HOME/go1.4
+Download Go 1.13.4 or newer tarball via curl (bootstrap version of Go must be signed and notorized in macOS version >= 10.15).
+
+tar -xf <go.darwin-amd64.tar.gz>
+
+mv go $HOME/goboot
 
 System Preferences > Software Update > off
 
@@ -18,12 +24,14 @@ System Preferences > Desktop & Screensaver > never screensaver
 
 System Preferences > Energy Saver > never sleep
 
-System Preferences > Sharing > enable ssh (for later)
+System Preferences > Sharing > enable ssh (enable for administrators)
 
 Create executable $HOME/stage0.sh with:
 
    #!/bin/bash
-   while true; do (curl -v http://10.50.0.2:8713/stage0/$(sw_ver -productVersion) | sh); sleep 5; done
+   while true; do (curl -v http://10.50.0.2:8713/stage0/$(sw_vers -productVersion) | sh); sleep 5; done
+
+chmod +x $HOME/stage0.sh
 
 Automator:
 
@@ -43,12 +51,12 @@ passwordless sudo:
     %admin ALL=(ALL) NOPASSWD: ALL
 
 install xcode
-  (as of 10.10 or 10.9, running git first time will propt for install;
-   before that, need to find old xcode version)
+  - Version < 10.9: search and install an older compatible version of Xcode.
+  - Versions 10.10, 10.9: running git first time will prompt for install.
+  - Version => 10.15: download Xcode from the Apple Developer site.
 
 verbose boot: (text instead of apple image)
 
     sudo nvram boot-args="-v"
 
 run-builder-darwin-10_11.sh
-
