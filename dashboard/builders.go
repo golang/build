@@ -1749,7 +1749,7 @@ func init() {
 			"GO_TEST_TIMEOUT_SCALE=4", // arm is normally 2; double that.
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return branch == "master" && goBranch == "master"
+			return branch == "master" && goBranch == "master" && defaultBuildsRepoPolicy(repo, branch, goBranch)
 		},
 		shouldRunDistTest: func(distTest string, isTry bool) bool {
 			if strings.Contains(distTest, "vendor/github.com/google/pprof") {
