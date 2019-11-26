@@ -107,8 +107,8 @@ func (w *Work) gitHeadCommit() string {
 }
 
 // gitRemoteBranchCommit returns the hash of the HEAD commit on the branch located
-// on a remote repository. It will return false when the branch does not exist or there
-// is a problem communicating with the remote repository.
+// on a remote repository. It will return false when the branch does not exist.
+// It panics if there is a problem communicating with the remote repository.
 func (w *Work) gitRemoteBranchCommit(repositoryURL, branch string) (string, bool) {
 	out := w.runner(w.Dir).runOut("git", "ls-remote", "--heads", repositoryURL, "refs/heads/"+branch)
 	if len(out) == 0 {
