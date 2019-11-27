@@ -262,6 +262,9 @@ message GerritMutation {
 
   // git refs to update.
   repeated GitRef refs = 3;
+
+  // deleted_refs are ref names to delete.
+  repeated string deleted_refs = 4;
 }
 
 message GitRef {

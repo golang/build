@@ -759,6 +759,15 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 		}
 	}
 
+	for _, refName := range gm.DeletedRefs {
+		delete(gp.ref, refName)
+		// TODO: this doesn't delete change refs (from
+		// gp.remote) yet, mostly because those don't tend to
+		// ever get deleted and we haven't yet needed it. If
+		// we ever need it, the mutation generation side would
+		// also need to be updated.
+	}
+
 	for _, refp := range gm.Refs {
 		refName := refp.Ref
 		hash := c.gitHashFromHexStr(refp.Sha1)
@@ -1075,6 +1084,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 	// it's not actually around I/O: all the input from ls-remote has
 	// already been slurped into memory.
 	c.mu.Lock()
+	refExists := map[string]bool{} // whether ref is this ls-remote fetch
 	for bs.Scan() {
 		line := bs.Bytes()
 		tab := bytes.IndexByte(line, '\t')
@@ -1086,6 +1096,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 		}
 		sha1 := string(line[:tab])
 		refName := strings.TrimSpace(string(line[tab+1:]))
+		refExists[refName] = true
 		hash := c.gitHashFromHexStr(sha1)
 
 		var needFetch bool
@@ -1101,7 +1112,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 			needFetch = curHash != hash
 		} else if trackGerritRef(refName) && gp.ref[refName] != hash {
 			needFetch = true
-			gp.logf("gerrit ref %q = %q", refName, sha1)
+			gp.logf("ref %q = %q", refName, sha1)
 		}
 
 		if needFetch {
@@ -1112,9 +1123,26 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 			})
 		}
 	}
+	var deletedRefs []string
+	for n := range gp.ref {
+		if !refExists[n] {
+			gp.logf("ref %q now deleted", n)
+			deletedRefs = append(deletedRefs, n)
+		}
+	}
 	c.mu.Unlock()
+
 	if err := bs.Err(); err != nil {
+		gp.logf("ls-remote scanning error: %v", err)
 		return err
+	}
+	if len(deletedRefs) > 0 {
+		c.addMutation(&maintpb.Mutation{
+			Gerrit: &maintpb.GerritMutation{
+				Project:     gp.proj,
+				DeletedRefs: deletedRefs,
+			},
+		})
 	}
 	if len(changedRefs) == 0 {
 		return nil
@@ -1150,6 +1178,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 			}})
 		changedRefs = changedRefs[len(batch):]
 	}
+
 	return nil
 }
 
