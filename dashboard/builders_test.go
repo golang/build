@@ -512,17 +512,23 @@ func TestBuilderConfig(t *testing.T) {
 		// But it's off for now as it's always failing.
 		{b("plan9-386", "go"), none},  // temporarily disabled
 		{b("plan9-386", "net"), none}, // temporarily disabled
+		{b("plan9-386", "exp"), none},
+		{b("plan9-386", "mobile"), none},
 		{b("plan9-386@go1.11", "go"), none},
 		{b("plan9-386@go1.12", "go"), none},
 		{b("plan9-386@go1.11", "net"), none},
 		{b("plan9-386@go1.12", "net"), none},
 		{b("plan9-amd64-9front", "go"), onlyPost},
+		{b("plan9-amd64-9front", "exp"), none},
+		{b("plan9-amd64-9front", "mobile"), none},
 		{b("plan9-amd64-9front@go1.11", "go"), none},
 		{b("plan9-amd64-9front@go1.12", "go"), none},
 		{b("plan9-amd64-9front", "net"), onlyPost},
 		{b("plan9-amd64-9front@go1.11", "net"), none},
 		{b("plan9-amd64-9front@go1.12", "net"), none},
 		{b("plan9-arm", "go"), onlyPost},
+		{b("plan9-arm", "exp"), none},
+		{b("plan9-arm", "mobile"), none},
 		{b("plan9-arm@go1.11", "go"), none},
 		{b("plan9-arm@go1.12", "go"), none},
 		{b("plan9-arm", "net"), onlyPost},

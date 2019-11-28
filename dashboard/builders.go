@@ -1950,7 +1950,7 @@ func init() {
 			}
 			return true
 		},
-		buildsRepo: onlyMaster,
+		buildsRepo: onlyMasterDefault,
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2008",
@@ -2392,7 +2392,7 @@ func init() {
 		Name:              "plan9-arm",
 		HostType:          "host-plan9-arm-0intro",
 		shouldRunDistTest: noTestDir,
-		buildsRepo:        onlyMaster,
+		buildsRepo:        onlyMasterDefault,
 	})
 	addBuilder(BuildConfig{
 		Name:     "plan9-amd64-9front",
@@ -2408,7 +2408,7 @@ func init() {
 			}
 			return true
 		},
-		buildsRepo: onlyMaster,
+		buildsRepo: onlyMasterDefault,
 	})
 	addBuilder(BuildConfig{
 		Name:     "plan9-386-0intro",
@@ -2424,7 +2424,7 @@ func init() {
 			}
 			return true
 		},
-		buildsRepo: onlyMaster,
+		buildsRepo: onlyMasterDefault,
 	})
 	addBuilder(BuildConfig{
 		Name:             "aix-ppc64",
@@ -2569,9 +2569,10 @@ func atLeastGo1(branch string, min int) bool {
 // onlyGo is a common buildsRepo policy value that only builds the main "go" repo.
 func onlyGo(repo, branch, goBranch string) bool { return repo == "go" }
 
-// onlyMaster is a common buildsRepo policy value that only builds things on the master branch.
-func onlyMaster(repo, branch, goBranch string) bool {
-	return branch == "master" && goBranch == "master"
+// onlyMasterDefault is a common buildsRepo policy value that only builds
+// default repos on the master branch.
+func onlyMasterDefault(repo, branch, goBranch string) bool {
+	return branch == "master" && goBranch == "master" && defaultBuildsRepoPolicy(repo, branch, goBranch)
 }
 
 // disabledBuilder is a buildsRepo policy function that always return false.
