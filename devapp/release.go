@@ -378,7 +378,7 @@ func (s *server) appendOpenIssues(dirToIssues map[string][]*maintner.GitHubIssue
 			}
 			sort.Sort(itemsBySummary(items))
 			for idx := range items {
-				if items[idx].Issue.HasLabel("Performance") {
+				if items[idx].Issue.HasLabel("Performance") && !items[idx].Issue.HasLabel("release-blocker") {
 					items[idx].FirstPerformance = true
 					break
 				}
