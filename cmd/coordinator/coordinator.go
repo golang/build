@@ -562,6 +562,30 @@ func getStatus(work buildgo.BuilderRev, statusPtrStr string) *buildStatus {
 	return nil
 }
 
+// cancelOnePostSubmitBuildWithHostType tries to cancel one
+// post-submit (non trybot) build with the provided host type and
+// reports whether it did so.
+//
+// It currently selects the one that's been running the least amount
+// of time, but that's not guaranteed.
+func cancelOnePostSubmitBuildWithHostType(hostType string) bool {
+	statusMu.Lock()
+	defer statusMu.Unlock()
+	var best *buildStatus
+	for _, st := range status {
+		if st.isTry() || st.conf.HostType != hostType {
+			continue
+		}
+		if best == nil || st.startTime.After(best.startTime) {
+			best = st
+		}
+	}
+	if best != nil {
+		go best.cancelBuild()
+	}
+	return best != nil
+}
+
 type byAge []*buildStatus
 
 func (s byAge) Len() int           { return len(s) }

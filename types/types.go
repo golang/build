@@ -173,7 +173,12 @@ func (a MajorMinor) Less(b MajorMinor) bool {
 // clients or show on trybot status pages to tell the user who long
 // they're expected to wait.
 type BuildletWaitStatus struct {
-	Ahead int `json:"ahead"` // number of waiters ahead of this buildlet request
+	// Message is a free-form message to send to the user's gomote binary.
+	// If present, all other fields are ignored.
+	Message string `json:"message"`
+
+	// Ahead are the number of waiters ahead of this buildlet request.
+	Ahead int `json:"ahead"`
 
 	// TODO: add number of active builds, and number of builds
 	// creating. And for how long. And maybe an estimate of how

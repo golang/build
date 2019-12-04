@@ -115,6 +115,10 @@ func create(args []string) error {
 	}
 	client, err := cc.CreateBuildletWithStatus(builderType, func(st types.BuildletWaitStatus) {
 		if status {
+			if st.Message != "" {
+				fmt.Fprintf(os.Stderr, "# %s\n", st.Message)
+				return
+			}
 			fmt.Fprintf(os.Stderr, "# still creating %s after %v; %d requests ahead of you\n", builderType, time.Since(t).Round(time.Second), st.Ahead)
 		}
 	})

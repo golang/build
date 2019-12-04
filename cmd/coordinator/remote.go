@@ -171,6 +171,8 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	resc := make(chan *buildlet.Client)
 	errc := make(chan error)
 
+	hconf := bconf.HostConfig()
+
 	go func() {
 		bc, err := sched.GetBuildlet(ctx, si)
 		if bc != nil {
@@ -194,6 +196,30 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 		w.Write(jenc)
 		w.(http.Flusher).Flush()
 	}
+	sendText := func(s string) {
+		sendJSONLine(msg{Status: &types.BuildletWaitStatus{Message: s}})
+	}
+
+	// If the gomote builder type requested is a reverse buildlet
+	// and all instances are busy, try canceling a post-submit
+	// build so it'll reconnect and the scheduler will give it to
+	// the higher priority gomote user.
+	isReverse := hconf.IsReverse
+	if isReverse {
+		if hs := reversePool.buildReverseStatusJSON().HostTypes[hconf.HostType]; hs == nil {
+			sendText(fmt.Sprintf("host type %q is not elastic; no machines are connected", hconf.HostType))
+		} else {
+			sendText(fmt.Sprintf("host type %q is not elastic; %d of %d machines connected, %d busy",
+				hconf.HostType, hs.Connected, hs.Expect, hs.Busy))
+			if hs.Connected > 0 && hs.Idle == 0 {
+				// Try to cancel one.
+				if cancelOnePostSubmitBuildWithHostType(hconf.HostType) {
+					sendText(fmt.Sprintf("canceled a post-submit build on a machine of type %q; it should reconnect and get assigned to you", hconf.HostType))
+				}
+			}
+		}
+	}
+
 	for {
 		select {
 		case <-ticker:
