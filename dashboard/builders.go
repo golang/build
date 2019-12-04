@@ -156,7 +156,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:       "for localhost development of buildlets/gomote/coordinator only",
 		SSHUsername: os.Getenv("USER"),
 	},
-	"host-nacl-kube": &HostConfig{
+	"host-nacl": &HostConfig{
 		Notes:           "Container with Native Client binaries.",
 		ContainerImage:  "linux-x86-nacl:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
@@ -169,7 +169,7 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
-	"host-s390x-cross-kube": &HostConfig{
+	"host-s390x-cross": &HostConfig{
 		Notes:           "Container with s390x cross-compiler.",
 		ContainerImage:  "linux-s390x-cross:latest",
 		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
@@ -1787,7 +1787,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "nacl-386",
-		HostType: "host-nacl-kube",
+		HostType: "host-nacl",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// nacl support is removed in Go 1.14.
 			return repo == "go" && !atLeastGo1(goBranch, 14) && !strings.HasPrefix(goBranch, "dev.")
@@ -1797,7 +1797,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "nacl-amd64p32",
-		HostType: "host-nacl-kube",
+		HostType: "host-nacl",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// nacl support is removed in Go 1.14.
 			return repo == "go" && !atLeastGo1(goBranch, 14) && !strings.HasPrefix(goBranch, "dev.")
@@ -2324,7 +2324,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "linux-s390x-crosscompile",
-		HostType:    "host-s390x-cross-kube",
+		HostType:    "host-s390x-cross",
 		Notes:       "s390x cross-compile builder for releases; doesn't run tests",
 		CompileOnly: true,
 		tryOnly:     true, // but not in trybot set for now
