@@ -46,8 +46,14 @@ message GithubIssueMutation {
   repeated int64 deleted_assignees = 11; // IDs of users to delete from the assignee list
   google.protobuf.Timestamp created = 5; // only needed on new issues
   google.protobuf.Timestamp updated = 6; // only set on updated issue text
-  string body = 7; // for new or updated issue text (top post, which isn't a comment)
   string title = 9; // issue title
+
+  // body_change changes the body field (the top post, which isn't a comment).
+  // It is now used in preference to the old body field.
+  StringChange body_change = 31;
+  // body was the old way to change the body, but it doesn't support removing the
+  // body text, which is common on PRs. New mutations use body_change instead.
+  string body = 7;
 
   bool no_milestone = 15; // true unsets any previously-set milestone; false ignored.
   // When setting a milestone, only the milestone_id must be set.
@@ -77,12 +83,19 @@ message GithubIssueMutation {
   repeated GithubReview review = 29;  // new reviews to add
   GithubIssueSyncStatus review_status = 30;
 
-  // Next tag: 31
+  // Next tag: 32
 }
 
 // BoolChange represents a change to a boolean value.
+// (Notably, the wrapper type permits representing a change to false.)
 message BoolChange {
   bool val = 1;
+}
+
+// StringChange represents a change to a boolean value.
+// (Notably, the wrapper type permits representing a change to the empty string.)
+message StringChange {
+  string val = 1;
 }
 
 message GithubLabel {

@@ -74,7 +74,7 @@ func init() {
 	tp2, _ = ptypes.TimestampProto(t2)
 }
 
-func TestProcessMutation_Github_NewIssue(t *testing.T) {
+func singleIssueGitHubCorpus() *Corpus {
 	c := new(Corpus)
 	github := &GitHub{c: c}
 	c.github = github
@@ -97,7 +97,11 @@ func TestProcessMutation_Github_NewIssue(t *testing.T) {
 			},
 		},
 	}
-	mutationTest{want: c}.test(t, &maintpb.Mutation{
+	return c
+}
+
+func TestProcessMutation_Github_NewIssue(t *testing.T) {
+	mutationTest{want: singleIssueGitHubCorpus()}.test(t, &maintpb.Mutation{
 		GithubIssue: &maintpb.GithubIssueMutation{
 			Owner:  "golang",
 			Repo:   "go",
@@ -109,6 +113,31 @@ func TestProcessMutation_Github_NewIssue(t *testing.T) {
 			Title:   "some title",
 			Body:    "some body",
 			Created: tp1,
+		},
+	})
+}
+
+func TestProcessMutation_Github_RemoveBody(t *testing.T) {
+	c := singleIssueGitHubCorpus()
+	want := singleIssueGitHubCorpus()
+	want.github.repos[GitHubRepoID{"golang", "go"}].issues[3].Body = ""
+	mutationTest{corpus: c, want: want}.test(t, &maintpb.Mutation{
+		GithubIssue: &maintpb.GithubIssueMutation{
+			Owner:      "golang",
+			Repo:       "go",
+			Number:     3,
+			BodyChange: &maintpb.StringChange{Val: ""},
+		},
+	})
+
+	// And test that the old mutation field (Body) still works.
+	want.github.repos[GitHubRepoID{"golang", "go"}].issues[3].Body = "and back"
+	mutationTest{corpus: c, want: want}.test(t, &maintpb.Mutation{
+		GithubIssue: &maintpb.GithubIssueMutation{
+			Owner:  "golang",
+			Repo:   "go",
+			Number: 3,
+			Body:   "and back",
 		},
 	})
 }
@@ -148,7 +177,7 @@ func TestNewMutationsFromIssue(t *testing.T) {
 		Owner:       "golang",
 		Repo:        "go",
 		Number:      5,
-		Body:        "body of the issue",
+		BodyChange:  &maintpb.StringChange{Val: "body of the issue"},
 		Created:     tp1,
 		Updated:     tp2,
 		Assignees:   []*maintpb.GithubUser{},
