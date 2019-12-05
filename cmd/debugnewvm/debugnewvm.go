@@ -27,6 +27,7 @@ import (
 
 var (
 	hostType      = flag.String("host", "", "host type to create")
+	zone          = flag.String("zone", "", "if non-empty, force a certain GCP zone")
 	overrideImage = flag.String("override-image", "", "if non-empty, an alternate GCE VM image or container image to use, depending on the host type")
 	serial        = flag.Bool("serial", true, "watch serial")
 	pauseAfterUp  = flag.Duration("pause-after-up", 0, "pause for this duration before buildlet is destroyed")
@@ -89,6 +90,10 @@ func main() {
 	}
 
 	env = buildenv.FromFlags()
+	if *zone != "" {
+		env.Zone = *zone
+	}
+
 	ctx := context.Background()
 
 	buildenv.CheckUserCredentials()
