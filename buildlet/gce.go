@@ -96,7 +96,7 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 		opts.ProjectID = buildEnv.ProjectName
 	}
 	if opts.Zone == "" {
-		opts.Zone = buildEnv.Zone
+		opts.Zone = buildEnv.RandomVMZone()
 	}
 	if opts.DeleteIn == 0 {
 		opts.DeleteIn = 30 * time.Minute

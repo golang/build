@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,10 +70,10 @@ type Environment struct {
 	// other fields.
 	Zone string
 
-	// ZonesToClean are the GCE zones that will be periodically cleaned by
-	// deleting old VMs. The zero value means that no cleaning will occur.
-	// This field is optional.
-	ZonesToClean []string
+	// VMZones are the GCE zones that the VMs will be deployed to. These
+	// GCE zones will be periodically cleaned by deleting old VMs. The zones
+	// should all exist within a single region.
+	VMZones []string
 
 	// StaticIP is the public, static IP address that will be attached to the
 	// coordinator instance. The zero value means the address will be looked
@@ -127,14 +128,18 @@ type Environment struct {
 	AutoCertCacheBucket string
 }
 
-// MachineTypeURI returns the URI for the environment's Machine Type.
-func (e Environment) MachineTypeURI() string {
-	return e.ComputePrefix() + "/zones/" + e.Zone + "/machineTypes/" + e.MachineType
-}
-
 // ComputePrefix returns the URI prefix for Compute Engine resources in a project.
 func (e Environment) ComputePrefix() string {
 	return prefix + e.ProjectName
+}
+
+// RandomVMZone returns a randomly selected zone from the zones in VMZones.
+// The Zone value will be returned if VMZones is not set.
+func (e Environment) RandomVMZone() string {
+	if len(e.VMZones) == 0 {
+		return e.Zone
+	}
+	return e.VMZones[rand.Intn(len(e.VMZones))]
 }
 
 // Region returns the GCE region, derived from its zone.
@@ -223,7 +228,7 @@ var Staging = &Environment{
 	ProjectNumber:         302018677728,
 	IsProd:                true,
 	Zone:                  "us-central1-f",
-	ZonesToClean:          []string{"us-central1-a", "us-central1-b", "us-central1-f"},
+	VMZones:               []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
 	StaticIP:              "104.154.113.235",
 	MachineType:           "n1-standard-1",
 	PreferContainersOnCOS: true,
@@ -254,7 +259,7 @@ var Production = &Environment{
 	ProjectNumber:         872405196845,
 	IsProd:                true,
 	Zone:                  "us-central1-f",
-	ZonesToClean:          []string{"us-central1-f"},
+	VMZones:               []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
 	StaticIP:              "107.178.219.46",
 	MachineType:           "n1-standard-4",
 	PreferContainersOnCOS: true,

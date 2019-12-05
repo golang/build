@@ -321,7 +321,9 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 		curSpan      = createSpan // either instSpan or waitBuildlet
 	)
 
-	log.Printf("Creating GCE VM %q for %s", instName, hostType)
+	zone := buildEnv.RandomVMZone()
+
+	log.Printf("Creating GCE VM %q for %s at %s", instName, hostType, zone)
 	bc, err = buildlet.StartNewVM(gcpCreds, buildEnv, instName, hostType, buildlet.VMOpts{
 		DeleteIn: deleteIn,
 		OnInstanceRequested: func() {
@@ -337,12 +339,13 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 		OnGotInstanceInfo: func() {
 			lg.LogEventTime("got_instance_info", "waiting_for_buildlet...")
 		},
+		Zone: zone,
 	})
 	if err != nil {
 		curSpan.Done(err)
-		log.Printf("Failed to create VM for %s: %v", hostType, err)
+		log.Printf("Failed to create VM for %s at %s: %v", hostType, zone, err)
 		if needDelete {
-			deleteVM(buildEnv.Zone, instName)
+			deleteVM(zone, instName)
 			p.putVMCountQuota(hconf.GCENumCPU())
 		}
 		p.setInstanceUsed(instName, false)
@@ -528,7 +531,7 @@ func (p *gceBuildletPool) cleanUpOldVMs() {
 	// and Region.Zones: http://godoc.org/google.golang.org/api/compute/v1#Region
 
 	for {
-		for _, zone := range buildEnv.ZonesToClean {
+		for _, zone := range buildEnv.VMZones {
 			if err := p.cleanZoneVMs(zone); err != nil {
 				log.Printf("Error cleaning VMs in zone %q: %v", zone, err)
 			}
