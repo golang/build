@@ -40,7 +40,7 @@ func init() {
 	add(&Repo{GoGerritProject: "protobuf", MirroredToGithub: true, ImportPath: "github.com/google/protobuf", HideFromDashboard: true})
 	add(&Repo{GoGerritProject: "gddo", MirroredToGithub: true, ImportPath: "github.com/golang/gddo", HideFromDashboard: true})
 	add(&Repo{GoGerritProject: "gofrontend", MirroredToGithub: true, HideFromDashboard: true})
-	add(&Repo{GoGerritProject: "gollvm", MirroredToGithub: true, HideFromDashboard: true})
+	add(&Repo{GoGerritProject: "gollvm", MirroredToGithub: false, HideFromDashboard: true})
 	add(&Repo{GoGerritProject: "grpc-review", MirroredToGithub: false, HideFromDashboard: true})
 	x("arch")
 	x("benchmarks")

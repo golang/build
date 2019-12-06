@@ -200,12 +200,17 @@ func formatGitAuthor(name, email string) string {
 // data given a repo name and a dashboard commit from that repo, using
 // previously loaded datastore commit info in tb.
 func (tb *uiTemplateDataBuilder) newCommitInfo(dsCommits map[string]*Commit, repo string, dc *apipb.DashCommit) *CommitInfo {
+	branch := dc.Branch
+	if branch == "" {
+		branch = "master"
+	}
 	ci := &CommitInfo{
 		Hash:        dc.Commit,
 		PackagePath: repo,
 		User:        formatGitAuthor(dc.AuthorName, dc.AuthorEmail),
 		Desc:        cleanTitle(dc.Title, tb.req.Branch),
 		Time:        time.Unix(dc.CommitTimeSec, 0),
+		Branch:      branch,
 	}
 	if dsc, ok := dsCommits[dc.Commit]; ok {
 		ci.ResultData = dsc.ResultData
@@ -479,6 +484,7 @@ func commitToBuildRevision(c *CommitInfo, rev *types.BuildRevision) {
 	rev.Date = c.Time.Format(time.RFC3339)
 	rev.Author = c.User
 	rev.Desc = c.Desc
+	rev.Branch = c.Branch
 }
 
 type Pagination struct {
@@ -672,6 +678,7 @@ type CommitInfo struct {
 	User        string    // "Foo Bar <foo@bar.com>"
 	Desc        string    // git commit title
 	Time        time.Time // commit time
+	Branch      string    // "master", "release-branch.go1.14"
 }
 
 // addEmptyResultGoHash adds an empty result containing goHash to

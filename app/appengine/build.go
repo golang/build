@@ -53,7 +53,7 @@ func filterDatastoreError(err error) error {
 			case "NeedsBenchmarking", "TryPatch", "FailNotificationSent":
 				// Removed in CLs 208397 and 208324.
 				return true
-			case "PackagePath", "ParentHash", "Num", "User", "Desc", "Time", "Branch", "NextNum":
+			case "PackagePath", "ParentHash", "Num", "User", "Desc", "Time", "Branch", "NextNum", "Kind":
 				// Removed in move to maintner in CL 208697.
 				return true
 			}
