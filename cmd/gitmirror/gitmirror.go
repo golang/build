@@ -11,10 +11,8 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha1"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -708,42 +706,30 @@ func subscribeToMaintnerAndTickleLoop() {
 }
 
 func subscribeToMaintnerAndTickle() error {
-	log.Printf("Loading maintner data.")
-	t0 := time.Now()
 	ctx := context.Background()
-	corpus, err := godata.Get(ctx)
-	if err != nil {
-		return err
-	}
-	log.Printf("Loaded maintner data in %v", time.Since(t0))
-	last := map[string]string{} // go.googlesource.com repo base => digest of all refs
+	retryTicker := time.NewTicker(10 * time.Second)
+	defer retryTicker.Stop() // we never return, though
 	for {
-		corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
-			proj := path.Base(gp.ServerSlashProject())
-			s1 := sha1.New()
-			gp.ForeachNonChangeRef(func(ref string, hash maintner.GitHash) error {
-				io.WriteString(s1, string(hash))
-				return nil
-			})
-			sum := fmt.Sprintf("%x", s1.Sum(nil))
-			lastSum := last[proj]
-			if lastSum == sum {
-				return nil
+		err := maintner.TailNetworkMutationSource(ctx, godata.Server, func(e maintner.MutationStreamEvent) error {
+			if e.Mutation != nil && e.Mutation.Gerrit != nil {
+				gm := e.Mutation.Gerrit
+				if strings.HasPrefix(gm.Project, "go.googlesource.com/") {
+					proj := strings.TrimPrefix(gm.Project, "go.googlesource.com/")
+					log.Printf("maintner refs for %s changed", gm.Project)
+					select {
+					case repoTickler(proj) <- true:
+					default:
+					}
+				}
 			}
-			last[proj] = sum
-			if lastSum == "" {
-				return nil
-			}
-			log.Printf("maintner refs for %s changed", gp.ServerSlashProject())
-			select {
-			case repoTickler(proj) <- true:
-			default:
-			}
-			return nil
+			return e.Err
 		})
-		if err := corpus.Update(ctx); err != nil {
-			return err
-		}
+		log.Printf("maintner tail error: %v; sleeping+restarting", err)
+
+		// prevent retry looping faster than once every 10
+		// seconds; but usually retry immediately in the case
+		// where we've been runing for a while already.
+		<-retryTicker.C
 	}
 }
 
