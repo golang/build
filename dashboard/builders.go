@@ -1192,8 +1192,8 @@ func defaultBuildsRepoPolicy(repo, branch, goBranch string) bool {
 	switch repo {
 	case "go":
 		return true
-	case "mobile", "exp":
-		// mobile and exp are opt-in.
+	case "mobile", "exp", "build":
+		// opt-in builders.
 		return false
 	}
 	return true
@@ -1201,6 +1201,13 @@ func defaultBuildsRepoPolicy(repo, branch, goBranch string) bool {
 
 func defaultPlusExp(repo, branch, goBranch string) bool {
 	if repo == "exp" {
+		return true
+	}
+	return defaultBuildsRepoPolicy(repo, branch, goBranch)
+}
+
+func defaultPlusExpBuild(repo, branch, goBranch string) bool {
+	if repo == "exp" || repo == "build" {
 		return true
 	}
 	return defaultBuildsRepoPolicy(repo, branch, goBranch)
@@ -1505,7 +1512,7 @@ func init() {
 		Name:       "linux-amd64",
 		HostType:   "host-linux-stretch",
 		tryBot:     defaultTrySet(),
-		buildsRepo: defaultPlusExp,
+		buildsRepo: defaultPlusExpBuild,
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
@@ -1633,7 +1640,7 @@ func init() {
 		Name:              "linux-amd64-race",
 		HostType:          "host-linux-jessie",
 		tryBot:            defaultTrySet(),
-		buildsRepo:        defaultPlusExp,
+		buildsRepo:        defaultPlusExpBuild,
 		shouldRunDistTest: fasterTrybots,
 		numTestHelpers:    1,
 		numTryTestHelpers: 5,
@@ -1973,7 +1980,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "windows-386-2008",
 		HostType:          "host-windows-amd64-2008",
-		buildsRepo:        defaultPlusExp,
+		buildsRepo:        defaultPlusExpBuild,
 		shouldRunDistTest: fasterTrybots,
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		tryBot:            defaultTrySet(),
@@ -1997,7 +2004,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2016",
 		HostType:          "host-windows-amd64-2016",
-		buildsRepo:        defaultPlusExp,
+		buildsRepo:        defaultPlusExpBuild,
 		shouldRunDistTest: fasterTrybots,
 		env: []string{
 			"GOARCH=amd64",
@@ -2016,7 +2023,7 @@ func init() {
 		HostType: "host-windows-amd64-2016-big",
 		Notes:    "Windows Server 2016 with go test -short=false",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			if !defaultPlusExp(repo, branch, goBranch) {
+			if !defaultPlusExpBuild(repo, branch, goBranch) {
 				return false
 			}
 			return repo == "go" || (branch == "master" && goBranch == "master")
@@ -2098,7 +2105,7 @@ func init() {
 		Name:              "darwin-amd64-10_15",
 		HostType:          "host-darwin-10_15",
 		shouldRunDistTest: macTestPolicy,
-		buildsRepo:        defaultPlusExp,
+		buildsRepo:        defaultPlusExpBuild,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-nocgo",

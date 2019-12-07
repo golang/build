@@ -511,6 +511,20 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64@go1.11", "exp"), none},
 		{b("linux-amd64@go1.12", "exp"), none},
 
+		// the build repo is only really useful for linux-amd64 (where we run it),
+		// and darwin-amd64 and perhaps windows-amd64 (for stuff like gomote).
+		// No need for any other operating systems to use it.
+		{b("linux-amd64", "build"), both},
+		{b("linux-amd64-longtest", "build"), onlyPost},
+		{b("windows-amd64-2016", "build"), both},
+		{b("darwin-amd64-10_12", "build"), none},
+		{b("darwin-amd64-10_14", "build"), none},
+		{b("darwin-amd64-10_15", "build"), onlyPost},
+		{b("openbsd-amd64-64", "build"), none},
+		{b("linux-amd64-fedora", "build"), none},
+		{b("linux-amd64-clang", "build"), none},
+		{b("linux-amd64-sid", "build"), none},
+
 		// Only use latest macOS for subrepos, and only amd64:
 		{b("darwin-amd64-10_12", "net"), onlyPost},
 		{b("darwin-amd64-10_12@go1.11", "net"), onlyPost},
