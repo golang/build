@@ -111,12 +111,14 @@ func TestUITemplateDataBuilder(t *testing.T) {
 						ResultData: []string{
 							"openbsd-amd64|true||",
 						},
+						Branch: "master",
 					},
 					{
-						Hash: "ffffffffffffffffffffffffffffffffffffffff",
-						User: "Fancy Fred <f@eff.tld>",
-						Desc: "all: add effs",
-						Time: time.Unix(1257894000, 0),
+						Hash:   "ffffffffffffffffffffffffffffffffffffffff",
+						User:   "Fancy Fred <f@eff.tld>",
+						Desc:   "all: add effs",
+						Time:   time.Unix(1257894000, 0),
+						Branch: "master",
 					},
 				},
 			},
@@ -195,10 +197,11 @@ func TestUITemplateDataBuilder(t *testing.T) {
 				Pagination: &Pagination{},
 				Commits: []*CommitInfo{
 					{
-						Hash: "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac",
-						User: "Foo Bar <foo@example.com>",
-						Desc: "runtime: fix all the bugs",
-						Time: time.Unix(1257894001, 0),
+						Hash:   "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac",
+						User:   "Foo Bar <foo@example.com>",
+						Desc:   "runtime: fix all the bugs",
+						Time:   time.Unix(1257894001, 0),
+						Branch: "master",
 					},
 				},
 				TagState: []*TagState{
@@ -214,6 +217,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 									User:        "Ee Yore <e@e.net>",
 									Desc:        "all: fix networking",
 									Time:        time.Unix(1257894001, 0),
+									Branch:      "master",
 								},
 							},
 							{
@@ -224,6 +228,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 									User:        "Sys Tem <sys@s.net>",
 									Desc:        "sys: support more systems",
 									Time:        time.Unix(1257894001, 0),
+									Branch:      "master",
 								},
 							},
 						},
@@ -240,6 +245,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 									User:        "Ee Yore <e@e.net>",
 									Desc:        "all: fix networking",
 									Time:        time.Unix(1257894001, 0),
+									Branch:      "master",
 								},
 							},
 							{
@@ -250,6 +256,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 									User:        "Sys Tem <sys@s.net>",
 									Desc:        "sys: support more systems",
 									Time:        time.Unix(1257894001, 0),
+									Branch:      "master",
 								},
 							},
 						},
@@ -292,6 +299,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 						User:        "Foo Bar <foo@example.com>",
 						Desc:        "net: fix all the bugs",
 						Time:        time.Unix(1257894001, 0),
+						Branch:      "master",
 						ResultData: []string{
 							"|false||aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 							"|false||bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
