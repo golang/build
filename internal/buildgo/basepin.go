@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/build/dashboard"
 	compute "google.golang.org/api/compute/v1"
 )
 
@@ -27,6 +28,13 @@ import (
 // there's been a VM created within the past N minutes of that type,
 // but we want VMs to always create quickly.
 func (c *Client) MakeBasepinDisks(ctx context.Context) error {
+	currentImage := map[string]bool{}
+	for _, hc := range dashboard.Hosts {
+		if hc.VMImage != "" {
+			currentImage[hc.VMImage] = true
+		}
+	}
+
 	// Try to find it by name.
 	svc := c.Compute()
 	imList, err := svc.Images.List(c.Env.ProjectName).Do()
@@ -35,6 +43,21 @@ func (c *Client) MakeBasepinDisks(ctx context.Context) error {
 	}
 	if imList.NextPageToken != "" {
 		return errors.New("too many images; pagination not supported")
+	}
+
+	getNeedMap := func() map[string]*compute.Image {
+		need := make(map[string]*compute.Image) // keys like "https://www.googleapis.com/compute/v1/projects/symbolic-datum-552/global/images/linux-buildlet-arm"
+		for _, im := range imList.Items {
+			imBase := path.Base(im.SelfLink)
+			if strings.Contains(im.SelfLink, "-debug") {
+				continue
+			}
+			if !currentImage[imBase] {
+				continue
+			}
+			need[im.SelfLink] = im
+		}
+		return need
 	}
 
 	for _, zone := range c.Env.VMZones {
@@ -46,13 +69,7 @@ func (c *Client) MakeBasepinDisks(ctx context.Context) error {
 			return fmt.Errorf("too many disks in %v; pagination not supported (yet?)", zone)
 		}
 
-		need := make(map[string]*compute.Image) // keys like "https://www.googleapis.com/compute/v1/projects/symbolic-datum-552/global/images/linux-buildlet-arm"
-		for _, im := range imList.Items {
-			if strings.Contains(im.SelfLink, "-debug") {
-				continue
-			}
-			need[im.SelfLink] = im
-		}
+		need := getNeedMap()
 
 		for _, d := range diskList.Items {
 			if !strings.HasPrefix(d.Name, "basepin-") {
@@ -63,6 +80,19 @@ func (c *Client) MakeBasepinDisks(ctx context.Context) error {
 					log.Printf("basepin: have %s: %s (%v)\n", d.Name, d.SourceImage, d.SourceImageId)
 				}
 				delete(need, d.SourceImage)
+				continue
+			}
+			if zone != c.Env.ControlZone {
+				log.Printf("basepin: deleting unnecessary disk %v in zone %v", d.Name, zone)
+				op, err := svc.Disks.Delete(c.Env.ProjectName, zone, d.Name).Do()
+				if err != nil {
+					log.Printf("basepin: failed to delete disk %v in zone %v: %v", d.Name, zone, err)
+					continue
+				}
+				if err := c.AwaitOp(ctx, op); err != nil {
+					log.Printf("basepin: failed to delete disk %v in zone %v: %v", d.Name, zone, err)
+					continue
+				}
 			}
 		}
 
