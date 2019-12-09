@@ -125,7 +125,7 @@ var goDash = &Dashboard{
 func init() {
 	var add []*Package
 	for _, r := range repos.ByGerritProject {
-		if r.HideFromDashboard || !strings.HasPrefix(r.ImportPath, "golang.org/x") || r.GoGerritProject == "" {
+		if !r.ShowOnDashboard() {
 			continue
 		}
 		add = append(add, &Package{

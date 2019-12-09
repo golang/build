@@ -245,7 +245,7 @@ func repoImportPath(rh *apipb.DashRepoHead) string {
 		return ""
 	}
 	ri, ok := repos.ByGerritProject[rh.GerritProject]
-	if !ok || ri.HideFromDashboard {
+	if !ok || !ri.ShowOnDashboard() {
 		return ""
 	}
 	return ri.ImportPath

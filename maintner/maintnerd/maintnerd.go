@@ -7,7 +7,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"flag"
@@ -22,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -29,13 +29,13 @@ import (
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/autocertcache"
-	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/gitauth"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/maintner/maintnerd/gcslog"
 	"golang.org/x/build/maintner/maintnerd/maintapi"
+	"golang.org/x/build/repos"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/http2"
 	"golang.org/x/time/rate"
@@ -306,46 +306,6 @@ func main() {
 	log.Fatal(<-errc)
 }
 
-// Projects to watch when using the "go" config.
-var goGitHubProjects = []string{
-	"golang/arch",
-	"golang/benchmarks",
-	"golang/blog",
-	"golang/build",
-	"golang/crypto",
-	"golang/debug",
-	"golang/dl",
-	"golang/example",
-	"golang/exp",
-	"golang/gddo",
-	"golang/go",
-	"golang/image",
-	"golang/lint",
-	"golang/mobile",
-	"golang/mod",
-	"golang/net",
-	"golang/oauth2",
-	"golang/perf",
-	"golang/playground",
-	"golang/proposal",
-	"golang/review",
-	"golang/scratch",
-	"golang/sublime-build",
-	"golang/sublime-config",
-	"golang/sync",
-	"golang/sys",
-	"golang/talks",
-	"golang/term",
-	"golang/text",
-	"golang/time",
-	"golang/tools",
-	"golang/tour",
-	"golang/vgo",
-	"golang/website",
-	"golang/xerrors",
-	"protocolbuffers/protobuf-go",
-}
-
 func setGoConfig() {
 	if *watchGithub != "" {
 		log.Fatalf("can't set both --config and --watch-github")
@@ -354,20 +314,42 @@ func setGoConfig() {
 		log.Fatalf("can't set both --config and --watch-gerrit")
 	}
 	*pubsub = "https://pubsubhelper.golang.org"
-	*watchGithub = strings.Join(goGitHubProjects, ",")
+	*watchGithub = strings.Join(goGitHubProjects(), ",")
+	*watchGerrit = strings.Join(goGerritProjects(), ",")
+}
 
-	gerrc := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
-	projs, err := gerrc.ListProjects(context.Background())
-	if err != nil {
-		log.Fatalf("error listing Go's gerrit projects: %v", err)
+// goGitHubProjects returns the GitHub repos to track in --config=go.
+// The strings are of form "<org-or-user>/<repo>".
+func goGitHubProjects() []string {
+	var ret []string
+	for _, r := range repos.ByGerritProject {
+		if gr := r.GitHubRepo(); gr != "" {
+			ret = append(ret, gr)
+		}
 	}
-	var buf bytes.Buffer
-	buf.WriteString("code.googlesource.com/gocloud,code.googlesource.com/google-api-go-client")
-	for _, pi := range projs {
-		buf.WriteString(",go.googlesource.com/")
-		buf.WriteString(pi.ID)
+	sort.Strings(ret)
+	return ret
+}
+
+// goGerritProjects returns the Gerrit projects to track in --config=go.
+// The strings are of the form "<hostname>/<proj>".
+func goGerritProjects() []string {
+	var ret []string
+	// TODO: add these to the repos package at some point? Or
+	// maybe just stop maintaining them in maintner if nothing's
+	// using them? I think the only thing that uses them is the
+	// stats tooling, to see where gophers are working. That's
+	// probably enough reason to keep them in. So just keep hard-coding
+	// them here for now.
+	ret = append(ret,
+		"code.googlesource.com/gocloud",
+		"code.googlesource.com/google-api-go-client",
+	)
+	for p := range repos.ByGerritProject {
+		ret = append(ret, "go.googlesource.com/"+p)
 	}
-	*watchGerrit = buf.String()
+	sort.Strings(ret)
+	return ret
 }
 
 func setGodataConfig() {

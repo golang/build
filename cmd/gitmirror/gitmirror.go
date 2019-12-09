@@ -188,11 +188,8 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 // shouldMirrorTo returns the GitHub repository the named repo should be
 // mirrored to or "" if it should not be mirrored.
 func shouldMirrorTo(name string) (dst string) {
-	if name == "protobuf" {
-		return "git@github.com:protocolbuffers/protobuf-go.git"
-	}
-	if r, ok := repospkg.ByGerritProject[name]; ok && r.MirroredToGithub {
-		return "git@github.com:golang/" + name + ".git"
+	if r, ok := repospkg.ByGerritProject[name]; ok && r.MirrorToGitHub {
+		return "git@github.com:" + r.GitHubRepo() + ".git"
 	}
 	return ""
 }
