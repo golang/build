@@ -37,7 +37,7 @@ resources:
 - name: "{{ .Kube.Name }}"
   type: container.v1.cluster
   properties:
-    zone: "{{ .Env.Zone }}"
+    zone: "{{ .Env.ControlZone }}"
     cluster:
       initial_node_count: {{ .Kube.MinNodes }}
       network: "default"

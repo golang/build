@@ -90,9 +90,6 @@ func main() {
 	}
 
 	env = buildenv.FromFlags()
-	if *zone != "" {
-		env.Zone = *zone
-	}
 
 	ctx := context.Background()
 
@@ -106,15 +103,20 @@ func main() {
 	name := fmt.Sprintf("debug-temp-%d", time.Now().Unix())
 
 	log.Printf("Creating %s (with VM image %s)", name, vmImageSummary)
+	var zoneSelected string
 	bc, err := buildlet.StartNewVM(creds, env, name, *hostType, buildlet.VMOpts{
+		Zone:                *zone,
 		OnInstanceRequested: func() { log.Printf("instance requested") },
 		OnInstanceCreated: func() {
 			log.Printf("instance created")
 			if *serial {
-				go watchSerial(name)
+				go watchSerial(zoneSelected, name)
 			}
 		},
-		OnGotInstanceInfo: func() { log.Printf("got instance info") },
+		OnGotInstanceInfo: func(inst *compute.Instance) {
+			zoneSelected = inst.Zone
+			log.Printf("got instance info; running in %v", zoneSelected)
+		},
 		OnBeginBuildletProbe: func(buildletURL string) {
 			log.Printf("About to hit %s to see if buildlet is up yet...", buildletURL)
 		},
@@ -213,11 +215,11 @@ func main() {
 //   gcloud compute connect-to-serial-port --zone=xxx $NAME
 // but in Go and works. For some reason, gcloud doesn't work as a
 // child process and has weird errors.
-func watchSerial(name string) {
+func watchSerial(zone, name string) {
 	start := int64(0)
 	indent := strings.Repeat(" ", len("2017/07/25 06:37:14 SERIAL: "))
 	for {
-		sout, err := computeSvc.Instances.GetSerialPortOutput(env.ProjectName, env.Zone, name).Start(start).Do()
+		sout, err := computeSvc.Instances.GetSerialPortOutput(env.ProjectName, zone, name).Start(start).Do()
 		if err != nil {
 			log.Printf("serial output error: %v", err)
 			return

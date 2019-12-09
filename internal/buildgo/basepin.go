@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"path"
 	"sort"
 	"strings"
 	"time"
@@ -88,7 +89,7 @@ func (c *Client) MakeBasepinDisks(ctx context.Context) error {
 				return err
 			}
 			if err := c.AwaitOp(ctx, op); err != nil {
-				log.Fatalf("basepin: failed to create: %v", err)
+				return fmt.Errorf("basepin: failed to create: %v", err)
 			}
 		}
 		log.Printf("basepin: created %d images in %v", len(needed), zone)
@@ -103,10 +104,10 @@ func (c *Client) AwaitOp(ctx context.Context, op *compute.Operation) error {
 	svc := c.Compute()
 	opName := op.Name
 	// TODO: move logging to Client c.logger. and add Client.WithLogger shallow copier.
-	log.Printf("Waiting on operation %v", opName)
+	log.Printf("Waiting on operation %v (in %q)", opName, op.Zone)
 	for {
 		time.Sleep(2 * time.Second)
-		op, err := svc.ZoneOperations.Get(c.Env.ProjectName, c.Env.Zone, opName).Do()
+		op, err := svc.ZoneOperations.Get(c.Env.ProjectName, path.Base(op.Zone), opName).Do()
 		if err != nil {
 			return fmt.Errorf("Failed to get op %s: %v", opName, err)
 		}

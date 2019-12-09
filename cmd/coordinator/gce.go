@@ -116,7 +116,7 @@ func initGCE() error {
 
 		// Convert the zone from "projects/1234/zones/us-central1-a" to "us-central1-a".
 		projectZone = path.Base(projectZone)
-		buildEnv.Zone = projectZone
+		buildEnv.ControlZone = projectZone
 
 		if buildEnv.StaticIP == "" {
 			buildEnv.StaticIP, err = metadata.ExternalIP()
@@ -336,7 +336,7 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 			waitBuildlet = lg.CreateSpan("wait_buildlet_start", instName)
 			curSpan = waitBuildlet
 		},
-		OnGotInstanceInfo: func() {
+		OnGotInstanceInfo: func(*compute.Instance) {
 			lg.LogEventTime("got_instance_info", "waiting_for_buildlet...")
 		},
 		Zone: zone,
@@ -354,12 +354,12 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 	waitBuildlet.Done(nil)
 	bc.SetDescription("GCE VM: " + instName)
 	bc.SetOnHeartbeatFailure(func() {
-		p.putBuildlet(bc, hostType, instName)
+		p.putBuildlet(bc, hostType, zone, instName)
 	})
 	return bc, nil
 }
 
-func (p *gceBuildletPool) putBuildlet(bc *buildlet.Client, hostType, instName string) error {
+func (p *gceBuildletPool) putBuildlet(bc *buildlet.Client, hostType, zone, instName string) error {
 	// TODO(bradfitz): add the buildlet to a freelist (of max N
 	// items) for up to 10 minutes since when it got started if
 	// it's never seen a command execution failure, and we can
@@ -369,7 +369,7 @@ func (p *gceBuildletPool) putBuildlet(bc *buildlet.Client, hostType, instName st
 	// buildlet client library between Close, Destroy/Halt, and
 	// tracking execution errors.  That was all half-baked before
 	// and thus removed. Now Close always destroys everything.
-	deleteVM(buildEnv.Zone, instName)
+	deleteVM(zone, instName)
 	p.setInstanceUsed(instName, false)
 
 	hconf, ok := dashboard.Hosts[hostType]

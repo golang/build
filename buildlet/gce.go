@@ -71,7 +71,7 @@ type VMOpts struct {
 
 	// OnInstanceCreated optionally specifies a hook to run synchronously
 	// after the computeService.Instances.Get call.
-	OnGotInstanceInfo func()
+	OnGotInstanceInfo func(*compute.Instance)
 
 	// OnBeginBuildletProbe optionally specifies a hook to run synchronously
 	// before StartNewVM tries to hit buildletURL to see if it's up yet.
@@ -98,6 +98,7 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 	if opts.Zone == "" {
 		opts.Zone = buildEnv.RandomVMZone()
 	}
+	zone := opts.Zone
 	if opts.DeleteIn == 0 {
 		opts.DeleteIn = 30 * time.Minute
 	}
@@ -110,12 +111,6 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 		return nil, fmt.Errorf("host %q is type %q; want either a VM or container type", hostType, hconf.PoolName())
 	}
 
-	zone := opts.Zone
-	if zone == "" {
-		// TODO: automatic? maybe that's not useful.
-		// For now just return an error.
-		return nil, errors.New("buildlet: missing required Zone option")
-	}
 	projectID := opts.ProjectID
 	if projectID == "" {
 		return nil, errors.New("buildlet: missing required ProjectID option")
@@ -328,7 +323,9 @@ OpLoop:
 		buildletURL = "http://" + intIP
 		ipPort = intIP + ":80"
 	}
-	condRun(opts.OnGotInstanceInfo)
+	if opts.OnGotInstanceInfo != nil {
+		opts.OnGotInstanceInfo(inst)
+	}
 
 	const timeout = 5 * time.Minute
 	var alive bool

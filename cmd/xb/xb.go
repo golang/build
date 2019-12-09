@@ -56,12 +56,12 @@ func main() {
 	case "kubectl":
 		env := getEnv()
 		curCtx := kubeCurrentContext()
-		wantCtx := fmt.Sprintf("gke_%s_%s_go", env.ProjectName, env.Zone)
+		wantCtx := fmt.Sprintf("gke_%s_%s_go", env.ProjectName, env.ControlZone)
 		if curCtx != wantCtx {
 			log.SetFlags(0)
 			log.Fatalf("Wrong kubectl context; currently using %q; want %q\nRun:\n  gcloud container clusters get-credentials --project=%s --zone=%s go",
 				curCtx, wantCtx,
-				env.ProjectName, env.Zone,
+				env.ProjectName, env.ControlZone,
 			)
 		}
 		// gcloud container clusters get-credentials --zone=us-central1-f go

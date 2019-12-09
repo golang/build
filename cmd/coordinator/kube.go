@@ -59,7 +59,7 @@ func initKube() error {
 	var err error
 	buildletsKubeClient, err = gke.NewClient(ctx,
 		buildEnv.KubeBuild.Name,
-		gke.OptZone(buildEnv.Zone),
+		gke.OptZone(buildEnv.ControlZone),
 		gke.OptProject(buildEnv.ProjectName),
 		gke.OptTokenSource(gcpCreds.TokenSource))
 	if err != nil {
@@ -68,7 +68,7 @@ func initKube() error {
 
 	goKubeClient, err = gke.NewClient(ctx,
 		buildEnv.KubeTools.Name,
-		gke.OptZone(buildEnv.Zone),
+		gke.OptZone(buildEnv.ControlZone),
 		gke.OptProject(buildEnv.ProjectName),
 		gke.OptTokenSource(gcpCreds.TokenSource))
 	if err != nil {
@@ -437,7 +437,7 @@ func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
 				}
 				if err == nil && time.Now().Unix() > unixDeadline {
 					stats.DeletedOld++
-					log.Printf("cleanUpOldPods: Deleting expired pod %q in zone %q ...", pod.Name, buildEnv.Zone)
+					log.Printf("cleanUpOldPods: Deleting expired pod %q in zone %q ...", pod.Name, buildEnv.ControlZone)
 					err = buildletsKubeClient.DeletePod(ctx, pod.Name)
 					if err != nil {
 						log.Printf("cleanUpOldPods: problem deleting old pod %q: %v", pod.Name, err)

@@ -65,10 +65,10 @@ type Environment struct {
 	// disabled and the coordinator serves on 8119.
 	IsProd bool
 
-	// Zone is the GCE zone that the coordinator instance and Kubernetes cluster
+	// ControlZone is the GCE zone that the coordinator instance and Kubernetes cluster
 	// will run in. This field may be overridden as necessary without impacting
 	// other fields.
-	Zone string
+	ControlZone string
 
 	// VMZones are the GCE zones that the VMs will be deployed to. These
 	// GCE zones will be periodically cleaned by deleting old VMs. The zones
@@ -137,14 +137,14 @@ func (e Environment) ComputePrefix() string {
 // The Zone value will be returned if VMZones is not set.
 func (e Environment) RandomVMZone() string {
 	if len(e.VMZones) == 0 {
-		return e.Zone
+		return e.ControlZone
 	}
 	return e.VMZones[rand.Intn(len(e.VMZones))]
 }
 
 // Region returns the GCE region, derived from its zone.
 func (e Environment) Region() string {
-	return e.Zone[:strings.LastIndex(e.Zone, "-")]
+	return e.ControlZone[:strings.LastIndex(e.ControlZone, "-")]
 }
 
 // SnapshotURL returns the absolute URL of the .tar.gz containing a
@@ -227,7 +227,7 @@ var Staging = &Environment{
 	ProjectName:           "go-dashboard-dev",
 	ProjectNumber:         302018677728,
 	IsProd:                true,
-	Zone:                  "us-central1-f",
+	ControlZone:           "us-central1-f",
 	VMZones:               []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
 	StaticIP:              "104.154.113.235",
 	MachineType:           "n1-standard-1",
@@ -258,7 +258,7 @@ var Production = &Environment{
 	ProjectName:           "symbolic-datum-552",
 	ProjectNumber:         872405196845,
 	IsProd:                true,
-	Zone:                  "us-central1-f",
+	ControlZone:           "us-central1-f",
 	VMZones:               []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
 	StaticIP:              "107.178.219.46",
 	MachineType:           "n1-standard-4",
