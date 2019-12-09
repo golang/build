@@ -35,61 +35,64 @@ func (c *Client) MakeBasepinDisks(ctx context.Context) error {
 	if imList.NextPageToken != "" {
 		return errors.New("too many images; pagination not supported")
 	}
-	diskList, err := svc.Disks.List(c.Env.ProjectName, c.Env.Zone).Do()
-	if err != nil {
-		return err
-	}
-	if diskList.NextPageToken != "" {
-		return errors.New("too many disks; pagination not supported (yet?)")
-	}
 
-	need := make(map[string]*compute.Image) // keys like "https://www.googleapis.com/compute/v1/projects/symbolic-datum-552/global/images/linux-buildlet-arm"
-	for _, im := range imList.Items {
-		if strings.Contains(im.SelfLink, "-debug") {
-			continue
-		}
-		need[im.SelfLink] = im
-	}
-
-	for _, d := range diskList.Items {
-		if !strings.HasPrefix(d.Name, "basepin-") {
-			continue
-		}
-		if si, ok := need[d.SourceImage]; ok && d.SourceImageId == fmt.Sprint(si.Id) {
-			if c.Verbose {
-				log.Printf("basepin: have %s: %s (%v)\n", d.Name, d.SourceImage, d.SourceImageId)
-			}
-			delete(need, d.SourceImage)
-		}
-	}
-
-	var needed []string
-	for imageName := range need {
-		needed = append(needed, imageName)
-	}
-	sort.Strings(needed)
-	for _, n := range needed {
-		log.Printf("basepin: need %v", n)
-	}
-	for i, imName := range needed {
-		im := need[imName]
-		log.Printf("basepin: (%d/%d) creating %s ...", i+1, len(needed), im.Name)
-		op, err := svc.Disks.Insert(c.Env.ProjectName, c.Env.Zone, &compute.Disk{
-			Description:   "zone-cached basepin image of " + im.Name,
-			Name:          "basepin-" + im.Name + "-" + fmt.Sprint(im.Id),
-			SizeGb:        im.DiskSizeGb,
-			SourceImage:   im.SelfLink,
-			SourceImageId: fmt.Sprint(im.Id),
-			Type:          "https://www.googleapis.com/compute/v1/projects/" + c.Env.ProjectName + "/zones/" + c.Env.Zone + "/diskTypes/pd-ssd",
-		}).Do()
+	for _, zone := range c.Env.VMZones {
+		diskList, err := svc.Disks.List(c.Env.ProjectName, zone).Do()
 		if err != nil {
-			return err
+			return fmt.Errorf("error listing disks in zone %v: %v", zone, err)
 		}
-		if err := c.AwaitOp(ctx, op); err != nil {
-			log.Fatalf("basepin: failed to create: %v", err)
+		if diskList.NextPageToken != "" {
+			return fmt.Errorf("too many disks in %v; pagination not supported (yet?)", zone)
 		}
+
+		need := make(map[string]*compute.Image) // keys like "https://www.googleapis.com/compute/v1/projects/symbolic-datum-552/global/images/linux-buildlet-arm"
+		for _, im := range imList.Items {
+			if strings.Contains(im.SelfLink, "-debug") {
+				continue
+			}
+			need[im.SelfLink] = im
+		}
+
+		for _, d := range diskList.Items {
+			if !strings.HasPrefix(d.Name, "basepin-") {
+				continue
+			}
+			if si, ok := need[d.SourceImage]; ok && d.SourceImageId == fmt.Sprint(si.Id) {
+				if c.Verbose {
+					log.Printf("basepin: have %s: %s (%v)\n", d.Name, d.SourceImage, d.SourceImageId)
+				}
+				delete(need, d.SourceImage)
+			}
+		}
+
+		var needed []string
+		for imageName := range need {
+			needed = append(needed, imageName)
+		}
+		sort.Strings(needed)
+		for _, n := range needed {
+			log.Printf("basepin: need %v disk in %v", n, zone)
+		}
+		for i, imName := range needed {
+			im := need[imName]
+			log.Printf("basepin: (%d/%d) creating %s ...", i+1, len(needed), im.Name)
+			op, err := svc.Disks.Insert(c.Env.ProjectName, zone, &compute.Disk{
+				Description:   "zone-cached basepin image of " + im.Name,
+				Name:          "basepin-" + im.Name + "-" + fmt.Sprint(im.Id),
+				SizeGb:        im.DiskSizeGb,
+				SourceImage:   im.SelfLink,
+				SourceImageId: fmt.Sprint(im.Id),
+				Type:          "https://www.googleapis.com/compute/v1/projects/" + c.Env.ProjectName + "/zones/" + zone + "/diskTypes/pd-ssd",
+			}).Do()
+			if err != nil {
+				return err
+			}
+			if err := c.AwaitOp(ctx, op); err != nil {
+				log.Fatalf("basepin: failed to create: %v", err)
+			}
+		}
+		log.Printf("basepin: created %d images in %v", len(needed), zone)
 	}
-	log.Printf("basepin: created %d images", len(needed))
 	return nil
 }
 
