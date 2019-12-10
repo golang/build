@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package gophers is a list of names, emails, and Github usernames of people
+// Package gophers is a list of names, emails, and GitHub usernames of people
 // from the Go git repos and issue trackers.
 package gophers
 
@@ -15,7 +15,7 @@ import (
 // Person represents a person.
 type Person struct {
 	Name    string   // "Foo Bar"
-	Github  string   // "FooBar" (orig case, no '@')
+	GitHub  string   // "FooBar" (orig case, no '@')
 	Gerrit  string   // "foo@bar.com" (lowercase)
 	Emails  []string // all lower
 	Googler bool     // whether person is (or was) a Googler; determined via heuristics
@@ -35,7 +35,7 @@ func (p *Person) mergeIDs(ids ...string) {
 	for _, id := range ids {
 		switch {
 		case strings.HasPrefix(id, "@"):
-			p.Github = id[1:]
+			p.GitHub = id[1:]
 			idToPerson[strings.ToLower(id)] = p
 		case strings.Contains(id, "@"):
 			email := strings.ToLower(id)
@@ -3172,8 +3172,8 @@ func init() {
 	addPerson("祥曦 徐", "lucas1x1x@gmail.com", "28434@62eb7196-b449-3ce5-99f1-c037f21e1705")
 }
 
-// GithubOfGomoteUser returns the GitHub username for the provided gomote user.
-func GithubOfGomoteUser(gomoteUser string) (githubUser string) {
+// GitHubOfGomoteUser returns the GitHub username for the provided gomote user.
+func GitHubOfGomoteUser(gomoteUser string) (githubUser string) {
 	switch gomoteUser {
 	case "amedee":
 		return "cagedmantis"

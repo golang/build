@@ -566,7 +566,7 @@ func handleSSHPublicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
 	// github user's public ssh keys for authentication. This is
 	// mostly of laziness and pragmatism, not wanting to invent or
 	// maintain a new auth mechanism or password/key registry.
-	githubUser := gophers.GithubOfGomoteUser(user)
+	githubUser := gophers.GitHubOfGomoteUser(user)
 	keys := githubPublicKeys(githubUser)
 	for _, authKey := range keys {
 		if ssh.KeysEqual(key, authKey.PublicKey) {
