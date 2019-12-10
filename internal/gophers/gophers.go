@@ -3174,6 +3174,8 @@ func init() {
 // GithubOfGomoteUser returns the GitHub username for the provided gomote user.
 func GithubOfGomoteUser(gomoteUser string) (githubUser string) {
 	switch gomoteUser {
+	case "amedee":
+		return "cagedmantis"
 	case "austin":
 		return "aclements"
 	case "cbro":
