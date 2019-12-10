@@ -244,6 +244,7 @@ func init() {
 	addPerson("Alexander Orlov", "alexander.orlov@loxal.net", "@loxal")
 	addPerson("Alexander Polcyn", "apolcyn@google.com", "16623@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Alexander Polcyn", "apolcyn@google.com", "@apolcyn")
+	addPerson("Alexander Rakoczy", "alex@golang.org", "rakoczy@google.com", "@toothrot", "32558@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Alexander Reece", "awreece@gmail.com", "@awreece")
 	addPerson("Alexander Shopov", "ash@kambanaria.org", "@alshopov")
 	addPerson("Alexander Zhavnerchik", "alex.vizor@gmail.com", "@alxzh")
@@ -3208,6 +3209,8 @@ func GithubOfGomoteUser(gomoteUser string) (githubUser string) {
 		return "pjweinbgo"
 	case "r":
 		return "robpike"
+	case "rakoczy":
+		return "toothrot"
 	case "rstambler":
 		return "stamblerre"
 	case "sameer":
