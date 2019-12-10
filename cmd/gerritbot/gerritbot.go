@@ -32,6 +32,7 @@ import (
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
+	"golang.org/x/build/repos"
 	"golang.org/x/oauth2"
 )
 
@@ -189,43 +190,16 @@ const (
 )
 
 // Gerrit projects we accept PRs for.
-var gerritProjectWhitelist = map[string]bool{
-	"arch":           true,
-	"benchmarks":     true,
-	"blog":           true,
-	"build":          true,
-	"crypto":         true,
-	"debug":          true,
-	"dl":             true,
-	"example":        true,
-	"exp":            true,
-	"gddo":           true,
-	"go":             true,
-	"image":          true,
-	"lint":           true,
-	"mobile":         true,
-	"mod":            true,
-	"net":            true,
-	"oauth2":         true,
-	"perf":           true,
-	"playground":     true,
-	"proposal":       true,
-	"protobuf":       true,
-	"review":         true,
-	"scratch":        true,
-	"sublime-build":  true,
-	"sublime-config": true,
-	"sync":           true,
-	"sys":            true,
-	"talks":          true,
-	"term":           true,
-	"text":           true,
-	"time":           true,
-	"tools":          true,
-	"tour":           true,
-	"vgo":            true,
-	"website":        true,
-	"xerrors":        true,
+var gerritProjectWhitelist = genProjectWhitelist()
+
+func genProjectWhitelist() map[string]bool {
+	m := make(map[string]bool)
+	for p, r := range repos.ByGerritProject {
+		if r.MirrorToGitHub {
+			m[p] = true
+		}
+	}
+	return m
 }
 
 type cachedPullRequest struct {
