@@ -281,7 +281,6 @@ type gopherbot struct {
 	}
 }
 
-// tasks are executed in order every corpus update.
 var tasks = []struct {
 	name string
 	fn   func(*gopherbot, context.Context) error

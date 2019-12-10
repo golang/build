@@ -13,7 +13,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/go-github/github"
-
 	"golang.org/x/build/devapp/owners"
 	"golang.org/x/build/maintner"
 )
