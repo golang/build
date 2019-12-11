@@ -184,3 +184,13 @@ type BuildletWaitStatus struct {
 	// actually "create" any. (It can just wait for one register
 	// itself)
 }
+
+// ActivePostSubmitBuild is a summary of an active build that the
+// coordinator's doing. Each one is rendered on build.golang.org as a
+// blue gopher which links to StatusURL to watch the build live.
+type ActivePostSubmitBuild struct {
+	Builder   string `json:"builder"`            // "linux-amd64"
+	Commit    string `json:"commit"`             // hash of commit being tested
+	GoCommit  string `json:"goCommit,omitempty"` // hash of Go commit, or empty for the main repo
+	StatusURL string `json:"statusURL"`
+}

@@ -15,43 +15,18 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"golang.org/x/build/app/key"
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/log"
-	"google.golang.org/appengine/memcache"
 )
 
 const (
 	commitsPerPage = 30
 	builderVersion = 1 // must match x/build/cmd/coordinator/dash.go's value
 )
-
-// buildingHandler records that a build is in progress.
-// The data is only stored in memcache and with a timeout. It's assumed
-// that the build system will periodically refresh this if the build
-// is slow.
-func buildingHandler(r *http.Request) (interface{}, error) {
-	if r.Method != "POST" {
-		return nil, errBadMethod(r.Method)
-	}
-	c := contextForRequest(r)
-	key := buildingKey(r.FormValue("hash"), r.FormValue("gohash"), r.FormValue("builder"))
-	err := memcache.Set(c, &memcache.Item{
-		Key:        key,
-		Value:      []byte(r.FormValue("url")),
-		Expiration: 15 * time.Minute,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return map[string]interface{}{
-		"key": key,
-	}, nil
-}
 
 // resultHandler records a build result.
 // It reads a JSON-encoded Result value from the request body,

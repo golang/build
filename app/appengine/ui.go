@@ -29,7 +29,6 @@ import (
 	"google.golang.org/appengine"
 	"google.golang.org/appengine/datastore"
 	"google.golang.org/appengine/log"
-	"google.golang.org/appengine/memcache"
 )
 
 // uiHandler is the HTTP handler for the https://build.golang.org/.
@@ -672,7 +671,9 @@ type CommitInfo struct {
 	// ResultData is a copy of the Commit.ResultData field from datastore.
 	ResultData []string
 
-	buildingURLs map[builderAndGoHash]string
+	// BuildingURLs contains the status URL values for builds that
+	// are currently in progress for this commit.
+	BuildingURLs map[builderAndGoHash]string
 
 	PackagePath string    // (empty for main repo commits)
 	User        string    // "Foo Bar <foo@bar.com>"
@@ -709,36 +710,63 @@ type uiTemplateData struct {
 	Branch     string
 }
 
-// buildingKey returns a memcache key that points to the log URL
-// of an inflight build for the given hash, goHash, and builder.
-func buildingKey(hash, goHash, builder string) string {
-	return fmt.Sprintf("building|%v|%v|%v", hash, goHash, builder)
-}
+var altActiveBuildingForTest func() []types.ActivePostSubmitBuild
 
-// skipMemcacheForTest, if true, disables memcache operations for use in tests.
-var skipMemcacheForTest = false
+// getActiveBuilding returns the builds that coordinator is currently doing.
+// This isn't critical functionality so errors are logged but otherwise ignored for now.
+// Once this is merged into the coordinator we won't need to make an RPC to get
+// this info. See https://github.com/golang/go/issues/34744#issuecomment-563398753.
+func getActiveBuilding(ctx context.Context) (builds []types.ActivePostSubmitBuild) {
+	if f := altActiveBuildingForTest; f != nil {
+		return f()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	req, _ := http.NewRequest("GET", "https://farmer.golang.org/status/post-submit-active.json", nil)
+	req = req.WithContext(ctx)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Warningf(ctx, "getActiveBuilding: Do: %v", err)
+		return
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		log.Warningf(ctx, "getActiveBuilding: %v", res.Status)
+		return
+	}
+	if err := json.NewDecoder(res.Body).Decode(&builds); err != nil {
+		log.Warningf(ctx, "getActiveBuilding: JSON decode: %v", err)
+	}
+	return builds
+}
 
 // populateBuildingURLs populates each commit in Commits' buildingURLs map with the
 // URLs of builds which are currently in progress.
 func (td *uiTemplateData) populateBuildingURLs(ctx context.Context) {
-	if skipMemcacheForTest {
-		return
+	activeBuilding := getActiveBuilding(ctx)
+	// active maps from a build record with its status URL zeroed
+	// out to to the actual value of that status URL.
+	active := map[types.ActivePostSubmitBuild]string{}
+	for _, rec := range activeBuilding {
+		statusURL := rec.StatusURL
+		rec.StatusURL = ""
+		active[rec] = statusURL
 	}
 
-	// need are memcache keys: "building|<hash>|<gohash>|<builder>"
-	// The hash is of the main "go" repo, or the subrepo commit hash.
-	// The gohash is empty for the main repo, else it's the Go hash.
-	var need []string
+	condAdd := func(c *CommitInfo, rec types.ActivePostSubmitBuild) {
+		su, ok := active[rec]
+		if !ok {
+			return
+		}
+		if c.BuildingURLs == nil {
+			c.BuildingURLs = make(map[builderAndGoHash]string)
+		}
+		c.BuildingURLs[builderAndGoHash{rec.Builder, rec.GoCommit}] = su
+	}
 
-	commit := map[string]*CommitInfo{} // commit hash -> Commit
-
-	// Gather pending commits for main repo.
 	for _, b := range td.Builders {
 		for _, c := range td.Commits {
-			if c.Result(b, "") == nil {
-				commit[c.Hash] = c
-				need = append(need, buildingKey(c.Hash, "", b))
-			}
+			condAdd(c, types.ActivePostSubmitBuild{Builder: b, Commit: c.Hash})
 		}
 	}
 
@@ -748,42 +776,14 @@ func (td *uiTemplateData) populateBuildingURLs(ctx context.Context) {
 		for _, b := range td.Builders {
 			for _, pkg := range ts.Packages {
 				c := pkg.Commit
-				commit[c.Hash] = c
-				if c.Result(b, goHash) == nil {
-					need = append(need, buildingKey(c.Hash, goHash, b))
-				}
+				condAdd(c, types.ActivePostSubmitBuild{
+					Builder:  b,
+					Commit:   c.Hash,
+					GoCommit: goHash,
+				})
 			}
 		}
 	}
-
-	if len(need) == 0 {
-		return
-	}
-
-	m, err := memcache.GetMulti(ctx, need)
-	if err != nil {
-		// oh well. this is a cute non-critical feature anyway.
-		log.Debugf(ctx, "GetMulti of building keys: %v", err)
-		return
-	}
-	for k, it := range m {
-		f := strings.SplitN(k, "|", 4)
-		if len(f) != 4 {
-			continue
-		}
-		hash, goHash, builder := f[1], f[2], f[3]
-		c, ok := commit[hash]
-		if !ok {
-			continue
-		}
-		m := c.buildingURLs
-		if m == nil {
-			m = make(map[builderAndGoHash]string)
-			c.buildingURLs = m
-		}
-		m[builderAndGoHash{builder, goHash}] = string(it.Value)
-	}
-
 }
 
 var uiTemplate = template.Must(

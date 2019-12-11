@@ -128,45 +128,6 @@ func recordResult(br buildgo.BuilderRev, ok bool, buildLog string, runTime time.
 	return nil
 }
 
-// pingDashboard runs in its own goroutine, created periodically to
-// POST to build.golang.org/building to let it know that we're still working on a build.
-func (st *buildStatus) pingDashboard() {
-	if st.conf.IsTryOnly() {
-		// Builders that are trybot-only don't appear on the dashboard.
-		return
-	}
-	if *mode == "dev" {
-		log.Print("In dev mode, not pinging dashboard")
-		return
-	}
-	st.mu.Lock()
-	logsURL := st.logsURLLocked()
-	st.mu.Unlock()
-	args := url.Values{
-		"builder": []string{st.Name},
-		"key":     []string{builderKey(st.Name)},
-		"hash":    []string{st.Rev},
-		"url":     []string{logsURL},
-	}
-	if st.IsSubrepo() {
-		args.Set("hash", st.SubRev)
-		args.Set("gohash", st.Rev)
-	}
-	u := buildEnv.DashBase() + "building?" + args.Encode()
-	for {
-		st.mu.Lock()
-		done := st.done
-		st.mu.Unlock()
-		if !done.IsZero() {
-			return
-		}
-		if res, _ := http.PostForm(u, nil); res != nil {
-			res.Body.Close()
-		}
-		time.Sleep(60 * time.Second)
-	}
-}
-
 func builderKey(builder string) string {
 	master := masterKey()
 	if len(master) == 0 {

@@ -24,7 +24,6 @@ var maintnerClient = createMaintnerClient()
 
 func main() {
 	// authenticated handlers
-	handleFunc("/building", AuthHandler(buildingHandler))          // called by coordinator during builds
 	handleFunc("/clear-results", AuthHandler(clearResultsHandler)) // called by x/build/cmd/retrybuilds
 	handleFunc("/result", AuthHandler(resultHandler))              // called by coordinator after build
 

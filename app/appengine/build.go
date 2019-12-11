@@ -234,7 +234,7 @@ func (c *CommitInfo) Result(builder, goHash string) *Result {
 	if r := result(c.ResultData, c.Hash, c.PackagePath, builder, goHash); r != nil {
 		return r
 	}
-	if u, ok := c.buildingURLs[builderAndGoHash{builder, goHash}]; ok {
+	if u, ok := c.BuildingURLs[builderAndGoHash{builder, goHash}]; ok {
 		return &Result{
 			Builder:     builder,
 			BuildingURL: u,

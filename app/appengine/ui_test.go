@@ -13,22 +13,21 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/maintner/maintnerd/apipb"
+	"golang.org/x/build/types"
 )
 
 func TestUITemplateDataBuilder(t *testing.T) {
 	// Thin the list of builders to make this test's data lighter
 	// and require less maintenance keeping it in sync.
-	// Also disable use of memcache.
 	origBuilders := dashboard.Builders
 	defer func() {
 		dashboard.Builders = origBuilders
-		skipMemcacheForTest = false
+		altActiveBuildingForTest = nil
 	}()
 	dashboard.Builders = map[string]*dashboard.BuildConfig{
 		"linux-amd64": origBuilders["linux-amd64"],
 		"linux-386":   origBuilders["linux-386"],
 	}
-	skipMemcacheForTest = true
 
 	tests := []struct {
 		name           string                   // test subname
@@ -36,7 +35,8 @@ func TestUITemplateDataBuilder(t *testing.T) {
 		req            *apipb.DashboardRequest  // what we pretend we sent to maintner
 		res            *apipb.DashboardResponse // what we pretend we got back from maintner
 		testCommitData map[string]*Commit       // what we pretend we loaded from datastore
-		want           *uiTemplateData          // what we're hoping we generated for the view/template
+		activeBuilds   []types.ActivePostSubmitBuild
+		want           *uiTemplateData // what we're hoping we generated for the view/template
 	}{
 		// Basic test.
 		{
@@ -69,6 +69,9 @@ func TestUITemplateDataBuilder(t *testing.T) {
 						"openbsd-amd64|true||", // pretend openbsd-amd64 passed (and thus exists)
 					},
 				},
+			},
+			activeBuilds: []types.ActivePostSubmitBuild{
+				{Builder: "linux-amd64", Commit: "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac", StatusURL: "http://fake-status"},
 			},
 			res: &apipb.DashboardResponse{
 				Branches: []string{"release.foo", "release.bar", "dev.blah"},
@@ -111,7 +114,8 @@ func TestUITemplateDataBuilder(t *testing.T) {
 						ResultData: []string{
 							"openbsd-amd64|true||",
 						},
-						Branch: "master",
+						Branch:       "master",
+						BuildingURLs: map[builderAndGoHash]string{{builder: "linux-amd64"}: "http://fake-status"},
 					},
 					{
 						Hash:   "ffffffffffffffffffffffffffffffffffffffff",
@@ -311,6 +315,9 @@ func TestUITemplateDataBuilder(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			altActiveBuildingForTest = func() (builds []types.ActivePostSubmitBuild) {
+				return tt.activeBuilds
+			}
 			tb := newUITemplateDataBuilder(tt.view, tt.req, tt.res)
 			if tt.testCommitData != nil {
 				tb.testCommitData = tt.testCommitData

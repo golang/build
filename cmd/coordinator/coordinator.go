@@ -310,6 +310,7 @@ func main() {
 	http.HandleFunc("/try", serveTryStatus(false))
 	http.HandleFunc("/try.json", serveTryStatus(true))
 	http.HandleFunc("/status/reverse.json", reversePool.ServeReverseStatusJSON)
+	http.HandleFunc("/status/post-submit-active.json", handlePostSubmitActiveJSON)
 	http.Handle("/buildlet/create", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletCreate)))
 	http.Handle("/buildlet/list", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletList)))
 	go func() {
@@ -3496,7 +3497,6 @@ type buildStatus struct {
 	done            time.Time        // finished running
 	succeeded       bool             // set when done
 	output          livelog.Buffer   // stdout and stderr
-	startedPinging  bool             // started pinging the go dashboard
 	events          []eventAndTime
 	useSnapshotMemo *bool // if non-nil, memoized result of useSnapshot
 }
@@ -3647,13 +3647,6 @@ func (st *buildStatus) LogEventTime(event string, optText ...string) {
 	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	switch event {
-	case "finish_get_buildlet", "create_gce_buildlet":
-		if !st.startedPinging {
-			st.startedPinging = true
-			go st.pingDashboard()
-		}
-	}
 	var text string
 	if len(optText) > 0 {
 		text = optText[0]
@@ -4007,4 +4000,42 @@ func latestTryMessage(work *apipb.GerritTryWorkItem) string {
 		}
 	}
 	return ""
+}
+
+// handlePostSubmitActiveJSON serves JSON with the the info for which builds
+// are currently building. The build.golang.org dashboard renders these as little
+// blue gophers that link to the each build's status.
+// TODO: this a transitional step on our way towards merging build.golang.org into
+// this codebase; see https://github.com/golang/go/issues/34744#issuecomment-563398753.
+func handlePostSubmitActiveJSON(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(activePostSubmitBuilds())
+}
+
+func activePostSubmitBuilds() []types.ActivePostSubmitBuild {
+	var ret []types.ActivePostSubmitBuild
+	statusMu.Lock()
+	defer statusMu.Unlock()
+	for _, st := range status {
+		if st.isTry() || !st.HasBuildlet() {
+			continue
+		}
+		st.mu.Lock()
+		logsURL := st.logsURLLocked()
+		st.mu.Unlock()
+
+		var commit, goCommit string
+		if st.IsSubrepo() {
+			commit, goCommit = st.SubRev, st.Rev
+		} else {
+			commit = st.Rev
+		}
+		ret = append(ret, types.ActivePostSubmitBuild{
+			StatusURL: logsURL,
+			Builder:   st.Name,
+			Commit:    commit,
+			GoCommit:  goCommit,
+		})
+	}
+	return ret
 }
