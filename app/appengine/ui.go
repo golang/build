@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,16 +20,13 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/datastore"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/repos"
 	"golang.org/x/build/types"
 	"grpc.go4.org"
 	"grpc.go4.org/codes"
-
-	"google.golang.org/appengine"
-	"google.golang.org/appengine/datastore"
-	"google.golang.org/appengine/log"
 )
 
 // uiHandler is the HTTP handler for the https://build.golang.org/.
@@ -49,7 +47,7 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 	// coordinator too, do that concurrently in an
 	// x/sync/errgroup.Group here. But for now we're only doing
 	// one RPC call.
-	ctx := goDash.Context(appengine.NewContext(r))
+	ctx := r.Context()
 	dashRes, err := maintnerClient.GetDashboard(ctx, dashReq)
 	if err != nil {
 		http.Error(w, "maintner.GetDashboard: "+err.Error(), httpStatusOfErr(err))
@@ -165,7 +163,7 @@ func (tb *uiTemplateDataBuilder) loadDatastoreCommits(ctx context.Context, want 
 		key := (&Commit{
 			PackagePath: k.packagePath,
 			Hash:        k.commit,
-		}).Key(ctx)
+		}).Key()
 		keys = append(keys, key)
 	}
 	commits, err := fetchCommits(ctx, keys)
@@ -504,7 +502,7 @@ func fetchCommits(ctx context.Context, keys []*datastore.Key) ([]*Commit, error)
 		out[i] = new(Commit)
 	}
 
-	err := datastore.GetMulti(ctx, keys, out)
+	err := datastoreClient.GetMulti(ctx, keys, out)
 	err = filterDatastoreError(err)
 	err = filterNoSuchEntity(err)
 	if err != nil {
@@ -726,16 +724,16 @@ func getActiveBuilding(ctx context.Context) (builds []types.ActivePostSubmitBuil
 	req = req.WithContext(ctx)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Warningf(ctx, "getActiveBuilding: Do: %v", err)
+		log.Printf("getActiveBuilding: Do: %v", err)
 		return
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		log.Warningf(ctx, "getActiveBuilding: %v", res.Status)
+		log.Printf("getActiveBuilding: %v", res.Status)
 		return
 	}
 	if err := json.NewDecoder(res.Body).Decode(&builds); err != nil {
-		log.Warningf(ctx, "getActiveBuilding: JSON decode: %v", err)
+		log.Printf("getActiveBuilding: JSON decode: %v", err)
 	}
 	return builds
 }

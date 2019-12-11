@@ -15,15 +15,20 @@ import (
 	pathpkg "path"
 	"strings"
 
+	"cloud.google.com/go/datastore"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/loghash"
-	"google.golang.org/appengine"
-	"google.golang.org/appengine/datastore"
 )
 
 const (
 	maxDatastoreStringLen = 500
 )
+
+func dsKey(kind, name string, parent *datastore.Key) *datastore.Key {
+	dk := datastore.NameKey(kind, name, parent)
+	dk.Namespace = "Git"
+	return dk
+}
 
 // A Package describes a package that is listed on the dashboard.
 type Package struct {
@@ -35,12 +40,12 @@ func (p *Package) String() string {
 	return fmt.Sprintf("%s: %q", p.Path, p.Name)
 }
 
-func (p *Package) Key(c context.Context) *datastore.Key {
+func (p *Package) Key() *datastore.Key {
 	key := p.Path
 	if key == "" {
 		key = "go"
 	}
-	return datastore.NewKey(c, "Package", key, 0, nil)
+	return dsKey("Package", key, nil)
 }
 
 // filterDatastoreError returns err, unless it's just about datastore
@@ -71,15 +76,15 @@ func filterNoSuchEntity(err error) error {
 }
 
 // filterAppEngineError returns err, unless ignore(err) is true,
-// in which case it returns nil. If err is an appengine.MultiError,
+// in which case it returns nil. If err is an datastore.MultiError,
 // it returns either nil (if all errors are ignored) or a deep copy
 // with the non-ignored errors.
 func filterAppEngineError(err error, ignore func(error) bool) error {
 	if err == nil || ignore(err) {
 		return nil
 	}
-	if me, ok := err.(appengine.MultiError); ok {
-		me2 := make(appengine.MultiError, 0, len(me))
+	if me, ok := err.(datastore.MultiError); ok {
+		me2 := make(datastore.MultiError, 0, len(me))
 		for _, err := range me {
 			if e2 := filterAppEngineError(err, ignore); e2 != nil {
 				me2 = append(me2, e2)
@@ -94,18 +99,18 @@ func filterAppEngineError(err error, ignore func(error) bool) error {
 }
 
 // getOrMakePackageInTx fetches a Package by path from the datastore,
-// creating it if necessary. It should be run in a transaction.
-func getOrMakePackageInTx(c context.Context, path string) (*Package, error) {
+// creating it if necessary.
+func getOrMakePackageInTx(ctx context.Context, tx *datastore.Transaction, path string) (*Package, error) {
 	p := &Package{Path: path}
 	if path != "" {
 		p.Name = pathpkg.Base(path)
 	} else {
 		p.Name = "Go"
 	}
-	err := datastore.Get(c, p.Key(c), p)
+	err := tx.Get(p.Key(), p)
 	err = filterDatastoreError(err)
 	if err == datastore.ErrNoSuchEntity {
-		if _, err := datastore.Put(c, p.Key(c), p); err != nil {
+		if _, err := tx.Put(p.Key(), p); err != nil {
 			return nil, err
 		}
 		return p, nil
@@ -136,13 +141,13 @@ type Commit struct {
 	ResultData []string `datastore:",noindex"`
 }
 
-func (com *Commit) Key(c context.Context) *datastore.Key {
+func (com *Commit) Key() *datastore.Key {
 	if com.Hash == "" {
 		panic("tried Key on Commit with empty Hash")
 	}
 	p := Package{Path: com.PackagePath}
 	key := com.PackagePath + "|" + com.Hash
-	return datastore.NewKey(c, "Commit", key, 0, p.Key(c))
+	return dsKey("Commit", key, p.Key())
 }
 
 // Valid reports whether the commit is valid.
@@ -151,24 +156,14 @@ func (c *Commit) Valid() bool {
 	return validHash(c.Hash)
 }
 
-func putCommit(c context.Context, com *Commit) error {
-	if !com.Valid() {
-		return errors.New("putting Commit: commit is not valid")
-	}
-	if _, err := datastore.Put(c, com.Key(c), com); err != nil {
-		return fmt.Errorf("putting Commit: %v", err)
-	}
-	return nil
-}
-
 // each result line is approx 105 bytes. This constant is a tradeoff between
 // build history and the AppEngine datastore limit of 1mb.
 const maxResults = 1000
 
-// AddResult adds the denormalized Result data to the Commit's ResultData field.
-// It must be called from inside a datastore transaction.
-func (com *Commit) AddResult(c context.Context, r *Result) error {
-	err := datastore.Get(c, com.Key(c), com)
+// AddResult adds the denormalized Result data to the Commit's
+// ResultData field.
+func (com *Commit) AddResult(tx *datastore.Transaction, r *Result) error {
+	err := tx.Get(com.Key(), com)
 	if err == datastore.ErrNoSuchEntity {
 		// If it doesn't exist, we create it below.
 	} else {
@@ -190,7 +185,13 @@ func (com *Commit) AddResult(c context.Context, r *Result) error {
 		// otherwise, add the new result data for this builder.
 		com.ResultData = trim(append(com.ResultData, r.Data()), maxResults)
 	}
-	return putCommit(c, com)
+	if !com.Valid() {
+		return errors.New("putting Commit: commit is not valid")
+	}
+	if _, err := tx.Put(com.Key(), com); err != nil {
+		return fmt.Errorf("putting Commit: %v", err)
+	}
+	return nil
 }
 
 // removeResult removes the denormalized Result data from the ResultData field
@@ -372,10 +373,10 @@ type Result struct {
 	RunTime int64 // time to build+test in nanoseconds
 }
 
-func (r *Result) Key(c context.Context) *datastore.Key {
+func (r *Result) Key() *datastore.Key {
 	p := Package{Path: r.PackagePath}
 	key := r.Builder + "|" + r.PackagePath + "|" + r.Hash + "|" + r.GoHash
-	return datastore.NewKey(c, "Result", key, 0, p.Key(c))
+	return dsKey("Result", key, p.Key())
 }
 
 func (r *Result) Valid() error {
@@ -418,7 +419,7 @@ func PutLog(c context.Context, text string) (hash string, err error) {
 	io.WriteString(z, text)
 	z.Close()
 	hash = loghash.New(text)
-	key := datastore.NewKey(c, "Log", hash, 0, nil)
-	_, err = datastore.Put(c, key, &Log{b.Bytes()})
+	key := dsKey("Log", hash, nil)
+	_, err = datastoreClient.Put(c, key, &Log{b.Bytes()})
 	return
 }

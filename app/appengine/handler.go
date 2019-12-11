@@ -12,15 +12,14 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"cloud.google.com/go/datastore"
 	"golang.org/x/build/app/key"
-	"google.golang.org/appengine"
-	"google.golang.org/appengine/datastore"
-	"google.golang.org/appengine/log"
 )
 
 const (
@@ -44,7 +43,7 @@ func resultHandler(r *http.Request) (interface{}, error) {
 			builderVersion, v)
 	}
 
-	c := contextForRequest(r)
+	ctx := r.Context()
 	res := new(Result)
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(res); err != nil {
@@ -55,45 +54,45 @@ func resultHandler(r *http.Request) (interface{}, error) {
 	}
 	// store the Log text if supplied
 	if len(res.Log) > 0 {
-		hash, err := PutLog(c, res.Log)
+		hash, err := PutLog(ctx, res.Log)
 		if err != nil {
 			return nil, fmt.Errorf("putting Log: %v", err)
 		}
 		res.LogHash = hash
 	}
-	tx := func(c context.Context) error {
-		if _, err := getOrMakePackageInTx(c, res.PackagePath); err != nil {
+	tx := func(tx *datastore.Transaction) error {
+		if _, err := getOrMakePackageInTx(ctx, tx, res.PackagePath); err != nil {
 			return fmt.Errorf("GetPackage: %v", err)
 		}
 		// put Result
-		if _, err := datastore.Put(c, res.Key(c), res); err != nil {
+		if _, err := tx.Put(res.Key(), res); err != nil {
 			return fmt.Errorf("putting Result: %v", err)
 		}
 		// add Result to Commit
 		com := &Commit{PackagePath: res.PackagePath, Hash: res.Hash}
-		if err := com.AddResult(c, res); err != nil {
+		if err := com.AddResult(tx, res); err != nil {
 			return fmt.Errorf("AddResult: %v", err)
 		}
 		return nil
 	}
-	return nil, datastore.RunInTransaction(c, tx, nil)
+	_, err := datastoreClient.RunInTransaction(ctx, tx)
+	return nil, err
 }
 
 // logHandler displays log text for a given hash.
 // It handles paths like "/log/hash".
 func logHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "text/plain; charset=utf-8")
-	c := contextForRequest(r)
+	c := r.Context()
 	hash := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
-	key := datastore.NewKey(c, "Log", hash, 0, nil)
+	key := dsKey("Log", hash, nil)
 	l := new(Log)
-	if err := datastore.Get(c, key, l); err != nil {
+	if err := datastoreClient.Get(c, key, l); err != nil {
 		if err == datastore.ErrNoSuchEntity {
 			// Fall back to default namespace;
 			// maybe this was on the old dashboard.
-			c := appengine.NewContext(r)
-			key := datastore.NewKey(c, "Log", hash, 0, nil)
-			err = datastore.Get(c, key, l)
+			key := dsKey("Log", hash, nil)
+			err = datastoreClient.Get(c, key, l)
 		}
 		if err != nil {
 			logErr(w, r, err)
@@ -123,14 +122,14 @@ func clearResultsHandler(r *http.Request) (interface{}, error) {
 		return nil, errors.New("missing 'hash'")
 	}
 
-	ctx := contextForRequest(r)
+	ctx := r.Context()
 
-	err := datastore.RunInTransaction(ctx, func(ctx context.Context) error {
+	_, err := datastoreClient.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
 		c := &Commit{
 			PackagePath: "", // TODO(adg): support clearing sub-repos
 			Hash:        hash,
 		}
-		err := datastore.Get(ctx, c.Key(ctx), c)
+		err := tx.Get(c.Key(), c)
 		err = filterDatastoreError(err)
 		if err == datastore.ErrNoSuchEntity {
 			// Doesn't exist, so no build to clear.
@@ -146,12 +145,12 @@ func clearResultsHandler(r *http.Request) (interface{}, error) {
 			return nil
 		}
 		c.RemoveResult(r)
-		_, err = datastore.Put(ctx, c.Key(ctx), c)
+		_, err = tx.Put(c.Key(), c)
 		if err != nil {
 			return err
 		}
-		return datastore.Delete(ctx, r.Key(ctx))
-	}, nil)
+		return tx.Delete(r.Key())
+	})
 	return nil, err
 }
 
@@ -189,7 +188,7 @@ func builderKeyRevoked(builder string) bool {
 // supplied key and builder query parameters.
 func AuthHandler(h dashHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		c := contextForRequest(r)
+		c := r.Context()
 
 		// Put the URL Query values into r.Form to avoid parsing the
 		// request body when calling r.FormValue.
@@ -213,12 +212,12 @@ func AuthHandler(h dashHandler) http.HandlerFunc {
 		// Write JSON response.
 		dashResp := &dashResponse{Response: resp}
 		if err != nil {
-			log.Errorf(c, "%v", err)
+			log.Printf("%v", err)
 			dashResp.Error = err.Error()
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if err = json.NewEncoder(w).Encode(dashResp); err != nil {
-			log.Criticalf(c, "encoding response: %v", err)
+			log.Printf("encoding response: %v", err)
 		}
 	}
 }
@@ -241,24 +240,19 @@ func validKey(c context.Context, key, builder string) bool {
 }
 
 func isMasterKey(c context.Context, k string) bool {
-	return appengine.IsDevAppServer() || k == key.Secret(c)
+	return k == key.Secret(datastoreClient, c)
 }
 
 func builderKey(c context.Context, builder string) string {
-	h := hmac.New(md5.New, []byte(key.Secret(c)))
+	h := hmac.New(md5.New, []byte(key.Secret(datastoreClient, c)))
 	h.Write([]byte(builder))
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 func logErr(w http.ResponseWriter, r *http.Request, err error) {
-	c := contextForRequest(r)
-	log.Errorf(c, "Error: %v", err)
+	log.Printf("Error: %v", err)
 	w.WriteHeader(http.StatusInternalServerError)
 	fmt.Fprint(w, "Error: ", html.EscapeString(err.Error()))
-}
-
-func contextForRequest(r *http.Request) context.Context {
-	return goDash.Context(appengine.NewContext(r))
 }
 
 // limitStringLength essentially does return s[:max],

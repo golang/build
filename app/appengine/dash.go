@@ -13,14 +13,17 @@ import (
 	"sort"
 	"strings"
 
+	"cloud.google.com/go/datastore"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/repos"
 	"golang.org/x/net/http2"
-	"google.golang.org/appengine"
 	"grpc.go4.org" // simpler, uses x/net/http2.Transport; we use this elsewhere in x/build
 )
 
-var maintnerClient = createMaintnerClient()
+var (
+	maintnerClient  = createMaintnerClient()
+	datastoreClient = createDatastoreClient()
+)
 
 func main() {
 	// authenticated handlers
@@ -40,7 +43,16 @@ func main() {
 		http.Redirect(w, r, "https://golang.org/favicon.ico", http.StatusFound)
 	})
 
-	appengine.Main()
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+		log.Printf("Defaulting to port %s", port)
+	}
+
+	log.Printf("Listening on port %s", port)
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func staticDir() string {
@@ -48,6 +60,22 @@ func staticDir() string {
 		return "static"
 	}
 	return "app/appengine/static"
+}
+
+func createDatastoreClient() *datastore.Client {
+	// First try with an empty project ID, so $DATASTORE_PROJECT_ID will be respected
+	// if set.
+	c, err := datastore.NewClient(context.Background(), "")
+	if err == nil {
+		return c
+	}
+	// Otherwise auto-detect it from the environment (that is,
+	// work automatically in prod).
+	c, err = datastore.NewClient(context.Background(), datastore.DetectProjectID)
+	if err != nil {
+		log.Fatalf("datastore.NewClient: %v", err)
+	}
+	return c
 }
 
 func createMaintnerClient() apipb.MaintnerServiceClient {
@@ -101,16 +129,6 @@ func (d *Dashboard) packageWithPath(importPath string) *Package {
 		}
 	}
 	return nil
-}
-
-// Context returns a namespaced context for this dashboard, or panics if it
-// fails to create a new context.
-func (d *Dashboard) Context(ctx context.Context) context.Context {
-	n, err := appengine.Namespace(ctx, "Git")
-	if err != nil {
-		panic(err)
-	}
-	return n
 }
 
 // goDash is the dashboard for the main go repository.
