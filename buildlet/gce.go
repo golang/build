@@ -195,16 +195,12 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 		Scheduling: &compute.Scheduling{Preemptible: false},
 	}
 
-	// Container builders use the COS image, which defaults to
-	// logging to Cloud Logging, which requires the default
-	// service account. So enable it when needed.
-	// TODO: reduce this scope in the future, when we go wild with IAM.
-	if hconf.IsContainer() {
+	// Container builders use the COS image, which defaults to logging to Cloud Logging.
+	// Permission is granted to this service account.
+	if hconf.IsContainer() && buildEnv.COSServiceAccount != "" {
 		instance.ServiceAccounts = []*compute.ServiceAccount{
 			{
-				// This funky email address is the
-				// "default service account" for GCE VMs:
-				Email:  fmt.Sprintf("%v-compute@developer.gserviceaccount.com", buildEnv.ProjectNumber),
+				Email:  buildEnv.COSServiceAccount,
 				Scopes: []string{compute.CloudPlatformScope},
 			},
 		}

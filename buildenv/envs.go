@@ -126,6 +126,11 @@ type Environment struct {
 	// golang.org/x/crypto/acme/autocert (LetsEncrypt) cache.
 	// If empty, LetsEncrypt isn't used.
 	AutoCertCacheBucket string
+
+	// COSServiceAccount (Container Optimized OS) is the service
+	// account that will be assigned to a VM instance that hosts
+	// a container when the instance is created.
+	COSServiceAccount string
 }
 
 // ComputePrefix returns the URI prefix for Compute Engine resources in a project.
@@ -244,12 +249,13 @@ var Staging = &Environment{
 		Name:        "go",
 		MachineType: "n1-standard-4",
 	},
-	DashURL:         "https://go-dashboard-dev.appspot.com/",
-	PerfDataURL:     "https://perfdata.golang.org",
-	CoordinatorName: "farmer",
-	BuildletBucket:  "dev-go-builder-data",
-	LogBucket:       "dev-go-build-log",
-	SnapBucket:      "dev-go-build-snap",
+	DashURL:           "https://go-dashboard-dev.appspot.com/",
+	PerfDataURL:       "https://perfdata.golang.org",
+	CoordinatorName:   "farmer",
+	BuildletBucket:    "dev-go-builder-data",
+	LogBucket:         "dev-go-build-log",
+	SnapBucket:        "dev-go-build-snap",
+	COSServiceAccount: "linux-cos-builders@go-dashboard-dev.iam.gserviceaccount.com",
 }
 
 // Production defines the environment that the coordinator and build
@@ -282,6 +288,7 @@ var Production = &Environment{
 	LogBucket:           "go-build-log",
 	SnapBucket:          "go-build-snap",
 	AutoCertCacheBucket: "farmer-golang-org-autocert-cache",
+	COSServiceAccount:   "linux-cos-builders@symbolic-datum-552.iam.gserviceaccount.com",
 }
 
 var Development = &Environment{
