@@ -25,6 +25,7 @@ import (
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/repos"
 	"golang.org/x/build/types"
+	"golang.org/x/sync/errgroup"
 	"grpc.go4.org"
 	"grpc.go4.org/codes"
 )
@@ -43,18 +44,34 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: if we end up fetching the building state from the
-	// coordinator too, do that concurrently in an
-	// x/sync/errgroup.Group here. But for now we're only doing
-	// one RPC call.
 	ctx := r.Context()
-	dashRes, err := maintnerClient.GetDashboard(ctx, dashReq)
-	if err != nil {
+	var (
+		dashRes      *apipb.DashboardResponse
+		activeBuilds []types.ActivePostSubmitBuild
+	)
+	var rpcs errgroup.Group
+	rpcs.Go(func() error {
+		var err error
+		dashRes, err = maintnerClient.GetDashboard(ctx, dashReq)
+		return err
+	})
+	if view.ShowsActiveBuilds() {
+		rpcs.Go(func() error {
+			activeBuilds = getActiveBuilds(ctx)
+			return nil
+		})
+	}
+	if err := rpcs.Wait(); err != nil {
 		http.Error(w, "maintner.GetDashboard: "+err.Error(), httpStatusOfErr(err))
 		return
 	}
 
-	tb := newUITemplateDataBuilder(view, dashReq, dashRes)
+	tb := &uiTemplateDataBuilder{
+		view:         view,
+		req:          dashReq,
+		res:          dashRes,
+		activeBuilds: activeBuilds,
+	}
 	data, err := tb.buildTemplateData(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -67,6 +84,9 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 // See viewForRequest.
 type dashboardView interface {
 	ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiTemplateData)
+	// ShowsActiveBuilds reports whether this view uses
+	// information about the currently active builds.
+	ShowsActiveBuilds() bool
 }
 
 // viewForRequest selects the dashboardView based on the HTTP
@@ -96,25 +116,15 @@ type commitInPackage struct {
 // dashboardViews. That is, it maps the maintner protobuf response to
 // the data structure needed by the dashboardView/template.
 type uiTemplateDataBuilder struct {
-	view dashboardView
-	req  *apipb.DashboardRequest
-	res  *apipb.DashboardResponse
+	view         dashboardView
+	req          *apipb.DashboardRequest
+	res          *apipb.DashboardResponse
+	activeBuilds []types.ActivePostSubmitBuild // optional; for blue gopher links
 
 	// testCommitData, if non-nil, provides an alternate data
 	// source to use for testing instead of making real datastore
 	// calls. The keys are stringified datastore.Keys.
 	testCommitData map[string]*Commit
-}
-
-// newUITemplateDataBuilder returns a new uiTemplateDataBuilder for a
-// given view, dashboard request, and dashboard response from
-// maintner.
-func newUITemplateDataBuilder(view dashboardView, req *apipb.DashboardRequest, res *apipb.DashboardResponse) *uiTemplateDataBuilder {
-	return &uiTemplateDataBuilder{
-		view: view,
-		req:  req,
-		res:  res,
-	}
 }
 
 // getCommitsToLoad returns a set (all values are true) of which commits to load from
@@ -324,9 +334,10 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context) (*uiTemp
 		if tb.req.Repo == "" && tb.req.Branch == "master" {
 			data.Builders = onlyGoMasterBuilders(data.Builders)
 		}
-
+	}
+	if tb.view.ShowsActiveBuilds() {
 		// Populate building URLs for the HTML UI only.
-		data.populateBuildingURLs(ctx)
+		data.populateBuildingURLs(ctx, tb.activeBuilds)
 	}
 
 	return data, nil
@@ -335,6 +346,7 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context) (*uiTemp
 // htmlView renders the HTML (default) form of https://build.golang.org/ with no mode parameter.
 type htmlView struct{}
 
+func (htmlView) ShowsActiveBuilds() bool { return true }
 func (htmlView) ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 	var buf bytes.Buffer
 	if err := uiTemplate.Execute(&buf, data); err != nil {
@@ -398,6 +410,7 @@ func cleanTitle(title, viewBranch string) string {
 //    hash builder failure-url
 type failuresView struct{}
 
+func (failuresView) ShowsActiveBuilds() bool { return false }
 func (failuresView) ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 	w.Header().Set("Content-Type", "text/plain")
 	for _, c := range data.Commits {
@@ -416,6 +429,7 @@ func (failuresView) ServeDashboard(w http.ResponseWriter, r *http.Request, data 
 // The output is a types.BuildStatus JSON object.
 type jsonView struct{}
 
+func (jsonView) ShowsActiveBuilds() bool { return false }
 func (jsonView) ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 	// cell returns one of "" (no data), "ok", or a failure URL.
 	cell := func(res *Result) string {
@@ -708,44 +722,38 @@ type uiTemplateData struct {
 	Branch     string
 }
 
-var altActiveBuildingForTest func() []types.ActivePostSubmitBuild
-
-// getActiveBuilding returns the builds that coordinator is currently doing.
+// getActiveBuilds returns the builds that coordinator is currently doing.
 // This isn't critical functionality so errors are logged but otherwise ignored for now.
 // Once this is merged into the coordinator we won't need to make an RPC to get
 // this info. See https://github.com/golang/go/issues/34744#issuecomment-563398753.
-func getActiveBuilding(ctx context.Context) (builds []types.ActivePostSubmitBuild) {
-	if f := altActiveBuildingForTest; f != nil {
-		return f()
-	}
+func getActiveBuilds(ctx context.Context) (builds []types.ActivePostSubmitBuild) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	req, _ := http.NewRequest("GET", "https://farmer.golang.org/status/post-submit-active.json", nil)
 	req = req.WithContext(ctx)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Printf("getActiveBuilding: Do: %v", err)
+		log.Printf("getActiveBuilds: Do: %v", err)
 		return
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		log.Printf("getActiveBuilding: %v", res.Status)
+		log.Printf("getActiveBuilds: %v", res.Status)
 		return
 	}
 	if err := json.NewDecoder(res.Body).Decode(&builds); err != nil {
-		log.Printf("getActiveBuilding: JSON decode: %v", err)
+		log.Printf("getActiveBuilds: JSON decode: %v", err)
 	}
 	return builds
 }
 
 // populateBuildingURLs populates each commit in Commits' buildingURLs map with the
 // URLs of builds which are currently in progress.
-func (td *uiTemplateData) populateBuildingURLs(ctx context.Context) {
-	activeBuilding := getActiveBuilding(ctx)
+func (td *uiTemplateData) populateBuildingURLs(ctx context.Context, activeBuilds []types.ActivePostSubmitBuild) {
 	// active maps from a build record with its status URL zeroed
 	// out to to the actual value of that status URL.
 	active := map[types.ActivePostSubmitBuild]string{}
-	for _, rec := range activeBuilding {
+	for _, rec := range activeBuilds {
 		statusURL := rec.StatusURL
 		rec.StatusURL = ""
 		active[rec] = statusURL
