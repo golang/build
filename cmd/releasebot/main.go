@@ -546,14 +546,25 @@ func (w *Work) checkDocs() {
 		w.logError("doc/contrib.html does not list major version %s", major)
 	}
 
-	// Check that the release is listed on the release history page.
-	data, err = ioutil.ReadFile(filepath.Join(w.Dir, "gitwork", "doc/devel/release.html"))
-	if err != nil {
-		w.log.Panic(err)
+	// TODO: Delete this block after Go 1.14 is released (and Go 1.12 is no longer supported),
+	//       or consider moving it into a third -mode=wrapup. See golang.org/issue/36086.
+	if w.activeReleaseHistory() {
+		// Check that the release is listed on the release history page.
+		data, err := ioutil.ReadFile(filepath.Join(w.Dir, "gitwork", "doc/devel/release.html"))
+		if err != nil {
+			w.log.Panic(err)
+		}
+		if !strings.Contains(string(data), w.Version+" (released ") {
+			w.logError("doc/devel/release.html does not document %s", w.Version)
+		}
 	}
-	if !strings.Contains(string(data), w.Version+" (released ") {
-		w.logError("doc/devel/release.html does not document %s", w.Version)
-	}
+}
+
+// activeReleaseHistory reports whether this release needs to include
+// an up-to-date release history page. We've stopped doing this for
+// Go 1.13 and newer. See golang.org/issue/36075.
+func (w *Work) activeReleaseHistory() bool {
+	return major(w.Version) == "go1.12"
 }
 
 // major takes a go version like "go1.5", "go1.5.1", "go1.5.2", etc.,
