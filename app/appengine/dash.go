@@ -22,10 +22,12 @@ import (
 
 var (
 	maintnerClient  = createMaintnerClient()
-	datastoreClient = createDatastoreClient()
+	datastoreClient *datastore.Client // not done at init as createDatastoreClient fails under test environments
 )
 
 func main() {
+	datastoreClient = createDatastoreClient()
+
 	// authenticated handlers
 	handleFunc("/clear-results", AuthHandler(clearResultsHandler)) // called by x/build/cmd/retrybuilds
 	handleFunc("/result", AuthHandler(resultHandler))              // called by coordinator after build
