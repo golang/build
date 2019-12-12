@@ -7,12 +7,16 @@ package sendwikidiff
 import (
 	"context"
 	"os"
+	"os/exec"
 	"testing"
 )
 
 func TestWikiPubSub(t *testing.T) {
 	if testing.Short() {
 		return
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git binary not available")
 	}
 	oldSendgridKey := sendgridAPIKey
 	sendgridAPIKey = "super secret key"
