@@ -45,32 +45,25 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	var (
-		dashRes      *apipb.DashboardResponse
-		activeBuilds []types.ActivePostSubmitBuild
-	)
+	tb := &uiTemplateDataBuilder{
+		view: view,
+		req:  dashReq,
+	}
 	var rpcs errgroup.Group
 	rpcs.Go(func() error {
 		var err error
-		dashRes, err = maintnerClient.GetDashboard(ctx, dashReq)
+		tb.res, err = maintnerClient.GetDashboard(ctx, dashReq)
 		return err
 	})
 	if view.ShowsActiveBuilds() {
 		rpcs.Go(func() error {
-			activeBuilds = getActiveBuilds(ctx)
+			tb.activeBuilds = getActiveBuilds(ctx)
 			return nil
 		})
 	}
 	if err := rpcs.Wait(); err != nil {
 		http.Error(w, "maintner.GetDashboard: "+err.Error(), httpStatusOfErr(err))
 		return
-	}
-
-	tb := &uiTemplateDataBuilder{
-		view:         view,
-		req:          dashReq,
-		res:          dashRes,
-		activeBuilds: activeBuilds,
 	}
 	data, err := tb.buildTemplateData(ctx)
 	if err != nil {
