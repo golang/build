@@ -91,7 +91,7 @@ func logHandler(w http.ResponseWriter, r *http.Request) {
 		if err == datastore.ErrNoSuchEntity {
 			// Fall back to default namespace;
 			// maybe this was on the old dashboard.
-			key := dsKey("Log", hash, nil)
+			key.Namespace = ""
 			err = datastoreClient.Get(c, key, l)
 		}
 		if err != nil {
