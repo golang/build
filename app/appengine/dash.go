@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"cloud.google.com/go/datastore"
+	"github.com/NYTimes/gziphandler"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/repos"
 	"golang.org/x/net/http2"
@@ -144,14 +145,15 @@ func createMaintnerClient() apipb.MaintnerServiceClient {
 }
 
 func handleFunc(path string, h http.HandlerFunc) {
-	http.Handle(path, hstsHandler(h))
+	http.Handle(path, hstsHandler(gziphandler.GzipHandler(h)))
 }
 
-// hstsHandler wraps an http.HandlerFunc such that it sets the HSTS header.
-func hstsHandler(fn http.HandlerFunc) http.Handler {
+// hstsHandler returns a Handler that sets the HSTS header but
+// otherwise just wraps h.
+func hstsHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000; preload")
-		fn(w, r)
+		h.ServeHTTP(w, r)
 	})
 }
 

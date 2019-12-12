@@ -4,6 +4,7 @@ go 1.12
 
 require (
 	cloud.google.com/go v0.38.0
+	github.com/NYTimes/gziphandler v1.1.1
 	github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239 // indirect
 	github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625
 	github.com/coreos/go-systemd v0.0.0-20181012123002-c6f51f82210d
@@ -29,7 +30,7 @@ require (
 	golang.org/x/text v0.3.2
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
 	google.golang.org/api v0.4.0
-	google.golang.org/appengine v1.5.0
+	google.golang.org/appengine v1.5.0 // indirect
 	google.golang.org/genproto v0.0.0-20190502173448-54afdca5d873
 	google.golang.org/grpc v1.20.1 // indirect
 	gopkg.in/inf.v0 v0.9.1
