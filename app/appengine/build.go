@@ -398,7 +398,7 @@ func (r *Result) Data() string {
 // A Log is a gzip-compressed log file stored under the SHA1 hash of the
 // uncompressed log text.
 type Log struct {
-	CompressedLog []byte
+	CompressedLog []byte `datastore:",noindex"`
 }
 
 func (l *Log) Text() ([]byte, error) {
