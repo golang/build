@@ -1583,6 +1583,8 @@ func init() {
 				return false
 			case "mobile":
 				return false
+			case "build":
+				return false
 			}
 			return true
 		},
@@ -1720,6 +1722,9 @@ func init() {
 		HostType: "host-linux-stretch-morecpu",
 		Notes:    "Debian Stretch with go test -short=false; to get 32-bit coverage",
 		buildsRepo: func(repo, branch, goBranch string) bool {
+			if repo == "build" {
+				return false
+			}
 			return repo == "go" || (branch == "master" && goBranch == "master")
 		},
 		needsGoProxy: true, // for cmd/go module tests
@@ -1821,7 +1826,7 @@ func init() {
 			switch repo {
 			case "go":
 				return true
-			case "mobile", "exp", "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
+			case "build", "mobile", "exp", "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
 				return false
 			default:
 				return branch == "master" && goBranch == "master"
@@ -2171,7 +2176,7 @@ func init() {
 		Notes:    "Android emulator on GCE",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
-			case "blog", "talks", "review", "tour", "website":
+			case "build", "blog", "talks", "review", "tour", "website":
 				return false
 			}
 			return atLeastGo1(branch, 13) && atLeastGo1(goBranch, 13)
@@ -2198,7 +2203,7 @@ func init() {
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
-			case "blog", "talks", "review", "tour", "website":
+			case "build", "blog", "talks", "review", "tour", "website":
 				return false
 			}
 			return atLeastGo1(branch, 13) && atLeastGo1(goBranch, 13)

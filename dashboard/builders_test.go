@@ -524,6 +524,14 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-fedora", "build"), none},
 		{b("linux-amd64-clang", "build"), none},
 		{b("linux-amd64-sid", "build"), none},
+		{b("linux-amd64-nocgo", "build"), none},
+		{b("linux-386-longtest", "build"), none},
+		{b("freebsd-386-10_3", "build"), none},
+		{b("freebsd-386-10_4", "build"), none},
+		{b("freebsd-386-11_1", "build"), none},
+		{b("js-wasm", "build"), none},
+		{b("android-386-emu", "build"), none},
+		{b("android-amd64-emu", "build"), none},
 
 		// Only use latest macOS for subrepos, and only amd64:
 		{b("darwin-amd64-10_12", "net"), onlyPost},
