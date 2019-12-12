@@ -25,6 +25,7 @@
     </header>
 
     <form action="." method="GET">
+    <input type="hidden" name="repo" value="{{.Package.Path}}">
     <nav class="dashboards">
       {{if not (eq .Branch "")}}
       <label>
