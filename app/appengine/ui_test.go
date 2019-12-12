@@ -207,8 +207,9 @@ func TestUITemplateDataBuilder(t *testing.T) {
 				},
 				TagState: []*TagState{
 					{
-						Name: "master",
-						Tag:  &CommitInfo{Hash: "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac"},
+						Name:     "master",
+						Tag:      &CommitInfo{Hash: "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac"},
+						Builders: []string{"linux-386", "linux-amd64"},
 						Packages: []*PackageState{
 							{
 								Package: &Package{Name: "net", Path: "golang.org/x/net"},
@@ -235,8 +236,9 @@ func TestUITemplateDataBuilder(t *testing.T) {
 						},
 					},
 					{
-						Name: "release-branch.go1.99",
-						Tag:  &CommitInfo{Hash: "ffffffffffffffffffffffffffffffffffffffff"},
+						Name:     "release-branch.go1.99",
+						Tag:      &CommitInfo{Hash: "ffffffffffffffffffffffffffffffffffffffff"},
+						Builders: []string{"linux-386", "linux-amd64"},
 						Packages: []*PackageState{
 							{
 								Package: &Package{Name: "net", Path: "golang.org/x/net"},

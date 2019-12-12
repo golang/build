@@ -300,9 +300,8 @@ func isUntested(builder, repo, branch, goBranch string) bool {
 	}
 	bc, ok := dashboard.Builders[builder]
 	if !ok {
-		// Not managed by coordinator. Might be an old-style builder.
-		// TODO: remove this once the old-style builders are all dead.
-		return false
+		// Unknown builder, so not tested.
+		return true
 	}
 	return !bc.BuildsRepoPostSubmit(repo, branch, goBranch)
 }

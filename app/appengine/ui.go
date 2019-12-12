@@ -220,8 +220,7 @@ func (tb *uiTemplateDataBuilder) newCommitInfo(dsCommits map[string]*Commit, rep
 	}
 	// For non-go repos, add the rows for the Go commits that were
 	// at HEAD overlapping in time with dc.Commit.
-	isGo := tb.req.Repo == "" || tb.req.Repo == "go"
-	if !isGo {
+	if !tb.isGoRepo() {
 		if dc.GoCommitAtTime != "" {
 			ci.addEmptyResultGoHash(dc.GoCommitAtTime)
 		}
@@ -236,8 +235,30 @@ func (tb *uiTemplateDataBuilder) newCommitInfo(dsCommits map[string]*Commit, rep
 // the page in the three branches (master, latest release branch, two releases ago).
 func (tb *uiTemplateDataBuilder) showXRepoSection() bool {
 	return tb.req.Page == 0 &&
-		(tb.req.Branch == "" || tb.req.Branch == "master" || tb.req.Branch == "mixed") &&
-		(tb.req.Repo == "" || tb.req.Repo == "go")
+		(tb.branch() == "master" || tb.req.Branch == "mixed") &&
+		tb.isGoRepo()
+}
+
+func (tb *uiTemplateDataBuilder) isGoRepo() bool { return tb.req.Repo == "" || tb.req.Repo == "go" }
+
+// repoGerritProj returns the Gerrit project name on go.googlesource.com for
+// the repo requested, or empty if unknown.
+func (tb *uiTemplateDataBuilder) repoGerritProj() string {
+	if tb.isGoRepo() {
+		return "go"
+	}
+	if r, ok := repos.ByImportPath[tb.req.Repo]; ok {
+		return r.GoGerritProject
+	}
+	return ""
+}
+
+// branch returns the request branch, or "master" if empty.
+func (tb *uiTemplateDataBuilder) branch() string {
+	if tb.req.Branch == "" {
+		return "master"
+	}
+	return tb.req.Branch
 }
 
 // repoImportPath returns the import path for rh, unless rh is the
@@ -289,6 +310,12 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context) (*uiTemp
 					Commit: tb.newCommitInfo(dsCommits, path, rh.Commit),
 				})
 			}
+			builders := map[string]bool{}
+			for _, pkg := range ts.Packages {
+				addBuilders(builders, pkg.Package.Name, ts.Branch())
+			}
+			ts.Builders = builderKeys(builders)
+
 			sort.Slice(ts.Packages, func(i, j int) bool {
 				return ts.Packages[i].Package.Name < ts.Packages[j].Package.Name
 			})
@@ -304,17 +331,25 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context) (*uiTemp
 		}
 	}
 
-	builders := commitBuilders(commits, releaseBranches)
 	data := &uiTemplateData{
 		Dashboard:  goDash,
 		Package:    goDash.packageWithPath(tb.req.Repo),
 		Commits:    commits,
-		Builders:   builders,
 		TagState:   xRepoSections,
 		Pagination: &Pagination{},
 		Branches:   tb.res.Branches,
 		Branch:     tb.req.Branch,
 	}
+
+	builders := buildersOfCommits(commits)
+	if tb.branch() == "mixed" {
+		for _, gr := range tb.res.Releases {
+			addBuilders(builders, tb.repoGerritProj(), gr.BranchName)
+		}
+	} else {
+		addBuilders(builders, tb.repoGerritProj(), tb.branch())
+	}
+	data.Builders = builderKeys(builders)
 
 	if tb.res.CommitsTruncated {
 		data.Pagination.Next = int(tb.req.Page) + 1
@@ -324,13 +359,6 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context) (*uiTemp
 		data.Pagination.HasPrev = true
 	}
 
-	if tb.view == (htmlView{}) {
-		// In the UI, when viewing the master branch of the main
-		// Go repository, hide builders that aren't active on it.
-		if tb.req.Repo == "" && tb.req.Branch == "master" {
-			data.Builders = onlyGoMasterBuilders(data.Builders)
-		}
-	}
 	if tb.view.ShowsActiveBuilds() {
 		// Populate building URLs for the HTML UI only.
 		data.populateBuildingURLs(ctx, tb.activeBuilds)
@@ -419,6 +447,9 @@ func (failuresView) ServeDashboard(w http.ResponseWriter, r *http.Request, data 
 			fmt.Fprintln(w, c.Hash, b, url)
 		}
 	}
+	// TODO: this doesn't include the TagState commit. It would be
+	// needed if we want to do golang.org/issue/36131, to permit
+	// the retrybuilds command to wipe flaky non-go builds.
 }
 
 // jsonView renders https://build.golang.org/?mode=json.
@@ -438,17 +469,19 @@ func (jsonView) ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiT
 		return fmt.Sprintf("https://%v/log/%v", r.Host, res.LogHash)
 	}
 
+	builders := data.allBuilders()
+
 	var res types.BuildStatus
-	res.Builders = data.Builders
+	res.Builders = builders
 
 	// First the commits from the main section (the "go" repo)
 	for _, c := range data.Commits {
 		rev := types.BuildRevision{
 			Repo:    "go",
-			Results: make([]string, len(data.Builders)),
+			Results: make([]string, len(res.Builders)),
 		}
 		commitToBuildRevision(c, &rev)
-		for i, b := range data.Builders {
+		for i, b := range res.Builders {
 			rev.Results[i] = cell(c.Result(b, ""))
 		}
 		res.Revisions = append(res.Revisions, rev)
@@ -468,7 +501,7 @@ func (jsonView) ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiT
 			rev := types.BuildRevision{
 				Repo:       pkgState.Package.Name,
 				GoRevision: goRev,
-				Results:    make([]string, len(data.Builders)),
+				Results:    make([]string, len(res.Builders)),
 				GoBranch:   goBranch,
 			}
 			commitToBuildRevision(pkgState.Commit, &rev)
@@ -527,69 +560,37 @@ func fetchCommits(ctx context.Context, keys []*datastore.Key) ([]*Commit, error)
 	return filtered, nil
 }
 
-// commitBuilders returns the names of active builders that provided
+// buildersOfCommits returns the set of builders that provided
 // Results for the provided commits.
-func commitBuilders(commits []*CommitInfo, releaseBranches []string) []string {
-	builders := make(map[string]bool)
+func buildersOfCommits(commits []*CommitInfo) map[string]bool {
+	m := make(map[string]bool)
 	for _, commit := range commits {
 		for _, r := range commit.Results() {
 			if r.Builder != "" {
-				builders[r.Builder] = true
+				m[r.Builder] = true
 			}
 		}
 	}
-	// Add all known builders from the builder configuration too.
-	// We want to see columns even if there are no results so we
-	// can identify missing builders. (Issue 19930)
+	return m
+}
+
+// addBuilders adds builders to the provide map that should be active for
+// the named Gerrit project & branch. (Issue 19930)
+func addBuilders(builders map[string]bool, gerritProj, branch string) {
 	for name, bc := range dashboard.Builders {
-		if !activePostSubmitBuilder(bc, releaseBranches) {
-			continue
-		}
-		builders[name] = true
-	}
-	k := keys(builders)
-	sort.Sort(builderOrder(k))
-	return k
-}
-
-// activePostSubmitBuilder reports whether the builder bc
-// is considered to be "active", meaning it's configured
-// to test the Go repository on master branch or at least
-// one of the supported release branches.
-func activePostSubmitBuilder(bc *dashboard.BuildConfig, releaseBranches []string) bool {
-	if bc.BuildsRepoPostSubmit("go", "master", "master") {
-		return true
-	}
-	for _, rb := range releaseBranches {
-		if bc.BuildsRepoPostSubmit("go", rb, rb) {
-			return true
+		if bc.BuildsRepoPostSubmit(gerritProj, branch, branch) {
+			builders[name] = true
 		}
 	}
-	// TODO(golang.org/issue/34744): This doesn't catch x-repo-only builders yet; adjust further as needed.
-	return false
 }
 
-func keys(m map[string]bool) (s []string) {
+func builderKeys(m map[string]bool) (s []string) {
 	s = make([]string, 0, len(m))
 	for k := range m {
 		s = append(s, k)
 	}
-	sort.Strings(s)
+	sort.Sort(builderOrder(s))
 	return
-}
-
-// onlyGoMasterBuilders returns a subset of all builders that are
-// configured to do post-submit builds on master branch of Go repo.
-func onlyGoMasterBuilders(all []string) []string {
-	var goMaster []string
-	for _, name := range all {
-		bc, ok := dashboard.Builders[name]
-		if !ok || !bc.BuildsRepoPostSubmit("go", "master", "master") {
-			continue
-		}
-		goMaster = append(goMaster, name)
-	}
-	return goMaster
 }
 
 // builderOrder implements sort.Interface, sorting builder names
@@ -654,6 +655,7 @@ type TagState struct {
 	Name     string      // Go branch name: "master", "release-branch.go1.4", etc
 	Tag      *CommitInfo // current Go commit on the Name branch
 	Packages []*PackageState
+	Builders []string
 }
 
 // Branch returns the git branch name, converting from the old
@@ -711,8 +713,8 @@ type uiTemplateData struct {
 	Dashboard  *Dashboard
 	Package    *Package
 	Commits    []*CommitInfo
-	Builders   []string
-	TagState   []*TagState
+	Builders   []string    // builders for just the main section; not the "TagState" sections
+	TagState   []*TagState // x/foo repo overviews at master + last two releases
 	Pagination *Pagination
 	Branches   []string
 	Branch     string
@@ -786,6 +788,21 @@ func (td *uiTemplateData) populateBuildingURLs(ctx context.Context, activeBuilds
 			}
 		}
 	}
+}
+
+// allBuilders returns the list of builders, unified over the main
+// section and any x/foo branch overview (TagState) sections.
+func (td *uiTemplateData) allBuilders() []string {
+	m := map[string]bool{}
+	for _, b := range td.Builders {
+		m[b] = true
+	}
+	for _, ts := range td.TagState {
+		for _, b := range ts.Builders {
+			m[b] = true
+		}
+	}
+	return builderKeys(m)
 }
 
 var uiTemplate = template.Must(
