@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	pathpkg "path"
 	"strings"
 
@@ -241,6 +242,26 @@ func (c *CommitInfo) Result(builder, goHash string) *Result {
 			BuildingURL: u,
 			Hash:        c.Hash,
 			GoHash:      goHash,
+		}
+	}
+	if *fakeResults {
+		switch rand.Intn(3) {
+		default:
+			return nil
+		case 1:
+			return &Result{
+				Builder: builder,
+				Hash:    c.Hash,
+				GoHash:  goHash,
+				OK:      true,
+			}
+		case 2:
+			return &Result{
+				Builder: builder,
+				Hash:    c.Hash,
+				GoHash:  goHash,
+				LogHash: "fakefailureurl",
+			}
 		}
 	}
 	return nil

@@ -123,6 +123,9 @@ type uiTemplateDataBuilder struct {
 // getCommitsToLoad returns a set (all values are true) of which commits to load from
 // the datastore.
 func (tb *uiTemplateDataBuilder) getCommitsToLoad() map[commitInPackage]bool {
+	if *fakeResults {
+		return nil
+	}
 	m := make(map[commitInPackage]bool)
 	add := func(packagePath, commit string) {
 		m[commitInPackage{packagePath: packagePath, commit: commit}] = true

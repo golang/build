@@ -6,7 +6,10 @@ package main
 
 import (
 	"context"
+	crand "crypto/rand"
 	"crypto/tls"
+	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -25,8 +28,42 @@ var (
 	datastoreClient *datastore.Client // not done at init as createDatastoreClient fails under test environments
 )
 
+var (
+	dev         = flag.Bool("dev", false, "whether to run in local development mode")
+	fakeResults = flag.Bool("fake-results", false, "dev mode option: whether to make up fake random results. If true, datastore is not used.")
+)
+
 func main() {
+	flag.Parse()
+	if *fakeResults && !*dev {
+		log.Fatalf("--fake-results requires --dev mode")
+	}
+	if *dev {
+		randBytes := make([]byte, 20)
+		if _, err := crand.Read(randBytes[:]); err != nil {
+			panic(err)
+		}
+		devModeMasterKey = fmt.Sprintf("%x", randBytes)
+		if !*fakeResults {
+			log.Printf("Running in dev mode. Temporary master key is %v", devModeMasterKey)
+			if os.Getenv("DATASTORE_PROJECT_ID") == "" {
+				log.Printf("DATASTORE_PROJECT_ID not set; defaulting to production golang-org")
+				os.Setenv("DATASTORE_PROJECT_ID", "golang-org")
+			}
+		}
+	}
+
 	datastoreClient = createDatastoreClient()
+
+	if *dev && !*fakeResults {
+		// Test early whether user has datastore access.
+		key := dsKey("Log", "bogus-want-no-such-entity", nil)
+		if err := datastoreClient.Get(context.Background(), key, new(Log)); err != datastore.ErrNoSuchEntity {
+			log.Printf("Failed to access datastore: %v", err)
+			log.Printf("Run with --fake-results to avoid hitting a real datastore.")
+			os.Exit(1)
+		}
+	}
 
 	// authenticated handlers
 	handleFunc("/clear-results", AuthHandler(clearResultsHandler)) // called by x/build/cmd/retrybuilds
@@ -45,14 +82,16 @@ func main() {
 		http.Redirect(w, r, "https://golang.org/favicon.ico", http.StatusFound)
 	})
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-		log.Printf("Defaulting to port %s", port)
+	listen := os.Getenv("PORT")
+	if listen == "" {
+		listen = "8080"
+	}
+	if !strings.Contains(listen, ":") {
+		listen = ":" + listen
 	}
 
-	log.Printf("Listening on port %s", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
+	log.Printf("Serving dashboard on %s", listen)
+	if err := http.ListenAndServe(listen, nil); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -65,6 +104,9 @@ func staticDir() string {
 }
 
 func createDatastoreClient() *datastore.Client {
+	if *fakeResults {
+		return nil
+	}
 	// First try with an empty project ID, so $DATASTORE_PROJECT_ID will be respected
 	// if set.
 	c, err := datastore.NewClient(context.Background(), "")

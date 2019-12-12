@@ -239,12 +239,21 @@ func validKey(c context.Context, key, builder string) bool {
 	return key == builderKey(c, builder)
 }
 
-func isMasterKey(c context.Context, k string) bool {
-	return k == key.Secret(datastoreClient, c)
+var devModeMasterKey string
+
+func masterKey(ctx context.Context) string {
+	if *dev {
+		return devModeMasterKey
+	}
+	return key.Secret(ctx, datastoreClient)
 }
 
-func builderKey(c context.Context, builder string) string {
-	h := hmac.New(md5.New, []byte(key.Secret(datastoreClient, c)))
+func isMasterKey(ctx context.Context, k string) bool {
+	return k == masterKey(ctx)
+}
+
+func builderKey(ctx context.Context, builder string) string {
+	h := hmac.New(md5.New, []byte(masterKey(ctx)))
 	h.Write([]byte(builder))
 	return fmt.Sprintf("%x", h.Sum(nil))
 }

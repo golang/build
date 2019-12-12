@@ -22,7 +22,7 @@ type builderKey struct {
 
 var dsKey = datastore.NameKey("BuilderKey", "root", nil)
 
-func Secret(c *datastore.Client, ctx context.Context) string {
+func Secret(ctx context.Context, c *datastore.Client) string {
 	// check with rlock
 	theKey.RLock()
 	k := theKey.Secret
