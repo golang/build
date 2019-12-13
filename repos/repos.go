@@ -33,6 +33,11 @@ type Repo struct {
 	// GitHub. If MirrorToGitHub is true, this is the
 	// destination.
 	gitHubRepo string
+
+	// WebsiteDesc is the description of the repo for showing on
+	// https://golang.org/pkg/#subrepo.
+	// It should be plain text. Hostnames may be auto-linkified.
+	WebsiteDesc string
 }
 
 // ByGerritProject maps from a Gerrit project name ("go", "net", etc)
@@ -53,31 +58,31 @@ func init() {
 	addMirrored("sublime-config")
 
 	x("arch")
-	x("benchmarks")
-	x("blog")
-	x("build")
-	x("crypto")
-	x("debug")
+	x("benchmarks", desc("benchmarks to measure Go as it is developed"))
+	x("blog", desc("blog.golang.org's implementation"))
+	x("build", desc("build.golang.org's implementation"))
+	x("crypto", desc("additional cryptography packages"))
+	x("debug", desc("an experimental debugger for Go"))
 	x("example", noDash)
-	x("exp")
-	x("image")
+	x("exp", desc("experimental and deprecated packages (handle with care; may change without warning)"))
+	x("image", desc("additional imaging packages"))
 	x("lint", noDash)
-	x("mobile")
+	x("mobile", desc("experimental support for Go on mobile platforms"))
 	x("mod")
-	x("net")
+	x("net", desc("additional networking packages"))
 	x("oauth2")
-	x("perf")
+	x("perf", desc("packages and tools for performance measurement, storage, and analysis"))
 	x("playground", noDash)
-	x("review")
+	x("review", desc("a tool for working with Gerrit code reviews"))
 	x("scratch", noDash)
-	x("sync")
-	x("sys")
+	x("sync", desc("additional concurrency primitives"))
+	x("sys", desc("packages for making system calls"))
 	x("talks")
 	x("term")
-	x("text")
-	x("time")
-	x("tools")
-	x("tour", noDash)
+	x("text", desc("packages for working with text"))
+	x("time", desc("additional time packages"))
+	x("tools", desc("godoc, goimports, gorename, and other tools"))
+	x("tour", noDash, desc("tour.golang.org's implementation"))
 	x("vgo", noDash)
 	x("website")
 	x("xerrors", noDash)
@@ -102,6 +107,8 @@ func noDash(r *Repo) { r.showOnDashboard = false }
 func coordinatorCanBuild(r *Repo) { r.CoordinatorCanBuild = true }
 
 func importPath(v string) modifyRepo { return func(r *Repo) { r.ImportPath = v } }
+
+func desc(v string) modifyRepo { return func(r *Repo) { r.WebsiteDesc = v } }
 
 // addMirrored adds a repo that's on Gerrit and mirrored to GitHub.
 func addMirrored(proj string, opts ...modifyRepo) {
