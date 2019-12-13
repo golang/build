@@ -799,7 +799,6 @@ var tmplFuncs = template.FuncMap{
 	"shortDesc":          shortDesc,
 	"shortHash":          shortHash,
 	"shortUser":          shortUser,
-	"tail":               tail,
 	"unsupported":        unsupported,
 	"isUntested":         isUntested,
 	"formatTime":         formatTime,
@@ -911,15 +910,6 @@ func shortUser(user string) string {
 		return user[:i]
 	}
 	return user
-}
-
-// tail returns the trailing n lines of s.
-func tail(n int, s string) string {
-	lines := strings.Split(s, "\n")
-	if len(lines) < n {
-		return s
-	}
-	return strings.Join(lines[len(lines)-n:], "\n")
 }
 
 // templateFile returns the path to the provided HTML template file,
