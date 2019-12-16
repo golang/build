@@ -564,7 +564,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:           "On 96 core packet.net host (Xenial) in Docker containers (Debian Buster); run by Go team. See x/build/env/linux-arm64/packet",
 		IsReverse:       true,
 		HermeticReverse: true,
-		ExpectNum:       20,
+		ExpectNum:       8,
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		SSHUsername:     "root",
 	},
