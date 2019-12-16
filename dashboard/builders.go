@@ -2360,12 +2360,6 @@ func init() {
 		shouldRunDistTest: noTestDir,
 		SkipSnapshot:      true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			if repo == "review" {
-				// '.git/hooks/pre-commit' cannot be executed on this builder,
-				// which causes the x/review tests to fail.
-				// (https://golang.org/issue/32836)
-				return false
-			}
 			return atLeastGo1(goBranch, 14) && defaultBuildsRepoPolicy(repo, branch, goBranch)
 		},
 	})
@@ -2454,7 +2448,7 @@ func init() {
 				// The x/net package wasn't working in Go 1.12; AIX folk plan to have
 				// it ready by Go 1.13. See https://golang.org/issue/31564#issuecomment-484786144
 				return atLeastGo1(branch, 13) && atLeastGo1(goBranch, 13)
-			case "review", "tools", "tour", "website":
+			case "tools", "tour", "website":
 				// The PATH on this builder is misconfigured in a way that causes
 				// any test that executes a 'go' command as a subprocess to fail.
 				// (https://golang.org/issue/31567).
