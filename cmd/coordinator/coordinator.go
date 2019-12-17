@@ -2059,6 +2059,19 @@ func (st *buildStatus) build() error {
 
 func (st *buildStatus) HasBuildlet() bool { return atomic.LoadInt32(&st.hasBuildlet) != 0 }
 
+// useKeepGoingFlag reports whether this build should use -k flag of 'go tool
+// dist test', which makes it keep going even when some tests have failed.
+func (st *buildStatus) useKeepGoingFlag() bool {
+	// For now, keep going for post-submit builders on release branches,
+	// because we prioritize seeing more complete test results over failing fast.
+	// Later on, we may start doing this all post-submit builders on all branches.
+	// See golang.org/issue/14305.
+	//
+	// TODO(golang.org/issue/36181): A more ideal long term solution is one that reports
+	// a failure fast, but still keeps going to make all other test results available.
+	return !st.isTry() && strings.HasPrefix(st.branch, "release-branch.go")
+}
+
 func (st *buildStatus) isTry() bool { return st.trySet != nil }
 
 func (st *buildStatus) isSlowBot() bool {
@@ -3235,6 +3248,9 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 	}
 	if st.conf.CompileOnly {
 		args = append(args, "--compile-only")
+	}
+	if st.useKeepGoingFlag() {
+		args = append(args, "-k")
 	}
 	args = append(args, names...)
 	var buf bytes.Buffer
