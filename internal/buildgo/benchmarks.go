@@ -86,7 +86,7 @@ func buildXBenchmark(ctx context.Context, sl spanlog.Logger, conf *dashboard.Bui
 		return nil, err
 	}
 	if err := bc.ListDir(ctx, "gopath/src/golang.org/x/benchmarks", buildlet.ListDirOpts{}, func(buildlet.DirEntry) {}); err != nil {
-		if err := FetchSubrepo(ctx, sl, bc, "benchmarks", rev); err != nil {
+		if err := FetchSubrepo(ctx, sl, bc, "benchmarks", rev, "golang.org/x/benchmarks"); err != nil {
 			return nil, err
 		}
 	}
@@ -112,7 +112,7 @@ func (gb GoBuilder) EnumerateBenchmarks(ctx context.Context, bc *buildlet.Client
 
 	// Fetch x/benchmarks
 	if benchmarksRev != "" {
-		if err := FetchSubrepo(ctx, gb.Logger, bc, "benchmarks", benchmarksRev); err != nil {
+		if err := FetchSubrepo(ctx, gb.Logger, bc, "benchmarks", benchmarksRev, "golang.org/x/benchmarks"); err != nil {
 			return nil, err
 		}
 	}

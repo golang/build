@@ -25,8 +25,6 @@ import (
 	"golang.org/x/build/internal/sourcecache"
 )
 
-const subrepoPrefix = "golang.org/x/"
-
 // BuilderRev is a build configuration type and a revision.
 type BuilderRev struct {
 	Name string // e.g. "linux-amd64-race"
@@ -177,16 +175,17 @@ func (gb GoBuilder) runConcurrentGoBuildStdCmd(ctx context.Context, bc *buildlet
 
 // FetchSubrepo checks out the go.googlesource.com repository
 // repo (for example, "net" or "oauth2") at git revision rev,
-// and places it into the buildlet's GOPATH workspace.
+// and places it into the buildlet's GOPATH workspace at
+// $GOPATH/src/<importPath>.
 //
 // The GOPATH workspace is assumed to be the "gopath" directory
 // in the buildlet's work directory.
-func FetchSubrepo(ctx context.Context, sl spanlog.Logger, bc *buildlet.Client, repo, rev string) error {
+func FetchSubrepo(ctx context.Context, sl spanlog.Logger, bc *buildlet.Client, repo, rev, importPath string) error {
 	tgz, err := sourcecache.GetSourceTgz(sl, repo, rev)
 	if err != nil {
 		return err
 	}
-	return bc.PutTar(ctx, tgz, "gopath/src/"+subrepoPrefix+repo)
+	return bc.PutTar(ctx, tgz, "gopath/src/"+importPath)
 }
 
 // VersionTgz returns an io.Reader of a *.tar.gz file containing only

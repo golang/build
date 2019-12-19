@@ -2566,7 +2566,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 
 	// Check out the provided sub-repo to the buildlet's workspace.
 	// Need to do this first, so we can run go env GOMOD in it.
-	err = buildgo.FetchSubrepo(st.ctx, st, st.bc, st.SubName, st.SubRev)
+	err = buildgo.FetchSubrepo(st.ctx, st, st.bc, st.SubName, st.SubRev, importPathOfRepo(st.SubName))
 	if err != nil {
 		return nil, err
 	}
@@ -2760,7 +2760,7 @@ func (st *buildStatus) fetchDependenciesToGOPATHWorkspace(goroot, gopath string)
 	// fetch checks out the provided sub-repo to the buildlet's workspace.
 	fetch := func(repo, rev string) error {
 		fetched[repo] = true
-		return buildgo.FetchSubrepo(st.ctx, st, st.bc, repo, rev)
+		return buildgo.FetchSubrepo(st.ctx, st, st.bc, repo, rev, importPathOfRepo(repo))
 	}
 
 	// findDeps uses 'go list' on the checked out repo to find its
