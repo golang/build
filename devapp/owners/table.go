@@ -59,6 +59,7 @@ var (
 	mpvl         = gh("mpvl")
 	mvdan        = gh("mvdan")
 	mwhudson     = gh("mwhudson")
+	neelance     = gh("neelance")
 	r            = gh("robpike")
 	rsc          = gh("rsc")
 	rstambler    = gh("stamblerre")
@@ -108,6 +109,11 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{iant},
 		Secondary: []Owner{thanm, cherryyz},
 	},
+
+	"go/misc/wasm":                 wasmOwners,
+	"go/cmd/compile/internal/wasm": wasmOwners,
+	"go/cmd/internal/obj/wasm":     wasmOwners,
+	"go/cmd/link/internal/wasm":    wasmOwners,
 
 	"go/src/archive/tar": {
 		Primary: []Owner{joetsai},
@@ -618,6 +624,11 @@ var entries = map[string]*Entry{
 		Primary: []Owner{mikioh, iant},
 	},
 
+	"oauth2": {
+		Primary:   []Owner{bradfitz},
+		Secondary: []Owner{jbd, cbro},
+	},
+
 	"review": {
 		Secondary: []Owner{josharian, kevinburke},
 	},
@@ -680,4 +691,8 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{dmitshur},
 		Secondary: []Owner{cnoellekb, andybons},
 	},
+}
+
+var wasmOwners = &Entry{
+	Primary: []Owner{neelance, cherryyz},
 }
