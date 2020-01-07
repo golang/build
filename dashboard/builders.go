@@ -436,9 +436,9 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2008-big": &HostConfig{
-		Notes:              "Same as host-windows-amd64-2008, but on n1-highcpu-8",
+		Notes:              "Same as host-windows-amd64-2008, but on n1-highcpu-16",
 		VMImage:            "windows-amd64-server-2008r2-v7",
-		machineType:        "n1-highcpu-8", // 8 vCPUs, 7.2 GB mem
+		machineType:        "n1-highcpu-16", // 16 vCPUs, 14.4 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
@@ -458,9 +458,9 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2016-big": &HostConfig{
-		Notes:              "Same as host-windows-amd64-2016, but on n1-highcpu-8",
+		Notes:              "Same as host-windows-amd64-2016, but on n1-highcpu-16",
 		VMImage:            "windows-amd64-server-2016-v7",
-		machineType:        "n1-highcpu-8", // 8 vCPUs, 7.2 GB mem
+		machineType:        "n1-highcpu-16", // 16 vCPUs, 14.4 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
