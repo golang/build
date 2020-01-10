@@ -314,7 +314,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-amd64-emu@go1.12", "mobile"), none},
 		{b("android-amd64-emu@go1.13", "mobile"), both},
 		{b("android-amd64-emu", "mobile@1.13"), both},
-		{b("freebsd-386-11_1@go1.12", "mobile"), onlyPost}, // TODO(dmitshur, golang.org/issue/36506): accurately refrects current state, but should be changed to none
+		{b("freebsd-386-11_1@go1.12", "mobile"), none}, // This was golang.org/issue/36506.
 
 		{b("android-amd64-emu", "go"), both},
 		{b("android-amd64-emu", "crypto"), both},
