@@ -1388,19 +1388,17 @@ func init() {
 		Name:     "freebsd-amd64-10_3",
 		HostType: "host-freebsd-10_3",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return (branch == "release-branch.go1.11" || goBranch == "release-branch.go1.12") &&
-				defaultBuildsRepoPolicy(repo, branch, goBranch)
+			return goBranch == "release-branch.go1.12" && defaultBuildsRepoPolicy(repo, branch, goBranch)
 		},
 		tryBot: func(repo, branch, goBranch string) bool {
-			return branch == "release-branch.go1.11" || branch == "release-branch.go1.12"
+			return branch == "release-branch.go1.12"
 		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-10_4",
 		HostType: "host-freebsd-10_4",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return (goBranch == "release-branch.go1.11" || goBranch == "release-branch.go1.12") &&
-				defaultBuildsRepoPolicy(repo, branch, goBranch)
+			return goBranch == "release-branch.go1.12" && defaultBuildsRepoPolicy(repo, branch, goBranch)
 		},
 		tryBot: nil,
 	})
@@ -1409,8 +1407,7 @@ func init() {
 		HostType: "host-freebsd-11_1",
 		tryBot:   nil,
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return (goBranch == "release-branch.go1.11" || goBranch == "release-branch.go1.12") &&
-				defaultBuildsRepoPolicy(repo, branch, goBranch)
+			return goBranch == "release-branch.go1.12" && defaultBuildsRepoPolicy(repo, branch, goBranch)
 		},
 		shouldRunDistTest: fasterTrybots,
 		numTryTestHelpers: 4,
@@ -1436,12 +1433,6 @@ func init() {
 		HostType:          "host-freebsd-12_0",
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		shouldRunDistTest: fasterTrybots,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			if repo == "net" && branch == "master" && goBranch == "release-branch.go1.11" {
-				return false
-			}
-			return defaultBuildsRepoPolicy(repo, branch, goBranch)
-		},
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
@@ -1452,7 +1443,7 @@ func init() {
 		Name:     "freebsd-386-10_3",
 		HostType: "host-freebsd-10_3",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return goBranch == "release-branch.go1.11" || goBranch == "release-branch.go1.12"
+			return goBranch == "release-branch.go1.12"
 		},
 		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
@@ -1460,7 +1451,7 @@ func init() {
 		Name:     "freebsd-386-10_4",
 		HostType: "host-freebsd-10_4",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return goBranch == "release-branch.go1.11" || goBranch == "release-branch.go1.12"
+			return goBranch == "release-branch.go1.12"
 		},
 		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
@@ -1469,7 +1460,7 @@ func init() {
 		HostType:          "host-freebsd-11_1",
 		shouldRunDistTest: noTestDir,
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return goBranch == "release-branch.go1.11" || goBranch == "release-branch.go1.12"
+			return goBranch == "release-branch.go1.12"
 		},
 		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
@@ -1477,14 +1468,8 @@ func init() {
 		Name:              "freebsd-386-11_2",
 		HostType:          "host-freebsd-11_2",
 		shouldRunDistTest: noTestDir,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			if repo == "net" && branch == "master" && goBranch == "release-branch.go1.11" {
-				return false
-			}
-			return defaultBuildsRepoPolicy(repo, branch, goBranch)
-		},
-		tryBot: explicitTrySet("sys"),
-		env:    []string{"GOARCH=386", "GOHOSTARCH=386"},
+		tryBot:            explicitTrySet("sys"),
+		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-386",

@@ -301,25 +301,22 @@ func TestBuilderConfig(t *testing.T) {
 		// Don't test all subrepos on all the builders.
 		{b("linux-amd64-ssacheck", "net"), none},
 		{b("linux-amd64-ssacheck@go1.10", "net"), none},
-		{b("linux-amd64-noopt@go1.11", "net"), none},
-		{b("linux-386-387@go1.11", "net"), none},
-		{b("linux-386-387@go1.11", "go"), onlyPost},
 		{b("linux-386-387", "crypto"), onlyPost},
-		{b("linux-arm-arm5spacemonkey@go1.11", "net"), none},
 		{b("linux-arm-arm5spacemonkey@go1.12", "net"), none},
 		{b("linux-arm-arm5spacemonkey", "exp"), none},
 		{b("linux-arm-arm5spacemonkey", "mobile"), none},
 
 		// The mobile repo requires Go 1.13+.
-		{b("android-amd64-emu", "go"), both},
 		{b("android-amd64-emu", "mobile"), both},
 		{b("android-amd64-emu", "mobile@1.10"), none},
 		{b("android-amd64-emu", "mobile@1.11"), none},
 		{b("android-amd64-emu@go1.10", "mobile"), none},
-		{b("android-amd64-emu@go1.11", "mobile"), none},
 		{b("android-amd64-emu@go1.12", "mobile"), none},
 		{b("android-amd64-emu@go1.13", "mobile"), both},
 		{b("android-amd64-emu", "mobile@1.13"), both},
+		{b("freebsd-386-11_1@go1.12", "mobile"), onlyPost}, // TODO(dmitshur, golang.org/issue/36506): accurately refrects current state, but should be changed to none
+
+		{b("android-amd64-emu", "go"), both},
 		{b("android-amd64-emu", "crypto"), both},
 		{b("android-amd64-emu", "net"), both},
 		{b("android-amd64-emu", "sync"), both},
@@ -334,7 +331,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-386-emu", "mobile@1.10"), none},
 		{b("android-386-emu", "mobile@1.11"), none},
 		{b("android-386-emu@go1.10", "mobile"), none},
-		{b("android-386-emu@go1.11", "mobile"), none},
 		{b("android-386-emu@go1.12", "mobile"), none},
 		{b("android-386-emu@go1.13", "mobile"), onlyPost},
 		{b("android-386-emu", "mobile@1.13"), onlyPost},
@@ -346,8 +342,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "net@1.11"), both},
 		{b("linux-amd64", "net@1.10"), none},   // too old
 		{b("linux-amd64@go1.10", "net"), none}, // too old
-		{b("linux-amd64@go1.11", "net"), both},
-		{b("linux-amd64@go1.11", "net@1.11"), both},
 		{b("linux-amd64@go1.12", "net@1.12"), both},
 
 		{b("linux-mips64le-mengzhuo", "go"), onlyPost},
@@ -368,12 +362,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-amd64-10_3@go1.12", "go"), both},
 		{b("freebsd-amd64-10_3@go1.12", "net@1.12"), both},
 		{b("freebsd-amd64-10_3@go1.12", "mobile"), none},
-		{b("freebsd-amd64-10_3@go1.11", "go"), both},
-		{b("freebsd-amd64-10_3@go1.11", "net@1.11"), both},
-		{b("freebsd-amd64-10_3@go1.11", "mobile"), none},
-		{b("freebsd-amd64-10_4@go1.11", "go"), isBuilder},
-		{b("freebsd-amd64-10_4@go1.11", "net"), isBuilder},
-		{b("freebsd-amd64-10_4@go1.11", "mobile"), none},
 		{b("freebsd-amd64-10_4@go1.12", "go"), isBuilder},
 		{b("freebsd-amd64-10_4@go1.12", "net"), isBuilder},
 		{b("freebsd-amd64-10_4@go1.12", "mobile"), none},
@@ -383,9 +371,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-amd64-11_1@go1.12", "go"), isBuilder},
 		{b("freebsd-amd64-11_1@go1.12", "net@1.12"), isBuilder},
 		{b("freebsd-amd64-11_1@go1.12", "mobile"), none},
-		{b("freebsd-amd64-11_1@go1.11", "go"), isBuilder},
-		{b("freebsd-amd64-11_1@go1.11", "net@1.11"), isBuilder},
-		{b("freebsd-amd64-11_1@go1.11", "mobile"), none},
 
 		// FreeBSD 12.0
 		{b("freebsd-amd64-12_0", "go"), both},
@@ -412,9 +397,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("aix-ppc64@go1.12", "mobile"), none},
 		{b("aix-ppc64@go1.13", "net"), onlyPost},
 		{b("aix-ppc64@go1.13", "mobile"), none},
-		{b("aix-ppc64@go1.11", "go"), none},
-		{b("aix-ppc64@go1.11", "net"), none},
-		{b("aix-ppc64@go1.11", "mobile"), none},
 
 		{b("linux-amd64-nocgo", "mobile"), none},
 
@@ -508,7 +490,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("js-wasm", "exp"), none},
 
 		// exp is experimental; it doesn't test against release branches.
-		{b("linux-amd64@go1.11", "exp"), none},
 		{b("linux-amd64@go1.12", "exp"), none},
 
 		// the build repo is only really useful for linux-amd64 (where we run it),
@@ -535,11 +516,8 @@ func TestBuilderConfig(t *testing.T) {
 
 		// Only use latest macOS for subrepos, and only amd64:
 		{b("darwin-amd64-10_12", "net"), onlyPost},
-		{b("darwin-amd64-10_12@go1.11", "net"), onlyPost},
 		{b("darwin-amd64-10_11", "net"), none},
-		{b("darwin-amd64-10_11@go1.11", "net"), none},
 		{b("darwin-amd64-10_11@go1.12", "net"), none},
-		{b("darwin-386-10_14@go1.11", "net"), none},
 
 		{b("darwin-amd64-10_15", "go"), onlyPost},
 		{b("darwin-amd64-10_14", "go"), onlyPost},
@@ -547,7 +525,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-10_11", "go"), onlyPost},
 		{b("darwin-amd64-10_10", "go"), none},
 		{b("darwin-amd64-10_10@go1.12", "go"), onlyPost},
-		{b("darwin-amd64-10_10@go1.11", "go"), onlyPost},
 		{b("darwin-386-10_14", "go"), onlyPost},
 		{b("darwin-386-10_14@go1.12", "go"), none},
 		{b("darwin-386-10_14@go1.13", "go"), onlyPost},
@@ -558,32 +535,20 @@ func TestBuilderConfig(t *testing.T) {
 		{b("plan9-386", "net"), none}, // temporarily disabled
 		{b("plan9-386", "exp"), none},
 		{b("plan9-386", "mobile"), none},
-		{b("plan9-386@go1.11", "go"), none},
 		{b("plan9-386@go1.12", "go"), none},
-		{b("plan9-386@go1.11", "net"), none},
 		{b("plan9-386@go1.12", "net"), none},
 		{b("plan9-amd64-9front", "go"), onlyPost},
 		{b("plan9-amd64-9front", "exp"), none},
 		{b("plan9-amd64-9front", "mobile"), none},
-		{b("plan9-amd64-9front@go1.11", "go"), none},
 		{b("plan9-amd64-9front@go1.12", "go"), none},
 		{b("plan9-amd64-9front", "net"), onlyPost},
-		{b("plan9-amd64-9front@go1.11", "net"), none},
 		{b("plan9-amd64-9front@go1.12", "net"), none},
 		{b("plan9-arm", "go"), onlyPost},
 		{b("plan9-arm", "exp"), none},
 		{b("plan9-arm", "mobile"), none},
-		{b("plan9-arm@go1.11", "go"), none},
 		{b("plan9-arm@go1.12", "go"), none},
 		{b("plan9-arm", "net"), onlyPost},
-		{b("plan9-arm@go1.11", "net"), none},
 		{b("plan9-arm@go1.12", "net"), none},
-
-		// x/net master with Go 1.11 doesn't work on our builders
-		// on 32-bit FreeBSD. Remove distracting red from the dashboard
-		// that'll never be fixed.
-		{b("freebsd-386-11_2@go1.11", "net"), none},
-		{b("freebsd-386-12_0@go1.11", "net"), none},
 
 		{b("dragonfly-amd64", "go"), onlyPost},
 		{b("dragonfly-amd64", "net"), onlyPost},
