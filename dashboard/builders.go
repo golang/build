@@ -291,7 +291,7 @@ var Hosts = map[string]*HostConfig{
 		VMImage:            "freebsd-amd64-103-b",
 		Notes:              "FreeBSD 10.3; GCE VM is built from script in build/env/freebsd-amd64",
 		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64", // TODO(bradfitz): why was this http instead of https?
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		env:                []string{"CC=clang"},
 		SSHUsername:        "gopher",
@@ -308,7 +308,16 @@ var Hosts = map[string]*HostConfig{
 		VMImage:            "freebsd-amd64-111-b",
 		Notes:              "FreeBSD 11.1; GCE VM is built from script in build/env/freebsd-amd64",
 		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64", // TODO(bradfitz): why was this http instead of https?
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
+		env:                []string{"CC=clang"},
+		SSHUsername:        "gopher",
+	},
+	"host-freebsd-11_1-big": &HostConfig{
+		VMImage:            "freebsd-amd64-111-b",
+		Notes:              "Same as host-freebsd-11_1, but on n1-highcpu-8",
+		machineType:        "n1-highcpu-8", // 8 vCPUs, 7.2 GB mem
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		env:                []string{"CC=clang"},
 		SSHUsername:        "gopher",
@@ -1437,7 +1446,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-race",
-		HostType: "host-freebsd-11_1",
+		HostType: "host-freebsd-11_1-big",
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-386-10_3",
