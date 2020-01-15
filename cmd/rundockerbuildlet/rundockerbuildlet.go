@@ -187,6 +187,7 @@ func checkFix() error {
 			"--name="+name,
 			"-v", filepath.Dir(keyFile)+":/buildkey/",
 			"-e", "HOSTNAME="+name,
+			"--security-opt=seccomp=unconfined", // Issue 35547
 			"--tmpfs=/workdir:rw,exec")
 		if *memory != "" {
 			cmd.Args = append(cmd.Args, "--memory="+*memory)
