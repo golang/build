@@ -480,16 +480,6 @@ var Hosts = map[string]*HostConfig{
 		OwnerGithub: "jordanrh1",
 		env:         []string{"GOROOT_BOOTSTRAP=C:\\Data\\Go"},
 	},
-	"host-darwin-10_8": &HostConfig{
-		IsReverse: true,
-		ExpectNum: 0,
-		Notes:     "MacStadium OS X 10.8 VM under VMWare ESXi",
-		env: []string{
-			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
-		},
-		SSHUsername:     "gopher",
-		HermeticReverse: false, // TODO: make it so, like 10.12
-	},
 	"host-darwin-10_10": &HostConfig{
 		IsReverse: true,
 		ExpectNum: 3,
@@ -2054,12 +2044,6 @@ func init() {
 			"GOARM=7",
 			"GO_TEST_TIMEOUT_SCALE=2",
 		},
-	})
-	addBuilder(BuildConfig{
-		Name:              "darwin-amd64-10_8",
-		HostType:          "host-darwin-10_8",
-		shouldRunDistTest: macTestPolicy,
-		buildsRepo:        disabledBuilder,
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-10_10",
