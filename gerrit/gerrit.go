@@ -12,6 +12,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -725,6 +726,16 @@ func (c *Client) GetProjectBranches(ctx context.Context, name string) (map[strin
 		m[bi.Ref] = bi
 	}
 	return m, nil
+}
+
+// GetContent returns the content of a file in the given project and branch.
+func (c *Client) GetContent(ctx context.Context, project, branch, path string) ([]byte, error) {
+	var res string
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/%s/files/%s/content", project, branch, url.PathEscape(path)))
+	if err != nil {
+		return nil, err
+	}
+	return base64.StdEncoding.DecodeString(res)
 }
 
 // WebLinkInfo is information about a web link.
