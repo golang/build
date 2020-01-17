@@ -6,6 +6,7 @@ package gke_test
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -17,6 +18,13 @@ import (
 	compute "google.golang.org/api/compute/v1"
 	container "google.golang.org/api/container/v1"
 )
+
+// Note: The TestNewClient, TestDialPod, TestDialService, and TestGetNodes
+// tests require to be run on GCE and with Application Default Credentials
+// that have at least the container.clusters.list permission, at least one
+// GKE cluster, and possibly more.
+//
+// They're currently disabled on the Go builders; see golang.org/issue/28543.
 
 // Tests NewClient and also Dialer.
 func TestNewClient(t *testing.T) {
@@ -134,6 +142,9 @@ func foreachCluster(t *testing.T, fn func(*container.Cluster, *kubernetes.Client
 	proj, err := metadata.ProjectID()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if os.Getenv("GO_BUILDER_NAME") != "" && proj == "symbolic-datum-552" {
+		t.Skip("builders on symbolic-datum-552 are not configured for gke tests (golang.org/issue/28543); skipping")
 	}
 	if _, err := ts.Token(); err != nil {
 		val, err := metadata.InstanceAttributeValue("service-accounts/default/token")
