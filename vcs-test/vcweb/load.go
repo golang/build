@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build linux
+
 package main
 
 import (
@@ -14,7 +16,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -117,10 +118,11 @@ func loadFS(dir1, dir2 string, force bool) {
 	check(os.MkdirAll(tmp, 0777))
 
 	for _, f := range zr.File {
-		if strings.HasSuffix(f.Name, "/") {
+		if f.FileInfo().IsDir() {
 			check(os.MkdirAll(filepath.Join(tmp, f.Name), 0777))
 			continue
 		}
+		check(os.MkdirAll(filepath.Join(tmp, filepath.Dir(f.Name)), 0777))
 		w, err := os.Create(filepath.Join(tmp, f.Name))
 		check(err)
 		r, err := f.Open()

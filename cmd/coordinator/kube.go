@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build go1.13
+// +build linux darwin
+
 package main
 
 import (
@@ -56,7 +59,7 @@ func initKube() error {
 	var err error
 	buildletsKubeClient, err = gke.NewClient(ctx,
 		buildEnv.KubeBuild.Name,
-		gke.OptZone(buildEnv.Zone),
+		gke.OptZone(buildEnv.ControlZone),
 		gke.OptProject(buildEnv.ProjectName),
 		gke.OptTokenSource(gcpCreds.TokenSource))
 	if err != nil {
@@ -65,7 +68,7 @@ func initKube() error {
 
 	goKubeClient, err = gke.NewClient(ctx,
 		buildEnv.KubeTools.Name,
-		gke.OptZone(buildEnv.Zone),
+		gke.OptZone(buildEnv.ControlZone),
 		gke.OptProject(buildEnv.ProjectName),
 		gke.OptTokenSource(gcpCreds.TokenSource))
 	if err != nil {
@@ -75,6 +78,7 @@ func initKube() error {
 	sourcecache.RegisterGitMirrorDial(func(ctx context.Context) (net.Conn, error) {
 		return goKubeClient.DialServicePort(ctx, "gitmirror", "")
 	})
+	go monitorGitMirror() // requires goKubeClient
 
 	go kubePool.pollCapacityLoop()
 	return nil
@@ -203,16 +207,6 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 	p.clusterResources = provisioned
 	p.mu.Unlock()
 
-}
-
-func (p *kubeBuildletPool) HasCapacity(hostType string) bool {
-	// TODO: implement. But for now we don't care because we only
-	// use the kubePool for the cross-compiled builds and we have
-	// very few hostTypes for those, and only one (ARM) that's
-	// used day-to-day. So it's okay if we lie here and always try
-	// to create buildlets. The scheduler will still give created
-	// buildlets to the highest priority waiter.
-	return true
 }
 
 func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg logger) (*buildlet.Client, error) {
@@ -443,7 +437,7 @@ func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
 				}
 				if err == nil && time.Now().Unix() > unixDeadline {
 					stats.DeletedOld++
-					log.Printf("cleanUpOldPods: Deleting expired pod %q in zone %q ...", pod.Name, buildEnv.Zone)
+					log.Printf("cleanUpOldPods: Deleting expired pod %q in zone %q ...", pod.Name, buildEnv.ControlZone)
 					err = buildletsKubeClient.DeletePod(ctx, pod.Name)
 					if err != nil {
 						log.Printf("cleanUpOldPods: problem deleting old pod %q: %v", pod.Name, err)

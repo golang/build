@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build go1.13
+// +build linux darwin
+
 // Code interacting with Google Compute Engine (GCE) and
 // a GCE implementation of the BuildletPool interface.
 
@@ -34,6 +37,7 @@ import (
 	"golang.org/x/build/cmd/coordinator/spanlog"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/buildstats"
 	"golang.org/x/build/internal/lru"
 	"golang.org/x/oauth2"
@@ -68,6 +72,7 @@ var (
 	metricsClient  *monapi.MetricClient
 	inStaging      bool                   // are we running in the staging project? (named -dev)
 	errorsClient   *errorreporting.Client // Stackdriver errors client
+	gkeNodeIP      string
 
 	initGCECalled bool
 )
@@ -103,9 +108,15 @@ func initGCE() error {
 		if err != nil || projectZone == "" {
 			return fmt.Errorf("failed to get current GCE zone: %v", err)
 		}
+
+		gkeNodeIP, err = metadata.Get("instance/network-interfaces/0/ip")
+		if err != nil {
+			return fmt.Errorf("failed to get current instance IP: %v", err)
+		}
+
 		// Convert the zone from "projects/1234/zones/us-central1-a" to "us-central1-a".
 		projectZone = path.Base(projectZone)
-		buildEnv.Zone = projectZone
+		buildEnv.ControlZone = projectZone
 
 		if buildEnv.StaticIP == "" {
 			buildEnv.StaticIP, err = metadata.ExternalIP()
@@ -181,6 +192,7 @@ func initGCE() error {
 	}
 
 	go gcePool.pollQuotaLoop()
+	go createBasepinDisks(context.Background())
 	return nil
 }
 
@@ -309,7 +321,9 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 		curSpan      = createSpan // either instSpan or waitBuildlet
 	)
 
-	log.Printf("Creating GCE VM %q for %s", instName, hostType)
+	zone := buildEnv.RandomVMZone()
+
+	log.Printf("Creating GCE VM %q for %s at %s", instName, hostType, zone)
 	bc, err = buildlet.StartNewVM(gcpCreds, buildEnv, instName, hostType, buildlet.VMOpts{
 		DeleteIn: deleteIn,
 		OnInstanceRequested: func() {
@@ -322,15 +336,16 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 			waitBuildlet = lg.CreateSpan("wait_buildlet_start", instName)
 			curSpan = waitBuildlet
 		},
-		OnGotInstanceInfo: func() {
+		OnGotInstanceInfo: func(*compute.Instance) {
 			lg.LogEventTime("got_instance_info", "waiting_for_buildlet...")
 		},
+		Zone: zone,
 	})
 	if err != nil {
 		curSpan.Done(err)
-		log.Printf("Failed to create VM for %s: %v", hostType, err)
+		log.Printf("Failed to create VM for %s at %s: %v", hostType, zone, err)
 		if needDelete {
-			deleteVM(buildEnv.Zone, instName)
+			deleteVM(zone, instName)
 			p.putVMCountQuota(hconf.GCENumCPU())
 		}
 		p.setInstanceUsed(instName, false)
@@ -339,12 +354,12 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 	waitBuildlet.Done(nil)
 	bc.SetDescription("GCE VM: " + instName)
 	bc.SetOnHeartbeatFailure(func() {
-		p.putBuildlet(bc, hostType, instName)
+		p.putBuildlet(bc, hostType, zone, instName)
 	})
 	return bc, nil
 }
 
-func (p *gceBuildletPool) putBuildlet(bc *buildlet.Client, hostType, instName string) error {
+func (p *gceBuildletPool) putBuildlet(bc *buildlet.Client, hostType, zone, instName string) error {
 	// TODO(bradfitz): add the buildlet to a freelist (of max N
 	// items) for up to 10 minutes since when it got started if
 	// it's never seen a command execution failure, and we can
@@ -354,7 +369,7 @@ func (p *gceBuildletPool) putBuildlet(bc *buildlet.Client, hostType, instName st
 	// buildlet client library between Close, Destroy/Halt, and
 	// tracking execution errors.  That was all half-baked before
 	// and thus removed. Now Close always destroys everything.
-	deleteVM(buildEnv.Zone, instName)
+	deleteVM(zone, instName)
 	p.setInstanceUsed(instName, false)
 
 	hconf, ok := dashboard.Hosts[hostType]
@@ -409,17 +424,6 @@ func (p *gceBuildletPool) awaitVMCountQuota(ctx context.Context, numCPU int) err
 			return ctx.Err()
 		}
 	}
-}
-
-func (p *gceBuildletPool) HasCapacity(hostType string) bool {
-	hconf, ok := dashboard.Hosts[hostType]
-	if !ok {
-		return false
-	}
-	numCPU := hconf.GCENumCPU()
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.haveQuotaLocked(numCPU)
 }
 
 // haveQuotaLocked reports whether the current GCE quota permits
@@ -527,7 +531,7 @@ func (p *gceBuildletPool) cleanUpOldVMs() {
 	// and Region.Zones: http://godoc.org/google.golang.org/api/compute/v1#Region
 
 	for {
-		for _, zone := range buildEnv.ZonesToClean {
+		for _, zone := range buildEnv.VMZones {
 			if err := p.cleanZoneVMs(zone); err != nil {
 				log.Printf("Error cleaning VMs in zone %q: %v", zone, err)
 			}
@@ -687,5 +691,36 @@ func syncBuildStatsLoop(env *buildenv.Environment) {
 		}
 		cancel()
 		<-ticker.C
+	}
+}
+
+// createBasepinDisks creates zone-local copies of VM disk images, to
+// speed up VM creations in the future.
+//
+// Other than a list call, this a no-op unless new VM images were
+// added or updated recently.
+func createBasepinDisks(ctx context.Context) {
+	if !metadata.OnGCE() || (buildEnv != buildenv.Production && buildEnv != buildenv.Staging) {
+		return
+	}
+	for {
+		t0 := time.Now()
+		bgc, err := buildgo.NewClient(ctx, buildEnv)
+		if err != nil {
+			log.Printf("basepin: NewClient: %v", err)
+			return
+		}
+		log.Printf("basepin: creating basepin disks...")
+		err = bgc.MakeBasepinDisks(ctx)
+		d := time.Since(t0).Round(time.Second / 10)
+		if err != nil {
+			basePinErr.Store(err.Error())
+			log.Printf("basepin: error creating basepin disks, after %v: %v", d, err)
+			time.Sleep(5 * time.Minute)
+			continue
+		}
+		basePinErr.Store("")
+		log.Printf("basepin: created basepin disks after %v", d)
+		return
 	}
 }

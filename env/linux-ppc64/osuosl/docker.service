@@ -1,0 +1,11 @@
+[Unit]
+Description=Docker ppc64
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/dockerd
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

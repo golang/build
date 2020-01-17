@@ -3,27 +3,20 @@
 // license that can be found in the LICENSE file.
 
 // The gitmirror binary watches the specified Gerrit repositories for
-// new commits and reports them to the build dashboard.
+// new commits and syncs them to GitHub.
 //
-// It also serves tarballs over HTTP for the build system, and pushes
-// new commits to Github.
+// It also serves tarballs over HTTP for the build system.
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
-	"crypto/sha1"
-	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path"
@@ -36,76 +29,30 @@ import (
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
-	"golang.org/x/build/buildenv"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/gitauth"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
+	repospkg "golang.org/x/build/repos"
 )
 
 const (
-	goBase         = "https://go.googlesource.com/"
-	watcherVersion = 3        // must match dashboard/app/build/handler.go's watcherVersion
-	master         = "master" // name of the master branch
+	goBase = "https://go.googlesource.com/"
 )
 
 var (
-	httpAddr = flag.String("http", "", "If non-empty, the listen address to run an HTTP server on")
-	cacheDir = flag.String("cachedir", "", "git cache directory. If empty a temp directory is made.")
-
-	dashFlag = flag.String("dash", "", "Dashboard URL (must end in /). If unset, will be automatically derived from the GCE project name.")
-	keyFile  = flag.String("key", defaultKeyFile, "Build dashboard key file. If empty, automatic from GCE project metadata")
-
+	httpAddr     = flag.String("http", "", "If non-empty, the listen address to run an HTTP server on")
+	cacheDir     = flag.String("cachedir", "", "git cache directory. If empty a temp directory is made.")
 	pollInterval = flag.Duration("poll", 60*time.Second, "Remote repo poll interval")
-
-	// TODO(bradfitz): these three are all kinda the same and
-	// redundant. Unify after research.
-	network = flag.Bool("network", true, "Enable network calls (disable for testing)")
-	mirror  = flag.Bool("mirror", false, "whether to mirror to github")
-	report  = flag.Bool("report", true, "Report updates to build dashboard (use false for development dry-run mode)")
-
-	filter   = flag.String("filter", "", "If non-empty, a comma-separated list of directories or files to watch for new commits (only works on main repo). If empty, watch all files in repo.")
-	branches = flag.String("branches", "", "If non-empty, a comma-separated list of branches to watch. If empty, watch changes on every branch.")
+	mirror       = flag.Bool("mirror", false, "whether to mirror to github; if disabled, it only runs in HTTP archive server mode")
 )
 
-var (
-	defaultKeyFile = filepath.Join(homeDir(), ".gobuildkey")
-	dashboardKey   = ""
-	networkSeen    = make(map[string]bool) // testing mode only (-network=false); known hashes
-)
-
-var httpClient = &http.Client{
-	Timeout: 30 * time.Second, // overkill
-}
-
-var gerritClient = gerrit.NewClient(goBase, gerrit.NoAuth)
-
-var (
-	// gitLogFn returns the list of unseen Commits on a Repo,
-	// typically by shelling out to `git log`.
-	// gitLogFn is a global var so we can stub it out for tests.
-	gitLogFn = gitLog
-
-	// gitRemotesFn returns a slice of remote branches known to the git repo.
-	// gitRemotesFn is a global var so we can stub it out for tests.
-	gitRemotesFn = gitRemotes
-)
+var gerritClient = gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
 
 func main() {
 	flag.Parse()
 	if err := gitauth.Init(); err != nil {
 		log.Fatalf("gitauth: %v", err)
-	}
-
-	if *dashFlag == "" && metadata.OnGCE() {
-		project, err := metadata.ProjectID()
-		if err != nil {
-			log.Fatalf("metadata.ProjectID: %v", err)
-		}
-		*dashFlag = buildenv.ByProjectID(project).DashBase()
-	}
-	if *dashFlag == "" {
-		log.Fatal("-dash must be specified and could not be autodetected")
 	}
 
 	log.Printf("gitmirror running.")
@@ -119,10 +66,6 @@ func main() {
 // runGitMirror is a little wrapper so we can use defer and return to signal
 // errors. It should only return a non-nil error.
 func runGitMirror() error {
-	if !strings.HasSuffix(*dashFlag, "/") {
-		return errors.New("dashboard URL (-dashboard) must end in /")
-	}
-
 	if *mirror {
 		sshDir := filepath.Join(homeDir(), ".ssh")
 		sshKey := filepath.Join(sshDir, "id_ed25519")
@@ -166,14 +109,6 @@ func runGitMirror() error {
 		}
 	}
 
-	if *report {
-		if k, err := readKey(); err != nil {
-			return err
-		} else {
-			dashboardKey = k
-		}
-	}
-
 	if *httpAddr != "" {
 		http.HandleFunc("/debug/env", handleDebugEnv)
 		http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
@@ -186,24 +121,19 @@ func runGitMirror() error {
 
 	errc := make(chan error)
 
-	subrepos, err := subrepoList()
-	if err != nil {
-		return err
-	}
-
-	startRepo := func(name, path string, dash bool) {
+	startRepo := func(name string) {
 		log.Printf("Starting watch of repo %s", name)
 		url := goBase + name
 		var dst string
 		if *mirror {
-			if shouldMirror(name) {
+			dst = shouldMirrorTo(name)
+			if dst != "" {
 				log.Printf("Starting mirror of subrepo %s", name)
-				dst = "git@github.com:golang/" + name + ".git"
 			} else {
 				log.Printf("Not mirroring repo %s", name)
 			}
 		}
-		r, err := NewRepo(url, dst, path, dash)
+		r, err := NewRepo(url, dst)
 		if err != nil {
 			errc <- err
 			return
@@ -216,27 +146,13 @@ func runGitMirror() error {
 		r.Loop()
 	}
 
-	go startRepo("go", "", true)
-
-	seen := map[string]bool{"go": true}
-	for _, path := range subrepos {
-		name := strings.TrimPrefix(path, "golang.org/x/")
-		seen[name] = true
-		go startRepo(name, path, true)
-	}
 	if *mirror {
-		for name := range gerritMetaMap() {
-			if seen[name] {
-				// Repo already picked up by dashboard list.
-				continue
-			}
-			path := "golang.org/x/" + name
-			if name == "dl" {
-				// This subrepo is different from others in that
-				// it doesn't use the /x/ path element.
-				path = "golang.org/" + name
-			}
-			go startRepo(name, path, false)
+		gerritRepos, err := gerritMetaMap()
+		if err != nil {
+			return fmt.Errorf("gerritMetaMap: %v", err)
+		}
+		for name := range gerritRepos {
+			go startRepo(name)
 		}
 	}
 
@@ -269,51 +185,13 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "</pre></body></html>")
 }
 
-// shouldMirror reports whether the named repo should be mirrored from
-// Gerrit to Github.
-func shouldMirror(name string) bool {
-	switch name {
-	case
-		"arch",
-		"benchmarks",
-		"blog",
-		"build",
-		"crypto",
-		"debug",
-		"dl",
-		"example",
-		"exp",
-		"gddo",
-		"go",
-		"gofrontend",
-		"image",
-		"lint",
-		"mobile",
-		"net",
-		"oauth2",
-		"playground",
-		"proposal",
-		"review",
-		"scratch",
-		"sync",
-		"sys",
-		"talks",
-		"term",
-		"text",
-		"time",
-		"tools",
-		"tour",
-		"vgo":
-		return true
+// shouldMirrorTo returns the GitHub repository the named repo should be
+// mirrored to or "" if it should not be mirrored.
+func shouldMirrorTo(name string) (dst string) {
+	if r, ok := repospkg.ByGerritProject[name]; ok && r.MirrorToGitHub {
+		return "git@github.com:" + r.GitHubRepo() + ".git"
 	}
-	// Else, see if it appears to be a subrepo:
-	r, err := httpClient.Get("https://golang.org/x/" + name)
-	if err != nil {
-		log.Printf("repo %v doesn't seem to exist: %v", name, err)
-		return false
-	}
-	r.Body.Close()
-	return r.StatusCode/100 == 2
+	return ""
 }
 
 // a statusEntry is a status string at a specific time.
@@ -359,13 +237,9 @@ func (r *statusRing) foreachDesc(fn func(statusEntry)) {
 
 // Repo represents a repository to be watched.
 type Repo struct {
-	root     string             // on-disk location of the git repo, *cacheDir/name
-	path     string             // base import path for repo (blank for main repo)
-	commits  map[string]*Commit // keyed by full commit hash (40 lowercase hex digits)
-	branches map[string]*Branch // keyed by branch name, eg "release-branch.go1.3" (or empty for default)
-	dash     bool               // push new commits to the dashboard
-	mirror   bool               // push new commits to 'dest' remote
-	status   statusRing
+	root   string // on-disk location of the git repo, *cacheDir/name
+	mirror bool   // push new commits to 'dest' remote
+	status statusRing
 
 	mu        sync.Mutex
 	err       error
@@ -380,20 +254,12 @@ type Repo struct {
 //
 // If dstURL is not empty, changes from the source repository will
 // be mirrored to the specified destination repository.
-// The importPath argument is the base import path of the repository,
-// and should be empty for the main Go repo.
-// The dash argument should be set true if commits to this
-// repo should be reported to the build dashboard.
-func NewRepo(srcURL, dstURL, importPath string, dash bool) (*Repo, error) {
+func NewRepo(srcURL, dstURL string) (*Repo, error) {
 	name := path.Base(srcURL) // "go", "net", etc
 	root := filepath.Join(*cacheDir, name)
 	r := &Repo{
-		path:     importPath,
-		root:     root,
-		commits:  make(map[string]*Commit),
-		branches: make(map[string]*Branch),
-		mirror:   dstURL != "",
-		dash:     dash,
+		root:   root,
+		mirror: dstURL != "",
 	}
 
 	http.Handle("/debug/watcher/"+r.name(), r)
@@ -401,7 +267,7 @@ func NewRepo(srcURL, dstURL, importPath string, dash bool) (*Repo, error) {
 	needClone := true
 	if r.shouldTryReuseGitDir(dstURL) {
 		r.setStatus("reusing git dir; running git fetch")
-		cmd := exec.Command("git", "fetch", "origin")
+		cmd := exec.Command("git", "fetch", "--prune", "origin")
 		cmd.Dir = r.root
 		r.logf("running git fetch")
 		t0 := time.Now()
@@ -431,19 +297,18 @@ func NewRepo(srcURL, dstURL, importPath string, dash bool) (*Repo, error) {
 
 	if r.mirror {
 		r.setStatus("adding dest remote")
-		if err := r.addRemote("dest", dstURL); err != nil {
+		if err := r.addRemote("dest", dstURL,
+			// We want to include only the refs/heads/* and refs/tags/* namespaces
+			// in the GitHub mirrors. They correspond to published branches and tags.
+			// Leave out internal Gerrit namespaces such as refs/changes/*,
+			// refs/users/*, etc., because they're not helpful on github.com/golang.
+			"push = +refs/heads/*:refs/heads/*",
+			"push = +refs/tags/*:refs/tags/*",
+		); err != nil {
 			r.setStatus("failed to add dest")
 			return nil, fmt.Errorf("adding remote: %v", err)
 		}
 		r.setStatus("added dest remote")
-	}
-
-	if r.dash {
-		r.logf("loading commit log")
-		if err := r.update(false); err != nil {
-			return nil, err
-		}
-		r.logf("found %v branches among %v commits\n", len(r.branches), len(r.commits))
 	}
 
 	return r, nil
@@ -547,7 +412,7 @@ func (r *Repo) shouldTryReuseGitDir(dstURL string) bool {
 	return false
 }
 
-func (r *Repo) addRemote(name, url string) error {
+func (r *Repo) addRemote(name, url string, opts ...string) error {
 	gitConfig := filepath.Join(r.root, "config")
 	f, err := os.OpenFile(gitConfig, os.O_WRONLY|os.O_APPEND, os.ModePerm)
 	if err != nil {
@@ -558,29 +423,30 @@ func (r *Repo) addRemote(name, url string) error {
 		f.Close()
 		return err
 	}
+	for _, o := range opts {
+		_, err := fmt.Fprintf(f, "\t%s\n", o)
+		if err != nil {
+			f.Close()
+			return err
+		}
+	}
 	return f.Close()
 }
 
-// Loop continuously runs "git fetch" in the repo, checks for
-// new commits, posts any new commits to the dashboard (if enabled),
-// and mirrors commits to a destination repo (if enabled).
+// Loop continuously runs "git fetch" in the repo, checks for new
+// commits and mirrors commits to a destination repo (if enabled).
 func (r *Repo) Loop() {
 	tickler := repoTickler(r.name())
 	for {
 		if err := r.fetch(); err != nil {
+			r.logf("fetch failed in repo loop: %v", err)
 			r.setErr(err)
 			time.Sleep(10 * time.Second)
 			continue
 		}
 		if r.mirror {
 			if err := r.push(); err != nil {
-				r.setErr(err)
-				time.Sleep(10 * time.Second)
-				continue
-			}
-		}
-		if r.dash {
-			if err := r.updateDashboard(); err != nil {
+				r.logf("push failed in repo loop: %v", err)
 				r.setErr(err)
 				time.Sleep(10 * time.Second)
 				continue
@@ -603,457 +469,12 @@ func (r *Repo) Loop() {
 	}
 }
 
-func (r *Repo) updateDashboard() (err error) {
-	r.setStatus("updating dashboard")
-	defer func() {
-		if err == nil {
-			r.setStatus("updated dashboard")
-		}
-	}()
-	if err := r.update(true); err != nil {
-		return err
-	}
-	remotes, err := gitRemotesFn(r)
-	if err != nil {
-		return err
-	}
-	for _, name := range remotes {
-		b, ok := r.branches[name]
-		if !ok {
-			// skip branch; must be already merged
-			continue
-		}
-		if err := r.postNewCommits(b); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (r *Repo) name() string {
-	if r.path == "" {
-		return "go"
-	}
-	return path.Base(r.path)
+	return filepath.Base(r.root)
 }
 
 func (r *Repo) logf(format string, args ...interface{}) {
 	log.Printf(r.name()+": "+format, args...)
-}
-
-// postNewCommits looks for unseen commits on the specified branch and
-// posts them to the dashboard.
-func (r *Repo) postNewCommits(b *Branch) error {
-	if b.Head == b.LastSeen {
-		return nil
-	}
-	c := b.LastSeen
-	if c == nil {
-		// Haven't seen anything on this branch yet:
-		if b.Name == master {
-			// For the master branch, bootstrap by creating a dummy
-			// commit with a lone child that is the initial commit.
-			c = &Commit{}
-			for _, c2 := range r.commits {
-				if c2.Parent == "" {
-					c.children = []*Commit{c2}
-					break
-				}
-			}
-			if c.children == nil {
-				return fmt.Errorf("couldn't find initial commit")
-			}
-		} else {
-			// Find the commit that this branch forked from.
-			base, err := r.mergeBase("heads/"+b.Name, master)
-			if err != nil {
-				return err
-			}
-			var ok bool
-			c, ok = r.commits[base]
-			if !ok {
-				return fmt.Errorf("couldn't find base commit: %v", base)
-			}
-		}
-	}
-	if err := r.postChildren(b, c); err != nil {
-		return err
-	}
-	b.LastSeen = b.Head
-	return nil
-}
-
-// postChildren posts to the dashboard all descendants of the given parent.
-// It ignores descendants that are not on the given branch.
-func (r *Repo) postChildren(b *Branch, parent *Commit) error {
-	for _, c := range parent.children {
-		if c.Branch != b.Name {
-			continue
-		}
-		if err := r.postCommit(c); err != nil {
-			if strings.Contains(err.Error(), "this package already has a first commit; aborting") {
-				return nil
-			}
-			return err
-		}
-	}
-	for _, c := range parent.children {
-		if err := r.postChildren(b, c); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// postCommit sends a commit to the build dashboard.
-func (r *Repo) postCommit(c *Commit) error {
-	if !*report {
-		r.logf("dry-run mode; NOT posting commit to dashboard: %v", c)
-		return nil
-	}
-	r.logf("sending commit to dashboard: %v", c)
-
-	t, err := time.Parse("Mon, 2 Jan 2006 15:04:05 -0700", c.Date)
-	if err != nil {
-		return fmt.Errorf("postCommit: parsing date %q for commit %v: %v", c.Date, c, err)
-	}
-	dc := struct {
-		PackagePath string // (empty for main repo commits)
-		Hash        string
-		ParentHash  string
-
-		User   string
-		Desc   string
-		Time   time.Time
-		Branch string
-
-		NeedsBenchmarking bool
-	}{
-		PackagePath: r.path,
-		Hash:        c.Hash,
-		ParentHash:  c.Parent,
-
-		User:   c.Author,
-		Desc:   c.Desc,
-		Time:   t,
-		Branch: c.Branch,
-
-		NeedsBenchmarking: c.NeedsBenchmarking(),
-	}
-	b, err := json.Marshal(dc)
-	if err != nil {
-		return fmt.Errorf("postCommit: marshaling request body: %v", err)
-	}
-
-	if !*network {
-		if c.Parent != "" {
-			if !networkSeen[c.Parent] {
-				r.logf("%v: %v", c.Parent, r.commits[c.Parent])
-				return fmt.Errorf("postCommit: no parent %v found on dashboard for %v", c.Parent, c)
-			}
-		}
-		if networkSeen[c.Hash] {
-			return fmt.Errorf("postCommit: already seen %v", c)
-		}
-		networkSeen[c.Hash] = true
-		return nil
-	}
-
-	v := url.Values{"version": {fmt.Sprint(watcherVersion)}, "key": {dashboardKey}}
-	u := *dashFlag + "commit?" + v.Encode()
-	resp, err := http.Post(u, "text/json", bytes.NewReader(b))
-	if err != nil {
-		return err
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return fmt.Errorf("postCommit: reading body: %v", err)
-	}
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("postCommit: status: %v\nbody: %s", resp.Status, body)
-	}
-
-	var s struct {
-		Error string
-	}
-	if err := json.Unmarshal(body, &s); err != nil {
-		return fmt.Errorf("postCommit: decoding response: %v", err)
-	}
-	if s.Error != "" {
-		return fmt.Errorf("postCommit: error: %v", s.Error)
-	}
-	return nil
-}
-
-// update looks for new commits and branches,
-// and updates the commits and branches maps.
-func (r *Repo) update(noisy bool) error {
-	remotes, err := gitRemotesFn(r)
-	if err != nil {
-		return err
-	}
-	for _, name := range remotes {
-		b := r.branches[name]
-
-		// Find all unseen commits on this branch.
-		revspec := "heads/" + name
-		if b != nil {
-			// If we know about this branch,
-			// only log commits down to the known head.
-			revspec = b.Head.Hash + ".." + revspec
-		}
-		log, err := gitLogFn(r, "--topo-order", revspec)
-		if err != nil {
-			return err
-		}
-		if len(log) == 0 {
-			// No commits to handle; carry on.
-			continue
-		}
-
-		var nDups, nDrops int
-
-		// Add unknown commits to r.commits.
-		var added []*Commit
-		for _, c := range log {
-			if noisy {
-				r.logf("found new commit %v", c)
-			}
-			// If we've already seen this commit,
-			// only store the master one in r.commits.
-			if _, ok := r.commits[c.Hash]; ok {
-				nDups++
-				if name != master {
-					nDrops++
-					continue
-				}
-			}
-			c.Branch = name
-			r.commits[c.Hash] = c
-			added = append(added, c)
-		}
-
-		if nDups > 0 {
-			r.logf("saw %v duplicate commits; dropped %v of them", nDups, nDrops)
-		}
-
-		// Link added commits.
-		for _, c := range added {
-			if c.Parent == "" {
-				// This is the initial commit; no parent.
-				r.logf("no parents for initial commit %v", c)
-				continue
-			}
-			// Find parent commit.
-			p, ok := r.commits[c.Parent]
-			if !ok {
-				return fmt.Errorf("can't find parent %q for %v", c.Parent, c)
-			}
-			// Link parent Commit.
-			c.parent = p
-			// Link child Commits.
-			p.children = append(p.children, c)
-		}
-
-		// Update branch head, or add newly discovered branch.
-		// If we had already seen log[0], eg. on a different branch,
-		// we would never have linked it in the loop above.
-		// We therefore fetch the commit from r.commits to ensure we have
-		// the right address.
-		head := r.commits[log[0].Hash]
-		if b != nil {
-			// Known branch; update head.
-			b.Head = head
-			r.logf("updated branch head: %v", b)
-		} else {
-			// It's a new branch; add it.
-			seen, err := r.lastSeen(head.Hash)
-			if err != nil {
-				return err
-			}
-			b = &Branch{Name: name, Head: head, LastSeen: seen}
-			r.branches[name] = b
-			r.logf("found branch: %v", b)
-		}
-	}
-
-	return nil
-}
-
-// lastSeen finds the most recent commit the dashboard has seen,
-// starting at the specified head. If the dashboard hasn't seen
-// any of the commits from head to the beginning, it returns nil.
-func (r *Repo) lastSeen(head string) (*Commit, error) {
-	h, ok := r.commits[head]
-	if !ok {
-		return nil, fmt.Errorf("lastSeen: can't find %q in commits", head)
-	}
-
-	var s []*Commit
-	for c := h; c != nil; c = c.parent {
-		s = append(s, c)
-	}
-
-	var err error
-	i := sort.Search(len(s), func(i int) bool {
-		if err != nil {
-			return false
-		}
-		ok, err = r.dashSeen(s[i].Hash)
-		return ok
-	})
-	switch {
-	case err != nil:
-		return nil, fmt.Errorf("lastSeen: %v", err)
-	case i < len(s):
-		return s[i], nil
-	default:
-		// Dashboard saw no commits.
-		return nil, nil
-	}
-}
-
-// dashSeen reports whether the build dashboard knows the specified commit.
-func (r *Repo) dashSeen(hash string) (bool, error) {
-	if !*network {
-		return networkSeen[hash], nil
-	}
-	v := url.Values{"hash": {hash}, "packagePath": {r.path}}
-	u := *dashFlag + "commit?" + v.Encode()
-	resp, err := httpClient.Get(u)
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return false, fmt.Errorf("status: %v", resp.Status)
-	}
-	var s struct {
-		Error string
-	}
-	err = json.NewDecoder(resp.Body).Decode(&s)
-	if err != nil {
-		return false, err
-	}
-	switch s.Error {
-	case "":
-		// Found one.
-		return true, nil
-	case "Commit not found":
-		// Commit not found, keep looking for earlier commits.
-		return false, nil
-	default:
-		return false, fmt.Errorf("dashboard: %v", s.Error)
-	}
-}
-
-// mergeBase returns the hash of the merge base for revspecs a and b.
-func (r *Repo) mergeBase(a, b string) (string, error) {
-	cmd := exec.Command("git", "merge-base", a, b)
-	cmd.Dir = r.root
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("git merge-base %s..%s: %v", a, b, err)
-	}
-	return string(bytes.TrimSpace(out)), nil
-}
-
-// gitRemotes returns a slice of remote branches known to the git repo.
-// It always puts "origin/master" first.
-func gitRemotes(r *Repo) ([]string, error) {
-	if *branches != "" {
-		return strings.Split(*branches, ","), nil
-	}
-
-	cmd := exec.Command("git", "branch")
-	cmd.Dir = r.root
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("git branch: %v", err)
-	}
-	bs := []string{master}
-	for _, b := range strings.Split(string(out), "\n") {
-		b = strings.TrimPrefix(b, "* ")
-		b = strings.TrimSpace(b)
-		// Ignore aliases, blank lines, and master (it's already in bs).
-		if b == "" || strings.Contains(b, "->") || b == master {
-			continue
-		}
-		// Ignore pre-go1 release branches; they are just noise.
-		if strings.HasPrefix(b, "release-branch.r") {
-			continue
-		}
-		bs = append(bs, b)
-	}
-	return bs, nil
-}
-
-const logFormat = `--format=format:` + logBoundary + `%H
-%P
-%an <%ae>
-%cD
-%B
-` + fileBoundary
-
-const logBoundary = `_-_- magic boundary -_-_`
-const fileBoundary = `_-_- file boundary -_-_`
-
-// gitLog runs "git log" with the supplied arguments
-// and parses the output into Commit values.
-func gitLog(r *Repo, dir string, args ...string) ([]*Commit, error) {
-	args = append([]string{"log", "--date=rfc", "--name-only", "--parents", logFormat}, args...)
-	if r.path == "" && *filter != "" {
-		paths := strings.Split(*filter, ",")
-		args = append(args, "--")
-		args = append(args, paths...)
-	}
-	cmd := exec.Command("git", args...)
-	cmd.Dir = r.root
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("git %v: %v\n%s", strings.Join(args, " "), err, out)
-	}
-
-	// We have a commit with description that contains 0x1b byte.
-	// Mercurial does not escape it, but xml.Unmarshal does not accept it.
-	// TODO(adg): do we still need to scrub this? Probably.
-	out = bytes.Replace(out, []byte{0x1b}, []byte{'?'}, -1)
-
-	var cs []*Commit
-	for _, text := range strings.Split(string(out), logBoundary) {
-		text = strings.TrimSpace(text)
-		if text == "" {
-			continue
-		}
-		p := strings.SplitN(text, "\n", 5)
-		if len(p) != 5 {
-			return nil, fmt.Errorf("git log %v: malformed commit: %q", strings.Join(args, " "), text)
-		}
-
-		// The change summary contains the change description and files
-		// modified in this commit.  There is no way to directly refer
-		// to the modified files in the log formatting string, so we look
-		// for the file boundary after the description.
-		changeSummary := p[4]
-		descAndFiles := strings.SplitN(changeSummary, fileBoundary, 2)
-		desc := strings.TrimSpace(descAndFiles[0])
-
-		// For branch merges, the list of files can still be empty
-		// because there are no changed files.
-		files := strings.Replace(strings.TrimSpace(descAndFiles[1]), "\n", " ", -1)
-
-		cs = append(cs, &Commit{
-			Hash: p[0],
-			// TODO(adg): This may break with branch merges.
-			Parent: strings.Split(p[1], " ")[0],
-			Author: p[2],
-			Date:   p[3],
-			Desc:   desc,
-			Files:  files,
-		})
-	}
-	return cs, nil
 }
 
 // fetch runs "git fetch" in the repository root.
@@ -1073,7 +494,9 @@ func (r *Repo) fetch() (err error) {
 		if n > 1 {
 			r.setStatus(fmt.Sprintf("running git fetch origin, attempt %d", n))
 		}
-		cmd := exec.Command("git", "fetch", "origin")
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "git", "fetch", "--prune", "origin")
 		cmd.Dir = r.root
 		if out, err := cmd.CombinedOutput(); err != nil {
 			err = fmt.Errorf("%v\n\n%s", err, out)
@@ -1084,12 +507,7 @@ func (r *Repo) fetch() (err error) {
 	})
 }
 
-// push effectively runs "git push -f --mirror dest" in the repository
-// root, but does things in smaller batches of refs, to work around
-// performance problems we saw in the past. (They might have been
-// fixed by later version of git; they seemed to only affect the HTTP
-// transport, but not ssh)
-//
+// push runs "git push -f --mirror dest" in the repository root.
 // It tries three times, just in case it failed because of a transient error.
 func (r *Repo) push() (err error) {
 	n := 0
@@ -1106,69 +524,13 @@ func (r *Repo) push() (err error) {
 		if n > 1 {
 			r.setStatus(fmt.Sprintf("syncing to github, attempt %d", n))
 		}
-		r.setStatus("sync: fetching local refs")
-		local, err := r.getLocalRefs()
-		if err != nil {
-			r.logf("failed to get local refs: %v", err)
+		cmd := exec.Command("git", "push", "-f", "--mirror", "dest")
+		cmd.Dir = r.root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			err = fmt.Errorf("%v\n\n%s", err, out)
+			r.logf("git push failed: %v", err)
 			return err
 		}
-		r.setStatus(fmt.Sprintf("sync: got %d local refs", len(local)))
-
-		r.setStatus("sync: fetching remote refs")
-		remote, err := r.getRemoteRefs("dest")
-		if err != nil {
-			r.logf("failed to get remote refs: %v", err)
-			return err
-		}
-		r.setStatus(fmt.Sprintf("sync: got %d remote refs", len(remote)))
-
-		var pushRefs []string
-		for ref, hash := range local {
-			if strings.Contains(ref, "refs/users/") ||
-				strings.Contains(ref, "refs/cache-auto") ||
-				strings.Contains(ref, "refs/changes/") {
-				continue
-			}
-			if remote[ref] != hash {
-				pushRefs = append(pushRefs, ref)
-			}
-		}
-		sort.Slice(pushRefs, func(i, j int) bool {
-			p1 := priority[refType(pushRefs[i])]
-			p2 := priority[refType(pushRefs[j])]
-			if p1 != p2 {
-				return p1 > p2
-			}
-			return pushRefs[i] <= pushRefs[j]
-		})
-		if len(pushRefs) == 0 {
-			r.setStatus("nothing to sync")
-			return nil
-		}
-		for len(pushRefs) > 0 {
-			r.setStatus(fmt.Sprintf("%d refs to push; pushing batch", len(pushRefs)))
-			r.logf("%d refs remain to sync to github", len(pushRefs))
-			args := []string{"push", "-f", "dest"}
-			n := 0
-			for _, ref := range pushRefs {
-				args = append(args, "+"+local[ref]+":"+ref)
-				n++
-				if n == 200 {
-					break
-				}
-			}
-			pushRefs = pushRefs[n:]
-			cmd := exec.Command("git", args...)
-			cmd.Dir = r.root
-			cmd.Stderr = os.Stderr
-			out, err := cmd.Output()
-			if err != nil {
-				r.logf("git push failed, running git %s: %s", args, out)
-				r.setStatus("git push failure")
-				return err
-			}
-		}
-		r.setStatus("sync complete")
 		return nil
 	})
 }
@@ -1277,58 +639,6 @@ func try(n int, fn func() error) error {
 	return err
 }
 
-// Branch represents a Mercurial branch.
-type Branch struct {
-	Name     string
-	Head     *Commit
-	LastSeen *Commit // the last commit posted to the dashboard
-}
-
-func (b *Branch) String() string {
-	return fmt.Sprintf("%q(Head: %v LastSeen: %v)", b.Name, b.Head, b.LastSeen)
-}
-
-// Commit represents a single Git commit.
-type Commit struct {
-	Hash   string
-	Author string
-	Date   string // Format: "Mon, 2 Jan 2006 15:04:05 -0700"
-	Desc   string // Plain text, first line is a short description.
-	Parent string
-	Branch string
-	Files  string
-
-	// For walking the graph.
-	parent   *Commit
-	children []*Commit
-}
-
-func (c *Commit) String() string {
-	s := c.Hash
-	if c.Branch != "" {
-		s += fmt.Sprintf("[%v]", c.Branch)
-	}
-	s += fmt.Sprintf("(%q)", strings.SplitN(c.Desc, "\n", 2)[0])
-	return s
-}
-
-// NeedsBenchmarking reports whether the Commit needs benchmarking.
-func (c *Commit) NeedsBenchmarking() bool {
-	// Do not benchmark branch commits, they are usually not interesting
-	// and fall out of the trunk succession.
-	if c.Branch != master {
-		return false
-	}
-	// Do not benchmark commits that do not touch source files (e.g. CONTRIBUTORS).
-	for _, f := range strings.Split(c.Files, " ") {
-		if (strings.HasPrefix(f, "include") || strings.HasPrefix(f, "src")) &&
-			!strings.HasSuffix(f, "_test.go") && !strings.Contains(f, "testdata") {
-			return true
-		}
-	}
-	return false
-}
-
 func homeDir() string {
 	switch runtime.GOOS {
 	case "plan9":
@@ -1337,57 +647,6 @@ func homeDir() string {
 		return os.Getenv("HOMEDRIVE") + os.Getenv("HOMEPATH")
 	}
 	return os.Getenv("HOME")
-}
-
-func readKey() (string, error) {
-	c, err := ioutil.ReadFile(*keyFile)
-	if os.IsNotExist(err) && metadata.OnGCE() {
-		key, err := metadata.ProjectAttributeValue("builder-master-key")
-		if err != nil {
-			return "", fmt.Errorf("-key=%s doesn't exist, and key can't be loaded from GCE metadata: %v", *keyFile, err)
-		}
-		return strings.TrimSpace(key), nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return string(bytes.TrimSpace(bytes.SplitN(c, []byte("\n"), 2)[0])), nil
-}
-
-// subrepoList fetches a list of sub-repositories from the dashboard
-// and returns them as a slice of base import paths.
-// Eg, []string{"golang.org/x/tools", "golang.org/x/net"}.
-func subrepoList() ([]string, error) {
-	if !*network {
-		return nil, nil
-	}
-
-	r, err := httpClient.Get(*dashFlag + "packages?kind=subrepo")
-	if err != nil {
-		return nil, fmt.Errorf("subrepo list: %v", err)
-	}
-	defer r.Body.Close()
-	if r.StatusCode != 200 {
-		return nil, fmt.Errorf("subrepo list: got status %v", r.Status)
-	}
-	var resp struct {
-		Response []struct {
-			Path string
-		}
-		Error string
-	}
-	err = json.NewDecoder(r.Body).Decode(&resp)
-	if err != nil {
-		return nil, fmt.Errorf("subrepo list: %v", err)
-	}
-	if resp.Error != "" {
-		return nil, fmt.Errorf("subrepo list: %v", resp.Error)
-	}
-	var pkgs []string
-	for _, r := range resp.Response {
-		pkgs = append(pkgs, r.Path)
-	}
-	return pkgs, nil
 }
 
 var (
@@ -1414,7 +673,12 @@ func repoTickler(repo string) chan bool {
 func pollGerritAndTickle() {
 	last := map[string]string{} // repo -> last seen hash
 	for {
-		for repo, hash := range gerritMetaMap() {
+		gerritRepos, err := gerritMetaMap()
+		if err != nil {
+			log.Printf("pollGerritAndTickle: gerritMetaMap failed, skipping: %v", err)
+			gerritRepos = nil
+		}
+		for repo, hash := range gerritRepos {
 			if hash != last[repo] {
 				last[repo] = hash
 				select {
@@ -1439,54 +703,41 @@ func subscribeToMaintnerAndTickleLoop() {
 }
 
 func subscribeToMaintnerAndTickle() error {
-	log.Printf("Loading maintner data.")
-	t0 := time.Now()
 	ctx := context.Background()
-	corpus, err := godata.Get(ctx)
-	if err != nil {
-		return err
-	}
-	log.Printf("Loaded maintner data in %v", time.Since(t0))
-	last := map[string]string{} // go.googlesource.com repo base => digest of all refs
+	retryTicker := time.NewTicker(10 * time.Second)
+	defer retryTicker.Stop() // we never return, though
 	for {
-		corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
-			proj := path.Base(gp.ServerSlashProject())
-			s1 := sha1.New()
-			gp.ForeachNonChangeRef(func(ref string, hash maintner.GitHash) error {
-				io.WriteString(s1, string(hash))
-				return nil
-			})
-			sum := fmt.Sprintf("%x", s1.Sum(nil))
-			lastSum := last[proj]
-			if lastSum == sum {
-				return nil
+		err := maintner.TailNetworkMutationSource(ctx, godata.Server, func(e maintner.MutationStreamEvent) error {
+			if e.Mutation != nil && e.Mutation.Gerrit != nil {
+				gm := e.Mutation.Gerrit
+				if strings.HasPrefix(gm.Project, "go.googlesource.com/") {
+					proj := strings.TrimPrefix(gm.Project, "go.googlesource.com/")
+					log.Printf("maintner refs for %s changed", gm.Project)
+					select {
+					case repoTickler(proj) <- true:
+					default:
+					}
+				}
 			}
-			last[proj] = sum
-			if lastSum == "" {
-				return nil
-			}
-			log.Printf("maintner refs for %s changed", gp.ServerSlashProject())
-			select {
-			case repoTickler(proj) <- true:
-			default:
-			}
-			return nil
+			return e.Err
 		})
-		if err := corpus.Update(ctx); err != nil {
-			return err
-		}
+		log.Printf("maintner tail error: %v; sleeping+restarting", err)
+
+		// prevent retry looping faster than once every 10
+		// seconds; but usually retry immediately in the case
+		// where we've been runing for a while already.
+		<-retryTicker.C
 	}
 }
 
 // gerritMetaMap returns the map from repo name (e.g. "go") to its
 // latest master hash.
-// The returned map is nil on any transient error.
-func gerritMetaMap() map[string]string {
+func gerritMetaMap() (map[string]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	meta, err := gerritClient.GetProjects(ctx, "master")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("gerritClient.GetProjects: %v", err)
 	}
 	m := map[string]string{}
 	for repo, v := range meta {
@@ -1494,66 +745,7 @@ func gerritMetaMap() map[string]string {
 			m[repo] = master
 		}
 	}
-	return m
-}
-
-func (r *Repo) getLocalRefs() (map[string]string, error) {
-	cmd := exec.Command("git", "show-ref")
-	cmd.Dir = r.root
-	return parseRefs(cmd)
-}
-
-// getRemoteRefs tells you which references are available in the remote
-// named dest, and returns a map of refs to the matching commit, e.g.
-// "refs/heads/master" => "6b27048ae5e6ad1ef927e72e437531493de612fe".
-func (r *Repo) getRemoteRefs(dest string) (map[string]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "ls-remote", dest)
-	cmd.Dir = r.root
-	return parseRefs(cmd)
-}
-
-func parseRefs(cmd *exec.Cmd) (map[string]string, error) {
-	refHash := map[string]string{}
-	var errBuf bytes.Buffer
-	if cmd.Stderr == nil {
-		cmd.Stderr = &errBuf
-	}
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	bs := bufio.NewScanner(out)
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-	for bs.Scan() {
-		f := strings.Fields(bs.Text())
-		refHash[f[1]] = f[0]
-	}
-	if err := bs.Err(); err != nil {
-		go cmd.Wait() // prevent zombies
-		return nil, err
-	}
-	if err := cmd.Wait(); err != nil {
-		return nil, fmt.Errorf("wait err: %v, stderr: %s", err, errBuf.Bytes())
-	}
-	return refHash, nil
-}
-
-func refType(s string) string {
-	s = strings.TrimPrefix(s, "refs/")
-	if i := strings.IndexByte(s, '/'); i != -1 {
-		return s[:i]
-	}
-	return s
-}
-
-var priority = map[string]int{
-	"heads":   5,
-	"tags":    4,
-	"changes": 3,
+	return m, nil
 }
 
 // GET /debug/goroutines

@@ -44,9 +44,10 @@ import (
 var defaultDir = filepath.Join(xdgCacheDir(), "fetchlogs")
 
 var (
-	flagN   = flag.Int("n", 300, "limit to most recent `N` commits")
-	flagPar = flag.Int("j", 5, "number of concurrent download `jobs`")
-	flagDir = flag.String("dir", defaultDir, "`directory` to save logs to")
+	flagN    = flag.Int("n", 300, "limit to most recent `N` commits")
+	flagPar  = flag.Int("j", 5, "number of concurrent download `jobs`")
+	flagDir  = flag.String("dir", defaultDir, "`directory` to save logs to")
+	flagRepo = flag.String("repo", "go", `repo to fetch logs for`)
 )
 
 func main() {
@@ -98,7 +99,7 @@ func main() {
 			if haveCommits > *flagN {
 				break
 			}
-			if rev.Repo != "go" {
+			if rev.Repo != *flagRepo {
 				continue
 			}
 

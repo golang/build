@@ -197,7 +197,7 @@ func TestGetGerritMessage(t *testing.T) {
 	}
 }
 
-func TestOwnerNameAndID(t *testing.T) {
+func TestOwnerID(t *testing.T) {
 	cl := &GerritCL{}
 	meta := newGerritMeta(
 		&GitCommit{
@@ -212,89 +212,119 @@ func TestOwnerNameAndID(t *testing.T) {
 	cl.Commit = &GitCommit{}
 
 	testCases := []struct {
-		cl        *GerritCL
-		OwnerID   int
-		OwnerName string
+		cl      *GerritCL
+		OwnerID int
 	}{
-		{&GerritCL{}, -1, ""},
-		{cl, 137, "Rick Sanchez"},
+		{&GerritCL{}, -1},
+		{cl, 137},
 	}
 	for _, tc := range testCases {
 		if got := tc.cl.OwnerID(); got != tc.OwnerID {
 			t.Errorf("cl.OwnerID() = %d; want %d", got, tc.OwnerID)
 		}
-		if got := tc.cl.OwnerName(); got != tc.OwnerName {
-			t.Errorf("cl.OwnerName() = %q; want %q", got, tc.OwnerName)
-		}
 	}
 }
 
 func TestSubject(t *testing.T) {
-	cl := &GerritCL{}
-	if w, e := cl.Subject(), ""; w != e {
-		t.Errorf("cl.Subject() = %q; want %q", w, e)
-	}
-
 	testcases := []struct{ msg, subject string }{
 		{"maintner: slurp up all the things", "maintner: slurp up all the things"},
 		{"cmd/go: build stuff\n\nand do other stuff, too.", "cmd/go: build stuff"},
+		{"cmd/go: build lots\nof stuff\n\nand do other stuff, too.", "cmd/go: build lots of stuff"}, // Subject is separated from body by a blank line.
+		{"cmd/go: build lots\nof stuff", "cmd/go: build lots of stuff"},
 	}
 	for _, tc := range testcases {
-		cl = &GerritCL{Commit: &GitCommit{Msg: tc.msg}}
+		cl := &GerritCL{Commit: &GitCommit{Msg: tc.msg}}
 		if cl.Subject() != tc.subject {
 			t.Errorf("cl.Subject() = %q; want %q", cl.Subject(), tc.subject)
 		}
 	}
 }
 
-func TestLineValue(t *testing.T) {
+func TestChangeID(t *testing.T) {
+	testcases := []struct{ msg, changeID string }{
+		{"maintner: slurp up all the things", ""},
+		{"cmd/go: build stuff\n\nChange-Id: I7d3850e6774403c5d4ae15ca94c31c2f46f4ffa3", "I7d3850e6774403c5d4ae15ca94c31c2f46f4ffa3"},
+	}
+	for _, tc := range testcases {
+		cl := &GerritCL{Commit: &GitCommit{Msg: tc.msg}}
+		if cl.ChangeID() != tc.changeID {
+			t.Errorf("cl.ChangeID() = %q; want %q", cl.ChangeID(), tc.changeID)
+		}
+	}
+}
+
+func TestLineValueOK(t *testing.T) {
 	tests := []struct {
 		all, prefix, want, wantRest string
+		wantOK                      bool
 	}{
 		{
 			all:      "foo:  value ",
 			prefix:   "foo:",
 			want:     "value",
 			wantRest: "",
+			wantOK:   true,
 		},
 		{
 			all:      "foo:  value\n",
 			prefix:   "foo:",
 			want:     "value",
 			wantRest: "",
+			wantOK:   true,
+		},
+		{
+			all:      "foo:\n",
+			prefix:   "foo:",
+			want:     "",
+			wantRest: "",
+			wantOK:   true,
+		},
+		{
+			all:      "bar:\n",
+			prefix:   "foo:",
+			want:     "",
+			wantRest: "",
+			wantOK:   false,
 		},
 		{
 			all:      "bar: other\nfoo:  value\n",
 			prefix:   "foo:",
 			want:     "value",
 			wantRest: "",
+			wantOK:   true,
 		},
 		{
 			all:      "notfoo: other\nfoo:  value\n",
 			prefix:   "foo:",
 			want:     "value",
 			wantRest: "",
+			wantOK:   true,
 		},
 		{
 			all:      "Foo: bar\nLabel: Vote=+1\nLabel: Vote=+2\n",
 			prefix:   "Label: ",
 			want:     "Vote=+1",
 			wantRest: "Label: Vote=+2\n",
+			wantOK:   true,
 		},
 		{
 			all:      "Label: Vote=+2\n",
 			prefix:   "Label: ",
 			want:     "Vote=+2",
 			wantRest: "",
+			wantOK:   true,
 		},
 	}
 	for _, tt := range tests {
-		got, gotRest := lineValue(tt.all, tt.prefix)
+		got, gotRest, gotOK := lineValueOK(tt.all, tt.prefix)
 		if got != tt.want {
-			t.Errorf("lineValue(%q, %q) returned value %q; want %q", tt.all, tt.prefix, got, tt.want)
+			t.Errorf("lineValueOK(%q, %q) returned value %q; want %q", tt.all, tt.prefix, got, tt.want)
 		}
 		if gotRest != tt.wantRest {
-			t.Errorf("lineValue(%q, %q) returned rest %q; want %q", tt.all, tt.prefix, gotRest, tt.wantRest)
+			t.Errorf("lineValueOK(%q, %q) returned rest %q; want %q", tt.all, tt.prefix, gotRest, tt.wantRest)
+		}
+		if gotOK != tt.wantOK {
+			t.Errorf("lineValueOK(%q, %q) returned ok %v; want %v", tt.all, tt.prefix, gotOK, tt.wantOK)
 		}
 	}
 }

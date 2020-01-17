@@ -4,4 +4,4 @@
 
 # golang.org/x/build/cmd/genbootstrap
 
-The genbootstrap command prepares GO_BOOTSTRAP tarballs suitable for use on builders.
+The genbootstrap command prepares GOROOT_BOOTSTRAP tarballs suitable for use on builders.

@@ -110,12 +110,7 @@ func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, hostT
 							ContainerPort: 80,
 						},
 					},
-					Env: []api.EnvVar{
-						{
-							Name:  "IN_KUBERNETES",
-							Value: "1",
-						},
-					},
+					Env: []api.EnvVar{},
 				},
 			},
 		},

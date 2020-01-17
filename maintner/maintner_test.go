@@ -5,6 +5,7 @@
 package maintner
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -73,7 +74,7 @@ func init() {
 	tp2, _ = ptypes.TimestampProto(t2)
 }
 
-func TestProcessMutation_Github_NewIssue(t *testing.T) {
+func singleIssueGitHubCorpus() *Corpus {
 	c := new(Corpus)
 	github := &GitHub{c: c}
 	c.github = github
@@ -96,7 +97,11 @@ func TestProcessMutation_Github_NewIssue(t *testing.T) {
 			},
 		},
 	}
-	mutationTest{want: c}.test(t, &maintpb.Mutation{
+	return c
+}
+
+func TestProcessMutation_Github_NewIssue(t *testing.T) {
+	mutationTest{want: singleIssueGitHubCorpus()}.test(t, &maintpb.Mutation{
 		GithubIssue: &maintpb.GithubIssueMutation{
 			Owner:  "golang",
 			Repo:   "go",
@@ -108,6 +113,31 @@ func TestProcessMutation_Github_NewIssue(t *testing.T) {
 			Title:   "some title",
 			Body:    "some body",
 			Created: tp1,
+		},
+	})
+}
+
+func TestProcessMutation_Github_RemoveBody(t *testing.T) {
+	c := singleIssueGitHubCorpus()
+	want := singleIssueGitHubCorpus()
+	want.github.repos[GitHubRepoID{"golang", "go"}].issues[3].Body = ""
+	mutationTest{corpus: c, want: want}.test(t, &maintpb.Mutation{
+		GithubIssue: &maintpb.GithubIssueMutation{
+			Owner:      "golang",
+			Repo:       "go",
+			Number:     3,
+			BodyChange: &maintpb.StringChange{Val: ""},
+		},
+	})
+
+	// And test that the old mutation field (Body) still works.
+	want.github.repos[GitHubRepoID{"golang", "go"}].issues[3].Body = "and back"
+	mutationTest{corpus: c, want: want}.test(t, &maintpb.Mutation{
+		GithubIssue: &maintpb.GithubIssueMutation{
+			Owner:  "golang",
+			Repo:   "go",
+			Number: 3,
+			Body:   "and back",
 		},
 	})
 }
@@ -147,7 +177,7 @@ func TestNewMutationsFromIssue(t *testing.T) {
 		Owner:       "golang",
 		Repo:        "go",
 		Number:      5,
-		Body:        "body of the issue",
+		BodyChange:  &maintpb.StringChange{Val: "body of the issue"},
 		Created:     tp1,
 		Updated:     tp2,
 		Assignees:   []*maintpb.GithubUser{},
@@ -208,6 +238,44 @@ func TestAssigneesDeleted(t *testing.T) {
 	gi := gr.issues[3]
 	if len(gi.Assignees) != 1 || gi.Assignees[0].ID != u2.ID {
 		t.Errorf("expected u1 to be deleted, got %v", gi.Assignees)
+	}
+}
+
+func TestSync(t *testing.T) {
+	c := new(Corpus)
+	assignees := []*GitHubUser{u1, u2}
+	issue := &GitHubIssue{
+		Number:    3,
+		User:      u1,
+		Body:      "some body",
+		Created:   t2,
+		Updated:   t2,
+		Assignees: assignees,
+	}
+	gr := &GitHubRepo{
+		id: GitHubRepoID{"golang", "go"},
+		issues: map[int32]*GitHubIssue{
+			3: issue,
+		},
+	}
+	c.github = &GitHub{
+		users: map[int64]*GitHubUser{
+			u1.ID: u1,
+		},
+		repos: map[GitHubRepoID]*GitHubRepo{
+			GitHubRepoID{"golang", "go"}: gr,
+		},
+	}
+
+	mutation := gr.newMutationFromIssue(issue, &github.Issue{
+		Number:    github.Int(3),
+		Assignees: []*github.User{&github.User{ID: github.Int64(u2.ID)}},
+	})
+	c.addMutation(mutation)
+	ctx := context.Background()
+	err := c.sync(ctx, false)
+	if err != nil {
+		t.Fatal("error: ", err)
 	}
 }
 

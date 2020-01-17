@@ -114,6 +114,25 @@ cp compiler-rt/lib/tsan/go/race_linux_ppc64le.syso go/src/runtime/race
 			`,
 	},
 	&Platform{
+		OS:   "linux",
+		Arch: "arm64",
+		Type: "linux-arm64-packet",
+		Script: `#!/usr/bin/env bash
+set -e
+apt-get update
+apt-get install -y git g++
+git clone https://go.googlesource.com/go
+pushd go
+git checkout $GOREV
+popd
+git clone https://git.llvm.org/git/compiler-rt.git
+(cd compiler-rt && git checkout $REV)
+(cd compiler-rt/lib/tsan/go && ./buildgo.sh)
+cp compiler-rt/lib/tsan/go/race_linux_arm64.syso go/src/runtime/race
+(cd go/src && ./race.bash)
+			`,
+	},
+	&Platform{
 		OS:   "netbsd",
 		Arch: "amd64",
 		Type: "netbsd-amd64-8_0",

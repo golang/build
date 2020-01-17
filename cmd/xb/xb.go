@@ -13,9 +13,9 @@
 // Examples:
 //
 //    xb --staging kubectl ...
+//    xb --prod kubectl ...
+//    xb google-email  # print the @google.com account from gcloud
 //
-// Currently kubectl is the only supported subcommand.
-
 package main // import "golang.org/x/build/cmd/xb"
 
 import (
@@ -25,6 +25,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"golang.org/x/build/buildenv"
@@ -36,10 +37,10 @@ var (
 )
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `xb {prod,staging} <CMD> [<ARGS>...]
+	fmt.Fprintf(os.Stderr, `xb [--prod or --staging] <CMD> [<ARGS>...]
 Example:
-   xb staging kubectl ...
-   xb prod gcloud ...
+   xb --staging kubectl ...
+   xb google-email
 `)
 	os.Exit(1)
 }
@@ -55,12 +56,12 @@ func main() {
 	case "kubectl":
 		env := getEnv()
 		curCtx := kubeCurrentContext()
-		wantCtx := fmt.Sprintf("gke_%s_%s_go", env.ProjectName, env.Zone)
+		wantCtx := fmt.Sprintf("gke_%s_%s_go", env.ProjectName, env.ControlZone)
 		if curCtx != wantCtx {
 			log.SetFlags(0)
 			log.Fatalf("Wrong kubectl context; currently using %q; want %q\nRun:\n  gcloud container clusters get-credentials --project=%s --zone=%s go",
 				curCtx, wantCtx,
-				env.ProjectName, env.Zone,
+				env.ProjectName, env.ControlZone,
 			)
 		}
 		// gcloud container clusters get-credentials --zone=us-central1-f go
@@ -68,6 +69,17 @@ func main() {
 		runCmd()
 	case "docker":
 		runDocker()
+	case "google-email":
+		out, err := exec.Command("gcloud", "config", "configurations", "list").CombinedOutput()
+		if err != nil {
+			log.Fatalf("gcloud: %v, %s", err, out)
+		}
+		googRx := regexp.MustCompile(`\S+@google\.com\b`)
+		e := googRx.FindString(string(out))
+		if e == "" {
+			log.Fatalf("didn't find @google.com address in gcloud config configurations list: %s", out)
+		}
+		fmt.Println(e)
 	default:
 		log.Fatalf("unknown command %q", cmd)
 	}
@@ -106,28 +118,6 @@ func getEnv() *buildenv.Environment {
 	return buildenv.Staging
 }
 
-var expectedGoLayerVersion = map[string]string{
-	"golang:1.10": "go version go1.10.2 linux/amd64",
-}
-
-func validateGoDockerVersion(layer, want string) {
-	out, _ := exec.Command("docker", "run", "--rm", layer, "go", "version").Output()
-	if strings.TrimSpace(string(out)) == want {
-		return
-	}
-
-	out, err := exec.Command("docker", "pull", layer).CombinedOutput()
-	if err != nil {
-		log.Fatalf("failed to docker pull %s: %v, %s", layer, err, out)
-	}
-
-	out, err = exec.Command("docker", "run", "--rm", layer, "go", "version").CombinedOutput()
-	if strings.TrimSpace(string(out)) == want {
-		return
-	}
-	log.Fatalf("expected docker layer %s to have version %q; got err=%v, output=%s", layer, want, err, out)
-}
-
 func runDocker() {
 	if flag.Arg(1) == "build" {
 		file := "Dockerfile"
@@ -138,16 +128,16 @@ func runDocker() {
 		}
 		layers := fromLayers(file)
 		for _, layer := range layers {
-			if want, ok := expectedGoLayerVersion[layer]; ok {
-				validateGoDockerVersion(layer, want)
+			if strings.HasPrefix(layer, "golang:") ||
+				strings.HasPrefix(layer, "debian:") ||
+				strings.HasPrefix(layer, "alpine:") ||
+				strings.HasPrefix(layer, "fedora:") {
 				continue
 			}
 			switch layer {
 			case "golang/buildlet-stage0":
 				log.Printf("building dependent layer %q", layer)
 				buildStage0Container()
-			case "debian:stretch":
-				// TODO: validate version of stretch
 			default:
 				log.Fatalf("unsupported layer %q; don't know how to validate or build", layer)
 			}

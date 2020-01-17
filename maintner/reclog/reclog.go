@@ -64,7 +64,8 @@ func ForeachFileRecord(path string, fn RecordCallback) error {
 // ForeachRecord calls fn for each record in r.
 // Calls to fn are made serially.
 // If fn returns an error, iteration ends and that error is returned.
-// The startOffset be 0 if reading from the beginning of a file.
+// The startOffset is where in the file r represents. It should be 0
+// if reading from the beginning of a file.
 func ForeachRecord(r io.Reader, startOffset int64, fn RecordCallback) error {
 	off := startOffset
 	br := bufio.NewReader(r)

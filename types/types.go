@@ -31,10 +31,6 @@ type BuildRevision struct {
 	// Revision is the full git hash of the repo.
 	Revision string `json:"revision"`
 
-	// ParentRevisions is the full git hashes of the parents of
-	// Revision.
-	ParentRevisions []string `json:"parentRevisions"`
-
 	// GoRevision is the full git hash of the "go" repo, if Repo is not "go" itself.
 	// Otherwise this is empty.
 	GoRevision string `json:"goRevision,omitempty"`
@@ -91,6 +87,7 @@ type BuildRecord struct {
 	ProcessID     string
 	StartTime     time.Time
 	IsTry         bool // is trybot run
+	IsExtra       bool // is an extra opt-in "slowbot" builder, not on by default
 	GoRev         string
 	Rev           string // same as GoRev for repo "go"
 	Repo          string // "go", "net", etc.
@@ -102,7 +99,8 @@ type BuildRecord struct {
 	EndTime    time.Time
 	Seconds    float64
 	Result     string // empty string, "ok", "fail"
-	FailureURL string `datastore:",noindex"`
+	FailureURL string `datastore:",noindex"` // deprecated; use LogURL
+	LogURL     string `datastore:",noindex"`
 
 	// TODO(bradfitz): log which reverse buildlet we got?
 	// Buildlet string
@@ -152,4 +150,47 @@ func (s *ReverseBuilderStatus) Host(hostType string) *ReverseHostStatus {
 	hs = &ReverseHostStatus{HostType: hostType}
 	s.HostTypes[hostType] = hs
 	return hs
+}
+
+// MajorMinor is a major-minor version pair.
+type MajorMinor struct {
+	Major, Minor int
+}
+
+// Less reports whether a is less than b.
+func (a MajorMinor) Less(b MajorMinor) bool {
+	if a.Major != b.Major {
+		return a.Major < b.Major
+	}
+	return a.Minor < b.Minor
+}
+
+// BuildletWaitStatus is the periodic messages we send to "gomote create"
+// clients or show on trybot status pages to tell the user who long
+// they're expected to wait.
+type BuildletWaitStatus struct {
+	// Message is a free-form message to send to the user's gomote binary.
+	// If present, all other fields are ignored.
+	Message string `json:"message"`
+
+	// Ahead are the number of waiters ahead of this buildlet request.
+	Ahead int `json:"ahead"`
+
+	// TODO: add number of active builds, and number of builds
+	// creating. And for how long. And maybe an estimate of how
+	// long those builds typically take? But recognize which are
+	// dynamic vs static (reverse) builder types and don't say
+	// that "1 is creating" on a reverse buildlet that can't
+	// actually "create" any. (It can just wait for one register
+	// itself)
+}
+
+// ActivePostSubmitBuild is a summary of an active build that the
+// coordinator's doing. Each one is rendered on build.golang.org as a
+// blue gopher which links to StatusURL to watch the build live.
+type ActivePostSubmitBuild struct {
+	Builder   string `json:"builder"`            // "linux-amd64"
+	Commit    string `json:"commit"`             // hash of commit being tested
+	GoCommit  string `json:"goCommit,omitempty"` // hash of Go commit, or empty for the main repo
+	StatusURL string `json:"statusURL"`
 }

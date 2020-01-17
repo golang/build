@@ -21,6 +21,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +32,7 @@ import (
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
+	"golang.org/x/build/repos"
 	"golang.org/x/oauth2"
 )
 
@@ -63,10 +65,11 @@ func main() {
 	b.initCorpus(ctx)
 	go b.corpusUpdateLoop(ctx)
 
-	https.ListenAndServe(http.HandlerFunc(handleIndex), &https.Options{
+	err = https.ListenAndServe(http.HandlerFunc(handleIndex), &https.Options{
 		Addr:                *listen,
 		AutocertCacheBucket: *autocertBucket,
 	})
+	log.Fatalln(err)
 }
 
 func defaultWorkdir() string {
@@ -187,39 +190,16 @@ const (
 )
 
 // Gerrit projects we accept PRs for.
-var gerritProjectWhitelist = map[string]bool{
-	"arch":           true,
-	"benchmarks":     true,
-	"blog":           true,
-	"build":          true,
-	"crypto":         true,
-	"debug":          true,
-	"dl":             true,
-	"example":        true,
-	"exp":            true,
-	"gddo":           true,
-	"go":             true,
-	"image":          true,
-	"lint":           true,
-	"mobile":         true,
-	"net":            true,
-	"oauth2":         true,
-	"perf":           true,
-	"playground":     true,
-	"proposal":       true,
-	"review":         true,
-	"scratch":        true,
-	"sublime-build":  true,
-	"sublime-config": true,
-	"sync":           true,
-	"sys":            true,
-	"talks":          true,
-	"term":           true,
-	"text":           true,
-	"time":           true,
-	"tools":          true,
-	"tour":           true,
-	"vgo":            true,
+var gerritProjectWhitelist = genProjectWhitelist()
+
+func genProjectWhitelist() map[string]bool {
+	m := make(map[string]bool)
+	for p, r := range repos.ByGerritProject {
+		if r.MirrorToGitHub {
+			m[p] = true
+		}
+	}
+	return m
 }
 
 type cachedPullRequest struct {
@@ -246,15 +226,19 @@ type bot struct {
 	// CLs that have been created/updated on Gerrit for GitHub PRs but are not yet
 	// reflected in the maintner corpus yet.
 	pendingCLs map[string]string // GitHub owner/repo#n -> Commit message from PR
+
+	// Cache of Gerrit Account IDs to AccountInfo structs.
+	cachedGerritAccounts map[int]*gerrit.AccountInfo // 1234 -> Detailed Account Info
 }
 
 func newBot(githubClient *github.Client, gerritClient *gerrit.Client) *bot {
 	return &bot{
-		githubClient: githubClient,
-		gerritClient: gerritClient,
-		importedPRs:  map[string]*maintner.GerritCL{},
-		pendingCLs:   map[string]string{},
-		cachedPRs:    map[string]*cachedPullRequest{},
+		githubClient:         githubClient,
+		gerritClient:         gerritClient,
+		importedPRs:          map[string]*maintner.GerritCL{},
+		pendingCLs:           map[string]string{},
+		cachedPRs:            map[string]*cachedPullRequest{},
+		cachedGerritAccounts: map[int]*gerrit.AccountInfo{},
 	}
 }
 
@@ -371,7 +355,7 @@ func prShortLink(pr *github.PullRequest) string {
 // imported. If the Gerrit change associated with a PR has been merged, the PR
 // is closed. Those that have no associated open or merged Gerrit changes will
 // result in one being created.
-// b's RWMutex read-write lock must be held.
+// b.RWMutex must be Lock'ed.
 func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) error {
 	log.Printf("Processing PR %s ...", pr.GetHTMLURL())
 	shortLink := prShortLink(pr)
@@ -428,6 +412,46 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 	return nil
 }
 
+// gerritMessageAuthorID returns the Gerrit Account ID of the author of m.
+func gerritMessageAuthorID(m *maintner.GerritMessage) (int, error) {
+	email := m.Author.Email()
+	if strings.Index(email, "@") == -1 {
+		return -1, fmt.Errorf("message author email %q does not contain '@' character", email)
+	}
+	i, err := strconv.Atoi(strings.Split(email, "@")[0])
+	if err != nil {
+		return -1, fmt.Errorf("strconv.Atoi: %v (email: %q)", err, email)
+	}
+	return i, nil
+}
+
+// gerritMessageAuthorName returns a message author's display name. To prevent a
+// thundering herd of redundant comments created by posting a different message
+// via postGitHubMessageNoDup in syncGerritCommentsToGitHub, it will only return
+// the correct display name for messages posted after a hard-coded date.
+// b.RWMutex must be Lock'ed.
+func (b *bot) gerritMessageAuthorName(ctx context.Context, m *maintner.GerritMessage) (string, error) {
+	t := time.Date(2018, time.November, 9, 0, 0, 0, 0, time.UTC)
+	if m.Date.Before(t) {
+		return m.Author.Name(), nil
+	}
+	id, err := gerritMessageAuthorID(m)
+	if err != nil {
+		return "", fmt.Errorf("gerritMessageAuthorID: %v", err)
+	}
+	account := b.cachedGerritAccounts[id]
+	if account != nil {
+		return account.Name, nil
+	}
+	ai, err := b.gerritClient.GetAccountInfo(ctx, strconv.Itoa(id))
+	if err != nil {
+		return "", fmt.Errorf("b.gerritClient.GetAccountInfo: %v", err)
+	}
+	b.cachedGerritAccounts[id] = &ai
+	return ai.Name, nil
+}
+
+// b.RWMutex must be Lock'ed.
 func (b *bot) syncGerritCommentsToGitHub(ctx context.Context, pr *github.PullRequest, cl *maintner.GerritCL) error {
 	if *dryRun {
 		log.Printf("[dry run] would sync Gerrit comments to %v", prShortLink(pr))
@@ -435,8 +459,16 @@ func (b *bot) syncGerritCommentsToGitHub(ctx context.Context, pr *github.PullReq
 	}
 	repo := pr.GetBase().GetRepo()
 	for _, m := range cl.Messages {
-		if m.Author.Email() == cl.Owner().Email() {
+		id, err := gerritMessageAuthorID(m)
+		if err != nil {
+			return fmt.Errorf("gerritMessageAuthorID: %v", err)
+		}
+		if id == cl.OwnerID() {
 			continue
+		}
+		authorName, err := b.gerritMessageAuthorName(ctx, m)
+		if err != nil {
+			return fmt.Errorf("b.gerritMessageAuthorName: %v", err)
 		}
 		msg := fmt.Sprintf(`Message from %s:
 
@@ -445,7 +477,7 @@ func (b *bot) syncGerritCommentsToGitHub(ctx context.Context, pr *github.PullReq
 ---
 Please don’t reply on this GitHub thread. Visit [golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d#message-%s).
 After addressing review feedback, remember to [publish your drafts](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it)!`,
-			m.Author.Name(), m.Message, cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
+			authorName, m.Message, cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
 		if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg); err != nil {
 			return fmt.Errorf("postGitHubMessageNoDup: %v", err)
 		}
@@ -459,7 +491,8 @@ After addressing review feedback, remember to [publish your drafts](https://gith
 // are available, the first closed change is returned.
 func (b *bot) gerritChangeForPR(pr *github.PullRequest) (*gerrit.ChangeInfo, error) {
 	q := fmt.Sprintf(`"%s %s"`, prefixGitFooterPR, prShortLink(pr))
-	cs, err := b.gerritClient.QueryChanges(context.Background(), q)
+	o := gerrit.QueryChangesOpt{Fields: []string{"MESSAGES"}}
+	cs, err := b.gerritClient.QueryChanges(context.Background(), q, o)
 	if err != nil {
 		return nil, fmt.Errorf("c.QueryChanges(ctx, %q): %v", q, err)
 	}
@@ -487,6 +520,12 @@ func (b *bot) closePR(ctx context.Context, pr *github.PullRequest, ch *gerrit.Ch
 		return fmt.Errorf("invalid status for closed Gerrit change: %q", ch.Status)
 	}
 
+	if ch.Status == gerrit.ChangeStatusAbandoned {
+		if reason := getAbandonReason(ch); reason != "" {
+			msg += "\n\n" + reason
+		}
+	}
+
 	repo := pr.GetBase().GetRepo()
 	if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg); err != nil {
 		return fmt.Errorf("postGitHubMessageNoDup: %v", err)
@@ -502,6 +541,23 @@ func (b *bot) closePR(ctx context.Context, pr *github.PullRequest, ch *gerrit.Ch
 	}
 	logGitHubRateLimits(resp)
 	return nil
+}
+
+// getAbandonReason returns the last abandon reason in ch,
+// or the empty string if a reason doesn't exist.
+func getAbandonReason(ch *gerrit.ChangeInfo) string {
+	for i := len(ch.Messages) - 1; i >= 0; i-- {
+		msg := ch.Messages[i]
+		if msg.Tag != "autogenerated:gerrit:abandon" {
+			continue
+		}
+		if msg.Message == "Abandoned" {
+			// An abandon reason wasn't provided.
+			return ""
+		}
+		return strings.TrimPrefix(msg.Message, "Abandoned\n\n")
+	}
+	return ""
 }
 
 // downloadRef calls the Gerrit API to retrieve the ref (such as refs/changes/16/81116/1)
@@ -609,10 +665,17 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		}
 	}
 
+	var pushOpts string
+	if cl == nil {
+		// Add this informational message only on CL creation.
+		msg := fmt.Sprintf("This Gerrit CL corresponds to GitHub PR %s.\n\nAuthor: %s", prShortLink(pr), author)
+		pushOpts = "%m=" + url.QueryEscape(msg)
+	}
+
 	// nokeycheck is specified to avoid failing silently when a review is created
 	// with what appears to be a private key. Since there are cases where a user
 	// would want a private key checked in (tests).
-	out, err := cmdOut(exec.Command("git", "-C", worktreeDir, "push", "-o", "nokeycheck", "origin", "HEAD:refs/for/"+prBaseRef))
+	out, err := cmdOut(exec.Command("git", "-C", worktreeDir, "push", "-o", "nokeycheck", "origin", "HEAD:refs/for/"+prBaseRef+pushOpts))
 	if err != nil {
 		return fmt.Errorf("could not create change: %v", err)
 	}
@@ -652,7 +715,7 @@ func commitMessage(pr *github.PullRequest, cl *maintner.GerritCL) (string, error
 	}
 
 	var msg bytes.Buffer
-	fmt.Fprintf(&msg, "%s\n\n%s\n\n", pr.GetTitle(), prBody)
+	fmt.Fprintf(&msg, "%s\n\n%s\n\n", cleanTitle(pr.GetTitle()), prBody)
 	fmt.Fprintf(&msg, "%s %s\n", prefixGitFooterChangeID, changeID)
 	fmt.Fprintf(&msg, "%s %s\n", prefixGitFooterLastRev, pr.Head.GetSHA())
 	fmt.Fprintf(&msg, "%s %s\n", prefixGitFooterPR, prShortLink(pr))
@@ -665,6 +728,19 @@ func commitMessage(pr *github.PullRequest, cl *maintner.GerritCL) (string, error
 		return "", fmt.Errorf("could not execute command %v: %v", cmd.Args, err)
 	}
 	return string(out), nil
+}
+
+var xRemove = regexp.MustCompile(`^x/\w+/`)
+
+// cleanTitle removes "x/foo/" from the beginning of t.
+// It's a common mistake that people make in their PR titles (since we
+// use that convention for issues, but not PRs) and it's better to just fix
+// it here rather than ask everybody to fix it manually.
+func cleanTitle(t string) string {
+	if strings.HasPrefix(t, "x/") {
+		return xRemove.ReplaceAllString(t, "")
+	}
+	return t
 }
 
 // genChangeID returns a new Gerrit Change ID using the Pull Request’s ID.
@@ -689,7 +765,7 @@ func reposRoot() string {
 }
 
 // getFullPR retrieves a Pull Request via GitHub’s API.
-// b's RWMutex read-write lock must be held.
+// b.RWMutex must be Lock'ed.
 func (b *bot) getFullPR(ctx context.Context, owner, repo string, number int) (*github.PullRequest, error) {
 	shortLink := githubShortLink(owner, repo, number)
 	cpr := b.cachedPRs[shortLink]

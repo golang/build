@@ -6,6 +6,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -24,7 +25,13 @@ const (
 
 	prefixProposal = "proposal:"
 	prefixDev      = "[dev."
+
+	// The title of the current release milestone in GitHub.
+	curMilestoneTitle = "Go1.14"
 )
+
+// The start date of the current release milestone.
+var curMilestoneStart = time.Date(2019, 8, 27, 0, 0, 0, 0, time.UTC)
 
 // titleDirs returns a slice of prefix directories contained in a title. For
 // devapp,maintner: my cool new change, it will return ["devapp", "maintner"].
@@ -61,8 +68,9 @@ func titleDirs(title string) []string {
 }
 
 type releaseData struct {
-	LastUpdated string
-	Sections    []section
+	LastUpdated  string
+	Sections     []section
+	BurndownJSON template.JS
 
 	// dirty is set if this data needs to be updated due to a corpus change.
 	dirty bool
@@ -80,8 +88,9 @@ type group struct {
 }
 
 type item struct {
-	Issue *maintner.GitHubIssue
-	CLs   []*gerritCL
+	Issue            *maintner.GitHubIssue
+	CLs              []*gerritCL
+	FirstPerformance bool // set if this item is the first item which is labeled "performance"
 }
 
 func (i *item) ReleaseBlocker() bool {
@@ -91,11 +100,34 @@ func (i *item) ReleaseBlocker() bool {
 	return i.Issue.HasLabel("release-blocker")
 }
 
+func (i *item) CurrentBlocker() bool {
+	return i.Issue.Milestone.Title == curMilestoneTitle && i.ReleaseBlocker()
+}
+
+func (i *item) EarlyInCycle() bool {
+	return !i.ReleaseBlocker() && i.Issue.HasLabel("early-in-cycle")
+}
+
 type itemsBySummary []item
 
-func (x itemsBySummary) Len() int           { return len(x) }
-func (x itemsBySummary) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
-func (x itemsBySummary) Less(i, j int) bool { return itemSummary(x[i]) < itemSummary(x[j]) }
+func (x itemsBySummary) Len() int      { return len(x) }
+func (x itemsBySummary) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
+func (x itemsBySummary) Less(i, j int) bool {
+	// Sort release-blocker issues to the front
+	ri := x[i].Issue != nil && x[i].Issue.HasLabel("release-blocker")
+	rj := x[j].Issue != nil && x[j].Issue.HasLabel("release-blocker")
+	if ri != rj {
+		return ri
+	}
+	// Sort performance issues to the end.
+	pi := x[i].Issue != nil && x[i].Issue.HasLabel("Performance")
+	pj := x[j].Issue != nil && x[j].Issue.HasLabel("Performance")
+	if pi != pj {
+		return !pi
+	}
+	// Otherwise sort by the item summary.
+	return itemSummary(x[i]) < itemSummary(x[j])
+}
 
 func itemSummary(it item) string {
 	if it.Issue != nil {
@@ -133,8 +165,9 @@ var annotationRE = regexp.MustCompile(`(?m)^R=(.+)\b`)
 
 type gerritCL struct {
 	*maintner.GerritCL
-	Closed    bool
-	Milestone string
+	NoPrefixTitle string // CL title without the directory prefix (e.g., "improve ListenAndServe" without leading "net/http: ").
+	Closed        bool
+	Milestone     string
 }
 
 // ReviewURL returns the code review address of cl.
@@ -148,6 +181,19 @@ func (cl *gerritCL) ReviewURL() string {
 		return ""
 	}
 	return fmt.Sprintf("https://%s-review.googlesource.com/%d", subd, cl.Number)
+}
+
+// burndownData is encoded to JSON and embedded in the page for use when
+// rendering a burndown chart using JavaScript.
+type burndownData struct {
+	Milestone string          `json:"milestone"`
+	Entries   []burndownEntry `json:"entries"`
+}
+
+type burndownEntry struct {
+	DateStr  string `json:"dateStr"` // "12-25"
+	Open     int    `json:"open"`
+	Blockers int    `json:"blockers"`
 }
 
 func (s *server) updateReleaseData() {
@@ -164,6 +210,7 @@ func (s *server) updateReleaseData() {
 			}
 
 			var (
+				pkgs, title   = ParsePrefixedChangeTitle(projectRoot(p), cl.Subject())
 				closed        bool
 				closedVersion int32
 				milestone     string
@@ -185,20 +232,20 @@ func (s *server) updateReleaseData() {
 				}
 			}
 			gcl := &gerritCL{
-				GerritCL:  cl,
-				Closed:    closed,
-				Milestone: milestone,
+				GerritCL:      cl,
+				NoPrefixTitle: title,
+				Closed:        closed,
+				Milestone:     milestone,
 			}
 
 			for _, r := range cl.GitHubIssueRefs {
 				issueToCLs[r.Number] = append(issueToCLs[r.Number], gcl)
 			}
-			dirs := titleDirs(cl.Subject())
-			if len(dirs) == 0 {
+			if len(pkgs) == 0 {
 				dirToCLs[""] = append(dirToCLs[""], gcl)
 			} else {
-				for _, d := range dirs {
-					dirToCLs[d] = append(dirToCLs[d], gcl)
+				for _, p := range pkgs {
+					dirToCLs[p] = append(dirToCLs[p], gcl)
 				}
 			}
 			return nil
@@ -207,21 +254,54 @@ func (s *server) updateReleaseData() {
 	})
 
 	dirToIssues := map[string][]*maintner.GitHubIssue{}
+	var curMilestoneIssues []*maintner.GitHubIssue
 	s.repo.ForeachIssue(func(issue *maintner.GitHubIssue) error {
-		// Issues in active milestones.
-		if !issue.Closed && issue.Milestone != nil && !issue.Milestone.Closed {
-			dirs := titleDirs(issue.Title)
-			if len(dirs) == 0 {
-				dirToIssues[""] = append(dirToIssues[""], issue)
-			} else {
-				for _, d := range dirs {
-					dirToIssues[d] = append(dirToIssues[d], issue)
-				}
+		// Only include issues in active milestones.
+		if issue.Milestone.IsUnknown() || issue.Milestone.Closed || issue.Milestone.IsNone() {
+			return nil
+		}
+
+		if issue.Milestone.Title == curMilestoneTitle {
+			curMilestoneIssues = append(curMilestoneIssues, issue)
+		}
+
+		// Only open issues are displayed on the page using dirToIssues.
+		if issue.Closed {
+			return nil
+		}
+
+		dirs := titleDirs(issue.Title)
+		if len(dirs) == 0 {
+			dirToIssues[""] = append(dirToIssues[""], issue)
+		} else {
+			for _, d := range dirs {
+				dirToIssues[d] = append(dirToIssues[d], issue)
 			}
 		}
 		return nil
 	})
 
+	bd := burndownData{Milestone: curMilestoneTitle}
+	for t, now := curMilestoneStart, time.Now(); t.Before(now); t = t.Add(24 * time.Hour) {
+		var e burndownEntry
+		for _, issue := range curMilestoneIssues {
+			if issue.Created.After(t) || (issue.Closed && issue.ClosedAt.Before(t)) {
+				continue
+			}
+			if issue.HasLabel("release-blocker") {
+				e.Blockers++
+			}
+			e.Open++
+		}
+		e.DateStr = t.Format("01-02")
+		bd.Entries = append(bd.Entries, e)
+	}
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(bd); err != nil {
+		log.Printf("json.Encode: %v", err)
+	}
+	s.data.release.BurndownJSON = template.JS(buf.String())
 	s.data.release.Sections = nil
 	s.appendOpenIssues(dirToIssues, issueToCLs)
 	s.appendPendingCLs(dirToCLs)
@@ -229,6 +309,38 @@ func (s *server) updateReleaseData() {
 	s.appendClosedIssues()
 	s.data.release.LastUpdated = time.Now().UTC().Format(time.UnixDate)
 	s.data.release.dirty = false
+}
+
+// projectRoot returns the import path corresponding to the repo root
+// of the Gerrit project p. For golang.org/x subrepos, the golang.org
+// part is omitted for previty.
+func projectRoot(p *maintner.GerritProject) string {
+	switch p.Server() {
+	case "go.googlesource.com":
+		switch subrepo := p.Project(); subrepo {
+		case "go":
+			// Main Go repo.
+			return ""
+		case "dl":
+			// dl is a special subrepo, there's no /x/ in its import path.
+			return "golang.org/dl"
+		case "gddo":
+			// There is no golang.org/x/gddo vanity import path, and
+			// the canonical import path for gddo is on GitHub.
+			return "github.com/golang/gddo"
+		default:
+			// For brevity, use x/subrepo rather than golang.org/x/subrepo.
+			return "x/" + subrepo
+		}
+	case "code.googlesource.com":
+		switch p.Project() {
+		case "gocloud":
+			return "cloud.google.com/go"
+		case "google-api-go-client":
+			return "google.golang.org/api"
+		}
+	}
+	return p.ServerSlashProject()
 }
 
 // requires s.cMu be locked.
@@ -265,6 +377,12 @@ func (s *server) appendOpenIssues(dirToIssues map[string][]*maintner.GitHubIssue
 				continue
 			}
 			sort.Sort(itemsBySummary(items))
+			for idx := range items {
+				if items[idx].Issue.HasLabel("Performance") && !items[idx].Issue.HasLabel("release-blocker") {
+					items[idx].FirstPerformance = true
+					break
+				}
+			}
 			issueGroups = append(issueGroups, group{
 				Dir:   d,
 				Items: items,

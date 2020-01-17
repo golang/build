@@ -1,16 +1,45 @@
 # Copyright 2017 The Go Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
-FROM debian:jessie
+
+FROM golang:1.13 AS build
+LABEL maintainer "golang-dev@googlegroups.com"
+
+ENV GO111MODULE=on
+ENV GOPROXY=https://proxy.golang.org
+
+RUN mkdir /gocache
+ENV GOCACHE /gocache
+
+COPY go.mod /go/src/golang.org/x/build/go.mod
+COPY go.sum /go/src/golang.org/x/build/go.sum
+
+WORKDIR /go/src/golang.org/x/build
+
+# Optimization for iterative docker build speed, not necessary for correctness:
+# TODO: write a tool to make writing Go module-friendly Dockerfiles easier.
+RUN go install cloud.google.com/go/compute/metadata
+RUN go install cloud.google.com/go/storage
+RUN go install golang.org/x/crypto/acme/autocert
+RUN go install golang.org/x/net/http2
+RUN go install golang.org/x/time/rate
+RUN go install grpc.go4.org
+
+COPY . /go/src/golang.org/x/build/
+
+RUN go install golang.org/x/build/maintner/maintnerd
+
+
+FROM debian:buster
 LABEL maintainer "golang-dev@googlegroups.com"
 
 # For interacting with the Go source & subrepos
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
-	ca-certificates \
+	ca-certificates netbase \
 	git-core \
 	openssh-client \
-	gnupg \
+	gnupg dirmngr \
 	&& rm -rf /var/lib/apt/lists/*
 
 # See https://github.com/golang/go/issues/23705
@@ -30,6 +59,5 @@ RUN mkdir -p ~/.ssh/ \
 	&& echo "|1|HygGkfOGLovavKfixjXWFJ7Yk1I=|lb/724row8KDTMC1dZiJlHyjxWM= ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==" >> ~/.ssh/known_hosts \
 	&& chmod 0600 ~/.ssh/known_hosts
 
-COPY ca-certificates.crt /etc/ssl/certs/
-COPY maintnerd /
+COPY --from=build /go/bin/maintnerd /
 ENTRYPOINT ["/tini", "--", "/maintnerd"]

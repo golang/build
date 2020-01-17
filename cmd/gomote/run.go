@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -28,6 +29,8 @@ func run(args []string) error {
 	fs.BoolVar(&debug, "debug", false, "write debug info about the command's execution before it begins")
 	var env stringSlice
 	fs.Var(&env, "e", "Environment variable KEY=value. The -e flag may be repeated multiple times to add multiple things to the environment.")
+	var firewall bool
+	fs.BoolVar(&firewall, "firewall", false, "Enable outbound firewall on machine. This is on by default on many builders (where supported) but disabled by default on gomote for ease of debugging. Once any command has been run with the -firewall flag on, it's on for the lifetime of that gomote instance.")
 	var path string
 	fs.StringVar(&path, "path", "", "Comma-separated list of ExecOpts.Path elements. The special string 'EMPTY' means to run without any $PATH. The empty string (default) does not modify the $PATH. Otherwise, the following expansions apply: the string '$PATH' expands to the current PATH element(s), the substring '$WORKDIR' expands to the buildlet's temp workdir.")
 
@@ -67,8 +70,9 @@ func run(args []string) error {
 	} else if path != "" {
 		pathOpt = strings.Split(path, ",")
 	}
+	env = append(env, "GO_DISABLE_OUTBOUND_NETWORK="+fmt.Sprint(firewall))
 
-	remoteErr, execErr := bc.Exec(cmd, buildlet.ExecOpts{
+	remoteErr, execErr := bc.Exec(context.Background(), cmd, buildlet.ExecOpts{
 		Dir:         dir,
 		SystemLevel: sys || strings.HasPrefix(cmd, "/"),
 		Output:      os.Stdout,

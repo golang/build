@@ -21,6 +21,8 @@ type Client struct {
 	Creds  *google.Credentials
 	Client *http.Client // OAuth2 client
 
+	Verbose bool // enable extra debug logging
+
 	mu             sync.Mutex
 	computeService *compute.Service // lazily initialized
 }

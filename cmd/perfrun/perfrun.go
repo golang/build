@@ -9,6 +9,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -37,12 +38,13 @@ var (
 // the standard benchmark format
 // (https://github.com/golang/proposal/blob/master/design/14313-benchmark-format.md).
 func runBench(out io.Writer, bench, src string, commits []string) error {
+	ctx := context.TODO()
 	bc, err := namedClient(*buildletBench)
 	if err != nil {
 		return err
 	}
 	log.Printf("Using buildlet %s", bc.RemoteName())
-	workDir, err := bc.WorkDir()
+	workDir, err := bc.WorkDir(ctx)
 	if err != nil {
 		log.Printf("Getting WorkDir: %v", err)
 		return err
@@ -51,14 +53,14 @@ func runBench(out io.Writer, bench, src string, commits []string) error {
 		log.Printf("Installing prebuilt rev %s", rev)
 		dir := fmt.Sprintf("go-%s", rev)
 		// Copy pre-built trees
-		if err := bc.PutTarFromURL(buildEnv.SnapshotURL(src, rev), dir); err != nil {
+		if err := bc.PutTarFromURL(ctx, buildEnv.SnapshotURL(src, rev), dir); err != nil {
 			log.Printf("failed to extract snapshot for %s: %v", rev, err)
 			return err
 		}
 		// Build binaries
 		log.Printf("Building bench binary for rev %s", rev)
 		var buf bytes.Buffer
-		remoteErr, err := bc.Exec(path.Join(dir, "bin", "go"), buildlet.ExecOpts{
+		remoteErr, err := bc.Exec(ctx, path.Join(dir, "bin", "go"), buildlet.ExecOpts{
 			Output:   &buf,
 			ExtraEnv: []string{"GOROOT=" + path.Join(workDir, dir)},
 			Args:     []string{"test", "-c"},
@@ -81,7 +83,7 @@ func runBench(out io.Writer, bench, src string, commits []string) error {
 		log.Printf("Starting bench run %d", i)
 		for _, rev := range commits {
 			var buf bytes.Buffer
-			remoteErr, err := bc.Exec(path.Join("go-"+rev, "test/bench/go1/go1.test"), buildlet.ExecOpts{
+			remoteErr, err := bc.Exec(context.Background(), path.Join("go-"+rev, "test/bench/go1/go1.test"), buildlet.ExecOpts{
 				Output: &buf,
 				Args:   []string{"-test.bench", ".", "-test.benchmem"},
 			})

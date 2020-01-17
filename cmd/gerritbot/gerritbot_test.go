@@ -5,6 +5,7 @@
 package main
 
 import (
+	"os/exec"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -43,6 +44,9 @@ Change-Id: If751ce3ffa3a4d5e00a3138211383d12cb6b23fc
 }
 
 func TestCommitMessage(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("skipping; 'git' not in PATH")
+	}
 	testCases := []struct {
 		desc     string
 		pr       *github.PullRequest
@@ -64,7 +68,7 @@ GitHub-Pull-Request: golang/go#42
 		},
 		{
 			"change with Change-Id",
-			newPullRequest("cmd/gerritbot: change with change ID", "Body text"),
+			newPullRequest("x/build/cmd/gerritbot: change with change ID", "Body text"),
 			newMaintnerCL(),
 			`cmd/gerritbot: change with change ID
 

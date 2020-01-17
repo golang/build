@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 /*
-The genbootstrap command prepares GO_BOOTSTRAP tarballs suitable for
+The genbootstrap command prepares GOROOT_BOOTSTRAP tarballs suitable for
 use on builders. It's a wrapper around bootstrap.bash. After
 bootstrap.bash produces the full output, genbootstrap trims it up,
 removing unnecessary and unwanted files.
@@ -87,13 +87,7 @@ func main() {
 			return nil
 		}
 		switch pkgrel {
-		case "cmd",
-			"database", "database.a",
-			"image", "image.a",
-			"net.a",
-			"net",
-			"runtime/cgo.a",
-			"vendor/golang.org/x/net":
+		case "cmd":
 			return remove()
 		}
 		switch rel {
@@ -104,12 +98,6 @@ func main() {
 			"misc/cgo",
 			"misc/chrome",
 			"misc/swig",
-			"src/cmd",
-			"src/net",
-			"src/runtime/cgo",
-			"src/database",
-			"src/image",
-			"src/vendor/golang.org/x/net",
 			"test":
 			return remove()
 		}

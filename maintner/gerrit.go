@@ -335,9 +335,9 @@ type GerritMessage struct {
 	// the git commit).
 	Date time.Time
 
-	// Author returns the author of the commit. This takes the form "Kevin Burke
-	// <13437@62eb7196-b449-3ce5-99f1-c037f21e1705>", where the number before
-	// the '@' sign is your Gerrit user ID, and the UUID after the '@' sign
+	// Author returns the author of the commit. This takes the form "Gerrit User
+	// 13437 <13437@62eb7196-b449-3ce5-99f1-c037f21e1705>", where the number
+	// before the '@' sign is your Gerrit user ID, and the UUID after the '@' sign
 	// seems to be the same for all commits for the same Gerrit server, across
 	// projects.
 	//
@@ -364,7 +364,7 @@ func (cl *GerritCL) Branch() string { return cl.branch }
 func (cl *GerritCL) updateBranch() {
 	for i := len(cl.Metas) - 1; i >= 0; i-- {
 		mc := cl.Metas[i]
-		branch, _ := lineValue(mc.Commit.Msg, "Branch:")
+		branch := lineValue(mc.Commit.Msg, "Branch:")
 		if branch != "" {
 			cl.branch = strings.TrimPrefix(branch, "refs/heads/")
 			return
@@ -372,19 +372,21 @@ func (cl *GerritCL) updateBranch() {
 	}
 }
 
-// lineValue extracts a value from an RFC 822-style "key: value" series of lines.
+// lineValueOK extracts a value from an RFC 822-style "key: value" series of lines.
 // If all is,
 //    foo: bar
 //    bar: baz
 // lineValue(all, "foo:") returns "bar". It trims any whitespace.
 // The prefix is case sensitive and must include the colon.
-func lineValue(all, prefix string) (value, rest string) {
+// The ok value reports whether a line with such a prefix is found, even if its
+// value is empty. If ok is true, the rest value contains the subsequent lines.
+func lineValueOK(all, prefix string) (value, rest string, ok bool) {
 	orig := all
 	consumed := 0
 	for {
 		i := strings.Index(all, prefix)
 		if i == -1 {
-			return "", ""
+			return "", "", false
 		}
 		if i > 0 && all[i-1] != '\n' && all[i-1] != '\r' {
 			all = all[i+len(prefix):]
@@ -399,8 +401,18 @@ func lineValue(all, prefix string) (value, rest string) {
 		} else {
 			consumed = len(orig)
 		}
-		return strings.TrimSpace(val), orig[consumed:]
+		return strings.TrimSpace(val), orig[consumed:], true
 	}
+}
+
+func lineValue(all, prefix string) string {
+	value, _, _ := lineValueOK(all, prefix)
+	return value
+}
+
+func lineValueRest(all, prefix string) (value, rest string) {
+	value, rest, _ = lineValueOK(all, prefix)
+	return
 }
 
 // WorkInProgress reports whether the CL has its Work-in-progress bit set, per
@@ -408,8 +420,7 @@ func lineValue(all, prefix string) (value, rest string) {
 func (cl *GerritCL) WorkInProgress() bool {
 	var wip bool
 	for _, m := range cl.Metas {
-		v, _ := lineValue(m.Commit.Msg, "Work-in-progress:")
-		switch v {
+		switch lineValue(m.Commit.Msg, "Work-in-progress:") {
 		case "true":
 			wip = true
 		case "false":
@@ -438,16 +449,7 @@ func (cl *GerritCL) Footer(key string) string {
 		panic("Footer key does not end in colon")
 	}
 	// TODO: git footers are treated as multimaps. Account for this.
-	v, _ := lineValue(cl.Commit.Msg, key)
-	return v
-}
-
-// OwnerName returns the name of the CL’s owner or an empty string on error.
-func (cl *GerritCL) OwnerName() string {
-	if !cl.complete() {
-		return ""
-	}
-	return cl.Metas[0].Commit.Author.Name()
+	return lineValue(cl.Commit.Msg, key)
 }
 
 // OwnerID returns the ID of the CL’s owner. It will return -1 on error.
@@ -485,15 +487,13 @@ func (cl *GerritCL) Owner() *GitPerson {
 	return commit.Author
 }
 
-// Subject returns the first line of the latest commit message.
+// Subject returns the subject of the latest commit message.
+// The subject is separated from the body by a blank line.
 func (cl *GerritCL) Subject() string {
-	if cl.Commit == nil {
-		return ""
+	if i := strings.Index(cl.Commit.Msg, "\n\n"); i >= 0 {
+		return strings.Replace(cl.Commit.Msg[:i], "\n", " ", -1)
 	}
-	if i := strings.Index(cl.Commit.Msg, "\n"); i >= 0 {
-		return cl.Commit.Msg[:i]
-	}
-	return cl.Commit.Msg
+	return strings.Replace(cl.Commit.Msg, "\n", " ", -1)
 }
 
 // CommitAtVersion returns the git commit of the specifid version of this CL.
@@ -757,6 +757,15 @@ func (gp *GerritProject) processMutation(gm *maintpb.GerritMutation) {
 		for _, p := range gc.Parents {
 			gp.markNeededCommit(p.Hash)
 		}
+	}
+
+	for _, refName := range gm.DeletedRefs {
+		delete(gp.ref, refName)
+		// TODO: this doesn't delete change refs (from
+		// gp.remote) yet, mostly because those don't tend to
+		// ever get deleted and we haven't yet needed it. If
+		// we ever need it, the mutation generation side would
+		// also need to be updated.
 	}
 
 	for _, refp := range gm.Refs {
@@ -1024,21 +1033,46 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 	c := gp.gerrit.c
 	gitDir := gp.gitDir()
 
-	fetchCtx, cancel := context.WithTimeout(ctx, time.Minute)
-	cmd := exec.CommandContext(fetchCtx, "git", "fetch", "origin")
+	t0 := time.Now()
+	cmd := exec.CommandContext(ctx, "git", "fetch", "origin")
 	cmd.Dir = gitDir
-	out, err := cmd.CombinedOutput()
-	cancel()
-	if err != nil {
-		return fmt.Errorf("git fetch origin: %v, %s", err, out)
-	}
+	// Enable extra Git tracing in case the fetch hangs.
+	cmd.Env = append(os.Environ(),
+		"GIT_TRACE2_EVENT=1",
+		"GIT_TRACE_CURL_NO_DATA=1",
+	)
+	cmd.Stdout = new(bytes.Buffer)
+	cmd.Stderr = cmd.Stdout
 
+	// The 'git fetch' needs a timeout in case it hangs, but to avoid spurious
+	// timeouts (and live-lock) the timeout should be (at least) an order of
+	// magnitude longer than we expect the operation to actually take. Moreover,
+	// exec.CommandContext sends SIGKILL, which may terminate the command without
+	// giving it a chance to flush useful trace entries, so we'll terminate it
+	// manually instead (see https://golang.org/issue/22757).
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("git fetch origin: %v", err)
+	}
+	timer := time.AfterFunc(10*time.Minute, func() {
+		cmd.Process.Signal(os.Interrupt)
+	})
+	err := cmd.Wait()
+	fetchDuration := time.Since(t0).Round(time.Millisecond)
+	timer.Stop()
+	if err != nil {
+		return fmt.Errorf("git fetch origin: %v after %v, %s", err, fetchDuration, cmd.Stdout)
+	}
+	gp.logf("ran git fetch origin in %v", fetchDuration)
+
+	t0 = time.Now()
 	cmd = exec.CommandContext(ctx, "git", "ls-remote")
 	cmd.Dir = gitDir
-	out, err = cmd.CombinedOutput()
+	out, err := cmd.CombinedOutput()
+	lsRemoteDuration := time.Since(t0).Round(time.Millisecond)
 	if err != nil {
-		return fmt.Errorf("git ls-remote in %s: %v, %s", gitDir, err, out)
+		return fmt.Errorf("git ls-remote in %s: %v after %v, %s", gitDir, err, lsRemoteDuration, out)
 	}
+	gp.logf("ran git ls-remote in %v", lsRemoteDuration)
 
 	var changedRefs []*maintpb.GitRef
 	var toFetch []GitHash
@@ -1050,6 +1084,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 	// it's not actually around I/O: all the input from ls-remote has
 	// already been slurped into memory.
 	c.mu.Lock()
+	refExists := map[string]bool{} // whether ref is this ls-remote fetch
 	for bs.Scan() {
 		line := bs.Bytes()
 		tab := bytes.IndexByte(line, '\t')
@@ -1061,6 +1096,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 		}
 		sha1 := string(line[:tab])
 		refName := strings.TrimSpace(string(line[tab+1:]))
+		refExists[refName] = true
 		hash := c.gitHashFromHexStr(sha1)
 
 		var needFetch bool
@@ -1076,7 +1112,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 			needFetch = curHash != hash
 		} else if trackGerritRef(refName) && gp.ref[refName] != hash {
 			needFetch = true
-			gp.logf("gerrit ref %q = %q", refName, sha1)
+			gp.logf("ref %q = %q", refName, sha1)
 		}
 
 		if needFetch {
@@ -1087,9 +1123,26 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 			})
 		}
 	}
+	var deletedRefs []string
+	for n := range gp.ref {
+		if !refExists[n] {
+			gp.logf("ref %q now deleted", n)
+			deletedRefs = append(deletedRefs, n)
+		}
+	}
 	c.mu.Unlock()
+
 	if err := bs.Err(); err != nil {
+		gp.logf("ls-remote scanning error: %v", err)
 		return err
+	}
+	if len(deletedRefs) > 0 {
+		c.addMutation(&maintpb.Mutation{
+			Gerrit: &maintpb.GerritMutation{
+				Project:     gp.proj,
+				DeletedRefs: deletedRefs,
+			},
+		})
 	}
 	if len(changedRefs) == 0 {
 		return nil
@@ -1125,6 +1178,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 			}})
 		changedRefs = changedRefs[len(batch):]
 	}
+
 	return nil
 }
 
@@ -1176,13 +1230,16 @@ func (gp *GerritProject) fetchHashes(ctx context.Context, hashes []GitHash) erro
 		args = append(args, hash.String())
 	}
 	gp.logf("fetching %v hashes...", len(hashes))
+	t0 := time.Now()
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = gp.gitDir()
-	if out, err := cmd.CombinedOutput(); err != nil {
-		log.Printf("error fetching %d hashes from gerrit project %s: %s", len(hashes), gp.proj, out)
+	out, err := cmd.CombinedOutput()
+	d := time.Since(t0).Round(time.Millisecond)
+	if err != nil {
+		gp.logf("error fetching %d hashes after %v: %s", len(hashes), d, out)
 		return err
 	}
-	gp.logf("fetched %v hashes.", len(hashes))
+	gp.logf("fetched %v hashes in %v", len(hashes), d)
 	return nil
 }
 
@@ -1300,7 +1357,6 @@ func (gp *GerritProject) check() error {
 type GerritMeta struct {
 	// Commit points up to the git commit for this Gerrit NoteDB meta commit.
 	Commit *GitCommit
-
 	// CL is the Gerrit CL this metadata is for.
 	CL *GerritCL
 
@@ -1332,17 +1388,39 @@ func (m *GerritMeta) Footer() string {
 	return m.Commit.Msg[i+2:]
 }
 
-// Hashtags returns the current set of hashtags.
+// Hashtags returns the set of hashtags on m's CL as of the time of m.
 func (m *GerritMeta) Hashtags() GerritHashtags {
-	tags, _ := lineValue(m.Footer(), "Hashtags: ")
-	return GerritHashtags(tags)
+	// If this GerritMeta set hashtags, use it.
+	tags, _, ok := lineValueOK(m.Footer(), "Hashtags: ")
+	if ok {
+		return GerritHashtags(tags)
+	}
+
+	// Otherwise, look at older metas (from most recent to oldest)
+	// to find most recent value. Ignore anything that's newer
+	// than m.
+	sawThisMeta := false // whether we've seen 'm'
+	metas := m.CL.Metas
+	for i := len(metas) - 1; i >= 0; i-- {
+		mp := metas[i]
+		if mp.Commit.Hash == m.Commit.Hash {
+			sawThisMeta = true
+			continue
+		}
+		if !sawThisMeta {
+			continue
+		}
+		if tags, _, ok := lineValueOK(mp.Footer(), "Hashtags: "); ok {
+			return GerritHashtags(tags)
+		}
+	}
+	return ""
 }
 
 // ActionTag returns the Gerrit "Tag" value from the meta commit.
 // These are of the form "autogenerated:gerrit:setHashtag".
 func (m *GerritMeta) ActionTag() string {
-	v, _ := lineValue(m.Footer(), "Tag: ")
-	return v
+	return lineValue(m.Footer(), "Tag: ")
 }
 
 // HashtagEdits returns the hashtags added and removed by this meta commit,
@@ -1362,7 +1440,7 @@ func (m *GerritMeta) HashtagEdits() (added, removed GerritHashtags, ok bool) {
 	// Hashtag added: bar
 	// Hashtags added: foo, bar
 	for len(msg) > 0 {
-		value, rest := lineValue(msg, "Hash")
+		value, rest := lineValueRest(msg, "Hash")
 		msg = rest
 		colon := strings.IndexByte(value, ':')
 		if colon != -1 {
@@ -1422,13 +1500,11 @@ func (m *GerritMeta) LabelVotes() map[string]map[string]int8 {
 	history := m.CL.Metas[:ourIndex+1]
 	var lastCommit string
 	for _, mc := range history {
-		log.Printf("For CL %v, mc %v", m.CL.Number, mc)
 		footer := mc.Footer()
 		isNew := strings.Contains(footer, "\nTag: autogenerated:gerrit:newPatchSet\n")
 		email := mc.Commit.Author.Email()
 		if isNew {
-			commit, _ := lineValue(footer, "Commit: ")
-			if commit != "" {
+			if commit := lineValue(footer, "Commit: "); commit != "" {
 				// TODO: implement Gerrit's vote copying. For example,
 				// label.Label-Name.copyAllScoresIfNoChange defaults to true (as it is with Go's server)
 				// https://gerrit-review.googlesource.com/Documentation/config-labels.html#label_copyAllScoresIfNoChange
@@ -1455,7 +1531,7 @@ func (m *GerritMeta) LabelVotes() map[string]map[string]int8 {
 		remain := footer
 		for len(remain) > 0 {
 			var labelEqVal string
-			labelEqVal, remain = lineValue(remain, "Label: ")
+			labelEqVal, remain = lineValueRest(remain, "Label: ")
 			if labelEqVal != "" {
 				label, value, whose := parseGerritLabelValue(labelEqVal)
 				if label != "" {

@@ -36,9 +36,6 @@ func main() {
 	if err := godoc(); err != nil {
 		log.Fatal(err)
 	}
-	if err := tour(); err != nil {
-		log.Fatal(err)
-	}
 	if dir := archDir(); dir != "" {
 		if err := cp("go/bin/go", "go/bin/"+dir+"/go"); err != nil {
 			log.Fatal(err)
@@ -51,9 +48,7 @@ func main() {
 		os.RemoveAll("go/pkg/tool/linux_amd64")
 	}
 	os.RemoveAll("go/pkg/obj")
-	var err error
-	switch runtime.GOOS {
-	case "windows":
+	if runtime.GOOS == "windows" {
 		// Clean up .exe~ files; golang.org/issue/23894
 		filepath.Walk("go", func(path string, fi os.FileInfo, err error) error {
 			if strings.HasSuffix(path, ".exe~") {
@@ -61,12 +56,9 @@ func main() {
 			}
 			return nil
 		})
-		err = windowsMSI()
-	case "darwin":
-		err = darwinPKG()
-	}
-	if err != nil {
-		log.Fatal(err)
+		if err := windowsMSI(); err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
@@ -77,7 +69,23 @@ func archDir() string {
 	return ""
 }
 
+// includesGodoc reports whether we should include the godoc binary in this release.
+// We only include it in go1.12.x and earlier releases; see issue 30029.
+func includesGodoc() bool {
+	_, version, _ := environ()
+	verMajor, verMinor, _ := splitVersion(version)
+	return verMajor == 1 && verMinor < 13
+}
+
+// godoc copies the godoc binary into place for Go 1.12 and earlier.
+//
+// TODO: remove this function once Go 1.14 is released (when Go 1.12
+// is no longer supported).
 func godoc() error {
+	if !includesGodoc() {
+		return nil
+	}
+
 	// Pre Go 1.7, the godoc binary is placed here by cmd/go.
 	// After Go 1.7, we need to copy the binary from GOPATH/bin to GOROOT/bin.
 	// TODO(cbro): Remove after Go 1.6 is no longer supported.
@@ -93,51 +101,6 @@ func godoc() error {
 	)
 }
 
-const tourPath = "golang.org/x/tour"
-
-var tourContent = []string{
-	"content",
-	"solutions",
-	"static",
-	"template",
-}
-
-var tourPackages = []string{
-	"pic",
-	"reader",
-	"tree",
-	"wc",
-}
-
-// TODO: Remove after Go 1.13 is released, and Go 1.11 is no longer supported.
-func tour() error {
-	_, version, _ := environ()
-	verMajor, verMinor, _ := splitVersion(version)
-	if verMajor > 1 || verMinor >= 12 {
-		return nil // Only include the tour in go1.11.x and earlier releases.
-	}
-
-	tourSrc := filepath.Join("gopath/src", tourPath)
-	contentDir := filepath.FromSlash("go/misc/tour")
-
-	// Copy all the tour content to $GOROOT/misc/tour.
-	if err := cpAllDir(contentDir, tourSrc, tourContent...); err != nil {
-		return err
-	}
-
-	// Copy the tour source code so it's accessible with $GOPATH pointing to $GOROOT/misc/tour.
-	tourPKGDir := filepath.Join(contentDir, "src", tourPath)
-	if err := cpAllDir(tourPKGDir, tourSrc, tourPackages...); err != nil {
-		return err
-	}
-
-	// Copy the tour binary to the tool directory, invoked as "go tool tour".
-	return cp(
-		filepath.FromSlash("go/pkg/tool/"+runtime.GOOS+"_"+runtime.GOARCH+"/tour"+ext()),
-		filepath.FromSlash("gopath/bin/"+archDir()+"/tour"+ext()),
-	)
-}
-
 func environ() (cwd, version string, err error) {
 	cwd, err = os.Getwd()
 	if err != nil {
@@ -150,75 +113,6 @@ func environ() (cwd, version string, err error) {
 	}
 	version = string(bytes.TrimSpace(versionBytes))
 	return
-}
-
-func darwinPKG() error {
-	cwd, version, err := environ()
-	if err != nil {
-		return err
-	}
-
-	// Write out darwin data that is used by the packaging process.
-	defer os.RemoveAll("darwin")
-	if err := writeDataFiles(darwinData, "darwin"); err != nil {
-		return err
-	}
-
-	// Create a work directory and place inside the files as they should
-	// be on the destination file system.
-	work := filepath.Join(cwd, "darwinpkg")
-	if err := os.MkdirAll(work, 0755); err != nil {
-		return err
-	}
-	defer os.RemoveAll(work)
-
-	// Write out /etc/paths.d/go.
-	const pathsBody = "/usr/local/go/bin"
-	pathsDir := filepath.Join(work, "etc/paths.d")
-	pathsFile := filepath.Join(pathsDir, "go")
-	if err := os.MkdirAll(pathsDir, 0755); err != nil {
-		return err
-	}
-	if err = ioutil.WriteFile(pathsFile, []byte(pathsBody), 0644); err != nil {
-		return err
-	}
-
-	// Copy Go installation to /usr/local/go.
-	goDir := filepath.Join(work, "usr/local/go")
-	if err := os.MkdirAll(goDir, 0755); err != nil {
-		return err
-	}
-	if err := cpDir(goDir, "go"); err != nil {
-		return err
-	}
-
-	// Build the package file.
-	dest := "package"
-	if err := os.Mkdir(dest, 0755); err != nil {
-		return err
-	}
-	defer os.RemoveAll(dest)
-
-	if err := run("pkgbuild",
-		"--identifier", "com.googlecode.go",
-		"--version", version,
-		"--scripts", "darwin/scripts",
-		"--root", work,
-		filepath.Join(dest, "com.googlecode.go.pkg"),
-	); err != nil {
-		return err
-	}
-
-	const pkg = "pkg" // known to cmd/release
-	if err := os.Mkdir(pkg, 0755); err != nil {
-		return err
-	}
-	return run("productbuild",
-		"--distribution", "darwin/Distribution",
-		"--resources", "darwin/Resources",
-		"--package-path", dest,
-		filepath.Join(cwd, pkg, "go.pkg"), // file name irrelevant
-	)
 }
 
 func windowsMSI() error {
@@ -237,6 +131,9 @@ func windowsMSI() error {
 	// Write out windows data that is used by the packaging process.
 	win := filepath.Join(cwd, "windows")
 	defer os.RemoveAll(win)
+	if !includesGodoc() {
+		removeGodocShortcut()
+	}
 	if err := writeDataFiles(windowsData, win); err != nil {
 		return err
 	}
@@ -508,61 +405,11 @@ func writeDataFiles(data map[string]string, base string) error {
 	return nil
 }
 
-var darwinData = map[string]string{
-
-	"scripts/postinstall": `#!/bin/bash
-GOROOT=/usr/local/go
-echo "Fixing permissions"
-cd $GOROOT
-find . -exec chmod ugo+r \{\} \;
-find bin -exec chmod ugo+rx \{\} \;
-find . -type d -exec chmod ugo+rx \{\} \;
-chmod o-w .
-`,
-
-	"scripts/preinstall": `#!/bin/bash
-GOROOT=/usr/local/go
-echo "Removing previous installation"
-if [ -d $GOROOT ]; then
-	rm -r $GOROOT
-fi
-`,
-
-	"Distribution": `<?xml version="1.0" encoding="utf-8" standalone="no"?>
-<installer-script minSpecVersion="1.000000">
-    <title>Go</title>
-    <background mime-type="image/png" file="bg.png"/>
-    <options customize="never" allow-external-scripts="no"/>
-    <domains enable_localSystem="true" />
-    <installation-check script="installCheck();"/>
-    <script>
-function installCheck() {
-    if(!(system.compareVersions(system.version.ProductVersion, '10.6.0') >= 0)) {
-        my.result.title = 'Unable to install';
-        my.result.message = 'Go requires Mac OS X 10.6 or later.';
-        my.result.type = 'Fatal';
-        return false;
-    }
-    if(system.files.fileExistsAtPath('/usr/local/go/bin/go')) {
-	    my.result.title = 'Previous Installation Detected';
-	    my.result.message = 'A previous installation of Go exists at /usr/local/go. This installer will remove the previous installation prior to installing. Please back up any data before proceeding.';
-	    my.result.type = 'Warning';
-	    return false;
-	}
-    return true;
-}
-    </script>
-    <choices-outline>
-        <line choice="com.googlecode.go.choice"/>
-    </choices-outline>
-    <choice id="com.googlecode.go.choice" title="Go">
-        <pkg-ref id="com.googlecode.go.pkg"/>
-    </choice>
-    <pkg-ref id="com.googlecode.go.pkg" auth="Root">com.googlecode.go.pkg</pkg-ref>
-</installer-script>
-`,
-
-	"Resources/bg.png": storageBase + "darwin/bg.png",
+// removeGodocShortcut removes the GODOC_SHORTCUT part out of the
+// installer.wxs file contents.
+func removeGodocShortcut() {
+	rx := regexp.MustCompile(`(?s)<!--GODOC_SHORTCUT-->.*<!--END_GODOC_SHORTCUT-->`)
+	windowsData["installer.wxs"] = rx.ReplaceAllString(windowsData["installer.wxs"], "")
 }
 
 var windowsData = map[string]string{
@@ -648,6 +495,7 @@ var windowsData = map[string]string{
 <!-- Programs Menu Shortcuts -->
 <DirectoryRef Id="GoProgramShortcutsDir">
   <Component Id="Component_GoProgramShortCuts" Guid="{f5fbfb5e-6c5c-423b-9298-21b0e3c98f4b}">
+    <!--GODOC_SHORTCUT-->
     <Shortcut
         Id="GoDocServerStartMenuShortcut"
         Name="GoDocServer"
@@ -655,7 +503,7 @@ var windowsData = map[string]string{
         Show="minimized"
         Arguments='/c start "Godoc Server http://localhost:6060" "[INSTALLDIR]bin\godoc.exe" -http=localhost:6060 -goroot="[INSTALLDIR]." &amp;&amp; start http://localhost:6060'
         Icon="gopher.ico"
-        Target="[%ComSpec]" />
+        Target="[%ComSpec]" /><!--END_GODOC_SHORTCUT-->
     <Shortcut
         Id="UninstallShortcut"
         Name="Uninstall Go"
@@ -699,14 +547,6 @@ var windowsData = map[string]string{
         Permanent="no"
         System="yes"
         Value="[INSTALLDIR]bin" />
-    <Environment
-        Id="GoRoot"
-        Action="set"
-        Part="all"
-        Name="GOROOT"
-        Permanent="no"
-        System="yes"
-        Value="[INSTALLDIR]" />
     <Environment
         Id="UserGoPath"
         Action="create"
@@ -874,6 +714,14 @@ func runSelfTests() {
 		if got != tt.want {
 			log.Fatalf("wixIsWinXPSupported(%q) = %v; want %v", tt.v, got, tt.want)
 		}
+	}
+
+	if !strings.Contains(windowsData["installer.wxs"], "GODOC_SHORTCUT") {
+		log.Fatal("expected GODOC_SHORTCUT to be present")
+	}
+	removeGodocShortcut()
+	if strings.Contains(windowsData["installer.wxs"], "GODOC_SHORTCUT") {
+		log.Fatal("expected GODOC_SHORTCUT to be gone")
 	}
 
 	fmt.Println("ok")

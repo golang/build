@@ -7,11 +7,16 @@ package godata
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
 
+	"cloud.google.com/go/compute/metadata"
+	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
 )
 
@@ -271,4 +276,89 @@ removed "bar" = "quux,blarf"
 	if !strings.HasPrefix(got, want) {
 		t.Errorf("got:\n%s\n\nwant prefix:\n%s", got, want)
 	}
+}
+
+func getGerritAuth() (username string, password string, err error) {
+	var slurp string
+	if metadata.OnGCE() {
+		for _, key := range []string{"gopherbot-gerrit-token", "maintner-gerrit-token", "gobot-password"} {
+			slurp, err = metadata.ProjectAttributeValue(key)
+			if err != nil || slurp == "" {
+				continue
+			}
+			break
+		}
+	}
+	if slurp == "" {
+		var ok bool
+		slurp, ok = os.LookupEnv("TEST_GERRIT_AUTH")
+		if !ok {
+			return "", "", errors.New("environment variable TEST_GERRIT_AUTH is not set")
+		}
+	}
+	f := strings.SplitN(strings.TrimSpace(slurp), ":", 2)
+	if len(f) == 1 {
+		// assume the whole thing is the token
+		return "git-gobot.golang.org", f[0], nil
+	}
+	if len(f) != 2 || f[0] == "" || f[1] == "" {
+		return "", "", fmt.Errorf("Expected Gerrit token %q to be of form <git-email>:<token>", slurp)
+	}
+	return f[0], f[1], nil
+}
+
+// Hit the Gerrit API and compare its computation of CLs' hashtags against what maintner thinks.
+// Off by default unless $TEST_GERRIT_AUTH is defined with "user:token", or we're running in the
+// prod project.
+func TestGerritHashtags(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	c := getGoData(t)
+	user, pass, err := getGerritAuth()
+	if err != nil {
+		t.Skipf("no Gerrit auth defined, skipping: %v", err)
+	}
+	gc := gerrit.NewClient("https://go-review.googlesource.com", gerrit.BasicAuth(user, pass))
+	ctx := context.Background()
+	more := true
+	n := 0
+	for more {
+		// We search Gerrit for "hashtag", which seems to also
+		// search auto-generated gerrit meta (notedb) texts,
+		// so this has the effect of searching for all Gerrit
+		// changes that have ever had hashtags added or
+		// removed:
+		cis, err := gc.QueryChanges(ctx, "hashtag", gerrit.QueryChangesOpt{
+			Start: n,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, ci := range cis {
+			n++
+			cl := c.Gerrit().Project("go.googlesource.com", ci.Project).CL(int32(ci.ChangeNumber))
+			if cl == nil {
+				t.Logf("Ignoring not-in-maintner %s/%v", ci.Project, ci.ChangeNumber)
+				continue
+			}
+			sort.Strings(ci.Hashtags)
+			want := strings.Join(ci.Hashtags, ", ")
+			got := canonicalTagList(string(cl.Meta.Hashtags()))
+			if got != want {
+				t.Errorf("ci: https://golang.org/cl/%d (%s) -- maintner = %q; want gerrit value %q", ci.ChangeNumber, ci.Project, got, want)
+			}
+			more = ci.MoreChanges
+		}
+	}
+	t.Logf("N = %v", n)
+}
+
+func canonicalTagList(s string) string {
+	var sl []string
+	for _, v := range strings.Split(s, ",") {
+		sl = append(sl, strings.TrimSpace(v))
+	}
+	sort.Strings(sl)
+	return strings.Join(sl, ", ")
 }

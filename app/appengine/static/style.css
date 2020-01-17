@@ -14,15 +14,17 @@ body {
   font-family: sans-serif;
   padding: 0; margin: 0;
   color: #222;
+  display: inline-block;
+  min-width: 100%;
 }
- 
+
 .container {
   max-width: 900px;
   margin: 0 auto;
 }
- 
+
 p, pre, ul, ol { margin: 20px; }
- 
+
 h1, h2, h3, h4 {
   margin: 20px 0;
   padding: 0;
@@ -203,6 +205,12 @@ table thead tr {
 .build .user {
   max-width: 50px;
 }
+
+tr.subheading2 th {
+  max-width: 4em;
+  overflow: hidden;
+  word-wrap: none;
+}
  
 .good   { text-decoration: none; color: #000000; border: 2px solid #00E700}
 .bad    { text-decoration: none; text-shadow: 1px 1px 0 #000000; color: #FFFFFF; background: #E70000;}
@@ -261,11 +269,6 @@ table thead tr {
   padding: 2px 8px;
 }
 
-.diff-benchmark {
-  clear: both;
-  padding-top: 5px;
-}
-
 /* positioning elements */
  
 .page {
@@ -312,4 +315,3 @@ aside {
     margin: 0;
   }
 }
-

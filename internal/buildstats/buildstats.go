@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"sort"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -308,4 +310,125 @@ func SyncSpans(ctx context.Context, env *buildenv.Environment) error {
 			return err
 		}
 	}
+}
+
+// TestStats describes stats for a cmd/dist test on a particular build
+// configuration (a "builder").
+type TestStats struct {
+	// AsOf is the time that the stats were queried from BigQuery.
+	AsOf time.Time
+
+	// BuilderTestStats maps from a builder name to that builder's
+	// test stats.
+	BuilderTestStats map[string]*BuilderTestStats
+}
+
+// Duration returns the median time to run testName on builder, if known.
+// Otherwise it returns some non-zero default value.
+func (ts *TestStats) Duration(builder, testName string) time.Duration {
+	if ts != nil {
+		if bs, ok := ts.BuilderTestStats[builder]; ok {
+			if d, ok := bs.MedianDuration[testName]; ok {
+				return d
+			}
+		}
+	}
+	return 3 * time.Second // some arbitrary value if unknown
+}
+
+func (ts *TestStats) Builders() []string {
+	s := make([]string, 0, len(ts.BuilderTestStats))
+	for k := range ts.BuilderTestStats {
+		s = append(s, k)
+	}
+	sort.Strings(s)
+	return s
+}
+
+type BuilderTestStats struct {
+	// Builder is which build configuration this is for.
+	Builder string
+
+	// Runs is how many times tests have run recently, for some
+	// fuzzy definition of "recently".
+	// The map key is a cmd/dist test name.
+	Runs map[string]int
+
+	// MedianDuration is the median duration for a test to
+	// pass on this BuilderTestStat's Builder.
+	// The map key is a cmd/dist test name.
+	MedianDuration map[string]time.Duration
+}
+
+func (ts *BuilderTestStats) Tests() []string {
+	s := make([]string, 0, len(ts.Runs))
+	for k := range ts.Runs {
+		s = append(s, k)
+	}
+	sort.Strings(s)
+	return s
+}
+
+// QueryTestStats returns stats on all tests for all builders.
+func QueryTestStats(ctx context.Context, env *buildenv.Environment) (*TestStats, error) {
+	ts := &TestStats{
+		AsOf:             time.Now(),
+		BuilderTestStats: map[string]*BuilderTestStats{},
+	}
+	bq, err := bigquery.NewClient(ctx, env.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+	defer bq.Close()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	q := bq.Query(`
+SELECT
+    Builder, Event, APPROX_QUANTILES(Seconds, 100)[OFFSET(50)] as MedianSec, COUNT(*) as N
+FROM
+    builds.Spans
+WHERE
+    Error='' AND
+    StartTime > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 500 HOUR)
+    AND Repo = "go"
+    AND Event LIKE 'run_test:%'
+GROUP BY 1, 2
+`)
+	it, err := q.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	n := 0
+	for {
+		var row struct {
+			Builder   string
+			Event     string
+			MedianSec float64
+			N         int
+		}
+		err := it.Next(&row)
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		n++
+		if n > 50000 {
+			break
+		}
+		bs := ts.BuilderTestStats[row.Builder]
+		if bs == nil {
+			bs = &BuilderTestStats{
+				Builder:        row.Builder,
+				Runs:           map[string]int{},
+				MedianDuration: map[string]time.Duration{},
+			}
+			ts.BuilderTestStats[row.Builder] = bs
+		}
+		distTest := strings.TrimPrefix(row.Event, "run_test:")
+		bs.Runs[distTest] = row.N
+		bs.MedianDuration[distTest] = time.Duration(row.MedianSec * 1e9)
+	}
+	return ts, nil
 }

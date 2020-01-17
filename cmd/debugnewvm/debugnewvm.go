@@ -27,11 +27,14 @@ import (
 
 var (
 	hostType      = flag.String("host", "", "host type to create")
+	zone          = flag.String("zone", "", "if non-empty, force a certain GCP zone")
 	overrideImage = flag.String("override-image", "", "if non-empty, an alternate GCE VM image or container image to use, depending on the host type")
 	serial        = flag.Bool("serial", true, "watch serial")
 	pauseAfterUp  = flag.Duration("pause-after-up", 0, "pause for this duration before buildlet is destroyed")
+	sleepSec      = flag.Int("sleep-test-secs", 0, "number of seconds to sleep when buildlet comes up, to test time source; OpenBSD only for now")
 
-	runBuild = flag.String("run-build", "", "optional builder name to run all.bash for")
+	runBuild = flag.String("run-build", "", "optional builder name to run all.bash or make.bash for")
+	makeOnly = flag.Bool("make-only", false, "if a --run-build builder name is given, this controls whether make.bash or all.bash is run")
 	buildRev = flag.String("rev", "master", "if --run-build is specified, the git hash or branch name to build")
 )
 
@@ -59,6 +62,9 @@ func main() {
 	if *hostType == "" {
 		log.Fatalf("missing --host (or --run-build)")
 	}
+	if *sleepSec != 0 && !strings.Contains(*hostType, "openbsd") {
+		log.Fatalf("The --sleep-test-secs is currently only supported for openbsd hosts.")
+	}
 
 	hconf, ok := dashboard.Hosts[*hostType]
 	if !ok {
@@ -74,12 +80,17 @@ func main() {
 			hconf.VMImage = img
 		}
 	}
-	vmImageSummary := hconf.VMImage
+	vmImageSummary := fmt.Sprintf("%q", hconf.VMImage)
 	if hconf.IsContainer() {
-		vmImageSummary = fmt.Sprintf("cos-stable, running %v", hconf.ContainerImage)
+		containerHost := hconf.ContainerVMImage()
+		if containerHost == "" {
+			containerHost = "default container host"
+		}
+		vmImageSummary = fmt.Sprintf("%s, running container %q", containerHost, hconf.ContainerImage)
 	}
 
 	env = buildenv.FromFlags()
+
 	ctx := context.Background()
 
 	buildenv.CheckUserCredentials()
@@ -91,16 +102,21 @@ func main() {
 
 	name := fmt.Sprintf("debug-temp-%d", time.Now().Unix())
 
-	log.Printf("Creating %s (with VM image %q)", name, vmImageSummary)
+	log.Printf("Creating %s (with VM image %s)", name, vmImageSummary)
+	var zoneSelected string
 	bc, err := buildlet.StartNewVM(creds, env, name, *hostType, buildlet.VMOpts{
+		Zone:                *zone,
 		OnInstanceRequested: func() { log.Printf("instance requested") },
 		OnInstanceCreated: func() {
 			log.Printf("instance created")
 			if *serial {
-				go watchSerial(name)
+				go watchSerial(zoneSelected, name)
 			}
 		},
-		OnGotInstanceInfo: func() { log.Printf("got instance info") },
+		OnGotInstanceInfo: func(inst *compute.Instance) {
+			zoneSelected = inst.Zone
+			log.Printf("got instance info; running in %v", zoneSelected)
+		},
 		OnBeginBuildletProbe: func(buildletURL string) {
 			log.Printf("About to hit %s to see if buildlet is up yet...", buildletURL)
 		},
@@ -115,8 +131,21 @@ func main() {
 	if err != nil {
 		log.Fatalf("StartNewVM: %v", err)
 	}
-	dir, err := bc.WorkDir()
+	dir, err := bc.WorkDir(ctx)
 	log.Printf("WorkDir: %v, %v", dir, err)
+
+	if *sleepSec > 0 {
+		bc.Exec(ctx, "sysctl", buildlet.ExecOpts{
+			Output:      os.Stdout,
+			SystemLevel: true,
+			Args:        []string{"kern.timecounter.hardware"},
+		})
+		bc.Exec(ctx, "bash", buildlet.ExecOpts{
+			Output:      os.Stdout,
+			SystemLevel: true,
+			Args:        []string{"-c", "rdate -p -v time.nist.gov; sleep " + fmt.Sprint(*sleepSec) + "; rdate -p -v time.nist.gov"},
+		})
+	}
 
 	var buildFailed bool
 	if *runBuild != "" {
@@ -124,7 +153,7 @@ func main() {
 		if u := bconf.GoBootstrapURL(env); u != "" {
 			log.Printf("Pushing 'go1.4' Go bootstrap dir ...")
 			const bootstrapDir = "go1.4" // might be newer; name is the default
-			if err := bc.PutTarFromURL(u, bootstrapDir); err != nil {
+			if err := bc.PutTarFromURL(ctx, u, bootstrapDir); err != nil {
 				bc.Close()
 				log.Fatalf("Putting Go bootstrap: %v", err)
 			}
@@ -133,31 +162,37 @@ func main() {
 		// Push Go code
 		log.Printf("Pushing 'go' dir...")
 		goTarGz := "https://go.googlesource.com/go/+archive/" + *buildRev + ".tar.gz"
-		if err := bc.PutTarFromURL(goTarGz, "go"); err != nil {
+		if err := bc.PutTarFromURL(ctx, goTarGz, "go"); err != nil {
 			bc.Close()
 			log.Fatalf("Putting go code: %v", err)
 		}
 
 		// Push a synthetic VERSION file to prevent git usage:
-		if err := bc.PutTar(buildgo.VersionTgz(*buildRev), "go"); err != nil {
+		if err := bc.PutTar(ctx, buildgo.VersionTgz(*buildRev), "go"); err != nil {
 			bc.Close()
 			log.Fatalf("Putting VERSION file: %v", err)
 		}
 
-		allScript := bconf.AllScript()
-		log.Printf("Running %s ...", allScript)
-		remoteErr, err := bc.Exec(path.Join("go", allScript), buildlet.ExecOpts{
+		script := bconf.AllScript()
+		if *makeOnly {
+			script = bconf.MakeScript()
+		}
+		t0 := time.Now()
+		log.Printf("Running %s ...", script)
+		remoteErr, err := bc.Exec(ctx, path.Join("go", script), buildlet.ExecOpts{
 			Output:   os.Stdout,
 			ExtraEnv: bconf.Env(),
 			Debug:    true,
 			Args:     bconf.AllScriptArgs(),
 		})
 		if err != nil {
-			log.Fatalf("error trying to run %s: %v", allScript, err)
+			log.Fatalf("error trying to run %s: %v", script, err)
 		}
 		if remoteErr != nil {
-			log.Printf("remote failure running %s: %v", allScript, remoteErr)
+			log.Printf("remote failure running %s: %v", script, remoteErr)
 			buildFailed = true
+		} else {
+			log.Printf("ran %s in %v", script, time.Since(t0).Round(time.Second))
 		}
 	}
 
@@ -180,11 +215,11 @@ func main() {
 //   gcloud compute connect-to-serial-port --zone=xxx $NAME
 // but in Go and works. For some reason, gcloud doesn't work as a
 // child process and has weird errors.
-func watchSerial(name string) {
+func watchSerial(zone, name string) {
 	start := int64(0)
 	indent := strings.Repeat(" ", len("2017/07/25 06:37:14 SERIAL: "))
 	for {
-		sout, err := computeSvc.Instances.GetSerialPortOutput(env.ProjectName, env.Zone, name).Start(start).Do()
+		sout, err := computeSvc.Instances.GetSerialPortOutput(env.ProjectName, zone, name).Start(start).Do()
 		if err != nil {
 			log.Printf("serial output error: %v", err)
 			return

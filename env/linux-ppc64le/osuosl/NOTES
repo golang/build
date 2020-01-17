@@ -1,6 +1,7 @@
 The linux-ppc64le buildlets run on PPC64 VMs at osuosl.org (OSU Open Source Lab).
 
-They run Debian jessie.
+They run Ubuntu bionic on the host, with Docker images running
+debian:buster running the buildlets.
 
 Filing tickets: https://support.osuosl.org/
     Ticket username: bradfitz@golang.org
@@ -8,21 +9,16 @@ Filing tickets: https://support.osuosl.org/
 
 Machines:
 
-go-le-1: debian@140.211.168.23
-go-le-2: debian@140.211.168.18
-go-le-3: debian@140.211.168.180
-go-le-4: debian@140.211.168.161
-go-le-5: debian@140.211.168.162
+* go-le-bionic-1: (20 GB RAM, 50 GB disk, 10 cores, POWER9)
+  Linux go-le-bionic-1 4.15.0-65-generic #74-Ubuntu SMP Tue Sep 17 17:08:54 UTC 2019 ppc64le ppc64le ppc64le GNU/Linux
 
-They accept ssh key 'id_ed25519_golang1'. For example,
+  ssh -i ~/.ssh/id_ed25519_golang1 ubuntu@140.211.169.171
+  (key from http://go/go-builders-ssh)
 
-     ssh -i ~/.ssh/id_ed25519_golang1 debian@140.211.168.23
-     (key from http://go/go-builders-ssh)
+* go-le-bionic-2: (20 GB RAM, 50 GB disk, 10 cores, POWER8)
+  Linux go-le-bionic-2 4.15.0-65-generic #74-Ubuntu SMP Tue Sep 17 17:08:54 UTC 2019 ppc64le ppc64le ppc64le GNU/Linux
 
-Each was once configured by scping setup.bash to them, logging in to
-each, and running:
+  ssh -i ~/.ssh/id_ed25519_golang1 ubuntu@140.211.169.160
+  (key from http://go/go-builders-ssh)
 
-$ sudo ./setup.bash <BUILDKEY_HERE>
-
-TODO: these should be updated like linux-arm and linux-arm64 to use Docker
-      per build. That is https://golang.org/issue/21189
+To configure the hosts, see the Makefile and trace what that does.

@@ -27,7 +27,7 @@ import (
 
 // Client is a Gerrit client.
 type Client struct {
-	url  string // URL prefix, e.g. "https://go-review.googlesource.com/a" (without trailing slash)
+	url  string // URL prefix, e.g. "https://go-review.googlesource.com" (without trailing slash)
 	auth Auth
 
 	// HTTPClient optionally specifies an HTTP client to use
@@ -37,7 +37,7 @@ type Client struct {
 
 // NewClient returns a new Gerrit client with the given URL prefix
 // and authentication mode.
-// The url should be just the scheme and hostname.
+// The url should be just the scheme and hostname. For example, "https://go-review.googlesource.com".
 // If auth is nil, a default is used, or requests are made unauthenticated.
 func NewClient(url string, auth Auth) *Client {
 	if auth == nil {
@@ -168,6 +168,7 @@ type ChangeInfo struct {
 	// refs/heads/ prefix is omitted.
 	ID           string `json:"id"`
 	ChangeNumber int    `json:"_number"`
+	ChangeID     string `json:"change_id"`
 
 	Project string `json:"project"`
 
@@ -175,17 +176,37 @@ type ChangeInfo struct {
 	// The refs/heads/ prefix is omitted.
 	Branch string `json:"branch"`
 
-	ChangeID string `json:"change_id"`
+	Topic    string       `json:"topic"`
+	Assignee *AccountInfo `json:"assignee"`
+	Hashtags []string     `json:"hashtags"`
 
+	// Subject is the subject of the change
+	// (the header line of the commit message).
 	Subject string `json:"subject"`
 
 	// Status is the status of the change (NEW, SUBMITTED, MERGED,
 	// ABANDONED, DRAFT).
 	Status string `json:"status"`
 
-	Created  TimeStamp `json:"created"`
-	Updated  TimeStamp `json:"updated"`
-	Mergable bool      `json:"mergable"`
+	Created    TimeStamp    `json:"created"`
+	Updated    TimeStamp    `json:"updated"`
+	Submitted  TimeStamp    `json:"submitted"`
+	Submitter  *AccountInfo `json:"submitter"`
+	SubmitType string       `json:"submit_type"`
+
+	// Mergeable indicates whether the change can be merged.
+	// It is not set for already-merged changes,
+	// nor if the change is untested, nor if the
+	// SKIP_MERGEABLE option has been set.
+	Mergeable bool `json:"mergeable"`
+
+	// Submittable indicates whether the change can be submitted.
+	// It is only set if requested, using the "SUBMITTABLE" option.
+	Submittable bool `json:"submittable"`
+
+	// Insertions and Deletions count inserted and deleted lines.
+	Insertions int `json:"insertions"`
+	Deletions  int `json:"deletions"`
 
 	// CurrentRevision is the commit ID of the current patch set
 	// of this change.  This is only set if the current revision
@@ -208,13 +229,44 @@ type ChangeInfo struct {
 	// Messages are included if field "MESSAGES" is requested.
 	Messages []ChangeMessageInfo `json:"messages"`
 
+	// Labels maps label names to LabelInfo entries.
 	Labels map[string]LabelInfo `json:"labels"`
 
-	// TODO: more as needed
+	// ReviewerUpdates are included if field "REVIEWER_UPDATES" is requested.
+	ReviewerUpdates []ReviewerUpdateInfo `json:"reviewer_updates"`
+
+	// Reviewers maps reviewer state ("REVIEWER", "CC", "REMOVED")
+	// to a list of accounts.
+	// REVIEWER lists users with at least one non-zero vote on the change.
+	// CC lists users added to the change who has not voted.
+	// REMOVED lists users who were previously reviewers on the change
+	// but who have been removed.
+	// Reviewers is only included if "DETAILED_LABELS" is requested.
+	Reviewers map[string][]*AccountInfo `json:"reviewers"`
+
+	// WorkInProgress indicates that the change is marked as a work in progress.
+	// (This means it is not yet ready for review, but it is still publicly visible.)
+	WorkInProgress bool `json:"work_in_progress"`
+
+	// HasReviewStarted indicates whether the change has ever been marked
+	// ready for review in the past (not as a work in progress).
+	HasReviewStarted bool `json:"has_review_started"`
+
+	// RevertOf lists the numeric Change-Id of the change that this change reverts.
+	RevertOf int `json:"revert_of"`
 
 	// MoreChanges is set on the last change from QueryChanges if
 	// the result set is truncated by an 'n' parameter.
 	MoreChanges bool `json:"_more_changes"`
+}
+
+// ReviewerUpdateInfo is a Gerrit data structure.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#review-update-info
+type ReviewerUpdateInfo struct {
+	Updated   TimeStamp    `json:"updated"`
+	UpdatedBy *AccountInfo `json:"updated_by"`
+	Reviewer  *AccountInfo `json:"reviewer"`
+	State     string       // "REVIEWER", "CC", or "REMOVED"
 }
 
 // AccountInfo is a Gerrit data structure. It's used both for getting the details
@@ -244,6 +296,7 @@ type ChangeMessageInfo struct {
 	Author         *AccountInfo `json:"author"`
 	Time           TimeStamp    `json:"date"`
 	Message        string       `json:"message"`
+	Tag            string       `json:"tag,omitempty"`
 	RevisionNumber int          `json:"_revision_number"`
 }
 
@@ -280,14 +333,16 @@ type ApprovalInfo struct {
 // obtained by adding o parameters as described at:
 // https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-changes
 type RevisionInfo struct {
-	Draft          bool                  `json:"draft"`
-	PatchSetNumber int                   `json:"_number"`
-	Created        TimeStamp             `json:"created"`
-	Uploader       *AccountInfo          `json:"uploader"`
-	Ref            string                `json:"ref"`
-	Fetch          map[string]*FetchInfo `json:"fetch"`
-	Commit         *CommitInfo           `json:"commit"`
-	Files          map[string]*FileInfo  `json:"files"`
+	Draft             bool                  `json:"draft"`
+	PatchSetNumber    int                   `json:"_number"`
+	Created           TimeStamp             `json:"created"`
+	Uploader          *AccountInfo          `json:"uploader"`
+	Ref               string                `json:"ref"`
+	Fetch             map[string]*FetchInfo `json:"fetch"`
+	Commit            *CommitInfo           `json:"commit"`
+	Files             map[string]*FileInfo  `json:"files"`
+	CommitWithFooters string                `json:"commit_with_footers"`
+	Kind              string                `json:"kind"`
 	// TODO: more
 }
 
@@ -793,7 +848,7 @@ func (c *Client) QueryAccounts(ctx context.Context, q string, opts ...QueryAccou
 // GetProjects returns a map of all projects on the Gerrit server.
 func (c *Client) GetProjects(ctx context.Context, branch string) (map[string]*ProjectInfo, error) {
 	mp := make(map[string]*ProjectInfo)
-	err := c.do(ctx, &mp, "GET", fmt.Sprintf("?b=%s&format=JSON", branch))
+	err := c.do(ctx, &mp, "GET", fmt.Sprintf("/projects/?b=%s&format=JSON", branch))
 	return mp, err
 }
 

@@ -16,7 +16,7 @@ set -e -x
 ANITA_VERSION=1.44
 ARCH=amd64
 # The release that the packages have been built for.
-RELEASE=8.0_2018Q1
+RELEASE=8.0_2019Q1
 
 # Must use GNU tar. On NetBSD, tar is BSD tar and gtar is GNU.
 TAR=tar

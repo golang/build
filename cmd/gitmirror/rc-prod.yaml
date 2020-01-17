@@ -26,7 +26,7 @@ spec:
         env:
         - name: XDG_CACHE_HOME
           value: "/cache"
-        command: ["/tini", "--", "/gitmirror", "-http=:8585", "-mirror=true", "-report=true", "-network=true", "-cachedir=/cache/gitmirror"]
+        command: ["/tini", "--", "/gitmirror", "-http=:8585", "-mirror=true", "-cachedir=/cache/gitmirror"]
         volumeMounts:
         - mountPath: /cache
           name: cache-volume

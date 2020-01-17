@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,15 +65,15 @@ type Environment struct {
 	// disabled and the coordinator serves on 8119.
 	IsProd bool
 
-	// Zone is the GCE zone that the coordinator instance and Kubernetes cluster
+	// ControlZone is the GCE zone that the coordinator instance and Kubernetes cluster
 	// will run in. This field may be overridden as necessary without impacting
 	// other fields.
-	Zone string
+	ControlZone string
 
-	// ZonesToClean are the GCE zones that will be periodically cleaned by
-	// deleting old VMs. The zero value means that no cleaning will occur.
-	// This field is optional.
-	ZonesToClean []string
+	// VMZones are the GCE zones that the VMs will be deployed to. These
+	// GCE zones will be periodically cleaned by deleting old VMs. The zones
+	// should all exist within a single region.
+	VMZones []string
 
 	// StaticIP is the public, static IP address that will be attached to the
 	// coordinator instance. The zero value means the address will be looked
@@ -101,12 +102,6 @@ type Environment struct {
 	// PerfDataURL is the base URL of the benchmark storage server.
 	PerfDataURL string
 
-	// CoordinatorURL is the location from which the coordinator
-	// binary will be downloaded.
-	// This is only used by cmd/coordinator/buildongce/create.go when
-	// creating the coordinator VM from scratch.
-	CoordinatorURL string
-
 	// CoordinatorName is the hostname of the coordinator instance.
 	CoordinatorName string
 
@@ -123,7 +118,7 @@ type Environment struct {
 	SnapBucket string
 
 	// MaxBuilds is the maximum number of concurrent builds that
-	// can run. Zero means unlimit. This is typically only used
+	// can run. Zero means unlimited. This is typically only used
 	// in a development or staging environment.
 	MaxBuilds int
 
@@ -131,11 +126,11 @@ type Environment struct {
 	// golang.org/x/crypto/acme/autocert (LetsEncrypt) cache.
 	// If empty, LetsEncrypt isn't used.
 	AutoCertCacheBucket string
-}
 
-// MachineTypeURI returns the URI for the environment's Machine Type.
-func (e Environment) MachineTypeURI() string {
-	return e.ComputePrefix() + "/zones/" + e.Zone + "/machineTypes/" + e.MachineType
+	// COSServiceAccount (Container Optimized OS) is the service
+	// account that will be assigned to a VM instance that hosts
+	// a container when the instance is created.
+	COSServiceAccount string
 }
 
 // ComputePrefix returns the URI prefix for Compute Engine resources in a project.
@@ -143,9 +138,18 @@ func (e Environment) ComputePrefix() string {
 	return prefix + e.ProjectName
 }
 
+// RandomVMZone returns a randomly selected zone from the zones in VMZones.
+// The Zone value will be returned if VMZones is not set.
+func (e Environment) RandomVMZone() string {
+	if len(e.VMZones) == 0 {
+		return e.ControlZone
+	}
+	return e.VMZones[rand.Intn(len(e.VMZones))]
+}
+
 // Region returns the GCE region, derived from its zone.
 func (e Environment) Region() string {
-	return e.Zone[:strings.LastIndex(e.Zone, "-")]
+	return e.ControlZone[:strings.LastIndex(e.ControlZone, "-")]
 }
 
 // SnapshotURL returns the absolute URL of the .tar.gz containing a
@@ -228,8 +232,8 @@ var Staging = &Environment{
 	ProjectName:           "go-dashboard-dev",
 	ProjectNumber:         302018677728,
 	IsProd:                true,
-	Zone:                  "us-central1-f",
-	ZonesToClean:          []string{"us-central1-a", "us-central1-b", "us-central1-f"},
+	ControlZone:           "us-central1-f",
+	VMZones:               []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
 	StaticIP:              "104.154.113.235",
 	MachineType:           "n1-standard-1",
 	PreferContainersOnCOS: true,
@@ -245,13 +249,13 @@ var Staging = &Environment{
 		Name:        "go",
 		MachineType: "n1-standard-4",
 	},
-	DashURL:         "https://go-dashboard-dev.appspot.com/",
-	PerfDataURL:     "https://perfdata.golang.org",
-	CoordinatorURL:  "https://storage.googleapis.com/dev-go-builder-data/coordinator",
-	CoordinatorName: "farmer",
-	BuildletBucket:  "dev-go-builder-data",
-	LogBucket:       "dev-go-build-log",
-	SnapBucket:      "dev-go-build-snap",
+	DashURL:           "https://go-dashboard-dev.appspot.com/",
+	PerfDataURL:       "https://perfdata.golang.org",
+	CoordinatorName:   "farmer",
+	BuildletBucket:    "dev-go-builder-data",
+	LogBucket:         "dev-go-build-log",
+	SnapBucket:        "dev-go-build-snap",
+	COSServiceAccount: "linux-cos-builders@go-dashboard-dev.iam.gserviceaccount.com",
 }
 
 // Production defines the environment that the coordinator and build
@@ -260,8 +264,8 @@ var Production = &Environment{
 	ProjectName:           "symbolic-datum-552",
 	ProjectNumber:         872405196845,
 	IsProd:                true,
-	Zone:                  "us-central1-f",
-	ZonesToClean:          []string{"us-central1-f"},
+	ControlZone:           "us-central1-f",
+	VMZones:               []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
 	StaticIP:              "107.178.219.46",
 	MachineType:           "n1-standard-4",
 	PreferContainersOnCOS: true,
@@ -279,12 +283,12 @@ var Production = &Environment{
 	},
 	DashURL:             "https://build.golang.org/",
 	PerfDataURL:         "https://perfdata.golang.org",
-	CoordinatorURL:      "https://storage.googleapis.com/go-builder-data/coordinator",
 	CoordinatorName:     "farmer",
 	BuildletBucket:      "go-builder-data",
 	LogBucket:           "go-build-log",
 	SnapBucket:          "go-build-snap",
 	AutoCertCacheBucket: "farmer-golang-org-autocert-cache",
+	COSServiceAccount:   "linux-cos-builders@symbolic-datum-552.iam.gserviceaccount.com",
 }
 
 var Development = &Environment{

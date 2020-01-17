@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build go1.13
+// +build linux darwin
+
 // Code related to remote buildlets. See x/build/remote-buildlet.txt
 
 package main // import "golang.org/x/build/cmd/coordinator"
@@ -38,6 +41,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/gophers"
+	"golang.org/x/build/types"
 	gossh "golang.org/x/crypto/ssh"
 )
 
@@ -114,17 +118,20 @@ func expireBuildlets() {
 	}
 }
 
+var timeNow = time.Now // for testing
+
 // always wrapped in requireBuildletProxyAuth.
 func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "POST required", 400)
 		return
 	}
-	const serverVersion = "20160922" // sent by cmd/gomote via buildlet/remote.go
-	if version := r.FormValue("version"); version < serverVersion {
-		http.Error(w, fmt.Sprintf("gomote client version %q is too old; predates server version %q", version, serverVersion), 400)
+	clientVersion := r.FormValue("version")
+	if clientVersion < buildlet.GomoteCreateMinVersion {
+		http.Error(w, fmt.Sprintf("gomote client version %q is too old; predates server minimum version %q", clientVersion, buildlet.GomoteCreateMinVersion), 400)
 		return
 	}
+
 	builderType := r.FormValue("builderType")
 	if builderType == "" {
 		http.Error(w, "missing 'builderType' parameter", 400)
@@ -136,71 +143,122 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, _, _ := r.BasicAuth()
-	pool := poolForConf(bconf)
 
-	var closeNotify <-chan bool
-	if cn, ok := w.(http.CloseNotifier); ok {
-		closeNotify = cn.CloseNotify()
+	w.Header().Set("X-Supported-Version", buildlet.GomoteCreateStreamVersion)
+
+	wantStream := false // streaming JSON updates, one JSON message (type msg) per line
+	if clientVersion >= buildlet.GomoteCreateStreamVersion {
+		wantStream = true
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.(http.Flusher).Flush()
 	}
 
-	ctx := context.WithValue(context.Background(), buildletTimeoutOpt{}, time.Duration(0))
-	ctx, cancel := context.WithCancel(ctx)
-	// NOTE: don't defer close this cancel. If the context is
-	// closed, the pod is destroyed.
-	// TODO: clean this up.
+	si := &SchedItem{
+		HostType: bconf.HostType,
+		IsGomote: true,
+	}
 
-	// Doing a release?
-	if user == "release" || user == "adg" || user == "bradfitz" {
-		ctx = context.WithValue(ctx, highPriorityOpt{}, true)
+	ctx := r.Context()
+
+	// ticker for sending status updates to client
+	var ticker <-chan time.Time
+	if wantStream {
+		t := time.NewTicker(5 * time.Second)
+		defer t.Stop()
+		ticker = t.C
 	}
 
 	resc := make(chan *buildlet.Client)
 	errc := make(chan error)
+
+	hconf := bconf.HostConfig()
+
 	go func() {
-		bc, err := pool.GetBuildlet(ctx, bconf.HostType, loggerFunc(func(event string, optText ...string) {
-			var extra string
-			if len(optText) > 0 {
-				extra = " " + optText[0]
-			}
-			log.Printf("creating buildlet %s for %s: %s%s", bconf.HostType, user, event, extra)
-		}))
+		bc, err := sched.GetBuildlet(ctx, si)
 		if bc != nil {
 			resc <- bc
-			return
+		} else {
+			errc <- err
 		}
-		errc <- err
 	}()
+	// One of these fields is set:
+	type msg struct {
+		Error    string                    `json:"error,omitempty"`
+		Buildlet *remoteBuildlet           `json:"buildlet,omitempty"`
+		Status   *types.BuildletWaitStatus `json:"status,omitempty"`
+	}
+	sendJSONLine := func(v interface{}) {
+		jenc, err := json.Marshal(v)
+		if err != nil {
+			log.Fatalf("remote: error marshalling JSON of type %T: %v", v, v)
+		}
+		jenc = append(jenc, '\n')
+		w.Write(jenc)
+		w.(http.Flusher).Flush()
+	}
+	sendText := func(s string) {
+		sendJSONLine(msg{Status: &types.BuildletWaitStatus{Message: s}})
+	}
+
+	// If the gomote builder type requested is a reverse buildlet
+	// and all instances are busy, try canceling a post-submit
+	// build so it'll reconnect and the scheduler will give it to
+	// the higher priority gomote user.
+	isReverse := hconf.IsReverse
+	if isReverse {
+		if hs := reversePool.buildReverseStatusJSON().HostTypes[hconf.HostType]; hs == nil {
+			sendText(fmt.Sprintf("host type %q is not elastic; no machines are connected", hconf.HostType))
+		} else {
+			sendText(fmt.Sprintf("host type %q is not elastic; %d of %d machines connected, %d busy",
+				hconf.HostType, hs.Connected, hs.Expect, hs.Busy))
+			if hs.Connected > 0 && hs.Idle == 0 {
+				// Try to cancel one.
+				if cancelOnePostSubmitBuildWithHostType(hconf.HostType) {
+					sendText(fmt.Sprintf("canceled a post-submit build on a machine of type %q; it should reconnect and get assigned to you", hconf.HostType))
+				}
+			}
+		}
+	}
+
 	for {
 		select {
+		case <-ticker:
+			st := sched.waiterState(si)
+			sendJSONLine(msg{Status: &st})
 		case bc := <-resc:
+			now := timeNow()
 			rb := &remoteBuildlet{
 				User:        user,
 				BuilderType: builderType,
 				HostType:    bconf.HostType,
 				buildlet:    bc,
-				Created:     time.Now(),
-				Expires:     time.Now().Add(remoteBuildletIdleTimeout),
+				Created:     now,
+				Expires:     now.Add(remoteBuildletIdleTimeout),
 			}
 			rb.Name = addRemoteBuildlet(rb)
-			jenc, err := json.MarshalIndent(rb, "", "  ")
-			if err != nil {
-				http.Error(w, err.Error(), 500)
-				log.Print(err)
-				return
-			}
+			bc.SetName(rb.Name)
 			log.Printf("created buildlet %v for %v (%s)", rb.Name, rb.User, bc.String())
-			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			jenc = append(jenc, '\n')
-			w.Write(jenc)
+			if wantStream {
+				// We already sent the Content-Type
+				// (and perhaps status update JSON
+				// lines) earlier, so just send the
+				// final JSON update with the result:
+				sendJSONLine(msg{Buildlet: rb})
+			} else {
+				// Legacy client path.
+				// TODO: delete !wantStream support 3-6 months after 2019-11-19.
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+				sendJSONLine(rb)
+			}
 			return
 		case err := <-errc:
-			log.Printf("error creating buildlet: %v", err)
-			http.Error(w, err.Error(), 500)
+			log.Printf("error creating gomote buildlet: %v", err)
+			if wantStream {
+				sendJSONLine(msg{Error: err.Error()})
+			} else {
+				http.Error(w, err.Error(), 500)
+			}
 			return
-		case <-closeNotify:
-			log.Printf("client went away during buildlet create request")
-			cancel()
-			closeNotify = nil // unnecessary, but habit.
 		}
 	}
 }
@@ -263,19 +321,6 @@ func remoteBuildletStatus() string {
 	return buf.String()
 }
 
-// httpRouter separates out HTTP traffic being proxied
-// to buildlets on behalf of remote clients from traffic
-// destined for the coordinator itself (the default).
-type httpRouter struct{}
-
-func (httpRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("X-Buildlet-Proxy") != "" {
-		requireBuildletProxyAuth(http.HandlerFunc(proxyBuildletHTTP)).ServeHTTP(w, r)
-	} else {
-		http.DefaultServeMux.ServeHTTP(w, r)
-	}
-}
-
 func proxyBuildletHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.TLS == nil {
 		http.Error(w, "https required", http.StatusBadRequest)
@@ -314,6 +359,11 @@ func proxyBuildletHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Method == "POST" && r.URL.Path == "/tcpproxy" {
+		proxyBuildletTCP(w, r, rb)
+		return
+	}
+
 	outReq, err := http.NewRequest(r.Method, rb.buildlet.URL()+r.URL.Path+"?"+r.URL.RawQuery, r.Body)
 	if err != nil {
 		log.Printf("bad proxy request: %v", err)
@@ -326,8 +376,94 @@ func proxyBuildletHTTP(w http.ResponseWriter, r *http.Request) {
 		Director:      func(*http.Request) {}, // nothing
 		Transport:     rb.buildlet.ProxyRoundTripper(),
 		FlushInterval: 500 * time.Millisecond,
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			log.Printf("gomote proxy error for %s: %v", buildletName, err)
+			w.WriteHeader(http.StatusBadGateway)
+			fmt.Fprintf(w, "(golang.org/issue/28365): gomote proxy error: %v", err)
+		},
 	}
 	proxy.ServeHTTP(w, outReq)
+}
+
+// proxyBuildletTCP handles connecting to and proxying between a
+// backend buildlet VM's TCP port and the client. This is called once
+// it's already authenticated by proxyBuildletHTTP.
+func proxyBuildletTCP(w http.ResponseWriter, r *http.Request, rb *remoteBuildlet) {
+	if r.ProtoMajor > 1 {
+		// TODO: deal with HTTP/2 requests if https://farmer.golang.org enables it later.
+		// Currently it does not, as other handlers Hijack too. We'd need to teach clients
+		// when to explicitly disable HTTP/1, or update the protocols to do read/write
+		// bodies instead of 101 Switching Protocols.
+		http.Error(w, "unexpected HTTP/2 request", http.StatusInternalServerError)
+		return
+	}
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "not a Hijacker", http.StatusInternalServerError)
+		return
+	}
+	// The target port is a header instead of a query parameter for no real reason other
+	// than being consistent with the reverse buildlet registration headers.
+	port, err := strconv.Atoi(r.Header.Get("X-Target-Port"))
+	if err != nil {
+		http.Error(w, "invalid or missing X-Target-Port", http.StatusBadRequest)
+		return
+	}
+	hc, ok := dashboard.Hosts[rb.HostType]
+	if !ok || !hc.IsVM() {
+		// TODO: implement support for non-VM types if/when needed.
+		http.Error(w, fmt.Sprintf("unsupported non-VM host type %q", rb.HostType), http.StatusBadRequest)
+		return
+	}
+	ip, _, err := net.SplitHostPort(rb.buildlet.IPPort())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("unexpected backend ip:port %q", rb.buildlet.IPPort()), http.StatusInternalServerError)
+		return
+	}
+
+	c, err := (&net.Dialer{}).DialContext(r.Context(), "tcp", net.JoinHostPort(ip, fmt.Sprint(port)))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to connect to port %v: %v", port, err), http.StatusInternalServerError)
+		return
+	}
+	defer c.Close()
+
+	// Hijack early so we can check for any unexpected buffered
+	// request data without doing a potentially blocking
+	// r.Body.Read. Also it's nice to be able to WriteString the
+	// response header explicitly. But using w.WriteHeader+w.Flush
+	// would probably also work. Somewhat arbitrary to do it early.
+	cc, buf, err := hj.Hijack()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Hijack: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer cc.Close()
+
+	if buf.Reader.Buffered() != 0 {
+		io.WriteString(cc, "HTTP/1.0 400 Bad Request\r\n\r\nUnexpected buffered data.\n")
+		return
+	}
+
+	// If we send a 101 response with an Upgrade header and a
+	// "Connection: Upgrade" header, that makes net/http's
+	// *Response.isProtocolSwitch() return true, which gives us a
+	// writable Response.Body on the client side, which simplifies
+	// the gomote code.
+	io.WriteString(cc, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: tcpproxy\r\nConnection: upgrade\r\n\r\n")
+
+	errc := make(chan error, 2)
+	// Copy from HTTP client to backend.
+	go func() {
+		_, err := io.Copy(c, cc)
+		errc <- err
+	}()
+	// And copy from backend to the HTTP client.
+	go func() {
+		_, err := io.Copy(cc, c)
+		errc <- err
+	}()
+	<-errc
 }
 
 func requireBuildletProxyAuth(h http.Handler) http.Handler {
@@ -430,7 +566,7 @@ func handleSSHPublicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
 	// github user's public ssh keys for authentication. This is
 	// mostly of laziness and pragmatism, not wanting to invent or
 	// maintain a new auth mechanism or password/key registry.
-	githubUser := gophers.GithubOfGomoteUser(user)
+	githubUser := gophers.GitHubOfGomoteUser(user)
 	keys := githubPublicKeys(githubUser)
 	for _, authKey := range keys {
 		if ssh.KeysEqual(key, authKey.PublicKey) {
@@ -555,7 +691,7 @@ func handleIncomingSSHPostAuth(s ssh.Session) {
 			err = <-errc
 		}()
 	}
-	workDir, err := rb.buildlet.WorkDir()
+	workDir, err := rb.buildlet.WorkDir(ctx)
 	if err != nil {
 		fmt.Fprintf(s, "Error getting WorkDir: %v\n", err)
 		return

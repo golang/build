@@ -1,28 +1,43 @@
 The linux-ppc64 buildlets run on PPC64 VMs at osuosl.org (OSU Open Source Lab).
 
-They run Debian jessie.
-
 Filing tickets: https://support.osuosl.org/
     Ticket username: bradfitz@golang.org
     Ticket password: http://go/pw-osuosl-ppc64
 
 Machines:
 
-go-be-1: debian@140.211.168.40
-go-be-2: debian@140.211.168.41
-go-be-3: debian@140.211.168.42
-go-be-4: debian@140.211.168.43
-go-be-5: debian@140.211.168.44
+* go-be-xenial-3: (20 GB RAM, 50 GB disk, 10 cores, POWER8)
 
-They accept ssh key 'id_ed25519_golang1'. For example,
+  ssh -i ~/.ssh/id_ed25519_golang1 ubuntu@140.211.169.164
+  (key from http://go/go-builders-ssh)
 
-     ssh -i ~/.ssh/id_ed25519_golang1 debian@140.211.168.40
-     (key from http://go/go-builders-ssh)
+  Linux go-be-xenial-3 4.4.0-130-powerpc64-smp #156-Ubuntu SMP Thu Jun 14 09:28:49 UTC 2018 ppc64 ppc64 ppc64 GNU/Linux
 
-Each was once configured by scping setup.bash to them, logging in to
-each, and running:
+# Installing Docker on the unsupported ppc64 platform
 
-$ sudo ./setup.bash <BUILDKEY_HERE>
+There are 3 main scripts, in chronological order:
+- build-golang.sh
+- build-docker.sh
+- build-ubuntu.sh
 
-TODO: these should be updated like linux-arm and linux-arm64 to use Docker
-      per build. That is https://golang.org/issue/21189
+## Go toolchain
+
+The build-golang.sh script will create a Go toolchain for ppc64 and is meant to be run on a system for which Go has official releases, such as linux/amd64.
+
+The resulting tgz archive (and sha256 checksum file) should be sent to the ppc64 machine
+
+## Docker
+
+The build-docker.sh script assumes it is running on the target ppc64 machine, after the Go toolchain archive and corresponding checksum file were transferred to the current directory.
+It will install docker and its dependencies to /usr/local/bin/ but will not start docker.
+
+## Ubuntu base image
+
+The build-ubuntu.sh script is to show how the tiborvass/ubuntu:xenial-ppc64 base image was built.
+To build images with static binaries only, there is no need for an ubuntu base image.
+Keep in mind, that the ubuntu packages are all 32bit, even though the kernel is 64bit.
+
+# Cleanup
+
+The cleanup.sh script by default uninstalls from /usr/local/bin/
+`./cleanup.sh all` will however remove all intermediary files and folders such as extracted archives.

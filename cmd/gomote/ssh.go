@@ -30,13 +30,13 @@ func ssh(args []string) error {
 		fs.Usage()
 	}
 	name := fs.Arg(0)
-	_, _, err := clientAndConf(name)
+	_, err := remoteClient(name)
 	if err != nil {
 		return err
 	}
 	// gomoteUser extracts "gopher" from "user-gopher-linux-amd64-0".
 	gomoteUser := strings.Split(name, "-")[1]
-	githubUser := gophers.GithubOfGomoteUser(gomoteUser)
+	githubUser := gophers.GitHubOfGomoteUser(gomoteUser)
 
 	sshUser := name
 	if mutable {

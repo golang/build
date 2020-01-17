@@ -29,6 +29,7 @@ type server struct {
 	mux         *http.ServeMux
 	staticDir   string
 	templateDir string
+	reloadTmpls bool
 
 	cMu              sync.RWMutex // Used to protect the fields below.
 	corpus           *maintner.Corpus
@@ -50,13 +51,15 @@ type issueData struct {
 type pageData struct {
 	release releaseData
 	reviews reviewsData
+	stats   statsData
 }
 
-func newServer(mux *http.ServeMux, staticDir, templateDir string) *server {
+func newServer(mux *http.ServeMux, staticDir, templateDir string, reloadTmpls bool) *server {
 	s := &server{
 		mux:         mux,
 		staticDir:   staticDir,
 		templateDir: templateDir,
+		reloadTmpls: reloadTmpls,
 		userMapping: map[int]*maintner.GitHubUser{},
 	}
 	s.mux.Handle("/", http.FileServer(http.Dir(s.staticDir)))
@@ -64,8 +67,10 @@ func newServer(mux *http.ServeMux, staticDir, templateDir string) *server {
 	s.mux.HandleFunc("/favicon.ico", s.handleFavicon)
 	s.mux.HandleFunc("/release", s.withTemplate("/release.tmpl", s.handleRelease))
 	s.mux.HandleFunc("/reviews", s.withTemplate("/reviews.tmpl", s.handleReviews))
+	s.mux.HandleFunc("/stats", s.withTemplate("/stats.tmpl", s.handleStats))
 	s.mux.HandleFunc("/dir/", handleDirRedirect)
-	s.mux.HandleFunc("/owners/", owners.Handler)
+	s.mux.HandleFunc("/owners", owners.Handler)
+	s.mux.Handle("/owners/", http.RedirectHandler("/owners", http.StatusPermanentRedirect)) // TODO: remove after clients updated to use URL without trailing slash
 	for _, p := range []string{"/imfeelinghelpful", "/imfeelinglucky"} {
 		s.mux.HandleFunc(p, s.handleRandomHelpWantedIssue)
 	}
@@ -75,7 +80,12 @@ func newServer(mux *http.ServeMux, staticDir, templateDir string) *server {
 
 func (s *server) withTemplate(tmpl string, fn func(*template.Template, http.ResponseWriter, *http.Request)) http.HandlerFunc {
 	t := template.Must(template.ParseFiles(path.Join(s.templateDir, tmpl)))
-	return func(w http.ResponseWriter, r *http.Request) { fn(t, w, r) }
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.reloadTmpls {
+			t = template.Must(template.ParseFiles(path.Join(s.templateDir, tmpl)))
+		}
+		fn(t, w, r)
+	}
 }
 
 // initCorpus fetches a full maintner corpus, overwriting any existing data.
@@ -106,6 +116,7 @@ func (s *server) corpusUpdateLoop(ctx context.Context) {
 		s.cMu.Lock()
 		s.data.release.dirty = true
 		s.data.reviews.dirty = true
+		s.data.stats.dirty = true
 		s.cMu.Unlock()
 		err := s.corpus.UpdateWithLocker(ctx, &s.cMu)
 		if err != nil {

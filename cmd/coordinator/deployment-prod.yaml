@@ -20,7 +20,8 @@ spec:
         - containerPort: 80
         - containerPort: 443
         - containerPort: 2222 # ssh proxy port
+        - containerPort: 8123 # module proxy port (internal, not accessible directly from public)
         resources:
           requests:
-            cpu: "1"
-            memory: "2Gi"
+            cpu: "2"
+            memory: "4Gi"

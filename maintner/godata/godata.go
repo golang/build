@@ -19,6 +19,9 @@ import (
 	"golang.org/x/build/maintner"
 )
 
+// Server is the Go project's production maintner log.
+const Server = "https://maintner.golang.org/logs"
+
 // Get returns the Go project's corpus, containing all Git commits,
 // Github activity, and Gerrit activity and metadata since the
 // beginning of the project.
@@ -46,7 +49,7 @@ func Get(ctx context.Context) (*maintner.Corpus, error) {
 	if err := os.MkdirAll(targetDir, 0700); err != nil {
 		return nil, err
 	}
-	mutSrc := maintner.NewNetworkMutationSource("https://maintner.golang.org/logs", targetDir)
+	mutSrc := maintner.NewNetworkMutationSource(Server, targetDir)
 	corpus := new(maintner.Corpus)
 	if err := corpus.Initialize(ctx, mutSrc); err != nil {
 		return nil, err

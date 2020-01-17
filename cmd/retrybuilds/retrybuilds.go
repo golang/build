@@ -12,6 +12,8 @@
 //   retrybuilds -builder=openbsd-amd64 -hash=6fecb7
 //   retrybuilds -redo-flaky
 //   retrybuilds -redo-flaky -builder=linux-amd64-clang
+//   retrybuilds -substr="failed to find foo"
+//   retrybuilds -substr="failed to find foo" -builder=linux-amd64-stretch
 package main
 
 import (
@@ -35,13 +37,14 @@ import (
 var (
 	masterKeyFile = flag.String("masterkey", filepath.Join(os.Getenv("HOME"), "keys", "gobuilder-master.key"), "path to Go builder master key. If present, the key argument is not necessary")
 	keyFile       = flag.String("key", "", "path to key file")
-	builder       = flag.String("builder", "", "builder to wipe a result for.")
+	builder       = flag.String("builder", "", "builder to wipe a result for. Empty means all.")
 	hash          = flag.String("hash", "", "Hash to wipe. If empty, all will be wiped.")
 	redoFlaky     = flag.Bool("redo-flaky", false, "Reset all flaky builds. If builder is empty, the master key is required.")
 	builderPrefix = flag.String("builder-prefix", "https://build.golang.org", "builder URL prefix")
 	logHash       = flag.String("loghash", "", "If non-empty, clear the build that failed with this loghash prefix")
 	sendMasterKey = flag.Bool("sendmaster", false, "send the master key in request instead of a builder-specific key; allows overriding actions of revoked keys")
 	branch        = flag.String("branch", "master", "branch to find flakes from (for use with -redo-flaky)")
+	substr        = flag.String("substr", "", "if non-empty, redoes all build failures whose failure logs contain this substring")
 )
 
 type Failure struct {
@@ -62,17 +65,40 @@ func main() {
 		}
 		return
 	}
+	if *substr != "" {
+		foreachFailure(func(f Failure, failLog string) {
+			if strings.Contains(failLog, *substr) {
+				log.Printf("Restarting %+v", f)
+				wipe(f.Builder, f.Hash)
+			}
+		})
+		return
+	}
 	if *redoFlaky {
-		fixTheFlakes()
+		foreachFailure(func(f Failure, failLog string) {
+			if isFlaky(failLog) {
+				log.Printf("Restarting flaky %+v", f)
+				wipe(f.Builder, f.Hash)
+			}
+		})
 		return
 	}
 	if *builder == "" {
-		log.Fatalf("Missing -builder, -redo-flaky, or -loghash flag.")
+		log.Fatalf("Missing -builder, -redo-flaky, -substr, or -loghash flag.")
+	}
+	if *hash == "" {
+		for _, f := range failures() {
+			if f.Builder != *builder {
+				continue
+			}
+			wipe(f.Builder, f.Hash)
+		}
+		return
 	}
 	wipe(*builder, fullHash(*hash))
 }
 
-func fixTheFlakes() {
+func foreachFailure(fn func(f Failure, failLog string)) {
 	gate := make(chan bool, 50)
 	var wg sync.WaitGroup
 	for _, f := range failures() {
@@ -94,10 +120,7 @@ func fixTheFlakes() {
 			if err != nil {
 				log.Fatalf("Error reading %s: %v", f.LogURL, err)
 			}
-			if isFlaky(string(failLog)) {
-				log.Printf("Restarting flaky %+v", f)
-				wipe(f.Builder, f.Hash)
-			}
+			fn(f, string(failLog))
 		}()
 	}
 	wg.Wait()
@@ -120,6 +143,13 @@ var flakePhrases = []string{
 	"lookup www.mit.edu on ",
 	"undefined: runtime.SetMutexProfileFraction", // ppc64 builders had not-quite-go1.8 bootstrap
 	"make.bat: The parameter is incorrect",
+	"killed",
+	"memory",
+	"allocate",
+	"Killed",
+	"Error running API checker: exit status 1",
+	"/compile: exit status 1",
+	"cmd/link: exit status 1",
 }
 
 func isFlaky(failLog string) bool {
@@ -154,25 +184,23 @@ func isFlaky(failLog string) bool {
 }
 
 func fullHash(h string) string {
-	if h == "" || len(h) == 40 {
+	if len(h) == 40 {
 		return h
 	}
-	for _, f := range failures() {
-		if strings.HasPrefix(f.Hash, h) {
-			return f.Hash
+	if h != "" {
+		for _, f := range failures() {
+			if strings.HasPrefix(f.Hash, h) {
+				return f.Hash
+			}
 		}
 	}
 	log.Fatalf("invalid hash %q; failed to finds its full hash. Not a recent failure?", h)
 	panic("unreachable")
 }
 
-// hash may be empty
+// wipe wipes the git hash failure for the provided failure.
+// Only the main go repo is currently supported.
 func wipe(builder, hash string) {
-	if hash != "" {
-		log.Printf("Clearing %s, hash %s", builder, hash)
-	} else {
-		log.Printf("Clearing all builds for %s", builder)
-	}
 	vals := url.Values{
 		"builder": {builder},
 		"hash":    {hash},

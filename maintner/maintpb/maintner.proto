@@ -46,8 +46,14 @@ message GithubIssueMutation {
   repeated int64 deleted_assignees = 11; // IDs of users to delete from the assignee list
   google.protobuf.Timestamp created = 5; // only needed on new issues
   google.protobuf.Timestamp updated = 6; // only set on updated issue text
-  string body = 7; // for new or updated issue text (top post, which isn't a comment)
   string title = 9; // issue title
+
+  // body_change changes the body field (the top post, which isn't a comment).
+  // It is now used in preference to the old body field.
+  StringChange body_change = 31;
+  // body was the old way to change the body, but it doesn't support removing the
+  // body text, which is common on PRs. New mutations use body_change instead.
+  string body = 7;
 
   bool no_milestone = 15; // true unsets any previously-set milestone; false ignored.
   // When setting a milestone, only the milestone_id must be set.
@@ -73,11 +79,23 @@ message GithubIssueMutation {
 
   repeated GithubIssueEvent event = 26;  // new events to add
   GithubIssueSyncStatus event_status = 27;
+
+  repeated GithubReview review = 29;  // new reviews to add
+  GithubIssueSyncStatus review_status = 30;
+
+  // Next tag: 32
 }
 
 // BoolChange represents a change to a boolean value.
+// (Notably, the wrapper type permits representing a change to false.)
 message BoolChange {
   bool val = 1;
+}
+
+// StringChange represents a change to a boolean value.
+// (Notably, the wrapper type permits representing a change to the empty string.)
+message StringChange {
+  string val = 1;
 }
 
 message GithubLabel {
@@ -160,6 +178,27 @@ message GithubCommit {
   string commit_id = 3; // "0beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33"
 }
 
+// Contents of a pull request review - when someone
+// comments, requests changes, or approves changes
+// on a pull request. See
+// https://developer.github.com/v3/pulls/reviews/ for more information.
+message GithubReview {
+  // Required:
+  int64 id = 1;
+
+  int64 actor_id = 2;
+  google.protobuf.Timestamp created = 3;  // time of the event
+  string body = 4;                        // body of the review comment
+  string state = 5;  // COMMENTED, APPROVED, CHANGES_REQUESTED
+  string commit_id = 6;
+  string actor_association = 7;
+
+  // other_json is usually empty.
+  bytes other_json = 8;
+
+  // Next tag: 9
+}
+
 // GithubIssueSyncStatus notes where syncing is at for comments
 // on an issue,
 // This mutation type is only made at/after the same top-level mutation
@@ -236,6 +275,9 @@ message GerritMutation {
 
   // git refs to update.
   repeated GitRef refs = 3;
+
+  // deleted_refs are ref names to delete.
+  repeated string deleted_refs = 4;
 }
 
 message GitRef {

@@ -84,6 +84,11 @@ func (t *tokenSource) Token() (*oauth2.Token, error) {
 }
 
 func (w *Work) findOrCreateReleaseIssue() {
+	if w.Security {
+		// There is no release status issue for security releases
+		// to avoid the risk of leaking sensitive test failures.
+		return
+	}
 	w.log.Printf("Release status issue title: %q", w.releaseStatusTitle())
 	if dryRun {
 		return
@@ -103,7 +108,7 @@ func (w *Work) findOrCreateReleaseIssue() {
 // createGitHubIssue creates an issue in the release milestone and returns its number.
 func (w *Work) createGitHubIssue(title, msg string) (int, error) {
 	if dryRun {
-		return 0, errors.New("attemted write operation in dry-run mode")
+		return 0, errors.New("attempted write operation in dry-run mode")
 	}
 	var dup int
 	goRepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
@@ -150,7 +155,11 @@ func (w *Work) pushIssues() {
 		if gi.Milestone == nil || gi.Milestone.Title != w.Milestone.Title {
 			return nil
 		}
-		if gi.Closed || gi.Title == w.releaseStatusTitle() {
+		if gi.Title == w.releaseStatusTitle() {
+			return nil
+		}
+		// All issues are unrelated if this is a security release.
+		if gi.Closed && !w.Security {
 			return nil
 		}
 		w.log.Printf("changing milestone of issue %d to %s", gi.Number, w.NextMilestone.Title)

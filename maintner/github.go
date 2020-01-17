@@ -164,6 +164,32 @@ func (gr *GitHubRepo) ForeachIssue(fn func(*GitHubIssue) error) error {
 	return nil
 }
 
+// ForeachReview calls fn for each review event on the issue
+//
+// If the issue is not a PullRequest, then it returns early with no error.
+//
+// If fn returns an error, iteration ends and ForeachReview returns
+// with that error.
+//
+// The fn function is called serially, in chronological order.
+func (pr *GitHubIssue) ForeachReview(fn func(*GitHubReview) error) error {
+	if !pr.PullRequest {
+		return nil
+	}
+	s := make([]*GitHubReview, 0, len(pr.reviews))
+	for _, rv := range pr.reviews {
+		s = append(s, rv)
+	}
+	sort.Slice(s, func(i, j int) bool { return s[i].Created.Before(s[j].Created) })
+	for _, rv := range s {
+		if err := fn(rv); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (g *GitHubRepo) getOrCreateMilestone(id int64) *GitHubMilestone {
 	if id == 0 {
 		panic("zero id")
@@ -240,7 +266,7 @@ type GitHubIssue struct {
 	Created     time.Time
 	Updated     time.Time
 	ClosedAt    time.Time
-	ClosedBy    *GitHubUser
+	ClosedBy    *GitHubUser // TODO(dmitshur): Implement (see golang.org/issue/28745).
 	Title       string
 	Body        string
 	Milestone   *GitHubMilestone       // nil for unknown, noMilestone for none
@@ -251,7 +277,9 @@ type GitHubIssue struct {
 	comments           map[int64]*GitHubComment    // by comment.ID
 	eventMaxTime       time.Time                   // latest time of any event in events map
 	eventsSyncedAsOf   time.Time                   // as of server's Date header
+	reviewsSyncedAsOf  time.Time                   // as of server's Date header
 	events             map[int64]*GitHubIssueEvent // by event.ID
+	reviews            map[int64]*GitHubReview     // by event.ID
 }
 
 // LastModified reports the most recent time that any known metadata was updated.
@@ -467,6 +495,68 @@ func (ms *GitHubMilestone) processMutation(mut maintpb.GithubMilestone) {
 	}
 }
 
+// GitHubReview represents a review on a Pull Request.
+// For more details, see https://developer.github.com/v3/pulls/reviews/
+type GitHubReview struct {
+	ID               int64
+	Actor            *GitHubUser
+	Body             string
+	State            string // COMMENTED, APPROVED, CHANGES_REQUESTED
+	CommitID         string
+	ActorAssociation string // CONTRIBUTOR
+	Created          time.Time
+	OtherJSON        string
+}
+
+// Proto converts GitHubReview to a protobuf
+func (e *GitHubReview) Proto() *maintpb.GithubReview {
+	p := &maintpb.GithubReview{
+		Id:               e.ID,
+		Body:             e.Body,
+		State:            e.State,
+		CommitId:         e.CommitID,
+		ActorAssociation: e.ActorAssociation,
+	}
+	if e.OtherJSON != "" {
+		p.OtherJson = []byte(e.OtherJSON)
+	}
+	if !e.Created.IsZero() {
+		if tp, err := ptypes.TimestampProto(e.Created); err == nil {
+			p.Created = tp
+		}
+	}
+	if e.Actor != nil {
+		p.ActorId = e.Actor.ID
+	}
+
+	return p
+}
+
+// r.github.c.mu must be held.
+func (r *GitHubRepo) newGithubReview(p *maintpb.GithubReview) *GitHubReview {
+	g := r.github
+	e := &GitHubReview{
+		ID:               p.Id,
+		Actor:            g.getOrCreateUserID(p.ActorId),
+		ActorAssociation: p.ActorAssociation,
+		CommitID:         p.CommitId,
+		Body:             p.Body,
+		State:            p.State,
+	}
+
+	if p.Created != nil {
+		e.Created, _ = ptypes.Timestamp(p.Created)
+	}
+	if len(p.OtherJson) > 0 {
+		// TODO: parse it and see if we've since learned how
+		// to deal with it?
+		log.Printf("Unknown JSON in log: %s", p.OtherJson)
+		e.OtherJSON = string(p.OtherJson)
+	}
+
+	return e
+}
+
 type GitHubComment struct {
 	ID      int64
 	User    *GitHubUser
@@ -655,6 +745,16 @@ func (gi *GitHubIssue) eventsSynced() bool {
 		return true
 	}
 	return gi.eventsSyncedAsOf.After(gi.Updated)
+}
+
+// (requires corpus be locked for reads)
+func (gi *GitHubIssue) reviewsSynced() bool {
+	if gi.NotExist {
+		// Issue doesn't exist, so can't sync its non-issues,
+		// so consider it done.
+		return true
+	}
+	return gi.reviewsSyncedAsOf.After(gi.Updated)
 }
 
 func (c *Corpus) initGithub() {
@@ -977,7 +1077,7 @@ func (d githubIssueDiffer) diffBody(m *maintpb.GithubIssueMutation) bool {
 	if d.a != nil && d.a.Body == d.b.GetBody() {
 		return false
 	}
-	m.Body = d.b.GetBody()
+	m.BodyChange = &maintpb.StringChange{Val: d.b.GetBody()}
 	return true
 }
 
@@ -986,7 +1086,11 @@ func (d githubIssueDiffer) diffTitle(m *maintpb.GithubIssueMutation) bool {
 		return false
 	}
 	m.Title = d.b.GetTitle()
-	return true
+	// TODO: emit a StringChange if we ever have a problem that we
+	// legitimately need real issues with no titles reflected in
+	// maintner's model. For now just ignore such changes, if
+	// GitHub even permits the.
+	return m.Title != ""
 }
 
 func (d githubIssueDiffer) diffMilestone(m *maintpb.GithubIssueMutation) bool {
@@ -1093,7 +1197,7 @@ func (d githubIssueDiffer) diffLockedState(m *maintpb.GithubIssueMutation) bool 
 // the corpus) and b (the current GitHub API state).
 //
 // If newMutationFromIssue returns nil, the provided github.Issue is no newer
-// than the data we have in the corpus. 'a'. may be nil.
+// than the data we have in the corpus. 'a' may be nil.
 func (r *GitHubRepo) newMutationFromIssue(a *GitHubIssue, b *github.Issue) *maintpb.Mutation {
 	if b == nil || b.Number == nil {
 		panic(fmt.Sprintf("github issue with nil number: %#v", b))
@@ -1242,6 +1346,9 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 	if m.Body != "" {
 		gi.Body = m.Body
 	}
+	if m.BodyChange != nil {
+		gi.Body = m.BodyChange.Val
+	}
 	if m.Title != "" {
 		gi.Title = m.Title
 	}
@@ -1312,6 +1419,26 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 			gi.eventsSyncedAsOf = serverDate.UTC()
 		}
 	}
+
+	for _, rmut := range m.Review {
+		if rmut.Id == 0 {
+			log.Printf("Ignoring bogus review mutation lacking Id: %v", rmut)
+			continue
+		}
+		if gi.reviews == nil {
+			gi.reviews = make(map[int64]*GitHubReview)
+		}
+		gre := gr.newGithubReview(rmut)
+		gi.reviews[rmut.Id] = gre
+		if gre.Created.After(gi.eventMaxTime) {
+			gi.eventMaxTime = gre.Created
+		}
+	}
+	if m.ReviewStatus != nil && m.ReviewStatus.ServerDate != nil {
+		if serverDate, err := ptypes.Timestamp(m.ReviewStatus.ServerDate); err == nil {
+			gi.reviewsSyncedAsOf = serverDate.UTC()
+		}
+	}
 }
 
 // githubCache is an httpcache.Cache wrapper that only
@@ -1378,6 +1505,7 @@ func (gr *GitHubRepo) sync(ctx context.Context, token string, loop bool) error {
 		gr:            gr,
 		githubDirect:  github.NewClient(&http.Client{Transport: directTransport}),
 		githubCaching: github.NewClient(&http.Client{Transport: cachingTransport}),
+		client:        http.DefaultClient,
 	}
 	activityCh := gr.github.c.activityChan("github:" + gr.id.String())
 	var expectChanges bool // got webhook update, but haven't seen new data yet
@@ -1425,6 +1553,10 @@ func (gr *GitHubRepo) sync(ctx context.Context, token string, loop bool) error {
 	}
 }
 
+type httpClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 // A githubRepoPoller updates the Corpus (gr.c) to have the latest
 // version of the GitHub repo rp, using the GitHub client ghc.
 type githubRepoPoller struct {
@@ -1434,6 +1566,7 @@ type githubRepoPoller struct {
 	lastUpdate    time.Time // modified by sync
 	githubCaching *github.Client
 	githubDirect  *github.Client // not caching
+	client        httpClient     // the client used to poll github
 }
 
 func (p *githubRepoPoller) Owner() string { return p.gr.id.Owner }
@@ -1452,6 +1585,9 @@ func (p *githubRepoPoller) sync(ctx context.Context, expectChanges bool) error {
 		return err
 	}
 	if err := p.syncEvents(ctx); err != nil {
+		return err
+	}
+	if err := p.syncReviews(ctx); err != nil {
 		return err
 	}
 	return nil
@@ -1567,6 +1703,9 @@ func (p *githubRepoPoller) foreachItem(
 		}
 		items, res, err := getPage(ctx, page)
 		if err != nil {
+			if canRetry(ctx, err) {
+				continue
+			}
 			return err
 		}
 		if len(items) == 0 {
@@ -1592,7 +1731,6 @@ func (p *githubRepoPoller) foreachItem(
 }
 
 func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) error {
-	c := p.gr.github.c
 	page := 1
 	seen := make(map[int64]bool)
 	keepGoing := true
@@ -1612,6 +1750,9 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 			},
 		})
 		if err != nil {
+			if canRetry(ctx, err) {
+				continue
+			}
 			return err
 		}
 		// See https://developer.github.com/v3/activity/events/ for X-Poll-Interval:
@@ -1644,12 +1785,12 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 			seen[id] = true
 
 			var mp *maintpb.Mutation
-			c.mu.RLock()
+			p.c.mu.RLock()
 			{
 				gi := p.gr.issues[int32(*is.Number)]
 				mp = p.gr.newMutationFromIssue(gi, is)
 			}
-			c.mu.RUnlock()
+			p.c.mu.RUnlock()
 
 			if mp == nil {
 				continue
@@ -1671,7 +1812,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 
 			changes++
 			p.logf("changed issue %d: %s", is.GetNumber(), is.GetTitle())
-			c.addMutation(mp)
+			p.c.addMutation(mp)
 			p.lastUpdate = time.Now()
 		}
 
@@ -1689,9 +1830,9 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 			}
 		}
 
-		c.mu.RLock()
+		p.c.mu.RLock()
 		num := len(p.gr.issues)
-		c.mu.RUnlock()
+		p.c.mu.RUnlock()
 		p.logf("After page %d: %v issues, %v changes, %v issues in memory", page, len(issues), changes, num)
 
 		page++
@@ -1702,7 +1843,15 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 		p.logf("remaining issues: %v", missing)
 		for _, num := range missing {
 			p.logf("getting issue %v ...", num)
-			issue, _, err := p.githubDirect.Issues.Get(ctx, owner, repo, int(num))
+			var issue *github.Issue
+			var err error
+			for {
+				issue, _, err = p.githubDirect.Issues.Get(ctx, owner, repo, int(num))
+				if canRetry(ctx, err) {
+					continue
+				}
+				break
+			}
 			if ge, ok := err.(*github.ErrorResponse); ok && ge.Message == "Not Found" {
 				mp := &maintpb.Mutation{
 					GithubIssue: &maintpb.GithubIssueMutation{
@@ -1712,7 +1861,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 						NotExist: true,
 					},
 				}
-				c.addMutation(mp)
+				p.c.addMutation(mp)
 				continue
 			} else if err != nil {
 				return err
@@ -1722,7 +1871,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 				continue
 			}
 			p.logf("modified issue %d: %s", issue.GetNumber(), issue.GetTitle())
-			c.addMutation(mp)
+			p.c.addMutation(mp)
 			p.lastUpdate = time.Now()
 		}
 	}
@@ -1782,10 +1931,10 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 			Sort:        "updated",
 			ListOptions: github.ListOptions{PerPage: 100},
 		})
-		// TODO: use res.Rate.* (https://godoc.org/github.com/google/go-github/github#Rate) to sleep
-		// and retry if we're out of tokens. Probably need to make an HTTP RoundTripper that does
-		// that automatically.
 		if err != nil {
+			if canRetry(ctx, err) {
+				continue
+			}
 			return err
 		}
 		serverDate, err := http.ParseTime(res.Header.Get("Date"))
@@ -1929,17 +2078,19 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 			ctx, cancel := context.WithTimeout(ctx, time.Minute)
 			defer cancel()
 			req = req.WithContext(ctx)
-			res, err := http.DefaultClient.Do(req)
+			res, err := p.client.Do(req)
 			if err != nil {
 				log.Printf("Fetching %s: %v", u, err)
 				return nil, nil, err
 			}
 			log.Printf("Fetching %s: %v", u, res.Status)
-			if res.StatusCode != http.StatusOK {
+			ghResp := makeGithubResponse(res)
+			if err := github.CheckResponse(res); err != nil {
 				log.Printf("Fetching %s: %v: %+v", u, res.Status, res.Header)
-				// TODO: rate limiting, etc.
-				return nil, nil, fmt.Errorf("%s: %v", u, res.Status)
+				log.Printf("GitHub error %s: %v", u, ghResp)
+				return nil, nil, err
 			}
+
 			evts, err := parseGithubEvents(res.Body)
 			if err != nil {
 				return nil, nil, fmt.Errorf("%s: parse github events: %v", u, err)
@@ -1955,7 +2106,7 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 			sdp, _ := ptypes.TimestampProto(serverDate.UTC())
 			mut.GithubIssue.EventStatus = &maintpb.GithubIssueSyncStatus{ServerDate: sdp}
 
-			return is, makeGithubResponse(res), err
+			return is, ghResp, err
 		},
 		func(v interface{}) error {
 			ge := v.(*GitHubIssueEvent)
@@ -2099,6 +2250,211 @@ func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
 	return evts, nil
 }
 
+func (p *githubRepoPoller) issueNumbersWithStaleReviewsSync() (issueNums []int32) {
+	p.c.mu.RLock()
+	defer p.c.mu.RUnlock()
+
+	for n, gi := range p.gr.issues {
+		if gi.PullRequest && !gi.reviewsSynced() {
+			issueNums = append(issueNums, n)
+		}
+	}
+	sort.Slice(issueNums, func(i, j int) bool {
+		return issueNums[i] < issueNums[j]
+	})
+	return issueNums
+}
+
+func (p *githubRepoPoller) syncReviews(ctx context.Context) error {
+	for {
+		nums := p.issueNumbersWithStaleReviewsSync()
+		if len(nums) == 0 {
+			return nil
+		}
+		remain := len(nums)
+		for _, num := range nums {
+			p.logf("reviews sync: %d issues remaining; syncing issue %v", remain, num)
+			if err := p.syncReviewsOnPullRequest(ctx, num); err != nil {
+				p.logf("review sync on issue %d: %v", num, err)
+				return err
+			}
+			remain--
+		}
+	}
+}
+
+func (p *githubRepoPoller) syncReviewsOnPullRequest(ctx context.Context, issueNum int32) error {
+	const perPage = 100
+	p.c.mu.RLock()
+	gi := p.gr.issues[issueNum]
+	if gi == nil {
+		p.c.mu.RUnlock()
+		panic(fmt.Sprintf("bogus issue %v", issueNum))
+	}
+
+	if !gi.PullRequest {
+		p.c.mu.RUnlock()
+		return nil
+	}
+
+	have := len(gi.reviews)
+	p.c.mu.RUnlock()
+
+	skipPages := have / perPage
+
+	mut := &maintpb.Mutation{
+		GithubIssue: &maintpb.GithubIssueMutation{
+			Owner:  p.Owner(),
+			Repo:   p.Repo(),
+			Number: issueNum,
+		},
+	}
+
+	err := p.foreachItem(ctx,
+		1+skipPages,
+		func(ctx context.Context, page int) ([]interface{}, *github.Response, error) {
+			u := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/%v/reviews?per_page=%v&page=%v",
+				p.Owner(), p.Repo(), issueNum, perPage, page)
+			req, _ := http.NewRequest("GET", u, nil)
+
+			req.Header.Set("Authorization", "Bearer "+p.token)
+			req.Header.Set("User-Agent", "golang-x-build-maintner/1.0")
+			ctx, cancel := context.WithTimeout(ctx, time.Minute)
+			defer cancel()
+			req = req.WithContext(ctx)
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				log.Printf("Fetching %s: %v", u, err)
+				return nil, nil, err
+			}
+			log.Printf("Fetching %s: %v", u, res.Status)
+			ghResp := makeGithubResponse(res)
+			if err := github.CheckResponse(res); err != nil {
+				log.Printf("Fetching %s: %v: %+v", u, res.Status, res.Header)
+				log.Printf("GitHub error %s: %v", u, ghResp)
+				return nil, nil, err
+			}
+			evts, err := parseGithubReviews(res.Body)
+			if err != nil {
+				return nil, nil, fmt.Errorf("%s: parse github pr review events: %v", u, err)
+			}
+			is := make([]interface{}, len(evts))
+			for i, v := range evts {
+				is[i] = v
+			}
+			serverDate, err := http.ParseTime(res.Header.Get("Date"))
+			if err != nil {
+				return nil, nil, fmt.Errorf("invalid server Date response: %v", err)
+			}
+			sdp, _ := ptypes.TimestampProto(serverDate.UTC())
+			mut.GithubIssue.ReviewStatus = &maintpb.GithubIssueSyncStatus{ServerDate: sdp}
+
+			return is, ghResp, err
+		},
+		func(v interface{}) error {
+			ge := v.(*GitHubReview)
+			p.c.mu.RLock()
+			_, ok := gi.reviews[ge.ID]
+			p.c.mu.RUnlock()
+			if ok {
+				// Already have it. And they're
+				// assumed to be immutable, so the
+				// copy we already have should be
+				// good. Don't add to mutation log.
+				return nil
+			}
+			mut.GithubIssue.Review = append(mut.GithubIssue.Review, ge.Proto())
+			return nil
+		})
+	if err != nil {
+		return err
+	}
+	p.c.addMutation(mut)
+	return nil
+}
+
+// parseGithubReviews parses the JSON array of GitHub review events in r.  It
+// does this the very manual way (using map[string]interface{})
+// instead of using nice types because https://golang.org/issue/15314
+// isn't implemented yet and also because even if it were implemented,
+// this code still wants to preserve any unknown fields to store in
+// the "OtherJSON" field for future updates of the code to parse. (If
+// GitHub adds new Event types in the future, we want to archive them,
+// even if we don't understand them)
+func parseGithubReviews(r io.Reader) ([]*GitHubReview, error) {
+	var jevents []map[string]interface{}
+	jd := json.NewDecoder(r)
+	jd.UseNumber()
+	if err := jd.Decode(&jevents); err != nil {
+		return nil, err
+	}
+	var evts []*GitHubReview
+	for _, em := range jevents {
+		for k, v := range em {
+			if v == nil {
+				delete(em, k)
+			}
+		}
+
+		e := &GitHubReview{}
+
+		e.ID = jint64(em["id"])
+		delete(em, "id")
+
+		e.Body, _ = em["body"].(string)
+		delete(em, "body")
+
+		e.State, _ = em["state"].(string)
+		delete(em, "state")
+
+		// TODO: store these two more compactly:
+		e.CommitID, _ = em["commit_id"].(string) // "5383ecf5a0824649ffcc0349f00f0317575753d0"
+		delete(em, "commit_id")
+
+		getUser := func(field string, gup **GitHubUser) {
+			am, ok := em[field].(map[string]interface{})
+			if !ok {
+				return
+			}
+			delete(em, field)
+			gu := &GitHubUser{ID: jint64(am["id"])}
+			gu.Login, _ = am["login"].(string)
+			*gup = gu
+		}
+
+		getUser("user", &e.Actor)
+
+		e.ActorAssociation, _ = em["author_association"].(string)
+		delete(em, "author_association")
+
+		if createdStr, ok := em["submitted_at"].(string); ok {
+			delete(em, "submitted_at")
+			var err error
+			e.Created, err = time.Parse(time.RFC3339, createdStr)
+			if err != nil {
+				return nil, err
+			}
+			e.Created = e.Created.UTC()
+		}
+
+		delete(em, "node_id")          // not sure what it is, but don't need to store it
+		delete(em, "html_url")         // not needed.
+		delete(em, "pull_request_url") // not needed.
+		delete(em, "_links")           // not needed. (duplicate data of above two nodes)
+
+		otherJSON, _ := json.Marshal(em)
+		e.OtherJSON = string(otherJSON)
+		if e.OtherJSON == "{}" {
+			e.OtherJSON = ""
+		}
+		if e.OtherJSON != "" {
+			log.Printf("warning: storing unknown field(s) in GitHub event: %s", e.OtherJSON)
+		}
+		evts = append(evts, e)
+	}
+	return evts, nil
+}
+
 // jint64 return an int64 from the provided JSON object value v.
 func jint64(v interface{}) int64 {
 	switch v := v.(type) {
@@ -2112,9 +2468,31 @@ func jint64(v interface{}) int64 {
 	}
 }
 
+// copy of go-github's parseRate, basically.
+func parseRate(r *http.Response) github.Rate {
+	var rate github.Rate
+	// Note: even though the header names below are not canonical (the
+	// canonical form would be X-Ratelimit-Limit), this particular
+	// casing is what GitHub returns. See headerRateRemaining in
+	// package go-github.
+	if limit := r.Header.Get("X-RateLimit-Limit"); limit != "" {
+		rate.Limit, _ = strconv.Atoi(limit)
+	}
+	if remaining := r.Header.Get("X-RateLimit-Remaining"); remaining != "" {
+		rate.Remaining, _ = strconv.Atoi(remaining)
+	}
+	if reset := r.Header.Get("X-RateLimit-Reset"); reset != "" {
+		if v, _ := strconv.ParseInt(reset, 10, 64); v != 0 {
+			rate.Reset = github.Timestamp{time.Unix(v, 0)}
+		}
+	}
+	return rate
+}
+
 // Copy of go-github's func newResponse, basically.
 func makeGithubResponse(res *http.Response) *github.Response {
 	gr := &github.Response{Response: res}
+	gr.Rate = parseRate(res)
 	for _, lv := range res.Header["Link"] {
 		for _, link := range strings.Split(lv, ",") {
 			segs := strings.Split(strings.TrimSpace(link), ";")
@@ -2238,4 +2616,25 @@ func (t limitTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		}
 	}
 	return t.base.RoundTrip(r)
+}
+
+func canRetry(ctx context.Context, err error) bool {
+	switch e := err.(type) {
+	case *github.RateLimitError:
+		log.Printf("GitHub rate limit error: %s, waiting until %s", e.Message, e.Rate.Reset.Time)
+		ctx, cancel := context.WithDeadline(ctx, e.Rate.Reset.Time)
+		defer cancel()
+		<-ctx.Done()
+		return ctx.Err() != context.Canceled
+	case *github.AbuseRateLimitError:
+		if e.RetryAfter != nil {
+			log.Printf("GitHub rate abuse error: %s, waiting for %s", e.Message, *e.RetryAfter)
+			ctx, cancel := context.WithTimeout(ctx, *e.RetryAfter)
+			defer cancel()
+			<-ctx.Done()
+			return ctx.Err() != context.Canceled
+		}
+		log.Printf("GitHub rate abuse error: %s", e.Message)
+	}
+	return false
 }

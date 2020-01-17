@@ -10,7 +10,6 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"strings"
 )
 
 type Owner struct {
@@ -43,11 +42,30 @@ type Response struct {
 func match(path string) *Entry {
 	var deepestPath string
 	for p := range entries {
-		if strings.HasPrefix(path, p) && len(p) > len(deepestPath) {
+		if hasPathPrefix(path, p) && len(p) > len(deepestPath) {
 			deepestPath = p
 		}
 	}
 	return entries[deepestPath]
+}
+
+// hasPathPrefix reports whether the slash-separated path s
+// begins with the elements in prefix.
+//
+// Copied from go/src/cmd/go/internal/str.HasPathPrefix.
+func hasPathPrefix(s, prefix string) bool {
+	if len(s) == len(prefix) {
+		return s == prefix
+	}
+	if prefix == "" {
+		return true
+	}
+	if len(s) > len(prefix) {
+		if prefix[len(prefix)-1] == '/' || s[len(prefix)] == '/' {
+			return s[:len(prefix)] == prefix
+		}
+	}
+	return false
 }
 
 // Handler takes one or more paths and returns a map of each to a matching
@@ -156,7 +174,7 @@ body {
 </style>
 <header class="header">
 	Alter these entries at
-	<a href="https://go.googlesource.com/build/+/master/devapp/owners/"
+	<a href="https://go.googlesource.com/build/+/master/devapp/owners"
 		target="_blank" rel="noopener">golang.org/x/build/devapp/owners</a>
 </header>
 <main>
@@ -170,12 +188,12 @@ body {
 		<span class="path">{{$path}}</span>
 		<span class="primary">
 			{{range .Primary}}
-				<a href="https://github.com/{{.GitHubUsername}}" target="_blank" rel="noopener">{{.GitHubUsername}}</a>
+				<a href="https://github.com/{{.GitHubUsername}}" target="_blank" rel="noopener">@{{.GitHubUsername}}</a>
 			{{end}}
 		</span>
 		<span class="secondary">
 			{{range .Secondary}}
-				<a href="https://github.com/{{.GitHubUsername}}" target="_blank" rel="noopener">{{.GitHubUsername}}</a>
+				<a href="https://github.com/{{.GitHubUsername}}" target="_blank" rel="noopener">@{{.GitHubUsername}}</a>
 			{{end}}
 		</span>
 	</div>

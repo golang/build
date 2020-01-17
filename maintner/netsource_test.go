@@ -317,13 +317,13 @@ func TestGetNewSegments(t *testing.T) {
 					}
 					return segs, nil
 				},
-				testHookSyncSeg: func(_ context.Context, seg LogSegmentJSON) (fileSeg, error) {
+				testHookSyncSeg: func(_ context.Context, seg LogSegmentJSON) (fileSeg, []byte, error) {
 					return fileSeg{
 						seg:    seg.Number,
 						size:   seg.Size,
 						sha224: seg.SHA224,
 						file:   fmt.Sprintf("/fake/%04d.mutlog", seg.Number),
-					}, nil
+					}, nil, nil
 				},
 				testHookFilePrefixSum224: func(file string, n int64) string {
 					if tt.prefixSum != "" {

@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -35,7 +36,7 @@ func ls(args []string) error {
 		dir = fs.Arg(1)
 	}
 	name := fs.Arg(0)
-	bc, _, err := clientAndConf(name)
+	bc, err := remoteClient(name)
 	if err != nil {
 		return err
 	}
@@ -44,7 +45,7 @@ func ls(args []string) error {
 		Digest:    digest,
 		Skip:      strings.Split(skip, ","),
 	}
-	return bc.ListDir(dir, opts, func(bi buildlet.DirEntry) {
+	return bc.ListDir(context.Background(), dir, opts, func(bi buildlet.DirEntry) {
 		fmt.Fprintf(os.Stdout, "%s\n", bi)
 	})
 }

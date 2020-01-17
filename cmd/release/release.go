@@ -14,7 +14,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	gobuild "go/build"
 	"io"
 	"io/ioutil"
 	"log"
@@ -33,11 +32,16 @@ import (
 	"golang.org/x/build/dashboard"
 )
 
+//go:generate go run makestatic.go
+
 var (
 	target = flag.String("target", "", "If specified, build specific target platform (e.g. 'linux-amd64'). Default is to build all.")
 	watch  = flag.Bool("watch", false, "Watch the build. Only compatible with -target")
 
-	rev       = flag.String("rev", "", "Go revision to build")
+	stagingDir = flag.String("staging_dir", "", "If specified, use this as the staging directory for untested release artifacts. Default is the system temporary directory.")
+
+	rev       = flag.String("rev", "", "Go revision to build, alternative to -tarball")
+	tarball   = flag.String("tarball", "", "Go tree tarball to build, alternative to -rev")
 	toolsRev  = flag.String("tools", "", "Tools revision to build")
 	tourRev   = flag.String("tour", "master", "Tour revision to include")
 	netRev    = flag.String("net", "master", "Net revision to include")
@@ -66,18 +70,14 @@ func main() {
 		return
 	}
 
-	if err := findReleaselet(); err != nil {
-		log.Fatalf("couldn't find releaselet source: %v", err)
-	}
-
-	if *rev == "" {
-		log.Fatal("must specify -rev flag")
-	}
-	if *toolsRev == "" {
-		log.Fatal("must specify -tools flag")
+	if (*rev == "" && *tarball == "") || (*rev != "" && *tarball != "") {
+		log.Fatal("must specify one of -rev or -tarball")
 	}
 	if *version == "" {
-		log.Fatal("must specify -version flag")
+		log.Fatal(`must specify -version flag (such as "go1.12" or "go1.13beta1")`)
+	}
+	if *toolsRev == "" && (versionIncludesGodoc(*version) || versionIncludesTour(*version)) {
+		log.Fatal("must specify -tools flag")
 	}
 
 	coordClient = coordinatorClient()
@@ -106,28 +106,6 @@ func main() {
 		log.Fatalf("no targets matched %q", *target)
 	}
 	wg.Wait()
-}
-
-var releaselet = "releaselet.go"
-
-func findReleaselet() error {
-	// First try the working directory.
-	if _, err := os.Stat(releaselet); err == nil {
-		return nil
-	}
-
-	// Then, try to locate the release command in the workspace.
-	const importPath = "golang.org/x/build/cmd/release"
-	pkg, err := gobuild.Import(importPath, "", gobuild.FindOnly)
-	if err != nil {
-		return fmt.Errorf("finding %q: %v", importPath, err)
-	}
-	r := filepath.Join(pkg.Dir, releaselet)
-	if _, err := os.Stat(r); err != nil {
-		return err
-	}
-	releaselet = r
-	return nil
 }
 
 type Build struct {
@@ -183,7 +161,7 @@ var builds = []*Build{
 		OS:      "linux",
 		Arch:    "amd64",
 		Race:    true,
-		Builder: "linux-amd64",
+		Builder: "linux-amd64-jessie", // using Jessie for at least [Go 1.11, Go 1.13] due to golang.org/issue/31336
 	},
 	{
 		OS:      "linux",
@@ -216,7 +194,7 @@ var builds = []*Build{
 		OS:      "darwin",
 		Arch:    "amd64",
 		Race:    true,
-		Builder: "darwin-amd64-10_11",
+		Builder: "darwin-amd64-10_15",
 	},
 	{
 		OS:       "linux",
@@ -257,6 +235,7 @@ func (b *Build) buildlet() (*buildlet.Client, error) {
 }
 
 func (b *Build) make() error {
+	ctx := context.TODO()
 	bc, ok := dashboard.Builders[b.Builder]
 	if !ok {
 		return fmt.Errorf("unknown builder: %v", bc)
@@ -273,38 +252,55 @@ func (b *Build) make() error {
 	}
 	defer client.Close()
 
-	work, err := client.WorkDir()
+	work, err := client.WorkDir(ctx)
 	if err != nil {
 		return err
 	}
 
-	// Push source to buildlet
+	// Push source to buildlet.
 	b.logf("Pushing source to buildlet.")
 	const (
 		goDir  = "go"
 		goPath = "gopath"
 		go14   = "go1.4"
 	)
+	if *tarball != "" {
+		tarFile, err := os.Open(*tarball)
+		if err != nil {
+			b.logf("failed to open tarball %q: %v", *tarball, err)
+			return err
+		}
+		if err := client.PutTar(ctx, tarFile, goDir); err != nil {
+			b.logf("failed to put tarball %q into dir %q: %v", *tarball, goDir, err)
+			return err
+		}
+		tarFile.Close()
+	} else {
+		tar := "https://go.googlesource.com/go/+archive/" + *rev + ".tar.gz"
+		if err := client.PutTarFromURL(ctx, tar, goDir); err != nil {
+			b.logf("failed to put tarball %q into dir %q: %v", tar, goDir, err)
+			return err
+		}
+	}
 	for _, r := range []struct {
 		repo, rev string
 	}{
-		{"go", *rev},
 		{"tools", *toolsRev},
 		{"tour", *tourRev},
 		{"net", *netRev},
 	} {
-		if b.Source && r.repo != "go" {
+		if b.Source {
 			continue
 		}
 		if r.repo == "tour" && !versionIncludesTour(*version) {
 			continue
 		}
-		dir := goDir
-		if r.repo != "go" {
-			dir = goPath + "/src/golang.org/x/" + r.repo
+		if (r.repo == "net" || r.repo == "tools") && !versionIncludesGodoc(*version) {
+			continue
 		}
+		dir := goPath + "/src/golang.org/x/" + r.repo
 		tar := "https://go.googlesource.com/" + r.repo + "/+archive/" + r.rev + ".tar.gz"
-		if err := client.PutTarFromURL(tar, dir); err != nil {
+		if err := client.PutTarFromURL(ctx, tar, dir); err != nil {
 			b.logf("failed to put tarball %q into dir %q: %v", tar, dir, err)
 			return err
 		}
@@ -312,25 +308,38 @@ func (b *Build) make() error {
 
 	if u := bc.GoBootstrapURL(buildEnv); u != "" && !b.Source {
 		b.logf("Installing go1.4.")
-		if err := client.PutTarFromURL(u, go14); err != nil {
+		if err := client.PutTarFromURL(ctx, u, go14); err != nil {
 			return err
 		}
 	}
 
 	// Write out version file.
 	b.logf("Writing VERSION file.")
-	if err := client.Put(strings.NewReader(*version), "go/VERSION", 0644); err != nil {
+	if err := client.Put(ctx, strings.NewReader(*version), "go/VERSION", 0644); err != nil {
 		return err
 	}
 
 	b.logf("Cleaning goroot (pre-build).")
-	if err := client.RemoveAll(addPrefix(goDir, preBuildCleanFiles)...); err != nil {
+	if err := client.RemoveAll(ctx, addPrefix(goDir, preBuildCleanFiles)...); err != nil {
 		return err
 	}
 
 	if b.Source {
 		b.logf("Skipping build.")
-		return b.fetchTarball(client)
+
+		// Remove unwanted top-level directories and verify only "go" remains:
+		if err := client.RemoveAll(ctx, "tmp", "gocache"); err != nil {
+			return err
+		}
+		if err := b.checkTopLevelDirs(ctx, client); err != nil {
+			return fmt.Errorf("verifying no unwanted top-level directories: %v", err)
+		}
+		if err := b.checkPerm(ctx, client); err != nil {
+			return fmt.Errorf("verifying file permissions: %v", err)
+		}
+
+		finalFilename := *version + "." + b.String() + ".tar.gz"
+		return b.fetchTarball(ctx, client, finalFilename)
 	}
 
 	// Set up build environment.
@@ -351,30 +360,27 @@ func (b *Build) make() error {
 		env = append(env, fmt.Sprintf("CGO_LDFLAGS=-march=armv%d", b.Goarm))
 	}
 
-	// Execute build
-	b.logf("Building.")
+	// Execute build (make.bash only first).
+	b.logf("Building (make.bash only).")
 	out := new(bytes.Buffer)
-	script := bc.AllScript()
-	scriptArgs := bc.AllScriptArgs()
-	if *skipTests || b.MakeOnly {
-		script = bc.MakeScript()
-		scriptArgs = bc.MakeScriptArgs()
-	}
-	all := filepath.Join(goDir, script)
 	var execOut io.Writer = out
 	if *watch && *target != "" {
 		execOut = io.MultiWriter(out, os.Stdout)
 	}
-	remoteErr, err := client.Exec(all, buildlet.ExecOpts{
+	remoteErr, err := client.Exec(context.Background(), filepath.Join(goDir, bc.MakeScript()), buildlet.ExecOpts{
 		Output:   execOut,
 		ExtraEnv: env,
-		Args:     scriptArgs,
+		Args:     bc.MakeScriptArgs(),
 	})
 	if err != nil {
 		return err
 	}
 	if remoteErr != nil {
 		return fmt.Errorf("Build failed: %v\nOutput:\n%v", remoteErr, out)
+	}
+
+	if err := b.checkRelocations(client); err != nil {
+		return err
 	}
 
 	goCmd := path.Join(goDir, "bin/go")
@@ -391,7 +397,7 @@ func (b *Build) make() error {
 		if len(args) > 0 && args[0] == "run" && hostArch != "" {
 			cmdEnv = setGOARCH(cmdEnv, hostArch)
 		}
-		remoteErr, err := client.Exec(goCmd, buildlet.ExecOpts{
+		remoteErr, err := client.Exec(context.Background(), goCmd, buildlet.ExecOpts{
 			Output:   execOut,
 			Dir:      ".", // root of buildlet work directory
 			Args:     args,
@@ -414,15 +420,18 @@ func (b *Build) make() error {
 		}
 	}
 
-	toolPaths := []string{
-		"golang.org/x/tools/cmd/godoc",
+	var toolPaths []string
+	if versionIncludesGodoc(*version) {
+		toolPaths = append(toolPaths, "golang.org/x/tools/cmd/godoc")
 	}
 	if versionIncludesTour(*version) {
 		toolPaths = append(toolPaths, "golang.org/x/tour")
 	}
-	b.logf("Building %v.", strings.Join(toolPaths, ", "))
-	if err := runGo(append([]string{"install"}, toolPaths...)...); err != nil {
-		return err
+	if len(toolPaths) > 0 {
+		b.logf("Building %v.", strings.Join(toolPaths, ", "))
+		if err := runGo(append([]string{"install"}, toolPaths...)...); err != nil {
+			return err
+		}
 	}
 
 	// postBuildCleanFiles are the list of files to remove in the go/ directory
@@ -435,7 +444,7 @@ func (b *Build) make() error {
 	// Remove race detector *.syso files for other GOOS/GOARCHes (except for the source release).
 	if !b.Source {
 		okayRace := fmt.Sprintf("race_%s_%s.syso", b.OS, b.Arch)
-		err := client.ListDir(".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
+		err := client.ListDir(ctx, ".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
 			name := strings.TrimPrefix(ent.Name(), "go/")
 			if strings.HasPrefix(name, "src/runtime/race/race_") &&
 				strings.HasSuffix(name, ".syso") &&
@@ -449,12 +458,12 @@ func (b *Build) make() error {
 	}
 
 	b.logf("Cleaning goroot (post-build).")
-	if err := client.RemoveAll(addPrefix(goDir, postBuildCleanFiles)...); err != nil {
+	if err := client.RemoveAll(ctx, addPrefix(goDir, postBuildCleanFiles)...); err != nil {
 		return err
 	}
 	// Users don't need the api checker binary pre-built. It's
 	// used by tests, but all.bash builds it first.
-	if err := client.RemoveAll(b.toolDir() + "/api"); err != nil {
+	if err := client.RemoveAll(ctx, b.toolDir()+"/api"); err != nil {
 		return err
 	}
 	// Remove go/pkg/${GOOS}_${GOARCH}/cmd. This saves a bunch of
@@ -462,69 +471,212 @@ func (b *Build) make() error {
 	// cmd/link, etc. If they want to, they still can, but they'll
 	// have to pay the cost of rebuilding dependent libaries. No
 	// need to ship them just in case.
-	if err := client.RemoveAll(b.pkgDir() + "/cmd"); err != nil {
+	//
+	// Also remove go/pkg/${GOOS}_${GOARCH}_{dynlink,shared,testcshared_shared}
+	// per Issue 20038.
+	if err := client.RemoveAll(ctx,
+		b.pkgDir()+"/cmd",
+		b.pkgDir()+"_dynlink",
+		b.pkgDir()+"_shared",
+		b.pkgDir()+"_testcshared_shared",
+	); err != nil {
 		return err
 	}
 
 	b.logf("Pushing and running releaselet.")
-	f, err := os.Open(releaselet)
-	if err != nil {
-		return err
-	}
-	err = client.Put(f, "releaselet.go", 0666)
-	f.Close()
+	err = client.Put(ctx, strings.NewReader(releaselet), "releaselet.go", 0666)
 	if err != nil {
 		return err
 	}
 	if err := runGo("run", "releaselet.go"); err != nil {
 		log.Printf("releaselet failed: %v", err)
-		client.ListDir(".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
+		client.ListDir(ctx, ".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
 			log.Printf("remote: %v", ent)
 		})
 		return err
 	}
 
-	cleanFiles := []string{"releaselet.go", goPath, go14}
+	cleanFiles := []string{"releaselet.go", goPath, go14, "tmp", "gocache"}
 
-	switch b.OS {
-	case "darwin":
-		filename := *version + "." + b.String() + ".pkg"
-		if err := b.fetchFile(client, filename, "pkg"); err != nil {
+	// So far, we've run make.bash. We want to create the release archive next.
+	// Since the release archive hasn't been tested yet, place it in a temporary
+	// location. After all.bash runs successfully (or gets explicitly skipped),
+	// we'll move the release archive to its final location.
+	type releaseFile struct {
+		Untested string // Temporary location of the file before the release has been tested.
+		Final    string // Final location where to move the file after the release has been tested.
+	}
+	var releases []releaseFile
+	stagingDir := *stagingDir
+	if stagingDir == "" {
+		var err error
+		stagingDir, err = ioutil.TempDir("", "go-release-staging_")
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	stagingFile := func(ext string) string {
+		return filepath.Join(stagingDir, *version+"."+b.String()+ext+".untested")
+	}
+
+	if b.OS == "windows" {
+		untested := stagingFile(".msi")
+		if err := b.fetchFile(client, untested, "msi"); err != nil {
 			return err
 		}
-		cleanFiles = append(cleanFiles, "pkg")
-	case "windows":
-		filename := *version + "." + b.String() + ".msi"
-		if err := b.fetchFile(client, filename, "msi"); err != nil {
-			return err
-		}
+		releases = append(releases, releaseFile{
+			Untested: untested,
+			Final:    *version + "." + b.String() + ".msi",
+		})
 		cleanFiles = append(cleanFiles, "msi")
 	}
 
 	// Need to delete everything except the final "go" directory,
 	// as we make the tarball relative to workdir.
 	b.logf("Cleaning workdir.")
-	if err := client.RemoveAll(cleanFiles...); err != nil {
+	if err := client.RemoveAll(ctx, cleanFiles...); err != nil {
 		return err
 	}
 
-	if b.OS == "windows" {
-		return b.fetchZip(client)
+	// And verify there's no other top-level stuff besides the "go" directory:
+	if err := b.checkTopLevelDirs(ctx, client); err != nil {
+		return fmt.Errorf("verifying no unwanted top-level directories: %v", err)
 	}
-	return b.fetchTarball(client)
+
+	if err := b.checkPerm(ctx, client); err != nil {
+		return fmt.Errorf("verifying file permissions: %v", err)
+	}
+
+	switch b.OS {
+	default:
+		untested := stagingFile(".tar.gz")
+		if err := b.fetchTarball(ctx, client, untested); err != nil {
+			return fmt.Errorf("fetching and writing tarball: %v", err)
+		}
+		releases = append(releases, releaseFile{
+			Untested: untested,
+			Final:    *version + "." + b.String() + ".tar.gz",
+		})
+	case "windows":
+		untested := stagingFile(".zip")
+		if err := b.fetchZip(client, untested); err != nil {
+			return fmt.Errorf("fetching and writing zip: %v", err)
+		}
+		releases = append(releases, releaseFile{
+			Untested: untested,
+			Final:    *version + "." + b.String() + ".zip",
+		})
+	}
+
+	// Execute build (all.bash) if running tests.
+	if *skipTests || b.MakeOnly {
+		b.logf("Skipping all.bash tests.")
+	} else {
+		if u := bc.GoBootstrapURL(buildEnv); u != "" {
+			b.logf("Installing go1.4 (second time, for all.bash).")
+			if err := client.PutTarFromURL(ctx, u, go14); err != nil {
+				return err
+			}
+		}
+
+		b.logf("Building (all.bash to ensure tests pass).")
+		out := new(bytes.Buffer)
+		var execOut io.Writer = out
+		if *watch && *target != "" {
+			execOut = io.MultiWriter(out, os.Stdout)
+		}
+		remoteErr, err := client.Exec(ctx, filepath.Join(goDir, bc.AllScript()), buildlet.ExecOpts{
+			Output:   execOut,
+			ExtraEnv: env,
+			Args:     bc.AllScriptArgs(),
+		})
+		if err != nil {
+			return err
+		}
+		if remoteErr != nil {
+			return fmt.Errorf("Build failed: %v\nOutput:\n%v", remoteErr, out)
+		}
+	}
+
+	// If we get this far, the all.bash tests have passed (or been skipped).
+	// Move untested release files to their final locations.
+	for _, r := range releases {
+		b.logf("Moving %q to %q.", r.Untested, r.Final)
+		if err := os.Rename(r.Untested, r.Final); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (b *Build) fetchTarball(client *buildlet.Client) error {
+// checkTopLevelDirs checks that all files under client's "."
+// ($WORKDIR) are are under "go/".
+func (b *Build) checkTopLevelDirs(ctx context.Context, client *buildlet.Client) error {
+	var badFileErr error // non-nil once an unexpected file/dir is found
+	if err := client.ListDir(ctx, ".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
+		name := ent.Name()
+		if !(strings.HasPrefix(name, "go/") || strings.HasPrefix(name, `go\`)) {
+			b.logf("unexpected file: %q", name)
+			if badFileErr == nil {
+				badFileErr = fmt.Errorf("unexpected filename %q found after cleaning", name)
+			}
+		}
+	}); err != nil {
+		return err
+	}
+	return badFileErr
+}
+
+// checkPerm checks that files in client's $WORKDIR/go directory
+// have expected permissions.
+func (b *Build) checkPerm(ctx context.Context, client *buildlet.Client) error {
+	var badPermErr error // non-nil once an unexpected perm is found
+	checkPerm := func(ent buildlet.DirEntry, allowed ...string) {
+		for _, p := range allowed {
+			if ent.Perm() == p {
+				return
+			}
+		}
+		b.logf("unexpected file %q perm: %q", ent.Name(), ent.Perm())
+		if badPermErr == nil {
+			badPermErr = fmt.Errorf("unexpected file %q perm %q found", ent.Name(), ent.Perm())
+		}
+	}
+	if err := client.ListDir(ctx, "go", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
+		switch b.OS {
+		default:
+			checkPerm(ent, "drwxr-xr-x", "-rw-r--r--", "-rwxr-xr-x")
+		case "windows":
+			checkPerm(ent, "drwxrwxrwx", "-rw-rw-rw-")
+		}
+	}); err != nil {
+		return err
+	}
+	if !b.Source {
+		if err := client.ListDir(ctx, "go/bin", buildlet.ListDirOpts{}, func(ent buildlet.DirEntry) {
+			switch b.OS {
+			default:
+				checkPerm(ent, "-rwxr-xr-x")
+			case "windows":
+				checkPerm(ent, "-rw-rw-rw-")
+			}
+		}); err != nil {
+			return err
+		}
+	}
+	return badPermErr
+}
+
+func (b *Build) fetchTarball(ctx context.Context, client *buildlet.Client, dest string) error {
 	b.logf("Downloading tarball.")
-	tgz, err := client.GetTar(context.Background(), ".")
+	tgz, err := client.GetTar(ctx, ".")
 	if err != nil {
 		return err
 	}
-	filename := *version + "." + b.String() + ".tar.gz"
-	return b.writeFile(filename, tgz)
+	return b.writeFile(dest, tgz)
 }
 
-func (b *Build) fetchZip(client *buildlet.Client) error {
+func (b *Build) fetchZip(client *buildlet.Client, dest string) error {
 	b.logf("Downloading tarball and re-compressing as zip.")
 
 	tgz, err := client.GetTar(context.Background(), ".")
@@ -533,8 +685,7 @@ func (b *Build) fetchZip(client *buildlet.Client) error {
 	}
 	defer tgz.Close()
 
-	filename := *version + "." + b.String() + ".zip"
-	f, err := os.Create(filename)
+	f, err := os.Create(dest)
 	if err != nil {
 		return err
 	}
@@ -545,8 +696,7 @@ func (b *Build) fetchZip(client *buildlet.Client) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-
-	b.logf("Wrote %q.", filename)
+	b.logf("Wrote %q.", dest)
 	return nil
 }
 
@@ -643,6 +793,32 @@ func (b *Build) writeFile(name string, r io.Reader) error {
 		}
 	}
 	b.logf("Wrote %q.", name)
+	return nil
+}
+
+// checkRelocations runs readelf on pkg/linux_amd64/runtime/cgo.a and makes sure
+// we don't see R_X86_64_REX_GOTPCRELX. See issue 31293.
+func (b *Build) checkRelocations(client *buildlet.Client) error {
+	if b.OS != "linux" || b.Arch != "amd64" {
+		return nil
+	}
+	var out bytes.Buffer
+	file := fmt.Sprintf("go/pkg/linux_%s/runtime/cgo.a", b.Arch)
+	remoteErr, err := client.Exec(context.Background(), "readelf", buildlet.ExecOpts{
+		Output:      &out,
+		Args:        []string{"-r", "--wide", file},
+		SystemLevel: true, // look for readelf in system's PATH
+	})
+	if err != nil {
+		return fmt.Errorf("failed to run readelf: %v", err)
+	}
+	got := out.String()
+	if strings.Contains(got, "R_X86_64_REX_GOTPCRELX") {
+		return fmt.Errorf("%s contained a R_X86_64_REX_GOTPCRELX relocation", file)
+	}
+	if !strings.Contains(got, "R_X86_64_GOTPCREL") {
+		return fmt.Errorf("%s did not contain a R_X86_64_GOTPCREL relocation; remoteErr=%v, %s", file, remoteErr, got)
+	}
 	return nil
 }
 
@@ -753,4 +929,14 @@ func versionIncludesTour(goVer string) bool {
 	// 1.12 and on, we won't ship the tour binary (see CL 131156).
 	return strings.HasPrefix(goVer, "go1.10.") ||
 		strings.HasPrefix(goVer, "go1.11.")
+}
+
+// versionIncludesGodoc reports whether the provided Go version (of the
+// form "go1.N" or "go1.N.M" includes the godoc binary.
+func versionIncludesGodoc(goVer string) bool {
+	// We don't do releases of Go 1.10 and earlier, so this only
+	// needs to recognize the two current past releases. From Go
+	// 1.13 and on, we won't ship the godoc binary (see Issue 30029).
+	return strings.HasPrefix(goVer, "go1.11.") ||
+		strings.HasPrefix(goVer, "go1.12.")
 }

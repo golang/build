@@ -5,6 +5,8 @@
 package main
 
 import (
+	"bytes"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
@@ -21,5 +23,18 @@ func TestReleaselet(t *testing.T) {
 	got := strings.TrimSpace(string(out))
 	if got != "ok" {
 		t.Errorf("got output %q; want ok", out)
+	}
+}
+
+func TestReleaseletIsUpToDate(t *testing.T) {
+	want, err := ioutil.ReadFile("releaselet.go")
+	if err != nil {
+		t.Fatalf("error while reading releaselet.go: %v", err)
+	}
+	got := []byte(releaselet)
+	if !bytes.Equal(got, want) {
+		t.Error(`The releaselet constant in static.go is stale. To see the difference, run:
+	$ go generate golang.org/x/build/cmd/release
+	$ git diff`)
 	}
 }

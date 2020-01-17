@@ -14,7 +14,6 @@ package main // import "golang.org/x/build/cmd/buildlet"
 
 import (
 	"archive/tar"
-	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -43,7 +42,6 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/build/buildlet"
-	"golang.org/x/build/internal/httpdl"
 	"golang.org/x/build/pargzip"
 )
 
@@ -52,7 +50,6 @@ var (
 	rebootOnHalt = flag.Bool("reboot", false, "reboot system in /halt handler.")
 	workDir      = flag.String("workdir", "", "Temporary directory to use. The contents of this directory may be deleted at any time. If empty, TempDir is used to create one.")
 	listenAddr   = flag.String("listen", "AUTO", "address to listen on. Unused in reverse mode. Warning: this service is inherently insecure and offers no protection of its own. Do not expose this port to the world.")
-	reverse      = flag.String("reverse", "", "[deprecated; use --reverse-type instead] if non-empty, go into reverse mode where the buildlet dials the coordinator instead of listening for connections. The value is a comma-separated list of modes, e.g. 'darwin-arm,darwin-amd64-race'")
 	reverseType  = flag.String("reverse-type", "", "if non-empty, go into reverse mode where the buildlet dials the coordinator instead of listening for connections. The value is the dashboard/builders.go Hosts map key, naming a HostConfig. This buildlet will receive work for any BuildConfig specifying this named HostConfig.")
 	coordinator  = flag.String("coordinator", "localhost:8119", "address of coordinator, in production use farmer.golang.org. Only used in reverse mode.")
 	hostname     = flag.String("hostname", "", "hostname to advertise to coordinator for reverse mode; default is actual hostname")
@@ -73,7 +70,12 @@ var (
 //   16: make macstadium builders always haltEntireOS
 //   17: make macstadium halts use sudo
 //   18: set TMPDIR and GOCACHE
-const buildletVersion = 18
+//   21: GO_BUILDER_SET_GOPROXY=coordinator support
+//   22: TrimSpace the reverse buildlet's gobuildkey contents
+//   23: revdial v2
+//   24: removeAllIncludingReadonly
+//   25: use removeAllIncludingReadonly for all work area cleanup
+const buildletVersion = 25
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -108,12 +110,15 @@ var (
 )
 
 func main() {
-	switch os.Getenv("GO_BUILDER_ENV") {
+	builderEnv := os.Getenv("GO_BUILDER_ENV")
+
+	switch builderEnv {
 	case "macstadium_vm":
 		configureMacStadium()
 	case "linux-arm-arm5spacemonkey":
 		initBaseUnixEnv() // Issue 28041
 	}
+
 	onGCE := metadata.OnGCE()
 	switch runtime.GOOS {
 	case "plan9":
@@ -133,11 +138,8 @@ func main() {
 	log.Printf("buildlet starting.")
 	flag.Parse()
 
-	if *reverse == "solaris-amd64-smartosbuildlet" {
-		// These machines were setup without GO_BUILDER_ENV
-		// set in their base image, so do init work here after
-		// flag parsing instead of at top.
-		*rebootOnHalt = true
+	if builderEnv == "android-amd64-emu" {
+		startAndroidEmulator()
 	}
 
 	// Optimize emphemeral filesystems. Prefer speed over safety,
@@ -154,10 +156,7 @@ func main() {
 		log.Printf("set OS rlimits.")
 	}
 
-	if *reverse != "" && *reverseType != "" {
-		log.Fatalf("can't specify both --reverse and --reverse-type")
-	}
-	isReverse := *reverse != "" || *reverseType != ""
+	isReverse := *reverseType != ""
 
 	if *listenAddr == "AUTO" && !isReverse {
 		v := defaultListenAddr()
@@ -189,12 +188,7 @@ func main() {
 				wdName += "-" + *reverseType
 			}
 			dir := filepath.Join(os.TempDir(), wdName)
-			if err := os.RemoveAll(dir); err != nil { // should be no-op
-				log.Fatal(err)
-			}
-			if err := os.Mkdir(dir, 0755); err != nil {
-				log.Fatal(err)
-			}
+			removeAllAndMkdir(dir)
 			*workDir = dir
 		}
 	}
@@ -257,60 +251,6 @@ func initGorootBootstrap() {
 
 	// Default if not otherwise configured in dashboard/builders.go:
 	os.Setenv("GOROOT_BOOTSTRAP", filepath.Join(*workDir, "go1.4"))
-
-	if runtime.GOOS == "solaris" && runtime.GOARCH == "amd64" {
-		gbenv := os.Getenv("GO_BUILDER_ENV")
-		if strings.Contains(gbenv, "oracle") {
-			// Oracle Solaris; not OpenSolaris-based or
-			// Illumos-based.  Do nothing.
-			return
-		}
-
-		// Assume this is an OpenSolaris-based machine or a
-		// SmartOS/Illumos machine before GOOS=="illumos" split.  For
-		// these machines, the old Joyent builders need to get the
-		// bootstrap and some config fixed.
-		os.Setenv("PATH", os.Getenv("PATH")+":/opt/local/bin")
-		downloadBootstrapGoroot("/root/go-solaris-amd64-bootstrap", "https://storage.googleapis.com/go-builder-data/gobootstrap-solaris-amd64.tar.gz")
-	}
-	if runtime.GOOS == "linux" && runtime.GOARCH == "ppc64" {
-		downloadBootstrapGoroot("/usr/local/go-bootstrap", "https://storage.googleapis.com/go-builder-data/gobootstrap-linux-ppc64.tar.gz")
-	}
-}
-
-func downloadBootstrapGoroot(destDir, url string) {
-	tarPath := destDir + ".tar.gz"
-	origInfo, err := os.Stat(tarPath)
-	if err != nil && !os.IsNotExist(err) {
-		log.Fatalf("Checking for tar existence: %v", err)
-	}
-	if err := httpdl.Download(tarPath, url); err != nil {
-		log.Fatalf("Downloading %s to %s: %v", url, tarPath, err)
-	}
-	newInfo, err := os.Stat(tarPath)
-	if err != nil {
-		log.Fatalf("Stat after download: %v", err)
-	}
-	if os.SameFile(origInfo, newInfo) {
-		// The file on disk was unmodified, so we probably untarred it already.
-		return
-	}
-	if err := os.RemoveAll(destDir); err != nil {
-		log.Fatal(err)
-	}
-	if err := os.MkdirAll(destDir, 0755); err != nil {
-		log.Fatal(err)
-	}
-	f, err := os.Open(tarPath)
-	if err != nil {
-		log.Fatalf("Opening after download: %v", err)
-	}
-	defer f.Close()
-	if err := untar(f, destDir); err != nil {
-		os.Remove(tarPath)
-		os.RemoveAll(destDir)
-		log.Fatalf("Untarring %s: %v", url, err)
-	}
 }
 
 func listenForCoordinator() {
@@ -368,7 +308,7 @@ func listenForCoordinator() {
 // registerSignal if non-nil registers shutdown signals with the provided chan.
 var registerSignal func(chan<- os.Signal)
 
-var inKube, _ = strconv.ParseBool(os.Getenv("IN_KUBERNETES"))
+var inKube = os.Getenv("KUBERNETES_SERVICE_HOST") != ""
 
 // metadataValue returns the GCE metadata instance value for the given key.
 // If the metadata is not defined, the returned string is empty.
@@ -524,6 +464,9 @@ func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "requires GET method", http.StatusBadRequest)
 		return
 	}
+	if !mkdirAllWorkdirOr500(w) {
+		return
+	}
 	dir := r.FormValue("dir")
 	if !validRelativeDir(dir) {
 		http.Error(w, "bogus dir", http.StatusBadRequest)
@@ -584,6 +527,9 @@ func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleWriteTGZ(w http.ResponseWriter, r *http.Request) {
+	if !mkdirAllWorkdirOr500(w) {
+		return
+	}
 	urlParam, _ := url.ParseQuery(r.URL.RawQuery)
 	baseDir := *workDir
 	if dir := urlParam.Get("dir"); dir != "" {
@@ -810,6 +756,11 @@ func untar(r io.Reader, dir string) (err error) {
 				return err
 			}
 			madeDir[abs] = true
+		case mode&os.ModeSymlink != 0:
+			// TODO: ignore these for now. They were breaking x/build tests.
+			// Implement these if/when we ever have a test that needs them.
+			// But maybe we'd have to skip creating them on Windows for some builders
+			// without permissions.
 		default:
 			return badRequest(fmt.Sprintf("tar file entry %s contained unsupported file type %v", f.Name, mode))
 		}
@@ -834,6 +785,23 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	if r.ProtoMajor*10+r.ProtoMinor < 11 {
 		// We need trailers, only available in HTTP/1.1 or HTTP/2.
 		http.Error(w, "HTTP/1.1 or higher required", http.StatusBadRequest)
+		return
+	}
+	// Create *workDir and (if needed) tmp and gocache.
+	if !mkdirAllWorkdirOr500(w) {
+		return
+	}
+	for _, dir := range []string{processTmpDirEnv, processGoCacheEnv} {
+		if dir == "" {
+			continue
+		}
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if err := checkAndroidEmulator(); err != nil {
+		http.Error(w, "android emulator not running: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -879,14 +847,17 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 		f.Flush()
 	}
 
+	postEnv := r.PostForm["env"]
+
 	goarch := "amd64" // unless we find otherwise
-	for _, pair := range r.PostForm["env"] {
-		if hasPrefixFold(pair, "GOARCH=") {
-			goarch = pair[len("GOARCH="):]
-		}
+	if v := getEnv(postEnv, "GOARCH"); v != "" {
+		goarch = v
+	}
+	if v, _ := strconv.ParseBool(getEnv(postEnv, "GO_DISABLE_OUTBOUND_NETWORK")); v {
+		disableOutboundNetwork()
 	}
 
-	env := append(baseEnv(goarch), r.PostForm["env"]...)
+	env := append(baseEnv(goarch), postEnv...)
 
 	if v := processTmpDirEnv; v != "" {
 		env = append(env, "TMPDIR="+v)
@@ -902,7 +873,13 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 	env = setPathEnv(env, r.PostForm["path"], *workDir)
 
-	cmd := exec.Command(absCmd, r.PostForm["cmdArg"]...)
+	var cmd *exec.Cmd
+	if needsBashWrapper(absCmd) {
+		cmd = exec.Command("bash", absCmd)
+	} else {
+		cmd = exec.Command(absCmd)
+	}
+	cmd.Args = append(cmd.Args, r.PostForm["cmdArg"]...)
 	cmd.Dir = dir
 	cmdOutput := flushWriter{w}
 	cmd.Stdout = cmdOutput
@@ -943,6 +920,17 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set(hdrProcessState, state)
 	log.Printf("[%p] Run = %s, after %v", cmd, state, time.Since(t0))
+}
+
+// needsBashWrappers reports whether the given command needs to
+// run through bash.
+func needsBashWrapper(cmd string) bool {
+	if !strings.HasSuffix(cmd, ".bash") {
+		return false
+	}
+	// The mobile platforms can't execute shell scripts directly.
+	ismobile := runtime.GOOS == "android" || runtime.GOOS == "darwin" && (runtime.GOARCH == "arm" || runtime.GOARCH == "arm64")
+	return ismobile
 }
 
 // pathNotExist reports whether path does not exist.
@@ -1172,7 +1160,7 @@ func doHalt() {
 			err = errors.New("not respecting -halt flag on macOS in unknown environment")
 		}
 	default:
-		err = errors.New("No system-specific halt command run; will just end buildlet process.")
+		err = errors.New("no system-specific halt command run; will just end buildlet process")
 	}
 	log.Printf("Shutdown: %v", err)
 	log.Printf("Ending buildlet process post-halt")
@@ -1202,7 +1190,7 @@ func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
 	for _, p := range paths {
 		log.Printf("Removing %s", p)
 		fullDir := filepath.Join(*workDir, filepath.FromSlash(p))
-		err := os.RemoveAll(fullDir)
+		err := removeAllIncludingReadonly(fullDir)
 		if p == "." && err != nil {
 			// If workDir is a mountpoint and/or contains a binary
 			// using it, we can get a "Device or resource busy" error.
@@ -1224,16 +1212,18 @@ func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// If we nuked the work directory (or tmp or gocache), recreate them.
-	for _, dir := range []string{*workDir, processTmpDirEnv, processGoCacheEnv} {
-		if dir == "" {
-			continue
-		}
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+}
+
+// mkdirAllWorkdirOr500 reports whether *workDir either exists or was created.
+// If it returns false, it also writes an HTTP 500 error to w.
+// This is used by callers to verify *workDir exists, even if it might've been
+// deleted previously.
+func mkdirAllWorkdirOr500(w http.ResponseWriter) bool {
+	if err := os.MkdirAll(*workDir, 0755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return false
 	}
+	return true
 }
 
 func handleWorkDir(w http.ResponseWriter, r *http.Request) {
@@ -1271,6 +1261,9 @@ func handleLs(w http.ResponseWriter, r *http.Request) {
 	digest, _ := strconv.ParseBool(r.FormValue("digest"))
 	skip := r.Form["skip"] // '/'-separated relative dirs
 
+	if !mkdirAllWorkdirOr500(w) {
+		return
+	}
 	if !validRelativeDir(dir) {
 		http.Error(w, "bogus dir", http.StatusBadRequest)
 		return
@@ -1344,14 +1337,27 @@ func handleConnectSSH(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	sshConn, err := net.Dial("tcp", "localhost:"+sshPort())
-	if err != nil {
-		sshServerOnce.Do(startSSHServer)
+	sshServerOnce.Do(startSSHServer)
+
+	var sshConn net.Conn
+	var err error
+
+	// In theory we shouldn't need retries here at all, but the
+	// startSSHServerLinux's use of sshd -D is kinda sketchy and
+	// restarts the process whenever we connect to it, so in case
+	// it's just down between restarts, try a few times. 5 tries
+	// and 5 seconds seems plenty.
+	const maxTries = 5
+	for try := 1; try <= maxTries; try++ {
 		sshConn, err = net.Dial("tcp", "localhost:"+sshPort())
-		if err != nil {
+		if err == nil {
+			break
+		}
+		if try == maxTries {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
+		time.Sleep(time.Second)
 	}
 	defer sshConn.Close()
 	hj, ok := w.(http.Hijacker)
@@ -1457,13 +1463,27 @@ func startSSHServerLinux() {
 		}
 	}
 
-	cmd := exec.Command("/usr/sbin/sshd", "-D", "-p", sshPort())
-	err := cmd.Start()
-	if err != nil {
-		log.Printf("starting sshd: %v", err)
-		return
-	}
-	log.Printf("sshd started.")
+	go func() {
+		for {
+			// TODO: using sshd -D isn't great as it only
+			// handles a single connection and exits.
+			// Maybe run in sshd -i (inetd) mode instead,
+			// and hook that up to the buildlet directly?
+			t0 := time.Now()
+			cmd := exec.Command("/usr/sbin/sshd", "-D", "-p", sshPort(), "-d", "-d")
+			cmd.Stderr = os.Stderr
+			err := cmd.Start()
+			if err != nil {
+				log.Printf("starting sshd: %v", err)
+				return
+			}
+			log.Printf("sshd started.")
+			log.Printf("sshd exited: %v; restarting", cmd.Wait())
+			if d := time.Since(t0); d < time.Second {
+				time.Sleep(time.Second - d)
+			}
+		}
+	}()
 	waitLocalSSH()
 }
 
@@ -1576,15 +1596,6 @@ func (pw *plan9LogWriter) Write(p []byte) (n int, err error) {
 	return pw.w.Write(pw.buf[:n+1])
 }
 
-func requireTrailerSupport() {
-	// Depend on a symbol that was added after HTTP Trailer support was
-	// implemented (4b96409 Dec 29 2014) so that this function will fail
-	// to compile without Trailer support.
-	// bufio.Reader.Discard was added by ee2ecc4 Jan 7 2015.
-	var r bufio.Reader
-	_ = r.Discard
-}
-
 var killProcessTree = killProcessTreeUnix
 
 func killProcessTreeUnix(p *os.Process) error {
@@ -1599,6 +1610,7 @@ func configureMacStadium() {
 	// TODO: setup RAM disk for tmp and set *workDir
 
 	disableMacScreensaver()
+	enableMacDeveloperMode()
 
 	version, err := exec.Command("sw_vers", "-productVersion").Output()
 	if err != nil {
@@ -1610,7 +1622,7 @@ func configureMacStadium() {
 		log.Fatalf("unsupported sw_vers version %q", version)
 	}
 	major, minor := m[1], m[2] // "10", "12"
-	*reverse = "darwin-amd64-" + major + "_" + minor
+	*reverseType = fmt.Sprintf("host-darwin-%s_%s", major, minor)
 	*coordinator = "farmer.golang.org:443"
 
 	// guestName is set by cmd/makemac to something like
@@ -1644,6 +1656,30 @@ func disableMacScreensaver() {
 	if err != nil {
 		log.Printf("disabling screensaver: %v", err)
 	}
+}
+
+// enableMacDeveloperMode enables developer mode on macOS for the
+// runtime tests. (Issue 31123)
+//
+// It is best effort; errors are logged but otherwise ignored.
+func enableMacDeveloperMode() {
+	// Macs are configured with password-less sudo. Without sudo we get prompts
+	// that "SampleTools wants to make changes" that block the buildlet from starting.
+	// But oddly, not via gomote. Only during startup. The environment must be different
+	// enough that in one case macOS asks for permission (because it can use the GUI?)
+	// and in the gomote case (where the environment is largley scrubbed) it can't do
+	// the GUI dialog somehow and must just try to do it anyway and finds that passwordless
+	// sudo works. But using sudo seems to make it always work.
+	// For extra paranoia, use a context to not block start-up.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, "/usr/bin/sudo", "/usr/sbin/DevToolsSecurity", "-enable").CombinedOutput()
+	if err != nil {
+		log.Printf("Error enabling developer mode: %v, %s", err, out)
+		return
+	}
+	log.Printf("DevToolsSecurity: %s", out)
 }
 
 func vmwareGetInfo(key string) string {
@@ -1737,7 +1773,7 @@ func appendSSHAuthorizedKey(sshUser, authKey string) error {
 	}
 	if runtime.GOOS == "windows" {
 		if res, err := exec.Command("icacls.exe", authFile, "/grant", `NT SERVICE\sshd:(R)`).CombinedOutput(); err != nil {
-			return fmt.Errorf("setting permissions on authorized_keys with: %v\n%s.", err, res)
+			return fmt.Errorf("setting permissions on authorized_keys with: %v\n%s", err, res)
 		}
 	}
 	return nil
@@ -1760,13 +1796,102 @@ func initBaseUnixEnv() {
 	}
 }
 
-// removeAllAndMkdir calls os.RemoveAll and then os.Mkdir on the given
+// removeAllAndMkdir calls removeAllIncludingReadonly and then os.Mkdir on the given
 // dir, failing the process if either step fails.
 func removeAllAndMkdir(dir string) {
-	if err := os.RemoveAll(dir); err != nil {
+	if err := removeAllIncludingReadonly(dir); err != nil {
 		log.Fatal(err)
 	}
 	if err := os.Mkdir(dir, 0755); err != nil {
 		log.Fatal(err)
+	}
+}
+
+// removeAllIncludingReadonly is like os.RemoveAll except that it'll
+// also try to change permissions to work around permission errors
+// when deleting.
+func removeAllIncludingReadonly(dir string) error {
+	err := os.RemoveAll(dir)
+	if err == nil || !os.IsPermission(err) ||
+		runtime.GOOS == "windows" { // different filesystem permission model; also our windows builders are ephemeral single-use VMs anyway
+		return err
+	}
+	// Make a best effort (ignoring errors) attempt to make all
+	// files and directories writable before we try to delete them
+	// all again.
+	filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
+		const ownerWritable = 0200
+		if err != nil || fi.Mode().Perm()&ownerWritable != 0 {
+			return nil
+		}
+		os.Chmod(path, fi.Mode().Perm()|ownerWritable)
+		return nil
+	})
+	return os.RemoveAll(dir)
+}
+
+var (
+	androidEmuDead = make(chan error) // closed on death
+	androidEmuErr  error              // set prior to channel close
+)
+
+func startAndroidEmulator() {
+	cmd := exec.Command("/android/sdk/emulator/emulator",
+		"@android-avd",
+		"-no-audio",
+		"-no-window",
+		"-no-boot-anim",
+		"-no-snapshot-save",
+		"-wipe-data", // required to prevent a hang with -no-window when recovering from a snapshot?
+	)
+	log.Printf("running Android emulator: %v", cmd.Args)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		log.Fatalf("failed to start Android emulator: %v", err)
+	}
+	go func() {
+		err := cmd.Wait()
+		if err == nil {
+			err = errors.New("exited without error")
+		}
+		androidEmuErr = err
+		close(androidEmuDead)
+	}()
+}
+
+// checkAndroidEmulator returns an error if this machine is an Android builder
+// and the Android emulator process has exited.
+func checkAndroidEmulator() error {
+	select {
+	case <-androidEmuDead:
+		return androidEmuErr
+	default:
+		return nil
+	}
+}
+
+var disableNetOnce sync.Once
+
+func disableOutboundNetwork() {
+	if runtime.GOOS != "linux" {
+		return
+	}
+	disableNetOnce.Do(disableOutboundNetworkLinux)
+}
+
+func disableOutboundNetworkLinux() {
+	const iptables = "/sbin/iptables"
+	const vcsTestGolangOrgIP = "35.184.38.56" // vcs-test.golang.org
+	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "1", "-m", "state", "--state", "NEW", "-d", vcsTestGolangOrgIP, "-p", "tcp", "-j", "ACCEPT"))
+	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "2", "-m", "state", "--state", "NEW", "-d", "10.0.0.0/8", "-p", "tcp", "-j", "ACCEPT"))
+	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "3", "-m", "state", "--state", "NEW", "-p", "tcp", "--dport", "443", "-j", "REJECT", "--reject-with", "icmp-host-prohibited"))
+	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "3", "-m", "state", "--state", "NEW", "-p", "tcp", "--dport", "22", "-j", "REJECT", "--reject-with", "icmp-host-prohibited"))
+}
+
+func runOrLog(cmd *exec.Cmd) {
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("failed to run %s: %v, %s", cmd.Args, err, out)
 	}
 }

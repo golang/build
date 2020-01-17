@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-var testServer = newServer(http.DefaultServeMux, "./static/", "./templates/")
+var testServer = newServer(http.DefaultServeMux, "./static/", "./templates/", false)
 
 func TestStaticAssetsFound(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)

@@ -25,10 +25,8 @@
     </header>
 
     <form action="." method="GET">
+    <input type="hidden" name="repo" value="{{.Package.Path}}">
     <nav class="dashboards">
-      {{range buildDashboards}}
-        <a href="{{.Prefix}}/">{{.Name}}</a>
-      {{end}}
       {{if not (eq .Branch "")}}
       <label>
         <select name="branch" onchange="this.form.submit()">
@@ -74,6 +72,7 @@
         <th {{if .Unsupported}}class="unsupported"{{end}} colspan="{{.N}}">{{.OS}}</th>
     {{end}}
       </tr>
+
       <tr>
     {{if $.Package.Path}}
         <th class="result arch">repo</th>
@@ -88,7 +87,18 @@
         <th class="result arch{{if (unsupported .)}} unsupported{{end}}" title="{{.}}">{{builderSubheading .}}</th>
     {{end}}
       </tr>
-    {{range $c := $.Commits}}
+
+      <tr class="subheading2">
+        <th {{if $.Package.Path}}colspan="2"{{end}}>&nbsp;</th>
+        <th></th>
+        <th></th>
+        <th></th>
+    {{range $.Builders}}
+        <th class="result arch{{if (unsupported .)}} unsupported{{end}}" title="{{.}}">{{builderSubheading2 .}}</th>
+    {{end}}
+      </tr>
+
+      {{range $c := $.Commits}}
       {{range $i, $h := $c.ResultGoHashes}}
         <tr class="commit">
         {{if $i}}
@@ -105,22 +115,24 @@
           <td class="hash"><a href="https://go-review.googlesource.com/q/{{$h}}">{{shortHash $h}}</a></td>
         {{end}}
           <td class="user" title="{{$c.User}}">{{shortUser $c.User}}</td>
-          <td class="time">{{$c.Time.Format "02 Jan 15:04"}}</td>
+          <td class="time">{{formatTime $c.Time}}</td>
           <td class="desc" title="{{$c.Desc}}">{{shortDesc $c.Desc}}</td>
         {{end}}
-          {{range $.Builders}}
+          {{range $builderName := $.Builders}}
             <td class="result{{if (unsupported .)}} unsupported{{end}}">
-              {{with $c.Result . $h}}
+            {{if isUntested $builderName "go" $.Branch ""}}•{{else}}
+              {{with $c.Result $builderName $h}}
                 {{if .BuildingURL}}
                   <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" height=16 width=16 border=0></a>
                 {{else if .OK}}
                   <span class="ok">ok</span>
                 {{else}}
-                  <a href="{{$.Dashboard.Prefix}}/log/{{.LogHash}}" class="fail">fail</a>
+                  <a href="/log/{{.LogHash}}" class="fail">fail</a>
                 {{end}}
               {{else}}
                 &nbsp;
               {{end}}
+            {{end}}
             </td>
           {{end}}
         </tr>
@@ -144,9 +156,11 @@
 
   {{range $.TagState}}
     {{$goHash := .Tag.Hash}}
+    {{$goBranch := .Branch}}
+    {{$builders := .Builders}}
     {{if .Packages}}
       <h2>
-        Sub-repositories at {{.Name}}
+        golang.org/x repos at Go {{$goBranch}}
         <small>(<a href="https://go-review.googlesource.com/q/{{.Tag.Hash}}">{{shortHash .Tag.Hash}}</a>)</small>
       </h2>
 
@@ -156,7 +170,7 @@
       <colgroup class="col-user"></colgroup>
       <colgroup class="col-time"></colgroup>
       <colgroup class="col-desc"></colgroup>
-      {{range $.Builders | builderSpans}}
+      {{range $builders | builderSpans}}
         <colgroup class="col-result{{if .Unsupported}} unsupported{{end}}" span="{{.N}}"></colgroup>
       {{end}}
       <tr>
@@ -168,7 +182,7 @@
         <th></th>
         <th></th>
         <th></th>
-        {{range $.Builders | builderSpans}}
+        {{range $builders | builderSpans}}
           <th {{if .Unsupported}}class="unsupported"{{end}} colspan="{{.N}}">{{.OS}}</th>
         {{end}}
       </tr>
@@ -178,8 +192,18 @@
         <th></th>
         <th></th>
         <th></th>
-        {{range $.Builders}}
+        {{range $builders}}
           <th class="result arch{{if (unsupported .)}} unsupported{{end}}" title="{{.}}">{{builderSubheading .}}</th>
+        {{end}}
+      </tr>
+      <tr class="subheading2">
+        <th>&nbsp;</th>
+        <th></th>
+        <th></th>
+        <th></th>
+        <th></th>
+        {{range $builders}}
+          <th class="result arch{{if (unsupported .)}} unsupported{{end}}" title="{{.}}">{{builderSubheading2 .}}</th>
         {{end}}
       </tr>
     {{range $pkg := .Packages}}
@@ -191,21 +215,25 @@
         </td>
         {{with $pkg.Commit}}
           <td class="user" title="{{.User}}">{{shortUser .User}}</td>
-          <td class="time">{{.Time.Format "02 Jan 15:04"}}</td>
+          <td class="time">{{formatTime .Time}}</td>
           <td class="desc" title="{{.Desc}}">{{shortDesc .Desc}}</td>
         {{end}}
-        {{range $.Builders}}
+        {{range $builderName := $builders}}
           <td class="result{{if (unsupported .)}} unsupported{{end}}">
-            {{with $pkg.Commit.Result . $goHash}}
-              {{if .BuildingURL}}
-                <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" height=16 width=16 border=0></a>
-              {{else if .OK}}
-                <span class="ok">ok</span>
-              {{else}}
-                <a href="{{$.Dashboard.Prefix}}/log/{{.LogHash}}" class="fail">fail</a>
-              {{end}}
+            {{if isUntested $builderName $pkg.Package.Name "master" $goBranch}}
+              •
             {{else}}
-              &nbsp;
+              {{with $pkg.Commit.Result $builderName $goHash}}
+                {{if .BuildingURL}}
+                  <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" height=16 width=16 border=0></a>
+                {{else if .OK}}
+                  <span class="ok">ok</span>
+                {{else}}
+                  <a href="/log/{{.LogHash}}" class="fail">fail</a>
+                {{end}}
+              {{else}}
+                &nbsp;
+              {{end}}
             {{end}}
           </td>
         {{end}}

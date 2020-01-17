@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build go1.13
+// +build linux darwin
+
 // Code interacting with build.golang.org ("the dashboard").
 
 package main
@@ -90,7 +93,7 @@ func dash(meth, cmd string, args url.Values, req, resp interface{}) error {
 }
 
 // recordResult sends build results to the dashboard.
-// This is not used for trybot failures; only failures after commit.
+// This is not used for trybot runs; only those after commit.
 // The URLs end up looking like https://build.golang.org/log/$HEXDIGEST
 func recordResult(br buildgo.BuilderRev, ok bool, buildLog string, runTime time.Duration) error {
 	req := map[string]interface{}{
@@ -103,7 +106,7 @@ func recordResult(br buildgo.BuilderRev, ok bool, buildLog string, runTime time.
 		"RunTime":     runTime,
 	}
 	if br.IsSubrepo() {
-		req["PackagePath"] = subrepoPrefix + br.SubName
+		req["PackagePath"] = importPathOfRepo(br.SubName)
 		req["Hash"] = br.SubRev
 		req["GoHash"] = br.Rev
 	}
@@ -123,45 +126,6 @@ func recordResult(br buildgo.BuilderRev, ok bool, buildLog string, runTime time.
 		return errors.New(result.Error)
 	}
 	return nil
-}
-
-// pingDashboard runs in its own goroutine, created periodically to
-// POST to build.golang.org/building to let it know that we're still working on a build.
-func (st *buildStatus) pingDashboard() {
-	if st.conf.TryOnly {
-		// Builders that are trybot-only don't appear on the dashboard.
-		return
-	}
-	if *mode == "dev" {
-		log.Print("In dev mode, not pinging dashboard")
-		return
-	}
-	st.mu.Lock()
-	logsURL := st.logsURLLocked()
-	st.mu.Unlock()
-	args := url.Values{
-		"builder": []string{st.Name},
-		"key":     []string{builderKey(st.Name)},
-		"hash":    []string{st.Rev},
-		"url":     []string{logsURL},
-	}
-	if st.IsSubrepo() {
-		args.Set("hash", st.SubRev)
-		args.Set("gohash", st.Rev)
-	}
-	u := buildEnv.DashBase() + "building?" + args.Encode()
-	for {
-		st.mu.Lock()
-		done := st.done
-		st.mu.Unlock()
-		if !done.IsZero() {
-			return
-		}
-		if res, _ := http.PostForm(u, nil); res != nil {
-			res.Body.Close()
-		}
-		time.Sleep(60 * time.Second)
-	}
 }
 
 func builderKey(builder string) string {

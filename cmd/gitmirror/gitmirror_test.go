@@ -6,13 +6,43 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http/httptest"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	// The tests need a dummy directory that exists with a
+	// basename of "build", but the tests never write to it. So we
+	// can create one and share it for all tests.
+	tempDir, err := ioutil.TempDir("", "")
+	if err != nil {
+		log.Fatal(err)
+	}
+	tempRepoRoot = filepath.Join(tempDir, "build")
+	if err := os.Mkdir(tempRepoRoot, 0700); err != nil {
+		log.Fatal(err)
+	}
+
+	e := m.Run()
+	os.RemoveAll(tempDir)
+	os.Exit(e)
+}
+
+var tempRepoRoot string
+
+func newTestRepo() *Repo {
+	return &Repo{
+		root:   tempRepoRoot,
+		mirror: false,
+	}
+}
 
 func TestHomepage(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
@@ -27,13 +57,13 @@ func TestHomepage(t *testing.T) {
 }
 
 func TestDebugWatcher(t *testing.T) {
-	r := &Repo{path: "build"}
+	r := newTestRepo()
 	r.setStatus("waiting")
 	req := httptest.NewRequest("GET", "/debug/watcher/build", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != 200 {
-		t.Fatalf("GET /: want code 200, got %d", w.Code)
+		t.Fatalf("GET / = code %d, want 200", w.Code)
 	}
 	body := w.Body.String()
 	if substr := `watcher status for repo: "build"`; !strings.Contains(body, substr) {
@@ -59,11 +89,18 @@ func (f *fakeCmd) CommandContext(ctx context.Context, cmd string, args ...string
 	return exec.CommandContext(ctx, "echo", append([]string{cmd}, args...)...)
 }
 
+func mustHaveGit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("skipping; git not in PATH")
+	}
+}
+
 func TestRev(t *testing.T) {
+	mustHaveGit(t)
 	f := &fakeCmd{}
 	testHookArchiveCmd = f.CommandContext
 	defer func() { testHookArchiveCmd = nil }()
-	r := &Repo{path: "build"}
+	r := newTestRepo()
 	r.setStatus("waiting")
 	req := httptest.NewRequest("GET", "/build.tar.gz?rev=example-branch", nil)
 	w := httptest.NewRecorder()
@@ -81,6 +118,7 @@ func TestRev(t *testing.T) {
 }
 
 func TestRevNotFound(t *testing.T) {
+	mustHaveGit(t)
 	f := &fakeCmd{}
 	f2 := &fakeCmd{}
 	testHookArchiveCmd = f.CommandContext
@@ -89,7 +127,7 @@ func TestRevNotFound(t *testing.T) {
 		testHookArchiveCmd = nil
 		testHookFetchCmd = nil
 	}()
-	r := &Repo{path: "build"}
+	r := newTestRepo()
 	r.setStatus("waiting")
 	req := httptest.NewRequest("GET", "/build.tar.gz?rev=example-branch", nil)
 	w := httptest.NewRecorder()
@@ -103,112 +141,5 @@ func TestRevNotFound(t *testing.T) {
 	wantArgs := []string{"fetch", "origin", "example-branch"}
 	if !reflect.DeepEqual(f2.Args, wantArgs) {
 		t.Fatalf("cmd: want '%q' for args, got %q", wantArgs, f2.Args)
-	}
-}
-
-// TestUpdate tests that we link new commits correctly in
-// our linked list (parent <=> child) of commits, and update
-// the Repo's map of commits correctly.
-func TestUpdate(t *testing.T) {
-	oldNetwork := *network
-	defer func() {
-		*network = oldNetwork
-	}()
-
-	*network = false
-
-	hash := func(i int) string {
-		return fmt.Sprintf("abc123%d", i)
-	}
-
-	commit := func(i int) *Commit {
-		c := &Commit{
-			Hash:   hash(i),
-			Author: "Sarah Adams <shadams@google.com>",
-			Date:   "Fri, 15 Sep 2017 13:56:53 -0700",
-			Desc:   fmt.Sprintf("CONTRIBUTORS: add person %d.", i),
-			Files:  "CONTRIBUTORS",
-		}
-
-		if i > 0 {
-			c.Parent = hash(i - 1)
-		}
-
-		return c
-	}
-
-	gitLogFn = func(r *Repo, dir string, args ...string) ([]*Commit, error) {
-		// We are testing new commits on a non-master branch.
-		// So, for simplicity, return no new commits on master.
-		for _, a := range args {
-			if strings.Contains(a, "origin/master") {
-				return nil, nil
-			}
-		}
-
-		var cs []*Commit
-		for i := 0; i < 5; i++ {
-			cs = append(cs, commit(i))
-		}
-		return cs, nil
-	}
-
-	gitRemotesFn = func(r *Repo) ([]string, error) {
-		return []string{"origin/master", "origin/other.branch"}, nil
-	}
-
-	repo := newTestRepo()
-
-	// Add a known commit on master.
-	// This commit is HEAD of origin/master when we forked to
-	// create the 'origin/other.branch' branch.
-	head := commit(0)
-	head.Branch = "origin/master"
-	repo.commits[hash(0)] = head
-
-	master := &Branch{
-		Name:     "origin/master",
-		Head:     head,
-		LastSeen: head,
-	}
-	repo.branches["origin/master"] = master
-
-	err := repo.update(false)
-	if err != nil {
-		t.Fatalf("update: got error %v", err)
-	}
-
-	head = repo.branches["origin/other.branch"].Head
-
-	if head.Hash != hash(0) {
-		t.Fatalf("expected head to have hash %s, got %s.", hash(0), head.Hash)
-	}
-
-	if len(head.children) != 1 {
-		t.Fatalf("expected head to have 1 child commit, got %d.", len(head.children))
-	}
-
-	for i := 0; i < 5; i++ {
-		if i != 0 {
-			if repo.commits[hash(i)].parent == nil {
-				t.Errorf("expected commit %d to have a parent commit.", i)
-			}
-		}
-		if i != 4 {
-			if len(repo.commits[hash(i)].children) == 0 {
-				t.Errorf("expected commit %d to have child commits.", i)
-			}
-		}
-	}
-}
-
-func newTestRepo() *Repo {
-	return &Repo{
-		path:     "",
-		root:     "/usr/local/home/go",
-		commits:  make(map[string]*Commit),
-		branches: make(map[string]*Branch),
-		mirror:   false,
-		dash:     false,
 	}
 }

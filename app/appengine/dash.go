@@ -2,212 +2,202 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build appengine
-
-package build
+package main
 
 import (
 	"context"
+	crand "crypto/rand"
+	"crypto/tls"
+	"flag"
+	"fmt"
+	"log"
 	"net/http"
+	"os"
+	"sort"
 	"strings"
 
-	"google.golang.org/appengine"
+	"cloud.google.com/go/datastore"
+	"github.com/NYTimes/gziphandler"
+	"golang.org/x/build/maintner/maintnerd/apipb"
+	"golang.org/x/build/repos"
+	"golang.org/x/net/http2"
+	"grpc.go4.org" // simpler, uses x/net/http2.Transport; we use this elsewhere in x/build
 )
 
-func handleFunc(path string, h http.HandlerFunc) {
-	for _, d := range dashboards {
-		http.Handle(d.Prefix+path, hstsHandler(h))
+var (
+	maintnerClient  = createMaintnerClient()
+	datastoreClient *datastore.Client // not done at init as createDatastoreClient fails under test environments
+)
+
+var (
+	dev         = flag.Bool("dev", false, "whether to run in local development mode")
+	fakeResults = flag.Bool("fake-results", false, "dev mode option: whether to make up fake random results. If true, datastore is not used.")
+)
+
+func main() {
+	flag.Parse()
+	if *fakeResults && !*dev {
+		log.Fatalf("--fake-results requires --dev mode")
+	}
+	if *dev {
+		randBytes := make([]byte, 20)
+		if _, err := crand.Read(randBytes[:]); err != nil {
+			panic(err)
+		}
+		devModeMasterKey = fmt.Sprintf("%x", randBytes)
+		if !*fakeResults {
+			log.Printf("Running in dev mode. Temporary master key is %v", devModeMasterKey)
+			if os.Getenv("DATASTORE_PROJECT_ID") == "" {
+				log.Printf("DATASTORE_PROJECT_ID not set; defaulting to production golang-org")
+				os.Setenv("DATASTORE_PROJECT_ID", "golang-org")
+			}
+		}
+	}
+
+	datastoreClient = createDatastoreClient()
+
+	if *dev && !*fakeResults {
+		// Test early whether user has datastore access.
+		key := dsKey("Log", "bogus-want-no-such-entity", nil)
+		if err := datastoreClient.Get(context.Background(), key, new(Log)); err != datastore.ErrNoSuchEntity {
+			log.Printf("Failed to access datastore: %v", err)
+			log.Printf("Run with --fake-results to avoid hitting a real datastore.")
+			os.Exit(1)
+		}
+	}
+
+	// authenticated handlers
+	handleFunc("/clear-results", AuthHandler(clearResultsHandler)) // called by x/build/cmd/retrybuilds
+	handleFunc("/result", AuthHandler(resultHandler))              // called by coordinator after build
+
+	// public handlers
+	handleFunc("/", uiHandler)
+	handleFunc("/log/", logHandler)
+
+	// We used to use App Engine's static file handling support, declared in app.yaml,
+	// but it's currently broken with dev_appserver.py with the go111 runtime we use.
+	// So just do it ourselves. It doesn't buy us enough to be worth it.
+	fs := http.StripPrefix("/static", http.FileServer(http.Dir(staticDir())))
+	handleFunc("/static/", fs.ServeHTTP)
+	handleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://golang.org/favicon.ico", http.StatusFound)
+	})
+
+	listen := os.Getenv("PORT")
+	if listen == "" {
+		listen = "8080"
+	}
+	if !strings.Contains(listen, ":") {
+		listen = ":" + listen
+	}
+
+	log.Printf("Serving dashboard on %s", listen)
+	if err := http.ListenAndServe(listen, nil); err != nil {
+		log.Fatal(err)
 	}
 }
 
-// hstsHandler wraps an http.HandlerFunc such that it sets the HSTS header.
-func hstsHandler(fn http.HandlerFunc) http.Handler {
+func staticDir() string {
+	if pwd, _ := os.Getwd(); strings.HasSuffix(pwd, "app/appengine") {
+		return "static"
+	}
+	return "app/appengine/static"
+}
+
+func createDatastoreClient() *datastore.Client {
+	if *fakeResults {
+		return nil
+	}
+	// First try with an empty project ID, so $DATASTORE_PROJECT_ID will be respected
+	// if set.
+	c, err := datastore.NewClient(context.Background(), "")
+	if err == nil {
+		return c
+	}
+	// Otherwise auto-detect it from the environment (that is,
+	// work automatically in prod).
+	c, err = datastore.NewClient(context.Background(), datastore.DetectProjectID)
+	if err != nil {
+		log.Fatalf("datastore.NewClient: %v", err)
+	}
+	return c
+}
+
+func createMaintnerClient() apipb.MaintnerServiceClient {
+	addr := os.Getenv("MAINTNER_ADDR") // host[:port]
+	if addr == "" {
+		addr = "maintner.golang.org"
+	}
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			NextProtos:         []string{"h2"},
+			InsecureSkipVerify: strings.HasPrefix(addr, "localhost:"),
+		},
+	}
+	hc := &http.Client{Transport: tr}
+	http2.ConfigureTransport(tr)
+
+	cc, err := grpc.NewClient(hc, "https://"+addr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return apipb.NewMaintnerServiceClient(cc)
+}
+
+func handleFunc(path string, h http.HandlerFunc) {
+	http.Handle(path, hstsHandler(gziphandler.GzipHandler(h)))
+}
+
+// hstsHandler returns a Handler that sets the HSTS header but
+// otherwise just wraps h.
+func hstsHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000; preload")
-		fn(w, r)
+		h.ServeHTTP(w, r)
 	})
 }
 
 // Dashboard describes a unique build dashboard.
+//
+// (There used to be more than one dashboard, so this is now somewhat
+// less important than it once was.)
 type Dashboard struct {
-	Name      string     // This dashboard's name (eg, "Go")
-	Namespace string     // This dashboard's namespace (eg, "" (default), "Git")
-	Prefix    string     // The path prefix (no trailing /)
-	Packages  []*Package // The project's packages to build
+	Name     string     // This dashboard's name (always "Go" nowadays)
+	Packages []*Package // The project's packages to build
 }
 
-// dashboardForRequest returns the appropriate dashboard for a given URL path.
-func dashboardForRequest(r *http.Request) *Dashboard {
-	for _, d := range dashboards[1:] {
-		if d.Prefix == "" {
-			panic("prefix can be empty only for the first dashboard")
-		}
-		if strings.HasPrefix(r.URL.Path, d.Prefix) {
-			return d
+// packageWithPath returns the Package in d with the provided importPath,
+// or nil if none is found.
+func (d *Dashboard) packageWithPath(importPath string) *Package {
+	for _, p := range d.Packages {
+		if p.Path == importPath {
+			return p
 		}
 	}
-	if dashboards[0].Prefix != "" {
-		panic("prefix for the first dashboard should be empty")
-	}
-	return dashboards[0]
+	return nil
 }
-
-// Context returns a namespaced context for this dashboard, or panics if it
-// fails to create a new context.
-func (d *Dashboard) Context(c context.Context) context.Context {
-	if d.Namespace == "" {
-		return c
-	}
-	n, err := appengine.Namespace(c, d.Namespace)
-	if err != nil {
-		panic(err)
-	}
-	return n
-}
-
-// The currently known dashboards.
-// The first one should have an empty prefix and
-// the other ones a non empty prefix.
-var dashboards = []*Dashboard{goDash, gccgoDash}
 
 // goDash is the dashboard for the main go repository.
 var goDash = &Dashboard{
-	Name:      "Go",
-	Namespace: "Git",
-	Prefix:    "",
-	Packages:  goPackages,
-}
-
-// goPackages is a list of all of the packages built by the main go repository.
-var goPackages = []*Package{
-	{
-		Kind: "go",
-		Name: "Go",
-	},
-	{
-		Kind: "subrepo",
-		Name: "arch",
-		Path: "golang.org/x/arch",
-	},
-	{
-		Kind: "subrepo",
-		Name: "benchmarks",
-		Path: "golang.org/x/benchmarks",
-	},
-	{
-		Kind: "subrepo",
-		Name: "blog",
-		Path: "golang.org/x/blog",
-	},
-	{
-		Kind: "subrepo",
-		Name: "crypto",
-		Path: "golang.org/x/crypto",
-	},
-	{
-		Kind: "subrepo",
-		Name: "debug",
-		Path: "golang.org/x/debug",
-	},
-	{
-		Kind: "subrepo",
-		Name: "exp",
-		Path: "golang.org/x/exp",
-	},
-	{
-		Kind: "subrepo",
-		Name: "image",
-		Path: "golang.org/x/image",
-	},
-	{
-		Kind: "subrepo",
-		Name: "mobile",
-		Path: "golang.org/x/mobile",
-	},
-	{
-		Kind: "subrepo",
-		Name: "net",
-		Path: "golang.org/x/net",
-	},
-	{
-		Kind: "subrepo",
-		Name: "oauth2",
-		Path: "golang.org/x/oauth2",
-	},
-	{
-		Kind: "subrepo",
-		Name: "perf",
-		Path: "golang.org/x/perf",
-	},
-	{
-		Kind: "subrepo",
-		Name: "review",
-		Path: "golang.org/x/review",
-	},
-	{
-		Kind: "subrepo",
-		Name: "sync",
-		Path: "golang.org/x/sync",
-	},
-	{
-		Kind: "subrepo",
-		Name: "sys",
-		Path: "golang.org/x/sys",
-	},
-	{
-		Kind: "subrepo",
-		Name: "talks",
-		Path: "golang.org/x/talks",
-	},
-	{
-		Kind: "subrepo",
-		Name: "term",
-		Path: "golang.org/x/term",
-	},
-	{
-		Kind: "subrepo",
-		Name: "text",
-		Path: "golang.org/x/text",
-	},
-	{
-		Kind: "subrepo",
-		Name: "time",
-		Path: "golang.org/x/time",
-	},
-	{
-		Kind: "subrepo",
-		Name: "tools",
-		Path: "golang.org/x/tools",
-	},
-	{
-		Kind: "subrepo",
-		Name: "tour",
-		Path: "golang.org/x/tour",
-	},
-}
-
-// gccgoDash is the dashboard for gccgo.
-var gccgoDash = &Dashboard{
-	Name:      "Gccgo",
-	Namespace: "Gccgo",
-	Prefix:    "/gccgo",
+	Name: "Go",
 	Packages: []*Package{
-		{
-			Kind: "gccgo",
-			Name: "Gccgo",
-		},
+		{Name: "Go"},
 	},
 }
 
-// hiddenBranches specifies branches that
-// should not be displayed on the build dashboard.
-// This also prevents the builder infrastructure
-// from testing sub-repos against these branches.
-var hiddenBranches = map[string]bool{
-	"release-branch.go1.4": true,
-	"release-branch.go1.5": true,
-	"release-branch.go1.6": true,
-	"release-branch.go1.7": true,
-	"release-branch.go1.8": true,
-	"release-branch.go1.9": true,
+func init() {
+	var add []*Package
+	for _, r := range repos.ByGerritProject {
+		if !r.ShowOnDashboard() {
+			continue
+		}
+		add = append(add, &Package{
+			Name: r.GoGerritProject,
+			Path: r.ImportPath,
+		})
+	}
+	sort.Slice(add, func(i, j int) bool {
+		return add[i].Name < add[j].Name
+	})
+	goDash.Packages = append(goDash.Packages, add...)
 }

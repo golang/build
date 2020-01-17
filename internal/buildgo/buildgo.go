@@ -25,8 +25,6 @@ import (
 	"golang.org/x/build/internal/sourcecache"
 )
 
-const subrepoPrefix = "golang.org/x/"
-
 // BuilderRev is a build configuration type and a revision.
 type BuilderRev struct {
 	Name string // e.g. "linux-amd64-race"
@@ -67,10 +65,15 @@ func (br *BuilderRev) SnapshotURL(buildEnv *buildenv.Environment) string {
 	return buildEnv.SnapshotURL(br.Name, br.Rev)
 }
 
+var TestHookSnapshotExists func(*BuilderRev) bool
+
 // snapshotExists reports whether the snapshot exists in storage.
 // It returns potentially false negatives on network errors.
 // Callers must not depend on this as more than an optimization.
 func (br *BuilderRev) SnapshotExists(ctx context.Context, buildEnv *buildenv.Environment) bool {
+	if f := TestHookSnapshotExists; f != nil {
+		return f(br)
+	}
 	req, err := http.NewRequest("HEAD", br.SnapshotURL(buildEnv), nil)
 	if err != nil {
 		panic(err)
@@ -98,10 +101,10 @@ type GoBuilder struct {
 // goroot is relative to the workdir with forward slashes.
 // w is the Writer to send build output to.
 // remoteErr and err are as described at the top of this file.
-func (gb GoBuilder) RunMake(bc *buildlet.Client, w io.Writer) (remoteErr, err error) {
+func (gb GoBuilder) RunMake(ctx context.Context, bc *buildlet.Client, w io.Writer) (remoteErr, err error) {
 	// Build the source code.
 	makeSpan := gb.CreateSpan("make", gb.Conf.MakeScript())
-	remoteErr, err = bc.Exec(path.Join(gb.Goroot, gb.Conf.MakeScript()), buildlet.ExecOpts{
+	remoteErr, err = bc.Exec(ctx, path.Join(gb.Goroot, gb.Conf.MakeScript()), buildlet.ExecOpts{
 		Output:   w,
 		ExtraEnv: append(gb.Conf.Env(), "GOBIN="),
 		Debug:    true,
@@ -120,7 +123,7 @@ func (gb GoBuilder) RunMake(bc *buildlet.Client, w io.Writer) (remoteErr, err er
 	// Need to run "go install -race std" before the snapshot + tests.
 	if pkgs := gb.Conf.GoInstallRacePackages(); len(pkgs) > 0 {
 		sp := gb.CreateSpan("install_race_std")
-		remoteErr, err = bc.Exec(path.Join(gb.Goroot, "bin/go"), buildlet.ExecOpts{
+		remoteErr, err = bc.Exec(ctx, path.Join(gb.Goroot, "bin/go"), buildlet.ExecOpts{
 			Output:   w,
 			ExtraEnv: append(gb.Conf.Env(), "GOBIN="),
 			Debug:    true,
@@ -138,7 +141,7 @@ func (gb GoBuilder) RunMake(bc *buildlet.Client, w io.Writer) (remoteErr, err er
 	}
 
 	if gb.Name == "linux-amd64-racecompile" {
-		return gb.runConcurrentGoBuildStdCmd(bc, w)
+		return gb.runConcurrentGoBuildStdCmd(ctx, bc, w)
 	}
 
 	return nil, nil
@@ -150,9 +153,9 @@ func (gb GoBuilder) RunMake(bc *buildlet.Client, w io.Writer) (remoteErr, err er
 // with -gcflags=-c=8 using a race-enabled cmd/compile (built by
 // caller, runMake, per builder config).
 // The idea is that this might find data races in cmd/compile.
-func (gb GoBuilder) runConcurrentGoBuildStdCmd(bc *buildlet.Client, w io.Writer) (remoteErr, err error) {
+func (gb GoBuilder) runConcurrentGoBuildStdCmd(ctx context.Context, bc *buildlet.Client, w io.Writer) (remoteErr, err error) {
 	span := gb.CreateSpan("go_build_c128_std_cmd")
-	remoteErr, err = bc.Exec(path.Join(gb.Goroot, "bin/go"), buildlet.ExecOpts{
+	remoteErr, err = bc.Exec(ctx, path.Join(gb.Goroot, "bin/go"), buildlet.ExecOpts{
 		Output:   w,
 		ExtraEnv: append(gb.Conf.Env(), "GOBIN="),
 		Debug:    true,
@@ -170,12 +173,19 @@ func (gb GoBuilder) runConcurrentGoBuildStdCmd(bc *buildlet.Client, w io.Writer)
 	return nil, nil
 }
 
-func FetchSubrepo(sl spanlog.Logger, bc *buildlet.Client, repo, rev string) error {
+// FetchSubrepo checks out the go.googlesource.com repository
+// repo (for example, "net" or "oauth2") at git revision rev,
+// and places it into the buildlet's GOPATH workspace at
+// $GOPATH/src/<importPath>.
+//
+// The GOPATH workspace is assumed to be the "gopath" directory
+// in the buildlet's work directory.
+func FetchSubrepo(ctx context.Context, sl spanlog.Logger, bc *buildlet.Client, repo, rev, importPath string) error {
 	tgz, err := sourcecache.GetSourceTgz(sl, repo, rev)
 	if err != nil {
 		return err
 	}
-	return bc.PutTar(tgz, "gopath/src/"+subrepoPrefix+repo)
+	return bc.PutTar(ctx, tgz, "gopath/src/"+importPath)
 }
 
 // VersionTgz returns an io.Reader of a *.tar.gz file containing only

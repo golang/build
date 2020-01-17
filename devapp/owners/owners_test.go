@@ -7,8 +7,11 @@ package owners
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -19,6 +22,12 @@ func TestMatch(t *testing.T) {
 		path  string
 		entry *Entry
 	}{
+		{
+			"sync",
+			&Entry{
+				Primary: []Owner{bcmills},
+			},
+		},
 		{
 			"crypto/chacha20poly1305/chacha20poly1305.go",
 			&Entry{
@@ -34,10 +43,14 @@ func TestMatch(t *testing.T) {
 			},
 		},
 		{
-			"go/path/with/no/owners",
+			"go/src/cmd/compile",
 			&Entry{
-				Primary: []Owner{rsc, iant, bradfitz},
+				Primary:   []Owner{khr, gri},
+				Secondary: []Owner{josharian, mdempsky, martisch},
 			},
+		},
+		{
+			"go/path/with/no/owners", nil,
 		},
 		{
 			"nonexistentrepo/foo/bar", nil,
@@ -109,7 +122,7 @@ func TestHandler(t *testing.T) {
 			rStr = "<empty>"
 		}
 		t.Logf("Request: %v", rStr)
-		req, err := http.NewRequest(tc.method, "/owners/", &buf)
+		req, err := http.NewRequest(tc.method, "/owners", &buf)
 		if err != nil {
 			t.Errorf("http.NewRequest: %v", err)
 			continue
@@ -138,7 +151,7 @@ func TestHandler(t *testing.T) {
 }
 
 func TestIndex(t *testing.T) {
-	req, err := http.NewRequest("GET", "/owners/", nil)
+	req, err := http.NewRequest("GET", "/owners", nil)
 	if err != nil {
 		t.Fatalf("http.NewRequest: %v", err)
 	}
@@ -151,7 +164,16 @@ func TestIndex(t *testing.T) {
 }
 
 func TestBadRequest(t *testing.T) {
-	req, err := http.NewRequest("POST", "/owners/", bytes.NewBufferString("malformed json"))
+	defer func(old io.Writer) { log.SetOutput(old) }(os.Stderr /* TODO: use log.Writer() when Go 1.14 is out */)
+	var logBuf bytes.Buffer
+	log.SetOutput(&logBuf)
+	defer func() {
+		if t.Failed() {
+			t.Logf("Log output: %s", &logBuf)
+		}
+	}()
+
+	req, err := http.NewRequest("POST", "/owners", bytes.NewBufferString("malformed json"))
 	if err != nil {
 		t.Fatalf("http.NewRequest: %v", err)
 	}

@@ -24,6 +24,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/autocertcache"
+	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/net/http2"
 )
@@ -42,11 +43,12 @@ func main() {
 		autocertBucket = flag.String("autocert-bucket", "", "if non-empty, listen on port 443 and serve a LetsEncrypt TLS cert using this Google Cloud Storage bucket as a cache")
 		staticDir      = flag.String("static-dir", "./static/", "location of static directory relative to binary location")
 		templateDir    = flag.String("template-dir", "./templates/", "location of templates directory relative to binary location")
+		reload         = flag.Bool("reload", false, "reload content on each page load")
 	)
 	flag.Parse()
 	rand.Seed(time.Now().UnixNano())
 
-	s := newServer(http.NewServeMux(), *staticDir, *templateDir)
+	s := newServer(http.NewServeMux(), *staticDir, *templateDir, *reload)
 	ctx := context.Background()
 	if err := s.initCorpus(ctx); err != nil {
 		log.Fatalf("Could not init corpus: %v", err)
@@ -134,7 +136,10 @@ func serveAutocertTLS(h http.Handler, bucket string) error {
 	}
 	config := &tls.Config{
 		GetCertificate: m.GetCertificate,
-		NextProtos:     []string{"h2", "http/1.1"},
+		NextProtos: []string{
+			"h2", "http/1.1", // enable HTTP/2
+			acme.ALPNProto, // enable tls-alpn ACME challenges
+		},
 	}
 	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)
 	server := &http.Server{

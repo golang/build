@@ -2,27 +2,69 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build go1.13
+// +build linux darwin
+
 package main
 
 import (
+	"bytes"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"golang.org/x/build/buildenv"
+	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/buildgo"
+	"golang.org/x/build/maintner/maintnerd/apipb"
 )
+
+type Seconds float64
+
+func (s Seconds) Duration() time.Duration {
+	return time.Duration(float64(s) * float64(time.Second))
+}
+
+var fixedTestDuration = map[string]Seconds{
+	"go_test:a": 1,
+	"go_test:b": 1.5,
+	"go_test:c": 2,
+	"go_test:d": 2.50,
+	"go_test:e": 3,
+	"go_test:f": 3.5,
+	"go_test:g": 4,
+	"go_test:h": 4.5,
+	"go_test:i": 5,
+	"go_test:j": 5.5,
+	"go_test:k": 6.5,
+}
 
 func TestPartitionGoTests(t *testing.T) {
 	var in []string
 	for name := range fixedTestDuration {
 		in = append(in, name)
 	}
-	sets := partitionGoTests("", in)
-	for i, set := range sets {
-		t.Logf("set %d = \"-run=^(%s)$\"", i, strings.Join(set, "|"))
+	testDuration := func(builder, testName string) time.Duration {
+		if s, ok := fixedTestDuration[testName]; ok {
+			return s.Duration()
+		}
+		return 3 * time.Second
+	}
+	sets := partitionGoTests(testDuration, "", in)
+	want := [][]string{
+		{"go_test:a", "go_test:b", "go_test:c", "go_test:d", "go_test:e"},
+		{"go_test:f", "go_test:g"},
+		{"go_test:h", "go_test:i"},
+		{"go_test:j"},
+		{"go_test:k"},
+	}
+	if !reflect.DeepEqual(sets, want) {
+		t.Errorf(" got: %v\nwant: %v", sets, want)
 	}
 }
 
@@ -108,4 +150,194 @@ func TestTryStatusJSON(t *testing.T) {
 func TestStagingClusterBuilders(t *testing.T) {
 	// Just test that it doesn't panic:
 	stagingClusterBuilders()
+}
+
+// tests that we don't test Go 1.10 for the build repo
+func TestNewTrySetBuildRepoGo110(t *testing.T) {
+	testingKnobSkipBuilds = true
+
+	work := &apipb.GerritTryWorkItem{
+		Project:   "build",
+		Branch:    "master",
+		ChangeId:  "I6f05da2186b38dc8056081252563a82c50f0ce05",
+		Commit:    "a62e6a3ab11cc9cc2d9e22a50025dd33fc35d22f",
+		GoCommit:  []string{"a2e79571a9d3dbe3cf10dcaeb1f9c01732219869", "e39e43d7349555501080133bb426f1ead4b3ef97", "f5ff72d62301c4e9d0a78167fab5914ca12919bd"},
+		GoBranch:  []string{"master", "release-branch.go1.11", "release-branch.go1.10"},
+		GoVersion: []*apipb.MajorMinor{{1, 12}, {1, 11}, {1, 10}},
+	}
+	ts := newTrySet(work)
+	for i, bs := range ts.builds {
+		v := bs.NameAndBranch()
+		if strings.Contains(v, "Go 1.10.x") {
+			t.Errorf("unexpected builder: %v", v)
+		}
+		t.Logf("build[%d]: %s", i, v)
+	}
+}
+
+func TestFindWork(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	defer func(old *buildenv.Environment) { buildEnv = old }(buildEnv)
+	buildEnv = buildenv.Production
+	defer func() { buildgo.TestHookSnapshotExists = nil }()
+	buildgo.TestHookSnapshotExists = func(br *buildgo.BuilderRev) bool {
+		if strings.Contains(br.Name, "android") {
+			log.Printf("snapshot check for %+v", br)
+		}
+		return false
+	}
+
+	addWorkTestHook = func(work buildgo.BuilderRev, d *commitDetail) {
+		t.Logf("Got: %v, %+v", work, d)
+	}
+	defer func() { addWorkTestHook = nil }()
+
+	err := findWork()
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestBuildersJSON(t *testing.T) {
+	rec := httptest.NewRecorder()
+	handleBuilders(rec, httptest.NewRequest("GET", "https://farmer.tld/builders?mode=json", nil))
+	res := rec.Result()
+	if res.Header.Get("Content-Type") != "application/json" || res.StatusCode != 200 {
+		var buf bytes.Buffer
+		res.Write(&buf)
+		t.Error(buf.String())
+	}
+}
+
+func mustConf(t *testing.T, name string) *dashboard.BuildConfig {
+	conf, ok := dashboard.Builders[name]
+	if !ok {
+		t.Fatalf("unknown builder %q", name)
+	}
+	return conf
+}
+
+func TestSlowBotsFromComments(t *testing.T) {
+	existing := []*dashboard.BuildConfig{mustConf(t, "linux-amd64")}
+	work := &apipb.GerritTryWorkItem{
+		Version: 2,
+		TryMessage: []*apipb.TryVoteMessage{
+			{
+				Version: 1,
+				Message: "ios",
+			},
+			{
+				Version: 2,
+				Message: "arm64, mac aix ",
+			},
+			{
+				Version: 1,
+				Message: "aix",
+			},
+		},
+	}
+	extra := slowBotsFromComments(work, existing)
+	var got []string
+	for _, bc := range extra {
+		got = append(got, bc.Name)
+	}
+	want := []string{"aix-ppc64", "darwin-amd64-10_14", "linux-arm64-packet"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("mismatch:\n got: %q\nwant: %q\n", got, want)
+	}
+}
+
+func TestSubreposFromComments(t *testing.T) {
+	work := &apipb.GerritTryWorkItem{
+		Version: 2,
+		TryMessage: []*apipb.TryVoteMessage{
+			{
+				Version: 2,
+				Message: "x/build, x/sync x/tools, x/sync",
+			},
+		},
+	}
+	got := xReposFromComments(work)
+	want := map[string]bool{
+		"build": true,
+		"sync":  true,
+		"tools": true,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("mismatch:\n got: %v\nwant: %v\n", got, want)
+	}
+}
+
+func TestBuildStatusFormat(t *testing.T) {
+	for i, tt := range []struct {
+		st   *buildStatus
+		want string
+	}{
+		{
+			st: &buildStatus{
+				trySet: &trySet{
+					tryKey: tryKey{
+						Project: "go",
+					},
+				},
+				BuilderRev: buildgo.BuilderRev{
+					Name:    "linux-amd64",
+					SubName: "tools",
+				},
+			},
+			want: "(x/tools) linux-amd64",
+		},
+		{
+			st: &buildStatus{
+				trySet: &trySet{
+					tryKey: tryKey{
+						Project: "tools",
+					},
+				},
+				BuilderRev: buildgo.BuilderRev{
+					Name:    "linux-amd64",
+					SubName: "tools",
+				},
+				goBranch: "release-branch.go1.15",
+			},
+			want: "linux-amd64 (Go 1.15.x)",
+		},
+		{
+			st: &buildStatus{
+				trySet: &trySet{
+					tryKey: tryKey{
+						Project: "go",
+					},
+				},
+				BuilderRev: buildgo.BuilderRev{
+					Name:    "linux-amd64",
+					SubName: "tools",
+				},
+			},
+			want: "(x/tools) linux-amd64",
+		},
+		{
+			st: &buildStatus{
+				BuilderRev: buildgo.BuilderRev{
+					Name: "darwin-amd64-10_14",
+				},
+			},
+			want: "darwin-amd64-10_14",
+		},
+		{
+			st: &buildStatus{
+				BuilderRev: buildgo.BuilderRev{
+					Name: "darwin-amd64-10_14",
+				},
+				goBranch: "release-branch.go1.15",
+			},
+			want: "darwin-amd64-10_14 (Go 1.15.x)",
+		},
+	} {
+		if got := tt.st.NameAndBranch(); got != tt.want {
+			t.Errorf("%d: NameAndBranch = %q; want %q", i, got, tt.want)
+		}
+	}
 }

@@ -51,15 +51,134 @@ message GoFindTryWorkResponse {
 
 message GerritTryWorkItem {
   string project = 1;    // "go", "net", etc. (Gerrit Project)
-  string branch = 2;     // "master"
+  string branch = 2;     // "master", "release-branch.go1.8", etc.
   string change_id = 3;  // "I1a27695838409259d1586a0adfa9f92bccf7ceba"
   string commit = 4;     // "ecf3dffc81dc21408fb02159af352651882a8383"
+
+  int32 version = 9; // which Gerrit revision number commit is
 
   // go_commit is set for subrepos and is the Go commit(s) to test against.
   // go_branch is a branch name of go_commit, for showing to users when
   // a try set fails.
   repeated string go_commit = 5;  // "4833e920c1d7f6b23458e6ff3c73951fcf754219"
-  repeated string go_branch = 6;  // "master", "release-branch.go1.8", etc
+  repeated string go_branch = 6;  // "master", "release-branch.go1.8", etc.
+
+  // go_version specifies the major and minor version of the targeted Go toolchain.
+  // For Go repo, it contains exactly one element.
+  // For subrepos, it contains elements that correspond to go_commit.
+  repeated MajorMinor go_version = 7;
+
+  // try_message is the list of TRY=xxxx messages associated with Run-TryBot votes.
+  repeated TryVoteMessage try_message = 8;
+}
+
+message TryVoteMessage {
+  string message = 1;   // just the part after "TRY=" until end of line, without \n
+  int64  author_id = 2; // Gerrit-internal ID
+  int32  version = 3;   // revision number comment was for
+}
+
+message MajorMinor {
+  int32 major = 1;
+  int32 minor = 2;
+}
+
+message ListGoReleasesRequest {}
+
+message ListGoReleasesResponse {
+  repeated GoRelease releases = 1;
+}
+
+message GoRelease {
+  int32 major = 1;
+  int32 minor = 2;
+  int32 patch = 3;
+  string tag_name = 4;       // "go1.11.1", etc.
+  string tag_commit = 5;     // "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac"
+
+  // Release branch information for this major-minor version pair.
+  string branch_name = 6;    // "release-branch.go1.11", etc.
+  string branch_commit = 7;  // most recent commit on the release branch, e.g., "edb6c16b9b62ed8586d2e3e422911d646095b7e5"
+}
+
+message DashboardRequest {
+  // page is the zero-based page number.
+  // TODO: deprecate, replace with time or commit continuation token.
+  int32 page = 1;
+
+  // repo is which repo to show ("go", "golang.org/x/net", "" means go).
+  string repo = 2;
+
+  // branch specifies which branch to show ("master", "release-branch.go1.13").
+  // Empty means "master".
+  // The special branch value "mixed" means to blend together all branches by commit time.
+  string branch = 3;
+
+  // max_commits specifies the number of commits that are desired.
+  // Zero means to use a default.
+  int32 max_commits = 4;
+}
+
+message DashboardResponse {
+  // commits are the commits to display, starting with the newest.
+  repeated DashCommit commits = 1;
+
+  // commits_truncated is whether the returned commits were truncated.
+  bool commits_truncated = 5;
+
+  // repo_heads contains the current head commit (of their master
+  // branch) for every repo on Go's Gerrit server.
+  repeated DashRepoHead repo_heads = 2;
+
+  repeated string branches = 3;
+
+  // releases is the same content is ListGoReleasesResponse, but with the addition of a "master"
+  // release first, containing the info for the "master" branch, which is just commits[0]
+  // if page 0. But if page != 0, the master head wouldn't be
+  // available otherwise, so we denormalize it a bit here:
+  // It's sorted from newest to oldest (master, release-branch.go1.latest, release-branch.go1.prior)
+  // Only the branch_name and branch_commit fields are guaranteed to be populated.
+  repeated GoRelease releases = 4;
+}
+
+message DashCommit {
+  // commit is the git commit hash ("26957168c4c0cdcc7ca4f0b19d0eb19474d224ac").
+  string commit = 1;
+
+  // author_name is the git author name part ("Foo Bar").
+  string author_name = 2;     // "Foo Bar"
+
+  // author_email is the git author email part ("foo@bar.com").
+  string author_email = 3;    // "foo@bar.com"
+
+  // commit_time_sec is the timestamp of git commit time, in unix seconds.
+  int64 commit_time_sec = 4;
+
+  // title is the git commit's first line ("runtime: fix all the bugs").
+  string title = 5;
+
+  // branch is the branch this commit was queried from ("master", "release-branch.go1.14")/
+  // This is normally redundant but is useful when DashboardRequest.branch == "mixed".
+  string branch = 7;
+
+  // For non-go repos, go_commit_at_time is what the Go master commit was at
+  // the time of DashCommit.commit_time.
+  string go_commit_at_time = 6;
+
+  // For non-go repos, go_commit_latest is the most recent Go master commit that's
+  // older than the the following x/foo commit's commit_time.
+  // If DashCommit is the current HEAD, go_commit_at_time can continue to update.
+  // go_commit_at_time might be the same as go_commit_at_time.
+  string go_commit_latest = 8;
+}
+
+message DashRepoHead {
+  // gerrit_project is Gerrit project name ("net", "go").
+  string gerrit_project = 1;
+
+  // commit is the current top-level commit in that project.
+  // (currently always on the master branch)
+  DashCommit commit = 2;
 }
 
 service MaintnerService {
@@ -74,4 +193,22 @@ service MaintnerService {
 
   // GoFindTryWork finds trybot work for the coordinator to build & test.
   rpc GoFindTryWork(GoFindTryWorkRequest) returns (GoFindTryWorkResponse);
+
+  // ListGoReleases lists Go releases sorted by version with latest first.
+  //
+  // A release is considered to exist for each git tag named "goX", "goX.Y", or
+  // "goX.Y.Z", as long as it has a corresponding "release-branch.goX" or
+  // "release-branch.goX.Y" release branch.
+  //
+  // ListGoReleases returns only the latest patch versions of releases which
+  // are considered supported per policy. For example, Go 1.12.6 and 1.11.11.
+  // The response is guaranteed to have two versions, otherwise an error
+  // is returned.
+  rpc ListGoReleases(ListGoReleasesRequest) returns (ListGoReleasesResponse);
+
+  // GetDashboard returns the information for the build.golang.org
+  // dashboard. It does not (at least currently)
+  // contain any pass/fail information; it only contains information on the branches
+  // and commits themselves.
+  rpc GetDashboard(DashboardRequest) returns (DashboardResponse);
 }

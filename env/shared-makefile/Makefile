@@ -11,6 +11,10 @@ docker: Dockerfile
 	go install golang.org/x/build/cmd/xb
 	xb docker build -t golang/$(IMAGE_NAME) .
 
+testssh: docker
+	go install golang.org/x/build/cmd/buildlet/testssh
+	testssh --start-image=golang/$(IMAGE_NAME)
+
 push-staging: docker
 	go install golang.org/x/build/cmd/xb
 	xb --staging docker tag golang/$(IMAGE_NAME) REPO/$(IMAGE_NAME):latest

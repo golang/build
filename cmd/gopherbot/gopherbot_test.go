@@ -178,16 +178,65 @@ func TestLabelMutations(t *testing.T) {
 	}
 }
 
-func TestAddLabels(t *testing.T) {
-	oldFunc := addLabelsToIssue
-	defer func() { addLabelsToIssue = oldFunc }()
+type fakeIssuesService struct {
+	labels map[int][]string
+}
 
-	var added []string
-	addLabelsToIssue = func(_ context.Context, _ *github.IssuesService, _ int, labels []string) error {
-		added = labels
-		return nil
+func (f *fakeIssuesService) ListLabelsByIssue(ctx context.Context, owner string, repo string, number int, opt *github.ListOptions) ([]*github.Label, *github.Response, error) {
+	var labels []*github.Label
+	if ls, ok := f.labels[number]; ok {
+		for _, l := range ls {
+			name := l
+			labels = append(labels, &github.Label{Name: &name})
+		}
 	}
+	return labels, nil, nil
+}
 
+func (f *fakeIssuesService) AddLabelsToIssue(ctx context.Context, owner string, repo string, number int, labels []string) ([]*github.Label, *github.Response, error) {
+	if f.labels == nil {
+		f.labels = map[int][]string{number: labels}
+		return nil, nil, nil
+	}
+	ls, ok := f.labels[number]
+	if !ok {
+		f.labels[number] = labels
+		return nil, nil, nil
+	}
+	for _, label := range labels {
+		var found bool
+		for _, l := range ls {
+			if l == label {
+				found = true
+			}
+		}
+		if found {
+			continue
+		}
+		f.labels[number] = append(f.labels[number], label)
+	}
+	return nil, nil, nil
+}
+
+func (f *fakeIssuesService) RemoveLabelForIssue(ctx context.Context, owner string, repo string, number int, label string) (*github.Response, error) {
+	if ls, ok := f.labels[number]; ok {
+		for i, l := range ls {
+			if l == label {
+				f.labels[number] = append(f.labels[number][:i], f.labels[number][i+1:]...)
+				return nil, nil
+			}
+		}
+	}
+	// The GitHub API returns a NotFound error if the label did not exist.
+	return nil, &github.ErrorResponse{
+		Response: &http.Response{
+			Status:     http.StatusText(http.StatusNotFound),
+			StatusCode: http.StatusNotFound,
+		},
+	}
+}
+
+func TestAddLabels(t *testing.T) {
 	testCases := []struct {
 		desc   string
 		gi     *maintner.GitHubIssue
@@ -222,60 +271,49 @@ func TestAddLabels(t *testing.T) {
 		},
 	}
 
-	b := &gopherbot{ghc: github.NewClient(http.DefaultClient)}
+	b := &gopherbot{}
 	for _, tc := range testCases {
-		// Clear any previous state from stubbed addLabelsToIssue function above
-		// since some test cases may skip calls to it.
-		added = nil
+		// Clear any previous state from fake addLabelsToIssue since some test cases may skip calls to it.
+		fis := &fakeIssuesService{}
+		b.is = fis
 
-		if err := b.addLabels(nil, tc.gi, tc.labels); err != nil {
+		if err := b.addLabels(context.Background(), tc.gi, tc.labels); err != nil {
 			t.Errorf("%s: b.addLabels got unexpected error: %v", tc.desc, err)
 			continue
 		}
-		if diff := cmp.Diff(added, tc.added); diff != "" {
+		if diff := cmp.Diff(fis.labels[int(tc.gi.ID)], tc.added); diff != "" {
 			t.Errorf("%s: labels added differ: (-got, +want)\n%s", tc.desc, diff)
 		}
 	}
 }
 
 func TestRemoveLabels(t *testing.T) {
-	oldLabelsForIssue := labelsForIssue
-	defer func() { labelsForIssue = oldLabelsForIssue }()
-
-	labelsForIssue = func(_ context.Context, _ *github.IssuesService, _ int) ([]string, error) {
-		return []string{"help wanted", "NeedsFix"}, nil
-	}
-
-	oldRemoveLabelFromIssue := removeLabelFromIssue
-	defer func() { removeLabelFromIssue = oldRemoveLabelFromIssue }()
-
-	var removed []string
-	removeLabelFromIssue = func(_ context.Context, _ *github.IssuesService, _ int, label string) error {
-		removed = append(removed, label)
-		return nil
-	}
-
 	testCases := []struct {
 		desc     string
 		gi       *maintner.GitHubIssue
+		ghLabels []string
 		toRemove []string
-		removed  []string
+		want     []string
 	}{
 		{
 			"basic remove",
 			&maintner.GitHubIssue{
+				Number: 123,
 				Labels: map[int64]*maintner.GitHubLabel{
 					0: {Name: "NeedsFix"},
+					1: {Name: "help wanted"},
 				},
 			},
+			[]string{"NeedsFix", "help wanted"},
 			[]string{"NeedsFix"},
-			[]string{"NeedsFix"},
+			[]string{"help wanted"},
 		},
 		{
 			"label not present in maintner",
 			&maintner.GitHubIssue{},
 			[]string{"NeedsFix"},
-			nil,
+			[]string{"NeedsFix"},
+			[]string{"NeedsFix"},
 		},
 		{
 			"label not present in GitHub",
@@ -284,23 +322,26 @@ func TestRemoveLabels(t *testing.T) {
 					0: {Name: "foo"},
 				},
 			},
+			[]string{"NeedsFix"},
 			[]string{"foo"},
-			nil,
+			[]string{"NeedsFix"},
 		},
 	}
 
-	b := &gopherbot{ghc: github.NewClient(http.DefaultClient)}
+	b := &gopherbot{}
 	for _, tc := range testCases {
-		// Clear any previous state from stubbed removeLabelFromIssue function above
-		// since some test cases may skip calls to it.
-		removed = nil
+		// Clear any previous state from fakeIssuesService since some test cases may skip calls to it.
+		fis := &fakeIssuesService{map[int][]string{
+			int(tc.gi.Number): tc.ghLabels,
+		}}
+		b.is = fis
 
-		if err := b.removeLabels(nil, tc.gi, tc.toRemove); err != nil {
+		if err := b.removeLabels(context.Background(), tc.gi, tc.toRemove); err != nil {
 			t.Errorf("%s: b.addLabels got unexpected error: %v", tc.desc, err)
 			continue
 		}
-		if diff := cmp.Diff(removed, tc.removed); diff != "" {
-			t.Errorf("%s: labels removed differ: (-got, +want)\n%s", tc.desc, diff)
+		if diff := cmp.Diff(fis.labels[int(tc.gi.Number)], tc.want); diff != "" {
+			t.Errorf("%s: labels differ: (-got, +want)\n%s", tc.desc, diff)
 		}
 	}
 }

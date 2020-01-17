@@ -85,15 +85,11 @@ func main() {
 		}
 	case "linux/arm64":
 		switch env := os.Getenv("GO_BUILDER_ENV"); env {
-		case "host-linux-arm64-packet", "host-linux-arm64-linaro":
+		case "host-linux-arm64-packet":
 			// No special setup.
 		default:
 			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
 		}
-	case "linux/ppc64":
-		initOregonStatePPC64()
-	case "linux/ppc64le":
-		initOregonStatePPC64le()
 	case "darwin/amd64":
 		// The MacStadium builders' baked-in stage0.sh
 		// bootstrap file doesn't set GO_BUILDER_ENV
@@ -164,6 +160,23 @@ Download:
 		cmd.Args = append(cmd.Args,
 			scalewayArgs...,
 		)
+	case "host-linux-mipsle-mengzhuo":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
+	case "host-linux-mips64le-rtrk":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--hostname=${GO_BUILDER_ENV}"))
+	case "host-linux-mips64-rtrk":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--hostname=${GO_BUILDER_ENV}"))
+	case "host-linux-ppc64le-power9-osu":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+	case "host-linux-ppc64le-osu": // power8
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+	case "host-linux-ppc64-osu":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	}
 	switch osArch {
 	case "linux/s390x":
@@ -171,7 +184,7 @@ Download:
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-s390x")...)
 	case "linux/arm64":
 		switch buildEnv {
-		case "host-linux-arm64-packet", "host-linux-arm64-linaro":
+		case "host-linux-arm64-packet":
 			hostname := os.Getenv("HOSTNAME") // if empty, docker container name is used
 			cmd.Args = append(cmd.Args,
 				"--reverse-type="+buildEnv,
@@ -184,24 +197,9 @@ Download:
 		default:
 			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
 		}
-	case "linux/ppc64":
-		// Assume OSU (osuosl.org) host type for now. If we get more, use
-		// GO_BUILD_HOST_TYPE (see above) and check that.
-		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-ppc64-osu")...)
-	case "linux/ppc64le":
-		// Assume OSU (osuosl.org) host type for now. If we get more, use
-		// GO_BUILD_HOST_TYPE (see above) and check that.
-		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-ppc64le-osu")...)
-	case "solaris/amd64":
-		if buildEnv != "" {
-			// Explicit value given. Treat it like a host type.
-			cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
-		} else {
-			// If there's no value, assume it's the old Joyent builders,
-			// which are currently GOOS=solaris, but will be illumos after
-			// golang.org/issue/20603.
-			cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-solaris-amd64")...)
-		}
+	case "solaris/amd64", "illumos/amd64":
+		hostType := buildEnv
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(hostType)...)
 	}
 	// Release the serial port (if we opened it) so the buildlet
 	// process can open & write to it. At least on Windows, only
@@ -288,6 +286,7 @@ func isNetworkUp() bool {
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
 			DisableKeepAlives: true,
+			Proxy:             http.ProxyFromEnvironment,
 		},
 	}
 	res, err := c.Get(probeURL)
@@ -299,49 +298,25 @@ func isNetworkUp() bool {
 }
 
 func buildletURL() string {
+	if v := os.Getenv("META_BUILDLET_BINARY_URL"); v != "" {
+		return v
+	}
+
 	switch os.Getenv("GO_BUILDER_ENV") {
 	case "linux-arm-arm5spacemonkey":
 		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-arm-arm5"
 	}
-	switch osArch {
-	case "linux/amd64":
-		// Issue 25760: the s390x cross-compile builder is
-		// working under Kubernetes (which sets
-		// IN_KUBERNETES=1 in the env), but isn't working when
-		// run under Docker in COS (a Container-Optimized OS
-		// VM on GCE). Maybe something is hiding the GCE
-		// metadata service from the COS container now. As a
-		// test, just hard code the s390x builder:
-		if os.Getenv("GOARCH") == "s390x" {
-			return "https://storage.googleapis.com/go-builder-data/buildlet.linux-amd64"
-		}
-	case "linux/s390x":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-s390x"
-	case "linux/arm64":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-arm64"
-	case "linux/ppc64":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64"
-	case "linux/ppc64le":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-ppc64le"
-	case "solaris/amd64":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.solaris-amd64"
-	case "darwin/amd64":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.darwin-amd64"
-	}
-	// The buildlet download URL is located in an env var
-	// when the buildlet is not running on GCE, or is running
-	// on Kubernetes.
-	if !metadata.OnGCE() || os.Getenv("IN_KUBERNETES") == "1" {
-		if v := os.Getenv("META_BUILDLET_BINARY_URL"); v != "" {
+
+	if metadata.OnGCE() {
+		v, err := metadata.InstanceAttributeValue(attr)
+		if err == nil {
 			return v
 		}
-		sleepFatalf("Not on GCE, and no META_BUILDLET_BINARY_URL specified.")
+		sleepFatalf("on GCE, but no META_BUILDLET_BINARY_URL env or instance attribute %q: %v", attr, err)
 	}
-	v, err := metadata.InstanceAttributeValue(attr)
-	if err != nil {
-		sleepFatalf("Failed to look up %q attribute value: %v", attr, err)
-	}
-	return v
+
+	// Fallback:
+	return fmt.Sprintf("https://storage.googleapis.com/go-builder-data/buildlet.%s-%s", runtime.GOOS, runtime.GOARCH)
 }
 
 func sleepFatalf(format string, args ...interface{}) {
@@ -379,45 +354,41 @@ func download(file, url string) error {
 }
 
 func aptGetInstall(pkgs ...string) {
+	t0 := time.Now()
 	args := append([]string{"--yes", "install"}, pkgs...)
 	cmd := exec.Command("apt-get", args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		log.Fatalf("error running apt-get install: %s", out)
 	}
+	log.Printf("stage0: apt-get installed %q in %v", pkgs, time.Since(t0).Round(time.Second/10))
 }
 
 func initBootstrapDir(destDir, tgzCache string) {
+	t0 := time.Now()
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		log.Fatal(err)
 	}
-	// TODO(bradfitz): rewrite this to use Go instead of curl+tar
-	// if this ever gets used on platforms besides Unix. For
-	// Windows and Plan 9 we bake in the bootstrap tarball into
-	// the image anyway. So this works for now. Solaris might require
-	// tweaking to use gtar instead or something.
 	latestURL := fmt.Sprintf("https://storage.googleapis.com/go-builder-data/gobootstrap-%s-%s.tar.gz",
 		runtime.GOOS, runtime.GOARCH)
-	curl := exec.Command("/usr/bin/curl", "-R", "-o", tgzCache, "-z", tgzCache, latestURL)
-	out, err := curl.CombinedOutput()
-	if err != nil {
-		log.Fatalf("curl error fetching %s to %s: %s", latestURL, out, err)
+	if err := httpdl.Download(tgzCache, latestURL); err != nil {
+		log.Fatalf("dowloading %s to %s: %v", latestURL, tgzCache, err)
 	}
+	log.Printf("synced %s to %s in %v", latestURL, tgzCache, time.Since(t0).Round(time.Second/10))
+
+	t1 := time.Now()
+	// TODO(bradfitz): rewrite this to use Go instead of shelling
+	// out to tar? if this ever gets used on platforms besides
+	// Unix. For Windows and Plan 9 we bake in the bootstrap
+	// tarball into the image anyway. So this works for now.
+	// Solaris might require tweaking to use gtar instead or
+	// something.
 	tar := exec.Command("tar", "zxf", tgzCache)
 	tar.Dir = destDir
-	out, err = tar.CombinedOutput()
+	out, err := tar.CombinedOutput()
 	if err != nil {
 		log.Fatalf("error untarring %s to %s: %s", tgzCache, destDir, out)
 	}
-}
-
-func initOregonStatePPC64() {
-	aptGetInstall("gcc", "strace", "libc6-dev", "gdb")
-	initBootstrapDir("/usr/local/go-bootstrap", "/usr/local/go-bootstrap.tar.gz")
-}
-
-func initOregonStatePPC64le() {
-	aptGetInstall("gcc", "strace", "libc6-dev", "gdb")
-	initBootstrapDir("/usr/local/go-bootstrap", "/usr/local/go-bootstrap.tar.gz")
+	log.Printf("untarred %s to %s in %v", tgzCache, destDir, time.Since(t1).Round(time.Second/10))
 }
 
 func isUnix() bool {

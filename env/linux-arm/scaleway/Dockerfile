@@ -2,33 +2,23 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM scaleway/ubuntu:armhf-xenial
+FROM golang:1.13 AS build
+RUN go get golang.org/x/build/cmd/buildlet/stage0
+
+FROM debian:buster
 
 RUN apt-get update
 
 RUN apt-get install --yes \
-          gcc strace procps psmisc libc6-dev
+          gcc strace procps psmisc libc6-dev curl netbase \
+          openssh-server
 
-RUN curl -L -o go1.8.1.tar.gz https://golang.org/dl/go1.8.1.linux-armv6l.tar.gz && \
-    tar fxzv go1.8.1.tar.gz -C /usr/local
+RUN curl -L https://golang.org/dl/go1.13.4.linux-armv6l.tar.gz | \
+    tar xzv  -C /usr/local && /usr/local/go/bin/go version
 
-ENV GO_BOOTSTRAP=/usr/local/go
+ENV GOROOT_BOOTSTRAP=/usr/local/go
 
 # compiled stage0 binary must be in working dir
-COPY stage0 /usr/local/bin/stage0
-
-ENV GO_BUILD_KEY_PATH /buildkey/gobuildkey
-ENV GO_BUILD_KEY_DELETE_AFTER_READ true
-
-# Not really, but we're in a container like Kubernetes, and this makes the syscall
-# package happy:
-ENV IN_KUBERNETES 1
-
-ENV GO_BUILDER_ENV host-linux-arm-scaleway
-
-# env specific
-ARG buildlet_bucket
-
-ENV META_BUILDLET_BINARY_URL "https://storage.googleapis.com/$buildlet_bucket/buildlet.linux-arm"
+COPY --from=build /go/bin/stage0 /usr/local/bin/stage0
 
 CMD ["/usr/local/bin/stage0"]

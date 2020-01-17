@@ -2,16 +2,13 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build appengine
-
 package key
 
 import (
 	"context"
 	"sync"
 
-	"google.golang.org/appengine"
-	"google.golang.org/appengine/datastore"
+	"cloud.google.com/go/datastore"
 )
 
 var theKey struct {
@@ -23,11 +20,9 @@ type builderKey struct {
 	Secret string
 }
 
-func (k *builderKey) Key(c context.Context) *datastore.Key {
-	return datastore.NewKey(c, "BuilderKey", "root", 0, nil)
-}
+var dsKey = datastore.NameKey("BuilderKey", "root", nil)
 
-func Secret(c context.Context) string {
+func Secret(ctx context.Context, c *datastore.Client) string {
 	// check with rlock
 	theKey.RLock()
 	k := theKey.Secret
@@ -44,18 +39,16 @@ func Secret(c context.Context) string {
 	}
 
 	// fill
-	if err := datastore.Get(c, theKey.Key(c), &theKey.builderKey); err != nil {
+	if err := c.Get(ctx, dsKey, &theKey.builderKey); err != nil {
 		if err == datastore.ErrNoSuchEntity {
 			// If the key is not stored in datastore, write it.
 			// This only happens at the beginning of a new deployment.
 			// The code is left here for SDK use and in case a fresh
 			// deployment is ever needed.  "gophers rule" is not the
 			// real key.
-			if !appengine.IsDevAppServer() {
-				panic("lost key from datastore")
-			}
+			panic("lost key from datastore")
 			theKey.Secret = "gophers rule"
-			datastore.Put(c, theKey.Key(c), &theKey.builderKey)
+			c.Put(ctx, dsKey, &theKey.builderKey)
 			return theKey.Secret
 		}
 		panic("cannot load builder key: " + err.Error())
