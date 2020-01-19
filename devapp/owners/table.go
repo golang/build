@@ -62,6 +62,7 @@ var (
 	mvdan        = gh("mvdan")
 	mwhudson     = gh("mwhudson")
 	neelance     = gh("neelance")
+	nigeltao     = gh("nigeltao")
 	pearring     = gh("pearring")
 	r            = gh("robpike")
 	rakoczy      = gh("toothrot")
@@ -353,7 +354,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{empijei},
 	},
 	"go/src/image": {
-		Primary:   []Owner{},
+		Primary:   []Owner{nigeltao},
 		Secondary: []Owner{r},
 	},
 	"go/src/index/suffixarray": {
