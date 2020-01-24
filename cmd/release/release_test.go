@@ -18,3 +18,27 @@ func TestBuildersExist(t *testing.T) {
 		}
 	}
 }
+
+func TestMinSupportedMacOSVersion(t *testing.T) {
+	testCases := []struct {
+		desc      string
+		goVer     string
+		wantMacOS string
+	}{
+		{"patch_release_12", "go1.12.1", "10.10"},
+		{"minor_release_13", "go1.13", "10.11"},
+		{"minor_release_14", "go1.14", "10.11"},
+		{"rc_release_13", "go1.13rc1", "10.11"},
+		{"beta_release_13", "go1.13beta1", "10.11"},
+		{"minor_release_15", "go1.15", "10.12"},
+		{"patch_release_15", "go1.15.1", "10.12"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			got := minSupportedMacOSVersion(tc.goVer)
+			if got != tc.wantMacOS {
+				t.Errorf("got %s; want %s", got, tc.wantMacOS)
+			}
+		})
+	}
+}
