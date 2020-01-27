@@ -555,7 +555,7 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-ppc64le-power9-osu": &HostConfig{
 		Notes:           "Debian Buster; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl",
 		IsReverse:       true,
-		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap", "GOPPC64=power9"},
 		SSHUsername:     "root",
 		HermeticReverse: true,
 	},
