@@ -1852,7 +1852,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 				}
 				break
 			}
-			if ge, ok := err.(*github.ErrorResponse); ok && ge.Message == "Not Found" {
+			if ge, ok := err.(*github.ErrorResponse); ok && (ge.Response.StatusCode == http.StatusNotFound || ge.Response.StatusCode == http.StatusGone) {
 				mp := &maintpb.Mutation{
 					GithubIssue: &maintpb.GithubIssueMutation{
 						Owner:    owner,
