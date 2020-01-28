@@ -70,7 +70,7 @@ func (e *HTTPError) Error() string {
 	return fmt.Sprintf("HTTP status %s; %s", e.Res.Status, e.Body)
 }
 
-// doArg is one of urlValues, reqBody, or wantResStatus
+// doArg is one of urlValues, reqBody, wantResStatus or wantPlainText
 type doArg interface {
 	isDoArg()
 }
@@ -78,6 +78,10 @@ type doArg interface {
 type wantResStatus int
 
 func (wantResStatus) isDoArg() {}
+
+type wantPlainText bool
+
+func (wantPlainText) isDoArg() {}
 
 type reqBody struct{ body interface{} }
 
@@ -91,10 +95,13 @@ func (c *Client) do(ctx context.Context, dst interface{}, method, path string, o
 	var arg url.Values
 	var body interface{}
 	var wantStatus = http.StatusOK
+	var wantText = false
 	for _, opt := range opts {
 		switch opt := opt.(type) {
 		case wantResStatus:
 			wantStatus = int(opt)
+		case wantPlainText:
+			wantText = bool(opt)
 		case reqBody:
 			body = opt.body
 		case urlValues:
@@ -147,8 +154,14 @@ func (c *Client) do(ctx context.Context, dst interface{}, method, path string, o
 	// The JSON response begins with an XSRF-defeating header
 	// like ")]}\n". Read that and skip it.
 	br := bufio.NewReader(res.Body)
-	if _, err := br.ReadSlice('\n'); err != nil {
+	bytes, err := br.ReadBytes('\n')
+	if err != nil && !(wantText && err == io.EOF) {
 		return err
+	}
+	// API calls that return text don't end with a newline
+	if wantText {
+		*(dst.(*[]byte)) = bytes
+		return nil
 	}
 	return json.NewDecoder(br).Decode(dst)
 }
@@ -730,12 +743,12 @@ func (c *Client) GetProjectBranches(ctx context.Context, name string) (map[strin
 
 // GetContent returns the content of a file in the given project and branch.
 func (c *Client) GetContent(ctx context.Context, project, branch, path string) ([]byte, error) {
-	var res string
-	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/%s/files/%s/content", project, branch, url.PathEscape(path)))
+	var res []byte
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/%s/files/%s/content", project, branch, url.PathEscape(path)), wantPlainText(true))
 	if err != nil {
 		return nil, err
 	}
-	return base64.StdEncoding.DecodeString(res)
+	return base64.StdEncoding.DecodeString(string(res))
 }
 
 // WebLinkInfo is information about a web link.
