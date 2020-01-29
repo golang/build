@@ -207,12 +207,13 @@ func buildGoTarget() {
 		goos, goarch = v[0], v[1]
 	}
 
+	goBin := goCmd()
 	env := append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch)
 	if *extraEnv != "" {
 		env = append(env, strings.Split(*extraEnv, ",")...)
 	}
 	env = envutil.Dedup(runtime.GOOS == "windows", env)
-	cmd := exec.Command(goCmd(),
+	cmd := exec.Command(goBin,
 		"list",
 		"--tags="+*tags,
 		"--installsuffix="+*installSuffix,
@@ -236,7 +237,7 @@ func buildGoTarget() {
 	if *static {
 		ldflags = "-linkmode=external -extldflags '-static -pthread' " + ldflags
 	}
-	cmd = exec.Command("go",
+	cmd = exec.Command(goBin,
 		"install",
 		"--tags="+*tags,
 		"--installsuffix="+*installSuffix,
