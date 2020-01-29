@@ -7,6 +7,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/md5"
 	"encoding/json"
@@ -24,6 +25,7 @@ import (
 	"time"
 
 	"go4.org/types"
+	"golang.org/x/build/internal/secret"
 	revtype "golang.org/x/build/types"
 )
 
@@ -52,12 +54,23 @@ const (
 
 func main() {
 	flag.Parse()
+
+	secretClient := mustCreateSecretClient()
+	defer secretClient.Close()
+
 	if *tags == "" && !*listAll { // Tags aren't needed if -list-all flag is set.
 		if *staging {
-			*tags = defaultBuilderTags("gobuilder-staging.key")
-		} else {
-			*tags = defaultBuilderTags("gobuilder-master.key")
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			key, err := secretClient.Retrieve(ctx, "builders_staging_key")
+			if err != nil {
+				log.Fatalf("unable to retrieve master key %v", err)
+			}
+			*tags = key
 		}
+	} else {
+		*tags = defaultBuilderTags("gobuilder-master.key")
 	}
 	if *num == 0 {
 		if *staging {
@@ -399,4 +412,12 @@ func getConnectedMachines() map[string]*revtype.ReverseBuilder {
 		return nil
 	}
 	return st.Machines
+}
+
+func mustCreateSecretClient() *secret.Client {
+	client, err := secret.NewClient()
+	if err != nil {
+		log.Fatalf("unable to create secret client %v", err)
+	}
+	return client
 }
