@@ -780,9 +780,6 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 			// up enough for e.g. compiling android-386
 			// from linux-amd64. (Issue #35596 too)
 			return
-		} else if goarch == "riscv64" {
-			// TODO(golang.org/issue/36871): Add a misc-compile trybot (or a real trybot).
-			return
 		}
 		goosArch := goos + "-" + goarch
 		if done[goosArch] {
