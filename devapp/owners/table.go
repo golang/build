@@ -25,6 +25,7 @@ var (
 	austin       = gh("aclements")
 	bcmills      = gh("bcmills")
 	bradfitz     = gh("bradfitz")
+	carmen       = gh("Lyoness")
 	cbro         = gh("broady")
 	cherryyz     = gh("cherrymui")
 	cnoellekb    = gh("cnoellekb")
@@ -43,6 +44,7 @@ var (
 	jbd          = gh("rakyll")
 	joetsai      = gh("dsnet")
 	josharian    = gh("josharian")
+	julieqiu     = gh("julieqiu")
 	kardianos    = gh("kardianos")
 	kevinburke   = gh("kevinburke")
 	khr          = gh("randall77")
@@ -57,6 +59,7 @@ var (
 	mvdan        = gh("mvdan")
 	mwhudson     = gh("mwhudson")
 	neelance     = gh("neelance")
+	pearring     = gh("pearring")
 	r            = gh("robpike")
 	rsc          = gh("rsc")
 	rstambler    = gh("stamblerre")
@@ -67,7 +70,7 @@ var (
 	x1ddos       = gh("x1ddos")
 )
 
-// entries is a map of <repo name>/<path> to Owner entries.
+// entries is a map of <repo name>/<path>/<domain> to Owner entries.
 // It should not be modified at runtime.
 var entries = map[string]*Entry{
 	"arch": {
@@ -687,6 +690,17 @@ var entries = map[string]*Entry{
 	"website": {
 		Primary:   []Owner{dmitshur},
 		Secondary: []Owner{cnoellekb, andybons},
+	},
+
+	// These components are domains, not Go packages.
+	"pkg.go.dev": {
+		Primary: []Owner{julieqiu},
+	},
+	"learn.go.dev": {
+		Primary: []Owner{carmen, pearring},
+	},
+	"go.dev": {
+		Primary: []Owner{pearring},
 	},
 }
 
