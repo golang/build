@@ -11,10 +11,7 @@ import (
 func gh(githubUsername string) Owner {
 	p := gophers.GetPerson("@" + githubUsername)
 	if p == nil {
-		panic(githubUsername + " not found")
-	}
-	if p.Gerrit == "" {
-		panic("person with GitHub username " + githubUsername + " must have at least one email")
+		panic("person with GitHub username " + githubUsername + " not found")
 	}
 	return Owner{GitHubUsername: githubUsername, GerritEmail: p.Gerrit}
 }
