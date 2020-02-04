@@ -2291,6 +2291,7 @@ func init() {
 		HostType:     "host-linux-riscv64-unleashed",
 		Name:         "linux-riscv64-unleashed",
 		SkipSnapshot: true,
+		env:          []string{"GO_TEST_TIMEOUT_SCALE=4"},
 		shouldRunDistTest: func(distTest string, isTry bool) bool {
 			switch distTest {
 			case "api", "reboot":
