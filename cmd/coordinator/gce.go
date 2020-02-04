@@ -353,6 +353,7 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 	}
 	waitBuildlet.Done(nil)
 	bc.SetDescription("GCE VM: " + instName)
+	bc.SetGCEInstanceName(instName)
 	bc.SetOnHeartbeatFailure(func() {
 		p.putBuildlet(bc, hostType, zone, instName)
 	})
@@ -543,11 +544,11 @@ func (p *gceBuildletPool) cleanUpOldVMs() {
 // cleanZoneVMs is part of cleanUpOldVMs, operating on a single zone.
 func (p *gceBuildletPool) cleanZoneVMs(zone string) error {
 	// Fetch the first 500 (default) running instances and clean
-	// thoes. We expect that we'll be running many fewer than
+	// those. We expect that we'll be running many fewer than
 	// that. Even if we have more, eventually the first 500 will
 	// either end or be cleaned, and then the next call will get a
 	// partially-different 500.
-	// TODO(bradfitz): revist this code if we ever start running
+	// TODO(bradfitz): revisit this code if we ever start running
 	// thousands of VMs.
 	gceAPIGate()
 	list, err := computeService.Instances.List(buildEnv.ProjectName, zone).Do()
@@ -557,6 +558,11 @@ func (p *gceBuildletPool) cleanZoneVMs(zone string) error {
 	for _, inst := range list.Items {
 		if inst.Metadata == nil {
 			// Defensive. Not seen in practice.
+			continue
+		}
+		if isGCERemoteBuildlet(inst.Name) {
+			// Remote buildlets have their own expiration mechanism that respects active SSH sessions.
+			log.Printf("cleanZoneVMs: skipping remote buildlet %q", inst.Name)
 			continue
 		}
 		var sawDeleteAt bool

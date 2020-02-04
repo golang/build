@@ -105,6 +105,17 @@ func addRemoteBuildlet(rb *remoteBuildlet) (name string) {
 	}
 }
 
+func isGCERemoteBuildlet(instName string) bool {
+	remoteBuildlets.Lock()
+	defer remoteBuildlets.Unlock()
+	for _, rb := range remoteBuildlets.m {
+		if rb.buildlet.GCEInstanceName() == instName {
+			return true
+		}
+	}
+	return false
+}
+
 func expireBuildlets() {
 	defer cleanTimer.Reset(remoteBuildletCleanInterval)
 	remoteBuildlets.Lock()

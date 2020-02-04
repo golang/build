@@ -110,6 +110,19 @@ func (c *Client) SetDescription(v string) {
 	c.desc = v
 }
 
+// SetGCEInstanceName sets an instance name for GCE buildlets.
+// This value differs from the buildlet name used in the CLI and web interface.
+func (c *Client) SetGCEInstanceName(v string) {
+	c.gceInstanceName = v
+}
+
+// GCEInstanceName gets an instance name for GCE buildlets.
+// This value differs from the buildlet name used in the CLI and web interface.
+// For non-GCE buildlets, this will return an empty string.
+func (c *Client) GCEInstanceName() string {
+	return c.gceInstanceName
+}
+
 // SetHTTPClient replaces the underlying HTTP client.
 // It should only be called before the Client is used.
 func (c *Client) SetHTTPClient(httpClient *http.Client) {
@@ -141,15 +154,16 @@ func defaultDialer() func(network, addr string) (net.Conn, error) {
 
 // A Client interacts with a single buildlet.
 type Client struct {
-	ipPort         string // required, unless remoteBuildlet+baseURL is set
-	tls            KeyPair
-	httpClient     *http.Client
-	dialer         func(context.Context) (net.Conn, error) // nil means to use net.Dialer.DialContext
-	baseURL        string                                  // optional baseURL (used by remote buildlets)
-	authUser       string                                  // defaults to "gomote", if password is non-empty
-	password       string                                  // basic auth password or empty for none
-	remoteBuildlet string                                  // non-empty if for remote buildlets (used by client)
-	name           string                                  // optional name for debugging, returned by Name
+	ipPort          string // required, unless remoteBuildlet+baseURL is set
+	tls             KeyPair
+	httpClient      *http.Client
+	dialer          func(context.Context) (net.Conn, error) // nil means to use net.Dialer.DialContext
+	baseURL         string                                  // optional baseURL (used by remote buildlets)
+	authUser        string                                  // defaults to "gomote", if password is non-empty
+	password        string                                  // basic auth password or empty for none
+	remoteBuildlet  string                                  // non-empty if for remote buildlets (used by client)
+	name            string                                  // optional name for debugging, returned by Name
+	gceInstanceName string                                  // instance name for GCE VMs
 
 	closeFuncs  []func() // optional extra code to run on close
 	releaseMode bool
