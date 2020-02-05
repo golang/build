@@ -857,6 +857,9 @@ func (b *gopherbot) setMiscMilestones(ctx context.Context) error {
 		if strings.HasPrefix(gi.Title, "x/vgo") {
 			return b.setMilestone(ctx, gi, vgo)
 		}
+		if strings.HasPrefix(gi.Title, "go.dev:") {
+			return b.setMilestone(ctx, gi, unreleased)
+		}
 		return nil
 	})
 }
