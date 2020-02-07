@@ -201,7 +201,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/vet": {
 		Primary:   []Owner{adonovan},
-		Secondary: []Owner{josharian, mvdan},
+		Secondary: []Owner{josharian},
 	},
 	"go/src/compress/bzip2": {
 		Primary:   []Owner{joetsai},
