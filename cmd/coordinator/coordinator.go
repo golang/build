@@ -45,7 +45,9 @@ import (
 	"unicode"
 
 	"go4.org/syncutil"
-	grpc "grpc.go4.org"
+	"golang.org/x/build/cmd/coordinator/protos"
+	"google.golang.org/grpc"
+	grpc4 "grpc.go4.org"
 
 	"cloud.google.com/go/errorreporting"
 	"cloud.google.com/go/storage"
@@ -162,8 +164,9 @@ func listenAndServeTLS() {
 }
 
 func serveTLS(ln net.Listener) {
+	// Support HTTP/2 for gRPC handlers.
 	config := &tls.Config{
-		NextProtos: []string{"http/1.1"},
+		NextProtos: []string{"http/1.1", "h2"},
 	}
 
 	if autocertManager != nil {
@@ -240,6 +243,9 @@ func (fn loggerFunc) CreateSpan(event string, optText ...string) spanlog.Span {
 // autocertManager is non-nil if LetsEncrypt is in use.
 var autocertManager *autocert.Manager
 
+// grpcServer is a shared gRPC server. It is global, as it needs to be used in places that aren't factored otherwise.
+var grpcServer = grpc.NewServer()
+
 func main() {
 	flag.Parse()
 
@@ -293,12 +299,14 @@ func main() {
 
 	addHealthCheckers(context.Background())
 
-	cc, err := grpc.NewClient(http.DefaultClient, "https://maintner.golang.org")
+	cc, err := grpc4.NewClient(http.DefaultClient, "https://maintner.golang.org")
 	if err != nil {
 		log.Fatal(err)
 	}
 	maintnerClient = apipb.NewMaintnerServiceClient(cc)
 
+	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
+	protos.RegisterCoordinatorServer(grpcServer, gs)
 	http.HandleFunc("/", handleStatus)
 	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
 	http.HandleFunc("/debug/watcher/", handleDebugWatcher)

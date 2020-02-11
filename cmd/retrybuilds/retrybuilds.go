@@ -18,8 +18,10 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/md5"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -32,6 +34,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/build/cmd/coordinator/protos"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -45,6 +54,8 @@ var (
 	sendMasterKey = flag.Bool("sendmaster", false, "send the master key in request instead of a builder-specific key; allows overriding actions of revoked keys")
 	branch        = flag.String("branch", "master", "branch to find flakes from (for use with -redo-flaky)")
 	substr        = flag.String("substr", "", "if non-empty, redoes all build failures whose failure logs contain this substring")
+	// TODO(golang.org/issue/34744) - remove after gRPC API for ClearResults is deployed
+	grpcHost = flag.String("grpc-host", "", "(EXPERIMENTAL) use gRPC for communicating with the API.")
 )
 
 type Failure struct {
@@ -56,11 +67,20 @@ type Failure struct {
 func main() {
 	flag.Parse()
 	*builderPrefix = strings.TrimSuffix(*builderPrefix, "/")
+	cl := client{}
+	if *grpcHost != "" {
+		tc := &tls.Config{InsecureSkipVerify: strings.HasPrefix(*grpcHost, "localhost:")}
+		cc, err := grpc.DialContext(context.Background(), *grpcHost, grpc.WithTransportCredentials(credentials.NewTLS(tc)))
+		if err != nil {
+			log.Fatalf("grpc.DialContext(_, %q, _) = %v, wanted no error", *grpcHost, err)
+		}
+		cl.coordinator = protos.NewCoordinatorClient(cc)
+	}
 	if *logHash != "" {
 		substr := "/log/" + *logHash
 		for _, f := range failures() {
 			if strings.Contains(f.LogURL, substr) {
-				wipe(f.Builder, f.Hash)
+				cl.wipe(f.Builder, f.Hash)
 			}
 		}
 		return
@@ -69,7 +89,7 @@ func main() {
 		foreachFailure(func(f Failure, failLog string) {
 			if strings.Contains(failLog, *substr) {
 				log.Printf("Restarting %+v", f)
-				wipe(f.Builder, f.Hash)
+				cl.wipe(f.Builder, f.Hash)
 			}
 		})
 		return
@@ -78,7 +98,7 @@ func main() {
 		foreachFailure(func(f Failure, failLog string) {
 			if isFlaky(failLog) {
 				log.Printf("Restarting flaky %+v", f)
-				wipe(f.Builder, f.Hash)
+				cl.wipe(f.Builder, f.Hash)
 			}
 		})
 		return
@@ -91,11 +111,11 @@ func main() {
 			if f.Builder != *builder {
 				continue
 			}
-			wipe(f.Builder, f.Hash)
+			cl.wipe(f.Builder, f.Hash)
 		}
 		return
 	}
-	wipe(*builder, fullHash(*hash))
+	cl.wipe(*builder, fullHash(*hash))
 }
 
 func foreachFailure(fn func(f Failure, failLog string)) {
@@ -198,9 +218,49 @@ func fullHash(h string) string {
 	panic("unreachable")
 }
 
+type client struct {
+	coordinator protos.CoordinatorClient
+}
+
+// grpcWipe wipes a git hash failure for the provided builder and hash.
+// Only the main Go repo is currently supported.
+// TODO(golang.org/issue/34744) - replace HTTP wipe with this after gRPC API for ClearResults is deployed
+func (c *client) grpcWipe(builder, hash string) {
+	md := metadata.New(map[string]string{"authorization": "builder " + builderKey(builder)})
+	for i := 0; i < 10; i++ {
+		ctx, cancel := context.WithTimeout(metadata.NewOutgoingContext(context.Background(), md), time.Minute)
+		resp, err := c.coordinator.ClearResults(ctx, &protos.ClearResultsRequest{
+			Builder: builder,
+			Hash:    hash,
+		})
+		cancel()
+		if err != nil {
+			s, _ := status.FromError(err)
+			switch s.Code() {
+			case codes.Aborted:
+				log.Printf("Concurrent datastore transaction wiping %v %v: retrying in 1 second", builder, hash)
+				time.Sleep(time.Second)
+			case codes.DeadlineExceeded:
+				log.Printf("Timeout wiping %v %v: retrying", builder, hash)
+			default:
+				log.Fatalln(err)
+			}
+			continue
+		}
+		log.Printf("cl.ClearResults(%q, %q) = %v: resp: %v", builder, hash, status.Code(err), resp)
+		return
+	}
+}
+
 // wipe wipes the git hash failure for the provided failure.
 // Only the main go repo is currently supported.
-func wipe(builder, hash string) {
+func (c *client) wipe(builder, hash string) {
+	if *grpcHost != "" {
+		// TODO(golang.org/issue/34744) - Remove HTTP logic after gRPC API for ClearResults is deployed
+		// to the Coordinator.
+		c.grpcWipe(builder, hash)
+		return
+	}
 	vals := url.Values{
 		"builder": {builder},
 		"hash":    {hash},

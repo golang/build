@@ -556,6 +556,12 @@ func healthCheckerHandler(hc *healthChecker) http.Handler {
 func uptime() time.Duration { return time.Since(processStartTime).Round(time.Second) }
 
 func handleStatus(w http.ResponseWriter, r *http.Request) {
+	// Support gRPC handlers. handleStatus is our toplevel ("/") handler, so reroute to the gRPC server for
+	// matching requests.
+	if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+		grpcServer.ServeHTTP(w, r)
+		return
+	}
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return

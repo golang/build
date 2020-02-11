@@ -1,0 +1,22 @@
+// Copyright 2020 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+syntax = "proto3";
+
+package protos;
+
+service Coordinator {
+  // ClearResults clears build failures from the coordinator to force them to rebuild.
+  rpc ClearResults(ClearResultsRequest) returns (ClearResultsResponse) {}
+}
+
+// ClearResultsRequest specifies the data needed to clear a result.
+message ClearResultsRequest {
+  // builder is the builder to clear results.
+  string builder = 1;
+  // hash is the commit hash to clear results.
+  string hash = 2;
+}
+
+message ClearResultsResponse {}
