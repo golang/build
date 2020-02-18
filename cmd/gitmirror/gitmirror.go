@@ -28,9 +28,9 @@ import (
 	"sync"
 	"time"
 
-	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/gitauth"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
 	repospkg "golang.org/x/build/repos"
@@ -57,31 +57,38 @@ func main() {
 
 	log.Printf("gitmirror running.")
 
+	sc := mustCreateSecretClient()
+	defer sc.Close()
+
 	go pollGerritAndTickle()
 	go subscribeToMaintnerAndTickleLoop()
-	err := runGitMirror()
+	err := runGitMirror(sc)
 	log.Fatalf("gitmirror exiting after failure: %v", err)
 }
 
 // runGitMirror is a little wrapper so we can use defer and return to signal
 // errors. It should only return a non-nil error.
-func runGitMirror() error {
+func runGitMirror(sc *secret.Client) error {
 	if *mirror {
 		sshDir := filepath.Join(homeDir(), ".ssh")
 		sshKey := filepath.Join(sshDir, "id_ed25519")
 		if _, err := os.Stat(sshKey); err == nil {
 			log.Printf("Using github ssh key at %v", sshKey)
 		} else {
-			if privKey, err := metadata.ProjectAttributeValue("github-ssh"); err == nil && len(privKey) > 0 {
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			if privKey, err := sc.Retrieve(ctx, secret.NameGitHubSSHKey); err == nil && len(privKey) > 0 {
 				if err := os.MkdirAll(sshDir, 0700); err != nil {
 					return err
 				}
 				if err := ioutil.WriteFile(sshKey, []byte(privKey+"\n"), 0600); err != nil {
 					return err
 				}
-				log.Printf("Wrote %s from GCE metadata.", sshKey)
+				log.Printf("Wrote %s from GCP secret manager.", sshKey)
 			} else {
-				return fmt.Errorf("Can't mirror to github without 'github-ssh' GCE metadata or file %v", sshKey)
+				return fmt.Errorf("Can't mirror to github without %q GCP secret manager or file %v", secret.NameGitHubSSHKey, sshKey)
 			}
 		}
 	}
@@ -761,4 +768,12 @@ func handleDebugEnv(w http.ResponseWriter, r *http.Request) {
 	for _, kv := range os.Environ() {
 		fmt.Fprintf(w, "%s\n", kv)
 	}
+}
+
+func mustCreateSecretClient() *secret.Client {
+	client, err := secret.NewClient()
+	if err != nil {
+		log.Fatalf("unable to create secret client %v", err)
+	}
+	return client
 }
