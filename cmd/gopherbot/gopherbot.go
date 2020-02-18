@@ -33,6 +33,7 @@ import (
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/foreach"
 	"golang.org/x/build/internal/gophers"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
 	"golang.org/x/build/maintner/maintnerd/apipb"
@@ -84,13 +85,14 @@ type milestone struct {
 	Name   string
 }
 
-func getGithubToken() (string, error) {
-	if metadata.OnGCE() {
-		for _, key := range []string{"gopherbot-github-token", "maintner-github-token"} {
-			token, err := metadata.ProjectAttributeValue(key)
-			if token != "" && err == nil {
-				return token, nil
-			}
+func getGithubToken(ctx context.Context, sc *secret.Client) (string, error) {
+	if metadata.OnGCE() && sc != nil {
+		ctxSc, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		token, err := sc.Retrieve(ctxSc, secret.NameMaintnerGitHubToken)
+		if err == nil && token != "" {
+			return token, nil
 		}
 	}
 	slurp, err := ioutil.ReadFile(*githubTokenFile)
@@ -104,24 +106,25 @@ func getGithubToken() (string, error) {
 	return f[1], nil
 }
 
-func getGerritAuth() (username string, password string, err error) {
-	var slurp string
-	if metadata.OnGCE() {
-		for _, key := range []string{"gopherbot-gerrit-token", "maintner-gerrit-token", "gobot-password"} {
-			slurp, err = metadata.ProjectAttributeValue(key)
-			if slurp != "" && err == nil {
-				break
-			}
-		}
-	}
-	if len(slurp) == 0 {
-		var slurpBytes []byte
-		slurpBytes, err = ioutil.ReadFile(*gerritTokenFile)
+func getGerritAuth(ctx context.Context, sc *secret.Client) (username string, password string, err error) {
+	if metadata.OnGCE() && sc != nil {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		token, err := sc.Retrieve(ctx, secret.NameGobotPassword)
 		if err != nil {
 			return "", "", err
 		}
-		slurp = string(slurpBytes)
+		return "git-gobot.golang.org", token, nil
 	}
+
+	var slurpBytes []byte
+	slurpBytes, err = ioutil.ReadFile(*gerritTokenFile)
+	if err != nil {
+		return "", "", err
+	}
+	slurp := string(slurpBytes)
+
 	f := strings.SplitN(strings.TrimSpace(slurp), ":", 2)
 	if len(f) == 1 {
 		// assume the whole thing is the token
@@ -133,8 +136,8 @@ func getGerritAuth() (username string, password string, err error) {
 	return f[0], f[1], nil
 }
 
-func getGithubClient() (*github.Client, error) {
-	token, err := getGithubToken()
+func getGithubClient(ctx context.Context, sc *secret.Client) (*github.Client, error) {
+	token, err := getGithubToken(ctx, sc)
 	if err != nil {
 		if *dryRun {
 			return github.NewClient(http.DefaultClient), nil
@@ -146,8 +149,8 @@ func getGithubClient() (*github.Client, error) {
 	return github.NewClient(tc), nil
 }
 
-func getGerritClient() (*gerrit.Client, error) {
-	username, token, err := getGerritAuth()
+func getGerritClient(ctx context.Context, sc *secret.Client) (*gerrit.Client, error) {
+	username, token, err := getGerritAuth(ctx, sc)
 	if err != nil {
 		if *dryRun {
 			c := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
@@ -191,11 +194,17 @@ func (c gerritChange) String() string {
 func main() {
 	flag.Parse()
 
-	ghc, err := getGithubClient()
+	var sc *secret.Client
+	if metadata.OnGCE() {
+		sc = mustCreateSecretClient()
+	}
+	ctx := context.Background()
+
+	ghc, err := getGithubClient(ctx, sc)
 	if err != nil {
 		log.Fatal(err)
 	}
-	gerrit, err := getGerritClient()
+	gerrit, err := getGerritClient(ctx, sc)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -221,7 +230,6 @@ func main() {
 	}
 	bot.initCorpus()
 
-	ctx := context.Background()
 	for {
 		t0 := time.Now()
 		taskErrors := bot.doTasks(ctx)
@@ -2120,4 +2128,12 @@ func printIssue(task string, gi *maintner.GitHubIssue) {
 		lastTask = task
 	}
 	fmt.Printf("\thttps://golang.org/issue/%v  %s\n", gi.Number, gi.Title)
+}
+
+func mustCreateSecretClient() *secret.Client {
+	client, err := secret.NewClient()
+	if err != nil {
+		log.Fatalf("unable to create secret client %v", err)
+	}
+	return client
 }
