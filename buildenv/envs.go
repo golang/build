@@ -54,10 +54,14 @@ type Environment struct {
 	// This field may be overridden as necessary without impacting other fields.
 	ProjectName string
 
-	// ProjectNumber is the GCP project's number, as visible in the admin console.
-	// This is used for things such as constructing the "email" of the default
-	// service account.
+	// ProjectNumber is the GCP build infrastructure project's number, as visible
+	// in the admin console. This is used for things such as constructing the
+	// "email" of the default service account.
 	ProjectNumber int64
+
+	// The GCP project name for the Go project, where build status is stored.
+	// This field may be overridden as necessary without impacting other fields.
+	GoProjectName string
 
 	// The IsProd flag indicates whether production functionality should be
 	// enabled. When true, GCE and Kubernetes builders are enabled and the
@@ -231,6 +235,7 @@ func ByProjectID(projectID string) *Environment {
 var Staging = &Environment{
 	ProjectName:           "go-dashboard-dev",
 	ProjectNumber:         302018677728,
+	GoProjectName:         "go-dashboard-dev",
 	IsProd:                true,
 	ControlZone:           "us-central1-f",
 	VMZones:               []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
@@ -263,6 +268,7 @@ var Staging = &Environment{
 var Production = &Environment{
 	ProjectName:           "symbolic-datum-552",
 	ProjectNumber:         872405196845,
+	GoProjectName:         "golang-org",
 	IsProd:                true,
 	ControlZone:           "us-central1-f",
 	VMZones:               []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
@@ -292,8 +298,9 @@ var Production = &Environment{
 }
 
 var Development = &Environment{
-	IsProd:   false,
-	StaticIP: "127.0.0.1",
+	GoProjectName: "golang-org",
+	IsProd:        false,
+	StaticIP:      "127.0.0.1",
 }
 
 // possibleEnvs enumerate the known buildenv.Environment definitions.

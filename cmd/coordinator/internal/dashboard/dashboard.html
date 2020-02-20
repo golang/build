@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>{{$.Dashboard.Name}} Build Dashboard</title>
+  <link rel="stylesheet" href="/style.css"/>
+  <script async>
+    let showUnsupported = window.location.hash.substr(1) !== 'short';
+
+    function redraw() {
+      showUnsupported = !document.querySelector('#showshort').checked;
+      document.querySelectorAll('.unsupported').forEach(el => {
+        el.hidden = !showUnsupported;
+      });
+      window.location.hash = showUnsupported ? '' : 'short';
+      document.querySelectorAll('.Build-builderOS').forEach(el => {
+        el.setAttribute(
+          'colspan',
+          el.getAttribute(
+            showUnsupported ? 'data-archs' : 'data-firstClassArchs'
+          )
+        );
+      });
+      document.querySelectorAll('.Build-osColumn').forEach(el => {
+        el.setAttribute(
+          'span',
+          el.getAttribute(
+            showUnsupported ? 'data-archs' : 'data-firstClassArchs'
+          )
+        );
+      });
+    }
+
+    window.addEventListener('load', () => {
+      document.querySelector('#showshort').checked = !showUnsupported;
+      document.querySelector('#showshort').addEventListener('change', redraw);
+      redraw();
+    });
+  </script>
+</head>
+
+<body class="Dashboard">
+<header class="Dashboard-topbar">
+<h1>Go Dashboard</h1>
+</header>
+
+<form action="../.." method="GET">
+<input type="hidden" name="repo" value="{{.Package.Path}}"/>
+<nav class="Dashboard-controls">
+  {{if not (eq .Branch "")}}
+    <label>
+      <select name="branch" onchange="this.form.submit()">
+          {{range $.Branches}}
+            <option value="{{.}}" {{if eq $.Branch .}} selected{{end}}>
+                {{.}}
+            </option>
+          {{end}}
+      </select>
+    </label>
+  {{end}}
+  <label>
+    <input type="checkbox" id="showshort"/>
+    show only
+    <a href="http://golang.org/wiki/PortingPolicy">first-class ports</a>
+  </label>
+</nav>
+</form>
+<h2 class="Dashboard-packageName">{{$.Package.Name}}</h2>
+
+<div class="page Build-scrollTable">
+{{if $.Commits}}
+  <table class="Build">
+    <colgroup class="col-hash" {{if $.Package.Path}} span="2" {{end}}></colgroup>
+    <colgroup class="col-user"></colgroup>
+    <colgroup class="col-time"></colgroup>
+    <colgroup class="Build-descriptionColumn col-desc"></colgroup>
+      {{range $.Builders}}
+        <colgroup class="Build-osColumn col-result{{if .Unsupported}} unsupported{{end}}" span="{{.Archs | len}}"
+                  data-archs="{{.Archs | len}}" data-firstClassArchs="{{.FirstClassArchs | len}}"></colgroup>
+      {{end}}
+    <tr class="Build-builderOSRow">
+      {{if $.Package.Path}}
+        <th colspan="2">revision</th>
+      {{else}}
+        <th>&nbsp;</th>
+      {{end}}
+      <th></th>
+      <th></th>
+      <th></th>
+      {{range $.Builders}}
+        <th class="Build-builderOS{{if not .FirstClass}} unsupported{{end}}" colspan="{{.Archs | len}}"
+            data-archs="{{.Archs | len}}" data-firstClassArchs="{{.FirstClassArchs | len}}">
+            {{.OS}}
+        </th>
+      {{end}}
+    </tr>
+
+    <tr class="Build-builderArchRow">
+      {{if $.Package.Path}}
+        <th class="result arch">repo</th>
+        <th class="result arch">{{$.Dashboard.Name}}</th>
+      {{else}}
+        <th>&nbsp;</th>
+      {{end}}
+      <th></th>
+      <th></th>
+      <th></th>
+      {{range $.Builders}}
+        {{range.Archs}}
+          <th class="result arch{{if not (.FirstClass)}} unsupported{{end}}" title="{{.Name}}">
+              {{.Arch}}
+          </th>
+        {{end}}
+      {{end}}
+    </tr>
+
+    <tr class="Build-builderTagRow">
+      <th {{if $.Package.Path}}colspan="2" {{end}}>&nbsp;</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      {{range $.Builders}}
+        {{range.Archs}}
+          <th class="Build-resultArch result arch{{if not (.FirstClass)}} unsupported{{end}}" title="{{.Name}}">
+              {{.Tag}}
+          </th>
+        {{end}}
+      {{end}}
+    </tr>
+    {{range $c := $.Commits}}
+      <tr class="commit">
+        <td class="hash">
+          <span class="ShortHash">
+            <a href="https://go-review.googlesource.com/q/{{$c.Hash}}">
+              {{$c.Hash}}
+            </a>
+          </span>
+        </td>
+        <td class="Build-user" title="{{$c.User}}">{{$c.ShortUser}}</td>
+        <td class="Build-commitTime">
+          {{$c.Time}}
+        </td>
+        <td class="Build-desc desc" title="{{$c.Desc}}">{{$c.Desc}}</td>
+        {{range $b := $.Builders}}
+          {{range $a := .Archs}}
+            <td class="{{if not $a.FirstClass}} unsupported{{end}}" data-builder="{{$a.Name}}">
+              {{with $c.ResultForBuilder $a.Name}}
+                  {{if .OK}} ok {{end}}
+              {{end}}
+            </td>
+          {{end}}
+        {{end}}
+      </tr>
+    {{end}}
+  </table>
+
+  {{with $.Pagination}}
+    <div class="paginate">
+      <nav>
+        {{if .HasPrev}}
+          <a href="?repo={{$.Package.Path}}&page={{.Prev}}&branch={{$.Branch}}">
+            newer
+          </a>
+        {{else}}
+          newer
+        {{end}}
+        {{if .Next}}
+          <a href="?repo={{$.Package.Path}}&page={{.Next}}branch={{$.Branch}}">
+            older
+          </a>
+        {{else}}
+          older
+        {{end}}
+        {{if .HasPrev}}
+          <a href="?branch={{$.Branch}}">
+            latest
+          </a>
+        {{else}}
+          latest
+        {{end}}
+      </nav>
+    </div>
+  {{end}}
+{{else}}
+  <p>No commits to display. Hm.</p>
+{{end}}
+</div>
+</body>
+</html>

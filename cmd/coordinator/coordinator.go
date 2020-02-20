@@ -45,6 +45,7 @@ import (
 	"unicode"
 
 	"go4.org/syncutil"
+	builddash "golang.org/x/build/cmd/coordinator/internal/dashboard"
 	"golang.org/x/build/cmd/coordinator/protos"
 	"google.golang.org/grpc"
 	grpc4 "grpc.go4.org"
@@ -305,6 +306,11 @@ func main() {
 	}
 	maintnerClient = apipb.NewMaintnerServiceClient(cc)
 
+	if err := loadStatic(); err != nil {
+		log.Printf("Failed to load static resources: %v", err)
+	}
+
+	dh := &builddash.Handler{Datastore: goDSClient, Maintner: maintnerClient}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
 	protos.RegisterCoordinatorServer(grpcServer, gs)
 	http.HandleFunc("/", handleStatus)
@@ -319,6 +325,7 @@ func main() {
 	http.HandleFunc("/try.json", serveTryStatus(true))
 	http.HandleFunc("/status/reverse.json", reversePool.ServeReverseStatusJSON)
 	http.HandleFunc("/status/post-submit-active.json", handlePostSubmitActiveJSON)
+	http.Handle("/dashboard", dh)
 	http.Handle("/buildlet/create", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletCreate)))
 	http.Handle("/buildlet/list", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletList)))
 	go func() {

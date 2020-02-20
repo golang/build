@@ -42,7 +42,7 @@ import (
 	"golang.org/x/build/internal/lru"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
 )
 
@@ -63,7 +63,10 @@ func gceAPIGate() {
 var (
 	buildEnv *buildenv.Environment
 
-	dsClient       *datastore.Client
+	// dsClient is a datastore client for the build project (symbolic-datum-552), where build progress is stored.
+	dsClient *datastore.Client
+	// goDSClient is a datastore client for golang-org, where build status is stored.
+	goDSClient     *datastore.Client
 	computeService *compute.Service
 	gcpCreds       *google.Credentials
 	errTryDeps     error // non-nil if try bots are disabled
@@ -100,7 +103,7 @@ func initGCE() error {
 	}
 
 	buildEnv = buildenv.ByProjectID(*buildEnvName)
-	inStaging = (buildEnv == buildenv.Staging)
+	inStaging = buildEnv == buildenv.Staging
 
 	// If running on GCE, override the zone and static IP, and check service account permissions.
 	if metadata.OnGCE() {
@@ -153,9 +156,17 @@ func initGCE() error {
 	dsClient, err = datastore.NewClient(ctx, buildEnv.ProjectName)
 	if err != nil {
 		if *mode == "dev" {
-			log.Printf("Error creating datastore client: %v", err)
+			log.Printf("Error creating datastore client for %q: %v", buildEnv.ProjectName, err)
 		} else {
-			log.Fatalf("Error creating datastore client: %v", err)
+			log.Fatalf("Error creating datastore client for %q: %v", buildEnv.ProjectName, err)
+		}
+	}
+	goDSClient, err = datastore.NewClient(ctx, buildEnv.GoProjectName)
+	if err != nil {
+		if *mode == "dev" {
+			log.Printf("Error creating datastore client for %q: %v", buildEnv.GoProjectName, err)
+		} else {
+			log.Fatalf("Error creating datastore client for %q: %v", buildEnv.GoProjectName, err)
 		}
 	}
 

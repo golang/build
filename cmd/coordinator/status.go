@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/build/cmd/coordinator/internal"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/foreach"
 )
@@ -794,83 +795,19 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 </html>
 `))
 
+var styleCSS []byte
+
+// loadStatic loads static resources into memroy for serving.
+func loadStatic() error {
+	path := internal.FilePath("style.css", "cmd/coordinator")
+	css, err := ioutil.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("ioutil.ReadFile(%q): %w", path, err)
+	}
+	styleCSS = css
+	return nil
+}
+
 func handleStyleCSS(w http.ResponseWriter, r *http.Request) {
-	src := strings.NewReader(styleCSS)
-	http.ServeContent(w, r, "style.css", processStartTime, src)
+	http.ServeContent(w, r, "style.css", processStartTime, bytes.NewReader(styleCSS))
 }
-
-const styleCSS = `
-body {
-	font-family: sans-serif;
-	color: #222;
-	padding: 10px;
-	margin: 0;
-}
-
-h1, h2, h1 > a, h2 > a, h1 > a:visited, h2 > a:visited {
-	color: #375EAB;
-}
-h1 { font-size: 24px; }
-h2 { font-size: 20px; }
-
-h1 > a, h2 > a {
-	display: none;
-	text-decoration: none;
-}
-
-h1:hover > a, h2:hover > a {
-	display: inline;
-}
-
-h1 > a:hover, h2 > a:hover {
-	text-decoration: underline;
-}
-
-pre {
-	font-family: monospace;
-	font-size: 9pt;
-}
-
-header {
-	margin: -10px -10px 0 -10px;
-	padding: 10px 10px;
-	background: #E0EBF5;
-}
-header a { color: #222; }
-header h1 {
-	display: inline;
-	margin: 0;
-	padding-top: 5px;
-}
-header nav {
-	display: inline-block;
-	margin-left: 20px;
-}
-header nav a {
-	display: inline-block;
-	padding: 10px;
-	margin: 0;
-	margin-right: 5px;
-	color: white;
-	background: #375EAB;
-	text-decoration: none;
-	font-size: 16px;
-	border: 1px solid #375EAB;
-	border-radius: 5px;
-}
-
-table {
-	border-collapse: collapse;
-	font-size: 9pt;
-}
-
-table td, table th, table td, table th {
-	text-align: left;
-	vertical-align: top;
-	padding: 2px 6px;
-}
-
-table thead tr {
-	background: #fff !important;
-}
-`

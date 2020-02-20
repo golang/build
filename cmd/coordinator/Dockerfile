@@ -86,6 +86,8 @@ RUN apt-get update && apt-get install -y \
 	&& rm -rf /var/lib/apt/lists/*
 
 
+COPY --from=build /go/src/golang.org/x/build/cmd/coordinator/internal/dashboard/dashboard.html /dashboard.html
+COPY --from=build /go/src/golang.org/x/build/cmd/coordinator/style.css /style.css
 COPY --from=build /go/bin/coordinator /
 COPY --from=build_drawterm /usr/local/bin/drawterm /usr/local/bin/
 

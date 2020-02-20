@@ -1,0 +1,161 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  color: #222;
+  font-family: sans-serif;
+  margin: 0;
+  padding: 10px;
+}
+
+h1,
+h2,
+h1 > a,
+h2 > a,
+h1 > a:visited,
+h2 > a:visited {
+  color: #375eab;
+}
+h1 {
+  font-size: 24px;
+}
+h2 {
+  font-size: 20px;
+}
+
+h1 > a,
+h2 > a {
+  display: none;
+  text-decoration: none;
+}
+
+h1:hover > a,
+h2:hover > a {
+  display: inline;
+}
+
+h1 > a:hover,
+h2 > a:hover {
+  text-decoration: underline;
+}
+
+pre {
+  font-family: monospace;
+  font-size: 9pt;
+}
+
+header {
+  background: #e0ebf5;
+  margin: -10px -10px 0 -10px;
+  padding: 10px 10px;
+}
+header a {
+  color: #222;
+}
+header h1 {
+  display: inline;
+  margin: 0;
+  padding-top: 5px;
+}
+header nav {
+  display: inline-block;
+  margin-left: 20px;
+}
+header nav a {
+  background: #375eab;
+  border: 1px solid #375eab;
+  border-radius: 5px;
+  color: white;
+  display: inline-block;
+  font-size: 16px;
+  margin: 0;
+  margin-right: 5px;
+  padding: 10px;
+  text-decoration: none;
+}
+
+table {
+  border-collapse: collapse;
+  font-size: 9pt;
+}
+
+table td,
+table th,
+table td,
+table th {
+  padding: 2px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+
+table thead tr {
+  background: #fff !important;
+}
+
+.Dashboard {
+  margin: 0;
+  padding: 0;
+}
+.Dashboard-topbar {
+  margin: 0;
+  padding: 1rem 0.625rem;
+}
+table.Build tbody tr:nth-child(even) {
+  background-color: #f4f4f4;
+}
+.ShortHash {
+  display: inline-block;
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: clip;
+  width: 3.2rem;
+}
+.Dashboard-packageName {
+  background: #e0ebf5;
+  padding: 0.125rem 0.3125rem;
+}
+.Dashboard-controls {
+  padding: 0.5rem;
+}
+.Build-scrollTable {
+  overflow-x: auto;
+}
+.Build-descriptionColumn,
+.Build-osColumn {
+  border-right: 0.0625rem solid #ccc;
+}
+.Build-resultArch {
+  max-width: 2rem;
+  overflow: hidden;
+  text-overflow: clip;
+  whitespace: nowrap;
+}
+.Build-user {
+  font-size: 0.8125rem;
+  max-width: 3.4rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.Build-commitTime {
+  color: #4e4e4e;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+.Build-desc {
+  max-width: 8.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.Build-builderOSRow th {
+  font-size: 0.8125rem;
+  text-align: center;
+}
+.Build-builderArchRow th,
+.Build-builderTagRow th {
+  font-size: 0.5625rem;
+  font-weight: normal;
+  text-align: center;
+  white-space: nowrap;
+}
