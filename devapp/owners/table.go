@@ -341,6 +341,9 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{gri},
 		Secondary: []Owner{adonovan},
 	},
+	"go/src/hash/maphash": {
+		Primary: []Owner{khr},
+	},
 	"go/src/html/template": {
 		Primary:   []Owner{mikesamuel},
 		Secondary: []Owner{empijei},
