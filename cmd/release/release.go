@@ -332,8 +332,7 @@ func (b *Build) make() error {
 	}
 
 	// Issues #36025 #35459
-	// TODO (amedee): remove check for go1.14 once #36845 and #36846 are resolved.
-	if b.OS == "darwin" && b.Arch == "amd64" && strings.HasPrefix(*version, "go1.14") {
+	if b.OS == "darwin" && b.Arch == "amd64" {
 		minMacVersion := minSupportedMacOSVersion(*version)
 		env = append(env, fmt.Sprintf("CGO_CFLAGS=-mmacosx-version-min=%s", minMacVersion))
 	}
@@ -886,22 +885,17 @@ func setGOARCH(env []string, goarch string) []string {
 }
 
 // minSupportedMacOSVersion provides the minimum supported macOS
-// version (of the form N.M) for each version of Go >= go1.12.
+// version (of the form N.M) for supported Go versions.
 func minSupportedMacOSVersion(goVer string) string {
 	// TODO(amedee): Use a version package to compare versions of Go.
 
 	// The minimum supported version of macOS with each version of go:
-	// go1.12 - macOS 10.10
 	// go1.13 - macOS 10.11
 	// go1.14 - macOS 10.11
 	// go1.15 - macOS 10.12
-	minMacVersion := "10.11"
-	if strings.HasPrefix(goVer, "go1.12.") {
-		minMacVersion = "10.10"
-		return minMacVersion
-	}
-	if strings.HasPrefix(goVer, "go1.15") {
-		minMacVersion = "10.12"
+	minMacVersion := "10.12"
+	if strings.HasPrefix(goVer, "go1.13") || strings.HasPrefix(goVer, "go1.14") {
+		minMacVersion = "10.11"
 		return minMacVersion
 	}
 	return minMacVersion

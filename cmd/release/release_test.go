@@ -25,7 +25,6 @@ func TestMinSupportedMacOSVersion(t *testing.T) {
 		goVer     string
 		wantMacOS string
 	}{
-		{"patch_release_12", "go1.12.1", "10.10"},
 		{"minor_release_13", "go1.13", "10.11"},
 		{"minor_release_14", "go1.14", "10.11"},
 		{"rc_release_13", "go1.13rc1", "10.11"},
