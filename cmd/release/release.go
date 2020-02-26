@@ -42,9 +42,6 @@ var (
 
 	rev       = flag.String("rev", "", "Go revision to build, alternative to -tarball")
 	tarball   = flag.String("tarball", "", "Go tree tarball to build, alternative to -rev")
-	toolsRev  = flag.String("tools", "", "Tools revision to build")
-	tourRev   = flag.String("tour", "master", "Tour revision to include")
-	netRev    = flag.String("net", "master", "Net revision to include")
 	version   = flag.String("version", "", "Version string (go1.5.2)")
 	user      = flag.String("user", username(), "coordinator username, appended to 'user-'")
 	skipTests = flag.Bool("skip_tests", false, "skip tests; run make.bash instead of all.bash (only use if you ran trybots first)")
@@ -75,9 +72,6 @@ func main() {
 	}
 	if *version == "" {
 		log.Fatal(`must specify -version flag (such as "go1.12" or "go1.13beta1")`)
-	}
-	if *toolsRev == "" && (versionIncludesGodoc(*version) || versionIncludesTour(*version)) {
-		log.Fatal("must specify -tools flag")
 	}
 
 	coordClient = coordinatorClient()
@@ -282,29 +276,6 @@ func (b *Build) make() error {
 			return err
 		}
 	}
-	for _, r := range []struct {
-		repo, rev string
-	}{
-		{"tools", *toolsRev},
-		{"tour", *tourRev},
-		{"net", *netRev},
-	} {
-		if b.Source {
-			continue
-		}
-		if r.repo == "tour" && !versionIncludesTour(*version) {
-			continue
-		}
-		if (r.repo == "net" || r.repo == "tools") && !versionIncludesGodoc(*version) {
-			continue
-		}
-		dir := goPath + "/src/golang.org/x/" + r.repo
-		tar := "https://go.googlesource.com/" + r.repo + "/+archive/" + r.rev + ".tar.gz"
-		if err := client.PutTarFromURL(ctx, tar, dir); err != nil {
-			b.logf("failed to put tarball %q into dir %q: %v", tar, dir, err)
-			return err
-		}
-	}
 
 	if u := bc.GoBootstrapURL(buildEnv); u != "" && !b.Source {
 		b.logf("Installing go1.4.")
@@ -423,20 +394,6 @@ func (b *Build) make() error {
 		b.logf("Building race detector.")
 
 		if err := runGo("install", "-race", "std"); err != nil {
-			return err
-		}
-	}
-
-	var toolPaths []string
-	if versionIncludesGodoc(*version) {
-		toolPaths = append(toolPaths, "golang.org/x/tools/cmd/godoc")
-	}
-	if versionIncludesTour(*version) {
-		toolPaths = append(toolPaths, "golang.org/x/tour")
-	}
-	if len(toolPaths) > 0 {
-		b.logf("Building %v.", strings.Join(toolPaths, ", "))
-		if err := runGo(append([]string{"install"}, toolPaths...)...); err != nil {
 			return err
 		}
 	}
@@ -926,26 +883,6 @@ func setGOARCH(env []string, goarch string) []string {
 		return env
 	}
 	return append(env, wantKV)
-}
-
-// versionIncludesTour reports whether the provided Go version (of the
-// form "go1.N" or "go1.N.M" includes the Go tour binary.
-func versionIncludesTour(goVer string) bool {
-	// We don't do releases of Go 1.9 and earlier, so this only
-	// needs to recognize the two current past releases. From Go
-	// 1.12 and on, we won't ship the tour binary (see CL 131156).
-	return strings.HasPrefix(goVer, "go1.10.") ||
-		strings.HasPrefix(goVer, "go1.11.")
-}
-
-// versionIncludesGodoc reports whether the provided Go version (of the
-// form "go1.N" or "go1.N.M" includes the godoc binary.
-func versionIncludesGodoc(goVer string) bool {
-	// We don't do releases of Go 1.10 and earlier, so this only
-	// needs to recognize the two current past releases. From Go
-	// 1.13 and on, we won't ship the godoc binary (see Issue 30029).
-	return strings.HasPrefix(goVer, "go1.11.") ||
-		strings.HasPrefix(goVer, "go1.12.")
 }
 
 // minSupportedMacOSVersion provides the minimum supported macOS
