@@ -43,13 +43,15 @@ func NewNetworkMutationSource(server, cacheDir string) MutationSource {
 }
 
 // TailNetworkMutationSource calls fn for all new mutations added to the log on server.
+// Events with the End field set to true are not sent, so all events will
+// have exactly one of Mutation or Err fields set to a non-zero value.
 // It ignores prior events.
 // If the server is restarted and its history diverges,
 // TailNetworkMutationSource may return duplicate events. This therefore does not
 // return a MutationSource, so it can't be accidentally misused for important things.
 // TailNetworkMutationSource returns if fn returns an error, or if ctx expires.
 func TailNetworkMutationSource(ctx context.Context, server string, fn func(MutationStreamEvent) error) error {
-	td, err := ioutil.TempDir("", "maintnerwatch")
+	td, err := ioutil.TempDir("", "maintnertail")
 	if err != nil {
 		return err
 	}

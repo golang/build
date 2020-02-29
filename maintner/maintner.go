@@ -208,9 +208,9 @@ type MutationSource interface {
 }
 
 // MutationStreamEvent represents one of three possible events while
-// reading mutations from disk. An event is either a mutation, an
-// error, or reaching the current end of the log. Only one of the
-// fields will be non-zero.
+// reading mutations from disk or another source.
+// An event is either a mutation, an error, or reaching the current
+// end of the log. Exactly one of the three fields will be non-zero.
 type MutationStreamEvent struct {
 	Mutation *maintpb.Mutation
 
