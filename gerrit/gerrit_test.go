@@ -338,3 +338,112 @@ func TestGetProjectTags(t *testing.T) {
 		}
 	}
 }
+
+// taken from https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-change-comments
+var exampleListChangeCommentsResponse = []byte(`)]}
+{
+    "gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java": [
+      {
+        "patch_set": 1,
+        "id": "TvcXrmjM",
+        "line": 23,
+        "message": "[nit] trailing whitespace",
+        "updated": "2013-02-26 15:40:43.986000000",
+        "author": {
+          "_account_id": 1000096,
+          "name": "John Doe",
+          "email": "john.doe@example.com"
+        }
+	  },
+	  {
+        "patch_set": 2,
+        "id": "TveXwFiA",
+        "line": 49,
+        "in_reply_to": "TfYX-Iuo",
+        "message": "Done",
+        "updated": "2013-02-26 15:40:45.328000000",
+        "author": {
+          "_account_id": 1000097,
+          "name": "Jane Roe",
+          "email": "jane.roe@example.com"
+        }
+      }
+    ]
+}`)
+
+func TestListChangeComments(t *testing.T) {
+	hitServer := false
+	uri := ""
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitServer = true
+		uri = r.URL.RequestURI()
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		w.WriteHeader(200)
+		w.Write(exampleListChangeCommentsResponse)
+	}))
+	defer s.Close()
+	c := NewClient(s.URL, NoAuth)
+	commentInfos, err := c.ListChangeComments(context.Background(), "48330")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hitServer {
+		t.Errorf("expected to hit test server, didn't")
+	}
+	if want := "/changes/48330/comments"; uri != want {
+		t.Errorf("expected RequestURI to be %s, got %s", want, uri)
+	}
+
+	expectedCommentInfos := map[string][]*CommentInfo{
+		"gerrit-server/src/main/java/com/google/gerrit/server/project/RefControl.java": []*CommentInfo{
+			{
+				ID:       "TvcXrmjM",
+				PatchSet: 1,
+				Line:     23,
+				Message:  "[nit] trailing whitespace",
+				Updated:  TimeStamp(time.Date(2013, 2, 26, 15, 40, 43, 986000000, time.UTC)),
+				Author: &AccountInfo{
+					NumericID: 1000096,
+					Name:      "John Doe",
+					Email:     "john.doe@example.com",
+				},
+			},
+			{
+				ID:        "TveXwFiA",
+				PatchSet:  2,
+				Line:      49,
+				InReplyTo: "TfYX-Iuo",
+				Message:   "Done",
+				Updated:   TimeStamp(time.Date(2013, 2, 26, 15, 40, 45, 328000000, time.UTC)),
+				Author: &AccountInfo{
+					NumericID: 1000097,
+					Name:      "Jane Roe",
+					Email:     "jane.roe@example.com",
+				},
+			},
+		},
+	}
+	if len(commentInfos) != len(expectedCommentInfos) {
+		t.Errorf("expected %d comments, got %d", len(expectedCommentInfos), len(commentInfos))
+	}
+
+	for path, comments := range commentInfos {
+		expectedComments, found := expectedCommentInfos[path]
+		if !found {
+			t.Errorf("unexpected comment path %q", path)
+		}
+
+		if len(comments) != len(expectedComments) {
+			t.Errorf("expected %d comments, got %d", len(expectedComments), len(comments))
+		}
+
+		for i, c := range comments {
+			if c.ID != expectedComments[i].ID {
+				t.Errorf("expected %s, got %s", expectedComments[i].ID, c.ID)
+			}
+			if !c.Updated.Equal(expectedComments[i].Updated) {
+				t.Errorf("expected %v, got %v", expectedComments[i].Updated, c.Updated)
+			}
+		}
+	}
+}

@@ -917,3 +917,44 @@ func (c *Client) GetGroupMembers(ctx context.Context, groupID string) ([]Account
 	err := c.do(ctx, &ais, "GET", "/groups/"+groupID+"/members")
 	return ais, err
 }
+
+// CommentRange describes the range of an inline comment.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#comment-range
+type CommentRange struct {
+	StartLine      int `json:"start_line"`
+	StartCharacter int `json:"start_character"`
+	EndLine        int `json:"end_line"`
+	EndCharacter   int `json:"end_character"`
+}
+
+// CommentInfo contains information about an inline comment.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#comment-info
+type CommentInfo struct {
+	ID         string        `json:"id"`
+	PatchSet   int           `json:"patch_set,omitempty"`
+	Path       string        `json:"path,omitempty"`
+	Line       int           `json:"line,omitempty"`
+	Message    string        `json:"message,omitempty"`
+	Range      *CommentRange `json:"range,omitempty"`
+	Side       string        `json:"side,omitempty"`
+	Parent     string        `json:"parent,omitempty"`
+	InReplyTo  string        `json:"in_reply_to,omitempty"`
+	Updated    TimeStamp     `json:"updated"`
+	Author     *AccountInfo  `json:"author,omitempty"`
+	Tag        string        `json:"tag,omitempty"`
+	Unresolved bool          `json:"unresolved,omitempty"`
+}
+
+// ListChangeComments returns the published comments of all revisions of the change.
+//
+// For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-change-comments
+// The changeID is https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-id
+func (c *Client) ListChangeComments(ctx context.Context, changeID string) (map[string][]*CommentInfo, error) {
+	var m map[string][]*CommentInfo
+	if err := c.do(ctx, &m, "GET", "/changes/"+changeID+"/comments"); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
