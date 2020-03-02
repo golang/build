@@ -93,7 +93,7 @@ func init() {
 	add(&Repo{
 		GoGerritProject: "protobuf",
 		MirrorToGitHub:  true,
-		ImportPath:      "github.com/google/protobuf",
+		ImportPath:      "google.golang.org/protobuf",
 		gitHubRepo:      "protocolbuffers/protobuf-go",
 	})
 }
