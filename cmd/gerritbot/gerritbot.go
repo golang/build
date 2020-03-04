@@ -30,6 +30,7 @@ import (
 	"github.com/google/go-github/github"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/https"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
 	"golang.org/x/build/repos"
@@ -46,16 +47,22 @@ var (
 	dryRun          = flag.Bool("dry-run", false, "print out mutating actions but don’t perform any")
 )
 
+// TODO(amedee): set to this value until the SLO numbers are published
+const secretClientTimeout = 10 * time.Second
+
 func main() {
 	flag.Parse()
-	if err := writeCookiesFile(); err != nil {
+
+	secretClient := mustCreateSecretClient()
+
+	if err := writeCookiesFile(secretClient); err != nil {
 		log.Fatalf("writeCookiesFile(): %v", err)
 	}
-	ghc, err := githubClient()
+	ghc, err := githubClient(secretClient)
 	if err != nil {
 		log.Fatalf("githubClient(): %v", err)
 	}
-	gc, err := gerritClient()
+	gc, err := gerritClient(secretClient)
 	if err != nil {
 		log.Fatalf("gerritClient(): %v", err)
 	}
@@ -89,7 +96,7 @@ func home() string {
 	return u.HomeDir
 }
 
-func writeCookiesFile() error {
+func writeCookiesFile(sc *secret.Client) error {
 	if *gitcookiesFile == "" {
 		return nil
 	}
@@ -97,19 +104,19 @@ func writeCookiesFile() error {
 	if !metadata.OnGCE() {
 		return fmt.Errorf("cannot write git http cookies file %q from metadata: not on GCE", *gitcookiesFile)
 	}
-	k := "gerritbot-gitcookies"
-	cookies, err := metadata.ProjectAttributeValue(k)
-	if cookies == "" {
-		return fmt.Errorf("metadata.ProjectAttribtueValue(%q) returned an empty value", k)
-	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), secretClientTimeout)
+	defer cancel()
+
+	cookies, err := sc.Retrieve(ctx, secret.NameGerritbotGitCookies)
 	if err != nil {
-		return fmt.Errorf("metadata.ProjectAttribtueValue(%q): %v", k, err)
+		return fmt.Errorf("secret.Retrieve(ctx, %q): %q, %w", secret.NameGerritbotGitCookies, cookies, err)
 	}
 	return ioutil.WriteFile(*gitcookiesFile, []byte(cookies), 0600)
 }
 
-func githubClient() (*github.Client, error) {
-	token, err := githubToken()
+func githubClient(sc *secret.Client) (*github.Client, error) {
+	token, err := githubToken(sc)
 	if err != nil {
 		return nil, err
 	}
@@ -118,10 +125,15 @@ func githubClient() (*github.Client, error) {
 	return github.NewClient(tc), nil
 }
 
-func githubToken() (string, error) {
+func githubToken(sc *secret.Client) (string, error) {
 	if metadata.OnGCE() {
-		token, err := metadata.ProjectAttributeValue("maintner-github-token")
-		if err == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), secretClientTimeout)
+		defer cancel()
+
+		token, err := sc.Retrieve(ctx, secret.NameMaintnerGitHubToken)
+		if err != nil {
+			log.Printf("secret.Retrieve(ctx, %q): %q, %v", secret.NameMaintnerGitHubToken, token, err)
+		} else {
 			return token, nil
 		}
 	}
@@ -136,8 +148,8 @@ func githubToken() (string, error) {
 	return tok, nil
 }
 
-func gerritClient() (*gerrit.Client, error) {
-	username, token, err := gerritAuth()
+func gerritClient(sc *secret.Client) (*gerrit.Client, error) {
+	username, token, err := gerritAuth(sc)
 	if err != nil {
 		return nil, err
 	}
@@ -145,13 +157,15 @@ func gerritClient() (*gerrit.Client, error) {
 	return c, nil
 }
 
-func gerritAuth() (string, string, error) {
+func gerritAuth(sc *secret.Client) (string, string, error) {
 	var slurp string
 	if metadata.OnGCE() {
 		var err error
-		slurp, err = metadata.ProjectAttributeValue("gobot-password")
+		ctx, cancel := context.WithTimeout(context.Background(), secretClientTimeout)
+		defer cancel()
+		slurp, err = sc.Retrieve(ctx, secret.NameGobotPassword)
 		if err != nil {
-			log.Printf(`Error retrieving Project Metadata "gobot-password": %v`, err)
+			log.Printf("secret.Retrieve(ctx, %q): %q, %v", secret.NameGobotPassword, slurp, err)
 		}
 	}
 	if len(slurp) == 0 {
@@ -897,4 +911,12 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 	}
 	logGitHubRateLimits(resp)
 	return nil
+}
+
+func mustCreateSecretClient() *secret.Client {
+	client, err := secret.NewClient()
+	if err != nil {
+		log.Fatalf("unable to create secret client %v", err)
+	}
+	return client
 }
