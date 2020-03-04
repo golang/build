@@ -17,6 +17,35 @@ import (
 	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1beta1"
 )
 
+const (
+	// NameBuilderMasterKey is the secret name for the builder master key.
+	NameBuilderMasterKey = "builder-master-key"
+
+	// NameFarmerRunBench is the secret name for farmer run bench.
+	NameFarmerRunBench = "farmer-run-bench"
+
+	// NameGerritbotGitCookies is the secret name for Gerritbot Git cookies.
+	NameGerritbotGitCookies = "gerritbot-gitcookies"
+
+	// NameGitHubSSH is the secret name for GitHub SSH key.
+	NameGitHubSSH = "github-ssh"
+
+	// NameGithubSSHKey is the secret name for the GitHub SSH private key.
+	NameGitHubSSHKey = "github-ssh-private-key"
+
+	// NameGobotPassword is the secret name for the Gobot password.
+	NameGobotPassword = "gobot-password"
+
+	// NameGomoteSSHPublicKey is the secret name for the gomote SSH public key.
+	NameGomoteSSHPublicKey = "gomote-ssh-public-key"
+
+	// NameMaintnerGitHubToken is the secret name for the Maintner GitHub token.
+	NameMaintnerGitHubToken = "maintner-github-token"
+
+	// NamePubSubHelperWebhook is the secret name for the pubsub helper webhook secret.
+	NamePubSubHelperWebhook = "pubsubhelper-webhook-secret"
+)
+
 type secretClient interface {
 	AccessSecretVersion(ctx context.Context, req *secretmanagerpb.AccessSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.AccessSecretVersionResponse, error)
 	io.Closer
