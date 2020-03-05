@@ -17,7 +17,6 @@ import (
 	"net/http"
 	"strings"
 
-	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/build/cmd/pubsubhelper/pubsubtypes"
 )
 
@@ -97,16 +96,12 @@ func validateGithubRequest(w http.ResponseWriter, r *http.Request) (body []byte,
 		return nil, err
 	}
 
-	// Compute expected signature.
-	key, err := metadata.ProjectAttributeValue("pubsubhelper-webhook-secret")
-	if err != nil {
-		return nil, err
-	}
 	body, err = ioutil.ReadAll(http.MaxBytesReader(w, r.Body, 5<<20))
 	if err != nil {
 		return nil, err
 	}
-	mac := hmac.New(h, []byte(key))
+	// TODO(golang/go#37171): find a cleaner solution than using a global
+	mac := hmac.New(h, []byte(*webhookSecret))
 	mac.Write(body)
 	expectSig := mac.Sum(nil)
 

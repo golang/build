@@ -32,19 +32,22 @@ import (
 	"github.com/jellevandenhooff/dkim"
 	"go4.org/types"
 	"golang.org/x/build/cmd/pubsubhelper/pubsubtypes"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/crypto/acme/autocert"
 )
 
 var (
-	botEmail   = flag.String("rcpt", "\x67\x6f\x70\x68\x65\x72\x62\x6f\x74@pubsubhelper.golang.org", "email address of bot. incoming emails must be to this address.")
-	httpListen = flag.String("http", ":80", "HTTP listen address")
-	acmeDomain = flag.String("autocert", "pubsubhelper.golang.org", "If non-empty, listen on port 443 and serve HTTPS with a LetsEncrypt cert for this domain.")
-	smtpListen = flag.String("smtp", ":25", "SMTP listen address")
+	botEmail      = flag.String("rcpt", "\x67\x6f\x70\x68\x65\x72\x62\x6f\x74@pubsubhelper.golang.org", "email address of bot. incoming emails must be to this address.")
+	httpListen    = flag.String("http", ":80", "HTTP listen address")
+	acmeDomain    = flag.String("autocert", "pubsubhelper.golang.org", "If non-empty, listen on port 443 and serve HTTPS with a LetsEncrypt cert for this domain.")
+	smtpListen    = flag.String("smtp", ":25", "SMTP listen address")
+	webhookSecret = flag.String("webhook-secret", "", "Development mode GitHub webhook secret. This flag should not be used in production.")
 )
 
 func main() {
 	flag.Parse()
 
+	ctx := context.Background()
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, os.Interrupt)
 	go func() {
@@ -52,6 +55,21 @@ func main() {
 		log.Printf("Signal %v received; exiting with status 0.", sig)
 		os.Exit(0)
 	}()
+
+	// webhooksecret should not be set in production
+	if *webhookSecret == "" {
+		sc := mustCreateSecretClient()
+		defer sc.Close()
+
+		ctxSc, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		var err error
+		*webhookSecret, err = sc.Retrieve(ctxSc, secret.NamePubSubHelperWebhook)
+		if err != nil {
+			log.Fatalf("unable to retrieve webhook secret %v", err)
+		}
+	}
 
 	http.HandleFunc("/", handleRoot)
 	http.HandleFunc("/waitevent", handleWaitEvent)
@@ -409,4 +427,12 @@ func onNewMail(c smtpd.Connection, from smtpd.MailAddress) (smtpd.Envelope, erro
 func onNewConnection(c smtpd.Connection) error {
 	log.Printf("smtpd: new connection from %v", c.Addr())
 	return nil
+}
+
+func mustCreateSecretClient() *secret.Client {
+	client, err := secret.NewClient()
+	if err != nil {
+		log.Fatalf("unable to create secret client %v", err)
+	}
+	return client
 }
