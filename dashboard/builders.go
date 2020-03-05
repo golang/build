@@ -2092,13 +2092,13 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-nocgo",
-		HostType:          "host-darwin-10_14",
+		HostType:          "host-darwin-10_15",
 		shouldRunDistTest: noTestDir,
 		env:               []string{"CGO_ENABLED=0"},
 	})
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-race",
-		HostType:          "host-darwin-10_14",
+		HostType:          "host-darwin-10_15",
 		shouldRunDistTest: macTestPolicy,
 		buildsRepo:        onlyGo,
 	})
