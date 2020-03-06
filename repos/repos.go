@@ -13,7 +13,8 @@ type Repo struct {
 	GoGerritProject string
 
 	// ImportPath is the repo's import path.
-	// It is empty for the main Go repo.
+	// It is empty for the main Go repo and other repos that do not
+	// contain Go code.
 	ImportPath string
 
 	// MirrorToGitHub controls whether this repo is mirrored
@@ -95,6 +96,12 @@ func init() {
 		MirrorToGitHub:  true,
 		ImportPath:      "google.golang.org/protobuf",
 		gitHubRepo:      "protocolbuffers/protobuf-go",
+	})
+
+	add(&Repo{
+		GoGerritProject: "vscode-go",
+		MirrorToGitHub:  true,
+		gitHubRepo:      "golang/vscode-go",
 	})
 }
 
