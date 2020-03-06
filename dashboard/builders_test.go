@@ -523,8 +523,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-10_14", "go"), onlyPost},
 		{b("darwin-amd64-10_12", "go"), onlyPost},
 		{b("darwin-amd64-10_11", "go"), onlyPost},
-		{b("darwin-amd64-10_10", "go"), none},
-		{b("darwin-amd64-10_10@go1.12", "go"), onlyPost},
 		{b("darwin-386-10_14", "go"), onlyPost},
 		{b("darwin-386-10_14@go1.12", "go"), none},
 		{b("darwin-386-10_14@go1.13", "go"), onlyPost},
@@ -630,7 +628,6 @@ func TestShouldRunDistTest(t *testing.T) {
 		{"linux-amd64", "reboot", tryMode, true},
 		{"linux-amd64-race", "reboot", tryMode, false},
 
-		{"darwin-amd64-10_10", "test:foo", postSubmit, false},
 		{"darwin-amd64-10_11", "test:foo", postSubmit, false},
 		{"darwin-amd64-10_12", "test:foo", postSubmit, false},
 		{"darwin-amd64-10_14", "test:foo", postSubmit, false},

@@ -66,14 +66,10 @@ buildlet-stage0.linux-mips64: FORCE
 	go install golang.org/x/build/cmd/upload
 	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
 
-# macstadium uploads all the darwin-amd64 stage0 binary as three
-# different filenames, which is used by four different Mac VM images.
+# macstadium uploads all the darwin-amd64 stage0 binary as
+# different filenames, which is used by different Mac VM images.
 # See the env/darwin/macstadium/** files for details.
-macstadium: run-builder-darwin-10_10.gz run-builder-darwin-10_11.gz
-
-run-builder-darwin-10_10.gz: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=darwin-amd64 --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false --gzip go-builder-data/$@
+macstadium: run-builder-darwin-10_11.gz
 
 # run-builder-darwin-10_11.gz is used by both our macOS 10.11 and 10.12 VM images.
 run-builder-darwin-10_11.gz: FORCE

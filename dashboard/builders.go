@@ -480,16 +480,6 @@ var Hosts = map[string]*HostConfig{
 		OwnerGithub: "jordanrh1",
 		env:         []string{"GOROOT_BOOTSTRAP=C:\\Data\\Go"},
 	},
-	"host-darwin-10_10": &HostConfig{
-		IsReverse: true,
-		ExpectNum: 3,
-		Notes:     "MacStadium OS X 10.10 VM under VMWare ESXi",
-		env: []string{
-			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
-		},
-		SSHUsername:     "gopher",
-		HermeticReverse: false, // TODO: make it so, like 10.12
-	},
 	"host-darwin-10_11": &HostConfig{
 		IsReverse: true,
 		ExpectNum: 3,
@@ -502,7 +492,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_12": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 3,
+		ExpectNum: 4,
 		Notes:     "MacStadium OS X 10.12 VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
@@ -512,7 +502,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_14": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 5,
+		ExpectNum: 6,
 		Notes:     "MacStadium macOS Mojave (10.14) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.12.1
@@ -522,7 +512,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_15": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 6,
+		ExpectNum: 7,
 		Notes:     "MacStadium macOS Catalina (10.15) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.12.1
@@ -2043,17 +2033,6 @@ func init() {
 		env: []string{
 			"GOARM=7",
 			"GO_TEST_TIMEOUT_SCALE=2",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:              "darwin-amd64-10_10",
-		HostType:          "host-darwin-10_10",
-		shouldRunDistTest: macTestPolicy,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// https://tip.golang.org/doc/go1.12 says:
-			// "Go 1.12 is the last release that will run on macOS 10.10 Yosemite."
-			major, minor, ok := version.ParseReleaseBranch(branch)
-			return repo == "go" && ok && major == 1 && minor <= 12
 		},
 	})
 	addBuilder(BuildConfig{
