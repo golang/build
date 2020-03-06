@@ -30,6 +30,7 @@ import (
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/autocertcache"
 	"golang.org/x/build/internal/gitauth"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
 	"golang.org/x/build/maintner/maintnerd/apipb"
@@ -82,12 +83,13 @@ var autocertManager *autocert.Manager
 
 func main() {
 	flag.Parse()
+	ctx := context.Background()
 
 	if *autocertDomain != "" {
 		if *autocertBucket == "" {
 			log.Fatalf("using --autocert requires --autocert-bucket.")
 		}
-		sc, err := storage.NewClient(context.Background())
+		sc, err := storage.NewClient(ctx)
 		if err != nil {
 			log.Fatalf("Creating autocert cache, storage.NewClient: %v", err)
 		}
@@ -128,7 +130,7 @@ func main() {
 		}
 		log.Printf("Syncing from https://maintner.golang.org/logs to %s", dir)
 		mutSrc := maintner.NewNetworkMutationSource("https://maintner.golang.org/logs", dir)
-		for evt := range mutSrc.GetMutations(context.Background()) {
+		for evt := range mutSrc.GetMutations(ctx) {
 			if evt.Err != nil {
 				log.Fatal(evt.Err)
 			}
@@ -148,7 +150,7 @@ func main() {
 		setGodataConfig()
 		var err error
 		log.Printf("Using godata corpus...")
-		corpus, err = godata.Get(context.Background())
+		corpus, err = godata.Get(ctx)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -193,7 +195,7 @@ func main() {
 			if len(splits) != 2 || splits[1] == "" {
 				log.Fatalf("Invalid github repo: %s. Should be 'owner/repo,owner2/repo2'", pair)
 			}
-			token, err := getGithubToken()
+			token, err := getGithubToken(ctx)
 			if err != nil {
 				log.Fatalf("getting github token: %v", err)
 			}
@@ -362,13 +364,18 @@ func setGodataConfig() {
 	*genMut = false
 }
 
-func getGithubToken() (string, error) {
+func getGithubToken(ctx context.Context) (string, error) {
 	if metadata.OnGCE() {
-		token, err := metadata.ProjectAttributeValue("maintner-github-token")
+		sc := mustCreateSecretClient()
+
+		ctxSc, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		token, err := sc.Retrieve(ctxSc, secret.NameMaintnerGitHubToken)
 		if err == nil {
 			return token, nil
 		}
-		log.Printf("getting GCE metadata 'maintner-github-token': %v", err)
+		log.Printf("unable to retrieve secret manager %q: %v", secret.NameMaintnerGitHubToken, err)
 		log.Printf("falling back to github token from file.")
 	}
 
@@ -495,4 +502,12 @@ func syncProdToDevMutationLogs() {
 			log.Fatal(err)
 		}
 	}
+}
+
+func mustCreateSecretClient() *secret.Client {
+	client, err := secret.NewClient()
+	if err != nil {
+		log.Fatalf("unable to create secret client %v", err)
+	}
+	return client
 }

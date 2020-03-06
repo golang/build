@@ -14,9 +14,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/maintner"
 )
 
@@ -278,16 +280,24 @@ removed "bar" = "quux,blarf"
 	}
 }
 
+// getSecret retrieves a secret by name from the secret manager service.
+func getSecret(name string) (string, error) {
+	sc, err := secret.NewClient()
+	if err != nil {
+		return "", err
+	}
+	defer sc.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	return sc.Retrieve(ctx, name)
+}
+
 func getGerritAuth() (username string, password string, err error) {
 	var slurp string
 	if metadata.OnGCE() {
-		for _, key := range []string{"gopherbot-gerrit-token", "maintner-gerrit-token", "gobot-password"} {
-			slurp, err = metadata.ProjectAttributeValue(key)
-			if err != nil || slurp == "" {
-				continue
-			}
-			break
-		}
+		slurp, _ = getSecret(secret.NameGobotPassword)
 	}
 	if slurp == "" {
 		var ok bool

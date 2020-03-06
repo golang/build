@@ -8,6 +8,7 @@ package gitauth
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -15,8 +16,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/compute/metadata"
+	"golang.org/x/build/internal/secret"
 )
 
 func Init() error {
@@ -28,14 +31,19 @@ func Init() error {
 		// Do nothing for now.
 		return nil
 	}
-	slurp, err := metadata.ProjectAttributeValue("gobot-password")
+
+	sc := mustCreateSecretClient()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	slurp, err := sc.Retrieve(ctx, secret.NameGobotPassword)
 	if err != nil {
 		proj, _ := metadata.ProjectID()
 		if proj != "symbolic-datum-552" { // TODO: don't hard-code this; use buildenv package
-			log.Printf("gitauth: ignoring 'gobot-password' GCE metadata lookup on non-prod project: %v", err)
+			log.Printf("gitauth: ignoring %q secret manager lookup on non-prod project: %v", secret.NameGobotPassword, err)
 			return nil
 		}
-		return fmt.Errorf("gitauth: getting gobot-password GCE metadata: %v", err)
+		return fmt.Errorf("gitauth: getting %s secret manager: %v", secret.NameGobotPassword, err)
 	}
 	slurp = strings.TrimSpace(slurp)
 	var buf bytes.Buffer
@@ -50,4 +58,12 @@ func homeDir() string {
 	}
 	log.Fatalf("No HOME set in environment.")
 	panic("unreachable")
+}
+
+func mustCreateSecretClient() *secret.Client {
+	client, err := secret.NewClient()
+	if err != nil {
+		log.Fatalf("unable to create secret client %v", err)
+	}
+	return client
 }
