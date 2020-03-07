@@ -5,12 +5,14 @@
 package main
 
 import (
+	"net/url"
 	"os/exec"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-github/github"
 	"golang.org/x/build/maintner"
+	"golang.org/x/build/repos"
 )
 
 func newPullRequest(title, body string) *github.PullRequest {
@@ -127,11 +129,44 @@ GitHub-Pull-Request: golang/go#42
 //
 // See https://golang.org/issue/27561.
 func TestFindChangeURL(t *testing.T) {
-	// Sample git output from Gerrit, extracted from production logs on 2018/09/07.
-	const out = "remote: \rremote: Processing changes: new: 1 (\\)\rremote: Processing changes: new: 1 (|)\rremote: Processing changes: refs: 1, new: 1 (|)\rremote: Processing changes: refs: 1, new: 1 (|)        \rremote: Processing changes: refs: 1, new: 1, done            \nremote: \nremote: SUCCESS        \nremote: \nremote: New Changes:        \nremote:   https://go-review.googlesource.com/c/dl/+/134117 remove blank line from codereview.cfg        \nTo https://go.googlesource.com/dl\n * [new branch]      HEAD -> refs/for/master"
-	got := gerritChangeRE.FindString(out)
-	want := "https://go-review.googlesource.com/c/dl/+/134117"
-	if got != want {
-		t.Errorf("could not find change URL in command output: %q\n\ngot %q, want %q", out, got, want)
+	for _, tc := range [...]struct {
+		name string
+		in   string // Output from git (and input to the regexp).
+		want string
+	}{
+		{
+			name: "verbatim", // Verbatim git output from Gerrit, extracted from production logs on 2018/09/07.
+			in:   "remote: \rremote: Processing changes: new: 1 (\\)\rremote: Processing changes: new: 1 (|)\rremote: Processing changes: refs: 1, new: 1 (|)\rremote: Processing changes: refs: 1, new: 1 (|)        \rremote: Processing changes: refs: 1, new: 1, done            \nremote: \nremote: SUCCESS        \nremote: \nremote: New Changes:        \nremote:   https://go-review.googlesource.com/c/dl/+/134117 remove blank line from codereview.cfg        \nTo https://go.googlesource.com/dl\n * [new branch]      HEAD -> refs/for/master",
+			want: "https://go-review.googlesource.com/c/dl/+/134117",
+		},
+		{
+			name: "repo-with-dash", // A Gerrit repository with a dash in its name (shortened git output).
+			in:   "remote: \rremote: Processing changes: (\\) [...] https://go-review.googlesource.com/c/vscode-go/+/222417 [...]",
+			want: "https://go-review.googlesource.com/c/vscode-go/+/222417",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := gerritChangeRE.FindString(tc.in)
+			if got != tc.want {
+				t.Errorf("could not find change URL in command output: %q\n\ngot %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestFindChangeURLInAllRepos tests that gerritChangeRE
+// works for names of all Gerrit repositories.
+//
+// See https://golang.org/issue/37725.
+func TestFindChangeURLInAllRepos(t *testing.T) {
+	for proj := range repos.ByGerritProject {
+		u := (&url.URL{
+			Scheme: "https",
+			Host:   "go-review.googlesource.com",
+			Path:   "/c/" + proj + "/+/1337",
+		}).String()
+		if gerritChangeRE.FindString("... "+u+" ...") != u {
+			t.Errorf("gerritChangeRE regexp didn't work for Gerrit repository named %q, does the regexp need to be adjusted to match some additional characters?", proj)
+		}
 	}
 }
