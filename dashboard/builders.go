@@ -2026,10 +2026,14 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:              "darwin-amd64-10_11",
-		HostType:          "host-darwin-10_11",
-		tryBot:            nil, // disabled until Macs fixed; https://golang.org/issue/23859
-		buildsRepo:        onlyGo,
+		Name:     "darwin-amd64-10_11",
+		HostType: "host-darwin-10_11",
+		tryBot:   nil, // disabled until Macs fixed; https://golang.org/issue/23859
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// Go 1.14 is the last release that will run on macOS 10.11 El Capitan.
+			// (See https://golang.org/doc/go1.14#darwin.)
+			return repo == "go" && atMostGo1(branch, 14)
+		},
 		shouldRunDistTest: macTestPolicy,
 		numTryTestHelpers: 3,
 	})
@@ -2503,6 +2507,13 @@ func atLeastGo1(branch string, min int) bool {
 	}
 	major, minor, ok := version.ParseReleaseBranch(branch)
 	return ok && major == 1 && minor >= min
+}
+
+// atMostGo1 reports whether branch is "release-branch.go1.N" where N <= max.
+// It assumes "master" branch is already greater than max, and doesn't include it.
+func atMostGo1(branch string, max int) bool {
+	major, minor, ok := version.ParseReleaseBranch(branch)
+	return ok && major == 1 && minor <= max
 }
 
 // onlyGo is a common buildsRepo policy value that only builds the main "go" repo.
