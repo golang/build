@@ -29,6 +29,7 @@ var slowBotAliases = map[string]string{
 	"openbsd-arm":   "",
 	"openbsd-arm64": "",
 	"nacl-arm":      "",
+	"darwin-arm":    "", // TODO(golang.org/issue/37611): Remove once port is removed.
 
 	"386":            "linux-386",
 	"aix":            "aix-ppc64",
@@ -45,7 +46,6 @@ var slowBotAliases = map[string]string{
 	"darwin":         "darwin-amd64-10_14",
 	"darwin-386":     "darwin-386-10_14",
 	"darwin-amd64":   "darwin-amd64-10_14",
-	"darwin-arm":     "darwin-arm-mg912baios",
 	"darwin-arm64":   "darwin-arm64-corellium",
 	"dragonfly":      "dragonfly-amd64",
 	"freebsd":        "freebsd-amd64-12_0",
@@ -599,16 +599,6 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:   1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
-		},
-	},
-	"host-darwin-amd64-zenly-ios": &HostConfig{
-		Notes:       "MacBook Pro hosted by Zenly, running the ios reverse buildlet",
-		OwnerGithub: "znly",
-		IsReverse:   true,
-		ExpectNum:   1,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/local/Cellar/1.10.3/libexec",
-			"GOHOSTARCH=amd64",
 		},
 	},
 	"host-darwin-arm64-corellium-ios": &HostConfig{
@@ -2080,24 +2070,6 @@ func init() {
 		HostType:          "host-darwin-10_15",
 		shouldRunDistTest: macTestPolicy,
 		buildsRepo:        onlyGo,
-	})
-	addBuilder(BuildConfig{
-		Name:     "darwin-arm-mg912baios",
-		HostType: "host-darwin-amd64-zenly-ios",
-		Notes:    "iPhone 5C (model MG912B/A), via a MacBook Pro; owned by zenly",
-		env: []string{
-			"GOARCH=arm",
-			"GOIOS_DEVICE_ID=8e5c23a5d0843d1ffe164ea0b2f2500599c3ebff",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:     "darwin-arm64-mn4m2zdaios",
-		HostType: "host-darwin-amd64-zenly-ios",
-		Notes:    "iPhone 7+ (model MN4M2ZD/A), via a MacBook Pro; owned by zenly",
-		env: []string{
-			"GOARCH=arm64",
-			"GOIOS_DEVICE_ID=5ec20fafe317e1c8ff51efc6d508cf19808474a2",
-		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "darwin-arm64-corellium",
