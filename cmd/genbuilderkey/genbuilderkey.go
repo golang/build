@@ -8,6 +8,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/md5"
 	"flag"
@@ -18,8 +19,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
-	"cloud.google.com/go/compute/metadata"
+	"golang.org/x/build/internal/secret"
 )
 
 func main() {
@@ -37,7 +39,7 @@ func key(principal string) string {
 }
 
 func getMasterKey() []byte {
-	v, err := metadata.ProjectAttributeValue("builder-master-key")
+	v, err := getMasterKeyFromSecretManager()
 	if err == nil {
 		return []byte(strings.TrimSpace(v))
 	}
@@ -47,4 +49,19 @@ func getMasterKey() []byte {
 	}
 	log.Fatalf("no builder master key found")
 	panic("not reachable")
+}
+
+// getMasterKeyFromSecretManager retrieves the master key from the secret
+// manager service.
+func getMasterKeyFromSecretManager() (string, error) {
+	sc, err := secret.NewClient()
+	if err != nil {
+		return "", err
+	}
+	defer sc.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	return sc.Retrieve(ctx, secret.NameBuilderMasterKey)
 }
