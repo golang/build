@@ -40,6 +40,7 @@ import (
 	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/buildstats"
 	"golang.org/x/build/internal/lru"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/compute/v1"
@@ -84,9 +85,10 @@ var (
 // It is initialized by initGCE.
 var oAuthHTTPClient *http.Client
 
-func initGCE() error {
+func initGCE(sc *secret.Client) error {
 	initGCECalled = true
 	var err error
+	ctx := context.Background()
 
 	// If the coordinator is running on a GCE instance and a
 	// buildEnv was not specified with the env flag, set the
@@ -132,7 +134,10 @@ func initGCE() error {
 			return errors.New("coordinator is not running with access to read and write Compute resources. VM support disabled")
 		}
 
-		if value, err := metadata.ProjectAttributeValue("farmer-run-bench"); err == nil {
+		ctxSec, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		if value, err := sc.Retrieve(ctxSec, secret.NameFarmerRunBench); err == nil {
 			*shouldRunBench, _ = strconv.ParseBool(value)
 		}
 	}
@@ -140,7 +145,6 @@ func initGCE() error {
 	cfgDump, _ := json.MarshalIndent(buildEnv, "", "  ")
 	log.Printf("Loaded configuration %q for project %q:\n%s", *buildEnvName, buildEnv.ProjectName, cfgDump)
 
-	ctx := context.Background()
 	if *mode != "dev" {
 		storageClient, err = storage.NewClient(ctx)
 		if err != nil {
@@ -191,7 +195,7 @@ func initGCE() error {
 	}
 	oAuthHTTPClient = oauth2.NewClient(ctx, gcpCreds.TokenSource)
 	computeService, _ = compute.New(oAuthHTTPClient)
-	errTryDeps = checkTryBuildDeps()
+	errTryDeps = checkTryBuildDeps(ctx, sc)
 	if errTryDeps != nil {
 		log.Printf("TryBot builders disabled due to error: %v", errTryDeps)
 	} else {
@@ -207,7 +211,7 @@ func initGCE() error {
 	return nil
 }
 
-func checkTryBuildDeps() error {
+func checkTryBuildDeps(ctx context.Context, sc *secret.Client) error {
 	if !hasStorageScope() {
 		return errors.New("coordinator's GCE instance lacks the storage service scope")
 	}
@@ -223,7 +227,10 @@ func checkTryBuildDeps() error {
 		// Don't expect to write to Gerrit in staging mode.
 		gerritClient = gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
 	} else {
-		gobotPass, err := metadata.ProjectAttributeValue("gobot-password")
+		ctxSec, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		gobotPass, err := sc.Retrieve(ctxSec, secret.NameGobotPassword)
 		if err != nil {
 			return fmt.Errorf("failed to get project metadata 'gobot-password': %v", err)
 		}

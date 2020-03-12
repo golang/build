@@ -11,6 +11,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/md5"
 	"encoding/json"
@@ -25,9 +26,9 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/build/internal/buildgo"
-
 	"cloud.google.com/go/compute/metadata"
+	"golang.org/x/build/internal/buildgo"
+	"golang.org/x/build/internal/secret"
 )
 
 // dash is copied from the builder binary. It runs the given method and command on the dashboard.
@@ -128,6 +129,26 @@ func recordResult(br buildgo.BuilderRev, ok bool, buildLog string, runTime time.
 	return nil
 }
 
+var (
+	keyOnce        sync.Once
+	masterKeyCache []byte
+)
+
+// mustInitMasterKeyCache populates the masterKeyCache
+// with the master key. If no master key is found it will
+// log an error and exit. If `masterKey()` is called before
+// the key is initialzed then it will log an error and exit.
+func mustInitMasterKeyCache(sc *secret.Client) {
+	keyOnce.Do(func() { loadKey(sc) })
+}
+
+func masterKey() []byte {
+	if len(masterKeyCache) == 0 {
+		log.Fatalf("No builder master key available")
+	}
+	return masterKeyCache
+}
+
 func builderKey(builder string) string {
 	master := masterKey()
 	if len(master) == 0 {
@@ -138,17 +159,7 @@ func builderKey(builder string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-func masterKey() []byte {
-	keyOnce.Do(loadKey)
-	return masterKeyCache
-}
-
-var (
-	keyOnce        sync.Once
-	masterKeyCache []byte
-)
-
-func loadKey() {
+func loadKey(sc *secret.Client) {
 	if *masterKeyFile != "" {
 		b, err := ioutil.ReadFile(*masterKeyFile)
 		if err != nil {
@@ -161,7 +172,15 @@ func loadKey() {
 		masterKeyCache = []byte("gophers rule")
 		return
 	}
-	masterKey, err := metadata.ProjectAttributeValue("builder-master-key")
+
+	if !metadata.OnGCE() {
+		log.Fatalf("No builder master key provided")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	masterKey, err := sc.Retrieve(ctx, secret.NameBuilderMasterKey)
 	if err != nil {
 		log.Fatalf("No builder master key available: %v", err)
 	}

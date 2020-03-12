@@ -50,6 +50,7 @@ import (
 	"google.golang.org/grpc"
 	grpc4 "grpc.go4.org"
 
+	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/errorreporting"
 	"cloud.google.com/go/storage"
 	"golang.org/x/build"
@@ -61,6 +62,7 @@ import (
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/buildstats"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/singleflight"
 	"golang.org/x/build/internal/sourcecache"
 	"golang.org/x/build/livelog"
@@ -254,7 +256,15 @@ func main() {
 		Version = "dev"
 	}
 	log.Printf("coordinator version %q starting", Version)
-	err := initGCE()
+
+	sc := mustCreateSecretClientOnGCE()
+	if sc != nil {
+		defer sc.Close()
+	}
+
+	mustInitMasterKeyCache(sc)
+
+	err := initGCE(sc)
 	if err != nil {
 		if *mode == "" {
 			*mode = "dev"
@@ -363,7 +373,7 @@ func main() {
 	}
 
 	go listenAndServeTLS()
-	go listenAndServeSSH() // ssh proxy to remote buildlets; remote.go
+	go listenAndServeSSH(sc) // ssh proxy to remote buildlets; remote.go
 
 	select {}
 }
@@ -4069,4 +4079,15 @@ func activePostSubmitBuilds() []types.ActivePostSubmitBuild {
 		})
 	}
 	return ret
+}
+
+func mustCreateSecretClientOnGCE() *secret.Client {
+	if !metadata.OnGCE() {
+		return nil
+	}
+	client, err := secret.NewClient()
+	if err != nil {
+		log.Fatalf("unable to create secret client %v", err)
+	}
+	return client
 }

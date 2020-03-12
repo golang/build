@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -34,13 +33,12 @@ import (
 	"time"
 	"unsafe"
 
-	"cloud.google.com/go/compute/metadata"
-
 	"github.com/gliderlabs/ssh"
 	"github.com/kr/pty"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/gophers"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/types"
 	gossh "golang.org/x/crypto/ssh"
 )
@@ -512,7 +510,7 @@ func writeSSHPrivateKeyToTempFile(key []byte) (path string, err error) {
 	return tf.Name(), tf.Close()
 }
 
-func listenAndServeSSH() {
+func listenAndServeSSH(sc *secret.Client) {
 	const listenAddr = ":2222" // TODO: flag if ever necessary?
 	var hostKey []byte
 	var err error
@@ -554,9 +552,19 @@ func listenAndServeSSH() {
 		return
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pubKey, err := sc.Retrieve(ctx, secret.NameGomoteSSHPublicKey)
+	if err != nil {
+		log.Fatalf("failed to get secret manager %s value", secret.NameGomoteSSHPublicKey)
+	}
+
+	ah := &sshHandlers{gomotePublicKey: pubKey}
+
 	s := &ssh.Server{
 		Addr:             listenAddr,
-		Handler:          handleIncomingSSHPostAuth,
+		Handler:          ah.handleIncomingSSHPostAuth,
 		PublicKeyHandler: handleSSHPublicKeyAuth,
 	}
 	s.AddHostKey(signer)
@@ -588,7 +596,11 @@ func handleSSHPublicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
 	return false
 }
 
-func handleIncomingSSHPostAuth(s ssh.Session) {
+type sshHandlers struct {
+	gomotePublicKey string
+}
+
+func (ah *sshHandlers) handleIncomingSSHPostAuth(s ssh.Session) {
 	inst := s.User()
 	user := userFromGomoteInstanceName(inst)
 
@@ -603,12 +615,8 @@ func handleIncomingSSHPostAuth(s ssh.Session) {
 		return
 	}
 
-	pubKey, err := metadata.ProjectAttributeValue("gomote-ssh-public-key")
-	if err != nil || pubKey == "" {
-		if err == nil {
-			err = errors.New("not found")
-		}
-		fmt.Fprintf(s, "failed to get GCE gomote-ssh-public-key: %v\n", err)
+	if ah.gomotePublicKey == "" {
+		fmt.Fprint(s, "invalid gomote-ssh-public-key")
 		return
 	}
 
@@ -660,7 +668,7 @@ func handleIncomingSSHPostAuth(s ssh.Session) {
 
 	var localProxyPort int
 	if useLocalSSHProxy {
-		sshConn, err := rb.buildlet.ConnectSSH(sshUser, pubKey)
+		sshConn, err := rb.buildlet.ConnectSSH(sshUser, ah.gomotePublicKey)
 		log.Printf("buildlet(%q).ConnectSSH = %T, %v", inst, sshConn, err)
 		if err != nil {
 			fmt.Fprintf(s, "failed to connect to ssh on %s: %v\n", inst, err)
