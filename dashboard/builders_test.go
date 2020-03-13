@@ -114,6 +114,7 @@ func TestTrybots(t *testing.T) {
 			repo:   "go",
 			branch: "dev.link",
 			want: []string{
+				"android-amd64-emu",
 				"freebsd-amd64-12_0",
 				"js-wasm",
 				"linux-386",
@@ -397,6 +398,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("aix-ppc64@go1.12", "mobile"), none},
 		{b("aix-ppc64@go1.13", "net"), onlyPost},
 		{b("aix-ppc64@go1.13", "mobile"), none},
+		{b("aix-ppc64@dev.link", "go"), onlyPost},
 
 		{b("linux-amd64-nocgo", "mobile"), none},
 

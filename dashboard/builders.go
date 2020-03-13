@@ -2526,9 +2526,21 @@ func TryBuildersForProject(proj, branch, goBranch string) []*BuildConfig {
 	return confs
 }
 
-// atLeastGo1 reports whether branch is either "master" or "release-branch.go1.N" where N >= min.
+// atLeastGo1 reports whether branch is "release-branch.go1.N" where N >= min.
+// It assumes "master" and "dev.*" branches are already greater than min, and
+// always includes them.
 func atLeastGo1(branch string, min int) bool {
 	if branch == "master" {
+		return true
+	}
+	if strings.HasPrefix(branch, "dev.") {
+		// Treat dev branches current.
+		// If a dev branch is active, it will be current.
+		// If it is not active, it doesn't matter anyway.
+		// TODO: dev.boringcrypto.go1.N branches may be the
+		// exception. Currently we only build boringcrypto
+		// on linux/amd64 and windows/386, which support all
+		// versions of Go, so it doesn't actually matter.
 		return true
 	}
 	major, minor, ok := version.ParseReleaseBranch(branch)
