@@ -557,6 +557,11 @@ func TestBuilderConfig(t *testing.T) {
 		{b("dragonfly-amd64-5_6", "go"), onlyPost},
 		{b("dragonfly-amd64-5_6", "net"), onlyPost},
 		{b("dragonfly-amd64-5_6@go1.13", "net"), onlyPost},
+
+		{b("linux-amd64-staticlockranking", "go"), onlyPost},
+		{b("linux-amd64-staticlockranking@go1.15", "go"), onlyPost},
+		{b("linux-amd64-staticlockranking@go1.14", "go"), none},
+		{b("linux-amd64-staticlockranking", "net"), none},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {

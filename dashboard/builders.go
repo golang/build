@@ -765,7 +765,19 @@ type BuildConfig struct {
 	// buildsRepo optionally specifies whether this
 	// builder does builds (of any type) for the given repo ("go",
 	// "net", etc) and its branch ("master", "release-branch.go1.12").
-	// If nil, a default policy is used. (see buildsRepoAtAll for details)
+	//
+	// If nil, the default policy defaultBuildsRepoPolicy is used.
+	// (See buildsRepoAtAll for details.)
+	//
+	// To implement a minor change to the default policy, create a
+	// function that re-uses defaultBuildsRepoPolicy. For example:
+	//
+	// 	buildsRepo: func(repo, branch, goBranch string) bool {
+	// 		b := defaultBuildsRepoPolicy(repo, branch, goBranch)
+	// 		// ... modify b from the default value as needed ...
+	// 		return b
+	// 	}
+	//
 	// goBranch is the branch of "go" to build against. If repo == "go",
 	// goBranch == branch.
 	buildsRepo func(repo, branch, goBranch string) bool
@@ -1587,6 +1599,21 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
+		Name:     "linux-amd64-staticlockranking",
+		HostType: "host-linux-stretch",
+		Notes:    "builder with GOEXPERIMENT=staticlockranking, see golang.org/issue/37937",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "go" && atLeastGo1(goBranch, 15)
+		},
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+			"GOEXPERIMENT=staticlockranking",
+		},
+		GoDeps: []string{
+			"02057906f7272a4787b8a0b5b7cafff8ad3024f0", // A master commit from 2020/03/19, just before CL 222925 and CL 207619 have landed.
+		},
+	})
+	addBuilder(BuildConfig{
 		Name:                "linux-amd64-racecompile",
 		HostType:            "host-linux-jessie",
 		tryBot:              nil, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
@@ -2392,7 +2419,6 @@ func init() {
 			return atLeastGo1(branch, 12) && atLeastGo1(goBranch, 12) && defaultBuildsRepoPolicy(repo, branch, goBranch)
 		},
 	})
-
 }
 
 // addBuilder adds c to the Builders map after doing some sanity
