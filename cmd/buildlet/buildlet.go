@@ -132,7 +132,9 @@ func main() {
 	onGCE := metadata.OnGCE()
 	switch runtime.GOOS {
 	case "plan9":
-		log.SetOutput(&plan9LogWriter{w: os.Stderr})
+		if onGCE {
+			log.SetOutput(&gcePlan9LogWriter{w: os.Stderr})
+		}
 	case "linux":
 		if onGCE && !inKube {
 			if w, err := os.OpenFile("/dev/console", os.O_WRONLY, 0); err == nil {
@@ -1642,14 +1644,14 @@ func (h requirePasswordHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	h.h.ServeHTTP(w, r)
 }
 
-// plan9LogWriter truncates log writes to 128 bytes,
-// to work around some Plan 9 and/or GCE serial port bug.
-type plan9LogWriter struct {
+// gcePlan9LogWriter truncates log writes to 128 bytes,
+// to work around a GCE serial port bug affecting Plan 9.
+type gcePlan9LogWriter struct {
 	w   io.Writer
 	buf []byte
 }
 
-func (pw *plan9LogWriter) Write(p []byte) (n int, err error) {
+func (pw *gcePlan9LogWriter) Write(p []byte) (n int, err error) {
 	const max = 128 - len("\n\x00")
 	if len(p) < max {
 		return pw.w.Write(p)
