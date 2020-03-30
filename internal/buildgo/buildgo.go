@@ -150,9 +150,9 @@ func (gb GoBuilder) RunMake(ctx context.Context, bc *buildlet.Client, w io.Write
 // runConcurrentGoBuildStdCmd is a step specific only to the
 // "linux-amd64-racecompile" builder to exercise the Go 1.9's new
 // concurrent compilation. It re-builds the standard library and tools
-// with -gcflags=-c=8 using a race-enabled cmd/compile (built by
-// caller, runMake, per builder config).
-// The idea is that this might find data races in cmd/compile.
+// with -gcflags=-c=8 using a race-enabled cmd/compile and cmd/link
+// (built by caller, RunMake, per builder config).
+// The idea is that this might find data races in cmd/compile and cmd/link.
 func (gb GoBuilder) runConcurrentGoBuildStdCmd(ctx context.Context, bc *buildlet.Client, w io.Writer) (remoteErr, err error) {
 	span := gb.CreateSpan("go_build_c128_std_cmd")
 	remoteErr, err = bc.Exec(ctx, path.Join(gb.Goroot, "bin/go"), buildlet.ExecOpts{

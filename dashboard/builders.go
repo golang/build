@@ -1620,8 +1620,8 @@ func init() {
 		CompileOnly:         true,
 		SkipSnapshot:        true,
 		StopAfterMake:       true,
-		InstallRacePackages: []string{"cmd/compile"},
-		Notes:               "race-enabled cmd/compile",
+		InstallRacePackages: []string{"cmd/compile", "cmd/link"},
+		Notes:               "race-enabled cmd/compile and cmd/link",
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
