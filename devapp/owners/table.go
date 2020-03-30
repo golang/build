@@ -186,7 +186,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mvdan},
 	},
 	"go/src/cmd/go": {
-		Primary:   []Owner{bcmills, jayconrod},
+		Primary:   []Owner{bcmills, jayconrod, matloob},
 		Secondary: []Owner{rsc, iant},
 	},
 	"go/src/cmd/link": {
@@ -600,7 +600,7 @@ var entries = map[string]*Entry{
 	},
 
 	"mod": {
-		Primary: []Owner{bcmills, jayconrod},
+		Primary: []Owner{bcmills, jayconrod, matloob},
 	},
 
 	"net": {
