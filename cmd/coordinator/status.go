@@ -18,6 +18,7 @@ import (
 	"html/template"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -32,6 +33,7 @@ import (
 	"golang.org/x/build/cmd/coordinator/internal"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/foreach"
+	"golang.org/x/build/kubernetes/api"
 )
 
 // status
@@ -176,15 +178,41 @@ func monitorGitMirror() {
 	}
 }
 
-// $1 is repo; $2 is error message
-var gitMirrorLineRx = regexp.MustCompile(`/debug/watcher/([\w-]+).?>.+</a> - (.*)`)
-
+// gitMirrorErrors queries the status pages of all
+// running gitmirror instances and reports errors.
 func gitMirrorErrors() (errs []string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	req, _ := http.NewRequest("GET", "http://gitmirror/", nil)
-	req = req.WithContext(ctx)
-	res, err := watcherProxy.Transport.RoundTrip(req)
+	pods, err := goKubeClient.GetPods(ctx)
+	if err != nil {
+		log.Println("gitMirrorErrors: goKubeClient.GetPods:", err)
+		return []string{"failed to get pods; can't query gitmirror status"}
+	}
+	var runningGitMirror []api.Pod
+	for _, p := range pods {
+		if p.Labels["app"] != "gitmirror" || p.Status.Phase != "Running" {
+			continue
+		}
+		runningGitMirror = append(runningGitMirror, p)
+	}
+	if len(runningGitMirror) == 0 {
+		return []string{"no running gitmirror instances"}
+	}
+	for _, pod := range runningGitMirror {
+		// The gitmirror -http=:8585 status page URL is hardcoded here.
+		// If the ReplicationController configuration changes (rare), this
+		// health check will begin to fail until it's updated accordingly.
+		instanceErrors := gitMirrorInstanceErrors(ctx, fmt.Sprintf("http://%s:8585/", pod.Status.PodIP))
+		for _, err := range instanceErrors {
+			errs = append(errs, fmt.Sprintf("instance %s: %s", pod.Name, err))
+		}
+	}
+	return errs
+}
+
+func gitMirrorInstanceErrors(ctx context.Context, url string) (errs []string) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return []string{err.Error()}
 	}
@@ -220,13 +248,20 @@ func gitMirrorErrors() (errs []string) {
 	return errs
 }
 
+// $1 is repo; $2 is error message
+var gitMirrorLineRx = regexp.MustCompile(`/debug/watcher/([\w-]+).?>.+</a> - (.*)`)
+
 func newGitMirrorChecker() *healthChecker {
 	return &healthChecker{
 		ID:     "gitmirror",
 		Title:  "Git mirroring",
 		DocURL: "https://github.com/golang/build/tree/master/cmd/gitmirror",
 		Check: func(w *checkWriter) {
-			ee, _ := lastGitMirrorErrors.Load().([]string)
+			ee, ok := lastGitMirrorErrors.Load().([]string)
+			if !ok {
+				w.warn("still checking")
+				return
+			}
 			for _, v := range ee {
 				w.error(v)
 			}

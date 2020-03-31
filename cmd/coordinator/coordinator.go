@@ -31,7 +31,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/http/httputil"
 	_ "net/http/pprof"
 	"net/url"
 	"os"
@@ -325,7 +324,6 @@ func main() {
 	protos.RegisterCoordinatorServer(grpcServer, gs)
 	http.HandleFunc("/", handleStatus)
 	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
-	http.HandleFunc("/debug/watcher/", handleDebugWatcher)
 	http.HandleFunc("/builders", handleBuilders)
 	http.HandleFunc("/temporarylogs", handleLogs)
 	http.HandleFunc("/reverse", handleReverse)
@@ -437,33 +435,6 @@ func (httpToHTTPSRedirector) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	u.Scheme = "https"
 	u.Host = req.Host
 	http.Redirect(w, req, u.String(), http.StatusMovedPermanently)
-}
-
-// watcherProxy is the proxy which forwards from
-// https://farmer.golang.org/ to the gitmirror kubernetes service (git
-// cache+sync).
-// This is used for /debug/watcher/<reponame> status pages, which are
-// served at the same URL paths for both the farmer.golang.org host
-// and the internal backend. (The name "watcher" is old; it's now called
-// "gitmirror" but the URL path remains for now.)
-var watcherProxy *httputil.ReverseProxy
-
-func init() {
-	u, err := url.Parse("http://gitmirror/") // unused hostname
-	if err != nil {
-		log.Fatal(err)
-	}
-	watcherProxy = httputil.NewSingleHostReverseProxy(u)
-	watcherProxy.Transport = &http.Transport{
-		IdleConnTimeout: 30 * time.Second,
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return goKubeClient.DialServicePort(ctx, "gitmirror", "")
-		},
-	}
-}
-
-func handleDebugWatcher(w http.ResponseWriter, r *http.Request) {
-	watcherProxy.ServeHTTP(w, r)
 }
 
 func stagingClusterBuilders() map[string]*dashboard.BuildConfig {
