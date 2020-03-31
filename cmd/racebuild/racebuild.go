@@ -30,7 +30,7 @@ import (
 
 var (
 	flagGoroot    = flag.String("goroot", "", "path to Go repository to update (required)")
-	flagRev       = flag.String("rev", "", "llvm compiler-rt git revision from http://llvm.org/git/compiler-rt.git (required)")
+	flagRev       = flag.String("rev", "", "llvm-project git revision from https://github.com/llvm/llvm-project (required)")
 	flagGoRev     = flag.String("gorev", "HEAD", "Go repository revision to use; HEAD is relative to --goroot")
 	flagPlatforms = flag.String("platforms", "all", `comma-separated platforms (such as "linux/amd64") to rebuild, or "all"`)
 )
@@ -50,10 +50,10 @@ git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
 popd
-git clone http://llvm.org/git/compiler-rt.git
-(cd compiler-rt && git checkout $REV)
-(cd compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
-cp compiler-rt/lib/tsan/go/race_freebsd_amd64.syso go/src/runtime/race
+git clone https://github.com/llvm/llvm-project
+(cd llvm-project && git checkout $REV)
+(cd llvm-project/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
+cp llvm-project/compiler-rt/lib/tsan/go/race_freebsd_amd64.syso go/src/runtime/race
 (cd go/src && ./race.bash)
 			`,
 	},
@@ -67,10 +67,10 @@ git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
 popd
-git clone http://llvm.org/git/compiler-rt.git
-(cd compiler-rt && git checkout $REV)
-(cd compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
-cp compiler-rt/lib/tsan/go/race_darwin_amd64.syso go/src/runtime/race
+git clone https://github.com/llvm/llvm-project
+(cd llvm-project && git checkout $REV)
+(cd llvm-project/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
+cp llvm-project/compiler-rt/lib/tsan/go/race_darwin_amd64.syso go/src/runtime/race
 (cd go/src && ./race.bash)
 			`,
 	},
@@ -86,10 +86,10 @@ git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
 popd
-git clone http://llvm.org/git/compiler-rt.git
-(cd compiler-rt && git checkout $REV)
-(cd compiler-rt/lib/tsan/go && ./buildgo.sh)
-cp compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/race
+git clone https://github.com/llvm/llvm-project
+(cd llvm-project && git checkout $REV)
+(cd llvm-project/compiler-rt/lib/tsan/go && ./buildgo.sh)
+cp llvm-project/compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/race
 (cd go/src && ./race.bash)
 			`,
 	},
@@ -105,10 +105,10 @@ git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
 popd
-git clone http://llvm.org/git/compiler-rt.git
-(cd compiler-rt && git checkout $REV)
-(cd compiler-rt/lib/tsan/go && ./buildgo.sh)
-cp compiler-rt/lib/tsan/go/race_linux_ppc64le.syso go/src/runtime/race
+git clone https://github.com/llvm/llvm-project
+(cd llvm-project && git checkout $REV)
+(cd llvm-project/compiler-rt/lib/tsan/go && ./buildgo.sh)
+cp llvm-project/compiler-rt/lib/tsan/go/race_linux_ppc64le.syso go/src/runtime/race
 # TODO(#23731): Uncomment to test the syso file before accepting it.
 # (cd go/src && ./race.bash)
 			`,
@@ -125,10 +125,10 @@ git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
 popd
-git clone https://git.llvm.org/git/compiler-rt.git
-(cd compiler-rt && git checkout $REV)
-(cd compiler-rt/lib/tsan/go && ./buildgo.sh)
-cp compiler-rt/lib/tsan/go/race_linux_arm64.syso go/src/runtime/race
+git clone https://github.com/llvm/llvm-project
+(cd llvm-project && git checkout $REV)
+(cd llvm-project/compiler-rt/lib/tsan/go && ./buildgo.sh)
+cp llvm-project/compiler-rt/lib/tsan/go/race_linux_arm64.syso go/src/runtime/race
 (cd go/src && ./race.bash)
 			`,
 	},
@@ -142,10 +142,10 @@ git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
 popd
-git clone http://llvm.org/git/compiler-rt.git
-(cd compiler-rt && git checkout $REV)
-(cd compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
-cp compiler-rt/lib/tsan/go/race_netbsd_amd64.syso go/src/runtime/race
+git clone https://github.com/llvm/llvm-project
+(cd llvm-project && git checkout $REV)
+(cd llvm-project/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
+cp llvm-project/compiler-rt/lib/tsan/go/race_netbsd_amd64.syso go/src/runtime/race
 # TODO(#24322): Uncomment to test the syso file before accepting it.
 # (cd go/src && ./race.bash)
 			`,
@@ -167,17 +167,17 @@ cd go
 git checkout %GOREV%
 if %errorlevel% neq 0 exit /b %errorlevel%
 cd ..
-git clone http://llvm.org/git/compiler-rt.git
+git clone https://github.com/llvm/llvm-project
 if %errorlevel% neq 0 exit /b %errorlevel%
-cd compiler-rt
+cd llvm-project
 git checkout %REV%
 if %errorlevel% neq 0 exit /b %errorlevel%
 cd ..
-cd compiler-rt/lib/tsan/go
+cd llvm-project/compiler-rt/lib/tsan/go
 call build.bat
 if %errorlevel% neq 0 exit /b %errorlevel%
-cd ../../../..
-xcopy compiler-rt\lib\tsan\go\race_windows_amd64.syso go\src\runtime\race\race_windows_amd64.syso /Y
+cd ../../../../..
+xcopy llvm-project\compiler-rt\lib\tsan\go\race_windows_amd64.syso go\src\runtime\race\race_windows_amd64.syso /Y
 if %errorlevel% neq 0 exit /b %errorlevel%
 cd go/src
 call race.bat
@@ -299,7 +299,7 @@ func (p *Platform) Build(ctx context.Context) error {
 	// Create gomote instance (or reuse an existing instance for debugging).
 	var lastErr error
 	for p.Inst == "" {
-		inst, err := p.Gomote(ctx, "create", p.Type)
+		inst, err := p.Gomote(ctx, "create", "-status=false", p.Type)
 		if err != nil {
 			select {
 			case <-ctx.Done():
