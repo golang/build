@@ -1449,7 +1449,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "freebsd-386-11_1",
 		HostType:          "host-freebsd-11_1",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return goBranch == "release-branch.go1.12" && defaultBuildsRepoPolicy(repo, branch, goBranch)
 		},
@@ -1458,7 +1458,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "freebsd-386-11_2",
 		HostType:          "host-freebsd-11_2",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		tryBot:            explicitTrySet("sys"),
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
@@ -1847,7 +1847,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-60",
 		HostType:          "host-openbsd-amd64-60",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		buildsRepo:        disabledBuilder,
 		numTestHelpers:    2,
 		numTryTestHelpers: 5,
@@ -1855,7 +1855,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-386-60",
 		HostType:          "host-openbsd-386-60",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		buildsRepo:        disabledBuilder,
 		env: []string{
 			// cmd/go takes ~192 seconds on openbsd-386
@@ -1868,7 +1868,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-386-62",
 		HostType:          "host-openbsd-386-62",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		env: []string{
 			// cmd/go takes ~192 seconds on openbsd-386
 			// now, which is over the 180 second default
@@ -1880,7 +1880,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-62",
 		HostType:          "host-openbsd-amd64-62",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		tryBot:            nil,
 		numTestHelpers:    0,
 		numTryTestHelpers: 5,
@@ -1889,7 +1889,7 @@ func init() {
 		Name:              "openbsd-amd64-64",
 		HostType:          "host-openbsd-amd64-64",
 		MinimumGoVersion:  types.MajorMinor{1, 11},
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		tryBot:            defaultTrySet(),
 		numTestHelpers:    0,
 		numTryTestHelpers: 5,
@@ -1898,45 +1898,35 @@ func init() {
 		Name:              "openbsd-386-64",
 		HostType:          "host-openbsd-386-64",
 		tryBot:            explicitTrySet("sys"),
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-arm-jsing",
 		HostType:          "host-openbsd-arm-joelsing",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		tryBot:            nil,
 		env: []string{
 			// The machine is slow.
 			"GO_TEST_TIMEOUT_SCALE=5",
 		},
 	})
-	netBSDDistTestPolicy := func(distTest string, isTry bool) bool {
-		// Skip the test directory (slow, and adequately
-		// covered by other builders), and skip the "reboot"
-		// test, which takes more disk space on /tmp than the
-		// NetBSD image had as of 2019-03-13. (Issue 30839)
-		if strings.HasPrefix(distTest, "test:") || distTest == "reboot" {
-			return false
-		}
-		return true
-	}
 	addBuilder(BuildConfig{
 		Name:              "netbsd-amd64-8_0",
 		HostType:          "host-netbsd-amd64-8_0",
-		shouldRunDistTest: netBSDDistTestPolicy,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		tryBot:            explicitTrySet("sys"),
 	})
 	addBuilder(BuildConfig{
 		Name:              "netbsd-386-8_0",
 		HostType:          "host-netbsd-386-8_0",
-		shouldRunDistTest: netBSDDistTestPolicy,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		// This builder currently hangs in the runtime tests; Issue 31726.
 		buildsRepo: disabledBuilder,
 	})
 	addBuilder(BuildConfig{
 		Name:              "netbsd-arm-bsiegert",
 		HostType:          "host-netbsd-arm-bsiegert",
-		shouldRunDistTest: netBSDDistTestPolicy,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		tryBot:            nil,
 		env: []string{
 			// The machine is slow.
@@ -1961,7 +1951,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2008",
 		HostType:          "host-windows-amd64-2008",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		buildsRepo:        onlyGo,
 		env: []string{
 			"GOARCH=amd64",
@@ -1985,7 +1975,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "windows-amd64-2012",
 		HostType:          "host-windows-amd64-2012",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		buildsRepo:        onlyGo,
 		env: []string{
 			"GOARCH=amd64",
@@ -2093,7 +2083,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "darwin-amd64-nocgo",
 		HostType:          "host-darwin-10_15",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		env:               []string{"CGO_ENABLED=0"},
 	})
 	addBuilder(BuildConfig{
@@ -2318,7 +2308,7 @@ func init() {
 		Name:              "dragonfly-amd64",
 		HostType:          "host-dragonfly-amd64-master",
 		Notes:             "DragonFly BSD master, run by DragonFly team",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		SkipSnapshot:      true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return atLeastGo1(goBranch, 14) && defaultBuildsRepoPolicy(repo, branch, goBranch)
@@ -2328,13 +2318,13 @@ func init() {
 		Name:              "dragonfly-amd64-5_6",
 		HostType:          "host-dragonfly-amd64-5_6",
 		Notes:             "DragonFly BSD 5.6 release",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		SkipSnapshot:      true,
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-arm-paulzhol",
 		HostType:          "host-freebsd-arm-paulzhol",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		SkipSnapshot:      true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// This was a fragile little machine with limited memory.
@@ -2361,14 +2351,14 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "plan9-arm",
 		HostType:          "host-plan9-arm-0intro",
-		shouldRunDistTest: noTestDir,
+		shouldRunDistTest: noTestDirAndNoReboot,
 		buildsRepo:        onlyMasterDefault,
 	})
 	addBuilder(BuildConfig{
 		Name:     "plan9-amd64-9front",
 		HostType: "host-plan9-amd64-0intro",
 		shouldRunDistTest: func(distTestName string, isTry bool) bool {
-			if !noTestDir(distTestName, isTry) {
+			if !noTestDirAndNoReboot(distTestName, isTry) {
 				return false
 			}
 			switch distTestName {
@@ -2384,7 +2374,7 @@ func init() {
 		Name:     "plan9-386-0intro",
 		HostType: "host-plan9-386-0intro",
 		shouldRunDistTest: func(distTestName string, isTry bool) bool {
-			if !noTestDir(distTestName, isTry) {
+			if !noTestDirAndNoReboot(distTestName, isTry) {
 				return false
 			}
 			switch distTestName {
@@ -2465,11 +2455,11 @@ func fasterTrybots(distTest string, isTry bool) bool {
 	return true
 }
 
-// noTestDir is a shouldRunDistTest policy function.
+// noTestDirAndNoReboot is a shouldRunDistTest policy function.
 // It skips (returns false) the test/ directory tests for all builds,
 // as well as the "reboot" test that tests that recompiling Go with
 // the just-built Go works.
-func noTestDir(distTest string, isTry bool) bool {
+func noTestDirAndNoReboot(distTest string, isTry bool) bool {
 	if strings.HasPrefix(distTest, "test:") || distTest == "reboot" {
 		return false // skip test
 	}
