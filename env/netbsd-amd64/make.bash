@@ -13,10 +13,10 @@
 
 set -e -x
 
-ANITA_VERSION=1.44
+ANITA_VERSION=2.3
 ARCH=amd64
 # The release that the packages have been built for.
-RELEASE=8.0_2019Q1
+RELEASE=9.0_2019Q4
 
 # Must use GNU tar. On NetBSD, tar is BSD tar and gtar is GNU.
 TAR=tar
@@ -33,7 +33,7 @@ fi
 
 # Download and build anita (automated NetBSD installer).
 if ! sha1sum -c anita-${ANITA_VERSION}.tar.gz.sha1; then
-  curl -vO http://www.gson.org/netbsd/anita/download/anita-${ANITA_VERSION}.tar.gz
+  curl -vO https://www.gson.org/netbsd/anita/download/anita-${ANITA_VERSION}.tar.gz
   sha1sum -c anita-${ANITA_VERSION}.tar.gz.sha1 || exit 1
 fi
 

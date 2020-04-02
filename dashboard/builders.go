@@ -356,6 +356,22 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-386-0b3b511.tar.gz",
 		SSHUsername:        "root",
 	},
+	"host-netbsd-amd64-9_0": &HostConfig{
+		VMImage:            "netbsd-amd64-9-0-2019q4",
+		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-amd64",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64-2da6b33.tar.gz",
+		SSHUsername:        "root",
+	},
+	"host-netbsd-386-9_0": &HostConfig{
+		VMImage:            "netbsd-i386-9-0-2019q4",
+		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-386",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-386",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-386-0b3b511.tar.gz",
+		SSHUsername:        "root",
+	},
 	"host-netbsd-arm-bsiegert": &HostConfig{
 		IsReverse:   true,
 		ExpectNum:   1,
@@ -1933,6 +1949,20 @@ func init() {
 		shouldRunDistTest: noTestDirAndNoReboot,
 		// This builder currently hangs in the runtime tests; Issue 31726.
 		buildsRepo: disabledBuilder,
+	})
+	addBuilder(BuildConfig{
+		Name:              "netbsd-amd64-9_0",
+		HostType:          "host-netbsd-amd64-9_0",
+		KnownIssue:        37244,
+		shouldRunDistTest: noTestDirAndNoReboot,
+		tryBot:            nil, // Not yet, gain confidence first.
+	})
+	addBuilder(BuildConfig{
+		Name:              "netbsd-386-9_0",
+		HostType:          "host-netbsd-386-9_0",
+		KnownIssue:        37244,
+		shouldRunDistTest: noTestDirAndNoReboot,
+		tryBot:            nil, // Not yet, gain confidence first.
 	})
 	addBuilder(BuildConfig{
 		Name:              "netbsd-arm-bsiegert",
