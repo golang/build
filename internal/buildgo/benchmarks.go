@@ -15,9 +15,9 @@ import (
 
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
-	"golang.org/x/build/cmd/coordinator/spanlog"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/sourcecache"
+	"golang.org/x/build/internal/spanlog"
 )
 
 // benchRuns is the number of times to run each benchmark binary

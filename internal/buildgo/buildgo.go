@@ -20,9 +20,9 @@ import (
 
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
-	"golang.org/x/build/cmd/coordinator/spanlog"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/sourcecache"
+	"golang.org/x/build/internal/spanlog"
 )
 
 // BuilderRev is a build configuration type and a revision.

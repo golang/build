@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"golang.org/x/build/buildlet"
-	"golang.org/x/build/cmd/coordinator/spanlog"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/spanlog"
 )
 
 func TestSchedLess(t *testing.T) {

@@ -19,9 +19,9 @@ import (
 	"net/http"
 	"time"
 
-	"golang.org/x/build/cmd/coordinator/spanlog"
 	"golang.org/x/build/internal/lru"
 	"golang.org/x/build/internal/singleflight"
+	"golang.org/x/build/internal/spanlog"
 )
 
 var processStartTime = time.Now()
