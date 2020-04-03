@@ -47,6 +47,7 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
 )
@@ -295,7 +296,7 @@ func (p *reverseBuildletPool) updateWaiterCounter(hostType string, delta int) {
 	p.waiters[hostType] += delta
 }
 
-func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg logger) (*buildlet.Client, error) {
+func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg pool.Logger) (*buildlet.Client, error) {
 	p.updateWaiterCounter(hostType, 1)
 	defer p.updateWaiterCounter(hostType, -1)
 	seenErrInUse := false
@@ -324,7 +325,7 @@ func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, 
 	}
 }
 
-func (p *reverseBuildletPool) cleanedBuildlet(b *buildlet.Client, lg logger) (*buildlet.Client, error) {
+func (p *reverseBuildletPool) cleanedBuildlet(b *buildlet.Client, lg pool.Logger) (*buildlet.Client, error) {
 	// Clean up any files from previous builds.
 	sp := lg.CreateSpan("clean_buildlet", b.String())
 	err := b.RemoveAll(context.Background(), ".")

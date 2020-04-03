@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/coordinator/pool"
 )
 
 type TestBuildletPool struct {
@@ -30,7 +31,7 @@ type TestBuildletPool struct {
 
 // GetBuildlet finds the first available buildlet for the hostType and returns
 // it, or an error if no buildlets are available for that hostType.
-func (tp *TestBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg logger) (*buildlet.Client, error) {
+func (tp *TestBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg pool.Logger) (*buildlet.Client, error) {
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
 	c, ok := tp.clients[hostType]
@@ -123,7 +124,7 @@ func TestHandleBuildletCreate_PreStream(t *testing.T) {
 	defer log.SetOutput(os.Stderr)
 	addBuilder(buildName)
 	remoteBuildlets.m = map[string]*remoteBuildlet{}
-	testPoolHook = func(_ *dashboard.HostConfig) BuildletPool { return testPool }
+	testPoolHook = func(_ *dashboard.HostConfig) pool.Buildlet { return testPool }
 	defer func() {
 		timeNow = time.Now
 		removeBuilder(buildName)
@@ -152,7 +153,7 @@ func TestHandleBuildletCreate_Stream(t *testing.T) {
 	defer log.SetOutput(os.Stderr)
 	addBuilder(buildName)
 	remoteBuildlets.m = map[string]*remoteBuildlet{}
-	testPoolHook = func(_ *dashboard.HostConfig) BuildletPool { return testPool }
+	testPoolHook = func(_ *dashboard.HostConfig) pool.Buildlet { return testPool }
 	defer func() {
 		timeNow = time.Now
 		removeBuilder(buildName)

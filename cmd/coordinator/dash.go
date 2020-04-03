@@ -28,6 +28,7 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/build/internal/buildgo"
+	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/secret"
 )
 
@@ -50,7 +51,7 @@ func dash(meth, cmd string, args url.Values, req, resp interface{}) error {
 	}
 	var r *http.Response
 	var err error
-	cmd = buildEnv.DashBase() + cmd + "?" + argsCopy.Encode()
+	cmd = pool.GCEBuildEnv().DashBase() + cmd + "?" + argsCopy.Encode()
 	switch meth {
 	case "GET":
 		if req != nil {

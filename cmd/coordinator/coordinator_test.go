@@ -21,6 +21,7 @@ import (
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/buildgo"
+	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 )
 
@@ -230,8 +231,9 @@ func TestFindWork(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping in short mode")
 	}
-	defer func(old *buildenv.Environment) { buildEnv = old }(buildEnv)
-	buildEnv = buildenv.Production
+	buildEnv := pool.GCEBuildEnv()
+	defer func(old *buildenv.Environment) { pool.SetGCEBuildEnv(old) }(buildEnv)
+	pool.SetGCEBuildEnv(buildenv.Production)
 	defer func() { buildgo.TestHookSnapshotExists = nil }()
 	buildgo.TestHookSnapshotExists = func(br *buildgo.BuilderRev) bool {
 		if strings.Contains(br.Name, "android") {

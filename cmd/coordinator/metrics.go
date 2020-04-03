@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"golang.org/x/build/cmd/coordinator/metrics"
+	"golang.org/x/build/internal/coordinator/pool"
 
 	"github.com/golang/protobuf/ptypes"
 	metpb "google.golang.org/genproto/googleapis/api/metric"
@@ -66,8 +67,8 @@ func reportReverseCountMetrics(ctx context.Context) error {
 		})
 	}
 
-	return metricsClient.CreateTimeSeries(ctx, &monpb.CreateTimeSeriesRequest{
-		Name:       m.DescriptorPath(buildEnv.ProjectName),
+	return pool.MetricsClient().CreateTimeSeries(ctx, &monpb.CreateTimeSeriesRequest{
+		Name:       m.DescriptorPath(pool.GCEBuildEnv().ProjectName),
 		TimeSeries: ts,
 	})
 }

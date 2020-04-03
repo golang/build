@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/sourcecache"
 	"golang.org/x/build/kubernetes"
 	"golang.org/x/build/kubernetes/api"
@@ -44,12 +45,12 @@ var (
 
 // initGCE must be called before initKube
 func initKube() error {
-	if buildEnv.KubeBuild.MaxNodes == 0 {
+	if pool.GCEBuildEnv().KubeBuild.MaxNodes == 0 {
 		return errors.New("Kubernetes builders disabled due to KubeBuild.MaxNodes == 0")
 	}
 
 	// projectID was set by initGCE
-	registryPrefix += "/" + buildEnv.ProjectName
+	registryPrefix += "/" + pool.GCEBuildEnv().ProjectName
 	if !hasCloudPlatformScope() {
 		return errors.New("coordinator not running with access to the Cloud Platform scope.")
 	}
@@ -58,19 +59,19 @@ func initKube() error {
 	defer cancel() // ctx is only used for discovery and connect; not retained.
 	var err error
 	buildletsKubeClient, err = gke.NewClient(ctx,
-		buildEnv.KubeBuild.Name,
-		gke.OptZone(buildEnv.ControlZone),
-		gke.OptProject(buildEnv.ProjectName),
-		gke.OptTokenSource(gcpCreds.TokenSource))
+		pool.GCEBuildEnv().KubeBuild.Name,
+		gke.OptZone(pool.GCEBuildEnv().ControlZone),
+		gke.OptProject(pool.GCEBuildEnv().ProjectName),
+		gke.OptTokenSource(pool.GCPCredentials().TokenSource))
 	if err != nil {
 		return err
 	}
 
 	goKubeClient, err = gke.NewClient(ctx,
-		buildEnv.KubeTools.Name,
-		gke.OptZone(buildEnv.ControlZone),
-		gke.OptProject(buildEnv.ProjectName),
-		gke.OptTokenSource(gcpCreds.TokenSource))
+		pool.GCEBuildEnv().KubeTools.Name,
+		gke.OptZone(pool.GCEBuildEnv().ControlZone),
+		gke.OptProject(pool.GCEBuildEnv().ProjectName),
+		gke.OptTokenSource(pool.GCPCredentials().TokenSource))
 	if err != nil {
 		return err
 	}
@@ -135,12 +136,12 @@ func (p *kubeBuildletPool) pollCapacityLoop() {
 func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 	nodes, err := buildletsKubeClient.GetNodes(ctx)
 	if err != nil {
-		log.Printf("failed to retrieve nodes to calculate cluster capacity for %s/%s: %v", buildEnv.ProjectName, buildEnv.Region(), err)
+		log.Printf("failed to retrieve nodes to calculate cluster capacity for %s/%s: %v", pool.GCEBuildEnv().ProjectName, pool.GCEBuildEnv().Region(), err)
 		return
 	}
 	pods, err := buildletsKubeClient.GetPods(ctx)
 	if err != nil {
-		log.Printf("failed to retrieve pods to calculate cluster capacity for %s/%s: %v", buildEnv.ProjectName, buildEnv.Region(), err)
+		log.Printf("failed to retrieve pods to calculate cluster capacity for %s/%s: %v", pool.GCEBuildEnv().ProjectName, pool.GCEBuildEnv().Region(), err)
 		return
 	}
 
@@ -209,7 +210,7 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 
 }
 
-func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg logger) (*buildlet.Client, error) {
+func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg pool.Logger) (*buildlet.Client, error) {
 	hconf, ok := dashboard.Hosts[hostType]
 	if !ok || !hconf.IsContainer() {
 		return nil, fmt.Errorf("kubepool: invalid host type %q", hostType)
@@ -221,7 +222,7 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg 
 		panic("expect non-nil buildletsKubeClient")
 	}
 
-	deleteIn, ok := ctx.Value(buildletTimeoutOpt{}).(time.Duration)
+	deleteIn, ok := ctx.Value(pool.BuildletTimeoutOpt{}).(time.Duration)
 	if !ok {
 		deleteIn = podDeleteTimeout
 	}
@@ -236,7 +237,7 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg 
 	log.Printf("Creating Kubernetes pod %q for %s", podName, hostType)
 
 	bc, err := buildlet.StartPod(ctx, buildletsKubeClient, podName, hostType, buildlet.PodOpts{
-		ProjectID:     buildEnv.ProjectName,
+		ProjectID:     pool.GCEBuildEnv().ProjectName,
 		ImageRegistry: registryPrefix,
 		Description:   fmt.Sprintf("Go Builder for %s", hostType),
 		DeleteIn:      deleteIn,
@@ -291,7 +292,7 @@ func (p *kubeBuildletPool) WriteHTMLStatus(w io.Writer) {
 		fmt.Fprintf(w, "<ul>")
 		for i, pod := range active {
 			if i < show/2 || i >= len(active)-(show/2) {
-				fmt.Fprintf(w, "<li>%v, %v</li>\n", pod.name, time.Since(pod.creation))
+				fmt.Fprintf(w, "<li>%v, %v</li>\n", pod.Name, time.Since(pod.Creation))
 			} else if i == show/2 {
 				fmt.Fprintf(w, "<li>... %d of %d total omitted ...</li>\n", len(active)-show, len(active))
 			}
@@ -353,16 +354,16 @@ func (p *kubeBuildletPool) podUsed(podName string) bool {
 	return ok
 }
 
-func (p *kubeBuildletPool) podsActive() (ret []resourceTime) {
+func (p *kubeBuildletPool) podsActive() (ret []pool.ResourceTime) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for name, ph := range p.pods {
-		ret = append(ret, resourceTime{
-			name:     name,
-			creation: ph.requestedAt,
+		ret = append(ret, pool.ResourceTime{
+			Name:     name,
+			Creation: ph.requestedAt,
 		})
 	}
-	sort.Sort(byCreationTime(ret))
+	sort.Sort(pool.ByCreationTime(ret))
 	return ret
 }
 
@@ -437,7 +438,7 @@ func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
 				}
 				if err == nil && time.Now().Unix() > unixDeadline {
 					stats.DeletedOld++
-					log.Printf("cleanUpOldPods: Deleting expired pod %q in zone %q ...", pod.Name, buildEnv.ControlZone)
+					log.Printf("cleanUpOldPods: Deleting expired pod %q in zone %q ...", pod.Name, pool.GCEBuildEnv().ControlZone)
 					err = buildletsKubeClient.DeletePod(ctx, pod.Name)
 					if err != nil {
 						log.Printf("cleanUpOldPods: problem deleting old pod %q: %v", pod.Name, err)
@@ -467,5 +468,5 @@ func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
 }
 
 func hasCloudPlatformScope() bool {
-	return hasScope(container.CloudPlatformScope)
+	return pool.HasScope(container.CloudPlatformScope)
 }

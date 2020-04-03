@@ -8,7 +8,7 @@
 // Code interacting with Google Compute Engine (GCE) and
 // a GCE implementation of the BuildletPool interface.
 
-package main
+package pool
 
 import (
 	"context"
@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
@@ -60,7 +61,13 @@ func gceAPIGate() {
 	<-apiCallTicker.C
 }
 
+// IsGCERemoteBuildletFunc should return true if the buildlet instance name is
+// is a GCE remote buildlet.
+type IsGCERemoteBuildletFunc func(instanceName string) bool
+
 // Initialized by initGCE:
+// TODO(http://golang.org/issue/38337): These should be moved into a struct as
+// part of the effort to reduce package level variables.
 var (
 	buildEnv *buildenv.Environment
 
@@ -78,6 +85,13 @@ var (
 	errorsClient   *errorreporting.Client // Stackdriver errors client
 	gkeNodeIP      string
 
+	// values created due to seperating the buildlet pools into a seperate package
+	gceMode             string
+	deleteTimeout       time.Duration
+	testFiles           map[string]string
+	basePinErr          *atomic.Value
+	isGCERemoteBuildlet IsGCERemoteBuildletFunc
+
 	initGCECalled bool
 )
 
@@ -85,26 +99,31 @@ var (
 // It is initialized by initGCE.
 var oAuthHTTPClient *http.Client
 
-func initGCE(sc *secret.Client) error {
+// InitGCE initializes the GCE buildlet pool.
+func InitGCE(sc *secret.Client, vmDeleteTimeout time.Duration, tFiles map[string]string, basePin *atomic.Value, fn IsGCERemoteBuildletFunc, buildEnvName, mode string) error {
 	initGCECalled = true
+	deleteTimeout = vmDeleteTimeout
+	testFiles = tFiles
+	basePinErr = basePin
+	isGCERemoteBuildlet = fn
 	var err error
 	ctx := context.Background()
 
 	// If the coordinator is running on a GCE instance and a
 	// buildEnv was not specified with the env flag, set the
 	// buildEnvName to the project ID
-	if *buildEnvName == "" {
-		if *mode == "dev" {
-			*buildEnvName = "dev"
+	if buildEnvName == "" {
+		if mode == "dev" {
+			buildEnvName = "dev"
 		} else if metadata.OnGCE() {
-			*buildEnvName, err = metadata.ProjectID()
+			buildEnvName, err = metadata.ProjectID()
 			if err != nil {
 				log.Fatalf("metadata.ProjectID: %v", err)
 			}
 		}
 	}
 
-	buildEnv = buildenv.ByProjectID(*buildEnvName)
+	buildEnv = buildenv.ByProjectID(buildEnvName)
 	inStaging = buildEnv == buildenv.Staging
 
 	// If running on GCE, override the zone and static IP, and check service account permissions.
@@ -133,19 +152,12 @@ func initGCE(sc *secret.Client) error {
 		if !hasComputeScope() {
 			return errors.New("coordinator is not running with access to read and write Compute resources. VM support disabled")
 		}
-
-		ctxSec, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-
-		if value, err := sc.Retrieve(ctxSec, secret.NameFarmerRunBench); err == nil {
-			*shouldRunBench, _ = strconv.ParseBool(value)
-		}
 	}
 
 	cfgDump, _ := json.MarshalIndent(buildEnv, "", "  ")
-	log.Printf("Loaded configuration %q for project %q:\n%s", *buildEnvName, buildEnv.ProjectName, cfgDump)
+	log.Printf("Loaded configuration %q for project %q:\n%s", buildEnvName, buildEnv.ProjectName, cfgDump)
 
-	if *mode != "dev" {
+	if mode != "dev" {
 		storageClient, err = storage.NewClient(ctx)
 		if err != nil {
 			log.Fatalf("storage.NewClient: %v", err)
@@ -159,7 +171,7 @@ func initGCE(sc *secret.Client) error {
 
 	dsClient, err = datastore.NewClient(ctx, buildEnv.ProjectName)
 	if err != nil {
-		if *mode == "dev" {
+		if mode == "dev" {
 			log.Printf("Error creating datastore client for %q: %v", buildEnv.ProjectName, err)
 		} else {
 			log.Fatalf("Error creating datastore client for %q: %v", buildEnv.ProjectName, err)
@@ -167,7 +179,7 @@ func initGCE(sc *secret.Client) error {
 	}
 	goDSClient, err = datastore.NewClient(ctx, buildEnv.GoProjectName)
 	if err != nil {
-		if *mode == "dev" {
+		if mode == "dev" {
 			log.Printf("Error creating datastore client for %q: %v", buildEnv.GoProjectName, err)
 		} else {
 			log.Fatalf("Error creating datastore client for %q: %v", buildEnv.GoProjectName, err)
@@ -175,7 +187,7 @@ func initGCE(sc *secret.Client) error {
 	}
 
 	// don't send dev errors to Stackdriver.
-	if *mode != "dev" {
+	if mode != "dev" {
 		errorsClient, err = errorreporting.NewClient(ctx, buildEnv.ProjectName, errorreporting.Config{
 			ServiceName: "coordinator",
 		})
@@ -187,7 +199,7 @@ func initGCE(sc *secret.Client) error {
 
 	gcpCreds, err = buildEnv.Credentials(ctx)
 	if err != nil {
-		if *mode == "dev" {
+		if mode == "dev" {
 			// don't try to do anything else with GCE, as it will likely fail
 			return nil
 		}
@@ -202,20 +214,101 @@ func initGCE(sc *secret.Client) error {
 		log.Printf("TryBot builders enabled.")
 	}
 
-	if *mode != "dev" {
+	if mode != "dev" {
 		go syncBuildStatsLoop(buildEnv)
 	}
+
+	gceMode = mode
 
 	go gcePool.pollQuotaLoop()
 	go createBasepinDisks(context.Background())
 	return nil
 }
 
+// TODO(http://golang.org/issue/38337): These should be moved into a struct as
+// part of the effort to reduce package level variables.
+
+// GCEStorageClient retrieves the GCE storage client.
+func GCEStorageClient() *storage.Client {
+	return storageClient
+}
+
+// GCEBuildEnv retrieves the GCE build env.
+func GCEBuildEnv() *buildenv.Environment {
+	return buildEnv
+}
+
+// SetGCEBuildEnv sets the GCE build env. This is primarily reserved for
+// testing purposes.
+func SetGCEBuildEnv(b *buildenv.Environment) {
+	buildEnv = b
+}
+
+// GetGCEBuildletPool retrieves the GCE buildlet pool.
+func GetGCEBuildletPool() *GCEBuildlet {
+	return gcePool
+}
+
+// GCEInStaging returns a boolean denoting if the enviornment is stageing.
+func GCEInStaging() bool {
+	return inStaging
+}
+
+// GCEGerritClient retrieves a gerrit client.
+func GCEGerritClient() *gerrit.Client {
+	return gerritClient
+}
+
+// GKENodeIP retrieves the GKE node IP.
+func GKENodeIP() string {
+	return gkeNodeIP
+}
+
+// GCEDSClient retrieves the datastore client.
+func GCEDSClient() *datastore.Client {
+	return dsClient
+}
+
+// GCEGoDSClient retrieves the datastore client for golang.org project.
+func GCEGoDSClient() *datastore.Client {
+	return goDSClient
+}
+
+// GCETryDepsErr retrives any Trybot dependency error.
+func GCETryDepsErr() error {
+	return errTryDeps
+}
+
+// GCEErrorsClient retrieves the stackdriver errors client.
+func GCEErrorsClient() *errorreporting.Client {
+	return errorsClient
+}
+
+// GCEOAuthHTTPClient retrieves an OAuth2 HTTP client used to make API calls to GCP.
+func GCEOAuthHTTPClient() *http.Client {
+	return oAuthHTTPClient
+}
+
+// GCPCredentials retrieves the GCP credentials.
+func GCPCredentials() *google.Credentials {
+	return gcpCreds
+}
+
+// MetricsClient retrieves a metrics client.
+func MetricsClient() *monapi.MetricClient {
+	return metricsClient
+}
+
+// StorageClient retrieves a storage client.
+func StorageClient() *storage.Client {
+	return storageClient
+}
+
 func checkTryBuildDeps(ctx context.Context, sc *secret.Client) error {
 	if !hasStorageScope() {
 		return errors.New("coordinator's GCE instance lacks the storage service scope")
 	}
-	if *mode == "dev" {
+	if gceMode == "dev" {
 		return errors.New("running in dev mode")
 	}
 	wr := storageClient.Bucket(buildEnv.LogBucket).Object("hello.txt").NewWriter(context.Background())
@@ -241,16 +334,17 @@ func checkTryBuildDeps(ctx context.Context, sc *secret.Client) error {
 	return nil
 }
 
-var gcePool = &gceBuildletPool{}
+var gcePool = &GCEBuildlet{}
 
-var _ BuildletPool = (*gceBuildletPool)(nil)
+var _ Buildlet = (*GCEBuildlet)(nil)
 
 // maxInstances is a temporary hack because we can't get buildlets to boot
 // without IPs, and we only have 200 IP addresses.
 // TODO(bradfitz): remove this once fixed.
 const maxInstances = 190
 
-type gceBuildletPool struct {
+// GCEBuildlet manages a pool of GCE buildlets.
+type GCEBuildlet struct {
 	mu sync.Mutex // guards all following
 
 	disabled bool
@@ -264,7 +358,7 @@ type gceBuildletPool struct {
 	inst      map[string]time.Time // GCE VM instance name -> creationTime
 }
 
-func (p *gceBuildletPool) pollQuotaLoop() {
+func (p *GCEBuildlet) pollQuotaLoop() {
 	if computeService == nil {
 		log.Printf("pollQuotaLoop: no GCE access; not checking quota.")
 		return
@@ -279,7 +373,7 @@ func (p *gceBuildletPool) pollQuotaLoop() {
 	}
 }
 
-func (p *gceBuildletPool) pollQuota() {
+func (p *GCEBuildlet) pollQuota() {
 	gceAPIGate()
 	reg, err := computeService.Regions.Get(buildEnv.ProjectName, buildEnv.Region()).Do()
 	if err != nil {
@@ -302,13 +396,15 @@ func (p *gceBuildletPool) pollQuota() {
 	}
 }
 
-func (p *gceBuildletPool) SetEnabled(enabled bool) {
+// SetEnabled marks the buildlet pool as enabled.
+func (p *GCEBuildlet) SetEnabled(enabled bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.disabled = !enabled
 }
 
-func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg logger) (bc *buildlet.Client, err error) {
+// GetBuildlet retrieves a buildlet client for an available buildlet.
+func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logger) (bc *buildlet.Client, err error) {
 	hconf, ok := dashboard.Hosts[hostType]
 	if !ok {
 		return nil, fmt.Errorf("gcepool: unknown host type %q", hostType)
@@ -320,9 +416,9 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 		return nil, err
 	}
 
-	deleteIn, ok := ctx.Value(buildletTimeoutOpt{}).(time.Duration)
+	deleteIn, ok := ctx.Value(BuildletTimeoutOpt{}).(time.Duration)
 	if !ok {
-		deleteIn = vmDeleteTimeout
+		deleteIn = deleteTimeout
 	}
 
 	instName := "buildlet-" + strings.TrimPrefix(hostType, "host-") + "-rn" + randHex(7)
@@ -378,7 +474,7 @@ func (p *gceBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg l
 	return bc, nil
 }
 
-func (p *gceBuildletPool) putBuildlet(bc *buildlet.Client, hostType, zone, instName string) error {
+func (p *GCEBuildlet) putBuildlet(bc *buildlet.Client, hostType, zone, instName string) error {
 	// TODO(bradfitz): add the buildlet to a freelist (of max N
 	// items) for up to 10 minutes since when it got started if
 	// it's never seen a command execution failure, and we can
@@ -399,7 +495,8 @@ func (p *gceBuildletPool) putBuildlet(bc *buildlet.Client, hostType, zone, instN
 	return nil
 }
 
-func (p *gceBuildletPool) WriteHTMLStatus(w io.Writer) {
+// WriteHTMLStatus writes the status of the buildlet pool to an io.Writer.
+func (p *GCEBuildlet) WriteHTMLStatus(w io.Writer) {
 	fmt.Fprintf(w, "<b>GCE pool</b> capacity: %s", p.capacityString())
 	const show = 6 // must be even
 	active := p.instancesActive()
@@ -407,7 +504,7 @@ func (p *gceBuildletPool) WriteHTMLStatus(w io.Writer) {
 		fmt.Fprintf(w, "<ul>")
 		for i, inst := range active {
 			if i < show/2 || i >= len(active)-(show/2) {
-				fmt.Fprintf(w, "<li>%v, %s</li>\n", inst.name, friendlyDuration(time.Since(inst.creation)))
+				fmt.Fprintf(w, "<li>%v, %s</li>\n", inst.Name, friendlyDuration(time.Since(inst.Creation)))
 			} else if i == show/2 {
 				fmt.Fprintf(w, "<li>... %d of %d total omitted ...</li>\n", len(active)-show, len(active))
 			}
@@ -416,11 +513,11 @@ func (p *gceBuildletPool) WriteHTMLStatus(w io.Writer) {
 	}
 }
 
-func (p *gceBuildletPool) String() string {
+func (p *GCEBuildlet) String() string {
 	return fmt.Sprintf("GCE pool capacity: %s", p.capacityString())
 }
 
-func (p *gceBuildletPool) capacityString() string {
+func (p *GCEBuildlet) capacityString() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return fmt.Sprintf("%d/%d instances; %d/%d CPUs",
@@ -430,7 +527,7 @@ func (p *gceBuildletPool) capacityString() string {
 
 // awaitVMCountQuota waits for numCPU CPUs of quota to become available,
 // or returns ctx.Err.
-func (p *gceBuildletPool) awaitVMCountQuota(ctx context.Context, numCPU int) error {
+func (p *GCEBuildlet) awaitVMCountQuota(ctx context.Context, numCPU int) error {
 	// Poll every 2 seconds, which could be better, but works and
 	// is simple.
 	for {
@@ -449,11 +546,11 @@ func (p *gceBuildletPool) awaitVMCountQuota(ctx context.Context, numCPU int) err
 // starting numCPU more CPUs.
 //
 // precondition: p.mu must be held.
-func (p *gceBuildletPool) haveQuotaLocked(numCPU int) bool {
+func (p *GCEBuildlet) haveQuotaLocked(numCPU int) bool {
 	return p.cpuLeft >= numCPU && p.instLeft >= 1 && len(p.inst) < maxInstances && p.addrUsage < maxInstances
 }
 
-func (p *gceBuildletPool) tryAllocateQuota(numCPU int) bool {
+func (p *GCEBuildlet) tryAllocateQuota(numCPU int) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.disabled {
@@ -471,7 +568,7 @@ func (p *gceBuildletPool) tryAllocateQuota(numCPU int) bool {
 
 // putVMCountQuota adjusts the dead-reckoning of our quota usage by
 // one instance and cpu CPUs.
-func (p *gceBuildletPool) putVMCountQuota(cpu int) {
+func (p *GCEBuildlet) putVMCountQuota(cpu int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.cpuUsage -= cpu
@@ -479,7 +576,7 @@ func (p *gceBuildletPool) putVMCountQuota(cpu int) {
 	p.instLeft++
 }
 
-func (p *gceBuildletPool) setInstanceUsed(instName string, used bool) {
+func (p *GCEBuildlet) setInstanceUsed(instName string, used bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.inst == nil {
@@ -492,39 +589,41 @@ func (p *gceBuildletPool) setInstanceUsed(instName string, used bool) {
 	}
 }
 
-func (p *gceBuildletPool) instanceUsed(instName string) bool {
+func (p *GCEBuildlet) instanceUsed(instName string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	_, ok := p.inst[instName]
 	return ok
 }
 
-func (p *gceBuildletPool) instancesActive() (ret []resourceTime) {
+func (p *GCEBuildlet) instancesActive() (ret []ResourceTime) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for name, create := range p.inst {
-		ret = append(ret, resourceTime{
-			name:     name,
-			creation: create,
+		ret = append(ret, ResourceTime{
+			Name:     name,
+			Creation: create,
 		})
 	}
-	sort.Sort(byCreationTime(ret))
+	sort.Sort(ByCreationTime(ret))
 	return ret
 }
 
-// resourceTime is a GCE instance or Kube pod name and its creation time.
-type resourceTime struct {
-	name     string
-	creation time.Time
+// ResourceTime is a GCE instance or Kube pod name and its creation time.
+type ResourceTime struct {
+	Name     string
+	Creation time.Time
 }
 
-type byCreationTime []resourceTime
+// ByCreationTime provides the functionality to sort resource times by
+// the time of creation.
+type ByCreationTime []ResourceTime
 
-func (s byCreationTime) Len() int           { return len(s) }
-func (s byCreationTime) Less(i, j int) bool { return s[i].creation.Before(s[j].creation) }
-func (s byCreationTime) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s ByCreationTime) Len() int           { return len(s) }
+func (s ByCreationTime) Less(i, j int) bool { return s[i].Creation.Before(s[j].Creation) }
+func (s ByCreationTime) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
-// cleanUpOldVMs loops forever and periodically enumerates virtual
+// CleanUpOldVMs loops forever and periodically enumerates virtual
 // machines and deletes those which have expired.
 //
 // A VM is considered expired if it has a "delete-at" metadata
@@ -537,8 +636,8 @@ func (s byCreationTime) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 // stranded and wasting resources forever, we instead set the
 // "delete-at" metadata attribute on them when created to some time
 // that's well beyond their expected lifetime.
-func (p *gceBuildletPool) cleanUpOldVMs() {
-	if *mode == "dev" {
+func (p *GCEBuildlet) CleanUpOldVMs() {
+	if gceMode == "dev" {
 		return
 	}
 	if computeService == nil {
@@ -560,7 +659,7 @@ func (p *gceBuildletPool) cleanUpOldVMs() {
 }
 
 // cleanZoneVMs is part of cleanUpOldVMs, operating on a single zone.
-func (p *gceBuildletPool) cleanZoneVMs(zone string) error {
+func (p *GCEBuildlet) cleanZoneVMs(zone string) error {
 	// Fetch the first 500 (default) running instances and clean
 	// those. We expect that we'll be running many fewer than
 	// that. Even if we have more, eventually the first 500 will
@@ -631,6 +730,8 @@ func (p *gceBuildletPool) cleanZoneVMs(zone string) error {
 
 var deletedVMCache = lru.New(100) // keyed by instName
 
+type token struct{}
+
 // deleteVM starts a delete of an instance in a given zone.
 //
 // It either returns an operation name (if delete is pending) or the
@@ -653,7 +754,8 @@ func deleteVM(zone, instName string) (operation string, err error) {
 	return op.Name, nil
 }
 
-func hasScope(want string) bool {
+// HasScope returns true if the GCE metadata contains the default scopes.
+func HasScope(want string) bool {
 	// If not on GCE, assume full access
 	if !metadata.OnGCE() {
 		return true
@@ -672,15 +774,16 @@ func hasScope(want string) bool {
 }
 
 func hasComputeScope() bool {
-	return hasScope(compute.ComputeScope) || hasScope(compute.CloudPlatformScope)
+	return HasScope(compute.ComputeScope) || HasScope(compute.CloudPlatformScope)
 }
 
 func hasStorageScope() bool {
-	return hasScope(storage.ScopeReadWrite) || hasScope(storage.ScopeFullControl) || hasScope(compute.CloudPlatformScope)
+	return HasScope(storage.ScopeReadWrite) || HasScope(storage.ScopeFullControl) || HasScope(compute.CloudPlatformScope)
 }
 
-func readGCSFile(name string) ([]byte, error) {
-	if *mode == "dev" {
+// ReadGCSFile reads the named file from the GCS bucket.
+func ReadGCSFile(name string) ([]byte, error) {
+	if gceMode == "dev" {
 		b, ok := testFiles[name]
 		if !ok {
 			return nil, &os.PathError{

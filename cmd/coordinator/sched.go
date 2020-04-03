@@ -18,6 +18,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/buildgo"
+	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/spanlog"
 	"golang.org/x/build/types"
 )
@@ -43,7 +44,7 @@ type Scheduler struct {
 // A getBuildletResult is a buildlet that was just created and is up and
 // is ready to be assigned to a caller based on priority.
 type getBuildletResult struct {
-	Pool     BuildletPool
+	Pool     pool.Buildlet
 	HostType string
 
 	// One of Client or Err gets set:
@@ -142,7 +143,7 @@ func (l stderrLogger) CreateSpan(event string, optText ...string) spanlog.Span {
 
 // getPoolBuildlet is launched as its own goroutine to do a
 // potentially long blocking cal to pool.GetBuildlet.
-func (s *Scheduler) getPoolBuildlet(pool BuildletPool, hostType string) {
+func (s *Scheduler) getPoolBuildlet(pool pool.Buildlet, hostType string) {
 	res := getBuildletResult{
 		Pool:     pool,
 		HostType: hostType,
@@ -341,7 +342,7 @@ type SchedItem struct {
 	s           *Scheduler
 	requestTime time.Time
 	tryFor      string // TODO: which user. (user with 1 trybot >> user with 50 trybots)
-	pool        BuildletPool
+	pool        pool.Buildlet
 	ctxDone     <-chan struct{}
 
 	// wantRes is the unbuffered channel that's passed

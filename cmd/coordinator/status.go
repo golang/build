@@ -32,6 +32,7 @@ import (
 
 	"golang.org/x/build/cmd/coordinator/internal"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/foreach"
 	"golang.org/x/build/kubernetes/api"
 )
@@ -646,8 +647,8 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	sort.Sort(byAge(data.Active))
 	sort.Sort(byAge(data.Pending))
 	sort.Sort(sort.Reverse(byAge(data.Recent)))
-	if errTryDeps != nil {
-		data.TrybotsErr = errTryDeps.Error()
+	if pool.GCETryDepsErr() != nil {
+		data.TrybotsErr = pool.GCETryDepsErr().Error()
 	} else {
 		if buf.Len() == 0 {
 			data.Trybots = template.HTML("<i>(none)</i>")
@@ -657,7 +658,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	buf.Reset()
-	gcePool.WriteHTMLStatus(&buf)
+	pool.GetGCEBuildletPool().WriteHTMLStatus(&buf)
 	data.GCEPoolStatus = template.HTML(buf.String())
 	buf.Reset()
 

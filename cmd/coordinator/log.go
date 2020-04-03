@@ -15,6 +15,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 
+	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/types"
 )
 
@@ -32,13 +33,13 @@ type ProcessRecord struct {
 }
 
 func updateInstanceRecord() {
-	if dsClient == nil {
+	if pool.GCEDSClient() == nil {
 		return
 	}
 	ctx := context.Background()
 	for {
 		key := datastore.NameKey("Process", processID, nil)
-		_, err := dsClient.Put(ctx, key, &ProcessRecord{
+		_, err := pool.GCEDSClient().Put(ctx, key, &ProcessRecord{
 			ID:            processID,
 			Start:         processStartTime,
 			LastHeartbeat: time.Now(),
@@ -51,23 +52,23 @@ func updateInstanceRecord() {
 }
 
 func putBuildRecord(br *types.BuildRecord) {
-	if dsClient == nil {
+	if pool.GCEDSClient() == nil {
 		return
 	}
 	ctx := context.Background()
 	key := datastore.NameKey("Build", br.ID, nil)
-	if _, err := dsClient.Put(ctx, key, br); err != nil {
+	if _, err := pool.GCEDSClient().Put(ctx, key, br); err != nil {
 		log.Printf("datastore Build Put: %v", err)
 	}
 }
 
 func putSpanRecord(sr *types.SpanRecord) {
-	if dsClient == nil {
+	if pool.GCEDSClient() == nil {
 		return
 	}
 	ctx := context.Background()
 	key := datastore.NameKey("Span", fmt.Sprintf("%s-%v-%v", sr.BuildID, sr.StartTime.UnixNano(), sr.Event), nil)
-	if _, err := dsClient.Put(ctx, key, sr); err != nil {
+	if _, err := pool.GCEDSClient().Put(ctx, key, sr); err != nil {
 		log.Printf("datastore Span Put: %v", err)
 	}
 }

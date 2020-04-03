@@ -37,6 +37,7 @@ import (
 	"github.com/kr/pty"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/gophers"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/types"
@@ -525,11 +526,11 @@ func listenAndServeSSH(sc *secret.Client) {
 			log.Fatal(err)
 		}
 	} else {
-		if storageClient == nil {
+		if pool.StorageClient() == nil {
 			log.Printf("GCS storage client not available; not running SSH server.")
 			return
 		}
-		r, err := storageClient.Bucket(buildEnv.BuildletBucket).Object("coordinator-gomote-ssh.key").NewReader(context.Background())
+		r, err := pool.StorageClient().Bucket(pool.GCEBuildEnv().BuildletBucket).Object("coordinator-gomote-ssh.key").NewReader(context.Background())
 		if err != nil {
 			log.Printf("Failed to read ssh host key: %v; not running SSH server.", err)
 			return

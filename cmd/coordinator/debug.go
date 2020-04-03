@@ -19,6 +19,7 @@ import (
 	"text/template"
 
 	"golang.org/x/build/internal/buildgo"
+	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/types"
 )
 
@@ -50,8 +51,8 @@ func handleDoSomeWork(work chan<- buildgo.BuilderRev) func(w http.ResponseWriter
 
 		// Cap number of jobs that can be scheduled from debug UI. If
 		// buildEnv.MaxBuilds is zero, there is no cap.
-		if buildEnv.MaxBuilds > 0 && count > buildEnv.MaxBuilds {
-			count = buildEnv.MaxBuilds
+		if pool.GCEBuildEnv().MaxBuilds > 0 && count > pool.GCEBuildEnv().MaxBuilds {
+			count = pool.GCEBuildEnv().MaxBuilds
 		}
 		log.Printf("looking for %v work items for %q", count, mode)
 

@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
+	cpool "golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/spanlog"
 )
 
@@ -207,7 +208,7 @@ func (c *getBuildletCall) wantGetBuildlet(t *testing.T, s *Scheduler) {
 
 type poolChan map[string]chan interface{} // hostType -> { *buildlet.Client | error}
 
-func (m poolChan) GetBuildlet(ctx context.Context, hostType string, lg logger) (*buildlet.Client, error) {
+func (m poolChan) GetBuildlet(ctx context.Context, hostType string, lg cpool.Logger) (*buildlet.Client, error) {
 	c, ok := m[hostType]
 	if !ok {
 		return nil, fmt.Errorf("pool doesn't support host type %q", hostType)
@@ -307,7 +308,7 @@ func TestScheduler(t *testing.T) {
 		pool["test-host-foo"] = make(chan interface{}, 1)
 		pool["test-host-bar"] = make(chan interface{}, 1)
 
-		testPoolHook = func(*dashboard.HostConfig) BuildletPool { return pool }
+		testPoolHook = func(*dashboard.HostConfig) cpool.Buildlet { return pool }
 		t.Run(tt.name, func(t *testing.T) {
 			s := NewScheduler()
 			for i, st := range tt.steps() {
