@@ -362,7 +362,7 @@ var Hosts = map[string]*HostConfig{
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/pkg/go112"},
 		OwnerGithub: "bsiegert",
 	},
-	"host-dragonfly-amd64-5_6": &HostConfig{
+	"host-dragonfly-amd64-5_8": &HostConfig{
 		IsReverse:   true,
 		ExpectNum:   1,
 		Notes:       "DragonFly BSD release version, run by DragonFly team",
@@ -2315,9 +2315,9 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:              "dragonfly-amd64-5_6",
-		HostType:          "host-dragonfly-amd64-5_6",
-		Notes:             "DragonFly BSD 5.6 release",
+		Name:              "dragonfly-amd64-5_8",
+		HostType:          "host-dragonfly-amd64-5_8",
+		Notes:             "DragonFly BSD 5.8 release",
 		shouldRunDistTest: noTestDirAndNoReboot,
 		SkipSnapshot:      true,
 	})
