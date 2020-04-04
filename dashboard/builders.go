@@ -44,7 +44,7 @@ var slowBotAliases = map[string]string{
 	"arm64":          "linux-arm64-packet",
 	"arm64p32":       "nacl-amd64p32",
 	"darwin":         "darwin-amd64-10_14",
-	"darwin-386":     "darwin-386-10_14",
+	"darwin-386":     "darwin-386-10_14", // TODO(golang.org/issue/37610): Remove when Go 1.14 is no longer supported.
 	"darwin-amd64":   "darwin-amd64-10_14",
 	"darwin-arm64":   "darwin-arm64-corellium",
 	"dragonfly":      "dragonfly-amd64",
@@ -1533,7 +1533,7 @@ func init() {
 		})
 	}
 	addMiscCompile("-linuxarm", "^linux-arm")                // 2: arm, arm64
-	addMiscCompile("-darwin", "^darwin")                     // 4: 386, amd64 + iOS: arm, arm64
+	addMiscCompile("-darwin", "^darwin")                     // 2: amd64, arm64 (for Go 1.14 and older, 4: 386, amd64 + iOS: arm, arm64)
 	addMiscCompile("-mips", "^linux-mips")                   // 4: mips, mipsle, mips64, mips64le
 	addMiscCompile("-ppc", "^(linux-ppc64|aix-)")            // 3: linux-ppc64{,le}, aix-ppc64
 	addMiscCompile("-solaris", "^(solaris|illumos)")         // 2: both amd64
@@ -2059,7 +2059,9 @@ func init() {
 		HostType:          "host-darwin-10_14",
 		shouldRunDistTest: macTestPolicy,
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return repo == "go" && atLeastGo1(branch, 13)
+			// Go 1.14 is the last release that will support 32-bit binaries on macOS (darwin/386).
+			// (See https://golang.org/doc/go1.14#darwin.)
+			return repo == "go" && atMostGo1(branch, 14)
 		},
 		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})

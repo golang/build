@@ -527,9 +527,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-10_11", "go"), none},
 		{b("darwin-amd64-10_11@go1.14", "go"), onlyPost}, // Go 1.14 is the last release that will run on macOS 10.11 El Capitan.
 		{b("darwin-amd64-10_11@go1.15", "go"), none},     // Go 1.15 will require macOS 10.12 Sierra or later.
-		{b("darwin-386-10_14", "go"), onlyPost},
-		{b("darwin-386-10_14@go1.12", "go"), none},
+		{b("darwin-386-10_14", "go"), none},
 		{b("darwin-386-10_14@go1.13", "go"), onlyPost},
+		{b("darwin-386-10_14@go1.14", "go"), onlyPost}, // Go 1.14 is the last release that supports 32-bit on macOS.
+		{b("darwin-386-10_14@go1.15", "go"), none},
 
 		// plan9 only lived at master. We didn't support any past releases.
 		// But it's off for now as it's always failing.
