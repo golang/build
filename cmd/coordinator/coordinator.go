@@ -1123,6 +1123,7 @@ type trySet struct {
 	// See LOCK ORDER comment above.
 	mu       sync.Mutex
 	canceled bool // try run is no longer wanted and its builds were canceled
+	attempt  int  // keep track of build attempt for the same commit
 	trySetState
 	errMsg bytes.Buffer
 }
@@ -1372,7 +1373,9 @@ func (ts *trySet) notifyStarting() {
 	if len(ts.slowBots) > 0 {
 		name = "SlowBots"
 	}
-	msg := name + " beginning. Status page: https://farmer.golang.org/try?commit=" + ts.Commit[:8]
+	ts.attempt++
+	msg := "(attempt " + string(ts.attempt) + ")" + name +
+		" beginning. Status page: https://farmer.golang.org/try?commit=" + ts.Commit[:8]
 
 	gerritClient := pool.NewGCEConfiguration().GerritClient()
 	ctx := context.Background()
