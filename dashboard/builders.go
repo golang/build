@@ -685,7 +685,7 @@ func init() {
 }
 
 // A HostConfig describes the available ways to obtain buildlets of
-// different types. Some host configs can server multiple
+// different types. Some host configs can serve multiple
 // builders. For example, a host config of "host-linux-jessie" can
 // serve linux-amd64, linux-amd64-race, linux-386, linux-386-387, etc.
 type HostConfig struct {
@@ -747,6 +747,16 @@ type BuildConfig struct {
 	// the type of host this build will run on.
 	// For example, "host-linux-jessie".
 	HostType string
+
+	// KnownIssue is a non-zero golang.org/issue/nnn number for a builder
+	// that is known to be failing for some reason, such as because it is
+	// a new builder still in development/testing, or because the feature
+	// or port that it's meant to test hasn't been added yet, etc.
+	//
+	// A non-zero value here means that failures on this builder should not
+	// be considered a serious regression and don't need investigation beyond
+	// what is already in scope of the listed issue.
+	KnownIssue int
 
 	Notes string // notes for humans
 
@@ -1599,9 +1609,10 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-amd64-staticlockranking",
-		HostType: "host-linux-stretch",
-		Notes:    "builder with GOEXPERIMENT=staticlockranking, see golang.org/issue/37937",
+		Name:       "linux-amd64-staticlockranking",
+		HostType:   "host-linux-stretch",
+		Notes:      "builder with GOEXPERIMENT=staticlockranking, see golang.org/issue/38029",
+		KnownIssue: 38029,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && atLeastGo1(goBranch, 15)
 		},

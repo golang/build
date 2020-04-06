@@ -818,6 +818,7 @@ var tmplFuncs = template.FuncMap{
 	"shortUser":          shortUser,
 	"unsupported":        unsupported,
 	"isUntested":         isUntested,
+	"knownIssue":         knownIssue,
 	"formatTime":         formatTime,
 }
 

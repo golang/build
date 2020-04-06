@@ -306,6 +306,17 @@ func isUntested(builder, repo, branch, goBranch string) bool {
 	return !bc.BuildsRepoPostSubmit(repo, branch, goBranch)
 }
 
+// knownIssue returns a known issue for the named builder,
+// or zero if there isn't a known issue.
+func knownIssue(builder string) int {
+	bc, ok := dashboard.Builders[builder]
+	if !ok {
+		// Unknown builder.
+		return 0
+	}
+	return bc.KnownIssue
+}
+
 // Results returns the build Results for this Commit.
 func (c *CommitInfo) Results() (results []*Result) {
 	for _, r := range c.ResultData {

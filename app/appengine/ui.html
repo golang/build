@@ -84,7 +84,7 @@
         <th></th>
         <th></th>
     {{range $.Builders}}
-        <th class="result arch{{if (unsupported .)}} unsupported{{end}}" title="{{.}}">{{builderSubheading .}}</th>
+        <th class="result arch{{if (unsupported .)}} unsupported{{end}}{{if knownIssue .}} noise{{end}}" title="{{.}}">{{builderSubheading .}}</th>
     {{end}}
       </tr>
 
@@ -94,7 +94,7 @@
         <th></th>
         <th></th>
     {{range $.Builders}}
-        <th class="result arch{{if (unsupported .)}} unsupported{{end}}" title="{{.}}">{{builderSubheading2 .}}</th>
+        <th class="result arch{{if (unsupported .)}} unsupported{{end}}{{if knownIssue .}} noise{{end}}" title="{{.}}">{{builderSubheading2 .}}</th>
     {{end}}
       </tr>
 
@@ -125,7 +125,9 @@
                 {{if .BuildingURL}}
                   <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" height=16 width=16 border=0></a>
                 {{else if .OK}}
-                  <span class="ok">ok</span>
+                  <span class="ok{{if knownIssue $builderName}} noise{{end}}">ok</span>
+                {{else if knownIssue $builderName}}
+                  <a href="/log/{{.LogHash}}" class="noise" title="Builder {{$builderName}} has a known issue. See golang.org/issue/{{knownIssue $builderName}}.">fail</a>
                 {{else}}
                   <a href="/log/{{.LogHash}}" class="fail">fail</a>
                 {{end}}
