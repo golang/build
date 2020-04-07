@@ -42,11 +42,14 @@ EOF""",
     "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add emacs25-nox11 vim screen" % (arch, release),
     # For https://golang.org/issue/24354
     "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add clang cmake" % (arch, release),
+
+    # Remove the /tmp entry, because it's mounted as tmpfs -s=ram%25 by default, which isn't enough disk space.
     """ed /etc/fstab << EOF
 H
-%s/wd0/sd0/
+/\\/tmp/d
 wq
 EOF""",
+
     "echo sshd=yes >> /etc/rc.conf",
     "echo PermitRootLogin without-password >> /etc/ssh/sshd_config",
     "/etc/rc.d/sshd restart",
