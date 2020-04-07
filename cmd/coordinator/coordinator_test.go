@@ -202,6 +202,30 @@ func TestNewTrySetBuildRepoGo110(t *testing.T) {
 	}
 }
 
+// Tests that TryBots run on branches of the x/ repositories, other than
+// "master" and "release-branch.go1.N". See golang.org/issue/37512.
+func TestXRepoBranches(t *testing.T) {
+	testingKnobSkipBuilds = true
+
+	work := &apipb.GerritTryWorkItem{
+		Project:   "tools",
+		Branch:    "gopls-release-branch.0.4",
+		ChangeId:  "Ica799fcf117bf607c0c59f41b08a78552339dc53",
+		Commit:    "6af4ce83c61d0f3e616b410b53b51982798c4d73",
+		GoVersion: []*apipb.MajorMinor{{1, 15}},
+		GoCommit:  []string{"74d6de03fd7db2c6faa7794620a9bcf0c4f018f2"},
+		GoBranch:  []string{"master"},
+	}
+	ts := newTrySet(work)
+	for i, bs := range ts.builds {
+		v := bs.NameAndBranch()
+		t.Logf("build[%d]: %s", i, v)
+	}
+	if len(ts.builds) < 3 {
+		t.Fatalf("expected at least 3 builders, got %v", len(ts.builds))
+	}
+}
+
 func TestFindWork(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping in short mode")

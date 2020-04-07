@@ -1164,6 +1164,7 @@ var testingKnobSkipBuilds bool
 // Must hold statusMu.
 func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	key := tryWorkItemKey(work)
+	// TODO(golang.org/issue/38303): compute goBranch value better
 	goBranch := key.Branch // assume same as repo's branch for now
 
 	builders := dashboard.TryBuildersForProject(key.Project, key.Branch, goBranch)
@@ -1203,6 +1204,10 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	// do subrepos. Any GoCommit values past the first are for older
 	// release branches, but we use a limited subset of builders for those.
 	var goRev string
+	if len(work.GoCommit) > 0 {
+		// By default, use the first GoCommit, which represents Go tip (master branch).
+		goRev = work.GoCommit[0]
+	}
 	for i, branch := range work.GoBranch {
 		if branch == work.Branch {
 			goRev = work.GoCommit[i]
