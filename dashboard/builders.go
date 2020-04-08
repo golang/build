@@ -339,6 +339,7 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-netbsd-amd64-8_0": &HostConfig{
+		// TODO(golang.org/issue/37244): Remove.
 		VMImage:            "netbsd-amd64-8-0-2018q1",
 		Notes:              "NetBSD 8.0RC1; GCE VM is built from script in build/env/netbsd-amd64",
 		machineType:        "n1-highcpu-4",
@@ -349,6 +350,7 @@ var Hosts = map[string]*HostConfig{
 	// Note: the netbsd-386 host hangs during the ../test phase of all.bash,
 	// so we don't use this for now. (See the netbsd-386-8 BuildConfig below.)
 	"host-netbsd-386-8_0": &HostConfig{
+		// TODO(golang.org/issue/37244): Remove.
 		VMImage:            "netbsd-i386-8-0-2018q1",
 		Notes:              "NetBSD 8.0RC1; GCE VM is built from script in build/env/netbsd-386",
 		machineType:        "n1-highcpu-4",
@@ -1937,12 +1939,14 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
+		// TODO(golang.org/issue/37244): Remove.
 		Name:              "netbsd-amd64-8_0",
 		HostType:          "host-netbsd-amd64-8_0",
 		shouldRunDistTest: noTestDirAndNoReboot,
-		tryBot:            explicitTrySet("sys"),
+		tryBot:            nil, // explicitTrySet("sys") moved over to netbsd-amd64-9_0 builder.
 	})
 	addBuilder(BuildConfig{
+		// TODO(golang.org/issue/37244): Remove.
 		Name:              "netbsd-386-8_0",
 		HostType:          "host-netbsd-386-8_0",
 		shouldRunDistTest: noTestDirAndNoReboot,
@@ -1952,16 +1956,13 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "netbsd-amd64-9_0",
 		HostType:          "host-netbsd-amd64-9_0",
-		KnownIssue:        37244,
 		shouldRunDistTest: noTestDirAndNoReboot,
-		tryBot:            nil, // Not yet, gain confidence first.
+		tryBot:            explicitTrySet("sys"),
 	})
 	addBuilder(BuildConfig{
 		Name:              "netbsd-386-9_0",
 		HostType:          "host-netbsd-386-9_0",
-		KnownIssue:        37244,
 		shouldRunDistTest: noTestDirAndNoReboot,
-		tryBot:            nil, // Not yet, gain confidence first.
 	})
 	addBuilder(BuildConfig{
 		Name:              "netbsd-arm-bsiegert",

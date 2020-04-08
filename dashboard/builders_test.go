@@ -180,7 +180,7 @@ func TestTrybots(t *testing.T) {
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-race",
-				"netbsd-amd64-8_0",
+				"netbsd-amd64-9_0",
 				"openbsd-386-64",
 				"openbsd-amd64-64",
 				"windows-386-2008",
@@ -386,6 +386,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("netbsd-amd64-8_0", "net"), onlyPost},
 		{b("netbsd-386-8_0", "go"), none},
 		{b("netbsd-386-8_0", "net"), none},
+		{b("netbsd-amd64-9_0", "go"), onlyPost},
+		{b("netbsd-amd64-9_0", "net"), onlyPost},
+		{b("netbsd-386-9_0", "go"), onlyPost},
+		{b("netbsd-386-9_0", "net"), onlyPost},
 
 		// AIX starts at Go 1.12
 		{b("aix-ppc64", "go"), onlyPost},
