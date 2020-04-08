@@ -283,9 +283,9 @@ func main() {
 	}
 
 	// TODO(evanbrown: disable kubePool if init fails)
-	err = initKube()
+	err = pool.InitKube(monitorGitMirror)
 	if err != nil {
-		kubeErr = err
+		pool.KubeSetErr(err)
 		log.Printf("Kube support disabled due to error initializing Kubernetes: %v", err)
 	}
 
@@ -346,8 +346,8 @@ func main() {
 		pool.GetGCEBuildletPool().SetEnabled(*devEnableGCE)
 	} else {
 		go pool.GetGCEBuildletPool().CleanUpOldVMs()
-		if kubeErr == nil {
-			go kubePool.cleanUpOldPodsLoop(context.Background())
+		if pool.KubeErr() == nil {
+			go pool.KubePool().CleanUpOldPodsLoop(context.Background())
 		}
 
 		if pool.GCEInStaging() {
@@ -1628,10 +1628,10 @@ func poolForConf(conf *dashboard.HostConfig) pool.Buildlet {
 	case conf.IsVM():
 		return pool.GetGCEBuildletPool()
 	case conf.IsContainer():
-		if pool.GCEBuildEnv().PreferContainersOnCOS || kubeErr != nil {
+		if pool.GCEBuildEnv().PreferContainersOnCOS || pool.KubeErr() != nil {
 			return pool.GetGCEBuildletPool() // it also knows how to do containers.
 		} else {
-			return kubePool
+			return pool.KubePool()
 		}
 	case conf.IsReverse:
 		return reversePool
@@ -1820,7 +1820,7 @@ func (st *buildStatus) forceSnapshotUsage() {
 }
 
 func (st *buildStatus) getCrossCompileConfig() *dashboard.CrossCompileConfig {
-	if kubeErr != nil {
+	if pool.KubeErr() != nil {
 		return nil
 	}
 	config := st.conf.CrossCompileConfig

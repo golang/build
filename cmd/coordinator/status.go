@@ -184,7 +184,7 @@ func monitorGitMirror() {
 func gitMirrorErrors() (errs []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	pods, err := goKubeClient.GetPods(ctx)
+	pods, err := pool.KubeGoClient().GetPods(ctx)
 	if err != nil {
 		log.Println("gitMirrorErrors: goKubeClient.GetPods:", err)
 		return []string{"failed to get pods; can't query gitmirror status"}
@@ -662,7 +662,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	data.GCEPoolStatus = template.HTML(buf.String())
 	buf.Reset()
 
-	kubePool.WriteHTMLStatus(&buf)
+	pool.KubePool().WriteHTMLStatus(&buf)
 	data.KubePoolStatus = template.HTML(buf.String())
 	buf.Reset()
 
