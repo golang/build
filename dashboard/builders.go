@@ -1625,10 +1625,9 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:       "linux-amd64-staticlockranking",
-		HostType:   "host-linux-stretch",
-		Notes:      "builder with GOEXPERIMENT=staticlockranking, see golang.org/issue/38029",
-		KnownIssue: 38029,
+		Name:     "linux-amd64-staticlockranking",
+		HostType: "host-linux-stretch",
+		Notes:    "builder with GOEXPERIMENT=staticlockranking, see golang.org/issue/37937",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && atLeastGo1(goBranch, 15)
 		},
