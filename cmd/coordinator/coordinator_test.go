@@ -152,6 +152,33 @@ func TestStagingClusterBuilders(t *testing.T) {
 	stagingClusterBuilders()
 }
 
+// Test that trybot on release-branch.go1.N branch of a golang.org/x repo
+// uses the Go revision from Go repository's release-branch.go1.N branch.
+// See golang.org/issue/28891.
+func TestIssue28891(t *testing.T) {
+	testingKnobSkipBuilds = true
+
+	work := &apipb.GerritTryWorkItem{ // Roughly based on https://go-review.googlesource.com/c/tools/+/150577/1.
+		Project:   "tools",
+		Branch:    "release-branch.go1.11",
+		ChangeId:  "Ice719ab807ce3922b885a800ac873cdbf165a8f7",
+		Commit:    "9d66f1bfdbed72f546df963194a19d56180c4ce7",
+		GoCommit:  []string{"a2e79571a9d3dbe3cf10dcaeb1f9c01732219869", "e39e43d7349555501080133bb426f1ead4b3ef97", "f5ff72d62301c4e9d0a78167fab5914ca12919bd"},
+		GoBranch:  []string{"master", "release-branch.go1.11", "release-branch.go1.10"},
+		GoVersion: []*apipb.MajorMinor{{1, 12}, {1, 11}, {1, 10}},
+	}
+	ts := newTrySet(work)
+	if len(ts.builds) == 0 {
+		t.Fatal("no builders in try set, want at least 1")
+	}
+	for i, bs := range ts.builds {
+		const go111Revision = "e39e43d7349555501080133bb426f1ead4b3ef97"
+		if bs.BuilderRev.Rev != go111Revision {
+			t.Errorf("build[%d]: %s: x/tools on release-branch.go1.11 branch should be tested with Go 1.11, but isn't", i, bs.NameAndBranch())
+		}
+	}
+}
+
 // tests that we don't test Go 1.10 for the build repo
 func TestNewTrySetBuildRepoGo110(t *testing.T) {
 	testingKnobSkipBuilds = true
