@@ -382,12 +382,9 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-386-12_0", "mobile"), none},
 
 		// NetBSD
-		{b("netbsd-amd64-8_0", "go"), onlyPost},
-		{b("netbsd-amd64-8_0", "net"), onlyPost},
-		{b("netbsd-386-8_0", "go"), none},
-		{b("netbsd-386-8_0", "net"), none},
 		{b("netbsd-amd64-9_0", "go"), onlyPost},
 		{b("netbsd-amd64-9_0", "net"), onlyPost},
+		{b("netbsd-amd64-9_0", "sys"), both},
 		{b("netbsd-386-9_0", "go"), onlyPost},
 		{b("netbsd-386-9_0", "net"), onlyPost},
 
