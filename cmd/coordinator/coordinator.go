@@ -2463,7 +2463,8 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 		return
 	}
 	for _, test := range strings.Fields(buf.String()) {
-		if !st.conf.ShouldRunDistTest(test, st.isTry()) {
+		isNormalTry := st.isTry() && !st.isSlowBot()
+		if !st.conf.ShouldRunDistTest(test, isNormalTry) {
 			continue
 		}
 		names = append(names, test)

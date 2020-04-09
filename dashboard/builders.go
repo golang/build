@@ -854,12 +854,12 @@ type BuildConfig struct {
 	//
 	// For example:
 	//
-	// 	distTestAdjust: func(run bool, distTest string, isTry bool) bool {
+	// 	distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 	// 		// ... modify run from the initial value as needed ...
 	// 		return run
 	// 	}
 	//
-	distTestAdjust func(run bool, distTest string, isTry bool) bool
+	distTestAdjust func(run bool, distTest string, isNormalTry bool) bool
 
 	// numTestHelpers is the number of _additional_ buildlets
 	// past the first one to help out with sharded tests.
@@ -1127,19 +1127,19 @@ func (c *BuildConfig) BuildsRepoTryBot(repo, branch, goBranch string) bool {
 }
 
 // ShouldRunDistTest reports whether the named cmd/dist test should be
-// run for this build config. The isTry parameter is whether this is
-// for a trybot (pre-submit) run.
+// run for this build config. The isNormalTry parameter is whether this
+// is for a normal TryBot (non-SlowBot) run.
 //
-// In general, this returns true. When in trybot mode, some
-// slow portable tests are only run on the fastest builder.
+// In general, this returns true. When in normal trybot mode,
+// some slow portable tests are only run on the fastest builder.
 //
 // Individual builders can adjust this policy to fit their needs.
-func (c *BuildConfig) ShouldRunDistTest(distTest string, isTry bool) bool {
+func (c *BuildConfig) ShouldRunDistTest(distTest string, isNormalTry bool) bool {
 	run := true
 
 	// This section implements the default cmd/dist test policy.
 	// Any changes here will affect test coverage on all builders.
-	if isTry {
+	if isNormalTry {
 		slowPortableTest := distTest == "api" // Whether a test is slow and has the same behavior everywhere.
 		fastestBuilder := c.Name == "linux-amd64"
 		if slowPortableTest && !fastestBuilder {
@@ -1150,7 +1150,7 @@ func (c *BuildConfig) ShouldRunDistTest(distTest string, isTry bool) bool {
 
 	// Let individual builders adjust the cmd/dist test policy.
 	if c.distTestAdjust != nil {
-		run = c.distTestAdjust(run, distTest, isTry)
+		run = c.distTestAdjust(run, distTest, isNormalTry)
 	}
 
 	return run
@@ -1770,7 +1770,7 @@ func init() {
 		FlakyNet:          true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 7,
-		distTestAdjust: func(run bool, distTest string, isTry bool) bool {
+		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 			switch distTest {
 			case "api", "reboot":
 				return false
@@ -1802,7 +1802,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return branch == "master" && goBranch == "master" && defaultBuildsRepoPolicy(repo, branch, goBranch)
 		},
-		distTestAdjust: func(run bool, distTest string, isTry bool) bool {
+		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 			if strings.Contains(distTest, "vendor/github.com/google/pprof") {
 				// Not worth it. And broken.
 				return false
@@ -1856,8 +1856,8 @@ func init() {
 				return branch == "master" && goBranch == "master"
 			}
 		},
-		distTestAdjust: func(run bool, distTest string, isTry bool) bool {
-			if isTry {
+		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
+			if isNormalTry {
 				if strings.Contains(distTest, "/internal/") ||
 					strings.Contains(distTest, "vendor/golang.org/x/arch") {
 					return false
@@ -1968,7 +1968,7 @@ func init() {
 		HostType:       "host-plan9-386-gce",
 		numTestHelpers: 1,
 		tryOnly:        true, // disable it for now; Issue 31261, Issue 29801
-		distTestAdjust: func(run bool, distTest string, isTry bool) bool {
+		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 			switch distTest {
 			case "api",
 				"go_test:cmd/go": // takes over 20 minutes without working SMP
@@ -2296,7 +2296,7 @@ func init() {
 		Name:         "linux-riscv64-unleashed",
 		SkipSnapshot: true,
 		env:          []string{"GO_TEST_TIMEOUT_SCALE=4"},
-		distTestAdjust: func(run bool, distTest string, isTry bool) bool {
+		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 			switch distTest {
 			case "api", "reboot":
 				return false
@@ -2389,8 +2389,8 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "plan9-amd64-9front",
 		HostType: "host-plan9-amd64-0intro",
-		distTestAdjust: func(run bool, distTest string, isTry bool) bool {
-			run = noTestDirAndNoReboot(run, distTest, isTry)
+		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
+			run = noTestDirAndNoReboot(run, distTest, isNormalTry)
 			if strings.HasPrefix(distTest, "test:") || distTest == "reboot" {
 				return false // skip test
 			}
@@ -2406,8 +2406,8 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "plan9-386-0intro",
 		HostType: "host-plan9-386-0intro",
-		distTestAdjust: func(run bool, distTest string, isTry bool) bool {
-			run = noTestDirAndNoReboot(run, distTest, isTry)
+		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
+			run = noTestDirAndNoReboot(run, distTest, isNormalTry)
 			switch distTest {
 			case "api",
 				"go_test:cmd/go": // takes over 20 minutes without working SMP
@@ -2476,8 +2476,8 @@ func addBuilder(c BuildConfig) {
 
 // fasterTrybots is a distTestAdjust policy function.
 // It skips (returns false) the test/ directory and reboot tests for trybots.
-func fasterTrybots(run bool, distTest string, isTry bool) bool {
-	if isTry {
+func fasterTrybots(run bool, distTest string, isNormalTry bool) bool {
+	if isNormalTry {
 		if strings.HasPrefix(distTest, "test:") || distTest == "reboot" {
 			return false // skip test
 		}
@@ -2487,7 +2487,7 @@ func fasterTrybots(run bool, distTest string, isTry bool) bool {
 
 // noTestDirAndNoReboot is a distTestAdjust policy function.
 // It skips (returns false) the test/ directory and reboot tests for all builds.
-func noTestDirAndNoReboot(run bool, distTest string, isTry bool) bool {
+func noTestDirAndNoReboot(run bool, distTest string, isNormalTry bool) bool {
 	if strings.HasPrefix(distTest, "test:") || distTest == "reboot" {
 		return false // skip test
 	}
@@ -2496,7 +2496,7 @@ func noTestDirAndNoReboot(run bool, distTest string, isTry bool) bool {
 
 // ppc64DistTestPolicy is a distTestAdjust policy function
 // that's shared by linux-ppc64le, -ppc64le-power9osu, and -ppc64.
-func ppc64DistTestPolicy(run bool, distTest string, isTry bool) bool {
+func ppc64DistTestPolicy(run bool, distTest string, isNormalTry bool) bool {
 	if distTest == "reboot" {
 		// Skip test. It seems to use a lot of memory?
 		// See https://golang.org/issue/35233.
@@ -2507,7 +2507,7 @@ func ppc64DistTestPolicy(run bool, distTest string, isTry bool) bool {
 
 // mipsDistTestPolicy is a distTestAdjust policy function
 // that's shared by the slow mips builders.
-func mipsDistTestPolicy(run bool, distTest string, isTry bool) bool {
+func mipsDistTestPolicy(run bool, distTest string, isNormalTry bool) bool {
 	switch distTest {
 	case "api", "reboot":
 		return false
@@ -2591,7 +2591,7 @@ func disabledBuilder(repo, branch, goBranch string) bool { return false }
 // still fail slowly on another builder where we have more resources
 // (like linux-amd64), then there's no point testing it redundantly on
 // the Macs.
-func macTestPolicy(run bool, distTest string, isTry bool) bool {
+func macTestPolicy(run bool, distTest string, isNormalTry bool) bool {
 	if strings.HasPrefix(distTest, "test:") {
 		return false
 	}
@@ -2600,7 +2600,7 @@ func macTestPolicy(run bool, distTest string, isTry bool) bool {
 		"wiki", "bench_go1", "codewalk":
 		return false
 	}
-	if isTry {
+	if isNormalTry {
 		switch distTest {
 		case "runtime:cpu124", "race", "moved_goroot":
 			return false
