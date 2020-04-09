@@ -638,6 +638,8 @@ func TestShouldRunDistTest(t *testing.T) {
 	}{
 		{"linux-amd64", "api", postSubmit, true},
 		{"linux-amd64", "api", tryMode, true},
+		{"freebsd-amd64-12_0", "api", postSubmit, true}, // freebsd-amd64-12_0 uses fasterTrybots policy, should still build.
+		{"freebsd-amd64-12_0", "api", tryMode, false},   // freebsd-amd64-12_0 uses fasterTrybots policy, should skip in try mode.
 
 		{"linux-amd64", "reboot", tryMode, true},
 		{"linux-amd64-race", "reboot", tryMode, false},
