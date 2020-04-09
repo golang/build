@@ -271,7 +271,6 @@ func mustConf(t *testing.T, name string) *dashboard.BuildConfig {
 }
 
 func TestSlowBotsFromComments(t *testing.T) {
-	existing := []*dashboard.BuildConfig{mustConf(t, "linux-amd64")}
 	work := &apipb.GerritTryWorkItem{
 		Version: 2,
 		TryMessage: []*apipb.TryVoteMessage{
@@ -289,9 +288,9 @@ func TestSlowBotsFromComments(t *testing.T) {
 			},
 		},
 	}
-	extra := slowBotsFromComments(work, existing)
+	slowBots := slowBotsFromComments(work)
 	var got []string
-	for _, bc := range extra {
+	for _, bc := range slowBots {
 		got = append(got, bc.Name)
 	}
 	want := []string{"aix-ppc64", "darwin-amd64-10_14", "linux-arm64-packet"}

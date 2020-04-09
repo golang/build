@@ -1167,9 +1167,9 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	// TODO(golang.org/issue/38303): compute goBranch value better
 	goBranch := key.Branch // assume same as repo's branch for now
 
-	builders := dashboard.TryBuildersForProject(key.Project, key.Branch, goBranch)
-	slowBots := slowBotsFromComments(work, builders)
-	builders = append(builders, slowBots...)
+	tryBots := dashboard.TryBuildersForProject(key.Project, key.Branch, goBranch)
+	slowBots := slowBotsFromComments(work)
+	builders := joinBuilders(tryBots, slowBots)
 
 	log.Printf("Starting new trybot set for %v", key)
 	ts := &trySet{
@@ -1340,6 +1340,23 @@ func tryKeyToBuilderRev(builder string, key tryKey, goRev string) buildgo.Builde
 		SubName: key.Project,
 		SubRev:  key.Commit,
 	}
+}
+
+// joinBuilders joins sets of builders into one set.
+// The resulting set contains unique builders sorted by name.
+func joinBuilders(sets ...[]*dashboard.BuildConfig) []*dashboard.BuildConfig {
+	byName := make(map[string]*dashboard.BuildConfig)
+	for _, set := range sets {
+		for _, bc := range set {
+			byName[bc.Name] = bc
+		}
+	}
+	var all []*dashboard.BuildConfig
+	for _, bc := range byName {
+		all = append(all, bc)
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].Name < all[j].Name })
+	return all
 }
 
 // state returns a copy of the trySet's state.
@@ -1541,7 +1558,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 				numFail, len(ts.builds), name, errMsg)
 		}
 		if len(ts.slowBots) > 0 {
-			fmt.Fprintf(&buf, "Extra slowbot builds that ran:\n")
+			fmt.Fprintf(&buf, "SlowBot builds that ran:\n")
 			for _, c := range ts.slowBots {
 				fmt.Fprintf(&buf, "* %s\n", c.Name)
 			}
@@ -2073,8 +2090,11 @@ func (st *buildStatus) useKeepGoingFlag() bool {
 	return !st.isTry() && strings.HasPrefix(st.branch, "release-branch.go")
 }
 
+// isTry reports whether the build is a part of a TryBot (pre-submit) run.
+// It may be a normal TryBot (part of the default try set) or a SlowBot.
 func (st *buildStatus) isTry() bool { return st.trySet != nil }
 
+// isSlowBot reports whether the build is an explicitly requested SlowBot.
 func (st *buildStatus) isSlowBot() bool {
 	if st.trySet == nil {
 		return false
@@ -2093,7 +2113,7 @@ func (st *buildStatus) buildRecord() *types.BuildRecord {
 		ProcessID: processID,
 		StartTime: st.startTime,
 		IsTry:     st.isTry(),
-		IsExtra:   st.isSlowBot(),
+		IsSlowBot: st.isSlowBot(),
 		GoRev:     st.Rev,
 		Rev:       st.SubRevOrGoRev(),
 		Repo:      st.RepoOrGo(),
@@ -3942,33 +3962,23 @@ func importPathOfRepo(repo string) string {
 	return r.ImportPath
 }
 
-// slowBotsFromComments looks at the TRY= comments from Gerrit (in
-// work) and returns any addition slow trybot build configuration that
-// should be tested in addition to the ones provided in the existing
-// slice.
-func slowBotsFromComments(work *apipb.GerritTryWorkItem, existing []*dashboard.BuildConfig) (extraBuilders []*dashboard.BuildConfig) {
-	have := map[string]bool{}
-	for _, bc := range existing {
-		have[bc.Name] = true
-	}
-
+// slowBotsFromComments looks at the Gerrit comments in work,
+// and returns all build configurations that were explicitly
+// requested to be tested as SlowBots via the TRY= syntax.
+func slowBotsFromComments(work *apipb.GerritTryWorkItem) (builders []*dashboard.BuildConfig) {
 	tryTerms := latestTryTerms(work)
-
 	for _, bc := range dashboard.Builders {
-		if have[bc.Name] {
-			continue
-		}
 		for _, term := range tryTerms {
 			if bc.MatchesSlowBotTerm(term) {
-				extraBuilders = append(extraBuilders, bc)
+				builders = append(builders, bc)
 				break
 			}
 		}
 	}
-	sort.Slice(extraBuilders, func(i, j int) bool {
-		return extraBuilders[i].Name < extraBuilders[j].Name
+	sort.Slice(builders, func(i, j int) bool {
+		return builders[i].Name < builders[j].Name
 	})
-	return
+	return builders
 }
 
 // xReposFromComments looks at the TRY= comments from Gerrit (in
