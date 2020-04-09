@@ -38,7 +38,7 @@ func reportMetrics(ctx context.Context) {
 func reportReverseCountMetrics(ctx context.Context) error {
 	m := metrics.ReverseCount
 	// 1. Gather # buildlets up per reverse builder type
-	totals := reversePool.hostTypeCount()
+	totals := pool.ReversePool().HostTypeCount()
 	// 2. Write counts to Stackdriver
 	ts := []*monpb.TimeSeries{}
 	now := ptypes.TimestampNow()

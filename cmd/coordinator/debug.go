@@ -31,7 +31,7 @@ func handleDoSomeWork(work chan<- buildgo.BuilderRev) func(w http.ResponseWriter
 		if r.Method == "GET" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			buf := new(bytes.Buffer)
-			if err := tmplDoSomeWork.Execute(buf, reversePool.HostTypes()); err != nil {
+			if err := tmplDoSomeWork.Execute(buf, pool.ReversePool().HostTypes()); err != nil {
 				http.Error(w, fmt.Sprintf("dosomework: %v", err), http.StatusInternalServerError)
 			}
 			buf.WriteTo(w)

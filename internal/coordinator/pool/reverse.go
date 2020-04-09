@@ -5,7 +5,7 @@
 // +build go1.13
 // +build linux darwin
 
-package main
+package pool
 
 /*
 This file implements reverse buildlets. These are buildlets that are not
@@ -33,6 +33,8 @@ work, go to:
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/md5"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -47,23 +49,36 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
-	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
 )
 
 const minBuildletVersion = 1
 
-var reversePool = &reverseBuildletPool{
-	oldInUse:     make(map[*buildlet.Client]bool),
-	hostLastGood: make(map[string]time.Time),
-}
+var (
+	reversePool = &ReverseBuildletPool{
+		oldInUse:     make(map[*buildlet.Client]bool),
+		hostLastGood: make(map[string]time.Time),
+	}
+
+	builderMasterKey []byte
+)
 
 const maxOldRevdialUsers = 10
 
-type token struct{}
+// SetBuilderMasterKey sets the builder master key used
+// to generate keys used by the builders.
+func SetBuilderMasterKey(masterKey []byte) {
+	builderMasterKey = masterKey
+}
 
-type reverseBuildletPool struct {
+// ReversePool retrieves the reverse buildlet pool.
+func ReversePool() *ReverseBuildletPool {
+	return reversePool
+}
+
+// ReverseBuildletPool manages the pool of reverse buildlet pools.
+type ReverseBuildletPool struct {
 	// mu guards all 5 fields below and also fields of
 	// *reverseBuildlet in buildlets
 	mu sync.Mutex
@@ -83,7 +98,7 @@ type reverseBuildletPool struct {
 
 	// hostLastGood tracks when buildlets were last seen to be
 	// healthy. It's only used by the health reporting code (in
-	// status.go). The reason it's a map on reverseBuildletPool
+	// status.go). The reason it's a map on ReverseBuildletPool
 	// rather than a field on each reverseBuildlet is because we
 	// also want to track the last known health time of buildlets
 	// that aren't currently connected.
@@ -100,14 +115,28 @@ type reverseBuildletPool struct {
 	hostLastGood map[string]time.Time
 }
 
-func (p *reverseBuildletPool) ServeReverseStatusJSON(w http.ResponseWriter, r *http.Request) {
+// BuildletLastSeen gives the last time a buildlet was connected to the pool. If
+// the buildlet has not been seen a false is returned by the boolean.
+func (p *ReverseBuildletPool) BuildletLastSeen(host string) (time.Time, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	t, ok := p.hostLastGood[host]
+	return t, ok
+}
+
+// ServeReverseStatusJSON is an HTTP handler implementation which serves the status in
+// JSON format.
+func (p *ReverseBuildletPool) ServeReverseStatusJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	status := p.buildReverseStatusJSON()
+	status := p.BuildReverseStatusJSON()
 	j, _ := json.MarshalIndent(status, "", "\t")
 	w.Write(j)
 }
 
-func (p *reverseBuildletPool) buildReverseStatusJSON() *types.ReverseBuilderStatus {
+// BuildReverseStatusJSON is an HTTP handler implementation which builds the reverse
+// status reverse buildlets.
+func (p *ReverseBuildletPool) BuildReverseStatusJSON() *types.ReverseBuilderStatus {
 	status := &types.ReverseBuilderStatus{}
 
 	p.mu.Lock()
@@ -150,7 +179,7 @@ func (p *reverseBuildletPool) buildReverseStatusJSON() *types.ReverseBuilderStat
 //
 // Otherwise it returns how many were busy, which might be 0 if none
 // were (yet?) registered. The busy valid is only valid if bc == nil.
-func (p *reverseBuildletPool) tryToGrab(hostType string) (bc *buildlet.Client, busy int) {
+func (p *ReverseBuildletPool) tryToGrab(hostType string) (bc *buildlet.Client, busy int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, b := range p.buildlets {
@@ -175,7 +204,7 @@ func (p *reverseBuildletPool) tryToGrab(hostType string) (bc *buildlet.Client, b
 	return nil, busy
 }
 
-func (p *reverseBuildletPool) getWakeChan(hostType string) chan token {
+func (p *ReverseBuildletPool) getWakeChan(hostType string) chan token {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.wakeChan == nil {
@@ -189,7 +218,7 @@ func (p *reverseBuildletPool) getWakeChan(hostType string) chan token {
 	return c
 }
 
-func (p *reverseBuildletPool) noteBuildletAvailable(hostType string) {
+func (p *ReverseBuildletPool) noteBuildletAvailable(hostType string) {
 	wake := p.getWakeChan(hostType)
 	select {
 	case wake <- token{}:
@@ -200,7 +229,7 @@ func (p *reverseBuildletPool) noteBuildletAvailable(hostType string) {
 // nukeBuildlet wipes out victim as a buildlet we'll ever return again,
 // and closes its TCP connection in hopes that it will fix itself
 // later.
-func (p *reverseBuildletPool) nukeBuildlet(victim *buildlet.Client) {
+func (p *ReverseBuildletPool) nukeBuildlet(victim *buildlet.Client) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	delete(p.oldInUse, victim)
@@ -215,7 +244,7 @@ func (p *reverseBuildletPool) nukeBuildlet(victim *buildlet.Client) {
 
 // healthCheckBuildletLoop periodically requests the status from b.
 // If the buildlet fails to respond promptly, it is removed from the pool.
-func (p *reverseBuildletPool) healthCheckBuildletLoop(b *reverseBuildlet) {
+func (p *ReverseBuildletPool) healthCheckBuildletLoop(b *reverseBuildlet) {
 	for {
 		time.Sleep(time.Duration(10+rand.Intn(5)) * time.Second)
 		if !p.healthCheckBuildlet(b) {
@@ -226,13 +255,13 @@ func (p *reverseBuildletPool) healthCheckBuildletLoop(b *reverseBuildlet) {
 
 // recordHealthy updates the two map entries in hostLastGood recording
 // that b is healthy.
-func (p *reverseBuildletPool) recordHealthy(b *reverseBuildlet) {
+func (p *ReverseBuildletPool) recordHealthy(b *reverseBuildlet) {
 	t := time.Now()
 	p.hostLastGood[b.hostname] = t
 	p.hostLastGood[b.hostType+":"+b.hostname] = t
 }
 
-func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
+func (p *ReverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 	if b.client.IsBroken() {
 		return false
 	}
@@ -287,7 +316,7 @@ func (p *reverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 	return true
 }
 
-func (p *reverseBuildletPool) updateWaiterCounter(hostType string, delta int) {
+func (p *ReverseBuildletPool) updateWaiterCounter(hostType string, delta int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.waiters == nil {
@@ -296,7 +325,8 @@ func (p *reverseBuildletPool) updateWaiterCounter(hostType string, delta int) {
 	p.waiters[hostType] += delta
 }
 
-func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg pool.Logger) (*buildlet.Client, error) {
+// GetBuildlet builds a buildlet client for the passed in host.
+func (p *ReverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg Logger) (*buildlet.Client, error) {
 	p.updateWaiterCounter(hostType, 1)
 	defer p.updateWaiterCounter(hostType, -1)
 	seenErrInUse := false
@@ -325,7 +355,7 @@ func (p *reverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, 
 	}
 }
 
-func (p *reverseBuildletPool) cleanedBuildlet(b *buildlet.Client, lg pool.Logger) (*buildlet.Client, error) {
+func (p *ReverseBuildletPool) cleanedBuildlet(b *buildlet.Client, lg Logger) (*buildlet.Client, error) {
 	// Clean up any files from previous builds.
 	sp := lg.CreateSpan("clean_buildlet", b.String())
 	err := b.RemoveAll(context.Background(), ".")
@@ -337,7 +367,9 @@ func (p *reverseBuildletPool) cleanedBuildlet(b *buildlet.Client, lg pool.Logger
 	return b, nil
 }
 
-func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
+// WriteHTMLStatus writes a status of the reverse buildlet pool, in HTML format,
+//  to the passed in io.Writer.
+func (p *ReverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 	// total maps from a host type to the number of machines which are
 	// capable of that role.
 	total := make(map[string]int)
@@ -370,6 +402,7 @@ func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 			friendlyDuration(time.Since(b.inUseTime)))
 		total[b.hostType]++
 		if b.inUse && !b.inHealthCheck {
+
 			inUse[b.hostType]++
 		}
 	}
@@ -406,9 +439,9 @@ func (p *reverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 	fmt.Fprintf(w, "<b>Reverse pool machine detail</b><ul>%s</ul>", buf.Bytes())
 }
 
-// hostTypeCount iterates through the running reverse buildlets, and
+// HostTypeCount iterates through the running reverse buildlets, and
 // constructs a count of running buildlets per hostType.
-func (p *reverseBuildletPool) hostTypeCount() map[string]int {
+func (p *ReverseBuildletPool) HostTypeCount() map[string]int {
 	total := map[string]int{}
 	p.mu.Lock()
 	for _, b := range p.buildlets {
@@ -418,14 +451,28 @@ func (p *reverseBuildletPool) hostTypeCount() map[string]int {
 	return total
 }
 
-func (p *reverseBuildletPool) String() string {
+// SingleHostTypeCount iterates through the running reverse buildlets, and
+// constructs a count of the running buildlet hostType requested.
+func (p *ReverseBuildletPool) SingleHostTypeCount(hostType string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	n := 0
+	for _, b := range p.buildlets {
+		if b.hostType == hostType {
+			n++
+		}
+	}
+	return n
+}
+
+func (p *ReverseBuildletPool) String() string {
 	// This doesn't currently show up anywhere, so ignore it for now.
 	return "TODO: some reverse buildlet summary"
 }
 
 // HostTypes returns the a deduplicated list of buildlet types curently supported
 // by the pool.
-func (p *reverseBuildletPool) HostTypes() (types []string) {
+func (p *ReverseBuildletPool) HostTypes() (types []string) {
 	s := make(map[string]bool)
 	p.mu.Lock()
 	for _, b := range p.buildlets {
@@ -442,7 +489,7 @@ func (p *reverseBuildletPool) HostTypes() (types []string) {
 
 // CanBuild reports whether the pool has a machine capable of building mode,
 // even if said machine isn't currently idle.
-func (p *reverseBuildletPool) CanBuild(hostType string) bool {
+func (p *ReverseBuildletPool) CanBuild(hostType string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, b := range p.buildlets {
@@ -453,7 +500,7 @@ func (p *reverseBuildletPool) CanBuild(hostType string) bool {
 	return false
 }
 
-func (p *reverseBuildletPool) addBuildlet(b *reverseBuildlet) {
+func (p *ReverseBuildletPool) addBuildlet(b *reverseBuildlet) {
 	p.mu.Lock()
 	defer p.noteBuildletAvailable(b.hostType)
 	defer p.mu.Unlock()
@@ -462,8 +509,20 @@ func (p *reverseBuildletPool) addBuildlet(b *reverseBuildlet) {
 	go p.healthCheckBuildletLoop(b)
 }
 
+// BuildletHostnames returns a slice of reverse buildlet hostnames.
+func (p *ReverseBuildletPool) BuildletHostnames() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	h := make([]string, 0, len(p.buildlets))
+	for _, b := range p.buildlets {
+		h = append(h, b.hostname)
+	}
+	return h
+}
+
 // reverseBuildlet is a registered reverse buildlet.
-// Its immediate fields are guarded by the reverseBuildletPool mutex.
+// Its immediate fields are guarded by the ReverseBuildletPool mutex.
 type reverseBuildlet struct {
 	// hostname is the name of the buildlet host.
 	// It doesn't have to be a complete DNS name.
@@ -486,13 +545,14 @@ type reverseBuildlet struct {
 	// inUseAs signifies that the buildlet is in use.
 	// inUseTime is when it entered that state.
 	// inHealthCheck is whether it's inUse due to a health check.
-	// All three are guarded by the mutex on reverseBuildletPool.
+	// All three are guarded by the mutex on ReverseBuildletPool.
 	inUse         bool
 	inUseTime     time.Time
 	inHealthCheck bool
 }
 
-func handleReverse(w http.ResponseWriter, r *http.Request) {
+// HandleReverse handles reverse buildlet connections.
+func HandleReverse(w http.ResponseWriter, r *http.Request) {
 	if r.TLS == nil {
 		http.Error(w, "buildlet registration requires SSL", http.StatusInternalServerError)
 		return
@@ -625,4 +685,15 @@ func (s byTypeThenHostname) Less(i, j int) bool {
 		return bi.hostname < bj.hostname
 	}
 	return ti < tj
+}
+
+// builderrKey generates the builder key used by reverse builders
+// to authenticate with the coordinator.
+func builderKey(builder string) string {
+	if len(builderMasterKey) == 0 {
+		return ""
+	}
+	h := hmac.New(md5.New, builderMasterKey)
+	io.WriteString(h, builder)
+	return fmt.Sprintf("%x", h.Sum(nil))
 }

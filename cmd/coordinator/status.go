@@ -410,15 +410,7 @@ func fetchMakeMacStatus() (errs, warns []string) {
 func hostTypeChecker(hostType string) func(cw *checkWriter) {
 	want := expectedHosts(hostType)
 	return func(cw *checkWriter) {
-		p := reversePool
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		n := 0
-		for _, b := range p.buildlets {
-			if b.hostType == hostType {
-				n++
-			}
-		}
+		n := pool.ReversePool().SingleHostTypeCount(hostType)
 		if n < want {
 			cw.errorf("%d connected; want %d", n, want)
 		}
@@ -512,10 +504,14 @@ func reverseHostChecker(hosts []string) func(cw *checkWriter) {
 		hostSet[v] = true
 	}
 
+	// TODO(amedee): rethink how this is implemented. It has been
+	// modified due to golang.org/issues/36841
+	// instead of a single lock being held while all of the
+	// operations are performed, there is now a lock held
+	// durring each BuildletLastSeen call and again when
+	// the buildlet host names are retrieved.
 	return func(cw *checkWriter) {
-		p := reversePool
-		p.mu.Lock()
-		defer p.mu.Unlock()
+		p := pool.ReversePool()
 
 		now := time.Now()
 		wantGoodSince := now.Add(-recentThreshold)
@@ -523,7 +519,7 @@ func reverseHostChecker(hosts []string) func(cw *checkWriter) {
 		numGood := 0
 		// Check last good times
 		for _, host := range hosts {
-			lastGood, ok := p.hostLastGood[host]
+			lastGood, ok := p.BuildletLastSeen(host)
 			if ok && lastGood.After(wantGoodSince) {
 				numGood++
 				continue
@@ -553,9 +549,9 @@ func reverseHostChecker(hosts []string) func(cw *checkWriter) {
 		// And check that we don't have more than 1
 		// connected of any type.
 		count := map[string]int{}
-		for _, b := range p.buildlets {
-			if hostSet[b.hostname] {
-				count[b.hostname]++
+		for _, hostname := range p.BuildletHostnames() {
+			if hostSet[hostname] {
+				count[hostname]++
 			}
 		}
 		for name, n := range count {
@@ -666,7 +662,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	data.KubePoolStatus = template.HTML(buf.String())
 	buf.Reset()
 
-	reversePool.WriteHTMLStatus(&buf)
+	pool.ReversePool().WriteHTMLStatus(&buf)
 	data.ReversePoolStatus = template.HTML(buf.String())
 
 	data.SchedState = sched.state()

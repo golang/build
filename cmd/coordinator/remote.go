@@ -216,7 +216,7 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	// the higher priority gomote user.
 	isReverse := hconf.IsReverse
 	if isReverse {
-		if hs := reversePool.buildReverseStatusJSON().HostTypes[hconf.HostType]; hs == nil {
+		if hs := pool.ReversePool().BuildReverseStatusJSON().HostTypes[hconf.HostType]; hs == nil {
 			sendText(fmt.Sprintf("host type %q is not elastic; no machines are connected", hconf.HostType))
 		} else {
 			sendText(fmt.Sprintf("host type %q is not elastic; %d of %d machines connected, %d busy",

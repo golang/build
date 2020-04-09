@@ -254,6 +254,11 @@ func main() {
 
 	mustInitMasterKeyCache(sc)
 
+	// TODO(golang.org/issue/38337): remove package level variables where possible.
+	// TODO(golang.org/issue/36841): remove after key functions are moved into
+	// a shared package.
+	pool.SetBuilderMasterKey(masterKey())
+
 	err := pool.InitGCE(sc, vmDeleteTimeout, testFiles, &basePinErr, isGCERemoteBuildlet, *buildEnvName, *mode)
 	if err != nil {
 		if *mode == "" {
@@ -317,12 +322,12 @@ func main() {
 	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
 	http.HandleFunc("/builders", handleBuilders)
 	http.HandleFunc("/temporarylogs", handleLogs)
-	http.HandleFunc("/reverse", handleReverse)
+	http.HandleFunc("/reverse", pool.HandleReverse)
 	http.Handle("/revdial", revdialv2.ConnHandler())
 	http.HandleFunc("/style.css", handleStyleCSS)
 	http.HandleFunc("/try", serveTryStatus(false))
 	http.HandleFunc("/try.json", serveTryStatus(true))
-	http.HandleFunc("/status/reverse.json", reversePool.ServeReverseStatusJSON)
+	http.HandleFunc("/status/reverse.json", pool.ReversePool().ServeReverseStatusJSON)
 	http.HandleFunc("/status/post-submit-active.json", handlePostSubmitActiveJSON)
 	http.Handle("/dashboard", dh)
 	http.Handle("/buildlet/create", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletCreate)))
@@ -494,7 +499,7 @@ func mayBuildRev(rev buildgo.BuilderRev) bool {
 	if pool.GCEBuildEnv().MaxBuilds > 0 && numCurrentBuilds() >= pool.GCEBuildEnv().MaxBuilds {
 		return false
 	}
-	if buildConf.IsReverse() && !reversePool.CanBuild(buildConf.HostType) {
+	if buildConf.IsReverse() && !pool.ReversePool().CanBuild(buildConf.HostType) {
 		return false
 	}
 	return true
@@ -866,7 +871,7 @@ func findWorkLoop() {
 		}
 		const debugArm = false
 		if debugArm {
-			for !reversePool.CanBuild("host-linux-arm") {
+			for !pool.ReversePool().CanBuild("host-linux-arm") {
 				log.Printf("waiting for ARM to register.")
 				time.Sleep(time.Second)
 			}
@@ -1634,7 +1639,7 @@ func poolForConf(conf *dashboard.HostConfig) pool.Buildlet {
 			return pool.KubePool()
 		}
 	case conf.IsReverse:
-		return reversePool
+		return pool.ReversePool()
 	default:
 		panic(fmt.Sprintf("no buildlet pool for host type %q", conf.HostType))
 	}
@@ -1742,7 +1747,7 @@ func (st *buildStatus) expectedBuildletStartDuration() time.Duration {
 			return 2 * time.Minute
 		}
 		return time.Minute
-	case *reverseBuildletPool:
+	case *pool.ReverseBuildletPool:
 		goos, arch := st.conf.GOOS(), st.conf.GOARCH()
 		if goos == "darwin" {
 			if arch == "arm" || arch == "arm64" {
@@ -2429,6 +2434,8 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 	}
 	return names, nil, nil
 }
+
+type token struct{}
 
 // newTestSet returns a new testSet given the dist test names (strings from "go tool dist test -list")
 // and benchmark items.
