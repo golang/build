@@ -526,11 +526,12 @@ func listenAndServeSSH(sc *secret.Client) {
 			log.Fatal(err)
 		}
 	} else {
-		if pool.StorageClient() == nil {
+		gce := pool.NewGCEConfiguration()
+		if gce.StorageClient() == nil {
 			log.Printf("GCS storage client not available; not running SSH server.")
 			return
 		}
-		r, err := pool.StorageClient().Bucket(pool.GCEBuildEnv().BuildletBucket).Object("coordinator-gomote-ssh.key").NewReader(context.Background())
+		r, err := gce.StorageClient().Bucket(gce.BuildEnv().BuildletBucket).Object("coordinator-gomote-ssh.key").NewReader(context.Background())
 		if err != nil {
 			log.Printf("Failed to read ssh host key: %v; not running SSH server.", err)
 			return

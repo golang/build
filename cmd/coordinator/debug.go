@@ -49,10 +49,11 @@ func handleDoSomeWork(work chan<- buildgo.BuilderRev) func(w http.ResponseWriter
 			count = 1
 		}
 
+		gceBuildEnv := pool.NewGCEConfiguration().BuildEnv()
 		// Cap number of jobs that can be scheduled from debug UI. If
 		// buildEnv.MaxBuilds is zero, there is no cap.
-		if pool.GCEBuildEnv().MaxBuilds > 0 && count > pool.GCEBuildEnv().MaxBuilds {
-			count = pool.GCEBuildEnv().MaxBuilds
+		if gceBuildEnv.MaxBuilds > 0 && count > gceBuildEnv.MaxBuilds {
+			count = gceBuildEnv.MaxBuilds
 		}
 		log.Printf("looking for %v work items for %q", count, mode)
 

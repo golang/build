@@ -638,13 +638,14 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	statusMu.Unlock()
 
+	gce := pool.NewGCEConfiguration()
 	data.RemoteBuildlets = template.HTML(remoteBuildletStatus())
 
 	sort.Sort(byAge(data.Active))
 	sort.Sort(byAge(data.Pending))
 	sort.Sort(sort.Reverse(byAge(data.Recent)))
-	if pool.GCETryDepsErr() != nil {
-		data.TrybotsErr = pool.GCETryDepsErr().Error()
+	if gce.TryDepsErr() != nil {
+		data.TrybotsErr = gce.TryDepsErr().Error()
 	} else {
 		if buf.Len() == 0 {
 			data.Trybots = template.HTML("<i>(none)</i>")
@@ -654,7 +655,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	buf.Reset()
-	pool.GetGCEBuildletPool().WriteHTMLStatus(&buf)
+	gce.BuildletPool().WriteHTMLStatus(&buf)
 	data.GCEPoolStatus = template.HTML(buf.String())
 	buf.Reset()
 

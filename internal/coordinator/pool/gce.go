@@ -228,80 +228,81 @@ func InitGCE(sc *secret.Client, vmDeleteTimeout time.Duration, tFiles map[string
 // TODO(http://golang.org/issue/38337): These should be moved into a struct as
 // part of the effort to reduce package level variables.
 
-// GCEStorageClient retrieves the GCE storage client.
-func GCEStorageClient() *storage.Client {
+// GCEConfiguration manages and contains all of the GCE configuration.
+type GCEConfiguration struct{}
+
+// NewGCEConfiguration creates a new GCEConfiguration.
+func NewGCEConfiguration() *GCEConfiguration { return &GCEConfiguration{} }
+
+// StorageClient retrieves the GCE storage client.
+func (c *GCEConfiguration) StorageClient() *storage.Client {
 	return storageClient
 }
 
-// GCEBuildEnv retrieves the GCE build env.
-func GCEBuildEnv() *buildenv.Environment {
+// BuildEnv retrieves the GCE build env.
+func (c *GCEConfiguration) BuildEnv() *buildenv.Environment {
 	return buildEnv
 }
 
-// SetGCEBuildEnv sets the GCE build env. This is primarily reserved for
+// SetBuildEnv sets the GCE build env. This is primarily reserved for
 // testing purposes.
-func SetGCEBuildEnv(b *buildenv.Environment) {
+func (c *GCEConfiguration) SetBuildEnv(b *buildenv.Environment) {
 	buildEnv = b
 }
 
-// GetGCEBuildletPool retrieves the GCE buildlet pool.
-func GetGCEBuildletPool() *GCEBuildlet {
+// BuildletPool retrieves the GCE buildlet pool.
+func (c *GCEConfiguration) BuildletPool() *GCEBuildlet {
 	return gcePool
 }
 
-// GCEInStaging returns a boolean denoting if the enviornment is stageing.
-func GCEInStaging() bool {
+// InStaging returns a boolean denoting if the enviornment is stageing.
+func (c *GCEConfiguration) InStaging() bool {
 	return inStaging
 }
 
-// GCEGerritClient retrieves a gerrit client.
-func GCEGerritClient() *gerrit.Client {
+// GerritClient retrieves a gerrit client.
+func (c *GCEConfiguration) GerritClient() *gerrit.Client {
 	return gerritClient
 }
 
 // GKENodeIP retrieves the GKE node IP.
-func GKENodeIP() string {
+func (c *GCEConfiguration) GKENodeIP() string {
 	return gkeNodeIP
 }
 
-// GCEDSClient retrieves the datastore client.
-func GCEDSClient() *datastore.Client {
+// DSClient retrieves the datastore client.
+func (c *GCEConfiguration) DSClient() *datastore.Client {
 	return dsClient
 }
 
-// GCEGoDSClient retrieves the datastore client for golang.org project.
-func GCEGoDSClient() *datastore.Client {
+// GoDSClient retrieves the datastore client for golang.org project.
+func (c *GCEConfiguration) GoDSClient() *datastore.Client {
 	return goDSClient
 }
 
-// GCETryDepsErr retrives any Trybot dependency error.
-func GCETryDepsErr() error {
+// TryDepsErr retrives any Trybot dependency error.
+func (c *GCEConfiguration) TryDepsErr() error {
 	return errTryDeps
 }
 
-// GCEErrorsClient retrieves the stackdriver errors client.
-func GCEErrorsClient() *errorreporting.Client {
+// ErrorsClient retrieves the stackdriver errors client.
+func (c *GCEConfiguration) ErrorsClient() *errorreporting.Client {
 	return errorsClient
 }
 
-// GCEOAuthHTTPClient retrieves an OAuth2 HTTP client used to make API calls to GCP.
-func GCEOAuthHTTPClient() *http.Client {
+// OAuthHTTPClient retrieves an OAuth2 HTTP client used to make API calls to GCP.
+func (c *GCEConfiguration) OAuthHTTPClient() *http.Client {
 	return oAuthHTTPClient
 }
 
 // GCPCredentials retrieves the GCP credentials.
-func GCPCredentials() *google.Credentials {
+func (c *GCEConfiguration) GCPCredentials() *google.Credentials {
 	return gcpCreds
 }
 
 // MetricsClient retrieves a metrics client.
-func MetricsClient() *monapi.MetricClient {
+func (c *GCEConfiguration) MetricsClient() *monapi.MetricClient {
 	return metricsClient
-}
-
-// StorageClient retrieves a storage client.
-func StorageClient() *storage.Client {
-	return storageClient
 }
 
 func checkTryBuildDeps(ctx context.Context, sc *secret.Client) error {

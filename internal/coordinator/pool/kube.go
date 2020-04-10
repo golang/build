@@ -56,12 +56,14 @@ type MonitorGitMirrorFunc func()
 
 // InitGCE must be called before initKube
 func InitKube(monitorGitMirror MonitorGitMirrorFunc) error {
-	if GCEBuildEnv().KubeBuild.MaxNodes == 0 {
+	gce := NewGCEConfiguration()
+	gceBuildEnv := gce.BuildEnv()
+	if gceBuildEnv.KubeBuild.MaxNodes == 0 {
 		return errors.New("Kubernetes builders disabled due to KubeBuild.MaxNodes == 0")
 	}
 
 	// projectID was set by initGCE
-	registryPrefix += "/" + GCEBuildEnv().ProjectName
+	registryPrefix += "/" + gceBuildEnv.ProjectName
 	if !hasCloudPlatformScope() {
 		return errors.New("coordinator not running with access to the Cloud Platform scope.")
 	}
@@ -70,19 +72,19 @@ func InitKube(monitorGitMirror MonitorGitMirrorFunc) error {
 	defer cancel() // ctx is only used for discovery and connect; not retained.
 	var err error
 	buildletsKubeClient, err = gke.NewClient(ctx,
-		GCEBuildEnv().KubeBuild.Name,
-		gke.OptZone(GCEBuildEnv().ControlZone),
-		gke.OptProject(GCEBuildEnv().ProjectName),
-		gke.OptTokenSource(GCPCredentials().TokenSource))
+		gceBuildEnv.KubeBuild.Name,
+		gke.OptZone(gceBuildEnv.ControlZone),
+		gke.OptProject(gceBuildEnv.ProjectName),
+		gke.OptTokenSource(gce.GCPCredentials().TokenSource))
 	if err != nil {
 		return err
 	}
 
 	goKubeClient, err = gke.NewClient(ctx,
-		GCEBuildEnv().KubeTools.Name,
-		gke.OptZone(GCEBuildEnv().ControlZone),
-		gke.OptProject(GCEBuildEnv().ProjectName),
-		gke.OptTokenSource(GCPCredentials().TokenSource))
+		gceBuildEnv.KubeTools.Name,
+		gke.OptZone(gceBuildEnv.ControlZone),
+		gke.OptProject(gceBuildEnv.ProjectName),
+		gke.OptTokenSource(gce.GCPCredentials().TokenSource))
 	if err != nil {
 		return err
 	}
@@ -165,14 +167,15 @@ func (p *kubeBuildletPool) pollCapacityLoop() {
 }
 
 func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
+	gceBuildEnv := NewGCEConfiguration().BuildEnv()
 	nodes, err := buildletsKubeClient.GetNodes(ctx)
 	if err != nil {
-		log.Printf("failed to retrieve nodes to calculate cluster capacity for %s/%s: %v", GCEBuildEnv().ProjectName, GCEBuildEnv().Region(), err)
+		log.Printf("failed to retrieve nodes to calculate cluster capacity for %s/%s: %v", gceBuildEnv.ProjectName, gceBuildEnv.Region(), err)
 		return
 	}
 	pods, err := buildletsKubeClient.GetPods(ctx)
 	if err != nil {
-		log.Printf("failed to retrieve pods to calculate cluster capacity for %s/%s: %v", GCEBuildEnv().ProjectName, GCEBuildEnv().Region(), err)
+		log.Printf("failed to retrieve pods to calculate cluster capacity for %s/%s: %v", gceBuildEnv.ProjectName, gceBuildEnv.Region(), err)
 		return
 	}
 
@@ -268,7 +271,7 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg 
 	log.Printf("Creating Kubernetes pod %q for %s", podName, hostType)
 
 	bc, err := buildlet.StartPod(ctx, buildletsKubeClient, podName, hostType, buildlet.PodOpts{
-		ProjectID:     GCEBuildEnv().ProjectName,
+		ProjectID:     NewGCEConfiguration().BuildEnv().ProjectName,
 		ImageRegistry: registryPrefix,
 		Description:   fmt.Sprintf("Go Builder for %s", hostType),
 		DeleteIn:      deleteIn,
@@ -469,7 +472,7 @@ func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
 				}
 				if err == nil && time.Now().Unix() > unixDeadline {
 					stats.DeletedOld++
-					log.Printf("cleanUpOldPods: Deleting expired pod %q in zone %q ...", pod.Name, GCEBuildEnv().ControlZone)
+					log.Printf("cleanUpOldPods: Deleting expired pod %q in zone %q ...", pod.Name, NewGCEConfiguration().BuildEnv().ControlZone)
 					err = buildletsKubeClient.DeletePod(ctx, pod.Name)
 					if err != nil {
 						log.Printf("cleanUpOldPods: problem deleting old pod %q: %v", pod.Name, err)

@@ -67,8 +67,8 @@ func reportReverseCountMetrics(ctx context.Context) error {
 		})
 	}
 
-	return pool.MetricsClient().CreateTimeSeries(ctx, &monpb.CreateTimeSeriesRequest{
-		Name:       m.DescriptorPath(pool.GCEBuildEnv().ProjectName),
+	return pool.NewGCEConfiguration().MetricsClient().CreateTimeSeries(ctx, &monpb.CreateTimeSeriesRequest{
+		Name:       m.DescriptorPath(pool.NewGCEConfiguration().BuildEnv().ProjectName),
 		TimeSeries: ts,
 	})
 }

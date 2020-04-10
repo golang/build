@@ -51,7 +51,7 @@ func dash(meth, cmd string, args url.Values, req, resp interface{}) error {
 	}
 	var r *http.Response
 	var err error
-	cmd = pool.GCEBuildEnv().DashBase() + cmd + "?" + argsCopy.Encode()
+	cmd = pool.NewGCEConfiguration().BuildEnv().DashBase() + cmd + "?" + argsCopy.Encode()
 	switch meth {
 	case "GET":
 		if req != nil {

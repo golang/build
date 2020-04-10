@@ -271,8 +271,10 @@ func main() {
 		}
 	}
 
-	if bucket := pool.GCEBuildEnv().AutoCertCacheBucket; bucket != "" {
-		if pool.GCEStorageClient() == nil {
+	gce := pool.NewGCEConfiguration()
+
+	if bucket := gce.BuildEnv().AutoCertCacheBucket; bucket != "" {
+		if gce.StorageClient() == nil {
 			log.Fatalf("expected storage client to be non-nil")
 		}
 		autocertManager = &autocert.Manager{
@@ -283,7 +285,7 @@ func main() {
 				}
 				return nil
 			},
-			Cache: autocertcache.NewGoogleCloudStorageCache(pool.GCEStorageClient(), bucket),
+			Cache: autocertcache.NewGoogleCloudStorageCache(gce.StorageClient(), bucket),
 		}
 	}
 
@@ -315,7 +317,7 @@ func main() {
 		log.Printf("Failed to load static resources: %v", err)
 	}
 
-	dh := &builddash.Handler{Datastore: pool.GCEGoDSClient(), Maintner: maintnerClient}
+	dh := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
 	protos.RegisterCoordinatorServer(grpcServer, gs)
 	http.HandleFunc("/", handleStatus)
@@ -348,14 +350,14 @@ func main() {
 
 	if *mode == "dev" {
 		// TODO(crawshaw): do more in dev mode
-		pool.GetGCEBuildletPool().SetEnabled(*devEnableGCE)
+		gce.BuildletPool().SetEnabled(*devEnableGCE)
 	} else {
-		go pool.GetGCEBuildletPool().CleanUpOldVMs()
+		go gce.BuildletPool().CleanUpOldVMs()
 		if pool.KubeErr() == nil {
 			go pool.KubePool().CleanUpOldPodsLoop(context.Background())
 		}
 
-		if pool.GCEInStaging() {
+		if gce.InStaging() {
 			dashboard.Builders = stagingClusterBuilders()
 		}
 
@@ -407,7 +409,7 @@ func addWorkDetail(work buildgo.BuilderRev, detail *commitDetail) {
 		return
 	}
 	if !mayBuildRev(work) {
-		if pool.GCEInStaging() {
+		if pool.NewGCEConfiguration().InStaging() {
 			if _, ok := dashboard.Builders[work.Name]; ok && logCantBuildStaging.Allow() {
 				log.Printf("may not build %v; skipping", work)
 			}
@@ -496,7 +498,8 @@ func mayBuildRev(rev buildgo.BuilderRev) bool {
 		}
 		return false
 	}
-	if pool.GCEBuildEnv().MaxBuilds > 0 && numCurrentBuilds() >= pool.GCEBuildEnv().MaxBuilds {
+	gceBuildEnv := pool.NewGCEConfiguration().BuildEnv()
+	if gceBuildEnv.MaxBuilds > 0 && numCurrentBuilds() >= gceBuildEnv.MaxBuilds {
 		return false
 	}
 	if buildConf.IsReverse() && !pool.ReversePool().CanBuild(buildConf.HostType) {
@@ -859,7 +862,7 @@ func workaroundFlush(w http.ResponseWriter) {
 // findTryWorkLoop.
 func findWorkLoop() {
 	// Useful for debugging a single run:
-	if pool.GCEInStaging() && false {
+	if pool.NewGCEConfiguration().InStaging() && false {
 		const debugSubrepo = false
 		if debugSubrepo {
 			addWork(buildgo.BuilderRev{
@@ -1002,11 +1005,10 @@ func findWork() error {
 					// then skip. But some builders on slow networks
 					// don't snapshot, so don't wait for them. They'll
 					// need to run make.bash first for x/ repos tests.
-					!builderInfo.SkipSnapshot && !rev.SnapshotExists(context.TODO(), pool.GCEBuildEnv()) {
+					!builderInfo.SkipSnapshot && !rev.SnapshotExists(context.TODO(), pool.NewGCEConfiguration().BuildEnv()) {
 					continue
 				}
 			}
-
 			add(rev)
 		}
 	}
@@ -1028,7 +1030,7 @@ func findWork() error {
 // findTryWorkLoop is a goroutine which loops periodically and queries
 // Gerrit for TryBot work.
 func findTryWorkLoop() {
-	if pool.GCETryDepsErr() != nil {
+	if pool.NewGCEConfiguration().TryDepsErr() != nil {
 		return
 	}
 	ticker := time.NewTicker(1 * time.Second)
@@ -1041,12 +1043,13 @@ func findTryWorkLoop() {
 }
 
 func findTryWork() error {
-	if pool.GCEInStaging() && !stagingTryWork {
+	isStaging := pool.NewGCEConfiguration().InStaging()
+	if isStaging && !stagingTryWork {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second) // should be milliseconds
 	defer cancel()
-	tryRes, err := maintnerClient.GoFindTryWork(ctx, &apipb.GoFindTryWorkRequest{ForStaging: pool.GCEInStaging()})
+	tryRes, err := maintnerClient.GoFindTryWork(ctx, &apipb.GoFindTryWorkRequest{ForStaging: isStaging})
 	if err != nil {
 		return err
 	}
@@ -1371,8 +1374,9 @@ func (ts *trySet) notifyStarting() {
 	}
 	msg := name + " beginning. Status page: https://farmer.golang.org/try?commit=" + ts.Commit[:8]
 
+	gerritClient := pool.NewGCEConfiguration().GerritClient()
 	ctx := context.Background()
-	if ci, err := pool.GCEGerritClient().GetChangeDetail(ctx, ts.ChangeTriple()); err == nil {
+	if ci, err := gerritClient.GetChangeDetail(ctx, ts.ChangeTriple()); err == nil {
 		if len(ci.Messages) == 0 {
 			log.Printf("No Gerrit comments retrieved on %v", ts.ChangeTriple())
 		}
@@ -1387,7 +1391,7 @@ func (ts *trySet) notifyStarting() {
 	}
 
 	// Ignore error. This isn't critical.
-	pool.GCEGerritClient().SetReview(ctx, ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{Message: msg})
+	gerritClient.SetReview(ctx, ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{Message: msg})
 }
 
 // awaitTryBuild runs in its own goroutine and waits for a build in a
@@ -1520,7 +1524,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 		ts.mu.Unlock()
 
 		if numFail == 1 && remain > 0 {
-			if err := pool.GCEGerritClient().SetReview(context.Background(), ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
+			if err := pool.NewGCEConfiguration().GerritClient().SetReview(context.Background(), ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
 				Message: fmt.Sprintf(
 					"Build is still in progress...\n"+
 						"This change failed on %s:\n"+
@@ -1571,7 +1575,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 			// TODO: restore this functionality
 			// msg += fmt.Sprintf("\nBenchmark results are available at:\nhttps://perf.golang.org/search?q=cl:%d+try:%s", ts.ci.ChangeNumber, ts.tryID)
 		}
-		if err := pool.GCEGerritClient().SetReview(context.Background(), ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
+		if err := pool.NewGCEConfiguration().GerritClient().SetReview(context.Background(), ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
 			Message: buf.String(),
 			Labels: map[string]int{
 				"TryBot-Result": score,
@@ -1631,10 +1635,10 @@ func poolForConf(conf *dashboard.HostConfig) pool.Buildlet {
 	}
 	switch {
 	case conf.IsVM():
-		return pool.GetGCEBuildletPool()
+		return pool.NewGCEConfiguration().BuildletPool()
 	case conf.IsContainer():
-		if pool.GCEBuildEnv().PreferContainersOnCOS || pool.KubeErr() != nil {
-			return pool.GetGCEBuildletPool() // it also knows how to do containers.
+		if pool.NewGCEConfiguration().BuildEnv().PreferContainersOnCOS || pool.KubeErr() != nil {
+			return pool.NewGCEConfiguration().BuildletPool() // it also knows how to do containers.
 		} else {
 			return pool.KubePool()
 		}
@@ -1812,7 +1816,7 @@ func (st *buildStatus) useSnapshot() bool {
 	if st.useSnapshotMemo != nil {
 		return *st.useSnapshotMemo
 	}
-	b := st.conf.SplitMakeRun() && st.BuilderRev.SnapshotExists(context.TODO(), pool.GCEBuildEnv())
+	b := st.conf.SplitMakeRun() && st.BuilderRev.SnapshotExists(context.TODO(), pool.NewGCEConfiguration().BuildEnv())
 	st.useSnapshotMemo = &b
 	return b
 }
@@ -1835,7 +1839,7 @@ func (st *buildStatus) getCrossCompileConfig() *dashboard.CrossCompileConfig {
 	if config.AlwaysCrossCompile {
 		return config
 	}
-	if pool.GCEInStaging() || st.isTry() {
+	if pool.NewGCEConfiguration().InStaging() || st.isTry() {
 		return config
 	}
 	return nil
@@ -1925,8 +1929,8 @@ func (st *buildStatus) build() error {
 	putBuildRecord(st.buildRecord())
 
 	sp := st.CreateSpan("checking_for_snapshot")
-	if pool.GCEInStaging() {
-		err := pool.GCEStorageClient().Bucket(pool.GCEBuildEnv().SnapBucket).Object(st.SnapshotObjectName()).Delete(context.Background())
+	if pool.NewGCEConfiguration().InStaging() {
+		err := pool.NewGCEConfiguration().StorageClient().Bucket(pool.NewGCEConfiguration().BuildEnv().SnapBucket).Object(st.SnapshotObjectName()).Delete(context.Background())
 		st.LogEventTime("deleted_snapshot", fmt.Sprint(err))
 	}
 	snapshotExists := st.useSnapshot()
@@ -1947,7 +1951,7 @@ func (st *buildStatus) build() error {
 
 	if st.useSnapshot() {
 		sp := st.CreateSpan("write_snapshot_tar")
-		if err := bc.PutTarFromURL(st.ctx, st.SnapshotURL(pool.GCEBuildEnv()), "go"); err != nil {
+		if err := bc.PutTarFromURL(st.ctx, st.SnapshotURL(pool.NewGCEConfiguration().BuildEnv()), "go"); err != nil {
 			return sp.Done(fmt.Errorf("failed to put snapshot to buildlet: %v", err))
 		}
 		sp.Done(nil)
@@ -2087,7 +2091,7 @@ func (st *buildStatus) buildRecord() *types.BuildRecord {
 
 	// Log whether we used COS, so we can do queries to analyze
 	// Kubernetes vs COS performance for containers.
-	if st.conf.IsContainer() && poolForConf(st.conf.HostConfig()) == pool.GetGCEBuildletPool() {
+	if st.conf.IsContainer() && poolForConf(st.conf.HostConfig()) == pool.NewGCEConfiguration().BuildletPool() {
 		rec.ContainerHost = "cos"
 	}
 
@@ -2332,7 +2336,7 @@ func (st *buildStatus) writeGoSourceTo(bc *buildlet.Client) error {
 }
 
 func (st *buildStatus) writeBootstrapToolchain() error {
-	u := st.conf.GoBootstrapURL(pool.GCEBuildEnv())
+	u := st.conf.GoBootstrapURL(pool.NewGCEConfiguration().BuildEnv())
 	if u == "" {
 		return nil
 	}
@@ -2367,7 +2371,7 @@ func (st *buildStatus) writeSnapshot(bc *buildlet.Client) (err error) {
 	}
 	defer tgz.Close()
 
-	wr := pool.GCEStorageClient().Bucket(pool.GCEBuildEnv().SnapBucket).Object(st.SnapshotObjectName()).NewWriter(ctx)
+	wr := pool.NewGCEConfiguration().StorageClient().Bucket(pool.NewGCEConfiguration().BuildEnv().SnapBucket).Object(st.SnapshotObjectName()).NewWriter(ctx)
 	wr.ContentType = "application/octet-stream"
 	wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
 	if _, err := io.Copy(wr, tgz); err != nil {
@@ -2381,7 +2385,8 @@ func (st *buildStatus) writeSnapshot(bc *buildlet.Client) (err error) {
 
 // reportErr reports an error to Stackdriver.
 func (st *buildStatus) reportErr(err error) {
-	if pool.GCEErrorsClient() == nil {
+	gceErrsClient := pool.NewGCEConfiguration().ErrorsClient()
+	if gceErrsClient == nil {
 		// errorsClient is nil in dev environments.
 		return
 	}
@@ -2390,7 +2395,7 @@ func (st *buildStatus) reportErr(err error) {
 	defer cancel()
 
 	err = fmt.Errorf("buildID: %v, name: %s, hostType: %s, error: %v", st.buildID, st.conf.Name, st.conf.HostType, err)
-	pool.GCEErrorsClient().ReportSync(ctx, errorreporting.Entry{Error: err})
+	gceErrsClient.ReportSync(ctx, errorreporting.Entry{Error: err})
 }
 
 func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
@@ -2523,7 +2528,7 @@ func getTestStats(sl spanlog.Logger) *buildstats.TestStats {
 		sp := sl.CreateSpan("query_test_stats")
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		ts, err := buildstats.QueryTestStats(ctx, pool.GCEBuildEnv())
+		ts, err := buildstats.QueryTestStats(ctx, pool.NewGCEConfiguration().BuildEnv())
 		sp.Done(err)
 		if err != nil {
 			log.Printf("getTestStats: error: %v", err)
@@ -2892,7 +2897,7 @@ func (m multiError) Error() string {
 // In localhost dev mode it just returns the value of GOPROXY.
 func moduleProxy() string {
 	// If we're running on localhost, just use the current environment's value.
-	if pool.GCEBuildEnv() == nil || !pool.GCEBuildEnv().IsProd {
+	if pool.NewGCEConfiguration().BuildEnv() == nil || !pool.NewGCEConfiguration().BuildEnv().IsProd {
 		// If empty, use installed VCS tools as usual to fetch modules.
 		return os.Getenv("GOPROXY")
 	}
@@ -2905,7 +2910,7 @@ func moduleProxy() string {
 	// TODO: migrate to a GKE internal load balancer with an internal static IP
 	// once we migrate symbolic-datum-552 off a Legacy VPC network to the modern
 	// scheme that supports internal static IPs.
-	return "http://" + pool.GKENodeIP() + ":30157"
+	return "http://" + pool.NewGCEConfiguration().GKENodeIP() + ":30157"
 }
 
 // affectedPkgs returns the name of every package affected by this commit.
@@ -3018,7 +3023,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 					defer st.LogEventTime("DEV_HELPER_SLEEP", bc.Name())
 				}
 				st.LogEventTime("got_empty_test_helper", bc.String())
-				if err := bc.PutTarFromURL(st.ctx, st.SnapshotURL(pool.GCEBuildEnv()), "go"); err != nil {
+				if err := bc.PutTarFromURL(st.ctx, st.SnapshotURL(pool.NewGCEConfiguration().BuildEnv()), "go"); err != nil {
 					log.Printf("failed to extract snapshot for helper %s: %v", bc.Name(), err)
 					return
 				}
@@ -3086,7 +3091,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 				lastBanner = banner
 				fmt.Fprintf(st, "\n##### %s\n", banner)
 			}
-			if pool.GCEInStaging() {
+			if pool.NewGCEConfiguration().InStaging() {
 				out = bytes.TrimSuffix(out, nl)
 				st.Write(out)
 				fmt.Fprintf(st, " (shard %s; par=%d)\n", ti.shardIPPort, ti.groupSize)
@@ -3124,9 +3129,9 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 func (st *buildStatus) uploadBenchResults(ctx context.Context, files []*benchFile) error {
 	s := *perfServer
 	if s == "" {
-		s = pool.GCEBuildEnv().PerfDataURL
+		s = pool.NewGCEConfiguration().BuildEnv().PerfDataURL
 	}
-	client := &perfstorage.Client{BaseURL: s, HTTPClient: pool.GCEOAuthHTTPClient()}
+	client := &perfstorage.Client{BaseURL: s, HTTPClient: pool.NewGCEConfiguration().OAuthHTTPClient()}
 	u := client.NewUpload(ctx)
 	for _, b := range files {
 		w, err := u.CreateFile(b.name)
@@ -3172,7 +3177,7 @@ func (st *buildStatus) benchFiles() []*benchFile {
 			st.trySet.ci.ChangeNumber, ps, st.trySet.tryID,
 			st.Name, st.trySet.ci.Branch, st.trySet.ci.Project,
 		)
-		if pool.GCEInStaging() {
+		if pool.NewGCEConfiguration().InStaging() {
 			benchFiles[0].out.WriteString("staging: true\n")
 		}
 		benchFiles[1].out.Write(benchFiles[0].out.Bytes())
@@ -3252,7 +3257,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 		pbr, perr := st.parentRev()
 		// TODO(quentin): Error if parent commit could not be determined?
 		if perr == nil {
-			remoteErr, err = ti.bench.Run(st.ctx, pool.GCEBuildEnv(), st, st.conf, bc, &buf, []buildgo.BuilderRev{st.BuilderRev, pbr})
+			remoteErr, err = ti.bench.Run(st.ctx, pool.NewGCEConfiguration().BuildEnv(), st, st.conf, bc, &buf, []buildgo.BuilderRev{st.BuilderRev, pbr})
 		}
 	} else {
 		env := append(st.conf.Env(),
@@ -3645,7 +3650,7 @@ func (st *buildStatus) LogEventTime(event string, optText ...string) {
 	if len(optText) > 1 {
 		panic("usage")
 	}
-	if pool.GCEInStaging() {
+	if pool.NewGCEConfiguration().InStaging() {
 		st.logf("%s %v", event, optText)
 	}
 	st.mu.Lock()
@@ -3766,10 +3771,10 @@ func (st *buildStatus) logsURLLocked() string {
 		return st.logURL
 	}
 	var urlPrefix string
-	if pool.GCEBuildEnv() == buildenv.Production {
+	if pool.NewGCEConfiguration().BuildEnv() == buildenv.Production {
 		urlPrefix = "https://farmer.golang.org"
 	} else {
-		urlPrefix = "http://" + pool.GCEBuildEnv().StaticIP
+		urlPrefix = "http://" + pool.NewGCEConfiguration().BuildEnv().StaticIP
 	}
 	if *mode == "dev" {
 		urlPrefix = "https://localhost:8119"
@@ -3883,12 +3888,12 @@ func newBuildLogBlob(objName string) (obj io.WriteCloser, url_ string) {
 			ioutil.NopCloser(nil),
 		}, "devmode://build-log/" + objName
 	}
-	if pool.GCEStorageClient() == nil {
+	if pool.NewGCEConfiguration().StorageClient() == nil {
 		panic("nil storageClient in newFailureBlob")
 	}
-	bucket := pool.GCEBuildEnv().LogBucket
+	bucket := pool.NewGCEConfiguration().BuildEnv().LogBucket
 
-	wr := pool.GCEStorageClient().Bucket(bucket).Object(objName).NewWriter(context.Background())
+	wr := pool.NewGCEConfiguration().StorageClient().Bucket(bucket).Object(objName).NewWriter(context.Background())
 	wr.ContentType = "text/plain; charset=utf-8"
 	wr.ACL = append(wr.ACL, storage.ACLRule{
 		Entity: storage.AllUsers,

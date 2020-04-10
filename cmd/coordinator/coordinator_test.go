@@ -231,9 +231,10 @@ func TestFindWork(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping in short mode")
 	}
-	buildEnv := pool.GCEBuildEnv()
-	defer func(old *buildenv.Environment) { pool.SetGCEBuildEnv(old) }(buildEnv)
-	pool.SetGCEBuildEnv(buildenv.Production)
+	gce := pool.NewGCEConfiguration()
+	buildEnv := gce.BuildEnv()
+	defer func(old *buildenv.Environment) { gce.SetBuildEnv(old) }(buildEnv)
+	gce.SetBuildEnv(buildenv.Production)
 	defer func() { buildgo.TestHookSnapshotExists = nil }()
 	buildgo.TestHookSnapshotExists = func(br *buildgo.BuilderRev) bool {
 		if strings.Contains(br.Name, "android") {
