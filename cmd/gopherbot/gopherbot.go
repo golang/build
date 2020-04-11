@@ -1973,7 +1973,22 @@ func (b *gopherbot) whoNeedsAccess(ctx context.Context) error {
 // The gerritChange passed must be used because it’s used as a key to deletedChanges and the ID returned
 // by cl.ChangeID() can be associated with multiple changes (cherry-picks, for example).
 func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritChange, cl *maintner.GerritCL) bool {
-	if found := humanReviewersInMetas(cl.Metas); found {
+	const (
+		gobotID     = 5976
+		gerritbotID = 12446
+	)
+	// The CL's owner will be GerritBot if it is imported from a PR.
+	// In that case, if the CL's author has a Gerrit account, they will be
+	// added as a reviewer (golang.org/issue/30265). Otherwise, no reviewers
+	// will be added. Work around this by requiring 2 human reviewers on PRs.
+	ownerID := int64(cl.OwnerID())
+	isPR := ownerID == gerritbotID
+	minHumans := 1
+	if isPR {
+		minHumans = 2
+	}
+
+	if found := humanReviewersInMetas(cl.Metas, minHumans); found {
 		return true
 	}
 
@@ -1985,27 +2000,27 @@ func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritCha
 		log.Printf("Could not list reviewers on change %q: %v", change.ID(), err)
 		return true
 	}
-
-	const (
-		gobotID     = 5976
-		gerritbotID = 12446
-	)
+	var count int
 	for _, r := range reviewers {
-		if r.NumericID != gobotID && r.NumericID != gerritbotID {
-			return true
+		if r.NumericID != gobotID && r.NumericID != gerritbotID && r.NumericID != ownerID {
+			count++
+			if count == minHumans {
+				return true
+			}
 		}
 	}
 	return false
 }
 
-func humanReviewersInMetas(metas []*maintner.GerritMeta) bool {
+// humanReviewersInMetas reports whether there are at least minHumans human
+// reviewers in the given metas.
+func humanReviewersInMetas(metas []*maintner.GerritMeta, minHumans int) bool {
 	// Emails as they appear in maintner (<numeric ID>@<instance ID>)
 	var (
 		gobotEmail     = "5976@62eb7196-b449-3ce5-99f1-c037f21e1705"
 		gerritbotEmail = "12446@62eb7196-b449-3ce5-99f1-c037f21e1705"
-
-		hasHuman bool
 	)
+	var count int
 	for _, m := range metas {
 		if !strings.Contains(m.Commit.Msg, "Reviewer:") && !strings.Contains(m.Commit.Msg, "CC:") {
 			continue
@@ -2017,17 +2032,19 @@ func humanReviewersInMetas(metas []*maintner.GerritMeta) bool {
 			}
 			if !strings.Contains(ln, gobotEmail) && !strings.Contains(ln, gerritbotEmail) {
 				// A human is already on the change.
-				hasHuman = true
-				return errStopIteration
+				count++
+				if count == minHumans {
+					return errStopIteration
+				}
 			}
 			return nil
 		})
 		if err != nil && err != errStopIteration {
 			log.Printf("humanReviewersInMetas: got unexpected error from foreach.LineStr: %v", err)
-			return hasHuman
+			return count >= minHumans
 		}
 	}
-	return hasHuman
+	return count >= minHumans
 }
 
 func getCodeOwners(ctx context.Context, paths []string) ([]*owners.Entry, error) {

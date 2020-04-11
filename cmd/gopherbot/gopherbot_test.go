@@ -356,33 +356,54 @@ func TestHumanReviewersInMetas(t *testing.T) {
 	testCases := []struct {
 		commitMsg string
 		hasHuman  bool
+		atLeast   int
 	}{
 		{`Patch-set: 6
 Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
 			true,
+			1,
 		},
 		{`Patch-set: 6
 CC: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
 			true,
+			1,
 		},
 		{`Patch-set: 6
 Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
 			false,
+			1,
 		},
 		{`Patch-set: 6
 Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
 CC: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
 			true,
+			1,
 		},
 		{`Patch-set: 6
 Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
 			true,
+			1,
+		},
+		{`Patch-set: 6
+Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
+Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
+		`,
+			false,
+			2,
+		},
+		{`Patch-set: 6
+Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
+Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
+Reviewer: Rebecca Stambler <16140@62eb7196-b449-3ce5-99f1-c037f21e1705>
+				`,
+			true,
+			2,
 		},
 	}
 
@@ -390,7 +411,7 @@ Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 		metas := []*maintner.GerritMeta{
 			{Commit: &maintner.GitCommit{Msg: tc.commitMsg}},
 		}
-		if got, want := humanReviewersInMetas(metas), tc.hasHuman; got != want {
+		if got, want := humanReviewersInMetas(metas, tc.atLeast), tc.hasHuman; got != want {
 			t.Errorf("Unexpected result for meta commit message: got %v; want %v for\n%s", got, want, tc.commitMsg)
 		}
 	}
