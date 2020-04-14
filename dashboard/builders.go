@@ -1935,6 +1935,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:           "openbsd-arm-jsing",
 		HostType:       "host-openbsd-arm-joelsing",
+		SkipSnapshot:   true,
 		distTestAdjust: noTestDirAndNoReboot,
 		tryBot:         nil,
 		env: []string{
