@@ -2351,6 +2351,7 @@ func init() {
 	addPerson("Rob Strong", "robert.a.strong@gmail.com")
 	addPerson("Robert Anthony Bellamy", "rabellamy@gmail.com")
 	addPerson("Robert Bittle", "guywithnose@gmail.com")
+	addPerson("Robert Findley", "rfindley@google.com", "@findleyr")
 	addPerson("Robert Figueiredo", "robfig@gmail.com", "@robfig")
 	addPerson("Robert Gogolok", "gogolok@gmail.com")
 	addPerson("Robert Griesemer", "gri@golang.org", "5210@62eb7196-b449-3ce5-99f1-c037f21e1705")

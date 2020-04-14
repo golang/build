@@ -35,12 +35,15 @@ var (
 	dvyukov      = gh("dvyukov")
 	empijei      = gh("empijei")
 	filippo      = gh("FiloSottile")
+	findleyr     = gh("findleyr")
 	gri          = gh("griesemer")
 	hanwen       = gh("hanwen")
+	heschik      = gh("heschik")
 	hyangah      = gh("hyangah")
 	iant         = gh("ianlancetaylor")
 	iancottrell  = gh("ianthehat")
 	jayconrod    = gh("jayconrod")
+	jba          = gh("jba")
 	jbd          = gh("rakyll")
 	joetsai      = gh("dsnet")
 	josharian    = gh("josharian")
@@ -61,6 +64,7 @@ var (
 	neelance     = gh("neelance")
 	pearring     = gh("pearring")
 	r            = gh("robpike")
+	rakoczy      = gh("toothrot")
 	rsc          = gh("rsc")
 	rstambler    = gh("stamblerre")
 	sameer       = gh("Sajmani")
@@ -650,41 +654,161 @@ var entries = map[string]*Entry{
 		Primary: []Owner{mpvl},
 	},
 
+	"tools/benchmark": toolsOwners,
+	"tools/blog":      toolsOwners,
 	"tools/cmd/compilebench": {
 		Secondary: []Owner{josharian},
 	},
 	"tools/cmd/bundle": {
 		Primary: []Owner{adonovan},
 	},
+	"tools/cmd/auth": {
+		Primary:   []Owner{bcmills},
+		Secondary: []Owner{jayconrod, matloob},
+	},
 	"tools/cmd/godoc": {
 		Primary:   []Owner{dmitshur},
 		Secondary: []Owner{agnivade, bradfitz, gri, kevinburke},
 	},
 	"tools/cmd/goimports": {
-		Primary: []Owner{bradfitz},
+		Primary:   []Owner{heschik},
+		Secondary: []Owner{bradfitz},
 	},
-	"tools/cmd/gopls": {
-		Primary: []Owner{rstambler, iancottrell},
+	"tools/cmd/present2md": {
+		Primary: []Owner{rsc},
 	},
 	"tools/cmd/stringer": {
 		Secondary: []Owner{mvdan},
 	},
+	"tools/container": toolsOwners,
+	"tools/cover":     toolsOwners,
+	"tools/go/analysis": {
+		Primary: []Owner{matloob},
+	},
+	"tools/go/ast": {
+		Primary:   []Owner{gri},
+		Secondary: []Owner{josharian, dmitshur},
+	},
+	"tools/go/buildutil": {
+		Primary:   []Owner{bcmills, jayconrod, matloob},
+		Secondary: []Owner{dmitshur},
+	},
+	"tools/go/callgraph": toolsOwners,
+	"tools/go/cfg":       toolsOwners,
+	"tools/go/expect": {
+		Primary: []Owner{iancottrell},
+	},
+	"tools/go/gccgoexportdata": toolsOwners,
+	"tools/go/gcexportdata": {
+		Primary: []Owner{rstambler, gri},
+	},
+	"tools/go/internal/cgo":           toolsOwners,
+	"tools/go/internal/gccgoimporter": toolsOwners,
+	"tools/go/internal/gcimporter": {
+		Primary: []Owner{rstambler, gri},
+	},
+	"tools/go/internal/packagesdriver": {
+		Primary: []Owner{matloob},
+	},
+	"tools/go/loader": {
+		Primary: []Owner{matloob},
+	},
 	"tools/go/packages": {
 		Primary: []Owner{matloob},
+	},
+	"tools/go/packages/packagestest": {
+		Primary: []Owner{iancottrell},
+	},
+	"tools/go/pointer": toolsOwners,
+	"tools/go/ssa": {
+		Primary: []Owner{findleyr},
+	},
+	"tools/go/types": toolsOwners,
+	"tools/go/vcs": {
+		Primary:   []Owner{dmitshur},
+		Secondary: []Owner{bcmills, jayconrod, matloob},
 	},
 	"tools/godoc": {
 		Primary: []Owner{dmitshur},
 	},
-	"tools/internal/lsp": {
-		Primary: []Owner{rstambler, iancottrell},
+	"tools/gopls": {
+		Primary:   []Owner{rstambler},
+		Secondary: []Owner{iancottrell},
 	},
-	"tools": {
-		Primary:   []Owner{iancottrell},
+	"tools/imports": {
+		Primary: []Owner{heschik},
+	},
+	"tools/internal/analysisinternal": {
+		Primary:   []Owner{rstambler},
 		Secondary: []Owner{matloob},
 	},
+	"tools/internal/apidiff": {
+		Primary:   []Owner{jba},
+		Secondary: []Owner{jayconrod, matloob, bcmills},
+	},
+	"tools/internal/fastwalk": {
+		Primary: []Owner{heschik},
+	},
+	"tools/internal/gocommand": {
+		Primary: []Owner{heschik},
+	},
+	"tools/internal/gopathwalk": {
+		Primary: []Owner{heschik},
+	},
+	"tools/internal/imports": {
+		Primary: []Owner{heschik},
+	},
+	"tools/internal/jsonrpc2": {
+		Primary:   []Owner{iancottrell},
+		Secondary: []Owner{findleyr, jba},
+	},
+	"tools/internal/lsp": {
+		Primary:   []Owner{rstambler},
+		Secondary: []Owner{iancottrell},
+	},
+	"tools/internal/memoize": {
+		Primary: []Owner{iancottrell},
+	},
+	"tools/internal/packagesinternal": {
+		Primary:   []Owner{rstambler},
+		Secondary: []Owner{matloob},
+	},
+	"tools/internal/proxydir": {
+		Primary: []Owner{findleyr},
+	},
+	"tools/internal/span": {
+		Primary:   []Owner{iancottrell},
+		Secondary: []Owner{heschik},
+	},
+	"tools/internal/telemetry": {
+		Primary:   []Owner{iancottrell},
+		Secondary: []Owner{findleyr},
+	},
+	"tools/internal/testenv": {
+		Primary: []Owner{bcmills},
+	},
+	"tools/internal/tool": {
+		Primary: []Owner{iancottrell},
+	},
+	"tools/internal/xcontext": {
+		Primary: []Owner{iancottrell},
+	},
+	"tools/playground": {
+		Primary: []Owner{andybons, rakoczy},
+	},
+	"tools/present": {
+		Primary: []Owner{rsc},
+	},
+	"tools/refactor": toolsOwners,
+	"tools/txtar": {
+		Primary: []Owner{jayconrod, bcmills, matloob},
+	},
+	"tools": toolsOwners,
+
 	"playground": {
 		Secondary: []Owner{},
 	},
+
 	"website": {
 		Primary:   []Owner{dmitshur},
 		Secondary: []Owner{cnoellekb, andybons},
@@ -700,6 +824,11 @@ var entries = map[string]*Entry{
 	"go.dev": {
 		Primary: []Owner{pearring},
 	},
+}
+
+var toolsOwners = &Entry{
+	Primary:   []Owner{iancottrell},
+	Secondary: []Owner{matloob},
 }
 
 var wasmOwners = &Entry{
