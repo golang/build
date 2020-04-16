@@ -1933,9 +1933,17 @@ func init() {
 		distTestAdjust: noTestDirAndNoReboot,
 	})
 	addBuilder(BuildConfig{
-		Name:           "openbsd-arm-jsing",
-		HostType:       "host-openbsd-arm-joelsing",
-		SkipSnapshot:   true,
+		Name:         "openbsd-arm-jsing",
+		HostType:     "host-openbsd-arm-joelsing",
+		SkipSnapshot: true,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			switch repo {
+			case "go", "net", "sys":
+				return branch == "master" && goBranch == "master"
+			default:
+				return false
+			}
+		},
 		distTestAdjust: noTestDirAndNoReboot,
 		tryBot:         nil,
 		env: []string{
