@@ -1,0 +1,49 @@
+{
+  "variables": {
+    "aws_access_key": "{{env `AWS_ACCESS_KEY_ID`}}",
+    "aws_secret_key": "{{env `AWS_SECRET_ACCESS_KEY`}}",
+    "region": "us-east-2"
+  },
+  "builders": [
+    {
+      "type": "amazon-ebs",
+      "access_key": "{{user `aws_access_key`}}",
+      "ami_name": "go-linux-arm64-{{timestamp}}",
+      "ami_description": "Image for linux-arm64 Go builder",
+      "instance_type": "a1.medium",
+      "region": "{{user `region`}}",
+      "secret_key": "{{user `aws_secret_key`}}",
+      "source_ami": "ami-0b1808bb4e7ed5ff5",
+      "decode_authorization_messages": true,
+      "ssh_username": "admin",
+      "tags": {
+        "Name": "Debian",
+        "Created": "{{isotime \"2006-01-02\"}}",
+        "OS": "Debian 10 Buster",
+        "Release": "Latest",
+        "Base_AMI_Name": "{{ .SourceAMIName }}",
+        "Extra": "{{ .SourceAMITags.TagName }}",
+        "Description": "{{user `description`}}"
+      },
+      "launch_block_device_mappings": [
+        {
+          "device_name": "/dev/xvda",
+          "volume_size": 10,
+          "volume_type": "gp2",
+          "delete_on_termination": true
+        }
+      ]
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "file",
+      "source": "./rundockerbuildlet.service",
+      "destination": "/tmp/rundockerbuildlet.service"
+    },
+    {
+      "type": "shell",
+      "script": "./prepare_image.sh"
+    }
+  ]
+}

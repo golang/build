@@ -232,7 +232,6 @@ Download:
 		}
 		sleepFatalf("Error running buildlet: %v", err)
 	}
-
 }
 
 // reverseHostTypeArgs returns the default arguments for the buildlet
