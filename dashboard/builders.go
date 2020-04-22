@@ -472,12 +472,6 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
-	"host-windows-arm-iotcore": &HostConfig{
-		IsReverse:   true,
-		ExpectNum:   1,
-		OwnerGithub: "jordanrh1",
-		env:         []string{"GOROOT_BOOTSTRAP=C:\\Data\\Go"},
-	},
 	"host-darwin-10_11": &HostConfig{
 		IsReverse: true,
 		ExpectNum: 3,
@@ -1575,8 +1569,8 @@ func init() {
 	addMiscCompile("-netbsd", "^netbsd-")                    // 4: amd64, 386, arm, arm64
 	addMiscCompile("-openbsd", "^openbsd-")                  // 4: amd64, 386, arm, arm64
 
-	// And 4 that don't fit above:
-	addMiscCompile("-other", "^(windows-arm|linux-s390x|linux-riscv64|dragonfly-amd64)$")
+	// And 3 that don't fit above:
+	addMiscCompile("-other", "^(linux-s390x|linux-riscv64|dragonfly-amd64)$")
 	// TODO: Issue 25963, get the misc-compile trybots for
 	// subrepos too, so "mobile" can at least be included as a
 	// misc-compile for ^android- and ^darwin-arm.
@@ -2071,15 +2065,6 @@ func init() {
 			// dist test timeout. So, bump this builder
 			// up:
 			"GO_TEST_TIMEOUT_SCALE=2"},
-	})
-	addBuilder(BuildConfig{
-		Name:         "windows-arm",
-		HostType:     "host-windows-arm-iotcore",
-		SkipSnapshot: true,
-		env: []string{
-			"GOARM=7",
-			"GO_TEST_TIMEOUT_SCALE=2",
-		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "darwin-amd64-10_11",

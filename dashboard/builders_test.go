@@ -712,6 +712,8 @@ func TestSlowBotAliases(t *testing.T) {
 	ports := strings.Fields(string(out))
 
 	done := map[string]bool{}
+	done["windows-arm"] = true // TODO(golang.org/issue/38607) disabled until builder is replaced
+
 	var add bytes.Buffer
 	check := func(term string, isArch bool) {
 		if done[term] {
@@ -780,8 +782,9 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	ports := strings.Fields(string(out))
 
 	done := map[string]bool{}
-	done["nacl-386"] = true // removed in Go 1.14
-	done["nacl-arm"] = true // removed in Go 1.14
+	done["nacl-386"] = true    // removed in Go 1.14
+	done["nacl-arm"] = true    // removed in Go 1.14
+	done["windows-arm"] = true // TODO(golang.org/issue/38607) disabled until builder is replaced
 	check := func(goos, goarch string) {
 		if goos == "android" {
 			// TODO(golang.org/issue/25963): support
@@ -820,7 +823,6 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 		if _, ok := done[goosArch]; !ok {
 			t.Errorf("Missing trybot or misc-compile trybot: %q", goosArch)
 		}
-
 	}
 
 	for _, port := range ports {
