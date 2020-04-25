@@ -73,6 +73,10 @@ var (
 	tklauser     = gh("tklauser")
 	tombergan    = gh("tombergan")
 	x1ddos       = gh("x1ddos")
+
+	// The tools team does not map to a GitHub username, so we use its Gerrit
+	// group UUID (1080).
+	toolsTeam = Owner{GerritEmail: "1080@62eb7196-b449-3ce5-99f1-c037f21e1705"}
 )
 
 // entries is a map of <repo name>/<path>/<domain> to Owner entries.
@@ -655,8 +659,12 @@ var entries = map[string]*Entry{
 		Primary: []Owner{mpvl},
 	},
 
-	"tools/benchmark": toolsOwners,
-	"tools/blog":      toolsOwners,
+	"tools/benchmark": {
+		Primary: []Owner{toolsTeam},
+	},
+	"tools/blog": {
+		Primary: []Owner{toolsTeam},
+	},
 	"tools/cmd/compilebench": {
 		Secondary: []Owner{josharian},
 	},
@@ -681,8 +689,12 @@ var entries = map[string]*Entry{
 	"tools/cmd/stringer": {
 		Secondary: []Owner{mvdan},
 	},
-	"tools/container": toolsOwners,
-	"tools/cover":     toolsOwners,
+	"tools/container": {
+		Primary: []Owner{toolsTeam},
+	},
+	"tools/cover": {
+		Primary: []Owner{toolsTeam},
+	},
 	"tools/go/analysis": {
 		Primary: []Owner{matloob},
 	},
@@ -694,17 +706,27 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{bcmills, jayconrod, matloob},
 		Secondary: []Owner{dmitshur},
 	},
-	"tools/go/callgraph": toolsOwners,
-	"tools/go/cfg":       toolsOwners,
+	"tools/go/callgraph": {
+		Primary: []Owner{toolsTeam},
+	},
+	"tools/go/cfg": {
+		Primary: []Owner{toolsTeam},
+	},
 	"tools/go/expect": {
 		Primary: []Owner{iancottrell},
 	},
-	"tools/go/gccgoexportdata": toolsOwners,
+	"tools/go/gccgoexportdata": {
+		Primary: []Owner{toolsTeam},
+	},
 	"tools/go/gcexportdata": {
 		Primary: []Owner{rstambler, gri},
 	},
-	"tools/go/internal/cgo":           toolsOwners,
-	"tools/go/internal/gccgoimporter": toolsOwners,
+	"tools/go/internal/cgo": {
+		Primary: []Owner{toolsTeam},
+	},
+	"tools/go/internal/gccgoimporter": {
+		Primary: []Owner{toolsTeam},
+	},
 	"tools/go/internal/gcimporter": {
 		Primary: []Owner{rstambler, gri},
 	},
@@ -720,11 +742,15 @@ var entries = map[string]*Entry{
 	"tools/go/packages/packagestest": {
 		Primary: []Owner{iancottrell},
 	},
-	"tools/go/pointer": toolsOwners,
+	"tools/go/pointer": {
+		Primary: []Owner{toolsTeam},
+	},
 	"tools/go/ssa": {
 		Primary: []Owner{findleyr},
 	},
-	"tools/go/types": toolsOwners,
+	"tools/go/types": {
+		Primary: []Owner{toolsTeam},
+	},
 	"tools/go/vcs": {
 		Primary:   []Owner{dmitshur},
 		Secondary: []Owner{bcmills, jayconrod, matloob},
@@ -800,11 +826,15 @@ var entries = map[string]*Entry{
 	"tools/present": {
 		Primary: []Owner{rsc},
 	},
-	"tools/refactor": toolsOwners,
+	"tools/refactor": {
+		Primary: []Owner{toolsTeam},
+	},
 	"tools/txtar": {
 		Primary: []Owner{jayconrod, bcmills, matloob},
 	},
-	"tools": toolsOwners,
+	"tools": {
+		Primary: []Owner{toolsTeam},
+	},
 
 	"playground": {
 		Secondary: []Owner{},
@@ -825,11 +855,6 @@ var entries = map[string]*Entry{
 	"go.dev": {
 		Primary: []Owner{pearring},
 	},
-}
-
-var toolsOwners = &Entry{
-	Primary:   []Owner{iancottrell},
-	Secondary: []Owner{matloob},
 }
 
 var wasmOwners = &Entry{
