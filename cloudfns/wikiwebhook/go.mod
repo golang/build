@@ -1,5 +1,7 @@
 module golang.org/x/build/cloudfns/wikiwebhook
 
+go 1.13
+
 require (
 	cloud.google.com/go v0.34.0
 	github.com/googleapis/gax-go v2.0.2+incompatible // indirect
