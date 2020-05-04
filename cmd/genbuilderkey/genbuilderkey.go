@@ -24,10 +24,20 @@ import (
 	"golang.org/x/build/internal/secret"
 )
 
+func usage() {
+	fmt.Fprintln(os.Stderr, "Usage: genbuilderkey <Host Type>")
+	fmt.Fprintln(os.Stderr, "Master builder key should be available to genbuilderkey by either:")
+	fmt.Fprintln(os.Stderr, " - File: $HOME/keys/gobuilder-master.key")
+	fmt.Fprintln(os.Stderr, " - Secret Management: executing genbuilderkey with access to secret management")
+	flag.PrintDefaults()
+}
+
 func main() {
+	flag.Usage = usage
 	flag.Parse()
 	if flag.NArg() != 1 {
-		log.Fatalf("expect one argument")
+		flag.Usage()
+		os.Exit(2)
 	}
 	fmt.Println(key(flag.Arg(0)))
 }
