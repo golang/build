@@ -6,11 +6,9 @@ package buildlet
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -31,56 +29,6 @@ func apiGate() {
 	if GCEGate != nil {
 		GCEGate()
 	}
-}
-
-// VMOpts control how new VMs are started.
-type VMOpts struct {
-	// Zone is the GCE zone to create the VM in.
-	// Optional; defaults to provided build environment's zone.
-	Zone string
-
-	// ProjectID is the GCE project ID (e.g. "foo-bar-123", not
-	// the numeric ID).
-	// Optional; defaults to provided build environment's project ID ("name").
-	ProjectID string
-
-	// TLS optionally specifies the TLS keypair to use.
-	// If zero, http without auth is used.
-	TLS KeyPair
-
-	// Optional description of the VM.
-	Description string
-
-	// Optional metadata to put on the instance.
-	Meta map[string]string
-
-	// DeleteIn optionally specifies a duration at which
-	// to delete the VM.
-	// If zero, a reasonable default is used.
-	// Negative means no deletion timeout.
-	DeleteIn time.Duration
-
-	// OnInstanceRequested optionally specifies a hook to run synchronously
-	// after the computeService.Instances.Insert call, but before
-	// waiting for its operation to proceed.
-	OnInstanceRequested func()
-
-	// OnInstanceCreated optionally specifies a hook to run synchronously
-	// after the instance operation succeeds.
-	OnInstanceCreated func()
-
-	// OnInstanceCreated optionally specifies a hook to run synchronously
-	// after the computeService.Instances.Get call.
-	OnGotInstanceInfo func(*compute.Instance)
-
-	// OnBeginBuildletProbe optionally specifies a hook to run synchronously
-	// before StartNewVM tries to hit buildletURL to see if it's up yet.
-	OnBeginBuildletProbe func(buildletURL string)
-
-	// OnEndBuildletProbe optionally specifies a hook to run synchronously
-	// after StartNewVM tries to hit the buildlet's URL to see if it's up.
-	// The hook parameters are the return values from http.Get.
-	OnEndBuildletProbe func(*http.Response, error)
 }
 
 // StartNewVM boots a new VM on GCE and returns a buildlet client
@@ -322,46 +270,7 @@ OpLoop:
 	if opts.OnGotInstanceInfo != nil {
 		opts.OnGotInstanceInfo(inst)
 	}
-
-	const timeout = 5 * time.Minute
-	var alive bool
-	impatientClient := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			Dial:              defaultDialer(),
-			DisableKeepAlives: true,
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		},
-	}
-	deadline := time.Now().Add(timeout)
-	try := 0
-	for time.Now().Before(deadline) {
-		try++
-		if fn := opts.OnBeginBuildletProbe; fn != nil {
-			fn(buildletURL)
-		}
-		res, err := impatientClient.Get(buildletURL)
-		if fn := opts.OnEndBuildletProbe; fn != nil {
-			fn(res, err)
-		}
-		if err != nil {
-			time.Sleep(1 * time.Second)
-			continue
-		}
-		res.Body.Close()
-		if res.StatusCode != 200 {
-			return nil, fmt.Errorf("buildlet returned HTTP status code %d on try number %d", res.StatusCode, try)
-		}
-		alive = true
-		break
-	}
-	if !alive {
-		return nil, fmt.Errorf("buildlet didn't come up at %s in %v", buildletURL, timeout)
-	}
-
-	return NewClient(ipPort, opts.TLS), nil
+	return buildletClient(ctx, buildletURL, ipPort, &opts)
 }
 
 // DestroyVM sends a request to delete a VM. Actual VM description is

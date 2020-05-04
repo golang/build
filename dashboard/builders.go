@@ -551,6 +551,14 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		SSHUsername:     "root",
 	},
+	"host-linux-arm64-aws": &HostConfig{
+		Notes:           "Debian Buster, EC2 arm64 instance. See x/build/env/linux-arm64/arm",
+		VMImage:         "ami-0454a5239a73a9e81",
+		machineType:     "a1.xlarge",
+		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		SSHUsername:     "admin",
+	},
 	"host-illumos-amd64-jclulow": &HostConfig{
 		Notes:       "SmartOS base64@19.1.0 zone",
 		Owner:       "josh@sysmgr.org",

@@ -74,10 +74,17 @@ type Environment struct {
 	// other fields.
 	ControlZone string
 
+	// PreferredAvailabilityZone is the preffered AWS availability zone.
+	PreferredAvailabilityZone string
+
 	// VMZones are the GCE zones that the VMs will be deployed to. These
 	// GCE zones will be periodically cleaned by deleting old VMs. The zones
 	// should all exist within a single region.
 	VMZones []string
+
+	// VMAvailabilityZones are the AWS availability zones that the VMs will be deployed to.
+	// The availability zones should all exist within a single region.
+	VMAvailabilityZones []string
 
 	// StaticIP is the public, static IP address that will be attached to the
 	// coordinator instance. The zero value means the address will be looked
@@ -149,6 +156,16 @@ func (e Environment) RandomVMZone() string {
 		return e.ControlZone
 	}
 	return e.VMZones[rand.Intn(len(e.VMZones))]
+}
+
+// RandomAWSVMZone returns a randomly selected zone from the zones in
+// VMAvailabilityZones. The PreferredAvailabilityZone value will be
+// returned if VMAvailabilityZones is not set.
+func (e Environment) RandomAWSVMZone() string {
+	if len(e.VMAvailabilityZones) == 0 {
+		return e.PreferredAvailabilityZone
+	}
+	return e.VMAvailabilityZones[rand.Intn(len(e.VMZones))]
 }
 
 // Region returns the GCE region, derived from its zone.
