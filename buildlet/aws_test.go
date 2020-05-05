@@ -6,6 +6,7 @@ package buildlet
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -78,7 +79,7 @@ func (f *fakeEC2Client) TerminateInstancesWithContext(ctx context.Context, input
 	}, nil
 }
 
-func (f *fakeEC2Client) WaitUntilInstanceExistsWithContext(ctx context.Context, input *ec2.DescribeInstancesInput, opt ...request.WaiterOption) error {
+func (f *fakeEC2Client) WaitUntilInstanceRunningWithContext(ctx context.Context, input *ec2.DescribeInstancesInput, opt ...request.WaiterOption) error {
 	if ctx == nil || input == nil || len(input.InstanceIds) == 0 {
 		return request.ErrInvalidParams{}
 	}
@@ -502,6 +503,9 @@ func TestConfigureVM(t *testing.T) {
 			if *got.InstanceInitiatedShutdownBehavior != "terminate" {
 				t.Errorf("InstanceType got %s; want %s", *got.InstanceInitiatedShutdownBehavior, "terminate")
 			}
+			if *got.TagSpecifications[0].ResourceType != "instance" {
+				t.Errorf("Tag Resource Type got %s; want %s", *got.TagSpecifications[0].ResourceType, "instance")
+			}
 			if *got.TagSpecifications[0].Tags[0].Key != "Name" {
 				t.Errorf("First Tag Key got %s; want %s", *got.TagSpecifications[0].Tags[0].Key, "Name")
 			}
@@ -514,8 +518,12 @@ func TestConfigureVM(t *testing.T) {
 			if *got.TagSpecifications[0].Tags[1].Value != tc.wantDesc {
 				t.Errorf("Second Tag Value got %s; want %s", *got.TagSpecifications[0].Tags[1].Value, tc.wantDesc)
 			}
-			gotUD := &AWSUserData{}
-			err := json.Unmarshal([]byte(*got.UserData), &gotUD)
+			gotUD := &EC2UserData{}
+			gotUDJson, err := base64.StdEncoding.DecodeString(*got.UserData)
+			if err != nil {
+				t.Fatalf("unable to base64 decode string %q: %s", *got.UserData, err)
+			}
+			err = json.Unmarshal([]byte(gotUDJson), gotUD)
 			if err != nil {
 				t.Errorf("unable to unmarshal user data: %v", err)
 			}

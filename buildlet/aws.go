@@ -6,6 +6,7 @@ package buildlet
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,20 +14,19 @@ import (
 	"net"
 	"time"
 
-	"golang.org/x/build/buildenv"
-	"golang.org/x/build/dashboard"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"golang.org/x/build/buildenv"
+	"golang.org/x/build/dashboard"
 )
 
-// AWSUserData is stored in the user data for each EC2 instance. This is
+// EC2UserData is stored in the user data for each EC2 instance. This is
 // used to store metadata about the running instance. The buildlet will retrieve
 // this on EC2 instances before allowing connections from the coordinator.
-type AWSUserData struct {
+type EC2UserData struct {
 	BuildletBinaryURL string            `json:"buildlet_binary_url,omitempty"`
 	BuildletHostType  string            `json:"buildlet_host_type,omitempty"`
 	Metadata          map[string]string `json:"metadata,omitempty"`
@@ -41,7 +41,7 @@ type ec2Client interface {
 	DescribeInstancesWithContext(context.Context, *ec2.DescribeInstancesInput, ...request.Option) (*ec2.DescribeInstancesOutput, error)
 	RunInstancesWithContext(context.Context, *ec2.RunInstancesInput, ...request.Option) (*ec2.Reservation, error)
 	TerminateInstancesWithContext(context.Context, *ec2.TerminateInstancesInput, ...request.Option) (*ec2.TerminateInstancesOutput, error)
-	WaitUntilInstanceExistsWithContext(context.Context, *ec2.DescribeInstancesInput, ...request.WaiterOption) error
+	WaitUntilInstanceRunningWithContext(context.Context, *ec2.DescribeInstancesInput, ...request.WaiterOption) error
 }
 
 // AWSClient is the client used to create and destroy buildlets on AWS.
@@ -92,6 +92,7 @@ func (c *AWSClient) StartNewVM(ctx context.Context, buildEnv *buildenv.Environme
 	}
 
 	vmConfig := c.configureVM(buildEnv, hconf, vmName, hostType, opts)
+
 	vmID, err := c.createVM(ctx, vmConfig, opts)
 	if err != nil {
 		return nil, err
@@ -122,7 +123,7 @@ func (c *AWSClient) createVM(ctx context.Context, vmConfig *ec2.RunInstancesInpu
 
 // WaitUntilVMExists submits a request which waits until an instance exists before returning.
 func (c *AWSClient) WaitUntilVMExists(ctx context.Context, instID string, opts *VMOpts) error {
-	err := c.client.WaitUntilInstanceExistsWithContext(ctx, &ec2.DescribeInstancesInput{
+	err := c.client.WaitUntilInstanceRunningWithContext(ctx, &ec2.DescribeInstancesInput{
 		InstanceIds: []*string{aws.String(instID)},
 	})
 	if err != nil {
@@ -158,9 +159,11 @@ func (c *AWSClient) configureVM(buildEnv *buildenv.Environment, hconf *dashboard
 		Placement: &ec2.Placement{
 			AvailabilityZone: aws.String(opts.Zone),
 		},
+		KeyName:                           aws.String("ec2-go-builders"),
 		InstanceInitiatedShutdownBehavior: aws.String("terminate"),
 		TagSpecifications: []*ec2.TagSpecification{
 			&ec2.TagSpecification{
+				ResourceType: aws.String("instance"),
 				Tags: []*ec2.Tag{
 					&ec2.Tag{
 						Key:   aws.String("Name"),
@@ -174,9 +177,13 @@ func (c *AWSClient) configureVM(buildEnv *buildenv.Environment, hconf *dashboard
 			},
 		},
 	}
+	c.vmUserDataSpec(vmConfig, buildEnv, hconf, vmName, hostType, opts)
+	return vmConfig
+}
 
+func (c *AWSClient) vmUserDataSpec(vmConfig *ec2.RunInstancesInput, buildEnv *buildenv.Environment, hconf *dashboard.HostConfig, vmName, hostType string, opts *VMOpts) {
 	// add custom metadata to the user data.
-	ud := AWSUserData{
+	ud := EC2UserData{
 		BuildletBinaryURL: hconf.BuildletBinaryURL(buildEnv),
 		BuildletHostType:  hostType,
 		TLSCert:           opts.TLS.CertPEM,
@@ -191,7 +198,9 @@ func (c *AWSClient) configureVM(buildEnv *buildenv.Environment, hconf *dashboard
 	if err != nil {
 		log.Printf("unable to marshal user data: %v", err)
 	}
-	return vmConfig.SetUserData(string(jsonUserData))
+	// user data must be base64 encoded
+	jud := base64.StdEncoding.EncodeToString([]byte(jsonUserData))
+	vmConfig.SetUserData(jud)
 }
 
 // DestroyVM submits a request to destroy a VM.

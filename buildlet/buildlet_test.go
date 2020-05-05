@@ -92,10 +92,10 @@ func TestBuildletClientError(t *testing.T) {
 		t.Error("http endpoint called")
 	}
 	if OnBeginBuildletProbeCalled {
-		t.Error("OnBeginBuildletProbe() was not called")
+		t.Error("OnBeginBuildletProbe() was called")
 	}
 	if OnEndBuildletProbeCalled {
-		t.Error("OnEndBuildletProbe() was not called")
+		t.Error("OnEndBuildletProbe() was called")
 	}
 }
 
