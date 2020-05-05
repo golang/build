@@ -365,6 +365,7 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:   1,
 		Notes:       "DragonFly BSD release version, run by DragonFly team",
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+		SSHUsername: "root",
 		OwnerGithub: "tuxillo",
 	},
 	"host-dragonfly-amd64-master": &HostConfig{
@@ -372,6 +373,7 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:   1,
 		Notes:       "DragonFly BSD master, run by DragonFly team",
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+		SSHUsername: "root",
 		OwnerGithub: "tuxillo",
 	},
 	"host-freebsd-arm-paulzhol": &HostConfig{
