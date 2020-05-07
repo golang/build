@@ -1,0 +1,53 @@
+/*
+ * Copyright 2020 The Go Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style
+ * license that can be found in the LICENSE file.
+ */
+*,
+:before,
+:after {
+  box-sizing: border-box;
+}
+html,
+.Site {
+  height: 100%;
+}
+.Site {
+  display: flex;
+  flex-direction: column;
+  font-family: sans-serif;
+  margin: 0;
+}
+h1,
+h2 {
+  font-weight: 600;
+  letter-spacing: 0.03rem;
+}
+
+h3,
+h4 {
+  font-weight: 600;
+  letter-spacing: 0.08rem;
+}
+h5,
+h6 {
+  font-weight: 500;
+  letter-spacing: 0.08rem;
+}
+.Site-content {
+  flex: 1 0 auto;
+  padding: 0.625rem;
+  width: 100%;
+}
+.Site-header {
+  flex: none;
+}
+.Header {
+  background: #e0ebf5;
+  color: #375eab;
+  padding: 0.625rem;
+}
+.Header-title {
+  font-size: 1.5rem;
+  margin: 0;
+}
