@@ -793,6 +793,21 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{rstambler},
 		Secondary: []Owner{iancottrell},
 	},
+	"tools/internal/lsp/cache": {
+		Primary: []Owner{rstambler},
+	},
+	"tools/internal/lsp/fake": {
+		Primary: []Owner{findleyr},
+	},
+	"tools/internal/lsp/lsprpc": {
+		Primary: []Owner{findleyr},
+	},
+	"tools/internal/lsp/regtest": {
+		Primary: []Owner{findleyr},
+	},
+	"tools/internal/lsp/source": {
+		Primary: []Owner{rstambler},
+	},
 	"tools/internal/memoize": {
 		Primary: []Owner{iancottrell},
 	},
