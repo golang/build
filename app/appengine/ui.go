@@ -331,6 +331,11 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context) (*uiTemp
 		}
 	}
 
+	gerritProject := "go"
+	if repo := repos.ByImportPath[tb.req.Repo]; repo != nil {
+		gerritProject = repo.GoGerritProject
+	}
+
 	data := &uiTemplateData{
 		Dashboard:  goDash,
 		Package:    goDash.packageWithPath(tb.req.Repo),
@@ -339,6 +344,7 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context) (*uiTemp
 		Pagination: &Pagination{},
 		Branches:   tb.res.Branches,
 		Branch:     tb.req.Branch,
+		Repo:       gerritProject,
 	}
 
 	builders := buildersOfCommits(commits)
@@ -458,6 +464,13 @@ type jsonView struct{}
 
 func (jsonView) ShowsActiveBuilds() bool { return false }
 func (jsonView) ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
+	res := toBuildStatus(r.Host, data)
+	v, _ := json.MarshalIndent(res, "", "\t")
+	w.Header().Set("Content-Type", "text/json; charset=utf-8")
+	w.Write(v)
+}
+
+func toBuildStatus(host string, data *uiTemplateData) types.BuildStatus {
 	// cell returns one of "" (no data), "ok", or a failure URL.
 	cell := func(res *Result) string {
 		switch {
@@ -466,7 +479,7 @@ func (jsonView) ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiT
 		case res.OK:
 			return "ok"
 		}
-		return fmt.Sprintf("https://%v/log/%v", r.Host, res.LogHash)
+		return fmt.Sprintf("https://%v/log/%v", host, res.LogHash)
 	}
 
 	builders := data.allBuilders()
@@ -474,17 +487,23 @@ func (jsonView) ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiT
 	var res types.BuildStatus
 	res.Builders = builders
 
-	// First the commits from the main section (the "go" repo)
+	// First the commits from the main section (the requested repo)
 	for _, c := range data.Commits {
-		rev := types.BuildRevision{
-			Repo:    "go",
-			Results: make([]string, len(res.Builders)),
+		// The logic below works for both the go repo and other subrepos: if c is
+		// in the main go repo, ResultGoHashes returns a slice of length 1
+		// containing the empty string.
+		for _, h := range c.ResultGoHashes() {
+			rev := types.BuildRevision{
+				Repo:       data.Repo,
+				Results:    make([]string, len(res.Builders)),
+				GoRevision: h,
+			}
+			commitToBuildRevision(c, &rev)
+			for i, b := range res.Builders {
+				rev.Results[i] = cell(c.Result(b, h))
+			}
+			res.Revisions = append(res.Revisions, rev)
 		}
-		commitToBuildRevision(c, &rev)
-		for i, b := range res.Builders {
-			rev.Results[i] = cell(c.Result(b, ""))
-		}
-		res.Revisions = append(res.Revisions, rev)
 	}
 
 	// Then the one commit each for the subrepos for each of the tracked tags.
@@ -511,10 +530,7 @@ func (jsonView) ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiT
 			res.Revisions = append(res.Revisions, rev)
 		}
 	}
-
-	v, _ := json.MarshalIndent(res, "", "\t")
-	w.Header().Set("Content-Type", "text/json; charset=utf-8")
-	w.Write(v)
+	return res
 }
 
 // commitToBuildRevision fills in the fields of BuildRevision rev that
@@ -718,6 +734,7 @@ type uiTemplateData struct {
 	Pagination *Pagination
 	Branches   []string
 	Branch     string
+	Repo       string // the repo gerrit project name. "go" if unspecified in the request.
 }
 
 // getActiveBuilds returns the builds that coordinator is currently doing.

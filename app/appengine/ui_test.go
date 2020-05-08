@@ -45,6 +45,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 			},
 			want: &uiTemplateData{
 				Dashboard:  goDash,
+				Repo:       "go",
 				Package:    &Package{Name: "Go", Path: ""},
 				Branches:   []string{"release.foo", "release.bar", "dev.blah"},
 				Builders:   []string{"linux-386", "linux-amd64"},
@@ -59,7 +60,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 			req:  &apipb.DashboardRequest{},
 			// Have only one commit load from the datastore:
 			testCommitData: map[string]*Commit{
-				"26957168c4c0cdcc7ca4f0b19d0eb19474d224ac": &Commit{
+				"26957168c4c0cdcc7ca4f0b19d0eb19474d224ac": {
 					PackagePath: "",
 					Hash:        "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac",
 					ResultData: []string{
@@ -96,6 +97,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 			},
 			want: &uiTemplateData{
 				Dashboard: goDash,
+				Repo:      "go",
 				Package:   &Package{Name: "Go", Path: ""},
 				Branches:  []string{"release.foo", "release.bar", "dev.blah"},
 				Builders:  []string{"linux-386", "linux-amd64", "openbsd-amd64"},
@@ -192,6 +194,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 			},
 			want: &uiTemplateData{
 				Dashboard:  goDash,
+				Repo:       "go",
 				Package:    &Package{Name: "Go", Path: ""},
 				Branches:   []string{"release.foo", "release.bar", "dev.blah"},
 				Builders:   []string{"linux-386", "linux-amd64"},
@@ -291,6 +294,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 			},
 			want: &uiTemplateData{
 				Dashboard:  goDash,
+				Repo:       "net",
 				Package:    &Package{Name: "net", Path: "golang.org/x/net"},
 				Branches:   []string{"master", "dev.blah"},
 				Builders:   []string{"linux-386", "linux-amd64"},
@@ -328,6 +332,209 @@ func TestUITemplateDataBuilder(t *testing.T) {
 			diff := cmp.Diff(tt.want, data, cmpopts.IgnoreUnexported(CommitInfo{}))
 			if diff != "" {
 				t.Errorf("mismatch want->got:\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestToBuildStatus(t *testing.T) {
+	tests := []struct {
+		name string
+		data *uiTemplateData
+		want types.BuildStatus
+	}{
+		{
+			name: "go repo",
+			data: &uiTemplateData{
+				Dashboard:  goDash,
+				Repo:       "go",
+				Package:    &Package{Name: "Go", Path: ""},
+				Branches:   []string{"release.foo", "release.bar", "dev.blah"},
+				Builders:   []string{"linux-386", "linux-amd64"},
+				Pagination: &Pagination{},
+				Commits: []*CommitInfo{
+					{
+						Hash:   "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac",
+						User:   "Foo Bar <foo@example.com>",
+						Desc:   "runtime: fix all the bugs",
+						Time:   time.Unix(1257894001, 0).UTC(),
+						Branch: "master",
+					},
+				},
+				TagState: []*TagState{
+					{
+						Name:     "master",
+						Tag:      &CommitInfo{Hash: "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac"},
+						Builders: []string{"linux-386", "linux-amd64"},
+						Packages: []*PackageState{
+							{
+								Package: &Package{Name: "net", Path: "golang.org/x/net"},
+								Commit: &CommitInfo{
+									Hash:        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+									PackagePath: "golang.org/x/net",
+									User:        "Ee Yore <e@e.net>",
+									Desc:        "all: fix networking",
+									Time:        time.Unix(1257894001, 0).UTC(),
+									Branch:      "master",
+								},
+							},
+							{
+								Package: &Package{Name: "sys", Path: "golang.org/x/sys"},
+								Commit: &CommitInfo{
+									Hash:        "dddddddddddddddddddddddddddddddddddddddd",
+									PackagePath: "golang.org/x/sys",
+									User:        "Sys Tem <sys@s.net>",
+									Desc:        "sys: support more systems",
+									Time:        time.Unix(1257894001, 0).UTC(),
+									Branch:      "master",
+								},
+							},
+						},
+					},
+					{
+						Name:     "release-branch.go1.99",
+						Tag:      &CommitInfo{Hash: "ffffffffffffffffffffffffffffffffffffffff"},
+						Builders: []string{"linux-386", "linux-amd64"},
+						Packages: []*PackageState{
+							{
+								Package: &Package{Name: "net", Path: "golang.org/x/net"},
+								Commit: &CommitInfo{
+									Hash:        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+									PackagePath: "golang.org/x/net",
+									User:        "Ee Yore <e@e.net>",
+									Desc:        "all: fix networking",
+									Time:        time.Unix(1257894001, 0).UTC(),
+									Branch:      "master",
+								},
+							},
+							{
+								Package: &Package{Name: "sys", Path: "golang.org/x/sys"},
+								Commit: &CommitInfo{
+									Hash:        "dddddddddddddddddddddddddddddddddddddddd",
+									PackagePath: "golang.org/x/sys",
+									User:        "Sys Tem <sys@s.net>",
+									Desc:        "sys: support more systems",
+									Time:        time.Unix(1257894001, 0).UTC(),
+									Branch:      "master",
+								},
+							},
+						},
+					},
+				},
+			},
+			want: types.BuildStatus{
+				Builders: []string{"linux-386", "linux-amd64"},
+				Revisions: []types.BuildRevision{
+					{
+						Repo:     "go",
+						Revision: "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac",
+						Date:     "2009-11-10T23:00:01Z",
+						Branch:   "master",
+						Author:   "Foo Bar <foo@example.com>",
+						Desc:     "runtime: fix all the bugs",
+						Results:  []string{"", ""},
+					},
+					{
+						Repo:       "net",
+						Revision:   "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+						GoRevision: "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac",
+						Date:       "2009-11-10T23:00:01Z",
+						Branch:     "master",
+						GoBranch:   "master",
+						Author:     "Ee Yore <e@e.net>",
+						Desc:       "all: fix networking",
+						Results:    []string{"", ""},
+					},
+					{
+						Repo:       "sys",
+						Revision:   "dddddddddddddddddddddddddddddddddddddddd",
+						GoRevision: "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac",
+						Date:       "2009-11-10T23:00:01Z",
+						Branch:     "master",
+						GoBranch:   "master",
+						Author:     "Sys Tem <sys@s.net>",
+						Desc:       "sys: support more systems",
+						Results:    []string{"", ""},
+					},
+					{
+						Repo:       "net",
+						Revision:   "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+						GoRevision: "ffffffffffffffffffffffffffffffffffffffff",
+						Date:       "2009-11-10T23:00:01Z",
+						Branch:     "master",
+						GoBranch:   "release-branch.go1.99",
+						Author:     "Ee Yore <e@e.net>",
+						Desc:       "all: fix networking",
+						Results:    []string{"", ""},
+					},
+					{
+						Repo:       "sys",
+						Revision:   "dddddddddddddddddddddddddddddddddddddddd",
+						GoRevision: "ffffffffffffffffffffffffffffffffffffffff",
+						Date:       "2009-11-10T23:00:01Z",
+						Branch:     "master",
+						GoBranch:   "release-branch.go1.99",
+						Author:     "Sys Tem <sys@s.net>",
+						Desc:       "sys: support more systems",
+						Results:    []string{"", ""},
+					},
+				},
+			},
+		},
+		{
+			name: "other repo",
+			data: &uiTemplateData{
+				Dashboard: goDash,
+				Repo:      "tools",
+				Builders:  []string{"linux", "windows"},
+				Commits: []*CommitInfo{
+					{
+						PackagePath: "golang.org/x/tools",
+						Hash:        "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac",
+						User:        "Foo Bar <foo@example.com>",
+						Desc:        "tools: fix all the bugs",
+						Time:        time.Unix(1257894001, 0).UTC(),
+						Branch:      "master",
+						ResultData: []string{
+							"linux|false|123|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+							"windows|false|456|bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+						},
+					},
+				},
+			},
+			want: types.BuildStatus{
+				Builders: []string{"linux", "windows"},
+				Revisions: []types.BuildRevision{
+					{
+						Repo:       "tools",
+						Revision:   "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac",
+						GoRevision: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+						Date:       "2009-11-10T23:00:01Z",
+						Branch:     "master",
+						Author:     "Foo Bar <foo@example.com>",
+						Desc:       "tools: fix all the bugs",
+						Results:    []string{"", "https://build.golang.org/log/456"},
+					},
+					{
+						Repo:       "tools",
+						Revision:   "26957168c4c0cdcc7ca4f0b19d0eb19474d224ac",
+						GoRevision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+						Date:       "2009-11-10T23:00:01Z",
+						Branch:     "master",
+						Author:     "Foo Bar <foo@example.com>",
+						Desc:       "tools: fix all the bugs",
+						Results:    []string{"https://build.golang.org/log/123", ""},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := toBuildStatus("build.golang.org", tt.data)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("buildStatus(...) mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
