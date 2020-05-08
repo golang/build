@@ -7,9 +7,9 @@ package buildlet
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"time"
 
@@ -80,25 +80,24 @@ type VMOpts struct {
 // buildletClient returns a buildlet client configured to speak to a VM via the buildlet
 // URL. The communication will use TLS if one is provided in the vmopts. This will wait until
 // it can connect with the endpoint before returning. The buildletURL is in the form of:
-// "https://<ip>". The ipPort field is in the form of "<ip>:<port>".
+// "https://<ip>". The ipPort field is in the form of "<ip>:<port>". The function
+// will attempt to connect to the buildlet for the lesser of: the default timeout period
+// (5 minutes) or the timeout set in the passed in context.
 func buildletClient(ctx context.Context, buildletURL, ipPort string, opts *VMOpts) (*Client, error) {
-	const timeout = 5 * time.Minute
-	deadline := time.Now().Add(timeout)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
 	try := 0
 	for !opts.SkipEndpointVerification {
 		try++
-		if deadline.Before(time.Now()) {
-			return nil, fmt.Errorf("unable to probe buildet at %s in %v with %d attempts", buildletURL, timeout, try)
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("unable to probe buildet at %s after %d attempts", buildletURL, try)
 		}
 		err := probeBuildlet(ctx, buildletURL, opts)
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-			return nil, fmt.Errorf("unable to probe buildlet at %s: %w", buildletURL, err)
+		if err == nil {
+			break
 		}
-		if err != nil {
-			time.Sleep(time.Second)
-			continue
-		}
-		break
+		log.Printf("probing buildlet at %s with attempt %d failed: %s", buildletURL, try, err)
+		time.Sleep(time.Second)
 	}
 	return NewClient(ipPort, opts.TLS), nil
 }
