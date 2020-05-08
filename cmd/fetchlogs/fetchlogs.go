@@ -33,21 +33,24 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"golang.org/x/build/repos"
 	"golang.org/x/build/types"
 )
 
 var defaultDir = filepath.Join(xdgCacheDir(), "fetchlogs")
 
 var (
-	flagN    = flag.Int("n", 300, "limit to most recent `N` commits")
-	flagPar  = flag.Int("j", 5, "number of concurrent download `jobs`")
-	flagDir  = flag.String("dir", defaultDir, "`directory` to save logs to")
-	flagRepo = flag.String("repo", "go", `repo to fetch logs for`)
+	flagN         = flag.Int("n", 300, "limit to most recent `N` commits")
+	flagPar       = flag.Int("j", 5, "number of concurrent download `jobs`")
+	flagDir       = flag.String("dir", defaultDir, "`directory` to save logs to")
+	flagRepo      = flag.String("repo", "go", `repo to fetch logs for`)
+	flagDashboard = flag.String("dashboard", "https://build.golang.org", `the dashboard root url`)
 )
 
 func main() {
@@ -82,8 +85,15 @@ func main() {
 	// Fetch dashboard pages.
 	haveCommits := 0
 	for page := 0; haveCommits < *flagN; page++ {
-		url := fmt.Sprintf("https://build.golang.org/?mode=json&page=%d", page)
-		index, err := fetcher.get(url)
+		dashURL := fmt.Sprintf("%s/?mode=json&page=%d", *flagDashboard, page)
+		if *flagRepo != "go" {
+			repo := repos.ByGerritProject[*flagRepo]
+			if repo == nil {
+				log.Fatalf("unknown repo %s", *flagRepo)
+			}
+			dashURL += "&repo=" + url.QueryEscape(repo.ImportPath)
+		}
+		index, err := fetcher.get(dashURL)
 		if err != nil {
 			log.Fatal(err)
 		}
