@@ -277,7 +277,10 @@ func TestAddLabels(t *testing.T) {
 		fis := &fakeIssuesService{}
 		b.is = fis
 
-		if err := b.addLabels(context.Background(), tc.gi, tc.labels); err != nil {
+		if err := b.addLabels(context.Background(), maintner.GitHubRepoID{
+			Owner: "golang",
+			Repo:  "go",
+		}, tc.gi, tc.labels); err != nil {
 			t.Errorf("%s: b.addLabels got unexpected error: %v", tc.desc, err)
 			continue
 		}
@@ -336,7 +339,10 @@ func TestRemoveLabels(t *testing.T) {
 		}}
 		b.is = fis
 
-		if err := b.removeLabels(context.Background(), tc.gi, tc.toRemove); err != nil {
+		if err := b.removeLabels(context.Background(), maintner.GitHubRepoID{
+			Owner: "golang",
+			Repo:  "go",
+		}, tc.gi, tc.toRemove); err != nil {
 			t.Errorf("%s: b.addLabels got unexpected error: %v", tc.desc, err)
 			continue
 		}

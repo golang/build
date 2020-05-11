@@ -293,30 +293,44 @@ var tasks = []struct {
 	name string
 	fn   func(*gopherbot, context.Context) error
 }{
+	// Tasks that are specific to the golang/go repo.
 	{"kicktrain", (*gopherbot).getOffKickTrain},
 	{"unwait-release", (*gopherbot).unwaitRelease},
-	{"freeze old issues", (*gopherbot).freezeOldIssues},
-	{"label proposals", (*gopherbot).labelProposals},
-	{"set subrepo milestones", (*gopherbot).setSubrepoMilestones},
-	{"set misc milestones", (*gopherbot).setMiscMilestones},
 	{"label build issues", (*gopherbot).labelBuildIssues},
 	{"label mobile issues", (*gopherbot).labelMobileIssues},
-	{"label documentation issues", (*gopherbot).labelDocumentationIssues},
 	{"label tools issues", (*gopherbot).labelToolsIssues},
 	{"label go.dev issues", (*gopherbot).labelGoDevIssues},
+	{"label proposals", (*gopherbot).labelProposals},
 	{"handle gopls issues", (*gopherbot).handleGoplsIssues},
-	{"close stale WaitingForInfo", (*gopherbot).closeStaleWaitingForInfo},
-	{"cl2issue", (*gopherbot).cl2issue},
+	{"open cherry pick issues", (*gopherbot).openCherryPickIssues},
+	{"close cherry pick issues", (*gopherbot).closeCherryPickIssues},
+	{"set subrepo milestones", (*gopherbot).setSubrepoMilestones},
+	{"set misc milestones", (*gopherbot).setMiscMilestones},
+	{"apply minor release milestones", (*gopherbot).setMinorMilestones},
 	{"update needs", (*gopherbot).updateNeeds},
+
+	// Tasks that can be applied to many repos.
+	{"freeze old issues", (*gopherbot).freezeOldIssues},
+	{"label documentation issues", (*gopherbot).labelDocumentationIssues},
+	{"close stale WaitingForInfo", (*gopherbot).closeStaleWaitingForInfo},
+	{"apply labels from comments", (*gopherbot).applyLabelsFromComments},
+
+	// Gerrit tasks are applied to all projects by default.
+	{"abandon scratch reviews", (*gopherbot).abandonScratchReviews},
+	{"assign reviewers to CLs", (*gopherbot).assignReviewersToCLs},
+	{"access", (*gopherbot).whoNeedsAccess},
+	{"cl2issue", (*gopherbot).cl2issue},
 	{"congratulate new contributors", (*gopherbot).congratulateNewContributors},
 	{"un-wait CLs", (*gopherbot).unwaitCLs},
-	{"open cherry pick issues", (*gopherbot).openCherryPickIssues},
-	{"apply minor release milestones", (*gopherbot).setMinorMilestones},
-	{"close cherry pick issues", (*gopherbot).closeCherryPickIssues},
-	{"apply labels from comments", (*gopherbot).applyLabelsFromComments},
-	{"assign reviewers to CLs", (*gopherbot).assignReviewersToCLs},
-	{"abandon scratch reviews", (*gopherbot).abandonScratchReviews},
-	{"access", (*gopherbot).whoNeedsAccess},
+}
+
+// gardenIssues reports whether GopherBot should perform general issue
+// gardening tasks for the repo.
+func gardenIssues(repo *maintner.GitHubRepo) bool {
+	if repo.ID().Owner != "golang" {
+		return false
+	}
+	return repo.ID().Repo == "go" || repo.ID().Repo == "vscode-go"
 }
 
 func (b *gopherbot) initCorpus() {
@@ -358,18 +372,18 @@ type issuesService interface {
 	RemoveLabelForIssue(ctx context.Context, owner string, repo string, number int, label string) (*github.Response, error)
 }
 
-func (b *gopherbot) addLabel(ctx context.Context, gi *maintner.GitHubIssue, label string) error {
-	return b.addLabels(ctx, gi, []string{label})
+func (b *gopherbot) addLabel(ctx context.Context, repoID maintner.GitHubRepoID, gi *maintner.GitHubIssue, label string) error {
+	return b.addLabels(ctx, repoID, gi, []string{label})
 }
 
-func (b *gopherbot) addLabels(ctx context.Context, gi *maintner.GitHubIssue, labels []string) error {
+func (b *gopherbot) addLabels(ctx context.Context, repoID maintner.GitHubRepoID, gi *maintner.GitHubIssue, labels []string) error {
 	var toAdd []string
 	for _, label := range labels {
 		if gi.HasLabel(label) {
 			log.Printf("Issue %d already has label %q; no need to send request to add it", gi.Number, label)
 			continue
 		}
-		printIssue("label-"+label, gi)
+		printIssue("label-"+label, repoID, gi)
 		toAdd = append(toAdd, label)
 	}
 
@@ -377,23 +391,23 @@ func (b *gopherbot) addLabels(ctx context.Context, gi *maintner.GitHubIssue, lab
 		return nil
 	}
 
-	_, _, err := b.is.AddLabelsToIssue(ctx, "golang", "go", int(gi.Number), toAdd)
+	_, _, err := b.is.AddLabelsToIssue(ctx, repoID.Owner, repoID.Repo, int(gi.Number), toAdd)
 	return err
 }
 
-// removeLabel removes the label from the given issue in golang/go.
-func (b *gopherbot) removeLabel(ctx context.Context, gi *maintner.GitHubIssue, label string) error {
-	return b.removeLabels(ctx, gi, []string{label})
+// removeLabel removes the label from the given issue in the given repo.
+func (b *gopherbot) removeLabel(ctx context.Context, repoID maintner.GitHubRepoID, gi *maintner.GitHubIssue, label string) error {
+	return b.removeLabels(ctx, repoID, gi, []string{label})
 }
 
-func (b *gopherbot) removeLabels(ctx context.Context, gi *maintner.GitHubIssue, labels []string) error {
+func (b *gopherbot) removeLabels(ctx context.Context, repoID maintner.GitHubRepoID, gi *maintner.GitHubIssue, labels []string) error {
 	var removeLabels bool
 	for _, l := range labels {
 		if !gi.HasLabel(l) {
 			log.Printf("Issue %d (in maintner) does not have label %q; no need to send request to remove it", gi.Number, l)
 			continue
 		}
-		printIssue("label-"+l, gi)
+		printIssue("label-"+l, repoID, gi)
 		removeLabels = true
 	}
 
@@ -401,7 +415,7 @@ func (b *gopherbot) removeLabels(ctx context.Context, gi *maintner.GitHubIssue, 
 		return nil
 	}
 
-	ghLabels, err := labelsForIssue(ctx, b.is, int(gi.Number))
+	ghLabels, err := labelsForIssue(ctx, repoID, b.is, int(gi.Number))
 	if err != nil {
 		return err
 	}
@@ -412,7 +426,7 @@ func (b *gopherbot) removeLabels(ctx context.Context, gi *maintner.GitHubIssue, 
 
 	for _, l := range ghLabels {
 		if toRemove[l] {
-			if err := removeLabelFromIssue(ctx, b.is, int(gi.Number), l); err != nil {
+			if err := removeLabelFromIssue(ctx, repoID, b.is, int(gi.Number), l); err != nil {
 				log.Printf("Could not remove label %q from issue %d: %v", l, gi.Number, err)
 				continue
 			}
@@ -421,11 +435,11 @@ func (b *gopherbot) removeLabels(ctx context.Context, gi *maintner.GitHubIssue, 
 	return nil
 }
 
-// labelsForIssue returns all labels for the given issue in the golang/go repo.
-func labelsForIssue(ctx context.Context, issues issuesService, issueNum int) ([]string, error) {
-	ghLabels, _, err := issues.ListLabelsByIssue(ctx, "golang", "go", issueNum, &github.ListOptions{PerPage: 100})
+// labelsForIssue returns all labels for the given issue in the given repo.
+func labelsForIssue(ctx context.Context, repoID maintner.GitHubRepoID, issues issuesService, issueNum int) ([]string, error) {
+	ghLabels, _, err := issues.ListLabelsByIssue(ctx, repoID.Owner, repoID.Repo, issueNum, &github.ListOptions{PerPage: 100})
 	if err != nil {
-		return nil, fmt.Errorf("could not list labels for golang/go#%d: %v", issueNum, err)
+		return nil, fmt.Errorf("could not list labels for %s#%d: %v", repoID, issueNum, err)
 	}
 	var labels []string
 	for _, l := range ghLabels {
@@ -434,10 +448,11 @@ func labelsForIssue(ctx context.Context, issues issuesService, issueNum int) ([]
 	return labels, nil
 }
 
-// removeLabelForIssue removes the given label from golang/go with the given issueNum.
-// If the issue did not have the label already (or the label didn't exist), return nil.
-func removeLabelFromIssue(ctx context.Context, issues issuesService, issueNum int, label string) error {
-	_, err := issues.RemoveLabelForIssue(ctx, "golang", "go", issueNum, label)
+// removeLabelForIssue removes the given label from the given repo with the
+// given issueNum. If the issue did not have the label already (or the label
+// didn't exist), return nil.
+func removeLabelFromIssue(ctx context.Context, repoID maintner.GitHubRepoID, issues issuesService, issueNum int, label string) error {
+	_, err := issues.RemoveLabelForIssue(ctx, repoID.Owner, repoID.Repo, issueNum, label)
 	if ge, ok := err.(*github.ErrorResponse); ok && ge.Response != nil && ge.Response.StatusCode == http.StatusNotFound {
 		return nil
 	}
@@ -445,7 +460,7 @@ func removeLabelFromIssue(ctx context.Context, issues issuesService, issueNum in
 }
 
 func (b *gopherbot) setMilestone(ctx context.Context, gi *maintner.GitHubIssue, m milestone) error {
-	printIssue("milestone-"+m.Name, gi)
+	printIssue("milestone-"+m.Name, b.gorepo.ID(), gi)
 	if *dryRun {
 		return nil
 	}
@@ -455,13 +470,9 @@ func (b *gopherbot) setMilestone(ctx context.Context, gi *maintner.GitHubIssue, 
 	return err
 }
 
-func (b *gopherbot) addGitHubComment(ctx context.Context, org, repo string, issueNum int32, msg string) error {
-	gr := b.corpus.GitHub().Repo(org, repo)
-	if gr == nil {
-		return fmt.Errorf("unknown github repo %s/%s", org, repo)
-	}
+func (b *gopherbot) addGitHubComment(ctx context.Context, repo *maintner.GitHubRepo, issueNum int32, msg string) error {
 	var since time.Time
-	if gi := gr.Issue(issueNum); gi != nil {
+	if gi := repo.Issue(issueNum); gi != nil {
 		dup := false
 		gi.ForeachComment(func(c *maintner.GitHubComment) error {
 			since = c.Updated
@@ -480,7 +491,7 @@ func (b *gopherbot) addGitHubComment(ctx context.Context, org, repo string, issu
 	}
 	// See if there is a dup comment from when gopherbot last got
 	// its data from maintner.
-	ics, _, err := b.ghc.Issues.ListComments(ctx, org, repo, int(issueNum), &github.IssueListCommentsOptions{
+	ics, _, err := b.ghc.Issues.ListComments(ctx, repo.ID().Owner, repo.ID().Repo, int(issueNum), &github.IssueListCommentsOptions{
 		Since:       since,
 		ListOptions: github.ListOptions{PerPage: 1000},
 	})
@@ -494,10 +505,10 @@ func (b *gopherbot) addGitHubComment(ctx context.Context, org, repo string, issu
 		}
 	}
 	if *dryRun {
-		log.Printf("[dry-run] would add comment to github.com/%s/%s/issues/%d: %v", org, repo, issueNum, msg)
+		log.Printf("[dry-run] would add comment to github.com/%s/issues/%d: %v", repo.ID(), issueNum, msg)
 		return nil
 	}
-	_, _, err = b.ghc.Issues.CreateComment(ctx, org, repo, int(issueNum), &github.IssueComment{
+	_, _, err = b.ghc.Issues.CreateComment(ctx, repo.ID().Owner, repo.ID().Repo, int(issueNum), &github.IssueComment{
 		Body: github.String(msg),
 	})
 	return err
@@ -547,12 +558,12 @@ func (b *gopherbot) createGitHubIssue(ctx context.Context, title, msg string, la
 	return i.GetNumber(), err
 }
 
-func (b *gopherbot) closeGitHubIssue(ctx context.Context, number int32) error {
+func (b *gopherbot) closeGitHubIssue(ctx context.Context, repoID maintner.GitHubRepoID, number int32) error {
 	if *dryRun {
 		log.Printf("[dry-run] would close golang.org/issue/%v", number)
 		return nil
 	}
-	_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(number), &github.IssueRequest{State: github.String("closed")})
+	_, _, err := b.ghc.Issues.Edit(ctx, repoID.Owner, repoID.Repo, int(number), &github.IssueRequest{State: github.String("closed")})
 	return err
 }
 
@@ -727,26 +738,31 @@ func (b *gopherbot) unwaitRelease(ctx context.Context) error {
 // again for another year.
 func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 	tooOld := time.Now().Add(-365 * 24 * time.Hour)
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.NotExist || !gi.Closed || gi.PullRequest || gi.Locked {
+	return b.corpus.GitHub().ForeachRepo(func(repo *maintner.GitHubRepo) error {
+		if !gardenIssues(repo) {
 			return nil
 		}
-		if gi.Updated.After(tooOld) {
-			return nil
-		}
-		printIssue("freeze", gi)
-		if *dryRun {
-			return nil
-		}
-		_, err := b.ghc.Issues.Lock(ctx, "golang", "go", int(gi.Number), nil)
-		if ge, ok := err.(*github.ErrorResponse); ok && ge.Response.StatusCode == http.StatusNotFound {
-			// It's rare, but an issue can become 404 on GitHub. See golang.org/issue/30182.
-			// Nothing to do since the issue is gone.
-			return nil
-		} else if err != nil {
-			return err
-		}
-		return b.addLabel(ctx, gi, frozenDueToAge)
+		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+			if gi.NotExist || !gi.Closed || gi.PullRequest || gi.Locked {
+				return nil
+			}
+			if gi.Updated.After(tooOld) {
+				return nil
+			}
+			printIssue("freeze", repo.ID(), gi)
+			if *dryRun {
+				return nil
+			}
+			_, err := b.ghc.Issues.Lock(ctx, repo.ID().Owner, repo.ID().Repo, int(gi.Number), nil)
+			if ge, ok := err.(*github.ErrorResponse); ok && ge.Response.StatusCode == http.StatusNotFound {
+				// It's rare, but an issue can become 404 on GitHub. See golang.org/issue/30182.
+				// Nothing to do since the issue is gone.
+				return nil
+			} else if err != nil {
+				return err
+			}
+			return b.addLabel(ctx, repo.ID(), gi, frozenDueToAge)
+		})
 	})
 }
 
@@ -769,14 +785,14 @@ func (b *gopherbot) labelProposals(ctx context.Context) error {
 		}
 		// Add Proposal label if missing:
 		if !gi.HasLabel("Proposal") && !gi.HasEvent("unlabeled") {
-			if err := b.addLabel(ctx, gi, "Proposal"); err != nil {
+			if err := b.addLabel(ctx, b.gorepo.ID(), gi, "Proposal"); err != nil {
 				return err
 			}
 		}
 
 		// Remove NeedsDecision label if exists, but not for Go 2 issues:
 		if !isGo2Issue(gi) && gi.HasLabel("NeedsDecision") && !gopherbotRemovedLabel(gi, "NeedsDecision") {
-			if err := b.removeLabel(ctx, gi, "NeedsDecision"); err != nil {
+			if err := b.removeLabel(ctx, b.gorepo.ID(), gi, "NeedsDecision"); err != nil {
 				return err
 			}
 		}
@@ -877,7 +893,7 @@ func (b *gopherbot) labelBuildIssues(ctx context.Context) error {
 		if gi.Closed || gi.PullRequest || !strings.HasPrefix(gi.Title, "x/build") || gi.HasLabel("Builders") || gi.HasEvent("unlabeled") {
 			return nil
 		}
-		return b.addLabel(ctx, gi, "Builders")
+		return b.addLabel(ctx, b.gorepo.ID(), gi, "Builders")
 	})
 }
 
@@ -886,16 +902,21 @@ func (b *gopherbot) labelMobileIssues(ctx context.Context) error {
 		if gi.Closed || gi.PullRequest || !strings.HasPrefix(gi.Title, "x/mobile") || gi.HasLabel("mobile") || gi.HasEvent("unlabeled") {
 			return nil
 		}
-		return b.addLabel(ctx, gi, "mobile")
+		return b.addLabel(ctx, b.gorepo.ID(), gi, "mobile")
 	})
 }
 
 func (b *gopherbot) labelDocumentationIssues(ctx context.Context) error {
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || gi.PullRequest || !isDocumentationTitle(gi.Title) || gi.HasLabel("Documentation") || gi.HasEvent("unlabeled") {
+	return b.corpus.GitHub().ForeachRepo(func(repo *maintner.GitHubRepo) error {
+		if !gardenIssues(repo) {
 			return nil
 		}
-		return b.addLabel(ctx, gi, "Documentation")
+		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+			if gi.Closed || gi.PullRequest || !isDocumentationTitle(gi.Title) || gi.HasLabel("Documentation") || gi.HasEvent("unlabeled") {
+				return nil
+			}
+			return b.addLabel(ctx, repo.ID(), gi, "Documentation")
+		})
 	})
 }
 
@@ -904,7 +925,7 @@ func (b *gopherbot) labelToolsIssues(ctx context.Context) error {
 		if gi.Closed || gi.PullRequest || !strings.HasPrefix(gi.Title, "x/tools") || gi.HasLabel("Tools") || gi.HasEvent("unlabeled") {
 			return nil
 		}
-		return b.addLabel(ctx, gi, "Tools")
+		return b.addLabel(ctx, b.gorepo.ID(), gi, "Tools")
 	})
 }
 
@@ -913,7 +934,7 @@ func (b *gopherbot) labelGoDevIssues(ctx context.Context) error {
 		if gi.Closed || gi.PullRequest || !strings.HasPrefix(gi.Title, "go.dev:") || gi.HasLabel("go.dev") || gi.HasEvent("unlabeled") {
 			return nil
 		}
-		return b.addLabel(ctx, gi, "go.dev")
+		return b.addLabel(ctx, b.gorepo.ID(), gi, "go.dev")
 	})
 }
 
@@ -926,7 +947,7 @@ func (b *gopherbot) handleGoplsIssues(ctx context.Context) error {
 		if gi.Closed || gi.PullRequest || !isGoplsTitle(gi.Title) || gi.HasLabel("gopls") || gi.HasEvent("unlabeled") {
 			return nil
 		}
-		if err := b.addLabel(ctx, gi, "gopls"); err != nil {
+		if err := b.addLabel(ctx, b.gorepo.ID(), gi, "gopls"); err != nil {
 			return err
 		}
 		// Check if the person filing the issue is known through Gerrit.
@@ -937,64 +958,68 @@ func (b *gopherbot) handleGoplsIssues(ctx context.Context) error {
 		const comment = "Thank you for filing a gopls issue! Please take a look at the " +
 			"[Troubleshooting guide](https://github.com/golang/tools/blob/master/gopls/doc/troubleshooting.md#troubleshooting), " +
 			"and make sure that you have provided all of the relevant information here."
-		return b.addGitHubComment(ctx, "golang", "go", gi.Number, comment)
+		return b.addGitHubComment(ctx, b.gorepo, gi.Number, comment)
 	})
 }
 
 func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 	const waitingForInfo = "WaitingForInfo"
 	now := time.Now()
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || gi.PullRequest || !gi.HasLabel("WaitingForInfo") {
+	return b.corpus.GitHub().ForeachRepo(func(repo *maintner.GitHubRepo) error {
+		if !gardenIssues(repo) {
 			return nil
 		}
-		var waitStart time.Time
-		gi.ForeachEvent(func(e *maintner.GitHubIssueEvent) error {
-			if e.Type == "reopened" {
-				// Ignore any previous WaitingForInfo label if it's reopend.
-				waitStart = time.Time{}
+		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+			if gi.Closed || gi.PullRequest || !gi.HasLabel("WaitingForInfo") {
 				return nil
 			}
-			if e.Label == waitingForInfo {
-				switch e.Type {
-				case "unlabeled":
+			var waitStart time.Time
+			gi.ForeachEvent(func(e *maintner.GitHubIssueEvent) error {
+				if e.Type == "reopened" {
+					// Ignore any previous WaitingForInfo label if it's reopend.
 					waitStart = time.Time{}
-				case "labeled":
-					waitStart = e.Created
+					return nil
+				}
+				if e.Label == waitingForInfo {
+					switch e.Type {
+					case "unlabeled":
+						waitStart = time.Time{}
+					case "labeled":
+						waitStart = e.Created
+					}
+					return nil
 				}
 				return nil
+			})
+			if waitStart.IsZero() {
+				return nil
 			}
-			return nil
-		})
-		if waitStart.IsZero() {
-			return nil
-		}
 
-		deadline := waitStart.AddDate(0, 1, 0) // 1 month
-		if now.Before(deadline) {
-			return nil
-		}
-
-		var lastOPComment time.Time
-		gi.ForeachComment(func(c *maintner.GitHubComment) error {
-			if c.User.ID == gi.User.ID {
-				lastOPComment = c.Created
+			deadline := waitStart.AddDate(0, 1, 0) // 1 month
+			if now.Before(deadline) {
+				return nil
 			}
-			return nil
-		})
-		if lastOPComment.After(waitStart) {
-			return nil
-		}
 
-		printIssue("close-stale-waiting-for-info", gi)
-		// TODO: write a task that reopens issues if the OP speaks up.
-		if err := b.addGitHubComment(ctx, "golang", "go", gi.Number,
-			"Timed out in state WaitingForInfo. Closing.\n\n(I am just a bot, though. Please speak up if this is a mistake or you have the requested information.)"); err != nil {
-			return err
-		}
-		return b.closeGitHubIssue(ctx, gi.Number)
+			var lastOPComment time.Time
+			gi.ForeachComment(func(c *maintner.GitHubComment) error {
+				if c.User.ID == gi.User.ID {
+					lastOPComment = c.Created
+				}
+				return nil
+			})
+			if lastOPComment.After(waitStart) {
+				return nil
+			}
+
+			printIssue("close-stale-waiting-for-info", repo.ID(), gi)
+			// TODO: write a task that reopens issues if the OP speaks up.
+			if err := b.addGitHubComment(ctx, repo, gi.Number,
+				"Timed out in state WaitingForInfo. Closing.\n\n(I am just a bot, though. Please speak up if this is a mistake or you have the requested information.)"); err != nil {
+				return err
+			}
+			return b.closeGitHubIssue(ctx, repo.ID(), gi.Number)
+		})
 	})
-
 }
 
 // cl2issue writes "Change https://golang.org/cl/NNNN mentions this issue"
@@ -1014,7 +1039,7 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 				return nil
 			}
 			for _, ref := range cl.GitHubIssueRefs {
-				if id := ref.Repo.ID(); id.Owner != "golang" || id.Repo != "go" {
+				if !gardenIssues(ref.Repo) {
 					continue
 				}
 				gi := ref.Repo.Issue(ref.Number)
@@ -1031,9 +1056,9 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 					return nil
 				})
 				if !hasComment {
-					printIssue("cl2issue", gi)
+					printIssue("cl2issue", ref.Repo.ID(), gi)
 					msg := fmt.Sprintf("Change https://golang.org/cl/%d mentions this issue: `%s`", cl.Number, cl.Commit.Summary())
-					if err := b.addGitHubComment(ctx, "golang", "go", gi.Number, msg); err != nil {
+					if err := b.addGitHubComment(ctx, ref.Repo, gi.Number, msg); err != nil {
 						return err
 					}
 				}
@@ -1106,9 +1131,9 @@ func (b *gopherbot) updateNeeds(ctx context.Context) error {
 			if !strings.HasPrefix(key, "needs") || labels[key] == maxPos {
 				continue
 			}
-			printIssue("updateneeds", gi)
+			printIssue("updateneeds", b.gorepo.ID(), gi)
 			fmt.Printf("\t... removing label %q\n", lab.Name)
-			if err := b.removeLabel(ctx, gi, lab.Name); err != nil {
+			if err := b.removeLabel(ctx, b.gorepo.ID(), gi, lab.Name); err != nil {
 				return err
 			}
 		}
@@ -1357,7 +1382,7 @@ func (b *gopherbot) getMajorReleases(ctx context.Context) ([]string, error) {
 func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
 		if gi.HasLabel("CherryPickApproved") && gi.HasLabel("CherryPickCandidate") {
-			if err := b.removeLabel(ctx, gi, "CherryPickCandidate"); err != nil {
+			if err := b.removeLabel(ctx, b.gorepo.ID(), gi, "CherryPickCandidate"); err != nil {
 				return err
 			}
 		}
@@ -1400,7 +1425,7 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 		}
 		var openedIssues []string
 		for _, rel := range selectedReleases {
-			printIssue("open-backport-issue-"+rel, gi)
+			printIssue("open-backport-issue-"+rel, b.gorepo.ID(), gi)
 			id, err := b.createGitHubIssue(ctx,
 				fmt.Sprintf("%s [%s backport]", gi.Title, rel),
 				fmt.Sprintf("@%s requested issue #%d to be considered for backport to the next %s minor release.\n\n%s\n",
@@ -1411,7 +1436,7 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 			}
 			openedIssues = append(openedIssues, fmt.Sprintf("#%d (for %s)", id, rel))
 		}
-		return b.addGitHubComment(ctx, "golang", "go", gi.Number, fmt.Sprintf("Backport issue(s) opened: %s.\n\nRemember to create the cherry-pick CL(s) as soon as the patch is submitted to master, according to https://golang.org/wiki/MinorReleases.", strings.Join(openedIssues, ", ")))
+		return b.addGitHubComment(ctx, b.gorepo, gi.Number, fmt.Sprintf("Backport issue(s) opened: %s.\n\nRemember to create the cherry-pick CL(s) as soon as the patch is submitted to master, according to https://golang.org/wiki/MinorReleases.", strings.Join(openedIssues, ", ")))
 	})
 }
 
@@ -1509,7 +1534,7 @@ func (b *gopherbot) closeCherryPickIssues(ctx context.Context) error {
 			}
 			clBranchVersion := cl.Branch()[len("release-branch."):] // "go1.11" or "go1.12".
 			for _, ref := range cl.GitHubIssueRefs {
-				if id := ref.Repo.ID(); id.Owner != "golang" || id.Repo != "go" {
+				if ref.Repo != b.gorepo {
 					continue
 				}
 				gi, ok := cherryPickIssues[ref.Number]
@@ -1521,12 +1546,12 @@ func (b *gopherbot) closeCherryPickIssues(ctx context.Context) error {
 					// doesn't match the CL branch goX.Y version, so skip it.
 					continue
 				}
-				printIssue("close-cherry-pick", gi)
-				if err := b.addGitHubComment(ctx, "golang", "go", gi.Number, fmt.Sprintf(
+				printIssue("close-cherry-pick", b.gorepo.ID(), gi)
+				if err := b.addGitHubComment(ctx, ref.Repo, gi.Number, fmt.Sprintf(
 					"Closed by merging %s to %s.", cl.Commit.Hash, cl.Branch())); err != nil {
 					return err
 				}
-				return b.closeGitHubIssue(ctx, gi.Number)
+				return b.closeGitHubIssue(ctx, ref.Repo.ID(), gi.Number)
 			}
 			return nil
 		})
@@ -1543,57 +1568,63 @@ type labelCommand struct {
 // applyLabelsFromComments looks within open GitHub issues for commands to add or
 // remove labels. Anyone can use the /label <label> or /unlabel <label> commands.
 func (b *gopherbot) applyLabelsFromComments(ctx context.Context) error {
-	allLabels := make(map[string]string) // lowercase label name -> proper casing
-	b.gorepo.ForeachLabel(func(gl *maintner.GitHubLabel) error {
-		allLabels[strings.ToLower(gl.Name)] = gl.Name
-		return nil
-	})
-
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed {
+	return b.corpus.GitHub().ForeachRepo(func(repo *maintner.GitHubRepo) error {
+		if !gardenIssues(repo) {
 			return nil
 		}
 
-		var cmds []labelCommand
-
-		cmds = append(cmds, labelCommandsFromBody(gi.Body, gi.Created)...)
-		gi.ForeachComment(func(gc *maintner.GitHubComment) error {
-			cmds = append(cmds, labelCommandsFromBody(gc.Body, gc.Created)...)
+		allLabels := make(map[string]string) // lowercase label name -> proper casing
+		repo.ForeachLabel(func(gl *maintner.GitHubLabel) error {
+			allLabels[strings.ToLower(gl.Name)] = gl.Name
 			return nil
 		})
 
-		for i, c := range cmds {
-			// Does the label even exist? If so, use the proper capitalization.
-			// If it doesn't exist, the command is a no-op.
-			if l, ok := allLabels[c.label]; ok {
-				cmds[i].label = l
-			} else {
-				cmds[i].noop = true
-				continue
+		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+			if gi.Closed {
+				return nil
 			}
 
-			// If any action has been taken on the label since the comment containing
-			// the command to add or remove it, then it should be a no-op.
-			gi.ForeachEvent(func(ge *maintner.GitHubIssueEvent) error {
-				if (ge.Type == "unlabeled" || ge.Type == "labeled") &&
-					strings.ToLower(ge.Label) == c.label &&
-					ge.Created.After(c.created) {
-					cmds[i].noop = true
-					return errStopIteration
-				}
+			var cmds []labelCommand
+
+			cmds = append(cmds, labelCommandsFromBody(gi.Body, gi.Created)...)
+			gi.ForeachComment(func(gc *maintner.GitHubComment) error {
+				cmds = append(cmds, labelCommandsFromBody(gc.Body, gc.Created)...)
 				return nil
 			})
-		}
 
-		toAdd, toRemove := mutationsFromCommands(cmds)
-		if err := b.addLabels(ctx, gi, toAdd); err != nil {
-			log.Printf("Unable to add labels (%v) to issue %d: %v", toAdd, gi.Number, err)
-		}
-		if err := b.removeLabels(ctx, gi, toRemove); err != nil {
-			log.Printf("Unable to remove labels (%v) from issue %d: %v", toRemove, gi.Number, err)
-		}
+			for i, c := range cmds {
+				// Does the label even exist? If so, use the proper capitalization.
+				// If it doesn't exist, the command is a no-op.
+				if l, ok := allLabels[c.label]; ok {
+					cmds[i].label = l
+				} else {
+					cmds[i].noop = true
+					continue
+				}
 
-		return nil
+				// If any action has been taken on the label since the comment containing
+				// the command to add or remove it, then it should be a no-op.
+				gi.ForeachEvent(func(ge *maintner.GitHubIssueEvent) error {
+					if (ge.Type == "unlabeled" || ge.Type == "labeled") &&
+						strings.ToLower(ge.Label) == c.label &&
+						ge.Created.After(c.created) {
+						cmds[i].noop = true
+						return errStopIteration
+					}
+					return nil
+				})
+			}
+
+			toAdd, toRemove := mutationsFromCommands(cmds)
+			if err := b.addLabels(ctx, repo.ID(), gi, toAdd); err != nil {
+				log.Printf("Unable to add labels (%v) to issue %d: %v", toAdd, gi.Number, err)
+			}
+			if err := b.removeLabels(ctx, repo.ID(), gi, toRemove); err != nil {
+				log.Printf("Unable to remove labels (%v) from issue %d: %v", toRemove, gi.Number, err)
+			}
+
+			return nil
+		})
 	})
 }
 
@@ -2119,7 +2150,7 @@ func isGoplsTitle(t string) bool {
 
 var lastTask string
 
-func printIssue(task string, gi *maintner.GitHubIssue) {
+func printIssue(task string, repoID maintner.GitHubRepoID, gi *maintner.GitHubIssue) {
 	if *dryRun {
 		task = task + " [dry-run]"
 	}
@@ -2127,7 +2158,11 @@ func printIssue(task string, gi *maintner.GitHubIssue) {
 		fmt.Println(task)
 		lastTask = task
 	}
-	fmt.Printf("\thttps://golang.org/issue/%v  %s\n", gi.Number, gi.Title)
+	if repoID.Owner != "golang" || repoID.Repo != "go" {
+		fmt.Printf("\thttps://github.com/%s/issues/%v  %s\n", repoID, gi.Number, gi.Title)
+	} else {
+		fmt.Printf("\thttps://golang.org/issue/%v  %s\n", gi.Number, gi.Title)
+	}
 }
 
 func mustCreateSecretClient() *secret.Client {
