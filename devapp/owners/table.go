@@ -855,6 +855,10 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{},
 	},
 
+	"vscode-go": {
+		Primary: []Owner{hyangah, rstambler},
+	},
+
 	"website": {
 		Primary:   []Owner{dmitshur},
 		Secondary: []Owner{cnoellekb, andybons},
