@@ -78,14 +78,14 @@ func main() {
 	switch osArch {
 	case "linux/arm":
 		switch env := os.Getenv("GO_BUILDER_ENV"); env {
-		case "linux-arm-arm5spacemonkey", "host-linux-arm-scaleway":
+		case "linux-arm-arm5spacemonkey", "host-linux-arm-scaleway", "host-linux-arm-aws":
 			// No setup currently.
 		default:
 			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
 		}
 	case "linux/arm64":
 		switch env := os.Getenv("GO_BUILDER_ENV"); env {
-		case "host-linux-arm64-packet":
+		case "host-linux-arm64-packet", "host-linux-arm64-aws":
 			// No special setup.
 		default:
 			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
@@ -152,6 +152,8 @@ Download:
 	case "linux-arm-arm5spacemonkey":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-arm5spacemonkey")...)
 		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
+	case "host-linux-arm-aws":
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
 	case "host-linux-arm-scaleway":
 		scalewayArgs := append(
 			reverseHostTypeArgs(buildEnv),
@@ -160,6 +162,8 @@ Download:
 		cmd.Args = append(cmd.Args,
 			scalewayArgs...,
 		)
+	case "host-linux-arm64-aws":
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
 	case "host-linux-mipsle-mengzhuo":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
@@ -194,6 +198,8 @@ Download:
 				"--reboot=false",
 				"--coordinator=farmer.golang.org:443",
 			)
+		case "host-linux-arm64-aws":
+			// no special configuration
 		default:
 			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
 		}
