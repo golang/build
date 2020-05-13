@@ -41,6 +41,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/pargzip"
 )
@@ -84,12 +86,13 @@ func defaultListenAddr() string {
 		// root).
 		return ":5936"
 	}
-	if !metadata.OnGCE() {
+	// check if if env is dev
+	if !metadata.OnGCE() && !onEC2() {
 		return "localhost:5936"
 	}
 	// In production, default to port 80 or 443, depending on
 	// whether TLS is configured.
-	if metadataValue("tls-cert") != "" {
+	if metadataValue(metaKeyTLSCert) != "" {
 		return ":443"
 	}
 	return ":80"
@@ -107,6 +110,12 @@ var (
 var (
 	processTmpDirEnv  string
 	processGoCacheEnv string
+)
+
+const (
+	metaKeyPassword = "password"
+	metaKeyTLSCert  = "tls-cert"
+	metaKeyTLSkey   = "tls-key"
 )
 
 func main() {
@@ -164,7 +173,7 @@ func main() {
 		*listenAddr = v
 	}
 
-	if !onGCE && !isReverse && !strings.HasPrefix(*listenAddr, "localhost:") {
+	if !onGCE && !isReverse && !onEC2() && !strings.HasPrefix(*listenAddr, "localhost:") {
 		log.Printf("** WARNING ***  This server is unsafe and offers no security. Be careful.")
 	}
 	if onGCE {
@@ -215,7 +224,7 @@ func main() {
 
 	var password string
 	if !isReverse {
-		password = metadataValue("password")
+		password = metadataValue(metaKeyPassword)
 	}
 	requireAuth := func(handler func(w http.ResponseWriter, r *http.Request)) http.Handler {
 		return requirePasswordHandler{http.HandlerFunc(handler), password}
@@ -254,7 +263,7 @@ func initGorootBootstrap() {
 }
 
 func listenForCoordinator() {
-	tlsCert, tlsKey := metadataValue("tls-cert"), metadataValue("tls-key")
+	tlsCert, tlsKey := metadataValue(metaKeyTLSCert), metadataValue(metaKeyTLSkey)
 	if (tlsCert == "") != (tlsKey == "") {
 		log.Fatalf("tls-cert and tls-key must both be supplied, or neither.")
 	}
@@ -310,10 +319,48 @@ var registerSignal func(chan<- os.Signal)
 
 var inKube = os.Getenv("KUBERNETES_SERVICE_HOST") != ""
 
+var (
+	// ec2UD contains a copy of the EC2 vm user data retrieved from the metadata.
+	ec2UD *buildlet.EC2UserData
+	// ec2MdC is an EC2 metadata client.
+	ec2MdC *ec2metadata.EC2Metadata
+)
+
+// onEC2 evaluates if the buildlet is running on an EC2 instance.
+func onEC2() bool {
+	if ec2MdC != nil {
+		return ec2MdC.Available()
+	}
+	ses, err := session.NewSession()
+	if err != nil {
+		log.Printf("unable to create aws session: %s", err)
+		return false
+	}
+	ec2MdC = ec2metadata.New(ses)
+	return ec2MdC.Available()
+}
+
+// mdValueFromUserData maps a metadata key value into the corresponding
+// EC2UserData value. If a mapping is not found, an empty string is returned.
+func mdValueFromUserData(ud *buildlet.EC2UserData, key string) string {
+	switch key {
+	case metaKeyTLSCert:
+		return ud.TLSCert
+	case metaKeyTLSkey:
+		return ud.TLSKey
+	case metaKeyPassword:
+		return ud.TLSPassword
+	default:
+		return ""
+	}
+}
+
 // metadataValue returns the GCE metadata instance value for the given key.
+// If the instance is on EC2 the corresponding value will be extracted from
+// the user data available via the metadata.
 // If the metadata is not defined, the returned string is empty.
 //
-// If not running on GCE, it falls back to using environment variables
+// If not running on GCE or EC2, it falls back to using environment variables
 // for local development.
 func metadataValue(key string) string {
 	// The common case (on GCE, but not in Kubernetes):
@@ -326,6 +373,24 @@ func metadataValue(key string) string {
 			log.Fatalf("metadata.InstanceAttributeValue(%q): %v", key, err)
 		}
 		return v
+	}
+
+	if onEC2() {
+		if ec2UD != nil {
+			return mdValueFromUserData(ec2UD, key)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		ec2MetaJson, err := ec2MdC.GetUserDataWithContext(ctx)
+		if err != nil {
+			log.Fatalf("unable to retrieve EC2 user data: %v", err)
+		}
+		ec2UD = &buildlet.EC2UserData{}
+		err = json.Unmarshal([]byte(ec2MetaJson), ec2UD)
+		if err != nil {
+			log.Fatalf("unable to unmarshal user data json: %v", err)
+		}
+		return mdValueFromUserData(ec2UD, key)
 	}
 
 	// Else allow use of environment variables to fake
