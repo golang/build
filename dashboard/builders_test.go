@@ -849,3 +849,24 @@ func TestExpectedMacstadiumVMCount(t *testing.T) {
 		t.Fatalf("macstadium host count: got %d; want 20", got)
 	}
 }
+
+// Test that we have a longtest builder and
+// that its environment configuration is okay.
+func TestLongTestBuilder(t *testing.T) {
+	long, ok := Builders["linux-amd64-longtest"]
+	if !ok {
+		t.Fatal("we don't have a linux-amd64-longtest builder anymore, is that intentional?")
+	}
+	if !long.IsLongTest() {
+		t.Error("the linux-amd64-longtest builder isn't a longtest builder, is that intentional?")
+	}
+	var shortDisabled bool
+	for _, e := range long.Env() {
+		if e == "GO_TEST_SHORT=0" {
+			shortDisabled = true
+		}
+	}
+	if !shortDisabled {
+		t.Error("the linux-amd64-longtest builder doesn't set GO_TEST_SHORT=0, is that intentional?")
+	}
+}

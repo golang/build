@@ -888,6 +888,11 @@ func (c *BuildConfig) Env() []string {
 	if c.FlakyNet {
 		env = append(env, "GO_BUILDER_FLAKY_NET=1")
 	}
+	if c.IsLongTest() {
+		// Set a private hook in cmd/dist to run main Go repository tests
+		// without the default -short flag. See golang.org/issue/12508.
+		env = append(env, "GO_TEST_SHORT=0")
+	}
 	env = append(env, c.HostConfig().env...)
 	return append(env, c.env...)
 }
@@ -1038,6 +1043,11 @@ func (c *BuildConfig) IsRace() bool {
 	return strings.HasSuffix(c.Name, "-race")
 }
 
+// IsLongTest reports whether this is a longtest builder.
+// A longtest builder runs tests without the -short flag.
+//
+// A builder is considered to be a longtest builder
+// if and only if its name ends with "-longtest".
 func (c *BuildConfig) IsLongTest() bool {
 	return strings.HasSuffix(c.Name, "-longtest")
 }
@@ -1754,7 +1764,6 @@ func init() {
 		},
 		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
-			"GO_TEST_SHORT=0",
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
 	})
@@ -1770,7 +1779,6 @@ func init() {
 		},
 		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
-			"GO_TEST_SHORT=0",
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
 	})
@@ -2072,7 +2080,6 @@ func init() {
 		},
 		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
-			"GO_TEST_SHORT=0",
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
 	})
