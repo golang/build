@@ -83,7 +83,7 @@ var slowBotAliases = map[string]string{
 	"openbsd":        "openbsd-amd64-64",
 	"openbsd-386":    "openbsd-386-64",
 	"openbsd-amd64":  "openbsd-amd64-64",
-	"plan9":          "plan9-386-0intro",
+	"plan9":          "plan9-arm",
 	"plan9-386":      "plan9-386-0intro",
 	"plan9-amd64":    "plan9-amd64-9front",
 	"ppc64":          "linux-ppc64-buildlet",
