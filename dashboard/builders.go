@@ -552,9 +552,10 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:     "root",
 	},
 	"host-linux-arm64-aws": &HostConfig{
-		Notes:           "Debian Buster, EC2 arm64 instance. See x/build/env/linux-arm64/arm",
+		Notes:           "Debian Buster, EC2 arm64 instance. See x/build/env/linux-arm64/aws",
 		VMImage:         "ami-0454a5239a73a9e81",
 		machineType:     "a1.xlarge",
+		isEC2:           true,
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		SSHUsername:     "admin",
@@ -712,6 +713,9 @@ type HostConfig struct {
 	machineType    string // optional GCE instance type
 	RegularDisk    bool   // if true, use spinning disk instead of SSD
 	MinCPUPlatform string // optional; https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform
+
+	// EC2 options
+	isEC2 bool // if true, the instance is configured to run on EC2
 
 	// ReverseOptions:
 	ExpectNum       int  // expected number of reverse buildlets of this type
@@ -1296,6 +1300,11 @@ func (c *HostConfig) MachineType() string {
 	return "n1-highcpu-2"
 }
 
+// IsEC2 returns true if the machine type is an EC2 arm64 type.
+func (c *HostConfig) IsEC2() bool {
+	return c.isEC2
+}
+
 // ShortOwner returns a short human-readable owner.
 func (c BuildConfig) ShortOwner() string {
 	owner := c.HostConfig().Owner
@@ -1316,6 +1325,8 @@ func (c *HostConfig) PoolName() string {
 	switch {
 	case c.IsReverse:
 		return "Reverse (dedicated machine/VM)"
+	case c.IsEC2():
+		return "EC2 VM"
 	case c.IsVM():
 		return "GCE VM"
 	case c.IsContainer():
@@ -1349,6 +1360,8 @@ func (c *HostConfig) IsHermetic() bool {
 	switch {
 	case c.IsReverse:
 		return c.HermeticReverse
+	case c.IsEC2():
+		return true
 	case c.IsVM():
 		return true
 	case c.IsContainer():
