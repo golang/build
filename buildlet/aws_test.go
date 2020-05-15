@@ -432,33 +432,40 @@ func TestEC2BuildletParams(t *testing.T) {
 
 func TestConfigureVM(t *testing.T) {
 	testCases := []struct {
-		desc             string
-		buildEnv         *buildenv.Environment
-		hconf            *dashboard.HostConfig
-		hostType         string
-		opts             *VMOpts
-		vmName           string
-		wantDesc         string
-		wantImageID      string
-		wantInstanceType string
-		wantName         string
-		wantZone         string
+		desc              string
+		buildEnv          *buildenv.Environment
+		hconf             *dashboard.HostConfig
+		hostType          string
+		opts              *VMOpts
+		vmName            string
+		wantDesc          string
+		wantImageID       string
+		wantInstanceType  string
+		wantName          string
+		wantZone          string
+		wantBuildletName  string
+		wantBuildletImage string
 	}{
 		{
-			desc:             "default-values",
-			buildEnv:         &buildenv.Environment{},
-			hconf:            &dashboard.HostConfig{},
-			vmName:           "base_vm",
-			hostType:         "host-foo-bar",
-			opts:             &VMOpts{},
-			wantInstanceType: "n1-highcpu-2",
-			wantName:         "base_vm",
+			desc:     "default-values",
+			buildEnv: &buildenv.Environment{},
+			hconf: &dashboard.HostConfig{
+				KonletVMImage: "gcr.io/symbolic-datum-552/gobuilder-arm64-aws",
+			},
+			vmName:            "base_vm",
+			hostType:          "host-foo-bar",
+			opts:              &VMOpts{},
+			wantInstanceType:  "n1-highcpu-2",
+			wantName:          "base_vm",
+			wantBuildletName:  "base_vm",
+			wantBuildletImage: "gcr.io/symbolic-datum-552/gobuilder-arm64-aws",
 		},
 		{
 			desc:     "full-configuration",
 			buildEnv: &buildenv.Environment{},
 			hconf: &dashboard.HostConfig{
-				VMImage: "awesome_image",
+				VMImage:       "awesome_image",
+				KonletVMImage: "gcr.io/symbolic-datum-552/gobuilder-arm64-aws",
 			},
 			vmName:   "base-vm",
 			hostType: "host-foo-bar",
@@ -473,11 +480,13 @@ func TestConfigureVM(t *testing.T) {
 					"sample": "value",
 				},
 			},
-			wantDesc:         "test description",
-			wantImageID:      "awesome_image",
-			wantInstanceType: "n1-highcpu-2",
-			wantName:         "base-vm",
-			wantZone:         "sa-west",
+			wantDesc:          "test description",
+			wantImageID:       "awesome_image",
+			wantInstanceType:  "n1-highcpu-2",
+			wantName:          "base-vm",
+			wantZone:          "sa-west",
+			wantBuildletName:  "base-vm",
+			wantBuildletImage: "gcr.io/symbolic-datum-552/gobuilder-arm64-aws",
 		},
 	}
 	for _, tc := range testCases {
@@ -533,6 +542,13 @@ func TestConfigureVM(t *testing.T) {
 			if gotUD.BuildletHostType != tc.hostType {
 				t.Errorf("buildletHostType got %s; want %s", gotUD.BuildletHostType, tc.hostType)
 			}
+			if gotUD.BuildletName != tc.wantBuildletName {
+				t.Errorf("buildletName got %s; want %s", gotUD.BuildletName, tc.wantBuildletName)
+			}
+			if gotUD.BuildletImageURL != tc.wantBuildletImage {
+				t.Errorf("buildletImageURL got %s; want %s", gotUD.BuildletImageURL, tc.wantBuildletImage)
+			}
+
 			if gotUD.TLSCert != tc.opts.TLS.CertPEM {
 				t.Errorf("TLSCert got %s; want %s", gotUD.TLSCert, tc.opts.TLS.CertPEM)
 			}

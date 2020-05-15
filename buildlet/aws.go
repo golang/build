@@ -29,6 +29,8 @@ import (
 type EC2UserData struct {
 	BuildletBinaryURL string            `json:"buildlet_binary_url,omitempty"`
 	BuildletHostType  string            `json:"buildlet_host_type,omitempty"`
+	BuildletImageURL  string            `json:"buildlet_image_url,omitempty"`
+	BuildletName      string            `json:"buildlet_name,omitempty"`
 	Metadata          map[string]string `json:"metadata,omitempty"`
 	TLSCert           string            `json:"tls_cert,omitempty"`
 	TLSKey            string            `json:"tls_key,omitempty"`
@@ -184,12 +186,14 @@ func (c *AWSClient) configureVM(buildEnv *buildenv.Environment, hconf *dashboard
 func (c *AWSClient) vmUserDataSpec(vmConfig *ec2.RunInstancesInput, buildEnv *buildenv.Environment, hconf *dashboard.HostConfig, vmName, hostType string, opts *VMOpts) {
 	// add custom metadata to the user data.
 	ud := EC2UserData{
+		BuildletName:      vmName,
 		BuildletBinaryURL: hconf.BuildletBinaryURL(buildEnv),
 		BuildletHostType:  hostType,
+		BuildletImageURL:  hconf.ContainerVMImage(),
+		Metadata:          make(map[string]string),
 		TLSCert:           opts.TLS.CertPEM,
 		TLSKey:            opts.TLS.KeyPEM,
 		TLSPassword:       opts.TLS.Password(),
-		Metadata:          make(map[string]string),
 	}
 	for k, v := range opts.Meta {
 		ud.Metadata[k] = v

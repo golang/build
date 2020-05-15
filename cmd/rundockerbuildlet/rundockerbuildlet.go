@@ -10,6 +10,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -23,7 +24,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"golang.org/x/build/buildenv"
+	"golang.org/x/build/buildlet"
 )
 
 var (
@@ -40,6 +44,12 @@ var (
 var (
 	buildKey     []byte
 	scalewayMeta = new(scalewayMetadata)
+	isReverse    = true
+	isSingleRun  = false
+	// ec2UD contains a copy of the EC2 vm user data retrieved from the metadata.
+	ec2UD *buildlet.EC2UserData
+	// ec2MetaClient is an EC2 metadata client.
+	ec2MetaClient *ec2metadata.EC2Metadata
 )
 
 func main() {
@@ -52,9 +62,19 @@ func main() {
 		*numInst = 1
 		*basename = "scaleway"
 		initScalewayMeta()
+	} else if onEC2() {
+		initEC2Meta()
+		*memory = ""
+		*image = ec2UD.BuildletImageURL
+		*pull = true
+		*numInst = 1
+		isReverse = false
+		isSingleRun = true
 	}
 
-	buildKey = getBuildKey()
+	if isReverse {
+		buildKey = getBuildKey()
+	}
 
 	if *image == "" {
 		log.Fatalf("docker --image is required")
@@ -65,8 +85,33 @@ func main() {
 		if err := checkFix(); err != nil {
 			log.Print(err)
 		}
+		if isSingleRun {
+			log.Printf("Configured to run a single instance. Exiting")
+			os.Exit(0)
+		}
 		time.Sleep(time.Second) // TODO: docker wait on the running containers?
 	}
+}
+
+func ec2MdClient() *ec2metadata.EC2Metadata {
+	if ec2MetaClient != nil {
+		return ec2MetaClient
+	}
+	ses, err := session.NewSession()
+	if err != nil {
+		return nil
+	}
+	ec2MetaClient = ec2metadata.New(ses)
+	return ec2MetaClient
+}
+
+func onEC2() bool {
+	if ec2MdClient() == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return ec2MdClient().AvailableWithContext(ctx)
 }
 
 func onScaleway() bool {
@@ -136,6 +181,8 @@ func checkFix() error {
 			// c1 instance hostname for debugability.
 			// There should only be one running container per c1 instance.
 			name = scalewayMeta.Hostname
+		} else if onEC2() {
+			name = ec2UD.BuildletName
 		} else {
 			name = fmt.Sprintf("%s%02d", *basename, num)
 		}
@@ -185,12 +232,16 @@ func checkFix() error {
 		cmd := exec.Command("docker", "run",
 			"-d",
 			"--name="+name,
-			"-v", filepath.Dir(keyFile)+":/buildkey/",
 			"-e", "HOSTNAME="+name,
 			"--security-opt=seccomp=unconfined", // Issue 35547
 			"--tmpfs=/workdir:rw,exec")
 		if *memory != "" {
 			cmd.Args = append(cmd.Args, "--memory="+*memory)
+		}
+		if isReverse {
+			cmd.Args = append(cmd.Args, "-v", filepath.Dir(keyFile)+":/buildkey/")
+		} else {
+			cmd.Args = append(cmd.Args, "-p", "443:443")
 		}
 		if *cpu > 0 {
 			cmd.Args = append(cmd.Args, fmt.Sprintf("--cpuset-cpus=%d-%d", *cpu*(num-1), *cpu*num-1))
@@ -232,6 +283,29 @@ func (m *scalewayMetadata) HasTag(t string) bool {
 		}
 	}
 	return false
+}
+
+func initEC2Meta() {
+	if !onEC2() {
+		log.Fatal("attempt to initialize metadata on non-EC2 instance")
+	}
+	if ec2UD != nil {
+		return
+	}
+	if ec2MdClient() == nil {
+		log.Fatalf("unable to retrieve EC2 metadata client")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ec2MetaJson, err := ec2MdClient().GetUserDataWithContext(ctx)
+	if err != nil {
+		log.Fatalf("unable to retrieve EC2 user data: %v", err)
+	}
+	ec2UD = &buildlet.EC2UserData{}
+	err = json.Unmarshal([]byte(ec2MetaJson), ec2UD)
+	if err != nil {
+		log.Fatalf("unable to unmarshal user data json: %v", err)
+	}
 }
 
 func initScalewayMeta() {
