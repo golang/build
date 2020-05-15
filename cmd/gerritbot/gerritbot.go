@@ -334,16 +334,23 @@ func (b *bot) checkPullRequests() {
 			return nil
 		}
 		return ghr.ForeachIssue(func(issue *maintner.GitHubIssue) error {
+			ctx := context.Background()
 			if issue.PullRequest && issue.Closed {
 				// Clean up any reference of closed CLs within pendingCLs.
 				shortLink := githubShortLink(id.Owner, id.Repo, int(issue.Number))
 				delete(b.pendingCLs, shortLink)
+				if cl, ok := b.importedPRs[shortLink]; ok {
+					// The CL associated with the PR is still open since it's
+					// present in importedPRs, so abandon it.
+					if err := b.abandonCL(ctx, cl, shortLink); err != nil {
+						log.Printf("abandonCL(ctx, https://golang.org/cl/%v, %q): %v", cl.Number, shortLink, err)
+					}
+				}
 				return nil
 			}
 			if issue.Closed || !issue.PullRequest || !issue.HasLabel("cla: yes") {
 				return nil
 			}
-			ctx := context.Background()
 			pr, err := b.getFullPR(ctx, id.Owner, id.Repo, int(issue.Number))
 			if err != nil {
 				log.Printf("getFullPR(ctx, %q, %q, %d): %v", id.Owner, id.Repo, issue.Number, err)
@@ -437,7 +444,7 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 // gerritMessageAuthorID returns the Gerrit Account ID of the author of m.
 func gerritMessageAuthorID(m *maintner.GerritMessage) (int, error) {
 	email := m.Author.Email()
-	if strings.Index(email, "@") == -1 {
+	if !strings.Contains(email, "@") {
 		return -1, fmt.Errorf("message author email %q does not contain '@' character", email)
 	}
 	i, err := strconv.Atoi(strings.Split(email, "@")[0])
@@ -563,6 +570,18 @@ func (b *bot) closePR(ctx context.Context, pr *github.PullRequest, ch *gerrit.Ch
 	}
 	logGitHubRateLimits(resp)
 	return nil
+}
+
+func (b *bot) abandonCL(ctx context.Context, cl *maintner.GerritCL, shortLink string) error {
+	if *dryRun {
+		log.Printf("[dry run] would abandon https://golang.org/cl/%v", cl.Number)
+		return nil
+	}
+	// Due to issues like https://golang.org/issue/28226, Gerrit may take time
+	// to catch up on the fact that a CL has been abandoned. We may have to
+	// make sure that we do not attempt to abandon the same CL multiple times.
+	msg := fmt.Sprintf("GitHub PR %s has been closed.", shortLink)
+	return b.gerritClient.AbandonChange(ctx, cl.ChangeID(), msg)
 }
 
 // getAbandonReason returns the last abandon reason in ch,
@@ -830,7 +849,7 @@ func logGitHubRateLimits(resp *github.Response) {
 	if resp == nil {
 		return
 	}
-	log.Printf("GitHub: %d/%d calls remaining; Reset in %v", resp.Rate.Remaining, resp.Rate.Limit, resp.Rate.Reset.Sub(time.Now()))
+	log.Printf("GitHub: %d/%d calls remaining; Reset in %v", resp.Rate.Remaining, resp.Rate.Limit, time.Until(resp.Rate.Reset.Time))
 }
 
 // postGitHubMessageNoDup ensures that the message being posted on an issue does not already have the
