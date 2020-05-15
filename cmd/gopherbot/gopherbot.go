@@ -1546,7 +1546,7 @@ func (b *gopherbot) closeCherryPickIssues(ctx context.Context) error {
 					// doesn't match the CL branch goX.Y version, so skip it.
 					continue
 				}
-				printIssue("close-cherry-pick", b.gorepo.ID(), gi)
+				printIssue("close-cherry-pick", ref.Repo.ID(), gi)
 				if err := b.addGitHubComment(ctx, ref.Repo, gi.Number, fmt.Sprintf(
 					"Closed by merging %s to %s.", cl.Commit.Hash, cl.Branch())); err != nil {
 					return err
