@@ -1779,6 +1779,8 @@ func init() {
 		},
 		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
+			"GOARCH=386",
+			"GOHOSTARCH=386",
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
 	})
