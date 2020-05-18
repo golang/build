@@ -44,7 +44,7 @@ var (
 	tarball   = flag.String("tarball", "", "Go tree tarball to build, alternative to -rev")
 	version   = flag.String("version", "", "Version string (go1.5.2)")
 	user      = flag.String("user", username(), "coordinator username, appended to 'user-'")
-	skipTests = flag.Bool("skip_tests", false, "skip tests; run make.bash instead of all.bash (only use if you ran trybots first)")
+	skipTests = flag.Bool("skip_tests", false, "skip tests; run make.bash but not all.bash (only use if sufficient testing was done elsewhere)")
 
 	uploadMode = flag.Bool("upload", false, "Upload files (exclusive to all other flags)")
 	uploadKick = flag.String("edge_kick_command", "", "Command to run to kick off an edge cache update")
@@ -108,20 +108,26 @@ type Build struct {
 
 	Race bool // Build race detector.
 
-	Builder string // Key for dashboard.Builders.
+	Builder  string // Key for dashboard.Builders.
+	TestOnly bool   // Run tests only; don't produce a release artifact.
 
-	Goarm    int  // GOARM value if set.
-	MakeOnly bool // don't run tests; needed by cross-compile builders (s390x)
+	Goarm     int  // GOARM value if set.
+	SkipTests bool // skip tests (run make.bash but not all.bash); needed by cross-compile builders (s390x)
 }
 
 func (b *Build) String() string {
-	if b.Source {
+	switch {
+	case b.Source:
 		return "src"
-	}
-	if b.Goarm != 0 {
+	case b.TestOnly:
+		// Test-only builds are named after the builder used to
+		// perform them. For example, "linux-amd64-longtest".
+		return b.Builder
+	case b.Goarm != 0:
 		return fmt.Sprintf("%v-%vv%vl", b.OS, b.Arch, b.Goarm)
+	default:
+		return fmt.Sprintf("%v-%v", b.OS, b.Arch)
 	}
-	return fmt.Sprintf("%v-%v", b.OS, b.Arch)
 }
 
 func (b *Build) toolDir() string { return "go/pkg/tool/" + b.OS + "_" + b.Arch }
@@ -149,13 +155,13 @@ var builds = []*Build{
 		Goarm:   6, // for compatibility with all Raspberry Pi models.
 		// The tests take too long for the release packaging.
 		// Much of the time the whole buildlet times out.
-		MakeOnly: true,
+		SkipTests: true,
 	},
 	{
 		OS:      "linux",
 		Arch:    "amd64",
 		Race:    true,
-		Builder: "linux-amd64-jessie", // using Jessie for at least [Go 1.11, Go 1.13] due to golang.org/issue/31336
+		Builder: "linux-amd64-jessie", // using Jessie for at least [Go 1.11, Go 1.13] due to golang.org/issue/31293
 	},
 	{
 		OS:      "linux",
@@ -191,20 +197,32 @@ var builds = []*Build{
 		Builder: "darwin-amd64-10_15",
 	},
 	{
-		OS:       "linux",
-		Arch:     "s390x",
-		MakeOnly: true,
-		Builder:  "linux-s390x-crosscompile",
+		OS:        "linux",
+		Arch:      "s390x",
+		SkipTests: true,
+		Builder:   "linux-s390x-crosscompile",
 	},
 	// TODO(bradfitz): switch this ppc64 builder to a Kubernetes
 	// container cross-compiling ppc64 like the s390x one? For
 	// now, the ppc64le builders (5) are back, so let's see if we
 	// can just depend on them not going away.
 	{
-		OS:       "linux",
-		Arch:     "ppc64le",
-		MakeOnly: true,
-		Builder:  "linux-ppc64le-buildlet",
+		OS:        "linux",
+		Arch:      "ppc64le",
+		SkipTests: true,
+		Builder:   "linux-ppc64le-buildlet",
+	},
+
+	// Test-only builds.
+	{
+		Builder: "linux-amd64-longtest",
+		OS:      "linux", Arch: "amd64",
+		TestOnly: true,
+	},
+	{
+		Builder: "windows-amd64-longtest",
+		OS:      "windows", Arch: "amd64",
+		TestOnly: true,
 	},
 }
 
@@ -236,7 +254,7 @@ func (b *Build) make() error {
 	}
 
 	var hostArch string // non-empty if we're cross-compiling (s390x)
-	if b.MakeOnly && bc.IsContainer() && (bc.GOARCH() != "amd64" && bc.GOARCH() != "386") {
+	if b.SkipTests && bc.IsContainer() && (bc.GOARCH() != "amd64" && bc.GOARCH() != "386") {
 		hostArch = "amd64"
 	}
 
@@ -464,7 +482,8 @@ func (b *Build) make() error {
 	// So far, we've run make.bash. We want to create the release archive next.
 	// Since the release archive hasn't been tested yet, place it in a temporary
 	// location. After all.bash runs successfully (or gets explicitly skipped),
-	// we'll move the release archive to its final location.
+	// we'll move the release archive to its final location. For TestOnly builds,
+	// we only care whether tests passed and do not produce release artifacts.
 	type releaseFile struct {
 		Untested string // Temporary location of the file before the release has been tested.
 		Final    string // Final location where to move the file after the release has been tested.
@@ -482,7 +501,7 @@ func (b *Build) make() error {
 		return filepath.Join(stagingDir, *version+"."+b.String()+ext+".untested")
 	}
 
-	if b.OS == "windows" {
+	if !b.TestOnly && b.OS == "windows" {
 		untested := stagingFile(".msi")
 		if err := b.fetchFile(client, untested, "msi"); err != nil {
 			return err
@@ -491,6 +510,9 @@ func (b *Build) make() error {
 			Untested: untested,
 			Final:    *version + "." + b.String() + ".msi",
 		})
+	}
+
+	if b.OS == "windows" {
 		cleanFiles = append(cleanFiles, "msi")
 	}
 
@@ -510,8 +532,8 @@ func (b *Build) make() error {
 		return fmt.Errorf("verifying file permissions: %v", err)
 	}
 
-	switch b.OS {
-	default:
+	switch {
+	case !b.TestOnly && b.OS != "windows":
 		untested := stagingFile(".tar.gz")
 		if err := b.fetchTarball(ctx, client, untested); err != nil {
 			return fmt.Errorf("fetching and writing tarball: %v", err)
@@ -520,7 +542,7 @@ func (b *Build) make() error {
 			Untested: untested,
 			Final:    *version + "." + b.String() + ".tar.gz",
 		})
-	case "windows":
+	case !b.TestOnly && b.OS == "windows":
 		untested := stagingFile(".zip")
 		if err := b.fetchZip(client, untested); err != nil {
 			return fmt.Errorf("fetching and writing zip: %v", err)
@@ -529,10 +551,23 @@ func (b *Build) make() error {
 			Untested: untested,
 			Final:    *version + "." + b.String() + ".zip",
 		})
+	case b.TestOnly:
+		// Use an empty .test-only file to indicate the test outcome.
+		// This file gets moved from its initial location in the
+		// release-staging directory to the final release directory
+		// when the test-only build passes tests successfully.
+		untested := stagingFile(".test-only")
+		if err := ioutil.WriteFile(untested, nil, 0600); err != nil {
+			return fmt.Errorf("writing empty test-only file: %v", err)
+		}
+		releases = append(releases, releaseFile{
+			Untested: untested,
+			Final:    *version + "." + b.String() + ".test-only",
+		})
 	}
 
 	// Execute build (all.bash) if running tests.
-	if *skipTests || b.MakeOnly {
+	if *skipTests || b.SkipTests {
 		b.logf("Skipping all.bash tests.")
 	} else {
 		if u := bc.GoBootstrapURL(buildEnv); u != "" {
@@ -760,9 +795,12 @@ func (b *Build) writeFile(name string, r io.Reader) error {
 }
 
 // checkRelocations runs readelf on pkg/linux_amd64/runtime/cgo.a and makes sure
-// we don't see R_X86_64_REX_GOTPCRELX. See issue 31293.
+// we don't see R_X86_64_REX_GOTPCRELX. See golang.org/issue/31293.
 func (b *Build) checkRelocations(client *buildlet.Client) error {
-	if b.OS != "linux" || b.Arch != "amd64" {
+	if b.OS != "linux" || b.Arch != "amd64" || b.TestOnly {
+		// This check is only applicable to linux/amd64 builds.
+		// However, skip it on test-only builds because they
+		// don't produce binaries that are shipped to users.
 		return nil
 	}
 	var out bytes.Buffer

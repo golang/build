@@ -19,6 +19,14 @@ func TestBuildersExist(t *testing.T) {
 	}
 }
 
+func TestTestOnlyBuildsDontSkipTests(t *testing.T) {
+	for _, b := range builds {
+		if b.TestOnly && b.SkipTests {
+			t.Errorf("build %s is configured to run tests only, but also to skip tests; is that intentional?", b)
+		}
+	}
+}
+
 func TestMinSupportedMacOSVersion(t *testing.T) {
 	testCases := []struct {
 		desc      string

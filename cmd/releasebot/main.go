@@ -31,19 +31,32 @@ import (
 	"golang.org/x/build/maintner"
 )
 
-var releaseTargets = []string{
-	"src",
-	"linux-386",
-	"linux-armv6l",
-	"linux-amd64",
-	"linux-arm64",
-	"freebsd-386",
-	"freebsd-amd64",
-	"windows-386",
-	"windows-amd64",
-	"darwin-amd64",
-	"linux-s390x",
-	"linux-ppc64le",
+// A Target is a release target.
+type Target struct {
+	Name     string // Target name as accepted by cmd/release. For example, "linux-amd64".
+	TestOnly bool   // Run tests only; don't produce a release artifact.
+}
+
+var releaseTargets = []Target{
+	// Source-only target.
+	{Name: "src"},
+
+	// Binary targets.
+	{Name: "linux-386"},
+	{Name: "linux-armv6l"},
+	{Name: "linux-amd64"},
+	{Name: "linux-arm64"},
+	{Name: "freebsd-386"},
+	{Name: "freebsd-amd64"},
+	{Name: "windows-386"},
+	{Name: "windows-amd64"},
+	{Name: "darwin-amd64"},
+	{Name: "linux-s390x"},
+	{Name: "linux-ppc64le"},
+
+	// Test-only targets.
+	{Name: "linux-amd64-longtest", TestOnly: true},
+	{Name: "windows-amd64-longtest", TestOnly: true},
 }
 
 var releaseModes = map[string]bool{
@@ -53,10 +66,18 @@ var releaseModes = map[string]bool{
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage: releasebot -mode {prepare|release} [-security] [-dry-run] {go1.8.5|go1.10beta2|go1.11rc1}")
+	flag.PrintDefaults()
 	os.Exit(2)
 }
 
-var dryRun bool // only perform pre-flight checks, only log to terminal
+var (
+	skipTestFlag = flag.String("skip-test", "linux-amd64-longtest windows-amd64-longtest", "space-separated list of test-only targets to skip (only use if sufficient testing was done elsewhere)")
+)
+
+var (
+	dryRun   bool                    // only perform pre-flight checks, only log to terminal
+	skipTest = make(map[string]bool) // test-only targets that should be skipped
+)
 
 func main() {
 	modeFlag := flag.String("mode", "", "release mode (prepare, release)")
@@ -65,7 +86,18 @@ func main() {
 	flag.Usage = usage
 	flag.Parse()
 	if *modeFlag == "" || !releaseModes[*modeFlag] || flag.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "need to provide a valid mode and a release name")
 		usage()
+	}
+	for _, target := range strings.Fields(*skipTestFlag) {
+		if t, ok := releaseTarget(target); !ok {
+			fmt.Fprintf(os.Stderr, "target %q in -skip-test=%q is not a known target\n", target, *skipTestFlag)
+			usage()
+		} else if !t.TestOnly {
+			fmt.Fprintf(os.Stderr, "%s is not a test-only target\n", target)
+			usage()
+		}
+		skipTest[target] = true
 	}
 
 	http.DefaultTransport = newLogger(http.DefaultTransport)
@@ -521,8 +553,8 @@ func (w *Work) printReleaseTable(md *bytes.Buffer) {
 	w.releaseMu.Lock()
 	defer w.releaseMu.Unlock()
 	for _, target := range releaseTargets {
-		fmt.Fprintf(md, "%s", mdEscape(target))
-		info := w.ReleaseInfo[target]
+		fmt.Fprintf(md, "%s", mdEscape(target.Name))
+		info := w.ReleaseInfo[target.Name]
 		if info == nil {
 			fmt.Fprintf(md, " not started\n")
 			continue
@@ -647,11 +679,17 @@ to %s and press enter.
 
 	var wg sync.WaitGroup
 	for _, target := range releaseTargets {
-		func() {
+		w.releaseMu.Lock()
+		w.ReleaseInfo[target.Name] = new(ReleaseInfo)
+		w.releaseMu.Unlock()
+
+		if target.TestOnly && skipTest[target.Name] {
+			w.log.Printf("skipping test-only target %s because of -skip-test=%q flag", target.Name, *skipTestFlag)
 			w.releaseMu.Lock()
-			defer w.releaseMu.Unlock()
-			w.ReleaseInfo[target] = new(ReleaseInfo)
-		}()
+			w.ReleaseInfo[target.Name].Msg = fmt.Sprintf("skipped because of -skip-test=%q flag", *skipTestFlag)
+			w.releaseMu.Unlock()
+			continue
+		}
 
 		wg.Add(1)
 		target := target
@@ -662,9 +700,9 @@ to %s and press enter.
 					stk := strings.TrimSpace(string(debug.Stack()))
 					msg := fmt.Sprintf("PANIC: %v\n\n    %s\n", mdEscape(fmt.Sprint(err)), strings.Replace(stk, "\n", "\n    ", -1))
 					w.logError(msg)
-					w.log.Printf("\n\nBuilding %s: PANIC: %v\n\n%s", target, err, debug.Stack())
+					w.log.Printf("\n\nBuilding %s: PANIC: %v\n\n%s", target.Name, err, debug.Stack())
 					w.releaseMu.Lock()
-					w.ReleaseInfo[target].Msg = msg
+					w.ReleaseInfo[target.Name].Msg = msg
 					w.releaseMu.Unlock()
 				}
 			}()
@@ -676,7 +714,7 @@ to %s and press enter.
 	// Check for release errors and stop if any.
 	w.releaseMu.Lock()
 	for _, target := range releaseTargets {
-		for _, out := range w.ReleaseInfo[target].Outputs {
+		for _, out := range w.ReleaseInfo[target.Name].Outputs {
 			if out.Error != "" || len(w.Errors) > 0 {
 				w.logError("RELEASE BUILD FAILED\n")
 				w.releaseMu.Unlock()
@@ -699,14 +737,16 @@ to %s and press enter.
 // they are reused instead of being rebuilt. In release mode, buildRelease then uploads
 // the release packaging to the gs://golang-release-staging bucket, along with files
 // containing the SHA256 hash of the releases, for eventual use by the download page.
-func (w *Work) buildRelease(target string) {
-	log.Printf("BUILDRELEASE %s %s\n", w.Version, target)
-	defer log.Printf("DONE BUILDRELEASE %s\n", target)
+func (w *Work) buildRelease(target Target) {
+	log.Printf("BUILDRELEASE %s %s\n", w.Version, target.Name)
+	defer log.Printf("DONE BUILDRELEASE %s %s\n", w.Version, target.Name)
 	releaseDir := filepath.Join(w.Dir, "release", w.VersionCommit)
-	prefix := fmt.Sprintf("%s.%s.", w.Version, target)
+	prefix := fmt.Sprintf("%s.%s.", w.Version, target.Name)
 	var files []string
 	switch {
-	case strings.HasPrefix(target, "windows-"):
+	case target.TestOnly:
+		files = []string{prefix + "test-only"}
+	case strings.HasPrefix(target.Name, "windows-"):
 		files = []string{prefix + "zip", prefix + "msi"}
 	default:
 		files = []string{prefix + "tar.gz"}
@@ -725,15 +765,15 @@ func (w *Work) buildRelease(target string) {
 		}
 	}
 	w.releaseMu.Lock()
-	w.ReleaseInfo[target].Outputs = outs
+	w.ReleaseInfo[target.Name].Outputs = outs
 	w.releaseMu.Unlock()
 
 	if haveFiles {
-		w.log.Printf("release %s: already have %v; not rebuilding files", target, files)
+		w.log.Printf("release -target=%q: already have %v; not rebuilding files", target.Name, files)
 	} else {
 		failures := 0
 		for {
-			args := []string{w.ReleaseBinary, "-target", target, "-user", gomoteUser,
+			args := []string{w.ReleaseBinary, "-target", target.Name, "-user", gomoteUser,
 				"-version", w.Version, "-staging_dir", w.StagingDir}
 			if w.Security {
 				args = append(args, "-tarball", filepath.Join(w.Dir, w.VersionCommit+".tar.gz"))
@@ -746,7 +786,7 @@ func (w *Work) buildRelease(target string) {
 			if !w.Prepare {
 				args = append(args, "-skip_tests")
 			}
-			out, err := w.runner(releaseDir, "GOPATH="+filepath.Join(w.Dir, "gopath")).runErr(args...)
+			releaseOutput, releaseError := w.runner(releaseDir, "GOPATH="+filepath.Join(w.Dir, "gopath")).runErr(args...)
 			// Exit code from release binary is apparently unreliable.
 			// Look to see if the files we expected were created instead.
 			failed := false
@@ -760,12 +800,12 @@ func (w *Work) buildRelease(target string) {
 			if !failed {
 				break
 			}
-			w.log.Printf("release %s:\nerror from cmd/release binary = %v\noutput from cmd/release binary:\n%s", target, err, out)
+			w.log.Printf("release -target=%q did not produce expected output files %v:\nerror from cmd/release binary = %v\noutput from cmd/release binary:\n%s", target.Name, files, releaseError, releaseOutput)
 			if failures++; failures >= 3 {
-				w.log.Printf("release %s: too many failures\n", target)
+				w.log.Printf("release -target=%q: too many failures\n", target.Name)
 				for _, out := range outs {
 					w.releaseMu.Lock()
-					out.Error = fmt.Sprintf("release %s: build failed", target)
+					out.Error = fmt.Sprintf("release -target=%q: build failed", target.Name)
 					w.releaseMu.Unlock()
 				}
 				return
@@ -778,9 +818,14 @@ func (w *Work) buildRelease(target string) {
 		return
 	}
 
+	if target.TestOnly {
+		// This was a test-only target, nothing to upload.
+		return
+	}
+
 	for _, out := range outs {
 		if err := w.uploadStagingRelease(target, out); err != nil {
-			w.log.Printf("release %s: %s", target, err)
+			w.log.Printf("error uploading release %s to staging bucket: %s", target.Name, err)
 			w.releaseMu.Lock()
 			out.Error = err.Error()
 			w.releaseMu.Unlock()
@@ -794,9 +839,11 @@ func (w *Work) buildRelease(target string) {
 // named "<target>.sha256" containing the hex sha256 hash
 // of the target file. This is needed for the release signing process
 // and also displayed on the eventual download page.
-func (w *Work) uploadStagingRelease(target string, out *ReleaseOutput) error {
+func (w *Work) uploadStagingRelease(target Target, out *ReleaseOutput) error {
 	if dryRun {
 		return errors.New("attempted write operation in dry-run mode")
+	} else if target.TestOnly {
+		return errors.New("attempted to upload a test-only target")
 	}
 
 	src := filepath.Join(w.Dir, "release", w.VersionCommit, out.File)
@@ -847,4 +894,14 @@ func (w *Work) mustIncludeSecurityBranch() {
 	if !w.gitCommitExistsInBranch(sha) {
 		log.Fatalf("release branch does not contain security release HEAD commit %q; aborting", sha)
 	}
+}
+
+// releaseTarget returns a release target with the specified name.
+func releaseTarget(name string) (_ Target, ok bool) {
+	for _, t := range releaseTargets {
+		if t.Name == name {
+			return t, true
+		}
+	}
+	return Target{}, false
 }
