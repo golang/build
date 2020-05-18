@@ -13,6 +13,7 @@ import (
 )
 
 type Owner struct {
+	// GitHubUsername is a GitHub user name or team name.
 	GitHubUsername string `json:"githubUsername"`
 	GerritEmail    string `json:"gerritEmail"`
 }

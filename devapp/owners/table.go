@@ -74,9 +74,7 @@ var (
 	tombergan    = gh("tombergan")
 	x1ddos       = gh("x1ddos")
 
-	// The tools team does not map to a GitHub username, so we use its Gerrit
-	// group UUID (1080).
-	toolsTeam = Owner{GerritEmail: "1080@62eb7196-b449-3ce5-99f1-c037f21e1705"}
+	toolsTeam = gh("golang/tools-team")
 )
 
 // entries is a map of <repo name>/<path>/<domain> to Owner entries.

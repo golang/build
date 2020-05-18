@@ -73,6 +73,8 @@ var idToPerson = map[string]*Person{}
 //
 // • GitHub username (for example, "@dmitshur"), leading '@' is mandatory
 //
+// • GitHub team name (for example, "@golang/tools-team"), leading '@' is mandatory
+//
 // • Gerrit <account ID>@<instance ID> (for example, "6005@62eb7196-b449-3ce5-99f1-c037f21e1705")
 //
 // • email (for example, "dmitshur@golang.org")
@@ -114,6 +116,7 @@ func init() {
 	// Not people, but hereby granted personhood:
 	addPerson("Gopherbot", "gobot@golang.org", "@gopherbot", "5976@62eb7196-b449-3ce5-99f1-c037f21e1705", "*bot")
 	addPerson("Gerrit Bot", "letsusegerrit@gmail.com", "12446@62eb7196-b449-3ce5-99f1-c037f21e1705", "*bot")
+	addPerson("Tools Team", "@golang/tools-team", "1080@62eb7196-b449-3ce5-99f1-c037f21e1705")
 
 	addPerson("212472270", "ggp493@gmail.com", "@ggriffiths")
 	addPerson("9.nashi", "9.nashi@gmail.com", "@80nashi")
