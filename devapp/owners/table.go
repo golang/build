@@ -852,7 +852,7 @@ var entries = map[string]*Entry{
 	},
 
 	"playground": {
-		Secondary: []Owner{},
+		Primary: []Owner{andybons, rakoczy},
 	},
 
 	"vscode-go": {
