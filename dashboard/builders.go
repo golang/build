@@ -545,8 +545,9 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-linux-arm64-aws": &HostConfig{
 		Notes:           "Debian Buster, EC2 arm64 instance. See x/build/env/linux-arm64/aws",
-		VMImage:         "ami-0454a5239a73a9e81",
-		machineType:     "a1.xlarge",
+		VMImage:         "ami-06f66c749c71b2511",
+		ContainerImage:  "gobuilder-arm64-aws:latest",
+		machineType:     "m6g.xlarge",
 		isEC2:           true,
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
@@ -661,7 +662,7 @@ func init() {
 			panic(fmt.Sprintf("HostType %q != key %q", c.HostType, key))
 		}
 		nSet := 0
-		if c.VMImage != "" {
+		if c.VMImage != "" && !c.isEC2 {
 			nSet++
 		}
 		if c.ContainerImage != "" {
@@ -1328,7 +1329,7 @@ func (c *HostConfig) PoolName() string {
 	case c.IsReverse:
 		return "Reverse (dedicated machine/VM)"
 	case c.IsEC2():
-		return "EC2 VM"
+		return "EC2 VM Container"
 	case c.IsVM():
 		return "GCE VM"
 	case c.IsContainer():
@@ -1350,6 +1351,9 @@ func (c *HostConfig) ContainerVMImage() string {
 	}
 	if c.NestedVirt {
 		return "debian-stretch-vmx"
+	}
+	if c.isEC2 && c.ContainerImage != "" {
+		return fmt.Sprintf("gcr.io/%s/%s", buildenv.Production.ProjectName, c.ContainerImage)
 	}
 	return ""
 }

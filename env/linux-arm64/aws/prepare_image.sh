@@ -35,13 +35,15 @@ sudo apt-get install -y \
 	 docker-ce-cli \
 	 containerd.io
 
+sudo usermod -aG docker "$USER"
+
 # retrieve the latest version of Go
 GO_VERSION="$(curl -s https://golang.org/dl/?mode=json | jq --raw-output '.[0].version')"
 GO_PACKAGE="$GO_VERSION.linux-arm64.tar.gz"
 GO_SHA="$(curl -s https://golang.org/dl/?mode=json | jq --raw-output '.[0].files | map(select(.arch == "arm64")) | .[0].sha256')"
 
 # download Go package
-curl -o $TMP_DIR/$GO_PACKAGE" -L "https://golang.org/dl/$GO_PACKAGE"
+curl -o "$TMP_DIR/$GO_PACKAGE" -L "https://golang.org/dl/$GO_PACKAGE"
 
 # verify sha256 shasum"
 echo "$GO_SHA $TMP_DIR/$GO_PACKAGE" | sha256sum --check --status

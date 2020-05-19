@@ -2,16 +2,15 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-# Compiled stage0 binary must be in working dir.
+# run on arm64 instance
+prod-build: Dockerfile
+	sudo docker build -t gcr.io/symbolic-datum-552/gobuilder-arm64-aws:latest .
 
-STAGING_BUCKET=dev-go-builder-data
-PROD_BUCKET=go-builder-data
-
-staging: Dockerfile
-	docker build --build-arg -t gobuilder-arm64-aws:latest .
-
-prod: Dockerfile
-	docker build --build-arg -t gobuilder-arm64-aws:latest .
+# run on arm64 instance
+prod-push: prod-build
+	sudo docker login -u oauth2accesstoken https://gcr.io
+	sudo docker push gcr.io/symbolic-datum-552/gobuilder-arm64-aws:latest
+	sudo rm /root/.docker/config.json
 
 env-var-check:
 ifndef AWS_ACCESS_KEY_ID

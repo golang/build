@@ -7,10 +7,7 @@ WantedBy=network-online.target
 
 [Service]
 Type=simple
+RemainAfterExit=true
 ExecStart=/usr/local/bin/rundockerbuildlet \
      -env=host-linux-arm64-aws \
-     -memory=7g \
      -image=gobuilder-arm64-aws
-Restart=always
-RestartSec=2
-StartLimitInterval=0

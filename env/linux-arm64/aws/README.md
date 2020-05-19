@@ -2,8 +2,8 @@
 
 ## Machines
 
-The AWS builders use the a1 instance types which are arm64 based machines of varying specifications.
-The base type used will be a1.xlarge 4 vCPUs, 8192 MiB.
+The AWS builders use the m6 instance types which are arm64 based machines of varying specifications.
+The base type used will be m6g.xlarge 4 vCPUs, 16384 MiB.
 
 ## Machine Image
 
@@ -28,14 +28,21 @@ or
 
 `AWS_ACCESS_KEY_ID=<id> AWS_SECRET_ACCESS_KEY=<secret> make create-aws-image`
 
-## Buildlet Image
+## Buildlet Container Image
 
-Buildlet images with stage0 installed can be created via:
+Buildlet container images must be build on an arm64 instance with the proper credentials. The instructions
+are as follows:
 
-Prod:
+*  In your normal gcloud dev environment, retrieve a short-lived access token:
 
-`make prod`
+  `you@dev:~$ gcloud auth print-access-token`
 
-Staging:
+*  On an arm64 instance, clone the build repository.
 
-`make staging`
+*  cd into the `env/linux-arm64/aws` directory.
+
+*  Execute: `make prod-push`
+
+*  When prompted for your password, paste in the access token from the first step.
+
+*  Ensure `/root/.docker/config.json` has been deleted.
