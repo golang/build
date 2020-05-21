@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha1"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -43,7 +44,7 @@ var (
 	workdir         = flag.String("workdir", defaultWorkdir(), "where git repos and temporary worktrees are created")
 	githubTokenFile = flag.String("github-token-file", filepath.Join(defaultWorkdir(), "github-token"), "file to load GitHub token from; should only contain the token text")
 	gerritTokenFile = flag.String("gerrit-token-file", filepath.Join(defaultWorkdir(), "gerrit-token"), "file to load Gerrit token from; should be of form <git-email>:<token>")
-	gitcookiesFile  = flag.String("gitcookies-file", "", "if non-empty, write a git http cookiefile to this location using compute metadata")
+	gitcookiesFile  = flag.String("gitcookies-file", "", "if non-empty, write a git http cookiefile to this location using secret manager")
 	dryRun          = flag.Bool("dry-run", false, "print out mutating actions but don’t perform any")
 )
 
@@ -53,7 +54,14 @@ const secretClientTimeout = 10 * time.Second
 func main() {
 	flag.Parse()
 
-	secretClient := mustCreateSecretClient()
+	var secretClient *secret.Client
+	if metadata.OnGCE() {
+		var err error
+		secretClient, err = secret.NewClient()
+		if err != nil {
+			log.Fatalf("unable to create a secret manager client: %v", err)
+		}
+	}
 
 	if err := writeCookiesFile(secretClient); err != nil {
 		log.Fatalf("writeCookiesFile(): %v", err)
@@ -102,7 +110,7 @@ func writeCookiesFile(sc *secret.Client) error {
 	}
 	log.Printf("Writing git http cookies file %q ...", *gitcookiesFile)
 	if !metadata.OnGCE() {
-		return fmt.Errorf("cannot write git http cookies file %q from metadata: not on GCE", *gitcookiesFile)
+		return fmt.Errorf("cannot write git http cookies file %q from secret manager: not on GCE", *gitcookiesFile)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), secretClientTimeout)
@@ -830,6 +838,9 @@ func logGitHubRateLimits(resp *github.Response) {
 // at the beginning of a message.
 // TODO(andybons): This logic is shared by gopherbot. Consolidate it somewhere.
 func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issueNum int, msg string) error {
+	if *dryRun {
+		return errors.New("attempted write operation in dry-run mode")
+	}
 	gr := b.corpus.GitHub().Repo(org, repo)
 	if gr == nil {
 		return fmt.Errorf("unknown github repo %s/%s", org, repo)
@@ -911,12 +922,4 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 	}
 	logGitHubRateLimits(resp)
 	return nil
-}
-
-func mustCreateSecretClient() *secret.Client {
-	client, err := secret.NewClient()
-	if err != nil {
-		log.Fatalf("unable to create secret client %v", err)
-	}
-	return client
 }
