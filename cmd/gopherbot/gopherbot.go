@@ -1141,35 +1141,58 @@ func (b *gopherbot) updateNeeds(ctx context.Context) error {
 	})
 }
 
-// If any of the messages in this array have been posted on a CL, don't post
-// again. If you amend the message even slightly, please prepend the new message
-// to this list, to avoid re-spamming people.
+// TODO: Improve this message. Some ideas:
 //
-// The first message is the "current" message.
-var congratulatoryMessages = []string{
-	// TODO: provide more helpful info? Amend, don't add 2nd commit, link to a
-	// review guide?
-	//
-	// also TODO: make this a template? May want to provide more dynamic
-	// information in the future. Would make it tougher to search and see if
-	// a comment has been previously posted.
-	`Congratulations on opening your first change. Thank you for your contribution!
+// Provide more helpful info? Amend, don't add 2nd commit, link to a review guide?
+// Make this a template? May want to provide more dynamic information in the future.
+// Only show freeze message during freeze.
+//
+const (
+	congratsSentence = `Congratulations on opening your first change. Thank you for your contribution!`
+
+	defaultCongratsMsg = congratsSentence + `
 
 Next steps:
-Within the next week or so, a maintainer will review your change and provide
-feedback. See https://golang.org/doc/contribute.html#review for more info and
-tips to get your patch through code review.
+A maintainer will review your change and provide feedback. See
+https://golang.org/doc/contribute.html#review for more info and tips to get your
+patch through code review.
 
 Most changes in the Go project go through a few rounds of revision. This can be
 surprising to people new to the project. The careful, iterative review process
 is our way of helping mentor contributors and ensuring that their contributions
-have a lasting impact.
+have a lasting impact.`
+
+	// Not all x/ repos are subject to the freeze, and so shouldn't get the
+	// warning about it. See isSubjectToFreeze for the complete list.
+	freezeCongratsMsg = defaultCongratsMsg + `
 
 During May-July and Nov-Jan the Go project is in a code freeze, during which
 little code gets reviewed or merged. If a reviewer responds with a comment like
-R=go1.11, it means that this CL will be reviewed as part of the next development
-cycle. See https://golang.org/s/release for more details.`, // TODO only show freeze message during freeze
-	"It's your first ever CL! Congrats, and thanks for sending!",
+R=go1.11 or adds a tag like "wait-release", it means that this CL will be
+reviewed as part of the next development cycle. See https://golang.org/s/release
+for more details.`
+)
+
+// If messages containing any of the sentences in this array have been posted
+// on a CL, don't post again. If you amend the message even slightly, please
+// prepend the new message to this list, to avoid re-spamming people.
+//
+// The first message is the "current" message.
+var oldCongratsMsgs = []string{
+	congratsSentence,
+	`It's your first ever CL! Congrats, and thanks for sending!`,
+}
+
+// isSubectToFreeze returns true if a repository is subject to the release
+// freeze. x/ repos can be subject if they are vendored into golang/go.
+func isSubjectToFreeze(repo string) bool {
+	switch repo {
+	case "go": // main repo
+		return true
+	case "crypto", "net", "sys", "text": // vendored x/ repos
+		return true
+	}
+	return false
 }
 
 // Don't want to congratulate people on CL's they submitted a year ago.
@@ -1224,13 +1247,17 @@ func (b *gopherbot) congratulateNewContributors(ctx context.Context) error {
 			continue
 		}
 		foundMessage := false
+		congratulatoryMessage := defaultCongratsMsg
+		if isSubjectToFreeze(cl.Project.Project()) {
+			congratulatoryMessage = freezeCongratsMsg
+		}
 		for i := range cl.Messages {
 			// TODO: once gopherbot starts posting these messages and we
 			// have the author's name for Gopherbot, check the author name
 			// matches as well.
-			for j := range congratulatoryMessages {
+			for j := range oldCongratsMsgs {
 				// Message looks something like "Patch set X:\n\n(our text)"
-				if strings.Contains(cl.Messages[i].Message, congratulatoryMessages[j]) {
+				if strings.Contains(cl.Messages[i].Message, oldCongratsMsgs[j]) {
 					foundMessage = true
 					break
 				}
@@ -1244,10 +1271,12 @@ func (b *gopherbot) congratulateNewContributors(ctx context.Context) error {
 			b.knownContributors[email] = true
 			continue
 		}
+		// Don't add all of the old congratulatory messages here, since we've
+		// already checked for them above.
 		opts := &gerritCommentOpts{
-			OldPhrases: congratulatoryMessages,
+			OldPhrases: []string{congratulatoryMessage},
 		}
-		err := b.addGerritComment(ctx, cl.ChangeID(), congratulatoryMessages[0], opts)
+		err := b.addGerritComment(ctx, cl.ChangeID(), congratulatoryMessage, opts)
 		if err != nil {
 			return fmt.Errorf("could not add comment to golang.org/cl/%d: %v", cl.Number, err)
 		}
