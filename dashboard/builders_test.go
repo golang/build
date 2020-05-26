@@ -137,9 +137,9 @@ func TestTrybots(t *testing.T) {
 		},
 		{
 			repo:   "go",
-			branch: "release-branch.go1.12",
+			branch: "release-branch.go1.14",
 			want: []string{
-				"freebsd-amd64-10_3",
+				"android-amd64-emu",
 				"freebsd-amd64-12_0",
 				"js-wasm",
 				"linux-386",
@@ -155,7 +155,6 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-plan9",
 				"misc-compile-ppc",
 				"misc-compile-solaris",
-				"nacl-amd64p32",
 				"openbsd-amd64-64",
 				"windows-386-2008",
 				"windows-amd64-2016",
@@ -460,10 +459,10 @@ func TestBuilderConfig(t *testing.T) {
 		// Long test.
 		{b("linux-amd64-longtest", "go"), onlyPost},
 		{b("linux-amd64-longtest", "net"), onlyPost},
-		{b("linux-amd64-longtest@go1.12", "go"), onlyPost},
-		{b("linux-amd64-longtest@go1.12", "net"), none},
+		{b("linux-amd64-longtest@go1.14", "go"), onlyPost},
+		{b("linux-amd64-longtest@go1.14", "net"), none},
 		{b("windows-amd64-longtest", "go"), onlyPost},
-		{b("windows-amd64-longtest@go1.13", "go"), onlyPost},
+		{b("windows-amd64-longtest@go1.14", "go"), onlyPost},
 		{b("windows-amd64-longtest", "net"), onlyPost},
 		{b("windows-amd64-longtest", "exp"), onlyPost},
 		{b("windows-amd64-longtest", "mobile"), none},
