@@ -1759,6 +1759,10 @@ func init() {
 		Name:     "linux-amd64-longtest",
 		HostType: "host-linux-stretch-morecpu",
 		Notes:    "Debian Stretch with go test -short=false",
+		tryBot: func(repo, branch, goBranch string) bool {
+			onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
+			return repo == "go" && onReleaseBranch // See issue 37827.
+		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" || (branch == "master" && goBranch == "master")
 		},
@@ -1771,6 +1775,10 @@ func init() {
 		Name:     "linux-386-longtest",
 		HostType: "host-linux-stretch-morecpu",
 		Notes:    "Debian Stretch with go test -short=false; to get 32-bit coverage",
+		tryBot: func(repo, branch, goBranch string) bool {
+			onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
+			return repo == "go" && onReleaseBranch // See issue 37827.
+		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			if repo == "build" {
 				return false
@@ -2074,6 +2082,10 @@ func init() {
 		Name:     "windows-amd64-longtest",
 		HostType: "host-windows-amd64-2016-big",
 		Notes:    "Windows Server 2016 with go test -short=false",
+		tryBot: func(repo, branch, goBranch string) bool {
+			onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
+			return repo == "go" && onReleaseBranch // See issue 37827.
+		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			if !defaultPlusExpBuild(repo, branch, goBranch) {
 				return false

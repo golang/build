@@ -158,6 +158,11 @@ func TestTrybots(t *testing.T) {
 				"openbsd-amd64-64",
 				"windows-386-2008",
 				"windows-amd64-2016",
+
+				// Include longtest builders on Go repo release branches. See issue 37827.
+				"linux-386-longtest",
+				"linux-amd64-longtest",
+				"windows-amd64-longtest",
 			},
 		},
 		{
@@ -459,10 +464,10 @@ func TestBuilderConfig(t *testing.T) {
 		// Long test.
 		{b("linux-amd64-longtest", "go"), onlyPost},
 		{b("linux-amd64-longtest", "net"), onlyPost},
-		{b("linux-amd64-longtest@go1.14", "go"), onlyPost},
+		{b("linux-amd64-longtest@go1.14", "go"), both},
 		{b("linux-amd64-longtest@go1.14", "net"), none},
 		{b("windows-amd64-longtest", "go"), onlyPost},
-		{b("windows-amd64-longtest@go1.14", "go"), onlyPost},
+		{b("windows-amd64-longtest@go1.14", "go"), both},
 		{b("windows-amd64-longtest", "net"), onlyPost},
 		{b("windows-amd64-longtest", "exp"), onlyPost},
 		{b("windows-amd64-longtest", "mobile"), none},
