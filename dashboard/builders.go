@@ -444,14 +444,6 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
-	"host-windows-amd64-2008-big": &HostConfig{
-		Notes:              "Same as host-windows-amd64-2008, but on n1-highcpu-16",
-		VMImage:            "windows-amd64-server-2008r2-v7",
-		machineType:        "n1-highcpu-16", // 16 vCPUs, 14.4 GB mem
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
-		SSHUsername:        "gopher",
-	},
 	"host-windows-amd64-2012": &HostConfig{
 		VMImage:            "windows-amd64-server-2012r2-v7",
 		machineType:        "n1-highcpu-4", // 4 vCPUs, 3.6 GB mem
@@ -2099,7 +2091,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-race",
-		HostType: "host-windows-amd64-2008-big",
+		HostType: "host-windows-amd64-2016-big",
 		Notes:    "Only runs -race tests (./race.bat)",
 		env: []string{
 			"GOARCH=amd64",
