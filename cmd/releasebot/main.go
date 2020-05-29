@@ -734,10 +734,7 @@ func (w *Work) buildRelease(target string) {
 			// The prepare step will run the tests on a commit that has the same
 			// tree (but maybe different message) as the one that the release
 			// step will process, so we can skip tests the second time.
-			// For beta releases, we're releasing from master. Beta releases
-			// should not skip tests, as a new commit may have been pushed after
-			// the prepare step.
-			if !w.Prepare && !w.BetaRelease {
+			if !w.Prepare {
 				args = append(args, "-skip_tests")
 			}
 			out, err := w.runner(releaseDir, "GOPATH="+filepath.Join(w.Dir, "gopath")).runErr(args...)

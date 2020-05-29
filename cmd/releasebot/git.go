@@ -18,18 +18,32 @@ const (
 	privateGoRepoURL = "sso://team/golang/go-private"
 )
 
-// gitCheckout sets up a fresh git checkout in which to work,
-// in $HOME/go-releasebot-work/<release>/gitwork
-// (where <release> is a string like go1.8.5).
+// gitCheckout sets w.Dir to the work directory
+// at $HOME/go-releasebot-work/<release> (where <release> is a string like go1.8.5),
+// creating it if it doesn't exist,
+// and sets up a fresh git checkout in which to work,
+// in $HOME/go-releasebot-work/<release>/gitwork.
+//
 // The first time it is run for a particular release,
 // gitCheckout also creates a clean checkout in
 // $HOME/go-releasebot-work/<release>/gitmirror,
 // to use as an object cache to speed future checkouts.
+//
+// For beta releases in -mode=release, it sets w.Dir but doesn't
+// fetch the latest master branch. This way the exact commit that
+// was tested in prepare mode is also used in release mode.
 func (w *Work) gitCheckout() {
 	w.Dir = filepath.Join(os.Getenv("HOME"), "go-releasebot-work/"+strings.ToLower(w.Version))
 	w.log.Printf("working in %s\n", w.Dir)
 	if err := os.MkdirAll(w.Dir, 0777); err != nil {
 		w.log.Panic(err)
+	}
+
+	if w.BetaRelease && !w.Prepare {
+		// We don't want to fetch the latest "master" branch for
+		// a beta release. Instead, reuse the same commit that was
+		// already fetched from origin and tested in prepare mode.
+		return
 	}
 
 	origin := publicGoRepoURL
