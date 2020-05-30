@@ -337,6 +337,9 @@ func (w *Work) doRelease() {
 	}
 	if w.BetaRelease || w.RCRelease {
 		// TODO: go tool api -allow_new=false
+		if strings.HasSuffix(w.Version, "beta1") {
+			w.checkBeta1ReleaseBlockers()
+		}
 	} else {
 		if !w.Security {
 			w.checkReleaseBlockers()
@@ -413,6 +416,21 @@ func (w *Work) checkReleaseBlockers() {
 		}
 		if !gi.Closed && gi.HasLabel("release-blocker") {
 			w.logError("open issue #%d is tagged release-blocker", gi.Number)
+		}
+		return nil
+	}); err != nil {
+		w.logError("error checking release-blockers: %v", err.Error())
+		return
+	}
+}
+
+func (w *Work) checkBeta1ReleaseBlockers() {
+	if err := goRepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		if gi.Milestone == nil || gi.Milestone.Title != w.Milestone.Title {
+			return nil
+		}
+		if !gi.Closed && gi.HasLabel("release-blocker") && !gi.HasLabel("okay-after-beta1") {
+			w.logError("open issue #%d is tagged release-blocker and not okay after beta1", gi.Number)
 		}
 		return nil
 	}); err != nil {
