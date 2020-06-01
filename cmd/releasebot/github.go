@@ -149,8 +149,15 @@ func (w *Work) createGitHubIssue(title, msg string) (int, error) {
 	return i.GetNumber(), err
 }
 
-// pushIssues moves open issues to the next release.
+// pushIssues moves open issues to the milestone of the next release of the same kind.
+// For major releases, it's the milestone of the next major release (e.g., 1.14 → 1.15).
+// For minor releases, it's the milestone of the next minor release (e.g., 1.14.1 → 1.14.2).
+// For other release types, it does nothing.
 func (w *Work) pushIssues() {
+	if w.BetaRelease || w.RCRelease {
+		// Nothing to do.
+		return
+	}
 	if err := goRepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
 		if gi.Milestone == nil || gi.Milestone.Title != w.Milestone.Title {
 			return nil
@@ -179,6 +186,7 @@ func (w *Work) pushIssues() {
 	}
 }
 
+// closeMilestone closes the milestone for the current release.
 func (w *Work) closeMilestone() {
 	w.log.Printf("closing milestone %s", w.Milestone.Title)
 	if dryRun {

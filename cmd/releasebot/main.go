@@ -79,73 +79,61 @@ func main() {
 
 	release := flag.Arg(0)
 
-	isBeta := strings.Contains(release, "beta")
-	isRC := strings.Contains(release, "rc")
-
-	if isBeta || isRC {
-		if *security {
-			log.Printf("error: only minor releases are supported in security mode")
-			usage()
-		}
-		w := &Work{
-			Prepare:     *modeFlag == "prepare",
-			Version:     release,
-			BetaRelease: isBeta,
-			RCRelease:   isRC,
-		}
-		w.doRelease()
-		return
+	w := &Work{
+		Prepare:     *modeFlag == "prepare",
+		Version:     release,
+		BetaRelease: strings.Contains(release, "beta"),
+		RCRelease:   strings.Contains(release, "rc"),
+		Security:    *security,
 	}
 
-	errFoundMilestone := errors.New("found milestone")
-	err := goRepo.ForeachMilestone(func(m *maintner.GitHubMilestone) error {
-		if strings.ToLower(m.Title) == release {
-			nextM, err := nextMilestone(m)
-			if err != nil {
-				return err
-			}
-			w := &Work{
-				Milestone:     m,
-				NextMilestone: nextM,
-				Prepare:       *modeFlag == "prepare",
-				Version:       release,
-				Security:      *security,
-			}
-			w.doRelease()
-			return errFoundMilestone
+	// Validate release version types.
+	if w.BetaRelease {
+		if w.Security {
+			log.Fatalf("%s is a beta version, it cannot be a security release", w.Version)
 		}
-		return nil
-	})
-	if err != nil && err != errFoundMilestone {
-		log.Fatalf("error looking for release %s: %v", release, err)
+		w.ReleaseBranch = "master"
+	} else if w.RCRelease {
+		if w.Security {
+			log.Fatalf("%s is a release candidate version, it cannot be a security release", w.Version)
+		}
+		shortRel := strings.Split(w.Version, "rc")[0]
+		w.ReleaseBranch = "release-branch." + shortRel
+	} else if strings.Count(w.Version, ".") == 1 {
+		// Major release like "go1.X".
+		if w.Security {
+			log.Fatalf("%s is a major version, it cannot be a security release", w.Version)
+		}
+		w.ReleaseBranch = "release-branch." + w.Version
+	} else if strings.Count(w.Version, ".") == 2 {
+		// Minor release or security release like "go1.X.Y".
+		shortRel := w.Version[:strings.LastIndex(w.Version, ".")]
+		w.ReleaseBranch = "release-branch." + shortRel
+		if w.Security {
+			w.ReleaseBranch += "-security"
+		}
+	} else {
+		log.Fatalf("cannot understand version %q", w.Version)
 	}
-	if err == nil {
-		log.Fatalf("cannot find release %s", release)
-	}
-}
 
-func nextMilestone(m *maintner.GitHubMilestone) (*maintner.GitHubMilestone, error) {
-	titleParts := strings.Split(m.Title, ".")
-	n, err := strconv.Atoi(titleParts[len(titleParts)-1])
+	// Find milestones.
+	var err error
+	w.Milestone, err = getMilestone(w.Version)
 	if err != nil {
-		return nil, err
+		log.Fatalf("cannot find the GitHub milestone for release %s: %v", w.Version, err)
 	}
-	titleParts[len(titleParts)-1] = strconv.Itoa(n + 1)
-	newTitle := strings.Join(titleParts, ".")
-	var res *maintner.GitHubMilestone
-	err = goRepo.ForeachMilestone(func(m *maintner.GitHubMilestone) error {
-		if m.Title == newTitle {
-			res = m
+	if !w.BetaRelease && !w.RCRelease {
+		nextV, err := nextVersion(w.Version)
+		if err != nil {
+			log.Fatalln("nextVersion:", err)
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
+		w.NextMilestone, err = getMilestone(nextV)
+		if err != nil {
+			log.Fatalf("cannot find the next GitHub milestone after release %s: %v", w.Version, err)
+		}
 	}
-	if res == nil {
-		return res, fmt.Errorf("no next milestone found with title %q", newTitle)
-	}
-	return res, nil
+
+	w.doRelease()
 }
 
 // checkForGitCodereview exits the program if git-codereview is not installed
@@ -177,6 +165,36 @@ func loadGomoteUser() {
 	log.Fatal("missing gomote token - cannot build releases.\n**FIX**: Download https://build-dot-golang-org.appspot.com/key?builder=user-YOURNAME\nand store in ~/.config/gomote/user-YOURNAME.token")
 }
 
+// getMilestone returns the GitHub milestone corresponding to the specified version,
+// or an error if it cannot be found.
+func getMilestone(version string) (*maintner.GitHubMilestone, error) {
+	errFoundMilestone := errors.New("found milestone")
+	var found *maintner.GitHubMilestone
+	err := goRepo.ForeachMilestone(func(m *maintner.GitHubMilestone) error {
+		if strings.ToLower(m.Title) != version {
+			return nil
+		}
+		found = m
+		return errFoundMilestone
+	})
+	if err == nil {
+		return nil, fmt.Errorf("no milestone found for version %q", version)
+	} else if err != errFoundMilestone {
+		return nil, err
+	}
+	return found, nil
+}
+
+func nextVersion(version string) (string, error) {
+	parts := strings.Split(version, ".")
+	n, err := strconv.Atoi(parts[len(parts)-1])
+	if err != nil {
+		return "", err
+	}
+	parts[len(parts)-1] = strconv.Itoa(n + 1)
+	return strings.Join(parts, "."), nil
+}
+
 // Work collects all the work state for managing a particular release.
 // The intent is that the code could be used in a setting where one program
 // is managing multiple releases, although the current releasebot command line
@@ -202,9 +220,12 @@ type Work struct {
 	releaseMu   sync.Mutex
 	ReleaseInfo map[string]*ReleaseInfo // map and info protected by releaseMu
 
-	// Properties set for minor releases only.
-	Milestone     *maintner.GitHubMilestone
-	NextMilestone *maintner.GitHubMilestone // Next minor milestone
+	Milestone *maintner.GitHubMilestone // Milestone for the current release.
+	// NextMilestone is the milestone of the next release of the same kind.
+	// For major releases, it's the milestone of the next major release (e.g., 1.14 → 1.15).
+	// For minor releases, it's the milestone of the next minor release (e.g., 1.14.1 → 1.14.2).
+	// For other release types, it's unset.
+	NextMilestone *maintner.GitHubMilestone
 }
 
 // ReleaseInfo describes a release build for a specific target.
@@ -299,36 +320,6 @@ func (w *Work) doRelease() {
 	defer w.finally()
 
 	w.log.Printf("starting")
-
-	if w.BetaRelease {
-		w.ReleaseBranch = "master"
-
-	} else if w.RCRelease {
-		shortRel := strings.Split(w.Version, "rc")[0]
-		w.ReleaseBranch = "release-branch." + shortRel
-
-	} else if strings.Count(w.Version, ".") == 1 {
-		// Major release like "go1.X".
-		if w.Security {
-			// TODO(dmitshur): move this error check to happen earlier
-			w.logError("%s is a major version, it cannot be a security release.", w.Version)
-			w.logError("**Found errors during release. Stopping!**")
-			return
-		}
-		w.ReleaseBranch = "release-branch." + w.Version
-	} else if strings.Count(w.Version, ".") == 2 {
-		// Minor release or security release like "go1.X.Y".
-		shortRel := w.Version[:strings.LastIndex(w.Version, ".")]
-		w.ReleaseBranch = "release-branch." + shortRel
-		if w.Security {
-			w.ReleaseBranch += "-security"
-		}
-	} else {
-		// TODO(dmitshur): move this error check to happen earlier
-		w.logError("Cannot understand version %q.", w.Version)
-		w.logError("**Found errors during release. Stopping!**")
-		return
-	}
 
 	w.checkSpelling()
 	w.gitCheckout()
