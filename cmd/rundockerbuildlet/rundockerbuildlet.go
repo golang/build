@@ -27,7 +27,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"golang.org/x/build/buildenv"
-	"golang.org/x/build/buildlet"
+	"golang.org/x/build/internal/cloud"
 )
 
 var (
@@ -47,7 +47,7 @@ var (
 	isReverse    = true
 	isSingleRun  = false
 	// ec2UD contains a copy of the EC2 vm user data retrieved from the metadata.
-	ec2UD *buildlet.EC2UserData
+	ec2UD *cloud.EC2UserData
 	// ec2MetaClient is an EC2 metadata client.
 	ec2MetaClient *ec2metadata.EC2Metadata
 )
@@ -301,7 +301,7 @@ func initEC2Meta() {
 	if err != nil {
 		log.Fatalf("unable to retrieve EC2 user data: %v", err)
 	}
-	ec2UD = &buildlet.EC2UserData{}
+	ec2UD = &cloud.EC2UserData{}
 	err = json.Unmarshal([]byte(ec2MetaJson), ec2UD)
 	if err != nil {
 		log.Fatalf("unable to unmarshal user data json: %v", err)

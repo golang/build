@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"golang.org/x/build/internal/cloud"
 	"google.golang.org/api/compute/v1"
 )
 
@@ -61,7 +61,7 @@ type VMOpts struct {
 	// OnInstanceCreated optionally specifies a hook to run synchronously
 	// after the EC2 instance information is retrieved.
 	// Only valid for EC2 resources.
-	OnGotEC2InstanceInfo func(*ec2.Instance)
+	OnGotEC2InstanceInfo func(*cloud.Instance)
 
 	// OnBeginBuildletProbe optionally specifies a hook to run synchronously
 	// before StartNewVM tries to hit buildletURL to see if it's up yet.
