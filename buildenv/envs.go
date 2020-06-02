@@ -142,6 +142,11 @@ type Environment struct {
 	// account that will be assigned to a VM instance that hosts
 	// a container when the instance is created.
 	COSServiceAccount string
+
+	// AWSSecurityGroup is the security group that any VM instance
+	// created on EC2 should contain. These security groups are
+	// collections of firewall rules to be applied to the VM.
+	AWSSecurityGroup string
 }
 
 // ComputePrefix returns the URI prefix for Compute Engine resources in a project.
@@ -278,6 +283,7 @@ var Staging = &Environment{
 	LogBucket:         "dev-go-build-log",
 	SnapBucket:        "dev-go-build-snap",
 	COSServiceAccount: "linux-cos-builders@go-dashboard-dev.iam.gserviceaccount.com",
+	AWSSecurityGroup:  "sg-02c2a75a3eed843bb",
 }
 
 // Production defines the environment that the coordinator and build
@@ -313,6 +319,7 @@ var Production = &Environment{
 	SnapBucket:          "go-build-snap",
 	AutoCertCacheBucket: "farmer-golang-org-autocert-cache",
 	COSServiceAccount:   "linux-cos-builders@symbolic-datum-552.iam.gserviceaccount.com",
+	AWSSecurityGroup:    "sg-02c2a75a3eed843bb",
 }
 
 var Development = &Environment{
