@@ -44,6 +44,12 @@ const (
 
 	// NamePubSubHelperWebhook is the secret name for the pubsub helper webhook secret.
 	NamePubSubHelperWebhook = "pubsubhelper-webhook-secret"
+
+	// NameAWSAccessKey is the secret name for the AWS access key.
+	NameAWSAccessKey = "aws-access-key"
+
+	// NameAWSKeyID is the secret name for the AWS key id.
+	NameAWSKeyID = "aws-key-id"
 )
 
 type secretClient interface {
