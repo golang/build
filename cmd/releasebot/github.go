@@ -158,11 +158,12 @@ func (w *Work) pushIssues() {
 		// Nothing to do.
 		return
 	}
+
 	if err := goRepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Milestone == nil || gi.Milestone.Title != w.Milestone.Title {
+		if gi.Milestone == nil || gi.Milestone.ID != w.Milestone.ID {
 			return nil
 		}
-		if gi.Title == w.releaseStatusTitle() {
+		if gi.Number == int32(w.ReleaseIssue) {
 			return nil
 		}
 		// All issues are unrelated if this is a security release.
@@ -200,6 +201,38 @@ func (w *Work) closeMilestone() {
 		w.logError("closing milestone: %v", err)
 	}
 
+}
+
+func (w *Work) removeOkayAfterBeta1() {
+	if !w.BetaRelease || !strings.HasSuffix(w.Version, "beta1") {
+		// Nothing to do.
+		return
+	}
+
+	if err := goRepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		if gi.Milestone == nil || gi.Milestone.ID != w.Milestone.ID {
+			return nil
+		}
+		if gi.Number == int32(w.ReleaseIssue) {
+			return nil
+		}
+		if gi.Closed || !gi.HasLabel("release-blocker") || !gi.HasLabel("okay-after-beta1") {
+			return nil
+		}
+		w.log.Printf("removing okay-after-beta1 label in issue %d", gi.Number)
+		if dryRun {
+			return nil
+		}
+		_, err := githubClient.Issues.RemoveLabelForIssue(context.Background(),
+			projectOwner, projectRepo, int(gi.Number), "okay-after-beta1")
+		if err != nil {
+			return fmt.Errorf("#%d: %s", gi.Number, err)
+		}
+		return nil
+	}); err != nil {
+		w.logError("error removing okay-after-beta1 label from issues in current milestone: %v", err)
+		return
+	}
 }
 
 func postGithubComment(number int, body string) error {

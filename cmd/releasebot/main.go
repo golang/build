@@ -426,9 +426,12 @@ func (w *Work) doRelease() {
 			return
 		}
 
-		if !w.BetaRelease && !w.RCRelease {
+		switch {
+		case !w.BetaRelease && !w.RCRelease:
 			w.pushIssues()
 			w.closeMilestone()
+		case w.BetaRelease && strings.HasSuffix(w.Version, "beta1"):
+			w.removeOkayAfterBeta1()
 		}
 		w.nextStepsRelease()
 	}
@@ -448,7 +451,7 @@ func (w *Work) checkSpelling() {
 
 func (w *Work) checkReleaseBlockers() {
 	if err := goRepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Milestone == nil || gi.Milestone.Title != w.Milestone.Title {
+		if gi.Milestone == nil || gi.Milestone.ID != w.Milestone.ID {
 			return nil
 		}
 		if !gi.Closed && gi.HasLabel("release-blocker") {
@@ -463,7 +466,7 @@ func (w *Work) checkReleaseBlockers() {
 
 func (w *Work) checkBeta1ReleaseBlockers() {
 	if err := goRepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Milestone == nil || gi.Milestone.Title != w.Milestone.Title {
+		if gi.Milestone == nil || gi.Milestone.ID != w.Milestone.ID {
 			return nil
 		}
 		if !gi.Closed && gi.HasLabel("release-blocker") && !gi.HasLabel("okay-after-beta1") {
