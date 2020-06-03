@@ -200,19 +200,24 @@ func loadGomoteUser() {
 // getMilestone returns the GitHub milestone corresponding to the specified version,
 // or an error if it cannot be found.
 func getMilestone(version string) (*maintner.GitHubMilestone, error) {
-	errFoundMilestone := errors.New("found milestone")
+	// Pre-release versions of Go share the same milestone as the
+	// release version, so trim the pre-release suffix, if any.
+	if i := strings.Index(version, "beta"); i != -1 {
+		version = version[:i]
+	} else if i := strings.Index(version, "rc"); i != -1 {
+		version = version[:i]
+	}
+
 	var found *maintner.GitHubMilestone
-	err := goRepo.ForeachMilestone(func(m *maintner.GitHubMilestone) error {
+	goRepo.ForeachMilestone(func(m *maintner.GitHubMilestone) error {
 		if strings.ToLower(m.Title) != version {
 			return nil
 		}
 		found = m
-		return errFoundMilestone
+		return errors.New("stop iteration")
 	})
-	if err == nil {
+	if found == nil {
 		return nil, fmt.Errorf("no milestone found for version %q", version)
-	} else if err != errFoundMilestone {
-		return nil, err
 	}
 	return found, nil
 }
