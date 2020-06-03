@@ -2,9 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Releasebot manages the process of defining, packaging, and publishing Go
-// releases. It is a work in progress; right now it only handles beta, rc and
-// minor (point) releases, but eventually we want it to handle major releases too.
+// Releasebot manages the process of defining,
+// packaging, and publishing Go releases.
 package main
 
 import (
@@ -483,7 +482,7 @@ func (w *Work) nextStepsPrepare(changeID string) {
 	if w.Security {
 		w.log.Printf(`
 
-The release is ready.
+The prepare stage has completed.
 
 Please review and submit https://team-review.git.corp.google.com/q/%s
 and then run the release stage.
@@ -494,7 +493,7 @@ and then run the release stage.
 
 	w.log.Printf(`
 
-The release is ready.
+The prepare stage has completed.
 
 Please review and submit https://go-review.googlesource.com/q/%s
 and then run the release stage.
@@ -505,7 +504,9 @@ and then run the release stage.
 func (w *Work) nextStepsBeta() {
 	w.log.Printf(`
 
-The release is ready. Run with mode=release to execute it.
+The prepare stage has completed.
+
+Please run the release stage next.
 
 `)
 }
@@ -513,9 +514,9 @@ The release is ready. Run with mode=release to execute it.
 func (w *Work) nextStepsRelease() {
 	w.log.Printf(`
 
-The release run is complete! Refer to the playbook for the next steps.
+The release stage has completed. Thanks for riding with releasebot today!
 
-Thanks for riding with releasebot today.
+Please refer to the playbook for the next steps.
 
 `)
 }
