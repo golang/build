@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// The debugnewvm command creates and destroys a VM-based GCE buildlet
+// The debugnewvm command creates and destroys a VM-based buildlet
 // with lots of logging for debugging. Nothing depends on this.
 package main
 
@@ -17,11 +17,15 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/buildgo"
+	"golang.org/x/build/internal/cloud"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 	compute "google.golang.org/api/compute/v1"
 )
 
@@ -29,13 +33,17 @@ var (
 	hostType      = flag.String("host", "", "host type to create")
 	zone          = flag.String("zone", "", "if non-empty, force a certain GCP zone")
 	overrideImage = flag.String("override-image", "", "if non-empty, an alternate GCE VM image or container image to use, depending on the host type")
-	serial        = flag.Bool("serial", true, "watch serial")
+	serial        = flag.Bool("serial", true, "watch serial. Supported for GCE VMs")
 	pauseAfterUp  = flag.Duration("pause-after-up", 0, "pause for this duration before buildlet is destroyed")
 	sleepSec      = flag.Int("sleep-test-secs", 0, "number of seconds to sleep when buildlet comes up, to test time source; OpenBSD only for now")
 
 	runBuild = flag.String("run-build", "", "optional builder name to run all.bash or make.bash for")
 	makeOnly = flag.Bool("make-only", false, "if a --run-build builder name is given, this controls whether make.bash or all.bash is run")
 	buildRev = flag.String("rev", "master", "if --run-build is specified, the git hash or branch name to build")
+
+	awsKeyID     = flag.String("aws-key-id", "", "if the builder runs on aws then key id is required. If executed on GCE, it will be retrieved from secrets.")
+	awsAccessKey = flag.String("aws-access-key", "", "if the builder runs on aws then the access key is required. If executed on GCE, it will be retrieved from secrets.")
+	awsRegion    = flag.String("aws-region", "us-east-2", "if the builder runs on aws then it is created in this region.")
 )
 
 var (
@@ -73,6 +81,16 @@ func main() {
 	if !hconf.IsVM() && !hconf.IsContainer() {
 		log.Fatalf("host type %q is type %q; want a VM or container host type", *hostType, hconf.PoolName())
 	}
+	if hconf.IsEC2() && (*awsKeyID == "" || *awsAccessKey == "") {
+		if !metadata.OnGCE() {
+			log.Fatal("missing -aws-key-id and -aws-access-key params are required for builders on AWS")
+		}
+		var err error
+		*awsKeyID, *awsAccessKey, err = awsCredentialsFromSecrets()
+		if err != nil {
+			log.Fatalf("unable to retrieve AWS credentials: %s", err)
+		}
+	}
 	if img := *overrideImage; img != "" {
 		if hconf.IsContainer() {
 			hconf.ContainerImage = img
@@ -90,44 +108,33 @@ func main() {
 	}
 
 	env = buildenv.FromFlags()
-
 	ctx := context.Background()
-
-	buildenv.CheckUserCredentials()
-	creds, err := env.Credentials(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-	computeSvc, _ = compute.New(oauth2.NewClient(ctx, creds.TokenSource))
-
 	name := fmt.Sprintf("debug-temp-%d", time.Now().Unix())
 
 	log.Printf("Creating %s (with VM image %s)", name, vmImageSummary)
-	var zoneSelected string
-	bc, err := buildlet.StartNewVM(creds, env, name, *hostType, buildlet.VMOpts{
-		Zone:                *zone,
-		OnInstanceRequested: func() { log.Printf("instance requested") },
-		OnInstanceCreated: func() {
-			log.Printf("instance created")
-			if *serial {
-				go watchSerial(zoneSelected, name)
-			}
-		},
-		OnGotInstanceInfo: func(inst *compute.Instance) {
-			zoneSelected = inst.Zone
-			log.Printf("got instance info; running in %v", zoneSelected)
-		},
-		OnBeginBuildletProbe: func(buildletURL string) {
-			log.Printf("About to hit %s to see if buildlet is up yet...", buildletURL)
-		},
-		OnEndBuildletProbe: func(res *http.Response, err error) {
-			if err != nil {
-				log.Printf("client buildlet probe error: %v", err)
-				return
-			}
-			log.Printf("buildlet probe: %s", res.Status)
-		},
-	})
+	var (
+		bc  *buildlet.Client
+		err error
+	)
+	if hconf.IsEC2() {
+		awsC, err := cloud.NewAWSClient(*awsRegion, *awsKeyID, *awsAccessKey)
+		if err != nil {
+			log.Fatalf("unable to create aws cloud client: %s", err)
+		}
+		ec2C := buildlet.NewEC2Client(awsC)
+		if err != nil {
+			log.Fatalf("unable to create ec2 client: %v", err)
+		}
+		bc, err = ec2Buildlet(context.Background(), ec2C, hconf, env, name, *hostType, *zone)
+	} else {
+		buildenv.CheckUserCredentials()
+		creds, err := env.Credentials(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+		computeSvc, _ = compute.New(oauth2.NewClient(ctx, creds.TokenSource))
+		bc, err = gceBuildlet(creds, env, name, *hostType, *zone)
+	}
 	if err != nil {
 		log.Fatalf("StartNewVM: %v", err)
 	}
@@ -215,6 +222,7 @@ func main() {
 //   gcloud compute connect-to-serial-port --zone=xxx $NAME
 // but in Go and works. For some reason, gcloud doesn't work as a
 // child process and has weird errors.
+// TODO(golang.org/issue/39485) - investigate if this is possible for EC2 instances
 func watchSerial(zone, name string) {
 	start := int64(0)
 	indent := strings.Repeat(" ", len("2017/07/25 06:37:14 SERIAL: "))
@@ -234,4 +242,80 @@ func watchSerial(zone, name string) {
 			time.Sleep(1 * time.Second)
 		}
 	}
+}
+
+// awsCredentialsFromSecrets retrieves AWS credentials from the secret management service.
+// This funciton returns the key ID and the access key.
+func awsCredentialsFromSecrets() (string, string, error) {
+	c, err := secret.NewClient()
+	if err != nil {
+		return "", "", fmt.Errorf("unable to create secret client: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	keyID, err := c.Retrieve(ctx, secret.NameAWSKeyID)
+	if err != nil {
+		return "", "", fmt.Errorf("unable to retrieve key ID: %w", err)
+	}
+	accessKey, err := c.Retrieve(ctx, secret.NameAWSAccessKey)
+	if err != nil {
+		return "", "", fmt.Errorf("unable to retrueve access key: %w", err)
+	}
+	return keyID, accessKey, nil
+}
+
+func gceBuildlet(creds *google.Credentials, env *buildenv.Environment, name, hostType, zone string) (*buildlet.Client, error) {
+	var zoneSelected string
+	return buildlet.StartNewVM(creds, env, name, hostType, buildlet.VMOpts{
+		Zone:                zone,
+		OnInstanceRequested: func() { log.Printf("instance requested") },
+		OnInstanceCreated: func() {
+			log.Printf("instance created")
+			if *serial {
+				go watchSerial(zoneSelected, name)
+			}
+		},
+		OnGotInstanceInfo: func(inst *compute.Instance) {
+			zoneSelected = inst.Zone
+			log.Printf("got instance info; running in %v", zoneSelected)
+		},
+		OnBeginBuildletProbe: func(buildletURL string) {
+			log.Printf("About to hit %s to see if buildlet is up yet...", buildletURL)
+		},
+		OnEndBuildletProbe: func(res *http.Response, err error) {
+			if err != nil {
+				log.Printf("client buildlet probe error: %v", err)
+				return
+			}
+			log.Printf("buildlet probe: %s", res.Status)
+		},
+	})
+}
+
+func ec2Buildlet(ctx context.Context, ec2Client *buildlet.EC2Client, hconf *dashboard.HostConfig, env *buildenv.Environment, name, hostType, zone string) (*buildlet.Client, error) {
+	kp, err := buildlet.NewKeyPair()
+	if err != nil {
+		log.Fatalf("key pair failed: %v", err)
+	}
+	return ec2Client.StartNewVM(ctx, env, hconf, name, hostType, &buildlet.VMOpts{
+		TLS:                 kp,
+		Zone:                zone,
+		OnInstanceRequested: func() { log.Printf("instance requested") },
+		OnInstanceCreated: func() {
+			log.Printf("instance created")
+		},
+		OnGotEC2InstanceInfo: func(inst *cloud.Instance) {
+			log.Printf("got instance info: running in %v", inst.Zone)
+		},
+		OnBeginBuildletProbe: func(buildletURL string) {
+			log.Printf("About to hit %s to see if buildlet is up yet...", buildletURL)
+		},
+		OnEndBuildletProbe: func(res *http.Response, err error) {
+			if err != nil {
+				log.Printf("client buildlet probe error: %v", err)
+				return
+			}
+			log.Printf("buildlet probe: %s", res.Status)
+		},
+	})
 }

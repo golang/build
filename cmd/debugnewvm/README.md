@@ -4,4 +4,4 @@
 
 # golang.org/x/build/cmd/debugnewvm
 
-The debugnewvm command creates and destroys a VM-based GCE buildlet with lots of logging for debugging.
+The debugnewvm command creates and destroys a VM-based buildlets with lots of logging for debugging.
