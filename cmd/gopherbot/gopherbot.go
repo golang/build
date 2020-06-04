@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -1840,7 +1841,8 @@ func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 				return nil
 			}
 
-			if b.humanReviewersOnChange(ctx, gc, cl) {
+			currentReviewers, ok := b.humanReviewersOnChange(ctx, gc, cl)
+			if ok {
 				return nil
 			}
 
@@ -1892,6 +1894,13 @@ func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 			for _, owner := range merged.Secondary {
 				review.Reviewers = append(review.Reviewers, gerrit.ReviewerInput{Reviewer: owner.GerritEmail, State: "CC"})
 			}
+
+			// If the reviewers that would be set are the same as the existing
+			// reviewers (minus the bots), there is no work to be done.
+			if sameReviewers(currentReviewers, review) {
+				log.Printf("Setting review %+v on %s would have no effect, continuing", review, changeURL)
+				return nil
+			}
 			if *dryRun {
 				log.Printf("[dry run] Would set review on %s: %+v", changeURL, review)
 				return nil
@@ -1906,6 +1915,38 @@ func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 		return nil
 	})
 	return nil
+}
+
+func sameReviewers(reviewers []string, review gerrit.ReviewInput) bool {
+	if len(reviewers) != len(review.Reviewers) {
+		return false
+	}
+	sort.Strings(reviewers)
+	var people []*gophers.Person
+	for _, id := range reviewers {
+		p := gophers.GetPerson(fmt.Sprintf("%s@%s", id, gerritInstanceID))
+		// If an existing reviewer is not known to us, we have no way of
+		// checking if these reviewer lists are identical.
+		if p == nil {
+			return false
+		}
+		people = append(people, p)
+	}
+	sort.Slice(review.Reviewers, func(i, j int) bool {
+		return review.Reviewers[i].Reviewer < review.Reviewers[j].Reviewer
+	})
+	// Check if any of the person's emails match the expected reviewer email.
+outer:
+	for i, p := range people {
+		reviewerEmail := review.Reviewers[i].Reviewer
+		for _, email := range p.Emails {
+			if email == reviewerEmail {
+				continue outer
+			}
+		}
+		return false
+	}
+	return true
 }
 
 // abandonScratchReviews abandons Gerrit CLs in the "scratch" project if they've been open for over a week.
@@ -1998,10 +2039,12 @@ func (b *gopherbot) whoNeedsAccess(ctx context.Context) error {
 	return nil
 }
 
-// humanReviewersOnChange returns true if there are (or were any) human reviewers in the given change.
-// The gerritChange passed must be used because it’s used as a key to deletedChanges and the ID returned
-// by cl.ChangeID() can be associated with multiple changes (cherry-picks, for example).
-func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritChange, cl *maintner.GerritCL) bool {
+// humanReviewersOnChange reports whether there is (or was) a sufficient number
+// of human reviewers in the given change. It also returns the IDs of the
+// current human reviewers. The given gerritChange must be used because it’s
+// used as a key to deletedChanges and the ID returned by cl.ChangeID() can be
+// associated with multiple changes (cherry-picks, for example).
+func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritChange, cl *maintner.GerritCL) ([]string, bool) {
 	const (
 		gobotID     = 5976
 		gerritbotID = 12446
@@ -2017,8 +2060,8 @@ func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritCha
 		minHumans = 2
 	}
 
-	if found := humanReviewersInMetas(cl.Metas, minHumans); found {
-		return true
+	if reviewers, found := humanReviewersInMetas(cl.Metas, minHumans); found {
+		return reviewers, true
 	}
 
 	reviewers, err := b.gerrit.ListReviewers(ctx, change.ID())
@@ -2027,29 +2070,37 @@ func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritCha
 			b.deletedChanges[change] = true
 		}
 		log.Printf("Could not list reviewers on change %q: %v", change.ID(), err)
-		return true
+		return nil, true
 	}
 	var count int
+	var ids []string
 	for _, r := range reviewers {
 		if r.NumericID != gobotID && r.NumericID != gerritbotID && r.NumericID != ownerID {
+			ids = append(ids, strconv.FormatInt(r.NumericID, 10))
 			count++
-			if count == minHumans {
-				return true
-			}
 		}
 	}
-	return false
+	return ids, count >= minHumans
 }
 
+// reviewerRe extracts the reviewer's Gerrit ID from a line that looks like:
+//
+//   Reviewer: Rebecca Stambler <16140@62eb7196-b449-3ce5-99f1-c037f21e1705>
+var reviewerRe = regexp.MustCompile(`.* <(?P<id>\d+)@.*>`)
+
+const gerritInstanceID = "@62eb7196-b449-3ce5-99f1-c037f21e1705"
+
 // humanReviewersInMetas reports whether there are at least minHumans human
-// reviewers in the given metas.
-func humanReviewersInMetas(metas []*maintner.GerritMeta, minHumans int) bool {
+// reviewers in the given metas. It also returns the Gerrit IDs of all of the
+// human reviewers.
+func humanReviewersInMetas(metas []*maintner.GerritMeta, minHumans int) ([]string, bool) {
 	// Emails as they appear in maintner (<numeric ID>@<instance ID>)
 	var (
-		gobotEmail     = "5976@62eb7196-b449-3ce5-99f1-c037f21e1705"
-		gerritbotEmail = "12446@62eb7196-b449-3ce5-99f1-c037f21e1705"
+		gobotEmail     = "5976" + gerritInstanceID
+		gerritbotEmail = "12446" + gerritInstanceID
 	)
 	var count int
+	var ids []string
 	for _, m := range metas {
 		if !strings.Contains(m.Commit.Msg, "Reviewer:") && !strings.Contains(m.Commit.Msg, "CC:") {
 			continue
@@ -2060,20 +2111,30 @@ func humanReviewersInMetas(metas []*maintner.GerritMeta, minHumans int) bool {
 				return nil
 			}
 			if !strings.Contains(ln, gobotEmail) && !strings.Contains(ln, gerritbotEmail) {
+				match := reviewerRe.FindStringSubmatch(ln)
+				if match == nil {
+					return nil
+				}
 				// A human is already on the change.
 				count++
-				if count == minHumans {
-					return errStopIteration
+				// Extract the human's Gerrit ID.
+				for i, name := range reviewerRe.SubexpNames() {
+					if name != "id" {
+						continue
+					}
+					if i < 0 || i > len(match) {
+						continue
+					}
+					ids = append(ids, match[i])
 				}
 			}
 			return nil
 		})
-		if err != nil && err != errStopIteration {
+		if err != nil {
 			log.Printf("humanReviewersInMetas: got unexpected error from foreach.LineStr: %v", err)
-			return count >= minHumans
 		}
 	}
-	return count >= minHumans
+	return ids, count >= minHumans
 }
 
 func getCodeOwners(ctx context.Context, paths []string) ([]*owners.Entry, error) {
