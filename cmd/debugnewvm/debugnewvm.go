@@ -43,7 +43,7 @@ var (
 
 	awsKeyID     = flag.String("aws-key-id", "", "if the builder runs on aws then key id is required. If executed on GCE, it will be retrieved from secrets.")
 	awsAccessKey = flag.String("aws-access-key", "", "if the builder runs on aws then the access key is required. If executed on GCE, it will be retrieved from secrets.")
-	awsRegion    = flag.String("aws-region", "us-east-2", "if the builder runs on aws then it is created in this region.")
+	awsRegion    = flag.String("aws-region", "", "if non-empty and the requested builder is an EC2 instance, force an EC2 region.")
 )
 
 var (
@@ -112,12 +112,13 @@ func main() {
 	name := fmt.Sprintf("debug-temp-%d", time.Now().Unix())
 
 	log.Printf("Creating %s (with VM image %s)", name, vmImageSummary)
-	var (
-		bc  *buildlet.Client
-		err error
-	)
+	var bc *buildlet.Client
 	if hconf.IsEC2() {
-		awsC, err := cloud.NewAWSClient(*awsRegion, *awsKeyID, *awsAccessKey)
+		region := env.AWSRegion
+		if *awsRegion != "" {
+			region = *awsRegion
+		}
+		awsC, err := cloud.NewAWSClient(region, *awsKeyID, *awsAccessKey)
 		if err != nil {
 			log.Fatalf("unable to create aws cloud client: %s", err)
 		}
@@ -126,6 +127,9 @@ func main() {
 			log.Fatalf("unable to create ec2 client: %v", err)
 		}
 		bc, err = ec2Buildlet(context.Background(), ec2C, hconf, env, name, *hostType, *zone)
+		if err != nil {
+			log.Fatalf("Start EC2 VM: %v", err)
+		}
 	} else {
 		buildenv.CheckUserCredentials()
 		creds, err := env.Credentials(ctx)
@@ -134,9 +138,9 @@ func main() {
 		}
 		computeSvc, _ = compute.New(oauth2.NewClient(ctx, creds.TokenSource))
 		bc, err = gceBuildlet(creds, env, name, *hostType, *zone)
-	}
-	if err != nil {
-		log.Fatalf("StartNewVM: %v", err)
+		if err != nil {
+			log.Fatalf("Start GCE VM: %v", err)
+		}
 	}
 	dir, err := bc.WorkDir(ctx)
 	log.Printf("WorkDir: %v, %v", dir, err)

@@ -143,10 +143,15 @@ type Environment struct {
 	// a container when the instance is created.
 	COSServiceAccount string
 
-	// AWSSecurityGroup is the security group that any VM instance
+	// AWSSecurityGroup is the security group name that any VM instance
 	// created on EC2 should contain. These security groups are
 	// collections of firewall rules to be applied to the VM.
 	AWSSecurityGroup string
+
+	// AWSRegion is the region where AWS resources are deployed.
+	// The availability zones set in VMEC2Zones should all reside
+	// within this region.
+	AWSRegion string
 }
 
 // ComputePrefix returns the URI prefix for Compute Engine resources in a project.
@@ -261,6 +266,7 @@ var Staging = &Environment{
 	IsProd:                true,
 	ControlZone:           "us-central1-f",
 	VMZones:               []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
+	VMEC2Zones:            []string{"us-east-1a", "us-east-1b"},
 	StaticIP:              "104.154.113.235",
 	MachineType:           "n1-standard-1",
 	PreferContainersOnCOS: true,
@@ -283,7 +289,8 @@ var Staging = &Environment{
 	LogBucket:         "dev-go-build-log",
 	SnapBucket:        "dev-go-build-snap",
 	COSServiceAccount: "linux-cos-builders@go-dashboard-dev.iam.gserviceaccount.com",
-	AWSSecurityGroup:  "sg-02c2a75a3eed843bb",
+	AWSSecurityGroup:  "staging-go-builders",
+	AWSRegion:         "us-east-1",
 }
 
 // Production defines the environment that the coordinator and build
@@ -319,7 +326,8 @@ var Production = &Environment{
 	SnapBucket:          "go-build-snap",
 	AutoCertCacheBucket: "farmer-golang-org-autocert-cache",
 	COSServiceAccount:   "linux-cos-builders@symbolic-datum-552.iam.gserviceaccount.com",
-	AWSSecurityGroup:    "sg-02c2a75a3eed843bb",
+	AWSSecurityGroup:    "go-builders",
+	AWSRegion:           "us-east-2",
 }
 
 var Development = &Environment{
