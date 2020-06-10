@@ -10,7 +10,6 @@ require (
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/fsnotify/fsnotify v1.4.7 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20190309154008-847fc94819f9 // indirect
-	github.com/kr/pretty v0.1.0 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.2 // indirect
 	github.com/neelance/astrewrite v0.0.0-20160511093645-99348263ae86 // indirect
 	github.com/neelance/sourcemap v0.0.0-20151028013722-8c68805598ab // indirect
@@ -38,9 +37,6 @@ require (
 	github.com/shurcooL/webdavfs v0.0.0-20181215192745-5988b2d638f6 // indirect
 	github.com/sourcegraph/annotate v0.0.0-20160123013949-f4cad6c6324d // indirect
 	github.com/sourcegraph/syntaxhighlight v0.0.0-20170531221838-bd320f5d308e // indirect
-	github.com/stretchr/testify v1.3.0 // indirect
-	golang.org/x/build v0.0.0-20190313234014-6d820572de7c
-	golang.org/x/sys v0.0.0-20190312061237-fead79001313 // indirect
-	golang.org/x/tools v0.0.0-20190313193421-dbad8e90c91b // indirect
+	golang.org/x/build v0.0.0-20200605162911-826f76b0b12a
 	sourcegraph.com/sourcegraph/go-diff v0.5.0 // indirect
 )
