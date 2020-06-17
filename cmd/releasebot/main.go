@@ -71,7 +71,7 @@ func usage() {
 }
 
 var (
-	skipTestFlag = flag.String("skip-test", "linux-amd64-longtest windows-amd64-longtest", "space-separated list of test-only targets to skip (only use if sufficient testing was done elsewhere)")
+	skipTestFlag = flag.String("skip-test", "linux-amd64-longtest", "space-separated list of test-only targets to skip (only use if sufficient testing was done elsewhere)")
 )
 
 var (
@@ -561,21 +561,28 @@ func (w *Work) printReleaseTable(md *bytes.Buffer) {
 	w.releaseMu.Lock()
 	defer w.releaseMu.Unlock()
 	for _, target := range releaseTargets {
-		fmt.Fprintf(md, "%s", mdEscape(target.Name))
+		fmt.Fprintf(md, "- %s", mdEscape(target.Name))
+		if target.TestOnly {
+			fmt.Fprintf(md, " (test only)")
+		}
 		info := w.ReleaseInfo[target.Name]
 		if info == nil {
-			fmt.Fprintf(md, " not started\n")
+			fmt.Fprintf(md, " - not started\n")
 			continue
 		}
-		for _, out := range info.Outputs {
-			if out.Link == "" {
-				fmt.Fprintf(md, " (~~%s~~)", mdEscape(out.Suffix))
-			} else {
-				fmt.Fprintf(md, " ([%s](%s))", mdEscape(out.Suffix), out.Link)
-			}
-		}
 		if len(info.Outputs) == 0 {
-			fmt.Fprintf(md, " not built")
+			fmt.Fprintf(md, " - not built")
+		} else if target.TestOnly && len(info.Outputs) == 1 && info.Outputs[0].Suffix == "test-only" {
+			fmt.Fprintf(md, " - ok")
+		}
+		for _, out := range info.Outputs {
+			if out.Suffix == "test-only" {
+				continue
+			} else if out.Link != "" {
+				fmt.Fprintf(md, " ([%s](%s))", mdEscape(out.Suffix), out.Link)
+			} else {
+				fmt.Fprintf(md, " (~~%s~~)", mdEscape(out.Suffix))
+			}
 		}
 		fmt.Fprintf(md, "\n")
 		if info.Msg != "" {
