@@ -41,6 +41,23 @@ var goRev string
 // TODO: use buildlet package instead of calling out to gomote.
 var platforms = []*Platform{
 	&Platform{
+		OS:   "openbsd",
+		Arch: "amd64",
+		Type: "openbsd-amd64-race",
+		Script: `#!/usr/bin/env bash
+set -e
+git clone https://go.googlesource.com/go
+pushd go
+git checkout $GOREV
+popd
+git clone https://github.com/llvm/llvm-project
+(cd llvm-project && git checkout $REV)
+(cd llvm-project/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
+cp llvm-project/compiler-rt/lib/tsan/go/race_openbsd_amd64.syso go/src/runtime/race
+(cd go/src && ./race.bash)
+			`,
+	},
+	&Platform{
 		OS:   "freebsd",
 		Arch: "amd64",
 		Type: "freebsd-amd64-race",
