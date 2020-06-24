@@ -7,7 +7,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
+
+	"golang.org/x/build/buildlet"
 )
 
 func destroy(args []string) error {
@@ -15,6 +18,23 @@ func destroy(args []string) error {
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "destroy usage: gomote destroy <instance>")
 		fs.PrintDefaults()
+		if fs.NArg() == 0 {
+			// List buildlets that you might want to destroy.
+			cc, err := buildlet.NewCoordinatorClientFromFlags()
+			if err != nil {
+				log.Fatal(err)
+			}
+			rbs, err := cc.RemoteBuildlets()
+			if err != nil {
+				log.Fatal(err)
+			}
+			if len(rbs) > 0 {
+				fmt.Printf("possible instances:\n")
+				for _, rb := range rbs {
+					fmt.Printf("\t%s\n", rb.Name)
+				}
+			}
+		}
 		os.Exit(1)
 	}
 
