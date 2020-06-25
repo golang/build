@@ -849,6 +849,10 @@ var entries = map[string]*Entry{
 		Primary: []Owner{toolsTeam},
 	},
 
+	"pkgsite": {
+		Primary: []Owner{julieqiu},
+	},
+
 	"playground": {
 		Primary: []Owner{andybons, rakoczy},
 	},
@@ -863,9 +867,6 @@ var entries = map[string]*Entry{
 	},
 
 	// These components are domains, not Go packages.
-	"pkg.go.dev": {
-		Primary: []Owner{julieqiu},
-	},
 	"learn.go.dev": {
 		Primary: []Owner{carmen, pearring},
 	},
