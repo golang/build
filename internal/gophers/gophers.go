@@ -1540,7 +1540,7 @@ func init() {
 	addPerson("Julian Kornberger", "jk+github@digineo.de", "@corny")
 	addPerson("Julian Pastarmov", "pastarmovj@google.com")
 	addPerson("Julian Phillips", "julian@quantumfyre.co.uk", "@qur")
-	addPerson("Julie Qiu", "julieyeqiu@gmail.com", "@julieqiu", "julieqiu@google.com", "julie@golang.org")
+	addPerson("Julie Qiu", "julie@golang.org", "@julieqiu", "julieqiu@google.com")
 	addPerson("Julien Kauffmann", "julien.kauffmann@freelan.org")
 	addPerson("Julien Salleyron", "julien.salleyron@gmail.com", "@Juliens")
 	addPerson("Julien Schmidt", "google@julienschmidt.com", "@julienschmidt")
