@@ -771,24 +771,24 @@ type BuildConfig struct {
 	CompileOnly bool // if true, compile tests, but don't run them
 	FlakyNet    bool // network tests are flaky (try anyway, but ignore some failures)
 
-	// buildsRepo optionally specifies whether this
-	// builder does builds (of any type) for the given repo ("go",
-	// "net", etc) and its branch ("master", "release-branch.go1.12").
+	// buildsRepo optionally specifies whether this builder does
+	// builds (of any type) for the given repo ("go", "net", etc.)
+	// and its branch ("master", "release-branch.go1.12", "dev.link", etc.).
+	// goBranch is the branch of "go" to build against. If repo == "go",
+	// goBranch == branch.
 	//
-	// If nil, the default policy defaultBuildsRepoPolicy is used.
-	// (See buildsRepoAtAll for details.)
+	// If nil, a default set of repos as reported by buildRepoByDefault
+	// is built. See buildsRepoAtAll method for details.
 	//
 	// To implement a minor change to the default policy, create a
-	// function that re-uses defaultBuildsRepoPolicy. For example:
+	// function that uses buildRepoByDefault. For example:
 	//
 	// 	buildsRepo: func(repo, branch, goBranch string) bool {
-	// 		b := defaultBuildsRepoPolicy(repo, branch, goBranch)
+	// 		b := buildRepoByDefault(repo)
 	// 		// ... modify b from the default value as needed ...
 	// 		return b
 	// 	}
 	//
-	// goBranch is the branch of "go" to build against. If repo == "go",
-	// goBranch == branch.
 	buildsRepo func(repo, branch, goBranch string) bool
 
 	// MinimumGoVersion optionally specifies the minimum Go version
@@ -1220,32 +1220,48 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 	if p := c.buildsRepo; p != nil {
 		return p(repo, branch, goBranch)
 	}
-	return defaultBuildsRepoPolicy(repo, branch, goBranch)
+	return buildRepoByDefault(repo)
 }
 
-func defaultBuildsRepoPolicy(repo, branch, goBranch string) bool {
+// buildRepoByDefault reports whether builders should do builds
+// for the given repo ("go", "net", etc.) by default.
+//
+// It's used directly by BuildConfig.buildsRepoAtAll method for
+// builders with a nil BuildConfig.buildsRepo value.
+// It's also used by many builders that provide a custom build
+// repo policy (a non-nil BuildConfig.buildsRepo value) as part
+// of making the decision of whether to build a given repo.
+//
+// As a result, it effectively implements the default build repo policy.
+// Any changes here will affect repo coverage of many builders.
+func buildRepoByDefault(repo string) bool {
 	switch repo {
 	case "go":
+		// Build the main Go repository by default.
 		return true
 	case "mobile", "exp", "build":
-		// opt-in builders.
+		// Don't build x/mobile, x/exp, x/build by default.
+		//
+		// Builders need to explicitly opt-in to build these repos.
 		return false
+	default:
+		// Build all other golang.org/x repositories by default.
+		return true
 	}
-	return true
 }
 
 func defaultPlusExp(repo, branch, goBranch string) bool {
 	if repo == "exp" {
 		return true
 	}
-	return defaultBuildsRepoPolicy(repo, branch, goBranch)
+	return buildRepoByDefault(repo)
 }
 
 func defaultPlusExpBuild(repo, branch, goBranch string) bool {
 	if repo == "exp" || repo == "build" {
 		return true
 	}
-	return defaultBuildsRepoPolicy(repo, branch, goBranch)
+	return buildRepoByDefault(repo)
 }
 
 // AllScriptArgs returns the set of arguments that should be passed to the
@@ -1435,7 +1451,7 @@ func init() {
 		Name:     "freebsd-amd64-10_3",
 		HostType: "host-freebsd-10_3",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return goBranch == "release-branch.go1.12" && defaultBuildsRepoPolicy(repo, branch, goBranch)
+			return goBranch == "release-branch.go1.12" && buildRepoByDefault(repo)
 		},
 		tryBot: func(repo, branch, goBranch string) bool {
 			return branch == "release-branch.go1.12"
@@ -1445,7 +1461,7 @@ func init() {
 		Name:     "freebsd-amd64-10_4",
 		HostType: "host-freebsd-10_4",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return goBranch == "release-branch.go1.12" && defaultBuildsRepoPolicy(repo, branch, goBranch)
+			return goBranch == "release-branch.go1.12" && buildRepoByDefault(repo)
 		},
 		tryBot: nil,
 	})
@@ -1454,7 +1470,7 @@ func init() {
 		HostType: "host-freebsd-11_1",
 		tryBot:   nil,
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return goBranch == "release-branch.go1.12" && defaultBuildsRepoPolicy(repo, branch, goBranch)
+			return goBranch == "release-branch.go1.12" && buildRepoByDefault(repo)
 		},
 		distTestAdjust:    fasterTrybots,
 		numTryTestHelpers: 4,
@@ -1490,7 +1506,7 @@ func init() {
 		Name:     "freebsd-386-10_3",
 		HostType: "host-freebsd-10_3",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return goBranch == "release-branch.go1.12" && defaultBuildsRepoPolicy(repo, branch, goBranch)
+			return goBranch == "release-branch.go1.12" && buildRepoByDefault(repo)
 		},
 		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
@@ -1498,7 +1514,7 @@ func init() {
 		Name:     "freebsd-386-10_4",
 		HostType: "host-freebsd-10_4",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return goBranch == "release-branch.go1.12" && defaultBuildsRepoPolicy(repo, branch, goBranch)
+			return goBranch == "release-branch.go1.12" && buildRepoByDefault(repo)
 		},
 		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
@@ -1507,7 +1523,7 @@ func init() {
 		HostType:       "host-freebsd-11_1",
 		distTestAdjust: noTestDirAndNoReboot,
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return goBranch == "release-branch.go1.12" && defaultBuildsRepoPolicy(repo, branch, goBranch)
+			return goBranch == "release-branch.go1.12" && buildRepoByDefault(repo)
 		},
 		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
@@ -1760,6 +1776,8 @@ func init() {
 			return repo == "go" && onReleaseBranch // See issue 37827.
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
+			// Test all repos, ignoring buildRepoByDefault.
+			// For golang.org/x repos, don't test non-latest versions.
 			return repo == "go" || (branch == "master" && goBranch == "master")
 		},
 		needsGoProxy: true, // for cmd/go module tests
@@ -1776,10 +1794,12 @@ func init() {
 			return repo == "go" && onReleaseBranch // See issue 37827.
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			if !defaultBuildsRepoPolicy(repo, branch, goBranch) {
-				return false
+			b := buildRepoByDefault(repo)
+			if repo != "go" && !(branch == "master" && goBranch == "master") {
+				// For golang.org/x repos, don't test non-latest versions.
+				b = false
 			}
-			return repo == "go" || (branch == "master" && goBranch == "master")
+			return b
 		},
 		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
@@ -1831,7 +1851,7 @@ func init() {
 			"GO_TEST_TIMEOUT_SCALE=4", // arm is normally 2; double that.
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return branch == "master" && goBranch == "master" && defaultBuildsRepoPolicy(repo, branch, goBranch)
+			return branch == "master" && goBranch == "master" && buildRepoByDefault(repo)
 		},
 		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 			if strings.Contains(distTest, "vendor/github.com/google/pprof") {
@@ -2083,10 +2103,12 @@ func init() {
 			return repo == "go" && onReleaseBranch // See issue 37827.
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			if !defaultPlusExpBuild(repo, branch, goBranch) {
-				return false
+			b := defaultPlusExpBuild(repo, branch, goBranch)
+			if repo != "go" && !(branch == "master" && goBranch == "master") {
+				// For golang.org/x repos, don't test non-latest versions.
+				b = false
 			}
-			return repo == "go" || (branch == "master" && goBranch == "master")
+			return b
 		},
 		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
@@ -2377,7 +2399,7 @@ func init() {
 		distTestAdjust: noTestDirAndNoReboot,
 		SkipSnapshot:   true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atLeastGo1(goBranch, 14) && defaultBuildsRepoPolicy(repo, branch, goBranch)
+			return atLeastGo1(goBranch, 14) && buildRepoByDefault(repo)
 		},
 	})
 	addBuilder(BuildConfig{
@@ -2411,7 +2433,7 @@ func init() {
 		Name:     "freebsd-arm64-dmgk",
 		HostType: "host-freebsd-arm64-dmgk",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atLeastGo1(goBranch, 14) && defaultBuildsRepoPolicy(repo, branch, goBranch)
+			return atLeastGo1(goBranch, 14) && buildRepoByDefault(repo)
 		},
 	})
 	addBuilder(BuildConfig{
@@ -2471,7 +2493,7 @@ func init() {
 				// Skip affected repos until the builder is fixed.
 				return false
 			}
-			return atLeastGo1(branch, 12) && atLeastGo1(goBranch, 12) && defaultBuildsRepoPolicy(repo, branch, goBranch)
+			return atLeastGo1(branch, 12) && atLeastGo1(goBranch, 12) && buildRepoByDefault(repo)
 		},
 	})
 }
@@ -2612,7 +2634,7 @@ func onlyGo(repo, branch, goBranch string) bool { return repo == "go" }
 // onlyMasterDefault is a common buildsRepo policy value that only builds
 // default repos on the master branch.
 func onlyMasterDefault(repo, branch, goBranch string) bool {
-	return branch == "master" && goBranch == "master" && defaultBuildsRepoPolicy(repo, branch, goBranch)
+	return branch == "master" && goBranch == "master" && buildRepoByDefault(repo)
 }
 
 // disabledBuilder is a buildsRepo policy function that always return false.
