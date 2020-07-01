@@ -11,7 +11,10 @@ import (
 )
 
 func main() {
-	http.Handle("/", fileServerHandler(relativeFile("./static"), http.HandlerFunc(homeHandler)))
+	s := &server{store: &memoryStore{}}
+	http.Handle("/workflows/create", http.HandlerFunc(s.createWorkflowHandler))
+	http.Handle("/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
+	http.Handle("/", fileServerHandler(relativeFile("./static"), http.HandlerFunc(s.homeHandler)))
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

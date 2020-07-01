@@ -1,0 +1,33 @@
+<!--
+    Copyright 2020 The Go Authors. All rights reserved.
+    Use of this source code is governed by a BSD-style
+    license that can be found in the LICENSE file.
+-->
+{{define "content"}}
+<section class="Workflows">
+  <div class="Workflows-header">
+    <h2>Workflows</h2>
+    <a href="/workflows/new" class="Button">New</a>
+  </div>
+  <ul class="WorkflowList">
+    {{range $workflow := .Workflows}}
+    <li class="WorkflowList-item">
+      <h3>{{$workflow.Title}}</h3>
+      <h4 class="WorkflowList-sectionTitle">Tasks</h4>
+      <ul class="TaskList">
+        {{range $task := $workflow.Tasks}}
+        <li class="TaskList-item">
+          <span class="TaskList-itemTitle">{{$task.Title}}</span>
+          Status: {{$task.Status}}
+        </li>
+        {{end}}
+        <li class="TaskList-item">
+          <span class="TaskList-itemTitle">Sample Task</span>
+          Status: created
+        </li>
+      </ul>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}

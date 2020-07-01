@@ -5,7 +5,9 @@
 package main
 
 import (
+	"bytes"
 	"html/template"
+	"io"
 	"log"
 	"mime"
 	"net/http"
@@ -14,12 +16,17 @@ import (
 	"path/filepath"
 )
 
+// fileServerHandler returns a http.Handler rooted at root. It will call the next handler provided for requests to "/".
+//
+// The returned handler sets the appropriate Content-Type and Cache-Control headers for the returned file.
 func fileServerHandler(root string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// http.FileServer would correctly return a 404, but we need to check that the file exists
+		// before calculating the Content-Type header.
 		if _, err := os.Stat(path.Join(root, r.URL.Path)); os.IsNotExist(err) {
 			http.NotFound(w, r)
 			return
@@ -32,13 +39,60 @@ func fileServerHandler(root string, next http.Handler) http.Handler {
 	})
 }
 
-var homeTemplate = template.Must(template.ParseFiles(relativeFile("index.html")))
+var (
+	homeTmpl        = template.Must(template.Must(layoutTmpl.Clone()).ParseFiles(relativeFile("templates/home.html")))
+	layoutTmpl      = template.Must(template.ParseFiles(relativeFile("templates/layout.html")))
+	newWorkflowTmpl = template.Must(template.Must(layoutTmpl.Clone()).ParseFiles(relativeFile("templates/new_workflow.html")))
+)
 
-func homeHandler(w http.ResponseWriter, _ *http.Request) {
-	if err := homeTemplate.Execute(w, nil); err != nil {
-		log.Printf("homeHandlerFunc: %v", err)
+// server implements the http handlers for relui.
+type server struct {
+	store store
+}
+
+type homeResponse struct {
+	Workflows []workflow
+}
+
+// homeHandler renders the homepage.
+func (s *server) homeHandler(w http.ResponseWriter, _ *http.Request) {
+	out := bytes.Buffer{}
+	if err := homeTmpl.Execute(&out, homeResponse{Workflows: s.store.GetWorkflows()}); err != nil {
+		log.Printf("homeHandler: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
 	}
+	io.Copy(w, &out)
+}
+
+// newWorkflowHandler presents a form for creating a new workflow.
+func (s *server) newWorkflowHandler(w http.ResponseWriter, _ *http.Request) {
+	out := bytes.Buffer{}
+	if err := newWorkflowTmpl.Execute(&out, nil); err != nil {
+		log.Printf("newWorkflowHandler: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	io.Copy(w, &out)
+}
+
+// createWorkflowHandler persists a new workflow in the datastore.
+func (s *server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	ref := r.Form.Get("workflow.revision")
+	if ref == "" {
+		// TODO(golang.org/issue/40279) - render a better error in the form.
+		http.Error(w, "workflow revision is required", http.StatusBadRequest)
+		return
+	}
+	if err := s.store.AddWorkflow(newLocalGoRelease(ref)); err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 // relativeFile returns the path to the provided file or directory,

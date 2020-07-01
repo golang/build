@@ -8,20 +8,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
-
-func TestHomeHandler(t *testing.T) {
-	req := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-
-	homeHandler(w, req)
-	resp := w.Result()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, http.StatusOK)
-	}
-}
 
 func TestFileServerHandler(t *testing.T) {
 	h := fileServerHandler("./testing", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -60,7 +52,7 @@ func TestFileServerHandler(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
-			req := httptest.NewRequest("GET", c.path, nil)
+			req := httptest.NewRequest(http.MethodGet, c.path, nil)
 			w := httptest.NewRecorder()
 
 			h.ServeHTTP(w, req)
@@ -81,6 +73,87 @@ func TestFileServerHandler(t *testing.T) {
 				if resp.Header.Get(k) != v {
 					t.Errorf("resp.Header.Get(%q) = %q, wanted %q", k, resp.Header.Get(k), v)
 				}
+			}
+		})
+	}
+}
+
+func TestServerHomeHandler(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+
+	s := &server{store: &memoryStore{}}
+	s.homeHandler(w, req)
+	resp := w.Result()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("resp.StatusCode = %d, wanted %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestServerNewWorkflowHandler(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/workflows/new", nil)
+	w := httptest.NewRecorder()
+
+	s := &server{store: &memoryStore{}}
+	s.newWorkflowHandler(w, req)
+	resp := w.Result()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestServerCreateWorkflowHandler(t *testing.T) {
+	cases := []struct {
+		desc        string
+		params      url.Values
+		wantCode    int
+		wantHeaders map[string]string
+		wantParams  map[string]string
+	}{
+		{
+			desc:     "bad request",
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			desc:     "successful creation",
+			params:   url.Values{"workflow.revision": []string{"abc"}},
+			wantCode: http.StatusSeeOther,
+			wantHeaders: map[string]string{
+				"Location": "/",
+			},
+			wantParams: map[string]string{"GitObject": "abc"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/workflows/create", strings.NewReader(c.params.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			w := httptest.NewRecorder()
+
+			s := &server{store: &memoryStore{}}
+			s.createWorkflowHandler(w, req)
+			resp := w.Result()
+
+			if resp.StatusCode != c.wantCode {
+				t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, c.wantCode)
+			}
+			for k, v := range c.wantHeaders {
+				if resp.Header.Get(k) != v {
+					t.Errorf("resp.Header.Get(%q) = %q, wanted %q", k, resp.Header.Get(k), v)
+				}
+			}
+			if len(s.store.GetWorkflows()) != 1 && c.wantParams != nil {
+				t.Fatalf("len(s.store.GetWorkflows()) = %d, wanted %d", len(s.store.GetWorkflows()), 1)
+			} else if len(s.store.GetWorkflows()) != 0 && c.wantParams == nil {
+				t.Fatalf("len(s.store.GetWorkflows()) = %d, wanted %d", len(s.store.GetWorkflows()), 0)
+			}
+			if c.wantParams == nil {
+				return
+			}
+			if diff := cmp.Diff(c.wantParams, s.store.GetWorkflows()[0].Params()); diff != "" {
+				t.Errorf("s.Store.GetWorkflows()[0].Params() mismatch (-want, +got):\n%s", diff)
 			}
 		})
 	}
