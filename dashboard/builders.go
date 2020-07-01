@@ -1776,7 +1776,7 @@ func init() {
 			return repo == "go" && onReleaseBranch // See issue 37827.
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			if repo == "build" {
+			if !defaultBuildsRepoPolicy(repo, branch, goBranch) {
 				return false
 			}
 			return repo == "go" || (branch == "master" && goBranch == "master")

@@ -471,6 +471,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("windows-amd64-longtest", "net"), onlyPost},
 		{b("windows-amd64-longtest", "exp"), onlyPost},
 		{b("windows-amd64-longtest", "mobile"), none},
+		{b("linux-386-longtest", "go"), onlyPost},
+		{b("linux-386-longtest", "net"), onlyPost},
+		{b("linux-386-longtest", "exp"), none},
+		{b("linux-386-longtest", "mobile"), none},
 
 		// Experimental exp repo runs in very few places.
 		{b("linux-amd64", "exp"), both},
