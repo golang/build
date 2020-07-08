@@ -12,7 +12,6 @@ import (
 	"log"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -100,55 +99,60 @@ func tryBotStatus(cl *maintner.GerritCL, forStaging bool) (try, done bool) {
 	return
 }
 
-var (
-	tryCommentRx = regexp.MustCompile(`(?m)^TRY=(.*)$`)
-	patchSetRx   = regexp.MustCompile(`^Patch Set (\d{1,4}):`)
-)
+var tryCommentRx = regexp.MustCompile(`(?m)^TRY=(.*)$`)
 
-func tryWorkItem(cl *maintner.GerritCL, ci *gerrit.ChangeInfo) *apipb.GerritTryWorkItem {
-	work := &apipb.GerritTryWorkItem{
+// tryWorkItem creates a GerritTryWorkItem for
+// the Gerrit CL specified by cl, ci, comments.
+func tryWorkItem(cl *maintner.GerritCL, ci *gerrit.ChangeInfo, comments map[string][]gerrit.CommentInfo) *apipb.GerritTryWorkItem {
+	w := &apipb.GerritTryWorkItem{
 		Project:  cl.Project.Project(),
 		Branch:   strings.TrimPrefix(cl.Branch(), "refs/heads/"),
 		ChangeId: cl.ChangeID(),
 		Commit:   cl.Commit.Hash.String(),
 	}
-	if ci != nil {
-		if ci.CurrentRevision != "" {
-			// In case maintner is behind.
-			work.Commit = ci.CurrentRevision
-			work.Version = int32(ci.Revisions[ci.CurrentRevision].PatchSetNumber)
+	if ci.CurrentRevision != "" {
+		// In case maintner is behind.
+		w.Commit = ci.CurrentRevision
+		w.Version = int32(ci.Revisions[ci.CurrentRevision].PatchSetNumber)
+	}
+	// Look for "TRY=" comments. Only consider messages that are accompanied
+	// by a Run-TryBot+1 vote, as a way of confirming the comment author has
+	// Trybot Access (see https://golang.org/wiki/GerritAccess#trybot-access-may-start-trybots).
+	for _, m := range ci.Messages {
+		// msg is like:
+		//   "Patch Set 2: Run-TryBot+1\n\n(1 comment)"
+		//   "Patch Set 2: Run-TryBot+1 Code-Review-2"
+		//   "Uploaded patch set 2."
+		//   "Removed Run-TryBot+1 by Brad Fitzpatrick <bradfitz@golang.org>\n"
+		//   "Patch Set 1: Run-TryBot+1\n\n(2 comments)"
+		if msg := m.Message; !strings.HasPrefix(msg, "Patch Set ") ||
+			!strings.Contains(firstLine(msg), "Run-TryBot+1") {
+			continue
 		}
-		// Also include any "TRY=foo" comments (just the "foo"
-		// aprt) from messages that accompany Run-TryBot+1
-		// votes.
-		for _, m := range ci.Messages {
-			// msg is like:
-			//   "Patch Set 2: Run-TryBot+1\n\nTRY=foo2"
-			//   "Patch Set 2: Run-TryBot+1 Code-Review-2"
-			//   "Uploaded patch set 2."
-			//   "Removed Run-TryBot+1 by Brad Fitzpatrick <bradfitz@golang.org>\n"
-			//   "Patch Set 1: Run-TryBot+1\n\nTRY=baz"
-			msg := m.Message
-			if !strings.Contains(msg, "\n\nTRY=") ||
-				!strings.HasPrefix(msg, "Patch Set ") ||
-				!strings.Contains(firstLine(msg), "Run-TryBot+1") {
+		// Get "TRY=foo" comments (just the "foo" part)
+		// from matching patchset-level comments. They
+		// are posted on the magic "/PATCHSET_LEVEL" path, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#file-id.
+		for _, c := range comments["/PATCHSET_LEVEL"] {
+			// It should be sufficient to match by equal time only.
+			// But check that author and patch set match too in order to be more strict.
+			if !c.Updated.Equal(m.Time) || c.Author.NumericID != m.Author.NumericID || c.PatchSet != m.RevisionNumber {
 				continue
 			}
-			pm := patchSetRx.FindStringSubmatch(msg)
-			var patchSet int
-			if pm != nil {
-				patchSet, _ = strconv.Atoi(pm[1])
+			if len(w.TryMessage) > 0 && c.PatchSet <= int(w.TryMessage[len(w.TryMessage)-1].Version) {
+				continue
 			}
-			if tm := tryCommentRx.FindStringSubmatch(msg); tm != nil && patchSet > 0 {
-				work.TryMessage = append(work.TryMessage, &apipb.TryVoteMessage{
-					Message:  tm[1],
-					AuthorId: m.Author.NumericID,
-					Version:  int32(patchSet),
-				})
+			tm := tryCommentRx.FindStringSubmatch(c.Message)
+			if tm == nil {
+				continue
 			}
+			w.TryMessage = append(w.TryMessage, &apipb.TryVoteMessage{
+				Message:  tm[1],
+				AuthorId: c.Author.NumericID,
+				Version:  int32(c.PatchSet),
+			})
 		}
 	}
-	return work
+	return w
 }
 
 func firstLine(s string) string {
@@ -253,7 +257,11 @@ func goFindTryWork(ctx context.Context, gerritc *gerrit.Client, maintc *maintner
 			log.Printf("nil Gerrit CL %v", ci.ChangeNumber)
 			continue
 		}
-		work := tryWorkItem(cl, ci)
+		comments, err := gerritc.ListChangeComments(ctx, ci.ID)
+		if err != nil {
+			return nil, err
+		}
+		work := tryWorkItem(cl, ci, comments)
 		if work.Project == "go" {
 			// Trybot on Go repo. Set the GoVersion field based on branch name.
 			if work.Branch == "master" {

@@ -489,6 +489,28 @@ func (c *Client) GetChangeDetail(ctx context.Context, changeID string, opts ...Q
 	return &change, nil
 }
 
+// ListChangeComments retrieves a map of published comments for the given change ID.
+// The map key is the file path (such as "maintner/git_test.go" or "/PATCHSET_LEVEL").
+// For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-change-comments.
+func (c *Client) ListChangeComments(ctx context.Context, changeID string) (map[string][]CommentInfo, error) {
+	var m map[string][]CommentInfo
+	if err := c.do(ctx, &m, "GET", "/changes/"+changeID+"/comments"); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// CommentInfo contains information about an inline comment.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#comment-info.
+type CommentInfo struct {
+	PatchSet int          `json:"patch_set,omitempty"`
+	ID       string       `json:"id"`
+	Path     string       `json:"path,omitempty"`
+	Message  string       `json:"message,omitempty"`
+	Updated  TimeStamp    `json:"updated"`
+	Author   *AccountInfo `json:"author,omitempty"`
+}
+
 // ListFiles retrieves a map of filenames to FileInfo's for the given change ID and revision.
 // For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-files
 func (c *Client) ListFiles(ctx context.Context, changeID, revision string) (map[string]*FileInfo, error) {

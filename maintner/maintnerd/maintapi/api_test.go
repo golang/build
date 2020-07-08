@@ -124,16 +124,17 @@ func TestTryBotStatus(t *testing.T) {
 func TestTryWorkItem(t *testing.T) {
 	c := getGoData(t)
 	tests := []struct {
-		proj  string
-		clnum int32
-		ci    *gerrit.ChangeInfo
-		want  string
+		proj     string
+		clnum    int32
+		ci       *gerrit.ChangeInfo
+		comments map[string][]gerrit.CommentInfo
+		want     string
 	}{
 		// Same Change-Id, different branch:
-		{"go", 51430, nil, `project:"go" branch:"master" change_id:"I0bcae339624e7d61037d9ea0885b7bd07491bbb6" commit:"45a4609c0ae214e448612e0bc0846e2f2682f1b2" `},
-		{"go", 51450, nil, `project:"go" branch:"release-branch.go1.9" change_id:"I0bcae339624e7d61037d9ea0885b7bd07491bbb6" commit:"7320506bc58d3a55eff2c67b2ec65cfa94f7b0a7" `},
+		{"go", 51430, &gerrit.ChangeInfo{}, nil, `project:"go" branch:"master" change_id:"I0bcae339624e7d61037d9ea0885b7bd07491bbb6" commit:"45a4609c0ae214e448612e0bc0846e2f2682f1b2" `},
+		{"go", 51450, &gerrit.ChangeInfo{}, nil, `project:"go" branch:"release-branch.go1.9" change_id:"I0bcae339624e7d61037d9ea0885b7bd07491bbb6" commit:"7320506bc58d3a55eff2c67b2ec65cfa94f7b0a7" `},
 		// Different project:
-		{"build", 51432, nil, `project:"build" branch:"master" change_id:"I1f71836da7008e58d3e76e2cc3170e96cd57ddf6" commit:"9251bc9950baff61d95da0761e2e4bfab61ed210" `},
+		{"build", 51432, &gerrit.ChangeInfo{}, nil, `project:"build" branch:"master" change_id:"I1f71836da7008e58d3e76e2cc3170e96cd57ddf6" commit:"9251bc9950baff61d95da0761e2e4bfab61ed210" `},
 
 		// With comments:
 		{
@@ -146,16 +147,36 @@ func TestTryWorkItem(t *testing.T) {
 				},
 				Messages: []gerrit.ChangeMessageInfo{
 					{
-						Author:  &gerrit.AccountInfo{NumericID: 1234},
-						Message: "Patch Set 1: Run-TryBot+1\n\nTRY=foo",
+						Author:         &gerrit.AccountInfo{NumericID: 1234},
+						Message:        "Patch Set 1: Run-TryBot+1\n\n(1 comment)",
+						Time:           gerrit.TimeStamp(time.Date(2020, 7, 7, 23, 27, 23, 0, time.UTC)),
+						RevisionNumber: 1,
 					},
 					{
-						Author:  &gerrit.AccountInfo{NumericID: 5678},
-						Message: "Patch Set 2: Foo-2 Run-TryBot+1\n\nTRY=bar",
+						Author:         &gerrit.AccountInfo{NumericID: 5678},
+						Message:        "Patch Set 2: Foo-2 Run-TryBot+1\n\n(1 comment)",
+						Time:           gerrit.TimeStamp(time.Date(2020, 7, 7, 23, 28, 47, 0, time.UTC)),
+						RevisionNumber: 2,
 					},
 				},
 			},
-			want: `project:"go" branch:"master" change_id:"I358eb7b11768df8c80fb7e805abd4cd01d52bb9b" commit:"f99d33e72efdea68fce39765bc94479b5ebed0a9" version:88 try_message:<message:"foo" author_id:1234 version:1 > try_message:<message:"bar" author_id:5678 version:2 > `,
+			comments: map[string][]gerrit.CommentInfo{
+				"/PATCHSET_LEVEL": {
+					{
+						PatchSet: 1,
+						Message:  "TRY=foo",
+						Updated:  gerrit.TimeStamp(time.Date(2020, 7, 7, 23, 27, 23, 0, time.UTC)),
+						Author:   &gerrit.AccountInfo{NumericID: 1234},
+					},
+					{
+						PatchSet: 2,
+						Message:  "A preceding sentence.\nTRY=bar, baz\nA following sentence.",
+						Updated:  gerrit.TimeStamp(time.Date(2020, 7, 7, 23, 28, 47, 0, time.UTC)),
+						Author:   &gerrit.AccountInfo{NumericID: 5678},
+					},
+				},
+			},
+			want: `project:"go" branch:"master" change_id:"I358eb7b11768df8c80fb7e805abd4cd01d52bb9b" commit:"f99d33e72efdea68fce39765bc94479b5ebed0a9" version:88 try_message:<message:"foo" author_id:1234 version:1 > try_message:<message:"bar, baz" author_id:5678 version:2 > `,
 		},
 	}
 	for _, tt := range tests {
@@ -164,7 +185,7 @@ func TestTryWorkItem(t *testing.T) {
 			t.Errorf("CL %d in %s not found", tt.clnum, tt.proj)
 			continue
 		}
-		got := fmt.Sprint(tryWorkItem(cl, tt.ci))
+		got := fmt.Sprint(tryWorkItem(cl, tt.ci, tt.comments))
 		if got != tt.want {
 			t.Errorf("tryWorkItem(%q, %v) mismatch:\n got: %#q\nwant: %#q", tt.proj, tt.clnum, got, tt.want)
 		}

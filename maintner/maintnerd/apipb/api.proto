@@ -69,6 +69,7 @@ message GerritTryWorkItem {
   repeated MajorMinor go_version = 7;
 
   // try_message is the list of TRY=xxxx messages associated with Run-TryBot votes.
+  // It's sorted from oldest to newest.
   repeated TryVoteMessage try_message = 8;
 }
 

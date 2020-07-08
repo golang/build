@@ -200,6 +200,7 @@ type GerritTryWorkItem struct {
 	// For subrepos, it contains elements that correspond to go_commit.
 	GoVersion []*MajorMinor `protobuf:"bytes,7,rep,name=go_version,json=goVersion" json:"go_version,omitempty"`
 	// try_message is the list of TRY=xxxx messages associated with Run-TryBot votes.
+	// It's sorted from oldest to newest.
 	TryMessage []*TryVoteMessage `protobuf:"bytes,8,rep,name=try_message,json=tryMessage" json:"try_message,omitempty"`
 }
 
