@@ -33,6 +33,7 @@ import (
 	"golang.org/x/build/devapp/owners"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/foreach"
+	"golang.org/x/build/internal/gophers"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
