@@ -2369,7 +2369,7 @@ func init() {
 	addPerson("Robert Weber", "robertweber95@gmail.com")
 	addPerson("Robert Xu", "robxu9@gmail.com")
 	addPerson("Robert-André Mauchin", "zebob.m@gmail.com")
-	addPerson("Roberto Clapis", "robclap8@gmail.com", "@empijei")
+	addPerson("Roberto Clapis", "roberto@golang.org", "@empijei")
 	addPerson("Roberto Lublinerman Reitzes", "rluble@google.com", "@rluble")
 	addPerson("Roberto Selbach", "roberto@selbach.ca")
 	addPerson("Roberto Selbach", "roberto@selbach.ca", "@robteix")
