@@ -573,6 +573,11 @@ func (b *bot) closePR(ctx context.Context, pr *github.PullRequest, ch *gerrit.Ch
 }
 
 func (b *bot) abandonCL(ctx context.Context, cl *maintner.GerritCL, shortLink string) error {
+	// Don't abandon any CLs to branches other than master, as they might be
+	// cherrypicks. See golang.org/issue/40151.
+	if cl.Branch() != "master" {
+		return nil
+	}
 	if *dryRun {
 		log.Printf("[dry run] would abandon https://golang.org/cl/%v", cl.Number)
 		return nil
