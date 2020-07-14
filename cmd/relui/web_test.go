@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	reluipb "golang.org/x/build/cmd/relui/protos"
 )
 
 func TestFileServerHandler(t *testing.T) {
@@ -105,6 +106,7 @@ func TestServerNewWorkflowHandler(t *testing.T) {
 }
 
 func TestServerCreateWorkflowHandler(t *testing.T) {
+	config := []*reluipb.Workflow{{Name: "test_workflow"}}
 	cases := []struct {
 		desc        string
 		params      url.Values
@@ -132,7 +134,7 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			w := httptest.NewRecorder()
 
-			s := &server{store: &memoryStore{}}
+			s := &server{store: &memoryStore{}, configs: config}
 			s.createWorkflowHandler(w, req)
 			resp := w.Result()
 
@@ -152,7 +154,7 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			if c.wantParams == nil {
 				return
 			}
-			if diff := cmp.Diff(c.wantParams, s.store.GetWorkflows()[0].Params()); diff != "" {
+			if diff := cmp.Diff(c.wantParams, s.store.GetWorkflows()[0].GetParams()); diff != "" {
 				t.Errorf("s.Store.GetWorkflows()[0].Params() mismatch (-want, +got):\n%s", diff)
 			}
 		})

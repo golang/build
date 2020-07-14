@@ -14,6 +14,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+
+	"github.com/golang/protobuf/proto"
+	reluipb "golang.org/x/build/cmd/relui/protos"
 )
 
 // fileServerHandler returns a http.Handler rooted at root. It will call the next handler provided for requests to "/".
@@ -47,11 +50,15 @@ var (
 
 // server implements the http handlers for relui.
 type server struct {
+	// configs are all configured release workflows.
+	configs []*reluipb.Workflow
+
+	// store is for persisting application state.
 	store store
 }
 
 type homeResponse struct {
-	Workflows []workflow
+	Workflows []*reluipb.Workflow
 }
 
 // homeHandler renders the homepage.
@@ -88,7 +95,17 @@ func (s *server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "workflow revision is required", http.StatusBadRequest)
 		return
 	}
-	if err := s.store.AddWorkflow(newLocalGoRelease(ref)); err != nil {
+	if len(s.configs) == 0 {
+		http.Error(w, "Unable to create workflow: no workflows configured", http.StatusInternalServerError)
+		return
+	}
+	// Always create the first workflow for now, until we have more.
+	wf := proto.Clone(s.configs[0]).(*reluipb.Workflow)
+	if wf.GetParams() == nil {
+		wf.Params = map[string]string{}
+	}
+	wf.Params["GitObject"] = ref
+	if err := s.store.AddWorkflow(wf); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}

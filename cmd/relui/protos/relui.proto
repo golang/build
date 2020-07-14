@@ -1,0 +1,53 @@
+// Copyright 2020 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+syntax = "proto3";
+
+package protos;
+
+message Workflow {
+  // name is a unique name for a workflow, such as local_go_release. The name must be unique across
+  // all workflow configurations.
+  string name = 1;
+
+  // buildable_asks is a list of tasks to be performed by the workflow.
+  repeated BuildableTask buildable_tasks = 2;
+
+  // params are parameters provided when creating a workflow.
+  map<string, string> params = 3;
+}
+
+message BuildableTask {
+  // name is a unique name for a task, such as fetch_go_source. The name must be unique across
+  // all workflow configurations.
+  string name = 1;
+
+  // depends_on is the name of a task this task depends on. Artifacts from the depends_on task will be available
+  // to this task.
+  string depends_on = 2;
+
+  // task_status is the current status of a task.
+  TaskStatus status = 3;
+
+  // artifact_url is an optional URL to an artifact published by this task.
+  string artifact_url = 4;
+
+  // git_source is an optional configuration for which git source to fetch.
+  GitSource git_source = 5;
+
+  // task_type is a unique type for a task, such as FetchGerritSource. Types are used by task runners to identify
+  // how to execute a task.
+  string task_type = 6;
+}
+
+message GitSource {
+  string url = 1;
+  string ref = 2;
+}
+
+enum TaskStatus {
+  TASK_STATUS_UNKNOWN = 0;
+  TASK_STATUS_CREATED = 1;
+  TASK_STATUS_STARTED = 2;
+}
