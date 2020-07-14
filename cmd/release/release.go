@@ -447,6 +447,14 @@ func (b *Build) make() error {
 	if err := client.RemoveAll(ctx, b.toolDir()+"/api"); err != nil {
 		return err
 	}
+	// The oldlink tool is used for debugging differences during
+	// testing of the linker rewrite, and can be built by users
+	// if necessary. See issue 39509.
+	// This can be removed when oldlink is gone, likely once Go 1.16
+	// is no longer supported.
+	if err := client.RemoveAll(ctx, b.toolDir()+"/oldlink"); err != nil {
+		return err
+	}
 	// Remove go/pkg/${GOOS}_${GOARCH}/cmd. This saves a bunch of
 	// space, and users don't typically rebuild cmd/compile,
 	// cmd/link, etc. If they want to, they still can, but they'll
