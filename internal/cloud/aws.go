@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/servicequotas"
 )
 
 const (
@@ -27,14 +28,29 @@ const (
 	tagDescription = "Description"
 )
 
+const (
+	// QuotaCodeCPUOnDemand is the quota code for on-demand CPUs.
+	QuotaCodeCPUOnDemand = "L-1216C47A"
+	// QuotaServiceEC2 is the service code for the EC2 service.
+	QuotaServiceEC2 = "ec2"
+)
+
 // vmClient defines the interface used to call the backing EC2 service. This is a partial interface
-// based on the EC2 package defined at `github.com/aws/aws-sdk-go/service/ec2`.
+// based on the EC2 package defined at github.com/aws/aws-sdk-go/service/ec2.
 type vmClient interface {
 	DescribeInstancesPagesWithContext(context.Context, *ec2.DescribeInstancesInput, func(*ec2.DescribeInstancesOutput, bool) bool, ...request.Option) error
 	DescribeInstancesWithContext(context.Context, *ec2.DescribeInstancesInput, ...request.Option) (*ec2.DescribeInstancesOutput, error)
 	RunInstancesWithContext(context.Context, *ec2.RunInstancesInput, ...request.Option) (*ec2.Reservation, error)
 	TerminateInstancesWithContext(context.Context, *ec2.TerminateInstancesInput, ...request.Option) (*ec2.TerminateInstancesOutput, error)
 	WaitUntilInstanceRunningWithContext(context.Context, *ec2.DescribeInstancesInput, ...request.WaiterOption) error
+	DescribeInstanceTypesPagesWithContext(context.Context, *ec2.DescribeInstanceTypesInput, func(*ec2.DescribeInstanceTypesOutput, bool) bool, ...request.Option) error
+}
+
+// quotaClient defines the interface used to call the backing service quotas service. This
+// is a partial interface based on the service quota package defined at
+// github.com/aws/aws-sdk-go/service/servicequotas.
+type quotaClient interface {
+	GetServiceQuota(*servicequotas.GetServiceQuotaInput) (*servicequotas.GetServiceQuotaOutput, error)
 }
 
 // EC2VMConfiguration is the configuration needed for an EC2 instance.
@@ -98,7 +114,8 @@ type Instance struct {
 
 // AWSClient is a client for AWS services.
 type AWSClient struct {
-	ec2Client vmClient
+	ec2Client   vmClient
+	quotaClient quotaClient
 }
 
 // NewAWSClient creates a new AWS client.
@@ -111,7 +128,8 @@ func NewAWSClient(region, keyID, accessKey string) (*AWSClient, error) {
 		return nil, fmt.Errorf("failed to create AWS session: %v", err)
 	}
 	return &AWSClient{
-		ec2Client: ec2.New(s),
+		ec2Client:   ec2.New(s),
+		quotaClient: servicequotas.New(s),
 	}, nil
 }
 
@@ -196,6 +214,58 @@ func (ac *AWSClient) WaitUntilInstanceRunning(ctx context.Context, instID string
 		return fmt.Errorf("failed waiting for vm instance: %w", err)
 	}
 	return err
+}
+
+// InstanceType contains information about an EC2 vm instance type.
+type InstanceType struct {
+	// Type is the textual label used to describe an instance type.
+	Type string
+	// CPU is the Default vCPU count.
+	CPU int64
+}
+
+// InstanceTypesARM retrieves all EC2 instance types in a region which support the
+// ARM64 architecture.
+func (ac *AWSClient) InstanceTypesARM(ctx context.Context) ([]*InstanceType, error) {
+	var its []*InstanceType
+	contains := func(strs []*string, want string) bool {
+		for _, s := range strs {
+			if aws.StringValue(s) == want {
+				return true
+			}
+		}
+		return false
+	}
+	fn := func(page *ec2.DescribeInstanceTypesOutput, lastPage bool) bool {
+		for _, it := range page.InstanceTypes {
+			if !contains(it.ProcessorInfo.SupportedArchitectures, "arm64") {
+				continue
+			}
+			its = append(its, &InstanceType{
+				Type: aws.StringValue(it.InstanceType),
+				CPU:  aws.Int64Value(it.VCpuInfo.DefaultVCpus),
+			})
+		}
+		return true
+	}
+	err := ac.ec2Client.DescribeInstanceTypesPagesWithContext(ctx, &ec2.DescribeInstanceTypesInput{}, fn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve arm64 instance types: %w", err)
+	}
+	return its, nil
+}
+
+// Quota retrieves the requested service quota for the service.
+func (ac *AWSClient) Quota(ctx context.Context, service, code string) (int64, error) {
+	// TODO(golang.org/issue/36841): use ctx
+	sq, err := ac.quotaClient.GetServiceQuota(&servicequotas.GetServiceQuotaInput{
+		QuotaCode:   aws.String(code),
+		ServiceCode: aws.String(service),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to retrieve quota: %w", err)
+	}
+	return int64(aws.Float64Value(sq.Quota.Value)), nil
 }
 
 // ec2ToInstance converts an `ec2.Instance` to an `Instance`

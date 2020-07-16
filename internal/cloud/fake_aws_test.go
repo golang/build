@@ -165,6 +165,62 @@ func TestFakeAWSClientRunningInstances(t *testing.T) {
 	})
 }
 
+func TestFakeAWSClientInstanceTypesARM(t *testing.T) {
+	t.Run("invalid-params", func(t *testing.T) {
+		f := NewFakeAWSClient()
+		if gotITs, gotErr := f.InstanceTypesARM(nil); gotErr == nil {
+			t.Errorf("InstanceTypesARM(nil) = %+v, nil, want error", gotITs)
+		}
+	})
+	t.Run("no-instances", func(t *testing.T) {
+		ctx := context.Background()
+		f := NewFakeAWSClient()
+		gotITs, gotErr := f.InstanceTypesARM(ctx)
+		if gotErr != nil {
+			t.Errorf("InstanceTypesARM(ctx) error = %v, no error", gotErr)
+		}
+		if !cmp.Equal(gotITs, f.instanceTypes) {
+			t.Errorf("InstanceTypesARM(ctx) = %+v, %s; want %+v", gotITs, gotErr, f.instanceTypes)
+		}
+	})
+}
+
+func TestFakeAWSClientQuota(t *testing.T) {
+	t.Run("invalid-context", func(t *testing.T) {
+		f := NewFakeAWSClient()
+		gotQuota, gotErr := f.Quota(nil, QuotaServiceEC2, QuotaCodeCPUOnDemand)
+		if gotErr == nil || gotQuota != 0 {
+			t.Errorf("Quota(nil, %s, %s) = %d, %s, want error", QuotaServiceEC2, QuotaCodeCPUOnDemand, gotQuota, gotErr)
+		}
+	})
+	t.Run("invalid-service", func(t *testing.T) {
+		f := NewFakeAWSClient()
+		gotQuota, gotErr := f.Quota(context.Background(), "", QuotaCodeCPUOnDemand)
+		if gotErr == nil || gotQuota != 0 {
+			t.Errorf("Quota(ctx, \"\", %s) = %d, %s, want error", QuotaCodeCPUOnDemand, gotQuota, gotErr)
+		}
+	})
+	t.Run("invalid-quota-code", func(t *testing.T) {
+		f := NewFakeAWSClient()
+		gotQuota, gotErr := f.Quota(context.Background(), QuotaServiceEC2, "")
+		if gotErr == nil || gotQuota != 0 {
+			t.Errorf("Quota(ctx, %s, \"\") = %d, %s, want error", QuotaServiceEC2, gotQuota, gotErr)
+		}
+	})
+	t.Run("valid-request", func(t *testing.T) {
+		f := NewFakeAWSClient()
+		wantQuota, ok := f.serviceQuotas[serviceQuotaKey{QuotaCodeCPUOnDemand, QuotaServiceEC2}]
+		if !ok {
+			t.Fatal("unable to retrieve quota value")
+		}
+		gotQuota, gotErr := f.Quota(context.Background(), QuotaServiceEC2, QuotaCodeCPUOnDemand)
+		if gotErr != nil || gotQuota != wantQuota {
+			t.Errorf("Quota(ctx, %s, %s) = %d, %s, want %d, nil", QuotaServiceEC2,
+				QuotaCodeCPUOnDemand, gotQuota, gotErr, wantQuota)
+		}
+	})
+}
+
 func TestFakeAWSClientCreateInstance(t *testing.T) {
 	t.Run("create-instance", func(t *testing.T) {
 		ctx := context.Background()

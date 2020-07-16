@@ -21,14 +21,30 @@ func init() { mrand.Seed(time.Now().UnixNano()) }
 // FakeAWSClient provides a fake AWS Client used to test the AWS client
 // functionality.
 type FakeAWSClient struct {
-	mu        sync.RWMutex
-	instances map[string]*Instance
+	mu            sync.RWMutex
+	instances     map[string]*Instance
+	instanceTypes []*InstanceType
+	serviceQuotas map[serviceQuotaKey]int64
+}
+
+// serviceQuotaKey should be used as the key in the serviceQuotas map.
+type serviceQuotaKey struct {
+	code    string
+	service string
 }
 
 // NewFakeAWSClient crates a fake AWS client.
 func NewFakeAWSClient() *FakeAWSClient {
 	return &FakeAWSClient{
 		instances: make(map[string]*Instance),
+		instanceTypes: []*InstanceType{
+			&InstanceType{"ab.large", 10},
+			&InstanceType{"ab.xlarge", 20},
+			&InstanceType{"ab.small", 30},
+		},
+		serviceQuotas: map[serviceQuotaKey]int64{
+			serviceQuotaKey{QuotaCodeCPUOnDemand, QuotaServiceEC2}: 384,
+		},
 	}
 }
 
@@ -65,6 +81,36 @@ func (f *FakeAWSClient) RunningInstances(ctx context.Context) ([]*Instance, erro
 		instances = append(instances, copyInstance(inst))
 	}
 	return instances, nil
+}
+
+// InstanceTypesArm retrieves all EC2 instance types in a region which support the ARM64 architecture.
+func (f *FakeAWSClient) InstanceTypesARM(ctx context.Context) ([]*InstanceType, error) {
+	if ctx == nil {
+		return nil, errors.New("invalid params")
+	}
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	instanceTypes := make([]*InstanceType, 0, len(f.instanceTypes))
+	for _, it := range f.instanceTypes {
+		instanceTypes = append(instanceTypes, &InstanceType{it.Type, it.CPU})
+	}
+	return instanceTypes, nil
+}
+
+// Quota retrieves the requested service quota for the service.
+func (f *FakeAWSClient) Quota(ctx context.Context, service, code string) (int64, error) {
+	if ctx == nil || service == "" || code == "" {
+		return 0, errors.New("invalid params")
+	}
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	v, ok := f.serviceQuotas[serviceQuotaKey{code, service}]
+	if !ok {
+		return 0, errors.New("service quota not found")
+	}
+	return v, nil
 }
 
 // CreateInstance creates an EC2 VM instance.

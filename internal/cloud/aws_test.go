@@ -17,20 +17,30 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/servicequotas"
 	"github.com/google/go-cmp/cmp"
 )
 
-var _ vmClient = (*fakeEC2Client)(nil)
+type awsClient interface {
+	vmClient
+	quotaClient
+}
+
+var _ awsClient = (*fakeEC2Client)(nil)
 
 type fakeEC2Client struct {
 	mu sync.RWMutex
 	// instances map of instanceId -> *ec2.Instance
-	instances map[string]*ec2.Instance
+	instances     map[string]*ec2.Instance
+	instanceTypes []*ec2.InstanceTypeInfo
+	serviceQuota  map[string]float64
 }
 
-func newFakeEC2Client() *fakeEC2Client {
+func newFakeAWSClient() *fakeEC2Client {
 	return &fakeEC2Client{
-		instances: make(map[string]*ec2.Instance),
+		instances:     make(map[string]*ec2.Instance),
+		instanceTypes: []*ec2.InstanceTypeInfo{},
+		serviceQuota:  make(map[string]float64),
 	}
 }
 
@@ -237,14 +247,70 @@ func (f *fakeEC2Client) WaitUntilInstanceRunningWithContext(ctx context.Context,
 	return nil
 }
 
-func fakeClient() *AWSClient {
-	return &AWSClient{
-		ec2Client: newFakeEC2Client(),
+func (f *fakeEC2Client) DescribeInstanceTypesPagesWithContext(ctx context.Context, input *ec2.DescribeInstanceTypesInput, fn func(*ec2.DescribeInstanceTypesOutput, bool) bool, opt ...request.Option) error {
+	if ctx == nil || input == nil || fn == nil {
+		return errors.New("invalid input")
+	}
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	for it, its := range f.instanceTypes {
+		fn(&ec2.DescribeInstanceTypesOutput{
+			InstanceTypes: []*ec2.InstanceTypeInfo{its},
+		}, it == len(f.instanceTypes)-1)
+	}
+	return nil
+}
+
+func (f *fakeEC2Client) GetServiceQuota(input *servicequotas.GetServiceQuotaInput) (*servicequotas.GetServiceQuotaOutput, error) {
+	if input == nil || input.QuotaCode == nil || input.ServiceCode == nil {
+		return nil, request.ErrInvalidParams{}
+	}
+	v, ok := f.serviceQuota[aws.StringValue(input.ServiceCode)+"-"+aws.StringValue(input.QuotaCode)]
+	if !ok {
+		return nil, errors.New("quota not found")
+	}
+	return &servicequotas.GetServiceQuotaOutput{
+		Quota: &servicequotas.ServiceQuota{
+			Value: aws.Float64(v),
+		},
+	}, nil
+}
+
+type option func(*fakeEC2Client)
+
+func WithServiceQuota(service, quota string, value float64) option {
+	return func(c *fakeEC2Client) {
+		c.serviceQuota[service+"-"+quota] = value
 	}
 }
 
-func fakeClientWithInstances(t *testing.T, count int) (*AWSClient, []*Instance) {
-	c := fakeClient()
+func WithInstanceType(name, arch string, numCPU int64) option {
+	return func(c *fakeEC2Client) {
+		c.instanceTypes = append(c.instanceTypes, &ec2.InstanceTypeInfo{
+			InstanceType: aws.String(name),
+			ProcessorInfo: &ec2.ProcessorInfo{
+				SupportedArchitectures: []*string{aws.String(arch)},
+			},
+			VCpuInfo: &ec2.VCpuInfo{
+				DefaultVCpus: aws.Int64(numCPU),
+			},
+		})
+	}
+}
+
+func fakeClient(opts ...option) *AWSClient {
+	fc := newFakeAWSClient()
+	for _, opt := range opts {
+		opt(fc)
+	}
+	return &AWSClient{
+		ec2Client:   fc,
+		quotaClient: fc,
+	}
+}
+
+func fakeClientWithInstances(t *testing.T, count int, opts ...option) (*AWSClient, []*Instance) {
+	c := fakeClient(opts...)
 	ctx := context.Background()
 	insts := make([]*Instance, 0, count)
 	for i := 0; i < count; i++ {
@@ -297,6 +363,50 @@ func TestRunningInstances(t *testing.T) {
 		}
 		if len(gotInsts) != len(wantInsts)-1 {
 			t.Errorf("got instance count %d: want %d", len(gotInsts), len(wantInsts)-1)
+		}
+	})
+}
+
+func TestInstanceTypesARM(t *testing.T) {
+	opts := []option{
+		WithInstanceType("zz.large", "x86_64", 10),
+		WithInstanceType("aa.xlarge", "arm64", 20),
+	}
+
+	t.Run("query-arm64-instances", func(t *testing.T) {
+		c := fakeClient(opts...)
+		gotInstTypes, gotErr := c.InstanceTypesARM(context.Background())
+		if gotErr != nil {
+			t.Fatalf("InstanceTypesArm(ctx) = %+v, %s; want nil, nil", gotInstTypes, gotErr)
+		}
+		if len(gotInstTypes) != 1 {
+			t.Errorf("got instance type count %d: want %d", len(gotInstTypes), 1)
+		}
+	})
+	t.Run("nil-request", func(t *testing.T) {
+		c := fakeClient(opts...)
+		gotInstTypes, gotErr := c.InstanceTypesARM(nil)
+		if gotErr == nil {
+			t.Fatalf("InstanceTypesArm(nil) = %+v, %s; want nil, error", gotInstTypes, gotErr)
+		}
+	})
+}
+
+func TestQuota(t *testing.T) {
+	t.Run("on-demand-vcpu", func(t *testing.T) {
+		wantQuota := int64(384)
+		c := fakeClient(WithServiceQuota(QuotaServiceEC2, QuotaCodeCPUOnDemand, float64(wantQuota)))
+		gotQuota, gotErr := c.Quota(context.Background(), QuotaServiceEC2, QuotaCodeCPUOnDemand)
+		if gotErr != nil || wantQuota != gotQuota {
+			t.Fatalf("Quota(ctx, %s, %s) = %+v, %s; want %d, nil", QuotaServiceEC2, QuotaCodeCPUOnDemand, gotQuota, gotErr, wantQuota)
+		}
+	})
+	t.Run("nil-request", func(t *testing.T) {
+		wantQuota := int64(384)
+		c := fakeClient(WithServiceQuota(QuotaServiceEC2, QuotaCodeCPUOnDemand, float64(wantQuota)))
+		gotQuota, gotErr := c.Quota(context.Background(), "", "")
+		if gotErr == nil || gotQuota != 0 {
+			t.Fatalf("Quota(ctx, %s, %s) = %+v, %s; want 0, error", QuotaServiceEC2, QuotaCodeCPUOnDemand, gotQuota, gotErr)
 		}
 	})
 }
