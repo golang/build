@@ -261,7 +261,7 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg 
 		deleteIn = podDeleteTimeout
 	}
 
-	podName := "buildlet-" + strings.TrimPrefix(hostType, "host-") + "-rn" + randHex(7)
+	podName := instanceName(hostType, 7)
 
 	// Get an estimate for when the pod will be started/running and set
 	// the context timeout based on that

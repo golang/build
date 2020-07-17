@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strings"
 	"time"
 
 	"golang.org/x/build/buildlet"
@@ -55,4 +56,8 @@ func friendlyDuration(d time.Duration) string {
 	}
 	d2 := ((d + 50*time.Microsecond) / (100 * time.Microsecond)) * (100 * time.Microsecond)
 	return d2.String()
+}
+
+func instanceName(hostType string, length int) string {
+	return fmt.Sprintf("buildlet-%s-rn%s", strings.TrimPrefix(hostType, "host-"), randHex(length))
 }
