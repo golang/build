@@ -60,6 +60,7 @@ import (
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/buildstats"
+	"golang.org/x/build/internal/cloud"
 	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/singleflight"
@@ -115,6 +116,7 @@ var (
 	mode           = flag.String("mode", "", "Valid modes are 'dev', 'prod', or '' for auto-detect. dev means localhost development, not be confused with staging on go-dashboard-dev, which is still the 'prod' mode.")
 	buildEnvName   = flag.String("env", "", "The build environment configuration to use. Not required if running on GCE.")
 	devEnableGCE   = flag.Bool("dev_gce", false, "Whether or not to enable the GCE pool when in dev mode. The pool is enabled by default in prod mode.")
+	devEnableEC2   = flag.Bool("dev_ec2", false, "Whether or not to enable the EC2 pool when in dev mode. The pool is enabled by default in prod mode.")
 	shouldRunBench = flag.Bool("run_bench", false, "Whether or not to run benchmarks on trybot commits. Override by GCE project attribute 'farmer-run-bench'.")
 	perfServer     = flag.String("perf_server", "", "Upload benchmark results to `server`. Overrides buildenv default for testing.")
 )
@@ -294,6 +296,13 @@ func main() {
 	if err != nil {
 		pool.KubeSetErr(err)
 		log.Printf("Kube support disabled due to error initializing Kubernetes: %v", err)
+	}
+
+	if *mode == "prod" || (*mode == "dev" && *devEnableEC2) {
+		// TODO(golang.org/issues/38337) the coordinator will use a package scoped pool
+		// until the coordinator is refactored to not require them.
+		ec2Pool := mustCreateEC2BuildletPool(sc)
+		defer ec2Pool.Close()
 	}
 
 	go updateInstanceRecord()
@@ -1634,6 +1643,8 @@ func poolForConf(conf *dashboard.HostConfig) pool.Buildlet {
 		panic("nil conf")
 	}
 	switch {
+	case conf.IsEC2():
+		return pool.EC2BuildetPool()
 	case conf.IsVM():
 		return pool.NewGCEConfiguration().BuildletPool()
 	case conf.IsContainer():
@@ -1751,6 +1762,9 @@ func (st *buildStatus) expectedBuildletStartDuration() time.Duration {
 			return 2 * time.Minute
 		}
 		return time.Minute
+	case *pool.EC2Buildlet:
+		// lack of historical data. 2 * time.Minute is a safe overestimate
+		return 2 * time.Minute
 	case *pool.ReverseBuildletPool:
 		goos, arch := st.conf.GOOS(), st.conf.GOARCH()
 		if goos == "darwin" {
@@ -4047,4 +4061,27 @@ func mustCreateSecretClientOnGCE() *secret.Client {
 		log.Fatalf("unable to create secret client %v", err)
 	}
 	return client
+}
+
+func mustCreateEC2BuildletPool(sc *secret.Client) *pool.EC2Buildlet {
+	awsKeyID, err := sc.Retrieve(context.Background(), secret.NameAWSKeyID)
+	if err != nil {
+		log.Fatalf("unable to retrieve secret %q: %s", secret.NameAWSKeyID, err)
+	}
+
+	awsAccessKey, err := sc.Retrieve(context.Background(), secret.NameAWSAccessKey)
+	if err != nil {
+		log.Fatalf("unable to retrieve secret %q: %s", secret.NameAWSAccessKey, err)
+	}
+
+	awsClient, err := cloud.NewAWSClient(buildenv.Production.AWSRegion, awsKeyID, awsAccessKey)
+	if err != nil {
+		log.Fatalf("unable to create AWS client: %s", err)
+	}
+
+	ec2Pool, err := pool.NewEC2Buildlet(awsClient, buildenv.Production, dashboard.Hosts, isGCERemoteBuildlet)
+	if err != nil {
+		log.Fatalf("unable to create EC2 buildlet pool: %s", err)
+	}
+	return ec2Pool
 }
