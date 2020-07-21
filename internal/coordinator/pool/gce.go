@@ -61,12 +61,9 @@ func gceAPIGate() {
 	<-apiCallTicker.C
 }
 
-// IsGCERemoteBuildletFunc should return true if the buildlet instance name is
-// is a GCE remote buildlet.
-type IsGCERemoteBuildletFunc func(instanceName string) bool
-
 // Initialized by InitGCE:
-// TODO(http://golang.org/issue/38337): These should be moved into a struct as
+//
+// TODO(golang.org/issue/38337): These should be moved into a struct as
 // part of the effort to reduce package level variables.
 var (
 	buildEnv *buildenv.Environment
@@ -92,11 +89,11 @@ var (
 	deleteTimeout       time.Duration
 	testFiles           map[string]string
 	basePinErr          *atomic.Value
-	isGCERemoteBuildlet IsGCERemoteBuildletFunc
+	isGCERemoteBuildlet IsRemoteBuildletFunc
 )
 
 // InitGCE initializes the GCE buildlet pool.
-func InitGCE(sc *secret.Client, vmDeleteTimeout time.Duration, tFiles map[string]string, basePin *atomic.Value, fn IsGCERemoteBuildletFunc, buildEnvName, mode string) error {
+func InitGCE(sc *secret.Client, vmDeleteTimeout time.Duration, tFiles map[string]string, basePin *atomic.Value, fn IsRemoteBuildletFunc, buildEnvName, mode string) error {
 	gceMode = mode
 	deleteTimeout = vmDeleteTimeout
 	testFiles = tFiles
@@ -220,7 +217,7 @@ func InitGCE(sc *secret.Client, vmDeleteTimeout time.Duration, tFiles map[string
 	return nil
 }
 
-// TODO(http://golang.org/issue/38337): These should be moved into a struct as
+// TODO(golang.org/issue/38337): These should be moved into a struct as
 // part of the effort to reduce package level variables.
 
 // GCEConfiguration manages and contains all of the GCE configuration.
@@ -404,10 +401,7 @@ func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logge
 		return nil, err
 	}
 
-	deleteIn, ok := ctx.Value(BuildletTimeoutOpt{}).(time.Duration)
-	if !ok {
-		deleteIn = deleteTimeout
-	}
+	deleteIn := deleteTimeoutFromContextOrValue(ctx, deleteTimeout)
 
 	instName := instanceName(hostType, 7)
 	instName = strings.Replace(instName, "_", "-", -1) // Issue 22905; can't use underscores in GCE VMs
@@ -633,8 +627,8 @@ func (p *GCEBuildlet) CleanUpOldVMs() {
 	}
 
 	// TODO(bradfitz): remove this list and just query it from the compute API?
-	// http://godoc.org/google.golang.org/api/compute/v1#RegionsService.Get
-	// and Region.Zones: http://godoc.org/google.golang.org/api/compute/v1#Region
+	// https://godoc.org/google.golang.org/api/compute/v1#RegionsService.Get
+	// and Region.Zones: https://godoc.org/google.golang.org/api/compute/v1#Region
 
 	for {
 		for _, zone := range buildEnv.VMZones {

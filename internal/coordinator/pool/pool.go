@@ -36,6 +36,13 @@ type Buildlet interface {
 	String() string // TODO(bradfitz): more status stuff
 }
 
+// IsRemoteBuildletFunc should report whether the buildlet instance name is
+// is a remote buildlet. This is applicable to GCE and EC2 instances.
+//
+// TODO(golang.org/issue/38337): should be removed once remote buildlet management
+// functions are moved into a package.
+type IsRemoteBuildletFunc func(instanceName string) bool
+
 // randHex generates a random hex string.
 func randHex(n int) string {
 	buf := make([]byte, n/2+1)
@@ -58,6 +65,23 @@ func friendlyDuration(d time.Duration) string {
 	return d2.String()
 }
 
+// instanceName generates a random instance name according to the host type.
 func instanceName(hostType string, length int) string {
 	return fmt.Sprintf("buildlet-%s-rn%s", strings.TrimPrefix(hostType, "host-"), randHex(length))
+}
+
+// deleteTimeoutFromContextOrValue retrieves the buildlet timeout duration from the
+// context. If it it is not found in the context, it will fallback to using the timeout passed
+// into the function.
+func deleteTimeoutFromContextOrValue(ctx context.Context, timeout time.Duration) time.Duration {
+	deleteIn, ok := ctx.Value(BuildletTimeoutOpt{}).(time.Duration)
+	if !ok {
+		deleteIn = timeout
+	}
+	return deleteIn
+}
+
+// isBuildlet checks the name string in order to determine if the name is for a buildlet.
+func isBuildlet(name string) bool {
+	return strings.HasPrefix(name, "buildlet-")
 }
