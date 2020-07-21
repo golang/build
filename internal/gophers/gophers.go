@@ -1277,6 +1277,7 @@ func init() {
 	addPerson("Jakub Ryszard Czarnowicz", "j.czarnowicz@gmail.com", "@Naranim")
 	addPerson("Jakub Čajka", "jcajka@redhat.com", "11002@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Jakub Čajka", "jcajka@redhat.com", "@jcajka")
+	addPerson("Jamal Carvalho", "jamal@golang.org", "@jamalc")
 	addPerson("James Abley", "james.abley@gmail.com")
 	addPerson("James Bardin", "j.bardin@gmail.com", "@jbardin")
 	addPerson("James Chacon", "jchacon@google.com")

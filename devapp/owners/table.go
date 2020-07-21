@@ -42,6 +42,7 @@ var (
 	hyangah      = gh("hyangah")
 	iant         = gh("ianlancetaylor")
 	iancottrell  = gh("ianthehat")
+	jamalc       = gh("jamalc")
 	jayconrod    = gh("jayconrod")
 	jba          = gh("jba")
 	jbd          = gh("rakyll")
@@ -850,7 +851,7 @@ var entries = map[string]*Entry{
 	},
 
 	"pkgsite": {
-		Primary: []Owner{julieqiu},
+		Primary: []Owner{julieqiu, jba, jamalc},
 	},
 
 	"playground": {
