@@ -120,7 +120,7 @@
         {{end}}
           {{range $builderName := $.Builders}}
             <td class="result{{if (unsupported .)}} unsupported{{end}}">
-            {{if isUntested $builderName "go" $.Branch ""}}•{{else}}
+            {{if and (eq $.Repo "go") (isUntested $builderName "go" $.Branch "")}}•{{else}}
               {{with $c.Result $builderName $h}}
                 {{if .BuildingURL}}
                   <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" height=16 width=16 border=0></a>
