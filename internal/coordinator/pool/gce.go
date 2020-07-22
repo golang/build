@@ -65,7 +65,7 @@ func gceAPIGate() {
 // is a GCE remote buildlet.
 type IsGCERemoteBuildletFunc func(instanceName string) bool
 
-// Initialized by initGCE:
+// Initialized by InitGCE:
 // TODO(http://golang.org/issue/38337): These should be moved into a struct as
 // part of the effort to reduce package level variables.
 var (
@@ -74,16 +74,18 @@ var (
 	// dsClient is a datastore client for the build project (symbolic-datum-552), where build progress is stored.
 	dsClient *datastore.Client
 	// goDSClient is a datastore client for golang-org, where build status is stored.
-	goDSClient     *datastore.Client
-	computeService *compute.Service
-	gcpCreds       *google.Credentials
-	errTryDeps     error // non-nil if try bots are disabled
-	gerritClient   *gerrit.Client
-	storageClient  *storage.Client
-	metricsClient  *monapi.MetricClient
-	inStaging      bool                   // are we running in the staging project? (named -dev)
-	errorsClient   *errorreporting.Client // Stackdriver errors client
-	gkeNodeIP      string
+	goDSClient *datastore.Client
+	// oAuthHTTPClient is the OAuth2 HTTP client used to make API calls to Google Cloud APIs.
+	oAuthHTTPClient *http.Client
+	computeService  *compute.Service
+	gcpCreds        *google.Credentials
+	errTryDeps      error // non-nil if try bots are disabled
+	gerritClient    *gerrit.Client
+	storageClient   *storage.Client
+	metricsClient   *monapi.MetricClient
+	inStaging       bool                   // are we running in the staging project? (named -dev)
+	errorsClient    *errorreporting.Client // Stackdriver errors client
+	gkeNodeIP       string
 
 	// values created due to seperating the buildlet pools into a seperate package
 	gceMode             string
@@ -91,23 +93,18 @@ var (
 	testFiles           map[string]string
 	basePinErr          *atomic.Value
 	isGCERemoteBuildlet IsGCERemoteBuildletFunc
-
-	initGCECalled bool
 )
-
-// oAuthHTTPClient is the OAuth2 HTTP client used to make API calls to Google Cloud APIs.
-// It is initialized by initGCE.
-var oAuthHTTPClient *http.Client
 
 // InitGCE initializes the GCE buildlet pool.
 func InitGCE(sc *secret.Client, vmDeleteTimeout time.Duration, tFiles map[string]string, basePin *atomic.Value, fn IsGCERemoteBuildletFunc, buildEnvName, mode string) error {
-	initGCECalled = true
+	gceMode = mode
 	deleteTimeout = vmDeleteTimeout
 	testFiles = tFiles
 	basePinErr = basePin
 	isGCERemoteBuildlet = fn
-	var err error
+
 	ctx := context.Background()
+	var err error
 
 	// If the coordinator is running on a GCE instance and a
 	// buildEnv was not specified with the env flag, set the
@@ -214,14 +211,12 @@ func InitGCE(sc *secret.Client, vmDeleteTimeout time.Duration, tFiles map[string
 		log.Printf("TryBot builders enabled.")
 	}
 
-	if mode != "dev" {
+	if mode != "dev" && metadata.OnGCE() && (buildEnv == buildenv.Production || buildEnv == buildenv.Staging) {
 		go syncBuildStatsLoop(buildEnv)
+		go gcePool.pollQuotaLoop()
+		go createBasepinDisks(ctx)
 	}
 
-	gceMode = mode
-
-	go gcePool.pollQuotaLoop()
-	go createBasepinDisks(context.Background())
 	return nil
 }
 
@@ -360,14 +355,6 @@ type GCEBuildlet struct {
 }
 
 func (p *GCEBuildlet) pollQuotaLoop() {
-	if computeService == nil {
-		log.Printf("pollQuotaLoop: no GCE access; not checking quota.")
-		return
-	}
-	if buildEnv.ProjectName == "" {
-		log.Printf("pollQuotaLoop: no GCE project name configured; not checking quota.")
-		return
-	}
 	for {
 		p.pollQuota()
 		time.Sleep(5 * time.Second)
@@ -827,9 +814,6 @@ func syncBuildStatsLoop(env *buildenv.Environment) {
 // Other than a list call, this a no-op unless new VM images were
 // added or updated recently.
 func createBasepinDisks(ctx context.Context) {
-	if !metadata.OnGCE() || (buildEnv != buildenv.Production && buildEnv != buildenv.Staging) {
-		return
-	}
 	for {
 		t0 := time.Now()
 		bgc, err := buildgo.NewClient(ctx, buildEnv)

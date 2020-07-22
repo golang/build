@@ -62,7 +62,7 @@ func InitKube(monitorGitMirror MonitorGitMirrorFunc) error {
 		return errors.New("Kubernetes builders disabled due to KubeBuild.MaxNodes == 0")
 	}
 
-	// projectID was set by initGCE
+	// projectID was set by InitGCE.
 	registryPrefix += "/" + gceBuildEnv.ProjectName
 	if !hasCloudPlatformScope() {
 		return errors.New("coordinator not running with access to the Cloud Platform scope.")
