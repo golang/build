@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// relui is a web interface for managing the release process of Go.
 package main
 
 import (
