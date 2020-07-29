@@ -380,7 +380,6 @@ func (w *Work) doRelease() {
 		if !w.Security {
 			w.checkReleaseBlockers()
 		}
-		w.checkDocs()
 	}
 	w.findOrCreateReleaseIssue()
 	if len(w.Errors) > 0 && !dryRun {
@@ -590,28 +589,6 @@ func (w *Work) printReleaseTable(md *bytes.Buffer) {
 			fmt.Fprintf(md, "  - %s\n", strings.Replace(strings.TrimRight(info.Msg, "\n"), "\n", "\n    ", -1))
 		}
 	}
-}
-
-func (w *Work) checkDocs() {
-	// Check that the major version is listed on the project page.
-	data, err := ioutil.ReadFile(filepath.Join(w.Dir, "gitwork", "doc/contrib.html"))
-	if err != nil {
-		w.log.Panic(err)
-	}
-	major := major(w.Version)
-	if !strings.Contains(string(data), major) {
-		w.logError("doc/contrib.html does not list major version %s", major)
-	}
-}
-
-// major takes a go version like "go1.5", "go1.5.1", "go1.5.2", etc.,
-// and returns the corresponding major version like "go1.5".
-func major(v string) string {
-	if strings.Count(v, ".") != 2 {
-		// No minor component to drop, return as is.
-		return v
-	}
-	return v[:strings.LastIndex(v, ".")]
 }
 
 func (w *Work) writeVersion() (changeID string) {
