@@ -83,7 +83,7 @@ func TestServerHomeHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 
-	s := &server{store: &memoryStore{}}
+	s := &server{store: newFileStore("")}
 	s.homeHandler(w, req)
 	resp := w.Result()
 
@@ -96,7 +96,7 @@ func TestServerNewWorkflowHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/workflows/new", nil)
 	w := httptest.NewRecorder()
 
-	s := &server{store: &memoryStore{}}
+	s := &server{store: newFileStore("")}
 	s.newWorkflowHandler(w, req)
 	resp := w.Result()
 
@@ -134,7 +134,7 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			w := httptest.NewRecorder()
 
-			s := &server{store: &memoryStore{}, configs: config}
+			s := &server{store: newFileStore(""), configs: config}
 			s.createWorkflowHandler(w, req)
 			resp := w.Result()
 
@@ -146,16 +146,16 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 					t.Errorf("resp.Header.Get(%q) = %q, wanted %q", k, resp.Header.Get(k), v)
 				}
 			}
-			if len(s.store.GetWorkflows()) != 1 && c.wantParams != nil {
-				t.Fatalf("len(s.store.GetWorkflows()) = %d, wanted %d", len(s.store.GetWorkflows()), 1)
-			} else if len(s.store.GetWorkflows()) != 0 && c.wantParams == nil {
-				t.Fatalf("len(s.store.GetWorkflows()) = %d, wanted %d", len(s.store.GetWorkflows()), 0)
+			if len(s.store.Workflows()) != 1 && c.wantParams != nil {
+				t.Fatalf("len(s.store.Workflows()) = %d, wanted %d", len(s.store.Workflows()), 1)
+			} else if len(s.store.Workflows()) != 0 && c.wantParams == nil {
+				t.Fatalf("len(s.store.Workflows()) = %d, wanted %d", len(s.store.Workflows()), 0)
 			}
 			if c.wantParams == nil {
 				return
 			}
-			if diff := cmp.Diff(c.wantParams, s.store.GetWorkflows()[0].GetParams()); diff != "" {
-				t.Errorf("s.Store.GetWorkflows()[0].Params() mismatch (-want, +got):\n%s", diff)
+			if diff := cmp.Diff(c.wantParams, s.store.Workflows()[0].GetParams()); diff != "" {
+				t.Errorf("s.Store.Workflows()[0].Params() mismatch (-want, +got):\n%s", diff)
 			}
 		})
 	}

@@ -6,6 +6,7 @@
 package main
 
 import (
+	"flag"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -16,8 +17,13 @@ import (
 	reluipb "golang.org/x/build/cmd/relui/protos"
 )
 
+var (
+	devDataDir = flag.String("dev-data-directory", defaultDevDataDir(), "Development-only directory to use for storage of application state.")
+)
+
 func main() {
-	s := &server{store: &memoryStore{}, configs: loadWorkflowConfig("./workflows")}
+	flag.Parse()
+	s := &server{store: newFileStore(*devDataDir), configs: loadWorkflowConfig("./workflows")}
 	http.Handle("/workflows/create", http.HandlerFunc(s.createWorkflowHandler))
 	http.Handle("/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
 	http.Handle("/", fileServerHandler(relativeFile("./static"), http.HandlerFunc(s.homeHandler)))
@@ -53,4 +59,13 @@ func loadWorkflowConfig(dir string) []*reluipb.Workflow {
 		ws = append(ws, w)
 	}
 	return ws
+}
+
+// defaultDevDataDir returns a directory suitable for storage of data when developing relui on most platforms.
+func defaultDevDataDir() string {
+	c, err := os.UserConfigDir()
+	if err != nil {
+		c = os.TempDir()
+	}
+	return filepath.Join(c, "go-build", "relui")
 }

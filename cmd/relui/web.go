@@ -64,7 +64,7 @@ type homeResponse struct {
 // homeHandler renders the homepage.
 func (s *server) homeHandler(w http.ResponseWriter, _ *http.Request) {
 	out := bytes.Buffer{}
-	if err := homeTmpl.Execute(&out, homeResponse{Workflows: s.store.GetWorkflows()}); err != nil {
+	if err := homeTmpl.Execute(&out, homeResponse{Workflows: s.store.Workflows()}); err != nil {
 		log.Printf("homeHandler: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -106,6 +106,7 @@ func (s *server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	wf.Params["GitObject"] = ref
 	if err := s.store.AddWorkflow(wf); err != nil {
+		log.Printf("Error adding workflow: s.store.AddWorkflow(%v) = %v", wf, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}

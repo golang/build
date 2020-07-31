@@ -41,6 +41,12 @@ message BuildableTask {
   string task_type = 6;
 }
 
+// LocalStorage is the persisted data of relui. It is used in development mode for saving application state.
+message LocalStorage {
+  // workflows are a list of user-created workflows.
+  repeated Workflow workflows = 1;
+}
+
 message GitSource {
   string url = 1;
   string ref = 2;
