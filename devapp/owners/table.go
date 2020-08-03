@@ -11,7 +11,7 @@ import (
 func gh(githubUsername string) Owner {
 	p := gophers.GetPerson("@" + githubUsername)
 	if p == nil {
-		panic("person with GitHub username " + githubUsername + " not found")
+		panic("person with GitHub username " + githubUsername + " does not exist in the internal/gophers package.")
 	}
 	return Owner{GitHubUsername: githubUsername, GerritEmail: p.Gerrit}
 }
@@ -51,6 +51,7 @@ var (
 	julieqiu     = gh("julieqiu")
 	kardianos    = gh("kardianos")
 	kevinburke   = gh("kevinburke")
+	kele         = gh("kele")
 	khr          = gh("randall77")
 	martisch     = gh("martisch")
 	matloob      = gh("matloob")
@@ -353,8 +354,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{khr},
 	},
 	"go/src/html/template": {
-		Primary:   []Owner{mikesamuel},
-		Secondary: []Owner{empijei},
+		Primary:   []Owner{empijei},
+		Secondary: []Owner{kele},
 	},
 	"go/src/image": {
 		Primary:   []Owner{nigeltao},
@@ -864,7 +865,7 @@ var entries = map[string]*Entry{
 
 	"website": {
 		Primary:   []Owner{dmitshur},
-		Secondary: []Owner{cnoellekb, andybons},
+		Secondary: []Owner{andybons},
 	},
 
 	// These components are domains, not Go packages.

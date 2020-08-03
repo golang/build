@@ -683,6 +683,7 @@ func init() {
 	addPerson("Damian Gryski", "damian@gryski.com", "@dgryski")
 	addPerson("Damian Gryski", "dgryski@gmail.com", "7050@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Damian Gryski", "dgryski@gmail.com", "@dgryski")
+	addPerson("Damian Bogel", "kele@google.com", "@kele")
 	addPerson("Damien Lespiau", "damien.lespiau@gmail.com", "13855@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Damien Lespiau", "damien.lespiau@intel.com", "damien.lespiau@gmail.com", "@dlespiau")
 	addPerson("Damien Mathieu", "42@dmathieu.com", "@dmathieu")
