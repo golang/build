@@ -223,24 +223,6 @@ var Hosts = map[string]*HostConfig{
 		OwnerGithub: "bradfitz", // at home
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
 	},
-	"host-openbsd-amd64-60": &HostConfig{
-		VMImage:     "openbsd-amd64-60",
-		machineType: "n1-highcpu-4",
-		// OpenBSD 6.0 requires binaries built with Go 1.10, per https://golang.org/wiki/OpenBSD
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64.go1.10",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-60.tar.gz",
-		Notes:              "OpenBSD 6.0; GCE VM is built from script in build/env/openbsd-amd64",
-		SSHUsername:        "gopher",
-	},
-	"host-openbsd-386-60": &HostConfig{
-		VMImage:     "openbsd-386-60",
-		machineType: "n1-highcpu-4",
-		// OpenBSD 6.0 requires binaries built with Go 1.10, per https://golang.org/wiki/OpenBSD
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386.go1.10",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-60.tar.gz",
-		Notes:              "OpenBSD 6.0; GCE VM is built from script in build/env/openbsd-386",
-		SSHUsername:        "gopher",
-	},
 	"host-openbsd-amd64-62": &HostConfig{
 		VMImage:            "openbsd-amd64-62",
 		machineType:        "n1-highcpu-4",
@@ -279,30 +261,6 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:   1,
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		OwnerGithub: "4a6f656c",
-	},
-	"host-freebsd-93-gce": &HostConfig{
-		VMImage:            "freebsd-amd64-gce93",
-		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
-		SSHUsername:        "gopher",
-	},
-	"host-freebsd-10_3": &HostConfig{
-		VMImage:            "freebsd-amd64-103-b",
-		Notes:              "FreeBSD 10.3; GCE VM is built from script in build/env/freebsd-amd64",
-		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
-		env:                []string{"CC=clang"},
-		SSHUsername:        "gopher",
-	},
-	"host-freebsd-10_4": &HostConfig{
-		VMImage:            "freebsd-amd64-104",
-		Notes:              "FreeBSD 10.4; GCE VM is built from script in build/env/freebsd-amd64",
-		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
-		SSHUsername:        "gopher",
 	},
 	"host-freebsd-11_1": &HostConfig{
 		VMImage:            "freebsd-amd64-111-b",
@@ -1443,29 +1401,6 @@ func explicitTrySet(projs ...string) func(proj, branch, goBranch string) bool {
 
 func init() {
 	addBuilder(BuildConfig{
-		Name:       "freebsd-amd64-gce93",
-		HostType:   "host-freebsd-93-gce",
-		buildsRepo: disabledBuilder,
-	})
-	addBuilder(BuildConfig{
-		Name:     "freebsd-amd64-10_3",
-		HostType: "host-freebsd-10_3",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return goBranch == "release-branch.go1.12" && buildRepoByDefault(repo)
-		},
-		tryBot: func(repo, branch, goBranch string) bool {
-			return branch == "release-branch.go1.12"
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:     "freebsd-amd64-10_4",
-		HostType: "host-freebsd-10_4",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return goBranch == "release-branch.go1.12" && buildRepoByDefault(repo)
-		},
-		tryBot: nil,
-	})
-	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-11_1",
 		HostType: "host-freebsd-11_1",
 		tryBot:   nil,
@@ -1504,22 +1439,6 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-race",
 		HostType: "host-freebsd-11_1-big", // TODO(golang.org/issue/40562): Update to newer FreeBSD.
-	})
-	addBuilder(BuildConfig{
-		Name:     "freebsd-386-10_3",
-		HostType: "host-freebsd-10_3",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return goBranch == "release-branch.go1.12" && buildRepoByDefault(repo)
-		},
-		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
-	})
-	addBuilder(BuildConfig{
-		Name:     "freebsd-386-10_4",
-		HostType: "host-freebsd-10_4",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return goBranch == "release-branch.go1.12" && buildRepoByDefault(repo)
-		},
-		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
 		Name:           "freebsd-386-11_1",
@@ -1883,6 +1802,7 @@ func init() {
 		HostType: "host-nacl",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// nacl support is removed in Go 1.14.
+			// TODO: Remove builder after Go 1.15 is out.
 			return repo == "go" && !atLeastGo1(goBranch, 14) && !strings.HasPrefix(goBranch, "dev.")
 		},
 		numTryTestHelpers: 3,
@@ -1893,6 +1813,7 @@ func init() {
 		HostType: "host-nacl",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// nacl support is removed in Go 1.14.
+			// TODO: Remove builder after Go 1.15 is out.
 			return repo == "go" && !atLeastGo1(goBranch, 14) && !strings.HasPrefix(goBranch, "dev.")
 		},
 		tryBot:            explicitTrySet("go"),
@@ -1931,27 +1852,6 @@ func init() {
 			"GOOS=js", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
 			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:              "openbsd-amd64-60",
-		HostType:          "host-openbsd-amd64-60",
-		distTestAdjust:    noTestDirAndNoReboot,
-		buildsRepo:        disabledBuilder,
-		numTestHelpers:    2,
-		numTryTestHelpers: 5,
-	})
-	addBuilder(BuildConfig{
-		Name:           "openbsd-386-60",
-		HostType:       "host-openbsd-386-60",
-		distTestAdjust: noTestDirAndNoReboot,
-		buildsRepo:     disabledBuilder,
-		env: []string{
-			// cmd/go takes ~192 seconds on openbsd-386
-			// now, which is over the 180 second default
-			// dist test timeout. So, bump this builder
-			// up:
-			"GO_TEST_TIMEOUT_SCALE=2",
 		},
 	})
 	addBuilder(BuildConfig{

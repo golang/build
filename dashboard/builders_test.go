@@ -356,21 +356,9 @@ func TestBuilderConfig(t *testing.T) {
 		// go1.12.html: "Go 1.12 is the last release that is
 		// supported on FreeBSD 10.x [... and 11.1]"
 		// But golang.org/issue/40563 happened.
-		{b("freebsd-386-10_3", "go"), none},
-		{b("freebsd-386-10_3", "net"), none},
-		{b("freebsd-386-10_3", "mobile"), none},
-		{b("freebsd-amd64-10_3", "go"), none},
-		{b("freebsd-amd64-10_3", "net"), none},
-		{b("freebsd-amd64-10_3", "mobile"), none},
 		{b("freebsd-amd64-11_1", "go"), none},
 		{b("freebsd-amd64-11_1", "net"), none},
 		{b("freebsd-amd64-11_1", "mobile"), none},
-		{b("freebsd-amd64-10_3@go1.12", "go"), both},
-		{b("freebsd-amd64-10_3@go1.12", "net@1.12"), both},
-		{b("freebsd-amd64-10_3@go1.12", "mobile"), none},
-		{b("freebsd-amd64-10_4@go1.12", "go"), isBuilder},
-		{b("freebsd-amd64-10_4@go1.12", "net"), isBuilder},
-		{b("freebsd-amd64-10_4@go1.12", "mobile"), none},
 		{b("freebsd-amd64-11_1@go1.14", "go"), isBuilder},
 		{b("freebsd-amd64-11_1@go1.14", "net"), isBuilder},
 		{b("freebsd-amd64-11_1@go1.14", "mobile"), none},
@@ -425,6 +413,8 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-amd64-emu", "go"), isBuilder},
 		{b("android-386-emu", "go"), isBuilder},
 
+		// golang.org/doc/go1.13: "Go 1.13 is the last release
+		// that will run on Native Client (NaCl)."
 		{b("nacl-386", "go"), none},
 		{b("nacl-386@dev.link", "go"), none},
 		{b("nacl-386@go1.13", "go"), onlyPost},
@@ -487,13 +477,9 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-10_15", "exp"), onlyPost},
 		// ... but not on most others:
 		{b("darwin-amd64-10_12", "exp"), none},
-		{b("freebsd-386-10_3@go1.12", "exp"), none},
-		{b("freebsd-386-10_4@go1.12", "exp"), none},
 		{b("freebsd-386-11_1@go1.14", "exp"), none},
 		{b("freebsd-386-11_2", "exp"), none},
 		{b("freebsd-386-12_0", "exp"), none},
-		{b("freebsd-amd64-10_3@go1.12", "exp"), none},
-		{b("freebsd-amd64-10_4@go1.12", "exp"), none},
 		{b("freebsd-amd64-11_1@go1.14", "exp"), none},
 		{b("freebsd-amd64-11_2", "exp"), none},
 		{b("freebsd-amd64-12_0", "exp"), none},
@@ -519,8 +505,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-sid", "build"), none},
 		{b("linux-amd64-nocgo", "build"), none},
 		{b("linux-386-longtest", "build"), none},
-		{b("freebsd-386-10_3", "build"), none},
-		{b("freebsd-386-10_4", "build"), none},
 		{b("freebsd-386-11_1", "build"), none},
 		{b("js-wasm", "build"), none},
 		{b("android-386-emu", "build"), none},
@@ -606,16 +590,27 @@ func TestBuilderConfig(t *testing.T) {
 }
 
 func TestHostConfigsAllUsed(t *testing.T) {
-	used := map[string]bool{}
+	knownUnused := map[string]bool{
+		// Currently host-linux-armhf-cross and host-linux-armel-cross aren't
+		// referenced, but the coordinator hard-codes them, so don't make
+		// these two an error for now.
+		"host-linux-armhf-cross": true,
+		"host-linux-armel-cross": true,
+
+		"host-linux-x86-alpine": true, // TODO(golang.org/issue/19938): Fix the Alpine builder, or remove it.
+		"host-linux-arm64-aws":  true, // TODO(golang.org/issue/36841): Add a builder that uses this host, or remove it.
+	}
+
+	used := make(map[string]bool)
 	for _, conf := range Builders {
 		used[conf.HostType] = true
 	}
 	for hostType := range Hosts {
-		if !used[hostType] {
-			// Currently host-linux-armhf-cross and host-linux-armel-cross aren't
-			// referenced, but the coordinator hard-codes them, so don't make
-			// this an error for now.
-			t.Logf("warning: host type %q is not referenced from any build config", hostType)
+		if !used[hostType] && !knownUnused[hostType] {
+			t.Errorf("host type %q is not referenced from any build config", hostType)
+		}
+		if used[hostType] && knownUnused[hostType] {
+			t.Errorf("host type %q should not be listed in knownUnused since it's in use", hostType)
 		}
 	}
 }
