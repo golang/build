@@ -84,6 +84,9 @@ func main() {
 		if *target != "" && b.String() != *target {
 			continue
 		}
+		if !match(b.GoQuery, *version) {
+			continue
+		}
 		matches++
 		b.logf("Start.")
 		wg.Add(1)
@@ -103,6 +106,10 @@ func main() {
 }
 
 type Build struct {
+	// GoQuery is a Go version query specifying the Go versions
+	// the build applies to. Empty string means all Go versions.
+	GoQuery string
+
 	OS, Arch string
 	Source   bool
 
@@ -169,15 +176,17 @@ var builds = []*Build{
 		Builder: "linux-arm64-packet",
 	},
 	{
+		GoQuery: ">= go1.15rc2", // See #40563.
 		OS:      "freebsd",
 		Arch:    "386",
-		Builder: "freebsd-386-11_1",
+		Builder: "freebsd-386-11_2",
 	},
 	{
+		GoQuery: ">= go1.15rc2", // See #40563.
 		OS:      "freebsd",
 		Arch:    "amd64",
 		Race:    true,
-		Builder: "freebsd-amd64-11_1",
+		Builder: "freebsd-amd64-11_2",
 	},
 	{
 		OS:      "windows",
@@ -211,6 +220,21 @@ var builds = []*Build{
 		Arch:      "ppc64le",
 		SkipTests: true,
 		Builder:   "linux-ppc64le-buildlet",
+	},
+
+	// Older builds.
+	{
+		GoQuery: "< go1.15",
+		OS:      "freebsd",
+		Arch:    "386",
+		Builder: "freebsd-386-11_1",
+	},
+	{
+		GoQuery: "< go1.15",
+		OS:      "freebsd",
+		Arch:    "amd64",
+		Race:    true,
+		Builder: "freebsd-amd64-11_1",
 	},
 
 	// Test-only builds.
@@ -933,16 +957,37 @@ func setGOARCH(env []string, goarch string) []string {
 // minSupportedMacOSVersion provides the minimum supported macOS
 // version (of the form N.M) for supported Go versions.
 func minSupportedMacOSVersion(goVer string) string {
-	// TODO(amedee): Use a version package to compare versions of Go.
+	// TODO(amedee,dmitshur,golang.org/issue/40558): Use a version package to compare versions of Go.
 
 	// The minimum supported version of macOS with each version of go:
 	// go1.13 - macOS 10.11
 	// go1.14 - macOS 10.11
 	// go1.15 - macOS 10.12
 	minMacVersion := "10.12"
-	if strings.HasPrefix(goVer, "go1.13") || strings.HasPrefix(goVer, "go1.14") {
+	if match("< go1.15", goVer) {
 		minMacVersion = "10.11"
 		return minMacVersion
 	}
 	return minMacVersion
+}
+
+// match reports whether the Go version goVer matches the provided version query.
+// The empty query matches all Go versions.
+// match panics if given a query that it doesn't support.
+func match(query, goVer string) bool {
+	// TODO(golang.org/issue/40558): This should help inform the API for a Go version parser.
+	switch query {
+	case "": // A special case to make the zero Build.GoQuery value useful.
+		return true
+	case ">= go1.15rc2":
+		// By the time this code is added, Go 1.15 RC 1 has already been released and
+		// won't be modified, that's why we only care about matching RC 2 and onwards.
+		// (We could've just done ">= go1.15", but that could be misleading in future.)
+		return goVer != "go1.15rc1" && !strings.HasPrefix(goVer, "go1.15beta") &&
+			!strings.HasPrefix(goVer, "go1.14") && !strings.HasPrefix(goVer, "go1.13")
+	case "< go1.15":
+		return strings.HasPrefix(goVer, "go1.14") || strings.HasPrefix(goVer, "go1.13")
+	default:
+		panic(fmt.Errorf("match: query %q is not supported", query))
+	}
 }
