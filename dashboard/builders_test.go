@@ -319,7 +319,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-amd64-emu@go1.12", "mobile"), none},
 		{b("android-amd64-emu@go1.13", "mobile"), both},
 		{b("android-amd64-emu", "mobile@1.13"), both},
-		{b("freebsd-386-11_1@go1.12", "mobile"), none}, // This was golang.org/issue/36506.
+		{b("freebsd-386-11_1@go1.14", "mobile"), none}, // See golang.org/issue/36506.
 
 		{b("android-amd64-emu", "go"), both},
 		{b("android-amd64-emu", "crypto"), both},
@@ -355,6 +355,7 @@ func TestBuilderConfig(t *testing.T) {
 
 		// go1.12.html: "Go 1.12 is the last release that is
 		// supported on FreeBSD 10.x [... and 11.1]"
+		// But golang.org/issue/40563 happened.
 		{b("freebsd-386-10_3", "go"), none},
 		{b("freebsd-386-10_3", "net"), none},
 		{b("freebsd-386-10_3", "mobile"), none},
@@ -370,12 +371,12 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-amd64-10_4@go1.12", "go"), isBuilder},
 		{b("freebsd-amd64-10_4@go1.12", "net"), isBuilder},
 		{b("freebsd-amd64-10_4@go1.12", "mobile"), none},
-		{b("freebsd-amd64-11_1@go1.13", "go"), none},
-		{b("freebsd-amd64-11_1@go1.13", "net@1.12"), none},
+		{b("freebsd-amd64-11_1@go1.14", "go"), isBuilder},
+		{b("freebsd-amd64-11_1@go1.14", "net"), isBuilder},
+		{b("freebsd-amd64-11_1@go1.14", "mobile"), none},
+		{b("freebsd-amd64-11_1@go1.13", "go"), isBuilder},
+		{b("freebsd-amd64-11_1@go1.13", "net"), isBuilder},
 		{b("freebsd-amd64-11_1@go1.13", "mobile"), none},
-		{b("freebsd-amd64-11_1@go1.12", "go"), isBuilder},
-		{b("freebsd-amd64-11_1@go1.12", "net@1.12"), isBuilder},
-		{b("freebsd-amd64-11_1@go1.12", "mobile"), none},
 
 		// FreeBSD 12.0
 		{b("freebsd-amd64-12_0", "go"), both},
@@ -488,12 +489,12 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-10_12", "exp"), none},
 		{b("freebsd-386-10_3@go1.12", "exp"), none},
 		{b("freebsd-386-10_4@go1.12", "exp"), none},
-		{b("freebsd-386-11_1@go1.12", "exp"), none},
+		{b("freebsd-386-11_1@go1.14", "exp"), none},
 		{b("freebsd-386-11_2", "exp"), none},
 		{b("freebsd-386-12_0", "exp"), none},
 		{b("freebsd-amd64-10_3@go1.12", "exp"), none},
 		{b("freebsd-amd64-10_4@go1.12", "exp"), none},
-		{b("freebsd-amd64-11_1@go1.12", "exp"), none},
+		{b("freebsd-amd64-11_1@go1.14", "exp"), none},
 		{b("freebsd-amd64-11_2", "exp"), none},
 		{b("freebsd-amd64-12_0", "exp"), none},
 		{b("openbsd-amd64-62", "exp"), none},

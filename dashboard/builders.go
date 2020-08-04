@@ -1470,7 +1470,10 @@ func init() {
 		HostType: "host-freebsd-11_1",
 		tryBot:   nil,
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return goBranch == "release-branch.go1.12" && buildRepoByDefault(repo)
+			// This builder is unfortunately still used by Go 1.14 and 1.13,
+			// so keep it around a bit longer. See golang.org/issue/40563.
+			// Test relevant Go versions so that we're better informed.
+			return atMostGo1(goBranch, 14) && buildRepoByDefault(repo)
 		},
 		distTestAdjust:    fasterTrybots,
 		numTryTestHelpers: 4,
@@ -1500,7 +1503,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-race",
-		HostType: "host-freebsd-11_1-big",
+		HostType: "host-freebsd-11_1-big", // TODO(golang.org/issue/40562): Update to newer FreeBSD.
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-386-10_3",
@@ -1523,7 +1526,10 @@ func init() {
 		HostType:       "host-freebsd-11_1",
 		distTestAdjust: noTestDirAndNoReboot,
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return goBranch == "release-branch.go1.12" && buildRepoByDefault(repo)
+			// This builder is unfortunately still used by Go 1.14 and 1.13,
+			// so keep it around a bit longer. See golang.org/issue/40563.
+			// Test relevant Go versions so that we're better informed.
+			return atMostGo1(goBranch, 14) && buildRepoByDefault(repo)
 		},
 		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
