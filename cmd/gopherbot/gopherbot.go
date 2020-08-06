@@ -333,9 +333,7 @@ var tasks = []struct {
 
 	// Gerrit tasks are applied to all projects by default.
 	{"abandon scratch reviews", (*gopherbot).abandonScratchReviews},
-
-	// Disabled temporarily due to https://golang.org/issue/40147
-	//	{"assign reviewers to CLs", (*gopherbot).assignReviewersToCLs},
+	{"assign reviewers to CLs", (*gopherbot).assignReviewersToCLs},
 
 	{"access", (*gopherbot).whoNeedsAccess},
 	{"cl2issue", (*gopherbot).cl2issue},
@@ -1931,7 +1929,7 @@ func sameReviewers(reviewers []string, review gerrit.ReviewInput) bool {
 	sort.Strings(reviewers)
 	var people []*gophers.Person
 	for _, id := range reviewers {
-		p := gophers.GetPerson(fmt.Sprintf("%s@%s", id, gerritInstanceID))
+		p := gophers.GetPerson(fmt.Sprintf("%s%s", id, gerritInstanceID))
 		// If an existing reviewer is not known to us, we have no way of
 		// checking if these reviewer lists are identical.
 		if p == nil {
