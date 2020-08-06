@@ -60,12 +60,14 @@ var (
 	mikesamuel   = gh("mikesamuel")
 	mikioh       = gh("mikioh")
 	minux        = gh("minux")
+	mknyszek     = gh("mknyszek")
 	mpvl         = gh("mpvl")
 	mvdan        = gh("mvdan")
 	mwhudson     = gh("mwhudson")
 	neelance     = gh("neelance")
 	nigeltao     = gh("nigeltao")
 	pearring     = gh("pearring")
+	prattmic     = gh("prattmic")
 	r            = gh("robpike")
 	rakoczy      = gh("toothrot")
 	rsc          = gh("rsc")
@@ -510,7 +512,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{rsc},
 	},
 	"go/src/runtime": {
-		Primary:   []Owner{austin, rsc, khr},
+		Primary:   []Owner{austin, khr, mknyszek, prattmic},
 		Secondary: []Owner{iant, dvyukov, martisch},
 	},
 	"go/src/runtime/cgo": {
