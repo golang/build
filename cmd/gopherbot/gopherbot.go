@@ -228,6 +228,20 @@ func main() {
 			{"scratch", 72110}: true,
 			{"scratch", 72131}: true,
 		},
+		deletedIssues: map[int32]bool{
+			23772: true,
+			27223: true,
+			28522: true,
+			29309: true,
+			32047: true,
+			32048: true,
+			32469: true,
+			32706: true,
+			32737: true,
+			33315: true,
+			33316: true,
+			39453: true,
+		},
 	}
 	bot.initCorpus()
 
@@ -279,9 +293,10 @@ type gopherbot struct {
 
 	knownContributors map[string]bool
 
-	// Until golang.org/issue/22635 is fixed, keep a map of changes that were deleted
-	// to prevent calls to Gerrit that will always 404.
+	// Until golang.org/issue/22635 is fixed, keep a map of changes and issues
+	// that were deleted to prevent calls to Gerrit or GitHub that will always 404.
 	deletedChanges map[gerritChange]bool
+	deletedIssues  map[int32]bool // issue number -> deleted
 
 	releases struct {
 		sync.Mutex
@@ -318,7 +333,10 @@ var tasks = []struct {
 
 	// Gerrit tasks are applied to all projects by default.
 	{"abandon scratch reviews", (*gopherbot).abandonScratchReviews},
-	{"assign reviewers to CLs", (*gopherbot).assignReviewersToCLs},
+
+	// Disabled temporarily due to https://golang.org/issue/40147
+	//	{"assign reviewers to CLs", (*gopherbot).assignReviewersToCLs},
+
 	{"access", (*gopherbot).whoNeedsAccess},
 	{"cl2issue", (*gopherbot).cl2issue},
 	{"congratulate new contributors", (*gopherbot).congratulateNewContributors},
@@ -744,7 +762,7 @@ func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 			return nil
 		}
 		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-			if gi.NotExist || !gi.Closed || gi.PullRequest || gi.Locked {
+			if gi.NotExist || !gi.Closed || gi.PullRequest || gi.Locked || b.deletedIssues[gi.Number] {
 				return nil
 			}
 			if gi.Updated.After(tooOld) {
@@ -960,7 +978,7 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 			return nil
 		}
 		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-			if gi.Closed || gi.PullRequest || !gi.HasLabel("WaitingForInfo") {
+			if gi.Closed || gi.PullRequest || !gi.HasLabel("WaitingForInfo") || gi.NotExist || b.deletedIssues[gi.Number] {
 				return nil
 			}
 			var waitStart time.Time
