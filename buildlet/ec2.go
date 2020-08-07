@@ -71,7 +71,7 @@ func (c *EC2Client) StartNewVM(ctx context.Context, buildEnv *buildenv.Environme
 	if err != nil {
 		return nil, err
 	}
-	if err = c.WaitUntilVMExists(ctx, vm.ID, opts); err != nil {
+	if err = c.waitUntilVMExists(ctx, vm.ID, opts); err != nil {
 		return nil, err
 	}
 	// once the VM is up and running then all of the configuration data is available
@@ -100,8 +100,8 @@ func (c *EC2Client) createVM(ctx context.Context, config *cloud.EC2VMConfigurati
 	return inst, nil
 }
 
-// WaitUntilVMExists submits a request which waits until an instance exists before returning.
-func (c *EC2Client) WaitUntilVMExists(ctx context.Context, instID string, opts *VMOpts) error {
+// waitUntilVMExists submits a request which waits until an instance exists before returning.
+func (c *EC2Client) waitUntilVMExists(ctx context.Context, instID string, opts *VMOpts) error {
 	if err := c.client.WaitUntilInstanceRunning(ctx, instID); err != nil {
 		return fmt.Errorf("failed waiting for vm instance: %w", err)
 	}

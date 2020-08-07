@@ -190,7 +190,7 @@ func TestWaitUntilInstanceExists(t *testing.T) {
 	if gotErr != nil {
 		t.Fatalf("createVM(ctx, %v, %v) failed with %s", vmConfig, opts, gotErr)
 	}
-	gotErr = c.WaitUntilVMExists(ctx, gotVM.ID, opts)
+	gotErr = c.waitUntilVMExists(ctx, gotVM.ID, opts)
 	if gotErr != nil {
 		t.Fatalf("WaitUntilVMExists(%v, %v, %v) failed with error %s", ctx, gotVM.ID, opts, gotErr)
 	}
