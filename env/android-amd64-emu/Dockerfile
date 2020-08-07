@@ -12,10 +12,12 @@ ENV DEBIAN_FRONTEND noninteractive
 ENV GO_BUILDER_ENV android-amd64-emu
 
 # For gomobile tests
-ENV ANDROID_HOME=/android/sdk
+ENV ANDROID_SDK_ROOT=/android/sdk
+# TODO(golang.org/issues/39945): delete the use of ANDROID_HOME after cl/244057 lands.
+ENV ANDROID_HOME=${ANDROID_SDK_ROOT}
 ENV CGO_CFLAGS=-I/android/openal-headers
 
-ENV PATH="${PATH}:${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/build-tools/27.0.3:/android/gradle/bin"
+ENV PATH="${PATH}:${ANDROID_SDK_ROOT}/platform-tools:${ANDROID_SDK_ROOT}/build-tools/27.0.3:/android/gradle/bin"
 ENV CC_FOR_android_386=/android/sdk/ndk-bundle/toolchains/llvm/prebuilt/linux-x86_64/bin/i686-linux-android26-clang
 ENV CC_FOR_android_amd64=/android/sdk/ndk-bundle/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang
 
