@@ -508,11 +508,17 @@ func (b *gopherbot) addGitHubComment(ctx context.Context, repo *maintner.GitHubR
 	}
 	// See if there is a dup comment from when gopherbot last got
 	// its data from maintner.
-	ics, _, err := b.ghc.Issues.ListComments(ctx, repo.ID().Owner, repo.ID().Repo, int(issueNum), &github.IssueListCommentsOptions{
+	ics, resp, err := b.ghc.Issues.ListComments(ctx, repo.ID().Owner, repo.ID().Repo, int(issueNum), &github.IssueListCommentsOptions{
 		Since:       since,
 		ListOptions: github.ListOptions{PerPage: 1000},
 	})
 	if err != nil {
+		// TODO(golang/go#40640) - This issue was transferred or otherwise is gone. We should permanently skip it. This
+		// is a temporary fix to keep gopherbot working.
+		if resp != nil && resp.StatusCode == http.StatusNotFound {
+			log.Printf("addGitHubComment: Issue %v#%v returned a 404 when trying to load comments. Skipping. See golang/go#40640.", repo.ID(), issueNum)
+			return nil
+		}
 		return err
 	}
 	for _, ic := range ics {
@@ -1021,7 +1027,7 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 			// TODO: write a task that reopens issues if the OP speaks up.
 			if err := b.addGitHubComment(ctx, repo, gi.Number,
 				"Timed out in state WaitingForInfo. Closing.\n\n(I am just a bot, though. Please speak up if this is a mistake or you have the requested information.)"); err != nil {
-				return err
+				return fmt.Errorf("b.addGitHubComment(_, %v, %v) = %w", repo.ID(), gi.Number, err)
 			}
 			return b.closeGitHubIssue(ctx, repo.ID(), gi.Number)
 		})
