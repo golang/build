@@ -58,9 +58,6 @@ func (c *EC2Client) StartNewVM(ctx context.Context, buildEnv *buildenv.Environme
 	if opts.Description == "" {
 		opts.Description = fmt.Sprintf("Go Builder for %s", hostType)
 	}
-	if opts.Zone == "" {
-		opts.Zone = buildEnv.RandomEC2VMZone()
-	}
 	if opts.DeleteIn == 0 {
 		opts.DeleteIn = 30 * time.Minute
 	}
