@@ -255,6 +255,10 @@ func file(name string) *acFile {
 // updated, and used to find contributors to add to the CONTRIBUTORS file.
 // It includes "go", which represents the main Go repository,
 // and an import path corresponding to each subrepository root.
+//
+// TODO(golang.org/issue/36047): Rewrite to use x/build/repos, being
+// mindful whether each repo is expected to contribute to the main
+// Go distribution's CONTRIBUTORS file or not.
 var repos = []string{
 	"go", // main repo
 	"golang.org/x/arch",
@@ -263,14 +267,17 @@ var repos = []string{
 	"golang.org/x/build",
 	"golang.org/x/crypto",
 	"golang.org/x/debug",
+	"golang.org/dl",
 	"golang.org/x/exp",
 	"github.com/golang/gddo", // The canonical import path for gddo is on GitHub.
 	"golang.org/x/image",
 	"golang.org/x/lint",
 	"golang.org/x/mobile",
+	"golang.org/x/mod",
 	"golang.org/x/net",
 	"golang.org/x/oauth2",
 	"golang.org/x/perf",
+	"golang.org/x/pkgsite",
 	"golang.org/x/playground",
 	"go.googlesource.com/proposal.git", // It doesn't have an /x/ vanity import path.
 	"golang.org/x/review",
