@@ -598,7 +598,6 @@ func TestHostConfigsAllUsed(t *testing.T) {
 		"host-linux-armel-cross": true,
 
 		"host-linux-x86-alpine": true, // TODO(golang.org/issue/19938): Fix the Alpine builder, or remove it.
-		"host-linux-arm64-aws":  true, // TODO(golang.org/issue/36841): Add a builder that uses this host, or remove it.
 	}
 
 	used := make(map[string]bool)
@@ -872,5 +871,57 @@ func TestLongTestBuilder(t *testing.T) {
 	}
 	if !shortDisabled {
 		t.Error("the linux-amd64-longtest builder doesn't set GO_TEST_SHORT=0, is that intentional?")
+	}
+}
+
+func TestHostConfigIsVM(t *testing.T) {
+	testCases := []struct {
+		desc   string
+		config *HostConfig
+		want   bool
+	}{
+		{
+			desc: "non-ec2-vm",
+			config: &HostConfig{
+				VMImage:        "image-x",
+				ContainerImage: "",
+				isEC2:          false,
+			},
+			want: true,
+		},
+		{
+			desc: "non-ec2-container",
+			config: &HostConfig{
+				VMImage:        "",
+				ContainerImage: "container-image-x",
+				isEC2:          false,
+			},
+			want: false,
+		},
+		{
+			desc: "ec2-container",
+			config: &HostConfig{
+				VMImage:        "image-x",
+				ContainerImage: "container-image-x",
+				isEC2:          true,
+			},
+			want: false,
+		},
+		{
+			desc: "ec2-vm",
+			config: &HostConfig{
+				VMImage:        "image-x",
+				ContainerImage: "",
+				isEC2:          true,
+			},
+			want: true,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf(tc.desc), func(t *testing.T) {
+			if got := tc.config.IsVM(); got != tc.want {
+				t.Errorf("HostConfig.IsVM() = %t; want %t", got, tc.want)
+			}
+		})
 	}
 }

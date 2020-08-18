@@ -661,7 +661,9 @@ type HostConfig struct {
 	// it automatically.
 	buildletURLTmpl string
 
-	// Exactly 1 of these must be set:
+	// Exactly 1 of these must be set (with the exception of EC2 instances).
+	// An EC2 instance may run a container inside a VM. In that case, a VMImage
+	// and ContainerImage will both be set.
 	VMImage        string // e.g. "openbsd-amd64-60"
 	ContainerImage string // e.g. "linux-buildlet-std:latest" (suffix after "gcr.io/<PROJ>/")
 	IsReverse      bool   // if true, only use the reverse buildlet pool
@@ -912,7 +914,17 @@ func (c *BuildConfig) IsContainer() bool { return c.HostConfig().IsContainer() }
 func (c *HostConfig) IsContainer() bool  { return c.ContainerImage != "" }
 
 func (c *BuildConfig) IsVM() bool { return c.HostConfig().IsVM() }
-func (c *HostConfig) IsVM() bool  { return c.VMImage != "" }
+
+// IsVM reports whether the instance running the job is ultimately a VM. Hosts where
+// a VM is used only to initiate a container are considered a container, not a VM.
+// EC2 instances may be configured to run in containers that are running
+// on custom AMIs.
+func (c *HostConfig) IsVM() bool {
+	if c.isEC2 {
+		return c.VMImage != "" && c.ContainerImage == ""
+	}
+	return c.VMImage != ""
+}
 
 func (c *BuildConfig) GOOS() string { return c.Name[:strings.Index(c.Name, "-")] }
 
@@ -2208,6 +2220,10 @@ func init() {
 		Name:     "linux-arm64-packet",
 		HostType: "host-linux-arm64-packet",
 		FlakyNet: true, // maybe not flaky, but here conservatively
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-arm64-aws",
+		HostType: "host-linux-arm64-aws",
 	})
 	addBuilder(BuildConfig{
 		FlakyNet:       true,
