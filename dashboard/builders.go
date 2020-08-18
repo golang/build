@@ -25,7 +25,6 @@ import (
 // syntax entirely. This is a first draft.
 var slowBotAliases = map[string]string{
 	// Known missing builders:
-	"netbsd-arm64":  "",
 	"openbsd-arm":   "",
 	"openbsd-arm64": "",
 	"nacl-arm":      "",
@@ -80,6 +79,7 @@ var slowBotAliases = map[string]string{
 	"netbsd-386":     "netbsd-386-9_0",
 	"netbsd-amd64":   "netbsd-amd64-9_0",
 	"netbsd-arm":     "netbsd-arm-bsiegert",
+	"netbsd-arm64":   "netbsd-arm64-bsiegert",
 	"openbsd":        "openbsd-amd64-64",
 	"openbsd-386":    "openbsd-386-64",
 	"openbsd-amd64":  "openbsd-amd64-64",
@@ -316,6 +316,12 @@ var Hosts = map[string]*HostConfig{
 		IsReverse:   true,
 		ExpectNum:   1,
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/pkg/go112"},
+		OwnerGithub: "bsiegert",
+	},
+	"host-netbsd-arm64-bsiegert": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   1,
+		env:         []string{"GOROOT_BOOTSTRAP=/usr/pkg/go114"},
 		OwnerGithub: "bsiegert",
 	},
 	"host-dragonfly-amd64-5_8": &HostConfig{
@@ -1922,6 +1928,16 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:           "netbsd-arm-bsiegert",
 		HostType:       "host-netbsd-arm-bsiegert",
+		distTestAdjust: noTestDirAndNoReboot,
+		tryBot:         nil,
+		env: []string{
+			// The machine is slow.
+			"GO_TEST_TIMEOUT_SCALE=10",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:           "netbsd-arm64-bsiegert",
+		HostType:       "host-netbsd-arm64-bsiegert",
 		distTestAdjust: noTestDirAndNoReboot,
 		tryBot:         nil,
 		env: []string{
