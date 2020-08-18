@@ -683,7 +683,7 @@ func (p *GCEBuildlet) cleanZoneVMs(zone string) error {
 				}
 			}
 		}
-		isBuildlet := strings.HasPrefix(inst.Name, "buildlet-")
+		isBuildlet := isBuildlet(inst.Name)
 
 		if isBuildlet && !sawDeleteAt && !p.instanceUsed(inst.Name) {
 			createdAt, _ := time.Parse(time.RFC3339Nano, inst.CreationTimestamp)

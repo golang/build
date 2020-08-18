@@ -341,6 +341,12 @@ func (eb *EC2Buildlet) destroyUntrackedInstances() {
 	}
 	deleteInsts := make([]string, 0, len(insts))
 	for _, inst := range insts {
+		if !isBuildlet(inst.Name) {
+			// Non-buildlets have not been created by the EC2 buildlet pool. Their lifecycle
+			// should not be managed by the pool.
+			log.Printf("destroyUntrackedInstances: skipping non-buildlet %q", inst.Name)
+			continue
+		}
 		if eb.isRemoteBuildlet(inst.Name) {
 			// Remote buildlets have their own expiration mechanism that respects active SSH sessions.
 			log.Printf("destroyUntrackedInstances: skipping remote buildlet %q", inst.Name)

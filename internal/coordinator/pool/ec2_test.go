@@ -512,11 +512,11 @@ func TestEC2BuildletRetrieveAndSetInstanceTypes(t *testing.T) {
 
 func TestEC2BuildeletDestroyUntrackedInstances(t *testing.T) {
 	awsC := cloud.NewFakeAWSClient()
-	create := func() *cloud.Instance {
+	create := func(name string) *cloud.Instance {
 		inst, err := awsC.CreateInstance(context.Background(), &cloud.EC2VMConfiguration{
 			Description: "test instance",
 			ImageID:     "image-x",
-			Name:        instanceName("host-test-type", 10),
+			Name:        name,
 			SSHKeyID:    "key-14",
 			Tags:        map[string]string{},
 			Type:        "type-x",
@@ -529,10 +529,11 @@ func TestEC2BuildeletDestroyUntrackedInstances(t *testing.T) {
 	}
 	// create untracked instances
 	for it := 0; it < 10; it++ {
-		_ = create()
+		_ = create(instanceName("host-test-type", 10))
 	}
-	wantTrackedInst := create()
-	wantRemoteInst := create()
+	wantTrackedInst := create(instanceName("host-test-type", 10))
+	wantRemoteInst := create(instanceName("host-test-type", 10))
+	_ = create("debug-tiger-host-14") // non buildlet instance
 
 	pool := &EC2Buildlet{
 		awsClient: awsC,
@@ -556,9 +557,10 @@ func TestEC2BuildeletDestroyUntrackedInstances(t *testing.T) {
 		},
 	}
 	pool.destroyUntrackedInstances()
+	wantInstCount := 3
 	gotInsts, err := awsC.RunningInstances(context.Background())
-	if err != nil || len(gotInsts) != 2 {
-		t.Errorf("awsClient.RunningInstances(ctx) = %+v, %s; want single inst and no error", gotInsts, err)
+	if err != nil || len(gotInsts) != wantInstCount {
+		t.Errorf("awsClient.RunningInstances(ctx) = %+v, %s; want %d instances and no error", gotInsts, err, wantInstCount)
 	}
 }
 
