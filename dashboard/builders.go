@@ -562,19 +562,19 @@ var Hosts = map[string]*HostConfig{
 		},
 	},
 	"host-darwin-arm64-corellium-ios": &HostConfig{
-		Notes:       "Virtual iOS devices hosted by Zenly on Corellium",
+		Notes:       "Virtual iOS devices hosted by Zenly on Corellium; see issues 31722 and 40523",
 		OwnerGithub: "znly",
 		IsReverse:   true,
-		ExpectNum:   3,
+		ExpectNum:   2,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/var/mobile/go-darwin-arm64-bootstrap",
 		},
 	},
 	"host-android-arm64-corellium-android": &HostConfig{
-		Notes:       "Virtual Android devices hosted by Zenly on Corellium",
+		Notes:       "Virtual Android devices hosted by Zenly on Corellium; see issues 31722 and 40523",
 		OwnerGithub: "znly",
 		IsReverse:   true,
-		ExpectNum:   3,
+		ExpectNum:   2,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/data/data/com.termux/files/home/go-android-arm64-bootstrap",
 		},
