@@ -1383,6 +1383,14 @@ func (ts *trySet) notifyStarting() {
 	}
 	msg := name + " beginning. Status page: https://farmer.golang.org/try?commit=" + ts.Commit[:8]
 
+	// If any of the requested SlowBot builders
+	// have a known issue, give users a warning.
+	for _, b := range ts.slowBots {
+		if b.KnownIssue != 0 {
+			msg += fmt.Sprintf("\nNote that builder %s has a known issue golang.org/issue/%d.", b.Name, b.KnownIssue)
+		}
+	}
+
 	gerritClient := pool.NewGCEConfiguration().GerritClient()
 	ctx := context.Background()
 	if ci, err := gerritClient.GetChangeDetail(ctx, ts.ChangeTriple()); err == nil {

@@ -1760,7 +1760,8 @@ func init() {
 			GOARM:              "7",
 			AlwaysCrossCompile: false,
 		},
-		tryBot:            nil, // Issue 22748, Issue 22749
+		tryBot:            nil, // Issues #22748, #22749, #35628, #40872.
+		KnownIssue:        35628,
 		FlakyNet:          true,
 		numTestHelpers:    2,
 		numTryTestHelpers: 7,
