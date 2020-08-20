@@ -860,7 +860,9 @@ func (c *BuildConfig) Env() []string {
 // to append to this builder as a function of the repo being built
 // ("go", "oauth2", "net", etc).
 func (c *BuildConfig) ModulesEnv(repo string) (env []string) {
-	if c.IsReverse() && repo != "go" {
+	// EC2 and reverse builders should set the public module proxy
+	// address instead of the internal proxy.
+	if (c.HostConfig().isEC2 || c.IsReverse()) && repo != "go" {
 		env = append(env, "GOPROXY=https://proxy.golang.org")
 	}
 	switch repo {
