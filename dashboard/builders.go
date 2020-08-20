@@ -25,10 +25,8 @@ import (
 // syntax entirely. This is a first draft.
 var slowBotAliases = map[string]string{
 	// Known missing builders:
-	"openbsd-arm":   "",
-	"openbsd-arm64": "",
-	"darwin-arm":    "", // TODO(golang.org/issue/37611): Remove once port is removed.
-	"darwin-arm64":  "", // TODO(golang.org/issue/39782): Add builder for darwin/arm64.
+	"darwin-arm":   "", // TODO(golang.org/issue/37611): Remove once port is removed.
+	"darwin-arm64": "", // TODO(golang.org/issue/39782): Add builder for darwin/arm64.
 
 	"386":            "linux-386",
 	"aix":            "aix-ppc64",
@@ -78,6 +76,8 @@ var slowBotAliases = map[string]string{
 	"openbsd":        "openbsd-amd64-64",
 	"openbsd-386":    "openbsd-386-64",
 	"openbsd-amd64":  "openbsd-amd64-64",
+	"openbsd-arm":    "openbsd-arm-jsing",
+	"openbsd-arm64":  "openbsd-arm64-jsing",
 	"plan9":          "plan9-arm",
 	"plan9-386":      "plan9-386-0intro",
 	"plan9-amd64":    "plan9-amd64-9front",
@@ -246,6 +246,12 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-arm-joelsing": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   1,
+		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+		OwnerGithub: "4a6f656c",
+	},
+	"host-openbsd-arm64-joelsing": &HostConfig{
 		IsReverse:   true,
 		ExpectNum:   1,
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
@@ -1880,6 +1886,25 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:         "openbsd-arm-jsing",
 		HostType:     "host-openbsd-arm-joelsing",
+		SkipSnapshot: true,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			switch repo {
+			case "go", "net", "sys":
+				return branch == "master" && goBranch == "master"
+			default:
+				return false
+			}
+		},
+		distTestAdjust: noTestDirAndNoReboot,
+		tryBot:         nil,
+		env: []string{
+			// The machine is slow.
+			"GO_TEST_TIMEOUT_SCALE=5",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:         "openbsd-arm64-jsing",
+		HostType:     "host-openbsd-arm64-joelsing",
 		SkipSnapshot: true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
