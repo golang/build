@@ -73,6 +73,7 @@ var (
 	rsc          = gh("rsc")
 	rstambler    = gh("stamblerre")
 	sameer       = gh("Sajmani")
+	shinfan      = gh("shinfan")
 	thanm        = gh("thanm")
 	tklauser     = gh("tklauser")
 	tombergan    = gh("tombergan")
@@ -639,7 +640,7 @@ var entries = map[string]*Entry{
 
 	"oauth2": {
 		Primary:   []Owner{bradfitz},
-		Secondary: []Owner{jbd, cbro},
+		Secondary: []Owner{jbd, cbro, shinfan},
 	},
 
 	"review": {
