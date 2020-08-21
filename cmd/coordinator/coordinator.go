@@ -4081,7 +4081,7 @@ func mustCreateEC2BuildletPool(sc *secret.Client) *pool.EC2Buildlet {
 		log.Fatalf("unable to retrieve secret %q: %s", secret.NameAWSAccessKey, err)
 	}
 
-	awsClient, err := cloud.NewAWSClient(buildenv.Production.AWSRegion, awsKeyID, awsAccessKey)
+	awsClient, err := cloud.NewAWSClient(buildenv.Production.AWSRegion, awsKeyID, awsAccessKey, cloud.WithRateLimiter(cloud.DefaultEC2LimitConfig))
 	if err != nil {
 		log.Fatalf("unable to create AWS client: %s", err)
 	}

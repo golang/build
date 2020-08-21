@@ -118,8 +118,11 @@ type AWSClient struct {
 	quotaClient quotaClient
 }
 
+// AWSOpt is an optional configuration setting for the AWSClient.
+type AWSOpt func(*AWSClient)
+
 // NewAWSClient creates a new AWS client.
-func NewAWSClient(region, keyID, accessKey string) (*AWSClient, error) {
+func NewAWSClient(region, keyID, accessKey string, opts ...AWSOpt) (*AWSClient, error) {
 	s, err := session.NewSession(&aws.Config{
 		Region:      aws.String(region),
 		Credentials: credentials.NewStaticCredentials(keyID, accessKey, ""), // Token is only required for STS
@@ -127,10 +130,14 @@ func NewAWSClient(region, keyID, accessKey string) (*AWSClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create AWS session: %v", err)
 	}
-	return &AWSClient{
+	c := &AWSClient{
 		ec2Client:   ec2.New(s),
 		quotaClient: servicequotas.New(s),
-	}, nil
+	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c, nil
 }
 
 // Instance retrieves an EC2 instance by instance ID.
