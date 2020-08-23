@@ -78,6 +78,7 @@ var slowBotAliases = map[string]string{
 	"openbsd-amd64":  "openbsd-amd64-64",
 	"openbsd-arm":    "openbsd-arm-jsing",
 	"openbsd-arm64":  "openbsd-arm64-jsing",
+	"openbsd-mips64": "openbsd-mips64-jsing",
 	"plan9":          "plan9-arm",
 	"plan9-386":      "plan9-386-0intro",
 	"plan9-amd64":    "plan9-amd64-9front",
@@ -252,6 +253,12 @@ var Hosts = map[string]*HostConfig{
 		OwnerGithub: "4a6f656c",
 	},
 	"host-openbsd-arm64-joelsing": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   1,
+		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+		OwnerGithub: "4a6f656c",
+	},
+	"host-openbsd-mips64-joelsing": &HostConfig{
 		IsReverse:   true,
 		ExpectNum:   1,
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
@@ -1906,6 +1913,26 @@ func init() {
 		Name:         "openbsd-arm64-jsing",
 		HostType:     "host-openbsd-arm64-joelsing",
 		SkipSnapshot: true,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			switch repo {
+			case "go", "net", "sys":
+				return branch == "master" && goBranch == "master"
+			default:
+				return false
+			}
+		},
+		distTestAdjust: noTestDirAndNoReboot,
+		tryBot:         nil,
+		env: []string{
+			// The machine is slow.
+			"GO_TEST_TIMEOUT_SCALE=5",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:         "openbsd-mips64-jsing",
+		HostType:     "host-openbsd-mips64-joelsing",
+		SkipSnapshot: true,
+		KnownIssue:   40995,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
 			case "go", "net", "sys":
