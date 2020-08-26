@@ -42,6 +42,7 @@ type fileStore struct {
 	ls *reluipb.LocalStorage
 
 	// persistDir is a path to a directory for saving application data in textproto format.
+	// Set persistDir to an empty string to disable saving and loading from the filesystem.
 	persistDir string
 }
 
@@ -82,4 +83,22 @@ func (f *fileStore) persist() error {
 		return fmt.Errorf("ioutil.WriteFile(%q, _, %v) = %w", dst, 0644, err)
 	}
 	return nil
+}
+
+// load reads fileStore state from persistDir/fileStoreName.
+func (f *fileStore) load() error {
+	if f.persistDir == "" {
+		return nil
+	}
+	path := filepath.Join(f.persistDir, fileStoreName)
+	b, err := ioutil.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("ioutil.ReadFile(%q) = _, %v", path, err)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return proto.UnmarshalText(string(b), f.ls)
 }

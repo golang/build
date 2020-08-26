@@ -23,7 +23,11 @@ var (
 
 func main() {
 	flag.Parse()
-	s := &server{store: newFileStore(*devDataDir), configs: loadWorkflowConfig("./workflows")}
+	fs := newFileStore(*devDataDir)
+	if err := fs.load(); err != nil {
+		log.Fatalf("Error loading state from %q: %v", *devDataDir, err)
+	}
+	s := &server{store: fs, configs: loadWorkflowConfig("./workflows")}
 	http.Handle("/workflows/create", http.HandlerFunc(s.createWorkflowHandler))
 	http.Handle("/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
 	http.Handle("/", fileServerHandler(relativeFile("./static"), http.HandlerFunc(s.homeHandler)))
@@ -31,7 +35,6 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-
 	log.Printf("Listening on :" + port)
 	log.Fatal(http.ListenAndServe(":"+port, http.DefaultServeMux))
 }
