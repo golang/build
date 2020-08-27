@@ -73,6 +73,7 @@ var (
 	rsc          = gh("rsc")
 	rstambler    = gh("stamblerre")
 	sameer       = gh("Sajmani")
+	suzmue       = gh("suzmue")
 	thanm        = gh("thanm")
 	tklauser     = gh("tklauser")
 	tombergan    = gh("tombergan")
@@ -862,7 +863,8 @@ var entries = map[string]*Entry{
 	},
 
 	"vscode-go": {
-		Primary: []Owner{hyangah, rstambler},
+		Primary:   []Owner{hyangah},
+		Secondary: []Owner{suzmue},
 	},
 
 	"website": {
