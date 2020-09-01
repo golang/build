@@ -66,6 +66,7 @@ func main() {
 		initEC2Meta()
 		*memory = ""
 		*image = ec2UD.BuildletImageURL
+		*builderEnv = ec2UD.BuildletHostType
 		*pull = true
 		*numInst = 1
 		isReverse = false
