@@ -29,6 +29,7 @@ var (
 	cbro         = gh("broady")
 	cherryyz     = gh("cherrymui")
 	cnoellekb    = gh("cnoellekb")
+	codyoss      = gh("codyoss")
 	dmitshur     = gh("dmitshur")
 	danderson    = gh("danderson")
 	drchase      = gh("dr2chase")
@@ -626,7 +627,7 @@ var entries = map[string]*Entry{
 
 	"oauth2": {
 		Primary:   []Owner{bradfitz},
-		Secondary: []Owner{jbd, cbro, shinfan},
+		Secondary: []Owner{jbd, cbro, shinfan, codyoss},
 	},
 
 	"review": {
