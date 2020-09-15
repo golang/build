@@ -21,6 +21,7 @@ var (
 	agl          = gh("agl")
 	agnivade     = gh("agnivade")
 	alexbrainman = gh("alexbrainman")
+	amedee       = gh("cagedmantis")
 	andybons     = gh("andybons")
 	austin       = gh("aclements")
 	bcmills      = gh("bcmills")
@@ -90,7 +91,7 @@ var entries = map[string]*Entry{
 	},
 
 	"build": {
-		Primary: []Owner{dmitshur, bradfitz, andybons},
+		Primary: []Owner{dmitshur, bradfitz, andybons, amedee},
 	},
 	"build/maintner/cmd/maintserve": {
 		Primary:   []Owner{dmitshur},
