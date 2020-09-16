@@ -74,17 +74,10 @@ type Environment struct {
 	// other fields.
 	ControlZone string
 
-	// PreferredEC2Zone is the preffered AWS availability zone.
-	PreferredEC2Zone string
-
 	// VMZones are the GCE zones that the VMs will be deployed to. These
 	// GCE zones will be periodically cleaned by deleting old VMs. The zones
 	// should all exist within a single region.
 	VMZones []string
-
-	// VMEC2Zones are the AWS availability zones that the VMs will be deployed to.
-	// The availability zones should all exist within a single region.
-	VMEC2Zones []string
 
 	// StaticIP is the public, static IP address that will be attached to the
 	// coordinator instance. The zero value means the address will be looked
@@ -149,8 +142,6 @@ type Environment struct {
 	AWSSecurityGroup string
 
 	// AWSRegion is the region where AWS resources are deployed.
-	// The availability zones set in VMEC2Zones should all reside
-	// within this region.
 	AWSRegion string
 }
 
@@ -166,16 +157,6 @@ func (e Environment) RandomVMZone() string {
 		return e.ControlZone
 	}
 	return e.VMZones[rand.Intn(len(e.VMZones))]
-}
-
-// RandomEC2VMZone returns a randomly selected zone from the zones in
-// VMAvailabilityZones. The PreferredAvailabilityZone value will be
-// returned if VMAvailabilityZones is not set.
-func (e Environment) RandomEC2VMZone() string {
-	if len(e.VMEC2Zones) == 0 {
-		return e.PreferredEC2Zone
-	}
-	return e.VMEC2Zones[rand.Intn(len(e.VMEC2Zones))]
 }
 
 // Region returns the GCE region, derived from its zone.
@@ -266,7 +247,6 @@ var Staging = &Environment{
 	IsProd:                true,
 	ControlZone:           "us-central1-f",
 	VMZones:               []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
-	VMEC2Zones:            []string{"us-east-1a", "us-east-1b"},
 	StaticIP:              "104.154.113.235",
 	MachineType:           "n1-standard-1",
 	PreferContainersOnCOS: true,
@@ -302,7 +282,6 @@ var Production = &Environment{
 	IsProd:                true,
 	ControlZone:           "us-central1-f",
 	VMZones:               []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
-	VMEC2Zones:            []string{"us-east-2a", "us-east-2b"},
 	StaticIP:              "107.178.219.46",
 	MachineType:           "n1-standard-4",
 	PreferContainersOnCOS: true,
