@@ -20,6 +20,7 @@ import (
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal"
 	"golang.org/x/build/internal/cloud"
 	"golang.org/x/build/internal/spanlog"
 )
@@ -72,10 +73,6 @@ func WithVMDeleteTimeout(timeout time.Duration) EC2Opt {
 
 // EC2Buildlet manages a pool of AWS EC2 buildlets.
 type EC2Buildlet struct {
-	once sync.Once
-	// done channel closing will signal the pollers to discontinue polling
-	done chan struct{}
-
 	// awsClient is the client used to interact with AWS services.
 	awsClient awsClient
 	// buildEnv contains the build enviornment settings.
@@ -93,8 +90,12 @@ type EC2Buildlet struct {
 	isRemoteBuildlet IsRemoteBuildletFunc
 	// ledger tracks instances and their resource allocations.
 	ledger *ledger
+	// cancelPoll will signal to the pollers to discontinue polling.
+	cancelPoll context.CancelFunc
 	// vmDeleteTimeout contains the timeout used to determine if a VM should be deleted.
 	vmDeleteTimeout time.Duration
+	// pollWait waits for all pollers to terminate polling.
+	pollWait sync.WaitGroup
 }
 
 // ec2BuildletClient represents an EC2 buildlet client in the buildlet package.
@@ -111,11 +112,12 @@ func NewEC2Buildlet(client *cloud.AWSClient, buildEnv *buildenv.Environment, hos
 	if fn == nil {
 		return nil, errors.New("remote buildlet check function is not set")
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	b := &EC2Buildlet{
 		awsClient:        client,
 		buildEnv:         buildEnv,
 		buildletClient:   buildlet.NewEC2Client(client),
-		done:             make(chan struct{}),
+		cancelPoll:       cancel,
 		hosts:            hosts,
 		isRemoteBuildlet: fn,
 		ledger:           newLedger(),
@@ -124,14 +126,34 @@ func NewEC2Buildlet(client *cloud.AWSClient, buildEnv *buildenv.Environment, hos
 	for _, opt := range opts {
 		opt(b)
 	}
-	if err := b.retrieveAndSetQuota(); err != nil {
+	if err := b.retrieveAndSetQuota(ctx); err != nil {
 		return nil, fmt.Errorf("unable to create EC2 pool: %w", err)
 	}
 	if err := b.retrieveAndSetInstanceTypes(); err != nil {
 		return nil, fmt.Errorf("unable to create EC2 pool: %w", err)
 	}
-	go b.cleanupUnusedVMs()
-	go b.pollQuota()
+
+	b.pollWait.Add(1)
+	// polls for the EC2 quota data and sets the quota data in
+	// the ledger. When the context has been cancelled, the polling will stop.
+	go func() {
+		go internal.PeriodicallyDo(ctx, time.Hour, func(ctx context.Context, _ time.Time) {
+			log.Printf("retrieveing EC2 quota")
+			_ = b.retrieveAndSetQuota(ctx)
+		})
+		b.pollWait.Done()
+	}()
+
+	b.pollWait.Add(1)
+	// poll queries for VMs which are not tracked in the ledger and
+	// deletes them. When the context has been cancelled, the polling will stop.
+	go func() {
+		go internal.PeriodicallyDo(ctx, 2*time.Minute, func(ctx context.Context, _ time.Time) {
+			log.Printf("cleaning up unused EC2 instances")
+			b.destroyUntrackedInstances(ctx)
+		})
+		b.pollWait.Done()
+	}()
 
 	// TODO(golang.org/issues/38337) remove once a package level variable is no longer
 	// required by the main package.
@@ -256,43 +278,22 @@ func (eb *EC2Buildlet) buildletDone(instName string) {
 
 // Close stops the pollers used by the EC2Buildlet pool from running.
 func (eb *EC2Buildlet) Close() {
-	eb.once.Do(func() {
-		close(eb.done)
-	})
+	eb.cancelPoll()
+	eb.pollWait.Wait()
 }
 
 // retrieveAndSetQuota queries EC2 for account relevant quotas and sets the quota in the ledger.
-func (eb *EC2Buildlet) retrieveAndSetQuota() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func (eb *EC2Buildlet) retrieveAndSetQuota(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	cpuQuota, err := eb.awsClient.Quota(ctx, cloud.QuotaServiceEC2, cloud.QuotaCodeCPUOnDemand)
 	if err != nil {
-		log.Printf("unable to query for cpu quota: %s", err)
+		log.Printf("unable to query for EC2 cpu quota: %s", err)
 		return err
 	}
 	eb.ledger.SetCPULimit(cpuQuota)
 	return nil
-}
-
-// pollQuota repeatedly polls for the EC2 quota data and sets the quota data in
-// the ledger. It stops polling once the done channel has been closed.
-func (eb *EC2Buildlet) pollQuota() {
-	t := time.NewTicker(time.Hour)
-	defer t.Stop()
-	for {
-		select {
-		case <-t.C:
-			err := eb.retrieveAndSetQuota()
-			if err != nil {
-				log.Printf("polling for EC2 quota failed: %s", err)
-			}
-		case <-eb.done:
-			// closing the done channel signals the end of the polling loop.
-			log.Printf("stopped polling for EC2 quota")
-			return
-		}
-	}
 }
 
 // retrieveAndSetInstanceTypes retrieves the ARM64 instance types from the EC2
@@ -303,35 +304,17 @@ func (eb *EC2Buildlet) retrieveAndSetInstanceTypes() error {
 
 	its, err := eb.awsClient.InstanceTypesARM(ctx)
 	if err != nil {
-		return fmt.Errorf("unable to retrieve instance types: %w", err)
+		return fmt.Errorf("unable to retrieve EC2 instance types: %w", err)
 	}
 	eb.ledger.UpdateInstanceTypes(its)
 	log.Printf("ec2 buildlet pool instance types updated")
 	return nil
 }
 
-// cleanupUnusedVMs periodically queries for VMs which are not tracked in the ledger and
-// deletes them. If the done channel has been closed then the polling will exit.
-func (eb *EC2Buildlet) cleanupUnusedVMs() {
-	t := time.NewTicker(2 * time.Minute)
-	defer t.Stop()
-	for {
-		select {
-		case <-t.C:
-			log.Printf("cleaning up unused EC2 instances")
-			eb.destroyUntrackedInstances()
-		case <-eb.done:
-			// closing the done channel signals the end of the polling loop.
-			log.Printf("stopped cleaning up unused EC2 instances")
-			return
-		}
-	}
-}
-
 // destroyUntrackedInstances searches for VMs which exist but are not being tracked in the
 // ledger and deletes them.
-func (eb *EC2Buildlet) destroyUntrackedInstances() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (eb *EC2Buildlet) destroyUntrackedInstances(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	insts, err := eb.awsClient.RunningInstances(ctx)

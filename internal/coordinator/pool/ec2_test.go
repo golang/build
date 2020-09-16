@@ -462,23 +462,13 @@ func TestEC2BuildletbuildletDone(t *testing.T) {
 }
 
 func TestEC2BuildletClose(t *testing.T) {
+	cancelled := false
 	pool := &EC2Buildlet{
-		done: make(chan struct{}),
+		cancelPoll: func() { cancelled = true },
 	}
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("EC2Buildlet.Close() paniced=%s", r)
-		}
-	}()
 	pool.Close()
-	pool.Close()
-	select {
-	case _, ok := <-pool.done:
-		if ok {
-			t.Error("EC2Buildlet.done not closed; read from channel")
-		}
-	default:
-		t.Error("EC2Buildlet.done not closed: waiting for read")
+	if !cancelled {
+		t.Error("EC2Buildlet.pollCancel not called")
 	}
 }
 
@@ -487,7 +477,7 @@ func TestEC2BuildletRetrieveAndSetQuota(t *testing.T) {
 		awsClient: cloud.NewFakeAWSClient(),
 		ledger:    newLedger(),
 	}
-	err := pool.retrieveAndSetQuota()
+	err := pool.retrieveAndSetQuota(context.Background())
 	if err != nil {
 		t.Errorf("EC2Buildlet.retrieveAndSetQuota(ctx) = %s; want nil", err)
 	}
@@ -556,7 +546,7 @@ func TestEC2BuildeletDestroyUntrackedInstances(t *testing.T) {
 			},
 		},
 	}
-	pool.destroyUntrackedInstances()
+	pool.destroyUntrackedInstances(context.Background())
 	wantInstCount := 3
 	gotInsts, err := awsC.RunningInstances(context.Background())
 	if err != nil || len(gotInsts) != wantInstCount {
