@@ -108,7 +108,6 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{filippo},
 	},
 	"crypto/ssh": {
-		Primary:   []Owner{hanwen},
 		Secondary: []Owner{filippo},
 	},
 
