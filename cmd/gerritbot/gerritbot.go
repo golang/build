@@ -56,13 +56,8 @@ func main() {
 
 	var secretClient *secret.Client
 	if metadata.OnGCE() {
-		var err error
-		secretClient, err = secret.NewClient()
-		if err != nil {
-			log.Fatalf("unable to create a secret manager client: %v", err)
-		}
+		secretClient = secret.MustNewClient()
 	}
-
 	if err := writeCookiesFile(secretClient); err != nil {
 		log.Fatalf("writeCookiesFile(): %v", err)
 	}

@@ -366,7 +366,7 @@ func setGodataConfig() {
 
 func getGithubToken(ctx context.Context) (string, error) {
 	if metadata.OnGCE() {
-		sc := mustCreateSecretClient()
+		sc := secret.MustNewClient()
 
 		ctxSc, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -502,12 +502,4 @@ func syncProdToDevMutationLogs() {
 			log.Fatal(err)
 		}
 	}
-}
-
-func mustCreateSecretClient() *secret.Client {
-	client, err := secret.NewClient()
-	if err != nil {
-		log.Fatalf("unable to create secret client %v", err)
-	}
-	return client
 }

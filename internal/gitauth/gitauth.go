@@ -32,7 +32,7 @@ func Init() error {
 		return nil
 	}
 
-	sc := mustCreateSecretClient()
+	sc := secret.MustNewClient()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -58,12 +58,4 @@ func homeDir() string {
 	}
 	log.Fatalf("No HOME set in environment.")
 	panic("unreachable")
-}
-
-func mustCreateSecretClient() *secret.Client {
-	client, err := secret.NewClient()
-	if err != nil {
-		log.Fatalf("unable to create secret client %v", err)
-	}
-	return client
 }

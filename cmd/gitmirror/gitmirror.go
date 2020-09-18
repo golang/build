@@ -57,7 +57,7 @@ func main() {
 
 	log.Printf("gitmirror running.")
 
-	sc := mustCreateSecretClient()
+	sc := secret.MustNewClient()
 	defer sc.Close()
 
 	go pollGerritAndTickle()
@@ -768,12 +768,4 @@ func handleDebugEnv(w http.ResponseWriter, r *http.Request) {
 	for _, kv := range os.Environ() {
 		fmt.Fprintf(w, "%s\n", kv)
 	}
-}
-
-func mustCreateSecretClient() *secret.Client {
-	client, err := secret.NewClient()
-	if err != nil {
-		log.Fatalf("unable to create secret client %v", err)
-	}
-	return client
 }

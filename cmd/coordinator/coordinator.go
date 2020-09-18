@@ -4064,11 +4064,7 @@ func mustCreateSecretClientOnGCE() *secret.Client {
 	if !metadata.OnGCE() {
 		return nil
 	}
-	client, err := secret.NewClient()
-	if err != nil {
-		log.Fatalf("unable to create secret client %v", err)
-	}
-	return client
+	return secret.MustNewClient()
 }
 
 func mustCreateEC2BuildletPool(sc *secret.Client) *pool.EC2Buildlet {

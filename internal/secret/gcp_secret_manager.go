@@ -9,6 +9,7 @@ package secret
 import (
 	"context"
 	"io"
+	"log"
 	"path"
 
 	"cloud.google.com/go/compute/metadata"
@@ -104,4 +105,14 @@ func (smc *Client) Close() error {
 // query for a secret.
 func buildNamePath(projectID, name, version string) string {
 	return path.Join("projects", projectID, "secrets", name, "versions", version)
+}
+
+// MustNewClient instantiates an instance of the Secret Manager Client. If there is an error
+// this fuction will exit.
+func MustNewClient() *Client {
+	c, err := NewClient()
+	if err != nil {
+		log.Fatalf("unable to create secret client %v", err)
+	}
+	return c
 }

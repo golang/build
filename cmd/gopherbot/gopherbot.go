@@ -197,7 +197,7 @@ func main() {
 
 	var sc *secret.Client
 	if metadata.OnGCE() {
-		sc = mustCreateSecretClient()
+		sc = secret.MustNewClient()
 	}
 	ctx := context.Background()
 
@@ -2310,12 +2310,4 @@ func printIssue(task string, repoID maintner.GitHubRepoID, gi *maintner.GitHubIs
 	} else {
 		fmt.Printf("\thttps://golang.org/issue/%v  %s\n", gi.Number, gi.Title)
 	}
-}
-
-func mustCreateSecretClient() *secret.Client {
-	client, err := secret.NewClient()
-	if err != nil {
-		log.Fatalf("unable to create secret client %v", err)
-	}
-	return client
 }

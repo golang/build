@@ -58,7 +58,7 @@ func main() {
 
 	// webhooksecret should not be set in production
 	if *webhookSecret == "" {
-		sc := mustCreateSecretClient()
+		sc := secret.MustNewClient()
 		defer sc.Close()
 
 		ctxSc, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -427,12 +427,4 @@ func onNewMail(c smtpd.Connection, from smtpd.MailAddress) (smtpd.Envelope, erro
 func onNewConnection(c smtpd.Connection) error {
 	log.Printf("smtpd: new connection from %v", c.Addr())
 	return nil
-}
-
-func mustCreateSecretClient() *secret.Client {
-	client, err := secret.NewClient()
-	if err != nil {
-		log.Fatalf("unable to create secret client %v", err)
-	}
-	return client
 }

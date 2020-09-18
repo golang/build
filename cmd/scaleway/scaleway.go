@@ -55,7 +55,7 @@ const (
 func main() {
 	flag.Parse()
 
-	secretClient := mustCreateSecretClient()
+	secretClient := secret.MustNewClient()
 	defer secretClient.Close()
 
 	if *tags == "" && !*listAll { // Tags aren't needed if -list-all flag is set.
@@ -412,12 +412,4 @@ func getConnectedMachines() map[string]*revtype.ReverseBuilder {
 		return nil
 	}
 	return st.Machines
-}
-
-func mustCreateSecretClient() *secret.Client {
-	client, err := secret.NewClient()
-	if err != nil {
-		log.Fatalf("unable to create secret client %v", err)
-	}
-	return client
 }
