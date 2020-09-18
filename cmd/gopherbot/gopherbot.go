@@ -408,7 +408,13 @@ func (b *gopherbot) addLabels(ctx context.Context, repoID maintner.GitHubRepoID,
 		return nil
 	}
 
-	_, _, err := b.is.AddLabelsToIssue(ctx, repoID.Owner, repoID.Repo, int(gi.Number), toAdd)
+	_, resp, err := b.is.AddLabelsToIssue(ctx, repoID.Owner, repoID.Repo, int(gi.Number), toAdd)
+	if err != nil && resp != nil && resp.StatusCode == http.StatusNotFound {
+		// TODO(golang/go#40640) - This issue was transferred or otherwise is gone. We should permanently skip it. This
+		// is a temporary fix to keep gopherbot working.
+		log.Printf("addLabels: Issue %v#%v returned a 404 when trying to add labels. Skipping. See golang/go#40640.", repoID, gi.Number)
+		return nil
+	}
 	return err
 }
 
