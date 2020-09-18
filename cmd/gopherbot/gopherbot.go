@@ -904,7 +904,7 @@ func (b *gopherbot) setMiscMilestones(ctx context.Context) error {
 		if strings.HasPrefix(gi.Title, "x/vgo") {
 			return b.setMilestone(ctx, gi, vgo)
 		}
-		if strings.HasPrefix(gi.Title, "go.dev:") {
+		if strings.HasPrefix(gi.Title, "go.dev:") || strings.HasPrefix(gi.Title, "x/pkgsite") {
 			return b.setMilestone(ctx, gi, unreleased)
 		}
 		return nil
@@ -954,7 +954,8 @@ func (b *gopherbot) labelToolsIssues(ctx context.Context) error {
 
 func (b *gopherbot) labelGoDevIssues(ctx context.Context) error {
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || gi.PullRequest || !strings.HasPrefix(gi.Title, "go.dev:") || gi.HasLabel("go.dev") || gi.HasEvent("unlabeled") {
+		hasGoDevTitle := strings.HasPrefix(gi.Title, "go.dev:") || strings.HasPrefix(gi.Title, "x/pkgsite")
+		if gi.Closed || gi.PullRequest || !hasGoDevTitle || gi.HasLabel("go.dev") || gi.HasEvent("unlabeled") {
 			return nil
 		}
 		return b.addLabel(ctx, b.gorepo.ID(), gi, "go.dev")
