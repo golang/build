@@ -316,6 +316,7 @@ var tasks = []struct {
 	{"label mobile issues", (*gopherbot).labelMobileIssues},
 	{"label tools issues", (*gopherbot).labelToolsIssues},
 	{"label go.dev issues", (*gopherbot).labelGoDevIssues},
+	{"label pkgsite issues", (*gopherbot).labelPkgsiteIssues},
 	{"label proposals", (*gopherbot).labelProposals},
 	{"handle gopls issues", (*gopherbot).handleGoplsIssues},
 	{"open cherry pick issues", (*gopherbot).openCherryPickIssues},
@@ -941,7 +942,7 @@ func (b *gopherbot) labelDocumentationIssues(ctx context.Context) error {
 			return nil
 		}
 		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-			if gi.Closed || gi.PullRequest || !isDocumentationTitle(gi.Title) || gi.HasLabel("Documentation") || gi.HasEvent("unlabeled") {
+			if gi.Closed || gi.PullRequest || !isDocumentationTitle(gi.Title) || gi.HasLabel("Documentation") || gi.HasEvent("unlabeled") || strings.HasPrefix(gi.Title, "x/pkgsite:") {
 				return nil
 			}
 			return b.addLabel(ctx, repo.ID(), gi, "Documentation")
@@ -960,11 +961,26 @@ func (b *gopherbot) labelToolsIssues(ctx context.Context) error {
 
 func (b *gopherbot) labelGoDevIssues(ctx context.Context) error {
 	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		hasGoDevTitle := strings.HasPrefix(gi.Title, "go.dev:") || strings.HasPrefix(gi.Title, "x/pkgsite")
+		hasGoDevTitle := strings.HasPrefix(gi.Title, "go.dev:")
 		if gi.Closed || gi.PullRequest || !hasGoDevTitle || gi.HasLabel("go.dev") || gi.HasEvent("unlabeled") {
 			return nil
 		}
 		return b.addLabel(ctx, b.gorepo.ID(), gi, "go.dev")
+	})
+}
+
+func (b *gopherbot) labelPkgsiteIssues(ctx context.Context) error {
+	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		hasPkgsiteTitle := strings.HasPrefix(gi.Title, "x/pkgsite:")
+		if gi.Closed || gi.PullRequest || !hasPkgsiteTitle || gi.HasLabel("pkgsite") || gi.HasEvent("unlabeled") {
+			return nil
+		}
+
+		repoID := b.gorepo.ID()
+		if err := b.removeLabels(ctx, repoID, gi, []string{"go.dev"}); err != nil {
+			return err
+		}
+		return b.addLabel(ctx, repoID, gi, "pkgsite")
 	})
 }
 
