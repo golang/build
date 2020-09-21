@@ -942,7 +942,7 @@ func (b *gopherbot) labelDocumentationIssues(ctx context.Context) error {
 			return nil
 		}
 		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-			if gi.Closed || gi.PullRequest || !isDocumentationTitle(gi.Title) || gi.HasLabel("Documentation") || gi.HasEvent("unlabeled") || strings.HasPrefix(gi.Title, "x/pkgsite:") {
+			if gi.Closed || gi.PullRequest || !isDocumentationTitle(gi.Title) || gi.HasLabel("Documentation") || gi.HasEvent("unlabeled") {
 				return nil
 			}
 			return b.addLabel(ctx, repo.ID(), gi, "Documentation")
@@ -977,8 +977,10 @@ func (b *gopherbot) labelPkgsiteIssues(ctx context.Context) error {
 		}
 
 		repoID := b.gorepo.ID()
-		if err := b.removeLabels(ctx, repoID, gi, []string{"go.dev"}); err != nil {
-			return err
+		if gi.HasLabel("go.dev") {
+			if err := b.removeLabel(ctx, repoID, gi, "go.dev"); err != nil {
+				return err
+			}
 		}
 		return b.addLabel(ctx, repoID, gi, "pkgsite")
 	})
@@ -2260,6 +2262,10 @@ func isDocumentationTitle(t string) bool {
 		return false
 	}
 	t = strings.ToLower(t)
+	if strings.HasPrefix(t, "x/pkgsite:") {
+		// Don't label pkgsite issues with the Documentation label.
+		return false
+	}
 	if strings.HasPrefix(t, "doc:") {
 		return true
 	}
