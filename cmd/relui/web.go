@@ -17,6 +17,7 @@ import (
 
 	"cloud.google.com/go/pubsub"
 	"github.com/golang/protobuf/proto"
+	"github.com/google/uuid"
 	reluipb "golang.org/x/build/cmd/relui/protos"
 )
 
@@ -107,6 +108,10 @@ func (s *server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 	wf := proto.Clone(s.configs[0]).(*reluipb.Workflow)
 	if wf.GetParams() == nil {
 		wf.Params = map[string]string{}
+	}
+	wf.Id = uuid.New().String()
+	for _, t := range wf.GetBuildableTasks() {
+		t.Id = uuid.New().String()
 	}
 	wf.Params["GitObject"] = ref
 	if err := s.store.AddWorkflow(wf); err != nil {

@@ -106,7 +106,12 @@ func TestServerNewWorkflowHandler(t *testing.T) {
 }
 
 func TestServerCreateWorkflowHandler(t *testing.T) {
-	config := []*reluipb.Workflow{{Name: "test_workflow"}}
+	config := []*reluipb.Workflow{
+		{
+			Name:           "test_workflow",
+			BuildableTasks: []*reluipb.BuildableTask{{Name: "test_task"}},
+		},
+	}
 	cases := []struct {
 		desc        string
 		params      url.Values
@@ -156,6 +161,12 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			}
 			if diff := cmp.Diff(c.wantParams, s.store.Workflows()[0].GetParams()); diff != "" {
 				t.Errorf("s.Store.Workflows()[0].Params() mismatch (-want, +got):\n%s", diff)
+			}
+			if s.store.Workflows()[0].GetId() == "" {
+				t.Errorf("s.Store.Workflows[0].GetId() = %q, wanted not empty", s.store.Workflows()[0].GetId())
+			}
+			if s.store.Workflows()[0].GetBuildableTasks()[0].GetId() == "" {
+				t.Errorf("s.Store.Workflows[0].GetBuildableTasks()[0].GetId() = %q, wanted not empty", s.store.Workflows()[0].GetId())
 			}
 		})
 	}
