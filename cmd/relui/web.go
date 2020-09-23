@@ -15,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 
+	"cloud.google.com/go/pubsub"
 	"github.com/golang/protobuf/proto"
 	reluipb "golang.org/x/build/cmd/relui/protos"
 )
@@ -55,6 +56,9 @@ type server struct {
 
 	// store is for persisting application state.
 	store store
+
+	// topic is for communicating with relui workers.
+	topic *pubsub.Topic
 }
 
 type homeResponse struct {

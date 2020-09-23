@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"io/ioutil"
 	"log"
@@ -13,12 +14,17 @@ import (
 	"os"
 	"path/filepath"
 
+	"cloud.google.com/go/pubsub"
 	"github.com/golang/protobuf/proto"
 	reluipb "golang.org/x/build/cmd/relui/protos"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
 	devDataDir = flag.String("dev-data-directory", defaultDevDataDir(), "Development-only directory to use for storage of application state.")
+	projectID  = flag.String("project-id", os.Getenv("PUBSUB_PROJECT_ID"), "Pubsub project ID for communicating with workers. Uses PUBSUB_PROJECT_ID if unset.")
+	topicID    = flag.String("topic-id", "relui-development", "Pubsub topic ID for communicating with workers.")
 )
 
 func main() {
@@ -27,7 +33,12 @@ func main() {
 	if err := fs.load(); err != nil {
 		log.Fatalf("Error loading state from %q: %v", *devDataDir, err)
 	}
-	s := &server{store: fs, configs: loadWorkflowConfig("./workflows")}
+	ctx := context.Background()
+	s := &server{
+		configs: loadWorkflowConfig("./workflows"),
+		store:   fs,
+		topic:   getTopic(ctx),
+	}
 	http.Handle("/workflows/create", http.HandlerFunc(s.createWorkflowHandler))
 	http.Handle("/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
 	http.Handle("/", fileServerHandler(relativeFile("./static"), http.HandlerFunc(s.homeHandler)))
@@ -37,6 +48,22 @@ func main() {
 	}
 	log.Printf("Listening on :" + port)
 	log.Fatal(http.ListenAndServe(":"+port, http.DefaultServeMux))
+}
+
+// getTopic creates and returns a pubsub topic from the project specified in projectId, which is to be used for
+// communicating with relui workers.
+//
+// It is safe to call if a topic already exists. A reference to the topic will be returned.
+func getTopic(ctx context.Context) *pubsub.Topic {
+	client, err := pubsub.NewClient(ctx, *projectID)
+	if err != nil {
+		log.Fatalf("pubsub.NewClient(_, %q) = %v, wanted no error", *projectID, err)
+	}
+	_, err = client.CreateTopic(ctx, *topicID)
+	if err != nil && status.Code(err) != codes.AlreadyExists {
+		log.Fatalf("client.CreateTopic(_, %q) = %v, wanted no error", *topicID, err)
+	}
+	return client.Topic(*topicID)
 }
 
 // loadWorkflowConfig loads Workflow configuration files from dir. It expects all files to be in textproto format.

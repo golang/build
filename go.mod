@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go v0.54.0
 	cloud.google.com/go/bigquery v1.4.0
 	cloud.google.com/go/datastore v1.1.0
+	cloud.google.com/go/pubsub v1.2.0
 	cloud.google.com/go/storage v1.6.0
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239 // indirect
