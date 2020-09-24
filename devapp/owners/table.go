@@ -22,7 +22,6 @@ var (
 	agnivade     = gh("agnivade")
 	alexbrainman = gh("alexbrainman")
 	amedee       = gh("cagedmantis")
-	andybons     = gh("andybons")
 	austin       = gh("aclements")
 	bcmills      = gh("bcmills")
 	bradfitz     = gh("bradfitz")
@@ -91,11 +90,10 @@ var entries = map[string]*Entry{
 	},
 
 	"build": {
-		Primary: []Owner{dmitshur, bradfitz, andybons, amedee},
+		Primary: []Owner{dmitshur, bradfitz, amedee},
 	},
 	"build/maintner/cmd/maintserve": {
-		Primary:   []Owner{dmitshur},
-		Secondary: []Owner{andybons},
+		Primary: []Owner{dmitshur},
 	},
 
 	"crypto": {
@@ -840,7 +838,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{iancottrell},
 	},
 	"tools/playground": {
-		Primary: []Owner{andybons, rakoczy},
+		Primary: []Owner{rakoczy},
 	},
 	"tools/present": {
 		Primary: []Owner{rsc},
@@ -860,7 +858,7 @@ var entries = map[string]*Entry{
 	},
 
 	"playground": {
-		Primary: []Owner{andybons, rakoczy},
+		Primary: []Owner{rakoczy},
 	},
 
 	"vscode-go": {
@@ -869,8 +867,7 @@ var entries = map[string]*Entry{
 	},
 
 	"website": {
-		Primary:   []Owner{dmitshur},
-		Secondary: []Owner{andybons},
+		Primary: []Owner{dmitshur},
 	},
 
 	// These components are domains, not Go packages.
