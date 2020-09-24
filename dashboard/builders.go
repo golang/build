@@ -29,6 +29,7 @@ var slowBotAliases = map[string]string{
 	"openbsd-arm64": "",
 	"nacl-arm":      "",
 	"darwin-arm":    "", // TODO(golang.org/issue/37611): Remove once port is removed.
+	"ios-arm64":     "", // TODO(golang.org/issue/41610): Add builder for ios/arm64.
 
 	"386":            "linux-386",
 	"aix":            "aix-ppc64",
