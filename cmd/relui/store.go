@@ -17,8 +17,10 @@ import (
 
 // store is a persistence adapter for saving data.
 type store interface {
-	Workflows() []*reluipb.Workflow
 	AddWorkflow(workflow *reluipb.Workflow) error
+	BuildableTask(workflowId, id string) *reluipb.BuildableTask
+	Workflow(id string) *reluipb.Workflow
+	Workflows() []*reluipb.Workflow
 }
 
 var _ store = (*fileStore)(nil)
@@ -57,9 +59,31 @@ func (f *fileStore) AddWorkflow(w *reluipb.Workflow) error {
 	return nil
 }
 
-// Workflows returns all workflows stored.
+// Workflows returns all reluipb.Workflows stored.
 func (f *fileStore) Workflows() []*reluipb.Workflow {
 	return f.localStorage().GetWorkflows()
+}
+
+// Workflow returns a single reluipb.Workflow found by its id. If it is not found, it returns nil.
+func (f *fileStore) Workflow(id string) *reluipb.Workflow {
+	for _, w := range f.Workflows() {
+		if w.GetId() == id {
+			return w
+		}
+	}
+	return nil
+}
+
+// BuildableTask returns a single reluipb.BuildableTask found by the reluipb.Workflow id and its id.
+// If it is not found, it returns nil.
+func (f *fileStore) BuildableTask(workflowId, id string) *reluipb.BuildableTask {
+	wf := f.Workflow(workflowId)
+	for _, t := range wf.GetBuildableTasks() {
+		if t.GetId() == id {
+			return t
+		}
+	}
+	return nil
 }
 
 // localStorage returns a deep copy of data stored in fileStore.

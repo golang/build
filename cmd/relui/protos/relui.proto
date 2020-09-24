@@ -47,6 +47,18 @@ message BuildableTask {
   string id = 7;
 }
 
+// StartBuildableTaskRequest is a message sent to workers to start working on a BuildableTask for a Workflow.
+message StartBuildableTaskRequest {
+  // workflow_id is the workflow to which the BuildableTask belongs.
+  string workflow_id = 1;
+
+  // buildable_task_id is the id of the BuildableTask to be started.
+  string buildable_task_id = 2;
+
+  // buildable_task_type is the type of the BuildableTask to be started.
+  string buildable_task_type = 3;
+}
+
 // LocalStorage is the persisted data of relui. It is used in development mode for saving application state.
 message LocalStorage {
   // workflows are a list of user-created workflows.

@@ -122,6 +122,28 @@ func (s *server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
+func (s *server) startTaskHandler(w http.ResponseWriter, r *http.Request) {
+	wf := s.store.Workflow(r.PostFormValue("workflow.id"))
+	bt := s.store.BuildableTask(r.PostFormValue("workflow.id"), r.PostFormValue("task.id"))
+	if bt == nil {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
+	res := s.topic.Publish(r.Context(), &pubsub.Message{
+		Data: []byte((&reluipb.StartBuildableTaskRequest{
+			WorkflowId:        wf.GetId(),
+			BuildableTaskId:   bt.GetId(),
+			BuildableTaskType: bt.GetTaskType(),
+		}).String()),
+	})
+	if _, err := res.Get(r.Context()); err != nil {
+		log.Printf("Error publishing task start: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
 // relativeFile returns the path to the provided file or directory,
 // conditionally prepending a relative path depending on the environment.
 //

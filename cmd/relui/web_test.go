@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -12,8 +13,12 @@ import (
 	"strings"
 	"testing"
 
+	"cloud.google.com/go/pubsub"
+	"cloud.google.com/go/pubsub/pstest"
 	"github.com/google/go-cmp/cmp"
 	reluipb "golang.org/x/build/cmd/relui/protos"
+	"google.golang.org/api/option"
+	"google.golang.org/grpc"
 )
 
 func TestFileServerHandler(t *testing.T) {
@@ -167,6 +172,144 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			}
 			if s.store.Workflows()[0].GetBuildableTasks()[0].GetId() == "" {
 				t.Errorf("s.Store.Workflows[0].GetBuildableTasks()[0].GetId() = %q, wanted not empty", s.store.Workflows()[0].GetId())
+			}
+		})
+	}
+}
+
+// newPSTest creates a new pstest.Server and returns a pubsub.Client connected to it and the server.
+//
+// cleanup will close the client, connection, and test server.
+func newPSTest(ctx context.Context, t *testing.T) (c *pubsub.Client, s *pstest.Server, cleanup func()) {
+	t.Helper()
+	s = pstest.NewServer()
+	conn, err := grpc.DialContext(ctx, s.Addr, grpc.WithInsecure())
+	if err != nil {
+		s.Close()
+		t.Fatalf("grpc.DialContext(_, %q, %v) = _, %v, wanted no error", s.Addr, grpc.WithInsecure(), err)
+	}
+	c, err = pubsub.NewClient(ctx, "relui-test", option.WithGRPCConn(conn))
+	if err != nil {
+		s.Close()
+		conn.Close()
+		t.Fatalf("pubsub.NewClient(_, %q, %v) = _, %v, wanted no error", "relui-test", option.WithGRPCConn(conn), err)
+	}
+	return c, s, func() {
+		c.Close()
+		conn.Close()
+		s.Close()
+	}
+}
+
+func TestServerStartTaskHandler(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	client, pssrv, cleanup := newPSTest(ctx, t)
+	defer cleanup()
+	topic, err := client.CreateTopic(ctx, "relui-test-topic")
+	if err != nil {
+		t.Fatalf("client.CreateTopic(_, %q) = _, %v", "relui-test-topic", err)
+	}
+
+	s := server{store: newFileStore(""), topic: topic}
+	wf := &reluipb.Workflow{
+		Id:   "someworkflow",
+		Name: "test_workflow",
+		BuildableTasks: []*reluipb.BuildableTask{{
+			Name:     "test_task",
+			TaskType: "TestTask",
+			Id:       "sometask",
+		}},
+		Params: map[string]string{"GitObject": "master"},
+	}
+	if s.store.AddWorkflow(wf) != nil {
+		t.Fatalf("store.AddWorkflow(%v) = %v, wanted no error", wf, err)
+	}
+	want := &reluipb.StartBuildableTaskRequest{
+		WorkflowId:        "someworkflow",
+		BuildableTaskId:   "sometask",
+		BuildableTaskType: "TestTask",
+	}
+	params := url.Values{"workflow.id": []string{"someworkflow"}, "task.id": []string{"sometask"}}
+	req := httptest.NewRequest(http.MethodPost, "/tasks/start", strings.NewReader(params.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	w := httptest.NewRecorder()
+	s.startTaskHandler(w, req)
+	resp := w.Result()
+
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Errorf("resp.StatusCode = %d, wanted %d", resp.StatusCode, http.StatusSeeOther)
+	}
+	if resp.Header.Get("Location") != "/" {
+		t.Errorf("resp.Header.Get(%q) = %q, wanted %q", "Location", resp.Header.Get("Location"), "/")
+	}
+	if len(pssrv.Messages()) != 1 {
+		t.Fatalf("len(pssrv.Messages()) = %d, wanted %d", len(pssrv.Messages()), 1)
+	}
+	msg := pssrv.Messages()[0]
+	if string(msg.Data) != want.String() {
+		t.Errorf("msg.Data = %q, wanted %q", string(msg.Data), "hello world")
+	}
+}
+
+func TestStartTaskHandlerErrors(t *testing.T) {
+	wf := &reluipb.Workflow{
+		Id:   "someworkflow",
+		Name: "test_workflow",
+		BuildableTasks: []*reluipb.BuildableTask{{
+			Name:     "test_task",
+			TaskType: "TestTask",
+			Id:       "sometask",
+		}},
+		Params: map[string]string{"GitObject": "master"},
+	}
+
+	cases := []struct {
+		desc     string
+		params   url.Values
+		wantCode int
+	}{
+		{
+			desc:     "task not found",
+			params:   url.Values{"workflow.id": []string{"someworkflow"}, "task.id": []string{"notexist"}},
+			wantCode: http.StatusNotFound,
+		},
+		{
+			desc:     "pubsub publish failure",
+			params:   url.Values{"workflow.id": []string{"someworkflow"}, "task.id": []string{"sometask"}},
+			wantCode: http.StatusInternalServerError,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			client, pssrv, cleanup := newPSTest(ctx, t)
+			defer cleanup()
+			topic, err := client.CreateTopic(ctx, "relui-test-topic")
+			if err != nil {
+				t.Fatalf("client.CreateTopic(_, %q) = _, %v", "relui-test-topic", err)
+			}
+			// Simulate pubsub failure by stopping publishing.
+			topic.Stop()
+
+			s := server{store: newFileStore(""), topic: topic}
+			if s.store.AddWorkflow(wf) != nil {
+				t.Fatalf("store.AddWorkflow(%v) = %v, wanted no error", wf, err)
+			}
+			req := httptest.NewRequest(http.MethodPost, "/tasks/start", strings.NewReader(c.params.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+			w := httptest.NewRecorder()
+			s.startTaskHandler(w, req)
+			resp := w.Result()
+
+			if resp.StatusCode != c.wantCode {
+				t.Errorf("resp.StatusCode = %d, wanted %d", resp.StatusCode, c.wantCode)
+			}
+			if len(pssrv.Messages()) != 0 {
+				t.Fatalf("len(pssrv.Messages()) = %d, wanted %d", len(pssrv.Messages()), 0)
 			}
 		})
 	}
