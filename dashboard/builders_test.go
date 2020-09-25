@@ -790,7 +790,6 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	done["nacl-386"] = true    // removed in Go 1.14
 	done["nacl-arm"] = true    // removed in Go 1.14
 	done["windows-arm"] = true // TODO(golang.org/issue/38607) disabled until builder is replaced
-	done["ios-arm64"] = true   // TODO(golang.org/issue/41610): Add builder for ios/arm64.
 	check := func(goos, goarch string) {
 		if goos == "android" {
 			// TODO(golang.org/issue/25963): support

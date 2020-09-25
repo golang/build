@@ -715,8 +715,8 @@ type BuildConfig struct {
 	HostType string
 
 	// KnownIssue is a non-zero golang.org/issue/nnn number for a builder
-	// that is known to be failing for some reason, such as because it is
-	// a new builder still in development/testing, or because the feature
+	// that may fail due to a known issue, such as because it is a new
+	// builder still in development/testing, or because the feature
 	// or port that it's meant to test hasn't been added yet, etc.
 	//
 	// A non-zero value here means that failures on this builder should not
@@ -1559,6 +1559,24 @@ func init() {
 	addMiscCompile("-freebsd", `^freebsd-(386|arm|arm64)\b`) // 3: 386, arm, arm64 (amd64 already trybot)
 	addMiscCompile("-netbsd", "^netbsd-")                    // 4: amd64, 386, arm, arm64
 	addMiscCompile("-openbsd", "^openbsd-")                  // 4: amd64, 386, arm, arm64
+
+	// TODO(golang.org/issue/41610): Test misc-compile-ios as a post-
+	// submit builder with a known issue, before promoting to trybot.
+	func(suffix, rx string) {
+		addBuilder(BuildConfig{
+			Name:        "misc-compile" + suffix,
+			HostType:    "host-linux-jessie",
+			buildsRepo:  func(repo, branch, goBranch string) bool { return repo == "go" && branch == "master" },
+			KnownIssue:  41610,
+			env:         []string{"GO_DISABLE_OUTBOUND_NETWORK=1"},
+			CompileOnly: true,
+			Notes:       "Runs buildall.sh to cross-compile & vet std+cmd packages for " + rx + ", but doesn't run any tests.",
+			allScriptArgs: []string{
+				// Filtering pattern to buildall.bash:
+				rx,
+			},
+		})
+	}("-ios", "^ios-") // 1: arm64 (for Go 1.16 and newer)
 
 	// And 3 that don't fit above:
 	addMiscCompile("-other", "^(linux-s390x|linux-riscv64|dragonfly-amd64)$")
