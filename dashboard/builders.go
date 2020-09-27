@@ -59,7 +59,7 @@ var slowBotAliases = map[string]string{
 	"linux-mipsle":   "linux-mipsle-rtrk",
 	"linux-ppc64":    "linux-ppc64-buildlet",
 	"linux-ppc64le":  "linux-ppc64le-buildlet",
-	"linux-riscv64":  "linux-riscv64-unleashed",
+	"linux-riscv64":  "linux-riscv64-jsing",
 	"linux-s390x":    "linux-s390x-ibm",
 	"longtest":       "linux-amd64-longtest",
 	"mac":            "darwin-amd64-10_14",
@@ -84,7 +84,7 @@ var slowBotAliases = map[string]string{
 	"plan9-amd64":    "plan9-amd64-9front",
 	"ppc64":          "linux-ppc64-buildlet",
 	"ppc64le":        "linux-ppc64le-buildlet",
-	"riscv64":        "linux-riscv64-unleashed",
+	"riscv64":        "linux-riscv64-jsing",
 	"s390x":          "linux-s390x-ibm",
 	"solaris":        "solaris-amd64-oraclerel",
 	"solaris-amd64":  "solaris-amd64-oraclerel",
@@ -205,6 +205,13 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:   3,
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		OwnerGithub: "esnolte", // https://github.com/golang/go/issues/34973#issuecomment-543836871
+	},
+	"host-linux-riscv64-joelsing": &HostConfig{
+		Notes:       "SiFive HiFive Unleashed RISC-V board. 8 GB RAM, 4 cores.",
+		IsReverse:   true,
+		ExpectNum:   1,
+		OwnerGithub: "4a6f656c",
+		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
 	},
 	"host-linux-riscv64-unleashed": &HostConfig{
 		Notes:       "SiFive HiFive Unleashed RISC-V board. 8 GB RAM, 4 cores.",
@@ -2308,6 +2315,27 @@ func init() {
 		env: []string{
 			"GOARCH=mips",
 			"GOHOSTARCH=mips",
+		},
+	})
+	addBuilder(BuildConfig{
+		HostType:     "host-linux-riscv64-joelsing",
+		Name:         "linux-riscv64-jsing",
+		SkipSnapshot: true,
+		env:          []string{"GO_TEST_TIMEOUT_SCALE=4"},
+		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
+			switch distTest {
+			case "api", "reboot":
+				return false
+			}
+			return run
+		},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			switch repo {
+			case "go", "net", "sys":
+				return branch == "master" && goBranch == "master"
+			default:
+				return false
+			}
 		},
 	})
 	addBuilder(BuildConfig{
