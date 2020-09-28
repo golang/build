@@ -1953,8 +1953,11 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:           "netbsd-arm64-bsiegert",
-		HostType:       "host-netbsd-arm64-bsiegert",
+		Name:     "netbsd-arm64-bsiegert",
+		HostType: "host-netbsd-arm64-bsiegert",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return atLeastGo1(goBranch, 16) && buildRepoByDefault(repo)
+		},
 		distTestAdjust: noTestDirAndNoReboot,
 		tryBot:         nil,
 		env: []string{
