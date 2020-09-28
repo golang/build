@@ -1551,7 +1551,7 @@ func init() {
 		})
 	}
 	addMiscCompile("-linuxarm", "^linux-arm")                // 2: arm, arm64
-	addMiscCompile("-darwin", "^darwin")                     // 2: amd64, arm64 (for Go 1.14 and older, 4: 386, amd64 + iOS: arm, arm64)
+	addMiscCompile("-darwin", "^darwin-(386|amd64)$")        // 1: amd64 (in Go 1.14: 386, amd64)
 	addMiscCompile("-mips", "^linux-mips")                   // 4: mips, mipsle, mips64, mips64le
 	addMiscCompile("-ppc", "^(linux-ppc64|aix-)")            // 3: linux-ppc64{,le}, aix-ppc64
 	addMiscCompile("-solaris", "^(solaris|illumos)")         // 2: both amd64
@@ -1560,29 +1560,12 @@ func init() {
 	addMiscCompile("-netbsd", "^netbsd-")                    // 4: amd64, 386, arm, arm64
 	addMiscCompile("-openbsd", "^openbsd-")                  // 4: amd64, 386, arm, arm64
 
-	// TODO(golang.org/issue/41610): Test misc-compile-ios as a post-
-	// submit builder with a known issue, before promoting to trybot.
-	func(suffix, rx string) {
-		addBuilder(BuildConfig{
-			Name:        "misc-compile" + suffix,
-			HostType:    "host-linux-jessie",
-			buildsRepo:  func(repo, branch, goBranch string) bool { return repo == "go" && branch == "master" },
-			KnownIssue:  41610,
-			env:         []string{"GO_DISABLE_OUTBOUND_NETWORK=1"},
-			CompileOnly: true,
-			Notes:       "Runs buildall.sh to cross-compile & vet std+cmd packages for " + rx + ", but doesn't run any tests.",
-			allScriptArgs: []string{
-				// Filtering pattern to buildall.bash:
-				rx,
-			},
-		})
-	}("-ios", "^ios-") // 1: arm64 (for Go 1.16 and newer)
-
 	// And 3 that don't fit above:
 	addMiscCompile("-other", "^(linux-s390x|linux-riscv64|dragonfly-amd64)$")
-	// TODO: Issue 25963, get the misc-compile trybots for
-	// subrepos too, so "mobile" can at least be included as a
-	// misc-compile for ^android- and ^darwin-arm.
+
+	// TODO: Issue 25963, get the misc-compile trybots for Android/iOS.
+	// Then consider subrepos too, so "mobile" can at least be included
+	// as a misc-compile for ^android- and ^ios-.
 
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-nocgo",

@@ -787,16 +787,18 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	ports := strings.Fields(string(out))
 
 	done := map[string]bool{}
-	done["nacl-386"] = true    // removed in Go 1.14
-	done["nacl-arm"] = true    // removed in Go 1.14
-	done["windows-arm"] = true // TODO(golang.org/issue/38607) disabled until builder is replaced
+	done["darwin-arm"] = true   // TODO: Remove when Go 1.16 is out and Go 1.14 becomes unsupported.
+	done["windows-arm"] = true  // TODO(golang.org/issue/38607) disabled until builder is replaced
+	done["darwin-arm64"] = true // TODO(golang.org/issue/39782): Add builder for darwin/arm64.
 	check := func(goos, goarch string) {
-		if goos == "android" {
+		if goos == "android" || goos == "ios" {
 			// TODO(golang.org/issue/25963): support
-			// compilation-only Android trybots.
+			// compilation-only Android and iOS trybots.
 			// buildall.bash doesn't set the environment
 			// up enough for e.g. compiling android-386
 			// from linux-amd64. (Issue #35596 too)
+			// iOS likely needs to be built on macOS
+			// with Xcode available.
 			return
 		}
 		goosArch := goos + "-" + goarch
