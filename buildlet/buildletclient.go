@@ -130,7 +130,8 @@ func (c *Client) SetHTTPClient(httpClient *http.Client) {
 }
 
 // SetDialer sets the function that creates a new connection to the buildlet.
-// By default, net.Dialer.DialContext is used.
+// By default, net.Dialer.DialContext is used. SetDialer has effect only when
+// TLS isn't used.
 //
 // TODO(bradfitz): this is only used for ssh connections to buildlets,
 // which previously required the client to do its own net.Dial +
@@ -845,6 +846,11 @@ func (c *Client) ListDir(ctx context.Context, dir string, opts ListDirOpts, fn f
 }
 
 func (c *Client) getDialer() func(context.Context) (net.Conn, error) {
+	if !c.tls.IsZero() {
+		return func(_ context.Context) (net.Conn, error) {
+			return c.tls.tlsDialer()("tcp", c.ipPort)
+		}
+	}
 	if c.dialer != nil {
 		return c.dialer
 	}
@@ -875,6 +881,9 @@ func (c *Client) ConnectSSH(user, authorizedPubKey string) (net.Conn, error) {
 	}
 	req.Header.Add("X-Go-Ssh-User", user)
 	req.Header.Add("X-Go-Authorized-Key", authorizedPubKey)
+	if !c.tls.IsZero() {
+		req.SetBasicAuth(c.authUsername(), c.password)
+	}
 	if err := req.Write(conn); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("writing /connect-ssh HTTP request failed: %v", err)

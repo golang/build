@@ -516,7 +516,7 @@ var Hosts = map[string]*HostConfig{
 		isEC2:           true,
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		SSHUsername:     "admin",
+		SSHUsername:     "root",
 	},
 	"host-illumos-amd64-jclulow": &HostConfig{
 		Notes:       "SmartOS base64@19.1.0 zone",
