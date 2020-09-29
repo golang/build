@@ -50,6 +50,7 @@ var (
 	josharian    = gh("josharian")
 	julieqiu     = gh("julieqiu")
 	kardianos    = gh("kardianos")
+	katie        = gh("katiehockman")
 	kevinburke   = gh("kevinburke")
 	kele         = gh("kele")
 	khr          = gh("randall77")
@@ -70,6 +71,7 @@ var (
 	prattmic     = gh("prattmic")
 	r            = gh("robpike")
 	rakoczy      = gh("toothrot")
+	roland       = gh("rolandshoemaker")
 	rsc          = gh("rsc")
 	rstambler    = gh("stamblerre")
 	sameer       = gh("Sajmani")
@@ -99,16 +101,10 @@ var entries = map[string]*Entry{
 
 	"crypto": {
 		Primary:   []Owner{filippo},
-		Secondary: []Owner{agl},
+		Secondary: []Owner{agl, katie, roland},
 	},
 	"crypto/acme": {
-		Primary: []Owner{filippo, x1ddos},
-	},
-	"crypto/acme/autocert": {
-		Primary:   []Owner{bradfitz, x1ddos},
-		Secondary: []Owner{filippo},
-	},
-	"crypto/ssh": {
+		Primary:   []Owner{roland, x1ddos},
 		Secondary: []Owner{filippo},
 	},
 
@@ -246,15 +242,11 @@ var entries = map[string]*Entry{
 	},
 	"go/src/crypto": {
 		Primary:   []Owner{filippo},
-		Secondary: []Owner{rsc},
+		Secondary: []Owner{agl, katie, roland},
 	},
 	"go/src/crypto/tls": {
 		Primary:   []Owner{filippo},
-		Secondary: []Owner{agl, rsc, kevinburke},
-	},
-	"go/src/crypto/x509": {
-		Primary:   []Owner{filippo},
-		Secondary: []Owner{agl, rsc},
+		Secondary: []Owner{agl, katie, roland, kevinburke},
 	},
 	"go/src/database/sql": {
 		Primary:   []Owner{bradfitz, kardianos},
@@ -275,7 +267,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/encoding/asn1": {
 		Primary:   []Owner{filippo},
-		Secondary: []Owner{agl},
+		Secondary: []Owner{agl, katie, roland},
 	},
 	"go/src/encoding/binary": {
 		Primary: []Owner{gri},
@@ -407,15 +399,16 @@ var entries = map[string]*Entry{
 		Primary: []Owner{gri, rsc},
 	},
 	"go/src/math/big": {
-		Primary: []Owner{gri},
+		Primary:   []Owner{gri, filippo},
+		Secondary: []Owner{katie, roland},
 	},
 	"go/src/math/bits": {
 		Primary:   []Owner{gri},
-		Secondary: []Owner{khr, josharian},
+		Secondary: []Owner{khr, josharian, filippo},
 	},
 	"go/src/math/rand": {
 		Primary:   []Owner{gri, rsc},
-		Secondary: []Owner{josharian},
+		Secondary: []Owner{josharian, filippo},
 	},
 	"go/src/mime": {
 		Primary: []Owner{bradfitz},
@@ -432,25 +425,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/net/http": {
 		Primary:   []Owner{bradfitz},
-		Secondary: []Owner{rsc},
-	},
-	"go/src/net/http/cgi": {
-		Primary: []Owner{bradfitz},
-	},
-	"go/src/net/http/cookiejar": {
-		Primary: []Owner{},
-	},
-	"go/src/net/http/httptest": {
-		Primary: []Owner{bradfitz},
-	},
-	"go/src/net/http/httptrace": {
-		Primary: []Owner{bradfitz},
-	},
-	"go/src/net/http/httputil": {
-		Primary: []Owner{bradfitz},
-	},
-	"go/src/net/http/internal": {
-		Primary: []Owner{bradfitz},
+		Secondary: []Owner{rsc, empijei},
 	},
 	"go/src/net/http/pprof": {
 		Primary: []Owner{rsc},
@@ -563,7 +538,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/testing/quick": {
 		Primary:   []Owner{},
-		Secondary: []Owner{agl},
+		Secondary: []Owner{agl, katie},
 	},
 	"go/src/text/scanner": {
 		Primary: []Owner{gri},
@@ -622,10 +597,12 @@ var entries = map[string]*Entry{
 		Primary: []Owner{danderson, mdlayher},
 	},
 	"net/http": {
-		Primary: []Owner{bradfitz},
+		Primary:   []Owner{bradfitz},
+		Secondary: []Owner{empijei},
 	},
 	"net/http2": {
-		Primary: []Owner{bradfitz, tombergan},
+		Primary:   []Owner{bradfitz, tombergan},
+		Secondary: []Owner{empijei},
 	},
 	"net/icmp": {
 		Primary: []Owner{mikioh},
