@@ -399,11 +399,11 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-nocgo", "mobile"), none},
 
 		// Virtual mobiledevices
-		{b("darwin-arm64-corellium", "go"), isBuilder},
+		{b("ios-arm64-corellium", "go"), isBuilder},
 		{b("android-arm64-corellium", "go"), isBuilder},
 		{b("android-arm-corellium", "go"), isBuilder},
 
-		// Mobile builders that run with GOOS=linux/darwin and have
+		// Mobile builders that run with GOOS=linux/ios and have
 		// a device attached.
 		{b("linux-amd64-androidemu", "mobile"), both},
 

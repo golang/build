@@ -29,7 +29,7 @@ var slowBotAliases = map[string]string{
 	"openbsd-arm64": "",
 	"nacl-arm":      "",
 	"darwin-arm":    "", // TODO(golang.org/issue/37611): Remove once port is removed.
-	"ios-arm64":     "", // TODO(golang.org/issue/41610): Add builder for ios/arm64.
+	"darwin-arm64":  "", // TODO(golang.org/issue/39782): Add builder for darwin/arm64.
 
 	"386":            "linux-386",
 	"aix":            "aix-ppc64",
@@ -46,7 +46,7 @@ var slowBotAliases = map[string]string{
 	"darwin":         "darwin-amd64-10_14",
 	"darwin-386":     "darwin-386-10_14", // TODO(golang.org/issue/37610): Remove when Go 1.14 is no longer supported.
 	"darwin-amd64":   "darwin-amd64-10_14",
-	"darwin-arm64":   "darwin-arm64-corellium",
+	"ios-arm64":      "ios-arm64-corellium",
 	"dragonfly":      "dragonfly-amd64",
 	"freebsd":        "freebsd-amd64-12_0",
 	"freebsd-386":    "freebsd-386-12_0",
@@ -54,7 +54,7 @@ var slowBotAliases = map[string]string{
 	"freebsd-arm":    "freebsd-arm-paulzhol",
 	"freebsd-arm64":  "freebsd-arm64-dmgk",
 	"illumos":        "illumos-amd64",
-	"ios":            "darwin-arm64-corellium",
+	"ios":            "ios-arm64-corellium",
 	"js":             "js-wasm",
 	"linux":          "linux-amd64",
 	"linux-arm64":    "linux-arm64-packet",
@@ -562,13 +562,13 @@ var Hosts = map[string]*HostConfig{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
 		},
 	},
-	"host-darwin-arm64-corellium-ios": &HostConfig{
+	"host-ios-arm64-corellium-ios": &HostConfig{
 		Notes:       "Virtual iOS devices hosted by Zenly on Corellium; see issues 31722 and 40523",
 		OwnerGithub: "znly",
 		IsReverse:   true,
 		ExpectNum:   2,
 		env: []string{
-			"GOROOT_BOOTSTRAP=/var/mobile/go-darwin-arm64-bootstrap",
+			"GOROOT_BOOTSTRAP=/var/mobile/go-ios-arm64-bootstrap",
 		},
 	},
 	"host-android-arm64-corellium-android": &HostConfig{
@@ -2115,12 +2115,13 @@ func init() {
 		buildsRepo:     onlyGo,
 	})
 	addBuilder(BuildConfig{
-		Name:     "darwin-arm64-corellium",
-		HostType: "host-darwin-arm64-corellium-ios",
+		Name:     "ios-arm64-corellium",
+		HostType: "host-ios-arm64-corellium-ios",
 		Notes:    "Virtual iPhone SE running on Corellium; owned by zenly",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && branch == "master" && goBranch == "master"
 		},
+		KnownIssue: 41610,
 	})
 	addBuilder(BuildConfig{
 		Name:     "android-arm64-corellium",
