@@ -1063,9 +1063,6 @@ func (c *BuildConfig) AllScript() string {
 	if strings.HasPrefix(c.Name, "nacl-") {
 		return "src/nacltest.bash"
 	}
-	if strings.HasPrefix(c.Name, "darwin-arm") && !strings.Contains(c.Name, "corellium") {
-		return "src/iostest.bash"
-	}
 	if strings.HasPrefix(c.Name, "misc-compile") {
 		return "src/buildall.bash"
 	}
@@ -1087,10 +1084,8 @@ func (c *BuildConfig) SplitMakeRun() bool {
 		// These we've verified to work.
 		return true
 	}
-	// TODO(bradfitz): make iostest.bash work too. And
-	// buildall.bash should really just be N small container jobs
-	// instead of a "buildall.bash". Then we can delete this whole
-	// method.
+	// TODO(bradfitz): buildall.bash should really just be N small container
+	// jobs instead of a "buildall.bash". Then we can delete this whole method.
 	return false
 }
 
@@ -1246,9 +1241,6 @@ func defaultPlusExpBuild(repo, branch, goBranch string) bool {
 // AllScriptArgs returns the set of arguments that should be passed to the
 // all.bash-equivalent script. Usually empty.
 func (c *BuildConfig) AllScriptArgs() []string {
-	if strings.HasPrefix(c.Name, "darwin-arm") && !strings.Contains(c.Name, "corellium") {
-		return []string{"-restart"}
-	}
 	return append([]string(nil), c.allScriptArgs...)
 }
 
