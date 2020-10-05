@@ -1489,7 +1489,9 @@ func init() {
 		Name:  "linux-386-387",
 		Notes: "GO386=387",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return repo == "go" || (repo == "crypto" && branch == "master" && goBranch == "master")
+			// GO386=387 is removed in Go 1.16 (golang.org/issue/40255).
+			// It's still supported in Go 1.15 and 1.14.
+			return atMostGo1(goBranch, 15) && (repo == "go" || repo == "crypto")
 		},
 		HostType: "host-linux-jessie",
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386", "GO386=387"},

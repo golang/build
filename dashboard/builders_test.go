@@ -307,9 +307,14 @@ func TestBuilderConfig(t *testing.T) {
 
 		// Don't test all subrepos on all the builders.
 		{b("linux-amd64-ssacheck", "net"), none},
-		{b("linux-amd64-ssacheck@go1.10", "net"), none},
-		{b("linux-386-387", "crypto"), onlyPost},
-		{b("linux-arm-arm5spacemonkey@go1.12", "net"), none},
+		{b("linux-amd64-ssacheck@go1.15", "net"), none},
+		{b("linux-386-387", "crypto"), none},
+		{b("linux-386-387@go1.16", "crypto"), none},
+		{b("linux-386-387@go1.15", "crypto"), onlyPost},
+		{b("linux-386-387@go1.15", "crypto@1.15"), onlyPost},
+		{b("linux-386-387@go1.15", "build"), none},
+		{b("linux-386-387@go1.14", "crypto"), onlyPost},
+		{b("linux-arm-arm5spacemonkey@go1.15", "net"), none},
 		{b("linux-arm-arm5spacemonkey", "exp"), none},
 		{b("linux-arm-arm5spacemonkey", "mobile"), none},
 
