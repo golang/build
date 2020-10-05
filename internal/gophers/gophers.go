@@ -2513,6 +2513,7 @@ func init() {
 	addPerson("Shengyu Zhang", "shengyu.zhang@chaitin.com", "@SilverRainZ")
 	addPerson("Shi Han Ng", "shihanng@gmail.com")
 	addPerson("Shinichi Nishimura", "nshmura.s@gmail.com")
+	addPerson("Shin Fan", "shinfan@google.com", "@shinfan")
 	addPerson("Shinji Tanaka", "shinji.tanaka@gmail.com", "@stanaka")
 	addPerson("Shintaro Kaneko", "kaneshin0120@gmail.com", "@kaneshin")
 	addPerson("Shivakumar GN", "shivakumar.gn@gmail.com", "@shivakumargn")
