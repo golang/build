@@ -995,7 +995,7 @@ func needsBashWrapper(cmd string) bool {
 		return false
 	}
 	// The mobile platforms can't execute shell scripts directly.
-	ismobile := runtime.GOOS == "android" || runtime.GOOS == "darwin" && (runtime.GOARCH == "arm" || runtime.GOARCH == "arm64")
+	ismobile := runtime.GOOS == "android" || runtime.GOOS == "ios"
 	return ismobile
 }
 
