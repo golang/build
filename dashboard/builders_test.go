@@ -420,17 +420,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-amd64-emu", "go"), isBuilder},
 		{b("android-386-emu", "go"), isBuilder},
 
-		// golang.org/doc/go1.13: "Go 1.13 is the last release
-		// that will run on Native Client (NaCl)."
-		{b("nacl-386", "go"), none},
-		{b("nacl-386@dev.link", "go"), none},
-		{b("nacl-386@go1.13", "go"), onlyPost},
-		{b("nacl-386", "net"), none},
-		{b("nacl-amd64p32", "go"), none},
-		{b("nacl-amd64p32@dev.link", "go"), none},
-		{b("nacl-amd64p32@go1.13", "go"), both},
-		{b("nacl-amd64p32", "net"), none},
-
 		// Only test tip for js/wasm, and only for some repos:
 		{b("js-wasm", "go"), both},
 		{b("js-wasm", "arch"), onlyPost},

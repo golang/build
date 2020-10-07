@@ -450,7 +450,7 @@ func stagingClusterBuilders() map[string]*dashboard.BuildConfig {
 		"linux-amd64",
 		"linux-amd64-sid",
 		"linux-amd64-clang",
-		"nacl-amd64p32",
+		"js-wasm",
 	} {
 		if c, ok := dashboard.Builders[name]; ok {
 			m[name] = c
@@ -2962,7 +2962,7 @@ var errBuildletsGone = errors.New("runTests: dist test failed: all buildlets had
 
 // runTests is only called for builders which support a split make/run
 // (should be everything, at least soon). Currently (2015-05-27) iOS
-// and Android and Nacl do not.
+// and Android do not.
 //
 // After runTests completes, the caller must assume that st.bc might be invalid
 // (It's possible that only one of the helper buildlets survived).

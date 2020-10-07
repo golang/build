@@ -27,14 +27,12 @@ var slowBotAliases = map[string]string{
 	// Known missing builders:
 	"openbsd-arm":   "",
 	"openbsd-arm64": "",
-	"nacl-arm":      "",
 	"darwin-arm":    "", // TODO(golang.org/issue/37611): Remove once port is removed.
 	"darwin-arm64":  "", // TODO(golang.org/issue/39782): Add builder for darwin/arm64.
 
 	"386":            "linux-386",
 	"aix":            "aix-ppc64",
 	"amd64":          "linux-amd64",
-	"amd64p32":       "nacl-amd64p32",
 	"android":        "android-amd64-emu",
 	"android-386":    "android-386-emu",
 	"android-amd64":  "android-amd64-emu",
@@ -42,7 +40,6 @@ var slowBotAliases = map[string]string{
 	"android-arm64":  "android-arm64-corellium",
 	"arm":            "linux-arm",
 	"arm64":          "linux-arm64-packet",
-	"arm64p32":       "nacl-amd64p32",
 	"darwin":         "darwin-amd64-10_14",
 	"darwin-386":     "darwin-386-10_14", // TODO(golang.org/issue/37610): Remove when Go 1.14 is no longer supported.
 	"darwin-amd64":   "darwin-amd64-10_14",
@@ -73,9 +70,6 @@ var slowBotAliases = map[string]string{
 	"mips64":         "linux-mips64-rtrk",
 	"mips64le":       "linux-mips64le-mengzhuo",
 	"mipsle":         "linux-mipsle-rtrk",
-	"nacl":           "nacl-amd64p32",
-	"nacl-387":       "nacl-386",
-	"nacl-arm64p32":  "nacl-amd64p32",
 	"netbsd":         "netbsd-amd64-9_0",
 	"netbsd-386":     "netbsd-386-9_0",
 	"netbsd-amd64":   "netbsd-amd64-9_0",
@@ -156,12 +150,6 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:   0,
 		Notes:       "for localhost development of buildlets/gomote/coordinator only",
 		SSHUsername: os.Getenv("USER"),
-	},
-	"host-nacl": &HostConfig{
-		Notes:           "Container with Native Client binaries.",
-		ContainerImage:  "linux-x86-nacl:latest",
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
 	"host-js-wasm": &HostConfig{
 		Notes:           "Container with node.js for testing js/wasm.",
@@ -1060,9 +1048,6 @@ func (c *BuildConfig) AllScript() string {
 	if strings.HasPrefix(c.Name, "plan9-") {
 		return "src/all.rc"
 	}
-	if strings.HasPrefix(c.Name, "nacl-") {
-		return "src/nacltest.bash"
-	}
 	if strings.HasPrefix(c.Name, "misc-compile") {
 		return "src/buildall.bash"
 	}
@@ -1079,8 +1064,7 @@ func (c *BuildConfig) SplitMakeRun() bool {
 	switch c.AllScript() {
 	case "src/all.bash", "src/all.bat",
 		"src/race.bash", "src/race.bat",
-		"src/all.rc",
-		"src/nacltest.bash":
+		"src/all.rc":
 		// These we've verified to work.
 		return true
 	}
@@ -1253,9 +1237,6 @@ func (c *BuildConfig) MakeScript() string {
 	}
 	if strings.HasPrefix(c.Name, "plan9-") {
 		return "src/make.rc"
-	}
-	if strings.HasPrefix(c.Name, "nacl-") {
-		return "src/naclmake.bash"
 	}
 	return "src/make.bash"
 }
@@ -1813,29 +1794,6 @@ func init() {
 			}
 			return run
 		},
-	})
-	addBuilder(BuildConfig{
-		Name:     "nacl-386",
-		HostType: "host-nacl",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// nacl support is removed in Go 1.14.
-			// TODO: Remove builder after Go 1.15 is out.
-			return repo == "go" && !atLeastGo1(goBranch, 14) && !strings.HasPrefix(goBranch, "dev.")
-		},
-		numTryTestHelpers: 3,
-		env:               []string{"GOOS=nacl", "GOARCH=386", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
-	})
-	addBuilder(BuildConfig{
-		Name:     "nacl-amd64p32",
-		HostType: "host-nacl",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// nacl support is removed in Go 1.14.
-			// TODO: Remove builder after Go 1.15 is out.
-			return repo == "go" && !atLeastGo1(goBranch, 14) && !strings.HasPrefix(goBranch, "dev.")
-		},
-		tryBot:            explicitTrySet("go"),
-		numTryTestHelpers: 3,
-		env:               []string{"GOOS=nacl", "GOARCH=amd64p32", "GOHOSTOS=linux", "GOHOSTARCH=amd64"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "js-wasm",
