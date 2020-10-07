@@ -308,6 +308,9 @@ func TestBuilderConfig(t *testing.T) {
 		// Don't test all subrepos on all the builders.
 		{b("linux-amd64-ssacheck", "net"), none},
 		{b("linux-amd64-ssacheck@go1.15", "net"), none},
+		{b("linux-386-softfloat", "crypto"), onlyPost},
+		{b("linux-386-softfloat@go1.16", "crypto"), onlyPost},
+		{b("linux-386-softfloat@go1.15", "crypto"), none},
 		{b("linux-386-387", "crypto"), none},
 		{b("linux-386-387@go1.16", "crypto"), none},
 		{b("linux-386-387@go1.15", "crypto"), onlyPost},
