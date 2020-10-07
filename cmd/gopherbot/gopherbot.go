@@ -1802,22 +1802,22 @@ func mutationsFromCommands(cmds []labelCommand) (add, remove []string) {
 	}
 
 	for l := range toAdd {
-		if toAdd[l] && !labelChangeBlacklisted(l, "add") {
+		if toAdd[l] && !labelChangeDisallowed(l, "add") {
 			add = append(add, l)
 		}
 	}
 
 	for l := range toRemove {
-		if toRemove[l] && !labelChangeBlacklisted(l, "remove") {
+		if toRemove[l] && !labelChangeDisallowed(l, "remove") {
 			remove = append(remove, l)
 		}
 	}
 	return add, remove
 }
 
-// labelChangeBlacklisted returns true if an action on the given label is
+// labelChangeDisallowed reports whether an action on the given label is
 // forbidden via gopherbot.
-func labelChangeBlacklisted(label, action string) bool {
+func labelChangeDisallowed(label, action string) bool {
 	if action == "remove" && label == "Security" {
 		return true
 	}
