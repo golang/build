@@ -119,16 +119,16 @@ func main() {
 			if strings.HasPrefix(pkg, "cmd/") {
 				continue
 			}
-			fmt.Printf("<dl id=%q><dt><a href=%q>%s</a></dt>\n  <dd>\n",
+			fmt.Printf("<dl id=%q><dt><a href=%q>%s</a></dt>\n  <dd>",
 				pkg, "/pkg/"+pkg+"/", pkg)
 			for _, change := range changes[pkg] {
 				changeURL := fmt.Sprintf("https://golang.org/cl/%d", change.CL.Number)
 				subj := clSubject(change.CL)
 				subj = strings.TrimPrefix(subj, pkg+": ")
-				fmt.Printf("    <p><!-- CL %d -->\n      TODO: <a href=%q>%s</a>: %s\n    </p>\n\n",
+				fmt.Printf("\n    <p><!-- CL %d -->\n      TODO: <a href=%q>%s</a>: %s\n    </p>\n",
 					change.CL.Number, changeURL, changeURL, html.EscapeString(subj))
 			}
-			fmt.Printf("</dl><!-- %s -->\n\n", pkg)
+			fmt.Printf("  </dd>\n</dl><!-- %s -->\n\n", pkg)
 		}
 
 	} else {
