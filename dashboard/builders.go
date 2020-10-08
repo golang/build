@@ -525,7 +525,17 @@ var Hosts = map[string]*HostConfig{
 		machineType:     "m6g.xlarge",
 		isEC2:           true,
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-arm64",
+		SSHUsername:     "root",
+	},
+	"host-linux-arm-aws": &HostConfig{
+		Notes:           "Debian Buster, EC2 arm instance. See x/build/env/linux-arm/aws",
+		VMImage:         "ami-07409163bccd5ac4d",
+		ContainerImage:  "gobuilder-arm-aws:latest",
+		machineType:     "m6g.xlarge",
+		isEC2:           true,
+		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-arm",
 		SSHUsername:     "root",
 	},
 	"host-illumos-amd64-jclulow": &HostConfig{
@@ -2288,6 +2298,11 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "linux-arm64-aws",
 		HostType: "host-linux-arm64-aws",
+	})
+	addBuilder(BuildConfig{
+		Name:       "linux-arm-aws",
+		HostType:   "host-linux-arm-aws",
+		KnownIssue: 41867, // builder being tested for reliability
 	})
 	addBuilder(BuildConfig{
 		FlakyNet:       true,

@@ -1,0 +1,13 @@
+[Unit]
+Description=Run Buildlets in Docker
+After=network.target
+
+[Install]
+WantedBy=network-online.target
+
+[Service]
+Type=simple
+RemainAfterExit=true
+ExecStart=/usr/local/bin/rundockerbuildlet \
+     -env=host-linux-arm-aws \
+     -image=gobuilder-arm-aws
