@@ -1473,7 +1473,6 @@ func init() {
 			// GO386=softfloat is added in Go 1.16 (golang.org/issue/41848).
 			return atLeastGo1(goBranch, 16) && (repo == "go" || repo == "crypto")
 		},
-		KnownIssue: 41840,
 		GoDeps: []string{
 			"04b8a9fea57e37589d82410281f22ebde0027808", // CL 260017, "all: implement GO386=softfloat".
 		},
