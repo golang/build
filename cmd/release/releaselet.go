@@ -605,8 +605,8 @@ var windowsData = map[string]string{
 	"images/gopher.ico":     storageBase + "windows/gopher.ico",
 }
 
-// runSelfTests contains the tests for this file, since this file is
-// +build ignore. This is called by releaselet_test.go with an
+// runSelfTests contains the tests for this file, since this file
+// is +build ignore. This is called by releaselet_test.go with an
 // environment variable set, which func main above recognizes.
 func runSelfTests() {
 	// Test splitVersion.
