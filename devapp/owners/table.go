@@ -107,6 +107,10 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{roland, x1ddos},
 		Secondary: []Owner{filippo},
 	},
+	"crypto/acme/autocert": {
+		Primary:   []Owner{bradfitz, x1ddos},
+		Secondary: []Owner{roland, filippo},
+	},
 
 	"debug": {
 		Secondary: []Owner{hyangah, khr},
