@@ -1216,8 +1216,11 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		// By default, use the first GoCommit, which represents Go tip (master branch).
 		goRev = work.GoCommit[0]
 	}
-	for i, branch := range work.GoBranch {
-		if branch == work.Branch {
+	for i, goBranch := range work.GoBranch {
+		// There are two cases where we want to change goRev to work.GoCommit[i]:
+		// 1. CL branch is like "master" or "release-branch.go1.15" and matches the Go branch exactly.
+		// 2. CL branch is like "release-branch.go1.15-suffix" and its prefix matches.
+		if work.Branch == goBranch || strings.HasPrefix(work.Branch, goBranch+"-") {
 			goRev = work.GoCommit[i]
 		}
 	}

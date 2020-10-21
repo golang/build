@@ -180,6 +180,33 @@ func TestIssue28891(t *testing.T) {
 	}
 }
 
+// Test that trybot on release-branch.go1.N-{suffix} branch of a golang.org/x repo
+// uses the Go revision from Go repository's release-branch.go1.N branch.
+// See golang.org/issue/42127.
+func TestIssue42127(t *testing.T) {
+	testingKnobSkipBuilds = true
+
+	work := &apipb.GerritTryWorkItem{ // Roughly based on https://go-review.googlesource.com/c/net/+/264058/1.
+		Project:   "net",
+		Branch:    "release-branch.go1.15-bundle",
+		ChangeId:  "I546597cedf3715e6617babcb3b62140bf1857a27",
+		Commit:    "286322bb8662ddff3686e42a01c33a1d47d25153",
+		GoCommit:  []string{"b2a8317b31d652b3ee293a313269b8290bcdf96c", "3b1f07fff774f86f13316f7bec6552566568fc10", "768b64711ae4292bd9a02c9cc8d44282f5fac66b"},
+		GoBranch:  []string{"master", "release-branch.go1.15", "release-branch.go1.14"},
+		GoVersion: []*apipb.MajorMinor{{1, 16}, {1, 15}, {1, 14}},
+	}
+	ts := newTrySet(work)
+	if len(ts.builds) == 0 {
+		t.Fatal("no builders in try set, want at least 1")
+	}
+	for i, bs := range ts.builds {
+		const go115Revision = "3b1f07fff774f86f13316f7bec6552566568fc10"
+		if bs.BuilderRev.Rev != go115Revision {
+			t.Errorf("build[%d]: %s: x/net on release-branch.go1.15-bundle branch should be tested with Go 1.15, but isn't", i, bs.NameAndBranch())
+		}
+	}
+}
+
 // tests that we don't test Go 1.10 for the build repo
 func TestNewTrySetBuildRepoGo110(t *testing.T) {
 	testingKnobSkipBuilds = true
