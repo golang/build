@@ -424,8 +424,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{bradfitz, minux},
 	},
 	"go/src/net": {
-		Primary:   []Owner{mikioh},
-		Secondary: []Owner{bradfitz, iant},
+		Primary: []Owner{bradfitz, iant},
 	},
 	"go/src/net/http": {
 		Primary:   []Owner{bradfitz},
@@ -435,7 +434,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{rsc},
 	},
 	"go/src/net/internal/socktest": {
-		Primary: []Owner{mikioh},
+		Primary: []Owner{},
 	},
 	"go/src/net/mail": {
 		Primary:   []Owner{},
@@ -594,8 +593,7 @@ var entries = map[string]*Entry{
 	},
 
 	"net": {
-		Primary:   []Owner{mikioh},
-		Secondary: []Owner{bradfitz, iant},
+		Primary: []Owner{bradfitz, iant},
 	},
 	"net/bpf": {
 		Primary: []Owner{danderson, mdlayher},
@@ -609,13 +607,13 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{empijei},
 	},
 	"net/icmp": {
-		Primary: []Owner{mikioh},
+		Primary: []Owner{},
 	},
 	"net/ipv4": {
-		Primary: []Owner{mikioh, iant},
+		Primary: []Owner{iant},
 	},
 	"net/ipv6": {
-		Primary: []Owner{mikioh, iant},
+		Primary: []Owner{iant},
 	},
 
 	"oauth2": {
