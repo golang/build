@@ -74,6 +74,7 @@ var slowBotAliases = map[string]string{
 	"netbsd-amd64":   "netbsd-amd64-9_0",
 	"netbsd-arm":     "netbsd-arm-bsiegert",
 	"netbsd-arm64":   "netbsd-arm64-bsiegert",
+	"nocgo":          "linux-amd64-nocgo",
 	"openbsd":        "openbsd-amd64-64",
 	"openbsd-386":    "openbsd-386-64",
 	"openbsd-amd64":  "openbsd-amd64-64",
