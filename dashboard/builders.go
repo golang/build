@@ -520,7 +520,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-linux-arm64-aws": &HostConfig{
 		Notes:           "Debian Buster, EC2 arm64 instance. See x/build/env/linux-arm64/aws",
-		VMImage:         "ami-06f66c749c71b2511",
+		VMImage:         "ami-03089323a1d38e652",
 		ContainerImage:  "gobuilder-arm64-aws:latest",
 		machineType:     "m6g.xlarge",
 		isEC2:           true,

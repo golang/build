@@ -13,7 +13,16 @@
       "instance_type": "a1.medium",
       "region": "{{user `region`}}",
       "secret_key": "{{user `aws_secret_key`}}",
-      "source_ami": "ami-0b1808bb4e7ed5ff5",
+      "source_ami_filter": {
+        "filters": {
+          "architecture": "arm64",
+          "virtualization-type": "hvm",
+          "name": "debian-10-arm64-*",
+          "root-device-type": "ebs"
+        },
+        "owners": ["136693071363"],
+        "most_recent": true
+      },
       "decode_authorization_messages": true,
       "ssh_username": "admin",
       "tags": {
