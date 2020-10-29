@@ -576,7 +576,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:       "Virtual iOS devices hosted by Zenly on Corellium; see issues 31722 and 40523",
 		OwnerGithub: "znly",
 		IsReverse:   true,
-		ExpectNum:   2,
+		ExpectNum:   3,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/var/mobile/go-ios-arm64-bootstrap",
 		},
@@ -585,7 +585,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:       "Virtual Android devices hosted by Zenly on Corellium; see issues 31722 and 40523",
 		OwnerGithub: "znly",
 		IsReverse:   true,
-		ExpectNum:   2,
+		ExpectNum:   3,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/data/data/com.termux/files/home/go-android-arm64-bootstrap",
 		},

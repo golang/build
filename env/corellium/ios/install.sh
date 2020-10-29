@@ -16,10 +16,6 @@ ios() {
 	ssh "$HOST" "$@"
 }
 
-# Replace the builtin packages sources with a list of sources
-# that contain aworking toolchain.
-scp files/sources.list $HOST:/etc/apt/sources.list.d/sources.list
-ios rm /etc/apt/sources.list.d/electra.list
 ios apt-get update
 ios apt install -y --allow-unauthenticated git tmux rsync org.coolstar.iostoolchain ld64 com.linusyang.localeutf8
 
