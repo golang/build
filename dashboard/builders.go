@@ -1553,13 +1553,41 @@ func init() {
 			},
 			tryOnly:     true,
 			CompileOnly: true,
-			Notes:       "Runs buildall.sh to cross-compile & vet std+cmd packages for " + rx + ", but doesn't run any tests.",
+			Notes:       "Runs buildall.bash to cross-compile & vet std+cmd packages for " + rx + ", but doesn't run any tests.",
 			allScriptArgs: []string{
 				// Filtering pattern to buildall.bash:
 				rx,
 			},
 		})
 	}
+	// tryNewMiscCompile is an intermediate step towards adding a real addMiscCompile TryBot.
+	// It adds a post-submit-only builder with KnownIssue, GoDeps set to the provided values,
+	// and runs on a limited set of branches to get test results without potential disruption
+	// for contributors. It can be modified as needed when onboarding a misc-compile builder.
+	tryNewMiscCompile := func(suffix, rx string, knownIssue int, goDeps []string) {
+		addBuilder(BuildConfig{
+			Name:        "misc-compile" + suffix,
+			HostType:    "host-linux-jessie",
+			buildsRepo:  func(repo, branch, goBranch string) bool { return repo == "go" && branch == "master" },
+			KnownIssue:  knownIssue,
+			GoDeps:      goDeps,
+			env:         []string{"GO_DISABLE_OUTBOUND_NETWORK=1"},
+			CompileOnly: true,
+			Notes:       fmt.Sprintf("Tries buildall.bash to cross-compile & vet std+cmd packages for "+rx+", but doesn't run any tests. See golang.org/issue/%d.", knownIssue),
+			allScriptArgs: []string{
+				// Filtering pattern to buildall.bash:
+				rx,
+			},
+		})
+	}
+
+	// TODO(golang.org/issue/42341): Try out misc-compile-darwinarm64.
+	tryNewMiscCompile("-darwinarm64", "^darwin-arm64$", 42341,
+		[]string{
+			"b85c2dd56c4ecc7bf445bd1615467ecd38598eee", // CL 265121, "cmd/link: enable internal linking by default on darwin/arm64".
+		},
+	) // 1: arm64 (for Go 1.16 and newer)
+
 	addMiscCompile("-linuxarm", "^linux-arm")                // 2: arm, arm64
 	addMiscCompile("-darwin", "^darwin-(386|amd64)$")        // 1: amd64 (in Go 1.14: 386, amd64)
 	addMiscCompile("-mips", "^linux-mips")                   // 4: mips, mipsle, mips64, mips64le
