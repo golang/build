@@ -106,6 +106,13 @@ var Builders = map[string]*BuildConfig{}
 // Hosts contains the names and configs of all the types of
 // buildlets. They can be VMs, containers, or dedicated machines.
 var Hosts = map[string]*HostConfig{
+	"host-linux-buster": &HostConfig{
+		Notes:           "Debian Buster",
+		ContainerImage:  "linux-x86-buster:latest",
+		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:     "root",
+	},
 	"host-linux-jessie": &HostConfig{
 		Notes:           "Debian Jessie, our standard Linux container image.",
 		ContainerImage:  "linux-x86-jessie:latest",
@@ -1774,6 +1781,15 @@ func init() {
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-amd64-buster",
+		HostType: "host-linux-buster",
+		Notes:    "Debian Buster.",
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
+		KnownIssue: 42750,
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-longtest",
