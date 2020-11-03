@@ -1538,12 +1538,19 @@ func init() {
 		})
 	}
 
-	// addMiscCompile adds a misc-compile builder that runs
+	// addMiscCompileGo1 adds a misc-compile TryBot that runs
 	// buildall.bash on a subset of platforms matching the egrep
 	// pattern rx. The pattern is matched against the "go tool
 	// dist list" name, but with hyphens instead of forward
 	// slashes ("linux-amd64", etc).
-	addMiscCompile := func(suffix, rx string) {
+	// If min is non-zero, it specifies the minimum Go 1.x version.
+	addMiscCompileGo1 := func(min int, suffix, rx string) {
+		var v types.MajorMinor
+		var alsoNote string
+		if min != 0 {
+			v = types.MajorMinor{1, min}
+			alsoNote = fmt.Sprintf(" Applies to Go 1.%d and newer.", min)
+		}
 		addBuilder(BuildConfig{
 			Name:     "misc-compile" + suffix,
 			HostType: "host-linux-jessie",
@@ -1551,45 +1558,23 @@ func init() {
 			env: []string{
 				"GO_DISABLE_OUTBOUND_NETWORK=1",
 			},
-			tryOnly:     true,
-			CompileOnly: true,
-			Notes:       "Runs buildall.bash to cross-compile & vet std+cmd packages for " + rx + ", but doesn't run any tests.",
+			tryOnly:          true,
+			MinimumGoVersion: v,
+			CompileOnly:      true,
+			Notes:            "Runs buildall.bash to cross-compile & vet std+cmd packages for " + rx + ", but doesn't run any tests." + alsoNote,
 			allScriptArgs: []string{
 				// Filtering pattern to buildall.bash:
 				rx,
 			},
 		})
 	}
-	// tryNewMiscCompile is an intermediate step towards adding a real addMiscCompile TryBot.
-	// It adds a post-submit-only builder with KnownIssue, GoDeps set to the provided values,
-	// and runs on a limited set of branches to get test results without potential disruption
-	// for contributors. It can be modified as needed when onboarding a misc-compile builder.
-	tryNewMiscCompile := func(suffix, rx string, knownIssue int, goDeps []string) {
-		addBuilder(BuildConfig{
-			Name:        "misc-compile" + suffix,
-			HostType:    "host-linux-jessie",
-			buildsRepo:  func(repo, branch, goBranch string) bool { return repo == "go" && branch == "master" },
-			KnownIssue:  knownIssue,
-			GoDeps:      goDeps,
-			env:         []string{"GO_DISABLE_OUTBOUND_NETWORK=1"},
-			CompileOnly: true,
-			Notes:       fmt.Sprintf("Tries buildall.bash to cross-compile & vet std+cmd packages for "+rx+", but doesn't run any tests. See golang.org/issue/%d.", knownIssue),
-			allScriptArgs: []string{
-				// Filtering pattern to buildall.bash:
-				rx,
-			},
-		})
-	}
-
-	// TODO(golang.org/issue/42341): Try out misc-compile-darwinarm64.
-	tryNewMiscCompile("-darwinarm64", "^darwin-arm64$", 42341,
-		[]string{
-			"b85c2dd56c4ecc7bf445bd1615467ecd38598eee", // CL 265121, "cmd/link: enable internal linking by default on darwin/arm64".
-		},
-	) // 1: arm64 (for Go 1.16 and newer)
+	// addMiscCompile adds a misc-compile TryBot
+	// for all supported Go versions.
+	addMiscCompile := func(suffix, rx string) { addMiscCompileGo1(0, suffix, rx) }
 
 	addMiscCompile("-linuxarm", "^linux-arm")                // 2: arm, arm64
 	addMiscCompile("-darwin", "^darwin-(386|amd64)$")        // 1: amd64 (in Go 1.14: 386, amd64)
+	addMiscCompileGo1(16, "-darwinarm64", "^darwin-arm64$")  // 1: arm64 (for Go 1.16 and newer)
 	addMiscCompile("-mips", "^linux-mips")                   // 4: mips, mipsle, mips64, mips64le
 	addMiscCompile("-ppc", "^(linux-ppc64|aix-)")            // 3: linux-ppc64{,le}, aix-ppc64
 	addMiscCompile("-solaris", "^(solaris|illumos)")         // 2: both amd64
@@ -2549,6 +2534,30 @@ func addBuilder(c BuildConfig) {
 	}
 
 	Builders[c.Name] = &c
+}
+
+// tryNewMiscCompile is an intermediate step towards adding a real addMiscCompile TryBot.
+// It adds a post-submit-only builder with KnownIssue, GoDeps set to the provided values,
+// and runs on a limited set of branches to get test results without potential disruption
+// for contributors. It can be modified as needed when onboarding a misc-compile builder.
+func tryNewMiscCompile(suffix, rx string, knownIssue int, goDeps []string) {
+	if knownIssue == 0 {
+		panic("tryNewMiscCompile: knownIssue parameter must be non-zero")
+	}
+	addBuilder(BuildConfig{
+		Name:        "misc-compile" + suffix,
+		HostType:    "host-linux-jessie",
+		buildsRepo:  func(repo, branch, goBranch string) bool { return repo == "go" && branch == "master" },
+		KnownIssue:  knownIssue,
+		GoDeps:      goDeps,
+		env:         []string{"GO_DISABLE_OUTBOUND_NETWORK=1"},
+		CompileOnly: true,
+		Notes:       fmt.Sprintf("Tries buildall.bash to cross-compile & vet std+cmd packages for "+rx+", but doesn't run any tests. See golang.org/issue/%d.", knownIssue),
+		allScriptArgs: []string{
+			// Filtering pattern to buildall.bash:
+			rx,
+		},
+	})
 }
 
 // fasterTrybots is a distTestAdjust policy function.
