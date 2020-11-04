@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
@@ -61,7 +62,7 @@ var hitGerrit = flag.Bool("hit_gerrit", false, "query production Gerrit in TestF
 
 func TestFindTryWork(t *testing.T) {
 	if !*hitGerrit {
-		t.Skip("skipping without flag --hit_gerrit")
+		t.Skip("skipping without flag -hit_gerrit")
 	}
 	c := getGoData(t)
 	s := apiService{c}
@@ -75,13 +76,13 @@ func TestFindTryWork(t *testing.T) {
 
 	// Just for interactive debugging. This is using live data.
 	// The stable tests are in TestTryWorkItem and TestTryBotStatus.
-	t.Logf("Current: %v", res)
+	t.Logf("Current:\n%v", proto.MarshalTextString(res))
 
 	t1 := time.Now()
-	res, err = s.GoFindTryWork(context.Background(), req)
+	res2, err := s.GoFindTryWork(context.Background(), req)
 	d1 := time.Since(t1)
 	t.Logf("Latency: %v, then %v", d0, d1)
-	t.Logf("Cached: %v, %v", res, err)
+	t.Logf("Cached: equal=%v, err=%v", proto.Equal(res, res2), err)
 }
 
 func TestTryBotStatus(t *testing.T) {

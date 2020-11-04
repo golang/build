@@ -249,6 +249,11 @@ func goFindTryWork(ctx context.Context, gerritc *gerrit.Client, maintc *maintner
 	if err != nil {
 		return nil, err
 	}
+	// If Go X.Y is the latest supported release, the version in development is likely Go X.(Y+1).
+	develVersion := &apipb.MajorMinor{
+		Major: supportedReleases[0].Major,
+		Minor: supportedReleases[0].Minor + 1,
+	}
 
 	res := new(apipb.GoFindTryWorkResponse)
 	for _, ci := range cis {
@@ -264,26 +269,23 @@ func goFindTryWork(ctx context.Context, gerritc *gerrit.Client, maintc *maintner
 		work := tryWorkItem(cl, ci, comments)
 		if work.Project == "go" {
 			// Trybot on Go repo. Set the GoVersion field based on branch name.
-			if work.Branch == "master" {
-				latest := supportedReleases[0]
-				work.GoVersion = []*apipb.MajorMinor{{latest.Major, latest.Minor}}
-			} else if major, minor, ok := parseReleaseBranchVersion(work.Branch); ok {
+			if major, minor, ok := parseReleaseBranchVersion(work.Branch); ok {
 				// A release branch like release-branch.goX.Y.
 				// Use the major-minor Go version determined from the branch name.
 				work.GoVersion = []*apipb.MajorMinor{{major, minor}}
 			} else {
-				// A branch that is neither master nor release-branch.goX.Y.
-				// I don't see a straightforward way to compute its version,
-				// so use the latest Go release until we need to do more.
-				latest := supportedReleases[0]
-				work.GoVersion = []*apipb.MajorMinor{{latest.Major, latest.Minor}}
+				// A branch that is not release-branch.goX.Y: maybe
+				// "master" or a development branch like "dev.link".
+				// There isn't a way to determine the version from its name,
+				// so use the development Go version until we need to do more.
+				// TODO(golang.org/issue/42376): This can be made more precise.
+				work.GoVersion = []*apipb.MajorMinor{develVersion}
 			}
 		} else {
 			// Trybot on a subrepo. Set the Go fields to master and the supported releases.
 			work.GoCommit = []string{goProj.Ref("refs/heads/master").String()}
 			work.GoBranch = []string{"master"}
-			latest := supportedReleases[0]
-			work.GoVersion = []*apipb.MajorMinor{{latest.Major, latest.Minor}}
+			work.GoVersion = []*apipb.MajorMinor{develVersion}
 			for _, r := range supportedReleases {
 				work.GoCommit = append(work.GoCommit, r.BranchCommit)
 				work.GoBranch = append(work.GoBranch, r.BranchName)
