@@ -841,10 +841,10 @@ type BuildConfig struct {
 
 	// numTestHelpers is the number of _additional_ buildlets
 	// past the first one to help out with sharded tests.
-	// For trybots, the numTryHelpers value is used, unless it's
-	// zero, in which case numTestHelpers is used.
+	// For TryBots and SlowBots, the numTryHelpers value is used,
+	// unless it's zero, in which case numTestHelpers is used.
 	numTestHelpers    int
-	numTryTestHelpers int // for trybots. if 0, numTesthelpers is used
+	numTryTestHelpers int // For TryBots/SlowBots. If 0, numTestHelpers is used.
 
 	env           []string // extra environment ("key=value") pairs
 	allScriptArgs []string
@@ -1373,6 +1373,11 @@ func (c *HostConfig) GCENumCPU() int {
 	return n
 }
 
+// NumTestHelpers reports how many additional buildlets
+// past the first one to help out with sharded tests.
+//
+// isTry specifies whether it's for a pre-submit test
+// run (a TryBot or SlowBot) where speed matters more.
 func (c *BuildConfig) NumTestHelpers(isTry bool) int {
 	if isTry && c.numTryTestHelpers != 0 {
 		return c.numTryTestHelpers
@@ -1754,6 +1759,10 @@ func init() {
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
+		// TODO(golang.org/issue/37439): Decide whether it's worth it
+		// to go for 3~9 extra helpers for -longtest SlowBot requests
+		// based on how well having more helpers scales. Try 3, 5, 9.
+		numTryTestHelpers: 9,
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-386-longtest",
@@ -1777,6 +1786,10 @@ func init() {
 			"GOHOSTARCH=386",
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
+		// TODO(golang.org/issue/37439): Decide whether it's worth it
+		// to go for 3~9 extra helpers for -longtest SlowBot requests
+		// based on how well having more helpers scales. Try 3, 5, 9.
+		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-arm",
@@ -2095,6 +2108,10 @@ func init() {
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
+		// TODO(golang.org/issue/37439): Decide whether it's worth it
+		// to go for 3~9 extra helpers for -longtest SlowBot requests
+		// based on how well having more helpers scales. Try 3, 5, 9.
+		numTryTestHelpers: 3,
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-race",
