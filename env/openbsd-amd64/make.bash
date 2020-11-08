@@ -8,12 +8,12 @@
 set -e
 set -u
 
-readonly VERSION="6.4"
+readonly VERSION="6.8"
 readonly RELNO="${VERSION/./}"
 readonly SNAPSHOT=false
 
 readonly ARCH="${ARCH:-amd64}"
-readonly MIRROR="${MIRROR:-ftp.usa.openbsd.org}"
+readonly MIRROR="${MIRROR:-cdn.openbsd.org}"
 
 if [[ "${ARCH}" != "amd64" && "${ARCH}" != "i386" ]]; then
   echo "ARCH must be amd64 or i386"
@@ -45,9 +45,6 @@ function cleanup() {
 }
 
 trap cleanup EXIT INT
-
-# XXX: Download and save bash, curl, and their dependencies too?
-# Currently we download them from the network during the install process.
 
 # Create custom siteXX.tgz set.
 PKG_ADD_OPTIONS=""
@@ -117,6 +114,7 @@ Which disk = sd0
 Use (W)hole disk or (E)dit the MBR = whole
 Use (A)uto layout, (E)dit auto layout, or create (C)ustom layout = auto
 URL to autopartitioning template for disklabel = file://disklabel.template
+Location of sets = cd0
 Set name(s) = +* -x* -game* -man* done
 Directory does not contain SHA256.sig. Continue without verification = yes
 EOF
@@ -165,18 +163,7 @@ send "umount /mnt\n"
 send "exit\n"
 
 expect timeout { exit 1 } "CONGRATULATIONS!"
-
-# There is some form of race condition with OpenBSD 6.2 MP
-# and qemu, which can result in init(1) failing to run /bin/sh
-# the first time around...
-expect {
-  timeout { exit 1 }
-  "Enter pathname of shell or RETURN for sh:" {
-    send "\nexit\n"
-    expect timeout { exit 1 } eof
-  }
-  eof
-}
+expect timeout { exit 1 } eof
 EOF
 
 # Create Compute Engine disk image.
