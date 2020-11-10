@@ -396,6 +396,14 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-mips64le-mengzhuo", "sys"), onlyPost},
 		{b("linux-mips64le-mengzhuo", "net"), onlyPost},
 
+		// OpenBSD.
+		{b("openbsd-amd64-64@go1.16", "go"), both},
+		{b("openbsd-amd64-64@go1.15", "go"), both},
+		{b("openbsd-amd64-64@go1.14", "go"), both},
+		{b("openbsd-amd64-62@go1.16", "go"), none}, // golang.org/issue/42426.
+		{b("openbsd-amd64-62@go1.15", "go"), onlyPost},
+		{b("openbsd-amd64-62@go1.14", "go"), onlyPost},
+
 		// go1.12.html: "Go 1.12 is the last release that is
 		// supported on FreeBSD 10.x [... and 11.1]"
 		// But golang.org/issue/40563 happened.

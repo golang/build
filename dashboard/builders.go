@@ -1904,6 +1904,11 @@ func init() {
 		Name:           "openbsd-386-62",
 		HostType:       "host-openbsd-386-62",
 		distTestAdjust: noTestDirAndNoReboot,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder is unfortunately still used by Go 1.15 and 1.14,
+			// so keep it around a bit longer. See golang.org/issue/42426.
+			return atMostGo1(goBranch, 15) && buildRepoByDefault(repo)
+		},
 		env: []string{
 			// cmd/go takes ~192 seconds on openbsd-386
 			// now, which is over the 180 second default
@@ -1913,10 +1918,15 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:              "openbsd-amd64-62",
-		HostType:          "host-openbsd-amd64-62",
-		distTestAdjust:    noTestDirAndNoReboot,
-		tryBot:            nil,
+		Name:           "openbsd-amd64-62",
+		HostType:       "host-openbsd-amd64-62",
+		distTestAdjust: noTestDirAndNoReboot,
+		tryBot:         nil,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder is unfortunately still used by Go 1.15 and 1.14,
+			// so keep it around a bit longer. See golang.org/issue/42426.
+			return atMostGo1(goBranch, 15) && buildRepoByDefault(repo)
+		},
 		numTestHelpers:    0,
 		numTryTestHelpers: 5,
 	})
