@@ -69,12 +69,18 @@ func (f *noopEC2Client) RunInstancesWithContext(ctx context.Context, input *ec2.
 	if ctx == nil || input == nil || len(opts) != 1 {
 		f.t.Fatal("RunInstancesWithContext params not passed down")
 	}
+	if ctx.Err() != nil {
+		f.t.Fatalf("context.Err() = %s; want no error", ctx.Err())
+	}
 	return nil, nil
 }
 
 func (f *noopEC2Client) TerminateInstancesWithContext(ctx context.Context, input *ec2.TerminateInstancesInput, opts ...request.Option) (*ec2.TerminateInstancesOutput, error) {
 	if ctx == nil || input == nil || len(opts) != 1 {
 		f.t.Fatal("TerminateInstancesWithContext params not passed down")
+	}
+	if ctx.Err() != nil {
+		f.t.Fatalf("context.Err() = %s; want no error", ctx.Err())
 	}
 	return nil, nil
 }

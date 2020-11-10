@@ -111,7 +111,7 @@ func (i *EC2RateLimitInterceptor) DescribeInstancesWithContext(ctx context.Conte
 
 // RunInstancesWithContext rate limits calls. The rate limiter will return an error if the request exceeds the bucket size, the Context is canceled, or the expected wait time exceeds the Context's Deadline. An error is returned if either the rate or resource limiter returns an error.
 func (i *EC2RateLimitInterceptor) RunInstancesWithContext(ctx context.Context, in *ec2.RunInstancesInput, opts ...request.Option) (*ec2.Reservation, error) {
-	g, ctx := errgroup.WithContext(ctx)
+	g := new(errgroup.Group)
 	g.Go(func() error {
 		return i.runInstancesRate.Wait(ctx)
 	})
@@ -131,7 +131,7 @@ func (i *EC2RateLimitInterceptor) RunInstancesWithContext(ctx context.Context, i
 
 // TerminateInstancesWithContext rate limits calls. The rate limiter will return an error if the request exceeds the bucket size, the Context is canceled, or the expected wait time exceeds the Context's Deadline. An error is returned if either the rate or resource limiter returns an error.
 func (i *EC2RateLimitInterceptor) TerminateInstancesWithContext(ctx context.Context, in *ec2.TerminateInstancesInput, opts ...request.Option) (*ec2.TerminateInstancesOutput, error) {
-	g, ctx := errgroup.WithContext(ctx)
+	g := new(errgroup.Group)
 	g.Go(func() error {
 		return i.mutatingRate.Wait(ctx)
 	})
