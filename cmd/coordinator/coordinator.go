@@ -1519,7 +1519,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 		return
 	}
 
-	const failureFooter = "Consult https://build.golang.org/ to see whether they are new failures. Keep in mind that TryBots currently test *exactly* your git commit, without rebasing. If your commit's git parent is old, the failure might've already been fixed."
+	const failureFooter = "Consult https://build.golang.org/ to see whether they are new failures. Keep in mind that TryBots currently test *exactly* your git commit, without rebasing. If your commit's git parent is old, the failure might've already been fixed.\n"
 
 	s1 := sha1.New()
 	io.WriteString(s1, buildLog)
@@ -1569,7 +1569,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 		if numFail == 0 {
 			score = 1
 			fmt.Fprintf(&buf, "%s are happy.\n", name)
-		} else if numFail > 0 {
+		} else {
 			score = -1
 			ts.mu.Lock()
 			errMsg := ts.errMsg.String()
@@ -1577,6 +1577,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 			fmt.Fprintf(&buf, "%d of %d %s failed:\n%s\n"+failureFooter,
 				numFail, len(ts.builds), name, errMsg)
 		}
+		fmt.Fprintln(&buf)
 		if len(ts.slowBots) > 0 {
 			fmt.Fprintf(&buf, "SlowBot builds that ran:\n")
 			for _, c := range ts.slowBots {
