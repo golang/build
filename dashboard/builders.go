@@ -2338,9 +2338,8 @@ func init() {
 		HostType: "host-linux-arm64-aws",
 	})
 	addBuilder(BuildConfig{
-		Name:       "linux-arm-aws",
-		HostType:   "host-linux-arm-aws",
-		KnownIssue: 41867, // builder being tested for reliability
+		Name:     "linux-arm-aws",
+		HostType: "host-linux-arm-aws",
 	})
 	addBuilder(BuildConfig{
 		FlakyNet:       true,
