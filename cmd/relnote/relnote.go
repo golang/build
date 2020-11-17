@@ -35,7 +35,7 @@ type change struct {
 }
 
 func (c change) TextLine() string {
-	subj := clSubject(c.CL)
+	subj := c.CL.Subject()
 	if c.Note != "yes" && c.Note != "y" {
 		subj = c.Note + ": " + subj
 	}
@@ -123,7 +123,7 @@ func main() {
 				pkg, "/pkg/"+pkg+"/", pkg)
 			for _, change := range changes[pkg] {
 				changeURL := fmt.Sprintf("https://golang.org/cl/%d", change.CL.Number)
-				subj := clSubject(change.CL)
+				subj := change.CL.Subject()
 				subj = strings.TrimPrefix(subj, pkg+": ")
 				fmt.Printf("\n    <p><!-- CL %d -->\n      TODO: <a href=%q>%s</a>: %s\n    </p>\n",
 					change.CL.Number, changeURL, changeURL, html.EscapeString(subj))
@@ -141,20 +141,10 @@ func main() {
 	}
 }
 
-// clSubject returns the first line of the CL's commit message,
-// without the trailing newline.
-func clSubject(cl *maintner.GerritCL) string {
-	subj := cl.Commit.Msg
-	if i := strings.Index(subj, "\n"); i != -1 {
-		return subj[:i]
-	}
-	return subj
-}
-
 // clPackage returns the package name from the CL's commit message,
 // or "??" if it's formatted unconventionally.
 func clPackage(cl *maintner.GerritCL) string {
-	subj := clSubject(cl)
+	subj := cl.Subject()
 	if i := strings.Index(subj, ":"); i != -1 {
 		return subj[:i]
 	}
