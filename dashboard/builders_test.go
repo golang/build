@@ -755,7 +755,6 @@ func TestSlowBotAliases(t *testing.T) {
 	ports := strings.Fields(string(out))
 
 	done := map[string]bool{}
-	done["windows-arm"] = true // TODO(golang.org/issue/38607) disabled until builder is replaced
 
 	var add bytes.Buffer
 	check := func(term string, isArch bool) {
@@ -826,7 +825,6 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 
 	done := map[string]bool{}
 	done["darwin-arm"] = true   // TODO: Remove when Go 1.16 is out and Go 1.14 becomes unsupported.
-	done["windows-arm"] = true  // TODO(golang.org/issue/38607) disabled until builder is replaced
 	done["darwin-arm64"] = true // TODO(golang.org/issue/39782): Add builder for darwin/arm64.
 	check := func(goos, goarch string) {
 		if goos == "android" || goos == "ios" {

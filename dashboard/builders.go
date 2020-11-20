@@ -94,6 +94,7 @@ var slowBotAliases = map[string]string{
 	"windows":        "windows-amd64-2016",
 	"windows-386":    "windows-386-2008",
 	"windows-amd64":  "windows-amd64-2016",
+	"windows-arm":    "windows-arm-zx2c4",
 }
 
 // Builders are the different build configurations.
@@ -456,6 +457,12 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
+	},
+	"host-windows-arm64-zx2c4": &HostConfig{
+		IsReverse:   true,
+		ExpectNum:   1,
+		OwnerGithub: "zx2c4",
+		env:         []string{"GOROOT_BOOTSTRAP=C:\\Program Files (Arm)\\Go"},
 	},
 	"host-darwin-10_11": &HostConfig{
 		IsReverse: true,
@@ -1614,8 +1621,8 @@ func init() {
 	addMiscCompile("-netbsd", "^netbsd-")                    // 4: amd64, 386, arm, arm64
 	addMiscCompile("-openbsd", "^openbsd-")                  // 4: amd64, 386, arm, arm64
 
-	// And 3 that don't fit above:
-	addMiscCompile("-other", "^(linux-s390x|linux-riscv64|dragonfly-amd64)$")
+	// And 4 that don't fit above:
+	addMiscCompile("-other", "^(windows-arm|linux-s390x|linux-riscv64|dragonfly-amd64)$")
 
 	// TODO: Issue 25963, get the misc-compile trybots for Android/iOS.
 	// Then consider subrepos too, so "mobile" can at least be included
@@ -2172,6 +2179,14 @@ func init() {
 			// now, which is over the 180 second default
 			// dist test timeout. So, bump this builder
 			// up:
+			"GO_TEST_TIMEOUT_SCALE=2"},
+	})
+	addBuilder(BuildConfig{
+		Name:       "windows-arm-zx2c4",
+		HostType:   "host-windows-arm64-zx2c4",
+		KnownIssue: 38607, // TODO: remove this after this builder has proved it works
+		env: []string{
+			"GOARM=7",
 			"GO_TEST_TIMEOUT_SCALE=2"},
 	})
 	addBuilder(BuildConfig{
