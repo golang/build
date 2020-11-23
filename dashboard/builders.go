@@ -1789,7 +1789,6 @@ func init() {
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
-		KnownIssue: 42750,
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-longtest",

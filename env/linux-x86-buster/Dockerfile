@@ -16,9 +16,11 @@ ENV DEBIAN_FRONTEND noninteractive
 # libc6-dev-i386 gcc-multilib: for 32-bit builds
 # procps lsof psmisc: misc basic tools
 # libgles2-mesa-dev libopenal-dev fonts-droid-fallback: required by x/mobile repo
+# netbase: for net package tests, issue 42750
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
 	ca-certificates \
+	netbase \
 	curl \
 	gdb \
 	strace \
