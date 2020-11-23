@@ -181,6 +181,8 @@ Download:
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	case "host-linux-ppc64-osu":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+	case "host-linux-amd64-wsl":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	}
 	switch osArch {
 	case "linux/s390x":
