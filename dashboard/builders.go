@@ -646,6 +646,13 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
+	"host-linux-amd64-wsl": &HostConfig{
+		Notes:       "Windows 10 WSL2 Ubuntu",
+		OwnerGithub: "mengzhuo",
+		IsReverse:   true,
+		ExpectNum:   1,
+		env:         []string{"GOROOT_BOOTSTRAP=/usr/lib/go"},
+	},
 }
 
 // CrossCompileConfig describes how to cross-compile a build on a
@@ -2600,6 +2607,13 @@ func init() {
 			}
 			return atLeastGo1(branch, 12) && atLeastGo1(goBranch, 12) && buildRepoByDefault(repo)
 		},
+	})
+	addBuilder(BuildConfig{
+		Name:         "linux-amd64-wsl",
+		HostType:     "host-linux-amd64-wsl",
+		Notes:        "Windows 10 WSL2 Ubuntu",
+		FlakyNet:     true,
+		SkipSnapshot: true, // The builder has a slow uplink bandwidth.
 	})
 }
 
