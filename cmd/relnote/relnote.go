@@ -14,13 +14,16 @@ import (
 	"html"
 	"io/ioutil"
 	"log"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 
+	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
+	"golang.org/x/build/repos"
 )
 
 var (
@@ -55,6 +58,15 @@ func main() {
 	// Previous release was 6 months earlier.
 	cutoff = cutoff.AddDate(0, -6, 0)
 
+	// The maintner corpus doesn't track inline comments. See golang.org/issue/24863.
+	// So we need to use a Gerrit API client to fetch them instead. If maintner starts
+	// tracking inline comments in the future, this extra complexity can be dropped.
+	gerritClient := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
+	matchedCLs, err := findCLsWithRelNote(gerritClient, cutoff)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	var existingHTML []byte
 	if *exclFile != "" {
 		var err error
@@ -68,9 +80,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	ger := corpus.Gerrit()
 	changes := map[string][]change{} // keyed by pkg
-	ger.ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+	corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
 		if gp.Server() != "go.googlesource.com" {
 			return nil
 		}
@@ -78,11 +89,25 @@ func main() {
 			if cl.Status != "merged" {
 				return nil
 			}
+			if cl.Branch() != "master" {
+				// Ignore CLs sent to development or release branches.
+				return nil
+			}
 			if cl.Commit.CommitTime.Before(cutoff) {
 				// Was in a previous release; not for this one.
 				return nil
 			}
-			relnote := clRelNote(cl)
+			_, ok := matchedCLs[int(cl.Number)]
+			if !ok {
+				// Wasn't matched by the Gerrit API search query.
+				// Return before making further Gerrit API calls.
+				return nil
+			}
+			comments, err := gerritClient.ListChangeComments(context.Background(), fmt.Sprint(cl.Number))
+			if err != nil {
+				return err
+			}
+			relnote := clRelNote(cl, comments)
 			if relnote == "" ||
 				bytes.Contains(existingHTML, []byte(fmt.Sprintf("CL %d", cl.Number))) {
 				return nil
@@ -119,7 +144,7 @@ func main() {
 			if strings.HasPrefix(pkg, "cmd/") {
 				continue
 			}
-			fmt.Printf("<dl id=%q><dt><a href=%q>%s</a></dt>\n  <dd>",
+			fmt.Printf("\n<dl id=%q><dt><a href=%q>%s</a></dt>\n  <dd>",
 				pkg, "/pkg/"+pkg+"/", pkg)
 			for _, change := range changes[pkg] {
 				changeURL := fmt.Sprintf("https://golang.org/cl/%d", change.CL.Number)
@@ -128,9 +153,8 @@ func main() {
 				fmt.Printf("\n    <p><!-- CL %d -->\n      TODO: <a href=%q>%s</a>: %s\n    </p>\n",
 					change.CL.Number, changeURL, changeURL, html.EscapeString(subj))
 			}
-			fmt.Printf("  </dd>\n</dl><!-- %s -->\n\n", pkg)
+			fmt.Printf("  </dd>\n</dl><!-- %s -->\n", pkg)
 		}
-
 	} else {
 		for _, pkg := range pkgs {
 			fmt.Printf("%s\n", pkg)
@@ -141,34 +165,71 @@ func main() {
 	}
 }
 
-// clPackage returns the package name from the CL's commit message,
+// findCLsWithRelNote finds CLs that contain a RELNOTE marker by
+// using a Gerrit API client. Returned map is keyed by CL number.
+func findCLsWithRelNote(client *gerrit.Client, since time.Time) (map[int]*gerrit.ChangeInfo, error) {
+	// Gerrit search operators are documented at
+	// https://gerrit-review.googlesource.com/Documentation/user-search.html#search-operators.
+	query := fmt.Sprintf(`status:merged branch:master since:%s (comment:"RELNOTE" OR comment:"RELNOTES")`,
+		since.Format("2006-01-02"))
+	cs, err := client.QueryChanges(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[int]*gerrit.ChangeInfo) // CL Number → CL.
+	for _, c := range cs {
+		m[c.ChangeNumber] = c
+	}
+	return m, nil
+}
+
+// clPackage returns the package import path from the CL's commit message,
 // or "??" if it's formatted unconventionally.
 func clPackage(cl *maintner.GerritCL) string {
-	subj := cl.Subject()
-	if i := strings.Index(subj, ":"); i != -1 {
-		return subj[:i]
+	var pkg string
+	if i := strings.Index(cl.Subject(), ":"); i == -1 {
+		return "??"
+	} else {
+		pkg = cl.Subject()[:i]
 	}
-	return "??"
+	if r := repos.ByGerritProject[cl.Project.Project()]; r == nil {
+		return "??"
+	} else {
+		pkg = path.Join(r.ImportPath, pkg)
+	}
+	return pkg
 }
 
-var relNoteRx = regexp.MustCompile(`RELNOTES?=(.+)`)
-
-func parseRelNote(s string) string {
-	if m := relNoteRx.FindStringSubmatch(s); m != nil {
-		return m[1]
-	}
-	return ""
-}
-
-func clRelNote(cl *maintner.GerritCL) string {
+// clRelNote extracts a RELNOTE note from a Gerrit CL commit
+// message and any inline comments. If there isn't a RELNOTE
+// note, it returns the empty string.
+func clRelNote(cl *maintner.GerritCL, comments map[string][]gerrit.CommentInfo) string {
 	msg := cl.Commit.Msg
 	if strings.Contains(msg, "RELNOTE") {
 		return parseRelNote(msg)
 	}
-	for _, comment := range cl.Messages {
-		if strings.Contains(comment.Message, "RELNOTE") {
-			return parseRelNote(comment.Message)
+	// Since July 2020, Gerrit UI has replaced top-level comments
+	// with patchset-level inline comments, so don't bother looking
+	// for RELNOTE= in cl.Messages—there won't be any. Instead, do
+	// look through all inline comments that we got via Gerrit API.
+	for _, cs := range comments {
+		for _, c := range cs {
+			if strings.Contains(c.Message, "RELNOTE") {
+				return parseRelNote(c.Message)
+			}
 		}
 	}
 	return ""
 }
+
+// parseRelNote parses a RELNOTE annotation from the string s.
+// It returns the empty string if no such annotation exists.
+func parseRelNote(s string) string {
+	m := relNoteRx.FindStringSubmatch(s)
+	if m == nil {
+		return ""
+	}
+	return m[1]
+}
+
+var relNoteRx = regexp.MustCompile(`RELNOTES?=(.+)`)
