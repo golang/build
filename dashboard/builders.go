@@ -2204,9 +2204,8 @@ func init() {
 			"GO_TEST_TIMEOUT_SCALE=2"},
 	})
 	addBuilder(BuildConfig{
-		Name:       "windows-arm-zx2c4",
-		HostType:   "host-windows-arm64-zx2c4",
-		KnownIssue: 38607, // TODO: remove this after this builder has proved it works
+		Name:     "windows-arm-zx2c4",
+		HostType: "host-windows-arm64-zx2c4",
 		env: []string{
 			"GOARM=7",
 			"GO_TEST_TIMEOUT_SCALE=2"},
