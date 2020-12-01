@@ -513,7 +513,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-linux-s390x": &HostConfig{
 		Notes:       "run by IBM",
-		OwnerGithub: "mundaym",
+		OwnerGithub: "ruixin-bao",
 		IsReverse:   true,
 		env:         []string{"GOROOT_BOOTSTRAP=/var/buildlet/go-linux-s390x-bootstrap"},
 	},
