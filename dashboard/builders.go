@@ -2208,7 +2208,7 @@ func init() {
 		HostType: "host-windows-arm64-zx2c4",
 		env: []string{
 			"GOARM=7",
-			"GO_TEST_TIMEOUT_SCALE=2"},
+			"GO_TEST_TIMEOUT_SCALE=3"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "darwin-amd64-10_11",
