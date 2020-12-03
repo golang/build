@@ -2,13 +2,12 @@
 # proto-message: Workflow
 
 name: "local_go_release"
+git_source: {
+  url: "https://go.googlesource.com/go"
+}
 buildable_tasks: [
   {
     name: "fetch_go_source"
     task_type: "FetchGitSource"
-    git_source: {
-      ref: "master"
-      url: "https://go.googlesource.com/go"
-    }
   }
 ]

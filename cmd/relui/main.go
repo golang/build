@@ -14,29 +14,31 @@ import (
 	"os"
 	"path/filepath"
 
+	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/pubsub"
 	"github.com/golang/protobuf/proto"
+	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 	reluipb "golang.org/x/build/cmd/relui/protos"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 var (
-	devDataDir = flag.String("dev-data-directory", defaultDevDataDir(), "Development-only directory to use for storage of application state.")
-	projectID  = flag.String("project-id", os.Getenv("PUBSUB_PROJECT_ID"), "Pubsub project ID for communicating with workers. Uses PUBSUB_PROJECT_ID if unset.")
-	topicID    = flag.String("topic-id", "relui-development", "Pubsub topic ID for communicating with workers.")
+	projectID = flag.String("project-id", os.Getenv("PUBSUB_PROJECT_ID"), "Pubsub project ID for communicating with workers. Uses PUBSUB_PROJECT_ID if unset.")
+	topicID   = flag.String("topic-id", "relui-development", "Pubsub topic ID for communicating with workers.")
 )
 
 func main() {
 	flag.Parse()
-	fs := newFileStore(*devDataDir)
-	if err := fs.load(); err != nil {
-		log.Fatalf("Error loading state from %q: %v", *devDataDir, err)
-	}
 	ctx := context.Background()
+	dsc, err := datastore.NewClient(ctx, *projectID)
+	if err != nil {
+		log.Fatalf("datastore.NewClient(_, %q) = _, %v, wanted no error", *projectID, err)
+	}
+	d := &dsStore{client: dsiface.AdaptClient(dsc)}
 	s := &server{
 		configs: loadWorkflowConfig("./workflows"),
-		store:   fs,
+		store:   d,
 		topic:   getTopic(ctx),
 	}
 	http.Handle("/workflows/create", http.HandlerFunc(s.createWorkflowHandler))
@@ -90,13 +92,4 @@ func loadWorkflowConfig(dir string) []*reluipb.Workflow {
 		ws = append(ws, w)
 	}
 	return ws
-}
-
-// defaultDevDataDir returns a directory suitable for storage of data when developing relui on most platforms.
-func defaultDevDataDir() string {
-	c, err := os.UserConfigDir()
-	if err != nil {
-		c = os.TempDir()
-	}
-	return filepath.Join(c, "go-build", "relui")
 }

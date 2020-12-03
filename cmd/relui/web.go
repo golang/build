@@ -106,14 +106,11 @@ func (s *server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// Always create the first workflow for now, until we have more.
 	wf := proto.Clone(s.configs[0]).(*reluipb.Workflow)
-	if wf.GetParams() == nil {
-		wf.Params = map[string]string{}
-	}
 	wf.Id = uuid.New().String()
 	for _, t := range wf.GetBuildableTasks() {
 		t.Id = uuid.New().String()
 	}
-	wf.Params["GitObject"] = ref
+	wf.GitSource = &reluipb.GitSource{Ref: ref}
 	if err := s.store.AddWorkflow(wf); err != nil {
 		log.Printf("Error adding workflow: s.store.AddWorkflow(%v) = %v", wf, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

@@ -15,7 +15,7 @@ import (
 
 	"cloud.google.com/go/pubsub"
 	"cloud.google.com/go/pubsub/pstest"
-	"github.com/google/go-cmp/cmp"
+	"golang.org/x/build/cmd/relui/internal/datastore/fake"
 	reluipb "golang.org/x/build/cmd/relui/protos"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -88,7 +88,7 @@ func TestServerHomeHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 
-	s := &server{store: newFileStore("")}
+	s := &server{store: &dsStore{client: &fake.Client{}}}
 	s.homeHandler(w, req)
 	resp := w.Result()
 
@@ -101,7 +101,7 @@ func TestServerNewWorkflowHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/workflows/new", nil)
 	w := httptest.NewRecorder()
 
-	s := &server{store: newFileStore("")}
+	s := &server{store: &dsStore{client: &fake.Client{}}}
 	s.newWorkflowHandler(w, req)
 	resp := w.Result()
 
@@ -122,7 +122,6 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 		params      url.Values
 		wantCode    int
 		wantHeaders map[string]string
-		wantParams  map[string]string
 	}{
 		{
 			desc:     "bad request",
@@ -135,7 +134,6 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			wantHeaders: map[string]string{
 				"Location": "/",
 			},
-			wantParams: map[string]string{"GitObject": "abc"},
 		},
 	}
 	for _, c := range cases {
@@ -144,7 +142,7 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			w := httptest.NewRecorder()
 
-			s := &server{store: newFileStore(""), configs: config}
+			s := &server{store: &dsStore{client: &fake.Client{}}, configs: config}
 			s.createWorkflowHandler(w, req)
 			resp := w.Result()
 
@@ -156,22 +154,18 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 					t.Errorf("resp.Header.Get(%q) = %q, wanted %q", k, resp.Header.Get(k), v)
 				}
 			}
-			if len(s.store.Workflows()) != 1 && c.wantParams != nil {
-				t.Fatalf("len(s.store.Workflows()) = %d, wanted %d", len(s.store.Workflows()), 1)
-			} else if len(s.store.Workflows()) != 0 && c.wantParams == nil {
-				t.Fatalf("len(s.store.Workflows()) = %d, wanted %d", len(s.store.Workflows()), 0)
-			}
-			if c.wantParams == nil {
+			if c.wantCode == http.StatusBadRequest {
 				return
 			}
-			if diff := cmp.Diff(c.wantParams, s.store.Workflows()[0].GetParams()); diff != "" {
-				t.Errorf("s.Store.Workflows()[0].Params() mismatch (-want, +got):\n%s", diff)
+			wfs := s.store.Workflows()
+			if len(wfs) != 1 {
+				t.Fatalf("len(wfs) = %d, wanted %d", len(wfs), 1)
 			}
-			if s.store.Workflows()[0].GetId() == "" {
-				t.Errorf("s.Store.Workflows[0].GetId() = %q, wanted not empty", s.store.Workflows()[0].GetId())
+			if wfs[0].GetId() == "" {
+				t.Errorf("s.Store.Workflows[0].GetId() = %q, wanted not empty", wfs[0].GetId())
 			}
-			if s.store.Workflows()[0].GetBuildableTasks()[0].GetId() == "" {
-				t.Errorf("s.Store.Workflows[0].GetBuildableTasks()[0].GetId() = %q, wanted not empty", s.store.Workflows()[0].GetId())
+			if wfs[0].GetBuildableTasks()[0].GetId() == "" {
+				t.Errorf("s.Store.Workflows[0].GetBuildableTasks()[0].GetId() = %q, wanted not empty", wfs[0].GetId())
 			}
 		})
 	}
@@ -211,7 +205,7 @@ func TestServerStartTaskHandler(t *testing.T) {
 		t.Fatalf("client.CreateTopic(_, %q) = _, %v", "relui-test-topic", err)
 	}
 
-	s := server{store: newFileStore(""), topic: topic}
+	s := server{store: &dsStore{client: &fake.Client{}}, topic: topic}
 	wf := &reluipb.Workflow{
 		Id:   "someworkflow",
 		Name: "test_workflow",
@@ -220,7 +214,6 @@ func TestServerStartTaskHandler(t *testing.T) {
 			TaskType: "TestTask",
 			Id:       "sometask",
 		}},
-		Params: map[string]string{"GitObject": "master"},
 	}
 	if s.store.AddWorkflow(wf) != nil {
 		t.Fatalf("store.AddWorkflow(%v) = %v, wanted no error", wf, err)
@@ -262,7 +255,6 @@ func TestStartTaskHandlerErrors(t *testing.T) {
 			TaskType: "TestTask",
 			Id:       "sometask",
 		}},
-		Params: map[string]string{"GitObject": "master"},
 	}
 
 	cases := []struct {
@@ -294,7 +286,7 @@ func TestStartTaskHandlerErrors(t *testing.T) {
 			// Simulate pubsub failure by stopping publishing.
 			topic.Stop()
 
-			s := server{store: newFileStore(""), topic: topic}
+			s := server{store: &dsStore{client: &fake.Client{}}, topic: topic}
 			if s.store.AddWorkflow(wf) != nil {
 				t.Fatalf("store.AddWorkflow(%v) = %v, wanted no error", wf, err)
 			}

@@ -5,17 +5,15 @@
 package main
 
 import (
-	"fmt"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"sync"
+	"context"
+	"log"
 
-	"github.com/golang/protobuf/proto"
+	"cloud.google.com/go/datastore"
+	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 	reluipb "golang.org/x/build/cmd/relui/protos"
 )
 
-// store is a persistence adapter for saving data.
+// store is a persistence interface for saving data.
 type store interface {
 	AddWorkflow(workflow *reluipb.Workflow) error
 	BuildableTask(workflowId, id string) *reluipb.BuildableTask
@@ -23,106 +21,48 @@ type store interface {
 	Workflows() []*reluipb.Workflow
 }
 
-var _ store = (*fileStore)(nil)
+var _ store = (*dsStore)(nil)
 
-// newFileStore initializes a fileStore ready for use.
-//
-// If dir is set to an empty string (""), no data will be saved to disk.
-func newFileStore(dir string) *fileStore {
-	return &fileStore{
-		persistDir: dir,
-		ls:         new(reluipb.LocalStorage),
-	}
+// dsStore is a store backed by Google Cloud Datastore.
+type dsStore struct {
+	client dsiface.Client
 }
 
-// fileStoreName is the name of the data file used by fileStore for persistence.
-const fileStoreName = "local_storage.textpb"
-
-// fileStore is a non-durable implementation of store that keeps everything in memory.
-type fileStore struct {
-	mu sync.Mutex
-	ls *reluipb.LocalStorage
-
-	// persistDir is a path to a directory for saving application data in textproto format.
-	// Set persistDir to an empty string to disable saving and loading from the filesystem.
-	persistDir string
+// AddWorkflow adds a reluipb.Workflow to the database.
+func (d *dsStore) AddWorkflow(wf *reluipb.Workflow) error {
+	key := datastore.NameKey("Workflow", wf.GetId(), nil)
+	_, err := d.client.Put(context.TODO(), key, wf)
+	return err
 }
 
-// AddWorkflow adds a workflow to the store, persisting changes to disk.
-func (f *fileStore) AddWorkflow(w *reluipb.Workflow) error {
-	f.mu.Lock()
-	f.ls.Workflows = append(f.ls.Workflows, w)
-	f.mu.Unlock()
-	if err := f.persist(); err != nil {
-		return err
-	}
-	return nil
-}
-
-// Workflows returns all reluipb.Workflows stored.
-func (f *fileStore) Workflows() []*reluipb.Workflow {
-	return f.localStorage().GetWorkflows()
-}
-
-// Workflow returns a single reluipb.Workflow found by its id. If it is not found, it returns nil.
-func (f *fileStore) Workflow(id string) *reluipb.Workflow {
-	for _, w := range f.Workflows() {
-		if w.GetId() == id {
-			return w
+// BuildableTask fetches a reluipb.BuildableTask from the database.
+func (d *dsStore) BuildableTask(workflowId, id string) *reluipb.BuildableTask {
+	wf := d.Workflow(workflowId)
+	for _, bt := range wf.GetBuildableTasks() {
+		if bt.GetId() == id {
+			return bt
 		}
 	}
 	return nil
 }
 
-// BuildableTask returns a single reluipb.BuildableTask found by the reluipb.Workflow id and its id.
-// If it is not found, it returns nil.
-func (f *fileStore) BuildableTask(workflowId, id string) *reluipb.BuildableTask {
-	wf := f.Workflow(workflowId)
-	for _, t := range wf.GetBuildableTasks() {
-		if t.GetId() == id {
-			return t
-		}
-	}
-	return nil
-}
-
-// localStorage returns a deep copy of data stored in fileStore.
-func (f *fileStore) localStorage() *reluipb.LocalStorage {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return proto.Clone(f.ls).(*reluipb.LocalStorage)
-}
-
-// persist saves fileStore state to persistDir/fileStoreName.
-func (f *fileStore) persist() error {
-	if f.persistDir == "" {
+// Workflow fetches a reluipb.Workflow from the database.
+func (d *dsStore) Workflow(id string) *reluipb.Workflow {
+	key := datastore.NameKey("Workflow", id, nil)
+	wf := new(reluipb.Workflow)
+	if err := d.client.Get(context.TODO(), key, wf); err != nil {
+		log.Printf("d.client.Get(_, %q, %v) = %v", key, wf, err)
 		return nil
 	}
-	if err := os.MkdirAll(f.persistDir, 0755); err != nil {
-		return fmt.Errorf("os.MkDirAll(%q, %v) = %w", f.persistDir, 0755, err)
-	}
-	dst := filepath.Join(f.persistDir, fileStoreName)
-	data := []byte(proto.MarshalTextString(f.localStorage()))
-	if err := ioutil.WriteFile(dst, data, 0644); err != nil {
-		return fmt.Errorf("ioutil.WriteFile(%q, _, %v) = %w", dst, 0644, err)
-	}
-	return nil
+	return wf
 }
 
-// load reads fileStore state from persistDir/fileStoreName.
-func (f *fileStore) load() error {
-	if f.persistDir == "" {
+// Workflows returns all reluipb.Workflow entities from the database.
+func (d *dsStore) Workflows() []*reluipb.Workflow {
+	var wfs []*reluipb.Workflow
+	if _, err := d.client.GetAll(context.TODO(), datastore.NewQuery("Workflow"), &wfs); err != nil {
+		log.Printf("d.client.GetAll(_, %#v, %v) = %v", datastore.NewQuery("Workflow"), &wfs, err)
 		return nil
 	}
-	path := filepath.Join(f.persistDir, fileStoreName)
-	b, err := ioutil.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("ioutil.ReadFile(%q) = _, %v", path, err)
-	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return proto.UnmarshalText(string(b), f.ls)
+	return wfs
 }
