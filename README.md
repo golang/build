@@ -1,5 +1,7 @@
 # Go Build Tools
 
+[![Go Reference](https://pkg.go.dev/badge/golang.org/x/build.svg)](https://pkg.go.dev/golang.org/x/build)
+
 This subrepository holds the source for various packages and tools that support
 Go's build system and the development of the Go programming language.
 
@@ -49,7 +51,7 @@ The main components of the Go build system are:
   1. by creating VMs on Google Compute Engine (GCE) with custom images
   configured to fetch & run the buildlet on boot, listening on port 80 in a
   private network.
-  
+
   2. by running Linux containers (on either Google Kubernetes Engine
   or GCE with the Container-Optimized OS image), with the container
   images configured to fetch & run the buildlet on start, also
