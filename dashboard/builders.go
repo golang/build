@@ -2083,7 +2083,6 @@ func init() {
 		Name:         "openbsd-mips64-jsing",
 		HostType:     "host-openbsd-mips64-joelsing",
 		SkipSnapshot: true,
-		KnownIssue:   40995,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
 			case "go", "net", "sys":
