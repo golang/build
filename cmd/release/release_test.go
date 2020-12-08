@@ -42,19 +42,20 @@ func TestTestOnlyBuildsDontSkipTests(t *testing.T) {
 
 func TestMinSupportedMacOSVersion(t *testing.T) {
 	testCases := []struct {
-		desc      string
 		goVer     string
 		wantMacOS string
 	}{
-		{"minor_release_13", "go1.13", "10.11"},
-		{"minor_release_14", "go1.14", "10.11"},
-		{"rc_release_13", "go1.13rc1", "10.11"},
-		{"beta_release_13", "go1.13beta1", "10.11"},
-		{"minor_release_15", "go1.15", "10.12"},
-		{"patch_release_15", "go1.15.1", "10.12"},
+		{"go1.14", "10.11"},
+		{"go1.14.14", "10.11"},
+		{"go1.15", "10.12"},
+		{"go1.15.7", "10.12"},
+		{"go1.16beta1", "10.12"},
+		{"go1.16rc1", "10.12"},
+		{"go1.16", "10.12"},
+		{"go1.16.1", "10.12"},
 	}
 	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
+		t.Run(tc.goVer, func(t *testing.T) {
 			got := minSupportedMacOSVersion(tc.goVer)
 			if got != tc.wantMacOS {
 				t.Errorf("got %s; want %s", got, tc.wantMacOS)
@@ -63,7 +64,7 @@ func TestMinSupportedMacOSVersion(t *testing.T) {
 	}
 }
 
-func TestFreeBSDBuilder(t *testing.T) {
+func TestBuilderSelectionPerGoVersion(t *testing.T) {
 	matchBuilds := func(target, goVer string) (matched []*Build) {
 		for _, b := range builds {
 			if b.String() != target || !match(b.GoQuery, goVer) {
@@ -79,12 +80,23 @@ func TestFreeBSDBuilder(t *testing.T) {
 		target      string
 		wantBuilder string
 	}{
-		// Go 1.14.x and 1.13.x still use the FreeBSD 11.1 builder.
-		{"go1.13.55", "freebsd-amd64", "freebsd-amd64-11_1"},
-		{"go1.13.55", "freebsd-386", "freebsd-386-11_1"},
+		// Go 1.15.x and 1.14.x still use the Jessie builders.
+		{"go1.14.55", "linux-amd64", "linux-amd64-jessie"},
+		{"go1.15.55", "linux-386", "linux-386-jessie"},
+		// Go 1.16 starts to use the the Stretch builders.
+		{"go1.16", "linux-amd64", "linux-amd64-stretch"},
+		{"go1.16", "linux-386", "linux-386-stretch"},
+
+		// Go 1.15.x and 1.14.x still use the Packet and Scaleway builders.
+		{"go1.14.55", "linux-arm64", "linux-arm64-packet"},
+		{"go1.15.55", "linux-armv6l", "linux-arm"},
+		// Go 1.16 starts to use the the AWS builders.
+		{"go1.16", "linux-arm64", "linux-arm64-aws"},
+		{"go1.16", "linux-armv6l", "linux-arm-aws"},
+
+		// Go 1.14.x still use the FreeBSD 11.1 builder.
 		{"go1.14.55", "freebsd-amd64", "freebsd-amd64-11_1"},
 		{"go1.14.55", "freebsd-386", "freebsd-386-11_1"},
-
 		// Go 1.15 RC 2+ starts to use the the FreeBSD 11.2 builder.
 		{"go1.15rc2", "freebsd-amd64", "freebsd-amd64-11_2"},
 		{"go1.15rc2", "freebsd-386", "freebsd-386-11_2"},
@@ -92,14 +104,12 @@ func TestFreeBSDBuilder(t *testing.T) {
 		{"go1.15", "freebsd-386", "freebsd-386-11_2"},
 		{"go1.15.1", "freebsd-amd64", "freebsd-amd64-11_2"},
 		{"go1.15.1", "freebsd-386", "freebsd-386-11_2"},
-
-		// May change further during the 1.16 dev cycle,
-		// but expect same builder as 1.15 for now.
+		// Go 1.16 continues to use the the FreeBSD 11.2 builder.
 		{"go1.16", "freebsd-amd64", "freebsd-amd64-11_2"},
 		{"go1.16", "freebsd-386", "freebsd-386-11_2"},
 	}
 	for _, tc := range testCases {
-		t.Run(tc.goVer, func(t *testing.T) {
+		t.Run(tc.target+"@"+tc.goVer, func(t *testing.T) {
 			builds := matchBuilds(tc.target, tc.goVer)
 			if len(builds) != 1 {
 				t.Fatalf("got %d matching builds; want 1", len(builds))

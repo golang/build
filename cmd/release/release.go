@@ -151,29 +151,30 @@ var builds = []*Build{
 		Builder: "linux-amd64",
 	},
 	{
+		GoQuery: ">= go1.16beta1",
 		OS:      "linux",
 		Arch:    "386",
-		Builder: "linux-386",
+		Builder: "linux-386-stretch",
 	},
 	{
+		GoQuery: ">= go1.16beta1",
 		OS:      "linux",
 		Arch:    "arm",
-		Builder: "linux-arm",
-		Goarm:   6, // for compatibility with all Raspberry Pi models.
-		// The tests take too long for the release packaging.
-		// Much of the time the whole buildlet times out.
-		SkipTests: true,
+		Builder: "linux-arm-aws",
+		Goarm:   6, // For compatibility with all Raspberry Pi models.
 	},
 	{
+		GoQuery: ">= go1.16beta1",
 		OS:      "linux",
 		Arch:    "amd64",
 		Race:    true,
-		Builder: "linux-amd64-jessie", // using Jessie for at least [Go 1.11, Go 1.13] due to golang.org/issue/31293
+		Builder: "linux-amd64-stretch", // Using Stretch as of Go 1.16 because Jessie LTS has ended (golang.org/issue/40561#issuecomment-731482962).
 	},
 	{
+		GoQuery: ">= go1.16beta1",
 		OS:      "linux",
 		Arch:    "arm64",
-		Builder: "linux-arm64-packet",
+		Builder: "linux-arm64-aws",
 	},
 	{
 		GoQuery: ">= go1.15rc2", // See #40563.
@@ -223,6 +224,35 @@ var builds = []*Build{
 	},
 
 	// Older builds.
+	{
+		GoQuery: "< go1.16beta1",
+		OS:      "linux",
+		Arch:    "386",
+		Builder: "linux-386-jessie",
+	},
+	{
+		GoQuery: "< go1.16beta1",
+		OS:      "linux",
+		Arch:    "arm",
+		Builder: "linux-arm",
+		Goarm:   6, // For compatibility with all Raspberry Pi models.
+		// The tests take too long for the release packaging.
+		// Much of the time the whole buildlet times out.
+		SkipTests: true,
+	},
+	{
+		GoQuery: "< go1.16beta1",
+		OS:      "linux",
+		Arch:    "amd64",
+		Race:    true,
+		Builder: "linux-amd64-jessie", // Using Jessie for Go 1.11 through Go 1.15 inclusive due to golang.org/issue/31293.
+	},
+	{
+		GoQuery: "< go1.16beta1",
+		OS:      "linux",
+		Arch:    "arm64",
+		Builder: "linux-arm64-packet",
+	},
 	{
 		GoQuery: "< go1.15",
 		OS:      "freebsd",
@@ -960,9 +990,9 @@ func minSupportedMacOSVersion(goVer string) string {
 	// TODO(amedee,dmitshur,golang.org/issue/40558): Use a version package to compare versions of Go.
 
 	// The minimum supported version of macOS with each version of go:
-	// go1.13 - macOS 10.11
 	// go1.14 - macOS 10.11
 	// go1.15 - macOS 10.12
+	// go1.16 - macOS 10.12
 	minMacVersion := "10.12"
 	if match("< go1.15", goVer) {
 		minMacVersion = "10.11"
@@ -979,14 +1009,18 @@ func match(query, goVer string) bool {
 	switch query {
 	case "": // A special case to make the zero Build.GoQuery value useful.
 		return true
+	case ">= go1.16beta1":
+		return !strings.HasPrefix(goVer, "go1.15") && !strings.HasPrefix(goVer, "go1.14")
+	case "< go1.16beta1":
+		return strings.HasPrefix(goVer, "go1.15") || strings.HasPrefix(goVer, "go1.14")
 	case ">= go1.15rc2":
 		// By the time this code is added, Go 1.15 RC 1 has already been released and
 		// won't be modified, that's why we only care about matching RC 2 and onwards.
 		// (We could've just done ">= go1.15", but that could be misleading in future.)
 		return goVer != "go1.15rc1" && !strings.HasPrefix(goVer, "go1.15beta") &&
-			!strings.HasPrefix(goVer, "go1.14") && !strings.HasPrefix(goVer, "go1.13")
+			!strings.HasPrefix(goVer, "go1.14")
 	case "< go1.15":
-		return strings.HasPrefix(goVer, "go1.14") || strings.HasPrefix(goVer, "go1.13")
+		return strings.HasPrefix(goVer, "go1.14")
 	default:
 		panic(fmt.Errorf("match: query %q is not supported", query))
 	}
