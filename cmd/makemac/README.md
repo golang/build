@@ -1,4 +1,4 @@
-[![GoDoc](https://godoc.org/golang.org/x/build/cmd/makemac?status.svg)](https://godoc.org/golang.org/x/build/cmd/makemac)
+[![Go Reference](https://pkg.go.dev/badge/golang.org/x/build/cmd/makemac.svg)](https://pkg.go.dev/golang.org/x/build/cmd/makemac)
 
 # golang.org/x/build/cmd/makemac
 

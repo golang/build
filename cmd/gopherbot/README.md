@@ -1,4 +1,4 @@
-[![GoDoc](https://godoc.org/golang.org/x/build/cmd/gopherbot?status.svg)](https://godoc.org/golang.org/x/build/cmd/gopherbot)
+[![Go Reference](https://pkg.go.dev/badge/golang.org/x/build/cmd/gopherbot.svg)](https://pkg.go.dev/golang.org/x/build/cmd/gopherbot)
 
 # golang.org/x/build/cmd/gopherbot
 

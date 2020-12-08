@@ -1,4 +1,4 @@
-[![GoDoc](https://godoc.org/golang.org/x/build/maintner/cmd/maintserve?status.svg)](https://godoc.org/golang.org/x/build/maintner/cmd/maintserve)
+[![Go Reference](https://pkg.go.dev/badge/golang.org/x/build/maintner/cmd/maintserve.svg)](https://pkg.go.dev/golang.org/x/build/maintner/cmd/maintserve)
 
 # golang.org/x/build/maintner/cmd/maintserve
 
