@@ -264,19 +264,19 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-amd64-68": &HostConfig{
-		VMImage:            "openbsd-amd64-68",
+		VMImage:            "openbsd-amd64-68-v2", // v2 adds 009_exit syspatch; see golang.org/issue/35712#issuecomment-742764125.
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
-		Notes:              "OpenBSD 6.8; GCE VM is built from script in build/env/openbsd-amd64",
+		Notes:              "OpenBSD 6.8 (with 009_exit syspatch); GCE VM is built from script in build/env/openbsd-amd64",
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-386-68": &HostConfig{
-		VMImage:            "openbsd-386-68",
+		VMImage:            "openbsd-386-68-v2", // v2 adds 009_exit syspatch; see golang.org/issue/35712#issuecomment-742764125.
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
-		Notes:              "OpenBSD 6.8; GCE VM is built from script in build/env/openbsd-386",
+		Notes:              "OpenBSD 6.8 (with 009_exit syspatch); GCE VM is built from script in build/env/openbsd-386",
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-arm-joelsing": &HostConfig{
