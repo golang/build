@@ -25,9 +25,8 @@ import (
 // syntax entirely. This is a first draft.
 var slowBotAliases = map[string]string{
 	// Known missing builders:
-	"darwin-arm":   "", // TODO(golang.org/issue/37611): Remove once port is removed.
-	"darwin-arm64": "", // TODO(golang.org/issue/39782): Add builder for darwin/arm64.
-	"ios-amd64":    "", // There is no builder for the iOS Simulator. See issues 42100 and 42177.
+	"darwin-arm": "", // TODO(golang.org/issue/37611): Remove once port is removed.
+	"ios-amd64":  "", // There is no builder for the iOS Simulator. See issues 42100 and 42177.
 
 	"386":            "linux-386",
 	"aix":            "aix-ppc64",
@@ -42,6 +41,7 @@ var slowBotAliases = map[string]string{
 	"darwin":         "darwin-amd64-10_14",
 	"darwin-386":     "darwin-386-10_14", // TODO(golang.org/issue/37610): Remove when Go 1.14 is no longer supported.
 	"darwin-amd64":   "darwin-amd64-10_14",
+	"darwin-arm64":   "darwin-arm64-11_0-toothrot",
 	"ios-arm64":      "ios-arm64-corellium",
 	"dragonfly":      "dragonfly-amd64",
 	"freebsd":        "freebsd-amd64-12_0",
@@ -510,6 +510,15 @@ var Hosts = map[string]*HostConfig{
 		},
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
+	},
+	"host-darwin-arm64-11_0-toothrot": &HostConfig{
+		IsReverse: true,
+		ExpectNum: 2,
+		Notes:     "macOS Big Sur (11.0) ARM64 (M1). Mac mini",
+		env: []string{
+			"GOROOT_BOOTSTRAP=/Users/gopher/goboot",
+		},
+		SSHUsername: "gopher",
 	},
 	"host-linux-s390x": &HostConfig{
 		Notes:       "run by IBM",
@@ -2285,6 +2294,16 @@ func init() {
 		HostType:       "host-darwin-10_15",
 		distTestAdjust: noTestDirAndNoReboot,
 		env:            []string{"CGO_ENABLED=0"},
+	})
+	addBuilder(BuildConfig{
+		Name:           "darwin-arm64-11_0-toothrot",
+		HostType:       "host-darwin-arm64-11_0-toothrot",
+		distTestAdjust: macTestPolicy,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// Darwin ARM64 added in Go 1.16.
+			return atLeastGo1(goBranch, 16) && defaultPlusExpBuild(repo, branch, goBranch)
+		},
+		KnownIssue: 39782,
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-race",
