@@ -2,23 +2,29 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// fake provides a fake implementation of a Datastore client to use in testing.
+// fake provides a fake implementation of a Datastore client to use in
+// testing.
 package fake
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"log"
 	"reflect"
+	"sync"
 
 	"cloud.google.com/go/datastore"
 	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 )
 
-// Client is a fake implementation of dsiface.Client to use in testing.
+// Client is a fake implementation of dsiface.Client to use in
+// testing.
 type Client struct {
 	dsiface.Client
 
-	db map[string]map[string]interface{}
+	m  sync.Mutex
+	db map[string]map[string][]byte
 }
 
 var _ dsiface.Client = &Client{}
@@ -48,12 +54,16 @@ func (f *Client) DeleteMulti(context.Context, []*datastore.Key) (err error) {
 	panic("unimplemented")
 }
 
-// Get loads the entity stored for key into dst, which must be a struct pointer.
+// Get loads the entity stored for key into dst, which must be a
+// struct pointer.
 func (f *Client) Get(_ context.Context, key *datastore.Key, dst interface{}) (err error) {
+	f.m.Lock()
+	defer f.m.Unlock()
 	if f == nil {
 		return datastore.ErrNoSuchEntity
 	}
-	if dst == nil { // get catches nil interfaces; we need to catch nil ptr here
+	// get catches nil interfaces; we need to catch nil ptr here
+	if dst == nil {
 		return datastore.ErrInvalidEntityType
 	}
 	kdb := f.db[key.Kind]
@@ -64,20 +74,22 @@ func (f *Client) Get(_ context.Context, key *datastore.Key, dst interface{}) (er
 	if rv.Kind() != reflect.Ptr {
 		return datastore.ErrInvalidEntityType
 	}
-	rd := rv.Elem()
 	v := kdb[key.Encode()]
 	if v == nil {
 		return datastore.ErrNoSuchEntity
 	}
-	rd.Set(reflect.ValueOf(v).Elem())
-	return nil
+	d := gob.NewDecoder(bytes.NewReader(v))
+	return d.Decode(dst)
 }
 
-// GetAll runs the provided query in the given context and returns all keys that match that query,
-// as well as appending the values to dst.
+// GetAll runs the provided query in the given context and returns all
+// keys that match that query, as well as appending the values to dst.
 //
-// GetAll currently only supports a query of all entities of a given Kind, and a dst of a slice of pointers to structs.
+// GetAll currently only supports a query of all entities of a given
+// Kind, and a dst of a slice of pointers to structs.
 func (f *Client) GetAll(_ context.Context, q *datastore.Query, dst interface{}) (keys []*datastore.Key, err error) {
+	f.m.Lock()
+	defer f.m.Unlock()
 	fv := reflect.ValueOf(q).Elem().FieldByName("kind")
 	kdb := f.db[fv.String()]
 	if kdb == nil {
@@ -92,9 +104,12 @@ func (f *Client) GetAll(_ context.Context, q *datastore.Query, dst interface{}) 
 		}
 		keys = append(keys, dk)
 		// This value is expected to represent a slice of pointers to structs.
-		// ev := reflect.New(s.Type().Elem().Elem())
-		// json.Unmarshal(v, ev.Interface())
-		s.Set(reflect.Append(s, reflect.ValueOf(v)))
+		ev := reflect.New(s.Type().Elem().Elem())
+		d := gob.NewDecoder(bytes.NewReader(v))
+		if err := d.DecodeValue(ev); err != nil {
+			return nil, err
+		}
+		s.Set(reflect.Append(s, ev))
 	}
 	return
 }
@@ -114,17 +129,25 @@ func (f *Client) NewTransaction(context.Context, ...datastore.TransactionOption)
 	panic("unimplemented")
 }
 
-// Put saves the entity src into the datastore with the given key. src must be a struct pointer.
+// Put saves the entity src into the datastore with the given key. src
+// must be a struct pointer.
 func (f *Client) Put(_ context.Context, key *datastore.Key, src interface{}) (*datastore.Key, error) {
+	f.m.Lock()
+	defer f.m.Unlock()
 	if f.db == nil {
-		f.db = make(map[string]map[string]interface{})
+		f.db = make(map[string]map[string][]byte)
 	}
 	kdb := f.db[key.Kind]
 	if kdb == nil {
-		f.db[key.Kind] = make(map[string]interface{})
+		f.db[key.Kind] = make(map[string][]byte)
 		kdb = f.db[key.Kind]
 	}
-	kdb[key.Encode()] = src
+	dst := bytes.Buffer{}
+	e := gob.NewEncoder(&dst)
+	if err := e.Encode(src); err != nil {
+		return nil, err
+	}
+	kdb[key.Encode()] = dst.Bytes()
 	return key, nil
 }
 

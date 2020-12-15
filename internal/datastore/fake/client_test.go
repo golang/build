@@ -5,7 +5,9 @@
 package fake
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"testing"
 	"time"
 
@@ -20,7 +22,7 @@ type author struct {
 func TestClientGet(t *testing.T) {
 	cases := []struct {
 		desc    string
-		db      map[string]map[string]interface{}
+		db      map[string]map[string][]byte
 		key     *datastore.Key
 		dst     interface{}
 		want    *author
@@ -28,8 +30,8 @@ func TestClientGet(t *testing.T) {
 	}{
 		{
 			desc: "correct key",
-			db: map[string]map[string]interface{}{
-				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): &author{Name: "Kafka"}},
+			db: map[string]map[string][]byte{
+				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): gobEncode(t, &author{Name: "Kafka"})},
 			},
 			key:  datastore.NameKey("Author", "The Trial", nil),
 			dst:  new(author),
@@ -37,8 +39,8 @@ func TestClientGet(t *testing.T) {
 		},
 		{
 			desc: "incorrect key errors",
-			db: map[string]map[string]interface{}{
-				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): &author{Name: "Kafka"}},
+			db: map[string]map[string][]byte{
+				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): gobEncode(t, &author{Name: "Kafka"})},
 			},
 			key:     datastore.NameKey("Author", "The Go Programming Language", nil),
 			dst:     new(author),
@@ -46,16 +48,16 @@ func TestClientGet(t *testing.T) {
 		},
 		{
 			desc: "nil dst errors",
-			db: map[string]map[string]interface{}{
-				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): &author{Name: "Kafka"}},
+			db: map[string]map[string][]byte{
+				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): gobEncode(t, &author{Name: "Kafka"})},
 			},
 			key:     datastore.NameKey("Author", "The Go Programming Language", nil),
 			wantErr: true,
 		},
 		{
 			desc: "incorrect dst type errors",
-			db: map[string]map[string]interface{}{
-				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): &author{Name: "Kafka"}},
+			db: map[string]map[string][]byte{
+				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): gobEncode(t, &author{Name: "Kafka"})},
 			},
 			key:     datastore.NameKey("Author", "The Go Programming Language", nil),
 			dst:     &time.Time{},
@@ -63,8 +65,8 @@ func TestClientGet(t *testing.T) {
 		},
 		{
 			desc: "non-pointer dst errors",
-			db: map[string]map[string]interface{}{
-				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): &author{Name: "Kafka"}},
+			db: map[string]map[string][]byte{
+				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): gobEncode(t, &author{Name: "Kafka"})},
 			},
 			key:     datastore.NameKey("Author", "The Go Programming Language", nil),
 			dst:     author{},
@@ -72,8 +74,8 @@ func TestClientGet(t *testing.T) {
 		},
 		{
 			desc: "nil dst errors",
-			db: map[string]map[string]interface{}{
-				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): &author{Name: "Kafka"}},
+			db: map[string]map[string][]byte{
+				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): gobEncode(t, &author{Name: "Kafka"})},
 			},
 			key:     datastore.NameKey("Author", "The Go Programming Language", nil),
 			dst:     nil,
@@ -106,7 +108,7 @@ func TestClientGet(t *testing.T) {
 func TestClientGetAll(t *testing.T) {
 	cases := []struct {
 		desc     string
-		db       map[string]map[string]interface{}
+		db       map[string]map[string][]byte
 		query    *datastore.Query
 		want     []*author
 		wantKeys []*datastore.Key
@@ -114,8 +116,8 @@ func TestClientGetAll(t *testing.T) {
 	}{
 		{
 			desc: "all of a Kind",
-			db: map[string]map[string]interface{}{
-				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): &author{Name: "Kafka"}},
+			db: map[string]map[string][]byte{
+				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): gobEncode(t, &author{Name: "Kafka"})},
 			},
 			query:    datastore.NewQuery("Author"),
 			wantKeys: []*datastore.Key{datastore.NameKey("Author", "The Trial", nil)},
@@ -123,8 +125,8 @@ func TestClientGetAll(t *testing.T) {
 		},
 		{
 			desc: "all of a non-existent kind",
-			db: map[string]map[string]interface{}{
-				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): &author{Name: "Kafka"}},
+			db: map[string]map[string][]byte{
+				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): gobEncode(t, &author{Name: "Kafka"})},
 			},
 			query:   datastore.NewQuery("Book"),
 			wantErr: false,
@@ -158,12 +160,36 @@ func TestClientPut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cl.Put(_, %v, %v) = %v, %q, wanted no error", gotKey, key, src, err)
 	}
-	got := cl.db["Author"][key.Encode()]
+	got := new(author)
+	gobDecode(t, cl.db["Author"][key.Encode()], got)
 
 	if diff := cmp.Diff(src, got); diff != "" {
 		t.Errorf("author mismatch (-want +got):\n%s", diff)
 	}
 	if diff := cmp.Diff(key, gotKey); diff != "" {
 		t.Errorf("keys mismatch (-want +got):\n%s", diff)
+	}
+}
+
+// gobEncode encodes src with gob, returning the encoded byte slice.
+// It will report errors on the provided testing.T.
+func gobEncode(t *testing.T, src interface{}) []byte {
+	t.Helper()
+	dst := bytes.Buffer{}
+	e := gob.NewEncoder(&dst)
+	if err := e.Encode(src); err != nil {
+		t.Errorf("e.Encode(%v) = %q, wanted no error", src, err)
+		return nil
+	}
+	return dst.Bytes()
+}
+
+// gobDecode decodes v into dst with gob. It will report errors on the
+// provided testing.T.
+func gobDecode(t *testing.T, v []byte, dst interface{}) {
+	t.Helper()
+	d := gob.NewDecoder(bytes.NewReader(v))
+	if err := d.Decode(dst); err != nil {
+		t.Errorf("d.Decode(%v) = %q, wanted no error", dst, err)
 	}
 }

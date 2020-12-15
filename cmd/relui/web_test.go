@@ -15,8 +15,8 @@ import (
 
 	"cloud.google.com/go/pubsub"
 	"cloud.google.com/go/pubsub/pstest"
-	"golang.org/x/build/cmd/relui/internal/datastore/fake"
 	reluipb "golang.org/x/build/cmd/relui/protos"
+	"golang.org/x/build/internal/datastore/fake"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
 )
