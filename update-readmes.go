@@ -47,6 +47,10 @@ func main() {
 			// Skip.
 			return nil
 		}
+		if pkg.Doc == "" {
+			// There's no package comment, so don't create an empty README.
+			return nil
+		}
 		if _, err := os.Stat(filepath.Join(pkg.Dir, "README")); err == nil {
 			// Directory has exiting README; don't touch.
 			return nil
@@ -63,7 +67,7 @@ func main() {
 		}
 		newContents := []byte(fmt.Sprintf(`<!-- %s -->
 
-[![GoDoc](https://godoc.org/%s?status.svg)](https://godoc.org/%s)
+[![Go Reference](https://pkg.go.dev/badge/%s.svg)](https://pkg.go.dev/%s)
 
 # %s
 
