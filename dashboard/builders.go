@@ -2302,7 +2302,6 @@ func init() {
 			// Darwin ARM64 added in Go 1.16.
 			return atLeastGo1(goBranch, 16) && defaultPlusExpBuild(repo, branch, goBranch)
 		},
-		KnownIssue: 39782,
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-race",
