@@ -54,9 +54,7 @@ fi
 mkdir -p etc
 cat >install.site <<EOF
 #!/bin/sh
-syspatch
-pkg_add -iv ${PKG_ADD_OPTIONS} bash curl git
-
+touch /firstboot
 echo 'set tty com0' > boot.conf
 EOF
 
@@ -64,6 +62,12 @@ cat >etc/installurl <<EOF
 https://${MIRROR}/pub/OpenBSD
 EOF
 cat >etc/rc.local <<EOF
+if [[ -f /firstboot ]]; then
+  syspatch
+  pkg_add -iv ${PKG_ADD_OPTIONS} bash curl git
+  rm -f /firstboot
+fi
+
 (
   set -x
 
