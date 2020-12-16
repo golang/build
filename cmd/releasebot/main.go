@@ -32,6 +32,10 @@ import (
 
 // A Target is a release target.
 type Target struct {
+	// GoQuery is a Go version query specifying the Go versions the
+	// release target applies to. Empty string means all Go versions.
+	GoQuery string
+
 	Name     string // Target name as accepted by cmd/release. For example, "linux-amd64".
 	TestOnly bool   // Run tests only; don't produce a release artifact.
 }
@@ -50,6 +54,7 @@ var releaseTargets = []Target{
 	{Name: "windows-386"},
 	{Name: "windows-amd64"},
 	{Name: "darwin-amd64"},
+	{Name: "darwin-arm64", GoQuery: ">= go1.16beta1"},
 	{Name: "linux-s390x"},
 	{Name: "linux-ppc64le"},
 
@@ -88,8 +93,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, "need to provide a valid mode and a release name")
 		usage()
 	}
+	releaseVersion := flag.Arg(0)
 	for _, target := range strings.Fields(*skipTestFlag) {
-		if t, ok := releaseTarget(target); !ok {
+		if t, ok := releaseTarget(target, releaseVersion); !ok {
 			fmt.Fprintf(os.Stderr, "target %q in -skip-test=%q is not a known target\n", target, *skipTestFlag)
 			usage()
 		} else if !t.TestOnly {
@@ -108,13 +114,11 @@ func main() {
 	loadGithubAuth()
 	loadGCSAuth()
 
-	release := flag.Arg(0)
-
 	w := &Work{
 		Prepare:     *modeFlag == "prepare",
-		Version:     release,
-		BetaRelease: strings.Contains(release, "beta"),
-		RCRelease:   strings.Contains(release, "rc"),
+		Version:     releaseVersion,
+		BetaRelease: strings.Contains(releaseVersion, "beta"),
+		RCRelease:   strings.Contains(releaseVersion, "rc"),
 		Security:    *security,
 	}
 
@@ -146,6 +150,9 @@ func main() {
 	} else {
 		log.Fatalf("cannot understand version %q", w.Version)
 	}
+
+	// Select release targets for this Go version.
+	w.ReleaseTargets = matchTargets(w.Version)
 
 	// Find milestones.
 	var err error
@@ -244,14 +251,15 @@ type Work struct {
 	RCRelease   bool
 	Security    bool // cut a security release from the internal Gerrit
 
-	ReleaseIssue  int    // Release status issue number
-	ReleaseBranch string // "master" for beta releases
-	Dir           string // work directory ($HOME/go-releasebot-work/<release>)
-	StagingDir    string // staging directory (a temporary directory inside <work>/release-staging)
-	Errors        []string
-	ReleaseBinary string
-	Version       string
-	VersionCommit string
+	ReleaseIssue   int    // Release status issue number
+	ReleaseBranch  string // "master" for beta releases
+	Dir            string // work directory ($HOME/go-releasebot-work/<release>)
+	StagingDir     string // staging directory (a temporary directory inside <work>/release-staging)
+	Errors         []string
+	ReleaseBinary  string
+	ReleaseTargets []Target // Selected release targets for this release.
+	Version        string
+	VersionCommit  string
 
 	releaseMu   sync.Mutex
 	ReleaseInfo map[string]*ReleaseInfo // map and info protected by releaseMu
@@ -560,7 +568,7 @@ func (w *Work) printReleaseTable(md *bytes.Buffer) {
 	// TODO: print sha256
 	w.releaseMu.Lock()
 	defer w.releaseMu.Unlock()
-	for _, target := range releaseTargets {
+	for _, target := range w.ReleaseTargets {
 		fmt.Fprintf(md, "- %s", mdEscape(target.Name))
 		if target.TestOnly {
 			fmt.Fprintf(md, " (test only)")
@@ -671,7 +679,7 @@ to %s and press enter.
 	}
 
 	var wg sync.WaitGroup
-	for _, target := range releaseTargets {
+	for _, target := range w.ReleaseTargets {
 		w.releaseMu.Lock()
 		w.ReleaseInfo[target.Name] = new(ReleaseInfo)
 		w.releaseMu.Unlock()
@@ -706,7 +714,7 @@ to %s and press enter.
 
 	// Check for release errors and stop if any.
 	w.releaseMu.Lock()
-	for _, target := range releaseTargets {
+	for _, target := range w.ReleaseTargets {
 		for _, out := range w.ReleaseInfo[target.Name].Outputs {
 			if out.Error != "" || len(w.Errors) > 0 {
 				w.logError("RELEASE BUILD FAILED\n")
@@ -889,12 +897,43 @@ func (w *Work) mustIncludeSecurityBranch() {
 	}
 }
 
-// releaseTarget returns a release target with the specified name.
-func releaseTarget(name string) (_ Target, ok bool) {
+// releaseTarget returns a release target with the specified name
+// for the specified Go version.
+func releaseTarget(name, goVer string) (_ Target, ok bool) {
 	for _, t := range releaseTargets {
+		if !match(t.GoQuery, goVer) {
+			continue
+		}
 		if t.Name == name {
 			return t, true
 		}
 	}
 	return Target{}, false
+}
+
+// matchTargets selects release targets that have a matching
+// GoQuery value for the specified Go version.
+func matchTargets(goVer string) (matched []Target) {
+	for _, t := range releaseTargets {
+		if !match(t.GoQuery, goVer) {
+			continue
+		}
+		matched = append(matched, t)
+	}
+	return matched
+}
+
+// match reports whether the Go version goVer matches the provided version query.
+// The empty query matches all Go versions.
+// match panics if given a query that it doesn't support.
+func match(query, goVer string) bool {
+	// TODO(golang.org/issue/40558): This should help inform the API for a Go version parser.
+	switch query {
+	case "": // A special case to make the zero Target.GoQuery value useful.
+		return true
+	case ">= go1.16beta1":
+		return !strings.HasPrefix(goVer, "go1.15") && !strings.HasPrefix(goVer, "go1.14")
+	default:
+		panic(fmt.Errorf("match: query %q is not supported", query))
+	}
 }

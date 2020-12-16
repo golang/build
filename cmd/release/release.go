@@ -207,6 +207,13 @@ var builds = []*Build{
 		Builder: "darwin-amd64-10_15",
 	},
 	{
+		GoQuery: ">= go1.16beta1", // Go 1.16 Beta 1 is the first Go (pre-)release with the darwin/arm64 port.
+		OS:      "darwin",
+		Arch:    "arm64",
+		Race:    true,
+		Builder: "darwin-arm64-11_0-toothrot",
+	},
+	{
 		OS:        "linux",
 		Arch:      "s390x",
 		SkipTests: true,
