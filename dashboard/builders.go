@@ -264,7 +264,7 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-amd64-68": &HostConfig{
-		VMImage:            "openbsd-amd64-68-v2", // v2 adds 009_exit syspatch; see golang.org/issue/35712#issuecomment-742764125.
+		VMImage:            "openbsd-amd64-68-v3", // v3 adds 009_exit syspatch; see golang.org/cl/278732.
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
@@ -272,7 +272,7 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-386-68": &HostConfig{
-		VMImage:            "openbsd-386-68-v2", // v2 adds 009_exit syspatch; see golang.org/issue/35712#issuecomment-742764125.
+		VMImage:            "openbsd-386-68-v3", // v3 adds 009_exit syspatch; see golang.org/cl/278732.
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
