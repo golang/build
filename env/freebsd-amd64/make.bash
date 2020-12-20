@@ -8,8 +8,8 @@
 # an ISO mounted as the CD-ROM, and customizes the system before powering down.
 # SSH is enabled, and a user gopher, password gopher, is created.
 
-# Only tested on Ubuntu 16.04.
-# Requires packages: qemu qemu-img expect sgabios genisoimage
+# Only tested on Ubuntu 20.04.
+# Requires packages: qemu-system-x86 qemu-img expect genisoimage
 
 set -e
 
@@ -60,30 +60,46 @@ case $1 in
   readonly VERSION_TRAILER=
   readonly SHA256=e5f7fb12b828f0af7edf9464a08e51effef05ca9eb5fb52dba6d23a3c7a39223
 ;;
+11.4)
+  readonly VERSION=11.4-RELEASE
+  readonly VERSION_TRAILER=
+  readonly SHA256=53a9db4dfd9c964d487d9f928754c964e2c3610c579c7f3558c745a75fa430f0
+;;
 12.0)
   readonly VERSION=12.0-RELEASE
   readonly VERSION_TRAILER=
   readonly SHA256=9eb70a552f5395819904ed452a02e5805743459dbb1912ebafe4c9ae5de5eb53
 ;;
+12.1)
+  readonly VERSION=12.1-RELEASE
+  readonly VERSION_TRAILER=
+  readonly SHA256=3750767f042ebf47a1e8e122b67d9cd48ec3cd2a4a60b724e64c4ff6ba33653a
+;;
+12.2)
+  readonly VERSION=12.2-RELEASE
+  readonly VERSION_TRAILER=
+  readonly SHA256=0f8593382b6833658c6f6be532d4ffbedde7b75504452e27d912a0183f72ab56
+;;
 *)
   echo "Usage: $0 <version>"
-  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 10.4 11.0 11.1 11.2 11.3 12.0"
+  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 10.4 11.0 11.1 11.2 11.3 11.4 12.0 12.1 12.2"
   exit 1
 esac
 
-IMAGE=freebsd-amd64-${VERSION/-RELEASE/}.tar.gz
-readonly IMAGE=${IMAGE/\./}
+function cleanup() {
+	rm -rf iso \
+		*.iso \
+		*.raw \
+		*.qcow2
+}
 
-if [ $(tput cols) -lt 80 ]; then
-	echo "Running qemu with curses display requires a window 80 columns or larger or expect(1) won't work correctly."
-	exit 1
-fi
+trap cleanup EXIT
 
 if ! [ -e FreeBSD-${VERSION:?}-amd64.raw ]; then
   download_image
 fi
 
-qemu-img create -f qcow2 -b FreeBSD-${VERSION:?}-amd64${VERSION_TRAILER}.raw disk.qcow2
+qemu-img create -f qcow2 -b FreeBSD-${VERSION:?}-amd64${VERSION_TRAILER}.raw disk.qcow2 8G
 
 mkdir -p iso/boot iso/etc iso/usr/local/etc/rc.d
 cp loader.conf iso/boot
@@ -117,22 +133,26 @@ sleep 2
 env DOWNLOAD_UPDATES=$((1-IS_SNAPSHOT)) expect <<'EOF'
 set prompt "root@.*:~ #[ ]"
 set timeout -1
+set send_human {.1 .3 1 .05 2}
 
-spawn qemu-system-x86_64 -nographic -option-rom sgabios.bin -m 1G -drive if=virtio,file=disk.qcow2,format=qcow2,cache=none -cdrom config.iso -net nic,model=virtio -net user
+spawn qemu-system-x86_64 -machine graphics=off -display none -serial stdio \
+ -fw_cfg name=opt/etc/sercon-port,string=0x3F8 \
+ -m 1G -drive if=virtio,file=disk.qcow2,format=qcow2,cache=none -cdrom config.iso -net nic,model=virtio -net user
 set qemu_pid $spawn_id
 
 # boot with serial console enabled
 expect -ex "Welcome to FreeBSD"
-sleep 2
-expect -ex "ape to loader prompt"
-send "3\n"
-expect -ex "Type '?' for a list of commands, 'help' for more detailed help."
-send "set console=\"comconsole\"\n"
+expect -re "Autoboot in \[0-9\]\+ seconds"
 sleep 1
-send "boot\n"
+send -h "3" ;# escape to bootloader prompt
+expect -ex "Type '?' for a list of commands, 'help' for more detailed help."
+expect -ex "OK "
+send -h "set console=\"comconsole\"\n"
+expect -ex "OK "
+send -h "boot\n"
 
 # wait for login prompt
-set timeout 120
+set timeout 180
 expect {
     "\nlogin: " {
         send "root\n"
@@ -165,7 +185,8 @@ if {$::env(DOWNLOAD_UPDATES)} {
             sleep 2
             expect -re $prompt
             send "freebsd-update install\n"
-            expect "Installing updates... done."
+            expect "Installing updates..."
+            expect "done."
             sleep 1
             send "\n"
         }
@@ -184,17 +205,12 @@ if {$::env(DOWNLOAD_UPDATES)} {
 
 expect -re $prompt
 sleep 1
-send "pkg install bash curl git gdb\n"
-expect "Do you want to fetch and install it now"
-sleep 1
-send "y\n"
-
-expect "Proceed with this action"
-sleep 1
-send "y\n"
+send "pkg install -y bash curl git gdb\n"
 
 expect -re $prompt
-sleep 1
+send "sync\n"
+
+expect -re $prompt
 send "poweroff\n"
 expect "All buffers synced."
 
@@ -202,6 +218,8 @@ wait -i $qemu_pid
 EOF
 
 # Create Compute Engine disk image.
+IMAGE=freebsd-amd64-${VERSION/-RELEASE/}.tar.gz
+readonly IMAGE=${IMAGE/\./}
 echo "Archiving disk.raw as ${IMAGE:?}... (this may take a while)"
 qemu-img convert -f qcow2 -O raw -t none -T none disk.qcow2 disk.raw
 tar -Szcf ${IMAGE:?} disk.raw
