@@ -1873,10 +1873,7 @@ func init() {
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
-		// TODO(golang.org/issue/37439): Decide whether it's worth it
-		// to go for 3~9 extra helpers for -longtest SlowBot requests
-		// based on how well having more helpers scales. Try 3, 5, 9.
-		numTryTestHelpers: 9,
+		numTryTestHelpers: 4, // Target time is < 15 min for golang.org/issue/42661.
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-386-longtest",
@@ -1900,10 +1897,7 @@ func init() {
 			"GOHOSTARCH=386",
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
-		// TODO(golang.org/issue/37439): Decide whether it's worth it
-		// to go for 3~9 extra helpers for -longtest SlowBot requests
-		// based on how well having more helpers scales. Try 3, 5, 9.
-		numTryTestHelpers: 5,
+		numTryTestHelpers: 4, // Target time is < 15 min for golang.org/issue/42661.
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-arm",
@@ -2240,10 +2234,7 @@ func init() {
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
-		// TODO(golang.org/issue/37439): Decide whether it's worth it
-		// to go for 3~9 extra helpers for -longtest SlowBot requests
-		// based on how well having more helpers scales. Try 3, 5, 9.
-		numTryTestHelpers: 3,
+		numTryTestHelpers: 4, // Target time is < 15 min for golang.org/issue/42661.
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-race",
