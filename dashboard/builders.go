@@ -659,7 +659,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:       "Windows 10 WSL2 Ubuntu",
 		OwnerGithub: "mengzhuo",
 		IsReverse:   true,
-		ExpectNum:   1,
+		ExpectNum:   2,
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/lib/go"},
 	},
 }
