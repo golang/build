@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -262,9 +263,15 @@ func goFindTryWork(ctx context.Context, gerritc *gerrit.Client, maintc *maintner
 			log.Printf("nil Gerrit CL %v", ci.ChangeNumber)
 			continue
 		}
-		comments, err := gerritc.ListChangeComments(ctx, ci.ID)
+		// There are rare cases when the project~branch~Change-Id triplet doesn't
+		// uniquely identify a change, but project~numericId does. It's important
+		// we select the right and only one change in this context, so prefer the
+		// project~numericId identifier type. See golang.org/issue/43312 and
+		// https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-id.
+		changeID := fmt.Sprintf("%s~%d", url.PathEscape(ci.Project), ci.ChangeNumber)
+		comments, err := gerritc.ListChangeComments(ctx, changeID)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("gerritc.ListChangeComments(ctx, %q): %v", changeID, err)
 		}
 		work := tryWorkItem(cl, ci, comments)
 		if work.Project == "go" {
