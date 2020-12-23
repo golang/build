@@ -2019,14 +2019,11 @@ func init() {
 		Name:           "openbsd-amd64-62",
 		HostType:       "host-openbsd-amd64-62",
 		distTestAdjust: noTestDirAndNoReboot,
-		tryBot:         nil,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// This builder is unfortunately still used by Go 1.15 and 1.14,
 			// so keep it around a bit longer. See golang.org/issue/42426.
 			return atMostGo1(goBranch, 15) && buildRepoByDefault(repo)
 		},
-		numTestHelpers:    0,
-		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
 		Name:             "openbsd-amd64-64",
@@ -2040,10 +2037,11 @@ func init() {
 		distTestAdjust: noTestDirAndNoReboot,
 	})
 	addBuilder(BuildConfig{
-		Name:           "openbsd-amd64-68",
-		HostType:       "host-openbsd-amd64-68",
-		tryBot:         defaultTrySet(),
-		distTestAdjust: noTestDirAndNoReboot,
+		Name:              "openbsd-amd64-68",
+		HostType:          "host-openbsd-amd64-68",
+		tryBot:            defaultTrySet(),
+		distTestAdjust:    noTestDirAndNoReboot,
+		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-386-68",
