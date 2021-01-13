@@ -366,10 +366,12 @@ var windowsData = map[string]string{
   <?define ProdId = {FF5B30B2-08C2-11E1-85A2-6ACA4824019B} ?>
   <?define UpgradeCode = {1C3114EA-08C3-11E1-9095-7FCA4824019B} ?>
   <?define SysFolder=SystemFolder ?>
+  <?define ArchProgramFilesFolder="ProgramFilesFolder" ?>
 <?else?>
   <?define ProdId = {716c3eaa-9302-48d2-8e5e-5cfec5da2fab} ?>
   <?define UpgradeCode = {22ea7650-4ac6-4001-bf29-f4b8775db1c0} ?>
   <?define SysFolder=System64Folder ?>
+  <?define ArchProgramFilesFolder="ProgramFiles64Folder" ?>
 <?endif?>
 
 <Product
@@ -406,7 +408,6 @@ var windowsData = map[string]string{
     ((VersionNT > 601) OR (VersionNT = 601 AND ServicePackLevel >= 1))
 </Condition>
 <MajorUpgrade AllowDowngrades="yes" />
-<SetDirectory Id="INSTALLDIRROOT" Value="[%SYSTEMDRIVE]"/>
 
 <CustomAction
     Id="SetApplicationRootDirectory"
@@ -415,7 +416,7 @@ var windowsData = map[string]string{
 
 <!-- Define the directory structure and environment variables -->
 <Directory Id="TARGETDIR" Name="SourceDir">
-  <Directory Id="INSTALLDIRROOT">
+  <Directory Id="$(var.ArchProgramFilesFolder)">
     <Directory Id="INSTALLDIR" Name="Go"/>
   </Directory>
   <Directory Id="ProgramMenuFolder">
