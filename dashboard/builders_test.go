@@ -890,7 +890,7 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 func TestExpectedMacstadiumVMCount(t *testing.T) {
 	got := 0
 	for host, config := range Hosts {
-		if strings.HasPrefix(host, "host-darwin-10_") {
+		if strings.HasPrefix(host, "host-darwin-10_") || strings.HasPrefix(host, "host-darwin-amd64-") {
 			got += config.ExpectNum
 		}
 	}
