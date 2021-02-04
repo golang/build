@@ -39,10 +39,6 @@ type Repo struct {
 	// https://golang.org/pkg/#subrepo.
 	// It should be plain text. Hostnames may be auto-linkified.
 	WebsiteDesc string
-
-	// usePkgGoDev controls whether the repo has opted-in to use
-	// pkg.go.dev for displaying documentation for Go packages.
-	usePkgGoDev bool
 }
 
 // ByGerritProject maps from a Gerrit project name ("go", "net", etc)
@@ -77,7 +73,7 @@ func init() {
 	x("net", desc("additional networking packages"))
 	x("oauth2")
 	x("perf", desc("packages and tools for performance measurement, storage, and analysis"))
-	x("pkgsite", desc("home of the pkg.go.dev website"), usePkgGoDev(), noBuildAndNoDash)
+	x("pkgsite", desc("home of the pkg.go.dev website"), noBuildAndNoDash)
 	x("playground", noDash)
 	x("review", desc("a tool for working with Gerrit code reviews"))
 	x("scratch", noDash)
@@ -129,7 +125,6 @@ func archivedOnGitHub(r *Repo) {
 func importPath(v string) modifyRepo { return func(r *Repo) { r.ImportPath = v } }
 
 func desc(v string) modifyRepo { return func(r *Repo) { r.WebsiteDesc = v } }
-func usePkgGoDev() modifyRepo  { return func(r *Repo) { r.usePkgGoDev = true } }
 
 // addMirrored adds a repo that's on Gerrit and mirrored to GitHub.
 func addMirrored(proj string, opts ...modifyRepo) {
@@ -202,7 +197,3 @@ func (r *Repo) ShowOnDashboard() bool { return r.showOnDashboard }
 // at or is mirrored to. It returns the empty string if this repo has no
 // GitHub presence.
 func (r *Repo) GitHubRepo() string { return r.gitHubRepo }
-
-// UsePkgGoDev reports whether the repo has opted-in to use
-// pkg.go.dev for displaying documentation for Go packages.
-func (r *Repo) UsePkgGoDev() bool { return r.usePkgGoDev }
