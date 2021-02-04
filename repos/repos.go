@@ -56,7 +56,7 @@ var ByImportPath = map[string]*Repo{ /* initialized below */ }
 func init() {
 	addMirrored("go", coordinatorCanBuild, noDash)
 	addMirrored("dl", importPath("golang.org/dl"), coordinatorCanBuild)
-	addMirrored("gddo", importPath("github.com/golang/gddo"))
+	addMirrored("gddo", importPath("github.com/golang/gddo"), archivedOnGitHub)
 	addMirrored("gofrontend")
 	addMirrored("proposal")
 	addMirrored("sublime-build")
@@ -119,6 +119,12 @@ func noDash(r *Repo) { r.showOnDashboard = false }
 func noBuildAndNoDash(r *Repo) { r.CoordinatorCanBuild, r.showOnDashboard = false, false }
 
 func coordinatorCanBuild(r *Repo) { r.CoordinatorCanBuild = true }
+
+func archivedOnGitHub(r *Repo) {
+	// When a repository is archived on GitHub, trying to push
+	// to it will fail. So don't mirror.
+	r.MirrorToGitHub = false
+}
 
 func importPath(v string) modifyRepo { return func(r *Repo) { r.ImportPath = v } }
 
