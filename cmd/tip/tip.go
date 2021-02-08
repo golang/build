@@ -46,8 +46,6 @@ func main() {
 	switch os.Getenv(k) {
 	case "golangorg":
 		b = golangorgBuilder{}
-	case "talks":
-		b = talksBuilder{}
 	default:
 		log.Fatalf("Unknown %v value: %q", k, os.Getenv(k))
 	}
