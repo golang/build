@@ -810,7 +810,7 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 
 	output := st.output.Reader()
 	go func() {
-		<-w.(http.CloseNotifier).CloseNotify()
+		<-r.Context().Done()
 		output.Close()
 	}()
 	buf := make([]byte, 65536)
