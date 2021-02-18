@@ -1688,7 +1688,20 @@ func configureMacStadium() {
 		log.Fatalf("unsupported sw_vers version %q", version)
 	}
 	major, minor := m[1], m[2] // "10", "12"
-	*reverseType = fmt.Sprintf("host-darwin-%s_%s", major, minor)
+
+	// As of macOS 11.0 (Big Sur), the major digits are used to indicate the version of
+	// macOS. This version also introduced support for multiple architectures. This
+	// takes into account the need to distinguish between versions and architectures for
+	// the later versions.
+	mj, err := strconv.Atoi(major)
+	if err != nil {
+		log.Fatalf("unable to parse major version %q", major)
+	}
+	if mj >= 11 {
+		*reverseType = fmt.Sprintf("host-darwin-%s-%s_%s", runtime.GOARCH, major, "0")
+	} else {
+		*reverseType = fmt.Sprintf("host-darwin-%s_%s", major, minor)
+	}
 	*coordinator = "farmer.golang.org:443"
 
 	// guestName is set by cmd/makemac to something like
