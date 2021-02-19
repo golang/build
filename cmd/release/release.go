@@ -260,19 +260,6 @@ var builds = []*Build{
 		Arch:    "arm64",
 		Builder: "linux-arm64-packet",
 	},
-	{
-		GoQuery: "< go1.15",
-		OS:      "freebsd",
-		Arch:    "386",
-		Builder: "freebsd-386-11_1",
-	},
-	{
-		GoQuery: "< go1.15",
-		OS:      "freebsd",
-		Arch:    "amd64",
-		Race:    true,
-		Builder: "freebsd-amd64-11_1",
-	},
 
 	// Test-only builds.
 	{
@@ -864,7 +851,7 @@ func (b *Build) writeFile(name string, r io.Reader) error {
 }
 
 // checkRelocations runs readelf on pkg/linux_amd64/runtime/cgo.a and makes sure
-// we don't see R_X86_64_REX_GOTPCRELX in new Go 1.15 and Go 1.14 minor releases.
+// we don't see R_X86_64_REX_GOTPCRELX in new Go 1.15 minor releases.
 // See golang.org/issue/31293 and golang.org/issue/40561#issuecomment-731482962.
 func (b *Build) checkRelocations(client *buildlet.Client) error {
 	if b.OS != "linux" || b.Arch != "amd64" || b.TestOnly {
@@ -895,8 +882,7 @@ func (b *Build) checkRelocations(client *buildlet.Client) error {
 		if !strings.Contains(got, "R_X86_64_REX_GOTPCRELX") {
 			return fmt.Errorf("%s did not contain a R_X86_64_REX_GOTPCRELX relocation; remoteErr=%v, %s", file, remoteErr, got)
 		}
-	case strings.HasPrefix(*version, "go1.15"),
-		strings.HasPrefix(*version, "go1.14"):
+	case strings.HasPrefix(*version, "go1.15"):
 		if strings.Contains(got, "R_X86_64_REX_GOTPCRELX") {
 			return fmt.Errorf("%s contained a R_X86_64_REX_GOTPCRELX relocation", file)
 		}
@@ -1012,12 +998,12 @@ func minSupportedMacOSVersion(goVer string) string {
 	// TODO(amedee,dmitshur,golang.org/issue/40558): Use a version package to compare versions of Go.
 
 	// The minimum supported version of macOS with each version of go:
-	// go1.14 - macOS 10.11
 	// go1.15 - macOS 10.12
 	// go1.16 - macOS 10.12
-	minMacVersion := "10.12"
-	if match("< go1.15", goVer) {
-		minMacVersion = "10.11"
+	// go1.17 - macOS 10.13
+	minMacVersion := "10.13"
+	if match("< go1.17beta1", goVer) {
+		minMacVersion = "10.12"
 		return minMacVersion
 	}
 	return minMacVersion
@@ -1031,18 +1017,17 @@ func match(query, goVer string) bool {
 	switch query {
 	case "": // A special case to make the zero Build.GoQuery value useful.
 		return true
+	case "< go1.17beta1":
+		return strings.HasPrefix(goVer, "go1.16") || strings.HasPrefix(goVer, "go1.15")
 	case ">= go1.16beta1":
-		return !strings.HasPrefix(goVer, "go1.15") && !strings.HasPrefix(goVer, "go1.14")
+		return !strings.HasPrefix(goVer, "go1.15")
 	case "< go1.16beta1":
-		return strings.HasPrefix(goVer, "go1.15") || strings.HasPrefix(goVer, "go1.14")
+		return strings.HasPrefix(goVer, "go1.15")
 	case ">= go1.15rc2":
 		// By the time this code is added, Go 1.15 RC 1 has already been released and
 		// won't be modified, that's why we only care about matching RC 2 and onwards.
 		// (We could've just done ">= go1.15", but that could be misleading in future.)
-		return goVer != "go1.15rc1" && !strings.HasPrefix(goVer, "go1.15beta") &&
-			!strings.HasPrefix(goVer, "go1.14")
-	case "< go1.15":
-		return strings.HasPrefix(goVer, "go1.14")
+		return goVer != "go1.15rc1" && !strings.HasPrefix(goVer, "go1.15beta")
 	default:
 		panic(fmt.Errorf("match: query %q is not supported", query))
 	}

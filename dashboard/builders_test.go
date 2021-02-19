@@ -172,7 +172,7 @@ func TestTrybots(t *testing.T) {
 		},
 		{
 			repo:   "go",
-			branch: "release-branch.go1.14",
+			branch: "release-branch.go1.15",
 			want: []string{
 				"android-amd64-emu",
 				"freebsd-amd64-12_0",
@@ -362,7 +362,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-amd64-emu@go1.12", "mobile"), none},
 		{b("android-amd64-emu@go1.13", "mobile"), both},
 		{b("android-amd64-emu", "mobile@1.13"), both},
-		{b("freebsd-386-11_1@go1.14", "mobile"), none}, // See golang.org/issue/36506.
 
 		{b("android-amd64-emu", "go"), both},
 		{b("android-amd64-emu", "crypto"), both},
@@ -407,19 +406,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("openbsd-amd64-62@go1.15", "go"), onlyPost},
 		{b("openbsd-amd64-62@go1.14", "go"), onlyPost},
 
-		// go1.12.html: "Go 1.12 is the last release that is
-		// supported on FreeBSD 10.x [... and 11.1]"
-		// But golang.org/issue/40563 happened.
-		{b("freebsd-amd64-11_1", "go"), none},
-		{b("freebsd-amd64-11_1", "net"), none},
-		{b("freebsd-amd64-11_1", "mobile"), none},
-		{b("freebsd-amd64-11_1@go1.14", "go"), isBuilder},
-		{b("freebsd-amd64-11_1@go1.14", "net"), isBuilder},
-		{b("freebsd-amd64-11_1@go1.14", "mobile"), none},
-		{b("freebsd-amd64-11_1@go1.13", "go"), isBuilder},
-		{b("freebsd-amd64-11_1@go1.13", "net"), isBuilder},
-		{b("freebsd-amd64-11_1@go1.13", "mobile"), none},
-
 		// FreeBSD 12.0
 		{b("freebsd-amd64-12_0", "go"), both},
 		{b("freebsd-amd64-12_0", "net"), both},
@@ -441,11 +427,11 @@ func TestBuilderConfig(t *testing.T) {
 		{b("aix-ppc64", "mobile"), none},
 		{b("aix-ppc64", "exp"), none},
 		{b("aix-ppc64", "term"), onlyPost},
-		{b("aix-ppc64@go1.12", "go"), onlyPost},
-		{b("aix-ppc64@go1.12", "net"), none},
-		{b("aix-ppc64@go1.12", "mobile"), none},
-		{b("aix-ppc64@go1.13", "net"), onlyPost},
-		{b("aix-ppc64@go1.13", "mobile"), none},
+		{b("aix-ppc64@go1.15", "go"), onlyPost},
+		{b("aix-ppc64@go1.15", "net"), onlyPost},
+		{b("aix-ppc64@go1.15", "mobile"), none},
+		{b("aix-ppc64@go1.16", "net"), onlyPost},
+		{b("aix-ppc64@go1.16", "mobile"), none},
 		{b("aix-ppc64@dev.link", "go"), onlyPost},
 
 		{b("linux-amd64-nocgo", "mobile"), none},
@@ -520,10 +506,8 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-10_15", "exp"), onlyPost},
 		// ... but not on most others:
 		{b("darwin-amd64-10_12", "exp"), none},
-		{b("freebsd-386-11_1@go1.14", "exp"), none},
 		{b("freebsd-386-11_2", "exp"), none},
 		{b("freebsd-386-12_0", "exp"), none},
-		{b("freebsd-amd64-11_1@go1.14", "exp"), none},
 		{b("freebsd-amd64-11_2", "exp"), none},
 		{b("freebsd-amd64-12_0", "exp"), none},
 		{b("openbsd-amd64-64", "exp"), none},
@@ -548,26 +532,16 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-sid", "build"), none},
 		{b("linux-amd64-nocgo", "build"), none},
 		{b("linux-386-longtest", "build"), none},
-		{b("freebsd-386-11_1", "build"), none},
 		{b("js-wasm", "build"), none},
 		{b("android-386-emu", "build"), none},
 		{b("android-amd64-emu", "build"), none},
 
 		// Only use latest macOS for subrepos, and only amd64:
 		{b("darwin-amd64-10_12", "net"), onlyPost},
-		{b("darwin-amd64-10_11", "net"), none},
-		{b("darwin-amd64-10_11@go1.12", "net"), none},
 
 		{b("darwin-amd64-10_15", "go"), onlyPost},
 		{b("darwin-amd64-10_14", "go"), onlyPost},
 		{b("darwin-amd64-10_12", "go"), onlyPost},
-		{b("darwin-amd64-10_11", "go"), none},
-		{b("darwin-amd64-10_11@go1.14", "go"), onlyPost}, // Go 1.14 is the last release that will run on macOS 10.11 El Capitan.
-		{b("darwin-amd64-10_11@go1.15", "go"), none},     // Go 1.15 will require macOS 10.12 Sierra or later.
-		{b("darwin-386-10_14", "go"), none},
-		{b("darwin-386-10_14@go1.13", "go"), onlyPost},
-		{b("darwin-386-10_14@go1.14", "go"), onlyPost}, // Go 1.14 is the last release that supports 32-bit on macOS.
-		{b("darwin-386-10_14@go1.15", "go"), none},
 
 		// plan9 only lived at master. We didn't support any past releases.
 		// But it's off for now as it's always failing.
@@ -690,7 +664,6 @@ func TestShouldRunDistTest(t *testing.T) {
 		{"linux-amd64", "reboot", tryMode, true},
 		{"linux-amd64-race", "reboot", tryMode, false},
 
-		{"darwin-amd64-10_11", "test:foo", postSubmit, false},
 		{"darwin-amd64-10_12", "test:foo", postSubmit, false},
 		{"darwin-amd64-10_14", "test:foo", postSubmit, false},
 		{"darwin-amd64-10_14", "reboot", postSubmit, false},
@@ -830,7 +803,6 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	ports := strings.Fields(string(out))
 
 	done := map[string]bool{}
-	done["darwin-arm"] = true    // TODO: Remove when Go 1.16 is out and Go 1.14 becomes unsupported.
 	done["darwin-arm64"] = true  // TODO(golang.org/issue/39782): Add builder for darwin/arm64.
 	done["windows-arm64"] = true // TODO(golang.org/issue/42604): Add builder for windows/arm64.
 	check := func(goos, goarch string) {

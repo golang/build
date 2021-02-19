@@ -27,7 +27,7 @@ func TestAllQueriesSupported(t *testing.T) {
 					t.Errorf("build %v uses an unsupported version query:\n%v", b, err)
 				}
 			}()
-			match(b.GoQuery, "go1.14.6") // Shouldn't panic for any b.GoQuery.
+			match(b.GoQuery, "go1.15.6") // Shouldn't panic for any b.GoQuery.
 		})
 	}
 }
@@ -45,14 +45,16 @@ func TestMinSupportedMacOSVersion(t *testing.T) {
 		goVer     string
 		wantMacOS string
 	}{
-		{"go1.14", "10.11"},
-		{"go1.14.14", "10.11"},
 		{"go1.15", "10.12"},
 		{"go1.15.7", "10.12"},
 		{"go1.16beta1", "10.12"},
 		{"go1.16rc1", "10.12"},
 		{"go1.16", "10.12"},
 		{"go1.16.1", "10.12"},
+		{"go1.17beta1", "10.13"},
+		{"go1.17rc1", "10.13"},
+		{"go1.17", "10.13"},
+		{"go1.17.2", "10.13"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.goVer, func(t *testing.T) {
@@ -80,23 +82,18 @@ func TestBuilderSelectionPerGoVersion(t *testing.T) {
 		target      string
 		wantBuilder string
 	}{
-		// Go 1.15.x and 1.14.x still use the Jessie builders.
-		{"go1.14.55", "linux-amd64", "linux-amd64-jessie"},
+		// Go 1.15.x still uses the Jessie builders.
 		{"go1.15.55", "linux-386", "linux-386-jessie"},
 		// Go 1.16 starts to use the the Stretch builders.
 		{"go1.16", "linux-amd64", "linux-amd64-stretch"},
 		{"go1.16", "linux-386", "linux-386-stretch"},
 
-		// Go 1.15.x and 1.14.x still use the Packet and Scaleway builders.
-		{"go1.14.55", "linux-arm64", "linux-arm64-packet"},
+		// Go 1.15.x still uses the Packet and Scaleway builders.
 		{"go1.15.55", "linux-armv6l", "linux-arm"},
 		// Go 1.16 starts to use the the AWS builders.
 		{"go1.16", "linux-arm64", "linux-arm64-aws"},
 		{"go1.16", "linux-armv6l", "linux-arm-aws"},
 
-		// Go 1.14.x still use the FreeBSD 11.1 builder.
-		{"go1.14.55", "freebsd-amd64", "freebsd-amd64-11_1"},
-		{"go1.14.55", "freebsd-386", "freebsd-386-11_1"},
 		// Go 1.15 RC 2+ starts to use the the FreeBSD 11.2 builder.
 		{"go1.15rc2", "freebsd-amd64", "freebsd-amd64-11_2"},
 		{"go1.15rc2", "freebsd-386", "freebsd-386-11_2"},

@@ -25,7 +25,6 @@ import (
 // syntax entirely. This is a first draft.
 var slowBotAliases = map[string]string{
 	// Known missing builders:
-	"darwin-arm":    "", // TODO(golang.org/issue/37611): Remove once port is removed.
 	"ios-amd64":     "", // There is no builder for the iOS Simulator. See issues 42100 and 42177.
 	"windows-arm64": "", // TODO(golang.org/issue/42604): Add builder for windows/arm64.
 
@@ -40,7 +39,6 @@ var slowBotAliases = map[string]string{
 	"arm":            "linux-arm",
 	"arm64":          "linux-arm64-packet",
 	"darwin":         "darwin-amd64-10_14",
-	"darwin-386":     "darwin-386-10_14", // TODO(golang.org/issue/37610): Remove when Go 1.14 is no longer supported.
 	"darwin-amd64":   "darwin-amd64-10_14",
 	"darwin-arm64":   "darwin-arm64-11_0-toothrot",
 	"ios-arm64":      "ios-arm64-corellium",
@@ -298,24 +296,6 @@ var Hosts = map[string]*HostConfig{
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		OwnerGithub: "4a6f656c",
 	},
-	"host-freebsd-11_1": &HostConfig{
-		VMImage:            "freebsd-amd64-111-b",
-		Notes:              "FreeBSD 11.1; GCE VM is built from script in build/env/freebsd-amd64",
-		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
-		env:                []string{"CC=clang"},
-		SSHUsername:        "gopher",
-	},
-	"host-freebsd-11_1-big": &HostConfig{
-		VMImage:            "freebsd-amd64-111-b",
-		Notes:              "Same as host-freebsd-11_1, but on n1-highcpu-16",
-		machineType:        "n1-highcpu-16", // 16 vCPUs, 14.4 GB mem
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
-		env:                []string{"CC=clang"},
-		SSHUsername:        "gopher",
-	},
 	"host-freebsd-11_2": &HostConfig{
 		VMImage:            "freebsd-amd64-112",
 		Notes:              "FreeBSD 11.2; GCE VM is built from script in build/env/freebsd-amd64",
@@ -328,6 +308,14 @@ var Hosts = map[string]*HostConfig{
 		VMImage:            "freebsd-amd64-120-v1",
 		Notes:              "FreeBSD 12.0; GCE VM is built from script in build/env/freebsd-amd64",
 		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
+		SSHUsername:        "gopher",
+	},
+	"host-freebsd-12_0-big": &HostConfig{
+		VMImage:            "freebsd-amd64-120-v1",
+		Notes:              "Same as host-freebsd-12_0, but on n1-highcpu-16",
+		machineType:        "n1-highcpu-16", // 16 vCPUs, 14.4 GB mem
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
@@ -472,19 +460,9 @@ var Hosts = map[string]*HostConfig{
 		OwnerGithub: "zx2c4",
 		env:         []string{"GOROOT_BOOTSTRAP=C:\\Program Files (Arm)\\Go"},
 	},
-	"host-darwin-10_11": &HostConfig{
-		IsReverse: true,
-		ExpectNum: 3,
-		Notes:     "MacStadium OS X 10.11 VM under VMWare ESXi",
-		env: []string{
-			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
-		},
-		SSHUsername:     "gopher",
-		HermeticReverse: false, // TODO: make it so, like 10.12
-	},
 	"host-darwin-10_12": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 4,
+		ExpectNum: 5,
 		Notes:     "MacStadium OS X 10.12 VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
@@ -494,7 +472,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_14": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 6,
+		ExpectNum: 7,
 		Notes:     "MacStadium macOS Mojave (10.14) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.12.1
@@ -504,7 +482,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_15": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 6,
+		ExpectNum: 7,
 		Notes:     "MacStadium macOS Catalina (10.15) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.12.1
@@ -1489,19 +1467,6 @@ func explicitTrySet(projs ...string) func(proj, branch, goBranch string) bool {
 
 func init() {
 	addBuilder(BuildConfig{
-		Name:     "freebsd-amd64-11_1",
-		HostType: "host-freebsd-11_1",
-		tryBot:   nil,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder is unfortunately still used by Go 1.14 and 1.13,
-			// so keep it around a bit longer. See golang.org/issue/40563.
-			// Test relevant Go versions so that we're better informed.
-			return atMostGo1(goBranch, 14) && buildRepoByDefault(repo)
-		},
-		distTestAdjust:    fasterTrybots,
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-11_2",
 		HostType:          "host-freebsd-11_2",
 		tryBot:            explicitTrySet("sys"),
@@ -1526,19 +1491,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-race",
-		HostType: "host-freebsd-11_1-big", // TODO(golang.org/issue/40562): Update to newer FreeBSD.
-	})
-	addBuilder(BuildConfig{
-		Name:           "freebsd-386-11_1",
-		HostType:       "host-freebsd-11_1",
-		distTestAdjust: noTestDirAndNoReboot,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder is unfortunately still used by Go 1.14 and 1.13,
-			// so keep it around a bit longer. See golang.org/issue/40563.
-			// Test relevant Go versions so that we're better informed.
-			return atMostGo1(goBranch, 14) && buildRepoByDefault(repo)
-		},
-		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
+		HostType: "host-freebsd-12_0-big",
 	})
 	addBuilder(BuildConfig{
 		Name:           "freebsd-386-11_2",
@@ -1578,7 +1531,7 @@ func init() {
 		Notes: "GO386=387",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// GO386=387 is removed in Go 1.16 (golang.org/issue/40255).
-			// It's still supported in Go 1.15 and 1.14.
+			// It's still supported in Go 1.15.
 			return atMostGo1(goBranch, 15) && (repo == "go" || repo == "crypto")
 		},
 		HostType: "host-linux-jessie",
@@ -1645,7 +1598,7 @@ func init() {
 	addMiscCompile := func(suffix, rx string) { addMiscCompileGo1(0, suffix, rx) }
 
 	addMiscCompile("-linuxarm", "^linux-arm")                // 2: arm, arm64
-	addMiscCompile("-darwin", "^darwin-(386|amd64)$")        // 1: amd64 (in Go 1.14: 386, amd64)
+	addMiscCompile("-darwin", "^darwin-(386|amd64)$")        // 1: amd64
 	addMiscCompileGo1(16, "-darwinarm64", "^darwin-arm64$")  // 1: arm64 (for Go 1.16 and newer)
 	addMiscCompile("-mips", "^linux-mips")                   // 4: mips, mipsle, mips64, mips64le
 	addMiscCompile("-ppc", "^(linux-ppc64|aix-)")            // 3: linux-ppc64{,le}, aix-ppc64
@@ -2014,7 +1967,7 @@ func init() {
 		HostType:       "host-openbsd-386-62",
 		distTestAdjust: noTestDirAndNoReboot,
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder is unfortunately still used by Go 1.15 and 1.14,
+			// This builder is unfortunately still used by Go 1.15,
 			// so keep it around a bit longer. See golang.org/issue/42426.
 			return atMostGo1(goBranch, 15) && buildRepoByDefault(repo)
 		},
@@ -2031,7 +1984,7 @@ func init() {
 		HostType:       "host-openbsd-amd64-62",
 		distTestAdjust: noTestDirAndNoReboot,
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder is unfortunately still used by Go 1.15 and 1.14,
+			// This builder is unfortunately still used by Go 1.15,
 			// so keep it around a bit longer. See golang.org/issue/42426.
 			return atMostGo1(goBranch, 15) && buildRepoByDefault(repo)
 		},
@@ -2264,29 +2217,6 @@ func init() {
 		env: []string{
 			"GOARM=7",
 			"GO_TEST_TIMEOUT_SCALE=3"},
-	})
-	addBuilder(BuildConfig{
-		Name:     "darwin-amd64-10_11",
-		HostType: "host-darwin-10_11",
-		tryBot:   nil, // disabled until Macs fixed; https://golang.org/issue/23859
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// Go 1.14 is the last release that will run on macOS 10.11 El Capitan.
-			// (See https://golang.org/doc/go1.14#darwin.)
-			return repo == "go" && atMostGo1(branch, 14)
-		},
-		distTestAdjust:    macTestPolicy,
-		numTryTestHelpers: 3,
-	})
-	addBuilder(BuildConfig{
-		Name:           "darwin-386-10_14",
-		HostType:       "host-darwin-10_14",
-		distTestAdjust: macTestPolicy,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// Go 1.14 is the last release that will support 32-bit binaries on macOS (darwin/386).
-			// (See https://golang.org/doc/go1.14#darwin.)
-			return repo == "go" && atMostGo1(branch, 14)
-		},
-		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-10_12",
@@ -2664,10 +2594,6 @@ func init() {
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
-			case "net":
-				// The x/net package wasn't working in Go 1.12; AIX folk plan to have
-				// it ready by Go 1.13. See https://golang.org/issue/31564#issuecomment-484786144
-				return atLeastGo1(branch, 13) && atLeastGo1(goBranch, 13)
 			case "tools", "tour", "website":
 				// The PATH on this builder is misconfigured in a way that causes
 				// any test that executes a 'go' command as a subprocess to fail.
@@ -2675,7 +2601,7 @@ func init() {
 				// Skip affected repos until the builder is fixed.
 				return false
 			}
-			return atLeastGo1(branch, 12) && atLeastGo1(goBranch, 12) && buildRepoByDefault(repo)
+			return buildRepoByDefault(repo)
 		},
 	})
 	addBuilder(BuildConfig{
