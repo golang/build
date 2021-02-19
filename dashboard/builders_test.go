@@ -830,8 +830,9 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	ports := strings.Fields(string(out))
 
 	done := map[string]bool{}
-	done["darwin-arm"] = true   // TODO: Remove when Go 1.16 is out and Go 1.14 becomes unsupported.
-	done["darwin-arm64"] = true // TODO(golang.org/issue/39782): Add builder for darwin/arm64.
+	done["darwin-arm"] = true    // TODO: Remove when Go 1.16 is out and Go 1.14 becomes unsupported.
+	done["darwin-arm64"] = true  // TODO(golang.org/issue/39782): Add builder for darwin/arm64.
+	done["windows-arm64"] = true // TODO(golang.org/issue/42604): Add builder for windows/arm64.
 	check := func(goos, goarch string) {
 		if goos == "android" || goos == "ios" {
 			// TODO(golang.org/issue/25963): support

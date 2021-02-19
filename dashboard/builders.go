@@ -25,8 +25,9 @@ import (
 // syntax entirely. This is a first draft.
 var slowBotAliases = map[string]string{
 	// Known missing builders:
-	"darwin-arm": "", // TODO(golang.org/issue/37611): Remove once port is removed.
-	"ios-amd64":  "", // There is no builder for the iOS Simulator. See issues 42100 and 42177.
+	"darwin-arm":    "", // TODO(golang.org/issue/37611): Remove once port is removed.
+	"ios-amd64":     "", // There is no builder for the iOS Simulator. See issues 42100 and 42177.
+	"windows-arm64": "", // TODO(golang.org/issue/42604): Add builder for windows/arm64.
 
 	"386":            "linux-386",
 	"aix":            "aix-ppc64",
