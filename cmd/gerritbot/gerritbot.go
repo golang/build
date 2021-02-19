@@ -831,7 +831,7 @@ func (b *bot) getFullPR(ctx context.Context, owner, repo string, number int) (*g
 	resp, err := b.githubClient.Do(ctx, req, pr)
 	logGitHubRateLimits(resp)
 	if err != nil {
-		if resp.StatusCode == http.StatusNotModified {
+		if resp != nil && resp.StatusCode == http.StatusNotModified {
 			log.Println("Returning cached version of", shortLink)
 			return cpr.pr, nil
 		}
