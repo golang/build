@@ -167,7 +167,15 @@ func main() {
 		}
 		w.NextMilestone, err = getMilestone(nextV)
 		if err != nil {
-			log.Fatalf("cannot find the next GitHub milestone after release %s: %v", w.Version, err)
+			log.Fatalf("cannot find %s, the next GitHub milestone after release %s: %v", nextV, w.Version, err)
+		}
+	}
+	// For major releases (go1.X), also check the "create first minor release milestone"
+	// step in the release process wasn't accidentally missed. See issue 44404.
+	if !w.BetaRelease && !w.RCRelease && strings.Count(w.Version, ".") == 1 {
+		firstMinor := w.Version + ".1"
+		if _, err := getMilestone(firstMinor); err != nil {
+			log.Fatalf("cannot find %s, the first minor release GitHub milestone after major release %s: %v", firstMinor, w.Version, err)
 		}
 	}
 
