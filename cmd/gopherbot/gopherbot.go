@@ -65,6 +65,7 @@ const (
 	needsDecisionID      = 373401956
 	needsFixID           = 373399998
 	needsInvestigationID = 373402289
+	earlyInCycleID       = 626114143
 )
 
 // Label names (that are used in multiple places).
@@ -355,6 +356,7 @@ var tasks = []struct {
 	// Tasks that are specific to the golang/go repo.
 	{"kicktrain", (*gopherbot).getOffKickTrain},
 	{"unwait-release", (*gopherbot).unwaitRelease},
+	{"ping-early-issues", (*gopherbot).pingEarlyIssues},
 	{"label build issues", (*gopherbot).labelBuildIssues},
 	{"label mobile issues", (*gopherbot).labelMobileIssues},
 	{"label tools issues", (*gopherbot).labelToolsIssues},
@@ -792,6 +794,8 @@ func (b *gopherbot) unwaitRelease(ctx context.Context) error {
 			log.Printf("[dry run] would remove hashtag 'wait-release' from CL %d", ci.ChangeNumber)
 			continue
 		}
+		log.Printf("https://golang.org/cl/%d: removing wait-release", ci.ChangeNumber)
+		time.Sleep(3 * time.Second) // Take a moment between updating CLs, since a human will be running this task manually.
 		_, err := b.gerrit.SetHashtags(ctx, ci.ID, gerrit.HashtagsInput{
 			Add:    []string{"ex-wait-release"},
 			Remove: []string{"wait-release"},
@@ -800,9 +804,53 @@ func (b *gopherbot) unwaitRelease(ctx context.Context) error {
 			log.Printf("https://golang.org/cl/%d: modifying hash tags: %v", ci.ChangeNumber, err)
 			return err
 		}
-		log.Printf("https://golang.org/cl/%d: removed wait-release", ci.ChangeNumber)
 	}
 	return nil
+}
+
+// pingEarlyIssues pings early-in-cycle issues in the next major release milestone.
+// This is run manually (with --only-run) at the opening of a release cycle.
+func (b *gopherbot) pingEarlyIssues(ctx context.Context) error {
+	// We only run this task if it was explicitly requested via
+	// the --only-run flag.
+	if *onlyRun == "" {
+		return nil
+	}
+
+	// Compute nextMajor, a value like "1.17" representing that Go 1.17
+	// is the next major version (the version whose development just started).
+	majorReleases, err := b.getMajorReleases(ctx)
+	if err != nil {
+		return err
+	}
+	nextMajor := majorReleases[len(majorReleases)-1]
+
+	// The message posted in this task links to an announcement that the tree is open
+	// for general Go 1.x development. Update the openTreeURLs map appropriately when
+	// running this task.
+	openTreeURLs := map[string]string{
+		"1.17": "https://groups.google.com/g/golang-dev/c/VNJFUxHWLHo/m/PBmGdYqoAAAJ",
+	}
+	if url, ok := openTreeURLs[nextMajor]; !ok {
+		return fmt.Errorf("openTreeURLs[%q] is missing a value, please fill it in", nextMajor)
+	} else if !strings.HasPrefix(url, "https://groups.google.com/g/golang-dev/c/") {
+		return fmt.Errorf("openTreeURLs[%q] is %q, which doesn't begin with the usual prefix, so please double-check that the URL is correct", nextMajor, url)
+	}
+
+	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		if gi.NotExist || gi.Closed || gi.PullRequest || !gi.HasLabelID(earlyInCycleID) || gi.Milestone.Title != "Go"+nextMajor {
+			return nil
+		}
+		if *dryRun {
+			log.Printf("[dry run] would ping early-in-cycle issue %d", gi.Number)
+			return nil
+		}
+		log.Printf("pinging early-in-cycle issue %d", gi.Number)
+		time.Sleep(3 * time.Second) // Take a moment between pinging issues, since a human will be running this task manually.
+		msg := fmt.Sprintf("This issue is currently labeled as early-in-cycle for Go %s.\n"+
+			"That [time is now](%s), so a friendly reminder to look at it again.", nextMajor, openTreeURLs[nextMajor])
+		return b.addGitHubComment(ctx, b.gorepo, gi.Number, msg)
+	})
 }
 
 // freezeOldIssues locks any issue that's old and closed.
@@ -1472,6 +1520,9 @@ func (b *gopherbot) onLatestCL(ctx context.Context, cl *maintner.GerritCL, f fun
 
 // getMajorReleases returns the two most recent major Go 1.x releases, and
 // the next upcoming release, sorted and formatted like []string{"1.9", "1.10", "1.11"}.
+//
+// The data returned is fetched from Maintner Service occasionally
+// and cached for some time.
 func (b *gopherbot) getMajorReleases(ctx context.Context) ([]string, error) {
 	b.releases.Lock()
 	defer b.releases.Unlock()
