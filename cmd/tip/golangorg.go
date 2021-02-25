@@ -5,8 +5,6 @@
 package main
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -76,7 +74,7 @@ func (b golangorgBuilder) Init(logger *log.Logger, dir, hostport string, heads m
 
 	logger.Printf("starting golangorg ...")
 	golangorgBin := filepath.Join(binDir, "golangorg")
-	golangorg := exec.Command(golangorgBin, "-http="+hostport, "-index", "-index_interval=-1s", "-play")
+	golangorg := exec.Command(golangorgBin, "-http="+hostport)
 	golangorg.Env = append(os.Environ(), "GOROOT="+goDir)
 	golangorg.Stdout = logWriter
 	golangorg.Stderr = logWriter
@@ -86,15 +84,7 @@ func (b golangorgBuilder) Init(logger *log.Logger, dir, hostport string, heads m
 	return golangorg, nil
 }
 
-var indexingMsg = []byte("Indexing in progress: result may be inaccurate")
-
 func (b golangorgBuilder) HealthCheck(hostport string) error {
-	body, err := getOK(fmt.Sprintf("http://%v/search?q=FALLTHROUGH", hostport))
-	if err != nil {
-		return err
-	}
-	if bytes.Contains(body, indexingMsg) {
-		return errors.New("still indexing")
-	}
-	return nil
+	_, err := getOK(fmt.Sprintf("http://%v/pkg/fmt", hostport))
+	return err
 }
