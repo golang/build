@@ -205,10 +205,10 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mwhudson, thanm},
 	},
 	"go/src/cmd/pprof": {
-		Primary: []Owner{hyangah},
+		Primary: []Owner{cherryyz},
 	},
 	"go/src/cmd/trace": {
-		Primary: []Owner{hyangah},
+		Primary: []Owner{mknyszek, prattmic},
 	},
 	"go/src/cmd/vet": {
 		Primary: []Owner{adonovan},
@@ -369,6 +369,9 @@ var entries = map[string]*Entry{
 	"go/src/internal/cpu": {
 		Primary: []Owner{khr, martisch},
 	},
+	"go/src/internal/profile": {
+		Primary: []Owner{cherryyz},
+	},
 	"go/src/internal/singleflight": {
 		Primary: []Owner{bradfitz, iant},
 	},
@@ -391,6 +394,9 @@ var entries = map[string]*Entry{
 	"go/src/internal/testenv": {
 		Primary:   []Owner{bradfitz, iant},
 		Secondary: []Owner{josharian},
+	},
+	"go/src/internal/trace": {
+		Primary: []Owner{mknyszek, prattmic},
 	},
 	"go/src/io": {
 		Primary:   []Owner{gri},
@@ -431,7 +437,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{rsc, empijei},
 	},
 	"go/src/net/http/pprof": {
-		Primary: []Owner{rsc},
+		Primary: []Owner{cherryyz, rsc},
 	},
 	"go/src/net/internal/socktest": {
 		Primary: []Owner{},
@@ -503,17 +509,16 @@ var entries = map[string]*Entry{
 		Primary: []Owner{austin, khr},
 	},
 	"go/src/runtime/pprof": {
-		Primary: []Owner{hyangah},
+		Primary: []Owner{cherryyz},
 	},
 	"go/src/runtime/pprof/internal/protopprof": {
-		Primary:   []Owner{},
-		Secondary: []Owner{matloob},
+		Primary: []Owner{cherryyz},
 	},
 	"go/src/runtime/race": {
 		Primary: []Owner{dvyukov},
 	},
 	"go/src/runtime/trace": {
-		Primary: []Owner{hyangah, dvyukov},
+		Primary: []Owner{mknyszek, prattmic, dvyukov},
 	},
 	"go/src/sort": {
 		Primary: []Owner{rsc, gri, iant, bradfitz},
