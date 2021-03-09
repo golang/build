@@ -5,6 +5,7 @@
 # golang.org/x/build/dashboard
 
 Package dashboard contains shared configuration and logic used by various pieces of the Go continuous build system.
+<!-- End of auto-generated section -->
 
 ## Deploying
 

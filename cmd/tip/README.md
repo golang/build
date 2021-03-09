@@ -5,6 +5,7 @@
 # golang.org/x/build/cmd/tip
 
 Command tip is the tip.golang.org server, serving the latest HEAD straight from the Git oven.
+<!-- End of auto-generated section -->
 
 ## Deployment
 

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// fake provides a fake implementation of a Datastore client to use in
-// testing.
+// Package fake provides a fake implementation of a Datastore client
+// to use in testing.
 package fake
 
 import (
