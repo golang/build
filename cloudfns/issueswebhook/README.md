@@ -14,5 +14,5 @@ gcloud functions deploy GitHubIssueChangeWebHook \
   --project=symbolic-datum-552 \
   --runtime go113 \
   --trigger-http \
-  --set-env-vars=GCS_BUCKET=<bucket name>,GITHUB_WEBHOOK_SECRET=<github webhook secret>
+  --set-env-vars="GCS_BUCKET=golang-github-issue-data,GITHUB_WEBHOOK_SECRET=$(gcloud --project=symbolic-datum-552 secrets versions access latest --secret=github-webhook-secret)"
 ```

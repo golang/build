@@ -31,7 +31,7 @@ const (
 	// NameGitHubSSH is the secret name for GitHub SSH key.
 	NameGitHubSSH = "github-ssh"
 
-	// NameGithubSSHKey is the secret name for the GitHub SSH private key.
+	// NameGitHubSSHKey is the secret name for the GitHub SSH private key.
 	NameGitHubSSHKey = "github-ssh-private-key"
 
 	// NameGobotPassword is the secret name for the Gobot password.
@@ -43,6 +43,9 @@ const (
 	// NameMaintnerGitHubToken is the secret name for the Maintner GitHub token.
 	NameMaintnerGitHubToken = "maintner-github-token"
 
+	// NameGitHubWebhookSecret is the secret name for a golang/go GitHub webhook secret.
+	NameGitHubWebhookSecret = "github-webhook-secret"
+
 	// NamePubSubHelperWebhook is the secret name for the pubsub helper webhook secret.
 	NamePubSubHelperWebhook = "pubsubhelper-webhook-secret"
 
@@ -51,6 +54,10 @@ const (
 
 	// NameAWSKeyID is the secret name for the AWS key id.
 	NameAWSKeyID = "aws-key-id"
+
+	// NameSendGridAPIKey is the secret name for a Go project SendGrid API key.
+	// This API key only allows sending email.
+	NameSendGridAPIKey = "sendgrid-sendonly-api-key"
 )
 
 type secretClient interface {

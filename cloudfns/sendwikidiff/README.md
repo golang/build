@@ -15,5 +15,5 @@ gcloud functions deploy HandleWikiChangePubSub \
   --runtime go113 \
   --trigger-topic github.webhooks.golang.go.wiki \
   --memory 1024 \
-  --set-env-vars=SENDGRID_API_KEY=<SENDGRID_API_KEY>
+  --set-env-vars="SENDGRID_API_KEY=$(gcloud --project=symbolic-datum-552 secrets versions access latest --secret=sendgrid-sendonly-api-key)"
 ```
