@@ -80,7 +80,6 @@ var (
 	thanm        = gh("thanm")
 	tklauser     = gh("tklauser")
 	tombergan    = gh("tombergan")
-	x1ddos       = gh("x1ddos")
 
 	toolsTeam = gh("golang/tools-team")
 )
@@ -104,11 +103,11 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{agl, katie, roland},
 	},
 	"crypto/acme": {
-		Primary:   []Owner{roland, x1ddos},
+		Primary:   []Owner{roland},
 		Secondary: []Owner{filippo},
 	},
 	"crypto/acme/autocert": {
-		Primary:   []Owner{bradfitz, x1ddos},
+		Primary:   []Owner{bradfitz},
 		Secondary: []Owner{roland, filippo},
 	},
 
