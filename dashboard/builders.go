@@ -2354,18 +2354,21 @@ func init() {
 		HostType:       "host-linux-ppc64-osu",
 		FlakyNet:       true,
 		distTestAdjust: ppc64DistTestPolicy,
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see golang.org/issues/44422
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-ppc64le-buildlet",
 		HostType:       "host-linux-ppc64le-osu",
 		FlakyNet:       true,
 		distTestAdjust: ppc64DistTestPolicy,
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see golang.org/issues/44422
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-ppc64le-power9osu",
 		HostType:       "host-linux-ppc64le-power9-osu",
 		FlakyNet:       true,
 		distTestAdjust: ppc64DistTestPolicy,
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see golang.org/issues/44422
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-arm64-packet",
