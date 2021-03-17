@@ -14,5 +14,5 @@ gcloud functions deploy GitHubWikiChangeWebHook \
   --project=symbolic-datum-552 \
   --runtime go113 \
   --trigger-http \
-  --set-env-vars="PUBSUB_TOPIC=github.webhooks.golang.go.wiki,GITHUB_WEBHOOK_SECRET=$(gcloud --project=symbolic-datum-552 secrets versions access latest --secret=github-webhook-secret)"
+  --set-env-vars="PUBSUB_TOPIC=github.webhooks.golang.go.wiki,GCP_PROJECT=symbolic-datum-552,GITHUB_WEBHOOK_SECRET=$(gcloud --project=symbolic-datum-552 secrets versions access latest --secret=github-webhook-secret)"
 ```

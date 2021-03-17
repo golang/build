@@ -27,7 +27,6 @@ var (
 )
 
 func GitHubWikiChangeWebHook(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not read request body: %v", err)
@@ -64,7 +63,13 @@ func GitHubWikiChangeWebHook(w http.ResponseWriter, r *http.Request) {
 // publishToTopic publishes body to the given topic.
 // It returns the ID of the message published.
 var publishToTopic = func(topic string, body []byte) (string, error) {
+	// TODO(dmitshur): Can factor out pubsub.NewClient to run once at init time as suggested at
+	// https://cloud.google.com/functions/docs/concepts/go-runtime#one-time_initialization, and
+	// determine projectID via metadata.ProjectID instead of needing the GCP_PROJECT env var.
 	ctx := context.Background()
+	if projectID == "" {
+		return "", fmt.Errorf("projectID is an empty string")
+	}
 	client, err := pubsub.NewClient(ctx, projectID)
 	if err != nil {
 		return "", fmt.Errorf("pubsub.NewClient: %v", err)
