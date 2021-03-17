@@ -171,24 +171,34 @@ func newBasepinChecker() *healthChecker {
 	}
 }
 
-var lastGitMirrorErrors atomic.Value // of []string
+// gitMirrorStatus is the latest known status of the gitmirror service.
+var gitMirrorStatus = struct {
+	sync.Mutex
+	Errors   []string
+	Warnings []string
+}{Warnings: []string{"still checking"}}
 
 func monitorGitMirror() {
 	for {
-		lastGitMirrorErrors.Store(gitMirrorErrors())
+		errs, warns := gitMirrorErrors()
+		gitMirrorStatus.Lock()
+		gitMirrorStatus.Errors, gitMirrorStatus.Warnings = errs, warns
+		gitMirrorStatus.Unlock()
 		time.Sleep(30 * time.Second)
 	}
 }
 
 // gitMirrorErrors queries the status pages of all
 // running gitmirror instances and reports errors.
-func gitMirrorErrors() (errs []string) {
+//
+// It makes use of pool.KubeGoClient() to do the query.
+func gitMirrorErrors() (errs, warns []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	pods, err := pool.KubeGoClient().GetPods(ctx)
 	if err != nil {
 		log.Println("gitMirrorErrors: goKubeClient.GetPods:", err)
-		return []string{"failed to get pods; can't query gitmirror status"}
+		return []string{"failed to get pods; can't query gitmirror status"}, nil
 	}
 	var runningGitMirror []api.Pod
 	for _, p := range pods {
@@ -198,29 +208,32 @@ func gitMirrorErrors() (errs []string) {
 		runningGitMirror = append(runningGitMirror, p)
 	}
 	if len(runningGitMirror) == 0 {
-		return []string{"no running gitmirror instances"}
+		return []string{"no running gitmirror instances"}, nil
 	}
 	for _, pod := range runningGitMirror {
 		// The gitmirror -http=:8585 status page URL is hardcoded here.
 		// If the ReplicationController configuration changes (rare), this
 		// health check will begin to fail until it's updated accordingly.
-		instanceErrors := gitMirrorInstanceErrors(ctx, fmt.Sprintf("http://%s:8585/", pod.Status.PodIP))
-		for _, err := range instanceErrors {
+		instErrs, instWarns := gitMirrorInstanceErrors(ctx, fmt.Sprintf("http://%s:8585/", pod.Status.PodIP))
+		for _, err := range instErrs {
 			errs = append(errs, fmt.Sprintf("instance %s: %s", pod.Name, err))
 		}
+		for _, warn := range instWarns {
+			warns = append(warns, fmt.Sprintf("instance %s: %s", pod.Name, warn))
+		}
 	}
-	return errs
+	return errs, warns
 }
 
-func gitMirrorInstanceErrors(ctx context.Context, url string) (errs []string) {
+func gitMirrorInstanceErrors(ctx context.Context, url string) (errs, warns []string) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return []string{err.Error()}
+		return []string{err.Error()}, nil
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		return []string{res.Status}
+		return []string{res.Status}, nil
 	}
 	// TODO: add a JSON mode to gitmirror so we don't need to parse HTML.
 	// This works for now. We control its output.
@@ -240,14 +253,19 @@ func gitMirrorInstanceErrors(ctx context.Context, url string) (errs []string) {
 			if strings.Contains(line, "</html>") {
 				break
 			}
-			return []string{fmt.Sprintf("error parsing line %q", line)}
+			return []string{fmt.Sprintf("error parsing line %q", line)}, nil
+		}
+		if strings.HasPrefix(m[2], "ok; ") {
+			// If the status begins with "ok", it can't be that bad.
+			warns = append(warns, fmt.Sprintf("repo %s: %s", m[1], m[2]))
+			continue
 		}
 		errs = append(errs, fmt.Sprintf("repo %s: %s", m[1], m[2]))
 	}
 	if err := bs.Err(); err != nil {
 		errs = append(errs, err.Error())
 	}
-	return errs
+	return errs, warns
 }
 
 // $1 is repo; $2 is error message
@@ -259,13 +277,14 @@ func newGitMirrorChecker() *healthChecker {
 		Title:  "Git mirroring",
 		DocURL: "https://github.com/golang/build/tree/master/cmd/gitmirror",
 		Check: func(w *checkWriter) {
-			ee, ok := lastGitMirrorErrors.Load().([]string)
-			if !ok {
-				w.warn("still checking")
-				return
-			}
-			for _, v := range ee {
+			gitMirrorStatus.Lock()
+			errs, warns := gitMirrorStatus.Errors, gitMirrorStatus.Warnings
+			gitMirrorStatus.Unlock()
+			for _, v := range errs {
 				w.error(v)
+			}
+			for _, v := range warns {
+				w.warn(v)
 			}
 		},
 	}
