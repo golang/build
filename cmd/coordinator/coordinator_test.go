@@ -324,7 +324,7 @@ func TestSlowBotsFromComments(t *testing.T) {
 	for _, bc := range slowBots {
 		got = append(got, bc.Name)
 	}
-	want := []string{"aix-ppc64", "darwin-amd64-10_14", "linux-arm64-packet"}
+	want := []string{"aix-ppc64", "darwin-amd64-10_14", "linux-arm64-aws"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("mismatch:\n got: %q\nwant: %q\n", got, want)
 	}

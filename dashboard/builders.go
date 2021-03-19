@@ -37,7 +37,7 @@ var slowBotAliases = map[string]string{
 	"android-arm":          "android-arm-corellium",
 	"android-arm64":        "android-arm64-corellium",
 	"arm":                  "linux-arm-aws",
-	"arm64":                "linux-arm64-packet",
+	"arm64":                "linux-arm64-aws",
 	"darwin":               "darwin-amd64-10_14",
 	"darwin-amd64":         "darwin-amd64-10_14",
 	"darwin-arm64":         "darwin-arm64-11_0-toothrot",
@@ -53,7 +53,7 @@ var slowBotAliases = map[string]string{
 	"js":                   "js-wasm",
 	"linux":                "linux-amd64",
 	"linux-arm":            "linux-arm-aws",
-	"linux-arm64":          "linux-arm64-packet",
+	"linux-arm64":          "linux-arm64-aws",
 	"linux-mips":           "linux-mips-rtrk",
 	"linux-mips64":         "linux-mips64-rtrk",
 	"linux-mips64le":       "linux-mips64le-mengzhuo",
@@ -1600,7 +1600,7 @@ func init() {
 	// for all supported Go versions.
 	addMiscCompile := func(suffix, rx string) { addMiscCompileGo1(0, suffix, rx) }
 
-	addMiscCompile("-linuxarm", "^linux-arm")                // 2: arm, arm64
+	addMiscCompile("-linuxarm", "^linux-arm-arm5$")          // 1: linux/arm with GOARM=5
 	addMiscCompile("-darwin", "^darwin-(386|amd64)$")        // 1: amd64
 	addMiscCompileGo1(16, "-darwinarm64", "^darwin-arm64$")  // 1: arm64 (for Go 1.16 and newer)
 	addMiscCompile("-mips", "^linux-mips")                   // 4: mips, mipsle, mips64, mips64le
@@ -2410,8 +2410,10 @@ func init() {
 		FlakyNet: true, // maybe not flaky, but here conservatively
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-arm64-aws",
-		HostType: "host-linux-arm64-aws",
+		Name:              "linux-arm64-aws",
+		HostType:          "host-linux-arm64-aws",
+		tryBot:            defaultTrySet(),
+		numTryTestHelpers: 1,
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-arm-aws",
