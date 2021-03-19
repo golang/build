@@ -89,7 +89,7 @@ func TestBuilderSelectionPerGoVersion(t *testing.T) {
 		{"go1.16", "linux-386", "linux-386-stretch"},
 
 		// Go 1.15.x still uses the Packet and Scaleway builders.
-		{"go1.15.55", "linux-armv6l", "linux-arm"},
+		{"go1.15.55", "linux-armv6l", "linux-arm-scaleway"},
 		// Go 1.16 starts to use the the AWS builders.
 		{"go1.16", "linux-arm64", "linux-arm64-aws"},
 		{"go1.16", "linux-armv6l", "linux-arm-aws"},

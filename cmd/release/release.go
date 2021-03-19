@@ -241,7 +241,7 @@ var builds = []*Build{
 		GoQuery: "< go1.16beta1",
 		OS:      "linux",
 		Arch:    "arm",
-		Builder: "linux-arm",
+		Builder: "linux-arm-scaleway",
 		Goarm:   6, // For compatibility with all Raspberry Pi models.
 		// The tests take too long for the release packaging.
 		// Much of the time the whole buildlet times out.

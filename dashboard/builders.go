@@ -36,7 +36,7 @@ var slowBotAliases = map[string]string{
 	"android-amd64":        "android-amd64-emu",
 	"android-arm":          "android-arm-corellium",
 	"android-arm64":        "android-arm64-corellium",
-	"arm":                  "linux-arm",
+	"arm":                  "linux-arm-aws",
 	"arm64":                "linux-arm64-packet",
 	"darwin":               "darwin-amd64-10_14",
 	"darwin-amd64":         "darwin-amd64-10_14",
@@ -52,6 +52,7 @@ var slowBotAliases = map[string]string{
 	"ios":                  "ios-arm64-corellium",
 	"js":                   "js-wasm",
 	"linux":                "linux-amd64",
+	"linux-arm":            "linux-arm-aws",
 	"linux-arm64":          "linux-arm64-packet",
 	"linux-mips":           "linux-mips-rtrk",
 	"linux-mips64":         "linux-mips64-rtrk",
@@ -1899,7 +1900,7 @@ func init() {
 		numTryTestHelpers: 4, // Target time is < 15 min for golang.org/issue/42661.
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-arm",
+		Name:     "linux-arm-scaleway",
 		HostType: "host-linux-arm-scaleway",
 		CrossCompileConfig: &CrossCompileConfig{
 			CompileHostType:    "host-linux-armhf-cross",
@@ -2413,8 +2414,10 @@ func init() {
 		HostType: "host-linux-arm64-aws",
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-arm-aws",
-		HostType: "host-linux-arm-aws",
+		Name:              "linux-arm-aws",
+		HostType:          "host-linux-arm-aws",
+		tryBot:            defaultTrySet(),
+		numTryTestHelpers: 1,
 	})
 	addBuilder(BuildConfig{
 		FlakyNet:       true,
