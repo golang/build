@@ -120,10 +120,10 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{thanm, cherryyz},
 	},
 
-	"go/misc/wasm":                 wasmOwners,
-	"go/cmd/compile/internal/wasm": wasmOwners,
-	"go/cmd/internal/obj/wasm":     wasmOwners,
-	"go/cmd/link/internal/wasm":    wasmOwners,
+	"go/misc/wasm":                     wasmOwners,
+	"go/src/cmd/compile/internal/wasm": wasmOwners,
+	"go/src/cmd/internal/obj/wasm":     wasmOwners,
+	"go/src/cmd/link/internal/wasm":    wasmOwners,
 
 	"go/src/archive/tar": {
 		Primary: []Owner{joetsai},
