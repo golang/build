@@ -47,7 +47,7 @@ func TestFriendlyDuration(t *testing.T) {
 func TestHandleStatus_HealthFormatting(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	addHealthCheckers(ctx)
+	addHealthCheckers(ctx, nil)
 	addHealthChecker(&healthChecker{
 		ID:    "allgood",
 		Title: "All Good Test",

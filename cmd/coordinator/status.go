@@ -31,11 +31,15 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/go-github/github"
+	"go.opencensus.io/stats"
 	"golang.org/x/build/cmd/coordinator/internal"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/foreach"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/kubernetes/api"
+	"golang.org/x/oauth2"
 )
 
 // status
@@ -136,11 +140,11 @@ func addHealthChecker(hc *healthChecker) {
 }
 
 // basePinErr is the status of the start-up time basepin disk creation
-// in gce.go. It's of type string; nil means no result yet, empty
-// string means success, and non-empty means an error.
+// in gce.go. It's of type string; no value means no result yet,
+// empty string means success, and non-empty means an error.
 var basePinErr atomic.Value
 
-func addHealthCheckers(ctx context.Context) {
+func addHealthCheckers(ctx context.Context, sc *secret.Client) {
 	addHealthChecker(newMacHealthChecker())
 	addHealthChecker(newScalewayHealthChecker())
 	addHealthChecker(newPacketHealthChecker())
@@ -150,6 +154,7 @@ func addHealthCheckers(ctx context.Context) {
 	addHealthChecker(newBasepinChecker())
 	addHealthChecker(newGitMirrorChecker())
 	addHealthChecker(newTipGolangOrgChecker(ctx))
+	addHealthChecker(newGitHubAPIChecker(ctx, sc))
 }
 
 func newBasepinChecker() *healthChecker {
@@ -292,8 +297,8 @@ func newGitMirrorChecker() *healthChecker {
 
 func newTipGolangOrgChecker(ctx context.Context) *healthChecker {
 	// tipError is the status of the tip.golang.org website.
-	// It's of type string; nil means no result yet, empty
-	// string means success, and non-empty means an error.
+	// It's of type string; no value means no result yet,
+	// empty string means success, and non-empty means an error.
 	var tipError atomic.Value
 	go func() {
 		for {
@@ -580,6 +585,90 @@ func reverseHostChecker(hosts []string) func(cw *checkWriter) {
 			}
 		}
 	}
+}
+
+// newGitHubAPIChecker creates a GitHub API health checker
+// that queries the remaining rate limit at regular invervals
+// and reports when the hourly quota has been exceeded.
+//
+// It also records metrics to track remaining rate limit over time.
+//
+func newGitHubAPIChecker(ctx context.Context, sc *secret.Client) *healthChecker {
+	// githubRate is the status of the GitHub API v3 client.
+	// It's of type *github.Rate; no value means no result yet,
+	// nil value means no recent result.
+	var githubRate atomic.Value
+
+	hc := &healthChecker{
+		ID:     "githubapi",
+		Title:  "GitHub API Rate Limit",
+		DocURL: "https://golang.org/issue/44406",
+		Check: func(w *checkWriter) {
+			rate, ok := githubRate.Load().(*github.Rate)
+			if !ok {
+				w.warn("still checking")
+			} else if rate == nil {
+				w.warn("no recent result")
+			} else if rate.Remaining == 0 {
+				resetIn := "a minute or so"
+				if t := time.Until(rate.Reset.Time); t > time.Minute {
+					resetIn = t.Round(time.Second).String()
+				}
+				w.warnf("hourly GitHub API rate limit exceeded; reset in %s", resetIn)
+			}
+		},
+	}
+
+	// Start measuring and reporting the remaining GitHub API v3 rate limit.
+	if sc == nil {
+		hc.Check = func(w *checkWriter) {
+			w.info("check disabled; credentials were not provided")
+		}
+		return hc
+	}
+	token, err := sc.Retrieve(ctx, secret.NameMaintnerGitHubToken)
+	if err != nil {
+		log.Printf("newGitHubAPIChecker: sc.Retrieve(_, %q) failed, err = %v\n", secret.NameMaintnerGitHubToken, err)
+		hc.Check = func(w *checkWriter) {
+			// The check is displayed publicly, so don't include details from err.
+			w.error("failed to retrieve API token")
+		}
+		return hc
+	}
+	gh := github.NewClient(oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})))
+	go func() {
+		t := time.NewTicker(time.Minute)
+		defer t.Stop()
+		for {
+			// Fetch the current rate limit from the GitHub API.
+			// This endpoint is special in that it doesn't consume rate limit quota itself.
+			var rate *github.Rate
+			rateLimitsCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			rl, _, err := gh.RateLimits(rateLimitsCtx)
+			cancel()
+			if rle := (*github.RateLimitError)(nil); errors.As(err, &rle) {
+				rate = &rle.Rate
+			} else if err != nil {
+				log.Println("GitHubAPIChecker: github.RateLimits:", err)
+			} else {
+				rate = rl.GetCore()
+			}
+
+			// Store the result of fetching, and record the current rate limit, if any.
+			githubRate.Store(rate)
+			if rate != nil {
+				stats.Record(ctx, mGitHubAPIRemaining.M(int64(rate.Remaining)))
+			}
+
+			select {
+			case <-t.C:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return hc
 }
 
 func healthCheckerHandler(hc *healthChecker) http.Handler {

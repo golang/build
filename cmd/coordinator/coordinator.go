@@ -316,7 +316,7 @@ func main() {
 		log.Fatalf("Unknown mode: %q", *mode)
 	}
 
-	addHealthCheckers(context.Background())
+	addHealthCheckers(context.Background(), sc)
 
 	gr, err := metrics.GCEResource("go-build-coordinator")
 	if err != nil && metadata.OnGCE() {

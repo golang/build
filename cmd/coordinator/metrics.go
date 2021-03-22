@@ -19,8 +19,9 @@ import (
 )
 
 var (
-	kHostType         = tag.MustNewKey("go-build/coordinator/host_type")
-	mReverseBuildlets = stats.Int64("go-build/coordinator/reverse_buildlets_count", "number of reverse buildlets", stats.UnitDimensionless)
+	kHostType           = tag.MustNewKey("go-build/coordinator/host_type")
+	mReverseBuildlets   = stats.Int64("go-build/coordinator/reverse_buildlets_count", "number of reverse buildlets", stats.UnitDimensionless)
+	mGitHubAPIRemaining = stats.Int64("go-build/githubapi/remaining", "remaining GitHub API rate limit", stats.UnitDimensionless)
 )
 
 // views should contain all measurements. All *view.View added to this
@@ -31,6 +32,12 @@ var views = []*view.View{
 		Description: "Number of reverse buildlets that are up",
 		Measure:     mReverseBuildlets,
 		TagKeys:     []tag.Key{kHostType},
+		Aggregation: view.LastValue(),
+	},
+	{
+		Name:        "go-build/githubapi/remaining",
+		Description: "Remaining GitHub API rate limit",
+		Measure:     mGitHubAPIRemaining,
 		Aggregation: view.LastValue(),
 	},
 }
