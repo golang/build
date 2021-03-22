@@ -22,7 +22,6 @@ RUN go install \
     cloud.google.com/go/compute/metadata \
     cloud.google.com/go/datastore \
     cloud.google.com/go/errorreporting \
-    cloud.google.com/go/monitoring/apiv3 \
     cloud.google.com/go/storage \
     github.com/gliderlabs/ssh \
     github.com/golang/protobuf/ptypes \

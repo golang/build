@@ -57,6 +57,7 @@ import (
 	"golang.org/x/build/autocertcache"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/cmd/coordinator/internal/metrics"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/buildgo"
@@ -317,6 +318,17 @@ func main() {
 
 	addHealthCheckers(context.Background())
 
+	gr, err := metrics.GCEResource("go-build-coordinator")
+	if err != nil && metadata.OnGCE() {
+		log.Println("metrics.GCEResource:", err)
+	}
+	if ms, err := metrics.NewService(gr, views); err != nil {
+		log.Println("failed to initialize metrics:", err)
+	} else {
+		http.Handle("/metrics", ms)
+		defer ms.Stop()
+	}
+
 	cc, err := grpc4.NewClient(http.DefaultClient, "https://maintner.golang.org")
 	if err != nil {
 		log.Fatal(err)
@@ -374,7 +386,7 @@ func main() {
 		go listenAndServeInternalModuleProxy()
 		go findWorkLoop()
 		go findTryWorkLoop()
-		go reportMetrics(context.Background())
+		go reportReverseCountMetrics()
 		// TODO(cmang): gccgo will need its own findWorkLoop
 	}
 

@@ -15,18 +15,13 @@ import (
 	"text/template"
 	"time"
 
-	monapi "cloud.google.com/go/monitoring/apiv3"
 	"golang.org/x/build/buildenv"
-	"golang.org/x/build/cmd/coordinator/metrics"
 	"golang.org/x/build/internal/buildgo"
 	dm "google.golang.org/api/deploymentmanager/v2"
-	"google.golang.org/api/option"
-	monpb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
 var (
 	makeClusters = flag.String("make-clusters", "go,buildlets", "comma-separated list of clusters to create. Empty means none.")
-	makeMetrics  = flag.Bool("make-metrics", false, "Create the Stackdriver metrics for buildlet monitoring.")
 )
 
 // Deployment Manager V2 manifest for creating a Google Container Engine
@@ -86,12 +81,6 @@ func main() {
 		err := createCluster(bgc, c)
 		if err != nil {
 			log.Fatalf("Error creating Kubernetes cluster %q: %v", c.Name, err)
-		}
-	}
-
-	if *makeMetrics {
-		if err := createMetrics(bgc); err != nil {
-			log.Fatalf("could not create metrics: %v", err)
 		}
 	}
 }
@@ -184,25 +173,4 @@ func randomPassword() string {
 		log.Fatalf("randomPassword: %v", err)
 	}
 	return fmt.Sprintf("%x", buf)
-}
-
-// createMetrics creates the Stackdriver metric types required to monitor
-// buildlets on Stackdriver.
-func createMetrics(bgc *buildgo.Client) error {
-	ctx := context.Background()
-	c, err := monapi.NewMetricClient(ctx, option.WithCredentials(bgc.Creds))
-	if err != nil {
-		return err
-	}
-
-	for _, m := range metrics.Metrics {
-		if _, err = c.CreateMetricDescriptor(ctx, &monpb.CreateMetricDescriptorRequest{
-			Name:             m.DescriptorPath(bgc.Env.ProjectName),
-			MetricDescriptor: m.Descriptor,
-		}); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }

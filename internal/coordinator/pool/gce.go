@@ -32,7 +32,6 @@ import (
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/datastore"
 	"cloud.google.com/go/errorreporting"
-	monapi "cloud.google.com/go/monitoring/apiv3"
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
@@ -80,7 +79,6 @@ var (
 	errTryDeps      error // non-nil if try bots are disabled
 	gerritClient    *gerrit.Client
 	storageClient   *storage.Client
-	metricsClient   *monapi.MetricClient
 	inStaging       bool                   // are we running in the staging project? (named -dev)
 	errorsClient    *errorreporting.Client // Stackdriver errors client
 	gkeNodeIP       string
@@ -156,11 +154,6 @@ func InitGCE(sc *secret.Client, vmDeleteTimeout time.Duration, tFiles map[string
 		storageClient, err = storage.NewClient(ctx)
 		if err != nil {
 			log.Fatalf("storage.NewClient: %v", err)
-		}
-
-		metricsClient, err = monapi.NewMetricClient(ctx)
-		if err != nil {
-			log.Fatalf("monapi.NewMetricClient: %v", err)
 		}
 	}
 
@@ -291,11 +284,6 @@ func (c *GCEConfiguration) OAuthHTTPClient() *http.Client {
 // GCPCredentials retrieves the GCP credentials.
 func (c *GCEConfiguration) GCPCredentials() *google.Credentials {
 	return gcpCreds
-}
-
-// MetricsClient retrieves a metrics client.
-func (c *GCEConfiguration) MetricsClient() *monapi.MetricClient {
-	return metricsClient
 }
 
 func checkTryBuildDeps(ctx context.Context, sc *secret.Client) error {
