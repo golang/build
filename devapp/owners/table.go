@@ -36,6 +36,7 @@ var (
 	empijei      = gh("empijei")
 	filippo      = gh("FiloSottile")
 	findleyr     = gh("findleyr")
+	guodongli    = gh("guodongli-google")
 	gri          = gh("griesemer")
 	hanwen       = gh("hanwen")
 	heschik      = gh("heschik")
@@ -77,9 +78,11 @@ var (
 	sameer       = gh("Sajmani")
 	shinfan      = gh("shinfan")
 	suzmue       = gh("suzmue")
+	taking       = gh("timothy-king")
 	thanm        = gh("thanm")
 	tklauser     = gh("tklauser")
 	tombergan    = gh("tombergan")
+	zpavlinovic  = gh("zpavlinovic")
 
 	toolsTeam = gh("golang/tools-team")
 )
@@ -681,7 +684,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{toolsTeam},
 	},
 	"tools/go/analysis": {
-		Primary: []Owner{matloob},
+		Primary:   []Owner{matloob},
+		Secondary: []Owner{taking, guodongli, zpavlinovic},
 	},
 	"tools/go/ast": {
 		Primary:   []Owner{gri},
