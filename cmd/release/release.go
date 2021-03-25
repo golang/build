@@ -263,6 +263,11 @@ var builds = []*Build{
 
 	// Test-only builds.
 	{
+		Builder: "linux-386-longtest",
+		OS:      "linux", Arch: "386",
+		TestOnly: true,
+	},
+	{
 		Builder: "linux-amd64-longtest",
 		OS:      "linux", Arch: "amd64",
 		TestOnly: true,

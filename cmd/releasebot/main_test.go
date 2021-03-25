@@ -23,7 +23,10 @@ func TestTargetSelectionPerGoVersion(t *testing.T) {
 		want  []string // Expected release targets.
 	}{
 		{
-			goVer: []string{"go1.16beta1", "go1.16rc1", "go1.16", "go1.16.1"},
+			goVer: []string{
+				"go1.17beta1", "go1.17rc1", "go1.17", "go1.17.1",
+				"go1.16.3",
+			},
 			want: []string{
 				"src",
 				"linux-386",
@@ -38,12 +41,13 @@ func TestTargetSelectionPerGoVersion(t *testing.T) {
 				"darwin-arm64", // New to Go 1.16.
 				"linux-s390x",
 				"linux-ppc64le",
+				"linux-386-longtest",
 				"linux-amd64-longtest",
 				"windows-amd64-longtest",
 			},
 		},
 		{
-			goVer: []string{"go1.15.7", "go1.14.14"},
+			goVer: []string{"go1.15.11"},
 			want: []string{
 				"src",
 				"linux-386",
@@ -57,6 +61,7 @@ func TestTargetSelectionPerGoVersion(t *testing.T) {
 				"darwin-amd64",
 				"linux-s390x",
 				"linux-ppc64le",
+				"linux-386-longtest",
 				"linux-amd64-longtest",
 				"windows-amd64-longtest",
 			},

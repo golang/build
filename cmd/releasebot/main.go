@@ -59,6 +59,7 @@ var releaseTargets = []Target{
 	{Name: "linux-ppc64le"},
 
 	// Test-only targets.
+	{Name: "linux-386-longtest", TestOnly: true},
 	{Name: "linux-amd64-longtest", TestOnly: true},
 	{Name: "windows-amd64-longtest", TestOnly: true},
 }
@@ -75,7 +76,7 @@ func usage() {
 }
 
 var (
-	skipTestFlag = flag.String("skip-test", "linux-amd64-longtest", "space-separated list of test-only targets to skip (only use if sufficient testing was done elsewhere)")
+	skipTestFlag = flag.String("skip-test", "", "space-separated list of test-only targets to skip (only use if sufficient testing was done elsewhere)")
 )
 
 var (
