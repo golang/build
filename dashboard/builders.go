@@ -1687,12 +1687,45 @@ func init() {
 		HostType: "host-linux-buster",
 		Notes:    "builder with GOEXPERIMENT=regabi, see golang.org/issue/40724",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			// Make sure we don't break things on master.
-			// The actual experiment is on dev.regabi
-			// (until we merge to master). And dev.regabi
-			// is being merged into dev.typeparams, so
-			// test that, too.
-			return repo == "go" && (branch == "master" || branch == "dev.regabi" || branch == "dev.typeparams")
+			return repo == "go" && branch == "master"
+		},
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+			"GOEXPERIMENT=regabi",
+		},
+		GoDeps: []string{
+			"89b44b4e2bb2f88474d6b8476f5c28ea2aea9b28", // A master commit from 2020/12/20, just before a merge into dev.regabi, before the GOEXPERIMENT is used anywhere
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "windows-amd64-regabi",
+		HostType: "host-windows-amd64-2016",
+		Notes:    "builder with GOEXPERIMENT=regabi, see golang.org/issue/40724",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "go" && branch == "master"
+		},
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+			"GOEXPERIMENT=regabi",
+			"GOARCH=amd64",
+			"GOHOSTARCH=amd64",
+			// cmd/go takes ~188 seconds on windows-amd64
+			// now, which is over the 180 second default
+			// dist test timeout. So, bump this builder
+			// up:
+			"GO_TEST_TIMEOUT_SCALE=2",
+		},
+		GoDeps: []string{
+			"89b44b4e2bb2f88474d6b8476f5c28ea2aea9b28", // A master commit from 2020/12/20, just before a merge into dev.regabi, before the GOEXPERIMENT is used anywhere
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:           "darwin-amd64-regabi",
+		HostType:       "host-darwin-10_15",
+		distTestAdjust: macTestPolicy,
+		Notes:          "builder with GOEXPERIMENT=regabi, see golang.org/issue/40724",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "go" && branch == "master"
 		},
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
