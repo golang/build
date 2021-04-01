@@ -146,6 +146,7 @@ var basePinErr atomic.Value
 
 func addHealthCheckers(ctx context.Context, sc *secret.Client) {
 	addHealthChecker(newMacHealthChecker())
+	addHealthChecker(newMacOSARM64Checker())
 	addHealthChecker(newScalewayHealthChecker())
 	addHealthChecker(newPacketHealthChecker())
 	addHealthChecker(newOSUPPC64Checker())
@@ -430,6 +431,15 @@ func fetchMakeMacStatus() (errs, warns []string) {
 		return []string{fmt.Sprintf("reading status response body: %v", err)}, nil
 	}
 	return resj.Errors, resj.Warnings
+}
+
+func newMacOSARM64Checker() *healthChecker {
+	return &healthChecker{
+		ID:     "macos-arm64",
+		Title:  "macOS ARM64 (M1 Mac minis)",
+		DocURL: "https://golang.org/issue/39782",
+		Check:  hostTypeChecker("host-darwin-arm64-11_0-toothrot"),
+	}
 }
 
 func hostTypeChecker(hostType string) func(cw *checkWriter) {
