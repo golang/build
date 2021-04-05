@@ -84,7 +84,7 @@ var slowBotAliases = map[string]string{
 	"openbsd-mips64":       "openbsd-mips64-jsing",
 	"plan9":                "plan9-arm",
 	"plan9-386":            "plan9-386-0intro",
-	"plan9-amd64":          "plan9-amd64-9front",
+	"plan9-amd64":          "plan9-amd64-0intro",
 	"ppc64":                "linux-ppc64-buildlet",
 	"ppc64le":              "linux-ppc64le-buildlet",
 	"ppc64lep9":            "linux-ppc64le-power9osu",
@@ -390,11 +390,13 @@ var Hosts = map[string]*HostConfig{
 	"host-plan9-amd64-0intro": &HostConfig{
 		IsReverse:   true,
 		ExpectNum:   1,
+		Notes:       "QEMU VM, Plan 9 from Bell Labs, 9k kernel",
 		OwnerGithub: "0intro",
 	},
 	"host-plan9-386-0intro": &HostConfig{
 		IsReverse:   true,
 		ExpectNum:   1,
+		Notes:       "QEMU VM, Plan 9 from Bell Labs",
 		OwnerGithub: "0intro",
 	},
 	"host-plan9-386-gce": &HostConfig{
@@ -2597,7 +2599,7 @@ func init() {
 		buildsRepo:     onlyMasterDefault,
 	})
 	addBuilder(BuildConfig{
-		Name:     "plan9-amd64-9front",
+		Name:     "plan9-amd64-0intro",
 		HostType: "host-plan9-amd64-0intro",
 		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 			run = noTestDirAndNoReboot(run, distTest, isNormalTry)
