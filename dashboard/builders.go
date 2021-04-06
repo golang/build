@@ -465,7 +465,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_12": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 5,
+		ExpectNum: 3,
 		Notes:     "MacStadium OS X 10.12 VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
@@ -475,7 +475,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_14": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 7,
+		ExpectNum: 3,
 		Notes:     "MacStadium macOS Mojave (10.14) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.12.1
@@ -485,7 +485,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_15": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 7,
+		ExpectNum: 5,
 		Notes:     "MacStadium macOS Catalina (10.15) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.12.1
@@ -495,7 +495,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-amd64-11_0": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 1,
+		ExpectNum: 5,
 		Notes:     "MacStadium macOS Big Sur (11.0) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.13.4

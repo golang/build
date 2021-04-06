@@ -877,8 +877,8 @@ func TestExpectedMacstadiumVMCount(t *testing.T) {
 			got += config.ExpectNum
 		}
 	}
-	if got != 20 {
-		t.Fatalf("macstadium host count: got %d; want 20", got)
+	if got != 16 {
+		t.Fatalf("macstadium host count: got %d; want 16", got)
 	}
 }
 
