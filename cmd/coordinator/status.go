@@ -360,7 +360,7 @@ var errFound = errors.New("error= line was found")
 
 func newMacHealthChecker() *healthChecker {
 	var hosts []string
-	const numMacHosts = 10 // physical Mac minis, not reverse buildlet connections
+	const numMacHosts = 8 // physical Mac Pros, not reverse buildlet connections. M1 Macs will be included in seperate checks.
 	for i := 1; i <= numMacHosts; i++ {
 		for _, suf := range []string{"a", "b"} {
 			name := fmt.Sprintf("macstadium_host%02d%s", i, suf)
