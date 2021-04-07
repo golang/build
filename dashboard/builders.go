@@ -2276,7 +2276,6 @@ func init() {
 		HostType:       "host-darwin-amd64-11_0",
 		distTestAdjust: macTestPolicy,
 		buildsRepo:     defaultPlusExpBuild,
-		KnownIssue:     40762,
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-nocgo",
