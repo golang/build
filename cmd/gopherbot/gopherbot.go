@@ -81,6 +81,9 @@ var (
 	vgo        = milestone{71, "vgo"}
 )
 
+// GitHub Milestone numbers for the golang/vscode-go repo.
+var vscodeUntriaged = milestone{26, "Untriaged"}
+
 type milestone struct {
 	Number int
 	Name   string
@@ -336,6 +339,9 @@ var tasks = []struct {
 	{"abandon scratch reviews", (*gopherbot).abandonScratchReviews},
 	{"assign reviewers to CLs", (*gopherbot).assignReviewersToCLs},
 
+	// Tasks that are specific to the golang/vscode-go repo.
+	{"set vscode-go milestones", (*gopherbot).setVSCodeGoMilestones},
+
 	{"access", (*gopherbot).whoNeedsAccess},
 	{"cl2issue", (*gopherbot).cl2issue},
 	{"congratulate new contributors", (*gopherbot).congratulateNewContributors},
@@ -483,12 +489,12 @@ func removeLabelFromIssue(ctx context.Context, repoID maintner.GitHubRepoID, iss
 	return err
 }
 
-func (b *gopherbot) setMilestone(ctx context.Context, gi *maintner.GitHubIssue, m milestone) error {
-	printIssue("milestone-"+m.Name, b.gorepo.ID(), gi)
+func (b *gopherbot) setMilestone(ctx context.Context, repoID maintner.GitHubRepoID, gi *maintner.GitHubIssue, m milestone) error {
+	printIssue("milestone-"+m.Name, repoID, gi)
 	if *dryRun {
 		return nil
 	}
-	_, _, err := b.ghc.Issues.Edit(ctx, "golang", "go", int(gi.Number), &github.IssueRequest{
+	_, _, err := b.ghc.Issues.Edit(ctx, repoID.Owner, repoID.Repo, int(gi.Number), &github.IssueRequest{
 		Milestone: github.Int(m.Number),
 	})
 	return err
@@ -720,7 +726,7 @@ func (b *gopherbot) getOffKickTrain(ctx context.Context) error {
 	for _, m := range matches {
 		fmt.Printf("%-30s - %s\n", m.url, m.title)
 		if !*dryRun {
-			if err := b.setMilestone(ctx, m.gi, unplanned); err != nil {
+			if err := b.setMilestone(ctx, b.gorepo.ID(), m.gi, unplanned); err != nil {
 				return err
 			}
 		}
@@ -809,7 +815,7 @@ func (b *gopherbot) labelProposals(ctx context.Context) error {
 		}
 		// Add Milestone if missing:
 		if gi.Milestone.IsNone() && !gi.HasEvent("milestoned") && !gi.HasEvent("demilestoned") {
-			if err := b.setMilestone(ctx, gi, proposal); err != nil {
+			if err := b.setMilestone(ctx, b.gorepo.ID(), gi, proposal); err != nil {
 				return err
 			}
 		}
@@ -896,7 +902,7 @@ func (b *gopherbot) setSubrepoMilestones(ctx context.Context) error {
 			// Handled by setMiscMilestones
 			return nil
 		}
-		return b.setMilestone(ctx, gi, unreleased)
+		return b.setMilestone(ctx, b.gorepo.ID(), gi, unreleased)
 	})
 }
 
@@ -906,15 +912,28 @@ func (b *gopherbot) setMiscMilestones(ctx context.Context) error {
 			return nil
 		}
 		if strings.Contains(gi.Title, "gccgo") { // TODO: better gccgo bug report heuristic?
-			return b.setMilestone(ctx, gi, gccgo)
+			return b.setMilestone(ctx, b.gorepo.ID(), gi, gccgo)
 		}
 		if strings.HasPrefix(gi.Title, "x/vgo") {
-			return b.setMilestone(ctx, gi, vgo)
+			return b.setMilestone(ctx, b.gorepo.ID(), gi, vgo)
 		}
 		if strings.HasPrefix(gi.Title, "go.dev:") || strings.HasPrefix(gi.Title, "x/pkgsite") {
-			return b.setMilestone(ctx, gi, unreleased)
+			return b.setMilestone(ctx, b.gorepo.ID(), gi, unreleased)
 		}
 		return nil
+	})
+}
+
+func (b *gopherbot) setVSCodeGoMilestones(ctx context.Context) error {
+	vscode := b.corpus.GitHub().Repo("golang", "vscode-go")
+	if vscode == nil {
+		return nil
+	}
+	return vscode.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		if gi.Closed || gi.PullRequest || !gi.Milestone.IsNone() || gi.HasEvent("demilestoned") || gi.HasEvent("milestoned") {
+			return nil
+		}
+		return b.setMilestone(ctx, vscode.ID(), gi, vscodeUntriaged)
 	})
 }
 
@@ -1532,7 +1551,7 @@ func (b *gopherbot) setMinorMilestones(ctx context.Context) error {
 			log.Printf("Failed to apply minor release milestone to issue %d: %v", gi.Number, err)
 			return nil
 		}
-		return b.setMilestone(ctx, gi, m)
+		return b.setMilestone(ctx, b.gorepo.ID(), gi, m)
 	})
 }
 
