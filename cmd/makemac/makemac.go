@@ -10,7 +10,7 @@ See https://github.com/vmware/govmomi/tree/master/govc
 
 Usage:
 
-  $ makemac <osx_minor_version>  # e.g, 8, 9, 10, 11, 12
+  $ makemac <macos_version>  # e.g, darwin-10_10, darwin-10_11, darwin-10_15, darwin-amd64-11_0
 
 */
 package main
@@ -29,6 +29,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -40,7 +41,7 @@ import (
 
 func usage() {
 	fmt.Fprintf(os.Stderr, `Usage:
-    makemac <osx_minor_version>
+    makemac <macos_version> e.g, darwin-10_10, darwin-amd64-11_0
     makemac -status
     makemac -auto
 `)
@@ -48,19 +49,25 @@ func usage() {
 }
 
 var (
-	flagStatus   = flag.Bool("status", false, "print status only")
-	flagAuto     = flag.Bool("auto", false, "Automatically create & destroy as needed, reacting to https://farmer.golang.org/status/reverse.json status.")
-	flagListen   = flag.String("listen", ":8713", "HTTP status port; used by auto mode only")
-	flagNuke     = flag.Bool("destroy-all", false, "immediately destroy all running Mac VMs")
-	flagBaseDisk = flag.Int("base-disk", 0, "debug mode: if non-zero, print base disk of macOS 10.<value> VM and exit")
+	flagStatus     = flag.Bool("status", false, "print status only")
+	flagAuto       = flag.Bool("auto", false, "Automatically create & destroy as needed, reacting to https://farmer.golang.org/status/reverse.json status.")
+	flagListen     = flag.String("listen", ":8713", "HTTP status port; used by auto mode only")
+	flagNuke       = flag.Bool("destroy-all", false, "immediately destroy all running Mac VMs")
+	flagBaseDisk   = flag.String("base-disk", "", "debug mode: if set, print base disk of macOS version selected VM and exit")
+	flagDatacenter = flag.String("datacenter", "MacStadium-ATL", "target VMWare datacenter")
+	flagCluster    = flag.String("cluster", "MacPro_Cluster", "target VMWare cluster")
 )
 
 func main() {
 	flag.Parse()
 	numArg := flag.NArg()
 	ctx := context.Background()
-	if *flagBaseDisk != 0 {
-		baseDisk, err := findBaseDisk(ctx, *flagBaseDisk)
+	if *flagBaseDisk != "" {
+		fv, err := hostTypeToVersion("host-" + *flagBaseDisk)
+		if err != nil {
+			log.Fatalf("unable to convert host=%q to VM", *flagBaseDisk)
+		}
+		baseDisk, err := findBaseDisk(ctx, fv)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -93,7 +100,7 @@ func main() {
 		}
 		return
 	}
-	minor, err := strconv.Atoi(flag.Arg(0))
+	v, err := hostTypeToVersion("host-" + flag.Arg(0))
 	if err != nil && !*flagStatus {
 		usage()
 	}
@@ -109,8 +116,7 @@ func main() {
 		return
 	}
 
-	_, err = state.CreateMac(ctx, minor)
-	if err != nil {
+	if _, err = state.CreateMac(ctx, v); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -120,9 +126,9 @@ type State struct {
 	mu sync.Mutex
 
 	Hosts  map[string]int    // IP address -> running Mac VM count (including 0)
-	VMHost map[string]string // "mac_10_8_host02b" => "10.0.0.0"
+	VMHost map[string]string // "mac_10_8_amd64_host02b" => "10.0.0.0"
 	HostIP map[string]string // "host-5" -> "10.0.0.0"
-	VMInfo map[string]VMInfo // "mac_10_8_host02b" => ...
+	VMInfo map[string]VMInfo // "mac_10_8_amd64_host02b" => ...
 
 	// VMOfSlot maps from a "slot name" to the VMWare VM name.
 	//
@@ -131,9 +137,9 @@ type State struct {
 	// This slot name of the form "macstadium_host02b" is what's
 	// reported as the host name to the coordinator.
 	//
-	// The map value is the VMWare vm name, such as "mac_10_8_host02b",
+	// The map value is the VMWare vm name, such as "mac_10_8_amd64_host02b",
 	// and is the map key of VMHost and VMInfo above.
-	VMOfSlot map[string]string // "macstadium_host02b" => "mac_10_8_host02b"
+	VMOfSlot map[string]string // "macstadium_host02b" => "mac_10_8_amd64_host02b"
 }
 
 type VMInfo struct {
@@ -168,11 +174,12 @@ func (st *State) NumCreatableVMs() int {
 	return n
 }
 
-// NumMacVMsOfVersion reports how many VMs are running Mac OS X 10.<ver>.
-func (st *State) NumMacVMsOfVersion(ver int) int {
+// NumMacVMsOfVersion reports how many VMs are running the specified macOS version.
+func (st *State) NumMacVMsOfVersion(ver *Version) int {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	prefix := fmt.Sprintf("mac_10_%v_", ver)
+
+	prefix := fmt.Sprintf("mac_%d_%d_%s_", ver.Major, ver.Minor, ver.Arch)
 	n := 0
 	for name := range st.VMInfo {
 		if strings.HasPrefix(name, prefix) {
@@ -198,34 +205,28 @@ func (st *State) DestroyAllMacs(ctx context.Context) error {
 	return ret
 }
 
-// CreateMac creates an Mac VM running OS X 10.<minor>.
-func (st *State) CreateMac(ctx context.Context, minor int) (slotName string, err error) {
-	// TODO(bradfitz): return VM name, update state, etc.
-
-	st.mu.Lock()
-	defer st.mu.Unlock()
-
-	var guestType string
-	switch minor {
-	case 8:
-		guestType = "darwin12_64Guest"
-	case 9:
-		guestType = "darwin13_64Guest"
-	case 10:
-		guestType = "darwin14_64Guest"
-	case 11:
-		guestType = "darwin15_64Guest"
-	case 12:
-		guestType = "darwin16_64Guest"
-	case 13:
+// guestType returns the appropriate VMWare guest type for the macOS version requested.
+func guestType(ver *Version) (string, error) {
+	switch ver.String() {
+	case "amd64_10.8":
+		return "darwin12_64Guest", nil
+	case "amd64_10.9":
+		return "darwin13_64Guest", nil
+	case "amd64_10.10":
+		return "darwin14_64Guest", nil
+	case "amd64_10.11":
+		return "darwin15_64Guest", nil
+	case "amd64_10.12":
+		return "darwin16_64Guest", nil
+	case "amd64_10.13":
 		// High Sierra. Requires vSphere 6.7.
 		// https://www.virtuallyghetto.com/2018/04/new-vsphere-6-7-apis-worth-checking-out.html
-		guestType = "darwin17_64Guest"
-	case 14:
+		return "darwin17_64Guest", nil
+	case "amd64_10.14":
 		// Mojave. Requires vSphere 6.7.
 		// https://www.virtuallyghetto.com/2018/04/new-vsphere-6-7-apis-worth-checking-out.html
-		guestType = "darwin18_64Guest"
-	case 15:
+		return "darwin18_64Guest", nil
+	case "amd64_10.15":
 		// Catalina. Requires vSphere 6.7 update 3.
 		// https://docs.macstadium.com/docs/vsphere-67-update-3
 		// vSphere 6.7 update 3 does not support the guestid `darwin19_64Guest` (which would be
@@ -234,36 +235,51 @@ func (st *State) CreateMac(ctx context.Context, minor int) (slotName string, err
 		// TODO: Add a new GOS definition for darwin19_64 (macOS 10.15) in HWV >= 17
 		// https://github.com/vmware/open-vm-tools/commit/6297504ef9e139c68b65afe299136d041d690eeb
 		// TODO: investigate updating the guestid when we upgrade vSphere past version 6.7u3.
-		guestType = "darwin18_64Guest"
-	default:
-		return "", fmt.Errorf("unsupported makemac minor OS X version %d", minor)
+		return "darwin18_64Guest", nil
+	case "amd64_11.0":
+		// Big Sur. Requires vSphere 6.7 update 3.
+		// https://docs.macstadium.com/docs/macos-version-in-your-vmware-cloud
+		return "darwin19_64Guest", nil
 	}
+	return "", fmt.Errorf("unsupported makemac OS X version %s", ver.String())
+}
 
-	hostType := fmt.Sprintf("host-darwin-10_%d", minor)
+// CreateMac creates a VM running the requested macOS version.
+func (st *State) CreateMac(ctx context.Context, ver *Version) (slotName string, err error) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
 
-	key, err := ioutil.ReadFile(filepath.Join(os.Getenv("HOME"), "keys", hostType))
+	gt, err := guestType(ver)
 	if err != nil {
 		return "", err
 	}
 
-	baseDisk, err := findBaseDisk(ctx, minor)
+	hostType := fmt.Sprintf("host-darwin-%d_%d", ver.Major, ver.Minor)
+	if ver.Major >= 11 {
+		hostType = fmt.Sprintf("host-darwin-%s-%d_%d", ver.Arch, ver.Major, ver.Minor)
+	}
+	key, err := ioutil.ReadFile(filepath.Join(os.Getenv("HOME"), "keys", hostType))
 	if err != nil {
-		return "", fmt.Errorf("failed to find osx_%d_frozen_nfs base disk: %v", minor, err)
+		return "", err
+	}
+	baseDisk, err := findBaseDisk(ctx, ver)
+	if err != nil {
+		return "", fmt.Errorf("failed to find osx_%s_%d_%d_frozen_nfs base disk: %v", ver.Arch, ver.Major, ver.Minor, err)
 	}
 
 	hostNum, hostWhich, err := st.pickHost()
 	if err != nil {
 		return "", err
 	}
-	name := fmt.Sprintf("mac_10_%v_host%02d%s", minor, hostNum, hostWhich)
+	name := fmt.Sprintf("mac_%d_%d_%s_host%02d%s", ver.Major, ver.Minor, ver.Arch, hostNum, hostWhich)
 	slotName = fmt.Sprintf("macstadium_host%02d%s", hostNum, hostWhich)
 
 	if err := govc(ctx, "vm.create",
 		"-m", "4096",
 		"-c", "6",
 		"-on=false",
-		"-net", "dvPortGroup-Private", // 10.50.0.0/16
-		"-g", guestType,
+		"-net", "Private-1", // 172.17.20.0/24
+		"-g", gt,
 		// Put the config on the host's datastore, which
 		// forces the VM to run on that host:
 		"-ds", fmt.Sprintf("BOOT_%d", hostNum),
@@ -299,7 +315,7 @@ func (st *State) CreateMac(ctx context.Context, minor int) (slotName string, err
 		"-vm", name,
 		"-link=true",
 		"-persist=false",
-		"-ds=GGLGLN-A-001-STV1",
+		"-ds=GGLGTM-A-002-STV02",
 		"-disk", baseDisk,
 	); err != nil {
 		return "", err
@@ -325,7 +341,8 @@ func govc(ctx context.Context, args ...string) error {
 	return nil
 }
 
-const hostIPPrefix = "10.88.203." // with fourth octet starting at 10
+// esx management network IP range
+const hostIPPrefix = "10.87.58." // with fourth octet starting at 10
 
 var errNoHost = errors.New("no usable host found")
 
@@ -343,7 +360,7 @@ func (st *State) pickHost() (hostNum int, hostWhich string, err error) {
 		if err != nil {
 			return 0, "", err
 		}
-		hostNum -= 10   // 10.88.203.11 is "BOOT_1" datastore.
+		hostNum -= 10   // 10.87.58.11 is "BOOT_1" datastore.
 		hostWhich = "a" // unless in use
 		if st.whichAInUse(hostNum) {
 			hostWhich = "b"
@@ -367,6 +384,9 @@ func (st *State) whichAInUse(hostNum int) bool {
 	return false
 }
 
+// vmNameReg is used to validate valid host names. Such as mac_11_12_amd64_host01b.
+var vmNameReg = regexp.MustCompile("^mac_[1-9][0-9]_[0-9][0-9]?_amd64_host[0-9][0-9](a|b)$")
+
 // getStat queries govc to find the current state of the hosts and VMs.
 func getState(ctx context.Context) (*State, error) {
 	st := &State{
@@ -378,8 +398,9 @@ func getState(ctx context.Context) (*State, error) {
 	}
 
 	var hosts elementList
-	if err := govcJSONDecode(ctx, &hosts, "ls", "-json", "/MacStadium-ATL/host/MacMini_Cluster"); err != nil {
-		return nil, fmt.Errorf("getState: reading /MacStadium-ATL/host/MacMini_Cluster: %v", err)
+	p := fmt.Sprintf("/%s/host/%s", *flagDatacenter, *flagCluster)
+	if err := govcJSONDecode(ctx, &hosts, "ls", "-json", p); err != nil {
+		return nil, fmt.Errorf("getState: reading %s: %v", p, err)
 	}
 	for _, h := range hosts.Elements {
 		if h.Object.Self.Type == "HostSystem" {
@@ -390,8 +411,8 @@ func getState(ctx context.Context) (*State, error) {
 	}
 
 	var vms elementList
-	if err := govcJSONDecode(ctx, &vms, "ls", "-json", "/MacStadium-ATL/vm"); err != nil {
-		return nil, fmt.Errorf("getState: reading /MacStadium-ATL/vm: %v", err)
+	if err := govcJSONDecode(ctx, &vms, "ls", "-json", fmt.Sprintf("/%s/vm", *flagDatacenter)); err != nil {
+		return nil, fmt.Errorf("getState: reading /%s/vm: %v", *flagDatacenter, err)
 	}
 	for _, h := range vms.Elements {
 		if h.Object.Self.Type != "VirtualMachine" {
@@ -401,7 +422,7 @@ func getState(ctx context.Context) (*State, error) {
 		hostID := h.Object.Runtime.Host.Value
 		hostIP := st.HostIP[hostID]
 		st.VMHost[name] = hostIP
-		if hostIP != "" && strings.HasPrefix(name, "mac_10_") {
+		if hostIP != "" && vmNameReg.MatchString(name) {
 			st.Hosts[hostIP]++
 			var bootTime time.Time
 			if bt := h.Object.Summary.Runtime.BootTime; bt != "" {
@@ -418,7 +439,7 @@ func getState(ctx context.Context) (*State, error) {
 					err := govc(ctx, "vm.destroy", name)
 					log.Printf("vm.destroy(%q) = %v", name, err)
 				} else {
-					st.VMOfSlot[slotName] = name // macstadium_host02a => mac_10_8_host02a
+					st.VMOfSlot[slotName] = name // macstadium_host02a => mac_10_8_amd64_host02a
 				}
 			}
 
@@ -477,9 +498,9 @@ func govcJSONDecode(ctx context.Context, dst interface{}, args ...string) error 
 }
 
 // findBaseDisk returns the path of the vmdk of the most recent
-// snapshot of the osx_$(minor)_frozen_nfs VM.
-func findBaseDisk(ctx context.Context, minor int) (string, error) {
-	vmName := fmt.Sprintf("osx_%d_frozen_nfs", minor)
+// snapshot of the osx_$(arch)_$(major)_$(minor)_frozen_nfs VM.
+func findBaseDisk(ctx context.Context, ver *Version) (string, error) {
+	vmName := fmt.Sprintf("osx_%s_%d_%d_frozen_nfs", ver.Arch, ver.Major, ver.Minor)
 	out, err := exec.CommandContext(ctx, "govc", "vm.info", "-json", vmName).Output()
 	if err != nil {
 		return "", err
@@ -511,9 +532,9 @@ func findBaseDisk(ctx context.Context, minor int) (string, error) {
 	// Now find the first vmdk file, without its [datastore] prefix. The files are listed like:
 	/*
 	   "SnapshotFile": [
-	     "[GGLGLN-A-001-STV1] osx_14_frozen_nfs/osx_14_frozen_nfs-Snapshot2.vmsn",
-	     "[GGLGLN-A-001-STV1] osx_14_frozen_nfs/osx_14_frozen_nfs_15.vmdk",
-	     "[GGLGLN-A-001-STV1] osx_14_frozen_nfs/osx_14_frozen_nfs_15-000001.vmdk"
+	     "[GGLGLN-A-001-STV1] osx_amd64_10_14_frozen_nfs/osx_amd64_10_14_frozen_nfs-Snapshot2.vmsn",
+	     "[GGLGLN-A-001-STV1] osx_amd64_10_14_frozen_nfs/osx_amd64_10_14_frozen_nfs_15.vmdk",
+	     "[GGLGLN-A-001-STV1] osx_amd64_10_14_frozen_nfs/osx_amd64_10_14_frozen_nfs_15-000001.vmdk"
 	   ]
 	*/
 	for _, f := range ss.SnapshotFile {
@@ -634,7 +655,7 @@ func autoAdjust() {
 
 	revHost := make(map[string]*types.ReverseBuilder)
 	for hostType, hostStatus := range rstat.HostTypes {
-		if !strings.HasPrefix(hostType, "host-darwin-10") {
+		if !hostOnMacStadium(hostType) {
 			continue
 		}
 		for name, revBuild := range hostStatus.Machines {
@@ -683,28 +704,78 @@ func autoAdjust() {
 			return
 		}
 		ver := wantedMacVersionNext(st, &rstat)
-
-		if ver == 0 {
+		if ver == nil {
 			dedupLogf("Have capacity for %d more Mac VMs, but none requested by coordinator.", canCreate)
 			return
 		}
-		dedupLogf("Have capacity for %d more Mac VMs; creating requested 10.%d ...", canCreate, ver)
+		dedupLogf("Have capacity for %d more Mac VMs; creating requested %d.%d_%s...", canCreate, ver.Major, ver.Minor, ver.Arch)
 		slotName, err := st.CreateMac(ctx, ver)
 		if err != nil {
-			errStr := fmt.Sprintf("Error creating 10.%d: %v", ver, err)
+			errStr := fmt.Sprintf("Error creating %d.%d_%s: %v", ver.Major, ver.Minor, ver.Arch, err)
 			errors = append(errors, errStr)
 			log.Print(errStr)
 			return
 		}
-		log.Printf("Created 10.%d VM on %q", ver, slotName)
+		log.Printf("Created %d.%d_%s VM on %q", ver.Major, ver.Minor, ver.Arch, slotName)
 		dirty = true
 	}
 }
 
-// wantedMacVersionNext returns the macOS 10.x version to create next,
-// or 0 to not make anything. It gets the latest reverse buildlet
+// Version represents a macOS version.
+// For example, Major=11 Minor=2 Arch=arm64 represents macOS 11.2 arm64.
+type Version struct {
+	Major int    // 10, 11, ...
+	Minor int    // 0, 1, 2, ...
+	Arch  string // amd64, arm64
+}
+
+func (v Version) String() string {
+	return fmt.Sprintf("%s_%d.%d", v.Arch, v.Major, v.Minor)
+}
+
+// hostTypeToVersion determines the version of macOS from the host type.
+// Sample host types would be: host-darwin-10_12 and host-darwin-arm64-11_0.
+func hostTypeToVersion(hostType string) (*Version, error) {
+	v := &Version{}
+	var err error
+	if !strings.HasPrefix(hostType, "host-darwin-") {
+		return nil, errors.New("unrecognized version")
+	}
+	htv := strings.TrimPrefix(hostType, "host-darwin-")
+	vs := strings.Split(htv, "-")
+	if len(vs) > 2 {
+		return nil, errors.New("unrecognized version")
+	}
+	var majorMinor string
+	if len(vs) == 2 {
+		if vs[0] != "amd64" && vs[0] != "arm64" {
+			return nil, errors.New("unrecognized version")
+		}
+		v.Arch = vs[0]
+		majorMinor = vs[1]
+	} else {
+		v.Arch = "amd64"
+		majorMinor = vs[0]
+	}
+	mms := strings.Split(majorMinor, "_")
+	if len(mms) != 2 {
+		return nil, errors.New("unrecognized version")
+	}
+	v.Major, err = strconv.Atoi(mms[0])
+	if err != nil {
+		return nil, err
+	}
+	v.Minor, err = strconv.Atoi(mms[1])
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+// wantedMacVersionNext returns the macOS version to create next,
+// or nil to not make anything. It gets the latest reverse buildlet
 // status from the coordinator.
-func wantedMacVersionNext(st *State, rstat *types.ReverseBuilderStatus) int {
+func wantedMacVersionNext(st *State, rstat *types.ReverseBuilderStatus) *Version {
 	// TODO: improve this logic now that the coordinator has a
 	// proper scheduler. Instead, don't create anything
 	// proactively until there's demand from it from the
@@ -718,10 +789,10 @@ func wantedMacVersionNext(st *State, rstat *types.ReverseBuilderStatus) int {
 	// dashboard/builders.go of how many are expected, which ends
 	// up in ReverseBuilderStatus.
 	for hostType, hostStatus := range rstat.HostTypes {
-		if !strings.HasPrefix(hostType, "host-darwin-10_") {
+		if !hostOnMacStadium(hostType) {
 			continue
 		}
-		ver, err := strconv.Atoi(strings.TrimPrefix(hostType, "host-darwin-10_"))
+		ver, err := hostTypeToVersion(hostType)
 		if err != nil {
 			log.Printf("ERROR: unexpected host type %q", hostType)
 			continue
@@ -731,7 +802,7 @@ func wantedMacVersionNext(st *State, rstat *types.ReverseBuilderStatus) int {
 			return ver
 		}
 	}
-	return 0
+	return nil
 }
 
 func handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -772,17 +843,31 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 // Starting with the macOS 10.14 (Mojave) image, their baked-in stage0.sh
 // script does:
 //
-//    while true; do (curl http://10.50.0.2:8713/stage0/$(sw_vers -productVersion)| sh); sleep 5; done
+//    while true; do (curl http://172.17.20.2:8713/stage0/$(sw_vers -productVersion)| sh); sleep 5; done
 func handleStage0(w http.ResponseWriter, r *http.Request) {
 	// ver will be like "10.14.4"
-	// Nothing currently uses this, but it might be useful in the future.
 	ver := strings.TrimPrefix(r.RequestURI, "/stage0/")
-	_ = ver
+	vs := strings.Split(ver, ".")
+	major, err := strconv.Atoi(vs[0])
+	if err != nil {
+		log.Printf("handleStage0 error converting version=%q; %s", ver, err)
+		major = 10
+	}
 
 	fmt.Fprintf(w, "set -e\nset -x\n")
 	fmt.Fprintf(w, "export GO_BUILDER_ENV=macstadium_vm\n")
-	fmt.Fprintf(w, "curl -o buildlet http://10.50.0.2:8713/buildlet.darwin-amd64\n")
-	fmt.Fprintf(w, "chmod +x buildlet; ./buildlet")
+	fmt.Fprintf(w, "curl -o buildlet http://172.17.20.2:8713/buildlet.darwin-amd64\n")
+
+	// Starting with macOS 11.0, the work directory path generated by the buildlet is
+	// longer than permitted by certain net package tests. This is a workaround until
+	// a cleaner solution is implemeted.
+	if major >= 11 {
+		fmt.Fprint(w, "rm -rf /Users/gopher/workdir\n")
+		fmt.Fprint(w, "mkdir -p /Users/gopher/workdir\n")
+		fmt.Fprintf(w, "chmod +x buildlet; ./buildlet -workdir /Users/gopher/workdir")
+	} else {
+		fmt.Fprintf(w, "chmod +x buildlet; ./buildlet")
+	}
 }
 
 func handleBuildlet(w http.ResponseWriter, r *http.Request) {
@@ -886,4 +971,12 @@ func isFileSystemReadOnly() bool {
 		}
 	}
 	return false
+}
+
+// onMacStadiumReg matches host names for hosts that are hosted on MacStadium.
+var onMacStadiumReg = regexp.MustCompile("^host-darwin-(amd64-)?[1-9][0-9]+_[0-9]+$")
+
+// hostOnMacstadium is true if the host type is hosted on the MacStadium cluster.
+func hostOnMacStadium(hostType string) bool {
+	return onMacStadiumReg.MatchString(hostType)
 }
