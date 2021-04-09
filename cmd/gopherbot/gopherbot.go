@@ -195,6 +195,11 @@ func (c gerritChange) String() string {
 	return c.ID()
 }
 
+type githubIssue struct {
+	repo maintner.GitHubRepoID
+	num  int32
+}
+
 func main() {
 	flag.Parse()
 
@@ -217,6 +222,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	var goRepo = maintner.GitHubRepoID{Owner: "golang", Repo: "go"}
 	bot := &gopherbot{
 		ghc:    ghc,
 		gerrit: gerrit,
@@ -231,19 +237,53 @@ func main() {
 			{"scratch", 72110}: true,
 			{"scratch", 72131}: true,
 		},
-		deletedIssues: map[int32]bool{
-			23772: true,
-			27223: true,
-			28522: true,
-			29309: true,
-			32047: true,
-			32048: true,
-			32469: true,
-			32706: true,
-			32737: true,
-			33315: true,
-			33316: true,
-			39453: true,
+		deletedIssues: map[githubIssue]bool{
+			{goRepo, 13084}: true,
+			{goRepo, 23772}: true,
+			{goRepo, 27223}: true,
+			{goRepo, 28522}: true,
+			{goRepo, 29309}: true,
+			{goRepo, 32047}: true,
+			{goRepo, 32048}: true,
+			{goRepo, 32469}: true,
+			{goRepo, 32706}: true,
+			{goRepo, 32737}: true,
+			{goRepo, 33315}: true,
+			{goRepo, 33316}: true,
+			{goRepo, 33592}: true,
+			{goRepo, 33593}: true,
+			{goRepo, 33697}: true,
+			{goRepo, 33785}: true,
+			{goRepo, 34296}: true,
+			{goRepo, 34476}: true,
+			{goRepo, 34766}: true,
+			{goRepo, 34780}: true,
+			{goRepo, 34786}: true,
+			{goRepo, 34821}: true,
+			{goRepo, 35493}: true,
+			{goRepo, 35649}: true,
+			{goRepo, 36322}: true,
+			{goRepo, 36323}: true,
+			{goRepo, 36324}: true,
+			{goRepo, 36342}: true,
+			{goRepo, 36343}: true,
+			{goRepo, 36406}: true,
+			{goRepo, 36517}: true,
+			{goRepo, 36829}: true,
+			{goRepo, 36885}: true,
+			{goRepo, 36933}: true,
+			{goRepo, 36939}: true,
+			{goRepo, 36941}: true,
+			{goRepo, 36947}: true,
+			{goRepo, 36962}: true,
+			{goRepo, 36963}: true,
+			{goRepo, 37516}: true,
+			{goRepo, 37522}: true,
+			{goRepo, 37582}: true,
+			{goRepo, 37896}: true,
+			{goRepo, 38132}: true,
+			{goRepo, 38241}: true,
+			{goRepo, 39453}: true,
 		},
 	}
 	bot.initCorpus()
@@ -299,7 +339,7 @@ type gopherbot struct {
 	// Until golang.org/issue/22635 is fixed, keep a map of changes and issues
 	// that were deleted to prevent calls to Gerrit or GitHub that will always 404.
 	deletedChanges map[gerritChange]bool
-	deletedIssues  map[int32]bool // issue number -> deleted
+	deletedIssues  map[githubIssue]bool
 
 	releases struct {
 		sync.Mutex
@@ -779,7 +819,7 @@ func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 			return nil
 		}
 		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-			if gi.NotExist || !gi.Closed || gi.PullRequest || gi.Locked || b.deletedIssues[gi.Number] {
+			if gi.NotExist || !gi.Closed || gi.PullRequest || gi.Locked || b.deletedIssues[githubIssue{repo.ID(), gi.Number}] {
 				return nil
 			}
 			if gi.Updated.After(tooOld) {
@@ -1033,7 +1073,7 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 			return nil
 		}
 		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-			if gi.Closed || gi.PullRequest || !gi.HasLabel("WaitingForInfo") || gi.NotExist || b.deletedIssues[gi.Number] {
+			if gi.Closed || gi.PullRequest || !gi.HasLabel("WaitingForInfo") || gi.NotExist || b.deletedIssues[githubIssue{repo.ID(), gi.Number}] {
 				return nil
 			}
 			var waitStart time.Time
