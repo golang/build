@@ -925,6 +925,13 @@ func (b *gopherbot) setMiscMilestones(ctx context.Context) error {
 }
 
 func (b *gopherbot) setVSCodeGoMilestones(ctx context.Context) error {
+	// Disabled in production for golang.org/issue/45461.
+	// Only run this task if it was explicitly requested
+	// via the --only-run flag.
+	if *onlyRun == "" {
+		return nil
+	}
+
 	vscode := b.corpus.GitHub().Repo("golang", "vscode-go")
 	if vscode == nil {
 		return nil
