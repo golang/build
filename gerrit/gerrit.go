@@ -524,15 +524,49 @@ func (c *Client) ListFiles(ctx context.Context, changeID, revision string) (map[
 // ReviewInput contains information for adding a review to a revision.
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#review-input
 type ReviewInput struct {
-	Message string         `json:"message,omitempty"`
-	Labels  map[string]int `json:"labels,omitempty"`
+	// The message to be added as review comment.
+	Message string `json:"message,omitempty"`
+
+	// Apply this tag to the review comment message, votes, and inline comments.
+	Tag string `json:"tag,omitempty"`
+
+	// The votes that should be added to the revision.
+	Labels map[string]int `json:"labels,omitempty"`
 
 	// Comments contains optional per-line comments to post.
 	// The map key is a file path (such as "src/foo/bar.go").
 	Comments map[string][]CommentInput `json:"comments,omitempty"`
 
+	// The robot comments that should be added as a map that maps a file path to
+	// a list of RobotCommentInput entities.
+	RobotComments map[string][]RobotCommentInput `json:"robot_comments,omitempty"`
+
+	// Draft handling that defines how draft comments are handled that are
+	// already in the database but that were not also described in this input.
+	// Allowed values are PUBLISH, PUBLISH_ALL_REVISIONS and KEEP.
+	Drafts string `json:"drafts,omitempty"`
+
+	// Notify handling that defines to whom email notifications should be sent
+	// after the review is stored.
+	Notify string `json:"notify,omitempty"`
+
+	// Additional information about whom to notify about the update.
+	NotifyDetails []NotifyInfo `json:"notify_details,omitempty"`
+
+	// Whether comments with the same content at the same place will be omitted.
+	OmitDuplicateComments bool `json:"omit_duplicate_comments,omitempty"`
+
+	// {account-id} the review should be posted on behalf of.
+	OnBehalfOf string `json:"on_behalf_of,omitempty"`
+
 	// Reviewers optionally specifies new reviewers to add to the change.
 	Reviewers []ReviewerInput `json:"reviewers,omitempty"`
+
+	// If true, and if the change is work in progress, then start review.
+	Ready bool `json:"ready,omitempty"`
+
+	// If true, mark the change as work in progress.
+	WorkInProgress bool `json:"work_in_progress"`
 }
 
 // ReviewerInput contains information for adding a reviewer to a change.
@@ -553,8 +587,30 @@ type CommentInput struct {
 	// TODO(haya14busa): more, as needed.
 }
 
+// RobotCommentInput contains information for creating an inline robot comment.
+type RobotCommentInput struct {
+	// The ID of the robot that generated this comment.
+	RobotID string `json:"robot_id"`
+
+	// An ID of the run of the robot.
+	RobotRunID string `json:"robot_run_id"`
+
+	// URL to more information.
+	URL string `json:"url,omitempty"`
+
+	// Robot specific properties as map that maps arbitrary keys to values.
+	Properties map[string]string `json:"properties,omitempty"`
+}
+
 type reviewInfo struct {
 	Labels map[string]int `json:"labels,omitempty"`
+}
+
+// NotifyInfo contains detailed information about who should be notified about an update.
+type NotifyInfo struct {
+	// A list of account IDs that identify the accounts that should be should
+	// be notified.
+	Accounts []string `json:"accounts,omitempty"`
 }
 
 // SetReview leaves a message on a change and/or modifies labels.
