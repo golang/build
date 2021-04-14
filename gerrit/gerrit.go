@@ -526,6 +526,7 @@ func (c *Client) ListFiles(ctx context.Context, changeID, revision string) (map[
 type ReviewInput struct {
 	Message string         `json:"message,omitempty"`
 	Labels  map[string]int `json:"labels,omitempty"`
+	Tag     string         `json:"tag,omitempty"`
 
 	// Comments contains optional per-line comments to post.
 	// The map key is a file path (such as "src/foo/bar.go").
