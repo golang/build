@@ -548,8 +548,10 @@ type ReviewerInput struct {
 // CommentInput contains information for creating an inline comment.
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#comment-input
 type CommentInput struct {
-	Line    int    `json:"line"`
-	Message string `json:"message"`
+	Line       int    `json:"line,omitempty"`
+	Message    string `json:"message"`
+	InReplyTo  string `json:"in_reply_to,omitempty"`
+	Unresolved bool   `json:"unresolved,omitempty"`
 
 	// TODO(haya14busa): more, as needed.
 }
