@@ -1417,15 +1417,17 @@ func (ts *trySet) notifyStarting() {
 		}
 	}
 
-	// Ignore error. This isn't critical.
 	gerritClient := pool.NewGCEConfiguration().GerritClient()
 	ctx := context.Background()
-	gerritClient.SetReview(ctx, ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
+	unresolved := true
+	if err := gerritClient.SetReview(ctx, ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
 		Tag: tryBotsTag("beginning"),
 		Comments: map[string][]gerrit.CommentInput{
-			"/PATCHSET_LEVEL": {{Message: msg, Unresolved: true}},
+			"/PATCHSET_LEVEL": {{Message: msg, Unresolved: &unresolved}},
 		},
-	})
+	}); err != nil {
+		log.Printf("Error leaving Gerrit comment on %s: %v", ts.Commit[:8], err)
+	}
 }
 
 // awaitTryBuild runs in its own goroutine and waits for a build in a
@@ -1633,15 +1635,16 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 		log.Printf("Error getting Gerrit comments on %s: %v", ts.ChangeTriple(), err)
 	}
 
+	// Mark resolved if TryBots are happy.
+	unresolved := gerritScore != 1
+
 	ri := gerrit.ReviewInput{
 		Tag: gerritTag,
 		Comments: map[string][]gerrit.CommentInput{
 			"/PATCHSET_LEVEL": {{
-				InReplyTo: inReplyTo,
-				Message:   gerritMsg.String(),
-				// These threads always start as unresolved,
-				// mark resolved if TryBots are happy.
-				Unresolved: gerritScore != 1,
+				InReplyTo:  inReplyTo,
+				Message:    gerritMsg.String(),
+				Unresolved: &unresolved,
 			}},
 		},
 	}
@@ -1651,8 +1654,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 		}
 	}
 	if err := gerritClient.SetReview(ctx, ts.ChangeTriple(), ts.Commit, ri); err != nil {
-		log.Printf("Failed to call Gerrit: %v", err)
-		return
+		log.Printf("Error leaving Gerrit comment on %s: %v", ts.Commit[:8], err)
 	}
 }
 

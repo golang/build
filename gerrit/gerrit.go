@@ -551,7 +551,7 @@ type CommentInput struct {
 	Line       int    `json:"line,omitempty"`
 	Message    string `json:"message"`
 	InReplyTo  string `json:"in_reply_to,omitempty"`
-	Unresolved bool   `json:"unresolved,omitempty"`
+	Unresolved *bool  `json:"unresolved,omitempty"`
 
 	// TODO(haya14busa): more, as needed.
 }
