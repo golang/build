@@ -29,7 +29,7 @@ System Preferences > Sharing > enable ssh (enable for administrators)
 Create executable $HOME/stage0.sh with:
 
    #!/bin/bash
-   while true; do (curl -v http://10.50.0.2:8713/stage0/$(sw_vers -productVersion) | sh); sleep 5; done
+   while true; do (curl -v http://172.17.20.2:8713/stage0/$(sw_vers -productVersion) | sh); sleep 5; done
 
 chmod +x $HOME/stage0.sh
 

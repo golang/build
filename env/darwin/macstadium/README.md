@@ -1,10 +1,10 @@
 # Overview
 
 Go's Mac builders run at Mac hosting provider,
-[MacStadium](https://macstadium.com). We have a VMware cluster with 10
-physical Mac Minis on which we run two VMs each.
+[MacStadium](https://macstadium.com). We have a VMware cluster with 8
+physical Mac Pros on which we run two VMs each. There is also a single M1 Mac Mini.
 
-In addition to 20 Mac VMs, we also run one 1 Linux VM that's our
+In addition to the Mac VMs and M1 Mac mini, we also run one a Linux VM that's our
 bastion host & runs various services.
 
 ## Bastion Host
@@ -18,7 +18,7 @@ via:
 
 It also runs:
 
-* a DHCP server for the 20 Mac VMs to get IP addresses from (systemd
+* a DHCP server for the 16 Mac VMs to get IP addresses from (systemd
   unit `isc-dhcp-server.service`, so watch with `journalctl -f -u
   isc-dhcp-server.service`)
 
@@ -41,18 +41,14 @@ It also runs:
 ## OpenVPN
 
 The method of last resort to access the cluster, which works even if
-the bastion host VM is down, is to VPN to our Cisco something gateway.
-
-TODO: put this info somewhere. It's currently circulated in email
-between Brad, Russ, and Dmitri in an email with some subject "macOS VM
-info".
+the bastion host VM is down, is to [VPN to our Cisco gateway](http://go/go-how-to-vpn-into-macstadium).
 
 ## VMware web UI
 
 Once you've connected to either OpenVPN or WireGuard, you can hit the
 VMware web UI at:
 
-   https://10.88.203.9/ui/
+   https://10.87.58.9/ui/
 
 (Alternatively, `ssh -D` to the bastion host to make a SOCKS tunnel
 and configure your browser to send proxy through that SOCKS tunnel.)
@@ -79,13 +75,13 @@ Common techniques to debug:
 
 * What does `journalctl -f -u makemac` say? Is it error looping?
 
-* Look at https://10.88.203.9/ui/ and see if VMware is unhappy about
+* Look at https://10.87.58.9/ui/ and see if VMware is unhappy about
   things. Did hosts die? Did storage disappear?
 
 * Need to hard reboot machines? Eventually we'll fix
   https://github.com/golang/go/issues/32033 but for now you can use
   https://portal.macstadium.com/subscriptions and power cycle
   machines that VMware reports dead (or that you see missing from
-  https://farmer.golang.org's reverse pool info).
+  [https://farmer.golang.org](https://farmer.golang.org)'s reverse pool info).
 
 * Worst case, file a ticket: https://portal.macstadium.com/tickets
