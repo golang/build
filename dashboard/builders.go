@@ -307,9 +307,25 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
+	"host-freebsd-11_4": &HostConfig{
+		VMImage:            "freebsd-amd64-114",
+		Notes:              "FreeBSD 11.4; GCE VM is built from script in build/env/freebsd-amd64",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
+		SSHUsername:        "gopher",
+	},
 	"host-freebsd-12_0": &HostConfig{
 		VMImage:            "freebsd-amd64-120-v1",
 		Notes:              "FreeBSD 12.0; GCE VM is built from script in build/env/freebsd-amd64",
+		machineType:        "n1-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
+		SSHUsername:        "gopher",
+	},
+	"host-freebsd-12_2": &HostConfig{
+		VMImage:            "freebsd-amd64-122",
+		Notes:              "FreeBSD 12.2; GCE VM is built from script in build/env/freebsd-amd64",
 		machineType:        "n1-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
@@ -1479,6 +1495,12 @@ func init() {
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
+		Name:              "freebsd-amd64-11_4",
+		HostType:          "host-freebsd-11_4",
+		numTryTestHelpers: 4,
+		KnownIssue:        44431,
+	})
+	addBuilder(BuildConfig{
 		Name:             "freebsd-amd64-12_0",
 		HostType:         "host-freebsd-12_0",
 		MinimumGoVersion: types.MajorMinor{1, 11},
@@ -1488,11 +1510,24 @@ func init() {
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
+		Name:              "freebsd-amd64-12_2",
+		HostType:          "host-freebsd-12_2",
+		numTryTestHelpers: 4,
+		KnownIssue:        44431,
+	})
+	addBuilder(BuildConfig{
 		Name:              "freebsd-386-12_0",
 		HostType:          "host-freebsd-12_0",
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		distTestAdjust:    fasterTrybots,
 		numTryTestHelpers: 4,
+	})
+	addBuilder(BuildConfig{
+		Name:              "freebsd-386-12_2",
+		HostType:          "host-freebsd-12_2",
+		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		numTryTestHelpers: 4,
+		KnownIssue:        44431,
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-race",
@@ -1504,6 +1539,13 @@ func init() {
 		distTestAdjust: noTestDirAndNoReboot,
 		tryBot:         explicitTrySet("sys"),
 		env:            []string{"GOARCH=386", "GOHOSTARCH=386"},
+	})
+	addBuilder(BuildConfig{
+		Name:           "freebsd-386-11_4",
+		HostType:       "host-freebsd-11_4",
+		distTestAdjust: noTestDirAndNoReboot,
+		env:            []string{"GOARCH=386", "GOHOSTARCH=386"},
+		KnownIssue:     44431,
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-386",
