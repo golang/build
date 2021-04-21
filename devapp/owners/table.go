@@ -853,6 +853,10 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{suzmue},
 	},
 
+	"vulndb": {
+		Primary: []Owner{filippo, katie, roland},
+	},
+
 	"website": {
 		Primary: []Owner{dmitshur},
 	},

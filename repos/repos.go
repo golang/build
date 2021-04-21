@@ -86,6 +86,7 @@ func init() {
 	x("tools", desc("godoc, goimports, gorename, and other tools"))
 	x("tour", noDash, desc("tour.golang.org's implementation"))
 	x("vgo", noDash)
+	x("vulndb", desc("the Go Vulnerability Database and packages for working with it"))
 	x("website")
 	x("xerrors", noDash)
 
