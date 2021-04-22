@@ -2302,6 +2302,10 @@ func init() {
 		Name:           "darwin-amd64-10_12",
 		HostType:       "host-darwin-10_12",
 		distTestAdjust: macTestPolicy,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// macOS 10.12 not supported after Go 1.16
+			return atMostGo1(goBranch, 16) && buildRepoByDefault(repo)
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-10_14",

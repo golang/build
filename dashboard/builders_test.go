@@ -547,11 +547,14 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-amd64-emu", "build"), none},
 
 		// Only use latest macOS for subrepos, and only amd64:
-		{b("darwin-amd64-10_12", "net"), onlyPost},
+		{b("darwin-amd64-10_12@go1.16", "net"), onlyPost},
+		{b("darwin-amd64-10_12", "net"), none},
+		{b("darwin-amd64-10_14", "net"), onlyPost},
 
 		{b("darwin-amd64-10_15", "go"), onlyPost},
 		{b("darwin-amd64-10_14", "go"), onlyPost},
-		{b("darwin-amd64-10_12", "go"), onlyPost},
+		{b("darwin-amd64-10_12", "go"), none},
+		{b("darwin-amd64-10_12@go1.16", "go"), onlyPost},
 
 		// plan9 only lived at master. We didn't support any past releases.
 		// But it's off for now as it's always failing.
