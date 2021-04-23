@@ -826,9 +826,17 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	}
 	ports := strings.Fields(string(out))
 
-	done := map[string]bool{}
-	done["darwin-arm64"] = true  // TODO(golang.org/issue/39782): Add builder for darwin/arm64.
-	done["windows-arm64"] = true // TODO(golang.org/issue/42604): Add builder for windows/arm64.
+	// knownMissing tracks Go ports that that are known to be
+	// completely missing TryBot (pre-submit) test coverage.
+	//
+	// All ports should have either a real TryBot or at least a misc-compile TryBot,
+	// so this map is meant to be used to temporarily fix tests
+	// when the work of adding a new port is actively underway.
+	knownMissing := map[string]bool{
+		"windows-arm64": true, // TODO(golang.org/issue/42604): Add builder for windows/arm64.
+	}
+
+	var done = make(map[string]bool)
 	check := func(goos, goarch string) {
 		if goos == "android" || goos == "ios" {
 			// TODO(golang.org/issue/25963): support
@@ -856,7 +864,7 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 			if strings.HasPrefix(conf.Name, "misc-compile-") {
 				re, err := regexp.Compile(conf.allScriptArgs[0])
 				if err != nil {
-					t.Errorf("Invalid misc-compile filtering pattern for builder %q: %q",
+					t.Errorf("invalid misc-compile filtering pattern for builder %q: %q",
 						conf.Name, conf.allScriptArgs[0])
 				}
 
@@ -866,8 +874,12 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 				}
 			}
 		}
-		if _, ok := done[goosArch]; !ok {
-			t.Errorf("Missing trybot or misc-compile trybot: %q", goosArch)
+		if knownMissing[goosArch] && done[goosArch] {
+			// Make it visible when a builder is added but the old
+			// knownMissing entry isn't removed by failing the test.
+			t.Errorf("knownMissing[%q] is true, but a corresponding TryBot (real or misc-compile) exists", goosArch)
+		} else if _, ok := done[goosArch]; !ok && !knownMissing[goosArch] {
+			t.Errorf("missing real TryBot or misc-compile TryBot for %q", goosArch)
 		}
 	}
 
@@ -878,7 +890,6 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 		}
 		check(port[:slash], port[slash+1:])
 	}
-
 }
 
 // TestExpectedMacstadiumVMCount ensures that only 20 instances of macOS virtual machines
