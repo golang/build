@@ -590,8 +590,8 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-staticlockranking@go1.14", "go"), none},
 		{b("linux-amd64-staticlockranking", "net"), none},
 
-		{b("linux-amd64-regabi", "go"), onlyPost},
-		{b("linux-amd64-regabi", "net"), none},
+		{b("linux-amd64-noregabi", "go"), onlyPost},
+		{b("linux-amd64-noregabi", "net"), none},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {

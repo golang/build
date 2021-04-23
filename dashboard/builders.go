@@ -1728,30 +1728,30 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-amd64-regabi",
+		Name:     "linux-amd64-noregabi",
 		HostType: "host-linux-buster",
-		Notes:    "builder with GOEXPERIMENT=regabi, see golang.org/issue/40724",
+		Notes:    "builder with GOEXPERIMENT=noregabi, see golang.org/issue/40724",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && branch == "master"
 		},
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
-			"GOEXPERIMENT=regabi",
+			"GOEXPERIMENT=noregabi",
 		},
 		GoDeps: []string{
 			"89b44b4e2bb2f88474d6b8476f5c28ea2aea9b28", // A master commit from 2020/12/20, just before a merge into dev.regabi, before the GOEXPERIMENT is used anywhere
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:     "windows-amd64-regabi",
+		Name:     "windows-amd64-noregabi",
 		HostType: "host-windows-amd64-2016",
-		Notes:    "builder with GOEXPERIMENT=regabi, see golang.org/issue/40724",
+		Notes:    "builder with GOEXPERIMENT=noregabi, see golang.org/issue/40724",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && branch == "master"
 		},
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
-			"GOEXPERIMENT=regabi",
+			"GOEXPERIMENT=noregabi",
 			"GOARCH=amd64",
 			"GOHOSTARCH=amd64",
 			// cmd/go takes ~188 seconds on windows-amd64
@@ -1765,16 +1765,16 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:           "darwin-amd64-regabi",
+		Name:           "darwin-amd64-noregabi",
 		HostType:       "host-darwin-10_15",
 		distTestAdjust: macTestPolicy,
-		Notes:          "builder with GOEXPERIMENT=regabi, see golang.org/issue/40724",
+		Notes:          "builder with GOEXPERIMENT=noregabi, see golang.org/issue/40724",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && branch == "master"
 		},
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
-			"GOEXPERIMENT=regabi",
+			"GOEXPERIMENT=noregabi",
 		},
 		GoDeps: []string{
 			"89b44b4e2bb2f88474d6b8476f5c28ea2aea9b28", // A master commit from 2020/12/20, just before a merge into dev.regabi, before the GOEXPERIMENT is used anywhere
