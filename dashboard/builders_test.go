@@ -92,7 +92,7 @@ func TestTrybots(t *testing.T) {
 			branch: "master",
 			want: []string{
 				"android-amd64-emu",
-				"freebsd-amd64-12_0",
+				"freebsd-amd64-12_2",
 				"js-wasm",
 				"linux-386",
 				"linux-amd64",
@@ -120,7 +120,7 @@ func TestTrybots(t *testing.T) {
 			branch: "dev.link",
 			want: []string{
 				"android-amd64-emu",
-				"freebsd-amd64-12_0",
+				"freebsd-amd64-12_2",
 				"js-wasm",
 				"linux-386",
 				"linux-amd64",
@@ -148,7 +148,7 @@ func TestTrybots(t *testing.T) {
 			branch: "release-branch.go1.16",
 			want: []string{
 				"android-amd64-emu",
-				"freebsd-amd64-12_0",
+				"freebsd-amd64-12_2",
 				"js-wasm",
 				"linux-386",
 				"linux-amd64",
@@ -181,7 +181,7 @@ func TestTrybots(t *testing.T) {
 			branch: "release-branch.go1.15",
 			want: []string{
 				"android-amd64-emu",
-				"freebsd-amd64-12_0",
+				"freebsd-amd64-12_2",
 				"js-wasm",
 				"linux-386",
 				"linux-amd64",
@@ -221,9 +221,9 @@ func TestTrybots(t *testing.T) {
 			branch: "master",
 			want: []string{
 				"android-amd64-emu",
-				"freebsd-386-11_2",
-				"freebsd-amd64-11_2",
-				"freebsd-amd64-12_0",
+				"freebsd-386-11_4",
+				"freebsd-amd64-11_4",
+				"freebsd-amd64-12_2",
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-race",
@@ -416,13 +416,24 @@ func TestBuilderConfig(t *testing.T) {
 		{b("openbsd-amd64-62@go1.15", "go"), onlyPost},
 		{b("openbsd-amd64-62@go1.14", "go"), onlyPost},
 
-		// FreeBSD 12.0
-		{b("freebsd-amd64-12_0", "go"), both},
-		{b("freebsd-amd64-12_0", "net"), both},
-		{b("freebsd-amd64-12_0", "mobile"), none},
-		{b("freebsd-386-12_0", "go"), onlyPost},
-		{b("freebsd-386-12_0", "net"), onlyPost},
-		{b("freebsd-386-12_0", "mobile"), none},
+		// FreeBSD 12.2
+		{b("freebsd-amd64-12_2", "go"), both},
+		{b("freebsd-amd64-12_2", "net"), both},
+		{b("freebsd-amd64-12_2", "mobile"), none},
+		{b("freebsd-386-12_2", "go"), onlyPost},
+		{b("freebsd-386-12_2", "net"), onlyPost},
+		{b("freebsd-386-12_2", "mobile"), none},
+
+		// FreeBSD 11.2
+		// See golang.org/issue/45727
+		{b("freebsd-amd64-11_2@go1.15", "go"), isBuilder},
+		{b("freebsd-amd64-11_2@go1.15", "net"), onlyPost},
+		{b("freebsd-amd64-11_2@go1.15", "sys"), both},
+		{b("freebsd-amd64-11_2", "go"), none},
+		{b("freebsd-386-11_2@go1.16", "go"), isBuilder},
+		{b("freebsd-386-11_2@go1.16", "net"), onlyPost},
+		{b("freebsd-386-11_2@go1.16", "sys"), both},
+		{b("freebsd-386-11_2", "go"), none},
 
 		// NetBSD
 		{b("netbsd-amd64-9_0", "go"), onlyPost},
@@ -516,10 +527,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-10_15", "exp"), onlyPost},
 		// ... but not on most others:
 		{b("darwin-amd64-10_12", "exp"), none},
-		{b("freebsd-386-11_2", "exp"), none},
-		{b("freebsd-386-12_0", "exp"), none},
-		{b("freebsd-amd64-11_2", "exp"), none},
-		{b("freebsd-amd64-12_0", "exp"), none},
+		{b("freebsd-386-11_4", "exp"), none},
+		{b("freebsd-386-12_2", "exp"), none},
+		{b("freebsd-amd64-11_4", "exp"), none},
+		{b("freebsd-amd64-12_2", "exp"), none},
 		{b("openbsd-amd64-64", "exp"), none},
 		{b("openbsd-amd64-68", "exp"), none},
 		{b("js-wasm", "exp"), none},
@@ -671,8 +682,8 @@ func TestShouldRunDistTest(t *testing.T) {
 	}{
 		{"linux-amd64", "api", postSubmit, true},
 		{"linux-amd64", "api", tryMode, true},
-		{"freebsd-amd64-12_0", "api", postSubmit, true}, // freebsd-amd64-12_0 uses fasterTrybots policy, should still build.
-		{"freebsd-amd64-12_0", "api", tryMode, false},   // freebsd-amd64-12_0 uses fasterTrybots policy, should skip in try mode.
+		{"freebsd-amd64-12_2", "api", postSubmit, true}, // freebsd-amd64-12_2 uses fasterTrybots policy, should still build.
+		{"freebsd-amd64-12_2", "api", tryMode, false},   // freebsd-amd64-12_2 uses fasterTrybots policy, should skip in try mode.
 
 		{"linux-amd64", "reboot", tryMode, true},
 		{"linux-amd64-race", "reboot", tryMode, false},

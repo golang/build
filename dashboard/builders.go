@@ -43,9 +43,9 @@ var slowBotAliases = map[string]string{
 	"darwin-arm64":         "darwin-arm64-11_0-toothrot",
 	"ios-arm64":            "ios-arm64-corellium",
 	"dragonfly":            "dragonfly-amd64",
-	"freebsd":              "freebsd-amd64-12_0",
-	"freebsd-386":          "freebsd-386-12_0",
-	"freebsd-amd64":        "freebsd-amd64-12_0",
+	"freebsd":              "freebsd-amd64-12_2",
+	"freebsd-386":          "freebsd-386-12_2",
+	"freebsd-amd64":        "freebsd-amd64-12_2",
 	"freebsd-arm":          "freebsd-arm-paulzhol",
 	"freebsd-arm64":        "freebsd-arm64-dmgk",
 	"illumos":              "illumos-amd64",
@@ -315,14 +315,6 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
-	"host-freebsd-12_0": &HostConfig{
-		VMImage:            "freebsd-amd64-120-v1",
-		Notes:              "FreeBSD 12.0; GCE VM is built from script in build/env/freebsd-amd64",
-		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
-		SSHUsername:        "gopher",
-	},
 	"host-freebsd-12_2": &HostConfig{
 		VMImage:            "freebsd-amd64-122",
 		Notes:              "FreeBSD 12.2; GCE VM is built from script in build/env/freebsd-amd64",
@@ -331,9 +323,9 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
-	"host-freebsd-12_0-big": &HostConfig{
-		VMImage:            "freebsd-amd64-120-v1",
-		Notes:              "Same as host-freebsd-12_0, but on n1-highcpu-16",
+	"host-freebsd-12_2-big": &HostConfig{
+		VMImage:            "freebsd-amd64-122",
+		Notes:              "Same as host-freebsd-12_2, but on n1-highcpu-16",
 		machineType:        "n1-highcpu-16", // 16 vCPUs, 14.4 GB mem
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
@@ -1493,45 +1485,38 @@ func init() {
 		tryBot:            explicitTrySet("sys"),
 		distTestAdjust:    fasterTrybots,
 		numTryTestHelpers: 4,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder is still used by Go 1.16 and 1.15,
+			// so keep it around a bit longer. See golang.org/issue/45727.
+			// Test relevant Go versions so that we're better informed.
+			return atMostGo1(goBranch, 16) && buildRepoByDefault(repo)
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-11_4",
 		HostType:          "host-freebsd-11_4",
+		tryBot:            explicitTrySet("sys"),
+		distTestAdjust:    fasterTrybots,
 		numTryTestHelpers: 4,
-		KnownIssue:        44431,
 	})
 	addBuilder(BuildConfig{
-		Name:             "freebsd-amd64-12_0",
-		HostType:         "host-freebsd-12_0",
-		MinimumGoVersion: types.MajorMinor{1, 11},
-		tryBot:           defaultTrySet("sys"),
+		Name:     "freebsd-amd64-12_2",
+		HostType: "host-freebsd-12_2",
+		tryBot:   defaultTrySet("sys"),
 
 		distTestAdjust:    fasterTrybots, // If changing this policy, update TestShouldRunDistTest accordingly.
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
-		Name:              "freebsd-amd64-12_2",
-		HostType:          "host-freebsd-12_2",
-		numTryTestHelpers: 4,
-		KnownIssue:        44431,
-	})
-	addBuilder(BuildConfig{
-		Name:              "freebsd-386-12_0",
-		HostType:          "host-freebsd-12_0",
-		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
-		distTestAdjust:    fasterTrybots,
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-386-12_2",
 		HostType:          "host-freebsd-12_2",
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		distTestAdjust:    fasterTrybots,
 		numTryTestHelpers: 4,
-		KnownIssue:        44431,
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-race",
-		HostType: "host-freebsd-12_0-big",
+		HostType: "host-freebsd-12_2-big",
 	})
 	addBuilder(BuildConfig{
 		Name:           "freebsd-386-11_2",
@@ -1539,13 +1524,19 @@ func init() {
 		distTestAdjust: noTestDirAndNoReboot,
 		tryBot:         explicitTrySet("sys"),
 		env:            []string{"GOARCH=386", "GOHOSTARCH=386"},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder is still used by Go 1.16 and 1.15,
+			// so keep it around a bit longer. See golang.org/issue/45727.
+			// Test relevant Go versions so that we're better informed.
+			return atMostGo1(goBranch, 16) && buildRepoByDefault(repo)
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "freebsd-386-11_4",
 		HostType:       "host-freebsd-11_4",
 		distTestAdjust: noTestDirAndNoReboot,
+		tryBot:         explicitTrySet("sys"),
 		env:            []string{"GOARCH=386", "GOHOSTARCH=386"},
-		KnownIssue:     44431,
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-386",
