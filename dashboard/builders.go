@@ -1601,13 +1601,17 @@ func init() {
 		})
 	}
 
-	// addMiscCompileGo1 adds a misc-compile TryBot that runs
-	// buildall.bash on a subset of platforms matching the egrep
-	// pattern rx. The pattern is matched against the "go tool
-	// dist list" name, but with hyphens instead of forward
-	// slashes ("linux-amd64", etc).
+	// addMiscCompileGo1 adds a misc-compile TryBot that
+	// runs buildall.bash on the specified target(s), up to 3 max.
+	// The targets are matched against the "go tool dist list" name,
+	// but with hyphens instead of forward slashes ("linux-amd64", etc).
 	// If min is non-zero, it specifies the minimum Go 1.x version.
-	addMiscCompileGo1 := func(min int, suffix, rx string) {
+	addMiscCompileGo1 := func(min int, suffix string, targets ...string) {
+		if len(targets) > 3 {
+			// This limit will do until we have better visibility
+			// into holistic TryBot completion times via metrics.
+			panic("at most 3 targets may be specified to avoid making TryBots slow; see issues 32632 and 17104")
+		}
 		var v types.MajorMinor
 		var alsoNote string
 		if min != 0 {
@@ -1624,30 +1628,42 @@ func init() {
 			tryOnly:          true,
 			MinimumGoVersion: v,
 			CompileOnly:      true,
-			Notes:            "Runs buildall.bash to cross-compile & vet std+cmd packages for " + rx + ", but doesn't run any tests." + alsoNote,
+			Notes:            "Runs buildall.bash to cross-compile & vet std+cmd packages for " + strings.Join(targets, " & ") + ", but doesn't run any tests." + alsoNote,
 			allScriptArgs: []string{
 				// Filtering pattern to buildall.bash:
-				rx,
+				"^(" + strings.Join(targets, "|") + ")$",
 			},
 		})
 	}
 	// addMiscCompile adds a misc-compile TryBot
 	// for all supported Go versions.
-	addMiscCompile := func(suffix, rx string) { addMiscCompileGo1(0, suffix, rx) }
+	addMiscCompile := func(suffix string, targets ...string) { addMiscCompileGo1(0, suffix, targets...) }
 
-	addMiscCompile("-linuxarm", "^linux-arm-arm5$")          // 1: linux/arm with GOARM=5
-	addMiscCompile("-darwin", "^darwin-(386|amd64)$")        // 1: amd64
-	addMiscCompileGo1(16, "-darwinarm64", "^darwin-arm64$")  // 1: arm64 (for Go 1.16 and newer)
-	addMiscCompile("-mips", "^linux-mips")                   // 4: mips, mipsle, mips64, mips64le
-	addMiscCompile("-ppc", "^(linux-ppc64|aix-)")            // 3: linux-ppc64{,le}, aix-ppc64
-	addMiscCompile("-solaris", "^(solaris|illumos)")         // 2: both amd64
-	addMiscCompile("-plan9", "^plan9-")                      // 3: amd64, 386, arm
-	addMiscCompile("-freebsd", `^freebsd-(386|arm|arm64)\b`) // 3: 386, arm, arm64 (amd64 already trybot)
-	addMiscCompile("-netbsd", "^netbsd-")                    // 4: amd64, 386, arm, arm64
-	addMiscCompile("-openbsd", "^openbsd-")                  // 4: amd64, 386, arm, arm64
-
-	// And 4 that don't fit above:
-	addMiscCompile("-other", "^(windows-arm|linux-s390x|linux-riscv64|dragonfly-amd64)$")
+	// Arrange so that no more than 3 ports are tested sequentially in each misc-compile
+	// TryBot to avoid any individual misc-compile TryBot from becoming a bottleneck for
+	// overall TryBot completion time (currently 10 minutes; see golang.org/issue/17104).
+	//
+	// The TestTryBotsCompileAllPorts test is used to detect any gaps in TryBot coverage
+	// when new ports are added, and the misc-compile pairs below can be re-arranged.
+	//
+	// (In the past, we used flexible regexp patterns that matched all architectures
+	// for a given GOOS value. However, over time as new architectures were added,
+	// some misc-compile TryBot could become much slower than others.)
+	//
+	// See golang.org/issue/32632.
+	addMiscCompile("-mac-win", "darwin-amd64", "windows-arm")
+	addMiscCompileGo1(16, "-darwinarm64", "darwin-arm64") // darwin/arm64 (for Go 1.16 and newer) only.
+	addMiscCompile("-mips", "linux-mips", "linux-mips64")
+	addMiscCompile("-mipsle", "linux-mipsle", "linux-mips64le")
+	addMiscCompile("-ppc", "linux-ppc64", "linux-ppc64le", "aix-ppc64")
+	addMiscCompile("-freebsd", "freebsd-386", "freebsd-arm", "freebsd-arm64")
+	addMiscCompile("-netbsd", "netbsd-386", "netbsd-amd64")
+	addMiscCompile("-netbsd-arm", "netbsd-arm", "netbsd-arm64")
+	addMiscCompile("-openbsd", "openbsd-386", "openbsd-mips64")
+	addMiscCompile("-openbsd-arm", "openbsd-arm", "openbsd-arm64")
+	addMiscCompile("-plan9", "plan9-386", "plan9-amd64", "plan9-arm")
+	addMiscCompile("-other-1", "solaris-amd64", "illumos-amd64", "dragonfly-amd64")
+	addMiscCompile("-other-2", "linux-riscv64", "linux-s390x", "linux-arm-arm5") // 'linux-arm-arm5' is linux/arm with GOARM=5.
 
 	// TODO: Issue 25963, get the misc-compile trybots for Android/iOS.
 	// Then consider subrepos too, so "mobile" can at least be included

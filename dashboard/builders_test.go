@@ -99,20 +99,23 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-race",
 				"linux-arm-aws",
 				"linux-arm64-aws",
-				"misc-compile-darwin",
-				"misc-compile-darwinarm64",
-				"misc-compile-freebsd",
-				"misc-compile-linuxarm",
-				"misc-compile-mips",
-				"misc-compile-netbsd",
-				"misc-compile-openbsd",
-				"misc-compile-other",
-				"misc-compile-plan9",
-				"misc-compile-ppc",
-				"misc-compile-solaris",
 				"openbsd-amd64-68",
 				"windows-386-2008",
 				"windows-amd64-2016",
+
+				"misc-compile-darwinarm64",
+				"misc-compile-freebsd",
+				"misc-compile-mac-win",
+				"misc-compile-mips",
+				"misc-compile-mipsle",
+				"misc-compile-netbsd",
+				"misc-compile-netbsd-arm",
+				"misc-compile-openbsd",
+				"misc-compile-openbsd-arm",
+				"misc-compile-plan9",
+				"misc-compile-ppc",
+				"misc-compile-other-1",
+				"misc-compile-other-2",
 			},
 		},
 		{
@@ -127,20 +130,23 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-race",
 				"linux-arm-aws",
 				"linux-arm64-aws",
-				"misc-compile-darwin",
-				"misc-compile-darwinarm64",
-				"misc-compile-freebsd",
-				"misc-compile-linuxarm",
-				"misc-compile-mips",
-				"misc-compile-netbsd",
-				"misc-compile-openbsd",
-				"misc-compile-other",
-				"misc-compile-plan9",
-				"misc-compile-ppc",
-				"misc-compile-solaris",
 				"openbsd-amd64-68",
 				"windows-386-2008",
 				"windows-amd64-2016",
+
+				"misc-compile-darwinarm64",
+				"misc-compile-freebsd",
+				"misc-compile-mac-win",
+				"misc-compile-mips",
+				"misc-compile-mipsle",
+				"misc-compile-netbsd",
+				"misc-compile-netbsd-arm",
+				"misc-compile-openbsd",
+				"misc-compile-openbsd-arm",
+				"misc-compile-plan9",
+				"misc-compile-ppc",
+				"misc-compile-other-1",
+				"misc-compile-other-2",
 			},
 		},
 		{
@@ -155,20 +161,23 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-race",
 				"linux-arm-aws",
 				"linux-arm64-aws",
-				"misc-compile-darwin",
-				"misc-compile-darwinarm64", // Starts with Go 1.16.
-				"misc-compile-freebsd",
-				"misc-compile-linuxarm",
-				"misc-compile-mips",
-				"misc-compile-netbsd",
-				"misc-compile-openbsd",
-				"misc-compile-other",
-				"misc-compile-plan9",
-				"misc-compile-ppc",
-				"misc-compile-solaris",
 				"openbsd-amd64-68",
 				"windows-386-2008",
 				"windows-amd64-2016",
+
+				"misc-compile-darwinarm64", // Starts with Go 1.16.
+				"misc-compile-freebsd",
+				"misc-compile-mac-win",
+				"misc-compile-mips",
+				"misc-compile-mipsle",
+				"misc-compile-netbsd",
+				"misc-compile-netbsd-arm",
+				"misc-compile-openbsd",
+				"misc-compile-openbsd-arm",
+				"misc-compile-plan9",
+				"misc-compile-ppc",
+				"misc-compile-other-1",
+				"misc-compile-other-2",
 
 				// Include longtest builders on Go repo release branches. See issue 37827.
 				"linux-386-longtest",
@@ -188,19 +197,22 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-race",
 				"linux-arm-aws",
 				"linux-arm64-aws",
-				"misc-compile-darwin",
-				"misc-compile-freebsd",
-				"misc-compile-linuxarm",
-				"misc-compile-mips",
-				"misc-compile-netbsd",
-				"misc-compile-openbsd",
-				"misc-compile-other",
-				"misc-compile-plan9",
-				"misc-compile-ppc",
-				"misc-compile-solaris",
 				"openbsd-amd64-68",
 				"windows-386-2008",
 				"windows-amd64-2016",
+
+				"misc-compile-freebsd",
+				"misc-compile-mac-win",
+				"misc-compile-mips",
+				"misc-compile-mipsle",
+				"misc-compile-netbsd",
+				"misc-compile-netbsd-arm",
+				"misc-compile-openbsd",
+				"misc-compile-openbsd-arm",
+				"misc-compile-plan9",
+				"misc-compile-ppc",
+				"misc-compile-other-1",
+				"misc-compile-other-2",
 
 				// Include longtest builders on Go repo release branches. See issue 37827.
 				"linux-386-longtest",
@@ -817,8 +829,10 @@ func TestCrossCompileConfigs(t *testing.T) {
 	}
 }
 
-// TestTryBotsCompileAllPorts verifies that each port (go tool dist list) is covered by
-// either a real trybot or a misc-compile trybot.
+// TestTryBotsCompileAllPorts verifies that each port (go tool dist list)
+// is covered by either a real TryBot or a misc-compile TryBot.
+//
+// The special pseudo-port 'linux-arm-arm5' is tested in TestMiscCompileLinuxGOARM5.
 func TestTryBotsCompileAllPorts(t *testing.T) {
 	out, err := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "tool", "dist", "list").Output()
 	if err != nil {
@@ -889,6 +903,34 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 			t.Fatalf("unexpected port %q", port)
 		}
 		check(port[:slash], port[slash+1:])
+	}
+}
+
+// The 'linux-arm-arm5' pseduo-port is supported by src/buildall.bash
+// and tests linux/arm with GOARM=5 set. Since it's not a normal port,
+// the TestTryBotsCompileAllPorts wouldn't report if the misc-compile
+// TryBot that covers is is accidentally removed. Check it explicitly.
+func TestMiscCompileLinuxGOARM5(t *testing.T) {
+	var ok bool
+	for _, b := range Builders {
+		if !strings.HasPrefix(b.Name, "misc-compile-") {
+			continue
+		}
+		re, err := regexp.Compile(b.allScriptArgs[0])
+		if err != nil {
+			t.Fatalf("invalid misc-compile filtering pattern for builder %q: %q",
+				b.Name, b.allScriptArgs[0])
+		}
+		if re.MatchString("linux-arm-arm5") {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		// We get here if the linux-arm-arm5 port is no longer checked by
+		// a misc-compile TryBot. Report it as a failure in case the coverage
+		// was removed accidentally (e.g., as part of a refactor).
+		t.Errorf("no misc-compile TryBot coverage for the special 'linux-arm-arm5' pseudo-port")
 	}
 }
 
