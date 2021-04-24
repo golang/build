@@ -725,6 +725,7 @@ type ProjectInfo struct {
 	Description string            `json:"description"`
 	State       string            `json:"state"`
 	Branches    map[string]string `json:"branches"`
+	WebLinks    []WebLinkInfo     `json:"web_links,omitempty"`
 }
 
 // ListProjects returns the server's active projects.
