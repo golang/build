@@ -853,10 +853,10 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 			return
 		}
 		for _, conf := range Builders {
-			os := conf.GOOS()
-			arch := conf.GOARCH()
+			if conf.GOOS() == goos && conf.GOARCH() == goarch &&
+				conf.BuildsRepoTryBot("go", "master", "master") {
 
-			if os == goos && arch == goarch && (conf.tryOnly || conf.tryBot != nil) {
+				// There's a real TryBot for this GOOS/GOARCH pair.
 				done[goosArch] = true
 				break
 			}
@@ -864,11 +864,11 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 			if strings.HasPrefix(conf.Name, "misc-compile-") {
 				re, err := regexp.Compile(conf.allScriptArgs[0])
 				if err != nil {
-					t.Errorf("invalid misc-compile filtering pattern for builder %q: %q",
+					t.Fatalf("invalid misc-compile filtering pattern for builder %q: %q",
 						conf.Name, conf.allScriptArgs[0])
 				}
-
-				if re.MatchString(goosArch) || re.MatchString(goos) {
+				if re.MatchString(goosArch) {
+					// There's a misc-compile TryBot for this GOOS/GOARCH pair.
 					done[goosArch] = true
 					break
 				}
