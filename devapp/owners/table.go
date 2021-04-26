@@ -735,7 +735,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{toolsTeam},
 	},
 	"tools/go/ssa": {
-		Primary: []Owner{findleyr},
+		Primary:   []Owner{taking},
+		Secondary: []Owner{findleyr},
 	},
 	"tools/go/types": {
 		Primary: []Owner{toolsTeam},
