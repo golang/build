@@ -843,12 +843,10 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	// knownMissing tracks Go ports that that are known to be
 	// completely missing TryBot (pre-submit) test coverage.
 	//
-	// All ports should have either a real TryBot or at least a misc-compile TryBot,
+	// All completed ports should have either a real TryBot or at least a misc-compile TryBot,
 	// so this map is meant to be used to temporarily fix tests
 	// when the work of adding a new port is actively underway.
-	knownMissing := map[string]bool{
-		"windows-arm64": true, // TODO(golang.org/issue/42604): Add builder for windows/arm64.
-	}
+	knownMissing := map[string]bool{}
 
 	var done = make(map[string]bool)
 	check := func(goos, goarch string) {

@@ -1651,7 +1651,7 @@ func init() {
 	// some misc-compile TryBot could become much slower than others.)
 	//
 	// See golang.org/issue/32632.
-	addMiscCompile("-mac-win", "darwin-amd64", "windows-arm")
+	addMiscCompile("-mac-win", "darwin-amd64", "windows-arm", "windows-arm64")
 	addMiscCompileGo1(16, "-darwinarm64", "darwin-arm64") // darwin/arm64 (for Go 1.16 and newer) only.
 	addMiscCompile("-mips", "linux-mips", "linux-mips64")
 	addMiscCompile("-mipsle", "linux-mipsle", "linux-mips64le")
