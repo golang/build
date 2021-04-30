@@ -177,17 +177,17 @@ var builds = []*Build{
 		Builder: "linux-arm64-aws",
 	},
 	{
-		GoQuery: ">= go1.15rc2", // See #40563.
+		GoQuery: ">= go1.17beta1", // See #45727.
 		OS:      "freebsd",
 		Arch:    "386",
-		Builder: "freebsd-386-11_2",
+		Builder: "freebsd-386-11_4",
 	},
 	{
-		GoQuery: ">= go1.15rc2", // See #40563.
+		GoQuery: ">= go1.17beta1", // See #45727.
 		OS:      "freebsd",
 		Arch:    "amd64",
 		Race:    true,
-		Builder: "freebsd-amd64-11_2",
+		Builder: "freebsd-amd64-11_4",
 	},
 	{
 		OS:      "windows",
@@ -259,6 +259,19 @@ var builds = []*Build{
 		OS:      "linux",
 		Arch:    "arm64",
 		Builder: "linux-arm64-packet",
+	},
+	{
+		GoQuery: "< go1.17beta1", // See #40563.
+		OS:      "freebsd",
+		Arch:    "386",
+		Builder: "freebsd-386-11_2",
+	},
+	{
+		GoQuery: "< go1.17beta1", // See #40563.
+		OS:      "freebsd",
+		Arch:    "amd64",
+		Race:    true,
+		Builder: "freebsd-amd64-11_2",
 	},
 
 	// Test-only builds.
@@ -1022,17 +1035,14 @@ func match(query, goVer string) bool {
 	switch query {
 	case "": // A special case to make the zero Build.GoQuery value useful.
 		return true
+	case ">= go1.17beta1":
+		return !strings.HasPrefix(goVer, "go1.16") && !strings.HasPrefix(goVer, "go1.15")
 	case "< go1.17beta1":
 		return strings.HasPrefix(goVer, "go1.16") || strings.HasPrefix(goVer, "go1.15")
 	case ">= go1.16beta1":
 		return !strings.HasPrefix(goVer, "go1.15")
 	case "< go1.16beta1":
 		return strings.HasPrefix(goVer, "go1.15")
-	case ">= go1.15rc2":
-		// By the time this code is added, Go 1.15 RC 1 has already been released and
-		// won't be modified, that's why we only care about matching RC 2 and onwards.
-		// (We could've just done ">= go1.15", but that could be misleading in future.)
-		return goVer != "go1.15rc1" && !strings.HasPrefix(goVer, "go1.15beta")
 	default:
 		panic(fmt.Errorf("match: query %q is not supported", query))
 	}
