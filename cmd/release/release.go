@@ -61,6 +61,7 @@ func main() {
 
 	if *uploadMode {
 		buildenv.CheckUserCredentials()
+		userToken() // Call userToken for the side-effect of exiting if a gomote token doesn't exist.
 		if err := upload(flag.Args()); err != nil {
 			log.Fatal(err)
 		}
