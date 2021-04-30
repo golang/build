@@ -2606,6 +2606,7 @@ func init() {
 		HostType:       "host-dragonfly-amd64-master",
 		Notes:          "DragonFly BSD master, run by DragonFly team",
 		distTestAdjust: noTestDirAndNoReboot,
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see golang.org/issue/45216
 		SkipSnapshot:   true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return atLeastGo1(goBranch, 14) && buildRepoByDefault(repo)
@@ -2616,6 +2617,7 @@ func init() {
 		HostType:       "host-dragonfly-amd64-5_8",
 		Notes:          "DragonFly BSD 5.8 release",
 		distTestAdjust: noTestDirAndNoReboot,
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see golang.org/issue/45216
 		SkipSnapshot:   true,
 	})
 	addBuilder(BuildConfig{
