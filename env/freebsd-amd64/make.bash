@@ -80,9 +80,16 @@ case $1 in
   readonly VERSION_TRAILER=
   readonly SHA256=0f8593382b6833658c6f6be532d4ffbedde7b75504452e27d912a0183f72ab56
 ;;
+13.0)
+  readonly VERSION=13.0-RELEASE
+  readonly VERSION_TRAILER=
+  readonly SHA256=48288a693215a88b26ec81b2648de7433acec7db491aaeaed49c0ffd1612d345
+  readonly BLIND_SWITCH_CONSOLE=1
+;;
+
 *)
   echo "Usage: $0 <version>"
-  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 10.4 11.0 11.1 11.2 11.3 11.4 12.0 12.1 12.2"
+  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 10.4 11.0 11.1 11.2 11.3 11.4 12.0 12.1 12.2 13.0"
   exit 1
 esac
 
@@ -130,7 +137,7 @@ genisoimage -r -o config.iso iso/
 # TODO(wathiede): remove sleep
 sleep 2
 
-env DOWNLOAD_UPDATES=$((1-IS_SNAPSHOT)) expect <<'EOF'
+env DOWNLOAD_UPDATES=$((1-IS_SNAPSHOT)) BLIND_SWITCH_CONSOLE=${BLIND_SWITCH_CONSOLE:=0} expect <<'EOF'
 set prompt "root@.*:~ #[ ]"
 set timeout -1
 set send_human {.1 .3 1 .05 2}
@@ -140,16 +147,30 @@ spawn qemu-system-x86_64 -machine graphics=off -display none -serial stdio \
  -m 1G -drive if=virtio,file=disk.qcow2,format=qcow2,cache=none -cdrom config.iso -net nic,model=virtio -net user
 set qemu_pid $spawn_id
 
-# boot with serial console enabled
-expect -ex "Welcome to FreeBSD"
-expect -re "Autoboot in \[0-9\]\+ seconds"
-sleep 1
-send -h "3" ;# escape to bootloader prompt
-expect -ex "Type '?' for a list of commands, 'help' for more detailed help."
-expect -ex "OK "
-send -h "set console=\"comconsole\"\n"
-expect -ex "OK "
-send -h "boot\n"
+if {$::env(BLIND_SWITCH_CONSOLE)} {
+    # simulate a user interacting with the boot menu:
+    # hit "5" (Cons: menu) to switch from Video (Video -> Dual (Serial primary) -> Dual (Video primary) -> Serial),
+    # to toggle the serial console, then hit "return" to boot
+    expect -ex "Booting from Hard Disk..."
+    expect -ex "/"
+    expect -ex "\n"
+    send -h " " ;# stop the autoboot timer
+    send -h 5
+    sleep 1
+    send -h "\r"
+    expect -ex "---<<BOOT>>---"
+} else {
+    # boot with serial console enabled
+    expect -ex "Welcome to FreeBSD"
+    expect -re "Autoboot in \[0-9\]\+ seconds"
+    sleep 1
+    send -h "3" ;# escape to bootloader prompt
+    expect -ex "Type '?' for a list of commands, 'help' for more detailed help."
+    expect -ex "OK "
+    send -h "set console=\"comconsole\"\n"
+    expect -ex "OK "
+    send -h "boot\n"
+}
 
 # wait for login prompt
 set timeout 180
