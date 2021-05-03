@@ -39,7 +39,7 @@ var (
 	guodongli    = gh("guodongli-google")
 	gri          = gh("griesemer")
 	hanwen       = gh("hanwen")
-	heschik      = gh("heschik")
+	heschi       = gh("heschi")
 	hyangah      = gh("hyangah")
 	iant         = gh("ianlancetaylor")
 	iancottrell  = gh("ianthehat")
@@ -95,7 +95,7 @@ var entries = map[string]*Entry{
 	},
 
 	"build": {
-		Primary: []Owner{dmitshur, bradfitz, amedee},
+		Primary: []Owner{dmitshur, bradfitz, amedee, heschi},
 	},
 	"build/maintner/cmd/maintserve": {
 		Primary: []Owner{dmitshur},
@@ -669,7 +669,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{agnivade, bradfitz, gri, kevinburke},
 	},
 	"tools/cmd/goimports": {
-		Primary:   []Owner{heschik},
+		Primary:   []Owner{heschi},
 		Secondary: []Owner{bradfitz},
 	},
 	"tools/cmd/present2md": {
@@ -754,7 +754,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{iancottrell},
 	},
 	"tools/imports": {
-		Primary: []Owner{heschik},
+		Primary: []Owner{heschi},
 	},
 	"tools/internal/analysisinternal": {
 		Primary:   []Owner{rstambler},
@@ -765,16 +765,16 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{jayconrod, matloob, bcmills},
 	},
 	"tools/internal/fastwalk": {
-		Primary: []Owner{heschik},
+		Primary: []Owner{heschi},
 	},
 	"tools/internal/gocommand": {
-		Primary: []Owner{heschik},
+		Primary: []Owner{heschi},
 	},
 	"tools/internal/gopathwalk": {
-		Primary: []Owner{heschik},
+		Primary: []Owner{heschi},
 	},
 	"tools/internal/imports": {
-		Primary: []Owner{heschik},
+		Primary: []Owner{heschi},
 	},
 	"tools/internal/jsonrpc2": {
 		Primary:   []Owner{iancottrell},
@@ -811,7 +811,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/internal/span": {
 		Primary:   []Owner{iancottrell},
-		Secondary: []Owner{heschik},
+		Secondary: []Owner{heschi},
 	},
 	"tools/internal/telemetry": {
 		Primary:   []Owner{iancottrell},

@@ -1174,7 +1174,7 @@ func init() {
 	addPerson("Herbie Ong", "herbie@google.com", "17100@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Herbie Ong", "herbie@google.com", "@cybrcodr")
 	addPerson("Heschi Kreinick", "heschi@google.com", "17090@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Heschi Kreinick", "heschi@google.com", "@heschik")
+	addPerson("Heschi Kreinick", "heschi@google.com", "@heschi")
 	addPerson("Hidetatsu Yaginuma", "ygnmhdtt@gmail.com", "@yagi5")
 	addPerson("Hilko Bengen", "bengen@hilluzination.de")
 	addPerson("Hiroaki Nakamura", "hnakamur@gmail.com")
