@@ -11,15 +11,32 @@ import (
 	"sync"
 )
 
-const MaxBufferSize = 2 << 20 // 2MB of output is way more than we expect.
+const (
+	// MaxBufferSize is the maximum buffer size, as it is more output than
+	// we expect from reasonable tests.
+	MaxBufferSize = 2 << 20 // 2 MB
 
-// Buffer is a WriteCloser that provides multiple Readers that each yield the same data.
-// It is safe to Write to a Buffer while Readers consume that data.
-// Its zero value is a ready-to-use buffer.
+	// truncationMessage is added to the end of the log when it reaches the
+	// maximum size.
+	truncationMessage = "\n\n... log truncated ..."
+
+	// maxUserSize is the total user output we can place in the buffer
+	// while still leaving room for the truncation message.
+	maxUserSize = MaxBufferSize - len(truncationMessage)
+)
+
+// Buffer is an io.WriteCloser that provides multiple Readers that each yield
+// the same data.
+//
+// It is safe to Write to a Buffer while Readers consume data. A Buffer has a
+// maximum size of MaxBufferSize, after which Write will silently drop
+// additional data and the buffer will contain a truncation note at the end.
+//
+// The zero value is a ready-to-use buffer.
 type Buffer struct {
 	mu     sync.Mutex // Guards the fields below.
 	wake   *sync.Cond // Created on demand by reader.
-	buf    []byte
+	buf    []byte // Length is in the range [0, MaxBufferSize].
 	eof    bool
 	lastID int
 }
@@ -30,11 +47,20 @@ func (b *Buffer) Write(b2 []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	needTrunc := false
 	b2len := len(b2)
-	if len(b.buf)+b2len > MaxBufferSize {
-		b2 = b2[:MaxBufferSize-len(b.buf)]
+	if len(b.buf) == MaxBufferSize {
+		// b.buf is full and truncationMessage was written.
+		b2 = nil
+	} else if len(b.buf)+b2len > maxUserSize {
+		b2 = b2[:maxUserSize-len(b.buf)]
+		needTrunc = true
+		// After this write, b.buf will reach MaxBufferSize length.
 	}
 	b.buf = append(b.buf, b2...)
+	if needTrunc {
+		b.buf = append(b.buf, []byte(truncationMessage)...)
+	}
 	b.wakeReaders()
 	return b2len, nil
 }

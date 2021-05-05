@@ -5,6 +5,7 @@
 package livelog
 
 import (
+	"bytes"
 	"io"
 	"sync"
 	"testing"
@@ -83,5 +84,66 @@ func testRead(t *testing.T, prefix string, r io.Reader, want string, wantErr err
 	}
 	if ok {
 		t.Logf("%s: ok", prefix)
+	}
+}
+
+func TestTruncation(t *testing.T) {
+	tests := []struct {
+		desc   string
+		inputs [][]byte
+		want   []byte
+	}{
+		{
+			desc: "no truncation",
+			inputs: [][]byte{
+				bytes.Repeat([]byte{'a'}, maxUserSize),
+			},
+			want: bytes.Repeat([]byte{'a'}, maxUserSize),
+		},
+		{
+			desc: "one byte overflow",
+			inputs: [][]byte{
+				bytes.Repeat([]byte{'a'}, maxUserSize),
+				[]byte{'b'},
+			},
+			want: append(bytes.Repeat([]byte{'a'}, maxUserSize), []byte(truncationMessage)...),
+		},
+		{
+			desc: "single overflow",
+			inputs: [][]byte{
+				bytes.Repeat([]byte{'a'}, 2*MaxBufferSize),
+			},
+			want: append(bytes.Repeat([]byte{'a'}, maxUserSize), []byte(truncationMessage)...),
+		},
+		{
+			desc: "multiple overflow",
+			inputs: [][]byte{
+				bytes.Repeat([]byte{'a'}, 2*MaxBufferSize),
+				bytes.Repeat([]byte{'a'}, 2*MaxBufferSize),
+			},
+			want: append(bytes.Repeat([]byte{'a'}, maxUserSize), []byte(truncationMessage)...),
+		},
+		{
+			desc: "partial input overflow",
+			inputs: [][]byte{
+				bytes.Repeat([]byte{'a'}, maxUserSize-2),
+				[]byte{'1', '2', '3'},
+			},
+			want: append(bytes.Repeat([]byte{'a'}, maxUserSize-2), append([]byte{'1', '2'}, []byte(truncationMessage)...)...),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.desc, func(t *testing.T) {
+			var buf Buffer
+			for _, input := range test.inputs {
+				buf.Write(input)
+			}
+
+			got := buf.Bytes()
+			if !bytes.Equal(got, test.want) {
+				t.Errorf("buf inputs %v got %v, want %v", test.inputs, got, test.want)
+			}
+		})
 	}
 }
