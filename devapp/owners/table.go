@@ -437,7 +437,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/net/http": {
 		Primary:   []Owner{bradfitz},
-		Secondary: []Owner{rsc, empijei},
+		Secondary: []Owner{rsc},
 	},
 	"go/src/net/http/pprof": {
 		Primary: []Owner{cherryyz, rsc},
@@ -608,11 +608,11 @@ var entries = map[string]*Entry{
 	},
 	"net/http": {
 		Primary:   []Owner{bradfitz},
-		Secondary: []Owner{empijei},
+		Secondary: []Owner{},
 	},
 	"net/http2": {
 		Primary:   []Owner{bradfitz, tombergan},
-		Secondary: []Owner{empijei},
+		Secondary: []Owner{},
 	},
 	"net/icmp": {
 		Primary: []Owner{},
