@@ -30,18 +30,8 @@ import (
 
 const (
 	uploadURL     = "https://golang.org/dl/upload"
-	projectID     = "999119582588"
 	storageBucket = "golang"
 )
-
-var publicACL = []storage.ACLRule{
-	{Entity: storage.AllUsers, Role: storage.RoleReader},
-	// If you don't give the owners access, the web UI seems to
-	// have a bug and doesn't have access to see that it's public,
-	// so won't render the "Shared Publicly" link. So we do that,
-	// even though it's dumb and unnecessary otherwise:
-	{Entity: storage.ACLEntity("project-owners-" + projectID), Role: storage.RoleOwner},
-}
 
 // File represents a file on the golang.org downloads page.
 // It should be kept in sync with the download code in x/tools/godoc/dl.
@@ -210,7 +200,6 @@ func updateSite(f *File) error {
 
 func putObject(ctx context.Context, c *storage.Client, name string, body []byte) error {
 	wr := c.Bucket(storageBucket).Object(name).NewWriter(ctx)
-	wr.ACL = publicACL
 	if _, err := wr.Write(body); err != nil {
 		return err
 	}
@@ -303,7 +292,6 @@ func uploadArtifactGCS(ctx context.Context, storageClient *storage.Client, path 
 		return "", -1, fmt.Errorf("could not get sha256: %v", err)
 	}
 	copier := dst.CopierFrom(src)
-	copier.ACL = publicACL
 	attrs, err := copier.Run(ctx)
 	if err != nil {
 		return "", -1, err
