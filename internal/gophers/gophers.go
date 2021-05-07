@@ -591,7 +591,7 @@ func init() {
 	addPerson("Charlie Dorian", "cldorian@gmail.com", "5435@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Charlie Dorian", "cldorian@gmail.com", "@cldorian")
 	addPerson("Cheng-Lung Sung", "clsung@gmail.com", "@clsung")
-	addPerson("Cherry Zhang", "cherryyz@google.com", "13315@62eb7196-b449-3ce5-99f1-c037f21e1705", "@cherrymui", "lunaria21@gmail.com", "9670@62eb7196-b449-3ce5-99f1-c037f21e1705")
+	addPerson("Cherry Mui", "cherryyz@google.com", "13315@62eb7196-b449-3ce5-99f1-c037f21e1705", "@cherrymui", "lunaria21@gmail.com", "9670@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Chew Choon Keat", "choonkeat@gmail.com", "@choonkeat")
 	addPerson("Chintan Sheth", "shethchintan7@gmail.com")
 	addPerson("Cholerae Hu", "choleraehyq@gmail.com", "15760@62eb7196-b449-3ce5-99f1-c037f21e1705")
