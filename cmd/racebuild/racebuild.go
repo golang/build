@@ -92,6 +92,23 @@ cp llvm-project/compiler-rt/lib/tsan/go/race_darwin_amd64.syso go/src/runtime/ra
 			`,
 	},
 	&Platform{
+		OS:   "darwin",
+		Arch: "arm64",
+		Type: "darwin-arm64-11_0-toothrot",
+		Script: `#!/usr/bin/env bash
+set -e
+git clone https://go.googlesource.com/go
+pushd go
+git checkout $GOREV
+popd
+git clone https://github.com/llvm/llvm-project
+(cd llvm-project && git checkout $REV)
+(cd llvm-project/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
+cp llvm-project/compiler-rt/lib/tsan/go/race_darwin_arm64.syso go/src/runtime/race
+(cd go/src && ./race.bash)
+			`,
+	},
+	&Platform{
 		OS:   "linux",
 		Arch: "amd64",
 		Type: "linux-amd64-race",
