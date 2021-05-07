@@ -503,12 +503,15 @@ func (c *Client) ListChangeComments(ctx context.Context, changeID string) (map[s
 // CommentInfo contains information about an inline comment.
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#comment-info.
 type CommentInfo struct {
-	PatchSet int          `json:"patch_set,omitempty"`
-	ID       string       `json:"id"`
-	Path     string       `json:"path,omitempty"`
-	Message  string       `json:"message,omitempty"`
-	Updated  TimeStamp    `json:"updated"`
-	Author   *AccountInfo `json:"author,omitempty"`
+	PatchSet   int          `json:"patch_set,omitempty"`
+	ID         string       `json:"id"`
+	Path       string       `json:"path,omitempty"`
+	Message    string       `json:"message,omitempty"`
+	Updated    TimeStamp    `json:"updated"`
+	Author     *AccountInfo `json:"author,omitempty"`
+	InReplyTo  string       `json:"in_reply_to,omitempty"`
+	Unresolved *bool        `json:"unresolved,omitempty"`
+	Tag        string       `json:"tag,omitempty"`
 }
 
 // ListFiles retrieves a map of filenames to FileInfo's for the given change ID and revision.
