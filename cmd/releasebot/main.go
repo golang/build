@@ -567,9 +567,16 @@ func (w *Work) postSummary() {
 	if dryRun || w.Security {
 		return
 	}
-	err := postGithubComment(w.ReleaseIssue, body)
-	if err != nil {
-		fmt.Printf("error posting update comment: %v\n", err)
+
+	// Ensure that the entire body can be posted to the issue by splitting it into multiple
+	// GitHub comments if necesary.
+	// golang.org/issue/45998
+	bodyParts := splitLogMessage(body, githubCommentCharacterLimit)
+	for _, b := range bodyParts {
+		err := postGithubComment(w.ReleaseIssue, b)
+		if err != nil {
+			fmt.Printf("error posting update comment: %v\n", err)
+		}
 	}
 }
 
@@ -945,4 +952,26 @@ func match(query, goVer string) bool {
 	default:
 		panic(fmt.Errorf("match: query %q is not supported", query))
 	}
+}
+
+// splitLogMessage splits a string into n number of strings of maximum size maxStrLen.
+// It naively attempts to split the string along the bounderies of new line characters in order
+// to make each individual string as readable as possible.
+func splitLogMessage(s string, maxStrLen int) []string {
+	sl := []string{}
+	for len(s) > maxStrLen {
+		end := strings.LastIndex(s[:maxStrLen], "\n")
+		if end == -1 {
+			end = maxStrLen
+		}
+		sl = append(sl, s[:end])
+
+		if string(s[end]) == "\n" {
+			s = s[end+1:]
+		} else {
+			s = s[end:]
+		}
+	}
+	sl = append(sl, s)
+	return sl
 }

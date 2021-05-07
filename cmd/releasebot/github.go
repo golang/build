@@ -235,9 +235,11 @@ func (w *Work) removeOkayAfterBeta1() {
 	}
 }
 
+const githubCommentCharacterLimit = 65536 // discovered in golang.org/issue/45998
+
 func postGithubComment(number int, body string) error {
 	if dryRun {
-		return errors.New("attemted write operation in dry-run mode")
+		return errors.New("attempted write operation in dry-run mode")
 	}
 	_, _, err := githubClient.Issues.CreateComment(context.TODO(), projectOwner, projectRepo, number, &github.IssueComment{
 		Body: &body,
