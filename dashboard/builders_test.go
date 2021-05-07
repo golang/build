@@ -287,14 +287,17 @@ func TestTrybots(t *testing.T) {
 	}
 }
 
-// TestBuilderConfig whether a given builder and repo at different
-// branches is either a post-submit builder, trybot, neither, or both.
+// TestBuilderConfig tests whether a given builder and repo at different branches is
+// completely disabled ("none"),
+// a TryBot and a post-submit builder ("both"), or
+// a post-submit only builder ("onlyPost").
 func TestBuilderConfig(t *testing.T) {
-	// builderConfigWant is bitmask of 4 different things to assert are wanted:
+	// want is a bitmask of 4 different things to assert are wanted:
 	// - being a post-submit builder
 	// - NOT being a post-submit builder
 	// - being a trybot builder
 	// - NOT being a post-submit builder
+	// Note: a builder cannot be configured as a TryBot without also being a post-submit builder.
 	type want uint8
 	const (
 		isTrybot want = 1 << iota
@@ -302,6 +305,7 @@ func TestBuilderConfig(t *testing.T) {
 		isBuilder  // post-submit
 		notBuilder // not post-submit
 
+		// Available combinations:
 		none     = notTrybot + notBuilder
 		both     = isTrybot + isBuilder
 		onlyPost = notTrybot + isBuilder
@@ -353,7 +357,7 @@ func TestBuilderConfig(t *testing.T) {
 	}
 	tests := []struct {
 		br   builderAndRepo
-		want want
+		want want // none, both, or onlyPost.
 	}{
 		{b("linux-amd64", "go"), both},
 		{b("linux-amd64", "net"), both},
@@ -438,11 +442,11 @@ func TestBuilderConfig(t *testing.T) {
 
 		// FreeBSD 11.2
 		// See golang.org/issue/45727
-		{b("freebsd-amd64-11_2@go1.15", "go"), isBuilder},
+		{b("freebsd-amd64-11_2@go1.15", "go"), onlyPost},
 		{b("freebsd-amd64-11_2@go1.15", "net"), onlyPost},
 		{b("freebsd-amd64-11_2@go1.15", "sys"), both},
 		{b("freebsd-amd64-11_2", "go"), none},
-		{b("freebsd-386-11_2@go1.16", "go"), isBuilder},
+		{b("freebsd-386-11_2@go1.16", "go"), onlyPost},
 		{b("freebsd-386-11_2@go1.16", "net"), onlyPost},
 		{b("freebsd-386-11_2@go1.16", "sys"), both},
 		{b("freebsd-386-11_2", "go"), none},
@@ -470,21 +474,21 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-nocgo", "mobile"), none},
 
 		// Virtual mobiledevices
-		{b("ios-arm64-corellium", "go"), isBuilder},
-		{b("android-arm64-corellium", "go"), isBuilder},
-		{b("android-arm-corellium", "go"), isBuilder},
+		{b("ios-arm64-corellium", "go"), onlyPost},
+		{b("android-arm64-corellium", "go"), onlyPost},
+		{b("android-arm-corellium", "go"), onlyPost},
 
 		// Mobile builders that run with GOOS=linux/ios and have
 		// a device attached.
 		{b("linux-amd64-androidemu", "mobile"), both},
 
 		// But the emulators run all:
-		{b("android-amd64-emu", "mobile"), isBuilder},
-		{b("android-386-emu", "mobile"), isBuilder},
-		{b("android-amd64-emu", "net"), isBuilder},
-		{b("android-386-emu", "net"), isBuilder},
-		{b("android-amd64-emu", "go"), isBuilder},
-		{b("android-386-emu", "go"), isBuilder},
+		{b("android-amd64-emu", "mobile"), both},
+		{b("android-386-emu", "mobile"), onlyPost},
+		{b("android-amd64-emu", "net"), both},
+		{b("android-386-emu", "net"), onlyPost},
+		{b("android-amd64-emu", "go"), both},
+		{b("android-386-emu", "go"), onlyPost},
 
 		// Only test tip for js/wasm, and only for some repos:
 		{b("js-wasm", "go"), both},
@@ -618,6 +622,14 @@ func TestBuilderConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {
+			// Require a want value that asserts both dimensions: try or not, post or not.
+			switch tt.want {
+			case none, both, onlyPost:
+				// OK.
+			default:
+				t.Fatalf("tt.want must be one of: none, both, or onlyPost")
+			}
+
 			bc, ok := Builders[tt.br.builder]
 			if !ok {
 				t.Fatalf("unknown builder %q", tt.br.builder)
