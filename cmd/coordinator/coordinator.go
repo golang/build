@@ -1511,6 +1511,7 @@ func (ts *trySet) notifyStarting() {
 			}
 			unresolved := false
 			ri.Comments["/PATCHSET_LEVEL"] = append(ri.Comments["/PATCHSET_LEVEL"], gerrit.CommentInput{
+				InReplyTo:  t.root.ID,
 				Message:    "Superseded.",
 				Unresolved: &unresolved,
 			})
