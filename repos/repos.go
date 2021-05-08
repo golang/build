@@ -67,7 +67,7 @@ func init() {
 	x("example", noDash)
 	x("exp", desc("experimental and deprecated packages (handle with care; may change without warning)"))
 	x("image", desc("additional imaging packages"))
-	x("lint", noDash)
+	x("lint", noDash, archivedOnGitHub)
 	x("mobile", desc("experimental support for Go on mobile platforms"))
 	x("mod")
 	x("net", desc("additional networking packages"))
