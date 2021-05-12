@@ -1184,14 +1184,17 @@ var testingKnobSkipBuilds bool
 //
 // Must hold statusMu.
 func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
-	key := tryWorkItemKey(work)
-	// TODO(golang.org/issue/38303): compute goBranch value better
-	goBranch := key.Branch // assume same as repo's branch for now
-
-	tryBots := dashboard.TryBuildersForProject(key.Project, key.Branch, goBranch)
+	goBranch := work.Branch
+	if work.Project != "go" && len(work.GoBranch) > 0 {
+		// work.GoBranch is non-empty when work.Project != "go",
+		// so prefer work.GoBranch[0] over work.Branch.
+		goBranch = work.GoBranch[0]
+	}
+	tryBots := dashboard.TryBuildersForProject(work.Project, work.Branch, goBranch)
 	slowBots := slowBotsFromComments(work)
 	builders := joinBuilders(tryBots, slowBots)
 
+	key := tryWorkItemKey(work)
 	log.Printf("Starting new trybot set for %v", key)
 	ts := &trySet{
 		tryKey: key,
