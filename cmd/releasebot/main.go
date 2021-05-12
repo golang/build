@@ -569,8 +569,7 @@ func (w *Work) postSummary() {
 	}
 
 	// Ensure that the entire body can be posted to the issue by splitting it into multiple
-	// GitHub comments if necesary.
-	// golang.org/issue/45998
+	// GitHub comments if necessary. See golang.org/issue/45998.
 	bodyParts := splitLogMessage(body, githubCommentCharacterLimit)
 	for _, b := range bodyParts {
 		err := postGithubComment(w.ReleaseIssue, b)
