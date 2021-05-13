@@ -180,10 +180,15 @@ func TestTryWorkItem(t *testing.T) {
 
 		// Test that TryBots run on branches of the x/ repositories, other than
 		// "master" and "release-branch.go1.N". See issue 37512.
-		{"tools", 227356, &gerrit.ChangeInfo{}, nil, `project:"tools" branch:"gopls-release-branch.0.4" change_id:"Ica799fcf117bf607c0c59f41b08a78552339dc53" commit:"13af72af5ccdfe6f1e75b57b02cfde3bb0a77a76" ` +
-			`go_commit:"9995c6b50aa55c1cc1236d1d688929df512dad53" go_branch:"master" go_version:<major:1 minor:17 > `},
 		{"tools", 238259, &gerrit.ChangeInfo{}, nil, `project:"tools" branch:"dev.go2go" change_id:"I24950593b517af011a636966cb98b9652d2c4134" commit:"76e917206452e73dc28cbeb58a15ea8f30487263" ` +
 			`go_commit:"9995c6b50aa55c1cc1236d1d688929df512dad53" go_branch:"master" go_version:<major:1 minor:17 > `},
+
+		// Test that x/tools TryBots on gopls release branches are
+		// tested on tip and two supported releases. See issue 46156.
+		{"tools", 316773, &gerrit.ChangeInfo{}, nil, `project:"tools" branch:"gopls-release-branch.0.6" change_id:"I32fd2c0d30854e61109ebd16a05d5099f9074fe5" commit:"0bb7e5c47b1a31f85d4f173edc878a8e049764a5" ` +
+			`go_commit:"9995c6b50aa55c1cc1236d1d688929df512dad53" go_commit:"e67a58b7cb2b228e04477dfdb1aacd8348e63534" go_commit:"72ccabc99449b2cb5bb1438eb90244d55f7b02f5" ` +
+			`go_branch:"master" go_branch:"release-branch.go1.16" go_branch:"release-branch.go1.15" ` +
+			`go_version:<major:1 minor:17 > go_version:<major:1 minor:16 > go_version:<major:1 minor:15 > `},
 
 		// With comments:
 		{

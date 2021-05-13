@@ -192,9 +192,11 @@ func tryWorkItem(
 			w.GoCommit = []string{goCommit.String()}
 			w.GoBranch = []string{goBranch}
 			w.GoVersion = []*apipb.MajorMinor{{major, minor}}
-		} else if w.Branch == "master" {
-			// For subrepos on the "master" branch, use the default policy
-			// of testing it with Go tip and the supported releases.
+		} else if w.Branch == "master" ||
+			w.Project == "tools" && strings.HasPrefix(w.Branch, "gopls-release-branch.") { // Issue 46156.
+
+			// For subrepos on the "master" branch and select branches that have opted in,
+			// use the default policy of testing it with Go tip and the supported releases.
 			w.GoCommit = []string{goProj.Ref("refs/heads/master").String()}
 			w.GoBranch = []string{"master"}
 			w.GoVersion = []*apipb.MajorMinor{&develVersion}
