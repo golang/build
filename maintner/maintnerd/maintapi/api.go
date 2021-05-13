@@ -104,7 +104,14 @@ var tryCommentRx = regexp.MustCompile(`(?m)^TRY=(.*)$`)
 
 // tryWorkItem creates a GerritTryWorkItem for
 // the Gerrit CL specified by cl, ci, comments.
-func tryWorkItem(cl *maintner.GerritCL, ci *gerrit.ChangeInfo, comments map[string][]gerrit.CommentInfo) *apipb.GerritTryWorkItem {
+//
+// goProj is the state of the main Go repository.
+// develVersion is the version of Go in development at HEAD of master branch.
+// supportedReleases are the supported Go releases per https://golang.org/doc/devel/release.html#policy.
+func tryWorkItem(
+	cl *maintner.GerritCL, ci *gerrit.ChangeInfo, comments map[string][]gerrit.CommentInfo,
+	goProj refer, develVersion apipb.MajorMinor, supportedReleases []*apipb.GoRelease,
+) (*apipb.GerritTryWorkItem, error) {
 	w := &apipb.GerritTryWorkItem{
 		Project:  cl.Project.Project(),
 		Branch:   strings.TrimPrefix(cl.Branch(), "refs/heads/"),
@@ -116,6 +123,7 @@ func tryWorkItem(cl *maintner.GerritCL, ci *gerrit.ChangeInfo, comments map[stri
 		w.Commit = ci.CurrentRevision
 		w.Version = int32(ci.Revisions[ci.CurrentRevision].PatchSetNumber)
 	}
+
 	// Look for "TRY=" comments. Only consider messages that are accompanied
 	// by a Run-TryBot+1 vote, as a way of confirming the comment author has
 	// Trybot Access (see https://golang.org/wiki/GerritAccess#trybot-access-may-start-trybots).
@@ -153,7 +161,64 @@ func tryWorkItem(cl *maintner.GerritCL, ci *gerrit.ChangeInfo, comments map[stri
 			})
 		}
 	}
-	return w
+
+	// Populate GoCommit, GoBranch, GoVersion fields
+	// according to what's being tested. Coordinator
+	// will use these to run corresponding tests.
+	if w.Project == "go" {
+		// TryBot on Go repo. Set the GoVersion field based on branch name.
+		if major, minor, ok := parseReleaseBranchVersion(w.Branch); ok {
+			// A release branch like release-branch.goX.Y.
+			// Use the major-minor Go version determined from the branch name.
+			w.GoVersion = []*apipb.MajorMinor{{major, minor}}
+		} else {
+			// A branch that is not release-branch.goX.Y: maybe
+			// "master" or a development branch like "dev.link".
+			// There isn't a way to determine the version from its name,
+			// so use the development Go version until we need to do more.
+			// TODO(golang.org/issue/42376): This can be made more precise.
+			w.GoVersion = []*apipb.MajorMinor{&develVersion}
+		}
+	} else {
+		// TryBot on a subrepo.
+		trimBundleSuffix := func(branch string) string {
+			// There was only one branch with a suffix, release-branch.go1.15-bundle in x/net, so just hardcode it.
+			// TODO: This special case can be removed when Go 1.17 is out and 1.15 is no longer supported.
+			return strings.TrimSuffix(branch, "-bundle")
+		}
+		if major, minor, ok := parseReleaseBranchVersion(trimBundleSuffix(w.Branch)); ok {
+			// An release-branch.goX.Y (or one with a -suffix) branch is used for internal needs
+			// of goX.Y only, so no reason to test it on other Go versions.
+			goBranch := fmt.Sprintf("release-branch.go%d.%d", major, minor)
+			goCommit := goProj.Ref("refs/heads/" + goBranch)
+			if goCommit == "" {
+				return nil, fmt.Errorf("branch %q doesn't exist", goBranch)
+			}
+			w.GoCommit = []string{goCommit.String()}
+			w.GoBranch = []string{goBranch}
+			w.GoVersion = []*apipb.MajorMinor{{major, minor}}
+		} else if w.Branch == "master" {
+			// For subrepos on the "master" branch, use the default policy
+			// of testing it with Go tip and the supported releases.
+			w.GoCommit = []string{goProj.Ref("refs/heads/master").String()}
+			w.GoBranch = []string{"master"}
+			w.GoVersion = []*apipb.MajorMinor{&develVersion}
+			for _, r := range supportedReleases {
+				w.GoCommit = append(w.GoCommit, r.BranchCommit)
+				w.GoBranch = append(w.GoBranch, r.BranchName)
+				w.GoVersion = append(w.GoVersion, &apipb.MajorMinor{r.Major, r.Minor})
+			}
+		} else {
+			// A branch that is neither release-branch.goX.Y nor "master":
+			// maybe some custom branch like "dev.go2go".
+			// Test it against Go tip only until we want to do more.
+			w.GoCommit = []string{goProj.Ref("refs/heads/master").String()}
+			w.GoBranch = []string{"master"}
+			w.GoVersion = []*apipb.MajorMinor{&develVersion}
+		}
+	}
+
+	return w, nil
 }
 
 func firstLine(s string) string {
@@ -251,7 +316,8 @@ func goFindTryWork(ctx context.Context, gerritc *gerrit.Client, maintc *maintner
 		return nil, err
 	}
 	// If Go X.Y is the latest supported release, the version in development is likely Go X.(Y+1).
-	develVersion := &apipb.MajorMinor{
+	// TODO(golang.org/issue/42376): This can be made more precise.
+	develVersion := apipb.MajorMinor{
 		Major: supportedReleases[0].Major,
 		Minor: supportedReleases[0].Minor + 1,
 	}
@@ -273,31 +339,10 @@ func goFindTryWork(ctx context.Context, gerritc *gerrit.Client, maintc *maintner
 		if err != nil {
 			return nil, fmt.Errorf("gerritc.ListChangeComments(ctx, %q): %v", changeID, err)
 		}
-		work := tryWorkItem(cl, ci, comments)
-		if work.Project == "go" {
-			// Trybot on Go repo. Set the GoVersion field based on branch name.
-			if major, minor, ok := parseReleaseBranchVersion(work.Branch); ok {
-				// A release branch like release-branch.goX.Y.
-				// Use the major-minor Go version determined from the branch name.
-				work.GoVersion = []*apipb.MajorMinor{{major, minor}}
-			} else {
-				// A branch that is not release-branch.goX.Y: maybe
-				// "master" or a development branch like "dev.link".
-				// There isn't a way to determine the version from its name,
-				// so use the development Go version until we need to do more.
-				// TODO(golang.org/issue/42376): This can be made more precise.
-				work.GoVersion = []*apipb.MajorMinor{develVersion}
-			}
-		} else {
-			// Trybot on a subrepo. Set the Go fields to master and the supported releases.
-			work.GoCommit = []string{goProj.Ref("refs/heads/master").String()}
-			work.GoBranch = []string{"master"}
-			work.GoVersion = []*apipb.MajorMinor{develVersion}
-			for _, r := range supportedReleases {
-				work.GoCommit = append(work.GoCommit, r.BranchCommit)
-				work.GoBranch = append(work.GoBranch, r.BranchName)
-				work.GoVersion = append(work.GoVersion, &apipb.MajorMinor{r.Major, r.Minor})
-			}
+		work, err := tryWorkItem(cl, ci, comments, goProj, develVersion, supportedReleases)
+		if err != nil {
+			log.Printf("goFindTryWork: skipping CL %v because %v\n", ci.ChangeNumber, err)
+			continue
 		}
 		res.Waiting = append(res.Waiting, work)
 	}
@@ -353,6 +398,17 @@ func (s apiService) ListGoReleases(ctx context.Context, req *apipb.ListGoRelease
 	return &apipb.ListGoReleasesResponse{
 		Releases: releases,
 	}, nil
+}
+
+// refer is implemented by *maintner.GerritProject,
+// or something that acts like it for testing.
+type refer interface {
+	// Ref returns a non-change ref, such as "HEAD", "refs/heads/master",
+	// or "refs/tags/v0.8.0",
+	// Change refs of the form "refs/changes/*" are not supported.
+	// The returned hash is the zero value (an empty string) if the ref
+	// does not exist.
+	Ref(ref string) maintner.GitHash
 }
 
 // nonChangeRefLister is implemented by *maintner.GerritProject,

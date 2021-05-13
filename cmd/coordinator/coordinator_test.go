@@ -161,23 +161,23 @@ func TestStagingClusterBuilders(t *testing.T) {
 func TestIssue28891(t *testing.T) {
 	testingKnobSkipBuilds = true
 
-	work := &apipb.GerritTryWorkItem{ // Roughly based on https://go-review.googlesource.com/c/tools/+/150577/1.
-		Project:   "tools",
-		Branch:    "release-branch.go1.11",
-		ChangeId:  "Ice719ab807ce3922b885a800ac873cdbf165a8f7",
-		Commit:    "9d66f1bfdbed72f546df963194a19d56180c4ce7",
-		GoCommit:  []string{"a2e79571a9d3dbe3cf10dcaeb1f9c01732219869", "e39e43d7349555501080133bb426f1ead4b3ef97", "f5ff72d62301c4e9d0a78167fab5914ca12919bd"},
-		GoBranch:  []string{"master", "release-branch.go1.11", "release-branch.go1.10"},
-		GoVersion: []*apipb.MajorMinor{{1, 12}, {1, 11}, {1, 10}},
+	work := &apipb.GerritTryWorkItem{ // Based on what maintapi's GoFindTryWork does for x/net CL 258478.
+		Project:   "net",
+		Branch:    "release-branch.go1.15",
+		ChangeId:  "I546597cedf3715e6617babcb3b62140bf1857a27",
+		Commit:    "a5fa9d4b7c91aa1c3fecbeb6358ec1127b910dd6",
+		GoCommit:  []string{"72ccabc99449b2cb5bb1438eb90244d55f7b02f5"},
+		GoBranch:  []string{"release-branch.go1.15"},
+		GoVersion: []*apipb.MajorMinor{{1, 15}},
 	}
 	ts := newTrySet(work)
 	if len(ts.builds) == 0 {
 		t.Fatal("no builders in try set, want at least 1")
 	}
 	for i, bs := range ts.builds {
-		const go111Revision = "e39e43d7349555501080133bb426f1ead4b3ef97"
-		if bs.BuilderRev.Rev != go111Revision {
-			t.Errorf("build[%d]: %s: x/tools on release-branch.go1.11 branch should be tested with Go 1.11, but isn't", i, bs.NameAndBranch())
+		const go115Revision = "72ccabc99449b2cb5bb1438eb90244d55f7b02f5"
+		if bs.BuilderRev.Rev != go115Revision {
+			t.Errorf("build[%d]: %s: x/net on release-branch.go1.15 branch should be tested with Go 1.15, but isn't", i, bs.NameAndBranch())
 		}
 	}
 }
@@ -188,47 +188,24 @@ func TestIssue28891(t *testing.T) {
 func TestIssue42127(t *testing.T) {
 	testingKnobSkipBuilds = true
 
-	work := &apipb.GerritTryWorkItem{ // Roughly based on https://go-review.googlesource.com/c/net/+/264058/1.
+	work := &apipb.GerritTryWorkItem{ // Based on what maintapi's GoFindTryWork does for x/net CL 264058.
 		Project:   "net",
 		Branch:    "release-branch.go1.15-bundle",
 		ChangeId:  "I546597cedf3715e6617babcb3b62140bf1857a27",
-		Commit:    "286322bb8662ddff3686e42a01c33a1d47d25153",
-		GoCommit:  []string{"b2a8317b31d652b3ee293a313269b8290bcdf96c", "3b1f07fff774f86f13316f7bec6552566568fc10", "768b64711ae4292bd9a02c9cc8d44282f5fac66b"},
-		GoBranch:  []string{"master", "release-branch.go1.15", "release-branch.go1.14"},
-		GoVersion: []*apipb.MajorMinor{{1, 16}, {1, 15}, {1, 14}},
+		Commit:    "abf26a14a65b111d492067f407f32455c5b1048c",
+		GoCommit:  []string{"72ccabc99449b2cb5bb1438eb90244d55f7b02f5"},
+		GoBranch:  []string{"release-branch.go1.15"},
+		GoVersion: []*apipb.MajorMinor{{1, 15}},
 	}
 	ts := newTrySet(work)
 	if len(ts.builds) == 0 {
 		t.Fatal("no builders in try set, want at least 1")
 	}
 	for i, bs := range ts.builds {
-		const go115Revision = "3b1f07fff774f86f13316f7bec6552566568fc10"
+		const go115Revision = "72ccabc99449b2cb5bb1438eb90244d55f7b02f5"
 		if bs.BuilderRev.Rev != go115Revision {
 			t.Errorf("build[%d]: %s: x/net on release-branch.go1.15-bundle branch should be tested with Go 1.15, but isn't", i, bs.NameAndBranch())
 		}
-	}
-}
-
-// tests that we don't test Go 1.10 for the build repo
-func TestNewTrySetBuildRepoGo110(t *testing.T) {
-	testingKnobSkipBuilds = true
-
-	work := &apipb.GerritTryWorkItem{
-		Project:   "build",
-		Branch:    "master",
-		ChangeId:  "I6f05da2186b38dc8056081252563a82c50f0ce05",
-		Commit:    "a62e6a3ab11cc9cc2d9e22a50025dd33fc35d22f",
-		GoCommit:  []string{"a2e79571a9d3dbe3cf10dcaeb1f9c01732219869", "e39e43d7349555501080133bb426f1ead4b3ef97", "f5ff72d62301c4e9d0a78167fab5914ca12919bd"},
-		GoBranch:  []string{"master", "release-branch.go1.11", "release-branch.go1.10"},
-		GoVersion: []*apipb.MajorMinor{{1, 12}, {1, 11}, {1, 10}},
-	}
-	ts := newTrySet(work)
-	for i, bs := range ts.builds {
-		v := bs.NameAndBranch()
-		if strings.Contains(v, "Go 1.10.x") {
-			t.Errorf("unexpected builder: %v", v)
-		}
-		t.Logf("build[%d]: %s", i, v)
 	}
 }
 
@@ -237,14 +214,14 @@ func TestNewTrySetBuildRepoGo110(t *testing.T) {
 func TestXRepoBranches(t *testing.T) {
 	testingKnobSkipBuilds = true
 
-	work := &apipb.GerritTryWorkItem{
+	work := &apipb.GerritTryWorkItem{ // Based on what maintapi's GoFindTryWork does for x/tools CL 227356.
 		Project:   "tools",
 		Branch:    "gopls-release-branch.0.4",
 		ChangeId:  "Ica799fcf117bf607c0c59f41b08a78552339dc53",
-		Commit:    "6af4ce83c61d0f3e616b410b53b51982798c4d73",
-		GoVersion: []*apipb.MajorMinor{{1, 15}},
-		GoCommit:  []string{"74d6de03fd7db2c6faa7794620a9bcf0c4f018f2"},
+		Commit:    "13af72af5ccdfe6f1e75b57b02cfde3bb0a77a76",
+		GoCommit:  []string{"9995c6b50aa55c1cc1236d1d688929df512dad53"},
 		GoBranch:  []string{"master"},
+		GoVersion: []*apipb.MajorMinor{{1, 17}},
 	}
 	ts := newTrySet(work)
 	for i, bs := range ts.builds {

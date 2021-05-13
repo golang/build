@@ -1218,26 +1218,6 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		work.GoVersion = []*apipb.MajorMinor{{}}
 	}
 
-	// GoCommit is non-empty for x/* repos (aka "subrepos"). It
-	// is the Go revision to use to build & test the x/* repo
-	// with. The first element is the master branch. We test the
-	// master branch against all the normal builders configured to
-	// do subrepos. Any GoCommit values past the first are for older
-	// release branches, but we use a limited subset of builders for those.
-	var goRev string
-	if len(work.GoCommit) > 0 {
-		// By default, use the first GoCommit, which represents Go tip (master branch).
-		goRev = work.GoCommit[0]
-	}
-	for i, goBranch := range work.GoBranch {
-		// There are two cases where we want to change goRev to work.GoCommit[i]:
-		// 1. CL branch is like "master" or "release-branch.go1.15" and matches the Go branch exactly.
-		// 2. CL branch is like "release-branch.go1.15-suffix" and its prefix matches.
-		if work.Branch == goBranch || strings.HasPrefix(work.Branch, goBranch+"-") {
-			goRev = work.GoCommit[i]
-		}
-	}
-
 	addBuilderToSet := func(bs *buildStatus, brev buildgo.BuilderRev) {
 		bs.trySet = ts
 		status[brev] = bs
@@ -1252,6 +1232,15 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		go ts.awaitTryBuild(idx, bs, brev)
 	}
 
+	var mainBuildGoCommit string
+	if key.Project != "go" && len(work.GoCommit) > 0 {
+		// work.GoCommit is non-empty when work.Project != "go".
+		// For the main build, use the first GoCommit, which represents Go tip (master branch).
+		mainBuildGoCommit = work.GoCommit[0]
+	}
+
+	// Start the main TryBot build using the selected builders.
+	// There may be additional builds, those are handled below.
 	if !testingKnobSkipBuilds {
 		go ts.notifyStarting()
 	}
@@ -1260,7 +1249,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		if goVersion.Less(bconf.MinimumGoVersion) {
 			continue
 		}
-		brev := tryKeyToBuilderRev(bconf.Name, key, goRev)
+		brev := tryKeyToBuilderRev(bconf.Name, key, mainBuildGoCommit)
 		bs, err := newBuild(brev, noCommitDetail)
 		if err != nil {
 			log.Printf("can't create build for %q: %v", brev, err)
@@ -1269,17 +1258,16 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		addBuilderToSet(bs, brev)
 	}
 
-	// For subrepos on the "master" branch, test against prior releases of Go too.
-	if key.Project != "go" && key.Branch == "master" {
-		// linuxBuilder is the standard builder we run for when testing x/* repos against
-		// the past two Go releases.
+	// If this is a golang.org/x repo and there's more than one GoCommit,
+	// that means we're testing against prior releases of Go too.
+	// The version selection logic is currently in maintapi's GoFindTryWork implementation.
+	if key.Project != "go" && len(work.GoCommit) >= 2 {
+		// linuxBuilder is the standard builder for this purpose.
 		linuxBuilder := dashboard.Builders["linux-amd64"]
 
-		// If there's more than one GoCommit, that means this is an x/* repo
-		// and we're testing against previous releases of Go.
 		for i, goRev := range work.GoCommit {
 			if i == 0 {
-				// Skip the i==0 element, which is handled above.
+				// Skip the i==0 element, which was already handled above.
 				continue
 			}
 			branch := work.GoBranch[i]

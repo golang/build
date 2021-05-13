@@ -124,6 +124,32 @@ func TestTryBotStatus(t *testing.T) {
 
 func TestTryWorkItem(t *testing.T) {
 	c := getGoData(t)
+	goProj := gerritProject{
+		refs: []refHash{
+			{"refs/heads/master", gitHash("9995c6b50aa55c1cc1236d1d688929df512dad53")},
+			{"refs/heads/release-branch.go1.16", gitHash("e67a58b7cb2b228e04477dfdb1aacd8348e63534")},
+			{"refs/heads/release-branch.go1.15", gitHash("72ccabc99449b2cb5bb1438eb90244d55f7b02f5")},
+		},
+	}
+	develVersion := apipb.MajorMinor{
+		Major: 1, Minor: 17,
+	}
+	supportedReleases := []*apipb.GoRelease{
+		{
+			Major: 1, Minor: 16, Patch: 3,
+			TagName:      "go1.16.3",
+			TagCommit:    "9baddd3f21230c55f0ad2a10f5f20579dcf0a0bb",
+			BranchName:   "release-branch.go1.16",
+			BranchCommit: "e67a58b7cb2b228e04477dfdb1aacd8348e63534",
+		},
+		{
+			Major: 1, Minor: 15, Patch: 11,
+			TagName:      "go1.15.11",
+			TagCommit:    "8c163e85267d146274f68854fe02b4a495586584",
+			BranchName:   "release-branch.go1.15",
+			BranchCommit: "72ccabc99449b2cb5bb1438eb90244d55f7b02f5",
+		},
+	}
 	tests := []struct {
 		proj     string
 		clnum    int32
@@ -132,10 +158,32 @@ func TestTryWorkItem(t *testing.T) {
 		want     string
 	}{
 		// Same Change-Id, different branch:
-		{"go", 51430, &gerrit.ChangeInfo{}, nil, `project:"go" branch:"master" change_id:"I0bcae339624e7d61037d9ea0885b7bd07491bbb6" commit:"45a4609c0ae214e448612e0bc0846e2f2682f1b2" `},
-		{"go", 51450, &gerrit.ChangeInfo{}, nil, `project:"go" branch:"release-branch.go1.9" change_id:"I0bcae339624e7d61037d9ea0885b7bd07491bbb6" commit:"7320506bc58d3a55eff2c67b2ec65cfa94f7b0a7" `},
+		{"go", 51430, &gerrit.ChangeInfo{}, nil, `project:"go" branch:"master" change_id:"I0bcae339624e7d61037d9ea0885b7bd07491bbb6" commit:"45a4609c0ae214e448612e0bc0846e2f2682f1b2" go_version:<major:1 minor:17 > `},
+		{"go", 51450, &gerrit.ChangeInfo{}, nil, `project:"go" branch:"release-branch.go1.9" change_id:"I0bcae339624e7d61037d9ea0885b7bd07491bbb6" commit:"7320506bc58d3a55eff2c67b2ec65cfa94f7b0a7" go_version:<major:1 minor:9 > `},
 		// Different project:
-		{"build", 51432, &gerrit.ChangeInfo{}, nil, `project:"build" branch:"master" change_id:"I1f71836da7008e58d3e76e2cc3170e96cd57ddf6" commit:"9251bc9950baff61d95da0761e2e4bfab61ed210" `},
+		{"build", 51432, &gerrit.ChangeInfo{}, nil, `project:"build" branch:"master" change_id:"I1f71836da7008e58d3e76e2cc3170e96cd57ddf6" commit:"9251bc9950baff61d95da0761e2e4bfab61ed210" ` +
+			// Tested on tip and two supported releases.
+			`go_commit:"9995c6b50aa55c1cc1236d1d688929df512dad53" go_commit:"e67a58b7cb2b228e04477dfdb1aacd8348e63534" go_commit:"72ccabc99449b2cb5bb1438eb90244d55f7b02f5" ` +
+			`go_branch:"master" go_branch:"release-branch.go1.16" go_branch:"release-branch.go1.15" ` +
+			`go_version:<major:1 minor:17 > go_version:<major:1 minor:16 > go_version:<major:1 minor:15 > `},
+
+		// Test that a golang.org/x repo TryBot on a branch like
+		// "release-branch.go1.N" or "release-branch.go1.N-suffix"
+		// tests with Go 1.N (rather than tip + two supported releases).
+		// See issues 28891 and 42127.
+		{"net", 314649, &gerrit.ChangeInfo{}, nil, `project:"net" branch:"internal-branch.go1.16-vendor" change_id:"I2c54ce3b2acf1c5efdea66db0595b93a3f5ae5f3" commit:"3f4a416c7d3b3b41375d159f71ff0a801fc0102b" ` +
+			`go_commit:"9995c6b50aa55c1cc1236d1d688929df512dad53" go_branch:"master" go_version:<major:1 minor:17 > `}, // TODO(golang.org/issue/46154): This should be tested with Go 1.16, not tip.
+		{"net", 258478, &gerrit.ChangeInfo{}, nil, `project:"net" branch:"release-branch.go1.15" change_id:"I546597cedf3715e6617babcb3b62140bf1857a27" commit:"a5fa9d4b7c91aa1c3fecbeb6358ec1127b910dd6" ` +
+			`go_commit:"72ccabc99449b2cb5bb1438eb90244d55f7b02f5" go_branch:"release-branch.go1.15" go_version:<major:1 minor:15 > `},
+		{"net", 264058, &gerrit.ChangeInfo{}, nil, `project:"net" branch:"release-branch.go1.15-bundle" change_id:"I546597cedf3715e6617babcb3b62140bf1857a27" commit:"abf26a14a65b111d492067f407f32455c5b1048c" ` +
+			`go_commit:"72ccabc99449b2cb5bb1438eb90244d55f7b02f5" go_branch:"release-branch.go1.15" go_version:<major:1 minor:15 > `},
+
+		// Test that TryBots run on branches of the x/ repositories, other than
+		// "master" and "release-branch.go1.N". See issue 37512.
+		{"tools", 227356, &gerrit.ChangeInfo{}, nil, `project:"tools" branch:"gopls-release-branch.0.4" change_id:"Ica799fcf117bf607c0c59f41b08a78552339dc53" commit:"13af72af5ccdfe6f1e75b57b02cfde3bb0a77a76" ` +
+			`go_commit:"9995c6b50aa55c1cc1236d1d688929df512dad53" go_branch:"master" go_version:<major:1 minor:17 > `},
+		{"tools", 238259, &gerrit.ChangeInfo{}, nil, `project:"tools" branch:"dev.go2go" change_id:"I24950593b517af011a636966cb98b9652d2c4134" commit:"76e917206452e73dc28cbeb58a15ea8f30487263" ` +
+			`go_commit:"9995c6b50aa55c1cc1236d1d688929df512dad53" go_branch:"master" go_version:<major:1 minor:17 > `},
 
 		// With comments:
 		{
@@ -177,7 +225,7 @@ func TestTryWorkItem(t *testing.T) {
 					},
 				},
 			},
-			want: `project:"go" branch:"master" change_id:"I358eb7b11768df8c80fb7e805abd4cd01d52bb9b" commit:"f99d33e72efdea68fce39765bc94479b5ebed0a9" version:88 try_message:<message:"foo" author_id:1234 version:1 > try_message:<message:"bar, baz" author_id:5678 version:2 > `,
+			want: `project:"go" branch:"master" change_id:"I358eb7b11768df8c80fb7e805abd4cd01d52bb9b" commit:"f99d33e72efdea68fce39765bc94479b5ebed0a9" version:88 go_version:<major:1 minor:17 > try_message:<message:"foo" author_id:1234 version:1 > try_message:<message:"bar, baz" author_id:5678 version:2 > `,
 		},
 	}
 	for _, tt := range tests {
@@ -186,9 +234,25 @@ func TestTryWorkItem(t *testing.T) {
 			t.Errorf("CL %d in %s not found", tt.clnum, tt.proj)
 			continue
 		}
-		got := fmt.Sprint(tryWorkItem(cl, tt.ci, tt.comments))
-		if got != tt.want {
-			t.Errorf("tryWorkItem(%q, %v) mismatch:\n got: %#q\nwant: %#q", tt.proj, tt.clnum, got, tt.want)
+		work, err := tryWorkItem(cl, tt.ci, tt.comments, goProj, develVersion, supportedReleases)
+		if err != nil {
+			t.Errorf("tryWorkItem(%q, %v, ...): err=%v", tt.proj, tt.clnum, err)
+			continue
+		}
+		if len(work.GoVersion) == 0 {
+			t.Errorf("tryWorkItem(%q, %v, ...): len(GoVersion) is zero, want at least one", tt.proj, tt.clnum)
+		}
+		if work.Project != "go" && (len(work.GoCommit) == 0 || len(work.GoBranch) == 0) {
+			t.Errorf("tryWorkItem(%q, %v, ...): GoCommit/GoBranch slice is empty for x/ repo, want both non-empty", tt.proj, tt.clnum)
+		}
+		if len(work.GoBranch) != len(work.GoCommit) {
+			t.Errorf("tryWorkItem(%q, %v, ...): bad correlation between GoBranch and GoCommit slices", tt.proj, tt.clnum)
+		}
+		if ok := len(work.GoVersion) == len(work.GoCommit) || (len(work.GoVersion) == 1 && len(work.GoCommit) == 0); !ok {
+			t.Errorf("tryWorkItem(%q, %v, ...): bad correlation between GoVersion and GoCommit slices", tt.proj, tt.clnum)
+		}
+		if got := fmt.Sprint(work); got != tt.want {
+			t.Errorf("tryWorkItem(%q, %v, ...) mismatch:\n got: %#q\nwant: %#q", tt.proj, tt.clnum, got, tt.want)
 		}
 	}
 }
@@ -545,6 +609,15 @@ func TestGetDashboard(t *testing.T) {
 
 type gerritProject struct {
 	refs []refHash
+}
+
+func (gp gerritProject) Ref(ref string) maintner.GitHash {
+	for _, r := range gp.refs {
+		if r.Ref == ref {
+			return r.Hash
+		}
+	}
+	return ""
 }
 
 func (gp gerritProject) ForeachNonChangeRef(fn func(ref string, hash maintner.GitHash) error) error {
