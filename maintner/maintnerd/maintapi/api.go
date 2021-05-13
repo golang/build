@@ -181,13 +181,8 @@ func tryWorkItem(
 		}
 	} else {
 		// TryBot on a subrepo.
-		trimBundleSuffix := func(branch string) string {
-			// There was only one branch with a suffix, release-branch.go1.15-bundle in x/net, so just hardcode it.
-			// TODO: This special case can be removed when Go 1.17 is out and 1.15 is no longer supported.
-			return strings.TrimSuffix(branch, "-bundle")
-		}
-		if major, minor, ok := parseReleaseBranchVersion(trimBundleSuffix(w.Branch)); ok {
-			// An release-branch.goX.Y (or one with a -suffix) branch is used for internal needs
+		if major, minor, ok := parseInternalBranchVersion(w.Branch); ok {
+			// An internal-branch.goX.Y-suffix branch is used for internal needs
 			// of goX.Y only, so no reason to test it on other Go versions.
 			goBranch := fmt.Sprintf("release-branch.go%d.%d", major, minor)
 			goCommit := goProj.Ref("refs/heads/" + goBranch)
@@ -209,7 +204,7 @@ func tryWorkItem(
 				w.GoVersion = append(w.GoVersion, &apipb.MajorMinor{r.Major, r.Minor})
 			}
 		} else {
-			// A branch that is neither release-branch.goX.Y nor "master":
+			// A branch that is neither internal-branch.goX.Y-suffix nor "master":
 			// maybe some custom branch like "dev.go2go".
 			// Test it against Go tip only until we want to do more.
 			w.GoCommit = []string{goProj.Ref("refs/heads/master").String()}
@@ -383,6 +378,42 @@ func parseTagVersion(tagName string) (major, minor, patch int32, ok bool) {
 func parseReleaseBranchVersion(branchName string) (major, minor int32, ok bool) {
 	maj, min, ok := version.ParseReleaseBranch(branchName)
 	return int32(maj), int32(min), ok
+}
+
+// parseInternalBranchVersion parses the major-minor version pair
+// from internal-branch.goX-suffix or internal-branch.goX.Y-suffix internal branch names,
+// and reports whether the internal branch name is valid.
+//
+// Before Go 1.16, golang.org/x repositories used release-branch.go1.n as internal
+// branch names, so this function also accepts those branch names. See issue 36882.
+//
+// For example, "internal-branch.go1-vendor" is parsed as version 1.0,
+// and "internal-branch.go1.2-vendor" is parsed as version 1.2.
+func parseInternalBranchVersion(branchName string) (major, minor int32, ok bool) {
+	// Accept release branches as internal branches, since Go 1.15 still uses them.
+	// There was only one branch with a suffix, release-branch.go1.15-bundle in x/net, so just hardcode it.
+	// TODO: This special case can be removed when Go 1.17 is out and 1.15 is no longer supported.
+	if maj, min, ok := version.ParseReleaseBranch(strings.TrimSuffix(branchName, "-bundle")); ok {
+		return int32(maj), int32(min), ok
+	}
+
+	const prefix = "internal-branch."
+	if !strings.HasPrefix(branchName, prefix) {
+		return 0, 0, false
+	}
+	tagAndSuffix := branchName[len(prefix):] // "go1.16-vendor".
+	i := strings.Index(tagAndSuffix, "-")
+	if i == -1 || i == len(tagAndSuffix)-1 {
+		// No "-suffix" at all, or empty suffix. Reject.
+		return 0, 0, false
+	}
+	tag := tagAndSuffix[:i] // "go1.16".
+	maj, min, pat, ok := version.ParseTag(tag)
+	if !ok || pat != 0 {
+		// Not a major Go release tag. Reject.
+		return 0, 0, false
+	}
+	return int32(maj), int32(min), true
 }
 
 // ListGoReleases lists Go releases. A release is considered to exist

@@ -168,11 +168,11 @@ func TestTryWorkItem(t *testing.T) {
 			`go_version:<major:1 minor:17 > go_version:<major:1 minor:16 > go_version:<major:1 minor:15 > `},
 
 		// Test that a golang.org/x repo TryBot on a branch like
-		// "release-branch.go1.N" or "release-branch.go1.N-suffix"
+		// "internal-branch.go1.N-suffix", "release-branch.go1.N", or "release-branch.go1.N-suffix"
 		// tests with Go 1.N (rather than tip + two supported releases).
-		// See issues 28891 and 42127.
+		// See issues 28891, 42127, and 36882.
 		{"net", 314649, &gerrit.ChangeInfo{}, nil, `project:"net" branch:"internal-branch.go1.16-vendor" change_id:"I2c54ce3b2acf1c5efdea66db0595b93a3f5ae5f3" commit:"3f4a416c7d3b3b41375d159f71ff0a801fc0102b" ` +
-			`go_commit:"9995c6b50aa55c1cc1236d1d688929df512dad53" go_branch:"master" go_version:<major:1 minor:17 > `}, // TODO(golang.org/issue/46154): This should be tested with Go 1.16, not tip.
+			`go_commit:"e67a58b7cb2b228e04477dfdb1aacd8348e63534" go_branch:"release-branch.go1.16" go_version:<major:1 minor:16 > `},
 		{"net", 258478, &gerrit.ChangeInfo{}, nil, `project:"net" branch:"release-branch.go1.15" change_id:"I546597cedf3715e6617babcb3b62140bf1857a27" commit:"a5fa9d4b7c91aa1c3fecbeb6358ec1127b910dd6" ` +
 			`go_commit:"72ccabc99449b2cb5bb1438eb90244d55f7b02f5" go_branch:"release-branch.go1.15" go_version:<major:1 minor:15 > `},
 		{"net", 264058, &gerrit.ChangeInfo{}, nil, `project:"net" branch:"release-branch.go1.15-bundle" change_id:"I546597cedf3715e6617babcb3b62140bf1857a27" commit:"abf26a14a65b111d492067f407f32455c5b1048c" ` +
@@ -254,6 +254,36 @@ func TestTryWorkItem(t *testing.T) {
 		if got := fmt.Sprint(work); got != tt.want {
 			t.Errorf("tryWorkItem(%q, %v, ...) mismatch:\n got: %#q\nwant: %#q", tt.proj, tt.clnum, got, tt.want)
 		}
+	}
+}
+
+func TestParseInternalBranchVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		wantMaj int32
+		wantMin int32
+		wantOK  bool
+	}{
+		{"internal-branch.go1.16-vendor", 1, 16, true},
+		{"internal-branch.go1.16-", 0, 0, false}, // Empty suffix is rejected.
+		{"internal-branch.go1.16", 0, 0, false},  // No suffix is rejected.
+		{"not-internal-branch", 0, 0, false},
+		{"internal-branch.go1.16.2", 0, 0, false},
+		{"internal-branch.go42-suffix", 42, 0, true}, // Be ready in case Go 42 is released after 7.5 million years.
+
+		// Old naming scheme for internal branches. See issue 36882.
+		{"release-branch.go1.15", 1, 15, true},
+		{"release-branch.go1.15-bundle", 1, 15, true},
+		{"release-branch.go1.15-other", 0, 0, false}, // There are no other branches that need to be supported for now.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			maj, min, ok := parseInternalBranchVersion(tt.name)
+			if ok != tt.wantOK || maj != tt.wantMaj || min != tt.wantMin {
+				t.Errorf("parseInternalBranchVersion(%q) = Go %v.%v ok=%v; want Go %v.%v ok=%v", tt.name,
+					maj, min, ok, tt.wantMaj, tt.wantMin, tt.wantOK)
+			}
+		})
 	}
 }
 
