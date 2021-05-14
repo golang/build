@@ -287,7 +287,8 @@ func TestParseGithubEvents(t *testing.T) {
     "event": "locked",
     "commit_id": null,
     "commit_url": null,
-    "created_at": "2017-03-13T22:39:36Z"
+    "created_at": "2017-03-13T22:39:36Z",
+    "lock_reason": "off-topic"
   }`,
 			e: &GitHubIssueEvent{
 				ID:      998144646,
@@ -480,6 +481,47 @@ func TestParseGithubEvents(t *testing.T) {
 				Created:    p3339("2017-03-20T02:53:43Z"),
 				RenameFrom: "test-2",
 				RenameTo:   "test-2 new name",
+			},
+		},
+
+		{
+			name: "Extra Unknown JSON",
+			j: `{
+    "id": 998144526,
+    "url": "https://api.github.com/repos/bradfitz/go-issue-mirror/issues/events/998144526",
+    "actor": {
+      "login": "bradfitz",
+      "id": 2621
+    },
+    "event": "labeled",
+    "commit_id": null,
+    "commit_url": null,
+    "created_at": "2017-03-13T22:39:28Z",
+    "label": {
+      "name": "enhancement",
+      "color": "84b6eb"
+    },
+    "random_new_field": "some new thing that GitHub API may add"
+  }
+`,
+			e: &GitHubIssueEvent{
+				ID:      998144526,
+				Type:    "labeled",
+				Created: t3339("2017-03-13T22:39:28Z"),
+				Actor: &GitHubUser{
+					ID:    2621,
+					Login: "bradfitz",
+				},
+				Label:     "enhancement",
+				OtherJSON: `{"random_new_field":"some new thing that GitHub API may add"}`,
+			},
+			p: &maintpb.GithubIssueEvent{
+				Id:        998144526,
+				EventType: "labeled",
+				ActorId:   2621,
+				Created:   p3339("2017-03-13T22:39:28Z"),
+				Label:     &maintpb.GithubLabel{Name: "enhancement"},
+				OtherJson: []byte(`{"random_new_field":"some new thing that GitHub API may add"}`),
 			},
 		},
 	}
@@ -817,7 +859,7 @@ func TestParseGitHubReviews(t *testing.T) {
 				},
 				"submitted_at": "2018-03-22T00:26:48Z",
 				"commit_id" : "e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
-				"random_key": "some random value"
+				"random_new_field": "some new thing that GitHub API may add"
 				}`,
 			e: &GitHubReview{
 				ID: 123456,
@@ -830,7 +872,7 @@ func TestParseGitHubReviews(t *testing.T) {
 				CommitID:         "e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
 				ActorAssociation: "CONTRIBUTOR",
 				Created:          t3339("2018-03-22T00:26:48Z"),
-				OtherJSON:        `{"random_key":"some random value"}`,
+				OtherJSON:        `{"random_new_field":"some new thing that GitHub API may add"}`,
 			},
 			p: &maintpb.GithubReview{
 				Id:               123456,
@@ -840,7 +882,7 @@ func TestParseGitHubReviews(t *testing.T) {
 				CommitId:         "e4d70f7e8892f024e4ed3e8b99ee6c5a9f16e126",
 				ActorAssociation: "CONTRIBUTOR",
 				Created:          p3339("2018-03-22T00:26:48Z"),
-				OtherJson:        []byte(`{"random_key":"some random value"}`),
+				OtherJson:        []byte(`{"random_new_field":"some new thing that GitHub API may add"}`),
 			},
 		},
 	}

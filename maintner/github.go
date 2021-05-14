@@ -607,8 +607,8 @@ type GitHubIssueEvent struct {
 	Actor   *GitHubUser
 
 	Label               string      // for type: "unlabeled", "labeled"
-	Assignee            *GitHubUser // for type "assigned", "unassigned"
-	Assigner            *GitHubUser // for type "assigned", "unassigned"
+	Assignee            *GitHubUser // for type: "assigned", "unassigned"
+	Assigner            *GitHubUser // for type: "assigned", "unassigned"
 	Milestone           string      // for type: "milestoned", "demilestoned"
 	From, To            string      // for type: "renamed"
 	CommitID, CommitURL string      // for type: "closed", "referenced" ... ?
@@ -703,6 +703,7 @@ func (r *GitHubRepo) newGithubEvent(p *maintpb.GithubIssueEvent) *GitHubIssueEve
 		// TODO: parse it and see if we've since learned how
 		// to deal with it?
 		log.Printf("Unknown JSON in log: %s", p.OtherJson)
+		e.OtherJSON = string(p.OtherJson)
 	}
 	if p.Label != nil {
 		e.Label = g.c.str(p.Label.Name)
@@ -2130,8 +2131,8 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 	return nil
 }
 
-// parseGithubEvents parses the JSON array of GitHub events in r.  It
-// does this the very manual way (using map[string]interface{})
+// parseGithubEvents parses the JSON array of GitHub issue events in r.
+// It does this the very manual way (using map[string]interface{})
 // instead of using nice types because https://golang.org/issue/15314
 // isn't implemented yet and also because even if it were implemented,
 // this code still wants to preserve any unknown fields to store in
@@ -2235,7 +2236,8 @@ func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
 				e.TeamReviewer = t
 			}
 		}
-		delete(em, "node_id") // not sure what it is, but don't need to store it
+		delete(em, "node_id")     // GitHub API v4 Global Node ID; don't store it.
+		delete(em, "lock_reason") // Not stored.
 
 		otherJSON, _ := json.Marshal(em)
 		e.OtherJSON = string(otherJSON)
@@ -2243,7 +2245,7 @@ func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
 			e.OtherJSON = ""
 		}
 		if e.OtherJSON != "" {
-			log.Printf("warning: storing unknown field(s) in GitHub event: %s", e.OtherJSON)
+			log.Printf("warning: storing unknown field(s) in GitHub issue event: %s", e.OtherJSON)
 		}
 		evts = append(evts, e)
 	}
@@ -2336,7 +2338,7 @@ func (p *githubRepoPoller) syncReviewsOnPullRequest(ctx context.Context, issueNu
 			}
 			evts, err := parseGithubReviews(res.Body)
 			if err != nil {
-				return nil, nil, fmt.Errorf("%s: parse github pr review events: %v", u, err)
+				return nil, nil, fmt.Errorf("%s: parse github pr reviews: %v", u, err)
 			}
 			is := make([]interface{}, len(evts))
 			for i, v := range evts {
@@ -2373,8 +2375,8 @@ func (p *githubRepoPoller) syncReviewsOnPullRequest(ctx context.Context, issueNu
 	return nil
 }
 
-// parseGithubReviews parses the JSON array of GitHub review events in r.  It
-// does this the very manual way (using map[string]interface{})
+// parseGithubReviews parses the JSON array of GitHub reviews in r.
+// It does this the very manual way (using map[string]interface{})
 // instead of using nice types because https://golang.org/issue/15314
 // isn't implemented yet and also because even if it were implemented,
 // this code still wants to preserve any unknown fields to store in
@@ -2437,7 +2439,7 @@ func parseGithubReviews(r io.Reader) ([]*GitHubReview, error) {
 			e.Created = e.Created.UTC()
 		}
 
-		delete(em, "node_id")          // not sure what it is, but don't need to store it
+		delete(em, "node_id")          // GitHub API v4 Global Node ID; don't store it.
 		delete(em, "html_url")         // not needed.
 		delete(em, "pull_request_url") // not needed.
 		delete(em, "_links")           // not needed. (duplicate data of above two nodes)
@@ -2448,7 +2450,7 @@ func parseGithubReviews(r io.Reader) ([]*GitHubReview, error) {
 			e.OtherJSON = ""
 		}
 		if e.OtherJSON != "" {
-			log.Printf("warning: storing unknown field(s) in GitHub event: %s", e.OtherJSON)
+			log.Printf("warning: storing unknown field(s) in GitHub review: %s", e.OtherJSON)
 		}
 		evts = append(evts, e)
 	}
