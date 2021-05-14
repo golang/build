@@ -222,6 +222,10 @@ func (g *GitHubRepo) getOrCreateLabel(id int64) *GitHubLabel {
 	return lb
 }
 
+func (g *GitHubRepo) verbose() bool {
+	return g.github != nil && g.github.c != nil && g.github.c.verbose
+}
+
 // GitHubUser represents a GitHub user.
 // It is a subset of https://developer.github.com/v3/users/#get-a-single-user
 type GitHubUser struct {
@@ -550,7 +554,9 @@ func (r *GitHubRepo) newGithubReview(p *maintpb.GithubReview) *GitHubReview {
 	if len(p.OtherJson) > 0 {
 		// TODO: parse it and see if we've since learned how
 		// to deal with it?
-		log.Printf("Unknown JSON in log: %s", p.OtherJson)
+		if r.verbose() {
+			log.Printf("newGithubReview: unknown JSON in log: %s", p.OtherJson)
+		}
 		e.OtherJSON = string(p.OtherJson)
 	}
 
@@ -702,7 +708,9 @@ func (r *GitHubRepo) newGithubEvent(p *maintpb.GithubIssueEvent) *GitHubIssueEve
 	if len(p.OtherJson) > 0 {
 		// TODO: parse it and see if we've since learned how
 		// to deal with it?
-		log.Printf("Unknown JSON in log: %s", p.OtherJson)
+		if r.verbose() {
+			log.Printf("newGithubEvent: unknown JSON in log: %s", p.OtherJson)
+		}
 		e.OtherJSON = string(p.OtherJson)
 	}
 	if p.Label != nil {
@@ -985,10 +993,6 @@ type githubIssueDiffer struct {
 	b  *github.Issue // may NOT be nil
 }
 
-func (d githubIssueDiffer) verbose() bool {
-	return d.gr.github != nil && d.gr.github.c != nil && d.gr.github.c.verbose
-}
-
 // returns nil if no changes.
 func (d githubIssueDiffer) Diff() *maintpb.GithubIssueMutation {
 	var changed bool
@@ -1000,7 +1004,7 @@ func (d githubIssueDiffer) Diff() *maintpb.GithubIssueMutation {
 	}
 	for _, f := range issueDiffMethods {
 		if f(d, m) {
-			if d.verbose() {
+			if d.gr.verbose() {
 				fname := strings.TrimPrefix(runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name(), "golang.org/x/build/maintner.githubIssueDiffer.")
 				log.Printf("Issue %d changed: %v", d.b.GetNumber(), fname)
 			}
