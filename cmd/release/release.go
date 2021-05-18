@@ -202,10 +202,11 @@ var builds = []*Build{
 		Builder: "windows-amd64-2008",
 	},
 	{
+		GoQuery: ">= go1.17beta1",
 		OS:      "darwin",
 		Arch:    "amd64",
 		Race:    true,
-		Builder: "darwin-amd64-10_15",
+		Builder: "darwin-amd64-11_0",
 	},
 	{
 		GoQuery: ">= go1.16beta1", // Go 1.16 Beta 1 is the first Go (pre-)release with the darwin/arm64 port.
@@ -273,6 +274,13 @@ var builds = []*Build{
 		Arch:    "amd64",
 		Race:    true,
 		Builder: "freebsd-amd64-11_2",
+	},
+	{
+		GoQuery: "< go1.17beta1", // See golang/go#46161.
+		OS:      "darwin",
+		Arch:    "amd64",
+		Race:    true,
+		Builder: "darwin-amd64-10_15",
 	},
 
 	// Test-only builds.
