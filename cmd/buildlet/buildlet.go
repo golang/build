@@ -223,7 +223,6 @@ func main() {
 	initGorootBootstrap()
 
 	http.HandleFunc("/", handleRoot)
-	http.HandleFunc("/debug/goroutines", handleGoroutines)
 	http.HandleFunc("/debug/x", handleX)
 
 	var password string
@@ -233,6 +232,7 @@ func main() {
 	requireAuth := func(handler func(w http.ResponseWriter, r *http.Request)) http.Handler {
 		return requirePasswordHandler{http.HandlerFunc(handler), password}
 	}
+	http.Handle("/debug/goroutines", requireAuth(handleGoroutines))
 	http.Handle("/writetgz", requireAuth(handleWriteTGZ))
 	http.Handle("/write", requireAuth(handleWrite))
 	http.Handle("/exec", requireAuth(handleExec))
@@ -496,7 +496,6 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "buildlet running on %s-%s\n", runtime.GOOS, runtime.GOARCH)
 }
 
-// unauthenticated /debug/goroutines handler
 func handleGoroutines(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Dumping goroutines.")
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")

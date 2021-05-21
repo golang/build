@@ -947,9 +947,6 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 <h2 id=fd>File Descriptors <a href='#fd'>¶</a></h2>
 <p>{{.NumFD}}</p>
 
-<h2 id=goroutines>Goroutines <a href='#goroutines'>¶</a></h2>
-<p>{{.NumGoroutine}} <a href='/debug/goroutines'>goroutines</a></p>
-
 </body>
 </html>
 `))

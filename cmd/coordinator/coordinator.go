@@ -32,11 +32,9 @@ import (
 	"log"
 	"net"
 	"net/http"
-	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"path"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -343,7 +341,6 @@ func main() {
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
 	protos.RegisterCoordinatorServer(grpcServer, gs)
 	http.HandleFunc("/", handleStatus)
-	http.HandleFunc("/debug/goroutines", handleDebugGoroutines)
 	http.HandleFunc("/builders", handleBuilders)
 	http.HandleFunc("/temporarylogs", handleLogs)
 	http.HandleFunc("/reverse", pool.HandleReverse)
@@ -837,13 +834,6 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-}
-
-func handleDebugGoroutines(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	buf := make([]byte, 1<<20)
-	buf = buf[:runtime.Stack(buf, true)]
-	w.Write(buf)
 }
 
 func writeStatusHeader(w http.ResponseWriter, st *buildStatus) {
