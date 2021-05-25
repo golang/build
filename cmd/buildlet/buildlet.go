@@ -41,6 +41,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"golang.org/x/build/buildlet"
@@ -334,12 +335,18 @@ func onEC2() bool {
 	if ec2MdC != nil {
 		return ec2MdC.Available()
 	}
-	ses, err := session.NewSession()
+	cfg := aws.NewConfig()
+	// TODO(golang/go#42604) - Improve detection of our qemu forwarded
+	// metadata service for Windows ARM VMs running on EC2.
+	if runtime.GOOS == "windows" && runtime.GOARCH == "arm64" {
+		cfg = cfg.WithEndpoint("http://10.0.2.100:8173/latest")
+	}
+	ses, err := session.NewSession(cfg)
 	if err != nil {
 		log.Printf("unable to create aws session: %s", err)
 		return false
 	}
-	ec2MdC = ec2metadata.New(ses)
+	ec2MdC = ec2metadata.New(ses, cfg)
 	return ec2MdC.Available()
 }
 
@@ -1123,11 +1130,10 @@ func baseEnv(goarch string) []string {
 func windowsBaseEnv(goarch string) (e []string) {
 	e = append(e, "GOBUILDEXIT=1") // exit all.bat with completion status
 
-	is64 := goarch != "386"
 	for _, pair := range os.Environ() {
 		const pathEq = "PATH="
 		if hasPrefixFold(pair, pathEq) {
-			e = append(e, "PATH="+windowsPath(pair[len(pathEq):], is64))
+			e = append(e, "PATH="+windowsPath(pair[len(pathEq):], goarch))
 		} else {
 			e = append(e, pair)
 		}
@@ -1143,15 +1149,18 @@ func hasPrefixFold(s, prefix string) bool {
 // windowsPath cleans the windows %PATH% environment.
 // is64Bit is whether this is a windows-amd64-* builder.
 // The PATH is assumed to be that of the image described in env/windows/README.
-func windowsPath(old string, is64Bit bool) string {
+func windowsPath(old string, goarch string) string {
 	vv := filepath.SplitList(old)
 	newPath := make([]string, 0, len(vv))
+	is64Bit := goarch != "386"
 
 	// for windows-buildlet-v2 images
 	for _, v := range vv {
 		// The base VM image has both the 32-bit and 64-bit gcc installed.
 		// They're both in the environment, so scrub the one
 		// we don't want (TDM-GCC-64 or TDM-GCC-32).
+		//
+		// This is not present in arm64 images.
 		if strings.Contains(v, "TDM-GCC-") {
 			gcc64 := strings.Contains(v, "TDM-GCC-64")
 			if is64Bit != gcc64 {
@@ -1161,11 +1170,13 @@ func windowsPath(old string, is64Bit bool) string {
 		newPath = append(newPath, v)
 	}
 
-	// for windows-amd64-* images
-	if is64Bit {
-		newPath = append(newPath, `C:\godep\gcc64\bin`)
-	} else {
+	switch goarch {
+	case "arm64":
+		newPath = append(newPath, `C:\godep\llvm-aarch64\bin`)
+	case "386":
 		newPath = append(newPath, `C:\godep\gcc32\bin`)
+	default:
+		newPath = append(newPath, `C:\godep\gcc64\bin`)
 	}
 
 	return strings.Join(newPath, string(filepath.ListSeparator))
@@ -1226,6 +1237,11 @@ func doHalt() {
 			err = exec.Command("/usr/bin/sudo", "/sbin/halt", "-n", "-q", "-l").Run()
 		} else {
 			err = errors.New("not respecting -halt flag on macOS in unknown environment")
+		}
+	case "windows":
+		err = errors.New("not respsecting -halt flag on windows in unknown environment")
+		if runtime.GOARCH == "arm64" {
+			err = exec.Command("shutdown /s").Run()
 		}
 	default:
 		err = errors.New("no system-specific halt command run; will just end buildlet process")
