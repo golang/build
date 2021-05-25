@@ -89,47 +89,11 @@ var (
 	toolsTeam = gh("golang/tools-team")
 )
 
-// entries is a map of <repo name>/<path>/<domain> to Owner entries.
-// It should not be modified at runtime.
+// entries is a map of <repo name>/<path> or <domain> to Owner entries.
+// For <repo name>/<path>, there is an implicit prefix of go.googlesource.com.
+// This map should not be modified at runtime.
 var entries = map[string]*Entry{
-	"arch": {
-		Primary: []Owner{cherryyz},
-	},
-
-	"build": {
-		Primary: []Owner{dmitshur, bradfitz, amedee, heschi},
-	},
-	"build/maintner/cmd/maintserve": {
-		Primary: []Owner{dmitshur},
-	},
-
-	"crypto": {
-		Primary:   []Owner{filippo},
-		Secondary: []Owner{agl, katie, roland},
-	},
-	"crypto/acme": {
-		Primary:   []Owner{roland},
-		Secondary: []Owner{filippo},
-	},
-	"crypto/acme/autocert": {
-		Primary:   []Owner{bradfitz},
-		Secondary: []Owner{roland, filippo},
-	},
-
-	"debug": {
-		Secondary: []Owner{hyangah, khr},
-	},
-
-	"gccgo": {
-		Primary:   []Owner{iant},
-		Secondary: []Owner{thanm, cherryyz},
-	},
-
-	"go/misc/wasm":                     wasmOwners,
-	"go/src/cmd/compile/internal/wasm": wasmOwners,
-	"go/src/cmd/internal/obj/wasm":     wasmOwners,
-	"go/src/cmd/link/internal/wasm":    wasmOwners,
-
+	// Go standard library.
 	"go/src/archive/tar": {
 		Primary: []Owner{joetsai},
 	},
@@ -196,6 +160,7 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{khr},
 		Secondary: []Owner{josharian, martisch},
 	},
+	"go/src/cmd/compile/internal/wasm": wasmOwners,
 	"go/src/cmd/doc": {
 		Primary:   []Owner{r},
 		Secondary: []Owner{mvdan},
@@ -204,10 +169,12 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{bcmills, jayconrod, matloob},
 		Secondary: []Owner{rsc, iant},
 	},
+	"go/src/cmd/internal/obj/wasm": wasmOwners,
 	"go/src/cmd/link": {
 		Primary:   []Owner{cherryyz, rsc, mdempsky, iant},
 		Secondary: []Owner{mwhudson, thanm},
 	},
+	"go/src/cmd/link/internal/wasm": wasmOwners,
 	"go/src/cmd/pprof": {
 		Primary: []Owner{cherryyz},
 	},
@@ -584,24 +551,40 @@ var entries = map[string]*Entry{
 		Primary: []Owner{gri},
 	},
 
-	"gofrontend": {
-		Primary:   []Owner{iant},
-		Secondary: []Owner{thanm},
-	},
+	// Misc. additional tooling in the Go repository.
+	"go/misc/wasm": wasmOwners,
 
-	"gollvm": {
-		Primary:   []Owner{thanm},
-		Secondary: []Owner{cherryyz},
+	// golang.org/x/ repositories.
+	"arch": {
+		Primary: []Owner{cherryyz},
 	},
-
+	"build": {
+		Primary: []Owner{dmitshur, bradfitz, amedee, heschi},
+	},
+	"build/maintner/cmd/maintserve": {
+		Primary: []Owner{dmitshur},
+	},
+	"crypto": {
+		Primary:   []Owner{filippo},
+		Secondary: []Owner{agl, katie, roland},
+	},
+	"crypto/acme": {
+		Primary:   []Owner{roland},
+		Secondary: []Owner{filippo},
+	},
+	"crypto/acme/autocert": {
+		Primary:   []Owner{bradfitz},
+		Secondary: []Owner{roland, filippo},
+	},
+	"debug": {
+		Secondary: []Owner{hyangah, khr},
+	},
 	"mobile": {
 		Primary: []Owner{hyangah},
 	},
-
 	"mod": {
 		Primary: []Owner{bcmills, jayconrod, matloob},
 	},
-
 	"net": {
 		Primary: []Owner{neild, iant},
 	},
@@ -625,31 +608,25 @@ var entries = map[string]*Entry{
 	"net/ipv6": {
 		Primary: []Owner{iant},
 	},
-
 	"oauth2": {
 		Primary:   []Owner{bradfitz},
 		Secondary: []Owner{jbd, cbro, shinfan, codyoss},
 	},
-
 	"review": {
 		Secondary: []Owner{kevinburke},
 	},
-
 	"sync": {
 		Primary: []Owner{bcmills},
 	},
-
 	"sys/unix": {
 		Primary: []Owner{iant, bradfitz, tklauser},
 	},
 	"sys/windows": {
 		Primary: []Owner{alexbrainman, bradfitz},
 	},
-
 	"text": {
 		Primary: []Owner{mpvl},
 	},
-
 	"tools/benchmark": {
 		Primary: []Owner{toolsTeam},
 	},
@@ -843,26 +820,35 @@ var entries = map[string]*Entry{
 	"tools": {
 		Primary: []Owner{toolsTeam},
 	},
-
 	"pkgsite": {
 		Primary: []Owner{julieqiu, jba, jamalc},
 	},
-
 	"playground": {
 		Primary: []Owner{rakoczy},
 	},
-
-	"vscode-go": {
-		Primary:   []Owner{hyangah},
-		Secondary: []Owner{suzmue},
-	},
-
 	"vulndb": {
 		Primary: []Owner{filippo, katie, roland},
 	},
-
 	"website": {
 		Primary: []Owner{dmitshur},
+	},
+
+	// Misc. other Go repositories.
+	"gccgo": {
+		Primary:   []Owner{iant},
+		Secondary: []Owner{thanm, cherryyz},
+	},
+	"gofrontend": {
+		Primary:   []Owner{iant},
+		Secondary: []Owner{thanm},
+	},
+	"gollvm": {
+		Primary:   []Owner{thanm},
+		Secondary: []Owner{cherryyz},
+	},
+	"vscode-go": {
+		Primary:   []Owner{hyangah},
+		Secondary: []Owner{suzmue},
 	},
 
 	// These components are domains, not Go packages.
