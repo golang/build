@@ -1,0 +1,8 @@
+[Unit]
+Description=QEMU
+
+[Service]
+ExecStart=/home/ubuntu/win10-arm64.sh
+
+[Install]
+WantedBy=multi-user.target

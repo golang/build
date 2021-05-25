@@ -1,0 +1,55 @@
+{
+  "variables": {
+    "aws_access_key": "{{env `AWS_ACCESS_KEY_ID`}}",
+    "aws_secret_key": "{{env `AWS_SECRET_ACCESS_KEY`}}",
+    "region": "us-east-2"
+  },
+  "builders": [
+    {
+      "type": "amazon-ebs",
+      "iam_instance_profile": "buildetS3ReadOnly",
+      "access_key": "{{user `aws_access_key`}}",
+      "ami_name": "go-linux-arm64-host-{{timestamp}}",
+      "ami_description": "Image for linux-arm64 Go builder hosting windows-arm64",
+      "instance_type": "a1.metal",
+      "region": "{{user `region`}}",
+      "secret_key": "{{user `aws_secret_key`}}",
+      "source_ami": "ami-0b0c8ae527978b689",
+      "decode_authorization_messages": true,
+      "ssh_username": "ubuntu",
+      "tags": {
+        "Name": "Ubuntu",
+        "Created": "{{isotime \"2006-01-02\"}}",
+        "OS": "Ubuntu 20.04 Focal (ARM64)",
+        "Release": "Latest",
+        "Base_AMI_Name": "{{ .SourceAMIName }}",
+        "Extra": "{{ .SourceAMITags.TagName }}",
+        "Description": "{{user `description`}}"
+      },
+      "launch_block_device_mappings": [
+        {
+          "device_name": "/dev/sda1",
+          "volume_size": 50,
+          "volume_type": "gp2",
+          "delete_on_termination": true
+        }
+      ]
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "file",
+      "source": "./win10-arm64.sh",
+      "destination": "/home/ubuntu/win10-arm64.sh"
+    },
+    {
+      "type": "file",
+      "source": "./qemu.service",
+      "destination": "/tmp/qemu.service"
+    },
+    {
+      "type": "shell",
+      "script": "./prepare_image.sh"
+    }
+  ]
+}
