@@ -10,6 +10,9 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strings"
+
+	"golang.org/x/build/repos"
 )
 
 type Owner struct {
@@ -121,17 +124,69 @@ func jsonError(w http.ResponseWriter, text string, code int) {
 	w.Write(buf.Bytes())
 }
 
+// translatePath takes a path for a package based on go.googlesource.com
+// and translates it into a form that aligns more closely with the issue
+// tracker.
+//
+// Specifically, Go standard library packages lose the go/src prefix,
+// repositories with a golang.org/x/ import path get the x/ prefix,
+// and all other paths are left as-is (this includes e.g. domains).
+func translatePath(path string) string {
+	// Check if it's in the standard library, in which case,
+	// drop the prefix.
+	if strings.HasPrefix(path, "go/src/") {
+		return path[len("go/src/"):]
+	}
+
+	// Check if it's some other path in the main repo, in which case,
+	// drop the go/ prefix.
+	if strings.HasPrefix(path, "go/") {
+		return path[len("go/"):]
+	}
+
+	// Check if it's a golang.org/x/ repository, and if so add an x/ prefix.
+	firstComponent := path
+	i := strings.IndexRune(path, '/')
+	if i > 0 {
+		firstComponent = path[:i]
+	}
+	if _, ok := repos.ByImportPath["golang.org/x/"+firstComponent]; ok {
+		return "x/" + path
+	}
+
+	// None of the above was true, so just leave it untouched.
+	return path
+}
+
+// translateOwnersPaths returns a copy of entries with all its keys
+// adjusted for better readability on https://dev.golang.org/owners.
+//
+// Panics if the translation causes a collision between keys.
+func translateOwnersPaths() map[string]*Entry {
+	tm := make(map[string]*Entry)
+	for path, entry := range entries {
+		tPath := translatePath(path)
+		if _, ok := tm[tPath]; ok {
+			panic("path translation creates duplicates")
+		}
+		tm[tPath] = entry
+	}
+	return tm
+}
+
 func serveIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	var buf bytes.Buffer
-	if err := indexTmpl.Execute(&buf, entries); err != nil {
+	if err := indexTmpl.Execute(&buf, displayEntries); err != nil {
 		log.Printf("unable to execute index template: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 	w.Write(buf.Bytes())
 }
+
+var displayEntries = translateOwnersPaths()
 
 var indexTmpl = template.Must(template.New("index").Parse(`<!DOCTYPE html>
 <html lang="en">
