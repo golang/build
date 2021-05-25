@@ -68,6 +68,7 @@ var (
 	mvdan        = gh("mvdan")
 	mwhudson     = gh("mwhudson")
 	neelance     = gh("neelance")
+	neild        = gh("neild")
 	nigeltao     = gh("nigeltao")
 	pearring     = gh("pearring")
 	prattmic     = gh("prattmic")
@@ -246,7 +247,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{gri},
 	},
 	"go/src/context": {
-		Primary: []Owner{sameer, bradfitz},
+		Primary: []Owner{neild, sameer},
 	},
 	"go/src/crypto": {
 		Primary:   []Owner{filippo},
@@ -425,19 +426,19 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{josharian, filippo},
 	},
 	"go/src/mime": {
-		Primary: []Owner{bradfitz},
+		Primary: []Owner{neild},
 	},
 	"go/src/mime/multipart": {
-		Primary: []Owner{bradfitz, minux},
+		Primary: []Owner{neild, minux},
 	},
 	"go/src/mime/quotedprintable": {
-		Primary: []Owner{bradfitz, minux},
+		Primary: []Owner{neild, minux},
 	},
 	"go/src/net": {
-		Primary: []Owner{bradfitz, iant},
+		Primary: []Owner{iant, neild},
 	},
 	"go/src/net/http": {
-		Primary:   []Owner{bradfitz},
+		Primary:   []Owner{neild},
 		Secondary: []Owner{rsc},
 	},
 	"go/src/net/http/pprof": {
@@ -464,7 +465,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{bradfitz, rsc},
 	},
 	"go/src/net/url": {
-		Primary: []Owner{rsc, bradfitz},
+		Primary: []Owner{neild, rsc},
 	},
 	"go/src/os": {
 		Primary: []Owner{rsc, r, iant, bradfitz, gri},
@@ -602,17 +603,17 @@ var entries = map[string]*Entry{
 	},
 
 	"net": {
-		Primary: []Owner{bradfitz, iant},
+		Primary: []Owner{neild, iant},
 	},
 	"net/bpf": {
 		Primary: []Owner{danderson, mdlayher},
 	},
 	"net/http": {
-		Primary:   []Owner{bradfitz},
+		Primary:   []Owner{neild},
 		Secondary: []Owner{},
 	},
 	"net/http2": {
-		Primary:   []Owner{bradfitz, tombergan},
+		Primary:   []Owner{neild, tombergan},
 		Secondary: []Owner{},
 	},
 	"net/icmp": {
