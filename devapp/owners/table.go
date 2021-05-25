@@ -872,8 +872,16 @@ var entries = map[string]*Entry{
 	"go.dev": {
 		Primary: []Owner{pearring},
 	},
+	"index.golang.org": modProxyOwners,
+	"proxy.golang.org": modProxyOwners,
+	"sum.golang.org":   modProxyOwners,
 }
 
 var wasmOwners = &Entry{
 	Primary: []Owner{neelance, cherryyz},
+}
+
+var modProxyOwners = &Entry{
+	Primary:   []Owner{katie, heschi, hyangah},
+	Secondary: []Owner{findleyr},
 }
