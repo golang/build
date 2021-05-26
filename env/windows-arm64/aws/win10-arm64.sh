@@ -10,7 +10,7 @@
   -cpu host \
   --accel kvm \
   -smp 4 \
-  -m 8G \
+  -m 24G \
   -drive file=/home/ubuntu/win10/QEMU_EFI.fd,format=raw,if=pflash,readonly=on \
   -drive file=/home/ubuntu/win10/QEMU_VARS.fd,format=raw,if=pflash \
   -device nec-usb-xhci \
