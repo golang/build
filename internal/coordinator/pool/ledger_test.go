@@ -115,7 +115,9 @@ func TestLedgerReleaseResources(t *testing.T) {
 		instName    string
 		entry       *entry
 		cpuUsed     int64
+		a1Used      int64
 		wantCPUUsed int64
+		wantA1Used  int64
 		wantErr     bool
 	}{
 		{
@@ -126,7 +128,9 @@ func TestLedgerReleaseResources(t *testing.T) {
 				vCPUCount:    10,
 			},
 			cpuUsed:     20,
+			a1Used:      0,
 			wantCPUUsed: 10,
+			wantA1Used:  0,
 			wantErr:     false,
 		},
 		{
@@ -137,14 +141,45 @@ func TestLedgerReleaseResources(t *testing.T) {
 				vCPUCount:    10,
 			},
 			cpuUsed:     20,
+			a1Used:      0,
 			wantCPUUsed: 20,
+			wantA1Used:  0,
+			wantErr:     true,
+		},
+		{
+			desc:     "success-with-a1-instance",
+			instName: "inst-x",
+			entry: &entry{
+				instanceName: "inst-x",
+				vCPUCount:    10,
+				instanceType: a1MetalInstance,
+			},
+			cpuUsed:     20,
+			a1Used:      1,
+			wantCPUUsed: 10,
+			wantA1Used:  0,
+			wantErr:     false,
+		},
+		{
+			desc:     "entry-not-found-with-a1-instance",
+			instName: "inst-x",
+			entry: &entry{
+				instanceName: "inst-w",
+				vCPUCount:    10,
+				instanceType: a1MetalInstance,
+			},
+			cpuUsed:     20,
+			a1Used:      1,
+			wantCPUUsed: 20,
+			wantA1Used:  1,
 			wantErr:     true,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			l := &ledger{
-				cpuUsed: tc.cpuUsed,
+				cpuUsed:        tc.cpuUsed,
+				instanceA1Used: tc.a1Used,
 				entries: map[string]*entry{
 					tc.entry.instanceName: tc.entry,
 				},
@@ -156,61 +191,124 @@ func TestLedgerReleaseResources(t *testing.T) {
 			if l.cpuUsed != tc.wantCPUUsed {
 				t.Errorf("ledger.cpuUsed = %d; wanted %d", l.cpuUsed, tc.wantCPUUsed)
 			}
+			if l.instanceA1Used != tc.wantA1Used {
+				t.Errorf("ledger.instanceA1Used = %d; wanted %d", l.instanceA1Used, tc.wantA1Used)
+			}
 		})
 	}
 }
 
-func TestLedgerAllocateCPU(t *testing.T) {
+func TestLedgerAllocateResources(t *testing.T) {
 	testCases := []struct {
 		desc        string
 		numCPU      int64
 		cpuLimit    int64
 		cpuUsed     int64
+		a1Used      int64
+		a1Limit     int64
 		instName    string
+		instType    string
 		wantReserve bool
 		wantCPUUsed int64
+		wantA1Used  int64
 	}{
 		{
 			desc:        "reservation-success",
 			numCPU:      10,
 			cpuLimit:    10,
 			cpuUsed:     0,
+			a1Used:      0,
+			a1Limit:     1,
 			instName:    "chacha",
+			instType:    "x.type",
 			wantReserve: true,
 			wantCPUUsed: 10,
+			wantA1Used:  0,
 		},
 		{
 			desc:        "failed-to-reserve",
+			a1Used:      0,
+			a1Limit:     1,
 			numCPU:      10,
 			cpuLimit:    5,
 			cpuUsed:     0,
 			instName:    "pasa",
+			instType:    "x.type",
 			wantReserve: false,
 			wantCPUUsed: 0,
+			wantA1Used:  0,
 		},
 		{
 			desc:        "invalid-cpu-count",
+			a1Used:      0,
+			a1Limit:     1,
 			numCPU:      0,
 			cpuLimit:    50,
 			cpuUsed:     20,
 			instName:    "double",
+			instType:    "x.type",
 			wantReserve: false,
 			wantCPUUsed: 20,
+			wantA1Used:  0,
+		},
+		{
+			desc:        "reservation-success with a1.metal instance",
+			numCPU:      10,
+			cpuLimit:    10,
+			cpuUsed:     0,
+			a1Used:      0,
+			a1Limit:     1,
+			instName:    "chacha",
+			instType:    a1MetalInstance,
+			wantReserve: true,
+			wantCPUUsed: 10,
+			wantA1Used:  1,
+		},
+		{
+			desc:        "failed-to-reserve with a1.metal instance",
+			a1Used:      0,
+			a1Limit:     1,
+			numCPU:      10,
+			cpuLimit:    5,
+			cpuUsed:     0,
+			instName:    "pasa",
+			instType:    a1MetalInstance,
+			wantReserve: false,
+			wantCPUUsed: 0,
+			wantA1Used:  0,
+		},
+		{
+			desc:        "invalid-cpu-count with a1.metal instance",
+			a1Used:      0,
+			a1Limit:     10,
+			numCPU:      0,
+			cpuLimit:    50,
+			cpuUsed:     20,
+			instName:    "double",
+			instType:    a1MetalInstance,
+			wantReserve: false,
+			wantCPUUsed: 20,
+			wantA1Used:  0,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			l := &ledger{
-				entries:  make(map[string]*entry),
-				cpuLimit: tc.cpuLimit,
-				cpuUsed:  tc.cpuUsed,
+				entries:         make(map[string]*entry),
+				cpuLimit:        tc.cpuLimit,
+				cpuUsed:         tc.cpuUsed,
+				instanceA1Limit: tc.a1Limit,
+				instanceA1Used:  tc.a1Used,
 			}
-			gotReserve := l.allocateCPU(tc.numCPU, tc.instName)
+			gotReserve := l.allocateResources(tc.numCPU, tc.instName, tc.instType)
 			if gotReserve != tc.wantReserve {
-				t.Errorf("ledger.allocateCPU(%d) = %v, want %v", tc.numCPU, gotReserve, tc.wantReserve)
+				t.Errorf("ledger.allocateResources(%d) = %v, want %v", tc.numCPU, gotReserve, tc.wantReserve)
 			}
 			if l.cpuUsed != tc.wantCPUUsed {
 				t.Errorf("ledger.cpuUsed = %d; want %d", l.cpuUsed, tc.wantCPUUsed)
+			}
+			if l.instanceA1Used != tc.wantA1Used {
+				t.Errorf("ledger.instanceA1Used = %d; want %d", l.instanceA1Used, tc.wantA1Used)
 			}
 			if _, ok := l.entries[tc.instName]; tc.wantReserve && !ok {
 				t.Fatalf("ledger.entries[%s] = nil; want it to exist", tc.instName)

@@ -25,6 +25,7 @@ type entry struct {
 	createdAt    time.Time
 	instanceID   string
 	instanceName string
+	instanceType string
 	vCPUCount    int64
 }
 
@@ -40,6 +41,10 @@ type ledger struct {
 	// entries contains a mapping of instance name to entries for each instance
 	// that has resources allocated to it.
 	entries map[string]*entry
+	// instanceA1Limit is the limit of a1.metal instances which can be created on EC2.
+	instanceA1Limit int64
+	// instanceA1Used is the current count of a1.metal instances.
+	instanceA1Used int64
 	// types contains a mapping of instance type names to instance types for each
 	// ARM64 EC2 instance.
 	types map[string]*cloud.InstanceType
@@ -48,8 +53,9 @@ type ledger struct {
 // newLedger creates a new ledger.
 func newLedger() *ledger {
 	return &ledger{
-		entries: make(map[string]*entry),
-		types:   make(map[string]*cloud.InstanceType),
+		entries:         make(map[string]*entry),
+		instanceA1Limit: 1, // TODO(golang.org/issue/42604) query for limit once issue is resolved.
+		types:           make(map[string]*cloud.InstanceType),
 	}
 }
 
@@ -65,7 +71,7 @@ func (l *ledger) ReserveResources(ctx context.Context, instName, vmType string) 
 	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
 	for {
-		if l.allocateCPU(instType.CPU, instName) {
+		if l.allocateResources(instType.CPU, instName, instType.Type) {
 			return nil
 		}
 		select {
@@ -94,7 +100,9 @@ func (l *ledger) PrepareReservationRequest(instName, vmType string) (*cloud.Inst
 	return instType, nil
 }
 
-// releaseResources deletes the entry associated with an instance. The resources associated to the
+const a1MetalInstance = "a1.metal" // added for golang.org/issue/42604
+
+// releaseResources deletes the entry associated with an instance. The resources associated with the
 // instance will also be released. An error is returned if the instance entry is not found.
 // Lock l.mu must be held by the caller.
 func (l *ledger) releaseResources(instName string) error {
@@ -102,29 +110,40 @@ func (l *ledger) releaseResources(instName string) error {
 	if !ok {
 		return fmt.Errorf("instance not found for releasing quota: %s", instName)
 	}
+	if e.instanceType == a1MetalInstance && l.instanceA1Used > 0 {
+		l.instanceA1Used--
+	}
 	l.deallocateCPU(e.vCPUCount)
 	return nil
 }
 
-// allocateCPU ensures that there is enough CPU to allocate below the CPU Quota
+// allocateResources ensures that there is enough CPU to allocate below the CPU Quota
 // for the caller to create a resouce with the numCPU passed in. If there is enough
 // then the ammount of used CPU will increase by the requested ammount. If there is
 // not enough CPU available, then a false is returned. In the event that CPU is allocated
 // an entry will be added in the entries map for the instance.
-func (l *ledger) allocateCPU(numCPU int64, instName string) bool {
+// It also enforces instance type limits.
+func (l *ledger) allocateResources(numCPU int64, instName, instType string) bool {
 	// should never happen
 	if numCPU <= 0 {
 		log.Printf("invalid allocation requested: %d", numCPU)
 		return false
 	}
+	isA1Metal := instType == a1MetalInstance
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	if isA1Metal && l.instanceA1Used >= l.instanceA1Limit {
+		return false
+	}
 	if numCPU+l.cpuUsed > l.cpuLimit {
 		return false
 	}
 	l.cpuUsed += numCPU
+	if isA1Metal {
+		l.instanceA1Used++
+	}
 	e, ok := l.entries[instName]
 	if ok {
 		e.vCPUCount = numCPU
@@ -132,6 +151,7 @@ func (l *ledger) allocateCPU(numCPU int64, instName string) bool {
 		l.entries[instName] = &entry{
 			instanceName: instName,
 			vCPUCount:    numCPU,
+			instanceType: instType,
 		}
 	}
 	return true
