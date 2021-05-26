@@ -473,6 +473,16 @@ var Hosts = map[string]*HostConfig{
 		OwnerGithub: "zx2c4",
 		env:         []string{"GOROOT_BOOTSTRAP=C:\\Program Files (Arm)\\Go"},
 	},
+	"host-windows-arm64-qemu": &HostConfig{
+		Notes:              "Ubuntu hosting Windows 10 in qemu with KVM, EC2 ARM64 instance. See x/build/env/windows-arm64/aws",
+		VMImage:            "ami-0203852dc6efbfb68",
+		SSHUsername:        "gopher", // Windows username is gopher, linux is ubuntu.
+		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-arm64",
+		env:                []string{"GOARCH=arm64"},
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-windows-arm64-f22ec5.tar.gz",
+		isEC2:              true,
+		machineType:        "a1.metal",
+	},
 	"host-darwin-10_12": &HostConfig{
 		IsReverse: true,
 		ExpectNum: 3,
@@ -695,10 +705,10 @@ func init() {
 			panic(fmt.Sprintf("HostType %q != key %q", c.HostType, key))
 		}
 		nSet := 0
-		if c.VMImage != "" && !c.isEC2 {
+		if c.VMImage != "" {
 			nSet++
 		}
-		if c.ContainerImage != "" {
+		if c.ContainerImage != "" && !c.isEC2 {
 			nSet++
 		}
 		if c.IsReverse {
@@ -2304,6 +2314,15 @@ func init() {
 		env: []string{
 			"GOARM=7",
 			"GO_TEST_TIMEOUT_SCALE=3"},
+	})
+	addBuilder(BuildConfig{
+		Name:              "windows-arm64-aws",
+		HostType:          "host-windows-arm64-qemu",
+		numTryTestHelpers: 1,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
+		},
+		KnownIssue: 42604,
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-10_12",
