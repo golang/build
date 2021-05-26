@@ -122,10 +122,10 @@ func getSourceTgzFromURL(hc *http.Client, source, repo, rev, urlStr string) (tgz
 		return nil, fmt.Errorf("fetching %s/%s from %s: %v; body: %s", repo, rev, source, res.Status, slurp)
 	}
 	// TODO(bradfitz): finish golang.org/issue/11224
-	const maxSize = 50 << 20 // talks repo is over 25MB; go source is 7.8MB on 2015-06-15
+	const maxSize = 100 << 20 // As of 2021-05-25, a compressed tarball of x/website is 55 MB; Go source is 22 MB.
 	slurp, err := ioutil.ReadAll(io.LimitReader(res.Body, maxSize+1))
 	if len(slurp) > maxSize && err == nil {
-		err = fmt.Errorf("body over %d bytes", maxSize)
+		err = fmt.Errorf("rejected because body exceeded a limit of %d MB; see golang.org/issue/46379", maxSize/1024/1024)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading %s/%s from %s: %v", repo, rev, source, err)
