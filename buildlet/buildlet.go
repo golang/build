@@ -82,9 +82,9 @@ type VMOpts struct {
 // it can connect with the endpoint before returning. The buildletURL is in the form of:
 // "https://<ip>". The ipPort field is in the form of "<ip>:<port>". The function
 // will attempt to connect to the buildlet for the lesser of: the default timeout period
-// (5 minutes) or the timeout set in the passed in context.
+// (10 minutes) or the timeout set in the passed in context.
 func buildletClient(ctx context.Context, buildletURL, ipPort string, opts *VMOpts) (*Client, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	try := 0
 	for !opts.SkipEndpointVerification {
