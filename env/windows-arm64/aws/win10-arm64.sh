@@ -26,3 +26,5 @@
   -chardev file,path=/var/log/qemu-serial.log,id=char0 \
   -serial chardev:char0 \
   -device ramfb
+
+/sbin/halt
