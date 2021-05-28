@@ -89,9 +89,9 @@ var (
 	toolsTeam = gh("golang/tools-team")
 )
 
-// entries is a map of <repo name>/<path> or <domain> to Owner entries.
-// For <repo name>/<path>, there is an implicit prefix of go.googlesource.com.
-// This map should not be modified at runtime.
+// entries is a map of <repo name>/<path>, <domain>, or <branch> to Owner
+// entries. For <repo name>/<path>, there is an implicit prefix of
+// go.googlesource.com. This map should not be modified at runtime.
 var entries = map[string]*Entry{
 	// Go standard library.
 	"go/src/archive/tar": {
@@ -831,6 +831,12 @@ var entries = map[string]*Entry{
 	},
 	"website": {
 		Primary: []Owner{dmitshur},
+	},
+
+	// Branches in the Go repository.
+	"dev.fuzz": {
+		Primary:   []Owner{katie, jayconrod},
+		Secondary: []Owner{roland},
 	},
 
 	// Misc. other Go repositories.
