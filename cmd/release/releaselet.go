@@ -90,8 +90,15 @@ func windowsMSI() error {
 	// Install Wix tools.
 	wix := filepath.Join(cwd, "wix")
 	defer os.RemoveAll(wix)
-	if err := installWix(wix); err != nil {
-		return err
+	switch runtime.GOARCH {
+	default:
+		if err := installWix(wixRelease311, wix); err != nil {
+			return err
+		}
+	case "arm64":
+		if err := installWix(wixRelease314, wix); err != nil {
+			return err
+		}
 	}
 
 	// Write out windows data that is used by the packaging process.
@@ -125,6 +132,8 @@ func windowsMSI() error {
 			return "x86"
 		case "amd64":
 			return "x64"
+		case "arm64":
+			return "arm64"
 		}
 	}
 
@@ -159,20 +168,33 @@ func windowsMSI() error {
 	)
 }
 
-const wixBinaries = "https://storage.googleapis.com/go-builder-data/wix311-binaries.zip"
-const wixSha256 = "da034c489bd1dd6d8e1623675bf5e899f32d74d6d8312f8dd125a084543193de"
+type wixRelease struct {
+	BinaryURL string
+	SHA256    string
+}
+
+var (
+	wixRelease311 = wixRelease{
+		BinaryURL: "https://storage.googleapis.com/go-builder-data/wix311-binaries.zip",
+		SHA256:    "da034c489bd1dd6d8e1623675bf5e899f32d74d6d8312f8dd125a084543193de",
+	}
+	wixRelease314 = wixRelease{
+		BinaryURL: "https://storage.googleapis.com/go-builder-data/wix314-binaries.zip",
+		SHA256:    "34dcbba9952902bfb710161bd45ee2e721ffa878db99f738285a21c9b09c6edb", // WiX v3.14.0.4118 release, SHA 256 of wix314-binaries.zip from https://wixtoolset.org/releases/v3-14-0-4118/.
+	}
+)
 
 // installWix fetches and installs the wix toolkit to the specified path.
-func installWix(path string) error {
+func installWix(wix wixRelease, path string) error {
 	// Fetch wix binary zip file.
-	body, err := httpGet(wixBinaries)
+	body, err := httpGet(wix.BinaryURL)
 	if err != nil {
 		return err
 	}
 
-	// Verify sha256
+	// Verify sha256.
 	sum := sha256.Sum256(body)
-	if fmt.Sprintf("%x", sum) != wixSha256 {
+	if fmt.Sprintf("%x", sum) != wix.SHA256 {
 		return errors.New("sha256 mismatch for wix toolkit")
 	}
 
@@ -358,19 +380,24 @@ var windowsData = map[string]string{
 	"installer.wxs": `<?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
 <!--
-# Copyright 2010 The Go Authors.  All rights reserved.
+# Copyright 2010 The Go Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 -->
 
 <?if $(var.Arch) = 386 ?>
-  <?define ProdId = {FF5B30B2-08C2-11E1-85A2-6ACA4824019B} ?>
   <?define UpgradeCode = {1C3114EA-08C3-11E1-9095-7FCA4824019B} ?>
+  <?define InstallerVersion="300" ?>
   <?define SysFolder=SystemFolder ?>
   <?define ArchProgramFilesFolder="ProgramFilesFolder" ?>
+<?elseif $(var.Arch) = arm64 ?>
+  <?define UpgradeCode = {21ade9a3-3fdd-4ba6-bea6-c85abadc9488} ?>
+  <?define InstallerVersion="500" ?>
+  <?define SysFolder=System64Folder ?>
+  <?define ArchProgramFilesFolder="ProgramFiles64Folder" ?>
 <?else?>
-  <?define ProdId = {716c3eaa-9302-48d2-8e5e-5cfec5da2fab} ?>
   <?define UpgradeCode = {22ea7650-4ac6-4001-bf29-f4b8775db1c0} ?>
+  <?define InstallerVersion="300" ?>
   <?define SysFolder=System64Folder ?>
   <?define ArchProgramFilesFolder="ProgramFiles64Folder" ?>
 <?endif?>
@@ -388,7 +415,7 @@ var windowsData = map[string]string{
     Keywords='Installer'
     Description="The Go Programming Language Installer"
     Comments="The Go programming language is an open source project to make programmers more productive."
-    InstallerVersion="300"
+    InstallerVersion="$(var.InstallerVersion)"
     Compressed="yes"
     InstallScope="perMachine"
     Languages="1033" />
@@ -625,12 +652,6 @@ func runSelfTests() {
 			log.Fatalf("splitVersion(%q) = %v, %v, %v; want %v, %v, %v",
 				tt.v, major, minor, patch, tt.major, tt.minor, tt.patch)
 		}
-	}
-
-	// GoDoc binary is no longer bundled with the binary distribution
-	// as of Go 1.13, so there should not be a shortcut to it.
-	if strings.Contains(windowsData["installer.wxs"], "GODOC_SHORTCUT") {
-		log.Fatal("expected GODOC_SHORTCUT to be gone")
 	}
 
 	fmt.Println("ok")

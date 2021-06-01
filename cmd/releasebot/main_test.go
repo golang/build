@@ -25,6 +25,29 @@ func TestTargetSelectionPerGoVersion(t *testing.T) {
 		{
 			goVer: []string{
 				"go1.17beta1", "go1.17rc1", "go1.17", "go1.17.1",
+			},
+			want: []string{
+				"src",
+				"linux-386",
+				"linux-armv6l",
+				"linux-amd64",
+				"linux-arm64",
+				"freebsd-386",
+				"freebsd-amd64",
+				"windows-386",
+				"windows-amd64",
+				"windows-arm64", // New to Go 1.17.
+				"darwin-amd64",
+				"darwin-arm64",
+				"linux-s390x",
+				"linux-ppc64le",
+				"linux-386-longtest",
+				"linux-amd64-longtest",
+				"windows-amd64-longtest",
+			},
+		},
+		{
+			goVer: []string{
 				"go1.16.3",
 			},
 			want: []string{

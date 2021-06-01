@@ -202,6 +202,17 @@ var builds = []*Build{
 		Builder: "windows-amd64-2008",
 	},
 	{
+		GoQuery: ">= go1.17beta1", // Go 1.17 Beta 1 is the first Go (pre-)release with the windows/arm64 port.
+		OS:      "windows",
+		Arch:    "arm64",
+		Race:    false, // Not supported as of 2021-06-01.
+		Builder: "windows-arm64-aws",
+
+		// TODO(golang.org/issue/46406, golang.org/issue/46502): Fix or skip failing tests,
+		// ensure the builder is fast enough to complete tests, then remove SkipTests here.
+		SkipTests: true,
+	},
+	{
 		GoQuery: ">= go1.17beta1",
 		OS:      "darwin",
 		Arch:    "amd64",
@@ -597,6 +608,11 @@ func (b *Build) make() error {
 
 	if b.OS == "windows" {
 		cleanFiles = append(cleanFiles, "msi")
+	}
+	if b.OS == "windows" && b.Arch == "arm64" {
+		// At least on windows-arm64, 'wix/winterop.dll' gets created.
+		// Delete the entire wix directory since it's unrelated to Go.
+		cleanFiles = append(cleanFiles, "wix")
 	}
 
 	// Need to delete everything except the final "go" directory,
