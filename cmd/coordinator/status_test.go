@@ -91,8 +91,6 @@ func TestHandleStatus_HealthFormatting(t *testing.T) {
 	}
 	for _, sub := range []string{
 		`<a href="/status/macs">MacStadium Mac VMs</a> [`,
-		`<a href="/status/scaleway">Scaleway linux/arm machines</a> [`,
-		`<li>scaleway-prod-02 not yet connected</li>`,
 		`<li>macstadium_host06a not yet connected</li>`,
 		`<a href="/status/allgood">All Good Test</a>: ok`,
 		`<li>test-info</li>`,

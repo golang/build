@@ -147,7 +147,6 @@ var basePinErr atomic.Value
 func addHealthCheckers(ctx context.Context, sc *secret.Client) {
 	addHealthChecker(newMacHealthChecker())
 	addHealthChecker(newMacOSARM64Checker())
-	addHealthChecker(newScalewayHealthChecker())
 	addHealthChecker(newPacketHealthChecker())
 	addHealthChecker(newOSUPPC64Checker())
 	addHealthChecker(newOSUPPC64leChecker())
@@ -458,20 +457,6 @@ func expectedHosts(hostType string) int {
 		panic(fmt.Sprintf("unknown host type %q", hostType))
 	}
 	return hc.ExpectNum
-}
-
-func newScalewayHealthChecker() *healthChecker {
-	var hosts []string
-	for i := 1; i <= expectedHosts("host-linux-arm-scaleway"); i++ {
-		name := fmt.Sprintf("scaleway-prod-%02d", i)
-		hosts = append(hosts, name)
-	}
-	return &healthChecker{
-		ID:     "scaleway",
-		Title:  "Scaleway linux/arm machines",
-		DocURL: "https://github.com/golang/build/tree/master/env/linux-arm/scaleway",
-		Check:  reverseHostChecker(hosts),
-	}
 }
 
 func newPacketHealthChecker() *healthChecker {

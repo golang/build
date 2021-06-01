@@ -205,13 +205,6 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/goboot"},
 		SSHUsername:     "root",
 	},
-	"host-linux-arm-scaleway": &HostConfig{
-		IsReverse:       true,
-		HermeticReverse: true,
-		ExpectNum:       50,
-		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
-		SSHUsername:     "root",
-	},
 	"host-linux-arm5spacemonkey": &HostConfig{
 		IsReverse:   true,
 		ExpectNum:   3,
@@ -1959,36 +1952,6 @@ func init() {
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
 		numTryTestHelpers: 4, // Target time is < 15 min for golang.org/issue/42661.
-	})
-	addBuilder(BuildConfig{
-		Name:     "linux-arm-scaleway",
-		HostType: "host-linux-arm-scaleway",
-		CrossCompileConfig: &CrossCompileConfig{
-			CompileHostType:    "host-linux-armhf-cross",
-			CCForTarget:        "arm-linux-gnueabihf-gcc",
-			GOARM:              "7",
-			AlwaysCrossCompile: false,
-		},
-		tryBot:            nil, // Issues #22748, #22749, #35628, #40872.
-		KnownIssue:        35628,
-		FlakyNet:          true,
-		numTestHelpers:    2,
-		numTryTestHelpers: 7,
-		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
-			switch distTest {
-			case "api", "reboot":
-				return false
-			}
-			return run
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:          "linux-arm-nativemake",
-		Notes:         "runs make.bash on real ARM hardware, but does not run tests",
-		HostType:      "host-linux-arm-scaleway",
-		tryOnly:       true,
-		tryBot:        nil,
-		StopAfterMake: true,
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-arm-arm5spacemonkey",
