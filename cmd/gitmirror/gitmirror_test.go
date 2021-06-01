@@ -39,15 +39,14 @@ var tempRepoRoot string
 
 func newTestRepo() *Repo {
 	return &Repo{
-		root:   tempRepoRoot,
-		mirror: false,
+		root: tempRepoRoot,
 	}
 }
 
 func TestHomepage(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
-	handleRoot(w, req)
+	(&mirror{}).handleRoot(w, req)
 	if w.Code != 200 {
 		t.Fatalf("GET /: want code 200, got %d", w.Code)
 	}
