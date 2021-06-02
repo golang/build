@@ -18,7 +18,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -69,14 +68,20 @@ func main() {
 	}
 
 	m := &mirror{
-		repos:        map[string]*Repo{},
+		mux:          http.DefaultServeMux,
+		repos:        map[string]*repo{},
 		cacheDir:     cacheDir,
 		gerritClient: gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth),
 	}
 	http.HandleFunc("/", m.handleRoot)
 
-	if err := m.addRepos(); err != nil {
-		log.Fatalf("adding repos: %v", err)
+	var eg errgroup.Group
+	for name := range repospkg.ByGerritProject {
+		r := m.addRepo(name)
+		eg.Go(r.init)
+	}
+	if err := eg.Wait(); err != nil {
+		log.Fatalf("initializing repos: %v", err)
 	}
 
 	if *flagMirror {
@@ -158,27 +163,24 @@ func createCacheDir() (string, error) {
 // A mirror watches Gerrit repositories, fetching the latest commits and
 // optionally mirroring them.
 type mirror struct {
-	repos        map[string]*Repo
+	mux          *http.ServeMux
+	repos        map[string]*repo
 	cacheDir     string
 	gerritClient *gerrit.Client
 }
 
-// addRepos adds known repositories to the mirror.
-func (m *mirror) addRepos() error {
-	var eg errgroup.Group
-	for name := range repospkg.ByGerritProject {
-		name := name
-		eg.Go(func() error {
-			r, err := NewRepo(goBase+name, m.cacheDir)
-			if err != nil {
-				return err
-			}
-			http.Handle("/"+name+".tar.gz", r)
-			m.repos[name] = r
-			return nil
-		})
+func (m *mirror) addRepo(name string) *repo {
+	r := &repo{
+		name:    name,
+		url:     goBase + name,
+		root:    filepath.Join(m.cacheDir, name),
+		changed: make(chan bool, 1),
+		mirror:  m,
 	}
-	return eg.Wait()
+	m.mux.Handle("/"+name+".tar.gz", r)
+	m.mux.Handle("/debug/watcher/"+r.name, r)
+	m.repos[name] = r
+	return r
 }
 
 // runMirrors sets up and starts mirroring for the repositories that are
@@ -265,12 +267,15 @@ func (r *statusRing) foreachDesc(fn func(statusEntry)) {
 	}
 }
 
-// Repo represents a repository to be watched.
-type Repo struct {
+// repo represents a repository to be watched.
+type repo struct {
+	name    string
+	url     string
 	root    string    // on-disk location of the git repo, *cacheDir/name
 	changed chan bool // sent to when a change comes in
 	status  statusRing
 	dests   []string // destination remotes to mirror to
+	mirror  *mirror
 
 	mu        sync.Mutex
 	err       error
@@ -280,17 +285,8 @@ type Repo struct {
 	lastGood  time.Time
 }
 
-// NewRepo checks out an instance of the git repository at url to dir.
-func NewRepo(url, dir string) (*Repo, error) {
-	name := path.Base(url) // "go", "net", etc
-	root := filepath.Join(dir, name)
-	r := &Repo{
-		root:    root,
-		changed: make(chan bool, 1),
-	}
-
-	http.Handle("/debug/watcher/"+r.name(), r)
-
+// init sets up the repo, cloning the repository to the local root.
+func (r *repo) init() error {
 	canReuse := true
 	if _, err := os.Stat(filepath.Join(r.root, "FETCH_HEAD")); err != nil {
 		canReuse = false
@@ -298,36 +294,49 @@ func NewRepo(url, dir string) (*Repo, error) {
 	}
 	if canReuse {
 		r.setStatus("reusing git dir; running git fetch")
-		cmd := exec.Command("git", "fetch", "--prune", "origin")
-		cmd.Dir = r.root
-		r.logf("running git fetch")
-		t0 := time.Now()
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		err := cmd.Run()
-		r.logf("ran git fetch in %v", time.Since(t0))
+		_, _, err := r.runGitLogged("fetch", "--prune", "origin")
 		if err != nil {
 			canReuse = false
-			r.logf("git fetch failed; proceeding to wipe + clone instead; err: %v, stderr: %s", err, stderr.Bytes())
+			r.logf("git fetch failed; proceeding to wipe + clone instead")
 		}
 	}
 	if !canReuse {
 		r.setStatus("need clone; removing cache root")
 		os.RemoveAll(r.root)
-		t0 := time.Now()
-		r.setStatus("running fresh git clone --mirror")
-		r.logf("cloning %v into %s", url, r.root)
-		cmd := exec.Command("git", "clone", "--mirror", url, r.root)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return nil, fmt.Errorf("cloning %s: %v\n\n%s", url, err, out)
+		_, _, err := r.runGitLogged("clone", "--mirror", r.url, r.root)
+		if err != nil {
+			return fmt.Errorf("cloning %s: %v", r.url, err)
 		}
 		r.setStatus("cloned")
-		r.logf("cloned in %v", time.Since(t0))
 	}
-	return r, nil
+	return nil
 }
 
-func (r *Repo) setErr(err error) {
+func (r *repo) runGitLogged(args ...string) ([]byte, []byte, error) {
+	start := time.Now()
+	r.logf("running git %s", args)
+	stdout, stderr, err := r.runGitQuiet(args...)
+	if err == nil {
+		r.logf("ran git %s in %v", args, time.Since(start))
+	} else {
+		r.logf("git %s failed after %v: %v\n%v", args, time.Since(start), err, string(stderr))
+	}
+	return stdout, stderr, err
+}
+
+func (r *repo) runGitQuiet(args ...string) ([]byte, []byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = r.root
+	cmd.Stdout, cmd.Stderr = stdout, stderr
+	err := cmd.Run()
+	return stdout.Bytes(), stderr.Bytes(), err
+}
+
+func (r *repo) setErr(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	change := (r.err != nil) != (err != nil)
@@ -348,7 +357,7 @@ func (r *Repo) setErr(err error) {
 
 var startTime = time.Now()
 
-func (r *Repo) statusLine() string {
+func (r *repo) statusLine() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -373,15 +382,13 @@ func (r *Repo) statusLine() string {
 	return fmt.Sprintf("broken for %v", time.Since(r.lastGood))
 }
 
-func (r *Repo) setStatus(status string) {
+func (r *repo) setStatus(status string) {
 	r.status.add(status)
 }
 
-func (r *Repo) addRemote(name, url string, opts ...string) error {
+func (r *repo) addRemote(name, url string, opts ...string) error {
 	r.dests = append(r.dests, name)
-	cmd := exec.Command("git", "remote", "remove", name)
-	cmd.Dir = r.root
-	if err := cmd.Run(); err != nil {
+	if _, _, err := r.runGitQuiet("remote", "remove", name); err != nil {
 		// Exit status 2 means not found, which is fine.
 		if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 2 {
 			return err
@@ -409,7 +416,7 @@ func (r *Repo) addRemote(name, url string, opts ...string) error {
 
 // Loop continuously runs "git fetch" in the repo, checks for new
 // commits and mirrors commits to a destination repo (if enabled).
-func (r *Repo) Loop() {
+func (r *repo) Loop() {
 outer:
 	for {
 		if err := r.fetch(); err != nil {
@@ -443,27 +450,17 @@ outer:
 	}
 }
 
-func (r *Repo) name() string {
-	return filepath.Base(r.root)
-}
-
-func (r *Repo) logf(format string, args ...interface{}) {
-	log.Printf(r.name()+": "+format, args...)
+func (r *repo) logf(format string, args ...interface{}) {
+	log.Printf(r.name+": "+format, args...)
 }
 
 // fetch runs "git fetch" in the repository root.
 // It tries three times, just in case it failed because of a transient error.
-func (r *Repo) fetch() error {
+func (r *repo) fetch() error {
 	err := try(3, func(attempt int) error {
 		r.setStatus(fmt.Sprintf("running git fetch origin, attempt %d", attempt))
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
-		cmd := exec.CommandContext(ctx, "git", "fetch", "--prune", "origin")
-		cmd.Dir = r.root
-		if out, err := cmd.CombinedOutput(); err != nil {
-			err = fmt.Errorf("%v\n\n%s", err, out)
-			r.logf("git fetch: %v", err)
-			return err
+		if _, stderr, err := r.runGitLogged("fetch", "--prune", "origin"); err != nil {
+			return fmt.Errorf("%v\n\n%s", err, stderr)
 		}
 		return nil
 	})
@@ -477,15 +474,11 @@ func (r *Repo) fetch() error {
 
 // push runs "git push -f --mirror dest" in the repository root.
 // It tries three times, just in case it failed because of a transient error.
-func (r *Repo) push(dest string) error {
+func (r *repo) push(dest string) error {
 	err := try(3, func(attempt int) error {
 		r.setStatus(fmt.Sprintf("syncing to %v, attempt %d", dest, attempt))
-		cmd := exec.Command("git", "push", "-f", "--mirror", dest)
-		cmd.Dir = r.root
-		if out, err := cmd.CombinedOutput(); err != nil {
-			err = fmt.Errorf("%v\n\n%s", err, out)
-			r.logf("git push failed: %v", err)
-			return err
+		if _, stderr, err := r.runGitLogged("push", "-f", "--mirror", dest); err != nil {
+			return fmt.Errorf("%v\n\n%s", err, stderr)
 		}
 		return nil
 	})
@@ -497,55 +490,18 @@ func (r *Repo) push(dest string) error {
 	return err
 }
 
-// hasRev returns true if the repo contains the commit-ish rev.
-func (r *Repo) hasRev(ctx context.Context, rev string) bool {
-	cmd := exec.CommandContext(ctx, "git", "cat-file", "-t", rev)
-	cmd.Dir = r.root
-	return cmd.Run() == nil
-}
-
-// if non-nil, used by r.archive to create a "git archive" command.
-var testHookArchiveCmd func(context.Context, string, ...string) *exec.Cmd
-
-// if non-nil, used by r.archive to create a "git fetch" command.
-var testHookFetchCmd func(context.Context, string, ...string) *exec.Cmd
-
-// archive exports the git repository at the given rev and returns the
-// compressed repository.
-func (r *Repo) archive(ctx context.Context, rev string) ([]byte, error) {
-	var cmd *exec.Cmd
-	if testHookArchiveCmd == nil {
-		cmd = exec.CommandContext(ctx, "git", "archive", "--format=tgz", rev)
-	} else {
-		cmd = testHookArchiveCmd(ctx, "git", "archive", "--format=tgz", rev)
-	}
-	cmd.Dir = r.root
-	return cmd.Output()
-}
-
-// fetchRev attempts to fetch rev from remote.
-func (r *Repo) fetchRev(ctx context.Context, remote, rev string) error {
-	var cmd *exec.Cmd
-	if testHookFetchCmd == nil {
-		cmd = exec.CommandContext(ctx, "git", "fetch", remote, rev)
-	} else {
-		cmd = testHookFetchCmd(ctx, "git", "fetch", remote, rev)
-	}
-	cmd.Dir = r.root
-	return cmd.Run()
-}
-
-func (r *Repo) fetchRevIfNeeded(ctx context.Context, rev string) error {
-	if r.hasRev(ctx, rev) {
+func (r *repo) fetchRevIfNeeded(ctx context.Context, rev string) error {
+	if _, _, err := r.runGitQuiet("cat-file", "-e", rev); err == nil {
 		return nil
 	}
 	r.logf("attempting to fetch missing revision %s from origin", rev)
-	return r.fetchRev(ctx, "origin", rev)
+	_, _, err := r.runGitLogged("fetch", "origin", rev)
+	return err
 }
 
 // GET /<name>.tar.gz
 // GET /debug/watcher/<name>
-func (r *Repo) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (r *repo) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if req.Method != "GET" && req.Method != "HEAD" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -565,7 +521,7 @@ func (r *Repo) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		// Try the archive anyway, it might work
 		r.logf("error fetching revision %s: %v", rev, err)
 	}
-	tgz, err := r.archive(ctx, rev)
+	tgz, _, err := r.runGitQuiet("archive", "--format=tgz", rev)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -575,10 +531,10 @@ func (r *Repo) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Write(tgz)
 }
 
-func (r *Repo) serveStatus(w http.ResponseWriter, req *http.Request) {
+func (r *repo) serveStatus(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	fmt.Fprintf(w, "<html><head><title>watcher: %s</title><body><h1>watcher status for repo: %q</h1>\n",
-		r.name(), r.name())
+		r.name, r.name)
 	fmt.Fprintf(w, "<pre>\n")
 	nowRound := time.Now().Round(time.Second)
 	r.status.foreachDesc(func(ent statusEntry) {

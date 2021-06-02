@@ -5,14 +5,12 @@
 package main
 
 import (
-	"context"
 	"io/ioutil"
 	"log"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -37,8 +35,9 @@ func TestMain(m *testing.M) {
 
 var tempRepoRoot string
 
-func newTestRepo() *Repo {
-	return &Repo{
+func newTestRepo() *repo {
+	return &repo{
+		name: "build",
 		root: tempRepoRoot,
 	}
 }
@@ -73,72 +72,8 @@ func TestDebugWatcher(t *testing.T) {
 	}
 }
 
-// fakeCmd records the results of CommandContext and echoes any arguments to
-// stdout.
-type fakeCmd struct {
-	Cmd       string
-	Args      []string
-	callCount int
-}
-
-func (f *fakeCmd) CommandContext(ctx context.Context, cmd string, args ...string) *exec.Cmd {
-	f.callCount++
-	f.Cmd = cmd
-	f.Args = args
-	return exec.CommandContext(ctx, "echo", append([]string{cmd}, args...)...)
-}
-
 func mustHaveGit(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("skipping; git not in PATH")
-	}
-}
-
-func TestRev(t *testing.T) {
-	mustHaveGit(t)
-	f := &fakeCmd{}
-	testHookArchiveCmd = f.CommandContext
-	defer func() { testHookArchiveCmd = nil }()
-	r := newTestRepo()
-	r.setStatus("waiting")
-	req := httptest.NewRequest("GET", "/build.tar.gz?rev=example-branch", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != 200 {
-		t.Fatalf("GET /: want code 200, got %d", w.Code)
-	}
-	if f.Cmd != "git" {
-		t.Fatalf("cmd: want 'git' for cmd, got %s", f.Cmd)
-	}
-	wantArgs := []string{"archive", "--format=tgz", "example-branch"}
-	if !reflect.DeepEqual(f.Args, wantArgs) {
-		t.Fatalf("cmd: want '%q' for args, got %q", wantArgs, f.Args)
-	}
-}
-
-func TestRevNotFound(t *testing.T) {
-	mustHaveGit(t)
-	f := &fakeCmd{}
-	f2 := &fakeCmd{}
-	testHookArchiveCmd = f.CommandContext
-	testHookFetchCmd = f2.CommandContext
-	defer func() {
-		testHookArchiveCmd = nil
-		testHookFetchCmd = nil
-	}()
-	r := newTestRepo()
-	r.setStatus("waiting")
-	req := httptest.NewRequest("GET", "/build.tar.gz?rev=example-branch", nil)
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != 200 {
-		t.Fatalf("GET /build.tar.gz: want code 200, got %d", w.Code)
-	}
-	if f2.callCount != 1 {
-		t.Fatal("GET /build.tar.gz: want 'git fetch' to be called, wasn't called")
-	}
-	wantArgs := []string{"fetch", "origin", "example-branch"}
-	if !reflect.DeepEqual(f2.Args, wantArgs) {
-		t.Fatalf("cmd: want '%q' for args, got %q", wantArgs, f2.Args)
 	}
 }
