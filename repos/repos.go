@@ -36,10 +36,10 @@ type Repo struct {
 	// build coordinator knows how to build.
 	CoordinatorCanBuild bool
 
-	// gitHubRepo is the "org/repo" of where this repo exists on
+	// GitHubRepo is the "org/repo" of where this repo exists on
 	// GitHub. If MirrorToGitHub is true, this is the
 	// destination.
-	gitHubRepo string
+	GitHubRepo string
 
 	// WebsiteDesc is the description of the repo for showing on
 	// https://golang.org/pkg/#subrepo.
@@ -103,13 +103,13 @@ func init() {
 		GoGerritProject: "protobuf",
 		MirrorToGitHub:  true,
 		ImportPath:      "google.golang.org/protobuf",
-		gitHubRepo:      "protocolbuffers/protobuf-go",
+		GitHubRepo:      "protocolbuffers/protobuf-go",
 	})
 
 	add(&Repo{
 		GoGerritProject: "vscode-go",
 		MirrorToGitHub:  true,
-		gitHubRepo:      "golang/vscode-go",
+		GitHubRepo:      "golang/vscode-go",
 	})
 }
 
@@ -138,7 +138,7 @@ func addMirrored(proj string, opts ...modifyRepo) {
 	repo := &Repo{
 		GoGerritProject: proj,
 		MirrorToGitHub:  true,
-		gitHubRepo:      "golang/" + proj,
+		GitHubRepo:      "golang/" + proj,
 	}
 	for _, o := range opts {
 		o(repo)
@@ -153,7 +153,7 @@ func x(proj string, opts ...modifyRepo) {
 		MirrorToGitHub:      true,
 		CoordinatorCanBuild: true,
 		ImportPath:          "golang.org/x/" + proj,
-		gitHubRepo:          "golang/" + proj,
+		GitHubRepo:          "golang/" + proj,
 		showOnDashboard:     true,
 	}
 	for _, o := range opts {
@@ -166,7 +166,7 @@ func add(r *Repo) {
 	if (r.MirrorToCSR || r.MirrorToGitHub || r.showOnDashboard) && r.GoGerritProject == "" {
 		panic(fmt.Sprintf("project %+v sets feature(s) that require a GoGerritProject, but has none", r))
 	}
-	if r.MirrorToGitHub && r.gitHubRepo == "" {
+	if r.MirrorToGitHub && r.GitHubRepo == "" {
 		panic(fmt.Sprintf("project %+v has MirrorToGitHub but no gitHubRepo", r))
 	}
 	if r.showOnDashboard && !r.CoordinatorCanBuild {
@@ -192,8 +192,3 @@ func add(r *Repo) {
 //
 // When this returns true, r.GoGerritProject is guaranteed to be non-empty.
 func (r *Repo) ShowOnDashboard() bool { return r.showOnDashboard }
-
-// GitHubRepo returns the "<org>/<repo>" that this repo either lives
-// at or is mirrored to. It returns the empty string if this repo has no
-// GitHub presence.
-func (r *Repo) GitHubRepo() string { return r.gitHubRepo }

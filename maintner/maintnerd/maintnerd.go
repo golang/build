@@ -325,7 +325,7 @@ func setGoConfig() {
 func goGitHubProjects() []string {
 	var ret []string
 	for _, r := range repos.ByGerritProject {
-		if gr := r.GitHubRepo(); gr != "" {
+		if gr := r.GitHubRepo; gr != "" {
 			ret = append(ret, gr)
 		}
 	}

@@ -101,7 +101,7 @@ func main() {
 	}
 
 	for _, repo := range m.repos {
-		go repo.Loop()
+		go repo.loop()
 	}
 	go m.pollGerritAndTickle()
 	go m.subscribeToMaintnerAndTickleLoop()
@@ -218,7 +218,7 @@ func (m *mirror) addRepo(meta *repospkg.Repo) *repo {
 func (m *mirror) addMirrors() error {
 	for _, repo := range m.repos {
 		if repo.meta.MirrorToGitHub {
-			if err := repo.addRemote("github", "git@github.com:"+repo.meta.GitHubRepo()+".git"); err != nil {
+			if err := repo.addRemote("github", "git@github.com:"+repo.meta.GitHubRepo+".git"); err != nil {
 				return fmt.Errorf("adding GitHub remote: %v", err)
 			}
 		}
@@ -346,7 +346,7 @@ func (r *repo) runGitLogged(args ...string) ([]byte, []byte, error) {
 	if err == nil {
 		r.logf("ran git %s in %v", args, time.Since(start))
 	} else {
-		r.logf("git %s failed after %v: %v\n%v", args, time.Since(start), err, string(stderr))
+		r.logf("git %s failed after %v: %v\nstdout: %v\nstderr: %v\n", args, time.Since(start), err, string(stdout), string(stderr))
 	}
 	return stdout, stderr, err
 }
@@ -357,7 +357,12 @@ func (r *repo) runGitQuiet(args ...string) ([]byte, []byte, error) {
 
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = r.root
+	if args[0] == "clone" {
+		// Small hack: if we're cloning, the root doesn't exist yet.
+		cmd.Dir = "/"
+	} else {
+		cmd.Dir = r.root
+	}
 	cmd.Env = append(os.Environ(), "HOME="+r.mirror.homeDir)
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	err := cmd.Run()
@@ -429,28 +434,15 @@ func (r *repo) addRemote(name, url string) error {
 	return ioutil.WriteFile(filepath.Join(r.root, "remotes", name), []byte(remote), 0777)
 }
 
-// Loop continuously runs "git fetch" in the repo, checks for new
+// loop continuously runs "git fetch" in the repo, checks for new
 // commits and mirrors commits to a destination repo (if enabled).
-func (r *repo) Loop() {
-outer:
+func (r *repo) loop() {
 	for {
-		if err := r.fetch(); err != nil {
-			r.logf("fetch failed in repo loop: %v", err)
-			r.setErr(err)
+		if err := r.loopOnce(); err != nil {
 			time.Sleep(10 * time.Second)
 			continue
 		}
-		for _, dest := range r.dests {
-			if err := r.push(dest); err != nil {
-				r.logf("push failed in repo loop: %v", err)
-				r.setErr(err)
-				time.Sleep(10 * time.Second)
-				continue outer
-			}
-		}
 
-		r.setErr(nil)
-		r.setStatus("waiting")
 		// We still run a timer but a very slow one, just
 		// in case the mechanism updating the repo tickler
 		// breaks for some reason.
@@ -463,6 +455,24 @@ outer:
 			r.setStatus("poll timer fired")
 		}
 	}
+}
+
+func (r *repo) loopOnce() error {
+	if err := r.fetch(); err != nil {
+		r.logf("fetch failed: %v", err)
+		r.setErr(err)
+		return err
+	}
+	for _, dest := range r.dests {
+		if err := r.push(dest); err != nil {
+			r.logf("push failed: %v", err)
+			r.setErr(err)
+			return err
+		}
+	}
+	r.setErr(nil)
+	r.setStatus("waiting")
+	return nil
 }
 
 func (r *repo) logf(format string, args ...interface{}) {
