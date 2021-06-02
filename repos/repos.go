@@ -60,7 +60,7 @@ func init() {
 
 	x("arch")
 	x("benchmarks", desc("benchmarks to measure Go as it is developed"))
-	x("blog", desc("blog.golang.org's implementation"))
+	x("blog", noDash)
 	x("build", desc("build.golang.org's implementation"))
 	x("crypto", desc("additional cryptography packages"))
 	x("debug", desc("an experimental debugger for Go"))
@@ -84,10 +84,10 @@ func init() {
 	x("text", desc("packages for working with text"))
 	x("time", desc("additional time packages"))
 	x("tools", desc("godoc, goimports, gorename, and other tools"))
-	x("tour", noDash, desc("tour.golang.org's implementation"))
+	x("tour", noDash)
 	x("vgo", noDash)
 	x("vulndb", desc("the Go Vulnerability Database and packages for working with it"))
-	x("website")
+	x("website", desc("home of the golang.org and go.dev websites"))
 	x("xerrors", noDash)
 
 	add(&Repo{GoGerritProject: "gollvm"})
