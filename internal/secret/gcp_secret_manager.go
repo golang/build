@@ -34,6 +34,9 @@ const (
 	// NameGitHubSSHKey is the secret name for the GitHub SSH private key.
 	NameGitHubSSHKey = "github-ssh-private-key"
 
+	// NameGitMirrorServiceKey is the secret name for the gitmirror service account key.
+	NameGitMirrorServiceKey = "gitmirror-service-key"
+
 	// NameGobotPassword is the secret name for the Gobot password.
 	NameGobotPassword = "gobot-password"
 

@@ -22,6 +22,12 @@ type Repo struct {
 	// gitHubRepo must both be defined.
 	MirrorToGitHub bool
 
+	// MirrorToCSR controls whether this repo is mirrored from
+	// Gerrit to Cloud Source Repositories. If true, GoGerritProject
+	// must be defined. It will be mirrored to a CSR repo with the
+	// same name as the Gerrit repo.
+	MirrorToCSR bool
+
 	// showOnDashboard is whether to show the repo on the bottom
 	// of build.golang.org in the repo overview section.
 	showOnDashboard bool
@@ -157,21 +163,14 @@ func x(proj string, opts ...modifyRepo) {
 }
 
 func add(r *Repo) {
-	if r.MirrorToGitHub {
-		if r.gitHubRepo == "" {
-			panic(fmt.Sprintf("project %+v has MirrorToGitHub but no gitHubRepo", r))
-		}
-		if r.GoGerritProject == "" {
-			panic(fmt.Sprintf("project %+v has MirrorToGitHub but no GoGerritProject", r))
-		}
+	if (r.MirrorToCSR || r.MirrorToGitHub || r.showOnDashboard) && r.GoGerritProject == "" {
+		panic(fmt.Sprintf("project %+v sets feature(s) that require a GoGerritProject, but has none", r))
 	}
-	if r.showOnDashboard {
-		if !r.CoordinatorCanBuild {
-			panic(fmt.Sprintf("project %+v is showOnDashboard but not marked buildable by coordinator", r))
-		}
-		if r.GoGerritProject == "" {
-			panic(fmt.Sprintf("project %+v is showOnDashboard but has no Gerrit project", r))
-		}
+	if r.MirrorToGitHub && r.gitHubRepo == "" {
+		panic(fmt.Sprintf("project %+v has MirrorToGitHub but no gitHubRepo", r))
+	}
+	if r.showOnDashboard && !r.CoordinatorCanBuild {
+		panic(fmt.Sprintf("project %+v is showOnDashboard but not marked buildable by coordinator", r))
 	}
 
 	if p := r.GoGerritProject; p != "" {

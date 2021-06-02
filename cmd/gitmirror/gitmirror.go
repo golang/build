@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -66,18 +67,24 @@ func main() {
 	if err != nil {
 		log.Fatalf("creating cache dir: %v", err)
 	}
+	credsDir, err := ioutil.TempDir("", "gitmirror-credentials")
+	if err != nil {
+		log.Fatalf("creating credentials dir: %v", err)
+	}
+	defer os.RemoveAll(credsDir)
 
 	m := &mirror{
 		mux:          http.DefaultServeMux,
 		repos:        map[string]*repo{},
 		cacheDir:     cacheDir,
+		homeDir:      credsDir,
 		gerritClient: gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth),
 	}
 	http.HandleFunc("/", m.handleRoot)
 
 	var eg errgroup.Group
-	for name := range repospkg.ByGerritProject {
-		r := m.addRepo(name)
+	for _, repo := range repospkg.ByGerritProject {
+		r := m.addRepo(repo)
 		eg.Go(r.init)
 	}
 	if err := eg.Wait(); err != nil {
@@ -85,11 +92,11 @@ func main() {
 	}
 
 	if *flagMirror {
-		if err := writeCredentials(); err != nil {
-			log.Fatalf("writing ssh credentials: %v", err)
+		if err := writeCredentials(credsDir); err != nil {
+			log.Fatalf("writing git credentials: %v", err)
 		}
-		if err := m.runMirrors(); err != nil {
-			log.Fatalf("running mirror: %v", err)
+		if err := m.addMirrors(); err != nil {
+			log.Fatalf("configuring mirrors: %v", err)
 		}
 	}
 
@@ -99,38 +106,58 @@ func main() {
 	go m.pollGerritAndTickle()
 	go m.subscribeToMaintnerAndTickleLoop()
 
-	select {}
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt)
+	<-shutdown
 }
 
-func writeCredentials() error {
+func writeCredentials(home string) error {
 	sc := secret.MustNewClient()
 	defer sc.Close()
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	sshDir := filepath.Join(home, ".ssh")
-	sshKey := filepath.Join(sshDir, "id_ed25519")
-	if _, err := os.Stat(sshKey); err == nil {
-		log.Printf("Using github ssh key at %v", sshKey)
-		return nil
-	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	sshConfig := &bytes.Buffer{}
+	gitConfig := &bytes.Buffer{}
+	sshConfigPath := filepath.Join(home, "ssh_config")
+	// ssh ignores $HOME in favor of /etc/passwd, so we need to override ssh_config explicitly.
+	fmt.Fprintf(gitConfig, "[core]\n  sshCommand=\"ssh -F %v\"\n", sshConfigPath)
+
+	// GitHub key, used as the default SSH private key.
 	privKey, err := sc.Retrieve(ctx, secret.NameGitHubSSHKey)
-	if err != nil || len(privKey) == 0 {
-		return fmt.Errorf("can't mirror to github without %q GCP secret manager or file %v", secret.NameGitHubSSHKey, sshKey)
+	if err != nil {
+		return fmt.Errorf("reading github key from secret manager: %v", err)
 	}
-	if err := os.MkdirAll(sshDir, 0700); err != nil {
+	privKeyPath := filepath.Join(home, secret.NameGitHubSSHKey)
+	if err := ioutil.WriteFile(privKeyPath, []byte(privKey+"\n"), 0600); err != nil {
 		return err
 	}
-	if err := ioutil.WriteFile(sshKey, []byte(privKey+"\n"), 0600); err != nil {
+	fmt.Fprintf(sshConfig, "Host github.com\n  IdentityFile %v\n", privKeyPath)
+
+	// gitmirror service key, used to gcloud auth for CSR writes.
+	serviceKey, err := sc.Retrieve(ctx, secret.NameGitMirrorServiceKey)
+	if err != nil {
+		return fmt.Errorf("reading service key from secret manager: %v", err)
+	}
+	serviceKeyPath := filepath.Join(home, secret.NameGitMirrorServiceKey)
+	if err := ioutil.WriteFile(serviceKeyPath, []byte(serviceKey), 0600); err != nil {
 		return err
 	}
-	log.Printf("Wrote %s from GCP secret manager.", sshKey)
+	gcloud := exec.CommandContext(ctx, "gcloud", "auth", "activate-service-account", "--key-file", serviceKeyPath)
+	gcloud.Env = append(os.Environ(), "HOME="+home)
+	if out, err := gcloud.CombinedOutput(); err != nil {
+		return fmt.Errorf("gcloud auth failed: %v\n%v", err, out)
+	}
+	fmt.Fprintf(gitConfig, "[credential \"https://source.developers.google.com\"]\n  helper=gcloud.sh\n")
+
+	if err := ioutil.WriteFile(filepath.Join(home, ".gitconfig"), gitConfig.Bytes(), 0600); err != nil {
+		return err
+	}
+	if err := ioutil.WriteFile(sshConfigPath, sshConfig.Bytes(), 0600); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -163,16 +190,20 @@ func createCacheDir() (string, error) {
 // A mirror watches Gerrit repositories, fetching the latest commits and
 // optionally mirroring them.
 type mirror struct {
-	mux          *http.ServeMux
-	repos        map[string]*repo
-	cacheDir     string
+	mux      *http.ServeMux
+	repos    map[string]*repo
+	cacheDir string
+	// homeDir is used as $HOME for all commands, allowing easy configuration overrides.
+	homeDir      string
 	gerritClient *gerrit.Client
 }
 
-func (m *mirror) addRepo(name string) *repo {
+func (m *mirror) addRepo(meta *repospkg.Repo) *repo {
+	name := meta.GoGerritProject
 	r := &repo{
 		name:    name,
 		url:     goBase + name,
+		meta:    meta,
 		root:    filepath.Join(m.cacheDir, name),
 		changed: make(chan bool, 1),
 		mirror:  m,
@@ -183,23 +214,18 @@ func (m *mirror) addRepo(name string) *repo {
 	return r
 }
 
-// runMirrors sets up and starts mirroring for the repositories that are
-// configured to be mirrored.
-func (m *mirror) runMirrors() error {
-	for name, repo := range m.repos {
-		meta, ok := repospkg.ByGerritProject[name]
-		if !ok || !meta.MirrorToGitHub {
-			continue
+// addMirrors sets up mirroring for repositories that need it.
+func (m *mirror) addMirrors() error {
+	for _, repo := range m.repos {
+		if repo.meta.MirrorToGitHub {
+			if err := repo.addRemote("github", "git@github.com:"+repo.meta.GitHubRepo()+".git"); err != nil {
+				return fmt.Errorf("adding GitHub remote: %v", err)
+			}
 		}
-		if err := repo.addRemote("github", "git@github.com:"+meta.GitHubRepo()+".git",
-			// We want to include only the refs/heads/* and refs/tags/* namespaces
-			// in the mirrors. They correspond to published branches and tags.
-			// Leave out internal Gerrit namespaces such as refs/changes/*,
-			// refs/users/*, etc., because they're not helpful on other hosts.
-			"push = +refs/heads/*:refs/heads/*",
-			"push = +refs/tags/*:refs/tags/*",
-		); err != nil {
-			return fmt.Errorf("adding remote: %v", err)
+		if repo.meta.MirrorToCSR {
+			if err := repo.addRemote("csr", "https://source.developers.google.com/p/golang-org/r/"+repo.name); err != nil {
+				return fmt.Errorf("adding CSR remote: %v", err)
+			}
 		}
 	}
 	return nil
@@ -271,7 +297,8 @@ func (r *statusRing) foreachDesc(fn func(statusEntry)) {
 type repo struct {
 	name    string
 	url     string
-	root    string    // on-disk location of the git repo, *cacheDir/name
+	root    string // on-disk location of the git repo, *cacheDir/name
+	meta    *repospkg.Repo
 	changed chan bool // sent to when a change comes in
 	status  statusRing
 	dests   []string // destination remotes to mirror to
@@ -331,6 +358,7 @@ func (r *repo) runGitQuiet(args ...string) ([]byte, []byte, error) {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = r.root
+	cmd.Env = append(os.Environ(), "HOME="+r.mirror.homeDir)
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	err := cmd.Run()
 	return stdout.Bytes(), stderr.Bytes(), err
@@ -386,32 +414,19 @@ func (r *repo) setStatus(status string) {
 	r.status.add(status)
 }
 
-func (r *repo) addRemote(name, url string, opts ...string) error {
+func (r *repo) addRemote(name, url string) error {
 	r.dests = append(r.dests, name)
-	if _, _, err := r.runGitQuiet("remote", "remove", name); err != nil {
-		// Exit status 2 means not found, which is fine.
-		if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 2 {
-			return err
-		}
-	}
-	gitConfig := filepath.Join(r.root, "config")
-	f, err := os.OpenFile(gitConfig, os.O_WRONLY|os.O_APPEND, os.ModePerm)
-	if err != nil {
+	if err := os.MkdirAll(filepath.Join(r.root, "remotes"), 0777); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(f, "\n[remote %q]\n\turl = %v\n", name, url)
-	if err != nil {
-		f.Close()
-		return err
-	}
-	for _, o := range opts {
-		_, err := fmt.Fprintf(f, "\t%s\n", o)
-		if err != nil {
-			f.Close()
-			return err
-		}
-	}
-	return f.Close()
+	// We want to include only the refs/heads/* and refs/tags/* namespaces
+	// in the mirrors. They correspond to published branches and tags.
+	// Leave out internal Gerrit namespaces such as refs/changes/*,
+	// refs/users/*, etc., because they're not helpful on other hosts.
+	remote := "URL: " + url + "\n" +
+		"Push: +refs/heads/*:refs/heads/*\n" +
+		"Push: +refs/tags/*:refs/tags/*\n"
+	return ioutil.WriteFile(filepath.Join(r.root, "remotes", name), []byte(remote), 0777)
 }
 
 // Loop continuously runs "git fetch" in the repo, checks for new
