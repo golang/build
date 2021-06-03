@@ -101,10 +101,12 @@ func newTestMirror(t *testing.T) *testMirror {
 		github: t.TempDir(),
 		csr:    t.TempDir(),
 		m: &mirror{
-			mux:      http.NewServeMux(),
-			cacheDir: t.TempDir(),
-			homeDir:  t.TempDir(),
-			repos:    map[string]*repo{},
+			mux:          http.NewServeMux(),
+			cacheDir:     t.TempDir(),
+			homeDir:      t.TempDir(),
+			repos:        map[string]*repo{},
+			mirrorGitHub: true,
+			mirrorCSR:    true,
 		},
 		t: t,
 	}

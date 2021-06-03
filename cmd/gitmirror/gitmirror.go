@@ -45,6 +45,9 @@ var (
 	flagCacheDir     = flag.String("cachedir", "", "git cache directory. If empty a temp directory is made.")
 	flagPollInterval = flag.Duration("poll", 60*time.Second, "Remote repo poll interval")
 	flagMirror       = flag.Bool("mirror", false, "whether to mirror to mirror repos; if disabled, it only runs in HTTP archive server mode")
+	flagMirrorGitHub = flag.Bool("mirror-github", true, "whether to mirror to GitHub when mirroring is enabled")
+	flagMirrorCSR    = flag.Bool("mirror-csr", false, "whether to mirror to Cloud Source Repositories when mirroring is enabled")
+	flagSecretsDir   = flag.String("secretsdir", "", "directory to load secrets from instead of GCP")
 )
 
 func main() {
@@ -79,6 +82,8 @@ func main() {
 		cacheDir:     cacheDir,
 		homeDir:      credsDir,
 		gerritClient: gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth),
+		mirrorGitHub: *flagMirrorGitHub,
+		mirrorCSR:    *flagMirrorCSR,
 	}
 	http.HandleFunc("/", m.handleRoot)
 
@@ -112,9 +117,6 @@ func main() {
 }
 
 func writeCredentials(home string) error {
-	sc := secret.MustNewClient()
-	defer sc.Close()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -125,31 +127,35 @@ func writeCredentials(home string) error {
 	fmt.Fprintf(gitConfig, "[core]\n  sshCommand=\"ssh -F %v\"\n", sshConfigPath)
 
 	// GitHub key, used as the default SSH private key.
-	privKey, err := sc.Retrieve(ctx, secret.NameGitHubSSHKey)
-	if err != nil {
-		return fmt.Errorf("reading github key from secret manager: %v", err)
+	if *flagMirrorGitHub {
+		privKey, err := retrieveSecret(ctx, secret.NameGitHubSSHKey)
+		if err != nil {
+			return fmt.Errorf("reading github key from secret manager: %v", err)
+		}
+		privKeyPath := filepath.Join(home, secret.NameGitHubSSHKey)
+		if err := ioutil.WriteFile(privKeyPath, []byte(privKey+"\n"), 0600); err != nil {
+			return err
+		}
+		fmt.Fprintf(sshConfig, "Host github.com\n  IdentityFile %v\n", privKeyPath)
 	}
-	privKeyPath := filepath.Join(home, secret.NameGitHubSSHKey)
-	if err := ioutil.WriteFile(privKeyPath, []byte(privKey+"\n"), 0600); err != nil {
-		return err
-	}
-	fmt.Fprintf(sshConfig, "Host github.com\n  IdentityFile %v\n", privKeyPath)
 
 	// gitmirror service key, used to gcloud auth for CSR writes.
-	serviceKey, err := sc.Retrieve(ctx, secret.NameGitMirrorServiceKey)
-	if err != nil {
-		return fmt.Errorf("reading service key from secret manager: %v", err)
+	if *flagMirrorCSR {
+		serviceKey, err := retrieveSecret(ctx, secret.NameGitMirrorServiceKey)
+		if err != nil {
+			return fmt.Errorf("reading service key from secret manager: %v", err)
+		}
+		serviceKeyPath := filepath.Join(home, secret.NameGitMirrorServiceKey)
+		if err := ioutil.WriteFile(serviceKeyPath, []byte(serviceKey), 0600); err != nil {
+			return err
+		}
+		gcloud := exec.CommandContext(ctx, "gcloud", "auth", "activate-service-account", "--key-file", serviceKeyPath)
+		gcloud.Env = append(os.Environ(), "HOME="+home)
+		if out, err := gcloud.CombinedOutput(); err != nil {
+			return fmt.Errorf("gcloud auth failed: %v\n%v", err, out)
+		}
+		fmt.Fprintf(gitConfig, "[credential \"https://source.developers.google.com\"]\n  helper=gcloud.sh\n")
 	}
-	serviceKeyPath := filepath.Join(home, secret.NameGitMirrorServiceKey)
-	if err := ioutil.WriteFile(serviceKeyPath, []byte(serviceKey), 0600); err != nil {
-		return err
-	}
-	gcloud := exec.CommandContext(ctx, "gcloud", "auth", "activate-service-account", "--key-file", serviceKeyPath)
-	gcloud.Env = append(os.Environ(), "HOME="+home)
-	if out, err := gcloud.CombinedOutput(); err != nil {
-		return fmt.Errorf("gcloud auth failed: %v\n%v", err, out)
-	}
-	fmt.Fprintf(gitConfig, "[credential \"https://source.developers.google.com\"]\n  helper=gcloud.sh\n")
 
 	if err := ioutil.WriteFile(filepath.Join(home, ".gitconfig"), gitConfig.Bytes(), 0600); err != nil {
 		return err
@@ -159,6 +165,16 @@ func writeCredentials(home string) error {
 	}
 
 	return nil
+}
+
+func retrieveSecret(ctx context.Context, name string) (string, error) {
+	if *flagSecretsDir != "" {
+		secret, err := ioutil.ReadFile(filepath.Join(*flagSecretsDir, name))
+		return string(secret), err
+	}
+	sc := secret.MustNewClient()
+	defer sc.Close()
+	return sc.Retrieve(ctx, name)
 }
 
 func createCacheDir() (string, error) {
@@ -194,8 +210,9 @@ type mirror struct {
 	repos    map[string]*repo
 	cacheDir string
 	// homeDir is used as $HOME for all commands, allowing easy configuration overrides.
-	homeDir      string
-	gerritClient *gerrit.Client
+	homeDir                 string
+	gerritClient            *gerrit.Client
+	mirrorGitHub, mirrorCSR bool
 }
 
 func (m *mirror) addRepo(meta *repospkg.Repo) *repo {
@@ -217,12 +234,12 @@ func (m *mirror) addRepo(meta *repospkg.Repo) *repo {
 // addMirrors sets up mirroring for repositories that need it.
 func (m *mirror) addMirrors() error {
 	for _, repo := range m.repos {
-		if repo.meta.MirrorToGitHub {
+		if m.mirrorGitHub && repo.meta.MirrorToGitHub {
 			if err := repo.addRemote("github", "git@github.com:"+repo.meta.GitHubRepo+".git"); err != nil {
 				return fmt.Errorf("adding GitHub remote: %v", err)
 			}
 		}
-		if repo.meta.MirrorToCSR {
+		if m.mirrorCSR && repo.meta.MirrorToCSR {
 			if err := repo.addRemote("csr", "https://source.developers.google.com/p/golang-org/r/"+repo.name); err != nil {
 				return fmt.Errorf("adding CSR remote: %v", err)
 			}
@@ -520,7 +537,7 @@ func (r *repo) fetchRevIfNeeded(ctx context.Context, rev string) error {
 		return nil
 	}
 	r.logf("attempting to fetch missing revision %s from origin", rev)
-	_, _, err := r.runGitLogged("fetch", "origin", rev)
+	_, _, err := r.runGitLogged("fetch", "-v", "origin", rev)
 	return err
 }
 

@@ -56,7 +56,7 @@ var ByGerritProject = map[string]*Repo{ /* initialized below */ }
 var ByImportPath = map[string]*Repo{ /* initialized below */ }
 
 func init() {
-	addMirrored("go", coordinatorCanBuild, noDash)
+	addMirrored("go", coordinatorCanBuild, noDash, enableCSR)
 	addMirrored("dl", importPath("golang.org/dl"), coordinatorCanBuild)
 	addMirrored("gddo", importPath("github.com/golang/gddo"), archivedOnGitHub)
 	addMirrored("gofrontend")
@@ -80,7 +80,7 @@ func init() {
 	x("oauth2")
 	x("perf", desc("packages and tools for performance measurement, storage, and analysis"))
 	x("pkgsite", desc("home of the pkg.go.dev website"), noBuildAndNoDash)
-	x("playground", noDash)
+	x("playground", noDash, enableCSR)
 	x("review", desc("a tool for working with Gerrit code reviews"))
 	x("scratch", noDash)
 	x("sync", desc("additional concurrency primitives"))
@@ -93,7 +93,7 @@ func init() {
 	x("tour", noDash)
 	x("vgo", noDash)
 	x("vulndb", desc("the Go Vulnerability Database and packages for working with it"))
-	x("website", desc("home of the golang.org and go.dev websites"))
+	x("website", desc("home of the golang.org and go.dev websites"), enableCSR)
 	x("xerrors", noDash)
 
 	add(&Repo{GoGerritProject: "gollvm"})
@@ -127,6 +127,10 @@ func archivedOnGitHub(r *Repo) {
 	// When a repository is archived on GitHub, trying to push
 	// to it will fail. So don't mirror.
 	r.MirrorToGitHub = false
+}
+
+func enableCSR(r *Repo) {
+	r.MirrorToCSR = true
 }
 
 func importPath(v string) modifyRepo { return func(r *Repo) { r.ImportPath = v } }
