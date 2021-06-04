@@ -147,7 +147,8 @@ func tryWorkItem(
 			if !c.Updated.Equal(m.Time) || c.Author.NumericID != m.Author.NumericID || c.PatchSet != m.RevisionNumber {
 				continue
 			}
-			if len(w.TryMessage) > 0 && c.PatchSet <= int(w.TryMessage[len(w.TryMessage)-1].Version) {
+			if len(w.TryMessage) > 0 && c.PatchSet < int(w.TryMessage[len(w.TryMessage)-1].Version) {
+				// Don't include try messages older than the latest we've seen. They're obsolete.
 				continue
 			}
 			tm := tryCommentRx.FindStringSubmatch(c.Message)

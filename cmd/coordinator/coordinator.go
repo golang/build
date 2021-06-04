@@ -1299,6 +1299,9 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		linuxBuilder := dashboard.Builders["linux-amd64"]
 
 		addXrepo := func(project string) *buildStatus {
+			if testingKnobSkipBuilds {
+				return nil
+			}
 			if !linuxBuilder.BuildsRepoTryBot(project, branch, branch) {
 				return nil
 			}

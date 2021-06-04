@@ -232,6 +232,51 @@ func TestTryWorkItem(t *testing.T) {
 			},
 			want: `project:"go" branch:"master" change_id:"I358eb7b11768df8c80fb7e805abd4cd01d52bb9b" commit:"f99d33e72efdea68fce39765bc94479b5ebed0a9" version:88 go_version:<major:1 minor:17 > try_message:<message:"foo" author_id:1234 version:1 > try_message:<message:"bar, baz" author_id:5678 version:2 > `,
 		},
+
+		// Test that followup TRY= requests on the same patch set are included. See issue 42084.
+		{
+			proj:  "go",
+			clnum: 324763,
+			ci: &gerrit.ChangeInfo{
+				CurrentRevision: "dd38fd80c3667f891dbe06bd1d8ed153c2e208da",
+				Revisions: map[string]gerrit.RevisionInfo{
+					"dd38fd80c3667f891dbe06bd1d8ed153c2e208da": {PatchSetNumber: 1},
+				},
+				Messages: []gerrit.ChangeMessageInfo{
+					{
+						Author:         &gerrit.AccountInfo{NumericID: 1234},
+						Message:        "Patch Set 1: Run-TryBot+1 Trust+1\n\n(1 comment)",
+						Time:           gerrit.TimeStamp(time.Date(2021, 6, 3, 18, 58, 0, 0, time.UTC)),
+						RevisionNumber: 1,
+					},
+					{
+						Author:         &gerrit.AccountInfo{NumericID: 1234},
+						Message:        "Patch Set 1: Run-TryBot+1\n\n(1 comment)",
+						Time:           gerrit.TimeStamp(time.Date(2021, 6, 3, 19, 16, 26, 0, time.UTC)),
+						RevisionNumber: 1,
+					},
+				},
+			},
+			comments: map[string][]gerrit.CommentInfo{
+				"/PATCHSET_LEVEL": {
+					{
+						PatchSet: 1,
+						Message:  "TRY=windows-arm64,windows-amd64",
+						Updated:  gerrit.TimeStamp(time.Date(2021, 6, 3, 18, 58, 0, 0, time.UTC)),
+						Author:   &gerrit.AccountInfo{NumericID: 1234},
+					},
+					{
+						PatchSet: 1,
+						Message:  "TRY=windows-arm64-aws",
+						Updated:  gerrit.TimeStamp(time.Date(2021, 6, 3, 19, 16, 26, 0, time.UTC)),
+						Author:   &gerrit.AccountInfo{NumericID: 1234},
+					},
+				},
+			},
+			want: `project:"go" branch:"master" change_id:"I023d5208374f867552ba68b45011f7990159868f" commit:"dd38fd80c3667f891dbe06bd1d8ed153c2e208da" version:1 go_version:<major:1 minor:17 > ` +
+				`try_message:<message:"windows-arm64,windows-amd64" author_id:1234 version:1 > ` +
+				`try_message:<message:"windows-arm64-aws" author_id:1234 version:1 > `,
+		},
 	}
 	for _, tt := range tests {
 		cl := c.Gerrit().Project("go.googlesource.com", tt.proj).CL(tt.clnum)
