@@ -46,7 +46,7 @@ var (
 	flagPollInterval = flag.Duration("poll", 60*time.Second, "Remote repo poll interval")
 	flagMirror       = flag.Bool("mirror", false, "whether to mirror to mirror repos; if disabled, it only runs in HTTP archive server mode")
 	flagMirrorGitHub = flag.Bool("mirror-github", true, "whether to mirror to GitHub when mirroring is enabled")
-	flagMirrorCSR    = flag.Bool("mirror-csr", false, "whether to mirror to Cloud Source Repositories when mirroring is enabled")
+	flagMirrorCSR    = flag.Bool("mirror-csr", true, "whether to mirror to Cloud Source Repositories when mirroring is enabled")
 	flagSecretsDir   = flag.String("secretsdir", "", "directory to load secrets from instead of GCP")
 )
 
@@ -363,7 +363,7 @@ func (r *repo) runGitLogged(args ...string) ([]byte, []byte, error) {
 	if err == nil {
 		r.logf("ran git %s in %v", args, time.Since(start))
 	} else {
-		r.logf("git %s failed after %v: %v\nstdout: %v\nstderr: %v\n", args, time.Since(start), err, string(stdout), string(stderr))
+		r.logf("git %s failed after %v: %v\nstderr: %v\n", args, time.Since(start), err, string(stderr))
 	}
 	return stdout, stderr, err
 }
@@ -537,7 +537,7 @@ func (r *repo) fetchRevIfNeeded(ctx context.Context, rev string) error {
 		return nil
 	}
 	r.logf("attempting to fetch missing revision %s from origin", rev)
-	_, _, err := r.runGitLogged("fetch", "-v", "origin", rev)
+	_, _, err := r.runGitLogged("fetch", "origin", rev)
 	return err
 }
 
