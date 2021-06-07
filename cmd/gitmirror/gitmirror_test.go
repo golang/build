@@ -79,6 +79,21 @@ func TestMirror(t *testing.T) {
 	}
 }
 
+// Tests that mirroring an initially empty repository works. See golang/go#39597.
+// The repository still has to exist.
+func TestMirrorInitiallyEmpty(t *testing.T) {
+	tm := newTestMirror(t)
+	if err := tm.m.repos["build"].loopOnce(); err == nil {
+		t.Error("expected error mirroring empty repository, got none")
+	}
+	tm.commit("first commit")
+	tm.loopOnce()
+	rev := tm.git(tm.gerrit, "rev-parse", "HEAD")
+	if githubRev := tm.git(tm.github, "rev-parse", "HEAD"); rev != githubRev {
+		t.Errorf("github HEAD is %v, want %v", githubRev, rev)
+	}
+}
+
 type testMirror struct {
 	gerrit, github, csr string
 	m                   *gitMirror
@@ -107,6 +122,7 @@ func newTestMirror(t *testing.T) *testMirror {
 			repos:        map[string]*repo{},
 			mirrorGitHub: true,
 			mirrorCSR:    true,
+			timeoutScale: 0,
 		},
 		t: t,
 	}

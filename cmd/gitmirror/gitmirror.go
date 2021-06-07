@@ -84,6 +84,7 @@ func main() {
 		gerritClient: gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth),
 		mirrorGitHub: *flagMirrorGitHub,
 		mirrorCSR:    *flagMirrorCSR,
+		timeoutScale: 1,
 	}
 	http.HandleFunc("/", m.handleRoot)
 
@@ -213,6 +214,7 @@ type gitMirror struct {
 	homeDir                 string
 	gerritClient            *gerrit.Client
 	mirrorGitHub, mirrorCSR bool
+	timeoutScale            int
 }
 
 func (m *gitMirror) addRepo(meta *repospkg.Repo) *repo {
@@ -456,7 +458,7 @@ func (r *repo) addRemote(name, url string) error {
 func (r *repo) loop() {
 	for {
 		if err := r.loopOnce(); err != nil {
-			time.Sleep(10 * time.Second)
+			time.Sleep(10 * time.Second * time.Duration(r.mirror.timeoutScale))
 			continue
 		}
 
@@ -499,7 +501,7 @@ func (r *repo) logf(format string, args ...interface{}) {
 // fetch runs "git fetch" in the repository root.
 // It tries three times, just in case it failed because of a transient error.
 func (r *repo) fetch() error {
-	err := try(3, func(attempt int) error {
+	err := r.try(3, func(attempt int) error {
 		r.setStatus(fmt.Sprintf("running git fetch origin, attempt %d", attempt))
 		if _, stderr, err := r.runGitLogged("fetch", "--prune", "origin"); err != nil {
 			return fmt.Errorf("%v\n\n%s", err, stderr)
@@ -517,7 +519,7 @@ func (r *repo) fetch() error {
 // push runs "git push -f --mirror dest" in the repository root.
 // It tries three times, just in case it failed because of a transient error.
 func (r *repo) push(dest string) error {
-	err := try(3, func(attempt int) error {
+	err := r.try(3, func(attempt int) error {
 		r.setStatus(fmt.Sprintf("syncing to %v, attempt %d", dest, attempt))
 		if _, stderr, err := r.runGitLogged("push", "-f", "--mirror", dest); err != nil {
 			return fmt.Errorf("%v\n\n%s", err, stderr)
@@ -588,10 +590,10 @@ func (r *repo) serveStatus(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "\n</pre></body></html>")
 }
 
-func try(n int, fn func(attempt int) error) error {
+func (r *repo) try(n int, fn func(attempt int) error) error {
 	var err error
 	for tries := 0; tries < n; tries++ {
-		time.Sleep(time.Duration(tries) * 5 * time.Second) // Linear back-off.
+		time.Sleep(time.Duration(tries) * 5 * time.Second * time.Duration(r.mirror.timeoutScale)) // Linear back-off.
 		if err = fn(tries); err == nil {
 			break
 		}
