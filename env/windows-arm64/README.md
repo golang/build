@@ -16,10 +16,10 @@ a1.metal instances then saving the image manually.
       qemu-image convert -O qcow2 win.vhdx win.qcow2
       ```
 
-- SSH to your instance tunneling port 5901, and run `win10-arm64.sh`
+- SSH to your instance tunneling port 5903, and run `win10-arm64.sh`
   script to boot the Windows VM.
     - You may need to stop the current VM: `sudo systemctl stop qemu`
-- VNC to the tunneled port 5901.
+- VNC to the tunneled port 5903.
 - Open the device control panel, and use the "Search for Drivers"
   button to search the virtio drive `D:` for drivers.
     - Matching drivers will be automatically installed.
