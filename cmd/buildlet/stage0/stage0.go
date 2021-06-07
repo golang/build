@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // The stage0 command looks up the buildlet's URL from its environment
-// (GCE metadata service, scaleway, etc), downloads it, and runs
+// (GCE metadata service, EC2, etc), downloads it, and runs
 // it. If not on GCE, such as when in a Linux Docker container being
 // developed and tested locally, the stage0 instead looks for the
 // META_BUILDLET_BINARY_URL environment to have a URL to the buildlet
@@ -78,7 +78,7 @@ func main() {
 	switch osArch {
 	case "linux/arm":
 		switch env := os.Getenv("GO_BUILDER_ENV"); env {
-		case "linux-arm-arm5spacemonkey", "host-linux-arm-scaleway", "host-linux-arm-aws":
+		case "linux-arm-arm5spacemonkey", "host-linux-arm-aws":
 			// No setup currently.
 		default:
 			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
@@ -154,14 +154,6 @@ Download:
 		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
 	case "host-linux-arm-aws":
 		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
-	case "host-linux-arm-scaleway":
-		scalewayArgs := append(
-			reverseHostTypeArgs(buildEnv),
-			"--hostname="+os.Getenv("HOSTNAME"),
-		)
-		cmd.Args = append(cmd.Args,
-			scalewayArgs...,
-		)
 	case "host-linux-arm64-aws":
 		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
 	case "host-linux-mipsle-mengzhuo":

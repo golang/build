@@ -1532,7 +1532,7 @@ func startSSHServerLinux() {
 		return
 	}
 
-	// The scaleway Docker images don't have ssh host keys in
+	// The AWS Docker images don't have ssh host keys in
 	// their image, at least as of 2017-07-23. So make them first.
 	// These are the types sshd -D complains about currently.
 	if runtime.GOARCH == "arm" {

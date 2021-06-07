@@ -4,4 +4,4 @@
 
 # golang.org/x/build/cmd/buildlet/stage0
 
-The stage0 command looks up the buildlet's URL from its environment (GCE metadata service, scaleway, etc), downloads it, and runs it.
+The stage0 command looks up the buildlet's URL from its environment (GCE metadata service, EC2, etc), downloads it, and runs it.
