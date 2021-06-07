@@ -42,19 +42,11 @@ RUN apt-get update && apt-get install -y \
 	git-core \
 	openssh-client \
 	gnupg dirmngr \
-	curl \
+	curl tini \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Install gcloud for auth to CSR, see https://cloud.google.com/sdk/docs/install#deb
-RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && apt-get update -y && apt-get install google-cloud-sdk -y
-
-# See https://github.com/golang/go/issues/23705
-ENV TINI_VERSION v0.16.1
-ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
-ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini.asc /tini.asc
-RUN gpg --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 595E85A6B1B4779EA4DAAEC70B588DFF0527A9B7 \
- && gpg --verify /tini.asc
-RUN chmod +x /tini
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && apt-get update -y && apt-get install google-cloud-sdk -y && rm -rf /var/lib/apt/lists/*
 
 # Add github.com's known_hosts entries, so git push calls later don't
 # prompt, and don't need to have their strict host key checking
@@ -66,4 +58,4 @@ RUN mkdir -p ~/.ssh/ \
 	&& chmod 0600 ~/.ssh/known_hosts
 
 COPY --from=build /go/bin/gitmirror /
-ENTRYPOINT ["/tini", "--", "/gitmirror"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/gitmirror"]
