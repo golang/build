@@ -86,7 +86,8 @@ var (
 	tombergan    = gh("tombergan")
 	zpavlinovic  = gh("zpavlinovic")
 
-	toolsTeam = gh("golang/tools-team")
+	fuzzingTeam = gh("golang/fuzzing")
+	toolsTeam   = gh("golang/tools-team")
 )
 
 // entries is a map of <repo name>/<path>, <domain>, or <branch> to Owner
@@ -835,8 +836,7 @@ var entries = map[string]*Entry{
 
 	// Branches in the Go repository.
 	"dev.fuzz": {
-		Primary:   []Owner{katie, jayconrod},
-		Secondary: []Owner{roland},
+		Primary: []Owner{fuzzingTeam},
 	},
 
 	// Misc. other Go repositories.
