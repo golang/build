@@ -76,7 +76,7 @@ func main() {
 	}
 	defer os.RemoveAll(credsDir)
 
-	m := &mirror{
+	m := &gitMirror{
 		mux:          http.DefaultServeMux,
 		repos:        map[string]*repo{},
 		cacheDir:     cacheDir,
@@ -108,7 +108,7 @@ func main() {
 	for _, repo := range m.repos {
 		go repo.loop()
 	}
-	go m.pollGerritAndTickle()
+	go m.pollGerritAndTickleLoop()
 	go m.subscribeToMaintnerAndTickleLoop()
 
 	shutdown := make(chan os.Signal, 1)
@@ -203,9 +203,9 @@ func createCacheDir() (string, error) {
 	return *flagCacheDir, nil
 }
 
-// A mirror watches Gerrit repositories, fetching the latest commits and
+// A gitMirror watches Gerrit repositories, fetching the latest commits and
 // optionally mirroring them.
-type mirror struct {
+type gitMirror struct {
 	mux      *http.ServeMux
 	repos    map[string]*repo
 	cacheDir string
@@ -215,7 +215,7 @@ type mirror struct {
 	mirrorGitHub, mirrorCSR bool
 }
 
-func (m *mirror) addRepo(meta *repospkg.Repo) *repo {
+func (m *gitMirror) addRepo(meta *repospkg.Repo) *repo {
 	name := meta.GoGerritProject
 	r := &repo{
 		name:    name,
@@ -232,7 +232,7 @@ func (m *mirror) addRepo(meta *repospkg.Repo) *repo {
 }
 
 // addMirrors sets up mirroring for repositories that need it.
-func (m *mirror) addMirrors() error {
+func (m *gitMirror) addMirrors() error {
 	for _, repo := range m.repos {
 		if m.mirrorGitHub && repo.meta.MirrorToGitHub {
 			if err := repo.addRemote("github", "git@github.com:"+repo.meta.GitHubRepo+".git"); err != nil {
@@ -251,7 +251,7 @@ func (m *mirror) addMirrors() error {
 // GET /
 // or:
 // GET /debug/watcher/
-func (m *mirror) handleRoot(w http.ResponseWriter, r *http.Request) {
+func (m *gitMirror) handleRoot(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" && r.URL.Path != "/debug/watcher/" {
 		http.NotFound(w, r)
 		return
@@ -319,7 +319,7 @@ type repo struct {
 	changed chan bool // sent to when a change comes in
 	status  statusRing
 	dests   []string // destination remotes to mirror to
-	mirror  *mirror
+	mirror  *gitMirror
 
 	mu        sync.Mutex
 	err       error
@@ -599,7 +599,7 @@ func try(n int, fn func(attempt int) error) error {
 	return err
 }
 
-func (m *mirror) notifyChanged(name string) {
+func (m *gitMirror) notifyChanged(name string) {
 	repo, ok := m.repos[name]
 	if !ok {
 		return
@@ -610,11 +610,11 @@ func (m *mirror) notifyChanged(name string) {
 	}
 }
 
-// pollGerritAndTickle polls Gerrit's JSON meta URL of all its URLs
+// pollGerritAndTickleLoop polls Gerrit's JSON meta URL of all its URLs
 // and their current branch heads.  When this sees that one has
 // changed, it tickles the channel for that repo and wakes up its
 // poller, if its poller is in a sleep.
-func (m *mirror) pollGerritAndTickle() {
+func (m *gitMirror) pollGerritAndTickleLoop() {
 	last := map[string]string{} // repo -> last seen hash
 	for {
 		gerritRepos, err := m.gerritMetaMap()
@@ -634,7 +634,7 @@ func (m *mirror) pollGerritAndTickle() {
 
 // subscribeToMaintnerAndTickleLoop subscribes to maintner.golang.org
 // and watches for any ref changes in realtime.
-func (m *mirror) subscribeToMaintnerAndTickleLoop() {
+func (m *gitMirror) subscribeToMaintnerAndTickleLoop() {
 	for {
 		if err := m.subscribeToMaintnerAndTickle(); err != nil {
 			log.Printf("maintner loop: %v; retrying in 30 seconds", err)
@@ -643,7 +643,7 @@ func (m *mirror) subscribeToMaintnerAndTickleLoop() {
 	}
 }
 
-func (m *mirror) subscribeToMaintnerAndTickle() error {
+func (m *gitMirror) subscribeToMaintnerAndTickle() error {
 	ctx := context.Background()
 	retryTicker := time.NewTicker(10 * time.Second)
 	defer retryTicker.Stop() // we never return, though
@@ -670,7 +670,7 @@ func (m *mirror) subscribeToMaintnerAndTickle() error {
 
 // gerritMetaMap returns the map from repo name (e.g. "go") to its
 // latest master hash.
-func (m *mirror) gerritMetaMap() (map[string]string, error) {
+func (m *gitMirror) gerritMetaMap() (map[string]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	meta, err := m.gerritClient.GetProjects(ctx, "master")

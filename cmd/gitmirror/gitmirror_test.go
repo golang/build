@@ -81,7 +81,7 @@ func TestMirror(t *testing.T) {
 
 type testMirror struct {
 	gerrit, github, csr string
-	m                   *mirror
+	m                   *gitMirror
 	server              *httptest.Server
 	buildRepo           *repo
 	t                   *testing.T
@@ -100,7 +100,7 @@ func newTestMirror(t *testing.T) *testMirror {
 		gerrit: t.TempDir(),
 		github: t.TempDir(),
 		csr:    t.TempDir(),
-		m: &mirror{
+		m: &gitMirror{
 			mux:          http.NewServeMux(),
 			cacheDir:     t.TempDir(),
 			homeDir:      t.TempDir(),
