@@ -375,7 +375,7 @@ func (r *repo) runGitQuiet(args ...string) ([]byte, []byte, error) {
 	defer cancel()
 
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.Command("git", args...)
 	if args[0] == "clone" {
 		// Small hack: if we're cloning, the root doesn't exist yet.
 		cmd.Dir = "/"
@@ -384,7 +384,7 @@ func (r *repo) runGitQuiet(args ...string) ([]byte, []byte, error) {
 	}
 	cmd.Env = append(os.Environ(), "HOME="+r.mirror.homeDir)
 	cmd.Stdout, cmd.Stderr = stdout, stderr
-	err := cmd.Run()
+	err := runCmdContext(ctx, cmd)
 	return stdout.Bytes(), stderr.Bytes(), err
 }
 
@@ -701,4 +701,32 @@ func handleDebugEnv(w http.ResponseWriter, r *http.Request) {
 	for _, kv := range os.Environ() {
 		fmt.Fprintf(w, "%s\n", kv)
 	}
+}
+
+// runCommandContext runs cmd controlled by ctx.
+func runCmdContext(ctx context.Context, cmd *exec.Cmd) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	resChan := make(chan error, 1)
+	go func() {
+		resChan <- cmd.Wait()
+	}()
+
+	select {
+	case err := <-resChan:
+		return err
+	case <-ctx.Done():
+	}
+	// Canceled. Interrupt and see if it ends voluntarily.
+	cmd.Process.Signal(os.Interrupt)
+	select {
+	case <-resChan:
+		return ctx.Err()
+	case <-time.After(time.Second):
+	}
+	// Didn't shut down in response to interrupt. Kill it hard.
+	cmd.Process.Kill()
+	<-resChan
+	return ctx.Err()
 }
