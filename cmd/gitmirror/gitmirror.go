@@ -86,13 +86,16 @@ func main() {
 		mirrorCSR:    *flagMirrorCSR,
 		timeoutScale: 1,
 	}
-	http.HandleFunc("/", m.handleRoot)
 
 	var eg errgroup.Group
 	for _, repo := range repospkg.ByGerritProject {
 		r := m.addRepo(repo)
 		eg.Go(r.init)
 	}
+
+	http.HandleFunc("/", m.handleRoot)
+	http.HandleFunc("/healthz", m.handleHealth)
+
 	if err := eg.Wait(); err != nil {
 		log.Fatalf("initializing repos: %v", err)
 	}
@@ -269,6 +272,23 @@ func (m *gitMirror) handleRoot(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "<a href='/debug/watcher/%s'>%s</a> - %s\n", name, name, m.repos[name].statusLine())
 	}
 	fmt.Fprint(w, "</pre></body></html>")
+}
+
+func (m *gitMirror) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	for _, r := range m.repos {
+		r.mu.Lock()
+		err := r.err
+		r.mu.Unlock()
+
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "%v: %v\n", r.name, err)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 // a statusEntry is a status string at a specific time.
