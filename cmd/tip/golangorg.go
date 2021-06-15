@@ -59,23 +59,18 @@ func (b golangorgBuilder) Init(logger *log.Logger, dir, hostport string, heads m
 	goBin := filepath.Join(goDir, "bin/go")
 	binDir := filepath.Join(dir, "bin")
 	install := exec.Command(goBin, "install", "golang.org/x/website/cmd/golangorg")
+	install.Env = append(os.Environ(), "GOBIN="+binDir)
+	install.Dir = websiteDir
 	install.Stdout = logWriter
 	install.Stderr = logWriter
-	install.Dir = websiteDir
-	install.Env = append(os.Environ(),
-		"GOROOT="+goDir,
-		"GO111MODULE=on",
-		"GOPROXY=https://proxy.golang.org",
-		"GOBIN="+binDir,
-	)
 	if err := install.Run(); err != nil {
 		return nil, fmt.Errorf("go install golang.org/x/website/cmd/golangorg: %v", err)
 	}
 
 	logger.Printf("starting golangorg ...")
 	golangorgBin := filepath.Join(binDir, "golangorg")
-	golangorg := exec.Command(golangorgBin, "-http="+hostport)
-	golangorg.Env = append(os.Environ(), "GOROOT="+goDir)
+	golangorg := exec.Command(golangorgBin, "-http="+hostport, "-goroot="+goDir)
+	golangorg.Dir = filepath.Join(websiteDir, "cmd/golangorg")
 	golangorg.Stdout = logWriter
 	golangorg.Stderr = logWriter
 	if err := golangorg.Start(); err != nil {
@@ -85,6 +80,11 @@ func (b golangorgBuilder) Init(logger *log.Logger, dir, hostport string, heads m
 }
 
 func (b golangorgBuilder) HealthCheck(hostport string) error {
-	_, err := getOK(fmt.Sprintf("http://%v/pkg/fmt", hostport))
-	return err
+	if _, err := getOK(fmt.Sprintf("http://%v/doc/", hostport)); err != nil {
+		return err
+	}
+	if _, err := getOK(fmt.Sprintf("http://%v/src/fmt/", hostport)); err != nil {
+		return err
+	}
+	return nil
 }
