@@ -1,19 +1,21 @@
-apiVersion: v1
-kind: ReplicationController
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: gitmirror-rc
+  name: gitmirror-deployment
+  labels:
+    app: gitmirror
 spec:
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
   replicas: 2
   selector:
-    app: gitmirror
+    matchLabels:
+      app: gitmirror
   template:
     metadata:
-      name: gitmirror
       labels:
         app: gitmirror
-      annotations:
-        container.seccomp.security.alpha.kubernetes.io/gitmirror: docker/default
-        container.apparmor.security.beta.kubernetes.io/gitmirror: runtime/default
     spec:
       volumes:
       - name: cache-volume
@@ -39,3 +41,4 @@ spec:
           limits:
             cpu: "3"
             memory: "6Gi"
+
