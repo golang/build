@@ -476,6 +476,13 @@ var Hosts = map[string]*HostConfig{
 		isEC2:              true,
 		machineType:        "a1.metal",
 	},
+	"host-windows-arm64-mini": &HostConfig{
+		Notes:              "macOS hosting Windows 10 in qemu with HVM acceleration.",
+		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-arm64",
+		env:                []string{"GOARCH=arm64"},
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-windows-arm64-f22ec5.tar.gz",
+		IsReverse:          true,
+	},
 	"host-darwin-10_12": &HostConfig{
 		IsReverse: true,
 		ExpectNum: 3,
@@ -2281,6 +2288,15 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "windows-arm64-aws",
 		HostType:          "host-windows-arm64-qemu",
+		numTryTestHelpers: 1,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
+		},
+		KnownIssue: 42604,
+	})
+	addBuilder(BuildConfig{
+		Name:              "windows-arm64-10",
+		HostType:          "host-windows-arm64-mini",
 		numTryTestHelpers: 1,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
