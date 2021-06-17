@@ -120,7 +120,7 @@ func TestTrybots(t *testing.T) {
 		},
 		{
 			repo:   "go",
-			branch: "dev.link",
+			branch: "dev.typeparams",
 			want: []string{
 				"android-amd64-emu",
 				"freebsd-amd64-12_2",
@@ -128,6 +128,7 @@ func TestTrybots(t *testing.T) {
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-race",
+				"linux-amd64-unified",
 				"linux-arm-aws",
 				"linux-arm64-aws",
 				"openbsd-amd64-68",
@@ -616,6 +617,13 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-staticlockranking@go1.15", "go"), onlyPost},
 		{b("linux-amd64-staticlockranking@go1.14", "go"), none},
 		{b("linux-amd64-staticlockranking", "net"), none},
+
+		{b("linux-amd64-unified", "go"), none},
+		{b("linux-amd64-unified", "tools"), none},
+		{b("linux-amd64-unified", "net"), none},
+		{b("linux-amd64-unified@dev.typeparams", "go"), both},
+		{b("linux-amd64-unified@dev.typeparams", "tools"), both},
+		{b("linux-amd64-unified@dev.typeparams", "net"), none},
 
 		{b("linux-amd64-noregabi", "go"), onlyPost},
 		{b("linux-amd64-noregabi", "net"), none},

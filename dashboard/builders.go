@@ -1745,6 +1745,26 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
+		Name:     "linux-amd64-unified",
+		HostType: "host-linux-buster",
+		Notes:    "builder with GOEXPERIMENT=unified, see golang.org/issue/46786",
+		tryBot: func(repo, branch, goBranch string) bool {
+			return (repo == "go" || repo == "tools") && goBranch == "dev.typeparams"
+		},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return (repo == "go" || repo == "tools") && goBranch == "dev.typeparams"
+		},
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+			"GOEXPERIMENT=unified",
+		},
+		GoDeps: []string{
+			"804ecc2581caf33ae347d6a1ce67436d1f74e93b", // CL 328215, which added GOEXPERIMENT=unified on dev.typeparams
+		},
+		numTestHelpers:    1,
+		numTryTestHelpers: 4,
+	})
+	addBuilder(BuildConfig{
 		Name:     "linux-amd64-noregabi",
 		HostType: "host-linux-buster",
 		Notes:    "builder with GOEXPERIMENT=noregabi, see golang.org/issue/40724",
