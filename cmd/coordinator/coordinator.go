@@ -931,7 +931,8 @@ func findWork() error {
 		knownToDashboard[b] = true
 	}
 
-	var goRevisions []string // revisions of repo "go", branch "master" revisions
+	var goRevisions []string           // revisions of repo "go", branch "master"
+	var goRevisionsTypeParams []string // revisions of repo "go", branch "dev.typeparams" golang.org/issue/46786 and golang.org/issue/46864
 	seenSubrepo := make(map[string]bool)
 	commitTime := make(map[string]string)   // git rev => "2019-11-20T22:54:54Z" (time.RFC3339 from build.golang.org's JSON)
 	commitBranch := make(map[string]string) // git rev => "master"
@@ -966,6 +967,8 @@ func findWork() error {
 		if br.Repo == "go" {
 			if br.Branch == "master" {
 				goRevisions = append(goRevisions, br.Revision)
+			} else if br.Branch == "dev.typeparams" {
+				goRevisionsTypeParams = append(goRevisionsTypeParams, br.Revision)
 			}
 		} else {
 			// If this is the first time we've seen this sub-repo
@@ -1028,12 +1031,20 @@ func findWork() error {
 	// And to bootstrap new builders, see if we have any builders
 	// that the dashboard doesn't know about.
 	for b, builderInfo := range dashboard.Builders {
-		if knownToDashboard[b] ||
-			!builderInfo.BuildsRepoPostSubmit("go", "master", "master") {
+		if knownToDashboard[b] {
+			// no need to bootstrap.
 			continue
 		}
-		for _, rev := range goRevisions {
-			add(buildgo.BuilderRev{Name: b, Rev: rev})
+		if builderInfo.BuildsRepoPostSubmit("go", "master", "master") {
+			for _, rev := range goRevisions {
+				add(buildgo.BuilderRev{Name: b, Rev: rev})
+			}
+		} else if builderInfo.BuildsRepoPostSubmit("go", "dev.typeparams", "dev.typeparams") {
+			// schedule builds on dev.typeparams branch
+			// golang.org/issue/46786 and golang.org/issue/46864
+			for _, rev := range goRevisionsTypeParams {
+				add(buildgo.BuilderRev{Name: b, Rev: rev})
+			}
 		}
 	}
 	return nil
