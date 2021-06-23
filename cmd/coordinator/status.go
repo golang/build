@@ -207,7 +207,7 @@ func gitMirrorErrors() (errs, warns []string) {
 	}
 	var runningGitMirror []api.Pod
 	for _, p := range pods {
-		if p.Labels["app"] != "gitmirror" || p.Status.Phase != "Running" {
+		if !strings.HasPrefix(p.Labels["app"], "gitmirror") || p.Status.Phase != "Running" {
 			continue
 		}
 		runningGitMirror = append(runningGitMirror, p)
