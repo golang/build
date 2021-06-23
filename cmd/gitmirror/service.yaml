@@ -7,4 +7,4 @@ spec:
     - port: 8585
       targetPort: 8585
   selector:
-    app: gitmirror
+    app: gitmirror-serving
