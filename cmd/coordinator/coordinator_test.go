@@ -254,33 +254,33 @@ func TestIssue42084(t *testing.T) {
 	hasWindowsARM64Builder := false
 	for _, bs := range ts.builds {
 		v := bs.NameAndBranch()
-		if v == "windows-arm64-aws" {
+		if v == "windows-arm64-10" {
 			hasWindowsARM64Builder = true
 		}
 	}
 	if hasWindowsARM64Builder {
-		// This test relies on windows-arm64-aws builder not being default TryBot
-		// to provide coverage for issue 42084. If the build policy changes, need
-		// to pick another builder to use in this test.
-		t.Fatal("windows-arm64-aws builder was included even without TRY= message")
+		// This test relies on windows-arm64-10 builder not being a default
+		// TryBot to provide coverage for issue 42084. If the build policy
+		// changes, need to pick another builder to use in this test.
+		t.Fatal("windows-arm64-10 builder was included even without TRY= message")
 	}
 
 	// Next, add try messages, and check that the SlowBot is now included.
 	work.TryMessage = []*apipb.TryVoteMessage{
-		{Message: "TRY=windows-arm64,windows-amd64", AuthorId: 1234, Version: 1},
-		{Message: "TRY=windows-arm64-aws", AuthorId: 1234, Version: 1},
+		{Message: "TRY=windows-amd64", AuthorId: 1234, Version: 1},
+		{Message: "TRY=windows-arm64-10", AuthorId: 1234, Version: 1},
 	}
 	ts = newTrySet(work)
 	hasWindowsARM64Builder = false
 	for i, bs := range ts.builds {
 		v := bs.NameAndBranch()
 		t.Logf("build[%d]: %s", i, v)
-		if v == "windows-arm64-aws" {
+		if v == "windows-arm64-10" {
 			hasWindowsARM64Builder = true
 		}
 	}
 	if !hasWindowsARM64Builder {
-		t.Error("windows-arm64-aws SlowBot was not included")
+		t.Error("windows-arm64-10 SlowBot was not included")
 	}
 }
 

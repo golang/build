@@ -205,10 +205,10 @@ var builds = []*Build{
 		OS:      "windows",
 		Arch:    "arm64",
 		Race:    false, // Not supported as of 2021-06-01.
-		Builder: "windows-arm64-aws",
-
-		// TODO(golang.org/issue/46406, golang.org/issue/46502): Fix or skip failing tests,
-		// ensure the builder is fast enough to complete tests, then remove SkipTests here.
+		Builder: "windows-arm64-10",
+		// TODO(golang.org/issue/46406, golang.org/issue/46502): Fix
+		// or skip failing tests, ensure the builder is fast enough to
+		// complete tests, then remove SkipTests here.
 		SkipTests: true,
 	},
 	{

@@ -267,7 +267,7 @@ func TestTryWorkItem(t *testing.T) {
 					},
 					{
 						PatchSet: 1,
-						Message:  "TRY=windows-arm64-aws",
+						Message:  "TRY=windows-arm64-10",
 						Updated:  gerrit.TimeStamp(time.Date(2021, 6, 3, 19, 16, 26, 0, time.UTC)),
 						Author:   &gerrit.AccountInfo{NumericID: 1234},
 					},
@@ -275,7 +275,7 @@ func TestTryWorkItem(t *testing.T) {
 			},
 			want: `project:"go" branch:"master" change_id:"I023d5208374f867552ba68b45011f7990159868f" commit:"dd38fd80c3667f891dbe06bd1d8ed153c2e208da" version:1 go_version:<major:1 minor:17 > ` +
 				`try_message:<message:"windows-arm64,windows-amd64" author_id:1234 version:1 > ` +
-				`try_message:<message:"windows-arm64-aws" author_id:1234 version:1 > `,
+				`try_message:<message:"windows-arm64-10" author_id:1234 version:1 > `,
 		},
 	}
 	for _, tt := range tests {

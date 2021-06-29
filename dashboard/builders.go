@@ -25,8 +25,7 @@ import (
 // syntax entirely. This is a first draft.
 var slowBotAliases = map[string]string{
 	// Known missing builders:
-	"ios-amd64":     "", // There is no builder for the iOS Simulator. See issues 42100 and 42177.
-	"windows-arm64": "", // TODO(golang.org/issue/42604): Add builder for windows/arm64.
+	"ios-amd64": "", // There is no builder for the iOS Simulator. See issues 42100 and 42177.
 
 	"386":                  "linux-386",
 	"aix":                  "aix-ppc64",
@@ -97,6 +96,7 @@ var slowBotAliases = map[string]string{
 	"windows-386":          "windows-386-2008",
 	"windows-amd64":        "windows-amd64-2016",
 	"windows-arm":          "windows-arm-zx2c4",
+	"windows-arm64":        "windows-arm64-10",
 }
 
 // Builders are the different build configurations.
@@ -465,16 +465,6 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:   1,
 		OwnerGithub: "zx2c4",
 		env:         []string{"GOROOT_BOOTSTRAP=C:\\Program Files (Arm)\\Go"},
-	},
-	"host-windows-arm64-qemu": &HostConfig{
-		Notes:              "Ubuntu hosting Windows 10 in qemu with KVM, EC2 ARM64 instance. See x/build/env/windows-arm64/aws",
-		VMImage:            "ami-0203852dc6efbfb68",
-		SSHUsername:        "gopher", // Windows username is gopher, linux is ubuntu.
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-arm64",
-		env:                []string{"GOARCH=arm64"},
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-windows-arm64-f22ec5.tar.gz",
-		isEC2:              true,
-		machineType:        "a1.metal",
 	},
 	"host-windows-arm64-mini": &HostConfig{
 		Notes:              "macOS hosting Windows 10 in qemu with HVM acceleration.",
@@ -2306,22 +2296,12 @@ func init() {
 			"GO_TEST_TIMEOUT_SCALE=3"},
 	})
 	addBuilder(BuildConfig{
-		Name:              "windows-arm64-aws",
-		HostType:          "host-windows-arm64-qemu",
-		numTryTestHelpers: 1,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
-		},
-		KnownIssue: 42604,
-	})
-	addBuilder(BuildConfig{
 		Name:              "windows-arm64-10",
 		HostType:          "host-windows-arm64-mini",
 		numTryTestHelpers: 1,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
 		},
-		KnownIssue: 42604,
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-10_12",
