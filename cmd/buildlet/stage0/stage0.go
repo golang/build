@@ -200,6 +200,15 @@ Download:
 	case "solaris/amd64", "illumos/amd64":
 		hostType := buildEnv
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(hostType)...)
+	case "windows/arm64":
+		switch buildEnv {
+		case "host-windows-arm64-mini":
+			cmd.Args = append(cmd.Args,
+				"--halt=true",
+				"--reverse-type="+buildEnv,
+				"--coordinator=farmer.golang.org:443",
+			)
+		}
 	}
 	// Release the serial port (if we opened it) so the buildlet
 	// process can open & write to it. At least on Windows, only

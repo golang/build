@@ -102,7 +102,6 @@ func defaultListenAddr() string {
 
 // Functionality set non-nil by some platforms:
 var (
-	osHalt                   func()
 	configureSerialLogOutput func()
 	setOSRlimit              func() error
 )
@@ -251,6 +250,11 @@ func main() {
 			log.Fatalf("Error dialing coordinator: %v", err)
 		}
 		log.Printf("buildlet reverse mode exiting.")
+		if *haltEntireOS {
+			// The coordinator disconnects before doHalt has time to
+			// execute. handleHalt has a 1s delay.
+			time.Sleep(5 * time.Second)
+		}
 		os.Exit(0)
 	}
 }
@@ -1194,29 +1198,23 @@ func handleHalt(w http.ResponseWriter, r *http.Request) {
 	// requests from doing anything from this point on in the
 	// remaining second.
 	log.Printf("Halting in 1 second.")
-	time.AfterFunc(1*time.Second, doHalt)
-}
-
-func doHalt() {
-	if *rebootOnHalt {
-		if err := exec.Command("reboot").Run(); err != nil {
-			log.Printf("Error running reboot: %v", err)
+	time.AfterFunc(1*time.Second, func() {
+		if *rebootOnHalt {
+			doReboot()
 		}
-		os.Exit(0)
-	}
-	if !*haltEntireOS {
+		if *haltEntireOS {
+			doHalt()
+		}
 		log.Printf("Ending buildlet process due to halt.")
 		os.Exit(0)
 		return
-	}
+	})
+}
+
+func doHalt() {
 	log.Printf("Halting machine.")
-	time.AfterFunc(5*time.Second, func() { os.Exit(0) })
-	if osHalt != nil {
-		// TODO: Windows: http://msdn.microsoft.com/en-us/library/windows/desktop/aa376868%28v=vs.85%29.aspx
-		osHalt()
-		os.Exit(0)
-	}
 	// Backup mechanism, if exec hangs for any reason:
+	time.AfterFunc(5*time.Second, func() { os.Exit(0) })
 	var err error
 	switch runtime.GOOS {
 	case "openbsd":
@@ -1238,14 +1236,28 @@ func doHalt() {
 			err = errors.New("not respecting -halt flag on macOS in unknown environment")
 		}
 	case "windows":
-		err = errors.New("not respsecting -halt flag on windows in unknown environment")
+		err = errors.New("not respecting -halt flag on Windows in unknown environment")
 		if runtime.GOARCH == "arm64" {
-			err = exec.Command("shutdown /s").Run()
+			err = exec.Command("shutdown", "/s").Run()
 		}
 	default:
 		err = errors.New("no system-specific halt command run; will just end buildlet process")
 	}
 	log.Printf("Shutdown: %v", err)
+	log.Printf("Ending buildlet process post-halt")
+	os.Exit(0)
+}
+
+func doReboot() {
+	log.Printf("Rebooting machine.")
+	var err error
+	switch runtime.GOOS {
+	case "windows":
+		err = exec.Command("shutdown", "/r").Run()
+	default:
+		err = exec.Command("reboot").Run()
+	}
+	log.Printf("Reboot: %v", err)
 	log.Printf("Ending buildlet process post-halt")
 	os.Exit(0)
 }
