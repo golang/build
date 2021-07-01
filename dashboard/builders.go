@@ -352,14 +352,6 @@ var Hosts = map[string]*HostConfig{
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/pkg/go114"},
 		OwnerGithub: "bsiegert",
 	},
-	"host-dragonfly-amd64-5_8": &HostConfig{
-		IsReverse:   true,
-		ExpectNum:   1,
-		Notes:       "DragonFly BSD release version, run by DragonFly team",
-		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
-		SSHUsername: "root",
-		OwnerGithub: "tuxillo",
-	},
 	"host-dragonfly-amd64-master": &HostConfig{
 		IsReverse:   true,
 		ExpectNum:   1,
@@ -2609,14 +2601,6 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return atLeastGo1(goBranch, 14) && buildRepoByDefault(repo)
 		},
-	})
-	addBuilder(BuildConfig{
-		Name:           "dragonfly-amd64-5_8",
-		HostType:       "host-dragonfly-amd64-5_8",
-		Notes:          "DragonFly BSD 5.8 release",
-		distTestAdjust: noTestDirAndNoReboot,
-		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see golang.org/issue/45216
-		SkipSnapshot:   true,
 	})
 	addBuilder(BuildConfig{
 		Name:           "freebsd-arm-paulzhol",
