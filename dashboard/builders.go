@@ -472,6 +472,7 @@ var Hosts = map[string]*HostConfig{
 		env:                []string{"GOARCH=arm64"},
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-windows-arm64-f22ec5.tar.gz",
 		IsReverse:          true,
+		ExpectNum:          1,
 	},
 	"host-darwin-10_12": &HostConfig{
 		IsReverse: true,
