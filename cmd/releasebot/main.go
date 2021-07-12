@@ -652,14 +652,15 @@ func (w *Work) checkVersion() {
 
 func (w *Work) buildReleaseBinary() {
 	gopath := filepath.Join(w.Dir, "gopath")
+	r := w.runner(w.Dir, "GOPATH="+gopath, "GOBIN="+filepath.Join(gopath, "bin"))
+	r.run("go", "clean", "-modcache")
 	if err := os.RemoveAll(gopath); err != nil {
 		w.log.Panic(err)
 	}
 	if err := os.MkdirAll(gopath, 0777); err != nil {
 		w.log.Panic(err)
 	}
-	r := w.runner(w.Dir, "GO111MODULE=off", "GOPATH="+gopath, "GOBIN="+filepath.Join(gopath, "bin"))
-	r.run("go", "get", "golang.org/x/build/cmd/release")
+	r.run("go", "install", "golang.org/x/build/cmd/release@latest")
 	w.ReleaseBinary = filepath.Join(gopath, "bin/release")
 }
 
