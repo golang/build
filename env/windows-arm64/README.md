@@ -62,3 +62,31 @@ a1.metal instances then saving the image manually.
   interrupt requests not arriving in time. qemu-system-x86_64 has a
   workaround for this. We're still investigating how to increase this
   on aarch64.
+
+### Packaging
+
+- Create a directory named `macmini-windows`, and ensure it contains 
+  the following:
+
+  ```
+  macmini-windows/UTM.app (from https://github.com/utmapp/UTM/releases/v2.1.2/download/UTM.dmg)
+  macmini-windows/sysroot-macos-arm64 (from https://github.com/utmapp/UTM/suites/3210727480/artifacts/74269055)
+  macmini-windows/Images/QEMU_EFI.fd (from steps above)
+  macmini-windows/Images/virtio.iso (from https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win.iso)
+  macmini-windows/Images/win10.qcow2 (from above)
+  ```
+
+- Tar the directory:
+
+  ```bash
+  tar cvJf "windows-arm64.$(date +%+4Y%m%d).tar.xz" macmini-windows
+  ```
+
+- Upload to GCS for safekeeping:
+
+  ```bash
+  gsutil cp windows-arm64.DATE_FROM_ABOVE.tar.xz gs://go-builder-data/windows-arm64.DATE_FROM_ABOVE.tar.xz
+  ```
+
+- On your target host, untar the directory in your home directory. See
+  x/build/cmd/runqemubuildlet for more information.

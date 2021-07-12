@@ -4,4 +4,4 @@
 
 # golang.org/x/build/cmd/gitmirror
 
-The gitmirror binary watches the specified Gerrit repositories for new commits and syncs them to GitHub.
+The gitmirror binary watches the specified Gerrit repositories for new commits and syncs them to mirror repositories.
