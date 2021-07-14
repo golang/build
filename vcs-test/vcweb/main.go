@@ -90,6 +90,7 @@ func main() {
 			Cache:      autocertcache.NewGoogleCloudStorageCache(client, "vcs-test-autocert"),
 			Prompt:     autocert.AcceptTOS,
 			HostPolicy: autocert.HostWhitelist("vcs-test.golang.org"),
+			Email:      "golang-dev@googlegroups.com", // for lack of a better choice.
 		}
 		s := &http.Server{
 			Addr:    ":https",
