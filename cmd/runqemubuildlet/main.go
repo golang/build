@@ -35,13 +35,16 @@ func main() {
 	for ctx.Err() == nil {
 		cmd := windows10Cmd(*windows10Path)
 		log.Printf("Starting VM: %s", cmd.String())
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 		if err := cmd.Start(); err != nil {
 			log.Printf("cmd.Start() = %v. Retrying in 10 seconds.", err)
 			time.Sleep(10 * time.Second)
 			continue
 		}
 		if err := internal.WaitOrStop(ctx, cmd, os.Interrupt, time.Minute); err != nil {
-			log.Printf("waitOrStop(_, %v, %v, %v) = %v", cmd, os.Interrupt, time.Minute, err)
+			log.Printf("waitOrStop(_, %v, %v, %v) = %v. Retrying in 10 seconds.", cmd, os.Interrupt, time.Minute, err)
+			time.Sleep(10 * time.Second)
 		}
 	}
 }
@@ -63,29 +66,29 @@ func defaultWindowsDir() string {
 // to be started.
 func windows10Cmd(base string) *exec.Cmd {
 	c := exec.Command(filepath.Join(base, "sysroot-macos-arm64/bin/qemu-system-aarch64"),
-		fmt.Sprintf("-L %s", filepath.Join(base, "UTM.app/Contents/Resources/qemu")),
-		"-device ramfb",
-		"-cpu max",
-		"-smp cpus=8,sockets=1,cores=8,threads=1", // This works well with M1 Mac Minis.
-		"-machine virt,highmem=off",
-		"-accel hvf",
-		"-accel tcg,tb-size=1536",
-		"-boot menu=on",
-		"-m 12288",
-		`-name "Virtual Machine"`,
-		"-device qemu-xhci,id=usb-bus",
-		"-device usb-tablet,bus=usb-bus.0",
-		"-device usb-mouse,bus=usb-bus.0",
-		"-device usb-kbd,bus=usb-bus.0",
-		fmt.Sprintf("-bios %s", filepath.Join(base, "Images/QEMU_EFI.fd")),
-		"-device nvme,drive=drive0,serial=drive0,bootindex=0",
-		fmt.Sprintf(`-drive "if=none,media=disk,id=drive0,file=%s,cache=writethrough"`, filepath.Join(base, "Images/win10.qcow2")),
-		"-device usb-storage,drive=drive2,removable=true,bootindex=1",
-		fmt.Sprintf(`-drive "if=none,media=cdrom,id=drive2,file=%s,cache=writethrough"`, filepath.Join(base, "Images/virtio.iso")),
-		"-device virtio-net-pci,netdev=net0",
-		"-netdev user,id=net0",
+		"-L", filepath.Join(base, "UTM.app/Contents/Resources/qemu"),
+		"-cpu", "max",
+		"-smp", "cpus=8,sockets=1,cores=8,threads=1", // This works well with M1 Mac Minis.
+		"-machine", "virt,highmem=off",
+		"-accel", "hvf",
+		"-accel", "tcg,tb-size=1536",
+		"-boot", "menu=on",
+		"-m", "12288",
+		"-name", "Virtual Machine",
+		"-device", "qemu-xhci,id=usb-bus",
+		"-device", "ramfb",
+		"-device", "usb-tablet,bus=usb-bus.0",
+		"-device", "usb-mouse,bus=usb-bus.0",
+		"-device", "usb-kbd,bus=usb-bus.0",
+		"-device", "virtio-net-pci,netdev=net0",
+		"-netdev", "user,id=net0",
+		"-bios", filepath.Join(base, "Images/QEMU_EFI.fd"),
+		"-device", "nvme,drive=drive0,serial=drive0,bootindex=0",
+		"-drive", fmt.Sprintf("if=none,media=disk,id=drive0,file=%s,cache=writethrough", filepath.Join(base, "Images/win10.qcow2")),
+		"-device", "usb-storage,drive=drive2,removable=true,bootindex=1",
+		"-drive", fmt.Sprintf("if=none,media=cdrom,id=drive2,file=%s,cache=writethrough", filepath.Join(base, "Images/virtio.iso")),
 		"-snapshot", // critical to avoid saving state between runs.
-		"-vnc :3",
+		"-vnc", ":3",
 	)
 	c.Env = append(os.Environ(),
 		fmt.Sprintf("DYLD_LIBRARY_PATH=%s", filepath.Join(base, "sysroot-macos-arm64/lib")),
