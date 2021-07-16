@@ -830,7 +830,16 @@ var entries = map[string]*Entry{
 	"vulndb": {
 		Primary: []Owner{filippo, katie, roland},
 	},
-	"website": {
+	"website/cmd/admingolangorg": {
+		Primary: []Owner{dmitshur},
+	},
+	"website/cmd/golangorg": {
+		Primary: []Owner{dmitshur},
+	},
+	"website/internal/dl": {
+		Primary: []Owner{dmitshur},
+	},
+	"website/internal/history": {
 		Primary: []Owner{dmitshur},
 	},
 
