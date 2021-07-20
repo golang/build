@@ -24,6 +24,7 @@ import (
 
 var (
 	windows10Path = flag.String("windows-10-path", defaultWindowsDir(), "Path to Windows image and QEMU dependencies.")
+	healthzURL    = flag.String("buildlet-healthz-url", "http://localhost:8080/healthz", "URL to buildlet /healthz endpoint.")
 )
 
 func main() {
@@ -33,20 +34,30 @@ func main() {
 	defer stop()
 
 	for ctx.Err() == nil {
-		cmd := windows10Cmd(*windows10Path)
-		log.Printf("Starting VM: %s", cmd.String())
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Start(); err != nil {
-			log.Printf("cmd.Start() = %v. Retrying in 10 seconds.", err)
+		if err := runWindows10(ctx); err != nil {
+			log.Printf("runWindows10() = %v. Retrying in 10 seconds.", err)
 			time.Sleep(10 * time.Second)
 			continue
 		}
-		if err := internal.WaitOrStop(ctx, cmd, os.Interrupt, time.Minute); err != nil {
-			log.Printf("waitOrStop(_, %v, %v, %v) = %v. Retrying in 10 seconds.", cmd, os.Interrupt, time.Minute, err)
-			time.Sleep(10 * time.Second)
-		}
 	}
+}
+
+func runWindows10(ctx context.Context) error {
+	cmd := windows10Cmd(*windows10Path)
+	log.Printf("Starting VM: %s", cmd.String())
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("cmd.Start() = %w", err)
+	}
+	ctx, cancel := heartbeatContext(ctx, 30*time.Second, 10*time.Minute, func(ctx context.Context) error {
+		return checkBuildletHealth(ctx, *healthzURL)
+	})
+	defer cancel()
+	if err := internal.WaitOrStop(ctx, cmd, os.Interrupt, time.Minute); err != nil {
+		return fmt.Errorf("WaitOrStop(_, %v, %v, %v) = %w", cmd, os.Interrupt, time.Minute, err)
+	}
+	return nil
 }
 
 // defaultWindowsDir returns a default path for a Windows VM.
@@ -81,7 +92,7 @@ func windows10Cmd(base string) *exec.Cmd {
 		"-device", "usb-mouse,bus=usb-bus.0",
 		"-device", "usb-kbd,bus=usb-bus.0",
 		"-device", "virtio-net-pci,netdev=net0",
-		"-netdev", "user,id=net0",
+		"-netdev", "user,id=net0,hostfwd=tcp::8080-:8080",
 		"-bios", filepath.Join(base, "Images/QEMU_EFI.fd"),
 		"-device", "nvme,drive=drive0,serial=drive0,bootindex=0",
 		"-drive", fmt.Sprintf("if=none,media=disk,id=drive0,file=%s,cache=writethrough", filepath.Join(base, "Images/win10.qcow2")),
