@@ -46,6 +46,7 @@ import (
 )
 
 var (
+	dryRun        = flag.Bool("dry-run", false, "just report what would've been done, without changing anything")
 	masterKeyFile = flag.String("masterkey", filepath.Join(os.Getenv("HOME"), "keys", "gobuilder-master.key"), "path to Go builder master key. If present, the key argument is not necessary")
 	keyFile       = flag.String("key", "", "path to key file")
 	builder       = flag.String("builder", "", "builder to wipe a result for. Empty means all.")
@@ -67,6 +68,7 @@ type Failure struct {
 }
 
 func main() {
+	log.SetFlags(0)
 	buildenv.RegisterStagingFlag()
 	flag.Parse()
 	*builderPrefix = strings.TrimSuffix(*builderPrefix, "/")
@@ -83,9 +85,11 @@ func main() {
 		substr := "/log/" + *logHash
 		for _, f := range failures() {
 			if strings.Contains(f.LogURL, substr) {
+				log.Printf("Restarting %+v", f)
 				cl.wipe(f.Builder, f.Hash)
 			}
 		}
+		log.Printf("wiped %d matching failures\n", cl.wiped)
 		return
 	}
 	if *substr != "" {
@@ -95,6 +99,7 @@ func main() {
 				cl.wipe(f.Builder, f.Hash)
 			}
 		})
+		log.Printf("wiped %d matching failures\n", cl.wiped)
 		return
 	}
 	if *redoFlaky {
@@ -104,6 +109,7 @@ func main() {
 				cl.wipe(f.Builder, f.Hash)
 			}
 		})
+		log.Printf("wiped %d matching failures\n", cl.wiped)
 		return
 	}
 	if *builder == "" {
@@ -114,11 +120,16 @@ func main() {
 			if f.Builder != *builder {
 				continue
 			}
+			log.Printf("Restarting %+v", f)
 			cl.wipe(f.Builder, f.Hash)
 		}
+		log.Printf("wiped %d matching failures\n", cl.wiped)
 		return
 	}
-	cl.wipe(*builder, fullHash(*hash))
+	fullHash := fullHash(*hash)
+	log.Printf("Restarting %q", fullHash)
+	cl.wipe(*builder, fullHash)
+	log.Printf("wiped %d matching failures\n", cl.wiped)
 }
 
 func foreachFailure(fn func(f Failure, failLog string)) {
@@ -223,6 +234,7 @@ func fullHash(h string) string {
 
 type client struct {
 	coordinator protos.CoordinatorClient
+	wiped       int // wiped is how many build results have been wiped.
 }
 
 // grpcWipe wipes a git hash failure for the provided builder and hash.
@@ -251,6 +263,7 @@ func (c *client) grpcWipe(builder, hash string) {
 			continue
 		}
 		log.Printf("cl.ClearResults(%q, %q) = %v: resp: %v", builder, hash, status.Code(err), resp)
+		c.wiped++
 		return
 	}
 }
@@ -258,6 +271,10 @@ func (c *client) grpcWipe(builder, hash string) {
 // wipe wipes the git hash failure for the provided failure.
 // Only the main go repo is currently supported.
 func (c *client) wipe(builder, hash string) {
+	if *dryRun {
+		c.wiped++ // Pretend.
+		return
+	}
 	if *grpcHost != "" {
 		// TODO(golang.org/issue/34744) - Remove HTTP logic after gRPC API for ClearResults is deployed
 		// to the Coordinator.
@@ -297,6 +314,7 @@ func (c *client) wipe(builder, hash string) {
 		default:
 			log.Fatalf("Dashboard error: %v", e)
 		case "":
+			c.wiped++
 			return
 		}
 	}
