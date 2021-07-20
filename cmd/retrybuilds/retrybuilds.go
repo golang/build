@@ -35,7 +35,9 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/build/buildenv"
 	"golang.org/x/build/cmd/coordinator/protos"
+	"golang.org/x/build/internal/secret"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -65,6 +67,7 @@ type Failure struct {
 }
 
 func main() {
+	buildenv.RegisterStagingFlag()
 	flag.Parse()
 	*builderPrefix = strings.TrimSuffix(*builderPrefix, "/")
 	cl := client{}
@@ -315,19 +318,31 @@ func builderKey(builder string) string {
 }
 
 func builderKeyFromMaster(builder string) (key string, ok bool) {
-	if *masterKeyFile == "" {
-		return
-	}
-	slurp, err := ioutil.ReadFile(*masterKeyFile)
+	masterKey, err := getMasterKeyFromSecretManager()
 	if err != nil {
-		return
+		slurp, err := ioutil.ReadFile(*masterKeyFile)
+		if err != nil {
+			return "", false
+		}
+		masterKey = string(bytes.TrimSpace(slurp))
 	}
 	if *sendMasterKey {
-		return string(slurp), true
+		return masterKey, true
 	}
-	h := hmac.New(md5.New, bytes.TrimSpace(slurp))
+	h := hmac.New(md5.New, []byte(masterKey))
 	h.Write([]byte(builder))
 	return fmt.Sprintf("%x", h.Sum(nil)), true
+}
+
+// getMasterKeyFromSecretManager retrieves the master key
+// from the secret manager service.
+func getMasterKeyFromSecretManager() (string, error) {
+	sc, err := secret.NewClientInProject(buildenv.FromFlags().ProjectName)
+	if err != nil {
+		return "", err
+	}
+	defer sc.Close()
+	return sc.Retrieve(context.Background(), secret.NameBuilderMasterKey)
 }
 
 var (

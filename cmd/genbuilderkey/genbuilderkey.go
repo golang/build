@@ -19,21 +19,25 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
+	"golang.org/x/build/buildenv"
 	"golang.org/x/build/internal/secret"
 )
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage: genbuilderkey <Host Type>")
+	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Master builder key should be available to genbuilderkey by either:")
-	fmt.Fprintln(os.Stderr, " - File: $HOME/keys/gobuilder-master.key")
 	fmt.Fprintln(os.Stderr, " - Secret Management: executing genbuilderkey with access to secret management")
+	fmt.Fprintln(os.Stderr, " - File: $HOME/keys/gobuilder-master.key")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Flags:")
 	flag.PrintDefaults()
 }
 
 func main() {
 	flag.Usage = usage
+	buildenv.RegisterStagingFlag()
 	flag.Parse()
 	if flag.NArg() != 1 {
 		flag.Usage()
@@ -61,17 +65,13 @@ func getMasterKey() []byte {
 	panic("not reachable")
 }
 
-// getMasterKeyFromSecretManager retrieves the master key from the secret
-// manager service.
+// getMasterKeyFromSecretManager retrieves the master key
+// from the secret manager service.
 func getMasterKeyFromSecretManager() (string, error) {
-	sc, err := secret.NewClient()
+	sc, err := secret.NewClientInProject(buildenv.FromFlags().ProjectName)
 	if err != nil {
 		return "", err
 	}
 	defer sc.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	return sc.Retrieve(ctx, secret.NameBuilderMasterKey)
+	return sc.Retrieve(context.Background(), secret.NameBuilderMasterKey)
 }

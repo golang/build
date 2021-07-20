@@ -71,10 +71,11 @@ type secretClient interface {
 // Client is used to interact with the GCP Secret Management service.
 type Client struct {
 	client    secretClient
-	projectID string
+	projectID string // projectID specifies the ID of the GCP project where secrets are retreived from.
 }
 
-// NewClient instantiates an instance of the Secret Manager Client.
+// NewClient creates a Secret Manager Client
+// that targets the current GCP instance's project ID.
 func NewClient() (*Client, error) {
 	projectID, err := metadata.ProjectID()
 	if err != nil {
@@ -89,6 +90,19 @@ func NewClient() (*Client, error) {
 		return nil, err
 	}
 
+	return &Client{
+		client:    client,
+		projectID: projectID,
+	}, nil
+}
+
+// NewClientInProject creates a Secret Manager Client
+// that targets the specified GCP project ID.
+func NewClientInProject(projectID string) (*Client, error) {
+	client, err := secretmanager.NewClient(context.Background())
+	if err != nil {
+		return nil, err
+	}
 	return &Client{
 		client:    client,
 		projectID: projectID,
