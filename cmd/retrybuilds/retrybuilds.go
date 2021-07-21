@@ -57,8 +57,7 @@ var (
 	sendMasterKey = flag.Bool("sendmaster", false, "send the master key in request instead of a builder-specific key; allows overriding actions of revoked keys")
 	branch        = flag.String("branch", "master", "branch to find flakes from (for use with -redo-flaky)")
 	substr        = flag.String("substr", "", "if non-empty, redoes all build failures whose failure logs contain this substring")
-	// TODO(golang.org/issue/34744) - remove after gRPC API for ClearResults is deployed
-	grpcHost = flag.String("grpc-host", "", "(EXPERIMENTAL) use gRPC for communicating with the API.")
+	grpcHost      = flag.String("grpc-host", "farmer.golang.org:https", "use gRPC for communicating with the Coordinator API")
 )
 
 type Failure struct {
@@ -71,16 +70,17 @@ func main() {
 	log.SetFlags(0)
 	buildenv.RegisterStagingFlag()
 	flag.Parse()
+
 	*builderPrefix = strings.TrimSuffix(*builderPrefix, "/")
-	cl := client{}
-	if *grpcHost != "" {
-		tc := &tls.Config{InsecureSkipVerify: strings.HasPrefix(*grpcHost, "localhost:")}
-		cc, err := grpc.DialContext(context.Background(), *grpcHost, grpc.WithTransportCredentials(credentials.NewTLS(tc)))
-		if err != nil {
-			log.Fatalf("grpc.DialContext(_, %q, _) = %v, wanted no error", *grpcHost, err)
-		}
-		cl.coordinator = protos.NewCoordinatorClient(cc)
+	tc := &tls.Config{InsecureSkipVerify: strings.HasPrefix(*grpcHost, "localhost:")}
+	cc, err := grpc.DialContext(context.Background(), *grpcHost, grpc.WithTransportCredentials(credentials.NewTLS(tc)))
+	if err != nil {
+		log.Fatalf("grpc.DialContext(_, %q, _) = %v, wanted no error", *grpcHost, err)
 	}
+	cl := client{
+		coordinator: protos.NewCoordinatorClient(cc),
+	}
+
 	if *logHash != "" {
 		substr := "/log/" + *logHash
 		for _, f := range failures() {
