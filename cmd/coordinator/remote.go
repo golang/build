@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.13 && (linux || darwin)
-// +build go1.13
+//go:build go1.16 && (linux || darwin)
+// +build go1.16
 // +build linux darwin
 
 // Code related to remote buildlets. See x/build/remote-buildlet.txt
