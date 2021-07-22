@@ -44,6 +44,7 @@ import (
 
 	"go4.org/syncutil"
 	builddash "golang.org/x/build/cmd/coordinator/internal/dashboard"
+	"golang.org/x/build/cmd/coordinator/internal/legacydash"
 	"golang.org/x/build/cmd/coordinator/protos"
 	"google.golang.org/grpc"
 	grpc4 "grpc.go4.org"
@@ -337,10 +338,22 @@ func main() {
 		log.Printf("Failed to load static resources: %v", err)
 	}
 
-	dh := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient}
+	dashV1 := legacydash.Handler(gce.GoDSClient(), maintnerClient, string(masterKey()))
+	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
 	protos.RegisterCoordinatorServer(grpcServer, gs)
-	http.HandleFunc("/", handleStatus)
+	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+		switch req.Host {
+		case "build.golang.org",
+			"farmer-ui-test.golang.org",
+			"farmer-ui-test-staging.golang.org":
+			// Serve a build dashboard at build.golang.org.
+			dashV1.ServeHTTP(w, req)
+		default:
+			// Serve a status page at farmer.golang.org.
+			handleStatus(w, req)
+		}
+	})
 	http.HandleFunc("/builders", handleBuilders)
 	http.HandleFunc("/temporarylogs", handleLogs)
 	http.HandleFunc("/reverse", pool.HandleReverse)
@@ -350,7 +363,7 @@ func main() {
 	http.HandleFunc("/try.json", serveTryStatus(true))
 	http.HandleFunc("/status/reverse.json", pool.ReversePool().ServeReverseStatusJSON)
 	http.HandleFunc("/status/post-submit-active.json", handlePostSubmitActiveJSON)
-	http.Handle("/dashboard", dh)
+	http.Handle("/dashboard", dashV2)
 	http.Handle("/buildlet/create", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletCreate)))
 	http.Handle("/buildlet/list", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletList)))
 	go func() {
