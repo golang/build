@@ -218,6 +218,25 @@ call race.bat
 if %errorlevel% neq 0 exit /b %errorlevel%
 			`,
 	},
+	&Platform{
+		OS:   "linux",
+		Arch: "s390x",
+		Type: "linux-s390x-ibm",
+		Script: `#!/usr/bin/env bash
+set -e
+apt-get update
+apt-get install -y git g++
+git clone https://go.googlesource.com/go
+pushd go
+git checkout $GOREV
+popd
+git clone https://github.com/llvm/llvm-project
+(cd llvm-project && git checkout $REV)
+(cd llvm-project/compiler-rt/lib/tsan/go && ./buildgo.sh)
+cp llvm-project/compiler-rt/lib/tsan/go/race_linux_s390x.syso go/src/runtime/race
+(cd go/src && ./race.bash)
+			`,
+	},
 }
 
 func init() {
