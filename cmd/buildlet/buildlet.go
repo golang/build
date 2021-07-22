@@ -57,7 +57,7 @@ var (
 	reverseType  = flag.String("reverse-type", "", "if non-empty, go into reverse mode where the buildlet dials the coordinator instead of listening for connections. The value is the dashboard/builders.go Hosts map key, naming a HostConfig. This buildlet will receive work for any BuildConfig specifying this named HostConfig.")
 	coordinator  = flag.String("coordinator", "localhost:8119", "address of coordinator, in production use farmer.golang.org. Only used in reverse mode.")
 	hostname     = flag.String("hostname", "", "hostname to advertise to coordinator for reverse mode; default is actual hostname")
-	healthAddr   = flag.String("health-addr", "localhost:8080", "For reverse buildlets, address to listen for /healthz requests separately from the reverse dialer to the coordinator.")
+	healthAddr   = flag.String("health-addr", "0.0.0.0:8080", "For reverse buildlets, address to listen for /healthz requests separately from the reverse dialer to the coordinator.")
 )
 
 // Bump this whenever something notable happens, or when another
@@ -2013,7 +2013,7 @@ func runOrLog(cmd *exec.Cmd) {
 
 // handleHealthz always returns 200 OK.
 func handleHealthz(w http.ResponseWriter, _ *http.Request) {
-	w.Write([]byte("ok"))
+	fmt.Fprintln(w, "ok")
 }
 
 // serveReverseHealth serves /healthz requests on healthAddr for

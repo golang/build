@@ -92,7 +92,7 @@ func windows10Cmd(base string) *exec.Cmd {
 		"-device", "usb-mouse,bus=usb-bus.0",
 		"-device", "usb-kbd,bus=usb-bus.0",
 		"-device", "virtio-net-pci,netdev=net0",
-		"-netdev", "user,id=net0,hostfwd=tcp::8080-:8080",
+		"-netdev", "user,id=net0,hostfwd=tcp:127.0.0.1:8080-:8080",
 		"-bios", filepath.Join(base, "Images/QEMU_EFI.fd"),
 		"-device", "nvme,drive=drive0,serial=drive0,bootindex=0",
 		"-drive", fmt.Sprintf("if=none,media=disk,id=drive0,file=%s,cache=writethrough", filepath.Join(base, "Images/win10.qcow2")),
