@@ -1,7 +1,0 @@
-runtime: go113
-service: build
-
-handlers:
-  - url: /.*
-    script: auto
-    secure: always
