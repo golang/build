@@ -92,7 +92,7 @@ func init() {
 	x("tools", desc("godoc, goimports, gorename, and other tools"))
 	x("tour", noDash)
 	x("vgo", noDash)
-	x("vulndb", desc("the Go Vulnerability Database and packages for working with it"))
+	x("vulndb", desc("the Go Vulnerability Database and packages for working with it"), enableCSR)
 	x("website", desc("home of the golang.org and go.dev websites"), enableCSR)
 	x("xerrors", noDash)
 
