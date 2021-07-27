@@ -3,11 +3,11 @@ module golang.org/x/build
 go 1.16
 
 require (
-	cloud.google.com/go v0.54.0
-	cloud.google.com/go/bigquery v1.4.0
+	cloud.google.com/go v0.65.0
+	cloud.google.com/go/bigquery v1.8.0
 	cloud.google.com/go/datastore v1.1.0
-	cloud.google.com/go/pubsub v1.2.0
-	cloud.google.com/go/storage v1.6.0
+	cloud.google.com/go/pubsub v1.3.1
+	cloud.google.com/go/storage v1.10.0
 	contrib.go.opencensus.io/exporter/prometheus v0.3.0
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.5
 	github.com/NYTimes/gziphandler v1.1.1
@@ -31,16 +31,16 @@ require (
 	github.com/tarm/serial v0.0.0-20180830185346-98f6abe2eb07
 	go.opencensus.io v0.23.0
 	go4.org v0.0.0-20180809161055-417644f6feb5
-	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
-	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b
-	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
-	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
-	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
-	golang.org/x/sys v0.0.0-20201214210602-f9fddec55a1e
-	golang.org/x/text v0.3.3
-	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
-	google.golang.org/api v0.20.0
-	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013
+	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97
+	golang.org/x/net v0.0.0-20210726213435-c6fcb2dbf985
+	golang.org/x/oauth2 v0.0.0-20210628180205-a41e5a781914
+	golang.org/x/perf v0.0.0-20210220033136-40a54f11e909
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c
+	golang.org/x/text v0.3.6
+	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
+	google.golang.org/api v0.30.0
+	google.golang.org/genproto v0.0.0-20200825200019-8632dd797987
 	google.golang.org/grpc v1.33.2
 	gopkg.in/inf.v0 v0.9.1
 	grpc.go4.org v0.0.0-20170609214715-11d0a25b4919
