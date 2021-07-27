@@ -11,13 +11,11 @@ require (
 	contrib.go.opencensus.io/exporter/prometheus v0.3.0
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.5
 	github.com/NYTimes/gziphandler v1.1.1
-	github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239 // indirect
 	github.com/aws/aws-sdk-go v1.30.15
 	github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625
 	github.com/coreos/go-systemd v0.0.0-20181012123002-c6f51f82210d
 	github.com/davecgh/go-spew v1.1.1
-	github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568 // indirect
-	github.com/gliderlabs/ssh v0.1.1
+	github.com/gliderlabs/ssh v0.3.3
 	github.com/golang/protobuf v1.4.3
 	github.com/google/go-cmp v0.5.5
 	github.com/google/go-github v17.0.0+incompatible
