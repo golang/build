@@ -5,8 +5,8 @@
 FROM golang/buildlet-stage0 AS stage0
 
 # A stage to build just the Delve binary.
-FROM golang:1.12-stretch as delvebuild
-RUN go get github.com/go-delve/delve/cmd/dlv
+FROM golang:1.16-stretch AS delvebuild
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
 FROM debian:stretch
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
