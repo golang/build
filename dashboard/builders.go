@@ -62,6 +62,7 @@ var slowBotAliases = map[string]string{
 	"linux-ppc64le-power9": "linux-ppc64le-power9osu",
 	"linux-riscv64":        "linux-riscv64-jsing",
 	"linux-s390x":          "linux-s390x-ibm",
+	"linux-loong64":        "linux-loong64-3a5000",
 	"longtest":             "linux-amd64-longtest",
 	"mac":                  "darwin-amd64-10_14",
 	"macos":                "darwin-amd64-10_14",
@@ -578,6 +579,15 @@ var Hosts = map[string]*HostConfig{
 		IsReverse:   true,
 		ExpectNum:   1,
 		env:         []string{"GOROOT_BOOTSTRAP=/opt/golang/go-solaris-amd64-bootstrap"},
+	},
+	"host-linux-loong64-3a5000": &HostConfig{
+		Notes:       "Loongson 3A5000 Box hosted by Loongson; loong64 is the short name of LoongArch 64 bit version",
+		OwnerGithub: "XiaodongLoong",
+		IsReverse:   true,
+		ExpectNum:   1,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/lib/go-1.15",
+		},
 	},
 	"host-linux-mipsle-mengzhuo": &HostConfig{
 		Notes:       "Loongson 3A Box hosted by Meng Zhuo; actually MIPS64 despite the name",
@@ -2411,6 +2421,18 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
+		HostType:       "host-linux-loong64-3a5000",
+		Name:           "linux-loong64-3a5000",
+		SkipSnapshot:   true,
+		distTestAdjust: loong64DistTestPolicy,
+		buildsRepo:     loong64BuildsRepoPolicy,
+		env: []string{
+			"GOARCH=loong64",
+			"GOHOSTARCH=loong64",
+		},
+		KnownIssue: 46229,
+	})
+	addBuilder(BuildConfig{
 		FlakyNet:       true,
 		HostType:       "host-linux-mipsle-mengzhuo",
 		Name:           "linux-mips64le-mengzhuo",
@@ -2746,6 +2768,25 @@ func mipsBuildsRepoPolicy(repo, branch, goBranch string) bool {
 
 // riscvDistTestPolicy is same as mipsDistTestPolicy for now.
 var riscvDistTestPolicy = mipsDistTestPolicy
+
+// loong64DistTestPolicy is a distTestAdjust policy function
+func loong64DistTestPolicy(run bool, distTest string, isNormalTry bool) bool {
+	switch distTest {
+	case "api", "reboot":
+		return false
+	}
+	return run
+}
+
+// loong64BuildsRepoPolicy is a buildsRepo policy function
+func loong64BuildsRepoPolicy(repo, branch, goBranch string) bool {
+	switch repo {
+	case "go", "net", "sys":
+		return branch == "master" && goBranch == "master"
+	default:
+		return false
+	}
+}
 
 // TryBuildersForProject returns the builders that should run as part of
 // a TryBot set for the given project.

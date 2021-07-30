@@ -156,6 +156,9 @@ Download:
 	case "host-linux-mipsle-mengzhuo":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
+	case "host-linux-loong64-3a5000":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
 	case "host-linux-mips64le-rtrk":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
