@@ -744,8 +744,8 @@ to %s and press enter.
 }
 
 // buildRelease builds the release packaging for a given target. Because the
-// "release" program can be flaky, it tries up to five times. The release files
-// are first written to a staging directory specified in w.StagingDir
+// "release" program can be flaky, it tries multiple times before stopping.
+// The release files are first written to a staging directory specified in w.StagingDir
 // (a temporary directory inside $HOME/go-releasebot-work/go1.2.3/release-staging),
 // then after the all.bash tests complete successfully (or get skipped),
 // they get moved to the final release directory
@@ -816,11 +816,12 @@ func (w *Work) buildRelease(target Target) {
 			}
 			w.releaseMu.Unlock()
 			if !failed {
+				w.log.Printf("release -target=%q: build succeeded (after %d retries)\n", target.Name, failures)
 				break
 			}
 			w.log.Printf("release -target=%q did not produce expected output files %v:\nerror from cmd/release binary = %v\noutput from cmd/release binary:\n%s", target.Name, files, releaseError, releaseOutput)
 			if failures++; failures >= 3 {
-				w.log.Printf("release -target=%q: too many failures\n", target.Name)
+				w.log.Printf("release -target=%q: too many failed attempts, stopping\n", target.Name)
 				for _, out := range outs {
 					w.releaseMu.Lock()
 					out.Error = fmt.Sprintf("release -target=%q: build failed", target.Name)
@@ -828,6 +829,7 @@ func (w *Work) buildRelease(target Target) {
 				}
 				return
 			}
+			w.log.Printf("release -target=%q: waiting a bit and trying again\n", target.Name)
 			time.Sleep(1 * time.Minute)
 		}
 	}
