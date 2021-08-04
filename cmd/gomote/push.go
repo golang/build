@@ -47,6 +47,7 @@ func push(args []string) error {
 			return errors.New("Failed to get $GOROOT from environment or go env")
 		}
 	}
+	goroot = filepath.Clean(goroot)
 
 	if fs.NArg() != 1 {
 		fs.Usage()
@@ -153,8 +154,12 @@ func push(args []string) error {
 		if err != nil {
 			return err
 		}
-		rel := strings.TrimPrefix(filepath.ToSlash(strings.TrimPrefix(path, goroot)), "/")
-		if rel == "" {
+		rel, err := filepath.Rel(goroot, path)
+		if err != nil {
+			return fmt.Errorf("error calculating relative path from %q to %q", goroot, path)
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "." {
 			return nil
 		}
 		if fi.IsDir() {
