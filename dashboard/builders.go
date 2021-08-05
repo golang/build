@@ -2465,6 +2465,11 @@ func init() {
 		HostType:          "host-linux-arm-aws",
 		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 1,
+		env: []string{
+			"GOARCH=arm",
+			"GOARM=6",
+			"GOHOSTARCH=arm",
+		},
 	})
 	addBuilder(BuildConfig{
 		FlakyNet:       true,
