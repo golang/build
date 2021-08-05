@@ -27,6 +27,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -36,9 +37,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
+	"golang.org/x/build/maintner"
+	"golang.org/x/build/maintner/godata"
 	"golang.org/x/build/repos"
 	"golang.org/x/build/types"
 )
@@ -119,8 +123,24 @@ func main() {
 			if err != nil {
 				log.Fatal("malformed revision date: ", err)
 			}
-			revDir := revToDir(rev.Revision, date)
+			var goDate time.Time
+			if rev.GoRevision != "" {
+				commit := goProject().GitCommit(rev.GoRevision)
+				goDate = commit.CommitTime
+			}
+			revDir, revDirDepth := revToDir(rev.Revision, date, rev.GoRevision, goDate)
 			ensureDir(revDir)
+
+			if rev.GoRevision != "" {
+				// In October 2021 we started creating a separate subdirectory for
+				// each Go repo commit. (Previously, we overwrote the link for each
+				// subrepo commit when downloading a new Go commit.) Remove the
+				// previous links, if any, so that greplogs won't double-count them.
+				prevRevDir, _ := revToDir(rev.Revision, date, "", time.Time{})
+				if err := os.RemoveAll(prevRevDir); err != nil {
+					log.Fatal(err)
+				}
+			}
 
 			// Save revision metadata.
 			buf := bytes.Buffer{}
@@ -148,17 +168,17 @@ func main() {
 				}
 
 				wg.Add(1)
-				go func(rev, builder, logURL string) {
+				go func(builder, logURL string) {
 					defer wg.Done()
 					logPath := filepath.Join("log", filepath.Base(logURL))
 					err := fetcher.getFile(logURL, logPath)
 					if err != nil {
 						log.Fatal("error fetching log: ", err)
 					}
-					if err := linkLog(revDir, builder, logPath); err != nil {
+					if err := linkLog(revDir, revDirDepth, builder, logPath); err != nil {
 						log.Fatal("error linking log: ", err)
 					}
-				}(revDir, status.Builders[i], res)
+				}(status.Builders[i], res)
 			}
 		}
 	}
@@ -249,10 +269,40 @@ func (f *fetcher) getFile(url string, filename string) error {
 	return p.err
 }
 
+var (
+	goProjectOnce   sync.Once
+	cachedGoProject *maintner.GerritProject
+	goProjectErr    error
+)
+
+func getGoProject(ctx context.Context) (*maintner.GerritProject, error) {
+	corpus, err := godata.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	gp := corpus.Gerrit().Project("go.googlesource.com", "go")
+	if gp == nil {
+		return nil, fmt.Errorf("go.googlesource.com/go Gerrit project not found")
+	}
+
+	return gp, nil
+}
+
+func goProject() *maintner.GerritProject {
+	goProjectOnce.Do(func() {
+		cachedGoProject, goProjectErr = getGoProject(context.Background())
+	})
+	if goProjectErr != nil {
+		log.Fatal(goProjectErr)
+	}
+	return cachedGoProject
+}
+
 // ensureDir creates directory name if it does not exist.
 func ensureDir(name string) {
-	err := os.Mkdir(name, 0777)
-	if err != nil && !os.IsExist(err) {
+	err := os.MkdirAll(name, 0777)
+	if err != nil {
 		log.Fatal("error creating directory ", name, ": ", err)
 	}
 }
@@ -286,9 +336,9 @@ func writeFileAtomic(filename string, r io.Reader) error {
 
 // linkLog creates a symlink for finding logPath based on its git
 // revision and builder.
-func linkLog(revDir, builder, logPath string) error {
+func linkLog(revDir string, revDirDepth int, builder, logPath string) error {
 	// Create symlink.
-	err := os.Symlink("../../"+logPath, filepath.Join(revDir, builder))
+	err := os.Symlink(strings.Repeat("../", revDirDepth)+logPath, filepath.Join(revDir, builder))
 	if err != nil && !os.IsExist(err) {
 		return err
 	}
@@ -302,6 +352,16 @@ func parseRevDate(date string) (time.Time, error) {
 }
 
 // revToDir returns the path of the revision directory for revision.
-func revToDir(revision string, date time.Time) string {
-	return filepath.Join("rev", date.Format("2006-01-02T15:04:05")+"-"+revision[:7])
+func revToDir(revision string, date time.Time, goRev string, goDate time.Time) (dir string, depth int) {
+	if goDate.After(date) {
+		date = goDate
+	}
+	dateStr := date.Format("2006-01-02T15:04:05")
+
+	parts := []string{dateStr, revision[:7]}
+	if goRev != "" {
+		parts = append(parts, goRev[:7])
+	}
+
+	return filepath.Join("rev", strings.Join(parts, "-")), 2
 }
