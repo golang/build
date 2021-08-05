@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build go1.16
+// +build go1.16
+
 package main
 
 import (
 	"context"
+	"embed"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -21,8 +25,12 @@ import (
 	"google.golang.org/grpc"
 )
 
+// testStatic is our static web server content.
+//go:embed testing
+var testStatic embed.FS
+
 func TestFileServerHandler(t *testing.T) {
-	h := fileServerHandler("./testing", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := fileServerHandler(testStatic, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Home"))
 	}))
 
@@ -41,7 +49,7 @@ func TestFileServerHandler(t *testing.T) {
 		},
 		{
 			desc:     "sets headers and returns file",
-			path:     "/test.css",
+			path:     "/testing/test.css",
 			wantCode: http.StatusOK,
 			wantBody: ".Header { font-size: 10rem; }\n",
 			wantHeaders: map[string]string{
@@ -54,6 +62,9 @@ func TestFileServerHandler(t *testing.T) {
 			path:     "/foo.js",
 			wantCode: http.StatusNotFound,
 			wantBody: "404 page not found\n",
+			wantHeaders: map[string]string{
+				"Content-Type": "text/plain; charset=utf-8",
+			},
 		},
 	}
 	for _, c := range cases {

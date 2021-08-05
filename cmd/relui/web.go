@@ -2,12 +2,16 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build go1.16
+// +build go1.16
+
 package main
 
 import (
 	"bytes"
 	"html/template"
 	"io"
+	"io/fs"
 	"log"
 	"mime"
 	"net/http"
@@ -21,33 +25,28 @@ import (
 	reluipb "golang.org/x/build/cmd/relui/protos"
 )
 
-// fileServerHandler returns a http.Handler rooted at root. It will call the next handler provided for requests to "/".
+// fileServerHandler returns a http.Handler rooted at root. It will
+// call the next handler provided for requests to "/".
 //
-// The returned handler sets the appropriate Content-Type and Cache-Control headers for the returned file.
-func fileServerHandler(root string, next http.Handler) http.Handler {
+// The returned handler sets the appropriate Content-Type and
+// Cache-Control headers for the returned file.
+func fileServerHandler(fs fs.FS, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
 			next.ServeHTTP(w, r)
 			return
 		}
-		// http.FileServer would correctly return a 404, but we need to check that the file exists
-		// before calculating the Content-Type header.
-		if _, err := os.Stat(path.Join(root, r.URL.Path)); os.IsNotExist(err) {
-			http.NotFound(w, r)
-			return
-		}
 		w.Header().Set("Content-Type", mime.TypeByExtension(path.Ext(r.URL.Path)))
 		w.Header().Set("Cache-Control", "no-cache, private, max-age=0")
-
-		fs := http.FileServer(http.Dir(root))
-		fs.ServeHTTP(w, r)
+		s := http.FileServer(http.FS(fs))
+		s.ServeHTTP(w, r)
 	})
 }
 
 var (
-	homeTmpl        = template.Must(template.Must(layoutTmpl.Clone()).ParseFiles(relativeFile("templates/home.html")))
-	layoutTmpl      = template.Must(template.ParseFiles(relativeFile("templates/layout.html")))
-	newWorkflowTmpl = template.Must(template.Must(layoutTmpl.Clone()).ParseFiles(relativeFile("templates/new_workflow.html")))
+	homeTmpl        = template.Must(template.Must(layoutTmpl.Clone()).ParseFS(templates, "templates/home.html"))
+	layoutTmpl      = template.Must(template.ParseFS(templates, "templates/layout.html"))
+	newWorkflowTmpl = template.Must(template.Must(layoutTmpl.Clone()).ParseFS(templates, "templates/new_workflow.html"))
 )
 
 // server implements the http handlers for relui.

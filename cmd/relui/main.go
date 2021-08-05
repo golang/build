@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build go1.16
+// +build go1.16
+
 // relui is a web interface for managing the release process of Go.
 package main
 
@@ -44,7 +47,7 @@ func main() {
 	http.Handle("/workflows/create", http.HandlerFunc(s.createWorkflowHandler))
 	http.Handle("/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
 	http.Handle("/tasks/start", http.HandlerFunc(s.startTaskHandler))
-	http.Handle("/", fileServerHandler(relativeFile("./static"), http.HandlerFunc(s.homeHandler)))
+	http.Handle("/", fileServerHandler(static, http.HandlerFunc(s.homeHandler)))
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
