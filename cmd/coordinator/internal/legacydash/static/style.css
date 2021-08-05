@@ -69,18 +69,30 @@ dd { margin: 2px 20px; }
   background: #E0EBF5;
 }
  
-#topbar a {
-  color: #222;
-}
 #topbar h1 {
-  float: left;
+  display: inline;
   margin: 0;
   padding-top: 5px;
 }
+#topbar h1 a {
+  color: #375EAB;
+  text-decoration: none;
+}
+#topbar h1 a:hover {
+  text-decoration: underline;
+}
  
 #topbar nav { 
-  float: left;
+  display: inline-block;
   margin-left: 20px;
+}
+#topbar nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+#topbar nav ul li {
+  display: inline-block;
 }
 #topbar nav a {
   display: inline-block;

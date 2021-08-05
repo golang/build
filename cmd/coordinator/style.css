@@ -49,17 +49,25 @@ header {
   margin: -10px -10px 0 -10px;
   padding: 10px 10px;
 }
-header a {
-  color: #222;
-}
 header h1 {
   display: inline;
   margin: 0;
   padding-top: 5px;
 }
+header h1 a {
+  display: initial;
+}
 header nav {
   display: inline-block;
   margin-left: 20px;
+}
+header nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+header nav ul li {
+  display: inline-block;
 }
 header nav a {
   background: #375eab;
@@ -98,7 +106,7 @@ table thead tr {
 }
 .Dashboard-topbar {
   margin: 0;
-  padding: 1rem 0.625rem;
+  padding: 0.625rem 0.625rem;
 }
 table.Build tbody tr:nth-child(even) {
   background-color: #f4f4f4;
