@@ -297,7 +297,7 @@ var Production = &Environment{
 		Name:        "go",
 		MachineType: "n1-standard-4",
 	},
-	DashURL:             "https://build.golang.org/",
+	DashURL:             "https://farmer-ui-test.golang.org/", // TODO(golang.org/issue/47580): Go back to build.golang.org after its DNS rollout stabilizes.
 	PerfDataURL:         "https://perfdata.golang.org",
 	CoordinatorName:     "farmer",
 	BuildletBucket:      "go-builder-data",
