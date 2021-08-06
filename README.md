@@ -18,19 +18,13 @@ https://github.com/golang/go/issues. Prefix your issue with
 
 The main components of the Go build system are:
 
-* The **dashboard**, in [app/](https://dev.golang.org/dir/build/app), serves
-  https://build.golang.org/. It runs on App Engine and holds the state for
-  which builds passed or failed, and stores the build failure logs for
-  post-submit failures. (Trybot build failure logs are stored elsewhere).
-  The dashboard does not execute any builds on its own.
-
-
 * The **coordinator**, in
   [cmd/coordinator/](https://dev.golang.org/dir/build/cmd/coordinator/),
-  serves https://farmer.golang.org/. It runs on GKE and coordinates the
-  whole build system. It finds work to do (both pre-submit "TryBot" work,
-  and post-submit work) and executes builds, allocating machines to run the
-  builds. It is the owner of all machines.
+  serves https://farmer.golang.org/ and https://build.golang.org/.
+  It runs on GKE and coordinates the whole build system. It finds work
+  to do (both pre-submit "TryBot" work, and post-submit work) and executes
+  builds, allocating machines to run the builds. It is the owner of all machines.
+  It holds the state for which builds passed or failed, and the build logs.
 
 * The Go package in [buildenv/](https://dev.golang.org/dir/build/buildenv/)
   contains constants for where the dashboard and coordinator run, for prod,
@@ -67,7 +61,7 @@ The main components of the Go build system are:
   over the already-open TCP connection.
 
   These three pools can be viewed at the coordinator's
-  http://farmer.golang.org/#pools
+  https://farmer.golang.org/#pools.
 
 
 * The [env/](https://dev.golang.org/dir/build/env/) directory describes

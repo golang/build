@@ -8,8 +8,8 @@
 
 // The coordinator runs the majority of the Go build system.
 //
-// It is responsible for finding build work and executing it,
-// reporting the results to build.golang.org for public display.
+// It is responsible for finding build work, executing it,
+// and displaying the results.
 //
 // For an overview of the Go build system, see the README at
 // the root of the x/build repo.
