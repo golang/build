@@ -382,9 +382,11 @@ func (htmlView) ShowsActiveBuilds() bool { return true }
 func (htmlView) ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
 	var buf bytes.Buffer
 	if err := uiTemplate.Execute(&buf, data); err != nil {
-		logErr(w, r, err)
+		log.Printf("Error: %v", err)
+		http.Error(w, "Error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	buf.WriteTo(w)
 }
 

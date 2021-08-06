@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"log"
 	"net/http"
 	"strconv"
@@ -84,7 +83,6 @@ func resultHandler(r *http.Request) (interface{}, error) {
 // logHandler displays log text for a given hash.
 // It handles paths like "/log/hash".
 func logHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-type", "text/plain; charset=utf-8")
 	c := r.Context()
 	hash := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
 	key := dsKey("Log", hash, nil)
@@ -97,15 +95,18 @@ func logHandler(w http.ResponseWriter, r *http.Request) {
 			err = datastoreClient.Get(c, key, l)
 		}
 		if err != nil {
-			logErr(w, r, err)
+			log.Printf("Error: %v", err)
+			http.Error(w, "Error: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 	b, err := l.Text()
 	if err != nil {
-		logErr(w, r, err)
+		log.Printf("Error: %v", err)
+		http.Error(w, "Error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-type", "text/plain; charset=utf-8")
 	w.Write(b)
 }
 
@@ -249,12 +250,6 @@ func builderKey(ctx context.Context, builder string) string {
 	h := hmac.New(md5.New, []byte(masterKey))
 	h.Write([]byte(builder))
 	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
-func logErr(w http.ResponseWriter, r *http.Request, err error) {
-	log.Printf("Error: %v", err)
-	w.WriteHeader(http.StatusInternalServerError)
-	fmt.Fprint(w, "Error: ", html.EscapeString(err.Error()))
 }
 
 // limitStringLength essentially does return s[:max],
