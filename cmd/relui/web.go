@@ -19,7 +19,6 @@ import (
 	"path"
 	"path/filepath"
 
-	"cloud.google.com/go/pubsub"
 	"github.com/golang/protobuf/proto"
 	"github.com/google/uuid"
 	reluipb "golang.org/x/build/cmd/relui/protos"
@@ -56,9 +55,6 @@ type server struct {
 
 	// store is for persisting application state.
 	store store
-
-	// topic is for communicating with relui workers.
-	topic *pubsub.Topic
 }
 
 type homeResponse struct {
@@ -119,22 +115,9 @@ func (s *server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) startTaskHandler(w http.ResponseWriter, r *http.Request) {
-	wf := s.store.Workflow(r.PostFormValue("workflow.id"))
 	bt := s.store.BuildableTask(r.PostFormValue("workflow.id"), r.PostFormValue("task.id"))
 	if bt == nil {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return
-	}
-	res := s.topic.Publish(r.Context(), &pubsub.Message{
-		Data: []byte((&reluipb.StartBuildableTaskRequest{
-			WorkflowId:        wf.GetId(),
-			BuildableTaskId:   bt.GetId(),
-			BuildableTaskType: bt.GetTaskType(),
-		}).String()),
-	})
-	if _, err := res.Get(r.Context()); err != nil {
-		log.Printf("Error publishing task start: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)

@@ -8,7 +8,6 @@
 package main
 
 import (
-	"context"
 	"embed"
 	"io/ioutil"
 	"net/http"
@@ -17,12 +16,8 @@ import (
 	"strings"
 	"testing"
 
-	"cloud.google.com/go/pubsub"
-	"cloud.google.com/go/pubsub/pstest"
 	reluipb "golang.org/x/build/cmd/relui/protos"
 	"golang.org/x/build/internal/datastore/fake"
-	"google.golang.org/api/option"
-	"google.golang.org/grpc"
 )
 
 // testStatic is our static web server content.
@@ -182,41 +177,8 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 	}
 }
 
-// newPSTest creates a new pstest.Server and returns a pubsub.Client connected to it and the server.
-//
-// cleanup will close the client, connection, and test server.
-func newPSTest(ctx context.Context, t *testing.T) (c *pubsub.Client, s *pstest.Server, cleanup func()) {
-	t.Helper()
-	s = pstest.NewServer()
-	conn, err := grpc.DialContext(ctx, s.Addr, grpc.WithInsecure())
-	if err != nil {
-		s.Close()
-		t.Fatalf("grpc.DialContext(_, %q, %v) = _, %v, wanted no error", s.Addr, grpc.WithInsecure(), err)
-	}
-	c, err = pubsub.NewClient(ctx, "relui-test", option.WithGRPCConn(conn))
-	if err != nil {
-		s.Close()
-		conn.Close()
-		t.Fatalf("pubsub.NewClient(_, %q, %v) = _, %v, wanted no error", "relui-test", option.WithGRPCConn(conn), err)
-	}
-	return c, s, func() {
-		c.Close()
-		conn.Close()
-		s.Close()
-	}
-}
-
 func TestServerStartTaskHandler(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	client, pssrv, cleanup := newPSTest(ctx, t)
-	defer cleanup()
-	topic, err := client.CreateTopic(ctx, "relui-test-topic")
-	if err != nil {
-		t.Fatalf("client.CreateTopic(_, %q) = _, %v", "relui-test-topic", err)
-	}
-
-	s := server{store: &dsStore{client: &fake.Client{}}, topic: topic}
+	s := server{store: &dsStore{client: &fake.Client{}}}
 	wf := &reluipb.Workflow{
 		Id:   "someworkflow",
 		Name: "test_workflow",
@@ -226,13 +188,8 @@ func TestServerStartTaskHandler(t *testing.T) {
 			Id:       "sometask",
 		}},
 	}
-	if s.store.AddWorkflow(wf) != nil {
+	if err := s.store.AddWorkflow(wf); err != nil {
 		t.Fatalf("store.AddWorkflow(%v) = %v, wanted no error", wf, err)
-	}
-	want := &reluipb.StartBuildableTaskRequest{
-		WorkflowId:        "someworkflow",
-		BuildableTaskId:   "sometask",
-		BuildableTaskType: "TestTask",
 	}
 	params := url.Values{"workflow.id": []string{"someworkflow"}, "task.id": []string{"sometask"}}
 	req := httptest.NewRequest(http.MethodPost, "/tasks/start", strings.NewReader(params.Encode()))
@@ -247,13 +204,6 @@ func TestServerStartTaskHandler(t *testing.T) {
 	}
 	if resp.Header.Get("Location") != "/" {
 		t.Errorf("resp.Header.Get(%q) = %q, wanted %q", "Location", resp.Header.Get("Location"), "/")
-	}
-	if len(pssrv.Messages()) != 1 {
-		t.Fatalf("len(pssrv.Messages()) = %d, wanted %d", len(pssrv.Messages()), 1)
-	}
-	msg := pssrv.Messages()[0]
-	if string(msg.Data) != want.String() {
-		t.Errorf("msg.Data = %q, wanted %q", string(msg.Data), "hello world")
 	}
 }
 
@@ -278,27 +228,11 @@ func TestStartTaskHandlerErrors(t *testing.T) {
 			params:   url.Values{"workflow.id": []string{"someworkflow"}, "task.id": []string{"notexist"}},
 			wantCode: http.StatusNotFound,
 		},
-		{
-			desc:     "pubsub publish failure",
-			params:   url.Values{"workflow.id": []string{"someworkflow"}, "task.id": []string{"sometask"}},
-			wantCode: http.StatusInternalServerError,
-		},
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			client, pssrv, cleanup := newPSTest(ctx, t)
-			defer cleanup()
-			topic, err := client.CreateTopic(ctx, "relui-test-topic")
-			if err != nil {
-				t.Fatalf("client.CreateTopic(_, %q) = _, %v", "relui-test-topic", err)
-			}
-			// Simulate pubsub failure by stopping publishing.
-			topic.Stop()
-
-			s := server{store: &dsStore{client: &fake.Client{}}, topic: topic}
-			if s.store.AddWorkflow(wf) != nil {
+			s := server{store: &dsStore{client: &fake.Client{}}}
+			if err := s.store.AddWorkflow(wf); err != nil {
 				t.Fatalf("store.AddWorkflow(%v) = %v, wanted no error", wf, err)
 			}
 			req := httptest.NewRequest(http.MethodPost, "/tasks/start", strings.NewReader(c.params.Encode()))
@@ -310,9 +244,6 @@ func TestStartTaskHandlerErrors(t *testing.T) {
 
 			if resp.StatusCode != c.wantCode {
 				t.Errorf("resp.StatusCode = %d, wanted %d", resp.StatusCode, c.wantCode)
-			}
-			if len(pssrv.Messages()) != 0 {
-				t.Fatalf("len(pssrv.Messages()) = %d, wanted %d", len(pssrv.Messages()), 0)
 			}
 		})
 	}

@@ -6,7 +6,6 @@ require (
 	cloud.google.com/go v0.65.0
 	cloud.google.com/go/bigquery v1.8.0
 	cloud.google.com/go/datastore v1.1.0
-	cloud.google.com/go/pubsub v1.3.1
 	cloud.google.com/go/storage v1.10.0
 	contrib.go.opencensus.io/exporter/prometheus v0.3.0
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.5
