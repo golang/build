@@ -203,6 +203,10 @@ table thead tr {
 .build .ok {
   font-size: 83%;
 }
+.build a.ok {
+  color: #000;
+  text-decoration: none;
+}
 
 .build .desc, .build .time, .build .user {
   white-space: nowrap;

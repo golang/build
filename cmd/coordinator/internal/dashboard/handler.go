@@ -290,10 +290,20 @@ func formatGitAuthor(name, email string) string {
 }
 
 var templ = template.Must(
-	template.New("dashboard.html").ParseFiles(
+	template.New("dashboard.html").Funcs(template.FuncMap{
+		"shortHash": shortHash,
+	}).ParseFiles(
 		internal.FilePath("dashboard.html", "internal/dashboard", "cmd/coordinator/internal/dashboard"),
 	),
 )
+
+// shortHash returns a short version of a hash.
+func shortHash(hash string) string {
+	if len(hash) > 7 {
+		hash = hash[:7]
+	}
+	return hash
+}
 
 // A Commit describes an individual commit in a package.
 //

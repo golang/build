@@ -111,6 +111,9 @@ table thead tr {
 table.Build tbody tr:nth-child(even) {
   background-color: #f4f4f4;
 }
+table.Build tbody tr.commit:hover {
+  background-color: #ffff99;
+}
 .ShortHash {
   display: inline-block;
   font-family: monospace;
@@ -151,6 +154,7 @@ table.Build tbody tr:nth-child(even) {
   white-space: nowrap;
 }
 .Build-desc {
+  font-size: 0.8125rem;
   max-width: 8.875rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -162,8 +166,16 @@ table.Build tbody tr:nth-child(even) {
 }
 .Build-builderArchRow th,
 .Build-builderTagRow th {
-  font-size: 0.5625rem;
+  font-size: 0.625rem;
   font-weight: normal;
   text-align: center;
   white-space: nowrap;
+}
+.Build-result {
+  text-align: center;
+}
+.Build-resultOK {
+  font-size: 0.6875rem;
+  color: #000;
+  text-decoration: none;
 }

@@ -133,7 +133,8 @@
                 {{if .BuildingURL}}
                   <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" height=16 width=16 border=0></a>
                 {{else if .OK}}
-                  <span class="ok{{if knownIssue $builderName}} noise{{end}}">ok</span>
+                  <a href="/log/{{.LogHash}}" class="ok{{if knownIssue $builderName}} noise{{end}}"
+                    title="Build log of {{$builderName}} on commit {{shortHash $c.Hash}}{{with $h}} (using Go commit {{shortHash .}}){{end}}.">ok</a>
                 {{else if knownIssue $builderName}}
                   <a href="/log/{{.LogHash}}" class="noise" title="Builder {{$builderName}} has a known issue. See golang.org/issue/{{knownIssue $builderName}}.">fail</a>
                 {{else}}
@@ -237,7 +238,8 @@
                 {{if .BuildingURL}}
                   <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" height=16 width=16 border=0></a>
                 {{else if .OK}}
-                  <span class="ok">ok</span>
+                  <a href="/log/{{.LogHash}}" class="ok"
+                    title="Build log of {{$builderName}} on commit {{shortHash $h}} (using Go commit {{shortHash $goHash}}).">ok</a>
                 {{else}}
                   <a href="/log/{{.LogHash}}" class="fail">fail</a>
                 {{end}}

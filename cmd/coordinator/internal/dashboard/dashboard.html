@@ -150,9 +150,12 @@
         <td class="Build-desc desc" title="{{$c.Desc}}">{{$c.Desc}}</td>
         {{range $b := $.Builders}}
           {{range $a := .Archs}}
-            <td class="{{if not $a.FirstClass}} unsupported{{end}}" data-builder="{{$a.Name}}">
+            <td class="Build-result {{if not $a.FirstClass}} unsupported{{end}}" data-builder="{{$a.Name}}">
               {{with $c.ResultForBuilder $a.Name}}
-                  {{if .OK}} ok {{end}}
+                  {{if .OK}}
+                    <a class="Build-resultOK" href="https://build.golang.org/log/{{.LogHash}}"
+                      title="Build log of {{$a.Name}} on commit {{shortHash $c.Hash}}.">ok</a>
+                  {{end}}
               {{end}}
             </td>
           {{end}}
