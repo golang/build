@@ -418,18 +418,9 @@ func main() {
 	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
 	protos.RegisterCoordinatorServer(grpcServer, gs)
-	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-		switch req.Host {
-		case "build.golang.org",
-			"farmer-ui-test.golang.org",
-			"farmer-ui-test-staging.golang.org":
-			// Serve a build dashboard at build.golang.org.
-			dashV1.ServeHTTP(w, req)
-		default:
-			// Serve a status page at farmer.golang.org.
-			handleStatus(w, req)
-		}
-	})
+	http.HandleFunc("/", handleStatus)       // Serve a status page at farmer.golang.org.
+	http.Handle("build.golang.org/", dashV1) // Serve a build dashboard at build.golang.org.
+	http.Handle("build-staging.golang.org/", dashV1)
 	http.HandleFunc("/builders", handleBuilders)
 	http.HandleFunc("/temporarylogs", handleLogs)
 	http.HandleFunc("/reverse", pool.HandleReverse)

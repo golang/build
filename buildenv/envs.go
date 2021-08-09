@@ -262,7 +262,7 @@ var Staging = &Environment{
 		Name:        "go",
 		MachineType: "n1-standard-4",
 	},
-	DashURL:           "https://go-dashboard-dev.appspot.com/",
+	DashURL:           "https://build-staging.golang.org/",
 	PerfDataURL:       "https://perfdata.golang.org",
 	CoordinatorName:   "farmer",
 	BuildletBucket:    "dev-go-builder-data",
@@ -297,7 +297,7 @@ var Production = &Environment{
 		Name:        "go",
 		MachineType: "n1-standard-4",
 	},
-	DashURL:             "https://farmer-ui-test.golang.org/", // TODO(golang.org/issue/47580): Go back to build.golang.org after its DNS rollout stabilizes.
+	DashURL:             "https://build.golang.org/",
 	PerfDataURL:         "https://perfdata.golang.org",
 	CoordinatorName:     "farmer",
 	BuildletBucket:      "go-builder-data",
