@@ -196,9 +196,15 @@ func serveTLS(ln net.Listener) {
 		config.Certificates = []tls.Certificate{cert}
 	}
 
+	var h http.Handler = httpRouter{}
+	if *mode == "dev" {
+		// Use hostPathHandler in local development mode (only) to improve
+		// convenience of testing multiple domains that coordinator serves.
+		h = hostPathHandler(h)
+	}
 	server := &http.Server{
 		Addr:    ln.Addr().String(),
-		Handler: httpRouter{},
+		Handler: h,
 	}
 	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)
 	log.Printf("Coordinator serving on: %v", tlsLn.Addr())
@@ -222,10 +228,9 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 }
 
 // httpRouter is the coordinator's mux, routing traffic to one of
-// three locations:
+// two locations:
 //   1) a buildlet, from gomote clients (if X-Buildlet-Proxy is set)
-//   2) our module proxy cache on GKE (if X-Proxy-Service == module-cache)
-//   3) traffic to the coordinator itself (the default)
+//   2) traffic to the coordinator itself (the default)
 type httpRouter struct{}
 
 func (httpRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -234,6 +239,77 @@ func (httpRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.DefaultServeMux.ServeHTTP(w, r)
+}
+
+var validHosts = map[string]bool{
+	"farmer.golang.org": true,
+	"build.golang.org":  true,
+}
+
+// hostPathHandler infers the host from the first element of the URL path,
+// and rewrites URLs in the output HTML accordingly. It disables response
+// compression to simplify the process of link rewriting.
+func hostPathHandler(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		elem, rest := strings.TrimPrefix(r.URL.Path, "/"), ""
+		if i := strings.Index(elem, "/"); i >= 0 {
+			elem, rest = elem[:i], elem[i+1:]
+		}
+		if !validHosts[elem] {
+			u := "/farmer.golang.org" + r.URL.EscapedPath()
+			if r.URL.RawQuery != "" {
+				u += "?" + r.URL.RawQuery
+			}
+			http.Redirect(w, r, u, http.StatusTemporaryRedirect)
+			return
+		}
+
+		r.Host = elem
+		r.URL.Host = elem
+		r.URL.Path = "/" + rest
+		r.Header.Set("Accept-Encoding", "identity") // Disable compression for link rewriting.
+		lw := &linkRewriter{ResponseWriter: w, host: r.Host}
+		h.ServeHTTP(lw, r)
+		lw.Flush()
+	})
+}
+
+// A linkRewriter is a ResponseWriter that rewrites links in HTML output.
+// It rewrites relative links /foo to be /host/foo, and it rewrites any link
+// https://h/foo, where h is in validHosts, to be /h/foo. This corrects the
+// links to have the right form for the test server.
+type linkRewriter struct {
+	http.ResponseWriter
+	host string
+	buf  []byte
+	ct   string // content-type
+}
+
+func (r *linkRewriter) Write(data []byte) (int, error) {
+	if r.ct == "" {
+		ct := r.Header().Get("Content-Type")
+		if ct == "" {
+			// Note: should use first 512 bytes, but first write is fine for our purposes.
+			ct = http.DetectContentType(data)
+		}
+		r.ct = ct
+	}
+	if !strings.HasPrefix(r.ct, "text/html") {
+		return r.ResponseWriter.Write(data)
+	}
+	r.buf = append(r.buf, data...)
+	return len(data), nil
+}
+
+func (r *linkRewriter) Flush() {
+	repl := []string{
+		`href="/`, `href="/` + r.host + `/`,
+	}
+	for host := range validHosts {
+		repl = append(repl, `href="https://`+host, `href="/`+host)
+	}
+	strings.NewReplacer(repl...).WriteString(r.ResponseWriter, string(r.buf))
+	r.buf = nil
 }
 
 // autocertManager is non-nil if LetsEncrypt is in use.
