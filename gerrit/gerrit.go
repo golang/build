@@ -333,7 +333,9 @@ type LabelInfo struct {
 	Optional bool `json:"optional"`
 
 	// Fields set by LABELS field option:
+	Approved *AccountInfo `json:"approved"`
 
+	// Fields set by DETAILED_LABELS option:
 	All []ApprovalInfo `json:"all"`
 }
 
@@ -998,4 +1000,48 @@ func (c *Client) GetGroupMembers(ctx context.Context, groupID string) ([]Account
 	var ais []AccountInfo
 	err := c.do(ctx, &ais, "GET", "/groups/"+groupID+"/members")
 	return ais, err
+}
+
+// SubmitChange submits the given change.
+// For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#submit-change
+// The changeID is https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-id
+func (c *Client) SubmitChange(ctx context.Context, changeID string) (ChangeInfo, error) {
+	var change ChangeInfo
+	err := c.do(ctx, &change, "POST", "/changes/"+changeID+"/submit")
+	return change, err
+}
+
+// MergeableInfo contains information about the mergeability of a change.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#mergeable-info.
+type MergeableInfo struct {
+	SubmitType   string `json:"submit_type"`
+	Strategy     string `json:"strategy"`
+	Mergeable    bool   `json:"mergeable"`
+	CommitMerged bool   `json:"commit_merged"`
+}
+
+// GetMergeable retrieves mergeability information for a change at a specific revision.
+func (c *Client) GetMergeable(ctx context.Context, changeID, revision string) (MergeableInfo, error) {
+	var mergeable MergeableInfo
+	err := c.do(ctx, &mergeable, "GET", "/changes/"+changeID+"/revisions/"+revision+"/mergeable")
+	return mergeable, err
+}
+
+// ActionInfo contains information about actions a client can make to
+// maniuplate a resource.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#action-info.
+type ActionInfo struct {
+	Method  string `json:"method"`
+	Label   string `json:"label"`
+	Title   string `json:"title"`
+	Enabled bool   `json:"enabled"`
+}
+
+// GetRevisionActions retrieves revision actions.
+func (c *Client) GetRevisionActions(ctx context.Context, changeID, revision string) (map[string]*ActionInfo, error) {
+	var actions map[string]*ActionInfo
+	err := c.do(ctx, &actions, "GET", "/changes/"+changeID+"/revisions/"+revision+"/actions")
+	return actions, err
 }

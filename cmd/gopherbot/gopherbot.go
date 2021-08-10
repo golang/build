@@ -384,6 +384,7 @@ var tasks = []struct {
 	// Gerrit tasks are applied to all projects by default.
 	{"abandon scratch reviews", (*gopherbot).abandonScratchReviews},
 	{"assign reviewers to CLs", (*gopherbot).assignReviewersToCLs},
+	{"auto-submit CLs", (*gopherbot).autoSubmitCLs},
 
 	// Tasks that are specific to the golang/vscode-go repo.
 	{"set vscode-go milestones", (*gopherbot).setVSCodeGoMilestones},
@@ -2253,6 +2254,122 @@ func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritCha
 		}
 	}
 	return ids, count >= minHumans
+}
+
+// autoSubmitCLs submits CLs which are labelled "Auto-Submit", are submittable according to Gerrit,
+// have a positive TryBot-Result label, and have no unresolved comments.
+//
+// See golang.org/issue/48021.
+func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
+	// We only run this task if it was explicitly requested via
+	// the --only-run flag.
+	if *onlyRun == "" {
+		return nil
+	}
+
+	return b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+		if gp.Server() != "go.googlesource.com" {
+			return nil
+		}
+		return gp.ForeachOpenCL(func(cl *maintner.GerritCL) error {
+			gc := gerritChange{gp.Project(), cl.Number}
+			if b.deletedChanges[gc] {
+				return nil
+			}
+
+			// Break out early (before making Gerrit API calls) if the Auto-Submit label
+			// hasn't been used at all in this CL.
+			var autosubmitPresent bool
+			for _, meta := range cl.Metas {
+				if strings.Contains(meta.Commit.Msg, "\nLabel: Auto-Submit") {
+					autosubmitPresent = true
+					break
+				}
+			}
+			if !autosubmitPresent {
+				return nil
+			}
+
+			// Skip this CL if there aren't Auto-Submit+1 and TryBot-Result+1 labels.
+			changeInfo, err := b.gerrit.GetChange(ctx, fmt.Sprint(cl.Number), gerrit.QueryChangesOpt{Fields: []string{"LABELS", "SUBMITTABLE"}})
+			if err != nil {
+				if httpErr, ok := err.(*gerrit.HTTPError); ok && httpErr.Res.StatusCode == http.StatusNotFound {
+					b.deletedChanges[gc] = true
+				}
+				log.Printf("Could not retrieve change %q: %v", gc.ID(), err)
+				return nil
+			}
+			if !(changeInfo.Labels["Auto-Submit"].Approved != nil && changeInfo.Labels["TryBot-Result"].Approved != nil) {
+				return nil
+			}
+			// NOTE: we might be able to skip this as well, since the revision action
+			// check will also cover this...
+			if !changeInfo.Submittable {
+				return nil
+			}
+
+			// Skip this CL if there are any unresolved comment threads.
+			comments, err := b.gerrit.ListChangeComments(ctx, fmt.Sprint(cl.Number))
+			if err != nil {
+				return err
+			}
+			for _, commentSet := range comments {
+				sort.Slice(commentSet, func(i, j int) bool {
+					return commentSet[i].Updated.Time().Before(commentSet[j].Updated.Time())
+				})
+				threads := make(map[string]bool)
+				for _, c := range commentSet {
+					id := c.ID
+					if c.InReplyTo != "" {
+						id = c.InReplyTo
+					}
+					threads[id] = *c.Unresolved
+				}
+				for _, unresolved := range threads {
+					if unresolved {
+						return nil
+					}
+				}
+			}
+
+			// We need to check the mergeability, as well as the submitability,
+			// as the latter doesn't take into account merge conflicts, just
+			// if the change satisfies the project submit rules.
+			//
+			// NOTE: this may now be redundant, since the revision action check
+			// below will also inherently checks mergeability, since the change
+			// cannot actually be submitted if there is a merge conflict. We
+			// may be able to just skip this entirely.
+			mi, err := b.gerrit.GetMergeable(ctx, fmt.Sprint(cl.Number), "current")
+			if err != nil {
+				return err
+			}
+			if !mi.Mergeable || mi.CommitMerged {
+				return nil
+			}
+
+			ra, err := b.gerrit.GetRevisionActions(ctx, fmt.Sprint(cl.Number), "current")
+			if err != nil {
+				return err
+			}
+			if ra["submit"] == nil || !ra["submit"].Enabled {
+				return nil
+			}
+
+			if *dryRun {
+				log.Printf("[dry-run] would've submitted CL https://golang.org/cl/%d ...", cl.Number)
+				return nil
+			}
+			log.Printf("submitting CL https://golang.org/cl/%d ...", cl.Number)
+
+			// TODO: if maintner isn't fast enough (or is too fast) and it re-runs this
+			// before the submission is noticed, we may run this more than once. This
+			// could be handled with a local cache of "recently submitted" changes to
+			// be ignored.
+			_, err = b.gerrit.SubmitChange(ctx, fmt.Sprint(cl.Number))
+			return err
+		})
+	})
 }
 
 // reviewerRe extracts the reviewer's Gerrit ID from a line that looks like:
