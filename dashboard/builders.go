@@ -1732,10 +1732,10 @@ func init() {
 		HostType: "host-linux-buster",
 		Notes:    "builder with GOEXPERIMENT=unified, see golang.org/issue/46786",
 		tryBot: func(repo, branch, goBranch string) bool {
-			return (repo == "go" || repo == "tools") && goBranch == "dev.typeparams"
+			return (repo == "go" || repo == "tools") && (goBranch == "master" || goBranch == "dev.typeparams")
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return (repo == "go" || repo == "tools") && goBranch == "dev.typeparams"
+			return (repo == "go" || repo == "tools") && (goBranch == "master" || goBranch == "dev.typeparams")
 		},
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
