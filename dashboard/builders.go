@@ -108,6 +108,13 @@ var Builders = map[string]*BuildConfig{}
 // Hosts contains the names and configs of all the types of
 // buildlets. They can be VMs, containers, or dedicated machines.
 var Hosts = map[string]*HostConfig{
+	"host-linux-bullseye": &HostConfig{
+		Notes:           "Debian Bullseye",
+		ContainerImage:  "linux-x86-bullseye:latest",
+		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:     "root",
+	},
 	"host-linux-buster": &HostConfig{
 		Notes:           "Debian Buster",
 		ContainerImage:  "linux-x86-buster:latest",
@@ -1887,6 +1894,14 @@ func init() {
 		HostType:   "host-linux-stretch",
 		Notes:      "Debian Stretch. Same as the normal 'linux-amd64' builder at this time, but with -stretch suffix. Used for release builds.",
 		buildsRepo: disabledBuilder, // Disabled because the "linux-amd64" builder does identical work.
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-amd64-bullseye",
+		HostType: "host-linux-bullseye",
+		Notes:    "Debian Bullseye.",
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},

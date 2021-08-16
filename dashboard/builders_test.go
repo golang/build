@@ -569,6 +569,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-fedora", "build"), none},
 		{b("linux-amd64-clang", "build"), none},
 		{b("linux-amd64-sid", "build"), none},
+		{b("linux-amd64-bullseye", "build"), none},
 		{b("linux-amd64-nocgo", "build"), none},
 		{b("linux-386-longtest", "build"), none},
 		{b("js-wasm", "build"), none},
