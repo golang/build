@@ -175,7 +175,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/internal/obj/wasm": wasmOwners,
 	"go/src/cmd/link": {
-		Primary:   []Owner{cherryyz, rsc, mdempsky, iant},
+		Primary:   []Owner{cherryyz, rsc, iant},
 		Secondary: []Owner{mwhudson, thanm},
 	},
 	"go/src/cmd/link/internal/wasm": wasmOwners,
