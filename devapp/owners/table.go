@@ -117,35 +117,35 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{khr, gri},
 		Secondary: []Owner{josharian, mdempsky, martisch},
 	},
-	"go/src/cmd/compile/amd64": {
+	"go/src/cmd/compile/internal/amd64": {
 		Primary:   []Owner{khr},
 		Secondary: []Owner{josharian, rsc, drchase, cherryyz, martisch},
 	},
-	"go/src/cmd/compile/arm": {
+	"go/src/cmd/compile/internal/arm": {
 		Primary:   []Owner{khr},
 		Secondary: []Owner{rsc, drchase, cherryyz},
 	},
-	"go/src/cmd/compile/arm64": {
+	"go/src/cmd/compile/internal/arm64": {
 		Primary:   []Owner{khr},
 		Secondary: []Owner{rsc, drchase, cherryyz},
 	},
-	"go/src/cmd/compile/mips": {
+	"go/src/cmd/compile/internal/mips": {
 		Primary:   []Owner{khr},
 		Secondary: []Owner{rsc, drchase, cherryyz},
 	},
-	"go/src/cmd/compile/mips64": {
+	"go/src/cmd/compile/internal/mips64": {
 		Primary:   []Owner{khr},
 		Secondary: []Owner{rsc, drchase, cherryyz},
 	},
-	"go/src/cmd/compile/ppc64": {
+	"go/src/cmd/compile/internal/ppc64": {
 		Primary:   []Owner{khr},
 		Secondary: []Owner{rsc, drchase, cherryyz},
 	},
-	"go/src/cmd/compile/s390x": {
+	"go/src/cmd/compile/internal/s390x": {
 		Primary:   []Owner{khr},
 		Secondary: []Owner{rsc, drchase, cherryyz},
 	},
-	"go/src/cmd/compile/x86": {
+	"go/src/cmd/compile/internal/x86": {
 		Primary:   []Owner{khr},
 		Secondary: []Owner{josharian, rsc, drchase, cherryyz, martisch},
 	},
@@ -156,6 +156,9 @@ var entries = map[string]*Entry{
 	"go/src/cmd/compile/internal/types": {
 		Primary:   []Owner{gri},
 		Secondary: []Owner{josharian, mdempsky, rsc},
+	},
+	"go/src/cmd/compile/internal/types2": {
+		Primary: []Owner{gri, findleyr},
 	},
 	"go/src/cmd/compile/internal/ssa": {
 		Primary:   []Owner{khr},
@@ -318,8 +321,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{gri},
 	},
 	"go/src/go/types": {
-		Primary:   []Owner{gri},
-		Secondary: []Owner{adonovan},
+		Primary: []Owner{gri, findleyr},
 	},
 	"go/src/hash/maphash": {
 		Primary: []Owner{khr},
