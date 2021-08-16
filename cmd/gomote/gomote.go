@@ -50,7 +50,7 @@ The "gomote run" command has many of its own flags:
     -builderenv string
           Optional alternate builder to act like. Must share the same
           underlying buildlet host type, or it's an error. For
-          instance, linux-amd64-race or linux-386-387 are compatible
+          instance, linux-amd64-race is compatible
           with linux-amd64, but openbsd-amd64 and openbsd-386 are
           different hosts.
     -debug
