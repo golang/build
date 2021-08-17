@@ -1376,14 +1376,26 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	// For the Go project on the "master" branch,
 	// use the TRY= syntax to test against x repos.
 	if branch := key.Branch; key.Project == "go" && branch == "master" {
-		// linuxBuilder is the standard builder as it is the fastest and least expensive.
-		linuxBuilder := dashboard.Builders["linux-amd64"]
+		// customBuilder optionally specifies the builder to use for the build
+		// (empty string means to use the default builder).
+		addXrepo := func(project, customBuilder string) *buildStatus {
+			// linux-amd64 is the default builder as it is the fastest and least
+			// expensive.
+			builder := dashboard.Builders["linux-amd64"]
+			if customBuilder != "" {
+				b, ok := dashboard.Builders[customBuilder]
+				if !ok {
+					log.Printf("can't resolve requested builder %q", customBuilder)
+					return nil
+				}
+				builder = b
+			}
 
-		addXrepo := func(project string) *buildStatus {
 			if testingKnobSkipBuilds {
 				return nil
 			}
-			if !linuxBuilder.BuildsRepoTryBot(project, branch, branch) {
+			if !builder.BuildsRepoTryBot(project, branch, branch) {
+				log.Printf("builder %q isn't configured to build %q@%q as a trybot", builder.Name, project, branch)
 				return nil
 			}
 			rev, err := getRepoHead(project)
@@ -1392,7 +1404,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 				return nil
 			}
 			brev := buildgo.BuilderRev{
-				Name:    linuxBuilder.Name,
+				Name:    builder.Name,
 				Rev:     work.Commit,
 				SubName: project,
 				SubRev:  rev,
@@ -1407,17 +1419,17 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		}
 
 		// First, add the opt-in x repos.
-		xrepos := xReposFromComments(work)
-		for project := range xrepos {
-			if bs := addXrepo(project); bs != nil {
+		repoBuilders := xReposFromComments(work)
+		for rb := range repoBuilders {
+			if bs := addXrepo(rb.Project, rb.Builder); bs != nil {
 				ts.xrepos = append(ts.xrepos, bs)
 			}
 		}
 
-		// Always include x/tools. See golang.org/issue/34348.
+		// Always include the default x/tools builder. See golang.org/issue/34348.
 		// Do not add it to the trySet's list of opt-in x repos, however.
-		if !xrepos["tools"] {
-			addXrepo("tools")
+		if haveDefaultToolsBuild := repoBuilders[xRepoAndBuilder{Project: "tools"}]; !haveDefaultToolsBuild {
+			addXrepo("tools", "")
 		}
 	}
 
@@ -4193,18 +4205,39 @@ func slowBotsFromComments(work *apipb.GerritTryWorkItem) (builders []*dashboard.
 	return builders
 }
 
-// xReposFromComments looks at the TRY= comments from Gerrit (in
-// work) and returns any additional subrepos that should be tested.
-// The TRY= comments are expected to be of the format TRY=x/foo,
-// where foo is the name of the subrepo.
-func xReposFromComments(work *apipb.GerritTryWorkItem) map[string]bool {
-	xrepos := map[string]bool{}
+type xRepoAndBuilder struct {
+	Project string // "net", "tools", etc.
+	Builder string // Builder to use. Empty string means default builder.
+}
+
+func (rb xRepoAndBuilder) String() string {
+	if rb.Builder == "" {
+		return rb.Project
+	}
+	return rb.Project + "@" + rb.Builder
+}
+
+// xReposFromComments looks at the TRY= comments from Gerrit (in work) and
+// returns any additional subrepos that should be tested. The TRY= comments
+// are expected to be of the format TRY=x/foo or TRY=x/foo@builder where foo is
+// the name of the subrepo and builder is a builder name. If no builder is
+// provided, a default builder is used.
+func xReposFromComments(work *apipb.GerritTryWorkItem) map[xRepoAndBuilder]bool {
+	xrepos := make(map[xRepoAndBuilder]bool)
 	for _, term := range latestTryTerms(work) {
 		if len(term) < len("x/_") || term[:2] != "x/" {
 			continue
 		}
-		xrepo := term[2:]
-		xrepos[xrepo] = true
+		parts := strings.SplitN(term, "@", 2)
+		xrepo := parts[0][2:]
+		builder := "" // By convention, this means the default builder.
+		if len(parts) > 1 {
+			builder = parts[1]
+		}
+		xrepos[xRepoAndBuilder{
+			Project: xrepo,
+			Builder: builder,
+		}] = true
 	}
 	return xrepos
 }
@@ -4219,7 +4252,7 @@ func latestTryTerms(work *apipb.GerritTryWorkItem) []string {
 		return nil
 	}
 	return strings.FieldsFunc(tryMsg, func(c rune) bool {
-		return !unicode.IsLetter(c) && !unicode.IsNumber(c) && c != '-' && c != '_' && c != '/'
+		return !unicode.IsLetter(c) && !unicode.IsNumber(c) && c != '-' && c != '_' && c != '/' && c != '@'
 	})
 }
 

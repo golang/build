@@ -365,15 +365,16 @@ func TestSubreposFromComments(t *testing.T) {
 		TryMessage: []*apipb.TryVoteMessage{
 			{
 				Version: 2,
-				Message: "x/build, x/sync x/tools, x/sync",
+				Message: "x/build, x/sync x/tools, x/sync, x/tools@freebsd-amd64-race",
 			},
 		},
 	}
 	got := xReposFromComments(work)
-	want := map[string]bool{
-		"build": true,
-		"sync":  true,
-		"tools": true,
+	want := map[xRepoAndBuilder]bool{
+		{"build", ""}:                   true,
+		{"sync", ""}:                    true,
+		{"tools", ""}:                   true,
+		{"tools", "freebsd-amd64-race"}: true,
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("mismatch:\n got: %v\nwant: %v\n", got, want)
