@@ -232,22 +232,6 @@ var Hosts = map[string]*HostConfig{
 		OwnerGithub: "bradfitz", // at home
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
 	},
-	"host-openbsd-amd64-62": &HostConfig{
-		VMImage:            "openbsd-amd64-62",
-		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
-		Notes:              "OpenBSD 6.2; GCE VM is built from script in build/env/openbsd-amd64",
-		SSHUsername:        "gopher",
-	},
-	"host-openbsd-386-62": &HostConfig{
-		VMImage:            "openbsd-386-62-a",
-		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
-		Notes:              "OpenBSD 6.2; GCE VM is built from script in build/env/openbsd-386",
-		SSHUsername:        "gopher",
-	},
 	"host-openbsd-amd64-64": &HostConfig{
 		VMImage:            "openbsd-amd64-64-190129a",
 		MinCPUPlatform:     "Intel Skylake", // for better TSC? Maybe? see Issue 29223. builds faster at least.
@@ -2045,33 +2029,6 @@ func init() {
 			"GOOS=js", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
 			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:           "openbsd-386-62",
-		HostType:       "host-openbsd-386-62",
-		distTestAdjust: noTestDirAndNoReboot,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder is unfortunately still used by Go 1.15,
-			// so keep it around a bit longer. See golang.org/issue/42426.
-			return atMostGo1(goBranch, 15) && buildRepoByDefault(repo)
-		},
-		env: []string{
-			// cmd/go takes ~192 seconds on openbsd-386
-			// now, which is over the 180 second default
-			// dist test timeout. So, bump this builder
-			// up:
-			"GO_TEST_TIMEOUT_SCALE=2",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:           "openbsd-amd64-62",
-		HostType:       "host-openbsd-amd64-62",
-		distTestAdjust: noTestDirAndNoReboot,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder is unfortunately still used by Go 1.15,
-			// so keep it around a bit longer. See golang.org/issue/42426.
-			return atMostGo1(goBranch, 15) && buildRepoByDefault(repo)
 		},
 	})
 	addBuilder(BuildConfig{

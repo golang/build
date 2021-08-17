@@ -430,9 +430,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("openbsd-amd64-64@go1.16", "go"), onlyPost},
 		{b("openbsd-amd64-64@go1.15", "go"), onlyPost},
 		{b("openbsd-amd64-64@go1.14", "go"), onlyPost},
-		{b("openbsd-amd64-62@go1.16", "go"), none}, // golang.org/issue/42426.
-		{b("openbsd-amd64-62@go1.15", "go"), onlyPost},
-		{b("openbsd-amd64-62@go1.14", "go"), onlyPost},
 
 		// FreeBSD 12.2
 		{b("freebsd-amd64-12_2", "go"), both},
