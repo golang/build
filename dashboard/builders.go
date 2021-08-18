@@ -1524,9 +1524,10 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-386",
-		HostType:       "host-linux-jessie",
+		HostType:       "host-linux-bullseye",
 		distTestAdjust: fasterTrybots,
 		tryBot:         defaultTrySet(),
+		Notes:          "Debian stable (currently Debian bullseye).",
 		env: []string{
 			"GOARCH=386",
 			"GOHOSTARCH=386",
@@ -1888,10 +1889,9 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:       "linux-386-jessie",
-		HostType:   "host-linux-jessie",
-		Notes:      "Debian Jessie, 32-bit builder. Same as the normal 'linux-386' builder at this time, but with -jessie suffix. Used for release builds.",
-		buildsRepo: disabledBuilder, // Disabled because the "linux-386" builder does identical work.
+		Name:     "linux-386-jessie",
+		HostType: "host-linux-jessie",
+		Notes:    "Debian Jessie, 32-bit builder.",
 		env: []string{
 			"GOARCH=386",
 			"GOHOSTARCH=386",
@@ -1902,6 +1902,16 @@ func init() {
 		Name:     "linux-386-stretch",
 		HostType: "host-linux-stretch",
 		Notes:    "Debian Stretch, 32-bit builder.",
+		env: []string{
+			"GOARCH=386",
+			"GOHOSTARCH=386",
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-386-buster",
+		HostType: "host-linux-buster",
+		Notes:    "Debian Buster, 32-bit builder.",
 		env: []string{
 			"GOARCH=386",
 			"GOHOSTARCH=386",
