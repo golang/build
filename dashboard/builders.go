@@ -1551,7 +1551,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:       "linux-amd64",
-		HostType:   "host-linux-stretch",
+		HostType:   "host-linux-bullseye",
 		tryBot:     defaultTrySet(),
 		buildsRepo: defaultPlusExpBuild,
 		env: []string{
@@ -1645,7 +1645,7 @@ func init() {
 
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-nocgo",
-		HostType: "host-linux-jessie",
+		HostType: "host-linux-bullseye",
 		Notes:    "cgo disabled",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
@@ -1671,7 +1671,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:       "linux-amd64-noopt",
 		Notes:      "optimizations and inlining disabled",
-		HostType:   "host-linux-jessie",
+		HostType:   "host-linux-bullseye",
 		buildsRepo: onlyGo,
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
@@ -1680,7 +1680,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "linux-amd64-ssacheck",
-		HostType:    "host-linux-jessie",
+		HostType:    "host-linux-bullseye",
 		buildsRepo:  onlyGo,
 		tryBot:      nil, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
 		CompileOnly: true,
@@ -1783,7 +1783,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:                "linux-amd64-racecompile",
-		HostType:            "host-linux-jessie",
+		HostType:            "host-linux-bullseye",
 		tryBot:              nil, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
 		CompileOnly:         true,
 		SkipSnapshot:        true,
@@ -1799,7 +1799,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-amd64-race",
-		HostType:          "host-linux-jessie",
+		HostType:          "host-linux-bullseye",
 		tryBot:            defaultTrySet(),
 		buildsRepo:        defaultPlusExpBuild,
 		distTestAdjust:    fasterTrybots,
@@ -1858,7 +1858,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-jessie",
 		HostType: "host-linux-jessie",
-		Notes:    "Debian Jessie. The normal 'linux-amd64' builder is stretch. We use Jessie for our release builds due to https://golang.org/issue/31293",
+		Notes:    "Debian Jessie.",
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
@@ -2713,7 +2713,7 @@ func tryNewMiscCompile(suffix, rx string, knownIssue int, goDeps []string) {
 	}
 	addBuilder(BuildConfig{
 		Name:        "misc-compile" + suffix,
-		HostType:    "host-linux-jessie",
+		HostType:    "host-linux-bullseye",
 		buildsRepo:  func(repo, branch, goBranch string) bool { return repo == "go" && branch == "master" },
 		KnownIssue:  knownIssue,
 		GoDeps:      goDeps,
