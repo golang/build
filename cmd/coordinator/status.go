@@ -36,7 +36,6 @@ import (
 	"golang.org/x/build/cmd/coordinator/internal"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool"
-	"golang.org/x/build/internal/foreach"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/kubernetes/api"
 	"golang.org/x/oauth2"
@@ -153,7 +152,6 @@ func addHealthCheckers(ctx context.Context, sc *secret.Client) {
 	addHealthChecker(newOSUPPC64lePower9Checker())
 	addHealthChecker(newBasepinChecker())
 	addHealthChecker(newGitMirrorChecker())
-	addHealthChecker(newTipGolangOrgChecker(ctx))
 	addHealthChecker(newGitHubAPIChecker(ctx, sc))
 }
 
@@ -294,68 +292,6 @@ func newGitMirrorChecker() *healthChecker {
 		},
 	}
 }
-
-func newTipGolangOrgChecker(ctx context.Context) *healthChecker {
-	// tipError is the status of the tip.golang.org website.
-	// It's of type string; no value means no result yet,
-	// empty string means success, and non-empty means an error.
-	var tipError atomic.Value
-	go func() {
-		for {
-			tipError.Store(fetchTipGolangOrgError(ctx))
-			time.Sleep(30 * time.Second)
-		}
-	}()
-	return &healthChecker{
-		ID:     "tip",
-		Title:  "tip.golang.org website",
-		DocURL: "https://github.com/golang/build/tree/master/cmd/tip",
-		Check: func(w *checkWriter) {
-			e, ok := tipError.Load().(string)
-			if !ok {
-				w.warn("still checking")
-			} else if e != "" {
-				w.error(e)
-			}
-		},
-	}
-}
-
-// fetchTipGolangOrgError fetches the error= value from https://tip.golang.org/_tipstatus.
-func fetchTipGolangOrgError(ctx context.Context) string {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	req, _ := http.NewRequest(http.MethodGet, "https://tip.golang.org/_tipstatus", nil)
-	req = req.WithContext(ctx)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err.Error()
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return resp.Status
-	}
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err.Error()
-	}
-	var e string
-	err = foreach.Line(b, func(s []byte) error {
-		if !bytes.HasPrefix(s, []byte("error=")) {
-			return nil
-		}
-		e = string(s[len("error="):])
-		return errFound
-	})
-	if err != errFound {
-		return "missing error= line"
-	} else if e != "<nil>" {
-		return "_tipstatus page reports error: " + e
-	}
-	return ""
-}
-
-var errFound = errors.New("error= line was found")
 
 func newMacHealthChecker() *healthChecker {
 	var hosts []string
