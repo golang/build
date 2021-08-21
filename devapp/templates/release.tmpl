@@ -80,11 +80,12 @@ a:visited {
     {{range .Groups}}
       {{if .Dir}}<h4 class="DirTitle">{{.Dir}}</h4>{{end}}
       {{range .Items}}
-	{{if .FirstPerformance}}<h5 class="Performance-separator">performance</h5>{{end}}
+        {{if .FirstPerformance}}<h5 class="Performance-separator">performance</h5>{{end}}
         {{$i := .Issue}}
         {{if $i}}
           <div class="Item">
-            {{if .CurrentBlocker}}
+            {{$currentBlocker := and (eq .Issue.Milestone.Title $.CurMilestone) .ReleaseBlocker}}
+            {{if $currentBlocker}}
               <div class="Mark" title="{{.Issue.Milestone.Title}} release blocker">★</div>
             {{else if .ReleaseBlocker}}
               <div class="Mark" title="Release blocker">✩</div>

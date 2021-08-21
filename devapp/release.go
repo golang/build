@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"golang.org/x/build/maintner"
+	"golang.org/x/build/maintner/maintnerd/maintapi/version"
 )
 
 const (
@@ -25,13 +26,7 @@ const (
 
 	prefixProposal = "proposal:"
 	prefixDev      = "[dev."
-
-	// The title of the current release milestone in GitHub.
-	curMilestoneTitle = "Go1.17"
 )
-
-// The start date of the current release milestone.
-var curMilestoneStart = time.Date(2021, 2, 22, 0, 0, 0, 0, time.UTC)
 
 // titleDirs returns a slice of prefix directories contained in a title. For
 // devapp,maintner: my cool new change, it will return ["devapp", "maintner"].
@@ -71,6 +66,7 @@ type releaseData struct {
 	LastUpdated  string
 	Sections     []section
 	BurndownJSON template.JS
+	CurMilestone string // The title of the current release milestone in GitHub. For example, "Go1.18".
 
 	// dirty is set if this data needs to be updated due to a corpus change.
 	dirty bool
@@ -98,10 +94,6 @@ func (i *item) ReleaseBlocker() bool {
 		return false
 	}
 	return i.Issue.HasLabel("release-blocker")
-}
-
-func (i *item) CurrentBlocker() bool {
-	return i.Issue.Milestone.Title == curMilestoneTitle && i.ReleaseBlocker()
 }
 
 func (i *item) EarlyInCycle() bool {
@@ -253,6 +245,25 @@ func (s *server) updateReleaseData() {
 		return nil
 	})
 
+	// Determine current milestone based on the highest go1.X tag.
+	var highestGo1X int
+	s.proj.ForeachNonChangeRef(func(ref string, _ maintner.GitHash) error {
+		if !strings.HasPrefix(ref, "refs/tags/go1.") {
+			return nil
+		}
+		tagName := ref[len("refs/tags/"):]
+		if _, x, _, ok := version.ParseTag(tagName); ok && x > highestGo1X {
+			highestGo1X = x
+		}
+		return nil
+	})
+	// The title of the current release milestone in GitHub. For example, "Go1.18".
+	curMilestoneTitle := fmt.Sprintf("Go1.%d", highestGo1X+1)
+	// The start date of the current release milestone, approximated by taking the
+	// Go 1.17 release date, and adding 6 months for each successive major release.
+	var monthsSinceGo117Release = time.Month(6 * (highestGo1X - 17))
+	curMilestoneStart := time.Date(2021, time.August+monthsSinceGo117Release, 1, 0, 0, 0, 0, time.UTC)
+
 	dirToIssues := map[string][]*maintner.GitHubIssue{}
 	var curMilestoneIssues []*maintner.GitHubIssue
 	s.repo.ForeachIssue(func(issue *maintner.GitHubIssue) error {
@@ -307,6 +318,7 @@ func (s *server) updateReleaseData() {
 	s.appendPendingCLs(dirToCLs)
 	s.appendPendingProposals(issueToCLs)
 	s.appendClosedIssues()
+	s.data.release.CurMilestone = curMilestoneTitle
 	s.data.release.LastUpdated = time.Now().UTC().Format(time.UnixDate)
 	s.data.release.dirty = false
 }

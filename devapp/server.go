@@ -33,7 +33,8 @@ type server struct {
 
 	cMu              sync.RWMutex // Used to protect the fields below.
 	corpus           *maintner.Corpus
-	repo             *maintner.GitHubRepo
+	repo             *maintner.GitHubRepo    // The golang/go repo.
+	proj             *maintner.GerritProject // The go.googlesource.com/go project.
 	helpWantedIssues []issueData
 	data             pageData
 
@@ -97,9 +98,13 @@ func (s *server) initCorpus(ctx context.Context) error {
 		return fmt.Errorf("godata.Get: %v", err)
 	}
 	s.corpus = corpus
-	s.repo = s.corpus.GitHub().Repo("golang", "go") // The golang/go repo.
+	s.repo = s.corpus.GitHub().Repo("golang", "go")
 	if s.repo == nil {
 		return fmt.Errorf(`s.corpus.GitHub().Repo("golang", "go") = nil`)
+	}
+	s.proj = s.corpus.Gerrit().Project("go.googlesource.com", "go")
+	if s.proj == nil {
+		return fmt.Errorf(`s.corpus.Gerrit().Project("go.googlesource.com", "go") = nil`)
 	}
 	return nil
 }
