@@ -2267,7 +2267,6 @@ func init() {
 		},
 		env: []string{
 			"GOARCH=arm64",
-			"GOHOSTARCH=arm64",
 		},
 	})
 	addBuilder(BuildConfig{
@@ -2278,9 +2277,8 @@ func init() {
 			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
 		},
 		env: []string{
-			"GOARCH=arm",
+			"GOARCH=arm64",
 			"GOARM=7",
-			"GOHOSTARCH=arm",
 		},
 		KnownIssue: 47019,
 	})
