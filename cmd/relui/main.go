@@ -9,15 +9,24 @@
 package main
 
 import (
+	"context"
+	"flag"
 	"log"
 	"net/http"
 	"os"
+)
 
-	"golang.org/x/build/internal/datastore/fake"
+var (
+	pgConnect = flag.String("pg-connect", "host=/var/run/postgresql user=postgres database=relui-dev", "Postgres connection string or URI")
 )
 
 func main() {
-	d := &dsStore{client: &fake.Client{}}
+	ctx := context.Background()
+	d := new(pgStore)
+	if err := d.Connect(ctx, *pgConnect); err != nil {
+		log.Fatalf("d.Connect() = %v", err)
+	}
+	defer d.Close()
 	s := &server{
 		store: d,
 	}
