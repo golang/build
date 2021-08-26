@@ -2270,19 +2270,6 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:              "windows-arm-10",
-		HostType:          "host-windows-arm64-mini",
-		numTryTestHelpers: 1,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
-		},
-		env: []string{
-			"GOARCH=arm64",
-			"GOARM=7",
-		},
-		KnownIssue: 47019,
-	})
-	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-10_12",
 		HostType:       "host-darwin-10_12",
 		distTestAdjust: macTestPolicy,
