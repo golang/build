@@ -225,6 +225,13 @@ var Hosts = map[string]*HostConfig{
 		OwnerGithub: "4a6f656c",
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
 	},
+	"host-linux-riscv64-unmatched": &HostConfig{
+		Notes:       "SiFive HiFive Unmatched RISC-V board. 16 GB RAM, 4 cores.",
+		IsReverse:   true,
+		ExpectNum:   1,
+		OwnerGithub: "mengzhuo",
+		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
+	},
 	"host-linux-riscv64-unleashed": &HostConfig{
 		Notes:       "SiFive HiFive Unleashed RISC-V board. 8 GB RAM, 4 cores.",
 		IsReverse:   true,
@@ -2545,6 +2552,14 @@ func init() {
 				return false
 			}
 		},
+	})
+	addBuilder(BuildConfig{
+		HostType:     "host-linux-riscv64-unmatched",
+		Name:         "linux-riscv64-unmatched",
+		env:          []string{"GO_TEST_TIMEOUT_SCALE=4"},
+		FlakyNet:     true,
+		SkipSnapshot: true, // The builder has a slow uplink bandwidth.
+		buildsRepo:   onlyMasterDefault,
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-s390x-ibm",
