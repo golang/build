@@ -1,9 +1,12 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: gopherbot-deployment
 spec:
   replicas: 1 # more than 1 might cause duplicate GitHub comments
+  selector:
+    matchLabels:
+      app: gopherbot
   template:
     metadata:
       labels:
