@@ -78,7 +78,7 @@ func main() {
 	switch osArch {
 	case "linux/arm":
 		switch env := os.Getenv("GO_BUILDER_ENV"); env {
-		case "linux-arm-arm5spacemonkey", "host-linux-arm-aws":
+		case "host-linux-arm-aws":
 			// No setup currently.
 		default:
 			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
@@ -149,9 +149,6 @@ Download:
 	buildEnv := os.Getenv("GO_BUILDER_ENV")
 
 	switch buildEnv {
-	case "linux-arm-arm5spacemonkey":
-		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-arm5spacemonkey")...)
-		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
 	case "host-linux-arm-aws":
 		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
 	case "host-linux-arm64-aws":
@@ -308,11 +305,6 @@ func isNetworkUp() bool {
 func buildletURL() string {
 	if v := os.Getenv("META_BUILDLET_BINARY_URL"); v != "" {
 		return v
-	}
-
-	switch os.Getenv("GO_BUILDER_ENV") {
-	case "linux-arm-arm5spacemonkey":
-		return "https://storage.googleapis.com/go-builder-data/buildlet.linux-arm-arm5"
 	}
 
 	if metadata.OnGCE() {

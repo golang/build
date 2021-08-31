@@ -122,14 +122,9 @@ const (
 
 func main() {
 	builderEnv := os.Getenv("GO_BUILDER_ENV")
-
-	switch builderEnv {
-	case "macstadium_vm":
+	if builderEnv == "macstadium_vm" {
 		configureMacStadium()
-	case "linux-arm-arm5spacemonkey":
-		initBaseUnixEnv() // Issue 28041
 	}
-
 	onGCE := metadata.OnGCE()
 	switch runtime.GOOS {
 	case "plan9":
