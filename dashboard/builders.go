@@ -212,12 +212,6 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/goboot"},
 		SSHUsername:     "root",
 	},
-	"host-linux-arm5spacemonkey": &HostConfig{
-		IsReverse:   true,
-		ExpectNum:   3,
-		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
-		OwnerGithub: "esnolte", // https://github.com/golang/go/issues/34973#issuecomment-543836871
-	},
 	"host-linux-riscv64-joelsing": &HostConfig{
 		Notes:       "SiFive HiFive Unleashed RISC-V board. 8 GB RAM, 4 cores.",
 		IsReverse:   true,
@@ -1966,41 +1960,6 @@ func init() {
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
 		numTryTestHelpers: 4, // Target time is < 15 min for golang.org/issue/42661.
-	})
-	addBuilder(BuildConfig{
-		Name:     "linux-arm-arm5spacemonkey",
-		HostType: "host-linux-arm5spacemonkey",
-		CrossCompileConfig: &CrossCompileConfig{
-			CompileHostType:    "host-linux-armel-cross",
-			CCForTarget:        "arm-linux-gnueabi-gcc",
-			GOARM:              "5",
-			AlwaysCrossCompile: true,
-		},
-		env: []string{
-			"GOARM=5",
-			"GO_TEST_TIMEOUT_SCALE=4", // arm is normally 2; double that.
-		},
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return branch == "master" && goBranch == "master" && buildRepoByDefault(repo)
-		},
-		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
-			if strings.Contains(distTest, "vendor/github.com/google/pprof") {
-				// Not worth it. And broken.
-				return false
-			}
-			if distTest == "api" {
-				// Broken on this build config (Issue
-				// 24754), and not worth it on slow
-				// builder. It's covered by other
-				// builders anyway.
-				return false
-			}
-			if strings.HasPrefix(distTest, "test:") {
-				// Slow, and not worth it on slow builder.
-				return false
-			}
-			return run
-		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "js-wasm",

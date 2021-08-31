@@ -372,9 +372,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-386-softfloat", "crypto"), onlyPost},
 		{b("linux-386-softfloat@go1.16", "crypto"), onlyPost},
 		{b("linux-386-softfloat@go1.15", "crypto"), none},
-		{b("linux-arm-arm5spacemonkey@go1.15", "net"), none},
-		{b("linux-arm-arm5spacemonkey", "exp"), none},
-		{b("linux-arm-arm5spacemonkey", "mobile"), none},
 
 		// The mobile repo requires Go 1.13+.
 		{b("android-amd64-emu", "mobile"), both},
