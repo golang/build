@@ -580,7 +580,7 @@ var Hosts = map[string]*HostConfig{
 		env:         []string{"GOROOT_BOOTSTRAP=/opt/golang/go-solaris-amd64-bootstrap"},
 	},
 	"host-linux-mipsle-mengzhuo": &HostConfig{
-		Notes:       "Loongson 3A Box hosted by Meng Zhuo; actually MIPS64 despite the name",
+		Notes:       "Loongson 3A Box hosted by Meng Zhuo; actually MIPS64le despite the name",
 		OwnerGithub: "mengzhuo",
 		IsReverse:   true,
 		ExpectNum:   1,
@@ -2364,10 +2364,6 @@ func init() {
 		SkipSnapshot:   true,
 		distTestAdjust: mipsDistTestPolicy,
 		buildsRepo:     mipsBuildsRepoPolicy,
-		env: []string{
-			"GOARCH=mips64le",
-			"GOHOSTARCH=mips64le",
-		},
 	})
 	addBuilder(BuildConfig{
 		FlakyNet:       true,
