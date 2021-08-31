@@ -1982,7 +1982,7 @@ func init() {
 					return false
 				}
 				switch distTest {
-				case "cmd/go", "nolibgcc:crypto/x509":
+				case "cmd/go", "nolibgcc:crypto/x509", "reboot":
 					return false
 				}
 			}
@@ -2582,9 +2582,6 @@ func init() {
 		HostType: "host-plan9-amd64-0intro",
 		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 			run = noTestDirAndNoReboot(run, distTest, isNormalTry)
-			if strings.HasPrefix(distTest, "test:") || distTest == "reboot" {
-				return false // skip test
-			}
 			switch distTest {
 			case "api",
 				"go_test:cmd/go": // takes over 20 minutes without working SMP
