@@ -2471,17 +2471,11 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		HostType:     "host-linux-riscv64-joelsing",
-		Name:         "linux-riscv64-jsing",
-		SkipSnapshot: true,
-		env:          []string{"GO_TEST_TIMEOUT_SCALE=4"},
-		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
-			switch distTest {
-			case "api", "reboot":
-				return false
-			}
-			return run
-		},
+		HostType:       "host-linux-riscv64-joelsing",
+		Name:           "linux-riscv64-jsing",
+		SkipSnapshot:   true,
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=4"},
+		distTestAdjust: riscvDistTestPolicy,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
 			case "go", "net", "sys":
@@ -2492,17 +2486,11 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		HostType:     "host-linux-riscv64-unleashed",
-		Name:         "linux-riscv64-unleashed",
-		SkipSnapshot: true,
-		env:          []string{"GO_TEST_TIMEOUT_SCALE=4"},
-		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
-			switch distTest {
-			case "api", "reboot":
-				return false
-			}
-			return run
-		},
+		HostType:       "host-linux-riscv64-unleashed",
+		Name:           "linux-riscv64-unleashed",
+		SkipSnapshot:   true,
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=4"},
+		distTestAdjust: riscvDistTestPolicy,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
 			case "go", "net", "sys":
@@ -2513,12 +2501,13 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		HostType:     "host-linux-riscv64-unmatched",
-		Name:         "linux-riscv64-unmatched",
-		env:          []string{"GO_TEST_TIMEOUT_SCALE=4"},
-		FlakyNet:     true,
-		SkipSnapshot: true, // The builder has a slow uplink bandwidth.
-		buildsRepo:   onlyMasterDefault,
+		HostType:       "host-linux-riscv64-unmatched",
+		Name:           "linux-riscv64-unmatched",
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=4"},
+		FlakyNet:       true,
+		SkipSnapshot:   true, // The builder has a slow uplink bandwidth.
+		buildsRepo:     onlyMasterDefault,
+		distTestAdjust: riscvDistTestPolicy,
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-s390x-ibm",
@@ -2754,6 +2743,9 @@ func mipsBuildsRepoPolicy(repo, branch, goBranch string) bool {
 		return false
 	}
 }
+
+// riscvDistTestPolicy is same as mipsDistTestPolicy for now.
+var riscvDistTestPolicy = mipsDistTestPolicy
 
 // TryBuildersForProject returns the builders that should run as part of
 // a TryBot set for the given project.
