@@ -611,9 +611,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-unified@dev.typeparams", "go"), both},
 		{b("linux-amd64-unified@dev.typeparams", "tools"), both},
 		{b("linux-amd64-unified@dev.typeparams", "net"), none},
-
-		{b("linux-amd64-noregabi", "go"), onlyPost},
-		{b("linux-amd64-noregabi", "net"), none},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {
