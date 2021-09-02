@@ -23,8 +23,8 @@ push-staging: docker-staging
 	docker push $(IMAGE_STAGING):$(VERSION)
 
 deploy-prod: push-prod
-	kubectl set image deployment/gitmirror-serving-deployment gitmirror=$(IMAGE_PROD):$(VERSION)
-	kubectl set image deployment/gitmirror-mirroring-deployment gitmirror=$(IMAGE_PROD):$(VERSION)
+	kubectl set image --namespace=prod deployment/gitmirror-serving-deployment gitmirror=$(IMAGE_PROD):$(VERSION)
+	kubectl set image --namespace=prod deployment/gitmirror-mirroring-deployment gitmirror=$(IMAGE_PROD):$(VERSION)
 
 deploy-staging: push-staging
 	echo "no staging configuration"
