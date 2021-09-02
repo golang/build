@@ -44,6 +44,9 @@ type KubeConfig struct {
 
 	// Name is the name of the Kubernetes cluster that will be created.
 	Name string
+
+	// Namespace is the Kubernetes namespace to use within the cluster.
+	Namespace string
 }
 
 // Environment describes the configuration of the infrastructure for a
@@ -261,6 +264,7 @@ var Staging = &Environment{
 		MaxNodes:    3,
 		Name:        "go",
 		MachineType: "n1-standard-4",
+		Namespace:   "default",
 	},
 	DashURL:           "https://build-staging.golang.org/",
 	PerfDataURL:       "https://perfdata.golang.org",
@@ -296,6 +300,7 @@ var Production = &Environment{
 		MaxNodes:    4,
 		Name:        "go",
 		MachineType: "n1-standard-4",
+		Namespace:   "prod",
 	},
 	DashURL:             "https://build.golang.org/",
 	PerfDataURL:         "https://perfdata.golang.org",

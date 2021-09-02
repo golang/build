@@ -39,7 +39,10 @@ type Client struct {
 // The provided host is an url (scheme://hostname[:port]) of a
 // Kubernetes master without any path.
 // The provided client is an authorized http.Client used to perform requests to the Kubernetes API master.
-func NewClient(baseURL string, client *http.Client) (*Client, error) {
+func NewClient(baseURL, namespace string, client *http.Client) (*Client, error) {
+	if namespace == "" {
+		return nil, fmt.Errorf("must specify Kubernetes namespace")
+	}
 	validURL, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL %q: %v", baseURL, err)
@@ -47,7 +50,7 @@ func NewClient(baseURL string, client *http.Client) (*Client, error) {
 	return &Client{
 		endpointURL: strings.TrimSuffix(validURL.String(), "/") + "/api/v1",
 		httpClient:  client,
-		namespace:   "default",
+		namespace:   namespace,
 	}, nil
 }
 

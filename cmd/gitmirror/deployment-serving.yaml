@@ -1,6 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  namespace: prod
   name: gitmirror-serving-deployment
   labels:
     app: gitmirror-serving
@@ -17,6 +18,9 @@ spec:
       labels:
         app: gitmirror-serving
     spec:
+      serviceAccountName: gitmirror
+      nodeSelector:
+        cloud.google.com/gke-nodepool: workload-identity-pool
       volumes:
       - name: cache-volume
         emptyDir:

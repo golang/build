@@ -143,21 +143,8 @@ func writeCredentials(home string) error {
 		fmt.Fprintf(sshConfig, "Host github.com\n  IdentityFile %v\n", privKeyPath)
 	}
 
-	// gitmirror service key, used to gcloud auth for CSR writes.
+	// The gitmirror service account should already be available via GKE workload identity.
 	if *flagMirrorCSR {
-		serviceKey, err := retrieveSecret(ctx, secret.NameGitMirrorServiceKey)
-		if err != nil {
-			return fmt.Errorf("reading service key from secret manager: %v", err)
-		}
-		serviceKeyPath := filepath.Join(home, secret.NameGitMirrorServiceKey)
-		if err := ioutil.WriteFile(serviceKeyPath, []byte(serviceKey), 0600); err != nil {
-			return err
-		}
-		gcloud := exec.CommandContext(ctx, "gcloud", "auth", "activate-service-account", "--key-file", serviceKeyPath)
-		gcloud.Env = append(os.Environ(), "HOME="+home)
-		if out, err := gcloud.CombinedOutput(); err != nil {
-			return fmt.Errorf("gcloud auth failed: %v\n%v", err, out)
-		}
 		fmt.Fprintf(gitConfig, "[credential \"https://source.developers.google.com\"]\n  helper=gcloud.sh\n")
 	}
 

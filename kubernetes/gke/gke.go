@@ -35,6 +35,7 @@ type clientOpt struct {
 	Project     string
 	TokenSource oauth2.TokenSource
 	Zone        string
+	Namespace   string
 }
 
 type clientOptFunc func(*clientOpt)
@@ -69,9 +70,16 @@ func OptTokenSource(ts oauth2.TokenSource) ClientOpt {
 	})
 }
 
+// OptNamespace sets the Kubernetes namespace to look in.
+func OptNamespace(namespace string) ClientOpt {
+	return clientOptFunc(func(o *clientOpt) {
+		o.Namespace = namespace
+	})
+}
+
 // NewClient returns an Kubernetes client to a GKE cluster.
 func NewClient(ctx context.Context, clusterName string, opts ...ClientOpt) (*kubernetes.Client, error) {
-	var opt clientOpt
+	opt := clientOpt{Namespace: "default"}
 	for _, o := range opts {
 		o.modify(&opt)
 	}
@@ -166,7 +174,7 @@ func NewClient(ctx context.Context, clusterName string, opts ...ClientOpt) (*kub
 		},
 	}
 
-	kubeClient, err := kubernetes.NewClient("https://"+cluster.Endpoint, kubeHTTPClient)
+	kubeClient, err := kubernetes.NewClient("https://"+cluster.Endpoint, opt.Namespace, kubeHTTPClient)
 	if err != nil {
 		return nil, fmt.Errorf("kubernetes HTTP client could not be created: %v", err)
 	}

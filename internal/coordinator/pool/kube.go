@@ -83,6 +83,7 @@ func InitKube(monitorGitMirror MonitorGitMirrorFunc) error {
 
 	goKubeClient, err = gke.NewClient(ctx,
 		gceBuildEnv.KubeTools.Name,
+		gke.OptNamespace(gceBuildEnv.KubeTools.Namespace),
 		gke.OptZone(gceBuildEnv.ControlZone),
 		gke.OptProject(gceBuildEnv.ProjectName),
 		gke.OptTokenSource(gce.GCPCredentials().TokenSource))

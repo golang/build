@@ -74,7 +74,7 @@ func TestRunPod(t *testing.T) {
 	s := httptest.NewServer(&hs)
 	defer s.Close()
 
-	c, err := kubernetes.NewClient(s.URL, http.DefaultClient)
+	c, err := kubernetes.NewClient(s.URL, "default", http.DefaultClient)
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
