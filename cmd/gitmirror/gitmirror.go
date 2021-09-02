@@ -723,8 +723,12 @@ func handleDebugEnv(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// runCommandContext runs cmd controlled by ctx.
-func runCmdContext(ctx context.Context, cmd *exec.Cmd) error {
+// runCmdContext allows OS-specific overrides of process execution behavior.
+// See runCmdContextLinux.
+var runCmdContext = runCmdContextDefault
+
+// runCommandContextDefault runs cmd controlled by ctx.
+func runCmdContextDefault(ctx context.Context, cmd *exec.Cmd) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
