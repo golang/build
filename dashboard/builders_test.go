@@ -414,6 +414,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-mips64le-mengzhuo", "sys"), onlyPost},
 		{b("linux-mips64le-mengzhuo", "net"), onlyPost},
 
+		{b("linux-loong64-3a5000", "go"), onlyPost},
+		{b("linux-loong64-3a5000", "sys"), onlyPost},
+		{b("linux-loong64-3a5000", "net"), onlyPost},
+
 		// OpenBSD.
 		{b("openbsd-amd64-68@go1.16", "go"), both},
 		{b("openbsd-amd64-68@go1.15", "go"), both},
