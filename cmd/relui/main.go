@@ -32,7 +32,6 @@ func main() {
 	}
 	http.Handle("/workflows/create", http.HandlerFunc(s.createWorkflowHandler))
 	http.Handle("/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
-	http.Handle("/tasks/start", http.HandlerFunc(s.startTaskHandler))
 	http.Handle("/", fileServerHandler(static, http.HandlerFunc(s.homeHandler)))
 	port := os.Getenv("PORT")
 	if port == "" {

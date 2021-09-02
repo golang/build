@@ -11,24 +11,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 
-	"cloud.google.com/go/datastore"
-	"github.com/googleapis/google-cloud-go-testing/datastore/dsiface"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
-	reluipb "golang.org/x/build/cmd/relui/protos"
 )
 
 var errDBNotExist = errors.New("database does not exist")
 
 // store is a persistence interface for saving data.
 type store interface {
-	AddWorkflow(workflow *reluipb.Workflow) error
-	BuildableTask(workflowId, id string) *reluipb.BuildableTask
-	Workflow(id string) *reluipb.Workflow
-	Workflows() []*reluipb.Workflow
 }
+
+var _ store = (*pgStore)(nil)
 
 // pgStore is a store backed by a Postgres database.
 type pgStore struct {
@@ -121,66 +115,4 @@ func checkIfDBExists(ctx context.Context, cfg *pgx.ConnConfig) (bool, error) {
 		return false, fmt.Errorf("row.Scan() = %w", err)
 	}
 	return exists == 1, nil
-}
-
-func (*pgStore) AddWorkflow(workflow *reluipb.Workflow) error {
-	return nil
-}
-
-func (*pgStore) BuildableTask(workflowId, id string) *reluipb.BuildableTask {
-	return nil
-}
-
-func (*pgStore) Workflow(id string) *reluipb.Workflow {
-	return nil
-}
-
-func (*pgStore) Workflows() []*reluipb.Workflow {
-	return nil
-}
-
-var _ store = (*dsStore)(nil)
-
-// dsStore is a store backed by Google Cloud Datastore.
-type dsStore struct {
-	client dsiface.Client
-}
-
-// AddWorkflow adds a reluipb.Workflow to the database.
-func (d *dsStore) AddWorkflow(wf *reluipb.Workflow) error {
-	key := datastore.NameKey("Workflow", wf.GetId(), nil)
-	_, err := d.client.Put(context.TODO(), key, wf)
-	return err
-}
-
-// BuildableTask fetches a reluipb.BuildableTask from the database.
-func (d *dsStore) BuildableTask(workflowId, id string) *reluipb.BuildableTask {
-	wf := d.Workflow(workflowId)
-	for _, bt := range wf.GetBuildableTasks() {
-		if bt.GetId() == id {
-			return bt
-		}
-	}
-	return nil
-}
-
-// Workflow fetches a reluipb.Workflow from the database.
-func (d *dsStore) Workflow(id string) *reluipb.Workflow {
-	key := datastore.NameKey("Workflow", id, nil)
-	wf := new(reluipb.Workflow)
-	if err := d.client.Get(context.TODO(), key, wf); err != nil {
-		log.Printf("d.client.Get(_, %q, %v) = %v", key, wf, err)
-		return nil
-	}
-	return wf
-}
-
-// Workflows returns all reluipb.Workflow entities from the database.
-func (d *dsStore) Workflows() []*reluipb.Workflow {
-	var wfs []*reluipb.Workflow
-	if _, err := d.client.GetAll(context.TODO(), datastore.NewQuery("Workflow"), &wfs); err != nil {
-		log.Printf("d.client.GetAll(_, %#v, %v) = %v", datastore.NewQuery("Workflow"), &wfs, err)
-		return nil
-	}
-	return wfs
 }
