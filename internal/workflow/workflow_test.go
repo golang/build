@@ -56,9 +56,27 @@ func TestSplitJoin(t *testing.T) {
 }
 
 func TestParallelism(t *testing.T) {
+	// block1 and block2 block until they're both running.
+	chan1, chan2 := make(chan bool, 1), make(chan bool, 1)
+	block1 := func(ctx context.Context) (string, error) {
+		chan1 <- true
+		select {
+		case <-chan2:
+		case <-ctx.Done():
+		}
+		return "", ctx.Err()
+	}
+	block2 := func(ctx context.Context) (string, error) {
+		chan2 <- true
+		select {
+		case <-chan1:
+		case <-ctx.Done():
+		}
+		return "", ctx.Err()
+	}
 	wd := workflow.New()
-	out1 := wd.Task("sleep #1", sleep, wd.Constant(100*time.Millisecond))
-	out2 := wd.Task("sleep #2", sleep, wd.Constant(100*time.Millisecond))
+	out1 := wd.Task("block #1", block1)
+	out2 := wd.Task("block #2", block2)
 	wd.Output("out1", out1)
 	wd.Output("out2", out2)
 
@@ -66,13 +84,11 @@ func TestParallelism(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	start := time.Now()
-	_, err = w.Run(context.Background(), loggingListener(t))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = w.Run(ctx, loggingListener(t))
 	if err != nil {
 		t.Fatal(err)
-	}
-	if delay := time.Since(start); delay > 150*time.Millisecond {
-		t.Errorf("too much time elapsed: %v", delay)
 	}
 }
 
@@ -96,11 +112,6 @@ func TestParameters(t *testing.T) {
 	if want := map[string]interface{}{"out1": "#1", "out2": "#2"}; !reflect.DeepEqual(outputs, want) {
 		t.Errorf("outputs = %#v, want %#v", outputs, want)
 	}
-}
-
-func sleep(ctx context.Context, d time.Duration) (struct{}, error) {
-	time.Sleep(d)
-	return struct{}{}, nil
 }
 
 func appendInt(ctx context.Context, s string, i int) (string, error) {
