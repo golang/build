@@ -12,8 +12,9 @@ import (
 	"context"
 	"flag"
 	"log"
-	"net/http"
 	"os"
+
+	"golang.org/x/build/internal/relui"
 )
 
 var (
@@ -22,21 +23,14 @@ var (
 
 func main() {
 	ctx := context.Background()
-	d := new(pgStore)
-	if err := d.Connect(ctx, *pgConnect); err != nil {
-		log.Fatalf("d.Connect() = %v", err)
+	s, err := relui.NewServer(ctx, *pgConnect)
+	if err != nil {
+		log.Fatalf("relui.NewServer() = %v", err)
 	}
-	defer d.Close()
-	s := &server{
-		store: d,
-	}
-	http.Handle("/workflows/create", http.HandlerFunc(s.createWorkflowHandler))
-	http.Handle("/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
-	http.Handle("/", fileServerHandler(static, http.HandlerFunc(s.homeHandler)))
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 	log.Printf("Listening on :" + port)
-	log.Fatal(http.ListenAndServe(":"+port, http.DefaultServeMux))
+	log.Fatal(s.Serve(port))
 }

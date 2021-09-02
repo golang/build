@@ -5,10 +5,11 @@
 //go:build go1.16
 // +build go1.16
 
-package main
+package relui
 
 import (
 	"bytes"
+	"context"
 	"html/template"
 	"io"
 	"io/fs"
@@ -42,10 +43,32 @@ var (
 	newWorkflowTmpl = template.Must(template.Must(layoutTmpl.Clone()).ParseFS(templates, "templates/new_workflow.html"))
 )
 
-// server implements the http handlers for relui.
-type server struct {
+// Server implements the http handlers for relui.
+type Server struct {
 	// store is for persisting application state.
 	store store
+}
+
+// NewServer initializes a server with a database connection specified
+// by pgConn. Any libpq compatible connection strings or URIs are
+// supported.
+func NewServer(ctx context.Context, pgConn string) (*Server, error) {
+	d := new(PgStore)
+	if err := d.Connect(ctx, pgConn); err != nil {
+		return nil, err
+	}
+	defer d.Close()
+	s := &Server{
+		store: d,
+	}
+	http.Handle("/workflows/create", http.HandlerFunc(s.createWorkflowHandler))
+	http.Handle("/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
+	http.Handle("/", fileServerHandler(static, http.HandlerFunc(s.homeHandler)))
+	return s, nil
+}
+
+func (s *Server) Serve(port string) error {
+	return http.ListenAndServe(":"+port, http.DefaultServeMux)
 }
 
 type homeResponse struct {
@@ -53,7 +76,7 @@ type homeResponse struct {
 }
 
 // homeHandler renders the homepage.
-func (s *server) homeHandler(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) homeHandler(w http.ResponseWriter, _ *http.Request) {
 	out := bytes.Buffer{}
 	if err := homeTmpl.Execute(&out, homeResponse{}); err != nil {
 		log.Printf("homeHandler: %v", err)
@@ -64,7 +87,7 @@ func (s *server) homeHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 // newWorkflowHandler presents a form for creating a new workflow.
-func (s *server) newWorkflowHandler(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) newWorkflowHandler(w http.ResponseWriter, _ *http.Request) {
 	out := bytes.Buffer{}
 	if err := newWorkflowTmpl.Execute(&out, nil); err != nil {
 		log.Printf("newWorkflowHandler: %v", err)
@@ -75,6 +98,6 @@ func (s *server) newWorkflowHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 // createWorkflowHandler persists a new workflow in the datastore.
-func (s *server) createWorkflowHandler(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) createWorkflowHandler(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, "Unable to create workflow: no workflows configured", http.StatusInternalServerError)
 }

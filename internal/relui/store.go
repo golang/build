@@ -5,7 +5,7 @@
 //go:build go1.16
 // +build go1.16
 
-package main
+package relui
 
 import (
 	"context"
@@ -22,10 +22,10 @@ var errDBNotExist = errors.New("database does not exist")
 type store interface {
 }
 
-var _ store = (*pgStore)(nil)
+var _ store = (*PgStore)(nil)
 
-// pgStore is a store backed by a Postgres database.
-type pgStore struct {
+// PgStore is a store backed by a Postgres database.
+type PgStore struct {
 	db *pgxpool.Pool
 }
 
@@ -35,7 +35,7 @@ type pgStore struct {
 // Any key/value or URI string compatible with libpq is valid. If the
 // database does not exist, one will be created using the credentials
 // provided.
-func (p *pgStore) Connect(ctx context.Context, connString string) error {
+func (p *PgStore) Connect(ctx context.Context, connString string) error {
 	cfg, err := pgx.ParseConfig(connString)
 	if err != nil {
 		return fmt.Errorf("pgx.ParseConfig() = %w", err)
@@ -52,7 +52,7 @@ func (p *pgStore) Connect(ctx context.Context, connString string) error {
 }
 
 // Close closes the pgxpool.Pool.
-func (p *pgStore) Close() {
+func (p *PgStore) Close() {
 	p.db.Close()
 }
 

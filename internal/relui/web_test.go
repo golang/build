@@ -5,7 +5,7 @@
 //go:build go1.16
 // +build go1.16
 
-package main
+package relui
 
 import (
 	"embed"
@@ -89,7 +89,7 @@ func TestServerHomeHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 
-	s := &server{}
+	s := &Server{}
 	s.homeHandler(w, req)
 	resp := w.Result()
 
@@ -102,7 +102,7 @@ func TestServerNewWorkflowHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/workflows/new", nil)
 	w := httptest.NewRecorder()
 
-	s := &server{}
+	s := &Server{}
 	s.newWorkflowHandler(w, req)
 	resp := w.Result()
 
