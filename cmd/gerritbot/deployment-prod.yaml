@@ -1,6 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  namespace: prod
   name: gerritbot-deployment
 spec:
   replicas: 1
@@ -15,6 +16,9 @@ spec:
         container.seccomp.security.alpha.kubernetes.io/gerritbot: docker/default
         container.apparmor.security.beta.kubernetes.io/gerritbot: runtime/default
     spec:
+      serviceAccountName: gerritbot
+      nodeSelector:
+        cloud.google.com/gke-nodepool: workload-identity-pool
       containers:
       - name: gerritbot
         image: gcr.io/symbolic-datum-552/gerritbot:latest

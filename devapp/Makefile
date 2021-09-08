@@ -17,8 +17,10 @@ docker-staging: Dockerfile
 
 push-prod: docker-prod
 	docker push $(IMAGE_PROD):$(VERSION)
+	docker push $(IMAGE_PROD):$(MUTABLE_VERSION)
 push-staging: docker-staging
 	docker push $(IMAGE_STAGING):$(VERSION)
+	docker push $(IMAGE_STAGING):$(MUTABLE_VERSION)
 
 deploy-prod: push-prod
 	go install golang.org/x/build/cmd/xb

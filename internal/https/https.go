@@ -131,11 +131,7 @@ func serveAutocertTLS(ctx context.Context, h http.Handler, bucket string) error 
 		},
 		Cache: autocertcache.NewGoogleCloudStorageCache(sc, bucket),
 	}
-	config := &tls.Config{
-		GetCertificate: m.GetCertificate,
-		NextProtos:     []string{"h2", "http/1.1"},
-	}
-	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)
+	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, m.TLSConfig())
 	if err := http2.ConfigureServer(server, nil); err != nil {
 		return fmt.Errorf("http2.ConfigureServer: %v", err)
 	}

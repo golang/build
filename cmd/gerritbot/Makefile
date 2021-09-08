@@ -17,12 +17,14 @@ docker-staging: Dockerfile
 
 push-prod: docker-prod
 	docker push $(IMAGE_PROD):$(VERSION)
+	docker push $(IMAGE_PROD):$(MUTABLE_VERSION)
 push-staging: docker-staging
 	docker push $(IMAGE_STAGING):$(VERSION)
+	docker push $(IMAGE_STAGING):$(MUTABLE_VERSION)
 
 deploy-prod: push-prod
 	go install golang.org/x/build/cmd/xb
-	xb --prod kubectl set image deployment/gerritbot-deployment gerritbot=$(IMAGE_PROD):$(VERSION)
+	xb --prod kubectl --namespace prod set image deployment/gerritbot-deployment gerritbot=$(IMAGE_PROD):$(VERSION)
 deploy-staging: push-staging
 	go install golang.org/x/build/cmd/xb
 	xb --staging kubectl set image deployment/gerritbot-deployment gerritbot=$(IMAGE_STAGING):$(VERSION)
