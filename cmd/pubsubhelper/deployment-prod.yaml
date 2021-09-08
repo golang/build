@@ -1,6 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  namespace: prod
   name: pubsubhelper-deployment
 spec:
   replicas: 1
@@ -15,19 +16,14 @@ spec:
         container.seccomp.security.alpha.kubernetes.io/pubsubhelper: docker/default
         container.apparmor.security.beta.kubernetes.io/pubsubhelper: runtime/default
     spec:
-      volumes:
-      - name: pv-autocert-cache
-        gcePersistentDisk:
-          pdName: pubsubhelper-autocert-cache
-          fsType: ext4
+      serviceAccountName: pubsubhelper
+      nodeSelector:
+        cloud.google.com/gke-nodepool: workload-identity-pool
       containers:
       - name: pubsubhelper
         image: gcr.io/symbolic-datum-552/pubsubhelper:latest
         imagePullPolicy: Always
-        command: ["/pubsubhelper"]
-        volumeMounts:
-        - mountPath: /autocert-cache
-          name: pv-autocert-cache
+        command: ["/pubsubhelper", "-autocert-bucket=golang-pubsubhelper-autocert"]
         ports:
         - containerPort: 25
         - containerPort: 80
