@@ -1,6 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  namespace: prod
   name: devapp-deployment
 spec:
   replicas: 2
@@ -15,6 +16,9 @@ spec:
         container.seccomp.security.alpha.kubernetes.io/devapp: docker/default
         container.apparmor.security.beta.kubernetes.io/devapp: runtime/default
     spec:
+      serviceAccountName: devapp
+      nodeSelector:
+        cloud.google.com/gke-nodepool: workload-identity-pool
       containers:
       - name: devapp
         image: gcr.io/symbolic-datum-552/devapp:latest
