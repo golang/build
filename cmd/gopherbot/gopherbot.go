@@ -75,11 +75,14 @@ const (
 
 // GitHub Milestone numbers for the golang/go repo.
 var (
-	proposal   = milestone{30, "Proposal"}
-	unreleased = milestone{22, "Unreleased"}
-	unplanned  = milestone{6, "Unplanned"}
-	gccgo      = milestone{23, "Gccgo"}
-	vgo        = milestone{71, "vgo"}
+	proposal         = milestone{30, "Proposal"}
+	unreleased       = milestone{22, "Unreleased"}
+	unplanned        = milestone{6, "Unplanned"}
+	gccgo            = milestone{23, "Gccgo"}
+	vgo              = milestone{71, "vgo"}
+	pkgsiteLicense   = milestone{168, "pkgsite/license"}
+	pkgsiteSearch    = milestone{164, "pkgsite/search"}
+	pkgsiteUnplanned = milestone{167, "pkgsite/unplanned"}
 )
 
 // GitHub Milestone numbers for the golang/vscode-go repo.
@@ -989,6 +992,14 @@ func (b *gopherbot) setSubrepoMilestones(ctx context.Context) error {
 		case "x/vgo":
 			// Handled by setMiscMilestones
 			return nil
+		case "x/pkgsite":
+			if strings.Contains(gi.Title, "license") || strings.Contains(gi.Title, "licence") {
+				return b.setMilestone(ctx, b.gorepo.ID(), gi, pkgsiteLicense)
+			}
+			if strings.Contains(gi.Title, "search") {
+				return b.setMilestone(ctx, b.gorepo.ID(), gi, pkgsiteSearch)
+			}
+			return b.setMilestone(ctx, b.gorepo.ID(), gi, pkgsiteUnplanned)
 		}
 		return b.setMilestone(ctx, b.gorepo.ID(), gi, unreleased)
 	})
@@ -1005,7 +1016,7 @@ func (b *gopherbot) setMiscMilestones(ctx context.Context) error {
 		if strings.HasPrefix(gi.Title, "x/vgo") {
 			return b.setMilestone(ctx, b.gorepo.ID(), gi, vgo)
 		}
-		if strings.HasPrefix(gi.Title, "go.dev:") || strings.HasPrefix(gi.Title, "x/pkgsite") {
+		if strings.HasPrefix(gi.Title, "go.dev:") {
 			return b.setMilestone(ctx, b.gorepo.ID(), gi, unreleased)
 		}
 		return nil
