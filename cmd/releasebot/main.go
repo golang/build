@@ -190,7 +190,7 @@ func checkForGitCodereview() {
 	cmd := exec.Command("which", "git-codereview")
 	if err := cmd.Run(); err != nil {
 		log.Fatal("could not find git-codereivew: ", cmd.Args, ": ", err, "\n\n"+
-			"Please install it via go get golang.org/x/review/git-codereview\n"+
+			"Please install it via go install golang.org/x/review/git-codereview@latest\n"+
 			"to use this program.")
 	}
 }
@@ -634,7 +634,7 @@ func (w *Work) writeVersion() (changeID string) {
 	} else if w.Security {
 		r.run("git", "codereview", "mail")
 	} else {
-		r.run("git", "codereview", "mail", "-trybot")
+		r.run("git", "codereview", "mail", "-trybot", "-trust")
 	}
 	return
 }
