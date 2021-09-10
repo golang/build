@@ -9,9 +9,13 @@ package relui
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
+	"github.com/golang-migrate/migrate/v4"
+	dbpgx "github.com/golang-migrate/migrate/v4/database/pgx"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
@@ -32,17 +36,8 @@ type PgStore struct {
 // Connect connects to the database using the credentials supplied in
 // the provided connString.
 //
-// Any key/value or URI string compatible with libpq is valid. If the
-// database does not exist, one will be created using the credentials
-// provided.
+// Any key/value or URI string compatible with libpq is valid.
 func (p *PgStore) Connect(ctx context.Context, connString string) error {
-	cfg, err := pgx.ParseConfig(connString)
-	if err != nil {
-		return fmt.Errorf("pgx.ParseConfig() = %w", err)
-	}
-	if err := CreateDBIfNotExists(ctx, cfg); err != nil {
-		return err
-	}
 	pool, err := pgxpool.Connect(ctx, connString)
 	if err != nil {
 		return err
@@ -54,6 +49,62 @@ func (p *PgStore) Connect(ctx context.Context, connString string) error {
 // Close closes the pgxpool.Pool.
 func (p *PgStore) Close() {
 	p.db.Close()
+}
+
+// InitDB creates and applies all migrations to the database specified
+// in conn.
+//
+// If the database does not exist, one will be created using the
+// credentials provided.
+//
+// Any key/value or URI string compatible with libpq is valid.
+func InitDB(ctx context.Context, conn string) error {
+	cfg, err := pgx.ParseConfig(conn)
+	if err != nil {
+		return fmt.Errorf("pgx.ParseConfig() = %w", err)
+	}
+	if err := CreateDBIfNotExists(ctx, cfg); err != nil {
+		return err
+	}
+	if err := MigrateDB(conn); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MigrateDB applies all migrations to the database specified in conn.
+//
+// Any key/value or URI string compatible with libpq is valid.
+func MigrateDB(conn string) error {
+	cfg, err := pgx.ParseConfig(conn)
+	if err != nil {
+		return fmt.Errorf("pgx.ParseConfig() = %w", err)
+	}
+	db, err := sql.Open("pgx", conn)
+	if err != nil {
+		return fmt.Errorf("sql.Open(%q, _) = %v, %w", "pgx", db, err)
+	}
+	mcfg := &dbpgx.Config{
+		MigrationsTable: "migrations",
+		DatabaseName:    cfg.Database,
+	}
+	mdb, err := dbpgx.WithInstance(db, mcfg)
+	if err != nil {
+		return fmt.Errorf("dbpgx.WithInstance(_, %v) = %v, %w", mcfg, mdb, err)
+	}
+	mfs, err := iofs.New(migrations, "migrations")
+	if err != nil {
+		return fmt.Errorf("iofs.New(%v, %q) = %v, %w", migrations, "migrations", mfs, err)
+	}
+	m, err := migrate.NewWithInstance("iofs", mfs, "pgx", mdb)
+	if err != nil {
+		return fmt.Errorf("migrate.NewWithInstance(%q, %v, %q, %v) = %v, %w", "iofs", migrations, "pgx", mdb, m, err)
+	}
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("m.Up() = %w", err)
+	}
+	db.Close()
+	return nil
 }
 
 // ConnectMaintenanceDB connects to the maintenance database using the

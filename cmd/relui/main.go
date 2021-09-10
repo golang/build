@@ -18,12 +18,25 @@ import (
 )
 
 var (
-	pgConnect = flag.String("pg-connect", "host=/var/run/postgresql user=postgres database=relui-dev", "Postgres connection string or URI")
+	pgConnect   = flag.String("pg-connect", "host=/var/run/postgresql user=postgres database=relui-dev", "Postgres connection string or URI")
+	onlyMigrate = flag.Bool("only-migrate", false, "Exit after running migrations. Migrations are run by default.")
 )
 
 func main() {
+	flag.Parse()
 	ctx := context.Background()
-	s, err := relui.NewServer(ctx, *pgConnect)
+	if err := relui.InitDB(ctx, *pgConnect); err != nil {
+		log.Fatalf("relui.InitDB() = %v", err)
+	}
+	if *onlyMigrate {
+		return
+	}
+	d := new(relui.PgStore)
+	if err := d.Connect(ctx, *pgConnect); err != nil {
+		log.Fatal(err)
+	}
+	defer d.Close()
+	s, err := relui.NewServer(ctx, d)
 	if err != nil {
 		log.Fatalf("relui.NewServer() = %v", err)
 	}

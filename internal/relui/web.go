@@ -52,15 +52,8 @@ type Server struct {
 // NewServer initializes a server with a database connection specified
 // by pgConn. Any libpq compatible connection strings or URIs are
 // supported.
-func NewServer(ctx context.Context, pgConn string) (*Server, error) {
-	d := new(PgStore)
-	if err := d.Connect(ctx, pgConn); err != nil {
-		return nil, err
-	}
-	defer d.Close()
-	s := &Server{
-		store: d,
-	}
+func NewServer(ctx context.Context, st store) (*Server, error) {
+	s := &Server{store: st}
 	http.Handle("/workflows/create", http.HandlerFunc(s.createWorkflowHandler))
 	http.Handle("/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
 	http.Handle("/", fileServerHandler(static, http.HandlerFunc(s.homeHandler)))
