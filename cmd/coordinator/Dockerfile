@@ -2,8 +2,8 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.16 AS build
-LABEL maintainer "golang-dev@googlegroups.com"
+FROM golang:1.17 AS build
+LABEL maintainer="golang-dev@googlegroups.com"
 
 RUN mkdir /gocache
 ENV GOCACHE /gocache
@@ -13,35 +13,13 @@ COPY go.sum /go/src/golang.org/x/build/go.sum
 
 WORKDIR /go/src/golang.org/x/build
 
-# Optimization for iterative docker build speed, not necessary for correctness:
-# TODO: write a tool to make writing Go module-friendly Dockerfiles easier.
-RUN go install \
-    cloud.google.com/go/compute/metadata \
-    cloud.google.com/go/datastore \
-    cloud.google.com/go/errorreporting \
-    cloud.google.com/go/storage \
-    github.com/gliderlabs/ssh \
-    github.com/golang/protobuf/ptypes \
-    github.com/kr/pty \
-    go4.org/syncutil \
-    golang.org/x/crypto/acme/autocert \
-    golang.org/x/crypto/ssh \
-    golang.org/x/oauth2 \
-    golang.org/x/oauth2/google \
-    golang.org/x/perf/storage \
-    golang.org/x/time/rate \
-    google.golang.org/api/compute/v1 \
-    google.golang.org/api/container/v1 \
-    google.golang.org/api/googleapi \
-    google.golang.org/genproto/googleapis/api/metric \
-    google.golang.org/genproto/googleapis/monitoring/v3 \
-    gopkg.in/inf.v0 \
-    grpc.go4.org \
-    && true
+# Download module dependencies to improve speed of re-building the
+# Docker image during minor code changes.
+RUN go mod download
 
 # Makefile passes a string with --build-arg version
 # This becomes part of the cache key for all subsequent instructions,
-# so it must not be placed above the "go install" commands above.
+# so it must not be placed above the "go mod download" command above.
 ARG version=unknown
 
 # TODO: ideally we'd first copy all of x/build here EXCEPT
