@@ -1,6 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  namespace: prod
   name: gopherbot-deployment
 spec:
   replicas: 1 # more than 1 might cause duplicate GitHub comments
@@ -15,6 +16,9 @@ spec:
         container.seccomp.security.alpha.kubernetes.io/gopherbot: docker/default
         container.apparmor.security.beta.kubernetes.io/gopherbot: runtime/default
     spec:
+      serviceAccountName: gopherbot
+      nodeSelector:
+        cloud.google.com/gke-nodepool: workload-identity-pool
       volumes:
       - name: cache-volume
         emptyDir: {}
