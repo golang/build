@@ -2452,7 +2452,6 @@ func init() {
 		Name:           "linux-riscv64-unmatched",
 		env:            []string{"GO_TEST_TIMEOUT_SCALE=4"},
 		FlakyNet:       true,
-		SkipSnapshot:   true, // The builder has a slow uplink bandwidth.
 		buildsRepo:     onlyMasterDefault,
 		distTestAdjust: riscvDistTestPolicy,
 	})
