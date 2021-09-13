@@ -87,6 +87,7 @@ var (
 	zpavlinovic  = gh("zpavlinovic")
 
 	fuzzingTeam = gh("golang/fuzzing")
+	pkgsiteTeam = gh("golang/pkgsite")
 	toolsTeam   = gh("golang/tools-team")
 )
 
@@ -824,7 +825,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{toolsTeam},
 	},
 	"pkgsite": {
-		Primary: []Owner{julieqiu, jba, jamalc},
+		Primary: []Owner{pkgsiteTeam},
 	},
 	"playground": {
 		Primary: []Owner{rakoczy},
