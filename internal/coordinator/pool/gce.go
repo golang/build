@@ -81,7 +81,7 @@ var (
 	storageClient   *storage.Client
 	inStaging       bool                   // are we running in the staging project? (named -dev)
 	errorsClient    *errorreporting.Client // Stackdriver errors client
-	gkeNodeIP       string
+	gkeNodeHostname string
 
 	// values created due to seperating the buildlet pools into a seperate package
 	gceMode             string
@@ -126,9 +126,9 @@ func InitGCE(sc *secret.Client, vmDeleteTimeout time.Duration, tFiles map[string
 			return fmt.Errorf("failed to get current GCE zone: %v", err)
 		}
 
-		gkeNodeIP, err = metadata.Get("instance/network-interfaces/0/ip")
+		gkeNodeHostname, err = metadata.Get("instance/hostname")
 		if err != nil {
-			return fmt.Errorf("failed to get current instance IP: %v", err)
+			return fmt.Errorf("failed to get current instance hostname: %v", err)
 		}
 
 		// Convert the zone from "projects/1234/zones/us-central1-a" to "us-central1-a".
@@ -251,9 +251,9 @@ func (c *GCEConfiguration) GerritClient() *gerrit.Client {
 	return gerritClient
 }
 
-// GKENodeIP retrieves the GKE node IP.
-func (c *GCEConfiguration) GKENodeIP() string {
-	return gkeNodeIP
+// GKENodeHostname retrieves the GKE node hostname.
+func (c *GCEConfiguration) GKENodeHostname() string {
+	return gkeNodeHostname
 }
 
 // DSClient retrieves the datastore client.

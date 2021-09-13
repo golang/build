@@ -1,6 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  namespace: prod
   name: coordinator-deployment
 spec:
   selector:
@@ -14,6 +15,9 @@ spec:
         container.seccomp.security.alpha.kubernetes.io/coordinator: docker/default
         container.apparmor.security.beta.kubernetes.io/coordinator: runtime/default
     spec:
+      serviceAccountName: coordinator
+      nodeSelector:
+        cloud.google.com/gke-nodepool: workload-identity-pool
       containers:
       - name: coordinator
         image: gcr.io/symbolic-datum-552/coordinator:latest

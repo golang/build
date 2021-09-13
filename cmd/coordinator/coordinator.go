@@ -3163,7 +3163,7 @@ func moduleProxy() string {
 	// TODO: migrate to a GKE internal load balancer with an internal static IP
 	// once we migrate symbolic-datum-552 off a Legacy VPC network to the modern
 	// scheme that supports internal static IPs.
-	return "http://" + pool.NewGCEConfiguration().GKENodeIP() + ":30157"
+	return "http://" + pool.NewGCEConfiguration().GKENodeHostname() + ":30157"
 }
 
 // affectedPkgs returns the name of every package affected by this commit.

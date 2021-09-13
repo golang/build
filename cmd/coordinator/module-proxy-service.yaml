@@ -1,6 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
+  namespace: prod
   name: proxygolang-proxy
   annotations:
     cloud.google.com/load-balancer-type: "Internal"
