@@ -446,7 +446,6 @@ func (gl *GCSLog) flushLocked(ctx context.Context) error {
 	err := try(4, time.Second, func() error {
 		w := gl.bucket.Object(objName).NewWriter(ctx)
 		w.ContentType = "application/octet-stream"
-		w.ACL = append(w.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
 		if _, err := w.Write(buf); err != nil {
 			return err
 		}

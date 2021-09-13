@@ -27,7 +27,7 @@ push-staging: docker-staging
 
 deploy-prod: push-prod
 	go install golang.org/x/build/cmd/xb
-	xb --prod kubectl set image deployment/maintnerd-deployment maintnerd=$(IMAGE_PROD):$(VERSION)
+	xb --prod kubectl --namespace prod set image deployment/maintnerd-deployment maintnerd=$(IMAGE_PROD):$(VERSION)
 deploy-staging: push-staging
 	go install golang.org/x/build/cmd/xb
 	xb --staging kubectl set image deployment/maintnerd-deployment maintnerd=$(IMAGE_STAGING):$(VERSION)

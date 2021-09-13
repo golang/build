@@ -1,6 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  namespace: prod
   name: maintnerd-deployment
 spec:
   replicas: 1 # MUST BE 1 FOR NOW
@@ -15,6 +16,9 @@ spec:
         container.seccomp.security.alpha.kubernetes.io/maintnerd: docker/default
         container.apparmor.security.beta.kubernetes.io/maintnerd: runtime/default
     spec:
+      serviceAccountName: maintnerd
+      nodeSelector:
+        cloud.google.com/gke-nodepool: workload-identity-pool
       volumes:
       - name: pv-maintner-cache
         gcePersistentDisk:
