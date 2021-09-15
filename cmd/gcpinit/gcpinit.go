@@ -32,7 +32,7 @@ resources:
 - name: "{{ .Kube.Name }}"
   type: container.v1.cluster
   properties:
-    zone: "{{ .Env.ControlZone }}"
+    zone: "{{ .Env.KubeServices.Zone }}"
     cluster:
       initial_node_count: {{ .Kube.MinNodes }}
       network: "default"
@@ -77,7 +77,7 @@ func main() {
 		log.Fatalf("could not create client: %v", err)
 	}
 
-	for _, c := range []*buildenv.KubeConfig{&buildEnv.KubeBuild, &buildEnv.KubeTools} {
+	for _, c := range []*buildenv.KubeConfig{&buildEnv.KubeBuild, &buildEnv.KubeServices} {
 		err := createCluster(bgc, c)
 		if err != nil {
 			log.Fatalf("Error creating Kubernetes cluster %q: %v", c.Name, err)

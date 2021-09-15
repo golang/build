@@ -133,7 +133,7 @@ func InitGCE(sc *secret.Client, vmDeleteTimeout time.Duration, tFiles map[string
 
 		// Convert the zone from "projects/1234/zones/us-central1-a" to "us-central1-a".
 		projectZone = path.Base(projectZone)
-		buildEnv.ControlZone = projectZone
+		buildEnv.KubeBuild.Zone = projectZone
 
 		if buildEnv.StaticIP == "" {
 			buildEnv.StaticIP, err = metadata.ExternalIP()
@@ -349,9 +349,9 @@ func (p *GCEBuildlet) pollQuotaLoop() {
 
 func (p *GCEBuildlet) pollQuota() {
 	gceAPIGate()
-	reg, err := computeService.Regions.Get(buildEnv.ProjectName, buildEnv.Region()).Do()
+	reg, err := computeService.Regions.Get(buildEnv.ProjectName, buildEnv.KubeBuild.Region).Do()
 	if err != nil {
-		log.Printf("Failed to get quota for %s/%s: %v", buildEnv.ProjectName, buildEnv.Region(), err)
+		log.Printf("Failed to get quota for %s/%s: %v", buildEnv.ProjectName, buildEnv.KubeBuild.Region, err)
 		return
 	}
 	p.mu.Lock()

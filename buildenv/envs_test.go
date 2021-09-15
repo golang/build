@@ -9,44 +9,13 @@ import (
 )
 
 func TestEnvironmentNextZone(t *testing.T) {
-	testCases := []struct {
-		name      string
-		env       Environment
-		wantOneOf []string // desired zone should appear in this slice
-	}{
-		{
-			name: "zones-not-set",
-			env: Environment{
-				ControlZone: "kentucky",
-				VMZones:     []string{},
-			},
-			wantOneOf: []string{"kentucky"},
-		},
-		{
-			name: "zone-and-zones-set",
-			env: Environment{
-				ControlZone: "kentucky",
-				VMZones:     []string{"texas", "california", "washington"},
-			},
-
-			wantOneOf: []string{"texas", "california", "washington"},
-		},
-		{
-			name: "zones-only-contains-one-entry",
-			env: Environment{
-				ControlZone: "kentucky",
-				VMZones:     []string{"texas"},
-			},
-			wantOneOf: []string{"texas"},
-		},
+	env := Environment{
+		VMZones: []string{"texas", "california", "washington"},
 	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := tc.env.RandomVMZone()
-			if !containsString(got, tc.wantOneOf) {
-				t.Errorf("got=%q; want %v", got, tc.wantOneOf)
-			}
-		})
+	wantOneOf := []string{"texas", "california", "washington"}
+	got := env.RandomVMZone()
+	if !containsString(got, wantOneOf) {
+		t.Errorf("got=%q; want %v", got, wantOneOf)
 	}
 }
 

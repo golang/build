@@ -74,7 +74,7 @@ func InitKube(monitorGitMirror MonitorGitMirrorFunc) error {
 	var err error
 	buildletsKubeClient, err = gke.NewClient(ctx,
 		gceBuildEnv.KubeBuild.Name,
-		gke.OptZone(gceBuildEnv.ControlZone),
+		gke.OptZone(gceBuildEnv.KubeBuild.ZoneOrRegion()),
 		gke.OptProject(gceBuildEnv.ProjectName),
 		gke.OptTokenSource(gce.GCPCredentials().TokenSource))
 	if err != nil {
@@ -82,9 +82,9 @@ func InitKube(monitorGitMirror MonitorGitMirrorFunc) error {
 	}
 
 	goKubeClient, err = gke.NewClient(ctx,
-		gceBuildEnv.KubeTools.Name,
-		gke.OptNamespace(gceBuildEnv.KubeTools.Namespace),
-		gke.OptZone(gceBuildEnv.ControlZone),
+		gceBuildEnv.KubeServices.Name,
+		gke.OptNamespace(gceBuildEnv.KubeServices.Namespace),
+		gke.OptZone(gceBuildEnv.KubeServices.ZoneOrRegion()),
 		gke.OptProject(gceBuildEnv.ProjectName),
 		gke.OptTokenSource(gce.GCPCredentials().TokenSource))
 	if err != nil {
@@ -172,12 +172,12 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 	gceBuildEnv := NewGCEConfiguration().BuildEnv()
 	nodes, err := buildletsKubeClient.GetNodes(ctx)
 	if err != nil {
-		log.Printf("failed to retrieve nodes to calculate cluster capacity for %s/%s: %v", gceBuildEnv.ProjectName, gceBuildEnv.Region(), err)
+		log.Printf("failed to retrieve nodes to calculate cluster capacity for %s/%s: %v", gceBuildEnv.ProjectName, gceBuildEnv.KubeBuild.Region, err)
 		return
 	}
 	pods, err := buildletsKubeClient.GetPods(ctx)
 	if err != nil {
-		log.Printf("failed to retrieve pods to calculate cluster capacity for %s/%s: %v", gceBuildEnv.ProjectName, gceBuildEnv.Region(), err)
+		log.Printf("failed to retrieve pods to calculate cluster capacity for %s/%s: %v", gceBuildEnv.ProjectName, gceBuildEnv.KubeBuild.Region, err)
 		return
 	}
 
@@ -474,7 +474,7 @@ func (p *kubeBuildletPool) cleanUpOldPods(ctx context.Context) {
 				}
 				if err == nil && time.Now().Unix() > unixDeadline {
 					stats.DeletedOld++
-					log.Printf("cleanUpOldPods: Deleting expired pod %q in zone %q ...", pod.Name, NewGCEConfiguration().BuildEnv().ControlZone)
+					log.Printf("cleanUpOldPods: Deleting expired pod %q...", pod.Name)
 					err = buildletsKubeClient.DeletePod(ctx, pod.Name)
 					if err != nil {
 						log.Printf("cleanUpOldPods: problem deleting old pod %q: %v", pod.Name, err)
