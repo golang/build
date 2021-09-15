@@ -28,26 +28,13 @@ const (
 
 // KubeConfig describes the configuration of a Kubernetes cluster.
 type KubeConfig struct {
-	// MinNodes is the minimum number of nodes in the Kubernetes cluster.
-	// The autoscaler will ensure that at least this many nodes is always
-	// running despite any scale-down decision.
-	MinNodes int64
-
-	// MaxNodes is the maximum number of nodes that the autoscaler can
-	// provision in the Kubernetes cluster.
-	// If MaxNodes is 0, Kubernetes is not used.
-	MaxNodes int64
-
-	// MachineType is the GCE machine type to use for the Kubernetes cluster nodes.
-	MachineType string
-
 	// The zone of the cluster. Autopilot clusters have no single zone.
 	Zone string
 
 	// The region of the cluster.
 	Region string
 
-	// Name is the name of the Kubernetes cluster that will be created.
+	// Name is the name of the Kubernetes cluster that will be used.
 	Name string
 
 	// Namespace is the Kubernetes namespace to use within the cluster.
@@ -99,9 +86,6 @@ type Environment struct {
 	// coordinator instance. The zero value means the address will be looked
 	// up by name. This field is optional.
 	StaticIP string
-
-	// MachineType is the GCE machine type to use for the coordinator.
-	MachineType string
 
 	// KubeBuild is the cluster that runs buildlets.
 	KubeBuild KubeConfig
@@ -254,24 +238,17 @@ var Staging = &Environment{
 	IsProd:                true,
 	VMZones:               []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
 	StaticIP:              "104.154.113.235",
-	MachineType:           "n1-standard-1",
 	PreferContainersOnCOS: true,
 	KubeBuild: KubeConfig{
-		MinNodes:    1,
-		MaxNodes:    1, // auto-scaling disabled
-		Zone:        "us-central1-f",
-		Region:      "us-central1",
-		Name:        "buildlets",
-		MachineType: "n1-standard-4", // only used for make.bash due to PreferContainersOnCOS
+		Zone:   "us-central1-f",
+		Region: "us-central1",
+		Name:   "buildlets",
 	},
 	KubeServices: KubeConfig{
-		MinNodes:    3,
-		MaxNodes:    3,
-		Zone:        "us-central1-f",
-		Region:      "us-central1",
-		Name:        "go",
-		MachineType: "n1-standard-4",
-		Namespace:   "default",
+		Zone:      "us-central1-f",
+		Region:    "us-central1",
+		Name:      "go",
+		Namespace: "default",
 	},
 	DashURL:           "https://build-staging.golang.org/",
 	PerfDataURL:       "https://perfdata.golang.org",
@@ -293,23 +270,16 @@ var Production = &Environment{
 	IsProd:                true,
 	VMZones:               []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
 	StaticIP:              "107.178.219.46",
-	MachineType:           "n1-standard-4",
 	PreferContainersOnCOS: true,
 	KubeBuild: KubeConfig{
-		MinNodes:    2,
-		MaxNodes:    2, // auto-scaling disabled
-		Zone:        "us-central1-f",
-		Region:      "us-central1",
-		Name:        "buildlets",
-		MachineType: "n1-standard-4", // only used for make.bash due to PreferContainersOnCOS
+		Zone:   "us-central1-f",
+		Region: "us-central1",
+		Name:   "buildlets",
 	},
 	KubeServices: KubeConfig{
-		MinNodes:    4,
-		MaxNodes:    4,
-		Region:      "us-central1",
-		Name:        "services",
-		MachineType: "n1-standard-4",
-		Namespace:   "prod",
+		Region:    "us-central1",
+		Name:      "services",
+		Namespace: "prod",
 	},
 	DashURL:             "https://build.golang.org/",
 	PerfDataURL:         "https://perfdata.golang.org",

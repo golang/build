@@ -59,8 +59,8 @@ type MonitorGitMirrorFunc func()
 func InitKube(monitorGitMirror MonitorGitMirrorFunc) error {
 	gce := NewGCEConfiguration()
 	gceBuildEnv := gce.BuildEnv()
-	if gceBuildEnv.KubeBuild.MaxNodes == 0 {
-		return errors.New("Kubernetes builders disabled due to KubeBuild.MaxNodes == 0")
+	if gceBuildEnv.KubeBuild.Name == "" {
+		return errors.New("Kubernetes builders disabled due to empty KubeBuild.Name")
 	}
 
 	// projectID was set by InitGCE.
