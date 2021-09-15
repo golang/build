@@ -17,8 +17,6 @@ spec:
         container.apparmor.security.beta.kubernetes.io/pubsubhelper: runtime/default
     spec:
       serviceAccountName: pubsubhelper
-      nodeSelector:
-        cloud.google.com/gke-nodepool: workload-identity-pool
       containers:
       - name: pubsubhelper
         image: gcr.io/symbolic-datum-552/pubsubhelper:latest

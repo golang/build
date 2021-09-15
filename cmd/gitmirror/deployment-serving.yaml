@@ -19,8 +19,6 @@ spec:
         app: gitmirror-serving
     spec:
       serviceAccountName: gitmirror
-      nodeSelector:
-        cloud.google.com/gke-nodepool: workload-identity-pool
       volumes:
       - name: cache-volume
         emptyDir:

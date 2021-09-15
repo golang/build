@@ -17,8 +17,6 @@ spec:
         container.apparmor.security.beta.kubernetes.io/devapp: runtime/default
     spec:
       serviceAccountName: devapp
-      nodeSelector:
-        cloud.google.com/gke-nodepool: workload-identity-pool
       containers:
       - name: devapp
         image: gcr.io/symbolic-datum-552/devapp:latest

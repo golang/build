@@ -17,8 +17,6 @@ spec:
         container.apparmor.security.beta.kubernetes.io/maintnerd: runtime/default
     spec:
       serviceAccountName: maintnerd
-      nodeSelector:
-        cloud.google.com/gke-nodepool: workload-identity-pool
       volumes:
       - name: pv-maintner-cache
         gcePersistentDisk:

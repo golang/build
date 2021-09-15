@@ -17,8 +17,6 @@ spec:
         container.apparmor.security.beta.kubernetes.io/gerritbot: runtime/default
     spec:
       serviceAccountName: gerritbot
-      nodeSelector:
-        cloud.google.com/gke-nodepool: workload-identity-pool
       containers:
       - name: gerritbot
         image: gcr.io/symbolic-datum-552/gerritbot:latest
