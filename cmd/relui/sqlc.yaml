@@ -1,0 +1,12 @@
+version: "1"
+packages:
+  - name: "db"
+    path: "../../internal/relui/db"
+    queries: "../../internal/relui/queries"
+    schema: "schema.sql"
+    engine: "postgresql"
+    sql_package: "pgx/v4"
+overrides:
+  - go_type: "database/sql.NullString"
+    db_type: "jsonb"
+    nullable: true

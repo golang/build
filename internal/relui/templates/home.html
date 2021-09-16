@@ -12,14 +12,16 @@
   <ul class="WorkflowList">
     {{range $workflow := .Workflows}}
     <li class="WorkflowList-item">
-      <h3>{{$workflow.Name}} - {{index $workflow.GitSource}}</h3>
+      <h3>{{$workflow.Name.String}} - {{index $workflow.ID}}</h3>
       <h4 class="WorkflowList-sectionTitle">Tasks</h4>
       <ul class="TaskList">
-        {{range $task := $workflow.BuildableTasks}}
+        {{$tasks := index $.WorkflowTasks $workflow.ID}}
+        {{range $task := $tasks}}
         <li class="TaskList-item">
           <span class="TaskList-itemTitle">{{$task.Name}}</span>
-          Status: {{$task.Status}}
-          ID: {{$task.Id}}
+          Finished: {{$task.Finished}}
+          Result: {{$task.Result.String}}
+          Name: {{$task.Name}}
         </li>
         {{end}}
         <li class="TaskList-item">

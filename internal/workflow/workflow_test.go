@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/uuid"
 	"golang.org/x/build/internal/workflow"
 )
 
@@ -141,7 +142,7 @@ type logTestListener struct {
 	logger workflow.Logger
 }
 
-func (l *logTestListener) Logger(_, _ string) workflow.Logger {
+func (l *logTestListener) Logger(_ uuid.UUID, _ string) workflow.Logger {
 	return l.logger
 }
 
@@ -219,12 +220,12 @@ func TestResume(t *testing.T) {
 
 type mapListener struct {
 	workflow.Listener
-	states map[string]map[string]*workflow.TaskState
+	states map[uuid.UUID]map[string]*workflow.TaskState
 }
 
-func (l *mapListener) TaskStateChanged(workflowID, taskID string, state *workflow.TaskState) error {
+func (l *mapListener) TaskStateChanged(workflowID uuid.UUID, taskID string, state *workflow.TaskState) error {
 	if l.states == nil {
-		l.states = map[string]map[string]*workflow.TaskState{}
+		l.states = map[uuid.UUID]map[string]*workflow.TaskState{}
 	}
 	if l.states[workflowID] == nil {
 		l.states[workflowID] = map[string]*workflow.TaskState{}
@@ -262,7 +263,7 @@ func runWorkflow(t *testing.T, w *workflow.Workflow, listener workflow.Listener)
 
 type verboseListener struct{ t *testing.T }
 
-func (l *verboseListener) TaskStateChanged(_, _ string, st *workflow.TaskState) error {
+func (l *verboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *workflow.TaskState) error {
 	switch {
 	case !st.Finished:
 		l.t.Logf("task %-10v: started", st.Name)
@@ -274,7 +275,7 @@ func (l *verboseListener) TaskStateChanged(_, _ string, st *workflow.TaskState) 
 	return nil
 }
 
-func (l *verboseListener) Logger(_, task string) workflow.Logger {
+func (l *verboseListener) Logger(_ uuid.UUID, task string) workflow.Logger {
 	return &testLogger{t: l.t, task: task}
 }
 

@@ -17,39 +17,9 @@ import (
 	dbpgx "github.com/golang-migrate/migrate/v4/database/pgx"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 var errDBNotExist = errors.New("database does not exist")
-
-// store is a persistence interface for saving data.
-type store interface {
-}
-
-var _ store = (*PgStore)(nil)
-
-// PgStore is a store backed by a Postgres database.
-type PgStore struct {
-	db *pgxpool.Pool
-}
-
-// Connect connects to the database using the credentials supplied in
-// the provided connString.
-//
-// Any key/value or URI string compatible with libpq is valid.
-func (p *PgStore) Connect(ctx context.Context, connString string) error {
-	pool, err := pgxpool.Connect(ctx, connString)
-	if err != nil {
-		return err
-	}
-	p.db = pool
-	return nil
-}
-
-// Close closes the pgxpool.Pool.
-func (p *PgStore) Close() {
-	p.db.Close()
-}
 
 // InitDB creates and applies all migrations to the database specified
 // in conn.

@@ -14,11 +14,12 @@ import (
 	"log"
 	"os"
 
+	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/build/internal/relui"
 )
 
 var (
-	pgConnect   = flag.String("pg-connect", "host=/var/run/postgresql user=postgres database=relui-dev", "Postgres connection string or URI")
+	pgConnect   = flag.String("pg-connect", "", "Postgres connection string or URI. If empty, libpq connection defaults are used.")
 	onlyMigrate = flag.Bool("only-migrate", false, "Exit after running migrations. Migrations are run by default.")
 )
 
@@ -31,12 +32,12 @@ func main() {
 	if *onlyMigrate {
 		return
 	}
-	d := new(relui.PgStore)
-	if err := d.Connect(ctx, *pgConnect); err != nil {
+	db, err := pgxpool.Connect(ctx, *pgConnect)
+	if err != nil {
 		log.Fatal(err)
 	}
-	defer d.Close()
-	s, err := relui.NewServer(ctx, d)
+	defer db.Close()
+	s := relui.NewServer(db)
 	if err != nil {
 		log.Fatalf("relui.NewServer() = %v", err)
 	}

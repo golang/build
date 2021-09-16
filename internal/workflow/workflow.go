@@ -195,9 +195,9 @@ type TaskContext struct {
 type Listener interface {
 	// TaskStateChanged is called when the state of a task changes.
 	// state is safe to store or modify.
-	TaskStateChanged(workflowID, taskID string, state *TaskState) error
+	TaskStateChanged(workflowID uuid.UUID, taskID string, state *TaskState) error
 	// Logger is called to obtain a Logger for a particular task.
-	Logger(workflowID, taskID string) Logger
+	Logger(workflowID uuid.UUID, taskID string) Logger
 }
 
 // TaskState contains the state of a task in a running workflow. Once Finished
@@ -212,7 +212,7 @@ type TaskState struct {
 
 // WorkflowState contains the shallow state of a running workflow.
 type WorkflowState struct {
-	ID     string
+	ID     uuid.UUID
 	Params map[string]string
 }
 
@@ -245,7 +245,7 @@ func (tr *taskResult) deps() []*taskDefinition {
 
 // A Workflow is an instantiated workflow instance, ready to run.
 type Workflow struct {
-	ID     string
+	ID     uuid.UUID
 	def    *Definition
 	params map[string]string
 
@@ -291,7 +291,7 @@ func (t *taskState) toExported() *TaskState {
 // Start instantiates a workflow with the given parameters.
 func Start(def *Definition, params map[string]string) (*Workflow, error) {
 	w := &Workflow{
-		ID:     uuid.New().String(),
+		ID:     uuid.New(),
 		def:    def,
 		params: params,
 		tasks:  map[*taskDefinition]*taskState{},
@@ -438,11 +438,11 @@ func (w *Workflow) runTask(ctx context.Context, listener Listener, state taskSta
 
 type defaultListener struct{}
 
-func (s *defaultListener) TaskStateChanged(_, _ string, _ *TaskState) error {
+func (s *defaultListener) TaskStateChanged(_ uuid.UUID, _ string, _ *TaskState) error {
 	return nil
 }
 
-func (s *defaultListener) Logger(_, task string) Logger {
+func (s *defaultListener) Logger(_ uuid.UUID, task string) Logger {
 	return &defaultLogger{}
 }
 

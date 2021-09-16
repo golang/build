@@ -7,29 +7,15 @@ package relui
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
-
-	"github.com/jackc/pgx/v4"
 )
 
-const dbEnvKey = "RELUI_TEST_DATABASE"
-
 func TestCreateDBIfNotExists(t *testing.T) {
-	dbEnv := os.Getenv(dbEnvKey)
-	if dbEnv == "" {
-		t.Skipf("%q is not set. Skipping.", dbEnvKey)
-	}
-	if testing.Short() {
-		t.Skip("Skipping database tests in short mode.")
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	db := testDB(ctx, t)
 
-	ctx := context.Background()
-	cfg, err := pgx.ParseConfig(dbEnv)
-	if err != nil {
-		t.Fatalf("pgx.ParseConfig(os.Getenv(%q)) = %v, wanted no error", dbEnvKey, err)
-	}
-	testCfg := cfg.Copy()
+	testCfg := db.Config().ConnConfig.Copy()
 	testCfg.Database = "relui-test-nonexistent"
 	if err := DropDB(ctx, testCfg); err != nil && !errors.Is(err, errDBNotExist) {
 		t.Fatalf("p.DropDB() = %v, wanted %q or nil", err, errDBNotExist)

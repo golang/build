@@ -18,7 +18,7 @@ DEV_CFG := ${HOME}/.local/share/relui
 
 .PHONY: dev
 dev: postgres-dev docker
-	docker run --rm --name=relui-dev -v $(POSTGRES_RUN_DEV) -p 8080:8080 $(DOCKER_TAG)
+	docker run --rm --name=relui-dev -v $(POSTGRES_RUN_DEV) -e PGUSER=$(POSTGRES_USER) -e PGDATABASE=relui-dev -p 8080:8080 $(DOCKER_TAG)
 
 .PHONY: postgres-dev
 postgres-dev: $(DEV_CFG)/pgpass
@@ -38,7 +38,7 @@ schema.sql: $(MIGRATION_FILES) $(GO_FILES)
 
 .PHONY: test
 test: postgres-dev docker-test
-	docker run --rm --name=relui-test -v $(POSTGRES_RUN_DEV) -e RELUI_TEST_DATABASE="host=/var/run/postgresql user=postgres database=relui-test" golang/relui-test:$(VERSION)
+	docker run --rm --name=relui-test -v $(POSTGRES_RUN_DEV) -e PGUSER=$(POSTGRES_USER) -e PGDATABASE=relui-test golang/relui-test:$(VERSION)
 
 .PHONY: docker
 docker:
