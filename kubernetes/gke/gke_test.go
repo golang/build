@@ -154,7 +154,7 @@ func foreachCluster(t *testing.T, fn func(*container.Cluster, *kubernetes.Client
 		t.Skipf("default token source doesn't work; skipping test: %v", err)
 	}
 
-	clusters, err := containerService.Projects.Zones.Clusters.List(proj, "-").Context(ctx).Do()
+	clusters, err := containerService.Projects.Locations.Clusters.List("/project/" + proj + "/locations/-").Context(ctx).Do()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func foreachCluster(t *testing.T, fn func(*container.Cluster, *kubernetes.Client
 		t.Skip("no GKE clusters")
 	}
 	for _, cl := range clusters.Clusters {
-		kc, err := gke.NewClient(ctx, cl.Name, gke.OptZone(cl.Zone))
+		kc, err := gke.NewClient(ctx, cl.Name, cl.Zone)
 		if err != nil {
 			t.Fatal(err)
 		}

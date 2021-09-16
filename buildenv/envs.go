@@ -41,10 +41,10 @@ type KubeConfig struct {
 	Namespace string
 }
 
-// ZoneOrRegion returns the zone or if unset, the region of the cluster.
+// Location returns the zone or if unset, the region of the cluster.
 // This is the string to use as the "zone" of the cluster when connecting to it
-// with the Kubernetes API.
-func (kc KubeConfig) ZoneOrRegion() string {
+// with kubectl.
+func (kc KubeConfig) Location() string {
 	if kc.Zone != "" {
 		return kc.Zone
 	}
@@ -277,8 +277,9 @@ var Production = &Environment{
 		Name:   "buildlets",
 	},
 	KubeServices: KubeConfig{
+		Zone:      "us-central1-f",
 		Region:    "us-central1",
-		Name:      "services",
+		Name:      "go",
 		Namespace: "prod",
 	},
 	DashURL:             "https://build.golang.org/",

@@ -121,19 +121,20 @@ func InitGCE(sc *secret.Client, vmDeleteTimeout time.Duration, tFiles map[string
 
 	// If running on GCE, override the zone and static IP, and check service account permissions.
 	if metadata.OnGCE() {
-		projectZone, err := metadata.Get("instance/zone")
-		if err != nil || projectZone == "" {
-			return fmt.Errorf("failed to get current GCE zone: %v", err)
-		}
-
 		gkeNodeHostname, err = metadata.Get("instance/hostname")
 		if err != nil {
 			return fmt.Errorf("failed to get current instance hostname: %v", err)
 		}
 
-		// Convert the zone from "projects/1234/zones/us-central1-a" to "us-central1-a".
-		projectZone = path.Base(projectZone)
-		buildEnv.KubeBuild.Zone = projectZone
+		if buildEnv.KubeBuild.Zone == "" {
+			projectZone, err := metadata.Get("instance/zone")
+			if err != nil || projectZone == "" {
+				return fmt.Errorf("failed to get current GCE zone: %v", err)
+			}
+			// Convert the zone from "projects/1234/zones/us-central1-a" to "us-central1-a".
+			projectZone = path.Base(projectZone)
+			buildEnv.KubeBuild.Zone = projectZone
+		}
 
 		if buildEnv.StaticIP == "" {
 			buildEnv.StaticIP, err = metadata.ExternalIP()

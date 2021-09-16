@@ -74,7 +74,7 @@ func InitKube(monitorGitMirror MonitorGitMirrorFunc) error {
 	var err error
 	buildletsKubeClient, err = gke.NewClient(ctx,
 		gceBuildEnv.KubeBuild.Name,
-		gke.OptZone(gceBuildEnv.KubeBuild.ZoneOrRegion()),
+		gceBuildEnv.KubeBuild.Location(),
 		gke.OptProject(gceBuildEnv.ProjectName),
 		gke.OptTokenSource(gce.GCPCredentials().TokenSource))
 	if err != nil {
@@ -83,8 +83,8 @@ func InitKube(monitorGitMirror MonitorGitMirrorFunc) error {
 
 	goKubeClient, err = gke.NewClient(ctx,
 		gceBuildEnv.KubeServices.Name,
+		gceBuildEnv.KubeServices.Location(),
 		gke.OptNamespace(gceBuildEnv.KubeServices.Namespace),
-		gke.OptZone(gceBuildEnv.KubeServices.ZoneOrRegion()),
 		gke.OptProject(gceBuildEnv.ProjectName),
 		gke.OptTokenSource(gce.GCPCredentials().TokenSource))
 	if err != nil {
