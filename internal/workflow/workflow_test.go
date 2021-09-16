@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"golang.org/x/build/internal/workflow"
 )
 
@@ -200,6 +201,9 @@ func TestResume(t *testing.T) {
 	wfState := &workflow.WorkflowState{ID: w.ID, Params: nil}
 	taskStates := storage.states[w.ID]
 	w2, err := workflow.Resume(wd, wfState, taskStates)
+	if err != nil {
+		t.Fatal(err)
+	}
 	out := runWorkflow(t, w2, storage)
 	if got, want := out["output"], "not blocked"; got != want {
 		t.Errorf("output from maybeBlock was %q, wanted %q", got, want)
@@ -230,12 +234,13 @@ func (l *mapListener) TaskStateChanged(workflowID, taskID string, state *workflo
 }
 
 func (l *mapListener) assertState(t *testing.T, w *workflow.Workflow, want map[string]*workflow.TaskState) {
-	if diff := cmp.Diff(l.states[w.ID], want); diff != "" {
+	if diff := cmp.Diff(l.states[w.ID], want, cmpopts.IgnoreFields(workflow.TaskState{}, "SerializedResult")); diff != "" {
 		t.Errorf("task state didn't match expections: %v", diff)
 	}
 }
 
 func startWorkflow(t *testing.T, wd *workflow.Definition, params map[string]string) *workflow.Workflow {
+	t.Helper()
 	w, err := workflow.Start(wd, params)
 	if err != nil {
 		t.Fatal(err)
@@ -244,6 +249,7 @@ func startWorkflow(t *testing.T, wd *workflow.Definition, params map[string]stri
 }
 
 func runWorkflow(t *testing.T, w *workflow.Workflow, listener workflow.Listener) map[string]interface{} {
+	t.Helper()
 	if listener == nil {
 		listener = &verboseListener{t}
 	}
@@ -260,7 +266,7 @@ func (l *verboseListener) TaskStateChanged(_, _ string, st *workflow.TaskState) 
 	switch {
 	case !st.Finished:
 		l.t.Logf("task %-10v: started", st.Name)
-	case st.Error != nil:
+	case st.Error != "":
 		l.t.Logf("task %-10v: error: %v", st.Name, st.Error)
 	default:
 		l.t.Logf("task %-10v: done: %v", st.Name, st.Result)
