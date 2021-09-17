@@ -272,14 +272,13 @@ var Production = &Environment{
 	StaticIP:              "107.178.219.46",
 	PreferContainersOnCOS: true,
 	KubeBuild: KubeConfig{
-		Zone:   "us-central1-f",
+		Zone:   "us-central1-c",
 		Region: "us-central1",
 		Name:   "buildlets",
 	},
 	KubeServices: KubeConfig{
-		Zone:      "us-central1-f",
 		Region:    "us-central1",
-		Name:      "go",
+		Name:      "services",
 		Namespace: "prod",
 	},
 	DashURL:             "https://build.golang.org/",

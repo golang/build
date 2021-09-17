@@ -129,7 +129,7 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 		NetworkInterfaces: []*compute.NetworkInterface{
 			&compute.NetworkInterface{
 				AccessConfigs: accessConfigs,
-				Network:       prefix + "/global/networks/default",
+				Network:       prefix + "/global/networks/default-vpc",
 			},
 		},
 
