@@ -92,7 +92,7 @@ func (w *Work) gitTagVersion() {
 	out := r.runOut("git", "rev-parse", "HEAD")
 	w.VersionCommit = strings.TrimSpace(string(out))
 	out = r.runOut("git", "show", w.VersionCommit)
-	fmt.Printf("About to tag the following commit as %s:\n\n%s\n\nOk? (y/n) ", w.Version, out)
+	fmt.Printf("About to tag the following commit as %s:\n\n%s\n\nOk? (Y/n) ", w.Version, out)
 	if dryRun {
 		fmt.Println("dry-run")
 		return
@@ -102,8 +102,8 @@ func (w *Work) gitTagVersion() {
 	if err != nil {
 		w.log.Panic(err)
 	}
-	if response != "y" {
-		w.log.Panic("stopped")
+	if response != "Y" && response != "y" {
+		w.log.Fatal("stopped as requested")
 	}
 	out, err = r.runErr("git", "tag", w.Version, w.VersionCommit)
 	if err != nil {
