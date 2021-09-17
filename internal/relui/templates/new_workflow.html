@@ -4,14 +4,35 @@
     license that can be found in the LICENSE file.
 -->
 {{define "content"}}
-<section class="NewWorkflow">
-  <h2>New Go Release</h2>
-  <form action="/workflows/create" method="post">
-    <label>
-      Revision
-      <input name="workflow.params.revision" value="main" />
-    </label>
-    <input name="workflow.create" type="submit" value="Create" />
-  </form>
-</section>
+  <section class="NewWorkflow">
+    <h2>New Go Release</h2>
+    <form action="/workflows/new" method="get">
+      <label for="workflow.name">
+        Workflow:
+      </label>
+      <select id="workflow.name" name="workflow.name" onchange="this.form.submit()">
+        <option value="">Select Workflow</option>
+          {{range $name, $definition := .Definitions}}
+            <option value="{{$name}}" {{if eq $name $.Name}}selected="selected"{{end}}>
+                {{$name}}
+            </option>
+          {{end}}
+      </select>
+      <noscript>
+        <input name="workflow.new" type="submit" value="New"/>
+      </noscript>
+    </form>
+    {{if .Selected}}
+      <form action="/workflows/create" method="post">
+        <input type="hidden" id="workflow.name" name="workflow.name" value="{{$.Name}}">
+        {{range $name := .Selected.ParameterNames}}
+          <div class="NewWorkflow-Parameter">
+            <label for="workflow.params.{{$name}}">{{$name}}</label>
+            <input id="workflow.params.{{$name}}" name="workflow.params.{{$name}}" value=""/>
+          </div>
+        {{end}}
+        <input name="workflow.create" type="submit" value="Create"/>
+      </form>
+    {{end}}
+  </section>
 {{end}}

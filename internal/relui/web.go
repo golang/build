@@ -109,10 +109,23 @@ func (s *Server) homeHandler(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, &out)
 }
 
+type newWorkflowResponse struct {
+	Definitions map[string]*workflow.Definition
+	Name        string
+}
+
+func (n *newWorkflowResponse) Selected() *workflow.Definition {
+	return n.Definitions[n.Name]
+}
+
 // newWorkflowHandler presents a form for creating a new workflow.
-func (s *Server) newWorkflowHandler(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) newWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 	out := bytes.Buffer{}
-	if err := newWorkflowTmpl.Execute(&out, nil); err != nil {
+	resp := &newWorkflowResponse{
+		Definitions: Definitions,
+		Name:        r.FormValue("workflow.name"),
+	}
+	if err := newWorkflowTmpl.Execute(&out, resp); err != nil {
 		log.Printf("newWorkflowHandler: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -123,17 +136,20 @@ func (s *Server) newWorkflowHandler(w http.ResponseWriter, _ *http.Request) {
 // createWorkflowHandler persists a new workflow in the datastore, and
 // starts the workflow in a goroutine.
 func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
+	d := Definitions[r.FormValue("workflow.name")]
+	if d == nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	ref := r.Form.Get("workflow.params.revision")
-	if ref == "" {
-		http.Error(w, "workflow revision is required", http.StatusBadRequest)
-		return
+	params := make(map[string]string)
+	for _, n := range d.ParameterNames() {
+		params[n] = r.FormValue(fmt.Sprintf("workflow.params.%s", n))
+		if params[n] == "" {
+			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
 	}
-	params := map[string]string{"greeting": ref}
-	wf, err := workflow.Start(newEchoWorkflow(ref), params)
+	wf, err := workflow.Start(Definitions["echo"], params)
 	if err != nil {
 		log.Printf("createWorkflowHandler: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -219,17 +235,4 @@ type stdoutLogger struct {
 
 func (l *stdoutLogger) Printf(format string, v ...interface{}) {
 	log.Printf("%q(%q): %v", l.WorkflowID, l.TaskID, fmt.Sprintf(format, v...))
-}
-
-// newEchoWorkflow returns a runnable workflow.Definition for
-// development.
-func newEchoWorkflow(greeting string) *workflow.Definition {
-	wd := workflow.New()
-	gt := wd.Task("echo", echo, wd.Constant(greeting))
-	wd.Output("greeting", gt)
-	return wd
-}
-
-func echo(_ context.Context, arg string) (string, error) {
-	return arg, nil
 }

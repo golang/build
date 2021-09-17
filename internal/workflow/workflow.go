@@ -67,6 +67,16 @@ func (d *Definition) Parameter(name string) Value {
 	return &workflowParameter{name: name}
 }
 
+// ParameterNames returns the names of all parameters associated with
+// the Definition.
+func (d *Definition) ParameterNames() []string {
+	var names []string
+	for n := range d.parameterNames {
+		names = append(names, n)
+	}
+	return names
+}
+
 type workflowParameter struct {
 	name string
 }

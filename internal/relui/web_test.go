@@ -130,15 +130,40 @@ func TestServerHomeHandler(t *testing.T) {
 }
 
 func TestServerNewWorkflowHandler(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/workflows/new", nil)
-	w := httptest.NewRecorder()
+	cases := []struct {
+		desc     string
+		params   url.Values
+		wantCode int
+	}{
+		{
+			desc:     "No selection",
+			wantCode: http.StatusOK,
+		},
+		{
+			desc:     "valid workflow",
+			params:   url.Values{"workflow.name": []string{"echo"}},
+			wantCode: http.StatusOK,
+		},
+		{
+			desc:     "invalid workflow",
+			params:   url.Values{"workflow.name": []string{"this workflow does not exist"}},
+			wantCode: http.StatusOK,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			u := url.URL{Path: "/workflows/new", RawQuery: c.params.Encode()}
+			req := httptest.NewRequest(http.MethodGet, u.String(), nil)
+			w := httptest.NewRecorder()
 
-	s := &Server{}
-	s.newWorkflowHandler(w, req)
-	resp := w.Result()
+			s := &Server{}
+			s.newWorkflowHandler(w, req)
+			resp := w.Result()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, http.StatusOK)
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, http.StatusOK)
+			}
+		})
 	}
 }
 
@@ -155,12 +180,25 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 		wantTasks     []db.Task
 	}{
 		{
-			desc:     "bad request",
+			desc:     "no params",
 			wantCode: http.StatusBadRequest,
 		},
 		{
-			desc:     "successful creation",
-			params:   url.Values{"workflow.params.revision": []string{"abc"}},
+			desc:     "invalid workflow name",
+			params:   url.Values{"workflow.name": []string{"invalid"}},
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			desc:     "missing workflow params",
+			params:   url.Values{"workflow.name": []string{"echo"}},
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			desc: "successful creation",
+			params: url.Values{
+				"workflow.name":            []string{"echo"},
+				"workflow.params.greeting": []string{"abc"},
+			},
 			wantCode: http.StatusSeeOther,
 			wantHeaders: map[string]string{
 				"Location": "/",
