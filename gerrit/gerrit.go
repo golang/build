@@ -69,7 +69,7 @@ func (e *HTTPError) Error() string {
 	return fmt.Sprintf("HTTP status %s; %s", e.Res.Status, e.Body)
 }
 
-// doArg is one of urlValues, reqBody, or wantResStatus
+// doArg is an optional argument for the Client.do method.
 type doArg interface {
 	isDoArg()
 }
@@ -78,9 +78,17 @@ type wantResStatus int
 
 func (wantResStatus) isDoArg() {}
 
-type reqBody struct{ body interface{} }
+// reqBodyJSON sets the request body to a JSON encoding of v,
+// and the request's Content-Type header to "application/json".
+type reqBodyJSON struct{ v interface{} }
 
-func (reqBody) isDoArg() {}
+func (reqBodyJSON) isDoArg() {}
+
+// reqBodyRaw sets the request body to r,
+// and the request's Content-Type header to "application/octet-stream".
+type reqBodyRaw struct{ r io.Reader }
+
+func (reqBodyRaw) isDoArg() {}
 
 type urlValues url.Values
 
@@ -88,14 +96,23 @@ func (urlValues) isDoArg() {}
 
 func (c *Client) do(ctx context.Context, dst interface{}, method, path string, opts ...doArg) error {
 	var arg url.Values
-	var body interface{}
+	var body io.Reader
+	var contentType string
 	var wantStatus = http.StatusOK
 	for _, opt := range opts {
 		switch opt := opt.(type) {
 		case wantResStatus:
 			wantStatus = int(opt)
-		case reqBody:
-			body = opt.body
+		case reqBodyJSON:
+			b, err := json.MarshalIndent(opt.v, "", "  ")
+			if err != nil {
+				return err
+			}
+			body = bytes.NewReader(b)
+			contentType = "application/json"
+		case reqBodyRaw:
+			body = opt.r
+			contentType = "application/octet-stream"
 		case urlValues:
 			arg = url.Values(opt)
 		default:
@@ -103,16 +120,6 @@ func (c *Client) do(ctx context.Context, dst interface{}, method, path string, o
 		}
 	}
 
-	var bodyr io.Reader
-	var contentType string
-	if body != nil {
-		v, err := json.MarshalIndent(body, "", "  ")
-		if err != nil {
-			return err
-		}
-		bodyr = bytes.NewReader(v)
-		contentType = "application/json"
-	}
 	// slashA is either "/a" (for authenticated requests) or "" for unauthenticated.
 	// See https://gerrit-review.googlesource.com/Documentation/rest-api.html#authentication
 	slashA := "/a"
@@ -124,7 +131,7 @@ func (c *Client) do(ctx context.Context, dst interface{}, method, path string, o
 	if arg != nil {
 		u += "?" + arg.Encode()
 	}
-	req, err := http.NewRequest(method, u, bodyr)
+	req, err := http.NewRequestWithContext(ctx, method, u, body)
 	if err != nil {
 		return err
 	}
@@ -132,7 +139,7 @@ func (c *Client) do(ctx context.Context, dst interface{}, method, path string, o
 		req.Header.Set("Content-Type", contentType)
 	}
 	c.auth.setAuth(c, req)
-	res, err := c.httpClient().Do(req.WithContext(ctx))
+	res, err := c.httpClient().Do(req)
 	if err != nil {
 		return err
 	}
@@ -143,6 +150,14 @@ func (c *Client) do(ctx context.Context, dst interface{}, method, path string, o
 		return &HTTPError{res, body, err}
 	}
 
+	if dst == nil {
+		// Drain the response body, return an error if it's anything but empty.
+		body, err := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
+		if err != nil || len(body) != 0 {
+			return &HTTPError{res, body, err}
+		}
+		return nil
+	}
 	// The JSON response begins with an XSRF-defeating header
 	// like ")]}\n". Read that and skip it.
 	br := bufio.NewReader(res.Body)
@@ -456,15 +471,15 @@ func (c *Client) GetChange(ctx context.Context, changeID string, opts ...QueryCh
 	default:
 		return nil, errors.New("only 1 option struct supported")
 	}
-	change := new(ChangeInfo)
-	err := c.do(ctx, change, "GET", "/changes/"+changeID, urlValues{
+	var change ChangeInfo
+	err := c.do(ctx, &change, "GET", "/changes/"+changeID, urlValues{
 		"n": condInt(opt.N),
 		"o": opt.Fields,
 	})
 	if he, ok := err.(*HTTPError); ok && he.Res.StatusCode == 404 {
 		return nil, ErrChangeNotExist
 	}
-	return change, err
+	return &change, err
 }
 
 // GetChangeDetail retrieves a change with labels, detailed labels, detailed
@@ -570,7 +585,7 @@ type reviewInfo struct {
 func (c *Client) SetReview(ctx context.Context, changeID, revision string, review ReviewInput) error {
 	var res reviewInfo
 	return c.do(ctx, &res, "POST", fmt.Sprintf("/changes/%s/revisions/%s/review", changeID, revision),
-		reqBody{review})
+		reqBodyJSON{&review})
 }
 
 // ReviewerInfo contains information about reviewers of a change.
@@ -606,7 +621,7 @@ type HashtagsInput struct {
 // See https://gerrit-documentation.storage.googleapis.com/Documentation/2.15.1/rest-api-changes.html#set-hashtags
 func (c *Client) SetHashtags(ctx context.Context, changeID string, hashtags HashtagsInput) ([]string, error) {
 	var res []string
-	err := c.do(ctx, &res, "POST", fmt.Sprintf("/changes/%s/hashtags", changeID), reqBody{hashtags})
+	err := c.do(ctx, &res, "POST", fmt.Sprintf("/changes/%s/hashtags", changeID), reqBodyJSON{&hashtags})
 	return res, err
 }
 
@@ -645,7 +660,7 @@ func (c *Client) AbandonChange(ctx context.Context, changeID string, message ...
 		Message string `json:"message,omitempty"`
 	}{msg}
 	var change ChangeInfo
-	return c.do(ctx, &change, "POST", "/changes/"+changeID+"/abandon", reqBody{&b})
+	return c.do(ctx, &change, "POST", "/changes/"+changeID+"/abandon", reqBodyJSON{&b})
 }
 
 // ProjectInput contains the options for creating a new project.
@@ -679,7 +694,7 @@ type ProjectInfo struct {
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#list-projects
 func (c *Client) ListProjects(ctx context.Context) ([]ProjectInfo, error) {
 	var res map[string]ProjectInfo
-	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/"))
+	err := c.do(ctx, &res, "GET", "/projects/")
 	if err != nil {
 		return nil, err
 	}
@@ -707,8 +722,47 @@ func (c *Client) CreateProject(ctx context.Context, name string, p ...ProjectInp
 		pi = p[0]
 	}
 	var res ProjectInfo
-	err := c.do(ctx, &res, "PUT", fmt.Sprintf("/projects/%s", name), reqBody{&pi}, wantResStatus(http.StatusCreated))
+	err := c.do(ctx, &res, "PUT", fmt.Sprintf("/projects/%s", name), reqBodyJSON{&pi}, wantResStatus(http.StatusCreated))
 	return res, err
+}
+
+// CreateChange creates a new change.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#create-change.
+func (c *Client) CreateChange(ctx context.Context, ci ChangeInput) (ChangeInfo, error) {
+	var res ChangeInfo
+	err := c.do(ctx, &res, "POST", "/changes/", reqBodyJSON{&ci}, wantResStatus(http.StatusCreated))
+	return res, err
+}
+
+// ChangeInput contains the options for creating a new change.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-input.
+type ChangeInput struct {
+	Project string `json:"project"`
+	Branch  string `json:"branch"`
+	Subject string `json:"subject"`
+}
+
+// ChangeFileContentInChangeEdit puts content of a file to a change edit.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#put-edit-file.
+func (c *Client) ChangeFileContentInChangeEdit(ctx context.Context, changeID string, path string, content string) error {
+	err := c.do(ctx, nil, "PUT", "/changes/"+changeID+"/edit/"+url.QueryEscape(path),
+		reqBodyRaw{strings.NewReader(content)}, wantResStatus(http.StatusNoContent))
+	if he, ok := err.(*HTTPError); ok && he.Res.StatusCode == http.StatusConflict {
+		// The change edit was a no-op.
+		// Note: If/when there's a need inside x/build to handle this differently,
+		// maybe it'll be a good time to return something other than a *HTTPError
+		// and document it as part of the API.
+	}
+	return err
+}
+
+// PublishChangeEdit promotes the change edit to a regular patch set.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#publish-edit.
+func (c *Client) PublishChangeEdit(ctx context.Context, changeID string) error {
+	return c.do(ctx, nil, "POST", "/changes/"+changeID+"/edit:publish", wantResStatus(http.StatusNoContent))
 }
 
 // ErrProjectNotExist is returned when a project doesn't exist.
@@ -896,7 +950,7 @@ func (ts TimeStamp) MarshalJSON() ([]byte, error) {
 
 func (ts *TimeStamp) UnmarshalJSON(p []byte) error {
 	if len(p) < 2 {
-		return errors.New("Timestamp too short")
+		return errors.New("timestamp too short")
 	}
 	if p[0] != '"' || p[len(p)-1] != '"' {
 		return errors.New("not double-quoted")
