@@ -8,6 +8,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"crypto/sha256"
 	"errors"
@@ -27,6 +28,7 @@ import (
 	"time"
 
 	"golang.org/x/build/buildenv"
+	"golang.org/x/build/internal/task"
 	"golang.org/x/build/maintner"
 )
 
@@ -66,12 +68,13 @@ var releaseTargets = []Target{
 }
 
 var releaseModes = map[string]bool{
-	"prepare": true,
-	"release": true,
+	"prepare":    true,
+	"release":    true,
+	"mail-dl-cl": true,
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: releasebot -mode {prepare|release} [-security] [-dry-run] {go1.8.5|go1.10beta2|go1.11rc1}")
+	fmt.Fprintln(os.Stderr, "usage: releasebot -mode {prepare|release|mail-dl-cl} [-security] [-dry-run] {go1.8.5|go1.10beta2|go1.11rc1}")
 	flag.PrintDefaults()
 	os.Exit(2)
 }
@@ -91,8 +94,14 @@ func main() {
 	security := flag.Bool("security", false, "cut a security release from the internal Gerrit")
 	flag.Usage = usage
 	flag.Parse()
-	if *modeFlag == "" || !releaseModes[*modeFlag] || flag.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "need to provide a valid mode and a release name")
+	if !releaseModes[*modeFlag] {
+		fmt.Fprintln(os.Stderr, "need to provide a valid mode")
+		usage()
+	} else if *modeFlag == "mail-dl-cl" {
+		mailDLCL()
+		return
+	} else if flag.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "need to provide a release name")
 		usage()
 	}
 	releaseVersion := flag.Arg(0)
@@ -182,6 +191,46 @@ func main() {
 	}
 
 	w.doRelease()
+}
+
+// mailDLCL parses command-line arguments for the mail-dl-cl mode,
+// and runs it.
+func mailDLCL() {
+	if flag.NArg() != 1 && flag.NArg() != 2 {
+		fmt.Fprintln(os.Stderr, "need to provide 1 or 2 versions")
+		usage()
+	}
+	versions := flag.Args()
+
+	fmt.Printf("About to create a golang.org/dl CL for the following Go versions:\n\n\t• %s\n\nOk? (Y/n) ", strings.Join(versions, "\n\t• "))
+	if dryRun {
+		fmt.Println("dry-run")
+		return
+	}
+	var response string
+	_, err := fmt.Scanln(&response)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if response != "Y" && response != "y" {
+		log.Fatalln("stopped as requested")
+	}
+	changeURL, err := task.MailDLCL(context.Background(), versions)
+	if err != nil {
+		log.Fatalf(`task.MailDLCL(ctx, %#v) failed: %v
+
+If it's neccessary to perform it manually as a workaround,
+consider the following steps:
+
+	git clone https://go.googlesource.com/dl && cd dl
+	go run ./internal/genv goX.Y.Z goX.A.B
+	git add .
+	git commit -m "dl: add goX.Y.Z and goX.A.B"
+	git codereview mail -trybot -trust
+
+Discuss with the secondary release coordinator as needed.`, versions, err)
+	}
+	fmt.Printf("\nPlease review and submit %s\nand then refer to the playbook for the next steps.\n\n", changeURL)
 }
 
 // checkForGitCodereview exits the program if git-codereview is not installed
