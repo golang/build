@@ -174,6 +174,10 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{bcmills, jayconrod, matloob},
 		Secondary: []Owner{rsc, iant},
 	},
+	"go/src/cmd/gofmt": {
+		Primary:   []Owner{gri},
+		Secondary: []Owner{mvdan},
+	},
 	"go/src/cmd/internal/obj/wasm": wasmOwners,
 	"go/src/cmd/link": {
 		Primary:   []Owner{cherryyz, rsc, iant},
@@ -293,7 +297,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{agnivade},
 	},
 	"go/src/go/format": {
-		Primary: []Owner{gri},
+		Primary:   []Owner{gri},
+		Secondary: []Owner{mvdan},
 	},
 	"go/src/go/importer": {
 		Primary: []Owner{gri, adonovan},
@@ -313,7 +318,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{gri},
 	},
 	"go/src/go/printer": {
-		Primary: []Owner{gri},
+		Primary:   []Owner{gri},
+		Secondary: []Owner{mvdan},
 	},
 	"go/src/go/scanner": {
 		Primary: []Owner{gri},
