@@ -157,6 +157,8 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("X-Supported-Version", buildlet.GomoteCreateStreamVersion)
 
+	recordBuildletCreate(r.Context(), builderType)
+
 	wantStream := false // streaming JSON updates, one JSON message (type msg) per line
 	if clientVersion >= buildlet.GomoteCreateStreamVersion {
 		wantStream = true
@@ -371,6 +373,7 @@ func proxyBuildletHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "POST" && r.URL.Path == "/tcpproxy" {
+		recordGomoteRDPUsage(r.Context())
 		proxyBuildletTCP(w, r, rb)
 		return
 	}
@@ -561,7 +564,7 @@ func listenAndServeSSH(sc *secret.Client) {
 	s := &ssh.Server{
 		Addr:             listenAddr,
 		Handler:          ah.handleIncomingSSHPostAuth,
-		PublicKeyHandler: handleSSHPublicKeyAuth,
+		PublicKeyHandler: recordSSHPublicKeyAuthHandler(handleSSHPublicKeyAuth),
 	}
 	s.AddHostKey(signer)
 
