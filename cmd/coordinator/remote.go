@@ -527,21 +527,14 @@ func listenAndServeSSH(sc *secret.Client) {
 			log.Fatal(err)
 		}
 	} else {
-		gce := pool.NewGCEConfiguration()
-		if gce.StorageClient() == nil {
-			log.Printf("GCS storage client not available; not running SSH server.")
-			return
-		}
-		r, err := gce.StorageClient().Bucket(gce.BuildEnv().BuildletBucket).Object("coordinator-gomote-ssh.key").NewReader(context.Background())
+		ctxHostKey, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		hostKeyStr, err := sc.Retrieve(ctxHostKey, secret.NameGomoteSSHPrivateKey)
 		if err != nil {
-			log.Printf("Failed to read ssh host key: %v; not running SSH server.", err)
+			log.Printf("failed to get secret manager %s value: %s. not running SSH server.", secret.NameGomoteSSHPrivateKey, err)
 			return
 		}
-		hostKey, err = ioutil.ReadAll(r)
-		if err != nil {
-			log.Printf("Failed to read ssh host key: %v; not running SSH server.", err)
-			return
-		}
+		hostKey = []byte(hostKeyStr)
 		sshPrivateKeyFile, err = writeSSHPrivateKeyToTempFile(hostKey)
 		log.Printf("ssh: writeSSHPrivateKeyToTempFile = %v, %v", sshPrivateKeyFile, err)
 		if err != nil {
@@ -551,7 +544,7 @@ func listenAndServeSSH(sc *secret.Client) {
 	}
 	signer, err := gossh.ParsePrivateKey(hostKey)
 	if err != nil {
-		log.Printf("failed to parse SSH host key: %v; running running SSH server", err)
+		log.Printf("failed to parse SSH host key: %v; not running SSH server", err)
 		return
 	}
 

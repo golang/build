@@ -37,6 +37,9 @@ const (
 	// NameGobotPassword is the secret name for the Gobot password.
 	NameGobotPassword = "gobot-password"
 
+	// NameGomoteSSHPrivateKey is the secret name for the gomote SSH private key.
+	NameGomoteSSHPrivateKey = "gomote-ssh-private-key"
+
 	// NameGomoteSSHPublicKey is the secret name for the gomote SSH public key.
 	NameGomoteSSHPublicKey = "gomote-ssh-public-key"
 
