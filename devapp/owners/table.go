@@ -740,7 +740,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/gopls": {
 		Primary:   []Owner{rstambler},
-		Secondary: []Owner{iancottrell},
+		Secondary: []Owner{toolsTeam},
 	},
 	"tools/imports": {
 		Primary: []Owner{heschi},
@@ -771,7 +771,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/internal/lsp": {
 		Primary:   []Owner{rstambler},
-		Secondary: []Owner{iancottrell},
+		Secondary: []Owner{toolsTeam},
 	},
 	"tools/internal/lsp/cache": {
 		Primary: []Owner{rstambler},
