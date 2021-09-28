@@ -393,9 +393,9 @@ func main() {
 
 	addHealthCheckers(context.Background(), sc)
 
-	gr, err := metrics.GCEResource("go-build-coordinator")
+	gr, err := metrics.GKEResource("coordinator-deployment")
 	if err != nil && metadata.OnGCE() {
-		log.Println("metrics.GCEResource:", err)
+		log.Println("metrics.GKEResource:", err)
 	}
 	if ms, err := metrics.NewService(gr, views); err != nil {
 		log.Println("failed to initialize metrics:", err)

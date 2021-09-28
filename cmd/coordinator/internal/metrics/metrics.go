@@ -10,13 +10,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"path"
+	"os"
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
 	"contrib.go.opencensus.io/exporter/prometheus"
 	"contrib.go.opencensus.io/exporter/stackdriver"
 	"go.opencensus.io/stats/view"
+	"golang.org/x/build/buildenv"
 	mrpb "google.golang.org/genproto/googleapis/api/monitoredres"
 )
 
@@ -103,58 +104,38 @@ func (r *MonitoredResource) MonitoredResource() (resType string, labels map[stri
 	return r.Type, r.Labels
 }
 
-// GCEResource populates a MonitoredResource with GCE Metadata.
+// GKEResource populates a MonitoredResource with GKE Metadata.
 //
-// The returned MonitoredResource will have the type set to "generic_task".
-func GCEResource(jobName string) (*MonitoredResource, error) {
+// The returned MonitoredResource will have the type set to "k8s_container".
+func GKEResource(containerName string) (*MonitoredResource, error) {
 	projID, err := metadata.ProjectID()
 	if err != nil {
 		return nil, err
 	}
-	zone, err := metadata.Zone()
+	// https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#gke_mds
+	location, err := metadata.InstanceAttributeValue("cluster-location")
 	if err != nil {
 		return nil, err
 	}
-	inst, err := metadata.InstanceName()
+	// https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity#gke_mds
+	clusterName, err := metadata.InstanceAttributeValue("cluster-name")
 	if err != nil {
 		return nil, err
 	}
-	group, err := instanceGroupName()
+	podName, err := os.Hostname()
 	if err != nil {
 		return nil, err
-	} else if group == "" {
-		group = projID
 	}
 
 	return (*MonitoredResource)(&mrpb.MonitoredResource{
-		Type: "generic_task", // See: https://cloud.google.com/monitoring/api/resources#tag_generic_task
+		Type: "k8s_container", // See: https://cloud.google.com/monitoring/api/resources#tag_k8s_container
 		Labels: map[string]string{
-			"project_id": projID,
-			"location":   zone,
-			"namespace":  group,
-			"job":        jobName,
-			"task_id":    inst,
+			"project_id":     projID,
+			"location":       location,
+			"cluster_name":   clusterName,
+			"namespace_name": buildenv.ByProjectID(projID).KubeServices.Namespace,
+			"pod_name":       podName,
+			"container_name": containerName,
 		},
 	}), nil
-}
-
-// instanceGroupName fetches the instanceGroupName from the instance
-// metadata.
-//
-// The instance group manager applies a custom "created-by" attribute
-// to the instance, which is not part of the metadata package API, and
-// must be queried separately.
-//
-// An empty string will be returned if a metadata.NotDefinedError is
-// returned when fetching metadata. An error will be returned if other
-// errors occur when fetching metadata.
-func instanceGroupName() (string, error) {
-	ig, err := metadata.InstanceAttributeValue("created-by")
-	if errors.As(err, new(metadata.NotDefinedError)) {
-		return "", nil
-	} else if err != nil {
-		return "", err
-	}
-	// "created-by" format: "projects/{{InstanceID}}/zones/{{Zone}}/instanceGroupManagers/{{Instance Group Name}}
-	return path.Base(ig), nil
 }
