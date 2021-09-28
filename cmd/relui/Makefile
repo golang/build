@@ -33,7 +33,7 @@ postgres-dev: $(DEV_CFG)/pgpass
 
 schema.sql: $(MIGRATION_FILES) $(GO_FILES)
 	docker build -f Dockerfile -t golang/relui:$(VERSION) ../..
-	docker run --rm --name=relui-dev-migrate -v $(POSTGRES_RUN_DEV) $(DOCKER_TAG) --only-migrate
+	docker run --rm --name=relui-dev-migrate -v $(POSTGRES_RUN_DEV) -e PGUSER=$(POSTGRES_USER) -e PGDATABASE=relui-dev $(DOCKER_TAG) --only-migrate
 	docker exec postgres-dev pg_dump --username=$(POSTGRES_USER) --schema-only relui-dev > schema.sql
 
 .PHONY: test

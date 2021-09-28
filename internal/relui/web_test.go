@@ -194,7 +194,8 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			desc: "successful creation",
 			params: url.Values{
 				"workflow.name":            []string{"echo"},
-				"workflow.params.greeting": []string{"abc"},
+				"workflow.params.greeting": []string{"hello"},
+				"workflow.params.farewell": []string{"bye"},
 			},
 			wantCode: http.StatusSeeOther,
 			wantHeaders: map[string]string{
@@ -203,7 +204,7 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			wantWorkflows: []db.Workflow{
 				{
 					ID:        uuid.New(), // SameUUIDVariant
-					Params:    nullString(`{"greeting": "abc"}`),
+					Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
 					Name:      nullString(`Echo`),
 					CreatedAt: time.Now(), // cmpopts.EquateApproxTime
 					UpdatedAt: time.Now(), // cmpopts.EquateApproxTime
@@ -211,8 +212,13 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			},
 			wantTasks: []db.Task{
 				{
-					Name:      "echo",
-					Finished:  false,
+					Name:      "greeting",
+					Error:     sql.NullString{},
+					CreatedAt: time.Now(), // cmpopts.EquateApproxTime
+					UpdatedAt: time.Now(), // cmpopts.EquateApproxTime
+				},
+				{
+					Name:      "farewell",
 					Error:     sql.NullString{},
 					CreatedAt: time.Now(), // cmpopts.EquateApproxTime
 					UpdatedAt: time.Now(), // cmpopts.EquateApproxTime
@@ -262,8 +268,8 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 					cancel()
 				}
 			})
-			if len(c.wantTasks) > 0 {
-				c.wantTasks[0].WorkflowID = wfs[0].ID
+			for i := range c.wantTasks {
+				c.wantTasks[i].WorkflowID = wfs[0].ID
 			}
 			if diff := cmp.Diff(c.wantTasks, tasks, cmpopts.EquateApproxTime(time.Minute), cmpopts.IgnoreFields(db.Task{}, "Finished", "Result")); diff != "" {
 				t.Errorf("q.TasksForWorkflow(_, %q) mismatch (-want +got):\n%s", wfs[0].ID, diff)

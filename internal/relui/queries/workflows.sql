@@ -42,4 +42,20 @@ ORDER BY created_at;
 SELECT tasks.*
 FROM tasks
 WHERE workflow_id=$1
-ORDER BY created_At;
+ORDER BY created_at;
+
+-- name: CreateTaskLog :one
+INSERT INTO task_logs (workflow_id, task_name, body)
+VALUES ($1, $2, $3)
+RETURNING *;
+
+-- name: TaskLogsForTask :many
+SELECT task_logs.*
+FROM task_logs
+WHERE workflow_id=$1 AND task_name = $2
+ORDER BY created_at;
+
+-- name: TaskLogs :many
+SELECT task_logs.*
+FROM task_logs
+ORDER BY created_at;

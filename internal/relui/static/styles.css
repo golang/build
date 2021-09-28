@@ -36,7 +36,6 @@ h6 {
 }
 .Site-content {
   flex: 1 0 auto;
-  padding: 0.625rem;
   width: 100%;
 }
 .Site-header {
@@ -51,22 +50,17 @@ h6 {
   font-size: 1.5rem;
   margin: 0;
 }
-@media only screen and (min-width: 75rem) {
-  .Workflows,
-  .NewWorkflow {
-    width: 74.75rem;
-  }
-}
-@media only screen and (min-width: 48rem) {
-  .Workflows,
-  .NewWorkflow {
-    margin: 0 auto;
-  }
+.Workflows {
+  padding: 0 0.625rem;
 }
 .Workflows-header {
   align-items: center;
+  background: #fff;
+  border-bottom: 0.0625rem solid #d6d6d6;
   display: flex;
   justify-content: space-between;
+  margin: 0 -0.625rem;
+  padding: 0 0.625rem;
 }
 .WorkflowList,
 .TaskList {
@@ -74,22 +68,48 @@ h6 {
   margin: 0;
   padding: 0;
 }
+.WorkflowList-title {
+}
 .WorkflowList-sectionTitle {
-  margin-bottom: 0.5rem;
   font-weight: normal;
+  margin-bottom: 0.5rem;
+}
+.WorkflowList-item {
+  background: #fff;
+  margin-top: 1rem;
+  padding: 0 0.5rem;
+  border: 0.0625rem solid #d6d6d6;
+  border-radius: 0.0625rem;
 }
 .TaskList {
-  border: 1px solid #d6d6d6;
-  border-radius: 0.25rem;
-}
-.TaskList-item {
-  display: flex;
-  align-items: center;
-  padding: 0.5rem;
-  justify-content: space-between;
+  border-bottom: 0.0625rem solid #d6d6d6;
+  border-top: 0.0625rem solid #d6d6d6;
+  margin-bottom: 1rem;
 }
 .TaskList-item + .TaskList-item {
   border-top: 0.0625rem solid #d6d6d6;
+}
+.TaskList-itemSummary {
+  align-items: center;
+  cursor: pointer;
+  justify-content: space-between;
+  padding: 0.5rem;
+}
+.TaskList-itemSummary:hover {
+  background-color: #fafafa;
+}
+.TaskList-itemLogs {
+  background-color: #f5f5f5;
+  box-shadow: inset 0 6px 6px -8px #888;
+  font-size: 0.875rem;
+  margin: 0;
+  padding: 1rem 0;
+}
+.TaskList-itemLogLine {
+  padding: 0 1rem;
+}
+.TaskList-itemLogLine:nth-child(even) {
+  background-color: #fafafa;
 }
 .Button {
   background: #375eab;

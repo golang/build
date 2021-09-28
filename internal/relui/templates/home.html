@@ -4,33 +4,43 @@
     license that can be found in the LICENSE file.
 -->
 {{define "content"}}
-<section class="Workflows">
-  <div class="Workflows-header">
-    <h2>Workflows</h2>
-    <a href="/workflows/new" class="Button">New</a>
-  </div>
-  <ul class="WorkflowList">
-    {{range $workflow := .Workflows}}
-    <li class="WorkflowList-item">
-      <h3>{{$workflow.Name.String}} - {{index $workflow.ID}}</h3>
-      <h4 class="WorkflowList-sectionTitle">Tasks</h4>
-      <ul class="TaskList">
-        {{$tasks := index $.WorkflowTasks $workflow.ID}}
-        {{range $task := $tasks}}
-        <li class="TaskList-item">
-          <span class="TaskList-itemTitle">{{$task.Name}}</span>
-          Finished: {{$task.Finished}}
-          Result: {{$task.Result.String}}
-          Name: {{$task.Name}}
+  <section class="Workflows">
+    <div class="Workflows-header">
+      <h2>Workflows</h2>
+      <a href="/workflows/new" class="Button">New</a>
+    </div>
+    <ul class="WorkflowList">
+      {{range $workflow := .Workflows}}
+        <li class="WorkflowList-item">
+          <h3 class="WorkflowList-title">
+            {{$workflow.Name.String}} -
+            {{index $workflow.ID}}
+          </h3>
+          <h4 class="WorkflowList-sectionTitle">Tasks</h4>
+          <ul class="TaskList">
+            {{$tasks := index $.WorkflowTasks $workflow.ID}}
+            {{range $task := $tasks}}
+              <li class="TaskList-item">
+                <details class="TaskList-itemDetails">
+                  <summary class="TaskList-itemSummary">
+                    <span class="TaskList-itemTitle">{{$task.Name}}</span>
+                    Finished: {{$task.Finished}} Result: {{$task.Result.String}} Name:
+                    {{$task.Name}}
+                  </summary>
+                  <div class="TaskList-itemLogs">
+                    {{range $log := $.Logs $workflow.ID  $task.Name}}
+                      <div class="TaskList-itemLogLine">
+                        {{$log.CreatedAt.Format "2006/01/02 15:04:05"}}
+                        {{$log.Body}}
+                      </div>
+                    {{end}}
+                  </div>
+                </details>
+              </li>
+            {{end}}
+          </ul>
         </li>
-        {{end}}
-        <li class="TaskList-item">
-          <span class="TaskList-itemTitle">Sample Task</span>
-          Status: created
-        </li>
-      </ul>
-    </li>
-    {{end}}
-  </ul>
-</section>
+      {{end}}
+    </ul>
+  </section>
 {{end}}

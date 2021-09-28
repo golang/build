@@ -7,31 +7,29 @@
   <section class="NewWorkflow">
     <h2>New Go Release</h2>
     <form action="/workflows/new" method="get">
-      <label for="workflow.name">
-        Workflow:
-      </label>
+      <label for="workflow.name">Workflow:</label>
       <select id="workflow.name" name="workflow.name" onchange="this.form.submit()">
         <option value="">Select Workflow</option>
-          {{range $name, $definition := .Definitions}}
-            <option value="{{$name}}" {{if eq $name $.Name}}selected="selected"{{end}}>
-                {{$name}}
-            </option>
-          {{end}}
+        {{range $name, $definition := .Definitions}}
+          <option value="{{$name}}" {{if eq $name $.Name}}selected="selected"{{end}}>
+            {{$name}}
+          </option>
+        {{end}}
       </select>
       <noscript>
-        <input name="workflow.new" type="submit" value="New"/>
+        <input name="workflow.new" type="submit" value="New" />
       </noscript>
     </form>
     {{if .Selected}}
       <form action="/workflows/create" method="post">
-        <input type="hidden" id="workflow.name" name="workflow.name" value="{{$.Name}}">
+        <input type="hidden" id="workflow.name" name="workflow.name" value="{{$.Name}}" />
         {{range $name := .Selected.ParameterNames}}
           <div class="NewWorkflow-Parameter">
             <label for="workflow.params.{{$name}}">{{$name}}</label>
-            <input id="workflow.params.{{$name}}" name="workflow.params.{{$name}}" value=""/>
+            <input id="workflow.params.{{$name}}" name="workflow.params.{{$name}}" value="" />
           </div>
         {{end}}
-        <input name="workflow.create" type="submit" value="Create"/>
+        <input name="workflow.create" type="submit" value="Create" />
       </form>
     {{end}}
   </section>

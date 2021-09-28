@@ -24,6 +24,15 @@ type Task struct {
 	UpdatedAt  time.Time
 }
 
+type TaskLog struct {
+	ID         int32
+	WorkflowID uuid.UUID
+	TaskName   string
+	Body       string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
 type Workflow struct {
 	ID        uuid.UUID
 	Params    sql.NullString

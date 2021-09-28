@@ -76,34 +76,60 @@ func (s *Server) Serve(port string) error {
 type homeResponse struct {
 	Workflows     []db.Workflow
 	WorkflowTasks map[uuid.UUID][]db.Task
+	TaskLogs      map[uuid.UUID]map[string][]db.TaskLog
+}
+
+func (h *homeResponse) Logs(workflow uuid.UUID, task string) []db.TaskLog {
+	t := h.TaskLogs[workflow]
+	if t == nil {
+		return nil
+	}
+	return t[task]
 }
 
 // homeHandler renders the homepage.
 func (s *Server) homeHandler(w http.ResponseWriter, r *http.Request) {
-	q := db.New(s.db)
-	ws, err := q.Workflows(r.Context())
+	resp, err := s.buildHomeResponse(r.Context())
 	if err != nil {
 		log.Printf("homeHandler: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
-	}
-	tasks, err := q.Tasks(r.Context())
-	if err != nil {
-		log.Printf("homeHandler: %v", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-	wfTasks := make(map[uuid.UUID][]db.Task, len(ws))
-	for _, t := range tasks {
-		wfTasks[t.WorkflowID] = append(wfTasks[t.WorkflowID], t)
 	}
 	out := bytes.Buffer{}
-	if err := homeTmpl.Execute(&out, homeResponse{Workflows: ws, WorkflowTasks: wfTasks}); err != nil {
+	if err := homeTmpl.Execute(&out, resp); err != nil {
 		log.Printf("homeHandler: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 	io.Copy(w, &out)
+}
+
+func (s *Server) buildHomeResponse(ctx context.Context) (*homeResponse, error) {
+	q := db.New(s.db)
+	ws, err := q.Workflows(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := q.Tasks(ctx)
+	if err != nil {
+		return nil, err
+	}
+	wfTasks := make(map[uuid.UUID][]db.Task, len(ws))
+	for _, t := range tasks {
+		wfTasks[t.WorkflowID] = append(wfTasks[t.WorkflowID], t)
+	}
+	tlogs, err := q.TaskLogs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	wftlogs := make(map[uuid.UUID]map[string][]db.TaskLog)
+	for _, l := range tlogs {
+		if wftlogs[l.WorkflowID] == nil {
+			wftlogs[l.WorkflowID] = make(map[string][]db.TaskLog)
+		}
+		wftlogs[l.WorkflowID][l.TaskName] = append(wftlogs[l.WorkflowID][l.TaskName], l)
+	}
+	return &homeResponse{Workflows: ws, WorkflowTasks: wfTasks, TaskLogs: wftlogs}, nil
 }
 
 type newWorkflowResponse struct {
@@ -180,56 +206,4 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("wf.Run() = %v, %v", result, err)
 	}(wf, s.db)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
-}
-
-// listener implements workflow.Listener for recording workflow state.
-type listener struct {
-	db *pgxpool.Pool
-}
-
-// TaskStateChanged is called whenever a task is updated by the
-// workflow. The workflow.TaskState is persisted as a db.Task,
-// creating or updating a row as necessary.
-func (l *listener) TaskStateChanged(workflowID uuid.UUID, taskID string, state *workflow.TaskState) error {
-	log.Printf("TaskStateChanged(%q, %q, %v)", workflowID, taskID, state)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	result, err := json.Marshal(state.Result)
-	if err != nil {
-		return err
-	}
-	err = l.db.BeginFunc(ctx, func(tx pgx.Tx) error {
-		q := db.New(tx)
-		updated := time.Now()
-		_, err := q.UpsertTask(ctx, db.UpsertTaskParams{
-			WorkflowID: workflowID,
-			Name:       taskID,
-			Finished:   state.Finished,
-			Result:     sql.NullString{String: string(result), Valid: len(result) > 0},
-			Error:      sql.NullString{},
-			CreatedAt:  updated,
-			UpdatedAt:  updated,
-		})
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		log.Printf("TaskStateChanged(%q, %q, %v) = %v", workflowID, taskID, state, err)
-	}
-	return err
-}
-
-func (l *listener) Logger(workflowID uuid.UUID, taskID string) workflow.Logger {
-	return &stdoutLogger{WorkflowID: workflowID, TaskID: taskID}
-}
-
-type stdoutLogger struct {
-	WorkflowID uuid.UUID
-	TaskID     string
-}
-
-func (l *stdoutLogger) Printf(format string, v ...interface{}) {
-	log.Printf("%q(%q): %v", l.WorkflowID, l.TaskID, fmt.Sprintf(format, v...))
 }

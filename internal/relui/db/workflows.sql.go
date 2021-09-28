@@ -50,6 +50,32 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 	return i, err
 }
 
+const createTaskLog = `-- name: CreateTaskLog :one
+INSERT INTO task_logs (workflow_id, task_name, body)
+VALUES ($1, $2, $3)
+RETURNING id, workflow_id, task_name, body, created_at, updated_at
+`
+
+type CreateTaskLogParams struct {
+	WorkflowID uuid.UUID
+	TaskName   string
+	Body       string
+}
+
+func (q *Queries) CreateTaskLog(ctx context.Context, arg CreateTaskLogParams) (TaskLog, error) {
+	row := q.db.QueryRow(ctx, createTaskLog, arg.WorkflowID, arg.TaskName, arg.Body)
+	var i TaskLog
+	err := row.Scan(
+		&i.ID,
+		&i.WorkflowID,
+		&i.TaskName,
+		&i.Body,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createWorkflow = `-- name: CreateWorkflow :one
 INSERT INTO workflows (id, params, name, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5)
@@ -81,6 +107,78 @@ func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) 
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const taskLogs = `-- name: TaskLogs :many
+SELECT task_logs.id, task_logs.workflow_id, task_logs.task_name, task_logs.body, task_logs.created_at, task_logs.updated_at
+FROM task_logs
+ORDER BY created_at
+`
+
+func (q *Queries) TaskLogs(ctx context.Context) ([]TaskLog, error) {
+	rows, err := q.db.Query(ctx, taskLogs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskLog
+	for rows.Next() {
+		var i TaskLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkflowID,
+			&i.TaskName,
+			&i.Body,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const taskLogsForTask = `-- name: TaskLogsForTask :many
+SELECT task_logs.id, task_logs.workflow_id, task_logs.task_name, task_logs.body, task_logs.created_at, task_logs.updated_at
+FROM task_logs
+WHERE workflow_id=$1 AND task_name = $2
+ORDER BY created_at
+`
+
+type TaskLogsForTaskParams struct {
+	WorkflowID uuid.UUID
+	TaskName   string
+}
+
+func (q *Queries) TaskLogsForTask(ctx context.Context, arg TaskLogsForTaskParams) ([]TaskLog, error) {
+	rows, err := q.db.Query(ctx, taskLogsForTask, arg.WorkflowID, arg.TaskName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskLog
+	for rows.Next() {
+		var i TaskLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkflowID,
+			&i.TaskName,
+			&i.Body,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const tasks = `-- name: Tasks :many
@@ -121,7 +219,7 @@ const tasksForWorkflow = `-- name: TasksForWorkflow :many
 SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at
 FROM tasks
 WHERE workflow_id=$1
-ORDER BY created_At
+ORDER BY created_at
 `
 
 func (q *Queries) TasksForWorkflow(ctx context.Context, workflowID uuid.UUID) ([]Task, error) {
@@ -217,11 +315,15 @@ func (q *Queries) Workflow(ctx context.Context, id uuid.UUID) (Workflow, error) 
 }
 
 const workflows = `-- name: Workflows :many
+
 SELECT id, params, name, created_at, updated_at
 FROM workflows
 ORDER BY created_at DESC
 `
 
+// Copyright 2021 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
 func (q *Queries) Workflows(ctx context.Context) ([]Workflow, error) {
 	rows, err := q.db.Query(ctx, workflows)
 	if err != nil {

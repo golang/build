@@ -5,8 +5,6 @@
 package relui
 
 import (
-	"context"
-
 	"golang.org/x/build/internal/workflow"
 )
 
@@ -20,10 +18,13 @@ var Definitions = map[string]*workflow.Definition{
 // development.
 func newEchoWorkflow() *workflow.Definition {
 	wd := workflow.New()
-	wd.Output("greeting", wd.Task("echo", echo, wd.Parameter("greeting")))
+	greeting := wd.Task("greeting", echo, wd.Parameter("greeting"))
+	wd.Output("greeting", greeting)
+	wd.Output("farewell", wd.Task("farewell", echo, wd.Parameter("farewell")))
 	return wd
 }
 
-func echo(_ context.Context, arg string) (string, error) {
+func echo(ctx *workflow.TaskContext, arg string) (string, error) {
+	ctx.Printf("echo(%v, %q)", ctx, arg)
 	return arg, nil
 }
