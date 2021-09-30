@@ -17,7 +17,8 @@ import (
 
 var (
 	pgConnect   = flag.String("pg-connect", "", "Postgres connection string or URI. If empty, libpq connection defaults are used.")
-	onlyMigrate = flag.Bool("only-migrate", false, "Exit after running migrations. Migrations are run by default.")
+	migrateOnly = flag.Bool("migrate-only", false, "Exit after running migrations. Migrations are run by default.")
+	downUp      = flag.Bool("migrate-down-up", false, "Run all Up migration steps, then the last down migration step, followed by the final up migration. Exits after completion.")
 )
 
 func main() {
@@ -26,7 +27,13 @@ func main() {
 	if err := relui.InitDB(ctx, *pgConnect); err != nil {
 		log.Fatalf("relui.InitDB() = %v", err)
 	}
-	if *onlyMigrate {
+	if *migrateOnly {
+		return
+	}
+	if *downUp {
+		if err := relui.MigrateDB(*pgConnect, true); err != nil {
+			log.Fatalf("relui.MigrateDB() = %v", err)
+		}
 		return
 	}
 	db, err := pgxpool.Connect(ctx, *pgConnect)

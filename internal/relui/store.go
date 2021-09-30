@@ -33,7 +33,7 @@ func InitDB(ctx context.Context, conn string) error {
 	if err := CreateDBIfNotExists(ctx, cfg); err != nil {
 		return err
 	}
-	if err := MigrateDB(conn); err != nil {
+	if err := MigrateDB(conn, false); err != nil {
 		return err
 	}
 	return nil
@@ -41,8 +41,10 @@ func InitDB(ctx context.Context, conn string) error {
 
 // MigrateDB applies all migrations to the database specified in conn.
 //
-// Any key/value or URI string compatible with libpq is valid.
-func MigrateDB(conn string) error {
+// Any key/value or URI string compatible with libpq is a valid conn.
+// If downUp is true, all migrations will be run, then the down and up
+// migrations of the final migration are run.
+func MigrateDB(conn string, downUp bool) error {
 	cfg, err := pgx.ParseConfig(conn)
 	if err != nil {
 		return fmt.Errorf("pgx.ParseConfig() = %w", err)
@@ -69,6 +71,14 @@ func MigrateDB(conn string) error {
 	}
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("m.Up() = %w", err)
+	}
+	if downUp {
+		if err := m.Steps(-1); err != nil {
+			return fmt.Errorf("m.Steps(%d) = %w", -1, err)
+		}
+		if err := m.Up(); err != nil {
+			return fmt.Errorf("m.Up() = %w", err)
+		}
 	}
 	db.Close()
 	return nil

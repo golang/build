@@ -6,8 +6,6 @@ VERSION := $(shell ../coordinator/version.sh)
 DOCKER_TAG := golang/relui:$(VERSION)
 
 INTERNAL_PATH := ../../internal/relui
-MIGRATION_FILES := $(wildcard $(INTERNAL_PATH)/migrations/*.sql)
-GO_FILES := $(shell find $(INTERNAL_PATH) -name "*.go")
 
 POSTGRES_DATA_DEV := "postgres-data-dev:/var/lib/postgresql/data"
 POSTGRES_RUN_DEV := "postgres-run-dev:/var/run/postgresql"
@@ -31,9 +29,13 @@ postgres-dev: $(DEV_CFG)/pgpass
 		-e POSTGRES_PASSWORD_FILE=/run/secrets/pgpass \
 		postgres:13
 
-schema.sql: $(MIGRATION_FILES) $(GO_FILES)
-	docker build -f Dockerfile -t golang/relui:$(VERSION) ../..
-	docker run --rm --name=relui-dev-migrate -v $(POSTGRES_RUN_DEV) -e PGUSER=$(POSTGRES_USER) -e PGDATABASE=relui-dev $(DOCKER_TAG) --only-migrate
+migrate: docker
+	docker run --rm --name=relui-dev-migrate -v $(POSTGRES_RUN_DEV) -e PGUSER=$(POSTGRES_USER) -e PGDATABASE=relui-dev $(DOCKER_TAG) --migrate-only
+
+migrate-down-up: docker
+	docker run --rm --name=relui-dev-migrate -v $(POSTGRES_RUN_DEV) -e PGUSER=$(POSTGRES_USER) -e PGDATABASE=relui-dev $(DOCKER_TAG) --migrate-down-up
+
+schema.sql: migrate
 	docker exec postgres-dev pg_dump --username=$(POSTGRES_USER) --schema-only relui-dev > schema.sql
 
 .PHONY: test
@@ -47,11 +49,3 @@ docker:
 .PHONY: docker-test
 docker-test:
 	docker build -f Dockerfile.test -t golang/relui-test:$(VERSION) ../..
-
-$(DEV_CFG):
-	mkdir -p $(DEV_CFG)
-
-$(DEV_CFG)/pgpass: $(DEV_CFG)
-	touch $(DEV_CFG)/pgpass
-	chmod 0600 $(DEV_CFG)/pgpass
-	openssl rand -hex -out $(DEV_CFG)/pgpass 32
