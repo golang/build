@@ -13,24 +13,55 @@
       {{range $workflow := .Workflows}}
         <li class="WorkflowList-item">
           <h3 class="WorkflowList-title">
-            {{$workflow.Name.String}} -
-            {{index $workflow.ID}}
+            {{$workflow.Name.String}}
+            <span class="WorkflowList-titleTime">
+              {{$workflow.CreatedAt.UTC.Format "2006/01/02 15:04 MST"}}
+            </span>
           </h3>
+          <table class="WorkflowList-params">
+            <tbody>
+              {{range $name, $value := $.WorkflowParams $workflow}}
+                <tr>
+                  <td class="WorkflowList-paramData">{{$name}}:</td>
+                  <td class="WorkflowList-paramData">{{$value}}</td>
+                </tr>
+              {{end}}
+            </tbody>
+          </table>
           <h4 class="WorkflowList-sectionTitle">Tasks</h4>
           <ul class="TaskList">
+            <li class="TaskList-item TaskList-itemHeader">
+              <span class="TaskList-itemStatus">Status</span>
+              <span class="TaskList-itemName">Name</span>
+              <span class="TaskList-itemCreated">Started</span>
+              <span class="TaskList-itemUpdated">Updated</span>
+              <span class="TaskList-itemResult">Result</span>
+            </li>
             {{$tasks := index $.WorkflowTasks $workflow.ID}}
             {{range $task := $tasks}}
               <li class="TaskList-item">
                 <details class="TaskList-itemDetails">
                   <summary class="TaskList-itemSummary">
-                    <span class="TaskList-itemTitle">{{$task.Name}}</span>
-                    Finished: {{$task.Finished}} Result: {{$task.Result.String}} Name:
-                    {{$task.Name}}
+                    <span class="TaskList-itemCol TaskList-itemStatus">
+                      {{$task.Finished}}
+                    </span>
+                    <span class="TaskList-itemCol TaskList-itemName">
+                      {{$task.Name}}
+                    </span>
+                    <span class="TaskList-itemCol TaskList-itemCreated">
+                      {{$task.CreatedAt.UTC.Format "Mon Jan _2 2006 15:04:05"}}
+                    </span>
+                    <span class="TaskList-itemCol TaskList-itemUpdated">
+                      {{$task.UpdatedAt.UTC.Format "Mon Jan _2 2006 15:04:05"}}
+                    </span>
+                    <span class="TaskList-itemCol TaskList-itemResult">
+                      {{$task.Result}}
+                    </span>
                   </summary>
                   <div class="TaskList-itemLogs">
                     {{range $log := $.Logs $workflow.ID  $task.Name}}
                       <div class="TaskList-itemLogLine">
-                        {{$log.CreatedAt.Format "2006/01/02 15:04:05"}}
+                        {{$log.CreatedAt.UTC.Format "2006/01/02 15:04:05"}}
                         {{$log.Body}}
                       </div>
                     {{end}}

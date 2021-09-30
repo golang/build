@@ -339,7 +339,7 @@ func (w *Workflow) validate() error {
 // will be restarted, but tasks that finished in errors will not be retried.
 //
 // The host must create the WorkflowState. TaskStates should be saved from
-// listener callbacks, but for ease of stoage, their Result field does not
+// listener callbacks, but for ease of storage, their Result field does not
 // need to be populated.
 func Resume(def *Definition, state *WorkflowState, taskStates map[string]*TaskState) (*Workflow, error) {
 	w := &Workflow{

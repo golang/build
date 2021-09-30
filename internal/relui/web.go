@@ -87,6 +87,12 @@ func (h *homeResponse) Logs(workflow uuid.UUID, task string) []db.TaskLog {
 	return t[task]
 }
 
+func (h *homeResponse) WorkflowParams(wf db.Workflow) map[string]string {
+	params := make(map[string]string)
+	json.Unmarshal([]byte(wf.Params.String), &params)
+	return params
+}
+
 // homeHandler renders the homepage.
 func (s *Server) homeHandler(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.buildHomeResponse(r.Context())
