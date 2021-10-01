@@ -22,12 +22,11 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"runtime"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
-	"golang.org/x/build/envutil"
+	"golang.org/x/build/internal/envutil"
 )
 
 var (
@@ -208,18 +207,18 @@ func buildGoTarget() {
 	}
 
 	goBin := goCmd()
-	env := append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch)
+	env := []string{"GOOS=" + goos, "GOARCH=" + goarch}
 	if *extraEnv != "" {
 		env = append(env, strings.Split(*extraEnv, ",")...)
 	}
-	env = envutil.Dedup(runtime.GOOS == "windows", env)
+
 	cmd := exec.Command(goBin,
 		"list",
 		"--tags="+*tags,
 		"--installsuffix="+*installSuffix,
 		"-f", "{{.Target}}",
 		target)
-	cmd.Env = env
+	envutil.SetEnv(cmd, env...)
 	out, err := cmd.Output()
 	if err != nil {
 		log.Fatalf("go list: %v", err)
@@ -249,7 +248,7 @@ func buildGoTarget() {
 	if *verbose {
 		cmd.Stdout = os.Stdout
 	}
-	cmd.Env = env
+	envutil.SetEnv(cmd, env...)
 	if err := cmd.Run(); err != nil {
 		log.Fatalf("go install %s: %v, %s", target, err, stderr.Bytes())
 	}

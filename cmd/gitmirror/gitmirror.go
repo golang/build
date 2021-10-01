@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/internal/gitauth"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/maintner"
@@ -385,11 +386,11 @@ func (r *repo) runGitQuiet(args ...string) ([]byte, []byte, error) {
 	cmd := exec.Command("git", args...)
 	if args[0] == "clone" {
 		// Small hack: if we're cloning, the root doesn't exist yet.
-		cmd.Dir = "/"
+		envutil.SetDir(cmd, "/")
 	} else {
-		cmd.Dir = r.root
+		envutil.SetDir(cmd, r.root)
 	}
-	cmd.Env = append(os.Environ(), "HOME="+r.mirror.homeDir)
+	envutil.SetEnv(cmd, "HOME="+r.mirror.homeDir)
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	err := runCmdContext(ctx, cmd)
 	return stdout.Bytes(), stderr.Bytes(), err

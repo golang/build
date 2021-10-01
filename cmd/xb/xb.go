@@ -29,6 +29,7 @@ import (
 	"strings"
 
 	"golang.org/x/build/buildenv"
+	"golang.org/x/build/internal/envutil"
 )
 
 var (
@@ -198,7 +199,7 @@ func buildStage0Container() {
 	}
 
 	cmd := exec.Command("make", "docker")
-	cmd.Dir = strings.TrimSpace(string(dir))
+	envutil.SetDir(cmd, strings.TrimSpace(string(dir)))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {

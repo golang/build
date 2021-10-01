@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strings"
 
+	"golang.org/x/build/internal/envutil"
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
 )
@@ -326,7 +327,7 @@ func gitAuthorEmails() []*acLine {
 			}
 		}
 		cmd := exec.Command("git", "fetch")
-		cmd.Dir = dir
+		envutil.SetDir(cmd, dir)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			log.Fatalf("Error updating repo %q: %v, %s", repo, err, out)
 		}
@@ -337,7 +338,7 @@ func gitAuthorEmails() []*acLine {
 		}
 
 		cmd = exec.Command("git", "log", "--format=%ae/%h/%an", "origin/master") //, "HEAD@{5 years ago}..HEAD")
-		cmd.Dir = dir
+		envutil.SetDir(cmd, dir)
 		cmd.Stderr = os.Stderr
 		out, err := cmd.StdoutPipe()
 		if err != nil {

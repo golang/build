@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/maintner/maintpb"
 )
 
@@ -1035,9 +1036,9 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 
 	t0 := time.Now()
 	cmd := exec.CommandContext(ctx, "git", "fetch", "origin")
-	cmd.Dir = gitDir
+	envutil.SetDir(cmd, gitDir)
 	// Enable extra Git tracing in case the fetch hangs.
-	cmd.Env = append(os.Environ(),
+	envutil.SetEnv(cmd,
 		"GIT_TRACE2_EVENT=1",
 		"GIT_TRACE_CURL_NO_DATA=1",
 	)
@@ -1066,7 +1067,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 
 	t0 = time.Now()
 	cmd = exec.CommandContext(ctx, "git", "ls-remote")
-	cmd.Dir = gitDir
+	envutil.SetDir(cmd, gitDir)
 	out, err := cmd.CombinedOutput()
 	lsRemoteDuration := time.Since(t0).Round(time.Millisecond)
 	if err != nil {
@@ -1232,7 +1233,7 @@ func (gp *GerritProject) fetchHashes(ctx context.Context, hashes []GitHash) erro
 	gp.logf("fetching %v hashes...", len(hashes))
 	t0 := time.Now()
 	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = gp.gitDir()
+	envutil.SetDir(cmd, gp.gitDir())
 	out, err := cmd.CombinedOutput()
 	d := time.Since(t0).Round(time.Millisecond)
 	if err != nil {
@@ -1263,7 +1264,7 @@ func (gp *GerritProject) init(ctx context.Context) error {
 
 	if _, err := os.Stat(filepath.Join(gitDir, ".git", "config")); err == nil {
 		cmd := exec.CommandContext(ctx, "git", "remote", "-v")
-		cmd.Dir = gitDir
+		envutil.SetDir(cmd, gitDir)
 		remoteBytes, err := cmd.Output()
 		if err != nil {
 			return fmt.Errorf("running git remote -v in %v: %v", gitDir, formatExecError(err))
@@ -1279,7 +1280,7 @@ func (gp *GerritProject) init(ctx context.Context) error {
 	buf := new(bytes.Buffer)
 	cmd.Stdout = buf
 	cmd.Stderr = buf
-	cmd.Dir = gitDir
+	envutil.SetDir(cmd, gitDir)
 	if err := cmd.Run(); err != nil {
 		log.Printf(`Error running "git init": %s`, buf.String())
 		return err
@@ -1288,7 +1289,7 @@ func (gp *GerritProject) init(ctx context.Context) error {
 	cmd = exec.CommandContext(ctx, "git", "remote", "add", "origin", "https://"+gp.proj)
 	cmd.Stdout = buf
 	cmd.Stderr = buf
-	cmd.Dir = gitDir
+	envutil.SetDir(cmd, gitDir)
 	if err := cmd.Run(); err != nil {
 		log.Printf(`Error running "git remote add origin": %s`, buf.String())
 		return err

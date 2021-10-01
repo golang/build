@@ -39,6 +39,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool"
+	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/internal/gophers"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/types"
@@ -742,7 +743,7 @@ func (ah *sshHandlers) handleIncomingSSHPostAuth(s ssh.Session) {
 		cmd = exec.Command("/usr/local/bin/drawterm",
 			"-a", ip, "-c", ip, "-u", "glenda", "-k", "user=glenda")
 	}
-	cmd.Env = append(cmd.Env, fmt.Sprintf("TERM=%s", ptyReq.Term))
+	envutil.SetEnv(cmd, "TERM="+ptyReq.Term)
 	f, err := pty.Start(cmd)
 	if err != nil {
 		log.Printf("running ssh client to %s: %v", inst, err)

@@ -46,6 +46,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/internal/cloud"
+	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/pargzip"
 )
 
@@ -215,8 +216,6 @@ func main() {
 		removeAllAndMkdir(processGoCacheEnv)
 	}
 
-	initGorootBootstrap()
-
 	http.HandleFunc("/", handleRoot)
 	http.HandleFunc("/debug/x", handleX)
 
@@ -259,17 +258,6 @@ func main() {
 		}
 		os.Exit(0)
 	}
-}
-
-var inheritedGorootBootstrap string
-
-func initGorootBootstrap() {
-	// Remember any GOROOT_BOOTSTRAP to use as a backup in handleExec
-	// if $WORKDIR/go1.4 ends up not existing.
-	inheritedGorootBootstrap = os.Getenv("GOROOT_BOOTSTRAP")
-
-	// Default if not otherwise configured in dashboard/builders.go:
-	os.Setenv("GOROOT_BOOTSTRAP", filepath.Join(*workDir, "go1.4"))
 }
 
 func listenForCoordinator() {
@@ -930,28 +918,22 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	postEnv := r.PostForm["env"]
 
 	goarch := "amd64" // unless we find otherwise
-	if v := getEnv(postEnv, "GOARCH"); v != "" {
+	if v := envutil.Get(runtime.GOOS, postEnv, "GOARCH"); v != "" {
 		goarch = v
 	}
-	if v, _ := strconv.ParseBool(getEnv(postEnv, "GO_DISABLE_OUTBOUND_NETWORK")); v {
+	if v, _ := strconv.ParseBool(envutil.Get(runtime.GOOS, postEnv, "GO_DISABLE_OUTBOUND_NETWORK")); v {
 		disableOutboundNetwork()
 	}
 
 	env := append(baseEnv(goarch), postEnv...)
-
 	if v := processTmpDirEnv; v != "" {
 		env = append(env, "TMPDIR="+v)
 	}
 	if v := processGoCacheEnv; v != "" {
 		env = append(env, "GOCACHE="+v)
 	}
-
-	// Prefer buildlet process's inherited GOROOT_BOOTSTRAP if
-	// there was one and the one we're about to use doesn't exist.
-	if v := getEnv(env, "GOROOT_BOOTSTRAP"); v != "" && inheritedGorootBootstrap != "" && pathNotExist(v) {
-		env = append(env, "GOROOT_BOOTSTRAP="+inheritedGorootBootstrap)
-	}
 	env = setPathEnv(env, r.PostForm["path"], *workDir)
+	env = envutil.Dedup(runtime.GOOS, env)
 
 	var cmd *exec.Cmd
 	if needsBashWrapper(absCmd) {
@@ -960,11 +942,11 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 		cmd = exec.Command(absCmd)
 	}
 	cmd.Args = append(cmd.Args, r.PostForm["cmdArg"]...)
-	cmd.Dir = dir
+	cmd.Env = env
+	envutil.SetDir(cmd, dir)
 	cmdOutput := flushWriter{w}
 	cmd.Stdout = cmdOutput
 	cmd.Stderr = cmdOutput
-	cmd.Env = env
 
 	log.Printf("[%p] Running %s with args %q and env %q in dir %s",
 		cmd, cmd.Path, cmd.Args, cmd.Env, cmd.Dir)
@@ -1017,26 +999,6 @@ func needsBashWrapper(cmd string) bool {
 func pathNotExist(path string) bool {
 	_, err := os.Stat(path)
 	return os.IsNotExist(err)
-}
-
-func getEnv(env []string, key string) string {
-	for _, kv := range env {
-		if len(kv) <= len(key) || kv[len(key)] != '=' {
-			continue
-		}
-		if runtime.GOOS == "windows" {
-			// Case insensitive.
-			if strings.EqualFold(kv[:len(key)], key) {
-				return kv[len(key)+1:]
-			}
-		} else {
-			// Case sensitive.
-			if kv[:len(key)] == key {
-				return kv[len(key)+1:]
-			}
-		}
-	}
-	return ""
 }
 
 // setPathEnv returns a copy of the provided environment with any existing
@@ -1125,11 +1087,33 @@ func pathSeparator() string {
 	}
 }
 
+var (
+	defaultBootstrap     string
+	defaultBootstrapOnce sync.Once
+)
+
 func baseEnv(goarch string) []string {
+	var env []string
 	if runtime.GOOS == "windows" {
-		return windowsBaseEnv(goarch)
+		env = windowsBaseEnv(goarch)
+	} else {
+		env = os.Environ()
 	}
-	return os.Environ()
+
+	defaultBootstrapOnce.Do(func() {
+		defaultBootstrap = filepath.Join(*workDir, "go1.4")
+
+		// Prefer buildlet process's inherited GOROOT_BOOTSTRAP if
+		// there was one and our default doesn't exist.
+		if v := os.Getenv("GOROOT_BOOTSTRAP"); v != "" && v != defaultBootstrap {
+			if pathNotExist(defaultBootstrap) {
+				defaultBootstrap = v
+			}
+		}
+	})
+	env = append(env, "GOROOT_BOOTSTRAP="+defaultBootstrap)
+
+	return env
 }
 
 func windowsBaseEnv(goarch string) (e []string) {

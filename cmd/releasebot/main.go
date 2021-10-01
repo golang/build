@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"golang.org/x/build/buildenv"
+	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/build/maintner"
 )
@@ -395,7 +396,7 @@ func (r *runner) run(args ...string) {
 // runs of side-effect-free commands like "git cat-file commit HEAD".
 func (r *runner) runOut(args ...string) []byte {
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Dir = r.dir
+	envutil.SetDir(cmd, r.dir)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		r.w.log.Printf("$ %s\n", strings.Join(args, " "))
@@ -410,10 +411,8 @@ func (r *runner) runOut(args ...string) []byte {
 func (r *runner) runErr(args ...string) ([]byte, error) {
 	r.w.log.Printf("$ %s\n", strings.Join(args, " "))
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Dir = r.dir
-	if len(r.extraEnv) > 0 {
-		cmd.Env = append(os.Environ(), r.extraEnv...)
-	}
+	envutil.SetDir(cmd, r.dir)
+	envutil.SetEnv(cmd, r.extraEnv...)
 	return cmd.CombinedOutput()
 }
 

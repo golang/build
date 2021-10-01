@@ -139,6 +139,7 @@ func (r *gitRepo) pull() error {
 	defer r.Unlock()
 	cmd := exec.Command("git", "pull")
 	cmd.Dir = r.dir
+	cmd.Env = append(os.Environ(), "PWD="+r.dir)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
 	if err := cmd.Run(); err != nil {
@@ -169,5 +170,6 @@ func (r *gitRepo) cmdShow(ref string) *exec.Cmd {
 	defer r.RUnlock()
 	cmd := exec.Command("git", "show", ref)
 	cmd.Dir = r.dir
+	cmd.Env = append(os.Environ(), "PWD="+r.dir)
 	return cmd
 }

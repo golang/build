@@ -20,6 +20,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/build/internal/envutil"
 )
 
 var skipBuild = flag.Bool("skip_build", false, "skip bootstrap.bash step; useful during development of cleaning code")
@@ -52,8 +54,8 @@ func main() {
 	if !*skipBuild {
 		os.RemoveAll(outDir)
 		cmd := exec.Command(filepath.Join(os.Getenv("GOROOT"), "src", "bootstrap.bash"))
-		cmd.Dir = filepath.Join(os.Getenv("GOROOT"), "src")
-		cmd.Env = append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch)
+		envutil.SetDir(cmd, filepath.Join(os.Getenv("GOROOT"), "src"))
+		envutil.SetEnv(cmd, "GOOS="+goos, "GOARCH="+goarch)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -133,7 +135,7 @@ func main() {
 
 	log.Printf("Running: tar zcf %s .", tgz)
 	cmd := exec.Command("tar", "zcf", tgz, ".")
-	cmd.Dir = outDir
+	envutil.SetDir(cmd, outDir)
 	if err := cmd.Run(); err != nil {
 		log.Fatalf("tar zf failed: %v", err)
 	}

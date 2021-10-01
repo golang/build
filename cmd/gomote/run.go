@@ -13,7 +13,7 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
-	"golang.org/x/build/envutil"
+	"golang.org/x/build/internal/envutil"
 )
 
 func run(args []string) error {
@@ -77,7 +77,7 @@ func run(args []string) error {
 		SystemLevel: sys || strings.HasPrefix(cmd, "/"),
 		Output:      os.Stdout,
 		Args:        fs.Args()[2:],
-		ExtraEnv:    envutil.Dedup(conf.GOOS() == "windows", append(conf.Env(), []string(env)...)),
+		ExtraEnv:    envutil.Dedup(conf.GOOS(), append(conf.Env(), []string(env)...)),
 		Debug:       debug,
 		Path:        pathOpt,
 	})

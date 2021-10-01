@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 
+	"golang.org/x/build/internal/envutil"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -273,7 +274,7 @@ func main() {
 	parsePlatformsFlag()
 
 	cmd := exec.Command("git", "rev-parse", *flagGoRev)
-	cmd.Dir = *flagGoroot
+	envutil.SetDir(cmd, *flagGoroot)
 	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
 	if err != nil {

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/internal/foreach"
 	"golang.org/x/build/maintner/maintpb"
 )
@@ -179,7 +180,7 @@ func (c *Corpus) enqueueCommitLocked(h GitHash) {
 // syncGitCommits polls for git commits in a directory.
 func (c *Corpus) syncGitCommits(ctx context.Context, conf polledGitCommits, loop bool) error {
 	cmd := exec.CommandContext(ctx, "git", "show-ref", "refs/remotes/origin/master")
-	cmd.Dir = conf.dir
+	envutil.SetDir(cmd, conf.dir)
 	out, err := cmd.Output()
 	if err != nil {
 		log.Fatal(err)
@@ -248,13 +249,13 @@ var (
 
 func parseCommitFromGit(dir string, hash GitHash) (*maintpb.GitCommit, error) {
 	cmd := exec.Command("git", "cat-file", "commit", hash.String())
-	cmd.Dir = dir
+	envutil.SetDir(cmd, dir)
 	catFile, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git cat-file -p %v: %v", hash, err)
 	}
 	cmd = exec.Command("git", "diff-tree", "--numstat", hash.String())
-	cmd.Dir = dir
+	envutil.SetDir(cmd, dir)
 	diffTreeOut, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git diff-tree --numstat %v: %v", hash, err)

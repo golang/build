@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/build/internal/envutil"
 	repospkg "golang.org/x/build/repos"
 )
 
@@ -190,7 +191,7 @@ func (tm *testMirror) commit(content string) {
 func (tm *testMirror) git(dir string, args ...string) string {
 	tm.t.Helper()
 	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
+	envutil.SetDir(cmd, dir)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		tm.t.Fatalf("git: %v, %s", err, out)

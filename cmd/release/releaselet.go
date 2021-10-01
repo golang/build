@@ -252,6 +252,9 @@ func run(name string, arg ...string) error {
 func runDir(dir, name string, arg ...string) error {
 	cmd := exec.Command(name, arg...)
 	cmd.Dir = dir
+	if dir != "" {
+		cmd.Env = append(os.Environ(), "PWD="+dir)
+	}
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	return cmd.Run()
 }

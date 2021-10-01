@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/envutil"
 )
 
 func main() {
@@ -256,7 +257,7 @@ type runner struct{ dir string }
 func (r runner) run(args ...string) {
 	log.Printf("> %s\n", strings.Join(args, " "))
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Dir = r.dir
+	envutil.SetDir(cmd, r.dir)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Fatalf("command failed: %s\n%s", err, out)
@@ -270,7 +271,7 @@ func (r runner) run(args ...string) {
 // and returns the command's standard output.
 func (r runner) runOut(args ...string) []byte {
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Dir = r.dir
+	envutil.SetDir(cmd, r.dir)
 	out, err := cmd.Output()
 	if err != nil {
 		log.Printf("> %s\n", strings.Join(args, " "))

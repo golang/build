@@ -7,15 +7,16 @@ package main
 import (
 	"bytes"
 	"io/ioutil"
-	"os"
 	"os/exec"
 	"strings"
 	"testing"
+
+	"golang.org/x/build/internal/envutil"
 )
 
 func TestReleaselet(t *testing.T) {
 	cmd := exec.Command("go", "run", "releaselet.go")
-	cmd.Env = append(os.Environ(), "RUN_RELEASELET_TESTS=true")
+	envutil.SetEnv(cmd, "RUN_RELEASELET_TESTS=true")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("error running releaselet.go tests: %v, %s", err, out)
