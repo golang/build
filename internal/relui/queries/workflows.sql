@@ -3,12 +3,12 @@
 -- license that can be found in the LICENSE file.
 
 -- name: Workflows :many
-SELECT id, params, name, created_at, updated_at
+SELECT *
 FROM workflows
 ORDER BY created_at DESC;
 
 -- name: Workflow :one
-SELECT id, params, name, created_at, updated_at
+SELECT *
 FROM workflows
 WHERE id = $1;
 
@@ -41,7 +41,7 @@ ORDER BY created_at;
 -- name: TasksForWorkflow :many
 SELECT tasks.*
 FROM tasks
-WHERE workflow_id=$1
+WHERE workflow_id = $1
 ORDER BY created_at;
 
 -- name: CreateTaskLog :one
@@ -52,10 +52,25 @@ RETURNING *;
 -- name: TaskLogsForTask :many
 SELECT task_logs.*
 FROM task_logs
-WHERE workflow_id=$1 AND task_name = $2
+WHERE workflow_id = $1
+  AND task_name = $2
 ORDER BY created_at;
 
 -- name: TaskLogs :many
 SELECT task_logs.*
 FROM task_logs
 ORDER BY created_at;
+
+-- name: UnfinishedWorkflows :many
+SELECT workflows.*
+FROM workflows
+WHERE workflows.finished = false;
+
+-- name: WorkflowFinished :one
+UPDATE workflows
+SET finished   = $2,
+    output     = $3,
+    updated_at = $4
+WHERE workflows.id = $1
+RETURNING *;
+

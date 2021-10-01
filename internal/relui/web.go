@@ -7,7 +7,6 @@ package relui
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -17,10 +16,8 @@ import (
 	"mime"
 	"net/http"
 	"path"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/workflow"
@@ -54,11 +51,16 @@ var (
 type Server struct {
 	db *pgxpool.Pool
 	m  *http.ServeMux
+	w  *Worker
 }
 
 // NewServer initializes a server with the provided connection pool.
-func NewServer(p *pgxpool.Pool) *Server {
-	s := &Server{db: p, m: &http.ServeMux{}}
+func NewServer(p *pgxpool.Pool, w *Worker) *Server {
+	s := &Server{
+		db: p,
+		m:  new(http.ServeMux),
+		w:  w,
+	}
 	s.m.Handle("/workflows/create", http.HandlerFunc(s.createWorkflowHandler))
 	s.m.Handle("/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
 	s.m.Handle("/", fileServerHandler(static, http.HandlerFunc(s.homeHandler)))
@@ -151,7 +153,7 @@ func (n *newWorkflowResponse) Selected() *workflow.Definition {
 func (s *Server) newWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 	out := bytes.Buffer{}
 	resp := &newWorkflowResponse{
-		Definitions: Definitions,
+		Definitions: Definitions(),
 		Name:        r.FormValue("workflow.name"),
 	}
 	if err := newWorkflowTmpl.Execute(&out, resp); err != nil {
@@ -165,7 +167,8 @@ func (s *Server) newWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 // createWorkflowHandler persists a new workflow in the datastore, and
 // starts the workflow in a goroutine.
 func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
-	d := Definitions[r.FormValue("workflow.name")]
+	name := r.FormValue("workflow.name")
+	d := Definition(name)
 	if d == nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -178,38 +181,10 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	wf, err := workflow.Start(Definitions["echo"], params)
-	if err != nil {
-		log.Printf("createWorkflowHandler: %v", err)
+	if _, err := s.w.StartWorkflow(r.Context(), name, d, params); err != nil {
+		log.Printf("s.w.StartWorkflow(%v, %v, %v): %v", r.Context(), d, params, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	err = s.db.BeginFunc(r.Context(), func(tx pgx.Tx) error {
-		q := db.New(tx)
-		m, err := json.Marshal(params)
-		if err != nil {
-			return err
-		}
-		updated := time.Now()
-		_, err = q.CreateWorkflow(r.Context(), db.CreateWorkflowParams{
-			ID:        wf.ID,
-			Name:      sql.NullString{String: "Echo", Valid: true},
-			Params:    sql.NullString{String: string(m), Valid: len(m) > 0},
-			CreatedAt: updated,
-			UpdatedAt: updated,
-		})
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		log.Printf("createWorkflowHandler: %v", err)
-		http.Error(w, "Error creating workflow", http.StatusInternalServerError)
-	}
-	go func(wf *workflow.Workflow, db *pgxpool.Pool) {
-		result, err := wf.Run(context.TODO(), &listener{db})
-		log.Printf("wf.Run() = %v, %v", result, err)
-	}(wf, s.db)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

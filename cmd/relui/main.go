@@ -41,7 +41,12 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	s := relui.NewServer(db)
+	w := relui.NewWorker(db, relui.NewPGListener(db))
+	go w.Run(ctx)
+	if err := w.ResumeAll(ctx); err != nil {
+		log.Printf("w.ResumeAll() = %v", err)
+	}
+	s := relui.NewServer(db, w)
 	if err != nil {
 		log.Fatalf("relui.NewServer() = %v", err)
 	}

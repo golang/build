@@ -10,3 +10,6 @@ overrides:
   - go_type: "database/sql.NullString"
     db_type: "jsonb"
     nullable: true
+  - go_type: "string"
+    db_type: "jsonb"
+    nullable: false

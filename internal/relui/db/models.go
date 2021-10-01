@@ -34,4 +34,7 @@ type Workflow struct {
 	Name      sql.NullString
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	Finished  bool
+	Output    string
+	Error     string
 }

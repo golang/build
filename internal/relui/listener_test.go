@@ -28,7 +28,7 @@ func TestListenerTaskStateChanged(t *testing.T) {
 		t.Fatalf("q.CreateWorkflow(%v, %v) = %v, wanted no error", ctx, wfp, err)
 	}
 
-	l := &listener{db: dbp}
+	l := &PGListener{db: dbp}
 	state := &workflow.TaskState{
 		Name:             "TestTask",
 		Finished:         true,
@@ -75,7 +75,7 @@ func TestListenerLogger(t *testing.T) {
 		t.Fatalf("q.UpsertTask(%v, %v) = %v, wanted no error", ctx, params, err)
 	}
 
-	l := &listener{db: dbp}
+	l := &PGListener{db: dbp}
 	l.Logger(wf.ID, "TestTask").Printf("A fancy log line says %q", "hello")
 
 	logs, err := q.TaskLogs(ctx)

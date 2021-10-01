@@ -79,7 +79,7 @@ func (q *Queries) CreateTaskLog(ctx context.Context, arg CreateTaskLogParams) (T
 const createWorkflow = `-- name: CreateWorkflow :one
 INSERT INTO workflows (id, params, name, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, params, name, created_at, updated_at
+RETURNING id, params, name, created_at, updated_at, finished, output, error
 `
 
 type CreateWorkflowParams struct {
@@ -105,6 +105,9 @@ func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) 
 		&i.Name,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Finished,
+		&i.Output,
+		&i.Error,
 	)
 	return i, err
 }
@@ -145,7 +148,8 @@ func (q *Queries) TaskLogs(ctx context.Context) ([]TaskLog, error) {
 const taskLogsForTask = `-- name: TaskLogsForTask :many
 SELECT task_logs.id, task_logs.workflow_id, task_logs.task_name, task_logs.body, task_logs.created_at, task_logs.updated_at
 FROM task_logs
-WHERE workflow_id=$1 AND task_name = $2
+WHERE workflow_id = $1
+  AND task_name = $2
 ORDER BY created_at
 `
 
@@ -218,7 +222,7 @@ func (q *Queries) Tasks(ctx context.Context) ([]Task, error) {
 const tasksForWorkflow = `-- name: TasksForWorkflow :many
 SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at
 FROM tasks
-WHERE workflow_id=$1
+WHERE workflow_id = $1
 ORDER BY created_at
 `
 
@@ -239,6 +243,41 @@ func (q *Queries) TasksForWorkflow(ctx context.Context, workflowID uuid.UUID) ([
 			&i.Error,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const unfinishedWorkflows = `-- name: UnfinishedWorkflows :many
+SELECT workflows.id, workflows.params, workflows.name, workflows.created_at, workflows.updated_at, workflows.finished, workflows.output, workflows.error
+FROM workflows
+WHERE workflows.finished = false
+`
+
+func (q *Queries) UnfinishedWorkflows(ctx context.Context) ([]Workflow, error) {
+	rows, err := q.db.Query(ctx, unfinishedWorkflows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Workflow
+	for rows.Next() {
+		var i Workflow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Params,
+			&i.Name,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Finished,
+			&i.Output,
+			&i.Error,
 		); err != nil {
 			return nil, err
 		}
@@ -296,7 +335,7 @@ func (q *Queries) UpsertTask(ctx context.Context, arg UpsertTaskParams) (Task, e
 }
 
 const workflow = `-- name: Workflow :one
-SELECT id, params, name, created_at, updated_at
+SELECT id, params, name, created_at, updated_at, finished, output, error
 FROM workflows
 WHERE id = $1
 `
@@ -310,13 +349,53 @@ func (q *Queries) Workflow(ctx context.Context, id uuid.UUID) (Workflow, error) 
 		&i.Name,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Finished,
+		&i.Output,
+		&i.Error,
+	)
+	return i, err
+}
+
+const workflowFinished = `-- name: WorkflowFinished :one
+UPDATE workflows
+SET finished   = $2,
+    output     = $3,
+    updated_at = $4
+WHERE workflows.id = $1
+RETURNING id, params, name, created_at, updated_at, finished, output, error
+`
+
+type WorkflowFinishedParams struct {
+	ID        uuid.UUID
+	Finished  bool
+	Output    string
+	UpdatedAt time.Time
+}
+
+func (q *Queries) WorkflowFinished(ctx context.Context, arg WorkflowFinishedParams) (Workflow, error) {
+	row := q.db.QueryRow(ctx, workflowFinished,
+		arg.ID,
+		arg.Finished,
+		arg.Output,
+		arg.UpdatedAt,
+	)
+	var i Workflow
+	err := row.Scan(
+		&i.ID,
+		&i.Params,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Finished,
+		&i.Output,
+		&i.Error,
 	)
 	return i, err
 }
 
 const workflows = `-- name: Workflows :many
 
-SELECT id, params, name, created_at, updated_at
+SELECT id, params, name, created_at, updated_at, finished, output, error
 FROM workflows
 ORDER BY created_at DESC
 `
@@ -339,6 +418,9 @@ func (q *Queries) Workflows(ctx context.Context) ([]Workflow, error) {
 			&i.Name,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Finished,
+			&i.Output,
+			&i.Error,
 		); err != nil {
 			return nil, err
 		}
