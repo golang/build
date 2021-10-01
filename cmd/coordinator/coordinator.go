@@ -2557,6 +2557,10 @@ func (st *buildStatus) doSnapshot(bc *buildlet.Client) error {
 	if st.conf.SkipSnapshot {
 		return nil
 	}
+	if pool.NewGCEConfiguration().BuildEnv().SnapBucket == "" {
+		// Build environment isn't configured to do snapshots.
+		return nil
+	}
 	if err := st.cleanForSnapshot(bc); err != nil {
 		return fmt.Errorf("cleanForSnapshot: %v", err)
 	}
@@ -2624,7 +2628,15 @@ func (st *buildStatus) writeSnapshot(bc *buildlet.Client) (err error) {
 	}
 	defer tgz.Close()
 
-	wr := pool.NewGCEConfiguration().StorageClient().Bucket(pool.NewGCEConfiguration().BuildEnv().SnapBucket).Object(st.SnapshotObjectName()).NewWriter(ctx)
+	sc := pool.NewGCEConfiguration().StorageClient()
+	if sc == nil {
+		return errors.New("GCE configuration missing storage client")
+	}
+	bucket := pool.NewGCEConfiguration().BuildEnv().SnapBucket
+	if bucket == "" {
+		return errors.New("build environment missing snapshot bucket")
+	}
+	wr := sc.Bucket(bucket).Object(st.SnapshotObjectName()).NewWriter(ctx)
 	wr.ContentType = "application/octet-stream"
 	wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
 	if _, err := io.Copy(wr, tgz); err != nil {
