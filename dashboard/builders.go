@@ -619,6 +619,14 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:   2,
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/lib/go"},
 	},
+	"host-linux-amd64-perf": &HostConfig{
+		Notes:           "Cascade Lake performance testing machines",
+		machineType:     "c2-standard-8",  // C2 has precisely defined, consistent server architecture.
+		ContainerImage:  "linux-x86-bullseye:latest",
+		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:     "root",
+	},
 }
 
 // CrossCompileConfig describes how to cross-compile a build on a
@@ -692,7 +700,7 @@ type HostConfig struct {
 	ContainerImage string // e.g. "linux-buildlet-std:latest" (suffix after "gcr.io/<PROJ>/")
 	IsReverse      bool   // if true, only use the reverse buildlet pool
 
-	// GCE options, if VMImage != ""
+	// GCE options, if VMImage != "" || ContainerImage != ""
 	machineType    string // optional GCE instance type
 	RegularDisk    bool   // if true, use spinning disk instead of SSD
 	MinCPUPlatform string // optional; https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform
@@ -2518,6 +2526,15 @@ func init() {
 		Notes:        "Windows 10 WSL2 Ubuntu",
 		FlakyNet:     true,
 		SkipSnapshot: true, // The builder has a slow uplink bandwidth.
+	})
+	addBuilder(BuildConfig{
+		Name:         "linux-amd64-perf",
+		HostType:     "host-linux-amd64-perf",
+		Notes:        "Performance testing for linux-amd64",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "benchmarks"
+		},
+		RunBench: true,
 	})
 }
 
