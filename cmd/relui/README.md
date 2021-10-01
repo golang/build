@@ -52,19 +52,9 @@ go run -tags pgx github.com/golang-migrate/migrate/v4/cmd/migrate \
 
 #### Running
 
-Migrations are automatically ran on application launch. Updating
-schema.sql, as documented below, will also run migrations. "Down"
+Migrations are automatically ran on application launch. "Down"
 migrations are not automatically run and must be manually invoked in
 `psql`, or by the `--migrate-down-up` flag or `make migrate-down-up`.
-
-#### cmd/relui/schema.sql
-
-`schema.sql` is updated by running the following command in this
-directory:
-
-```bash
-make schema.sql
-```
 
 ## Testing
 

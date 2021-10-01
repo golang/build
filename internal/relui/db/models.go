@@ -9,11 +9,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type Migration struct {
-	Version int64
-	Dirty   bool
-}
-
 type Task struct {
 	WorkflowID uuid.UUID
 	Name       string

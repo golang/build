@@ -35,9 +35,6 @@ migrate: docker
 migrate-down-up: docker
 	docker run --rm --name=relui-dev-migrate -v $(POSTGRES_RUN_DEV) -e PGUSER=$(POSTGRES_USER) -e PGDATABASE=relui-dev $(DOCKER_TAG) --migrate-down-up
 
-schema.sql: migrate
-	docker exec postgres-dev pg_dump --username=$(POSTGRES_USER) --schema-only relui-dev > schema.sql
-
 .PHONY: test
 test: postgres-dev docker-test
 	docker run --rm --name=relui-test -v $(POSTGRES_RUN_DEV) -e PGUSER=$(POSTGRES_USER) -e PGDATABASE=relui-test golang/relui-test:$(VERSION)

@@ -3,7 +3,7 @@ packages:
   - name: "db"
     path: "../../internal/relui/db"
     queries: "../../internal/relui/queries"
-    schema: "schema.sql"
+    schema: "../../internal/relui/migrations/"
     engine: "postgresql"
     sql_package: "pgx/v4"
 overrides:
