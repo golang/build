@@ -166,29 +166,11 @@ func main() {
 	// Select release targets for this Go version.
 	w.ReleaseTargets = matchTargets(w.Version)
 
-	// Find milestones.
+	// Find milestone.
 	var err error
 	w.Milestone, err = getMilestone(w.Version)
 	if err != nil {
 		log.Fatalf("cannot find the GitHub milestone for release %s: %v", w.Version, err)
-	}
-	if !w.BetaRelease && !w.RCRelease {
-		nextV, err := nextVersion(w.Version)
-		if err != nil {
-			log.Fatalln("nextVersion:", err)
-		}
-		w.NextMilestone, err = getMilestone(nextV)
-		if err != nil {
-			log.Fatalf("cannot find %s, the next GitHub milestone after release %s: %v", nextV, w.Version, err)
-		}
-	}
-	// For major releases (go1.X), also check the "create first minor release milestone"
-	// step in the release process wasn't accidentally missed. See issue 44404.
-	if !w.BetaRelease && !w.RCRelease && strings.Count(w.Version, ".") == 1 {
-		firstMinor := w.Version + ".1"
-		if _, err := getMilestone(firstMinor); err != nil {
-			log.Fatalf("cannot find %s, the first minor release GitHub milestone after major release %s: %v", firstMinor, w.Version, err)
-		}
 	}
 
 	w.doRelease()
@@ -325,11 +307,6 @@ type Work struct {
 	ReleaseInfo map[string]*ReleaseInfo // map and info protected by releaseMu
 
 	Milestone *maintner.GitHubMilestone // Milestone for the current release.
-	// NextMilestone is the milestone of the next release of the same kind.
-	// For major releases, it's the milestone of the next major release (e.g., 1.14 → 1.15).
-	// For minor releases, it's the milestone of the next minor release (e.g., 1.14.1 → 1.14.2).
-	// For other release types, it's unset.
-	NextMilestone *maintner.GitHubMilestone
 }
 
 // ReleaseInfo describes a release build for a specific target.

@@ -149,14 +149,40 @@ func (w *Work) createGitHubIssue(title, msg string) (int, error) {
 	return i.GetNumber(), err
 }
 
-// pushIssues moves open issues to the milestone of the next release of the same kind.
+// pushIssues moves open issues to the milestone of the next release of the same kind,
+// creating the milestone if it doesn't already exist.
 // For major releases, it's the milestone of the next major release (e.g., 1.14 → 1.15).
 // For minor releases, it's the milestone of the next minor release (e.g., 1.14.1 → 1.14.2).
 // For other release types, it does nothing.
+//
+// For major releases, it also creates the first minor release milestone if it doesn't already exist.
 func (w *Work) pushIssues() {
 	if w.BetaRelease || w.RCRelease {
 		// Nothing to do.
 		return
+	}
+
+	// Get the milestone for the next release.
+	var nextMilestone *github.Milestone
+	nextV, err := nextVersion(w.Version)
+	if err != nil {
+		w.logError("error determining next version: %v", err)
+		return
+	}
+	nextMilestone, err = w.findOrCreateMilestone(nextV)
+	if err != nil {
+		w.logError("error finding or creating %s, the next GitHub milestone after release %s: %v", nextV, w.Version, err)
+		return
+	}
+
+	// For major releases (go1.X), also create the first minor release milestone (go1.X.1). See issue 44404.
+	if strings.Count(w.Version, ".") == 1 {
+		firstMinor := w.Version + ".1"
+		_, err := w.findOrCreateMilestone(firstMinor)
+		if err != nil {
+			// Log this error, but continue executing the rest of the task.
+			w.logError("error finding or creating %s, the first minor release GitHub milestone after major release %s: %v", firstMinor, w.Version, err)
+		}
 	}
 
 	if err := goRepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
@@ -170,12 +196,12 @@ func (w *Work) pushIssues() {
 		if gi.Closed && !w.Security {
 			return nil
 		}
-		w.log.Printf("changing milestone of issue %d to %s", gi.Number, w.NextMilestone.Title)
+		w.log.Printf("changing milestone of issue %d to %s", gi.Number, nextMilestone.GetTitle())
 		if dryRun {
 			return nil
 		}
 		_, _, err := githubClient.Issues.Edit(context.TODO(), projectOwner, projectRepo, int(gi.Number), &github.IssueRequest{
-			Milestone: github.Int(int(w.NextMilestone.Number)),
+			Milestone: github.Int(nextMilestone.GetNumber()),
 		})
 		if err != nil {
 			return fmt.Errorf("#%d: %s", gi.Number, err)
@@ -185,6 +211,52 @@ func (w *Work) pushIssues() {
 		w.logError("error moving issues to the next minor release: %v", err)
 		return
 	}
+}
+
+// findOrCreateMilestone finds or creates a GitHub milestone corresponding
+// to the specified Go version. This is done via the GitHub API, using githubClient.
+// If the milestone exists but isn't open, an error is returned.
+func (w *Work) findOrCreateMilestone(version string) (*github.Milestone, error) {
+	// Look for an existing open milestone corresponding to version,
+	// and return it if found.
+	for opt := (&github.MilestoneListOptions{ListOptions: github.ListOptions{PerPage: 100}}); ; {
+		ms, resp, err := githubClient.Issues.ListMilestones(context.Background(), projectOwner, projectRepo, opt)
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range ms {
+			if strings.ToLower(m.GetTitle()) == version {
+				// Found an existing milestone.
+				return m, nil
+			}
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opt.Page = resp.NextPage
+	}
+
+	// Create a new milestone.
+	// For historical reasons, Go milestone titles use a capital "Go1.n" format,
+	// in contrast to go versions which are like "go1.n". Do the same here.
+	title := strings.Replace(version, "go", "Go", 1)
+	w.log.Printf("creating milestone titled %q", title)
+	if dryRun {
+		return &github.Milestone{Title: github.String(title)}, nil
+	}
+	m, _, err := githubClient.Issues.CreateMilestone(context.Background(), projectOwner, projectRepo, &github.Milestone{
+		Title: github.String(title),
+	})
+	if e := (*github.ErrorResponse)(nil); errors.As(err, &e) && e.Response != nil && e.Response.StatusCode == http.StatusUnprocessableEntity && len(e.Errors) == 1 && e.Errors[0].Code == "already_exists" {
+		// We'll run into an already_exists error here if the milestone exists,
+		// but it wasn't found in the loop above because the milestone isn't open.
+		// That shouldn't happen under normal circumstances, so if it does,
+		// let humans figure out how to best deal with it.
+		return nil, errors.New("a closed milestone with the same title already exists")
+	} else if err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // closeMilestone closes the milestone for the current release.
