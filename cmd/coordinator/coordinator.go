@@ -70,7 +70,6 @@ import (
 	"golang.org/x/build/repos"
 	"golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
-	perfstorage "golang.org/x/perf/storage"
 	"golang.org/x/time/rate"
 )
 
@@ -120,8 +119,6 @@ var (
 	buildEnvName   = flag.String("env", "", "The build environment configuration to use. Not required if running on GCE.")
 	devEnableGCE   = flag.Bool("dev_gce", false, "Whether or not to enable the GCE pool when in dev mode. The pool is enabled by default in prod mode.")
 	devEnableEC2   = flag.Bool("dev_ec2", false, "Whether or not to enable the EC2 pool when in dev mode. The pool is enabled by default in prod mode.")
-	shouldRunBench = flag.Bool("run_bench", false, "Whether or not to run benchmarks on trybot commits. Override by GCE project attribute 'farmer-run-bench'.")
-	perfServer     = flag.String("perf_server", "", "Upload benchmark results to `server`. Overrides buildenv default for testing.")
 )
 
 // LOCK ORDER:
@@ -1149,7 +1146,6 @@ type trySetState struct {
 	remain       int
 	failed       []string // builder names, with optional " ($branch)" suffix
 	builds       []*buildStatus
-	benchResults []string // builder names, with optional " ($branch)" suffix
 }
 
 func (ts trySetState) clone() trySetState {
@@ -1157,7 +1153,6 @@ func (ts trySetState) clone() trySetState {
 		remain:       ts.remain,
 		failed:       append([]string(nil), ts.failed...),
 		builds:       append([]*buildStatus(nil), ts.builds...),
-		benchResults: append([]string(nil), ts.benchResults...),
 	}
 }
 
@@ -1609,21 +1604,16 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 	var (
 		succeeded       = bs.succeeded
 		buildLog        = bs.output.String()
-		hasBenchResults = bs.hasBenchResults
 	)
 	bs.mu.Unlock()
 
 	ts.mu.Lock()
-	if hasBenchResults {
-		ts.benchResults = append(ts.benchResults, bs.NameAndBranch())
-	}
 	ts.remain--
 	remain := ts.remain
 	if !succeeded {
 		ts.failed = append(ts.failed, bs.NameAndBranch())
 	}
 	numFail := len(ts.failed)
-	benchResults := append([]string(nil), ts.benchResults...)
 	canceled := ts.canceled
 	ts.mu.Unlock()
 
@@ -1710,12 +1700,6 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 			for _, st := range ts.xrepos {
 				fmt.Fprintf(gerritMsg, "* %s\n", st.NameAndBranch())
 			}
-		}
-		// TODO: provide a link in the final report that links to a permanent summary page
-		// of which builds ran, and for how long.
-		if len(benchResults) > 0 {
-			// TODO: restore this functionality
-			// fmt.Fprintf(gerritMsg, "\nBenchmark results are available at:\nhttps://perf.golang.org/search?q=cl:%d+try:%s", ts.ci.ChangeNumber, ts.tryID)
 		}
 	}
 
@@ -2302,14 +2286,6 @@ func (st *buildStatus) spanRecord(sp *span, err error) *types.SpanRecord {
 	return rec
 }
 
-// shouldBench returns whether we should attempt to run benchmarks
-func (st *buildStatus) shouldBench() bool {
-	if !*shouldRunBench {
-		return false
-	}
-	return st.isTry() && !st.IsSubrepo() && st.conf.RunBench
-}
-
 // goBuilder returns a GoBuilder for this buildStatus.
 func (st *buildStatus) goBuilder() buildgo.GoBuilder {
 	return buildgo.GoBuilder{
@@ -2622,9 +2598,8 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 
 type token struct{}
 
-// newTestSet returns a new testSet given the dist test names (strings from "go tool dist test -list")
-// and benchmark items.
-func (st *buildStatus) newTestSet(testStats *buildstats.TestStats, distTestNames []string, benchmarks []*buildgo.BenchmarkItem) (*testSet, error) {
+// newTestSet returns a new testSet given the dist test names (strings from "go tool dist test -list").
+func (st *buildStatus) newTestSet(testStats *buildstats.TestStats, distTestNames []string) (*testSet, error) {
 	set := &testSet{
 		st:        st,
 		testStats: testStats,
@@ -2633,17 +2608,6 @@ func (st *buildStatus) newTestSet(testStats *buildstats.TestStats, distTestNames
 		set.items = append(set.items, &testItem{
 			set:      set,
 			name:     name,
-			duration: testStats.Duration(st.BuilderRev.Name, name),
-			take:     make(chan token, 1),
-			done:     make(chan token),
-		})
-	}
-	for _, bench := range benchmarks {
-		name := "bench:" + bench.Name()
-		set.items = append(set.items, &testItem{
-			set:      set,
-			name:     name,
-			bench:    bench,
 			duration: testStats.Duration(st.BuilderRev.Name, name),
 			take:     make(chan token, 1),
 			done:     make(chan token),
@@ -2911,29 +2875,6 @@ func moduleProxy() string {
 	return "http://" + pool.NewGCEConfiguration().GKENodeHostname() + ":30157"
 }
 
-// affectedPkgs returns the name of every package affected by this commit.
-// The returned list may contain duplicates and is unsorted.
-// It is safe to call this on a nil trySet.
-func (ts *trySet) affectedPkgs() (pkgs []string) {
-	// TODO(quentin): Support non-try commits by asking maintnerd for the affected files.
-	if ts == nil {
-		return
-	}
-	// TODO(bradfitz): query maintner for this. Old logic with a *gerrit.ChangeInfo was:
-	/*
-		rev := ts.ci.Revisions[ts.ci.CurrentRevision]
-			for p := range rev.Files {
-				if strings.HasPrefix(p, "src/") {
-					pkg := path.Dir(p[len("src/"):])
-					if pkg != "" {
-						pkgs = append(pkgs, pkg)
-					}
-				}
-			}
-	*/
-	return
-}
-
 var errBuildletsGone = errors.New("runTests: dist test failed: all buildlets had network errors or timeouts, yet tests remain")
 
 // runTests is only called for builders which support a split make/run
@@ -2950,26 +2891,10 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	if err != nil {
 		return nil, fmt.Errorf("distTestList exec: %v", err)
 	}
-	var benches []*buildgo.BenchmarkItem
-	if st.shouldBench() {
-		sp := st.CreateSpan("enumerate_benchmarks")
-		rev, err := getRepoHead("benchmarks")
-		if err != nil {
-			return nil, err
-		}
-		if rev == "" {
-			rev = "master" // should happen rarely; ok if it does.
-		}
-		b, err := st.goBuilder().EnumerateBenchmarks(st.ctx, st.bc, rev, st.trySet.affectedPkgs())
-		sp.Done(err)
-		if err == nil {
-			benches = b
-		}
-	}
 
 	testStats := getTestStats(st)
 
-	set, err := st.newTestSet(testStats, testNames, benches)
+	set, err := st.newTestSet(testStats, testNames)
 	if err != nil {
 		return nil, err
 	}
@@ -3054,8 +2979,6 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 		close(buildletsGone)
 	}()
 
-	benchFiles := st.benchFiles()
-
 	var lastBanner string
 	var serialDuration time.Duration
 	for _, ti := range set.items {
@@ -3071,14 +2994,6 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 			case <-buildletsGone:
 				set.cancelAll()
 				return nil, errBuildletsGone
-			}
-		}
-
-		if ti.bench != nil {
-			for i, s := range ti.bench.Output {
-				if i < len(benchFiles) {
-					benchFiles[i].out.WriteString(s)
-				}
 			}
 		}
 
@@ -3112,78 +3027,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 	}
 	st.LogEventTime("tests_complete", msg)
 	fmt.Fprintf(st, "\nAll tests passed.\n")
-	for _, f := range benchFiles {
-		if f.out.Len() > 0 {
-			st.hasBenchResults = true
-		}
-	}
-	if st.hasBenchResults {
-		sp := st.CreateSpan("upload_bench_results")
-		sp.Done(st.uploadBenchResults(st.ctx, benchFiles))
-	}
 	return nil, nil
-}
-
-func (st *buildStatus) uploadBenchResults(ctx context.Context, files []*benchFile) error {
-	s := *perfServer
-	if s == "" {
-		s = pool.NewGCEConfiguration().BuildEnv().PerfDataURL
-	}
-	client := &perfstorage.Client{BaseURL: s, HTTPClient: pool.NewGCEConfiguration().OAuthHTTPClient()}
-	u := client.NewUpload(ctx)
-	for _, b := range files {
-		w, err := u.CreateFile(b.name)
-		if err != nil {
-			u.Abort()
-			return err
-		}
-		if _, err := b.out.WriteTo(w); err != nil {
-			u.Abort()
-			return err
-		}
-	}
-	status, err := u.Commit()
-	if err != nil {
-		return err
-	}
-	st.LogEventTime("bench_upload", status.UploadID)
-	return nil
-}
-
-// TODO: what is a bench file?
-type benchFile struct {
-	name string
-	out  bytes.Buffer
-}
-
-func (st *buildStatus) benchFiles() []*benchFile {
-	if !st.shouldBench() {
-		return nil
-	}
-	// TODO: renable benchmarking. Or do it outside of the coordinator, if we end up
-	// making the coordinator into just a gomote proxy + scheduler.
-	// Old logic was:
-	/*
-		// We know rev and rev.Commit.Parents[0] exist because BenchmarkItem.buildParent has checked.
-		rev := st.trySet.ci.Revisions[st.trySet.ci.CurrentRevision]
-		ps := rev.PatchSetNumber
-		benchFiles := []*benchFile{
-			{name: "orig.txt"},
-			{name: fmt.Sprintf("ps%d.txt", ps)},
-		}
-		fmt.Fprintf(&benchFiles[0].out, "cl: %d\nps: %d\ntry: %s\nbuildlet: %s\nbranch: %s\nrepo: https://go.googlesource.com/%s\n",
-			st.trySet.ci.ChangeNumber, ps, st.trySet.tryID,
-			st.Name, st.trySet.ci.Branch, st.trySet.ci.Project,
-		)
-		if pool.NewGCEConfiguration().InStaging() {
-			benchFiles[0].out.WriteString("staging: true\n")
-		}
-		benchFiles[1].out.Write(benchFiles[0].out.Bytes())
-		fmt.Fprintf(&benchFiles[0].out, "commit: %s\n", rev.Commit.Parents[0].CommitID)
-		fmt.Fprintf(&benchFiles[1].out, "commit: %s\n", st.BuilderRev.Rev)
-		return benchFiles
-	*/
-	return nil
 }
 
 const (
@@ -3250,35 +3094,27 @@ func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, 
 	ctx, cancel := context.WithTimeout(st.ctx, timeout)
 	defer cancel()
 
-	var remoteErr, err error
-	if ti := tis[0]; ti.bench != nil {
-		pbr, perr := st.parentRev()
-		// TODO(quentin): Error if parent commit could not be determined?
-		if perr == nil {
-			remoteErr, err = ti.bench.Run(st.ctx, pool.NewGCEConfiguration().BuildEnv(), st, st.conf, bc, &buf, []buildgo.BuilderRev{st.BuilderRev, pbr})
-		}
-	} else {
-		env := append(st.conf.Env(),
-			"GOROOT="+goroot,
-			"GOPATH="+gopath,
-			"GOPROXY="+moduleProxy(),
-		)
-		env = append(env, st.conf.ModulesEnv("go")...)
+	env := append(st.conf.Env(),
+		"GOROOT="+goroot,
+		"GOPATH="+gopath,
+		"GOPROXY="+moduleProxy(),
+	)
+	env = append(env, st.conf.ModulesEnv("go")...)
 
-		remoteErr, err = bc.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
-			// We set Dir to "." instead of the default ("go/bin") so when the dist tests
-			// try to run os/exec.Command("go", "test", ...), the LookPath of "go" doesn't
-			// return "./go.exe" (which exists in the current directory: "go/bin") and then
-			// fail when dist tries to run the binary in dir "$GOROOT/src", since
-			// "$GOROOT/src" + "./go.exe" doesn't exist. Perhaps LookPath should return
-			// an absolute path.
-			Dir:      ".",
-			Output:   &buf, // see "maybe stream lines" TODO below
-			ExtraEnv: env,
-			Path:     []string{"$WORKDIR/go/bin", "$PATH"},
-			Args:     args,
-		})
-	}
+	remoteErr, err := bc.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
+		// We set Dir to "." instead of the default ("go/bin") so when the dist tests
+		// try to run os/exec.Command("go", "test", ...), the LookPath of "go" doesn't
+		// return "./go.exe" (which exists in the current directory: "go/bin") and then
+		// fail when dist tries to run the binary in dir "$GOROOT/src", since
+		// "$GOROOT/src" + "./go.exe" doesn't exist. Perhaps LookPath should return
+		// an absolute path.
+		Dir:      ".",
+		Output:   &buf, // see "maybe stream lines" TODO below
+		ExtraEnv: env,
+		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+		Args:     args,
+	})
+
 	execDuration := time.Since(t0)
 	sp.Done(err)
 	if err != nil {
@@ -3410,8 +3246,6 @@ type testItem struct {
 	name     string        // "go_test:sort"
 	duration time.Duration // optional approximate size
 
-	bench *buildgo.BenchmarkItem // If populated, this is a benchmark instead of a regular test.
-
 	take chan token // buffered size 1: sending takes ownership of rest of fields:
 
 	done    chan token // closed when done; guards output & failed
@@ -3492,8 +3326,6 @@ type buildStatus struct {
 	cancel          context.CancelFunc // used to cancel context; for use by setDone only
 
 	hasBuildlet int32 // atomic: non-zero if this build has a buildlet; for status.go.
-
-	hasBenchResults bool // set by runTests, may only be used when build() returns.
 
 	mu              sync.Mutex       // guards following
 	canceled        bool             // whether this build was forcefully canceled, so errors should be ignored

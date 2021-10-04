@@ -801,9 +801,6 @@ type BuildConfig struct {
 	// the tarball in under ~5 minutes.
 	SkipSnapshot bool
 
-	// RunBench causes the coordinator to run benchmarks on this buildlet type.
-	RunBench bool
-
 	// StopAfterMake causes the build to stop after the make
 	// script completes, returning its result as the result of the
 	// whole build. It does not run or compile any of the tests,
@@ -1501,7 +1498,6 @@ func init() {
 		},
 		numTestHelpers:    1,
 		numTryTestHelpers: 4,
-		RunBench:          true,
 	})
 	addBuilder(BuildConfig{
 		Name:       "linux-amd64-vmx",
