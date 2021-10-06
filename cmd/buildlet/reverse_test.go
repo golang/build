@@ -128,3 +128,33 @@ func TestReverseDial(t *testing.T) {
 	const hostType = "test-reverse-dial"
 	testReverseDial(t, srv.Addr, hostType)
 }
+
+// TestReverseDialRedirect verfies that a revdial connection works with a 307
+// redirect to the endpoints. The coordinator will do this in dev mode.
+func TestReverseDialRedirect(t *testing.T) {
+	pool.SetBuilderMasterKey([]byte(devMasterKey))
+
+	srv, ln, err := coordinatorServer()
+	if err != nil {
+		t.Fatalf("serveCoordinator got err %v want nil", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/redirected/reverse", pool.HandleReverse)
+	mux.Handle("/redirected/revdial", revdial.ConnHandler())
+
+	redirect := func(w http.ResponseWriter, r *http.Request) {
+		u := *r.URL
+		u.Path = "/redirected/" + u.Path
+		http.Redirect(w, r, u.String(), http.StatusTemporaryRedirect)
+	}
+	mux.HandleFunc("/reverse", redirect)
+	mux.HandleFunc("/revdial", redirect)
+	srv.Handler = mux
+
+	go srv.Serve(ln)
+	defer srv.Close()
+
+	const hostType = "test-reverse-dial-redirect"
+	testReverseDial(t, srv.Addr, hostType)
+}

@@ -24,9 +24,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -314,21 +316,31 @@ func (ln *Listener) grabConn(path string) {
 		log.Printf("revdial.Listener: failed to pick up connection to %s: %v", path, err)
 		ln.sendMessage(controlMsg{Command: "pickup-failed", ConnPath: path, Err: err.Error()})
 	}
-	req, _ := http.NewRequest("GET", path, nil)
-	if err := req.Write(c); err != nil {
-		failPickup(err)
-		return
-	}
 	bufr := bufio.NewReader(c)
-	resp, err := http.ReadResponse(bufr, req)
-	if err != nil {
-		failPickup(err)
+
+	success := false
+	const maxRedirects = 2
+	for i := 0; i < maxRedirects; i++ {
+		req, _ := http.NewRequest("GET", path, nil)
+		if err := req.Write(c); err != nil {
+			failPickup(err)
+			return
+		}
+		path, err = ReadProtoSwitchOrRedirect(bufr, req)
+		if err != nil {
+			failPickup(fmt.Errorf("switch failed: %v", err))
+			return
+		}
+		if path == "" {
+			success = true
+			break
+		}
+	}
+	if !success {
+		failPickup(errors.New("too many redirects"))
 		return
 	}
-	if resp.StatusCode != 101 {
-		failPickup(fmt.Errorf("non-101 response %v", resp.Status))
-		return
-	}
+
 	select {
 	case ln.connc <- c:
 	case <-ln.donec:
@@ -419,4 +431,51 @@ func connHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	(&http.Response{StatusCode: http.StatusSwitchingProtocols, Proto: "HTTP/1.1"}).Write(conn)
 	d.matchConn(conn)
+}
+
+// checkRelativeURL verifies that URL s does not change scheme or host.
+func checkRelativeURL(s string) error {
+	u, err := url.Parse(s)
+	if err != nil {
+		return err
+	}
+
+	// A relative URL should have no schema or host.
+	if u.Scheme != "" {
+		return fmt.Errorf("URL %q is not relative: contains scheme", s)
+	}
+	if u.Host != "" {
+		return fmt.Errorf("URL %q is not relative: contains host", s)
+	}
+	return nil
+}
+
+// ReadProtoSwitchOrRedirect is a helper for completing revdial protocol switch
+// requests. If the response indicates successful switch, nothing is returned.
+// If the response indicates a redirect, the new location is returned.
+func ReadProtoSwitchOrRedirect(r *bufio.Reader, req *http.Request) (location string, err error) {
+	resp, err := http.ReadResponse(r, req)
+	if err != nil {
+		return "", fmt.Errorf("error reading response: %v", err)
+	}
+	switch resp.StatusCode {
+	case http.StatusSwitchingProtocols:
+		// Success! Don't read body, as caller may want it.
+		return "", nil
+	case http.StatusTemporaryRedirect:
+		// Redirect. Discard body.
+		msg, _ := io.ReadAll(resp.Body)
+		location := resp.Header.Get("Location")
+		if location == "" {
+			return "", fmt.Errorf("redirect missing Location header; got %+v:\n\t%s", resp, msg)
+		}
+		if err := checkRelativeURL(location); err != nil {
+			return "", fmt.Errorf("redirect Location must be relative: %w", err)
+		}
+		// Retry at new location.
+		return location, nil
+	default:
+		msg, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("want HTTP status 101 or 307; got %v:\n\t%s", resp.Status, msg)
+	}
 }

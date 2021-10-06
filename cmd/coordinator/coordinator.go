@@ -246,11 +246,21 @@ var validHosts = map[string]bool{
 	"build.golang.org":  true,
 }
 
+type hijackResponseWriter interface {
+	http.Hijacker
+	http.ResponseWriter
+}
+
 // hostPathHandler infers the host from the first element of the URL path,
 // and rewrites URLs in the output HTML accordingly. It disables response
 // compression to simplify the process of link rewriting.
 func hostPathHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hw, ok := w.(hijackResponseWriter)
+		if !ok {
+			log.Fatalf("hostPathHandler ResponseWriter does not implement Hijack: %T", w)
+		}
+
 		elem, rest := strings.TrimPrefix(r.URL.Path, "/"), ""
 		if i := strings.Index(elem, "/"); i >= 0 {
 			elem, rest = elem[:i], elem[i+1:]
@@ -268,7 +278,7 @@ func hostPathHandler(h http.Handler) http.Handler {
 		r.URL.Host = elem
 		r.URL.Path = "/" + rest
 		r.Header.Set("Accept-Encoding", "identity") // Disable compression for link rewriting.
-		lw := &linkRewriter{ResponseWriter: w, host: r.Host}
+		lw := &linkRewriter{hijackResponseWriter: hw, host: r.Host}
 		h.ServeHTTP(lw, r)
 		lw.Flush()
 	})
@@ -279,7 +289,7 @@ func hostPathHandler(h http.Handler) http.Handler {
 // https://h/foo, where h is in validHosts, to be /h/foo. This corrects the
 // links to have the right form for the test server.
 type linkRewriter struct {
-	http.ResponseWriter
+	hijackResponseWriter
 	host string
 	buf  []byte
 	ct   string // content-type
@@ -295,7 +305,7 @@ func (r *linkRewriter) Write(data []byte) (int, error) {
 		r.ct = ct
 	}
 	if !strings.HasPrefix(r.ct, "text/html") {
-		return r.ResponseWriter.Write(data)
+		return r.hijackResponseWriter.Write(data)
 	}
 	r.buf = append(r.buf, data...)
 	return len(data), nil
@@ -308,7 +318,7 @@ func (r *linkRewriter) Flush() {
 	for host := range validHosts {
 		repl = append(repl, `href="https://`+host, `href="/`+host)
 	}
-	strings.NewReplacer(repl...).WriteString(r.ResponseWriter, string(r.buf))
+	strings.NewReplacer(repl...).WriteString(r.hijackResponseWriter, string(r.buf))
 	r.buf = nil
 }
 

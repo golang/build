@@ -10,6 +10,7 @@ import (
 	"crypto/hmac"
 	"crypto/md5"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -118,28 +119,37 @@ func dialCoordinator() (net.Listener, error) {
 	bufw := bufio.NewWriter(conn)
 
 	log.Printf("Registering reverse mode with coordinator...")
-	req, err := http.NewRequest("GET", "/reverse", nil)
-	if err != nil {
-		log.Fatal(err)
+
+	success := false
+	location := "/reverse"
+	const maxRedirects = 2
+	for i := 0; i < maxRedirects; i++ {
+		req, err := http.NewRequest("GET", location, nil)
+		if err != nil {
+			log.Fatal(err)
+		}
+		req.Header.Set("X-Go-Host-Type", *reverseType)
+		req.Header.Set("X-Go-Builder-Key", key)
+		req.Header.Set("X-Go-Builder-Hostname", *hostname)
+		req.Header.Set("X-Go-Builder-Version", strconv.Itoa(buildletVersion))
+		req.Header.Set("X-Revdial-Version", "2")
+		if err := req.Write(bufw); err != nil {
+			return nil, fmt.Errorf("coordinator /reverse request failed: %v", err)
+		}
+		if err := bufw.Flush(); err != nil {
+			return nil, fmt.Errorf("coordinator /reverse request flush failed: %v", err)
+		}
+		location, err = revdial.ReadProtoSwitchOrRedirect(bufr, req)
+		if err != nil {
+			return nil, fmt.Errorf("coordinator registration failed: %v", err)
+		}
+		if location == "" {
+			success = true
+			break
+		}
 	}
-	req.Header.Set("X-Go-Host-Type", *reverseType)
-	req.Header.Set("X-Go-Builder-Key", key)
-	req.Header.Set("X-Go-Builder-Hostname", *hostname)
-	req.Header.Set("X-Go-Builder-Version", strconv.Itoa(buildletVersion))
-	req.Header.Set("X-Revdial-Version", "2")
-	if err := req.Write(bufw); err != nil {
-		return nil, fmt.Errorf("coordinator /reverse request failed: %v", err)
-	}
-	if err := bufw.Flush(); err != nil {
-		return nil, fmt.Errorf("coordinator /reverse request flush failed: %v", err)
-	}
-	resp, err := http.ReadResponse(bufr, req)
-	if err != nil {
-		return nil, fmt.Errorf("coordinator /reverse response failed: %v", err)
-	}
-	if resp.StatusCode != 101 {
-		msg, _ := ioutil.ReadAll(resp.Body)
-		return nil, fmt.Errorf("coordinator registration failed; want HTTP status 101; got %v:\n\t%s", resp.Status, msg)
+	if !success {
+		return nil, errors.New("coordinator /reverse: too many redirects")
 	}
 
 	log.Printf("Connected to coordinator; reverse dialing active")
