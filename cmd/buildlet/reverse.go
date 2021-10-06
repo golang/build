@@ -60,7 +60,10 @@ func isDevReverseMode() bool {
 	return !strings.HasPrefix(*coordinator, "farmer.golang.org")
 }
 
-func dialCoordinator() error {
+// dialCoordinator dials the coordinator to establish a revdial connection
+// where the returned net.Listener can be used to accept connections from the
+// coordinator.
+func dialCoordinator() (net.Listener, error) {
 	devMode := isDevReverseMode()
 
 	if *hostname == "" {
@@ -108,7 +111,7 @@ func dialCoordinator() error {
 	}
 	conn, err := dial(context.Background())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	bufr := bufio.NewReader(conn)
@@ -125,28 +128,23 @@ func dialCoordinator() error {
 	req.Header.Set("X-Go-Builder-Version", strconv.Itoa(buildletVersion))
 	req.Header.Set("X-Revdial-Version", "2")
 	if err := req.Write(bufw); err != nil {
-		return fmt.Errorf("coordinator /reverse request failed: %v", err)
+		return nil, fmt.Errorf("coordinator /reverse request failed: %v", err)
 	}
 	if err := bufw.Flush(); err != nil {
-		return fmt.Errorf("coordinator /reverse request flush failed: %v", err)
+		return nil, fmt.Errorf("coordinator /reverse request flush failed: %v", err)
 	}
 	resp, err := http.ReadResponse(bufr, req)
 	if err != nil {
-		return fmt.Errorf("coordinator /reverse response failed: %v", err)
+		return nil, fmt.Errorf("coordinator /reverse response failed: %v", err)
 	}
 	if resp.StatusCode != 101 {
 		msg, _ := ioutil.ReadAll(resp.Body)
-		return fmt.Errorf("coordinator registration failed; want HTTP status 101; got %v:\n\t%s", resp.Status, msg)
+		return nil, fmt.Errorf("coordinator registration failed; want HTTP status 101; got %v:\n\t%s", resp.Status, msg)
 	}
 
 	log.Printf("Connected to coordinator; reverse dialing active")
-	srv := &http.Server{}
 	ln := revdial.NewListener(conn, dial)
-	err = srv.Serve(ln)
-	if ln.Closed() { // TODO: this actually wants to know whether an error-free Close was called
-		return nil
-	}
-	return fmt.Errorf("http.Serve on reverse connection complete: %v", err)
+	return ln, nil
 }
 
 var coordDialer = &net.Dialer{
@@ -206,8 +204,10 @@ func dialCoordinatorViaCONNECT(ctx context.Context, addr string, proxy *url.URL)
 	return c, nil
 }
 
+const devMasterKey = "gophers rule"
+
 func devBuilderKey(builder string) string {
-	h := hmac.New(md5.New, []byte("gophers rule"))
+	h := hmac.New(md5.New, []byte(devMasterKey))
 	io.WriteString(h, builder)
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
@@ -227,11 +227,4 @@ func homedir() string {
 		return "/root"
 	}
 	return "/"
-}
-
-// TestDialCoordinator dials the coordinator. Exported for testing.
-func TestDialCoordinator() {
-	// TODO(crawshaw): move some of this logic out of main to simplify testing hook.
-	http.Handle("/status", http.HandlerFunc(handleStatus))
-	dialCoordinator()
 }

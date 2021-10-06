@@ -247,9 +247,13 @@ func main() {
 				log.Printf("Error in serveReverseHealth: %v", err)
 			}
 		}()
-		if err := dialCoordinator(); err != nil {
+		ln, err := dialCoordinator()
+		if err != nil {
 			log.Fatalf("Error dialing coordinator: %v", err)
 		}
+		srv := &http.Server{}
+		err = srv.Serve(ln)
+		log.Printf("http.Serve on reverse connection complete: %v", err)
 		log.Printf("buildlet reverse mode exiting.")
 		if *haltEntireOS {
 			// The coordinator disconnects before doHalt has time to
