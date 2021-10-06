@@ -70,7 +70,7 @@ import (
 	"golang.org/x/build/livelog"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/repos"
-	revdialv2 "golang.org/x/build/revdial/v2"
+	"golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
 	"golang.org/x/crypto/acme/autocert"
 	perfstorage "golang.org/x/perf/storage"
@@ -424,7 +424,7 @@ func main() {
 	http.HandleFunc("/builders", handleBuilders)
 	http.HandleFunc("/temporarylogs", handleLogs)
 	http.HandleFunc("/reverse", pool.HandleReverse)
-	http.Handle("/revdial", revdialv2.ConnHandler())
+	http.Handle("/revdial", revdial.ConnHandler())
 	http.HandleFunc("/style.css", handleStyleCSS)
 	http.HandleFunc("/try", serveTryStatus(false))
 	http.HandleFunc("/try.json", serveTryStatus(true))
