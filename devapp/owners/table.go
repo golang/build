@@ -351,6 +351,9 @@ var entries = map[string]*Entry{
 	"go/src/internal/cpu": {
 		Primary: []Owner{khr, martisch},
 	},
+	"go/src/internal/fuzz": {
+		Primary: []Owner{katie, roland, jayconrod},
+	},
 	"go/src/internal/profile": {
 		Primary: []Owner{cherryyz},
 	},
