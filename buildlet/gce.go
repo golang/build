@@ -71,19 +71,6 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 		diskType = "" // a spinning disk
 	}
 
-	// Request an IP address if this is a world-facing buildlet.
-	var accessConfigs []*compute.AccessConfig
-	// TODO(bradfitz): remove the "true ||" part once we figure out why the buildlet
-	// never boots without an IP address. Userspace seems to hang before we get to the buildlet?
-	if true || !opts.TLS.IsZero() {
-		accessConfigs = []*compute.AccessConfig{
-			&compute.AccessConfig{
-				Type: "ONE_TO_ONE_NAT",
-				Name: "External NAT",
-			},
-		}
-	}
-
 	srcImage := "https://www.googleapis.com/compute/v1/projects/" + projectID + "/global/images/" + hconf.VMImage
 	minCPU := hconf.MinCPUPlatform
 	if hconf.IsContainer() {
@@ -126,12 +113,9 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 			Items: []string{"https-server"},
 		},
 		Metadata: &compute.Metadata{},
-		NetworkInterfaces: []*compute.NetworkInterface{
-			&compute.NetworkInterface{
-				AccessConfigs: accessConfigs,
-				Network:       prefix + "/global/networks/default-vpc",
-			},
-		},
+		NetworkInterfaces: []*compute.NetworkInterface{{
+			Network: prefix + "/global/networks/default-vpc",
+		}},
 
 		// Prior to git rev 1b1e086fd, we used preemptible
 		// instances, as we were helping test the feature. It was
