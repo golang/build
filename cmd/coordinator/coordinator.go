@@ -398,6 +398,16 @@ func main() {
 		defer ec2Pool.Close()
 	}
 
+	if *mode == "dev" {
+		// Replace linux-amd64 with a config using a -localdev reverse
+		// buildlet so it is possible to run local builds by starting a
+		// local reverse buildlet.
+		dashboard.Builders["linux-amd64"] = &dashboard.BuildConfig{
+			Name:       "linux-amd64",
+			HostType:   "host-linux-amd64-localdev",
+		}
+	}
+
 	go updateInstanceRecord()
 
 	switch *mode {
@@ -466,6 +476,7 @@ func main() {
 	if *mode == "dev" {
 		// TODO(crawshaw): do more in dev mode
 		gce.BuildletPool().SetEnabled(*devEnableGCE)
+		go findWorkLoop()
 	} else {
 		go gce.BuildletPool().CleanUpOldVMs()
 		if pool.KubeErr() == nil {

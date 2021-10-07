@@ -7,13 +7,20 @@ Building, running tests, running locally is supported on Linux and macOS only.
 Run
 
 ```sh
-go run golang.org/x/build/cmd/coordinator -mode=dev -env=dev
+go run golang.org/x/build/cmd/coordinator -mode=dev
 ```
 
 to start a server on https://localhost:8119. Proceed past the TLS warning and
 you should get the homepage. Some features won't work when running locally,
 but you should be able to navigate between the homepage, the dashboard,
 the builders page, and do limited local development and testing.
+
+To test builds locally, start a `host-linux-amd64-localdev` reverse buildlet,
+which will run `linux-amd64` tests:
+
+```sh
+go run golang.org/x/build/cmd/buildlet -halt=false -reverse-type=host-linux-amd64-localdev
+```
 
 #### Render the "Trybot Status" page locally
 
