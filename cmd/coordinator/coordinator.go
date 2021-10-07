@@ -112,12 +112,18 @@ const devPause = false
 // will be run.
 const stagingTryWork = true
 
+const (
+	defaultListenAddr    = ":443"
+	defaultListenAddrDev = "localhost:8119"
+)
+
 var (
 	masterKeyFile  = flag.String("masterkey", "", "Path to builder master key. Else fetched using GCE project attribute 'builder-master-key'.")
 	mode           = flag.String("mode", "", "Valid modes are 'dev', 'prod', or '' for auto-detect. dev means localhost development, not be confused with staging on go-dashboard-dev, which is still the 'prod' mode.")
 	buildEnvName   = flag.String("env", "", "The build environment configuration to use. Not required if running on GCE.")
 	devEnableGCE   = flag.Bool("dev_gce", false, "Whether or not to enable the GCE pool when in dev mode. The pool is enabled by default in prod mode.")
 	devEnableEC2   = flag.Bool("dev_ec2", false, "Whether or not to enable the EC2 pool when in dev mode. The pool is enabled by default in prod mode.")
+	listenAddr     = flag.String("listen", defaultListenAddr, "The address for the web server to listen on. In dev mode, this defaults to localhost:8119. To listen on external interfaces, pass -listen=:8119")
 	shouldRunBench = flag.Bool("run_bench", false, "Whether or not to run benchmarks on trybot commits. Override by GCE project attribute 'farmer-run-bench'.")
 	perfServer     = flag.String("perf_server", "", "Upload benchmark results to `server`. Overrides buildenv default for testing.")
 )
@@ -158,9 +164,9 @@ var testFiles = map[string]string{
 }
 
 func listenAndServeTLS() {
-	addr := ":443"
-	if *mode == "dev" {
-		addr = "localhost:8119"
+	addr := *listenAddr
+	if *mode == "dev" && addr == defaultListenAddr {
+		addr = defaultListenAddrDev
 	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
