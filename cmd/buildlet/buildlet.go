@@ -936,7 +936,11 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	if v := processGoCacheEnv; v != "" {
 		env = append(env, "GOCACHE="+v)
 	}
-	env = setPathEnv(env, r.PostForm["path"], *workDir)
+	if path := r.PostForm["path"]; len(path) > 0 {
+		if kv, ok := pathEnv(runtime.GOOS, env, path, *workDir); ok {
+			env = append(env, kv)
+		}
+	}
 	env = envutil.Dedup(runtime.GOOS, env)
 
 	var cmd *exec.Cmd
@@ -1005,89 +1009,47 @@ func pathNotExist(path string) bool {
 	return os.IsNotExist(err)
 }
 
-// setPathEnv returns a copy of the provided environment with any existing
-// PATH variables replaced by the user-provided path.
-// These substitutions are applied to user-supplied path elements:
-//   - the string "$PATH" expands to the original PATH elements
-//   - the substring "$WORKDIR" expands to the provided workDir
-// A path of just ["$EMPTY"] removes the PATH variable from the environment.
-func setPathEnv(env, path []string, workDir string) []string {
-	if len(path) == 0 {
-		return env
+// pathEnv returns a key=value string for the system path variable
+// (either PATH or path depending on the platform) with values
+// substituted from env:
+//   - the string "$PATH" expands to the original value of the path variable
+//   - the string "$WORKDIR" expands to the provided workDir
+//   - the string "$EMPTY" expands to the empty string
+//
+// The "ok" result reports whether kv differs from the path found in env.
+func pathEnv(goos string, env, path []string, workDir string) (kv string, ok bool) {
+	pathVar := "PATH"
+	if goos == "plan9" {
+		pathVar = "path"
 	}
 
-	var (
-		pathIdx  = -1
-		pathOrig = ""
+	orig := envutil.Get(goos, env, pathVar)
+	r := strings.NewReplacer(
+		"$PATH", orig,
+		"$WORKDIR", workDir,
+		"$EMPTY", "",
 	)
 
-	for i, s := range env {
-		if isPathEnvPair(s) {
-			pathIdx = i
-			pathOrig = s[len("PaTh="):] // in whatever case
-			break
-		}
-	}
-	if len(path) == 1 && path[0] == "$EMPTY" {
-		// Remove existing path variable if it exists.
-		if pathIdx >= 0 {
-			env = append(env[:pathIdx], env[pathIdx+1:]...)
-		}
-		return env
-	}
-
 	// Apply substitions to a copy of the path argument.
-	path = append([]string{}, path...)
-	for i, s := range path {
-		if s == "$PATH" {
-			path[i] = pathOrig // ok if empty
-		} else {
-			path[i] = strings.Replace(s, "$WORKDIR", workDir, -1)
+	subst := make([]string, 0, len(path))
+	for _, elem := range path {
+		if s := r.Replace(elem); s != "" {
+			subst = append(subst, s)
 		}
 	}
-
-	// Put the new PATH in env.
-	env = append([]string{}, env...)
-	pathEnv := pathEnvVar() + "=" + strings.Join(path, pathSeparator())
-	if pathIdx >= 0 {
-		env[pathIdx] = pathEnv
-	} else {
-		env = append(env, pathEnv)
-	}
-
-	return env
+	kv = pathVar + "=" + strings.Join(subst, pathListSeparator(goos))
+	v := kv[len(pathVar)+1:]
+	return kv, v != orig
 }
 
-// isPathEnvPair reports whether the key=value pair s represents
-// the operating system's path variable.
-func isPathEnvPair(s string) bool {
-	// On Unix it's PATH.
-	// On Plan 9 it's path.
-	// On Windows it's pAtH case-insensitive.
-	if runtime.GOOS == "windows" {
-		return len(s) >= 5 && strings.EqualFold(s[:5], "PATH=")
-	}
-	if runtime.GOOS == "plan9" {
-		return strings.HasPrefix(s, "path=")
-	}
-	return strings.HasPrefix(s, "PATH=")
-}
-
-// On Unix it's PATH.
-// On Plan 9 it's path.
-// On Windows it's pAtH case-insensitive.
-func pathEnvVar() string {
-	if runtime.GOOS == "plan9" {
-		return "path"
-	}
-	return "PATH"
-}
-
-func pathSeparator() string {
-	if runtime.GOOS == "plan9" {
+func pathListSeparator(goos string) string {
+	switch goos {
+	case "windows":
+		return ";"
+	case "plan9":
 		return "\x00"
-	} else {
-		return string(filepath.ListSeparator)
+	default:
+		return ":"
 	}
 }
 
