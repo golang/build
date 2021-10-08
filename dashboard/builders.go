@@ -2502,12 +2502,6 @@ func init() {
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
-			case "tools", "tour", "website":
-				// The PATH on this builder is misconfigured in a way that causes
-				// any test that executes a 'go' command as a subprocess to fail.
-				// (https://golang.org/issue/31567).
-				// Skip affected repos until the builder is fixed.
-				return false
 			case "vulndb", "vuln":
 				// vulndb currently uses a dependency which does not build cleanly
 				// on aix-ppc64. Until that issue is resolved, skip vulndb on
