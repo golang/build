@@ -9,7 +9,7 @@ gcloud compute instances delete vcs-test --zone=us-central1-a
 gcloud compute instances create vcs-test --zone=us-central1-a \
 	--address vcs-test \
 	--image-project debian-cloud --image-family debian-9 \
-	--machine-type n1-standard-1 \
+	--machine-type e2-standard-1 \
 	--service-account=vcs-test@symbolic-datum-552.iam.gserviceaccount.com \
 	--scopes cloud-platform \
 	--tags=allow-ssh,http-server,https-server

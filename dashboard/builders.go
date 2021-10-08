@@ -133,15 +133,15 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-stretch": &HostConfig{
 		Notes:           "Debian Stretch",
 		ContainerImage:  "linux-x86-stretch:latest",
-		machineType:     "n1-standard-4", // 4 vCPUs, 15 GB mem
+		machineType:     "e2-standard-4", // 4 vCPUs, 16 GB mem
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
 	"host-linux-stretch-morecpu": &HostConfig{
-		Notes:           "Debian Stretch, but on n1-highcpu-16",
+		Notes:           "Debian Stretch, but on e2-highcpu-16",
 		ContainerImage:  "linux-x86-stretch:latest",
-		machineType:     "n1-highcpu-16", // 16 vCPUs, 14.4 GB mem
+		machineType:     "e2-highcpu-16", // 16 vCPUs, 16 GB mem
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
@@ -237,7 +237,7 @@ var Hosts = map[string]*HostConfig{
 	"host-openbsd-amd64-64": &HostConfig{
 		VMImage:            "openbsd-amd64-64-190129a",
 		MinCPUPlatform:     "Intel Skylake", // for better TSC? Maybe? see Issue 29223. builds faster at least.
-		machineType:        "n1-highcpu-4",
+		machineType:        "e2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
 		Notes:              "OpenBSD 6.4 with hw.smt=1; GCE VM is built from script in build/env/openbsd-amd64",
@@ -245,7 +245,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-openbsd-386-64": &HostConfig{
 		VMImage:            "openbsd-386-64",
-		machineType:        "n1-highcpu-4",
+		machineType:        "e2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
 		Notes:              "OpenBSD 6.4; GCE VM is built from script in build/env/openbsd-386",
@@ -253,7 +253,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-openbsd-amd64-68": &HostConfig{
 		VMImage:            "openbsd-amd64-68-v3", // v3 adds 009_exit syspatch; see golang.org/cl/278732.
-		machineType:        "n1-highcpu-4",
+		machineType:        "e2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
 		Notes:              "OpenBSD 6.8 (with 009_exit syspatch); GCE VM is built from script in build/env/openbsd-amd64",
@@ -261,7 +261,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-openbsd-386-68": &HostConfig{
 		VMImage:            "openbsd-386-68-v3", // v3 adds 009_exit syspatch; see golang.org/cl/278732.
-		machineType:        "n1-highcpu-4",
+		machineType:        "e2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
 		Notes:              "OpenBSD 6.8 (with 009_exit syspatch); GCE VM is built from script in build/env/openbsd-386",
@@ -288,7 +288,7 @@ var Hosts = map[string]*HostConfig{
 	"host-freebsd-11_2": &HostConfig{
 		VMImage:            "freebsd-amd64-112",
 		Notes:              "FreeBSD 11.2; GCE VM is built from script in build/env/freebsd-amd64",
-		machineType:        "n1-highcpu-4",
+		machineType:        "e2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
@@ -296,7 +296,7 @@ var Hosts = map[string]*HostConfig{
 	"host-freebsd-11_4": &HostConfig{
 		VMImage:            "freebsd-amd64-114",
 		Notes:              "FreeBSD 11.4; GCE VM is built from script in build/env/freebsd-amd64",
-		machineType:        "n1-highcpu-4",
+		machineType:        "e2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
@@ -304,15 +304,15 @@ var Hosts = map[string]*HostConfig{
 	"host-freebsd-12_2": &HostConfig{
 		VMImage:            "freebsd-amd64-122",
 		Notes:              "FreeBSD 12.2; GCE VM is built from script in build/env/freebsd-amd64",
-		machineType:        "n1-highcpu-4",
+		machineType:        "e2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-freebsd-12_2-big": &HostConfig{
 		VMImage:            "freebsd-amd64-122",
-		Notes:              "Same as host-freebsd-12_2, but on n1-highcpu-16",
-		machineType:        "n1-highcpu-16", // 16 vCPUs, 14.4 GB mem
+		Notes:              "Same as host-freebsd-12_2, but on e2-highcpu-16",
+		machineType:        "e2-highcpu-16", // 16 vCPUs, 16 GB mem
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
@@ -320,7 +320,7 @@ var Hosts = map[string]*HostConfig{
 	"host-netbsd-amd64-9_0": &HostConfig{
 		VMImage:            "netbsd-amd64-9-0-2019q4",
 		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-amd64",
-		machineType:        "n1-highcpu-4",
+		machineType:        "e2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64-2da6b33.tar.gz",
 		SSHUsername:        "root",
@@ -328,7 +328,7 @@ var Hosts = map[string]*HostConfig{
 	"host-netbsd-386-9_0": &HostConfig{
 		VMImage:            "netbsd-i386-9-0-2019q4",
 		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-386",
-		machineType:        "n1-highcpu-4",
+		machineType:        "e2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-386-0b3b511.tar.gz",
 		SSHUsername:        "root",
@@ -390,57 +390,34 @@ var Hosts = map[string]*HostConfig{
 		Notes:              "Plan 9 from 0intro; GCE VM is built from script in build/env/plan9-386",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.plan9-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-plan9-386.tar.gz",
-
-		// We *were* using n1-standard-1 because Plan 9 can only
-		// reliably use a single CPU. Using 2 or 4 and we see
-		// test failures. See:
-		//    https://golang.org/issue/8393
-		//    https://golang.org/issue/9491
-		// n1-standard-1 has 3.6 GB of memory which WAS (see below)
-		// overkill (userspace probably only sees 2GB anyway),
-		// but it's the cheapest option. And plenty to keep
-		// our ~250 MB of inputs+outputs in its ramfs.
-		//
-		// But the docs says "For the n1 series of machine
-		// types, a virtual CPU is implemented as a single
-		// hyperthread on a 2.6GHz Intel Sandy Bridge Xeon or
-		// Intel Ivy Bridge Xeon (or newer) processor. This
-		// means that the n1-standard-2 machine type will see
-		// a whole physical core."
-		//
-		// ... so we used n1-highcpu-2 (1.80 RAM, still
-		// plenty), just so we can get 1 whole core for the
-		// single-core Plan 9. It will see 2 virtual cores and
-		// only use 1, but we hope that 1 will be more powerful
-		// and we'll stop timing out on tests.
-		machineType: "n1-highcpu-4",
-		env:         []string{"GO_TEST_TIMEOUT_SCALE=3"},
+		machineType:        "e2-highcpu-4",
+		env:                []string{"GO_TEST_TIMEOUT_SCALE=3"},
 	},
 	"host-windows-amd64-2008": &HostConfig{
 		VMImage:            "windows-amd64-server-2008r2-v7",
-		machineType:        "n1-highcpu-4", // 4 vCPUs, 3.6 GB mem
+		machineType:        "e2-highcpu-4", // 4 vCPUs, 4 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2012": &HostConfig{
 		VMImage:            "windows-amd64-server-2012r2-v7",
-		machineType:        "n1-highcpu-4", // 4 vCPUs, 3.6 GB mem
+		machineType:        "e2-highcpu-4", // 4 vCPUs, 4 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2016": &HostConfig{
 		VMImage:            "windows-amd64-server-2016-v7",
-		machineType:        "n1-highcpu-4", // 4 vCPUs, 3.6 GB mem
+		machineType:        "e2-highcpu-4", // 4 vCPUs, 4 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2016-big": &HostConfig{
-		Notes:              "Same as host-windows-amd64-2016, but on n1-highcpu-16",
+		Notes:              "Same as host-windows-amd64-2016, but on e2-highcpu-16",
 		VMImage:            "windows-amd64-server-2016-v7",
-		machineType:        "n1-highcpu-16", // 16 vCPUs, 14.4 GB mem
+		machineType:        "e2-highcpu-16", // 16 vCPUs, 16 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
@@ -1306,9 +1283,9 @@ func (c *HostConfig) MachineType() string {
 		// so their /workdir tmpfs can be larger. The COS
 		// image has no swap, so we want to make sure the
 		// /workdir fits completely in memory.
-		return "n1-standard-4" // 4 vCPUs, 15 GB mem
+		return "e2-standard-4" // 4 vCPUs, 16 GB mem
 	}
-	return "n1-highcpu-2"
+	return "e2-highcpu-2"
 }
 
 // IsEC2 returns true if the machine type is an EC2 arm64 type.
