@@ -321,6 +321,11 @@ var gcePool = &GCEBuildlet{}
 
 var _ Buildlet = (*GCEBuildlet)(nil)
 
+// maxInstances is a temporary hack because we can't get buildlets to boot
+// without IPs, and we only have 200 IP addresses.
+// TODO(bradfitz): remove this once fixed.
+const maxInstances = 190
+
 // GCEBuildlet manages a pool of GCE buildlets.
 type GCEBuildlet struct {
 	mu sync.Mutex // guards all following
@@ -332,6 +337,7 @@ type GCEBuildlet struct {
 	instLeft  int // dead-reckoning instances remain
 	instUsage int
 	cpuUsage  int
+	addrUsage int
 	inst      map[string]time.Time // GCE VM instance name -> creationTime
 }
 
@@ -359,6 +365,8 @@ func (p *GCEBuildlet) pollQuota() {
 		case "INSTANCES":
 			p.instLeft = int(quota.Limit) - int(quota.Usage)
 			p.instUsage = int(quota.Usage)
+		case "IN_USE_ADDRESSES":
+			p.addrUsage = int(quota.Usage)
 		}
 	}
 }
@@ -511,7 +519,7 @@ func (p *GCEBuildlet) awaitVMCountQuota(ctx context.Context, numCPU int) error {
 //
 // precondition: p.mu must be held.
 func (p *GCEBuildlet) haveQuotaLocked(numCPU int) bool {
-	return p.cpuLeft >= numCPU && p.instLeft >= 1
+	return p.cpuLeft >= numCPU && p.instLeft >= 1 && len(p.inst) < maxInstances && p.addrUsage < maxInstances
 }
 
 func (p *GCEBuildlet) tryAllocateQuota(numCPU int) bool {
@@ -524,6 +532,7 @@ func (p *GCEBuildlet) tryAllocateQuota(numCPU int) bool {
 		p.cpuUsage += numCPU
 		p.cpuLeft -= numCPU
 		p.instLeft--
+		p.addrUsage++
 		return true
 	}
 	return false
