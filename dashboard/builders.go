@@ -623,7 +623,7 @@ var Hosts = map[string]*HostConfig{
 		IsReverse:   true,
 		ExpectNum:   3,
 		env: []string{
-			"GOROOT_BOOTSTRAP=/var/mobile/go-ios-arm64-bootstrap",
+			"GOROOT_BOOTSTRAP=/var/root/go-ios-arm64-bootstrap",
 		},
 	},
 	"host-android-arm64-corellium-android": &HostConfig{
