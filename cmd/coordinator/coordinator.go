@@ -2322,7 +2322,9 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 		return nil, err
 	}
 
-	if st.IsSubrepo() {
+	if st.conf.RunBench {
+		remoteErr, err = st.runBenchmarkTests()
+	} else if st.IsSubrepo() {
 		remoteErr, err = st.runSubrepoTests()
 	} else {
 		remoteErr, err = st.runTests(st.getHelpers())
@@ -2873,6 +2875,50 @@ func moduleProxy() string {
 	// once we migrate symbolic-datum-552 off a Legacy VPC network to the modern
 	// scheme that supports internal static IPs.
 	return "http://" + pool.NewGCEConfiguration().GKENodeHostname() + ":30157"
+}
+
+// runBenchmarkTests runs benchmarks from x/benchmarks when RunBench is set.
+func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
+	if st.SubName != "benchmarks" {
+		return nil, fmt.Errorf("benchmark tests only supported in x/benchmarks")
+	}
+
+	st.LogEventTime("fetching_subrepo", st.SubName)
+
+	workDir, err := st.bc.WorkDir(st.ctx)
+	if err != nil {
+		err = fmt.Errorf("error discovering workdir for helper %s: %v", st.bc.IPPort(), err)
+		return nil, err
+	}
+	goroot := st.conf.FilePathJoin(workDir, "go")
+	gopath := st.conf.FilePathJoin(workDir, "gopath")
+	repoPath := importPathOfRepo(st.SubName)
+
+	// Check out the provided sub-repo to the buildlet's workspace so we
+	// can run scripts from the repo.
+	err = buildgo.FetchSubrepo(st.ctx, st, st.bc, st.SubName, st.SubRev, repoPath)
+	if err != nil {
+		return nil, err
+	}
+
+	sp := st.CreateSpan("running_subrepo_tests", st.SubName)
+	defer func() { sp.Done(err) }()
+
+	env := append(st.conf.Env(),
+		"GOROOT="+goroot,
+		"GOPATH="+gopath,
+		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
+	)
+	env = append(env, st.conf.ModulesEnv(st.SubName)...)
+
+	return st.bc.Exec(st.ctx, "go/bin/go", buildlet.ExecOpts{
+		Debug:    true, // make buildlet print extra debug in output for failures
+		Output:   st,
+		Dir:      "gopath/src/" + repoPath,
+		ExtraEnv: env,
+		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+		Args:     []string{"run", repoPath + "/cmd/bench"},
+	})
 }
 
 var errBuildletsGone = errors.New("runTests: dist test failed: all buildlets had network errors or timeouts, yet tests remain")

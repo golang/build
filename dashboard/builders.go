@@ -781,6 +781,10 @@ type BuildConfig struct {
 	//
 	buildsRepo func(repo, branch, goBranch string) bool
 
+	// RunBench enables benchmarking of the toolchain using x/benchmarks.
+	// This only applies when building x/benchmarks.
+	RunBench bool
+
 	// MinimumGoVersion optionally specifies the minimum Go version
 	// this builder is allowed to use. It can be useful for skipping
 	// builders that are too new and no longer support some supported
