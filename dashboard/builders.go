@@ -939,40 +939,6 @@ func (c *BuildConfig) ModulesEnv(repo string) (env []string) {
 	return env
 }
 
-// ShouldTestPackageInGOPATHMode is used to control whether the package
-// with the specified import path should be tested in GOPATH mode.
-//
-// When running tests for all golang.org/* repositories in GOPATH mode,
-// this method is called repeatedly with the full import path of each
-// package that is found and is being considered for testing in GOPATH
-// mode. It's not used and has no effect on import paths in the main
-// "go" repository. It has no effect on tests done in module mode.
-//
-// When considering making changes here, keep the release policy in mind:
-//
-// 	https://golang.org/doc/devel/release.html#policy
-//
-func (*BuildConfig) ShouldTestPackageInGOPATHMode(importPath string) bool {
-	if importPath == "golang.org/x/tools/gopls" ||
-		strings.HasPrefix(importPath, "golang.org/x/tools/gopls/") {
-		// Don't test golang.org/x/tools/gopls/... in GOPATH mode.
-		return false
-	}
-	if importPath == "golang.org/x/net/http2/h2demo" {
-		// Don't test golang.org/x/net/http2/h2demo in GOPATH mode.
-		//
-		// It was never tested before golang.org/issue/34361 because it
-		// had a +build h2demo constraint. But that build constraint is
-		// being removed, so explicitly skip testing it in GOPATH mode.
-		//
-		// The package is supported only in module mode now, since
-		// it requires third-party dependencies.
-		return false
-	}
-	// Test everything else in GOPATH mode as usual.
-	return true
-}
-
 func (c *BuildConfig) IsReverse() bool { return c.HostConfig().IsReverse }
 
 func (c *BuildConfig) IsContainer() bool { return c.HostConfig().IsContainer() }

@@ -733,33 +733,6 @@ func TestShouldRunDistTest(t *testing.T) {
 	}
 }
 
-func TestShouldTestPackageInGOPATHMode(t *testing.T) {
-	// This function doesn't change behavior depending on the builder
-	// at this time, so just use a common one.
-	bc, ok := Builders["linux-amd64"]
-	if !ok {
-		t.Fatal("unknown builder")
-	}
-
-	tests := []struct {
-		importPath string
-		want       bool
-	}{
-		{"golang.org/x/image/bmp", true},
-		{"golang.org/x/tools/go/ast/astutil", true},
-		{"golang.org/x/tools/go/packages", true},
-		{"golang.org/x/tools", true}, // Three isn't a package there, but if there was, it should be tested.
-		{"golang.org/x/tools/gopls", false},
-		{"golang.org/x/tools/gopls/internal/foobar", false},
-	}
-	for _, tt := range tests {
-		got := bc.ShouldTestPackageInGOPATHMode(tt.importPath)
-		if got != tt.want {
-			t.Errorf("ShouldTestPackageInGOPATHMode(%q) = %v; want %v", tt.importPath, got, tt.want)
-		}
-	}
-}
-
 func TestSlowBotAliases(t *testing.T) {
 	for term, name := range slowBotAliases {
 		if name == "" {
