@@ -403,8 +403,8 @@ func main() {
 		// buildlet so it is possible to run local builds by starting a
 		// local reverse buildlet.
 		dashboard.Builders["linux-amd64"] = &dashboard.BuildConfig{
-			Name:       "linux-amd64",
-			HostType:   "host-linux-amd64-localdev",
+			Name:     "linux-amd64",
+			HostType: "host-linux-amd64-localdev",
 		}
 	}
 
@@ -463,7 +463,7 @@ func main() {
 		if *mode == "dev" {
 			return
 		}
-		var handler http.Handler = httpToHTTPSRedirector{}
+		var handler http.Handler = httpRouter{}
 		if autocertManager != nil {
 			handler = autocertManager.HTTPHandler(handler)
 		}
@@ -548,17 +548,6 @@ func addWorkDetail(work buildgo.BuilderRev, detail *commitDetail) {
 		return
 	}
 	st.start()
-}
-
-// httpToHTTPSRedirector redirects all requests from http to https.
-type httpToHTTPSRedirector struct{}
-
-func (httpToHTTPSRedirector) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set("Connection", "close")
-	u := *req.URL
-	u.Scheme = "https"
-	u.Host = req.Host
-	http.Redirect(w, req, u.String(), http.StatusMovedPermanently)
 }
 
 func stagingClusterBuilders() map[string]*dashboard.BuildConfig {

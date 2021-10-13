@@ -35,8 +35,8 @@ var defaultOptions = &Options{
 	Addr: "localhost:6343",
 }
 
-// ListenAndServe serves the given handler by HTTPS (and HTTP, redirecting to
-// HTTPS) using the provided options.
+// ListenAndServe serves the given handler by HTTPS and HTTP using the
+// provided options.
 //
 // ListenAndServe always returns a non-nil error.
 func ListenAndServe(handler http.Handler, opt *Options) error {
@@ -54,9 +54,8 @@ func ListenAndServe(handler http.Handler, opt *Options) error {
 		return fmt.Errorf("http.Serve = %v", err)
 	}
 
-	// handler is served primarily via HTTPS, so just redirect HTTP to HTTPS.
 	redirect := &http.Server{
-		Handler: http.HandlerFunc(redirectToHTTPS),
+		Handler: handler,
 	}
 	errc := make(chan error)
 	go func() {

@@ -208,16 +208,6 @@ func main() {
 		}
 	}
 
-	var ln net.Listener
-	var err error
-	if !*syncQuit && !*initQuit {
-		ln, err = net.Listen("tcp", *listen)
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Printf("Listening on %v", ln.Addr())
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	t0 := time.Now()
@@ -287,13 +277,7 @@ func main() {
 	if *genMut {
 		go func() { errc <- fmt.Errorf("Corpus.SyncLoop = %v", corpus.SyncLoop(ctx)) }()
 	}
-	if ln != nil {
-		var handler http.Handler = http.DefaultServeMux
-		if autocertManager != nil {
-			handler = autocertManager.HTTPHandler(handler)
-		}
-		go func() { errc <- fmt.Errorf("http.Serve = %v", http.Serve(ln, handler)) }()
-	}
+	go func() { errc <- http.ListenAndServe(*listen, nil) }()
 	if *autocertDomain != "" {
 		go func() { errc <- serveAutocertTLS() }()
 	}

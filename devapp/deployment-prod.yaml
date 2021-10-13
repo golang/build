@@ -37,3 +37,35 @@ spec:
           limits:
             memory: "8Gi"
             ephemeral-storage: "32Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prod
+  name: devapp
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
+    - port: 443
+      targetPort: 443
+      name: https
+  selector:
+    app: devapp
+  type: LoadBalancer
+  loadBalancerIP: 35.188.206.122
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prod
+  name: devapp-internal
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
+  selector:
+    app: devapp
+  type: ClusterIP

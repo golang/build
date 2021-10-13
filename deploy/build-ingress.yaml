@@ -1,0 +1,119 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: prod
+  name: build-ingress
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: ingress
+    networking.gke.io/managed-certificates: dev-test-cert,build-cert,dev-cert,gerritbot-cert,maintner-cert
+    # Legacy Let's Encrypt certs.
+    ingress.gcp.kubernetes.io/pre-shared-cert: build-golang-org,build-golang-org-rsa,dev-golang-org,dev-golang-org-rsa,gerritbot-golang-org,gerritbot-golang-org-rsa,maintner-golang-org,maintner-golang-org-rsa
+    kubernetes.io/ingress.class: "gce"
+    networking.gke.io/v1beta1.FrontendConfig: build-ingress-frontend
+spec:
+  rules:
+  - host: dev-test.golang.org
+    http:
+      paths:
+      - pathType: ImplementationSpecific
+        path: /*
+        backend:
+          service:
+            name: devapp-internal
+            port:
+              number: 80
+  - host: build.golang.org
+    http:
+      paths:
+      - pathType: ImplementationSpecific
+        path: /*
+        backend:
+          service:
+            name: coordinator-internal
+            port:
+              number: 80
+  - host: dev.golang.org
+    http:
+      paths:
+      - pathType: ImplementationSpecific
+        path: /*
+        backend:
+          service:
+            name: devapp-internal
+            port:
+              number: 80
+  - host: gerritbot.golang.org
+    http:
+      paths:
+      - pathType: ImplementationSpecific
+        path: /*
+        backend:
+          service:
+            name: gerritbot-internal
+            port:
+              number: 80
+  - host: maintner.golang.org
+    http:
+      paths:
+      - pathType: ImplementationSpecific
+        path: /*
+        backend:
+          service:
+            name: maintner-internal
+            port:
+              number: 80
+---
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  namespace: prod
+  name: build-ingress-frontend
+spec:
+  redirectToHttps:
+    enabled: true
+    responseCodeName: FOUND
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  namespace: prod
+  name: dev-test-cert
+spec:
+  domains:
+    - dev-test.golang.org
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  namespace: prod
+  name: build-cert
+spec:
+  domains:
+    - build.golang.org
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  namespace: prod
+  name: dev-cert
+spec:
+  domains:
+    - dev.golang.org
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  namespace: prod
+  name: gerritbot-cert
+spec:
+  domains:
+    - gerritbot.golang.org
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  namespace: prod
+  name: maintner-cert
+spec:
+  domains:
+    - maintner.golang.org

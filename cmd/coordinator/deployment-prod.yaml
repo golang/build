@@ -30,3 +30,39 @@ spec:
           requests:
             cpu: "2"
             memory: "4Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prod
+  name: coordinator
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
+    - port: 443
+      targetPort: 443
+      name: https
+    - port: 2222
+      targetPort: 2222
+      name: ssh
+  selector:
+    app: coordinator
+  type: LoadBalancer
+  loadBalancerIP: 107.178.219.46
+  externalTrafficPolicy: Local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prod
+  name: coordinator-internal
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
+  selector:
+    app: coordinator
+  type: ClusterIP

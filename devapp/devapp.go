@@ -55,22 +55,8 @@ func main() {
 	}
 	go s.corpusUpdateLoop(ctx)
 
-	ln, err := net.Listen("tcp", *listen)
-	if err != nil {
-		log.Fatalf("Error listening on %s: %v", *listen, err)
-	}
-	log.Printf("Listening on %s", ln.Addr())
-
 	errc := make(chan error)
-	if ln != nil {
-		go func() {
-			handler := http.Handler(s)
-			if *autocertBucket != "" {
-				handler = http.HandlerFunc(redirectHTTP)
-			}
-			errc <- fmt.Errorf("http.Serve = %v", http.Serve(ln, handler))
-		}()
-	}
+	go func() { errc <- http.ListenAndServe(*listen, http.Handler(s)) }()
 	if *autocertBucket != "" {
 		go func() { errc <- serveAutocertTLS(s, *autocertBucket) }()
 	}
@@ -79,18 +65,6 @@ func main() {
 	}
 
 	log.Fatal(<-errc)
-}
-
-func redirectHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/healthz" {
-		handleHealthz(w, r)
-		return
-	}
-	if r.TLS != nil || r.Host == "" {
-		http.NotFound(w, r)
-		return
-	}
-	http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusFound)
 }
 
 func serveDevTLS(h http.Handler, port int) error {
