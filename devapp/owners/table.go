@@ -171,7 +171,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mvdan},
 	},
 	"go/src/cmd/go": {
-		Primary:   []Owner{bcmills, jayconrod, matloob},
+		Primary:   []Owner{bcmills, matloob},
 		Secondary: []Owner{rsc, iant},
 	},
 	"go/src/cmd/gofmt": {
@@ -352,7 +352,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{khr, martisch},
 	},
 	"go/src/internal/fuzz": {
-		Primary: []Owner{katie, roland, jayconrod},
+		Primary: []Owner{katie, roland},
 	},
 	"go/src/internal/profile": {
 		Primary: []Owner{cherryyz},
@@ -596,7 +596,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{hyangah},
 	},
 	"mod": {
-		Primary: []Owner{bcmills, jayconrod, matloob},
+		Primary: []Owner{bcmills, matloob},
 	},
 	"net": {
 		Primary: []Owner{neild, iant},
@@ -654,7 +654,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/cmd/auth": {
 		Primary:   []Owner{bcmills},
-		Secondary: []Owner{jayconrod, matloob},
+		Secondary: []Owner{matloob},
 	},
 	"tools/cmd/godoc": {
 		Primary:   []Owner{dmitshur},
@@ -685,7 +685,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{josharian, dmitshur},
 	},
 	"tools/go/buildutil": {
-		Primary:   []Owner{bcmills, jayconrod, matloob},
+		Primary:   []Owner{bcmills, matloob},
 		Secondary: []Owner{dmitshur},
 	},
 	"tools/go/callgraph": {
@@ -736,7 +736,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/go/vcs": {
 		Primary:   []Owner{dmitshur},
-		Secondary: []Owner{bcmills, jayconrod, matloob},
+		Secondary: []Owner{bcmills, matloob},
 	},
 	"tools/godoc": {
 		Primary: []Owner{dmitshur},
@@ -754,7 +754,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/internal/apidiff": {
 		Primary:   []Owner{jba},
-		Secondary: []Owner{jayconrod, matloob, bcmills},
+		Secondary: []Owner{matloob, bcmills},
 	},
 	"tools/internal/fastwalk": {
 		Primary: []Owner{heschi},
@@ -828,7 +828,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{toolsTeam},
 	},
 	"tools/txtar": {
-		Primary: []Owner{jayconrod, bcmills, matloob},
+		Primary: []Owner{bcmills, matloob},
 	},
 	"tools": {
 		Primary: []Owner{toolsTeam},
