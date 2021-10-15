@@ -149,6 +149,7 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-stretch-vmx": &HostConfig{
 		Notes:           "Debian Stretch w/ Nested Virtualization (VMX CPU bit) enabled, for testing",
 		ContainerImage:  "linux-x86-stretch:latest",
+		machineType:     "n2-highcpu-4", // e2 instances do not support MinCPUPlatform or NestedVirt.
 		NestedVirt:      true,
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
@@ -237,7 +238,7 @@ var Hosts = map[string]*HostConfig{
 	"host-openbsd-amd64-64": &HostConfig{
 		VMImage:            "openbsd-amd64-64-190129a",
 		MinCPUPlatform:     "Intel Skylake", // for better TSC? Maybe? see Issue 29223. builds faster at least.
-		machineType:        "e2-highcpu-4",
+		machineType:        "n2-highcpu-4",  // e2 instances do not support MinCPUPlatform or NestedVirt.
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
 		Notes:              "OpenBSD 6.4 with hw.smt=1; GCE VM is built from script in build/env/openbsd-amd64",
@@ -721,7 +722,7 @@ type HostConfig struct {
 	HermeticReverse bool // whether reverse buildlet has fresh env per conn
 
 	// Container image options, if ContainerImage != "":
-	NestedVirt    bool   // container requires VMX nested virtualization
+	NestedVirt    bool   // container requires VMX nested virtualization. e2 and n2d instances are not supported.
 	KonletVMImage string // optional VM image (containing konlet) to use instead of default
 
 	// Optional base env. GOROOT_BOOTSTRAP should go here if the buildlet
@@ -1277,6 +1278,11 @@ func (c *BuildConfig) GorootFinal() string {
 func (c *HostConfig) MachineType() string {
 	if v := c.machineType; v != "" {
 		return v
+	}
+	if c.NestedVirt {
+		// e2 instances do not support nested virtualization, but n2
+		// instances do.
+		return "n2-standard-4" // 4 vCPUs, 16 GB mem
 	}
 	if c.IsContainer() {
 		// Set a higher default machine size for containers,
