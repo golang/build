@@ -237,8 +237,8 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-openbsd-amd64-64": &HostConfig{
 		VMImage:            "openbsd-amd64-64-190129a",
-		MinCPUPlatform:     "Intel Skylake", // for better TSC? Maybe? see Issue 29223. builds faster at least.
-		machineType:        "n2-highcpu-4",  // e2 instances do not support MinCPUPlatform or NestedVirt.
+		MinCPUPlatform:     "Intel Cascade Lake", // for better TSC? Maybe? see Issue 29223. builds faster at least.
+		machineType:        "n2-highcpu-4",       // e2 instances do not support MinCPUPlatform or NestedVirt.
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
 		Notes:              "OpenBSD 6.4 with hw.smt=1; GCE VM is built from script in build/env/openbsd-amd64",

@@ -75,7 +75,7 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 	minCPU := hconf.MinCPUPlatform
 	if hconf.IsContainer() {
 		if hconf.NestedVirt {
-			minCPU = "Cascade Lake" // n2 vms (which support NestedVirtualization) are either Ice Lake or Cascade Lake.
+			minCPU = "Intel Cascade Lake" // n2 vms (which support NestedVirtualization) are either Ice Lake or Cascade Lake.
 		}
 		if vm := hconf.ContainerVMImage(); vm != "" {
 			srcImage = "https://www.googleapis.com/compute/v1/projects/" + projectID + "/global/images/" + vm
