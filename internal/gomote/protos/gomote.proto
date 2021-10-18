@@ -1,0 +1,101 @@
+// Copyright 2021 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+syntax = "proto3";
+
+package protos;
+
+option go_package = "golang.org/x/build/internal/gomote/protos";
+
+// GomoteService can manage the lifecycle of gomote instances and interact with them.
+service GomoteService {
+  // Authenticate provides authentication information without any additonal action.
+  rpc Authenticate (AuthenticateRequest) returns (AuthenticateResponse) {}
+  // CreateInstance creates a gomote instance.
+  rpc CreateInstance (CreateInstanceRequest) returns (CreateInstanceResponse) {}
+  // DestroyInstance destroys a gomote instance.
+  rpc DestroyInstance (DestroyInstanceRequest) returns (DestroyInstanceResponse) {}
+  // ExecuteCommand executes a command on the gomote instance.
+  rpc ExecuteCommand (ExecuteCommandRequest) returns (stream ExecuteCommandResponse) {}
+  // InstanceAlive gives the liveness state of a gomote instance.
+  rpc InstanceAlive (InstanceAliveRequest) returns (InstanceAliveResponse) {}
+  // ListDirectory lists the contents of a directory on an gomote instance.
+  rpc ListDirectory (ListDirectoryRequest) returns (ListDirectoryResponse) {}
+  // ListInstances lists all of the live gomote instances owned by the caller.
+  rpc ListInstances (ListInstancesRequest) returns (ListInstancesResponse) {}
+  // ReadTGZ tars and zips a dicrectory which exists on the gomote instance.
+  rpc ReadTGZ (ReadTGZRequest) returns (stream ReadTGZResponse) {}
+  // RemoveDirectory removes a directory from the gomote instance.
+  rpc RemoveDirectory (RemoveDirectoryRequest) returns (RemoveDirectoryResponse) {}
+  // RetrieveSSHCredentials retrieves the SSH credentials for the specified gomote instance.
+  rpc RetrieveSSHCredentials (RetrieveSSHCredentialsRequest) returns (RetrieveSSHCredentialsResponse) {}
+  // WriteTGZ expands a tar and ziped file onto the file system of a gomote instance.
+  rpc WriteTGZ (stream WriteTGZRequest) returns (WriteTGZResponse) {}
+}
+
+// AuthenticateRequest specifies the data needed for an authentication request.
+message AuthenticateRequest {}
+
+// AuthenticateResponse contains authenticated user data.
+message AuthenticateResponse {}
+
+// CreateInstanceRequest specifies the data needed to create a gomote instance.
+message CreateInstanceRequest {}
+
+// CreateInstanceResponse contains data about a created gomote instance.
+message CreateInstanceResponse {}
+
+// DestroyInstanceRequest specifies the data needed to destroy a gomote instance.
+message DestroyInstanceRequest {}
+
+// DestroyInstanceResponse contains data about a destroyed gomote instance.
+message DestroyInstanceResponse {}
+
+// ExecuteCommandRequest specifies the data needed to execute a command on a gomote instance.
+message ExecuteCommandRequest {}
+
+// ExecuteCommandResponse contains data about the executed command.
+message ExecuteCommandResponse {}
+
+// InstanceAliveRequest specifies the data needed to check the liveness of a gomote instance.
+message InstanceAliveRequest {}
+
+// InstanceAliveResponse contains instance liveness state.
+message InstanceAliveResponse {}
+
+// ListDirectoryRequest specifies the data needed to list contents of a directory from a gomote instance.
+message ListDirectoryRequest {}
+
+// ListDirectoryResponse contains the directory listing of a gomote instance.
+message ListDirectoryResponse {}
+
+// ListInstancesRequest specifies the data needed to list the live gomote instances owned by the caller.
+message ListInstancesRequest {}
+
+// ListInstancesResponse contains the list of live gomote instances owned by the caller.
+message ListInstancesResponse {}
+
+// ReadTGZRequest specifies the data needed to retrieve a tar and zipped directory from a gomote instance.
+message ReadTGZRequest {}
+
+// ReadTGZResponse contains a tar and zipped directory from a gomote instance.
+message ReadTGZResponse {}
+
+// RemoveDirectoryRequest specifies the data needed to remove a directory from a gomote instance.
+message RemoveDirectoryRequest {}
+
+// RemoveDirectoryResponse contains the results from removing a directory from a gomote instance.
+message RemoveDirectoryResponse {}
+
+// RetrieveSSHCredentialsRequest specifies the data needed to retrieve SSH credentials for a gomote instance.
+message RetrieveSSHCredentialsRequest {}
+
+// RetrieveSSHCredentialsResponse contains SSH credentials for a gomote instance.
+message RetrieveSSHCredentialsResponse {}
+
+// WriteTGZRequest specifies the data needed to expand a tar and zipped file onto the file system of a gomote instance.
+message WriteTGZRequest {}
+
+// WriteTGZResponse contains the results from expanding a tar and zipped file onto the file system of a gomote instance.
+message WriteTGZResponse {}
