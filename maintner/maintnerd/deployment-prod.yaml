@@ -8,6 +8,8 @@ spec:
   selector:
     matchLabels:
       app: maintnerd
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:
@@ -35,9 +37,9 @@ spec:
         resources:
           requests:
             cpu: "1"
-            memory: "4Gi"
+            memory: "8Gi"
           limits:
-            memory: "6Gi"
+            memory: "12Gi"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
