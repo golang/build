@@ -422,9 +422,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("openbsd-amd64-68@go1.16", "go"), both},
 		{b("openbsd-amd64-68@go1.15", "go"), both},
 		{b("openbsd-amd64-68@go1.14", "go"), both},
-		{b("openbsd-amd64-64@go1.16", "go"), onlyPost},
-		{b("openbsd-amd64-64@go1.15", "go"), onlyPost},
-		{b("openbsd-amd64-64@go1.14", "go"), onlyPost},
 
 		// FreeBSD 12.2
 		{b("freebsd-amd64-12_2", "go"), both},
@@ -541,7 +538,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-386-12_2", "exp"), none},
 		{b("freebsd-amd64-11_4", "exp"), none},
 		{b("freebsd-amd64-12_2", "exp"), none},
-		{b("openbsd-amd64-64", "exp"), none},
 		{b("openbsd-amd64-68", "exp"), none},
 		{b("js-wasm", "exp"), none},
 

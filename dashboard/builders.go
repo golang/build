@@ -235,23 +235,6 @@ var Hosts = map[string]*HostConfig{
 		OwnerGithub: "bradfitz", // at home
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
 	},
-	"host-openbsd-amd64-64": &HostConfig{
-		VMImage:            "openbsd-amd64-64-190129a",
-		MinCPUPlatform:     "Intel Cascade Lake", // for better TSC? Maybe? see Issue 29223. builds faster at least.
-		machineType:        "n2-highcpu-4",       // e2 instances do not support MinCPUPlatform or NestedVirt.
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
-		Notes:              "OpenBSD 6.4 with hw.smt=1; GCE VM is built from script in build/env/openbsd-amd64",
-		SSHUsername:        "gopher",
-	},
-	"host-openbsd-386-64": &HostConfig{
-		VMImage:            "openbsd-386-64",
-		machineType:        "e2-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
-		Notes:              "OpenBSD 6.4; GCE VM is built from script in build/env/openbsd-386",
-		SSHUsername:        "gopher",
-	},
 	"host-openbsd-amd64-68": &HostConfig{
 		VMImage:            "openbsd-amd64-68-v3", // v3 adds 009_exit syspatch; see golang.org/cl/278732.
 		machineType:        "e2-highcpu-4",
@@ -1900,17 +1883,6 @@ func init() {
 			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
-	})
-	addBuilder(BuildConfig{
-		Name:             "openbsd-amd64-64",
-		HostType:         "host-openbsd-amd64-64",
-		MinimumGoVersion: types.MajorMinor{1, 11},
-		distTestAdjust:   noTestDirAndNoReboot,
-	})
-	addBuilder(BuildConfig{
-		Name:           "openbsd-386-64",
-		HostType:       "host-openbsd-386-64",
-		distTestAdjust: noTestDirAndNoReboot,
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-68",
