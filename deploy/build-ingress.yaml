@@ -16,6 +16,13 @@ spec:
     http:
       paths:
       - pathType: ImplementationSpecific
+        path: /owners
+        backend:
+          service:
+            name: devapp-internal-iap
+            port:
+              number: 80
+      - pathType: ImplementationSpecific
         path: /*
         backend:
           service:
@@ -59,7 +66,7 @@ spec:
         path: /*
         backend:
           service:
-            name: maintner-internal
+            name: maintnerd-internal
             port:
               number: 80
 ---
@@ -72,6 +79,17 @@ spec:
   redirectToHttps:
     enabled: true
     responseCodeName: FOUND
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  namespace: prod
+  name: build-ingress-iap-backend
+spec:
+  iap:
+    enabled: true
+    oauthclientCredentials:
+      secretName: iap-oauth
 ---
 apiVersion: networking.gke.io/v1
 kind: ManagedCertificate
