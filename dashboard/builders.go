@@ -2168,6 +2168,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && branch == "master" && goBranch == "master"
 		},
+		KnownIssue: 48772,
 	})
 	addBuilder(BuildConfig{
 		Name:     "android-arm64-corellium",
@@ -2176,6 +2177,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && branch == "master" && goBranch == "master"
 		},
+		KnownIssue: 49048,
 	})
 	addBuilder(BuildConfig{
 		Name:     "android-arm-corellium",
@@ -2184,6 +2186,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && branch == "master" && goBranch == "master"
 		},
+		KnownIssue: 49048,
 		env: []string{
 			"CGO_ENABLED=1",
 			"GOARCH=arm",
