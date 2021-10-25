@@ -8,27 +8,22 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
-	"cloud.google.com/go/storage"
-	"golang.org/x/build/autocertcache"
 	"golang.org/x/build/internal/gitauth"
+	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
@@ -37,16 +32,11 @@ import (
 	"golang.org/x/build/maintner/maintnerd/maintapi"
 	"golang.org/x/build/repos"
 	"golang.org/x/crypto/acme/autocert"
-	"golang.org/x/net/http2"
 	"golang.org/x/time/rate"
 	grpc "grpc.go4.org"
 )
 
 var (
-	listen          = flag.String("listen", "localhost:6343", "listen address")
-	devTLSPort      = flag.Int("dev-tls-port", 0, "if non-zero, port number to run localhost self-signed TLS server")
-	autocertDomain  = flag.String("autocert", "", "if non-empty, listen on port 443 and serve a LetsEncrypt TLS cert on this domain")
-	autocertBucket  = flag.String("autocert-bucket", "", "if non-empty, Google Cloud Storage bucket to store LetsEncrypt cache in")
 	syncQuit        = flag.Bool("sync-and-quit", false, "sync once and quit; don't run a server")
 	initQuit        = flag.Bool("init-and-quit", false, "load the mutation log and quit; don't run a server")
 	verbose         = flag.Bool("verbose", false, "enable verbose debug output")
@@ -83,21 +73,6 @@ var autocertManager *autocert.Manager
 func main() {
 	flag.Parse()
 	ctx := context.Background()
-
-	if *autocertDomain != "" {
-		if *autocertBucket == "" {
-			log.Fatalf("using --autocert requires --autocert-bucket.")
-		}
-		sc, err := storage.NewClient(ctx)
-		if err != nil {
-			log.Fatalf("Creating autocert cache, storage.NewClient: %v", err)
-		}
-		autocertManager = &autocert.Manager{
-			Prompt:     autocert.AcceptTOS,
-			HostPolicy: autocert.HostWhitelist(*autocertDomain),
-			Cache:      autocertcache.NewGoogleCloudStorageCache(sc, *autocertBucket),
-		}
-	}
 
 	if *dataDir == "" {
 		*dataDir = filepath.Join(os.Getenv("HOME"), "var", "maintnerd")
@@ -273,19 +248,10 @@ func main() {
 `)
 	})
 
-	errc := make(chan error)
 	if *genMut {
-		go func() { errc <- fmt.Errorf("Corpus.SyncLoop = %v", corpus.SyncLoop(ctx)) }()
+		go func() { log.Fatalf("Corpus.SyncLoop = %v", corpus.SyncLoop(ctx)) }()
 	}
-	go func() { errc <- http.ListenAndServe(*listen, nil) }()
-	if *autocertDomain != "" {
-		go func() { errc <- serveAutocertTLS() }()
-	}
-	if *devTLSPort != 0 {
-		go func() { errc <- serveDevTLS(*devTLSPort) }()
-	}
-
-	log.Fatal(<-errc)
+	log.Fatalln(https.ListenAndServe(ctx, http.DefaultServeMux))
 }
 
 func setGoConfig() {
@@ -370,64 +336,6 @@ func getGithubToken(ctx context.Context) (string, error) {
 	}
 	token := f[1]
 	return token, nil
-}
-
-func serveDevTLS(port int) error {
-	ln, err := net.Listen("tcp", "localhost:"+strconv.Itoa(port))
-	if err != nil {
-		return err
-	}
-	defer ln.Close()
-	log.Printf("Serving self-signed TLS at https://%s", ln.Addr())
-	// Abuse httptest for its localhost TLS setup code:
-	ts := httptest.NewUnstartedServer(http.DefaultServeMux)
-	// Ditch the provided listener, replace with our own:
-	ts.Listener.Close()
-	ts.Listener = ln
-	ts.TLS = &tls.Config{
-		NextProtos:         []string{"h2", "http/1.1"},
-		InsecureSkipVerify: true,
-	}
-	ts.StartTLS()
-
-	select {}
-}
-
-func serveAutocertTLS() error {
-	if *autocertBucket == "" {
-		return fmt.Errorf("using --autocert requires --autocert-bucket.")
-	}
-	ln, err := net.Listen("tcp", ":443")
-	if err != nil {
-		return err
-	}
-	defer ln.Close()
-	config := &tls.Config{
-		GetCertificate: autocertManager.GetCertificate,
-		NextProtos:     []string{"h2", "http/1.1"},
-	}
-	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)
-	server := &http.Server{
-		Addr: ln.Addr().String(),
-	}
-	if err := http2.ConfigureServer(server, nil); err != nil {
-		log.Fatalf("http2.ConfigureServer: %v", err)
-	}
-	return server.Serve(tlsLn)
-}
-
-type tcpKeepAliveListener struct {
-	*net.TCPListener
-}
-
-func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
-	tc, err := ln.AcceptTCP()
-	if err != nil {
-		return
-	}
-	tc.SetKeepAlive(true)
-	tc.SetKeepAlivePeriod(3 * time.Minute)
-	return tc, nil
 }
 
 func syncProdToDevMutationLogs() {

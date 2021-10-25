@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha1"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -30,7 +29,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -53,7 +51,6 @@ import (
 	"cloud.google.com/go/errorreporting"
 	"cloud.google.com/go/storage"
 	"golang.org/x/build"
-	"golang.org/x/build/autocertcache"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/cmd/coordinator/internal/metrics"
@@ -63,6 +60,7 @@ import (
 	"golang.org/x/build/internal/buildstats"
 	"golang.org/x/build/internal/cloud"
 	"golang.org/x/build/internal/coordinator/pool"
+	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/singleflight"
 	"golang.org/x/build/internal/sourcecache"
@@ -72,7 +70,6 @@ import (
 	"golang.org/x/build/repos"
 	"golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
-	"golang.org/x/crypto/acme/autocert"
 	perfstorage "golang.org/x/perf/storage"
 	"golang.org/x/time/rate"
 )
@@ -123,7 +120,6 @@ var (
 	buildEnvName   = flag.String("env", "", "The build environment configuration to use. Not required if running on GCE.")
 	devEnableGCE   = flag.Bool("dev_gce", false, "Whether or not to enable the GCE pool when in dev mode. The pool is enabled by default in prod mode.")
 	devEnableEC2   = flag.Bool("dev_ec2", false, "Whether or not to enable the EC2 pool when in dev mode. The pool is enabled by default in prod mode.")
-	listenAddr     = flag.String("listen", defaultListenAddr, "The address for the web server to listen on. In dev mode, this defaults to localhost:8119. To listen on external interfaces, pass -listen=:8119")
 	shouldRunBench = flag.Bool("run_bench", false, "Whether or not to run benchmarks on trybot commits. Override by GCE project attribute 'farmer-run-bench'.")
 	perfServer     = flag.String("perf_server", "", "Upload benchmark results to `server`. Overrides buildenv default for testing.")
 )
@@ -161,76 +157,6 @@ const (
 var testFiles = map[string]string{
 	"farmer-cert.pem": build.DevCoordinatorCA,
 	"farmer-key.pem":  build.DevCoordinatorKey,
-}
-
-func listenAndServeTLS() {
-	addr := *listenAddr
-	if *mode == "dev" && addr == defaultListenAddr {
-		addr = defaultListenAddrDev
-	}
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		log.Fatalf("net.Listen(%s): %v", addr, err)
-	}
-	serveTLS(ln)
-}
-
-func serveTLS(ln net.Listener) {
-	// Support HTTP/2 for gRPC handlers.
-	config := &tls.Config{
-		NextProtos: []string{"http/1.1", "h2"},
-	}
-
-	if autocertManager != nil {
-		config.GetCertificate = autocertManager.GetCertificate
-	} else {
-		certPEM, err := pool.ReadGCSFile("farmer-cert.pem")
-		if err != nil {
-			log.Printf("cannot load TLS cert, skipping https: %v", err)
-			return
-		}
-		keyPEM, err := pool.ReadGCSFile("farmer-key.pem")
-		if err != nil {
-			log.Printf("cannot load TLS key, skipping https: %v", err)
-			return
-		}
-		cert, err := tls.X509KeyPair(certPEM, keyPEM)
-		if err != nil {
-			log.Printf("bad TLS cert: %v", err)
-			return
-		}
-		config.Certificates = []tls.Certificate{cert}
-	}
-
-	var h http.Handler = httpRouter{}
-	if *mode == "dev" {
-		// Use hostPathHandler in local development mode (only) to improve
-		// convenience of testing multiple domains that coordinator serves.
-		h = hostPathHandler(h)
-	}
-	server := &http.Server{
-		Addr:    ln.Addr().String(),
-		Handler: h,
-	}
-	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, config)
-	log.Printf("Coordinator serving on: %v", tlsLn.Addr())
-	if err := server.Serve(tlsLn); err != nil {
-		log.Fatalf("serve https: %v", err)
-	}
-}
-
-type tcpKeepAliveListener struct {
-	*net.TCPListener
-}
-
-func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
-	tc, err := ln.AcceptTCP()
-	if err != nil {
-		return
-	}
-	tc.SetKeepAlive(true)
-	tc.SetKeepAlivePeriod(3 * time.Minute)
-	return tc, nil
 }
 
 // httpRouter is the coordinator's mux, routing traffic to one of
@@ -328,13 +254,11 @@ func (r *linkRewriter) Flush() {
 	r.buf = nil
 }
 
-// autocertManager is non-nil if LetsEncrypt is in use.
-var autocertManager *autocert.Manager
-
 // grpcServer is a shared gRPC server. It is global, as it needs to be used in places that aren't factored otherwise.
 var grpcServer = grpc.NewServer()
 
 func main() {
+	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
 
 	if Version == "" && *mode == "dev" {
@@ -367,22 +291,6 @@ func main() {
 	}
 
 	gce := pool.NewGCEConfiguration()
-
-	if bucket := gce.BuildEnv().AutoCertCacheBucket; bucket != "" {
-		if gce.StorageClient() == nil {
-			log.Fatalf("expected storage client to be non-nil")
-		}
-		autocertManager = &autocert.Manager{
-			Prompt: autocert.AcceptTOS,
-			HostPolicy: func(_ context.Context, host string) error {
-				if !strings.HasSuffix(host, ".golang.org") {
-					return fmt.Errorf("bogus host %q", host)
-				}
-				return nil
-			},
-			Cache: autocertcache.NewGoogleCloudStorageCache(gce.StorageClient(), bucket),
-		}
-	}
 
 	// TODO(evanbrown: disable kubePool if init fails)
 	err = pool.InitKube(monitorGitMirror)
@@ -459,20 +367,6 @@ func main() {
 	http.Handle("/dashboard", dashV2)
 	http.Handle("/buildlet/create", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletCreate)))
 	http.Handle("/buildlet/list", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletList)))
-	go func() {
-		if *mode == "dev" {
-			return
-		}
-		var handler http.Handler = httpRouter{}
-		if autocertManager != nil {
-			handler = autocertManager.HTTPHandler(handler)
-		}
-		err := http.ListenAndServe(":80", handler)
-		if err != nil {
-			log.Fatalf("http.ListenAndServe:80: %v", err)
-		}
-	}()
-
 	if *mode == "dev" {
 		// TODO(crawshaw): do more in dev mode
 		gce.BuildletPool().SetEnabled(*devEnableGCE)
@@ -494,10 +388,15 @@ func main() {
 		// TODO(cmang): gccgo will need its own findWorkLoop
 	}
 
-	go listenAndServeTLS()
 	go listenAndServeSSH(sc) // ssh proxy to remote buildlets; remote.go
 
-	select {}
+	var h http.Handler = httpRouter{}
+	if *mode == "dev" {
+		// Use hostPathHandler in local development mode (only) to improve
+		// convenience of testing multiple domains that coordinator serves.
+		h = hostPathHandler(h)
+	}
+	log.Fatalln(https.ListenAndServe(context.Background(), h))
 }
 
 // ignoreAllNewWork, when true, prevents addWork from doing anything.

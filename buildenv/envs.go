@@ -126,11 +126,6 @@ type Environment struct {
 	// in a development or staging environment.
 	MaxBuilds int
 
-	// AutoCertCacheBucket is the GCS bucket to use for the
-	// golang.org/x/crypto/acme/autocert (LetsEncrypt) cache.
-	// If empty, LetsEncrypt isn't used.
-	AutoCertCacheBucket string
-
 	// COSServiceAccount (Container Optimized OS) is the service
 	// account that will be assigned to a VM instance that hosts
 	// a container when the instance is created.
@@ -281,16 +276,15 @@ var Production = &Environment{
 		Name:      "services",
 		Namespace: "prod",
 	},
-	DashURL:             "https://build.golang.org/",
-	PerfDataURL:         "https://perfdata.golang.org",
-	CoordinatorName:     "farmer",
-	BuildletBucket:      "go-builder-data",
-	LogBucket:           "go-build-log",
-	SnapBucket:          "go-build-snap",
-	AutoCertCacheBucket: "farmer-golang-org-autocert-cache",
-	COSServiceAccount:   "linux-cos-builders@symbolic-datum-552.iam.gserviceaccount.com",
-	AWSSecurityGroup:    "go-builders",
-	AWSRegion:           "us-east-2",
+	DashURL:           "https://build.golang.org/",
+	PerfDataURL:       "https://perfdata.golang.org",
+	CoordinatorName:   "farmer",
+	BuildletBucket:    "go-builder-data",
+	LogBucket:         "go-build-log",
+	SnapBucket:        "go-build-snap",
+	COSServiceAccount: "linux-cos-builders@symbolic-datum-552.iam.gserviceaccount.com",
+	AWSSecurityGroup:  "go-builders",
+	AWSRegion:         "us-east-2",
 }
 
 var Development = &Environment{

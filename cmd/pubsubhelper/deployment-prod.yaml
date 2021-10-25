@@ -21,7 +21,7 @@ spec:
       - name: pubsubhelper
         image: gcr.io/symbolic-datum-552/pubsubhelper:latest
         imagePullPolicy: Always
-        command: ["/pubsubhelper", "-autocert-bucket=golang-pubsubhelper-autocert"]
+        command: ["/pubsubhelper", "-listen-http=:80", "-listen-https-autocert=443", "-autocert-bucket=golang-pubsubhelper-autocert"]
         ports:
         - containerPort: 25
         - containerPort: 80

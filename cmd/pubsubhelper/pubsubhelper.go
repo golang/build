@@ -27,26 +27,22 @@ import (
 	"sync"
 	"time"
 
-	"cloud.google.com/go/storage"
 	"github.com/bradfitz/go-smtpd/smtpd"
 	"github.com/jellevandenhooff/dkim"
 	"go4.org/types"
-	"golang.org/x/build/autocertcache"
 	"golang.org/x/build/cmd/pubsubhelper/pubsubtypes"
+	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/secret"
-	"golang.org/x/crypto/acme/autocert"
 )
 
 var (
-	botEmail       = flag.String("rcpt", "\x67\x6f\x70\x68\x65\x72\x62\x6f\x74@pubsubhelper.golang.org", "email address of bot. incoming emails must be to this address.")
-	httpListen     = flag.String("http", ":80", "HTTP listen address")
-	acmeDomain     = flag.String("autocert", "pubsubhelper.golang.org", "If non-empty, listen on port 443 and serve HTTPS with a LetsEncrypt cert for this domain.")
-	autocertBucket = flag.String("autocert-bucket", "", "if -autocert is enabled, use this GCS bucket as the autocert cache.")
-	smtpListen     = flag.String("smtp", ":25", "SMTP listen address")
-	webhookSecret  = flag.String("webhook-secret", "", "Development mode GitHub webhook secret. This flag should not be used in production.")
+	botEmail      = flag.String("rcpt", "\x67\x6f\x70\x68\x65\x72\x62\x6f\x74@pubsubhelper.golang.org", "email address of bot. incoming emails must be to this address.")
+	smtpListen    = flag.String("smtp", ":25", "SMTP listen address")
+	webhookSecret = flag.String("webhook-secret", "", "Development mode GitHub webhook secret. This flag should not be used in production.")
 )
 
 func main() {
+	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
 
 	ctx := context.Background()
@@ -90,47 +86,7 @@ func main() {
 		err := s.ListenAndServe()
 		errc <- fmt.Errorf("SMTP ListenAndServe: %v", err)
 	}()
-	m := &autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist(*acmeDomain),
-	}
-	go func() {
-		if *acmeDomain == "" {
-			return
-		}
-		if *autocertBucket == "" {
-			log.Fatalf("autocert-bucket is required when autocert is enabled")
-		}
-		sc, err := storage.NewClient(context.Background())
-		if err != nil {
-			log.Fatalf("storage.NewClient: %v", err)
-		}
-		m.Cache = autocertcache.NewGoogleCloudStorageCache(sc, *autocertBucket)
-		log.Printf("running pubsubhelper HTTPS on :443 for %s", *acmeDomain)
-		s := &http.Server{
-			Addr:              ":https",
-			TLSConfig:         m.TLSConfig(),
-			ReadHeaderTimeout: 10 * time.Second,
-			WriteTimeout:      5 * time.Minute,
-			IdleTimeout:       5 * time.Minute,
-		}
-		err = s.ListenAndServeTLS("", "")
-		errc <- fmt.Errorf("HTTPS ListenAndServeTLS: %v", err)
-	}()
-	go func() {
-		log.Printf("running pubsubhelper HTTP on %s", *httpListen)
-		s := &http.Server{
-			Addr:              *httpListen,
-			ReadHeaderTimeout: 10 * time.Second,
-			WriteTimeout:      5 * time.Minute,
-			IdleTimeout:       5 * time.Minute,
-			Handler:           m.HTTPHandler(http.DefaultServeMux),
-		}
-		err := s.ListenAndServe()
-		errc <- fmt.Errorf("HTTP ListenAndServe: %v", err)
-	}()
-
-	log.Fatal(<-errc)
+	log.Fatalln(https.ListenAndServe(ctx, http.DefaultServeMux))
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {

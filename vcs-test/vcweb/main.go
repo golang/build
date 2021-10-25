@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build linux
 // +build linux
 
 package main
@@ -12,7 +13,6 @@ import (
 	"fmt"
 	"html"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -24,9 +24,7 @@ import (
 
 	"github.com/coreos/go-systemd/activation"
 	"github.com/coreos/go-systemd/daemon"
-	"golang.org/x/build/autocertcache"
-	"golang.org/x/crypto/acme"
-	"golang.org/x/crypto/acme/autocert"
+	"golang.org/x/build/internal/https"
 )
 
 var (
@@ -53,6 +51,7 @@ var isLoadDir = map[string]bool{
 
 func main() {
 	flag.Usage = usage
+	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
 	if flag.NArg() != 0 {
 		usage()
@@ -78,33 +77,6 @@ func main() {
 		httpListener := listeners["vcweb-http.socket"][0]
 		httpsListener := listeners["vcweb-https.socket"][0]
 
-		go func() {
-			log.Fatal(http.Serve(httpListener, handler))
-		}()
-		dir := acme.LetsEncryptURL
-		if *staging {
-			dir = "https://acme-staging.api.letsencrypt.org/directory"
-		}
-		m := autocert.Manager{
-			Client:     &acme.Client{DirectoryURL: dir},
-			Cache:      autocertcache.NewGoogleCloudStorageCache(client, "vcs-test-autocert"),
-			Prompt:     autocert.AcceptTOS,
-			HostPolicy: autocert.HostWhitelist("vcs-test.golang.org"),
-			Email:      "golang-dev@googlegroups.com", // for lack of a better choice.
-		}
-		s := &http.Server{
-			Addr:    ":https",
-			Handler: handler,
-			TLSConfig: &tls.Config{
-				MinVersion:     tls.VersionSSL30,
-				GetCertificate: fallbackSNI(m.GetCertificate, "vcs-test.golang.org"),
-				NextProtos: []string{
-					"h2", "http/1.1", // enable HTTP/2
-					acme.ALPNProto, // enable tls-alpn ACME challenges
-				},
-			},
-		}
-
 		dt, err := daemon.SdWatchdogEnabled(true)
 		if err != nil {
 			log.Fatal(err)
@@ -116,15 +88,17 @@ func main() {
 				daemon.SdNotify(false, "WATCHDOG=1")
 			}
 		}()
+
+		go func() {
+			log.Fatal(http.Serve(httpListener, handler))
+		}()
+		s, err := https.AutocertServer(ctx, "vcs-test-autocert", "", handler)
+		if err != nil {
+			log.Fatal(err)
+		}
 		log.Fatal(s.ServeTLS(httpsListener, "", ""))
 	}
-
-	// Local development on :8088.
-	l, err := net.Listen("tcp", "127.0.0.1:8088")
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Fatal(http.Serve(l, handler))
+	log.Fatal(https.ListenAndServe(ctx, handler))
 }
 
 var nameRE = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)

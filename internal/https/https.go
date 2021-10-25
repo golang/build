@@ -7,9 +7,15 @@ package https // import "golang.org/x/build/internal/https"
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"flag"
 	"fmt"
-	"net"
+	"math/big"
 	"net/http"
 	"strings"
 	"time"
@@ -17,106 +23,69 @@ import (
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/autocertcache"
 	"golang.org/x/crypto/acme/autocert"
-	"golang.org/x/net/http2"
 )
 
-// Options are the configuration parameters for the HTTP(S) server.
 type Options struct {
-	// Addr specifies the host and port the server should listen on.
-	Addr string
-
-	// AutocertCacheBucket specifies the name of the GCS bucket for
-	// Let’s Encrypt to use. If this is not specified, then HTTP traffic is
-	// served on Addr.
-	AutocertCacheBucket string
+	// Specifies the GCS bucket to use with AutocertAddr.
+	AutocertBucket string
+	// If non-empty, listen on this address and serve HTTPS using a Let's Encrypt cert stored in AutocertBucket.
+	AutocertAddr string
+	// If non-empty, listen on this address and serve HTTPS using a self-signed cert.
+	SelfSignedAddr string
+	// If non-empty, listen on this address and serve HTTP.
+	HTTPAddr string
 }
 
-var defaultOptions = &Options{
-	Addr: "localhost:6343",
+var DefaultOptions = &Options{}
+
+func RegisterFlags(set *flag.FlagSet) {
+	set.StringVar(&DefaultOptions.AutocertBucket, "autocert-bucket", "", "specifies the GCS bucket to use with autocert-addr")
+	set.StringVar(&DefaultOptions.AutocertAddr, "listen-https-autocert", "", "if non-empty, listen on this address and serve HTTPS using a Let's Encrypt cert stored in autocert-bucket")
+	set.StringVar(&DefaultOptions.SelfSignedAddr, "listen-https-selfsigned", "", "if non-empty, listen on this address and serve HTTPS using a self-signed cert")
+	set.StringVar(&DefaultOptions.HTTPAddr, "listen-http", "", "if non-empty, listen on this address and serve HTTP")
 }
 
-// ListenAndServe serves the given handler by HTTPS and HTTP using the
-// provided options.
-//
-// ListenAndServe always returns a non-nil error.
-func ListenAndServe(handler http.Handler, opt *Options) error {
-	if opt == nil {
-		opt = defaultOptions
-	}
-	ln, err := net.Listen("tcp", opt.Addr)
-	if err != nil {
-		return fmt.Errorf(`net.Listen("tcp", %q): %v`, opt.Addr, err)
-	}
-	defer ln.Close()
-
-	if opt.AutocertCacheBucket == "" {
-		err := http.Serve(ln, handler)
-		return fmt.Errorf("http.Serve = %v", err)
-	}
-
-	redirect := &http.Server{
-		Handler: handler,
-	}
-	errc := make(chan error)
-	go func() {
-		err := redirect.Serve(ln)
-		errc <- fmt.Errorf("http.Serve = %v", err)
-	}()
-
-	ctx, cancel := context.WithCancel(context.TODO())
-	go func() {
-		errc <- serveAutocertTLS(ctx, handler, opt.AutocertCacheBucket)
-	}()
-
-	// Wait for the first error.
-	err = <-errc
-
-	// Stop the other handler (whichever it may be) and wait for it to return.
-	redirect.Close()
-	cancel()
-	<-errc
-
-	return err
+func ListenAndServe(ctx context.Context, handler http.Handler) error {
+	return ListenAndServeOpts(ctx, handler, DefaultOptions)
 }
 
-// redirectToHTTPS will redirect to the https version of the URL requested. If
-// r.TLS is set or r.Host is empty, a 404 not found response is sent.
-func redirectToHTTPS(w http.ResponseWriter, r *http.Request) {
-	if r.TLS != nil || r.Host == "" {
-		http.NotFound(w, r)
-		return
+func ListenAndServeOpts(ctx context.Context, handler http.Handler, opts *Options) error {
+	errc := make(chan error, 3)
+
+	if opts.HTTPAddr != "" {
+		server := &http.Server{Addr: opts.HTTPAddr, Handler: handler}
+		defer server.Close()
+		go func() { errc <- server.ListenAndServe() }()
 	}
 
-	http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusFound)
+	if opts.AutocertAddr != "" {
+		if opts.AutocertBucket == "" {
+			return fmt.Errorf("must specify autocert-bucket with listen-https-autocert")
+		}
+		server, err := AutocertServer(ctx, opts.AutocertBucket, opts.AutocertAddr, handler)
+		if err != nil {
+			return err
+		}
+		defer server.Close()
+		go func() { errc <- server.ListenAndServeTLS("", "") }()
+	}
+
+	if opts.SelfSignedAddr != "" {
+		server, err := SelfSignedServer(opts.SelfSignedAddr, handler)
+		if err != nil {
+			return err
+		}
+		defer server.Close()
+		go func() { errc <- server.ListenAndServeTLS("", "") }()
+	}
+
+	return <-errc
 }
 
-// serveAutocertTLS serves the handler h on port 443 using the given GCS bucket
-// for its autocert cache. It will only serve on domains of the form *.golang.org.
-//
-// serveAutocertTLS always returns a non-nil error.
-func serveAutocertTLS(ctx context.Context, h http.Handler, bucket string) error {
-	ln, err := net.Listen("tcp", ":443")
-	if err != nil {
-		return err
-	}
-	defer ln.Close()
-
-	ctx, cancel := context.WithCancel(ctx)
-	server := &http.Server{Handler: h}
-	done := make(chan struct{})
-	go func() {
-		<-ctx.Done()
-		server.Close()
-		close(done)
-	}()
-	defer func() {
-		cancel()
-		<-done
-	}()
-
+func AutocertServer(ctx context.Context, bucket, addr string, handler http.Handler) (*http.Server, error) {
 	sc, err := storage.NewClient(ctx)
 	if err != nil {
-		return fmt.Errorf("storage.NewClient: %v", err)
+		return nil, fmt.Errorf("storage.NewClient: %v", err)
 	}
 	const hostSuffix = ".golang.org"
 	m := autocert.Manager{
@@ -130,23 +99,50 @@ func serveAutocertTLS(ctx context.Context, h http.Handler, bucket string) error 
 		},
 		Cache: autocertcache.NewGoogleCloudStorageCache(sc, bucket),
 	}
-	tlsLn := tls.NewListener(tcpKeepAliveListener{ln.(*net.TCPListener)}, m.TLSConfig())
-	if err := http2.ConfigureServer(server, nil); err != nil {
-		return fmt.Errorf("http2.ConfigureServer: %v", err)
+	server := &http.Server{
+		Addr:      addr,
+		Handler:   handler,
+		TLSConfig: m.TLSConfig(),
 	}
-	return server.Serve(tlsLn)
+	return server, nil
 }
 
-type tcpKeepAliveListener struct {
-	*net.TCPListener
-}
-
-func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
-	tc, err := ln.AcceptTCP()
+func SelfSignedServer(addr string, handler http.Handler) (*http.Server, error) {
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return
+		return nil, err
 	}
-	tc.SetKeepAlive(true)
-	tc.SetKeepAlivePeriod(3 * time.Minute)
-	return tc, nil
+
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate serial number: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			Organization: []string{"Go build system"},
+		},
+		NotBefore:   time.Now().Add(-time.Minute),
+		NotAfter:    time.Now().Add(10 * 365 * 24 * time.Hour),
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IsCA:        true,
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, template, template, &priv.PublicKey, priv)
+	if err != nil {
+		return nil, err
+	}
+	s := &http.Server{
+		Addr:    addr,
+		Handler: handler,
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{{
+				Certificate: [][]byte{derBytes},
+				PrivateKey:  priv,
+			}},
+		},
+	}
+	return s, nil
 }

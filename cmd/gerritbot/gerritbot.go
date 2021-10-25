@@ -39,8 +39,6 @@ import (
 )
 
 var (
-	listen          = flag.String("listen", "localhost:6343", "listen address")
-	autocertBucket  = flag.String("autocert-bucket", "", "if non-empty, listen on port 443 and serve a LetsEncrypt TLS cert using this Google Cloud Storage bucket as a cache")
 	workdir         = flag.String("workdir", defaultWorkdir(), "where git repos and temporary worktrees are created")
 	githubTokenFile = flag.String("github-token-file", filepath.Join(defaultWorkdir(), "github-token"), "file to load GitHub token from; should only contain the token text")
 	gerritTokenFile = flag.String("gerrit-token-file", filepath.Join(defaultWorkdir(), "gerrit-token"), "file to load Gerrit token from; should be of form <git-email>:<token>")
@@ -52,6 +50,7 @@ var (
 const secretClientTimeout = 10 * time.Second
 
 func main() {
+	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
 
 	var secretClient *secret.Client
@@ -75,11 +74,7 @@ func main() {
 	b.initCorpus(ctx)
 	go b.corpusUpdateLoop(ctx)
 
-	err = https.ListenAndServe(http.HandlerFunc(handleIndex), &https.Options{
-		Addr:                *listen,
-		AutocertCacheBucket: *autocertBucket,
-	})
-	log.Fatalln(err)
+	log.Fatalln(https.ListenAndServe(ctx, http.HandlerFunc(handleIndex)))
 }
 
 func defaultWorkdir() string {
