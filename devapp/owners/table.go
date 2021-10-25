@@ -76,7 +76,6 @@ var (
 	rakoczy      = gh("toothrot")
 	roland       = gh("rolandshoemaker")
 	rsc          = gh("rsc")
-	rstambler    = gh("stamblerre")
 	sameer       = gh("Sajmani")
 	shinfan      = gh("shinfan")
 	suzmue       = gh("suzmue")
@@ -701,7 +700,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{toolsTeam},
 	},
 	"tools/go/gcexportdata": {
-		Primary: []Owner{rstambler, gri},
+		Primary:   []Owner{gri, findleyr},
+		Secondary: []Owner{toolsTeam},
 	},
 	"tools/go/internal/cgo": {
 		Primary: []Owner{toolsTeam},
@@ -710,7 +710,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{toolsTeam},
 	},
 	"tools/go/internal/gcimporter": {
-		Primary: []Owner{rstambler, gri},
+		Primary:   []Owner{gri, findleyr},
+		Secondary: []Owner{toolsTeam},
 	},
 	"tools/go/internal/packagesdriver": {
 		Primary: []Owner{matloob},
@@ -742,15 +743,14 @@ var entries = map[string]*Entry{
 		Primary: []Owner{dmitshur},
 	},
 	"tools/gopls": {
-		Primary:   []Owner{rstambler},
-		Secondary: []Owner{toolsTeam},
+		Primary: []Owner{toolsTeam},
 	},
 	"tools/imports": {
 		Primary: []Owner{heschi},
 	},
 	"tools/internal/analysisinternal": {
-		Primary:   []Owner{rstambler},
-		Secondary: []Owner{matloob},
+		Primary:   []Owner{matloob},
+		Secondary: []Owner{toolsTeam},
 	},
 	"tools/internal/apidiff": {
 		Primary:   []Owner{jba},
@@ -773,11 +773,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{findleyr, jba},
 	},
 	"tools/internal/lsp": {
-		Primary:   []Owner{rstambler},
-		Secondary: []Owner{toolsTeam},
-	},
-	"tools/internal/lsp/cache": {
-		Primary: []Owner{rstambler},
+		Primary: []Owner{toolsTeam},
 	},
 	"tools/internal/lsp/fake": {
 		Primary: []Owner{findleyr},
@@ -789,14 +785,13 @@ var entries = map[string]*Entry{
 		Primary: []Owner{findleyr},
 	},
 	"tools/internal/lsp/source": {
-		Primary: []Owner{rstambler},
+		Primary: []Owner{toolsTeam},
 	},
 	"tools/internal/memoize": {
 		Primary: []Owner{iancottrell},
 	},
 	"tools/internal/packagesinternal": {
-		Primary:   []Owner{rstambler},
-		Secondary: []Owner{matloob},
+		Primary: []Owner{toolsTeam},
 	},
 	"tools/internal/proxydir": {
 		Primary: []Owner{findleyr},
