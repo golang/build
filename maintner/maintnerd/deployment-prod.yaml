@@ -27,7 +27,7 @@ spec:
       - name: maintnerd
         image: gcr.io/symbolic-datum-552/maintnerd:latest
         imagePullPolicy: Always
-        command: ["/usr/bin/tini", "--", "/maintnerd", "--config=go", "--bucket=golang-maintner-log", "--verbose", "--data-dir=/cache", "--listen-http=:80", "--listen-https-autocert=:443", "--autocert-bucket=golang-maintner-autocert"]
+        command: ["/usr/bin/tini", "--", "/maintnerd", "--config=go", "--bucket=golang-maintner-log", "--verbose", "--data-dir=/cache", "--listen-http=:80", "--listen-https-autocert=:443", "--autocert-bucket=golang-maintner-autocert", "-listen-https-selfsigned=:444"]
         volumeMounts:
         - mountPath: /cache
           name: maintner-cache
@@ -77,11 +77,13 @@ kind: Service
 metadata:
   namespace: prod
   name: maintnerd-internal
+  annotations:
+    cloud.google.com/app-protocols: '{"https":"HTTP2"}'
 spec:
   ports:
-    - port: 80
-      targetPort: 80
-      name: http
+    - port: 444
+      targetPort: 444
+      name: https
   selector:
     app: maintnerd
   type: ClusterIP

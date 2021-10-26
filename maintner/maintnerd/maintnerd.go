@@ -71,6 +71,7 @@ Maintner is short for "maintainer."
 var autocertManager *autocert.Manager
 
 func main() {
+	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
 	ctx := context.Background()
 

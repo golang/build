@@ -20,7 +20,7 @@ spec:
       - name: coordinator
         image: gcr.io/symbolic-datum-552/coordinator:latest
         imagePullPolicy: Always
-        command: ["/coordinator", "-listen-http=:80", "-listen-autocert-ssh=:443", "-autocert-bucket=farmer-golang-org-autocert-cache"]
+        command: ["/coordinator", "-listen-http=:80", "-listen-https-autocert=:443", "-autocert-bucket=farmer-golang-org-autocert-cache"]
         ports:
         - containerPort: 80
         - containerPort: 443

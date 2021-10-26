@@ -9,9 +9,9 @@ info="$USER $(date)"
 GO111MODULE=on CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build "-ldflags=\"-X=main.buildInfo=$info\"" -o vcweb.exe ./vcweb
 trap "rm -f vcweb.exe" EXIT
 
-gcloud beta compute scp vcweb.exe vcs-test:
+gcloud beta compute scp --zone us-central1-a vcweb.exe vcs-test:
 
-gcloud compute ssh vcs-test -- sudo -n bash -c \''
+gcloud compute ssh --zone us-central1-a vcs-test -- sudo -n bash -c \''
 	mv vcweb.exe /usr/bin/vcweb
 	chmod a+rx /usr/bin/vcweb
 	systemctl restart vcweb.service

@@ -21,14 +21,14 @@ spec:
           service:
             name: devapp-internal-iap
             port:
-              number: 80
+              number: 444
       - pathType: ImplementationSpecific
         path: /*
         backend:
           service:
             name: devapp-internal
             port:
-              number: 80
+              number: 444
   - host: build.golang.org
     http:
       paths:
@@ -48,7 +48,7 @@ spec:
           service:
             name: devapp-internal
             port:
-              number: 80
+              number: 444
   - host: gerritbot.golang.org
     http:
       paths:
@@ -68,7 +68,7 @@ spec:
           service:
             name: maintnerd-internal
             port:
-              number: 80
+              number: 444
 ---
 apiVersion: networking.gke.io/v1beta1
 kind: FrontendConfig
