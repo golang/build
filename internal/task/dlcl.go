@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package task implements tasks involved in making a Go release.
 package task
 
 import (
@@ -35,14 +34,8 @@ func MailDLCL(ctx context.Context, versions []string) (changeURL string, _ error
 	if len(versions) < 1 || len(versions) > 2 {
 		return "", fmt.Errorf("got %d Go versions, want 1 or 2", len(versions))
 	}
-	for _, ver := range versions {
-		if ver != strings.ToLower(ver) {
-			return "", fmt.Errorf("version %q is not lowercase", ver)
-		} else if strings.Contains(ver, " ") {
-			return "", fmt.Errorf("version %q contains a space", ver)
-		} else if !strings.HasPrefix(ver, "go") {
-			return "", fmt.Errorf("version %q doesn't have the 'go' prefix", ver)
-		}
+	if err := verifyGoVersions(versions...); err != nil {
+		return "", err
 	}
 
 	var files = make(map[string]string) // Map key is relative path, and map value is file content.
@@ -101,6 +94,19 @@ func MailDLCL(ctx context.Context, versions []string) (changeURL string, _ error
 		return "", err
 	}
 	return fmt.Sprintf("https://golang.org/cl/%d", ci.ChangeNumber), nil
+}
+
+func verifyGoVersions(versions ...string) error {
+	for _, ver := range versions {
+		if ver != strings.ToLower(ver) {
+			return fmt.Errorf("version %q is not lowercase", ver)
+		} else if strings.Contains(ver, " ") {
+			return fmt.Errorf("version %q contains a space", ver)
+		} else if !strings.HasPrefix(ver, "go") {
+			return fmt.Errorf("version %q doesn't have the 'go' prefix", ver)
+		}
+	}
+	return nil
 }
 
 func docHost(ver string) string {

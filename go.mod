@@ -15,8 +15,10 @@ require (
 	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f
 	github.com/creack/pty v1.1.15
 	github.com/davecgh/go-spew v1.1.1
+	github.com/esimov/stackblur-go v1.0.1
 	github.com/gliderlabs/ssh v0.3.3
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.3
+	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.6
 	github.com/google/go-github v17.0.0+incompatible
@@ -31,6 +33,7 @@ require (
 	go.opencensus.io v0.23.0
 	go4.org v0.0.0-20180809161055-417644f6feb5
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97
+	golang.org/x/image v0.0.0-20210628002857-a66eb6448b8d
 	golang.org/x/net v0.0.0-20210726213435-c6fcb2dbf985
 	golang.org/x/oauth2 v0.0.0-20210628180205-a41e5a781914
 	golang.org/x/perf v0.0.0-20210220033136-40a54f11e909

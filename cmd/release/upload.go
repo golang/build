@@ -34,7 +34,7 @@ const (
 )
 
 // File represents a file on the golang.org downloads page.
-// It should be kept in sync with the download code in x/tools/godoc/dl.
+// It should be kept in sync with the download code in x/website/internal/dl.
 type File struct {
 	Filename       string `json:"filename"`
 	OS             string `json:"os"`
