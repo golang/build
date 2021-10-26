@@ -15,6 +15,7 @@ require (
 	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f
 	github.com/creack/pty v1.1.15
 	github.com/davecgh/go-spew v1.1.1
+	github.com/dghubble/oauth1 v0.7.0
 	github.com/esimov/stackblur-go v1.0.1
 	github.com/gliderlabs/ssh v0.3.3
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.3

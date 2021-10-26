@@ -61,6 +61,20 @@ const (
 	// NameSendGridAPIKey is the secret name for a Go project SendGrid API key.
 	// This API key only allows sending email.
 	NameSendGridAPIKey = "sendgrid-sendonly-api-key"
+
+	// NameTwitterAPISecret is the secret name for Twitter API credentials for
+	// posting tweets from the Go project's Twitter account (twitter.com/golang).
+	//
+	// The secret value encodes relevant keys and their secrets as
+	// a JSON object:
+	//
+	// 	{
+	// 		"ConsumerKey":       "...",
+	// 		"ConsumerSecret":    "...",
+	// 		"AccessTokenKey":    "...",
+	// 		"AccessTokenSecret": "..."
+	// 	}
+	NameTwitterAPISecret = "twitter-api-secret"
 )
 
 type secretClient interface {

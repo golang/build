@@ -6,21 +6,28 @@ package task
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/png"
+	"io"
 	"math"
 	"math/rand"
+	"mime/multipart"
 	"net/http"
+	"net/url"
 	"strings"
 	"text/template"
 	"time"
 
+	"github.com/dghubble/oauth1"
 	"github.com/esimov/stackblur-go"
 	"github.com/golang/freetype/truetype"
+	"golang.org/x/build/buildenv"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/workflow"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gomono"
@@ -148,7 +155,7 @@ func tweetRelease(ctx workflow.TaskContext, r ReleaseTweet, dryRun bool) (tweetU
 	}
 
 	// Generate tweet image.
-	_, imageText, err := tweetImage(r.Version, rnd)
+	imagePNG, imageText, err := tweetImage(r.Version, rnd)
 	if err != nil {
 		return "", err
 	}
@@ -160,8 +167,12 @@ func tweetRelease(ctx workflow.TaskContext, r ReleaseTweet, dryRun bool) (tweetU
 	if dryRun {
 		return "(dry-run)", nil
 	}
-	// TODO(golang.org/issue/47403): Use Twitter API.
-	return "", fmt.Errorf("use of twitter API not implemented yet")
+	cl, err := twitterClient()
+	if err != nil {
+		return "", err
+	}
+	tweetURL, err = postTweet(cl, tweetText, imagePNG)
+	return tweetURL, err
 }
 
 // tweetText generates the text to use in the announcement
@@ -568,3 +579,111 @@ var (
 	// shadowColor is the color used as the shadow color.
 	shadowColor = color.NRGBA{0, 0, 0, 140} // #0000008c.
 )
+
+// postTweet posts a tweet with the provided text and image.
+// twitterAPI is used to make Twitter API calls.
+func postTweet(twitterAPI *http.Client, text string, imagePNG []byte) (tweetURL string, _ error) {
+	// Make a Twitter API call to upload PNG to upload.twitter.com.
+	// See https://developer.twitter.com/en/docs/twitter-api/v1/media/upload-media/api-reference/post-media-upload.
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	if f, err := w.CreateFormFile("media", "image.png"); err != nil {
+		return "", err
+	} else if _, err := f.Write(imagePNG); err != nil {
+		return "", err
+	} else if err := w.Close(); err != nil {
+		return "", err
+	}
+	req, err := http.NewRequest(http.MethodPost, "https://upload.twitter.com/1.1/media/upload.json?media_category=tweet_image", &buf)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	resp, err := twitterAPI.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		return "", fmt.Errorf("POST media/upload: non-200 OK status code: %v body: %q", resp.Status, body)
+	}
+	var media struct {
+		ID string `json:"media_id_string"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&media); err != nil {
+		return "", err
+	}
+
+	// Make a Twitter API call to update status with uploaded image.
+	// See https://developer.twitter.com/en/docs/twitter-api/v1/tweets/post-and-engage/api-reference/post-statuses-update.
+	resp, err = twitterAPI.PostForm("https://api.twitter.com/1.1/statuses/update.json", url.Values{
+		"status":    []string{text},
+		"media_ids": []string{media.ID},
+	})
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		if isTweetTooLong(resp, body) {
+			// A friendlier error for a common error type.
+			return "", ErrTweetTooLong
+		}
+		return "", fmt.Errorf("POST statuses/update: non-200 OK status code: %v body: %q", resp.Status, body)
+	}
+	var tweet struct {
+		ID   string `json:"id_str"`
+		User struct {
+			ScreenName string `json:"screen_name"`
+		}
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tweet); err != nil {
+		return "", err
+	}
+	return "https://twitter.com/" + tweet.User.ScreenName + "/status/" + tweet.ID, nil
+}
+
+// ErrTweetTooLong is the error when a tweet is too long.
+var ErrTweetTooLong = fmt.Errorf("tweet text length exceeded Twitter's limit")
+
+// isTweetTooLong reports whether the Twitter API response is
+// known to represent a "Tweet needs to be a bit shorter." error.
+// See https://developer.twitter.com/en/support/twitter-api/error-troubleshooting.
+func isTweetTooLong(resp *http.Response, body []byte) bool {
+	if resp.StatusCode != http.StatusForbidden {
+		return false
+	}
+	var r struct{ Errors []struct{ Code int } }
+	if err := json.Unmarshal(body, &r); err != nil {
+		return false
+	}
+	return len(r.Errors) == 1 && r.Errors[0].Code == 186
+}
+
+// twitterClient creates an HTTP client authenticated to make
+// Twitter API calls on behalf of the twitter.com/golang account.
+func twitterClient() (*http.Client, error) {
+	sc, err := secret.NewClientInProject(buildenv.Production.ProjectName)
+	if err != nil {
+		return nil, err
+	}
+	defer sc.Close()
+	secretJSON, err := sc.Retrieve(context.Background(), secret.NameTwitterAPISecret)
+	if err != nil {
+		return nil, err
+	}
+	var s struct {
+		ConsumerKey       string
+		ConsumerSecret    string
+		AccessTokenKey    string
+		AccessTokenSecret string
+	}
+	if err := json.Unmarshal([]byte(secretJSON), &s); err != nil {
+		return nil, err
+	}
+	config := oauth1.NewConfig(s.ConsumerKey, s.ConsumerSecret)
+	token := oauth1.NewToken(s.AccessTokenKey, s.AccessTokenSecret)
+	return config.Client(context.Background(), token), nil
+}

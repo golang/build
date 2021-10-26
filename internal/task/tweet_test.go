@@ -2,16 +2,17 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package task_test
+package task
 
 import (
 	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
-	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
 )
 
@@ -25,14 +26,14 @@ func TestTweetRelease(t *testing.T) {
 
 	tests := [...]struct {
 		name    string
-		taskFn  func(workflow.TaskContext, task.ReleaseTweet, bool) (string, error)
-		in      task.ReleaseTweet
+		taskFn  func(workflow.TaskContext, ReleaseTweet, bool) (string, error)
+		in      ReleaseTweet
 		wantLog string
 	}{
 		{
 			name:   "minor",
-			taskFn: task.TweetMinorRelease,
-			in: task.ReleaseTweet{
+			taskFn: TweetMinorRelease,
+			in: ReleaseTweet{
 				Version:          "go1.17.1",
 				SecondaryVersion: "go1.16.8",
 				Security:         "Includes security fixes for A and B.",
@@ -62,8 +63,8 @@ go version go1.17.1 linux/arm64` + "\n",
 		},
 		{
 			name:   "beta",
-			taskFn: task.TweetBetaRelease,
-			in: task.ReleaseTweet{
+			taskFn: TweetBetaRelease,
+			in: ReleaseTweet{
 				Version:      "go1.17beta1",
 				Announcement: "https://groups.google.com/g/golang-announce/c/i4EliPDV9Ok/m/MxA-nj53AAAJ",
 				RandomSeed:   678,
@@ -91,8 +92,8 @@ go version go1.17beta1 darwin/amd64` + "\n",
 		},
 		{
 			name:   "rc",
-			taskFn: task.TweetRCRelease,
-			in: task.ReleaseTweet{
+			taskFn: TweetRCRelease,
+			in: ReleaseTweet{
 				Version:      "go1.17rc2",
 				Announcement: "https://groups.google.com/g/golang-announce/c/yk30ovJGXWY/m/p9uUnKbbBQAJ",
 				RandomSeed:   456,
@@ -120,8 +121,8 @@ go version go1.17rc2 windows/arm64` + "\n",
 		},
 		{
 			name:   "major",
-			taskFn: task.TweetMajorRelease,
-			in: task.ReleaseTweet{
+			taskFn: TweetMajorRelease,
+			in: ReleaseTweet{
 				Version:    "go1.17",
 				Security:   "Includes a super duper security fix (CVE-123).",
 				RandomSeed: 123,
@@ -172,4 +173,79 @@ type fmtWriter struct{ w io.Writer }
 
 func (f fmtWriter) Printf(format string, v ...interface{}) {
 	fmt.Fprintf(f.w, format, v...)
+}
+
+func TestPostTweet(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("upload.twitter.com/1.1/media/upload.json", func(w http.ResponseWriter, req *http.Request) {
+		if got, want := req.Method, http.MethodPost; got != want {
+			t.Errorf("media/upload: got method %s, want %s", got, want)
+			return
+		}
+		if got, want := req.FormValue("media_category"), "tweet_image"; got != want {
+			t.Errorf("media/upload: got media_category=%q, want %q", got, want)
+		}
+		f, hdr, err := req.FormFile("media")
+		if err != nil {
+			t.Errorf("media/upload: error getting image file: %v", err)
+			return
+		}
+		if got, want := hdr.Filename, "image.png"; got != want {
+			t.Errorf("media/upload: got file name=%q, want %q", got, want)
+		}
+		if got, want := mustRead(f), "image-png-bytes"; got != want {
+			t.Errorf("media/upload: got file content=%q, want %q", got, want)
+			return
+		}
+		mustWrite(w, `{"media_id_string": "media-123"}`)
+	})
+	mux.HandleFunc("api.twitter.com/1.1/statuses/update.json", func(w http.ResponseWriter, req *http.Request) {
+		if got, want := req.Method, http.MethodPost; got != want {
+			t.Errorf("statuses/update: got method %s, want %s", got, want)
+			return
+		}
+		if got, want := req.FormValue("status"), "tweet-text"; got != want {
+			t.Errorf("statuses/update: got status=%q, want %q", got, want)
+		}
+		if got, want := req.FormValue("media_ids"), "media-123"; got != want {
+			t.Errorf("statuses/update: got media_ids=%q, want %q", got, want)
+		}
+		mustWrite(w, `{"id_str": "tweet-123", "user": {"screen_name": "golang"}}`)
+	})
+	httpClient := &http.Client{Transport: localRoundTripper{mux}}
+
+	tweetURL, err := postTweet(httpClient, "tweet-text", []byte("image-png-bytes"))
+	if err != nil {
+		t.Fatal("postTweet:", err)
+	}
+	if got, want := tweetURL, "https://twitter.com/golang/status/tweet-123"; got != want {
+		t.Errorf("got tweetURL=%q, want %q", got, want)
+	}
+}
+
+// localRoundTripper is an http.RoundTripper that executes HTTP transactions
+// by using handler directly, instead of going over an HTTP connection.
+type localRoundTripper struct {
+	handler http.Handler
+}
+
+func (l localRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	w := httptest.NewRecorder()
+	l.handler.ServeHTTP(w, req)
+	return w.Result(), nil
+}
+
+func mustRead(r io.Reader) string {
+	b, err := io.ReadAll(r)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
+
+func mustWrite(w io.Writer, s string) {
+	_, err := io.WriteString(w, s)
+	if err != nil {
+		panic(err)
+	}
 }
