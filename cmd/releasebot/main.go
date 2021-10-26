@@ -11,6 +11,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -30,6 +31,7 @@ import (
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/internal/task"
+	"golang.org/x/build/internal/workflow"
 	"golang.org/x/build/maintner"
 )
 
@@ -69,13 +71,19 @@ var releaseTargets = []Target{
 }
 
 var releaseModes = map[string]bool{
-	"prepare":    true,
-	"release":    true,
+	"prepare": true,
+	"release": true,
+
 	"mail-dl-cl": true,
+
+	"tweet-minor": true,
+	"tweet-beta":  true,
+	"tweet-rc":    true,
+	"tweet-major": true,
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: releasebot -mode {prepare|release|mail-dl-cl} [-security] [-dry-run] {go1.8.5|go1.10beta2|go1.11rc1}")
+	fmt.Fprintln(os.Stderr, "usage: releasebot -mode {prepare|release|mail-dl-cl|tweet-{minor,beta,rc,major}} [-security] [-dry-run] {go1.8.5|go1.10beta2|go1.11rc1}")
 	flag.PrintDefaults()
 	os.Exit(2)
 }
@@ -100,6 +108,10 @@ func main() {
 		usage()
 	} else if *modeFlag == "mail-dl-cl" {
 		mailDLCL()
+		return
+	} else if strings.HasPrefix(*modeFlag, "tweet-") {
+		kind := (*modeFlag)[len("tweet-"):]
+		postTweet(kind)
 		return
 	} else if flag.NArg() != 1 {
 		fmt.Fprintln(os.Stderr, "need to provide a release name")
@@ -200,9 +212,11 @@ func mailDLCL() {
 	}
 	changeURL, err := task.MailDLCL(context.Background(), versions)
 	if err != nil {
-		log.Fatalf(`task.MailDLCL(ctx, %#v) failed: %v
+		log.Fatalf(`task.MailDLCL(ctx, %#v) failed:
 
-If it's neccessary to perform it manually as a workaround,
+	%v
+
+If it's necessary to perform it manually as a workaround,
 consider the following steps:
 
 	git clone https://go.googlesource.com/dl && cd dl
@@ -214,6 +228,71 @@ consider the following steps:
 Discuss with the secondary release coordinator as needed.`, versions, err)
 	}
 	fmt.Printf("\nPlease review and submit %s\nand then refer to the playbook for the next steps.\n\n", changeURL)
+}
+
+// postTweet parses command-line arguments for the tweet-* modes,
+// and runs it.
+// kind must be one of "minor", "beta", "rc", or "major".
+func postTweet(kind string) {
+	if flag.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "need to provide 1 release tweet JSON object")
+		usage()
+	}
+	var tweet task.ReleaseTweet
+	err := json.Unmarshal([]byte(flag.Arg(0)), &tweet)
+	if err != nil {
+		log.Fatalln("error parsing release tweet JSON object:", err)
+	}
+
+	versions := []string{tweet.Version}
+	if tweet.SecondaryVersion != "" {
+		versions = append(versions, tweet.SecondaryVersion+" (secondary)")
+	}
+	fmt.Printf("About to tweet about the release of the following Go versions:\n\n\t• %s\n\n", strings.Join(versions, "\n\t• "))
+	if tweet.Security != "" {
+		fmt.Printf("with the following security sentence (%d characters long):\n\n\t%s\n\n", len([]rune(tweet.Security)), tweet.Security)
+	} else {
+		fmt.Print("with no security fixes being mentioned,\n\n")
+	}
+	if tweet.Announcement != "" {
+		fmt.Printf("and with the following announcement URL:\n\n\t%s\n\n", tweet.Announcement)
+	}
+	fmt.Print("Ok? (Y/n) ")
+	var response string
+	_, err = fmt.Scanln(&response)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if response != "Y" && response != "y" {
+		log.Fatalln("stopped as requested")
+	}
+	tweetRelease := map[string]func(workflow.TaskContext, task.ReleaseTweet, bool) (string, error){
+		"minor": task.TweetMinorRelease,
+		"beta":  task.TweetBetaRelease,
+		"rc":    task.TweetRCRelease,
+		"major": task.TweetMajorRelease,
+	}[kind]
+	tweetURL, err := tweetRelease(workflow.TaskContext{Context: context.Background(), Logger: log.Default()}, tweet, dryRun)
+	if errors.Is(err, task.ErrTweetTooLong) && len([]rune(tweet.Security)) > 120 {
+		log.Fatalf(`A tweet was not created because it's too long.
+
+The provided security sentence is somewhat long (%d characters),
+so try making it shorter to avoid exceeding Twitter's limits.`, len([]rune(tweet.Security)))
+	} else if err != nil {
+		log.Fatalf(`tweetRelease(ctx, %#v) failed:
+
+	%v
+
+If it's necessary to perform it manually as a workaround,
+consider the following options:
+
+	• use the template displayed in the log above (if any)
+	• use the same format as the last tweet for the release
+	  of the same kind
+
+Discuss with the secondary release coordinator as needed.`, tweet, err)
+	}
+	fmt.Printf("\nPlease check that %s looks okay\nand then refer to the playbook for the next steps.\n\n", tweetURL)
 }
 
 // checkForGitCodereview exits the program if git-codereview is not installed
