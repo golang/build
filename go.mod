@@ -27,6 +27,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.0.5
 	github.com/googleapis/google-cloud-go-testing v0.0.0-20200911160855-bcd43fbb19e8
 	github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7
+	github.com/grpc-ecosystem/go-grpc-middleware v1.0.1-0.20190118093823-f849b5445de4
 	github.com/jackc/pgconn v1.10.0
 	github.com/jackc/pgx/v4 v4.13.0
 	github.com/jellevandenhooff/dkim v0.0.0-20150330215556-f50fe3d243e1
