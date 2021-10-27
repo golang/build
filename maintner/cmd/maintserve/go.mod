@@ -9,22 +9,22 @@ require (
 	github.com/shurcooL/httpgzip v0.0.0-20190720172056-320755c1c1b0
 	github.com/shurcooL/issues v0.0.0-20191102180135-669a77a17f95
 	github.com/shurcooL/issuesapp v0.0.0-20210327203029-07180e5ead8e
-	golang.org/x/build v0.0.0-20210728140622-4dfbbed51eaf
+	golang.org/x/build v0.0.0-20211025152730-a72dd9f27a81
 )
 
 require (
 	dmitri.shuralyov.com/html/belt v0.0.0-20200615000106-f19ad8cb3e56 // indirect
 	dmitri.shuralyov.com/state v0.0.0-20191123213244-83b4075e5ca2 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
-	github.com/dustin/go-humanize v0.0.0-20171111073723-bb3d318650d4 // indirect
+	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/fsnotify/fsnotify v1.4.7 // indirect
-	github.com/golang/protobuf v1.4.3 // indirect
+	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-github v17.0.0+incompatible // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
 	github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7 // indirect
-	github.com/microcosm-cc/bluemonday v1.0.15 // indirect
+	github.com/microcosm-cc/bluemonday v1.0.16 // indirect
 	github.com/neelance/astrewrite v0.0.0-20160511093645-99348263ae86 // indirect
 	github.com/neelance/sourcemap v0.0.0-20200213170602-2833bce08e4c // indirect
 	github.com/russross/blackfriday v1.5.2 // indirect
@@ -36,9 +36,9 @@ require (
 	github.com/shurcooL/gopherjslib v0.0.0-20200209150458-30f639db26d4 // indirect
 	github.com/shurcooL/highlight_diff v0.0.0-20181222201841-111da2e7d480 // indirect
 	github.com/shurcooL/highlight_go v0.0.0-20191220051317-782971ddf21b // indirect
-	github.com/shurcooL/home v0.0.0-20210102192440-164885982757 // indirect
+	github.com/shurcooL/home v0.0.0-20210828181528-e98364ec944d // indirect
 	github.com/shurcooL/htmlg v0.0.0-20190503024804-b6326af49ef6 // indirect
-	github.com/shurcooL/httperror v0.0.0-20200615034159-acadaf61ee20 // indirect
+	github.com/shurcooL/httperror v0.0.0-20210906152555-9bb3cabb3d15 // indirect
 	github.com/shurcooL/httpfs v0.0.0-20190707220628-8d4bc4ba7749 // indirect
 	github.com/shurcooL/notifications v0.0.0-20181111060504-bcc2b3082a7a // indirect
 	github.com/shurcooL/octicon v0.0.0-20191102190552-cbb32d6a785c // indirect
@@ -56,7 +56,7 @@ require (
 	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c // indirect
 	golang.org/x/text v0.3.6 // indirect
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac // indirect
-	golang.org/x/tools v0.0.0-20200825202427-b303f430e36d // indirect
-	google.golang.org/appengine v1.6.6 // indirect
-	google.golang.org/protobuf v1.25.0 // indirect
+	golang.org/x/tools v0.1.5 // indirect
+	google.golang.org/appengine v1.6.7 // indirect
+	google.golang.org/protobuf v1.27.1 // indirect
 )
