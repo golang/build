@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package https contains helpers for starting an HTTPS server.
+// Package https contains helpers for starting an HTTP/HTTPS server.
 package https // import "golang.org/x/build/internal/https"
 
 import (
@@ -38,6 +38,10 @@ type Options struct {
 
 var DefaultOptions = &Options{}
 
+// RegisterFlags registers flags that control DefaultOptions, which will be
+// used with ListenAndServe below.
+// Typical usage is to call RegisterFlags at the beginning of main, then
+// ListenAndServe at the end.
 func RegisterFlags(set *flag.FlagSet) {
 	set.StringVar(&DefaultOptions.AutocertBucket, "autocert-bucket", "", "specifies the GCS bucket to use with autocert-addr")
 	set.StringVar(&DefaultOptions.AutocertAddr, "listen-https-autocert", "", "if non-empty, listen on this address and serve HTTPS using a Let's Encrypt cert stored in autocert-bucket")
@@ -45,10 +49,14 @@ func RegisterFlags(set *flag.FlagSet) {
 	set.StringVar(&DefaultOptions.HTTPAddr, "listen-http", "", "if non-empty, listen on this address and serve HTTP")
 }
 
+// ListenAndServe runs the servers configured by DefaultOptions. It always
+// returns a non-nil error.
 func ListenAndServe(ctx context.Context, handler http.Handler) error {
 	return ListenAndServeOpts(ctx, handler, DefaultOptions)
 }
 
+// ListenAndServeOpts runs the servers configured by opts. It always
+// returns a non-nil error.
 func ListenAndServeOpts(ctx context.Context, handler http.Handler, opts *Options) error {
 	errc := make(chan error, 3)
 
@@ -82,6 +90,9 @@ func ListenAndServeOpts(ctx context.Context, handler http.Handler, opts *Options
 	return <-errc
 }
 
+// AutocertServer returns an http.Server that is configured to serve
+// HTTPS on addr using a Let's Encrypt certificate cached in the GCS
+// bucket specified by bucket.
 func AutocertServer(ctx context.Context, bucket, addr string, handler http.Handler) (*http.Server, error) {
 	sc, err := storage.NewClient(ctx)
 	if err != nil {
@@ -107,6 +118,8 @@ func AutocertServer(ctx context.Context, bucket, addr string, handler http.Handl
 	return server, nil
 }
 
+// SelfSignedServer returns an http.Server that is configured to serve
+// self-signed HTTPS on addr.
 func SelfSignedServer(addr string, handler http.Handler) (*http.Server, error) {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
