@@ -6,8 +6,6 @@ metadata:
   annotations:
     kubernetes.io/ingress.global-static-ip-name: ingress
     networking.gke.io/managed-certificates: dev-test-cert,build-cert,dev-cert,gerritbot-cert,maintner-cert
-    # Legacy Let's Encrypt certs.
-    ingress.gcp.kubernetes.io/pre-shared-cert: build-golang-org,build-golang-org-rsa,dev-golang-org,dev-golang-org-rsa,gerritbot-golang-org,gerritbot-golang-org-rsa,maintner-golang-org,maintner-golang-org-rsa
     kubernetes.io/ingress.class: "gce"
     networking.gke.io/v1beta1.FrontendConfig: build-ingress-frontend
 spec:
@@ -38,7 +36,7 @@ spec:
           service:
             name: coordinator-internal
             port:
-              number: 80
+              number: 444
   - host: dev.golang.org
     http:
       paths:
@@ -58,7 +56,7 @@ spec:
           service:
             name: gerritbot-internal
             port:
-              number: 80
+              number: 444
   - host: maintner.golang.org
     http:
       paths:

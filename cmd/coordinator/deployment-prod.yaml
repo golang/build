@@ -20,10 +20,11 @@ spec:
       - name: coordinator
         image: gcr.io/symbolic-datum-552/coordinator:latest
         imagePullPolicy: Always
-        command: ["/coordinator", "-listen-http=:80", "-listen-https-autocert=:443", "-autocert-bucket=farmer-golang-org-autocert-cache"]
+        command: ["/coordinator", "-listen-http=:80", "-listen-https-autocert=:443", "-autocert-bucket=farmer-golang-org-autocert-cache", "-listen-https-selfsigned=:444"]
         ports:
         - containerPort: 80
         - containerPort: 443
+        - containerPort: 444
         - containerPort: 2222 # ssh proxy port
         - containerPort: 8123 # module proxy port (internal, not accessible directly from public)
         resources:
@@ -58,11 +59,16 @@ kind: Service
 metadata:
   namespace: prod
   name: coordinator-internal
+  annotations:
+    cloud.google.com/app-protocols: '{"https":"HTTP2"}'
 spec:
   ports:
     - port: 80
       targetPort: 80
       name: http
+    - port: 444
+      targetPort: 444
+      name: https
   selector:
     app: coordinator
   type: ClusterIP
