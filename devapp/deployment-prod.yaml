@@ -21,14 +21,13 @@ spec:
       - name: devapp
         image: gcr.io/symbolic-datum-552/devapp:latest
         imagePullPolicy: Always
-        command: ["/devapp", "-listen-http=:80", "-listen-https-autocert=:443", "-autocert-bucket=golang-devapp-autocert", "-listen-https-selfsigned=:444"]
+        command: ["/devapp", "-listen-https-selfsigned=:444"]
         readinessProbe:
           httpGet:
             path: /healthz
-            port: 80
+            port: 444
+            scheme: HTTPS
         ports:
-        - containerPort: 80
-        - containerPort: 443
         - containerPort: 444
         resources:
           requests:
@@ -38,24 +37,6 @@ spec:
           limits:
             memory: "8Gi"
             ephemeral-storage: "32Gi"
----
-apiVersion: v1
-kind: Service
-metadata:
-  namespace: prod
-  name: devapp
-spec:
-  ports:
-    - port: 80
-      targetPort: 80
-      name: http
-    - port: 443
-      targetPort: 443
-      name: https
-  selector:
-    app: devapp
-  type: LoadBalancer
-  loadBalancerIP: 35.188.206.122
 ---
 apiVersion: v1
 kind: Service

@@ -63,9 +63,6 @@ metadata:
     cloud.google.com/app-protocols: '{"https":"HTTP2"}'
 spec:
   ports:
-    - port: 80
-      targetPort: 80
-      name: http
     - port: 444
       targetPort: 444
       name: https
