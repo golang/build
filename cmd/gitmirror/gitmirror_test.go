@@ -136,14 +136,22 @@ func newTestMirror(t *testing.T) *testMirror {
 	// destinations are bare so we can push to them.
 	gitConfig := &bytes.Buffer{}
 	overrideRepo := func(fromURL, toDir string, bare bool) {
-		init := exec.Command("git", "init")
+		initArgs := []string{"init"}
 		if bare {
-			init.Args = append(init.Args, "--bare")
+			initArgs = append(initArgs, "--bare")
 		}
-		init.Dir = toDir
-		if out, err := init.CombinedOutput(); err != nil {
-			t.Fatalf("git init: %v\n%v", err, out)
+		for _, args := range [][]string{
+			initArgs,
+			{"config", "user.name", "Gopher"},
+			{"config", "user.email", "gopher@golang.org"},
+		} {
+			cmd := exec.Command("git", args...)
+			envutil.SetDir(cmd, toDir)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("%s: %v\n%s", strings.Join(cmd.Args, " "), err, out)
+			}
 		}
+
 		fmt.Fprintf(gitConfig, "[url %q]\n  insteadOf = %v\n", toDir, fromURL)
 	}
 	overrideRepo("https://go.googlesource.com/build", tm.gerrit, false)
