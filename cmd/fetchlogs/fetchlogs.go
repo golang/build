@@ -37,6 +37,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -50,10 +51,10 @@ import (
 var defaultDir = filepath.Join(xdgCacheDir(), "fetchlogs")
 
 var (
-	flagN         = flag.Int("n", 300, "limit to most recent `N` commits")
+	flagN         = flag.Int("n", 300, "limit to most recent `N` commits per repo")
 	flagPar       = flag.Int("j", 5, "number of concurrent download `jobs`")
 	flagDir       = flag.String("dir", defaultDir, "`directory` to save logs to")
-	flagRepo      = flag.String("repo", "go", `repo to fetch logs for`)
+	flagRepo      = flag.String("repo", "go", `comma-separated list of repos to fetch logs for, or "all" for all known repos`)
 	flagDashboard = flag.String("dashboard", "https://build.golang.org", `the dashboard root url`)
 )
 
@@ -87,103 +88,166 @@ func main() {
 	wg := sync.WaitGroup{}
 
 	// Fetch dashboard pages.
-	haveCommits := 0
-	for page := 0; haveCommits < *flagN; page++ {
-		dashURL := fmt.Sprintf("%s/?mode=json&page=%d", *flagDashboard, page)
-		if *flagRepo != "go" {
-			repo := repos.ByGerritProject[*flagRepo]
-			if repo == nil {
-				log.Fatalf("unknown repo %s", *flagRepo)
+	for _, repo := range parseRepoFlag() {
+		project := repo.GoGerritProject
+		haveCommits := 0
+		for page := 0; haveCommits < *flagN; page++ {
+			dashURL := fmt.Sprintf("%s/?mode=json&page=%d", *flagDashboard, page)
+			if project != "go" {
+				dashURL += "&repo=" + url.QueryEscape(repo.ImportPath)
 			}
-			dashURL += "&repo=" + url.QueryEscape(repo.ImportPath)
-		}
-		index, err := fetcher.get(dashURL)
-		if err != nil {
-			log.Fatal(err)
-		}
+			index, err := fetcher.get(dashURL)
+			if err != nil {
+				log.Fatal(err)
+			}
 
-		var status types.BuildStatus
-		if err = json.NewDecoder(index).Decode(&status); err != nil {
-			log.Fatal("error unmarshalling result: ", err)
-		}
-		index.Close()
+			var status types.BuildStatus
+			if err = json.NewDecoder(index).Decode(&status); err != nil {
+				log.Fatal("error unmarshalling result: ", err)
+			}
+			index.Close()
 
-		for _, rev := range status.Revisions {
-			haveCommits++
-			if haveCommits > *flagN {
+			if len(status.Revisions) == 0 {
+				// We asked for a page of revisions and received a valid reply with none.
+				// Assume that there are no more beyond this.
 				break
 			}
-			if rev.Repo != *flagRepo {
-				continue
-			}
 
-			// Create a revision directory. This way we
-			// have a record of commits with no failures.
-			date, err := parseRevDate(rev.Date)
-			if err != nil {
-				log.Fatal("malformed revision date: ", err)
-			}
-			var goDate time.Time
-			if rev.GoRevision != "" {
-				commit := goProject().GitCommit(rev.GoRevision)
-				goDate = commit.CommitTime
-			}
-			revDir, revDirDepth := revToDir(rev.Revision, date, rev.GoRevision, goDate)
-			ensureDir(revDir)
-
-			if rev.GoRevision != "" {
-				// In October 2021 we started creating a separate subdirectory for
-				// each Go repo commit. (Previously, we overwrote the link for each
-				// subrepo commit when downloading a new Go commit.) Remove the
-				// previous links, if any, so that greplogs won't double-count them.
-				prevRevDir, _ := revToDir(rev.Revision, date, "", time.Time{})
-				if err := os.RemoveAll(prevRevDir); err != nil {
-					log.Fatal(err)
+			for _, rev := range status.Revisions {
+				if haveCommits >= *flagN {
+					break
 				}
-			}
-
-			// Save revision metadata.
-			buf := bytes.Buffer{}
-			enc := json.NewEncoder(&buf)
-			if err = enc.Encode(rev); err != nil {
-				log.Fatal(err)
-			}
-			if err = writeFileAtomic(filepath.Join(revDir, ".rev.json"), &buf); err != nil {
-				log.Fatal("error saving revision metadata: ", err)
-			}
-
-			// Save builders list so Results list can be
-			// interpreted.
-			if err = enc.Encode(status.Builders); err != nil {
-				log.Fatal(err)
-			}
-			if err = writeFileAtomic(filepath.Join(revDir, ".builders.json"), &buf); err != nil {
-				log.Fatal("error saving builders metadata: ", err)
-			}
-
-			// Fetch revision logs.
-			for i, res := range rev.Results {
-				if res == "" || res == "ok" {
+				if rev.Repo != project {
+					// The results for the "go" repo (fetched without the "&repo" query
+					// parameter) empirically include some subrepo results for release
+					// branches.
+					//
+					// Those aren't really relevant to the "go" repo — and they should be
+					// included when we fetch the subrepo explicitly anyway — so filter
+					// them out here.
 					continue
 				}
+				haveCommits++
 
-				wg.Add(1)
-				go func(builder, logURL string) {
-					defer wg.Done()
-					logPath := filepath.Join("log", filepath.Base(logURL))
-					err := fetcher.getFile(logURL, logPath)
-					if err != nil {
-						log.Fatal("error fetching log: ", err)
+				// Create a revision directory. This way we
+				// have a record of commits with no failures.
+				date, err := parseRevDate(rev.Date)
+				if err != nil {
+					log.Fatal("malformed revision date: ", err)
+				}
+				var goDate time.Time
+				if rev.GoRevision != "" {
+					commit := goProject().GitCommit(rev.GoRevision)
+					goDate = commit.CommitTime
+				}
+				revDir, revDirDepth := revToDir(rev.Revision, date, rev.GoRevision, goDate)
+				ensureDir(revDir)
+
+				if rev.GoRevision != "" {
+					// In October 2021 we started creating a separate subdirectory for
+					// each Go repo commit. (Previously, we overwrote the link for each
+					// subrepo commit when downloading a new Go commit.) Remove the
+					// previous links, if any, so that greplogs won't double-count them.
+					prevRevDir, _ := revToDir(rev.Revision, date, "", time.Time{})
+					if err := os.RemoveAll(prevRevDir); err != nil {
+						log.Fatal(err)
 					}
-					if err := linkLog(revDir, revDirDepth, builder, logPath); err != nil {
-						log.Fatal("error linking log: ", err)
+				}
+
+				// Save revision metadata.
+				buf := bytes.Buffer{}
+				enc := json.NewEncoder(&buf)
+				if err = enc.Encode(rev); err != nil {
+					log.Fatal(err)
+				}
+				if err = writeFileAtomic(filepath.Join(revDir, ".rev.json"), &buf); err != nil {
+					log.Fatal("error saving revision metadata: ", err)
+				}
+
+				// Save builders list so Results list can be
+				// interpreted.
+				if err = enc.Encode(status.Builders); err != nil {
+					log.Fatal(err)
+				}
+				if err = writeFileAtomic(filepath.Join(revDir, ".builders.json"), &buf); err != nil {
+					log.Fatal("error saving builders metadata: ", err)
+				}
+
+				// Fetch revision logs.
+				for i, res := range rev.Results {
+					if res == "" || res == "ok" {
+						continue
 					}
-				}(status.Builders[i], res)
+
+					wg.Add(1)
+					go func(builder, logURL string) {
+						defer wg.Done()
+						logPath := filepath.Join("log", filepath.Base(logURL))
+						err := fetcher.getFile(logURL, logPath)
+						if err != nil {
+							log.Fatal("error fetching log: ", err)
+						}
+						if err := linkLog(revDir, revDirDepth, builder, logPath); err != nil {
+							log.Fatal("error linking log: ", err)
+						}
+					}(status.Builders[i], res)
+				}
 			}
 		}
 	}
 
 	wg.Wait()
+}
+
+func parseRepoFlag() (rs []*repos.Repo) {
+	if *flagRepo == "all" {
+		for p, repo := range repos.ByGerritProject {
+			if p == "go" || repo.ShowOnDashboard() {
+				rs = append(rs, repo)
+			}
+		}
+	} else {
+		for _, p := range strings.Split(*flagRepo, ",") {
+			p = strings.TrimSpace(p)
+			repo := repos.ByGerritProject[p]
+			if repo == nil {
+				log.Fatalf("unknown repo %s", *flagRepo)
+			}
+			rs = append(rs, repo)
+		}
+	}
+	sort.Slice(rs, func(i, j int) bool {
+		pi := rs[i].GoGerritProject
+		pj := rs[j].GoGerritProject
+
+		// Read "go" first because it doesn't require maintner data.
+		if pj == "go" {
+			return false // Nothing is before "go".
+		} else if pi == "go" {
+			return true // "go" is before everything else.
+		}
+
+		return pi < pj
+	})
+
+	if len(rs) == 0 {
+		log.Fatal("-repo flag does not contain any repos")
+	}
+	if rs[0].GoGerritProject == "go" && len(rs) > 1 {
+		go func() {
+			// Prefetch maintner data, since we'll likely need it and can hide
+			// some of the latency behind processing the "go" project
+			// (which does not need it).
+			//
+			// If the first repo is not "go", then we'll either need the maintner data
+			// right away (in which case we can't hide any substantial latency) or not
+			// at all (in which case we shouldn't bother churning memory and disk
+			// pages to load it).
+			_ = goProject()
+		}()
+	}
+
+	return rs
 }
 
 // A fetcher downloads files over HTTP concurrently. It allows
@@ -229,6 +293,9 @@ func (f *fetcher) get(url string) (io.ReadCloser, error) {
 	f.tokens <- struct{}{}
 	if err != nil {
 		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("GET %s: %v %s", url, resp.StatusCode, http.StatusText(resp.StatusCode))
 	}
 
 	return resp.Body, nil
