@@ -2508,6 +2508,12 @@ func init() {
 				// (https://golang.org/issue/31567).
 				// Skip affected repos until the builder is fixed.
 				return false
+			case "vulndb", "vuln":
+				// vulndb currently uses a dependency which does not build cleanly
+				// on aix-ppc64. Until that issue is resolved, skip vulndb on
+				// this builder.
+				// (https://golang.org/issue/49218).
+				return false
 			}
 			return buildRepoByDefault(repo)
 		},
