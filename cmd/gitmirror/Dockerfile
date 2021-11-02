@@ -2,10 +2,8 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.14 AS build
-LABEL maintainer "golang-dev@googlegroups.com"
-
-ENV GO111MODULE=on
+FROM golang:1.17 AS build
+LABEL maintainer="golang-dev@googlegroups.com"
 
 RUN mkdir /gocache
 ENV GOCACHE /gocache
@@ -15,25 +13,16 @@ COPY go.sum /go/src/golang.org/x/build/go.sum
 
 WORKDIR /go/src/golang.org/x/build
 
-# Optimization for iterative docker build speed, not necessary for correctness:
-# TODO: write a tool to make writing Go module-friendly Dockerfiles easier.
-RUN go install cloud.google.com/go/compute/metadata
-COPY gerrit /go/src/golang.org/x/build/gerrit
-RUN go install golang.org/x/build/gerrit
-COPY buildenv /go/src/golang.org/x/build/buildenv
-RUN go install golang.org/x/build/buildenv
-COPY internal/foreach /go/src/golang.org/x/build/internal/foreach
-COPY maintner /go/src/golang.org/x/build/maintner
-COPY cmd/pubsubhelper /go/src/golang.org/x/build/cmd/pubsubhelper
-RUN go install golang.org/x/build/maintner/maintnerd/apipb
-RUN go install golang.org/x/build/maintner/godata
+# Download module dependencies to improve speed of re-building the
+# Docker image during minor code changes.
+RUN go mod download
 
 COPY . /go/src/golang.org/x/build/
 
 RUN go install golang.org/x/build/cmd/gitmirror
 
 FROM debian:buster
-LABEL maintainer "golang-dev@googlegroups.com"
+LABEL maintainer="golang-dev@googlegroups.com"
 
 # For interacting with the Go source & subrepos
 RUN apt-get update && apt-get install -y \
