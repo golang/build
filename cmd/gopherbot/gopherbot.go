@@ -365,6 +365,7 @@ var tasks = []struct {
 	{"label tools issues", (*gopherbot).labelToolsIssues},
 	{"label go.dev issues", (*gopherbot).labelGoDevIssues},
 	{"label pkgsite issues", (*gopherbot).labelPkgsiteIssues},
+	{"label x/vuln issues", (*gopherbot).labelVulnIssues},
 	{"label proposals", (*gopherbot).labelProposals},
 	{"handle gopls issues", (*gopherbot).handleGoplsIssues},
 	{"open cherry pick issues", (*gopherbot).openCherryPickIssues},
@@ -1105,6 +1106,16 @@ func (b *gopherbot) labelPkgsiteIssues(ctx context.Context) error {
 			}
 		}
 		return b.addLabel(ctx, repoID, gi, "pkgsite")
+	})
+}
+
+func (b *gopherbot) labelVulnIssues(ctx context.Context) error {
+	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		hasVulnTitle := strings.HasPrefix(gi.Title, "x/vuln:") || strings.HasPrefix(gi.Title, "x/vuln/")
+		if gi.Closed || gi.PullRequest || !hasVulnTitle || gi.HasLabel("x/vuln") || gi.HasEvent("unlabeled") {
+			return nil
+		}
+		return b.addLabel(ctx, b.gorepo.ID(), gi, "x/vuln")
 	})
 }
 
