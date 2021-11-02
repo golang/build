@@ -322,7 +322,12 @@ func goFindTryWork(ctx context.Context, gerritc *gerrit.Client, maintc *maintner
 
 	res := new(apipb.GoFindTryWorkResponse)
 	for _, ci := range cis {
-		cl := maintc.Gerrit().Project("go.googlesource.com", ci.Project).CL(int32(ci.ChangeNumber))
+		proj := maintc.Gerrit().Project("go.googlesource.com", ci.Project)
+		if proj == nil {
+			log.Printf("nil Gerrit project %q", ci.Project)
+			continue
+		}
+		cl := proj.CL(int32(ci.ChangeNumber))
 		if cl == nil {
 			log.Printf("nil Gerrit CL %v", ci.ChangeNumber)
 			continue
