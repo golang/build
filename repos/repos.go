@@ -79,7 +79,7 @@ func init() {
 	x("net", desc("additional networking packages"))
 	x("oauth2")
 	x("perf", desc("packages and tools for performance measurement, storage, and analysis"))
-	x("pkgsite", desc("home of the pkg.go.dev website"), noBuildAndNoDash)
+	x("pkgsite", desc("home of the pkg.go.dev website"), noBuildAndNoDash, enableCSR("go-discovery"))
 	x("playground", noDash, enableCSR("golang-org"))
 	x("review", desc("a tool for working with Gerrit code reviews"))
 	x("scratch", noDash)
