@@ -232,8 +232,8 @@ func (m *gitMirror) addMirrors() error {
 				return fmt.Errorf("adding GitHub remote: %v", err)
 			}
 		}
-		if m.mirrorCSR && repo.meta.MirrorToCSR {
-			if err := repo.addRemote("csr", "https://source.developers.google.com/p/golang-org/r/"+repo.name); err != nil {
+		if m.mirrorCSR && repo.meta.MirrorToCSRProject != "" {
+			if err := repo.addRemote("csr", "https://source.developers.google.com/p/"+repo.meta.MirrorToCSRProject+"/r/"+repo.name); err != nil {
 				return fmt.Errorf("adding CSR remote: %v", err)
 			}
 		}

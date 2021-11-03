@@ -165,11 +165,11 @@ func newTestMirror(t *testing.T) *testMirror {
 		t.Fatal(err)
 	}
 	tm.buildRepo = tm.m.addRepo(&repospkg.Repo{
-		GoGerritProject: "build",
-		ImportPath:      "golang.org/x/build",
-		MirrorToGitHub:  true,
-		GitHubRepo:      "golang/build",
-		MirrorToCSR:     true,
+		GoGerritProject:    "build",
+		ImportPath:         "golang.org/x/build",
+		MirrorToGitHub:     true,
+		GitHubRepo:         "golang/build",
+		MirrorToCSRProject: "golang-org",
 	})
 	if err := tm.buildRepo.init(); err != nil {
 		t.Fatal(err)

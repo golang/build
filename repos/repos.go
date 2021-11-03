@@ -22,11 +22,11 @@ type Repo struct {
 	// gitHubRepo must both be defined.
 	MirrorToGitHub bool
 
-	// MirrorToCSR controls whether this repo is mirrored from
-	// Gerrit to Cloud Source Repositories. If true, GoGerritProject
-	// must be defined. It will be mirrored to a CSR repo with the
-	// same name as the Gerrit repo.
-	MirrorToCSR bool
+	// MirrorToCSRProject controls whether this repo is mirrored from
+	// Gerrit to Cloud Source Repositories. If not empty, GoGerritProject
+	// must be defined. It will be mirrored to a CSR repo in the given
+	// project with the same name as the Gerrit repo.
+	MirrorToCSRProject string
 
 	// showOnDashboard is whether to show the repo on the bottom
 	// of build.golang.org in the repo overview section.
@@ -56,7 +56,7 @@ var ByGerritProject = map[string]*Repo{ /* initialized below */ }
 var ByImportPath = map[string]*Repo{ /* initialized below */ }
 
 func init() {
-	addMirrored("go", coordinatorCanBuild, noDash, enableCSR)
+	addMirrored("go", coordinatorCanBuild, noDash, enableCSR("golang-org"))
 	addMirrored("dl", importPath("golang.org/dl"), coordinatorCanBuild)
 	addMirrored("gddo", importPath("github.com/golang/gddo"), archivedOnGitHub)
 	addMirrored("gofrontend")
@@ -80,7 +80,7 @@ func init() {
 	x("oauth2")
 	x("perf", desc("packages and tools for performance measurement, storage, and analysis"))
 	x("pkgsite", desc("home of the pkg.go.dev website"), noBuildAndNoDash)
-	x("playground", noDash, enableCSR)
+	x("playground", noDash, enableCSR("golang-org"))
 	x("review", desc("a tool for working with Gerrit code reviews"))
 	x("scratch", noDash)
 	x("sync", desc("additional concurrency primitives"))
@@ -93,8 +93,8 @@ func init() {
 	x("tour", noDash)
 	x("vgo", noDash)
 	x("vuln", desc("code for the Go Vulnerability Database"))
-	x("vulndb", desc("reports for the Go Vulnerability Database"), enableCSR)
-	x("website", desc("home of the golang.org and go.dev websites"), enableCSR)
+	x("vulndb", desc("reports for the Go Vulnerability Database"), enableCSR("golang-org"))
+	x("website", desc("home of the golang.org and go.dev websites"), enableCSR("golang-org"))
 	x("xerrors", noDash)
 
 	add(&Repo{GoGerritProject: "gollvm"})
@@ -130,9 +130,7 @@ func archivedOnGitHub(r *Repo) {
 	r.MirrorToGitHub = false
 }
 
-func enableCSR(r *Repo) {
-	r.MirrorToCSR = true
-}
+func enableCSR(p string) modifyRepo { return func(r *Repo) { r.MirrorToCSRProject = p } }
 
 func importPath(v string) modifyRepo { return func(r *Repo) { r.ImportPath = v } }
 
@@ -168,7 +166,7 @@ func x(proj string, opts ...modifyRepo) {
 }
 
 func add(r *Repo) {
-	if (r.MirrorToCSR || r.MirrorToGitHub || r.showOnDashboard) && r.GoGerritProject == "" {
+	if (r.MirrorToCSRProject != "" || r.MirrorToGitHub || r.showOnDashboard) && r.GoGerritProject == "" {
 		panic(fmt.Sprintf("project %+v sets feature(s) that require a GoGerritProject, but has none", r))
 	}
 	if r.MirrorToGitHub && r.GitHubRepo == "" {
