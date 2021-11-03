@@ -39,6 +39,7 @@ metadata:
   namespace: prod
   name: gerritbot-internal
   annotations:
+    cloud.google.com/neg: '{"ingress": false}'
     cloud.google.com/app-protocols: '{"https":"HTTP2"}'
 spec:
   ports:
@@ -47,4 +48,4 @@ spec:
       name: https
   selector:
     app: gerritbot
-  type: ClusterIP
+  type: NodePort
