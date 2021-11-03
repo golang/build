@@ -36,6 +36,22 @@ func TestTrivial(t *testing.T) {
 	}
 }
 
+func TestStuck(t *testing.T) {
+	fail := func(context.Context) (string, error) {
+		return "", fmt.Errorf("goodbye world")
+	}
+
+	wd := workflow.New()
+	nothing := wd.Task("fail", fail)
+	wd.Output("nothing", nothing)
+
+	w := startWorkflow(t, wd, nil)
+	_, err := w.Run(context.Background(), &verboseListener{t: t})
+	if err == nil || !strings.Contains(err.Error(), "as far as it can") {
+		t.Errorf("Run of stuck workflow = %v, wanted it to give up early", err)
+	}
+}
+
 func TestSplitJoin(t *testing.T) {
 	echo := func(ctx context.Context, arg string) (string, error) {
 		return arg, nil
@@ -250,11 +266,13 @@ func startWorkflow(t *testing.T, wd *workflow.Definition, params map[string]stri
 }
 
 func runWorkflow(t *testing.T, w *workflow.Workflow, listener workflow.Listener) map[string]interface{} {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	t.Helper()
 	if listener == nil {
 		listener = &verboseListener{t}
 	}
-	outputs, err := w.Run(context.Background(), listener)
+	outputs, err := w.Run(ctx, listener)
 	if err != nil {
 		t.Fatal(err)
 	}

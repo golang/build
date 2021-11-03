@@ -378,7 +378,7 @@ func Resume(def *Definition, state *WorkflowState, taskStates map[string]*TaskSt
 	return w, nil
 }
 
-// Run runs a workflow to successful completion and returns its outputs.
+// Run runs a workflow to completion or quiescence and returns its outputs.
 // listener.TaskStateChanged will be called when each task starts and
 // finishes. It should be used only for monitoring and persistence purposes -
 // to read task results, register Outputs.
@@ -418,6 +418,17 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 				stateChan <- w.runTask(ctx, listener, task, in)
 				running.Done()
 			}(*task)
+		}
+
+		// Exit if we've run everything we can given errors.
+		running := 0
+		for _, task := range w.tasks {
+			if task.started && !task.finished {
+				running++
+			}
+		}
+		if running == 0 {
+			return nil, fmt.Errorf("workflow has progressed as far as it can")
 		}
 
 		select {
