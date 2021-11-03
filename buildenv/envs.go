@@ -138,6 +138,11 @@ type Environment struct {
 
 	// AWSRegion is the region where AWS resources are deployed.
 	AWSRegion string
+
+	// iapServiceIDs is a map of service-backends to service IDs for the backend
+	// services used by IAP enabled HTTP paths.
+	// map[backend-service-name]service_id
+	iapServiceIDs map[string]string
 }
 
 // ComputePrefix returns the URI prefix for Compute Engine resources in a project.
@@ -202,6 +207,15 @@ func (e Environment) Credentials(ctx context.Context) (*google.Credentials, erro
 	return creds, nil
 }
 
+// IAPServiceID returns the service id for the backend service. If a path does not exist for a
+// backend, the service id will be an empty string.
+func (e Environment) IAPServiceID(backendServiceName string) string {
+	if v, ok := e.iapServiceIDs[backendServiceName]; ok {
+		return v
+	}
+	return ""
+}
+
 // ByProjectID returns an Environment for the specified
 // project ID. It is currently limited to the symbolic-datum-552
 // and go-dashboard-dev projects.
@@ -254,6 +268,7 @@ var Staging = &Environment{
 	COSServiceAccount: "linux-cos-builders@go-dashboard-dev.iam.gserviceaccount.com",
 	AWSSecurityGroup:  "staging-go-builders",
 	AWSRegion:         "us-east-1",
+	iapServiceIDs:     map[string]string{},
 }
 
 // Production defines the environment that the coordinator and build
@@ -285,6 +300,10 @@ var Production = &Environment{
 	COSServiceAccount: "linux-cos-builders@symbolic-datum-552.iam.gserviceaccount.com",
 	AWSSecurityGroup:  "go-builders",
 	AWSRegion:         "us-east-2",
+	iapServiceIDs: map[string]string{
+		"coordinator-internal-iap": "5961904996536591018",
+		"relui-internal":           "5124132661507612124",
+	},
 }
 
 var Development = &Environment{

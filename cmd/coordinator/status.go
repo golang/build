@@ -39,6 +39,7 @@ import (
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/kubernetes/api"
 	"golang.org/x/oauth2"
+	"google.golang.org/grpc"
 )
 
 // status
@@ -628,13 +629,19 @@ func healthCheckerHandler(hc *healthChecker) http.Handler {
 
 func uptime() time.Duration { return time.Since(processStartTime).Round(time.Second) }
 
-func handleStatus(w http.ResponseWriter, r *http.Request) {
-	// Support gRPC handlers. handleStatus is our toplevel ("/") handler, so reroute to the gRPC server for
-	// matching requests.
-	if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
-		grpcServer.ServeHTTP(w, r)
-		return
+// grpcHandlerFunc creates handler which intercepts requests intended for a GRPC server and directs the calls to the server.
+// All other requests are directed toward the passed in handler.
+func grpcHandlerFunc(gs *grpc.Server, h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+			gs.ServeHTTP(w, r)
+			return
+		}
+		h(w, r)
 	}
+}
+
+func handleStatus(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return

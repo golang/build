@@ -18,11 +18,13 @@ import (
 	"embed"
 	"net/http"
 	"sort"
+	"strings"
 
 	"cloud.google.com/go/datastore"
 	"github.com/NYTimes/gziphandler"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/repos"
+	"google.golang.org/grpc"
 )
 
 var (
@@ -44,12 +46,13 @@ var (
 // fakeResults controls whether to make up fake random results. If true, datastore is not used.
 const fakeResults = false
 
-// Handler sets a datastore client, maintner client, and builder master key
-// at the package scope, and returns an HTTP mux for the legacy dashboard.
-func Handler(dc *datastore.Client, mc apipb.MaintnerServiceClient, key string) http.Handler {
+// Handler sets a datastore client, maintner client, builder master key and
+// GRPC server at the package scope, and returns an HTTP mux for the legacy dashboard.
+func Handler(dc *datastore.Client, mc apipb.MaintnerServiceClient, key string, grpcServer *grpc.Server) http.Handler {
 	datastoreClient = dc
 	maintnerClient = mc
 	masterKey = key
+	grpcServer = grpcServer
 
 	mux := http.NewServeMux()
 
@@ -58,7 +61,7 @@ func Handler(dc *datastore.Client, mc apipb.MaintnerServiceClient, key string) h
 	mux.Handle("/result", hstsGzip(AuthHandler(resultHandler)))              // called by coordinator after build
 
 	// public handlers
-	mux.Handle("/", hstsGzip(http.HandlerFunc(uiHandler)))
+	mux.Handle("/", GRPCHandler(grpcServer, hstsGzip(http.HandlerFunc(uiHandler)))) // enables GRPC server for build.golang.org
 	mux.Handle("/log/", hstsGzip(http.HandlerFunc(logHandler)))
 
 	// static handler
@@ -70,6 +73,18 @@ func Handler(dc *datastore.Client, mc apipb.MaintnerServiceClient, key string) h
 
 //go:embed static
 var static embed.FS
+
+// GRPCHandler creates handler which intercepts requests intended for a GRPC server and directs the calls to the server.
+// All other requests are directed toward the passed in handler.
+func GRPCHandler(gs *grpc.Server, h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+			gs.ServeHTTP(w, r)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
 
 // hstsGzip is short for hstsHandler(GzipHandler(h)).
 func hstsGzip(h http.Handler) http.Handler {

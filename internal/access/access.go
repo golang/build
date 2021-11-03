@@ -55,6 +55,7 @@ func IAPFromContext(ctx context.Context) (*IAPFields, error) {
 // It ensures that the caller has successfully authenticated via IAP. If the caller
 // has authenticated, the headers created by IAP will be added to the request scope
 // context passed down to the server implementation.
+// https://cloud.google.com/iap/docs/signed-headers-howto
 func iapAuthFunc(audience string, validatorFn validator) grpcauth.AuthFunc {
 	return func(ctx context.Context) (context.Context, error) {
 		md, ok := metadata.FromIncomingContext(ctx)
@@ -117,11 +118,17 @@ func RequireIAPAuthStreamInterceptor(audience string) grpc.StreamServerIntercept
 type validator func(ctx context.Context, token, audiance string) (*idtoken.Payload, error)
 
 // IAPAudienceGCE returns the jwt audience for GCE and GKE services.
+// The project number is the numerical GCP project number the service is deployed in.
+// The service ID is the identifier for the backend service used to route IAP requests.
+// https://cloud.google.com/iap/docs/signed-headers-howto
 func IAPAudienceGCE(projectNumber int64, serviceID string) string {
 	return fmt.Sprintf("/projects/%d/global/backendServices/%s", projectNumber, serviceID)
 }
 
 // IAPAudienceAppEngine returns the JWT audience for App Engine services.
+// The project number is the numerical GCP project number the service is deployed in.
+// The project ID is the textual identifier for the GCP project that the App Engine instance is deployed in.
+// https://cloud.google.com/iap/docs/signed-headers-howto
 func IAPAudienceAppEngine(projectNumber int64, projectID string) string {
 	return fmt.Sprintf("/projects/%d/apps/%s", projectNumber, projectID)
 }

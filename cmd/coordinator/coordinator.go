@@ -40,6 +40,9 @@ import (
 	builddash "golang.org/x/build/cmd/coordinator/internal/dashboard"
 	"golang.org/x/build/cmd/coordinator/internal/legacydash"
 	"golang.org/x/build/cmd/coordinator/protos"
+	"golang.org/x/build/internal/access"
+	"golang.org/x/build/internal/gomote"
+	gomoteprotos "golang.org/x/build/internal/gomote/protos"
 	"google.golang.org/grpc"
 	grpc4 "grpc.go4.org"
 
@@ -55,6 +58,7 @@ import (
 	"golang.org/x/build/internal/buildstats"
 	"golang.org/x/build/internal/cloud"
 	"golang.org/x/build/internal/coordinator/pool"
+	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/maintner/maintnerd/apipb"
@@ -236,9 +240,6 @@ func (r *linkRewriter) Flush() {
 	r.buf = nil
 }
 
-// grpcServer is a shared gRPC server. It is global, as it needs to be used in places that aren't factored otherwise.
-var grpcServer = grpc.NewServer()
-
 func main() {
 	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
@@ -330,12 +331,26 @@ func main() {
 		log.Printf("Failed to load static resources: %v", err)
 	}
 
-	dashV1 := legacydash.Handler(gce.GoDSClient(), maintnerClient, string(masterKey()))
+	var opts []grpc.ServerOption
+	if env := buildenv.FromFlags(); env == buildenv.Production {
+		var coordinatorBackend, serviceID = "coordinator-internal-iap", ""
+		if serviceID = env.IAPServiceID(coordinatorBackend); serviceID == "" {
+			log.Fatalf("unable to retrieve Service ID for backend service=%q", coordinatorBackend)
+		}
+		opts = append(opts, grpc.UnaryInterceptor(access.RequireIAPAuthUnaryInterceptor(access.IAPAudienceGCE(env.ProjectNumber, serviceID))))
+		opts = append(opts, grpc.StreamInterceptor(access.RequireIAPAuthStreamInterceptor(access.IAPAudienceGCE(env.ProjectNumber, serviceID))))
+	}
+	// grpcServer is a shared gRPC server. It is global, as it needs to be used in places that aren't factored otherwise.
+	grpcServer := grpc.NewServer(opts...)
+
+	dashV1 := legacydash.Handler(gce.GoDSClient(), maintnerClient, string(masterKey()), grpcServer)
 	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
+	gomoteServer := gomote.New(remote.NewSessionPool(context.Background()))
 	protos.RegisterCoordinatorServer(grpcServer, gs)
-	http.HandleFunc("/", handleStatus)       // Serve a status page at farmer.golang.org.
-	http.Handle("build.golang.org/", dashV1) // Serve a build dashboard at build.golang.org.
+	gomoteprotos.RegisterGomoteServiceServer(grpcServer, gomoteServer)
+	http.HandleFunc("/", grpcHandlerFunc(grpcServer, handleStatus)) // Serve a status page at farmer.golang.org.
+	http.Handle("build.golang.org/", dashV1)                        // Serve a build dashboard at build.golang.org.
 	http.Handle("build-staging.golang.org/", dashV1)
 	http.HandleFunc("/builders", handleBuilders)
 	http.HandleFunc("/temporarylogs", handleLogs)
