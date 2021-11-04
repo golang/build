@@ -70,6 +70,7 @@ import (
 	"golang.org/x/build/repos"
 	"golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
+	perfstorage "golang.org/x/perf/storage"
 	"golang.org/x/time/rate"
 )
 
@@ -2910,8 +2911,7 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
 	)
 	env = append(env, st.conf.ModulesEnv(st.SubName)...)
-
-	return st.bc.Exec(st.ctx, "go/bin/go", buildlet.ExecOpts{
+	rErr, err := st.bc.Exec(st.ctx, "go/bin/go", buildlet.ExecOpts{
 		Debug:    true, // make buildlet print extra debug in output for failures
 		Output:   st,
 		Dir:      "gopath/src/" + repoPath,
@@ -2919,6 +2919,45 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
 		Args:     []string{"run", repoPath + "/cmd/bench"},
 	})
+	if err != nil || rErr != nil {
+		return rErr, err
+	}
+
+	// Upload benchmark results on success.
+	if err := st.uploadBenchResults(); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (st *buildStatus) uploadBenchResults() (err error) {
+	sp := st.CreateSpan("upload_bench_results")
+	defer func() { sp.Done(err) }()
+
+	s := pool.NewGCEConfiguration().BuildEnv().PerfDataURL
+	if s == "" {
+		log.Printf("No perfdata URL, skipping benchmark upload")
+		return nil
+	}
+	client := &perfstorage.Client{BaseURL: s, HTTPClient: pool.NewGCEConfiguration().OAuthHTTPClient()}
+	u := client.NewUpload(st.ctx)
+	w, err := u.CreateFile("results")
+	if err != nil {
+		u.Abort()
+		return fmt.Errorf("error creating perfdata file: %w", err)
+	}
+	// TODO(prattmic): Full log output may contain non-benchmark output
+	// that can be erroneously parsed as benchfmt.
+	if _, err := w.Write([]byte(st.logs())); err != nil {
+		u.Abort()
+		return fmt.Errorf("error writing perfdata file with contents %q: %w", st.logs(), err)
+	}
+	status, err := u.Commit()
+	if err != nil {
+		return fmt.Errorf("error committing perfdata file: %w", err)
+	}
+	st.LogEventTime("bench_upload", status.UploadID)
+	return nil
 }
 
 var errBuildletsGone = errors.New("runTests: dist test failed: all buildlets had network errors or timeouts, yet tests remain")

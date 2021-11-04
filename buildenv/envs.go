@@ -291,6 +291,7 @@ var Development = &Environment{
 	GoProjectName: "golang-org",
 	IsProd:        false,
 	StaticIP:      "127.0.0.1",
+	PerfDataURL:   "http://localhost:8081",
 }
 
 // possibleEnvs enumerate the known buildenv.Environment definitions.
