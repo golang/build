@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"golang.org/x/build/maintner/internal/robustio"
 	"golang.org/x/build/maintner/maintpb"
 	"golang.org/x/build/maintner/reclog"
 )
@@ -55,7 +56,7 @@ func TailNetworkMutationSource(ctx context.Context, server string, fn func(Mutat
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(td)
+	defer robustio.RemoveAll(td)
 
 	ns := NewNetworkMutationSource(server, td).(*netMutSource)
 	ns.quiet = true
@@ -231,7 +232,7 @@ func (ns *netMutSource) locallyCachedSegments() (segs []fileSeg, err error) {
 		}
 		if segGrowing[num] {
 			name := fmt.Sprintf("%04d.growing.mutlog", num)
-			slurp, err := ioutil.ReadFile(filepath.Join(ns.cacheDir, name))
+			slurp, err := robustio.ReadFile(filepath.Join(ns.cacheDir, name))
 			if err != nil {
 				return nil, err
 			}
@@ -506,13 +507,13 @@ func (ns *netMutSource) syncSeg(ctx context.Context, seg LogSegmentJSON) (_ file
 
 	// See how much data we already have in the partial growing file.
 	partial := filepath.Join(ns.cacheDir, fmt.Sprintf("%04d.growing.mutlog", seg.Number))
-	have, _ := ioutil.ReadFile(partial)
+	have, _ := robustio.ReadFile(partial)
 	if int64(len(have)) == seg.Size {
 		got224 := fmt.Sprintf("%x", sha256.Sum224(have))
 		if got224 == seg.SHA224 {
 			if !isFinalSeg {
 				// This was growing for us, but the server started a new growing segment.
-				if err := os.Rename(partial, frozen); err != nil {
+				if err := robustio.Rename(partial, frozen); err != nil {
 					return fileSeg{}, nil, err
 				}
 				return fileSeg{seg: seg.Number, file: frozen, sha224: seg.SHA224, size: seg.Size}, nil, nil
@@ -579,7 +580,7 @@ func (ns *netMutSource) syncSeg(ctx context.Context, seg LogSegmentJSON) (_ file
 	if !isFinalSeg {
 		finalName = frozen
 	}
-	if err := os.Rename(tf.Name(), finalName); err != nil {
+	if err := robustio.Rename(tf.Name(), finalName); err != nil {
 		return fileSeg{}, nil, err
 	}
 	if !ns.quiet {
