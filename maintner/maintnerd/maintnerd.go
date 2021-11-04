@@ -33,7 +33,7 @@ import (
 	"golang.org/x/build/repos"
 	"golang.org/x/crypto/acme/autocert"
 	"golang.org/x/time/rate"
-	grpc "grpc.go4.org"
+	"google.golang.org/grpc"
 )
 
 var (

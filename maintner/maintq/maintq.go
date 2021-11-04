@@ -13,19 +13,19 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"golang.org/x/build/maintner/maintnerd/apipb"
-	"golang.org/x/net/http2"
-	"grpc.go4.org"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 var (
-	server = flag.String("server", "maintner.golang.org", "maintnerd server")
+	server = flag.String("server", "maintner.golang.org:443", "maintnerd server")
 )
 
 var (
@@ -36,18 +36,20 @@ var (
 func main() {
 	flag.Parse()
 
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			NextProtos:         []string{"h2"},
-			InsecureSkipVerify: strings.HasPrefix(*server, "localhost:"),
-		},
+	c := credentials.NewTLS(&tls.Config{
+		NextProtos:         []string{"h2"},
+		InsecureSkipVerify: strings.HasPrefix(*server, "localhost:"),
+	})
+	opts := []grpc.DialOption{
+		grpc.WithDisableRetry(),
+		grpc.WithBlock(),
+		grpc.WithTimeout(5 * time.Second),
+		grpc.WithTransportCredentials(c),
 	}
-	hc := &http.Client{Transport: tr}
-	http2.ConfigureTransport(tr)
 
-	cc, err := grpc.NewClient(hc, "https://"+*server)
+	cc, err := grpc.Dial(*server, opts...)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("unable to grpc.Dial(%q) = %s", *server, err)
 	}
 	mc = apipb.NewMaintnerServiceClient(cc)
 

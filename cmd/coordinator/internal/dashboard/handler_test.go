@@ -19,14 +19,14 @@ import (
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/types"
-	grpc4 "grpc.go4.org"
+	"google.golang.org/grpc"
 )
 
 type fakeMaintner struct {
 	resp *apipb.DashboardResponse
 }
 
-func (f *fakeMaintner) GetDashboard(ctx context.Context, in *apipb.DashboardRequest, opts ...grpc4.CallOption) (*apipb.DashboardResponse, error) {
+func (f *fakeMaintner) GetDashboard(ctx context.Context, in *apipb.DashboardRequest, opts ...grpc.CallOption) (*apipb.DashboardResponse, error) {
 	return f.resp, nil
 }
 

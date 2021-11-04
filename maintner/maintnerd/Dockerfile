@@ -20,7 +20,7 @@ RUN go install cloud.google.com/go/storage
 RUN go install golang.org/x/crypto/acme/autocert
 RUN go install golang.org/x/net/http2
 RUN go install golang.org/x/time/rate
-RUN go install grpc.go4.org
+RUN go install google.golang.org/grpc
 
 COPY . /go/src/golang.org/x/build/
 

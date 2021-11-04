@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -39,7 +40,8 @@ import (
 	"golang.org/x/build/maintner/godata"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/oauth2"
-	"grpc.go4.org"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 var (
@@ -171,7 +173,13 @@ func getGerritClient(ctx context.Context, sc *secret.Client) (*gerrit.Client, er
 }
 
 func getMaintnerClient() (apipb.MaintnerServiceClient, error) {
-	cc, err := grpc.NewClient(nil, "https://maintner.golang.org")
+	opts := []grpc.DialOption{
+		grpc.WithBlock(),
+		grpc.WithTimeout(10 * time.Second),
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{NextProtos: []string{"h2"}})),
+	}
+	mServer := "maintner.golang.org:443"
+	cc, err := grpc.Dial(mServer, opts...)
 	if err != nil {
 		return nil, err
 	}

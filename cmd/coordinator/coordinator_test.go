@@ -167,7 +167,7 @@ func TestIssue28891(t *testing.T) {
 		Commit:    "a5fa9d4b7c91aa1c3fecbeb6358ec1127b910dd6",
 		GoCommit:  []string{"72ccabc99449b2cb5bb1438eb90244d55f7b02f5"},
 		GoBranch:  []string{"release-branch.go1.15"},
-		GoVersion: []*apipb.MajorMinor{{1, 15}},
+		GoVersion: []*apipb.MajorMinor{{Major: 1, Minor: 15}},
 	}
 	ts := newTrySet(work)
 	if len(ts.builds) == 0 {
@@ -194,7 +194,7 @@ func TestIssue42127(t *testing.T) {
 		Commit:    "abf26a14a65b111d492067f407f32455c5b1048c",
 		GoCommit:  []string{"72ccabc99449b2cb5bb1438eb90244d55f7b02f5"},
 		GoBranch:  []string{"release-branch.go1.15"},
-		GoVersion: []*apipb.MajorMinor{{1, 15}},
+		GoVersion: []*apipb.MajorMinor{{Major: 1, Minor: 15}},
 	}
 	ts := newTrySet(work)
 	if len(ts.builds) == 0 {
@@ -220,7 +220,7 @@ func TestXRepoBranches(t *testing.T) {
 		Commit:    "13af72af5ccdfe6f1e75b57b02cfde3bb0a77a76",
 		GoCommit:  []string{"9995c6b50aa55c1cc1236d1d688929df512dad53"},
 		GoBranch:  []string{"master"},
-		GoVersion: []*apipb.MajorMinor{{1, 17}},
+		GoVersion: []*apipb.MajorMinor{{Major: 1, Minor: 17}},
 	}
 	ts := newTrySet(work)
 	for i, bs := range ts.builds {
@@ -245,7 +245,7 @@ func TestIssue42084(t *testing.T) {
 		Version:   1,
 		GoCommit:  []string{"9995c6b50aa55c1cc1236d1d688929df512dad53"},
 		GoBranch:  []string{"master"},
-		GoVersion: []*apipb.MajorMinor{{1, 17}},
+		GoVersion: []*apipb.MajorMinor{{Major: 1, Minor: 17}},
 	}
 
 	// First, determine builds without try messages. Our target SlowBot shouldn't be included.

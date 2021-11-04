@@ -29,8 +29,8 @@ import (
 	"golang.org/x/build/repos"
 	"golang.org/x/build/types"
 	"golang.org/x/sync/errgroup"
-	"grpc.go4.org"
-	"grpc.go4.org/codes"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 )
 
 // uiHandler is the HTTP handler for the https://build.golang.org/.

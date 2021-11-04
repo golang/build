@@ -23,7 +23,7 @@ import (
 	"golang.org/x/build/cmd/coordinator/internal"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/maintner/maintnerd/apipb"
-	grpc4 "grpc.go4.org"
+	"google.golang.org/grpc"
 )
 
 var firstClassPorts = map[string]bool{
@@ -51,7 +51,7 @@ type data struct {
 // MaintnerClient is a subset of apipb.MaintnerServiceClient.
 type MaintnerClient interface {
 	// GetDashboard is extracted from apipb.MaintnerServiceClient.
-	GetDashboard(ctx context.Context, in *apipb.DashboardRequest, opts ...grpc4.CallOption) (*apipb.DashboardResponse, error)
+	GetDashboard(ctx context.Context, in *apipb.DashboardRequest, opts ...grpc.CallOption) (*apipb.DashboardResponse, error)
 }
 
 type Handler struct {

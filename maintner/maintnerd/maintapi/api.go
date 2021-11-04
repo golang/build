@@ -22,17 +22,20 @@ import (
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/maintner/maintnerd/maintapi/version"
 	"golang.org/x/build/repos"
-	"grpc.go4.org"
-	"grpc.go4.org/codes"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 )
 
 // NewAPIService creates a gRPC Server that serves the Maintner API for the given corpus.
 func NewAPIService(corpus *maintner.Corpus) apipb.MaintnerServiceServer {
-	return apiService{corpus}
+	return apiService{c: corpus}
 }
 
 // apiService implements apipb.MaintnerServiceServer using the Corpus c.
 type apiService struct {
+	// embed the unimplemented server.
+	apipb.UnsafeMaintnerServiceServer
+
 	c *maintner.Corpus
 	// There really shouldn't be any more fields here.
 	// All state should be in c.
@@ -171,7 +174,7 @@ func tryWorkItem(
 		if major, minor, ok := parseReleaseBranchVersion(w.Branch); ok {
 			// A release branch like release-branch.goX.Y.
 			// Use the major-minor Go version determined from the branch name.
-			w.GoVersion = []*apipb.MajorMinor{{major, minor}}
+			w.GoVersion = []*apipb.MajorMinor{{Major: major, Minor: minor}}
 		} else {
 			// A branch that is not release-branch.goX.Y: maybe
 			// "master" or a development branch like "dev.link".
@@ -192,7 +195,7 @@ func tryWorkItem(
 			}
 			w.GoCommit = []string{goCommit.String()}
 			w.GoBranch = []string{goBranch}
-			w.GoVersion = []*apipb.MajorMinor{{major, minor}}
+			w.GoVersion = []*apipb.MajorMinor{{Major: major, Minor: minor}}
 		} else if w.Branch == "master" ||
 			w.Project == "tools" && strings.HasPrefix(w.Branch, "gopls-release-branch.") { // Issue 46156.
 
@@ -204,7 +207,7 @@ func tryWorkItem(
 			for _, r := range supportedReleases {
 				w.GoCommit = append(w.GoCommit, r.BranchCommit)
 				w.GoBranch = append(w.GoBranch, r.BranchName)
-				w.GoVersion = append(w.GoVersion, &apipb.MajorMinor{r.Major, r.Minor})
+				w.GoVersion = append(w.GoVersion, &apipb.MajorMinor{Major: r.Major, Minor: r.Minor})
 			}
 		} else {
 			// A branch that is neither internal-branch.goX.Y-suffix nor "master":

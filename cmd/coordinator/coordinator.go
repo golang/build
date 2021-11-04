@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha1"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -37,23 +38,18 @@ import (
 	"time"
 	"unicode"
 
-	builddash "golang.org/x/build/cmd/coordinator/internal/dashboard"
-	"golang.org/x/build/cmd/coordinator/internal/legacydash"
-	"golang.org/x/build/cmd/coordinator/protos"
-	"golang.org/x/build/internal/access"
-	"golang.org/x/build/internal/gomote"
-	gomoteprotos "golang.org/x/build/internal/gomote/protos"
-	"google.golang.org/grpc"
-	grpc4 "grpc.go4.org"
-
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/storage"
 	"golang.org/x/build"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
+	builddash "golang.org/x/build/cmd/coordinator/internal/dashboard"
+	"golang.org/x/build/cmd/coordinator/internal/legacydash"
 	"golang.org/x/build/cmd/coordinator/internal/metrics"
+	"golang.org/x/build/cmd/coordinator/protos"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/access"
 	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/buildstats"
 	"golang.org/x/build/internal/cloud"
@@ -61,6 +57,8 @@ import (
 	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/coordinator/schedule"
+	"golang.org/x/build/internal/gomote"
+	gomoteprotos "golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/maintner/maintnerd/apipb"
@@ -68,6 +66,8 @@ import (
 	"golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
 	"golang.org/x/time/rate"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -326,9 +326,15 @@ func main() {
 		defer ms.Stop()
 	}
 
-	cc, err := grpc4.NewClient(http.DefaultClient, "https://maintner.golang.org")
+	dialOpts := []grpc.DialOption{
+		grpc.WithBlock(),
+		grpc.WithTimeout(10 * time.Second),
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{NextProtos: []string{"h2"}})),
+	}
+	mServer := "maintner.golang.org:443"
+	cc, err := grpc.Dial(mServer, dialOpts...)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("unable to grpc.Dial(%q) = _, %s", mServer, err)
 	}
 	maintnerClient = apipb.NewMaintnerServiceClient(cc)
 

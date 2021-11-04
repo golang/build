@@ -6,7 +6,9 @@ package apipb
 
 // Run "go generate" in this directory to update. You need to have:
 //
-// - a protoc binary (see https://github.com/golang/protobuf#installation)
-// - go get grpc-codegen.go4.org/protoc-gen-go4grpc
+// a protoc binary (see https://github.com/protocolbuffers/protobuf/releases)
+// protocol compiler plugins for Go:
+// go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.26
+// go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.1
 
-//go:generate protoc --proto_path=$GOPATH/src:. --go4grpc_out=plugins=grpc:. api.proto
+//go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative api.proto

@@ -20,13 +20,14 @@ import (
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
 	"golang.org/x/build/maintner/maintnerd/apipb"
-	"grpc.go4.org"
-	"grpc.go4.org/codes"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 func TestGetRef(t *testing.T) {
 	c := getGoData(t)
-	s := apiService{c}
+	s := apiService{c: c}
 	req := &apipb.GetRefRequest{
 		GerritServer:  "go.googlesource.com",
 		GerritProject: "go",
@@ -65,7 +66,7 @@ func TestFindTryWork(t *testing.T) {
 		t.Skip("skipping without flag -hit_gerrit")
 	}
 	c := getGoData(t)
-	s := apiService{c}
+	s := apiService{c: c}
 	req := &apipb.GoFindTryWorkRequest{}
 	t0 := time.Now()
 	res, err := s.GoFindTryWork(context.Background(), req)
@@ -155,40 +156,105 @@ func TestTryWorkItem(t *testing.T) {
 		clnum    int32
 		ci       *gerrit.ChangeInfo
 		comments map[string][]gerrit.CommentInfo
-		want     string
+		want     *apipb.GerritTryWorkItem
 	}{
 		// Same Change-Id, different branch:
-		{"go", 51430, &gerrit.ChangeInfo{}, nil, `project:"go" branch:"master" change_id:"I0bcae339624e7d61037d9ea0885b7bd07491bbb6" commit:"45a4609c0ae214e448612e0bc0846e2f2682f1b2" go_version:<major:1 minor:17 > `},
-		{"go", 51450, &gerrit.ChangeInfo{}, nil, `project:"go" branch:"release-branch.go1.9" change_id:"I0bcae339624e7d61037d9ea0885b7bd07491bbb6" commit:"7320506bc58d3a55eff2c67b2ec65cfa94f7b0a7" go_version:<major:1 minor:9 > `},
-		// Different project:
-		{"build", 51432, &gerrit.ChangeInfo{}, nil, `project:"build" branch:"master" change_id:"I1f71836da7008e58d3e76e2cc3170e96cd57ddf6" commit:"9251bc9950baff61d95da0761e2e4bfab61ed210" ` +
-			// Tested on tip and two supported releases.
-			`go_commit:"9995c6b50aa55c1cc1236d1d688929df512dad53" go_commit:"e67a58b7cb2b228e04477dfdb1aacd8348e63534" go_commit:"72ccabc99449b2cb5bb1438eb90244d55f7b02f5" ` +
-			`go_branch:"master" go_branch:"release-branch.go1.16" go_branch:"release-branch.go1.15" ` +
-			`go_version:<major:1 minor:17 > go_version:<major:1 minor:16 > go_version:<major:1 minor:15 > `},
+		{"go", 51430, &gerrit.ChangeInfo{}, nil, &apipb.GerritTryWorkItem{
+			Project:   "go",
+			Branch:    "master",
+			ChangeId:  "I0bcae339624e7d61037d9ea0885b7bd07491bbb6",
+			Commit:    "45a4609c0ae214e448612e0bc0846e2f2682f1b2",
+			GoVersion: []*apipb.MajorMinor{&apipb.MajorMinor{Major: 1, Minor: 17}},
+		}},
+		{"go", 51450, &gerrit.ChangeInfo{}, nil, &apipb.GerritTryWorkItem{
+			Project:   "go",
+			Branch:    "release-branch.go1.9",
+			ChangeId:  "I0bcae339624e7d61037d9ea0885b7bd07491bbb6",
+			Commit:    "7320506bc58d3a55eff2c67b2ec65cfa94f7b0a7",
+			GoVersion: []*apipb.MajorMinor{&apipb.MajorMinor{Major: 1, Minor: 9}},
+		}},
+		// Different project: Tested on tip and two supported releases.
+		{"build", 51432, &gerrit.ChangeInfo{}, nil, &apipb.GerritTryWorkItem{
+			Project:  "build",
+			Branch:   "master",
+			ChangeId: "I1f71836da7008e58d3e76e2cc3170e96cd57ddf6",
+			Commit:   "9251bc9950baff61d95da0761e2e4bfab61ed210",
+			GoCommit: []string{
+				"9995c6b50aa55c1cc1236d1d688929df512dad53",
+				"e67a58b7cb2b228e04477dfdb1aacd8348e63534",
+				"72ccabc99449b2cb5bb1438eb90244d55f7b02f5",
+			},
+			GoBranch: []string{"master", "release-branch.go1.16", "release-branch.go1.15"},
+			GoVersion: []*apipb.MajorMinor{
+				&apipb.MajorMinor{Major: 1, Minor: 17},
+				&apipb.MajorMinor{Major: 1, Minor: 16},
+				&apipb.MajorMinor{Major: 1, Minor: 15},
+			},
+		}},
 
 		// Test that a golang.org/x repo TryBot on a branch like
 		// "internal-branch.go1.N-suffix", "release-branch.go1.N", or "release-branch.go1.N-suffix"
 		// tests with Go 1.N (rather than tip + two supported releases).
 		// See issues 28891, 42127, and 36882.
-		{"net", 314649, &gerrit.ChangeInfo{}, nil, `project:"net" branch:"internal-branch.go1.16-vendor" change_id:"I2c54ce3b2acf1c5efdea66db0595b93a3f5ae5f3" commit:"3f4a416c7d3b3b41375d159f71ff0a801fc0102b" ` +
-			`go_commit:"e67a58b7cb2b228e04477dfdb1aacd8348e63534" go_branch:"release-branch.go1.16" go_version:<major:1 minor:16 > `},
-		{"net", 258478, &gerrit.ChangeInfo{}, nil, `project:"net" branch:"release-branch.go1.15" change_id:"I546597cedf3715e6617babcb3b62140bf1857a27" commit:"a5fa9d4b7c91aa1c3fecbeb6358ec1127b910dd6" ` +
-			`go_commit:"72ccabc99449b2cb5bb1438eb90244d55f7b02f5" go_branch:"release-branch.go1.15" go_version:<major:1 minor:15 > `},
-		{"net", 264058, &gerrit.ChangeInfo{}, nil, `project:"net" branch:"release-branch.go1.15-bundle" change_id:"I546597cedf3715e6617babcb3b62140bf1857a27" commit:"abf26a14a65b111d492067f407f32455c5b1048c" ` +
-			`go_commit:"72ccabc99449b2cb5bb1438eb90244d55f7b02f5" go_branch:"release-branch.go1.15" go_version:<major:1 minor:15 > `},
+		{"net", 314649, &gerrit.ChangeInfo{}, nil, &apipb.GerritTryWorkItem{
+			Project:   "net",
+			Branch:    "internal-branch.go1.16-vendor",
+			ChangeId:  "I2c54ce3b2acf1c5efdea66db0595b93a3f5ae5f3",
+			Commit:    "3f4a416c7d3b3b41375d159f71ff0a801fc0102b",
+			GoCommit:  []string{"e67a58b7cb2b228e04477dfdb1aacd8348e63534"},
+			GoBranch:  []string{"release-branch.go1.16"},
+			GoVersion: []*apipb.MajorMinor{&apipb.MajorMinor{Major: 1, Minor: 16}},
+		}},
+		{"net", 258478, &gerrit.ChangeInfo{}, nil, &apipb.GerritTryWorkItem{
+			Project:   "net",
+			Branch:    "release-branch.go1.15",
+			ChangeId:  "I546597cedf3715e6617babcb3b62140bf1857a27",
+			Commit:    "a5fa9d4b7c91aa1c3fecbeb6358ec1127b910dd6",
+			GoCommit:  []string{"72ccabc99449b2cb5bb1438eb90244d55f7b02f5"},
+			GoBranch:  []string{"release-branch.go1.15"},
+			GoVersion: []*apipb.MajorMinor{&apipb.MajorMinor{Major: 1, Minor: 15}},
+		}},
+		{"net", 264058, &gerrit.ChangeInfo{}, nil, &apipb.GerritTryWorkItem{
+			Project:   "net",
+			Branch:    "release-branch.go1.15-bundle",
+			ChangeId:  "I546597cedf3715e6617babcb3b62140bf1857a27",
+			Commit:    "abf26a14a65b111d492067f407f32455c5b1048c",
+			GoCommit:  []string{"72ccabc99449b2cb5bb1438eb90244d55f7b02f5"},
+			GoBranch:  []string{"release-branch.go1.15"},
+			GoVersion: []*apipb.MajorMinor{&apipb.MajorMinor{Major: 1, Minor: 15}},
+		}},
 
 		// Test that TryBots run on branches of the x/ repositories, other than
 		// "master" and "release-branch.go1.N". See issue 37512.
-		{"tools", 238259, &gerrit.ChangeInfo{}, nil, `project:"tools" branch:"dev.go2go" change_id:"I24950593b517af011a636966cb98b9652d2c4134" commit:"76e917206452e73dc28cbeb58a15ea8f30487263" ` +
-			`go_commit:"9995c6b50aa55c1cc1236d1d688929df512dad53" go_branch:"master" go_version:<major:1 minor:17 > `},
+		{"tools", 238259, &gerrit.ChangeInfo{}, nil, &apipb.GerritTryWorkItem{
+			Project:   "tools",
+			Branch:    "dev.go2go",
+			ChangeId:  "I24950593b517af011a636966cb98b9652d2c4134",
+			Commit:    "76e917206452e73dc28cbeb58a15ea8f30487263",
+			GoCommit:  []string{"9995c6b50aa55c1cc1236d1d688929df512dad53"},
+			GoBranch:  []string{"master"},
+			GoVersion: []*apipb.MajorMinor{&apipb.MajorMinor{Major: 1, Minor: 17}},
+		}},
 
 		// Test that x/tools TryBots on gopls release branches are
 		// tested on tip and two supported releases. See issue 46156.
-		{"tools", 316773, &gerrit.ChangeInfo{}, nil, `project:"tools" branch:"gopls-release-branch.0.6" change_id:"I32fd2c0d30854e61109ebd16a05d5099f9074fe5" commit:"0bb7e5c47b1a31f85d4f173edc878a8e049764a5" ` +
-			`go_commit:"9995c6b50aa55c1cc1236d1d688929df512dad53" go_commit:"e67a58b7cb2b228e04477dfdb1aacd8348e63534" go_commit:"72ccabc99449b2cb5bb1438eb90244d55f7b02f5" ` +
-			`go_branch:"master" go_branch:"release-branch.go1.16" go_branch:"release-branch.go1.15" ` +
-			`go_version:<major:1 minor:17 > go_version:<major:1 minor:16 > go_version:<major:1 minor:15 > `},
+		{"tools", 316773, &gerrit.ChangeInfo{}, nil, &apipb.GerritTryWorkItem{
+			Project:  "tools",
+			Branch:   "gopls-release-branch.0.6",
+			ChangeId: "I32fd2c0d30854e61109ebd16a05d5099f9074fe5",
+			Commit:   "0bb7e5c47b1a31f85d4f173edc878a8e049764a5",
+			GoCommit: []string{
+				"9995c6b50aa55c1cc1236d1d688929df512dad53",
+				"e67a58b7cb2b228e04477dfdb1aacd8348e63534",
+				"72ccabc99449b2cb5bb1438eb90244d55f7b02f5",
+			},
+			GoBranch: []string{"master", "release-branch.go1.16", "release-branch.go1.15"},
+			GoVersion: []*apipb.MajorMinor{
+				&apipb.MajorMinor{Major: 1, Minor: 17},
+				&apipb.MajorMinor{Major: 1, Minor: 16},
+				&apipb.MajorMinor{Major: 1, Minor: 15},
+			},
+		}},
 
 		// With comments:
 		{
@@ -230,7 +296,18 @@ func TestTryWorkItem(t *testing.T) {
 					},
 				},
 			},
-			want: `project:"go" branch:"master" change_id:"I358eb7b11768df8c80fb7e805abd4cd01d52bb9b" commit:"f99d33e72efdea68fce39765bc94479b5ebed0a9" version:88 go_version:<major:1 minor:17 > try_message:<message:"foo" author_id:1234 version:1 > try_message:<message:"bar, baz" author_id:5678 version:2 > `,
+			want: &apipb.GerritTryWorkItem{
+				Project:   "go",
+				Branch:    "master",
+				ChangeId:  "I358eb7b11768df8c80fb7e805abd4cd01d52bb9b",
+				Commit:    "f99d33e72efdea68fce39765bc94479b5ebed0a9",
+				Version:   88,
+				GoVersion: []*apipb.MajorMinor{&apipb.MajorMinor{Major: 1, Minor: 17}},
+				TryMessage: []*apipb.TryVoteMessage{
+					&apipb.TryVoteMessage{Message: "foo", AuthorId: 1234, Version: 1},
+					&apipb.TryVoteMessage{Message: "bar, baz", AuthorId: 5678, Version: 2},
+				},
+			},
 		},
 
 		// Test that followup TRY= requests on the same patch set are included. See issue 42084.
@@ -273,9 +350,18 @@ func TestTryWorkItem(t *testing.T) {
 					},
 				},
 			},
-			want: `project:"go" branch:"master" change_id:"I023d5208374f867552ba68b45011f7990159868f" commit:"dd38fd80c3667f891dbe06bd1d8ed153c2e208da" version:1 go_version:<major:1 minor:17 > ` +
-				`try_message:<message:"windows-arm64,windows-amd64" author_id:1234 version:1 > ` +
-				`try_message:<message:"windows-arm64-10" author_id:1234 version:1 > `,
+			want: &apipb.GerritTryWorkItem{
+				Project:   "go",
+				Branch:    "master",
+				ChangeId:  "I023d5208374f867552ba68b45011f7990159868f",
+				Commit:    "dd38fd80c3667f891dbe06bd1d8ed153c2e208da",
+				Version:   1,
+				GoVersion: []*apipb.MajorMinor{&apipb.MajorMinor{Major: 1, Minor: 17}},
+				TryMessage: []*apipb.TryVoteMessage{
+					&apipb.TryVoteMessage{Message: "windows-arm64,windows-amd64", AuthorId: 1234, Version: 1},
+					&apipb.TryVoteMessage{Message: "windows-arm64-10", AuthorId: 1234, Version: 1},
+				},
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -301,8 +387,8 @@ func TestTryWorkItem(t *testing.T) {
 		if ok := len(work.GoVersion) == len(work.GoCommit) || (len(work.GoVersion) == 1 && len(work.GoCommit) == 0); !ok {
 			t.Errorf("tryWorkItem(%q, %v, ...): bad correlation between GoVersion and GoCommit slices", tt.proj, tt.clnum)
 		}
-		if got := fmt.Sprint(work); got != tt.want {
-			t.Errorf("tryWorkItem(%q, %v, ...) mismatch:\n got: %#q\nwant: %#q", tt.proj, tt.clnum, got, tt.want)
+		if diff := cmp.Diff(tt.want, work, protocmp.Transform()); diff != "" {
+			t.Errorf("tryWorkItem(%q, %v, ...) mismatch (-want +got):\n%s", tt.proj, tt.clnum, diff)
 		}
 	}
 }
@@ -481,7 +567,7 @@ func TestSupportedGoReleases(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%d: supportedGoReleases: %v", i, err)
 		}
-		if diff := cmp.Diff(got, tt.want); diff != "" {
+		if diff := cmp.Diff(got, tt.want, protocmp.Transform()); diff != "" {
 			t.Errorf("%d: supportedGoReleases: (-got +want)\n%s", i, diff)
 		}
 	}
@@ -489,7 +575,7 @@ func TestSupportedGoReleases(t *testing.T) {
 
 func TestGetDashboard(t *testing.T) {
 	c := getGoData(t)
-	s := apiService{c}
+	s := apiService{c: c}
 
 	type check func(t *testing.T, res *apipb.DashboardResponse, resErr error)
 	var noError check = func(t *testing.T, res *apipb.DashboardResponse, resErr error) {

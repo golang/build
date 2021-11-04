@@ -37,7 +37,7 @@ require (
 	golang.org/x/image v0.0.0-20210628002857-a66eb6448b8d
 	golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2
 	golang.org/x/oauth2 v0.0.0-20210628180205-a41e5a781914
-	golang.org/x/perf v0.0.0-20210220033136-40a54f11e909
+	golang.org/x/perf v0.0.0-20211012211434-03971e389cd3
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c
 	golang.org/x/text v0.3.7
@@ -47,7 +47,6 @@ require (
 	google.golang.org/grpc v1.39.0
 	google.golang.org/protobuf v1.27.1
 	gopkg.in/inf.v0 v0.9.1
-	grpc.go4.org v0.0.0-20170609214715-11d0a25b4919
 )
 
 require (
