@@ -621,7 +621,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-linux-amd64-perf": &HostConfig{
 		Notes:           "Cascade Lake performance testing machines",
-		machineType:     "c2-standard-8",  // C2 has precisely defined, consistent server architecture.
+		machineType:     "c2-standard-8", // C2 has precisely defined, consistent server architecture.
 		ContainerImage:  "linux-x86-bullseye:latest",
 		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
@@ -2528,13 +2528,14 @@ func init() {
 		SkipSnapshot: true, // The builder has a slow uplink bandwidth.
 	})
 	addBuilder(BuildConfig{
-		Name:         "linux-amd64-perf",
-		HostType:     "host-linux-amd64-perf",
-		Notes:        "Performance testing for linux-amd64",
+		Name:     "linux-amd64-perf",
+		HostType: "host-linux-amd64-perf",
+		Notes:    "Performance testing for linux-amd64",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "benchmarks"
 		},
-		RunBench: true,
+		RunBench:     true,
+		SkipSnapshot: true,
 	})
 }
 
