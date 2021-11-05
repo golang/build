@@ -496,9 +496,11 @@ func (p *GCEBuildlet) String() string {
 func (p *GCEBuildlet) capacityString() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return fmt.Sprintf("%d/%d instances; %d/%d CPUs",
+	return fmt.Sprintf("%d/%d instances; %d/%d CPUs, %d/%d C2_CPUS, %d/%d N2_CPUS",
 		len(p.inst), p.instUsage+p.instLeft,
-		p.cpuUsage, p.cpuUsage+p.cpuLeft)
+		p.cpuUsage, p.cpuUsage+p.cpuLeft,
+		p.c2cpuUsage, p.c2cpuUsage+p.c2cpuLeft,
+		p.n2cpuUsage, p.n2cpuUsage+p.n2cpuLeft)
 }
 
 // awaitVMCountQuota waits for numCPU CPUs of quota to become available,
