@@ -2946,6 +2946,17 @@ func (st *buildStatus) uploadBenchResults() (err error) {
 		u.Abort()
 		return fmt.Errorf("error creating perfdata file: %w", err)
 	}
+
+	// Prepend some useful metadata.
+	var b strings.Builder
+	fmt.Fprintf(&b, "go-commit: %s\n", st.Rev)
+	fmt.Fprintf(&b, "benchmarks-commit: %s\n", st.SubRev)
+	fmt.Fprintf(&b, "post-submit: %t\n", st.trySet == nil)
+	if _, err := w.Write([]byte(b.String())); err != nil {
+		u.Abort()
+		return fmt.Errorf("error writing perfdata metadata with contents %q: %w", b.String(), err)
+	}
+
 	// TODO(prattmic): Full log output may contain non-benchmark output
 	// that can be erroneously parsed as benchfmt.
 	if _, err := w.Write([]byte(st.logs())); err != nil {
