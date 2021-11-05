@@ -327,12 +327,18 @@ type GCEBuildlet struct {
 
 	disabled bool
 
-	// CPU quota usage & limits.
-	cpuLeft   int // dead-reckoning CPUs remain
-	instLeft  int // dead-reckoning instances remain
-	instUsage int
-	cpuUsage  int
-	inst      map[string]time.Time // GCE VM instance name -> creationTime
+	// CPU quota usage & limits. pollQuota updates quotas periodically.
+	// The values recorded here reflect the updates as well as our own
+	// bookkeeping of instances as they are created and destroyed.
+	cpuLeft    int
+	instLeft   int
+	c2cpuLeft  int
+	n2cpuLeft  int
+	instUsage  int
+	cpuUsage   int
+	c2cpuUsage int
+	n2cpuUsage int
+	inst       map[string]time.Time // GCE VM instance name -> creationTime
 }
 
 func (p *GCEBuildlet) pollQuotaLoop() {
@@ -356,6 +362,12 @@ func (p *GCEBuildlet) pollQuota() {
 		case "CPUS":
 			p.cpuLeft = int(quota.Limit) - int(quota.Usage)
 			p.cpuUsage = int(quota.Usage)
+		case "C2_CPUS":
+			p.c2cpuLeft = int(quota.Limit) - int(quota.Usage)
+			p.c2cpuUsage = int(quota.Usage)
+		case "N2_CPUS":
+			p.n2cpuLeft = int(quota.Limit) - int(quota.Usage)
+			p.n2cpuUsage = int(quota.Usage)
 		case "INSTANCES":
 			p.instLeft = int(quota.Limit) - int(quota.Usage)
 			p.instUsage = int(quota.Usage)
@@ -377,7 +389,7 @@ func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logge
 		return nil, fmt.Errorf("gcepool: unknown host type %q", hostType)
 	}
 	qsp := lg.CreateSpan("awaiting_gce_quota")
-	err = p.awaitVMCountQuota(ctx, hconf.GCENumCPU())
+	err = p.awaitVMCountQuota(ctx, hconf)
 	qsp.Done(err)
 	if err != nil {
 		return nil, err
@@ -424,7 +436,7 @@ func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logge
 		log.Printf("Failed to create VM for %s at %s: %v", hostType, zone, err)
 		if needDelete {
 			deleteVM(zone, instName)
-			p.putVMCountQuota(hconf.GCENumCPU())
+			p.putVMCountQuota(hconf)
 		}
 		p.setInstanceUsed(instName, false)
 		return nil, err
@@ -455,7 +467,7 @@ func (p *GCEBuildlet) putBuildlet(bc *buildlet.Client, hostType, zone, instName 
 	if !ok {
 		panic("failed to lookup conf") // should've worked if we did it before
 	}
-	p.putVMCountQuota(hconf.GCENumCPU())
+	p.putVMCountQuota(hconf)
 	return nil
 }
 
@@ -491,11 +503,11 @@ func (p *GCEBuildlet) capacityString() string {
 
 // awaitVMCountQuota waits for numCPU CPUs of quota to become available,
 // or returns ctx.Err.
-func (p *GCEBuildlet) awaitVMCountQuota(ctx context.Context, numCPU int) error {
+func (p *GCEBuildlet) awaitVMCountQuota(ctx context.Context, hconf *dashboard.HostConfig) error {
 	// Poll every 2 seconds, which could be better, but works and
 	// is simple.
 	for {
-		if p.tryAllocateQuota(numCPU) {
+		if p.tryAllocateQuota(hconf) {
 			return nil
 		}
 		select {
@@ -506,37 +518,68 @@ func (p *GCEBuildlet) awaitVMCountQuota(ctx context.Context, numCPU int) error {
 	}
 }
 
-// haveQuotaLocked reports whether the current GCE quota permits
-// starting numCPU more CPUs.
-//
-// precondition: p.mu must be held.
-func (p *GCEBuildlet) haveQuotaLocked(numCPU int) bool {
-	return p.cpuLeft >= numCPU && p.instLeft >= 1
-}
-
-func (p *GCEBuildlet) tryAllocateQuota(numCPU int) bool {
+func (p *GCEBuildlet) tryAllocateQuota(hconf *dashboard.HostConfig) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.disabled {
 		return false
 	}
-	if p.haveQuotaLocked(numCPU) {
+	if p.instLeft < 1 {
+		return false
+	}
+	numCPU := hconf.GCENumCPU()
+	mt := hconf.MachineType()
+	if strings.HasPrefix(mt, "n2-") {
+		if p.n2cpuLeft < numCPU {
+			return false
+		}
+		p.n2cpuUsage += numCPU
+		p.n2cpuLeft -= numCPU
+		p.instLeft--
+	} else if strings.HasPrefix(mt, "c2-") {
+		if p.c2cpuLeft < numCPU {
+			return false
+		}
+		p.c2cpuUsage += numCPU
+		p.c2cpuLeft -= numCPU
+		p.instLeft--
+	} else {
+		// E2 and N1 instances are counted here. We do not use N2D,
+		// M1, M2, or A2 quotas. See
+		// https://cloud.google.com/compute/quotas#cpu_quota.
+		if p.cpuLeft < numCPU {
+			return false
+		}
 		p.cpuUsage += numCPU
 		p.cpuLeft -= numCPU
 		p.instLeft--
-		return true
 	}
-	return false
+	return true
 }
 
 // putVMCountQuota adjusts the dead-reckoning of our quota usage by
 // one instance and cpu CPUs.
-func (p *GCEBuildlet) putVMCountQuota(cpu int) {
+func (p *GCEBuildlet) putVMCountQuota(hconf *dashboard.HostConfig) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.cpuUsage -= cpu
-	p.cpuLeft += cpu
-	p.instLeft++
+	mt := hconf.MachineType()
+	numCPU := hconf.GCENumCPU()
+	if strings.HasPrefix(mt, "n2-") {
+		p.n2cpuUsage -= numCPU
+		p.n2cpuLeft += numCPU
+		p.instLeft++
+	} else if strings.HasPrefix(mt, "c2-") {
+		p.c2cpuUsage -= numCPU
+		p.c2cpuLeft += numCPU
+		p.instLeft++
+	} else {
+		// E2 and N1 instances are counted here. We do not use N2D,
+		// M1, M2, or A2 quotas. See
+		// https://cloud.google.com/compute/quotas#cpu_quota.
+		p.cpuUsage -= numCPU
+		p.cpuLeft += numCPU
+		p.instLeft++
+	}
 }
 
 func (p *GCEBuildlet) setInstanceUsed(instName string, used bool) {
