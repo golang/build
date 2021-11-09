@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: prod
+  name: relui-deployment
+spec:
+  selector:
+    matchLabels:
+      app: relui
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: relui
+    spec:
+      serviceAccountName: relui
+      containers:
+        - name: relui
+          image: gcr.io/symbolic-datum-552/relui:latest
+          imagePullPolicy: Always
+          command: ["/sbin/tini", "--", "./relui", "--listen-https-selfsigned=:444"]
+          ports:
+            - containerPort: 444
+          env:
+            - name: PGUSER
+              value: relui
+            - name: PGDATABASE
+              value: relui-prod
+          resources:
+            requests:
+              cpu: "2"
+              memory: "4Gi"
+        - name: cloud-sql-proxy
+          # It is recommended to use the latest version of the Cloud SQL proxy
+          image: gcr.io/cloudsql-docker/gce-proxy:latest
+          command:
+            - "/cloud_sql_proxy"
+
+            # If connecting from a VPC-native GKE cluster, you can use the
+            # following flag to have the proxy connect over private IP
+            - "-ip_address_types=PRIVATE"
+
+            # Replace DB_PORT with the port the proxy should listen on
+            # Defaults: MySQL: 3306, Postgres: 5432, SQLServer: 1433
+            - "-instances=symbolic-datum-552:us-central1:relui-prod-01=tcp:5432"
+          securityContext:
+            # The default Cloud SQL proxy image runs as the
+            # "nonroot" user and group (uid: 65532) by default.
+            runAsNonRoot: true
+          # Resource configuration depends on an application's requirements. You
+          # should adjust the following values based on what your application
+          # needs. For details, see https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+          resources:
+            requests:
+              # The proxy's memory use scales linearly with the number of active
+              # connections. Fewer open connections will use less memory. Adjust
+              # this value based on your application's requirements.
+              memory: "2Gi"
+              # The proxy's CPU use scales linearly with the amount of IO between
+              # the database and the application. Adjust this value based on your
+              # application's requirements.
+              cpu: "1"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: prod
+  name: relui
+  annotations:
+    iam.gke.io/gcp-service-account: relui@symbolic-datum-552.iam.gserviceaccount.com
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prod
+  name: relui-internal
+  annotations:
+    cloud.google.com/neg: '{"ingress": false}'
+    cloud.google.com/app-protocols: '{"https":"HTTP2"}'
+spec:
+  ports:
+    - port: 444
+      targetPort: 444
+      name: https
+  selector:
+    app: relui
+  type: NodePort

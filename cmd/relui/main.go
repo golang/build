@@ -9,9 +9,9 @@ import (
 	"context"
 	"flag"
 	"log"
-	"os"
 
 	"github.com/jackc/pgx/v4/pgxpool"
+	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/relui"
 )
 
@@ -22,6 +22,7 @@ var (
 )
 
 func main() {
+	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
 	ctx := context.Background()
 	if err := relui.InitDB(ctx, *pgConnect); err != nil {
@@ -50,10 +51,5 @@ func main() {
 	if err != nil {
 		log.Fatalf("relui.NewServer() = %v", err)
 	}
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-	log.Printf("Listening on :" + port)
-	log.Fatal(s.Serve(port))
+	log.Fatalln(https.ListenAndServe(ctx, s))
 }

@@ -39,10 +39,29 @@ migrate-down-up: docker
 test: postgres-dev docker-test
 	docker run --rm --name=relui-test -v $(POSTGRES_RUN_DEV) -e PGUSER=$(POSTGRES_USER) -e PGDATABASE=relui-test golang/relui-test:$(VERSION)
 
+DOCKER_IMAGE := golang/relui
+IMAGE_PROD := gcr.io/symbolic-datum-552/relui
+MUTABLE_VERSION := latest
+
 .PHONY: docker
 docker:
-	docker build -f Dockerfile -t golang/relui:$(VERSION) ../..
+	docker build -f Dockerfile -t $(DOCKER_IMAGE):$(VERSION) ../..
 
 .PHONY: docker-test
 docker-test:
 	docker build -f Dockerfile.test -t golang/relui-test:$(VERSION) ../..
+
+.PHONY: docker-prod
+docker-prod: docker
+	docker tag $(DOCKER_IMAGE):$(VERSION) $(IMAGE_PROD):$(VERSION)
+	docker tag $(DOCKER_IMAGE):$(VERSION) $(IMAGE_PROD):$(MUTABLE_VERSION)
+
+.PHONY: push-prod
+push-prod: docker-prod
+	docker push $(IMAGE_PROD):$(VERSION)
+	docker push $(IMAGE_PROD):$(MUTABLE_VERSION)
+
+.PHONY: deploy-prod
+deploy-prod: push-prod
+	go install golang.org/x/build/cmd/xb
+	xb --prod kubectl --namespace prod set image deployment/relui-deployment relui=$(IMAGE_PROD):$(VERSION)
