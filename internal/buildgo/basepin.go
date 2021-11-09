@@ -15,8 +15,11 @@ import (
 	"time"
 
 	"golang.org/x/build/dashboard"
-	compute "google.golang.org/api/compute/v1"
+	"google.golang.org/api/compute/v1"
 )
+
+// diskPrefix is the name prefix of GCE disks used by MakeBasepinDisks.
+const diskPrefix = "basepin-"
 
 // MakeBasepinDisks looks at the list of all the project's VM images
 // and creates (if needed) a disk for each one, named with the prefix
@@ -61,7 +64,7 @@ func (c *Client) MakeBasepinDisks(ctx context.Context) error {
 	}
 
 	for _, zone := range c.Env.VMZones {
-		diskList, err := svc.Disks.List(c.Env.ProjectName, zone).Do()
+		diskList, err := svc.Disks.List(c.Env.ProjectName, zone).Filter(fmt.Sprintf(`name="%s*"`, diskPrefix)).Do()
 		if err != nil {
 			return fmt.Errorf("error listing disks in zone %v: %v", zone, err)
 		}
@@ -72,9 +75,6 @@ func (c *Client) MakeBasepinDisks(ctx context.Context) error {
 		need := getNeedMap()
 
 		for _, d := range diskList.Items {
-			if !strings.HasPrefix(d.Name, "basepin-") {
-				continue
-			}
 			if si, ok := need[d.SourceImage]; ok && d.SourceImageId == fmt.Sprint(si.Id) {
 				if c.Verbose {
 					log.Printf("basepin: have %s: %s (%v)\n", d.Name, d.SourceImage, d.SourceImageId)
@@ -109,7 +109,7 @@ func (c *Client) MakeBasepinDisks(ctx context.Context) error {
 			log.Printf("basepin: (%d/%d) creating %s ...", i+1, len(needed), im.Name)
 			op, err := svc.Disks.Insert(c.Env.ProjectName, zone, &compute.Disk{
 				Description:   "zone-cached basepin image of " + im.Name,
-				Name:          "basepin-" + im.Name + "-" + fmt.Sprint(im.Id),
+				Name:          diskPrefix + im.Name + "-" + fmt.Sprint(im.Id),
 				SizeGb:        im.DiskSizeGb,
 				SourceImage:   im.SelfLink,
 				SourceImageId: fmt.Sprint(im.Id),
