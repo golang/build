@@ -2010,7 +2010,7 @@ func init() {
 			}
 			return run
 		},
-		buildsRepo: onlyMasterDefault,
+		buildsRepo: plan9Default,
 	})
 	addBuilder(BuildConfig{
 		Name:           "windows-amd64-2008",
@@ -2489,7 +2489,7 @@ func init() {
 		Name:           "plan9-arm",
 		HostType:       "host-plan9-arm-0intro",
 		distTestAdjust: noTestDirAndNoReboot,
-		buildsRepo:     onlyMasterDefault,
+		buildsRepo:     plan9Default,
 	})
 	addBuilder(BuildConfig{
 		Name:     "plan9-amd64-0intro",
@@ -2503,7 +2503,7 @@ func init() {
 			}
 			return run
 		},
-		buildsRepo: onlyMasterDefault,
+		buildsRepo: plan9Default,
 	})
 	addBuilder(BuildConfig{
 		Name:     "plan9-386-0intro",
@@ -2517,7 +2517,7 @@ func init() {
 			}
 			return run
 		},
-		buildsRepo: onlyMasterDefault,
+		buildsRepo: plan9Default,
 	})
 	addBuilder(BuildConfig{
 		Name:             "aix-ppc64",
@@ -2740,6 +2740,19 @@ func onlyGo(repo, branch, goBranch string) bool { return repo == "go" }
 // default repos on the master branch.
 func onlyMasterDefault(repo, branch, goBranch string) bool {
 	return branch == "master" && goBranch == "master" && buildRepoByDefault(repo)
+}
+
+// plan9Default is like onlyMasterDefault, but also omits repos that are
+// both filesystem-intensive and unlikely to be relevant to plan9 users.
+func plan9Default(repo, branch, goBranch string) bool {
+	switch repo {
+	case "website":
+		// The x/website tests read and check the website code snippets,
+		// which require many filesystem walk and read operations.
+		return false
+	default:
+		return onlyMasterDefault(repo, branch, goBranch)
+	}
 }
 
 // disabledBuilder is a buildsRepo policy function that always return false.
