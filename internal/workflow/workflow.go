@@ -32,7 +32,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"sync"
 
 	"github.com/google/uuid"
 )
@@ -386,8 +385,6 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 	if listener == nil {
 		listener = &defaultListener{}
 	}
-	var running sync.WaitGroup
-	defer running.Wait()
 
 	stateChan := make(chan taskState, 2*len(w.def.tasks))
 	for {
@@ -402,42 +399,50 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 			return outValues, nil
 		}
 
-		// Start any idle tasks whose dependencies are all done.
-		for _, task := range w.tasks {
-			if task.started {
-				continue
-			}
-			in, ready := task.args()
-			if !ready {
-				continue
-			}
-			task.started = true
-			listener.TaskStateChanged(w.ID, task.def.name, task.toExported())
-			running.Add(1)
-			go func(task taskState) {
-				stateChan <- w.runTask(ctx, listener, task, in)
-				running.Done()
-			}(*task)
-		}
-
-		// Exit if we've run everything we can given errors.
 		running := 0
 		for _, task := range w.tasks {
 			if task.started && !task.finished {
 				running++
 			}
 		}
-		if running == 0 {
-			return nil, fmt.Errorf("workflow has progressed as far as it can")
+
+		if ctx.Err() == nil {
+			// Start any idle tasks whose dependencies are all done.
+			for _, task := range w.tasks {
+				if task.started {
+					continue
+				}
+				in, ready := task.args()
+				if !ready {
+					continue
+				}
+				task.started = true
+				running++
+				listener.TaskStateChanged(w.ID, task.def.name, task.toExported())
+				go func(task taskState) {
+					stateChan <- w.runTask(ctx, listener, task, in)
+				}(*task)
+			}
 		}
 
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case state := <-stateChan:
-			w.tasks[state.def] = &state
-			listener.TaskStateChanged(w.ID, state.def.name, state.toExported())
+		// Exit if we've run everything we can given errors.
+		if running == 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+				return nil, fmt.Errorf("workflow has progressed as far as it can")
+			}
 		}
+
+		state := <-stateChan
+		w.tasks[state.def] = &state
+		if state.err != nil && ctx.Err() != nil {
+			// Don't report failures that occur after cancellation has begun.
+			// They may be due to the cancellation itself.
+			continue
+		}
+		listener.TaskStateChanged(w.ID, state.def.name, state.toExported())
 	}
 }
 
