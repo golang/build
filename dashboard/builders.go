@@ -1900,9 +1900,17 @@ func init() {
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
-		Name:              "openbsd-386-68",
-		HostType:          "host-openbsd-386-68",
-		tryBot:            explicitTrySet("sys"),
+		Name:     "openbsd-386-68",
+		HostType: "host-openbsd-386-68",
+		tryBot:   explicitTrySet("sys"),
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			if repo == "review" {
+				// https://golang.org/issue/49529: git seems to be too slow on this
+				// platform.
+				return false
+			}
+			return buildRepoByDefault(repo)
+		},
 		distTestAdjust:    noTestDirAndNoReboot,
 		numTryTestHelpers: 4,
 	})
@@ -1975,8 +1983,16 @@ func init() {
 		distTestAdjust: noTestDirAndNoReboot,
 	})
 	addBuilder(BuildConfig{
-		Name:           "netbsd-arm-bsiegert",
-		HostType:       "host-netbsd-arm-bsiegert",
+		Name:     "netbsd-arm-bsiegert",
+		HostType: "host-netbsd-arm-bsiegert",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			if repo == "review" {
+				// https://golang.org/issue/49530: This test seems to be too slow even
+				// with a long scale factor.
+				return false
+			}
+			return buildRepoByDefault(repo)
+		},
 		distTestAdjust: noTestDirAndNoReboot,
 		tryBot:         nil,
 		env: []string{
