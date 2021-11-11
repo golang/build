@@ -19,7 +19,7 @@ import (
 )
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: %s {https://play.golang.org/p/<id> | <id>}\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "usage: %s {http(s)://play.golang.org/p/<id> | <id>}\n", os.Args[0])
 }
 
 func main() {
@@ -28,9 +28,21 @@ func main() {
 		os.Exit(2)
 	}
 
-	snippetID := strings.TrimPrefix(os.Args[1], "https://play.golang.org/p/")
+	snippetID := os.Args[1]
+	prefixes := []string{"https://play.golang.org/p/", "http://play.golang.org/p/"}
+	for _, p := range prefixes {
+		if strings.HasPrefix(os.Args[1], p) {
+			snippetID = strings.TrimPrefix(os.Args[1], p)
+			break
+		}
+	}
 	if snippetID == "" {
 		usage()
+		os.Exit(2)
+	}
+	if strings.Contains(snippetID, "/") {
+		usage()
+		fmt.Fprintf(os.Stderr, "Invalid Snippet ID %q (contains slash)\n", snippetID)
 		os.Exit(2)
 	}
 
@@ -57,6 +69,10 @@ func main() {
 		os.Exit(1)
 	}
 	k := datastore.NameKey("Snippet", snippetID, nil)
+	if client.Get(ctx, k, new(struct{})) == datastore.ErrNoSuchEntity {
+		fmt.Fprintf(os.Stderr, "Snippet with ID %q does not exist\n", snippetID)
+		os.Exit(0)
+	}
 	fmt.Printf("Deleting snippet %q ...\n", snippetID)
 	if err := client.Delete(ctx, k); err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to delete Snippet with ID %q: %v\n", snippetID, err)
