@@ -37,6 +37,13 @@ spec:
             name: coordinator-internal
             port:
               number: 444
+      - pathType: ImplementationSpecific
+        path: /releases
+        backend:
+          service:
+            name: relui-internal
+            port:
+              number: 444
   - host: dev.golang.org
     http:
       paths:
