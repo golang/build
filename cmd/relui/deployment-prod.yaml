@@ -19,14 +19,20 @@ spec:
         - name: relui
           image: gcr.io/symbolic-datum-552/relui:latest
           imagePullPolicy: Always
-          command: ["/sbin/tini", "--", "./relui", "--listen-https-selfsigned=:444"]
+          command:
+            - "/usr/bin/tini"
+            - "--"
+            - "./relui"
+            - "--listen-https-selfsigned=:444"
           ports:
             - containerPort: 444
           env:
             - name: PGUSER
-              value: relui
+              value: relui-prod@symbolic-datum-552.iam
+            - name: PGHOST
+              value: 127.0.0.1
             - name: PGDATABASE
-              value: relui-prod
+              value: relui
           resources:
             requests:
               cpu: "2"
@@ -36,11 +42,10 @@ spec:
           image: gcr.io/cloudsql-docker/gce-proxy:latest
           command:
             - "/cloud_sql_proxy"
-
             # If connecting from a VPC-native GKE cluster, you can use the
             # following flag to have the proxy connect over private IP
             - "-ip_address_types=PRIVATE"
-
+            - "-enable_iam_login"
             # Replace DB_PORT with the port the proxy should listen on
             # Defaults: MySQL: 3306, Postgres: 5432, SQLServer: 1433
             - "-instances=symbolic-datum-552:us-central1:relui-prod-01=tcp:5432"
@@ -68,7 +73,7 @@ metadata:
   namespace: prod
   name: relui
   annotations:
-    iam.gke.io/gcp-service-account: relui@symbolic-datum-552.iam.gserviceaccount.com
+    iam.gke.io/gcp-service-account: relui-prod@symbolic-datum-552.iam.gserviceaccount.com
 ---
 apiVersion: v1
 kind: Service
