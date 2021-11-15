@@ -89,6 +89,9 @@ func MigrateDB(conn string, downUp bool) error {
 // with the name cfg.User will be used.
 func ConnectMaintenanceDB(ctx context.Context, cfg *pgx.ConnConfig, maintDB string) (*pgx.Conn, error) {
 	cfg = cfg.Copy()
+	if maintDB == "" {
+		maintDB = "postgres"
+	}
 	cfg.Database = maintDB
 	return pgx.ConnectConfig(ctx, cfg)
 }
