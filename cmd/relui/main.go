@@ -9,6 +9,7 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net/url"
 
 	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/build/internal/https"
@@ -16,9 +17,10 @@ import (
 )
 
 var (
-	pgConnect   = flag.String("pg-connect", "", "Postgres connection string or URI. If empty, libpq connection defaults are used.")
-	migrateOnly = flag.Bool("migrate-only", false, "Exit after running migrations. Migrations are run by default.")
+	baseURL     = flag.String("base-url", "", "Prefix URL for routing and links.")
 	downUp      = flag.Bool("migrate-down-up", false, "Run all Up migration steps, then the last down migration step, followed by the final up migration. Exits after completion.")
+	migrateOnly = flag.Bool("migrate-only", false, "Exit after running migrations. Migrations are run by default.")
+	pgConnect   = flag.String("pg-connect", "", "Postgres connection string or URI. If empty, libpq connection defaults are used.")
 )
 
 func main() {
@@ -47,7 +49,14 @@ func main() {
 	if err := w.ResumeAll(ctx); err != nil {
 		log.Printf("w.ResumeAll() = %v", err)
 	}
-	s := relui.NewServer(db, w)
+	var base *url.URL
+	if *baseURL != "" {
+		base, err = url.Parse(*baseURL)
+		if err != nil {
+			log.Fatalf("url.Parse(%q) = %v, %v", *baseURL, base, err)
+		}
+	}
+	s := relui.NewServer(db, w, base)
 	if err != nil {
 		log.Fatalf("relui.NewServer() = %v", err)
 	}

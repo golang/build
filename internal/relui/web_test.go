@@ -116,7 +116,7 @@ func TestServerHomeHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 
-	s := NewServer(p, NewWorker(p, &PGListener{p}))
+	s := NewServer(p, NewWorker(p, &PGListener{p}), nil)
 	s.homeHandler(w, req)
 	resp := w.Result()
 
@@ -152,7 +152,7 @@ func TestServerNewWorkflowHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, u.String(), nil)
 			w := httptest.NewRecorder()
 
-			s := &Server{}
+			s := NewServer(nil, nil, nil)
 			s.newWorkflowHandler(w, req)
 			resp := w.Result()
 
@@ -219,7 +219,7 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			rec := httptest.NewRecorder()
 			q := db.New(p)
 
-			s := NewServer(p, NewWorker(p, &PGListener{p}))
+			s := NewServer(p, NewWorker(p, &PGListener{p}), nil)
 			s.createWorkflowHandler(rec, req)
 			resp := rec.Result()
 
@@ -367,4 +367,56 @@ func TestSameUUIDVariant(t *testing.T) {
 // nullString returns a sql.NullString for a string.
 func nullString(val string) sql.NullString {
 	return sql.NullString{String: val, Valid: true}
+}
+
+func TestServerBaseLink(t *testing.T) {
+	cases := []struct {
+		desc    string
+		baseURL string
+		target  string
+		want    string
+	}{
+		{
+			desc:   "no baseURL, relative",
+			target: "/workflows",
+			want:   "/workflows",
+		},
+		{
+			desc:   "no baseURL, absolute",
+			target: "https://example.test/something",
+			want:   "https://example.test/something",
+		},
+		{
+			desc:    "absolute baseURL, relative",
+			baseURL: "https://example.test/releases",
+			target:  "/workflows",
+			want:    "https://example.test/releases/workflows",
+		},
+		{
+			desc:    "relative baseURL, relative",
+			baseURL: "/releases",
+			target:  "/workflows",
+			want:    "/releases/workflows",
+		},
+		{
+			desc:    "absolute baseURL, absolute",
+			baseURL: "https://example.test/releases",
+			target:  "https://example.test/something",
+			want:    "https://example.test/something",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			base, err := url.Parse(c.baseURL)
+			if err != nil {
+				t.Fatalf("url.Parse(%q) = %v, %v, wanted no error", c.baseURL, base, err)
+			}
+			s := NewServer(nil, nil, base)
+
+			got := s.BaseLink(c.target)
+			if got != c.want {
+				t.Errorf("s.BaseLink(%q) = %q, wanted %q", c.target, got, c.want)
+			}
+		})
+	}
 }

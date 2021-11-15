@@ -15,6 +15,7 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"net/url"
 	"path"
 
 	"github.com/google/uuid"
@@ -41,26 +42,31 @@ func fileServerHandler(fs fs.FS, next http.Handler) http.Handler {
 	})
 }
 
-var (
-	homeTmpl        = template.Must(template.Must(layoutTmpl.Clone()).ParseFS(templates, "templates/home.html"))
-	layoutTmpl      = template.Must(template.ParseFS(templates, "templates/layout.html"))
-	newWorkflowTmpl = template.Must(template.Must(layoutTmpl.Clone()).ParseFS(templates, "templates/new_workflow.html"))
-)
-
 // Server implements the http handlers for relui.
 type Server struct {
-	db *pgxpool.Pool
-	m  *http.ServeMux
-	w  *Worker
+	db      *pgxpool.Pool
+	m       *http.ServeMux
+	w       *Worker
+	baseURL *url.URL
+
+	homeTmpl        *template.Template
+	newWorkflowTmpl *template.Template
 }
 
 // NewServer initializes a server with the provided connection pool.
-func NewServer(p *pgxpool.Pool, w *Worker) *Server {
+func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL) *Server {
 	s := &Server{
-		db: p,
-		m:  new(http.ServeMux),
-		w:  w,
+		db:      p,
+		m:       new(http.ServeMux),
+		w:       w,
+		baseURL: baseURL,
 	}
+	helpers := map[string]interface{}{
+		"baseLink": s.BaseLink,
+	}
+	layout := template.Must(template.New("layout.html").Funcs(helpers).ParseFS(templates, "templates/layout.html"))
+	s.homeTmpl = template.Must(template.Must(layout.Clone()).Funcs(helpers).ParseFS(templates, "templates/home.html"))
+	s.newWorkflowTmpl = template.Must(template.Must(layout.Clone()).Funcs(helpers).ParseFS(templates, "templates/new_workflow.html"))
 	s.m.Handle("/workflows/create", http.HandlerFunc(s.createWorkflowHandler))
 	s.m.Handle("/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
 	s.m.Handle("/", fileServerHandler(static, http.HandlerFunc(s.homeHandler)))
@@ -68,11 +74,33 @@ func NewServer(p *pgxpool.Pool, w *Worker) *Server {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.m.ServeHTTP(w, r)
+	if s.baseURL == nil || s.baseURL.Path == "/" {
+		s.m.ServeHTTP(w, r)
+		return
+	}
+	http.StripPrefix(s.baseURL.Path, s.m)
 }
 
 func (s *Server) Serve(port string) error {
 	return http.ListenAndServe(":"+port, s.m)
+}
+
+func (s *Server) BaseLink(target string) string {
+	if s.baseURL == nil {
+		return target
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		log.Printf("BaseLink: url.Parse(%q) = %v, %v", target, u, err)
+		return target
+	}
+	if u.IsAbs() {
+		return u.String()
+	}
+	u.Scheme = s.baseURL.Scheme
+	u.Host = s.baseURL.Host
+	u.Path = path.Join(s.baseURL.Path, u.Path)
+	return u.String()
 }
 
 type homeResponse struct {
@@ -104,7 +132,7 @@ func (s *Server) homeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := bytes.Buffer{}
-	if err := homeTmpl.Execute(&out, resp); err != nil {
+	if err := s.homeTmpl.Execute(&out, resp); err != nil {
 		log.Printf("homeHandler: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -156,7 +184,7 @@ func (s *Server) newWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 		Definitions: Definitions(),
 		Name:        r.FormValue("workflow.name"),
 	}
-	if err := newWorkflowTmpl.Execute(&out, resp); err != nil {
+	if err := s.newWorkflowTmpl.Execute(&out, resp); err != nil {
 		log.Printf("newWorkflowHandler: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return

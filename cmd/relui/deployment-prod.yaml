@@ -24,6 +24,7 @@ spec:
             - "--"
             - "./relui"
             - "--listen-https-selfsigned=:444"
+            - "--base-url=https://build.golang.org/releases"
           ports:
             - containerPort: 444
           env:
