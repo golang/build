@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -48,6 +49,8 @@ type Server struct {
 	m       *http.ServeMux
 	w       *Worker
 	baseURL *url.URL
+	// mux used if baseURL is set
+	bm *http.ServeMux
 
 	homeTmpl        *template.Template
 	newWorkflowTmpl *template.Template
@@ -70,19 +73,21 @@ func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL) *Server {
 	s.m.Handle("/workflows/create", http.HandlerFunc(s.createWorkflowHandler))
 	s.m.Handle("/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
 	s.m.Handle("/", fileServerHandler(static, http.HandlerFunc(s.homeHandler)))
+	if baseURL != nil && baseURL.Path != "/" && baseURL.Path != "" {
+		nosuffix := strings.TrimSuffix(baseURL.Path, "/")
+		s.bm = new(http.ServeMux)
+		s.bm.Handle(nosuffix+"/", http.StripPrefix(nosuffix, s.m))
+		s.bm.Handle("/", s.m)
+	}
 	return s
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if s.baseURL == nil || s.baseURL.Path == "/" {
-		s.m.ServeHTTP(w, r)
+	if s.bm != nil {
+		s.bm.ServeHTTP(w, r)
 		return
 	}
-	http.StripPrefix(s.baseURL.Path, s.m)
-}
-
-func (s *Server) Serve(port string) error {
-	return http.ListenAndServe(":"+port, s.m)
+	s.m.ServeHTTP(w, r)
 }
 
 func (s *Server) BaseLink(target string) string {
