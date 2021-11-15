@@ -3,12 +3,10 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-# This script requires expect, growisofs and qemu.
-
 set -e
 set -u
 
-readonly VERSION="6.8"
+readonly VERSION="7.0"
 readonly RELNO="${VERSION/./}"
 readonly SNAPSHOT=false
 

@@ -252,6 +252,22 @@ var Hosts = map[string]*HostConfig{
 		Notes:              "OpenBSD 6.8 (with 009_exit syspatch); GCE VM is built from script in build/env/openbsd-386",
 		SSHUsername:        "gopher",
 	},
+	"host-openbsd-amd64-70": &HostConfig{
+		VMImage:            "openbsd-amd64-70",
+		machineType:        "e2-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
+		Notes:              "OpenBSD 7.0; GCE VM is built from script in build/env/openbsd-amd64",
+		SSHUsername:        "gopher",
+	},
+	"host-openbsd-386-70": &HostConfig{
+		VMImage:            "openbsd-386-70",
+		machineType:        "e2-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
+		Notes:              "OpenBSD 7.0; GCE VM is built from script in build/env/openbsd-386",
+		SSHUsername:        "gopher",
+	},
 	"host-openbsd-arm-joelsing": &HostConfig{
 		IsReverse: true,
 		ExpectNum: 1,
@@ -1895,6 +1911,28 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "openbsd-386-68",
 		HostType: "host-openbsd-386-68",
+		tryBot:   explicitTrySet("sys"),
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			if repo == "review" {
+				// https://golang.org/issue/49529: git seems to be too slow on this
+				// platform.
+				return false
+			}
+			return buildRepoByDefault(repo)
+		},
+		distTestAdjust:    noTestDirAndNoReboot,
+		numTryTestHelpers: 4,
+	})
+	addBuilder(BuildConfig{
+		Name:              "openbsd-amd64-70",
+		HostType:          "host-openbsd-amd64-70",
+		tryBot:            defaultTrySet(),
+		distTestAdjust:    noTestDirAndNoReboot,
+		numTryTestHelpers: 4,
+	})
+	addBuilder(BuildConfig{
+		Name:     "openbsd-386-70",
+		HostType: "host-openbsd-386-70",
 		tryBot:   explicitTrySet("sys"),
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			if repo == "review" {
