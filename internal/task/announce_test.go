@@ -5,12 +5,31 @@
 package task
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"golang.org/x/build/internal/workflow"
 )
+
+// Test that the task doesn't start running if the provided
+// context doesn't have sufficient time for the task to run.
+func TestAnnounceReleaseShortContext(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	r := ReleaseAnnouncement{Version: "go1.18.1", SecondaryVersion: "go1.17.8"}
+	_, err := (AnnounceMailTasks{}).AnnounceMinorRelease(&workflow.TaskContext{Context: ctx}, r)
+	if err == nil {
+		t.Errorf("want non-nil error")
+	} else if !strings.HasPrefix(err.Error(), "insufficient time") {
+		t.Errorf("want error that starts with 'insufficient time' instead of: %s", err)
+	}
+}
 
 func TestAnnouncementMail(t *testing.T) {
 	tests := [...]struct {
@@ -86,7 +105,6 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 		t.Run(tc.name, func(t *testing.T) {
 			m, err := announcementMail(tc.in)
 			if err != nil {
-				t.Skip("announcementMail is not implemented yet") // TODO(go.dev/issue/47405): Implement.
 				t.Fatal("announcementMail returned non-nil error:", err)
 			}
 			if *updateFlag {
@@ -126,5 +144,190 @@ func writeTestdataFile(t *testing.T, name string, data []byte) {
 	err := os.WriteFile(filepath.Join("testdata", name), data, 0644)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAnnounceRelease(t *testing.T) {
+	if testing.Short() {
+		t.Skip("not running test that uses internet in short mode")
+	}
+
+	tests := [...]struct {
+		name    string
+		taskFn  func(*workflow.TaskContext, ReleaseAnnouncement) (SentMail, error)
+		in      ReleaseAnnouncement
+		want    SentMail
+		wantLog string
+	}{
+		{
+			name:   "minor",
+			taskFn: (AnnounceMailTasks{}).AnnounceMinorRelease,
+			in: ReleaseAnnouncement{
+				Version:          "go1.18.1",
+				SecondaryVersion: "go1.17.8", // Intentionally not 1.17.9 so the real email doesn't get in the way.
+				Names:            []string{"Alice", "Bob", "Charlie"},
+			},
+			want: SentMail{Subject: "[dry-run] Go 1.18.1 and Go 1.17.8 are released"},
+			wantLog: `announcement subject: Go 1.18.1 and Go 1.17.8 are released
+
+announcement body HTML:
+<p>Hello gophers,</p>
+<p>We have just released Go versions 1.18.1 and 1.17.8, minor point releases.</p>
+<p>View the release notes for more information:<br>
+<a href="https://go.dev/doc/devel/release#go1.18.1">https://go.dev/doc/devel/release#go1.18.1</a></p>
+<p>You can download binary and source distributions from the Go website:<br>
+<a href="https://go.dev/dl/">https://go.dev/dl/</a></p>
+<p>To compile from source using a Git clone, update to the release with<br>
+<code>git checkout go1.18.1</code> and build as usual.</p>
+<p>Thanks to everyone who contributed to the releases.</p>
+<p>Cheers,<br>
+Alice, Bob, and Charlie for the Go team</p>
+
+announcement body text:
+Hello gophers,
+
+We have just released Go versions 1.18.1 and 1.17.8, minor point releases.
+
+View the release notes for more information:
+https://go.dev/doc/devel/release#go1.18.1
+
+You can download binary and source distributions from the Go website:
+https://go.dev/dl/
+
+To compile from source using a Git clone, update to the release with
+git checkout go1.18.1 and build as usual.
+
+Thanks to everyone who contributed to the releases.
+
+Cheers,
+Alice, Bob, and Charlie for the Go team` + "\n",
+		},
+		// Just one test case is enough, since TestAnnouncementMail
+		// has very thorough coverage for all release types.
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Call the announce task function in dry-run mode so it
+			// doesn't actually try to announce, but capture its log.
+			var buf bytes.Buffer
+			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
+			sentMail, err := tc.taskFn(ctx, tc.in)
+			if err != nil {
+				t.Fatal("task function returned non-nil error:", err)
+			}
+			if diff := cmp.Diff(tc.want, sentMail); diff != "" {
+				t.Errorf("sent mail mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.wantLog, buf.String()); diff != "" {
+				t.Errorf("log mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFindGoogleGroupsThread(t *testing.T) {
+	if testing.Short() {
+		t.Skip("not running test that uses internet in short mode")
+	}
+
+	threadURL, err := findGoogleGroupsThread(&workflow.TaskContext{
+		Context: context.Background(),
+	}, "[security] Go 1.18.3 and Go 1.17.11 are released")
+	if err != nil {
+		// Note: These test failures are only actionable if the error is not
+		// a transient network one.
+		t.Fatalf("findGoogleGroupsThread returned a non-nil error: %v", err)
+	}
+	// Just log the threadURL since we can't rely on stable output.
+	// This test is mostly for debugging if we need to.
+	t.Logf("threadURL: %q\n", threadURL)
+}
+
+func TestMarkdownToText(t *testing.T) {
+	const in = `Hello gophers,
+
+This is a simple Markdown document that exercises
+a limited set of features used in email templates.
+
+There may be security fixes following the [security policy](https://go.dev/security):
+
+-	abc: Read hangs on extremely large input
+
+	On an operating system, ` + "`Read`" + ` will hang indefinitely if
+	the buffer size is larger than 1 << 64 - 1 bytes.
+
+	Thanks to Gopher A for reporting the issue.
+
+	This is CVE-123 and Go issue https://go.dev/issue/123.
+
+-	xyz: Clean("X") returns "Y" when Z
+
+	Some description of the problem here.
+
+	Markdown allows one to use backslash escapes, like \_underscore\_
+	or \*literal asterisks\*, so we might encounter that.
+
+View release notes:
+https://go.dev/doc/devel/release#go1.18.3
+
+You can download binaries:
+https://go.dev/dl/
+
+To builds from source, use
+` + "`git checkout`" + `.
+
+An easy way to try go1.19beta1
+is by using the go command:
+$ go install example.org@latest
+$ example download
+
+That's all for now.
+`
+	_, got, err := renderMarkdown(strings.NewReader(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const want = `Hello gophers,
+
+This is a simple Markdown document that exercises
+a limited set of features used in email templates.
+
+There may be security fixes following the security policy <https://go.dev/security>:
+
+-	abc: Read hangs on extremely large input
+
+	On an operating system, Read will hang indefinitely if
+	the buffer size is larger than 1 << 64 - 1 bytes.
+
+	Thanks to Gopher A for reporting the issue.
+
+	This is CVE-123 and Go issue https://go.dev/issue/123.
+
+-	xyz: Clean("X") returns "Y" when Z
+
+	Some description of the problem here.
+
+	Markdown allows one to use backslash escapes, like \_underscore\_
+	or \*literal asterisks\*, so we might encounter that.
+
+View release notes:
+https://go.dev/doc/devel/release#go1.18.3
+
+You can download binaries:
+https://go.dev/dl/
+
+To builds from source, use
+git checkout.
+
+An easy way to try go1.19beta1
+is by using the go command:
+$ go install example.org@latest
+$ example download
+
+That's all for now.
+`
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("plain text rendering mismatch (-want +got):\n%s", diff)
 	}
 }

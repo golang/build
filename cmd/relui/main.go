@@ -18,6 +18,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"strings"
 	"time"
@@ -57,6 +58,11 @@ func main() {
 		log.Fatalln(err)
 	}
 	gerritAPIFlag := secret.Flag("gerrit-api-secret", "Gerrit API secret to use for workflows that interact with Gerrit.")
+	var annMail task.AnnounceMailTasks
+	secret.FlagVar(&annMail.SendGridAPIKey, "sendgrid-api-key", "SendGrid API key for workflows involving sending email.")
+	addressVarFlag(&annMail.From, "announce-mail-from", "The From address to use for the announcement mail.")
+	addressVarFlag(&annMail.To, "announce-mail-to", "The To address to use for the announcement mail.")
+	addressListVarFlag(&annMail.BCC, "announce-mail-bcc", "The BCC address list to use for the announcement mail.")
 	var twitterAPI secret.TwitterCredentials
 	secret.JSONVarFlag(&twitterAPI, "twitter-api-secret", "Twitter API secret to use for workflows involving tweeting.")
 	masterKey := secret.Flag("builder-master-key", "Builder master key")
@@ -102,6 +108,7 @@ func main() {
 	}
 	dh := relui.NewDefinitionHolder()
 	relui.RegisterMailDLCLDefinition(dh, versionTasks)
+	relui.RegisterAnnounceDefinitions(dh, annMail)
 	relui.RegisterTweetDefinitions(dh, extCfg)
 	userPassAuth := buildlet.UserPass{
 		Username: "user-relui",
@@ -195,4 +202,33 @@ func publishFile(uploadURL string, auth buildlet.UserPass, f *relui.WebsiteFile)
 		return fmt.Errorf("upload failed to %q: %v\n%s", uploadURL, resp.Status, b)
 	}
 	return nil
+}
+
+// addressVarFlag defines an address flag with specified name and usage string.
+// The argument p points to a mail.Address variable in which to store the value of the flag.
+func addressVarFlag(p *mail.Address, name, usage string) {
+	flag.Func(name, usage, func(s string) error {
+		a, err := mail.ParseAddress(s)
+		if err != nil {
+			return err
+		}
+		*p = *a
+		return nil
+	})
+}
+
+// addressListVarFlag defines an address list flag with specified name and usage string.
+// The argument p points to a []mail.Address variable in which to store the value of the flag.
+func addressListVarFlag(p *[]mail.Address, name, usage string) {
+	flag.Func(name, usage, func(s string) error {
+		as, err := mail.ParseAddressList(s)
+		if err != nil {
+			return err
+		}
+		*p = nil // Clear out the list before appending.
+		for _, a := range as {
+			*p = append(*p, *a)
+		}
+		return nil
+	})
 }

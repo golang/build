@@ -74,7 +74,7 @@ func (h *DefinitionHolder) Definitions() map[string]*workflow.Definition {
 }
 
 // RegisterMailDLCLDefinition registers a workflow definition for mailing a golang.org/dl CL
-// onto h, using e for the external service configuration.
+// onto h.
 func RegisterMailDLCLDefinition(h *DefinitionHolder, tasks *task.VersionTasks) {
 	versions := workflow.Parameter{
 		Name:          "Versions",
@@ -99,6 +99,108 @@ For example:
 		return task.ChangeLink(id), nil
 	}, wd.Parameter(versions)))
 	h.RegisterDefinition("mail-dl-cl", wd)
+}
+
+// RegisterAnnounceDefinitions registers workflow definitions involving announcing
+// onto h.
+func RegisterAnnounceDefinitions(h *DefinitionHolder, tasks task.AnnounceMailTasks) {
+	version := workflow.Parameter{
+		Name: "Version",
+		Doc: `Version is the Go version that has been released.
+
+The version string must use the same format as Go tags.`,
+	}
+	security := workflow.Parameter{
+		Name:          "Security (optional)",
+		ParameterType: workflow.SliceLong,
+		Doc: `Security is a list of descriptions, one for each distinct security fix included in this release, in Markdown format.
+
+The empty list means there are no security fixes included.
+
+This field applies only to minor releases.
+
+Past examples:
+• "encoding/pem: fix stack overflow in Decode
+
+   A large (more than 5 MB) PEM input can cause a stack overflow in Decode,
+   leading the program to crash.
+
+   Thanks to Juho Nurminen of Mattermost who reported the error.
+
+   This is CVE-2022-24675 and Go issue https://go.dev/issue/51853."
+• "crypto/elliptic: tolerate all oversized scalars in generic P-256
+
+   A crafted scalar input longer than 32 bytes can cause P256().ScalarMult
+   or P256().ScalarBaseMult to panic. Indirect uses through crypto/ecdsa and
+   crypto/tls are unaffected. amd64, arm64, ppc64le, and s390x are unaffected.
+
+   This was discovered thanks to a Project Wycheproof test vector.
+
+   This is CVE-2022-28327 and Go issue https://go.dev/issue/52075."`,
+		Example: `encoding/pem: fix stack overflow in Decode
+
+A large (more than 5 MB) PEM input can cause a stack overflow in Decode,
+leading the program to crash.
+
+Thanks to Juho Nurminen of Mattermost who reported the error.
+
+This is CVE-2022-24675 and Go issue https://go.dev/issue/51853.`,
+	}
+	names := workflow.Parameter{
+		Name:          "Names (optional)",
+		ParameterType: workflow.SliceShort,
+		Doc:           `Names is an optional list of release coordinator names to include in the sign-off message.`,
+	}
+
+	{
+		minorVersion := version
+		minorVersion.Example = "go1.18.2"
+		secondaryVersion := workflow.Parameter{
+			Name:    "SecondaryVersion",
+			Doc:     `SecondaryVersion is an older Go version that was also released.`,
+			Example: "go1.17.10",
+		}
+
+		wd := workflow.New()
+		sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v1, v2 string, sec, names []string) (task.SentMail, error) {
+			return tasks.AnnounceMinorRelease(ctx, task.ReleaseAnnouncement{Version: v1, SecondaryVersion: v2, Security: sec, Names: names})
+		}, wd.Parameter(minorVersion), wd.Parameter(secondaryVersion), wd.Parameter(security), wd.Parameter(names))
+		wd.Output("AnnouncementURL", wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail))
+		h.RegisterDefinition("announce-minor", wd)
+	}
+	{
+		betaVersion := version
+		betaVersion.Example = "go1.19beta1"
+
+		wd := workflow.New()
+		sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v string, names []string) (task.SentMail, error) {
+			return tasks.AnnounceBetaRelease(ctx, task.ReleaseAnnouncement{Version: v, Names: names})
+		}, wd.Parameter(betaVersion), wd.Parameter(names))
+		wd.Output("AnnouncementURL", wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail))
+		h.RegisterDefinition("announce-beta", wd)
+	}
+	{
+		rcVersion := version
+		rcVersion.Example = "go1.19rc1"
+
+		wd := workflow.New()
+		sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v string, names []string) (task.SentMail, error) {
+			return tasks.AnnounceRCRelease(ctx, task.ReleaseAnnouncement{Version: v, Names: names})
+		}, wd.Parameter(rcVersion), wd.Parameter(names))
+		wd.Output("AnnouncementURL", wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail))
+		h.RegisterDefinition("announce-rc", wd)
+	}
+	{
+		majorVersion := version
+		majorVersion.Example = "go1.19"
+
+		wd := workflow.New()
+		sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v string, names []string) (task.SentMail, error) {
+			return tasks.AnnounceMajorRelease(ctx, task.ReleaseAnnouncement{Version: v, Names: names})
+		}, wd.Parameter(majorVersion), wd.Parameter(names))
+		wd.Output("AnnouncementURL", wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail))
+		h.RegisterDefinition("announce-major", wd)
+	}
 }
 
 // RegisterTweetDefinitions registers workflow definitions involving tweeting
