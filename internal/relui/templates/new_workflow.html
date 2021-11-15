@@ -21,7 +21,7 @@
       </noscript>
     </form>
     {{if .Selected}}
-      <form action="/workflows/create" method="post">
+      <form action="{{baseLink "/workflows/create"}}" method="post">
         <input type="hidden" id="workflow.name" name="workflow.name" value="{{$.Name}}" />
         {{range $name := .Selected.ParameterNames}}
           <div class="NewWorkflow-Parameter">
