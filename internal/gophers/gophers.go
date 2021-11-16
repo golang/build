@@ -3247,6 +3247,8 @@ func GitHubOfGomoteUser(gomoteUser string) (githubUser string) {
 		return "spf13"
 	case "valsorda":
 		return "FiloSottile"
+	case "bracewell":
+		return "rolandshoemaker"
 	}
 	return gomoteUser
 }
