@@ -11,8 +11,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"html"
+	"html/template"
 	"net/http"
-	"text/template"
+	"strings"
 
 	"golang.org/x/build/dashboard"
 )
@@ -41,7 +44,34 @@ func handleBuilders(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-var buildersTmpl = template.Must(template.New("builders").Parse(`
+var buildersTmpl = template.Must(template.New("builders").Funcs(template.FuncMap{
+	"builderOwners": func(bc *dashboard.BuildConfig) template.HTML {
+		owners := bc.HostConfig().Owners
+		if len(owners) == 0 {
+			return "golang-dev"
+		}
+		var buf strings.Builder
+		for i, p := range owners {
+			if i != 0 {
+				buf.WriteString(", ")
+			}
+			if p.GitHub != "" {
+				fmt.Fprintf(&buf, `<a href="https://github.com/%s">@%[1]s</a>`, html.EscapeString(p.GitHub))
+			} else if len(p.Emails) > 0 {
+				name := p.Name
+				if name == "" {
+					name = p.Emails[0]
+				}
+				fmt.Fprintf(&buf, `<a href="mailto:%s">%s</a>`, html.EscapeString(p.Emails[0]), html.EscapeString(name))
+			} else if p.Name != "" {
+				buf.WriteString(html.EscapeString(p.Name))
+			} else {
+				buf.WriteString("(unnamed)")
+			}
+		}
+		return template.HTML(buf.String())
+	},
+}).Parse(`
 <!DOCTYPE html>
 <html>
 <head><link rel="stylesheet" href="/style.css"/><title>Go Farmer</title></head>
@@ -62,13 +92,13 @@ var buildersTmpl = template.Must(template.New("builders").Parse(`
 <h2 id='builders'>Defined Builders</h2>
 
 <table>
-<thead><tr><th>name</th><th>pool</th><th>owner</th><th>notes</th></tr>
+<thead><tr><th>name</th><th>pool</th><th>owners</th><th>notes</th></tr>
 </thead>
 {{range .Builders}}
 <tr>
 	<td>{{.Name}}</td>
 	<td><a href='#{{.HostType}}'>{{.HostType}}</a></td>
-	<td>{{if .OwnerGithub}}<a href='https://github.com/{{.OwnerGithub}}'>@{{.OwnerGithub}}</a>{{else}}{{.ShortOwner}}{{end}}</td>
+	<td>{{builderOwners .}}</td>
 	<td>{{.Notes}}</td>
 </tr>
 {{end}}
@@ -83,7 +113,7 @@ var buildersTmpl = template.Must(template.New("builders").Parse(`
 <tr id='{{.HostType}}'>
 	<td>{{.HostType}}</td>
 	<td>{{.PoolName}}</td>
-	<td>{{html .Notes}}</td>
+	<td>{{.Notes}}</td>
 </tr>
 {{end}}
 </table>

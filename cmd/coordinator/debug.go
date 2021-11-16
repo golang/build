@@ -13,11 +13,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
-	"text/template"
 
 	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/coordinator/pool"

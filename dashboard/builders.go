@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"golang.org/x/build/buildenv"
+	"golang.org/x/build/internal/gophers"
 	"golang.org/x/build/maintner/maintnerd/maintapi/version"
 	"golang.org/x/build/types"
 )
@@ -215,25 +216,25 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:     "root",
 	},
 	"host-linux-riscv64-joelsing": &HostConfig{
-		Notes:       "SiFive HiFive Unleashed RISC-V board. 8 GB RAM, 4 cores.",
-		IsReverse:   true,
-		ExpectNum:   1,
-		OwnerGithub: "4a6f656c",
-		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
+		Notes:     "SiFive HiFive Unleashed RISC-V board. 8 GB RAM, 4 cores.",
+		IsReverse: true,
+		ExpectNum: 1,
+		Owners:    []*gophers.Person{gh("4a6f656c")},
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
 	},
 	"host-linux-riscv64-unmatched": &HostConfig{
-		Notes:       "SiFive HiFive Unmatched RISC-V board. 16 GB RAM, 4 cores.",
-		IsReverse:   true,
-		ExpectNum:   1,
-		OwnerGithub: "mengzhuo",
-		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
+		Notes:     "SiFive HiFive Unmatched RISC-V board. 16 GB RAM, 4 cores.",
+		IsReverse: true,
+		ExpectNum: 1,
+		Owners:    []*gophers.Person{gh("mengzhuo")},
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
 	},
 	"host-linux-riscv64-unleashed": &HostConfig{
-		Notes:       "SiFive HiFive Unleashed RISC-V board. 8 GB RAM, 4 cores.",
-		IsReverse:   true,
-		ExpectNum:   1,          // for now. Joel's board might join the party later.
-		OwnerGithub: "bradfitz", // at home
-		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
+		Notes:     "SiFive HiFive Unleashed RISC-V board. 8 GB RAM, 4 cores.",
+		IsReverse: true,
+		ExpectNum: 1,                                 // for now. Joel's board might join the party later.
+		Owners:    []*gophers.Person{gh("bradfitz")}, // at home
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
 	},
 	"host-openbsd-amd64-68": &HostConfig{
 		VMImage:            "openbsd-amd64-68-v3", // v3 adds 009_exit syspatch; see golang.org/cl/278732.
@@ -252,22 +253,22 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-arm-joelsing": &HostConfig{
-		IsReverse:   true,
-		ExpectNum:   1,
-		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
-		OwnerGithub: "4a6f656c",
+		IsReverse: true,
+		ExpectNum: 1,
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+		Owners:    []*gophers.Person{gh("4a6f656c")},
 	},
 	"host-openbsd-arm64-joelsing": &HostConfig{
-		IsReverse:   true,
-		ExpectNum:   1,
-		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
-		OwnerGithub: "4a6f656c",
+		IsReverse: true,
+		ExpectNum: 1,
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+		Owners:    []*gophers.Person{gh("4a6f656c")},
 	},
 	"host-openbsd-mips64-joelsing": &HostConfig{
-		IsReverse:   true,
-		ExpectNum:   1,
-		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
-		OwnerGithub: "4a6f656c",
+		IsReverse: true,
+		ExpectNum: 1,
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
+		Owners:    []*gophers.Person{gh("4a6f656c")},
 	},
 	"host-freebsd-11_2": &HostConfig{
 		VMImage:            "freebsd-amd64-112",
@@ -318,16 +319,16 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "root",
 	},
 	"host-netbsd-arm-bsiegert": &HostConfig{
-		IsReverse:   true,
-		ExpectNum:   1,
-		env:         []string{"GOROOT_BOOTSTRAP=/usr/pkg/go112"},
-		OwnerGithub: "bsiegert",
+		IsReverse: true,
+		ExpectNum: 1,
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/pkg/go112"},
+		Owners:    []*gophers.Person{gh("bsiegert")},
 	},
 	"host-netbsd-arm64-bsiegert": &HostConfig{
-		IsReverse:   true,
-		ExpectNum:   1,
-		env:         []string{"GOROOT_BOOTSTRAP=/usr/pkg/go114"},
-		OwnerGithub: "bsiegert",
+		IsReverse: true,
+		ExpectNum: 1,
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/pkg/go114"},
+		Owners:    []*gophers.Person{gh("bsiegert")},
 	},
 	"host-dragonfly-amd64-master": &HostConfig{
 		IsReverse:   true,
@@ -335,39 +336,39 @@ var Hosts = map[string]*HostConfig{
 		Notes:       "DragonFly BSD master, run by DragonFly team",
 		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		SSHUsername: "root",
-		OwnerGithub: "tuxillo",
+		Owners:      []*gophers.Person{gh("tuxillo")},
 	},
 	"host-freebsd-arm-paulzhol": &HostConfig{
-		IsReverse:   true,
-		ExpectNum:   1,
-		Notes:       "Cubiboard2 1Gb RAM dual-core Cortex-A7 (Allwinner A20), FreeBSD 11.1-RELEASE",
-		env:         []string{"GOROOT_BOOTSTRAP=/usr/home/paulzhol/go1.4"},
-		OwnerGithub: "paulzhol",
+		IsReverse: true,
+		ExpectNum: 1,
+		Notes:     "Cubiboard2 1Gb RAM dual-core Cortex-A7 (Allwinner A20), FreeBSD 11.1-RELEASE",
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/home/paulzhol/go1.4"},
+		Owners:    []*gophers.Person{gh("paulzhol")},
 	},
 	"host-freebsd-arm64-dmgk": &HostConfig{
-		IsReverse:   true,
-		ExpectNum:   1,
-		Notes:       "AWS EC2 a1.large 2 vCPU 4GiB RAM, FreeBSD 12.1-STABLE",
-		env:         []string{"GOROOT_BOOTSTRAP=/usr/home/builder/gobootstrap"},
-		OwnerGithub: "dmgk",
+		IsReverse: true,
+		ExpectNum: 1,
+		Notes:     "AWS EC2 a1.large 2 vCPU 4GiB RAM, FreeBSD 12.1-STABLE",
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/home/builder/gobootstrap"},
+		Owners:    []*gophers.Person{gh("dmgk")},
 	},
 	"host-plan9-arm-0intro": &HostConfig{
-		IsReverse:   true,
-		ExpectNum:   1,
-		Notes:       "Raspberry Pi 3 Model B, Plan 9 from Bell Labs",
-		OwnerGithub: "0intro",
+		IsReverse: true,
+		ExpectNum: 1,
+		Notes:     "Raspberry Pi 3 Model B, Plan 9 from Bell Labs",
+		Owners:    []*gophers.Person{gh("0intro")},
 	},
 	"host-plan9-amd64-0intro": &HostConfig{
-		IsReverse:   true,
-		ExpectNum:   1,
-		Notes:       "QEMU VM, Plan 9 from Bell Labs, 9k kernel",
-		OwnerGithub: "0intro",
+		IsReverse: true,
+		ExpectNum: 1,
+		Notes:     "QEMU VM, Plan 9 from Bell Labs, 9k kernel",
+		Owners:    []*gophers.Person{gh("0intro")},
 	},
 	"host-plan9-386-0intro": &HostConfig{
-		IsReverse:   true,
-		ExpectNum:   1,
-		Notes:       "QEMU VM, Plan 9 from Bell Labs",
-		OwnerGithub: "0intro",
+		IsReverse: true,
+		ExpectNum: 1,
+		Notes:     "QEMU VM, Plan 9 from Bell Labs",
+		Owners:    []*gophers.Person{gh("0intro")},
 	},
 	"host-plan9-386-gce": &HostConfig{
 		VMImage:            "plan9-386-v7",
@@ -407,10 +408,10 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-windows-arm64-zx2c4": &HostConfig{
-		IsReverse:   true,
-		ExpectNum:   1,
-		OwnerGithub: "zx2c4",
-		env:         []string{"GOROOT_BOOTSTRAP=C:\\Program Files (Arm)\\Go"},
+		IsReverse: true,
+		ExpectNum: 1,
+		Owners:    []*gophers.Person{gh("zx2c4")},
+		env:       []string{"GOROOT_BOOTSTRAP=C:\\Program Files (Arm)\\Go"},
 	},
 	"host-windows-arm64-mini": &HostConfig{
 		Notes:              "macOS hosting Windows 10 in qemu with HVM acceleration.",
@@ -469,10 +470,10 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername: "gopher",
 	},
 	"host-linux-s390x": &HostConfig{
-		Notes:       "run by IBM",
-		OwnerGithub: "ruixin-bao",
-		IsReverse:   true,
-		env:         []string{"GOROOT_BOOTSTRAP=/var/buildlet/go-linux-s390x-bootstrap"},
+		Notes:     "run by IBM",
+		Owners:    []*gophers.Person{gh("ruixin-bao")},
+		IsReverse: true,
+		env:       []string{"GOROOT_BOOTSTRAP=/var/buildlet/go-linux-s390x-bootstrap"},
 	},
 	"host-linux-ppc64-osu": &HostConfig{
 		Notes:           "Debian jessie; run by Go team on osuosl.org",
@@ -527,81 +528,79 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-illumos-amd64-jclulow": &HostConfig{
 		Notes:       "SmartOS base64@19.1.0 zone",
-		Owner:       "josh@sysmgr.org",
-		OwnerGithub: "jclulow",
+		Owners:      []*gophers.Person{gh("jclulow")},
 		IsReverse:   true,
 		ExpectNum:   1,
 		SSHUsername: "gobuild",
 	},
 	"host-solaris-oracle-amd64-oraclerel": &HostConfig{
-		Notes:       "Oracle Solaris amd64 Release System",
-		Owner:       "",
-		OwnerGithub: "rorth", // https://github.com/golang/go/issues/15581#issuecomment-550368581
-		IsReverse:   true,
-		ExpectNum:   1,
-		env:         []string{"GOROOT_BOOTSTRAP=/opt/golang/go-solaris-amd64-bootstrap"},
+		Notes:     "Oracle Solaris amd64 Release System",
+		Owners:    []*gophers.Person{gh("rorth")}, // https://github.com/golang/go/issues/15581#issuecomment-550368581
+		IsReverse: true,
+		ExpectNum: 1,
+		env:       []string{"GOROOT_BOOTSTRAP=/opt/golang/go-solaris-amd64-bootstrap"},
 	},
 	"host-linux-loong64-3a5000": &HostConfig{
-		Notes:       "Loongson 3A5000 Box hosted by Loongson; loong64 is the short name of LoongArch 64 bit version",
-		OwnerGithub: "XiaodongLoong",
-		IsReverse:   true,
-		ExpectNum:   5,
+		Notes:     "Loongson 3A5000 Box hosted by Loongson; loong64 is the short name of LoongArch 64 bit version",
+		Owners:    []*gophers.Person{gh("XiaodongLoong")},
+		IsReverse: true,
+		ExpectNum: 5,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/lib/go-1.15",
 		},
 	},
 	"host-linux-mipsle-mengzhuo": &HostConfig{
-		Notes:       "Loongson 3A Box hosted by Meng Zhuo; actually MIPS64le despite the name",
-		OwnerGithub: "mengzhuo",
-		IsReverse:   true,
-		ExpectNum:   1,
+		Notes:     "Loongson 3A Box hosted by Meng Zhuo; actually MIPS64le despite the name",
+		Owners:    []*gophers.Person{gh("mengzhuo")},
+		IsReverse: true,
+		ExpectNum: 1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/lib/golang",
 			"GOMIPS64=hardfloat",
 		},
 	},
 	"host-linux-mips64le-rtrk": &HostConfig{
-		Notes:       "cavium,rhino_utm8 board hosted at RT-RK.com; quad-core cpu, 8GB of ram and 240GB ssd disks.",
-		OwnerGithub: "bogojevic", // and @milanknezevic. https://github.com/golang/go/issues/31217#issuecomment-547004892
-		IsReverse:   true,
-		ExpectNum:   1,
+		Notes:     "cavium,rhino_utm8 board hosted at RT-RK.com; quad-core cpu, 8GB of ram and 240GB ssd disks.",
+		Owners:    []*gophers.Person{gh("bogojevic"), gh("milanknezevic")}, // See https://github.com/golang/go/issues/31217#issuecomment-547004892.
+		IsReverse: true,
+		ExpectNum: 1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
 		},
 	},
 	"host-linux-mips64-rtrk": &HostConfig{
-		Notes:       "cavium,rhino_utm8 board hosted at RT-RK.com; quad-core cpu, 8GB of ram and 240GB ssd disks.",
-		OwnerGithub: "bogojevic", // and @milanknezevic. https://github.com/golang/go/issues/31217#issuecomment-547004892
-		IsReverse:   true,
-		ExpectNum:   1,
+		Notes:     "cavium,rhino_utm8 board hosted at RT-RK.com; quad-core cpu, 8GB of ram and 240GB ssd disks.",
+		Owners:    []*gophers.Person{gh("bogojevic"), gh("milanknezevic")}, // See https://github.com/golang/go/issues/31217#issuecomment-547004892.
+		IsReverse: true,
+		ExpectNum: 1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
 		},
 	},
 	"host-ios-arm64-corellium-ios": &HostConfig{
-		Notes:       "Virtual iOS devices hosted by Zenly on Corellium; see issues 31722 and 40523",
-		OwnerGithub: "znly",
-		IsReverse:   true,
-		ExpectNum:   3,
+		Notes:     "Virtual iOS devices hosted by Zenly on Corellium; see issues 31722 and 40523",
+		Owners:    []*gophers.Person{gh("steeve")},
+		IsReverse: true,
+		ExpectNum: 3,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/var/root/go-ios-arm64-bootstrap",
 		},
 	},
 	"host-android-arm64-corellium-android": &HostConfig{
-		Notes:       "Virtual Android devices hosted by Zenly on Corellium; see issues 31722 and 40523",
-		OwnerGithub: "znly",
-		IsReverse:   true,
-		ExpectNum:   3,
+		Notes:     "Virtual Android devices hosted by Zenly on Corellium; see issues 31722 and 40523",
+		Owners:    []*gophers.Person{gh("steeve")},
+		IsReverse: true,
+		ExpectNum: 3,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/data/data/com.termux/files/home/go-android-arm64-bootstrap",
 		},
 	},
 	"host-aix-ppc64-osuosl": &HostConfig{
-		Notes:       "AIX 7.2 VM on OSU; run by Tony Reix",
-		OwnerGithub: "trex58",
-		IsReverse:   true,
-		ExpectNum:   1,
-		env:         []string{"GOROOT_BOOTSTRAP=/opt/freeware/lib/golang"},
+		Notes:     "AIX 7.2 VM on OSU; run by Tony Reix",
+		Owners:    []*gophers.Person{gh("trex58")},
+		IsReverse: true,
+		ExpectNum: 1,
+		env:       []string{"GOROOT_BOOTSTRAP=/opt/freeware/lib/golang"},
 	},
 	"host-android-amd64-emu": &HostConfig{
 		Notes:           "Debian Buster w/ Android SDK + emulator (use nested virt)",
@@ -613,11 +612,11 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:     "root",
 	},
 	"host-linux-amd64-wsl": &HostConfig{
-		Notes:       "Windows 10 WSL2 Ubuntu",
-		OwnerGithub: "mengzhuo",
-		IsReverse:   true,
-		ExpectNum:   2,
-		env:         []string{"GOROOT_BOOTSTRAP=/usr/lib/go"},
+		Notes:     "Windows 10 WSL2 Ubuntu",
+		Owners:    []*gophers.Person{gh("mengzhuo")},
+		IsReverse: true,
+		ExpectNum: 2,
+		env:       []string{"GOROOT_BOOTSTRAP=/usr/lib/go"},
 	},
 	"host-linux-amd64-perf": &HostConfig{
 		Notes:           "Cascade Lake performance testing machines",
@@ -644,6 +643,14 @@ type CrossCompileConfig struct {
 	// AlwaysCrossCompile controls whether this builder always
 	// cross compiles. Otherwise it's only done for trybot runs.
 	AlwaysCrossCompile bool
+}
+
+func gh(githubUsername string) *gophers.Person {
+	p := gophers.GetPerson("@" + githubUsername)
+	if p == nil {
+		panic("person with GitHub username " + githubUsername + " does not exist in the golang.org/x/build/internal/gophers package")
+	}
+	return p
 }
 
 func init() {
@@ -724,9 +731,8 @@ type HostConfig struct {
 	// relevant Cloud Storage bucket as specified by the build environment.
 	goBootstrapURLTmpl string // optional URL to a built Go 1.4+ tar.gz
 
-	Owner       string // optional email of owner; "bradfitz@golang.org", empty means golang-dev
-	OwnerGithub string // optional GitHub username of owner
-	Notes       string // notes for humans
+	Owners []*gophers.Person // owners; empty means golang-dev
+	Notes  string            // notes for humans
 
 	SSHUsername string // username to ssh as, empty means not supported
 }
@@ -1289,20 +1295,6 @@ func (c *HostConfig) MachineType() string {
 // IsEC2 returns true if the machine type is an EC2 arm64 type.
 func (c *HostConfig) IsEC2() bool {
 	return c.isEC2
-}
-
-// ShortOwner returns a short human-readable owner.
-func (c BuildConfig) ShortOwner() string {
-	owner := c.HostConfig().Owner
-	if owner == "" {
-		return "go-dev"
-	}
-	return strings.TrimSuffix(owner, "@golang.org")
-}
-
-// OwnerGithub returns the Github handle of the owner.
-func (c BuildConfig) OwnerGithub() string {
-	return c.HostConfig().OwnerGithub
 }
 
 // PoolName returns a short summary of the builder's host type for the
@@ -2206,7 +2198,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "ios-arm64-corellium",
 		HostType: "host-ios-arm64-corellium-ios",
-		Notes:    "Virtual iPhone SE running on Corellium; owned by zenly",
+		Notes:    "Virtual iPhone SE running on Corellium; owned by zenly (github.com/znly)",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && branch == "master" && goBranch == "master"
 		},
@@ -2215,7 +2207,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "android-arm64-corellium",
 		HostType: "host-android-arm64-corellium-android",
-		Notes:    "Virtual Android running on Corellium; owned by zenly",
+		Notes:    "Virtual Android running on Corellium; owned by zenly (github.com/znly)",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && branch == "master" && goBranch == "master"
 		},
@@ -2224,7 +2216,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "android-arm-corellium",
 		HostType: "host-android-arm64-corellium-android",
-		Notes:    "Virtual Android running on Corellium; owned by zenly",
+		Notes:    "Virtual Android running on Corellium; owned by zenly (github.com/znly)",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && branch == "master" && goBranch == "master"
 		},
@@ -2573,8 +2565,7 @@ func init() {
 	})
 }
 
-// addBuilder adds c to the Builders map after doing some sanity
-// checks.
+// addBuilder adds c to the Builders map after doing some checks.
 func addBuilder(c BuildConfig) {
 	if c.Name == "" {
 		panic("empty name")

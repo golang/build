@@ -11,7 +11,7 @@ import (
 func gh(githubUsername string) Owner {
 	p := gophers.GetPerson("@" + githubUsername)
 	if p == nil {
-		panic("person with GitHub username " + githubUsername + " does not exist in the internal/gophers package.")
+		panic("person with GitHub username " + githubUsername + " does not exist in the golang.org/x/build/internal/gophers package")
 	}
 	return Owner{GitHubUsername: githubUsername, GerritEmail: p.Gerrit}
 }

@@ -675,6 +675,17 @@ func TestHostConfigsAllUsed(t *testing.T) {
 	}
 }
 
+// Test that all specified builder owners are non-nil.
+func TestBuilderOwners(t *testing.T) {
+	for host, config := range Hosts {
+		for i, p := range config.Owners {
+			if p == nil {
+				t.Errorf("dashboard.Hosts[%q].Owners[%d] is nil, want non-nil", host, i)
+			}
+		}
+	}
+}
+
 // tests that goBranch is optional for repo == "go"
 func TestBuildsRepoAtAllImplicitGoBranch(t *testing.T) {
 	builder := Builders["android-amd64-emu"]

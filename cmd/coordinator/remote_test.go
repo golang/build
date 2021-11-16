@@ -23,6 +23,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool"
+	"golang.org/x/build/internal/gophers"
 )
 
 type TestBuildletPool struct {
@@ -100,7 +101,7 @@ func addBuilder(name string) {
 	}
 	dashboard.Hosts["test-host"] = &dashboard.HostConfig{
 		HostType: "test-host",
-		Owner:    "test@golang.org",
+		Owners:   []*gophers.Person{{Emails: []string{"test@golang.org"}}},
 	}
 	testPool.Add("test-host", &buildlet.Client{})
 }
