@@ -471,8 +471,9 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-linux-s390x": &HostConfig{
 		Notes:     "run by IBM",
-		Owners:    []*gophers.Person{gh("ruixin-bao")},
+		Owners:    []*gophers.Person{gh("ruixin-bao"), gh("jonathan-albrecht-ibm"), gophers.GetPerson("Cindy Lee")}, // See https://groups.google.com/g/golang-dev/c/obUDaYbaxXw/m/5sMgfDYVAAAJ.
 		IsReverse: true,
+		ExpectNum: 2, // See https://github.com/golang/go/issues/49557#issuecomment-969148789.
 		env:       []string{"GOROOT_BOOTSTRAP=/var/buildlet/go-linux-s390x-bootstrap"},
 	},
 	"host-linux-ppc64-osu": &HostConfig{
