@@ -41,6 +41,8 @@ var (
 	makeOnly = flag.Bool("make-only", false, "if a --run-build builder name is given, this controls whether make.bash or all.bash is run")
 	buildRev = flag.String("rev", "master", "if --run-build is specified, the git hash or branch name to build")
 
+	useIAPTunnel = flag.Bool("use-iap-tunnel", true, "use an IAP tunnel to connect to GCE builders")
+
 	awsKeyID     = flag.String("aws-key-id", "", "if the builder runs on aws then key id is required. If executed on GCE, it will be retrieved from secrets.")
 	awsAccessKey = flag.String("aws-access-key", "", "if the builder runs on aws then the access key is required. If executed on GCE, it will be retrieved from secrets.")
 	awsRegion    = flag.String("aws-region", "", "if non-empty and the requested builder is an EC2 instance, force an EC2 region.")
@@ -293,6 +295,7 @@ func gceBuildlet(creds *google.Credentials, env *buildenv.Environment, name, hos
 			}
 			log.Printf("buildlet probe: %s", res.Status)
 		},
+		UseIAPTunnel: *useIAPTunnel,
 	})
 }
 

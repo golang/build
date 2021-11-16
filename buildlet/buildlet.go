@@ -75,6 +75,9 @@ type VMOpts struct {
 	// SkipEndpointVerification does not verify that the builder is listening
 	// on port 80 or 443 before creating a buildlet client.
 	SkipEndpointVerification bool
+
+	// UseIAPTunnel uses an IAP tunnel to connect to buildlets on GCP.
+	UseIAPTunnel bool
 }
 
 // buildletClient returns a buildlet client configured to speak to a VM via the buildlet

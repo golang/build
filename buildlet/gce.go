@@ -9,6 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
+	"os"
+	"os/exec"
 	"sort"
 	"strings"
 	"sync"
@@ -254,7 +257,64 @@ OpLoop:
 	if opts.OnGotInstanceInfo != nil {
 		opts.OnGotInstanceInfo(inst)
 	}
-	return buildletClient(ctx, buildletURL, ipPort, &opts)
+	var closeFuncs []func()
+	if opts.UseIAPTunnel {
+		localPort, closeFunc, err := createIAPTunnel(ctx, inst)
+		if err != nil {
+			return nil, fmt.Errorf("creating IAP tunnel: %v", err)
+		}
+		buildletURL = "http://localhost:" + localPort
+		ipPort = "127.0.0.1:" + localPort
+		closeFuncs = append(closeFuncs, closeFunc)
+	}
+	client, err := buildletClient(ctx, buildletURL, ipPort, &opts)
+	if err != nil {
+		return nil, err
+	}
+	client.closeFuncs = append(client.closeFuncs, closeFuncs...)
+	return client, nil
+}
+
+func createIAPTunnel(ctx context.Context, inst *compute.Instance) (string, func(), error) {
+	// Allocate a local listening port.
+	ln, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return "", nil, err
+	}
+	localAddr := ln.Addr().(*net.TCPAddr)
+	ln.Close()
+	// Start the gcloud command. For some reason, when gcloud is run with a
+	// pipe for stdout, it doesn't log the success message, so we can only
+	// check for success empirically.
+	tunnelCmd := exec.CommandContext(ctx,
+		"gcloud", "compute", "start-iap-tunnel", "--iap-tunnel-disable-connection-check",
+		"--zone", inst.Zone, inst.Name, "80", "--local-host-port", localAddr.String())
+	tunnelCmd.Stderr = os.Stderr
+	tunnelCmd.Stdout = os.Stdout
+	if err := tunnelCmd.Start(); err != nil {
+		return "", nil, err
+	}
+	// Start the process. Either it's going to fail to start after a bit, or
+	// it'll start listening on its port. Because we told it not to check the
+	// connection above, the connections won't be functional, but we can dial.
+	errc := make(chan error, 1)
+	go func() { errc <- tunnelCmd.Wait() }()
+	for start := time.Now(); time.Since(start) < 60*time.Second; time.Sleep(5 * time.Second) {
+		// Check if the server crashed.
+		select {
+		case err := <-errc:
+			return "", nil, err
+		default:
+		}
+		// Check if it's healthy.
+		conn, err := net.DialTCP("tcp", nil, localAddr)
+		if err == nil {
+			conn.Close()
+			kill := func() { tunnelCmd.Process.Kill() }
+			return fmt.Sprint(localAddr.Port), kill, nil
+		}
+	}
+	return "", nil, fmt.Errorf("iap tunnel startup timed out")
 }
 
 // DestroyVM sends a request to delete a VM. Actual VM description is
