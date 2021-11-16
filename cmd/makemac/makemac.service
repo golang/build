@@ -7,7 +7,6 @@ After=network.target
 User=gopher
 Environment="PATH=/home/gopher/bin:/usr/local/bin:/usr/bin"
 # The following file decalres these variables: GOVC_URL GOVC_USERNAME GOVC_PASSWORD GOVC_INSECURE
-# A copy is located at http://go/go-builder-macstadiumd-env-file
 EnvironmentFile=/home/gopher/govc_env_file
 ExecStart=/home/gopher/makemac -auto
 Restart=always

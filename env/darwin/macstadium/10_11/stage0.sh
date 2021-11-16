@@ -4,6 +4,8 @@
 # baked into the macOS 10.12 Sierra image. (That is, both 10.11 and
 # 10.12 download and run the run-builder-darwin-10_11.gz URL)
 #
+# It is not used on modern OS X versions.
+#
 # Normally our VMs & containers actually have the cmd/buildlet/stage0
 # binary baked-in, but the Mac VM images are extra painful to
 # configure, so there's an extra level of indirection in their boot

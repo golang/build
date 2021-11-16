@@ -240,6 +240,12 @@ func guestType(ver *Version) (string, error) {
 		// Big Sur. Requires vSphere 6.7 update 3.
 		// https://docs.macstadium.com/docs/macos-version-in-your-vmware-cloud
 		return "darwin19_64Guest", nil
+	case "amd64_12.0":
+		// Determined experimentally to be the latest version by running:
+		// $ source govc_env_file
+		// $ govc vm.create -g darwin19_64Guest -ds GGLGTM-A-002-STV02 -net Private-1 -on=false heschi-test
+		// See also https://github.com/vmware/open-vm-tools/blob/master/open-vm-tools/lib/include/guest_os_tables.h.
+		return "darwin19_64Guest", nil
 	}
 	return "", fmt.Errorf("unsupported makemac OS X version %s", ver.String())
 }

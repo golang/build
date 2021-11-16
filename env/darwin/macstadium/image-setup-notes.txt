@@ -2,15 +2,14 @@ The Disk should be formatted with a case insensitive file system (default).
 
 Install VMWare tools daemon.
 
-  - you should be able to do this from the vSphere UI, but I got errors with Mojave.
-  - backup plan: https://my.vmware.com/web/vmware/details?productId=742&downloadGroup=VMTOOLS1032
-    and then copy the darwin.iso to the host and install it manually.
+  - The UI is supposed to be able to do this automatically, but it's broken as of writing.
+  - Instead, mount darwin.iso from ISO/VMWARE TOOLS and run the installer from there.
   - open security preferences and click "Allow" on blocked software install from VMware
   - reboot
   - make sure you can run and see:
 
     $ /Library/Application Support/VMware Tools/vmware-tools-daemon --cmd "info-get guestinfo.name"
-    No value value
+    No value found
 
 Download Go 1.13.4 or newer tarball via curl (bootstrap version of Go must be signed and notorized in macOS version >= 10.15).
 
@@ -53,10 +52,15 @@ passwordless sudo:
 install xcode
   - Version < 10.9: search and install an older compatible version of Xcode.
   - Versions 10.10, 10.9: running git first time will prompt for install.
-  - Version => 10.15: download Xcode from the Apple Developer site.
+  - Version => 10.15: download Xcode from the Apple Developer site:
+    https://stackoverflow.com/questions/10335747/how-to-download-xcode-dmg-or-xip-file
+    (You don't want to log in to your account on the machine, so don't use the App Store.)
+    Extract it, move the resulting Xcode folder to Applications, and run xcode-select:
+    sudo xcode-select --switch /Applications/Xcode.app
+    Then run xcodebuild -version and wait for Xcode to be verified.
+    Finally, accept the license:
+    sudo xcodebuild -license accept
 
 verbose boot: (text instead of apple image)
 
     sudo nvram boot-args="-v"
-
-run-builder-darwin-10_11.sh

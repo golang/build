@@ -12,7 +12,7 @@ bastion host & runs various services.
 The bastion host is **macstadiumd.golang.org** and can be accessed
 via:
 
-    $ ssh -i ~/keys/id_ed25519_golang1 gopher@macstadiumd.golang.org
+    $ ssh -D :1080 -i ~/keys/id_ed25519_golang1 gopher@macstadiumd.golang.org
 
 (Where `id_ed255519_golang1` is available from http://go/go-builders-ssh)
 
@@ -45,13 +45,16 @@ the bastion host VM is down, is to [VPN to our Cisco gateway](http://go/go-how-t
 
 ## VMware web UI
 
-Once you've connected to either OpenVPN or WireGuard, you can hit the
+Connect with OpenVPN, WireGuard, or configure your browser to use
+localhost:1080 as a SOCKS proxy. Add:
+
+10.87.58.9      vcenter.gglgtm-a-002.macstadium.com
+
+to your hosts file, then access the UI at https://vcenter.gglgtm-a-002.macstadium.com.
+
 VMware web UI at:
 
    https://10.87.58.9/ui/
-
-(Alternatively, `ssh -D` to the bastion host to make a SOCKS tunnel
-and configure your browser to send proxy through that SOCKS tunnel.)
 
 ## Adding a New Image
 
