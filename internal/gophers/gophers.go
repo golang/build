@@ -586,6 +586,7 @@ func init() {
 	addPerson("Chad Rosier", "mrosier.qdt@qualcommdatacenter.com", "25690@62eb7196-b449-3ce5-99f1-c037f21e1705", "@mrosier-qdt")
 	addPerson("ChaiShushan", "chaishushan@gmail.com", "@chai2010")
 	addPerson("Chance Zibolski", "chance.zibolski@coreos.com")
+	addPerson("Changkun Ou", "mail@changkun.de", "@changkun")
 	addPerson("Changsoo Kim", "broodkcs@gmail.com")
 	addPerson("Channing Kimble-Brown", "channing@golang.org", "@cnoellekb")
 	addPerson("Charle Demers", "charle.demers@gmail.com")

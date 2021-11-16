@@ -579,7 +579,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-ios-arm64-corellium-ios": &HostConfig{
 		Notes:     "Virtual iOS devices hosted by Zenly on Corellium; see issues 31722 and 40523",
-		Owners:    []*gophers.Person{gh("steeve")},
+		Owners:    []*gophers.Person{gh("steeve"), gh("changkun")}, // See https://groups.google.com/g/golang-dev/c/oiuIE7qrWp0.
 		IsReverse: true,
 		ExpectNum: 3,
 		env: []string{
@@ -588,7 +588,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-android-arm64-corellium-android": &HostConfig{
 		Notes:     "Virtual Android devices hosted by Zenly on Corellium; see issues 31722 and 40523",
-		Owners:    []*gophers.Person{gh("steeve")},
+		Owners:    []*gophers.Person{gh("steeve"), gh("changkun")}, // See https://groups.google.com/g/golang-dev/c/oiuIE7qrWp0.
 		IsReverse: true,
 		ExpectNum: 3,
 		env: []string{
@@ -2202,7 +2202,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && branch == "master" && goBranch == "master"
 		},
-		KnownIssue: 48772,
+		KnownIssue: 49616,
 	})
 	addBuilder(BuildConfig{
 		Name:     "android-arm64-corellium",
@@ -2211,7 +2211,6 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && branch == "master" && goBranch == "master"
 		},
-		KnownIssue: 49048,
 	})
 	addBuilder(BuildConfig{
 		Name:     "android-arm-corellium",
@@ -2220,7 +2219,6 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && branch == "master" && goBranch == "master"
 		},
-		KnownIssue: 49048,
 		env: []string{
 			"CGO_ENABLED=1",
 			"GOARCH=arm",
