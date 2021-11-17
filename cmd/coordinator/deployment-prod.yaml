@@ -58,6 +58,24 @@ apiVersion: v1
 kind: Service
 metadata:
   namespace: prod
+  name: coordinator-internal-iap
+  annotations:
+    beta.cloud.google.com/backend-config: '{"default": "build-ingress-iap-backend"}'
+    cloud.google.com/neg: '{"ingress": false}'
+    cloud.google.com/app-protocols: '{"https":"HTTP2"}'
+spec:
+  ports:
+    - port: 444
+      targetPort: 444
+      name: https
+  selector:
+    app: coordinator
+  type: NodePort
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prod
   name: coordinator-internal
   annotations:
     cloud.google.com/neg: '{"ingress": false}'
