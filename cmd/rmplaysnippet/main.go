@@ -29,7 +29,12 @@ func main() {
 	}
 
 	snippetID := os.Args[1]
-	prefixes := []string{"https://play.golang.org/p/", "http://play.golang.org/p/"}
+	prefixes := []string{
+		"https://play.golang.org/p/",
+		"http://play.golang.org/p/",
+		"https://go.dev/play/p/",
+		"http://go.dev/play/p/",
+	}
 	for _, p := range prefixes {
 		if strings.HasPrefix(os.Args[1], p) {
 			snippetID = strings.TrimPrefix(os.Args[1], p)
