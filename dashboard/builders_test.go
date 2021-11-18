@@ -240,8 +240,10 @@ func TestTrybots(t *testing.T) {
 			want: []string{
 				"android-amd64-emu",
 				"freebsd-386-11_4",
+				"freebsd-386-13_0",
 				"freebsd-amd64-11_4",
 				"freebsd-amd64-12_2",
+				"freebsd-amd64-13_0",
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-race",
@@ -428,6 +430,14 @@ func TestBuilderConfig(t *testing.T) {
 		{b("openbsd-amd64-68@go1.16", "go"), both},
 		{b("openbsd-amd64-68@go1.15", "go"), both},
 		{b("openbsd-amd64-68@go1.14", "go"), both},
+
+		// FreeBSD 13.0
+		{b("freebsd-amd64-13_0", "go"), onlyPost},
+		{b("freebsd-amd64-13_0", "net"), onlyPost},
+		{b("freebsd-amd64-13_0", "mobile"), none},
+		{b("freebsd-386-13_0", "go"), onlyPost},
+		{b("freebsd-386-13_0", "net"), onlyPost},
+		{b("freebsd-386-13_0", "mobile"), none},
 
 		// FreeBSD 12.2
 		{b("freebsd-amd64-12_2", "go"), both},

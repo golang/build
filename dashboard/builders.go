@@ -310,6 +310,14 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
+	"host-freebsd-13_0": &HostConfig{
+		VMImage:            "freebsd-amd64-130",
+		Notes:              "FreeBSD 13.0; GCE VM is built from script in build/env/freebsd-amd64",
+		machineType:        "e2-highcpu-4",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
+		SSHUsername:        "gopher",
+	},
 	"host-freebsd-12_2-big": &HostConfig{
 		VMImage:            "freebsd-amd64-122",
 		Notes:              "Same as host-freebsd-12_2, but on e2-highcpu-16",
@@ -1471,6 +1479,21 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-race",
 		HostType: "host-freebsd-12_2-big",
+	})
+	addBuilder(BuildConfig{
+		Name:              "freebsd-amd64-13_0",
+		HostType:          "host-freebsd-13_0",
+		tryBot:            explicitTrySet("sys"),
+		distTestAdjust:    fasterTrybots, // If changing this policy, update TestShouldRunDistTest accordingly.
+		numTryTestHelpers: 4,
+	})
+	addBuilder(BuildConfig{
+		Name:              "freebsd-386-13_0",
+		HostType:          "host-freebsd-13_0",
+		tryBot:            explicitTrySet("sys"),
+		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		distTestAdjust:    fasterTrybots,
+		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
 		Name:           "freebsd-386-11_2",
