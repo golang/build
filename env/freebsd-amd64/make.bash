@@ -106,7 +106,7 @@ if ! [ -e FreeBSD-${VERSION:?}-amd64.raw ]; then
   download_image
 fi
 
-qemu-img create -f qcow2 -b FreeBSD-${VERSION:?}-amd64${VERSION_TRAILER}.raw disk.qcow2 8G
+qemu-img create -f qcow2 -b FreeBSD-${VERSION:?}-amd64${VERSION_TRAILER}.raw disk.qcow2 16G
 
 mkdir -p iso/boot iso/etc iso/usr/local/etc/rc.d
 cp loader.conf iso/boot
