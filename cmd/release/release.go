@@ -219,7 +219,7 @@ var builds = []*Build{
 		OS:      "darwin",
 		Arch:    "arm64",
 		Race:    true,
-		Builder: "darwin-arm64-11_0-toothrot",
+		Builder: "darwin-arm64-12_0-toothrot",
 	},
 	{
 		OS:        "linux",

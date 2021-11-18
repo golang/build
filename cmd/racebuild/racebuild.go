@@ -95,7 +95,7 @@ cp llvm-project/compiler-rt/lib/tsan/go/race_darwin_amd64.syso go/src/runtime/ra
 	&Platform{
 		OS:   "darwin",
 		Arch: "arm64",
-		Type: "darwin-arm64-11_0-toothrot",
+		Type: "darwin-arm64-12_0-toothrot",
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go

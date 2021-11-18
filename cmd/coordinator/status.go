@@ -373,7 +373,7 @@ func newMacOSARM64Checker() *healthChecker {
 		ID:     "macos-arm64",
 		Title:  "macOS ARM64 (M1 Mac minis)",
 		DocURL: "https://golang.org/issue/39782",
-		Check:  hostTypeChecker("host-darwin-arm64-11_0-toothrot"),
+		Check:  hostTypeChecker("host-darwin-arm64-12_0-toothrot"),
 	}
 }
 

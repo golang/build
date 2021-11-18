@@ -40,7 +40,7 @@ var slowBotAliases = map[string]string{
 	"arm64":                "linux-arm64-aws",
 	"darwin":               "darwin-amd64-10_14",
 	"darwin-amd64":         "darwin-amd64-10_14",
-	"darwin-arm64":         "darwin-arm64-11_0-toothrot",
+	"darwin-arm64":         "darwin-arm64-12_0-toothrot",
 	"ios-arm64":            "ios-arm64-corellium",
 	"dragonfly":            "dragonfly-amd64",
 	"freebsd":              "freebsd-amd64-12_2",
@@ -496,8 +496,17 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-arm64-11_0-toothrot": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 2,
 		Notes:     "macOS Big Sur (11.0) ARM64 (M1). Mac mini",
+		ExpectNum: 1,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/Users/gopher/goboot",
+		},
+		SSHUsername: "gopher",
+	},
+	"host-darwin-arm64-12_0-toothrot": &HostConfig{
+		IsReverse: true,
+		ExpectNum: 1,
+		Notes:     "macOS Big Sur (12.0) ARM64 (M1). Mac mini",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot",
 		},
@@ -2264,10 +2273,15 @@ func init() {
 		Name:           "darwin-arm64-11_0-toothrot",
 		HostType:       "host-darwin-arm64-11_0-toothrot",
 		distTestAdjust: macTestPolicy,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// Darwin ARM64 added in Go 1.16.
-			return atLeastGo1(goBranch, 16) && defaultPlusExpBuild(repo, branch, goBranch)
-		},
+		buildsRepo:     defaultPlusExpBuild,
+	})
+	addBuilder(BuildConfig{
+		Name:           "darwin-arm64-12_0-toothrot",
+		HostType:       "host-darwin-arm64-12_0-toothrot",
+		env:            []string{"MallocNanoZone=0"}, // golang.org/issue/49138
+		KnownIssue:     49149,
+		distTestAdjust: macTestPolicy,
+		buildsRepo:     defaultPlusExpBuild,
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-race",
