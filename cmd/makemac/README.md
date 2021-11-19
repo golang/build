@@ -10,13 +10,15 @@ more background.
 
 ```
 * On Linux,
-  $ go install golang.org/x/build/cmd/makemac
-  $ scp -i ~/.ssh/id_ed25519_golang1 $GOPATH/bin/makemac gopher@macstadiumd.golang.org:makemac.new
-  $ ssh -i ~/.ssh/id_ed25519_golang1 gopher@macstadiumd.golang.org 'cp makemac makemac.old; install makemac.new makemac'
+  $ cd cmd/makemac
+  $ CGO_ENABLED=0 go build golang.org/x/build/cmd/makemac
+  $ scp -i ~/.ssh/id_ed25519_golang1 ./makemac gopher@macstadiumd.golang.org:makemac.new
   $ ssh -i ~/.ssh/id_ed25519_golang1 gopher@macstadiumd.golang.org
 
 On that host,
-  * sudo systemctl restart makemac
+  $ cp makemac makemac.old
+  $ install makemac.new makemac
+  $ sudo systemctl restart makemac
   $ sudo journalctl -f -u makemac     # watch it
 ```
 
