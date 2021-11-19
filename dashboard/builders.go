@@ -43,9 +43,9 @@ var slowBotAliases = map[string]string{
 	"darwin-arm64":         "darwin-arm64-12_0-toothrot",
 	"ios-arm64":            "ios-arm64-corellium",
 	"dragonfly":            "dragonfly-amd64",
-	"freebsd":              "freebsd-amd64-12_2",
-	"freebsd-386":          "freebsd-386-12_2",
-	"freebsd-amd64":        "freebsd-amd64-12_2",
+	"freebsd":              "freebsd-amd64-13_0",
+	"freebsd-386":          "freebsd-386-13_0",
+	"freebsd-amd64":        "freebsd-amd64-13_0",
 	"freebsd-arm":          "freebsd-arm-paulzhol",
 	"freebsd-arm64":        "freebsd-arm64-dmgk",
 	"illumos":              "illumos-amd64",
@@ -334,9 +334,9 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
-	"host-freebsd-12_2-big": &HostConfig{
-		VMImage:            "freebsd-amd64-122",
-		Notes:              "Same as host-freebsd-12_2, but on e2-highcpu-16",
+	"host-freebsd-13_0-big": &HostConfig{
+		VMImage:            "freebsd-amd64-130",
+		Notes:              "Same as host-freebsd-13_0, but on e2-highcpu-16",
 		machineType:        "e2-highcpu-16", // 16 vCPUs, 16 GB mem
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
@@ -1520,7 +1520,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-race",
-		HostType: "host-freebsd-12_2-big",
+		HostType: "host-freebsd-13_0-big",
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-13_0",
