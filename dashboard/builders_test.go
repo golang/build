@@ -102,6 +102,7 @@ func TestTrybots(t *testing.T) {
 				"linux-arm64-aws",
 				"openbsd-amd64-68",
 				"openbsd-amd64-70",
+				"openbsd-amd64-70-n1",
 				"windows-386-2012",
 				"windows-amd64-2016",
 
@@ -135,6 +136,7 @@ func TestTrybots(t *testing.T) {
 				"linux-arm64-aws",
 				"openbsd-amd64-68",
 				"openbsd-amd64-70",
+				"openbsd-amd64-70-n1",
 				"windows-386-2012",
 				"windows-amd64-2016",
 
@@ -167,6 +169,7 @@ func TestTrybots(t *testing.T) {
 				"linux-arm64-aws",
 				"openbsd-amd64-68",
 				"openbsd-amd64-70",
+				"openbsd-amd64-70-n1",
 				"windows-386-2008",
 				"windows-amd64-2016",
 
@@ -204,6 +207,7 @@ func TestTrybots(t *testing.T) {
 				"linux-arm64-aws",
 				"openbsd-amd64-68",
 				"openbsd-amd64-70",
+				"openbsd-amd64-70-n1",
 				"windows-386-2008",
 				"windows-amd64-2016",
 
@@ -250,10 +254,13 @@ func TestTrybots(t *testing.T) {
 				"linux-arm-aws",
 				"linux-arm64-aws",
 				"netbsd-amd64-9_0",
+				"netbsd-amd64-9_0-n1",
 				"openbsd-386-68",
 				"openbsd-386-70",
+				"openbsd-386-70-n1",
 				"openbsd-amd64-68",
 				"openbsd-amd64-70",
+				"openbsd-amd64-70-n1",
 				"windows-386-2012",
 				"windows-amd64-2016",
 			},
