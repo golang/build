@@ -232,7 +232,7 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-riscv64-unleashed": &HostConfig{
 		Notes:     "SiFive HiFive Unleashed RISC-V board. 8 GB RAM, 4 cores.",
 		IsReverse: true,
-		ExpectNum: 1,                                 // for now. Joel's board might join the party later.
+		ExpectNum: 0,                                 // See golang.org/issue/49325.
 		Owners:    []*gophers.Person{gh("bradfitz")}, // at home
 		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
 	},
