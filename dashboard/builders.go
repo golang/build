@@ -38,8 +38,8 @@ var slowBotAliases = map[string]string{
 	"android-arm64":        "android-arm64-corellium",
 	"arm":                  "linux-arm-aws",
 	"arm64":                "linux-arm64-aws",
-	"darwin":               "darwin-amd64-10_14",
-	"darwin-amd64":         "darwin-amd64-10_14",
+	"darwin":               "darwin-amd64-12_0",
+	"darwin-amd64":         "darwin-amd64-12_0",
 	"darwin-arm64":         "darwin-arm64-12_0-toothrot",
 	"ios-arm64":            "ios-arm64-corellium",
 	"dragonfly":            "dragonfly-amd64",
@@ -478,7 +478,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_12": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 3,
+		ExpectNum: 2,
 		Notes:     "MacStadium OS X 10.12 VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
@@ -488,7 +488,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_14": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 3,
+		ExpectNum: 2,
 		Notes:     "MacStadium macOS Mojave (10.14) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.12.1
@@ -498,7 +498,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-10_15": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 4,
+		ExpectNum: 3,
 		Notes:     "MacStadium macOS Catalina (10.15) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.12.1
@@ -508,7 +508,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-amd64-11_0": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 5,
+		ExpectNum: 4,
 		Notes:     "MacStadium macOS Big Sur (11.0) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.13.4
@@ -518,7 +518,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-amd64-12_0": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 1,
+		ExpectNum: 5,
 		Notes:     "MacStadium macOS Monterey (12.0) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.17.3
@@ -1998,17 +1998,27 @@ func init() {
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
-		Name:              "openbsd-amd64-70",
-		HostType:          "host-openbsd-amd64-70",
-		tryBot:            defaultTrySet(),
-		distTestAdjust:    noTestDirAndNoReboot,
+		Name:           "openbsd-amd64-70",
+		HostType:       "host-openbsd-amd64-70",
+		tryBot:         defaultTrySet(),
+		distTestAdjust: noTestDirAndNoReboot,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// https://github.com/golang/go/issues/48977#issuecomment-971763553:
+			// 1.16 seems to be incompatible with 7.0.
+			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
+		},
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
-		Name:              "openbsd-amd64-70-n1",
-		HostType:          "host-openbsd-amd64-70-n1",
-		tryBot:            defaultTrySet(),
-		distTestAdjust:    noTestDirAndNoReboot,
+		Name:           "openbsd-amd64-70-n1",
+		HostType:       "host-openbsd-amd64-70-n1",
+		tryBot:         defaultTrySet(),
+		distTestAdjust: noTestDirAndNoReboot,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// https://github.com/golang/go/issues/48977#issuecomment-971763553:
+			// 1.16 seems to be incompatible with 7.0.
+			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
+		},
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
@@ -2021,7 +2031,9 @@ func init() {
 				// platform.
 				return false
 			}
-			return buildRepoByDefault(repo)
+			// https://github.com/golang/go/issues/48977#issuecomment-971763553:
+			// 1.16 seems to be incompatible with 7.0.
+			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
 		},
 		distTestAdjust:    noTestDirAndNoReboot,
 		numTryTestHelpers: 4,
@@ -2036,7 +2048,9 @@ func init() {
 				// platform.
 				return false
 			}
-			return buildRepoByDefault(repo)
+			// https://github.com/golang/go/issues/48977#issuecomment-971763553:
+			// 1.16 seems to be incompatible with 7.0.
+			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
 		},
 		distTestAdjust:    noTestDirAndNoReboot,
 		numTryTestHelpers: 4,
@@ -2330,7 +2344,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-nocgo",
-		HostType:       "host-darwin-10_15",
+		HostType:       "host-darwin-amd64-12_0",
 		distTestAdjust: noTestDirAndNoReboot,
 		env:            []string{"CGO_ENABLED=0"},
 	})
@@ -2350,7 +2364,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-race",
-		HostType:       "host-darwin-10_15",
+		HostType:       "host-darwin-amd64-12_0",
 		distTestAdjust: macTestPolicy,
 		buildsRepo:     onlyGo,
 	})

@@ -168,8 +168,6 @@ func TestTrybots(t *testing.T) {
 				"linux-arm-aws",
 				"linux-arm64-aws",
 				"openbsd-amd64-68",
-				"openbsd-amd64-70",
-				"openbsd-amd64-70-n1",
 				"windows-386-2008",
 				"windows-amd64-2016",
 
@@ -206,8 +204,6 @@ func TestTrybots(t *testing.T) {
 				"linux-arm-aws",
 				"linux-arm64-aws",
 				"openbsd-amd64-68",
-				"openbsd-amd64-70",
-				"openbsd-amd64-70-n1",
 				"windows-386-2008",
 				"windows-amd64-2016",
 
