@@ -1024,9 +1024,18 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 
 	// Check out the provided sub-repo to the buildlet's workspace so we
 	// can find go.mod files and run tests in it.
-	err = buildgo.FetchSubrepo(st.ctx, st, st.bc, st.SubName, st.SubRev, repoPath)
-	if err != nil {
-		return nil, err
+	{
+		tgz, err := sourcecache.GetSourceTgz(st, st.SubName, st.SubRev)
+		if errors.Is(err, sourcecache.ErrTooBig) {
+			// Source being too big is a non-retryable error.
+			return err, nil
+		} else if err != nil {
+			return nil, err
+		}
+		err = st.bc.PutTar(st.ctx, tgz, "gopath/src/"+repoPath)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Look for inner modules, in order to test them too. See golang.org/issue/32528.
@@ -1203,9 +1212,18 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 
 	// Check out the provided sub-repo to the buildlet's workspace so we
 	// can run scripts from the repo.
-	err = buildgo.FetchSubrepo(st.ctx, st, st.bc, st.SubName, st.SubRev, repoPath)
-	if err != nil {
-		return nil, err
+	{
+		tgz, err := sourcecache.GetSourceTgz(st, st.SubName, st.SubRev)
+		if errors.Is(err, sourcecache.ErrTooBig) {
+			// Source being too big is a non-retryable error.
+			return err, nil
+		} else if err != nil {
+			return nil, err
+		}
+		err = st.bc.PutTar(st.ctx, tgz, "gopath/src/"+repoPath)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	sp := st.CreateSpan("running_subrepo_tests", st.SubName)

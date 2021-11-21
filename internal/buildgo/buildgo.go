@@ -21,7 +21,6 @@ import (
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
-	"golang.org/x/build/internal/sourcecache"
 	"golang.org/x/build/internal/spanlog"
 )
 
@@ -171,21 +170,6 @@ func (gb GoBuilder) runConcurrentGoBuildStdCmd(ctx context.Context, bc *buildlet
 	}
 	span.Done(nil)
 	return nil, nil
-}
-
-// FetchSubrepo checks out the go.googlesource.com repository
-// repo (for example, "net" or "oauth2") at git revision rev,
-// and places it into the buildlet's GOPATH workspace at
-// $GOPATH/src/<importPath>.
-//
-// The GOPATH workspace is assumed to be the "gopath" directory
-// in the buildlet's work directory.
-func FetchSubrepo(ctx context.Context, sl spanlog.Logger, bc *buildlet.Client, repo, rev, importPath string) error {
-	tgz, err := sourcecache.GetSourceTgz(sl, repo, rev)
-	if err != nil {
-		return err
-	}
-	return bc.PutTar(ctx, tgz, "gopath/src/"+importPath)
 }
 
 // VersionTgz returns an io.Reader of a *.tar.gz file containing only
