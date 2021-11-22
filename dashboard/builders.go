@@ -542,6 +542,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:     "macOS Big Sur (12.0) ARM64 (M1). Mac mini",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot",
+			"MallocNanoZone=0", // golang.org/issue/49138
 		},
 		SSHUsername: "gopher",
 	},
