@@ -40,8 +40,9 @@ type source struct {
 // repo is go.googlesource.com repo ("go", "net", and so on).
 // rev is git revision.
 //
-// ErrTooBig is returned if the response size exceeds a size that on 2021-05-25
-// was deemed to be enough to meet expected legitimate future needs for a while.
+// An error of type TooBigError is returned if the compressed tarball exceeds a size that
+// on 2021-11-22 was deemed to be enough to meet expected legitimate future needs for a while.
+// See golang.org/issue/46379.
 func GetSourceTgz(sl spanlog.Logger, repo, rev string) (tgz io.Reader, err error) {
 	sp := sl.CreateSpan("get_source", repo+"@"+rev)
 	defer func() { sp.Done(err) }()
@@ -77,13 +78,22 @@ func GetSourceTgz(sl spanlog.Logger, repo, rev string) (tgz io.Reader, err error
 		return nil, err
 	}
 	if v.(source).TooBig {
-		return nil, ErrTooBig
+		return nil, TooBigError{Repo: repo, Rev: rev, Limit: maxSize(repo)}
 	}
 	return bytes.NewReader(v.(source).Tgz), nil
 }
 
-// ErrTooBig is the error returned when the source is considered too big.
-var ErrTooBig = fmt.Errorf("rejected because compressed tarball exceeded a limit of %d MB; see golang.org/issue/46379", maxSize/1024/1024)
+// TooBigError is the error returned when the source revision is considered too big.
+type TooBigError struct {
+	Repo  string
+	Rev   string
+	Limit int64 // Max size in bytes.
+}
+
+func (e TooBigError) Error() string {
+	return fmt.Sprintf("rejected because compressed tarball of repository go.googlesource.com/%s at revision %s exceeded a limit of %d MB; see golang.org/issue/46379",
+		e.Repo, e.Rev, e.Limit/1024/1024)
+}
 
 var gitMirrorClient *http.Client
 
@@ -139,8 +149,8 @@ func getSourceTgzFromURL(hc *http.Client, service, repo, rev, url string) (sourc
 		return source{}, fmt.Errorf("fetching %s/%s from %s: %v; body: %s", repo, rev, service, res.Status, slurp)
 	}
 	// See golang.org/issue/11224 for a discussion on tree filtering.
-	b, err := ioutil.ReadAll(io.LimitReader(res.Body, maxSize+1))
-	if len(b) > maxSize && err == nil {
+	b, err := ioutil.ReadAll(io.LimitReader(res.Body, maxSize(repo)+1))
+	if int64(len(b)) > maxSize(repo) && err == nil {
 		return source{TooBig: true}, nil
 	}
 	if err != nil {
@@ -149,9 +159,24 @@ func getSourceTgzFromURL(hc *http.Client, service, repo, rev, url string) (sourc
 	return source{Tgz: b}, nil
 }
 
-// maxSize is an artificial limit on how big of a source tarball this package is
-// is willing to accept. It's expected humans may need to manage it every couple
-// of years for the evolving needs of the Go project, and ideally not more often.
+// maxSize controls artificial limits on how big of a compressed source tarball
+// this package is willing to accept. It's expected humans may need to manage
+// these limits every couple of years for the evolving needs of the Go project,
+// and ideally not much more often.
 //
-// As of 2021-05-25, a compressed tarball of x/website is 55 MB; Go source is 22 MB.
-const maxSize = 100 << 20
+// repo is a go.googlesource.com repo ("go", "net", and so on).
+func maxSize(repo string) int64 {
+	switch repo {
+	default:
+		// As of 2021-11-22, a compressed tarball of Go source is 23 MB,
+		// x/net is 1.2 MB,
+		// x/build is 1.1 MB,
+		// x/tools is 2.9 MB.
+		return 100 << 20
+	case "website":
+		// In 2021, all content in x/blog (52 MB) and x/talks (74 MB) moved
+		// to x/website. This makes x/website an outlier, with a compressed
+		// tarball size of 135 MB. Give it some room to grow from there.
+		return 200 << 20
+	}
+}

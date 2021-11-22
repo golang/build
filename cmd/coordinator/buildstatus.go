@@ -1026,7 +1026,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	// can find go.mod files and run tests in it.
 	{
 		tgz, err := sourcecache.GetSourceTgz(st, st.SubName, st.SubRev)
-		if errors.Is(err, sourcecache.ErrTooBig) {
+		if errors.As(err, new(sourcecache.TooBigError)) {
 			// Source being too big is a non-retryable error.
 			return err, nil
 		} else if err != nil {
@@ -1214,7 +1214,7 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 	// can run scripts from the repo.
 	{
 		tgz, err := sourcecache.GetSourceTgz(st, st.SubName, st.SubRev)
-		if errors.Is(err, sourcecache.ErrTooBig) {
+		if errors.As(err, new(sourcecache.TooBigError)) {
 			// Source being too big is a non-retryable error.
 			return err, nil
 		} else if err != nil {
