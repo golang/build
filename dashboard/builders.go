@@ -522,6 +522,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:     "MacStadium macOS Monterey (12.0) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.17.3
+			"MallocNanoZone=0",                      // golang.org/issue/49138
 		},
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
@@ -2339,7 +2340,6 @@ func init() {
 		HostType:       "host-darwin-amd64-12_0",
 		distTestAdjust: macTestPolicy,
 		buildsRepo:     defaultPlusExpBuild,
-		env:            []string{"MallocNanoZone=0"}, // golang.org/issue/49138
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-nocgo",
@@ -2356,7 +2356,6 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:           "darwin-arm64-12_0-toothrot",
 		HostType:       "host-darwin-arm64-12_0-toothrot",
-		env:            []string{"MallocNanoZone=0"}, // golang.org/issue/49138
 		KnownIssue:     49149,
 		distTestAdjust: macTestPolicy,
 		buildsRepo:     defaultPlusExpBuild,
