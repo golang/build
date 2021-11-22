@@ -2340,7 +2340,6 @@ func init() {
 		distTestAdjust: macTestPolicy,
 		buildsRepo:     defaultPlusExpBuild,
 		env:            []string{"MallocNanoZone=0"}, // golang.org/issue/49138
-		KnownIssue:     49149,
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-nocgo",
