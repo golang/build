@@ -103,6 +103,7 @@ func TestTrybots(t *testing.T) {
 				"openbsd-amd64-68",
 				"openbsd-amd64-70",
 				"openbsd-amd64-70-n1",
+				"windows-386-2008",
 				"windows-386-2012",
 				"windows-amd64-2016",
 
@@ -137,6 +138,7 @@ func TestTrybots(t *testing.T) {
 				"openbsd-amd64-68",
 				"openbsd-amd64-70",
 				"openbsd-amd64-70-n1",
+				"windows-386-2008",
 				"windows-386-2012",
 				"windows-amd64-2016",
 
@@ -169,6 +171,7 @@ func TestTrybots(t *testing.T) {
 				"linux-arm64-aws",
 				"openbsd-amd64-68",
 				"windows-386-2008",
+				"windows-386-2012",
 				"windows-amd64-2016",
 
 				"misc-compile-darwinarm64", // Starts with Go 1.16.
@@ -205,6 +208,7 @@ func TestTrybots(t *testing.T) {
 				"linux-arm64-aws",
 				"openbsd-amd64-68",
 				"windows-386-2008",
+				"windows-386-2012",
 				"windows-amd64-2016",
 
 				"misc-compile-freebsd",
@@ -257,7 +261,7 @@ func TestTrybots(t *testing.T) {
 				"openbsd-amd64-68",
 				"openbsd-amd64-70",
 				"openbsd-amd64-70-n1",
-				"windows-386-2012",
+				"windows-386-2008",
 				"windows-amd64-2016",
 			},
 		},
@@ -267,7 +271,7 @@ func TestTrybots(t *testing.T) {
 			want: []string{
 				"linux-amd64",
 				"linux-amd64-race",
-				"windows-386-2012",
+				"windows-386-2008",
 				"windows-amd64-2016",
 			},
 		},
@@ -289,12 +293,12 @@ func TestTrybots(t *testing.T) {
 			}
 			for _, b := range got {
 				if _, ok := m[b]; !ok {
-					t.Errorf("got unexpected %q", b)
+					t.Errorf("got unexpected %q for %s/%s", b, tt.repo, tt.branch)
 				}
 				delete(m, b)
 			}
 			for b := range m {
-				t.Errorf("missing expected %q", b)
+				t.Errorf("missing expected %q for %s/%s", b, tt.repo, tt.branch)
 			}
 		})
 	}
@@ -547,8 +551,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "exp"), both},
 		{b("linux-amd64-race", "exp"), both},
 		{b("linux-amd64-longtest", "exp"), onlyPost},
-		{b("windows-386-2008", "exp"), none},
-		{b("windows-386-2012", "exp"), both},
+		{b("windows-386-2008", "exp"), both},
 		{b("windows-amd64-2016", "exp"), both},
 		{b("darwin-amd64-10_14", "exp"), onlyPost},
 		{b("darwin-amd64-10_15", "exp"), onlyPost},

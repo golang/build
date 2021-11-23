@@ -95,7 +95,7 @@ var slowBotAliases = map[string]string{
 	"solaris-amd64":        "solaris-amd64-oraclerel",
 	"wasm":                 "js-wasm",
 	"windows":              "windows-amd64-2016",
-	"windows-386":          "windows-386-2012",
+	"windows-386":          "windows-386-2008",
 	"windows-amd64":        "windows-amd64-2016",
 	"windows-arm":          "windows-arm-zx2c4",
 	"windows-arm64":        "windows-arm64-10",
@@ -1262,7 +1262,7 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 
 	// Build dev.boringcrypto branches only on linux/amd64 and windows/386 (see golang.org/issue/26791).
 	if repo == "go" && (branch == "dev.boringcrypto" || strings.HasPrefix(branch, "dev.boringcrypto.")) {
-		if c.Name != "linux-amd64" && c.Name != "windows-386-2012" {
+		if c.Name != "linux-amd64" && c.Name != "windows-386-2012" && c.Name != "windows-386-2008" {
 			return false
 		}
 	}
@@ -2186,6 +2186,7 @@ func init() {
 		Name:           "windows-amd64-2008",
 		HostType:       "host-windows-amd64-2008",
 		distTestAdjust: noTestDirAndNoReboot,
+		buildsRepo:     onlyGo,
 		env: []string{
 			"GOARCH=amd64",
 			"GOHOSTARCH=amd64",
@@ -2195,33 +2196,23 @@ func init() {
 			// up:
 			"GO_TEST_TIMEOUT_SCALE=2",
 		},
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder bill be used up to Go 1.17.
-			return atMostGo1(goBranch, 17) && onlyGo(repo, branch, goBranch)
-		},
 	})
 	addBuilder(BuildConfig{
-		Name:           "windows-386-2008",
-		HostType:       "host-windows-amd64-2008",
-		distTestAdjust: fasterTrybots,
-		env:            []string{"GOARCH=386", "GOHOSTARCH=386"},
-		tryBot:         defaultTrySet(),
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder bill be used up to Go 1.17.
-			return atMostGo1(goBranch, 17) && defaultPlusExpBuild(repo, branch, goBranch)
-		},
+		Name:              "windows-386-2008",
+		HostType:          "host-windows-amd64-2008",
+		buildsRepo:        defaultPlusExpBuild,
+		distTestAdjust:    fasterTrybots,
+		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
-		Name:           "windows-386-2012",
-		HostType:       "host-windows-amd64-2012",
-		distTestAdjust: fasterTrybots,
-		env:            []string{"GOARCH=386", "GOHOSTARCH=386"},
-		tryBot:         defaultTrySet(),
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder is used by Go 1.18 and forward.
-			return atLeastGo1(goBranch, 18) && defaultPlusExpBuild(repo, branch, goBranch)
-		},
+		Name:              "windows-386-2012",
+		HostType:          "host-windows-amd64-2012",
+		distTestAdjust:    fasterTrybots,
+		buildsRepo:        onlyGo,
+		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
