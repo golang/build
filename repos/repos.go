@@ -85,7 +85,7 @@ func init() {
 	x("scratch", noDash)
 	x("sync", desc("additional concurrency primitives"))
 	x("sys", desc("packages for making system calls"))
-	x("talks")
+	x("talks", noDash)
 	x("term")
 	x("text", desc("packages for working with text"))
 	x("time", desc("additional time packages"))
