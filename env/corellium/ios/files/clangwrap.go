@@ -24,7 +24,7 @@ func main() {
 		os.Exit(1)
 	}
 	args := os.Args[1:]
-	cmd := exec.Command("clang", "-isysroot", sdkpath, "-mios-version-min=6.0")
+	cmd := exec.Command("clang", "-isysroot", sdkpath, "-mios-version-min=12.0")
 	cmd.Args = append(cmd.Args, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
