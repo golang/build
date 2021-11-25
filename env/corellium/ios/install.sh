@@ -6,9 +6,13 @@
 #
 # Put a builder key in `buildkey`.
 #
-# Use `bootstrap.bash` from the Go standard distribution to build a
-# ios/arm64 bootstrap toolchain and put it in
-# `go-ios-arm64-bootstrap.tbz`.
+# Use `bootstrap.bash` from the Go standard distribution and build a
+# ios/arm64 bootstrap toolchain with cgo enabled and the compiler set
+# to the clang wrapper from $GOROOT/misc/ios:
+#
+# 	GOOS=ios GOARCH=arm64 CGO_ENABLED=1 CC_FOR_TARGET=$(pwd)/../misc/ios/clangwrap.sh ./bootstrap.bash
+#
+# Put it in `go-ios-arm64-bootstrap.tbz`.
 #
 # Finally, install.sh assumes an iPhone SDK in `iPhoneOS.sdk`.
 
