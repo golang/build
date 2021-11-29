@@ -332,7 +332,12 @@ func main() {
 	}
 
 	var opts []grpc.ServerOption
-	if env := buildenv.FromFlags(); env == buildenv.Production {
+	if *buildEnvName == "" && *mode != "dev" && metadata.OnGCE() {
+		projectID, err := metadata.ProjectID()
+		if err != nil {
+			log.Fatalf("metadata.ProjectID() = %v", err)
+		}
+		env := buildenv.ByProjectID(projectID)
 		var coordinatorBackend, serviceID = "coordinator-internal-iap", ""
 		if serviceID = env.IAPServiceID(coordinatorBackend); serviceID == "" {
 			log.Fatalf("unable to retrieve Service ID for backend service=%q", coordinatorBackend)
