@@ -55,6 +55,10 @@ func writeToken(refresh *oauth2.Token) error {
 	if err != nil {
 		return err
 	}
+	err = os.Mkdir(filepath.Join(configDir, "gomote"), 0755)
+	if err != nil {
+		return err
+	}
 	return os.WriteFile(filepath.Join(configDir, "gomote/iap-refresh-token"), refreshBytes, 0600)
 }
 
