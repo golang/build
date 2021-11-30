@@ -766,7 +766,7 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompil
 func (st *buildStatus) runAllLegacy() (remoteErr, err error) {
 	allScript := st.conf.AllScript()
 	sp := st.CreateSpan("legacy_all_path", allScript)
-	remoteErr, err = st.bc.Exec(st.ctx, path.Join("go", allScript), buildlet.ExecOpts{
+	remoteErr, err = st.bc.Exec(st.ctx, "./go/"+allScript, buildlet.ExecOpts{
 		Output:   st,
 		ExtraEnv: st.conf.Env(),
 		Debug:    true,
@@ -970,7 +970,7 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 		Output:      &buf,
 		ExtraEnv:    append(st.conf.Env(), "GOROOT="+goroot),
 		OnStartExec: func() { st.LogEventTime("discovering_tests") },
-		Path:        []string{"$WORKDIR/go/bin", "$PATH"},
+		Path:        []string{st.conf.FilePathJoin("$WORKDIR", "go", "bin"), "$PATH"},
 		Args:        args,
 	})
 	if remoteErr != nil {
@@ -1146,7 +1146,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 			Output:   st,
 			Dir:      tr.Dir,
 			ExtraEnv: env,
-			Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+			Path:     []string{st.conf.FilePathJoin("$WORKDIR", "go", "bin"), "$PATH"},
 			Args:     append(args, tr.Patterns...),
 		})
 		if err != nil {
@@ -1336,7 +1336,7 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 		Output:   st,
 		Dir:      "gopath/src/" + repoPath,
 		ExtraEnv: env,
-		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+		Path:     []string{st.conf.FilePathJoin("$WORKDIR", "go", "bin"), "$PATH"},
 		Args:     []string{"run", repoPath + "/cmd/bench"},
 	})
 	if err != nil || rErr != nil {
@@ -1688,7 +1688,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc buildlet.Client, tis []*testItem, g
 		Dir:      ".",
 		Output:   &buf, // see "maybe stream lines" TODO below
 		ExtraEnv: env,
-		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
+		Path:     []string{st.conf.FilePathJoin("$WORKDIR", "go", "bin"), "$PATH"},
 		Args:     args,
 	})
 	execDuration := time.Since(t0)

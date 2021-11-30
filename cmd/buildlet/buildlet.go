@@ -82,7 +82,8 @@ var (
 //	23: revdial v2
 //	24: removeAllIncludingReadonly
 //	25: use removeAllIncludingReadonly for all work area cleanup
-const buildletVersion = 25
+//	26: clean up path validation and normalization
+const buildletVersion = 26
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -520,18 +521,6 @@ func handleX(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Dumped X.")
 }
 
-// This is a remote code execution daemon, so security is kinda pointless, but:
-func validRelativeDir(dir string) bool {
-	if strings.Contains(dir, `\`) || path.IsAbs(dir) {
-		return false
-	}
-	dir = path.Clean(dir)
-	if strings.HasPrefix(dir, "../") || strings.HasSuffix(dir, "/..") || dir == ".." {
-		return false
-	}
-	return true
-}
-
 func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "requires GET method", http.StatusBadRequest)
@@ -540,15 +529,16 @@ func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 	if !mkdirAllWorkdirOr500(w) {
 		return
 	}
-	dir := r.FormValue("dir")
-	if !validRelativeDir(dir) {
-		http.Error(w, "bogus dir", http.StatusBadRequest)
+	dir, err := nativeRelPath(r.FormValue("dir"))
+	if err != nil {
+		http.Error(w, "invalid 'dir' parameter: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	zw := pargzip.NewWriter(w)
 	tw := tar.NewWriter(zw)
-	base := filepath.Join(*workDir, filepath.FromSlash(dir))
-	err := filepath.Walk(base, func(path string, fi os.FileInfo, err error) error {
+	base := filepath.Join(*workDir, dir)
+	err = filepath.Walk(base, func(path string, fi os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -601,12 +591,13 @@ func handleWriteTGZ(w http.ResponseWriter, r *http.Request) {
 	urlParam, _ := url.ParseQuery(r.URL.RawQuery)
 	baseDir := *workDir
 	if dir := urlParam.Get("dir"); dir != "" {
-		if !validRelativeDir(dir) {
+		var err error
+		dir, err = nativeRelPath(dir)
+		if err != nil {
 			log.Printf("writetgz: bogus dir %q", dir)
-			http.Error(w, "bogus dir", http.StatusBadRequest)
+			http.Error(w, "invalid 'dir' parameter: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		dir = filepath.FromSlash(dir)
 		baseDir = filepath.Join(baseDir, dir)
 
 		// Special case: if the directory is "go1.4" and it already exists, do nothing.
@@ -662,11 +653,7 @@ func handleWriteTGZ(w http.ResponseWriter, r *http.Request) {
 
 	err := untar(tgz, baseDir)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if he, ok := err.(httpStatuser); ok {
-			status = he.httpStatus()
-		}
-		http.Error(w, err.Error(), status)
+		http.Error(w, err.Error(), httpStatus(err))
 		return
 	}
 	io.WriteString(w, "OK")
@@ -681,8 +668,8 @@ func handleWrite(w http.ResponseWriter, r *http.Request) {
 	param, _ := url.ParseQuery(r.URL.RawQuery)
 
 	path := param.Get("path")
-	if path == "" || !validRelPath(path) {
-		http.Error(w, "bad path", http.StatusBadRequest)
+	if _, err := nativeRelPath(path); err != nil {
+		http.Error(w, "invalid 'path' parameter: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 	path = filepath.FromSlash(path)
@@ -744,7 +731,7 @@ func untar(r io.Reader, dir string) (err error) {
 	}()
 	zr, err := gzip.NewReader(r)
 	if err != nil {
-		return badRequest("requires gzip-compressed body: " + err.Error())
+		return badRequestf("requires gzip-compressed body: %w", err)
 	}
 	tr := tar.NewReader(zr)
 	loggedChtimesError := false
@@ -755,7 +742,7 @@ func untar(r io.Reader, dir string) (err error) {
 		}
 		if err != nil {
 			log.Printf("tar reading error: %v", err)
-			return badRequest("tar error: " + err.Error())
+			return badRequestf("tar error: %w", err)
 		}
 		if f.Typeflag == tar.TypeXGlobalHeader {
 			// golang.org/issue/22748: git archive exports
@@ -764,10 +751,10 @@ func untar(r io.Reader, dir string) (err error) {
 			// Ignore it.
 			continue
 		}
-		if !validRelPath(f.Name) {
-			return badRequest(fmt.Sprintf("tar file contained invalid name %q", f.Name))
+		rel, err := nativeRelPath(f.Name)
+		if err != nil {
+			return badRequestf("tar file contained invalid name %q: %v", f.Name, err)
 		}
-		rel := filepath.FromSlash(f.Name)
 		abs := filepath.Join(dir, rel)
 
 		fi := f.FileInfo()
@@ -830,7 +817,7 @@ func untar(r io.Reader, dir string) (err error) {
 			// But maybe we'd have to skip creating them on Windows for some builders
 			// without permissions.
 		default:
-			return badRequest(fmt.Sprintf("tar file entry %s contained unsupported file type %v", f.Name, mode))
+			return badRequestf("tar file entry %s contained unsupported file type %v", f.Name, mode)
 		}
 	}
 	return nil
@@ -875,40 +862,19 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Trailer", hdrProcessState) // declare it so we can set it
 
-	cmdPath := r.FormValue("cmd") // required
-	absCmd := cmdPath
-	dir := r.FormValue("dir") // optional
 	sysMode := r.FormValue("mode") == "sys"
 	debug, _ := strconv.ParseBool(r.FormValue("debug"))
 
-	if sysMode {
-		if cmdPath == "" {
-			http.Error(w, "requires 'cmd' parameter", http.StatusBadRequest)
-			return
-		}
-		if dir == "" {
-			dir = *workDir
-		} else {
-			dir = filepath.FromSlash(dir)
-			if !filepath.IsAbs(dir) {
-				dir = filepath.Join(*workDir, dir)
-			}
-		}
-	} else {
-		if !validRelPath(cmdPath) {
-			http.Error(w, "requires 'cmd' parameter", http.StatusBadRequest)
-			return
-		}
-		absCmd = filepath.Join(*workDir, filepath.FromSlash(cmdPath))
-		if dir == "" {
-			dir = filepath.Dir(absCmd)
-		} else {
-			if !validRelPath(dir) {
-				http.Error(w, "bogus 'dir' parameter", http.StatusBadRequest)
-				return
-			}
-			dir = filepath.Join(*workDir, filepath.FromSlash(dir))
-		}
+	absCmd, err := absExecCmd(r.FormValue("cmd"), sysMode) // required
+	if err != nil {
+		http.Error(w, "invalid 'cmd' parameter: "+err.Error(), httpStatus(err))
+		return
+	}
+
+	absDir, err := absExecDir(r.FormValue("dir"), sysMode, filepath.Dir(absCmd)) // optional
+	if err != nil {
+		http.Error(w, "invalid 'dir' parameter: "+err.Error(), httpStatus(err))
+		return
 	}
 
 	if f, ok := w.(http.Flusher); ok {
@@ -947,7 +913,7 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 	cmd.Args = append(cmd.Args, r.PostForm["cmdArg"]...)
 	cmd.Env = env
-	envutil.SetDir(cmd, dir)
+	envutil.SetDir(cmd, absDir)
 	cmdOutput := flushWriter{w}
 	cmd.Stdout = cmdOutput
 	cmd.Stderr = cmdOutput
@@ -961,7 +927,7 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 
 	t0 := time.Now()
-	err := cmd.Start()
+	err = cmd.Start()
 	if err == nil {
 		go func() {
 			select {
@@ -986,6 +952,65 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set(hdrProcessState, state)
 	log.Printf("[%p] Run = %s, after %v", cmd, state, time.Since(t0))
+}
+
+// absExecCmd returns the native, absolute path corresponding to the "cmd"
+// argument passed to the "exec" endpoint.
+func absExecCmd(cmdArg string, sysMode bool) (absCmd string, err error) {
+	if cmdArg == "" {
+		return "", badRequestf("requires 'cmd' parameter")
+	}
+
+	if filepath.IsAbs(cmdArg) {
+		return filepath.Clean(cmdArg), nil
+	}
+
+	relCmd, err := nativeRelPath(cmdArg)
+	if err != nil {
+		return "", badRequestf("invalid 'cmd' parameter: %w", err)
+	}
+
+	if strings.Contains(relCmd, string(filepath.Separator)) {
+		if sysMode {
+			return "", badRequestf("'sys' mode requires absolute or system 'cmd' path")
+		}
+		return filepath.Join(*workDir, filepath.FromSlash(cmdArg)), nil
+	}
+
+	if !sysMode {
+		absCmd, err = exec.LookPath(filepath.Join(*workDir, cmdArg))
+		if err == nil {
+			return absCmd, nil
+		}
+		// Not found in workdir; treat as a system command even if sysMode is false.
+	}
+
+	absCmd, err = exec.LookPath(cmdArg)
+	if err != nil {
+		return "", httpError{http.StatusUnprocessableEntity, fmt.Errorf("command %q not found", cmdArg)}
+	}
+	return absCmd, nil
+}
+
+// absExecDir returns the native, absolute path corresponding to the "dir"
+// argument passed to the "exec" endpoint.
+func absExecDir(dirArg string, sysMode bool, cmdDir string) (absDir string, err error) {
+	if dirArg == "" {
+		if sysMode {
+			return *workDir, nil
+		}
+		return cmdDir, nil
+	}
+
+	if filepath.IsAbs(dirArg) {
+		return filepath.Clean(dirArg), nil
+	}
+
+	relDir, err := nativeRelPath(dirArg)
+	if err != nil {
+		return "", badRequestf("invalid 'dir' parameter: %w", err)
+	}
+	return filepath.Join(*workDir, relDir), nil
 }
 
 // needsBashWrappers reports whether the given command needs to
@@ -1225,8 +1250,8 @@ func handleRemoveAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, p := range paths {
-		if !validRelPath(p) {
-			http.Error(w, fmt.Sprintf("bad 'path' parameter: %q", p), http.StatusBadRequest)
+		if _, err := nativeRelPath(p); err != nil {
+			http.Error(w, "invalid 'path' parameter: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 	}
@@ -1299,7 +1324,17 @@ func handleLs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "requires GET method", http.StatusBadRequest)
 		return
 	}
+
 	dir := r.FormValue("dir")
+	if dir != "" {
+		var err error
+		dir, err = nativeRelPath(dir)
+		if err != nil {
+			http.Error(w, "invalid 'dir' parameter: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
 	recursive, _ := strconv.ParseBool(r.FormValue("recursive"))
 	digest, _ := strconv.ParseBool(r.FormValue("digest"))
 	skip := r.Form["skip"] // '/'-separated relative dirs
@@ -1307,10 +1342,7 @@ func handleLs(w http.ResponseWriter, r *http.Request) {
 	if !mkdirAllWorkdirOr500(w) {
 		return
 	}
-	if !validRelativeDir(dir) {
-		http.Error(w, "bogus dir", http.StatusBadRequest)
-		return
-	}
+
 	base := filepath.Join(*workDir, filepath.FromSlash(dir))
 	anyOutput := false
 	err := filepath.Walk(base, func(path string, fi os.FileInfo, err error) error {
@@ -1579,28 +1611,69 @@ func fileSHA1(path string) (string, error) {
 	return fmt.Sprintf("%x", s1.Sum(nil)), nil
 }
 
-func validRelPath(p string) bool {
-	if p == "" || strings.Contains(p, `\`) || strings.HasPrefix(p, "/") || strings.Contains(p, "../") {
-		return false
+// nativeRelPath verifies that p is a non-empty relative path
+// using either slashes or the buildlet's native path separator,
+// and returns it canonicalized to the native path separator.
+func nativeRelPath(p string) (string, error) {
+	if p == "" {
+		return "", errors.New("path not provided")
 	}
-	return true
+
+	if filepath.Separator != '/' && strings.Contains(p, string(filepath.Separator)) {
+		clean := filepath.Clean(p)
+		if filepath.IsAbs(clean) {
+			return "", fmt.Errorf("path %q is not relative", p)
+		}
+		if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("path %q refers to a parent directory", p)
+		}
+		if strings.HasPrefix(p, string(filepath.Separator)) || filepath.VolumeName(clean) != "" {
+			// On Windows, this catches semi-relative paths like "C:" (meaning “the
+			// current working directory on volume C:”) and "\windows" (meaning “the
+			// windows subdirectory of the current drive letter”).
+			return "", fmt.Errorf("path %q is relative to volume", p)
+		}
+		return p, nil
+	}
+
+	clean := path.Clean(p)
+	if path.IsAbs(clean) {
+		return "", fmt.Errorf("path %q is not relative", p)
+	}
+	if clean == ".." || strings.HasPrefix(clean, "../") {
+		return "", fmt.Errorf("path %q refers to a parent directory", p)
+	}
+	canon := filepath.FromSlash(p)
+	if filepath.VolumeName(canon) != "" {
+		return "", fmt.Errorf("path %q begins with a native volume name", p)
+	}
+	return canon, nil
 }
 
-type httpStatuser interface {
-	error
-	httpStatus() int
-}
-
+// An httpError wraps an error with a corresponding HTTP status code.
 type httpError struct {
 	statusCode int
-	msg        string
+	err        error
 }
 
-func (he httpError) Error() string   { return he.msg }
+func (he httpError) Error() string   { return he.err.Error() }
+func (he httpError) Unwrap() error   { return he.err }
 func (he httpError) httpStatus() int { return he.statusCode }
 
-func badRequest(msg string) error {
-	return httpError{http.StatusBadRequest, msg}
+// badRequestf returns an httpError with status 400 and an error constructed by
+// formatting the given arguments.
+func badRequestf(format string, args ...interface{}) error {
+	return httpError{http.StatusBadRequest, fmt.Errorf(format, args...)}
+}
+
+// httpStatus returns the httpStatus of err if it is or wraps an httpError,
+// or StatusInternalServerError otherwise.
+func httpStatus(err error) int {
+	var he httpError
+	if !errors.As(err, &he) {
+		return http.StatusInternalServerError
+	}
+	return he.statusCode
 }
 
 // requirePassword is an http.Handler auth wrapper that enforces a

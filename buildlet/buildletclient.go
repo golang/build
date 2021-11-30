@@ -473,8 +473,12 @@ type ExecOpts struct {
 	// If nil, the output is discarded.
 	Output io.Writer
 
-	// Dir is the directory from which to execute the command.
-	// It is optional. If not specified, it defaults to the directory of
+	// Dir is the directory from which to execute the command,
+	// as an absolute or relative path using the buildlet's native
+	// path separator, or a slash-separated relative path.
+	// If relative, it is relative to the buildlet's work directory.
+	//
+	// Dir is optional. If not specified, it defaults to the directory of
 	// the command, or the work directory if SystemLevel is set.
 	Dir string
 
@@ -485,17 +489,20 @@ type ExecOpts struct {
 	// process's environment.
 	ExtraEnv []string
 
-	// Path, if non-nil, specifies the PATH variable of the executed
-	// process's environment. A non-nil empty list clears the path.
+	// Path, if non-nil, specifies the PATH variable of the executed process's
+	// environment. Each path in the list should use separators native to the
+	// buildlet's platform, and a non-nil empty list clears the path.
+	//
 	// The following expansions apply:
 	//   - the string "$PATH" expands to any existing PATH element(s)
 	//   - the substring "$WORKDIR" expands to buildlet's temp workdir
-	// After expansions, the list is joined with an OS-specific list
+	//
+	// After expansion, the list is joined with an OS-specific list
 	// separator and supplied to the executed process as its PATH
 	// environment variable.
 	Path []string
 
-	// SystemLevel controls whether the command is run outside of
+	// SystemLevel controls whether the command is expected to be found outside of
 	// the buildlet's environment.
 	SystemLevel bool
 
@@ -514,6 +521,10 @@ type ExecOpts struct {
 var ErrTimeout = errors.New("buildlet: timeout waiting for command to complete")
 
 // Exec runs cmd on the buildlet.
+//
+// cmd may be an absolute or relative path using the buildlet's native path
+// separator, or a slash-separated relative path. If relative, it is
+// relative to the buildlet's work directory (not opts.Dir).
 //
 // Two errors are returned: one is whether the command succeeded
 // remotely (remoteErr), and the second (execErr) is whether there
