@@ -60,7 +60,7 @@ var releaseTargets = []Target{
 	{Name: "windows-amd64"},
 	{Name: "windows-arm64", GoQuery: ">= go1.17beta1"},
 	{Name: "darwin-amd64"},
-	{Name: "darwin-arm64", GoQuery: ">= go1.16beta1"},
+	{Name: "darwin-arm64"},
 	{Name: "linux-s390x"},
 	{Name: "linux-ppc64le"},
 
@@ -1055,9 +1055,7 @@ func match(query, goVer string) bool {
 	case "": // A special case to make the zero Target.GoQuery value useful.
 		return true
 	case ">= go1.17beta1":
-		return !strings.HasPrefix(goVer, "go1.16") && !strings.HasPrefix(goVer, "go1.15")
-	case ">= go1.16beta1":
-		return !strings.HasPrefix(goVer, "go1.15")
+		return !strings.HasPrefix(goVer, "go1.16")
 	default:
 		panic(fmt.Errorf("match: query %q is not supported", query))
 	}

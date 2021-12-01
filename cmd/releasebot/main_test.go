@@ -24,6 +24,7 @@ func TestTargetSelectionPerGoVersion(t *testing.T) {
 	}{
 		{
 			goVer: []string{
+				"go1.18beta1", "go1.18rc1", "go1.18", "go1.18.1",
 				"go1.17beta1", "go1.17rc1", "go1.17", "go1.17.1",
 			},
 			want: []string{
@@ -62,26 +63,6 @@ func TestTargetSelectionPerGoVersion(t *testing.T) {
 				"windows-amd64",
 				"darwin-amd64",
 				"darwin-arm64", // New to Go 1.16.
-				"linux-s390x",
-				"linux-ppc64le",
-				"linux-386-longtest",
-				"linux-amd64-longtest",
-				"windows-amd64-longtest",
-			},
-		},
-		{
-			goVer: []string{"go1.15.11"},
-			want: []string{
-				"src",
-				"linux-386",
-				"linux-armv6l",
-				"linux-amd64",
-				"linux-arm64",
-				"freebsd-386",
-				"freebsd-amd64",
-				"windows-386",
-				"windows-amd64",
-				"darwin-amd64",
 				"linux-s390x",
 				"linux-ppc64le",
 				"linux-386-longtest",
