@@ -39,6 +39,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool"
+	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/internal/gophers"
 	"golang.org/x/build/internal/secret"
@@ -167,7 +168,7 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 		w.(http.Flusher).Flush()
 	}
 
-	si := &SchedItem{
+	si := &schedule.SchedItem{
 		HostType: bconf.HostType,
 		IsGomote: true,
 	}
@@ -237,7 +238,7 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-ticker:
-			st := sched.waiterState(si)
+			st := sched.WaiterState(si)
 			sendJSONLine(msg{Status: &st})
 		case bc := <-resc:
 			now := timeNow()

@@ -36,6 +36,7 @@ import (
 	"golang.org/x/build/cmd/coordinator/internal"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool"
+	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/kubernetes/api"
 	"golang.org/x/oauth2"
@@ -718,7 +719,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	pool.ReversePool().WriteHTMLStatus(&buf)
 	data.ReversePoolStatus = template.HTML(buf.String())
 
-	data.SchedState = sched.state()
+	data.SchedState = sched.State()
 
 	buf.Reset()
 	if err := statusTmpl.Execute(&buf, data); err != nil {
@@ -783,7 +784,7 @@ type statusData struct {
 	KubePoolStatus    template.HTML // TODO: embed template
 	ReversePoolStatus template.HTML // TODO: embed template
 	RemoteBuildlets   template.HTML
-	SchedState        schedulerState
+	SchedState        schedule.SchedulerState
 	DiskFree          string
 	Version           string
 	HealthCheckers    []*healthChecker

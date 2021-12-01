@@ -17,6 +17,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/build/internal/coordinator/schedule"
 )
 
 var durationTests = []struct {
@@ -108,27 +110,27 @@ func TestHandleStatus_HealthFormatting(t *testing.T) {
 
 func TestStatusSched(t *testing.T) {
 	data := statusData{
-		SchedState: schedulerState{
-			HostTypes: []schedulerHostState{
+		SchedState: schedule.SchedulerState{
+			HostTypes: []schedule.SchedulerHostState{
 				{
 					HostType:     "no-special",
 					LastProgress: 5 * time.Minute,
-					Total:        schedulerWaitingState{Count: 10, Newest: 5 * time.Minute, Oldest: 61 * time.Minute},
-					Regular:      schedulerWaitingState{Count: 1},
+					Total:        schedule.SchedulerWaitingState{Count: 10, Newest: 5 * time.Minute, Oldest: 61 * time.Minute},
+					Regular:      schedule.SchedulerWaitingState{Count: 1},
 				},
 				{
 					HostType:     "with-try",
 					LastProgress: 5 * time.Minute,
-					Total:        schedulerWaitingState{Count: 3},
-					Try:          schedulerWaitingState{Count: 1, Newest: 2 * time.Second, Oldest: 5 * time.Minute},
-					Regular:      schedulerWaitingState{Count: 2},
+					Total:        schedule.SchedulerWaitingState{Count: 3},
+					Try:          schedule.SchedulerWaitingState{Count: 1, Newest: 2 * time.Second, Oldest: 5 * time.Minute},
+					Regular:      schedule.SchedulerWaitingState{Count: 2},
 				},
 				{
 					HostType: "gomote-and-try",
-					Total:    schedulerWaitingState{Count: 6, Newest: 3 * time.Second, Oldest: 4 * time.Minute},
-					Gomote:   schedulerWaitingState{Count: 2, Newest: 3 * time.Second, Oldest: 4 * time.Minute},
-					Try:      schedulerWaitingState{Count: 1},
-					Regular:  schedulerWaitingState{Count: 3},
+					Total:    schedule.SchedulerWaitingState{Count: 6, Newest: 3 * time.Second, Oldest: 4 * time.Minute},
+					Gomote:   schedule.SchedulerWaitingState{Count: 2, Newest: 3 * time.Second, Oldest: 4 * time.Minute},
+					Try:      schedule.SchedulerWaitingState{Count: 1},
+					Regular:  schedule.SchedulerWaitingState{Count: 3},
 				},
 			},
 		},

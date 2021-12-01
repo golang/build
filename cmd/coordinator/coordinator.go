@@ -60,6 +60,7 @@ import (
 	clog "golang.org/x/build/internal/coordinator/log"
 	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/coordinator/remote"
+	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/maintner/maintnerd/apipb"
@@ -88,7 +89,7 @@ var (
 	processID        = "P" + randHex(9)
 )
 
-var sched = NewScheduler()
+var sched = schedule.NewScheduler()
 
 var Version string // set by linker -X
 
@@ -1746,7 +1747,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 
 // getBuildlets creates up to n buildlets and sends them on the returned channel
 // before closing the channel.
-func getBuildlets(ctx context.Context, n int, schedTmpl *SchedItem, lg pool.Logger) <-chan *buildlet.Client {
+func getBuildlets(ctx context.Context, n int, schedTmpl *schedule.SchedItem, lg pool.Logger) <-chan *buildlet.Client {
 	ch := make(chan *buildlet.Client) // NOT buffered
 	var wg sync.WaitGroup
 	wg.Add(n)
@@ -1973,61 +1974,6 @@ type eventAndTime struct {
 	t    time.Time
 	evt  string // "get_source", "make_and_test", "make", etc
 	text string // optional detail text
-}
-
-// span is an event covering a region of time.
-// A span ultimately ends in an error or success, and will eventually
-// be visualized and logged.
-type span struct {
-	event   string // event name like "get_foo" or "write_bar"
-	optText string // optional details for event
-	start   time.Time
-	end     time.Time
-	el      pool.EventTimeLogger // where we log to at the end; TODO: this will change
-}
-
-func createSpan(el pool.EventTimeLogger, event string, optText ...string) *span {
-	if len(optText) > 1 {
-		panic("usage")
-	}
-	start := time.Now()
-	var opt string
-	if len(optText) > 0 {
-		opt = optText[0]
-	}
-	el.LogEventTime(event, opt)
-	return &span{
-		el:      el,
-		event:   event,
-		start:   start,
-		optText: opt,
-	}
-}
-
-// Done ends a span.
-// It is legal to call Done multiple times. Only the first call
-// logs.
-// Done always returns its input argument.
-func (s *span) Done(err error) error {
-	if !s.end.IsZero() {
-		return err
-	}
-	t1 := time.Now()
-	s.end = t1
-	td := t1.Sub(s.start)
-	var text bytes.Buffer
-	fmt.Fprintf(&text, "after %s", friendlyDuration(td))
-	if err != nil {
-		fmt.Fprintf(&text, "; err=%v", err)
-	}
-	if s.optText != "" {
-		fmt.Fprintf(&text, "; %v", s.optText)
-	}
-	if st, ok := s.el.(*buildStatus); ok {
-		clog.CoordinatorProcess().PutSpanRecord(st.spanRecord(s, err))
-	}
-	s.el.LogEventTime("finish_"+s.event, text.String())
-	return err
 }
 
 var nl = []byte("\n")

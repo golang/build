@@ -6,7 +6,7 @@
 // +build go1.16
 // +build linux darwin
 
-package main
+package schedule
 
 import (
 	"context"
@@ -139,7 +139,7 @@ func (stderrLogger) LogEventTime(event string, optText ...string) {
 }
 
 func (l stderrLogger) CreateSpan(event string, optText ...string) spanlog.Span {
-	return createSpan(l, event, optText...)
+	return CreateSpan(l, event, optText...)
 }
 
 // getPoolBuildlet is launched as its own goroutine to do a
@@ -207,13 +207,13 @@ func (s *Scheduler) hasWaiter(si *SchedItem) bool {
 	return s.waiting[si.HostType][si]
 }
 
-type schedulerWaitingState struct {
+type SchedulerWaitingState struct {
 	Count  int
 	Newest time.Duration
 	Oldest time.Duration
 }
 
-func (st *schedulerWaitingState) add(si *SchedItem) {
+func (st *SchedulerWaitingState) add(si *SchedItem) {
 	st.Count++
 	age := time.Since(si.requestTime).Round(time.Second)
 	if st.Newest == 0 || age < st.Newest {
@@ -224,20 +224,20 @@ func (st *schedulerWaitingState) add(si *SchedItem) {
 	}
 }
 
-type schedulerHostState struct {
+type SchedulerHostState struct {
 	HostType     string
 	LastProgress time.Duration
-	Total        schedulerWaitingState
-	Gomote       schedulerWaitingState
-	Try          schedulerWaitingState
-	Regular      schedulerWaitingState
+	Total        SchedulerWaitingState
+	Gomote       SchedulerWaitingState
+	Try          SchedulerWaitingState
+	Regular      SchedulerWaitingState
 }
 
-type schedulerState struct {
-	HostTypes []schedulerHostState
+type SchedulerState struct {
+	HostTypes []SchedulerHostState
 }
 
-func (s *Scheduler) state() (st schedulerState) {
+func (s *Scheduler) State() (st SchedulerState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -245,7 +245,7 @@ func (s *Scheduler) state() (st schedulerState) {
 		if len(m) == 0 {
 			continue
 		}
-		var hst schedulerHostState
+		var hst SchedulerHostState
 		hst.HostType = hostType
 		for si := range m {
 			hst.Total.add(si)
@@ -270,9 +270,9 @@ func (s *Scheduler) state() (st schedulerState) {
 	return st
 }
 
-// waiterState returns tells waiter how many callers are on the line
+// WaiterState returns tells waiter how many callers are on the line
 // in front of them.
-func (s *Scheduler) waiterState(waiter *SchedItem) (ws types.BuildletWaitStatus) {
+func (s *Scheduler) WaiterState(waiter *SchedItem) (ws types.BuildletWaitStatus) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

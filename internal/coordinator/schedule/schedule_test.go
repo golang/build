@@ -6,7 +6,7 @@
 // +build go1.16
 // +build linux darwin
 
-package main
+package schedule
 
 import (
 	"context"
@@ -124,7 +124,7 @@ type discardLogger struct{}
 func (discardLogger) LogEventTime(event string, optText ...string) {}
 
 func (discardLogger) CreateSpan(event string, optText ...string) spanlog.Span {
-	return createSpan(discardLogger{}, event, optText...)
+	return CreateSpan(discardLogger{}, event, optText...)
 }
 
 // step is a test step for TestScheduler
