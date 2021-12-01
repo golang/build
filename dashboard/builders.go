@@ -3048,6 +3048,10 @@ func onlyMasterDefault(repo, branch, goBranch string) bool {
 // both filesystem-intensive and unlikely to be relevant to plan9 users.
 func plan9Default(repo, branch, goBranch string) bool {
 	switch repo {
+	case "review":
+		// The x/review repo tests a Git hook, but the plan9 "git" doesn't have the
+		// same command-line API as "git" everywhere else.
+		return false
 	case "website":
 		// The x/website tests read and check the website code snippets,
 		// which require many filesystem walk and read operations.
