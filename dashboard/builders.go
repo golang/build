@@ -1326,7 +1326,7 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 
 	// Build dev.boringcrypto branches only on linux/amd64 and windows/386 (see golang.org/issue/26791).
 	if repo == "go" && (branch == "dev.boringcrypto" || strings.HasPrefix(branch, "dev.boringcrypto.")) {
-		if c.Name != "linux-amd64" && c.Name != "windows-386-2012" && c.Name != "windows-386-2008" {
+		if c.Name != "linux-amd64" && c.Name != "windows-386-2008" {
 			return false
 		}
 	}
