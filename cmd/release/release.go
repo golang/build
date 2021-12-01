@@ -225,6 +225,7 @@ var builds = []*Build{
 		Builder: "darwin-amd64-11_0",
 	},
 	{
+		GoQuery: ">= go1.18beta1", // Go 1.18 Beta 1 is still to be finalized as part of issue 40561, but macOS 12 for now.
 		OS:      "darwin",
 		Arch:    "arm64",
 		Race:    true,
@@ -267,6 +268,13 @@ var builds = []*Build{
 		Arch:    "amd64",
 		Race:    true,
 		Builder: "darwin-amd64-10_15",
+	},
+	{
+		GoQuery: "< go1.18beta1", // Go 1.17 and 1.16 still use macOS 11. See issue 49889.
+		OS:      "darwin",
+		Arch:    "arm64",
+		Race:    true,
+		Builder: "darwin-arm64-11_0-toothrot",
 	},
 
 	// Test-only builds.
