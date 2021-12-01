@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build linux || darwin
+// +build linux darwin
+
 package pool
 
 import (
@@ -13,6 +16,7 @@ import (
 	"time"
 
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/dashboard"
 )
 
 // BuildletTimeoutOpt is a context.Value key for BuildletPool.GetBuildlet.
@@ -84,4 +88,35 @@ func deleteTimeoutFromContextOrValue(ctx context.Context, timeout time.Duration)
 // isBuildlet checks the name string in order to determine if the name is for a buildlet.
 func isBuildlet(name string) bool {
 	return strings.HasPrefix(name, "buildlet-")
+}
+
+// TestPoolHook is used to override the buildlet returned by ForConf. It should only be used for
+// testing purposes.
+var TestPoolHook func(*dashboard.HostConfig) Buildlet
+
+// ForHost returns the appropriate buildlet depending on the host configuration that is passed it.
+// The returned buildlet can be overriden for testing purposes by registering a test hook.
+func ForHost(conf *dashboard.HostConfig) Buildlet {
+	if TestPoolHook != nil {
+		return TestPoolHook(conf)
+	}
+	if conf == nil {
+		panic("nil conf")
+	}
+	switch {
+	case conf.IsEC2():
+		return EC2BuildetPool()
+	case conf.IsVM():
+		return NewGCEConfiguration().BuildletPool()
+	case conf.IsContainer():
+		if NewGCEConfiguration().BuildEnv().PreferContainersOnCOS || KubeErr() != nil {
+			return NewGCEConfiguration().BuildletPool() // it also knows how to do containers.
+		} else {
+			return KubePool()
+		}
+	case conf.IsReverse:
+		return ReversePool()
+	default:
+		panic(fmt.Sprintf("no buildlet pool for host type %q", conf.HostType))
+	}
 }

@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.13 && (linux || darwin)
-// +build go1.13
+//go:build linux || darwin
 // +build linux darwin
 
 // Code interacting with Google Compute Engine (GCE) and

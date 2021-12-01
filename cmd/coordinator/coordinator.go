@@ -1778,33 +1778,6 @@ func getBuildlets(ctx context.Context, n int, schedTmpl *SchedItem, lg pool.Logg
 	return ch
 }
 
-var testPoolHook func(*dashboard.HostConfig) pool.Buildlet
-
-func poolForConf(conf *dashboard.HostConfig) pool.Buildlet {
-	if testPoolHook != nil {
-		return testPoolHook(conf)
-	}
-	if conf == nil {
-		panic("nil conf")
-	}
-	switch {
-	case conf.IsEC2():
-		return pool.EC2BuildetPool()
-	case conf.IsVM():
-		return pool.NewGCEConfiguration().BuildletPool()
-	case conf.IsContainer():
-		if pool.NewGCEConfiguration().BuildEnv().PreferContainersOnCOS || pool.KubeErr() != nil {
-			return pool.NewGCEConfiguration().BuildletPool() // it also knows how to do containers.
-		} else {
-			return pool.KubePool()
-		}
-	case conf.IsReverse:
-		return pool.ReversePool()
-	default:
-		panic(fmt.Sprintf("no buildlet pool for host type %q", conf.HostType))
-	}
-}
-
 // noCommitDetail is just a nice name for nil at call sites.
 var noCommitDetail *commitDetail = nil
 

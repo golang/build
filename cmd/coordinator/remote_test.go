@@ -126,11 +126,11 @@ func TestHandleBuildletCreate_PreStream(t *testing.T) {
 	defer log.SetOutput(os.Stderr)
 	addBuilder(buildName)
 	remoteBuildlets.m = map[string]*remoteBuildlet{}
-	testPoolHook = func(_ *dashboard.HostConfig) pool.Buildlet { return testPool }
+	pool.TestPoolHook = func(_ *dashboard.HostConfig) pool.Buildlet { return testPool }
 	defer func() {
 		timeNow = time.Now
 		removeBuilder(buildName)
-		testPoolHook = nil
+		pool.TestPoolHook = nil
 	}()
 	timeNow = func() time.Time { return time.Unix(123, 0).In(time.UTC) }
 	data := url.Values{}
@@ -155,11 +155,11 @@ func TestHandleBuildletCreate_Stream(t *testing.T) {
 	defer log.SetOutput(os.Stderr)
 	addBuilder(buildName)
 	remoteBuildlets.m = map[string]*remoteBuildlet{}
-	testPoolHook = func(_ *dashboard.HostConfig) pool.Buildlet { return testPool }
+	pool.TestPoolHook = func(_ *dashboard.HostConfig) pool.Buildlet { return testPool }
 	defer func() {
 		timeNow = time.Now
 		removeBuilder(buildName)
-		testPoolHook = nil
+		pool.TestPoolHook = nil
 	}()
 	timeNow = func() time.Time { return time.Unix(123, 0).In(time.UTC) }
 	data := url.Values{}

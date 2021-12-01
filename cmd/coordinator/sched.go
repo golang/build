@@ -113,7 +113,7 @@ func (s *Scheduler) scheduleLocked() {
 		if need <= 0 {
 			continue
 		}
-		pool := poolForConf(dashboard.Hosts[hostType])
+		pool := pool.ForHost(dashboard.Hosts[hostType])
 		// TODO: recognize certain pools like the reverse pool
 		// that have finite capacity and will just queue up
 		// GetBuildlet calls anyway and avoid extra goroutines
@@ -362,10 +362,10 @@ type SchedItem struct {
 // The provided si must be newly allocated; ownership passes to the scheduler.
 func (s *Scheduler) GetBuildlet(ctx context.Context, si *SchedItem) (*buildlet.Client, error) {
 	hostConf, ok := dashboard.Hosts[si.HostType]
-	if !ok && testPoolHook == nil {
+	if !ok && pool.TestPoolHook == nil {
 		return nil, fmt.Errorf("invalid SchedItem.HostType %q", si.HostType)
 	}
-	pool := poolForConf(hostConf)
+	pool := pool.ForHost(hostConf)
 
 	si.pool = pool
 	si.s = s

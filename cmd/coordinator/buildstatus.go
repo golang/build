@@ -213,7 +213,7 @@ func (st *buildStatus) start() {
 }
 
 func (st *buildStatus) buildletPool() pool.Buildlet {
-	return poolForConf(st.conf.HostConfig())
+	return pool.ForHost(st.conf.HostConfig())
 }
 
 // parentRev returns the parent of this build's commit (but only if this build comes from a trySet).
@@ -589,7 +589,7 @@ func (st *buildStatus) buildRecord() *types.BuildRecord {
 
 	// Log whether we used COS, so we can do queries to analyze
 	// Kubernetes vs COS performance for containers.
-	if st.conf.IsContainer() && poolForConf(st.conf.HostConfig()) == pool.NewGCEConfiguration().BuildletPool() {
+	if st.conf.IsContainer() && pool.ForHost(st.conf.HostConfig()) == pool.NewGCEConfiguration().BuildletPool() {
 		rec.ContainerHost = "cos"
 	}
 

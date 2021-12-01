@@ -228,7 +228,7 @@ func (m poolChan) GetBuildlet(ctx context.Context, hostType string, lg cpool.Log
 func (poolChan) String() string { return "testing poolChan" }
 
 func TestScheduler(t *testing.T) {
-	defer func() { testPoolHook = nil }()
+	defer func() { cpool.TestPoolHook = nil }()
 
 	var pool poolChan // initialized per test below
 	// buildletAvailable is a step that creates a buildlet to the pool.
@@ -309,7 +309,7 @@ func TestScheduler(t *testing.T) {
 		pool["test-host-foo"] = make(chan interface{}, 1)
 		pool["test-host-bar"] = make(chan interface{}, 1)
 
-		testPoolHook = func(*dashboard.HostConfig) cpool.Buildlet { return pool }
+		cpool.TestPoolHook = func(*dashboard.HostConfig) cpool.Buildlet { return pool }
 		t.Run(tt.name, func(t *testing.T) {
 			s := NewScheduler()
 			for i, st := range tt.steps() {
