@@ -57,6 +57,7 @@ import (
 	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/buildstats"
 	"golang.org/x/build/internal/cloud"
+	clog "golang.org/x/build/internal/coordinator/log"
 	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/https"
@@ -244,6 +245,8 @@ func main() {
 	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
 
+	clog.SetProcessMetadata(processID, processStartTime)
+
 	if Version == "" && *mode == "dev" {
 		Version = "dev"
 	}
@@ -299,7 +302,7 @@ func main() {
 		}
 	}
 
-	go updateInstanceRecord()
+	go clog.CoordinatorProcess().UpdateInstanceRecord()
 
 	switch *mode {
 	case "dev", "prod":
@@ -2021,7 +2024,7 @@ func (s *span) Done(err error) error {
 		fmt.Fprintf(&text, "; %v", s.optText)
 	}
 	if st, ok := s.el.(*buildStatus); ok {
-		putSpanRecord(st.spanRecord(s, err))
+		clog.CoordinatorProcess().PutSpanRecord(st.spanRecord(s, err))
 	}
 	s.el.LogEventTime("finish_"+s.event, text.String())
 	return err

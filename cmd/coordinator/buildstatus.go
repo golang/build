@@ -32,6 +32,7 @@ import (
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/buildstats"
+	clog "golang.org/x/build/internal/coordinator/log"
 	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/singleflight"
 	"golang.org/x/build/internal/sourcecache"
@@ -206,7 +207,7 @@ func (st *buildStatus) start() {
 				log.Println(st.BuilderRev, "failed:", err)
 			}
 			st.setDone(err == nil)
-			putBuildRecord(st.buildRecord())
+			clog.CoordinatorProcess().PutBuildRecord(st.buildRecord())
 		}
 		markDone(st.BuilderRev)
 	}()
@@ -424,7 +425,7 @@ func (st *buildStatus) build() error {
 		cancel()
 	}
 
-	putBuildRecord(st.buildRecord())
+	clog.CoordinatorProcess().PutBuildRecord(st.buildRecord())
 
 	sp := st.CreateSpan("checking_for_snapshot")
 	if pool.NewGCEConfiguration().InStaging() {

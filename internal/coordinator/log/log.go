@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16 && (linux || darwin)
-// +build go1.16
+//go:build linux || darwin
 // +build linux darwin
 
-package main
+package log
 
 import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/datastore"
@@ -19,6 +19,33 @@ import (
 	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/types"
 )
+
+type Process struct {
+	processID        string
+	processStartTime time.Time
+}
+
+var (
+	process *Process
+	once    sync.Once
+)
+
+// SetProcessMetadata sets metadata about the process. This should be called before any
+// event logging operations.
+func SetProcessMetadata(id string, startTime time.Time) *Process {
+	once.Do(func() {
+		process = &Process{
+			processID:        id,
+			processStartTime: startTime,
+		}
+	})
+	return process
+}
+
+// CoordinatorProcess returns the package level process logger.
+func CoordinatorProcess() *Process {
+	return process
+}
 
 // Process is a datastore record about the lifetime of a coordinator process.
 //
@@ -33,17 +60,17 @@ type ProcessRecord struct {
 	// GCE instance type?
 }
 
-func updateInstanceRecord() {
+func (p *Process) UpdateInstanceRecord() {
 	dsClient := pool.NewGCEConfiguration().DSClient()
 	if dsClient == nil {
 		return
 	}
 	ctx := context.Background()
 	for {
-		key := datastore.NameKey("Process", processID, nil)
+		key := datastore.NameKey("Process", p.processID, nil)
 		_, err := dsClient.Put(ctx, key, &ProcessRecord{
-			ID:            processID,
-			Start:         processStartTime,
+			ID:            p.processID,
+			Start:         p.processStartTime,
 			LastHeartbeat: time.Now(),
 		})
 		if err != nil {
@@ -53,7 +80,7 @@ func updateInstanceRecord() {
 	}
 }
 
-func putBuildRecord(br *types.BuildRecord) {
+func (p *Process) PutBuildRecord(br *types.BuildRecord) {
 	dsClient := pool.NewGCEConfiguration().DSClient()
 	if dsClient == nil {
 		return
@@ -65,7 +92,7 @@ func putBuildRecord(br *types.BuildRecord) {
 	}
 }
 
-func putSpanRecord(sr *types.SpanRecord) {
+func (p *Process) PutSpanRecord(sr *types.SpanRecord) {
 	dsClient := pool.NewGCEConfiguration().DSClient()
 	if dsClient == nil {
 		return
