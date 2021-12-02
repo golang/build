@@ -29,8 +29,11 @@ spec:
         - containerPort: 8123 # module proxy port (internal, not accessible directly from public)
         resources:
           requests:
-            cpu: "2"
-            memory: "4Gi"
+            cpu: "4"
+            memory: "6Gi"
+          limits:
+            cpu: "6"
+            memory: "8Gi"
 ---
 apiVersion: v1
 kind: Service
