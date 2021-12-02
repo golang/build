@@ -29,11 +29,11 @@ import (
 )
 
 const (
-	uploadURL     = "https://golang.org/dl/upload"
+	uploadURL     = "https://go.dev/dl/upload"
 	storageBucket = "golang"
 )
 
-// File represents a file on the golang.org downloads page.
+// File represents a file on the go.dev downloads page.
 // It should be kept in sync with the download code in x/website/internal/dl.
 type File struct {
 	Filename       string `json:"filename"`
@@ -122,7 +122,7 @@ func upload(files []string) error {
 		return fmt.Errorf("waitForEdgeCache(%+v): %v", uploaded, err)
 	}
 
-	log.Println("Uploading payloads to golang.org ...")
+	log.Println("Uploading payloads to go.dev ...")
 	for _, f := range sitePayloads {
 		if err := updateSite(f); err != nil {
 			return fmt.Errorf("updateSite(%+v): %v", f, err)
@@ -179,7 +179,7 @@ func waitForEdgeCache(uploaded []string) error {
 }
 
 func updateSite(f *File) error {
-	// Post file details to golang.org.
+	// Post file details to go.dev.
 	req, err := json.Marshal(f)
 	if err != nil {
 		return err
