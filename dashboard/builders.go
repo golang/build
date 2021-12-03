@@ -229,13 +229,6 @@ var Hosts = map[string]*HostConfig{
 		Owners:    []*gophers.Person{gh("mengzhuo")},
 		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
 	},
-	"host-linux-riscv64-unleashed": &HostConfig{
-		Notes:     "SiFive HiFive Unleashed RISC-V board. 8 GB RAM, 4 cores.",
-		IsReverse: true,
-		ExpectNum: 0,                                 // See golang.org/issue/49325.
-		Owners:    []*gophers.Person{gh("bradfitz")}, // at home
-		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
-	},
 	"host-openbsd-amd64-68": &HostConfig{
 		VMImage:            "openbsd-amd64-68-v3", // v3 adds 009_exit syspatch; see golang.org/cl/278732.
 		machineType:        "e2-highcpu-4",
@@ -2690,21 +2683,6 @@ func init() {
 	addBuilder(BuildConfig{
 		HostType:       "host-linux-riscv64-joelsing",
 		Name:           "linux-riscv64-jsing",
-		SkipSnapshot:   true,
-		env:            []string{"GO_TEST_TIMEOUT_SCALE=4"},
-		distTestAdjust: riscvDistTestPolicy,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			switch repo {
-			case "go", "net", "sys":
-				return branch == "master" && goBranch == "master"
-			default:
-				return false
-			}
-		},
-	})
-	addBuilder(BuildConfig{
-		HostType:       "host-linux-riscv64-unleashed",
-		Name:           "linux-riscv64-unleashed",
 		SkipSnapshot:   true,
 		env:            []string{"GO_TEST_TIMEOUT_SCALE=4"},
 		distTestAdjust: riscvDistTestPolicy,
