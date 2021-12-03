@@ -2499,7 +2499,6 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && branch == "master" && goBranch == "master"
 		},
-		KnownIssue: 49616,
 	})
 	addBuilder(BuildConfig{
 		Name:     "android-arm64-corellium",
