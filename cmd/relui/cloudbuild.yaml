@@ -1,0 +1,10 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: [ 'run', '-d', '--network=cloudbuild', '--env=POSTGRES_HOST_AUTH_METHOD=trust', '--name=postgres', 'postgres:13' ]
+  - name: postgres
+    timeout: 120s
+    args: ['bash', '-c', 'while ! timeout 1 psql --host=postgres --user=postgres --command "select 1"; do sleep 1; done']
+  - name: gcr.io/cloud-builders/docker
+    args: [ 'build', '-f', 'cmd/relui/Dockerfile.test', '-t', 'golang/relui-test', '.' ]
+  - name: gcr.io/cloud-builders/docker
+    args: [ 'run', '--rm', '--network=cloudbuild', '-e', 'PGHOST=postgres', '-e', 'PGUSER=postgres', '-t', 'golang/relui-test', ]
