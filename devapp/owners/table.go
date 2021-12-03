@@ -528,7 +528,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{tklauser},
 	},
 	"go/src/testing": {
-		Primary:   []Owner{},
+		Primary:   []Owner{bcmills},
 		Secondary: []Owner{mpvl},
 	},
 	"go/src/testing/quick": {
