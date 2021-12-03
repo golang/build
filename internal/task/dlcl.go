@@ -29,7 +29,7 @@ import (
 // 	• "go1.18beta1" or "go1.18rc1" for a pre-release
 //
 // Credentials are fetched from Secret Manager.
-// On success, the URL of the change is returned, like "https://golang.org/cl/123".
+// On success, the URL of the change is returned, like "https://go.dev/cl/123".
 func MailDLCL(ctx context.Context, versions []string) (changeURL string, _ error) {
 	if len(versions) < 1 || len(versions) > 2 {
 		return "", fmt.Errorf("got %d Go versions, want 1 or 2", len(versions))
@@ -52,7 +52,7 @@ func MailDLCL(ctx context.Context, versions []string) (changeURL string, _ error
 			Version             string // "go1.5.3rc2"
 			VersionNoPatch      string // "go1.5"
 			CapitalSpaceVersion string // "Go 1.5"
-			DocHost             string // "golang.org" or "tip.golang.org" for rc/beta
+			DocHost             string // "go.dev" or "tip.golang.org" for rc/beta
 		}{
 			Year:                time.Now().UTC().Year(),
 			Version:             ver,
@@ -93,7 +93,7 @@ func MailDLCL(ctx context.Context, versions []string) (changeURL string, _ error
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("https://golang.org/cl/%d", ci.ChangeNumber), nil
+	return fmt.Sprintf("https://go.dev/cl/%d", ci.ChangeNumber), nil
 }
 
 func verifyGoVersions(versions ...string) error {
@@ -113,7 +113,7 @@ func docHost(ver string) string {
 	if strings.Contains(ver, "rc") || strings.Contains(ver, "beta") {
 		return "tip.golang.org"
 	}
-	return "golang.org"
+	return "go.dev"
 }
 
 func versionNoPatch(ver string) (string, error) {
@@ -123,7 +123,7 @@ func versionNoPatch(ver string) (string, error) {
 		return "", fmt.Errorf("unrecognized version %q", ver)
 	}
 	if m[2] != "" {
-		return "devel/release.html#" + m[1] + ".minor", nil
+		return "devel/release#" + m[1] + ".minor", nil
 	}
 	return m[1], nil
 }
@@ -142,9 +142,9 @@ var dlTmpl = template.Must(template.New("").Parse(`// Copyright {{.Year}} The Go
 // And then use the {{.Version}} command as if it were your normal go
 // command.
 //
-// See the release notes at https://{{.DocHost}}/doc/{{.VersionNoPatch}}
+// See the release notes at https://{{.DocHost}}/doc/{{.VersionNoPatch}}.
 //
-// File bugs at https://golang.org/issues/new
+// File bugs at https://go.dev/issue/new.
 package main
 
 import "golang.org/dl/internal/version"

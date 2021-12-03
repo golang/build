@@ -21,7 +21,7 @@ func TestTweetRelease(t *testing.T) {
 		// This test is useful when modifying the tweet text and image templates,
 		// but don't run it in -short mode since tweetImage involves making some
 		// HTTP GET requests to the internet.
-		t.Skip("skipping test that hits golang.org/dl/?mode=json read-only API in -short mode")
+		t.Skip("skipping test that hits go.dev/dl/?mode=json read-only API in -short mode")
 	}
 
 	tests := [...]struct {
@@ -47,7 +47,7 @@ func TestTweetRelease(t *testing.T) {
 
 📢 Announcement: https://groups.google.com/g/golang-announce/c/dx9d7IOseHw/m/KNH37k37AAAJ
 
-⬇️ Download: https://golang.org/dl/#go1.17.1
+⬇️ Download: https://go.dev/dl/#go1.17.1
 
 #golang
 tweet image:
@@ -72,11 +72,11 @@ go version go1.17.1 linux/arm64` + "\n",
 			wantLog: `tweet text:
 ⚡️ Go 1.17 Beta 1 is released!
 
-⚙️ Try it! File bugs! https://golang.org/issue/new
+⚙️ Try it! File bugs! https://go.dev/issue/new
 
 🗣 Announcement: https://groups.google.com/g/golang-announce/c/i4EliPDV9Ok/m/MxA-nj53AAAJ
 
-📦 Download: https://golang.org/dl/#go1.17beta1
+📦 Download: https://go.dev/dl/#go1.17beta1
 
 #golang
 tweet image:
@@ -101,11 +101,11 @@ go version go1.17beta1 darwin/amd64` + "\n",
 			wantLog: `tweet text:
 🎉 Go 1.17 Release Candidate 2 is released!
 
-🏖 Run it in dev! Run it in prod! File bugs! https://golang.org/issue/new
+🏖 Run it in dev! Run it in prod! File bugs! https://go.dev/issue/new
 
 🔈 Announcement: https://groups.google.com/g/golang-announce/c/yk30ovJGXWY/m/p9uUnKbbBQAJ
 
-📦 Download: https://golang.org/dl/#go1.17rc2
+📦 Download: https://go.dev/dl/#go1.17rc2
 
 #golang
 tweet image:
@@ -132,9 +132,9 @@ go version go1.17rc2 windows/arm64` + "\n",
 
 🔐 Security: Includes a super duper security fix (CVE-123).
 
-📝 Release notes: https://golang.org/doc/go1.17
+📝 Release notes: https://go.dev/doc/go1.17
 
-📦 Download: https://golang.org/dl/#go1.17
+📦 Download: https://go.dev/dl/#go1.17
 
 #golang
 tweet image:
@@ -163,7 +163,7 @@ go version go1.17 freebsd/amd64` + "\n",
 				t.Errorf("unexpected tweetURL: got = %q, want %q", got, want)
 			}
 			if got, want := buf.String(), tc.wantLog; got != want {
-				t.Errorf("unexpected log: got = %q, want %q", got, want)
+				t.Errorf("unexpected log:\n got: %q\nwant: %q", got, want)
 			}
 		})
 	}

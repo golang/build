@@ -246,7 +246,7 @@ const tweetTextTmpl = `{{define "minor" -}}
 
 {{emoji "announce"}} Announcement: {{.Announcement}}
 
-{{emoji "download"}} Download: https://golang.org/dl/#{{.Version}}
+{{emoji "download"}} Download: https://go.dev/dl/#{{.Version}}
 
 #golang{{end}}
 
@@ -256,11 +256,11 @@ const tweetTextTmpl = `{{define "minor" -}}
 
 {{with .Security}}{{emoji "security"}} Security: {{.}}{{"\n\n"}}{{end -}}
 
-{{emoji "try"}} Try it! File bugs! https://golang.org/issue/new
+{{emoji "try"}} Try it! File bugs! https://go.dev/issue/new
 
 {{emoji "announce"}} Announcement: {{.Announcement}}
 
-{{emoji "download"}} Download: https://golang.org/dl/#{{.Version}}
+{{emoji "download"}} Download: https://go.dev/dl/#{{.Version}}
 
 #golang{{end}}
 
@@ -270,11 +270,11 @@ const tweetTextTmpl = `{{define "minor" -}}
 
 {{with .Security}}{{emoji "security"}} Security: {{.}}{{"\n\n"}}{{end -}}
 
-{{emoji "run"}} Run it in dev! Run it in prod! File bugs! https://golang.org/issue/new
+{{emoji "run"}} Run it in dev! Run it in prod! File bugs! https://go.dev/issue/new
 
 {{emoji "announce"}} Announcement: {{.Announcement}}
 
-{{emoji "download"}} Download: https://golang.org/dl/#{{.Version}}
+{{emoji "download"}} Download: https://go.dev/dl/#{{.Version}}
 
 #golang{{end}}
 
@@ -284,9 +284,9 @@ const tweetTextTmpl = `{{define "minor" -}}
 
 {{with .Security}}{{emoji "security"}} Security: {{.}}{{"\n\n"}}{{end -}}
 
-{{emoji "notes"}} Release notes: https://golang.org/doc/{{.Version}}
+{{emoji "notes"}} Release notes: https://go.dev/doc/{{.Version}}
 
-{{emoji "download"}} Download: https://golang.org/dl/#{{.Version}}
+{{emoji "download"}} Download: https://go.dev/dl/#{{.Version}}
 
 #golang{{end}}`
 
@@ -359,7 +359,7 @@ var emoji = map[string][]string{
 // tweet for goVersion. It returns the image encoded as PNG,
 // and the text displayed in the image.
 //
-// tweetImage makes an HTTP GET request to the golang.org/dl/?mode=json
+// tweetImage makes an HTTP GET request to the go.dev/dl/?mode=json
 // read-only API to select a random release archive to highlight.
 func tweetImage(goVersion string, rnd *rand.Rand) (imagePNG []byte, imageText string, _ error) {
 	a, err := fetchRandomArchive(goVersion, rnd)
@@ -423,7 +423,7 @@ func fetchRandomArchive(goVer string, rnd *rand.Rand) (archive golangorgDLFile, 
 }
 
 func fetchReleaseArchives(goVer string) (archives []golangorgDLFile, _ error) {
-	url := "https://golang.org/dl/?mode=json"
+	url := "https://go.dev/dl/?mode=json"
 	if strings.Contains(goVer, "beta") || strings.Contains(goVer, "rc") ||
 		goVer == "go1.17" || goVer == "go1.17.1" /* For TestTweetRelease. */ {
 
@@ -464,13 +464,13 @@ func fetchReleaseArchives(goVer string) (archives []golangorgDLFile, _ error) {
 	return nil, fmt.Errorf("release version %q not found", goVer)
 }
 
-// golangorgDLRelease represents a release on the golang.org downloads page.
+// golangorgDLRelease represents a release on the go.dev downloads page.
 type golangorgDLRelease struct {
 	Version string
 	Files   []golangorgDLFile
 }
 
-// golangorgDLFile represents a file on the golang.org downloads page.
+// golangorgDLFile represents a file on the go.dev downloads page.
 // It should be kept in sync with code in x/build/cmd/release and x/website/internal/dl.
 type golangorgDLFile struct {
 	Filename string
@@ -570,7 +570,7 @@ func circle(x, y, r int) color.Alpha16 {
 var (
 	// gopherBlue is the Gopher Blue primary color from the Go color palette.
 	//
-	// Reference: https://golang.org/s/brandbook.
+	// Reference: https://go.dev/s/brandbook.
 	gopherBlue = color.NRGBA{0, 173, 216, 255} // #00add8.
 
 	// terminalColor is the color used as the terminal color.
