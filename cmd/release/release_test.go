@@ -124,13 +124,13 @@ func TestBuilderSelectionPerGoVersion(t *testing.T) {
 		{"go1.16", "darwin-amd64", "darwin-amd64-10_15"},
 		// Go 1.17 uses MacOS 11.0.
 		{"go1.17", "darwin-amd64", "darwin-amd64-11_0"},
-		// Go 1.18 uses MacOS 11.0.
-		{"go1.18", "darwin-amd64", "darwin-amd64-11_0"},
+		// Go 1.18 starts using a macOS 12 releaselet.
+		{"go1.18", "darwin-amd64", "darwin-amd64-12_0"},
 		// macOS (arm64)
 		// Go 1.16 and 1.17 use macOS 11.
 		{"go1.16", "darwin-arm64", "darwin-arm64-11_0-toothrot"},
 		{"go1.17", "darwin-arm64", "darwin-arm64-11_0-toothrot"},
-		// Go 1.18 starts using macOS 12 pending decision in issue 40561.
+		// Go 1.18 starts using a macOS 12 releaselet.
 		{"go1.18", "darwin-arm64", "darwin-arm64-12_0-toothrot"},
 
 		// Windows

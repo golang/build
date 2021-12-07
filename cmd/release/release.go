@@ -218,14 +218,14 @@ var builds = []*Build{
 		Builder: "windows-arm64-10",
 	},
 	{
-		GoQuery: ">= go1.17beta1",
+		GoQuery: ">= go1.18beta1", // Start exercising a macOS 12 releaselet as of Go 1.18 Beta 1; see issue 40561.
 		OS:      "darwin",
 		Arch:    "amd64",
 		Race:    true,
-		Builder: "darwin-amd64-11_0",
+		Builder: "darwin-amd64-12_0",
 	},
 	{
-		GoQuery: ">= go1.18beta1", // Go 1.18 Beta 1 is still to be finalized as part of issue 40561, but macOS 12 for now.
+		GoQuery: ">= go1.18beta1", // Start exercising a macOS 12 releaselet as of Go 1.18 Beta 1; see issue 40561.
 		OS:      "darwin",
 		Arch:    "arm64",
 		Race:    true,
@@ -261,6 +261,13 @@ var builds = []*Build{
 		Arch:    "amd64",
 		Race:    true,
 		Builder: "freebsd-amd64-11_2",
+	},
+	{
+		GoQuery: ">= go1.17beta1 && < go1.18beta1",
+		OS:      "darwin",
+		Arch:    "amd64",
+		Race:    true,
+		Builder: "darwin-amd64-11_0",
 	},
 	{
 		GoQuery: "< go1.17beta1", // See golang/go#46161.
