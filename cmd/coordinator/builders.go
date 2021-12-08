@@ -92,13 +92,14 @@ var buildersTmpl = template.Must(template.New("builders").Funcs(template.FuncMap
 <h2 id='builders'>Defined Builders</h2>
 
 <table>
-<thead><tr><th>name</th><th>pool</th><th>owners</th><th>notes</th></tr>
+<thead><tr><th>name</th><th>pool</th><th>owners</th><th>known issue</th><th>notes</th></tr>
 </thead>
 {{range .Builders}}
 <tr>
 	<td>{{.Name}}</td>
 	<td><a href='#{{.HostType}}'>{{.HostType}}</a></td>
 	<td>{{builderOwners .}}</td>
+	<td>{{with .KnownIssue}}<a href="https://go.dev/issue/{{.}}" title="This builder has a known issue. See go.dev/issue/{{.}}.">#{{.}}</a>{{end}}</td>
 	<td>{{.Notes}}</td>
 </tr>
 {{end}}
