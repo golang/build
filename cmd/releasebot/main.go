@@ -89,12 +89,15 @@ func usage() {
 }
 
 var (
-	skipTestFlag = flag.String("skip-test", "", "space-separated list of test-only targets to skip (only use if sufficient testing was done elsewhere)")
+	skipTestFlag     = flag.String("skip-test", "", "space-separated list of test-only targets to skip (only use if sufficient testing was done elsewhere)")
+	skipTargetFlag   = flag.String("skip-target", "", "space-separated list of targets to skip. This will require manual intervention to create artifacts for a target after releasing.")
+	skipAllTestsFlag = flag.Bool("skip-all-tests", false, "skip all test-only targets and tests for any target (only use if tests were verified elsewhere)")
 )
 
 var (
-	dryRun   bool                    // only perform pre-flight checks, only log to terminal
-	skipTest = make(map[string]bool) // test-only targets that should be skipped
+	dryRun     bool                    // only perform pre-flight checks, only log to terminal
+	skipTest   = make(map[string]bool) // test-only targets that should be skipped
+	skipTarget = make(map[string]bool) // targets that should be skipped
 )
 
 func main() {
@@ -127,6 +130,13 @@ func main() {
 			usage()
 		}
 		skipTest[target] = true
+	}
+	for _, target := range strings.Fields(*skipTargetFlag) {
+		if _, ok := releaseTarget(target, releaseVersion); !ok {
+			fmt.Fprintf(os.Stderr, "target %q in -skip-target=%q is not a known target\n", target, *skipTargetFlag)
+			usage()
+		}
+		skipTarget[target] = true
 	}
 
 	http.DefaultTransport = newLogger(http.DefaultTransport)
@@ -829,6 +839,20 @@ to %s and press enter.
 			w.releaseMu.Unlock()
 			continue
 		}
+		if target.TestOnly && *skipAllTestsFlag {
+			log.Printf("skipping test-only target %s because of -skip-all-tests=%t flag", target.Name, *skipAllTestsFlag)
+			w.releaseMu.Lock()
+			w.ReleaseInfo[target.Name].Msg = fmt.Sprintf("skipped because of -skip-all-tests=%t flag", *skipAllTestsFlag)
+			w.releaseMu.Unlock()
+			continue
+		}
+		if skipTarget[target.Name] {
+			log.Printf("skipping target %s because of -skip-target=%q flag", target.Name, *skipTargetFlag)
+			w.releaseMu.Lock()
+			w.ReleaseInfo[target.Name].Msg = fmt.Sprintf("skipped because of -skip-target=%q flag", *skipTargetFlag)
+			w.releaseMu.Unlock()
+			continue
+		}
 
 		wg.Add(1)
 		target := target
@@ -922,7 +946,7 @@ func (w *Work) buildRelease(target Target) {
 			// The prepare step will run the tests on a commit that has the same
 			// tree (but maybe different message) as the one that the release
 			// step will process, so we can skip tests the second time.
-			if !w.Prepare {
+			if !w.Prepare || *skipAllTestsFlag {
 				args = append(args, "-skip_tests")
 			}
 			releaseOutput, releaseError := w.runner(releaseDir, "GOPATH="+filepath.Join(w.Dir, "gopath")).runErr(args...)
