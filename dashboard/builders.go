@@ -1013,6 +1013,9 @@ type BuildConfig struct {
 	allScriptArgs []string
 
 	testHostConf *HostConfig // override HostConfig for testing, at least for now
+
+	// isRestricted marks if a builder should be restricted to a subset of users.
+	isRestricted bool
 }
 
 // Env returns the environment variables this builder should run with.
@@ -1093,6 +1096,10 @@ func (c *BuildConfig) FilePathJoin(x ...string) string {
 		return strings.Join(x, "\\")
 	}
 	return strings.Join(x, "/")
+}
+
+func (c *BuildConfig) IsRestricted() bool {
+	return c.isRestricted
 }
 
 // DistTestsExecTimeout returns how long the coordinator should wait
