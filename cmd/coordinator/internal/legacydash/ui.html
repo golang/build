@@ -92,7 +92,10 @@
         <th></th>
         <th></th>
     {{range $.Builders}}
-        <th class="result arch{{if (unsupported .)}} unsupported{{end}}{{if knownIssue .}} noise{{end}}" title="{{.}}">{{builderSubheading .}}</th>
+        {{$ki := knownIssue .}}
+        <th class="result arch{{if (unsupported .)}} unsupported{{end}}{{if $ki}} noise{{end}}" title="{{.}}
+          {{- with $ki}}{{"\n\n"}}This builder has a known issue. See go.dev/issue/{{.}}.{{end}}"
+        >{{builderSubheading .}}</th>
     {{end}}
       </tr>
 
@@ -102,7 +105,10 @@
         <th></th>
         <th></th>
     {{range $.Builders}}
-        <th class="result arch{{if (unsupported .)}} unsupported{{end}}{{if knownIssue .}} noise{{end}}" title="{{.}}">{{builderSubheading2 .}}</th>
+        {{$ki := knownIssue .}}
+        <th class="result arch{{if (unsupported .)}} unsupported{{end}}{{if $ki}} noise{{end}}" title="{{.}}
+          {{- with $ki}}{{"\n\n"}}This builder has a known issue. See go.dev/issue/{{.}}.{{end}}"
+        >{{builderSubheading2 .}}</th>
     {{end}}
       </tr>
 
@@ -130,15 +136,16 @@
             <td class="result{{if (unsupported .)}} unsupported{{end}}">
             {{if and (eq $.Repo "go") (isUntested $builderName "go" $.Branch "")}}•{{else}}
               {{with $c.Result $builderName $h}}
+                {{$ki := knownIssue $builderName}}
                 {{if .BuildingURL}}
-                  <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" height=16 width=16 border=0></a>
-                {{else if .OK}}
-                  <a href="/log/{{.LogHash}}" class="ok{{if knownIssue $builderName}} noise{{end}}"
-                    title="Build log of {{$builderName}} on commit {{shortHash $c.Hash}}{{with $h}} (using Go commit {{shortHash .}}){{end}}.">ok</a>
-                {{else if knownIssue $builderName}}
-                  <a href="/log/{{.LogHash}}" class="noise" title="Builder {{$builderName}} has a known issue. See golang.org/issue/{{knownIssue $builderName}}.">fail</a>
+                  <a href="{{.BuildingURL}}"><img src="https://go.dev/favicon.ico" height=16 width=16 border=0></a>
                 {{else}}
-                  <a href="/log/{{.LogHash}}" class="fail">fail</a>
+                  <a href="/log/{{.LogHash}}"
+                    class="{{if .OK}}ok{{else}}fail{{end}}
+                      {{- if $ki}} noise{{end}}"
+                    title="Build log of {{$builderName}} on commit {{shortHash $c.Hash}}{{with $h}} (using Go commit {{shortHash .}}){{end}}.
+                      {{- with $ki}}{{"\n\n"}}This builder has a known issue. See go.dev/issue/{{.}}.{{end}}"
+                  >{{if .OK}}ok{{else}}fail{{end}}</a>
                 {{end}}
               {{else}}
                 &nbsp;
@@ -204,7 +211,10 @@
         <th></th>
         <th></th>
         {{range $builders}}
-          <th class="result arch{{if (unsupported .)}} unsupported{{end}}" title="{{.}}">{{builderSubheading .}}</th>
+          {{$ki := knownIssue .}}
+          <th class="result arch{{if (unsupported .)}} unsupported{{end}}{{if $ki}} noise{{end}}" title="{{.}}
+            {{- with $ki}}{{"\n\n"}}This builder has a known issue. See go.dev/issue/{{.}}.{{end}}"
+          >{{builderSubheading .}}</th>
         {{end}}
       </tr>
       <tr class="subheading2">
@@ -214,7 +224,10 @@
         <th></th>
         <th></th>
         {{range $builders}}
-          <th class="result arch{{if (unsupported .)}} unsupported{{end}}" title="{{.}}">{{builderSubheading2 .}}</th>
+          {{$ki := knownIssue .}}
+          <th class="result arch{{if (unsupported .)}} unsupported{{end}}{{if $ki}} noise{{end}}" title="{{.}}
+            {{- with $ki}}{{"\n\n"}}This builder has a known issue. See go.dev/issue/{{.}}.{{end}}"
+          >{{builderSubheading2 .}}</th>
         {{end}}
       </tr>
     {{range $pkg := .Packages}}
@@ -235,13 +248,16 @@
               •
             {{else}}
               {{with $pkg.Commit.Result $builderName $goHash}}
+                {{$ki := knownIssue $builderName}}
                 {{if .BuildingURL}}
-                  <a href="{{.BuildingURL}}"><img src="https://golang.org/favicon.ico" height=16 width=16 border=0></a>
-                {{else if .OK}}
-                  <a href="/log/{{.LogHash}}" class="ok"
-                    title="Build log of {{$builderName}} on commit {{shortHash $h}} (using Go commit {{shortHash $goHash}}).">ok</a>
+                  <a href="{{.BuildingURL}}"><img src="https://go.dev/favicon.ico" height=16 width=16 border=0></a>
                 {{else}}
-                  <a href="/log/{{.LogHash}}" class="fail">fail</a>
+                  <a href="/log/{{.LogHash}}"
+                    class="{{if .OK}}ok{{else}}fail{{end}}
+                      {{- if $ki}} noise{{end}}"
+                    title="Build log of {{$builderName}} on commit {{shortHash $h}} (using Go commit {{shortHash $goHash}}).
+                      {{- with $ki}}{{"\n\n"}}This builder has a known issue. See go.dev/issue/{{.}}.{{end}}"
+                  >{{if .OK}}ok{{else}}fail{{end}}</a>
                 {{end}}
               {{else}}
                 &nbsp;
