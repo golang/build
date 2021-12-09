@@ -16,11 +16,11 @@ import (
 func TestSessionRenew(t *testing.T) {
 	start := time.Now()
 	s := Session{
-		expires: start,
+		Expires: start,
 	}
-	s.renew(context.Background())
-	if !s.expires.After(start) {
-		t.Errorf("Session.expires = %s; want a time > %s", s.expires, start)
+	s.renew()
+	if !s.Expires.After(start) {
+		t.Errorf("Session.expires = %s; want a time > %s", s.Expires, start)
 	}
 }
 
@@ -37,7 +37,7 @@ func TestSessionIsExpired(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			s := &Session{
-				expires: tc.expires,
+				Expires: tc.expires,
 			}
 			if got := s.isExpired(); got != tc.want {
 				t.Errorf("Session.isExpired() = %t; want %t", got, tc.want)
@@ -52,7 +52,7 @@ func TestSessionPool(t *testing.T) {
 
 	wantInstances := 4
 	for i := 0; i < wantInstances; i++ {
-		sp.AddSession("test-user", "builder-type-x", "host-type-x", &buildlet.FakeClient{})
+		sp.AddSession("accounts.google.com:user-xyz-124", "test-user", "builder-type-x", "host-type-x", &buildlet.FakeClient{})
 	}
 	sp.destroyExpiredSessions(context.Background())
 	if sp.Len() != wantInstances {
@@ -66,16 +66,16 @@ func TestSessionPoolList(t *testing.T) {
 
 	wantCount := 4
 	for i := 0; i < wantCount; i++ {
-		sp.AddSession(fmt.Sprintf("user-%d", i), "builder", "host", &buildlet.FakeClient{})
+		sp.AddSession("accounts.google.com:user-xyz-124", fmt.Sprintf("user-%d", i), "builder", "host", &buildlet.FakeClient{})
 	}
 	got := sp.List()
 	if len(got) != wantCount {
 		t.Errorf("SessionPool.List() = %v; want %d sessions", got, wantCount)
 	}
 	for it, s := range got[:len(got)-1] {
-		if s.name > got[it+1].name {
-			t.Fatalf("SessionPool.List(): Session[%d].name=%s > Session[%d].name=%s; want sorted by name",
-				it, s.name, it+1, got[it+1].name)
+		if s.ID > got[it+1].ID {
+			t.Fatalf("SessionPool.List(): SessionInstance[%d].ID=%s > SessionInstance[%d].ID=%s; want sorted by name",
+				it, s.ID, it+1, got[it+1].ID)
 		}
 	}
 }
@@ -86,31 +86,12 @@ func TestSessionPoolDestroySession(t *testing.T) {
 
 	var sn []string
 	for i := 0; i < 4; i++ {
-		name := sp.AddSession(fmt.Sprintf("user-%d", i), "builder", "host", &buildlet.FakeClient{})
+		name := sp.AddSession("accounts.google.com:user-xyz-124", fmt.Sprintf("user-%d", i), "builder", "host", &buildlet.FakeClient{})
 		sn = append(sn, name)
 	}
 	for _, name := range sn {
 		if err := sp.DestroySession(name); err != nil {
 			t.Errorf("SessionPool.DestroySession(%q) = %s; want no error", name, err)
 		}
-	}
-}
-
-func TestSessionPoolUserFromGomoteInstanceName(t *testing.T) {
-	testCases := []struct {
-		desc         string
-		buildletName string
-		user         string
-	}{
-		{"mutable", "user-bradfitz-linux-amd64-0", "bradfitz"},
-		{"non-mutable", "mutable-user-bradfitz-darwin-amd64-10_8-0", "bradfitz"},
-		{"invalid", "yipeee", ""},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
-			if got := userFromGomoteInstanceName(tc.buildletName); got != tc.user {
-				t.Errorf("userFromGomoteInstanceName(tc.buildletName) = %q; want %q", got, tc.user)
-			}
-		})
 	}
 }

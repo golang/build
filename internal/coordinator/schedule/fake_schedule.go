@@ -9,23 +9,36 @@ package schedule
 
 import (
 	"context"
+	"sync"
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/types"
 )
 
 // Fake is a fake scheduler.
-type Fake struct{}
+type Fake struct {
+	mu    sync.Mutex
+	state SchedulerState
+}
 
 // NewFake returns a fake scheduler.
-func NewFake() *Fake { return &Fake{} }
+func NewFake() *Fake {
+	return &Fake{
+		state: SchedulerState{
+			HostTypes: []SchedulerHostState{},
+		},
+	}
+}
 
 // State returns the state of the fake scheduler.
-func (f *Fake) State() (st SchedulerState) { return SchedulerState{} }
+func (f *Fake) State() (st SchedulerState) { return f.state }
 
 // WaiterState is the waiter state of the fake scheduler.
 func (f *Fake) WaiterState(waiter *SchedItem) (ws types.BuildletWaitStatus) {
-	return types.BuildletWaitStatus{}
+	return types.BuildletWaitStatus{
+		Message: "buildlet created",
+		Ahead:   0,
+	}
 }
 
 // GetBuildlet returns a fake buildlet client for the requested buildlet.

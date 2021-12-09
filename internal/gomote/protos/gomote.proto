@@ -13,7 +13,7 @@ service GomoteService {
   // Authenticate provides authentication information without any additonal action.
   rpc Authenticate (AuthenticateRequest) returns (AuthenticateResponse) {}
   // CreateInstance creates a gomote instance.
-  rpc CreateInstance (CreateInstanceRequest) returns (CreateInstanceResponse) {}
+  rpc CreateInstance (CreateInstanceRequest) returns (stream CreateInstanceResponse) {}
   // DestroyInstance destroys a gomote instance.
   rpc DestroyInstance (DestroyInstanceRequest) returns (DestroyInstanceResponse) {}
   // ExecuteCommand executes a command on the gomote instance.
@@ -41,10 +41,25 @@ message AuthenticateRequest {}
 message AuthenticateResponse {}
 
 // CreateInstanceRequest specifies the data needed to create a gomote instance.
-message CreateInstanceRequest {}
+message CreateInstanceRequest {
+  string builder_type = 1;
+}
 
 // CreateInstanceResponse contains data about a created gomote instance.
-message CreateInstanceResponse {}
+message CreateInstanceResponse {
+  // Instance information for the requested instance.
+  Instance instance = 1;
+  enum Status {
+    UNKNOWN = 0;
+    WAITING = 1;
+    COMPLETE = 2;
+  }
+  // The status for the requested create.
+  Status status = 2;
+  // Waiters ahead is the count of how many instances are being scheduled for
+  // creation before the current instance creation request.
+  int64 waiters_ahead = 3;
+}
 
 // DestroyInstanceRequest specifies the data needed to destroy a gomote instance.
 message DestroyInstanceRequest {}
@@ -57,6 +72,19 @@ message ExecuteCommandRequest {}
 
 // ExecuteCommandResponse contains data about the executed command.
 message ExecuteCommandResponse {}
+
+// Instance contains descriptive information about a gomote instance.
+message Instance {
+  // The unique identifier for a gomote instance.
+  string gomote_id = 1;
+  // Builder type for the gomote instance.
+  string builder_type = 2;
+  // Host type for the gomote instance.
+  string host_type = 3;
+  // The timestamp for when the builder instance will expire. It is
+  // reprsented in Unix epoch time format.
+  int64 expires = 4;
+}
 
 // InstanceAliveRequest specifies the data needed to check the liveness of a gomote instance.
 message InstanceAliveRequest {}

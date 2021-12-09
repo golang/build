@@ -21,7 +21,7 @@ type GomoteServiceClient interface {
 	// Authenticate provides authentication information without any additonal action.
 	Authenticate(ctx context.Context, in *AuthenticateRequest, opts ...grpc.CallOption) (*AuthenticateResponse, error)
 	// CreateInstance creates a gomote instance.
-	CreateInstance(ctx context.Context, in *CreateInstanceRequest, opts ...grpc.CallOption) (*CreateInstanceResponse, error)
+	CreateInstance(ctx context.Context, in *CreateInstanceRequest, opts ...grpc.CallOption) (GomoteService_CreateInstanceClient, error)
 	// DestroyInstance destroys a gomote instance.
 	DestroyInstance(ctx context.Context, in *DestroyInstanceRequest, opts ...grpc.CallOption) (*DestroyInstanceResponse, error)
 	// ExecuteCommand executes a command on the gomote instance.
@@ -59,13 +59,36 @@ func (c *gomoteServiceClient) Authenticate(ctx context.Context, in *Authenticate
 	return out, nil
 }
 
-func (c *gomoteServiceClient) CreateInstance(ctx context.Context, in *CreateInstanceRequest, opts ...grpc.CallOption) (*CreateInstanceResponse, error) {
-	out := new(CreateInstanceResponse)
-	err := c.cc.Invoke(ctx, "/protos.GomoteService/CreateInstance", in, out, opts...)
+func (c *gomoteServiceClient) CreateInstance(ctx context.Context, in *CreateInstanceRequest, opts ...grpc.CallOption) (GomoteService_CreateInstanceClient, error) {
+	stream, err := c.cc.NewStream(ctx, &GomoteService_ServiceDesc.Streams[0], "/protos.GomoteService/CreateInstance", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &gomoteServiceCreateInstanceClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type GomoteService_CreateInstanceClient interface {
+	Recv() (*CreateInstanceResponse, error)
+	grpc.ClientStream
+}
+
+type gomoteServiceCreateInstanceClient struct {
+	grpc.ClientStream
+}
+
+func (x *gomoteServiceCreateInstanceClient) Recv() (*CreateInstanceResponse, error) {
+	m := new(CreateInstanceResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (c *gomoteServiceClient) DestroyInstance(ctx context.Context, in *DestroyInstanceRequest, opts ...grpc.CallOption) (*DestroyInstanceResponse, error) {
@@ -78,7 +101,7 @@ func (c *gomoteServiceClient) DestroyInstance(ctx context.Context, in *DestroyIn
 }
 
 func (c *gomoteServiceClient) ExecuteCommand(ctx context.Context, in *ExecuteCommandRequest, opts ...grpc.CallOption) (GomoteService_ExecuteCommandClient, error) {
-	stream, err := c.cc.NewStream(ctx, &GomoteService_ServiceDesc.Streams[0], "/protos.GomoteService/ExecuteCommand", opts...)
+	stream, err := c.cc.NewStream(ctx, &GomoteService_ServiceDesc.Streams[1], "/protos.GomoteService/ExecuteCommand", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +160,7 @@ func (c *gomoteServiceClient) ListInstances(ctx context.Context, in *ListInstanc
 }
 
 func (c *gomoteServiceClient) ReadTGZ(ctx context.Context, in *ReadTGZRequest, opts ...grpc.CallOption) (GomoteService_ReadTGZClient, error) {
-	stream, err := c.cc.NewStream(ctx, &GomoteService_ServiceDesc.Streams[1], "/protos.GomoteService/ReadTGZ", opts...)
+	stream, err := c.cc.NewStream(ctx, &GomoteService_ServiceDesc.Streams[2], "/protos.GomoteService/ReadTGZ", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +210,7 @@ func (c *gomoteServiceClient) RetrieveSSHCredentials(ctx context.Context, in *Re
 }
 
 func (c *gomoteServiceClient) WriteTGZ(ctx context.Context, opts ...grpc.CallOption) (GomoteService_WriteTGZClient, error) {
-	stream, err := c.cc.NewStream(ctx, &GomoteService_ServiceDesc.Streams[2], "/protos.GomoteService/WriteTGZ", opts...)
+	stream, err := c.cc.NewStream(ctx, &GomoteService_ServiceDesc.Streams[3], "/protos.GomoteService/WriteTGZ", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +250,7 @@ type GomoteServiceServer interface {
 	// Authenticate provides authentication information without any additonal action.
 	Authenticate(context.Context, *AuthenticateRequest) (*AuthenticateResponse, error)
 	// CreateInstance creates a gomote instance.
-	CreateInstance(context.Context, *CreateInstanceRequest) (*CreateInstanceResponse, error)
+	CreateInstance(*CreateInstanceRequest, GomoteService_CreateInstanceServer) error
 	// DestroyInstance destroys a gomote instance.
 	DestroyInstance(context.Context, *DestroyInstanceRequest) (*DestroyInstanceResponse, error)
 	// ExecuteCommand executes a command on the gomote instance.
@@ -256,8 +279,8 @@ type UnimplementedGomoteServiceServer struct {
 func (UnimplementedGomoteServiceServer) Authenticate(context.Context, *AuthenticateRequest) (*AuthenticateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Authenticate not implemented")
 }
-func (UnimplementedGomoteServiceServer) CreateInstance(context.Context, *CreateInstanceRequest) (*CreateInstanceResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CreateInstance not implemented")
+func (UnimplementedGomoteServiceServer) CreateInstance(*CreateInstanceRequest, GomoteService_CreateInstanceServer) error {
+	return status.Errorf(codes.Unimplemented, "method CreateInstance not implemented")
 }
 func (UnimplementedGomoteServiceServer) DestroyInstance(context.Context, *DestroyInstanceRequest) (*DestroyInstanceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DestroyInstance not implemented")
@@ -317,22 +340,25 @@ func _GomoteService_Authenticate_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
-func _GomoteService_CreateInstance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateInstanceRequest)
-	if err := dec(in); err != nil {
-		return nil, err
+func _GomoteService_CreateInstance_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(CreateInstanceRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	if interceptor == nil {
-		return srv.(GomoteServiceServer).CreateInstance(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/protos.GomoteService/CreateInstance",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GomoteServiceServer).CreateInstance(ctx, req.(*CreateInstanceRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return srv.(GomoteServiceServer).CreateInstance(m, &gomoteServiceCreateInstanceServer{stream})
+}
+
+type GomoteService_CreateInstanceServer interface {
+	Send(*CreateInstanceResponse) error
+	grpc.ServerStream
+}
+
+type gomoteServiceCreateInstanceServer struct {
+	grpc.ServerStream
+}
+
+func (x *gomoteServiceCreateInstanceServer) Send(m *CreateInstanceResponse) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 func _GomoteService_DestroyInstance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -523,10 +549,6 @@ var GomoteService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _GomoteService_Authenticate_Handler,
 		},
 		{
-			MethodName: "CreateInstance",
-			Handler:    _GomoteService_CreateInstance_Handler,
-		},
-		{
 			MethodName: "DestroyInstance",
 			Handler:    _GomoteService_DestroyInstance_Handler,
 		},
@@ -552,6 +574,11 @@ var GomoteService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "CreateInstance",
+			Handler:       _GomoteService_CreateInstance_Handler,
+			ServerStreams: true,
+		},
 		{
 			StreamName:    "ExecuteCommand",
 			Handler:       _GomoteService_ExecuteCommand_Handler,

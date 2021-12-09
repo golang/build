@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -22,58 +21,27 @@ const (
 	remoteBuildletCleanInterval = time.Minute
 )
 
-// Session stores the metadata for a remote buildlet session.
+// Session stores the metadata for a remote buildlet Session.
 type Session struct {
-	mu sync.Mutex
-
-	builderType string // default builder config to use if not overwritten
+	BuilderType string // default builder config to use if not overwritten
+	Expires     time.Time
+	HostType    string
+	ID          string // unique identifier for instance "user-bradfitz-linux-amd64-0"
+	OwnerID     string // identity aware proxy user id: "accounts.google.com:userIDvalue"
 	buildlet    buildlet.Client
 	created     time.Time
-	expires     time.Time
-	hostType    string
-	name        string // dup of key
-	user        string // "user-foo" build key
-}
-
-// KeepAlive will renew the remote buildlet session by extending the expiration value. It will
-// periodically extend the value until the provided context has been cancelled.
-func (s *Session) KeepAlive(ctx context.Context) {
-	go internal.PeriodicallyDo(ctx, time.Minute, func(ctx context.Context, _ time.Time) {
-		s.renew(ctx)
-	})
 }
 
 // renew extends the expiration timestamp for a session.
-func (s *Session) renew(ctx context.Context) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.expires = time.Now().Add(remoteBuildletIdleTimeout)
+// The SessionPool lock should be held before calling.
+func (s *Session) renew() {
+	s.Expires = time.Now().Add(remoteBuildletIdleTimeout)
 }
 
 // isExpired determines if the remote buildlet session has expired.
+// The SessionPool lock should be held before calling.
 func (s *Session) isExpired() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// check that the expire timestamp has been set and that it has expired.
-	return !s.expires.IsZero() && s.expires.Before(time.Now())
-}
-
-// Buildlet returns the buildlet client associated with the Session.
-func (s *Session) Buildlet() buildlet.Client {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.buildlet
-}
-
-// Name returns the buildlet's name.
-func (s *Session) Name() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.name
+	return !s.Expires.IsZero() && s.Expires.Before(time.Now())
 }
 
 // SessionPool contains active remote buildlet sessions.
@@ -106,22 +74,22 @@ func NewSessionPool(ctx context.Context) *SessionPool {
 }
 
 // AddSession adds the provided session to the session pool.
-func (sp *SessionPool) AddSession(user, builderType, hostType string, bc buildlet.Client) (name string) {
+func (sp *SessionPool) AddSession(ownerID, username, builderType, hostType string, bc buildlet.Client) (name string) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 
 	for n := 0; ; n++ {
-		name = fmt.Sprintf("%s-%s-%d", user, builderType, n)
+		name = fmt.Sprintf("%s-%s-%d", username, builderType, n)
 		if _, ok := sp.m[name]; !ok {
 			now := time.Now()
 			sp.m[name] = &Session{
-				builderType: builderType,
+				BuilderType: builderType,
 				buildlet:    bc,
 				created:     now,
-				expires:     now.Add(remoteBuildletIdleTimeout),
-				hostType:    hostType,
-				name:        name,
-				user:        user,
+				Expires:     now.Add(remoteBuildletIdleTimeout),
+				HostType:    hostType,
+				ID:          name,
+				OwnerID:     ownerID,
 			}
 			return name
 		}
@@ -186,16 +154,22 @@ func (sp *SessionPool) Close() {
 	})
 }
 
-// List returns a list of all active sessions sorted by session name.
+// List returns a list of all active sessions sorted by session ID.
 func (sp *SessionPool) List() []*Session {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
 	var ss []*Session
 	for _, s := range sp.m {
-		ss = append(ss, s)
+		ss = append(ss, &Session{
+			BuilderType: s.BuilderType,
+			Expires:     s.Expires,
+			HostType:    s.HostType,
+			ID:          s.ID,
+			OwnerID:     s.OwnerID,
+		})
 	}
-	sort.Slice(ss, func(i, j int) bool { return ss[i].name < ss[j].name })
+	sort.Slice(ss, func(i, j int) bool { return ss[i].ID < ss[j].ID })
 	return ss
 }
 
@@ -207,41 +181,50 @@ func (sp *SessionPool) Len() int {
 	return len(sp.m)
 }
 
-// Session retrieves a session from the pool.
+// Session retrieves information about the instance associated with a session from the pool.
 func (sp *SessionPool) Session(buildletName string) (*Session, error) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 
-	if rb, ok := sp.m[buildletName]; ok {
-		rb.expires = time.Now().Add(remoteBuildletIdleTimeout)
-		return rb, nil
+	if s, ok := sp.m[buildletName]; ok {
+		s.renew()
+		return &Session{
+			BuilderType: s.BuilderType,
+			Expires:     s.Expires,
+			HostType:    s.HostType,
+			ID:          s.ID,
+			OwnerID:     s.OwnerID,
+		}, nil
 	}
 	return nil, fmt.Errorf("remote buildlet does not exist=%s", buildletName)
 }
 
-// userFromGomoteInstanceName returns the username part of a gomote
-// remote instance name.
-//
-// The instance name is of two forms. The normal form is:
-//
-//     user-bradfitz-linux-amd64-0
-//
-// The overloaded form to convey that the user accepts responsibility
-// for changes to the underlying host is to prefix the same instance
-// name with the string "mutable-", such as:
-//
-//     mutable-user-bradfitz-darwin-amd64-10_8-0
-//
-// The mutable part is ignored by this function.
-func userFromGomoteInstanceName(name string) string {
-	name = strings.TrimPrefix(name, "mutable-")
-	if !strings.HasPrefix(name, "user-") {
-		return ""
+// Buildlet returns the buildlet client associated with the Session.
+func (sp *SessionPool) BuildletClient(buildletName string) (buildlet.Client, error) {
+	sp.mu.RLock()
+	defer sp.mu.RUnlock()
+
+	s, ok := sp.m[buildletName]
+	if !ok {
+		return nil, fmt.Errorf("remote buildlet does not exist=%s", buildletName)
 	}
-	user := name[len("user-"):]
-	hyphen := strings.IndexByte(user, '-')
-	if hyphen == -1 {
-		return ""
+	return s.buildlet, nil
+}
+
+// KeepAlive will renew the remote buildlet session by extending the expiration value. It will
+// periodically extend the value until the provided context has been cancelled.
+func (sp *SessionPool) KeepAlive(ctx context.Context, buildletName string) error {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+
+	s, ok := sp.m[buildletName]
+	if !ok {
+		return fmt.Errorf("remote buildlet does not exist=%s", buildletName)
 	}
-	return user[:hyphen]
+	go internal.PeriodicallyDo(ctx, time.Minute, func(ctx context.Context, _ time.Time) {
+		sp.mu.Lock()
+		s.renew()
+		sp.mu.Unlock()
+	})
+	return nil
 }
