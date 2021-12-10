@@ -10,12 +10,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -119,31 +118,27 @@ type jwtTokenSource struct {
 	refresh  *oauth2.Token
 }
 
-// Exchange a refresh token for a JWT that works with IAP. As of writing, there
+// Token exchanges a refresh token for a JWT that works with IAP. As of writing, there
 // isn't anything to do this in the oauth2 library or google.golang.org/api/idtoken.
 func (s *jwtTokenSource) Token() (*oauth2.Token, error) {
-	v := url.Values{}
-	v.Set("client_id", s.conf.ClientID)
-	v.Set("client_secret", s.conf.ClientSecret)
-	v.Set("refresh_token", s.refresh.RefreshToken)
-	v.Set("grant_type", "refresh_token")
-	v.Set("audience", s.audience)
-	req, err := http.NewRequest("POST", s.conf.Endpoint.TokenURL, strings.NewReader(v.Encode()))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.PostForm(s.conf.Endpoint.TokenURL, url.Values{
+		"client_id":     []string{s.conf.ClientID},
+		"client_secret": []string{s.conf.ClientSecret},
+		"refresh_token": []string{s.refresh.RefreshToken},
+		"grant_type":    []string{"refresh_token"},
+		"audience":      []string{s.audience},
+	})
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		return nil, fmt.Errorf("IAP token exchange failed: status %v, body %q", resp.Status, body)
+	}
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("IAP token exchange failed: status %v, body %q", resp.Status, body)
 	}
 	var token jwtTokenJSON
 	if err := json.Unmarshal(body, &token); err != nil {
