@@ -26,6 +26,8 @@ import (
 	"strings"
 )
 
+// New comment.
+
 func main() {
 	root, err := build.Import("golang.org/x/build", "", build.FindOnly)
 	if err != nil {
