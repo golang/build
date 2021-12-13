@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.13 && (linux || darwin)
-// +build go1.13
+//go:build linux || darwin
 // +build linux darwin
 
 // Package dashboard contains the implementation of the build dashboard for the Coordinator.

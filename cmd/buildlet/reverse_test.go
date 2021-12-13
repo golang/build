@@ -3,8 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Same requirements as internal/coordinator/pool/reverse.go.
-//go:build go1.13 && (linux || darwin)
-// +build go1.13
+//go:build linux || darwin
 // +build linux darwin
 
 package main
