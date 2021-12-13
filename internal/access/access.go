@@ -34,8 +34,12 @@ const (
 // IAPFields contains the values for the headers retrieved from Identity Aware
 // Proxy.
 type IAPFields struct {
+	// Email contains the user's email address
+	// For example, "accounts.google.com:example@gmail.com"
 	Email string
-	ID    string
+	// ID contains a unique identifier for the user
+	// For example, "accounts.google.com:userIDvalue"
+	ID string
 }
 
 // IAPFromContext retrieves the IAPFields stored in the context if it exists.
@@ -96,7 +100,12 @@ func contextWithIAPMD(ctx context.Context, md metadata.MD) (context.Context, err
 	if iap.ID, err = retrieveFn(md, iapHeaderID); err != nil {
 		return ctx, fmt.Errorf("unable to retrieve metadata field: %s", iapHeaderID)
 	}
-	return context.WithValue(ctx, contextIAP, iap), nil
+	return ContextWithIAP(ctx, iap), nil
+}
+
+// ContextWithIAP adds the iap fields to the context.
+func ContextWithIAP(ctx context.Context, iap IAPFields) context.Context {
+	return context.WithValue(ctx, contextIAP, iap)
 }
 
 // RequireIAPAuthUnaryInterceptor creates an authentication interceptor for a GRPC
@@ -131,4 +140,29 @@ func IAPAudienceGCE(projectNumber int64, serviceID string) string {
 // https://cloud.google.com/iap/docs/signed-headers-howto
 func IAPAudienceAppEngine(projectNumber int64, projectID string) string {
 	return fmt.Sprintf("/projects/%d/apps/%s", projectNumber, projectID)
+}
+
+// FakeContextWithOutgoingIAPAuth adds the iap fields to the metadata of an outgoing GRPC request and
+// should only be used for testing.
+func FakeContextWithOutgoingIAPAuth(ctx context.Context, iap IAPFields) context.Context {
+	md := metadata.New(map[string]string{
+		iapHeaderEmail: iap.Email,
+		iapHeaderID:    iap.ID,
+		iapHeaderJWT:   "test-jwt",
+	})
+	return metadata.NewOutgoingContext(ctx, md)
+}
+
+// FakeIAPAuthFunc provides a fake IAP authentication validation and should only be used for testing.
+func FakeIAPAuthFunc() grpcauth.AuthFunc {
+	return iapAuthFunc("TESTING", func(ctx context.Context, token, audiance string) (*idtoken.Payload, error) { return nil, nil })
+}
+
+// FakeIAPAuthInterceptorOptions provides the GRPC server options for fake IAP authentication
+// and should only be used for testing.
+func FakeIAPAuthInterceptorOptions() []grpc.ServerOption {
+	return []grpc.ServerOption{
+		grpc.UnaryInterceptor(grpcauth.UnaryServerInterceptor(FakeIAPAuthFunc())),
+		grpc.StreamInterceptor(grpcauth.StreamServerInterceptor(FakeIAPAuthFunc())),
+	}
 }
