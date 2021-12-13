@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha1"
-	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -19,7 +18,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -39,11 +37,12 @@ import (
 )
 
 var (
-	workdir         = flag.String("workdir", defaultWorkdir(), "where git repos and temporary worktrees are created")
-	githubTokenFile = flag.String("github-token-file", filepath.Join(defaultWorkdir(), "github-token"), "file to load GitHub token from; should only contain the token text")
-	gerritTokenFile = flag.String("gerrit-token-file", filepath.Join(defaultWorkdir(), "gerrit-token"), "file to load Gerrit token from; should be of form <git-email>:<token>")
+	workdir         = flag.String("workdir", cacheDir(), "where git repos and temporary worktrees are created")
+	githubTokenFile = flag.String("github-token-file", filepath.Join(configDir(), "github-token"), "file to load GitHub token from; should only contain the token text")
+	gerritTokenFile = flag.String("gerrit-token-file", filepath.Join(configDir(), "gerrit-token"), "file to load Gerrit token from; should be of form <git-email>:<token>")
 	gitcookiesFile  = flag.String("gitcookies-file", "", "if non-empty, write a git http cookiefile to this location using secret manager")
 	dryRun          = flag.Bool("dry-run", false, "print out mutating actions but don’t perform any")
+	singlePR        = flag.String("single-pr", "", "process only this PR, specified in GitHub shortlink format, e.g. golang/go#1")
 )
 
 // TODO(amedee): set to this value until the SLO numbers are published
@@ -77,21 +76,20 @@ func main() {
 	log.Fatalln(https.ListenAndServe(ctx, http.HandlerFunc(handleIndex)))
 }
 
-func defaultWorkdir() string {
-	// TODO(andybons): Use os.UserCacheDir (issue 22536) when it's available.
-	return filepath.Join(home(), ".gerritbot")
+func configDir() string {
+	cd, err := os.UserConfigDir()
+	if err != nil {
+		log.Fatalf("UserConfigDir: %v", err)
+	}
+	return filepath.Join(cd, "gerritbot")
 }
 
-func home() string {
-	h := os.Getenv("HOME")
-	if h != "" {
-		return h
-	}
-	u, err := user.Current()
+func cacheDir() string {
+	cd, err := os.UserCacheDir()
 	if err != nil {
-		log.Fatalf("user.Current(): %v", err)
+		log.Fatalf("UserCacheDir: %v", err)
 	}
-	return u.HomeDir
+	return filepath.Join(cd, "gerritbot")
 }
 
 func writeCookiesFile(sc *secret.Client) error {
@@ -325,9 +323,12 @@ func (b *bot) checkPullRequests() {
 		}
 		return ghr.ForeachIssue(func(issue *maintner.GitHubIssue) error {
 			ctx := context.Background()
+			shortLink := githubShortLink(id.Owner, id.Repo, int(issue.Number))
+			if *singlePR != "" && shortLink != *singlePR {
+				return nil
+			}
 			if issue.PullRequest && issue.Closed {
 				// Clean up any reference of closed CLs within pendingCLs.
-				shortLink := githubShortLink(id.Owner, id.Repo, int(issue.Number))
 				delete(b.pendingCLs, shortLink)
 				if cl, ok := b.importedPRs[shortLink]; ok {
 					// The CL associated with the PR is still open since it's
@@ -472,10 +473,6 @@ func (b *bot) gerritMessageAuthorName(ctx context.Context, m *maintner.GerritMes
 
 // b.RWMutex must be Lock'ed.
 func (b *bot) syncGerritCommentsToGitHub(ctx context.Context, pr *github.PullRequest, cl *maintner.GerritCL) error {
-	if *dryRun {
-		log.Printf("[dry run] would sync Gerrit comments to %v", prShortLink(pr))
-		return nil
-	}
 	repo := pr.GetBase().GetRepo()
 	for _, m := range cl.Messages {
 		id, err := gerritMessageAuthorID(m)
@@ -489,15 +486,15 @@ func (b *bot) syncGerritCommentsToGitHub(ctx context.Context, pr *github.PullReq
 		if err != nil {
 			return fmt.Errorf("b.gerritMessageAuthorName: %v", err)
 		}
-		msg := fmt.Sprintf(`Message from %s:
-
+		header := fmt.Sprintf("Message from %s:\n", authorName)
+		msg := fmt.Sprintf(`
 %s
 
 ---
 Please don’t reply on this GitHub thread. Visit [golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d#message-%s).
 After addressing review feedback, remember to [publish your drafts](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it)!`,
-			authorName, m.Message, cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
-		if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg); err != nil {
+			m.Message, cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
+		if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), header, msg); err != nil {
 			return fmt.Errorf("postGitHubMessageNoDup: %v", err)
 		}
 	}
@@ -546,7 +543,7 @@ func (b *bot) closePR(ctx context.Context, pr *github.PullRequest, ch *gerrit.Ch
 	}
 
 	repo := pr.GetBase().GetRepo()
-	if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg); err != nil {
+	if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg); err != nil {
 		return fmt.Errorf("postGitHubMessageNoDup: %v", err)
 	}
 
@@ -727,7 +724,7 @@ Please visit %s to see it.
 Tip: You can toggle comments from me using the %s slash command (e.g. %s)
 See the [Wiki page](https://golang.org/wiki/GerritBot) for more info`,
 		pr.Head.GetSHA(), changeURL, "`comments`", "`/comments off`")
-	return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), msg)
+	return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg)
 }
 
 var changeIdentRE = regexp.MustCompile(`(?m)^Change-Id: (I[0-9a-fA-F]{40})\n?`)
@@ -848,13 +845,10 @@ func logGitHubRateLimits(resp *github.Response) {
 }
 
 // postGitHubMessageNoDup ensures that the message being posted on an issue does not already have the
-// same exact content. These comments can be toggled by the user via a slash command /comments {on|off}
-// at the beginning of a message.
+// same exact content, except for a header which is ignored. These comments can be toggled by the user
+// via a slash command /comments {on|off} at the beginning of a message.
 // TODO(andybons): This logic is shared by gopherbot. Consolidate it somewhere.
-func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issueNum int, msg string) error {
-	if *dryRun {
-		return errors.New("attempted write operation in dry-run mode")
-	}
+func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issueNum int, header, msg string) error {
 	gr := b.corpus.GitHub().Repo(org, repo)
 	if gr == nil {
 		return fmt.Errorf("unknown github repo %s/%s", org, repo)
@@ -928,8 +922,12 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 	if noComment {
 		return nil
 	}
-	_, resp, err = b.githubClient.Issues.CreateComment(ctx, org, repo, int(issueNum), &github.IssueComment{
-		Body: github.String(msg),
+	if *dryRun {
+		log.Printf("[dry run] would post comment to %v/%v#%v: %q", org, repo, issueNum, msg)
+		return nil
+	}
+	_, resp, err = b.githubClient.Issues.CreateComment(ctx, org, repo, issueNum, &github.IssueComment{
+		Body: github.String(header + msg),
 	})
 	if err != nil {
 		return err
