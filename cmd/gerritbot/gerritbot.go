@@ -27,6 +27,7 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"github.com/google/go-github/github"
+	"github.com/gregjones/httpcache"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/secret"
@@ -116,9 +117,18 @@ func githubClient(sc *secret.Client) (*github.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
-	tc := oauth2.NewClient(context.Background(), ts)
-	return github.NewClient(tc), nil
+	oauthTransport := &oauth2.Transport{
+		Source: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token}),
+	}
+	cachingTransport := &httpcache.Transport{
+		Transport:           oauthTransport,
+		Cache:               httpcache.NewMemoryCache(),
+		MarkCachedResponses: true,
+	}
+	httpClient := &http.Client{
+		Transport: cachingTransport,
+	}
+	return github.NewClient(httpClient), nil
 }
 
 func githubToken(sc *secret.Client) (string, error) {
@@ -212,11 +222,6 @@ func genProjectWhitelist() map[string]bool {
 	return m
 }
 
-type cachedPullRequest struct {
-	pr   *github.PullRequest
-	etag string
-}
-
 type bot struct {
 	githubClient *github.Client
 	gerritClient *gerrit.Client
@@ -224,14 +229,8 @@ type bot struct {
 	sync.RWMutex // Protects all fields below
 	corpus       *maintner.Corpus
 
-	// importedPRs and cachedPRs should share the same method for determining keys
-	// given the same Pull Request, as the presence of a key in the former determined
-	// whether it should remain in the latter.
+	// PRs and their corresponding Gerrit CLs.
 	importedPRs map[string]*maintner.GerritCL // GitHub owner/repo#n -> Gerrit CL
-
-	// Pull Requests that have been cached locally since maintner doesn’t support
-	// PRs and this is used to make conditional requests to the API.
-	cachedPRs map[string]*cachedPullRequest // GitHub owner/repo#n -> GitHub Pull Request
 
 	// CLs that have been created/updated on Gerrit for GitHub PRs but are not yet
 	// reflected in the maintner corpus yet.
@@ -247,7 +246,6 @@ func newBot(githubClient *github.Client, gerritClient *gerrit.Client) *bot {
 		gerritClient:         gerritClient,
 		importedPRs:          map[string]*maintner.GerritCL{},
 		pendingCLs:           map[string]string{},
-		cachedPRs:            map[string]*cachedPullRequest{},
 		cachedGerritAccounts: map[int]*gerrit.AccountInfo{},
 	}
 }
@@ -309,13 +307,6 @@ func (b *bot) checkPullRequests() {
 		})
 	})
 
-	// Remove any cached PRs that are no longer being checked.
-	for k := range b.cachedPRs {
-		if b.importedPRs[k] == nil {
-			delete(b.cachedPRs, k)
-		}
-	}
-
 	b.corpus.GitHub().ForeachRepo(func(ghr *maintner.GitHubRepo) error {
 		id := ghr.ID()
 		if id.Owner != "golang" || !gerritProjectWhitelist[id.Repo] {
@@ -339,12 +330,20 @@ func (b *bot) checkPullRequests() {
 				}
 				return nil
 			}
-			if issue.Closed || !issue.PullRequest || !issue.HasLabel("cla: yes") {
+			if issue.Closed || !issue.PullRequest {
 				return nil
 			}
 			pr, err := b.getFullPR(ctx, id.Owner, id.Repo, int(issue.Number))
 			if err != nil {
 				log.Printf("getFullPR(ctx, %q, %q, %d): %v", id.Owner, id.Repo, issue.Number, err)
+				return nil
+			}
+			approved, err := b.claApproved(ctx, id, pr)
+			if err != nil {
+				log.Printf("checking CLA approval: %v", err)
+				return nil
+			}
+			if !approved {
 				return nil
 			}
 			if err := b.processPullRequest(ctx, pr); err != nil {
@@ -354,6 +353,31 @@ func (b *bot) checkPullRequests() {
 			return nil
 		})
 	})
+}
+
+// claApproved reports whether the latest head commit of the given PR in repo
+// has been approved by the Google CLA checker.
+func (b *bot) claApproved(ctx context.Context, repo maintner.GitHubRepoID, pr *github.PullRequest) (bool, error) {
+	if pr.GetHead().GetSHA() == "" {
+		// Paranoia check. This should never happen.
+		return false, fmt.Errorf("no head SHA for PR %v %v", repo, pr.GetNumber())
+	}
+	runs, _, err := b.githubClient.Checks.ListCheckRunsForRef(ctx, repo.Owner, repo.Repo, pr.GetHead().GetSHA(), &github.ListCheckRunsOptions{
+		CheckName: github.String("cla/google"),
+		Status:    github.String("completed"),
+		Filter:    github.String("latest"),
+		// TODO(heschi): filter for App ID once supported by go-github
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, run := range runs.CheckRuns {
+		if run.GetApp().GetID() != 42202 {
+			continue
+		}
+		return run.GetConclusion() == "success", nil
+	}
+	return false, nil
 }
 
 // prShortLink returns text referencing an Issue or Pull Request that will be
@@ -798,42 +822,12 @@ func reposRoot() string {
 }
 
 // getFullPR retrieves a Pull Request via GitHub’s API.
-// b.RWMutex must be Lock'ed.
 func (b *bot) getFullPR(ctx context.Context, owner, repo string, number int) (*github.PullRequest, error) {
-	shortLink := githubShortLink(owner, repo, number)
-	cpr := b.cachedPRs[shortLink]
-	var etag string
-	if cpr != nil {
-		etag = cpr.etag
-		log.Printf("Retrieving PR %s from GitHub using Etag %q ...", shortLink, etag)
-	} else {
-		log.Printf("Retrieving PR %s from GitHub without an Etag ...", shortLink)
-	}
-
-	u := fmt.Sprintf("repos/%v/%v/pulls/%d", owner, repo, number)
-	req, err := b.githubClient.NewRequest(http.MethodGet, u, nil)
+	pr, resp, err := b.githubClient.PullRequests.Get(ctx, owner, repo, number)
 	if err != nil {
-		return nil, fmt.Errorf("b.githubClient.NewRequest(%q, %q, nil): %v", http.MethodGet, u, err)
-	}
-	if etag != "" {
-		req.Header.Add("If-None-Match", etag)
-	}
-
-	pr := new(github.PullRequest)
-	resp, err := b.githubClient.Do(ctx, req, pr)
-	logGitHubRateLimits(resp)
-	if err != nil {
-		if resp != nil && resp.StatusCode == http.StatusNotModified {
-			log.Println("Returning cached version of", shortLink)
-			return cpr.pr, nil
-		}
 		return nil, fmt.Errorf("b.githubClient.Do: %v", err)
 	}
-
-	b.cachedPRs[shortLink] = &cachedPullRequest{
-		etag: resp.Header.Get("Etag"),
-		pr:   pr,
-	}
+	logGitHubRateLimits(resp)
 	return pr, nil
 }
 
