@@ -49,6 +49,17 @@ func New(rsp *remote.SessionPool, sched *schedule.Scheduler) *Server {
 	}
 }
 
+// Authenticate will allow the caller to verify that they are properly authenticated and authorized to interact with the
+// Service.
+func (s *Server) Authenticate(ctx context.Context, req *protos.AuthenticateRequest) (*protos.AuthenticateResponse, error) {
+	_, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("Authenticate access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	return &protos.AuthenticateResponse{}, nil
+}
+
 // CreateInstance will create a gomote instance for the authenticated user.
 func (s *Server) CreateInstance(req *protos.CreateInstanceRequest, stream protos.GomoteService_CreateInstanceServer) error {
 	ctx, cancel := context.WithTimeout(stream.Context(), 5*time.Minute)
@@ -131,7 +142,7 @@ func (s *Server) CreateInstance(req *protos.CreateInstanceRequest, stream protos
 	}
 }
 
-// isPrivilegedUser returns true if the user is using a Google account.
+// isPrivilagedUser returns true if the user is using a Google account.
 // The user has to be a part of the appropriate IAM group.
 func isPrivilegedUser(email string) bool {
 	if strings.HasSuffix(email, "@google.com") {

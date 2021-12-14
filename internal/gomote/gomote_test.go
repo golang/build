@@ -61,6 +61,24 @@ func setupGomoteTest(t *testing.T, ctx context.Context) protos.GomoteServiceClie
 	return gc
 }
 
+func TestAuthenticate(t *testing.T) {
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	client := setupGomoteTest(t, context.Background())
+	got, err := client.Authenticate(ctx, &protos.AuthenticateRequest{})
+	if err != nil {
+		t.Fatalf("client.Authenticate(ctx, request) = %v,  %s; want no error", got, err)
+	}
+}
+
+func TestAuthenticateError(t *testing.T) {
+	wantCode := codes.Unauthenticated
+	client := setupGomoteTest(t, context.Background())
+	_, err := client.Authenticate(context.Background(), &protos.AuthenticateRequest{})
+	if status.Code(err) != wantCode {
+		t.Fatalf("client.Authenticate(ctx, request) = _, %s; want %s", status.Code(err), wantCode)
+	}
+}
+
 func TestCreateInstance(t *testing.T) {
 	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
 	req := &protos.CreateInstanceRequest{BuilderType: "linux-amd64"}
