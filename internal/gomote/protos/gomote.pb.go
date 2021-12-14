@@ -700,6 +700,8 @@ type ListInstancesResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
+
+	Instances []*Instance `protobuf:"bytes,1,rep,name=instances,proto3" json:"instances,omitempty"`
 }
 
 func (x *ListInstancesResponse) Reset() {
@@ -732,6 +734,13 @@ func (x *ListInstancesResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListInstancesResponse.ProtoReflect.Descriptor instead.
 func (*ListInstancesResponse) Descriptor() ([]byte, []int) {
 	return file_gomote_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ListInstancesResponse) GetInstances() []*Instance {
+	if x != nil {
+		return x.Instances
+	}
+	return nil
 }
 
 // ReadTGZRequest specifies the data needed to retrieve a tar and zipped directory from a gomote instance.
@@ -1093,8 +1102,11 @@ var file_gomote_proto_rawDesc = []byte{
 	0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x17, 0x0a, 0x15, 0x4c, 0x69, 0x73, 0x74, 0x44, 0x69, 0x72,
 	0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x16,
 	0x0a, 0x14, 0x4c, 0x69, 0x73, 0x74, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x73, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x17, 0x0a, 0x15, 0x4c, 0x69, 0x73, 0x74, 0x49, 0x6e,
-	0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x47, 0x0a, 0x15, 0x4c, 0x69, 0x73, 0x74, 0x49, 0x6e,
+	0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
+	0x2e, 0x0a, 0x09, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03,
+	0x28, 0x0b, 0x32, 0x10, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x2e, 0x49, 0x6e, 0x73, 0x74,
+	0x61, 0x6e, 0x63, 0x65, 0x52, 0x09, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x73, 0x22,
 	0x10, 0x0a, 0x0e, 0x52, 0x65, 0x61, 0x64, 0x54, 0x47, 0x5a, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
 	0x74, 0x22, 0x11, 0x0a, 0x0f, 0x52, 0x65, 0x61, 0x64, 0x54, 0x47, 0x5a, 0x52, 0x65, 0x73, 0x70,
 	0x6f, 0x6e, 0x73, 0x65, 0x22, 0x18, 0x0a, 0x16, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x44, 0x69,
@@ -1213,33 +1225,34 @@ var file_gomote_proto_goTypes = []interface{}{
 var file_gomote_proto_depIdxs = []int32{
 	9,  // 0: protos.CreateInstanceResponse.instance:type_name -> protos.Instance
 	0,  // 1: protos.CreateInstanceResponse.status:type_name -> protos.CreateInstanceResponse.Status
-	1,  // 2: protos.GomoteService.Authenticate:input_type -> protos.AuthenticateRequest
-	3,  // 3: protos.GomoteService.CreateInstance:input_type -> protos.CreateInstanceRequest
-	5,  // 4: protos.GomoteService.DestroyInstance:input_type -> protos.DestroyInstanceRequest
-	7,  // 5: protos.GomoteService.ExecuteCommand:input_type -> protos.ExecuteCommandRequest
-	10, // 6: protos.GomoteService.InstanceAlive:input_type -> protos.InstanceAliveRequest
-	12, // 7: protos.GomoteService.ListDirectory:input_type -> protos.ListDirectoryRequest
-	14, // 8: protos.GomoteService.ListInstances:input_type -> protos.ListInstancesRequest
-	16, // 9: protos.GomoteService.ReadTGZ:input_type -> protos.ReadTGZRequest
-	18, // 10: protos.GomoteService.RemoveDirectory:input_type -> protos.RemoveDirectoryRequest
-	20, // 11: protos.GomoteService.RetrieveSSHCredentials:input_type -> protos.RetrieveSSHCredentialsRequest
-	22, // 12: protos.GomoteService.WriteTGZ:input_type -> protos.WriteTGZRequest
-	2,  // 13: protos.GomoteService.Authenticate:output_type -> protos.AuthenticateResponse
-	4,  // 14: protos.GomoteService.CreateInstance:output_type -> protos.CreateInstanceResponse
-	6,  // 15: protos.GomoteService.DestroyInstance:output_type -> protos.DestroyInstanceResponse
-	8,  // 16: protos.GomoteService.ExecuteCommand:output_type -> protos.ExecuteCommandResponse
-	11, // 17: protos.GomoteService.InstanceAlive:output_type -> protos.InstanceAliveResponse
-	13, // 18: protos.GomoteService.ListDirectory:output_type -> protos.ListDirectoryResponse
-	15, // 19: protos.GomoteService.ListInstances:output_type -> protos.ListInstancesResponse
-	17, // 20: protos.GomoteService.ReadTGZ:output_type -> protos.ReadTGZResponse
-	19, // 21: protos.GomoteService.RemoveDirectory:output_type -> protos.RemoveDirectoryResponse
-	21, // 22: protos.GomoteService.RetrieveSSHCredentials:output_type -> protos.RetrieveSSHCredentialsResponse
-	23, // 23: protos.GomoteService.WriteTGZ:output_type -> protos.WriteTGZResponse
-	13, // [13:24] is the sub-list for method output_type
-	2,  // [2:13] is the sub-list for method input_type
-	2,  // [2:2] is the sub-list for extension type_name
-	2,  // [2:2] is the sub-list for extension extendee
-	0,  // [0:2] is the sub-list for field type_name
+	9,  // 2: protos.ListInstancesResponse.instances:type_name -> protos.Instance
+	1,  // 3: protos.GomoteService.Authenticate:input_type -> protos.AuthenticateRequest
+	3,  // 4: protos.GomoteService.CreateInstance:input_type -> protos.CreateInstanceRequest
+	5,  // 5: protos.GomoteService.DestroyInstance:input_type -> protos.DestroyInstanceRequest
+	7,  // 6: protos.GomoteService.ExecuteCommand:input_type -> protos.ExecuteCommandRequest
+	10, // 7: protos.GomoteService.InstanceAlive:input_type -> protos.InstanceAliveRequest
+	12, // 8: protos.GomoteService.ListDirectory:input_type -> protos.ListDirectoryRequest
+	14, // 9: protos.GomoteService.ListInstances:input_type -> protos.ListInstancesRequest
+	16, // 10: protos.GomoteService.ReadTGZ:input_type -> protos.ReadTGZRequest
+	18, // 11: protos.GomoteService.RemoveDirectory:input_type -> protos.RemoveDirectoryRequest
+	20, // 12: protos.GomoteService.RetrieveSSHCredentials:input_type -> protos.RetrieveSSHCredentialsRequest
+	22, // 13: protos.GomoteService.WriteTGZ:input_type -> protos.WriteTGZRequest
+	2,  // 14: protos.GomoteService.Authenticate:output_type -> protos.AuthenticateResponse
+	4,  // 15: protos.GomoteService.CreateInstance:output_type -> protos.CreateInstanceResponse
+	6,  // 16: protos.GomoteService.DestroyInstance:output_type -> protos.DestroyInstanceResponse
+	8,  // 17: protos.GomoteService.ExecuteCommand:output_type -> protos.ExecuteCommandResponse
+	11, // 18: protos.GomoteService.InstanceAlive:output_type -> protos.InstanceAliveResponse
+	13, // 19: protos.GomoteService.ListDirectory:output_type -> protos.ListDirectoryResponse
+	15, // 20: protos.GomoteService.ListInstances:output_type -> protos.ListInstancesResponse
+	17, // 21: protos.GomoteService.ReadTGZ:output_type -> protos.ReadTGZResponse
+	19, // 22: protos.GomoteService.RemoveDirectory:output_type -> protos.RemoveDirectoryResponse
+	21, // 23: protos.GomoteService.RetrieveSSHCredentials:output_type -> protos.RetrieveSSHCredentialsResponse
+	23, // 24: protos.GomoteService.WriteTGZ:output_type -> protos.WriteTGZResponse
+	14, // [14:25] is the sub-list for method output_type
+	3,  // [3:14] is the sub-list for method input_type
+	3,  // [3:3] is the sub-list for extension type_name
+	3,  // [3:3] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_gomote_proto_init() }

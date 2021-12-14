@@ -102,7 +102,9 @@ message ListDirectoryResponse {}
 message ListInstancesRequest {}
 
 // ListInstancesResponse contains the list of live gomote instances owned by the caller.
-message ListInstancesResponse {}
+message ListInstancesResponse {
+  repeated Instance instances = 1;
+}
 
 // ReadTGZRequest specifies the data needed to retrieve a tar and zipped directory from a gomote instance.
 message ReadTGZRequest {}

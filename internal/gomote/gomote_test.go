@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"golang.org/x/build/internal/access"
 	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/coordinator/schedule"
@@ -22,6 +23,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 func fakeGomoteServer(ctx context.Context) protos.GomoteServiceServer {
@@ -152,6 +154,27 @@ func TestCreateInstanceError(t *testing.T) {
 				return
 			}
 		})
+	}
+}
+
+func TestListInstance(t *testing.T) {
+	client := setupGomoteTest(t, context.Background())
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	var want []*protos.Instance
+	for i := 0; i < 3; i++ {
+		want = append(want, &protos.Instance{
+			GomoteId:    mustCreateInstance(t, client, fakeIAP()),
+			BuilderType: "linux-amd64",
+		})
+	}
+	mustCreateInstance(t, client, fakeIAPWithUser("user-x", "uuid-user-x"))
+	response, err := client.ListInstances(ctx, &protos.ListInstancesRequest{})
+	if err != nil {
+		t.Fatalf("client.ListInstances = nil, %s; want no error", err)
+	}
+	got := response.GetInstances()
+	if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&protos.Instance{}, "expires", "host_type")); diff != "" {
+		t.Errorf("ListInstances() mismatch (-want, +got):\n%s", diff)
 	}
 }
 

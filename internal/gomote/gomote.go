@@ -142,6 +142,30 @@ func (s *Server) CreateInstance(req *protos.CreateInstanceRequest, stream protos
 	}
 }
 
+// ListInstances will list the gomote instances owned by the requester. The requester must be authenticated.
+func (s *Server) ListInstances(ctx context.Context, req *protos.ListInstancesRequest) (*protos.ListInstancesResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("ListInstances access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	var instances []*protos.Instance
+	for _, s := range s.buildlets.List() {
+		if s.OwnerID != creds.ID {
+			continue
+		}
+		instances = append(instances, &protos.Instance{
+			GomoteId:    s.ID,
+			BuilderType: s.BuilderType,
+			HostType:    s.HostType,
+			Expires:     s.Expires.Unix(),
+		})
+	}
+	return &protos.ListInstancesResponse{
+		Instances: instances,
+	}, nil
+}
+
 // isPrivilagedUser returns true if the user is using a Google account.
 // The user has to be a part of the appropriate IAM group.
 func isPrivilegedUser(email string) bool {
