@@ -35,7 +35,7 @@ type Buildlet interface {
 	//
 	// The ctx may have context values of type buildletTimeoutOpt
 	// and highPriorityOpt.
-	GetBuildlet(ctx context.Context, hostType string, lg Logger) (*buildlet.Client, error)
+	GetBuildlet(ctx context.Context, hostType string, lg Logger) (buildlet.Client, error)
 
 	String() string // TODO(bradfitz): more status stuff
 }

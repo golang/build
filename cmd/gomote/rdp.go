@@ -53,7 +53,7 @@ func rdp(args []string) error {
 	}
 }
 
-func handleRDPConn(bc *buildlet.Client, c net.Conn) {
+func handleRDPConn(bc buildlet.Client, c net.Conn) {
 	const Lmsgprefix = 64 // new in Go 1.14, harmless before
 	log := log.New(os.Stderr, c.RemoteAddr().String()+": ", log.LstdFlags|Lmsgprefix)
 	log.Printf("accepted connection, dialing buildlet via coordinator proxy...")

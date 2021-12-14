@@ -77,7 +77,7 @@ func (cc *CoordinatorClient) client() (*http.Client, error) {
 //
 // It may expire at any time.
 // To release it, call Client.Close.
-func (cc *CoordinatorClient) CreateBuildlet(builderType string) (*Client, error) {
+func (cc *CoordinatorClient) CreateBuildlet(builderType string) (Client, error) {
 	return cc.CreateBuildletWithStatus(builderType, nil)
 }
 
@@ -90,7 +90,7 @@ const (
 )
 
 // CreateBuildletWithStatus is like CreateBuildlet but accepts an optional status callback.
-func (cc *CoordinatorClient) CreateBuildletWithStatus(builderType string, status func(types.BuildletWaitStatus)) (*Client, error) {
+func (cc *CoordinatorClient) CreateBuildletWithStatus(builderType string, status func(types.BuildletWaitStatus)) (Client, error) {
 	hc, err := cc.client()
 	if err != nil {
 		return nil, err
@@ -197,13 +197,13 @@ func (cc *CoordinatorClient) RemoteBuildlets() ([]RemoteBuildlet, error) {
 
 // NamedBuildlet returns a buildlet client for the named remote buildlet.
 // Names are not validated. Use Client.Status to check whether the client works.
-func (cc *CoordinatorClient) NamedBuildlet(name string) (*Client, error) {
+func (cc *CoordinatorClient) NamedBuildlet(name string) (Client, error) {
 	hc, err := cc.client()
 	if err != nil {
 		return nil, err
 	}
 	ipPort, _ := cc.instance().TLSHostPort() // must succeed if client did
-	c := &Client{
+	c := &client{
 		baseURL:        "https://" + ipPort,
 		remoteBuildlet: name,
 		httpClient:     hc,

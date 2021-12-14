@@ -563,7 +563,7 @@ type fakeEC2BuildletClient struct {
 
 // StartNewVM boots a new VM on EC2, waits until the client is accepting connections
 // on the configured port and returns a buildlet client configured communicate with it.
-func (f *fakeEC2BuildletClient) StartNewVM(ctx context.Context, buildEnv *buildenv.Environment, hconf *dashboard.HostConfig, vmName, hostType string, opts *buildlet.VMOpts) (*buildlet.Client, error) {
+func (f *fakeEC2BuildletClient) StartNewVM(ctx context.Context, buildEnv *buildenv.Environment, hconf *dashboard.HostConfig, vmName, hostType string, opts *buildlet.VMOpts) (buildlet.Client, error) {
 	// check required params
 	if opts == nil || opts.TLS.IsZero() {
 		return nil, errors.New("TLS keypair is not set")
@@ -619,7 +619,7 @@ func (f *fakeEC2BuildletClient) StartNewVM(ctx context.Context, buildEnv *builde
 			Zone: "zone-a",
 		})
 	}
-	return &buildlet.Client{}, nil
+	return &buildlet.FakeClient{}, nil
 }
 
 type testLogger struct {

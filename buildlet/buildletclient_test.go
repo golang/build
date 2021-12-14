@@ -78,7 +78,7 @@ func TestConnectSSHTLS(t *testing.T) {
 			}
 			ts.StartTLS()
 			defer ts.Close()
-			c := Client{
+			c := client{
 				ipPort:   strings.TrimPrefix(ts.URL, "https://"),
 				tls:      tc.keyPair,
 				password: tc.password,
@@ -150,7 +150,7 @@ func TestConnectSSHNonTLS(t *testing.T) {
 				w.WriteHeader(http.StatusSwitchingProtocols)
 			}))
 			defer ts.Close()
-			c := Client{
+			c := client{
 				ipPort:   strings.TrimPrefix(ts.URL, "http://"),
 				password: tc.password,
 				authUser: tc.authUser,

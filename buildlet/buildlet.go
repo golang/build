@@ -86,7 +86,7 @@ type VMOpts struct {
 // "https://<ip>". The ipPort field is in the form of "<ip>:<port>". The function
 // will attempt to connect to the buildlet for the lesser of: the default timeout period
 // (10 minutes) or the timeout set in the passed in context.
-func buildletClient(ctx context.Context, buildletURL, ipPort string, opts *VMOpts) (*Client, error) {
+func buildletClient(ctx context.Context, buildletURL, ipPort string, opts *VMOpts) (Client, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	try := 0

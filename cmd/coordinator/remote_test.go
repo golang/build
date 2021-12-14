@@ -27,13 +27,13 @@ import (
 )
 
 type TestBuildletPool struct {
-	clients map[string]*buildlet.Client
+	clients map[string]buildlet.Client
 	mu      sync.Mutex
 }
 
 // GetBuildlet finds the first available buildlet for the hostType and returns
 // it, or an error if no buildlets are available for that hostType.
-func (tp *TestBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg pool.Logger) (*buildlet.Client, error) {
+func (tp *TestBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg pool.Logger) (buildlet.Client, error) {
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
 	c, ok := tp.clients[hostType]
@@ -45,10 +45,10 @@ func (tp *TestBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg
 
 // Add sets the given client for the given hostType, overriding any previous
 // entries.
-func (tp *TestBuildletPool) Add(hostType string, client *buildlet.Client) {
+func (tp *TestBuildletPool) Add(hostType string, client buildlet.Client) {
 	tp.mu.Lock()
 	if tp.clients == nil {
-		tp.clients = make(map[string]*buildlet.Client)
+		tp.clients = make(map[string]buildlet.Client)
 	}
 	tp.clients[hostType] = client
 	tp.mu.Unlock()
@@ -103,7 +103,7 @@ func addBuilder(name string) {
 		HostType: "test-host",
 		Owners:   []*gophers.Person{{Emails: []string{"test@golang.org"}}},
 	}
-	testPool.Add("test-host", &buildlet.Client{})
+	testPool.Add("test-host", &buildlet.FakeClient{})
 }
 
 func removeBuilder(name string) {

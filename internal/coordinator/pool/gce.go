@@ -387,7 +387,7 @@ func (p *GCEBuildlet) SetEnabled(enabled bool) {
 }
 
 // GetBuildlet retrieves a buildlet client for an available buildlet.
-func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logger) (bc *buildlet.Client, err error) {
+func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logger) (bc buildlet.Client, err error) {
 	hconf, ok := dashboard.Hosts[hostType]
 	if !ok {
 		return nil, fmt.Errorf("gcepool: unknown host type %q", hostType)
@@ -454,7 +454,7 @@ func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logge
 	return bc, nil
 }
 
-func (p *GCEBuildlet) putBuildlet(bc *buildlet.Client, hostType, zone, instName string) error {
+func (p *GCEBuildlet) putBuildlet(bc buildlet.Client, hostType, zone, instName string) error {
 	// TODO(bradfitz): add the buildlet to a freelist (of max N
 	// items) for up to 10 minutes since when it got started if
 	// it's never seen a command execution failure, and we can

@@ -100,7 +100,7 @@ type EC2Buildlet struct {
 
 // ec2BuildletClient represents an EC2 buildlet client in the buildlet package.
 type ec2BuildletClient interface {
-	StartNewVM(ctx context.Context, buildEnv *buildenv.Environment, hconf *dashboard.HostConfig, vmName, hostType string, opts *buildlet.VMOpts) (*buildlet.Client, error)
+	StartNewVM(ctx context.Context, buildEnv *buildenv.Environment, hconf *dashboard.HostConfig, vmName, hostType string, opts *buildlet.VMOpts) (buildlet.Client, error)
 }
 
 // NewEC2Buildlet creates a new EC2 buildlet pool used to create and manage the lifecycle of
@@ -162,7 +162,7 @@ func NewEC2Buildlet(client *cloud.AWSClient, buildEnv *buildenv.Environment, hos
 }
 
 // GetBuildlet retrieves a buildlet client for a newly created buildlet.
-func (eb *EC2Buildlet) GetBuildlet(ctx context.Context, hostType string, lg Logger) (*buildlet.Client, error) {
+func (eb *EC2Buildlet) GetBuildlet(ctx context.Context, hostType string, lg Logger) (buildlet.Client, error) {
 	hconf, ok := eb.hosts[hostType]
 	if !ok {
 		return nil, fmt.Errorf("ec2 pool: unknown host type %q", hostType)

@@ -57,7 +57,7 @@ const minBuildletVersion = 1
 
 var (
 	reversePool = &ReverseBuildletPool{
-		oldInUse:     make(map[*buildlet.Client]bool),
+		oldInUse:     make(map[buildlet.Client]bool),
 		hostLastGood: make(map[string]time.Time),
 	}
 
@@ -94,7 +94,7 @@ type ReverseBuildletPool struct {
 	// oldInUse tracks which buildlets with the old revdial code are currently in use.
 	// These are a liability due to runaway memory issues (Issue 31639) so
 	// we bound how many can be running at once. Fortunately there aren't many left.
-	oldInUse map[*buildlet.Client]bool
+	oldInUse map[buildlet.Client]bool
 
 	// hostLastGood tracks when buildlets were last seen to be
 	// healthy. It's only used by the health reporting code (in
@@ -179,7 +179,7 @@ func (p *ReverseBuildletPool) BuildReverseStatusJSON() *types.ReverseBuilderStat
 //
 // Otherwise it returns how many were busy, which might be 0 if none
 // were (yet?) registered. The busy valid is only valid if bc == nil.
-func (p *ReverseBuildletPool) tryToGrab(hostType string) (bc *buildlet.Client, busy int) {
+func (p *ReverseBuildletPool) tryToGrab(hostType string) (bc buildlet.Client, busy int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, b := range p.buildlets {
@@ -229,7 +229,7 @@ func (p *ReverseBuildletPool) noteBuildletAvailable(hostType string) {
 // nukeBuildlet wipes out victim as a buildlet we'll ever return again,
 // and closes its TCP connection in hopes that it will fix itself
 // later.
-func (p *ReverseBuildletPool) nukeBuildlet(victim *buildlet.Client) {
+func (p *ReverseBuildletPool) nukeBuildlet(victim buildlet.Client) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	delete(p.oldInUse, victim)
@@ -326,7 +326,7 @@ func (p *ReverseBuildletPool) updateWaiterCounter(hostType string, delta int) {
 }
 
 // GetBuildlet builds a buildlet client for the passed in host.
-func (p *ReverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg Logger) (*buildlet.Client, error) {
+func (p *ReverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg Logger) (buildlet.Client, error) {
 	p.updateWaiterCounter(hostType, 1)
 	defer p.updateWaiterCounter(hostType, -1)
 	seenErrInUse := false
@@ -355,7 +355,7 @@ func (p *ReverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, 
 	}
 }
 
-func (p *ReverseBuildletPool) cleanedBuildlet(b *buildlet.Client, lg Logger) (*buildlet.Client, error) {
+func (p *ReverseBuildletPool) cleanedBuildlet(b buildlet.Client, lg Logger) (buildlet.Client, error) {
 	// Clean up any files from previous builds.
 	sp := lg.CreateSpan("clean_buildlet", b.String())
 	err := b.RemoveAll(context.Background(), ".")
@@ -534,7 +534,7 @@ type reverseBuildlet struct {
 	// sessRand is the unique random number for every unique buildlet session.
 	sessRand string
 
-	client  *buildlet.Client
+	client  buildlet.Client
 	conn    net.Conn
 	regTime time.Time // when it was first connected
 

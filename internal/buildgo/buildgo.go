@@ -100,7 +100,7 @@ type GoBuilder struct {
 // goroot is relative to the workdir with forward slashes.
 // w is the Writer to send build output to.
 // remoteErr and err are as described at the top of this file.
-func (gb GoBuilder) RunMake(ctx context.Context, bc *buildlet.Client, w io.Writer) (remoteErr, err error) {
+func (gb GoBuilder) RunMake(ctx context.Context, bc buildlet.Client, w io.Writer) (remoteErr, err error) {
 	// Build the source code.
 	makeSpan := gb.CreateSpan("make", gb.Conf.MakeScript())
 	remoteErr, err = bc.Exec(ctx, path.Join(gb.Goroot, gb.Conf.MakeScript()), buildlet.ExecOpts{
@@ -152,7 +152,7 @@ func (gb GoBuilder) RunMake(ctx context.Context, bc *buildlet.Client, w io.Write
 // with -gcflags=-c=8 using a race-enabled cmd/compile and cmd/link
 // (built by caller, RunMake, per builder config).
 // The idea is that this might find data races in cmd/compile and cmd/link.
-func (gb GoBuilder) runConcurrentGoBuildStdCmd(ctx context.Context, bc *buildlet.Client, w io.Writer) (remoteErr, err error) {
+func (gb GoBuilder) runConcurrentGoBuildStdCmd(ctx context.Context, bc buildlet.Client, w io.Writer) (remoteErr, err error) {
 	span := gb.CreateSpan("go_build_c128_std_cmd")
 	remoteErr, err = bc.Exec(ctx, path.Join(gb.Goroot, "bin/go"), buildlet.ExecOpts{
 		Output:   w,

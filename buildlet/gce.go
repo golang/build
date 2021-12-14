@@ -36,7 +36,7 @@ func apiGate() {
 
 // StartNewVM boots a new VM on GCE and returns a buildlet client
 // configured to speak to it.
-func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instName, hostType string, opts VMOpts) (*Client, error) {
+func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instName, hostType string, opts VMOpts) (Client, error) {
 	ctx := context.TODO()
 	computeService, _ := compute.New(oauth2.NewClient(ctx, creds.TokenSource))
 
@@ -271,7 +271,9 @@ OpLoop:
 	if err != nil {
 		return nil, err
 	}
-	client.closeFuncs = append(client.closeFuncs, closeFuncs...)
+	for _, cf := range closeFuncs {
+		client.AddCloseFunc(cf)
+	}
 	return client, nil
 }
 

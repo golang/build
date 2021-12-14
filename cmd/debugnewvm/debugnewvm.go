@@ -114,7 +114,7 @@ func main() {
 	name := fmt.Sprintf("debug-temp-%d", time.Now().Unix())
 
 	log.Printf("Creating %s (with VM image %s)", name, vmImageSummary)
-	var bc *buildlet.Client
+	var bc buildlet.Client
 	if hconf.IsEC2() {
 		region := env.AWSRegion
 		if *awsRegion != "" {
@@ -270,7 +270,7 @@ func awsCredentialsFromSecrets() (string, string, error) {
 	return keyID, accessKey, nil
 }
 
-func gceBuildlet(creds *google.Credentials, env *buildenv.Environment, name, hostType, zone string) (*buildlet.Client, error) {
+func gceBuildlet(creds *google.Credentials, env *buildenv.Environment, name, hostType, zone string) (buildlet.Client, error) {
 	var zoneSelected string
 	return buildlet.StartNewVM(creds, env, name, hostType, buildlet.VMOpts{
 		Zone:                zone,
@@ -299,7 +299,7 @@ func gceBuildlet(creds *google.Credentials, env *buildenv.Environment, name, hos
 	})
 }
 
-func ec2Buildlet(ctx context.Context, ec2Client *buildlet.EC2Client, hconf *dashboard.HostConfig, env *buildenv.Environment, name, hostType, zone string) (*buildlet.Client, error) {
+func ec2Buildlet(ctx context.Context, ec2Client *buildlet.EC2Client, hconf *dashboard.HostConfig, env *buildenv.Environment, name, hostType, zone string) (buildlet.Client, error) {
 	kp, err := buildlet.NewKeyPair()
 	if err != nil {
 		log.Fatalf("key pair failed: %v", err)

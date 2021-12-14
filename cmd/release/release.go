@@ -312,7 +312,7 @@ var preBuildCleanFiles = []string{
 	"misc/makerelease",
 }
 
-func (b *Build) buildlet() (*buildlet.Client, error) {
+func (b *Build) buildlet() (buildlet.Client, error) {
 	b.logf("Creating buildlet.")
 	bc, err := coordClient.CreateBuildlet(b.Builder)
 	if err != nil {
@@ -698,7 +698,7 @@ func (b *Build) make() error {
 
 // checkTopLevelDirs checks that all files under client's "."
 // ($WORKDIR) are are under "go/".
-func (b *Build) checkTopLevelDirs(ctx context.Context, client *buildlet.Client) error {
+func (b *Build) checkTopLevelDirs(ctx context.Context, client buildlet.Client) error {
 	var badFileErr error // non-nil once an unexpected file/dir is found
 	if err := client.ListDir(ctx, ".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
 		name := ent.Name()
@@ -716,7 +716,7 @@ func (b *Build) checkTopLevelDirs(ctx context.Context, client *buildlet.Client) 
 
 // checkPerm checks that files in client's $WORKDIR/go directory
 // have expected permissions.
-func (b *Build) checkPerm(ctx context.Context, client *buildlet.Client) error {
+func (b *Build) checkPerm(ctx context.Context, client buildlet.Client) error {
 	var badPermErr error // non-nil once an unexpected perm is found
 	checkPerm := func(ent buildlet.DirEntry, allowed ...string) {
 		for _, p := range allowed {
@@ -754,7 +754,7 @@ func (b *Build) checkPerm(ctx context.Context, client *buildlet.Client) error {
 	return badPermErr
 }
 
-func (b *Build) fetchTarball(ctx context.Context, client *buildlet.Client, dest string) error {
+func (b *Build) fetchTarball(ctx context.Context, client buildlet.Client, dest string) error {
 	b.logf("Downloading tarball.")
 	tgz, err := client.GetTar(ctx, ".")
 	if err != nil {
@@ -763,7 +763,7 @@ func (b *Build) fetchTarball(ctx context.Context, client *buildlet.Client, dest 
 	return b.writeFile(dest, tgz)
 }
 
-func (b *Build) fetchZip(client *buildlet.Client, dest string) error {
+func (b *Build) fetchZip(client buildlet.Client, dest string) error {
 	b.logf("Downloading tarball and re-compressing as zip.")
 
 	tgz, err := client.GetTar(context.Background(), ".")
@@ -835,7 +835,7 @@ func tgzToZip(w io.Writer, r io.Reader) error {
 
 // fetchFile fetches the specified directory from the given buildlet, and
 // writes the first file it finds in that directory to dest.
-func (b *Build) fetchFile(client *buildlet.Client, dest, dir string) error {
+func (b *Build) fetchFile(client buildlet.Client, dest, dir string) error {
 	b.logf("Downloading file from %q.", dir)
 	tgz, err := client.GetTar(context.Background(), dir)
 	if err != nil {
@@ -886,7 +886,7 @@ func (b *Build) writeFile(name string, r io.Reader) error {
 // checkRelocations runs readelf on pkg/linux_amd64/runtime/cgo.a and makes sure
 // we don't see R_X86_64_REX_GOTPCRELX in new Go 1.15 minor releases.
 // See golang.org/issue/31293 and golang.org/issue/40561#issuecomment-731482962.
-func (b *Build) checkRelocations(client *buildlet.Client) error {
+func (b *Build) checkRelocations(client buildlet.Client) error {
 	if b.OS != "linux" || b.Arch != "amd64" || b.TestOnly {
 		// This check is only applicable to linux/amd64 builds.
 		// However, skip it on test-only builds because they

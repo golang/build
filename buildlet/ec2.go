@@ -39,7 +39,7 @@ func NewEC2Client(client *cloud.AWSClient) *EC2Client {
 
 // StartNewVM boots a new VM on EC2, waits until the client is accepting connections
 // on the configured port and returns a buildlet client configured communicate with it.
-func (c *EC2Client) StartNewVM(ctx context.Context, buildEnv *buildenv.Environment, hconf *dashboard.HostConfig, vmName, hostType string, opts *VMOpts) (*Client, error) {
+func (c *EC2Client) StartNewVM(ctx context.Context, buildEnv *buildenv.Environment, hconf *dashboard.HostConfig, vmName, hostType string, opts *VMOpts) (Client, error) {
 	// check required params
 	if opts == nil || opts.TLS.IsZero() {
 		return nil, errors.New("TLS keypair is not set")

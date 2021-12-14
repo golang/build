@@ -1747,8 +1747,8 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 
 // getBuildlets creates up to n buildlets and sends them on the returned channel
 // before closing the channel.
-func getBuildlets(ctx context.Context, n int, schedTmpl *schedule.SchedItem, lg pool.Logger) <-chan *buildlet.Client {
-	ch := make(chan *buildlet.Client) // NOT buffered
+func getBuildlets(ctx context.Context, n int, schedTmpl *schedule.SchedItem, lg pool.Logger) <-chan buildlet.Client {
+	ch := make(chan buildlet.Client) // NOT buffered
 	var wg sync.WaitGroup
 	wg.Add(n)
 	for i := 0; i < n; i++ {

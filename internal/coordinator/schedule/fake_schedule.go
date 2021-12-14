@@ -29,6 +29,6 @@ func (f *Fake) WaiterState(waiter *SchedItem) (ws types.BuildletWaitStatus) {
 }
 
 // GetBuildlet returns a fake buildlet client for the requested buildlet.
-func (f *Fake) GetBuildlet(ctx context.Context, si *SchedItem) (*buildlet.Client, error) {
-	return &buildlet.Client{}, nil
+func (f *Fake) GetBuildlet(ctx context.Context, si *SchedItem) (buildlet.Client, error) {
+	return &buildlet.FakeClient{}, nil
 }

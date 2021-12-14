@@ -24,19 +24,19 @@ import (
 	"golang.org/x/oauth2"
 )
 
-var _ clientBuildlet = (*Client)(nil)
+var _ Client = (*client)(nil)
 
-// NewClient returns a *Client that will manipulate ipPort,
+// NewClient returns a *client that will manipulate ipPort,
 // authenticated using the provided keypair.
 //
 // This constructor returns immediately without testing the host or auth.
-func NewClient(ipPort string, kp KeyPair) *Client {
+func NewClient(ipPort string, kp KeyPair) Client {
 	tr := &http.Transport{
 		Dial:            defaultDialer(),
 		DialTLS:         kp.tlsDialer(),
 		IdleConnTimeout: time.Minute,
 	}
-	c := &Client{
+	c := &client{
 		ipPort:     ipPort,
 		tls:        kp,
 		password:   kp.Password(),
@@ -47,7 +47,7 @@ func NewClient(ipPort string, kp KeyPair) *Client {
 	return c
 }
 
-func (c *Client) setCommon() {
+func (c *client) setCommon() {
 	c.peerDead = make(chan struct{})
 	c.ctx, c.ctxCancel = context.WithCancel(context.Background())
 }
@@ -56,7 +56,7 @@ func (c *Client) setCommon() {
 // against this builder fail, or when the client is destroyed with
 // Close. The function fn is never called more than once.
 // SetOnHeartbeatFailure must be set before any use of the buildlet.
-func (c *Client) SetOnHeartbeatFailure(fn func()) {
+func (c *client) SetOnHeartbeatFailure(fn func()) {
 	c.heartbeatFailure = fn
 }
 
@@ -64,7 +64,7 @@ var ErrClosed = errors.New("buildlet: Client closed")
 
 // Closes destroys and closes down the buildlet, destroying all state
 // immediately.
-func (c *Client) Close() error {
+func (c *client) Close() error {
 	// TODO(bradfitz): have a Client-wide Done channel we set on
 	// all outbound HTTP Requests and close it in the once here?
 	// Then if something was in-flight and somebody else Closes,
@@ -92,7 +92,7 @@ func (c *Client) Close() error {
 	return nil
 }
 
-func (c *Client) setPeerDead(err error) {
+func (c *client) setPeerDead(err error) {
 	c.setPeerDeadOnce.Do(func() {
 		c.MarkBroken()
 		if err == nil {
@@ -106,26 +106,26 @@ func (c *Client) setPeerDead(err error) {
 // SetDescription sets a short description of where the buildlet
 // connection came from.  This is used by the build coordinator status
 // page, mostly for debugging.
-func (c *Client) SetDescription(v string) {
+func (c *client) SetDescription(v string) {
 	c.desc = v
 }
 
 // SetGCEInstanceName sets an instance name for GCE buildlets.
 // This value differs from the buildlet name used in the CLI and web interface.
-func (c *Client) SetGCEInstanceName(v string) {
+func (c *client) SetGCEInstanceName(v string) {
 	c.gceInstanceName = v
 }
 
 // GCEInstanceName gets an instance name for GCE buildlets.
 // This value differs from the buildlet name used in the CLI and web interface.
 // For non-GCE buildlets, this will return an empty string.
-func (c *Client) GCEInstanceName() string {
+func (c *client) GCEInstanceName() string {
 	return c.gceInstanceName
 }
 
 // SetHTTPClient replaces the underlying HTTP client.
 // It should only be called before the Client is used.
-func (c *Client) SetHTTPClient(httpClient *http.Client) {
+func (c *client) SetHTTPClient(httpClient *http.Client) {
 	c.httpClient = httpClient
 }
 
@@ -138,7 +138,7 @@ func (c *Client) SetHTTPClient(httpClient *http.Client) {
 // upgrade request. But now that the net/http client supports
 // read/write bodies for protocol upgrades, we could change how ssh
 // works and delete this.
-func (c *Client) SetDialer(dialer func(context.Context) (net.Conn, error)) {
+func (c *client) SetDialer(dialer func(context.Context) (net.Conn, error)) {
 	c.dialer = dialer
 }
 
@@ -153,8 +153,8 @@ func defaultDialer() func(network, addr string) (net.Conn, error) {
 	return net.Dial
 }
 
-// A Client interacts with a single buildlet.
-type Client struct {
+// A client interacts with a single buildlet.
+type client struct {
 	ipPort          string // required, unless remoteBuildlet+baseURL is set
 	tls             KeyPair
 	httpClient      *http.Client
@@ -190,13 +190,13 @@ type Client struct {
 // files. See golang.org/issue/19052.
 //
 // SetReleaseMode must be set before using the client.
-func (c *Client) SetReleaseMode(v bool) {
+func (c *client) SetReleaseMode(v bool) {
 	c.releaseMode = v
 }
 
-func (c *Client) String() string {
+func (c *client) String() string {
 	if c == nil {
-		return "(nil *buildlet.Client)"
+		return "(nil buildlet.Client)"
 	}
 	return strings.TrimSpace(c.URL() + " " + c.desc)
 }
@@ -204,12 +204,12 @@ func (c *Client) String() string {
 // RemoteName returns the name of this client's buildlet on the
 // coordinator. If this buildlet isn't a remote buildlet created via
 // gomote, this returns the empty string.
-func (c *Client) RemoteName() string {
+func (c *client) RemoteName() string {
 	return c.remoteBuildlet
 }
 
 // URL returns the buildlet's URL prefix, without a trailing slash.
-func (c *Client) URL() string {
+func (c *client) URL() string {
 	if c.baseURL != "" {
 		return strings.TrimRight(c.baseURL, "/")
 	}
@@ -219,15 +219,15 @@ func (c *Client) URL() string {
 	return "http://" + strings.TrimSuffix(c.ipPort, ":80")
 }
 
-func (c *Client) IPPort() string { return c.ipPort }
+func (c *client) IPPort() string { return c.ipPort }
 
-func (c *Client) SetName(name string) { c.name = name }
+func (c *client) SetName(name string) { c.name = name }
 
 // Name returns the name of this buildlet.
 // It returns the first non-empty string from the name given to
 // SetName, its remote buildlet name, its ip:port, or "(unnamed-buildlet)" in the case where
 // ip:port is empty because there's a custom dialer.
-func (c *Client) Name() string {
+func (c *client) Name() string {
 	if c.name != "" {
 		return c.name
 	}
@@ -241,7 +241,7 @@ func (c *Client) Name() string {
 }
 
 // MarkBroken marks this client as broken in some way.
-func (c *Client) MarkBroken() {
+func (c *client) MarkBroken() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.broken = true
@@ -249,20 +249,20 @@ func (c *Client) MarkBroken() {
 }
 
 // IsBroken reports whether this client is broken in some way.
-func (c *Client) IsBroken() bool {
+func (c *client) IsBroken() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.broken
 }
 
-func (c *Client) authUsername() string {
+func (c *client) authUsername() string {
 	if c.authUser != "" {
 		return c.authUser
 	}
 	return "gomote"
 }
 
-func (c *Client) do(req *http.Request) (*http.Response, error) {
+func (c *client) do(req *http.Request) (*http.Response, error) {
 	c.initHeartbeatOnce.Do(c.initHeartbeats)
 	if c.password != "" {
 		req.SetBasicAuth(c.authUsername(), c.password)
@@ -278,7 +278,7 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 // and the target type must be a VM type running on GCE. This was primarily
 // created for RDP to Windows machines, but it might get reused for other
 // purposes in the future.
-func (c *Client) ProxyTCP(port int) (io.ReadWriteCloser, error) {
+func (c *client) ProxyTCP(port int) (io.ReadWriteCloser, error) {
 	if c.RemoteName() == "" {
 		return nil, errors.New("ProxyTCP currently only supports gomote-created buildlets")
 	}
@@ -307,23 +307,23 @@ func (c *Client) ProxyTCP(port int) (io.ReadWriteCloser, error) {
 // ProxyRoundTripper returns a RoundTripper that sends HTTP requests directly
 // through to the underlying buildlet, adding auth and X-Buildlet-Proxy headers
 // as necessary. This is really only intended for use by the coordinator.
-func (c *Client) ProxyRoundTripper() http.RoundTripper {
+func (c *client) ProxyRoundTripper() http.RoundTripper {
 	return proxyRoundTripper{c}
 }
 
 type proxyRoundTripper struct {
-	c *Client
+	c *client
 }
 
 func (p proxyRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return p.c.do(req)
 }
 
-func (c *Client) initHeartbeats() {
+func (c *client) initHeartbeats() {
 	go c.heartbeatLoop()
 }
 
-func (c *Client) heartbeatLoop() {
+func (c *client) heartbeatLoop() {
 	failInARow := 0
 	for {
 		select {
@@ -355,7 +355,7 @@ var errHeaderTimeout = errors.New("timeout waiting for headers")
 
 // doHeaderTimeout calls c.do(req) and returns its results, or
 // errHeaderTimeout if max elapses first.
-func (c *Client) doHeaderTimeout(req *http.Request, max time.Duration) (res *http.Response, err error) {
+func (c *client) doHeaderTimeout(req *http.Request, max time.Duration) (res *http.Response, err error) {
 	type resErr struct {
 		res *http.Response
 		err error
@@ -403,7 +403,7 @@ func (c *Client) doHeaderTimeout(req *http.Request, max time.Duration) (res *htt
 }
 
 // doOK sends the request and expects a 200 OK response.
-func (c *Client) doOK(req *http.Request) error {
+func (c *client) doOK(req *http.Request) error {
 	res, err := c.do(req)
 	if err != nil {
 		return err
@@ -421,7 +421,7 @@ func (c *Client) doOK(req *http.Request) error {
 // If dir is empty, they're placed at the root of the buildlet's work directory.
 // The dir is created if necessary.
 // The Reader must be of a tar.gz file.
-func (c *Client) PutTar(ctx context.Context, r io.Reader, dir string) error {
+func (c *client) PutTar(ctx context.Context, r io.Reader, dir string) error {
 	req, err := http.NewRequest("PUT", c.URL()+"/writetgz?dir="+url.QueryEscape(dir), r)
 	if err != nil {
 		return err
@@ -434,7 +434,7 @@ func (c *Client) PutTar(ctx context.Context, r io.Reader, dir string) error {
 // If dir is empty, they're placed at the root of the buildlet's work directory.
 // The dir is created if necessary.
 // The url must be of a tar.gz file.
-func (c *Client) PutTarFromURL(ctx context.Context, tarURL, dir string) error {
+func (c *client) PutTarFromURL(ctx context.Context, tarURL, dir string) error {
 	form := url.Values{
 		"url": {tarURL},
 	}
@@ -447,7 +447,7 @@ func (c *Client) PutTarFromURL(ctx context.Context, tarURL, dir string) error {
 }
 
 // Put writes the provided file to path (relative to workdir) and sets mode.
-func (c *Client) Put(ctx context.Context, r io.Reader, path string, mode os.FileMode) error {
+func (c *client) Put(ctx context.Context, r io.Reader, path string, mode os.FileMode) error {
 	param := url.Values{
 		"path": {path},
 		"mode": {fmt.Sprint(int64(mode))},
@@ -461,7 +461,7 @@ func (c *Client) Put(ctx context.Context, r io.Reader, path string, mode os.File
 
 // GetTar returns a .tar.gz stream of the given directory, relative to the buildlet's work dir.
 // The provided dir may be empty to get everything.
-func (c *Client) GetTar(ctx context.Context, dir string) (io.ReadCloser, error) {
+func (c *client) GetTar(ctx context.Context, dir string) (io.ReadCloser, error) {
 	var args string
 	if c.releaseMode {
 		args = "&pargzip=0"
@@ -536,7 +536,7 @@ var ErrTimeout = errors.New("buildlet: timeout waiting for command to complete")
 //
 // If the context's deadline is exceeded, the returned execErr is
 // ErrTimeout.
-func (c *Client) Exec(ctx context.Context, cmd string, opts ExecOpts) (remoteErr, execErr error) {
+func (c *client) Exec(ctx context.Context, cmd string, opts ExecOpts) (remoteErr, execErr error) {
 	var mode string
 	if opts.SystemLevel {
 		mode = "sys"
@@ -629,7 +629,7 @@ func (c *Client) Exec(ctx context.Context, cmd string, opts ExecOpts) (remoteErr
 }
 
 // RemoveAll deletes the provided paths, relative to the work directory.
-func (c *Client) RemoveAll(ctx context.Context, paths ...string) error {
+func (c *client) RemoveAll(ctx context.Context, paths ...string) error {
 	if len(paths) == 0 {
 		return nil
 	}
@@ -643,7 +643,7 @@ func (c *Client) RemoveAll(ctx context.Context, paths ...string) error {
 }
 
 // DestroyVM shuts down the buildlet and destroys the VM instance.
-func (c *Client) DestroyVM(ts oauth2.TokenSource, proj, zone, instance string) error {
+func (c *client) DestroyVM(ts oauth2.TokenSource, proj, zone, instance string) error {
 	// TODO(bradfitz): move GCE stuff out of this package?
 	gceErrc := make(chan error, 1)
 	buildletErrc := make(chan error, 1)
@@ -696,7 +696,7 @@ type Status struct {
 }
 
 // Status returns an Status value describing this buildlet.
-func (c *Client) Status(ctx context.Context) (Status, error) {
+func (c *client) Status(ctx context.Context) (Status, error) {
 	select {
 	case <-c.peerDead:
 		return Status{}, c.deadErr
@@ -728,7 +728,7 @@ func (c *Client) Status(ctx context.Context) (Status, error) {
 }
 
 // WorkDir returns the absolute path to the buildlet work directory.
-func (c *Client) WorkDir(ctx context.Context) (string, error) {
+func (c *client) WorkDir(ctx context.Context) (string, error) {
 	req, err := http.NewRequest("GET", c.URL()+"/workdir", nil)
 	if err != nil {
 		return "", err
@@ -817,7 +817,7 @@ type ListDirOpts struct {
 // ListDir lists the contents of a directory.
 // The fn callback is run for each entry.
 // The directory dir itself is not included.
-func (c *Client) ListDir(ctx context.Context, dir string, opts ListDirOpts, fn func(DirEntry)) error {
+func (c *client) ListDir(ctx context.Context, dir string, opts ListDirOpts, fn func(DirEntry)) error {
 	param := url.Values{
 		"dir":       {dir},
 		"recursive": {fmt.Sprint(opts.Recursive)},
@@ -845,7 +845,7 @@ func (c *Client) ListDir(ctx context.Context, dir string, opts ListDirOpts, fn f
 	return sc.Err()
 }
 
-func (c *Client) getDialer() func(context.Context) (net.Conn, error) {
+func (c *client) getDialer() func(context.Context) (net.Conn, error) {
 	if !c.tls.IsZero() {
 		return func(_ context.Context) (net.Conn, error) {
 			return c.tls.tlsDialer()("tcp", c.ipPort)
@@ -857,7 +857,7 @@ func (c *Client) getDialer() func(context.Context) (net.Conn, error) {
 	return c.dialWithNetDial
 }
 
-func (c *Client) dialWithNetDial(ctx context.Context) (net.Conn, error) {
+func (c *client) dialWithNetDial(ctx context.Context) (net.Conn, error) {
 	var d net.Dialer
 	return d.DialContext(ctx, "tcp", c.ipPort)
 }
@@ -865,7 +865,7 @@ func (c *Client) dialWithNetDial(ctx context.Context) (net.Conn, error) {
 // ConnectSSH opens an SSH connection to the buildlet for the given username.
 // The authorizedPubKey must be a line from an ~/.ssh/authorized_keys file
 // and correspond to the private key to be used to communicate over the net.Conn.
-func (c *Client) ConnectSSH(user, authorizedPubKey string) (net.Conn, error) {
+func (c *client) ConnectSSH(user, authorizedPubKey string) (net.Conn, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	conn, err := c.getDialer()(ctx)
@@ -901,6 +901,11 @@ func (c *Client) ConnectSSH(user, authorizedPubKey string) (net.Conn, error) {
 	}
 	conn.SetDeadline(time.Time{})
 	return conn, nil
+}
+
+// AddCloseFunc adds an optional extra code to run on close.
+func (c *client) AddCloseFunc(fn func()) {
+	c.closeFuncs = append(c.closeFuncs, fn)
 }
 
 func condRun(fn func()) {

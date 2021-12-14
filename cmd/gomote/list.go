@@ -49,7 +49,7 @@ func list(args []string) error {
 // As a special case, if name contains '@', the name is expected to be
 // of the form <build-config-name>@ip[:port]. For example,
 // "windows-amd64-race@10.0.0.1".
-func remoteClient(name string) (*buildlet.Client, error) {
+func remoteClient(name string) (buildlet.Client, error) {
 	bc, _, err := clientAndCondConf(name, false)
 	return bc, err
 }
@@ -61,11 +61,11 @@ func remoteClient(name string) (*buildlet.Client, error) {
 // As a special case, if name contains '@', the name is expected to be
 // of the form <build-config-name>@ip[:port]. For example,
 // "windows-amd64-race@10.0.0.1".
-func clientAndConf(name string) (bc *buildlet.Client, conf *dashboard.BuildConfig, err error) {
+func clientAndConf(name string) (bc buildlet.Client, conf *dashboard.BuildConfig, err error) {
 	return clientAndCondConf(name, true)
 }
 
-func clientAndCondConf(name string, withConf bool) (bc *buildlet.Client, conf *dashboard.BuildConfig, err error) {
+func clientAndCondConf(name string, withConf bool) (bc buildlet.Client, conf *dashboard.BuildConfig, err error) {
 	if strings.Contains(name, "@") {
 		f := strings.SplitN(name, "@", 2)
 		if len(f) != 2 {

@@ -158,7 +158,7 @@ func (e Environment) RandomVMZone() string {
 // SnapshotURL returns the absolute URL of the .tar.gz containing a
 // built Go tree for the builderType and Go rev (40 character Git
 // commit hash). The tarball is suitable for passing to
-// (*buildlet.Client).PutTarFromURL.
+// (buildlet.Client).PutTarFromURL.
 func (e Environment) SnapshotURL(builderType, rev string) string {
 	return fmt.Sprintf("https://storage.googleapis.com/%s/go/%s/%s.tar.gz", e.SnapBucket, builderType, rev)
 }

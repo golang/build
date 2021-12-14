@@ -73,7 +73,7 @@ type remoteBuildlet struct {
 	Created     time.Time
 	Expires     time.Time
 
-	buildlet *buildlet.Client
+	buildlet buildlet.Client
 }
 
 // renew renews rb's idle timeout if ctx hasn't expired.
@@ -183,7 +183,7 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 		ticker = t.C
 	}
 
-	resc := make(chan *buildlet.Client)
+	resc := make(chan buildlet.Client)
 	errc := make(chan error)
 
 	hconf := bconf.HostConfig()

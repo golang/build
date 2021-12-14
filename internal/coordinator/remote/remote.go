@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/build/buildlet"
 	"golang.org/x/build/internal"
 )
 
@@ -21,21 +22,12 @@ const (
 	remoteBuildletCleanInterval = time.Minute
 )
 
-// BuildletClient is used in order to enable tests. The interface should contain all the buildlet.Client
-// functions used by the callers.
-type BuildletClient interface {
-	Close() error
-	GCEInstanceName() string
-	SetGCEInstanceName(v string)
-	SetName(name string)
-}
-
 // Session stores the metadata for a remote buildlet session.
 type Session struct {
 	mu sync.Mutex
 
 	builderType string // default builder config to use if not overwritten
-	buildlet    BuildletClient
+	buildlet    buildlet.Client
 	created     time.Time
 	expires     time.Time
 	hostType    string
@@ -69,7 +61,7 @@ func (s *Session) isExpired() bool {
 }
 
 // Buildlet returns the buildlet client associated with the Session.
-func (s *Session) Buildlet() BuildletClient {
+func (s *Session) Buildlet() buildlet.Client {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -114,7 +106,7 @@ func NewSessionPool(ctx context.Context) *SessionPool {
 }
 
 // AddSession adds the provided session to the session pool.
-func (sp *SessionPool) AddSession(user, builderType, hostType string, bc BuildletClient) (name string) {
+func (sp *SessionPool) AddSession(user, builderType, hostType string, bc buildlet.Client) (name string) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 

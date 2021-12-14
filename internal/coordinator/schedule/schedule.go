@@ -48,7 +48,7 @@ type getBuildletResult struct {
 	HostType string
 
 	// One of Client or Err gets set:
-	Client *buildlet.Client
+	Client buildlet.Client
 	Err    error
 }
 
@@ -348,18 +348,18 @@ type SchedItem struct {
 	// wantRes is the unbuffered channel that's passed
 	// synchronously from Scheduler.GetBuildlet to
 	// Scheduler.matchBuildlet. Its value is a channel (whose
-	// buffering doesn't matter) to pass over a *buildlet.Client
+	// buffering doesn't matter) to pass over a buildlet.Client
 	// just obtained from a BuildletPool. The contract to use
 	// wantRes is that the sender must have a result already
 	// available to send on the inner channel, and the receiver
 	// still wants it (their context hasn't expired).
-	wantRes chan chan<- *buildlet.Client
+	wantRes chan chan<- buildlet.Client
 }
 
 // GetBuildlet requests a buildlet with the parameters described in si.
 //
 // The provided si must be newly allocated; ownership passes to the scheduler.
-func (s *Scheduler) GetBuildlet(ctx context.Context, si *SchedItem) (*buildlet.Client, error) {
+func (s *Scheduler) GetBuildlet(ctx context.Context, si *SchedItem) (buildlet.Client, error) {
 	hostConf, ok := dashboard.Hosts[si.HostType]
 	if !ok && pool.TestPoolHook == nil {
 		return nil, fmt.Errorf("invalid SchedItem.HostType %q", si.HostType)
@@ -370,11 +370,11 @@ func (s *Scheduler) GetBuildlet(ctx context.Context, si *SchedItem) (*buildlet.C
 	si.s = s
 	si.requestTime = time.Now()
 	si.ctxDone = ctx.Done()
-	si.wantRes = make(chan chan<- *buildlet.Client) // unbuffered
+	si.wantRes = make(chan chan<- buildlet.Client) // unbuffered
 
 	s.addWaiter(si)
 
-	ch := make(chan *buildlet.Client)
+	ch := make(chan buildlet.Client)
 	select {
 	case si.wantRes <- ch:
 		// No need to call removeWaiter. If we're here, the

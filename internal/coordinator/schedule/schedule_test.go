@@ -136,7 +136,7 @@ type getBuildletCall struct {
 	ctxCancel context.CancelFunc
 
 	done      chan struct{} // closed when call done
-	gotClient *buildlet.Client
+	gotClient buildlet.Client
 	gotErr    error
 }
 
@@ -206,16 +206,16 @@ func (c *getBuildletCall) wantGetBuildlet(t *testing.T, s *Scheduler) {
 	}
 }
 
-type poolChan map[string]chan interface{} // hostType -> { *buildlet.Client | error}
+type poolChan map[string]chan interface{} // hostType -> { buildlet.Client | error}
 
-func (m poolChan) GetBuildlet(ctx context.Context, hostType string, lg cpool.Logger) (*buildlet.Client, error) {
+func (m poolChan) GetBuildlet(ctx context.Context, hostType string, lg cpool.Logger) (buildlet.Client, error) {
 	c, ok := m[hostType]
 	if !ok {
 		return nil, fmt.Errorf("pool doesn't support host type %q", hostType)
 	}
 	select {
 	case v := <-c:
-		if c, ok := v.(*buildlet.Client); ok {
+		if c, ok := v.(buildlet.Client); ok {
 			return c, nil
 		}
 		return nil, v.(error)

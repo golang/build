@@ -97,7 +97,7 @@ type buildStatus struct {
 	branch     string    // non-empty for post-submit work
 
 	onceInitHelpers sync.Once // guards call of onceInitHelpersFunc
-	helpers         <-chan *buildlet.Client
+	helpers         <-chan buildlet.Client
 	ctx             context.Context    // used to start the build
 	cancel          context.CancelFunc // used to cancel context; for use by setDone only
 
@@ -107,7 +107,7 @@ type buildStatus struct {
 	canceled        bool                // whether this build was forcefully canceled, so errors should be ignored
 	schedItem       *schedule.SchedItem // for the initial buildlet (ignoring helpers for now)
 	logURL          string              // if non-empty, permanent URL of log
-	bc              *buildlet.Client    // nil initially, until pool returns one
+	bc              buildlet.Client     // nil initially, until pool returns one
 	done            time.Time           // finished running
 	succeeded       bool                // set when done
 	output          livelog.Buffer      // stdout and stderr
@@ -288,7 +288,7 @@ func (st *buildStatus) getHelpersReadySoon() {
 
 // getHelpers returns a channel of buildlet test helpers, with an item
 // sent as they become available. The channel is closed at the end.
-func (st *buildStatus) getHelpers() <-chan *buildlet.Client {
+func (st *buildStatus) getHelpers() <-chan buildlet.Client {
 	st.onceInitHelpers.Do(st.onceInitHelpersFunc)
 	return st.helpers
 }
@@ -377,7 +377,7 @@ func (st *buildStatus) checkDep(ctx context.Context, dep string) (have bool, err
 
 var errSkipBuildDueToDeps = errors.New("build was skipped due to missing deps")
 
-func (st *buildStatus) getBuildlet() (*buildlet.Client, error) {
+func (st *buildStatus) getBuildlet() (buildlet.Client, error) {
 	schedItem := &schedule.SchedItem{
 		HostType:   st.conf.HostType,
 		IsTry:      st.trySet != nil,
@@ -790,7 +790,7 @@ func (st *buildStatus) runAllLegacy() (remoteErr, err error) {
 	return nil, nil
 }
 
-func (st *buildStatus) doSnapshot(bc *buildlet.Client) error {
+func (st *buildStatus) doSnapshot(bc buildlet.Client) error {
 	// If we're using a pre-built snapshot, don't make another.
 	if st.useSnapshot() {
 		return nil
@@ -815,7 +815,7 @@ func (st *buildStatus) writeGoSource() error {
 	return st.writeGoSourceTo(st.bc)
 }
 
-func (st *buildStatus) writeGoSourceTo(bc *buildlet.Client) error {
+func (st *buildStatus) writeGoSourceTo(bc buildlet.Client) error {
 	// Write the VERSION file.
 	sp := st.CreateSpan("write_version_tar")
 	if err := bc.PutTar(st.ctx, buildgo.VersionTgz(st.Rev), "go"); err != nil {
@@ -843,7 +843,7 @@ func (st *buildStatus) writeBootstrapToolchain() error {
 	return sp.Done(st.bc.PutTarFromURL(st.ctx, u, bootstrapDir))
 }
 
-func (st *buildStatus) cleanForSnapshot(bc *buildlet.Client) error {
+func (st *buildStatus) cleanForSnapshot(bc buildlet.Client) error {
 	sp := st.CreateSpan("clean_for_snapshot")
 	return sp.Done(bc.RemoveAll(st.ctx,
 		"go/doc/gopher",
@@ -851,7 +851,7 @@ func (st *buildStatus) cleanForSnapshot(bc *buildlet.Client) error {
 	))
 }
 
-func (st *buildStatus) writeSnapshot(bc *buildlet.Client) (err error) {
+func (st *buildStatus) writeSnapshot(bc buildlet.Client) (err error) {
 	sp := st.CreateSpan("write_snapshot_to_gcs")
 	defer func() { sp.Done(err) }()
 	// This should happen in 15 seconds or so, but I saw timeouts
@@ -1305,7 +1305,7 @@ var errBuildletsGone = errors.New("runTests: dist test failed: all buildlets had
 //
 // After runTests completes, the caller must assume that st.bc might be invalid
 // (It's possible that only one of the helper buildlets survived).
-func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err error) {
+func (st *buildStatus) runTests(helpers <-chan buildlet.Client) (remoteErr, err error) {
 	testNames, remoteErr, err := st.distTestList()
 	if remoteErr != nil {
 		return fmt.Errorf("distTestList remote: %v", remoteErr), nil
@@ -1358,7 +1358,7 @@ func (st *buildStatus) runTests(helpers <-chan *buildlet.Client) (remoteErr, err
 		defer buildletActivity.Done() // for the per-goroutine Add(2) above
 		for helper := range helpers {
 			buildletActivity.Add(1)
-			go func(bc *buildlet.Client) {
+			go func(bc buildlet.Client) {
 				defer buildletActivity.Done() // for the per-helper Add(1) above
 				defer st.LogEventTime("closed_helper", bc.Name())
 				defer bc.Close()
@@ -1478,7 +1478,7 @@ func parseOutputAndBanner(b []byte) (banner string, out []byte) {
 const maxTestExecErrors = 3
 
 // runTestsOnBuildlet runs tis on bc, using the optional goroot & gopath environment variables.
-func (st *buildStatus) runTestsOnBuildlet(bc *buildlet.Client, tis []*testItem, goroot, gopath string) {
+func (st *buildStatus) runTestsOnBuildlet(bc buildlet.Client, tis []*testItem, goroot, gopath string) {
 	names := make([]string, len(tis))
 	for i, ti := range tis {
 		names[i] = ti.name

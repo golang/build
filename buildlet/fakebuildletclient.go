@@ -15,7 +15,11 @@ import (
 	"golang.org/x/oauth2"
 )
 
-type clientBuildlet interface {
+// Client is an interface that represent the methods exposed by client. The
+// fake buildlet client should be used instead of client when testing things that
+// use the client interface.
+type Client interface {
+	AddCloseFunc(fn func())
 	Close() error
 	ConnectSSH(user, authorizedPubKey string) (net.Conn, error)
 	DestroyVM(ts oauth2.TokenSource, proj, zone, instance string) error
@@ -33,10 +37,13 @@ type clientBuildlet interface {
 	PutTar(ctx context.Context, r io.Reader, dir string) error
 	PutTarFromURL(ctx context.Context, tarURL, dir string) error
 	RemoteName() string
+	RemoveAll(ctx context.Context, paths ...string) error
 	SetDescription(v string)
+	SetDialer(dialer func(context.Context) (net.Conn, error))
 	SetGCEInstanceName(v string)
 	SetHTTPClient(httpClient *http.Client)
 	SetName(name string)
+	SetOnHeartbeatFailure(fn func())
 	SetReleaseMode(v bool)
 	Status(ctx context.Context) (Status, error)
 	String() string
@@ -46,16 +53,27 @@ type clientBuildlet interface {
 
 var errUnimplemented = errors.New("unimplemented function")
 
-var _ clientBuildlet = (*FakeClient)(nil)
+var _ Client = (*FakeClient)(nil)
 
 // FakeClient is a fake buildlet client used for testing. Not all functions are implemented.
 type FakeClient struct {
 	name         string
 	instanceName string
+	closeFuncs   []func()
+}
+
+// AddCloseFunc adds optional extra code to run on close for the fake buildlet.
+func (fc *FakeClient) AddCloseFunc(fn func()) {
+	fc.closeFuncs = append(fc.closeFuncs, fn)
 }
 
 // Close is a fake client closer.
-func (fc *FakeClient) Close() error { return nil }
+func (fc *FakeClient) Close() error {
+	for _, f := range fc.closeFuncs {
+		f()
+	}
+	return nil
+}
 
 // ConnectSSH connects to a fake SSH server.
 func (fc *FakeClient) ConnectSSH(user, authorizedPubKey string) (net.Conn, error) {
@@ -124,6 +142,9 @@ func (fc *FakeClient) RemoteName() string { return "" }
 // SetDescription sets the description on a fake client.
 func (fc *FakeClient) SetDescription(v string) {}
 
+// SetDialer sets the function that creates a new connection to the fake buildlet.
+func (fc *FakeClient) SetDialer(dialer func(context.Context) (net.Conn, error)) {}
+
 // SetGCEInstanceName sets the GCE instance name on a fake client.
 func (fc *FakeClient) SetGCEInstanceName(v string) {
 	fc.instanceName = v
@@ -136,6 +157,9 @@ func (fc *FakeClient) SetHTTPClient(httpClient *http.Client) {}
 func (fc *FakeClient) SetName(name string) {
 	fc.name = name
 }
+
+// SetOnHeartbeatFailure sets a function to be called when heartbeats against this fake buildlet fail.
+func (fc *FakeClient) SetOnHeartbeatFailure(fn func()) {}
 
 // SetReleaseMode sets the release mode on a fake client.
 func (fc *FakeClient) SetReleaseMode(v bool) {}
@@ -151,3 +175,6 @@ func (fc *FakeClient) URL() string { return "" }
 
 // WorkDir is the working directory for the fake buildlet.
 func (fc *FakeClient) WorkDir(ctx context.Context) (string, error) { return "", errUnimplemented }
+
+// RemoveAll deletes the provided paths, relative to the work directory for a fake buildlet.
+func (fc *FakeClient) RemoveAll(ctx context.Context, paths ...string) error { return errUnimplemented }

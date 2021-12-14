@@ -68,7 +68,7 @@ type PodOpts struct {
 
 // StartPod creates a new pod on a Kubernetes cluster and returns a buildlet client
 // configured to speak to it.
-func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, hostType string, opts PodOpts) (*Client, error) {
+func StartPod(ctx context.Context, kubeClient *kubernetes.Client, podName, hostType string, opts PodOpts) (Client, error) {
 	conf, ok := dashboard.Hosts[hostType]
 	if !ok || conf.ContainerImage == "" {
 		return nil, fmt.Errorf("invalid builder type %q", hostType)

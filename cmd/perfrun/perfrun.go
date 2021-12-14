@@ -112,7 +112,7 @@ func runBench(out io.Writer, bench, src string, commits []string) error {
 	return nil
 }
 
-func namedClient(name string) (*buildlet.Client, error) {
+func namedClient(name string) (buildlet.Client, error) {
 	if strings.Contains(name, ":") {
 		return buildlet.NewClient(name, buildlet.NoKeyPair), nil
 	}
