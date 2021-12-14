@@ -62,7 +62,10 @@ message CreateInstanceResponse {
 }
 
 // DestroyInstanceRequest specifies the data needed to destroy a gomote instance.
-message DestroyInstanceRequest {}
+message DestroyInstanceRequest {
+  // The unique identifier for a gomote instance.
+  string gomote_id = 1;
+}
 
 // DestroyInstanceResponse contains data about a destroyed gomote instance.
 message DestroyInstanceResponse {}

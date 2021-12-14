@@ -166,6 +166,31 @@ func (s *Server) ListInstances(ctx context.Context, req *protos.ListInstancesReq
 	}, nil
 }
 
+// DestroyInstance will destroy a gomote instance. It will ensure that the caller is authenticated and is the owner of the instance
+// before it destroys the instance.
+func (s *Server) DestroyInstance(ctx context.Context, req *protos.DestroyInstanceRequest) (*protos.DestroyInstanceResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("DestroyInstance access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	if req.GetGomoteId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid gomote ID")
+	}
+	session, err := s.buildlets.Session(req.GetGomoteId())
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
+	}
+	if session.OwnerID != creds.ID {
+		return nil, status.Errorf(codes.PermissionDenied, "not allowed to modify this gomote session")
+	}
+	if err := s.buildlets.DestroySession(req.GetGomoteId()); err != nil {
+		log.Printf("DestroyInstance remote.DestroySession(%s) = %s", req.GetGomoteId(), err)
+		return nil, status.Errorf(codes.Internal, "unable to destroy gomote instance")
+	}
+	return &protos.DestroyInstanceResponse{}, nil
+}
+
 // isPrivilagedUser returns true if the user is using a Google account.
 // The user has to be a part of the appropriate IAM group.
 func isPrivilegedUser(email string) bool {

@@ -178,6 +178,75 @@ func TestListInstance(t *testing.T) {
 	}
 }
 
+func TestDestroyInstance(t *testing.T) {
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	client := setupGomoteTest(t, context.Background())
+	gomoteID := mustCreateInstance(t, client, fakeIAP())
+	if _, err := client.DestroyInstance(ctx, &protos.DestroyInstanceRequest{
+		GomoteId: gomoteID,
+	}); err != nil {
+		t.Fatalf("client.DestroyInstance(ctx, req) = response, %s; want no error", err)
+	}
+}
+
+func TestDestroyInstanceError(t *testing.T) {
+	// This test will create a gomote instance and attempt to call DestroyInstance.
+	// If overrideID is set to true, the test will use a diffrent gomoteID than the
+	// the one created for the test.
+	testCases := []struct {
+		desc       string
+		ctx        context.Context
+		overrideID bool
+		gomoteID   string // Used iff overrideID is true.
+		wantCode   codes.Code
+	}{
+		{
+			desc:     "unauthenticated request",
+			ctx:      context.Background(),
+			wantCode: codes.Unauthenticated,
+		},
+		{
+			desc:       "missing gomote id",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			overrideID: true,
+			gomoteID:   "",
+			wantCode:   codes.InvalidArgument,
+		},
+		{
+			desc:       "gomote does not exist",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID: true,
+			gomoteID:   "chucky",
+			wantCode:   codes.NotFound,
+		},
+		{
+			desc:       "wrong gomote id",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID: false,
+			wantCode:   codes.PermissionDenied,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			client := setupGomoteTest(t, context.Background())
+			gomoteID := mustCreateInstance(t, client, fakeIAP())
+			if tc.overrideID {
+				gomoteID = tc.gomoteID
+			}
+			req := &protos.DestroyInstanceRequest{
+				GomoteId: gomoteID,
+			}
+			got, err := client.DestroyInstance(tc.ctx, req)
+			if err != nil && status.Code(err) != tc.wantCode {
+				t.Fatalf("unexpected error: %s", err)
+			}
+			if err == nil {
+				t.Fatalf("client.DestroyInstance(ctx, %v) = %v, nil; want error", req, got)
+			}
+		})
+	}
+}
+
 func TestIsPrivilegedUser(t *testing.T) {
 	in := "accounts.google.com:example@google.com"
 	if !isPrivilegedUser(in) {
