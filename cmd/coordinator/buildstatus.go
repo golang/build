@@ -1496,6 +1496,7 @@ func (st *buildStatus) runTests(helpers <-chan buildlet.Client) (remoteErr, err 
 		close(buildletsGone)
 	}()
 
+	var lastMetadata string
 	var lastHeader string
 	var serialDuration time.Duration
 	for _, ti := range set.items {
@@ -1516,9 +1517,24 @@ func (st *buildStatus) runTests(helpers <-chan buildlet.Client) (remoteErr, err 
 
 		serialDuration += ti.execDuration
 		if len(ti.output) > 0 {
-			header, out := parseOutputAndHeader(ti.output)
+			metadata, header, out := parseOutputAndHeader(ti.output)
+			printHeader := false
+			if metadata != lastMetadata {
+				lastMetadata = metadata
+				fmt.Fprintf(st, "\n%s\n", metadata)
+				// Always include the test header after
+				// metadata changes. This is a readability
+				// optimization that ensures that tests are
+				// always immediately preceeded by their test
+				// banner, even if it is duplicate banner
+				// because the test metadata changed.
+				printHeader = true
+			}
 			if header != lastHeader {
 				lastHeader = header
+				printHeader = true
+			}
+			if printHeader {
 				fmt.Fprintf(st, "\n%s\n", header)
 			}
 			if pool.NewGCEConfiguration().InStaging() {
@@ -1551,31 +1567,63 @@ const (
 	banner       = "XXXBANNERXXX:" // flag passed to dist
 	bannerPrefix = "\n" + banner   // with the newline added by dist
 
+	metadataBannerPrefix = bannerPrefix + "Test execution environment."
+
 	outputBanner = "##### " // banner to display in output.
 )
 
-var bannerPrefixBytes = []byte(bannerPrefix)
+var (
+	bannerPrefixBytes         = []byte(bannerPrefix)
+	metadataBannerPrefixBytes = []byte(metadataBannerPrefix)
+)
 
-// parseOutputAndHeader parses b and returns the test display header (e.g.,
-// "##### Testing packages.") and the following output.
-func parseOutputAndHeader(b []byte) (header string, out []byte) {
+// parseOutputAndHeader parses b and returns the test (optional) environment
+// metaadata, display header (e.g., "##### Testing packages.") and the
+// following output.
+//
+// metadata is the optional execution environment metadata block. e.g.,
+//
+// ##### Test execution environment.
+// # GOARCH: amd64
+// # CPU: Intel(R) Xeon(R) W-2135 CPU @ 3.70GHz
+func parseOutputAndHeader(b []byte) (metadata, header string, out []byte) {
 	if !bytes.HasPrefix(b, bannerPrefixBytes) {
-		return "", b
+		return "", "", b
 	}
 
-	b = b[1:] // skip newline
+	if bytes.HasPrefix(b, metadataBannerPrefixBytes) {
+		// Header includes everything up to and including the next
+		// banner.
+		rem := b[len(metadataBannerPrefixBytes):]
+		i := bytes.Index(rem, bannerPrefixBytes)
+		if i == -1 {
+			// Metadata block without a following block doesn't
+			// make sense. Bail.
+			return "", "", b
+		}
+		bi := i + len(metadataBannerPrefixBytes)
+		// Metadata portion of header, skipping initial and trailing newlines.
+		metadata = strings.Trim(string(b[:bi]), "\n")
+		metadata = strings.Replace(metadata, banner, outputBanner, 1)
+		b = b[bi+1:] // skip newline at start of next banner.
+	} else {
+		b = b[1:] // skip newline
+	}
+
+	// Find end of primary test banner.
 	nl := bytes.IndexByte(b, '\n')
 	if nl == -1 {
+		// No newline, everything is header.
 		header = string(b)
 		b = nil
 	} else {
 		header = string(b[:nl])
 		b = b[nl+1:]
 	}
-	// Replace internal marker banner with the human-friendly
-	// version.
-	header = strings.ReplaceAll(header, banner, outputBanner)
-	return header, b
+
+	// Replace internal marker banner with the human-friendly version.
+	header = strings.Replace(header, banner, outputBanner, 1)
+	return metadata, header, b
 }
 
 // maxTestExecError is the number of test execution failures at which
