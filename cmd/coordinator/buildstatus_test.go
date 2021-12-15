@@ -12,12 +12,12 @@ import (
 	"testing"
 )
 
-// TestParseOutputAndBanner tests banner parsing by parseOutputAndBanner.
-func TestParseOutputAndBanner(t *testing.T) {
+// TestParseOutputAndHeader tests header parsing by parseOutputAndHeader.
+func TestParseOutputAndHeader(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		input      []byte
-		wantBanner string
+		wantHeader string
 		wantOut    []byte
 	}{
 		{
@@ -28,27 +28,26 @@ ok	archive/tar	0.015s
 ok	archive/zip	0.406s
 ok	bufio	0.075s
 `),
-			wantBanner: "Testing packages.",
+			wantHeader: "##### Testing packages.",
 			wantOut: []byte(`ok	archive/tar	0.015s
 ok	archive/zip	0.406s
 ok	bufio	0.075s
 `),
 		},
 		{
-			name: "banner only",
+			name: "header only",
 			input: []byte(`
 XXXBANNERXXX:Testing packages.
 `),
-			wantBanner: "Testing packages.",
+			wantHeader: "##### Testing packages.",
 			wantOut:    []byte(``),
 		},
 		{
-			// TODO(prattmic): This is likely not desirable behavior.
-			name: "banner only missing trailing newline",
+			name: "header only missing trailing newline",
 			input: []byte(`
 XXXBANNERXXX:Testing packages.`),
-			wantBanner: "",
-			wantOut:    []byte(`Testing packages.`),
+			wantHeader: "##### Testing packages.",
+			wantOut:    []byte(``),
 		},
 		{
 			name: "no banner",
@@ -56,7 +55,7 @@ XXXBANNERXXX:Testing packages.`),
 ok	archive/zip	0.406s
 ok	bufio	0.075s
 `),
-			wantBanner: "",
+			wantHeader: "",
 			wantOut: []byte(`ok	archive/tar	0.015s
 ok	archive/zip	0.406s
 ok	bufio	0.075s
@@ -69,7 +68,7 @@ ok	archive/tar	0.015s
 ok	archive/zip	0.406s
 ok	bufio	0.075s
 `),
-			wantBanner: "",
+			wantHeader: "",
 			wantOut: []byte(`XXXBANNERXXX:Testing packages.
 ok	archive/tar	0.015s
 ok	archive/zip	0.406s
@@ -84,7 +83,7 @@ ok	archive/tar	0.015s
 ok	archive/zip	0.406s
 ok	bufio	0.075s
 `),
-			wantBanner: "",
+			wantHeader: "",
 			wantOut: []byte(`
 ##### Testing packages.
 ok	archive/tar	0.015s
@@ -94,9 +93,9 @@ ok	bufio	0.075s
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			gotBanner, gotOut := parseOutputAndBanner(tc.input)
-			if gotBanner != tc.wantBanner {
-				t.Errorf("parseOutputAndBanner(%q) got banner %q want banner %q", string(tc.input), gotBanner, tc.wantBanner)
+			gotHeader, gotOut := parseOutputAndHeader(tc.input)
+			if gotHeader != tc.wantHeader {
+				t.Errorf("parseOutputAndBanner(%q) got banner %q want banner %q", string(tc.input), gotHeader, tc.wantHeader)
 			}
 			if string(gotOut) != string(tc.wantOut) {
 				t.Errorf("parseOutputAndBanner(%q) got out %q want out %q", string(tc.input), string(gotOut), string(tc.wantOut))

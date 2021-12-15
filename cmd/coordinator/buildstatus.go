@@ -1400,7 +1400,7 @@ func (st *buildStatus) runTests(helpers <-chan buildlet.Client) (remoteErr, err 
 		close(buildletsGone)
 	}()
 
-	var lastBanner string
+	var lastHeader string
 	var serialDuration time.Duration
 	for _, ti := range set.items {
 	AwaitDone:
@@ -1420,10 +1420,10 @@ func (st *buildStatus) runTests(helpers <-chan buildlet.Client) (remoteErr, err 
 
 		serialDuration += ti.execDuration
 		if len(ti.output) > 0 {
-			banner, out := parseOutputAndBanner(ti.output)
-			if banner != lastBanner {
-				lastBanner = banner
-				fmt.Fprintf(st, "\n##### %s\n", banner)
+			header, out := parseOutputAndHeader(ti.output)
+			if header != lastHeader {
+				lastHeader = header
+				fmt.Fprintf(st, "\n%s\n", header)
 			}
 			if pool.NewGCEConfiguration().InStaging() {
 				out = bytes.TrimSuffix(out, nl)
@@ -1454,20 +1454,32 @@ func (st *buildStatus) runTests(helpers <-chan buildlet.Client) (remoteErr, err 
 const (
 	banner       = "XXXBANNERXXX:" // flag passed to dist
 	bannerPrefix = "\n" + banner   // with the newline added by dist
+
+	outputBanner = "##### " // banner to display in output.
 )
 
 var bannerPrefixBytes = []byte(bannerPrefix)
 
-func parseOutputAndBanner(b []byte) (banner string, out []byte) {
-	if bytes.HasPrefix(b, bannerPrefixBytes) {
-		b = b[len(bannerPrefixBytes):]
-		nl := bytes.IndexByte(b, '\n')
-		if nl != -1 {
-			banner = string(b[:nl])
-			b = b[nl+1:]
-		}
+// parseOutputAndHeader parses b and returns the test display header (e.g.,
+// "##### Testing packages.") and the following output.
+func parseOutputAndHeader(b []byte) (header string, out []byte) {
+	if !bytes.HasPrefix(b, bannerPrefixBytes) {
+		return "", b
 	}
-	return banner, b
+
+	b = b[1:] // skip newline
+	nl := bytes.IndexByte(b, '\n')
+	if nl == -1 {
+		header = string(b)
+		b = nil
+	} else {
+		header = string(b[:nl])
+		b = b[nl+1:]
+	}
+	// Replace internal marker banner with the human-friendly
+	// version.
+	header = strings.ReplaceAll(header, banner, outputBanner)
+	return header, b
 }
 
 // maxTestExecError is the number of test execution failures at which
