@@ -275,6 +275,7 @@ func (w *Work) closeMilestone() {
 
 }
 
+// removeOkayAfterBeta1 cleans up the okay-after-beta1 label after the beta1 release is out.
 func (w *Work) removeOkayAfterBeta1() {
 	if !w.BetaRelease || !strings.HasSuffix(w.Version, "beta1") {
 		// Nothing to do.
@@ -288,7 +289,7 @@ func (w *Work) removeOkayAfterBeta1() {
 		if gi.Number == int32(w.ReleaseIssue) {
 			return nil
 		}
-		if gi.Closed || !gi.HasLabel("release-blocker") || !gi.HasLabel("okay-after-beta1") {
+		if gi.Closed || !gi.HasLabel("okay-after-beta1") {
 			return nil
 		}
 		w.log.Printf("removing okay-after-beta1 label in issue %d", gi.Number)
