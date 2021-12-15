@@ -2213,6 +2213,7 @@ func init() {
 		Name:         "openbsd-arm-jsing",
 		HostType:     "host-openbsd-arm-joelsing",
 		SkipSnapshot: true,
+		FlakyNet:     true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
 			case "go", "net", "sys":
@@ -2232,6 +2233,7 @@ func init() {
 		Name:         "openbsd-arm64-jsing",
 		HostType:     "host-openbsd-arm64-joelsing",
 		SkipSnapshot: true,
+		FlakyNet:     true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
 			case "go", "net", "sys":
@@ -2251,6 +2253,7 @@ func init() {
 		Name:         "openbsd-mips64-jsing",
 		HostType:     "host-openbsd-mips64-joelsing",
 		SkipSnapshot: true,
+		FlakyNet:     true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
 			case "go", "net", "sys":
@@ -2619,6 +2622,7 @@ func init() {
 		Name:     "solaris-amd64-oraclerel",
 		HostType: "host-solaris-oracle-amd64-oraclerel",
 		Notes:    "Oracle Solaris release version",
+		FlakyNet: true,
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-ppc64-buildlet",
@@ -2735,6 +2739,7 @@ func init() {
 		HostType:       "host-linux-riscv64-joelsing",
 		Name:           "linux-riscv64-jsing",
 		SkipSnapshot:   true,
+		FlakyNet:       true,
 		env:            []string{"GO_TEST_TIMEOUT_SCALE=4"},
 		distTestAdjust: riscvDistTestPolicy,
 		buildsRepo: func(repo, branch, goBranch string) bool {
@@ -2758,6 +2763,7 @@ func init() {
 		Name:           "linux-s390x-ibm",
 		HostType:       "host-linux-s390x",
 		numTestHelpers: 0,
+		FlakyNet:       true,
 	})
 	addBuilder(BuildConfig{
 		Name:        "linux-s390x-crosscompile",
@@ -2794,6 +2800,7 @@ func init() {
 		HostType:       "host-freebsd-arm-paulzhol",
 		distTestAdjust: noTestDirAndNoReboot,
 		SkipSnapshot:   true,
+		FlakyNet:       true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// This was a fragile little machine with limited memory.
 			// Only run a few of the core subrepos for now while
