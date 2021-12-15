@@ -180,7 +180,7 @@ func main() {
 
 	// Find milestone.
 	var err error
-	w.Milestone, err = getMilestone(w.Version)
+	w.Milestone, err = findMilestone(w.Version)
 	if err != nil {
 		log.Fatalf("cannot find the GitHub milestone for release %s: %v", w.Version, err)
 	}
@@ -324,9 +324,9 @@ func loadGomoteUser() {
 	log.Fatal("missing gomote token - cannot build releases.\n**FIX**: Download https://build-dot-golang-org.appspot.com/key?builder=user-YOURNAME\nand store in ~/.config/gomote/user-YOURNAME.token")
 }
 
-// getMilestone returns the GitHub milestone corresponding to the specified version,
-// or an error if it cannot be found.
-func getMilestone(version string) (*maintner.GitHubMilestone, error) {
+// findMilestone finds the GitHub milestone corresponding to the specified Go version.
+// If there isn't exactly one open GitHub milestone that matches, an error is returned.
+func findMilestone(version string) (*maintner.GitHubMilestone, error) {
 	// Pre-release versions of Go share the same milestone as the
 	// release version, so trim the pre-release suffix, if any.
 	if i := strings.Index(version, "beta"); i != -1 {
@@ -335,18 +335,35 @@ func getMilestone(version string) (*maintner.GitHubMilestone, error) {
 		version = version[:i]
 	}
 
-	var found *maintner.GitHubMilestone
+	var open, closed []*maintner.GitHubMilestone
 	goRepo.ForeachMilestone(func(m *maintner.GitHubMilestone) error {
 		if strings.ToLower(m.Title) != version {
 			return nil
 		}
-		found = m
-		return errors.New("stop iteration")
+		if !m.Closed {
+			open = append(open, m)
+		} else {
+			closed = append(closed, m)
+		}
+		return nil
 	})
-	if found == nil {
-		return nil, fmt.Errorf("no milestone found for version %q", version)
+	if len(open) == 1 {
+		// Happy path: found exactly one open matching milestone.
+		return open[0], nil
+	} else if len(open) == 0 && len(closed) == 0 {
+		return nil, errors.New("no milestone found")
 	}
-	return found, nil
+	// Something's really unexpected.
+	// Include all relevant information to help the human who'll need to sort it out.
+	var buf strings.Builder
+	buf.WriteString("found duplicate or closed milestones:\n")
+	for _, m := range open {
+		fmt.Fprintf(&buf, "\t• open milestone %q (https://github.com/golang/go/milestone/%d)\n", m.Title, m.Number)
+	}
+	for _, m := range closed {
+		fmt.Fprintf(&buf, "\t• closed milestone %q (https://github.com/golang/go/milestone/%d)\n", m.Title, m.Number)
+	}
+	return nil, errors.New(buf.String())
 }
 
 func nextVersion(version string) (string, error) {
