@@ -62,10 +62,7 @@ func (s *Server) Authenticate(ctx context.Context, req *protos.AuthenticateReque
 
 // CreateInstance will create a gomote instance for the authenticated user.
 func (s *Server) CreateInstance(req *protos.CreateInstanceRequest, stream protos.GomoteService_CreateInstanceServer) error {
-	ctx, cancel := context.WithTimeout(stream.Context(), 5*time.Minute)
-	defer cancel()
-
-	creds, err := access.IAPFromContext(ctx)
+	creds, err := access.IAPFromContext(stream.Context())
 	if err != nil {
 		log.Printf("CreateInstance access.IAPFromContext(ctx) = nil, %s", err)
 		return status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
@@ -90,14 +87,14 @@ func (s *Server) CreateInstance(req *protos.CreateInstanceRequest, stream protos
 	}
 	rc := make(chan result, 1)
 	go func() {
-		bc, err := s.scheduler.GetBuildlet(ctx, si)
+		bc, err := s.scheduler.GetBuildlet(stream.Context(), si)
 		rc <- result{bc, err}
 	}()
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-ctx.Done():
+		case <-stream.Context().Done():
 			return status.Errorf(codes.DeadlineExceeded, "timed out waiting for gomote instance to be created")
 		case <-ticker.C:
 			st := s.scheduler.WaiterState(si)
@@ -149,21 +146,19 @@ func (s *Server) ListInstances(ctx context.Context, req *protos.ListInstancesReq
 		log.Printf("ListInstances access.IAPFromContext(ctx) = nil, %s", err)
 		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
 	}
-	var instances []*protos.Instance
+	res := &protos.ListInstancesResponse{}
 	for _, s := range s.buildlets.List() {
 		if s.OwnerID != creds.ID {
 			continue
 		}
-		instances = append(instances, &protos.Instance{
+		res.Instances = append(res.Instances, &protos.Instance{
 			GomoteId:    s.ID,
 			BuilderType: s.BuilderType,
 			HostType:    s.HostType,
 			Expires:     s.Expires.Unix(),
 		})
 	}
-	return &protos.ListInstancesResponse{
-		Instances: instances,
-	}, nil
+	return res, nil
 }
 
 // DestroyInstance will destroy a gomote instance. It will ensure that the caller is authenticated and is the owner of the instance
