@@ -209,6 +209,35 @@ func (s *Server) DestroyInstance(ctx context.Context, req *protos.DestroyInstanc
 	return &protos.DestroyInstanceResponse{}, nil
 }
 
+// RemoveFiles removes files or directories from the gomote instance.
+func (s *Server) RemoveFiles(ctx context.Context, req *protos.RemoveFilesRequest) (*protos.RemoveFilesResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("RemoveFiles access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	// TODO(go.dev/issue/48742) consider what additional path validation should be implemented.
+	if req.GetGomoteId() == "" || len(req.GetPaths()) == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid arguments")
+	}
+	session, err := s.buildlets.Session(req.GetGomoteId())
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
+	}
+	if session.OwnerID != creds.ID {
+		return nil, status.Errorf(codes.PermissionDenied, "not allowed to modify this gomote session")
+	}
+	bc, err := s.buildlets.BuildletClient(req.GetGomoteId())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "unable to retrieve buildlet client")
+	}
+	if err := bc.RemoveAll(ctx, req.GetPaths()...); err != nil {
+		log.Printf("RemoveFiles buildletClient.RemoveAll(ctx, %q) = %s", req.GetPaths(), err)
+		return nil, status.Errorf(codes.Unknown, "unable to remove files")
+	}
+	return &protos.RemoveFilesResponse{}, nil
+}
+
 // WriteTGZFromURL will instruct the gomote instance to download the tar.gz from the provided URL. The tar.gz file will be unpacked in the work directory
 // relative to the directory provided.
 func (s *Server) WriteTGZFromURL(ctx context.Context, req *protos.WriteTGZFromURLRequest) (*protos.WriteTGZFromURLResponse, error) {

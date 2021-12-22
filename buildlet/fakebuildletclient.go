@@ -57,9 +57,9 @@ var _ Client = (*FakeClient)(nil)
 
 // FakeClient is a fake buildlet client used for testing. Not all functions are implemented.
 type FakeClient struct {
-	name         string
-	instanceName string
 	closeFuncs   []func()
+	instanceName string
+	name         string
 }
 
 // AddCloseFunc adds optional extra code to run on close for the fake buildlet.
@@ -123,11 +123,13 @@ func (fc *FakeClient) ProxyTCP(port int) (io.ReadWriteCloser, error) { return ni
 
 // Put places a file on a fake buildlet.
 func (fc *FakeClient) Put(ctx context.Context, r io.Reader, path string, mode os.FileMode) error {
+	// TODO(go.dev/issue/48742) add a file system implementation which would enable proper testing.
 	return errUnimplemented
 }
 
 // PutTar fakes putting  a tar zipped file on a buildldet.
 func (fc *FakeClient) PutTar(ctx context.Context, r io.Reader, dir string) error {
+	// TODO(go.dev/issue/48742) add a file system implementation which would enable proper testing.
 	return errUnimplemented
 }
 
@@ -177,4 +179,7 @@ func (fc *FakeClient) URL() string { return "" }
 func (fc *FakeClient) WorkDir(ctx context.Context) (string, error) { return "", errUnimplemented }
 
 // RemoveAll deletes the provided paths, relative to the work directory for a fake buildlet.
-func (fc *FakeClient) RemoveAll(ctx context.Context, paths ...string) error { return errUnimplemented }
+func (fc *FakeClient) RemoveAll(ctx context.Context, paths ...string) error {
+	// TODO(go.dev/issue/48742) add a file system implementation which would enable proper testing.
+	return nil
+}

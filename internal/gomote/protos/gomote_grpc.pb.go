@@ -34,8 +34,8 @@ type GomoteServiceClient interface {
 	ListInstances(ctx context.Context, in *ListInstancesRequest, opts ...grpc.CallOption) (*ListInstancesResponse, error)
 	// ReadTGZ tars and zips a dicrectory which exists on the gomote instance.
 	ReadTGZ(ctx context.Context, in *ReadTGZRequest, opts ...grpc.CallOption) (GomoteService_ReadTGZClient, error)
-	// RemoveDirectory removes a directory from the gomote instance.
-	RemoveDirectory(ctx context.Context, in *RemoveDirectoryRequest, opts ...grpc.CallOption) (*RemoveDirectoryResponse, error)
+	// RemoveFiles removes files or directories from the gomote instance.
+	RemoveFiles(ctx context.Context, in *RemoveFilesRequest, opts ...grpc.CallOption) (*RemoveFilesResponse, error)
 	// RetrieveSSHCredentials retrieves the SSH credentials for the specified gomote instance.
 	RetrieveSSHCredentials(ctx context.Context, in *RetrieveSSHCredentialsRequest, opts ...grpc.CallOption) (*RetrieveSSHCredentialsResponse, error)
 	// WriteTGZ expands a tar and ziped file onto the file system of a gomote instance.
@@ -193,9 +193,9 @@ func (x *gomoteServiceReadTGZClient) Recv() (*ReadTGZResponse, error) {
 	return m, nil
 }
 
-func (c *gomoteServiceClient) RemoveDirectory(ctx context.Context, in *RemoveDirectoryRequest, opts ...grpc.CallOption) (*RemoveDirectoryResponse, error) {
-	out := new(RemoveDirectoryResponse)
-	err := c.cc.Invoke(ctx, "/protos.GomoteService/RemoveDirectory", in, out, opts...)
+func (c *gomoteServiceClient) RemoveFiles(ctx context.Context, in *RemoveFilesRequest, opts ...grpc.CallOption) (*RemoveFilesResponse, error) {
+	out := new(RemoveFilesResponse)
+	err := c.cc.Invoke(ctx, "/protos.GomoteService/RemoveFiles", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -274,8 +274,8 @@ type GomoteServiceServer interface {
 	ListInstances(context.Context, *ListInstancesRequest) (*ListInstancesResponse, error)
 	// ReadTGZ tars and zips a dicrectory which exists on the gomote instance.
 	ReadTGZ(*ReadTGZRequest, GomoteService_ReadTGZServer) error
-	// RemoveDirectory removes a directory from the gomote instance.
-	RemoveDirectory(context.Context, *RemoveDirectoryRequest) (*RemoveDirectoryResponse, error)
+	// RemoveFiles removes files or directories from the gomote instance.
+	RemoveFiles(context.Context, *RemoveFilesRequest) (*RemoveFilesResponse, error)
 	// RetrieveSSHCredentials retrieves the SSH credentials for the specified gomote instance.
 	RetrieveSSHCredentials(context.Context, *RetrieveSSHCredentialsRequest) (*RetrieveSSHCredentialsResponse, error)
 	// WriteTGZ expands a tar and ziped file onto the file system of a gomote instance.
@@ -313,8 +313,8 @@ func (UnimplementedGomoteServiceServer) ListInstances(context.Context, *ListInst
 func (UnimplementedGomoteServiceServer) ReadTGZ(*ReadTGZRequest, GomoteService_ReadTGZServer) error {
 	return status.Errorf(codes.Unimplemented, "method ReadTGZ not implemented")
 }
-func (UnimplementedGomoteServiceServer) RemoveDirectory(context.Context, *RemoveDirectoryRequest) (*RemoveDirectoryResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RemoveDirectory not implemented")
+func (UnimplementedGomoteServiceServer) RemoveFiles(context.Context, *RemoveFilesRequest) (*RemoveFilesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveFiles not implemented")
 }
 func (UnimplementedGomoteServiceServer) RetrieveSSHCredentials(context.Context, *RetrieveSSHCredentialsRequest) (*RetrieveSSHCredentialsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RetrieveSSHCredentials not implemented")
@@ -491,20 +491,20 @@ func (x *gomoteServiceReadTGZServer) Send(m *ReadTGZResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func _GomoteService_RemoveDirectory_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RemoveDirectoryRequest)
+func _GomoteService_RemoveFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveFilesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GomoteServiceServer).RemoveDirectory(ctx, in)
+		return srv.(GomoteServiceServer).RemoveFiles(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/protos.GomoteService/RemoveDirectory",
+		FullMethod: "/protos.GomoteService/RemoveFiles",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GomoteServiceServer).RemoveDirectory(ctx, req.(*RemoveDirectoryRequest))
+		return srv.(GomoteServiceServer).RemoveFiles(ctx, req.(*RemoveFilesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -599,8 +599,8 @@ var GomoteService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _GomoteService_ListInstances_Handler,
 		},
 		{
-			MethodName: "RemoveDirectory",
-			Handler:    _GomoteService_RemoveDirectory_Handler,
+			MethodName: "RemoveFiles",
+			Handler:    _GomoteService_RemoveFiles_Handler,
 		},
 		{
 			MethodName: "RetrieveSSHCredentials",

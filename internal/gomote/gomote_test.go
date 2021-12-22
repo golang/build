@@ -316,6 +316,86 @@ func TestDestroyInstanceError(t *testing.T) {
 	}
 }
 
+func TestRemoveFiles(t *testing.T) {
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	client := setupGomoteTest(t, context.Background())
+	gomoteID := mustCreateInstance(t, client, fakeIAP())
+	if _, err := client.RemoveFiles(ctx, &protos.RemoveFilesRequest{
+		GomoteId: gomoteID,
+		Paths:    []string{"temp_file.log"},
+	}); err != nil {
+		t.Fatalf("client.RemoveFiles(ctx, req) = response, %s; want no error", err)
+	}
+}
+
+func TestRemoveFilesError(t *testing.T) {
+	// This test will create a gomote instance and attempt to call RemoveFiles.
+	// If overrideID is set to true, the test will use a diffrent gomoteID than the
+	// the one created for the test.
+	testCases := []struct {
+		desc       string
+		ctx        context.Context
+		overrideID bool
+		gomoteID   string // Used iff overrideID is true.
+		paths      []string
+		wantCode   codes.Code
+	}{
+		{
+			desc:     "unauthenticated request",
+			ctx:      context.Background(),
+			wantCode: codes.Unauthenticated,
+		},
+		{
+			desc:       "missing gomote id",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			overrideID: true,
+			gomoteID:   "",
+			wantCode:   codes.InvalidArgument,
+		},
+		{
+			desc:     "missing paths",
+			ctx:      access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			paths:    []string{},
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			desc:       "gomote does not exist",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID: true,
+			gomoteID:   "chucky",
+			paths:      []string{"file.a"},
+			wantCode:   codes.NotFound,
+		},
+		{
+			desc:       "wrong gomote id",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID: false,
+			paths:      []string{"file.a"},
+			wantCode:   codes.PermissionDenied,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			client := setupGomoteTest(t, context.Background())
+			gomoteID := mustCreateInstance(t, client, fakeIAP())
+			if tc.overrideID {
+				gomoteID = tc.gomoteID
+			}
+			req := &protos.RemoveFilesRequest{
+				GomoteId: gomoteID,
+				Paths:    tc.paths,
+			}
+			got, err := client.RemoveFiles(tc.ctx, req)
+			if err != nil && status.Code(err) != tc.wantCode {
+				t.Fatalf("unexpected error: %s", err)
+			}
+			if err == nil {
+				t.Fatalf("client.RemoveFiles(ctx, %v) = %v, nil; want error", req, got)
+			}
+		})
+	}
+}
+
 func TestWriteTGZFromURL(t *testing.T) {
 	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
 	client := setupGomoteTest(t, context.Background())

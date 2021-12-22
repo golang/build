@@ -26,8 +26,8 @@ service GomoteService {
   rpc ListInstances (ListInstancesRequest) returns (ListInstancesResponse) {}
   // ReadTGZ tars and zips a dicrectory which exists on the gomote instance.
   rpc ReadTGZ (ReadTGZRequest) returns (stream ReadTGZResponse) {}
-  // RemoveDirectory removes a directory from the gomote instance.
-  rpc RemoveDirectory (RemoveDirectoryRequest) returns (RemoveDirectoryResponse) {}
+  // RemoveFiles removes files or directories from the gomote instance.
+  rpc RemoveFiles (RemoveFilesRequest) returns (RemoveFilesResponse) {}
   // RetrieveSSHCredentials retrieves the SSH credentials for the specified gomote instance.
   rpc RetrieveSSHCredentials (RetrieveSSHCredentialsRequest) returns (RetrieveSSHCredentialsResponse) {}
   // WriteTGZ expands a tar and ziped file onto the file system of a gomote instance.
@@ -120,11 +120,18 @@ message ReadTGZRequest {}
 // ReadTGZResponse contains a tar and zipped directory from a gomote instance.
 message ReadTGZResponse {}
 
-// RemoveDirectoryRequest specifies the data needed to remove a directory from a gomote instance.
-message RemoveDirectoryRequest {}
+// RemoveFilesRequest specifies the data needed to remove files or directories from a gomote instance.
+message RemoveFilesRequest {
+  // The unique identifier for a gomote instance.
+  string gomote_id = 1;
+  // The list of paths for files or directories to remove from the file system.
+  // When everything should be deleted, "." should be used.
+  // The paths are relative to the work directory.
+  repeated string paths = 2;
+}
 
-// RemoveDirectoryResponse contains the results from removing a directory from a gomote instance.
-message RemoveDirectoryResponse {}
+// RemoveFilesResponse contains the results from removing files or directories from a gomote instance.
+message RemoveFilesResponse {}
 
 // RetrieveSSHCredentialsRequest specifies the data needed to retrieve SSH credentials for a gomote instance.
 message RetrieveSSHCredentialsRequest {}
