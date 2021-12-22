@@ -139,6 +139,29 @@ func (s *Server) CreateInstance(req *protos.CreateInstanceRequest, stream protos
 	}
 }
 
+// InstanceAlive will ensure that the gomote instance is still alive and will extend the timeout. The requester must be authenticated.
+func (s *Server) InstanceAlive(ctx context.Context, req *protos.InstanceAliveRequest) (*protos.InstanceAliveResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("InstanceAlive access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	if req.GetGomoteId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid gomote ID")
+	}
+	session, err := s.buildlets.Session(req.GetGomoteId())
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
+	}
+	if session.OwnerID != creds.ID {
+		return nil, status.Errorf(codes.PermissionDenied, "not allowed to modify this gomote session")
+	}
+	if err := s.buildlets.RenewTimeout(req.GetGomoteId()); err != nil {
+		return nil, status.Errorf(codes.Internal, "unable to renew timeout")
+	}
+	return &protos.InstanceAliveResponse{}, nil
+}
+
 // ListInstances will list the gomote instances owned by the requester. The requester must be authenticated.
 func (s *Server) ListInstances(ctx context.Context, req *protos.ListInstancesRequest) (*protos.ListInstancesResponse, error) {
 	creds, err := access.IAPFromContext(ctx)

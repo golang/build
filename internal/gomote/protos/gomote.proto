@@ -90,7 +90,10 @@ message Instance {
 }
 
 // InstanceAliveRequest specifies the data needed to check the liveness of a gomote instance.
-message InstanceAliveRequest {}
+message InstanceAliveRequest {
+  // The unique identifier for a gomote instance.
+  string gomote_id = 1;
+}
 
 // InstanceAliveResponse contains instance liveness state.
 message InstanceAliveResponse {}

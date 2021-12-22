@@ -95,3 +95,23 @@ func TestSessionPoolDestroySession(t *testing.T) {
 		}
 	}
 }
+
+func TestRenewTimeout(t *testing.T) {
+	sp := NewSessionPool(context.Background())
+	defer sp.Close()
+
+	name := sp.AddSession("accounts.google.com:user-xyz-124", "user-x", "builder", "host", &buildlet.FakeClient{})
+	if err := sp.RenewTimeout(name); err != nil {
+		t.Errorf("SessionPool.RenewTimeout(%q) = %s; want no error", name, err)
+	}
+}
+
+func TestRenewTimeoutError(t *testing.T) {
+	sp := NewSessionPool(context.Background())
+	defer sp.Close()
+
+	name := sp.AddSession("accounts.google.com:user-xyz-124", "user-x", "builder", "host", &buildlet.FakeClient{})
+	if err := sp.RenewTimeout(name + "-wrong"); err == nil {
+		t.Errorf("SessionPool.RenewTimeout(%q) = %s; want error", name, err)
+	}
+}

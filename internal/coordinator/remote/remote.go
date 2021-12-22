@@ -228,3 +228,16 @@ func (sp *SessionPool) KeepAlive(ctx context.Context, buildletName string) error
 	})
 	return nil
 }
+
+// RenewTimeout will renew the remote buildlet session by extending the expiration value.
+func (sp *SessionPool) RenewTimeout(buildletName string) error {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+
+	s, ok := sp.m[buildletName]
+	if !ok {
+		return fmt.Errorf("remote buildlet does not exist=%s", buildletName)
+	}
+	s.renew()
+	return nil
+}

@@ -157,6 +157,75 @@ func TestCreateInstanceError(t *testing.T) {
 	}
 }
 
+func TestInstanceAlive(t *testing.T) {
+	client := setupGomoteTest(t, context.Background())
+	gomoteID := mustCreateInstance(t, client, fakeIAP())
+	req := &protos.InstanceAliveRequest{
+		GomoteId: gomoteID,
+	}
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	got, err := client.InstanceAlive(ctx, req)
+	if err != nil {
+		t.Fatalf("client.InstanceAlive(ctx, %v) = %v, %s; want no error", req, got, err)
+	}
+}
+
+func TestInstanceAliveError(t *testing.T) {
+	// This test will create a gomote instance and attempt to call InstanceAlive.
+	// If overrideID is set to true, the test will use a diffrent gomoteID than the
+	// the one created for the test.
+	testCases := []struct {
+		desc       string
+		ctx        context.Context
+		overrideID bool
+		gomoteID   string // Used iff overrideID is true.
+		wantCode   codes.Code
+	}{
+		{
+			desc:     "unauthenticated request",
+			ctx:      context.Background(),
+			wantCode: codes.Unauthenticated,
+		},
+		{
+			desc:       "missing gomote id",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			overrideID: true,
+			wantCode:   codes.InvalidArgument,
+		},
+		{
+			desc:       "gomote does not exist",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			overrideID: true,
+			gomoteID:   "xyz",
+			wantCode:   codes.NotFound,
+		},
+		{
+			desc:     "gomote is not owned by caller",
+			ctx:      access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("user-x", "email-y")),
+			wantCode: codes.PermissionDenied,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			client := setupGomoteTest(t, context.Background())
+			gomoteID := mustCreateInstance(t, client, fakeIAP())
+			if tc.overrideID {
+				gomoteID = tc.gomoteID
+			}
+			req := &protos.InstanceAliveRequest{
+				GomoteId: gomoteID,
+			}
+			got, err := client.InstanceAlive(tc.ctx, req)
+			if err != nil && status.Code(err) != tc.wantCode {
+				t.Fatalf("unexpected error: %s", err)
+			}
+			if err == nil {
+				t.Fatalf("client.InstanceAlive(ctx, %v) = %v, nil; want error", req, got)
+			}
+		})
+	}
+}
+
 func TestListInstance(t *testing.T) {
 	client := setupGomoteTest(t, context.Background())
 	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
