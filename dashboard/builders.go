@@ -579,7 +579,6 @@ var Hosts = map[string]*HostConfig{
 		Notes:     "MacStadium macOS Monterey (12.0) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.17.3
-			"MallocNanoZone=0",                      // golang.org/issue/49138
 		},
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
@@ -599,7 +598,6 @@ var Hosts = map[string]*HostConfig{
 		Notes:     "macOS Big Sur (12.0) ARM64 (M1). Mac mini",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot",
-			"MallocNanoZone=0", // golang.org/issue/49138
 		},
 		SSHUsername: "gopher",
 	},
