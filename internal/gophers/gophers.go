@@ -1913,7 +1913,7 @@ func init() {
 	addPerson("Mayra Cabrera", "mcabrera1087@gmail.com")
 	addPerson("Mehul Choube", "mchoube@gmail.com")
 	addPerson("Meir Fischer", "meirfischer@gmail.com", "@meirf")
-	addPerson("Meng Zhuo", "mengzhuo1203@gmail.com", "@mengzhuo")
+	addPerson("Meng Zhuo", "mzh@golangcn.org", "mengzhuo1203@gmail.com", "@mengzhuo")
 	addPerson("Menghan Li", "menghanl@google.com")
 	addPerson("Mhd Sulhan", "m.shulhan@gmail.com", "@shuLhan")
 	addPerson("MiLk", "hello@emilienkenler.com", "@MiLk")
