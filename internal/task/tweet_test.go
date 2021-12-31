@@ -7,10 +7,15 @@ package task
 import (
 	"bytes"
 	"context"
+	"flag"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"golang.org/x/build/internal/workflow"
@@ -173,6 +178,79 @@ type fmtWriter struct{ w io.Writer }
 
 func (f fmtWriter) Printf(format string, v ...interface{}) {
 	fmt.Fprintf(f.w, format, v...)
+}
+
+var updateFlag = flag.Bool("update", false, "Update golden files.")
+
+func TestDrawTerminal(t *testing.T) {
+	got, err := drawTerminal(`$ go install golang.org/dl/go1.18beta1@latest
+$ go1.18beta1 download
+Downloaded   0.0% (        0 / 111109966 bytes) ...
+Downloaded  50.0% ( 55554983 / 111109966 bytes) ...
+Downloaded 100.0% (111109966 / 111109966 bytes)
+Unpacking go1.18beta1.linux-s390x.tar.gz ...
+Success. You may now run 'go1.18beta1'
+$ go1.18beta1 version
+go version go1.18beta1 linux/s390x`)
+	if err != nil {
+		t.Fatalf("drawTerminal: got error=%v, want nil", err)
+	}
+	if *updateFlag {
+		encodePNG(t, filepath.Join("testdata", "terminal.png"), got)
+		return
+	}
+	want := decodePNG(t, filepath.Join("testdata", "terminal.png"))
+	if !got.Bounds().Eq(want.Bounds()) {
+		t.Fatalf("drawTerminal: got image bounds=%v, want %v", got.Bounds(), want.Bounds())
+	}
+	diff := func(a, b uint32) uint64 {
+		if a < b {
+			return uint64(b - a)
+		}
+		return uint64(a - b)
+	}
+	var total uint64
+	for y := 0; y < want.Bounds().Dy(); y++ {
+		for x := 0; x < want.Bounds().Dx(); x++ {
+			r0, g0, b0, a0 := got.At(x, y).RGBA()
+			r1, g1, b1, a1 := want.At(x, y).RGBA()
+			const D = 0xffff * 20 / 100 // Diff threshold of 20% for RGB color components.
+			if diff(r0, r1) > D || diff(g0, g1) > D || diff(b0, b1) > D || a0 != a1 {
+				t.Errorf("at (%d, %d):\n got RGBA %v\nwant RGBA %v", x, y, got.At(x, y), want.At(x, y))
+			}
+			total += diff(r0, r1) + diff(g0, g1) + diff(b0, b1)
+		}
+	}
+	if testing.Verbose() {
+		t.Logf("average pixel color diff: %v%%", 100*float64(total)/float64(0xffff*want.Bounds().Dx()*want.Bounds().Dy()))
+	}
+}
+
+func encodePNG(t *testing.T, name string, m image.Image) {
+	t.Helper()
+	var buf bytes.Buffer
+	err := (&png.Encoder{CompressionLevel: png.BestCompression}).Encode(&buf, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = os.WriteFile(name, buf.Bytes(), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func decodePNG(t *testing.T, name string) image.Image {
+	t.Helper()
+	f, err := os.Open(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	m, err := png.Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m
 }
 
 func TestPostTweet(t *testing.T) {

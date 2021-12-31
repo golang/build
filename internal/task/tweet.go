@@ -25,11 +25,11 @@ import (
 
 	"github.com/dghubble/oauth1"
 	"github.com/esimov/stackblur-go"
-	"github.com/golang/freetype/truetype"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/workflow"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gomono"
+	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
 )
 
@@ -496,7 +496,7 @@ func (f golangorgDLFile) GOARCH() string {
 // with the given text displayed.
 func drawTerminal(text string) (image.Image, error) {
 	// Load font from TTF data.
-	f, err := truetype.Parse(gomono.TTF)
+	f, err := opentype.Parse(gomono.TTF)
 	if err != nil {
 		return nil, err
 	}
@@ -521,7 +521,11 @@ func drawTerminal(text string) (image.Image, error) {
 		roundedRect(image.Rect(50, 80, width-50, height-80), 10), image.Point{}, draw.Over)
 
 	// Text.
-	d := font.Drawer{Dst: m, Src: image.White, Face: truetype.NewFace(f, &truetype.Options{Size: 24})}
+	face, err := opentype.NewFace(f, &opentype.FaceOptions{Size: 24, DPI: 72})
+	if err != nil {
+		return nil, err
+	}
+	d := font.Drawer{Dst: m, Src: image.White, Face: face}
 	const lineHeight = 32
 	for n, line := range strings.Split(text, "\n") {
 		d.Dot = fixed.P(80, 135+n*lineHeight)
