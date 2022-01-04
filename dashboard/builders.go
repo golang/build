@@ -352,7 +352,7 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-freebsd-13_0": &HostConfig{
-		VMImage:            "freebsd-amd64-130-stable-20211230-3684bb89d52-248759",
+		VMImage:            "freebsd-amd64-130-stable-20211230",
 		Notes:              "FreeBSD 13.0; GCE VM is built from script in build/env/freebsd-amd64",
 		machineType:        "e2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
@@ -360,7 +360,7 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-freebsd-13_0-big": &HostConfig{
-		VMImage:            "freebsd-amd64-130-stable-20211230-3684bb89d52-248759",
+		VMImage:            "freebsd-amd64-130-stable-20211230",
 		Notes:              "Same as host-freebsd-13_0, but on e2-highcpu-16",
 		machineType:        "e2-highcpu-16", // 16 vCPUs, 16 GB mem
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
