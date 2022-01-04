@@ -86,10 +86,16 @@ case $1 in
   readonly SHA256=48288a693215a88b26ec81b2648de7433acec7db491aaeaed49c0ffd1612d345
   readonly BLIND_SWITCH_CONSOLE=1
 ;;
-
+13.0-SNAPSHOT)
+  readonly IS_SNAPSHOT=1
+  readonly VERSION=13.0-STABLE
+  readonly VERSION_TRAILER="-20211230-3684bb89d52-248759"
+  readonly SHA256=7b8fcc2330c8d9f66dd012c5859167d56c227ece39188c8f55b2bddbf688875f # https://lists.freebsd.org/archives/freebsd-snapshots/2021-December/000036.html
+  readonly BLIND_SWITCH_CONSOLE=1
+;;
 *)
   echo "Usage: $0 <version>"
-  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 10.4 11.0 11.1 11.2 11.3 11.4 12.0 12.1 12.2 13.0"
+  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 10.4 11.0 11.1 11.2 11.3 11.4 12.0 12.1 12.2 13.0 13.0-SNAPSHOT"
   exit 1
 esac
 
@@ -106,7 +112,7 @@ if ! [ -e FreeBSD-${VERSION:?}-amd64.raw ]; then
   download_image
 fi
 
-qemu-img create -f qcow2 -b FreeBSD-${VERSION:?}-amd64${VERSION_TRAILER}.raw disk.qcow2 16G
+qemu-img create -f qcow2 -b FreeBSD-${VERSION:?}-amd64${VERSION_TRAILER}.raw -F raw disk.qcow2 16G
 
 mkdir -p iso/boot iso/etc iso/usr/local/etc/rc.d
 cp loader.conf iso/boot
