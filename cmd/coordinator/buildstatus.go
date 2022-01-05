@@ -1690,7 +1690,7 @@ func (st *buildStatus) htmlStatus(detail buildStatusDetail) template.HTML {
 	} else {
 		state = "<font color='#700000'>failed</font>"
 	}
-	if detail > singleLine {
+	if detail > singleLine && st.bc != nil {
 		fmt.Fprintf(&buf, "; <a href='%s'>%s</a>; %s", html.EscapeString(st.logsURLLocked()), state, html.EscapeString(st.bc.String()))
 	} else {
 		fmt.Fprintf(&buf, "; <a href='%s'>%s</a>", html.EscapeString(st.logsURLLocked()), state)
