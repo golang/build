@@ -93,6 +93,7 @@ func TestTrybots(t *testing.T) {
 			want: []string{
 				"android-amd64-emu",
 				"freebsd-amd64-12_2",
+				"freebsd-amd64-12_3",
 				"js-wasm",
 				"linux-386",
 				"linux-amd64",
@@ -128,6 +129,7 @@ func TestTrybots(t *testing.T) {
 			want: []string{
 				"android-amd64-emu",
 				"freebsd-amd64-12_2",
+				"freebsd-amd64-12_3",
 				"js-wasm",
 				"linux-386",
 				"linux-amd64",
@@ -163,6 +165,7 @@ func TestTrybots(t *testing.T) {
 			want: []string{
 				"android-amd64-emu",
 				"freebsd-amd64-12_2",
+				"freebsd-amd64-12_3",
 				"js-wasm",
 				"linux-386",
 				"linux-amd64",
@@ -200,6 +203,7 @@ func TestTrybots(t *testing.T) {
 			want: []string{
 				"android-amd64-emu",
 				"freebsd-amd64-12_2",
+				"freebsd-amd64-12_3",
 				"js-wasm",
 				"linux-386",
 				"linux-amd64",
@@ -247,6 +251,7 @@ func TestTrybots(t *testing.T) {
 				"freebsd-386-13_0",
 				"freebsd-amd64-11_4",
 				"freebsd-amd64-12_2",
+				"freebsd-amd64-12_3",
 				"freebsd-amd64-13_0",
 				"linux-386",
 				"linux-amd64",

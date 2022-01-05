@@ -80,6 +80,12 @@ case $1 in
   readonly VERSION_TRAILER=
   readonly SHA256=0f8593382b6833658c6f6be532d4ffbedde7b75504452e27d912a0183f72ab56
 ;;
+12.3-SNAPSHOT)
+  readonly IS_SNAPSHOT=1
+  readonly VERSION=12.3-STABLE
+  readonly VERSION_TRAILER=
+  readonly SHA256=e52ddb31b8f2ff7f8d03571b65e472cde3f92ef6b73ddaa5e7f5d4668ce4394c # https://lists.freebsd.org/archives/freebsd-snapshots/2021-December/000037.html
+;;
 13.0)
   readonly VERSION=13.0-RELEASE
   readonly VERSION_TRAILER=
@@ -89,7 +95,7 @@ case $1 in
 13.0-SNAPSHOT)
   readonly IS_SNAPSHOT=1
   readonly VERSION=13.0-STABLE
-  readonly VERSION_TRAILER="-20211230-3684bb89d52-248759"
+  readonly VERSION_TRAILER=
   readonly SHA256=7b8fcc2330c8d9f66dd012c5859167d56c227ece39188c8f55b2bddbf688875f # https://lists.freebsd.org/archives/freebsd-snapshots/2021-December/000036.html
   readonly BLIND_SWITCH_CONSOLE=1
 ;;
