@@ -112,7 +112,7 @@ type buildStatus struct {
 	succeeded       bool                // set when done
 	output          livelog.Buffer      // stdout and stderr
 	events          []eventAndTime
-	useSnapshotMemo *bool // if non-nil, memoized result of useSnapshot
+	useSnapshotMemo map[string]bool // memoized result of useSnapshotFor(rev), where the key is rev
 }
 
 func (st *buildStatus) NameAndBranch() string {
@@ -302,24 +302,35 @@ func (st *buildStatus) onceInitHelpersFunc() {
 // make.bash if it exists (anything can SplitMakeRun) and that the
 // snapshot exists.
 func (st *buildStatus) useSnapshot() bool {
+	return st.useSnapshotFor(st.Rev)
+}
+
+func (st *buildStatus) useSnapshotFor(rev string) bool {
 	if st.conf.SkipSnapshot {
 		return false
 	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	if st.useSnapshotMemo != nil {
-		return *st.useSnapshotMemo
+	if b, ok := st.useSnapshotMemo[rev]; ok {
+		return b
 	}
-	b := st.conf.SplitMakeRun() && st.BuilderRev.SnapshotExists(context.TODO(), pool.NewGCEConfiguration().BuildEnv())
-	st.useSnapshotMemo = &b
+	br := st.BuilderRev
+	br.Rev = rev
+	b := st.conf.SplitMakeRun() && br.SnapshotExists(context.TODO(), pool.NewGCEConfiguration().BuildEnv())
+	if st.useSnapshotMemo == nil {
+		st.useSnapshotMemo = make(map[string]bool)
+	}
+	st.useSnapshotMemo[rev] = b
 	return b
 }
 
 func (st *buildStatus) forceSnapshotUsage() {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	truth := true
-	st.useSnapshotMemo = &truth
+	if st.useSnapshotMemo == nil {
+		st.useSnapshotMemo = make(map[string]bool)
+	}
+	st.useSnapshotMemo[st.Rev] = true
 }
 
 func (st *buildStatus) getCrossCompileConfig() *dashboard.CrossCompileConfig {
@@ -444,11 +455,9 @@ func (st *buildStatus) build() error {
 	defer bc.Close()
 
 	if st.useSnapshot() {
-		sp := st.CreateSpan("write_snapshot_tar")
-		if err := bc.PutTarFromURL(st.ctx, st.SnapshotURL(pool.NewGCEConfiguration().BuildEnv()), "go"); err != nil {
-			return sp.Done(fmt.Errorf("failed to put snapshot to buildlet: %v", err))
+		if err := st.writeGoSnapshot(); err != nil {
+			return err
 		}
-		sp.Done(nil)
 	} else {
 		// Write the Go source and bootstrap tool chain in parallel.
 		var grp syncutil.Group
@@ -710,7 +719,7 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompil
 	}
 	defer kubeBC.Close()
 
-	if err := st.writeGoSourceTo(kubeBC); err != nil {
+	if err := st.writeGoSourceTo(kubeBC, st.Rev, "go"); err != nil {
 		return err
 	}
 
@@ -805,23 +814,39 @@ func (st *buildStatus) doSnapshot(bc buildlet.Client) error {
 	return nil
 }
 
-func (st *buildStatus) writeGoSource() error {
-	return st.writeGoSourceTo(st.bc)
+func (st *buildStatus) writeGoSnapshot() (err error) {
+	return st.writeGoSnapshotTo(st.Rev, "go")
 }
 
-func (st *buildStatus) writeGoSourceTo(bc buildlet.Client) error {
+func (st *buildStatus) writeGoSnapshotTo(rev, dir string) (err error) {
+	sp := st.CreateSpan("write_snapshot_tar")
+	defer func() { sp.Done(err) }()
+
+	snapshotURL := pool.NewGCEConfiguration().BuildEnv().SnapshotURL(st.Name, rev)
+
+	if err := st.bc.PutTarFromURL(st.ctx, snapshotURL, dir); err != nil {
+		return fmt.Errorf("failed to put baseline snapshot to buildlet: %v", err)
+	}
+	return nil
+}
+
+func (st *buildStatus) writeGoSource() error {
+	return st.writeGoSourceTo(st.bc, st.Rev, "go")
+}
+
+func (st *buildStatus) writeGoSourceTo(bc buildlet.Client, rev, dir string) error {
 	// Write the VERSION file.
 	sp := st.CreateSpan("write_version_tar")
-	if err := bc.PutTar(st.ctx, buildgo.VersionTgz(st.Rev), "go"); err != nil {
+	if err := bc.PutTar(st.ctx, buildgo.VersionTgz(rev), dir); err != nil {
 		return sp.Done(fmt.Errorf("writing VERSION tgz: %v", err))
 	}
 
-	srcTar, err := sourcecache.GetSourceTgz(st, "go", st.Rev)
+	srcTar, err := sourcecache.GetSourceTgz(st, "go", rev)
 	if err != nil {
 		return err
 	}
 	sp = st.CreateSpan("write_go_src_tar")
-	if err := bc.PutTar(st.ctx, srcTar, "go"); err != nil {
+	if err := bc.PutTar(st.ctx, srcTar, dir); err != nil {
 		return sp.Done(fmt.Errorf("writing tarball from Gerrit: %v", err))
 	}
 	return sp.Done(nil)
@@ -880,6 +905,38 @@ func (st *buildStatus) writeSnapshot(bc buildlet.Client) (err error) {
 	}
 
 	return wr.Close()
+}
+
+// baselineCommit determines the baseline commit for this benchmark run.
+func (st *buildStatus) baselineCommit() (baseline string, err error) {
+	sp := st.CreateSpan("list_go_releases")
+	defer func() { sp.Done(err) }()
+
+	// TODO(prattmic): Cache responses for a while. These won't change often.
+	res, err := maintnerClient.ListGoReleases(st.ctx, &apipb.ListGoReleasesRequest{})
+	if err != nil {
+		return "", err
+	}
+
+	releases := res.GetReleases()
+	if len(releases) == 0 {
+		return "", fmt.Errorf("no Go releases: %v", res)
+	}
+
+	if st.goBranch == "" {
+		// Testing master, baseline is latest release.
+		return releases[0].GetTagCommit(), nil
+	}
+
+	// Testing release branch. Baseline is latest patch version of this
+	// release.
+	for _, r := range releases {
+		if st.goBranch == r.GetBranchName() {
+			return r.GetTagCommit(), nil
+		}
+	}
+
+	return "", fmt.Errorf("cannot find latest release for %s", st.goBranch)
 }
 
 // reportErr reports an error to Stackdriver.
@@ -1195,7 +1252,7 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 		return nil, fmt.Errorf("benchmark tests only supported in x/benchmarks")
 	}
 
-	st.LogEventTime("fetching_subrepo", st.SubName)
+	const baselineDir = "gobaseline"
 
 	workDir, err := st.bc.WorkDir(st.ctx)
 	if err != nil {
@@ -1203,8 +1260,50 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 		return nil, err
 	}
 	goroot := st.conf.FilePathJoin(workDir, "go")
+	baselineGoroot := st.conf.FilePathJoin(workDir, baselineDir)
 	gopath := st.conf.FilePathJoin(workDir, "gopath")
 	repoPath := importPathOfRepo(st.SubName)
+
+	// Install baseline toolchain in addition to the experiment toolchain.
+	sp := st.CreateSpan("install_baseline")
+	baseline, err := st.baselineCommit()
+	if err != nil {
+		return nil, sp.Done(fmt.Errorf("error finding baseline commit: %w", err))
+	}
+	fmt.Fprintf(st, "Baseline toolchain %v\n", baseline)
+	if st.useSnapshotFor(baseline) {
+		if err := st.writeGoSnapshotTo(baseline, baselineDir); err != nil {
+			return nil, sp.Done(fmt.Errorf("error writing baseline snapshot: %w", err))
+		}
+	} else {
+		if err := st.writeGoSourceTo(st.bc, baseline, baselineDir); err != nil {
+			return nil, sp.Done(fmt.Errorf("error writing baseline source: %w", err))
+		}
+
+		br := st.BuilderRev
+		br.Rev = baseline
+
+		builder := buildgo.GoBuilder{
+			Logger:     st,
+			BuilderRev: br,
+			Conf:       st.conf,
+			Goroot:     baselineDir,
+			// Use the primary GOROOT as GOROOT_BOOTSTRAP. The
+			// typical bootstrap toolchain may not be available if
+			// the primary toolchain was installed from a snapshot.
+			GorootBootstrap: goroot,
+		}
+		remoteErr, err = builder.RunMake(st.ctx, st.bc, st)
+		if err != nil {
+			return nil, sp.Done(err)
+		}
+		if remoteErr != nil {
+			return sp.Done(remoteErr), nil
+		}
+	}
+	sp.Done(nil)
+
+	st.LogEventTime("fetching_subrepo", st.SubName)
 
 	// Check out the provided sub-repo to the buildlet's workspace so we
 	// can run scripts from the repo.
@@ -1222,10 +1321,12 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 		}
 	}
 
-	sp := st.CreateSpan("running_subrepo_tests", st.SubName)
+	// Run golang.org/x/benchmarks/cmd/bench to perform benchmarks.
+	sp = st.CreateSpan("running_subrepo_tests", st.SubName)
 	defer func() { sp.Done(err) }()
 
 	env := append(st.conf.Env(),
+		"BENCH_BASELINE_GOROOT="+baselineGoroot,
 		"GOROOT="+goroot,
 		"GOPATH="+gopath,
 		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
@@ -1244,13 +1345,13 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 	}
 
 	// Upload benchmark results on success.
-	if err := st.uploadBenchResults(); err != nil {
+	if err := st.uploadBenchResults(baseline); err != nil {
 		return nil, err
 	}
 	return nil, nil
 }
 
-func (st *buildStatus) uploadBenchResults() (err error) {
+func (st *buildStatus) uploadBenchResults(baseline string) (err error) {
 	sp := st.CreateSpan("upload_bench_results")
 	defer func() { sp.Done(err) }()
 
@@ -1269,7 +1370,8 @@ func (st *buildStatus) uploadBenchResults() (err error) {
 
 	// Prepend some useful metadata.
 	var b strings.Builder
-	fmt.Fprintf(&b, "go-commit: %s\n", st.Rev)
+	fmt.Fprintf(&b, "experiment-commit: %s\n", st.Rev)
+	fmt.Fprintf(&b, "baseline-commit: %s\n", baseline)
 	fmt.Fprintf(&b, "benchmarks-commit: %s\n", st.SubRev)
 	fmt.Fprintf(&b, "post-submit: %t\n", st.trySet == nil)
 	if _, err := w.Write([]byte(b.String())); err != nil {

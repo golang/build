@@ -92,8 +92,12 @@ type GoBuilder struct {
 	spanlog.Logger
 	BuilderRev
 	Conf *dashboard.BuildConfig
-	// Goroot is a Unix-style path relative to the work directory of the builder (e.g. "go").
+	// Goroot is a Unix-style path relative to the work directory of the
+	// builder (e.g. "go").
 	Goroot string
+	// GorootBootstrap is an optional absolute Unix-style path to the
+	// bootstrap toolchain, overriding the default.
+	GorootBootstrap string
 }
 
 // RunMake builds the tool chain.
@@ -103,9 +107,13 @@ type GoBuilder struct {
 func (gb GoBuilder) RunMake(ctx context.Context, bc buildlet.Client, w io.Writer) (remoteErr, err error) {
 	// Build the source code.
 	makeSpan := gb.CreateSpan("make", gb.Conf.MakeScript())
+	env := append(gb.Conf.Env(), "GOBIN=")
+	if gb.GorootBootstrap != "" {
+		env = append(env, "GOROOT_BOOTSTRAP="+gb.GorootBootstrap)
+	}
 	remoteErr, err = bc.Exec(ctx, path.Join(gb.Goroot, gb.Conf.MakeScript()), buildlet.ExecOpts{
 		Output:   w,
-		ExtraEnv: append(gb.Conf.Env(), "GOBIN="),
+		ExtraEnv: env,
 		Debug:    true,
 		Args:     gb.Conf.MakeScriptArgs(),
 	})
