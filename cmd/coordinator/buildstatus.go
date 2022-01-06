@@ -218,12 +218,6 @@ func (st *buildStatus) buildletPool() pool.Buildlet {
 	return pool.ForHost(st.conf.HostConfig())
 }
 
-// parentRev returns the parent of this build's commit (but only if this build comes from a trySet).
-func (st *buildStatus) parentRev() (pbr buildgo.BuilderRev, err error) {
-	err = errors.New("TODO: query maintner")
-	return
-}
-
 func (st *buildStatus) expectedMakeBashDuration() time.Duration {
 	// TODO: base this on historical measurements, instead of statically configured.
 	// TODO: move this to dashboard/builders.go? But once we based on on historical

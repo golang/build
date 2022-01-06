@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"golang.org/x/build/buildenv"
-	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/coordinator/pool"
@@ -320,14 +319,6 @@ func TestBuildersJSON(t *testing.T) {
 		res.Write(&buf)
 		t.Error(buf.String())
 	}
-}
-
-func mustConf(t *testing.T, name string) *dashboard.BuildConfig {
-	conf, ok := dashboard.Builders[name]
-	if !ok {
-		t.Fatalf("unknown builder %q", name)
-	}
-	return conf
 }
 
 func TestSlowBotsFromComments(t *testing.T) {

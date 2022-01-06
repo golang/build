@@ -1940,15 +1940,6 @@ func (ti *testItem) tryTake() bool {
 	}
 }
 
-func (ti *testItem) isDone() bool {
-	select {
-	case <-ti.done:
-		return true
-	default:
-		return false
-	}
-}
-
 // retry reschedules the test to run again, if a machine died before
 // or during execution, so its results aren't yet known.
 // The caller must own the 'take' semaphore.
