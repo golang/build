@@ -161,6 +161,46 @@ func TestTrybots(t *testing.T) {
 		},
 		{
 			repo:   "go",
+			branch: "release-branch.go1.17",
+			want: []string{
+				"android-amd64-emu",
+				"freebsd-amd64-12_2",
+				"freebsd-amd64-12_3",
+				"js-wasm",
+				"linux-386",
+				"linux-amd64",
+				"linux-amd64-race",
+				"linux-arm-aws",
+				"linux-arm64-aws",
+				"openbsd-amd64-68",
+				"openbsd-amd64-70",
+				"openbsd-amd64-70-n1",
+				"windows-386-2008",
+				"windows-386-2012",
+				"windows-amd64-2016",
+
+				"misc-compile-darwinarm64",
+				"misc-compile-freebsd",
+				"misc-compile-mac-win",
+				"misc-compile-mips",
+				"misc-compile-mipsle",
+				"misc-compile-netbsd",
+				"misc-compile-netbsd-arm",
+				"misc-compile-openbsd",
+				"misc-compile-openbsd-arm",
+				"misc-compile-plan9",
+				"misc-compile-ppc",
+				"misc-compile-other-1",
+				"misc-compile-other-2",
+
+				// Include longtest builders on Go repo release branches. See issue 37827.
+				"linux-386-longtest",
+				"linux-amd64-longtest",
+				"windows-amd64-longtest",
+			},
+		},
+		{
+			repo:   "go",
 			branch: "release-branch.go1.16",
 			want: []string{
 				"android-amd64-emu",
@@ -198,43 +238,6 @@ func TestTrybots(t *testing.T) {
 			},
 		},
 		{
-			repo:   "go",
-			branch: "release-branch.go1.15",
-			want: []string{
-				"android-amd64-emu",
-				"freebsd-amd64-12_2",
-				"freebsd-amd64-12_3",
-				"js-wasm",
-				"linux-386",
-				"linux-amd64",
-				"linux-amd64-race",
-				"linux-arm-aws",
-				"linux-arm64-aws",
-				"openbsd-amd64-68",
-				"windows-386-2008",
-				"windows-386-2012",
-				"windows-amd64-2016",
-
-				"misc-compile-freebsd",
-				"misc-compile-mac-win",
-				"misc-compile-mips",
-				"misc-compile-mipsle",
-				"misc-compile-netbsd",
-				"misc-compile-netbsd-arm",
-				"misc-compile-openbsd",
-				"misc-compile-openbsd-arm",
-				"misc-compile-plan9",
-				"misc-compile-ppc",
-				"misc-compile-other-1",
-				"misc-compile-other-2",
-
-				// Include longtest builders on Go repo release branches. See issue 37827.
-				"linux-386-longtest",
-				"linux-amd64-longtest",
-				"windows-amd64-longtest",
-			},
-		},
-		{
 			repo:   "mobile",
 			branch: "master",
 			want: []string{
@@ -247,9 +250,7 @@ func TestTrybots(t *testing.T) {
 			branch: "master",
 			want: []string{
 				"android-amd64-emu",
-				"freebsd-386-11_4",
 				"freebsd-386-13_0",
-				"freebsd-amd64-11_4",
 				"freebsd-amd64-12_2",
 				"freebsd-amd64-12_3",
 				"freebsd-amd64-13_0",
@@ -458,6 +459,16 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-386-12_2", "go"), onlyPost},
 		{b("freebsd-386-12_2", "net"), onlyPost},
 		{b("freebsd-386-12_2", "mobile"), none},
+
+		// FreeBSD 11.4
+		{b("freebsd-amd64-11_4@go1.16", "go"), onlyPost},
+		{b("freebsd-amd64-11_4@go1.16", "net"), onlyPost},
+		{b("freebsd-amd64-11_4@go1.16", "sys"), both},
+		{b("freebsd-amd64-11_4", "go"), none},
+		{b("freebsd-386-11_4@go1.17", "go"), onlyPost},
+		{b("freebsd-386-11_4@go1.17", "net"), onlyPost},
+		{b("freebsd-386-11_4@go1.17", "sys"), both},
+		{b("freebsd-386-11_4", "go"), none},
 
 		// FreeBSD 11.2
 		// See golang.org/issue/45727

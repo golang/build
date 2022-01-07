@@ -1573,6 +1573,11 @@ func init() {
 		tryBot:            explicitTrySet("sys"),
 		distTestAdjust:    fasterTrybots,
 		numTryTestHelpers: 4,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder is still used by Go 1.17 and 1.16,
+			// keep it around a bit longer. See go.dev/issue/49491.
+			return atMostGo1(goBranch, 17) && buildRepoByDefault(repo)
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-12_2",
@@ -1642,6 +1647,11 @@ func init() {
 		distTestAdjust: noTestDirAndNoReboot,
 		tryBot:         explicitTrySet("sys"),
 		env:            []string{"GOARCH=386", "GOHOSTARCH=386"},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder is still used by Go 1.17 and 1.16,
+			// keep it around a bit longer. See go.dev/issue/49491.
+			return atMostGo1(goBranch, 17) && buildRepoByDefault(repo)
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-386",
