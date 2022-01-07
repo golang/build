@@ -1361,8 +1361,8 @@ func buildRepoByDefault(repo string) bool {
 	case "go":
 		// Build the main Go repository by default.
 		return true
-	case "mobile", "exp", "build":
-		// Don't build x/mobile, x/exp, x/build by default.
+	case "mobile", "exp", "build", "vulndb":
+		// Don't build x/mobile, x/exp, x/build, x/vulndb by default.
 		//
 		// Builders need to explicitly opt-in to build these repos.
 		return false
@@ -1372,18 +1372,22 @@ func buildRepoByDefault(repo string) bool {
 	}
 }
 
-func defaultPlusExp(repo, branch, goBranch string) bool {
-	if repo == "exp" {
-		return true
-	}
-	return buildRepoByDefault(repo)
-}
+var (
+	defaultPlusExp      = defaultPlus("exp")
+	defaultPlusExpBuild = defaultPlus("exp", "build")
+)
 
-func defaultPlusExpBuild(repo, branch, goBranch string) bool {
-	if repo == "exp" || repo == "build" {
-		return true
+// defaultPlus returns a buildsRepo policy function that returns true for all
+// all the repos listed, plus the default repos.
+func defaultPlus(repos ...string) func(repo, branch, goBranch string) bool {
+	return func(repo, _, _ string) bool {
+		for _, r := range repos {
+			if r == repo {
+				return true
+			}
+		}
+		return buildRepoByDefault(repo)
 	}
-	return buildRepoByDefault(repo)
 }
 
 // AllScriptArgs returns the set of arguments that should be passed to the
@@ -1684,7 +1688,7 @@ func init() {
 		Name:       "linux-amd64",
 		HostType:   "host-linux-bullseye",
 		tryBot:     defaultTrySet(),
-		buildsRepo: defaultPlusExpBuild,
+		buildsRepo: defaultPlus("exp", "build", "vulndb"),
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
@@ -1778,16 +1782,15 @@ func init() {
 		HostType: "host-linux-bullseye",
 		Notes:    "cgo disabled",
 		buildsRepo: func(repo, branch, goBranch string) bool {
+			b := buildRepoByDefault(repo)
 			switch repo {
 			case "perf":
 				// Requires sqlite, which requires cgo.
-				return false
-			case "mobile":
-				return false
-			case "build":
-				return false
+				b = false
+			case "exp":
+				b = true
 			}
-			return true
+			return b
 		},
 		env: []string{
 			"CGO_ENABLED=0",
@@ -2043,15 +2046,19 @@ func init() {
 		HostType: "host-js-wasm",
 		tryBot:   explicitTrySet("go"),
 		buildsRepo: func(repo, branch, goBranch string) bool {
+			b := buildRepoByDefault(repo)
 			switch repo {
-			case "go":
-				return true
-			case "build", "mobile", "exp", "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
-				return false
-			default:
-				return branch == "master" && goBranch == "master"
+			case "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
+				// Don't test these golang.org/x repos.
+				b = false
 			}
+			if repo != "go" && !(branch == "master" && goBranch == "master") {
+				// For golang.org/x repos, don't test non-latest versions.
+				b = false
+			}
+			return b
 		},
+
 		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 			if isNormalTry {
 				if strings.Contains(distTest, "/internal/") ||
@@ -2556,11 +2563,14 @@ func init() {
 		HostType: "host-android-amd64-emu", // same amd64 host is used for 386 builder
 		Notes:    "Android emulator on GCE",
 		buildsRepo: func(repo, branch, goBranch string) bool {
+			b := buildRepoByDefault(repo)
 			switch repo {
+			case "mobile":
+				b = true
 			case "build", "blog", "talks", "review", "tour", "website":
-				return false
+				b = false
 			}
-			return atLeastGo1(branch, 13) && atLeastGo1(goBranch, 13)
+			return b
 		},
 		env: []string{
 			"GOARCH=386",
@@ -2583,11 +2593,14 @@ func init() {
 			return false
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
+			b := buildRepoByDefault(repo)
 			switch repo {
+			case "mobile":
+				b = true
 			case "build", "blog", "talks", "review", "tour", "website":
-				return false
+				b = false
 			}
-			return atLeastGo1(branch, 13) && atLeastGo1(goBranch, 13)
+			return b
 		},
 		env: []string{
 			"GOARCH=amd64",
@@ -3010,9 +3023,20 @@ func loong64BuildsRepoPolicy(repo, branch, goBranch string) bool {
 // The branch is the branch of that project ("master", "release-branch.go1.12", etc)
 // The goBranch is the branch of Go to use. If proj == "go", then branch == goBranch.
 func TryBuildersForProject(proj, branch, goBranch string) []*BuildConfig {
+	return buildersForProject(proj, branch, goBranch, (*BuildConfig).BuildsRepoTryBot)
+}
+
+// isBuilderFunc is the type of functions that report whether a builder
+// should be run given a project, branch and goBranch.
+type isBuilderFunc func(conf *BuildConfig, proj, branch, goBranch string) bool
+
+// buildsForProject returns the builders that should be run for the given project,
+// using isBuilder to test each builder.
+// See TryBuildersForProject for the valid forms of proj, branch and goBranch.
+func buildersForProject(proj, branch, goBranch string, isBuilder isBuilderFunc) []*BuildConfig {
 	var confs []*BuildConfig
 	for _, conf := range Builders {
-		if conf.BuildsRepoTryBot(proj, branch, goBranch) {
+		if isBuilder(conf, proj, branch, goBranch) {
 			confs = append(confs, conf)
 		}
 	}

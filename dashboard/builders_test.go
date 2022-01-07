@@ -78,9 +78,10 @@ func TestDistTestsExecTimeout(t *testing.T) {
 	}
 }
 
-// TestTrybots tests that a given repo & its branch yields the provided
-// complete set of builders. See also: TestBuilders, which tests both trybots
-// and post-submit builders, both at arbitrary branches.
+// TestTrybots tests that a given repo & its branch yields the provided complete
+// set of builders. See also: TestPostSubmit, which tests only post-submit
+// builders, and TestBuilderConfig, which tests both trybots and post-submit
+// builders, both at arbitrary branches.
 func TestTrybots(t *testing.T) {
 	tests := []struct {
 		repo   string // "go", "net", etc
@@ -288,24 +289,59 @@ func TestTrybots(t *testing.T) {
 			return
 		}
 		t.Run(fmt.Sprintf("%s/%s", tt.repo, tt.branch), func(t *testing.T) {
-			var got []string
 			goBranch := tt.branch // hard-code the common case for now
-			for _, bc := range TryBuildersForProject(tt.repo, tt.branch, goBranch) {
-				got = append(got, bc.Name)
-			}
-			m := map[string]bool{}
-			for _, b := range tt.want {
-				m[b] = true
-			}
-			for _, b := range got {
-				if _, ok := m[b]; !ok {
-					t.Errorf("got unexpected %q for %s/%s", b, tt.repo, tt.branch)
-				}
-				delete(m, b)
-			}
-			for b := range m {
-				t.Errorf("missing expected %q for %s/%s", b, tt.repo, tt.branch)
-			}
+			got := TryBuildersForProject(tt.repo, tt.branch, goBranch)
+			checkBuildersForProject(t, got, tt.want)
+		})
+	}
+}
+
+func checkBuildersForProject(t *testing.T, gotBuilders []*BuildConfig, want []string) {
+	var got []string
+	for _, bc := range gotBuilders {
+		got = append(got, bc.Name)
+	}
+	m := map[string]bool{}
+	for _, b := range want {
+		m[b] = true
+	}
+	for _, b := range got {
+		if _, ok := m[b]; !ok {
+			t.Errorf("got unexpected %q", b)
+		}
+		delete(m, b)
+	}
+	for b := range m {
+		t.Errorf("missing expected %q", b)
+	}
+}
+
+// TestPostSubmit tests that a given repo & its branch yields the provided
+// complete set of post-submit builders. See also: TestBuilderConfig, which
+// tests both trybots and post-submit builders, both at arbitrary branches.
+func TestPostSubmit(t *testing.T) {
+	tests := []struct {
+		repo   string // "go", "net", etc
+		branch string // of repo
+		want   []string
+	}{
+		{
+			repo:   "vulndb",
+			branch: "master",
+			want: []string{
+				"linux-amd64",
+				"linux-amd64-longtest",
+			},
+		},
+	}
+	for i, tt := range tests {
+		if tt.branch == "" || tt.repo == "" {
+			t.Fatalf("incomplete test entry %d", i)
+		}
+		t.Run(fmt.Sprintf("%s/%s", tt.repo, tt.branch), func(t *testing.T) {
+			goBranch := tt.branch // hard-code the common case for now
+			got := buildersForProject(tt.repo, tt.branch, goBranch, (*BuildConfig).BuildsRepoPostSubmit)
+			checkBuildersForProject(t, got, tt.want)
 		})
 	}
 }
@@ -397,9 +433,7 @@ func TestBuilderConfig(t *testing.T) {
 		// The mobile repo requires Go 1.13+.
 		{b("android-amd64-emu", "mobile"), both},
 		{b("android-amd64-emu", "mobile@1.10"), none},
-		{b("android-amd64-emu", "mobile@1.11"), none},
 		{b("android-amd64-emu@go1.10", "mobile"), none},
-		{b("android-amd64-emu@go1.12", "mobile"), none},
 		{b("android-amd64-emu@go1.13", "mobile"), both},
 		{b("android-amd64-emu", "mobile@1.13"), both},
 
@@ -416,9 +450,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-386-emu", "go"), onlyPost},
 		{b("android-386-emu", "mobile"), onlyPost},
 		{b("android-386-emu", "mobile@1.10"), none},
-		{b("android-386-emu", "mobile@1.11"), none},
 		{b("android-386-emu@go1.10", "mobile"), none},
-		{b("android-386-emu@go1.12", "mobile"), none},
 		{b("android-386-emu@go1.13", "mobile"), onlyPost},
 		{b("android-386-emu", "mobile@1.13"), onlyPost},
 
@@ -1151,5 +1183,22 @@ func TestModulesEnv(t *testing.T) {
 				t.Errorf("BuildConfig.ModulesEnv(%q) mismatch (-want, +got)\n%s", tc.repo, diff)
 			}
 		})
+	}
+}
+
+func TestDefaultPlusExpBuild(t *testing.T) {
+	for _, tc := range []struct {
+		repo string
+		want bool
+	}{
+		{"exp", true},
+		{"build", true},
+		{"anything", true},
+		{"vulndb", false},
+	} {
+		got := defaultPlusExpBuild(tc.repo, "", "")
+		if got != tc.want {
+			t.Errorf("%s: got %t, want %t", tc.repo, got, tc.want)
+		}
 	}
 }
