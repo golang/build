@@ -93,7 +93,7 @@ func init() {
 	x("tour", noDash)
 	x("vgo", noDash)
 	x("vuln", desc("code for the Go Vulnerability Database"))
-	x("vulndb", desc("reports for the Go Vulnerability Database"), enableCSR("golang-org"))
+	x("vulndb", desc("reports for the Go Vulnerability Database"), enableCSR("go-vuln"))
 	x("website", desc("home of the golang.org and go.dev websites"), enableCSR("golang-org"))
 	x("xerrors", noDash)
 
