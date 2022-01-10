@@ -301,8 +301,8 @@ var Production = &Environment{
 	AWSSecurityGroup:  "go-builders",
 	AWSRegion:         "us-east-2",
 	iapServiceIDs: map[string]string{
-		"coordinator-internal-iap": "5961904996536591018",
-		"relui-internal":           "5124132661507612124",
+		"coordinator-internal-iap": "7963570695201399464",
+		"relui-internal":           "155577380958854618",
 	},
 }
 
