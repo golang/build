@@ -317,8 +317,9 @@ func checkBuildersForProject(t *testing.T, gotBuilders []*BuildConfig, want []st
 }
 
 // TestPostSubmit tests that a given repo & its branch yields the provided
-// complete set of post-submit builders. See also: TestBuilderConfig, which
-// tests both trybots and post-submit builders, both at arbitrary branches.
+// complete set of post-submit builders. See also: TestTrybots, which tests only
+// trybots, and TestBuilderConfig, which tests both trybots and post-submit
+// builders, both at arbitrary branches.
 func TestPostSubmit(t *testing.T) {
 	tests := []struct {
 		repo   string // "go", "net", etc

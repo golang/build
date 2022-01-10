@@ -3037,7 +3037,7 @@ func TryBuildersForProject(proj, branch, goBranch string) []*BuildConfig {
 // should be run given a project, branch and goBranch.
 type isBuilderFunc func(conf *BuildConfig, proj, branch, goBranch string) bool
 
-// buildsForProject returns the builders that should be run for the given project,
+// buildersForProject returns the builders that should be run for the given project,
 // using isBuilder to test each builder.
 // See TryBuildersForProject for the valid forms of proj, branch and goBranch.
 func buildersForProject(proj, branch, goBranch string, isBuilder isBuilderFunc) []*BuildConfig {
