@@ -93,7 +93,6 @@ func TestTrybots(t *testing.T) {
 			branch: "master",
 			want: []string{
 				"android-amd64-emu",
-				"freebsd-amd64-12_2",
 				"freebsd-amd64-12_3",
 				"js-wasm",
 				"linux-386",
@@ -104,7 +103,6 @@ func TestTrybots(t *testing.T) {
 				"linux-arm64-aws",
 				"openbsd-amd64-68",
 				"openbsd-amd64-70",
-				"openbsd-amd64-70-n1",
 				"windows-386-2008",
 				"windows-386-2012",
 				"windows-amd64-2016",
@@ -129,7 +127,6 @@ func TestTrybots(t *testing.T) {
 			branch: "dev.typeparams",
 			want: []string{
 				"android-amd64-emu",
-				"freebsd-amd64-12_2",
 				"freebsd-amd64-12_3",
 				"js-wasm",
 				"linux-386",
@@ -140,7 +137,6 @@ func TestTrybots(t *testing.T) {
 				"linux-arm64-aws",
 				"openbsd-amd64-68",
 				"openbsd-amd64-70",
-				"openbsd-amd64-70-n1",
 				"windows-386-2008",
 				"windows-386-2012",
 				"windows-amd64-2016",
@@ -165,7 +161,6 @@ func TestTrybots(t *testing.T) {
 			branch: "release-branch.go1.17",
 			want: []string{
 				"android-amd64-emu",
-				"freebsd-amd64-12_2",
 				"freebsd-amd64-12_3",
 				"js-wasm",
 				"linux-386",
@@ -175,7 +170,6 @@ func TestTrybots(t *testing.T) {
 				"linux-arm64-aws",
 				"openbsd-amd64-68",
 				"openbsd-amd64-70",
-				"openbsd-amd64-70-n1",
 				"windows-386-2008",
 				"windows-386-2012",
 				"windows-amd64-2016",
@@ -205,7 +199,6 @@ func TestTrybots(t *testing.T) {
 			branch: "release-branch.go1.16",
 			want: []string{
 				"android-amd64-emu",
-				"freebsd-amd64-12_2",
 				"freebsd-amd64-12_3",
 				"js-wasm",
 				"linux-386",
@@ -252,7 +245,6 @@ func TestTrybots(t *testing.T) {
 			want: []string{
 				"android-amd64-emu",
 				"freebsd-386-13_0",
-				"freebsd-amd64-12_2",
 				"freebsd-amd64-12_3",
 				"freebsd-amd64-13_0",
 				"linux-386",
@@ -261,13 +253,10 @@ func TestTrybots(t *testing.T) {
 				"linux-arm-aws",
 				"linux-arm64-aws",
 				"netbsd-amd64-9_0",
-				"netbsd-amd64-9_0-n1",
 				"openbsd-386-68",
 				"openbsd-386-70",
-				"openbsd-386-70-n1",
 				"openbsd-amd64-68",
 				"openbsd-amd64-70",
-				"openbsd-amd64-70-n1",
 				"windows-386-2008",
 				"windows-amd64-2016",
 			},
@@ -485,13 +474,13 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-386-13_0", "net"), onlyPost},
 		{b("freebsd-386-13_0", "mobile"), none},
 
-		// FreeBSD 12.2
-		{b("freebsd-amd64-12_2", "go"), both},
-		{b("freebsd-amd64-12_2", "net"), both},
-		{b("freebsd-amd64-12_2", "mobile"), none},
-		{b("freebsd-386-12_2", "go"), onlyPost},
-		{b("freebsd-386-12_2", "net"), onlyPost},
-		{b("freebsd-386-12_2", "mobile"), none},
+		// FreeBSD 12.3
+		{b("freebsd-amd64-12_3", "go"), both},
+		{b("freebsd-amd64-12_3", "net"), both},
+		{b("freebsd-amd64-12_3", "mobile"), none},
+		{b("freebsd-386-12_3", "go"), onlyPost},
+		{b("freebsd-386-12_3", "net"), onlyPost},
+		{b("freebsd-386-12_3", "mobile"), none},
 
 		// FreeBSD 11.4
 		{b("freebsd-amd64-11_4@go1.16", "go"), onlyPost},
@@ -607,9 +596,9 @@ func TestBuilderConfig(t *testing.T) {
 		// ... but not on most others:
 		{b("darwin-amd64-10_12", "exp"), none},
 		{b("freebsd-386-11_4", "exp"), none},
-		{b("freebsd-386-12_2", "exp"), none},
+		{b("freebsd-386-12_3", "exp"), none},
 		{b("freebsd-amd64-11_4", "exp"), none},
-		{b("freebsd-amd64-12_2", "exp"), none},
+		{b("freebsd-amd64-12_3", "exp"), none},
 		{b("openbsd-amd64-68", "exp"), none},
 		{b("js-wasm", "exp"), none},
 
@@ -781,8 +770,8 @@ func TestShouldRunDistTest(t *testing.T) {
 	}{
 		{"linux-amd64", "api", postSubmit, true},
 		{"linux-amd64", "api", tryMode, true},
-		{"freebsd-amd64-12_2", "api", postSubmit, true}, // freebsd-amd64-12_2 uses fasterTrybots policy, should still build.
-		{"freebsd-amd64-12_2", "api", tryMode, false},   // freebsd-amd64-12_2 uses fasterTrybots policy, should skip in try mode.
+		{"freebsd-amd64-12_3", "api", postSubmit, true}, // freebsd-amd64-12_3 uses fasterTrybots policy, should still build.
+		{"freebsd-amd64-12_3", "api", tryMode, false},   // freebsd-amd64-12_3 uses fasterTrybots policy, should skip in try mode.
 
 		{"linux-amd64", "reboot", tryMode, true},
 		{"linux-amd64-race", "reboot", tryMode, false},

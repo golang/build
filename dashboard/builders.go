@@ -231,7 +231,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-openbsd-amd64-68": &HostConfig{
 		VMImage:            "openbsd-amd64-68-v3", // v3 adds 009_exit syspatch; see golang.org/cl/278732.
-		machineType:        "e2-highcpu-4",
+		machineType:        "n2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
 		Notes:              "OpenBSD 6.8 (with 009_exit syspatch); GCE VM is built from script in build/env/openbsd-amd64",
@@ -239,7 +239,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-openbsd-386-68": &HostConfig{
 		VMImage:            "openbsd-386-68-v3", // v3 adds 009_exit syspatch; see golang.org/cl/278732.
-		machineType:        "e2-highcpu-4",
+		machineType:        "n2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
 		Notes:              "OpenBSD 6.8 (with 009_exit syspatch); GCE VM is built from script in build/env/openbsd-386",
@@ -247,53 +247,13 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-openbsd-amd64-70": &HostConfig{
 		VMImage:            "openbsd-amd64-70",
-		machineType:        "e2-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
-		Notes:              "OpenBSD 7.0; GCE VM is built from script in build/env/openbsd-amd64",
-		SSHUsername:        "gopher",
-	},
-	"host-openbsd-amd64-70-n1": &HostConfig{
-		VMImage:            "openbsd-amd64-70",
-		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
-		Notes:              "OpenBSD 7.0; GCE VM is built from script in build/env/openbsd-amd64. n1-highcpu host.",
-		SSHUsername:        "gopher",
-	},
-	"host-openbsd-amd64-70-n2": &HostConfig{
-		VMImage:            "openbsd-amd64-70",
 		machineType:        "n2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
 		Notes:              "OpenBSD 7.0; GCE VM is built from script in build/env/openbsd-amd64. n2-highcpu host.",
 		SSHUsername:        "gopher",
 	},
-	"host-openbsd-amd64-70-n2d": &HostConfig{
-		VMImage:            "openbsd-amd64-70",
-		machineType:        "n2d-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
-		Notes:              "OpenBSD 7.0; GCE VM is built from script in build/env/openbsd-amd64. n2d-highcpu host.",
-		SSHUsername:        "gopher",
-	},
 	"host-openbsd-386-70": &HostConfig{
-		VMImage:            "openbsd-386-70",
-		machineType:        "e2-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
-		Notes:              "OpenBSD 7.0; GCE VM is built from script in build/env/openbsd-386",
-		SSHUsername:        "gopher",
-	},
-	"host-openbsd-386-70-n1": &HostConfig{
-		VMImage:            "openbsd-386-70",
-		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
-		Notes:              "OpenBSD 7.0; GCE VM is built from script in build/env/openbsd-386. n1-highcpu host.",
-		SSHUsername:        "gopher",
-	},
-	"host-openbsd-386-70-n2": &HostConfig{
 		VMImage:            "openbsd-386-70",
 		machineType:        "n2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
@@ -302,6 +262,7 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-386-70-n2d": &HostConfig{
+		// This host config is only for the runtime team to use investigating golang/go#49209.
 		VMImage:            "openbsd-386-70",
 		machineType:        "n2d-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
@@ -330,7 +291,7 @@ var Hosts = map[string]*HostConfig{
 	"host-freebsd-11_2": &HostConfig{
 		VMImage:            "freebsd-amd64-112",
 		Notes:              "FreeBSD 11.2; GCE VM is built from script in build/env/freebsd-amd64",
-		machineType:        "e2-highcpu-4",
+		machineType:        "n2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
@@ -338,15 +299,7 @@ var Hosts = map[string]*HostConfig{
 	"host-freebsd-11_4": &HostConfig{
 		VMImage:            "freebsd-amd64-114",
 		Notes:              "FreeBSD 11.4; GCE VM is built from script in build/env/freebsd-amd64",
-		machineType:        "e2-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
-		SSHUsername:        "gopher",
-	},
-	"host-freebsd-12_2": &HostConfig{
-		VMImage:            "freebsd-amd64-122",
-		Notes:              "FreeBSD 12.2; GCE VM is built from script in build/env/freebsd-amd64",
-		machineType:        "e2-highcpu-4",
+		machineType:        "n2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
@@ -377,64 +330,16 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-netbsd-amd64-9_0": &HostConfig{
 		VMImage:            "netbsd-amd64-9-0-2019q4",
-		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-amd64",
-		machineType:        "e2-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64-2da6b33.tar.gz",
-		SSHUsername:        "root",
-	},
-	"host-netbsd-amd64-9_0-n1": &HostConfig{
-		VMImage:            "netbsd-amd64-9-0-2019q4",
-		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-amd64. n1-highcpu host.",
-		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64-2da6b33.tar.gz",
-		SSHUsername:        "root",
-	},
-	"host-netbsd-amd64-9_0-n2": &HostConfig{
-		VMImage:            "netbsd-amd64-9-0-2019q4",
 		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-amd64. n2-highcpu host.",
 		machineType:        "n2-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64-2da6b33.tar.gz",
 		SSHUsername:        "root",
 	},
-	"host-netbsd-amd64-9_0-n2d": &HostConfig{
-		VMImage:            "netbsd-amd64-9-0-2019q4",
-		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-amd64. n2d-highcpu host.",
-		machineType:        "n2d-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64-2da6b33.tar.gz",
-		SSHUsername:        "root",
-	},
 	"host-netbsd-386-9_0": &HostConfig{
-		VMImage:            "netbsd-i386-9-0-2019q4",
-		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-386",
-		machineType:        "e2-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-386",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-386-0b3b511.tar.gz",
-		SSHUsername:        "root",
-	},
-	"host-netbsd-386-9_0-n1": &HostConfig{
-		VMImage:            "netbsd-i386-9-0-2019q4",
-		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-386. n1-highcpu host.",
-		machineType:        "n1-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-386",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-386-0b3b511.tar.gz",
-		SSHUsername:        "root",
-	},
-	"host-netbsd-386-9_0-n2": &HostConfig{
 		VMImage:            "netbsd-i386-9-0-2019q4",
 		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-386. n2-highcpu host.",
 		machineType:        "n2-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-386",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-386-0b3b511.tar.gz",
-		SSHUsername:        "root",
-	},
-	"host-netbsd-386-9_0-n2d": &HostConfig{
-		VMImage:            "netbsd-i386-9-0-2019q4",
-		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-386. n2d-highcpu host.",
-		machineType:        "n2d-highcpu-4",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-386-0b3b511.tar.gz",
 		SSHUsername:        "root",
@@ -1591,26 +1496,11 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:     "freebsd-amd64-12_2",
-		HostType: "host-freebsd-12_2",
-		tryBot:   defaultTrySet("sys"),
-
-		distTestAdjust:    fasterTrybots, // If changing this policy, update TestShouldRunDistTest accordingly.
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-12_3",
 		HostType: "host-freebsd-12_3",
 		tryBot:   defaultTrySet("sys"),
 
 		distTestAdjust:    fasterTrybots, // If changing this policy, update TestShouldRunDistTest accordingly.
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
-		Name:              "freebsd-386-12_2",
-		HostType:          "host-freebsd-12_2",
-		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
-		distTestAdjust:    fasterTrybots,
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
@@ -2121,38 +2011,6 @@ func init() {
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
-		Name:           "openbsd-amd64-70-n1",
-		HostType:       "host-openbsd-amd64-70-n1",
-		tryBot:         defaultTrySet(),
-		distTestAdjust: noTestDirAndNoReboot,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// https://github.com/golang/go/issues/48977#issuecomment-971763553:
-			// 1.16 seems to be incompatible with 7.0.
-			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
-		},
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
-		Name:           "openbsd-amd64-70-n2",
-		HostType:       "host-openbsd-amd64-70-n2",
-		distTestAdjust: noTestDirAndNoReboot,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// https://github.com/golang/go/issues/48977#issuecomment-971763553:
-			// 1.16 seems to be incompatible with 7.0.
-			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:           "openbsd-amd64-70-n2d",
-		HostType:       "host-openbsd-amd64-70-n2d",
-		distTestAdjust: noTestDirAndNoReboot,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// https://github.com/golang/go/issues/48977#issuecomment-971763553:
-			// 1.16 seems to be incompatible with 7.0.
-			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
-		},
-	})
-	addBuilder(BuildConfig{
 		Name:     "openbsd-386-70",
 		HostType: "host-openbsd-386-70",
 		tryBot:   explicitTrySet("sys"),
@@ -2170,50 +2028,10 @@ func init() {
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
-		Name:     "openbsd-386-70-n1",
-		HostType: "host-openbsd-386-70-n1",
-		tryBot:   explicitTrySet("sys"),
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			if repo == "review" {
-				// https://golang.org/issue/49529: git seems to be too slow on this
-				// platform.
-				return false
-			}
-			// https://github.com/golang/go/issues/48977#issuecomment-971763553:
-			// 1.16 seems to be incompatible with 7.0.
-			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
-		},
-		distTestAdjust:    noTestDirAndNoReboot,
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
-		Name:     "openbsd-386-70-n2",
-		HostType: "host-openbsd-386-70-n2",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			if repo == "review" {
-				// https://golang.org/issue/49529: git seems to be too slow on this
-				// platform.
-				return false
-			}
-			// https://github.com/golang/go/issues/48977#issuecomment-971763553:
-			// 1.16 seems to be incompatible with 7.0.
-			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
-		},
-		distTestAdjust: noTestDirAndNoReboot,
-	})
-	addBuilder(BuildConfig{
-		Name:     "openbsd-386-70-n2d",
-		HostType: "host-openbsd-386-70-n2d",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			if repo == "review" {
-				// https://golang.org/issue/49529: git seems to be too slow on this
-				// platform.
-				return false
-			}
-			// https://github.com/golang/go/issues/48977#issuecomment-971763553:
-			// 1.16 seems to be incompatible with 7.0.
-			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
-		},
+		// This builder is only for the runtime team to use investigating golang/go#49209.
+		Name:           "openbsd-386-70-n2d",
+		HostType:       "host-openbsd-386-70-n2d",
+		buildsRepo:     disabledBuilder,
 		distTestAdjust: noTestDirAndNoReboot,
 	})
 	addBuilder(BuildConfig{
@@ -2283,39 +2101,8 @@ func init() {
 		tryBot:         explicitTrySet("sys"),
 	})
 	addBuilder(BuildConfig{
-		Name:           "netbsd-amd64-9_0-n1",
-		HostType:       "host-netbsd-amd64-9_0-n1",
-		distTestAdjust: noTestDirAndNoReboot,
-		tryBot:         explicitTrySet("sys"),
-	})
-	addBuilder(BuildConfig{
-		Name:           "netbsd-amd64-9_0-n2",
-		HostType:       "host-netbsd-amd64-9_0-n2",
-		distTestAdjust: noTestDirAndNoReboot,
-	})
-	addBuilder(BuildConfig{
-		Name:           "netbsd-amd64-9_0-n2d",
-		HostType:       "host-netbsd-amd64-9_0-n2d",
-		distTestAdjust: noTestDirAndNoReboot,
-	})
-	addBuilder(BuildConfig{
 		Name:           "netbsd-386-9_0",
 		HostType:       "host-netbsd-386-9_0",
-		distTestAdjust: noTestDirAndNoReboot,
-	})
-	addBuilder(BuildConfig{
-		Name:           "netbsd-386-9_0-n1",
-		HostType:       "host-netbsd-386-9_0-n1",
-		distTestAdjust: noTestDirAndNoReboot,
-	})
-	addBuilder(BuildConfig{
-		Name:           "netbsd-386-9_0-n2",
-		HostType:       "host-netbsd-386-9_0-n2",
-		distTestAdjust: noTestDirAndNoReboot,
-	})
-	addBuilder(BuildConfig{
-		Name:           "netbsd-386-9_0-n2d",
-		HostType:       "host-netbsd-386-9_0-n2d",
 		distTestAdjust: noTestDirAndNoReboot,
 	})
 	addBuilder(BuildConfig{

@@ -115,9 +115,9 @@ func TestBuilderSelectionPerGoVersion(t *testing.T) {
 		{"go1.17rc2", "freebsd-386", "freebsd-386-11_4"},
 		{"go1.17", "freebsd-amd64", "freebsd-amd64-11_4"},
 		{"go1.17", "freebsd-386", "freebsd-386-11_4"},
-		// Go 1.18 use the the FreeBSD 12.2 builder.
-		{"go1.18", "freebsd-amd64", "freebsd-amd64-12_2"},
-		{"go1.18", "freebsd-386", "freebsd-386-12_2"},
+		// Go 1.18 use the the FreeBSD 12.3 builder.
+		{"go1.18", "freebsd-amd64", "freebsd-amd64-12_3"},
+		{"go1.18", "freebsd-386", "freebsd-386-12_3"},
 
 		// macOS (amd64)
 		// Go 1.16 uses MacOS 10.15.

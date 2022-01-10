@@ -177,14 +177,14 @@ var builds = []*Build{
 		GoQuery: ">= go1.18beta1", // See #40561.
 		OS:      "freebsd",
 		Arch:    "386",
-		Builder: "freebsd-386-12_2",
+		Builder: "freebsd-386-12_3",
 	},
 	{
 		GoQuery: ">= go1.18beta1", // See #40561.
 		OS:      "freebsd",
 		Arch:    "amd64",
 		Race:    true,
-		Builder: "freebsd-amd64-12_2",
+		Builder: "freebsd-amd64-12_3",
 	},
 	{
 		GoQuery: ">= go1.17beta1 && < go1.18beta1", // See #45727.
