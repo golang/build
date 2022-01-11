@@ -133,7 +133,7 @@ func (fc *FakeClient) PutTar(ctx context.Context, r io.Reader, dir string) error
 
 // PutTarFromURL fakes putting a tar zipped file on a builelt.
 func (fc *FakeClient) PutTarFromURL(ctx context.Context, tarURL, dir string) error {
-	return errUnimplemented
+	return nil
 }
 
 // RemoteName gives the remote name of the fake buildlet.

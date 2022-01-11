@@ -40,6 +40,8 @@ type GomoteServiceClient interface {
 	RetrieveSSHCredentials(ctx context.Context, in *RetrieveSSHCredentialsRequest, opts ...grpc.CallOption) (*RetrieveSSHCredentialsResponse, error)
 	// WriteTGZ expands a tar and ziped file onto the file system of a gomote instance.
 	WriteTGZ(ctx context.Context, opts ...grpc.CallOption) (GomoteService_WriteTGZClient, error)
+	// WriteTGZFromURL retrieves a tar and ziped file from a URL and expands it onto the file system of a gomote instance.
+	WriteTGZFromURL(ctx context.Context, in *WriteTGZFromURLRequest, opts ...grpc.CallOption) (*WriteTGZFromURLResponse, error)
 }
 
 type gomoteServiceClient struct {
@@ -243,6 +245,15 @@ func (x *gomoteServiceWriteTGZClient) CloseAndRecv() (*WriteTGZResponse, error) 
 	return m, nil
 }
 
+func (c *gomoteServiceClient) WriteTGZFromURL(ctx context.Context, in *WriteTGZFromURLRequest, opts ...grpc.CallOption) (*WriteTGZFromURLResponse, error) {
+	out := new(WriteTGZFromURLResponse)
+	err := c.cc.Invoke(ctx, "/protos.GomoteService/WriteTGZFromURL", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GomoteServiceServer is the server API for GomoteService service.
 // All implementations must embed UnimplementedGomoteServiceServer
 // for forward compatibility
@@ -269,6 +280,8 @@ type GomoteServiceServer interface {
 	RetrieveSSHCredentials(context.Context, *RetrieveSSHCredentialsRequest) (*RetrieveSSHCredentialsResponse, error)
 	// WriteTGZ expands a tar and ziped file onto the file system of a gomote instance.
 	WriteTGZ(GomoteService_WriteTGZServer) error
+	// WriteTGZFromURL retrieves a tar and ziped file from a URL and expands it onto the file system of a gomote instance.
+	WriteTGZFromURL(context.Context, *WriteTGZFromURLRequest) (*WriteTGZFromURLResponse, error)
 	mustEmbedUnimplementedGomoteServiceServer()
 }
 
@@ -308,6 +321,9 @@ func (UnimplementedGomoteServiceServer) RetrieveSSHCredentials(context.Context, 
 }
 func (UnimplementedGomoteServiceServer) WriteTGZ(GomoteService_WriteTGZServer) error {
 	return status.Errorf(codes.Unimplemented, "method WriteTGZ not implemented")
+}
+func (UnimplementedGomoteServiceServer) WriteTGZFromURL(context.Context, *WriteTGZFromURLRequest) (*WriteTGZFromURLResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method WriteTGZFromURL not implemented")
 }
 func (UnimplementedGomoteServiceServer) mustEmbedUnimplementedGomoteServiceServer() {}
 
@@ -537,6 +553,24 @@ func (x *gomoteServiceWriteTGZServer) Recv() (*WriteTGZRequest, error) {
 	return m, nil
 }
 
+func _GomoteService_WriteTGZFromURL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WriteTGZFromURLRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GomoteServiceServer).WriteTGZFromURL(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/protos.GomoteService/WriteTGZFromURL",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GomoteServiceServer).WriteTGZFromURL(ctx, req.(*WriteTGZFromURLRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // GomoteService_ServiceDesc is the grpc.ServiceDesc for GomoteService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -571,6 +605,10 @@ var GomoteService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RetrieveSSHCredentials",
 			Handler:    _GomoteService_RetrieveSSHCredentials_Handler,
+		},
+		{
+			MethodName: "WriteTGZFromURL",
+			Handler:    _GomoteService_WriteTGZFromURL_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

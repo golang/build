@@ -32,6 +32,8 @@ service GomoteService {
   rpc RetrieveSSHCredentials (RetrieveSSHCredentialsRequest) returns (RetrieveSSHCredentialsResponse) {}
   // WriteTGZ expands a tar and ziped file onto the file system of a gomote instance.
   rpc WriteTGZ (stream WriteTGZRequest) returns (WriteTGZResponse) {}
+  // WriteTGZFromURL retrieves a tar and ziped file from a URL and expands it onto the file system of a gomote instance.
+  rpc WriteTGZFromURL (WriteTGZFromURLRequest) returns (WriteTGZFromURLResponse) {}
 }
 
 // AuthenticateRequest specifies the data needed for an authentication request.
@@ -135,3 +137,17 @@ message WriteTGZRequest {}
 
 // WriteTGZResponse contains the results from expanding a tar and zipped file onto the file system of a gomote instance.
 message WriteTGZResponse {}
+
+// WriteTGZFromURLRequest specifies the data needed retrieve a file and expand it onto the file system of a gomote instance.
+// It instructs the buildlet to download the tar.gz file from the url and write it to directory, a relative directory from the workdir.
+// If the directory is empty, they're placed at the root of the buildlet's work directory.
+// The directory is created if necessary.
+// The url must be of a tar.gz file.
+message WriteTGZFromURLRequest {
+  string gomote_id = 1;
+  string url = 2;
+  string directory = 3;
+}
+
+// WriteTGZFromURLResponse contains the results from retrieving a file and expanding it onto the file system of a gomote instance.
+message WriteTGZFromURLResponse {}

@@ -209,6 +209,37 @@ func (s *Server) DestroyInstance(ctx context.Context, req *protos.DestroyInstanc
 	return &protos.DestroyInstanceResponse{}, nil
 }
 
+// WriteTGZFromURL will instruct the gomote instance to download the tar.gz from the provided URL. The tar.gz file will be unpacked in the work directory
+// relative to the directory provided.
+func (s *Server) WriteTGZFromURL(ctx context.Context, req *protos.WriteTGZFromURLRequest) (*protos.WriteTGZFromURLResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("WriteTGZFromURL access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	if req.GetGomoteId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid gomote ID")
+	}
+	if req.GetUrl() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "missing URL")
+	}
+	session, err := s.buildlets.Session(req.GetGomoteId())
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
+	}
+	if session.OwnerID != creds.ID {
+		return nil, status.Errorf(codes.PermissionDenied, "not allowed to modify this gomote session")
+	}
+	bc, err := s.buildlets.BuildletClient(req.GetGomoteId())
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
+	}
+	if err = bc.PutTarFromURL(ctx, req.GetUrl(), req.GetDirectory()); err != nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "unable to write tar.gz: %s", err)
+	}
+	return &protos.WriteTGZFromURLResponse{}, nil
+}
+
 // isPrivilagedUser returns true if the user is using a Google account.
 // The user has to be a part of the appropriate IAM group.
 func isPrivilegedUser(email string) bool {
