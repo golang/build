@@ -202,7 +202,7 @@ Download:
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(hostType)...)
 	case "windows/arm64":
 		switch buildEnv {
-		case "host-windows-arm64-mini":
+		case "host-windows-arm64-mini", "host-windows11-arm64-mini":
 			cmd.Args = append(cmd.Args,
 				"--halt=true",
 				"--reverse-type="+buildEnv,

@@ -135,7 +135,7 @@ $vs_buildtools = "$builder_dir\vs_buildtools.exe"
 Get-FileFromUrl -URL "https://aka.ms/vs/16/release/vs_buildtools.exe" -Output "$vs_buildtools"
 
 Write-Host "installing Visual Studio Build Tools"
-& $vs_buildtools --quiet --wait --norestart --nocache --installPath "$dep_dir\vs" --all --add Microsoft.VisualStudio.Component.VC.Tools.ARM64
+& $vs_buildtools --quiet --wait --norestart --nocache --installPath "$dep_dir\vs" --all --add Microsoft.VisualStudio.Component.VC.Tools.ARM64 --add Microsoft.VisualStudio.Component.VC.Tools.ARM
 
 # Create a buildlet user
 Write-Host "creating buildlet user"

@@ -13,7 +13,7 @@ a1.metal instances then saving the image manually.
     - Convert vhdx images to qcow2 via the following command:
 
       ```shell
-      qemu-image convert -O qcow2 win.vhdx win.qcow2
+      qemu-img convert -O qcow2 win.vhdx win.qcow2
       ```
 
 - SSH to your instance tunneling port 5903, and run `win10-arm64.sh`
@@ -29,6 +29,9 @@ a1.metal instances then saving the image manually.
     - Alternatively, you can modify `win10-arm64.sh` to forward ssh
       access to the VM, and run PowerShell in the CLI, which is a bit
       easier than through VNC.
+- Verify autologin works after a reboot. If not, try
+  https://docs.microsoft.com/en-us/sysinternals/downloads/autologon.
+- Set GO_BUILDER_ENV and install a builder key.
 - Once the image is complete, download the image to your workstation
   and upload to `s3://go-builder-data`.
     - You can find the appropriate the S3 path referenced in
