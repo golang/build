@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	_ "embed"
 	"flag"
 	"fmt"
 	"io"
@@ -32,7 +33,8 @@ import (
 	"golang.org/x/build/dashboard"
 )
 
-//go:generate go run makestatic.go
+//go:embed releaselet.go
+var releaselet string
 
 var (
 	target = flag.String("target", "", "If specified, build specific target platform (e.g. 'linux-amd64'). Default is to build all.")
