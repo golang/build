@@ -257,11 +257,6 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg 
 		panic("expect non-nil buildletsKubeClient")
 	}
 
-	deleteIn, ok := ctx.Value(BuildletTimeoutOpt{}).(time.Duration)
-	if !ok {
-		deleteIn = podDeleteTimeout
-	}
-
 	podName := instanceName(hostType, 7)
 
 	// Get an estimate for when the pod will be started/running and set
@@ -275,7 +270,7 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg 
 		ProjectID:     NewGCEConfiguration().BuildEnv().ProjectName,
 		ImageRegistry: registryPrefix,
 		Description:   fmt.Sprintf("Go Builder for %s", hostType),
-		DeleteIn:      deleteIn,
+		DeleteIn:      determineDeleteTimeout(ctx, hconf, podDeleteTimeout),
 		OnPodCreating: func() {
 			lg.LogEventTime("pod_creating")
 			p.setPodUsed(podName, true)

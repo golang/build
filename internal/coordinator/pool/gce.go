@@ -399,8 +399,6 @@ func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logge
 		return nil, err
 	}
 
-	deleteIn := deleteTimeoutFromContextOrValue(ctx, deleteTimeout)
-
 	instName := instanceName(hostType, 7)
 	instName = strings.Replace(instName, "_", "-", -1) // Issue 22905; can't use underscores in GCE VMs
 	p.setInstanceUsed(instName, true)
@@ -419,7 +417,7 @@ func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logge
 
 	log.Printf("Creating GCE VM %q for %s at %s", instName, hostType, zone)
 	bc, err = buildlet.StartNewVM(gcpCreds, buildEnv, instName, hostType, buildlet.VMOpts{
-		DeleteIn: deleteIn,
+		DeleteIn: determineDeleteTimeout(ctx, hconf, deleteTimeout),
 		OnInstanceRequested: func() {
 			log.Printf("GCE VM %q now booting", instName)
 		},

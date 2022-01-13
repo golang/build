@@ -768,7 +768,10 @@ type HostConfig struct {
 	// EC2 options
 	isEC2 bool // if true, the instance is configured to run on EC2
 
-	// ReverseOptions:
+	// GCE or EC2 options
+	DeleteTimeout time.Duration // Timeout after which the VM is destroyed. Zero duration uses global default.
+
+	// Reverse options
 	ExpectNum       int  // expected number of reverse buildlets of this type
 	HermeticReverse bool // whether reverse buildlet has fresh env per conn
 

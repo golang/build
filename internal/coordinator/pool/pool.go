@@ -74,15 +74,24 @@ func instanceName(hostType string, length int) string {
 	return fmt.Sprintf("buildlet-%s-rn%s", strings.TrimPrefix(hostType, "host-"), randHex(length))
 }
 
-// deleteTimeoutFromContextOrValue retrieves the buildlet timeout duration from the
-// context. If it it is not found in the context, it will fallback to using the timeout passed
-// into the function.
-func deleteTimeoutFromContextOrValue(ctx context.Context, timeout time.Duration) time.Duration {
+// determineDeleteTimeout determines the buildlet timeout duration with the
+// following priority:
+//
+// 1. Value from context
+// 2. Host type default from host config.
+// 3. Global default from 'timeout'.
+func determineDeleteTimeout(ctx context.Context, host *dashboard.HostConfig, timeout time.Duration) time.Duration {
 	deleteIn, ok := ctx.Value(BuildletTimeoutOpt{}).(time.Duration)
-	if !ok {
-		deleteIn = timeout
+	if ok {
+		return deleteIn
 	}
-	return deleteIn
+
+	deleteIn = host.DeleteTimeout
+	if deleteIn != 0 {
+		return deleteIn
+	}
+
+	return timeout
 }
 
 // isBuildlet checks the name string in order to determine if the name is for a buildlet.

@@ -11,26 +11,38 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"golang.org/x/build/dashboard"
 )
 
-func TestPoolDeleteTimeoutFromContextOrValue(t *testing.T) {
+func TestPoolDetermineDeleteTimeout(t *testing.T) {
 	testCases := []struct {
 		desc        string
 		ctxValue    interface{}
+		hostValue   time.Duration
 		timeout     time.Duration
 		wantTimeout time.Duration
 	}{
 		{
 			desc:        "from-context",
 			ctxValue:    time.Hour,
-			timeout:     time.Minute,
+			hostValue:   time.Minute,
+			timeout:     time.Second,
 			wantTimeout: time.Hour,
+		},
+		{
+			desc:        "from-host",
+			ctxValue:    nil,
+			hostValue:   time.Minute,
+			timeout:     time.Second,
+			wantTimeout: time.Minute,
 		},
 		{
 			desc:        "from-argument",
 			ctxValue:    nil,
-			timeout:     time.Minute,
-			wantTimeout: time.Minute,
+			hostValue:   0,
+			timeout:     time.Second,
+			wantTimeout: time.Second,
 		},
 	}
 	for _, tc := range testCases {
@@ -39,8 +51,11 @@ func TestPoolDeleteTimeoutFromContextOrValue(t *testing.T) {
 			if tc.ctxValue != nil {
 				ctx = context.WithValue(ctx, BuildletTimeoutOpt{}, tc.ctxValue)
 			}
-			if got := deleteTimeoutFromContextOrValue(ctx, tc.timeout); got != tc.wantTimeout {
-				t.Errorf("deleteTimeoutFromContextOrValue(%+v, %s) = %s; want %s", ctx, tc.timeout, got, tc.wantTimeout)
+			h := &dashboard.HostConfig{
+				DeleteTimeout: tc.hostValue,
+			}
+			if got := determineDeleteTimeout(ctx, h, tc.timeout); got != tc.wantTimeout {
+				t.Errorf("determineDeleteTimeout(%+v, %+v, %s) = %s; want %s", ctx, h, tc.timeout, got, tc.wantTimeout)
 			}
 		})
 	}

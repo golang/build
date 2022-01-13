@@ -195,7 +195,7 @@ func (eb *EC2Buildlet) GetBuildlet(ctx context.Context, hostType string, lg Logg
 		Zone:     "", // allow the EC2 api pick an availability zone with capacity
 		TLS:      kp,
 		Meta:     make(map[string]string),
-		DeleteIn: deleteTimeoutFromContextOrValue(ctx, eb.vmDeleteTimeout),
+		DeleteIn: determineDeleteTimeout(ctx, hconf, eb.vmDeleteTimeout),
 		OnInstanceRequested: func() {
 			log.Printf("EC2 VM %q now booting", instName)
 		},
