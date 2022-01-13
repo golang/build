@@ -678,6 +678,7 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
+		DeleteTimeout:   8 * time.Hour,
 	},
 }
 
