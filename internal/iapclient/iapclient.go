@@ -54,7 +54,7 @@ func writeToken(refresh *oauth2.Token) error {
 	if err != nil {
 		return err
 	}
-	err = os.Mkdir(filepath.Join(configDir, "gomote"), 0755)
+	err = os.MkdirAll(filepath.Join(configDir, "gomote"), 0755)
 	if err != nil {
 		return err
 	}
