@@ -19,9 +19,6 @@ import (
 	"golang.org/x/build/dashboard"
 )
 
-// BuildletTimeoutOpt is a context.Value key for BuildletPool.GetBuildlet.
-type BuildletTimeoutOpt struct{} // context Value key; value is time.Duration
-
 // Buildlet defines an interface for a pool of buildlets.
 type Buildlet interface {
 	// GetBuildlet returns a new buildlet client.
@@ -32,9 +29,6 @@ type Buildlet interface {
 	//
 	// Users of GetBuildlet must both call Client.Close when done
 	// with the client as well as cancel the provided Context.
-	//
-	// The ctx may have context values of type buildletTimeoutOpt
-	// and highPriorityOpt.
 	GetBuildlet(ctx context.Context, hostType string, lg Logger) (buildlet.Client, error)
 
 	String() string // TODO(bradfitz): more status stuff
@@ -77,18 +71,11 @@ func instanceName(hostType string, length int) string {
 // determineDeleteTimeout determines the buildlet timeout duration with the
 // following priority:
 //
-// 1. Value from context
-// 2. Host type default from host config.
-// 3. Global default from 'timeout'.
-func determineDeleteTimeout(ctx context.Context, host *dashboard.HostConfig, timeout time.Duration) time.Duration {
-	deleteIn, ok := ctx.Value(BuildletTimeoutOpt{}).(time.Duration)
-	if ok {
-		return deleteIn
-	}
-
-	deleteIn = host.DeleteTimeout
-	if deleteIn != 0 {
-		return deleteIn
+// 1. Host type default from host config.
+// 2. Global default from 'timeout'.
+func determineDeleteTimeout(host *dashboard.HostConfig, timeout time.Duration) time.Duration {
+	if host.DeleteTimeout != 0 {
+		return host.DeleteTimeout
 	}
 
 	return timeout

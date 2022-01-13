@@ -417,7 +417,7 @@ func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logge
 
 	log.Printf("Creating GCE VM %q for %s at %s", instName, hostType, zone)
 	bc, err = buildlet.StartNewVM(gcpCreds, buildEnv, instName, hostType, buildlet.VMOpts{
-		DeleteIn: determineDeleteTimeout(ctx, hconf, deleteTimeout),
+		DeleteIn: determineDeleteTimeout(hconf, deleteTimeout),
 		OnInstanceRequested: func() {
 			log.Printf("GCE VM %q now booting", instName)
 		},

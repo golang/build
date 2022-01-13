@@ -270,7 +270,7 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg 
 		ProjectID:     NewGCEConfiguration().BuildEnv().ProjectName,
 		ImageRegistry: registryPrefix,
 		Description:   fmt.Sprintf("Go Builder for %s", hostType),
-		DeleteIn:      determineDeleteTimeout(ctx, hconf, podDeleteTimeout),
+		DeleteIn:      determineDeleteTimeout(hconf, podDeleteTimeout),
 		OnPodCreating: func() {
 			lg.LogEventTime("pod_creating")
 			p.setPodUsed(podName, true)
