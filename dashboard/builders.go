@@ -2491,9 +2491,8 @@ func init() {
 		FlakyNet:       true,
 		HostType:       "host-linux-mipsle-mengzhuo",
 		Name:           "linux-mips64le-mengzhuo",
-		SkipSnapshot:   true,
+		buildsRepo:     onlyMasterDefault,
 		distTestAdjust: mipsDistTestPolicy,
-		buildsRepo:     mipsBuildsRepoPolicy,
 	})
 	addBuilder(BuildConfig{
 		FlakyNet:       true,
