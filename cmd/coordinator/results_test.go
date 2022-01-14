@@ -59,7 +59,7 @@ func TestClearResults(t *testing.T) {
 	s := httptest.NewServer(fd)
 	defer s.Close()
 
-	md := metadata.New(map[string]string{"authorization": "builder mykey"})
+	md := metadata.New(map[string]string{"coordinator-authorization": "builder mykey"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 	gs := &gRPCServer{dashboardURL: s.URL}
 	_, err := gs.ClearResults(ctx, req)
@@ -154,7 +154,7 @@ func TestClearResultsErrors(t *testing.T) {
 			s := httptest.NewServer(fd)
 			defer s.Close()
 
-			md := metadata.New(map[string]string{"authorization": "builder " + c.key})
+			md := metadata.New(map[string]string{"coordinator-authorization": "builder " + c.key})
 			ctx := metadata.NewIncomingContext(context.Background(), md)
 			gs := &gRPCServer{dashboardURL: s.URL}
 			_, err := gs.ClearResults(ctx, c.req)

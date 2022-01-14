@@ -137,9 +137,6 @@ var statusToCode = map[int]codes.Code{
 
 // keyFromContext loads a builder key from request metadata.
 //
-// The metadata format is prefixed with "builder " to avoid collisions with OAuth:
-//    authorization: builder MYKEY
-//
 // TODO(golang.org/issue/34744) - Move to shared file or library. This would make a nice UnaryServerInterceptor.
 // TODO(golang.org/issue/34744) - Currently allows the Build Dashboard to validate tokens, but we should validate here.
 func keyFromContext(ctx context.Context) (string, error) {
@@ -147,7 +144,7 @@ func keyFromContext(ctx context.Context) (string, error) {
 	if !ok {
 		return "", grpcstatus.Error(codes.Internal, codes.Internal.String())
 	}
-	auth := md.Get("authorization")
+	auth := md.Get("coordinator-authorization")
 	if len(auth) == 0 || len(auth[0]) < 9 || !strings.HasPrefix(auth[0], "builder ") {
 		return "", grpcstatus.Error(codes.Unauthenticated, codes.Unauthenticated.String())
 	}

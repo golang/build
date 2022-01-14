@@ -37,10 +37,12 @@ import (
 
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/cmd/coordinator/protos"
+	"golang.org/x/build/internal/iapclient"
 	"golang.org/x/build/internal/secret"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/oauth"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
@@ -57,7 +59,7 @@ var (
 	sendMasterKey = flag.Bool("sendmaster", false, "send the master key in request instead of a builder-specific key; allows overriding actions of revoked keys")
 	branch        = flag.String("branch", "master", "branch to find flakes from (for use with -redo-flaky)")
 	substr        = flag.String("substr", "", "if non-empty, redoes all build failures whose failure logs contain this substring")
-	grpcHost      = flag.String("grpc-host", "farmer.golang.org:https", "use gRPC for communicating with the Coordinator API")
+	grpcHost      = flag.String("grpc-host", "build.golang.org:443", "use gRPC for communicating with the Coordinator API")
 )
 
 type Failure struct {
@@ -72,8 +74,17 @@ func main() {
 	flag.Parse()
 
 	*builderPrefix = strings.TrimSuffix(*builderPrefix, "/")
-	tc := &tls.Config{InsecureSkipVerify: strings.HasPrefix(*grpcHost, "localhost:")}
-	cc, err := grpc.DialContext(context.Background(), *grpcHost, grpc.WithTransportCredentials(credentials.NewTLS(tc)))
+	ctx := context.Background()
+	ts, err := iapclient.TokenSource(ctx)
+	if err != nil {
+		log.Fatalf("failed to retrieve oauth token: %s", err)
+	}
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: strings.HasPrefix(*grpcHost, "localhost:")})),
+		grpc.WithDefaultCallOptions(grpc.PerRPCCredentials(oauth.TokenSource{TokenSource: ts})),
+		grpc.WithBlock(),
+	}
+	cc, err := grpc.DialContext(ctx, *grpcHost, opts...)
 	if err != nil {
 		log.Fatalf("grpc.DialContext(_, %q, _) = %v, wanted no error", *grpcHost, err)
 	}
@@ -241,7 +252,7 @@ type client struct {
 // Only the main Go repo is currently supported.
 // TODO(golang.org/issue/34744) - replace HTTP wipe with this after gRPC API for ClearResults is deployed
 func (c *client) grpcWipe(builder, hash string) {
-	md := metadata.New(map[string]string{"authorization": "builder " + builderKey(builder)})
+	md := metadata.New(map[string]string{"coordinator-authorization": "builder " + builderKey(builder)})
 	for i := 0; i < 10; i++ {
 		ctx, cancel := context.WithTimeout(metadata.NewOutgoingContext(context.Background(), md), time.Minute)
 		resp, err := c.coordinator.ClearResults(ctx, &protos.ClearResultsRequest{
@@ -249,6 +260,7 @@ func (c *client) grpcWipe(builder, hash string) {
 			Hash:    hash,
 		})
 		cancel()
+
 		if err != nil {
 			s, _ := status.FromError(err)
 			switch s.Code() {
