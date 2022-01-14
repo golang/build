@@ -29,6 +29,10 @@ const (
 	iapHeaderEmail = "X-Goog-Authenticated-User-Email"
 	// iapHeaderID is the header IAP stores the user id in.
 	iapHeaderID = "X-Goog-Authenticated-User-Id"
+
+	// IAPSkipAudienceValidation is the audience string used when the validation is not
+	// necessary. https://pkg.go.dev/google.golang.org/api/idtoken#Validate
+	IAPSkipAudienceValidation = ""
 )
 
 // IAPFields contains the values for the headers retrieved from Identity Aware
