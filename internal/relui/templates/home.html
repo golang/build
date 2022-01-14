@@ -29,47 +29,58 @@
             </tbody>
           </table>
           <h4 class="WorkflowList-sectionTitle">Tasks</h4>
-          <ul class="TaskList">
-            <li class="TaskList-item TaskList-itemHeader">
-              <span class="TaskList-itemStatus">Status</span>
-              <span class="TaskList-itemName">Name</span>
-              <span class="TaskList-itemCreated">Started</span>
-              <span class="TaskList-itemUpdated">Updated</span>
-              <span class="TaskList-itemResult">Result</span>
-            </li>
+          <table class="TaskList">
+            <thead>
+              <tr class="TaskList-item TaskList-itemHeader">
+                <th class="TaskList-itemHeaderCol TaskList-itemExpand"></th>
+                <th class="TaskList-itemHeaderCol TaskList-itemStatus">Status</th>
+                <th class="TaskList-itemHeaderCol TaskList-itemName">Name</th>
+                <th class="TaskList-itemHeaderCol TaskList-itemCreated">Started</th>
+                <th class="TaskList-itemHeaderCol TaskList-itemUpdated">Updated</th>
+                <th class="TaskList-itemHeaderCol TaskList-itemResult">Result</th>
+              </tr>
+            </thead>
             {{$tasks := index $.WorkflowTasks $workflow.ID}}
             {{range $task := $tasks}}
-              <li class="TaskList-item">
-                <details class="TaskList-itemDetails">
-                  <summary class="TaskList-itemSummary">
-                    <span class="TaskList-itemCol TaskList-itemStatus">
-                      {{$task.Finished}}
+              <tbody>
+                <tr class="TaskList-item TaskList-itemSummary TaskList-expandableItem">
+                  <td class="TaskList-itemCol TaskList-itemExpand">
+                    <span class="TaskList-itemExpandClosed">
+                      <img class="TaskList-itemExpandControl" alt="unfold more" src="{{baseLink "/static/images/chevron_right_black_24dp.svg"}}" />
                     </span>
-                    <span class="TaskList-itemCol TaskList-itemName">
-                      {{$task.Name}}
+                    <span class="TaskList-ItemExpandOpened">
+                      <img class="TaskList-itemExpandControl" alt="unfold less" src="{{baseLink "/static/images/expand_more_black_24dp.svg"}}" />
                     </span>
-                    <span class="TaskList-itemCol TaskList-itemCreated">
-                      {{$task.CreatedAt.UTC.Format "Mon Jan _2 2006 15:04:05"}}
-                    </span>
-                    <span class="TaskList-itemCol TaskList-itemUpdated">
-                      {{$task.UpdatedAt.UTC.Format "Mon Jan _2 2006 15:04:05"}}
-                    </span>
-                    <span class="TaskList-itemCol TaskList-itemResult">
-                      {{$task.Result}}
-                    </span>
-                  </summary>
-                  <div class="TaskList-itemLogs">
+                  </td>
+                  <td class="TaskList-itemCol TaskList-itemStatus">
+                    {{$task.Finished}}
+                  </td>
+                  <td class="TaskList-itemCol TaskList-itemName">
+                    {{$task.Name}}
+                  </td>
+                  <td class="TaskList-itemCol TaskList-itemCreated">
+                    {{$task.CreatedAt.UTC.Format "Mon Jan _2 2006 15:04:05"}}
+                  </td>
+                  <td class="TaskList-itemCol TaskList-itemUpdated">
+                    {{$task.UpdatedAt.UTC.Format "Mon Jan _2 2006 15:04:05"}}
+                  </td>
+                  <td class="TaskList-itemCol TaskList-itemResult">
+                    {{$task.Result}}
+                  </td>
+                </tr>
+                <tr class="TaskList-itemLogsRow">
+                  <td class="TaskList-itemLogs" colspan="6">
                     {{range $log := $.Logs $workflow.ID  $task.Name}}
                       <div class="TaskList-itemLogLine">
                         {{$log.CreatedAt.UTC.Format "2006/01/02 15:04:05"}}
                         {{$log.Body}}
                       </div>
                     {{end}}
-                  </div>
-                </details>
-              </li>
+                  </td>
+                </tr>
+              </tbody>
             {{end}}
-          </ul>
+          </table>
         </li>
       {{end}}
     </ul>
