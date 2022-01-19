@@ -758,7 +758,7 @@ func (b *gopherbot) getOffKickTrain(ctx context.Context) error {
 				return len(mss[i]) < len(mss[j])
 			})
 			matches = append(matches, match{
-				url:   fmt.Sprintf("https://golang.org/issue/%d", gi.Number),
+				url:   fmt.Sprintf("https://go.dev/issue/%d", gi.Number),
 				title: fmt.Sprintf("%s - %v", gi.Title, mss),
 				gi:    gi,
 			})
@@ -798,14 +798,14 @@ func (b *gopherbot) unwaitRelease(ctx context.Context) error {
 			log.Printf("[dry run] would remove hashtag 'wait-release' from CL %d", ci.ChangeNumber)
 			continue
 		}
-		log.Printf("https://golang.org/cl/%d: removing wait-release", ci.ChangeNumber)
+		log.Printf("https://go.dev/cl/%d: removing wait-release", ci.ChangeNumber)
 		time.Sleep(3 * time.Second) // Take a moment between updating CLs, since a human will be running this task manually.
 		_, err := b.gerrit.SetHashtags(ctx, ci.ID, gerrit.HashtagsInput{
 			Add:    []string{"ex-wait-release"},
 			Remove: []string{"wait-release"},
 		})
 		if err != nil {
-			log.Printf("https://golang.org/cl/%d: modifying hash tags: %v", ci.ChangeNumber, err)
+			log.Printf("https://go.dev/cl/%d: modifying hash tags: %v", ci.ChangeNumber, err)
 			return err
 		}
 	}
@@ -1192,7 +1192,7 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 	})
 }
 
-// cl2issue writes "Change https://golang.org/cl/NNNN mentions this issue"
+// cl2issue writes "Change https://go.dev/cl/NNNN mentions this issue"
 // and the change summary on GitHub when a new Gerrit change references a GitHub issue.
 func (b *gopherbot) cl2issue(ctx context.Context) error {
 	monthAgo := time.Now().Add(-30 * 24 * time.Hour)
@@ -1227,7 +1227,7 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 				})
 				if !hasComment {
 					printIssue("cl2issue", ref.Repo.ID(), gi)
-					msg := fmt.Sprintf("Change https://golang.org/cl/%d mentions this issue: `%s`", cl.Number, cl.Commit.Summary())
+					msg := fmt.Sprintf("Change https://go.dev/cl/%d mentions this issue: `%s`", cl.Number, cl.Commit.Summary())
 					if err := b.addGitHubComment(ctx, ref.Repo, gi.Number, msg); err != nil {
 						return err
 					}
@@ -1324,7 +1324,7 @@ const (
 
 Next steps:
 A maintainer will review your change and provide feedback. See
-https://golang.org/doc/contribute.html#review for more info and tips to get your
+https://go.dev/doc/contribute#review for more info and tips to get your
 patch through code review.
 
 Most changes in the Go project go through a few rounds of revision. This can be
@@ -1339,7 +1339,7 @@ have a lasting impact.`
 During May-July and Nov-Jan the Go project is in a code freeze, during which
 little code gets reviewed or merged. If a reviewer responds with a comment like
 R=go1.11 or adds a tag like "wait-release", it means that this CL will be
-reviewed as part of the next development cycle. See https://golang.org/s/release
+reviewed as part of the next development cycle. See https://go.dev/s/release
 for more details.`
 )
 
@@ -1490,7 +1490,7 @@ func (b *gopherbot) unwaitCLs(ctx context.Context) error {
 					}
 				}
 				if hasReplied {
-					log.Printf("https://golang.org/cl/%d -- remove wait-author; reply from %s", cl.Number, cl.Owner())
+					log.Printf("https://go.dev/cl/%d -- remove wait-author; reply from %s", cl.Number, cl.Owner())
 					err := b.onLatestCL(ctx, cl, func() error {
 						if *dryRun {
 							log.Printf("[dry run] would remove hashtag 'wait-author' from CL %d", cl.Number)
@@ -1498,10 +1498,10 @@ func (b *gopherbot) unwaitCLs(ctx context.Context) error {
 						}
 						_, err := b.gerrit.RemoveHashtags(ctx, fmt.Sprint(cl.Number), "wait-author")
 						if err != nil {
-							log.Printf("https://golang.org/cl/%d: error removing wait-author: %v", cl.Number, err)
+							log.Printf("https://go.dev/cl/%d: error removing wait-author: %v", cl.Number, err)
 							return err
 						}
-						log.Printf("https://golang.org/cl/%d: removed wait-author", cl.Number)
+						log.Printf("https://go.dev/cl/%d: removed wait-author", cl.Number)
 						return nil
 					})
 					if err != nil {
@@ -1638,7 +1638,7 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 			}
 			openedIssues = append(openedIssues, fmt.Sprintf("#%d (for %s)", id, rel))
 		}
-		return b.addGitHubComment(ctx, b.gorepo, gi.Number, fmt.Sprintf("Backport issue(s) opened: %s.\n\nRemember to create the cherry-pick CL(s) as soon as the patch is submitted to master, according to https://golang.org/wiki/MinorReleases.", strings.Join(openedIssues, ", ")))
+		return b.addGitHubComment(ctx, b.gorepo, gi.Number, fmt.Sprintf("Backport issue(s) opened: %s.\n\nRemember to create the cherry-pick CL(s) as soon as the patch is submitted to master, according to https://go.dev/wiki/MinorReleases.", strings.Join(openedIssues, ", ")))
 	})
 }
 
@@ -2133,10 +2133,10 @@ func (b *gopherbot) abandonScratchReviews(ctx context.Context) error {
 				return nil
 			}
 			if *dryRun {
-				log.Printf("[dry-run] would've closed scratch CL https://golang.org/cl/%d ...", cl.Number)
+				log.Printf("[dry-run] would've closed scratch CL https://go.dev/cl/%d ...", cl.Number)
 				return nil
 			}
-			log.Printf("closing scratch CL https://golang.org/cl/%d ...", cl.Number)
+			log.Printf("closing scratch CL https://go.dev/cl/%d ...", cl.Number)
 			err := b.gerrit.AbandonChange(ctx, fmt.Sprint(cl.Number), "Auto-abandoning old scratch review.")
 			if err != nil && strings.Contains(err.Error(), "404 Not Found") {
 				return nil
@@ -2444,6 +2444,6 @@ func printIssue(task string, repoID maintner.GitHubRepoID, gi *maintner.GitHubIs
 	if repoID.Owner != "golang" || repoID.Repo != "go" {
 		fmt.Printf("\thttps://github.com/%s/issues/%v  %s\n", repoID, gi.Number, gi.Title)
 	} else {
-		fmt.Printf("\thttps://golang.org/issue/%v  %s\n", gi.Number, gi.Title)
+		fmt.Printf("\thttps://go.dev/issue/%v  %s\n", gi.Number, gi.Title)
 	}
 }
