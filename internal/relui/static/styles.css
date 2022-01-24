@@ -147,6 +147,14 @@ h6 {
 .TaskList-expanded.TaskList-itemLogsRow {
   display: table-row;
 }
+.TaskList-itemCol.TaskList-itemState {
+  padding: 0.25rem 0 0 0;
+  width: 3.25rem;
+}
+.TaskList-itemStateIcon {
+  height: 1.25rem;
+  width: 1.25rem;
+}
 .TaskList-itemLogs {
   background-color: #f5f5f5;
   box-shadow: inset 0 6px 6px -8px #888;
@@ -159,6 +167,14 @@ h6 {
 }
 .TaskList-itemLogLine:nth-child(even) {
   background-color: #fafafa;
+}
+.TaskList-itemLogLineError {
+  background-color: #c9483c;
+  color: white;
+}
+.TaskList-errorBody {
+  display: block;
+  white-space: pre-wrap;
 }
 .TaskList-item {
 }
