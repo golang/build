@@ -413,7 +413,7 @@ func cosImage(ctx context.Context, svc *compute.Service) (string, error) {
 		return cosCachedImage, nil
 	}
 
-	imList, err := svc.Images.List("cos-cloud").Filter(`(family eq "cos-89-lts")`).Context(ctx).Do()
+	imList, err := svc.Images.List("cos-cloud").Filter(`(family eq "cos-stable")`).Context(ctx).Do()
 	if err != nil {
 		return "", err
 	}
