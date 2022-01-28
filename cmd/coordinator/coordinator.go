@@ -147,18 +147,18 @@ var testFiles = map[string]string{
 	"farmer-key.pem":  build.DevCoordinatorKey,
 }
 
-// httpRouter is the coordinator's mux, routing traffic to one of
+// httpRouter is the coordinator's handler, routing traffic to one of
 // two locations:
 //   1) a buildlet, from gomote clients (if X-Buildlet-Proxy is set)
 //   2) traffic to the coordinator itself (the default)
-type httpRouter struct{}
-
-func (httpRouter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("X-Buildlet-Proxy") != "" {
-		requireBuildletProxyAuth(http.HandlerFunc(proxyBuildletHTTP)).ServeHTTP(w, r)
-		return
-	}
-	http.DefaultServeMux.ServeHTTP(w, r)
+func httpRouter(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Buildlet-Proxy") != "" {
+			requireBuildletProxyAuth(http.HandlerFunc(proxyBuildletHTTP)).ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 var validHosts = map[string]bool{
@@ -318,10 +318,11 @@ func main() {
 	if err != nil && metadata.OnGCE() {
 		log.Println("metrics.GKEResource:", err)
 	}
+	mux := http.NewServeMux()
 	if ms, err := metrics.NewService(gr, views); err != nil {
 		log.Println("failed to initialize metrics:", err)
 	} else {
-		http.Handle("/metrics", ms)
+		mux.Handle("/metrics", ms)
 		defer ms.Stop()
 	}
 
@@ -358,21 +359,21 @@ func main() {
 	gomoteServer := gomote.New(remote.NewSessionPool(context.Background()), sched)
 	protos.RegisterCoordinatorServer(grpcServer, gs)
 	gomoteprotos.RegisterGomoteServiceServer(grpcServer, gomoteServer)
-	http.HandleFunc("/", grpcHandlerFunc(grpcServer, handleStatus)) // Serve a status page at farmer.golang.org.
-	http.Handle("build.golang.org/", dashV1)                        // Serve a build dashboard at build.golang.org.
-	http.Handle("build-staging.golang.org/", dashV1)
-	http.HandleFunc("/builders", handleBuilders)
-	http.HandleFunc("/temporarylogs", handleLogs)
-	http.HandleFunc("/reverse", pool.HandleReverse)
-	http.Handle("/revdial", revdial.ConnHandler())
-	http.HandleFunc("/style.css", handleStyleCSS)
-	http.HandleFunc("/try", serveTryStatus(false))
-	http.HandleFunc("/try.json", serveTryStatus(true))
-	http.HandleFunc("/status/reverse.json", pool.ReversePool().ServeReverseStatusJSON)
-	http.HandleFunc("/status/post-submit-active.json", handlePostSubmitActiveJSON)
-	http.Handle("/dashboard", dashV2)
-	http.Handle("/buildlet/create", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletCreate)))
-	http.Handle("/buildlet/list", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletList)))
+	mux.HandleFunc("/", grpcHandlerFunc(grpcServer, handleStatus)) // Serve a status page at farmer.golang.org.
+	mux.Handle("build.golang.org/", dashV1)                        // Serve a build dashboard at build.golang.org.
+	mux.Handle("build-staging.golang.org/", dashV1)
+	mux.HandleFunc("/builders", handleBuilders)
+	mux.HandleFunc("/temporarylogs", handleLogs)
+	mux.HandleFunc("/reverse", pool.HandleReverse)
+	mux.Handle("/revdial", revdial.ConnHandler())
+	mux.HandleFunc("/style.css", handleStyleCSS)
+	mux.HandleFunc("/try", serveTryStatus(false))
+	mux.HandleFunc("/try.json", serveTryStatus(true))
+	mux.HandleFunc("/status/reverse.json", pool.ReversePool().ServeReverseStatusJSON)
+	mux.HandleFunc("/status/post-submit-active.json", handlePostSubmitActiveJSON)
+	mux.Handle("/dashboard", dashV2)
+	mux.Handle("/buildlet/create", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletCreate)))
+	mux.Handle("/buildlet/list", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletList)))
 	if *mode == "dev" {
 		// TODO(crawshaw): do more in dev mode
 		gce.BuildletPool().SetEnabled(*devEnableGCE)
@@ -396,7 +397,7 @@ func main() {
 
 	go listenAndServeSSH(sc) // ssh proxy to remote buildlets; remote.go
 
-	var h http.Handler = httpRouter{}
+	h := httpRouter(mux)
 	if *mode == "dev" {
 		// Use hostPathHandler in local development mode (only) to improve
 		// convenience of testing multiple domains that coordinator serves.
