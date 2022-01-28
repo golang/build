@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 
 	"golang.org/x/oauth2"
 )
@@ -106,7 +107,16 @@ func (fc *FakeClient) IsBroken() bool { return false }
 
 // ListDir lists a directory on a fake buildlet.
 func (fc *FakeClient) ListDir(ctx context.Context, dir string, opts ListDirOpts, fn func(DirEntry)) error {
-	return errUnimplemented
+	if dir == "" || fn == nil {
+		errors.New("invalid arguments")
+	}
+	var lsOutput = `drwxr-xr-x      gocache/
+drwxr-xr-x      tmp/`
+	lines := strings.Split(lsOutput, "\n")
+	for _, line := range lines {
+		fn(DirEntry{line: line})
+	}
+	return nil
 }
 
 // MarkBroken marks the fake client as broken.

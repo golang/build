@@ -162,6 +162,41 @@ func (s *Server) InstanceAlive(ctx context.Context, req *protos.InstanceAliveReq
 	return &protos.InstanceAliveResponse{}, nil
 }
 
+func (s *Server) ListDirectory(ctx context.Context, req *protos.ListDirectoryRequest) (*protos.ListDirectoryResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	if req.GetGomoteId() == "" || req.GetDirectory() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid arguments")
+	}
+	session, err := s.buildlets.Session(req.GetGomoteId())
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
+	}
+	if session.OwnerID != creds.ID {
+		return nil, status.Errorf(codes.PermissionDenied, "not allowed to modify this gomote session")
+	}
+	bc, err := s.buildlets.BuildletClient(req.GetGomoteId())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "unable to retrieve buildlet client")
+	}
+	opt := buildlet.ListDirOpts{
+		Recursive: req.GetRecursive(),
+		Digest:    req.GetDigest(),
+		Skip:      req.GetSkipFiles(),
+	}
+	var entries []string
+	if err = bc.ListDir(context.Background(), req.GetDirectory(), opt, func(bi buildlet.DirEntry) {
+		entries = append(entries, bi.String())
+	}); err != nil {
+		return nil, status.Errorf(codes.Unimplemented, "method ListDirectory not implemented")
+	}
+	return &protos.ListDirectoryResponse{
+		Entries: entries,
+	}, nil
+}
+
 // ListInstances will list the gomote instances owned by the requester. The requester must be authenticated.
 func (s *Server) ListInstances(ctx context.Context, req *protos.ListInstancesRequest) (*protos.ListInstancesResponse, error) {
 	creds, err := access.IAPFromContext(ctx)

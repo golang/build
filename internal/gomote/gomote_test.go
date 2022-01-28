@@ -226,6 +226,91 @@ func TestInstanceAliveError(t *testing.T) {
 	}
 }
 
+func TestListDirectory(t *testing.T) {
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	client := setupGomoteTest(t, context.Background())
+	gomoteID := mustCreateInstance(t, client, fakeIAP())
+	if _, err := client.ListDirectory(ctx, &protos.ListDirectoryRequest{
+		GomoteId:  gomoteID,
+		Directory: "/foo",
+	}); err != nil {
+		t.Fatalf("client.RemoveFiles(ctx, req) = response, %s; want no error", err)
+	}
+}
+
+func TestListDirectoryError(t *testing.T) {
+	// This test will create a gomote instance and attempt to call ListDirectory.
+	// If overrideID is set to true, the test will use a diffrent gomoteID than the
+	// the one created for the test.
+	testCases := []struct {
+		desc       string
+		ctx        context.Context
+		overrideID bool
+		gomoteID   string // Used iff overrideID is true.
+		directory  string
+		recursive  bool
+		skipFiles  []string
+		digest     bool
+		wantCode   codes.Code
+	}{
+		{
+			desc:     "unauthenticated request",
+			ctx:      context.Background(),
+			wantCode: codes.Unauthenticated,
+		},
+		{
+			desc:       "missing gomote id",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			overrideID: true,
+			gomoteID:   "",
+			wantCode:   codes.InvalidArgument,
+		},
+		{
+			desc:     "missing directory",
+			ctx:      access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			desc:       "gomote does not exist",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID: true,
+			gomoteID:   "chucky",
+			directory:  "/foo",
+			wantCode:   codes.NotFound,
+		},
+		{
+			desc:       "wrong gomote id",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID: false,
+			directory:  "/foo",
+			wantCode:   codes.PermissionDenied,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			client := setupGomoteTest(t, context.Background())
+			gomoteID := mustCreateInstance(t, client, fakeIAP())
+			if tc.overrideID {
+				gomoteID = tc.gomoteID
+			}
+			req := &protos.ListDirectoryRequest{
+				GomoteId:  gomoteID,
+				Directory: tc.directory,
+				Recursive: false,
+				SkipFiles: []string{},
+				Digest:    false,
+			}
+			got, err := client.ListDirectory(tc.ctx, req)
+			if err != nil && status.Code(err) != tc.wantCode {
+				t.Fatalf("unexpected error: %s", err)
+			}
+			if err == nil {
+				t.Fatalf("client.RemoveFiles(ctx, %v) = %v, nil; want error", req, got)
+			}
+		})
+	}
+}
+
 func TestListInstance(t *testing.T) {
 	client := setupGomoteTest(t, context.Background())
 	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())

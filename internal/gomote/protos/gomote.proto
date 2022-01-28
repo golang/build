@@ -101,10 +101,25 @@ message InstanceAliveRequest {
 message InstanceAliveResponse {}
 
 // ListDirectoryRequest specifies the data needed to list contents of a directory from a gomote instance.
-message ListDirectoryRequest {}
+message ListDirectoryRequest {
+  // The unique identifier for a gomote instance.
+  string gomote_id = 1;
+  // The directory to list the contents of. The directory dir itself is not included.
+  string directory = 2;
+  // Controls whether the directory is listed recursively.
+  bool recursive = 3;
+  // The directories to skip, relative to the main directory.
+  // Each item should contain only forward slashes and not start or end in slashes.
+  repeated string skip_files = 4;
+  // Controls whether the SHA-1 of regular files are returned.
+  bool digest = 5;
+}
 
 // ListDirectoryResponse contains the directory listing of a gomote instance.
-message ListDirectoryResponse {}
+message ListDirectoryResponse {
+  // The directory entries.
+  repeated string entries = 1;
+}
 
 // ListInstancesRequest specifies the data needed to list the live gomote instances owned by the caller.
 message ListInstancesRequest {}
