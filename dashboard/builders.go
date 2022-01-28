@@ -646,6 +646,9 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum: 3,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/data/data/com.termux/files/home/go-android-arm64-bootstrap",
+			// Only run one job at a time to avoid the OOM killer.
+			// Issue 50084.
+			"GOMAXPROCS=1",
 		},
 	},
 	"host-aix-ppc64-osuosl": &HostConfig{
