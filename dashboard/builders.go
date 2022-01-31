@@ -322,8 +322,8 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-freebsd-13_0-big": &HostConfig{
 		VMImage:            "freebsd-amd64-130-stable-20211230",
-		Notes:              "Same as host-freebsd-13_0, but on e2-highcpu-16",
-		machineType:        "e2-highcpu-16", // 16 vCPUs, 16 GB mem
+		Notes:              "Same as host-freebsd-13_0, but on e2-standard-4",
+		machineType:        "e2-standard-4", // 4 vCPUs, 16 GB mem
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
