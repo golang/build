@@ -2307,6 +2307,13 @@ func init() {
 		HostType:       "host-darwin-10_15",
 		distTestAdjust: macTestPolicy,
 		buildsRepo:     defaultPlusExpBuild,
+		env: []string{
+			// Find out via at least one builder if having -mmacosx-version-min
+			// set via CGO_CFLAGS causes unexpected problems. This env var will
+			// also be set by cmd/release during a release. See issue 50892.
+			"CGO_CFLAGS=-mmacosx-version-min=10.13",
+		},
+		Notes: "Unlike other darwin/amd64 builders, this one sets CGO_CFLAGS=-mmacosx-version-min=10.13 in env.",
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-11_0",
