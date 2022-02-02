@@ -73,10 +73,36 @@ message DestroyInstanceRequest {
 message DestroyInstanceResponse {}
 
 // ExecuteCommandRequest specifies the data needed to execute a command on a gomote instance.
-message ExecuteCommandRequest {}
+message ExecuteCommandRequest {
+  // The unique identifier for a gomote instance.
+  string gomote_id = 1;
+  // The command to be executed on the buildlet.
+  string command = 2;
+  // Controls whether the command is run outside of the buildlet's environment.
+  bool system_level = 3;
+  // Debug will instruct the buildlet to include extra debugging information in the output.
+  bool debug = 4;
+  // These are additional environmental variables to include in the buildlet's process's
+  // environment.
+  repeated string append_environment = 5;
+  // Path specifies the PATH variable of the executed procesess's environment.
+  // A non-nil entry will clear the existing PATH value.
+  // The string "$PATH" expands to any existing PATH element(s).
+  // The substring "$WORKDIR" expands to buildlet's temp workdir.
+  repeated string path = 6;
+  // The directory from which to execute the command.
+  // If not specified, it defaults to the directory of the command or the
+  // work directory if system level is set.
+  string directory = 7;
+  // The arguments to pass to the command.
+  repeated string args = 8;
+}
 
 // ExecuteCommandResponse contains data about the executed command.
-message ExecuteCommandResponse {}
+message ExecuteCommandResponse {
+  // The output from the executed command.
+  string output = 1;
+}
 
 // Instance contains descriptive information about a gomote instance.
 message Instance {

@@ -7,6 +7,7 @@ package buildlet
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -88,7 +89,19 @@ func (fc *FakeClient) DestroyVM(ts oauth2.TokenSource, proj, zone, instance stri
 
 // Exec fakes the execution.
 func (fc *FakeClient) Exec(ctx context.Context, cmd string, opts ExecOpts) (remoteErr, execErr error) {
-	return nil, errUnimplemented
+	if cmd == "" {
+		return nil, errors.New("invalid command")
+	}
+	if opts.Output == nil {
+		return nil, nil
+	}
+	out := []byte("<this is a song that never ends>")
+	for it := 0; it < 3; it++ {
+		if n, err := opts.Output.Write(out); n != len(out) || err != nil {
+			return nil, fmt.Errorf("Output.Write(...) = %d, %q; want %d, no error", n, err, len(out))
+		}
+	}
+	return nil, nil
 }
 
 // GCEInstanceName gives the fake instance name.

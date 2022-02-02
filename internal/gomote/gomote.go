@@ -10,6 +10,7 @@ package gomote
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"regexp"
 	"strings"
@@ -149,12 +150,10 @@ func (s *Server) InstanceAlive(ctx context.Context, req *protos.InstanceAliveReq
 	if req.GetGomoteId() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid gomote ID")
 	}
-	session, err := s.buildlets.Session(req.GetGomoteId())
+	_, err = s.session(req.GetGomoteId(), creds.ID)
 	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
-	}
-	if session.OwnerID != creds.ID {
-		return nil, status.Errorf(codes.PermissionDenied, "not allowed to modify this gomote session")
+		// the helper function returns meaningful GRPC error.
+		return nil, err
 	}
 	if err := s.buildlets.RenewTimeout(req.GetGomoteId()); err != nil {
 		return nil, status.Errorf(codes.Internal, "unable to renew timeout")
@@ -170,16 +169,10 @@ func (s *Server) ListDirectory(ctx context.Context, req *protos.ListDirectoryReq
 	if req.GetGomoteId() == "" || req.GetDirectory() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid arguments")
 	}
-	session, err := s.buildlets.Session(req.GetGomoteId())
+	_, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
 	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
-	}
-	if session.OwnerID != creds.ID {
-		return nil, status.Errorf(codes.PermissionDenied, "not allowed to modify this gomote session")
-	}
-	bc, err := s.buildlets.BuildletClient(req.GetGomoteId())
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "unable to retrieve buildlet client")
+		// the helper function returns meaningful GRPC error.
+		return nil, err
 	}
 	opt := buildlet.ListDirOpts{
 		Recursive: req.GetRecursive(),
@@ -230,18 +223,64 @@ func (s *Server) DestroyInstance(ctx context.Context, req *protos.DestroyInstanc
 	if req.GetGomoteId() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid gomote ID")
 	}
-	session, err := s.buildlets.Session(req.GetGomoteId())
+	_, err = s.session(req.GetGomoteId(), creds.ID)
 	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
-	}
-	if session.OwnerID != creds.ID {
-		return nil, status.Errorf(codes.PermissionDenied, "not allowed to modify this gomote session")
+		// the helper function returns meaningful GRPC error.
+		return nil, err
 	}
 	if err := s.buildlets.DestroySession(req.GetGomoteId()); err != nil {
 		log.Printf("DestroyInstance remote.DestroySession(%s) = %s", req.GetGomoteId(), err)
 		return nil, status.Errorf(codes.Internal, "unable to destroy gomote instance")
 	}
 	return &protos.DestroyInstanceResponse{}, nil
+}
+
+// ExecuteCommand will execute a command on a gomote instance. The output from the command will be streamed back to the caller if the output is set.
+func (s *Server) ExecuteCommand(req *protos.ExecuteCommandRequest, stream protos.GomoteService_ExecuteCommandServer) error {
+	creds, err := access.IAPFromContext(stream.Context())
+	if err != nil {
+		return status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	_, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
+	if err != nil {
+		// the helper function returns meaningful GRPC error.
+		return err
+	}
+	remoteErr, execErr := bc.Exec(stream.Context(), req.GetCommand(), buildlet.ExecOpts{
+		Dir:         req.GetCommand(),
+		SystemLevel: req.GetSystemLevel(),
+		Output:      &execStreamWriter{stream: stream},
+		Args:        req.GetArgs(),
+		ExtraEnv:    req.GetAppendEnvironment(),
+		Debug:       req.GetDebug(),
+		Path:        req.GetPath(),
+	})
+	if execErr != nil {
+		// there were system errors preventing the command from being started or seen to completition.
+		return status.Errorf(codes.Aborted, "unable to execute command: %s", execErr)
+	}
+	if remoteErr != nil {
+		// the command succeeded remotely
+		return status.Errorf(codes.Unknown, "command execution failed: %s", remoteErr)
+	}
+	return nil
+}
+
+// execStreamWriter implements the io.Writer interface. Any data writen to it will be streamed
+// as an execute command response.
+type execStreamWriter struct {
+	stream protos.GomoteService_ExecuteCommandServer
+}
+
+// Write sends data writen to it as an execute command response.
+func (sw *execStreamWriter) Write(p []byte) (int, error) {
+	err := sw.stream.Send(&protos.ExecuteCommandResponse{
+		Output: string(p),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("unable to send data=%w", err)
+	}
+	return len(p), nil
 }
 
 // RemoveFiles removes files or directories from the gomote instance.
@@ -255,16 +294,10 @@ func (s *Server) RemoveFiles(ctx context.Context, req *protos.RemoveFilesRequest
 	if req.GetGomoteId() == "" || len(req.GetPaths()) == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid arguments")
 	}
-	session, err := s.buildlets.Session(req.GetGomoteId())
+	_, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
 	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
-	}
-	if session.OwnerID != creds.ID {
-		return nil, status.Errorf(codes.PermissionDenied, "not allowed to modify this gomote session")
-	}
-	bc, err := s.buildlets.BuildletClient(req.GetGomoteId())
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "unable to retrieve buildlet client")
+		// the helper function returns meaningful GRPC error.
+		return nil, err
 	}
 	if err := bc.RemoveAll(ctx, req.GetPaths()...); err != nil {
 		log.Printf("RemoveFiles buildletClient.RemoveAll(ctx, %q) = %s", req.GetPaths(), err)
@@ -287,21 +320,41 @@ func (s *Server) WriteTGZFromURL(ctx context.Context, req *protos.WriteTGZFromUR
 	if req.GetUrl() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "missing URL")
 	}
-	session, err := s.buildlets.Session(req.GetGomoteId())
+	_, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
 	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
-	}
-	if session.OwnerID != creds.ID {
-		return nil, status.Errorf(codes.PermissionDenied, "not allowed to modify this gomote session")
-	}
-	bc, err := s.buildlets.BuildletClient(req.GetGomoteId())
-	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
+		// the helper function returns meaningful GRPC error.
+		return nil, err
 	}
 	if err = bc.PutTarFromURL(ctx, req.GetUrl(), req.GetDirectory()); err != nil {
 		return nil, status.Errorf(codes.FailedPrecondition, "unable to write tar.gz: %s", err)
 	}
 	return &protos.WriteTGZFromURLResponse{}, nil
+}
+
+// session is a helper function that retreives a session associated with the gomoteID and ownerID.
+func (s *Server) session(gomoteID, ownerID string) (*remote.Session, error) {
+	session, err := s.buildlets.Session(gomoteID)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
+	}
+	if session.OwnerID != ownerID {
+		return nil, status.Errorf(codes.PermissionDenied, "not allowed to modify this gomote session")
+	}
+	return session, nil
+}
+
+// sessionAndClient is a helper function that retrieves a session and buildlet client for the
+// associated gomoteID and ownerID.
+func (s *Server) sessionAndClient(gomoteID, ownerID string) (*remote.Session, buildlet.Client, error) {
+	session, err := s.session(gomoteID, ownerID)
+	if err != nil {
+		return nil, nil, err
+	}
+	bc, err := s.buildlets.BuildletClient(gomoteID)
+	if err != nil {
+		return nil, nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
+	}
+	return session, bc, nil
 }
 
 // isPrivilagedUser returns true if the user is using a Google account.
