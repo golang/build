@@ -207,20 +207,28 @@ func mailDLCL() {
 	}
 	versions := flag.Args()
 
-	fmt.Printf("About to create a golang.org/dl CL for the following Go versions:\n\n\t• %s\n\nOk? (Y/n) ", strings.Join(versions, "\n\t• "))
-	if dryRun {
-		fmt.Println("dry-run")
-		return
+	extCfg := task.ExternalConfig{
+		DryRun: dryRun,
 	}
+	if !dryRun {
+		extCfg.GerritAPI.URL = gerritAPIURL
+		var err error
+		extCfg.GerritAPI.Auth, err = loadGerritAuth()
+		if err != nil {
+			log.Fatalln("error loading Gerrit API credentials:", err)
+		}
+	}
+
+	fmt.Printf("About to create a golang.org/dl CL for the following Go versions:\n\n\t• %s\n\nOk? (Y/n) ", strings.Join(versions, "\n\t• "))
 	var resp string
 	if _, err := fmt.Scanln(&resp); err != nil {
 		log.Fatalln(err)
 	} else if resp != "Y" && resp != "y" {
 		log.Fatalln("stopped as requested")
 	}
-	changeURL, err := task.MailDLCL(context.Background(), versions)
+	changeURL, err := task.MailDLCL(&workflow.TaskContext{Context: context.Background(), Logger: log.Default()}, versions, extCfg)
 	if err != nil {
-		log.Fatalf(`task.MailDLCL(ctx, %#v) failed:
+		log.Fatalf(`task.MailDLCL(ctx, %#v, extCfg) failed:
 
 	%v
 
@@ -228,7 +236,7 @@ If it's necessary to perform it manually as a workaround,
 consider the following steps:
 
 	git clone https://go.googlesource.com/dl && cd dl
-	go run ./internal/genv goX.Y.Z goX.A.B
+	# create files displayed in the log above
 	git add .
 	git commit -m "dl: add goX.Y.Z and goX.A.B"
 	git codereview mail -trybot -trust
@@ -252,6 +260,17 @@ func postTweet(kind string) {
 		log.Fatalln("error parsing release tweet JSON object:", err)
 	}
 
+	extCfg := task.ExternalConfig{
+		DryRun: dryRun,
+	}
+	if !dryRun {
+		var err error
+		extCfg.TwitterAPI, err = loadTwitterAuth()
+		if err != nil {
+			log.Fatalln("error loading Twitter API credentials:", err)
+		}
+	}
+
 	versions := []string{tweet.Version}
 	if tweet.SecondaryVersion != "" {
 		versions = append(versions, tweet.SecondaryVersion+" (secondary)")
@@ -272,20 +291,20 @@ func postTweet(kind string) {
 	} else if resp != "Y" && resp != "y" {
 		log.Fatalln("stopped as requested")
 	}
-	tweetRelease := map[string]func(workflow.TaskContext, task.ReleaseTweet, bool) (string, error){
+	tweetRelease := map[string]func(*workflow.TaskContext, task.ReleaseTweet, task.ExternalConfig) (string, error){
 		"minor": task.TweetMinorRelease,
 		"beta":  task.TweetBetaRelease,
 		"rc":    task.TweetRCRelease,
 		"major": task.TweetMajorRelease,
 	}[kind]
-	tweetURL, err := tweetRelease(workflow.TaskContext{Context: context.Background(), Logger: log.Default()}, tweet, dryRun)
+	tweetURL, err := tweetRelease(&workflow.TaskContext{Context: context.Background(), Logger: log.Default()}, tweet, extCfg)
 	if errors.Is(err, task.ErrTweetTooLong) && len([]rune(tweet.Security)) > 120 {
 		log.Fatalf(`A tweet was not created because it's too long.
 
 The provided security sentence is somewhat long (%d characters),
 so try making it shorter to avoid exceeding Twitter's limits.`, len([]rune(tweet.Security)))
 	} else if err != nil {
-		log.Fatalf(`tweetRelease(ctx, %#v) failed:
+		log.Fatalf(`tweetRelease(ctx, %#v, extCfg) failed:
 
 	%v
 

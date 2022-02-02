@@ -26,7 +26,6 @@ import (
 	"github.com/dghubble/oauth1"
 	"github.com/esimov/stackblur-go"
 	"github.com/golang/freetype/truetype"
-	"golang.org/x/build/buildenv"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/workflow"
 	"golang.org/x/image/font"
@@ -80,7 +79,7 @@ func (r ReleaseTweet) seed() int64 {
 
 // TweetMinorRelease posts a tweet announcing a minor Go release.
 // ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func TweetMinorRelease(ctx workflow.TaskContext, r ReleaseTweet, dryRun bool) (tweetURL string, _ error) {
+func TweetMinorRelease(ctx *workflow.TaskContext, r ReleaseTweet, e ExternalConfig) (tweetURL string, _ error) {
 	if err := verifyGoVersions(r.Version, r.SecondaryVersion); err != nil {
 		return "", err
 	}
@@ -88,12 +87,12 @@ func TweetMinorRelease(ctx workflow.TaskContext, r ReleaseTweet, dryRun bool) (t
 		return "", fmt.Errorf("announcement URL %q doesn't have the expected prefix %q", r.Announcement, announcementPrefix)
 	}
 
-	return tweetRelease(ctx, r, dryRun)
+	return tweetRelease(ctx, r, e)
 }
 
 // TweetBetaRelease posts a tweet announcing a beta Go release.
 // ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func TweetBetaRelease(ctx workflow.TaskContext, r ReleaseTweet, dryRun bool) (tweetURL string, _ error) {
+func TweetBetaRelease(ctx *workflow.TaskContext, r ReleaseTweet, e ExternalConfig) (tweetURL string, _ error) {
 	if r.SecondaryVersion != "" {
 		return "", fmt.Errorf("got 2 Go versions, want 1")
 	}
@@ -104,12 +103,12 @@ func TweetBetaRelease(ctx workflow.TaskContext, r ReleaseTweet, dryRun bool) (tw
 		return "", fmt.Errorf("announcement URL %q doesn't have the expected prefix %q", r.Announcement, announcementPrefix)
 	}
 
-	return tweetRelease(ctx, r, dryRun)
+	return tweetRelease(ctx, r, e)
 }
 
 // TweetRCRelease posts a tweet announcing a Go release candidate.
 // ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func TweetRCRelease(ctx workflow.TaskContext, r ReleaseTweet, dryRun bool) (tweetURL string, _ error) {
+func TweetRCRelease(ctx *workflow.TaskContext, r ReleaseTweet, e ExternalConfig) (tweetURL string, _ error) {
 	if r.SecondaryVersion != "" {
 		return "", fmt.Errorf("got 2 Go versions, want 1")
 	}
@@ -120,14 +119,14 @@ func TweetRCRelease(ctx workflow.TaskContext, r ReleaseTweet, dryRun bool) (twee
 		return "", fmt.Errorf("announcement URL %q doesn't have the expected prefix %q", r.Announcement, announcementPrefix)
 	}
 
-	return tweetRelease(ctx, r, dryRun)
+	return tweetRelease(ctx, r, e)
 }
 
 const announcementPrefix = "https://groups.google.com/g/golang-announce/c/"
 
 // TweetMajorRelease posts a tweet announcing a major Go release.
 // ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func TweetMajorRelease(ctx workflow.TaskContext, r ReleaseTweet, dryRun bool) (tweetURL string, _ error) {
+func TweetMajorRelease(ctx *workflow.TaskContext, r ReleaseTweet, e ExternalConfig) (tweetURL string, _ error) {
 	if r.SecondaryVersion != "" {
 		return "", fmt.Errorf("got 2 Go versions, want 1")
 	}
@@ -138,11 +137,11 @@ func TweetMajorRelease(ctx workflow.TaskContext, r ReleaseTweet, dryRun bool) (t
 		return "", fmt.Errorf("major release tweet doesn't accept an accouncement URL")
 	}
 
-	return tweetRelease(ctx, r, dryRun)
+	return tweetRelease(ctx, r, e)
 }
 
 // tweetRelease posts a tweet announcing a Go release.
-func tweetRelease(ctx workflow.TaskContext, r ReleaseTweet, dryRun bool) (tweetURL string, _ error) {
+func tweetRelease(ctx *workflow.TaskContext, r ReleaseTweet, e ExternalConfig) (tweetURL string, _ error) {
 	rnd := rand.New(rand.NewSource(r.seed()))
 
 	// Generate tweet text.
@@ -163,11 +162,11 @@ func tweetRelease(ctx workflow.TaskContext, r ReleaseTweet, dryRun bool) (tweetU
 		log.Printf("tweet image:\n%s\n", imageText)
 	}
 
-	// Post a tweet using the twitter.com/golang account.
-	if dryRun {
+	// Post a tweet via the Twitter API.
+	if e.DryRun {
 		return "(dry-run)", nil
 	}
-	cl, err := twitterClient()
+	cl, err := twitterClient(e.TwitterAPI)
 	if err != nil {
 		return "", err
 	}
@@ -662,28 +661,10 @@ func isTweetTooLong(resp *http.Response, body []byte) bool {
 	return len(r.Errors) == 1 && r.Errors[0].Code == 186
 }
 
-// twitterClient creates an HTTP client authenticated to make
-// Twitter API calls on behalf of the twitter.com/golang account.
-func twitterClient() (*http.Client, error) {
-	sc, err := secret.NewClientInProject(buildenv.Production.ProjectName)
-	if err != nil {
-		return nil, err
-	}
-	defer sc.Close()
-	secretJSON, err := sc.Retrieve(context.Background(), secret.NameTwitterAPISecret)
-	if err != nil {
-		return nil, err
-	}
-	var s struct {
-		ConsumerKey       string
-		ConsumerSecret    string
-		AccessTokenKey    string
-		AccessTokenSecret string
-	}
-	if err := json.Unmarshal([]byte(secretJSON), &s); err != nil {
-		return nil, err
-	}
-	config := oauth1.NewConfig(s.ConsumerKey, s.ConsumerSecret)
-	token := oauth1.NewToken(s.AccessTokenKey, s.AccessTokenSecret)
+// twitterClient creates an HTTP client authenticated to
+// make Twitter API calls using the provided credentials.
+func twitterClient(t secret.TwitterCredentials) (*http.Client, error) {
+	config := oauth1.NewConfig(t.ConsumerKey, t.ConsumerSecret)
+	token := oauth1.NewToken(t.AccessTokenKey, t.AccessTokenSecret)
 	return config.Client(context.Background(), token), nil
 }

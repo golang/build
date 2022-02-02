@@ -26,7 +26,7 @@ func TestTweetRelease(t *testing.T) {
 
 	tests := [...]struct {
 		name    string
-		taskFn  func(workflow.TaskContext, ReleaseTweet, bool) (string, error)
+		taskFn  func(*workflow.TaskContext, ReleaseTweet, ExternalConfig) (string, error)
 		in      ReleaseTweet
 		wantLog string
 	}{
@@ -154,8 +154,8 @@ go version go1.17 freebsd/amd64` + "\n",
 			// Call the tweet task function in dry-run mode so it
 			// doesn't actually try to tweet, but capture its log.
 			var buf bytes.Buffer
-			ctx := workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			tweetURL, err := tc.taskFn(ctx, tc.in, true)
+			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
+			tweetURL, err := tc.taskFn(ctx, tc.in, ExternalConfig{DryRun: true})
 			if err != nil {
 				t.Fatal("got a non-nil error:", err)
 			}

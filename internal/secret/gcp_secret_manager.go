@@ -8,6 +8,7 @@ package secret
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"path"
@@ -34,7 +35,7 @@ const (
 	// NameGitHubSSHKey is the secret name for the GitHub SSH private key.
 	NameGitHubSSHKey = "github-ssh-private-key"
 
-	// NameGobotPassword is the secret name for the Gobot password.
+	// NameGobotPassword is the secret name for the gobot@golang.org Gerrit account password.
 	NameGobotPassword = "gobot-password"
 
 	// NameGomoteSSHPrivateKey is the secret name for the gomote SSH private key.
@@ -66,7 +67,7 @@ const (
 	// posting tweets from the Go project's Twitter account (twitter.com/golang).
 	//
 	// The secret value encodes relevant keys and their secrets as
-	// a JSON object:
+	// a JSON object that can be unmarshaled into TwitterCredentials:
 	//
 	// 	{
 	// 		"ConsumerKey":       "...",
@@ -75,7 +76,30 @@ const (
 	// 		"AccessTokenSecret": "..."
 	// 	}
 	NameTwitterAPISecret = "twitter-api-secret"
+	// NameStagingTwitterAPISecret is the secret name for Twitter API credentials
+	// for posting tweets using a staging test Twitter account.
+	//
+	// This secret is available in the Secret Manager of the x/build staging GCP project.
+	//
+	// The secret value encodes relevant keys and their secrets as
+	// a JSON object that can be unmarshaled into TwitterCredentials.
+	NameStagingTwitterAPISecret = "staging-" + NameTwitterAPISecret
 )
+
+// TwitterCredentials holds Twitter API credentials.
+type TwitterCredentials struct {
+	ConsumerKey       string
+	ConsumerSecret    string
+	AccessTokenKey    string
+	AccessTokenSecret string
+}
+
+func (t TwitterCredentials) String() string {
+	return fmt.Sprintf("{%s (redacted) %s (redacted)}", t.ConsumerKey, t.AccessTokenKey)
+}
+func (t TwitterCredentials) GoString() string {
+	return fmt.Sprintf("secret.TwitterCredentials{ConsumerKey:%q ConsumerSecret:(redacted) AccessTokenKey:%q AccessTokenSecret:(redacted)}", t.ConsumerKey, t.AccessTokenKey)
+}
 
 type secretClient interface {
 	AccessSecretVersion(ctx context.Context, req *secretmanagerpb.AccessSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.AccessSecretVersionResponse, error)

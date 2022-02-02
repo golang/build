@@ -6,7 +6,6 @@ package task
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"go/format"
 	"path"
@@ -15,9 +14,8 @@ import (
 	"text/template"
 	"time"
 
-	"golang.org/x/build/buildenv"
 	"golang.org/x/build/gerrit"
-	"golang.org/x/build/internal/secret"
+	"golang.org/x/build/internal/workflow"
 )
 
 // MailDLCL mails a golang.org/dl CL that adds commands for the
@@ -28,9 +26,8 @@ import (
 // 	• "go1.18" for a major Go release
 // 	• "go1.18beta1" or "go1.18rc1" for a pre-release
 //
-// Credentials are fetched from Secret Manager.
 // On success, the URL of the change is returned, like "https://go.dev/cl/123".
-func MailDLCL(ctx context.Context, versions []string) (changeURL string, _ error) {
+func MailDLCL(ctx *workflow.TaskContext, versions []string, e ExternalConfig) (changeURL string, _ error) {
 	if len(versions) < 1 || len(versions) > 2 {
 		return "", fmt.Errorf("got %d Go versions, want 1 or 2", len(versions))
 	}
@@ -67,14 +64,17 @@ func MailDLCL(ctx context.Context, versions []string) (changeURL string, _ error
 			return "", fmt.Errorf("could not gofmt: %v", err)
 		}
 		files[path.Join(ver, "main.go")] = string(gofmted)
+		if log := ctx.Logger; log != nil {
+			log.Printf("file %q (command %q):\n%s", path.Join(ver, "main.go"), "golang.org/dl/"+ver, gofmted)
+		}
 	}
 
 	// Create a Gerrit CL using the Gerrit API.
-	gobot, err := gobot()
-	if err != nil {
-		return "", err
+	if e.DryRun {
+		return "(dry-run)", nil
 	}
-	ci, err := gobot.CreateChange(ctx, gerrit.ChangeInput{
+	cl := gerrit.NewClient(e.GerritAPI.URL, e.GerritAPI.Auth)
+	c, err := cl.CreateChange(ctx, gerrit.ChangeInput{
 		Project: "dl",
 		Subject: "dl: add " + strings.Join(versions, " and "),
 		Branch:  "master",
@@ -82,18 +82,18 @@ func MailDLCL(ctx context.Context, versions []string) (changeURL string, _ error
 	if err != nil {
 		return "", err
 	}
-	changeID := fmt.Sprintf("%s~%d", ci.Project, ci.ChangeNumber)
+	changeID := fmt.Sprintf("%s~%d", c.Project, c.ChangeNumber)
 	for path, content := range files {
-		err := gobot.ChangeFileContentInChangeEdit(ctx, changeID, path, content)
+		err := cl.ChangeFileContentInChangeEdit(ctx, changeID, path, content)
 		if err != nil {
 			return "", err
 		}
 	}
-	err = gobot.PublishChangeEdit(ctx, changeID)
+	err = cl.PublishChangeEdit(ctx, changeID)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("https://go.dev/cl/%d", ci.ChangeNumber), nil
+	return fmt.Sprintf("https://go.dev/cl/%d", c.ChangeNumber), nil
 }
 
 func verifyGoVersions(versions ...string) error {
@@ -153,18 +153,3 @@ func main() {
 	version.Run("{{.Version}}")
 }
 `))
-
-// gobot creates an authenticated Gerrit API client
-// that uses the gobot@golang.org Gerrit account.
-func gobot() (*gerrit.Client, error) {
-	sc, err := secret.NewClientInProject(buildenv.Production.ProjectName)
-	if err != nil {
-		return nil, err
-	}
-	defer sc.Close()
-	token, err := sc.Retrieve(context.Background(), secret.NameGobotPassword)
-	if err != nil {
-		return nil, err
-	}
-	return gerrit.NewClient("https://go-review.googlesource.com", gerrit.BasicAuth("git-gobot.golang.org", token)), nil
-}

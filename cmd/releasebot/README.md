@@ -15,5 +15,7 @@ The user running a release will need:
 * gomote access and a token in your name
 * gcloud application default credentials, and an account with GCS access to golang-org for bucket golang-release-staging
 * **`release-manager` group membership on Gerrit**
+* for `-mode=mail-dl-cl` only, Secret Manager access to Gerrit API secret
+* for `-mode=tweet-*` only, Secret Manager access to Twitter API secret
 
 NOTE: all but the Gerrit permission are ensured by the bot on startup.
