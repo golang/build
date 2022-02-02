@@ -38,7 +38,7 @@ Once you are happy with local testing, deploy to the VM by running `./redeploy-v
 ## Repositories
 
 The server can serve Bazaar, Fossil, Git, Mercurial, and Subversion repositories.
-The root of each repository is `http://vcs-test.golang.org/VCS/REPONAME`,
+The root of each repository is `https://vcs-test.golang.org/VCS/REPONAME`,
 where `VCS` is the version control system's command name (`bzr` for Bazaar, and so on),
 and `REPONAME` is the repository name.
 
@@ -49,13 +49,16 @@ The result should be a valid repository directory for the given version control 
 If the needed format of the zip file is unclear, download and inspect `gs://vcs-test/VCS/hello.zip`
 from `https://vcs-test.storage.googleapis.com/VCS/hello.zip`.
 
-Stale data may be served for up to five minutes after a zip file is updated in the
-Google Cloud Storage bucket. To force a rescan of Google Cloud Storage,
-fetch `http://vcs-test.golang.org/VCS/REPONAME?vcweb-force-reload=1`.
+Google Cloud Storage imposes a default `Cache-Control` policy of 3600 seconds for
+publicly-readable objects; for instructions to disable caching per object, see
+[`gsutil setmeta`](https://cloud.google.com/storage/docs/gsutil/commands/setmeta).
+`vcweb` itself may serve stale data for up to five minutes after a zip file is updated.
+To force a rescan of Google Cloud Storage, fetch
+`https://vcs-test.golang.org/VCS/REPONAME?vcweb-force-reload=1`.
 
 ## Static files
 
-The URL space `http://vcs-test.golang.org/go/NAME` is served by static files,
+The URL space `https://vcs-test.golang.org/go/NAME` is served by static files,
 fetched from `gs://vcs-test/go/NAME.zip`.
 The main use for static files is to write redirect HTML.
 See `gs://vcs-test/go/hello.zip` for examples.
