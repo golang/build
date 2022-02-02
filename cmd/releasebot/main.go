@@ -212,12 +212,10 @@ func mailDLCL() {
 		fmt.Println("dry-run")
 		return
 	}
-	var response string
-	_, err := fmt.Scanln(&response)
-	if err != nil {
+	var resp string
+	if _, err := fmt.Scanln(&resp); err != nil {
 		log.Fatalln(err)
-	}
-	if response != "Y" && response != "y" {
+	} else if resp != "Y" && resp != "y" {
 		log.Fatalln("stopped as requested")
 	}
 	changeURL, err := task.MailDLCL(context.Background(), versions)
@@ -268,12 +266,10 @@ func postTweet(kind string) {
 		fmt.Printf("and with the following announcement URL:\n\n\t%s\n\n", tweet.Announcement)
 	}
 	fmt.Print("Ok? (Y/n) ")
-	var response string
-	_, err = fmt.Scanln(&response)
-	if err != nil {
+	var resp string
+	if _, err = fmt.Scanln(&resp); err != nil {
 		log.Fatalln(err)
-	}
-	if response != "Y" && response != "y" {
+	} else if resp != "Y" && resp != "y" {
 		log.Fatalln("stopped as requested")
 	}
 	tweetRelease := map[string]func(workflow.TaskContext, task.ReleaseTweet, bool) (string, error){

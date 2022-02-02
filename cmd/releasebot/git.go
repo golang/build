@@ -97,15 +97,13 @@ func (w *Work) gitTagVersion() {
 		fmt.Println("dry-run")
 		return
 	}
-	var response string
-	_, err := fmt.Scanln(&response)
-	if err != nil {
+	var resp string
+	if _, err := fmt.Scanln(&resp); err != nil {
 		w.log.Panic(err)
-	}
-	if response != "Y" && response != "y" {
+	} else if resp != "Y" && resp != "y" {
 		w.log.Fatal("stopped as requested")
 	}
-	out, err = r.runErr("git", "tag", w.Version, w.VersionCommit)
+	out, err := r.runErr("git", "tag", w.Version, w.VersionCommit)
 	if err != nil {
 		w.logError("git tag failed: %s\n%s", err, out)
 		return
