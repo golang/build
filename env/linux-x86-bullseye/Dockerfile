@@ -39,6 +39,7 @@ RUN apt-get update && apt-get install -y \
 	libgles2-mesa-dev \
 	libopenal-dev \
 	lsof \
+	make \
 	netbase \
 	openssh-server \
 	procps \

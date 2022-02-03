@@ -40,6 +40,7 @@ RUN apt-get update && apt-get install -y \
 	qemu-user \
 	netbase \
 	openssh-server \
+	make \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Otherwise we get "Missing privilege separation directory: /run/sshd" ...

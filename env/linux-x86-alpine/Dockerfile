@@ -24,6 +24,7 @@ RUN apk add --no-cache \
 	go \
 	libc-dev \
 	lsof \
+	make \
 	openssh \
 	procps \
 	strace

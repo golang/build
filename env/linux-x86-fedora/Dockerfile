@@ -16,6 +16,7 @@ RUN yum -y update && yum -y install \
     strace \
     which \
     openssh-server \
+    make \
     && true
 
 RUN ssh-keygen -A

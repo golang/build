@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y \
 	git \
 	iptables \
 	screen \
+	make \
 	&& rm -rf /var/lib/apt/lists/*
 
 CMD ["/usr/bin/bash"]

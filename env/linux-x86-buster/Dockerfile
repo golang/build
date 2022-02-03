@@ -38,6 +38,7 @@ RUN apt-get update && apt-get install -y \
 	fonts-droid-fallback \
 	openssh-server \
 	iptables \
+	make \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /go1.4-amd64 \

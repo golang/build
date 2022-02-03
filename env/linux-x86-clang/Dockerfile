@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y \
 	psmisc \
 	openssh-server \
 	netbase \
+	make \
 	&& rm -rf /var/lib/apt/lists/* \
 	&& rm -f /usr/bin/gcc
 
