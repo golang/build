@@ -9,12 +9,15 @@ MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
 ENV DEBIAN_FRONTEND noninteractive
 
+# bzr: Bazaar VCS supported by cmd/go
 # fonts-droid-fallback: required by x/mobile repo
+# fossil: Fossil VCS supported by cmd/go
 # gcc-multilib: for 32-bit builds
 # gcc: for building Go's bootstrap 'dist' prog
 # gdb: optionally used by runtime tests for gdb
 # gfortran: for compiling cgo with fortran support (multilib for 386)
-# git: used for setting up benchmarks in the x/benchmarks builders
+# git: git VCS supported by cmd/go
+# gpg: the presence of a gpg binary can influence git behavior for cmd/go tests
 # libc6-dev-i386: for 32-bit builds
 # libc6-dev: for building Go's bootstrap 'dist' prog
 # libgles2-mesa-dev: required by x/mobile repo
@@ -27,15 +30,18 @@ ENV DEBIAN_FRONTEND noninteractive
 # strace: optionally used by some net/http tests
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
+	bzr \
 	ca-certificates \
 	curl \
 	fonts-droid-fallback \
+	fossil \
 	gcc \
 	gcc-multilib \
 	gdb \
 	gfortran \
 	gfortran-multilib \
 	git \
+	gpg \
 	iptables \
 	libc6-dev \
 	libc6-dev-i386 \
