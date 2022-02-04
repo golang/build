@@ -2261,12 +2261,6 @@ func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritCha
 //
 // See golang.org/issue/48021.
 func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
-	// We only run this task if it was explicitly requested via
-	// the --only-run flag.
-	if *onlyRun == "" {
-		return nil
-	}
-
 	return b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
 		if gp.Server() != "go.googlesource.com" {
 			return nil
