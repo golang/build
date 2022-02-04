@@ -14,11 +14,13 @@ ENV DEBIAN_FRONTEND noninteractive
 # gcc: for building Go's bootstrap 'dist' prog
 # gdb: optionally used by runtime tests for gdb
 # gfortran: for compiling cgo with fortran support (multilib for 386)
+# git: used for setting up benchmarks in the x/benchmarks builders
 # libc6-dev-i386: for 32-bit builds
 # libc6-dev: for building Go's bootstrap 'dist' prog
 # libgles2-mesa-dev: required by x/mobile repo
 # libopenal-dev: required by x/mobile repo
 # lsof: misc basic tool
+# make: used for setting up benchmarks in the x/benchmark builders
 # netbase: for net package tests, issue 42750
 # procps: misc basic tool
 # psmisc: misc basic tool
@@ -33,6 +35,7 @@ RUN apt-get update && apt-get install -y \
 	gdb \
 	gfortran \
 	gfortran-multilib \
+	git \
 	iptables \
 	libc6-dev \
 	libc6-dev-i386 \
