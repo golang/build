@@ -124,13 +124,6 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
-	"host-linux-jessie": &HostConfig{
-		Notes:           "Debian Jessie, our standard Linux container image.",
-		ContainerImage:  "linux-x86-jessie:latest",
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		SSHUsername:     "root",
-	},
 	"host-linux-stretch": &HostConfig{
 		Notes:           "Debian Stretch",
 		ContainerImage:  "linux-x86-stretch:latest",
@@ -742,7 +735,7 @@ func init() {
 
 // A HostConfig describes the available ways to obtain buildlets of
 // different types. Some host configs can serve multiple
-// builders. For example, a host config of "host-linux-jessie" can
+// builders. For example, a host config of "host-linux-bullseye" can
 // serve linux-amd64, linux-amd64-race, linux-386, linux-386-387, etc.
 type HostConfig struct {
 	// HostType is the unique name of this host config. It is also
@@ -808,7 +801,7 @@ type BuildConfig struct {
 
 	// HostType is the required key into the Hosts map, describing
 	// the type of host this build will run on.
-	// For example, "host-linux-jessie".
+	// For example, "host-linux-bullseye".
 	HostType string
 
 	// KnownIssue is a non-zero golang.org/issue/nnn number for a builder
@@ -1632,7 +1625,7 @@ func init() {
 		}
 		addBuilder(BuildConfig{
 			Name:     "misc-compile" + suffix,
-			HostType: "host-linux-jessie",
+			HostType: "host-linux-stretch",
 			tryBot:   defaultTrySet(),
 			env: []string{
 				"GO_DISABLE_OUTBOUND_NETWORK=1",
@@ -1796,13 +1789,13 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "linux-386-clang",
 		HostType: "host-linux-clang",
-		Notes:    "Debian jessie + clang 3.9 instead of gcc",
+		Notes:    "Debian Buster + clang 7.0 instead of gcc",
 		env:      []string{"CC=/usr/bin/clang", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-clang",
 		HostType: "host-linux-clang",
-		Notes:    "Debian jessie + clang 3.9 instead of gcc",
+		Notes:    "Debian Buster + clang 7.0 instead of gcc",
 		env:      []string{"CC=/usr/bin/clang"},
 	})
 	addBuilder(BuildConfig{
@@ -1840,14 +1833,6 @@ func init() {
 		Notes: "Runs GOOS=linux but with the Android emulator attached, for running x/mobile host tests.",
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-amd64-jessie",
-		HostType: "host-linux-jessie",
-		Notes:    "Debian Jessie.",
-		env: []string{
-			"GO_DISABLE_OUTBOUND_NETWORK=1",
-		},
-	})
-	addBuilder(BuildConfig{
 		Name:       "linux-amd64-stretch",
 		HostType:   "host-linux-stretch",
 		Notes:      "Debian Stretch. Same as the normal 'linux-amd64' builder at this time, but with -stretch suffix. Used for release builds.",
@@ -1869,16 +1854,6 @@ func init() {
 		HostType: "host-linux-buster",
 		Notes:    "Debian Buster.",
 		env: []string{
-			"GO_DISABLE_OUTBOUND_NETWORK=1",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:     "linux-386-jessie",
-		HostType: "host-linux-jessie",
-		Notes:    "Debian Jessie, 32-bit builder.",
-		env: []string{
-			"GOARCH=386",
-			"GOHOSTARCH=386",
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
 	})

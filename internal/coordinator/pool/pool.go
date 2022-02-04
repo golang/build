@@ -24,7 +24,7 @@ type Buildlet interface {
 	// GetBuildlet returns a new buildlet client.
 	//
 	// The hostType is the key into the dashboard.Hosts
-	// map (such as "host-linux-jessie"), NOT the buidler type
+	// map (such as "host-linux-bullseye"), NOT the buidler type
 	// ("linux-386").
 	//
 	// Users of GetBuildlet must both call Client.Close when done
