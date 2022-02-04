@@ -107,7 +107,7 @@ var tryCommentRx = regexp.MustCompile(`(?m)^TRY=(.*)$`)
 //
 // goProj is the state of the main Go repository.
 // develVersion is the version of Go in development at HEAD of master branch.
-// supportedReleases are the supported Go releases per https://golang.org/doc/devel/release.html#policy.
+// supportedReleases are the supported Go releases per https://go.dev/doc/devel/release#policy.
 func tryWorkItem(
 	cl *maintner.GerritCL, ci *gerrit.ChangeInfo, comments map[string][]gerrit.CommentInfo,
 	goProj refer, develVersion apipb.MajorMinor, supportedReleases []*apipb.GoRelease,
@@ -126,7 +126,7 @@ func tryWorkItem(
 
 	// Look for "TRY=" comments. Only consider messages that are accompanied
 	// by a Run-TryBot+1 vote, as a way of confirming the comment author has
-	// Trybot Access (see https://golang.org/wiki/GerritAccess#trybot-access-may-start-trybots).
+	// Trybot Access (see https://go.dev/wiki/GerritAccess#running-trybots-may-start-trybots).
 	for _, m := range ci.Messages {
 		// msg is like:
 		//   "Patch Set 2: Run-TryBot+1\n\n(1 comment)"
@@ -177,7 +177,7 @@ func tryWorkItem(
 			// "master" or a development branch like "dev.link".
 			// There isn't a way to determine the version from its name,
 			// so use the development Go version until we need to do more.
-			// TODO(golang.org/issue/42376): This can be made more precise.
+			// TODO(go.dev/issue/42376): This can be made more precise.
 			w.GoVersion = []*apipb.MajorMinor{&develVersion}
 		}
 	} else {
@@ -314,7 +314,7 @@ func goFindTryWork(ctx context.Context, gerritc *gerrit.Client, maintc *maintner
 		return nil, err
 	}
 	// If Go X.Y is the latest supported release, the version in development is likely Go X.(Y+1).
-	// TODO(golang.org/issue/42376): This can be made more precise.
+	// TODO(go.dev/issue/42376): This can be made more precise.
 	develVersion := apipb.MajorMinor{
 		Major: supportedReleases[0].Major,
 		Minor: supportedReleases[0].Minor + 1,
@@ -335,7 +335,7 @@ func goFindTryWork(ctx context.Context, gerritc *gerrit.Client, maintc *maintner
 		// There are rare cases when the project~branch~Change-Id triplet doesn't
 		// uniquely identify a change, but project~numericId does. It's important
 		// we select the right and only one change in this context, so prefer the
-		// project~numericId identifier type. See golang.org/issue/43312 and
+		// project~numericId identifier type. See go.dev/issue/43312 and
 		// https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-id.
 		changeID := fmt.Sprintf("%s~%d", url.PathEscape(ci.Project), ci.ChangeNumber)
 		comments, err := gerritc.ListChangeComments(ctx, changeID)
