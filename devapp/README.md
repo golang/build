@@ -52,7 +52,7 @@ $ make deploy-staging
 
 ```sh
 $ gcloud config set project symbolic-datum-552
-$ gcloud container clusters get-credentials --zone=us-central1-f go
+$ gcloud container clusters get-credentials --zone=us-central1 services
 $ make push-prod
 ```
 
