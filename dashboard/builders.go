@@ -117,6 +117,14 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
+	"host-linux-bullseye-morecpu": &HostConfig{
+		Notes:           "Debian Bullseye, but on e2-highcpu-16",
+		ContainerImage:  "linux-x86-bullseye:latest",
+		machineType:     "e2-highcpu-16", // 16 vCPUs, 16 GB mem
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:     "root",
+	},
 	"host-linux-buster": &HostConfig{
 		Notes:           "Debian Buster",
 		ContainerImage:  "linux-x86-buster:latest",
@@ -128,14 +136,6 @@ var Hosts = map[string]*HostConfig{
 		Notes:           "Debian Stretch",
 		ContainerImage:  "linux-x86-stretch:latest",
 		machineType:     "e2-standard-4", // 4 vCPUs, 16 GB mem
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		SSHUsername:     "root",
-	},
-	"host-linux-stretch-morecpu": &HostConfig{
-		Notes:           "Debian Stretch, but on e2-highcpu-16",
-		ContainerImage:  "linux-x86-stretch:latest",
-		machineType:     "e2-highcpu-16", // 16 vCPUs, 16 GB mem
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
@@ -1881,8 +1881,8 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-longtest",
-		HostType: "host-linux-stretch-morecpu",
-		Notes:    "Debian Stretch with go test -short=false",
+		HostType: "host-linux-bullseye-morecpu",
+		Notes:    "Debian Bullseye with go test -short=false",
 		tryBot: func(repo, branch, goBranch string) bool {
 			onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
 			return repo == "go" && onReleaseBranch // See issue 37827.
@@ -1900,8 +1900,8 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-386-longtest",
-		HostType: "host-linux-stretch-morecpu",
-		Notes:    "Debian Stretch with go test -short=false; to get 32-bit coverage",
+		HostType: "host-linux-bullseye-morecpu",
+		Notes:    "Debian Bullseye with go test -short=false; to get 32-bit coverage",
 		tryBot: func(repo, branch, goBranch string) bool {
 			onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
 			return repo == "go" && onReleaseBranch // See issue 37827.
