@@ -492,6 +492,9 @@ var entries = map[string]*Entry{
 	"go/src/runtime/internal/sys": {
 		Primary: []Owner{austin, khr},
 	},
+	"go/src/runtime/internal/syscall": {
+		Primary: []Owner{prattmic, mknyszek, austin},
+	},
 	"go/src/runtime/pprof": {
 		Primary: []Owner{cherryyz, prattmic},
 	},
