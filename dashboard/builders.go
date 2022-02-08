@@ -237,7 +237,7 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
 		Notes:              "OpenBSD 6.8 (with 009_exit syspatch); GCE VM is built from script in build/env/openbsd-386",
 		SSHUsername:        "gopher",
-		DeleteTimeout:      45 * time.Minute, // See golang/go#49666.
+		DeleteTimeout:      60 * time.Minute, // See golang/go#49666.
 	},
 	"host-openbsd-amd64-70": &HostConfig{
 		VMImage:            "openbsd-amd64-70",
@@ -254,7 +254,7 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
 		Notes:              "OpenBSD 7.0; GCE VM is built from script in build/env/openbsd-386. n2-highcpu host.",
 		SSHUsername:        "gopher",
-		DeleteTimeout:      45 * time.Minute, // See golang/go#49666.
+		DeleteTimeout:      60 * time.Minute, // See golang/go#49666.
 	},
 	"host-openbsd-386-70-n2d": &HostConfig{
 		// This host config is only for the runtime team to use investigating golang/go#49209.
