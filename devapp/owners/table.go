@@ -493,7 +493,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{austin, khr},
 	},
 	"go/src/runtime/pprof": {
-		Primary: []Owner{cherryyz},
+		Primary: []Owner{cherryyz, prattmic},
 	},
 	"go/src/runtime/pprof/internal/protopprof": {
 		Primary: []Owner{cherryyz},
