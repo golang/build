@@ -6,6 +6,7 @@ package secret
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"testing"
 
@@ -136,5 +137,49 @@ func TestBuildNamePath(t *testing.T) {
 	got := buildNamePath("x", "y", "z")
 	if got != want {
 		t.Errorf("BuildVersionNumber(%s, %s, %s) = %q; want=%q", "x", "y", "z", got, want)
+	}
+}
+
+func TestFlag(t *testing.T) {
+	r := &FlagResolver{
+		Context: context.Background(),
+		Client: &fakeSecretClient{
+			accessSecretMap: map[string]string{
+				buildNamePath("project1", "secret1", "latest"): "supersecret",
+				buildNamePath("project2", "secret2", "latest"): "tippytopsecret",
+			},
+		},
+		DefaultProjectID: "project1",
+	}
+
+	tests := []struct {
+		flagVal, wantVal string
+		wantErr          bool
+	}{
+		{"hey", "hey", false},
+		{"secret:secret1", "supersecret", false},
+		{"secret:project2/secret2", "tippytopsecret", false},
+		{"secret:foo", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.flagVal, func(t *testing.T) {
+			fs := flag.NewFlagSet("", flag.ContinueOnError)
+			fs.Usage = func() {} // Minimize console spam; can't prevent it entirely.
+			flagVal := r.Flag(fs, "testflag", "usage")
+			err := fs.Parse([]string{"--testflag", tt.flagVal})
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("flag parsing succeeded, should have failed")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("flag parsing failed: %v", err)
+			}
+			if *flagVal != tt.wantVal {
+				t.Errorf("flag value = %q, want %q", *flagVal, "hey")
+			}
+		})
 	}
 }
