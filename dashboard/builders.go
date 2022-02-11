@@ -2262,6 +2262,7 @@ func init() {
 		},
 		env: []string{
 			"GOARCH=arm64",
+			"GOMAXPROCS=4", // OOM problems, see go.dev/issue/51019
 		},
 	})
 	addBuilder(BuildConfig{
