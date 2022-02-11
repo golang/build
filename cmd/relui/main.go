@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/relui"
+	"golang.org/x/build/internal/task"
 )
 
 var (
@@ -39,7 +40,25 @@ func main() {
 		}
 		return
 	}
+
+	// Define the site header and external service configuration.
+	// The site header communicates to humans what will happen
+	// when workflows run.
+	// Keep these appropriately in sync.
+	var (
+		siteHeader = relui.SiteHeader{
+			Title:    "Go Releases (work in progress)",
+			CSSClass: "Site-header--workInProgress",
+		}
+		extCfg = task.ExternalConfig{
+			// TODO(go.dev/issue/51122): Once secrets are available from prod deployment and we're ready, pass them here.
+			// TODO(go.dev/issue/51150): When twitter client creation is factored out from task package, update code here.
+			DryRun: true,
+		}
+	)
+
 	dh := relui.NewDefinitionHolder()
+	relui.RegisterTweetDefinitions(dh, extCfg)
 	db, err := pgxpool.Connect(ctx, *pgConnect)
 	if err != nil {
 		log.Fatal(err)
@@ -57,7 +76,7 @@ func main() {
 			log.Fatalf("url.Parse(%q) = %v, %v", *baseURL, base, err)
 		}
 	}
-	s := relui.NewServer(db, w, base, relui.SiteHeader{Title: "Go Releases"})
+	s := relui.NewServer(db, w, base, siteHeader)
 	if err != nil {
 		log.Fatalf("relui.NewServer() = %v", err)
 	}

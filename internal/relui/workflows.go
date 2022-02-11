@@ -7,6 +7,7 @@ package relui
 import (
 	"sync"
 
+	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
 )
 
@@ -52,6 +53,39 @@ func (h *DefinitionHolder) Definitions() map[string]*workflow.Definition {
 		defs[k] = v
 	}
 	return defs
+}
+
+// RegisterTweetDefinitions registers workflow definitions involving tweeting
+// onto h, using e for the external service configuration.
+func RegisterTweetDefinitions(h *DefinitionHolder, e task.ExternalConfig) {
+	{
+		wd := workflow.New()
+		wd.Output("TweetURL", wd.Task("tweet-minor", func(ctx *workflow.TaskContext, v1, v2, sec, ann string) (string, error) {
+			return task.TweetMinorRelease(ctx, task.ReleaseTweet{Version: v1, SecondaryVersion: v2, Security: sec, Announcement: ann}, e)
+		}, wd.Parameter("Version"), wd.Parameter("SecondaryVersion"), wd.Parameter("Security (optional)"), wd.Parameter("Announcement")))
+		h.RegisterDefinition("tweet-minor", wd)
+	}
+	{
+		wd := workflow.New()
+		wd.Output("TweetURL", wd.Task("tweet-beta", func(ctx *workflow.TaskContext, v, sec, ann string) (string, error) {
+			return task.TweetBetaRelease(ctx, task.ReleaseTweet{Version: v, Security: sec, Announcement: ann}, e)
+		}, wd.Parameter("Version"), wd.Parameter("Security (optional)"), wd.Parameter("Announcement")))
+		h.RegisterDefinition("tweet-beta", wd)
+	}
+	{
+		wd := workflow.New()
+		wd.Output("TweetURL", wd.Task("tweet-rc", func(ctx *workflow.TaskContext, v, sec, ann string) (string, error) {
+			return task.TweetRCRelease(ctx, task.ReleaseTweet{Version: v, Security: sec, Announcement: ann}, e)
+		}, wd.Parameter("Version"), wd.Parameter("Security (optional)"), wd.Parameter("Announcement")))
+		h.RegisterDefinition("tweet-rc", wd)
+	}
+	{
+		wd := workflow.New()
+		wd.Output("TweetURL", wd.Task("tweet-major", func(ctx *workflow.TaskContext, v, sec string) (string, error) {
+			return task.TweetMajorRelease(ctx, task.ReleaseTweet{Version: v, Security: sec}, e)
+		}, wd.Parameter("Version"), wd.Parameter("Security (optional)")))
+		h.RegisterDefinition("tweet-major", wd)
+	}
 }
 
 // newEchoWorkflow returns a runnable workflow.Definition for

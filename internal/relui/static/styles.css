@@ -42,9 +42,15 @@ h6 {
   flex: none;
 }
 .Header {
+  padding: 0.625rem;
+}
+.Site-header--production .Header {
   background: #e0ebf5;
   color: #375eab;
-  padding: 0.625rem;
+}
+.Site-header--workInProgress .Header {
+  background: #d6d6d6;
+  color: #171d27;
 }
 .Header-title {
   font-size: 1.5rem;

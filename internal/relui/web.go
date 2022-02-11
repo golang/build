@@ -221,7 +221,10 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 	params := make(map[string]string)
 	for _, n := range d.ParameterNames() {
 		params[n] = r.FormValue(fmt.Sprintf("workflow.params.%s", n))
-		if params[n] == "" {
+
+		// TODO(go.dev/issue/51191): Create a better mechanism for storing parameter metadata.
+		requiredParam := !strings.HasSuffix(n, " (optional)")
+		if requiredParam && params[n] == "" {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
