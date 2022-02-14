@@ -434,6 +434,10 @@ var windowsData = map[string]string{
 <Property Id="EXISTING_GOLANG_INSTALLED">
   <RegistrySearch Id="installed" Type="raw" Root="HKCU" Key="Software\GoProgrammingLanguage" Name="installed" />
 </Property>
+<Property Id="INSTALLDIR">
+  <RegistrySearch Id="savedInstallDir" Type="raw" Root="HKCU" Key="Software\GoProgrammingLanguage" Name="installLocation" />
+</Property>
+
 <Media Id='1' Cabinet="go.cab" EmbedCab="yes" CompressionLevel="high" />
 <Condition Message="Windows 7 (with Service Pack 1) or greater required.">
     ((VersionNT > 601) OR (VersionNT = 601 AND ServicePackLevel >= 1))
