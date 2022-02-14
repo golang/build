@@ -33,7 +33,7 @@ import (
 	"golang.org/x/build/dashboard"
 )
 
-//go:embed releaselet.go
+//go:embed releaselet/releaselet.go
 var releaselet string
 
 var (

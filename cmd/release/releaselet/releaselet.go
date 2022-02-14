@@ -2,11 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build ignore
-// +build ignore
-
 // Command releaselet does buildlet-side release construction tasks.
-// It is intended to be executed on the buildlet preparing a release.
+// It is intended to be executed on the buildlet preparing a release
+// using the version of Go to be released.
 package main
 
 import (
@@ -29,11 +27,6 @@ import (
 )
 
 func main() {
-	if v, _ := strconv.ParseBool(os.Getenv("RUN_RELEASELET_TESTS")); v {
-		runSelfTests()
-		return
-	}
-
 	if dir := archDir(); dir != "" {
 		if err := cp("go/bin/go", "go/bin/"+dir+"/go"); err != nil {
 			log.Fatal(err)
@@ -635,27 +628,4 @@ var windowsData = map[string]string{
 	"images/Dialog.jpg":     storageBase + "windows/Dialog.jpg",
 	"images/DialogLeft.jpg": storageBase + "windows/DialogLeft.jpg",
 	"images/gopher.ico":     storageBase + "windows/gopher.ico",
-}
-
-// runSelfTests contains the tests for this file, since this file
-// is +build ignore. This is called by releaselet_test.go with an
-// environment variable set, which func main above recognizes.
-func runSelfTests() {
-	// Test splitVersion.
-	for _, tt := range []struct {
-		v                   string
-		major, minor, patch int
-	}{
-		{"go1", 1, 0, 0},
-		{"go1.34", 1, 34, 0},
-		{"go1.34.7", 1, 34, 7},
-	} {
-		major, minor, patch := splitVersion(tt.v)
-		if major != tt.major || minor != tt.minor || patch != tt.patch {
-			log.Fatalf("splitVersion(%q) = %v, %v, %v; want %v, %v, %v",
-				tt.v, major, minor, patch, tt.major, tt.minor, tt.patch)
-		}
-	}
-
-	fmt.Println("ok")
 }
