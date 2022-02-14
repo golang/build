@@ -50,7 +50,8 @@ h6 {
   font-size: 1.5rem;
   margin: 0;
 }
-.Workflows {
+.Workflows,
+.NewWorkflow {
   padding: 0 0.625rem;
 }
 .Workflows-header {
@@ -96,6 +97,22 @@ h6 {
   border-radius: 0.0625rem;
   margin-top: 1rem;
   padding: 0 0.5rem;
+}
+.NewWorkflow-workflowSelect {
+  padding-bottom: 0.5rem;
+  border-bottom: 0.0625rem solid #d6d6d6;
+}
+.NewWorkflow-parameter {
+  padding: 0.5rem 0;
+  display: flex;
+  gap: 0.5rem;
+}
+.NewWorkflow-parameter input {
+  flex-grow: 1;
+}
+.NewWorkflow-workflowCreate {
+  padding-top: 0.5rem;
+  border-top: 0.0625rem solid #d6d6d6;
 }
 .TaskList {
   align-items: center;

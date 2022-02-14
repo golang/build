@@ -43,12 +43,19 @@ func fileServerHandler(fs fs.FS, next http.Handler) http.Handler {
 	})
 }
 
+// SiteHeader configures the relui site header.
+type SiteHeader struct {
+	Title    string // Site title. For example, "Go Releases".
+	CSSClass string // Site header CSS class name. Optional.
+}
+
 // Server implements the http handlers for relui.
 type Server struct {
 	db      *pgxpool.Pool
 	m       *http.ServeMux
 	w       *Worker
 	baseURL *url.URL
+	header  SiteHeader
 	// mux used if baseURL is set
 	bm *http.ServeMux
 
@@ -56,13 +63,15 @@ type Server struct {
 	newWorkflowTmpl *template.Template
 }
 
-// NewServer initializes a server with the provided connection pool.
-func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL) *Server {
+// NewServer initializes a server with the provided connection pool,
+// worker, base URL and site header.
+func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL, header SiteHeader) *Server {
 	s := &Server{
 		db:      p,
 		m:       new(http.ServeMux),
 		w:       w,
 		baseURL: baseURL,
+		header:  header,
 	}
 	helpers := map[string]interface{}{
 		"baseLink": s.BaseLink,
@@ -109,6 +118,7 @@ func (s *Server) BaseLink(target string) string {
 }
 
 type homeResponse struct {
+	SiteHeader    SiteHeader
 	Workflows     []db.Workflow
 	WorkflowTasks map[uuid.UUID][]db.Task
 	TaskLogs      map[uuid.UUID]map[string][]db.TaskLog
@@ -170,10 +180,11 @@ func (s *Server) buildHomeResponse(ctx context.Context) (*homeResponse, error) {
 		}
 		wftlogs[l.WorkflowID][l.TaskName] = append(wftlogs[l.WorkflowID][l.TaskName], l)
 	}
-	return &homeResponse{Workflows: ws, WorkflowTasks: wfTasks, TaskLogs: wftlogs}, nil
+	return &homeResponse{SiteHeader: s.header, Workflows: ws, WorkflowTasks: wfTasks, TaskLogs: wftlogs}, nil
 }
 
 type newWorkflowResponse struct {
+	SiteHeader  SiteHeader
 	Definitions map[string]*workflow.Definition
 	Name        string
 }
@@ -186,6 +197,7 @@ func (n *newWorkflowResponse) Selected() *workflow.Definition {
 func (s *Server) newWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 	out := bytes.Buffer{}
 	resp := &newWorkflowResponse{
+		SiteHeader:  s.header,
 		Definitions: s.w.dh.Definitions(),
 		Name:        r.FormValue("workflow.name"),
 	}

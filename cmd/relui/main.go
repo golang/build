@@ -57,7 +57,7 @@ func main() {
 			log.Fatalf("url.Parse(%q) = %v, %v", *baseURL, base, err)
 		}
 	}
-	s := relui.NewServer(db, w, base)
+	s := relui.NewServer(db, w, base, relui.SiteHeader{Title: "Go Releases"})
 	if err != nil {
 		log.Fatalf("relui.NewServer() = %v", err)
 	}

@@ -116,7 +116,7 @@ func TestServerHomeHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 
-	s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}), nil)
+	s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}), nil, SiteHeader{})
 	s.homeHandler(w, req)
 	resp := w.Result()
 
@@ -152,7 +152,7 @@ func TestServerNewWorkflowHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, u.String(), nil)
 			w := httptest.NewRecorder()
 
-			s := NewServer(nil, NewWorker(NewDefinitionHolder(), nil, nil), nil)
+			s := NewServer(nil, NewWorker(NewDefinitionHolder(), nil, nil), nil, SiteHeader{})
 			s.newWorkflowHandler(w, req)
 			resp := w.Result()
 
@@ -219,7 +219,7 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			rec := httptest.NewRecorder()
 			q := db.New(p)
 
-			s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}), nil)
+			s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}), nil, SiteHeader{})
 			s.createWorkflowHandler(rec, req)
 			resp := rec.Result()
 
@@ -411,7 +411,7 @@ func TestServerBaseLink(t *testing.T) {
 			if err != nil {
 				t.Fatalf("url.Parse(%q) = %v, %v, wanted no error", c.baseURL, base, err)
 			}
-			s := NewServer(nil, nil, base)
+			s := NewServer(nil, nil, base, SiteHeader{})
 
 			got := s.BaseLink(c.target)
 			if got != c.want {

@@ -5,14 +5,14 @@
 -->
 <!DOCTYPE html>
 <html lang="en">
-  <title>Go Releases</title>
+  <title>{{.SiteHeader.Title}}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="{{baseLink "/static/styles.css"}}" />
   <script async defer src="{{baseLink "/static/site.js"}}"></script>
   <body class="Site">
-    <header class="Site-header">
+    <header class="Site-header {{.SiteHeader.CSSClass}}">
       <div class="Header">
-        <h1 class="Header-title">Go Releases</h1>
+        <h1 class="Header-title">{{.SiteHeader.Title}}</h1>
       </div>
     </header>
     <main class="Site-content">
