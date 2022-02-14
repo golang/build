@@ -211,11 +211,18 @@ var builds = []*Build{
 		Builder: "windows-amd64-2008",
 	},
 	{
-		GoQuery: ">= go1.17beta1", // Go 1.17 Beta 1 is the first Go (pre-)release with the windows/arm64 port.
+		GoQuery: ">= go1.17beta1 && < go1.18beta1", // Go 1.17 Beta 1 is the first Go (pre-)release with the windows/arm64 port.
 		OS:      "windows",
 		Arch:    "arm64",
 		Race:    false, // Not supported as of 2021-06-01.
 		Builder: "windows-arm64-10",
+	},
+	{
+		GoQuery: ">= go1.18beta1", // Go 1.17 Beta 1 is the first Go (pre-)release with the windows/arm64 port.
+		OS:      "windows",
+		Arch:    "arm64",
+		Race:    false, // Not supported as of 2021-06-01.
+		Builder: "windows-arm64-11",
 	},
 	{
 		GoQuery: ">= go1.18beta1", // Start exercising a macOS 12 releaselet as of Go 1.18 Beta 1; see issue 40561.
