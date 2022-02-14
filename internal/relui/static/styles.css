@@ -181,6 +181,8 @@ h6 {
 }
 .TaskList-itemLogLine {
   padding: 0 1rem;
+  white-space: pre-wrap;
+  tab-size: 4;
 }
 .TaskList-itemLogLine:nth-child(even) {
   background-color: #fafafa;

@@ -83,8 +83,7 @@
                     {{end}}
                     {{range $log := $.Logs $workflow.ID  $task.Name}}
                       <div class="TaskList-itemLogLine">
-                        {{$log.CreatedAt.UTC.Format "2006/01/02 15:04:05"}}
-                        {{$log.Body}}
+                        {{- $log.CreatedAt.UTC.Format "2006/01/02 15:04:05"}} {{$log.Body -}}
                       </div>
                     {{end}}
                   </td>
