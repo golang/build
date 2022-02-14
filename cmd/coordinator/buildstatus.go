@@ -1325,8 +1325,13 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 	sp = st.CreateSpan("running_subrepo_tests", st.SubName)
 	defer func() { sp.Done(err) }()
 
+	branch := st.goBranch
+	if branch == "" {
+		branch = "master"
+	}
 	env := append(st.conf.Env(),
 		"BENCH_BASELINE_GOROOT="+baselineGoroot,
+		"BENCH_BRANCH="+branch,
 		"GOROOT="+goroot,
 		"GOPATH="+gopath,
 		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
