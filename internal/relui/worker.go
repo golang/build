@@ -28,6 +28,8 @@ type Listener interface {
 
 // Worker runs workflows, and persists their state.
 type Worker struct {
+	dh *DefinitionHolder
+
 	db *pgxpool.Pool
 	l  Listener
 
@@ -36,8 +38,9 @@ type Worker struct {
 }
 
 // NewWorker returns a Worker ready to accept and run workflows.
-func NewWorker(db *pgxpool.Pool, l Listener) *Worker {
+func NewWorker(dh *DefinitionHolder, db *pgxpool.Pool, l Listener) *Worker {
 	return &Worker{
+		dh:      dh,
 		db:      db,
 		l:       l,
 		done:    make(chan struct{}),
@@ -130,7 +133,7 @@ func (w *Worker) Resume(ctx context.Context, id uuid.UUID) error {
 	if err != nil {
 		return err
 	}
-	d := Definition(wf.Name.String)
+	d := w.dh.Definition(wf.Name.String)
 	if d == nil {
 		return fmt.Errorf("no workflow named %q", wf.Name.String)
 	}

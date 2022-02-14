@@ -186,7 +186,7 @@ func (n *newWorkflowResponse) Selected() *workflow.Definition {
 func (s *Server) newWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 	out := bytes.Buffer{}
 	resp := &newWorkflowResponse{
-		Definitions: Definitions(),
+		Definitions: s.w.dh.Definitions(),
 		Name:        r.FormValue("workflow.name"),
 	}
 	if err := s.newWorkflowTmpl.Execute(&out, resp); err != nil {
@@ -201,7 +201,7 @@ func (s *Server) newWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 // starts the workflow in a goroutine.
 func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 	name := r.FormValue("workflow.name")
-	d := Definition(name)
+	d := s.w.dh.Definition(name)
 	if d == nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return

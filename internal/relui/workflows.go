@@ -10,32 +10,45 @@ import (
 	"golang.org/x/build/internal/workflow"
 )
 
-var dmut sync.Mutex
-var definitions = map[string]*workflow.Definition{
-	"echo": newEchoWorkflow(),
+// DefinitionHolder holds workflow definitions.
+type DefinitionHolder struct {
+	mu          sync.Mutex
+	definitions map[string]*workflow.Definition
+}
+
+// NewDefinitionHolder creates a new DefinitionHolder,
+// initialized with a sample "echo" workflow.
+func NewDefinitionHolder() *DefinitionHolder {
+	return &DefinitionHolder{definitions: map[string]*workflow.Definition{
+		"echo": newEchoWorkflow(),
+	}}
 }
 
 // Definition returns the initialized workflow.Definition registered
 // for a given name.
-func Definition(name string) *workflow.Definition {
-	dmut.Lock()
-	defer dmut.Unlock()
-	return definitions[name]
+func (h *DefinitionHolder) Definition(name string) *workflow.Definition {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.definitions[name]
 }
 
 // RegisterDefinition registers a definition with a name.
-func RegisterDefinition(name string, d *workflow.Definition) {
-	dmut.Lock()
-	defer dmut.Unlock()
-	definitions[name] = d
+// If a definition with the same name already exists, RegisterDefinition panics.
+func (h *DefinitionHolder) RegisterDefinition(name string, d *workflow.Definition) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, exist := h.definitions[name]; exist {
+		panic("relui: multiple registrations for " + name)
+	}
+	h.definitions[name] = d
 }
 
 // Definitions returns the names of all registered definitions.
-func Definitions() map[string]*workflow.Definition {
-	dmut.Lock()
-	defer dmut.Unlock()
+func (h *DefinitionHolder) Definitions() map[string]*workflow.Definition {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	defs := make(map[string]*workflow.Definition)
-	for k, v := range definitions {
+	for k, v := range h.definitions {
 		defs[k] = v
 	}
 	return defs

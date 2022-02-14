@@ -26,13 +26,14 @@ func TestWorkerStartWorkflow(t *testing.T) {
 	dbp := testDB(ctx, t)
 	q := db.New(dbp)
 	wg := sync.WaitGroup{}
-	w := NewWorker(dbp, &testWorkflowListener{
+	dh := NewDefinitionHolder()
+	w := NewWorker(dh, dbp, &testWorkflowListener{
 		Listener:   &PGListener{dbp},
 		onFinished: wg.Done,
 	})
 
 	wd := newTestEchoWorkflow()
-	RegisterDefinition(t.Name(), wd)
+	dh.RegisterDefinition(t.Name(), wd)
 	params := map[string]string{"echo": "greetings"}
 
 	wg.Add(1)
@@ -85,13 +86,14 @@ func TestWorkerResume(t *testing.T) {
 	dbp := testDB(ctx, t)
 	q := db.New(dbp)
 	wg := sync.WaitGroup{}
-	w := NewWorker(dbp, &testWorkflowListener{
+	dh := NewDefinitionHolder()
+	w := NewWorker(dh, dbp, &testWorkflowListener{
 		Listener:   &PGListener{dbp},
 		onFinished: wg.Done,
 	})
 
 	wd := newTestEchoWorkflow()
-	RegisterDefinition(t.Name(), wd)
+	dh.RegisterDefinition(t.Name(), wd)
 	wfid := createUnfinishedEchoWorkflow(t, ctx, q)
 
 	wg.Add(1)
@@ -124,7 +126,7 @@ func TestWorkerResumeMissingDefinition(t *testing.T) {
 	defer cancel()
 	dbp := testDB(ctx, t)
 	q := db.New(dbp)
-	w := NewWorker(dbp, &PGListener{dbp})
+	w := NewWorker(NewDefinitionHolder(), dbp, &PGListener{dbp})
 
 	cwp := db.CreateWorkflowParams{ID: uuid.New(), Name: nullString(t.Name()), Params: nullString("{}")}
 	if wf, err := q.CreateWorkflow(ctx, cwp); err != nil {
@@ -142,13 +144,14 @@ func TestWorkflowResumeAll(t *testing.T) {
 	dbp := testDB(ctx, t)
 	q := db.New(dbp)
 	wg := sync.WaitGroup{}
-	w := NewWorker(dbp, &testWorkflowListener{
+	dh := NewDefinitionHolder()
+	w := NewWorker(dh, dbp, &testWorkflowListener{
 		Listener:   &PGListener{dbp},
 		onFinished: wg.Done,
 	})
 
 	wd := newTestEchoWorkflow()
-	RegisterDefinition(t.Name(), wd)
+	dh.RegisterDefinition(t.Name(), wd)
 	wfid1 := createUnfinishedEchoWorkflow(t, ctx, q)
 	wfid2 := createUnfinishedEchoWorkflow(t, ctx, q)
 
@@ -193,10 +196,11 @@ func TestWorkerRunListenerError(t *testing.T) {
 	defer cancel()
 	dbp := testDB(ctx, t)
 	q := db.New(dbp)
-	w := NewWorker(dbp, &unimplementedListener{})
+	dh := NewDefinitionHolder()
+	w := NewWorker(dh, dbp, &unimplementedListener{})
 
 	wd := newTestEchoWorkflow()
-	RegisterDefinition(t.Name(), wd)
+	dh.RegisterDefinition(t.Name(), wd)
 	wfid := createUnfinishedEchoWorkflow(t, ctx, q)
 
 	if err := w.Resume(ctx, wfid); err != nil {

@@ -116,7 +116,7 @@ func TestServerHomeHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 
-	s := NewServer(p, NewWorker(p, &PGListener{p}), nil)
+	s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}), nil)
 	s.homeHandler(w, req)
 	resp := w.Result()
 
@@ -152,7 +152,7 @@ func TestServerNewWorkflowHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, u.String(), nil)
 			w := httptest.NewRecorder()
 
-			s := NewServer(nil, nil, nil)
+			s := NewServer(nil, NewWorker(NewDefinitionHolder(), nil, nil), nil)
 			s.newWorkflowHandler(w, req)
 			resp := w.Result()
 
@@ -219,7 +219,7 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			rec := httptest.NewRecorder()
 			q := db.New(p)
 
-			s := NewServer(p, NewWorker(p, &PGListener{p}), nil)
+			s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}), nil)
 			s.createWorkflowHandler(rec, req)
 			resp := rec.Result()
 
