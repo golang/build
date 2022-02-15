@@ -8,6 +8,8 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"reflect"
 	"testing"
 
 	gax "github.com/googleapis/gax-go/v2"
@@ -165,7 +167,7 @@ func TestFlag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.flagVal, func(t *testing.T) {
 			fs := flag.NewFlagSet("", flag.ContinueOnError)
-			fs.Usage = func() {} // Minimize console spam; can't prevent it entirely.
+			fs.SetOutput(ioutil.Discard)
 			flagVal := r.Flag(fs, "testflag", "usage")
 			err := fs.Parse([]string{"--testflag", tt.flagVal})
 			if tt.wantErr {
@@ -178,8 +180,57 @@ func TestFlag(t *testing.T) {
 				t.Fatalf("flag parsing failed: %v", err)
 			}
 			if *flagVal != tt.wantVal {
-				t.Errorf("flag value = %q, want %q", *flagVal, "hey")
+				t.Errorf("flag value = %q, want %q", *flagVal, tt.wantVal)
 			}
 		})
 	}
+}
+
+type jsonValue struct {
+	Foo, Bar int
+}
+
+func TestJSONFlag(t *testing.T) {
+	r := &FlagResolver{
+		Context: context.Background(),
+		Client: &fakeSecretClient{
+			accessSecretMap: map[string]string{
+				buildNamePath("project1", "secret1", "latest"): `{"Foo": 1, "Bar": 2}`,
+				buildNamePath("project1", "secret2", "latest"): `i am not json`,
+			},
+		},
+		DefaultProjectID: "project1",
+	}
+	tests := []struct {
+		flagVal   string
+		wantValue *jsonValue
+		wantErr   bool
+	}{
+		{"secret:secret1", &jsonValue{Foo: 1, Bar: 2}, false},
+		{"secret:secret2", nil, true},
+		{`{"Foo":0, "Bar":1}`, &jsonValue{Foo: 0, Bar: 1}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.flagVal, func(t *testing.T) {
+			fs := flag.NewFlagSet("", flag.ContinueOnError)
+			fs.SetOutput(ioutil.Discard)
+			value := &jsonValue{}
+			r.JSONVarFlag(fs, value, "testflag", "usage")
+			err := fs.Parse([]string{"--testflag", tt.flagVal})
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("flag parsing succeeded, should have failed")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("flag parsing failed: %v", err)
+			}
+			if !reflect.DeepEqual(value, tt.wantValue) {
+				t.Errorf("flag value = %q, want %q", value, tt.wantValue)
+			}
+		})
+	}
+
 }
