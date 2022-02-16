@@ -2308,16 +2308,29 @@ func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
 				return err
 			}
 			for _, commentSet := range comments {
+				// The API doesn't sort comments chronologically, but "the state of
+				// resolution of a comment thread is stored in the last comment in that
+				// thread chronologically", so first of all sort them by time.
 				sort.Slice(commentSet, func(i, j int) bool {
 					return commentSet[i].Updated.Time().Before(commentSet[j].Updated.Time())
 				})
+
+				// roots is a map of message IDs to their thread root.
+				roots := make(map[string]string)
 				threads := make(map[string]bool)
 				for _, c := range commentSet {
-					id := c.ID
-					if c.InReplyTo != "" {
-						id = c.InReplyTo
+					if c.InReplyTo == "" {
+						roots[c.ID] = c.ID
+						threads[c.ID] = *c.Unresolved
+						continue
 					}
-					threads[id] = *c.Unresolved
+
+					root, ok := roots[c.InReplyTo]
+					if !ok {
+						return fmt.Errorf("failed to determine unresolved state in CL %d: comment %q (parent of comment %q) is not found", cl.Number, c.InReplyTo, c.ID)
+					}
+					roots[c.ID] = root
+					threads[root] = *c.Unresolved
 				}
 				for _, unresolved := range threads {
 					if unresolved {
