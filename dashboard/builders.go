@@ -1574,11 +1574,7 @@ func init() {
 		Name:  "linux-386-softfloat",
 		Notes: "GO386=softfloat",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			// GO386=softfloat is added in Go 1.16 (golang.org/issue/41848).
-			return atLeastGo1(goBranch, 16) && (repo == "go" || repo == "crypto")
-		},
-		GoDeps: []string{
-			"04b8a9fea57e37589d82410281f22ebde0027808", // CL 260017, "all: implement GO386=softfloat".
+			return repo == "go" || repo == "crypto"
 		},
 		HostType: "host-linux-stretch",
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386", "GO386=softfloat"},
@@ -1658,8 +1654,8 @@ func init() {
 	// some misc-compile TryBot could become much slower than others.)
 	//
 	// See golang.org/issue/32632.
-	addMiscCompile("-mac-win", "darwin-amd64", "windows-arm", "windows-arm64")
-	addMiscCompileGo1(16, "-darwinarm64", "darwin-arm64") // darwin/arm64 (for Go 1.16 and newer) only.
+	addMiscCompile("-windows-arm", "windows-arm", "windows-arm64")
+	addMiscCompile("-darwin", "darwin-amd64", "darwin-arm64")
 	addMiscCompile("-mips", "linux-mips", "linux-mips64")
 	addMiscCompile("-mipsle", "linux-mipsle", "linux-mips64le")
 	addMiscCompile("-ppc", "linux-ppc64", "linux-ppc64le", "aix-ppc64")
@@ -1721,23 +1717,17 @@ func init() {
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 			"GO_GCFLAGS=-d=ssa/check/on,dclstack",
 		},
-		GoDeps: []string{
-			"f65abf6ddc8d1f3d403a9195fd74eaffa022b07f", // adds dclstack
-		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-staticlockranking",
 		HostType: "host-linux-stretch",
 		Notes:    "builder with GOEXPERIMENT=staticlockranking, see golang.org/issue/37937",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return repo == "go" && atLeastGo1(goBranch, 15)
+			return repo == "go"
 		},
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 			"GOEXPERIMENT=staticlockranking",
-		},
-		GoDeps: []string{
-			"02057906f7272a4787b8a0b5b7cafff8ad3024f0", // A master commit from 2020/03/19, just before CL 222925 and CL 207619 have landed.
 		},
 	})
 	addBuilder(BuildConfig{
@@ -1771,9 +1761,6 @@ func init() {
 		Notes:               "race-enabled cmd/compile and cmd/link",
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
-		},
-		GoDeps: []string{
-			"22f1b56dab29d397d2bdbdd603d85e60fb678089", // adds cmd/compile -c; Issue 20222
 		},
 	})
 	addBuilder(BuildConfig{
@@ -2107,11 +2094,8 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:     "netbsd-arm64-bsiegert",
-		HostType: "host-netbsd-arm64-bsiegert",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atLeastGo1(goBranch, 16) && buildRepoByDefault(repo)
-		},
+		Name:           "netbsd-arm64-bsiegert",
+		HostType:       "host-netbsd-arm64-bsiegert",
 		distTestAdjust: noTestDirAndNoReboot,
 		tryBot:         nil,
 		env: []string{
@@ -2380,7 +2364,7 @@ func init() {
 		tryBot: func(repo, branch, goBranch string) bool {
 			switch repo {
 			case "go", "mobile", "sys", "net", "tools", "crypto", "sync", "text", "time":
-				return atLeastGo1(branch, 13) && atLeastGo1(goBranch, 13)
+				return true
 			}
 			return false
 		},
@@ -2403,9 +2387,8 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:             "illumos-amd64",
-		HostType:         "host-illumos-amd64-jclulow",
-		MinimumGoVersion: types.MajorMinor{1, 13},
+		Name:     "illumos-amd64",
+		HostType: "host-illumos-amd64-jclulow",
 	})
 	addBuilder(BuildConfig{
 		Name:     "solaris-amd64-oraclerel",
@@ -2579,9 +2562,6 @@ func init() {
 		distTestAdjust: noTestDirAndNoReboot,
 		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see golang.org/issue/45216
 		SkipSnapshot:   true,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atLeastGo1(goBranch, 14) && buildRepoByDefault(repo)
-		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "freebsd-arm-paulzhol",
@@ -2607,9 +2587,6 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "freebsd-arm64-dmgk",
 		HostType: "host-freebsd-arm64-dmgk",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atLeastGo1(goBranch, 14) && buildRepoByDefault(repo)
-		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-arm",
@@ -2646,9 +2623,8 @@ func init() {
 		buildsRepo: plan9Default,
 	})
 	addBuilder(BuildConfig{
-		Name:             "aix-ppc64",
-		HostType:         "host-aix-ppc64-osuosl",
-		MinimumGoVersion: types.MajorMinor{1, 12},
+		Name:     "aix-ppc64",
+		HostType: "host-aix-ppc64-osuosl",
 		env: []string{
 			"PATH=/opt/freeware/bin:/usr/bin:/etc:/usr/sbin:/usr/ucb:/usr/bin/X11:/sbin:/usr/java7_64/jre/bin:/usr/java7_64/bin",
 		},

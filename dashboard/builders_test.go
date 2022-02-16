@@ -107,9 +107,9 @@ func TestTrybots(t *testing.T) {
 				"windows-386-2012",
 				"windows-amd64-2016",
 
-				"misc-compile-darwinarm64",
+				"misc-compile-darwin",
 				"misc-compile-freebsd",
-				"misc-compile-mac-win",
+				"misc-compile-windows-arm",
 				"misc-compile-mips",
 				"misc-compile-mipsle",
 				"misc-compile-netbsd",
@@ -141,9 +141,9 @@ func TestTrybots(t *testing.T) {
 				"windows-386-2012",
 				"windows-amd64-2016",
 
-				"misc-compile-darwinarm64",
+				"misc-compile-darwin",
 				"misc-compile-freebsd",
-				"misc-compile-mac-win",
+				"misc-compile-windows-arm",
 				"misc-compile-mips",
 				"misc-compile-mipsle",
 				"misc-compile-netbsd",
@@ -174,9 +174,9 @@ func TestTrybots(t *testing.T) {
 				"windows-386-2012",
 				"windows-amd64-2016",
 
-				"misc-compile-darwinarm64",
+				"misc-compile-darwin",
 				"misc-compile-freebsd",
-				"misc-compile-mac-win",
+				"misc-compile-windows-arm",
 				"misc-compile-mips",
 				"misc-compile-mipsle",
 				"misc-compile-netbsd",
@@ -211,9 +211,9 @@ func TestTrybots(t *testing.T) {
 				"windows-386-2012",
 				"windows-amd64-2016",
 
-				"misc-compile-darwinarm64", // Starts with Go 1.16.
+				"misc-compile-darwin",
 				"misc-compile-freebsd",
-				"misc-compile-mac-win",
+				"misc-compile-windows-arm",
 				"misc-compile-mips",
 				"misc-compile-mipsle",
 				"misc-compile-netbsd",
@@ -415,19 +415,13 @@ func TestBuilderConfig(t *testing.T) {
 
 		// Don't test all subrepos on all the builders.
 		{b("linux-amd64-ssacheck", "net"), none},
-		{b("linux-amd64-ssacheck@go1.15", "net"), none},
+		{b("linux-amd64-ssacheck@go1.18", "net"), none},
 		{b("linux-386-softfloat", "crypto"), onlyPost},
-		{b("linux-386-softfloat@go1.16", "crypto"), onlyPost},
-		{b("linux-386-softfloat@go1.15", "crypto"), none},
-
-		// The mobile repo requires Go 1.13+.
-		{b("android-amd64-emu", "mobile"), both},
-		{b("android-amd64-emu", "mobile@1.10"), none},
-		{b("android-amd64-emu@go1.10", "mobile"), none},
-		{b("android-amd64-emu@go1.13", "mobile"), both},
-		{b("android-amd64-emu", "mobile@1.13"), both},
+		{b("linux-386-softfloat@go1.18", "crypto"), onlyPost},
+		{b("linux-386-softfloat@go1.17", "crypto"), onlyPost},
 
 		{b("android-amd64-emu", "go"), both},
+		{b("android-amd64-emu", "mobile"), both},
 		{b("android-amd64-emu", "crypto"), both},
 		{b("android-amd64-emu", "net"), both},
 		{b("android-amd64-emu", "sync"), both},
@@ -439,10 +433,6 @@ func TestBuilderConfig(t *testing.T) {
 
 		{b("android-386-emu", "go"), onlyPost},
 		{b("android-386-emu", "mobile"), onlyPost},
-		{b("android-386-emu", "mobile@1.10"), none},
-		{b("android-386-emu@go1.10", "mobile"), none},
-		{b("android-386-emu@go1.13", "mobile"), onlyPost},
-		{b("android-386-emu", "mobile@1.13"), onlyPost},
 
 		{b("linux-amd64", "net"), both},
 		{b("linux-amd64", "net@1.12"), both},
@@ -658,12 +648,12 @@ func TestBuilderConfig(t *testing.T) {
 
 		{b("dragonfly-amd64", "go"), onlyPost},
 		{b("dragonfly-amd64", "net"), onlyPost},
-		{b("dragonfly-amd64@go1.13", "net"), none}, // Dragonfly ABI changes only supported by Go 1.14+
-		{b("dragonfly-amd64@go1.13", "go"), none},  // Dragonfly ABI changes only supported by Go 1.14+
+		{b("dragonfly-amd64@go1.18", "net"), onlyPost}, // Dragonfly ABI changes supported by Go 1.14+
+		{b("dragonfly-amd64@go1.18", "go"), onlyPost},  // Dragonfly ABI changes supported by Go 1.14+
 
 		{b("linux-amd64-staticlockranking", "go"), onlyPost},
-		{b("linux-amd64-staticlockranking@go1.15", "go"), onlyPost},
-		{b("linux-amd64-staticlockranking@go1.14", "go"), none},
+		{b("linux-amd64-staticlockranking@go1.18", "go"), onlyPost},
+		{b("linux-amd64-staticlockranking@go1.17", "go"), onlyPost},
 		{b("linux-amd64-staticlockranking", "net"), none},
 
 		{b("linux-amd64-unified", "go"), both},
