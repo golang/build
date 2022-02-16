@@ -1835,10 +1835,9 @@ func init() {
 		Notes: "Runs GOOS=linux but with the Android emulator attached, for running x/mobile host tests.",
 	})
 	addBuilder(BuildConfig{
-		Name:       "linux-amd64-stretch",
-		HostType:   "host-linux-stretch",
-		Notes:      "Debian Stretch. Same as the normal 'linux-amd64' builder at this time, but with -stretch suffix. Used for release builds.",
-		buildsRepo: disabledBuilder, // Disabled because the "linux-amd64" builder does identical work.
+		Name:     "linux-amd64-stretch",
+		HostType: "host-linux-stretch",
+		Notes:    "Debian Stretch.",
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
