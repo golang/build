@@ -518,3 +518,105 @@ func TestMergeOwnersEntries(t *testing.T) {
 		}
 	}
 }
+
+func TestFilterGerritOwners(t *testing.T) {
+	var (
+		andybons  = owners.Owner{GitHubUsername: "andybons", GerritEmail: "andybons@golang.org"}
+		bradfitz  = owners.Owner{GitHubUsername: "bradfitz", GerritEmail: "bradfitz@golang.org"}
+		toolsTeam = owners.Owner{GitHubUsername: "golang/tools-team"}
+	)
+	testCases := []struct {
+		name    string
+		entries []*owners.Entry
+		want    []*owners.Entry
+	}{
+		{
+			name:    "no entries",
+			entries: nil,
+			want:    []*owners.Entry{},
+		},
+		{
+			name: "all valid",
+			entries: []*owners.Entry{
+				{Primary: []owners.Owner{andybons}},
+				{Primary: []owners.Owner{bradfitz}},
+			},
+			want: []*owners.Entry{
+				{Primary: []owners.Owner{andybons}},
+				{Primary: []owners.Owner{bradfitz}},
+			},
+		},
+		{
+			name: "drop primary",
+			entries: []*owners.Entry{
+				{Primary: []owners.Owner{andybons, toolsTeam}},
+				{Primary: []owners.Owner{toolsTeam, bradfitz}},
+			},
+			want: []*owners.Entry{
+				{Primary: []owners.Owner{andybons}},
+				{Primary: []owners.Owner{bradfitz}},
+			},
+		},
+		{
+			name: "drop secondary",
+			entries: []*owners.Entry{
+				{
+					Primary:   []owners.Owner{andybons},
+					Secondary: []owners.Owner{bradfitz, toolsTeam},
+				},
+				{
+					Primary:   []owners.Owner{bradfitz},
+					Secondary: []owners.Owner{toolsTeam, andybons},
+				},
+			},
+			want: []*owners.Entry{
+				{
+					Primary:   []owners.Owner{andybons},
+					Secondary: []owners.Owner{bradfitz},
+				},
+				{
+					Primary:   []owners.Owner{bradfitz},
+					Secondary: []owners.Owner{andybons},
+				},
+			},
+		},
+		{
+			name: "upgrade secondary",
+			entries: []*owners.Entry{
+				{
+					Primary:   []owners.Owner{toolsTeam},
+					Secondary: []owners.Owner{bradfitz},
+				},
+			},
+			want: []*owners.Entry{
+				{
+					Primary: []owners.Owner{bradfitz},
+				},
+			},
+		},
+		{
+			name: "no primary",
+			entries: []*owners.Entry{
+				{
+					Secondary: []owners.Owner{bradfitz},
+				},
+			},
+			want: []*owners.Entry{
+				{
+					Primary: []owners.Owner{bradfitz},
+				},
+			},
+		},
+	}
+	cmpFn := func(a, b owners.Owner) bool {
+		return a.GitHubUsername < b.GitHubUsername
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := filterGerritOwners(tc.entries)
+			if diff := cmp.Diff(got, tc.want, cmpopts.SortSlices(cmpFn)); diff != "" {
+				t.Errorf("final entry results differ: (-got, +want)\n%s", diff)
+			}
+		})
+	}
+}

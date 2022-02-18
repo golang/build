@@ -2044,6 +2044,9 @@ func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 				return nil
 			}
 
+			// Remove owners that can't be reviewers.
+			entries = filterGerritOwners(entries)
+
 			authorEmail := cl.Commit.Author.Email()
 			merged := mergeOwnersEntries(entries, authorEmail)
 			if len(merged.Primary) == 0 && len(merged.Secondary) == 0 {
@@ -2504,6 +2507,35 @@ func mergeOwnersEntries(entries []*owners.Entry, authorEmail string) *owners.Ent
 		}
 	}
 	return &result
+}
+
+// filterGerritOwners removes all primary and secondary owners from entries
+// that are missing GerritEmail, and thus cannot be Gerrit reviewers (e.g.,
+// GitHub Teams).
+//
+// If an Entry's primary reviewers is empty after this process, the secondary
+// owners are upgraded to primary.
+func filterGerritOwners(entries []*owners.Entry) []*owners.Entry {
+	result := make([]*owners.Entry, 0, len(entries))
+	for _, e := range entries {
+		var clean owners.Entry
+		for _, owner := range e.Primary {
+			if owner.GerritEmail != "" {
+				clean.Primary = append(clean.Primary, owner)
+			}
+		}
+		for _, owner := range e.Secondary {
+			if owner.GerritEmail != "" {
+				clean.Secondary = append(clean.Secondary, owner)
+			}
+		}
+		if len(clean.Primary) == 0 {
+			clean.Primary = clean.Secondary
+			clean.Secondary = nil
+		}
+		result = append(result, &clean)
+	}
+	return result
 }
 
 func blockqoute(s string) string {
