@@ -10,6 +10,25 @@ import (
 	"golang.org/x/build/internal/gophers"
 )
 
+func TestPersonName(t *testing.T) {
+	for _, tt := range []struct {
+		id   string
+		want string
+	}{
+		{id: "@golang/tools-team", want: "Tools Team"},
+	} {
+		p := gophers.GetPerson(tt.id)
+		if p == nil {
+			t.Errorf("no person with id %q", tt.id)
+			continue
+		}
+		got := p.Name
+		if got != tt.want {
+			t.Errorf("person with id %q now has name %q but used to have %q; is that change intentional?", tt.id, got, tt.want)
+		}
+	}
+}
+
 // Test that a few people whose Gerrit emails have been broken
 // in the past still have the expected Gerrit email. This test
 // is mostly needed until golang.org/issue/34259 is resolved.
@@ -37,6 +56,12 @@ func TestGerritEmail(t *testing.T) {
 		{id: "Sebastien Binet", want: "seb.binet@gmail.com"},
 		{id: "Tobias Klauser", want: "tobias.klauser@gmail.com"},
 		{id: "Vitor De Mario", want: "vitordemario@gmail.com"},
+
+		// We're still figuring out how to handle teams.
+		// At this time their Gerrit email is unset.
+		{id: "Fuzzing Team", want: ""},
+		{id: "Pkgsite Team", want: ""},
+		{id: "Tools Team", want: ""},
 	} {
 		p := gophers.GetPerson(tt.id)
 		if p == nil {
