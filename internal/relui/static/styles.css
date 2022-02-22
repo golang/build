@@ -43,14 +43,12 @@ h6 {
 }
 .Header {
   padding: 0.625rem;
+  background: #d6d6d6;
+  color: #171d27;
 }
 .Site-header--production .Header {
   background: #e0ebf5;
   color: #375eab;
-}
-.Site-header--workInProgress .Header {
-  background: #d6d6d6;
-  color: #171d27;
 }
 .Header-title {
   font-size: 1.5rem;

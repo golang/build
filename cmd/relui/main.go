@@ -14,19 +14,29 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/relui"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/task"
 )
 
 var (
-	baseURL     = flag.String("base-url", "", "Prefix URL for routing and links.")
+	baseURL       = flag.String("base-url", "", "Prefix URL for routing and links.")
+	siteTitle     = flag.String("site-title", "Go Releases", "Site title.")
+	siteHeaderCSS = flag.String("site-header-css", "", "Site header CSS class name. Can be used to pick a look for the header.")
+
 	downUp      = flag.Bool("migrate-down-up", false, "Run all Up migration steps, then the last down migration step, followed by the final up migration. Exits after completion.")
 	migrateOnly = flag.Bool("migrate-only", false, "Exit after running migrations. Migrations are run by default.")
 	pgConnect   = flag.String("pg-connect", "", "Postgres connection string or URI. If empty, libpq connection defaults are used.")
 )
 
 func main() {
+	if err := secret.InitFlagSupport(context.Background()); err != nil {
+		log.Fatalln(err)
+	}
+	var twitterAPI secret.TwitterCredentials
+	secret.JSONVarFlag(&twitterAPI, "twitter-api-secret", "Twitter API secret to use for workflows involving tweeting.")
 	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
+
 	ctx := context.Background()
 	if err := relui.InitDB(ctx, *pgConnect); err != nil {
 		log.Fatalf("relui.InitDB() = %v", err)
@@ -47,13 +57,12 @@ func main() {
 	// Keep these appropriately in sync.
 	var (
 		siteHeader = relui.SiteHeader{
-			Title:    "Go Releases (work in progress)",
-			CSSClass: "Site-header--workInProgress",
+			Title:    *siteTitle,
+			CSSClass: *siteHeaderCSS,
 		}
 		extCfg = task.ExternalConfig{
-			// TODO(go.dev/issue/51122): Once secrets are available from prod deployment and we're ready, pass them here.
 			// TODO(go.dev/issue/51150): When twitter client creation is factored out from task package, update code here.
-			DryRun: true,
+			TwitterAPI: twitterAPI,
 		}
 	)
 

@@ -25,6 +25,10 @@ spec:
             - "./relui"
             - "--listen-https-selfsigned=:444"
             - "--base-url=https://build.golang.org/releases"
+            # Define the site header and external service configuration.
+            - "--site-title=Go Releases"
+            - "--site-header-css=Site-header--production"
+            - "--twitter-api-secret=secret:symbolic-datum-552/twitter-api-secret"
           ports:
             - containerPort: 444
           env:
