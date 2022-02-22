@@ -205,7 +205,16 @@ var indexCache struct {
 	err  error
 }
 
-var indexTmpl = template.Must(template.New("index").Parse(`<!DOCTYPE html>
+var indexTmpl = template.Must(template.New("index").Funcs(template.FuncMap{
+	"githubURL": func(githubUsername string) string {
+		if i := strings.Index(githubUsername, "/"); i != -1 {
+			// A GitHub team like "{org}/{team}".
+			org, team := githubUsername[:i], githubUsername[i+len("/"):]
+			return "https://github.com/orgs/" + org + "/teams/" + team
+		}
+		return "https://github.com/" + githubUsername
+	},
+}).Parse(`<!DOCTYPE html>
 <html lang="en">
 <title>Go Code Owners</title>
 <meta name=viewport content="width=device-width, initial-scale=1">
@@ -261,12 +270,12 @@ body {
 		<span class="path">{{$path}}</span>
 		<span class="primary">
 			{{range .Primary}}
-				<a href="https://github.com/{{.GitHubUsername}}" target="_blank" rel="noopener">@{{.GitHubUsername}}</a>
+				<a href="{{githubURL .GitHubUsername}}" target="_blank" rel="noopener">@{{.GitHubUsername}}</a>
 			{{end}}
 		</span>
 		<span class="secondary">
 			{{range .Secondary}}
-				<a href="https://github.com/{{.GitHubUsername}}" target="_blank" rel="noopener">@{{.GitHubUsername}}</a>
+				<a href="{{githubURL .GitHubUsername}}" target="_blank" rel="noopener">@{{.GitHubUsername}}</a>
 			{{end}}
 		</span>
 	</div>
