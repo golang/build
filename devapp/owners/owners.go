@@ -7,10 +7,12 @@ package owners
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"golang.org/x/build/repos"
 )
@@ -160,33 +162,48 @@ func translatePath(path string) string {
 
 // translateOwnersPaths returns a copy of entries with all its keys
 // adjusted for better readability on https://dev.golang.org/owners.
-//
-// Panics if the translation causes a collision between keys.
-func translateOwnersPaths() map[string]*Entry {
+func translateOwnersPaths() (map[string]*Entry, error) {
 	tm := make(map[string]*Entry)
 	for path, entry := range entries {
 		tPath := translatePath(path)
 		if _, ok := tm[tPath]; ok {
-			panic("path translation creates duplicates")
+			return nil, fmt.Errorf("path translation of %q creates a duplicate entry %q", path, tPath)
 		}
 		tm[tPath] = entry
 	}
-	return tm
+	return tm, nil
 }
 
 func serveIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	var buf bytes.Buffer
-	if err := indexTmpl.Execute(&buf, displayEntries); err != nil {
-		log.Printf("unable to execute index template: %v", err)
+	indexCache.once.Do(func() {
+		displayEntries, err := translateOwnersPaths()
+		if err != nil {
+			indexCache.err = err
+			return
+		}
+		var buf bytes.Buffer
+		indexCache.err = indexTmpl.Execute(&buf, displayEntries)
+		indexCache.html = buf.Bytes()
+	})
+	if indexCache.err != nil {
+		log.Printf("unable to serve index page HTML: %v", indexCache.err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	w.Write(buf.Bytes())
+	w.Write(indexCache.html)
 }
 
-var displayEntries = translateOwnersPaths()
+// indexCache is a cache of the owners index page HTML.
+//
+// As long as the owners are defined at package initialization time
+// and not modified at runtime, the HTML doesn't change per request.
+var indexCache struct {
+	once sync.Once
+	html []byte // Page HTML rendered by indexTmpl.
+	err  error
+}
 
 var indexTmpl = template.Must(template.New("index").Parse(`<!DOCTYPE html>
 <html lang="en">
