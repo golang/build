@@ -827,6 +827,6 @@ var wasmOwners = &Entry{
 }
 
 var modProxyOwners = &Entry{
-	Primary:   []Owner{katie, heschi, hyangah},
-	Secondary: []Owner{findleyr},
+	Primary:   []Owner{toolsTeam},
+	Secondary: []Owner{suzmue, heschi, findleyr, hyangah},
 }
