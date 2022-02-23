@@ -167,3 +167,22 @@ func TestAllocs(t *testing.T) {
 		t.Fatalf("unexpected %v allocation(s)", got)
 	}
 }
+
+func TestGo1PointX(t *testing.T) {
+	tests := []struct {
+		goVer string
+		wantX int
+	}{
+		{"go1.9", 9},
+		{"go1.16beta1", 16},
+		{"go1.16rc1", 16},
+		{"go1.16", 16},
+		{"go1.16.1", 16},
+	}
+	for _, tt := range tests {
+		x, ok := Go1PointX(tt.goVer)
+		if !ok || x != tt.wantX {
+			t.Errorf("Go1PointX(%q) = %v, %v, want %v, true", tt.goVer, x, ok, tt.wantX)
+		}
+	}
+}

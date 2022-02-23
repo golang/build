@@ -31,6 +31,8 @@ import (
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/releasetargets"
+	"golang.org/x/build/maintner/maintnerd/maintapi/version"
 )
 
 //go:embed releaselet/releaselet.go
@@ -42,10 +44,10 @@ var (
 
 	stagingDir = flag.String("staging_dir", "", "If specified, use this as the staging directory for untested release artifacts. Default is the system temporary directory.")
 
-	rev       = flag.String("rev", "", "Go revision to build")
-	version   = flag.String("version", "", "Version string (go1.5.2)")
-	user      = flag.String("user", username(), "coordinator username, appended to 'user-'")
-	skipTests = flag.Bool("skip_tests", false, "skip tests; run make.bash but not all.bash (only use if sufficient testing was done elsewhere)")
+	rev         = flag.String("rev", "", "Go revision to build")
+	flagVersion = flag.String("version", "", "Version string (go1.5.2)")
+	user        = flag.String("user", username(), "coordinator username, appended to 'user-'")
+	skipTests   = flag.Bool("skip_tests", false, "skip tests; run make.bash but not all.bash (only use if sufficient testing was done elsewhere)")
 
 	uploadMode = flag.Bool("upload", false, "Upload files (exclusive to all other flags)")
 )
@@ -71,7 +73,7 @@ func main() {
 	if *rev == "" {
 		log.Fatal("must specify -rev")
 	}
-	if *version == "" {
+	if *flagVersion == "" {
 		log.Fatal(`must specify -version flag (such as "go1.12" or "go1.13beta1")`)
 	}
 
@@ -80,12 +82,13 @@ func main() {
 
 	var wg sync.WaitGroup
 	matches := 0
-	for _, b := range builds {
+	targets, ok := releasetargets.TargetsForVersion(*flagVersion)
+	if !ok {
+		log.Fatalf("Unknown version %q", *flagVersion)
+	}
+	for _, b := range targetsToBuilds(targets) {
 		b := b
 		if *target != "" && b.String() != *target {
-			continue
-		}
-		if !match(b.GoQuery, *version) {
 			continue
 		}
 		matches++
@@ -106,11 +109,38 @@ func main() {
 	wg.Wait()
 }
 
-type Build struct {
-	// GoQuery is a Go version query specifying the Go versions
-	// the build applies to. Empty string means all Go versions.
-	GoQuery string
+func targetsToBuilds(targets releasetargets.ReleaseTargets) []*Build {
+	builds := []*Build{
+		{
+			Source:  true,
+			Builder: "linux-amd64",
+		},
+	}
+	for _, target := range targets {
+		build := &Build{
+			OS:        target.GOOS,
+			Arch:      target.GOARCH,
+			Race:      target.Race,
+			Builder:   target.Builder,
+			SkipTests: target.BuildOnly,
+		}
+		if target.GOOS == "linux" && target.GOARCH == "arm" {
+			build.Goarm = 6
+		}
+		builds = append(builds, build)
+		if target.LongTestBuilder != "" {
+			builds = append(builds, &Build{
+				OS:       target.GOOS,
+				Arch:     target.GOARCH,
+				Builder:  target.LongTestBuilder,
+				TestOnly: true,
+			})
+		}
+	}
+	return builds
+}
 
+type Build struct {
 	OS, Arch string
 	Source   bool
 
@@ -144,169 +174,6 @@ func (b *Build) pkgDir() string  { return "go/pkg/" + b.OS + "_" + b.Arch }
 func (b *Build) logf(format string, args ...interface{}) {
 	format = fmt.Sprintf("%v: %s", b, format)
 	log.Printf(format, args...)
-}
-
-var builds = []*Build{
-	{
-		Source:  true,
-		Builder: "linux-amd64",
-	},
-	{
-		OS:      "linux",
-		Arch:    "386",
-		Builder: "linux-386-stretch",
-	},
-	{
-		OS:      "linux",
-		Arch:    "arm",
-		Builder: "linux-arm-aws",
-		Goarm:   6, // For compatibility with all Raspberry Pi models.
-	},
-	{
-		OS:      "linux",
-		Arch:    "amd64",
-		Race:    true,
-		Builder: "linux-amd64-stretch", // Using Stretch as of Go 1.16 because Jessie LTS has ended (golang.org/issue/40561#issuecomment-731482962).
-	},
-	{
-		OS:      "linux",
-		Arch:    "arm64",
-		Builder: "linux-arm64-aws",
-	},
-	{
-		GoQuery: ">= go1.18beta1", // See #40561.
-		OS:      "freebsd",
-		Arch:    "386",
-		Builder: "freebsd-386-12_3",
-	},
-	{
-		GoQuery: ">= go1.18beta1", // See #40561.
-		OS:      "freebsd",
-		Arch:    "amd64",
-		Race:    true,
-		Builder: "freebsd-amd64-12_3",
-	},
-	{
-		GoQuery: ">= go1.17beta1 && < go1.18beta1", // See #45727.
-		OS:      "freebsd",
-		Arch:    "386",
-		Builder: "freebsd-386-11_4",
-	},
-	{
-		GoQuery: ">= go1.17beta1 && < go1.18beta1", // See #45727.
-		OS:      "freebsd",
-		Arch:    "amd64",
-		Race:    true,
-		Builder: "freebsd-amd64-11_4",
-	},
-	{
-		OS:      "windows",
-		Arch:    "386",
-		Builder: "windows-386-2008",
-	},
-	{
-		OS:      "windows",
-		Arch:    "amd64",
-		Race:    true,
-		Builder: "windows-amd64-2008",
-	},
-	{
-		GoQuery: ">= go1.17beta1 && < go1.18beta1", // Go 1.17 Beta 1 is the first Go (pre-)release with the windows/arm64 port.
-		OS:      "windows",
-		Arch:    "arm64",
-		Race:    false, // Not supported as of 2021-06-01.
-		Builder: "windows-arm64-10",
-	},
-	{
-		GoQuery: ">= go1.18beta1", // Go 1.17 Beta 1 is the first Go (pre-)release with the windows/arm64 port.
-		OS:      "windows",
-		Arch:    "arm64",
-		Race:    false, // Not supported as of 2021-06-01.
-		Builder: "windows-arm64-11",
-	},
-	{
-		GoQuery: ">= go1.18beta1", // Start exercising a macOS 12 releaselet as of Go 1.18 Beta 1; see issue 40561.
-		OS:      "darwin",
-		Arch:    "amd64",
-		Race:    true,
-		Builder: "darwin-amd64-12_0",
-	},
-	{
-		GoQuery: ">= go1.18beta1", // Start exercising a macOS 12 releaselet as of Go 1.18 Beta 1; see issue 40561.
-		OS:      "darwin",
-		Arch:    "arm64",
-		Race:    true,
-		Builder: "darwin-arm64-12_0-toothrot",
-	},
-	{
-		OS:        "linux",
-		Arch:      "s390x",
-		SkipTests: true,
-		Builder:   "linux-s390x-crosscompile",
-	},
-	// TODO(bradfitz): switch this ppc64 builder to a Kubernetes
-	// container cross-compiling ppc64 like the s390x one? For
-	// now, the ppc64le builders (5) are back, so let's see if we
-	// can just depend on them not going away.
-	{
-		OS:        "linux",
-		Arch:      "ppc64le",
-		SkipTests: true,
-		Builder:   "linux-ppc64le-buildlet",
-	},
-
-	// Older builds.
-	{
-		GoQuery: "< go1.17beta1", // See #40563.
-		OS:      "freebsd",
-		Arch:    "386",
-		Builder: "freebsd-386-11_2",
-	},
-	{
-		GoQuery: "< go1.17beta1", // See #40563.
-		OS:      "freebsd",
-		Arch:    "amd64",
-		Race:    true,
-		Builder: "freebsd-amd64-11_2",
-	},
-	{
-		GoQuery: ">= go1.17beta1 && < go1.18beta1",
-		OS:      "darwin",
-		Arch:    "amd64",
-		Race:    true,
-		Builder: "darwin-amd64-11_0",
-	},
-	{
-		GoQuery: "< go1.17beta1", // See golang/go#46161.
-		OS:      "darwin",
-		Arch:    "amd64",
-		Race:    true,
-		Builder: "darwin-amd64-10_15",
-	},
-	{
-		GoQuery: "< go1.18beta1", // Go 1.17 and 1.16 still use macOS 11. See issue 49889.
-		OS:      "darwin",
-		Arch:    "arm64",
-		Race:    true,
-		Builder: "darwin-arm64-11_0-toothrot",
-	},
-
-	// Test-only builds.
-	{
-		Builder: "linux-386-longtest",
-		OS:      "linux", Arch: "386",
-		TestOnly: true,
-	},
-	{
-		Builder: "linux-amd64-longtest",
-		OS:      "linux", Arch: "amd64",
-		TestOnly: true,
-	},
-	{
-		Builder: "windows-amd64-longtest",
-		OS:      "windows", Arch: "amd64",
-		TestOnly: true,
-	},
 }
 
 var preBuildCleanFiles = []string{
@@ -375,7 +242,7 @@ func (b *Build) make() error {
 
 	// Write out version file.
 	b.logf("Writing VERSION file.")
-	if err := client.Put(ctx, strings.NewReader(*version), "go/VERSION", 0644); err != nil {
+	if err := client.Put(ctx, strings.NewReader(*flagVersion), "go/VERSION", 0644); err != nil {
 		return err
 	}
 
@@ -398,7 +265,7 @@ func (b *Build) make() error {
 			return fmt.Errorf("verifying file permissions: %v", err)
 		}
 
-		finalFilename := *version + "." + b.String() + ".tar.gz"
+		finalFilename := *flagVersion + "." + b.String() + ".tar.gz"
 		return b.fetchTarball(ctx, client, finalFilename)
 	}
 
@@ -416,7 +283,7 @@ func (b *Build) make() error {
 
 	// Issues #36025 #35459
 	if b.OS == "darwin" && b.Arch == "amd64" {
-		minMacVersion := minSupportedMacOSVersion(*version)
+		minMacVersion := minSupportedMacOSVersion(*flagVersion)
 		env = append(env, fmt.Sprintf("CGO_CFLAGS=-mmacosx-version-min=%s", minMacVersion))
 	}
 
@@ -559,7 +426,7 @@ func (b *Build) make() error {
 		}
 	}
 	stagingFile := func(ext string) string {
-		return filepath.Join(stagingDir, *version+"."+b.String()+ext+".untested")
+		return filepath.Join(stagingDir, *flagVersion+"."+b.String()+ext+".untested")
 	}
 
 	if !b.TestOnly && b.OS == "windows" {
@@ -569,7 +436,7 @@ func (b *Build) make() error {
 		}
 		releases = append(releases, releaseFile{
 			Untested: untested,
-			Final:    *version + "." + b.String() + ".msi",
+			Final:    *flagVersion + "." + b.String() + ".msi",
 		})
 	}
 
@@ -606,7 +473,7 @@ func (b *Build) make() error {
 		}
 		releases = append(releases, releaseFile{
 			Untested: untested,
-			Final:    *version + "." + b.String() + ".tar.gz",
+			Final:    *flagVersion + "." + b.String() + ".tar.gz",
 		})
 	case !b.TestOnly && b.OS == "windows":
 		untested := stagingFile(".zip")
@@ -615,7 +482,7 @@ func (b *Build) make() error {
 		}
 		releases = append(releases, releaseFile{
 			Untested: untested,
-			Final:    *version + "." + b.String() + ".zip",
+			Final:    *flagVersion + "." + b.String() + ".zip",
 		})
 	case b.TestOnly:
 		// Use an empty .test-only file to indicate the test outcome.
@@ -628,7 +495,7 @@ func (b *Build) make() error {
 		}
 		releases = append(releases, releaseFile{
 			Untested: untested,
-			Final:    *version + "." + b.String() + ".test-only",
+			Final:    *flagVersion + "." + b.String() + ".test-only",
 		})
 	}
 
@@ -962,39 +829,16 @@ func setGOARCH(env []string, goarch string) []string {
 // minSupportedMacOSVersion provides the minimum supported macOS
 // version (of the form N.M) for supported Go versions.
 func minSupportedMacOSVersion(goVer string) string {
-	// TODO(amedee,dmitshur,golang.org/issue/40558): Use a version package to compare versions of Go.
-
 	// The minimum supported version of macOS with each version of go:
 	// go1.16 - macOS 10.12
 	// go1.17 - macOS 10.13
 	// go1.18 - macOS 10.13
-	minMacVersion := "10.13"
-	if match("< go1.17beta1", goVer) {
-		minMacVersion = "10.12"
-		return minMacVersion
+	x, ok := version.Go1PointX(goVer)
+	if !ok {
+		panic(fmt.Sprintf("could not parse version %v", goVer))
 	}
-	return minMacVersion
-}
-
-// match reports whether the Go version goVer matches the provided version query.
-// The empty query matches all Go versions.
-// match panics if given a query that it doesn't support.
-func match(query, goVer string) bool {
-	// TODO(golang.org/issue/40558): This should help inform the API for a Go version parser.
-	switch query {
-	case "": // A special case to make the zero Build.GoQuery value useful.
-		return true
-	case ">= go1.18beta1":
-		return !strings.HasPrefix(goVer, "go1.17") && !strings.HasPrefix(goVer, "go1.16")
-	case "< go1.18beta1":
-		return strings.HasPrefix(goVer, "go1.17") || strings.HasPrefix(goVer, "go1.16")
-	case ">= go1.17beta1":
-		return !strings.HasPrefix(goVer, "go1.16")
-	case "< go1.17beta1":
-		return strings.HasPrefix(goVer, "go1.16")
-	case ">= go1.17beta1 && < go1.18beta1":
-		return strings.HasPrefix(goVer, "go1.17")
-	default:
-		panic(fmt.Errorf("match: query %q is not supported", query))
+	if x < 17 {
+		return "10.12"
 	}
+	return "10.13"
 }

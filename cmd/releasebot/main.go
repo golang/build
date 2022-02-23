@@ -30,6 +30,7 @@ import (
 
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/internal/envutil"
+	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
 	"golang.org/x/build/maintner"
@@ -37,37 +38,8 @@ import (
 
 // A Target is a release target.
 type Target struct {
-	// GoQuery is a Go version query specifying the Go versions the
-	// release target applies to. Empty string means all Go versions.
-	GoQuery string
-
 	Name     string // Target name as accepted by cmd/release. For example, "linux-amd64".
 	TestOnly bool   // Run tests only; don't produce a release artifact.
-}
-
-var releaseTargets = []Target{
-	// Source-only target.
-	{Name: "src"},
-
-	// Binary targets.
-	{Name: "linux-386"},
-	{Name: "linux-armv6l"},
-	{Name: "linux-amd64"},
-	{Name: "linux-arm64"},
-	{Name: "freebsd-386"},
-	{Name: "freebsd-amd64"},
-	{Name: "windows-386"},
-	{Name: "windows-amd64"},
-	{Name: "windows-arm64", GoQuery: ">= go1.17beta1"},
-	{Name: "darwin-amd64"},
-	{Name: "darwin-arm64"},
-	{Name: "linux-s390x"},
-	{Name: "linux-ppc64le"},
-
-	// Test-only targets.
-	{Name: "linux-386-longtest", TestOnly: true},
-	{Name: "linux-amd64-longtest", TestOnly: true},
-	{Name: "windows-amd64-longtest", TestOnly: true},
 }
 
 var releaseModes = map[string]bool{
@@ -1001,12 +973,17 @@ func (w *Work) uploadStagingRelease(target Target, out *ReleaseOutput) error {
 // releaseTarget returns a release target with the specified name
 // for the specified Go version.
 func releaseTarget(name, goVer string) (_ Target, ok bool) {
-	for _, t := range releaseTargets {
-		if !match(t.GoQuery, goVer) {
-			continue
-		}
-		if t.Name == name {
-			return t, true
+	targets, ok := releasetargets.TargetsForVersion(goVer)
+	if !ok {
+		return Target{}, false
+	}
+	_, ok = targets[name]
+	if ok {
+		return Target{Name: name}, true
+	}
+	for _, target := range targets {
+		if target.LongTestBuilder == name {
+			return Target{Name: name, TestOnly: true}, true
 		}
 	}
 	return Target{}, false
@@ -1014,29 +991,21 @@ func releaseTarget(name, goVer string) (_ Target, ok bool) {
 
 // matchTargets selects release targets that have a matching
 // GoQuery value for the specified Go version.
-func matchTargets(goVer string) (matched []Target) {
-	for _, t := range releaseTargets {
-		if !match(t.GoQuery, goVer) {
-			continue
+func matchTargets(goVer string) []Target {
+	targets, ok := releasetargets.TargetsForVersion(goVer)
+	if !ok {
+		return nil
+	}
+	matched := []Target{
+		{Name: "src"},
+	}
+	for name, target := range targets {
+		matched = append(matched, Target{Name: name})
+		if target.LongTestBuilder != "" {
+			matched = append(matched, Target{Name: target.LongTestBuilder, TestOnly: true})
 		}
-		matched = append(matched, t)
 	}
 	return matched
-}
-
-// match reports whether the Go version goVer matches the provided version query.
-// The empty query matches all Go versions.
-// match panics if given a query that it doesn't support.
-func match(query, goVer string) bool {
-	// TODO(golang.org/issue/40558): This should help inform the API for a Go version parser.
-	switch query {
-	case "": // A special case to make the zero Target.GoQuery value useful.
-		return true
-	case ">= go1.17beta1":
-		return !strings.HasPrefix(goVer, "go1.16")
-	default:
-		panic(fmt.Errorf("match: query %q is not supported", query))
-	}
 }
 
 // splitLogMessage splits a string into n number of strings of maximum size maxStrLen.

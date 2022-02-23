@@ -116,3 +116,20 @@ func parse0To999(s string) (n int, ok bool) {
 	}
 	return n, true
 }
+
+// Go1PointX returns the second number in a string that looks like a Go
+// version, i.e. X in anything that starts with "go1.X".
+func Go1PointX(version string) (int, bool) {
+	const prefix = "go1."
+	if !strings.HasPrefix(version, prefix) {
+		return 0, false
+	}
+	numberEnd := len(prefix)
+	for ; numberEnd < len(version) && version[numberEnd] >= '0' && version[numberEnd] <= '9'; numberEnd++ {
+	}
+	x, ok := parse0To999(version[len(prefix):numberEnd])
+	if !ok {
+		return 0, false
+	}
+	return x, true
+}
