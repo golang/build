@@ -99,6 +99,7 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64",
 				"linux-amd64-race",
 				"linux-amd64-unified",
+				"linux-amd64-nounified",
 				"linux-arm-aws",
 				"linux-arm64-aws",
 				"openbsd-amd64-68",
@@ -133,6 +134,7 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64",
 				"linux-amd64-race",
 				"linux-amd64-unified",
+				"linux-amd64-nounified",
 				"linux-arm-aws",
 				"linux-arm64-aws",
 				"openbsd-amd64-68",
@@ -662,6 +664,13 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-unified@dev.typeparams", "go"), both},
 		{b("linux-amd64-unified@dev.typeparams", "tools"), both},
 		{b("linux-amd64-unified@dev.typeparams", "net"), none},
+
+		{b("linux-amd64-nounified", "go"), both},
+		{b("linux-amd64-nounified", "tools"), both},
+		{b("linux-amd64-nounified", "net"), none},
+		{b("linux-amd64-nounified@dev.typeparams", "go"), both},
+		{b("linux-amd64-nounified@dev.typeparams", "tools"), both},
+		{b("linux-amd64-nounified@dev.typeparams", "net"), none},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {

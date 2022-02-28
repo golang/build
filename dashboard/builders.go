@@ -1751,6 +1751,26 @@ func init() {
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
+		Name:     "linux-amd64-nounified",
+		HostType: "host-linux-buster",
+		Notes:    "builder with GOEXPERIMENT=nounified, see golang.org/issue/51397",
+		tryBot: func(repo, branch, goBranch string) bool {
+			return (repo == "go" || repo == "tools") && (goBranch == "master" || goBranch == "dev.typeparams")
+		},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return (repo == "go" || repo == "tools") && (goBranch == "master" || goBranch == "dev.typeparams")
+		},
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+			"GOEXPERIMENT=nounified",
+		},
+		GoDeps: []string{
+			"804ecc2581caf33ae347d6a1ce67436d1f74e93b", // CL 328215, which added GOEXPERIMENT=unified on dev.typeparams
+		},
+		numTestHelpers:    1,
+		numTryTestHelpers: 4,
+	})
+	addBuilder(BuildConfig{
 		Name:     "linux-amd64-goamd64v3",
 		HostType: "host-linux-bullseye",
 		Notes:    "builder with GOAMD64=v3, see proposal 45453 and issue 48505",
