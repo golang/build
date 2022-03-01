@@ -514,7 +514,10 @@ func drawTerminal(text string) (image.Image, error) {
 		roundedRect(image.Rect(50, 80, width-50, height-80).Add(image.Point{Y: 20}), 10), image.Point{}, draw.Over)
 
 	// Blur.
-	m = stackblur.Process(m, 80).(*image.NRGBA)
+	m, err = stackblur.Process(m, 80)
+	if err != nil {
+		return nil, err
+	}
 
 	// Terminal.
 	draw.DrawMask(m, m.Bounds(), image.NewUniform(terminalColor), image.Point{},
