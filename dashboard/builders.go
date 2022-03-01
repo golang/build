@@ -1287,8 +1287,9 @@ func buildRepoByDefault(repo string) bool {
 }
 
 var (
-	defaultPlusExp      = defaultPlus("exp")
-	defaultPlusExpBuild = defaultPlus("exp", "build")
+	defaultPlusExp            = defaultPlus("exp")
+	defaultPlusExpBuild       = defaultPlus("exp", "build")
+	defaultPlusExpBuildVulnDB = defaultPlus("exp", "build", "vulndb")
 )
 
 // defaultPlus returns a buildsRepo policy function that returns true for all
@@ -1580,10 +1581,17 @@ func init() {
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386", "GO386=softfloat"},
 	})
 	addBuilder(BuildConfig{
-		Name:       "linux-amd64",
-		HostType:   "host-linux-bullseye",
-		tryBot:     defaultTrySet(),
-		buildsRepo: defaultPlus("exp", "build", "vulndb"),
+		Name:     "linux-amd64",
+		HostType: "host-linux-bullseye",
+		tryBot:   defaultTrySet(),
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			if repo == "vulndb" && atMostGo1(goBranch, 16) {
+				// The vulndb repo is for use only by the Go team,
+				// so it doesn't need to work on older Go versions.
+				return false
+			}
+			return defaultPlusExpBuildVulnDB(repo, branch, goBranch)
+		},
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
