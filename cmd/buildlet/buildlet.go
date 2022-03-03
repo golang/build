@@ -1727,7 +1727,7 @@ func enableMacDeveloperMode() {
 	// that "SampleTools wants to make changes" that block the buildlet from starting.
 	// But oddly, not via gomote. Only during startup. The environment must be different
 	// enough that in one case macOS asks for permission (because it can use the GUI?)
-	// and in the gomote case (where the environment is largley scrubbed) it can't do
+	// and in the gomote case (where the environment is largely scrubbed) it can't do
 	// the GUI dialog somehow and must just try to do it anyway and finds that passwordless
 	// sudo works. But using sudo seems to make it always work.
 	// For extra paranoia, use a context to not block start-up.

@@ -144,7 +144,7 @@ func runDocker() {
 	}
 
 	for i, v := range flag.Args() {
-		// Replace any occurence of REPO with gcr.io/sybolic-datum-552 or
+		// Replace any occurrence of REPO with gcr.io/sybolic-datum-552 or
 		// the staging equivalent. Note that getEnv() is only called if
 		// REPO is already present, so the --prod and --staging flags
 		// aren't required to run "xb docker ..." in general.

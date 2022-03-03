@@ -673,7 +673,7 @@ func (m *gitMirror) subscribeToMaintnerAndTickle() error {
 
 		// prevent retry looping faster than once every 10
 		// seconds; but usually retry immediately in the case
-		// where we've been runing for a while already.
+		// where we've been running for a while already.
 		<-retryTicker.C
 	}
 }

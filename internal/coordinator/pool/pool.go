@@ -91,7 +91,7 @@ func isBuildlet(name string) bool {
 var TestPoolHook func(*dashboard.HostConfig) Buildlet
 
 // ForHost returns the appropriate buildlet depending on the host configuration that is passed it.
-// The returned buildlet can be overriden for testing purposes by registering a test hook.
+// The returned buildlet can be overridden for testing purposes by registering a test hook.
 func ForHost(conf *dashboard.HostConfig) Buildlet {
 	if TestPoolHook != nil {
 		return TestPoolHook(conf)

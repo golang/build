@@ -1530,7 +1530,7 @@ func (st *buildStatus) runTests(helpers <-chan buildlet.Client) (remoteErr, err 
 				// Always include the test header after
 				// metadata changes. This is a readability
 				// optimization that ensures that tests are
-				// always immediately preceeded by their test
+				// always immediately preceded by their test
 				// banner, even if it is duplicate banner
 				// because the test metadata changed.
 				printHeader = true

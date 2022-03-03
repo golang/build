@@ -6,7 +6,7 @@ After=network.target
 [Service]
 User=gopher
 Environment="PATH=/home/gopher/bin:/usr/local/bin:/usr/bin"
-# The following file decalres these variables: GOVC_URL GOVC_USERNAME GOVC_PASSWORD GOVC_INSECURE
+# The following file declares these variables: GOVC_URL GOVC_USERNAME GOVC_PASSWORD GOVC_INSECURE
 EnvironmentFile=/home/gopher/govc_env_file
 ExecStart=/home/gopher/makemac -auto
 Restart=always

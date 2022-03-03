@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // Package workflow declaratively defines computation graphs that support
-// automatic parallelization, persistance, and monitoring.
+// automatic parallelization, persistence, and monitoring.
 //
 // Workflows are a set of tasks that produce and consume Values. Tasks don't
 // run until the workflow is started, so Values represent data that doesn't

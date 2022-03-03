@@ -251,7 +251,7 @@ func watchSerial(zone, name string) {
 }
 
 // awsCredentialsFromSecrets retrieves AWS credentials from the secret management service.
-// This funciton returns the key ID and the access key.
+// This function returns the key ID and the access key.
 func awsCredentialsFromSecrets() (string, string, error) {
 	c, err := secret.NewClient()
 	if err != nil {
