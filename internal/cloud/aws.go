@@ -86,7 +86,7 @@ type Instance struct {
 	CPUCount int64
 	// CreatedAt is the time when the instance was launched.
 	CreatedAt time.Time
-	// Description is a user defined descripton of the instance.
+	// Description is a user defined description of the instance.
 	Description string
 	// ID is the instance ID.
 	ID string

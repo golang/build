@@ -1118,7 +1118,7 @@ func match(query, goVer string) bool {
 }
 
 // splitLogMessage splits a string into n number of strings of maximum size maxStrLen.
-// It naively attempts to split the string along the bounderies of new line characters in order
+// It naively attempts to split the string along the boundaries of new line characters in order
 // to make each individual string as readable as possible.
 func splitLogMessage(s string, maxStrLen int) []string {
 	sl := []string{}

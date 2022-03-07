@@ -28,7 +28,7 @@ import (
 
 var (
 	htmlMode = flag.Bool("html", false, "write HTML output")
-	exclFile = flag.String("exclude-from", "", "optional path to release notes HTML file. If specified, any 'CL NNNN' occurence in the content will cause that CL to be excluded from this tool's output.")
+	exclFile = flag.String("exclude-from", "", "optional path to release notes HTML file. If specified, any 'CL NNNN' occurrence in the content will cause that CL to be excluded from this tool's output.")
 )
 
 // change is a change that was noted via a RELNOTE= comment.

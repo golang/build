@@ -75,7 +75,7 @@ func WithVMDeleteTimeout(timeout time.Duration) EC2Opt {
 type EC2Buildlet struct {
 	// awsClient is the client used to interact with AWS services.
 	awsClient awsClient
-	// buildEnv contains the build enviornment settings.
+	// buildEnv contains the build environment settings.
 	buildEnv *buildenv.Environment
 	// buildletClient is the client used to create a buildlet.
 	buildletClient ec2BuildletClient

@@ -16,7 +16,7 @@ import (
 	"golang.org/x/build/internal/cloud"
 )
 
-// awsClient represents the AWS specific calls made durring the
+// awsClient represents the AWS specific calls made during the
 // lifecycle of a buildlet. This is a partial implementation of the AWSClient found at
 // `golang.org/x/internal/cloud`.
 type awsClient interface {
@@ -45,7 +45,7 @@ func (c *EC2Client) StartNewVM(ctx context.Context, buildEnv *buildenv.Environme
 		return nil, errors.New("TLS keypair is not set")
 	}
 	if buildEnv == nil {
-		return nil, errors.New("invalid build enviornment")
+		return nil, errors.New("invalid build environment")
 	}
 	if hconf == nil {
 		return nil, errors.New("invalid host configuration")

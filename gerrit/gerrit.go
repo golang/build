@@ -1029,7 +1029,7 @@ func (c *Client) GetMergeable(ctx context.Context, changeID, revision string) (M
 }
 
 // ActionInfo contains information about actions a client can make to
-// maniuplate a resource.
+// manipulate a resource.
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#action-info.
 type ActionInfo struct {

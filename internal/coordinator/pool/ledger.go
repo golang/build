@@ -118,7 +118,7 @@ func (l *ledger) releaseResources(instName string) error {
 
 // allocateResources ensures that there is enough CPU to allocate below the CPU Quota
 // for the caller to create a resouce with the numCPU passed in. If there is enough
-// then the ammount of used CPU will increase by the requested ammount. If there is
+// then the amount of used CPU will increase by the requested amount. If there is
 // not enough CPU available, then a false is returned. In the event that CPU is allocated
 // an entry will be added in the entries map for the instance.
 // It also enforces instance type limits.

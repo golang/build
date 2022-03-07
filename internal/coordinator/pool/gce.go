@@ -82,7 +82,7 @@ var (
 	errorsClient    *errorreporting.Client // Stackdriver errors client
 	gkeNodeHostname string
 
-	// values created due to seperating the buildlet pools into a seperate package
+	// values created due to separating the buildlet pools into a separate package
 	gceMode             string
 	deleteTimeout       time.Duration
 	testFiles           map[string]string
@@ -241,7 +241,7 @@ func (c *GCEConfiguration) BuildletPool() *GCEBuildlet {
 	return gcePool
 }
 
-// InStaging returns a boolean denoting if the enviornment is stageing.
+// InStaging returns a boolean denoting if the environment is staging.
 func (c *GCEConfiguration) InStaging() bool {
 	return inStaging
 }

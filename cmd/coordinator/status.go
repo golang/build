@@ -297,7 +297,7 @@ func newGitMirrorChecker() *healthChecker {
 
 func newMacHealthChecker() *healthChecker {
 	var hosts []string
-	const numMacHosts = 8 // physical Mac Pros, not reverse buildlet connections. M1 Macs will be included in seperate checks.
+	const numMacHosts = 8 // physical Mac Pros, not reverse buildlet connections. M1 Macs will be included in separate checks.
 	for i := 1; i <= numMacHosts; i++ {
 		for _, suf := range []string{"a", "b"} {
 			name := fmt.Sprintf("macstadium_host%02d%s", i, suf)
@@ -466,7 +466,7 @@ func reverseHostChecker(hosts []string) func(cw *checkWriter) {
 	// modified due to golang.org/issues/36841
 	// instead of a single lock being held while all of the
 	// operations are performed, there is now a lock held
-	// durring each BuildletLastSeen call and again when
+	// during each BuildletLastSeen call and again when
 	// the buildlet host names are retrieved.
 	return func(cw *checkWriter) {
 		p := pool.ReversePool()
