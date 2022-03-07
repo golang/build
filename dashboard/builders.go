@@ -2490,6 +2490,8 @@ func init() {
 			"GOARCH=arm",
 			"GOARM=6",
 			"GOHOSTARCH=arm",
+			"CGO_CFLAGS=-march=armv6",
+			"CGO_LDFLAGS=-march=armv6",
 		},
 	})
 	addBuilder(BuildConfig{

@@ -428,12 +428,6 @@ func (b *Build) make() error {
 		"GOBIN=",
 	)
 
-	if b.Goarm > 0 {
-		env = append(env, fmt.Sprintf("GOARM=%d", b.Goarm))
-		env = append(env, fmt.Sprintf("CGO_CFLAGS=-march=armv%d", b.Goarm))
-		env = append(env, fmt.Sprintf("CGO_LDFLAGS=-march=armv%d", b.Goarm))
-	}
-
 	// Issues #36025 #35459
 	if b.OS == "darwin" && b.Arch == "amd64" {
 		minMacVersion := minSupportedMacOSVersion(*version)
