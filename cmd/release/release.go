@@ -440,10 +440,6 @@ func (b *Build) make() error {
 		return fmt.Errorf("Build failed: %v\nOutput:\n%v", remoteErr, out)
 	}
 
-	if err := b.checkRelocations(client); err != nil {
-		return err
-	}
-
 	goCmd := path.Join(goDir, "bin/go")
 	if b.OS == "windows" {
 		goCmd += ".exe"
@@ -862,49 +858,6 @@ func (b *Build) writeFile(name string, r io.Reader) error {
 		}
 	}
 	b.logf("Wrote %q.", name)
-	return nil
-}
-
-// checkRelocations runs readelf on pkg/linux_amd64/runtime/cgo.a and makes sure
-// we don't see R_X86_64_REX_GOTPCRELX in new Go 1.15 minor releases.
-// See golang.org/issue/31293 and golang.org/issue/40561#issuecomment-731482962.
-func (b *Build) checkRelocations(client buildlet.Client) error {
-	if b.OS != "linux" || b.Arch != "amd64" || b.TestOnly {
-		// This check is only applicable to linux/amd64 builds.
-		// However, skip it on test-only builds because they
-		// don't produce binaries that are shipped to users.
-		return nil
-	}
-	var out bytes.Buffer
-	file := fmt.Sprintf("go/pkg/linux_%s/runtime/cgo.a", b.Arch)
-	remoteErr, err := client.Exec(context.Background(), "readelf", buildlet.ExecOpts{
-		Output:      &out,
-		Args:        []string{"-r", "--wide", file},
-		SystemLevel: true, // look for readelf in system's PATH
-	})
-	if err != nil {
-		return fmt.Errorf("failed to run readelf: %v", err)
-	}
-	got := out.String()
-	switch {
-	default: // Go 1.16 and newer.
-		// Note: This check was kept and updated for Go 1.16, since it wasn't hard.
-		// Remove it at some point in the future if it becomes no longer useful or
-		// overly expensive to maintain.
-		if strings.Contains(got, "R_X86_64_GOTPCREL") {
-			return fmt.Errorf("%s contained a R_X86_64_GOTPCREL relocation", file)
-		}
-		if !strings.Contains(got, "R_X86_64_REX_GOTPCRELX") {
-			return fmt.Errorf("%s did not contain a R_X86_64_REX_GOTPCRELX relocation; remoteErr=%v, %s", file, remoteErr, got)
-		}
-	case strings.HasPrefix(*version, "go1.15"):
-		if strings.Contains(got, "R_X86_64_REX_GOTPCRELX") {
-			return fmt.Errorf("%s contained a R_X86_64_REX_GOTPCRELX relocation", file)
-		}
-		if !strings.Contains(got, "R_X86_64_GOTPCREL") {
-			return fmt.Errorf("%s did not contain a R_X86_64_GOTPCREL relocation; remoteErr=%v, %s", file, remoteErr, got)
-		}
-	}
 	return nil
 }
 
