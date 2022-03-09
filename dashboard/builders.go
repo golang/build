@@ -98,7 +98,7 @@ var slowBotAliases = map[string]string{
 	"windows-386":          "windows-386-2008",
 	"windows-amd64":        "windows-amd64-2016",
 	"windows-arm":          "windows-arm-zx2c4",
-	"windows-arm64":        "windows-arm64-10",
+	"windows-arm64":        "windows-arm64-11",
 }
 
 // Builders are the different build configurations.
@@ -430,7 +430,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-windows-arm64-zx2c4": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 1,
+		ExpectNum: 0,
 		Owners:    []*gophers.Person{gh("zx2c4")},
 		env:       []string{"GOROOT_BOOTSTRAP=C:\\Program Files (Arm)\\Go"},
 	},
@@ -439,14 +439,14 @@ var Hosts = map[string]*HostConfig{
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-arm64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-windows-arm64-f22ec5.tar.gz",
 		IsReverse:          true,
-		ExpectNum:          6,
+		ExpectNum:          2,
 	},
 	"host-windows11-arm64-mini": &HostConfig{
 		Notes:              "macOS hosting Windows 11 in qemu with HVM acceleration.",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-arm64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-windows-arm64-f22ec5.tar.gz",
 		IsReverse:          true,
-		ExpectNum:          1,
+		ExpectNum:          5,
 	},
 	"host-darwin-10_12": &HostConfig{
 		IsReverse: true,
