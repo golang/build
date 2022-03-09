@@ -38,6 +38,12 @@ const (
 	// NameGobotPassword is the secret name for the gobot@golang.org Gerrit account password.
 	NameGobotPassword = "gobot-password"
 
+	// NameGomoteSSHCAPrivateKey is the secret name for the gomote SSH certificate authority private key.
+	NameGomoteSSHCAPrivateKey = "gomote-ssh-ca-private-key"
+
+	// NameGomoteSSHCAPublicKey is the secret name for the gomote SSH certificate authority public key.
+	NameGomoteSSHCAPublicKey = "gomote-ssh-ca-public-key"
+
 	// NameGomoteSSHPrivateKey is the secret name for the gomote SSH private key.
 	NameGomoteSSHPrivateKey = "gomote-ssh-private-key"
 
