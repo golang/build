@@ -23,6 +23,7 @@ import (
 	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/types"
+	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -38,15 +39,21 @@ type Server struct {
 	// embed the unimplemented server.
 	protos.UnimplementedGomoteServiceServer
 
-	buildlets *remote.SessionPool
-	scheduler scheduler
+	buildlets               *remote.SessionPool
+	scheduler               scheduler
+	sshCertificateAuthority ssh.Signer
 }
 
-// New creates a gomote server.
-func New(rsp *remote.SessionPool, sched *schedule.Scheduler) *Server {
+// New creates a gomote server. If the rawCAPriKey is invalid, the program will exit.
+func New(rsp *remote.SessionPool, sched *schedule.Scheduler, rawCAPriKey []byte) *Server {
+	signer, err := ssh.ParsePrivateKey(rawCAPriKey)
+	if err != nil {
+		log.Fatalf("unable to parse raw certificate authority private key into signer=%s", err)
+	}
 	return &Server{
-		buildlets: rsp,
-		scheduler: sched,
+		buildlets:               rsp,
+		scheduler:               sched,
+		sshCertificateAuthority: signer,
 	}
 }
 
@@ -161,6 +168,7 @@ func (s *Server) InstanceAlive(ctx context.Context, req *protos.InstanceAliveReq
 	return &protos.InstanceAliveResponse{}, nil
 }
 
+// ListDirectory lists the contents of the directory on a gomote instance.
 func (s *Server) ListDirectory(ctx context.Context, req *protos.ListDirectoryRequest) (*protos.ListDirectoryResponse, error) {
 	creds, err := access.IAPFromContext(ctx)
 	if err != nil {
@@ -304,6 +312,28 @@ func (s *Server) RemoveFiles(ctx context.Context, req *protos.RemoveFilesRequest
 		return nil, status.Errorf(codes.Unknown, "unable to remove files")
 	}
 	return &protos.RemoveFilesResponse{}, nil
+}
+
+// SignSSHKey signs the public SSH key with a certificate. The signed public SSH key is intended for use with the gomote service SSH
+// server. It will be signed by the certificate authority of the server and will restrict access to the gomote instance that it was
+// signed for.
+func (s *Server) SignSSHKey(ctx context.Context, req *protos.SignSSHKeyRequest) (*protos.SignSSHKeyResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	session, err := s.session(req.GetGomoteId(), creds.ID)
+	if err != nil {
+		// the helper function returns meaningful GRPC error.
+		return nil, err
+	}
+	signedPublicKey, err := remote.SignPublicSSHKey(ctx, s.sshCertificateAuthority, req.GetPublicSshKey(), session.ID, session.OwnerID, 5*time.Minute)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unable to sign ssh key")
+	}
+	return &protos.SignSSHKeyResponse{
+		SignedPublicSshKey: signedPublicKey,
+	}, nil
 }
 
 // WriteTGZFromURL will instruct the gomote instance to download the tar.gz from the provided URL. The tar.gz file will be unpacked in the work directory

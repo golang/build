@@ -28,8 +28,8 @@ service GomoteService {
   rpc ReadTGZ (ReadTGZRequest) returns (stream ReadTGZResponse) {}
   // RemoveFiles removes files or directories from the gomote instance.
   rpc RemoveFiles (RemoveFilesRequest) returns (RemoveFilesResponse) {}
-  // RetrieveSSHCredentials retrieves the SSH credentials for the specified gomote instance.
-  rpc RetrieveSSHCredentials (RetrieveSSHCredentialsRequest) returns (RetrieveSSHCredentialsResponse) {}
+  // SignSSHKey signs an SSH public key which can be used to SSH into instances owned by the caller.
+  rpc SignSSHKey (SignSSHKeyRequest) returns (SignSSHKeyResponse) {}
   // WriteTGZ expands a tar and zipped file onto the file system of a gomote instance.
   rpc WriteTGZ (stream WriteTGZRequest) returns (WriteTGZResponse) {}
   // WriteTGZFromURL retrieves a tar and zipped file from a URL and expands it onto the file system of a gomote instance.
@@ -174,11 +174,20 @@ message RemoveFilesRequest {
 // RemoveFilesResponse contains the results from removing files or directories from a gomote instance.
 message RemoveFilesResponse {}
 
-// RetrieveSSHCredentialsRequest specifies the data needed to retrieve SSH credentials for a gomote instance.
-message RetrieveSSHCredentialsRequest {}
+// SignSSHKeyRequest specifies the data needed to sign a public SSH key which attaches a certificate to the key.
+message SignSSHKeyRequest {
+  // The unique identifier for a gomote instance.
+  string gomote_id = 1;
+  // A user provided public SSH key which the user intends to initiate an SSH session with.
+  bytes public_ssh_key = 2;
+}
 
-// RetrieveSSHCredentialsResponse contains SSH credentials for a gomote instance.
-message RetrieveSSHCredentialsResponse {}
+// SignSSHKeyResponse contains the results from a request to sign a public SSH key.
+message SignSSHKeyResponse {
+  // A signed SSH key can be used in conjunction with the associated private key to initiate an SSH session to a gomote instance.
+  // The certificate attached to the key will contain principles which restrict the instance that can be logged into.
+  bytes signed_public_ssh_key = 1;
+}
 
 // WriteTGZRequest specifies the data needed to expand a tar and zipped file onto the file system of a gomote instance.
 message WriteTGZRequest {}

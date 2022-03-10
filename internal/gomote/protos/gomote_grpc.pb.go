@@ -36,8 +36,8 @@ type GomoteServiceClient interface {
 	ReadTGZ(ctx context.Context, in *ReadTGZRequest, opts ...grpc.CallOption) (GomoteService_ReadTGZClient, error)
 	// RemoveFiles removes files or directories from the gomote instance.
 	RemoveFiles(ctx context.Context, in *RemoveFilesRequest, opts ...grpc.CallOption) (*RemoveFilesResponse, error)
-	// RetrieveSSHCredentials retrieves the SSH credentials for the specified gomote instance.
-	RetrieveSSHCredentials(ctx context.Context, in *RetrieveSSHCredentialsRequest, opts ...grpc.CallOption) (*RetrieveSSHCredentialsResponse, error)
+	// SignSSHKey signs an SSH public key which can be used to SSH into instances owned by the caller.
+	SignSSHKey(ctx context.Context, in *SignSSHKeyRequest, opts ...grpc.CallOption) (*SignSSHKeyResponse, error)
 	// WriteTGZ expands a tar and zipped file onto the file system of a gomote instance.
 	WriteTGZ(ctx context.Context, opts ...grpc.CallOption) (GomoteService_WriteTGZClient, error)
 	// WriteTGZFromURL retrieves a tar and zipped file from a URL and expands it onto the file system of a gomote instance.
@@ -202,9 +202,9 @@ func (c *gomoteServiceClient) RemoveFiles(ctx context.Context, in *RemoveFilesRe
 	return out, nil
 }
 
-func (c *gomoteServiceClient) RetrieveSSHCredentials(ctx context.Context, in *RetrieveSSHCredentialsRequest, opts ...grpc.CallOption) (*RetrieveSSHCredentialsResponse, error) {
-	out := new(RetrieveSSHCredentialsResponse)
-	err := c.cc.Invoke(ctx, "/protos.GomoteService/RetrieveSSHCredentials", in, out, opts...)
+func (c *gomoteServiceClient) SignSSHKey(ctx context.Context, in *SignSSHKeyRequest, opts ...grpc.CallOption) (*SignSSHKeyResponse, error) {
+	out := new(SignSSHKeyResponse)
+	err := c.cc.Invoke(ctx, "/protos.GomoteService/SignSSHKey", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -276,8 +276,8 @@ type GomoteServiceServer interface {
 	ReadTGZ(*ReadTGZRequest, GomoteService_ReadTGZServer) error
 	// RemoveFiles removes files or directories from the gomote instance.
 	RemoveFiles(context.Context, *RemoveFilesRequest) (*RemoveFilesResponse, error)
-	// RetrieveSSHCredentials retrieves the SSH credentials for the specified gomote instance.
-	RetrieveSSHCredentials(context.Context, *RetrieveSSHCredentialsRequest) (*RetrieveSSHCredentialsResponse, error)
+	// SignSSHKey signs an SSH public key which can be used to SSH into instances owned by the caller.
+	SignSSHKey(context.Context, *SignSSHKeyRequest) (*SignSSHKeyResponse, error)
 	// WriteTGZ expands a tar and zipped file onto the file system of a gomote instance.
 	WriteTGZ(GomoteService_WriteTGZServer) error
 	// WriteTGZFromURL retrieves a tar and zipped file from a URL and expands it onto the file system of a gomote instance.
@@ -316,8 +316,8 @@ func (UnimplementedGomoteServiceServer) ReadTGZ(*ReadTGZRequest, GomoteService_R
 func (UnimplementedGomoteServiceServer) RemoveFiles(context.Context, *RemoveFilesRequest) (*RemoveFilesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveFiles not implemented")
 }
-func (UnimplementedGomoteServiceServer) RetrieveSSHCredentials(context.Context, *RetrieveSSHCredentialsRequest) (*RetrieveSSHCredentialsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RetrieveSSHCredentials not implemented")
+func (UnimplementedGomoteServiceServer) SignSSHKey(context.Context, *SignSSHKeyRequest) (*SignSSHKeyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SignSSHKey not implemented")
 }
 func (UnimplementedGomoteServiceServer) WriteTGZ(GomoteService_WriteTGZServer) error {
 	return status.Errorf(codes.Unimplemented, "method WriteTGZ not implemented")
@@ -509,20 +509,20 @@ func _GomoteService_RemoveFiles_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
-func _GomoteService_RetrieveSSHCredentials_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RetrieveSSHCredentialsRequest)
+func _GomoteService_SignSSHKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SignSSHKeyRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GomoteServiceServer).RetrieveSSHCredentials(ctx, in)
+		return srv.(GomoteServiceServer).SignSSHKey(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/protos.GomoteService/RetrieveSSHCredentials",
+		FullMethod: "/protos.GomoteService/SignSSHKey",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GomoteServiceServer).RetrieveSSHCredentials(ctx, req.(*RetrieveSSHCredentialsRequest))
+		return srv.(GomoteServiceServer).SignSSHKey(ctx, req.(*SignSSHKeyRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -603,8 +603,8 @@ var GomoteService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _GomoteService_RemoveFiles_Handler,
 		},
 		{
-			MethodName: "RetrieveSSHCredentials",
-			Handler:    _GomoteService_RetrieveSSHCredentials_Handler,
+			MethodName: "SignSSHKey",
+			Handler:    _GomoteService_SignSSHKey_Handler,
 		},
 		{
 			MethodName: "WriteTGZFromURL",

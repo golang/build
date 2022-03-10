@@ -19,6 +19,7 @@ import (
 	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/internal/gomote/protos"
+	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/nettest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -26,10 +27,15 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 )
 
-func fakeGomoteServer(ctx context.Context) protos.GomoteServiceServer {
+func fakeGomoteServer(t *testing.T, ctx context.Context) protos.GomoteServiceServer {
+	signer, err := ssh.ParsePrivateKey([]byte(devCertCAPrivate))
+	if err != nil {
+		t.Fatalf("unable to parse raw certificate authority private key into signer=%s", err)
+	}
 	return &Server{
-		buildlets: remote.NewSessionPool(ctx),
-		scheduler: schedule.NewFake(),
+		buildlets:               remote.NewSessionPool(ctx),
+		scheduler:               schedule.NewFake(),
+		sshCertificateAuthority: signer,
 	}
 }
 
@@ -40,7 +46,7 @@ func setupGomoteTest(t *testing.T, ctx context.Context) protos.GomoteServiceClie
 	}
 	sopts := access.FakeIAPAuthInterceptorOptions()
 	s := grpc.NewServer(sopts...)
-	protos.RegisterGomoteServiceServer(s, fakeGomoteServer(ctx))
+	protos.RegisterGomoteServiceServer(s, fakeGomoteServer(t, ctx))
 	go s.Serve(lis)
 
 	// create GRPC client
@@ -149,7 +155,7 @@ func TestCreateInstanceError(t *testing.T) {
 					t.Fatal("stream.Recv = stream, io.EOF; want no EOF")
 				}
 				if got != nil && status.Code(got) != tc.wantCode {
-					t.Fatalf("unexpected error: %s", err)
+					t.Fatalf("unexpected error: %s; want %s", err, tc.wantCode)
 				}
 				return
 			}
@@ -172,7 +178,7 @@ func TestInstanceAlive(t *testing.T) {
 
 func TestInstanceAliveError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call InstanceAlive.
-	// If overrideID is set to true, the test will use a diffrent gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than the
 	// the one created for the test.
 	testCases := []struct {
 		desc       string
@@ -217,7 +223,7 @@ func TestInstanceAliveError(t *testing.T) {
 			}
 			got, err := client.InstanceAlive(tc.ctx, req)
 			if err != nil && status.Code(err) != tc.wantCode {
-				t.Fatalf("unexpected error: %s", err)
+				t.Fatalf("unexpected error: %s; want %s", err, tc.wantCode)
 			}
 			if err == nil {
 				t.Fatalf("client.InstanceAlive(ctx, %v) = %v, nil; want error", req, got)
@@ -240,7 +246,7 @@ func TestListDirectory(t *testing.T) {
 
 func TestListDirectoryError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call ListDirectory.
-	// If overrideID is set to true, the test will use a diffrent gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than the
 	// the one created for the test.
 	testCases := []struct {
 		desc       string
@@ -302,7 +308,7 @@ func TestListDirectoryError(t *testing.T) {
 			}
 			got, err := client.ListDirectory(tc.ctx, req)
 			if err != nil && status.Code(err) != tc.wantCode {
-				t.Fatalf("unexpected error: %s", err)
+				t.Fatalf("unexpected error: %s; want %s", err, tc.wantCode)
 			}
 			if err == nil {
 				t.Fatalf("client.RemoveFiles(ctx, %v) = %v, nil; want error", req, got)
@@ -345,7 +351,7 @@ func TestDestroyInstance(t *testing.T) {
 
 func TestDestroyInstanceError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call DestroyInstance.
-	// If overrideID is set to true, the test will use a diffrent gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than the
 	// the one created for the test.
 	testCases := []struct {
 		desc       string
@@ -392,7 +398,7 @@ func TestDestroyInstanceError(t *testing.T) {
 			}
 			got, err := client.DestroyInstance(tc.ctx, req)
 			if err != nil && status.Code(err) != tc.wantCode {
-				t.Fatalf("unexpected error: %s", err)
+				t.Fatalf("unexpected error: %s; want %s", err, tc.wantCode)
 			}
 			if err == nil {
 				t.Fatalf("client.DestroyInstance(ctx, %v) = %v, nil; want error", req, got)
@@ -524,7 +530,7 @@ func TestRemoveFiles(t *testing.T) {
 
 func TestRemoveFilesError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call RemoveFiles.
-	// If overrideID is set to true, the test will use a diffrent gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than the
 	// the one created for the test.
 	testCases := []struct {
 		desc       string
@@ -581,10 +587,89 @@ func TestRemoveFilesError(t *testing.T) {
 			}
 			got, err := client.RemoveFiles(tc.ctx, req)
 			if err != nil && status.Code(err) != tc.wantCode {
-				t.Fatalf("unexpected error: %s", err)
+				t.Fatalf("unexpected error: %s; want %s", err, tc.wantCode)
 			}
 			if err == nil {
 				t.Fatalf("client.RemoveFiles(ctx, %v) = %v, nil; want error", req, got)
+			}
+		})
+	}
+}
+
+func TestSignSSHKey(t *testing.T) {
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	client := setupGomoteTest(t, context.Background())
+	gomoteID := mustCreateInstance(t, client, fakeIAP())
+	if _, err := client.SignSSHKey(ctx, &protos.SignSSHKeyRequest{
+		GomoteId:     gomoteID,
+		PublicSshKey: []byte(devCertCAPublic),
+	}); err != nil {
+		t.Fatalf("client.SignSSHKey(ctx, req) = response, %s; want no error", err)
+	}
+}
+
+func TestSignSSHKeyError(t *testing.T) {
+	// This test will create a gomote instance and attempt to call SignSSHKey.
+	// If overrideID is set to true, the test will use a different gomoteID than the
+	// the one created for the test.
+	testCases := []struct {
+		desc          string
+		ctx           context.Context
+		overrideID    bool
+		gomoteID      string // Used iff overrideID is true.
+		publickSSHKey []byte
+		wantCode      codes.Code
+	}{
+		{
+			desc:     "unauthenticated request",
+			ctx:      context.Background(),
+			wantCode: codes.Unauthenticated,
+		},
+		{
+			desc:       "missing gomote id",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			overrideID: true,
+			gomoteID:   "",
+			wantCode:   codes.NotFound,
+		},
+		{
+			desc:     "missing public key",
+			ctx:      access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			desc:          "gomote does not exist",
+			ctx:           access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID:    true,
+			gomoteID:      "chucky",
+			publickSSHKey: []byte(devCertCAPublic),
+			wantCode:      codes.NotFound,
+		},
+		{
+			desc:          "wrong gomote id",
+			ctx:           access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID:    false,
+			publickSSHKey: []byte(devCertCAPublic),
+			wantCode:      codes.PermissionDenied,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			client := setupGomoteTest(t, context.Background())
+			gomoteID := mustCreateInstance(t, client, fakeIAP())
+			if tc.overrideID {
+				gomoteID = tc.gomoteID
+			}
+			req := &protos.SignSSHKeyRequest{
+				GomoteId:     gomoteID,
+				PublicSshKey: tc.publickSSHKey,
+			}
+			got, err := client.SignSSHKey(tc.ctx, req)
+			if err != nil && status.Code(err) != tc.wantCode {
+				t.Fatalf("unexpected error: %s; want %s", err, tc.wantCode)
+			}
+			if err == nil {
+				t.Fatalf("client.SignSSHKey(ctx, %v) = %v, nil; want error", req, got)
 			}
 		})
 	}
@@ -605,7 +690,7 @@ func TestWriteTGZFromURL(t *testing.T) {
 
 func TestWriteTGZFromURLError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call TestWriteTGZFromURL.
-	// If overrideID is set to true, the test will use a diffrent gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than the
 	// the one created for the test.
 	testCases := []struct {
 		desc       string
@@ -663,7 +748,7 @@ func TestWriteTGZFromURLError(t *testing.T) {
 			}
 			got, err := client.WriteTGZFromURL(tc.ctx, req)
 			if err != nil && status.Code(err) != tc.wantCode {
-				t.Fatalf("unexpected error: %s", err)
+				t.Fatalf("unexpected error: %s; want %s", err, tc.wantCode)
 			}
 			if err == nil {
 				t.Fatalf("client.WriteTGZFromURL(ctx, %v) = %v, nil; want error", req, got)
@@ -772,3 +857,17 @@ func mustCreateInstance(t *testing.T, client protos.GomoteServiceClient, iap acc
 	}
 	return gomoteID
 }
+
+const (
+	// devCertCAPrivate is a private SSH CA certificate to be used for development.
+	devCertCAPrivate = `-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+QyNTUxOQAAACCVd2FJ3Db/oV53iRDt1RLscTn41hYXbunuCWIlXze2WAAAAJhjy3ePY8t3
+jwAAAAtzc2gtZWQyNTUxOQAAACCVd2FJ3Db/oV53iRDt1RLscTn41hYXbunuCWIlXze2WA
+AAAEALuUJMb/rEaFNa+vn5RejeoBiiViyda7djgEvMnQ8fRJV3YUncNv+hXneJEO3VEuxx
+OfjWFhdu6e4JYiVfN7ZYAAAAE3Rlc3R1c2VyQGdvbGFuZy5vcmcBAg==
+-----END OPENSSH PRIVATE KEY-----`
+
+	// devCertCAPublic is a public SSH CA certificate to be used for development.
+	devCertCAPublic = `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJV3YUncNv+hXneJEO3VEuxxOfjWFhdu6e4JYiVfN7ZY testuser@golang.org`
+)

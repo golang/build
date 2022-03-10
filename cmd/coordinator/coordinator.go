@@ -341,6 +341,7 @@ func main() {
 	if err := loadStatic(); err != nil {
 		log.Printf("Failed to load static resources: %v", err)
 	}
+	sshCA := mustRetrieveSSHCertificateAuthority()
 
 	var opts []grpc.ServerOption
 	if *buildEnvName == "" && *mode != "dev" && metadata.OnGCE() {
@@ -362,7 +363,7 @@ func main() {
 	dashV1 := legacydash.Handler(gce.GoDSClient(), maintnerClient, string(masterKey()), grpcServer)
 	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
-	gomoteServer := gomote.New(remote.NewSessionPool(context.Background()), sched)
+	gomoteServer := gomote.New(remote.NewSessionPool(context.Background()), sched, sshCA)
 	protos.RegisterCoordinatorServer(grpcServer, gs)
 	gomoteprotos.RegisterGomoteServiceServer(grpcServer, gomoteServer)
 	mux.HandleFunc("/", grpcHandlerFunc(grpcServer, handleStatus)) // Serve a status page at farmer.golang.org.
@@ -2213,4 +2214,12 @@ func mustCreateEC2BuildletPool(sc *secret.Client) *pool.EC2Buildlet {
 		log.Fatalf("unable to create EC2 buildlet pool: %s", err)
 	}
 	return ec2Pool
+}
+
+func mustRetrieveSSHCertificateAuthority() (privateKey []byte) {
+	privateKey, _, err := remote.SSHKeyPair()
+	if err != nil {
+		log.Fatalf("unable to create SSH CA cert: %s", err)
+	}
+	return
 }
