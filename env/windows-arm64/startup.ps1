@@ -143,6 +143,7 @@ $buildlet_user = "gopher"
 $buildlet_password = "gopher"
 net user $buildlet_user $buildlet_password /ADD
 net localgroup administrators $buildlet_user /ADD
+Set-LocalUser -Name $buildlet_user -PasswordNeverExpires $true
 
 # Run the bootstrap program on login
 Write-Host "setting stage0 to run on start"
