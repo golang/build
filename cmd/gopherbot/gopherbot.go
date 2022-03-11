@@ -2305,6 +2305,13 @@ func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
 				return nil
 			}
 
+			// Skip this CL if it has the "wait-release" hashtag set.
+			for _, ht := range changeInfo.Hashtags {
+				if ht == "wait-release" {
+					return nil
+				}
+			}
+
 			// Skip this CL if there are any unresolved comment threads.
 			comments, err := b.gerrit.ListChangeComments(ctx, fmt.Sprint(cl.Number))
 			if err != nil {
