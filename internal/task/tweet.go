@@ -217,7 +217,13 @@ func tweetText(r ReleaseTweet, rnd *rand.Rand) (string, error) {
 			ReleaseTweet: r,
 		}
 	} else if strings.Count(r.Version, ".") == 1 { // Major release like "go1.X".
-		name, data = "major", r
+		name, data = "major", struct {
+			Maj string
+			ReleaseTweet
+		}{
+			Maj:          r.Version[len("go"):],
+			ReleaseTweet: r,
+		}
 	} else if strings.Count(r.Version, ".") == 2 { // Minor release like "go1.X.Y".
 		name, data = "minor", struct {
 			Curr, Prev string
@@ -279,7 +285,7 @@ const tweetTextTmpl = `{{define "minor" -}}
 
 
 {{define "major" -}}
-{{emoji "release"}} Go {{.Version}} is released!
+{{emoji "release"}} Go {{.Maj}} is released!
 
 {{with .Security}}{{emoji "security"}} Security: {{.}}{{"\n\n"}}{{end -}}
 

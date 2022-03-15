@@ -128,7 +128,7 @@ go version go1.17rc2 windows/arm64` + "\n",
 				RandomSeed: 123,
 			},
 			wantLog: `tweet text:
-🥳 Go go1.17 is released!
+🥳 Go 1.17 is released!
 
 🔐 Security: Includes a super duper security fix (CVE-123).
 
