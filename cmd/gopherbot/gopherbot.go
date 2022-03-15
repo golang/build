@@ -409,7 +409,11 @@ func gardenIssues(repo *maintner.GitHubRepo) bool {
 	if repo.ID().Owner != "golang" {
 		return false
 	}
-	return repo.ID().Repo == "go" || repo.ID().Repo == "vscode-go"
+	switch repo.ID().Repo {
+	case "go", "vscode-go", "vulndb":
+		return true
+	}
+	return false
 }
 
 func (b *gopherbot) initCorpus() {
