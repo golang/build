@@ -446,7 +446,7 @@ type Instance struct {
 	// Host type for the gomote instance.
 	HostType string `protobuf:"bytes,3,opt,name=host_type,json=hostType,proto3" json:"host_type,omitempty"`
 	// The timestamp for when the builder instance will expire. It is
-	// reprsented in Unix epoch time format.
+	// represented in Unix epoch time format.
 	Expires int64 `protobuf:"varint,4,opt,name=expires,proto3" json:"expires,omitempty"`
 }
 
@@ -1153,8 +1153,8 @@ func (*WriteTGZResponse) Descriptor() ([]byte, []int) {
 	return file_gomote_proto_rawDescGZIP(), []int{22}
 }
 
-// WriteTGZFromURLRequest specifies the data needed retrieve a file and expand it onto the file system of a gomote instance.
-// It instructs the buildlet to download the tar.gz file from the url and write it to directory, a relative directory from the workdir.
+// WriteTGZFromURLRequest specifies the data needed to retrieve a file and expand it onto the file system of a gomote instance.
+// It instructs the buildlet to download the tar.gz file from the url and write it to a directory, a relative directory from the workdir.
 // If the directory is empty, they're placed at the root of the buildlet's work directory.
 // The directory is created if necessary.
 // The url must be of a tar.gz file.

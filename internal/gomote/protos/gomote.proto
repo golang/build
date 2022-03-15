@@ -10,7 +10,7 @@ option go_package = "golang.org/x/build/internal/gomote/protos";
 
 // GomoteService can manage the lifecycle of gomote instances and interact with them.
 service GomoteService {
-  // Authenticate provides authentication information without any additonal action.
+  // Authenticate provides authentication information without any additional action.
   rpc Authenticate (AuthenticateRequest) returns (AuthenticateResponse) {}
   // CreateInstance creates a gomote instance.
   rpc CreateInstance (CreateInstanceRequest) returns (stream CreateInstanceResponse) {}
@@ -24,15 +24,15 @@ service GomoteService {
   rpc ListDirectory (ListDirectoryRequest) returns (ListDirectoryResponse) {}
   // ListInstances lists all of the live gomote instances owned by the caller.
   rpc ListInstances (ListInstancesRequest) returns (ListInstancesResponse) {}
-  // ReadTGZ tars and zips a dicrectory which exists on the gomote instance.
+  // ReadTGZ tars and zips a directory which exists on the gomote instance.
   rpc ReadTGZ (ReadTGZRequest) returns (stream ReadTGZResponse) {}
   // RemoveFiles removes files or directories from the gomote instance.
   rpc RemoveFiles (RemoveFilesRequest) returns (RemoveFilesResponse) {}
   // RetrieveSSHCredentials retrieves the SSH credentials for the specified gomote instance.
   rpc RetrieveSSHCredentials (RetrieveSSHCredentialsRequest) returns (RetrieveSSHCredentialsResponse) {}
-  // WriteTGZ expands a tar and ziped file onto the file system of a gomote instance.
+  // WriteTGZ expands a tar and zipped file onto the file system of a gomote instance.
   rpc WriteTGZ (stream WriteTGZRequest) returns (WriteTGZResponse) {}
-  // WriteTGZFromURL retrieves a tar and ziped file from a URL and expands it onto the file system of a gomote instance.
+  // WriteTGZFromURL retrieves a tar and zipped file from a URL and expands it onto the file system of a gomote instance.
   rpc WriteTGZFromURL (WriteTGZFromURLRequest) returns (WriteTGZFromURLResponse) {}
 }
 
@@ -87,7 +87,7 @@ message Instance {
   // Host type for the gomote instance.
   string host_type = 3;
   // The timestamp for when the builder instance will expire. It is
-  // reprsented in Unix epoch time format.
+  // represented in Unix epoch time format.
   int64 expires = 4;
 }
 
@@ -160,8 +160,8 @@ message WriteTGZRequest {}
 // WriteTGZResponse contains the results from expanding a tar and zipped file onto the file system of a gomote instance.
 message WriteTGZResponse {}
 
-// WriteTGZFromURLRequest specifies the data needed retrieve a file and expand it onto the file system of a gomote instance.
-// It instructs the buildlet to download the tar.gz file from the url and write it to directory, a relative directory from the workdir.
+// WriteTGZFromURLRequest specifies the data needed to retrieve a file and expand it onto the file system of a gomote instance.
+// It instructs the buildlet to download the tar.gz file from the url and write it to a directory, a relative directory from the workdir.
 // If the directory is empty, they're placed at the root of the buildlet's work directory.
 // The directory is created if necessary.
 // The url must be of a tar.gz file.

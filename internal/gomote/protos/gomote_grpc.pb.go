@@ -18,7 +18,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type GomoteServiceClient interface {
-	// Authenticate provides authentication information without any additonal action.
+	// Authenticate provides authentication information without any additional action.
 	Authenticate(ctx context.Context, in *AuthenticateRequest, opts ...grpc.CallOption) (*AuthenticateResponse, error)
 	// CreateInstance creates a gomote instance.
 	CreateInstance(ctx context.Context, in *CreateInstanceRequest, opts ...grpc.CallOption) (GomoteService_CreateInstanceClient, error)
@@ -32,15 +32,15 @@ type GomoteServiceClient interface {
 	ListDirectory(ctx context.Context, in *ListDirectoryRequest, opts ...grpc.CallOption) (*ListDirectoryResponse, error)
 	// ListInstances lists all of the live gomote instances owned by the caller.
 	ListInstances(ctx context.Context, in *ListInstancesRequest, opts ...grpc.CallOption) (*ListInstancesResponse, error)
-	// ReadTGZ tars and zips a dicrectory which exists on the gomote instance.
+	// ReadTGZ tars and zips a directory which exists on the gomote instance.
 	ReadTGZ(ctx context.Context, in *ReadTGZRequest, opts ...grpc.CallOption) (GomoteService_ReadTGZClient, error)
 	// RemoveFiles removes files or directories from the gomote instance.
 	RemoveFiles(ctx context.Context, in *RemoveFilesRequest, opts ...grpc.CallOption) (*RemoveFilesResponse, error)
 	// RetrieveSSHCredentials retrieves the SSH credentials for the specified gomote instance.
 	RetrieveSSHCredentials(ctx context.Context, in *RetrieveSSHCredentialsRequest, opts ...grpc.CallOption) (*RetrieveSSHCredentialsResponse, error)
-	// WriteTGZ expands a tar and ziped file onto the file system of a gomote instance.
+	// WriteTGZ expands a tar and zipped file onto the file system of a gomote instance.
 	WriteTGZ(ctx context.Context, opts ...grpc.CallOption) (GomoteService_WriteTGZClient, error)
-	// WriteTGZFromURL retrieves a tar and ziped file from a URL and expands it onto the file system of a gomote instance.
+	// WriteTGZFromURL retrieves a tar and zipped file from a URL and expands it onto the file system of a gomote instance.
 	WriteTGZFromURL(ctx context.Context, in *WriteTGZFromURLRequest, opts ...grpc.CallOption) (*WriteTGZFromURLResponse, error)
 }
 
@@ -258,7 +258,7 @@ func (c *gomoteServiceClient) WriteTGZFromURL(ctx context.Context, in *WriteTGZF
 // All implementations must embed UnimplementedGomoteServiceServer
 // for forward compatibility
 type GomoteServiceServer interface {
-	// Authenticate provides authentication information without any additonal action.
+	// Authenticate provides authentication information without any additional action.
 	Authenticate(context.Context, *AuthenticateRequest) (*AuthenticateResponse, error)
 	// CreateInstance creates a gomote instance.
 	CreateInstance(*CreateInstanceRequest, GomoteService_CreateInstanceServer) error
@@ -272,15 +272,15 @@ type GomoteServiceServer interface {
 	ListDirectory(context.Context, *ListDirectoryRequest) (*ListDirectoryResponse, error)
 	// ListInstances lists all of the live gomote instances owned by the caller.
 	ListInstances(context.Context, *ListInstancesRequest) (*ListInstancesResponse, error)
-	// ReadTGZ tars and zips a dicrectory which exists on the gomote instance.
+	// ReadTGZ tars and zips a directory which exists on the gomote instance.
 	ReadTGZ(*ReadTGZRequest, GomoteService_ReadTGZServer) error
 	// RemoveFiles removes files or directories from the gomote instance.
 	RemoveFiles(context.Context, *RemoveFilesRequest) (*RemoveFilesResponse, error)
 	// RetrieveSSHCredentials retrieves the SSH credentials for the specified gomote instance.
 	RetrieveSSHCredentials(context.Context, *RetrieveSSHCredentialsRequest) (*RetrieveSSHCredentialsResponse, error)
-	// WriteTGZ expands a tar and ziped file onto the file system of a gomote instance.
+	// WriteTGZ expands a tar and zipped file onto the file system of a gomote instance.
 	WriteTGZ(GomoteService_WriteTGZServer) error
-	// WriteTGZFromURL retrieves a tar and ziped file from a URL and expands it onto the file system of a gomote instance.
+	// WriteTGZFromURL retrieves a tar and zipped file from a URL and expands it onto the file system of a gomote instance.
 	WriteTGZFromURL(context.Context, *WriteTGZFromURLRequest) (*WriteTGZFromURLResponse, error)
 	mustEmbedUnimplementedGomoteServiceServer()
 }
