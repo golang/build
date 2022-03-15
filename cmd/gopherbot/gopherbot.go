@@ -879,6 +879,9 @@ func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 		if !gardenIssues(repo) {
 			return nil
 		}
+		if !repoHasLabel(repo, frozenDueToAge) {
+			return nil
+		}
 		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
 			if gi.NotExist || !gi.Closed || gi.PullRequest || gi.Locked || b.deletedIssues[githubIssue{repo.ID(), gi.Number}] {
 				return nil
@@ -1069,15 +1072,19 @@ func (b *gopherbot) labelMobileIssues(ctx context.Context) error {
 }
 
 func (b *gopherbot) labelDocumentationIssues(ctx context.Context) error {
+	const documentation = "Documentation"
 	return b.corpus.GitHub().ForeachRepo(func(repo *maintner.GitHubRepo) error {
 		if !gardenIssues(repo) {
+			return nil
+		}
+		if !repoHasLabel(repo, documentation) {
 			return nil
 		}
 		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
 			if gi.Closed || gi.PullRequest || !isDocumentationTitle(gi.Title) || gi.HasLabel("Documentation") || gi.HasEvent("unlabeled") {
 				return nil
 			}
-			return b.addLabel(ctx, repo.ID(), gi, "Documentation")
+			return b.addLabel(ctx, repo.ID(), gi, documentation)
 		})
 	})
 }
@@ -1148,8 +1155,11 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 		if !gardenIssues(repo) {
 			return nil
 		}
+		if !repoHasLabel(repo, waitingForInfo) {
+			return nil
+		}
 		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-			if gi.Closed || gi.PullRequest || !gi.HasLabel("WaitingForInfo") || gi.NotExist || b.deletedIssues[githubIssue{repo.ID(), gi.Number}] {
+			if gi.Closed || gi.PullRequest || !gi.HasLabel(waitingForInfo) || gi.NotExist || b.deletedIssues[githubIssue{repo.ID(), gi.Number}] {
 				return nil
 			}
 			var waitStart time.Time
@@ -2617,4 +2627,15 @@ func printIssue(task string, repoID maintner.GitHubRepoID, gi *maintner.GitHubIs
 	} else {
 		fmt.Printf("\thttps://go.dev/issue/%v  %s\n", gi.Number, gi.Title)
 	}
+}
+
+func repoHasLabel(repo *maintner.GitHubRepo, name string) bool {
+	has := false
+	repo.ForeachLabel(func(label *maintner.GitHubLabel) error {
+		if label.Name == name {
+			has = true
+		}
+		return nil
+	})
+	return has
 }
