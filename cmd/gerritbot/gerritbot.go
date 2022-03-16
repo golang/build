@@ -659,7 +659,7 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 	if _, err := os.Stat(repoDir); os.IsNotExist(err) {
 		cmds := []*exec.Cmd{
 			exec.Command("git", "clone", "--bare", gerritRepo, repoDir),
-			exec.Command("git", "-C", repoDir, "remote", "add", "github", githubRepo.GetGitURL()),
+			exec.Command("git", "-C", repoDir, "remote", "add", "github", githubRepo.GetCloneURL()),
 		}
 		for _, c := range cmds {
 			if err := runCmd(c); err != nil {
