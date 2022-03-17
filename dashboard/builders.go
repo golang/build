@@ -1585,7 +1585,7 @@ func init() {
 		HostType: "host-linux-bullseye",
 		tryBot:   defaultTrySet(),
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			if repo == "vulndb" && atMostGo1(goBranch, 16) {
+			if repo == "vulndb" && atMostGo1(goBranch, 17) {
 				// The vulndb repo is for use only by the Go team,
 				// so it doesn't need to work on older Go versions.
 				return false

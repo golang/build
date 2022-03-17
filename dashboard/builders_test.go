@@ -614,10 +614,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-nocgo", "build"), none},
 		{b("linux-386-longtest", "build"), none},
 
-		// x/vulndb isn't tested on Go 1.16 and older.
-		{b("linux-amd64@go1.16", "vulndb"), none},
-		{b("linux-amd64@go1.17", "vulndb"), both},
-		{b("linux-amd64-longtest@go1.16", "vulndb"), none},
+		// x/vulndb isn't tested on Go 1.17 and older.
+		{b("linux-amd64@go1.17", "vulndb"), none},
+		{b("linux-amd64@go1.18", "vulndb"), both},
+		{b("linux-amd64-longtest@go1.17", "vulndb"), none},
 		{b("linux-amd64-longtest", "vulndb"), onlyPost},
 
 		{b("js-wasm", "build"), none},
