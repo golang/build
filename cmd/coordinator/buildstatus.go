@@ -58,29 +58,39 @@ func newBuild(rev buildgo.BuilderRev, detail *commitDetail) (*buildStatus, error
 		return nil, fmt.Errorf("required field Rev is empty; got %+v", rev)
 	}
 
-	var branch string
-	var commitTime time.Time
+	var revBranch, subRevBranch string
+	var revCommitTime, subRevCommitTime time.Time
 	if detail != nil {
-		branch = detail.Branch
-		if detail.CommitTime != "" {
-			var err error
-			commitTime, err = time.Parse(time.RFC3339, detail.CommitTime)
+		revBranch = detail.RevBranch
+		subRevBranch = detail.SubRevBranch
+
+		var err error
+		if detail.RevCommitTime != "" {
+			revCommitTime, err = time.Parse(time.RFC3339, detail.RevCommitTime)
 			if err != nil {
-				return nil, fmt.Errorf("invalid commit time %q, for %+v: %err", detail.CommitTime, rev, err)
+				return nil, fmt.Errorf("parsing commit time %q for %q: %v", detail.RevCommitTime, rev.Rev, err)
+			}
+		}
+		if detail.SubRevCommitTime != "" {
+			subRevCommitTime, err = time.Parse(time.RFC3339, detail.SubRevCommitTime)
+			if err != nil {
+				return nil, fmt.Errorf("parsing commit time %q for %q: %v", detail.SubRevCommitTime, rev.SubRev, err)
 			}
 		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	return &buildStatus{
-		buildID:    "B" + randHex(9),
-		BuilderRev: rev,
-		conf:       conf,
-		startTime:  time.Now(),
-		ctx:        ctx,
-		cancel:     cancel,
-		commitTime: commitTime,
-		branch:     branch,
+		buildID:          "B" + randHex(9),
+		BuilderRev:       rev,
+		conf:             conf,
+		startTime:        time.Now(),
+		ctx:              ctx,
+		cancel:           cancel,
+		revCommitTime:    revCommitTime,
+		subRevCommitTime: subRevCommitTime,
+		revBranch:        revBranch,
+		subRevBranch:     subRevBranch,
 	}, nil
 }
 
@@ -88,13 +98,15 @@ func newBuild(rev buildgo.BuilderRev, detail *commitDetail) (*buildStatus, error
 type buildStatus struct {
 	// Immutable:
 	buildgo.BuilderRev
-	buildID    string // "B" + 9 random hex
-	goBranch   string // non-empty for subrepo trybots if not go master branch
-	conf       *dashboard.BuildConfig
-	startTime  time.Time // actually time of newBuild (~same thing)
-	trySet     *trySet   // or nil
-	commitTime time.Time // non-zero for post-submit builders; max of Rev & SubRev's committer time
-	branch     string    // non-empty for post-submit work
+	buildID          string // "B" + 9 random hex
+	goBranch         string // non-empty for subrepo trybots if not go master branch
+	conf             *dashboard.BuildConfig
+	startTime        time.Time // actually time of newBuild (~same thing)
+	trySet           *trySet   // or nil
+	revCommitTime    time.Time // non-zero for post-submit builders; Rev's committer time
+	subRevCommitTime time.Time // non-zero for post-submit subrepo builders; SubRev's committer time
+	revBranch        string    // non-empty for post-submit work
+	subRevBranch     string    // non-empty for post-submit subrepo work
 
 	onceInitHelpers sync.Once // guards call of onceInitHelpersFunc
 	helpers         <-chan buildlet.Client
@@ -292,8 +304,8 @@ func (st *buildStatus) onceInitHelpersFunc() {
 		BuilderRev: st.BuilderRev,
 		HostType:   st.conf.HostType,
 		IsTry:      st.isTry(),
-		CommitTime: st.commitTime,
-		Branch:     st.branch,
+		CommitTime: st.commitTime(),
+		Branch:     st.branch(),
 	}
 	st.helpers = getBuildlets(st.ctx, st.conf.NumTestHelpers(st.isTry()), schedTmpl, st)
 }
@@ -387,8 +399,8 @@ func (st *buildStatus) getBuildlet() (buildlet.Client, error) {
 		HostType:   st.conf.HostType,
 		IsTry:      st.trySet != nil,
 		BuilderRev: st.BuilderRev,
-		CommitTime: st.commitTime,
-		Branch:     st.branch,
+		CommitTime: st.commitTime(),
+		Branch:     st.branch(),
 	}
 	st.mu.Lock()
 	st.schedItem = schedItem
@@ -557,7 +569,7 @@ func (st *buildStatus) useKeepGoingFlag() bool {
 	//
 	// TODO(golang.org/issue/36181): A more ideal long term solution is one that reports
 	// a failure fast, but still keeps going to make all other test results available.
-	return !st.isTry() && strings.HasPrefix(st.branch, "release-branch.go")
+	return !st.isTry() && strings.HasPrefix(st.branch(), "release-branch.go")
 }
 
 // isTry reports whether the build is a part of a TryBot (pre-submit) run.
@@ -708,8 +720,8 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompil
 		HostType:   config.CompileHostType,
 		IsTry:      st.trySet != nil,
 		BuilderRev: st.BuilderRev,
-		CommitTime: st.commitTime,
-		Branch:     st.branch,
+		CommitTime: st.commitTime(),
+		Branch:     st.branch(),
 	})
 	sp.Done(err)
 	if err != nil {
@@ -1939,4 +1951,20 @@ func (st *buildStatus) repeatedCommunicationError(execErr error) error {
 		return fmt.Errorf("network error promoted to terminal error: %v", execErr)
 	}
 	return nil
+}
+
+// commitTime returns the greater of Rev and SubRev's commit times.
+func (st *buildStatus) commitTime() time.Time {
+	if st.revCommitTime.Before(st.subRevCommitTime) {
+		return st.subRevCommitTime
+	}
+	return st.revCommitTime
+}
+
+// branch returns branch for either Rev, or SubRev if it exists.
+func (st *buildStatus) branch() string {
+	if st.SubRev != "" {
+		return st.subRevBranch
+	}
+	return st.revBranch
 }

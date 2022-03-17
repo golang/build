@@ -421,13 +421,19 @@ var ignoreAllNewWork bool
 var addWorkTestHook func(buildgo.BuilderRev, *commitDetail)
 
 type commitDetail struct {
-	// CommitTime is the greater of 1 or 2 possible git committer
-	// times: the commit time of the associated BuilderRev.Rev
-	// (for the BuilderRev also passed to addWorkDetail) or
-	// BuilderRev.SubRev (if not empty).
-	CommitTime string // in time.RFC3339 format
+	// RevCommitTime is always the git committer time of the associated
+	// BuilderRev.Rev.
+	RevCommitTime string // in time.RFC3339 format
 
-	Branch string
+	// SubRevCommitTime is always the git committer time of the associated
+	// BuilderRev.SubRev, if it exists. Otherwise, it's the empty string.
+	SubRevCommitTime string // in time.RFC3339 format
+
+	// Branch for BuilderRev.Rev.
+	RevBranch string
+
+	// Branch for BuilderRev.SubRev, if it exists.
+	SubRevBranch string
 }
 
 func addWork(work buildgo.BuilderRev) {
@@ -946,18 +952,14 @@ func findWork() error {
 	commitBranch := make(map[string]string) // git rev => "master"
 
 	add := func(br buildgo.BuilderRev) {
-		rev := br.Rev
-		ct := commitTime[br.Rev]
+		var d commitDetail
+		d.RevCommitTime = commitTime[br.Rev]
+		d.RevBranch = commitBranch[br.Rev]
 		if br.SubRev != "" {
-			rev = br.SubRev
-			if t := commitTime[rev]; t > ct {
-				ct = t
-			}
+			d.SubRevCommitTime = commitTime[br.SubRev]
+			d.SubRevBranch = commitBranch[br.SubRev]
 		}
-		addWorkDetail(br, &commitDetail{
-			CommitTime: ct,
-			Branch:     commitBranch[rev],
-		})
+		addWorkDetail(br, &d)
 	}
 
 	for _, br := range bs.Revisions {
