@@ -97,13 +97,13 @@ func main() {
 	log.Println()
 
 	// Walk the standard library source tree (GOROOT/src),
-	// skipping directories that start with "." and named "testdata" or "vendor",
+	// skipping directories that the Go command ignores (see go help packages)
 	// and update modules that are found.
 	err = filepath.Walk(filepath.Join(*goroot, "src"), func(path string, fi os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if fi.IsDir() && (strings.HasPrefix(fi.Name(), ".") || fi.Name() == "testdata" || fi.Name() == "vendor") {
+		if fi.IsDir() && (strings.HasPrefix(fi.Name(), ".") || strings.HasPrefix(fi.Name(), "_") || fi.Name() == "testdata" || fi.Name() == "vendor") {
 			return filepath.SkipDir
 		}
 		goModFile := fi.Name() == "go.mod" && !fi.IsDir()
