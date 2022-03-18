@@ -8,9 +8,6 @@ VERSION ?= $(shell git rev-parse --short HEAD)
 IMAGE_STAGING := gcr.io/go-dashboard-dev/maintnerd
 IMAGE_PROD := gcr.io/symbolic-datum-552/maintnerd
 
-DOCKER_IMAGE_build0=build0/maintnerd:latest
-DOCKER_CTR_build0=maintnerd-build0
-
 docker-prod:
 	docker build --force-rm -f Dockerfile --tag=$(IMAGE_PROD):$(VERSION) ../..
 	docker tag $(IMAGE_PROD):$(VERSION) $(IMAGE_PROD):$(MUTABLE_VERSION)
