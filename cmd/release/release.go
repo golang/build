@@ -42,8 +42,7 @@ var (
 
 	stagingDir = flag.String("staging_dir", "", "If specified, use this as the staging directory for untested release artifacts. Default is the system temporary directory.")
 
-	rev       = flag.String("rev", "", "Go revision to build, alternative to -tarball")
-	tarball   = flag.String("tarball", "", "Go tree tarball to build, alternative to -rev")
+	rev       = flag.String("rev", "", "Go revision to build")
 	version   = flag.String("version", "", "Version string (go1.5.2)")
 	user      = flag.String("user", username(), "coordinator username, appended to 'user-'")
 	skipTests = flag.Bool("skip_tests", false, "skip tests; run make.bash but not all.bash (only use if sufficient testing was done elsewhere)")
@@ -70,8 +69,8 @@ func main() {
 		return
 	}
 
-	if (*rev == "" && *tarball == "") || (*rev != "" && *tarball != "") {
-		log.Fatal("must specify one of -rev or -tarball")
+	if *rev == "" {
+		log.Fatal("must specify -rev")
 	}
 	if *version == "" {
 		log.Fatal(`must specify -version flag (such as "go1.12" or "go1.13beta1")`)
@@ -361,23 +360,11 @@ func (b *Build) make() error {
 		goPath = "gopath"
 		go14   = "go1.4"
 	)
-	if *tarball != "" {
-		tarFile, err := os.Open(*tarball)
-		if err != nil {
-			b.logf("failed to open tarball %q: %v", *tarball, err)
-			return err
-		}
-		if err := client.PutTar(ctx, tarFile, goDir); err != nil {
-			b.logf("failed to put tarball %q into dir %q: %v", *tarball, goDir, err)
-			return err
-		}
-		tarFile.Close()
-	} else {
-		tar := "https://go.googlesource.com/go/+archive/" + *rev + ".tar.gz"
-		if err := client.PutTarFromURL(ctx, tar, goDir); err != nil {
-			b.logf("failed to put tarball %q into dir %q: %v", tar, goDir, err)
-			return err
-		}
+
+	tar := "https://go.googlesource.com/go/+archive/" + *rev + ".tar.gz"
+	if err := client.PutTarFromURL(ctx, tar, goDir); err != nil {
+		b.logf("failed to put tarball %q into dir %q: %v", tar, goDir, err)
+		return err
 	}
 
 	if u := bc.GoBootstrapURL(buildEnv); u != "" && !b.Source {
