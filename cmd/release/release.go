@@ -48,7 +48,6 @@ var (
 	skipTests = flag.Bool("skip_tests", false, "skip tests; run make.bash but not all.bash (only use if sufficient testing was done elsewhere)")
 
 	uploadMode = flag.Bool("upload", false, "Upload files (exclusive to all other flags)")
-	uploadKick = flag.String("edge_kick_command", "", "Command to run to kick off an edge cache update")
 )
 
 var (
