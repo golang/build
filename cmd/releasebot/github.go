@@ -84,11 +84,6 @@ func (t *tokenSource) Token() (*oauth2.Token, error) {
 }
 
 func (w *Work) findOrCreateReleaseIssue() {
-	if w.Security {
-		// There is no release status issue for security releases
-		// to avoid the risk of leaking sensitive test failures.
-		return
-	}
 	w.log.Printf("Release status issue title: %q", w.releaseStatusTitle())
 	if dryRun {
 		return
@@ -192,8 +187,7 @@ func (w *Work) pushIssues() {
 		if gi.Number == int32(w.ReleaseIssue) {
 			return nil
 		}
-		// All issues are unrelated if this is a security release.
-		if gi.Closed && !w.Security {
+		if gi.Closed {
 			return nil
 		}
 		w.log.Printf("changing milestone of issue %d to %s", gi.Number, nextMilestone.GetTitle())

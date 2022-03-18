@@ -103,7 +103,6 @@ var (
 func main() {
 	modeFlag := flag.String("mode", "", "release mode (prepare, release)")
 	flag.BoolVar(&dryRun, "dry-run", false, "only perform pre-flight checks, only log to terminal")
-	security := flag.Bool("security", false, "cut a security release from the internal Gerrit")
 	flag.Usage = usage
 	flag.Parse()
 	if !releaseModes[*modeFlag] {
@@ -153,34 +152,21 @@ func main() {
 		Version:     releaseVersion,
 		BetaRelease: strings.Contains(releaseVersion, "beta"),
 		RCRelease:   strings.Contains(releaseVersion, "rc"),
-		Security:    *security,
 	}
 
 	// Validate release version types.
 	if w.BetaRelease {
-		if w.Security {
-			log.Fatalf("%s is a beta version, it cannot be a security release", w.Version)
-		}
 		w.ReleaseBranch = "master"
 	} else if w.RCRelease {
-		if w.Security {
-			log.Fatalf("%s is a release candidate version, it cannot be a security release", w.Version)
-		}
 		shortRel := strings.Split(w.Version, "rc")[0]
 		w.ReleaseBranch = "release-branch." + shortRel
 	} else if strings.Count(w.Version, ".") == 1 {
 		// Major release like "go1.X".
-		if w.Security {
-			log.Fatalf("%s is a major version, it cannot be a security release", w.Version)
-		}
 		w.ReleaseBranch = "release-branch." + w.Version
 	} else if strings.Count(w.Version, ".") == 2 {
 		// Minor release or security release like "go1.X.Y".
 		shortRel := w.Version[:strings.LastIndex(w.Version, ".")]
 		w.ReleaseBranch = "release-branch." + shortRel
-		if w.Security {
-			w.ReleaseBranch += "-security"
-		}
 	} else {
 		log.Fatalf("cannot understand version %q", w.Version)
 	}
@@ -412,7 +398,6 @@ type Work struct {
 	Prepare     bool // create the release commit and submit it for review
 	BetaRelease bool
 	RCRelease   bool
-	Security    bool // cut a security release from the internal Gerrit
 
 	ReleaseIssue   int    // Release status issue number
 	ReleaseBranch  string // "master" for beta releases
@@ -524,10 +509,6 @@ func (w *Work) doRelease() {
 	w.checkSpelling()
 	w.gitCheckout()
 
-	if !w.Security {
-		w.mustIncludeSecurityBranch()
-	}
-
 	// In release mode we carry on even if the tag exists, in case we
 	// need to resume a failed build.
 	if w.Prepare && w.gitTagExists() {
@@ -541,9 +522,7 @@ func (w *Work) doRelease() {
 			w.checkBeta1ReleaseBlockers()
 		}
 	} else {
-		if !w.Security {
-			w.checkReleaseBlockers()
-		}
+		w.checkReleaseBlockers()
 	}
 	w.findOrCreateReleaseIssue()
 	if len(w.Errors) > 0 && !dryRun {
@@ -642,18 +621,6 @@ func (w *Work) checkBeta1ReleaseBlockers() {
 }
 
 func (w *Work) nextStepsPrepare(changeID string) {
-	if w.Security {
-		w.log.Printf(`
-
-The prepare stage has completed.
-
-Please review and submit https://team-review.git.corp.google.com/q/%s
-and then run the release stage.
-
-`, changeID)
-		return
-	}
-
 	w.log.Printf(`
 
 The prepare stage has completed.
@@ -710,8 +677,7 @@ func (w *Work) postSummary() {
 
 	body := md.String()
 	fmt.Printf("%s", body)
-	// Avoid the risk of leaking sensitive test failures on security releases.
-	if dryRun || w.Security {
+	if dryRun {
 		return
 	}
 
@@ -777,8 +743,6 @@ func (w *Work) writeVersion() (changeID string) {
 	r.run("git", "commit", "-m", desc, "VERSION")
 	if dryRun {
 		fmt.Printf("\n### VERSION commit\n\n%s\n", r.runOut("git", "show", "HEAD"))
-	} else if w.Security {
-		r.run("git", "codereview", "mail")
 	} else {
 		r.run("git", "codereview", "mail", "-trybot", "-trust")
 	}
@@ -824,22 +788,6 @@ func (w *Work) buildReleases() {
 	}
 	w.StagingDir = stagingDir
 	w.ReleaseInfo = make(map[string]*ReleaseInfo)
-
-	if w.Security {
-		fmt.Printf(`
-
-Please download
-
-	https://team.git.corp.google.com/golang/go-private/+archive/%s.tar.gz
-
-to %s and press enter.
-`, w.VersionCommit, filepath.Join(w.Dir, w.VersionCommit+".tar.gz"))
-
-		_, err := fmt.Scanln()
-		if err != nil {
-			w.log.Panic(err)
-		}
-	}
 
 	var wg sync.WaitGroup
 	for _, target := range w.ReleaseTargets {
@@ -952,12 +900,7 @@ func (w *Work) buildRelease(target Target) {
 		failures := 0
 		for {
 			args := []string{w.ReleaseBinary, "-target", target.Name, "-user", gomoteUser,
-				"-version", w.Version, "-staging_dir", w.StagingDir}
-			if w.Security {
-				args = append(args, "-tarball", filepath.Join(w.Dir, w.VersionCommit+".tar.gz"))
-			} else {
-				args = append(args, "-rev", w.VersionCommit)
-			}
+				"-version", w.Version, "-staging_dir", w.StagingDir, "-rev", w.VersionCommit}
 			// The prepare step will run the tests on a commit that has the same
 			// tree (but maybe different message) as the one that the release
 			// step will process, so we can skip tests the second time.
@@ -1053,27 +996,6 @@ func (w *Work) uploadStagingRelease(target Target, out *ReleaseOutput) error {
 	out.Link = "https://" + releaseBucket + ".storage.googleapis.com/" + dst
 	w.releaseMu.Unlock()
 	return nil
-}
-
-// mustIncludeSecurityBranch remotely checks if there is an associated release branch
-// for the current release. If one exists, it ensures that the HEAD commit in the latest
-// security release branch exists within the current release branch. If the latest security
-// branch has changes which have not been merged into the proposed release, it will exit
-// fatally. If an asssociated security release branch does not exist, the function will
-// return without doing the check. It assumes that if the security branch doesn't exist,
-// it's because it was already merged everywhere and deleted.
-func (w *Work) mustIncludeSecurityBranch() {
-	securityReleaseBranch := fmt.Sprintf("%s-security", w.ReleaseBranch)
-
-	sha, ok := w.gitRemoteBranchCommit(privateGoRepoURL, securityReleaseBranch)
-	if !ok {
-		w.log.Printf("an associated security release branch %q does not exist; assuming it has been merged and deleted, so proceeding as usual", securityReleaseBranch)
-		return
-	}
-
-	if !w.gitCommitExistsInBranch(sha) {
-		log.Fatalf("release branch does not contain security release HEAD commit %q; aborting", sha)
-	}
 }
 
 // releaseTarget returns a release target with the specified name

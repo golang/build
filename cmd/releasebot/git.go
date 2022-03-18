@@ -11,13 +11,6 @@ import (
 	"strings"
 )
 
-const (
-	// publicGoRepoURL contains the Gerrit repository URL.
-	publicGoRepoURL = "https://go.googlesource.com/go"
-	// privateGoRepoURL contains the internal repository URL.
-	privateGoRepoURL = "sso://team/golang/go-private"
-)
-
 // gitCheckout sets w.Dir to the work directory
 // at $HOME/go-releasebot-work/<release> (where <release> is a string like go1.8.5),
 // creating it if it doesn't exist,
@@ -46,10 +39,7 @@ func (w *Work) gitCheckout() {
 		return
 	}
 
-	origin := publicGoRepoURL
-	if w.Security {
-		origin = privateGoRepoURL
-	}
+	const origin = "https://go.googlesource.com/go"
 
 	// Check out a local mirror to work-mirror, to speed future checkouts for this point release.
 	mirror := filepath.Join(w.Dir, "gitmirror")
@@ -116,22 +106,4 @@ func (w *Work) gitHeadCommit() string {
 	r := w.runner(filepath.Join(w.Dir, "gitwork"))
 	out := r.runOut("git", "rev-parse", "HEAD")
 	return strings.TrimSpace(string(out))
-}
-
-// gitRemoteBranchCommit returns the hash of the HEAD commit on the branch located
-// on a remote repository. It will return false when the branch does not exist.
-// It panics if there is a problem communicating with the remote repository.
-func (w *Work) gitRemoteBranchCommit(repositoryURL, branch string) (string, bool) {
-	out := w.runner(w.Dir).runOut("git", "ls-remote", "--heads", repositoryURL, "refs/heads/"+branch)
-	if len(out) == 0 {
-		return "", false
-	}
-	sha := strings.SplitN(string(out), "\t", 2)[0]
-	return sha, true
-}
-
-// gitCommitExistsInBranch reports whether the commit hash exists in the current branch.
-func (w *Work) gitCommitExistsInBranch(commitSHA string) bool {
-	_, err := w.runner(filepath.Join(w.Dir, "gitwork")).runErr("git", "merge-base", "--is-ancestor", commitSHA, "HEAD")
-	return err == nil
 }
