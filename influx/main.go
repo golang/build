@@ -12,11 +12,15 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"math/big"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
+	"os/exec"
 	"time"
 
 	"github.com/influxdata/influxdb-client-go/v2"
@@ -24,13 +28,20 @@ import (
 	"cloud.google.com/go/compute/metadata"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
+	"golang.org/x/build/internal/https"
 )
 
-const influxURL = "https://localhost:443"
+const (
+	influxListen = "localhost:8086"
+	influxURL    = "http://"+influxListen
+)
 
 func main() {
+	https.RegisterFlags(flag.CommandLine)
+	flag.Parse()
+
 	if err := run(); err != nil {
-		log.Printf("Error completing setup: %v", err)
+		log.Printf("Error starting and running influx: %v", err)
 		os.Exit(1)
 	}
 }
@@ -38,24 +49,46 @@ func main() {
 func run() error {
 	ctx := context.Background()
 
-	// Connecting via localhost with self-signed certs, so no cert checks.
-	options := influxdb2.DefaultOptions()
-	options.SetTLSConfig(&tls.Config{InsecureSkipVerify: true})
-	client := influxdb2.NewClientWithOptions(influxURL, "", options)
-	defer client.Close()
+	// Start Influx, bound to listen on localhost only. The DB may not be
+	// set up yet, in which case any unauthenticated user could perform
+	// setup, so we must ensure that only we can reach the server.
+	//
+	// Once we verify setup is complete, or perform setup ourselves, we
+	// will start a reverse proxy to forward external traffic to Influx.
+	cmd, err := startInflux(influxListen)
+	if err != nil {
+		return fmt.Errorf("error starting influx: %w", err)
+	}
+	go func() {
+		err := cmd.Wait()
+		log.Fatalf("Influx exited unexpectedly: %v", err)
+	}()
 
-	log.Printf("Waiting for influx to start...")
-	for {
-		_, err := client.Ready(ctx)
-		if err != nil {
-			log.Printf("Influx not ready: %v", err)
-			time.Sleep(1 * time.Second)
-			continue
-		}
-		break
+	if err := checkAndSetupInflux(ctx); err != nil {
+		return fmt.Errorf("error setting up influx: %w", err)
 	}
 
-	log.Printf("Influx ready!")
+	u, err := url.Parse(influxURL)
+	if err != nil {
+		return fmt.Errorf("error parsing influxURL: %w", err)
+	}
+
+	log.Printf("Starting reverse HTTP proxy...")
+	return https.ListenAndServe(ctx, httputil.NewSingleHostReverseProxy(u))
+}
+
+func startInflux(bindAddr string) (*exec.Cmd, error) {
+	cmd := exec.Command("/docker-entrypoint.sh", "influxd", "--http-bind-address", bindAddr)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	log.Printf("Running %v", cmd.Args)
+	return cmd, cmd.Start()
+}
+
+// checkAndSetupInflux determines if influx is already set up, and sets it up if not.
+func checkAndSetupInflux(ctx context.Context) (err error) {
+	client := newInfluxClient(ctx)
+	defer client.Close()
 
 	allowed, err := setupAllowed(ctx)
 	if err != nil {
@@ -77,6 +110,29 @@ func run() error {
 
 	log.Printf("Influx setup complete!")
 	return nil
+}
+
+// newInfluxClient creates and influx Client and waits for the database to
+// finish starting up.
+func newInfluxClient(ctx context.Context) influxdb2.Client {
+	// We used a self-signed certificate.
+	options := influxdb2.DefaultOptions()
+	options.SetTLSConfig(&tls.Config{InsecureSkipVerify: true})
+	client := influxdb2.NewClientWithOptions(influxURL, "", options)
+
+	log.Printf("Waiting for influx to start...")
+	for {
+		_, err := client.Ready(ctx)
+		if err != nil {
+			log.Printf("Influx not ready: %v", err)
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		break
+	}
+
+	log.Printf("Influx ready!")
+	return client
 }
 
 // Setup is the response to Influx GET /api/v2/setup.
