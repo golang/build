@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: prod
+  name: influx-deployment
+spec:
+  replicas: 1 # open source influx only supports a single instance
+  selector:
+    matchLabels:
+      app: influx
+  template:
+    metadata:
+      labels:
+        app: influx
+    spec:
+      serviceAccountName: influx
+      volumes:
+      - name: influx-data
+        persistentVolumeClaim:
+          claimName: influx-data-claim
+      containers:
+      - name: influx
+        image: gcr.io/symbolic-datum-552/influx:latest
+        imagePullPolicy: Always
+        command: ["/run-influx", "-listen-https-selfsigned=:443"]
+        volumeMounts:
+        - mountPath: /var/lib/influxdb2
+          name: influx-data
+        ports:
+        - containerPort: 443
+        resources:
+          requests:
+            cpu: "4"
+            memory: "4Gi"
+          limits:
+            memory: "8Gi"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: prod
+  name: influx-data-claim
+spec:
+  storageClassName: standard-rwo
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prod
+  name: influx-internal
+  annotations:
+    cloud.google.com/neg: '{"ingress": false}'
+    cloud.google.com/app-protocols: '{"https":"HTTP2"}'
+spec:
+  ports:
+    - port: 443
+      targetPort: 443
+      name: https
+  selector:
+    app: influx-data
+  type: NodePort

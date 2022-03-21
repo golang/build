@@ -21,3 +21,10 @@ push-prod: docker-prod
 push-staging: docker-staging
 	docker push $(IMAGE_STAGING):$(MUTABLE_VERSION)
 	docker push $(IMAGE_STAGING):$(VERSION)
+
+deploy-prod: push-prod
+	go install golang.org/x/build/cmd/xb
+	xb --prod kubectl --namespace prod set image deployment/influx-deployment influx=$(IMAGE_PROD):$(VERSION)
+deploy-staging: push-staging
+	go install golang.org/x/build/cmd/xb
+	xb --staging kubectl set image deployment/influx-deployment influx=$(IMAGE_STAGING):$(VERSION)
