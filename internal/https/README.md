@@ -4,4 +4,4 @@
 
 # golang.org/x/build/internal/https
 
-Package https contains helpers for starting an HTTPS server.
+Package https contains helpers for starting an HTTP/HTTPS server.

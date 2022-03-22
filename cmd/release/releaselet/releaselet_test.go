@@ -34,8 +34,11 @@ func TestSingleFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, f := range files {
-		if !strings.HasSuffix(f.Name(), "_test.go") && f.Name() != "releaselet.go" {
-			t.Errorf("releaselet should be a single file, found %v", f.Name())
+		if f.Name() == "releaselet.go" ||
+			f.Name() == "README.md" ||
+			strings.HasSuffix(f.Name(), "_test.go") {
+			continue
 		}
+		t.Errorf("releaselet should be a single file, found %v", f.Name())
 	}
 }
