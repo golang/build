@@ -24,7 +24,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/build"
@@ -39,8 +38,9 @@ import (
 var releaselet string
 
 var (
-	target = flag.String("target", "", "If specified, build specific target platform (e.g. 'linux-amd64'). Default is to build all.")
-	watch  = flag.Bool("watch", false, "Watch the build. Only compatible with -target")
+	flagTarget   = flag.String("target", "", "The specific target to build.")
+	flagLongTest = flag.Bool("longtest", false, "if false, run the normal build. if true, run only long tests.")
+	watch        = flag.Bool("watch", false, "Watch the build.")
 
 	stagingDir = flag.String("staging_dir", "", "If specified, use this as the staging directory for untested release artifacts. Default is the system temporary directory.")
 
@@ -73,6 +73,9 @@ func main() {
 	if *rev == "" {
 		log.Fatal("must specify -rev")
 	}
+	if *flagTarget == "" {
+		log.Fatal("must specify -target")
+	}
 	if *flagVersion == "" {
 		log.Fatal(`must specify -version flag (such as "go1.12" or "go1.13beta1")`)
 	}
@@ -80,67 +83,50 @@ func main() {
 	coordClient = coordinatorClient()
 	buildEnv = buildenv.Production
 
-	var wg sync.WaitGroup
-	matches := 0
-	targets, ok := releasetargets.TargetsForVersion(*flagVersion)
-	if !ok {
-		log.Fatalf("Unknown version %q", *flagVersion)
-	}
-	for _, b := range targetsToBuilds(targets) {
-		b := b
-		if *target != "" && b.String() != *target {
-			continue
-		}
-		matches++
-		b.logf("Start.")
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := b.make(); err != nil {
-				b.logf("Error: %v", err)
-			} else {
-				b.logf("Done.")
-			}
-		}()
-	}
-	if *target != "" && matches == 0 {
-		log.Fatalf("no targets matched %q", *target)
-	}
-	wg.Wait()
-}
-
-func targetsToBuilds(targets releasetargets.ReleaseTargets) []*Build {
-	builds := []*Build{
-		{
+	var build *Build
+	if *flagTarget == "src" {
+		build = &Build{
+			Name:    "src",
 			Source:  true,
 			Builder: "linux-amd64",
-		},
-	}
-	for _, target := range targets {
-		build := &Build{
+		}
+	} else {
+		targets, ok := releasetargets.TargetsForVersion(*flagVersion)
+		if !ok {
+			log.Fatalf("could not parse version %q", *flagVersion)
+		}
+		target, ok := targets[*flagTarget]
+		if !ok {
+			log.Fatalf("no such target %q in version %q", *flagTarget, *flagVersion)
+		}
+		build = &Build{
+			Name:      *flagTarget,
 			OS:        target.GOOS,
 			Arch:      target.GOARCH,
 			Race:      target.Race,
 			Builder:   target.Builder,
 			SkipTests: target.BuildOnly,
 		}
-		if target.GOOS == "linux" && target.GOARCH == "arm" {
-			build.Goarm = 6
-		}
-		builds = append(builds, build)
-		if target.LongTestBuilder != "" {
-			builds = append(builds, &Build{
-				OS:       target.GOOS,
-				Arch:     target.GOARCH,
-				Builder:  target.LongTestBuilder,
-				TestOnly: true,
-			})
+		if *flagLongTest {
+			if *skipTests || target.BuildOnly {
+				log.Fatalf("long testing requested, but no tests to run: skip=%v, build only=%v", *skipTests, target.BuildOnly)
+			}
+			build.Name = target.LongTestBuilder
+			build.Builder = target.LongTestBuilder
+			build.TestOnly = true
 		}
 	}
-	return builds
+	build.logf("Start.")
+	if err := build.make(); err != nil {
+		build.logf("Error: %v", err)
+		os.Exit(1)
+	} else {
+		build.logf("Done.")
+	}
 }
 
 type Build struct {
+	Name     string
 	OS, Arch string
 	Source   bool
 
@@ -149,30 +135,14 @@ type Build struct {
 	Builder  string // Key for dashboard.Builders.
 	TestOnly bool   // Run tests only; don't produce a release artifact.
 
-	Goarm     int  // GOARM value if set.
 	SkipTests bool // skip tests (run make.bash but not all.bash); needed by cross-compile builders (s390x)
-}
-
-func (b *Build) String() string {
-	switch {
-	case b.Source:
-		return "src"
-	case b.TestOnly:
-		// Test-only builds are named after the builder used to
-		// perform them. For example, "linux-amd64-longtest".
-		return b.Builder
-	case b.Goarm != 0:
-		return fmt.Sprintf("%v-%vv%vl", b.OS, b.Arch, b.Goarm)
-	default:
-		return fmt.Sprintf("%v-%v", b.OS, b.Arch)
-	}
 }
 
 func (b *Build) toolDir() string { return "go/pkg/tool/" + b.OS + "_" + b.Arch }
 func (b *Build) pkgDir() string  { return "go/pkg/" + b.OS + "_" + b.Arch }
 
 func (b *Build) logf(format string, args ...interface{}) {
-	format = fmt.Sprintf("%v: %s", b, format)
+	format = fmt.Sprintf("%v: %s", b.Name, format)
 	log.Printf(format, args...)
 }
 
@@ -265,7 +235,7 @@ func (b *Build) make() error {
 			return fmt.Errorf("verifying file permissions: %v", err)
 		}
 
-		finalFilename := *flagVersion + "." + b.String() + ".tar.gz"
+		finalFilename := *flagVersion + "." + b.Name + ".tar.gz"
 		return b.fetchTarball(ctx, client, finalFilename)
 	}
 
@@ -291,7 +261,7 @@ func (b *Build) make() error {
 	b.logf("Building (make.bash only).")
 	out := new(bytes.Buffer)
 	var execOut io.Writer = out
-	if *watch && *target != "" {
+	if *watch {
 		execOut = io.MultiWriter(out, os.Stdout)
 	}
 	remoteErr, err := client.Exec(context.Background(), filepath.Join(goDir, bc.MakeScript()), buildlet.ExecOpts{
@@ -313,7 +283,7 @@ func (b *Build) make() error {
 	runGo := func(args ...string) error {
 		out := new(bytes.Buffer)
 		var execOut io.Writer = out
-		if *watch && *target != "" {
+		if *watch {
 			execOut = io.MultiWriter(out, os.Stdout)
 		}
 		cmdEnv := append([]string(nil), env...)
@@ -426,7 +396,7 @@ func (b *Build) make() error {
 		}
 	}
 	stagingFile := func(ext string) string {
-		return filepath.Join(stagingDir, *flagVersion+"."+b.String()+ext+".untested")
+		return filepath.Join(stagingDir, *flagVersion+"."+b.Name+ext+".untested")
 	}
 
 	if !b.TestOnly && b.OS == "windows" {
@@ -436,7 +406,7 @@ func (b *Build) make() error {
 		}
 		releases = append(releases, releaseFile{
 			Untested: untested,
-			Final:    *flagVersion + "." + b.String() + ".msi",
+			Final:    *flagVersion + "." + b.Name + ".msi",
 		})
 	}
 
@@ -473,7 +443,7 @@ func (b *Build) make() error {
 		}
 		releases = append(releases, releaseFile{
 			Untested: untested,
-			Final:    *flagVersion + "." + b.String() + ".tar.gz",
+			Final:    *flagVersion + "." + b.Name + ".tar.gz",
 		})
 	case !b.TestOnly && b.OS == "windows":
 		untested := stagingFile(".zip")
@@ -482,7 +452,7 @@ func (b *Build) make() error {
 		}
 		releases = append(releases, releaseFile{
 			Untested: untested,
-			Final:    *flagVersion + "." + b.String() + ".zip",
+			Final:    *flagVersion + "." + b.Name + ".zip",
 		})
 	case b.TestOnly:
 		// Use an empty .test-only file to indicate the test outcome.
@@ -495,7 +465,7 @@ func (b *Build) make() error {
 		}
 		releases = append(releases, releaseFile{
 			Untested: untested,
-			Final:    *flagVersion + "." + b.String() + ".test-only",
+			Final:    *flagVersion + "." + b.Name + ".test-only",
 		})
 	}
 
@@ -513,7 +483,7 @@ func (b *Build) make() error {
 		b.logf("Building (all.bash to ensure tests pass).")
 		out := new(bytes.Buffer)
 		var execOut io.Writer = out
-		if *watch && *target != "" {
+		if *watch {
 			execOut = io.MultiWriter(out, os.Stdout)
 		}
 		remoteErr, err := client.Exec(ctx, filepath.Join(goDir, bc.AllScript()), buildlet.ExecOpts{

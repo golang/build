@@ -5,62 +5,10 @@
 package main
 
 import (
-	"sort"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 )
-
-func TestTargetSelectionPerGoVersion(t *testing.T) {
-	targetNames := func(targets []Target) (names []string) {
-		for _, t := range targets {
-			names = append(names, t.Name)
-		}
-		return names
-	}
-
-	for _, tc := range []struct {
-		goVer []string // Go versions to test.
-		want  []string // Expected release targets.
-	}{
-		{
-			goVer: []string{
-				"go1.18beta1", "go1.18rc1", "go1.18", "go1.18.1",
-				"go1.17beta1", "go1.17rc1", "go1.17", "go1.17.1",
-			},
-			want: []string{
-				"src",
-				"linux-386",
-				"linux-armv6l",
-				"linux-amd64",
-				"linux-arm64",
-				"freebsd-386",
-				"freebsd-amd64",
-				"windows-386",
-				"windows-amd64",
-				"windows-arm64", // New to Go 1.17.
-				"darwin-amd64",
-				"darwin-arm64",
-				"linux-s390x",
-				"linux-ppc64le",
-				"linux-386-longtest",
-				"linux-amd64-longtest",
-				"windows-amd64-longtest",
-			},
-		},
-	} {
-		for _, goVer := range tc.goVer {
-			t.Run(goVer, func(t *testing.T) {
-				got := targetNames(matchTargets(goVer))
-				sort.Strings(tc.want)
-				sort.Strings(got)
-				if diff := cmp.Diff(tc.want, got); diff != "" {
-					t.Errorf("release target mismatch (-want +got):\n%s", diff)
-				}
-			})
-		}
-	}
-}
 
 func TestSplitLogMessage(t *testing.T) {
 	testCases := []struct {

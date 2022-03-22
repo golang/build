@@ -38,8 +38,9 @@ import (
 
 // A Target is a release target.
 type Target struct {
-	Name     string // Target name as accepted by cmd/release. For example, "linux-amd64".
-	TestOnly bool   // Run tests only; don't produce a release artifact.
+	Name      string // Target name as accepted by cmd/release. For example, "linux-amd64".
+	SkipTests bool   // Skip tests.
+	TestOnly  bool   // Run tests only; don't produce a release artifact.
 }
 
 var releaseModes = map[string]bool{
@@ -61,15 +62,13 @@ func usage() {
 }
 
 var (
-	skipTestFlag     = flag.String("skip-test", "", "space-separated list of test-only targets to skip (only use if sufficient testing was done elsewhere)")
+	skipTestFlag     = flag.String("skip-test", "", "space-separated list of targets for which to skip tests (only use if sufficient testing was done elsewhere)")
 	skipTargetFlag   = flag.String("skip-target", "", "space-separated list of targets to skip. This will require manual intervention to create artifacts for a target after releasing.")
 	skipAllTestsFlag = flag.Bool("skip-all-tests", false, "skip all test-only targets and tests for any target (only use if tests were verified elsewhere)")
 )
 
 var (
-	dryRun     bool                    // only perform pre-flight checks, only log to terminal
-	skipTest   = make(map[string]bool) // test-only targets that should be skipped
-	skipTarget = make(map[string]bool) // targets that should be skipped
+	dryRun bool // only perform pre-flight checks, only log to terminal
 )
 
 func main() {
@@ -92,22 +91,26 @@ func main() {
 		usage()
 	}
 	releaseVersion := flag.Arg(0)
+	releaseTargets, ok := releasetargets.TargetsForVersion(releaseVersion)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "could not parse release name %q\n", releaseVersion)
+		usage()
+	}
 	for _, target := range strings.Fields(*skipTestFlag) {
-		if t, ok := releaseTarget(target, releaseVersion); !ok {
+		t, ok := releaseTargets[target]
+		if !ok {
 			fmt.Fprintf(os.Stderr, "target %q in -skip-test=%q is not a known target\n", target, *skipTestFlag)
 			usage()
-		} else if !t.TestOnly {
-			fmt.Fprintf(os.Stderr, "%s is not a test-only target\n", target)
-			usage()
 		}
-		skipTest[target] = true
+		t.LongTestBuilder = ""
+		t.BuildOnly = true
 	}
 	for _, target := range strings.Fields(*skipTargetFlag) {
-		if _, ok := releaseTarget(target, releaseVersion); !ok {
+		if _, ok := releaseTargets[target]; !ok {
 			fmt.Fprintf(os.Stderr, "target %q in -skip-target=%q is not a known target\n", target, *skipTargetFlag)
 			usage()
 		}
-		skipTarget[target] = true
+		delete(releaseTargets, target)
 	}
 
 	http.DefaultTransport = newLogger(http.DefaultTransport)
@@ -143,8 +146,13 @@ func main() {
 		log.Fatalf("cannot understand version %q", w.Version)
 	}
 
-	// Select release targets for this Go version.
-	w.ReleaseTargets = matchTargets(w.Version)
+	w.ReleaseTargets = []Target{{Name: "src"}}
+	for name, release := range releaseTargets {
+		w.ReleaseTargets = append(w.ReleaseTargets, Target{Name: name, SkipTests: release.BuildOnly || *skipAllTestsFlag})
+		if !*skipAllTestsFlag && release.LongTestBuilder != "" {
+			w.ReleaseTargets = append(w.ReleaseTargets, Target{Name: name, TestOnly: true})
+		}
+	}
 
 	// Find milestone.
 	var err error
@@ -767,28 +775,6 @@ func (w *Work) buildReleases() {
 		w.ReleaseInfo[target.Name] = new(ReleaseInfo)
 		w.releaseMu.Unlock()
 
-		if target.TestOnly && skipTest[target.Name] {
-			w.log.Printf("skipping test-only target %s because of -skip-test=%q flag", target.Name, *skipTestFlag)
-			w.releaseMu.Lock()
-			w.ReleaseInfo[target.Name].Msg = fmt.Sprintf("skipped because of -skip-test=%q flag", *skipTestFlag)
-			w.releaseMu.Unlock()
-			continue
-		}
-		if target.TestOnly && *skipAllTestsFlag {
-			log.Printf("skipping test-only target %s because of -skip-all-tests=%t flag", target.Name, *skipAllTestsFlag)
-			w.releaseMu.Lock()
-			w.ReleaseInfo[target.Name].Msg = fmt.Sprintf("skipped because of -skip-all-tests=%t flag", *skipAllTestsFlag)
-			w.releaseMu.Unlock()
-			continue
-		}
-		if skipTarget[target.Name] {
-			log.Printf("skipping target %s because of -skip-target=%q flag", target.Name, *skipTargetFlag)
-			w.releaseMu.Lock()
-			w.ReleaseInfo[target.Name].Msg = fmt.Sprintf("skipped because of -skip-target=%q flag", *skipTargetFlag)
-			w.releaseMu.Unlock()
-			continue
-		}
-
 		wg.Add(1)
 		target := target
 		go func() {
@@ -873,10 +859,13 @@ func (w *Work) buildRelease(target Target) {
 		for {
 			args := []string{w.ReleaseBinary, "-target", target.Name, "-user", gomoteUser,
 				"-version", w.Version, "-staging_dir", w.StagingDir, "-rev", w.VersionCommit}
+			if target.TestOnly {
+				args = append(args, "-longtest")
+			}
 			// The prepare step will run the tests on a commit that has the same
 			// tree (but maybe different message) as the one that the release
 			// step will process, so we can skip tests the second time.
-			if !w.Prepare || *skipAllTestsFlag {
+			if !w.Prepare || target.SkipTests {
 				args = append(args, "-skip_tests")
 			}
 			releaseOutput, releaseError := w.runner(releaseDir, "GOPATH="+filepath.Join(w.Dir, "gopath")).runErr(args...)
@@ -968,44 +957,6 @@ func (w *Work) uploadStagingRelease(target Target, out *ReleaseOutput) error {
 	out.Link = "https://" + releaseBucket + ".storage.googleapis.com/" + dst
 	w.releaseMu.Unlock()
 	return nil
-}
-
-// releaseTarget returns a release target with the specified name
-// for the specified Go version.
-func releaseTarget(name, goVer string) (_ Target, ok bool) {
-	targets, ok := releasetargets.TargetsForVersion(goVer)
-	if !ok {
-		return Target{}, false
-	}
-	_, ok = targets[name]
-	if ok {
-		return Target{Name: name}, true
-	}
-	for _, target := range targets {
-		if target.LongTestBuilder == name {
-			return Target{Name: name, TestOnly: true}, true
-		}
-	}
-	return Target{}, false
-}
-
-// matchTargets selects release targets that have a matching
-// GoQuery value for the specified Go version.
-func matchTargets(goVer string) []Target {
-	targets, ok := releasetargets.TargetsForVersion(goVer)
-	if !ok {
-		return nil
-	}
-	matched := []Target{
-		{Name: "src"},
-	}
-	for name, target := range targets {
-		matched = append(matched, Target{Name: name})
-		if target.LongTestBuilder != "" {
-			matched = append(matched, Target{Name: target.LongTestBuilder, TestOnly: true})
-		}
-	}
-	return matched
 }
 
 // splitLogMessage splits a string into n number of strings of maximum size maxStrLen.
