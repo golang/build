@@ -1790,18 +1790,6 @@ func init() {
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 			"GOAMD64=v3",
 		},
-		// TODO(go.dev/issue/48505): The default cost-optimized E2 machine family
-		// selects one of Intel or AMD platforms at VM creation time. See if that
-		// can be sufficient, and possibly deemed better for purposes of testing
-		// GOAMD64=v3 on a wider set of of platforms.
-		//
-		// See https://cloud.google.com/compute/docs/machine-types#machine_types
-		// and https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform.
-		//
-		// Otherwise, we can consider something like this in the host:
-		//machineType:    "n2-standard-4", // e2 instances do not support MinCPUPlatform or NestedVirt.
-		//MinCPUPlatform: "Intel Haswell", // Haswell is minimum to meet x86-64-v3 level.
-		KnownIssue: 48505,
 	})
 	addBuilder(BuildConfig{
 		Name:                "linux-amd64-racecompile",
