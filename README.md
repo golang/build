@@ -2,8 +2,14 @@
 
 [![Go Reference](https://pkg.go.dev/badge/golang.org/x/build.svg)](https://pkg.go.dev/golang.org/x/build)
 
-This subrepository holds the source for various packages and tools that support
+This repository holds the source for various packages and tools that support
 Go's build system and the development of the Go programming language.
+
+**Warning:** Packages here are internal to Go's build system and its needs.
+Some may one day be promoted to another `golang.org/x` repository,
+or they may be modified arbitrarily or even disappear altogether.
+In short, code in this repository is not subject to the Go 1 compatibility
+promise nor the [Release Policy](https://go.dev/doc/devel/release#policy).
 
 ## Report Issues / Send Patches
 
