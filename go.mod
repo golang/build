@@ -9,7 +9,9 @@ require (
 	cloud.google.com/go/storage v1.10.0
 	contrib.go.opencensus.io/exporter/prometheus v0.3.0
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.5
+	github.com/GoogleCloudPlatform/cloudsql-proxy v0.0.0-20190129172621-c8b1d7a94ddf
 	github.com/NYTimes/gziphandler v1.1.1
+	github.com/aclements/go-gg v0.0.0-20170118225347-6dbb4e4fefb0
 	github.com/aws/aws-sdk-go v1.30.15
 	github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625
 	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f
@@ -18,6 +20,7 @@ require (
 	github.com/dghubble/oauth1 v0.7.0
 	github.com/esimov/stackblur-go v1.1.0
 	github.com/gliderlabs/ssh v0.3.3
+	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.3
 	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.6
@@ -31,6 +34,7 @@ require (
 	github.com/jackc/pgconn v1.11.0
 	github.com/jackc/pgx/v4 v4.13.0
 	github.com/jellevandenhooff/dkim v0.0.0-20150330215556-f50fe3d243e1
+	github.com/mattn/go-sqlite3 v1.14.6
 	github.com/tarm/serial v0.0.0-20180830185346-98f6abe2eb07
 	go.opencensus.io v0.23.0
 	go4.org v0.0.0-20180809161055-417644f6feb5
@@ -44,6 +48,7 @@ require (
 	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
 	google.golang.org/api v0.51.0
+	google.golang.org/appengine v1.6.7
 	google.golang.org/genproto v0.0.0-20210726143408-b02e89920bf0
 	google.golang.org/grpc v1.39.0
 	google.golang.org/protobuf v1.27.1
@@ -51,6 +56,7 @@ require (
 )
 
 require (
+	github.com/aclements/go-moremath v0.0.0-20161014184102-0ff62e0875ff // indirect
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
@@ -59,6 +65,11 @@ require (
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect
 	github.com/deepmap/oapi-codegen v1.8.2 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
+	github.com/gonum/blas v0.0.0-20181208220705-f22b278b28ac // indirect
+	github.com/gonum/floats v0.0.0-20181209220543-c233463c7e82 // indirect
+	github.com/gonum/internal v0.0.0-20181124074243-f884aa714029 // indirect
+	github.com/gonum/lapack v0.0.0-20181123203213-e4cdc5a0bff9 // indirect
+	github.com/gonum/matrix v0.0.0-20181209220409-c518dec07be9 // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.0 // indirect
@@ -87,7 +98,6 @@ require (
 	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/tools v0.1.5 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
-	google.golang.org/appengine v1.6.7 // indirect
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

@@ -1,0 +1,11 @@
+runtime: go113
+service: perf
+
+handlers:
+  - url: /_ah/remote_api
+    script: auto
+  - url: /.*
+    script: auto
+    secure: always
+env_variables:
+  STORAGE_URL_BASE: 'https://perfdata.golang.org'
