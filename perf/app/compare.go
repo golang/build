@@ -262,15 +262,19 @@ func (a *App) fetchCompareResults(ctx context.Context, q string) ([]*resultGroup
 		if prefix != "" {
 			qPart = prefix + " " + qPart
 		}
-		res := a.StorageClient.Query(ctx, qPart)
+		s, err := a.StorageClient.Query(ctx, qPart)
+		if err != nil {
+			return nil, err
+		}
+		res := benchfmt.NewReader(s)
 		for res.Next() {
 			result := res.Result()
 			result.Content = elideKeyValues(result.Content, keys)
 			group.add(result)
 			found++
 		}
-		err := res.Err()
-		res.Close()
+		err = res.Err()
+		s.Close()
 		if err != nil {
 			// TODO: If the query is invalid, surface that to the user.
 			return nil, err

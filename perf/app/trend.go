@@ -24,6 +24,7 @@ import (
 	"github.com/aclements/go-gg/table"
 	"golang.org/x/build/perfdata"
 	"golang.org/x/net/context"
+	"golang.org/x/perf/storage/benchfmt"
 )
 
 // trend handles /trend.
@@ -90,8 +91,14 @@ func (a *App) trendQuery(ctx context.Context, q string, opt plotOptions) *trendD
 	}
 
 	// TODO(quentin): Chunk query based on matching upload IDs.
-	res := a.StorageClient.Query(ctx, q)
-	defer res.Close()
+	s, err := a.StorageClient.Query(ctx, q)
+	if err != nil {
+		errorf(ctx, "failed to read query results: %v", err)
+		d.Error = fmt.Sprintf("failed to read query results: %v", err)
+		return d
+	}
+	defer s.Close()
+	res := benchfmt.NewReader(s)
 	t, resultCols := queryToTable(res)
 	if err := res.Err(); err != nil {
 		errorf(ctx, "failed to read query results: %v", err)
@@ -176,7 +183,7 @@ func (a *App) trendQuery(ctx context.Context, q string, opt plotOptions) *trendD
 // queryToTable converts the result of a Query into a Table for later processing.
 // Each label is placed in a column named after the key.
 // Each metric is placed in a separate result column named after the unit.
-func queryToTable(q *perfdata.Query) (t *table.Table, resultCols []string) {
+func queryToTable(q *benchfmt.Reader) (t *table.Table, resultCols []string) {
 	var names []string
 	labels := make(map[string][]string)
 	results := make(map[string][]float64)

@@ -27,13 +27,9 @@ func TestQueryError(t *testing.T) {
 
 	c := &Client{BaseURL: ts.URL}
 
-	q := c.Query(context.Background(), "invalid query")
-	defer q.Close()
-
-	if q.Next() {
-		t.Error("Next = true, want false")
-	}
-	if q.Err() == nil {
+	s, err := c.Query(context.Background(), "invalid query")
+	if err == nil {
+		s.Close()
 		t.Error("Err = nil, want error")
 	}
 }
@@ -49,8 +45,12 @@ func TestQuery(t *testing.T) {
 
 	c := &Client{BaseURL: ts.URL}
 
-	q := c.Query(context.Background(), "key1:value key2:value")
-	defer q.Close()
+	s, err := c.Query(context.Background(), "key1:value key2:value")
+	if err != nil {
+		t.Fatalf("Err: %v", err)
+	}
+	defer s.Close()
+	q := benchfmt.NewReader(s)
 
 	var buf bytes.Buffer
 	bp := benchfmt.NewPrinter(&buf)
