@@ -143,6 +143,10 @@ type Environment struct {
 	// services used by IAP enabled HTTP paths.
 	// map[backend-service-name]service_id
 	iapServiceIDs map[string]string
+
+	// GomoteTransferBucket is the bucket used by the gomote GRPC service
+	// to transfer files between gomote clients and the gomote instances.
+	GomoteTransferBucket string
 }
 
 // ComputePrefix returns the URI prefix for Compute Engine resources in a project.
@@ -304,6 +308,7 @@ var Production = &Environment{
 		"coordinator-internal-iap": "7963570695201399464",
 		"relui-internal":           "155577380958854618",
 	},
+	GomoteTransferBucket: "gomote-transfer",
 }
 
 var Development = &Environment{

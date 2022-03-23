@@ -38,8 +38,9 @@ type GomoteServiceClient interface {
 	RemoveFiles(ctx context.Context, in *RemoveFilesRequest, opts ...grpc.CallOption) (*RemoveFilesResponse, error)
 	// SignSSHKey signs an SSH public key which can be used to SSH into instances owned by the caller.
 	SignSSHKey(ctx context.Context, in *SignSSHKeyRequest, opts ...grpc.CallOption) (*SignSSHKeyResponse, error)
-	// WriteTGZ expands a tar and zipped file onto the file system of a gomote instance.
-	WriteTGZ(ctx context.Context, opts ...grpc.CallOption) (GomoteService_WriteTGZClient, error)
+	// UploadFile generates a signed URL and associated fields to be used when uploading the object to GCS. Once uploaded
+	// the corresponding Write endpoint can be used to send the file to the gomote instance.
+	UploadFile(ctx context.Context, in *UploadFileRequest, opts ...grpc.CallOption) (*UploadFileResponse, error)
 	// WriteTGZFromURL retrieves a tar and zipped file from a URL and expands it onto the file system of a gomote instance.
 	WriteTGZFromURL(ctx context.Context, in *WriteTGZFromURLRequest, opts ...grpc.CallOption) (*WriteTGZFromURLResponse, error)
 }
@@ -211,38 +212,13 @@ func (c *gomoteServiceClient) SignSSHKey(ctx context.Context, in *SignSSHKeyRequ
 	return out, nil
 }
 
-func (c *gomoteServiceClient) WriteTGZ(ctx context.Context, opts ...grpc.CallOption) (GomoteService_WriteTGZClient, error) {
-	stream, err := c.cc.NewStream(ctx, &GomoteService_ServiceDesc.Streams[3], "/protos.GomoteService/WriteTGZ", opts...)
+func (c *gomoteServiceClient) UploadFile(ctx context.Context, in *UploadFileRequest, opts ...grpc.CallOption) (*UploadFileResponse, error) {
+	out := new(UploadFileResponse)
+	err := c.cc.Invoke(ctx, "/protos.GomoteService/UploadFile", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &gomoteServiceWriteTGZClient{stream}
-	return x, nil
-}
-
-type GomoteService_WriteTGZClient interface {
-	Send(*WriteTGZRequest) error
-	CloseAndRecv() (*WriteTGZResponse, error)
-	grpc.ClientStream
-}
-
-type gomoteServiceWriteTGZClient struct {
-	grpc.ClientStream
-}
-
-func (x *gomoteServiceWriteTGZClient) Send(m *WriteTGZRequest) error {
-	return x.ClientStream.SendMsg(m)
-}
-
-func (x *gomoteServiceWriteTGZClient) CloseAndRecv() (*WriteTGZResponse, error) {
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	m := new(WriteTGZResponse)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
+	return out, nil
 }
 
 func (c *gomoteServiceClient) WriteTGZFromURL(ctx context.Context, in *WriteTGZFromURLRequest, opts ...grpc.CallOption) (*WriteTGZFromURLResponse, error) {
@@ -278,8 +254,9 @@ type GomoteServiceServer interface {
 	RemoveFiles(context.Context, *RemoveFilesRequest) (*RemoveFilesResponse, error)
 	// SignSSHKey signs an SSH public key which can be used to SSH into instances owned by the caller.
 	SignSSHKey(context.Context, *SignSSHKeyRequest) (*SignSSHKeyResponse, error)
-	// WriteTGZ expands a tar and zipped file onto the file system of a gomote instance.
-	WriteTGZ(GomoteService_WriteTGZServer) error
+	// UploadFile generates a signed URL and associated fields to be used when uploading the object to GCS. Once uploaded
+	// the corresponding Write endpoint can be used to send the file to the gomote instance.
+	UploadFile(context.Context, *UploadFileRequest) (*UploadFileResponse, error)
 	// WriteTGZFromURL retrieves a tar and zipped file from a URL and expands it onto the file system of a gomote instance.
 	WriteTGZFromURL(context.Context, *WriteTGZFromURLRequest) (*WriteTGZFromURLResponse, error)
 	mustEmbedUnimplementedGomoteServiceServer()
@@ -319,8 +296,8 @@ func (UnimplementedGomoteServiceServer) RemoveFiles(context.Context, *RemoveFile
 func (UnimplementedGomoteServiceServer) SignSSHKey(context.Context, *SignSSHKeyRequest) (*SignSSHKeyResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SignSSHKey not implemented")
 }
-func (UnimplementedGomoteServiceServer) WriteTGZ(GomoteService_WriteTGZServer) error {
-	return status.Errorf(codes.Unimplemented, "method WriteTGZ not implemented")
+func (UnimplementedGomoteServiceServer) UploadFile(context.Context, *UploadFileRequest) (*UploadFileResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UploadFile not implemented")
 }
 func (UnimplementedGomoteServiceServer) WriteTGZFromURL(context.Context, *WriteTGZFromURLRequest) (*WriteTGZFromURLResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method WriteTGZFromURL not implemented")
@@ -527,30 +504,22 @@ func _GomoteService_SignSSHKey_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
-func _GomoteService_WriteTGZ_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(GomoteServiceServer).WriteTGZ(&gomoteServiceWriteTGZServer{stream})
-}
-
-type GomoteService_WriteTGZServer interface {
-	SendAndClose(*WriteTGZResponse) error
-	Recv() (*WriteTGZRequest, error)
-	grpc.ServerStream
-}
-
-type gomoteServiceWriteTGZServer struct {
-	grpc.ServerStream
-}
-
-func (x *gomoteServiceWriteTGZServer) SendAndClose(m *WriteTGZResponse) error {
-	return x.ServerStream.SendMsg(m)
-}
-
-func (x *gomoteServiceWriteTGZServer) Recv() (*WriteTGZRequest, error) {
-	m := new(WriteTGZRequest)
-	if err := x.ServerStream.RecvMsg(m); err != nil {
+func _GomoteService_UploadFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UploadFileRequest)
+	if err := dec(in); err != nil {
 		return nil, err
 	}
-	return m, nil
+	if interceptor == nil {
+		return srv.(GomoteServiceServer).UploadFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/protos.GomoteService/UploadFile",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GomoteServiceServer).UploadFile(ctx, req.(*UploadFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _GomoteService_WriteTGZFromURL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -607,6 +576,10 @@ var GomoteService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _GomoteService_SignSSHKey_Handler,
 		},
 		{
+			MethodName: "UploadFile",
+			Handler:    _GomoteService_UploadFile_Handler,
+		},
+		{
 			MethodName: "WriteTGZFromURL",
 			Handler:    _GomoteService_WriteTGZFromURL_Handler,
 		},
@@ -626,11 +599,6 @@ var GomoteService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "ReadTGZ",
 			Handler:       _GomoteService_ReadTGZ_Handler,
 			ServerStreams: true,
-		},
-		{
-			StreamName:    "WriteTGZ",
-			Handler:       _GomoteService_WriteTGZ_Handler,
-			ClientStreams: true,
 		},
 	},
 	Metadata: "gomote.proto",

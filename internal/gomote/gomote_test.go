@@ -9,11 +9,13 @@ package gomote
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"testing"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/build/internal/access"
 	"golang.org/x/build/internal/coordinator/remote"
@@ -27,13 +29,17 @@ import (
 	"google.golang.org/protobuf/testing/protocmp"
 )
 
+const testBucketName = "unit-testing-bucket"
+
 func fakeGomoteServer(t *testing.T, ctx context.Context) protos.GomoteServiceServer {
 	signer, err := ssh.ParsePrivateKey([]byte(devCertCAPrivate))
 	if err != nil {
 		t.Fatalf("unable to parse raw certificate authority private key into signer=%s", err)
 	}
 	return &Server{
+		bucket:                  &fakeBucketHandler{bucketName: testBucketName},
 		buildlets:               remote.NewSessionPool(ctx),
+		gceBucketName:           testBucketName,
 		scheduler:               schedule.NewFake(),
 		sshCertificateAuthority: signer,
 	}
@@ -675,6 +681,48 @@ func TestSignSSHKeyError(t *testing.T) {
 	}
 }
 
+func TestUploadFile(t *testing.T) {
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	client := setupGomoteTest(t, context.Background())
+	_ = mustCreateInstance(t, client, fakeIAP())
+	if _, err := client.UploadFile(ctx, &protos.UploadFileRequest{}); err != nil {
+		t.Fatalf("client.UploadFile(ctx, req) = response, %s; want no error", err)
+	}
+}
+
+func TestUploadFileError(t *testing.T) {
+	// This test will create a gomote instance and attempt to call UploadFile.
+	// If overrideID is set to true, the test will use a different gomoteID than the
+	// the one created for the test.
+	testCases := []struct {
+		desc       string
+		ctx        context.Context
+		overrideID bool
+		filename   string
+		wantCode   codes.Code
+	}{
+		{
+			desc:     "unauthenticated request",
+			ctx:      context.Background(),
+			wantCode: codes.Unauthenticated,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			client := setupGomoteTest(t, context.Background())
+			_ = mustCreateInstance(t, client, fakeIAP())
+			req := &protos.UploadFileRequest{}
+			got, err := client.UploadFile(tc.ctx, req)
+			if err != nil && status.Code(err) != tc.wantCode {
+				t.Fatalf("unexpected error: %s; want %s", err, tc.wantCode)
+			}
+			if err == nil {
+				t.Fatalf("client.UploadFile(ctx, %v) = %v, nil; want error", req, got)
+			}
+		})
+	}
+}
+
 func TestWriteTGZFromURL(t *testing.T) {
 	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
 	client := setupGomoteTest(t, context.Background())
@@ -871,3 +919,17 @@ OfjWFhdu6e4JYiVfN7ZYAAAAE3Rlc3R1c2VyQGdvbGFuZy5vcmcBAg==
 	// devCertCAPublic is a public SSH CA certificate to be used for development.
 	devCertCAPublic = `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJV3YUncNv+hXneJEO3VEuxxOfjWFhdu6e4JYiVfN7ZY testuser@golang.org`
 )
+
+type fakeBucketHandler struct{ bucketName string }
+
+func (fbc *fakeBucketHandler) GenerateSignedPostPolicyV4(object string, opts *storage.PostPolicyV4Options) (*storage.PostPolicyV4, error) {
+	if object == "" || opts == nil {
+		return nil, errors.New("invalid arguments")
+	}
+	return &storage.PostPolicyV4{
+		URL: fmt.Sprintf("https://localhost/%s/%s", fbc.bucketName, object),
+		Fields: map[string]string{
+			"x-permission-to-post": "granted",
+		},
+	}, nil
+}

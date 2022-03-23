@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/storage"
+	"github.com/google/uuid"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/access"
@@ -34,24 +36,33 @@ type scheduler interface {
 	GetBuildlet(ctx context.Context, si *schedule.SchedItem) (buildlet.Client, error)
 }
 
+// bucketHandle interface used to enable testing of the storage.bucketHandle.
+type bucketHandle interface {
+	GenerateSignedPostPolicyV4(object string, opts *storage.PostPolicyV4Options) (*storage.PostPolicyV4, error)
+}
+
 // Server is a gomote server implementation.
 type Server struct {
 	// embed the unimplemented server.
 	protos.UnimplementedGomoteServiceServer
 
+	bucket                  bucketHandle
 	buildlets               *remote.SessionPool
+	gceBucketName           string
 	scheduler               scheduler
 	sshCertificateAuthority ssh.Signer
 }
 
 // New creates a gomote server. If the rawCAPriKey is invalid, the program will exit.
-func New(rsp *remote.SessionPool, sched *schedule.Scheduler, rawCAPriKey []byte) *Server {
+func New(rsp *remote.SessionPool, sched *schedule.Scheduler, rawCAPriKey []byte, gomoteGCSBucket string, storageClient *storage.Client) *Server {
 	signer, err := ssh.ParsePrivateKey(rawCAPriKey)
 	if err != nil {
 		log.Fatalf("unable to parse raw certificate authority private key into signer=%s", err)
 	}
 	return &Server{
+		bucket:                  storageClient.Bucket(gomoteGCSBucket),
 		buildlets:               rsp,
+		gceBucketName:           gomoteGCSBucket,
 		scheduler:               sched,
 		sshCertificateAuthority: signer,
 	}
@@ -334,6 +345,39 @@ func (s *Server) SignSSHKey(ctx context.Context, req *protos.SignSSHKeyRequest) 
 	return &protos.SignSSHKeyResponse{
 		SignedPublicSshKey: signedPublicKey,
 	}, nil
+}
+
+// UploadFile creates a URL and a set of HTTP post fields which are used to upload a file to a staging GCS bucket. Uploaded files are made available to the
+// gomote instances via a subsequent call to one of the WriteFromURL endpoints.
+func (s *Server) UploadFile(ctx context.Context, req *protos.UploadFileRequest) (*protos.UploadFileResponse, error) {
+	_, err := access.IAPFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	url, fields, err := s.signURLForUpload(uuid.NewString())
+	if err != nil {
+		log.Printf("unable to create signed URL: %s", err)
+		return nil, status.Errorf(codes.Internal, "unable to create signed url")
+	}
+	return &protos.UploadFileResponse{
+		Url:    url,
+		Fields: fields,
+	}, nil
+}
+
+// signURLForUpload generates a signed URL and a set of http Post fields to be used to upload an object to GCS without authenticating.
+func (s *Server) signURLForUpload(object string) (url string, fields map[string]string, err error) {
+	if object == "" {
+		return "", nil, errors.New("invalid object name")
+	}
+	pv4, err := s.bucket.GenerateSignedPostPolicyV4(object, &storage.PostPolicyV4Options{
+		Expires:  time.Now().Add(10 * time.Minute),
+		Insecure: false,
+	})
+	if err != nil {
+		return "", nil, fmt.Errorf("unable to generate signed url: %w", err)
+	}
+	return pv4.URL, pv4.Fields, nil
 }
 
 // WriteTGZFromURL will instruct the gomote instance to download the tar.gz from the provided URL. The tar.gz file will be unpacked in the work directory

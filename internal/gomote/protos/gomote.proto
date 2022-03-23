@@ -30,8 +30,9 @@ service GomoteService {
   rpc RemoveFiles (RemoveFilesRequest) returns (RemoveFilesResponse) {}
   // SignSSHKey signs an SSH public key which can be used to SSH into instances owned by the caller.
   rpc SignSSHKey (SignSSHKeyRequest) returns (SignSSHKeyResponse) {}
-  // WriteTGZ expands a tar and zipped file onto the file system of a gomote instance.
-  rpc WriteTGZ (stream WriteTGZRequest) returns (WriteTGZResponse) {}
+  // UploadFile generates a signed URL and associated fields to be used when uploading the object to GCS. Once uploaded
+  // the corresponding Write endpoint can be used to send the file to the gomote instance.
+  rpc UploadFile (UploadFileRequest) returns (UploadFileResponse) {}
   // WriteTGZFromURL retrieves a tar and zipped file from a URL and expands it onto the file system of a gomote instance.
   rpc WriteTGZFromURL (WriteTGZFromURLRequest) returns (WriteTGZFromURLResponse) {}
 }
@@ -189,11 +190,16 @@ message SignSSHKeyResponse {
   bytes signed_public_ssh_key = 1;
 }
 
-// WriteTGZRequest specifies the data needed to expand a tar and zipped file onto the file system of a gomote instance.
-message WriteTGZRequest {}
+// UploadFileRequest specifies the data needed to create a request to upload an object to GCS.
+message UploadFileRequest {}
 
-// WriteTGZResponse contains the results from expanding a tar and zipped file onto the file system of a gomote instance.
-message WriteTGZResponse {}
+// UploadFileResponse contains the results from a request to upload an object to GCS.
+message UploadFileResponse {
+  // URL to post file to.
+  string url = 1;
+  // Form fields used when http posting files to GCS.
+  map<string, string> fields = 2;
+}
 
 // WriteTGZFromURLRequest specifies the data needed to retrieve a file and expand it onto the file system of a gomote instance.
 // It instructs the buildlet to download the tar.gz file from the url and write it to a directory, a relative directory from the workdir.

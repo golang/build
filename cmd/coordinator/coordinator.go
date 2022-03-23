@@ -66,6 +66,7 @@ import (
 	"golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
 	"golang.org/x/time/rate"
+	"google.golang.org/api/option"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -343,6 +344,7 @@ func main() {
 	}
 	sshCA := mustRetrieveSSHCertificateAuthority()
 
+	var gomoteBucket string
 	var opts []grpc.ServerOption
 	if *buildEnvName == "" && *mode != "dev" && metadata.OnGCE() {
 		projectID, err := metadata.ProjectID()
@@ -350,6 +352,7 @@ func main() {
 			log.Fatalf("metadata.ProjectID() = %v", err)
 		}
 		env := buildenv.ByProjectID(projectID)
+		gomoteBucket = env.GomoteTransferBucket
 		var coordinatorBackend, serviceID = "coordinator-internal-iap", ""
 		if serviceID = env.IAPServiceID(coordinatorBackend); serviceID == "" {
 			log.Fatalf("unable to retrieve Service ID for backend service=%q", coordinatorBackend)
@@ -363,7 +366,7 @@ func main() {
 	dashV1 := legacydash.Handler(gce.GoDSClient(), maintnerClient, string(masterKey()), grpcServer)
 	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
-	gomoteServer := gomote.New(remote.NewSessionPool(context.Background()), sched, sshCA)
+	gomoteServer := gomote.New(remote.NewSessionPool(context.Background()), sched, sshCA, gomoteBucket, mustStorageClient())
 	protos.RegisterCoordinatorServer(grpcServer, gs)
 	gomoteprotos.RegisterGomoteServiceServer(grpcServer, gomoteServer)
 	mux.HandleFunc("/", grpcHandlerFunc(grpcServer, handleStatus)) // Serve a status page at farmer.golang.org.
@@ -2201,4 +2204,15 @@ func mustRetrieveSSHCertificateAuthority() (privateKey []byte) {
 		log.Fatalf("unable to create SSH CA cert: %s", err)
 	}
 	return
+}
+
+func mustStorageClient() *storage.Client {
+	if metadata.OnGCE() {
+		return pool.NewGCEConfiguration().StorageClient()
+	}
+	storageClient, err := storage.NewClient(context.Background(), option.WithoutAuthentication())
+	if err != nil {
+		log.Fatalf("unable to create storage client: %s", err)
+	}
+	return storageClient
 }
