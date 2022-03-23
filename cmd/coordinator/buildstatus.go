@@ -44,9 +44,10 @@ import (
 	perfstorage "golang.org/x/perf/storage"
 )
 
-// newBuild constructs a new *buildStatus from rev and an optional detail.
-// If detail is nil, the scheduler just has less information to work with.
-func newBuild(rev buildgo.BuilderRev, detail *commitDetail) (*buildStatus, error) {
+// newBuild constructs a new *buildStatus from rev and commit details.
+// detail may be only partially populated, but it must have at least RevBranch set.
+// If rev.SubRev is set, then detail.SubRevBranch must also be set.
+func newBuild(rev buildgo.BuilderRev, detail commitDetail) (*buildStatus, error) {
 	// Note: can't acquire statusMu in newBuild, as this is called
 	// from findTryWork -> newTrySet, which holds statusMu.
 
@@ -57,40 +58,22 @@ func newBuild(rev buildgo.BuilderRev, detail *commitDetail) (*buildStatus, error
 	if rev.Rev == "" {
 		return nil, fmt.Errorf("required field Rev is empty; got %+v", rev)
 	}
-
-	var revBranch, subRevBranch string
-	var revCommitTime, subRevCommitTime time.Time
-	if detail != nil {
-		revBranch = detail.RevBranch
-		subRevBranch = detail.SubRevBranch
-
-		var err error
-		if detail.RevCommitTime != "" {
-			revCommitTime, err = time.Parse(time.RFC3339, detail.RevCommitTime)
-			if err != nil {
-				return nil, fmt.Errorf("parsing commit time %q for %q: %v", detail.RevCommitTime, rev.Rev, err)
-			}
-		}
-		if detail.SubRevCommitTime != "" {
-			subRevCommitTime, err = time.Parse(time.RFC3339, detail.SubRevCommitTime)
-			if err != nil {
-				return nil, fmt.Errorf("parsing commit time %q for %q: %v", detail.SubRevCommitTime, rev.SubRev, err)
-			}
-		}
+	if detail.RevBranch == "" {
+		return nil, fmt.Errorf("required field RevBranch is empty; got %+v", detail)
+	}
+	if rev.SubRev != "" && detail.SubRevBranch == "" {
+		return nil, fmt.Errorf("field SubRevBranch is empty, required because SubRev is present; got %+v", detail)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	return &buildStatus{
-		buildID:          "B" + randHex(9),
-		BuilderRev:       rev,
-		conf:             conf,
-		startTime:        time.Now(),
-		ctx:              ctx,
-		cancel:           cancel,
-		revCommitTime:    revCommitTime,
-		subRevCommitTime: subRevCommitTime,
-		revBranch:        revBranch,
-		subRevBranch:     subRevBranch,
+		buildID:      "B" + randHex(9),
+		BuilderRev:   rev,
+		commitDetail: detail,
+		conf:         conf,
+		startTime:    time.Now(),
+		ctx:          ctx,
+		cancel:       cancel,
 	}, nil
 }
 
@@ -98,15 +81,11 @@ func newBuild(rev buildgo.BuilderRev, detail *commitDetail) (*buildStatus, error
 type buildStatus struct {
 	// Immutable:
 	buildgo.BuilderRev
-	buildID          string // "B" + 9 random hex
-	goBranch         string // non-empty for subrepo trybots if not go master branch
-	conf             *dashboard.BuildConfig
-	startTime        time.Time // actually time of newBuild (~same thing)
-	trySet           *trySet   // or nil
-	revCommitTime    time.Time // non-zero for post-submit builders; Rev's committer time
-	subRevCommitTime time.Time // non-zero for post-submit subrepo builders; SubRev's committer time
-	revBranch        string    // non-empty for post-submit work
-	subRevBranch     string    // non-empty for post-submit subrepo work
+	commitDetail
+	buildID   string // "B" + 9 random hex
+	conf      *dashboard.BuildConfig
+	startTime time.Time // actually time of newBuild (~same thing)
+	trySet    *trySet   // or nil
 
 	onceInitHelpers sync.Once // guards call of onceInitHelpersFunc
 	helpers         <-chan buildlet.Client
@@ -129,17 +108,17 @@ type buildStatus struct {
 
 func (st *buildStatus) NameAndBranch() string {
 	result := st.Name
-	if st.goBranch != "" {
+	if st.RevBranch != "master" {
 		// For the common and currently-only case of
 		// "release-branch.go1.15" say "linux-amd64 (Go 1.15.x)"
 		const releasePrefix = "release-branch.go"
-		if strings.HasPrefix(st.goBranch, releasePrefix) {
-			result = fmt.Sprintf("%s (Go %s.x)", st.Name, strings.TrimPrefix(st.goBranch, releasePrefix))
+		if strings.HasPrefix(st.RevBranch, releasePrefix) {
+			result = fmt.Sprintf("%s (Go %s.x)", st.Name, strings.TrimPrefix(st.RevBranch, releasePrefix))
 		} else {
 			// But if we ever support building other branches,
 			// fall back to something verbose until we add a
 			// special case:
-			result = fmt.Sprintf("%s (go branch %s)", st.Name, st.goBranch)
+			result = fmt.Sprintf("%s (go branch %s)", st.Name, st.RevBranch)
 		}
 	}
 	// For an x repo running on a CL in a different repo,
@@ -935,7 +914,7 @@ func (st *buildStatus) baselineCommit() (baseline string, err error) {
 		return "", fmt.Errorf("no Go releases: %v", res)
 	}
 
-	if st.goBranch == "" {
+	if st.RevBranch == "master" {
 		// Testing master, baseline is latest release.
 		return releases[0].GetTagCommit(), nil
 	}
@@ -943,12 +922,12 @@ func (st *buildStatus) baselineCommit() (baseline string, err error) {
 	// Testing release branch. Baseline is latest patch version of this
 	// release.
 	for _, r := range releases {
-		if st.goBranch == r.GetBranchName() {
+		if st.RevBranch == r.GetBranchName() {
 			return r.GetTagCommit(), nil
 		}
 	}
 
-	return "", fmt.Errorf("cannot find latest release for %s", st.goBranch)
+	return "", fmt.Errorf("cannot find latest release for %s", st.RevBranch)
 }
 
 // reportErr reports an error to Stackdriver.
@@ -1337,13 +1316,9 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 	sp = st.CreateSpan("running_subrepo_tests", st.SubName)
 	defer func() { sp.Done(err) }()
 
-	branch := st.goBranch
-	if branch == "" {
-		branch = "master"
-	}
 	env := append(st.conf.Env(),
 		"BENCH_BASELINE_GOROOT="+baselineGoroot,
-		"BENCH_BRANCH="+branch,
+		"BENCH_BRANCH="+st.RevBranch,
 		"GOROOT="+goroot,
 		"GOPATH="+gopath,
 		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
@@ -1388,7 +1363,7 @@ func (st *buildStatus) uploadBenchResults(baseline string) (err error) {
 	// Prepend some useful metadata.
 	var b strings.Builder
 	fmt.Fprintf(&b, "experiment-commit: %s\n", st.Rev)
-	fmt.Fprintf(&b, "experiment-commit-time: %s\n", st.revCommitTime)
+	fmt.Fprintf(&b, "experiment-commit-time: %s\n", st.RevCommitTime)
 	fmt.Fprintf(&b, "baseline-commit: %s\n", baseline)
 	fmt.Fprintf(&b, "benchmarks-commit: %s\n", st.SubRev)
 	fmt.Fprintf(&b, "post-submit: %t\n", st.trySet == nil)
@@ -1956,16 +1931,16 @@ func (st *buildStatus) repeatedCommunicationError(execErr error) error {
 
 // commitTime returns the greater of Rev and SubRev's commit times.
 func (st *buildStatus) commitTime() time.Time {
-	if st.revCommitTime.Before(st.subRevCommitTime) {
-		return st.subRevCommitTime
+	if st.RevCommitTime.Before(st.SubRevCommitTime) {
+		return st.SubRevCommitTime
 	}
-	return st.revCommitTime
+	return st.RevCommitTime
 }
 
 // branch returns branch for either Rev, or SubRev if it exists.
 func (st *buildStatus) branch() string {
 	if st.SubRev != "" {
-		return st.subRevBranch
+		return st.SubRevBranch
 	}
-	return st.revBranch
+	return st.RevBranch
 }

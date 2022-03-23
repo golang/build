@@ -299,7 +299,7 @@ func TestFindWork(t *testing.T) {
 		return false
 	}
 
-	addWorkTestHook = func(work buildgo.BuilderRev, d *commitDetail) {
+	addWorkTestHook = func(work buildgo.BuilderRev, d commitDetail) {
 		t.Logf("Got: %v, %+v", work, d)
 	}
 	defer func() { addWorkTestHook = nil }()
@@ -388,6 +388,9 @@ func TestBuildStatusFormat(t *testing.T) {
 					Name:    "linux-amd64",
 					SubName: "tools",
 				},
+				commitDetail: commitDetail{
+					RevBranch: "master",
+				},
 			},
 			want: "(x/tools) linux-amd64",
 		},
@@ -402,7 +405,9 @@ func TestBuildStatusFormat(t *testing.T) {
 					Name:    "linux-amd64",
 					SubName: "tools",
 				},
-				goBranch: "release-branch.go1.15",
+				commitDetail: commitDetail{
+					RevBranch: "release-branch.go1.15",
+				},
 			},
 			want: "linux-amd64 (Go 1.15.x)",
 		},
@@ -417,6 +422,9 @@ func TestBuildStatusFormat(t *testing.T) {
 					Name:    "linux-amd64",
 					SubName: "tools",
 				},
+				commitDetail: commitDetail{
+					RevBranch: "master",
+				},
 			},
 			want: "(x/tools) linux-amd64",
 		},
@@ -424,6 +432,9 @@ func TestBuildStatusFormat(t *testing.T) {
 			st: &buildStatus{
 				BuilderRev: buildgo.BuilderRev{
 					Name: "darwin-amd64-10_14",
+				},
+				commitDetail: commitDetail{
+					RevBranch: "master",
 				},
 			},
 			want: "darwin-amd64-10_14",
@@ -433,7 +444,9 @@ func TestBuildStatusFormat(t *testing.T) {
 				BuilderRev: buildgo.BuilderRev{
 					Name: "darwin-amd64-10_14",
 				},
-				goBranch: "release-branch.go1.15",
+				commitDetail: commitDetail{
+					RevBranch: "release-branch.go1.15",
+				},
 			},
 			want: "darwin-amd64-10_14 (Go 1.15.x)",
 		},

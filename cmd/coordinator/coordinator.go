@@ -419,16 +419,16 @@ func main() {
 var ignoreAllNewWork bool
 
 // addWorkTestHook is optionally set by tests.
-var addWorkTestHook func(buildgo.BuilderRev, *commitDetail)
+var addWorkTestHook func(buildgo.BuilderRev, commitDetail)
 
 type commitDetail struct {
 	// RevCommitTime is always the git committer time of the associated
 	// BuilderRev.Rev.
-	RevCommitTime string // in time.RFC3339 format
+	RevCommitTime time.Time
 
 	// SubRevCommitTime is always the git committer time of the associated
-	// BuilderRev.SubRev, if it exists. Otherwise, it's the empty string.
-	SubRevCommitTime string // in time.RFC3339 format
+	// BuilderRev.SubRev, if it exists. Otherwise, it's the zero value.
+	SubRevCommitTime time.Time
 
 	// Branch for BuilderRev.Rev.
 	RevBranch string
@@ -437,15 +437,11 @@ type commitDetail struct {
 	SubRevBranch string
 }
 
-func addWork(work buildgo.BuilderRev) {
-	addWorkDetail(work, nil)
-}
-
 // addWorkDetail adds some work to (maybe) do, if it's not already
 // enqueued and the builders are configured to run the given repo. The
 // detail argument is optional and used for scheduling. It's currently
 // only used for post-submit builds.
-func addWorkDetail(work buildgo.BuilderRev, detail *commitDetail) {
+func addWorkDetail(work buildgo.BuilderRev, detail commitDetail) {
 	if f := addWorkTestHook; f != nil {
 		f(work, detail)
 		return
@@ -888,32 +884,6 @@ func workaroundFlush(w http.ResponseWriter) {
 // gccgo. This is separate from trybots, which populates its work from
 // findTryWorkLoop.
 func findWorkLoop() {
-	// Useful for debugging a single run:
-	if pool.NewGCEConfiguration().InStaging() && false {
-		const debugSubrepo = false
-		if debugSubrepo {
-			addWork(buildgo.BuilderRev{
-				Name:    "linux-arm",
-				Rev:     "c9778ec302b2e0e0d6027e1e0fca892e428d9657",
-				SubName: "tools",
-				SubRev:  "ac303766f5f240c1796eeea3dc9bf34f1261aa35",
-			})
-		}
-		const debugArm = false
-		if debugArm {
-			for !pool.ReversePool().CanBuild("host-linux-arm") {
-				log.Printf("waiting for ARM to register.")
-				time.Sleep(time.Second)
-			}
-			log.Printf("ARM machine(s) registered.")
-			addWork(buildgo.BuilderRev{Name: "linux-arm", Rev: "3129c67db76bc8ee13a1edc38a6c25f9eddcbc6c"})
-		} else {
-			addWork(buildgo.BuilderRev{Name: "linux-amd64", Rev: "9b16b9c7f95562bb290f5015324a345be855894d"})
-			addWork(buildgo.BuilderRev{Name: "linux-amd64-sid", Rev: "9b16b9c7f95562bb290f5015324a345be855894d"})
-			addWork(buildgo.BuilderRev{Name: "linux-amd64-clang", Rev: "9b16b9c7f95562bb290f5015324a345be855894d"})
-		}
-		ignoreAllNewWork = true
-	}
 	// TODO: remove this hard-coded 15 second ticker and instead
 	// do some new streaming gRPC call to maintnerd to subscribe
 	// to new commits.
@@ -954,13 +924,26 @@ func findWork() error {
 
 	add := func(br buildgo.BuilderRev) {
 		var d commitDetail
-		d.RevCommitTime = commitTime[br.Rev]
+		var err error
+		if revCommitTime := commitTime[br.Rev]; revCommitTime != "" {
+			d.RevCommitTime, err = time.Parse(time.RFC3339, revCommitTime)
+			if err != nil {
+				// Log the error, but ignore it. We can tolerate the lack of a commit time.
+				log.Printf("failure parsing commit time %q for %q: %v", revCommitTime, br.Rev, err)
+			}
+		}
 		d.RevBranch = commitBranch[br.Rev]
 		if br.SubRev != "" {
-			d.SubRevCommitTime = commitTime[br.SubRev]
+			if subRevCommitTime := commitTime[br.SubRev]; subRevCommitTime != "" {
+				d.SubRevCommitTime, err = time.Parse(time.RFC3339, subRevCommitTime)
+				if err != nil {
+					// Log the error, but ignore it. We can tolerate the lack of a commit time.
+					log.Printf("failure parsing commit time %q for %q: %v", subRevCommitTime, br.SubRev, err)
+				}
+			}
 			d.SubRevBranch = commitBranch[br.SubRev]
 		}
-		addWorkDetail(br, &d)
+		addWorkDetail(br, d)
 	}
 
 	for _, br := range bs.Revisions {
@@ -1193,10 +1176,12 @@ var testingKnobSkipBuilds bool
 // Must hold statusMu.
 func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	goBranch := work.Branch
+	var subBranch string // branch of subrepository, empty for main Go repo.
 	if work.Project != "go" && len(work.GoBranch) > 0 {
 		// work.GoBranch is non-empty when work.Project != "go",
-		// so prefer work.GoBranch[0] over work.Branch.
+		// so prefer work.GoBranch[0] over work.Branch for goBranch.
 		goBranch = work.GoBranch[0]
+		subBranch = work.Branch
 	}
 	tryBots := dashboard.TryBuildersForProject(work.Project, work.Branch, goBranch)
 	slowBots := slowBotsFromComments(work)
@@ -1261,7 +1246,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 			continue
 		}
 		brev := tryKeyToBuilderRev(bconf.Name, key, mainBuildGoCommit)
-		bs, err := newBuild(brev, noCommitDetail)
+		bs, err := newBuild(brev, commitDetail{RevBranch: goBranch, SubRevBranch: subBranch})
 		if err != nil {
 			log.Printf("can't create build for %q: %v", brev, err)
 			continue
@@ -1290,12 +1275,11 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 				continue
 			}
 			brev := tryKeyToBuilderRev(linuxBuilder.Name, key, goRev)
-			bs, err := newBuild(brev, noCommitDetail)
+			bs, err := newBuild(brev, commitDetail{RevBranch: branch, SubRevBranch: subBranch})
 			if err != nil {
 				log.Printf("can't create build for %q: %v", brev, err)
 				continue
 			}
-			bs.goBranch = branch
 			addBuilderToSet(bs, brev)
 		}
 	}
@@ -1336,7 +1320,8 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 				SubName: project,
 				SubRev:  rev,
 			}
-			bs, err := newBuild(brev, noCommitDetail)
+			// getRepoHead always fetches master, so use that as the SubRevBranch.
+			bs, err := newBuild(brev, commitDetail{RevBranch: branch, SubRevBranch: "master"})
 			if err != nil {
 				log.Printf("can't create x/%s trybot build for go/master commit %s: %v", project, rev, err)
 				return nil
@@ -1570,16 +1555,13 @@ func (ts *trySet) awaitTryBuild(idx int, bs *buildStatus, brev buildgo.BuilderRe
 		// start a new build if the old one appears dead or
 		// hung.
 
-		old := bs
-
 		// Sleep a bit and retry.
 		time.Sleep(30 * time.Second)
 		if !ts.wanted() {
 			return
 		}
-		bs, _ = newBuild(brev, noCommitDetail)
+		bs, _ = newBuild(brev, bs.commitDetail)
 		bs.trySet = ts
-		bs.goBranch = old.goBranch
 		go bs.start()
 		ts.mu.Lock()
 		ts.builds[idx] = bs
@@ -1791,9 +1773,6 @@ func getBuildlets(ctx context.Context, n int, schedTmpl *schedule.SchedItem, lg 
 	}()
 	return ch
 }
-
-// noCommitDetail is just a nice name for nil at call sites.
-var noCommitDetail *commitDetail = nil
 
 type testSet struct {
 	st        *buildStatus
