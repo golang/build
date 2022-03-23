@@ -17,6 +17,7 @@ type Target struct {
 	BuildOnly       bool
 	LongTestBuilder string
 	Race            bool
+	ExtraEnv        []string
 }
 
 // ReleaseTargets maps a target name (usually but not always $GOOS-$GOARCH)
@@ -32,8 +33,10 @@ type ReleaseTargets map[string]*Target
 var allReleases = map[int]ReleaseTargets{
 	17: {
 		"darwin-amd64": &Target{
-			Builder: "darwin-amd64-11_0",
-			Race:    true,
+			Builder:  "darwin-amd64-11_0",
+			Race:     true,
+			ExtraEnv: []string{"CGO_CFLAGS=-mmacosx-version-min=10.13"}, // Issues #36025 #35459
+
 		},
 		"darwin-arm64": &Target{
 			Builder: "darwin-arm64-11_0-toothrot",
@@ -84,8 +87,9 @@ var allReleases = map[int]ReleaseTargets{
 	},
 	18: {
 		"darwin-amd64": &Target{
-			Builder: "darwin-amd64-12_0",
-			Race:    true,
+			Builder:  "darwin-amd64-12_0",
+			Race:     true,
+			ExtraEnv: []string{"CGO_CFLAGS=-mmacosx-version-min=10.13"}, // Issues #36025 #35459
 		},
 		"darwin-arm64": &Target{
 			Builder: "darwin-arm64-12_0-toothrot",

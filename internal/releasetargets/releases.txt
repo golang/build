@@ -2,6 +2,7 @@ Targets for release 1.17
 ================================================================================
 darwin-amd64    darwin     amd64      darwin-amd64-11_0
 	Race enabled
+	Extra env: ["CGO_CFLAGS=-mmacosx-version-min=10.13"]
 
 darwin-arm64    darwin     arm64      darwin-arm64-11_0-toothrot
 	Race enabled
@@ -40,6 +41,7 @@ Targets for release 1.18
 ================================================================================
 darwin-amd64    darwin     amd64      darwin-amd64-12_0
 	Race enabled
+	Extra env: ["CGO_CFLAGS=-mmacosx-version-min=10.13"]
 
 darwin-arm64    darwin     arm64      darwin-arm64-12_0-toothrot
 	Race enabled

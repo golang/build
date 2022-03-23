@@ -63,6 +63,9 @@ func printRelease(w io.Writer, release int, targets ReleaseTargets) {
 		if len(flags) != 0 {
 			fmt.Fprintf(w, "\t%v\n", strings.Join(flags, ", "))
 		}
+		if len(target.ExtraEnv) != 0 {
+			fmt.Fprintf(w, "\tExtra env: %q\n", target.ExtraEnv)
+		}
 		fmt.Fprintf(w, "\n")
 	}
 	fmt.Fprintf(w, "\n\n")

@@ -31,7 +31,6 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/releasetargets"
-	"golang.org/x/build/maintner/maintnerd/maintapi/version"
 )
 
 //go:embed releaselet/releaselet.go
@@ -106,6 +105,7 @@ func main() {
 			Race:      target.Race,
 			Builder:   target.Builder,
 			SkipTests: target.BuildOnly,
+			ExtraEnv:  target.ExtraEnv,
 		}
 		if *flagLongTest {
 			if *skipTests || target.BuildOnly {
@@ -136,6 +136,8 @@ type Build struct {
 	TestOnly bool   // Run tests only; don't produce a release artifact.
 
 	SkipTests bool // skip tests (run make.bash but not all.bash); needed by cross-compile builders (s390x)
+
+	ExtraEnv []string
 }
 
 func (b *Build) toolDir() string { return "go/pkg/tool/" + b.OS + "_" + b.Arch }
@@ -250,12 +252,7 @@ func (b *Build) make() error {
 		"GOPATH="+work+sep+goPath,
 		"GOBIN=",
 	)
-
-	// Issues #36025 #35459
-	if b.OS == "darwin" && b.Arch == "amd64" {
-		minMacVersion := minSupportedMacOSVersion(*flagVersion)
-		env = append(env, fmt.Sprintf("CGO_CFLAGS=-mmacosx-version-min=%s", minMacVersion))
-	}
+	env = append(env, b.ExtraEnv...)
 
 	// Execute build (make.bash only first).
 	b.logf("Building (make.bash only).")
@@ -794,21 +791,4 @@ func setGOARCH(env []string, goarch string) []string {
 		return env
 	}
 	return append(env, wantKV)
-}
-
-// minSupportedMacOSVersion provides the minimum supported macOS
-// version (of the form N.M) for supported Go versions.
-func minSupportedMacOSVersion(goVer string) string {
-	// The minimum supported version of macOS with each version of go:
-	// go1.16 - macOS 10.12
-	// go1.17 - macOS 10.13
-	// go1.18 - macOS 10.13
-	x, ok := version.Go1PointX(goVer)
-	if !ok {
-		panic(fmt.Sprintf("could not parse version %v", goVer))
-	}
-	if x < 17 {
-		return "10.12"
-	}
-	return "10.13"
 }
