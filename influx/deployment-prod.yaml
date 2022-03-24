@@ -8,6 +8,12 @@ spec:
   selector:
     matchLabels:
       app: influx
+  strategy:
+    # Kill old pod, then start new one.
+    #
+    # We must do this otherwise we can't transfer persistent volume (it
+    # won't be available until the old pod dies).
+    type: Recreate
   template:
     metadata:
       labels:
@@ -36,6 +42,14 @@ spec:
             memory: "8Gi"
 ---
 apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: prod
+  name: influx
+  annotations:
+    iam.gke.io/gcp-service-account: influx@symbolic-datum-552.iam.gserviceaccount.com
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   namespace: prod
@@ -62,5 +76,5 @@ spec:
       targetPort: 443
       name: https
   selector:
-    app: influx-data
+    app: influx
   type: NodePort
