@@ -288,29 +288,6 @@ func cp(dst, src string) error {
 	return os.Chtimes(dst, fi.ModTime(), fi.ModTime())
 }
 
-func cpDir(dst, src string) error {
-	walk := func(srcPath string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		dstPath := filepath.Join(dst, srcPath[len(src):])
-		if info.IsDir() {
-			return os.MkdirAll(dstPath, 0755)
-		}
-		return cp(dstPath, srcPath)
-	}
-	return filepath.Walk(src, walk)
-}
-
-func cpAllDir(dst, basePath string, dirs ...string) error {
-	for _, dir := range dirs {
-		if err := cpDir(filepath.Join(dst, dir), filepath.Join(basePath, dir)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func ext() string {
 	if runtime.GOOS == "windows" {
 		return ".exe"
