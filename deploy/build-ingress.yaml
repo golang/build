@@ -5,7 +5,7 @@ metadata:
   name: build-ingress
   annotations:
     kubernetes.io/ingress.global-static-ip-name: ingress
-    networking.gke.io/managed-certificates: dev-test-cert,build-cert,dev-cert,gerritbot-cert,maintner-cert
+    networking.gke.io/managed-certificates: dev-test-cert,build-cert,dev-cert,gerritbot-cert,influx-cert,maintner-cert
     kubernetes.io/ingress.class: "gce"
     networking.gke.io/v1beta1.FrontendConfig: build-ingress-frontend
 spec:
@@ -85,6 +85,16 @@ spec:
             name: gerritbot-internal
             port:
               number: 444
+  - host: influx.golang.org
+    http:
+      paths:
+      - pathType: ImplementationSpecific
+        path: /*
+        backend:
+          service:
+            name: influx-internal
+            port:
+              number: 443
   - host: maintner.golang.org
     http:
       paths:
@@ -152,6 +162,15 @@ metadata:
 spec:
   domains:
     - gerritbot.golang.org
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  namespace: prod
+  name: influx-cert
+spec:
+  domains:
+    - influx.golang.org
 ---
 apiVersion: networking.gke.io/v1
 kind: ManagedCertificate
