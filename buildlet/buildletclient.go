@@ -166,8 +166,7 @@ type client struct {
 	name            string                                  // optional name for debugging, returned by Name
 	gceInstanceName string                                  // instance name for GCE VMs
 
-	closeFuncs  []func() // optional extra code to run on close
-	releaseMode bool
+	closeFuncs []func() // optional extra code to run on close
 
 	ctx              context.Context
 	ctxCancel        context.CancelFunc
@@ -182,16 +181,6 @@ type client struct {
 
 	mu     sync.Mutex
 	broken bool // client is broken in some way
-}
-
-// SetReleaseMode sets whether this client is being used in "release
-// mode", to prepare the final binaries to be shipped to users. All
-// this mode does for now is disable pargzip multi-stream gzip
-// files. See golang.org/issue/19052.
-//
-// SetReleaseMode must be set before using the client.
-func (c *client) SetReleaseMode(v bool) {
-	c.releaseMode = v
 }
 
 func (c *client) String() string {
@@ -462,11 +451,7 @@ func (c *client) Put(ctx context.Context, r io.Reader, path string, mode os.File
 // GetTar returns a .tar.gz stream of the given directory, relative to the buildlet's work dir.
 // The provided dir may be empty to get everything.
 func (c *client) GetTar(ctx context.Context, dir string) (io.ReadCloser, error) {
-	var args string
-	if c.releaseMode {
-		args = "&pargzip=0"
-	}
-	req, err := http.NewRequest("GET", c.URL()+"/tgz?dir="+url.QueryEscape(dir)+args, nil)
+	req, err := http.NewRequest("GET", c.URL()+"/tgz?dir="+url.QueryEscape(dir), nil)
 	if err != nil {
 		return nil, err
 	}

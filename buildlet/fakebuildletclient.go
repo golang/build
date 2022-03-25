@@ -46,7 +46,6 @@ type Client interface {
 	SetHTTPClient(httpClient *http.Client)
 	SetName(name string)
 	SetOnHeartbeatFailure(fn func())
-	SetReleaseMode(v bool)
 	Status(ctx context.Context) (Status, error)
 	String() string
 	URL() string
@@ -189,9 +188,6 @@ func (fc *FakeClient) SetName(name string) {
 
 // SetOnHeartbeatFailure sets a function to be called when heartbeats against this fake buildlet fail.
 func (fc *FakeClient) SetOnHeartbeatFailure(fn func()) {}
-
-// SetReleaseMode sets the release mode on a fake client.
-func (fc *FakeClient) SetReleaseMode(v bool) {}
 
 // Status provides a status on the fake client.
 func (fc *FakeClient) Status(ctx context.Context) (Status, error) { return Status{}, errUnimplemented }

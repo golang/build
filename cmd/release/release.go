@@ -8,7 +8,6 @@ package main
 import (
 	"archive/tar"
 	"archive/zip"
-	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -19,9 +18,11 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -79,20 +80,30 @@ func main() {
 	if *flagVersion == "" {
 		log.Fatal(`must specify -version flag (such as "go1.12" or "go1.13beta1")`)
 	}
+	if *stagingDir == "" {
+		var err error
+		*stagingDir, err = ioutil.TempDir("", "go-release-staging_")
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	if *flagTarget == "src" {
+		if err := writeSourceFile(*rev, *flagVersion, *flagVersion+".src.tar.gz"); err != nil {
+			log.Fatalf("building source archive: %v", err)
+		}
+		return
+	}
 
 	coordClient = coordinatorClient()
 	buildEnv = buildenv.Production
 
-	var target *releasetargets.Target
-	if *flagTarget != "src" {
-		targets, ok := releasetargets.TargetsForVersion(*flagVersion)
-		if !ok {
-			log.Fatalf("could not parse version %q", *flagVersion)
-		}
-		target, ok = targets[*flagTarget]
-		if !ok {
-			log.Fatalf("no such target %q in version %q", *flagTarget, *flagVersion)
-		}
+	targets, ok := releasetargets.TargetsForVersion(*flagVersion)
+	if !ok {
+		log.Fatalf("could not parse version %q", *flagVersion)
+	}
+	target, ok := targets[*flagTarget]
+	if !ok {
+		log.Fatalf("no such target %q in version %q", *flagTarget, *flagVersion)
 	}
 	if *flagLongTest && (*skipTests || target.BuildOnly) {
 		log.Fatalf("long testing requested, but no tests to run: skip=%v, build only=%v", *skipTests, target.BuildOnly)
@@ -103,7 +114,7 @@ func main() {
 		Logger:  &logger{*flagTarget},
 	}
 	ctx.Printf("Start.")
-	if err := runBuild(ctx, target, *flagLongTest, *flagTarget == "src"); err != nil {
+	if err := buildTarget(ctx, target, *flagLongTest); err != nil {
 		ctx.Printf("Error: %v", err)
 		os.Exit(1)
 	} else {
@@ -120,24 +131,66 @@ func (l *logger) Printf(format string, args ...interface{}) {
 	log.Printf(format, args...)
 }
 
-var preBuildCleanFiles = []string{
-	".gitattributes",
-	".github",
-	".gitignore",
-	".hgignore",
-	".hgtags",
-	"misc/dashboard",
-	"misc/makerelease",
+func writeSourceFile(revision, version, outPath string) error {
+	w, err := os.Create(outPath)
+	if err != nil {
+		return err
+	}
+	if err := writeSource(revision, version, w); err != nil {
+		return err
+	}
+	return w.Close()
 }
 
-func runBuild(ctx *workflow.TaskContext, target *releasetargets.Target, longTest bool, source bool) error {
-	if source {
-		target = &releasetargets.Target{
-			GOOS:    "linux",
-			GOARCH:  "amd64",
-			Builder: "linux-amd64",
-		}
+func writeSource(revision, version string, out io.Writer) error {
+	tarUrl := "https://go.googlesource.com/go/+archive/" + revision + ".tar.gz"
+	resp, err := http.Get(tarUrl)
+	if err != nil {
+		return err
 	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to fetch %q: %v", tarUrl, resp.Status)
+	}
+	defer resp.Body.Close()
+	gzReader, err := gzip.NewReader(resp.Body)
+	if err != nil {
+		return err
+	}
+	reader := tar.NewReader(gzReader)
+
+	gzWriter := gzip.NewWriter(out)
+	writer := tar.NewWriter(gzWriter)
+
+	// Add go/VERSION to the archive, and fix up the existing contents.
+	if err := writer.WriteHeader(&tar.Header{
+		Name:       "go/VERSION",
+		Size:       int64(len(version)),
+		Typeflag:   tar.TypeReg,
+		Mode:       0644,
+		ModTime:    time.Now(),
+		AccessTime: time.Now(),
+		ChangeTime: time.Now(),
+	}); err != nil {
+		return err
+	}
+	if _, err := writer.Write([]byte(version)); err != nil {
+		return err
+	}
+	if err := adjustTar(reader, writer, "go/", []adjustFunc{
+		dropRegexpMatches([]string{`VERSION`}), // Don't overwrite our VERSION file from above.
+		dropRegexpMatches(dropPatterns),
+		fixPermissions(),
+	}); err != nil {
+		return err
+	}
+
+	if err := writer.Close(); err != nil {
+		return err
+	}
+	return gzWriter.Close()
+}
+
+func buildTarget(ctx *workflow.TaskContext, target *releasetargets.Target, longTest bool) error {
 	builder := target.Builder
 	if longTest {
 		builder = target.LongTestBuilder
@@ -147,17 +200,8 @@ func runBuild(ctx *workflow.TaskContext, target *releasetargets.Target, longTest
 		return fmt.Errorf("unknown builder: %v", buildConfig)
 	}
 
-	var hostArch string // non-empty if we're cross-compiling (s390x)
-	if target.BuildOnly && buildConfig.IsContainer() && (buildConfig.GOARCH() != "amd64" && buildConfig.GOARCH() != "386") {
-		hostArch = "amd64"
-	}
-
 	ctx.Printf("Creating buildlet.")
 	client, err := coordClient.CreateBuildlet(builder)
-	if err != nil {
-		return err
-	}
-	client.SetReleaseMode(true) // disable pargzip; golang.org/issue/19052
 	if err != nil {
 		return err
 	}
@@ -176,46 +220,20 @@ func runBuild(ctx *workflow.TaskContext, target *releasetargets.Target, longTest
 		go14   = "go1.4"
 	)
 
-	tar := "https://go.googlesource.com/go/+archive/" + *rev + ".tar.gz"
-	if err := client.PutTarFromURL(ctx, tar, goDir); err != nil {
-		ctx.Printf("failed to put tarball %q into dir %q: %v", tar, goDir, err)
+	srcBuf := &bytes.Buffer{}
+	if err := writeSource(*rev, *flagVersion, srcBuf); err != nil {
 		return err
 	}
 
-	if u := buildConfig.GoBootstrapURL(buildEnv); u != "" && source {
+	if err := client.PutTar(ctx, srcBuf, ""); err != nil {
+		return fmt.Errorf("failed to put generated source tarball: %v", err)
+	}
+
+	if u := buildConfig.GoBootstrapURL(buildEnv); u != "" {
 		ctx.Printf("Installing go1.4.")
 		if err := client.PutTarFromURL(ctx, u, go14); err != nil {
 			return err
 		}
-	}
-
-	// Write out version file.
-	ctx.Printf("Writing VERSION file.")
-	if err := client.Put(ctx, strings.NewReader(*flagVersion), "go/VERSION", 0644); err != nil {
-		return err
-	}
-
-	ctx.Printf("Cleaning goroot (pre-build).")
-	if err := client.RemoveAll(ctx, addPrefix(goDir, preBuildCleanFiles)...); err != nil {
-		return err
-	}
-
-	if source {
-		ctx.Printf("Skipping build.")
-
-		// Remove unwanted top-level directories and verify only "go" remains:
-		if err := client.RemoveAll(ctx, "tmp", "gocache"); err != nil {
-			return err
-		}
-		if err := checkTopLevelDirs(ctx, client); err != nil {
-			return fmt.Errorf("verifying no unwanted top-level directories: %v", err)
-		}
-		if err := checkPerm(ctx, client, target, source); err != nil {
-			return fmt.Errorf("verifying file permissions: %v", err)
-		}
-
-		finalFilename := *flagVersion + "." + *flagTarget + ".tar.gz"
-		return fetchTarball(ctx, client, finalFilename)
 	}
 
 	// Set up build environment.
@@ -260,15 +278,11 @@ func runBuild(ctx *workflow.TaskContext, target *releasetargets.Target, longTest
 		if *watch {
 			execOut = io.MultiWriter(out, os.Stdout)
 		}
-		cmdEnv := append([]string(nil), env...)
-		if len(args) > 0 && args[0] == "run" && hostArch != "" {
-			cmdEnv = setGOARCH(cmdEnv, hostArch)
-		}
 		remoteErr, err := client.Exec(context.Background(), goCmd, buildlet.ExecOpts{
 			Output:   execOut,
 			Dir:      ".", // root of buildlet work directory
 			Args:     args,
-			ExtraEnv: cmdEnv,
+			ExtraEnv: env,
 		})
 		if err != nil {
 			return err
@@ -287,70 +301,50 @@ func runBuild(ctx *workflow.TaskContext, target *releasetargets.Target, longTest
 		}
 	}
 
-	// postBuildCleanFiles are the list of files to remove in the go/ directory
-	// after things have been built.
-	postBuildCleanFiles := []string{
-		"VERSION.cache",
-		"pkg/bootstrap",
+	ctx.Printf("Building release tarball.")
+	stagingFile := func(ext string) string {
+		return filepath.Join(*stagingDir, *flagVersion+"."+*flagTarget+ext+".untested")
+	}
+	untestedTarballPath := stagingFile(".tar.gz")
+	if err := buildDistribution(ctx, client, untestedTarballPath, []adjustFunc{
+		dropRegexpMatches(dropPatterns),
+		dropUnwantedSysos(target),
+		fixupCrossCompile(target),
+		fixPermissions(),
+	}); err != nil {
+		return fmt.Errorf("building distribution: %v", err)
 	}
 
-	// Remove race detector *.syso files for other GOOS/GOARCHes (except for the source release).
-	if !source {
-		okayRace := fmt.Sprintf("race_%s_%s.syso", target.GOOS, target.GOARCH)
-		err := client.ListDir(ctx, ".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
-			name := strings.TrimPrefix(ent.Name(), "go/")
-			if strings.HasPrefix(name, "src/runtime/race/race_") &&
-				strings.HasSuffix(name, ".syso") &&
-				path.Base(name) != okayRace {
-				postBuildCleanFiles = append(postBuildCleanFiles, name)
-			}
-		})
-		if err != nil {
-			return fmt.Errorf("enumerating files to clean race syso files: %v", err)
-		}
-	}
-
-	ctx.Printf("Cleaning goroot (post-build).")
-	if err := client.RemoveAll(ctx, addPrefix(goDir, postBuildCleanFiles)...); err != nil {
+	ctx.Printf("Refreshing buildlet go directory.")
+	// Replace the dirty tree with the distribution's contents before we
+	// proceed. This gives us a bit of free testing, and gives the MSI build
+	// process a clean start.
+	if err := client.RemoveAll(ctx, "go"); err != nil {
 		return err
 	}
-	// Users don't need the api checker binary pre-built. It's
-	// used by tests, but all.bash builds it first.
-	if err := client.RemoveAll(ctx, "go/pkg/tool/"+target.GOOS+"_"+target.GOARCH+"/api"); err != nil {
-		return err
-	}
-	// Remove go/pkg/${GOOS}_${GOARCH}/cmd. This saves a bunch of
-	// space, and users don't typically rebuild cmd/compile,
-	// cmd/link, etc. If they want to, they still can, but they'll
-	// have to pay the cost of rebuilding dependent libaries. No
-	// need to ship them just in case.
-	//
-	// Also remove go/pkg/${GOOS}_${GOARCH}_{dynlink,shared,testcshared_shared}
-	// per Issue 20038.
-	pkgDir := "go/pkg/" + target.GOOS + "_" + target.GOARCH
-	if err := client.RemoveAll(ctx,
-		pkgDir+"/cmd",
-		pkgDir+"_dynlink",
-		pkgDir+"_shared",
-		pkgDir+"_testcshared_shared",
-	); err != nil {
-		return err
-	}
-
-	ctx.Printf("Pushing and running releaselet.")
-	err = client.Put(ctx, strings.NewReader(releaselet), "releaselet.go", 0666)
+	r, err := os.Open(untestedTarballPath)
 	if err != nil {
 		return err
 	}
-	if err := runGo("run", "releaselet.go"); err != nil {
-		log.Printf("releaselet failed: %v", err)
-		client.ListDir(ctx, ".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
-			log.Printf("remote: %v", ent)
-		})
+	defer r.Close()
+	if err := client.PutTar(ctx, r, ""); err != nil {
 		return err
 	}
 
-	cleanFiles := []string{"releaselet.go", goPath, go14, "tmp", "gocache"}
+	if target.GOOS == "windows" {
+		ctx.Printf("Pushing and running releaselet.")
+		err = client.Put(ctx, strings.NewReader(releaselet), "releaselet.go", 0666)
+		if err != nil {
+			return err
+		}
+		if err := runGo("run", "releaselet.go"); err != nil {
+			ctx.Printf("releaselet failed: %v", err)
+			client.ListDir(ctx, ".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
+				ctx.Printf("remote: %v", ent)
+			})
+			return err
+		}
+	}
 
 	// So far, we've run make.bash. We want to create the release archive next.
 	// Since the release archive hasn't been tested yet, place it in a temporary
@@ -362,18 +356,6 @@ func runBuild(ctx *workflow.TaskContext, target *releasetargets.Target, longTest
 		Final    string // Final location where to move the file after the release has been tested.
 	}
 	var releases []releaseFile
-	stagingDir := *stagingDir
-	if stagingDir == "" {
-		var err error
-		stagingDir, err = ioutil.TempDir("", "go-release-staging_")
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-	stagingFile := func(ext string) string {
-		return filepath.Join(stagingDir, *flagVersion+"."+*flagTarget+ext+".untested")
-	}
-
 	if !target.BuildOnly && target.GOOS == "windows" {
 		untested := stagingFile(".msi")
 		if err := fetchFile(ctx, client, untested, "msi"); err != nil {
@@ -385,45 +367,16 @@ func runBuild(ctx *workflow.TaskContext, target *releasetargets.Target, longTest
 		})
 	}
 
-	if target.GOOS == "windows" {
-		cleanFiles = append(cleanFiles, "msi")
-	}
-	if target.GOOS == "windows" && target.GOARCH == "arm64" {
-		// At least on windows-arm64, 'wix/winterop.dll' gets created.
-		// Delete the entire wix directory since it's unrelated to Go.
-		cleanFiles = append(cleanFiles, "wix")
-	}
-
-	// Need to delete everything except the final "go" directory,
-	// as we make the tarball relative to workdir.
-	ctx.Printf("Cleaning workdir.")
-	if err := client.RemoveAll(ctx, cleanFiles...); err != nil {
-		return err
-	}
-
-	// And verify there's no other top-level stuff besides the "go" directory:
-	if err := checkTopLevelDirs(ctx, client); err != nil {
-		return fmt.Errorf("verifying no unwanted top-level directories: %v", err)
-	}
-
-	if err := checkPerm(ctx, client, target, source); err != nil {
-		return fmt.Errorf("verifying file permissions: %v", err)
-	}
-
 	switch {
 	case !target.BuildOnly && target.GOOS != "windows":
-		untested := stagingFile(".tar.gz")
-		if err := fetchTarball(ctx, client, untested); err != nil {
-			return fmt.Errorf("fetching and writing tarball: %v", err)
-		}
 		releases = append(releases, releaseFile{
-			Untested: untested,
+			Untested: untestedTarballPath,
 			Final:    *flagVersion + "." + *flagTarget + ".tar.gz",
 		})
 	case !target.BuildOnly && target.GOOS == "windows":
 		untested := stagingFile(".zip")
-		if err := fetchZip(ctx, client, untested); err != nil {
-			return fmt.Errorf("fetching and writing zip: %v", err)
+		if err := tgzToZip(untestedTarballPath, untested); err != nil {
+			return err
 		}
 		releases = append(releases, releaseFile{
 			Untested: untested,
@@ -485,103 +438,186 @@ func runBuild(ctx *workflow.TaskContext, target *releasetargets.Target, longTest
 	return nil
 }
 
-// checkTopLevelDirs checks that all files under client's "."
-// ($WORKDIR) are are under "go/".
-func checkTopLevelDirs(ctx *workflow.TaskContext, client buildlet.Client) error {
-	var badFileErr error // non-nil once an unexpected file/dir is found
-	if err := client.ListDir(ctx, ".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
-		name := ent.Name()
-		if !(strings.HasPrefix(name, "go/") || strings.HasPrefix(name, `go\`)) {
-			ctx.Printf("unexpected file: %q", name)
-			if badFileErr == nil {
-				badFileErr = fmt.Errorf("unexpected filename %q found after cleaning", name)
-			}
-		}
-	}); err != nil {
+func buildDistribution(ctx *workflow.TaskContext, client buildlet.Client, outputPath string, adjusts []adjustFunc) error {
+	input, err := client.GetTar(ctx, "go")
+	if err != nil {
 		return err
 	}
-	return badFileErr
+	defer input.Close()
+
+	gzReader, err := gzip.NewReader(input)
+	if err != nil {
+		return err
+	}
+	defer gzReader.Close()
+	reader := tar.NewReader(gzReader)
+	output, err := os.Create(outputPath)
+	if err != nil {
+		return err
+	}
+	gzWriter := gzip.NewWriter(output)
+	writer := tar.NewWriter(gzWriter)
+	if err := adjustTar(reader, writer, "go/", adjusts); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+	if err := gzWriter.Close(); err != nil {
+		return err
+	}
+	return output.Close()
 }
 
-// checkPerm checks that files in client's $WORKDIR/go directory
-// have expected permissions.
-func checkPerm(ctx *workflow.TaskContext, client buildlet.Client, target *releasetargets.Target, source bool) error {
-	var badPermErr error // non-nil once an unexpected perm is found
-	checkPerm := func(ent buildlet.DirEntry, allowed ...string) {
-		for _, p := range allowed {
-			if ent.Perm() == p {
-				return
+// An adjustFunc updates a tar file header in some way.
+// The input is safe to write to. A nil return means to drop the file.
+type adjustFunc func(*tar.Header) *tar.Header
+
+// adjustTar copies the files from reader to writer, putting them in prefixDir
+// and adjusting them with adjusts along the way.
+func adjustTar(reader *tar.Reader, writer *tar.Writer, prefixDir string, adjusts []adjustFunc) error {
+	if !strings.HasSuffix(prefixDir, "/") {
+		return fmt.Errorf("prefix dir %q must have a trailing /", prefixDir)
+	}
+	writer.WriteHeader(&tar.Header{
+		Name:       prefixDir,
+		Typeflag:   tar.TypeDir,
+		Mode:       0755,
+		ModTime:    time.Now(),
+		AccessTime: time.Now(),
+		ChangeTime: time.Now(),
+	})
+file:
+	for {
+		header, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		headerCopy := *header
+		newHeader := &headerCopy
+		for _, adjust := range adjusts {
+			newHeader = adjust(newHeader)
+			if newHeader == nil {
+				continue file
 			}
 		}
-		ctx.Printf("unexpected file %q perm: %q", ent.Name(), ent.Perm())
-		if badPermErr == nil {
-			badPermErr = fmt.Errorf("unexpected file %q perm %q found", ent.Name(), ent.Perm())
-		}
-	}
-	if err := client.ListDir(ctx, "go", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
-		switch target.GOOS {
-		default:
-			checkPerm(ent, "drwxr-xr-x", "-rw-r--r--", "-rwxr-xr-x")
-		case "windows":
-			checkPerm(ent, "drwxrwxrwx", "-rw-rw-rw-")
-		}
-	}); err != nil {
-		return err
-	}
-	if !source {
-		if err := client.ListDir(ctx, "go/bin", buildlet.ListDirOpts{}, func(ent buildlet.DirEntry) {
-			switch target.GOOS {
-			default:
-				checkPerm(ent, "-rwxr-xr-x")
-			case "windows":
-				checkPerm(ent, "-rw-rw-rw-")
-			}
-		}); err != nil {
+		newHeader.Name = prefixDir + newHeader.Name
+		writer.WriteHeader(newHeader)
+		if _, err := io.Copy(writer, reader); err != nil {
 			return err
 		}
 	}
-	return badPermErr
-}
-
-func fetchTarball(ctx *workflow.TaskContext, client buildlet.Client, dest string) error {
-	ctx.Printf("Downloading tarball.")
-	tgz, err := client.GetTar(ctx, ".")
-	if err != nil {
-		return err
-	}
-	return writeFile(ctx, dest, tgz)
-}
-
-func fetchZip(ctx *workflow.TaskContext, client buildlet.Client, dest string) error {
-	ctx.Printf("Downloading tarball and re-compressing as zip.")
-
-	tgz, err := client.GetTar(context.Background(), ".")
-	if err != nil {
-		return err
-	}
-	defer tgz.Close()
-
-	f, err := os.Create(dest)
-	if err != nil {
-		return err
-	}
-	if err := tgzToZip(f, tgz); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	ctx.Printf("Wrote %q.", dest)
 	return nil
 }
 
-func tgzToZip(w io.Writer, r io.Reader) error {
+var dropPatterns = []string{
+	// .gitattributes, .github, etc.
+	`\..*`,
+	// This shouldn't exist, since we create a VERSION file.
+	`VERSION.cache`,
+	// Remove the build cache that the toolchain build process creates.
+	// According to go.dev/cl/82095, it shouldn't exist at all.
+	`pkg/obj/.*`,
+	// Users don't need the api checker binary pre-built. It's
+	// used by tests, but all.bash builds it first.
+	`pkg/tool/[^/]+/api`,
+	// Remove pkg/${GOOS}_${GOARCH}/cmd. This saves a bunch of
+	// space, and users don't typically rebuild cmd/compile,
+	// cmd/link, etc. If they want to, they still can, but they'll
+	// have to pay the cost of rebuilding dependent libaries. No
+	// need to ship them just in case.
+	`pkg/[^/]+/cmd/.*`,
+	// Clean up .exe~ files; see go.dev/issue/23894.
+	`.*\.exe~`,
+}
+
+// dropRegexpMatches drops files whose name matches any of patterns.
+func dropRegexpMatches(patterns []string) adjustFunc {
+	var rejectRegexps []*regexp.Regexp
+	for _, pattern := range patterns {
+		rejectRegexps = append(rejectRegexps, regexp.MustCompile("^"+pattern+"$"))
+	}
+	return func(h *tar.Header) *tar.Header {
+		for _, regexp := range rejectRegexps {
+			if regexp.MatchString(h.Name) {
+				return nil
+			}
+		}
+		return h
+	}
+}
+
+// dropUnwantedSysos drops race detector sysos for other architectures.
+func dropUnwantedSysos(target *releasetargets.Target) adjustFunc {
+	raceSysoRegexp := regexp.MustCompile(`^src/runtime/race/race_(.*?).syso$`)
+	osarch := target.GOOS + "_" + target.GOARCH
+	return func(h *tar.Header) *tar.Header {
+		matches := raceSysoRegexp.FindStringSubmatch(h.Name)
+		if matches != nil && matches[1] != osarch {
+			return nil
+		}
+		return h
+	}
+}
+
+// fixPermissions sets files' permissions to user-writeable, world-readable.
+func fixPermissions() adjustFunc {
+	return func(h *tar.Header) *tar.Header {
+		if h.Typeflag == tar.TypeDir || h.Mode&0111 != 0 {
+			h.Mode = 0755
+		} else {
+			h.Mode = 0644
+		}
+		return h
+	}
+}
+
+// fixupCrossCompile moves cross-compiled tools to their final location and
+// drops unnecessary host architecture files.
+func fixupCrossCompile(target *releasetargets.Target) adjustFunc {
+	if !strings.HasSuffix(target.Builder, "-crosscompile") {
+		return func(h *tar.Header) *tar.Header { return h }
+	}
+	osarch := target.GOOS + "_" + target.GOARCH
+	return func(h *tar.Header) *tar.Header {
+		// Move cross-compiled tools up to bin/, and drop the existing contents.
+		if strings.HasPrefix(h.Name, "bin/") {
+			if strings.HasPrefix(h.Name, "bin/"+osarch) {
+				h.Name = strings.ReplaceAll(h.Name, "bin/"+osarch, "bin")
+			} else {
+				return nil
+			}
+		}
+		// Drop host architecture files.
+		if strings.HasPrefix(h.Name, "pkg/linux_amd64") ||
+			strings.HasPrefix(h.Name, "pkg/tool/linux_amd64") {
+			return nil
+		}
+		return h
+	}
+
+}
+
+func tgzToZip(tarballPath, zipPath string) error {
+	r, err := os.Open(tarballPath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
 	zr, err := gzip.NewReader(r)
 	if err != nil {
 		return err
 	}
 	tr := tar.NewReader(zr)
+
+	w, err := os.Create(zipPath)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
 
 	zw := zip.NewWriter(w)
 	for {
@@ -619,7 +655,10 @@ func tgzToZip(w io.Writer, r io.Reader) error {
 			return err
 		}
 	}
-	return zw.Close()
+	if err := zw.Close(); err != nil {
+		return err
+	}
+	return w.Close()
 }
 
 // fetchFile fetches the specified directory from the given buildlet, and
@@ -663,45 +702,8 @@ func writeFile(ctx *workflow.TaskContext, name string, r io.Reader) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	if strings.HasSuffix(name, ".gz") {
-		if err := verifyGzipSingleStream(name); err != nil {
-			return fmt.Errorf("error verifying that %s is a single-stream gzip: %v", name, err)
-		}
-	}
 	ctx.Printf("Wrote %q.", name)
 	return nil
-}
-
-// verifyGzipSingleStream verifies that the named gzip file is not
-// a multi-stream file. See golang.org/issue/19052
-func verifyGzipSingleStream(name string) error {
-	f, err := os.Open(name)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	br := bufio.NewReader(f)
-	zr, err := gzip.NewReader(br)
-	if err != nil {
-		return err
-	}
-	zr.Multistream(false)
-	if _, err := io.Copy(ioutil.Discard, zr); err != nil {
-		return fmt.Errorf("reading first stream: %v", err)
-	}
-	peek, err := br.Peek(1)
-	if len(peek) > 0 || err != io.EOF {
-		return fmt.Errorf("unexpected peek of %d, %v after first gzip stream", len(peek), err)
-	}
-	return nil
-}
-
-func addPrefix(prefix string, in []string) []string {
-	var out []string
-	for _, s := range in {
-		out = append(out, path.Join(prefix, s))
-	}
-	return out
 }
 
 func coordinatorClient() *buildlet.CoordinatorClient {
@@ -754,19 +756,4 @@ func userToken() string {
 		log.Fatal(err)
 	}
 	return strings.TrimSpace(string(slurp))
-}
-
-func setGOARCH(env []string, goarch string) []string {
-	wantKV := "GOARCH=" + goarch
-	existing := false
-	for i, kv := range env {
-		if strings.HasPrefix(kv, "GOARCH=") && kv != wantKV {
-			env[i] = wantKV
-			existing = true
-		}
-	}
-	if existing {
-		return env
-	}
-	return append(env, wantKV)
 }

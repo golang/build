@@ -545,12 +545,7 @@ func handleGetTGZ(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bogus dir", http.StatusBadRequest)
 		return
 	}
-	var zw io.WriteCloser
-	if r.FormValue("pargzip") == "0" {
-		zw = gzip.NewWriter(w)
-	} else {
-		zw = pargzip.NewWriter(w)
-	}
+	zw := pargzip.NewWriter(w)
 	tw := tar.NewWriter(zw)
 	base := filepath.Join(*workDir, filepath.FromSlash(dir))
 	err := filepath.Walk(base, func(path string, fi os.FileInfo, err error) error {

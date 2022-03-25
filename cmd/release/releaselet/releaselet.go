@@ -27,37 +27,12 @@ import (
 )
 
 func main() {
-	if dir := archDir(); dir != "" {
-		if err := cp("go/bin/go", "go/bin/"+dir+"/go"); err != nil {
-			log.Fatal(err)
-		}
-		if err := cp("go/bin/gofmt", "go/bin/"+dir+"/gofmt"); err != nil {
-			log.Fatal(err)
-		}
-		os.RemoveAll("go/bin/" + dir)
-		os.RemoveAll("go/pkg/linux_amd64")
-		os.RemoveAll("go/pkg/tool/linux_amd64")
+	if runtime.GOOS != "windows" {
+		log.Fatal("releaselet is only necessary on Windows")
 	}
-	os.RemoveAll("go/pkg/obj")
-	if runtime.GOOS == "windows" {
-		// Clean up .exe~ files; golang.org/issue/23894
-		filepath.Walk("go", func(path string, fi os.FileInfo, err error) error {
-			if strings.HasSuffix(path, ".exe~") {
-				os.Remove(path)
-			}
-			return nil
-		})
-		if err := windowsMSI(); err != nil {
-			log.Fatal(err)
-		}
+	if err := windowsMSI(); err != nil {
+		log.Fatal(err)
 	}
-}
-
-func archDir() string {
-	if os.Getenv("GO_BUILDER_NAME") == "linux-s390x-crosscompile" {
-		return "linux_s390x"
-	}
-	return ""
 }
 
 func environ() (cwd, version string, err error) {
