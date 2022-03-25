@@ -97,6 +97,7 @@ func TestTrybots(t *testing.T) {
 				"js-wasm",
 				"linux-386",
 				"linux-amd64",
+				"linux-amd64-boringcrypto",
 				"linux-amd64-race",
 				"linux-amd64-unified",
 				"linux-amd64-nounified",
@@ -132,6 +133,7 @@ func TestTrybots(t *testing.T) {
 				"js-wasm",
 				"linux-386",
 				"linux-amd64",
+				"linux-amd64-boringcrypto", // GoDeps will exclude, but not in test
 				"linux-amd64-race",
 				"linux-amd64-unified",
 				"linux-amd64-nounified",
@@ -167,6 +169,7 @@ func TestTrybots(t *testing.T) {
 				"js-wasm",
 				"linux-386",
 				"linux-amd64",
+				"linux-amd64-boringcrypto", // GoDeps will exclude, but not in test
 				"linux-amd64-race",
 				"linux-arm-aws",
 				"linux-arm64-aws",
@@ -205,6 +208,7 @@ func TestTrybots(t *testing.T) {
 				"js-wasm",
 				"linux-386",
 				"linux-amd64",
+				"linux-amd64-boringcrypto", // GoDeps will exclude, but not in test
 				"linux-amd64-race",
 				"linux-arm-aws",
 				"linux-arm64-aws",
@@ -251,6 +255,7 @@ func TestTrybots(t *testing.T) {
 				"freebsd-amd64-13_0",
 				"linux-386",
 				"linux-amd64",
+				"linux-amd64-boringcrypto", // GoDeps will exclude, but not in test
 				"linux-amd64-race",
 				"linux-arm-aws",
 				"linux-arm64-aws",

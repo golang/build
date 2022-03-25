@@ -1599,6 +1599,21 @@ func init() {
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
+		Name:     "linux-amd64-boringcrypto",
+		HostType: "host-linux-bullseye",
+		Notes:    "GOEXPERIMENT=boringcrypto",
+		tryBot:   defaultTrySet(),
+		env: []string{
+			"GOEXPERIMENT=boringcrypto",
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
+		numTestHelpers:    1,
+		numTryTestHelpers: 4,
+		GoDeps: []string{
+			"5c4ed73f1c3f2052d8f60ce5ed45d9d4f9686331", // CL 397895, "internal/goexperiment: add GOEXPERIMENT=boringcrypto"
+		},
+	})
+	addBuilder(BuildConfig{
 		Name:       "linux-amd64-vmx",
 		HostType:   "host-linux-stretch-vmx",
 		buildsRepo: disabledBuilder,
