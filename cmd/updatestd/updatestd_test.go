@@ -6,11 +6,16 @@ package main
 
 import (
 	"runtime"
+	"strings"
 	"testing"
 )
 
 func TestBuildList(t *testing.T) {
-	// This test is in the golang.org/x/module.
+	gowork := strings.TrimSpace(string(runner{"."}.runOut("go", "env", "GOWORK")))
+	if gowork != "" && gowork != "off" {
+		t.Skipf("must be run outside a workspace. GOWORK=%q", gowork)
+	}
+	// This test is in the golang.org/x/build module.
 	// Check that buildList(".") returns sensible results.
 	main, deps := buildList(".")
 	if want := (module{
