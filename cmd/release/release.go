@@ -105,7 +105,10 @@ func main() {
 	if !ok {
 		log.Fatalf("no such target %q in version %q", *flagTarget, *flagVersion)
 	}
-	if *flagLongTest && (*skipTests || target.BuildOnly) {
+	if *skipTests {
+		target.BuildOnly = true
+	}
+	if *flagLongTest && target.BuildOnly {
 		log.Fatalf("long testing requested, but no tests to run: skip=%v, build only=%v", *skipTests, target.BuildOnly)
 	}
 
@@ -114,7 +117,12 @@ func main() {
 		Logger:  &logger{*flagTarget},
 	}
 	ctx.Printf("Start.")
-	if err := buildTarget(ctx, target, *flagLongTest); err != nil {
+	ctx.Printf("Create source archive.")
+	srcBuf := &bytes.Buffer{}
+	if err := writeSource(*rev, *flagVersion, srcBuf); err != nil {
+		log.Fatalf("Building source archive: %v", err)
+	}
+	if err := buildTarget(ctx, srcBuf, *flagVersion, target, *flagLongTest); err != nil {
 		ctx.Printf("Error: %v", err)
 		os.Exit(1)
 	} else {
@@ -190,7 +198,7 @@ func writeSource(revision, version string, out io.Writer) error {
 	return gzWriter.Close()
 }
 
-func buildTarget(ctx *workflow.TaskContext, target *releasetargets.Target, longTest bool) error {
+func buildTarget(ctx *workflow.TaskContext, sourceArchive io.Reader, version string, target *releasetargets.Target, longTest bool) error {
 	builder := target.Builder
 	if longTest {
 		builder = target.LongTestBuilder
@@ -220,12 +228,7 @@ func buildTarget(ctx *workflow.TaskContext, target *releasetargets.Target, longT
 		go14   = "go1.4"
 	)
 
-	srcBuf := &bytes.Buffer{}
-	if err := writeSource(*rev, *flagVersion, srcBuf); err != nil {
-		return err
-	}
-
-	if err := client.PutTar(ctx, srcBuf, ""); err != nil {
+	if err := client.PutTar(ctx, sourceArchive, ""); err != nil {
 		return fmt.Errorf("failed to put generated source tarball: %v", err)
 	}
 
@@ -302,10 +305,13 @@ func buildTarget(ctx *workflow.TaskContext, target *releasetargets.Target, longT
 	}
 
 	ctx.Printf("Building release tarball.")
-	stagingFile := func(ext string) string {
-		return filepath.Join(*stagingDir, *flagVersion+"."+*flagTarget+ext+".untested")
+	fileName := func(ext string) string {
+		return fmt.Sprintf("%v.%v.%v", version, target.Name, ext)
 	}
-	untestedTarballPath := stagingFile(".tar.gz")
+	stagingFileName := func(ext string) string {
+		return filepath.Join(*stagingDir, fmt.Sprintf("%v.%v.%v.untested", version, target.Name, ext))
+	}
+	untestedTarballPath := stagingFileName(".tar.gz")
 	if err := buildDistribution(ctx, client, untestedTarballPath, []adjustFunc{
 		dropRegexpMatches(dropPatterns),
 		dropUnwantedSysos(target),
@@ -357,13 +363,13 @@ func buildTarget(ctx *workflow.TaskContext, target *releasetargets.Target, longT
 	}
 	var releases []releaseFile
 	if !target.BuildOnly && target.GOOS == "windows" {
-		untested := stagingFile(".msi")
+		untested := stagingFileName("msi")
 		if err := fetchFile(ctx, client, untested, "msi"); err != nil {
 			return err
 		}
 		releases = append(releases, releaseFile{
 			Untested: untested,
-			Final:    *flagVersion + "." + *flagTarget + ".msi",
+			Final:    fileName("msi"),
 		})
 	}
 
@@ -371,34 +377,34 @@ func buildTarget(ctx *workflow.TaskContext, target *releasetargets.Target, longT
 	case !target.BuildOnly && target.GOOS != "windows":
 		releases = append(releases, releaseFile{
 			Untested: untestedTarballPath,
-			Final:    *flagVersion + "." + *flagTarget + ".tar.gz",
+			Final:    fileName("tar.gz"),
 		})
 	case !target.BuildOnly && target.GOOS == "windows":
-		untested := stagingFile(".zip")
+		untested := stagingFileName("zip")
 		if err := tgzToZip(untestedTarballPath, untested); err != nil {
 			return err
 		}
 		releases = append(releases, releaseFile{
 			Untested: untested,
-			Final:    *flagVersion + "." + *flagTarget + ".zip",
+			Final:    fileName("zip"),
 		})
 	case target.BuildOnly:
 		// Use an empty .test-only file to indicate the test outcome.
 		// This file gets moved from its initial location in the
 		// release-staging directory to the final release directory
 		// when the test-only build passes tests successfully.
-		untested := stagingFile(".test-only")
+		untested := stagingFileName("test-only")
 		if err := ioutil.WriteFile(untested, nil, 0600); err != nil {
 			return fmt.Errorf("writing empty test-only file: %v", err)
 		}
 		releases = append(releases, releaseFile{
 			Untested: untested,
-			Final:    *flagVersion + "." + *flagTarget + ".test-only",
+			Final:    fileName("test-only"),
 		})
 	}
 
 	// Execute build (all.bash) if running tests.
-	if *skipTests || target.BuildOnly {
+	if target.BuildOnly {
 		ctx.Printf("Skipping all.bash tests.")
 	} else {
 		if u := buildConfig.GoBootstrapURL(buildEnv); u != "" {

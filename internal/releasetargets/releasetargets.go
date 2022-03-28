@@ -5,6 +5,7 @@
 package releasetargets
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 )
 
 type Target struct {
+	Name            string
 	GOOS, GOARCH    string
 	Builder         string
 	BuildOnly       bool
@@ -29,7 +31,7 @@ type ReleaseTargets map[string]*Target
 // propagated forward unless overridden. To remove a target in a later release,
 // set it to nil explicitly.
 // GOOS and GOARCH will be set automatically from the target name, but can be
-// overridden if necessary.
+// overridden if necessary. Name will also be set and should not be overriden.
 var allReleases = map[int]ReleaseTargets{
 	17: {
 		"darwin-amd64": &Target{
@@ -111,6 +113,10 @@ var allReleases = map[int]ReleaseTargets{
 func init() {
 	for _, targets := range allReleases {
 		for name, target := range targets {
+			if target.Name != "" {
+				panic(fmt.Sprintf("target.Name in %q should be left inferred", name))
+			}
+			target.Name = name
 			parts := strings.SplitN(name, "-", 2)
 			if target.GOOS == "" {
 				target.GOOS = parts[0]
