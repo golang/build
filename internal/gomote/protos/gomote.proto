@@ -33,6 +33,8 @@ service GomoteService {
   // UploadFile generates a signed URL and associated fields to be used when uploading the object to GCS. Once uploaded
   // the corresponding Write endpoint can be used to send the file to the gomote instance.
   rpc UploadFile (UploadFileRequest) returns (UploadFileResponse) {}
+  // WriteFileFromURL
+  rpc WriteFileFromURL (WriteFileFromURLRequest) returns (WriteFileFromURLResponse) {}
   // WriteTGZFromURL retrieves a tar and zipped file from a URL and expands it onto the file system of a gomote instance.
   rpc WriteTGZFromURL (WriteTGZFromURLRequest) returns (WriteTGZFromURLResponse) {}
 }
@@ -200,6 +202,22 @@ message UploadFileResponse {
   // Form fields used when http posting files to GCS.
   map<string, string> fields = 2;
 }
+
+// WriteFileFromURLRequest specifies the data needed to request that a gomote download the contents of a URL and place
+// the contents in a file.
+message WriteFileFromURLRequest {
+  // The unique identifier for a gomote instance.
+  string gomote_id = 1;
+  // URL to post get file from.
+  string url = 2;
+  // The filename as it should appear at the destination.
+  string filename = 3;
+  // The file mode.
+  fixed32 mode = 4;
+}
+
+// WriteFileFromURLResponse contains the results from requesting that a file be downloaded onto a gomote instance.
+message WriteFileFromURLResponse {}
 
 // WriteTGZFromURLRequest specifies the data needed to retrieve a file and expand it onto the file system of a gomote instance.
 // It instructs the buildlet to download the tar.gz file from the url and write it to a directory, a relative directory from the workdir.

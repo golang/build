@@ -11,7 +11,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"log"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -39,6 +42,8 @@ type scheduler interface {
 // bucketHandle interface used to enable testing of the storage.bucketHandle.
 type bucketHandle interface {
 	GenerateSignedPostPolicyV4(object string, opts *storage.PostPolicyV4Options) (*storage.PostPolicyV4, error)
+	SignedURL(object string, opts *storage.SignedURLOptions) (string, error)
+	Object(name string) *storage.ObjectHandle
 }
 
 // Server is a gomote server implementation.
@@ -380,6 +385,68 @@ func (s *Server) signURLForUpload(object string) (url string, fields map[string]
 	return pv4.URL, pv4.Fields, nil
 }
 
+// signURLForDownload generates a signed URL and fields to be used to upload an object to GCS without authenticating.
+func (s *Server) signURLForDownload(object string) (url string, err error) {
+	url, err = s.bucket.SignedURL(object, &storage.SignedURLOptions{
+		Expires: time.Now().Add(10 * time.Minute),
+		Method:  http.MethodGet,
+		Scheme:  storage.SigningSchemeV4,
+	})
+	if err != nil {
+		return "", fmt.Errorf("unable to generate signed url: %w", err)
+	}
+	return url, err
+}
+
+// WriteFileFromURL initiates an HTTP request to the passed in URL and streams the contents of the request to the gomote instance.
+func (s *Server) WriteFileFromURL(ctx context.Context, req *protos.WriteFileFromURLRequest) (*protos.WriteFileFromURLResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("WriteTGZFromURL access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	_, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
+	if err != nil {
+		// the helper function returns meaningful GRPC error.
+		return nil, err
+	}
+	var rc io.ReadCloser
+	// objects stored in the gomote staging bucket are only accessible when you have been granted explicit permissions. A builder
+	// requires a signed URL in order to access objects stored in the the gomote staging bucket.
+	if onObjectStore(s.gceBucketName, req.GetUrl()) {
+		object, err := objectFromURL(s.gceBucketName, req.GetUrl())
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid object URL")
+		}
+		rc, err = s.bucket.Object(object).NewReader(ctx)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "unable to create object reader: %s", err)
+		}
+	} else {
+		httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, req.GetUrl(), nil)
+		// TODO(amedee) find sane client defaults, possibly rely on context timeout in request.
+		client := &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				TLSHandshakeTimeout: 5 * time.Second,
+			},
+		}
+		resp, err := client.Do(httpRequest)
+		if err != nil {
+			return nil, status.Errorf(codes.Aborted, "failed to get file from URL: %s", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, status.Errorf(codes.Aborted, "unable to get file from URL: response code: %d", resp.StatusCode)
+		}
+		rc = resp.Body
+	}
+	defer rc.Close()
+	if err := bc.Put(ctx, rc, req.GetFilename(), fs.FileMode(req.GetMode())); err != nil {
+		return nil, status.Errorf(codes.Aborted, "failed to send the file to the gomote instance: %s", err)
+	}
+	return &protos.WriteFileFromURLResponse{}, nil
+}
+
 // WriteTGZFromURL will instruct the gomote instance to download the tar.gz from the provided URL. The tar.gz file will be unpacked in the work directory
 // relative to the directory provided.
 func (s *Server) WriteTGZFromURL(ctx context.Context, req *protos.WriteTGZFromURLRequest) (*protos.WriteTGZFromURLResponse, error) {
@@ -451,4 +518,22 @@ func emailToUser(email string) (string, error) {
 		return "", errors.New("invalid email format")
 	}
 	return email[strings.Index(email, ":")+1 : strings.LastIndex(email, "@")], nil
+}
+
+// onObjectStore returns true if the the url is for an object on GCS.
+func onObjectStore(bucketName, url string) bool {
+	return strings.HasPrefix(url, fmt.Sprintf("https://storage.googleapis.com/%s/", bucketName))
+}
+
+// objectFromURL returns the object name for an object on GCS.
+func objectFromURL(bucketName, url string) (string, error) {
+	if !onObjectStore(bucketName, url) {
+		return "", errors.New("URL not for gomote transfer bucket")
+	}
+	url = strings.TrimPrefix(url, fmt.Sprintf("https://storage.googleapis.com/%s/", bucketName))
+	pos := strings.Index(url, "?")
+	if pos == -1 {
+		return "", errors.New("invalid object store URL")
+	}
+	return url[:pos], nil
 }

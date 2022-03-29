@@ -736,6 +736,87 @@ func TestWriteTGZFromURL(t *testing.T) {
 	}
 }
 
+// TODO(go.dev/issue/48737) add test for files on GCS
+func TestWriteFileFromURL(t *testing.T) {
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	client := setupGomoteTest(t, context.Background())
+	gomoteID := mustCreateInstance(t, client, fakeIAP())
+	if _, err := client.WriteFileFromURL(ctx, &protos.WriteFileFromURLRequest{
+		GomoteId: gomoteID,
+		Url:      `https://go.dev/dl/go1.17.6.linux-amd64.tar.gz`,
+		Filename: "foo",
+		Mode:     0777,
+	}); err != nil {
+		t.Fatalf("client.WriteFileFromURL(ctx, req) = response, %s; want no error", err)
+	}
+}
+
+func TestWriteFileFromURLError(t *testing.T) {
+	// This test will create a gomote instance and attempt to call TestWriteFileFromURL.
+	// If overrideID is set to true, the test will use a different gomoteID than the
+	// the one created for the test.
+	testCases := []struct {
+		desc       string
+		ctx        context.Context
+		overrideID bool
+		gomoteID   string // Used iff overrideID is true.
+		url        string
+		filename   string
+		mode       uint32
+		wantCode   codes.Code
+	}{
+		{
+			desc:     "unauthenticated request",
+			ctx:      context.Background(),
+			wantCode: codes.Unauthenticated,
+		},
+		{
+			desc:       "missing gomote id",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			overrideID: true,
+			gomoteID:   "",
+			wantCode:   codes.NotFound,
+		},
+		{
+			desc:       "gomote does not exist",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID: true,
+			gomoteID:   "chucky",
+			url:        "go.dev/dl/1_14.tar.gz",
+			wantCode:   codes.NotFound,
+		},
+		{
+			desc:       "wrong gomote id",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID: false,
+			url:        "go.dev/dl/1_14.tar.gz",
+			wantCode:   codes.PermissionDenied,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			client := setupGomoteTest(t, context.Background())
+			gomoteID := mustCreateInstance(t, client, fakeIAP())
+			if tc.overrideID {
+				gomoteID = tc.gomoteID
+			}
+			req := &protos.WriteFileFromURLRequest{
+				GomoteId: gomoteID,
+				Url:      tc.url,
+				Filename: tc.filename,
+				Mode:     0,
+			}
+			got, err := client.WriteFileFromURL(tc.ctx, req)
+			if err != nil && status.Code(err) != tc.wantCode {
+				t.Fatalf("unexpected error: %s; want %s", err, tc.wantCode)
+			}
+			if err == nil {
+				t.Fatalf("client.WriteFileFromURL(ctx, %v) = %v, nil; want error", req, got)
+			}
+		})
+	}
+}
+
 func TestWriteTGZFromURLError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call TestWriteTGZFromURL.
 	// If overrideID is set to true, the test will use a different gomoteID than the
@@ -809,6 +890,29 @@ func TestIsPrivilegedUser(t *testing.T) {
 	in := "accounts.google.com:example@google.com"
 	if !isPrivilegedUser(in) {
 		t.Errorf("isPrivilagedUser(%q) = false; want true", in)
+	}
+}
+
+func TestObjectFromURL(t *testing.T) {
+	url := `https://storage.googleapis.com/example-bucket/cat.jpeg?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=example...`
+	bucket := "example-bucket"
+	wantObject := "cat.jpeg"
+	object, err := objectFromURL(bucket, url)
+	if err != nil {
+		t.Fatalf("urlToBucketObject(url) = %q, %s; want %q, no error", object, err, wantObject)
+	}
+	if object != wantObject {
+		t.Fatalf("urlToBucketObject(url) = %q; want %q", object, wantObject)
+	}
+}
+
+func TestObjectFromURLError(t *testing.T) {
+	bucket := "example-bucket"
+	object := "cat.jpeg"
+	url := fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, object)
+	got, err := objectFromURL(bucket, url)
+	if err == nil {
+		t.Fatalf("urlToBucketObject(url) = %q, nil; want \"\", error", got)
 	}
 }
 
@@ -932,4 +1036,15 @@ func (fbc *fakeBucketHandler) GenerateSignedPostPolicyV4(object string, opts *st
 			"x-permission-to-post": "granted",
 		},
 	}, nil
+}
+
+func (fbc *fakeBucketHandler) SignedURL(object string, opts *storage.SignedURLOptions) (string, error) {
+	if object == "" || opts == nil {
+		return "", errors.New("invalid arguments")
+	}
+	return fmt.Sprintf("https://localhost/%s?X-Goog-Algorithm=GOOG4-yyy", object), nil
+}
+
+func (fbc *fakeBucketHandler) Object(name string) *storage.ObjectHandle {
+	return &storage.ObjectHandle{}
 }

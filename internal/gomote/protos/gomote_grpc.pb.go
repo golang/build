@@ -41,6 +41,8 @@ type GomoteServiceClient interface {
 	// UploadFile generates a signed URL and associated fields to be used when uploading the object to GCS. Once uploaded
 	// the corresponding Write endpoint can be used to send the file to the gomote instance.
 	UploadFile(ctx context.Context, in *UploadFileRequest, opts ...grpc.CallOption) (*UploadFileResponse, error)
+	// WriteFileFromURL
+	WriteFileFromURL(ctx context.Context, in *WriteFileFromURLRequest, opts ...grpc.CallOption) (*WriteFileFromURLResponse, error)
 	// WriteTGZFromURL retrieves a tar and zipped file from a URL and expands it onto the file system of a gomote instance.
 	WriteTGZFromURL(ctx context.Context, in *WriteTGZFromURLRequest, opts ...grpc.CallOption) (*WriteTGZFromURLResponse, error)
 }
@@ -221,6 +223,15 @@ func (c *gomoteServiceClient) UploadFile(ctx context.Context, in *UploadFileRequ
 	return out, nil
 }
 
+func (c *gomoteServiceClient) WriteFileFromURL(ctx context.Context, in *WriteFileFromURLRequest, opts ...grpc.CallOption) (*WriteFileFromURLResponse, error) {
+	out := new(WriteFileFromURLResponse)
+	err := c.cc.Invoke(ctx, "/protos.GomoteService/WriteFileFromURL", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gomoteServiceClient) WriteTGZFromURL(ctx context.Context, in *WriteTGZFromURLRequest, opts ...grpc.CallOption) (*WriteTGZFromURLResponse, error) {
 	out := new(WriteTGZFromURLResponse)
 	err := c.cc.Invoke(ctx, "/protos.GomoteService/WriteTGZFromURL", in, out, opts...)
@@ -257,6 +268,8 @@ type GomoteServiceServer interface {
 	// UploadFile generates a signed URL and associated fields to be used when uploading the object to GCS. Once uploaded
 	// the corresponding Write endpoint can be used to send the file to the gomote instance.
 	UploadFile(context.Context, *UploadFileRequest) (*UploadFileResponse, error)
+	// WriteFileFromURL
+	WriteFileFromURL(context.Context, *WriteFileFromURLRequest) (*WriteFileFromURLResponse, error)
 	// WriteTGZFromURL retrieves a tar and zipped file from a URL and expands it onto the file system of a gomote instance.
 	WriteTGZFromURL(context.Context, *WriteTGZFromURLRequest) (*WriteTGZFromURLResponse, error)
 	mustEmbedUnimplementedGomoteServiceServer()
@@ -298,6 +311,9 @@ func (UnimplementedGomoteServiceServer) SignSSHKey(context.Context, *SignSSHKeyR
 }
 func (UnimplementedGomoteServiceServer) UploadFile(context.Context, *UploadFileRequest) (*UploadFileResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UploadFile not implemented")
+}
+func (UnimplementedGomoteServiceServer) WriteFileFromURL(context.Context, *WriteFileFromURLRequest) (*WriteFileFromURLResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method WriteFileFromURL not implemented")
 }
 func (UnimplementedGomoteServiceServer) WriteTGZFromURL(context.Context, *WriteTGZFromURLRequest) (*WriteTGZFromURLResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method WriteTGZFromURL not implemented")
@@ -522,6 +538,24 @@ func _GomoteService_UploadFile_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GomoteService_WriteFileFromURL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(WriteFileFromURLRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GomoteServiceServer).WriteFileFromURL(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/protos.GomoteService/WriteFileFromURL",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GomoteServiceServer).WriteFileFromURL(ctx, req.(*WriteFileFromURLRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _GomoteService_WriteTGZFromURL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WriteTGZFromURLRequest)
 	if err := dec(in); err != nil {
@@ -578,6 +612,10 @@ var GomoteService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UploadFile",
 			Handler:    _GomoteService_UploadFile_Handler,
+		},
+		{
+			MethodName: "WriteFileFromURL",
+			Handler:    _GomoteService_WriteFileFromURL_Handler,
 		},
 		{
 			MethodName: "WriteTGZFromURL",

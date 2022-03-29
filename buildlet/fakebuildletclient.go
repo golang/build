@@ -147,7 +147,10 @@ func (fc *FakeClient) ProxyTCP(port int) (io.ReadWriteCloser, error) { return ni
 // Put places a file on a fake buildlet.
 func (fc *FakeClient) Put(ctx context.Context, r io.Reader, path string, mode os.FileMode) error {
 	// TODO(go.dev/issue/48742) add a file system implementation which would enable proper testing.
-	return errUnimplemented
+	if path == "" {
+		errors.New("invalid argument")
+	}
+	return nil
 }
 
 // PutTar fakes putting  a tar zipped file on a buildldet.
