@@ -19,7 +19,7 @@ type Target struct {
 	BuildOnly       bool
 	LongTestBuilder string
 	Race            bool
-	ExtraEnv        []string
+	ExtraEnv        []string // Extra environment variables set during toolchain build.
 }
 
 // ReleaseTargets maps a target name (usually but not always $GOOS-$GOARCH)

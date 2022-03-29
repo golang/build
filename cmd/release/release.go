@@ -41,7 +41,7 @@ var releaselet string
 var (
 	flagTarget   = flag.String("target", "", "The specific target to build.")
 	flagLongTest = flag.Bool("longtest", false, "if false, run the normal build. if true, run only long tests.")
-	watch        = flag.Bool("watch", false, "Watch the build.")
+	flagWatch    = flag.Bool("watch", false, "Watch the build.")
 
 	stagingDir = flag.String("staging_dir", "", "If specified, use this as the staging directory for untested release artifacts. Default is the system temporary directory.")
 
@@ -117,17 +117,21 @@ func main() {
 		Logger:  &logger{*flagTarget},
 	}
 	ctx.Printf("Start.")
-	ctx.Printf("Create source archive.")
-	srcBuf := &bytes.Buffer{}
-	if err := writeSource(*rev, *flagVersion, srcBuf); err != nil {
-		log.Fatalf("Building source archive: %v", err)
-	}
-	if err := buildTarget(ctx, srcBuf, *flagVersion, target, *flagLongTest); err != nil {
+	if err := doRelease(ctx, *flagVersion, target, *flagLongTest, *flagWatch); err != nil {
 		ctx.Printf("Error: %v", err)
 		os.Exit(1)
 	} else {
 		ctx.Printf("Done.")
 	}
+}
+
+func doRelease(ctx *workflow.TaskContext, version string, target *releasetargets.Target, longTest, watch bool) error {
+	ctx.Printf("Create source archive.")
+	srcBuf := &bytes.Buffer{}
+	if err := writeSource(*rev, version, srcBuf); err != nil {
+		return fmt.Errorf("Building source archive: %v", err)
+	}
+	return buildTarget(ctx, srcBuf, version, target, longTest, watch)
 }
 
 type logger struct {
@@ -198,7 +202,12 @@ func writeSource(revision, version string, out io.Writer) error {
 	return gzWriter.Close()
 }
 
-func buildTarget(ctx *workflow.TaskContext, sourceArchive io.Reader, version string, target *releasetargets.Target, longTest bool) error {
+const (
+	goDir = "go"
+	go14  = "go1.4"
+)
+
+func buildTarget(ctx *workflow.TaskContext, sourceArchive io.Reader, version string, target *releasetargets.Target, longTest, watch bool) error {
 	builder := target.Builder
 	if longTest {
 		builder = target.LongTestBuilder
@@ -215,19 +224,10 @@ func buildTarget(ctx *workflow.TaskContext, sourceArchive io.Reader, version str
 	}
 	defer client.Close()
 
-	work, err := client.WorkDir(ctx)
-	if err != nil {
-		return err
-	}
+	buildletWrapper := &buildletWrapper{target, client, buildConfig, watch}
 
 	// Push source to buildlet.
 	ctx.Printf("Pushing source to buildlet.")
-	const (
-		goDir  = "go"
-		goPath = "gopath"
-		go14   = "go1.4"
-	)
-
 	if err := client.PutTar(ctx, sourceArchive, ""); err != nil {
 		return fmt.Errorf("failed to put generated source tarball: %v", err)
 	}
@@ -239,67 +239,19 @@ func buildTarget(ctx *workflow.TaskContext, sourceArchive io.Reader, version str
 		}
 	}
 
-	// Set up build environment.
-	sep := "/"
-	if target.GOOS == "windows" {
-		sep = "\\"
-	}
-	env := append(buildConfig.Env(),
-		"GOROOT_FINAL="+buildConfig.GorootFinal(),
-		"GOROOT="+work+sep+goDir,
-		"GOPATH="+work+sep+goPath,
-		"GOBIN=",
-	)
-	env = append(env, target.ExtraEnv...)
-
 	// Execute build (make.bash only first).
 	ctx.Printf("Building (make.bash only).")
-	out := new(bytes.Buffer)
-	var execOut io.Writer = out
-	if *watch {
-		execOut = io.MultiWriter(out, os.Stdout)
-	}
-	remoteErr, err := client.Exec(context.Background(), filepath.Join(goDir, buildConfig.MakeScript()), buildlet.ExecOpts{
-		Output:   execOut,
-		ExtraEnv: env,
-		Args:     buildConfig.MakeScriptArgs(),
-	})
-	if err != nil {
+	makeEnv := []string{"GOROOT_FINAL=" + buildConfig.GorootFinal()}
+	makeEnv = append(makeEnv, target.ExtraEnv...)
+	if err := buildletWrapper.exec(ctx, goDir+"/"+buildConfig.MakeScript(), buildConfig.MakeScriptArgs(), buildlet.ExecOpts{
+		ExtraEnv: makeEnv,
+	}); err != nil {
 		return err
-	}
-	if remoteErr != nil {
-		return fmt.Errorf("Build failed: %v\nOutput:\n%v", remoteErr, out)
-	}
-
-	goCmd := path.Join(goDir, "bin/go")
-	if target.GOOS == "windows" {
-		goCmd += ".exe"
-	}
-	runGo := func(args ...string) error {
-		out := new(bytes.Buffer)
-		var execOut io.Writer = out
-		if *watch {
-			execOut = io.MultiWriter(out, os.Stdout)
-		}
-		remoteErr, err := client.Exec(context.Background(), goCmd, buildlet.ExecOpts{
-			Output:   execOut,
-			Dir:      ".", // root of buildlet work directory
-			Args:     args,
-			ExtraEnv: env,
-		})
-		if err != nil {
-			return err
-		}
-		if remoteErr != nil {
-			return fmt.Errorf("go %v: %v\n%s", strings.Join(args, " "), remoteErr, out)
-		}
-		return nil
 	}
 
 	if target.Race {
 		ctx.Printf("Building race detector.")
-
-		if err := runGo("install", "-race", "std"); err != nil {
+		if err := buildletWrapper.runGo(ctx, "install", "-race", "std"); err != nil {
 			return err
 		}
 	}
@@ -343,7 +295,7 @@ func buildTarget(ctx *workflow.TaskContext, sourceArchive io.Reader, version str
 		if err != nil {
 			return err
 		}
-		if err := runGo("run", "releaselet.go"); err != nil {
+		if err := buildletWrapper.runGo(ctx, "run", "releaselet.go"); err != nil {
 			ctx.Printf("releaselet failed: %v", err)
 			client.ListDir(ctx, ".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
 				ctx.Printf("remote: %v", ent)
@@ -413,23 +365,9 @@ func buildTarget(ctx *workflow.TaskContext, sourceArchive io.Reader, version str
 				return err
 			}
 		}
-
 		ctx.Printf("Building (all.bash to ensure tests pass).")
-		out := new(bytes.Buffer)
-		var execOut io.Writer = out
-		if *watch {
-			execOut = io.MultiWriter(out, os.Stdout)
-		}
-		remoteErr, err := client.Exec(ctx, filepath.Join(goDir, buildConfig.AllScript()), buildlet.ExecOpts{
-			Output:   execOut,
-			ExtraEnv: env,
-			Args:     buildConfig.AllScriptArgs(),
-		})
-		if err != nil {
+		if err := buildletWrapper.exec(ctx, buildConfig.AllScript(), buildConfig.AllScriptArgs(), buildlet.ExecOpts{}); err != nil {
 			return err
-		}
-		if remoteErr != nil {
-			return fmt.Errorf("Build failed: %v\nOutput:\n%v", remoteErr, out)
 		}
 	}
 
@@ -442,6 +380,55 @@ func buildTarget(ctx *workflow.TaskContext, sourceArchive io.Reader, version str
 		}
 	}
 	return nil
+}
+
+// buildletWrapper provides convenience functions for working with buildlets
+// for a release.
+type buildletWrapper struct {
+	target *releasetargets.Target
+	client buildlet.Client
+	config *dashboard.BuildConfig
+	watch  bool
+}
+
+// exec runs cmd with args. Its working dir is opts.Dir, or the directory of cmd.
+// Its environment is the buildlet's environment, plus a GOPATH setting, plus opts.ExtraEnv.
+// If the command fails, its output is included in the returned error.
+func (b *buildletWrapper) exec(ctx context.Context, cmd string, args []string, opts buildlet.ExecOpts) error {
+	work, err := b.client.WorkDir(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Set up build environment. The caller's environment wins if there's a conflict.
+	env := append(b.config.Env(), "GOPATH="+work+"/gopath")
+	env = append(env, opts.ExtraEnv...)
+	out := &bytes.Buffer{}
+	opts.Output = out
+	opts.ExtraEnv = env
+	opts.Args = args
+	if b.watch {
+		opts.Output = io.MultiWriter(opts.Output, os.Stdout)
+	}
+	err, remoteErr := b.client.Exec(ctx, cmd, opts)
+	if err != nil {
+		return err
+	}
+	if remoteErr != nil {
+		return fmt.Errorf("Command %v %s failed: %v\nOutput:\n%v", cmd, args, remoteErr, out)
+	}
+	return nil
+}
+
+func (b *buildletWrapper) runGo(ctx context.Context, args ...string) error {
+	goCmd := goDir + "/bin/go"
+	if b.target.GOOS == "windows" {
+		goCmd += ".exe"
+	}
+	return b.exec(ctx, goCmd, args, buildlet.ExecOpts{
+		Dir:  ".", // root of buildlet work directory
+		Args: args,
+	})
 }
 
 func buildDistribution(ctx *workflow.TaskContext, client buildlet.Client, outputPath string, adjusts []adjustFunc) error {
