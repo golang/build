@@ -466,7 +466,18 @@ func (s *Server) WriteTGZFromURL(ctx context.Context, req *protos.WriteTGZFromUR
 		// the helper function returns meaningful GRPC error.
 		return nil, err
 	}
-	if err = bc.PutTarFromURL(ctx, req.GetUrl(), req.GetDirectory()); err != nil {
+	url := req.GetUrl()
+	if onObjectStore(s.gceBucketName, url) {
+		object, err := objectFromURL(s.gceBucketName, url)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid URL")
+		}
+		url, err = s.signURLForDownload(object)
+		if err != nil {
+			return nil, status.Errorf(codes.Aborted, "unable to sign url for download: %s", err)
+		}
+	}
+	if err := bc.PutTarFromURL(ctx, url, req.GetDirectory()); err != nil {
 		return nil, status.Errorf(codes.FailedPrecondition, "unable to write tar.gz: %s", err)
 	}
 	return &protos.WriteTGZFromURLResponse{}, nil

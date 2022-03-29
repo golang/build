@@ -723,19 +723,6 @@ func TestUploadFileError(t *testing.T) {
 	}
 }
 
-func TestWriteTGZFromURL(t *testing.T) {
-	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
-	client := setupGomoteTest(t, context.Background())
-	gomoteID := mustCreateInstance(t, client, fakeIAP())
-	if _, err := client.WriteTGZFromURL(ctx, &protos.WriteTGZFromURLRequest{
-		GomoteId:  gomoteID,
-		Directory: "foo",
-		Url:       `https://go.dev/dl/go1.17.6.linux-amd64.tar.gz`,
-	}); err != nil {
-		t.Fatalf("client.WriteTGZFromURL(ctx, req) = response, %s; want no error", err)
-	}
-}
-
 // TODO(go.dev/issue/48737) add test for files on GCS
 func TestWriteFileFromURL(t *testing.T) {
 	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
@@ -817,6 +804,32 @@ func TestWriteFileFromURLError(t *testing.T) {
 	}
 }
 
+func TestWriteTGZFromURL(t *testing.T) {
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	client := setupGomoteTest(t, context.Background())
+	gomoteID := mustCreateInstance(t, client, fakeIAP())
+	if _, err := client.WriteTGZFromURL(ctx, &protos.WriteTGZFromURLRequest{
+		GomoteId:  gomoteID,
+		Directory: "foo",
+		Url:       `https://go.dev/dl/go1.17.6.linux-amd64.tar.gz`,
+	}); err != nil {
+		t.Fatalf("client.WriteTGZFromURL(ctx, req) = response, %s; want no error", err)
+	}
+}
+
+func TestWriteTGZFromURLGomoteStaging(t *testing.T) {
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	client := setupGomoteTest(t, context.Background())
+	gomoteID := mustCreateInstance(t, client, fakeIAP())
+	if _, err := client.WriteTGZFromURL(ctx, &protos.WriteTGZFromURLRequest{
+		GomoteId:  gomoteID,
+		Directory: "foo",
+		Url:       fmt.Sprintf("https://storage.googleapis.com/%s/go1.17.6.linux-amd64.tar.gz?field=x", testBucketName),
+	}); err != nil {
+		t.Fatalf("client.WriteTGZFromURL(ctx, req) = response, %s; want no error", err)
+	}
+}
+
 func TestWriteTGZFromURLError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call TestWriteTGZFromURL.
 	// If overrideID is set to true, the test will use a different gomoteID than the
@@ -861,6 +874,12 @@ func TestWriteTGZFromURLError(t *testing.T) {
 			overrideID: false,
 			url:        "go.dev/dl/1_14.tar.gz",
 			wantCode:   codes.PermissionDenied,
+		},
+		{
+			desc:     "invalid gomote staging bucket URL",
+			ctx:      access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			url:      fmt.Sprintf("https://storage.googleapis.com/%s/go1.17.6.linux-amd64.tar.gz", testBucketName),
+			wantCode: codes.InvalidArgument,
 		},
 	}
 	for _, tc := range testCases {
