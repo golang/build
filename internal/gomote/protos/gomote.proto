@@ -24,8 +24,9 @@ service GomoteService {
   rpc ListDirectory (ListDirectoryRequest) returns (ListDirectoryResponse) {}
   // ListInstances lists all of the live gomote instances owned by the caller.
   rpc ListInstances (ListInstancesRequest) returns (ListInstancesResponse) {}
-  // ReadTGZ tars and zips a directory which exists on the gomote instance.
-  rpc ReadTGZ (ReadTGZRequest) returns (stream ReadTGZResponse) {}
+  // ReadTGZToURL tars and zips a directory which exists on the gomote instance and returns a URL where it can be
+  // downloaded from.
+  rpc ReadTGZToURL (ReadTGZToURLRequest) returns (ReadTGZToURLResponse) {}
   // RemoveFiles removes files or directories from the gomote instance.
   rpc RemoveFiles (RemoveFilesRequest) returns (RemoveFilesResponse) {}
   // SignSSHKey signs an SSH public key which can be used to SSH into instances owned by the caller.
@@ -158,11 +159,19 @@ message ListInstancesResponse {
   repeated Instance instances = 1;
 }
 
-// ReadTGZRequest specifies the data needed to retrieve a tar and zipped directory from a gomote instance.
-message ReadTGZRequest {}
+// ReadTGZToURLRequest specifies the data needed to retrieve a tar and zipped directory from a gomote instance.
+message ReadTGZToURLRequest {
+  // The unique identifier for a gomote instance.
+  string gomote_id = 1;
+  // The relative directory from the gomote's work directory to tar up.
+  string directory = 2;
+}
 
-// ReadTGZResponse contains a tar and zipped directory from a gomote instance.
-message ReadTGZResponse {}
+// ReadTGZToURLResponse contains a URL where the tar and zipped directory from a gomote instance can be downloaded from.
+message ReadTGZToURLResponse {
+  // URL to retrieve the tarball from.
+  string url = 1;
+}
 
 // RemoveFilesRequest specifies the data needed to remove files or directories from a gomote instance.
 message RemoveFilesRequest {

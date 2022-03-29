@@ -273,11 +273,19 @@ func (s *Server) ExecuteCommand(req *protos.ExecuteCommandRequest, stream protos
 	remoteErr, execErr := bc.Exec(stream.Context(), req.GetCommand(), buildlet.ExecOpts{
 		Dir:         req.GetCommand(),
 		SystemLevel: req.GetSystemLevel(),
-		Output:      &execStreamWriter{stream: stream},
-		Args:        req.GetArgs(),
-		ExtraEnv:    req.GetAppendEnvironment(),
-		Debug:       req.GetDebug(),
-		Path:        req.GetPath(),
+		Output: &streamWriter{writeFunc: func(p []byte) (int, error) {
+			err := stream.Send(&protos.ExecuteCommandResponse{
+				Output: string(p),
+			})
+			if err != nil {
+				return 0, fmt.Errorf("unable to send data=%w", err)
+			}
+			return len(p), nil
+		}},
+		Args:     req.GetArgs(),
+		ExtraEnv: req.GetAppendEnvironment(),
+		Debug:    req.GetDebug(),
+		Path:     req.GetPath(),
 	})
 	if execErr != nil {
 		// there were system errors preventing the command from being started or seen to completition.
@@ -290,21 +298,55 @@ func (s *Server) ExecuteCommand(req *protos.ExecuteCommandRequest, stream protos
 	return nil
 }
 
-// execStreamWriter implements the io.Writer interface. Any data writen to it will be streamed
-// as an execute command response.
-type execStreamWriter struct {
-	stream protos.GomoteService_ExecuteCommandServer
+// streamWriter implements the io.Writer interface.
+type streamWriter struct {
+	writeFunc func(p []byte) (int, error)
 }
 
-// Write sends data writen to it as an execute command response.
-func (sw *execStreamWriter) Write(p []byte) (int, error) {
-	err := sw.stream.Send(&protos.ExecuteCommandResponse{
-		Output: string(p),
-	})
+// Write calls the writeFunc function with the same arguments passed to the Write function.
+func (sw *streamWriter) Write(p []byte) (int, error) {
+	return sw.writeFunc(p)
+}
+
+// ReadTGZToURL retrieves a directory from the gomote instance and writes the file to GCS. It returns a signed URL which the caller uses
+// to read the file from GCS.
+func (s *Server) ReadTGZToURL(ctx context.Context, req *protos.ReadTGZToURLRequest) (*protos.ReadTGZToURLResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("unable to send data=%w", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
 	}
-	return len(p), nil
+	_, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
+	if err != nil {
+		// the helper function returns meaningful GRPC error.
+		return nil, err
+	}
+	tgz, err := bc.GetTar(ctx, req.GetDirectory())
+	if err != nil {
+		return nil, status.Errorf(codes.Aborted, "unable to retrieve tar from gomote instance: %s", err)
+	}
+	defer tgz.Close()
+	objectName := uuid.NewString()
+	objectHandle := s.bucket.Object(objectName)
+	// A context for writes is used to ensure we can cancel the context if a
+	// problem is encountered while writing to the object store. The API documentation
+	// states that the context should be canceled to stop writing without saving the data.
+	writeCtx, cancel := context.WithCancel(ctx)
+	tgzWriter := objectHandle.NewWriter(writeCtx)
+	defer cancel()
+	if _, err = io.Copy(tgzWriter, tgz); err != nil {
+		return nil, status.Errorf(codes.Aborted, "unable to stream tar.gz: %s", err)
+	}
+	// when close is called, the object is stored in the bucket.
+	if err := tgzWriter.Close(); err != nil {
+		return nil, status.Errorf(codes.Aborted, "unable to store object: %s", err)
+	}
+	url, err := s.signURLForDownload(objectName)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "unable to create signed URL for download: %s", err)
+	}
+	return &protos.ReadTGZToURLResponse{
+		Url: url,
+	}, nil
 }
 
 // RemoveFiles removes files or directories from the gomote instance.

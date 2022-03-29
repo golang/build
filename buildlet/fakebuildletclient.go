@@ -109,7 +109,8 @@ func (fc *FakeClient) GCEInstanceName() string { return fc.instanceName }
 
 // GetTar gives a vake tar zipped directory.
 func (fc *FakeClient) GetTar(ctx context.Context, dir string) (io.ReadCloser, error) {
-	return nil, errUnimplemented
+	r := strings.NewReader("the gopher goes to the sea and fights the kraken")
+	return io.NopCloser(r), nil
 }
 
 // IPPort provides a fake ip and port pair.

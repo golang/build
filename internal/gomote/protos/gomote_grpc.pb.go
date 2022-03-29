@@ -32,8 +32,9 @@ type GomoteServiceClient interface {
 	ListDirectory(ctx context.Context, in *ListDirectoryRequest, opts ...grpc.CallOption) (*ListDirectoryResponse, error)
 	// ListInstances lists all of the live gomote instances owned by the caller.
 	ListInstances(ctx context.Context, in *ListInstancesRequest, opts ...grpc.CallOption) (*ListInstancesResponse, error)
-	// ReadTGZ tars and zips a directory which exists on the gomote instance.
-	ReadTGZ(ctx context.Context, in *ReadTGZRequest, opts ...grpc.CallOption) (GomoteService_ReadTGZClient, error)
+	// ReadTGZToURL tars and zips a directory which exists on the gomote instance and returns a URL where it can be
+	// downloaded from.
+	ReadTGZToURL(ctx context.Context, in *ReadTGZToURLRequest, opts ...grpc.CallOption) (*ReadTGZToURLResponse, error)
 	// RemoveFiles removes files or directories from the gomote instance.
 	RemoveFiles(ctx context.Context, in *RemoveFilesRequest, opts ...grpc.CallOption) (*RemoveFilesResponse, error)
 	// SignSSHKey signs an SSH public key which can be used to SSH into instances owned by the caller.
@@ -164,36 +165,13 @@ func (c *gomoteServiceClient) ListInstances(ctx context.Context, in *ListInstanc
 	return out, nil
 }
 
-func (c *gomoteServiceClient) ReadTGZ(ctx context.Context, in *ReadTGZRequest, opts ...grpc.CallOption) (GomoteService_ReadTGZClient, error) {
-	stream, err := c.cc.NewStream(ctx, &GomoteService_ServiceDesc.Streams[2], "/protos.GomoteService/ReadTGZ", opts...)
+func (c *gomoteServiceClient) ReadTGZToURL(ctx context.Context, in *ReadTGZToURLRequest, opts ...grpc.CallOption) (*ReadTGZToURLResponse, error) {
+	out := new(ReadTGZToURLResponse)
+	err := c.cc.Invoke(ctx, "/protos.GomoteService/ReadTGZToURL", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &gomoteServiceReadTGZClient{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-type GomoteService_ReadTGZClient interface {
-	Recv() (*ReadTGZResponse, error)
-	grpc.ClientStream
-}
-
-type gomoteServiceReadTGZClient struct {
-	grpc.ClientStream
-}
-
-func (x *gomoteServiceReadTGZClient) Recv() (*ReadTGZResponse, error) {
-	m := new(ReadTGZResponse)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
+	return out, nil
 }
 
 func (c *gomoteServiceClient) RemoveFiles(ctx context.Context, in *RemoveFilesRequest, opts ...grpc.CallOption) (*RemoveFilesResponse, error) {
@@ -259,8 +237,9 @@ type GomoteServiceServer interface {
 	ListDirectory(context.Context, *ListDirectoryRequest) (*ListDirectoryResponse, error)
 	// ListInstances lists all of the live gomote instances owned by the caller.
 	ListInstances(context.Context, *ListInstancesRequest) (*ListInstancesResponse, error)
-	// ReadTGZ tars and zips a directory which exists on the gomote instance.
-	ReadTGZ(*ReadTGZRequest, GomoteService_ReadTGZServer) error
+	// ReadTGZToURL tars and zips a directory which exists on the gomote instance and returns a URL where it can be
+	// downloaded from.
+	ReadTGZToURL(context.Context, *ReadTGZToURLRequest) (*ReadTGZToURLResponse, error)
 	// RemoveFiles removes files or directories from the gomote instance.
 	RemoveFiles(context.Context, *RemoveFilesRequest) (*RemoveFilesResponse, error)
 	// SignSSHKey signs an SSH public key which can be used to SSH into instances owned by the caller.
@@ -300,8 +279,8 @@ func (UnimplementedGomoteServiceServer) ListDirectory(context.Context, *ListDire
 func (UnimplementedGomoteServiceServer) ListInstances(context.Context, *ListInstancesRequest) (*ListInstancesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListInstances not implemented")
 }
-func (UnimplementedGomoteServiceServer) ReadTGZ(*ReadTGZRequest, GomoteService_ReadTGZServer) error {
-	return status.Errorf(codes.Unimplemented, "method ReadTGZ not implemented")
+func (UnimplementedGomoteServiceServer) ReadTGZToURL(context.Context, *ReadTGZToURLRequest) (*ReadTGZToURLResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReadTGZToURL not implemented")
 }
 func (UnimplementedGomoteServiceServer) RemoveFiles(context.Context, *RemoveFilesRequest) (*RemoveFilesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveFiles not implemented")
@@ -463,25 +442,22 @@ func _GomoteService_ListInstances_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _GomoteService_ReadTGZ_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(ReadTGZRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
+func _GomoteService_ReadTGZToURL_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadTGZToURLRequest)
+	if err := dec(in); err != nil {
+		return nil, err
 	}
-	return srv.(GomoteServiceServer).ReadTGZ(m, &gomoteServiceReadTGZServer{stream})
-}
-
-type GomoteService_ReadTGZServer interface {
-	Send(*ReadTGZResponse) error
-	grpc.ServerStream
-}
-
-type gomoteServiceReadTGZServer struct {
-	grpc.ServerStream
-}
-
-func (x *gomoteServiceReadTGZServer) Send(m *ReadTGZResponse) error {
-	return x.ServerStream.SendMsg(m)
+	if interceptor == nil {
+		return srv.(GomoteServiceServer).ReadTGZToURL(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/protos.GomoteService/ReadTGZToURL",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GomoteServiceServer).ReadTGZToURL(ctx, req.(*ReadTGZToURLRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _GomoteService_RemoveFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -602,6 +578,10 @@ var GomoteService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _GomoteService_ListInstances_Handler,
 		},
 		{
+			MethodName: "ReadTGZToURL",
+			Handler:    _GomoteService_ReadTGZToURL_Handler,
+		},
+		{
 			MethodName: "RemoveFiles",
 			Handler:    _GomoteService_RemoveFiles_Handler,
 		},
@@ -631,11 +611,6 @@ var GomoteService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "ExecuteCommand",
 			Handler:       _GomoteService_ExecuteCommand_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "ReadTGZ",
-			Handler:       _GomoteService_ReadTGZ_Handler,
 			ServerStreams: true,
 		},
 	},
