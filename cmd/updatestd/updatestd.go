@@ -173,11 +173,11 @@ func (w Work) UpdateModule(dir string) error {
 
 	// Run all the commands.
 	log.Println("updating module", main.Path, "in", dir)
-	gowork := strings.TrimSpace(string(runner{"."}.runOut("go", "env", "GOWORK")))
+	r := runner{dir}
+	gowork := strings.TrimSpace(string(r.runOut("go", "env", "GOWORK")))
 	if gowork != "" && gowork != "off" {
 		log.Printf("warning: GOWORK=%q, things may go wrong?", gowork)
 	}
-	r := runner{dir}
 	r.run("go", "mod", "edit", "-go="+w.GoVersion)
 	r.run(goGet...)
 	r.run("go", "mod", "tidy")
