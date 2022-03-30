@@ -29,21 +29,22 @@ const Server = "https://maintner.golang.org/logs"
 // Use Corpus.Update to keep the corpus up-to-date. If you do this, you must
 // hold the read lock if reading and updating concurrently.
 //
-// The initial call to Get will download approximately 350-400 MB of
-// data into a directory "golang-maintner" under your operating
+// The initial call to Get will download a few gigabytes of data
+// into a directory "golang-maintner" under your operating
 // system's user cache directory. Subsequent calls will only download
 // what's changed since the previous call.
 //
 // Even with all the data already cached on local disk, a call to Get
-// takes approximately 5 seconds to read the mutation log into memory.
+// takes approximately 15 seconds per gigabyte of mutation log data
+// to load it into memory.
 // For daemons, use Corpus.Update to incrementally update an
 // already-loaded Corpus.
 //
 // The in-memory representation is about 25% larger than its on-disk
-// size. It's currently under 500 MB.
+// size. In April 2022, it's under 4 GB.
 //
-// See https://godoc.org/golang.org/x/build/maintner#Corpus for how
-// to walk the data structure. Enjoy.
+// See https://pkg.go.dev/golang.org/x/build/maintner#Corpus for how
+// to walk the data structure.
 func Get(ctx context.Context) (*maintner.Corpus, error) {
 	targetDir := Dir()
 	if err := os.MkdirAll(targetDir, 0700); err != nil {

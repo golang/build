@@ -36,9 +36,9 @@ spec:
         resources:
           requests:
             cpu: "1"
-            memory: "8Gi"
-          limits:
             memory: "12Gi"
+          limits:
+            memory: "16Gi"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

@@ -28,8 +28,6 @@ import (
 )
 
 // Corpus holds all of a project's metadata.
-//
-// Many public accessor methods are missing. File bugs at golang.org/issues/new.
 type Corpus struct {
 	mutationLogger MutationLogger // non-nil when this is a self-updating corpus
 	mutationSource MutationSource // from Initialize
