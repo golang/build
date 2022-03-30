@@ -31,8 +31,8 @@ func TestMatch(t *testing.T) {
 		{
 			"crypto/chacha20poly1305/chacha20poly1305.go",
 			&Entry{
-				Primary:   []Owner{filippo},
-				Secondary: []Owner{agl, katie, roland},
+				Primary:   []Owner{filippo, securityTeam},
+				Secondary: []Owner{agl},
 			},
 		},
 		{
@@ -102,7 +102,7 @@ func TestHandler(t *testing.T) {
 			},
 			map[string]*Entry{
 				"go/src/archive/zip/a.go":                     {Primary: []Owner{joetsai}, Secondary: []Owner{bradfitz}},
-				"crypto/chacha20poly1305/chacha20poly1305.go": {Primary: []Owner{filippo}, Secondary: []Owner{agl, katie, roland}},
+				"crypto/chacha20poly1305/chacha20poly1305.go": {Primary: []Owner{filippo, securityTeam}, Secondary: []Owner{agl}},
 			},
 		},
 	}

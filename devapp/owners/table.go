@@ -85,10 +85,12 @@ var (
 	tombergan    = gh("tombergan")
 	zpavlinovic  = gh("zpavlinovic")
 
-	fuzzingTeam = gh("golang/fuzzing")
-	pkgsiteTeam = gh("golang/pkgsite")
-	runtimeTeam = gh("golang/runtime")
-	toolsTeam   = gh("golang/tools-team")
+	fuzzingTeam  = gh("golang/fuzzing")
+	pkgsiteTeam  = gh("golang/pkgsite")
+	runtimeTeam  = gh("golang/runtime")
+	securityTeam = gh("golang/security")
+	toolsTeam    = gh("golang/tools-team")
+	vulndbTeam   = gh("golang/vulndb")
 )
 
 // entries is a map of <repo name>/<path>, <domain>, or <branch> to Owner
@@ -228,12 +230,12 @@ var entries = map[string]*Entry{
 		Primary: []Owner{neild, sameer},
 	},
 	"go/src/crypto": {
-		Primary:   []Owner{filippo},
-		Secondary: []Owner{agl, katie, roland},
+		Primary:   []Owner{filippo, securityTeam},
+		Secondary: []Owner{agl},
 	},
 	"go/src/crypto/tls": {
-		Primary:   []Owner{filippo},
-		Secondary: []Owner{agl, katie, roland, kevinburke},
+		Primary:   []Owner{filippo, securityTeam},
+		Secondary: []Owner{agl, kevinburke},
 	},
 	"go/src/database/sql": {
 		Primary:   []Owner{bradfitz, kardianos},
@@ -253,8 +255,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{rsc},
 	},
 	"go/src/encoding/asn1": {
-		Primary:   []Owner{filippo},
-		Secondary: []Owner{agl, katie, roland},
+		Primary:   []Owner{filippo, securityTeam},
+		Secondary: []Owner{agl},
 	},
 	"go/src/encoding/binary": {
 		Primary: []Owner{gri},
@@ -431,16 +433,16 @@ var entries = map[string]*Entry{
 		Primary: []Owner{gri, rsc},
 	},
 	"go/src/math/big": {
-		Primary:   []Owner{gri, filippo},
-		Secondary: []Owner{katie, roland},
+		Primary:   []Owner{gri, securityTeam},
+		Secondary: []Owner{katie, filippo},
 	},
 	"go/src/math/bits": {
 		Primary:   []Owner{gri},
-		Secondary: []Owner{khr, josharian, filippo},
+		Secondary: []Owner{khr, josharian, filippo, securityTeam},
 	},
 	"go/src/math/rand": {
 		Primary:   []Owner{gri, rsc},
-		Secondary: []Owner{josharian, filippo},
+		Secondary: []Owner{josharian, filippo, securityTeam},
 	},
 	"go/src/mime": {
 		Primary: []Owner{neild},
@@ -630,20 +632,23 @@ var entries = map[string]*Entry{
 		Primary: []Owner{dmitshur},
 	},
 	"crypto": {
-		Primary:   []Owner{filippo},
-		Secondary: []Owner{agl, katie, roland},
+		Primary:   []Owner{filippo, securityTeam},
+		Secondary: []Owner{agl},
 	},
 	"crypto/acme": {
-		Primary:   []Owner{roland},
+		Primary:   []Owner{roland, securityTeam},
 		Secondary: []Owner{filippo},
 	},
 	"crypto/acme/autocert": {
-		Primary:   []Owner{bradfitz},
+		Primary:   []Owner{bradfitz, securityTeam},
 		Secondary: []Owner{roland, filippo},
 	},
 	"debug": {
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{hyangah, khr},
+	},
+	"exp/vulncheck": {
+		Primary: []Owner{vulndbTeam},
 	},
 	"mobile": {
 		Primary: []Owner{hyangah},
@@ -824,8 +829,11 @@ var entries = map[string]*Entry{
 	"playground": {
 		Primary: []Owner{rakoczy},
 	},
+	"vuln": {
+		Primary: []Owner{vulndbTeam},
+	},
 	"vulndb": {
-		Primary: []Owner{filippo, katie, roland},
+		Primary: []Owner{vulndbTeam},
 	},
 	"website/cmd/admingolangorg": {
 		Primary: []Owner{dmitshur},
