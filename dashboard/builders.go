@@ -594,7 +594,7 @@ var Hosts = map[string]*HostConfig{
 		IsReverse: true,
 		ExpectNum: 5,
 		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/lib/go-1.15",
+			"GOROOT_BOOTSTRAP=/usr/lib/go-1.18",
 		},
 	},
 	"host-linux-mipsle-mengzhuo": &HostConfig{
