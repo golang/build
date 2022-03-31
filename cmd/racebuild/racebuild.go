@@ -44,7 +44,7 @@ var platforms = []*Platform{
 	&Platform{
 		OS:   "openbsd",
 		Arch: "amd64",
-		Type: "openbsd-amd64-race",
+		Type: "openbsd-amd64-70",
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -78,7 +78,7 @@ cp llvm-project/compiler-rt/lib/tsan/go/race_freebsd_amd64.syso go/src/runtime/r
 	&Platform{
 		OS:   "darwin",
 		Arch: "amd64",
-		Type: "darwin-amd64-10_12",
+		Type: "darwin-amd64-12_0",
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -151,7 +151,7 @@ cp llvm-project/compiler-rt/lib/tsan/go/race_linux_ppc64le.syso go/src/runtime/r
 	&Platform{
 		OS:   "linux",
 		Arch: "arm64",
-		Type: "linux-arm64-packet",
+		Type: "linux-arm64-aws",
 		Script: `#!/usr/bin/env bash
 set -e
 apt-get update
