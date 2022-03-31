@@ -1858,7 +1858,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 				break
 			}
 			if ge, ok := err.(*github.ErrorResponse); ok && (ge.Response.StatusCode == http.StatusNotFound || ge.Response.StatusCode == http.StatusGone) {
-				mp := &maintpb.Mutation{
+				mut := &maintpb.Mutation{
 					GithubIssue: &maintpb.GithubIssueMutation{
 						Owner:    owner,
 						Repo:     repo,
@@ -1866,7 +1866,8 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 						NotExist: true,
 					},
 				}
-				p.c.addMutation(mp)
+				p.logf("issue %d is gone, marking as NotExist", num)
+				p.c.addMutation(mut)
 				continue
 			} else if err != nil {
 				return err
@@ -1936,10 +1937,21 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 			Sort:        "updated",
 			ListOptions: github.ListOptions{PerPage: 100},
 		})
-		if err != nil {
-			if canRetry(ctx, err) {
-				continue
+		if canRetry(ctx, err) {
+			continue
+		} else if ge, ok := err.(*github.ErrorResponse); ok && (ge.Response.StatusCode == http.StatusNotFound || ge.Response.StatusCode == http.StatusGone) {
+			mut := &maintpb.Mutation{
+				GithubIssue: &maintpb.GithubIssueMutation{
+					Owner:    owner,
+					Repo:     repo,
+					Number:   issueNum,
+					NotExist: true,
+				},
 			}
+			p.logf("issue %d comments are gone, marking as NotExist", issueNum)
+			p.c.addMutation(mut)
+			return nil
+		} else if err != nil {
 			return err
 		}
 		serverDate, err := http.ParseTime(res.Header.Get("Date"))
@@ -2624,6 +2636,8 @@ func (t limitTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return t.base.RoundTrip(r)
 }
 
+// canRetry reports whether ctx hasn't been canceled and err is a non-nil retryable error.
+// If so, it blocks until enough time passes so that it's acceptable to retry immediately.
 func canRetry(ctx context.Context, err error) bool {
 	switch e := err.(type) {
 	case *github.RateLimitError:
