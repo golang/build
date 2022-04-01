@@ -40,7 +40,6 @@ import (
 type Target struct {
 	Name      string // Target name as accepted by cmd/release. For example, "linux-amd64".
 	SkipTests bool   // Skip tests.
-	TestOnly  bool   // Run tests only; don't produce a release artifact.
 }
 
 var releaseModes = map[string]bool{
@@ -64,7 +63,7 @@ func usage() {
 var (
 	skipTestFlag     = flag.String("skip-test", "", "space-separated list of targets for which to skip tests (only use if sufficient testing was done elsewhere)")
 	skipTargetFlag   = flag.String("skip-target", "", "space-separated list of targets to skip. This will require manual intervention to create artifacts for a target after releasing.")
-	skipAllTestsFlag = flag.Bool("skip-all-tests", false, "skip all test-only targets and tests for any target (only use if tests were verified elsewhere)")
+	skipAllTestsFlag = flag.Bool("skip-all-tests", false, "skip all tests for all targets (only use if tests were verified elsewhere)")
 )
 
 var (
@@ -149,9 +148,6 @@ func main() {
 	w.ReleaseTargets = []Target{{Name: "src"}}
 	for name, release := range releaseTargets {
 		w.ReleaseTargets = append(w.ReleaseTargets, Target{Name: name, SkipTests: release.BuildOnly || *skipAllTestsFlag})
-		if !*skipAllTestsFlag && release.LongTestBuilder != "" {
-			w.ReleaseTargets = append(w.ReleaseTargets, Target{Name: name, TestOnly: true})
-		}
 	}
 
 	// Find milestone.
@@ -678,9 +674,6 @@ func (w *Work) printReleaseTable(md *bytes.Buffer) {
 	defer w.releaseMu.Unlock()
 	for _, target := range w.ReleaseTargets {
 		fmt.Fprintf(md, "- %s", mdEscape(target.Name))
-		if target.TestOnly {
-			fmt.Fprintf(md, " (test only)")
-		}
 		info := w.ReleaseInfo[target.Name]
 		if info == nil {
 			fmt.Fprintf(md, " - not started\n")
@@ -688,13 +681,9 @@ func (w *Work) printReleaseTable(md *bytes.Buffer) {
 		}
 		if len(info.Outputs) == 0 {
 			fmt.Fprintf(md, " - not built")
-		} else if target.TestOnly && len(info.Outputs) == 1 && info.Outputs[0].Suffix == "test-only" {
-			fmt.Fprintf(md, " - ok")
 		}
 		for _, out := range info.Outputs {
-			if out.Suffix == "test-only" {
-				continue
-			} else if out.Link != "" {
+			if out.Link != "" {
 				fmt.Fprintf(md, " ([%s](%s))", mdEscape(out.Suffix), out.Link)
 			} else {
 				fmt.Fprintf(md, " (~~%s~~)", mdEscape(out.Suffix))
@@ -828,8 +817,6 @@ func (w *Work) buildRelease(target Target) {
 	prefix := fmt.Sprintf("%s.%s.", w.Version, target.Name)
 	var files []string
 	switch {
-	case target.TestOnly:
-		files = []string{prefix + "test-only"}
 	case strings.HasPrefix(target.Name, "windows-"):
 		files = []string{prefix + "zip", prefix + "msi"}
 	default:
@@ -859,9 +846,6 @@ func (w *Work) buildRelease(target Target) {
 		for {
 			args := []string{w.ReleaseBinary, "-target", target.Name, "-user", gomoteUser,
 				"-version", w.Version, "-staging_dir", w.StagingDir, "-rev", w.VersionCommit}
-			if target.TestOnly {
-				args = append(args, "-longtest")
-			}
 			// The prepare step will run the tests on a commit that has the same
 			// tree (but maybe different message) as the one that the release
 			// step will process, so we can skip tests the second time.
@@ -902,11 +886,6 @@ func (w *Work) buildRelease(target Target) {
 		return
 	}
 
-	if target.TestOnly {
-		// This was a test-only target, nothing to upload.
-		return
-	}
-
 	for _, out := range outs {
 		if err := w.uploadStagingRelease(target, out); err != nil {
 			w.log.Printf("error uploading release %s to staging bucket: %s", target.Name, err)
@@ -926,8 +905,6 @@ func (w *Work) buildRelease(target Target) {
 func (w *Work) uploadStagingRelease(target Target, out *ReleaseOutput) error {
 	if dryRun {
 		return errors.New("attempted write operation in dry-run mode")
-	} else if target.TestOnly {
-		return errors.New("attempted to upload a test-only target")
 	}
 
 	src := filepath.Join(w.Dir, "release", w.VersionCommit, out.File)
