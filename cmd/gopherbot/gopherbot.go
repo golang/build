@@ -235,6 +235,7 @@ func main() {
 	}
 
 	var goRepo = maintner.GitHubRepoID{Owner: "golang", Repo: "go"}
+	var vscode = maintner.GitHubRepoID{Owner: "golang", Repo: "vscode-go"}
 	bot := &gopherbot{
 		ghc:    ghc,
 		gerrit: gerrit,
@@ -295,7 +296,65 @@ func main() {
 			{goRepo, 37896}: true,
 			{goRepo, 38132}: true,
 			{goRepo, 38241}: true,
+			{goRepo, 38483}: true,
+			{goRepo, 38560}: true,
+			{goRepo, 38840}: true,
+			{goRepo, 39112}: true,
+			{goRepo, 39141}: true,
+			{goRepo, 39229}: true,
+			{goRepo, 39234}: true,
+			{goRepo, 39335}: true,
+			{goRepo, 39401}: true,
 			{goRepo, 39453}: true,
+			{goRepo, 39522}: true,
+			{goRepo, 39718}: true,
+			{goRepo, 40400}: true,
+			{goRepo, 40593}: true,
+			{goRepo, 40600}: true,
+			{goRepo, 41211}: true,
+			{goRepo, 41336}: true,
+			{goRepo, 41649}: true,
+			{goRepo, 41650}: true,
+			{goRepo, 41655}: true,
+			{goRepo, 41675}: true,
+			{goRepo, 41676}: true,
+			{goRepo, 41678}: true,
+			{goRepo, 41679}: true,
+			{goRepo, 41714}: true,
+			{goRepo, 42309}: true,
+			{goRepo, 43102}: true,
+			{goRepo, 43169}: true,
+			{goRepo, 43231}: true,
+			{goRepo, 43330}: true,
+			{goRepo, 43409}: true,
+			{goRepo, 43410}: true,
+			{goRepo, 43411}: true,
+			{goRepo, 43433}: true,
+			{goRepo, 43613}: true,
+			{goRepo, 43751}: true,
+			{goRepo, 44124}: true,
+			{goRepo, 44185}: true,
+			{goRepo, 44566}: true,
+			{goRepo, 44652}: true,
+			{goRepo, 44711}: true,
+			{goRepo, 44768}: true,
+			{goRepo, 44769}: true,
+			{goRepo, 44771}: true,
+			{goRepo, 44773}: true,
+			{goRepo, 44871}: true,
+			{goRepo, 45018}: true,
+			{goRepo, 45082}: true,
+			{goRepo, 45201}: true,
+			{goRepo, 45202}: true,
+			{goRepo, 47141}: true,
+
+			{vscode, 298}:  true,
+			{vscode, 524}:  true,
+			{vscode, 650}:  true,
+			{vscode, 741}:  true,
+			{vscode, 773}:  true,
+			{vscode, 959}:  true,
+			{vscode, 1402}: true,
 		},
 	}
 	bot.initCorpus()
@@ -479,6 +538,7 @@ func (b *gopherbot) addLabels(ctx context.Context, repoID maintner.GitHubRepoID,
 		// TODO(golang/go#40640) - This issue was transferred or otherwise is gone. We should permanently skip it. This
 		// is a temporary fix to keep gopherbot working.
 		log.Printf("addLabels: Issue %v#%v returned a 404 when trying to add labels. Skipping. See golang/go#40640.", repoID, gi.Number)
+		b.deletedIssues[githubIssue{repoID, gi.Number}] = true
 		return nil
 	}
 	return err
@@ -589,6 +649,7 @@ func (b *gopherbot) addGitHubComment(ctx context.Context, repo *maintner.GitHubR
 		// is a temporary fix to keep gopherbot working.
 		if resp != nil && resp.StatusCode == http.StatusNotFound {
 			log.Printf("addGitHubComment: Issue %v#%v returned a 404 when trying to load comments. Skipping. See golang/go#40640.", repo.ID(), issueNum)
+			b.deletedIssues[githubIssue{repo.ID(), issueNum}] = true
 			return nil
 		}
 		return err
@@ -899,8 +960,8 @@ func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 			}
 			_, err := b.ghc.Issues.Lock(ctx, repo.ID().Owner, repo.ID().Repo, int(gi.Number), nil)
 			if ge, ok := err.(*github.ErrorResponse); ok && ge.Response.StatusCode == http.StatusNotFound {
-				// It's rare, but an issue can become 404 on GitHub. See golang.org/issue/30182.
-				// Nothing to do since the issue is gone.
+				// An issue can become 404 on GitHub due to being deleted or transferred. See go.dev/issue/30182.
+				b.deletedIssues[githubIssue{repo.ID(), gi.Number}] = true
 				return nil
 			} else if err != nil {
 				return err
