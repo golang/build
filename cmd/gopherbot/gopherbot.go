@@ -790,10 +790,7 @@ func (b *gopherbot) getOffKickTrain(ctx context.Context) error {
 		gi    *maintner.GitHubIssue
 	}
 	var matches []match
-	b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.PullRequest || gi.Closed || gi.NotExist {
-			return nil
-		}
+	b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
 		curMilestone := gi.Milestone.Title
 		if !strings.HasPrefix(curMilestone, "Go1.") || strings.Count(curMilestone, ".") != 1 {
 			return nil
@@ -915,8 +912,8 @@ func (b *gopherbot) pingEarlyIssues(ctx context.Context) error {
 		return fmt.Errorf("openTreeURLs[%q] is %q, which doesn't begin with the usual prefix, so please double-check that the URL is correct", nextMajor, url)
 	}
 
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.NotExist || gi.Closed || gi.PullRequest || !gi.HasLabelID(earlyInCycleID) || gi.Milestone.Title != "Go"+nextMajor {
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
+		if !gi.HasLabelID(earlyInCycleID) || gi.Milestone.Title != "Go"+nextMajor {
 			return nil
 		}
 		if *dryRun {
@@ -947,11 +944,8 @@ func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 		if !repoHasLabel(repo, frozenDueToAge) {
 			return nil
 		}
-		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-			if gi.NotExist || !gi.Closed || gi.PullRequest || gi.Locked || b.deletedIssues[githubIssue{repo.ID(), gi.Number}] {
-				return nil
-			}
-			if gi.Updated.After(tooOld) {
+		return b.foreachIssue(repo, closed, func(gi *maintner.GitHubIssue) error {
+			if gi.Locked || gi.Updated.After(tooOld) {
 				return nil
 			}
 			printIssue("freeze", repo.ID(), gi)
@@ -975,10 +969,7 @@ func (b *gopherbot) freezeOldIssues(ctx context.Context) error {
 // to open issues with title beginning with "Proposal:". It tries not
 // to get into an edit war with a human.
 func (b *gopherbot) labelProposals(ctx context.Context) error {
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || gi.PullRequest {
-			return nil
-		}
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
 		if !strings.HasPrefix(gi.Title, "proposal:") && !strings.HasPrefix(gi.Title, "Proposal:") {
 			return nil
 		}
@@ -1038,8 +1029,8 @@ func isGo2Issue(gi *maintner.GitHubIssue) bool {
 }
 
 func (b *gopherbot) setSubrepoMilestones(ctx context.Context) error {
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || gi.PullRequest || !gi.Milestone.IsNone() || gi.HasEvent("demilestoned") || gi.HasEvent("milestoned") {
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
+		if !gi.Milestone.IsNone() || gi.HasEvent("demilestoned") || gi.HasEvent("milestoned") {
 			return nil
 		}
 		if !strings.HasPrefix(gi.Title, "x/") {
@@ -1084,8 +1075,8 @@ func (b *gopherbot) setSubrepoMilestones(ctx context.Context) error {
 }
 
 func (b *gopherbot) setMiscMilestones(ctx context.Context) error {
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || gi.PullRequest || !gi.Milestone.IsNone() || gi.HasEvent("demilestoned") || gi.HasEvent("milestoned") {
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
+		if !gi.Milestone.IsNone() || gi.HasEvent("demilestoned") || gi.HasEvent("milestoned") {
 			return nil
 		}
 		if strings.Contains(gi.Title, "gccgo") { // TODO: better gccgo bug report heuristic?
@@ -1106,8 +1097,8 @@ func (b *gopherbot) setVSCodeGoMilestones(ctx context.Context) error {
 	if vscode == nil {
 		return nil
 	}
-	return vscode.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || gi.PullRequest || !gi.Milestone.IsNone() || gi.HasEvent("demilestoned") || gi.HasEvent("milestoned") {
+	return b.foreachIssue(vscode, open, func(gi *maintner.GitHubIssue) error {
+		if !gi.Milestone.IsNone() || gi.HasEvent("demilestoned") || gi.HasEvent("milestoned") {
 			return nil
 		}
 		// Work-around golang/go#40640 by only milestoning new issues.
@@ -1119,8 +1110,8 @@ func (b *gopherbot) setVSCodeGoMilestones(ctx context.Context) error {
 }
 
 func (b *gopherbot) labelBuildIssues(ctx context.Context) error {
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || gi.PullRequest || !strings.HasPrefix(gi.Title, "x/build") || gi.HasLabel("Builders") || gi.HasEvent("unlabeled") {
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
+		if !strings.HasPrefix(gi.Title, "x/build") || gi.HasLabel("Builders") || gi.HasEvent("unlabeled") {
 			return nil
 		}
 		return b.addLabel(ctx, b.gorepo.ID(), gi, "Builders")
@@ -1128,8 +1119,8 @@ func (b *gopherbot) labelBuildIssues(ctx context.Context) error {
 }
 
 func (b *gopherbot) labelMobileIssues(ctx context.Context) error {
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || gi.PullRequest || !strings.HasPrefix(gi.Title, "x/mobile") || gi.HasLabel("mobile") || gi.HasEvent("unlabeled") {
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
+		if !strings.HasPrefix(gi.Title, "x/mobile") || gi.HasLabel("mobile") || gi.HasEvent("unlabeled") {
 			return nil
 		}
 		return b.addLabel(ctx, b.gorepo.ID(), gi, "mobile")
@@ -1145,8 +1136,8 @@ func (b *gopherbot) labelDocumentationIssues(ctx context.Context) error {
 		if !repoHasLabel(repo, documentation) {
 			return nil
 		}
-		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-			if gi.Closed || gi.PullRequest || !isDocumentationTitle(gi.Title) || gi.HasLabel("Documentation") || gi.HasEvent("unlabeled") {
+		return b.foreachIssue(repo, open, func(gi *maintner.GitHubIssue) error {
+			if !isDocumentationTitle(gi.Title) || gi.HasLabel("Documentation") || gi.HasEvent("unlabeled") {
 				return nil
 			}
 			return b.addLabel(ctx, repo.ID(), gi, documentation)
@@ -1155,8 +1146,8 @@ func (b *gopherbot) labelDocumentationIssues(ctx context.Context) error {
 }
 
 func (b *gopherbot) labelToolsIssues(ctx context.Context) error {
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || gi.PullRequest || !strings.HasPrefix(gi.Title, "x/tools") || gi.HasLabel("Tools") || gi.HasEvent("unlabeled") {
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
+		if !strings.HasPrefix(gi.Title, "x/tools") || gi.HasLabel("Tools") || gi.HasEvent("unlabeled") {
 			return nil
 		}
 		return b.addLabel(ctx, b.gorepo.ID(), gi, "Tools")
@@ -1164,9 +1155,9 @@ func (b *gopherbot) labelToolsIssues(ctx context.Context) error {
 }
 
 func (b *gopherbot) labelGoDevIssues(ctx context.Context) error {
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
 		hasGoDevTitle := strings.HasPrefix(gi.Title, "go.dev:")
-		if gi.Closed || gi.PullRequest || !hasGoDevTitle || gi.HasLabel("go.dev") || gi.HasEvent("unlabeled") {
+		if !hasGoDevTitle || gi.HasLabel("go.dev") || gi.HasEvent("unlabeled") {
 			return nil
 		}
 		return b.addLabel(ctx, b.gorepo.ID(), gi, "go.dev")
@@ -1174,9 +1165,9 @@ func (b *gopherbot) labelGoDevIssues(ctx context.Context) error {
 }
 
 func (b *gopherbot) labelPkgsiteIssues(ctx context.Context) error {
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
 		hasPkgsiteTitle := strings.HasPrefix(gi.Title, "x/pkgsite:")
-		if gi.Closed || gi.PullRequest || !hasPkgsiteTitle || gi.HasLabel("pkgsite") || gi.HasEvent("unlabeled") {
+		if !hasPkgsiteTitle || gi.HasLabel("pkgsite") || gi.HasEvent("unlabeled") {
 			return nil
 		}
 
@@ -1191,9 +1182,9 @@ func (b *gopherbot) labelPkgsiteIssues(ctx context.Context) error {
 }
 
 func (b *gopherbot) labelVulnIssues(ctx context.Context) error {
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
 		hasVulnTitle := strings.HasPrefix(gi.Title, "x/vuln:") || strings.HasPrefix(gi.Title, "x/vuln/")
-		if gi.Closed || gi.PullRequest || !hasVulnTitle || gi.HasLabel("x/vuln") || gi.HasEvent("unlabeled") {
+		if !hasVulnTitle || gi.HasLabel("x/vuln") || gi.HasEvent("unlabeled") {
 			return nil
 		}
 		return b.addLabel(ctx, b.gorepo.ID(), gi, "x/vuln")
@@ -1205,8 +1196,8 @@ func (b *gopherbot) labelVulnIssues(ctx context.Context) error {
 // This is necessary because gopls issues often require additional information to diagnose,
 // and we don't ask for this information in the Go issue template.
 func (b *gopherbot) handleGoplsIssues(ctx context.Context) error {
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || gi.PullRequest || !isGoplsTitle(gi.Title) || gi.HasLabel("gopls") || gi.HasEvent("unlabeled") {
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
+		if !isGoplsTitle(gi.Title) || gi.HasLabel("gopls") || gi.HasEvent("unlabeled") {
 			return nil
 		}
 		return b.addLabel(ctx, b.gorepo.ID(), gi, "gopls")
@@ -1223,8 +1214,8 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 		if !repoHasLabel(repo, waitingForInfo) {
 			return nil
 		}
-		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-			if gi.Closed || gi.PullRequest || !gi.HasLabel(waitingForInfo) || gi.NotExist || b.deletedIssues[githubIssue{repo.ID(), gi.Number}] {
+		return b.foreachIssue(repo, open, func(gi *maintner.GitHubIssue) error {
+			if !gi.HasLabel(waitingForInfo) {
 				return nil
 			}
 			var waitStart time.Time
@@ -1297,7 +1288,7 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 					continue
 				}
 				gi := ref.Repo.Issue(ref.Number)
-				if gi == nil || gi.PullRequest || gi.HasLabel(frozenDueToAge) {
+				if gi == nil || gi.NotExist || gi.PullRequest || gi.Locked || b.deletedIssues[githubIssue{ref.Repo.ID(), gi.Number}] {
 					continue
 				}
 				hasComment := false
@@ -1309,12 +1300,13 @@ func (b *gopherbot) cl2issue(ctx context.Context) error {
 					}
 					return nil
 				})
-				if !hasComment {
-					printIssue("cl2issue", ref.Repo.ID(), gi)
-					msg := fmt.Sprintf("Change https://go.dev/cl/%d mentions this issue: `%s`", cl.Number, cl.Commit.Summary())
-					if err := b.addGitHubComment(ctx, ref.Repo, gi.Number, msg); err != nil {
-						return err
-					}
+				if hasComment {
+					continue
+				}
+				printIssue("cl2issue", ref.Repo.ID(), gi)
+				msg := fmt.Sprintf("Change https://go.dev/cl/%d mentions this issue: `%s`", cl.Number, cl.Commit.Summary())
+				if err := b.addGitHubComment(ctx, ref.Repo, gi.Number, msg); err != nil {
+					return err
 				}
 			}
 			return nil
@@ -1332,10 +1324,7 @@ func canonicalLabelName(s string) string {
 // These were originally called NeedsFix, NeedsDecision, and NeedsInvestigation,
 // but are being renamed to "needs-foo".
 func (b *gopherbot) updateNeeds(ctx context.Context) error {
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || gi.PullRequest {
-			return nil
-		}
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
 		var numNeeds int
 		if gi.Labels[needsDecisionID] != nil {
 			numNeeds++
@@ -1666,13 +1655,13 @@ func (b *gopherbot) getMajorReleases(ctx context.Context) ([]string, error) {
 // openCherryPickIssues opens CherryPickCandidate issues for backport when
 // asked on the main issue.
 func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+	return b.foreachIssue(b.gorepo, open|closed|includePRs, func(gi *maintner.GitHubIssue) error {
 		if gi.HasLabel("CherryPickApproved") && gi.HasLabel("CherryPickCandidate") {
 			if err := b.removeLabel(ctx, b.gorepo.ID(), gi, "CherryPickCandidate"); err != nil {
 				return err
 			}
 		}
-		if gi.HasLabel(frozenDueToAge) || gi.PullRequest {
+		if gi.Locked || gi.PullRequest {
 			return nil
 		}
 		var backportComment *maintner.GitHubComment
@@ -1733,8 +1722,8 @@ func (b *gopherbot) setMinorMilestones(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || gi.PullRequest || !gi.Milestone.IsNone() || gi.HasEvent("demilestoned") || gi.HasEvent("milestoned") {
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
+		if !gi.Milestone.IsNone() || gi.HasEvent("demilestoned") || gi.HasEvent("milestoned") {
 			return nil
 		}
 		var majorRel string
@@ -1794,8 +1783,8 @@ func (b *gopherbot) getMinorMilestoneForMajor(majorRel string) (milestone, error
 // release branches, as GitHub only does that on merge to master.
 func (b *gopherbot) closeCherryPickIssues(ctx context.Context) error {
 	cherryPickIssues := make(map[int32]*maintner.GitHubIssue) // by GitHub Issue Number
-	b.gorepo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-		if gi.Closed || gi.PullRequest || gi.NotExist || gi.Milestone.IsNone() || gi.HasEvent("reopened") {
+	b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
+		if gi.Milestone.IsNone() || gi.HasEvent("reopened") {
 			return nil
 		}
 		if !strings.HasPrefix(gi.Milestone.Title, "Go") {
@@ -1865,11 +1854,7 @@ func (b *gopherbot) applyLabelsFromComments(ctx context.Context) error {
 			return nil
 		})
 
-		return repo.ForeachIssue(func(gi *maintner.GitHubIssue) error {
-			if gi.Closed {
-				return nil
-			}
-
+		return b.foreachIssue(repo, open|includePRs, func(gi *maintner.GitHubIssue) error {
 			var cmds []labelCommand
 
 			cmds = append(cmds, labelCommandsFromBody(gi.Body, gi.Created)...)
@@ -2469,6 +2454,37 @@ func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
 			_, err = b.gerrit.SubmitChange(ctx, fmt.Sprint(cl.Number))
 			return err
 		})
+	})
+}
+
+type issueFlags uint8
+
+const (
+	open        issueFlags = 1 << iota // Include open issues.
+	closed                             // Include closed issues.
+	includePRs                         // Include issues that are Pull Requests.
+	includeGone                        // Include issues that are gone (e.g., deleted or transferred).
+)
+
+// foreachIssue calls fn for each issue in repo gr as controlled by flags.
+//
+// If fn returns an error, iteration ends and foreachIssue returns
+// with that error.
+//
+// The fn function is called serially, with increasingly numbered
+// issues.
+func (b *gopherbot) foreachIssue(gr *maintner.GitHubRepo, flags issueFlags, fn func(*maintner.GitHubIssue) error) error {
+	return gr.ForeachIssue(func(gi *maintner.GitHubIssue) error {
+		switch {
+		case (flags&open == 0) && !gi.Closed,
+			(flags&closed == 0) && gi.Closed,
+			(flags&includePRs == 0) && gi.PullRequest,
+			(flags&includeGone == 0) && (gi.NotExist || b.deletedIssues[githubIssue{gr.ID(), gi.Number}]):
+			// Skip issue.
+			return nil
+		default:
+			return fn(gi)
+		}
 	})
 }
 

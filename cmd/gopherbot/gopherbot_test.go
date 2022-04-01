@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"net/http"
 	"testing"
 	"time"
@@ -618,5 +619,46 @@ func TestFilterGerritOwners(t *testing.T) {
 				t.Errorf("final entry results differ: (-got, +want)\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestForeachIssue(t *testing.T) {
+	if testing.Short() || flag.Lookup("test.run").Value.(flag.Getter).Get().(string) != "^TestForeachIssue$" {
+		t.Skip("not running test requiring large Go corpus download in short mode and if not explicitly requested with go test -run=^TestForeachIssue$")
+	}
+
+	b := &gopherbot{}
+	b.initCorpus()
+
+	var num int
+	err := b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
+		if gi.Closed || gi.PullRequest || gi.NotExist {
+			t.Errorf("issue %d should be skipped but isn't: %#v", gi.Number, gi)
+		}
+		num++
+		return nil
+	})
+	if err != nil {
+		t.Errorf("gopherbot.foreachIssue: got %v error, want nil", err)
+	}
+	t.Logf("gopherbot.foreachIssue walked over %d open issues (not including PRs and deleted/transferred/converted issues)", num)
+
+	var got struct {
+		Open, Closed, PR bool
+	}
+	err = b.foreachIssue(b.gorepo, open|closed|includePRs, func(gi *maintner.GitHubIssue) error {
+		if gi.NotExist {
+			t.Errorf("issue %d should be skipped but isn't: %#v", gi.Number, gi)
+		}
+		got.Open = got.Open || !gi.Closed
+		got.Closed = got.Closed || gi.Closed
+		got.PR = got.PR || gi.PullRequest
+		return nil
+	})
+	if err != nil {
+		t.Errorf("gopherbot.foreachIssue: got %v error, want nil", err)
+	}
+	if !got.Open || !got.Closed || !got.PR {
+		t.Errorf("got %+v, want all true", got)
 	}
 }
