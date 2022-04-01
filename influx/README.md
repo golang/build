@@ -50,3 +50,16 @@ One-time setup:
     $ gcloud secrets add-iam-policy-binding influx-admin-token --member=serviceAccount:influx@<PROJECT>.iam.gserviceaccount.com --role="roles/secretmanager.secretVersionAdder"
     $ gcloud secrets add-iam-policy-binding influx-reader-pass --member=serviceAccount:influx@<PROJECT>.iam.gserviceaccount.com --role="roles/secretmanager.secretVersionAdder"
     $ gcloud secrets add-iam-policy-binding influx-reader-token --member=serviceAccount:influx@<PROJECT>.iam.gserviceaccount.com --role="roles/secretmanager.secretVersionAdder"
+
+### Accessing Influx
+
+The available users on Influx are 'admin' (full access) and 'reader'
+(read-only). To login as 'reader', use the following to access the password:
+
+  $ gcloud --project=symbolic-datum-552 secrets versions access latest --secret=influx-reader-pass
+
+Then login at https://influx.golang.org.
+
+To access the admin password, admin API token, or reader API token, change to
+`--secret` to one of `influx-admin-pass`, `influx-admin-token`, or
+`influx-reader-token`, respectively.
