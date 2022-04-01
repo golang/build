@@ -2483,6 +2483,7 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
+		FlakyNet:       true,
 		HostType:       "host-linux-loong64-3a5000",
 		Name:           "linux-loong64-3a5000",
 		SkipSnapshot:   true,
