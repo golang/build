@@ -1363,7 +1363,7 @@ func (st *buildStatus) uploadBenchResults(baseline string) (err error) {
 	// Prepend some useful metadata.
 	var b strings.Builder
 	fmt.Fprintf(&b, "experiment-commit: %s\n", st.Rev)
-	fmt.Fprintf(&b, "experiment-commit-time: %s\n", st.RevCommitTime)
+	fmt.Fprintf(&b, "experiment-commit-time: %s\n", st.RevCommitTime.In(time.UTC).Format(time.RFC3339Nano))
 	fmt.Fprintf(&b, "baseline-commit: %s\n", baseline)
 	fmt.Fprintf(&b, "benchmarks-commit: %s\n", st.SubRev)
 	fmt.Fprintf(&b, "post-submit: %t\n", st.trySet == nil)
