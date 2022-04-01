@@ -140,10 +140,13 @@ git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
 popd
+workdir=$(pwd)
+pushd /tmp
 git clone https://github.com/llvm/llvm-project
 (cd llvm-project && git checkout $REV)
 (cd llvm-project/compiler-rt/lib/tsan/go && ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_linux_ppc64le.syso go/src/runtime/race
+cp llvm-project/compiler-rt/lib/tsan/go/race_linux_ppc64le.syso $workdir/go/src/runtime/race
+popd
 # TODO(#23731): Uncomment to test the syso file before accepting it.
 # (cd go/src && ./race.bash)
 			`,
