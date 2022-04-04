@@ -5,9 +5,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -16,6 +18,7 @@ import (
 	"time"
 
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/types"
 )
 
@@ -74,7 +77,7 @@ func builders() (bt []builderType) {
 	return
 }
 
-func create(args []string) error {
+func legacyCreate(args []string) error {
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
 
 	fs.Usage = func() {
@@ -127,4 +130,57 @@ func create(args []string) error {
 	}
 	fmt.Println(client.RemoteName())
 	return nil
+}
+
+func create(args []string) error {
+	fs := flag.NewFlagSet("create", flag.ContinueOnError)
+
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "create usage: gomote v2 create [create-opts] <type>")
+		fs.PrintDefaults()
+		fmt.Fprintln(os.Stderr, "\nValid types:")
+		for _, bt := range builders() {
+			var warn string
+			if bt.IsReverse {
+				if bt.ExpectNum > 0 {
+					warn = fmt.Sprintf("   [limited capacity: %d machines]", bt.ExpectNum)
+				} else {
+					warn = "   [limited capacity]"
+				}
+			}
+			fmt.Fprintf(os.Stderr, "  * %s%s\n", bt.Name, warn)
+		}
+		os.Exit(1)
+	}
+	var status bool
+	fs.BoolVar(&status, "status", true, "print regular status updates while waiting")
+
+	fs.Parse(args)
+	if fs.NArg() != 1 {
+		fs.Usage()
+	}
+	builderType := fs.Arg(0)
+	ctx := context.Background()
+	client := gomoteServerClient(ctx)
+
+	start := time.Now()
+	stream, err := client.CreateInstance(ctx, &protos.CreateInstanceRequest{BuilderType: builderType})
+	if err != nil {
+		return fmt.Errorf("failed to create buildlet: %v", statusFromError(err))
+	}
+	var instanceName string
+	for {
+		update, err := stream.Recv()
+		switch {
+		case err == io.EOF:
+			fmt.Println(instanceName)
+			return nil
+		case err != nil:
+			return fmt.Errorf("failed to create buildlet: %v", statusFromError(err))
+		case update.GetStatus() != protos.CreateInstanceResponse_COMPLETE && status:
+			fmt.Fprintf(os.Stderr, "# still creating %s after %v; %d requests ahead of you\n", builderType, time.Since(start).Round(time.Second), update.GetWaitersAhead())
+		case update.GetStatus() == protos.CreateInstanceResponse_COMPLETE:
+			instanceName = update.GetInstance().GetGomoteId()
+		}
+	}
 }

@@ -37,6 +37,7 @@ To list the subcommands, run "gomote" without arguments:
 	  rdp        RDP (Remote Desktop Protocol) to a Windows buildlet
 	  run        run a command on a buildlet
 	  ssh        ssh to a buildlet
+      v2         version 2 of the gomote API
 
 To list all the builder types available, run "create" with no arguments:
 
@@ -99,6 +100,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/oauth"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -147,7 +149,7 @@ func registerCommand(name, des string, run func([]string) error) {
 }
 
 func registerCommands() {
-	registerCommand("create", "create a buildlet; with no args, list types of buildlets", create)
+	registerCommand("create", "create a buildlet; with no args, list types of buildlets", legacyCreate)
 	registerCommand("destroy", "destroy a buildlet", destroy)
 	registerCommand("gettar", "extract a tar.gz from a buildlet", getTar)
 	registerCommand("ls", "list the contents of a directory on a buildlet", ls)
@@ -161,6 +163,7 @@ func registerCommands() {
 	registerCommand("rm", "delete files or directories", rm)
 	registerCommand("run", "run a command on a buildlet", run)
 	registerCommand("ssh", "ssh to a buildlet", ssh)
+	registerCommand("v2", "version 2 of the gomote commands", version2)
 }
 
 var (
@@ -185,8 +188,7 @@ func main() {
 	}
 	err := cmd.run(args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error running %s: %v\n", cmdName, err)
-		os.Exit(1)
+		logAndExitf("Error running %s: %v\n", cmdName, err)
 	}
 }
 
@@ -209,8 +211,31 @@ func gomoteServerClient(ctx context.Context) protos.GomoteServiceClient {
 	return protos.NewGomoteServiceClient(grpcClient)
 }
 
+type subCommand func([]string) error
+
+// version2 manages how version 2 subcommands are called.
+func version2(args []string) error {
+	cm := map[string]subCommand{
+		"create": create,
+	}
+	if len(args) == 0 {
+		usage()
+	}
+	subCmd := args[0]
+	sc, ok := cm[subCmd]
+	if !ok {
+		return fmt.Errorf("unknown sub-command %q\n", subCmd)
+	}
+	return sc(args[1:])
+}
+
 // logAndExitf is equivalent to Printf to Stderr followed by a call to os.Exit(1).
 func logAndExitf(format string, v ...interface{}) {
 	fmt.Fprintf(os.Stderr, format, v...)
 	os.Exit(1)
+}
+
+// statusFromError returns the message portion of a GRPC error.
+func statusFromError(err error) string {
+	return status.Convert(err).Message()
 }
