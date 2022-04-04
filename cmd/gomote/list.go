@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -14,9 +15,10 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/gomote/protos"
 )
 
-func list(args []string) error {
+func legacyList(args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "list usage: gomote list")
@@ -122,4 +124,28 @@ func clientAndCondConf(name string, withConf bool) (bc buildlet.Client, conf *da
 	}
 
 	return bc, conf, nil
+}
+
+func list(args []string) error {
+	fs := flag.NewFlagSet("list", flag.ContinueOnError)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "list usage: gomote list")
+		fs.PrintDefaults()
+		os.Exit(1)
+	}
+	fs.Parse(args)
+	if fs.NArg() != 0 {
+		fs.Usage()
+	}
+
+	ctx := context.Background()
+	client := gomoteServerClient(ctx)
+	resp, err := client.ListInstances(ctx, &protos.ListInstancesRequest{})
+	if err != nil {
+		return fmt.Errorf("unable to list instance: %s", statusFromError(err))
+	}
+	for _, inst := range resp.GetInstances() {
+		fmt.Printf("%s\t%s\t%s\texpires in %v\n", inst.GetGomoteId(), inst.GetBuilderType(), inst.GetHostType(), time.Unix(inst.GetExpires(), 0).Sub(time.Now()))
+	}
+	return nil
 }

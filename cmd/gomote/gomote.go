@@ -153,7 +153,7 @@ func registerCommands() {
 	registerCommand("destroy", "destroy a buildlet", legacyDestroy)
 	registerCommand("gettar", "extract a tar.gz from a buildlet", getTar)
 	registerCommand("ls", "list the contents of a directory on a buildlet", ls)
-	registerCommand("list", "list active buildlets", list)
+	registerCommand("list", "list active buildlets", legacyList)
 	registerCommand("ping", "test whether a buildlet is alive and reachable ", ping)
 	registerCommand("push", "sync your GOROOT directory to the buildlet", push)
 	registerCommand("put", "put files on a buildlet", put)
@@ -218,6 +218,7 @@ func version2(args []string) error {
 	cm := map[string]subCommand{
 		"create":  create,
 		"destroy": destroy,
+		"list":    list,
 	}
 	if len(args) == 0 {
 		usage()
