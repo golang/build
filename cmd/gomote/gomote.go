@@ -150,7 +150,7 @@ func registerCommand(name, des string, run func([]string) error) {
 
 func registerCommands() {
 	registerCommand("create", "create a buildlet; with no args, list types of buildlets", legacyCreate)
-	registerCommand("destroy", "destroy a buildlet", destroy)
+	registerCommand("destroy", "destroy a buildlet", legacyDestroy)
 	registerCommand("gettar", "extract a tar.gz from a buildlet", getTar)
 	registerCommand("ls", "list the contents of a directory on a buildlet", ls)
 	registerCommand("list", "list active buildlets", list)
@@ -216,7 +216,8 @@ type subCommand func([]string) error
 // version2 manages how version 2 subcommands are called.
 func version2(args []string) error {
 	cm := map[string]subCommand{
-		"create": create,
+		"create":  create,
+		"destroy": destroy,
 	}
 	if len(args) == 0 {
 		usage()

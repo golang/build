@@ -5,15 +5,17 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/internal/gomote/protos"
 )
 
-func destroy(args []string) error {
+func legacyDestroy(args []string) error {
 	fs := flag.NewFlagSet("destroy", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "destroy usage: gomote destroy <instance>")
@@ -48,4 +50,41 @@ func destroy(args []string) error {
 		return err
 	}
 	return bc.Close()
+}
+
+func destroy(args []string) error {
+	fs := flag.NewFlagSet("destroy", flag.ContinueOnError)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "destroy usage: gomote destroy <instance>")
+		fs.PrintDefaults()
+		if fs.NArg() == 0 {
+			// List buildlets that you might want to destroy.
+			client := gomoteServerClient(context.Background())
+			resp, err := client.ListInstances(context.Background(), &protos.ListInstancesRequest{})
+			if err != nil {
+				log.Fatalf("unable to list possible instances to destroy: %s", statusFromError(err))
+			}
+			if len(resp.GetInstances()) > 0 {
+				fmt.Printf("possible instances:\n")
+				for _, inst := range resp.GetInstances() {
+					fmt.Printf("\t%s\n", inst.GetGomoteId())
+				}
+			}
+		}
+		os.Exit(1)
+	}
+
+	fs.Parse(args)
+	if fs.NArg() != 1 {
+		fs.Usage()
+	}
+	name := fs.Arg(0)
+	ctx := context.Background()
+	client := gomoteServerClient(ctx)
+	if _, err := client.DestroyInstance(ctx, &protos.DestroyInstanceRequest{
+		GomoteId: name,
+	}); err != nil {
+		return fmt.Errorf("unable to destroy instance: %s", statusFromError(err))
+	}
+	return nil
 }
