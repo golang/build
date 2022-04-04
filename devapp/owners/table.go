@@ -49,7 +49,6 @@ var (
 	jba          = gh("jba")
 	jbd          = gh("rakyll")
 	joetsai      = gh("dsnet")
-	josharian    = gh("josharian")
 	julieqiu     = gh("julieqiu")
 	kardianos    = gh("kardianos")
 	katie        = gh("katiehockman")
@@ -118,11 +117,11 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/compile": {
 		Primary:   []Owner{khr, gri},
-		Secondary: []Owner{josharian, mdempsky, martisch},
+		Secondary: []Owner{mdempsky, martisch},
 	},
 	"go/src/cmd/compile/internal/amd64": {
 		Primary:   []Owner{khr},
-		Secondary: []Owner{josharian, rsc, drchase, cherryyz, martisch},
+		Secondary: []Owner{rsc, drchase, cherryyz, martisch},
 	},
 	"go/src/cmd/compile/internal/arm": {
 		Primary:   []Owner{khr},
@@ -150,7 +149,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/compile/internal/x86": {
 		Primary:   []Owner{khr},
-		Secondary: []Owner{josharian, rsc, drchase, cherryyz, martisch},
+		Secondary: []Owner{rsc, drchase, cherryyz, martisch},
 	},
 	"go/src/cmd/compile/internal/syntax": {
 		Primary:   []Owner{gri},
@@ -158,14 +157,14 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/compile/internal/types": {
 		Primary:   []Owner{gri},
-		Secondary: []Owner{josharian, mdempsky, rsc},
+		Secondary: []Owner{mdempsky, rsc},
 	},
 	"go/src/cmd/compile/internal/types2": {
 		Primary: []Owner{gri, findleyr},
 	},
 	"go/src/cmd/compile/internal/ssa": {
 		Primary:   []Owner{khr},
-		Secondary: []Owner{josharian, martisch},
+		Secondary: []Owner{martisch},
 	},
 	"go/src/cmd/compile/internal/wasm": wasmOwners,
 	"go/src/cmd/doc": {
@@ -287,8 +286,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{martisch},
 	},
 	"go/src/go/ast": {
-		Primary:   []Owner{gri},
-		Secondary: []Owner{josharian},
+		Primary: []Owner{gri},
 	},
 	"go/src/go/build": {
 		Primary: []Owner{rsc},
@@ -353,8 +351,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mknyszek, cherryyz},
 	},
 	"go/src/internal/bytealg": {
-		Primary:   []Owner{khr},
-		Secondary: []Owner{josharian},
+		Primary: []Owner{khr},
 	},
 	"go/src/internal/cpu": {
 		Primary:   []Owner{runtimeTeam},
@@ -415,8 +412,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{bradfitz},
 	},
 	"go/src/internal/testenv": {
-		Primary:   []Owner{bradfitz, iant},
-		Secondary: []Owner{josharian},
+		Primary: []Owner{bradfitz, iant},
 	},
 	"go/src/internal/trace": {
 		Primary:   []Owner{runtimeTeam},
@@ -438,11 +434,11 @@ var entries = map[string]*Entry{
 	},
 	"go/src/math/bits": {
 		Primary:   []Owner{gri},
-		Secondary: []Owner{khr, josharian, filippo, securityTeam},
+		Secondary: []Owner{khr, filippo, securityTeam},
 	},
 	"go/src/math/rand": {
 		Primary:   []Owner{gri, rsc},
-		Secondary: []Owner{josharian, filippo, securityTeam},
+		Secondary: []Owner{filippo, securityTeam},
 	},
 	"go/src/mime": {
 		Primary: []Owner{neild},
@@ -706,9 +702,6 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{toolsTeam},
 		Secondary: []Owner{findleyr, hyangah},
 	},
-	"tools/cmd/compilebench": {
-		Secondary: []Owner{josharian},
-	},
 	"tools/cmd/bundle": {
 		Primary: []Owner{adonovan},
 	},
@@ -736,7 +729,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/go/ast": {
 		Primary:   []Owner{gri},
-		Secondary: []Owner{josharian, dmitshur},
+		Secondary: []Owner{dmitshur},
 	},
 	"tools/go/buildutil": {
 		Primary:   []Owner{bcmills, matloob},

@@ -46,7 +46,7 @@ func TestMatch(t *testing.T) {
 			"go/src/cmd/compile",
 			&Entry{
 				Primary:   []Owner{khr, gri},
-				Secondary: []Owner{josharian, mdempsky, martisch},
+				Secondary: []Owner{mdempsky, martisch},
 			},
 		},
 		{
