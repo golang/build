@@ -9,9 +9,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
+
+	"golang.org/x/build/internal/gomote/protos"
 )
 
-func ping(args []string) error {
+func legacyPing(args []string) error {
 	fs := flag.NewFlagSet("ping", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "ping usage: gomote ping [--status] <instance>")
@@ -42,6 +44,30 @@ func ping(args []string) error {
 			return err
 		}
 		fmt.Printf("status: %+v\n", s)
+	}
+	return nil
+}
+
+func ping(args []string) error {
+	fs := flag.NewFlagSet("ping", flag.ContinueOnError)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "ping usage: gomote v2 ping [--status] <instance>")
+		fs.PrintDefaults()
+		os.Exit(1)
+	}
+	fs.Parse(args)
+
+	if fs.NArg() != 1 {
+		fs.Usage()
+	}
+	name := fs.Arg(0)
+	ctx := context.Background()
+	client := gomoteServerClient(ctx)
+	_, err := client.InstanceAlive(ctx, &protos.InstanceAliveRequest{
+		GomoteId: name,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to ping instance: %s", statusFromError(err))
 	}
 	return nil
 }

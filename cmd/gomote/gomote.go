@@ -221,6 +221,7 @@ func version2(args []string) error {
 		"list":    list,
 		"ls":      ls,
 		"run":     run,
+		"ping":    ping,
 	}
 	if len(args) == 0 {
 		usage()
