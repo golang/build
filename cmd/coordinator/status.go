@@ -371,21 +371,30 @@ func fetchMakeMacStatus() (errs, warns []string) {
 }
 
 func newMacOSARM64Checker() *healthChecker {
+	var expect int // Number of expected darwin/arm64 reverse builders based on x/build/dashboard.
+	for hostType, hc := range dashboard.Hosts {
+		if !strings.HasPrefix(hostType, "host-darwin-arm64-") || !hc.IsReverse {
+			continue
+		}
+		expect += hc.ExpectNum
+	}
+	// TODO(go.dev/issue/49149): Compute hosts dynamically after settling on a naming pattern.
+	// That way it won't be not neccessary to maintain this static map. But this works sooner.
+	hostsOn20220408 := []string{
+		"host-darwin-arm64-11_0-toothrot:Gophers-Mini",
+		"host-darwin-arm64-12_0-toothrot:Gophers-Mini-2",
+	}
+	checkReverse := reverseHostChecker(hostsOn20220408)
 	return &healthChecker{
 		ID:     "macos-arm64",
 		Title:  "macOS ARM64 (M1 Mac minis)",
 		DocURL: "https://golang.org/issue/39782",
-		Check:  hostTypeChecker("host-darwin-arm64-12_0-toothrot"),
-	}
-}
-
-func hostTypeChecker(hostType string) func(cw *checkWriter) {
-	want := expectedHosts(hostType)
-	return func(cw *checkWriter) {
-		n := pool.ReversePool().SingleHostTypeCount(hostType)
-		if n < want {
-			cw.errorf("%d connected; want %d", n, want)
-		}
+		Check: func(w *checkWriter) {
+			checkReverse(w)
+			if known := len(hostsOn20220408); known < expect {
+				w.warnf("this check doesn't know about %d more darwin/arm64 reverse builders that are expected", expect-known)
+			}
+		},
 	}
 }
 
