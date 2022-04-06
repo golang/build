@@ -864,11 +864,16 @@ func (st *buildStatus) cleanForSnapshot(bc buildlet.Client) error {
 func (st *buildStatus) writeSnapshot(bc buildlet.Client) (err error) {
 	sp := st.CreateSpan("write_snapshot_to_gcs")
 	defer func() { sp.Done(err) }()
-	// This should happen in 15 seconds or so, but I saw timeouts
-	// a couple times at 1 minute. Some buildlets might be far
-	// away on the network, so be more lenient. The timeout mostly
-	// is here to prevent infinite hangs.
-	ctx, cancel := context.WithTimeout(st.ctx, 5*time.Minute)
+	// A typical Go snapshot tarball in April 2022 is around 150 MB in size.
+	// Builders with a fast uplink speed can upload the tar within seconds or minutes.
+	// Reverse builders might be far away on the network, so be more lenient for them.
+	// (Fast builds require a sufficiently fast uplink speed or turning off snapshots,
+	// so the timeout here is mostly an upper bound to prevent infinite hangs.)
+	timeout := 5 * time.Minute
+	if st.conf.IsReverse() {
+		timeout *= 3
+	}
+	ctx, cancel := context.WithTimeout(st.ctx, timeout)
 	defer cancel()
 
 	tsp := st.CreateSpan("fetch_snapshot_reader_from_buildlet")
@@ -890,8 +895,8 @@ func (st *buildStatus) writeSnapshot(bc buildlet.Client) (err error) {
 	wr := sc.Bucket(bucket).Object(st.SnapshotObjectName()).NewWriter(ctx)
 	wr.ContentType = "application/octet-stream"
 	wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
-	if _, err := io.Copy(wr, tgz); err != nil {
-		st.logf("failed to write snapshot to GCS: %v", err)
+	if n, err := io.Copy(wr, tgz); err != nil {
+		st.logf("failed to write snapshot to GCS after copying %d bytes: %v", n, err)
 		return err
 	}
 
