@@ -671,10 +671,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-staticlockranking", "net"), none},
 
 		{b("linux-amd64-unified", "go"), both},
-		{b("linux-amd64-unified", "tools"), both},
+		{b("linux-amd64-unified", "tools"), onlyPost},
 		{b("linux-amd64-unified", "net"), none},
 		{b("linux-amd64-unified@dev.typeparams", "go"), both},
-		{b("linux-amd64-unified@dev.typeparams", "tools"), both},
+		{b("linux-amd64-unified@dev.typeparams", "tools"), onlyPost},
 		{b("linux-amd64-unified@dev.typeparams", "net"), none},
 
 		{b("linux-amd64-nounified", "go"), both},

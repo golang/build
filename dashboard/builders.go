@@ -1758,7 +1758,8 @@ func init() {
 		HostType: "host-linux-buster",
 		Notes:    "builder with GOEXPERIMENT=unified, see golang.org/issue/46786",
 		tryBot: func(repo, branch, goBranch string) bool {
-			return (repo == "go" || repo == "tools") && (goBranch == "master" || goBranch == "dev.typeparams")
+			// TODO(go.dev/issue/52150): Restore testing against tools repo.
+			return (repo == "go" /*|| repo == "tools"*/) && (goBranch == "master" || goBranch == "dev.typeparams")
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return (repo == "go" || repo == "tools") && (goBranch == "master" || goBranch == "dev.typeparams")
