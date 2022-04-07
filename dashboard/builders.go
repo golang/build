@@ -2926,6 +2926,9 @@ func plan9Default(repo, branch, goBranch string) bool {
 		// The x/website tests read and check the website code snippets,
 		// which require many filesystem walk and read operations.
 		return false
+	case "vulndb", "vuln":
+		// vulncheck can't read plan9 binaries.
+		return false
 	default:
 		return onlyMasterDefault(repo, branch, goBranch)
 	}
