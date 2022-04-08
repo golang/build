@@ -18,10 +18,10 @@ import (
 	"text/template"
 	"time"
 
-	"golang.org/x/net/context"
 	"golang.org/x/build/perfdata"
-	"golang.org/x/perf/storage/benchfmt"
 	"golang.org/x/build/perfdata/query"
+	"golang.org/x/net/context"
+	"golang.org/x/perf/storage/benchfmt"
 )
 
 // TODO(quentin): Add Context to every function when App Engine supports Go >=1.8.

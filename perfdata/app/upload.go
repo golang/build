@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/build/perfdata/db"
 	"golang.org/x/net/context"
 	"golang.org/x/perf/storage/benchfmt"
-	"golang.org/x/build/perfdata/db"
 )
 
 // upload is the handler for the /upload endpoint. It serves a form on

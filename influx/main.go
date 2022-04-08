@@ -23,17 +23,17 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/influxdata/influxdb-client-go/v2"
-	"github.com/influxdata/influxdb-client-go/v2/domain"
 	"cloud.google.com/go/compute/metadata"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
-	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
+	"github.com/influxdata/influxdb-client-go/v2"
+	"github.com/influxdata/influxdb-client-go/v2/domain"
 	"golang.org/x/build/internal/https"
+	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
 )
 
 const (
 	influxListen = "localhost:8086"
-	influxURL    = "http://"+influxListen
+	influxURL    = "http://" + influxListen
 )
 
 func main() {

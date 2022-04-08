@@ -36,7 +36,7 @@ const (
 type Buffer struct {
 	mu     sync.Mutex // Guards the fields below.
 	wake   *sync.Cond // Created on demand by reader.
-	buf    []byte // Length is in the range [0, MaxBufferSize].
+	buf    []byte     // Length is in the range [0, MaxBufferSize].
 	eof    bool
 	lastID int
 }

@@ -17,11 +17,11 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
 	"golang.org/x/build/internal/diff"
-	"golang.org/x/perf/storage/benchfmt"
 	. "golang.org/x/build/perfdata/db"
 	"golang.org/x/build/perfdata/db/dbtest"
+	"golang.org/x/net/context"
+	"golang.org/x/perf/storage/benchfmt"
 )
 
 // Most of the db package is tested via the end-to-end-tests in perf/storage/app.

@@ -14,9 +14,9 @@ import (
 	"reflect"
 	"testing"
 
-	"golang.org/x/perf/storage/benchfmt"
-	"golang.org/x/net/context"
 	"golang.org/x/build/internal/diff"
+	"golang.org/x/net/context"
+	"golang.org/x/perf/storage/benchfmt"
 )
 
 func TestQueryError(t *testing.T) {

@@ -11,8 +11,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"golang.org/x/net/context"
 	"golang.org/x/build/perfdata/fs"
+	"golang.org/x/net/context"
 )
 
 // impl is an fs.FS backed by local disk.
