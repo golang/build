@@ -28,6 +28,7 @@ import (
 	"github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/domain"
 	"golang.org/x/build/internal/https"
+	"golang.org/x/build/internal/influx"
 	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
 )
 
@@ -179,13 +180,6 @@ type influxSecrets struct {
 	readerToken string
 }
 
-const (
-	adminPassSecretName   = "influx-admin-pass"
-	adminTokenSecretName  = "influx-admin-token"
-	readerPassSecretName  = "influx-reader-pass"
-	readerTokenSecretName = "influx-reader-token"
-)
-
 // recordOrLog saves the secrets to Secret Manager, if available, or simply
 // logs them when not running on GCP.
 func (i *influxSecrets) recordOrLog(ctx context.Context) error {
@@ -224,16 +218,16 @@ func (i *influxSecrets) recordOrLog(ctx context.Context) error {
 		return nil
 	}
 
-	if err := addSecretVersion(adminPassSecretName, i.adminPass); err != nil {
+	if err := addSecretVersion(influx.AdminPassSecretName, i.adminPass); err != nil {
 		return fmt.Errorf("error adding admin password secret: %w", err)
 	}
-	if err := addSecretVersion(adminTokenSecretName, i.adminToken); err != nil {
+	if err := addSecretVersion(influx.AdminTokenSecretName, i.adminToken); err != nil {
 		return fmt.Errorf("error adding admin token secret: %w", err)
 	}
-	if err := addSecretVersion(readerPassSecretName, i.readerPass); err != nil {
+	if err := addSecretVersion(influx.ReaderPassSecretName, i.readerPass); err != nil {
 		return fmt.Errorf("error adding reader password secret: %w", err)
 	}
-	if err := addSecretVersion(readerTokenSecretName, i.readerToken); err != nil {
+	if err := addSecretVersion(influx.ReaderTokenSecretName, i.readerToken); err != nil {
 		return fmt.Errorf("error adding reader token secret: %w", err)
 	}
 
@@ -250,7 +244,7 @@ func setupUsers(ctx context.Context, client influxdb2.Client) (influxSecrets, er
 	}
 
 	// Initial instance setup; creates admin user.
-	onboard, err := client.Setup(ctx, "admin", adminPass, "golang", "perf", 0)
+	onboard, err := client.Setup(ctx, "admin", adminPass, influx.Org, influx.Bucket, 0)
 	if err != nil {
 		return influxSecrets{}, fmt.Errorf("influx setup error: %w", err)
 	}
