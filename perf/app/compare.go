@@ -9,9 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"io/ioutil"
 	"net/http"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -154,7 +152,7 @@ func linkify(labels benchfmt.Labels, label string) string {
 
 // compare handles queries that require comparison of the groups in the query.
 func (a *App) compare(w http.ResponseWriter, r *http.Request) {
-	ctx := requestContext(r)
+	ctx := r.Context()
 
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 500)
@@ -163,16 +161,10 @@ func (a *App) compare(w http.ResponseWriter, r *http.Request) {
 
 	q := r.Form.Get("q")
 
-	tmpl, err := ioutil.ReadFile(filepath.Join(a.BaseDir, "template/compare.html"))
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-
-	t, err := template.New("main").Funcs(template.FuncMap{
+	t, err := template.New("compare.html").Funcs(template.FuncMap{
 		"addToQuery": addToQuery,
 		"linkify":    linkify,
-	}).Parse(string(tmpl))
+	}).ParseFS(tmplFS, "template/compare.html")
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -376,7 +368,7 @@ func (a *App) compareQuery(ctx context.Context, q string) *compareData {
 
 // textCompare is called if benchsave is requesting a text-only analysis.
 func (a *App) textCompare(w http.ResponseWriter, r *http.Request) {
-	ctx := requestContext(r)
+	ctx := r.Context()
 
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 500)

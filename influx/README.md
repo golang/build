@@ -9,7 +9,8 @@ database setup and push access credentials to Google Secret Manager.
 
 To run an instance locally:
 
-    $ sudo docker build -t golang_influx . && sudo docker run --rm -p 443:8086 golang_influx
+    $ make docker-prod
+    $ docker run --rm -p 443:8086 gcr.io/symbolic-datum-552/influx:latest
 
 Browse / API connect to https://localhost:8086 (note that the instance uses a
 self-signed certificate), and authenticate with user 'admin' or 'reader' with

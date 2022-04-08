@@ -6,24 +6,17 @@ package app
 
 import (
 	"html/template"
-	"io/ioutil"
+	"log"
 	"net/http"
-	"path/filepath"
 
 	"golang.org/x/build/perfdata"
 )
 
 // index redirects / to /search.
 func (a *App) index(w http.ResponseWriter, r *http.Request) {
-	ctx := requestContext(r)
+	ctx := r.Context()
 
-	tmpl, err := ioutil.ReadFile(filepath.Join(a.BaseDir, "template/index.html"))
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-
-	t, err := template.New("main").Parse(string(tmpl))
+	t, err := template.New("index.html").ParseFS(tmplFS, "template/index.html")
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -36,7 +29,7 @@ func (a *App) index(w http.ResponseWriter, r *http.Request) {
 		uploads = append(uploads, ul.Info())
 	}
 	if err := ul.Err(); err != nil {
-		errorf(ctx, "failed to fetch recent uploads: %v", err)
+		log.Printf("failed to fetch recent uploads: %v", err)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

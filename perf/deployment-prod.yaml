@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: prod
+  name: perf-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: perf
+  template:
+    metadata:
+      labels:
+        app: perf
+    spec:
+      serviceAccountName: perf-prod
+      containers:
+      - name: perf
+        image: gcr.io/symbolic-datum-552/perf:latest
+        imagePullPolicy: Always
+        command: ["/perf", "-listen-https-selfsigned=:443", "-perfdata=https://perfdata.golang.org"]
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 443
+            scheme: HTTPS
+        ports:
+        - containerPort: 443
+        resources:
+          requests:
+            cpu: "4"
+            memory: "4Gi"
+          limits:
+            memory: "8Gi"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: prod
+  name: perf-prod
+  annotations:
+    iam.gke.io/gcp-service-account: perf-prod@symbolic-datum-552.iam.gserviceaccount.com
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prod
+  name: perf-internal
+  annotations:
+    cloud.google.com/neg: '{"ingress": false}'
+    cloud.google.com/app-protocols: '{"https":"HTTP2"}'
+spec:
+  ports:
+    - port: 443
+      targetPort: 443
+      name: https
+  selector:
+    app: perf
+  type: NodePort

@@ -6,10 +6,14 @@
 package app
 
 import (
+	"embed"
 	"net/http"
 
 	"golang.org/x/build/perfdata"
 )
+
+//go:embed template/*
+var tmplFS embed.FS
 
 // App manages the analysis server logic.
 // Construct an App instance and call RegisterOnMux to connect it with an HTTP server.
@@ -28,6 +32,7 @@ func (a *App) RegisterOnMux(mux *http.ServeMux) {
 	mux.HandleFunc("/search", a.search)
 	mux.HandleFunc("/compare", a.compare)
 	mux.HandleFunc("/trend", a.trend)
+	mux.HandleFunc("/healthz", a.healthz)
 }
 
 // search handles /search.
@@ -48,4 +53,10 @@ func (a *App) search(w http.ResponseWriter, r *http.Request) {
 	// than one analysis method.
 	//q := r.Form.Get("q")
 	a.compare(w, r)
+}
+
+// healthz handles /healthz.
+func (a *App) healthz(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
 }

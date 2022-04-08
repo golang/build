@@ -11,10 +11,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"io/ioutil"
+	"log"
 	"math"
 	"net/http"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,7 +30,7 @@ import (
 // With no query, it prints the list of recent uploads containing a "trend" key.
 // With a query, it shows a graph of the matching benchmark results.
 func (a *App) trend(w http.ResponseWriter, r *http.Request) {
-	ctx := requestContext(r)
+	ctx := r.Context()
 
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), 500)
@@ -40,13 +39,7 @@ func (a *App) trend(w http.ResponseWriter, r *http.Request) {
 
 	q := r.Form.Get("q")
 
-	tmpl, err := ioutil.ReadFile(filepath.Join(a.BaseDir, "template/trend.html"))
-	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
-	}
-
-	t, err := template.New("main").Parse(string(tmpl))
+	t, err := template.New("trend.html").ParseFS(tmplFS, "template/trend.html")
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -85,7 +78,7 @@ func (a *App) trendQuery(ctx context.Context, q string, opt plotOptions) *trendD
 			d.TrendUploads = append(d.TrendUploads, ul.Info())
 		}
 		if err := ul.Err(); err != nil {
-			errorf(ctx, "failed to fetch recent trend uploads: %v", err)
+			log.Printf("failed to fetch recent trend uploads: %v", err)
 		}
 		return d
 	}
@@ -93,7 +86,7 @@ func (a *App) trendQuery(ctx context.Context, q string, opt plotOptions) *trendD
 	// TODO(quentin): Chunk query based on matching upload IDs.
 	s, err := a.StorageClient.Query(ctx, q)
 	if err != nil {
-		errorf(ctx, "failed to read query results: %v", err)
+		log.Printf("failed to read query results: %v", err)
 		d.Error = fmt.Sprintf("failed to read query results: %v", err)
 		return d
 	}
@@ -101,7 +94,7 @@ func (a *App) trendQuery(ctx context.Context, q string, opt plotOptions) *trendD
 	res := benchfmt.NewReader(s)
 	t, resultCols := queryToTable(res)
 	if err := res.Err(); err != nil {
-		errorf(ctx, "failed to read query results: %v", err)
+		log.Printf("failed to read query results: %v", err)
 		d.Error = fmt.Sprintf("failed to read query results: %v", err)
 		return d
 	}
@@ -157,7 +150,7 @@ func (a *App) trendQuery(ctx context.Context, q string, opt plotOptions) *trendD
 	data = ggstat.Agg("commit", "branch", "commit-index")(ar.agg).F(data)
 
 	tables := data.Tables()
-	infof(ctx, "tables: %v", tables)
+	log.Printf("tables: %v", tables)
 	columns := []column{
 		{Name: "commit-index"},
 		{Name: "commit", Role: "tooltip"},
