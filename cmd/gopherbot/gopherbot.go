@@ -2462,6 +2462,41 @@ func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
 				return nil
 			}
 
+			// If this change is part of a stack, we'd like to merge the stack
+			// in the correct order (i.e. from the bottom of the stack to the
+			// top), so we'll only merge the current change if every change
+			// below it in the stack is either merged, or abandoned. If a parent
+			// change is no longer current (the revision of the change that the
+			// child change is based on is no longer the current revision of
+			// that change) we won't merge the child. GetRelatedChanges gives us
+			// the stack from top to bottom (the order of the git commits, from
+			// newest to oldest, see Gerrit documentation for
+			// RelatedChangesInfo), so first we find our change in the stack,
+			// then  check everything below it.
+			relatedChanges, err := b.gerrit.GetRelatedChanges(ctx, fmt.Sprint(cl.Number), "current")
+			if err != nil {
+				return err
+			}
+			if len(relatedChanges.Changes) > 0 {
+				var parentChanges bool
+				for _, ci := range relatedChanges.Changes {
+					if !parentChanges {
+						// Skip everything before the change we are checking, as
+						// they are the children of this change, and we only care
+						// about the parents.
+						parentChanges = ci.ChangeNumber == cl.Number
+						continue
+					}
+					if ci.Status != gerrit.ChangeStatusAbandoned &&
+						ci.Status != gerrit.ChangeStatusMerged {
+						return nil
+					}
+					if ci.CurrentRevisionNumber != ci.RevisionNumber {
+						return nil
+					}
+				}
+			}
+
 			if *dryRun {
 				log.Printf("[dry-run] would've submitted CL https://golang.org/cl/%d ...", cl.Number)
 				return nil

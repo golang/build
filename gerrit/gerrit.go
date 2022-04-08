@@ -1045,3 +1045,31 @@ func (c *Client) GetRevisionActions(ctx context.Context, changeID, revision stri
 	err := c.do(ctx, &actions, "GET", "/changes/"+changeID+"/revisions/"+revision+"/actions")
 	return actions, err
 }
+
+// RelatedChangeAndCommitInfo contains information about a particular
+// change at a particular commit.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#related-change-and-commit-info.
+type RelatedChangeAndCommitInfo struct {
+	Project               string     `json:"project"`
+	ChangeID              string     `json:"change_id"`
+	ChangeNumber          int32      `json:"_change_number"`
+	Commit                CommitInfo `json:"commit"`
+	Status                string     `json:"status"`
+	RevisionNumber        int32      `json:"_revision_number"`
+	CurrentRevisionNumber int32      `json:"_current_revision_number"`
+}
+
+// RelatedChangesInfo contains information about a set of related changes.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#related-changes-info.
+type RelatedChangesInfo struct {
+	Changes []RelatedChangeAndCommitInfo `json:"changes"`
+}
+
+// GetRelatedChanges retrieves information about a set of related changes.
+func (c *Client) GetRelatedChanges(ctx context.Context, changeID, revision string) (*RelatedChangesInfo, error) {
+	var changes *RelatedChangesInfo
+	err := c.do(ctx, &changes, "GET", "/changes/"+changeID+"/revisions/"+revision+"/related")
+	return changes, err
+}
