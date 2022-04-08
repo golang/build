@@ -18,7 +18,13 @@ spec:
       - name: perf
         image: gcr.io/symbolic-datum-552/perf:latest
         imagePullPolicy: Always
-        command: ["/perf", "-listen-https-selfsigned=:443", "-perfdata=https://perfdata.golang.org"]
+        command: [
+          "/perf",
+          "-listen-https-selfsigned=:443",
+          "-perfdata=https://perfdata.golang.org",
+          "-influx-host=https://influx.golang.org",
+          "-auth-cron-email=perf-prod@symbolic-datum-552.iam.gserviceaccount.com",
+        ]
         readinessProbe:
           httpGet:
             path: /healthz

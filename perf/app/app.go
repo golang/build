@@ -24,6 +24,29 @@ type App struct {
 	// BaseDir is the directory containing the "template" directory.
 	// If empty, the current directory will be used.
 	BaseDir string
+
+	// InfluxHost is the host URL of the perf InfluxDB server.
+	InfluxHost string
+
+	// InfluxToken is the Influx auth token for connecting to InfluxHost.
+	//
+	// If empty, we attempt to fetch the token from Secret Manager using
+	// InfluxProject.
+	InfluxToken string
+
+	// InfluxProject is the GCP project ID containing the InfluxDB secrets.
+	//
+	// If empty, this defaults to the project this service is running as.
+	//
+	// Only used if InfluxToken is empty.
+	InfluxProject string
+
+	// AuthCronEmail is the service account email which requests to
+	// /cron/syncinflux must contain an OICD authentication token for, with
+	// audience "/cron/syncinflux".
+	//
+	// If empty, no authentication is required.
+	AuthCronEmail string
 }
 
 // RegisterOnMux registers the app's URLs on mux.
@@ -32,6 +55,7 @@ func (a *App) RegisterOnMux(mux *http.ServeMux) {
 	mux.HandleFunc("/search", a.search)
 	mux.HandleFunc("/compare", a.compare)
 	mux.HandleFunc("/trend", a.trend)
+	mux.HandleFunc("/cron/syncinflux", a.syncInflux)
 	mux.HandleFunc("/healthz", a.healthz)
 }
 
