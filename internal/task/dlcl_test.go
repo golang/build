@@ -33,8 +33,8 @@ func TestMailDLCL(t *testing.T) {
 //
 // To install, run:
 //
-//     $ go install golang.org/dl/go1.17.1@latest
-//     $ go1.17.1 download
+//	$ go install golang.org/dl/go1.17.1@latest
+//	$ go1.17.1 download
 //
 // And then use the go1.17.1 command as if it were your normal go
 // command.
@@ -58,8 +58,8 @@ file "go1.16.8/main.go" (command "golang.org/dl/go1.16.8"):
 //
 // To install, run:
 //
-//     $ go install golang.org/dl/go1.16.8@latest
-//     $ go1.16.8 download
+//	$ go install golang.org/dl/go1.16.8@latest
+//	$ go1.16.8 download
 //
 // And then use the go1.16.8 command as if it were your normal go
 // command.
@@ -87,8 +87,8 @@ func main() {
 //
 // To install, run:
 //
-//     $ go install golang.org/dl/go1.17beta1@latest
-//     $ go1.17beta1 download
+//	$ go install golang.org/dl/go1.17beta1@latest
+//	$ go1.17beta1 download
 //
 // And then use the go1.17beta1 command as if it were your normal go
 // command.
@@ -116,8 +116,8 @@ func main() {
 //
 // To install, run:
 //
-//     $ go install golang.org/dl/go1.17rc2@latest
-//     $ go1.17rc2 download
+//	$ go install golang.org/dl/go1.17rc2@latest
+//	$ go1.17rc2 download
 //
 // And then use the go1.17rc2 command as if it were your normal go
 // command.
@@ -145,8 +145,8 @@ func main() {
 //
 // To install, run:
 //
-//     $ go install golang.org/dl/go1.17@latest
-//     $ go1.17 download
+//	$ go install golang.org/dl/go1.17@latest
+//	$ go1.17 download
 //
 // And then use the go1.17 command as if it were your normal go
 // command.

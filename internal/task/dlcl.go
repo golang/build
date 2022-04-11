@@ -136,8 +136,8 @@ var dlTmpl = template.Must(template.New("").Parse(`// Copyright {{.Year}} The Go
 //
 // To install, run:
 //
-//     $ go install golang.org/dl/{{.Version}}@latest
-//     $ {{.Version}} download
+//	$ go install golang.org/dl/{{.Version}}@latest
+//	$ {{.Version}} download
 //
 // And then use the {{.Version}} command as if it were your normal go
 // command.
