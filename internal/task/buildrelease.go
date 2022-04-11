@@ -26,13 +26,13 @@ import (
 // WriteSourceArchive writes a source archive to out, based on revision with version written in as VERSION.
 func WriteSourceArchive(ctx *workflow.TaskContext, revision, version string, out io.Writer) error {
 	ctx.Printf("Create source archive.")
-	tarUrl := "https://go.googlesource.com/go/+archive/" + revision + ".tar.gz"
-	resp, err := http.Get(tarUrl)
+	tarURL := "https://go.googlesource.com/go/+archive/" + revision + ".tar.gz"
+	resp, err := http.Get(tarURL)
 	if err != nil {
 		return err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to fetch %q: %v", tarUrl, resp.Status)
+		return fmt.Errorf("failed to fetch %q: %v", tarURL, resp.Status)
 	}
 	defer resp.Body.Close()
 	gzReader, err := gzip.NewReader(resp.Body)
@@ -126,7 +126,7 @@ var dropPatterns = []string{
 	`pkg/obj/.*`,
 	// Users don't need the api checker binary pre-built. It's
 	// used by tests, but all.bash builds it first.
-	`pkg/tool/[^/]+/api`,
+	`pkg/tool/[^/]+/api.*`,
 	// Remove pkg/${GOOS}_${GOARCH}/cmd. This saves a bunch of
 	// space, and users don't typically rebuild cmd/compile,
 	// cmd/link, etc. If they want to, they still can, but they'll
@@ -233,17 +233,17 @@ func (b *BuildletStep) BuildBinary(ctx *workflow.TaskContext, sourceArchive io.R
 
 	// Execute build (make.bash only first).
 	ctx.Printf("Building (make.bash only).")
-	makeEnv := []string{"GOROOT_FINAL=" + b.BuildConfig.GorootFinal()}
-	makeEnv = append(makeEnv, b.Target.ExtraEnv...)
 	if err := b.exec(ctx, goDir+"/"+b.BuildConfig.MakeScript(), b.BuildConfig.MakeScriptArgs(), buildlet.ExecOpts{
-		ExtraEnv: makeEnv,
+		ExtraEnv: b.makeEnv(),
 	}); err != nil {
 		return err
 	}
 
 	if b.Target.Race {
 		ctx.Printf("Building race detector.")
-		if err := b.runGo(ctx, "install", "-race", "std"); err != nil {
+		if err := b.runGo(ctx, []string{"install", "-race", "std"}, buildlet.ExecOpts{
+			ExtraEnv: b.makeEnv(),
+		}); err != nil {
 			return err
 		}
 	}
@@ -277,6 +277,14 @@ func (b *BuildletStep) BuildBinary(ctx *workflow.TaskContext, sourceArchive io.R
 	return gzWriter.Close()
 }
 
+func (b *BuildletStep) makeEnv() []string {
+	// We need GOROOT_FINAL both during the binary build and test runs. See go.dev/issue/52236.
+	makeEnv := []string{"GOROOT_FINAL=" + b.BuildConfig.GorootFinal()}
+	// Add extra vars from the target's configuration.
+	makeEnv = append(makeEnv, b.Target.ExtraEnv...)
+	return makeEnv
+}
+
 //go:embed releaselet/releaselet.go
 var releaselet string
 
@@ -288,7 +296,9 @@ func (b *BuildletStep) BuildMSI(ctx *workflow.TaskContext, binaryArchive io.Read
 	if err := b.Buildlet.Put(ctx, strings.NewReader(releaselet), "releaselet.go", 0666); err != nil {
 		return err
 	}
-	if err := b.runGo(ctx, "run", "releaselet.go"); err != nil {
+	if err := b.runGo(ctx, []string{"run", "releaselet.go"}, buildlet.ExecOpts{
+		Dir: ".", // root of buildlet work directory
+	}); err != nil {
 		ctx.Printf("releaselet failed: %v", err)
 		b.Buildlet.ListDir(ctx, ".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
 			ctx.Printf("remote: %v", ent)
@@ -339,7 +349,9 @@ func (b *BuildletStep) TestTarget(ctx *workflow.TaskContext, binaryArchive io.Re
 		}
 	}
 	ctx.Printf("Building (all.bash to ensure tests pass).")
-	return b.exec(ctx, goDir+"/"+b.BuildConfig.AllScript(), b.BuildConfig.AllScriptArgs(), buildlet.ExecOpts{})
+	return b.exec(ctx, goDir+"/"+b.BuildConfig.AllScript(), b.BuildConfig.AllScriptArgs(), buildlet.ExecOpts{
+		ExtraEnv: b.makeEnv(),
+	})
 }
 
 // exec runs cmd with args. Its working dir is opts.Dir, or the directory of cmd.
@@ -361,25 +373,24 @@ func (b *BuildletStep) exec(ctx context.Context, cmd string, args []string, opts
 	if b.Watch {
 		opts.Output = io.MultiWriter(opts.Output, os.Stdout)
 	}
-	err, remoteErr := b.Buildlet.Exec(ctx, cmd, opts)
-	if err != nil {
-		return err
+	remoteErr, execErr := b.Buildlet.Exec(ctx, cmd, opts)
+	if execErr != nil {
+		return execErr
 	}
 	if remoteErr != nil {
 		return fmt.Errorf("Command %v %s failed: %v\nOutput:\n%v", cmd, args, remoteErr, out)
 	}
+
 	return nil
 }
 
-func (b *BuildletStep) runGo(ctx context.Context, args ...string) error {
+func (b *BuildletStep) runGo(ctx context.Context, args []string, execOpts buildlet.ExecOpts) error {
 	goCmd := goDir + "/bin/go"
 	if b.Target.GOOS == "windows" {
 		goCmd += ".exe"
 	}
-	return b.exec(ctx, goCmd, args, buildlet.ExecOpts{
-		Dir:  ".", // root of buildlet work directory
-		Args: args,
-	})
+	execOpts.Args = args
+	return b.exec(ctx, goCmd, args, execOpts)
 }
 
 func ConvertTGZToZIP(r io.Reader, w io.Writer) error {

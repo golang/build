@@ -209,7 +209,7 @@ func doRelease(ctx *workflow.TaskContext, revision, version string, target *rele
 				Context: groupCtx,
 				Logger:  &logger{fmt.Sprintf("%v (tests on %v)", target.Name, builder)},
 			}
-			if err := runWithBuildlet(target.Builder, func(step *task.BuildletStep) error {
+			if err := runWithBuildlet(builder, func(step *task.BuildletStep) error {
 				return step.TestTarget(ctx, binaryReader())
 			}); err != nil {
 				return fmt.Errorf("Testing on %v: %v", builder, err)
@@ -227,7 +227,7 @@ func doRelease(ctx *workflow.TaskContext, revision, version string, target *rele
 
 	// If we get this far, the all.bash tests have passed (or been skipped).
 	// Move untested release files to their final locations.
-	stagingRe := regexp.MustCompile(`(.*)\.release-staging-.*`)
+	stagingRe := regexp.MustCompile(`([^/]*)\.release-staging-.*`)
 	for _, f := range stagingFiles {
 		if err := f.Close(); err != nil {
 			return err
