@@ -966,7 +966,7 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 		args = append(args, "--compile-only")
 	}
 	var buf bytes.Buffer
-	remoteErr, err = st.bc.Exec(st.ctx, "go/bin/go", buildlet.ExecOpts{
+	remoteErr, err = st.bc.Exec(st.ctx, "./go/bin/go", buildlet.ExecOpts{
 		Output:      &buf,
 		ExtraEnv:    append(st.conf.Env(), "GOROOT="+goroot),
 		OnStartExec: func() { st.LogEventTime("discovering_tests") },
@@ -1138,7 +1138,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 
 	var remoteErrors []error
 	for _, tr := range testRuns {
-		rErr, err := st.bc.Exec(st.ctx, "go/bin/go", buildlet.ExecOpts{
+		rErr, err := st.bc.Exec(st.ctx, "./go/bin/go", buildlet.ExecOpts{
 			Debug:    true, // make buildlet print extra debug in output for failures
 			Output:   st,
 			Dir:      tr.Dir,
@@ -1329,7 +1329,7 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
 	)
 	env = append(env, st.conf.ModulesEnv(st.SubName)...)
-	rErr, err := st.bc.Exec(st.ctx, "go/bin/go", buildlet.ExecOpts{
+	rErr, err := st.bc.Exec(st.ctx, "./go/bin/go", buildlet.ExecOpts{
 		Debug:    true, // make buildlet print extra debug in output for failures
 		Output:   st,
 		Dir:      "gopath/src/" + repoPath,
@@ -1676,7 +1676,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc buildlet.Client, tis []*testItem, g
 	)
 	env = append(env, st.conf.ModulesEnv("go")...)
 
-	remoteErr, err := bc.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
+	remoteErr, err := bc.Exec(ctx, "./go/bin/go", buildlet.ExecOpts{
 		// We set Dir to "." instead of the default ("go/bin") so when the dist tests
 		// try to run os/exec.Command("go", "test", ...), the LookPath of "go" doesn't
 		// return "./go.exe" (which exists in the current directory: "go/bin") and then
