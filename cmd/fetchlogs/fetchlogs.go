@@ -12,7 +12,7 @@
 // to be the SHA-1 of their contents). The rev/ directory contains
 // symlinks back to these logs named
 //
-//    rev/<ISO 8601 commit date>-<git revision>/<builder>
+//	rev/<ISO 8601 commit date>-<git revision>/<builder>
 //
 // Fetchlogs will reuse existing log files and revision symlinks, so
 // it only has to download logs that are new since the last time it
@@ -22,7 +22,7 @@
 // example, to list the revisions and builders with a particular
 // failure, use:
 //
-//    grep -lR <regexp> rev | sort
+//	grep -lR <regexp> rev | sort
 package main
 
 import (

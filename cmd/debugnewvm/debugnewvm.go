@@ -225,7 +225,9 @@ func main() {
 }
 
 // watchSerial streams the named VM's serial port to log.Printf. It's roughly:
-//   gcloud compute connect-to-serial-port --zone=xxx $NAME
+//
+//	gcloud compute connect-to-serial-port --zone=xxx $NAME
+//
 // but in Go and works. For some reason, gcloud doesn't work as a
 // child process and has weird errors.
 // TODO(golang.org/issue/39485) - investigate if this is possible for EC2 instances

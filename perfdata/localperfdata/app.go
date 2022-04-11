@@ -9,7 +9,7 @@
 //
 // Usage:
 //
-//     localperfdata [-addr address] [-view_url_base url] [-base_dir ../appengine] [-dsn file.db]
+//	localperfdata [-addr address] [-view_url_base url] [-base_dir ../appengine] [-dsn file.db]
 package main
 
 import (

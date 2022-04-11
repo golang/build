@@ -80,7 +80,6 @@ var idToPerson = map[string]*Person{}
 // • email (for example, "dmitshur@golang.org")
 //
 // Only exact matches are supported.
-//
 func GetPerson(id string) *Person {
 	return idToPerson[strings.ToLower(id)]
 }

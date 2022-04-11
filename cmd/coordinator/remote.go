@@ -774,13 +774,13 @@ func setWinsize(f *os.File, w, h int) {
 //
 // The instance name is of two forms. The normal form is:
 //
-//     user-bradfitz-linux-amd64-0
+//	user-bradfitz-linux-amd64-0
 //
 // The overloaded form to convey that the user accepts responsibility
 // for changes to the underlying host is to prefix the same instance
 // name with the string "mutable-", such as:
 //
-//     mutable-user-bradfitz-darwin-amd64-10_8-0
+//	mutable-user-bradfitz-darwin-amd64-10_8-0
 //
 // The mutable part is ignored by this function.
 func userFromGomoteInstanceName(name string) string {

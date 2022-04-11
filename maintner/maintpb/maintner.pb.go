@@ -5,9 +5,11 @@
 Package maintpb is a generated protocol buffer package.
 
 It is generated from these files:
+
 	maintner.proto
 
 It has these top-level messages:
+
 	Mutation
 	GithubMutation
 	GithubIssueMutation

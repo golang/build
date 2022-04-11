@@ -441,7 +441,8 @@ func cleanTitle(title, viewBranch string) string {
 
 // failuresView renders https://build.golang.org/?mode=failures, where it outputs
 // one line per failure on the front page, in the form:
-//    hash builder failure-url
+//
+//	hash builder failure-url
 type failuresView struct{}
 
 func (failuresView) ShowsActiveBuilds() bool { return false }

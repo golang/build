@@ -7,13 +7,13 @@
 //
 // Valid usage modes:
 //
-//   retrybuilds -loghash=f45f0eb8
-//   retrybuilds -builder=openbsd-amd64
-//   retrybuilds -builder=openbsd-amd64 -hash=6fecb7
-//   retrybuilds -redo-flaky
-//   retrybuilds -redo-flaky -builder=linux-amd64-clang
-//   retrybuilds -substr="failed to find foo"
-//   retrybuilds -substr="failed to find foo" -builder=linux-amd64-stretch
+//	retrybuilds -loghash=f45f0eb8
+//	retrybuilds -builder=openbsd-amd64
+//	retrybuilds -builder=openbsd-amd64 -hash=6fecb7
+//	retrybuilds -redo-flaky
+//	retrybuilds -redo-flaky -builder=linux-amd64-clang
+//	retrybuilds -substr="failed to find foo"
+//	retrybuilds -substr="failed to find foo" -builder=linux-amd64-stretch
 package main
 
 import (

@@ -150,8 +150,8 @@ var testFiles = map[string]string{
 
 // httpRouter is the coordinator's handler, routing traffic to one of
 // two locations:
-//   1) a buildlet, from gomote clients (if X-Buildlet-Proxy is set)
-//   2) traffic to the coordinator itself (the default)
+//  1. a buildlet, from gomote clients (if X-Buildlet-Proxy is set)
+//  2. traffic to the coordinator itself (the default)
 func httpRouter(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Buildlet-Proxy") != "" {
@@ -2025,9 +2025,10 @@ func randHex(n int) string {
 // import path, it always has forward slashes and no trailing slash.
 //
 // For example:
-//   "net"    -> "golang.org/x/net"
-//   "crypto" -> "golang.org/x/crypto"
-//   "dl"     -> "golang.org/dl"
+//
+//	"net"    -> "golang.org/x/net"
+//	"crypto" -> "golang.org/x/crypto"
+//	"dl"     -> "golang.org/dl"
 func importPathOfRepo(repo string) string {
 	r := repos.ByGerritProject[repo]
 	if r == nil {

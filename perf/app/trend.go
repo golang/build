@@ -321,12 +321,16 @@ func hasStringColumn(t table.Grouping, col string) bool {
 
 // aggResults pivots the table, taking the columns in Values and making a new column for each distinct value in Across.
 // aggResults("in", []string{"value1", "value2"} will reshape a table like
-//   in		value1	value2
-//   one	1	2
-//   two	3	4
+//
+//	in	value1	value2
+//	one	1	2
+//	two	3	4
+//
 // and will turn in into a table like
-//   one/value1	one/value2	two/value1	two/value2
-//   1		2		3		4
+//
+//	one/value1	one/value2	two/value1	two/value2
+//	1		2		3		4
+//
 // across columns must be []string, and value columns must be []float64.
 type aggResults struct {
 	// Across is the name of the column whose values are the column prefix.

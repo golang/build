@@ -8,14 +8,13 @@
 //
 // Usage:
 //
-//    xb {--prod,--staging} <CMD> [<ARGS>...]
+//	xb {--prod,--staging} <CMD> [<ARGS>...]
 //
 // Examples:
 //
-//    xb --staging kubectl ...
-//    xb --prod kubectl ...
-//    xb google-email  # print the @google.com account from gcloud
-//
+//	xb --staging kubectl ...
+//	xb --prod kubectl ...
+//	xb google-email  # print the @google.com account from gcloud
 package main // import "golang.org/x/build/cmd/xb"
 
 import (

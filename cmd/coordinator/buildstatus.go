@@ -1169,9 +1169,8 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 // The logic of the go tool for ignoring directories is documented at
 // https://golang.org/cmd/go/#hdr-Package_lists_and_patterns:
 //
-// 	Directory and file names that begin with "." or "_" are ignored
-// 	by the go tool, as are directories named "testdata".
-//
+//	Directory and file names that begin with "." or "_" are ignored
+//	by the go tool, as are directories named "testdata".
 func ignoredByGoTool(importPath string) bool {
 	for _, el := range strings.Split(importPath, "/") {
 		if strings.HasPrefix(el, ".") || strings.HasPrefix(el, "_") || el == "testdata" {

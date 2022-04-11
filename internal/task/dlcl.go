@@ -22,9 +22,9 @@ import (
 // specified Go versions. It accepts one or two versions only.
 //
 // The versions must use the same format as Go tags. For example:
-// 	• "go1.17.2" and "go1.16.9" for a minor Go release
-// 	• "go1.18" for a major Go release
-// 	• "go1.18beta1" or "go1.18rc1" for a pre-release
+//   - "go1.17.2" and "go1.16.9" for a minor Go release
+//   - "go1.18" for a major Go release
+//   - "go1.18beta1" or "go1.18rc1" for a pre-release
 //
 // On success, the URL of the change is returned, like "https://go.dev/cl/123".
 func MailDLCL(ctx *workflow.TaskContext, versions []string, e ExternalConfig) (changeURL string, _ error) {

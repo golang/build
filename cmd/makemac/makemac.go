@@ -10,8 +10,7 @@ See https://github.com/vmware/govmomi/tree/master/govc
 
 Usage:
 
-  $ makemac <macos_version>  # e.g, darwin-10_10, darwin-10_11, darwin-10_15, darwin-amd64-11_0
-
+	$ makemac <macos_version>  # e.g, darwin-10_10, darwin-10_11, darwin-10_15, darwin-amd64-11_0
 */
 package main
 
@@ -849,7 +848,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 // Starting with the macOS 10.14 (Mojave) image, their baked-in stage0.sh
 // script does:
 //
-//    while true; do (curl http://172.17.20.2:8713/stage0/$(sw_vers -productVersion)| sh); sleep 5; done
+//	while true; do (curl http://172.17.20.2:8713/stage0/$(sw_vers -productVersion)| sh); sleep 5; done
 func handleStage0(w http.ResponseWriter, r *http.Request) {
 	// ver will be like "10.14.4"
 	ver := strings.TrimPrefix(r.RequestURI, "/stage0/")

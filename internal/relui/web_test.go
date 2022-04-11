@@ -29,6 +29,7 @@ import (
 )
 
 // testStatic is our static web server content.
+//
 //go:embed testing
 var testStatic embed.FS
 

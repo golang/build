@@ -179,7 +179,6 @@ var gerritProjNameRx = regexp.MustCompile(`^[a-z0-9]+[a-z0-9\-\_]*$`)
 
 // TrackGoGitRepo registers a git directory to have its metadata slurped into the corpus.
 // The goRepo is a name like "go" or "net". The dir is a path on disk.
-//
 func (c *Corpus) TrackGoGitRepo(goRepo, dir string) {
 	if c.mutationLogger == nil {
 		panic("can't TrackGoGitRepo in non-leader mode")

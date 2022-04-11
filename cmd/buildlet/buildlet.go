@@ -67,20 +67,21 @@ var (
 // package's client API (via the Status method).
 //
 // Notable versions:
-//    3: switched to revdial protocol
-//    5: reverse dialing uses timeouts+tcp keepalives, pargzip fix
-//    7: version bumps while debugging revdial hang (Issue 12816)
-//    8: mac screensaver disabled
-//   11: move from self-signed cert to LetsEncrypt (Issue 16442)
-//   15: ssh support
-//   16: make macstadium builders always haltEntireOS
-//   17: make macstadium halts use sudo
-//   18: set TMPDIR and GOCACHE
-//   21: GO_BUILDER_SET_GOPROXY=coordinator support
-//   22: TrimSpace the reverse buildlet's gobuildkey contents
-//   23: revdial v2
-//   24: removeAllIncludingReadonly
-//   25: use removeAllIncludingReadonly for all work area cleanup
+//
+//	 3: switched to revdial protocol
+//	 5: reverse dialing uses timeouts+tcp keepalives, pargzip fix
+//	 7: version bumps while debugging revdial hang (Issue 12816)
+//	 8: mac screensaver disabled
+//	11: move from self-signed cert to LetsEncrypt (Issue 16442)
+//	15: ssh support
+//	16: make macstadium builders always haltEntireOS
+//	17: make macstadium halts use sudo
+//	18: set TMPDIR and GOCACHE
+//	21: GO_BUILDER_SET_GOPROXY=coordinator support
+//	22: TrimSpace the reverse buildlet's gobuildkey contents
+//	23: revdial v2
+//	24: removeAllIncludingReadonly
+//	25: use removeAllIncludingReadonly for all work area cleanup
 const buildletVersion = 25
 
 func defaultListenAddr() string {

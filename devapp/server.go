@@ -232,11 +232,17 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDirRedirect accepts requests of the form:
-//     /dir/REPO/some/dir/
+//
+//	/dir/REPO/some/dir/
+//
 // And redirects them to either:
-//     https://github.com/golang/REPO/tree/master/some/dir/
+//
+//	https://github.com/golang/REPO/tree/master/some/dir/
+//
 // or:
-//     https://go.googlesource.com/REPO/+/master/some/dir/
+//
+//	https://go.googlesource.com/REPO/+/master/some/dir/
+//
 // ... depending on the Referer. This is so we can make links
 // in Markdown docs that are clickable on both GitHub and
 // in the go.googlesource.com viewer. If detection fails, we

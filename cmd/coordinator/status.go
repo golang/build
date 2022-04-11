@@ -534,7 +534,6 @@ func reverseHostChecker(hosts []string) func(cw *checkWriter) {
 // and reports when the hourly quota has been exceeded.
 //
 // It also records metrics to track remaining rate limit over time.
-//
 func newGitHubAPIChecker(ctx context.Context, sc *secret.Client) *healthChecker {
 	// githubRate is the status of the GitHub API v3 client.
 	// It's of type *github.Rate; no value means no result yet,

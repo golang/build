@@ -437,14 +437,14 @@ func (db *DB) Query(q string) *Query {
 // Query is the result of a query.
 // Use Next to advance through the rows, making sure to call Close when done:
 //
-//   q := db.Query("key:value")
-//   defer q.Close()
-//   for q.Next() {
-//     res := q.Result()
-//     ...
-//   }
-//   err = q.Err() // get any error encountered during iteration
-//   ...
+//	q := db.Query("key:value")
+//	defer q.Close()
+//	for q.Next() {
+//	  res := q.Result()
+//	  ...
+//	}
+//	err = q.Err() // get any error encountered during iteration
+//	...
 type Query struct {
 	rows *sql.Rows
 	// for Debug
@@ -544,14 +544,14 @@ func (db *DB) Close() error {
 // UploadList is the result of ListUploads.
 // Use Next to advance through the rows, making sure to call Close when done:
 //
-//   q := db.ListUploads("key:value")
-//   defer q.Close()
-//   for q.Next() {
-//     info := q.Info()
-//     ...
-//   }
-//   err = q.Err() // get any error encountered during iteration
-//   ...
+//	q := db.ListUploads("key:value")
+//	defer q.Close()
+//	for q.Next() {
+//	  info := q.Info()
+//	  ...
+//	}
+//	err = q.Err() // get any error encountered during iteration
+//	...
 type UploadList struct {
 	rows        *sql.Rows
 	extraLabels []string

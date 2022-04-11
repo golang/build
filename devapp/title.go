@@ -15,18 +15,17 @@ import (
 //
 // Supported forms include:
 //
-// 	"root", "import/path: change title"   -> ["root/import/path"],         "change title"
-// 	"root", "path1, path2: change title"  -> ["root/path1", "root/path2"], "change title"  # Multiple comma-separated paths.
+//	"root", "import/path: change title"   -> ["root/import/path"],         "change title"
+//	"root", "path1, path2: change title"  -> ["root/path1", "root/path2"], "change title"  # Multiple comma-separated paths.
 //
 // If there's no path prefix (preceded by ": "), title is returned unmodified
 // with a paths list containing root:
 //
-// 	"root", "change title"                -> ["root"], "change title"
+//	"root", "change title"                -> ["root"], "change title"
 //
 // If there's a branch prefix in square brackets, title is returned with said prefix:
 //
-// 	"root", "[branch] path: change title" -> ["root/path"], "[branch] change title"
-//
+//	"root", "[branch] path: change title" -> ["root/path"], "[branch] change title"
 func ParsePrefixedChangeTitle(root, prefixedTitle string) (paths []string, title string) {
 	// Parse branch prefix in square brackets, if any.
 	// E.g., "[branch] path: change title" -> "[branch] ", "path: change title".

@@ -368,7 +368,7 @@ func (p *ReverseBuildletPool) cleanedBuildlet(b buildlet.Client, lg Logger) (bui
 }
 
 // WriteHTMLStatus writes a status of the reverse buildlet pool, in HTML format,
-//  to the passed in io.Writer.
+// to the passed in io.Writer.
 func (p *ReverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 	// total maps from a host type to the number of machines which are
 	// capable of that role.

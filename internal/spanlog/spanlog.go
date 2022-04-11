@@ -17,10 +17,10 @@ type Logger interface {
 // Span is a handle that can eventually be closed.
 // Typical usage:
 //
-//   sp := sl.CreateSpan("slow_operation")
-//   result, err := doSlowOperation()
-//   sp.Done(err)
-//   // do something with result, err
+//	sp := sl.CreateSpan("slow_operation")
+//	result, err := doSlowOperation()
+//	sp.Done(err)
+//	// do something with result, err
 type Span interface {
 	// Done marks a span as done.
 	// The err is returned unmodified for convenience at callsites.

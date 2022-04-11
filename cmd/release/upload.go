@@ -45,9 +45,10 @@ type File struct {
 }
 
 // fileRe matches the files created by the release tool, such as:
-//   go1.5beta2.src.tar.gz
-//   go1.5.1.linux-386.tar.gz
-//   go1.5.windows-amd64.msi
+//
+//	go1.5beta2.src.tar.gz
+//	go1.5.1.linux-386.tar.gz
+//	go1.5.windows-amd64.msi
 var fileRe = regexp.MustCompile(`^(go[a-z0-9-.]+)\.(src|([a-z0-9]+)-([a-z0-9]+)(?:-([a-z0-9.]+))?)\.(tar\.gz|zip|pkg|msi)(.asc)?$`)
 
 func upload(files []string) error {

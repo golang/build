@@ -8,9 +8,11 @@ import "strings"
 
 // parseQueryString splits a user-entered query into one or more perfdata server queries.
 // The supported query formats are:
-//     prefix | one vs two  - parsed as "prefix", {"one", "two"}
-//     prefix one vs two    - parsed as "", {"prefix one", "two"}
-//     anything else        - parsed as "", {"anything else"}
+//
+//	prefix | one vs two  - parsed as "prefix", {"one", "two"}
+//	prefix one vs two    - parsed as "", {"prefix one", "two"}
+//	anything else        - parsed as "", {"anything else"}
+//
 // The vs and | separators must not be quoted.
 func parseQueryString(q string) (string, []string) {
 	var queries []string

@@ -138,16 +138,15 @@ type Work struct {
 
 // UpdateModule updates the standard library module found in dir:
 //
-// 	1.	Set the expected Go version in go.mod file to w.GoVersion.
-// 	2.	For modules in the build list with "golang.org/x/" prefix,
-// 		update to pseudo-version corresponding to w.ProjectHashes.
-// 	3.	Run go mod tidy.
-// 	4.	Run go mod vendor.
+//  1. Set the expected Go version in go.mod file to w.GoVersion.
+//  2. For modules in the build list with "golang.org/x/" prefix,
+//     update to pseudo-version corresponding to w.ProjectHashes.
+//  3. Run go mod tidy.
+//  4. Run go mod vendor.
 //
 // The logic in this method needs to serve the dependency update
 // policy for the purpose of golang.org/issue/36905, although it
 // does not directly define said policy.
-//
 func (w Work) UpdateModule(dir string) error {
 	// Determine the build list.
 	main, deps := buildList(dir)

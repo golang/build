@@ -375,8 +375,10 @@ func (cl *GerritCL) updateBranch() {
 
 // lineValueOK extracts a value from an RFC 822-style "key: value" series of lines.
 // If all is,
-//    foo: bar
-//    bar: baz
+//
+//	foo: bar
+//	bar: baz
+//
 // lineValue(all, "foo:") returns "bar". It trims any whitespace.
 // The prefix is case sensitive and must include the colon.
 // The ok value reports whether a line with such a prefix is found, even if its
@@ -600,7 +602,7 @@ var statusIndicator = "\nStatus: "
 // The Go Gerrit site does not really use the "draft" status much, but if
 // you need to test it, create a dummy commit and then run
 //
-//     git push origin HEAD:refs/drafts/master
+//	git push origin HEAD:refs/drafts/master
 var statuses = []string{"merged", "abandoned", "draft", "new"}
 
 // getGerritStatus returns a Gerrit status for a commit, or the empty string to
@@ -954,11 +956,12 @@ func gerritVersionNumber(s string) (version int32, ok bool) {
 // fd1e71f1594ce64941a85428ddef2fbb0ad1023e	refs/changes/99/30599/3
 //
 // Capture values:
-//   $0: whole match
-//   $1: "fd1e71f1594ce64941a85428ddef2fbb0ad1023e"
-//   $2: "30599" (CL number)
-//   $3: "1", "2" (patchset number) or "meta" (a/ special commit
-//       holding the comments for a commit)
+//
+//	$0: whole match
+//	$1: "fd1e71f1594ce64941a85428ddef2fbb0ad1023e"
+//	$2: "30599" (CL number)
+//	$3: "1", "2" (patchset number) or "meta" (a/ special commit
+//	    holding the comments for a commit)
 //
 // The "99" in the middle covers all CL's that end in "99", so
 // refs/changes/99/99/1, refs/changes/99/199/meta.
@@ -1564,13 +1567,13 @@ func (m *GerritMeta) LabelVotes() map[string]map[string]int8 {
 // parseGerritLabelValue parses a Gerrit NoteDb "Label: ..." value.
 // It can take forms and return values such as:
 //
-//     "Run-TryBot=+1" => ("Run-TryBot", 1, "")
-//     "-Run-TryBot" => ("-Run-TryBot", 0, "")
-//     "-Run-TryBot " => ("-Run-TryBot", 0, "")
-//     "Run-TryBot=+1 Brad Fitzpatrick <5065@62eb7196-b449-3ce5-99f1-c037f21e1705>" =>
-//           ("Run-TryBot", 1, "5065@62eb7196-b449-3ce5-99f1-c037f21e1705")
-//     "-TryBot-Result Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>" =>
-//           ("-TryBot-Result", 0, "5976@62eb7196-b449-3ce5-99f1-c037f21e1705")
+//	"Run-TryBot=+1" => ("Run-TryBot", 1, "")
+//	"-Run-TryBot" => ("-Run-TryBot", 0, "")
+//	"-Run-TryBot " => ("-Run-TryBot", 0, "")
+//	"Run-TryBot=+1 Brad Fitzpatrick <5065@62eb7196-b449-3ce5-99f1-c037f21e1705>" =>
+//	      ("Run-TryBot", 1, "5065@62eb7196-b449-3ce5-99f1-c037f21e1705")
+//	"-TryBot-Result Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>" =>
+//	      ("-TryBot-Result", 0, "5976@62eb7196-b449-3ce5-99f1-c037f21e1705")
 func parseGerritLabelValue(v string) (label string, value int8, whose string) {
 	space := strings.IndexByte(v, ' ')
 	if space != -1 {

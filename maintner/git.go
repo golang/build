@@ -466,7 +466,9 @@ func (c *Corpus) processGitCommit(commit *maintpb.GitCommit) (*GitCommit, error)
 
 // parsePerson parses an "author" or "committer" value from "git cat-file -p COMMIT"
 // The values are like:
-//    Foo Bar <foobar@gmail.com> 1488624439 +0900
+//
+//	Foo Bar <foobar@gmail.com> 1488624439 +0900
+//
 // c.mu must be held for writing.
 func (c *Corpus) parsePerson(v []byte) (*GitPerson, time.Time, error) {
 	v = bytes.TrimSpace(v)

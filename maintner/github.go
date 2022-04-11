@@ -1448,9 +1448,9 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 
 // githubCache is an httpcache.Cache wrapper that only
 // stores responses for:
-//   * https://api.github.com/repos/$OWNER/$REPO/issues?direction=desc&page=1&sort=updated
-//   * https://api.github.com/repos/$OWNER/$REPO/milestones?page=1
-//   * https://api.github.com/repos/$OWNER/$REPO/labels?page=1
+//   - https://api.github.com/repos/$OWNER/$REPO/issues?direction=desc&page=1&sort=updated
+//   - https://api.github.com/repos/$OWNER/$REPO/milestones?page=1
+//   - https://api.github.com/repos/$OWNER/$REPO/labels?page=1
 type githubCache struct {
 	httpcache.Cache
 }

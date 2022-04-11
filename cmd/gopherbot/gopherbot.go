@@ -1389,7 +1389,6 @@ func (b *gopherbot) updateNeeds(ctx context.Context) error {
 // Provide more helpful info? Amend, don't add 2nd commit, link to a review guide?
 // Make this a template? May want to provide more dynamic information in the future.
 // Only show freeze message during freeze.
-//
 const (
 	congratsSentence = `Congratulations on opening your first change. Thank you for your contribution!`
 
@@ -2490,7 +2489,7 @@ func (b *gopherbot) foreachIssue(gr *maintner.GitHubRepo, flags issueFlags, fn f
 
 // reviewerRe extracts the reviewer's Gerrit ID from a line that looks like:
 //
-//   Reviewer: Rebecca Stambler <16140@62eb7196-b449-3ce5-99f1-c037f21e1705>
+//	Reviewer: Rebecca Stambler <16140@62eb7196-b449-3ce5-99f1-c037f21e1705>
 var reviewerRe = regexp.MustCompile(`.* <(?P<id>\d+)@.*>`)
 
 const gerritInstanceID = "@62eb7196-b449-3ce5-99f1-c037f21e1705"

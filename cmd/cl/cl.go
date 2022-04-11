@@ -34,13 +34,13 @@ By default, CL omits closed CLs, those with an R=close reply
 and no subsequent upload of a new patch set.
 If the -closed flag is specified, CL adds closed CLs to the output.
 
-By default, CL omits CLs containing ``DO NOT REVIEW'' in the
+By default, CL omits CLs containing “DO NOT REVIEW” in the
 latest patch's commit message.
 If the -dnr flag is specified, CL includes those CLs in its output.
 
 If the -r flag is specified, CL shows only CLs that need review,
 not those waiting for the author. In this mode, the
-redundant ``waiting for reviewer'' asterisk is elided.
+redundant “waiting for reviewer” asterisk is elided.
 
 If the -url flag is specified, CL replaces "CL 1234" at the beginning
 of each output line with a full URL, "https://golang.org/cl/1234".
