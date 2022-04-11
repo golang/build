@@ -30,6 +30,7 @@ spec:
             - "--site-header-css=Site-header--production"
             - "--gerrit-api-secret=secret:symbolic-datum-552/gobot-password"
             - "--twitter-api-secret=secret:symbolic-datum-552/twitter-api-secret"
+            - "--builder-master-key=secret:symbolic-datum-552/builder-master-key"
           ports:
             - containerPort: 444
           env:

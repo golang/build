@@ -32,7 +32,7 @@ type PGListener struct {
 // workflow. The workflow.TaskState is persisted as a db.Task,
 // creating or updating a row as necessary.
 func (l *PGListener) TaskStateChanged(workflowID uuid.UUID, taskName string, state *workflow.TaskState) error {
-	log.Printf("TaskStateChanged(%q, %q, %v)", workflowID, taskName, state)
+	log.Printf("TaskStateChanged(%q, %q, %#v)", workflowID, taskName, state)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	result, err := json.Marshal(state.Result)
@@ -54,7 +54,7 @@ func (l *PGListener) TaskStateChanged(workflowID uuid.UUID, taskName string, sta
 		return err
 	})
 	if err != nil {
-		log.Printf("TaskStateChanged(%q, %q, %v) = %v", workflowID, taskName, state, err)
+		log.Printf("TaskStateChanged(%q, %q, %#v) = %v", workflowID, taskName, state, err)
 	}
 	return err
 }

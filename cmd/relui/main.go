@@ -7,11 +7,19 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/md5"
 	"flag"
+	"fmt"
+	"io"
 	"log"
 	"net/url"
+	"os"
+	"path/filepath"
 
 	"github.com/jackc/pgx/v4/pgxpool"
+	"golang.org/x/build"
+	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/relui"
@@ -36,6 +44,7 @@ func main() {
 	gerritAPIFlag := secret.Flag("gerrit-api-secret", "Gerrit API secret to use for workflows that interact with Gerrit.")
 	var twitterAPI secret.TwitterCredentials
 	secret.JSONVarFlag(&twitterAPI, "twitter-api-secret", "Twitter API secret to use for workflows involving tweeting.")
+	masterKey := secret.Flag("builder-master-key", "Builder master key")
 	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
 
@@ -75,6 +84,18 @@ func main() {
 	dh := relui.NewDefinitionHolder()
 	relui.RegisterMailDLCLDefinition(dh, extCfg)
 	relui.RegisterTweetDefinitions(dh, extCfg)
+	coordinator := &buildlet.CoordinatorClient{
+		Auth: buildlet.UserPass{
+			Username: "user-relui",
+			Password: key(*masterKey, "user-relui"),
+		},
+		Instance: build.ProdCoordinator,
+	}
+	log.Printf("Coordinator client: %#v", coordinator)
+	if _, err := coordinator.RemoteBuildlets(); err != nil {
+		log.Printf("Broken coordinator client: %v", err)
+	}
+	relui.RegisterBuildReleaseWorkflows(dh, &osFiles{"/tmp"}, coordinator.CreateBuildlet)
 	db, err := pgxpool.Connect(ctx, *pgConnect)
 	if err != nil {
 		log.Fatal(err)
@@ -97,4 +118,22 @@ func main() {
 		log.Fatalf("relui.NewServer() = %v", err)
 	}
 	log.Fatalln(https.ListenAndServe(ctx, s))
+}
+
+func key(masterKey, principal string) string {
+	h := hmac.New(md5.New, []byte(masterKey))
+	io.WriteString(h, principal)
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+type osFiles struct {
+	basePath string
+}
+
+func (f *osFiles) Create(path string) (io.WriteCloser, error) {
+	return os.Create(filepath.Join(f.basePath, path))
+}
+
+func (f *osFiles) Open(path string) (io.ReadCloser, error) {
+	return os.Open(filepath.Join(f.basePath, path))
 }
