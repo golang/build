@@ -24,7 +24,7 @@ push-staging: docker-staging
 
 deploy-prod: push-prod
 	go install golang.org/x/build/cmd/xb
-	xb --prod kubectl --namespace prod set image deployment/perf-deployment influx=$(IMAGE_PROD):$(VERSION)
+	xb --prod kubectl --namespace prod set image deployment/perf-deployment perf=$(IMAGE_PROD):$(VERSION)
 deploy-staging: push-staging
 	go install golang.org/x/build/cmd/xb
-	xb --staging kubectl set image deployment/perf-deployment influx=$(IMAGE_STAGING):$(VERSION)
+	xb --staging kubectl set image deployment/perf-deployment perf=$(IMAGE_STAGING):$(VERSION)

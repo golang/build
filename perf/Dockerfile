@@ -16,5 +16,12 @@ RUN go build -o perf golang.org/x/build/perf
 
 FROM debian:bullseye
 
+# netbase and ca-certificates are needed for dialing TLS.
+RUN apt-get update && apt-get install -y \
+	--no-install-recommends \
+	netbase \
+	ca-certificates \
+	&& rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/perf /
 ENTRYPOINT ["/perf"]
