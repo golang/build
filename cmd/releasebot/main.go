@@ -225,7 +225,7 @@ consider the following steps:
 	# create files displayed in the log above
 	git add .
 	git commit -m "dl: add goX.Y.Z and goX.A.B"
-	git codereview mail -trybot -trust
+	git codereview mail -trybot
 
 Discuss with the secondary release coordinator as needed.`, versions, err)
 	}
@@ -744,7 +744,7 @@ func (w *Work) writeVersion() (changeID string) {
 	if dryRun {
 		fmt.Printf("\n### VERSION commit\n\n%s\n", r.runOut("git", "show", "HEAD"))
 	} else {
-		r.run("git", "codereview", "mail", "-trybot", "-trust")
+		r.run("git", "codereview", "mail", "-trybot")
 	}
 	return
 }
