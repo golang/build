@@ -229,8 +229,8 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 		Type: "linux-s390x-ibm",
 		Script: `#!/usr/bin/env bash
 set -e
-apt-get update
-apt-get install -y git g++
+cat /etc/os-release
+yum install -y gcc-c++ git golang-bin
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
