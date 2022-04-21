@@ -58,6 +58,19 @@ var (
 	onlyRun = flag.String("only-run", "", "if non-empty, the name of a task to run. Mostly for debugging, but tasks (like 'kicktrain') may choose to only run in explicit mode")
 )
 
+func init() {
+	flag.Usage = func() {
+		output := flag.CommandLine.Output()
+		fmt.Fprintf(output, "gopherbot runs Go's gopherbot role account on GitHub and Gerrit.\n\n")
+		flag.PrintDefaults()
+		fmt.Fprintln(output, "")
+		fmt.Fprintln(output, "Tasks (can be used for the --only-run flag):")
+		for _, t := range tasks {
+			fmt.Fprintf(output, "  %q\n", t.name)
+		}
+	}
+}
+
 const (
 	gopherbotGitHubID = 8566911
 )
@@ -184,13 +197,6 @@ func getMaintnerClient() (apipb.MaintnerServiceClient, error) {
 		return nil, err
 	}
 	return apipb.NewMaintnerServiceClient(cc), nil
-}
-
-func init() {
-	flag.Usage = func() {
-		os.Stderr.WriteString("gopherbot runs Go's gopherbot role account on GitHub and Gerrit.\n\n")
-		flag.PrintDefaults()
-	}
 }
 
 type gerritChange struct {
