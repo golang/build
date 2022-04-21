@@ -2291,6 +2291,7 @@ func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritCha
 	const (
 		gobotID     = 5976
 		gerritbotID = 12446
+		kokoroID    = 37747
 	)
 	// The CL's owner will be GerritBot if it is imported from a PR.
 	// In that case, if the CL's author has a Gerrit account, they will be
@@ -2315,15 +2316,30 @@ func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritCha
 		log.Printf("Could not list reviewers on change %q: %v", change.ID(), err)
 		return nil, true
 	}
-	var count int
 	var ids []string
 	for _, r := range reviewers {
-		if r.NumericID != gobotID && r.NumericID != gerritbotID && r.NumericID != ownerID {
-			ids = append(ids, strconv.FormatInt(r.NumericID, 10))
-			count++
+		switch id := r.NumericID; {
+		case id == gobotID, id == gerritbotID, id == kokoroID,
+			hasServiceUserTag(r.AccountInfo):
+			// Skip bots.
+			continue
+		case id == ownerID:
+			// Skip owner.
+			continue
+		}
+		ids = append(ids, strconv.FormatInt(r.NumericID, 10))
+	}
+	return ids, len(ids) >= minHumans
+}
+
+// hasServiceUserTag reports whether the account has a SERVICE_USER tag.
+func hasServiceUserTag(a gerrit.AccountInfo) bool {
+	for _, t := range a.Tags {
+		if t == "SERVICE_USER" {
+			return true
 		}
 	}
-	return ids, count >= minHumans
+	return false
 }
 
 // autoSubmitCLs submits CLs which are labelled "Auto-Submit", are submittable according to Gerrit,
@@ -2502,6 +2518,7 @@ func humanReviewersInMetas(metas []*maintner.GerritMeta, minHumans int) ([]strin
 	var (
 		gobotEmail     = "5976" + gerritInstanceID
 		gerritbotEmail = "12446" + gerritInstanceID
+		kokoroEmail    = "37747" + gerritInstanceID
 	)
 	var count int
 	var ids []string
@@ -2514,7 +2531,8 @@ func humanReviewersInMetas(metas []*maintner.GerritMeta, minHumans int) ([]strin
 			if !strings.HasPrefix(ln, "Reviewer:") && !strings.HasPrefix(ln, "CC:") {
 				return nil
 			}
-			if !strings.Contains(ln, gobotEmail) && !strings.Contains(ln, gerritbotEmail) {
+			if !strings.Contains(ln, gobotEmail) && !strings.Contains(ln, gerritbotEmail) &&
+				!strings.Contains(ln, kokoroEmail) {
 				match := reviewerRe.FindStringSubmatch(ln)
 				if match == nil {
 					return nil

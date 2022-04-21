@@ -286,17 +286,17 @@ type ReviewerUpdateInfo struct {
 
 // AccountInfo is a Gerrit data structure. It's used both for getting the details
 // for a single account, as well as for querying multiple accounts.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-accounts.html#account-info.
 type AccountInfo struct {
-	NumericID int64  `json:"_account_id"`
-	Name      string `json:"name,omitempty"`
-	Email     string `json:"email,omitempty"`
-	Username  string `json:"username,omitempty"`
+	NumericID int64    `json:"_account_id"`
+	Name      string   `json:"name,omitempty"`
+	Email     string   `json:"email,omitempty"`
+	Username  string   `json:"username,omitempty"`
+	Tags      []string `json:"tags,omitempty"`
 
 	// MoreAccounts is set on the last account from QueryAccounts if
 	// the result set is truncated by an 'n' parameter (or has more).
 	MoreAccounts bool `json:"_more_accounts"`
-
-	// TODO: "avatars" is also returned, but not added here yet (add if required)
 }
 
 func (ai *AccountInfo) Equal(v *AccountInfo) bool {
