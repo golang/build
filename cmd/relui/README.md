@@ -17,7 +17,7 @@ Run the command with the appropriate
 set.
 
 ```bash
-PGHOST=localhost PGDATABASE=relui-dev PGUSER=postgres go run ./
+PGHOST=localhost PGDATABASE=relui-dev PGUSER=postgres go run . -listen-http=localhost:8080
 ```
 
 Alternatively, using docker:

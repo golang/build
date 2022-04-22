@@ -54,7 +54,7 @@ type Server struct {
 	db      *pgxpool.Pool
 	m       *http.ServeMux
 	w       *Worker
-	baseURL *url.URL
+	baseURL *url.URL // nil means "/".
 	header  SiteHeader
 	// mux used if baseURL is set
 	bm *http.ServeMux
@@ -65,6 +65,8 @@ type Server struct {
 
 // NewServer initializes a server with the provided connection pool,
 // worker, base URL and site header.
+//
+// The base URL may be nil, which is the same as "/".
 func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL, header SiteHeader) *Server {
 	s := &Server{
 		db:      p,
@@ -234,5 +236,5 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
 }
