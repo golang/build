@@ -111,8 +111,23 @@ h6 {
   display: flex;
   gap: 0.5rem;
 }
-.NewWorkflow-parameter input {
+.NewWorkflow-parameter--slice {
+  flex-direction: column;
+}
+.NewWorkflow-parameterRow {
+  display: flex;
+  gap: 0.5rem;
+}
+.NewWorkflow-parameter--string input {
   flex-grow: 1;
+}
+.NewWorkflow-parameter--slice textarea {
+  font-family: inherit;
+  width: 100%;
+  height: 4rem;
+}
+.NewWorkflow-parameter--slice button {
+  font-size: 0.625rem;
 }
 .NewWorkflow-workflowCreate {
   padding-top: 0.5rem;

@@ -34,7 +34,7 @@ func TestWorkerStartWorkflow(t *testing.T) {
 
 	wd := newTestEchoWorkflow()
 	dh.RegisterDefinition(t.Name(), wd)
-	params := map[string]string{"echo": "greetings"}
+	params := map[string]interface{}{"echo": "greetings"}
 
 	wg.Add(1)
 	wfid, err := w.StartWorkflow(ctx, t.Name(), wd, params)
@@ -217,7 +217,7 @@ func newTestEchoWorkflow() *workflow.Definition {
 	echo := func(ctx context.Context, arg string) (string, error) {
 		return arg, nil
 	}
-	wd.Output("echo", wd.Task("echo", echo, wd.Parameter("echo")))
+	wd.Output("echo", wd.Task("echo", echo, wd.Parameter(workflow.Parameter{Name: "echo"})))
 	return wd
 }
 
@@ -256,7 +256,7 @@ func (u *unimplementedListener) Logger(uuid.UUID, string) workflow.Logger {
 	return log.Default()
 }
 
-func (u *unimplementedListener) WorkflowStarted(context.Context, uuid.UUID, string, map[string]string) error {
+func (u *unimplementedListener) WorkflowStarted(context.Context, uuid.UUID, string, map[string]interface{}) error {
 	return errors.New("method WorkflowStarted not implemented")
 }
 

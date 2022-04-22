@@ -60,7 +60,7 @@ func (l *PGListener) TaskStateChanged(workflowID uuid.UUID, taskName string, sta
 }
 
 // WorkflowStarted persists a new workflow execution in the database.
-func (l *PGListener) WorkflowStarted(ctx context.Context, workflowID uuid.UUID, name string, params map[string]string) error {
+func (l *PGListener) WorkflowStarted(ctx context.Context, workflowID uuid.UUID, name string, params map[string]interface{}) error {
 	q := db.New(l.db)
 	m, err := json.Marshal(params)
 	if err != nil {

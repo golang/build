@@ -220,14 +220,25 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	params := make(map[string]string)
-	for _, n := range d.ParameterNames() {
-		params[n] = r.FormValue(fmt.Sprintf("workflow.params.%s", n))
-
-		// TODO(go.dev/issue/51191): Create a better mechanism for storing parameter metadata.
-		requiredParam := !strings.HasSuffix(n, " (optional)")
-		if requiredParam && params[n] == "" {
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	params := make(map[string]interface{})
+	for _, p := range d.Parameters() {
+		switch p.Type.String() {
+		case "string":
+			v := r.FormValue(fmt.Sprintf("workflow.params.%s", p.Name))
+			if p.RequireNonZero() && v == "" {
+				http.Error(w, fmt.Sprintf("parameter %q must have non-zero value", p.Name), http.StatusBadRequest)
+				return
+			}
+			params[p.Name] = v
+		case "[]string":
+			v := r.Form[fmt.Sprintf("workflow.params.%s", p.Name)]
+			if p.RequireNonZero() && len(v) == 0 {
+				http.Error(w, fmt.Sprintf("parameter %q must have non-zero value", p.Name), http.StatusBadRequest)
+				return
+			}
+			params[p.Name] = v
+		default:
+			http.Error(w, fmt.Sprintf("parameter %q has an unsupported type %q", p.Name, p.Type), http.StatusInternalServerError)
 			return
 		}
 	}

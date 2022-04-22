@@ -23,14 +23,30 @@
     {{if .Selected}}
       <form action="{{baseLink "/workflows/create"}}" method="post">
         <input type="hidden" id="workflow.name" name="workflow.name" value="{{$.Name}}" />
-        {{range $name := .Selected.ParameterNames}}
-          <div class="NewWorkflow-parameter">
-            <label for="workflow.params.{{$name}}">{{$name}}</label>
-            <input id="workflow.params.{{$name}}" name="workflow.params.{{$name}}" value="" />
-          </div>
+        {{range $_, $p := .Selected.Parameters}}
+          {{if eq $p.Type.String "string"}}
+            <div class="NewWorkflow-parameter NewWorkflow-parameter--string">
+              <label for="workflow.params.{{$p.Name}}" title="{{$p.Doc}}">{{$p.Name}}</label>
+              <input id="workflow.params.{{$p.Name}}" name="workflow.params.{{$p.Name}}"
+                {{- with $p.HTMLInputType}} type="{{.}}"{{end}}
+                {{- if $p.RequireNonZero}} required{{end}} placeholder="{{$p.Example}}" />
+            </div>
+          {{else if eq $p.Type.String "[]string"}}
+            <div class="NewWorkflow-parameter NewWorkflow-parameter--slice">
+              <div class="NewWorkflow-parameterRow">
+                <label title="{{$p.Doc}}">{{$p.Name}}</label>
+                <button title="Increment the slice length." onclick="event.preventDefault(); addSliceRow(this.parentElement.parentElement, '{{$p.Name}}', '{{$p.HTMLElement}}', '{{$p.HTMLInputType}}', '{{$p.Example}}');">+</button>
+              </div>
+            </div>
+          {{else}}
+            <div class="NewWorkflow-parameter">
+              <label title="{{$p.Doc}}">{{$p.Name}}</label>
+              <span>unsupported parameter type "{{$p.ParameterType}}"</span>
+            </div>
+          {{end}}
         {{end}}
         <div class="NewWorkflow-workflowCreate">
-          <input name="workflow.create" type="submit" value="Create" onclick="return confirm('This will create and immediately run this workflow.\n\nReady to proceed?')" />
+          <input name="workflow.create" type="submit" value="Create" onclick="return this.form.reportValidity() && confirm('This will create and immediately run this workflow.\n\nReady to proceed?')" />
         </div>
       </form>
     {{end}}

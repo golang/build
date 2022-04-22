@@ -22,7 +22,7 @@ import (
 type Listener interface {
 	workflow.Listener
 
-	WorkflowStarted(ctx context.Context, workflowID uuid.UUID, name string, params map[string]string) error
+	WorkflowStarted(ctx context.Context, workflowID uuid.UUID, name string, params map[string]interface{}) error
 	WorkflowFinished(ctx context.Context, workflowID uuid.UUID, outputs map[string]interface{}, err error) error
 }
 
@@ -84,7 +84,7 @@ func (w *Worker) run(wf *workflow.Workflow) error {
 }
 
 // StartWorkflow persists and starts running a workflow.
-func (w *Worker) StartWorkflow(ctx context.Context, name string, def *workflow.Definition, params map[string]string) (uuid.UUID, error) {
+func (w *Worker) StartWorkflow(ctx context.Context, name string, def *workflow.Definition, params map[string]interface{}) (uuid.UUID, error) {
 	wf, err := workflow.Start(def, params)
 	if err != nil {
 		return uuid.UUID{}, err

@@ -117,17 +117,47 @@ func TestParameters(t *testing.T) {
 	}
 
 	wd := workflow.New()
-	param1 := wd.Parameter("param1")
-	param2 := wd.Parameter("param2")
+	param1 := wd.Parameter(workflow.Parameter{Name: "param1"})
+	param2 := wd.Parameter(workflow.Parameter{Name: "param2"})
 	out1 := wd.Task("echo 1", echo, param1)
 	out2 := wd.Task("echo 2", echo, param2)
 	wd.Output("out1", out1)
 	wd.Output("out2", out2)
 
-	w := startWorkflow(t, wd, map[string]string{"param1": "#1", "param2": "#2"})
+	wantParams := []workflow.Parameter{
+		{Name: "param1", ParameterType: workflow.BasicString},
+		{Name: "param2", ParameterType: workflow.BasicString},
+	}
+	if diff := cmp.Diff(wantParams, wd.Parameters(), cmp.Comparer(func(x, y reflect.Type) bool { return x == y })); diff != "" {
+		t.Errorf("wd.Parameters() mismatch (-want +got):\n%s", diff)
+	}
+
+	w := startWorkflow(t, wd, map[string]interface{}{"param1": "#1", "param2": "#2"})
 	outputs := runWorkflow(t, w, nil)
 	if want := map[string]interface{}{"out1": "#1", "out2": "#2"}; !reflect.DeepEqual(outputs, want) {
 		t.Errorf("outputs = %#v, want %#v", outputs, want)
+	}
+
+	t.Run("CountMismatch", func(t *testing.T) {
+		_, err := workflow.Start(wd, map[string]interface{}{"param1": "#1"})
+		if err == nil {
+			t.Errorf("workflow.Start didn't return an error despite a parameter count mismatch")
+		}
+	})
+	t.Run("TypeMismatch", func(t *testing.T) {
+		_, err := workflow.Start(wd, map[string]interface{}{"param1": "#1", "param2": 42})
+		if err == nil {
+			t.Errorf("workflow.Start didn't return an error despite a parameter type mismatch")
+		}
+	})
+}
+
+// Test that passing workflow.Parameter{...} directly to Definition.Task would be a build-time error.
+// Parameters need to be registered via the Definition.Parameter method.
+func TestParameterValue(t *testing.T) {
+	var p interface{} = workflow.Parameter{}
+	if _, ok := p.(workflow.Value); ok {
+		t.Errorf("Parameter unexpectedly implements Value; it intentionally tries not to to reduce possible API misuse")
 	}
 }
 
@@ -256,7 +286,7 @@ func (l *mapListener) assertState(t *testing.T, w *workflow.Workflow, want map[s
 	}
 }
 
-func startWorkflow(t *testing.T, wd *workflow.Definition, params map[string]string) *workflow.Workflow {
+func startWorkflow(t *testing.T, wd *workflow.Definition, params map[string]interface{}) *workflow.Workflow {
 	t.Helper()
 	w, err := workflow.Start(wd, params)
 	if err != nil {

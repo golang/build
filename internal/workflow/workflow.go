@@ -18,7 +18,7 @@
 //
 // Each task has a set of input Values, and returns a single output Value.
 // Calling Task defines a task that will run a Go function when it runs. That
-// function must take a *TaskContext or context.Context, followed by arguments
+// function must take a context.Context or *TaskContext, followed by arguments
 // corresponding to the dynamic type of the Values passed to it. The TaskContext
 // can be used as a normal Context, and also supports unstructured logging.
 //
@@ -32,6 +32,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -39,17 +40,16 @@ import (
 // New creates a new workflow definition.
 func New() *Definition {
 	return &Definition{
-		parameterNames: map[string]struct{}{},
-		tasks:          map[string]*taskDefinition{},
-		outputs:        map[string]*taskResult{},
+		tasks:   make(map[string]*taskDefinition),
+		outputs: make(map[string]*taskResult),
 	}
 }
 
 // A Definition defines the structure of a workflow.
 type Definition struct {
-	parameterNames map[string]struct{}
-	tasks          map[string]*taskDefinition
-	outputs        map[string]*taskResult
+	parameters []Parameter // Ordered according to registration, unique parameter names.
+	tasks      map[string]*taskDefinition
+	outputs    map[string]*taskResult
 }
 
 // A Value is a piece of data that will be produced or consumed when a task
@@ -60,36 +60,93 @@ type Value interface {
 	deps() []*taskDefinition
 }
 
-// Parameter creates a Value that is filled in at workflow creation time.
-func (d *Definition) Parameter(name string) Value {
-	d.parameterNames[name] = struct{}{}
-	return &workflowParameter{name: name}
+// Parameter describes a Value that is filled in at workflow creation time.
+//
+// It can be registered to a workflow with the Workflow.Parameter method.
+type Parameter struct {
+	Name          string // Name identifies the parameter within a workflow. Must be non-empty.
+	ParameterType        // Parameter type. Defaults to BasicString if not specified.
+	Doc           string // Doc documents the parameter. Optional.
+	Example       string // Example is an example value. Optional.
 }
 
-// ParameterNames returns the names of all parameters associated with
-// the Definition.
-func (d *Definition) ParameterNames() []string {
-	var names []string
-	for n := range d.parameterNames {
-		names = append(names, n)
+// RequireNonZero reports whether parameter p is required to have a non-zero value.
+func (p Parameter) RequireNonZero() bool {
+	return !strings.HasSuffix(p.Name, " (optional)")
+}
+
+// ParameterType defines the type of a workflow parameter.
+//
+// Since parameters are entered via an HTML form,
+// there are some HTML-related knobs available.
+type ParameterType struct {
+	Type reflect.Type // The Go type of the parameter.
+
+	// HTMLElement configures the HTML element for entering the parameter value.
+	// Supported values are "input" and "textarea".
+	HTMLElement string
+	// HTMLInputType optionally configures the <input> type attribute when HTMLElement is "input".
+	// If this attribute is not specified, <input> elements default to type="text".
+	// See https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input#input_types.
+	HTMLInputType string
+}
+
+var (
+	// String parameter types.
+	BasicString = ParameterType{
+		Type:        reflect.TypeOf(""),
+		HTMLElement: "input",
 	}
-	return names
+	URL = ParameterType{
+		Type:          reflect.TypeOf(""),
+		HTMLElement:   "input",
+		HTMLInputType: "url",
+	}
+
+	// Slice of string parameter types.
+	SliceShort = ParameterType{
+		Type:        reflect.TypeOf([]string(nil)),
+		HTMLElement: "input",
+	}
+	SliceLong = ParameterType{
+		Type:        reflect.TypeOf([]string(nil)),
+		HTMLElement: "textarea",
+	}
+)
+
+// Parameter registers a new parameter p that is filled in at
+// workflow creation time and returns the corresponding Value.
+// Parameter name must be non-empty and uniquely identify the
+// parameter in the workflow definition.
+//
+// If the parameter type is unspecified, BasicString is used.
+func (d *Definition) Parameter(p Parameter) Value {
+	if p.Name == "" {
+		panic(fmt.Errorf("parameter name must be non-empty"))
+	}
+	if p.ParameterType == (ParameterType{}) {
+		p.ParameterType = BasicString
+	}
+	for _, old := range d.parameters {
+		if p.Name == old.Name {
+			panic(fmt.Errorf("parameter with name %q was already registered with this workflow definition", p.Name))
+		}
+	}
+	d.parameters = append(d.parameters, p)
+	return parameter(p)
 }
 
-type workflowParameter struct {
-	name string
-}
+// parameter implements Value for a workflow parameter.
+type parameter Parameter
 
-func (wp *workflowParameter) typ() reflect.Type {
-	return reflect.TypeOf("")
-}
+func (p parameter) typ() reflect.Type               { return p.Type }
+func (p parameter) value(w *Workflow) reflect.Value { return reflect.ValueOf(w.params[p.Name]) }
+func (p parameter) deps() []*taskDefinition         { return nil }
 
-func (wp *workflowParameter) value(w *Workflow) reflect.Value {
-	return reflect.ValueOf(w.params[wp.name])
-}
-
-func (wp *workflowParameter) deps() []*taskDefinition {
-	return nil
+// Parameters returns parameters associated with the Definition
+// in the same order that they were registered.
+func (d *Definition) Parameters() []Parameter {
+	return d.parameters
 }
 
 // Constant creates a Value from an existing object.
@@ -158,8 +215,8 @@ func (d *Definition) Output(name string, v Value) {
 // Task adds a task to the workflow definition. It can take any number of
 // arguments, and returns one output. name must uniquely identify the task in
 // the workflow.
-// f must be a function that takes a context.Context argument, followed by one
-// argument for each of args, corresponding to the Value's dynamic type.
+// f must be a function that takes a context.Context or *TaskContext argument,
+// followed by one argument for each of args, corresponding to the Value's dynamic type.
 // It must return two values, the first of which will be returned as its Value,
 // and an error that will be used by the workflow engine. See the package
 // documentation for examples.
@@ -222,7 +279,7 @@ type TaskState struct {
 // WorkflowState contains the shallow state of a running workflow.
 type WorkflowState struct {
 	ID     uuid.UUID
-	Params map[string]string
+	Params map[string]interface{}
 }
 
 // A Logger is a debug logger passed to a task implementation.
@@ -256,7 +313,7 @@ func (tr *taskResult) deps() []*taskDefinition {
 type Workflow struct {
 	ID     uuid.UUID
 	def    *Definition
-	params map[string]string
+	params map[string]interface{}
 
 	tasks map[*taskDefinition]*taskState
 }
@@ -298,7 +355,7 @@ func (t *taskState) toExported() *TaskState {
 }
 
 // Start instantiates a workflow with the given parameters.
-func Start(def *Definition, params map[string]string) (*Workflow, error) {
+func Start(def *Definition, params map[string]interface{}) (*Workflow, error) {
 	w := &Workflow{
 		ID:     uuid.New(),
 		def:    def,
@@ -315,6 +372,7 @@ func Start(def *Definition, params map[string]string) (*Workflow, error) {
 }
 
 func (w *Workflow) validate() error {
+	// Validate tasks.
 	used := map[*taskDefinition]bool{}
 	for _, taskDef := range w.def.tasks {
 		for _, arg := range taskDef.args {
@@ -331,6 +389,21 @@ func (w *Workflow) validate() error {
 			return fmt.Errorf("task %v is not referenced and should be deleted", task.name)
 		}
 	}
+
+	// Validate parameters.
+	if got, want := len(w.params), len(w.def.parameters); got != want {
+		return fmt.Errorf("parameter count mismatch: workflow instance has %d, but definition has %d", got, want)
+	}
+	paramDefs := map[string]Value{} // Key is parameter name.
+	for _, p := range w.def.parameters {
+		paramDefs[p.Name] = parameter(p)
+	}
+	for name, v := range w.params {
+		if !paramDefs[name].typ().AssignableTo(reflect.TypeOf(v)) {
+			return fmt.Errorf("parameter type mismatch: value of parameter %q has type %v, but definition specifies %v", name, reflect.TypeOf(v), paramDefs[name].typ())
+		}
+	}
+
 	return nil
 }
 
