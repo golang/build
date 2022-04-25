@@ -67,7 +67,7 @@ When a new version of macOS is released:
 * Clone the latest macOS version on vSphere and upgrade that version
   to the desired macOS version as per the [instructions](vmware-notes.md).
 
-* If a completely new image is required, follow the [images setup notes](image-setup-notes.txt)
+* If a completely new image is required, follow the [images setup notes](../setup-notes.md)
   in order to add a new image.
 
 ## Debugging

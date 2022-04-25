@@ -1,0 +1,94 @@
+# For VMs only #
+
+The Disk should be formatted with a case insensitive file system (default).
+
+Install VMWare tools daemon.
+
+  - The UI is supposed to be able to do this automatically, but it's broken as of writing.
+  - Instead, mount darwin.iso from ISO/VMWARE TOOLS and run the installer from there.
+  - open security preferences and click "Allow" on blocked software install from VMware
+  - reboot
+  - make sure you can run and see:
+
+    $ /Library/Application Support/VMware Tools/vmware-tools-daemon --cmd "info-get guestinfo.name"
+    No value found
+
+# For all machine types
+
+- Turn on the computer.
+- Click through setup, connect to wifi, etc.
+- Full name: Gopher Gopherson
+- Account name: gopher
+- Password: with an exclamation mark
+- Decline as much as possible.
+- Set time zone to NY.
+- Open a terminal.
+- `sudo visudo`
+
+  Change  `%admin ALL=(ALL) ALL` to `%admin ALL=(ALL) NOPASSWD: ALL`.
+
+- `sudo nvram boot-args="-v"`
+
+- Install Go: download the latest tarball from go.dev/dl.
+
+  `tar -xf Downloads/go*.darwin-*.tar`
+
+  `mv go $HOME/goboot`
+
+Create `$HOME/stage0.sh`.
+
+**For VMs**
+```
+#!/bin/bash
+while true; do (curl -v http://172.17.20.2:8713/stage0/$(sw_vers -productVersion) | sh); sleep 5; done
+```
+**For physical machines**
+```
+#!/bin/bash
+
+set -x
+
+mkdir -p ~/go/bin;
+while true; do
+  url="https://storage.googleapis.com/go-builder-data/buildlet.darwin-arm64"
+  while ! curl -f -o ~/go/bin/buildlet "$url"; do
+      echo
+      echo "curl failed to fetch $url"
+      echo "Sleeping before retrying..."
+      sleep 2
+  done
+  chmod +x ~/go/bin/buildlet
+
+  mkdir -p /tmp/buildlet
+  ~/go/bin/buildlet --coordinator=farmer.golang.org --reverse-type host-darwin-arm64-XX_0 --halt=false --workdir=/tmp/buildlet;
+   sleep 2;
+done
+```
+
+`chmod +x $HOME/stage0.sh`
+
+- Run Automator.
+- Create a new Application.
+- Add a "run shell script" item with the command: 
+  `open -a Terminal.app $HOME/stage0.sh`
+- Save it to the desktop as "run-builder".
+
+In System Preferences:
+- Software Update > Advanced > disable checking for updates
+- Desktop & Screensaver > uncheck show screensaver
+- Energy Saver > never turn off display, don't automatically sleep, start up after power failure
+- Sharing > enable ssh (leave the default administrators setting)
+- Users & Groups > Gopher Gopherson > Login Items > add run-builder
+- Users & Groups > Login Options > auto-login Gopher Gopherson
+
+Install XCode:
+- Download Xcode from the Apple Developer site:
+https://stackoverflow.com/questions/10335747/how-to-download-xcode-dmg-or-xip-file.
+https://developer.apple.com/support/xcode/ is a more authoritative list of versions.
+(You don't want to log in to your account on the machine, so don't use the App Store.)
+- Extract it and move the resulting Xcode folder to Applications
+- run xcode-select: `sudo xcode-select --switch /Applications/Xcode.app`
+- run `xcodebuild -version` and wait for Xcode to be verified, which will take a long time.
+- accept the license: `sudo xcodebuild -license accept`
+
+Put a builder key in the usual spot.

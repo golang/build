@@ -1,7 +1,7 @@
 * Create a new virtual machine stored in GGLGTM*, with the most recent 
   supported version of macOS as the guest OS. Configure it with 2 CPUs,
   4 GB RAM, 60+ GiB of disk, and mount the installer ISO from ISO/OSX.
-* Setup OS X following image-setup-notes.txt.
+* Setup OS X following setup-notes.md.
 * Shut it down.
 * Clone to Virtual Machine (convention: "osx_amd64_11_0_frozen" for macOS
   11.0")
