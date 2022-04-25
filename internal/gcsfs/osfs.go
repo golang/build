@@ -10,6 +10,8 @@ import (
 var _ = fs.FS((*dirFS)(nil))
 var _ = CreateFS((*dirFS)(nil))
 
+// DirFS is a variant of os.DirFS that supports file creation and is a suitable
+// test fake for the GCS FS.
 func DirFS(dir string) fs.FS {
 	return dirFS(dir)
 }
@@ -53,7 +55,11 @@ func (dir dirFS) Create(name string) (WriteFile, error) {
 	if !fs.ValidPath(name) || runtime.GOOS == "windows" && containsAny(name, `\:`) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
-	f, err := os.Create(string(dir) + "/" + name)
+	fullName := path.Join(string(dir), name)
+	if err := os.MkdirAll(path.Dir(fullName), 0700); err != nil {
+		return nil, err
+	}
+	f, err := os.Create(fullName)
 	if err != nil {
 		return nil, err
 	}

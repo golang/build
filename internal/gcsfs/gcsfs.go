@@ -8,8 +8,10 @@ package gcsfs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
+	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -17,6 +19,30 @@ import (
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
 )
+
+// FromURL creates a new FS from a file:// or gs:// URL.
+// client is only used for gs:// URLs and can be nil otherwise.
+func FromURL(ctx context.Context, client *storage.Client, base string) (fs.FS, error) {
+	u, err := url.Parse(base)
+	if err != nil {
+		return nil, err
+	}
+	switch u.Scheme {
+	case "gs":
+		if u.Host == "" {
+			return nil, fmt.Errorf("missing bucket in %q", base)
+		}
+		fsys := NewFS(ctx, client, u.Host)
+		if prefix := strings.TrimPrefix(u.Path, "/"); prefix != "" {
+			return fs.Sub(fsys, prefix)
+		}
+		return fsys, nil
+	case "file":
+		return DirFS(u.Path), nil
+	default:
+		return nil, fmt.Errorf("unsupported scheme %q", u.Scheme)
+	}
+}
 
 // Create creates a new file on fsys, which must be a CreateFS.
 func Create(fsys fs.FS, name string) (WriteFile, error) {

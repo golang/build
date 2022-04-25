@@ -13,10 +13,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/url"
-	"os"
-	"path/filepath"
+	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/build"
 	"golang.org/x/build/buildlet"
@@ -35,9 +36,13 @@ var (
 	downUp      = flag.Bool("migrate-down-up", false, "Run all Up migration steps, then the last down migration step, followed by the final up migration. Exits after completion.")
 	migrateOnly = flag.Bool("migrate-only", false, "Exit after running migrations. Migrations are run by default.")
 	pgConnect   = flag.String("pg-connect", "", "Postgres connection string or URI. If empty, libpq connection defaults are used.")
+
+	scratchFilesBase = flag.String("scratch-files-base", "", "Storage for scratch files. gs://bucket/path or file:///path/to/scratch.")
+	stagingFilesBase = flag.String("staging-files-base", "", "Storage for staging files. gs://bucket/path or file:///path/to/staging.")
 )
 
 func main() {
+	rand.Seed(time.Now().Unix())
 	if err := secret.InitFlagSupport(context.Background()); err != nil {
 		log.Fatalln(err)
 	}
@@ -91,11 +96,20 @@ func main() {
 		},
 		Instance: build.ProdCoordinator,
 	}
-	log.Printf("Coordinator client: %#v", coordinator)
 	if _, err := coordinator.RemoteBuildlets(); err != nil {
-		log.Printf("Broken coordinator client: %v", err)
+		log.Fatalf("Broken coordinator client: %v", err)
 	}
-	relui.RegisterBuildReleaseWorkflows(dh, &osFiles{"/tmp"}, coordinator.CreateBuildlet)
+	gcsClient, err := storage.NewClient(ctx)
+	if err != nil {
+		log.Fatalf("Could not connect to GCS: %v", err)
+	}
+	releaseTasks := &relui.BuildReleaseTasks{
+		CreateBuildlet: coordinator.CreateBuildlet,
+		GCSClient:      gcsClient,
+		ScratchURL:     *scratchFilesBase,
+		StagingURL:     *stagingFilesBase,
+	}
+	releaseTasks.RegisterBuildReleaseWorkflows(dh)
 	db, err := pgxpool.Connect(ctx, *pgConnect)
 	if err != nil {
 		log.Fatal(err)
@@ -124,16 +138,4 @@ func key(masterKey, principal string) string {
 	h := hmac.New(md5.New, []byte(masterKey))
 	io.WriteString(h, principal)
 	return fmt.Sprintf("%x", h.Sum(nil))
-}
-
-type osFiles struct {
-	basePath string
-}
-
-func (f *osFiles) Create(path string) (io.WriteCloser, error) {
-	return os.Create(filepath.Join(f.basePath, path))
-}
-
-func (f *osFiles) Open(path string) (io.ReadCloser, error) {
-	return os.Open(filepath.Join(f.basePath, path))
 }

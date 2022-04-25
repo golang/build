@@ -254,6 +254,7 @@ func (d *Definition) Task(name string, f interface{}, args ...Value) Value {
 type TaskContext struct {
 	context.Context
 	Logger
+	WorkflowID uuid.UUID
 }
 
 // A Listener is used to notify the workflow host of state changes, for display
@@ -520,7 +521,11 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 }
 
 func (w *Workflow) runTask(ctx context.Context, listener Listener, state taskState, args []reflect.Value) taskState {
-	tctx := &TaskContext{Context: ctx, Logger: listener.Logger(w.ID, state.def.name)}
+	tctx := &TaskContext{
+		Context:    ctx,
+		Logger:     listener.Logger(w.ID, state.def.name),
+		WorkflowID: w.ID,
+	}
 	in := append([]reflect.Value{reflect.ValueOf(tctx)}, args...)
 	out := reflect.ValueOf(state.def.f).Call(in)
 	var err error
