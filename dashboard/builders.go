@@ -887,6 +887,11 @@ type BuildConfig struct {
 	// to run cmd/go tests fetching from the network.
 	needsGoProxy bool
 
+	// privateGoProxy for builder has it's own Go proxy instead of
+	// proxy.golang.org, after setting this builder will respect
+	// GOPROXY enviroment value.
+	privateGoProxy bool
+
 	// InstallRacePackages controls which packages to "go install
 	// -race <pkgs>" after running make.bash (or equivalent).  If
 	// the builder ends in "-race", the default if non-nil is just
@@ -959,7 +964,7 @@ func (c *BuildConfig) Env() []string {
 func (c *BuildConfig) ModulesEnv(repo string) (env []string) {
 	// EC2 and reverse builders should set the public module proxy
 	// address instead of the internal proxy.
-	if (c.HostConfig().isEC2 || c.IsReverse()) && repo != "go" {
+	if (c.HostConfig().isEC2 || c.IsReverse()) && repo != "go" && !c.PrivateGoProxy() {
 		env = append(env, "GOPROXY=https://proxy.golang.org")
 	}
 	switch repo {
@@ -1154,6 +1159,9 @@ func (c *BuildConfig) SplitMakeRun() bool {
 func (c *BuildConfig) IsTryOnly() bool { return c.tryOnly }
 
 func (c *BuildConfig) NeedsGoProxy() bool { return c.needsGoProxy }
+
+// PrivateGoProxy for builder has it's own Go proxy instead of proxy.golang.org
+func (c *BuildConfig) PrivateGoProxy() bool { return c.privateGoProxy }
 
 // BuildsRepoPostSubmit reports whether the build configuration type c
 // should build the given repo ("go", "net", etc) and branch
@@ -2517,6 +2525,7 @@ func init() {
 		Name:           "linux-mips64le-mengzhuo",
 		buildsRepo:     onlyMasterDefault,
 		distTestAdjust: mipsDistTestPolicy,
+		privateGoProxy: true, // this builder is behind firewall
 	})
 	addBuilder(BuildConfig{
 		FlakyNet:       true,
@@ -2589,6 +2598,7 @@ func init() {
 		FlakyNet:       true,
 		buildsRepo:     onlyMasterDefault,
 		distTestAdjust: riscvDistTestPolicy,
+		privateGoProxy: true, // this builder is behind firewall
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-s390x-ibm",
@@ -2701,11 +2711,12 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:         "linux-amd64-wsl",
-		HostType:     "host-linux-amd64-wsl",
-		Notes:        "Windows 10 WSL2 Ubuntu",
-		FlakyNet:     true,
-		SkipSnapshot: true, // The builder has a slow uplink bandwidth.
+		Name:           "linux-amd64-wsl",
+		HostType:       "host-linux-amd64-wsl",
+		Notes:          "Windows 10 WSL2 Ubuntu",
+		FlakyNet:       true,
+		SkipSnapshot:   true, // The builder has a slow uplink bandwidth.
+		privateGoProxy: true, // this builder is behind firewall
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-perf",

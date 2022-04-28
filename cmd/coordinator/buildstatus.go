@@ -1124,8 +1124,11 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	env := append(st.conf.Env(),
 		"GOROOT="+goroot,
 		"GOPATH="+gopath,
-		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
 	)
+	if !st.conf.IsReverse() {
+		// GKE value but will be ignored/overwritten by reverse buildlets
+		env = append(env, "GOPROXY="+moduleProxy())
+	}
 	env = append(env, st.conf.ModulesEnv(st.SubName)...)
 
 	args := []string{"test"}
