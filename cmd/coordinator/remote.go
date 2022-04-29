@@ -18,14 +18,12 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,9 +40,7 @@ import (
 	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/internal/gophers"
-	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/types"
-	gossh "golang.org/x/crypto/ssh"
 )
 
 var (
@@ -501,81 +497,6 @@ func requireBuildletProxyAuth(h http.Handler) http.Handler {
 	})
 }
 
-var sshPrivateKeyFile string
-
-func writeSSHPrivateKeyToTempFile(key []byte) (path string, err error) {
-	tf, err := ioutil.TempFile("", "ssh-priv-key")
-	if err != nil {
-		return "", err
-	}
-	if err := tf.Chmod(0600); err != nil {
-		return "", err
-	}
-	if _, err := tf.Write(key); err != nil {
-		return "", err
-	}
-	return tf.Name(), tf.Close()
-}
-
-func listenAndServeSSH(sc *secret.Client) {
-	const listenAddr = ":2222" // TODO: flag if ever necessary?
-	var hostKey []byte
-	var err error
-	if *mode == "dev" {
-		sshPrivateKeyFile = filepath.Join(os.Getenv("HOME"), "keys", "id_gomotessh_rsa")
-		hostKey, err = ioutil.ReadFile(sshPrivateKeyFile)
-		if os.IsNotExist(err) {
-			log.Printf("SSH host key file %s doesn't exist; not running SSH server.", sshPrivateKeyFile)
-			return
-		}
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else {
-		ctxHostKey, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		hostKeyStr, err := sc.Retrieve(ctxHostKey, secret.NameGomoteSSHPrivateKey)
-		if err != nil {
-			log.Printf("failed to get secret manager %s value: %s. not running SSH server.", secret.NameGomoteSSHPrivateKey, err)
-			return
-		}
-		hostKey = []byte(hostKeyStr)
-		sshPrivateKeyFile, err = writeSSHPrivateKeyToTempFile(hostKey)
-		log.Printf("ssh: writeSSHPrivateKeyToTempFile = %v, %v", sshPrivateKeyFile, err)
-		if err != nil {
-			log.Printf("error writing ssh private key to temp file: %v; not running SSH server", err)
-			return
-		}
-	}
-	signer, err := gossh.ParsePrivateKey(hostKey)
-	if err != nil {
-		log.Printf("failed to parse SSH host key: %v; not running SSH server", err)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	pubKey, err := sc.Retrieve(ctx, secret.NameGomoteSSHPublicKey)
-	if err != nil {
-		log.Fatalf("failed to get secret manager %s value", secret.NameGomoteSSHPublicKey)
-	}
-
-	ah := &sshHandlers{gomotePublicKey: pubKey}
-
-	s := &ssh.Server{
-		Addr:             listenAddr,
-		Handler:          ah.handleIncomingSSHPostAuth,
-		PublicKeyHandler: recordSSHPublicKeyAuthHandler(handleSSHPublicKeyAuth),
-	}
-	s.AddHostKey(signer)
-
-	log.Printf("running SSH server on %s", listenAddr)
-	err = s.ListenAndServe()
-	log.Printf("SSH server ended with error: %v", err)
-	// TODO: make ListenAndServe errors Fatal, once it has a proven track record. starting paranoid.
-}
-
 func handleSSHPublicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
 	inst := ctx.User() // expected to be of form "user-USER-goos-goarch-etc"
 	user := userFromGomoteInstanceName(inst)
@@ -598,7 +519,8 @@ func handleSSHPublicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
 }
 
 type sshHandlers struct {
-	gomotePublicKey string
+	gomotePublicKey   string
+	sshPrivateKeyFile string
 }
 
 func (ah *sshHandlers) handleIncomingSSHPostAuth(s ssh.Session) {
@@ -733,7 +655,7 @@ func (ah *sshHandlers) handleIncomingSSHPostAuth(s ssh.Session) {
 			"-p", strconv.Itoa(localProxyPort),
 			"-o", "UserKnownHostsFile=/dev/null",
 			"-o", "StrictHostKeyChecking=no",
-			"-i", sshPrivateKeyFile,
+			"-i", ah.sshPrivateKeyFile,
 			sshUser+"@localhost")
 	case "plan9":
 		fmt.Fprintf(s, "# Plan9 user/pass: glenda/glenda123\n")

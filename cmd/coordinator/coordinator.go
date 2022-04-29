@@ -112,6 +112,7 @@ var (
 	buildEnvName  = flag.String("env", "", "The build environment configuration to use. Not required if running on GCE.")
 	devEnableGCE  = flag.Bool("dev_gce", false, "Whether or not to enable the GCE pool when in dev mode. The pool is enabled by default in prod mode.")
 	devEnableEC2  = flag.Bool("dev_ec2", false, "Whether or not to enable the EC2 pool when in dev mode. The pool is enabled by default in prod mode.")
+	sshAddr       = flag.String("ssh_addr", ":2222", "Address the gomote SSH server should listen on")
 )
 
 // LOCK ORDER:
@@ -398,7 +399,39 @@ func main() {
 		// TODO(cmang): gccgo will need its own findWorkLoop
 	}
 
-	go listenAndServeSSH(sc) // ssh proxy to remote buildlets; remote.go
+	ctx := context.Background()
+	configureSSHServer := func() (*remote.SSHServer, error) {
+		privateKey, publicKey, err := retrieveSSHKeys(ctx, sc, *mode)
+		if err != nil {
+			return nil, fmt.Errorf("unable to retrieve keys for SSH Server: %s", err)
+		}
+		privateHostKeyFile, err := remote.WriteSSHPrivateKeyToTempFile(privateKey)
+		log.Printf("unable to write private host key file: %s", err)
+		if err != nil {
+			return nil, fmt.Errorf("error writing ssh private key to temp file: %v; not running SSH server", err)
+		}
+		sshHandlers := &sshHandlers{
+			gomotePublicKey:   string(publicKey),
+			sshPrivateKeyFile: privateHostKeyFile,
+		}
+		return remote.NewSSHServer(*sshAddr, privateKey, sshHandlers.handleIncomingSSHPostAuth, recordSSHPublicKeyAuthHandler(handleSSHPublicKeyAuth))
+	}
+	sshServ, err := configureSSHServer()
+	if err != nil {
+		log.Printf("unable to configure SSH server: %s", err)
+	} else {
+		go func() {
+			log.Printf("running SSH server on %s", *sshAddr)
+			err := sshServ.ListenAndServe()
+			log.Printf("SSH server ended with error: %v", err)
+		}()
+		defer func() {
+			err := sshServ.Close()
+			if err != nil {
+				log.Printf("unable to close SSH server: %s", err)
+			}
+		}()
+	}
 
 	h := httpRouter(mux)
 	if *mode == "dev" {
@@ -2209,4 +2242,27 @@ func mustStorageClient() *storage.Client {
 		log.Fatalf("unable to create storage client: %s", err)
 	}
 	return storageClient
+}
+
+func fromSecret(ctx context.Context, sc *secret.Client, secretName string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return sc.Retrieve(ctx, secretName)
+}
+
+func retrieveSSHKeys(ctx context.Context, sc *secret.Client, m string) (publicKey, privateKey []byte, err error) {
+	if m == "dev" {
+		return remote.SSHKeyPair()
+	} else if metadata.OnGCE() {
+		privateKeyS, err := fromSecret(ctx, sc, secret.NameGomoteSSHPrivateKey)
+		if err != nil {
+			return nil, nil, err
+		}
+		publicKeyS, err := fromSecret(ctx, sc, secret.NameGomoteSSHPublicKey)
+		if err != nil {
+			return nil, nil, err
+		}
+		return []byte(privateKeyS), []byte(publicKeyS), nil
+	}
+	return nil, nil, fmt.Errorf("unable to retrieve ssh keys")
 }

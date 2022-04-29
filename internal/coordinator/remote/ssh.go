@@ -12,8 +12,10 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"io/ioutil"
 	"time"
 
+	gssh "github.com/gliderlabs/ssh"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -70,4 +72,50 @@ func SSHKeyPair() (privateKey []byte, publicKey []byte, err error) {
 		Bytes: priKeyByt,
 	})
 	return
+}
+
+// SSHServer is the SSH server that the coordinator provides.
+type SSHServer struct {
+	server *gssh.Server
+}
+
+// NewSSHServer creates an SSH server used to access remote buildlet sessions.
+func NewSSHServer(addr string, privateKey []byte, handler gssh.Handler, publicKeyHandler gssh.PublicKeyHandler) (*SSHServer, error) {
+	signer, err := ssh.ParsePrivateKey(privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse SSH host key: %v; not running SSH server", err)
+	}
+	return &SSHServer{
+		server: &gssh.Server{
+			Addr:             addr,
+			Handler:          handler,
+			PublicKeyHandler: publicKeyHandler,
+			HostSigners:      []gssh.Signer{signer},
+		},
+	}, nil
+}
+
+// ListenAndServe attempts to start the SSH server. If an error is encountered it logs
+// the error and stops the server.
+func (ss *SSHServer) ListenAndServe() error {
+	return ss.server.ListenAndServe()
+}
+
+// Close imediately closes all active listeners and connections.
+func (ss *SSHServer) Close() error {
+	return ss.server.Close()
+}
+
+func WriteSSHPrivateKeyToTempFile(key []byte) (path string, err error) {
+	tf, err := ioutil.TempFile("", "ssh-priv-key")
+	if err != nil {
+		return "", err
+	}
+	if err := tf.Chmod(0600); err != nil {
+		return "", err
+	}
+	if _, err := tf.Write(key); err != nil {
+		return "", err
+	}
+	return tf.Name(), tf.Close()
 }
