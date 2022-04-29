@@ -53,7 +53,7 @@ func (dir dirFS) Stat(name string) (fs.FileInfo, error) {
 
 func (dir dirFS) Create(name string) (WriteFile, error) {
 	if !fs.ValidPath(name) || runtime.GOOS == "windows" && containsAny(name, `\:`) {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
+		return nil, &fs.PathError{Op: "create", Path: name, Err: fs.ErrInvalid}
 	}
 	fullName := path.Join(string(dir), name)
 	if err := os.MkdirAll(path.Dir(fullName), 0700); err != nil {

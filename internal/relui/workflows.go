@@ -207,7 +207,7 @@ func (tasks *BuildReleaseTasks) newBuildReleaseWorkflow(majorVersion string) (*w
 
 	source := wd.Task("Build source archive", tasks.buildSource, revision, version)
 	// Artifact file paths.
-	var artifacts []workflow.Value
+	artifacts := []workflow.Value{source}
 	// Empty values that represent the dependency on tests passing.
 	var testResults []workflow.Value
 	for _, target := range targets {
@@ -236,7 +236,8 @@ func (tasks *BuildReleaseTasks) newBuildReleaseWorkflow(majorVersion string) (*w
 	}
 	// Eventually we need to sign artifacts and perhaps summarize test results.
 	// For now, just mush them all together.
-	stagedArtifacts := wd.Task("Stage artifacts for signing", tasks.copyToStaging, wd.Slice(artifacts))
+	stagedArtifacts := wd.Task("Stage artifacts for signing", tasks.copyToStaging, version, wd.Slice(artifacts))
+	wd.Output("Staged artifacts", stagedArtifacts)
 	results := wd.Task("Combine results", combineResults, stagedArtifacts, wd.Slice(testResults))
 	wd.Output("Build results", results)
 	return wd, nil
@@ -244,31 +245,32 @@ func (tasks *BuildReleaseTasks) newBuildReleaseWorkflow(majorVersion string) (*w
 
 // BuildReleaseTasks serves as an adapter to the various build tasks in the task package.
 type BuildReleaseTasks struct {
+	GerritURL              string
 	GCSClient              *storage.Client
 	ScratchURL, StagingURL string
 	CreateBuildlet         func(string) (buildlet.Client, error)
 }
 
 func (b *BuildReleaseTasks) buildSource(ctx *workflow.TaskContext, revision, version string) (artifact, error) {
-	return b.runBuildStep(ctx, nil, "", artifact{}, "source.tar.gz", func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
-		return task.WriteSourceArchive(ctx, revision, version, w)
+	return b.runBuildStep(ctx, nil, "", artifact{}, "src.tar.gz", func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
+		return task.WriteSourceArchive(ctx, b.GerritURL, revision, version, w)
 	})
 }
 
 func (b *BuildReleaseTasks) buildBinary(ctx *workflow.TaskContext, target *releasetargets.Target, source artifact) (artifact, error) {
-	return b.runBuildStep(ctx, target, target.Builder, source, target.Name+"-binary.tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
+	return b.runBuildStep(ctx, target, target.Builder, source, "tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return bs.BuildBinary(ctx, r, w)
 	})
 }
 
 func (b *BuildReleaseTasks) buildMSI(ctx *workflow.TaskContext, target *releasetargets.Target, binary artifact) (artifact, error) {
-	return b.runBuildStep(ctx, target, target.Builder, binary, target.Name+".msi", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
+	return b.runBuildStep(ctx, target, target.Builder, binary, "msi", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return bs.BuildMSI(ctx, r, w)
 	})
 }
 
 func (b *BuildReleaseTasks) convertToZip(ctx *workflow.TaskContext, target *releasetargets.Target, binary artifact) (artifact, error) {
-	return b.runBuildStep(ctx, nil, "", binary, target.Name+".zip", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
+	return b.runBuildStep(ctx, target, "", binary, "zip", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return task.ConvertTGZToZIP(r, w)
 	})
 }
@@ -294,22 +296,22 @@ func (b *BuildReleaseTasks) runTests(ctx *workflow.TaskContext, target *releaset
 // runBuildStep is a convenience function that manages resources a build step might need.
 // If target and buildlet name are specified, a BuildletStep will be passed to f.
 // If inputName is specified, it will be opened and passed as a Reader to f.
-// If outputName is specified, a unique filename will be generated based off it, the file
-// will be opened and passed as a Writer to f, and its name will be returned as the result.
+// If outputSuffix is specified, a unique filename will be generated based off
+// it (and the target name, if any), the file will be opened and passed as a
+// Writer to f, and an artifact representing it will be returned as the result.
 func (b *BuildReleaseTasks) runBuildStep(
 	ctx *workflow.TaskContext,
 	target *releasetargets.Target,
 	buildletName string,
 	input artifact,
-	outputBase string,
+	outputSuffix string,
 	f func(*task.BuildletStep, io.Reader, io.Writer) error,
 ) (artifact, error) {
-	if (target == nil) != (buildletName == "") {
-		return artifact{}, fmt.Errorf("target and buildlet must be specified together")
-	}
-
 	var step *task.BuildletStep
-	if target != nil {
+	if buildletName != "" {
+		if target == nil {
+			return artifact{}, fmt.Errorf("target must be specified to use a buildlet")
+		}
 		ctx.Printf("Creating buildlet %v.", buildletName)
 		client, err := b.CreateBuildlet(buildletName)
 		if err != nil {
@@ -342,13 +344,17 @@ func (b *BuildReleaseTasks) runBuildStep(
 		defer in.Close()
 	}
 	var out io.WriteCloser
-	var outputName string
+	var scratchPath string
 	hash := sha256.New()
 	size := &sizeWriter{}
 	var multiOut io.Writer
-	if outputBase != "" {
-		outputName = fmt.Sprintf("%v/%v-%v", ctx.WorkflowID.String(), outputBase, rand.Int63())
-		out, err = gcsfs.Create(scratchFS, outputName)
+	if outputSuffix != "" {
+		scratchName := outputSuffix
+		if target != nil {
+			scratchName = target.Name + "." + outputSuffix
+		}
+		scratchPath = fmt.Sprintf("%v/%v-%v", ctx.WorkflowID.String(), scratchName, rand.Int63())
+		out, err = gcsfs.Create(scratchFS, scratchPath)
 		if err != nil {
 			return artifact{}, err
 		}
@@ -377,20 +383,27 @@ func (b *BuildReleaseTasks) runBuildStep(
 	}
 	return artifact{
 		target:      target,
-		scratchPath: outputName,
-		filename:    outputBase,
+		scratchPath: scratchPath,
+		suffix:      outputSuffix,
 		sha256:      fmt.Sprintf("%x", string(hash.Sum([]byte(nil)))),
 		size:        size.size,
 	}, nil
 }
 
 type artifact struct {
-	target      *releasetargets.Target
+	// The target platform of this artifact, or nil for source.
+	target *releasetargets.Target
+	// The scratch path of this artifact.
 	scratchPath string
+	// The path the artifact was staged to for the signing process.
 	stagingPath string
-	filename    string
-	sha256      string
-	size        int
+	// The filename suffix of the artifact, e.g. "tar.gz" or "src.tar.gz",
+	// combined with the version and target name to produce filename.
+	suffix string
+	// The final filename of this artifact as it will be downloaded.
+	filename string
+	sha256   string
+	size     int
 }
 
 type sizeWriter struct {
@@ -406,7 +419,7 @@ func combineResults(ctx *workflow.TaskContext, artifacts []artifact, tests []str
 	return fmt.Sprintf("%#v\n\n", artifacts) + strings.Join(tests, "\n"), nil
 }
 
-func (tasks *BuildReleaseTasks) copyToStaging(ctx *workflow.TaskContext, artifacts []artifact) ([]artifact, error) {
+func (tasks *BuildReleaseTasks) copyToStaging(ctx *workflow.TaskContext, version string, artifacts []artifact) ([]artifact, error) {
 	scratchFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.ScratchURL)
 	if err != nil {
 		return nil, err
@@ -418,7 +431,12 @@ func (tasks *BuildReleaseTasks) copyToStaging(ctx *workflow.TaskContext, artifac
 	var stagedArtifacts []artifact
 	for _, a := range artifacts {
 		staged := a
-		staged.stagingPath = path.Join(ctx.WorkflowID.String(), a.filename)
+		if a.target != nil {
+			staged.filename = version + "." + a.target.Name + "." + a.suffix
+		} else {
+			staged.filename = version + "." + a.suffix
+		}
+		staged.stagingPath = path.Join(ctx.WorkflowID.String(), staged.filename)
 		stagedArtifacts = append(stagedArtifacts, staged)
 
 		in, err := scratchFS.Open(a.scratchPath)
@@ -439,5 +457,5 @@ func (tasks *BuildReleaseTasks) copyToStaging(ctx *workflow.TaskContext, artifac
 			return nil, err
 		}
 	}
-	return artifacts, nil
+	return stagedArtifacts, nil
 }

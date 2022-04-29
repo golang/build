@@ -104,6 +104,7 @@ func main() {
 		log.Fatalf("Could not connect to GCS: %v", err)
 	}
 	releaseTasks := &relui.BuildReleaseTasks{
+		GerritURL:      "https://go.googlesource.com",
 		CreateBuildlet: coordinator.CreateBuildlet,
 		GCSClient:      gcsClient,
 		ScratchURL:     *scratchFilesBase,

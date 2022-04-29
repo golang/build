@@ -24,9 +24,9 @@ import (
 )
 
 // WriteSourceArchive writes a source archive to out, based on revision with version written in as VERSION.
-func WriteSourceArchive(ctx *workflow.TaskContext, revision, version string, out io.Writer) error {
+func WriteSourceArchive(ctx *workflow.TaskContext, gerritURL, revision, version string, out io.Writer) error {
 	ctx.Printf("Create source archive.")
-	tarURL := "https://go.googlesource.com/go/+archive/" + revision + ".tar.gz"
+	tarURL := gerritURL + "/go/+archive/" + revision + ".tar.gz"
 	resp, err := http.Get(tarURL)
 	if err != nil {
 		return err

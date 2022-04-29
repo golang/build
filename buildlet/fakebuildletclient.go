@@ -127,7 +127,7 @@ func (fc *FakeClient) ListDir(ctx context.Context, dir string, opts ListDirOpts,
 drwxr-xr-x      tmp/`
 	lines := strings.Split(lsOutput, "\n")
 	for _, line := range lines {
-		fn(DirEntry{line: line})
+		fn(DirEntry{Line: line})
 	}
 	return nil
 }

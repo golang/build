@@ -736,19 +736,19 @@ func (c *client) WorkDir(ctx context.Context) (string, error) {
 
 // DirEntry is the information about a file on a buildlet.
 type DirEntry struct {
-	// line is of the form "drw-rw-rw\t<name>" and then if a regular file,
+	// Line is of the form "drw-rw-rw\t<name>" and then if a regular file,
 	// also "\t<size>\t<modtime>". in either case, without trailing newline.
 	// TODO: break into parsed fields?
-	line string
+	Line string
 }
 
 func (de DirEntry) String() string {
-	return de.line
+	return de.Line
 }
 
 // Name returns the relative path to the file, such as "src/net/http/" or "src/net/http/jar.go".
 func (de DirEntry) Name() string {
-	f := strings.Split(de.line, "\t")
+	f := strings.Split(de.Line, "\t")
 	if len(f) < 2 {
 		return ""
 	}
@@ -757,26 +757,26 @@ func (de DirEntry) Name() string {
 
 // Perm returns the permission bits in string form, such as "-rw-r--r--" or "drwxr-xr-x".
 func (de DirEntry) Perm() string {
-	i := strings.IndexByte(de.line, '\t')
+	i := strings.IndexByte(de.Line, '\t')
 	if i == -1 {
 		return ""
 	}
-	return de.line[:i]
+	return de.Line[:i]
 }
 
 // IsDir reports whether de describes a directory. That is,
 // it tests for the os.ModeDir bit being set in de.Perm().
 func (de DirEntry) IsDir() bool {
-	if len(de.line) == 0 {
+	if len(de.Line) == 0 {
 		return false
 	}
-	return de.line[0] == 'd'
+	return de.Line[0] == 'd'
 }
 
 // Digest returns the SHA-1 digest of the file, such as "da39a3ee5e6b4b0d3255bfef95601890afd80709".
 // It returns the empty string if the digest isn't included.
 func (de DirEntry) Digest() string {
-	f := strings.Split(de.line, "\t")
+	f := strings.Split(de.Line, "\t")
 	if len(f) < 5 {
 		return ""
 	}
@@ -825,7 +825,7 @@ func (c *client) ListDir(ctx context.Context, dir string, opts ListDirOpts, fn f
 	sc := bufio.NewScanner(resp.Body)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
-		fn(DirEntry{line: line})
+		fn(DirEntry{Line: line})
 	}
 	return sc.Err()
 }
