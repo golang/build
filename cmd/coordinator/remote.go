@@ -12,7 +12,6 @@ package main // import "golang.org/x/build/cmd/coordinator"
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -21,32 +20,23 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"os"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
-	"unsafe"
 
-	"github.com/creack/pty"
-	"github.com/gliderlabs/ssh"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/coordinator/schedule"
-	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/types"
 )
 
 var (
-	remoteBuildlets = struct {
-		sync.Mutex
-		m map[string]*remoteBuildlet // keyed by buildletName
-	}{m: map[string]*remoteBuildlet{}}
+	remoteBuildlets = &remote.Buildlets{
+		M: map[string]*remote.Buildlet{},
+	}
 
 	cleanTimer *time.Timer
 )
@@ -60,43 +50,16 @@ func init() {
 	cleanTimer = time.AfterFunc(remoteBuildletCleanInterval, expireBuildlets)
 }
 
-type remoteBuildlet struct {
-	User        string // "user-foo" build key
-	Name        string // dup of key
-	HostType    string
-	BuilderType string // default builder config to use if not overwritten
-	Created     time.Time
-	Expires     time.Time
-
-	buildlet buildlet.Client
-}
-
-// renew renews rb's idle timeout if ctx hasn't expired.
-// renew should run in its own goroutine.
-func (rb *remoteBuildlet) renew(ctx context.Context) {
-	remoteBuildlets.Lock()
-	defer remoteBuildlets.Unlock()
-	select {
-	case <-ctx.Done():
-		return
-	default:
-	}
-	if got := remoteBuildlets.m[rb.Name]; got == rb {
-		rb.Expires = time.Now().Add(remoteBuildletIdleTimeout)
-		time.AfterFunc(time.Minute, func() { rb.renew(ctx) })
-	}
-}
-
-func addRemoteBuildlet(rb *remoteBuildlet) (name string) {
+func addRemoteBuildlet(rb *remote.Buildlet) (name string) {
 	remoteBuildlets.Lock()
 	defer remoteBuildlets.Unlock()
 	n := 0
 	for {
 		name = fmt.Sprintf("%s-%s-%d", rb.User, rb.BuilderType, n)
-		if _, ok := remoteBuildlets.m[name]; ok {
+		if _, ok := remoteBuildlets.M[name]; ok {
 			n++
 		} else {
-			remoteBuildlets.m[name] = rb
+			remoteBuildlets.M[name] = rb
 			return name
 		}
 	}
@@ -105,8 +68,8 @@ func addRemoteBuildlet(rb *remoteBuildlet) (name string) {
 func isGCERemoteBuildlet(instName string) bool {
 	remoteBuildlets.Lock()
 	defer remoteBuildlets.Unlock()
-	for _, rb := range remoteBuildlets.m {
-		if rb.buildlet.GCEInstanceName() == instName {
+	for _, rb := range remoteBuildlets.M {
+		if rb.Buildlet().GCEInstanceName() == instName {
 			return true
 		}
 	}
@@ -118,10 +81,10 @@ func expireBuildlets() {
 	remoteBuildlets.Lock()
 	defer remoteBuildlets.Unlock()
 	now := time.Now()
-	for name, rb := range remoteBuildlets.m {
+	for name, rb := range remoteBuildlets.M {
 		if !rb.Expires.IsZero() && rb.Expires.Before(now) {
-			go rb.buildlet.Close()
-			delete(remoteBuildlets.m, name)
+			go rb.Buildlet().Close()
+			delete(remoteBuildlets.M, name)
 		}
 	}
 }
@@ -194,7 +157,7 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	// One of these fields is set:
 	type msg struct {
 		Error    string                    `json:"error,omitempty"`
-		Buildlet *remoteBuildlet           `json:"buildlet,omitempty"`
+		Buildlet *remote.Buildlet          `json:"buildlet,omitempty"`
 		Status   *types.BuildletWaitStatus `json:"status,omitempty"`
 	}
 	sendJSONLine := func(v interface{}) {
@@ -237,14 +200,14 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 			sendJSONLine(msg{Status: &st})
 		case bc := <-resc:
 			now := timeNow()
-			rb := &remoteBuildlet{
+			rb := &remote.Buildlet{
 				User:        user,
 				BuilderType: builderType,
 				HostType:    bconf.HostType,
-				buildlet:    bc,
 				Created:     now,
 				Expires:     now.Add(remoteBuildletIdleTimeout),
 			}
+			rb.SetBuildlet(bc)
 			rb.Name = addRemoteBuildlet(rb)
 			bc.SetName(rb.Name)
 			log.Printf("created buildlet %v for %v (%s)", rb.Name, rb.User, bc.String())
@@ -279,11 +242,11 @@ func handleBuildletList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "GET required", 400)
 		return
 	}
-	res := make([]*remoteBuildlet, 0) // so it's never JSON "null"
+	res := make([]*remote.Buildlet, 0) // so it's never JSON "null"
 	remoteBuildlets.Lock()
 	defer remoteBuildlets.Unlock()
 	user, _, _ := r.BasicAuth()
-	for _, rb := range remoteBuildlets.m {
+	for _, rb := range remoteBuildlets.M {
 		if rb.User == user {
 			res = append(res, rb)
 		}
@@ -299,7 +262,7 @@ func handleBuildletList(w http.ResponseWriter, r *http.Request) {
 	w.Write(jenc)
 }
 
-type byBuildletName []*remoteBuildlet
+type byBuildletName []*remote.Buildlet
 
 func (s byBuildletName) Len() int           { return len(s) }
 func (s byBuildletName) Less(i, j int) bool { return s[i].Name < s[j].Name }
@@ -309,13 +272,13 @@ func remoteBuildletStatus() string {
 	remoteBuildlets.Lock()
 	defer remoteBuildlets.Unlock()
 
-	if len(remoteBuildlets.m) == 0 {
+	if len(remoteBuildlets.M) == 0 {
 		return "<i>(none)</i>"
 	}
 
 	var buf bytes.Buffer
-	var all []*remoteBuildlet
-	for _, rb := range remoteBuildlets.m {
+	var all []*remote.Buildlet
+	for _, rb := range remoteBuildlets.M {
 		all = append(all, rb)
 	}
 	sort.Sort(byBuildletName(all))
@@ -342,7 +305,7 @@ func proxyBuildletHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	remoteBuildlets.Lock()
-	rb, ok := remoteBuildlets.m[buildletName]
+	rb, ok := remoteBuildlets.M[buildletName]
 	if ok {
 		rb.Expires = time.Now().Add(remoteBuildletIdleTimeout)
 	}
@@ -358,13 +321,13 @@ func proxyBuildletHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "POST" && r.URL.Path == "/halt" {
-		err := rb.buildlet.Close()
+		err := rb.Buildlet().Close()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		rb.buildlet.Close()
+		rb.Buildlet().Close()
 		remoteBuildlets.Lock()
-		delete(remoteBuildlets.m, buildletName)
+		delete(remoteBuildlets.M, buildletName)
 		remoteBuildlets.Unlock()
 		return
 	}
@@ -375,7 +338,7 @@ func proxyBuildletHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	outReq, err := http.NewRequest(r.Method, rb.buildlet.URL()+r.URL.Path+"?"+r.URL.RawQuery, r.Body)
+	outReq, err := http.NewRequest(r.Method, rb.Buildlet().URL()+r.URL.Path+"?"+r.URL.RawQuery, r.Body)
 	if err != nil {
 		log.Printf("bad proxy request: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -385,7 +348,7 @@ func proxyBuildletHTTP(w http.ResponseWriter, r *http.Request) {
 	outReq.ContentLength = r.ContentLength
 	proxy := &httputil.ReverseProxy{
 		Director:      func(*http.Request) {}, // nothing
-		Transport:     rb.buildlet.ProxyRoundTripper(),
+		Transport:     rb.Buildlet().ProxyRoundTripper(),
 		FlushInterval: 500 * time.Millisecond,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			log.Printf("gomote proxy error for %s: %v", buildletName, err)
@@ -399,7 +362,7 @@ func proxyBuildletHTTP(w http.ResponseWriter, r *http.Request) {
 // proxyBuildletTCP handles connecting to and proxying between a
 // backend buildlet VM's TCP port and the client. This is called once
 // it's already authenticated by proxyBuildletHTTP.
-func proxyBuildletTCP(w http.ResponseWriter, r *http.Request, rb *remoteBuildlet) {
+func proxyBuildletTCP(w http.ResponseWriter, r *http.Request, rb *remote.Buildlet) {
 	if r.ProtoMajor > 1 {
 		// TODO: deal with HTTP/2 requests if https://farmer.golang.org enables it later.
 		// Currently it does not, as other handlers Hijack too. We'd need to teach clients
@@ -426,9 +389,9 @@ func proxyBuildletTCP(w http.ResponseWriter, r *http.Request, rb *remoteBuildlet
 		http.Error(w, fmt.Sprintf("unsupported non-VM host type %q", rb.HostType), http.StatusBadRequest)
 		return
 	}
-	ip, _, err := net.SplitHostPort(rb.buildlet.IPPort())
+	ip, _, err := net.SplitHostPort(rb.Buildlet().IPPort())
 	if err != nil {
-		http.Error(w, fmt.Sprintf("unexpected backend ip:port %q", rb.buildlet.IPPort()), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("unexpected backend ip:port %q", rb.Buildlet().IPPort()), http.StatusInternalServerError)
 		return
 	}
 
@@ -494,177 +457,4 @@ func requireBuildletProxyAuth(h http.Handler) http.Handler {
 		}
 		h.ServeHTTP(w, r)
 	})
-}
-
-type sshHandlers struct {
-	gomotePublicKey   string
-	sshPrivateKeyFile string
-}
-
-func (ah *sshHandlers) handleIncomingSSHPostAuth(s ssh.Session) {
-	inst := s.User()
-	user := remote.UserFromGomoteInstanceName(inst)
-
-	requestedMutable := strings.HasPrefix(inst, "mutable-")
-	if requestedMutable {
-		inst = strings.TrimPrefix(inst, "mutable-")
-	}
-
-	ptyReq, winCh, isPty := s.Pty()
-	if !isPty {
-		fmt.Fprintf(s, "scp etc not yet supported; https://golang.org/issue/21140\n")
-		return
-	}
-
-	if ah.gomotePublicKey == "" {
-		fmt.Fprint(s, "invalid gomote-ssh-public-key")
-		return
-	}
-
-	remoteBuildlets.Lock()
-	rb, ok := remoteBuildlets.m[inst]
-	remoteBuildlets.Unlock()
-	if !ok {
-		fmt.Fprintf(s, "unknown instance %q", inst)
-		return
-	}
-
-	hostType := rb.HostType
-	hostConf, ok := dashboard.Hosts[hostType]
-	if !ok {
-		fmt.Fprintf(s, "instance %q has unknown host type %q\n", inst, hostType)
-		return
-	}
-
-	bconf, ok := dashboard.Builders[rb.BuilderType]
-	if !ok {
-		fmt.Fprintf(s, "instance %q has unknown builder type %q\n", inst, rb.BuilderType)
-		return
-	}
-
-	ctx, cancel := context.WithCancel(s.Context())
-	defer cancel()
-	go rb.renew(ctx)
-
-	sshUser := hostConf.SSHUsername
-	useLocalSSHProxy := bconf.GOOS() != "plan9"
-	if sshUser == "" && useLocalSSHProxy {
-		fmt.Fprintf(s, "instance %q host type %q does not have SSH configured\n", inst, hostType)
-		return
-	}
-	if !hostConf.IsHermetic() && !requestedMutable {
-		fmt.Fprintf(s, "WARNING: instance %q host type %q is not currently\n", inst, hostType)
-		fmt.Fprintf(s, "configured to have a hermetic filesystem per boot.\n")
-		fmt.Fprintf(s, "You must be careful not to modify machine state\n")
-		fmt.Fprintf(s, "that will affect future builds. Do you agree? If so,\n")
-		fmt.Fprintf(s, "run gomote ssh --i-will-not-break-the-host <INST>\n")
-		return
-	}
-
-	log.Printf("connecting to ssh to instance %q ...", inst)
-
-	fmt.Fprintf(s, "# Welcome to the gomote ssh proxy, %s.\n", user)
-	fmt.Fprintf(s, "# Connecting to/starting remote ssh...\n")
-	fmt.Fprintf(s, "#\n")
-
-	var localProxyPort int
-	if useLocalSSHProxy {
-		sshConn, err := rb.buildlet.ConnectSSH(sshUser, ah.gomotePublicKey)
-		log.Printf("buildlet(%q).ConnectSSH = %T, %v", inst, sshConn, err)
-		if err != nil {
-			fmt.Fprintf(s, "failed to connect to ssh on %s: %v\n", inst, err)
-			return
-		}
-		defer sshConn.Close()
-
-		// Now listen on some localhost port that we'll proxy to sshConn.
-		// The openssh ssh command line tool will connect to this IP.
-		ln, err := net.Listen("tcp", "localhost:0")
-		if err != nil {
-			fmt.Fprintf(s, "local listen error: %v\n", err)
-			return
-		}
-		localProxyPort = ln.Addr().(*net.TCPAddr).Port
-		log.Printf("ssh local proxy port for %s: %v", inst, localProxyPort)
-		var lnCloseOnce sync.Once
-		lnClose := func() { lnCloseOnce.Do(func() { ln.Close() }) }
-		defer lnClose()
-
-		// Accept at most one connection from localProxyPort and proxy
-		// it to sshConn.
-		go func() {
-			c, err := ln.Accept()
-			lnClose()
-			if err != nil {
-				return
-			}
-			defer c.Close()
-			errc := make(chan error, 1)
-			go func() {
-				_, err := io.Copy(c, sshConn)
-				errc <- err
-			}()
-			go func() {
-				_, err := io.Copy(sshConn, c)
-				errc <- err
-			}()
-			err = <-errc
-		}()
-	}
-	workDir, err := rb.buildlet.WorkDir(ctx)
-	if err != nil {
-		fmt.Fprintf(s, "Error getting WorkDir: %v\n", err)
-		return
-	}
-	ip, _, ipErr := net.SplitHostPort(rb.buildlet.IPPort())
-
-	fmt.Fprintf(s, "# `gomote push` and the builders use:\n")
-	fmt.Fprintf(s, "# - workdir: %s\n", workDir)
-	fmt.Fprintf(s, "# - GOROOT: %s/go\n", workDir)
-	fmt.Fprintf(s, "# - GOPATH: %s/gopath\n", workDir)
-	fmt.Fprintf(s, "# - env: %s\n", strings.Join(bconf.Env(), " ")) // TODO: shell quote?
-	fmt.Fprintf(s, "# Happy debugging.\n")
-
-	log.Printf("ssh to %s: starting ssh -p %d for %s@localhost", inst, localProxyPort, sshUser)
-	var cmd *exec.Cmd
-	switch bconf.GOOS() {
-	default:
-		cmd = exec.Command("ssh",
-			"-p", strconv.Itoa(localProxyPort),
-			"-o", "UserKnownHostsFile=/dev/null",
-			"-o", "StrictHostKeyChecking=no",
-			"-i", ah.sshPrivateKeyFile,
-			sshUser+"@localhost")
-	case "plan9":
-		fmt.Fprintf(s, "# Plan9 user/pass: glenda/glenda123\n")
-		if ipErr != nil {
-			fmt.Fprintf(s, "# Failed to get IP out of %q: %v\n", rb.buildlet.IPPort(), err)
-			return
-		}
-		cmd = exec.Command("/usr/local/bin/drawterm",
-			"-a", ip, "-c", ip, "-u", "glenda", "-k", "user=glenda")
-	}
-	envutil.SetEnv(cmd, "TERM="+ptyReq.Term)
-	f, err := pty.Start(cmd)
-	if err != nil {
-		log.Printf("running ssh client to %s: %v", inst, err)
-		return
-	}
-	defer f.Close()
-	go func() {
-		for win := range winCh {
-			setWinsize(f, win.Width, win.Height)
-		}
-	}()
-	go func() {
-		io.Copy(f, s) // stdin
-	}()
-	io.Copy(s, f) // stdout
-	cmd.Process.Kill()
-	cmd.Wait()
-}
-
-func setWinsize(f *os.File, w, h int) {
-	syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), uintptr(syscall.TIOCSWINSZ),
-		uintptr(unsafe.Pointer(&struct{ h, w, x, y uint16 }{uint16(h), uint16(w), 0, 0})))
 }

@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build go1.16 && (linux || darwin)
+// +build go1.16
+// +build linux darwin
+
 package remote
 
 import (
@@ -14,14 +18,24 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"os/exec"
+	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
+	"unsafe"
 
+	"github.com/creack/pty"
 	gssh "github.com/gliderlabs/ssh"
+	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/internal/gophers"
 	"golang.org/x/crypto/ssh"
 )
@@ -83,27 +97,40 @@ func SSHKeyPair() (privateKey []byte, publicKey []byte, err error) {
 
 // SSHServer is the SSH server that the coordinator provides.
 type SSHServer struct {
-	server *gssh.Server
+	gomotePublicKey    string
+	privateHostKeyFile string
+	remoteBuildlets    *Buildlets
+	server             *gssh.Server
+	sessionPool        *SessionPool
 }
 
 // NewSSHServer creates an SSH server used to access remote buildlet sessions.
-func NewSSHServer(addr string, hostPrivateKey, caPrivateKey []byte, handler gssh.Handler, sp *SessionPool) (*SSHServer, error) {
+func NewSSHServer(addr string, hostPrivateKey, gomotePublicKey, caPrivateKey []byte, sp *SessionPool, rbs *Buildlets) (*SSHServer, error) {
 	hostSigner, err := ssh.ParsePrivateKey(hostPrivateKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse SSH host key: %v; not running SSH server", err)
+		return nil, fmt.Errorf("failed to parse SSH host key: %v; not configuring SSH server", err)
 	}
 	CASigner, err := ssh.ParsePrivateKey(caPrivateKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse SSH host key: %v; not running SSH server", err)
+		return nil, fmt.Errorf("failed to parse SSH host key: %v; not configuring SSH server", err)
 	}
-	return &SSHServer{
+	privateHostKeyFile, err := WriteSSHPrivateKeyToTempFile(hostPrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("error writing ssh private key to temp file: %v; not configuring SSH server", err)
+	}
+	s := &SSHServer{
+		gomotePublicKey:    string(gomotePublicKey),
+		privateHostKeyFile: privateHostKeyFile,
+		remoteBuildlets:    rbs,
+		sessionPool:        sp,
 		server: &gssh.Server{
 			Addr:             addr,
-			Handler:          handler,
 			PublicKeyHandler: chainSSHPublicKeyHandlers(handleSSHPublicKeyAuth, handleCertificateAuthFunc(sp, CASigner)),
 			HostSigners:      []gssh.Signer{hostSigner},
 		},
-	}, nil
+	}
+	s.server.Handler = s.HandleIncomingSSHPostAuth
+	return s, nil
 }
 
 // ListenAndServe attempts to start the SSH server. This blocks until the server stops.
@@ -120,6 +147,340 @@ func (ss *SSHServer) Close() error {
 // until the server stops. This should be used while testing the server.
 func (ss *SSHServer) serve(l net.Listener) error {
 	return ss.server.Serve(l)
+}
+
+// HandleIncomingSSHPostAuth handles SSH requests after the session has been authenticated. It forwards
+// the request to either the legacy handler or the new handler.
+// TODO(go.dev/issue/47521) The legacy path can be removed once the migration to the new security model
+// is complete.
+func (ss *SSHServer) HandleIncomingSSHPostAuth(s gssh.Session) {
+	inst := s.User()
+	requestedMutable := strings.HasPrefix(inst, "mutable-")
+	if requestedMutable {
+		inst = strings.TrimPrefix(inst, "mutable-")
+	}
+	_, _, isPty := s.Pty()
+	if !isPty {
+		fmt.Fprintf(s, "scp etc not yet supported; https://golang.org/issue/21140\n")
+		return
+	}
+	if ss.gomotePublicKey == "" {
+		fmt.Fprint(s, "invalid gomote-ssh-public-key")
+		return
+	}
+	ss.remoteBuildlets.Lock()
+	rb, ok := ss.remoteBuildlets.M[inst]
+	ss.remoteBuildlets.Unlock()
+	if ok {
+		ss.legacyIncomingSSHPostAuth(s, rb)
+		return
+	}
+	rs, err := ss.sessionPool.Session(inst)
+	if err != nil {
+		fmt.Fprintf(s, "unknown instance %q", inst)
+		return
+	}
+	ss.IncomingSSHPostAuth(s, rs)
+}
+
+// legacyIncomingSSHPostAuth is the handler for legacy remote buildlet SSH sessions.
+func (ss *SSHServer) legacyIncomingSSHPostAuth(s gssh.Session, rb *Buildlet) {
+	inst := s.User()
+	user := UserFromGomoteInstanceName(inst)
+
+	requestedMutable := strings.HasPrefix(inst, "mutable-")
+	if requestedMutable {
+		inst = strings.TrimPrefix(inst, "mutable-")
+	}
+
+	ptyReq, winCh, isPty := s.Pty()
+	if !isPty {
+		fmt.Fprintf(s, "scp etc not yet supported; https://golang.org/issue/21140\n")
+		return
+	}
+
+	if ss.gomotePublicKey == "" {
+		fmt.Fprint(s, "invalid gomote-ssh-public-key")
+		return
+	}
+
+	hostType := rb.HostType
+	hostConf, ok := dashboard.Hosts[hostType]
+	if !ok {
+		fmt.Fprintf(s, "instance %q has unknown host type %q\n", inst, hostType)
+		return
+	}
+
+	bconf, ok := dashboard.Builders[rb.BuilderType]
+	if !ok {
+		fmt.Fprintf(s, "instance %q has unknown builder type %q\n", inst, rb.BuilderType)
+		return
+	}
+
+	ctx, cancel := context.WithCancel(s.Context())
+	defer cancel()
+	go rb.Renew(ctx, ss.remoteBuildlets)
+
+	sshUser := hostConf.SSHUsername
+	useLocalSSHProxy := bconf.GOOS() != "plan9"
+	if sshUser == "" && useLocalSSHProxy {
+		fmt.Fprintf(s, "instance %q host type %q does not have SSH configured\n", inst, hostType)
+		return
+	}
+	if !hostConf.IsHermetic() && !requestedMutable {
+		fmt.Fprintf(s, "WARNING: instance %q host type %q is not currently\n", inst, hostType)
+		fmt.Fprintf(s, "configured to have a hermetic filesystem per boot.\n")
+		fmt.Fprintf(s, "You must be careful not to modify machine state\n")
+		fmt.Fprintf(s, "that will affect future builds. Do you agree? If so,\n")
+		fmt.Fprintf(s, "run gomote ssh --i-will-not-break-the-host <INST>\n")
+		return
+	}
+
+	log.Printf("connecting to ssh to instance %q ...", inst)
+
+	fmt.Fprintf(s, "# Welcome to the gomote ssh proxy, %s.\n", user)
+	fmt.Fprintf(s, "# Connecting to/starting remote ssh...\n")
+	fmt.Fprintf(s, "#\n")
+
+	var localProxyPort int
+	if useLocalSSHProxy {
+		sshConn, err := rb.Buildlet().ConnectSSH(sshUser, ss.gomotePublicKey)
+		log.Printf("buildlet(%q).ConnectSSH = %T, %v", inst, sshConn, err)
+		if err != nil {
+			fmt.Fprintf(s, "failed to connect to ssh on %s: %v\n", inst, err)
+			return
+		}
+		defer sshConn.Close()
+
+		// Now listen on some localhost port that we'll proxy to sshConn.
+		// The openssh ssh command line tool will connect to this IP.
+		ln, err := net.Listen("tcp", "localhost:0")
+		if err != nil {
+			fmt.Fprintf(s, "local listen error: %v\n", err)
+			return
+		}
+		localProxyPort = ln.Addr().(*net.TCPAddr).Port
+		log.Printf("ssh local proxy port for %s: %v", inst, localProxyPort)
+		var lnCloseOnce sync.Once
+		lnClose := func() { lnCloseOnce.Do(func() { ln.Close() }) }
+		defer lnClose()
+
+		// Accept at most one connection from localProxyPort and proxy
+		// it to sshConn.
+		go func() {
+			c, err := ln.Accept()
+			lnClose()
+			if err != nil {
+				return
+			}
+			defer c.Close()
+			errc := make(chan error, 1)
+			go func() {
+				_, err := io.Copy(c, sshConn)
+				errc <- err
+			}()
+			go func() {
+				_, err := io.Copy(sshConn, c)
+				errc <- err
+			}()
+			err = <-errc
+		}()
+	}
+	workDir, err := rb.Buildlet().WorkDir(ctx)
+	if err != nil {
+		fmt.Fprintf(s, "Error getting WorkDir: %v\n", err)
+		return
+	}
+	ip, _, ipErr := net.SplitHostPort(rb.Buildlet().IPPort())
+
+	fmt.Fprintf(s, "# `gomote push` and the builders use:\n")
+	fmt.Fprintf(s, "# - workdir: %s\n", workDir)
+	fmt.Fprintf(s, "# - GOROOT: %s/go\n", workDir)
+	fmt.Fprintf(s, "# - GOPATH: %s/gopath\n", workDir)
+	fmt.Fprintf(s, "# - env: %s\n", strings.Join(bconf.Env(), " ")) // TODO: shell quote?
+	fmt.Fprintf(s, "# Happy debugging.\n")
+
+	log.Printf("ssh to %s: starting ssh -p %d for %s@localhost", inst, localProxyPort, sshUser)
+	var cmd *exec.Cmd
+	switch bconf.GOOS() {
+	default:
+		cmd = exec.Command("ssh",
+			"-p", strconv.Itoa(localProxyPort),
+			"-o", "UserKnownHostsFile=/dev/null",
+			"-o", "StrictHostKeyChecking=no",
+			"-i", ss.privateHostKeyFile,
+			sshUser+"@localhost")
+	case "plan9":
+		fmt.Fprintf(s, "# Plan9 user/pass: glenda/glenda123\n")
+		if ipErr != nil {
+			fmt.Fprintf(s, "# Failed to get IP out of %q: %v\n", rb.Buildlet().IPPort(), err)
+			return
+		}
+		cmd = exec.Command("/usr/local/bin/drawterm",
+			"-a", ip, "-c", ip, "-u", "glenda", "-k", "user=glenda")
+	}
+	envutil.SetEnv(cmd, "TERM="+ptyReq.Term)
+	f, err := pty.Start(cmd)
+	if err != nil {
+		log.Printf("running ssh client to %s: %v", inst, err)
+		return
+	}
+	defer f.Close()
+	go func() {
+		for win := range winCh {
+			setWinsize(f, win.Width, win.Height)
+		}
+	}()
+	go func() {
+		io.Copy(f, s) // stdin
+	}()
+	io.Copy(s, f) // stdout
+	cmd.Process.Kill()
+	cmd.Wait()
+}
+
+// IncomingSSHPostAuth handles post-authentication requests for the SSH server. This handler uses
+// Sessions for session management.
+func (ss *SSHServer) IncomingSSHPostAuth(s gssh.Session, rs *Session) {
+	inst := s.User()
+	ptyReq, winCh, _ := s.Pty()
+	hostConf, ok := dashboard.Hosts[rs.HostType]
+	if !ok {
+		fmt.Fprintf(s, "instance %q has unknown host type %q\n", inst, rs.HostType)
+		return
+	}
+	bconf, ok := dashboard.Builders[rs.BuilderType]
+	if !ok {
+		fmt.Fprintf(s, "instance %q has unknown builder type %q\n", inst, rs.BuilderType)
+		return
+	}
+
+	ctx, cancel := context.WithCancel(s.Context())
+	defer cancel()
+	err := ss.sessionPool.KeepAlive(ctx, inst)
+	if err != nil {
+		log.Printf("ssh: KeepAlive on session=%s failed: %s", inst, err)
+	}
+
+	sshUser := hostConf.SSHUsername
+	useLocalSSHProxy := bconf.GOOS() != "plan9"
+	if sshUser == "" && useLocalSSHProxy {
+		fmt.Fprintf(s, "instance %q host type %q does not have SSH configured\n", inst, rs.HostType)
+		return
+	}
+	if !hostConf.IsHermetic() {
+		fmt.Fprintf(s, "WARNING: instance %q host type %q is not currently\n", inst, rs.HostType)
+		fmt.Fprintf(s, "configured to have a hermetic filesystem per boot.\n")
+		fmt.Fprintf(s, "You must be careful not to modify machine state\n")
+		fmt.Fprintf(s, "that will affect future builds. Do you agree? If so,\n")
+		fmt.Fprintf(s, "run gomote ssh --i-will-not-break-the-host <INST>\n")
+		return
+	}
+	log.Printf("connecting to ssh to instance %q ...", inst)
+	fmt.Fprint(s, "# Welcome to the gomote ssh proxy.\n")
+	fmt.Fprint(s, "# Connecting to/starting remote ssh...\n")
+	fmt.Fprint(s, "#\n")
+
+	var localProxyPort int
+	bc, err := ss.sessionPool.BuildletClient(inst)
+	if err != nil {
+		fmt.Fprintf(s, "failed to connect to ssh on %s: %v\n", inst, err)
+		return
+	}
+	if useLocalSSHProxy {
+		sshConn, err := bc.ConnectSSH(sshUser, ss.gomotePublicKey)
+		log.Printf("buildlet(%q).ConnectSSH = %T, %v", inst, sshConn, err)
+		if err != nil {
+			fmt.Fprintf(s, "failed to connect to ssh on %s: %v\n", inst, err)
+			return
+		}
+		defer sshConn.Close()
+
+		// Now listen on some localhost port that we'll proxy to sshConn.
+		// The openssh ssh command line tool will connect to this IP.
+		ln, err := net.Listen("tcp", "localhost:0")
+		if err != nil {
+			fmt.Fprintf(s, "local listen error: %v\n", err)
+			return
+		}
+		localProxyPort = ln.Addr().(*net.TCPAddr).Port
+		log.Printf("ssh local proxy port for %s: %v", inst, localProxyPort)
+		var lnCloseOnce sync.Once
+		lnClose := func() { lnCloseOnce.Do(func() { ln.Close() }) }
+		defer lnClose()
+
+		// Accept at most one connection from localProxyPort and proxy
+		// it to sshConn.
+		go func() {
+			c, err := ln.Accept()
+			lnClose()
+			if err != nil {
+				return
+			}
+			defer c.Close()
+			errc := make(chan error, 1)
+			go func() {
+				_, err := io.Copy(c, sshConn)
+				errc <- err
+			}()
+			go func() {
+				_, err := io.Copy(sshConn, c)
+				errc <- err
+			}()
+			err = <-errc
+		}()
+	}
+	workDir, err := bc.WorkDir(ctx)
+	if err != nil {
+		fmt.Fprintf(s, "Error getting WorkDir: %v\n", err)
+		return
+	}
+	ip, _, ipErr := net.SplitHostPort(bc.IPPort())
+
+	fmt.Fprint(s, "# `gomote push` and the builders use:\n")
+	fmt.Fprintf(s, "# - workdir: %s\n", workDir)
+	fmt.Fprintf(s, "# - GOROOT: %s/go\n", workDir)
+	fmt.Fprintf(s, "# - GOPATH: %s/gopath\n", workDir)
+	fmt.Fprintf(s, "# - env: %s\n", strings.Join(bconf.Env(), " ")) // TODO: shell quote?
+	fmt.Fprint(s, "# Happy debugging.\n")
+
+	log.Printf("ssh to %s: starting ssh -p %d for %s@localhost", inst, localProxyPort, sshUser)
+	var cmd *exec.Cmd
+	switch bconf.GOOS() {
+	default:
+		cmd = exec.Command("ssh",
+			"-p", strconv.Itoa(localProxyPort),
+			"-o", "UserKnownHostsFile=/dev/null",
+			"-o", "StrictHostKeyChecking=no",
+			"-i", ss.privateHostKeyFile,
+			sshUser+"@localhost")
+	case "plan9":
+		fmt.Fprintf(s, "# Plan9 user/pass: glenda/glenda123\n")
+		if ipErr != nil {
+			fmt.Fprintf(s, "# Failed to get IP out of %q: %v\n", bc.IPPort(), err)
+			return
+		}
+		cmd = exec.Command("/usr/local/bin/drawterm",
+			"-a", ip, "-c", ip, "-u", "glenda", "-k", "user=glenda")
+	}
+	envutil.SetEnv(cmd, "TERM="+ptyReq.Term)
+	f, err := pty.Start(cmd)
+	if err != nil {
+		log.Printf("running ssh client to %s: %v", inst, err)
+		return
+	}
+	defer f.Close()
+	go func() {
+		for win := range winCh {
+			setWinsize(f, win.Width, win.Height)
+		}
+	}()
+	go func() {
+		io.Copy(f, s) // stdin
+	}()
+	io.Copy(s, f) // stdout
+	cmd.Process.Kill()
+	cmd.Wait()
 }
 
 // WriteSSHPrivateKeyToTempFile writes a key to a temporary file on the local file system. It also
@@ -275,4 +636,9 @@ func UserFromGomoteInstanceName(name string) string {
 		return ""
 	}
 	return user[:hyphen]
+}
+
+func setWinsize(f *os.File, w, h int) {
+	syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), uintptr(syscall.TIOCSWINSZ),
+		uintptr(unsafe.Pointer(&struct{ h, w, x, y uint16 }{uint16(h), uint16(w), 0, 0})))
 }

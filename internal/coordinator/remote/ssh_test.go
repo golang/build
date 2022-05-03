@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build go1.16 && (linux || darwin)
+// +build go1.16
+// +build linux darwin
+
 package remote
 
 import (
@@ -10,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	gssh "github.com/gliderlabs/ssh"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/crypto/ssh"
@@ -230,11 +233,10 @@ func setupSSHServer(t *testing.T, ctx context.Context) (addr string, sp *Session
 		t.Fatalf("nettest.NewLocalListener(tcp) = _, %s; want no error", err)
 	}
 	addr = l.Addr().String()
-	h := func(ses gssh.Session) {
-		t.Logf("look at my session=%+v", ses)
-		return
+	rbs := &Buildlets{
+		M: map[string]*Buildlet{},
 	}
-	s, err = NewSSHServer(addr, []byte(devCertAlternateClientPrivate), []byte(devCertCAPrivate), h, sp)
+	s, err = NewSSHServer(addr, []byte(devCertAlternateClientPrivate), []byte(devCertCAPublic), []byte(devCertCAPrivate), sp, rbs)
 	if err != nil {
 		t.Fatalf("NewSSHServer(...) = %s; want no error", err)
 	}

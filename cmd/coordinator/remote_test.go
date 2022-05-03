@@ -23,6 +23,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool"
+	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/gophers"
 )
 
@@ -125,7 +126,7 @@ func TestHandleBuildletCreate_PreStream(t *testing.T) {
 	log.SetOutput(tlogger{t})
 	defer log.SetOutput(os.Stderr)
 	addBuilder(buildName)
-	remoteBuildlets.m = map[string]*remoteBuildlet{}
+	remoteBuildlets.M = map[string]*remote.Buildlet{}
 	pool.TestPoolHook = func(_ *dashboard.HostConfig) pool.Buildlet { return testPool }
 	defer func() {
 		timeNow = time.Now
@@ -154,7 +155,7 @@ func TestHandleBuildletCreate_Stream(t *testing.T) {
 	log.SetOutput(tlogger{t})
 	defer log.SetOutput(os.Stderr)
 	addBuilder(buildName)
-	remoteBuildlets.m = map[string]*remoteBuildlet{}
+	remoteBuildlets.M = map[string]*remote.Buildlet{}
 	pool.TestPoolHook = func(_ *dashboard.HostConfig) pool.Buildlet { return testPool }
 	defer func() {
 		timeNow = time.Now

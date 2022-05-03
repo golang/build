@@ -406,16 +406,7 @@ func main() {
 		if err != nil {
 			return nil, fmt.Errorf("unable to retrieve keys for SSH Server: %v", err)
 		}
-		privateHostKeyFile, err := remote.WriteSSHPrivateKeyToTempFile(privateKey)
-		log.Printf("unable to write private host key file: %s", err)
-		if err != nil {
-			return nil, fmt.Errorf("error writing ssh private key to temp file: %v; not running SSH server", err)
-		}
-		sshHandlers := &sshHandlers{
-			gomotePublicKey:   string(publicKey),
-			sshPrivateKeyFile: privateHostKeyFile,
-		}
-		return remote.NewSSHServer(*sshAddr, privateKey, sshCA, sshHandlers.handleIncomingSSHPostAuth, sp)
+		return remote.NewSSHServer(*sshAddr, privateKey, publicKey, sshCA, sp, remoteBuildlets)
 	}
 	sshServ, err := configureSSHServer()
 	if err != nil {
