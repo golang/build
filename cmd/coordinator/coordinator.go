@@ -1308,8 +1308,8 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 			if testingKnobSkipBuilds {
 				return nil
 			}
-			if !builder.BuildsRepoTryBot(project, branch, branch) {
-				log.Printf("builder %q isn't configured to build %q@%q as a trybot", builder.Name, project, branch)
+			if !builder.BuildsRepoPostSubmit(project, branch, branch) {
+				log.Printf("builder %q isn't configured to build %q@%q", builder.Name, project, branch)
 				return nil
 			}
 			rev, err := getRepoHead(project)
