@@ -360,7 +360,8 @@ func main() {
 	dashV1 := legacydash.Handler(gce.GoDSClient(), maintnerClient, string(masterKey()), grpcServer)
 	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
-	gomoteServer := gomote.New(remote.NewSessionPool(context.Background()), sched, sshCA, gomoteBucket, mustStorageClient())
+	sp := remote.NewSessionPool(context.Background())
+	gomoteServer := gomote.New(sp, sched, sshCA, gomoteBucket, mustStorageClient())
 	protos.RegisterCoordinatorServer(grpcServer, gs)
 	gomoteprotos.RegisterGomoteServiceServer(grpcServer, gomoteServer)
 	mux.HandleFunc("/", grpcHandlerFunc(grpcServer, handleStatus)) // Serve a status page at farmer.golang.org.
@@ -403,7 +404,7 @@ func main() {
 	configureSSHServer := func() (*remote.SSHServer, error) {
 		privateKey, publicKey, err := retrieveSSHKeys(ctx, sc, *mode)
 		if err != nil {
-			return nil, fmt.Errorf("unable to retrieve keys for SSH Server: %s", err)
+			return nil, fmt.Errorf("unable to retrieve keys for SSH Server: %v", err)
 		}
 		privateHostKeyFile, err := remote.WriteSSHPrivateKeyToTempFile(privateKey)
 		log.Printf("unable to write private host key file: %s", err)
@@ -414,7 +415,7 @@ func main() {
 			gomotePublicKey:   string(publicKey),
 			sshPrivateKeyFile: privateHostKeyFile,
 		}
-		return remote.NewSSHServer(*sshAddr, privateKey, sshHandlers.handleIncomingSSHPostAuth, recordSSHPublicKeyAuthHandler(handleSSHPublicKeyAuth))
+		return remote.NewSSHServer(*sshAddr, privateKey, sshCA, sshHandlers.handleIncomingSSHPostAuth, sp)
 	}
 	sshServ, err := configureSSHServer()
 	if err != nil {

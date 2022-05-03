@@ -10,8 +10,11 @@ import (
 	"testing"
 	"time"
 
+	gssh "github.com/gliderlabs/ssh"
 	"github.com/google/go-cmp/cmp"
+	"golang.org/x/build/buildlet"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/net/nettest"
 )
 
 func TestSignPublicSSHKey(t *testing.T) {
@@ -38,6 +41,216 @@ func TestSignPublicSSHKey(t *testing.T) {
 	if diff := cmp.Diff(pubKeyCert.SignatureKey.Marshal(), signer.PublicKey().Marshal()); diff != "" {
 		t.Fatalf("Public Keys mismatch (-want +got):\n%s", diff)
 	}
+}
+
+func TestHandleCertificateAuthFunc(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	addr, sp, s := setupSSHServer(t, ctx)
+	defer s.Close()
+
+	ownerID := "accounts.google.com:userIDvalue"
+	sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", &buildlet.FakeClient{})
+	certSigner := parsePrivateKey(t, []byte(devCertCAPrivate))
+	clientPubKey, err := SignPublicSSHKey(ctx, certSigner, []byte(devCertClientPublic), sessionID, ownerID, time.Minute)
+	if err != nil {
+		t.Fatalf("SignPublicSSHKey(...) = _, %s; want no error", err)
+	}
+	pubKey, _, _, _, err := ssh.ParseAuthorizedKey(clientPubKey)
+	if err != nil {
+		t.Fatalf("ParsePublicKey(...) = _, %s; want no error", err)
+	}
+	cert := pubKey.(*ssh.Certificate)
+	clientCertSigner := parsePrivateKey(t, []byte(devCertClientPrivate))
+	clientSigner, err := ssh.NewCertSigner(cert, clientCertSigner)
+	if err != nil {
+		t.Fatalf("NewCertSigner(...) = _, %s; want no error", err)
+	}
+	clientConfig := &ssh.ClientConfig{
+		User: sessionID,
+		Auth: []ssh.AuthMethod{
+			ssh.PublicKeys(clientSigner),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         5 * time.Second,
+	}
+	client, err := ssh.Dial("tcp", addr, clientConfig)
+	if err != nil {
+		t.Fatalf("Dial(...) = _, %s; want no error", err)
+	}
+	client.Close()
+}
+
+func TestHandleCertificateAuthFuncErrors(t *testing.T) {
+	t.Run("no certificate", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		addr, sp, s := setupSSHServer(t, ctx)
+		defer s.Close()
+
+		ownerID := "accounts.google.com:userIDvalue"
+		sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", &buildlet.FakeClient{})
+		clientSigner := parsePrivateKey(t, []byte(devCertClientPrivate))
+		clientConfig := &ssh.ClientConfig{
+			User: sessionID,
+			Auth: []ssh.AuthMethod{
+				ssh.PublicKeys(clientSigner),
+			},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			Timeout:         5 * time.Second,
+		}
+		_, err := ssh.Dial("tcp", addr, clientConfig)
+		if err == nil {
+			t.Fatal("Dial(...) = client, nil; want error")
+		}
+	})
+
+	t.Run("wrong certificate signer", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		addr, sp, s := setupSSHServer(t, ctx)
+		defer s.Close()
+
+		ownerID := "accounts.google.com:userIDvalue"
+		sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", &buildlet.FakeClient{})
+		certSigner := parsePrivateKey(t, []byte(devCertAlternateClientPrivate))
+		clientPubKey, err := SignPublicSSHKey(ctx, certSigner, []byte(devCertClientPublic), sessionID, ownerID, time.Minute)
+		if err != nil {
+			t.Fatalf("SignPublicSSHKey(...) = _, %s; want no error", err)
+		}
+		pubKey, _, _, _, err := ssh.ParseAuthorizedKey(clientPubKey)
+		if err != nil {
+			t.Fatalf("ParsePublicKey(...) = _, %s; want no error", err)
+		}
+		cert := pubKey.(*ssh.Certificate)
+		clientCertSigner := parsePrivateKey(t, []byte(devCertClientPrivate))
+		clientSigner, err := ssh.NewCertSigner(cert, clientCertSigner)
+		if err != nil {
+			t.Fatalf("NewCertSigner(...) = _, %s; want no error", err)
+		}
+		clientConfig := &ssh.ClientConfig{
+			User: sessionID,
+			Auth: []ssh.AuthMethod{
+				ssh.PublicKeys(clientSigner),
+			},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			Timeout:         5 * time.Second,
+		}
+		_, err = ssh.Dial("tcp", addr, clientConfig)
+		if err == nil {
+			t.Fatalf("Dial(...) = _, %s; want no error", err)
+		}
+	})
+
+	t.Run("wrong user", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		addr, sp, s := setupSSHServer(t, ctx)
+		defer s.Close()
+
+		ownerID := "accounts.google.com:userIDvalue"
+		sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", &buildlet.FakeClient{})
+		certSigner := parsePrivateKey(t, []byte(devCertCAPrivate))
+		clientPubKey, err := SignPublicSSHKey(ctx, certSigner, []byte(devCertClientPublic), sessionID, ownerID, time.Minute)
+		if err != nil {
+			t.Fatalf("SignPublicSSHKey(...) = _, %s; want no error", err)
+		}
+		pubKey, _, _, _, err := ssh.ParseAuthorizedKey(clientPubKey)
+		if err != nil {
+			t.Fatalf("ParsePublicKey(...) = _, %s; want no error", err)
+		}
+		cert := pubKey.(*ssh.Certificate)
+		clientCertSigner := parsePrivateKey(t, []byte(devCertClientPrivate))
+		clientSigner, err := ssh.NewCertSigner(cert, clientCertSigner)
+		if err != nil {
+			t.Fatalf("NewCertSigner(...) = _, %s; want no error", err)
+		}
+		clientConfig := &ssh.ClientConfig{
+			User: sessionID + "_i_do_not_exist",
+			Auth: []ssh.AuthMethod{
+				ssh.PublicKeys(clientSigner),
+			},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			Timeout:         5 * time.Second,
+		}
+		_, err = ssh.Dial("tcp", addr, clientConfig)
+		if err == nil {
+			t.Fatal("Dial(...) = _, nil; want error")
+		}
+	})
+
+	t.Run("wrong principle", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		addr, sp, s := setupSSHServer(t, ctx)
+		defer s.Close()
+
+		ownerID := "accounts.google.com:userIDvalue"
+		sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", &buildlet.FakeClient{})
+		certSigner := parsePrivateKey(t, []byte(devCertCAPrivate))
+		clientPubKey, err := SignPublicSSHKey(ctx, certSigner, []byte(devCertClientPublic), sessionID+"WRONG", ownerID, time.Minute)
+		if err != nil {
+			t.Fatalf("SignPublicSSHKey(...) = _, %s; want no error", err)
+		}
+		pubKey, _, _, _, err := ssh.ParseAuthorizedKey(clientPubKey)
+		if err != nil {
+			t.Fatalf("ParsePublicKey(...) = _, %s; want no error", err)
+		}
+		cert := pubKey.(*ssh.Certificate)
+		clientCertSigner := parsePrivateKey(t, []byte(devCertClientPrivate))
+		clientSigner, err := ssh.NewCertSigner(cert, clientCertSigner)
+		if err != nil {
+			t.Fatalf("NewCertSigner(...) = _, %s; want no error", err)
+		}
+		clientConfig := &ssh.ClientConfig{
+			User: sessionID,
+			Auth: []ssh.AuthMethod{
+				ssh.PublicKeys(clientSigner),
+			},
+			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+			Timeout:         5 * time.Second,
+		}
+		_, err = ssh.Dial("tcp", addr, clientConfig)
+		if err == nil {
+			t.Fatal("Dial(...) = _, nil; want error")
+		}
+	})
+
+}
+
+func setupSSHServer(t *testing.T, ctx context.Context) (addr string, sp *SessionPool, s *SSHServer) {
+	sp = NewSessionPool(ctx)
+	l, err := nettest.NewLocalListener("tcp")
+	if err != nil {
+		t.Fatalf("nettest.NewLocalListener(tcp) = _, %s; want no error", err)
+	}
+	addr = l.Addr().String()
+	h := func(ses gssh.Session) {
+		t.Logf("look at my session=%+v", ses)
+		return
+	}
+	s, err = NewSSHServer(addr, []byte(devCertAlternateClientPrivate), []byte(devCertCAPrivate), h, sp)
+	if err != nil {
+		t.Fatalf("NewSSHServer(...) = %s; want no error", err)
+	}
+	go s.serve(l)
+	if err != nil {
+		t.Fatalf("server.serve(l) = %s; want no error", err)
+	}
+	return
+}
+
+func parsePrivateKey(t *testing.T, pemEncoded []byte) ssh.Signer {
+	cert, err := ssh.ParsePrivateKey(pemEncoded)
+	if err != nil {
+		t.Fatalf("ssh.ParsePrivateKey() = _, %s; want no error", err)
+	}
+	return cert
 }
 
 const (

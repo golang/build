@@ -11,7 +11,6 @@
 package main // import "golang.org/x/build/cmd/coordinator"
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -37,9 +36,9 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool"
+	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/internal/envutil"
-	"golang.org/x/build/internal/gophers"
 	"golang.org/x/build/types"
 )
 
@@ -497,27 +496,6 @@ func requireBuildletProxyAuth(h http.Handler) http.Handler {
 	})
 }
 
-func handleSSHPublicKeyAuth(ctx ssh.Context, key ssh.PublicKey) bool {
-	inst := ctx.User() // expected to be of form "user-USER-goos-goarch-etc"
-	user := userFromGomoteInstanceName(inst)
-	if user == "" {
-		return false
-	}
-	// Map the gomote username to the github username, and use the
-	// github user's public ssh keys for authentication. This is
-	// mostly of laziness and pragmatism, not wanting to invent or
-	// maintain a new auth mechanism or password/key registry.
-	githubUser := gophers.GitHubOfGomoteUser(user)
-	keys := githubPublicKeys(githubUser)
-	for _, authKey := range keys {
-		if ssh.KeysEqual(key, authKey.PublicKey) {
-			log.Printf("for instance %q, github user %q key matched: %s", inst, githubUser, authKey.AuthorizedLine)
-			return true
-		}
-	}
-	return false
-}
-
 type sshHandlers struct {
 	gomotePublicKey   string
 	sshPrivateKeyFile string
@@ -525,7 +503,7 @@ type sshHandlers struct {
 
 func (ah *sshHandlers) handleIncomingSSHPostAuth(s ssh.Session) {
 	inst := s.User()
-	user := userFromGomoteInstanceName(inst)
+	user := remote.UserFromGomoteInstanceName(inst)
 
 	requestedMutable := strings.HasPrefix(inst, "mutable-")
 	if requestedMutable {
@@ -689,74 +667,4 @@ func (ah *sshHandlers) handleIncomingSSHPostAuth(s ssh.Session) {
 func setWinsize(f *os.File, w, h int) {
 	syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), uintptr(syscall.TIOCSWINSZ),
 		uintptr(unsafe.Pointer(&struct{ h, w, x, y uint16 }{uint16(h), uint16(w), 0, 0})))
-}
-
-// userFromGomoteInstanceName returns the username part of a gomote
-// remote instance name.
-//
-// The instance name is of two forms. The normal form is:
-//
-//	user-bradfitz-linux-amd64-0
-//
-// The overloaded form to convey that the user accepts responsibility
-// for changes to the underlying host is to prefix the same instance
-// name with the string "mutable-", such as:
-//
-//	mutable-user-bradfitz-darwin-amd64-10_8-0
-//
-// The mutable part is ignored by this function.
-func userFromGomoteInstanceName(name string) string {
-	name = strings.TrimPrefix(name, "mutable-")
-	if !strings.HasPrefix(name, "user-") {
-		return ""
-	}
-	user := name[len("user-"):]
-	hyphen := strings.IndexByte(user, '-')
-	if hyphen == -1 {
-		return ""
-	}
-	return user[:hyphen]
-}
-
-// authorizedKey is a Github user's SSH authorized key, in both string and parsed format.
-type authorizedKey struct {
-	AuthorizedLine string // e.g. "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILj8HGIG9NsT34PHxO8IBq0riSBv7snp30JM8AanBGoV"
-	PublicKey      ssh.PublicKey
-}
-
-func githubPublicKeys(user string) []authorizedKey {
-	// TODO: caching, rate limiting.
-	req, err := http.NewRequest("GET", "https://github.com/"+user+".keys", nil)
-	if err != nil {
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	req = req.WithContext(ctx)
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Printf("getting %s github keys: %v", user, err)
-		return nil
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return nil
-	}
-	var keys []authorizedKey
-	bs := bufio.NewScanner(res.Body)
-	for bs.Scan() {
-		key, _, _, _, err := ssh.ParseAuthorizedKey(bs.Bytes())
-		if err != nil {
-			log.Printf("parsing github user %q key %q: %v", user, bs.Text(), err)
-			continue
-		}
-		keys = append(keys, authorizedKey{
-			PublicKey:      key,
-			AuthorizedLine: strings.TrimSpace(bs.Text()),
-		})
-	}
-	if err := bs.Err(); err != nil {
-		return nil
-	}
-	return keys
 }
