@@ -189,14 +189,13 @@ func getGerritClient(ctx context.Context, sc *secret.Client) (*gerrit.Client, er
 	return c, nil
 }
 
-func getMaintnerClient() (apipb.MaintnerServiceClient, error) {
-	opts := []grpc.DialOption{
-		grpc.WithBlock(),
-		grpc.WithTimeout(10 * time.Second),
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{NextProtos: []string{"h2"}})),
-	}
+func getMaintnerClient(ctx context.Context) (apipb.MaintnerServiceClient, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	mServer := "maintner.golang.org:443"
-	cc, err := grpc.Dial(mServer, opts...)
+	cc, err := grpc.DialContext(ctx, mServer,
+		grpc.WithBlock(),
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{NextProtos: []string{"h2"}})))
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +238,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	mc, err := getMaintnerClient()
+	mc, err := getMaintnerClient(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}
