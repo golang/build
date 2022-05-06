@@ -55,6 +55,30 @@ func (h *DefinitionHolder) Definitions() map[string]*workflow.Definition {
 	return defs
 }
 
+// RegisterMailDLCLDefinition registers a workflow definition for mailing a golang.org/dl CL
+// onto h, using e for the external service configuration.
+func RegisterMailDLCLDefinition(h *DefinitionHolder, e task.ExternalConfig) {
+	versions := workflow.Parameter{
+		Name:          "Versions",
+		ParameterType: workflow.SliceShort,
+		Doc: `Versions are the Go versions that have been released.
+
+The versions must use the same format as Go tags,
+and the list must contain one or two versions.
+
+For example:
+• "go1.18.2" and "go1.17.10" for a minor Go release
+• "go1.19" for a major Go release
+• "go1.19beta1" or "go1.19rc1" for a pre-release`,
+	}
+
+	wd := workflow.New()
+	wd.Output("ChangeURL", wd.Task("mail-dl-cl", func(ctx *workflow.TaskContext, versions []string) (string, error) {
+		return task.MailDLCL(ctx, versions, e)
+	}, wd.Parameter(versions)))
+	h.RegisterDefinition("mail-dl-cl", wd)
+}
+
 // RegisterTweetDefinitions registers workflow definitions involving tweeting
 // onto h, using e for the external service configuration.
 func RegisterTweetDefinitions(h *DefinitionHolder, e task.ExternalConfig) {

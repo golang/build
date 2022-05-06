@@ -28,6 +28,7 @@ spec:
             # Define the site header and external service configuration.
             - "--site-title=Go Releases"
             - "--site-header-css=Site-header--production"
+            - "--gerrit-api-secret=secret:symbolic-datum-552/gobot-password"
             - "--twitter-api-secret=secret:symbolic-datum-552/twitter-api-secret"
           ports:
             - containerPort: 444

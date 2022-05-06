@@ -12,6 +12,7 @@ import (
 	"net/url"
 
 	"github.com/jackc/pgx/v4/pgxpool"
+	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/relui"
 	"golang.org/x/build/internal/secret"
@@ -32,6 +33,7 @@ func main() {
 	if err := secret.InitFlagSupport(context.Background()); err != nil {
 		log.Fatalln(err)
 	}
+	gerritAPIFlag := secret.Flag("gerrit-api-secret", "Gerrit API secret to use for workflows that interact with Gerrit.")
 	var twitterAPI secret.TwitterCredentials
 	secret.JSONVarFlag(&twitterAPI, "twitter-api-secret", "Twitter API secret to use for workflows involving tweeting.")
 	https.RegisterFlags(flag.CommandLine)
@@ -61,12 +63,17 @@ func main() {
 			CSSClass: *siteHeaderCSS,
 		}
 		extCfg = task.ExternalConfig{
+			GerritAPI: struct {
+				URL  string
+				Auth gerrit.Auth
+			}{"https://go-review.googlesource.com", gerrit.BasicAuth("git-gobot.golang.org", *gerritAPIFlag)},
 			// TODO(go.dev/issue/51150): When twitter client creation is factored out from task package, update code here.
 			TwitterAPI: twitterAPI,
 		}
 	)
 
 	dh := relui.NewDefinitionHolder()
+	relui.RegisterMailDLCLDefinition(dh, extCfg)
 	relui.RegisterTweetDefinitions(dh, extCfg)
 	db, err := pgxpool.Connect(ctx, *pgConnect)
 	if err != nil {
