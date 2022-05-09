@@ -132,8 +132,8 @@ $dep_dir = "C:\godep"
 $gcc32_tar = "$dep_dir\gcc32.tar.gz"
 $gcc64_tar = "$dep_dir\gcc64.tar.gz"
 mkdir $dep_dir
-Get-FileFromUrl -URL "https://storage.googleapis.com/go-builder-data/gcc5-1-tdm32.tar.gz" -Output "$gcc32_tar"
-Get-FileFromUrl -URL "https://storage.googleapis.com/go-builder-data/gcc5-1-tdm64.tar.gz" -Output "$gcc64_tar"
+Get-FileFromUrl -URL "https://storage.googleapis.com/go-builder-data/llvm-mingw-20220323-msvcrt-i686.tar.gz" -Output "$gcc32_tar"
+Get-FileFromUrl -URL "https://storage.googleapis.com/go-builder-data/llvm-mingw-20220323-msvcrt-x86_64.tar.gz" -Output "$gcc64_tar"
 
 Write-Host "extracting GCC"
 $extract32_args=@("--untar-file=$gcc32_tar", "--untar-dest-dir=$dep_dir")
