@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/coordinator/schedule"
 )
 
@@ -77,6 +78,7 @@ func TestHandleStatus_HealthFormatting(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/", nil)
+	setSessionPool(remote.NewSessionPool(ctx))
 	handleStatus(rec, req)
 	const pre = "<h2 id=health>Health"
 	const suf = "<h2 id=trybots>Active Trybot Runs"

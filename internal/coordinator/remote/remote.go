@@ -24,12 +24,12 @@ const (
 // Session stores the metadata for a remote buildlet Session.
 type Session struct {
 	BuilderType string // default builder config to use if not overwritten
+	Created     time.Time
 	Expires     time.Time
 	HostType    string
 	ID          string // unique identifier for instance "user-bradfitz-linux-amd64-0"
 	OwnerID     string // identity aware proxy user id: "accounts.google.com:userIDvalue"
 	buildlet    buildlet.Client
-	created     time.Time
 }
 
 // renew extends the expiration timestamp for a session.
@@ -85,7 +85,7 @@ func (sp *SessionPool) AddSession(ownerID, username, builderType, hostType strin
 			sp.m[name] = &Session{
 				BuilderType: builderType,
 				buildlet:    bc,
-				created:     now,
+				Created:     now,
 				Expires:     now.Add(remoteBuildletIdleTimeout),
 				HostType:    hostType,
 				ID:          name,
@@ -167,6 +167,7 @@ func (sp *SessionPool) List() []*Session {
 			HostType:    s.HostType,
 			ID:          s.ID,
 			OwnerID:     s.OwnerID,
+			Created:     s.Created,
 		})
 	}
 	sort.Slice(ss, func(i, j int) bool { return ss[i].ID < ss[j].ID })

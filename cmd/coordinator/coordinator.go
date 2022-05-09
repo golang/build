@@ -361,6 +361,7 @@ func main() {
 	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
 	sp := remote.NewSessionPool(context.Background())
+	setSessionPool(sp)
 	gomoteServer := gomote.New(sp, sched, sshCA, gomoteBucket, mustStorageClient())
 	protos.RegisterCoordinatorServer(grpcServer, gs)
 	gomoteprotos.RegisterGomoteServiceServer(grpcServer, gomoteServer)

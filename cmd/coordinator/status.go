@@ -36,6 +36,7 @@ import (
 	"golang.org/x/build/cmd/coordinator/internal"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool"
+	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/kubernetes/api"
@@ -688,6 +689,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	gce := pool.NewGCEConfiguration()
 	data.RemoteBuildlets = template.HTML(remoteBuildletStatus())
+	data.GomoteInstances = remoteSessionStatus()
 
 	sort.Sort(byAge(data.Active))
 	sort.Sort(byAge(data.Pending))
@@ -784,6 +786,7 @@ type statusData struct {
 	KubePoolStatus    template.HTML // TODO: embed template
 	ReversePoolStatus template.HTML // TODO: embed template
 	RemoteBuildlets   template.HTML
+	GomoteInstances   template.HTML
 	SchedState        schedule.SchedulerState
 	DiskFree          string
 	Version           string
@@ -825,6 +828,9 @@ var statusTmpl = template.Must(template.New("status").Parse(`
 
 <h2 id=remote>Remote buildlets <a href='#remote'>¶</a></h2>
 {{.RemoteBuildlets}}
+
+<h2 id=gomote>Gomote Remote buildlets <a href='#gomote'>¶</a></h2>
+{{.GomoteInstances}}
 
 <h2 id=trybots>Active Trybot Runs <a href='#trybots'>¶</a></h2>
 {{- if .TrybotsErr}}
@@ -899,4 +905,29 @@ func loadStatic() error {
 
 func handleStyleCSS(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "style.css", processStartTime, bytes.NewReader(styleCSS))
+}
+
+// statusSessionPool to be used exclusively in the status file.
+var statusSessionPool *remote.SessionPool
+
+// setSessionPool sets the session pool for use in the status file.
+func setSessionPool(sp *remote.SessionPool) {
+	statusSessionPool = sp
+}
+
+// remoteSessionStatus creates the status HTML for the sessions in the session pool.
+func remoteSessionStatus() template.HTML {
+	sessions := statusSessionPool.List()
+	if len(sessions) == 0 {
+		return "<i>(none)</i>"
+	}
+	var buf bytes.Buffer
+	buf.WriteString("<ul>")
+	for _, s := range sessions {
+		fmt.Fprintf(&buf, "<li><b>%s</b>, created %v ago, expires in %v</li>\n",
+			html.EscapeString(s.ID),
+			time.Since(s.Created), time.Until(s.Expires))
+	}
+	buf.WriteString("</ul>")
+	return template.HTML(buf.String())
 }
