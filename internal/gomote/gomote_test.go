@@ -12,6 +12,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -788,9 +790,13 @@ func TestWriteFileFromURL(t *testing.T) {
 	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
 	client := setupGomoteTest(t, context.Background())
 	gomoteID := mustCreateInstance(t, client, fakeIAP())
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "Go is an open source programming language")
+	}))
+	defer ts.Close()
 	if _, err := client.WriteFileFromURL(ctx, &protos.WriteFileFromURLRequest{
 		GomoteId: gomoteID,
-		Url:      `https://go.dev/dl/go1.17.6.linux-amd64.tar.gz`,
+		Url:      ts.URL,
 		Filename: "foo",
 		Mode:     0777,
 	}); err != nil {

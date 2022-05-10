@@ -478,7 +478,7 @@ func (s *Server) WriteFileFromURL(ctx context.Context, req *protos.WriteFileFrom
 			return nil, status.Errorf(codes.Aborted, "failed to get file from URL: %s", err)
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, status.Errorf(codes.Aborted, "unable to get file from URL: response code: %d", resp.StatusCode)
+			return nil, status.Errorf(codes.Aborted, "unable to get file from %q: response code: %d", req.GetUrl(), resp.StatusCode)
 		}
 		rc = resp.Body
 	}
