@@ -162,7 +162,7 @@ func registerCommands() {
 	registerCommand("rdp", "RDP (Remote Desktop Protocol) to a Windows buildlet", rdp)
 	registerCommand("rm", "delete files or directories", rm)
 	registerCommand("run", "run a command on a buildlet", legacyRun)
-	registerCommand("ssh", "ssh to a buildlet", ssh)
+	registerCommand("ssh", "ssh to a buildlet", legacySSH)
 	registerCommand("v2", "version 2 of the gomote commands", version2)
 }
 
@@ -222,6 +222,7 @@ func version2(args []string) error {
 		"ls":      ls,
 		"run":     run,
 		"ping":    ping,
+		"ssh":     ssh,
 	}
 	if len(args) == 0 {
 		usage()
