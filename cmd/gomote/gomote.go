@@ -160,7 +160,7 @@ func registerCommands() {
 	registerCommand("put14", "put Go 1.4 in place", put14)
 	registerCommand("puttar", "extract a tar.gz to a buildlet", putTar)
 	registerCommand("rdp", "RDP (Remote Desktop Protocol) to a Windows buildlet", rdp)
-	registerCommand("rm", "delete files or directories", rm)
+	registerCommand("rm", "delete files or directories", legacyRm)
 	registerCommand("run", "run a command on a buildlet", legacyRun)
 	registerCommand("ssh", "ssh to a buildlet", legacySSH)
 	registerCommand("v2", "version 2 of the gomote commands", version2)
@@ -223,6 +223,7 @@ func version2(args []string) error {
 		"run":     run,
 		"ping":    ping,
 		"ssh":     ssh,
+		"rm":      rm,
 	}
 	if len(args) == 0 {
 		usage()
