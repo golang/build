@@ -156,7 +156,7 @@ func registerCommands() {
 	registerCommand("list", "list active buildlets", legacyList)
 	registerCommand("ping", "test whether a buildlet is alive and reachable ", ping)
 	registerCommand("push", "sync your GOROOT directory to the buildlet", push)
-	registerCommand("put", "put files on a buildlet", put)
+	registerCommand("put", "put files on a buildlet", legacyPut)
 	registerCommand("put14", "put Go 1.4 in place", put14)
 	registerCommand("puttar", "extract a tar.gz to a buildlet", putTar)
 	registerCommand("rdp", "RDP (Remote Desktop Protocol) to a Windows buildlet", rdp)
@@ -225,6 +225,7 @@ func version2(args []string) error {
 		"ssh":     ssh,
 		"rm":      rm,
 		"gettar":  getTar,
+		"put":     put,
 	}
 	if len(args) == 0 {
 		usage()

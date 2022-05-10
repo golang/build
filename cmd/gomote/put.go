@@ -6,16 +6,20 @@ package main
 
 import (
 	"archive/tar"
+	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"mime/multipart"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/tarutil"
 )
 
@@ -115,8 +119,8 @@ func put14(args []string) error {
 	return bc.PutTarFromURL(ctx, u, "go1.4")
 }
 
-// put single file
-func put(args []string) error {
+// legacyPut single file
+func legacyPut(args []string) error {
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "put usage: gomote put [put-opts] <buildlet-name> <source or '-' for stdin> [destination]")
@@ -175,4 +179,108 @@ func put(args []string) error {
 
 	ctx := context.Background()
 	return bc.Put(ctx, r, dest, mode)
+}
+
+// put single file
+func put(args []string) error {
+	fs := flag.NewFlagSet("put", flag.ContinueOnError)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "put usage: gomote put [put-opts] <buildlet-name> <source or '-' for stdin> [destination]")
+		fs.PrintDefaults()
+		os.Exit(1)
+	}
+	modeStr := fs.String("mode", "", "Unix file mode (octal); default to source file mode")
+	fs.Parse(args)
+	if n := fs.NArg(); n < 2 || n > 3 {
+		fs.Usage()
+	}
+
+	var r io.Reader = os.Stdin
+	var mode os.FileMode = 0666
+
+	src := fs.Arg(1)
+	if src != "-" {
+		f, err := os.Open(src)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		r = f
+
+		if *modeStr == "" {
+			fi, err := f.Stat()
+			if err != nil {
+				return err
+			}
+			mode = fi.Mode()
+		}
+	}
+	if *modeStr != "" {
+		modeInt, err := strconv.ParseInt(*modeStr, 8, 64)
+		if err != nil {
+			return err
+		}
+		mode = os.FileMode(modeInt)
+		if !mode.IsRegular() {
+			return fmt.Errorf("bad mode: %v", mode)
+		}
+	}
+	dest := fs.Arg(2)
+	if dest == "" {
+		if src == "-" {
+			return errors.New("must specify destination file name when source is standard input")
+		}
+		dest = filepath.Base(src)
+	}
+	ctx := context.Background()
+	client := gomoteServerClient(ctx)
+	resp, err := client.UploadFile(ctx, &protos.UploadFileRequest{})
+	if err != nil {
+		return fmt.Errorf("unable to request credentials for a file upload: %s", statusFromError(err))
+	}
+	err = uploadToGCS(ctx, resp.GetFields(), r, dest, resp.GetUrl())
+	if err != nil {
+		return fmt.Errorf("unable to upload file to GCS: %s", err)
+	}
+	name := fs.Arg(0)
+	_, err = client.WriteFileFromURL(ctx, &protos.WriteFileFromURLRequest{
+		GomoteId: name,
+		Url:      fmt.Sprintf("%s%s", resp.GetUrl(), resp.GetObjectName()),
+		Filename: dest,
+		Mode:     uint32(mode),
+	})
+	if err != nil {
+		return fmt.Errorf("unable to write the file from URL: %s", statusFromError(err))
+	}
+	return nil
+}
+
+func uploadToGCS(ctx context.Context, fields map[string]string, file io.Reader, filename, url string) error {
+	buf := new(bytes.Buffer)
+	mw := multipart.NewWriter(buf)
+
+	for k, v := range fields {
+		if err := mw.WriteField(k, v); err != nil {
+			return fmt.Errorf("unable to write field: %s", err)
+		}
+	}
+	_, err := mw.CreateFormFile("file", filename)
+	if err != nil {
+		return fmt.Errorf("unable to create form file: %s", err)
+	}
+	// Write our own boundary to avoid buffering entire file into the multipart Writer
+	bound := fmt.Sprintf("\r\n--%s--\r\n", mw.Boundary())
+	req, err := http.NewRequestWithContext(ctx, "POST", url, io.NopCloser(io.MultiReader(buf, file, strings.NewReader(bound))))
+	if err != nil {
+		return fmt.Errorf("unable to create request: %s", err)
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("http request failed: %s", err)
+	}
+	if res.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("http post failed: status code=%d", res.StatusCode)
+	}
+	return nil
 }
