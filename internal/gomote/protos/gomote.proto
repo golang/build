@@ -210,6 +210,8 @@ message UploadFileResponse {
   string url = 1;
   // Form fields used when http posting files to GCS.
   map<string, string> fields = 2;
+  // Name used to reference the object.
+  string object_name = 3;
 }
 
 // WriteFileFromURLRequest specifies the data needed to request that a gomote download the contents of a URL and place

@@ -401,14 +401,16 @@ func (s *Server) UploadFile(ctx context.Context, req *protos.UploadFileRequest) 
 	if err != nil {
 		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
 	}
-	url, fields, err := s.signURLForUpload(uuid.NewString())
+	objectName := uuid.NewString()
+	url, fields, err := s.signURLForUpload(objectName)
 	if err != nil {
 		log.Printf("unable to create signed URL: %s", err)
 		return nil, status.Errorf(codes.Internal, "unable to create signed url")
 	}
 	return &protos.UploadFileResponse{
-		Url:    url,
-		Fields: fields,
+		Url:        url,
+		Fields:     fields,
+		ObjectName: objectName,
 	}, nil
 }
 
