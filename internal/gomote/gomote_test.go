@@ -941,12 +941,6 @@ func TestWriteTGZFromURLError(t *testing.T) {
 			url:        "go.dev/dl/1_14.tar.gz",
 			wantCode:   codes.PermissionDenied,
 		},
-		{
-			desc:     "invalid gomote staging bucket URL",
-			ctx:      access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
-			url:      fmt.Sprintf("https://storage.googleapis.com/%s/go1.17.6.linux-amd64.tar.gz", testBucketName),
-			wantCode: codes.InvalidArgument,
-		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -979,22 +973,22 @@ func TestIsPrivilegedUser(t *testing.T) {
 }
 
 func TestObjectFromURL(t *testing.T) {
-	url := `https://storage.googleapis.com/example-bucket/cat.jpeg?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=example...`
+	url := `https://storage.googleapis.com/example-bucket/cat.jpeg`
 	bucket := "example-bucket"
 	wantObject := "cat.jpeg"
 	object, err := objectFromURL(bucket, url)
 	if err != nil {
-		t.Fatalf("urlToBucketObject(url) = %q, %s; want %q, no error", object, err, wantObject)
+		t.Fatalf("urlToBucketObject(%q) = %q, %s; want %q, no error", url, object, err, wantObject)
 	}
 	if object != wantObject {
-		t.Fatalf("urlToBucketObject(url) = %q; want %q", object, wantObject)
+		t.Fatalf("urlToBucketObject(%q) = %q; want %q", url, object, wantObject)
 	}
 }
 
 func TestObjectFromURLError(t *testing.T) {
 	bucket := "example-bucket"
 	object := "cat.jpeg"
-	url := fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, object)
+	url := fmt.Sprintf("https://bunker.googleapis.com/%s/%s", bucket, object)
 	got, err := objectFromURL(bucket, url)
 	if err == nil {
 		t.Fatalf("urlToBucketObject(url) = %q, nil; want \"\", error", got)

@@ -100,6 +100,8 @@ message ExecuteCommandRequest {
   string directory = 7;
   // The arguments to pass to the command.
   repeated string args = 8;
+  // Optional alternate builder to act like. It must be a compatible builder.
+  string imitate_host_type = 9;
 }
 
 // ExecuteCommandResponse contains data about the executed command.

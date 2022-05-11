@@ -26,6 +26,7 @@ import (
 	"golang.org/x/build/internal/access"
 	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/coordinator/schedule"
+	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/types"
 	"golang.org/x/crypto/ssh"
@@ -265,10 +266,18 @@ func (s *Server) ExecuteCommand(req *protos.ExecuteCommandRequest, stream protos
 	if err != nil {
 		return status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
 	}
-	_, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
+	ses, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
 	if err != nil {
 		// the helper function returns meaningful GRPC error.
 		return err
+	}
+	builderType := req.GetImitateHostType()
+	if builderType == "" {
+		builderType = ses.BuilderType
+	}
+	conf, ok := dashboard.Builders[builderType]
+	if !ok {
+		return status.Errorf(codes.Internal, "unable to retrieve configuration for instance")
 	}
 	remoteErr, execErr := bc.Exec(stream.Context(), req.GetCommand(), buildlet.ExecOpts{
 		Dir:         req.GetCommand(),
@@ -283,7 +292,7 @@ func (s *Server) ExecuteCommand(req *protos.ExecuteCommandRequest, stream protos
 			return len(p), nil
 		}},
 		Args:     req.GetArgs(),
-		ExtraEnv: req.GetAppendEnvironment(),
+		ExtraEnv: envutil.Dedup(conf.GOOS(), append(conf.Env(), req.GetAppendEnvironment()...)),
 		Debug:    req.GetDebug(),
 		Path:     req.GetPath(),
 	})
@@ -585,10 +594,6 @@ func objectFromURL(bucketName, url string) (string, error) {
 	if !onObjectStore(bucketName, url) {
 		return "", errors.New("URL not for gomote transfer bucket")
 	}
-	url = strings.TrimPrefix(url, fmt.Sprintf("https://storage.googleapis.com/%s/", bucketName))
-	pos := strings.Index(url, "?")
-	if pos == -1 {
-		return "", errors.New("invalid object store URL")
-	}
-	return url[:pos], nil
+	objectName := strings.TrimPrefix(url, fmt.Sprintf("https://storage.googleapis.com/%s/", bucketName))
+	return objectName, nil
 }
