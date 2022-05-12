@@ -677,7 +677,7 @@ func (c *client) DestroyVM(ts oauth2.TokenSource, proj, zone, instance string) e
 // A coordinator can use the provided information to decide what, if anything,
 // to do with a buildlet.
 type Status struct {
-	Version int // buildlet version, coordinator rejects any value less than 1.
+	Version int // buildlet version, coordinator rejects value that is too old (see minBuildletVersion).
 }
 
 // Status returns an Status value describing this buildlet.
