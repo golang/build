@@ -269,7 +269,7 @@ func (p *ReverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 	}()
 	p.mu.Unlock()
 
-	t := time.NewTimer(5 * time.Second) // give buildlets time to respond
+	t := time.NewTimer(20 * time.Second) // give buildlets time to respond
 	var err error
 	select {
 	case err = <-res:
