@@ -7,7 +7,6 @@ package gcsfs
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -48,7 +47,7 @@ func FromURL(ctx context.Context, client *storage.Client, base string) (fs.FS, e
 func Create(fsys fs.FS, name string) (WriteFile, error) {
 	cfs, ok := fsys.(CreateFS)
 	if !ok {
-		return nil, &fs.PathError{Op: "create", Path: name, Err: errors.New("not implemented")}
+		return nil, &fs.PathError{Op: "create", Path: name, Err: fmt.Errorf("not implemented on type %T", fsys)}
 	}
 	return cfs.Create(name)
 }
@@ -76,6 +75,7 @@ type gcsFS struct {
 
 var _ = fs.FS((*gcsFS)(nil))
 var _ = CreateFS((*gcsFS)(nil))
+var _ = fs.SubFS((*gcsFS)(nil))
 
 // NewFS creates a new fs.FS that uses ctx for all of its operations.
 // Creating a new FS does not access the network, so they can be created
@@ -116,6 +116,12 @@ func (fsys *gcsFS) Create(name string) (WriteFile, error) {
 		return nil, err
 	}
 	return f.(*GCSFile), nil
+}
+
+func (fsys *gcsFS) Sub(dir string) (fs.FS, error) {
+	copy := *fsys
+	copy.prefix = path.Join(fsys.prefix, dir)
+	return &copy, nil
 }
 
 // fstest likes to send us backslashes. Treat them as invalid.

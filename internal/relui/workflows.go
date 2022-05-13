@@ -436,7 +436,7 @@ func (tasks *BuildReleaseTasks) copyToStaging(ctx *workflow.TaskContext, version
 		} else {
 			staged.filename = version + "." + a.suffix
 		}
-		staged.stagingPath = path.Join(ctx.WorkflowID.String(), staged.filename)
+		staged.stagingPath = path.Join(version, staged.filename)
 		stagedArtifacts = append(stagedArtifacts, staged)
 
 		in, err := scratchFS.Open(a.scratchPath)
