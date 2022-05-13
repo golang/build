@@ -84,16 +84,14 @@ var (
 
 	// values created due to separating the buildlet pools into a separate package
 	gceMode             string
-	deleteTimeout       time.Duration
 	testFiles           map[string]string
 	basePinErr          *atomic.Value
 	isGCERemoteBuildlet IsRemoteBuildletFunc
 )
 
 // InitGCE initializes the GCE buildlet pool.
-func InitGCE(sc *secret.Client, vmDeleteTimeout time.Duration, tFiles map[string]string, basePin *atomic.Value, fn IsRemoteBuildletFunc, buildEnvName, mode string) error {
+func InitGCE(sc *secret.Client, tFiles map[string]string, basePin *atomic.Value, fn IsRemoteBuildletFunc, buildEnvName, mode string) error {
 	gceMode = mode
-	deleteTimeout = vmDeleteTimeout
 	testFiles = tFiles
 	basePinErr = basePin
 	isGCERemoteBuildlet = fn
@@ -417,7 +415,7 @@ func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logge
 
 	log.Printf("Creating GCE VM %q for %s at %s", instName, hostType, zone)
 	bc, err = buildlet.StartNewVM(gcpCreds, buildEnv, instName, hostType, buildlet.VMOpts{
-		DeleteIn: determineDeleteTimeout(hconf, deleteTimeout),
+		DeleteIn: determineDeleteTimeout(hconf),
 		OnInstanceRequested: func() {
 			log.Printf("GCE VM %q now booting", instName)
 		},

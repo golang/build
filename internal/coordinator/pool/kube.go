@@ -33,15 +33,6 @@ import (
 This file implements the Kubernetes-based buildlet pool.
 */
 
-const (
-	// podDeleteTimeout is how long before we delete a VM.
-	// In practice this need only be as long as the slowest
-	// builder (plan9 currently), because on startup this program
-	// already deletes all buildlets it doesn't know about
-	// (i.e. ones from a previous instance of the coordinator).
-	podDeleteTimeout = 45 * time.Minute
-)
-
 // Initialized by initKube:
 var (
 	buildletsKubeClient *kubernetes.Client // for "buildlets" cluster
@@ -270,7 +261,7 @@ func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg 
 		ProjectID:     NewGCEConfiguration().BuildEnv().ProjectName,
 		ImageRegistry: registryPrefix,
 		Description:   fmt.Sprintf("Go Builder for %s", hostType),
-		DeleteIn:      determineDeleteTimeout(hconf, podDeleteTimeout),
+		DeleteIn:      determineDeleteTimeout(hconf),
 		OnPodCreating: func() {
 			lg.LogEventTime("pod_creating")
 			p.setPodUsed(podName, true)
@@ -406,7 +397,7 @@ func (p *kubeBuildletPool) String() string {
 	return fmt.Sprintf("Kubernetes pool capacity: %d/%d", inUse, total)
 }
 
-// CleanUpOldPods loops forever and periodically enumerates pods
+// CleanUpOldPodsLoop loops forever and periodically enumerates pods
 // and deletes those which have expired.
 //
 // A Pod is considered expired if it has a "delete-at" metadata

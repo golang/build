@@ -59,6 +59,7 @@ func (c *EC2Client) StartNewVM(ctx context.Context, buildEnv *buildenv.Environme
 		opts.Description = fmt.Sprintf("Go Builder for %s", hostType)
 	}
 	if opts.DeleteIn == 0 {
+		// Note: This implements a short default in the rare case the caller doesn't care.
 		opts.DeleteIn = 30 * time.Minute
 	}
 

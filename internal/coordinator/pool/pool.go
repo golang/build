@@ -68,17 +68,40 @@ func instanceName(hostType string, length int) string {
 	return fmt.Sprintf("buildlet-%s-rn%s", strings.TrimPrefix(hostType, "host-"), randHex(length))
 }
 
-// determineDeleteTimeout determines the buildlet timeout duration with the
-// following priority:
+// determineDeleteTimeout reports the buildlet delete timeout duration
+// with the following priority:
 //
-// 1. Host type default from host config.
-// 2. Global default from 'timeout'.
-func determineDeleteTimeout(host *dashboard.HostConfig, timeout time.Duration) time.Duration {
-	if host.DeleteTimeout != 0 {
-		return host.DeleteTimeout
+// 1. Host type override from host config.
+// 2. Global default.
+func determineDeleteTimeout(host *dashboard.HostConfig) time.Duration {
+	if host.CustomDeleteTimeout != 0 {
+		return host.CustomDeleteTimeout
 	}
 
-	return timeout
+	// The value we return below is effectively a global default.
+	//
+	// The comment of CleanUpOldVMs (and CleanUpOldPodsLoop) includes:
+	//
+	//	This is the safety mechanism to delete VMs which stray from the
+	//	normal deleting process. VMs are created to run a single build and
+	//	should be shut down by a controlling process. Due to various types
+	//	of failures, they might get stranded. To prevent them from getting
+	//	stranded and wasting resources forever, we instead set the
+	//	"delete-at" metadata attribute on them when created to some time
+	//	that's well beyond their expected lifetime.
+	//
+	// Issue go.dev/issue/52929 tracks what to do about this global
+	// timeout in the long term. Unless something changes,
+	// it needs to be maintained manually so that it's always
+	// "well beyond their expected lifetime" of each builder that doesn't
+	// otherwise override this timeout—otherwise it'll cause even more
+	// resources to be used due the automatic (and unlimited) retrying
+	// as described in go.dev/issue/42699.
+	//
+	// A global timeout of 45 minutes was chosen in 2015.
+	// Longtest builders were added in 2018 started to reach 45 mins by 2021-2022.
+	// Try 2 hours next, which might last some years (depending on test volume and test speed).
+	return 2 * time.Hour
 }
 
 // isBuildlet checks the name string in order to determine if the name is for a buildlet.

@@ -237,7 +237,6 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
 		Notes:              "OpenBSD 6.8 (with 009_exit syspatch); GCE VM is built from script in build/env/openbsd-386",
 		SSHUsername:        "gopher",
-		DeleteTimeout:      60 * time.Minute, // See golang/go#49666.
 	},
 	"host-openbsd-amd64-70": &HostConfig{
 		VMImage:            "openbsd-amd64-70",
@@ -254,7 +253,6 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
 		Notes:              "OpenBSD 7.0; GCE VM is built from script in build/env/openbsd-386. n2-highcpu host.",
 		SSHUsername:        "gopher",
-		DeleteTimeout:      60 * time.Minute, // See golang/go#49666.
 	},
 	"host-openbsd-386-70-n2d": &HostConfig{
 		// This host config is only for the runtime team to use investigating golang/go#49209.
@@ -689,13 +687,13 @@ var Hosts = map[string]*HostConfig{
 		env:       []string{"GOROOT_BOOTSTRAP=/usr/lib/go"},
 	},
 	"host-linux-amd64-perf": &HostConfig{
-		Notes:           "Cascade Lake performance testing machines",
-		machineType:     "c2-standard-8", // C2 has precisely defined, consistent server architecture.
-		ContainerImage:  "linux-x86-bullseye:latest",
-		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		SSHUsername:     "root",
-		DeleteTimeout:   8 * time.Hour,
+		Notes:               "Cascade Lake performance testing machines",
+		machineType:         "c2-standard-8", // C2 has precisely defined, consistent server architecture.
+		ContainerImage:      "linux-x86-bullseye:latest",
+		buildletURLTmpl:     "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:                 []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:         "root",
+		CustomDeleteTimeout: 8 * time.Hour,
 	},
 }
 
@@ -786,8 +784,12 @@ type HostConfig struct {
 	// EC2 options
 	isEC2 bool // if true, the instance is configured to run on EC2
 
-	// GCE or EC2 options
-	DeleteTimeout time.Duration // Timeout after which the VM is destroyed. Zero duration uses global default.
+	// GCE or EC2 options:
+	//
+	// CustomDeleteTimeout is an optional custom timeout after which the VM is forcibly destroyed and the build is retried.
+	// Zero duration defers decision to internal/coordinator/pool package, which is enough for longtest post-submit builds.
+	// (This is generally an internal implementation detail, currently left behind only for the -perf builder.)
+	CustomDeleteTimeout time.Duration
 
 	// Reverse options
 	ExpectNum       int  // expected number of reverse buildlets of this type

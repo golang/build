@@ -578,6 +578,7 @@ func (f *fakeEC2BuildletClient) StartNewVM(ctx context.Context, buildEnv *builde
 		return nil, fmt.Errorf("invalid vmName: %q and hostType: %q", vmName, hostType)
 	}
 	if opts.DeleteIn == 0 {
+		// Note: This implements a short default in the rare case the caller doesn't care.
 		opts.DeleteIn = 30 * time.Minute
 	}
 	if !f.createVMRequestSuccess {

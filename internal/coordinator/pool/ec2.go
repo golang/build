@@ -64,13 +64,6 @@ type awsClient interface {
 // EC2Opt is optional configuration for the the buildlet.
 type EC2Opt func(*EC2Buildlet)
 
-// WithVMDeleteTimeout sets the VM deletion timeout for all EC2 VMs.
-func WithVMDeleteTimeout(timeout time.Duration) EC2Opt {
-	return func(eb *EC2Buildlet) {
-		eb.vmDeleteTimeout = timeout
-	}
-}
-
 // EC2Buildlet manages a pool of AWS EC2 buildlets.
 type EC2Buildlet struct {
 	// awsClient is the client used to interact with AWS services.
@@ -92,8 +85,6 @@ type EC2Buildlet struct {
 	ledger *ledger
 	// cancelPoll will signal to the pollers to discontinue polling.
 	cancelPoll context.CancelFunc
-	// vmDeleteTimeout contains the timeout used to determine if a VM should be deleted.
-	vmDeleteTimeout time.Duration
 	// pollWait waits for all pollers to terminate polling.
 	pollWait sync.WaitGroup
 }
@@ -121,7 +112,6 @@ func NewEC2Buildlet(client *cloud.AWSClient, buildEnv *buildenv.Environment, hos
 		hosts:            hosts,
 		isRemoteBuildlet: fn,
 		ledger:           newLedger(),
-		vmDeleteTimeout:  45 * time.Minute, // default VM delete timeout
 	}
 	for _, opt := range opts {
 		opt(b)
@@ -195,7 +185,7 @@ func (eb *EC2Buildlet) GetBuildlet(ctx context.Context, hostType string, lg Logg
 		Zone:     "", // allow the EC2 api pick an availability zone with capacity
 		TLS:      kp,
 		Meta:     make(map[string]string),
-		DeleteIn: determineDeleteTimeout(hconf, eb.vmDeleteTimeout),
+		DeleteIn: determineDeleteTimeout(hconf),
 		OnInstanceRequested: func() {
 			log.Printf("EC2 VM %q now booting", instName)
 		},

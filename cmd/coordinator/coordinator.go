@@ -131,13 +131,6 @@ var maintnerClient apipb.MaintnerServiceClient
 
 const (
 	maxStatusDone = 30
-
-	// vmDeleteTimeout and podDeleteTimeout is how long before we delete a VM.
-	// In practice this need only be as long as the slowest
-	// builder (plan9 currently), because on startup this program
-	// already deletes all buildlets it doesn't know about
-	// (i.e. ones from a previous instance of the coordinator).
-	vmDeleteTimeout = 45 * time.Minute
 )
 
 // Fake keys signed by a fake CA.
@@ -266,7 +259,7 @@ func main() {
 	// a shared package.
 	pool.SetBuilderMasterKey(masterKey())
 
-	err := pool.InitGCE(sc, vmDeleteTimeout, testFiles, &basePinErr, isGCERemoteBuildlet, *buildEnvName, *mode)
+	err := pool.InitGCE(sc, testFiles, &basePinErr, isGCERemoteBuildlet, *buildEnvName, *mode)
 	if err != nil {
 		if *mode == "" {
 			*mode = "dev"

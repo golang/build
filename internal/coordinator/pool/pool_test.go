@@ -18,29 +18,25 @@ func TestPoolDetermineDeleteTimeout(t *testing.T) {
 	testCases := []struct {
 		desc        string
 		hostValue   time.Duration
-		timeout     time.Duration
 		wantTimeout time.Duration
 	}{
 		{
-			desc:        "from-host",
-			hostValue:   time.Minute,
-			timeout:     time.Second,
-			wantTimeout: time.Minute,
+			desc:        "default",
+			wantTimeout: 2 * time.Hour,
 		},
 		{
-			desc:        "from-argument",
-			hostValue:   0,
-			timeout:     time.Second,
-			wantTimeout: time.Second,
+			desc:        "from-host",
+			hostValue:   8 * time.Hour,
+			wantTimeout: 8 * time.Hour,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			h := &dashboard.HostConfig{
-				DeleteTimeout: tc.hostValue,
+				CustomDeleteTimeout: tc.hostValue,
 			}
-			if got := determineDeleteTimeout(h, tc.timeout); got != tc.wantTimeout {
-				t.Errorf("determineDeleteTimeout(%+v, %s) = %s; want %s", h, tc.timeout, got, tc.wantTimeout)
+			if got := determineDeleteTimeout(h); got != tc.wantTimeout {
+				t.Errorf("determineDeleteTimeout(%+v) = %s; want %s", h, got, tc.wantTimeout)
 			}
 		})
 	}

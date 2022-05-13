@@ -40,7 +40,7 @@ type VMOpts struct {
 
 	// DeleteIn optionally specifies a duration at which
 	// to delete the VM.
-	// If zero, a reasonable default is used.
+	// If zero, a short default is used (not enough for longtest builders).
 	// Negative means no deletion timeout.
 	DeleteIn time.Duration
 
