@@ -203,7 +203,7 @@ func (tasks *BuildReleaseTasks) newBuildReleaseWorkflow(majorVersion string) (*w
 	}
 	version := wd.Parameter(workflow.Parameter{Name: "Version", Example: "go1.10.1"})
 	revision := wd.Parameter(workflow.Parameter{Name: "Revision", Example: "release-branch.go1.10"})
-	skipTests := wd.Parameter(workflow.Parameter{Name: "Targets to skip testing (space-separated target names or 'all') (optional)"})
+	skipTests := wd.Parameter(workflow.Parameter{Name: "Targets to skip testing (or 'all') (optional)", ParameterType: workflow.SliceShort})
 
 	source := wd.Task("Build source archive", tasks.buildSource, revision, version)
 	// Artifact file paths.
@@ -275,12 +275,12 @@ func (b *BuildReleaseTasks) convertToZip(ctx *workflow.TaskContext, target *rele
 	})
 }
 
-func (b *BuildReleaseTasks) runTests(ctx *workflow.TaskContext, target *releasetargets.Target, buildlet, skipTests string, binary artifact) (string, error) {
-	skipped := skipTests == "all"
-	skipTargets := strings.Fields(skipTests)
-	for _, skip := range skipTargets {
-		if target.Name == skip {
+func (b *BuildReleaseTasks) runTests(ctx *workflow.TaskContext, target *releasetargets.Target, buildlet string, skipTests []string, binary artifact) (string, error) {
+	skipped := false
+	for _, skip := range skipTests {
+		if skip == "all" || target.Name == skip {
 			skipped = true
+			break
 		}
 	}
 	if skipped {

@@ -54,7 +54,7 @@ func TestRelease(t *testing.T) {
 	w, err := workflow.Start(wd, map[string]interface{}{
 		"Revision": "0",
 		"Version":  "go1.18releasetest1",
-		"Targets to skip testing (space-separated target names or 'all') (optional)": "",
+		"Targets to skip testing (or 'all') (optional)": []string(nil),
 	})
 	if err != nil {
 		t.Fatal(err)
