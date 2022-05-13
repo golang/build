@@ -2465,14 +2465,11 @@ func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
 			// If this change is part of a stack, we'd like to merge the stack
 			// in the correct order (i.e. from the bottom of the stack to the
 			// top), so we'll only merge the current change if every change
-			// below it in the stack is either merged, or abandoned. If a parent
-			// change is no longer current (the revision of the change that the
-			// child change is based on is no longer the current revision of
-			// that change) we won't merge the child. GetRelatedChanges gives us
-			// the stack from top to bottom (the order of the git commits, from
-			// newest to oldest, see Gerrit documentation for
-			// RelatedChangesInfo), so first we find our change in the stack,
-			// then  check everything below it.
+			// below it in the stack is either merged, or abandoned.
+			// GetRelatedChanges gives us the stack from top to bottom (the
+			// order of the git commits, from newest to oldest, see Gerrit
+			// documentation for RelatedChangesInfo), so first we find our
+			// change in the stack, then  check everything below it.
 			relatedChanges, err := b.gerrit.GetRelatedChanges(ctx, fmt.Sprint(cl.Number), "current")
 			if err != nil {
 				return err
@@ -2491,9 +2488,12 @@ func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
 						ci.Status != gerrit.ChangeStatusMerged {
 						return nil
 					}
-					if ci.CurrentRevisionNumber != ci.RevisionNumber {
-						return nil
-					}
+					// We do not check the revision number of merged/abandoned
+					// parents since, even if they are not current according to
+					// gerrit, if there were any merge conflicts, caused by the
+					// diffs between the revision this change was based on and
+					// the current revision, the change would not be considered
+					// submittable anyway.
 				}
 			}
 

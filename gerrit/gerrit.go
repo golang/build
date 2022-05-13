@@ -1051,13 +1051,11 @@ func (c *Client) GetRevisionActions(ctx context.Context, changeID, revision stri
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#related-change-and-commit-info.
 type RelatedChangeAndCommitInfo struct {
-	Project               string     `json:"project"`
-	ChangeID              string     `json:"change_id"`
-	ChangeNumber          int32      `json:"_change_number"`
-	Commit                CommitInfo `json:"commit"`
-	Status                string     `json:"status"`
-	RevisionNumber        int32      `json:"_revision_number"`
-	CurrentRevisionNumber int32      `json:"_current_revision_number"`
+	Project      string     `json:"project"`
+	ChangeID     string     `json:"change_id"`
+	ChangeNumber int32      `json:"_change_number"`
+	Commit       CommitInfo `json:"commit"`
+	Status       string     `json:"status"`
 }
 
 // RelatedChangesInfo contains information about a set of related changes.
