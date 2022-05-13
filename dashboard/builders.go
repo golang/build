@@ -40,7 +40,7 @@ var slowBotAliases = map[string]string{
 	"arm64":                "linux-arm64-aws",
 	"darwin":               "darwin-amd64-12_0",
 	"darwin-amd64":         "darwin-amd64-12_0",
-	"darwin-arm64":         "darwin-arm64-12_0-toothrot",
+	"darwin-arm64":         "darwin-arm64-12",
 	"ios-arm64":            "ios-arm64-corellium",
 	"dragonfly":            "dragonfly-amd64",
 	"freebsd":              "freebsd-amd64-13_0",
@@ -500,7 +500,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-arm64-11_0-toothrot": &HostConfig{
 		IsReverse: true,
-		Notes:     "macOS Big Sur (11.0) ARM64 (M1). Mac mini",
+		Notes:     "macOS Big Sur (11) ARM64 (M1). Mac mini",
 		ExpectNum: 1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot",
@@ -510,12 +510,31 @@ var Hosts = map[string]*HostConfig{
 	"host-darwin-arm64-12_0-toothrot": &HostConfig{
 		IsReverse: true,
 		ExpectNum: 1,
-		Notes:     "macOS Big Sur (12.0) ARM64 (M1). Mac mini",
+		Notes:     "macOS Big Sur (12) ARM64 (M1). Mac mini",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot",
 		},
 		SSHUsername: "gopher",
 	},
+	"host-darwin-arm64-11": &HostConfig{
+		IsReverse: true,
+		Notes:     "macOS Big Sur (11) ARM64 (M1). Mac mini",
+		ExpectNum: 3,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/Users/gopher/goboot",
+		},
+		SSHUsername: "gopher",
+	},
+	"host-darwin-arm64-12": &HostConfig{
+		IsReverse: true,
+		ExpectNum: 3,
+		Notes:     "macOS Big Sur (12) ARM64 (M1). Mac mini",
+		env: []string{
+			"GOROOT_BOOTSTRAP=/Users/gopher/goboot",
+		},
+		SSHUsername: "gopher",
+	},
+
 	"host-linux-s390x": &HostConfig{
 		Notes:     "run by IBM",
 		Owners:    []*gophers.Person{gh("jonathan-albrecht-ibm"), gophers.GetPerson("Cindy Lee")}, // See https://groups.google.com/g/golang-dev/c/obUDaYbaxXw/m/5sMgfDYVAAAJ.
@@ -2361,7 +2380,18 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:           "darwin-arm64-12_0-toothrot",
 		HostType:       "host-darwin-arm64-12_0-toothrot",
-		KnownIssue:     49149,
+		distTestAdjust: macTestPolicy,
+		buildsRepo:     defaultPlusExpBuild,
+	})
+	addBuilder(BuildConfig{
+		Name:           "darwin-arm64-11",
+		HostType:       "host-darwin-arm64-11",
+		distTestAdjust: macTestPolicy,
+		buildsRepo:     defaultPlusExpBuild,
+	})
+	addBuilder(BuildConfig{
+		Name:           "darwin-arm64-12",
+		HostType:       "host-darwin-arm64-12",
 		distTestAdjust: macTestPolicy,
 		buildsRepo:     defaultPlusExpBuild,
 	})

@@ -4,7 +4,7 @@ darwin-amd64    darwin     amd64      darwin-amd64-11_0
 	Race enabled
 	Extra env: ["CGO_CFLAGS=-mmacosx-version-min=10.13"]
 
-darwin-arm64    darwin     arm64      darwin-arm64-11_0-toothrot
+darwin-arm64    darwin     arm64      darwin-arm64-11
 	Race enabled
 
 freebsd-386     freebsd    386        freebsd-386-11_4
@@ -43,7 +43,7 @@ darwin-amd64    darwin     amd64      darwin-amd64-12_0
 	Race enabled
 	Extra env: ["CGO_CFLAGS=-mmacosx-version-min=10.13"]
 
-darwin-arm64    darwin     arm64      darwin-arm64-12_0-toothrot
+darwin-arm64    darwin     arm64      darwin-arm64-12
 	Race enabled
 
 freebsd-386     freebsd    386        freebsd-386-12_3

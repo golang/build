@@ -41,7 +41,7 @@ var allReleases = map[int]ReleaseTargets{
 
 		},
 		"darwin-arm64": &Target{
-			Builder: "darwin-arm64-11_0-toothrot",
+			Builder: "darwin-arm64-11",
 			Race:    true,
 		},
 		"freebsd-386": &Target{
@@ -94,7 +94,7 @@ var allReleases = map[int]ReleaseTargets{
 			ExtraEnv: []string{"CGO_CFLAGS=-mmacosx-version-min=10.13"}, // Issues #36025 #35459
 		},
 		"darwin-arm64": &Target{
-			Builder: "darwin-arm64-12_0-toothrot",
+			Builder: "darwin-arm64-12",
 			Race:    true,
 		},
 		"freebsd-386": &Target{
