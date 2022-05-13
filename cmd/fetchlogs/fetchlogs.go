@@ -137,7 +137,10 @@ func main() {
 				}
 				var goDate time.Time
 				if rev.GoRevision != "" {
-					commit := goProject().GitCommit(rev.GoRevision)
+					commit, err := goProject().GitCommit(rev.GoRevision)
+					if err != nil {
+						log.Fatal("invalid GoRevision: ", err)
+					}
 					goDate = commit.CommitTime
 				}
 				revDir, revDirDepth := revToDir(rev.Revision, date, rev.GoRevision, goDate)

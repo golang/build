@@ -808,9 +808,16 @@ func (s apiService) dashRepoHeads() (heads []*apipb.DashRepoHead) {
 		if gh == "" {
 			return nil
 		}
-		c := gp.GitCommit(gh.String())
-		if c == nil {
-			return nil
+		c, err := gp.GitCommit(gh.String())
+		if err != nil {
+			// In theory we could ignore this error to produce best-effort results for
+			// the remaining projects. However, we expect as an invariant that the
+			// head commit for each project always exists. If it ever doesn't,
+			// something is deeply wrong with the project state and should be
+			// investigated, and surfacing the error makes it more likely to be
+			// investigated and fixed soon after a regression or corruption occurs
+			// (instead of at an arbitrarily later date).
+			return err
 		}
 		heads = append(heads, &apipb.DashRepoHead{
 			GerritProject: gp.Project(),

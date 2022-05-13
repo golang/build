@@ -69,7 +69,10 @@ func (s *server) handleReviews(t *template.Template, w http.ResponseWriter, r *h
 	dirty := s.data.reviews.dirty
 	s.cMu.RUnlock()
 	if dirty {
-		s.updateReviewsData()
+		if err := s.updateReviewsData(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	s.cMu.RLock()
@@ -115,7 +118,7 @@ func (s *server) handleReviews(t *template.Template, w http.ResponseWriter, r *h
 	}
 }
 
-func (s *server) updateReviewsData() {
+func (s *server) updateReviewsData() error {
 	log.Println("Updating reviews data ...")
 	s.cMu.Lock()
 	defer s.cMu.Unlock()
@@ -125,7 +128,7 @@ func (s *server) updateReviewsData() {
 	)
 	s.corpus.Gerrit().ForeachProjectUnsorted(filterProjects(func(p *maintner.GerritProject) error {
 		proj := &project{GerritProject: p}
-		p.ForeachOpenCL(withoutDeletedCLs(p, func(cl *maintner.GerritCL) error {
+		err := p.ForeachOpenCL(withoutDeletedCLs(p, func(cl *maintner.GerritCL) error {
 			if cl.WorkInProgress() ||
 				cl.Owner() == nil ||
 				strings.Contains(cl.Commit.Msg, "DO NOT REVIEW") {
@@ -165,7 +168,11 @@ func (s *server) updateReviewsData() {
 			}
 
 			searchTerms = append(searchTerms, searchTermsFromReviewerFields(cl)...)
-			for label, votes := range cl.Metas[len(cl.Metas)-1].LabelVotes() {
+			labelVotes, err := cl.Metas[len(cl.Metas)-1].LabelVotes()
+			if err != nil {
+				return fmt.Errorf("error updating review data for CL %d: %v", cl.Number, err)
+			}
+			for label, votes := range labelVotes {
 				for _, val := range votes {
 					if label == "Code-Review" {
 						switch val {
@@ -207,6 +214,9 @@ func (s *server) updateReviewsData() {
 			totalChanges++
 			return nil
 		}))
+		if err != nil {
+			return err
+		}
 		sort.Slice(proj.Changes, func(i, j int) bool {
 			return proj.Changes[i].LastUpdate.Before(proj.Changes[j].LastUpdate)
 		})
@@ -219,6 +229,7 @@ func (s *server) updateReviewsData() {
 	s.data.reviews.Projects = projects
 	s.data.reviews.TotalChanges = totalChanges
 	s.data.reviews.dirty = false
+	return nil
 }
 
 // hasHumanComments reports whether cl has any comments from a human on it.
