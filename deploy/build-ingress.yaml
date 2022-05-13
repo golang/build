@@ -136,6 +136,7 @@ spec:
     enabled: true
     oauthclientCredentials:
       secretName: iap-oauth
+  timeoutSec: 7200
 ---
 apiVersion: networking.gke.io/v1
 kind: ManagedCertificate
