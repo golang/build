@@ -397,6 +397,9 @@ func (w *Workflow) validate() error {
 	}
 	paramDefs := map[string]Value{} // Key is parameter name.
 	for _, p := range w.def.parameters {
+		if _, ok := w.params[p.Name]; !ok {
+			return fmt.Errorf("parameter name mismatch: workflow instance doesn't have %q, but definition requires it", p.Name)
+		}
 		paramDefs[p.Name] = parameter(p)
 	}
 	for name, v := range w.params {

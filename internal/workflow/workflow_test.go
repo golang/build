@@ -144,6 +144,12 @@ func TestParameters(t *testing.T) {
 			t.Errorf("workflow.Start didn't return an error despite a parameter count mismatch")
 		}
 	})
+	t.Run("NameMismatch", func(t *testing.T) {
+		_, err := workflow.Start(wd, map[string]interface{}{"paramA": "#1", "paramB": "#2"})
+		if err == nil {
+			t.Errorf("workflow.Start didn't return an error despite a parameter name mismatch")
+		}
+	})
 	t.Run("TypeMismatch", func(t *testing.T) {
 		_, err := workflow.Start(wd, map[string]interface{}{"param1": "#1", "param2": 42})
 		if err == nil {
