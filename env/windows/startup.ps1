@@ -148,7 +148,7 @@ $bootstrap_exe_path = "$builder_dir\bootstrap.exe"
 # https://docs.microsoft.com/en-us/visualstudio/install/build-tools-container
 Write-Host "downloading Visual Studio Build Tools"
 $vs_buildtools = "$builder_dir\vs_buildtools.exe"
-Get-FileFromUrl -URL "https://aka.ms/vs/15/release/vs_buildtools.exe" -Output "$vs_buildtools"
+Get-FileFromUrl -URL "https://storage.googleapis.com/go-builder-data/vs_buildtools.exe" -Output "$vs_buildtools"
 
 Write-Host "installing Visual Studio Build Tools"
 & $vs_buildtools --quiet --wait --norestart --nocache --installPath "$dep_dir\vs" --all
