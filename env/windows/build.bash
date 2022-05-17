@@ -107,6 +107,7 @@ yes "Y" | gcloud compute instances delete "$INSTANCE_NAME" --project="$PROJECT_I
 
 echo "Creating new machine with image"
 gcloud compute instances create --machine-type="$MACHINE_TYPE" --image "$BUILDLET_IMAGE" "$TEST_INSTANCE_NAME" \
+       --network=default-vpc \
        --project="$PROJECT_ID" --metadata="buildlet-binary-url=https://storage.googleapis.com/go-builder-data/buildlet.windows-amd64" \
        --zone="$ZONE"
 
