@@ -70,7 +70,7 @@ echo "Creating target instance"
 gcloud compute instances create --machine-type="$MACHINE_TYPE" "$INSTANCE_NAME" \
         --image "$BASE_IMAGE" --image-project "$IMAGE_PROJECT" \
         --project="$PROJECT_ID" --zone="$ZONE" \
-        --network=default-vcp \
+        --network=default-vpc \
         --metadata="buildlet-binary-url=https://storage.googleapis.com/go-builder-data/buildlet.windows-amd64" \
         --metadata-from-file=windows-startup-script-ps1=startup.ps1
 
