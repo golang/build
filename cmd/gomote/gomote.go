@@ -37,7 +37,7 @@ To list the subcommands, run "gomote" without arguments:
 	  rdp        RDP (Remote Desktop Protocol) to a Windows buildlet
 	  run        run a command on a buildlet
 	  ssh        ssh to a buildlet
-      v2         version 2 of the gomote API
+	  v2         version 2 of the gomote API
 
 To list all the builder types available, run "create" with no arguments:
 
@@ -151,7 +151,7 @@ func registerCommand(name, des string, run func([]string) error) {
 func registerCommands() {
 	registerCommand("create", "create a buildlet; with no args, list types of buildlets", legacyCreate)
 	registerCommand("destroy", "destroy a buildlet", legacyDestroy)
-	registerCommand("gettar", "extract a tar.gz from a buildlet", getTar)
+	registerCommand("gettar", "extract a tar.gz from a buildlet", legacyGetTar)
 	registerCommand("ls", "list the contents of a directory on a buildlet", legacyLs)
 	registerCommand("list", "list active buildlets", legacyList)
 	registerCommand("ping", "test whether a buildlet is alive and reachable ", ping)
@@ -224,6 +224,7 @@ func version2(args []string) error {
 		"ping":    ping,
 		"ssh":     ssh,
 		"rm":      rm,
+		"gettar":  getTar,
 	}
 	if len(args) == 0 {
 		usage()
