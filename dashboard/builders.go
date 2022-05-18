@@ -218,7 +218,7 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-riscv64-unmatched": &HostConfig{
 		Notes:     "SiFive HiFive Unmatched RISC-V board. 16 GB RAM, 4 cores.",
 		IsReverse: true,
-		ExpectNum: 1,
+		ExpectNum: 2,
 		Owners:    []*gophers.Person{gh("mengzhuo")},
 		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
 	},
