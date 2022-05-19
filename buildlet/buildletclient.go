@@ -549,9 +549,9 @@ func (c *client) Exec(ctx context.Context, cmd string, opts ExecOpts) (remoteErr
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	// The first thing the buildlet's exec handler does is flush the headers, so
-	// 10 seconds should be plenty of time, regardless of where on the planet
-	// (Atlanta, Paris, etc) the reverse buildlet is:
-	res, err := c.doHeaderTimeout(req, 10*time.Second)
+	// 20 seconds should be plenty of time, regardless of where on the planet
+	// (Atlanta, Paris, Sydney, etc.) the reverse buildlet is:
+	res, err := c.doHeaderTimeout(req, 20*time.Second)
 	if err == errHeaderTimeout {
 		c.MarkBroken()
 		return nil, errors.New("buildlet: timeout waiting for exec header response")
@@ -693,7 +693,7 @@ func (c *client) Status(ctx context.Context) (Status, error) {
 		return Status{}, err
 	}
 	req = req.WithContext(ctx)
-	resp, err := c.doHeaderTimeout(req, 10*time.Second) // plenty of time
+	resp, err := c.doHeaderTimeout(req, 20*time.Second) // plenty of time
 	if err != nil {
 		return Status{}, err
 	}
@@ -719,7 +719,7 @@ func (c *client) WorkDir(ctx context.Context) (string, error) {
 		return "", err
 	}
 	req = req.WithContext(ctx)
-	resp, err := c.doHeaderTimeout(req, 10*time.Second) // plenty of time
+	resp, err := c.doHeaderTimeout(req, 20*time.Second) // plenty of time
 	if err != nil {
 		return "", err
 	}
