@@ -55,6 +55,7 @@ var (
 	flagPar       = flag.Int("j", 5, "number of concurrent download `jobs`")
 	flagDir       = flag.String("dir", defaultDir, "`directory` to save logs to")
 	flagRepo      = flag.String("repo", "go", `comma-separated list of repos to fetch logs for, or "all" for all known repos`)
+	flagBranch    = flag.String("branch", "", `comma-separated list of Go repo branches to fetch logs for; default branch if empty`)
 	flagDashboard = flag.String("dashboard", "https://build.golang.org", `the dashboard root url`)
 )
 
@@ -89,111 +90,116 @@ func main() {
 
 	// Fetch dashboard pages.
 	for _, repo := range parseRepoFlag() {
-		project := repo.GoGerritProject
-		haveCommits := 0
-		for page := 0; haveCommits < *flagN; page++ {
-			dashURL := fmt.Sprintf("%s/?mode=json&page=%d", *flagDashboard, page)
-			if project != "go" {
-				dashURL += "&repo=" + url.QueryEscape(repo.ImportPath)
-			}
-			index, err := fetcher.get(dashURL)
-			if err != nil {
-				log.Fatal(err)
-			}
+		for _, branch := range strings.Split(*flagBranch, ",") {
+			project := repo.GoGerritProject
+			haveCommits := 0
+			for page := 0; haveCommits < *flagN; page++ {
+				dashURL := fmt.Sprintf("%s/?mode=json&page=%d", *flagDashboard, page)
+				if project != "go" {
+					dashURL += "&repo=" + url.QueryEscape(repo.ImportPath)
+				}
+				if branch != "" {
+					dashURL += "&branch=" + url.QueryEscape(branch)
+				}
+				index, err := fetcher.get(dashURL)
+				if err != nil {
+					log.Fatal(err)
+				}
 
-			var status types.BuildStatus
-			if err = json.NewDecoder(index).Decode(&status); err != nil {
-				log.Fatal("error unmarshalling result: ", err)
-			}
-			index.Close()
+				var status types.BuildStatus
+				if err = json.NewDecoder(index).Decode(&status); err != nil {
+					log.Fatal("error unmarshalling result: ", err)
+				}
+				index.Close()
 
-			if len(status.Revisions) == 0 {
-				// We asked for a page of revisions and received a valid reply with none.
-				// Assume that there are no more beyond this.
-				break
-			}
-
-			for _, rev := range status.Revisions {
-				if haveCommits >= *flagN {
+				if len(status.Revisions) == 0 {
+					// We asked for a page of revisions and received a valid reply with none.
+					// Assume that there are no more beyond this.
 					break
 				}
-				if rev.Repo != project {
-					// The results for the "go" repo (fetched without the "&repo" query
-					// parameter) empirically include some subrepo results for release
-					// branches.
-					//
-					// Those aren't really relevant to the "go" repo — and they should be
-					// included when we fetch the subrepo explicitly anyway — so filter
-					// them out here.
-					continue
-				}
-				haveCommits++
 
-				// Create a revision directory. This way we
-				// have a record of commits with no failures.
-				date, err := parseRevDate(rev.Date)
-				if err != nil {
-					log.Fatal("malformed revision date: ", err)
-				}
-				var goDate time.Time
-				if rev.GoRevision != "" {
-					commit, err := goProject().GitCommit(rev.GoRevision)
-					if err != nil {
-						log.Fatal("invalid GoRevision: ", err)
+				for _, rev := range status.Revisions {
+					if haveCommits >= *flagN {
+						break
 					}
-					goDate = commit.CommitTime
-				}
-				revDir, revDirDepth := revToDir(rev.Revision, date, rev.GoRevision, goDate)
-				ensureDir(revDir)
-
-				if rev.GoRevision != "" {
-					// In October 2021 we started creating a separate subdirectory for
-					// each Go repo commit. (Previously, we overwrote the link for each
-					// subrepo commit when downloading a new Go commit.) Remove the
-					// previous links, if any, so that greplogs won't double-count them.
-					prevRevDir, _ := revToDir(rev.Revision, date, "", time.Time{})
-					if err := os.RemoveAll(prevRevDir); err != nil {
-						log.Fatal(err)
-					}
-				}
-
-				// Save revision metadata.
-				buf := bytes.Buffer{}
-				enc := json.NewEncoder(&buf)
-				if err = enc.Encode(rev); err != nil {
-					log.Fatal(err)
-				}
-				if err = writeFileAtomic(filepath.Join(revDir, ".rev.json"), &buf); err != nil {
-					log.Fatal("error saving revision metadata: ", err)
-				}
-
-				// Save builders list so Results list can be
-				// interpreted.
-				if err = enc.Encode(status.Builders); err != nil {
-					log.Fatal(err)
-				}
-				if err = writeFileAtomic(filepath.Join(revDir, ".builders.json"), &buf); err != nil {
-					log.Fatal("error saving builders metadata: ", err)
-				}
-
-				// Fetch revision logs.
-				for i, res := range rev.Results {
-					if res == "" || res == "ok" {
+					if rev.Repo != project {
+						// The results for the "go" repo (fetched without the "&repo" query
+						// parameter) empirically include some subrepo results for release
+						// branches.
+						//
+						// Those aren't really relevant to the "go" repo — and they should be
+						// included when we fetch the subrepo explicitly anyway — so filter
+						// them out here.
 						continue
 					}
+					haveCommits++
 
-					wg.Add(1)
-					go func(builder, logURL string) {
-						defer wg.Done()
-						logPath := filepath.Join("log", filepath.Base(logURL))
-						err := fetcher.getFile(logURL, logPath)
+					// Create a revision directory. This way we
+					// have a record of commits with no failures.
+					date, err := parseRevDate(rev.Date)
+					if err != nil {
+						log.Fatal("malformed revision date: ", err)
+					}
+					var goDate time.Time
+					if rev.GoRevision != "" {
+						commit, err := goProject().GitCommit(rev.GoRevision)
 						if err != nil {
-							log.Fatal("error fetching log: ", err)
+							log.Fatal("invalid GoRevision: ", err)
 						}
-						if err := linkLog(revDir, revDirDepth, builder, logPath); err != nil {
-							log.Fatal("error linking log: ", err)
+						goDate = commit.CommitTime
+					}
+					revDir, revDirDepth := revToDir(rev.Revision, date, rev.GoRevision, goDate)
+					ensureDir(revDir)
+
+					if rev.GoRevision != "" {
+						// In October 2021 we started creating a separate subdirectory for
+						// each Go repo commit. (Previously, we overwrote the link for each
+						// subrepo commit when downloading a new Go commit.) Remove the
+						// previous links, if any, so that greplogs won't double-count them.
+						prevRevDir, _ := revToDir(rev.Revision, date, "", time.Time{})
+						if err := os.RemoveAll(prevRevDir); err != nil {
+							log.Fatal(err)
 						}
-					}(status.Builders[i], res)
+					}
+
+					// Save revision metadata.
+					buf := bytes.Buffer{}
+					enc := json.NewEncoder(&buf)
+					if err = enc.Encode(rev); err != nil {
+						log.Fatal(err)
+					}
+					if err = writeFileAtomic(filepath.Join(revDir, ".rev.json"), &buf); err != nil {
+						log.Fatal("error saving revision metadata: ", err)
+					}
+
+					// Save builders list so Results list can be
+					// interpreted.
+					if err = enc.Encode(status.Builders); err != nil {
+						log.Fatal(err)
+					}
+					if err = writeFileAtomic(filepath.Join(revDir, ".builders.json"), &buf); err != nil {
+						log.Fatal("error saving builders metadata: ", err)
+					}
+
+					// Fetch revision logs.
+					for i, res := range rev.Results {
+						if res == "" || res == "ok" {
+							continue
+						}
+
+						wg.Add(1)
+						go func(builder, logURL string) {
+							defer wg.Done()
+							logPath := filepath.Join("log", filepath.Base(logURL))
+							err := fetcher.getFile(logURL, logPath)
+							if err != nil {
+								log.Fatal("error fetching log: ", err)
+							}
+							if err := linkLog(revDir, revDirDepth, builder, logPath); err != nil {
+								log.Fatal("error linking log: ", err)
+							}
+						}(status.Builders[i], res)
+					}
 				}
 			}
 		}
