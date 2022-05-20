@@ -2437,7 +2437,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "android-386-emu",
 		HostType: "host-android-amd64-emu", // same amd64 host is used for 386 builder
-		Notes:    "Android emulator on GCE",
+		Notes:    "Android emulator on GCE (GOOS=android GOARCH=386)",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			b := buildRepoByDefault(repo)
 			switch repo {
@@ -2460,11 +2460,12 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "android-amd64-emu",
 		HostType:          "host-android-amd64-emu",
-		Notes:             "Android emulator on GCE",
+		Notes:             "Android emulator on GCE (GOOS=android GOARCH=amd64)",
 		numTryTestHelpers: 3,
 		tryBot: func(repo, branch, goBranch string) bool {
+			// See discussion in go.dev/issue/53377.
 			switch repo {
-			case "go", "mobile", "sys", "net", "tools", "crypto", "sync", "text", "time":
+			case "mobile":
 				return true
 			}
 			return false

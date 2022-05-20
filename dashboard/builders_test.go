@@ -92,7 +92,6 @@ func TestTrybots(t *testing.T) {
 			repo:   "go",
 			branch: "master",
 			want: []string{
-				"android-amd64-emu",
 				"freebsd-amd64-12_3",
 				"js-wasm",
 				"linux-386",
@@ -129,7 +128,6 @@ func TestTrybots(t *testing.T) {
 			repo:   "go",
 			branch: "release-branch.go1.17",
 			want: []string{
-				"android-amd64-emu",
 				"freebsd-amd64-12_3",
 				"js-wasm",
 				"linux-386",
@@ -169,7 +167,6 @@ func TestTrybots(t *testing.T) {
 			repo:   "go",
 			branch: "release-branch.go1.16",
 			want: []string{
-				"android-amd64-emu",
 				"freebsd-amd64-12_3",
 				"js-wasm",
 				"linux-386",
@@ -216,7 +213,6 @@ func TestTrybots(t *testing.T) {
 			repo:   "sys",
 			branch: "master",
 			want: []string{
-				"android-amd64-emu",
 				"freebsd-386-13_0",
 				"freebsd-amd64-12_3",
 				"freebsd-amd64-13_0",
@@ -394,19 +390,20 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-386-softfloat@go1.18", "crypto"), onlyPost},
 		{b("linux-386-softfloat@go1.17", "crypto"), onlyPost},
 
-		{b("android-amd64-emu", "go"), both},
+		{b("android-amd64-emu", "go"), onlyPost},
 		{b("android-amd64-emu", "mobile"), both},
-		{b("android-amd64-emu", "crypto"), both},
-		{b("android-amd64-emu", "net"), both},
-		{b("android-amd64-emu", "sync"), both},
-		{b("android-amd64-emu", "sys"), both},
-		{b("android-amd64-emu", "text"), both},
-		{b("android-amd64-emu", "time"), both},
-		{b("android-amd64-emu", "tools"), both},
+		{b("android-amd64-emu", "crypto"), onlyPost},
+		{b("android-amd64-emu", "net"), onlyPost},
+		{b("android-amd64-emu", "sync"), onlyPost},
+		{b("android-amd64-emu", "sys"), onlyPost},
+		{b("android-amd64-emu", "text"), onlyPost},
+		{b("android-amd64-emu", "time"), onlyPost},
+		{b("android-amd64-emu", "tools"), onlyPost},
 		{b("android-amd64-emu", "website"), none},
 
 		{b("android-386-emu", "go"), onlyPost},
 		{b("android-386-emu", "mobile"), onlyPost},
+		{b("android-386-emu", "crypto"), onlyPost},
 
 		{b("linux-amd64", "net"), both},
 		{b("linux-amd64", "net@1.12"), both},
@@ -498,12 +495,12 @@ func TestBuilderConfig(t *testing.T) {
 		// a device attached.
 		{b("linux-amd64-androidemu", "mobile"), both},
 
-		// But the emulators run all:
+		// The Android emulator builders can test all repos.
 		{b("android-amd64-emu", "mobile"), both},
 		{b("android-386-emu", "mobile"), onlyPost},
-		{b("android-amd64-emu", "net"), both},
+		{b("android-amd64-emu", "net"), onlyPost},
 		{b("android-386-emu", "net"), onlyPost},
-		{b("android-amd64-emu", "go"), both},
+		{b("android-amd64-emu", "go"), onlyPost},
 		{b("android-386-emu", "go"), onlyPost},
 
 		// Only test tip for js/wasm, and only for some repos:
