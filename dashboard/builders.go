@@ -65,6 +65,7 @@ var slowBotAliases = map[string]string{
 	"linux-riscv64":        "linux-riscv64-jsing",
 	"linux-s390x":          "linux-s390x-ibm",
 	"longtest":             "linux-amd64-longtest",
+	"loong64":              "linux-loong64-3a5000",
 	"mac":                  "darwin-amd64-10_14",
 	"macos":                "darwin-amd64-10_14",
 	"mips":                 "linux-mips-rtrk",
@@ -1717,7 +1718,8 @@ func init() {
 	addMiscCompile("-openbsd", "openbsd-386", "openbsd-mips64")
 	addMiscCompile("-openbsd-arm", "openbsd-arm", "openbsd-arm64")
 	addMiscCompile("-plan9", "plan9-386", "plan9-amd64", "plan9-arm")
-	addMiscCompile("-other-1", "solaris-amd64", "illumos-amd64", "dragonfly-amd64")
+	addMiscCompile("-solaris", "solaris-amd64", "illumos-amd64")
+	addMiscCompile("-other-1", "dragonfly-amd64", "linux-loong64")
 	addMiscCompile("-other-2", "linux-riscv64", "linux-s390x", "linux-arm-arm5") // 'linux-arm-arm5' is linux/arm with GOARM=5.
 
 	// TODO: Issue 25963, get the misc-compile trybots for Android/iOS.

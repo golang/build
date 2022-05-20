@@ -120,6 +120,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-openbsd-arm",
 				"misc-compile-plan9",
 				"misc-compile-ppc",
+				"misc-compile-solaris",
 				"misc-compile-other-1",
 				"misc-compile-other-2",
 			},
@@ -156,6 +157,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-openbsd-arm",
 				"misc-compile-plan9",
 				"misc-compile-ppc",
+				"misc-compile-solaris",
 				"misc-compile-other-1",
 				"misc-compile-other-2",
 			},
@@ -190,6 +192,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-openbsd-arm",
 				"misc-compile-plan9",
 				"misc-compile-ppc",
+				"misc-compile-solaris",
 				"misc-compile-other-1",
 				"misc-compile-other-2",
 
@@ -228,6 +231,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-openbsd-arm",
 				"misc-compile-plan9",
 				"misc-compile-ppc",
+				"misc-compile-solaris",
 				"misc-compile-other-1",
 				"misc-compile-other-2",
 
