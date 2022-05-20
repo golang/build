@@ -90,14 +90,11 @@ const (
 
 // GitHub Milestone numbers for the golang/go repo.
 var (
-	proposal         = milestone{30, "Proposal"}
-	unreleased       = milestone{22, "Unreleased"}
-	unplanned        = milestone{6, "Unplanned"}
-	gccgo            = milestone{23, "Gccgo"}
-	vgo              = milestone{71, "vgo"}
-	pkgsiteLicense   = milestone{168, "pkgsite/license"}
-	pkgsiteSearch    = milestone{164, "pkgsite/search"}
-	pkgsiteUnplanned = milestone{167, "pkgsite/unplanned"}
+	proposal   = milestone{30, "Proposal"}
+	unreleased = milestone{22, "Unreleased"}
+	unplanned  = milestone{6, "Unplanned"}
+	gccgo      = milestone{23, "Gccgo"}
+	vgo        = milestone{71, "vgo"}
 )
 
 // GitHub Milestone numbers for the golang/vscode-go repo.
@@ -1067,14 +1064,6 @@ func (b *gopherbot) setSubrepoMilestones(ctx context.Context) error {
 		case "x/vgo":
 			// Handled by setMiscMilestones
 			return nil
-		case "x/pkgsite":
-			if strings.Contains(gi.Title, "license") || strings.Contains(gi.Title, "licence") {
-				return b.setMilestone(ctx, b.gorepo.ID(), gi, pkgsiteLicense)
-			}
-			if strings.Contains(gi.Title, "search") {
-				return b.setMilestone(ctx, b.gorepo.ID(), gi, pkgsiteSearch)
-			}
-			return b.setMilestone(ctx, b.gorepo.ID(), gi, pkgsiteUnplanned)
 		}
 		return b.setMilestone(ctx, b.gorepo.ID(), gi, unreleased)
 	})
