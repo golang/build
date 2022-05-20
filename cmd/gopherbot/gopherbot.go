@@ -433,7 +433,7 @@ var tasks = []struct {
 	{"label build issues", (*gopherbot).labelBuildIssues},
 	{"label mobile issues", (*gopherbot).labelMobileIssues},
 	{"label tools issues", (*gopherbot).labelToolsIssues},
-	{"label go.dev issues", (*gopherbot).labelGoDevIssues},
+	{"label website issues", (*gopherbot).labelWebsiteIssues},
 	{"label pkgsite issues", (*gopherbot).labelPkgsiteIssues},
 	{"label x/vuln issues", (*gopherbot).labelVulnIssues},
 	{"label proposals", (*gopherbot).labelProposals},
@@ -1080,9 +1080,6 @@ func (b *gopherbot) setMiscMilestones(ctx context.Context) error {
 		if strings.HasPrefix(gi.Title, "x/vgo") {
 			return b.setMilestone(ctx, b.gorepo.ID(), gi, vgo)
 		}
-		if strings.HasPrefix(gi.Title, "go.dev:") {
-			return b.setMilestone(ctx, b.gorepo.ID(), gi, unreleased)
-		}
 		return nil
 	})
 }
@@ -1149,13 +1146,13 @@ func (b *gopherbot) labelToolsIssues(ctx context.Context) error {
 	})
 }
 
-func (b *gopherbot) labelGoDevIssues(ctx context.Context) error {
+func (b *gopherbot) labelWebsiteIssues(ctx context.Context) error {
 	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
-		hasGoDevTitle := strings.HasPrefix(gi.Title, "go.dev:")
-		if !hasGoDevTitle || gi.HasLabel("go.dev") || gi.HasEvent("unlabeled") {
+		hasWebsiteTitle := strings.HasPrefix(gi.Title, "x/website:")
+		if !hasWebsiteTitle || gi.HasLabel("website") || gi.HasEvent("unlabeled") {
 			return nil
 		}
-		return b.addLabel(ctx, b.gorepo.ID(), gi, "go.dev")
+		return b.addLabel(ctx, b.gorepo.ID(), gi, "website")
 	})
 }
 
@@ -1165,14 +1162,7 @@ func (b *gopherbot) labelPkgsiteIssues(ctx context.Context) error {
 		if !hasPkgsiteTitle || gi.HasLabel("pkgsite") || gi.HasEvent("unlabeled") {
 			return nil
 		}
-
-		repoID := b.gorepo.ID()
-		if gi.HasLabel("go.dev") {
-			if err := b.removeLabel(ctx, repoID, gi, "go.dev"); err != nil {
-				return err
-			}
-		}
-		return b.addLabel(ctx, repoID, gi, "pkgsite")
+		return b.addLabel(ctx, b.gorepo.ID(), gi, "pkgsite")
 	})
 }
 
