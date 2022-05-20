@@ -509,6 +509,8 @@ type ExecOpts struct {
 	OnStartExec func()
 }
 
+// ErrTimeout is a sentinel error that represents that waiting
+// for a command to complete has exceeded the given timeout.
 var ErrTimeout = errors.New("buildlet: timeout waiting for command to complete")
 
 // Exec runs cmd on the buildlet.
@@ -519,8 +521,8 @@ var ErrTimeout = errors.New("buildlet: timeout waiting for command to complete")
 // seen to completition. If execErr is non-nil, the remoteErr is
 // meaningless.
 //
-// If the context's deadline is exceeded, the returned execErr is
-// ErrTimeout.
+// If the context's deadline is exceeded while waiting for the command
+// to complete, the returned execErr is ErrTimeout.
 func (c *client) Exec(ctx context.Context, cmd string, opts ExecOpts) (remoteErr, execErr error) {
 	var mode string
 	if opts.SystemLevel {
@@ -553,10 +555,11 @@ func (c *client) Exec(ctx context.Context, cmd string, opts ExecOpts) (remoteErr
 	// (Atlanta, Paris, Sydney, etc.) the reverse buildlet is:
 	res, err := c.doHeaderTimeout(req, 20*time.Second)
 	if err == errHeaderTimeout {
+		// If we don't see headers after all that time,
+		// consider the buildlet to be unhealthy.
 		c.MarkBroken()
 		return nil, errors.New("buildlet: timeout waiting for exec header response")
-	}
-	if err != nil {
+	} else if err != nil {
 		return nil, err
 	}
 	defer res.Body.Close()
@@ -577,7 +580,7 @@ func (c *client) Exec(ctx context.Context, cmd string, opts ExecOpts) (remoteErr
 			out = ioutil.Discard
 		}
 		if _, err := io.Copy(out, res.Body); err != nil {
-			resc <- errs{execErr: fmt.Errorf("error copying response: %v", err)}
+			resc <- errs{execErr: fmt.Errorf("error copying response: %w", err)}
 			return
 		}
 
@@ -600,10 +603,15 @@ func (c *client) Exec(ctx context.Context, cmd string, opts ExecOpts) (remoteErr
 	select {
 	case res := <-resc:
 		if res.execErr != nil {
+			// Note: We've historically marked the buildlet as unhealthy after
+			// reaching any kind of execution error, even when it's a remote command
+			// execution timeout (see use of ErrTimeout below).
+			// This is certainly on the safer side of avoiding false positive signal,
+			// but maybe someday we'll want to start to rely on the buildlet to report
+			// such a condition and not mark it as unhealthy.
+
 			c.MarkBroken()
-			if res.execErr == context.DeadlineExceeded {
-				// Historical pre-context value.
-				// TODO: update docs & callers to just use the context value.
+			if errors.Is(res.execErr, context.DeadlineExceeded) {
 				res.execErr = ErrTimeout
 			}
 		}

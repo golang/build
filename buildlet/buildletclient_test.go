@@ -7,10 +7,12 @@ package buildlet
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -170,4 +172,56 @@ func createKeyPair(t *testing.T) KeyPair {
 		t.Fatalf("NewKeyPair() = %v, %s; want no error", kp, err)
 	}
 	return kp
+}
+
+// Test that Exec returns ErrTimeout upon reaching the context timeout
+// during command execution, as its documentation promises.
+func TestExecTimeoutError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/status", func(w http.ResponseWriter, req *http.Request) {
+		json.NewEncoder(w).Encode(Status{})
+	})
+	mux.HandleFunc("/exec", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte("."))
+		w.(http.Flusher).Flush() // /exec needs to flush headers right away.
+		<-req.Context().Done()   // Simulate that execution hangs, so no more output.
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+	u, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatalf("unable to parse http server url %s", err)
+	}
+	cl := NewClient(u.Host, NoKeyPair)
+	defer cl.Close()
+
+	// Use a custom context that reports context.DeadlineExceeded
+	// after Exec starts command execution. (context.WithTimeout
+	// requires us to select an arbitrary duration, which might
+	// not be long enough or will make the test take too long.)
+	ctx := deadlineOnDemandContext{
+		Context: context.Background(),
+		done:    make(chan struct{}),
+	}
+	_, execErr := cl.Exec(ctx, "./bin/test", ExecOpts{
+		OnStartExec: func() { close(ctx.done) },
+	})
+	if execErr != ErrTimeout {
+		t.Errorf("cl.Exec error = %v; want %v", execErr, ErrTimeout)
+	}
+}
+
+type deadlineOnDemandContext struct {
+	context.Context
+	done chan struct{}
+}
+
+func (c deadlineOnDemandContext) Done() <-chan struct{} { return c.done }
+func (c deadlineOnDemandContext) Err() error {
+	select {
+	default:
+		return nil
+	case <-c.done:
+		return context.DeadlineExceeded
+	}
 }
