@@ -23,8 +23,8 @@ import (
 	"golang.org/x/build/tarutil"
 )
 
-// put a .tar.gz
-func putTar(args []string) error {
+// legacyPutTar a .tar.gz
+func legacyPutTar(args []string) error {
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "puttar usage: gomote puttar [put-opts] <buildlet-name> [tar.gz file or '-' for stdin]")
@@ -91,6 +91,106 @@ func putTar(args []string) error {
 		tgz = f
 	}
 	return bc.PutTar(ctx, tgz, dir)
+}
+
+// putTar a .tar.gz
+func putTar(args []string) error {
+	fs := flag.NewFlagSet("put", flag.ContinueOnError)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "puttar usage: gomote puttar [put-opts] <buildlet-name> [tar.gz file or '-' for stdin]")
+		fs.PrintDefaults()
+		os.Exit(1)
+	}
+	var rev string
+	fs.StringVar(&rev, "gorev", "", "If non-empty, git hash to download from gerrit and put to the buildlet. e.g. 886b02d705ff for Go 1.4.1. This just maps to the --URL flag, so the two options are mutually exclusive.")
+	var dir string
+	fs.StringVar(&dir, "dir", "", "relative directory from buildlet's work dir to extra tarball into")
+	var tarURL string
+	fs.StringVar(&tarURL, "url", "", "URL of tarball, instead of provided file.")
+
+	fs.Parse(args)
+	if fs.NArg() < 1 || fs.NArg() > 2 {
+		fs.Usage()
+	}
+	if rev != "" && tarURL != "" {
+		fmt.Fprintln(os.Stderr, "--gorev and --url are mutually exclusive")
+		fs.Usage()
+	}
+	name := fs.Arg(0)
+	ctx := context.Background()
+	client := gomoteServerClient(ctx)
+
+	if rev != "" {
+		tarURL = "https://go.googlesource.com/go/+archive/" + rev + ".tar.gz"
+	}
+	if tarURL != "" {
+		if fs.NArg() != 1 {
+			fs.Usage()
+		}
+		_, err := client.WriteTGZFromURL(ctx, &protos.WriteTGZFromURLRequest{
+			GomoteId:  name,
+			Directory: dir,
+			Url:       tarURL,
+		})
+		if err != nil {
+			return fmt.Errorf("unable to write tar to instance: %s", statusFromError(err))
+		}
+		if rev != "" {
+			// Put a VERSION file there too, to avoid git usage.
+			version := strings.NewReader("devel " + rev)
+			var vtar tarutil.FileList
+			vtar.AddRegular(&tar.Header{
+				Name: "VERSION",
+				Mode: 0644,
+				Size: int64(version.Len()),
+			}, int64(version.Len()), version)
+			tgz := vtar.TarGz()
+			defer tgz.Close()
+
+			resp, err := client.UploadFile(ctx, &protos.UploadFileRequest{})
+			if err != nil {
+				return fmt.Errorf("unable to request credentials for a file upload: %s", statusFromError(err))
+			}
+			if err := uploadToGCS(ctx, resp.GetFields(), tgz, resp.GetObjectName(), resp.GetUrl()); err != nil {
+				return fmt.Errorf("unable to upload version file to GCS: %s", err)
+			}
+			if _, err = client.WriteTGZFromURL(ctx, &protos.WriteTGZFromURLRequest{
+				GomoteId:  name,
+				Directory: dir,
+				Url:       fmt.Sprintf("%s%s", resp.GetUrl(), resp.GetObjectName()),
+			}); err != nil {
+				return fmt.Errorf("unable to write tar to instance: %s", statusFromError(err))
+			}
+		}
+		return nil
+	}
+	var tgz io.Reader = os.Stdin
+	if fs.NArg() != 2 {
+		fs.Usage()
+	}
+	if fs.Arg(1) != "-" {
+		f, err := os.Open(fs.Arg(1))
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		tgz = f
+	}
+	resp, err := client.UploadFile(ctx, &protos.UploadFileRequest{})
+	if err != nil {
+		return fmt.Errorf("unable to request credentials for a file upload: %s", statusFromError(err))
+	}
+	if err := uploadToGCS(ctx, resp.GetFields(), tgz, resp.GetObjectName(), resp.GetUrl()); err != nil {
+		return fmt.Errorf("unable to upload file to GCS: %s", err)
+	}
+	if _, err := client.WriteTGZFromURL(ctx, &protos.WriteTGZFromURLRequest{
+		GomoteId:  name,
+		Directory: dir,
+		Url:       fmt.Sprintf("%s%s", resp.GetUrl(), resp.GetObjectName()),
+	}); err != nil {
+		return fmt.Errorf("unable to write tar to instance: %s", statusFromError(err))
+	}
+	return nil
 }
 
 // put go1.4 in the workdir
