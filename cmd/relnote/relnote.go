@@ -42,7 +42,7 @@ func (c change) TextLine() string {
 	if c.Note != "yes" && c.Note != "y" {
 		subj = c.Note + ": " + subj
 	}
-	return fmt.Sprintf("https://golang.org/cl/%d: %s", c.CL.Number, subj)
+	return fmt.Sprintf("https://go.dev/cl/%d: %s", c.CL.Number, subj)
 }
 
 func main() {
@@ -58,7 +58,7 @@ func main() {
 	// Previous release was 6 months earlier.
 	cutoff = cutoff.AddDate(0, -6, 0)
 
-	// The maintner corpus doesn't track inline comments. See golang.org/issue/24863.
+	// The maintner corpus doesn't track inline comments. See go.dev/issue/24863.
 	// So we need to use a Gerrit API client to fetch them instead. If maintner starts
 	// tracking inline comments in the future, this extra complexity can be dropped.
 	gerritClient := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
@@ -147,7 +147,7 @@ func main() {
 			fmt.Printf("\n<dl id=%q><dt><a href=%q>%s</a></dt>\n  <dd>",
 				pkg, "/pkg/"+pkg+"/", pkg)
 			for _, change := range changes[pkg] {
-				changeURL := fmt.Sprintf("https://golang.org/cl/%d", change.CL.Number)
+				changeURL := fmt.Sprintf("https://go.dev/cl/%d", change.CL.Number)
 				subj := change.CL.Subject()
 				subj = strings.TrimPrefix(subj, pkg+": ")
 				fmt.Printf("\n    <p><!-- CL %d -->\n      TODO: <a href=%q>%s</a>: %s\n    </p>\n",
