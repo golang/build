@@ -610,7 +610,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:     "Loongson 3A5000 Box hosted by Loongson; loong64 is the short name of LoongArch 64 bit version",
 		Owners:    []*gophers.Person{gh("XiaodongLoong")},
 		IsReverse: true,
-		ExpectNum: 5,
+		ExpectNum: 3,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/lib/go-1.18",
 		},
