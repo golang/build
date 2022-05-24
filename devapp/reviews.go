@@ -69,7 +69,9 @@ func (s *server) handleReviews(t *template.Template, w http.ResponseWriter, r *h
 	dirty := s.data.reviews.dirty
 	s.cMu.RUnlock()
 	if dirty {
-		if err := s.updateReviewsData(); err != nil {
+		err := s.updateReviewsData()
+		if err != nil {
+			log.Println("updateReviewsData:", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -126,7 +128,7 @@ func (s *server) updateReviewsData() error {
 		projects     []*project
 		totalChanges int
 	)
-	s.corpus.Gerrit().ForeachProjectUnsorted(filterProjects(func(p *maintner.GerritProject) error {
+	err := s.corpus.Gerrit().ForeachProjectUnsorted(filterProjects(func(p *maintner.GerritProject) error {
 		proj := &project{GerritProject: p}
 		err := p.ForeachOpenCL(withoutDeletedCLs(p, func(cl *maintner.GerritCL) error {
 			if cl.WorkInProgress() ||
@@ -223,6 +225,9 @@ func (s *server) updateReviewsData() error {
 		projects = append(projects, proj)
 		return nil
 	}))
+	if err != nil {
+		return err
+	}
 	sort.Slice(projects, func(i, j int) bool {
 		return projects[i].Project() < projects[j].Project()
 	})
