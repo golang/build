@@ -2547,6 +2547,7 @@ func init() {
 		SkipSnapshot:   true,
 		distTestAdjust: loong64DistTestPolicy,
 		buildsRepo:     loong64BuildsRepoPolicy,
+		privateGoProxy: true, // this builder is behind firewall
 		env: []string{
 			"GOARCH=loong64",
 			"GOHOSTARCH=loong64",
