@@ -74,26 +74,16 @@ func MailDLCL(ctx *workflow.TaskContext, versions []string, e ExternalConfig) (c
 		return "(dry-run)", nil
 	}
 	cl := gerrit.NewClient(e.GerritAPI.URL, e.GerritAPI.Auth)
-	c, err := cl.CreateChange(ctx, gerrit.ChangeInput{
+	changeInput := gerrit.ChangeInput{
 		Project: "dl",
 		Subject: "dl: add " + strings.Join(versions, " and "),
 		Branch:  "master",
-	})
+	}
+	changeID, err := (&realGerritClient{client: cl}).CreateAutoSubmitChange(ctx, changeInput, files)
 	if err != nil {
 		return "", err
 	}
-	changeID := fmt.Sprintf("%s~%d", c.Project, c.ChangeNumber)
-	for path, content := range files {
-		err := cl.ChangeFileContentInChangeEdit(ctx, changeID, path, content)
-		if err != nil {
-			return "", err
-		}
-	}
-	err = cl.PublishChangeEdit(ctx, changeID)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("https://go.dev/cl/%d", c.ChangeNumber), nil
+	return changeLink(changeID), nil
 }
 
 func verifyGoVersions(versions ...string) error {

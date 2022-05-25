@@ -66,7 +66,7 @@ type HTTPError struct {
 }
 
 func (e *HTTPError) Error() string {
-	return fmt.Sprintf("HTTP status %s; %s", e.Res.Status, e.Body)
+	return fmt.Sprintf("HTTP status %s on request to %s; %s", e.Res.Status, e.Res.Request.URL, e.Body)
 }
 
 // doArg is an optional argument for the Client.do method.
@@ -760,6 +760,13 @@ func (c *Client) ChangeFileContentInChangeEdit(ctx context.Context, changeID str
 	return err
 }
 
+// DeleteFileInChangeEdit deletes a file from a change edit.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#delete-edit-file.
+func (c *Client) DeleteFileInChangeEdit(ctx context.Context, changeID string, path string) error {
+	return c.do(ctx, nil, "DELETE", "/changes/"+changeID+"/edit/"+url.QueryEscape(path), wantResStatus(http.StatusNoContent))
+}
+
 // PublishChangeEdit promotes the change edit to a regular patch set.
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#publish-edit.
@@ -874,6 +881,22 @@ func (c *Client) GetProjectTags(ctx context.Context, name string) (map[string]Ta
 		m[ti.Ref] = ti
 	}
 	return m, nil
+}
+
+// TagInput contains information for creating a tag.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#tag-input
+type TagInput struct {
+	// Ref is optional, and when present must be equal to the URL parameter. Removed.
+	Revision string `json:"revision,omitempty"`
+	Message  string `json:"message,omitempty"`
+}
+
+// CreateTag creates a tag on project.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#create-tag.
+func (c *Client) CreateTag(ctx context.Context, project, tag string, input TagInput) (TagInfo, error) {
+	var res TagInfo
+	err := c.do(ctx, &res, "PUT", fmt.Sprintf("/projects/%s/tags/%s", project, url.PathEscape(tag)), reqBodyJSON{&input}, wantResStatus(http.StatusCreated))
+	return res, err
 }
 
 // GetAccountInfo gets the specified account's information from Gerrit.
