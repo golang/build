@@ -99,7 +99,7 @@ var buildersTmpl = template.Must(template.New("builders").Funcs(template.FuncMap
 	<td>{{.Name}}</td>
 	<td><a href='#{{.HostType}}'>{{.HostType}}</a></td>
 	<td>{{builderOwners .}}</td>
-	<td>{{with .KnownIssue}}<a href="https://go.dev/issue/{{.}}" title="This builder has a known issue. See go.dev/issue/{{.}}.">#{{.}}</a>{{end}}</td>
+	<td>{{range $i, $issue := .KnownIssues}}{{if ne $i 0}}, {{end}}<a href="https://go.dev/issue/{{$issue}}" title="This builder has a known issue. See: go.dev/issue/{{$issue}}.">#{{$issue}}</a>{{end}}</td>
 	<td>{{.Notes}}</td>
 </tr>
 {{end}}

@@ -318,7 +318,10 @@ func knownIssue(builder string) int {
 		// Unknown builder.
 		return 0
 	}
-	return bc.KnownIssue
+	if len(bc.KnownIssues) > 0 {
+		return bc.KnownIssues[0]
+	}
+	return 0
 }
 
 // Results returns the build Results for this Commit.

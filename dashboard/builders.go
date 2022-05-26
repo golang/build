@@ -828,15 +828,15 @@ type BuildConfig struct {
 	// For example, "host-linux-bullseye".
 	HostType string
 
-	// KnownIssue is a non-zero golang.org/issue/nnn number for a builder
-	// that may fail due to a known issue, such as because it is a new
+	// KnownIssues is a slice of non-zero golang.org/issue/nnn numbers for a
+	// builder that may fail due to a known issue, such as because it is a new
 	// builder still in development/testing, or because the feature
 	// or port that it's meant to test hasn't been added yet, etc.
 	//
 	// A non-zero value here means that failures on this builder should not
 	// be considered a serious regression and don't need investigation beyond
-	// what is already in scope of the listed issue.
-	KnownIssue int
+	// what is already in scope of the listed issues.
+	KnownIssues []int
 
 	Notes string // notes for humans
 
@@ -2781,6 +2781,11 @@ func addBuilder(c BuildConfig) {
 	if c.SkipSnapshot && (c.numTestHelpers > 0 || c.numTryTestHelpers > 0) {
 		panic(fmt.Sprintf("config %q's SkipSnapshot is not compatible with sharded test helpers", c.Name))
 	}
+	for i, issue := range c.KnownIssues {
+		if issue == 0 {
+			panic(fmt.Errorf("config %q's KnownIssues slice has a zero issue at index %d", c.Name, i))
+		}
+	}
 
 	types := 0
 	for _, fn := range []func() bool{c.IsReverse, c.IsContainer, c.IsVM} {
@@ -2807,7 +2812,7 @@ func tryNewMiscCompile(suffix, rx string, knownIssue int, goDeps []string) {
 		Name:        "misc-compile" + suffix,
 		HostType:    "host-linux-bullseye",
 		buildsRepo:  func(repo, branch, goBranch string) bool { return repo == "go" && branch == "master" },
-		KnownIssue:  knownIssue,
+		KnownIssues: []int{knownIssue},
 		GoDeps:      goDeps,
 		env:         []string{"GO_DISABLE_OUTBOUND_NETWORK=1"},
 		CompileOnly: true,

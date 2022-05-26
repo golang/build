@@ -1495,13 +1495,18 @@ func (ts *trySet) notifyStarting() {
 	if len(ts.slowBots) > 0 {
 		name = "SlowBots"
 	}
-	msg := name + " beginning. Status page: " + ts.statusPage()
+	msg := name + " beginning. Status page: " + ts.statusPage() + "\n"
 
 	// If any of the requested SlowBot builders
 	// have a known issue, give users a warning.
 	for _, b := range ts.slowBots {
-		if b.KnownIssue != 0 {
-			msg += fmt.Sprintf("\nNote that builder %s has a known issue golang.org/issue/%d.", b.Name, b.KnownIssue)
+		if len(b.KnownIssues) > 0 {
+			issueBlock := new(strings.Builder)
+			issueBlock.WriteString("Note that builder %s has known issues:\n")
+			for _, i := range b.KnownIssues {
+				fmt.Fprintf(issueBlock, "\thttps://go.dev/issue/%d\n", i)
+			}
+			msg += issueBlock.String()
 		}
 	}
 
