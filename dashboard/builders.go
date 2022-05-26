@@ -2204,7 +2204,8 @@ func init() {
 			}
 			return run
 		},
-		buildsRepo: plan9Default,
+		buildsRepo:  plan9Default,
+		KnownIssues: []int{29801},
 	})
 	addBuilder(BuildConfig{
 		Name:           "windows-amd64-2008",
@@ -2711,7 +2712,8 @@ func init() {
 			}
 			return run
 		},
-		buildsRepo: plan9Default,
+		buildsRepo:  plan9Default,
+		KnownIssues: []int{49756, 49327},
 	})
 	addBuilder(BuildConfig{
 		Name:     "plan9-386-0intro",
@@ -2725,7 +2727,8 @@ func init() {
 			}
 			return run
 		},
-		buildsRepo: plan9Default,
+		buildsRepo:  plan9Default,
+		KnownIssues: []int{50137, 50878},
 	})
 	addBuilder(BuildConfig{
 		Name:     "aix-ppc64",
