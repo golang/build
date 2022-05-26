@@ -435,6 +435,7 @@ var tasks = []struct {
 	{"label tools issues", (*gopherbot).labelToolsIssues},
 	{"label website issues", (*gopherbot).labelWebsiteIssues},
 	{"label pkgsite issues", (*gopherbot).labelPkgsiteIssues},
+	{"label proxy.golang.org issues", (*gopherbot).labelProxyIssues},
 	{"label x/vuln issues", (*gopherbot).labelVulnIssues},
 	{"label proposals", (*gopherbot).labelProposals},
 	{"handle gopls issues", (*gopherbot).handleGoplsIssues},
@@ -1163,6 +1164,16 @@ func (b *gopherbot) labelPkgsiteIssues(ctx context.Context) error {
 			return nil
 		}
 		return b.addLabel(ctx, b.gorepo.ID(), gi, "pkgsite")
+	})
+}
+
+func (b *gopherbot) labelProxyIssues(ctx context.Context) error {
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
+		hasProxyTitle := strings.Contains(gi.Title, "proxy.golang.org") || strings.Contains(gi.Title, "sum.golang.org") || strings.Contains(gi.Title, "index.golang.org")
+		if !hasProxyTitle || gi.HasLabel("proxy.golang.org") || gi.HasEvent("unlabeled") {
+			return nil
+		}
+		return b.addLabel(ctx, b.gorepo.ID(), gi, "proxy.golang.org")
 	})
 }
 
