@@ -2697,6 +2697,7 @@ func init() {
 		HostType:       "host-plan9-arm-0intro",
 		distTestAdjust: noTestDirAndNoReboot,
 		buildsRepo:     plan9Default,
+		KnownIssues:    []int{49338},
 	})
 	addBuilder(BuildConfig{
 		Name:     "plan9-amd64-0intro",
