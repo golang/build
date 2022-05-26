@@ -1804,6 +1804,7 @@ func init() {
 		},
 		numTestHelpers:    1,
 		numTryTestHelpers: 4,
+		KnownIssues:       []int{52150},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-nounified",
