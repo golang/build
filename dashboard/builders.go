@@ -2337,6 +2337,7 @@ func init() {
 			"GOARCH=arm64",
 			"GOMAXPROCS=4", // OOM problems, see go.dev/issue/51019
 		},
+		KnownIssues: []int{51019},
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-10_12",
