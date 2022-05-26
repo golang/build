@@ -2132,6 +2132,7 @@ func init() {
 			// The machine is slow.
 			"GO_TEST_TIMEOUT_SCALE=5",
 		},
+		KnownIssues: []int{52703},
 	})
 	addBuilder(BuildConfig{
 		Name:         "openbsd-mips64-jsing",
