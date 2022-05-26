@@ -2492,10 +2492,11 @@ func init() {
 		HostType: "host-illumos-amd64-jclulow",
 	})
 	addBuilder(BuildConfig{
-		Name:     "solaris-amd64-oraclerel",
-		HostType: "host-solaris-oracle-amd64-oraclerel",
-		Notes:    "Oracle Solaris release version",
-		FlakyNet: true,
+		Name:        "solaris-amd64-oraclerel",
+		HostType:    "host-solaris-oracle-amd64-oraclerel",
+		Notes:       "Oracle Solaris release version",
+		FlakyNet:    true,
+		KnownIssues: []int{51443},
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-ppc64-buildlet",
