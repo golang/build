@@ -2689,6 +2689,7 @@ func init() {
 			"GOARM=7",
 			"CGO_ENABLED=1",
 		},
+		KnownIssues: []int{52679},
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-arm64-dmgk",
