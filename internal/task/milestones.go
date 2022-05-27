@@ -26,7 +26,7 @@ const (
 	KindUnknown ReleaseKind = iota
 	KindBeta
 	KindRC
-	KindFinal
+	KindMajor
 	KindMinor
 )
 
@@ -36,7 +36,7 @@ type ReleaseMilestones struct {
 
 // FetchMilestones returns the milestone numbers for the version currently being
 // released, and the next version that outstanding issues should be moved to.
-// If this is a final release, it also creates its first minor release
+// If this is a major release, it also creates its first minor release
 // milestone.
 func (m *MilestoneTasks) FetchMilestones(ctx *workflow.TaskContext, currentVersion string, kind ReleaseKind) (ReleaseMilestones, error) {
 	x, ok := goversion.Go1PointX(currentVersion)
@@ -62,7 +62,7 @@ func (m *MilestoneTasks) FetchMilestones(ctx *workflow.TaskContext, currentVersi
 	if err != nil {
 		return ReleaseMilestones{}, err
 	}
-	if kind == KindFinal {
+	if kind == KindMajor {
 		// Create the first minor release milestone too.
 		firstMinor := majorVersion + ".1"
 		if err != nil {
@@ -92,14 +92,18 @@ func uppercaseVersion(version string) string {
 
 // CheckBlockers returns an error if there are open release blockers in
 // the current milestone.
-func (m *MilestoneTasks) CheckBlockers(ctx *workflow.TaskContext, milestones ReleaseMilestones, kind ReleaseKind) (string, error) {
+func (m *MilestoneTasks) CheckBlockers(ctx *workflow.TaskContext, milestones ReleaseMilestones, version string, kind ReleaseKind) (string, error) {
 	issues, err := m.loadMilestoneIssues(ctx, milestones.Current, kind)
 	if err != nil {
 		return "", err
 	}
 	var blockers []string
-	for number, blocker := range issues {
-		if blocker {
+	for number, labels := range issues {
+		releaseBlocker := labels["release-blocker"]
+		if kind == KindBeta && (labels["okay-after-beta1"] || !strings.HasSuffix(version, "beta1")) {
+			releaseBlocker = false
+		}
+		if releaseBlocker {
 			blockers = append(blockers, fmt.Sprintf("https://go.dev/issue/%v", number))
 		}
 	}
@@ -110,10 +114,10 @@ func (m *MilestoneTasks) CheckBlockers(ctx *workflow.TaskContext, milestones Rel
 	return "", nil
 }
 
-// loadMilestoneIssues returns all the open issues in milestone and whether
-// they should block the given kind of release.
-func (m *MilestoneTasks) loadMilestoneIssues(ctx *workflow.TaskContext, milestoneID int, kind ReleaseKind) (map[int]bool, error) {
-	issues := map[int]bool{}
+// loadMilestoneIssues returns all the open issues in the specified milestone
+// and their labels.
+func (m *MilestoneTasks) loadMilestoneIssues(ctx *workflow.TaskContext, milestoneID int, kind ReleaseKind) (map[int]map[string]bool, error) {
+	issues := map[int]map[string]bool{}
 	var query struct {
 		Repository struct {
 			Issues struct {
@@ -152,20 +156,11 @@ more:
 		if issue.Labels.PageInfo.HasNextPage {
 			return nil, fmt.Errorf("issue %v (#%v) has more than 10 labels", issue.Title, issue.Number)
 		}
-		releaseBlocker := false
-		betaOK := false
+		labels := map[string]bool{}
 		for _, label := range issue.Labels.Nodes {
-			if label.Name == "release-blocker" {
-				releaseBlocker = true
-			}
-			if label.Name == "okay-after-beta1" {
-				betaOK = true
-			}
+			labels[label.Name] = true
 		}
-		if kind == KindBeta && betaOK {
-			releaseBlocker = false
-		}
-		issues[issue.Number] = releaseBlocker
+		issues[issue.Number] = labels
 	}
 	if query.Repository.Issues.PageInfo.HasNextPage {
 		afterToken = &query.Repository.Issues.PageInfo.EndCursor
@@ -174,15 +169,46 @@ more:
 	return issues, nil
 }
 
-// PushIssues moves all the open issues in the current milestone to the next one.
-func (m *MilestoneTasks) PushIssues(ctx *workflow.TaskContext, milestones ReleaseMilestones) (string, error) {
+// PushIssues updates issues to reflect a finished release. For beta1 releases,
+// it removes the okay-after-beta1 label. For major and minor releases,
+// it moves them to the next milestone and closes the current one.
+func (m *MilestoneTasks) PushIssues(ctx *workflow.TaskContext, milestones ReleaseMilestones, version string, kind ReleaseKind) (string, error) {
+	// For RCs we don't change issues at all.
+	if kind == KindRC {
+		return "", nil
+	}
+
 	issues, err := m.loadMilestoneIssues(ctx, milestones.Current, KindUnknown)
 	if err != nil {
 		return "", err
 	}
-	for issueNumber := range issues {
+	for issueNumber, labels := range issues {
+		var newLabels *[]string
+		var newMilestone *int
+		if kind == KindBeta && strings.HasSuffix(version, "beta1") {
+			if labels["okay-after-beta1"] {
+				newLabels = &[]string{}
+				for label := range labels {
+					if label == "okay-after-beta1" {
+						continue
+					}
+					*newLabels = append(*newLabels, label)
+				}
+			}
+		} else if kind == KindMajor || kind == KindMinor {
+			newMilestone = &milestones.Next
+		}
 		_, _, err := m.Client.EditIssue(ctx, m.RepoOwner, m.RepoName, issueNumber, &github.IssueRequest{
-			Milestone: &milestones.Next,
+			Milestone: newMilestone,
+			Labels:    newLabels,
+		})
+		if err != nil {
+			return "", err
+		}
+	}
+	if kind == KindMajor || kind == KindMinor {
+		_, _, err := m.Client.EditMilestone(ctx, m.RepoOwner, m.RepoName, milestones.Current, &github.Milestone{
+			State: github.String("closed"),
 		})
 		if err != nil {
 			return "", err
@@ -203,6 +229,9 @@ type GitHubClientInterface interface {
 
 	// See github.Client.Issues.Edit.
 	EditIssue(ctx context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error)
+
+	// See github.Client.Issues.EditMilestone
+	EditMilestone(ctx context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error)
 }
 
 type GitHubClient struct {
@@ -287,4 +316,8 @@ func findMilestone(ctx context.Context, client *githubv4.Client, owner, repo, na
 
 func (c *GitHubClient) EditIssue(ctx context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
 	return c.V3.Issues.Edit(ctx, owner, repo, number, issue)
+}
+
+func (c *GitHubClient) EditMilestone(ctx context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
+	return c.V3.Issues.EditMilestone(ctx, owner, repo, number, milestone)
 }

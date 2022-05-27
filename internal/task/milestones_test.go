@@ -40,7 +40,7 @@ func TestMilestones(t *testing.T) {
 	client3 := github.NewClient(httpClient)
 	client4 := githubv4.NewClient(httpClient)
 
-	blocker, err := resetRepo(ctx, client3)
+	normal, blocker, err := resetRepo(ctx, client3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,63 +53,91 @@ func TestMilestones(t *testing.T) {
 		RepoOwner: *flagOwner,
 		RepoName:  *flagRepo,
 	}
-	milestones, err := tasks.FetchMilestones(ctx, "go1.20", KindFinal)
+	milestones, err := tasks.FetchMilestones(ctx, "go1.20", KindMajor)
 	if err != nil {
 		t.Fatalf("GetMilestones: %v", err)
 	}
-	_, err = tasks.CheckBlockers(ctx, milestones, KindFinal)
+	if _, err := tasks.PushIssues(ctx, milestones, "go1.20beta1", KindBeta); err != nil {
+		t.Fatalf("Pushing issues for beta release: %v", err)
+	}
+	pushedBlocker, _, err := client3.Issues.Get(ctx, *flagOwner, *flagRepo, blocker.GetNumber())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pushedBlocker.Labels) != 1 || *pushedBlocker.Labels[0].Name != "release-blocker" {
+		t.Errorf("release blocking issue has labels %#v, should only have release-blocker", pushedBlocker.Labels)
+	}
+	_, err = tasks.CheckBlockers(ctx, milestones, "go1.20", KindMajor)
 	if err == nil || !strings.Contains(err.Error(), "open release blockers") {
 		t.Fatalf("CheckBlockers with an open release blocker didn't give expected error: %v", err)
 	}
 	if _, _, err := client3.Issues.Edit(ctx, *flagOwner, *flagRepo, *blocker.Number, &github.IssueRequest{State: github.String("closed")}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tasks.CheckBlockers(ctx, milestones, KindFinal); err != nil {
+	if _, err := tasks.CheckBlockers(ctx, milestones, "go1.20", KindMajor); err != nil {
 		t.Fatalf("CheckBlockers with no release blockers failed: %v", err)
+	}
+	if _, err := tasks.PushIssues(ctx, milestones, "go1.20", KindMajor); err != nil {
+		t.Fatalf("PushIssues for major release failed: %v", err)
+	}
+	milestone, _, err := client3.Issues.GetMilestone(ctx, *flagOwner, *flagRepo, milestones.Current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if milestone.GetState() != "closed" {
+		t.Errorf("current milestone is %q, should be closed", milestone.GetState())
+	}
+	pushedNormal, _, err := client3.Issues.Get(ctx, *flagOwner, *flagRepo, normal.GetNumber())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushedNormal.GetMilestone().GetNumber() != milestones.Next {
+		t.Errorf("issue %v is on milestone %v, should have been pushed to %v", normal.GetNumber(), pushedNormal.GetMilestone().GetNumber(), milestones.Next)
 	}
 }
 
 // resetRepo clears out the test repository and sets it to have:
 // - a single milestone, Go1.20
 // - a normal issue in that milestone
-// - a release blocking issue in that milestone, which is returned.
-func resetRepo(ctx context.Context, client *github.Client) (*github.Issue, error) {
-	milestones, _, err := client.Issues.ListMilestones(ctx, *flagOwner, *flagRepo, nil)
+// - an okay-after-beta1 release blocking issue in that milestone, which is returned.
+func resetRepo(ctx context.Context, client *github.Client) (normal, blocker *github.Issue, err error) {
+	milestones, _, err := client.Issues.ListMilestones(ctx, *flagOwner, *flagRepo, &github.MilestoneListOptions{State: "all"})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, m := range milestones {
 		if _, err := client.Issues.DeleteMilestone(ctx, *flagOwner, *flagRepo, *m.Number); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	issues, _, err := client.Issues.ListByRepo(ctx, *flagOwner, *flagRepo, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, i := range issues {
 		if _, _, err := client.Issues.Edit(ctx, *flagOwner, *flagRepo, *i.Number, &github.IssueRequest{
 			State: github.String("CLOSED"),
 		}); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	currentMilestone, _, err := client.Issues.CreateMilestone(ctx, *flagOwner, *flagRepo, &github.Milestone{Title: github.String("Go1.20")})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if _, _, err := client.Issues.Create(ctx, *flagOwner, *flagRepo, &github.IssueRequest{
+	normal, _, err = client.Issues.Create(ctx, *flagOwner, *flagRepo, &github.IssueRequest{
 		Title:     github.String("Non-release-blocker"),
 		Milestone: currentMilestone.Number,
-	}); err != nil {
-		return nil, err
+	})
+	if err != nil {
+		return nil, nil, err
 	}
-	blocker, _, err := client.Issues.Create(ctx, *flagOwner, *flagRepo, &github.IssueRequest{
+	blocker, _, err = client.Issues.Create(ctx, *flagOwner, *flagRepo, &github.IssueRequest{
 		Title:     github.String("Release-blocker"),
 		Milestone: currentMilestone.Number,
-		Labels:    &[]string{"release-blocker"},
+		Labels:    &[]string{"release-blocker", "okay-after-beta1"},
 	})
-	return blocker, err
+	return normal, blocker, err
 }
 
 type testLogger struct {
