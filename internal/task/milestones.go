@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/google/go-github/github"
@@ -74,16 +73,6 @@ func (m *MilestoneTasks) FetchMilestones(ctx *workflow.TaskContext, currentVersi
 		}
 	}
 	return ReleaseMilestones{Current: currentMilestone, Next: nextMilestone}, nil
-}
-
-func nextVersion(version string) (string, error) {
-	parts := strings.Split(version, ".")
-	n, err := strconv.Atoi(parts[len(parts)-1])
-	if err != nil {
-		return "", err
-	}
-	parts[len(parts)-1] = strconv.Itoa(n + 1)
-	return strings.Join(parts, "."), nil
 }
 
 func uppercaseVersion(version string) string {

@@ -19,6 +19,8 @@ type GerritClient interface {
 	AwaitSubmit(ctx context.Context, changeID string) (string, error)
 	// Tag creates a tag on project at the specified commit.
 	Tag(ctx context.Context, project, tag, commit string) error
+	// ListTags returns all the tags on project.
+	ListTags(ctx context.Context, project string) ([]string, error)
 }
 
 type realGerritClient struct {
@@ -87,6 +89,18 @@ func (c *realGerritClient) Tag(ctx context.Context, project, tag, commit string)
 		Revision: commit,
 	})
 	return err
+}
+
+func (c *realGerritClient) ListTags(ctx context.Context, project string) ([]string, error) {
+	tags, err := c.client.GetProjectTags(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	var tagNames []string
+	for _, tag := range tags {
+		tagNames = append(tagNames, strings.TrimPrefix(tag.Ref, "refs/tags/"))
+	}
+	return tagNames, nil
 }
 
 // changeLink returns a link to the review page for the CL with the specified
