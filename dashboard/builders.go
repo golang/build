@@ -2557,6 +2557,7 @@ func init() {
 			"GOARCH=loong64",
 			"GOHOSTARCH=loong64",
 		},
+		KnownIssues: []int{53116, 53093},
 	})
 	addBuilder(BuildConfig{
 		FlakyNet:       true,
