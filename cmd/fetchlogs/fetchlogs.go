@@ -150,7 +150,7 @@ func main() {
 							// might not include that commit. To rule out that possibility, refresh
 							// the local maintner data before bailing out.
 							commit, err = goProject(forceRefresh).GitCommit(rev.GoRevision)
-							if err == nil {
+							if err != nil {
 								log.Fatal("invalid GoRevision: ", err)
 							}
 						}
