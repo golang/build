@@ -142,9 +142,17 @@ func main() {
 					}
 					var goDate time.Time
 					if rev.GoRevision != "" {
-						commit, err := goProject().GitCommit(rev.GoRevision)
+						commit, err := goProject(useCached).GitCommit(rev.GoRevision)
 						if err != nil {
-							log.Fatal("invalid GoRevision: ", err)
+							// A rare race is possible here: if a commit is added to the Go repo
+							// after the initial maintner load, and a dashboard test run completes
+							// for that commit before we're done fetching logs, the maintner data
+							// might not include that commit. To rule out that possibility, refresh
+							// the local maintner data before bailing out.
+							commit, err = goProject(forceRefresh).GitCommit(rev.GoRevision)
+							if err == nil {
+								log.Fatal("invalid GoRevision: ", err)
+							}
 						}
 						goDate = commit.CommitTime
 					}
@@ -252,7 +260,7 @@ func parseRepoFlag() (rs []*repos.Repo) {
 			// right away (in which case we can't hide any substantial latency) or not
 			// at all (in which case we shouldn't bother churning memory and disk
 			// pages to load it).
-			_ = goProject()
+			_ = goProject(useCached)
 		}()
 	}
 
@@ -346,7 +354,7 @@ func (f *fetcher) getFile(url string, filename string) error {
 }
 
 var (
-	goProjectOnce   sync.Once
+	goProjectMu     sync.Mutex
 	cachedGoProject *maintner.GerritProject
 	goProjectErr    error
 )
@@ -365,15 +373,25 @@ func getGoProject(ctx context.Context) (*maintner.GerritProject, error) {
 	return gp, nil
 }
 
-func goProject() *maintner.GerritProject {
-	goProjectOnce.Do(func() {
+func goProject(policy refreshPolicy) *maintner.GerritProject {
+	goProjectMu.Lock()
+	defer goProjectMu.Unlock()
+	if policy == forceRefresh || (cachedGoProject == nil && goProjectErr == nil) {
 		cachedGoProject, goProjectErr = getGoProject(context.Background())
-	})
+	}
+
 	if goProjectErr != nil {
 		log.Fatal(goProjectErr)
 	}
 	return cachedGoProject
 }
+
+type refreshPolicy int8
+
+const (
+	useCached refreshPolicy = iota
+	forceRefresh
+)
 
 // ensureDir creates directory name if it does not exist.
 func ensureDir(name string) {
