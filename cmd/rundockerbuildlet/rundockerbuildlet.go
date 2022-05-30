@@ -16,17 +16,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"golang.org/x/build/buildenv"
 	"golang.org/x/build/internal/cloud"
 )
 
@@ -42,10 +39,9 @@ var (
 )
 
 var (
-	buildKey     []byte
-	scalewayMeta = new(scalewayMetadata)
-	isReverse    = true
-	isSingleRun  = false
+	buildKey    []byte
+	isReverse   = true
+	isSingleRun = false
 	// ec2UD contains a copy of the EC2 vm user data retrieved from the metadata.
 	ec2UD *cloud.EC2UserData
 	// ec2MetaClient is an EC2 metadata client.
@@ -55,14 +51,7 @@ var (
 func main() {
 	flag.Parse()
 
-	if onScaleway() {
-		*memory = ""
-		*image = "eu.gcr.io/symbolic-datum-552/scaleway-builder"
-		*pull = true
-		*numInst = 1
-		*basename = "scaleway"
-		initScalewayMeta()
-	} else if onEC2() {
+	if onEC2() {
 		initEC2Meta()
 		*memory = ""
 		*image = ec2UD.BuildletImageURL
@@ -115,29 +104,9 @@ func onEC2() bool {
 	return ec2MdClient().AvailableWithContext(ctx)
 }
 
-func onScaleway() bool {
-	if *builderEnv == "host-linux-arm-scaleway" {
-		return true
-	}
-	if runtime.GOOS == "linux" && runtime.GOARCH == "arm" {
-		if _, err := os.Stat("/usr/local/bin/oc-metadata"); err == nil {
-			return true
-		}
-	}
-	return false
-}
-
 func getBuildKey() []byte {
 	key, err := ioutil.ReadFile(*keyFile)
 	if err != nil {
-		if onScaleway() {
-			const prefix = "buildkey_host-linux-arm-scaleway_"
-			for _, tag := range scalewayMeta.Tags {
-				if strings.HasPrefix(tag, prefix) {
-					return []byte(strings.TrimPrefix(tag, prefix))
-				}
-			}
-		}
 		log.Fatalf("error reading build key from --key=%s: %v", *keyFile, err)
 	}
 	return bytes.TrimSpace(key)
@@ -162,10 +131,6 @@ func checkFix() error {
 		}
 		container, name, status := f[0], f[1], f[2]
 		prefix := *basename
-		if scalewayMeta != nil {
-			// scaleway containers are named after their instance.
-			prefix = scalewayMeta.Hostname
-		}
 		if !strings.HasPrefix(name, prefix) {
 			continue
 		}
@@ -177,12 +142,7 @@ func checkFix() error {
 
 	for num := 1; num <= *numInst; num++ {
 		var name string
-		if scalewayMeta != nil && scalewayMeta.Hostname != "" {
-			// The -name passed to 'docker run' should match the
-			// c1 instance hostname for debugability.
-			// There should only be one running container per c1 instance.
-			name = scalewayMeta.Hostname
-		} else if onEC2() {
+		if onEC2() {
 			name = ec2UD.BuildletName
 		} else {
 			name = fmt.Sprintf("%s%02d", *basename, num)
@@ -250,9 +210,6 @@ func checkFix() error {
 		if *builderEnv != "" {
 			cmd.Args = append(cmd.Args, "-e", "GO_BUILDER_ENV="+*builderEnv)
 		}
-		if u := buildletBinaryURL(); u != "" {
-			cmd.Args = append(cmd.Args, "-e", "META_BUILDLET_BINARY_URL="+u)
-		}
 		cmd.Args = append(cmd.Args,
 			"-e", "GO_BUILD_KEY_PATH=/buildkey/gobuildkey",
 			"-e", "GO_BUILD_KEY_DELETE_AFTER_READ=true",
@@ -266,24 +223,6 @@ func checkFix() error {
 		log.Printf("Created %v", name)
 	}
 	return nil
-}
-
-type scalewayMetadata struct {
-	Name     string   `json:"name"`
-	Hostname string   `json:"hostname"`
-	Tags     []string `json:"tags"`
-}
-
-func (m *scalewayMetadata) HasTag(t string) bool {
-	if m == nil {
-		return false
-	}
-	for _, v := range m.Tags {
-		if v == t {
-			return true
-		}
-	}
-	return false
 }
 
 func initEC2Meta() {
@@ -309,37 +248,10 @@ func initEC2Meta() {
 	}
 }
 
-func initScalewayMeta() {
-	const metaURL = "http://169.254.42.42/conf?format=json"
-	res, err := http.Get(metaURL)
-	if err != nil {
-		log.Fatalf("failed to get scaleway metadata: %v", err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		log.Fatalf("failed to get scaleway metadata from %s: %v", metaURL, res.Status)
-	}
-	if err := json.NewDecoder(res.Body).Decode(scalewayMeta); err != nil {
-		log.Fatalf("invalid JSON from scaleway metadata URL %s: %v", metaURL, err)
-	}
-}
-
 func removeContainer(container string) {
 	if out, err := exec.Command("docker", "rm", "-f", container).CombinedOutput(); err != nil {
 		log.Printf("error running docker rm -f %s: %v, %s", container, err, out)
 		return
 	}
 	log.Printf("Removed container %s", container)
-}
-
-func buildletBinaryURL() string {
-	if !onScaleway() {
-		// Only used for Scaleway currently.
-		return ""
-	}
-	env := buildenv.Production
-	if scalewayMeta.HasTag("staging") {
-		env = buildenv.Staging
-	}
-	return fmt.Sprintf("https://storage.googleapis.com/%s/buildlet.linux-arm", env.BuildletBucket)
 }
