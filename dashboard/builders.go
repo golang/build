@@ -2182,6 +2182,7 @@ func init() {
 			// The machine is slow.
 			"GO_TEST_TIMEOUT_SCALE=10",
 		},
+		FlakyNet: true,
 	})
 	addBuilder(BuildConfig{
 		Name:           "netbsd-arm64-bsiegert",
@@ -2192,6 +2193,7 @@ func init() {
 			// The machine is slow.
 			"GO_TEST_TIMEOUT_SCALE=10",
 		},
+		FlakyNet: true,
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-386",
