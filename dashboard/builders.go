@@ -2159,11 +2159,13 @@ func init() {
 		HostType:       "host-netbsd-amd64-9_0",
 		distTestAdjust: noTestDirAndNoReboot,
 		tryBot:         explicitTrySet("sys"),
+		KnownIssues:    []int{50138},
 	})
 	addBuilder(BuildConfig{
 		Name:           "netbsd-386-9_0",
 		HostType:       "host-netbsd-386-9_0",
 		distTestAdjust: noTestDirAndNoReboot,
+		KnownIssues:    []int{50138},
 	})
 	addBuilder(BuildConfig{
 		Name:     "netbsd-arm-bsiegert",
@@ -2182,7 +2184,8 @@ func init() {
 			// The machine is slow.
 			"GO_TEST_TIMEOUT_SCALE=10",
 		},
-		FlakyNet: true,
+		FlakyNet:    true,
+		KnownIssues: []int{50138},
 	})
 	addBuilder(BuildConfig{
 		Name:           "netbsd-arm64-bsiegert",
@@ -2193,7 +2196,8 @@ func init() {
 			// The machine is slow.
 			"GO_TEST_TIMEOUT_SCALE=10",
 		},
-		FlakyNet: true,
+		FlakyNet:    true,
+		KnownIssues: []int{50138},
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-386",
