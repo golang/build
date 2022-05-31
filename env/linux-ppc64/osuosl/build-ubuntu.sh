@@ -1,4 +1,8 @@
 #!/bin/sh -ex
+# Copyright 2022 Go Authors All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
 
 export rootfs=$(pwd)/ubuntu_xenial_1604
 if [ ! -e "$rootfs" ]; then

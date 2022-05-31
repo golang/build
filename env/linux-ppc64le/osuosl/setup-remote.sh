@@ -1,4 +1,8 @@
 #!/bin/bash
+# Copyright 2022 Go Authors All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
 
 # See Makefile for usage
 
@@ -26,5 +30,3 @@ ssh -i ~/.ssh/id_ed25519_golang1 $USER_AT_HOST ./install-docker.bash
 # Now that we have Docker, "log in" again (with access to the docker
 # group) and do the rest:
 ssh -i ~/.ssh/id_ed25519_golang1 $USER_AT_HOST ./install-buildlet.bash $HOST_TYPE
-
-

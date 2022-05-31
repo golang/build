@@ -1,4 +1,8 @@
 #!/bin/bash
+# Copyright 2022 Go Authors All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
 
 while true; do
   DYLD_LIBRARY_PATH="$HOME/macmini-windows/sysroot-macos-arm64/lib" "$HOME/macmini-windows/sysroot-macos-arm64/bin/qemu-system-aarch64" \

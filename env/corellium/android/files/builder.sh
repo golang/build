@@ -1,3 +1,7 @@
+# Copyright 2022 Go Authors All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
 export CC=$HOME/clangwrap
 export GO_BUILDER_ENV=host-android-arm64-corellium-android
 (
@@ -5,7 +9,7 @@ export GO_BUILDER_ENV=host-android-arm64-corellium-android
 	while true; do
 		go get golang.org/x/build/cmd/buildlet
 		# unset LD_PRELOAD libtermux-exec for 32-bit binaries
-		(unset LD_PRELOAD && 
+		(unset LD_PRELOAD &&
 			$HOME/go/bin/buildlet -reverse-type host-android-arm64-corellium-android -coordinator farmer.golang.org)
 		sleep 1
 		#/system/bin/reboot

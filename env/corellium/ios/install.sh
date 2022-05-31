@@ -1,4 +1,8 @@
 #!/bin/sh
+# Copyright 2022 Go Authors All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
 
 # install.sh sets up a newly created Corellium iPhone device.
 # Set HOST to root@<ip> where <ip> is the device ssh

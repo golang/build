@@ -1,3 +1,9 @@
+/**
+ * Copyright 2022 Go Authors All rights reserved.
+ * Use of this source code is governed by a BSD-style
+ * license that can be found in the LICENSE file.
+ */
+
 * { box-sizing: border-box; }
 
 .dashboards {
@@ -31,44 +37,44 @@ h1, h2, h3, h4 {
   color: #375EAB;
   font-weight: bold;
 }
- 
+
 h1 { font-size: 24px; }
 h2 { font-size: 20px; }
 h3 { font-size: 20px; }
 h4 { font-size: 16px; }
- 
+
 h2 { background: #E0EBF5; padding: 2px 5px; }
 h3, h4 { margin: 20px 5px; }
- 
+
 dl, dd { font-size: 14px; }
 dl { margin: 20px; }
 dd { margin: 2px 20px; }
- 
+
 .clear {
   clear: both;
 }
- 
+
 .button {
   padding: 10px;
-  
+
   color: #222;
   border: 1px solid #375EAB;
   background: #E0EBF5;
-  
+
   border-radius: 5px;
-  
+
   cursor: pointer;
-  
+
   margin-left: 60px;
 }
- 
+
 /* navigation bar */
- 
+
 #topbar {
   padding: 10px 10px;
   background: #E0EBF5;
 }
- 
+
 #topbar h1 {
   display: inline;
   margin: 0;
@@ -81,8 +87,8 @@ dd { margin: 2px 20px; }
 #topbar h1 a:hover {
   text-decoration: underline;
 }
- 
-#topbar nav { 
+
+#topbar nav {
   display: inline-block;
   margin-left: 20px;
 }
@@ -97,62 +103,62 @@ dd { margin: 2px 20px; }
 #topbar nav a {
   display: inline-block;
   padding: 10px;
-  
+
   margin: 0;
   margin-right: 5px;
- 
+
   color: white;
   background: #375EAB;
-    
+
   text-decoration: none;
   font-size: 16px;
-    
+
   border: 1px solid #375EAB;
   -webkit-border-radius: 5px;
   -moz-border-radius: 5px;
   border-radius: 5px;
 }
- 
+
 .page {
   margin-top: 20px;
 }
- 
+
 /* settings panels */
 aside {
   margin-top: 5px;
 }
- 
+
 .panel {
   border: 1px solid #aaa;
   border-radius: 5px;
   margin-bottom: 5px;
 }
- 
+
 .panel h1 {
   font-size: 16px;
   margin: 0;
   padding: 2px 8px;
 }
- 
+
 .panel select {
   padding: 5px;
   border: 0;
   width: 100%;
 }
- 
+
 /* results table */
- 
+
 table {
   margin: 5px;
   border-collapse: collapse;
   font-size: 11px;
 }
- 
+
 table td, table th, table td, table th {
   vertical-align: top;
   padding: 2px 6px;
 }
- 
+
 table tr:nth-child(2n+1) {
   background: #F4F4F4;
 }
@@ -160,29 +166,29 @@ table tr:nth-child(2n+1) {
 table tr.commit:hover {
   background-color: #ffff99 !important;
 }
- 
+
 table thead tr {
   background: #fff !important;
 }
- 
+
 /* build results */
- 
+
 .build td, .build th, .packages td, .packages th {
   vertical-align: top;
   padding: 2px 4px;
   font-size: 10pt;
 }
-      
+
 .build .hash {
   font-family: monospace;
   font-size: 9pt;
 }
- 
+
 .build .result {
   text-align: center;
   width: 2em;
 }
- 
+
 .build .col-desc, .build .col-result, .build .col-metric, .build .col-numresults {
   border-right: 1px solid #ccc;
 }
@@ -213,7 +219,7 @@ table thead tr {
   text-overflow: ellipsis;
   overflow: hidden;
 }
- 
+
 .build .desc {
   max-width: 150px;
 }
@@ -235,12 +241,12 @@ tr.subheading2 th {
 .build a.noise { text-decoration: none; color: #888; }
 
 /* pagination */
- 
+
 .paginate nav {
   padding: 0.5em;
   margin: 10px 0;
 }
- 
+
 .paginate nav a {
   padding: 0.5em;
   background: #E0EBF5;
@@ -250,7 +256,7 @@ tr.subheading2 th {
   -moz-border-radius: 5px;
   border-radius: 5px;
 }
- 
+
 .paginate nav a.inactive {
   color: #888;
   cursor: default;
@@ -258,20 +264,20 @@ tr.subheading2 th {
 }
 
 /* diffs */
- 
+
 .diff-meta {
   font-family: monospace;
   margin-bottom: 10px;
 }
- 
+
 .diff-container {
   padding: 10px;
 }
- 
+
 .diff table .metric {
   font-weight: bold;
 }
- 
+
 .diff {
   border: 1px solid #aaa;
   border-radius: 5px;
@@ -279,7 +285,7 @@ tr.subheading2 th {
   margin-right: 10px;
   float: left;
 }
- 
+
 .diff h1 {
   font-size: 16px;
   margin: 0;
@@ -287,12 +293,12 @@ tr.subheading2 th {
 }
 
 /* positioning elements */
- 
+
 .page {
   position: relative;
   width: 100%;
 }
- 
+
 aside {
   position: absolute;
   top: 0;
@@ -300,7 +306,7 @@ aside {
   bottom: 0;
   width: 200px;
 }
- 
+
 .main-content {
   position: absolute;
   top: 0;
@@ -309,19 +315,19 @@ aside {
   min-height: 200px;
   overflow: hidden;
 }
- 
+
 @media only screen and (max-width: 900px) {
   aside {
     position: relative;
     display: block;
     width: auto;
   }
- 
+
   .main-content {
     position: static;
     padding: 0;
   }
-  
+
   aside .panel {
     float: left;
     width: auto;

@@ -1,4 +1,8 @@
 #!/bin/sh -ex
+# Copyright 2022 Go Authors All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
 
 GO_VERSION=1.13.3
 CRUN_VERSION=6254263af0a41d3b78ed280f944acda10199d42a # latest released version doesn't work

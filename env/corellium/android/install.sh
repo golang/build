@@ -1,4 +1,8 @@
 #!/bin/bash
+# Copyright 2022 Go Authors All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
 
 # install.sh sets up newly installed Android Corellium device.
 # Connect to the device with "adb connect <ip>:5001" where
@@ -53,4 +57,3 @@ termux go build clangwrap.go
 termux mv /data/data/com.termux/files/usr/arm-linux-androideabi /data/data/com.termux/files/home/arm-linux-androideabi
 
 termux /system/bin/reboot
-

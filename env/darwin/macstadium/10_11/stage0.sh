@@ -1,4 +1,8 @@
 #!/bin/bash
+# Copyright 2022 Go Authors All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
 
 # This is the file baked into the OS X 10.11 VM image. It is ALSO
 # baked into the macOS 10.12 Sierra image. (That is, both 10.11 and
