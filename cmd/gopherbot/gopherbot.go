@@ -2081,9 +2081,9 @@ func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 			if ok {
 				return nil
 			}
+			log.Printf("humanReviewersOnChange reported insufficient reviewers or cc on CL %d, attempting to add some", cl.Number)
 
 			changeURL := fmt.Sprintf("https://go-review.googlesource.com/c/%s/+/%d", gp.Project(), cl.Number)
-			log.Printf("No reviewers or cc: %s", changeURL)
 			files, err := b.gerrit.ListFiles(ctx, gc.ID(), cl.Commit.Hash.String())
 			if err != nil {
 				log.Printf("Could not get change %+v: %v", gc, err)
