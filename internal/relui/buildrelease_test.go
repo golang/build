@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -25,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/internal/untar"
@@ -32,6 +34,8 @@ import (
 )
 
 func TestRelease(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	if runtime.GOOS != "linux" {
 		t.Skip("Requires bash shell scripting support.")
 	}
@@ -44,6 +48,8 @@ func TestRelease(t *testing.T) {
 		logs:    map[string][]*[]string{},
 	}
 	stagingDir := t.TempDir()
+	go fakeSign(ctx, t, filepath.Join(stagingDir, "go1.18releasetest1"))
+	signingPollDuration = 100 * time.Millisecond
 	tasks := BuildReleaseTasks{
 		GerritURL:      s.URL,
 		GCSClient:      nil,
@@ -63,13 +69,16 @@ func TestRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := w.Run(context.TODO(), &verboseListener{t})
+	out, err := w.Run(ctx, &verboseListener{t})
 	if err != nil {
 		t.Fatal(err)
 	}
-	artifacts := out["Staged artifacts"].([]artifact)
+	artifacts := out["Signed artifacts"].([]artifact)
 	byName := map[string]artifact{}
 	for _, a := range artifacts {
+		if a.sha256 == "" || a.size < 1 || a.suffix == "" || a.filename == "" {
+			t.Errorf("release process produced an invalid artifact: %#v", a)
+		}
 		byName[a.filename] = a
 	}
 
@@ -77,7 +86,7 @@ func TestRelease(t *testing.T) {
 		"go/VERSION":       "go1.18releasetest1",
 		"go/src/make.bash": makeScript,
 	})
-	checkMSI(t, stagingDir, byName["go1.18releasetest1.windows-amd64.msi"])
+	checkContents(t, stagingDir, byName["go1.18releasetest1.windows-amd64.msi"], "I'm an MSI!\n")
 	checkTGZ(t, stagingDir, byName["go1.18releasetest1.linux-amd64.tar.gz"], map[string]string{
 		"go/VERSION":                        "go1.18releasetest1",
 		"go/tool/something_orother/compile": "",
@@ -91,6 +100,7 @@ func TestRelease(t *testing.T) {
 		"go/VERSION":                        "go1.18releasetest1",
 		"go/tool/something_orother/compile": "",
 	})
+	checkContents(t, stagingDir, byName["go1.18releasetest1.darwin-amd64.pkg"], "I'm a .pkg!\n")
 
 	// TODO: consider logging this to golden files?
 	for name, logs := range fakeBuildlets.logs {
@@ -185,21 +195,21 @@ func serveTarballs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func checkMSI(t *testing.T, stagingDir string, a artifact) {
+func checkContents(t *testing.T, stagingDir string, a artifact, contents string) {
 	t.Run(a.filename, func(t *testing.T) {
-		b, err := ioutil.ReadFile(filepath.Join(stagingDir, a.stagingPath))
+		b, err := ioutil.ReadFile(filepath.Join(stagingDir, a.signedPath))
 		if err != nil {
 			t.Fatalf("reading %v: %v", a.filename, err)
 		}
-		if got, want := string(b), "I'm an MSI!\n"; got != want {
-			t.Fatalf("%v contains %q, want %q", a.filename, got, want)
+		if got, want := string(b), contents; got != want {
+			t.Errorf("%v contains %q, want %q", a.filename, got, want)
 		}
 	})
 }
 
 func checkTGZ(t *testing.T, stagingDir string, a artifact, contents map[string]string) {
 	t.Run(a.filename, func(t *testing.T) {
-		b, err := ioutil.ReadFile(filepath.Join(stagingDir, a.stagingPath))
+		b, err := ioutil.ReadFile(filepath.Join(stagingDir, a.signedPath))
 		if err != nil {
 			t.Fatalf("reading %v: %v", a.filename, err)
 		}
@@ -230,14 +240,14 @@ func checkTGZ(t *testing.T, stagingDir string, a artifact, contents map[string]s
 			}
 		}
 		if len(contents) != 0 {
-			t.Fatalf("not all files were found: missing %v", contents)
+			t.Errorf("not all files were found: missing %v", contents)
 		}
 	})
 }
 
 func checkZip(t *testing.T, stagingDir string, a artifact, contents map[string]string) {
 	t.Run(a.filename, func(t *testing.T) {
-		b, err := ioutil.ReadFile(filepath.Join(stagingDir, a.stagingPath))
+		b, err := ioutil.ReadFile(filepath.Join(stagingDir, a.signedPath))
 		if err != nil {
 			t.Fatalf("reading %v: %v", a.filename, err)
 		}
@@ -264,7 +274,7 @@ func checkZip(t *testing.T, stagingDir string, a artifact, contents map[string]s
 			}
 		}
 		if len(contents) != 0 {
-			t.Fatalf("not all files were found: missing %v", contents)
+			t.Errorf("not all files were found: missing %v", contents)
 		}
 	})
 }
@@ -474,4 +484,164 @@ type testLogger struct {
 
 func (l *testLogger) Printf(format string, v ...interface{}) {
 	l.t.Logf("task %-10v: LOG: %s", l.task, fmt.Sprintf(format, v...))
+}
+
+// fakeSign acts like a human running the signbinaries job periodically.
+func fakeSign(ctx context.Context, t *testing.T, dir string) {
+	seen := map[string]bool{}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(500 * time.Millisecond):
+		}
+
+		fakeSignOnce(t, dir, seen)
+	}
+}
+
+func fakeSignOnce(t *testing.T, dir string, seen map[string]bool) {
+	contents, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fi := range contents {
+		fn := fi.Name()
+		if fn == "signed" || seen[fn] {
+			continue
+		}
+		var copy, gpgSign, makePkg bool
+		hasSuffix := func(suffix string) bool { return strings.HasSuffix(fn, suffix) }
+		switch {
+		case strings.Contains(fn, "darwin") && hasSuffix(".tar.gz"):
+			copy = true
+			gpgSign = true
+			makePkg = true
+		case strings.Contains(fn, "darwin") && hasSuffix(".pkg"):
+			copy = true
+		case hasSuffix(".tar.gz"):
+			gpgSign = true
+		case hasSuffix("msi"):
+			copy = true
+		}
+
+		if err := os.MkdirAll(filepath.Join(dir, "signed"), 0777); err != nil {
+			t.Fatal(err)
+		}
+
+		writeSignedWithHash := func(filename string, contents []byte) {
+			path := filepath.Join(dir, "signed", filename)
+			if err := ioutil.WriteFile(path, contents, 0777); err != nil {
+				t.Fatal(err)
+			}
+			hash := fmt.Sprintf("%x", sha256.Sum256(contents))
+			if err := ioutil.WriteFile(path+".sha256", []byte(hash), 0777); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if copy {
+			bytes, err := ioutil.ReadFile(filepath.Join(dir, fn))
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeSignedWithHash(fn, bytes)
+		}
+		if makePkg {
+			writeSignedWithHash(strings.ReplaceAll(fn, ".tar.gz", ".pkg"), []byte("I'm a .pkg!\n"))
+		}
+		if gpgSign {
+			writeSignedWithHash(fn+".asc", []byte("gpg signature"))
+		}
+		seen[fn] = true
+	}
+}
+
+// These are the files created by the Go 1.18 release.
+const inputs = `
+go1.18.darwin-amd64.tar.gz
+go1.18.darwin-arm64.tar.gz
+go1.18.freebsd-386.tar.gz
+go1.18.freebsd-amd64.tar.gz
+go1.18.linux-386.tar.gz
+go1.18.linux-amd64.tar.gz
+go1.18.linux-arm64.tar.gz
+go1.18.linux-armv6l.tar.gz
+go1.18.linux-ppc64le.tar.gz
+go1.18.linux-s390x.tar.gz
+go1.18.src.tar.gz
+go1.18.windows-386.msi
+go1.18.windows-386.zip
+go1.18.windows-amd64.msi
+go1.18.windows-amd64.zip
+go1.18.windows-arm64.msi
+go1.18.windows-arm64.zip
+`
+
+// These are the files created in the "signed" folder by the signing run for Go 1.18.
+const outputs = `
+go1.18.darwin-amd64.pkg
+go1.18.darwin-amd64.pkg.sha256
+go1.18.darwin-amd64.tar.gz
+go1.18.darwin-amd64.tar.gz.asc
+go1.18.darwin-amd64.tar.gz.asc.sha256
+go1.18.darwin-amd64.tar.gz.sha256
+go1.18.darwin-arm64.pkg
+go1.18.darwin-arm64.pkg.sha256
+go1.18.darwin-arm64.tar.gz
+go1.18.darwin-arm64.tar.gz.asc
+go1.18.darwin-arm64.tar.gz.asc.sha256
+go1.18.darwin-arm64.tar.gz.sha256
+go1.18.freebsd-386.tar.gz.asc
+go1.18.freebsd-386.tar.gz.asc.sha256
+go1.18.freebsd-amd64.tar.gz.asc
+go1.18.freebsd-amd64.tar.gz.asc.sha256
+go1.18.linux-386.tar.gz.asc
+go1.18.linux-386.tar.gz.asc.sha256
+go1.18.linux-amd64.tar.gz.asc
+go1.18.linux-amd64.tar.gz.asc.sha256
+go1.18.linux-arm64.tar.gz.asc
+go1.18.linux-arm64.tar.gz.asc.sha256
+go1.18.linux-armv6l.tar.gz.asc
+go1.18.linux-armv6l.tar.gz.asc.sha256
+go1.18.linux-ppc64le.tar.gz.asc
+go1.18.linux-ppc64le.tar.gz.asc.sha256
+go1.18.linux-s390x.tar.gz.asc
+go1.18.linux-s390x.tar.gz.asc.sha256
+go1.18.src.tar.gz.asc
+go1.18.src.tar.gz.asc.sha256
+go1.18.windows-386.msi
+go1.18.windows-386.msi.sha256
+go1.18.windows-amd64.msi
+go1.18.windows-amd64.msi.sha256
+go1.18.windows-arm64.msi
+go1.18.windows-arm64.msi.sha256
+`
+
+func TestFakeSign(t *testing.T) {
+	dir := t.TempDir()
+	for _, f := range strings.Split(strings.TrimSpace(inputs), "\n") {
+		if err := ioutil.WriteFile(filepath.Join(dir, f), []byte("hi"), 0777); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fakeSignOnce(t, dir, map[string]bool{})
+	want := map[string]bool{}
+	for _, f := range strings.Split(strings.TrimSpace(outputs), "\n") {
+		want[f] = true
+	}
+	got := map[string]bool{}
+	files, err := ioutil.ReadDir(filepath.Join(dir, "signed"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		got[f.Name()] = true
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("signed outputs mismatch (-want +got):\n%v", diff)
+	}
 }

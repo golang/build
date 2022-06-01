@@ -8,10 +8,12 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"io/fs"
 	"math/rand"
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/buildlet"
@@ -208,6 +210,7 @@ func (tasks *BuildReleaseTasks) newBuildReleaseWorkflow(majorVersion string) (*w
 	source := wd.Task("Build source archive", tasks.buildSource, revision, version)
 	// Artifact file paths.
 	artifacts := []workflow.Value{source}
+	var darwinTargets []*releasetargets.Target
 	// Empty values that represent the dependency on tests passing.
 	var testResults []workflow.Value
 	for _, target := range targets {
@@ -216,11 +219,15 @@ func (tasks *BuildReleaseTasks) newBuildReleaseWorkflow(majorVersion string) (*w
 
 		// Build release artifacts for the platform.
 		bin := wd.Task(taskName("Build binary archive"), tasks.buildBinary, targetVal, source)
-		if target.GOOS == "windows" {
+		switch target.GOOS {
+		case "windows":
 			zip := wd.Task(taskName("Convert to .zip"), tasks.convertToZip, targetVal, bin)
 			msi := wd.Task(taskName("Build MSI"), tasks.buildMSI, targetVal, bin)
 			artifacts = append(artifacts, msi, zip)
-		} else {
+		case "darwin":
+			artifacts = append(artifacts, bin)
+			darwinTargets = append(darwinTargets, target)
+		default:
 			artifacts = append(artifacts, bin)
 		}
 
@@ -234,10 +241,9 @@ func (tasks *BuildReleaseTasks) newBuildReleaseWorkflow(majorVersion string) (*w
 			testResults = append(testResults, long)
 		}
 	}
-	// Eventually we need to sign artifacts and perhaps summarize test results.
-	// For now, just mush them all together.
 	stagedArtifacts := wd.Task("Stage artifacts for signing", tasks.copyToStaging, version, wd.Slice(artifacts))
-	wd.Output("Staged artifacts", stagedArtifacts)
+	signedArtifacts := wd.Task("Wait for signed artifacts", tasks.awaitSigned, version, wd.Constant(darwinTargets), stagedArtifacts)
+	wd.Output("Signed artifacts", signedArtifacts)
 	results := wd.Task("Combine results", combineResults, stagedArtifacts, wd.Slice(testResults))
 	wd.Output("Build results", results)
 	return wd, nil
@@ -397,6 +403,11 @@ type artifact struct {
 	scratchPath string
 	// The path the artifact was staged to for the signing process.
 	stagingPath string
+	// The path artifact can be found at after the signing process. It may be
+	// the same as the staging path for artifacts that are externally signed.
+	signedPath string
+	// The contents of the GPG signature for this artifact (.asc file).
+	gpgSignature string
 	// The filename suffix of the artifact, e.g. "tar.gz" or "src.tar.gz",
 	// combined with the version and target name to produce filename.
 	suffix string
@@ -458,4 +469,118 @@ func (tasks *BuildReleaseTasks) copyToStaging(ctx *workflow.TaskContext, version
 		}
 	}
 	return stagedArtifacts, nil
+}
+
+var signingPollDuration = 30 * time.Second
+
+// awaitSigned waits for all of artifacts to be signed, plus the pkgs for
+// darwinTargets.
+func (tasks *BuildReleaseTasks) awaitSigned(ctx *workflow.TaskContext, version string, darwinTargets []*releasetargets.Target, artifacts []artifact) ([]artifact, error) {
+	// .pkg artifacts are created by the signing process. Create placeholders,
+	// to be filled out once the files exist.
+	for _, t := range darwinTargets {
+		artifacts = append(artifacts, artifact{
+			target:   t,
+			suffix:   "pkg",
+			filename: version + "." + t.Name + ".pkg",
+			size:     -1,
+		})
+	}
+
+	stagingFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.StagingURL)
+	if err != nil {
+		return nil, err
+	}
+
+	todo := map[artifact]bool{}
+	for _, a := range artifacts {
+		todo[a] = true
+	}
+	var signedArtifacts []artifact
+	for {
+		for a := range todo {
+			signed, ok, err := readSignedArtifact(stagingFS, version, a)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				continue
+			}
+
+			signedArtifacts = append(signedArtifacts, signed)
+			delete(todo, a)
+		}
+
+		if len(todo) == 0 {
+			return signedArtifacts, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(signingPollDuration):
+			ctx.Printf("Still waiting for %v artifacts to be signed", len(todo))
+		}
+	}
+}
+
+func readSignedArtifact(stagingFS fs.FS, version string, a artifact) (_ artifact, ok bool, _ error) {
+	// Our signing process has somewhat uneven behavior. In general, for things
+	// that contain their own signature, such as MSIs and .pkgs, we don't
+	// produce a GPG signature, just the new file. On macOS, tars can be signed
+	// too, but we GPG sign them anyway.
+	modifiedBySigning := false
+	hasGPG := false
+	suffix := func(suffix string) bool { return a.suffix == suffix }
+	switch {
+	case suffix("src.tar.gz"):
+		hasGPG = true
+	case a.target.GOOS == "darwin" && suffix("tar.gz"):
+		modifiedBySigning = true
+		hasGPG = true
+	case a.target.GOOS == "darwin" && suffix("pkg"):
+		modifiedBySigning = true
+	case suffix("tar.gz"):
+		hasGPG = true
+	case suffix("msi"):
+		modifiedBySigning = true
+	case suffix("zip"):
+		// For reasons unclear, we don't sign zip files.
+	default:
+		return artifact{}, false, fmt.Errorf("unhandled file type %q", a.suffix)
+	}
+
+	signed := artifact{
+		target:   a.target,
+		filename: a.filename,
+		suffix:   a.suffix,
+	}
+	if modifiedBySigning {
+		signed.signedPath = version + "/signed/" + a.filename
+	} else {
+		signed.signedPath = version + "/" + a.filename
+	}
+
+	fi, err := fs.Stat(stagingFS, signed.signedPath)
+	if err != nil {
+		return artifact{}, false, nil
+	}
+	if modifiedBySigning {
+		hash, err := fs.ReadFile(stagingFS, version+"/signed/"+a.filename+".sha256")
+		if err != nil {
+			return artifact{}, false, err
+		}
+		signed.size = int(fi.Size())
+		signed.sha256 = string(hash)
+	} else {
+		signed.sha256 = a.sha256
+		signed.size = a.size
+	}
+	if hasGPG {
+		sig, err := fs.ReadFile(stagingFS, version+"/signed/"+a.filename+".asc")
+		if err != nil {
+			return artifact{}, false, nil
+		}
+		signed.gpgSignature = string(sig)
+	}
+	return signed, true, nil
 }
