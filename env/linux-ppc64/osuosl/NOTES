@@ -2,14 +2,14 @@ The linux-ppc64 buildlets run on PPC64 VMs at osuosl.org (OSU Open Source Lab).
 
 Filing tickets: https://support.osuosl.org/
     Ticket username: bradfitz@golang.org
-    Ticket password: http://go/pw-osuosl-ppc64
+    Ticket password: go/pw-osuosl-ppc64
 
 Machines:
 
 * go-be-xenial-3: (20 GB RAM, 50 GB disk, 10 cores, POWER8)
 
   ssh -i ~/.ssh/id_ed25519_golang1 ubuntu@140.211.169.164
-  (key from http://go/go-builders-ssh)
+  (key from go/go-builders-ssh)
 
   Linux go-be-xenial-3 4.4.0-130-powerpc64-smp #156-Ubuntu SMP Thu Jun 14 09:28:49 UTC 2018 ppc64 ppc64 ppc64 GNU/Linux
 

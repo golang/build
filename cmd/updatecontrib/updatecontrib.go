@@ -111,7 +111,7 @@ func main() {
 	}
 }
 
-// validName is meant to reject most invalid names with a simple rule, and a whitelist.
+// validName is meant to reject most invalid names with a simple rule, and an allowlist.
 func validName(name string) bool {
 	if valid, ok := validNames[name]; ok {
 		return valid

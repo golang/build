@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // perfrun interacts with the buildlet coordinator to run the go1
-// benchmarks on a buildlet slave for the most recent successful
+// benchmarks on a buildlet follower for the most recent successful
 // commits according to the build dashboard.
 package main
 

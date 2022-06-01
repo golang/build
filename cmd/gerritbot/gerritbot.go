@@ -210,9 +210,9 @@ const (
 )
 
 // Gerrit projects we accept PRs for.
-var gerritProjectWhitelist = genProjectWhitelist()
+var gerritProjectAllowlist = genProjectAllowlist()
 
-func genProjectWhitelist() map[string]bool {
+func genProjectAllowlist() map[string]bool {
 	m := make(map[string]bool)
 	for p, r := range repos.ByGerritProject {
 		if r.MirrorToGitHub {
@@ -294,7 +294,7 @@ func (b *bot) checkPullRequests() {
 	b.importedPRs = map[string]*maintner.GerritCL{}
 	b.corpus.Gerrit().ForeachProjectUnsorted(func(p *maintner.GerritProject) error {
 		pname := p.Project()
-		if !gerritProjectWhitelist[pname] {
+		if !gerritProjectAllowlist[pname] {
 			return nil
 		}
 		return p.ForeachOpenCL(func(cl *maintner.GerritCL) error {
@@ -309,7 +309,7 @@ func (b *bot) checkPullRequests() {
 
 	b.corpus.GitHub().ForeachRepo(func(ghr *maintner.GitHubRepo) error {
 		id := ghr.ID()
-		if id.Owner != "golang" || !gerritProjectWhitelist[id.Repo] {
+		if id.Owner != "golang" || !gerritProjectAllowlist[id.Repo] {
 			return nil
 		}
 		return ghr.ForeachIssue(func(issue *maintner.GitHubIssue) error {

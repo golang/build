@@ -1,20 +1,20 @@
 Only needed to create new machines: (skip this step)
 
   https://app.packet.net/
-  login info: http://go/go-builder-packet
+  login info: go/go-builder-packet
 
 Machines:
 
 golang-builder-1:
 
      $ ssh -i ~/keys/id_ed25519_golang1 root@147.75.74.194
-     (key: http://go/golang-ssh-key)
+     (key: go/golang-ssh-key)
 
 Machine details:
 
   root@go-builder:~# cat /proc/cpuinfo | grep process | wc -l
   96
- 
+
   root@go-builder:~/packet# free
                 total        used        free      shared  buff/cache   available
   Mem:       32876144     1091236    30183828       17852     1601080    31052836

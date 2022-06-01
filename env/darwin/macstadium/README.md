@@ -14,7 +14,7 @@ via:
 
     $ ssh -D :1080 -i ~/keys/id_ed25519_golang1 gopher@macstadiumd.golang.org
 
-(Where `id_ed255519_golang1` is available from http://go/go-builders-ssh)
+(Where `id_ed255519_golang1` is available from go/go-builders-ssh)
 
 It also runs:
 
@@ -41,7 +41,7 @@ It also runs:
 ## OpenVPN
 
 The method of last resort to access the cluster, which works even if
-the bastion host VM is down, is to [VPN to our Cisco gateway](http://go/go-how-to-vpn-into-macstadium).
+the bastion host VM is down, is to VPN to our Cisco gateway via go/go-how-to-vpn-into-macstadium.
 
 ## VMware web UI
 

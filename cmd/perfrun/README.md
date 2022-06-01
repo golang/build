@@ -4,4 +4,4 @@
 
 # golang.org/x/build/cmd/perfrun
 
-perfrun interacts with the buildlet coordinator to run the go1 benchmarks on a buildlet slave for the most recent successful commits according to the build dashboard.
+perfrun interacts with the buildlet coordinator to run the go1 benchmarks on a buildlet follower for the most recent successful commits according to the build dashboard.
