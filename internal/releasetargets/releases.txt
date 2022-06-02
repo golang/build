@@ -76,3 +76,42 @@ windows-arm64   windows    arm64      windows-arm64-11
 
 
 
+Targets for release 1.19
+================================================================================
+darwin-amd64    darwin     amd64      darwin-amd64-12_0
+	Race enabled
+	Extra env: ["CGO_CFLAGS=-mmacosx-version-min=10.13"]
+
+darwin-arm64    darwin     arm64      darwin-arm64-12
+	Race enabled
+
+freebsd-386     freebsd    386        freebsd-386-12_3
+
+freebsd-amd64   freebsd    amd64      freebsd-amd64-12_3
+	Race enabled
+
+linux-386       linux      386        linux-386-buster
+	Long tests on linux-386-longtest
+
+linux-amd64     linux      amd64      linux-amd64-buster
+	Race enabled, Long tests on linux-amd64-longtest
+
+linux-arm64     linux      arm64      linux-arm64-aws
+
+linux-armv6l    linux      arm        linux-arm-aws
+
+linux-ppc64le   linux      ppc64le    linux-ppc64le-buildlet
+	Build only
+
+linux-s390x     linux      s390x      linux-s390x-crosscompile
+	Build only
+
+windows-386     windows    386        windows-386-2008
+
+windows-amd64   windows    amd64      windows-amd64-2008
+	Race enabled, Long tests on windows-amd64-longtest
+
+windows-arm64   windows    arm64      windows-arm64-11
+
+
+

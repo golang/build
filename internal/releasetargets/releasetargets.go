@@ -108,6 +108,17 @@ var allReleases = map[int]ReleaseTargets{
 			Builder: "windows-arm64-11",
 		},
 	},
+	19: {
+		"linux-386": &Target{
+			Builder:         "linux-386-buster",
+			LongTestBuilder: "linux-386-longtest",
+		},
+		"linux-amd64": &Target{
+			Builder:         "linux-amd64-buster",
+			LongTestBuilder: "linux-amd64-longtest",
+			Race:            true,
+		},
+	},
 }
 
 func init() {
