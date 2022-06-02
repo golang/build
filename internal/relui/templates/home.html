@@ -77,9 +77,9 @@
                 <tr class="TaskList-itemLogsRow">
                   <td class="TaskList-itemLogs" colspan="6">
                     {{if $task.Error.Valid}}
-                    <div class="TaskList-itemLogLine TaskList-itemLogLineError">
-                      <code class="TaskList-errorBody">{{$task.Error.Value}}</code>
-                    </div>
+                      <div class="TaskList-itemLogLine TaskList-itemLogLineError">
+                        {{- $task.Error.Value -}}
+                      </div>
                     {{end}}
                     {{range $log := $.Logs $workflow.ID  $task.Name}}
                       <div class="TaskList-itemLogLine">

@@ -205,14 +205,12 @@ h6 {
 }
 .TaskList-itemLogLine:nth-child(even) {
   background-color: #fafafa;
+  font-family: monospace;
 }
 .TaskList-itemLogLineError {
   background-color: #c9483c;
   color: white;
-}
-.TaskList-errorBody {
-  display: block;
-  white-space: pre-wrap;
+  padding: 0.5rem 1rem;
 }
 .TaskList-item {
 }

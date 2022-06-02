@@ -30,6 +30,7 @@ ON CONFLICT (workflow_id, name) DO UPDATE
         name        = excluded.name,
         finished    = excluded.finished,
         result      = excluded.result,
+        error       = excluded.error,
         updated_at  = excluded.updated_at
 RETURNING *;
 

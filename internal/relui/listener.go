@@ -47,7 +47,7 @@ func (l *PGListener) TaskStateChanged(workflowID uuid.UUID, taskName string, sta
 			Name:       taskName,
 			Finished:   state.Finished,
 			Result:     sql.NullString{String: string(result), Valid: len(result) > 0},
-			Error:      sql.NullString{},
+			Error:      sql.NullString{String: state.Error, Valid: state.Error != ""},
 			CreatedAt:  updated,
 			UpdatedAt:  updated,
 		})
