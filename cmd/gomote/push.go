@@ -207,13 +207,7 @@ func push(args []string) error {
 		// -- gomote run go test -v ...
 		// Because the go test would fail remotely without
 		// these files if they were deleted by gomote push.
-		switch rel {
-		case "src/cmd/cgo/zdefaultcc.go",
-			"src/cmd/go/internal/cfg/zdefaultcc.go",
-			"src/cmd/go/internal/cfg/zosarch.go",
-			"src/cmd/internal/objabi/zbootstrap.go",
-			"src/go/build/zcgo.go",
-			"src/runtime/internal/sys/zversion.go":
+		if isGoToolDistGenerated(rel) {
 			continue
 		}
 		if isGitIgnored(rel) {
@@ -248,9 +242,7 @@ func push(args []string) error {
 	notHave := 0
 	const maxNotHavePrint = 5
 	for rel, inf := range local {
-		switch rel {
-		case "VERSION.cache", "src/runtime/internal/sys/zversion.go", "src/cmd/internal/objabi/zbootstrap.go",
-			"src/go/build/zcgo.go":
+		if isGoToolDistGenerated(rel) || rel == "VERSION.cache" {
 			continue
 		}
 		if !inf.fi.Mode().IsRegular() {
@@ -298,6 +290,20 @@ func push(args []string) error {
 		}
 	}
 	return nil
+}
+
+func isGoToolDistGenerated(path string) bool {
+	switch path {
+	case "src/cmd/cgo/zdefaultcc.go",
+		"src/cmd/go/internal/cfg/zdefaultcc.go",
+		"src/cmd/go/internal/cfg/zosarch.go",
+		"src/cmd/internal/objabi/zbootstrap.go",
+		"src/go/build/zcgo.go",
+		"src/internal/buildcfg/zbootstrap.go",
+		"src/runtime/internal/sys/zversion.go":
+		return true
+	}
+	return false
 }
 
 func isEditorBackup(path string) bool {
