@@ -27,8 +27,10 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/internal"
 	"golang.org/x/build/internal/untar"
 	"golang.org/x/build/internal/workflow"
 )
@@ -39,23 +41,49 @@ func TestRelease(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Requires bash shell scripting support.")
 	}
-	s := httptest.NewServer(http.HandlerFunc(serveTarballs))
-	defer s.Close()
+
+	// Set up a server that will be used to serve inputs to the build.
+	tarballServer := httptest.NewServer(http.HandlerFunc(serveTarballs))
+	defer tarballServer.Close()
 	fakeBuildlets := &fakeBuildlets{
 		t:       t,
 		dir:     t.TempDir(),
-		httpURL: s.URL,
+		httpURL: tarballServer.URL,
 		logs:    map[string][]*[]string{},
 	}
+
+	// Set up the fake signing process.
 	stagingDir := t.TempDir()
 	go fakeSign(ctx, t, filepath.Join(stagingDir, "go1.18releasetest1"))
 	signingPollDuration = 100 * time.Millisecond
+
+	// Set up the fake CDN publishing process.
+	servingDir := t.TempDir()
+	dlDir := t.TempDir()
+	dlServer := httptest.NewServer(http.FileServer(http.FS(os.DirFS(dlDir))))
+	defer dlServer.Close()
+	go fakeCDNLoad(ctx, t, servingDir, dlDir)
+	uploadPollDuration = 100 * time.Millisecond
+
+	// Set up the fake website to publish to.
+	var filesMu sync.Mutex
+	files := map[string]*WebsiteFile{}
+	publishFile := func(f *WebsiteFile) error {
+		filesMu.Lock()
+		defer filesMu.Unlock()
+		files[f.Filename] = f
+		return nil
+	}
+
 	tasks := BuildReleaseTasks{
-		GerritURL:      s.URL,
+		GerritURL:      tarballServer.URL,
 		GCSClient:      nil,
 		ScratchURL:     "file://" + filepath.ToSlash(t.TempDir()),
 		StagingURL:     "file://" + filepath.ToSlash(stagingDir),
+		ServingURL:     "file://" + filepath.ToSlash(servingDir),
 		CreateBuildlet: fakeBuildlets.createBuildlet,
+		DownloadURL:    dlServer.URL,
+		PublishFile:    publishFile,
 	}
 	wd, err := tasks.newBuildReleaseWorkflow("go1.18")
 	if err != nil {
@@ -69,38 +97,59 @@ func TestRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := w.Run(ctx, &verboseListener{t})
+	_, err = w.Run(ctx, &verboseListener{t})
 	if err != nil {
 		t.Fatal(err)
 	}
-	artifacts := out["Signed artifacts"].([]artifact)
-	byName := map[string]artifact{}
-	for _, a := range artifacts {
-		if a.sha256 == "" || a.size < 1 || a.suffix == "" || a.filename == "" {
-			t.Errorf("release process produced an invalid artifact: %#v", a)
+	for _, f := range files {
+		if f.ChecksumSHA256 == "" || f.Size < 1 || f.Filename == "" || f.Kind == "" {
+			t.Errorf("release process produced an invalid artifact: %#v", f)
 		}
-		byName[a.filename] = a
 	}
 
-	checkTGZ(t, stagingDir, byName["go1.18releasetest1.src.tar.gz"], map[string]string{
+	checkTGZ(t, dlDir, files, "go1.18releasetest1.src.tar.gz", &WebsiteFile{
+		OS:   "",
+		Arch: "",
+		Kind: "source",
+	}, map[string]string{
 		"go/VERSION":       "go1.18releasetest1",
 		"go/src/make.bash": makeScript,
 	})
-	checkContents(t, stagingDir, byName["go1.18releasetest1.windows-amd64.msi"], "I'm an MSI!\n")
-	checkTGZ(t, stagingDir, byName["go1.18releasetest1.linux-amd64.tar.gz"], map[string]string{
+	checkContents(t, dlDir, files, "go1.18releasetest1.windows-amd64.msi", &WebsiteFile{
+		OS:   "windows",
+		Arch: "amd64",
+		Kind: "installer",
+	}, "I'm an MSI!\n")
+	checkTGZ(t, dlDir, files, "go1.18releasetest1.linux-amd64.tar.gz", &WebsiteFile{
+		OS:   "linux",
+		Arch: "amd64",
+		Kind: "archive",
+	}, map[string]string{
 		"go/VERSION":                        "go1.18releasetest1",
 		"go/tool/something_orother/compile": "",
 		"go/pkg/something_orother/race.a":   "",
 	})
-	checkZip(t, stagingDir, byName["go1.18releasetest1.windows-arm64.zip"], map[string]string{
+	checkZip(t, dlDir, files, "go1.18releasetest1.windows-arm64.zip", &WebsiteFile{
+		OS:   "windows",
+		Arch: "arm64",
+		Kind: "archive",
+	}, map[string]string{
 		"go/VERSION":                        "go1.18releasetest1",
 		"go/tool/something_orother/compile": "",
 	})
-	checkZip(t, stagingDir, byName["go1.18releasetest1.windows-386.zip"], map[string]string{
+	checkTGZ(t, dlDir, files, "go1.18releasetest1.linux-armv6l.tar.gz", &WebsiteFile{
+		OS:   "linux",
+		Arch: "armv6l",
+		Kind: "archive",
+	}, map[string]string{
 		"go/VERSION":                        "go1.18releasetest1",
 		"go/tool/something_orother/compile": "",
 	})
-	checkContents(t, stagingDir, byName["go1.18releasetest1.darwin-amd64.pkg"], "I'm a .pkg!\n")
+	checkContents(t, dlDir, files, "go1.18releasetest1.darwin-amd64.pkg", &WebsiteFile{
+		OS:   "darwin",
+		Arch: "amd64",
+		Kind: "installer",
+	}, "I'm a .pkg!\n")
 
 	// TODO: consider logging this to golden files?
 	for name, logs := range fakeBuildlets.logs {
@@ -195,27 +244,36 @@ func serveTarballs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func checkContents(t *testing.T, stagingDir string, a artifact, contents string) {
-	t.Run(a.filename, func(t *testing.T) {
-		b, err := ioutil.ReadFile(filepath.Join(stagingDir, a.signedPath))
-		if err != nil {
-			t.Fatalf("reading %v: %v", a.filename, err)
+func checkFile(t *testing.T, dlDir string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, check func([]byte)) {
+	t.Run(filename, func(t *testing.T) {
+		f, ok := files[filename]
+		if !ok {
+			t.Fatalf("file %q not published", filename)
 		}
+		if diff := cmp.Diff(meta, f, cmpopts.IgnoreFields(WebsiteFile{}, "Filename", "Version", "ChecksumSHA256", "Size")); diff != "" {
+			t.Errorf("file metadata mismatch (-want +got):\n%v", diff)
+		}
+		b, err := ioutil.ReadFile(filepath.Join(dlDir, f.Filename))
+		if err != nil {
+			t.Fatalf("reading %v: %v", f.Filename, err)
+		}
+		check(b)
+	})
+}
+
+func checkContents(t *testing.T, dlDir string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, contents string) {
+	checkFile(t, dlDir, files, filename, meta, func(b []byte) {
 		if got, want := string(b), contents; got != want {
-			t.Errorf("%v contains %q, want %q", a.filename, got, want)
+			t.Errorf("%v contains %q, want %q", filename, got, want)
 		}
 	})
 }
 
-func checkTGZ(t *testing.T, stagingDir string, a artifact, contents map[string]string) {
-	t.Run(a.filename, func(t *testing.T) {
-		b, err := ioutil.ReadFile(filepath.Join(stagingDir, a.signedPath))
-		if err != nil {
-			t.Fatalf("reading %v: %v", a.filename, err)
-		}
+func checkTGZ(t *testing.T, dlDir string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, contents map[string]string) {
+	checkFile(t, dlDir, files, filename, meta, func(b []byte) {
 		gzr, err := gzip.NewReader(bytes.NewReader(b))
 		if err != nil {
-			t.Fatalf("unzipping %v: %v", a.filename, err)
+			t.Fatal(err)
 		}
 		tr := tar.NewReader(gzr)
 		for {
@@ -245,12 +303,8 @@ func checkTGZ(t *testing.T, stagingDir string, a artifact, contents map[string]s
 	})
 }
 
-func checkZip(t *testing.T, stagingDir string, a artifact, contents map[string]string) {
-	t.Run(a.filename, func(t *testing.T) {
-		b, err := ioutil.ReadFile(filepath.Join(stagingDir, a.signedPath))
-		if err != nil {
-			t.Fatalf("reading %v: %v", a.filename, err)
-		}
+func checkZip(t *testing.T, dlDir string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, contents map[string]string) {
+	checkFile(t, dlDir, files, filename, meta, func(b []byte) {
 		zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
 		if err != nil {
 			t.Fatal(err)
@@ -489,15 +543,9 @@ func (l *testLogger) Printf(format string, v ...interface{}) {
 // fakeSign acts like a human running the signbinaries job periodically.
 func fakeSign(ctx context.Context, t *testing.T, dir string) {
 	seen := map[string]bool{}
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(500 * time.Millisecond):
-		}
-
+	internal.PeriodicallyDo(ctx, 100*time.Millisecond, func(_ context.Context, _ time.Time) {
 		fakeSignOnce(t, dir, seen)
-	}
+	})
 }
 
 func fakeSignOnce(t *testing.T, dir string, seen map[string]bool) {
@@ -644,4 +692,27 @@ func TestFakeSign(t *testing.T) {
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("signed outputs mismatch (-want +got):\n%v", diff)
 	}
+}
+
+func fakeCDNLoad(ctx context.Context, t *testing.T, from, to string) {
+	seen := map[string]bool{}
+	internal.PeriodicallyDo(ctx, 100*time.Millisecond, func(_ context.Context, _ time.Time) {
+		files, err := os.ReadDir(from)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range files {
+			if seen[f.Name()] {
+				continue
+			}
+			seen[f.Name()] = true
+			contents, err := os.ReadFile(filepath.Join(from, f.Name()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(to, f.Name()), contents, 0777); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
 }

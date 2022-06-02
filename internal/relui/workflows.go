@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"math/rand"
+	"net/http"
 	"path"
 	"strings"
 	"sync"
@@ -244,17 +245,21 @@ func (tasks *BuildReleaseTasks) newBuildReleaseWorkflow(majorVersion string) (*w
 	stagedArtifacts := wd.Task("Stage artifacts for signing", tasks.copyToStaging, version, wd.Slice(artifacts))
 	signedArtifacts := wd.Task("Wait for signed artifacts", tasks.awaitSigned, version, wd.Constant(darwinTargets), stagedArtifacts)
 	wd.Output("Signed artifacts", signedArtifacts)
-	results := wd.Task("Combine results", combineResults, stagedArtifacts, wd.Slice(testResults))
-	wd.Output("Build results", results)
+	wait := wd.Task("Wait for signing and tests", combineResults, signedArtifacts, wd.Slice(testResults))
+	uploaded := wd.Task("Upload artifacts to CDN", tasks.uploadArtifacts, signedArtifacts, wait)
+	published := wd.Task("Publish to website", tasks.publishArtifacts, version, signedArtifacts, uploaded)
+	wd.Output("Published", published)
 	return wd, nil
 }
 
 // BuildReleaseTasks serves as an adapter to the various build tasks in the task package.
 type BuildReleaseTasks struct {
-	GerritURL              string
-	GCSClient              *storage.Client
-	ScratchURL, StagingURL string
-	CreateBuildlet         func(string) (buildlet.Client, error)
+	GerritURL                          string
+	GCSClient                          *storage.Client
+	ScratchURL, StagingURL, ServingURL string
+	DownloadURL                        string
+	PublishFile                        func(*WebsiteFile) error
+	CreateBuildlet                     func(string) (buildlet.Client, error)
 }
 
 func (b *BuildReleaseTasks) buildSource(ctx *workflow.TaskContext, revision, version string) (artifact, error) {
@@ -583,4 +588,137 @@ func readSignedArtifact(stagingFS fs.FS, version string, a artifact) (_ artifact
 		signed.gpgSignature = string(sig)
 	}
 	return signed, true, nil
+}
+
+var uploadPollDuration = 30 * time.Second
+
+func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *workflow.TaskContext, artifacts []artifact, _ string) (string, error) {
+	stagingFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.StagingURL)
+	if err != nil {
+		return "", err
+	}
+	servingFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.ServingURL)
+	if err != nil {
+		return "", err
+	}
+
+	todo := map[artifact]bool{}
+	for _, a := range artifacts {
+		if err := uploadArtifact(stagingFS, servingFS, a); err != nil {
+			return "", err
+		}
+		todo[a] = true
+	}
+
+	for {
+		for _, a := range artifacts {
+			resp, err := http.Head(tasks.DownloadURL + "/" + a.filename)
+			if err != nil {
+				return "", err
+			}
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				delete(todo, a)
+			}
+		}
+
+		if len(todo) == 0 {
+			return "", nil
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(uploadPollDuration):
+			ctx.Printf("Still waiting for %v artifacts to be published", len(todo))
+		}
+	}
+}
+
+func uploadArtifact(stagingFS, servingFS fs.FS, a artifact) error {
+	in, err := stagingFS.Open(a.signedPath)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := gcsfs.Create(servingFS, a.filename)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+
+	sha256, err := gcsfs.Create(servingFS, a.filename+".sha256")
+	if err != nil {
+		return err
+	}
+	defer sha256.Close()
+	if _, err := sha256.Write([]byte(a.sha256)); err != nil {
+		return err
+	}
+	if err := sha256.Close(); err != nil {
+		return err
+	}
+
+	if a.gpgSignature != "" {
+		asc, err := gcsfs.Create(servingFS, a.filename+".asc")
+		if err != nil {
+			return err
+		}
+		defer asc.Close()
+		if _, err := asc.Write([]byte(a.gpgSignature)); err != nil {
+			return err
+		}
+		if err := asc.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (tasks *BuildReleaseTasks) publishArtifacts(ctx *workflow.TaskContext, version string, artifacts []artifact, _ string) (string, error) {
+	for _, a := range artifacts {
+		f := &WebsiteFile{
+			Filename:       a.filename,
+			Version:        version,
+			ChecksumSHA256: a.sha256,
+			Size:           int64(a.size),
+		}
+		if a.target != nil {
+			f.OS = a.target.GOOS
+			f.Arch = a.target.GOARCH
+			if a.target.GOARCH == "arm" {
+				f.Arch = "armv6l"
+			}
+		}
+		switch a.suffix {
+		case "src.tar.gz":
+			f.Kind = "source"
+		case "tar.gz", "zip":
+			f.Kind = "archive"
+		case "msi", "pkg":
+			f.Kind = "installer"
+		}
+		if err := tasks.PublishFile(f); err != nil {
+			return "", err
+		}
+	}
+	return "", nil
+}
+
+// WebsiteFile represents a file on the go.dev downloads page.
+// It should be kept in sync with the download code in x/website/internal/dl.
+type WebsiteFile struct {
+	Filename       string `json:"filename"`
+	OS             string `json:"os"`
+	Arch           string `json:"arch"`
+	Version        string `json:"version"`
+	ChecksumSHA256 string `json:"sha256"`
+	Size           int64  `json:"size"`
+	Kind           string `json:"kind"` // "archive", "installer", "source"
 }
