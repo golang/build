@@ -363,7 +363,8 @@ const workflowFinished = `-- name: WorkflowFinished :one
 UPDATE workflows
 SET finished   = $2,
     output     = $3,
-    updated_at = $4
+    error      = $4,
+    updated_at = $5
 WHERE workflows.id = $1
 RETURNING id, params, name, created_at, updated_at, finished, output, error
 `
@@ -372,6 +373,7 @@ type WorkflowFinishedParams struct {
 	ID        uuid.UUID
 	Finished  bool
 	Output    string
+	Error     string
 	UpdatedAt time.Time
 }
 
@@ -380,6 +382,7 @@ func (q *Queries) WorkflowFinished(ctx context.Context, arg WorkflowFinishedPara
 		arg.ID,
 		arg.Finished,
 		arg.Output,
+		arg.Error,
 		arg.UpdatedAt,
 	)
 	var i Workflow

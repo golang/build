@@ -71,7 +71,8 @@ WHERE workflows.finished = false;
 UPDATE workflows
 SET finished   = $2,
     output     = $3,
-    updated_at = $4
+    error      = $4,
+    updated_at = $5
 WHERE workflows.id = $1
 RETURNING *;
 

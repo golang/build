@@ -20,9 +20,32 @@
           </h3>
           <table class="WorkflowList-params">
             <tbody>
+              <tr>
+                <td>State:</td>
+                <td class="WorkflowList-paramData">
+                  {{if $workflow.Error}}
+                    Error
+                    <div class="WorkflowList-workflowStateIcon Workflowlist-workflowStateIcon--error"></div>
+                  {{else if $workflow.Finished}}
+                    Success
+                    <div class="WorkflowList-workflowStateIcon Workflowlist-workflowStateIcon--success"></div>
+                  {{else}}
+                    Pending
+                    <div class="WorkflowList-workflowStateIcon Workflowlist-workflowStateIcon--pending"></div>
+                  {{end}}
+                </td>
+              </tr>
+              <tr>
+                <td>Output:</td>
+                <td class="WorkflowList-paramData">{{$workflow.Output}}</td>
+              </tr>
+              <tr>
+                <td>Error:</td>
+                <td class="WorkflowList-paramData">{{$workflow.Error}}</td>
+              </tr>
               {{range $name, $value := $.WorkflowParams $workflow}}
                 <tr>
-                  <td class="WorkflowList-paramData">{{$name}}:</td>
+                  <td>{{$name}}:</td>
                   <td class="WorkflowList-paramData">{{$value}}</td>
                 </tr>
               {{end}}

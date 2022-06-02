@@ -81,6 +81,22 @@ h6 {
   border: none;
   border-spacing: 0;
 }
+.WorkflowList-workflowStateIcon {
+  background-size: contain;
+  display: inline-block;
+  height: 1.25rem;
+  margin: -0.25rem 0;
+  width: 1.25rem;
+}
+.Workflowlist-workflowStateIcon--error {
+  background-image: url("images/error_red_24dp.svg");
+}
+.Workflowlist-workflowStateIcon--success {
+  background-image: url("images/check_circle_green_24dp.svg");
+}
+.Workflowlist-workflowStateIcon--pending {
+  background-image: url("images/pending_yellow_24dp.svg");
+}
 .WorkflowList-titleTime {
   font-size: 1rem;
 }

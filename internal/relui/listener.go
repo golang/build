@@ -79,19 +79,23 @@ func (l *PGListener) WorkflowStarted(ctx context.Context, workflowID uuid.UUID, 
 
 // WorkflowFinished saves the final state of a workflow after its run
 // has completed.
-func (l *PGListener) WorkflowFinished(ctx context.Context, workflowID uuid.UUID, outputs map[string]interface{}, err error) error {
-	log.Printf("WorkflowCompleted(%q, %v, %q)", workflowID, outputs, err)
+func (l *PGListener) WorkflowFinished(ctx context.Context, workflowID uuid.UUID, outputs map[string]interface{}, workflowErr error) error {
+	log.Printf("WorkflowCompleted(%q, %v, %q)", workflowID, outputs, workflowErr)
 	q := db.New(l.db)
 	m, err := json.Marshal(outputs)
 	if err != nil {
 		return err
 	}
-	_, err = q.WorkflowFinished(ctx, db.WorkflowFinishedParams{
+	wp := db.WorkflowFinishedParams{
 		ID:        workflowID,
 		Finished:  true,
 		Output:    string(m),
 		UpdatedAt: time.Now(),
-	})
+	}
+	if workflowErr != nil {
+		wp.Error = workflowErr.Error()
+	}
+	_, err = q.WorkflowFinished(ctx, wp)
 	return err
 }
 
