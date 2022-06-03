@@ -22,7 +22,9 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/google/go-github/github"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/shurcooL/githubv4"
 	"golang.org/x/build"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
@@ -30,6 +32,7 @@ import (
 	"golang.org/x/build/internal/relui"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/task"
+	"golang.org/x/oauth2"
 )
 
 var (
@@ -57,6 +60,7 @@ func main() {
 	var twitterAPI secret.TwitterCredentials
 	secret.JSONVarFlag(&twitterAPI, "twitter-api-secret", "Twitter API secret to use for workflows involving tweeting.")
 	masterKey := secret.Flag("builder-master-key", "Builder master key")
+	githubToken := secret.Flag("github-token", "GitHub API token")
 	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
 
@@ -111,7 +115,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not connect to GCS: %v", err)
 	}
-	releaseTasks := &relui.BuildReleaseTasks{
+
+	buildTasks := &relui.BuildReleaseTasks{
 		GerritURL:      "https://go.googlesource.com",
 		CreateBuildlet: coordinator.CreateBuildlet,
 		GCSClient:      gcsClient,
@@ -123,7 +128,23 @@ func main() {
 			return publishFile(*websiteUploadURL, userPassAuth, f)
 		},
 	}
-	releaseTasks.RegisterBuildReleaseWorkflows(dh)
+	githubHTTPClient := oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: *githubToken}))
+	milestoneTasks := &task.MilestoneTasks{
+		Client: &task.GitHubClient{
+			V3: github.NewClient(githubHTTPClient),
+			V4: githubv4.NewClient(githubHTTPClient),
+		},
+		RepoOwner: "golang",
+		RepoName:  "go",
+	}
+	versionTasks := &task.VersionTasks{
+		Gerrit: &task.RealGerritClient{
+			Client: gerrit.NewClient("https://go-review.googlesource.com", gerrit.BasicAuth("git-gobot.golang.org", *gerritAPIFlag)),
+		},
+		Project: "go",
+	}
+
+	relui.RegisterReleaseWorkflows(dh, buildTasks, milestoneTasks, versionTasks)
 	db, err := pgxpool.Connect(ctx, *pgConnect)
 	if err != nil {
 		log.Fatal(err)

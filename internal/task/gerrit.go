@@ -23,32 +23,32 @@ type GerritClient interface {
 	ListTags(ctx context.Context, project string) ([]string, error)
 }
 
-type realGerritClient struct {
-	client *gerrit.Client
+type RealGerritClient struct {
+	Client *gerrit.Client
 }
 
-func (c *realGerritClient) CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, files map[string]string) (string, error) {
-	change, err := c.client.CreateChange(ctx, input)
+func (c *RealGerritClient) CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, files map[string]string) (string, error) {
+	change, err := c.Client.CreateChange(ctx, input)
 	if err != nil {
 		return "", err
 	}
 	changeID := fmt.Sprintf("%s~%d", change.Project, change.ChangeNumber)
 	for path, content := range files {
 		if content == "" {
-			if err := c.client.DeleteFileInChangeEdit(ctx, changeID, path); err != nil {
+			if err := c.Client.DeleteFileInChangeEdit(ctx, changeID, path); err != nil {
 				return "", err
 			}
 		} else {
-			if err := c.client.ChangeFileContentInChangeEdit(ctx, changeID, path, content); err != nil {
+			if err := c.Client.ChangeFileContentInChangeEdit(ctx, changeID, path, content); err != nil {
 				return "", err
 			}
 		}
 	}
 
-	if err := c.client.PublishChangeEdit(ctx, changeID); err != nil {
+	if err := c.Client.PublishChangeEdit(ctx, changeID); err != nil {
 		return "", err
 	}
-	if err := c.client.SetReview(ctx, changeID, "current", gerrit.ReviewInput{
+	if err := c.Client.SetReview(ctx, changeID, "current", gerrit.ReviewInput{
 		Labels: map[string]int{
 			"Run-TryBot":  1,
 			"Auto-Submit": 1,
@@ -59,9 +59,9 @@ func (c *realGerritClient) CreateAutoSubmitChange(ctx context.Context, input ger
 	return changeID, nil
 }
 
-func (c *realGerritClient) AwaitSubmit(ctx context.Context, changeID string) (string, error) {
+func (c *RealGerritClient) AwaitSubmit(ctx context.Context, changeID string) (string, error) {
 	for {
-		detail, err := c.client.GetChangeDetail(ctx, changeID, gerrit.QueryChangesOpt{
+		detail, err := c.Client.GetChangeDetail(ctx, changeID, gerrit.QueryChangesOpt{
 			Fields: []string{"CURRENT_REVISION", "DETAILED_LABELS"},
 		})
 		if err != nil {
@@ -84,15 +84,15 @@ func (c *realGerritClient) AwaitSubmit(ctx context.Context, changeID string) (st
 	}
 }
 
-func (c *realGerritClient) Tag(ctx context.Context, project, tag, commit string) error {
-	_, err := c.client.CreateTag(ctx, project, tag, gerrit.TagInput{
+func (c *RealGerritClient) Tag(ctx context.Context, project, tag, commit string) error {
+	_, err := c.Client.CreateTag(ctx, project, tag, gerrit.TagInput{
 		Revision: commit,
 	})
 	return err
 }
 
-func (c *realGerritClient) ListTags(ctx context.Context, project string) ([]string, error) {
-	tags, err := c.client.GetProjectTags(ctx, project)
+func (c *RealGerritClient) ListTags(ctx context.Context, project string) ([]string, error) {
+	tags, err := c.Client.GetProjectTags(ctx, project)
 	if err != nil {
 		return nil, err
 	}

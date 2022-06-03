@@ -26,7 +26,8 @@ const (
 	KindBeta
 	KindRC
 	KindMajor
-	KindMinor
+	KindCurrentMinor
+	KindPrevMinor
 )
 
 type ReleaseMilestones struct {
@@ -81,10 +82,10 @@ func uppercaseVersion(version string) string {
 
 // CheckBlockers returns an error if there are open release blockers in
 // the current milestone.
-func (m *MilestoneTasks) CheckBlockers(ctx *workflow.TaskContext, milestones ReleaseMilestones, version string, kind ReleaseKind) (string, error) {
+func (m *MilestoneTasks) CheckBlockers(ctx *workflow.TaskContext, milestones ReleaseMilestones, version string, kind ReleaseKind) error {
 	issues, err := m.loadMilestoneIssues(ctx, milestones.Current, kind)
 	if err != nil {
-		return "", err
+		return err
 	}
 	var blockers []string
 	for number, labels := range issues {
@@ -98,9 +99,9 @@ func (m *MilestoneTasks) CheckBlockers(ctx *workflow.TaskContext, milestones Rel
 	}
 	sort.Strings(blockers)
 	if len(blockers) != 0 {
-		return "", fmt.Errorf("open release blockers:\n%v", strings.Join(blockers, "\n"))
+		return fmt.Errorf("open release blockers:\n%v", strings.Join(blockers, "\n"))
 	}
-	return "", nil
+	return nil
 }
 
 // loadMilestoneIssues returns all the open issues in the specified milestone
@@ -161,15 +162,15 @@ more:
 // PushIssues updates issues to reflect a finished release. For beta1 releases,
 // it removes the okay-after-beta1 label. For major and minor releases,
 // it moves them to the next milestone and closes the current one.
-func (m *MilestoneTasks) PushIssues(ctx *workflow.TaskContext, milestones ReleaseMilestones, version string, kind ReleaseKind) (string, error) {
+func (m *MilestoneTasks) PushIssues(ctx *workflow.TaskContext, milestones ReleaseMilestones, version string, kind ReleaseKind) error {
 	// For RCs we don't change issues at all.
 	if kind == KindRC {
-		return "", nil
+		return nil
 	}
 
 	issues, err := m.loadMilestoneIssues(ctx, milestones.Current, KindUnknown)
 	if err != nil {
-		return "", err
+		return err
 	}
 	for issueNumber, labels := range issues {
 		var newLabels *[]string
@@ -184,7 +185,7 @@ func (m *MilestoneTasks) PushIssues(ctx *workflow.TaskContext, milestones Releas
 					*newLabels = append(*newLabels, label)
 				}
 			}
-		} else if kind == KindMajor || kind == KindMinor {
+		} else if kind == KindMajor || kind == KindCurrentMinor || kind == KindPrevMinor {
 			newMilestone = &milestones.Next
 		}
 		_, _, err := m.Client.EditIssue(ctx, m.RepoOwner, m.RepoName, issueNumber, &github.IssueRequest{
@@ -192,18 +193,18 @@ func (m *MilestoneTasks) PushIssues(ctx *workflow.TaskContext, milestones Releas
 			Labels:    newLabels,
 		})
 		if err != nil {
-			return "", err
+			return err
 		}
 	}
-	if kind == KindMajor || kind == KindMinor {
+	if kind == KindMajor || kind == KindCurrentMinor || kind == KindPrevMinor {
 		_, _, err := m.Client.EditMilestone(ctx, m.RepoOwner, m.RepoName, milestones.Current, &github.Milestone{
 			State: github.String("closed"),
 		})
 		if err != nil {
-			return "", err
+			return err
 		}
 	}
-	return "", nil
+	return nil
 }
 
 // GitHubClientInterface is a wrapper around the GitHub v3 and v4 APIs, for

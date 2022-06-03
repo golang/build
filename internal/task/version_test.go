@@ -13,14 +13,14 @@ import (
 
 var flagRunVersionTest = flag.Bool("run-version-test", false, "run version test, which will submit CLs to go.googlesource.com/scratch. Must have a Gerrit cookie in gitcookies.")
 
-func TestGetNextVersionsLive(t *testing.T) {
+func TestGetNextVersionLive(t *testing.T) {
 	if !*flagRunVersionTest {
 		t.Skip("Not enabled by flags")
 	}
 
 	cl := gerrit.NewClient("https://go-review.googlesource.com", gerrit.GitCookiesAuth())
 	tasks := &VersionTasks{
-		Gerrit:  &realGerritClient{client: cl},
+		Gerrit:  &RealGerritClient{Client: cl},
 		Project: "go",
 	}
 	ctx := &workflow.TaskContext{
@@ -28,19 +28,22 @@ func TestGetNextVersionsLive(t *testing.T) {
 		Logger:  &testLogger{t},
 	}
 
-	versions, err := tasks.GetNextVersions(ctx)
-	if err != nil {
-		t.Fatal(err)
+	versions := map[ReleaseKind]string{}
+	for kind := ReleaseKind(0); kind <= KindPrevMinor; kind++ {
+		var err error
+		versions[kind], err = tasks.GetNextVersion(ctx, kind)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	// It's hard to check correctness automatically.
 	t.Errorf("manually verify results: %#v", versions)
 }
 
-func TestGetNextVersions(t *testing.T) {
+func TestGetNextVersion(t *testing.T) {
 	tasks := &VersionTasks{
 		Gerrit: &versionsClient{
 			tags: []string{
-				"go1.1", "go1.2",
 				"go1.3beta1", "go1.3beta2", "go1.3rc1", "go1.3", "go1.3.1", "go1.3.2", "go1.3.3",
 				"go1.4beta1", "go1.4beta2", "go1.4rc1", "go1.4", "go1.4.1",
 				"go1.5beta1", "go1.5rc1",
@@ -52,18 +55,22 @@ func TestGetNextVersions(t *testing.T) {
 		Context: context.Background(),
 		Logger:  &testLogger{t},
 	}
-	versions, err := tasks.GetNextVersions(ctx)
-	if err != nil {
-		t.Fatal(err)
+	versions := map[ReleaseKind]string{}
+	for kind := ReleaseKind(1); kind <= KindPrevMinor; kind++ {
+		var err error
+		versions[kind], err = tasks.GetNextVersion(ctx, kind)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
-	want := NextVersions{
-		CurrentMinor:  "go1.4.2",
-		PreviousMinor: "go1.3.4",
-		Beta:          "go1.5beta2",
-		RC:            "go1.5rc2",
-		Major:         "go1.5",
+	want := map[ReleaseKind]string{
+		KindBeta:         "go1.5beta2",
+		KindRC:           "go1.5rc2",
+		KindMajor:        "go1.5",
+		KindCurrentMinor: "go1.4.2",
+		KindPrevMinor:    "go1.3.4",
 	}
-	if diff := cmp.Diff(versions, want); diff != "" {
+	if diff := cmp.Diff(want, versions); diff != "" {
 		t.Fatalf("GetNextVersions mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -83,7 +90,7 @@ func TestVersion(t *testing.T) {
 	}
 	cl := gerrit.NewClient("https://go-review.googlesource.com", gerrit.GitCookiesAuth())
 	tasks := &VersionTasks{
-		Gerrit:  &realGerritClient{client: cl},
+		Gerrit:  &RealGerritClient{Client: cl},
 		Project: "scratch",
 	}
 	ctx := &workflow.TaskContext{

@@ -35,6 +35,7 @@ spec:
             - "--gerrit-api-secret=secret:symbolic-datum-552/gobot-password"
             - "--twitter-api-secret=secret:symbolic-datum-552/twitter-api-secret"
             - "--builder-master-key=secret:symbolic-datum-552/builder-master-key"
+            - "--github-token=secret:symbolic-datum-552/maintner-github-token"
             - "--scratch-files-base=gs://golang-release-staging/relui-scratch"
             - "--staging-files-base=gs://golang-release-staging"
             - "--serving-files-base=gs://golang"

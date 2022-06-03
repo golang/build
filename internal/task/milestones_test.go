@@ -57,7 +57,7 @@ func TestMilestones(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMilestones: %v", err)
 	}
-	if _, err := tasks.PushIssues(ctx, milestones, "go1.20beta1", KindBeta); err != nil {
+	if err := tasks.PushIssues(ctx, milestones, "go1.20beta1", KindBeta); err != nil {
 		t.Fatalf("Pushing issues for beta release: %v", err)
 	}
 	pushedBlocker, _, err := client3.Issues.Get(ctx, *flagOwner, *flagRepo, blocker.GetNumber())
@@ -67,17 +67,17 @@ func TestMilestones(t *testing.T) {
 	if len(pushedBlocker.Labels) != 1 || *pushedBlocker.Labels[0].Name != "release-blocker" {
 		t.Errorf("release blocking issue has labels %#v, should only have release-blocker", pushedBlocker.Labels)
 	}
-	_, err = tasks.CheckBlockers(ctx, milestones, "go1.20", KindMajor)
+	err = tasks.CheckBlockers(ctx, milestones, "go1.20", KindMajor)
 	if err == nil || !strings.Contains(err.Error(), "open release blockers") {
 		t.Fatalf("CheckBlockers with an open release blocker didn't give expected error: %v", err)
 	}
 	if _, _, err := client3.Issues.Edit(ctx, *flagOwner, *flagRepo, *blocker.Number, &github.IssueRequest{State: github.String("closed")}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tasks.CheckBlockers(ctx, milestones, "go1.20", KindMajor); err != nil {
+	if err := tasks.CheckBlockers(ctx, milestones, "go1.20", KindMajor); err != nil {
 		t.Fatalf("CheckBlockers with no release blockers failed: %v", err)
 	}
-	if _, err := tasks.PushIssues(ctx, milestones, "go1.20", KindMajor); err != nil {
+	if err := tasks.PushIssues(ctx, milestones, "go1.20", KindMajor); err != nil {
 		t.Fatalf("PushIssues for major release failed: %v", err)
 	}
 	milestone, _, err := client3.Issues.GetMilestone(ctx, *flagOwner, *flagRepo, milestones.Current)

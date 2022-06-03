@@ -15,54 +15,48 @@ type VersionTasks struct {
 	Project string
 }
 
-type NextVersions struct {
-	CurrentMinor  string
-	PreviousMinor string
-	Beta          string
-	RC            string
-	Major         string
-}
-
-// GetNextVersions returns the next version for each type of release.
-func (t *VersionTasks) GetNextVersions(ctx *workflow.TaskContext) (NextVersions, error) {
+// GetNextVersion returns the next for the given type of release.
+func (t *VersionTasks) GetNextVersion(ctx *workflow.TaskContext, kind ReleaseKind) (string, error) {
 	tags, err := t.Gerrit.ListTags(ctx, t.Project)
 	if err != nil {
-		return NextVersions{}, err
+		return "", err
 	}
 	tagSet := map[string]bool{}
 	for _, tag := range tags {
 		tagSet[tag] = true
 	}
 	// Find the most recently released major version.
-	currentMajor := 0
-	for ; ; currentMajor++ {
-		if !tagSet[fmt.Sprintf("go1.%d", currentMajor+1)] {
+	// Going down from a high number is convenient for testing.
+	currentMajor := 100
+	for ; ; currentMajor-- {
+		if tagSet[fmt.Sprintf("go1.%d", currentMajor)] {
 			break
 		}
 	}
-	var savedError error
-	findUnused := func(v string) string {
+	findUnused := func(v string) (string, error) {
 		for {
 			if !tagSet[v] {
-				return v
+				return v, nil
 			}
-			var err error
 			v, err = nextVersion(v)
 			if err != nil {
-				savedError = err
-				return ""
+				return "", err
 			}
 		}
 	}
-	// Find the next missing tag for each release type.
-	result := NextVersions{
-		CurrentMinor:  findUnused(fmt.Sprintf("go1.%d.1", currentMajor)),
-		PreviousMinor: findUnused(fmt.Sprintf("go1.%d.1", currentMajor-1)),
-		Beta:          findUnused(fmt.Sprintf("go1.%dbeta1", currentMajor+1)),
-		RC:            findUnused(fmt.Sprintf("go1.%drc1", currentMajor+1)),
-		Major:         fmt.Sprintf("go1.%d", currentMajor+1),
+	switch kind {
+	case KindCurrentMinor:
+		return findUnused(fmt.Sprintf("go1.%d.1", currentMajor))
+	case KindPrevMinor:
+		return findUnused(fmt.Sprintf("go1.%d.1", currentMajor-1))
+	case KindBeta:
+		return findUnused(fmt.Sprintf("go1.%dbeta1", currentMajor+1))
+	case KindRC:
+		return findUnused(fmt.Sprintf("go1.%drc1", currentMajor+1))
+	case KindMajor:
+		return fmt.Sprintf("go1.%d", currentMajor+1), nil
 	}
-	return result, savedError
+	return "", fmt.Errorf("unknown release kind %v", kind)
 }
 
 func nextVersion(version string) (string, error) {
@@ -97,6 +91,6 @@ func (t *VersionTasks) AwaitCL(ctx *workflow.TaskContext, changeID string) (stri
 }
 
 // TagRelease tags commit as version.
-func (t *VersionTasks) TagRelease(ctx *workflow.TaskContext, version, commit string) (string, error) {
-	return "", t.Gerrit.Tag(ctx, t.Project, version, commit)
+func (t *VersionTasks) TagRelease(ctx *workflow.TaskContext, version, commit string) error {
+	return t.Gerrit.Tag(ctx, t.Project, version, commit)
 }

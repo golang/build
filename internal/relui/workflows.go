@@ -12,7 +12,6 @@ import (
 	"math/rand"
 	"net/http"
 	"path"
-	"strings"
 	"sync"
 	"time"
 
@@ -184,46 +183,102 @@ func echo(ctx *workflow.TaskContext, arg string) (string, error) {
 	return arg, nil
 }
 
-func (tasks *BuildReleaseTasks) RegisterBuildReleaseWorkflows(h *DefinitionHolder) {
-	go117, err := tasks.newBuildReleaseWorkflow("go1.17")
-	if err != nil {
-		panic(err)
+func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks) error {
+	createSingle := func(name, major string, kind task.ReleaseKind) error {
+		wd := workflow.New()
+		err := addSingleReleaseWorkflow(build, milestone, version, wd, "go1.19", task.KindMajor)
+		if err != nil {
+			return err
+		}
+		h.RegisterDefinition(name, wd)
+		return nil
 	}
-	h.RegisterDefinition("Release Go 1.17", go117)
-	go118, err := tasks.newBuildReleaseWorkflow("go1.18")
-	if err != nil {
-		panic(err)
+	if err := createSingle("Go 1.19 final", "go1.19", task.KindMajor); err != nil {
+		return err
 	}
-	h.RegisterDefinition("Release Go 1.18", go118)
-
+	if err := createSingle("Go 1.19 next RC", "go1.19", task.KindRC); err != nil {
+		return err
+	}
+	if err := createSingle("Go 1.19 next beta", "go1.19", task.KindBeta); err != nil {
+		return err
+	}
+	wd, err := createMinorReleaseWorkflow(build, milestone, version, "go1.17", "go1.18")
+	if err != nil {
+		return err
+	}
+	h.RegisterDefinition("Minor releases for Go 1.17 and 1.18", wd)
+	return nil
 }
 
-func (tasks *BuildReleaseTasks) newBuildReleaseWorkflow(majorVersion string) (*workflow.Definition, error) {
+func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, prev, current string) (*workflow.Definition, error) {
 	wd := workflow.New()
+	if err := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(current), current, task.KindCurrentMinor); err != nil {
+		return nil, err
+	}
+	if err := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(prev), prev, task.KindPrevMinor); err != nil {
+		return nil, err
+	}
+	return wd, nil
+}
+
+func addSingleReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, wd *workflow.Definition, major string, kind task.ReleaseKind) error {
+	skipTests := wd.Parameter(workflow.Parameter{Name: "Targets to skip testing (or 'all') (optional)", ParameterType: workflow.SliceShort})
+
+	kindVal := wd.Constant(kind)
+	branch := fmt.Sprintf("release-branch.%v", major)
+	if kind == task.KindBeta {
+		branch = "master"
+	}
+	branchVal := wd.Constant(branch)
+	// TODO(heschi): read the real branch HEAD here, and check that it's the base commit for the version CL if there is one.
+	tagCommit := wd.Constant(branch)
+
+	// Select version, check milestones.
+	nextVersion := wd.Task("Get next version", version.GetNextVersion, kindVal)
+	milestones := wd.Task("Pick milestones", milestone.FetchMilestones, nextVersion, kindVal)
+	checked := wd.Action("Check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal)
+	// TODO(heschi): add mail-dl-cl here.
+
+	// Build, test, and sign release.
+	signedAndTestedArtifacts, err := build.addBuildTasks(wd, "go1.19", nextVersion, branchVal, skipTests, checked)
+	if err != nil {
+		return err
+	}
+
+	// Tag version and upload to CDN/website.
+	uploaded := wd.Action("Upload artifacts to CDN", build.uploadArtifacts, signedAndTestedArtifacts)
+	if branch != "master" {
+		versionCL := wd.Task("Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, nextVersion, uploaded)
+		tagCommit = wd.Task("Wait for version CL submission", version.AwaitCL, versionCL)
+	}
+	tagged := wd.Action("Tag version", version.TagRelease, nextVersion, tagCommit, uploaded)
+	pushed := wd.Action("Push issues", milestone.PushIssues, milestones, nextVersion, kindVal, tagged)
+	published := wd.Task("Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, pushed)
+	wd.Output("Publish results", published)
+	return nil
+}
+
+func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, majorVersion string, version, revision, skipTests workflow.Value, dependency workflow.Dependency) (workflow.Value, error) {
 	targets, ok := releasetargets.TargetsForVersion(majorVersion)
 	if !ok {
 		return nil, fmt.Errorf("malformed/unknown version %q", majorVersion)
 	}
-	version := wd.Parameter(workflow.Parameter{Name: "Version", Example: "go1.10.1"})
-	revision := wd.Parameter(workflow.Parameter{Name: "Revision", Example: "release-branch.go1.10"})
-	skipTests := wd.Parameter(workflow.Parameter{Name: "Targets to skip testing (or 'all') (optional)", ParameterType: workflow.SliceShort})
 
-	source := wd.Task("Build source archive", tasks.buildSource, revision, version)
+	source := wd.Task("Build source archive", tasks.buildSource, revision, version, dependency)
 	// Artifact file paths.
 	artifacts := []workflow.Value{source}
 	var darwinTargets []*releasetargets.Target
-	// Empty values that represent the dependency on tests passing.
-	var testResults []workflow.Value
+	var testsPassed []workflow.TaskInput
 	for _, target := range targets {
 		targetVal := wd.Constant(target)
-		taskName := func(step string) string { return target.Name + ": " + step }
+		wd := wd.Sub(target.Name)
 
 		// Build release artifacts for the platform.
-		bin := wd.Task(taskName("Build binary archive"), tasks.buildBinary, targetVal, source)
+		bin := wd.Task("Build binary archive", tasks.buildBinary, targetVal, source)
 		switch target.GOOS {
 		case "windows":
-			zip := wd.Task(taskName("Convert to .zip"), tasks.convertToZip, targetVal, bin)
-			msi := wd.Task(taskName("Build MSI"), tasks.buildMSI, targetVal, bin)
+			zip := wd.Task("Convert to .zip", tasks.convertToZip, targetVal, bin)
+			msi := wd.Task("Build MSI", tasks.buildMSI, targetVal, bin)
 			artifacts = append(artifacts, msi, zip)
 		case "darwin":
 			artifacts = append(artifacts, bin)
@@ -235,21 +290,19 @@ func (tasks *BuildReleaseTasks) newBuildReleaseWorkflow(majorVersion string) (*w
 		if target.BuildOnly {
 			continue
 		}
-		short := wd.Task(taskName("Run short tests"), tasks.runTests, targetVal, wd.Constant(target.Builder), skipTests, bin)
-		testResults = append(testResults, short)
+		short := wd.Action("Run short tests", tasks.runTests, targetVal, wd.Constant(target.Builder), skipTests, bin)
+		testsPassed = append(testsPassed, short)
 		if target.LongTestBuilder != "" {
-			long := wd.Task(taskName("Run long tests"), tasks.runTests, targetVal, wd.Constant(target.LongTestBuilder), skipTests, bin)
-			testResults = append(testResults, long)
+			long := wd.Action("Run long tests", tasks.runTests, targetVal, wd.Constant(target.LongTestBuilder), skipTests, bin)
+			testsPassed = append(testsPassed, long)
 		}
 	}
 	stagedArtifacts := wd.Task("Stage artifacts for signing", tasks.copyToStaging, version, wd.Slice(artifacts))
 	signedArtifacts := wd.Task("Wait for signed artifacts", tasks.awaitSigned, version, wd.Constant(darwinTargets), stagedArtifacts)
-	wd.Output("Signed artifacts", signedArtifacts)
-	wait := wd.Task("Wait for signing and tests", combineResults, signedArtifacts, wd.Slice(testResults))
-	uploaded := wd.Task("Upload artifacts to CDN", tasks.uploadArtifacts, signedArtifacts, wait)
-	published := wd.Task("Publish to website", tasks.publishArtifacts, version, signedArtifacts, uploaded)
-	wd.Output("Published", published)
-	return wd, nil
+	signedAndTested := wd.Task("Wait for signing and tests", func(ctx *workflow.TaskContext, artifacts []artifact) ([]artifact, error) {
+		return artifacts, nil
+	}, append([]workflow.TaskInput{signedArtifacts}, testsPassed...)...)
+	return signedAndTested, nil
 }
 
 // BuildReleaseTasks serves as an adapter to the various build tasks in the task package.
@@ -286,7 +339,7 @@ func (b *BuildReleaseTasks) convertToZip(ctx *workflow.TaskContext, target *rele
 	})
 }
 
-func (b *BuildReleaseTasks) runTests(ctx *workflow.TaskContext, target *releasetargets.Target, buildlet string, skipTests []string, binary artifact) (string, error) {
+func (b *BuildReleaseTasks) runTests(ctx *workflow.TaskContext, target *releasetargets.Target, buildlet string, skipTests []string, binary artifact) error {
 	skipped := false
 	for _, skip := range skipTests {
 		if skip == "all" || target.Name == skip {
@@ -296,12 +349,12 @@ func (b *BuildReleaseTasks) runTests(ctx *workflow.TaskContext, target *releaset
 	}
 	if skipped {
 		ctx.Printf("Skipping test")
-		return "skipped", nil
+		return nil
 	}
 	_, err := b.runBuildStep(ctx, target, buildlet, binary, "", func(bs *task.BuildletStep, r io.Reader, _ io.Writer) error {
 		return bs.TestTarget(ctx, r)
 	})
-	return "", err
+	return err
 }
 
 // runBuildStep is a convenience function that manages resources a build step might need.
@@ -431,8 +484,8 @@ func (w *sizeWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func combineResults(ctx *workflow.TaskContext, artifacts []artifact, tests []string) (string, error) {
-	return fmt.Sprintf("%#v\n\n", artifacts) + strings.Join(tests, "\n"), nil
+func combineResults(ctx *workflow.TaskContext, artifacts []artifact) ([]artifact, error) {
+	return artifacts, nil
 }
 
 func (tasks *BuildReleaseTasks) copyToStaging(ctx *workflow.TaskContext, version string, artifacts []artifact) ([]artifact, error) {
@@ -592,20 +645,20 @@ func readSignedArtifact(stagingFS fs.FS, version string, a artifact) (_ artifact
 
 var uploadPollDuration = 30 * time.Second
 
-func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *workflow.TaskContext, artifacts []artifact, _ string) (string, error) {
+func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *workflow.TaskContext, artifacts []artifact) error {
 	stagingFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.StagingURL)
 	if err != nil {
-		return "", err
+		return err
 	}
 	servingFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.ServingURL)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	todo := map[artifact]bool{}
 	for _, a := range artifacts {
 		if err := uploadArtifact(stagingFS, servingFS, a); err != nil {
-			return "", err
+			return err
 		}
 		todo[a] = true
 	}
@@ -614,7 +667,7 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *workflow.TaskContext, artif
 		for _, a := range artifacts {
 			resp, err := http.Head(tasks.DownloadURL + "/" + a.filename)
 			if err != nil {
-				return "", err
+				return err
 			}
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
@@ -623,11 +676,11 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *workflow.TaskContext, artif
 		}
 
 		if len(todo) == 0 {
-			return "", nil
+			return nil
 		}
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return ctx.Err()
 		case <-time.After(uploadPollDuration):
 			ctx.Printf("Still waiting for %v artifacts to be published", len(todo))
 		}
@@ -681,7 +734,7 @@ func uploadArtifact(stagingFS, servingFS fs.FS, a artifact) error {
 	return nil
 }
 
-func (tasks *BuildReleaseTasks) publishArtifacts(ctx *workflow.TaskContext, version string, artifacts []artifact, _ string) (string, error) {
+func (tasks *BuildReleaseTasks) publishArtifacts(ctx *workflow.TaskContext, version string, artifacts []artifact) (string, error) {
 	for _, a := range artifacts {
 		f := &WebsiteFile{
 			Filename:       a.filename,
@@ -708,7 +761,7 @@ func (tasks *BuildReleaseTasks) publishArtifacts(ctx *workflow.TaskContext, vers
 			return "", err
 		}
 	}
-	return "", nil
+	return fmt.Sprintf("Uploaded %v artifacts for %v", len(artifacts), version), nil
 }
 
 // WebsiteFile represents a file on the go.dev downloads page.

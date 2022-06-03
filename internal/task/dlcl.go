@@ -79,7 +79,7 @@ func MailDLCL(ctx *workflow.TaskContext, versions []string, e ExternalConfig) (c
 		Subject: "dl: add " + strings.Join(versions, " and "),
 		Branch:  "master",
 	}
-	changeID, err := (&realGerritClient{client: cl}).CreateAutoSubmitChange(ctx, changeInput, files)
+	changeID, err := (&RealGerritClient{Client: cl}).CreateAutoSubmitChange(ctx, changeInput, files)
 	if err != nil {
 		return "", err
 	}

@@ -28,14 +28,26 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/go-github/github"
 	"github.com/google/uuid"
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal"
+	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/untar"
 	"golang.org/x/build/internal/workflow"
 )
 
 func TestRelease(t *testing.T) {
+	t.Run("beta", func(t *testing.T) {
+		testRelease(t, "go1.18beta1", task.KindBeta)
+	})
+	t.Run("rc", func(t *testing.T) {
+		testRelease(t, "go1.18rc1", task.KindRC)
+	})
+}
+
+func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if runtime.GOOS != "linux" {
@@ -54,7 +66,7 @@ func TestRelease(t *testing.T) {
 
 	// Set up the fake signing process.
 	stagingDir := t.TempDir()
-	go fakeSign(ctx, t, filepath.Join(stagingDir, "go1.18releasetest1"))
+	go fakeSign(ctx, t, filepath.Join(stagingDir, wantVersion))
 	signingPollDuration = 100 * time.Millisecond
 
 	// Set up the fake CDN publishing process.
@@ -71,11 +83,21 @@ func TestRelease(t *testing.T) {
 	publishFile := func(f *WebsiteFile) error {
 		filesMu.Lock()
 		defer filesMu.Unlock()
-		files[f.Filename] = f
+		files[strings.TrimPrefix(f.Filename, wantVersion+".")] = f
 		return nil
 	}
 
-	tasks := BuildReleaseTasks{
+	gerrit := &fakeGerrit{createdTags: map[string]string{}}
+	versionTasks := &task.VersionTasks{
+		Gerrit:  gerrit,
+		Project: "go",
+	}
+	milestoneTasks := &task.MilestoneTasks{
+		Client:    &fakeGitHub{},
+		RepoOwner: "golang",
+		RepoName:  "go",
+	}
+	buildTasks := &BuildReleaseTasks{
 		GerritURL:      tarballServer.URL,
 		GCSClient:      nil,
 		ScratchURL:     "file://" + filepath.ToSlash(t.TempDir()),
@@ -85,13 +107,11 @@ func TestRelease(t *testing.T) {
 		DownloadURL:    dlServer.URL,
 		PublishFile:    publishFile,
 	}
-	wd, err := tasks.newBuildReleaseWorkflow("go1.18")
-	if err != nil {
+	wd := workflow.New()
+	if err := addSingleReleaseWorkflow(buildTasks, milestoneTasks, versionTasks, wd, "go1.18", kind); err != nil {
 		t.Fatal(err)
 	}
 	w, err := workflow.Start(wd, map[string]interface{}{
-		"Revision": "0",
-		"Version":  "go1.18releasetest1",
 		"Targets to skip testing (or 'all') (optional)": []string(nil),
 	})
 	if err != nil {
@@ -107,49 +127,61 @@ func TestRelease(t *testing.T) {
 		}
 	}
 
-	checkTGZ(t, dlDir, files, "go1.18releasetest1.src.tar.gz", &WebsiteFile{
+	checkTGZ(t, dlDir, files, "src.tar.gz", &WebsiteFile{
 		OS:   "",
 		Arch: "",
 		Kind: "source",
 	}, map[string]string{
-		"go/VERSION":       "go1.18releasetest1",
+		"go/VERSION":       wantVersion,
 		"go/src/make.bash": makeScript,
 	})
-	checkContents(t, dlDir, files, "go1.18releasetest1.windows-amd64.msi", &WebsiteFile{
+	checkContents(t, dlDir, files, "windows-amd64.msi", &WebsiteFile{
 		OS:   "windows",
 		Arch: "amd64",
 		Kind: "installer",
 	}, "I'm an MSI!\n")
-	checkTGZ(t, dlDir, files, "go1.18releasetest1.linux-amd64.tar.gz", &WebsiteFile{
+	checkTGZ(t, dlDir, files, "linux-amd64.tar.gz", &WebsiteFile{
 		OS:   "linux",
 		Arch: "amd64",
 		Kind: "archive",
 	}, map[string]string{
-		"go/VERSION":                        "go1.18releasetest1",
+		"go/VERSION":                        wantVersion,
 		"go/tool/something_orother/compile": "",
 		"go/pkg/something_orother/race.a":   "",
 	})
-	checkZip(t, dlDir, files, "go1.18releasetest1.windows-arm64.zip", &WebsiteFile{
+	checkZip(t, dlDir, files, "windows-arm64.zip", &WebsiteFile{
 		OS:   "windows",
 		Arch: "arm64",
 		Kind: "archive",
 	}, map[string]string{
-		"go/VERSION":                        "go1.18releasetest1",
+		"go/VERSION":                        wantVersion,
 		"go/tool/something_orother/compile": "",
 	})
-	checkTGZ(t, dlDir, files, "go1.18releasetest1.linux-armv6l.tar.gz", &WebsiteFile{
+	checkTGZ(t, dlDir, files, "linux-armv6l.tar.gz", &WebsiteFile{
 		OS:   "linux",
 		Arch: "armv6l",
 		Kind: "archive",
 	}, map[string]string{
-		"go/VERSION":                        "go1.18releasetest1",
+		"go/VERSION":                        wantVersion,
 		"go/tool/something_orother/compile": "",
 	})
-	checkContents(t, dlDir, files, "go1.18releasetest1.darwin-amd64.pkg", &WebsiteFile{
+	checkContents(t, dlDir, files, "darwin-amd64.pkg", &WebsiteFile{
 		OS:   "darwin",
 		Arch: "amd64",
 		Kind: "installer",
 	}, "I'm a .pkg!\n")
+
+	wantCLs := 1 // VERSION
+	if kind == task.KindBeta {
+		wantCLs = 0
+	}
+	if gerrit.changesCreated != wantCLs {
+		t.Errorf("workflow sent %v changes to Gerrit, want %v", gerrit.changesCreated, wantCLs)
+	}
+
+	if len(gerrit.createdTags) != 1 {
+		t.Errorf("workflow created %v tags, want 1", gerrit.createdTags)
+	}
 
 	// TODO: consider logging this to golden files?
 	for name, logs := range fakeBuildlets.logs {
@@ -331,6 +363,48 @@ func checkZip(t *testing.T, dlDir string, files map[string]*WebsiteFile, filenam
 			t.Errorf("not all files were found: missing %v", contents)
 		}
 	})
+}
+
+type fakeGerrit struct {
+	changesCreated int
+	createdTags    map[string]string
+}
+
+func (g *fakeGerrit) CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, contents map[string]string) (string, error) {
+	g.changesCreated++
+	return "fake~12345", nil
+}
+
+func (g *fakeGerrit) AwaitSubmit(ctx context.Context, changeID string) (string, error) {
+	return "fakehash", nil
+}
+
+func (g *fakeGerrit) ListTags(ctx context.Context, project string) ([]string, error) {
+	return []string{"go1.17"}, nil
+}
+
+func (g *fakeGerrit) Tag(ctx context.Context, project, tag, commit string) error {
+	g.createdTags[tag] = commit
+	return nil
+}
+
+type fakeGitHub struct {
+}
+
+func (g *fakeGitHub) FetchMilestone(ctx context.Context, owner, repo, name string, create bool) (int, error) {
+	return 0, nil
+}
+
+func (g *fakeGitHub) Query(ctx context.Context, q interface{}, variables map[string]interface{}) error {
+	return nil
+}
+
+func (g *fakeGitHub) EditIssue(ctx context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
+	return nil, nil, nil
+}
+
+func (g *fakeGitHub) EditMilestone(ctx context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
+	return nil, nil, nil
 }
 
 type fakeBuildlets struct {
