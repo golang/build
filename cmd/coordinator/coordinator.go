@@ -1502,7 +1502,7 @@ func (ts *trySet) notifyStarting() {
 	for _, b := range ts.slowBots {
 		if len(b.KnownIssues) > 0 {
 			issueBlock := new(strings.Builder)
-			issueBlock.WriteString("Note that builder %s has known issues:\n")
+			fmt.Fprintf(issueBlock, "Note that builder %s has known issues:\n", b.Name)
 			for _, i := range b.KnownIssues {
 				fmt.Fprintf(issueBlock, "\thttps://go.dev/issue/%d\n", i)
 			}
