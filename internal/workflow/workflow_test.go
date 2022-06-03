@@ -36,6 +36,56 @@ func TestTrivial(t *testing.T) {
 	}
 }
 
+func TestDependency(t *testing.T) {
+	var actionRan, checkRan bool
+	action := func(ctx context.Context) error {
+		actionRan = true
+		return nil
+	}
+	checkAction := func(ctx context.Context) error {
+		if !actionRan {
+			return fmt.Errorf("prior action didn't run")
+		}
+		checkRan = true
+		return nil
+	}
+	hi := func(ctx context.Context) (string, error) {
+		if !actionRan || !checkRan {
+			return "", fmt.Errorf("either action (%v) or checkAction (%v) didn't run", actionRan, checkRan)
+		}
+		return "hello world", nil
+	}
+
+	wd := workflow.New()
+	firstDep := wd.Action("first action", action)
+	secondDep := wd.Action("check action", checkAction, firstDep)
+	wd.Output("greeting", wd.Task("say hi", hi, secondDep))
+
+	w := startWorkflow(t, wd, nil)
+	outputs := runWorkflow(t, w, nil)
+	if got, want := outputs["greeting"], "hello world"; got != want {
+		t.Errorf("greeting = %q, want %q", got, want)
+	}
+}
+
+func TestDependencyError(t *testing.T) {
+	action := func(ctx context.Context) error {
+		return fmt.Errorf("hardcoded error")
+	}
+	task := func(ctx context.Context) (string, error) {
+		return "", fmt.Errorf("unexpected error")
+	}
+
+	wd := workflow.New()
+	dep := wd.Action("failing action", action)
+	wd.Output("output", wd.Task("task", task, dep))
+	w := startWorkflow(t, wd, nil)
+	l := &verboseListener{t: t}
+	if _, err := w.Run(context.Background(), l); err == nil {
+		t.Errorf("workflow finished successfully, expected an error")
+	}
+}
+
 func TestStuck(t *testing.T) {
 	fail := func(context.Context) (string, error) {
 		return "", fmt.Errorf("goodbye world")
