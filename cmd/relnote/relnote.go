@@ -17,6 +17,7 @@ import (
 	"path"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,25 +28,71 @@ import (
 )
 
 var (
+	verbose  = flag.Bool("v", false, "print verbose logging")
 	htmlMode = flag.Bool("html", false, "write HTML output")
 	exclFile = flag.String("exclude-from", "", "optional path to release notes HTML file. If specified, any 'CL NNNN' occurrence in the content will cause that CL to be excluded from this tool's output.")
 )
 
 // change is a change that was noted via a RELNOTE= comment.
 type change struct {
-	CL   *maintner.GerritCL
-	Note string // the part after RELNOTE=
+	CL    *maintner.GerritCL
+	Note  string // the part after RELNOTE=
+	Issue *maintner.GitHubIssue
+}
+
+func (c change) ID() string {
+	switch {
+	default:
+		panic("invalid change")
+	case c.CL != nil:
+		return fmt.Sprintf("CL %d", c.CL.Number)
+	case c.Issue != nil:
+		return fmt.Sprintf("https://go.dev/issue/%d", c.Issue.Number)
+	}
+}
+
+func (c change) URL() string {
+	switch {
+	default:
+		panic("invalid change")
+	case c.CL != nil:
+		return fmt.Sprint("https://go.dev/cl/", c.CL.Number)
+	case c.Issue != nil:
+		return fmt.Sprint("https://go.dev/issue/", c.Issue.Number)
+	}
+}
+
+func (c change) Subject() string {
+	switch {
+	default:
+		panic("invalid change")
+	case c.CL != nil:
+		subj := c.CL.Subject()
+		subj = strings.TrimPrefix(subj, clPackage(c.CL)+":")
+		return strings.TrimSpace(subj)
+	case c.Issue != nil:
+		return issueSubject(c.Issue)
+	}
 }
 
 func (c change) TextLine() string {
-	subj := c.CL.Subject()
-	if c.Note != "yes" && c.Note != "y" {
-		subj = c.Note + ": " + subj
+	switch {
+	default:
+		panic("invalid change")
+	case c.CL != nil:
+		subj := c.CL.Subject()
+		if c.Note != "yes" && c.Note != "y" {
+			subj += "; " + c.Note
+		}
+		return subj
+	case c.Issue != nil:
+		return issueSubject(c.Issue)
 	}
-	return fmt.Sprintf("https://go.dev/cl/%d: %s", c.CL.Number, subj)
 }
 
 func main() {
+	log.SetPrefix("relnote: ")
+	log.SetFlags(0)
 	flag.Parse()
 
 	// Releases are every 6 months. Walk forward by 6 month increments to next release.
@@ -81,6 +128,8 @@ func main() {
 		log.Fatal(err)
 	}
 	changes := map[string][]change{} // keyed by pkg
+	gh := corpus.GitHub().Repo("golang", "go")
+	addedIssue := make(map[int32]bool)
 	corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
 		if gp.Server() != "go.googlesource.com" {
 			return nil
@@ -97,26 +146,52 @@ func main() {
 				// Was in a previous release; not for this one.
 				return nil
 			}
-			_, ok := matchedCLs[int(cl.Number)]
-			if !ok {
-				// Wasn't matched by the Gerrit API search query.
-				// Return before making further Gerrit API calls.
+			for _, num := range issueNumbers(cl) {
+				if bytes.Contains(existingHTML, []byte(fmt.Sprintf("https://go.dev/issue/%d", num))) || addedIssue[num] {
+					continue
+				}
+				if issue := gh.Issue(num); issue != nil && !issue.ClosedAt.Before(cutoff) && hasLabel(issue, "Proposal-Accepted") {
+					if *verbose {
+						log.Printf("CL %d mentions accepted proposal #%d (%s)", cl.Number, num, issue.Title)
+					}
+					pkg := issuePackage(issue)
+					changes[pkg] = append(changes[pkg], change{Issue: issue})
+					addedIssue[num] = true
+				}
+			}
+			if bytes.Contains(existingHTML, []byte(fmt.Sprintf("CL %d", cl.Number))) {
 				return nil
 			}
-			comments, err := gerritClient.ListChangeComments(context.Background(), fmt.Sprint(cl.Number))
-			if err != nil {
-				return err
+			var relnote string
+			if _, ok := matchedCLs[int(cl.Number)]; ok {
+				comments, err := gerritClient.ListChangeComments(context.Background(), fmt.Sprint(cl.Number))
+				if err != nil {
+					return err
+				}
+				relnote = clRelNote(cl, comments)
 			}
-			relnote := clRelNote(cl, comments)
-			if relnote == "" ||
-				bytes.Contains(existingHTML, []byte(fmt.Sprintf("CL %d", cl.Number))) {
-				return nil
+			if relnote == "" {
+				// Invent a RELNOTE=modified api/name.txt if the commit modifies any API files.
+				var api []string
+				for _, f := range cl.Commit.Files {
+					if strings.HasPrefix(f.File, "api/") && strings.HasSuffix(f.File, ".txt") {
+						api = append(api, f.File)
+					}
+				}
+				if len(api) > 0 {
+					relnote = "modified " + strings.Join(api, ", ")
+					if *verbose {
+						log.Printf("CL %d %s", cl.Number, relnote)
+					}
+				}
 			}
-			pkg := clPackage(cl)
-			changes[pkg] = append(changes[pkg], change{
-				Note: relnote,
-				CL:   cl,
-			})
+			if relnote != "" {
+				pkg := clPackage(cl)
+				changes[pkg] = append(changes[pkg], change{
+					Note: relnote,
+					CL:   cl,
+				})
+			}
 			return nil
 		})
 		return nil
@@ -126,7 +201,14 @@ func main() {
 	for pkg, changes := range changes {
 		pkgs = append(pkgs, pkg)
 		sort.Slice(changes, func(i, j int) bool {
-			return changes[i].CL.Number < changes[j].CL.Number
+			x, y := &changes[i], &changes[j]
+			if (x.Issue != nil) != (y.Issue != nil) {
+				return x.Issue != nil
+			}
+			if x.Issue != nil {
+				return x.Issue.Number < y.Issue.Number
+			}
+			return x.CL.Number < y.CL.Number
 		})
 	}
 	sort.Strings(pkgs)
@@ -137,7 +219,7 @@ func main() {
 				continue
 			}
 			for _, change := range changes[pkg] {
-				fmt.Printf("<!-- CL %d: %s -->\n", change.CL.Number, change.TextLine())
+				fmt.Printf("<!-- %s: %s -->\n", change.ID(), change.TextLine())
 			}
 		}
 		for _, pkg := range pkgs {
@@ -147,11 +229,8 @@ func main() {
 			fmt.Printf("\n<dl id=%q><dt><a href=%q>%s</a></dt>\n  <dd>",
 				pkg, "/pkg/"+pkg+"/", pkg)
 			for _, change := range changes[pkg] {
-				changeURL := fmt.Sprintf("https://go.dev/cl/%d", change.CL.Number)
-				subj := change.CL.Subject()
-				subj = strings.TrimPrefix(subj, pkg+": ")
-				fmt.Printf("\n    <p><!-- CL %d -->\n      TODO: <a href=%q>%s</a>: %s\n    </p>\n",
-					change.CL.Number, changeURL, changeURL, html.EscapeString(subj))
+				fmt.Printf("\n    <p><!-- %s -->\n      TODO: <a href=%q>%s</a>: %s\n    </p>\n",
+					change.ID(), change.URL(), change.URL(), html.EscapeString(change.TextLine()))
 			}
 			fmt.Printf("  </dd>\n</dl><!-- %s -->\n", pkg)
 		}
@@ -159,7 +238,7 @@ func main() {
 		for _, pkg := range pkgs {
 			fmt.Printf("%s\n", pkg)
 			for _, change := range changes[pkg] {
-				fmt.Printf("  %s\n", change.TextLine())
+				fmt.Printf("  %s: %s\n", change.URL(), change.TextLine())
 			}
 		}
 	}
@@ -183,14 +262,27 @@ func findCLsWithRelNote(client *gerrit.Client, since time.Time) (map[int]*gerrit
 	return m, nil
 }
 
+// packagePrefix returns the package prefix at the start of s.
+// For example packagePrefix("net/http: add HTTP 5 support") == "net/http".
+// If there's no package prefix, packagePrefix returns "".
+func packagePrefix(s string) string {
+	i := strings.Index(s, ":")
+	if i < 0 {
+		return ""
+	}
+	s = s[:i]
+	if strings.Trim(s, "abcdefghijklmnopqrstuvwxyz0123456789/") != "" {
+		return ""
+	}
+	return s
+}
+
 // clPackage returns the package import path from the CL's commit message,
 // or "??" if it's formatted unconventionally.
 func clPackage(cl *maintner.GerritCL) string {
-	var pkg string
-	if i := strings.Index(cl.Subject(), ":"); i == -1 {
+	pkg := packagePrefix(cl.Subject())
+	if pkg == "" {
 		return "??"
-	} else {
-		pkg = cl.Subject()[:i]
 	}
 	if r := repos.ByGerritProject[cl.Project.Project()]; r == nil {
 		return "??"
@@ -233,3 +325,52 @@ func parseRelNote(s string) string {
 }
 
 var relNoteRx = regexp.MustCompile(`RELNOTES?=(.+)`)
+
+// issuePackage returns the package import path from the issue's title,
+// or "??" if it's formatted unconventionally.
+func issuePackage(issue *maintner.GitHubIssue) string {
+	pkg := packagePrefix(issue.Title)
+	if pkg == "" {
+		return "??"
+	}
+	return pkg
+}
+
+// issueSubject returns the issue's title with the package prefix removed.
+func issueSubject(issue *maintner.GitHubIssue) string {
+	pkg := packagePrefix(issue.Title)
+	if pkg == "" {
+		return issue.Title
+	}
+	return strings.TrimSpace(strings.TrimPrefix(issue.Title, pkg+":"))
+}
+
+func hasLabel(issue *maintner.GitHubIssue, label string) bool {
+	for _, l := range issue.Labels {
+		if l.Name == label {
+			return true
+		}
+	}
+	return false
+}
+
+var numbersRE = regexp.MustCompile(`(?m)(?:^|\s)#([0-9]{3,})`)
+var golangGoNumbersRE = regexp.MustCompile(`(?m)golang/go#([0-9]{3,})`)
+
+// issueNumbers returns the golang/go issue numbers referred to by the CL.
+func issueNumbers(cl *maintner.GerritCL) []int32 {
+	var re *regexp.Regexp
+	if cl.Project.Project() == "go" {
+		re = numbersRE
+	} else {
+		re = golangGoNumbersRE
+	}
+
+	var list []int32
+	for _, s := range re.FindAllStringSubmatch(cl.Commit.Msg, -1) {
+		if n, err := strconv.Atoi(s[1]); err == nil && n < 1e9 {
+			list = append(list, int32(n))
+		}
+	}
+	return list
+}
