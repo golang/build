@@ -86,6 +86,28 @@ func TestDependencyError(t *testing.T) {
 	}
 }
 
+func TestSub(t *testing.T) {
+	hi := func(ctx context.Context) (string, error) {
+		return "hi", nil
+	}
+	concat := func(ctx context.Context, s1, s2 string) (string, error) {
+		return s1 + " " + s2, nil
+	}
+
+	wd := workflow.New()
+	sub1 := wd.Sub("sub1")
+	g1 := sub1.Task("Greeting", hi)
+	sub2 := wd.Sub("sub2")
+	g2 := sub2.Task("Greeting", hi)
+	wd.Output("result", wd.Task("Concatenate", concat, g1, g2))
+
+	w := startWorkflow(t, wd, nil)
+	outputs := runWorkflow(t, w, nil)
+	if got, want := outputs["result"], "hi hi"; got != want {
+		t.Errorf("result = %q, want %q", got, want)
+	}
+}
+
 func TestStuck(t *testing.T) {
 	fail := func(context.Context) (string, error) {
 		return "", fmt.Errorf("goodbye world")

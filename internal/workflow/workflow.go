@@ -46,13 +46,31 @@ import (
 // New creates a new workflow definition.
 func New() *Definition {
 	return &Definition{
-		tasks:   make(map[string]*taskDefinition),
-		outputs: make(map[string]*taskResult),
+		definitionState: &definitionState{
+			tasks:   make(map[string]*taskDefinition),
+			outputs: make(map[string]*taskResult),
+		},
 	}
 }
 
 // A Definition defines the structure of a workflow.
 type Definition struct {
+	namePrefix string // For sub-workflows, the prefix that will be prepended to various names.
+	*definitionState
+}
+
+func (d *Definition) Sub(name string) *Definition {
+	return &Definition{
+		namePrefix:      name + ": " + d.namePrefix,
+		definitionState: d.definitionState,
+	}
+}
+
+func (d *Definition) name(name string) string {
+	return d.namePrefix + name
+}
+
+type definitionState struct {
 	parameters []Parameter // Ordered according to registration, unique parameter names.
 	tasks      map[string]*taskDefinition
 	outputs    map[string]*taskResult
@@ -142,6 +160,7 @@ func (d *Definition) Parameter(p Parameter) Value {
 	if p.Name == "" {
 		panic(fmt.Errorf("parameter name must be non-empty"))
 	}
+	p.Name = d.name(p.Name)
 	if p.ParameterType == (ParameterType{}) {
 		p.ParameterType = BasicString
 	}
@@ -227,7 +246,7 @@ func (d *Definition) Output(name string, v Value) {
 	if !ok {
 		panic(fmt.Errorf("output must be a task result"))
 	}
-	d.outputs[name] = tr
+	d.outputs[d.name(name)] = tr
 }
 
 // Task adds a task to the workflow definition. It can take any number of
@@ -244,6 +263,7 @@ func (d *Definition) Task(name string, f interface{}, inputs ...TaskInput) Value
 }
 
 func (d *Definition) addTask(hasResult bool, name string, f interface{}, inputs ...TaskInput) *taskDefinition {
+	name = d.name(name)
 	var args []Value
 	for _, arg := range inputs {
 		val, ok := arg.(Value)
