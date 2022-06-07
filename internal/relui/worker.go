@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
@@ -35,6 +36,12 @@ type Worker struct {
 
 	done    chan struct{}
 	pending chan *workflow.Workflow
+
+	mu sync.Mutex
+	// running is a set of currently running Workflow ids. Run uses
+	// this set to prevent starting a simultaneous execution of a
+	// currently running Workflow.
+	running map[string]struct{}
 }
 
 // NewWorker returns a Worker ready to accept and run workflows.
@@ -45,6 +52,7 @@ func NewWorker(dh *DefinitionHolder, db *pgxpool.Pool, l Listener) *Worker {
 		l:       l,
 		done:    make(chan struct{}),
 		pending: make(chan *workflow.Workflow, 1),
+		running: make(map[string]struct{}),
 	}
 }
 
@@ -64,6 +72,12 @@ func (w *Worker) Run(ctx context.Context) error {
 			return ctx.Err()
 		case wf := <-w.pending:
 			eg.Go(func() error {
+				if err := w.markRunning(wf); err != nil {
+					log.Println(err)
+					return nil
+				}
+				defer w.markStopped(wf)
+
 				outputs, err := wf.Run(ctx, w.l)
 				if wfErr := w.l.WorkflowFinished(ctx, wf.ID, outputs, err); wfErr != nil {
 					return fmt.Errorf("w.l.WorkflowFinished(_, %q, %v, %q) = %w", wf.ID, outputs, err, wfErr)
@@ -72,6 +86,22 @@ func (w *Worker) Run(ctx context.Context) error {
 			})
 		}
 	}
+}
+
+func (w *Worker) markRunning(wf *workflow.Workflow) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if _, ok := w.running[wf.ID.String()]; ok {
+		return fmt.Errorf("workflow %q already running", wf.ID)
+	}
+	w.running[wf.ID.String()] = struct{}{}
+	return nil
+}
+
+func (w *Worker) markStopped(wf *workflow.Workflow) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	delete(w.running, wf.ID.String())
 }
 
 func (w *Worker) run(wf *workflow.Workflow) error {

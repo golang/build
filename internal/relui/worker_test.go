@@ -191,27 +191,6 @@ func TestWorkflowResumeAll(t *testing.T) {
 	}
 }
 
-func TestWorkerRunListenerError(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	dbp := testDB(ctx, t)
-	q := db.New(dbp)
-	dh := NewDefinitionHolder()
-	w := NewWorker(dh, dbp, &unimplementedListener{})
-
-	wd := newTestEchoWorkflow()
-	dh.RegisterDefinition(t.Name(), wd)
-	wfid := createUnfinishedEchoWorkflow(t, ctx, q)
-
-	if err := w.Resume(ctx, wfid); err != nil {
-		t.Fatalf("w.Resume(_, %v) = %v, wanted no error", wfid, err)
-	}
-
-	if err := w.Run(ctx); err == nil {
-		t.Fatalf("w.Run() = %v, wanted error", err)
-	}
-}
-
 func newTestEchoWorkflow() *workflow.Definition {
 	wd := workflow.New()
 	echo := func(ctx context.Context, arg string) (string, error) {
