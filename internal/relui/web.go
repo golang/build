@@ -7,7 +7,9 @@ package relui
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -18,24 +20,22 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/julienschmidt/httprouter"
 	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/workflow"
 )
 
-// fileServerHandler returns a http.Handler rooted at root. It will
-// call the next handler provided for requests to "/".
+// fileServerHandler returns a http.Handler for serving static assets.
 //
 // The returned handler sets the appropriate Content-Type and
 // Cache-Control headers for the returned file.
-func fileServerHandler(fs fs.FS, next http.Handler) http.Handler {
+func fileServerHandler(fs fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
-			next.ServeHTTP(w, r)
-			return
-		}
 		w.Header().Set("Content-Type", mime.TypeByExtension(path.Ext(r.URL.Path)))
 		w.Header().Set("Cache-Control", "no-cache, private, max-age=0")
 		s := http.FileServer(http.FS(fs))
@@ -52,7 +52,7 @@ type SiteHeader struct {
 // Server implements the http handlers for relui.
 type Server struct {
 	db      *pgxpool.Pool
-	m       *http.ServeMux
+	m       *httprouter.Router
 	w       *Worker
 	baseURL *url.URL // nil means "/".
 	header  SiteHeader
@@ -70,7 +70,7 @@ type Server struct {
 func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL, header SiteHeader) *Server {
 	s := &Server{
 		db:      p,
-		m:       new(http.ServeMux),
+		m:       httprouter.New(),
 		w:       w,
 		baseURL: baseURL,
 		header:  header,
@@ -81,9 +81,11 @@ func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL, header SiteHeader) 
 	layout := template.Must(template.New("layout.html").Funcs(helpers).ParseFS(templates, "templates/layout.html"))
 	s.homeTmpl = template.Must(template.Must(layout.Clone()).Funcs(helpers).ParseFS(templates, "templates/home.html"))
 	s.newWorkflowTmpl = template.Must(template.Must(layout.Clone()).Funcs(helpers).ParseFS(templates, "templates/new_workflow.html"))
-	s.m.Handle("/workflows/create", http.HandlerFunc(s.createWorkflowHandler))
-	s.m.Handle("/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
-	s.m.Handle("/", fileServerHandler(static, http.HandlerFunc(s.homeHandler)))
+	s.m.POST("/workflows/:id/tasks/:name/retry", s.retryTaskHandler)
+	s.m.Handler(http.MethodGet, "/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
+	s.m.Handler(http.MethodPost, "/workflows", http.HandlerFunc(s.createWorkflowHandler))
+	s.m.Handler(http.MethodGet, "/static/*path", fileServerHandler(static))
+	s.m.Handler(http.MethodGet, "/", http.HandlerFunc(s.homeHandler))
 	if baseURL != nil && baseURL.Path != "/" && baseURL.Path != "" {
 		nosuffix := strings.TrimSuffix(baseURL.Path, "/")
 		s.bm = new(http.ServeMux)
@@ -248,4 +250,50 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
+}
+
+func (s *Server) retryTaskHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	id, err := uuid.Parse(params.ByName("id"))
+	if err != nil {
+		log.Printf("retryTaskHandler(_, _, %v) uuid.Parse(%v): %v", params, params.ByName("id"), err)
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
+	if err := s.retryTask(r.Context(), id, params.ByName("name")); err != nil {
+		log.Printf("s.retryTask(_, %q, %q): %v", id, params.ByName("id"), err)
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+			return
+		}
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	if err := s.w.Resume(r.Context(), id); err != nil {
+		log.Printf("s.w.Resume(_, %q): %v", id, err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
+}
+
+func (s *Server) retryTask(ctx context.Context, id uuid.UUID, name string) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("tx.Begin(): %w", err)
+	}
+	q := db.New(s.db)
+	q = q.WithTx(tx)
+	if _, err := q.ResetTask(ctx, db.ResetTaskParams{WorkflowID: id, Name: name, UpdatedAt: time.Now()}); err != nil {
+		tx.Rollback(ctx)
+		return fmt.Errorf("q.ResetTask: %w", err)
+	}
+	if _, err := q.ResetWorkflow(ctx, db.ResetWorkflowParams{ID: id, UpdatedAt: time.Now()}); err != nil {
+		tx.Rollback(ctx)
+		return fmt.Errorf("q.ResetWorkflow: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		tx.Rollback(ctx)
+		return fmt.Errorf("tx.Commit: %w", err)
+	}
+	return nil
 }

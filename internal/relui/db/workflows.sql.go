@@ -114,6 +114,68 @@ func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) 
 	return i, err
 }
 
+const resetTask = `-- name: ResetTask :one
+UPDATE tasks
+SET finished   = false,
+    result     = DEFAULT,
+    error      = DEFAULT,
+    updated_at = $3
+WHERE workflow_id = $1 AND name = $2
+RETURNING workflow_id, name, finished, result, error, created_at, updated_at
+`
+
+type ResetTaskParams struct {
+	WorkflowID uuid.UUID
+	Name       string
+	UpdatedAt  time.Time
+}
+
+func (q *Queries) ResetTask(ctx context.Context, arg ResetTaskParams) (Task, error) {
+	row := q.db.QueryRow(ctx, resetTask, arg.WorkflowID, arg.Name, arg.UpdatedAt)
+	var i Task
+	err := row.Scan(
+		&i.WorkflowID,
+		&i.Name,
+		&i.Finished,
+		&i.Result,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const resetWorkflow = `-- name: ResetWorkflow :one
+UPDATE workflows
+SET finished = false,
+    output = DEFAULT,
+    error = DEFAULT,
+    updated_at = $2
+WHERE id = $1
+RETURNING id, params, name, created_at, updated_at, finished, output, error
+`
+
+type ResetWorkflowParams struct {
+	ID        uuid.UUID
+	UpdatedAt time.Time
+}
+
+func (q *Queries) ResetWorkflow(ctx context.Context, arg ResetWorkflowParams) (Workflow, error) {
+	row := q.db.QueryRow(ctx, resetWorkflow, arg.ID, arg.UpdatedAt)
+	var i Workflow
+	err := row.Scan(
+		&i.ID,
+		&i.Params,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Finished,
+		&i.Output,
+		&i.Error,
+	)
+	return i, err
+}
+
 const taskLogs = `-- name: TaskLogs :many
 SELECT task_logs.id, task_logs.workflow_id, task_logs.task_name, task_logs.body, task_logs.created_at, task_logs.updated_at
 FROM task_logs

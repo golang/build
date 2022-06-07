@@ -174,10 +174,12 @@ func (w *Worker) Resume(ctx context.Context, id uuid.UUID) error {
 	taskStates := make(map[string]*workflow.TaskState)
 	for _, t := range tasks {
 		taskStates[t.Name] = &workflow.TaskState{
-			Name:             t.Name,
-			Finished:         t.Finished,
-			SerializedResult: []byte(t.Result.String),
-			Error:            t.Error.String,
+			Name:     t.Name,
+			Finished: t.Finished,
+			Error:    t.Error.String,
+		}
+		if t.Result.Valid {
+			taskStates[t.Name].SerializedResult = []byte(t.Result.String)
 		}
 	}
 	res, err := workflow.Resume(d, state, taskStates)

@@ -76,3 +76,20 @@ SET finished   = $2,
 WHERE workflows.id = $1
 RETURNING *;
 
+-- name: ResetTask :one
+UPDATE tasks
+SET finished   = false,
+    result     = DEFAULT,
+    error      = DEFAULT,
+    updated_at = $3
+WHERE workflow_id = $1 AND name = $2
+RETURNING *;
+
+-- name: ResetWorkflow :one
+UPDATE workflows
+SET finished = false,
+    output = DEFAULT,
+    error = DEFAULT,
+    updated_at = $2
+WHERE id = $1
+RETURNING *;

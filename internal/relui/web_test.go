@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"testing"
@@ -34,9 +35,7 @@ import (
 var testStatic embed.FS
 
 func TestFileServerHandler(t *testing.T) {
-	h := fileServerHandler(testStatic, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Home"))
-	}))
+	h := fileServerHandler(testStatic)
 
 	cases := []struct {
 		desc        string
@@ -45,12 +44,6 @@ func TestFileServerHandler(t *testing.T) {
 		wantBody    string
 		wantHeaders map[string]string
 	}{
-		{
-			desc:     "fallback to next handler",
-			path:     "/",
-			wantCode: http.StatusOK,
-			wantBody: "Home",
-		},
 		{
 			desc:     "sets headers and returns file",
 			path:     "/testing/test.css",
@@ -419,6 +412,184 @@ func TestServerBaseLink(t *testing.T) {
 			got := s.BaseLink(c.target)
 			if got != c.want {
 				t.Errorf("s.BaseLink(%q) = %q, wanted %q", c.target, got, c.want)
+			}
+		})
+	}
+}
+
+func TestServerRetryTaskHandler(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hourAgo := time.Now().Add(-1 * time.Hour)
+	wfID := uuid.New()
+
+	cases := []struct {
+		desc          string
+		params        map[string]string
+		wantCode      int
+		wantHeaders   map[string]string
+		wantWorkflows []db.Workflow
+	}{
+		{
+			desc:     "no params",
+			wantCode: http.StatusNotFound,
+			wantWorkflows: []db.Workflow{
+				{
+					ID:        wfID,
+					Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
+					Name:      nullString(`echo`),
+					Finished:  true,
+					Output:    `{"some": "thing"}`,
+					Error:     "internal explosion",
+					CreatedAt: hourAgo, // cmpopts.EquateApproxTime
+					UpdatedAt: hourAgo, // cmpopts.EquateApproxTime
+				},
+			},
+		},
+		{
+			desc:     "invalid workflow id",
+			params:   map[string]string{"id": "invalid", "name": "greeting"},
+			wantCode: http.StatusNotFound,
+			wantWorkflows: []db.Workflow{
+				{
+					ID:        wfID,
+					Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
+					Name:      nullString(`echo`),
+					Finished:  true,
+					Output:    `{"some": "thing"}`,
+					Error:     "internal explosion",
+					CreatedAt: hourAgo, // cmpopts.EquateApproxTime
+					UpdatedAt: hourAgo, // cmpopts.EquateApproxTime
+				},
+			},
+		},
+		{
+			desc:     "wrong workflow id",
+			params:   map[string]string{"id": uuid.New().String(), "name": "greeting"},
+			wantCode: http.StatusNotFound,
+			wantWorkflows: []db.Workflow{
+				{
+					ID:        wfID,
+					Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
+					Name:      nullString(`echo`),
+					Finished:  true,
+					Output:    `{"some": "thing"}`,
+					Error:     "internal explosion",
+					CreatedAt: hourAgo, // cmpopts.EquateApproxTime
+					UpdatedAt: hourAgo, // cmpopts.EquateApproxTime
+				},
+			},
+		},
+		{
+			desc:     "invalid task name",
+			params:   map[string]string{"id": wfID.String(), "name": "invalid"},
+			wantCode: http.StatusNotFound,
+			wantWorkflows: []db.Workflow{
+				{
+					ID:        wfID,
+					Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
+					Name:      nullString(`echo`),
+					Finished:  true,
+					Output:    `{"some": "thing"}`,
+					Error:     "internal explosion",
+					CreatedAt: hourAgo, // cmpopts.EquateApproxTime
+					UpdatedAt: hourAgo, // cmpopts.EquateApproxTime
+				},
+			},
+		},
+		{
+			desc:     "successful reset",
+			params:   map[string]string{"id": wfID.String(), "name": "greeting"},
+			wantCode: http.StatusSeeOther,
+			wantHeaders: map[string]string{
+				"Location": "/",
+			},
+			wantWorkflows: []db.Workflow{
+				{
+					ID:        wfID,
+					Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
+					Name:      nullString(`echo`),
+					Output:    "{}",
+					CreatedAt: hourAgo,    // cmpopts.EquateApproxTime
+					UpdatedAt: time.Now(), // cmpopts.EquateApproxTime
+				},
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			p := testDB(ctx, t)
+			q := db.New(p)
+
+			wf := db.CreateWorkflowParams{
+				ID:        wfID,
+				Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
+				Name:      nullString(`echo`),
+				CreatedAt: hourAgo,
+				UpdatedAt: hourAgo,
+			}
+			if _, err := q.CreateWorkflow(ctx, wf); err != nil {
+				t.Fatalf("CreateWorkflow(_, %v) = _, %v, wanted no error", wf, err)
+			}
+			wff := db.WorkflowFinishedParams{
+				ID:        wf.ID,
+				Finished:  true,
+				Output:    `{"some": "thing"}`,
+				Error:     "internal explosion",
+				UpdatedAt: hourAgo,
+			}
+			if _, err := q.WorkflowFinished(ctx, wff); err != nil {
+				t.Fatalf("WorkflowFinished(_, %v) = _, %v, wanted no error", wff, err)
+			}
+			gtg := db.CreateTaskParams{
+				WorkflowID: wf.ID,
+				Name:       "greeting",
+				Finished:   true,
+				Error:      nullString("internal explosion"),
+				CreatedAt:  hourAgo,
+				UpdatedAt:  hourAgo,
+			}
+			if _, err := q.CreateTask(ctx, gtg); err != nil {
+				t.Fatalf("CreateTask(_, %v) = _, %v, wanted no error", gtg, err)
+			}
+			fw := db.CreateTaskParams{
+				WorkflowID: wf.ID,
+				Name:       "farewell",
+				Finished:   true,
+				Error:      nullString("internal explosion"),
+				CreatedAt:  hourAgo,
+				UpdatedAt:  hourAgo,
+			}
+			if _, err := q.CreateTask(ctx, fw); err != nil {
+				t.Fatalf("CreateTask(_, %v) = _, %v, wanted no error", fw, err)
+			}
+
+			req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", c.params["id"], "tasks", c.params["name"], "retry"), nil)
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rec := httptest.NewRecorder()
+			s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}), nil, SiteHeader{})
+
+			s.m.ServeHTTP(rec, req)
+			resp := rec.Result()
+
+			if resp.StatusCode != c.wantCode {
+				t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, c.wantCode)
+			}
+			for k, v := range c.wantHeaders {
+				if resp.Header.Get(k) != v {
+					t.Errorf("resp.Header.Get(%q) = %q, wanted %q", k, resp.Header.Get(k), v)
+				}
+			}
+			if c.wantCode == http.StatusBadRequest {
+				return
+			}
+			wfs, err := q.Workflows(ctx)
+			if err != nil {
+				t.Fatalf("q.Workflows() = %v, %v, wanted no error", wfs, err)
+			}
+			if diff := cmp.Diff(c.wantWorkflows, wfs, SameUUIDVariant(), cmpopts.EquateApproxTime(time.Minute)); diff != "" {
+				t.Fatalf("q.Workflows() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

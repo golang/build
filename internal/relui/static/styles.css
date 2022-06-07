@@ -218,10 +218,10 @@ h6 {
   padding: 0 1rem;
   white-space: pre-wrap;
   tab-size: 4;
+  font-family: monospace;
 }
 .TaskList-itemLogLine:nth-child(even) {
   background-color: #fafafa;
-  font-family: monospace;
 }
 .TaskList-itemLogLineError {
   background-color: #c9483c;

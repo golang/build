@@ -61,6 +61,7 @@
                 <th class="TaskList-itemHeaderCol TaskList-itemStarted">Started</th>
                 <th class="TaskList-itemHeaderCol TaskList-itemUpdated">Updated</th>
                 <th class="TaskList-itemHeaderCol TaskList-itemResult">Result</th>
+                <th class="TaskList-itemHeaderCol TaskList-itemActions">Actions</th>
               </tr>
             </thead>
             {{$tasks := index $.WorkflowTasks $workflow.ID}}
@@ -96,9 +97,19 @@
                   <td class="TaskList-itemCol TaskList-itemResult">
                     {{$task.Result}}
                   </td>
+                  <td class="TaskList-itemCol TaskList-itemAction">
+                    {{if $task.Error.Valid}}
+                    <div class="TaskList-retryTask">
+                      <form action="{{baseLink (printf "/workflows/%s/tasks/%s/retry" $workflow.ID $task.Name) }}" method="post">
+                        <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />
+                        <input name="task.reset" type="submit" value="Retry" onclick="return this.form.reportValidity() && confirm('This will retry the task and clear workflow errors.\n\nReady to proceed?')" />
+                      </form>
+                    </div>
+                    {{end}}
+                  </td>
                 </tr>
                 <tr class="TaskList-itemLogsRow">
-                  <td class="TaskList-itemLogs" colspan="6">
+                  <td class="TaskList-itemLogs" colspan="7">
                     {{if $task.Error.Valid}}
                       <div class="TaskList-itemLogLine TaskList-itemLogLineError">
                         {{- $task.Error.Value -}}

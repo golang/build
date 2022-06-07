@@ -21,7 +21,7 @@
       </noscript>
     </form>
     {{if .Selected}}
-      <form action="{{baseLink "/workflows/create"}}" method="post">
+      <form action="{{baseLink "/workflows"}}" method="post">
         <input type="hidden" id="workflow.name" name="workflow.name" value="{{$.Name}}" />
         {{range $_, $p := .Selected.Parameters}}
           {{if eq $p.Type.String "string"}}
