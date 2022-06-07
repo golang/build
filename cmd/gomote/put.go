@@ -219,6 +219,33 @@ func put14(args []string) error {
 	return bc.PutTarFromURL(ctx, u, "go1.4")
 }
 
+// putBootstrap places the bootstrap version of go in the workdir
+func putBootstrap(args []string) error {
+	fs := flag.NewFlagSet("putbootstrap", flag.ContinueOnError)
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "putbootstrap usage: gomote putbootstrap <buildlet-name>")
+		fs.PrintDefaults()
+		os.Exit(1)
+	}
+	fs.Parse(args)
+	if fs.NArg() != 1 {
+		fs.Usage()
+	}
+	name := fs.Arg(0)
+	ctx := context.Background()
+	client := gomoteServerClient(ctx)
+	resp, err := client.AddBootstrap(ctx, &protos.AddBootstrapRequest{
+		GomoteId: name,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to add bootstrap version of Go to instance: %s", statusFromError(err))
+	}
+	if resp.GetBootstrapGoUrl() == "" {
+		fmt.Printf("No GoBootstrapURL defined for %q; ignoring. (may be baked into image)\n", name)
+	}
+	return nil
+}
+
 // legacyPut single file
 func legacyPut(args []string) error {
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)

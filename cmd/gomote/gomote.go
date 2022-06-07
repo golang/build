@@ -216,17 +216,19 @@ type subCommand func([]string) error
 // version2 manages how version 2 subcommands are called.
 func version2(args []string) error {
 	cm := map[string]subCommand{
-		"create":  create,
-		"destroy": destroy,
-		"list":    list,
-		"ls":      ls,
-		"run":     run,
-		"ping":    ping,
-		"ssh":     ssh,
-		"rm":      rm,
-		"gettar":  getTar,
-		"put":     put,
-		"puttar":  putTar,
+
+		"create":       create,
+		"destroy":      destroy,
+		"list":         list,
+		"ls":           ls,
+		"run":          run,
+		"ping":         ping,
+		"ssh":          ssh,
+		"rm":           rm,
+		"gettar":       getTar,
+		"put":          put,
+		"puttar":       putTar,
+		"putbootstrap": putBootstrap,
 	}
 	if len(args) == 0 {
 		usage()

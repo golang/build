@@ -20,6 +20,8 @@ const _ = grpc.SupportPackageIsVersion7
 type GomoteServiceClient interface {
 	// Authenticate provides authentication information without any additional action.
 	Authenticate(ctx context.Context, in *AuthenticateRequest, opts ...grpc.CallOption) (*AuthenticateResponse, error)
+	// AddBootstrap adds the bootstrap version of Go to the work directory.
+	AddBootstrap(ctx context.Context, in *AddBootstrapRequest, opts ...grpc.CallOption) (*AddBootstrapResponse, error)
 	// CreateInstance creates a gomote instance.
 	CreateInstance(ctx context.Context, in *CreateInstanceRequest, opts ...grpc.CallOption) (GomoteService_CreateInstanceClient, error)
 	// DestroyInstance destroys a gomote instance.
@@ -59,6 +61,15 @@ func NewGomoteServiceClient(cc grpc.ClientConnInterface) GomoteServiceClient {
 func (c *gomoteServiceClient) Authenticate(ctx context.Context, in *AuthenticateRequest, opts ...grpc.CallOption) (*AuthenticateResponse, error) {
 	out := new(AuthenticateResponse)
 	err := c.cc.Invoke(ctx, "/protos.GomoteService/Authenticate", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gomoteServiceClient) AddBootstrap(ctx context.Context, in *AddBootstrapRequest, opts ...grpc.CallOption) (*AddBootstrapResponse, error) {
+	out := new(AddBootstrapResponse)
+	err := c.cc.Invoke(ctx, "/protos.GomoteService/AddBootstrap", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -225,6 +236,8 @@ func (c *gomoteServiceClient) WriteTGZFromURL(ctx context.Context, in *WriteTGZF
 type GomoteServiceServer interface {
 	// Authenticate provides authentication information without any additional action.
 	Authenticate(context.Context, *AuthenticateRequest) (*AuthenticateResponse, error)
+	// AddBootstrap adds the bootstrap version of Go to the work directory.
+	AddBootstrap(context.Context, *AddBootstrapRequest) (*AddBootstrapResponse, error)
 	// CreateInstance creates a gomote instance.
 	CreateInstance(*CreateInstanceRequest, GomoteService_CreateInstanceServer) error
 	// DestroyInstance destroys a gomote instance.
@@ -260,6 +273,9 @@ type UnimplementedGomoteServiceServer struct {
 
 func (UnimplementedGomoteServiceServer) Authenticate(context.Context, *AuthenticateRequest) (*AuthenticateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Authenticate not implemented")
+}
+func (UnimplementedGomoteServiceServer) AddBootstrap(context.Context, *AddBootstrapRequest) (*AddBootstrapResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddBootstrap not implemented")
 }
 func (UnimplementedGomoteServiceServer) CreateInstance(*CreateInstanceRequest, GomoteService_CreateInstanceServer) error {
 	return status.Errorf(codes.Unimplemented, "method CreateInstance not implemented")
@@ -324,6 +340,24 @@ func _GomoteService_Authenticate_Handler(srv interface{}, ctx context.Context, d
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GomoteServiceServer).Authenticate(ctx, req.(*AuthenticateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GomoteService_AddBootstrap_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddBootstrapRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GomoteServiceServer).AddBootstrap(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/protos.GomoteService/AddBootstrap",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GomoteServiceServer).AddBootstrap(ctx, req.(*AddBootstrapRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -560,6 +594,10 @@ var GomoteService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Authenticate",
 			Handler:    _GomoteService_Authenticate_Handler,
+		},
+		{
+			MethodName: "AddBootstrap",
+			Handler:    _GomoteService_AddBootstrap_Handler,
 		},
 		{
 			MethodName: "DestroyInstance",

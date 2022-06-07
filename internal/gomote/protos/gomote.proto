@@ -12,6 +12,8 @@ option go_package = "golang.org/x/build/internal/gomote/protos";
 service GomoteService {
   // Authenticate provides authentication information without any additional action.
   rpc Authenticate (AuthenticateRequest) returns (AuthenticateResponse) {}
+  // AddBootstrap adds the bootstrap version of Go to the work directory.
+  rpc AddBootstrap (AddBootstrapRequest) returns (AddBootstrapResponse) {}
   // CreateInstance creates a gomote instance.
   rpc CreateInstance (CreateInstanceRequest) returns (stream CreateInstanceResponse) {}
   // DestroyInstance destroys a gomote instance.
@@ -49,6 +51,21 @@ message AuthenticateResponse {}
 // CreateInstanceRequest specifies the data needed to create a gomote instance.
 message CreateInstanceRequest {
   string builder_type = 1;
+}
+
+// AddBootstrapRequest specifies the data needed for a request to add the bootstrap version of Go
+// to the instance.
+message AddBootstrapRequest {
+  // The unique identifier for a gomote instance.
+  string gomote_id = 1;
+}
+
+// AddBootstrapResponse contains the information about the add bootstrap request.
+message AddBootstrapResponse {
+  // The URL for the Go version added to the work directory.
+  // If empty, the bootstrap version is undefined and has probably been included in
+  // the instance image.
+  string bootstrap_go_url = 1;
 }
 
 // CreateInstanceResponse contains data about a created gomote instance.

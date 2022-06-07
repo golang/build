@@ -21,6 +21,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/google/uuid"
+	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/access"
@@ -72,6 +73,33 @@ func New(rsp *remote.SessionPool, sched *schedule.Scheduler, rawCAPriKey []byte,
 		scheduler:               sched,
 		sshCertificateAuthority: signer,
 	}
+}
+
+// AddBootstrap adds the bootstrap version of Go to an instance and returns the URL for the bootstrap version. If no
+// bootstrap version is defined then the returned version URL will be empty.
+func (s *Server) AddBootstrap(ctx context.Context, req *protos.AddBootstrapRequest) (*protos.AddBootstrapResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("Authenticate access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	ses, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
+	if err != nil {
+		// the helper function returns meaningful GRPC error.
+		return nil, err
+	}
+	bconf, ok := dashboard.Builders[ses.BuilderType]
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "unknown builder type")
+	}
+	url := bconf.GoBootstrapURL(buildenv.Production)
+	if url == "" {
+		return &protos.AddBootstrapResponse{}, nil
+	}
+	if err = bc.PutTarFromURL(ctx, url, "go1.4"); err != nil {
+		return nil, status.Errorf(codes.Internal, "unable to download bootstrap Go")
+	}
+	return &protos.AddBootstrapResponse{BootstrapGoUrl: url}, nil
 }
 
 // Authenticate will allow the caller to verify that they are properly authenticated and authorized to interact with the
