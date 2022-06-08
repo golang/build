@@ -12,14 +12,17 @@ import (
 	"math/rand"
 	"net/http"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/gcsfs"
 	"golang.org/x/build/internal/releasetargets"
+	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
 )
@@ -187,6 +190,64 @@ func echo(ctx *workflow.TaskContext, arg string) (string, error) {
 	return arg, nil
 }
 
+type AwaitConditionFunc func(ctx *workflow.TaskContext) (done bool, err error)
+
+// AwaitFunc is a workflow.Task that polls the provided awaitCondition
+// every period until it either returns true or returns an error.
+func AwaitFunc(ctx *workflow.TaskContext, period time.Duration, awaitCondition AwaitConditionFunc) (bool, error) {
+	ticker := time.NewTicker(period)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-ticker.C:
+			ok, err := awaitCondition(ctx)
+			if ok || err != nil {
+				return ok, err
+			}
+		}
+	}
+}
+
+// AwaitAction is a workflow.Action that is a convenience wrapper
+// around AwaitFunc.
+func AwaitAction(ctx *workflow.TaskContext, period time.Duration, awaitCondition AwaitConditionFunc) error {
+	_, err := AwaitFunc(ctx, period, awaitCondition)
+	return err
+}
+
+func checkTaskApproved(ctx *workflow.TaskContext, p *pgxpool.Pool, taskName string) (bool, error) {
+	q := db.New(p)
+	logs, err := q.TaskLogsForTask(ctx, db.TaskLogsForTaskParams{
+		WorkflowID: ctx.WorkflowID,
+		TaskName:   taskName,
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, l := range logs {
+		if strings.Contains(l.Body, "USER-APPROVED") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func approveActionDep(p *pgxpool.Pool, taskName string) func(*workflow.TaskContext, interface{}) error {
+	return func(ctx *workflow.TaskContext, _ interface{}) error {
+		return AwaitAction(ctx, 10*time.Second, func(ctx *workflow.TaskContext) (done bool, err error) {
+			return checkTaskApproved(ctx, p, taskName)
+		})
+	}
+}
+
+func ApproveActionDep(p *pgxpool.Pool) func(taskName string) func(*workflow.TaskContext, interface{}) error {
+	return func(taskName string) func(*workflow.TaskContext, interface{}) error {
+		return approveActionDep(p, taskName)
+	}
+}
+
 func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks) error {
 	createSingle := func(name, major string, kind task.ReleaseKind) error {
 		wd := workflow.New()
@@ -250,8 +311,11 @@ func addSingleReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Mileston
 		return err
 	}
 
+	verifiedName := "APPROVE-Wait for Release Coordinator Approval"
+	verified := wd.Action(verifiedName, build.ApproveActionFunc(verifiedName), signedAndTestedArtifacts)
+
 	// Tag version and upload to CDN/website.
-	uploaded := wd.Action("Upload artifacts to CDN", build.uploadArtifacts, signedAndTestedArtifacts)
+	uploaded := wd.Action("Upload artifacts to CDN", build.uploadArtifacts, signedAndTestedArtifacts, verified)
 
 	tagCommit := branchHead
 	if branch != "master" {
@@ -322,6 +386,7 @@ type BuildReleaseTasks struct {
 	DownloadURL                        string
 	PublishFile                        func(*WebsiteFile) error
 	CreateBuildlet                     func(string) (buildlet.Client, error)
+	ApproveActionFunc                  func(taskName string) func(*workflow.TaskContext, interface{}) error
 }
 
 func (b *BuildReleaseTasks) buildSource(ctx *workflow.TaskContext, revision, version string) (artifact, error) {

@@ -118,6 +118,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not connect to GCS: %v", err)
 	}
+	db, err := pgxpool.Connect(ctx, *pgConnect)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
 
 	buildTasks := &relui.BuildReleaseTasks{
 		GerritURL:      "https://go.googlesource.com",
@@ -130,6 +135,7 @@ func main() {
 		PublishFile: func(f *relui.WebsiteFile) error {
 			return publishFile(*websiteUploadURL, userPassAuth, f)
 		},
+		ApproveActionFunc: relui.ApproveActionDep(db),
 	}
 	githubHTTPClient := oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: *githubToken}))
 	milestoneTasks := &task.MilestoneTasks{
@@ -140,13 +146,8 @@ func main() {
 		RepoOwner: "golang",
 		RepoName:  "go",
 	}
-
 	relui.RegisterReleaseWorkflows(dh, buildTasks, milestoneTasks, versionTasks)
-	db, err := pgxpool.Connect(ctx, *pgConnect)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
+
 	w := relui.NewWorker(dh, db, relui.NewPGListener(db))
 	go w.Run(ctx)
 	if err := w.ResumeAll(ctx); err != nil {

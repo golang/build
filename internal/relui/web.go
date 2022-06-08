@@ -76,12 +76,14 @@ func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL, header SiteHeader) 
 		header:  header,
 	}
 	helpers := map[string]interface{}{
-		"baseLink": s.BaseLink,
+		"baseLink":  s.BaseLink,
+		"hasPrefix": strings.HasPrefix,
 	}
 	layout := template.Must(template.New("layout.html").Funcs(helpers).ParseFS(templates, "templates/layout.html"))
 	s.homeTmpl = template.Must(template.Must(layout.Clone()).Funcs(helpers).ParseFS(templates, "templates/home.html"))
 	s.newWorkflowTmpl = template.Must(template.Must(layout.Clone()).Funcs(helpers).ParseFS(templates, "templates/new_workflow.html"))
 	s.m.POST("/workflows/:id/tasks/:name/retry", s.retryTaskHandler)
+	s.m.POST("/workflows/:id/tasks/:name/approve", s.approveTaskHandler)
 	s.m.Handler(http.MethodGet, "/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
 	s.m.Handler(http.MethodPost, "/workflows", http.HandlerFunc(s.createWorkflowHandler))
 	s.m.Handler(http.MethodGet, "/static/*path", fileServerHandler(static))
@@ -304,4 +306,26 @@ func (s *Server) retryTask(ctx context.Context, id uuid.UUID, name string) error
 	l.Printf("task reset. Previous state: %#v", task)
 	l.Printf("workflow reset. Previous state: %#v", wf)
 	return nil
+}
+
+func (s *Server) approveTaskHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	id, err := uuid.Parse(params.ByName("id"))
+	if err != nil {
+		log.Printf("approveTaskHandler(_, _, %v) uuid.Parse(%v): %v", params, params.ByName("id"), err)
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
+	q := db.New(s.db)
+	t, err := q.Task(r.Context(), db.TaskParams{WorkflowID: id, Name: params.ByName("name")})
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	} else if err != nil {
+		log.Printf("q.Task(_, %q): %v", id, err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	// This log entry serves as approval.
+	s.w.l.Logger(id, t.Name).Printf("USER-APPROVED")
+	http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
 }

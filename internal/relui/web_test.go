@@ -423,6 +423,16 @@ func TestServerRetryTaskHandler(t *testing.T) {
 
 	hourAgo := time.Now().Add(-1 * time.Hour)
 	wfID := uuid.New()
+	unchangedWorkflow := db.Workflow{
+		ID:        wfID,
+		Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
+		Name:      nullString(`echo`),
+		Finished:  true,
+		Output:    `{"some": "thing"}`,
+		Error:     "internal explosion",
+		CreatedAt: hourAgo, // cmpopts.EquateApproxTime
+		UpdatedAt: hourAgo, // cmpopts.EquateApproxTime
+	}
 
 	cases := []struct {
 		desc          string
@@ -432,54 +442,21 @@ func TestServerRetryTaskHandler(t *testing.T) {
 		wantWorkflows []db.Workflow
 	}{
 		{
-			desc:     "no params",
-			wantCode: http.StatusNotFound,
-			wantWorkflows: []db.Workflow{
-				{
-					ID:        wfID,
-					Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
-					Name:      nullString(`echo`),
-					Finished:  true,
-					Output:    `{"some": "thing"}`,
-					Error:     "internal explosion",
-					CreatedAt: hourAgo, // cmpopts.EquateApproxTime
-					UpdatedAt: hourAgo, // cmpopts.EquateApproxTime
-				},
-			},
+			desc:          "no params",
+			wantCode:      http.StatusNotFound,
+			wantWorkflows: []db.Workflow{unchangedWorkflow},
 		},
 		{
-			desc:     "invalid workflow id",
-			params:   map[string]string{"id": "invalid", "name": "greeting"},
-			wantCode: http.StatusNotFound,
-			wantWorkflows: []db.Workflow{
-				{
-					ID:        wfID,
-					Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
-					Name:      nullString(`echo`),
-					Finished:  true,
-					Output:    `{"some": "thing"}`,
-					Error:     "internal explosion",
-					CreatedAt: hourAgo, // cmpopts.EquateApproxTime
-					UpdatedAt: hourAgo, // cmpopts.EquateApproxTime
-				},
-			},
+			desc:          "invalid workflow id",
+			params:        map[string]string{"id": "invalid", "name": "greeting"},
+			wantCode:      http.StatusNotFound,
+			wantWorkflows: []db.Workflow{unchangedWorkflow},
 		},
 		{
-			desc:     "wrong workflow id",
-			params:   map[string]string{"id": uuid.New().String(), "name": "greeting"},
-			wantCode: http.StatusNotFound,
-			wantWorkflows: []db.Workflow{
-				{
-					ID:        wfID,
-					Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
-					Name:      nullString(`echo`),
-					Finished:  true,
-					Output:    `{"some": "thing"}`,
-					Error:     "internal explosion",
-					CreatedAt: hourAgo, // cmpopts.EquateApproxTime
-					UpdatedAt: hourAgo, // cmpopts.EquateApproxTime
-				},
-			},
+			desc:          "wrong workflow id",
+			params:        map[string]string{"id": uuid.New().String(), "name": "greeting"},
+			wantCode:      http.StatusNotFound,
+			wantWorkflows: []db.Workflow{unchangedWorkflow},
 		},
 		{
 			desc:     "invalid task name",
@@ -590,6 +567,115 @@ func TestServerRetryTaskHandler(t *testing.T) {
 			}
 			if diff := cmp.Diff(c.wantWorkflows, wfs, SameUUIDVariant(), cmpopts.EquateApproxTime(time.Minute)); diff != "" {
 				t.Fatalf("q.Workflows() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestServerApproveTaskHandler(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hourAgo := time.Now().Add(-1 * time.Hour)
+	wfID := uuid.New()
+
+	cases := []struct {
+		desc        string
+		params      map[string]string
+		wantCode    int
+		wantHeaders map[string]string
+		wantLogs    []db.TaskLog
+	}{
+		{
+			desc:     "no params",
+			wantCode: http.StatusNotFound,
+		},
+		{
+			desc:     "invalid workflow id",
+			params:   map[string]string{"id": "invalid", "name": "greeting"},
+			wantCode: http.StatusNotFound,
+		},
+		{
+			desc:     "wrong workflow id",
+			params:   map[string]string{"id": uuid.New().String(), "name": "greeting"},
+			wantCode: http.StatusNotFound,
+		},
+		{
+			desc:     "invalid task name",
+			params:   map[string]string{"id": wfID.String(), "name": "invalid"},
+			wantCode: http.StatusNotFound,
+		},
+		{
+			desc:     "successful reset",
+			params:   map[string]string{"id": wfID.String(), "name": "APPROVE-please"},
+			wantCode: http.StatusSeeOther,
+			wantHeaders: map[string]string{
+				"Location": "/",
+			},
+			wantLogs: []db.TaskLog{{
+				WorkflowID: wfID,
+				TaskName:   "APPROVE-please",
+				Body:       "USER-APPROVED",
+				CreatedAt:  time.Now(),
+				UpdatedAt:  time.Now(),
+			}},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			p := testDB(ctx, t)
+			q := db.New(p)
+
+			wf := db.CreateWorkflowParams{
+				ID:        wfID,
+				Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
+				Name:      nullString(`echo`),
+				CreatedAt: hourAgo,
+				UpdatedAt: hourAgo,
+			}
+			if _, err := q.CreateWorkflow(ctx, wf); err != nil {
+				t.Fatalf("CreateWorkflow(_, %v) = _, %v, wanted no error", wf, err)
+			}
+			gtg := db.CreateTaskParams{
+				WorkflowID: wf.ID,
+				Name:       "APPROVE-please",
+				Finished:   true,
+				Error:      nullString("internal explosion"),
+				CreatedAt:  hourAgo,
+				UpdatedAt:  hourAgo,
+			}
+			if _, err := q.CreateTask(ctx, gtg); err != nil {
+				t.Fatalf("CreateTask(_, %v) = _, %v, wanted no error", gtg, err)
+			}
+
+			req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", c.params["id"], "tasks", c.params["name"], "approve"), nil)
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rec := httptest.NewRecorder()
+			s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}), nil, SiteHeader{})
+
+			s.m.ServeHTTP(rec, req)
+			resp := rec.Result()
+
+			if resp.StatusCode != c.wantCode {
+				t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, c.wantCode)
+			}
+			for k, v := range c.wantHeaders {
+				if resp.Header.Get(k) != v {
+					t.Errorf("resp.Header.Get(%q) = %q, wanted %q", k, resp.Header.Get(k), v)
+				}
+			}
+			if c.wantCode == http.StatusBadRequest {
+				return
+			}
+			logs, err := q.TaskLogsForTask(ctx, db.TaskLogsForTaskParams{
+				WorkflowID: wfID,
+				TaskName:   "APPROVE-please",
+			})
+			if err != nil {
+				t.Fatalf("q.TaskLogsForTask() = %v, %v, wanted no error", logs, err)
+			}
+			if diff := cmp.Diff(c.wantLogs, logs, SameUUIDVariant(), cmpopts.EquateApproxTime(time.Minute), cmpopts.IgnoreFields(db.TaskLog{}, "ID")); diff != "" {
+				t.Fatalf("q.TaskLogsForTask() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

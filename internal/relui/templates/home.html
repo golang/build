@@ -106,6 +106,14 @@
                       </form>
                     </div>
                     {{end}}
+                    {{if and (not $task.Finished) (hasPrefix $task.Name "APPROVE-")}}
+                    <div class="TaskList-approveTask">
+                      <form action="{{baseLink (printf "/workflows/%s/tasks/%s/approve" $workflow.ID $task.Name) }}" method="post">
+                        <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />
+                        <input name="task.approve" type="submit" value="Approve" onclick="return this.form.reportValidity() && confirm('This will mark the task approved and resume the workflow.\n\nReady to proceed?')" />
+                      </form>
+                    </div>
+                    {{end}}
                   </td>
                 </tr>
                 <tr class="TaskList-itemLogsRow">
