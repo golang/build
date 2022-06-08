@@ -45,6 +45,13 @@ FROM tasks
 WHERE workflow_id = $1
 ORDER BY created_at;
 
+-- name: Task :one
+SELECT tasks.*
+FROM tasks
+WHERE workflow_id = $1
+  AND name = $2
+LIMIT 1;
+
 -- name: CreateTaskLog :one
 INSERT INTO task_logs (workflow_id, task_name, body)
 VALUES ($1, $2, $3)
@@ -82,14 +89,15 @@ SET finished   = false,
     result     = DEFAULT,
     error      = DEFAULT,
     updated_at = $3
-WHERE workflow_id = $1 AND name = $2
+WHERE workflow_id = $1
+  AND name = $2
 RETURNING *;
 
 -- name: ResetWorkflow :one
 UPDATE workflows
-SET finished = false,
-    output = DEFAULT,
-    error = DEFAULT,
+SET finished   = false,
+    output     = DEFAULT,
+    error      = DEFAULT,
     updated_at = $2
 WHERE id = $1
 RETURNING *;

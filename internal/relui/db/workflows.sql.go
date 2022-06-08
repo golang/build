@@ -120,7 +120,8 @@ SET finished   = false,
     result     = DEFAULT,
     error      = DEFAULT,
     updated_at = $3
-WHERE workflow_id = $1 AND name = $2
+WHERE workflow_id = $1
+  AND name = $2
 RETURNING workflow_id, name, finished, result, error, created_at, updated_at
 `
 
@@ -147,9 +148,9 @@ func (q *Queries) ResetTask(ctx context.Context, arg ResetTaskParams) (Task, err
 
 const resetWorkflow = `-- name: ResetWorkflow :one
 UPDATE workflows
-SET finished = false,
-    output = DEFAULT,
-    error = DEFAULT,
+SET finished   = false,
+    output     = DEFAULT,
+    error      = DEFAULT,
     updated_at = $2
 WHERE id = $1
 RETURNING id, params, name, created_at, updated_at, finished, output, error
@@ -172,6 +173,34 @@ func (q *Queries) ResetWorkflow(ctx context.Context, arg ResetWorkflowParams) (W
 		&i.Finished,
 		&i.Output,
 		&i.Error,
+	)
+	return i, err
+}
+
+const task = `-- name: Task :one
+SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at
+FROM tasks
+WHERE workflow_id = $1
+  AND name = $2
+LIMIT 1
+`
+
+type TaskParams struct {
+	WorkflowID uuid.UUID
+	Name       string
+}
+
+func (q *Queries) Task(ctx context.Context, arg TaskParams) (Task, error) {
+	row := q.db.QueryRow(ctx, task, arg.WorkflowID, arg.Name)
+	var i Task
+	err := row.Scan(
+		&i.WorkflowID,
+		&i.Name,
+		&i.Finished,
+		&i.Result,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

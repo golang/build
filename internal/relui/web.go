@@ -281,19 +281,27 @@ func (s *Server) retryTask(ctx context.Context, id uuid.UUID, name string) error
 	if err != nil {
 		return fmt.Errorf("tx.Begin(): %w", err)
 	}
-	q := db.New(s.db)
-	q = q.WithTx(tx)
+	defer tx.Rollback(ctx)
+	q := db.New(s.db).WithTx(tx)
+	wf, err := q.Workflow(ctx, id)
+	if err != nil {
+		return fmt.Errorf("q.Workflow: %w", err)
+	}
+	task, err := q.Task(ctx, db.TaskParams{WorkflowID: id, Name: name})
+	if err != nil {
+		return fmt.Errorf("q.Task: %w", err)
+	}
 	if _, err := q.ResetTask(ctx, db.ResetTaskParams{WorkflowID: id, Name: name, UpdatedAt: time.Now()}); err != nil {
-		tx.Rollback(ctx)
 		return fmt.Errorf("q.ResetTask: %w", err)
 	}
 	if _, err := q.ResetWorkflow(ctx, db.ResetWorkflowParams{ID: id, UpdatedAt: time.Now()}); err != nil {
-		tx.Rollback(ctx)
 		return fmt.Errorf("q.ResetWorkflow: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
-		tx.Rollback(ctx)
 		return fmt.Errorf("tx.Commit: %w", err)
 	}
+	l := s.w.l.Logger(id, name)
+	l.Printf("task reset. Previous state: %#v", task)
+	l.Printf("workflow reset. Previous state: %#v", wf)
 	return nil
 }
