@@ -70,7 +70,7 @@ func (h *DefinitionHolder) Definitions() map[string]*workflow.Definition {
 
 // RegisterMailDLCLDefinition registers a workflow definition for mailing a golang.org/dl CL
 // onto h, using e for the external service configuration.
-func RegisterMailDLCLDefinition(h *DefinitionHolder, e task.ExternalConfig) {
+func RegisterMailDLCLDefinition(h *DefinitionHolder, tasks *task.VersionTasks) {
 	versions := workflow.Parameter{
 		Name:          "Versions",
 		ParameterType: workflow.SliceShort,
@@ -87,7 +87,11 @@ For example:
 
 	wd := workflow.New()
 	wd.Output("ChangeURL", wd.Task("mail-dl-cl", func(ctx *workflow.TaskContext, versions []string) (string, error) {
-		return task.MailDLCL(ctx, versions, e)
+		id, err := tasks.MailDLCL(ctx, versions, false)
+		if err != nil {
+			return "", err
+		}
+		return task.ChangeLink(id), nil
 	}, wd.Parameter(versions)))
 	h.RegisterDefinition("mail-dl-cl", wd)
 }
@@ -237,7 +241,9 @@ func addSingleReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Mileston
 	nextVersion := wd.Task("Get next version", version.GetNextVersion, kindVal)
 	milestones := wd.Task("Pick milestones", milestone.FetchMilestones, nextVersion, kindVal)
 	checked := wd.Action("Check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal)
-	// TODO(heschi): add mail-dl-cl here.
+	dlcl := wd.Task("Mail DL CL", version.MailDLCL, wd.Slice([]workflow.Value{nextVersion}), wd.Constant(false))
+	dlclCommit := wd.Task("Wait for DL CL", version.AwaitCL, dlcl)
+	wd.Output("Download CL submitted", dlclCommit)
 
 	// Build, test, and sign release.
 	signedAndTestedArtifacts, err := build.addBuildTasks(wd, "go1.19", nextVersion, branchVal, skipTests, checked)

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"golang.org/x/build/buildenv"
+	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/internal/task"
@@ -169,16 +170,13 @@ func mailDLCL() {
 	}
 	versions := flag.Args()
 
-	extCfg := task.ExternalConfig{
-		DryRun: dryRun,
-	}
+	versionTasks := &task.VersionTasks{}
 	if !dryRun {
-		extCfg.GerritAPI.URL = gerritAPIURL
-		var err error
-		extCfg.GerritAPI.Auth, err = loadGerritAuth()
+		auth, err := loadGerritAuth()
 		if err != nil {
 			log.Fatalln("error loading Gerrit API credentials:", err)
 		}
+		versionTasks.Gerrit = &task.RealGerritClient{Client: gerrit.NewClient(gerritAPIURL, auth)}
 	}
 
 	fmt.Printf("About to create a golang.org/dl CL for the following Go versions:\n\n\t• %s\n\nOk? (Y/n) ", strings.Join(versions, "\n\t• "))
@@ -188,7 +186,7 @@ func mailDLCL() {
 	} else if resp != "Y" && resp != "y" {
 		log.Fatalln("stopped as requested")
 	}
-	changeURL, err := task.MailDLCL(&workflow.TaskContext{Context: context.Background(), Logger: log.Default()}, versions, extCfg)
+	changeID, err := versionTasks.MailDLCL(&workflow.TaskContext{Context: context.Background(), Logger: log.Default()}, versions, dryRun)
 	if err != nil {
 		log.Fatalf(`task.MailDLCL(ctx, %#v, extCfg) failed:
 
@@ -205,7 +203,7 @@ consider the following steps:
 
 Discuss with the secondary release coordinator as needed.`, versions, err)
 	}
-	fmt.Printf("\nPlease review and submit %s\nand then refer to the playbook for the next steps.\n\n", changeURL)
+	fmt.Printf("\nPlease review and submit %s\nand then refer to the playbook for the next steps.\n\n", task.ChangeLink(changeID))
 }
 
 // postTweet parses command-line arguments for the tweet-* modes,

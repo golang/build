@@ -72,7 +72,7 @@ func (c *RealGerritClient) AwaitSubmit(ctx context.Context, changeID string) (st
 		}
 		for _, approver := range detail.Labels["TryBot-Result"].All {
 			if approver.Value < 0 {
-				return "", fmt.Errorf("trybots failed on %v", changeLink(changeID))
+				return "", fmt.Errorf("trybots failed on %v", ChangeLink(changeID))
 			}
 		}
 
@@ -116,9 +116,9 @@ func (c *RealGerritClient) ListTags(ctx context.Context, project string) ([]stri
 	return tagNames, nil
 }
 
-// changeLink returns a link to the review page for the CL with the specified
+// ChangeLink returns a link to the review page for the CL with the specified
 // change ID. The change ID must be in the project~cl# form.
-func changeLink(changeID string) string {
+func ChangeLink(changeID string) string {
 	parts := strings.SplitN(changeID, "~", 3)
 	if len(parts) != 2 {
 		return fmt.Sprintf("(unparseable change ID %q)", changeID)

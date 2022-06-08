@@ -169,12 +169,13 @@ func main() {
 			// doesn't actually try to mail a dl CL, but capture its log.
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			changeURL, err := MailDLCL(ctx, tc.in, ExternalConfig{DryRun: true})
+			tasks := &VersionTasks{Gerrit: nil}
+			changeID, err := tasks.MailDLCL(ctx, tc.in, true)
 			if err != nil {
 				t.Fatal("got a non-nil error:", err)
 			}
-			if got, want := changeURL, "(dry-run)"; got != want {
-				t.Errorf("unexpected changeURL: got = %q, want %q", got, want)
+			if got, want := changeID, "(dry-run)"; got != want {
+				t.Errorf("unexpected changeID: got = %q, want %q", got, want)
 			}
 			if got, want := buf.String(), tc.wantLog; got != want {
 				t.Errorf("unexpected log:\ngot:\n%s\nwant:\n%s", got, want)

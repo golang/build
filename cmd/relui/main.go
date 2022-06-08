@@ -88,17 +88,20 @@ func main() {
 			CSSClass: *siteHeaderCSS,
 		}
 		extCfg = task.ExternalConfig{
-			GerritAPI: struct {
-				URL  string
-				Auth gerrit.Auth
-			}{"https://go-review.googlesource.com", gerrit.BasicAuth("git-gobot.golang.org", *gerritAPIFlag)},
 			// TODO(go.dev/issue/51150): When twitter client creation is factored out from task package, update code here.
 			TwitterAPI: twitterAPI,
 		}
 	)
 
+	gerritClient := &task.RealGerritClient{
+		Client: gerrit.NewClient("https://go-review.googlesource.com", gerrit.BasicAuth("git-gobot.golang.org", *gerritAPIFlag)),
+	}
+	versionTasks := &task.VersionTasks{
+		Gerrit:    gerritClient,
+		GoProject: "go",
+	}
 	dh := relui.NewDefinitionHolder()
-	relui.RegisterMailDLCLDefinition(dh, extCfg)
+	relui.RegisterMailDLCLDefinition(dh, versionTasks)
 	relui.RegisterTweetDefinitions(dh, extCfg)
 	userPassAuth := buildlet.UserPass{
 		Username: "user-relui",
@@ -136,12 +139,6 @@ func main() {
 		},
 		RepoOwner: "golang",
 		RepoName:  "go",
-	}
-	versionTasks := &task.VersionTasks{
-		Gerrit: &task.RealGerritClient{
-			Client: gerrit.NewClient("https://go-review.googlesource.com", gerrit.BasicAuth("git-gobot.golang.org", *gerritAPIFlag)),
-		},
-		Project: "go",
 	}
 
 	relui.RegisterReleaseWorkflows(dh, buildTasks, milestoneTasks, versionTasks)

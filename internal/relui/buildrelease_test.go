@@ -89,8 +89,8 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 
 	gerrit := &fakeGerrit{createdTags: map[string]string{}}
 	versionTasks := &task.VersionTasks{
-		Gerrit:  gerrit,
-		Project: "go",
+		Gerrit:    gerrit,
+		GoProject: "go",
 	}
 	milestoneTasks := &task.MilestoneTasks{
 		Client:    &fakeGitHub{},
@@ -171,9 +171,9 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		Kind: "installer",
 	}, "I'm a .pkg!\n")
 
-	wantCLs := 1 // VERSION
+	wantCLs := 2 // VERSION bump, DL
 	if kind == task.KindBeta {
-		wantCLs = 0
+		wantCLs--
 	}
 	if gerrit.changesCreated != wantCLs {
 		t.Errorf("workflow sent %v changes to Gerrit, want %v", gerrit.changesCreated, wantCLs)

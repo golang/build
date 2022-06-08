@@ -20,8 +20,8 @@ func TestGetNextVersionLive(t *testing.T) {
 
 	cl := gerrit.NewClient("https://go-review.googlesource.com", gerrit.GitCookiesAuth())
 	tasks := &VersionTasks{
-		Gerrit:  &RealGerritClient{Client: cl},
-		Project: "go",
+		Gerrit:    &RealGerritClient{Client: cl},
+		GoProject: "go",
 	}
 	ctx := &workflow.TaskContext{
 		Context: context.Background(),
@@ -49,7 +49,7 @@ func TestGetNextVersion(t *testing.T) {
 				"go1.5beta1", "go1.5rc1",
 			},
 		},
-		Project: "go",
+		GoProject: "go",
 	}
 	ctx := &workflow.TaskContext{
 		Context: context.Background(),
@@ -90,8 +90,8 @@ func TestVersion(t *testing.T) {
 	}
 	cl := gerrit.NewClient("https://go-review.googlesource.com", gerrit.GitCookiesAuth())
 	tasks := &VersionTasks{
-		Gerrit:  &RealGerritClient{Client: cl},
-		Project: "scratch",
+		Gerrit:    &RealGerritClient{Client: cl},
+		GoProject: "scratch",
 	}
 	ctx := &workflow.TaskContext{
 		Context: context.Background(),

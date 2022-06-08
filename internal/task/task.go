@@ -6,7 +6,6 @@
 package task
 
 import (
-	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/secret"
 )
 
@@ -18,13 +17,6 @@ type ExternalConfig struct {
 	// In dry-run mode, tasks are expected to report
 	// what would be done, without changing anything.
 	DryRun bool
-
-	// GerritAPI specifies a Gerrit API server where
-	// Go project CLs can be mailed.
-	GerritAPI struct {
-		URL  string // Gerrit API URL. For example, "https://go-review.googlesource.com".
-		Auth gerrit.Auth
-	}
 
 	// TwitterAPI holds Twitter API credentials that
 	// can be used to post a tweet.

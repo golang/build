@@ -11,13 +11,13 @@ import (
 
 // VersionTasks contains tasks related to versioning the release.
 type VersionTasks struct {
-	Gerrit  GerritClient
-	Project string
+	Gerrit    GerritClient
+	GoProject string
 }
 
 // GetNextVersion returns the next for the given type of release.
 func (t *VersionTasks) GetNextVersion(ctx *workflow.TaskContext, kind ReleaseKind) (string, error) {
-	tags, err := t.Gerrit.ListTags(ctx, t.Project)
+	tags, err := t.Gerrit.ListTags(ctx, t.GoProject)
 	if err != nil {
 		return "", err
 	}
@@ -76,7 +76,7 @@ func nextVersion(version string) (string, error) {
 // CreateAutoSubmitVersionCL mails an auto-submit change to update VERSION on branch.
 func (t *VersionTasks) CreateAutoSubmitVersionCL(ctx *workflow.TaskContext, branch, version string) (string, error) {
 	return t.Gerrit.CreateAutoSubmitChange(ctx, gerrit.ChangeInput{
-		Project: t.Project,
+		Project: t.GoProject,
 		Branch:  branch,
 		Subject: fmt.Sprintf("[%v] %v", branch, version),
 	}, map[string]string{
@@ -86,11 +86,11 @@ func (t *VersionTasks) CreateAutoSubmitVersionCL(ctx *workflow.TaskContext, bran
 
 // AwaitCL waits for the specified CL to be submitted.
 func (t *VersionTasks) AwaitCL(ctx *workflow.TaskContext, changeID string) (string, error) {
-	ctx.Printf("Awaiting review/submit of %v", changeLink(changeID))
+	ctx.Printf("Awaiting review/submit of %v", ChangeLink(changeID))
 	return t.Gerrit.AwaitSubmit(ctx, changeID)
 }
 
 // TagRelease tags commit as version.
 func (t *VersionTasks) TagRelease(ctx *workflow.TaskContext, version, commit string) error {
-	return t.Gerrit.Tag(ctx, t.Project, version, commit)
+	return t.Gerrit.Tag(ctx, t.GoProject, version, commit)
 }

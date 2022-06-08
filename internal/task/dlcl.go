@@ -26,8 +26,8 @@ import (
 //   - "go1.18" for a major Go release
 //   - "go1.18beta1" or "go1.18rc1" for a pre-release
 //
-// On success, the URL of the change is returned, like "https://go.dev/cl/123".
-func MailDLCL(ctx *workflow.TaskContext, versions []string, e ExternalConfig) (changeURL string, _ error) {
+// On success, the ID of the change is returned, like "dl~1234".
+func (t *VersionTasks) MailDLCL(ctx *workflow.TaskContext, versions []string, dryRun bool) (changeID string, _ error) {
 	if len(versions) < 1 || len(versions) > 2 {
 		return "", fmt.Errorf("got %d Go versions, want 1 or 2", len(versions))
 	}
@@ -70,20 +70,15 @@ func MailDLCL(ctx *workflow.TaskContext, versions []string, e ExternalConfig) (c
 	}
 
 	// Create a Gerrit CL using the Gerrit API.
-	if e.DryRun {
+	if dryRun {
 		return "(dry-run)", nil
 	}
-	cl := gerrit.NewClient(e.GerritAPI.URL, e.GerritAPI.Auth)
 	changeInput := gerrit.ChangeInput{
 		Project: "dl",
 		Subject: "dl: add " + strings.Join(versions, " and "),
 		Branch:  "master",
 	}
-	changeID, err := (&RealGerritClient{Client: cl}).CreateAutoSubmitChange(ctx, changeInput, files)
-	if err != nil {
-		return "", err
-	}
-	return changeLink(changeID), nil
+	return t.Gerrit.CreateAutoSubmitChange(ctx, changeInput, files)
 }
 
 func verifyGoVersions(versions ...string) error {
