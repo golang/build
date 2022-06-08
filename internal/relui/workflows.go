@@ -234,30 +234,33 @@ func addSingleReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Mileston
 		branch = "master"
 	}
 	branchVal := wd.Constant(branch)
-	// TODO(heschi): read the real branch HEAD here, and check that it's the base commit for the version CL if there is one.
-	tagCommit := wd.Constant(branch)
+	branchHead := wd.Task("Read branch HEAD", version.ReadBranchHead, branchVal)
 
 	// Select version, check milestones.
 	nextVersion := wd.Task("Get next version", version.GetNextVersion, kindVal)
 	milestones := wd.Task("Pick milestones", milestone.FetchMilestones, nextVersion, kindVal)
 	checked := wd.Action("Check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal)
 	dlcl := wd.Task("Mail DL CL", version.MailDLCL, wd.Slice([]workflow.Value{nextVersion}), wd.Constant(false))
-	dlclCommit := wd.Task("Wait for DL CL", version.AwaitCL, dlcl)
+	dlclCommit := wd.Task("Wait for DL CL", version.AwaitCL, dlcl, wd.Constant(""))
 	wd.Output("Download CL submitted", dlclCommit)
 
 	// Build, test, and sign release.
-	signedAndTestedArtifacts, err := build.addBuildTasks(wd, "go1.19", nextVersion, branchVal, skipTests, checked)
+	signedAndTestedArtifacts, err := build.addBuildTasks(wd, "go1.19", nextVersion, branchHead, skipTests, checked)
 	if err != nil {
 		return err
 	}
 
 	// Tag version and upload to CDN/website.
 	uploaded := wd.Action("Upload artifacts to CDN", build.uploadArtifacts, signedAndTestedArtifacts)
+
+	tagCommit := branchHead
 	if branch != "master" {
-		versionCL := wd.Task("Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, nextVersion, uploaded)
-		tagCommit = wd.Task("Wait for version CL submission", version.AwaitCL, versionCL)
+		branchHeadChecked := wd.Action("Check for modified branch head", version.CheckBranchHead, branchVal, branchHead, uploaded)
+		versionCL := wd.Task("Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, nextVersion, branchHeadChecked)
+		tagCommit = wd.Task("Wait for version CL submission", version.AwaitCL, versionCL, branchHead)
 	}
 	tagged := wd.Action("Tag version", version.TagRelease, nextVersion, tagCommit, uploaded)
+
 	pushed := wd.Action("Push issues", milestone.PushIssues, milestones, nextVersion, kindVal, tagged)
 	published := wd.Task("Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, pushed)
 	wd.Output("Publish results", published)

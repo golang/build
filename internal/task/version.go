@@ -85,9 +85,25 @@ func (t *VersionTasks) CreateAutoSubmitVersionCL(ctx *workflow.TaskContext, bran
 }
 
 // AwaitCL waits for the specified CL to be submitted.
-func (t *VersionTasks) AwaitCL(ctx *workflow.TaskContext, changeID string) (string, error) {
+func (t *VersionTasks) AwaitCL(ctx *workflow.TaskContext, changeID, baseCommit string) (string, error) {
 	ctx.Printf("Awaiting review/submit of %v", ChangeLink(changeID))
-	return t.Gerrit.AwaitSubmit(ctx, changeID)
+	return t.Gerrit.AwaitSubmit(ctx, changeID, baseCommit)
+}
+
+// ReadBranchHead returns the current HEAD revision of branch.
+func (t *VersionTasks) ReadBranchHead(ctx *workflow.TaskContext, branch string) (string, error) {
+	return t.Gerrit.ReadBranchHead(ctx, t.GoProject, branch)
+}
+
+func (t *VersionTasks) CheckBranchHead(ctx *workflow.TaskContext, branch, expectedCommit string) error {
+	head, err := t.ReadBranchHead(ctx, branch)
+	if err != nil {
+		return err
+	}
+	if head != expectedCommit {
+		return fmt.Errorf("head of branch %q is %q, wanted %q", branch, head, expectedCommit)
+	}
+	return nil
 }
 
 // TagRelease tags commit as version.

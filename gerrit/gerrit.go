@@ -781,6 +781,7 @@ var (
 	ErrProjectNotExist = errors.New("gerrit: requested project does not exist")
 	ErrChangeNotExist  = errors.New("gerrit: requested change does not exist")
 	ErrTagNotExist     = errors.New("gerrit: requested tag does not exist")
+	ErrBranchNotExist  = errors.New("gerrit: requested branch does not exist")
 )
 
 // GetProjectInfo returns info about a project.
@@ -815,6 +816,19 @@ func (c *Client) GetProjectBranches(ctx context.Context, name string) (map[strin
 		m[bi.Ref] = bi
 	}
 	return m, nil
+}
+
+// GetBranch gets a particular branch in project. If the branch doesn't exist, the
+// error will be ErrBranchNotExist.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-branch.
+func (c *Client) GetBranch(ctx context.Context, project, branch string) (BranchInfo, error) {
+	var res BranchInfo
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/%s", project, branch))
+	if he, ok := err.(*HTTPError); ok && he.Res.StatusCode == 404 {
+		return BranchInfo{}, ErrBranchNotExist
+	}
+	return res, err
 }
 
 // WebLinkInfo is information about a web link.

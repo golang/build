@@ -16,11 +16,14 @@ type GerritClient interface {
 	CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, contents map[string]string) (string, error)
 	// AwaitSubmit waits for the specified change to be auto-submitted or fail
 	// trybots. If the CL is submitted, returns the submitted commit hash.
-	AwaitSubmit(ctx context.Context, changeID string) (string, error)
+	// If parentCommit is non-empty, the submitted CL's parent must match it.
+	AwaitSubmit(ctx context.Context, changeID, parentCommit string) (string, error)
 	// Tag creates a tag on project at the specified commit.
 	Tag(ctx context.Context, project, tag, commit string) error
 	// ListTags returns all the tags on project.
 	ListTags(ctx context.Context, project string) ([]string, error)
+	// ReadBranchHead returns the head of a branch in project.
+	ReadBranchHead(ctx context.Context, project, branch string) (string, error)
 }
 
 type RealGerritClient struct {
@@ -59,15 +62,19 @@ func (c *RealGerritClient) CreateAutoSubmitChange(ctx context.Context, input ger
 	return changeID, nil
 }
 
-func (c *RealGerritClient) AwaitSubmit(ctx context.Context, changeID string) (string, error) {
+func (c *RealGerritClient) AwaitSubmit(ctx context.Context, changeID, parentCommit string) (string, error) {
 	for {
 		detail, err := c.Client.GetChangeDetail(ctx, changeID, gerrit.QueryChangesOpt{
-			Fields: []string{"CURRENT_REVISION", "DETAILED_LABELS"},
+			Fields: []string{"CURRENT_REVISION", "DETAILED_LABELS", "CURRENT_COMMIT"},
 		})
 		if err != nil {
 			return "", err
 		}
 		if detail.Status == "MERGED" {
+			parents := detail.Revisions[detail.CurrentRevision].Commit.Parents
+			if parentCommit != "" && (len(parents) != 1 || parents[0].CommitID != parentCommit) {
+				return "", fmt.Errorf("expected merged CL %v to have one parent commit %v, has %v", ChangeLink(changeID), parentCommit, parents)
+			}
 			return detail.CurrentRevision, nil
 		}
 		for _, approver := range detail.Labels["TryBot-Result"].All {
@@ -114,6 +121,14 @@ func (c *RealGerritClient) ListTags(ctx context.Context, project string) ([]stri
 		tagNames = append(tagNames, strings.TrimPrefix(tag.Ref, "refs/tags/"))
 	}
 	return tagNames, nil
+}
+
+func (c *RealGerritClient) ReadBranchHead(ctx context.Context, project, branch string) (string, error) {
+	branchInfo, err := c.Client.GetBranch(ctx, project, branch)
+	if err != nil {
+		return "", err
+	}
+	return branchInfo.Revision, nil
 }
 
 // ChangeLink returns a link to the review page for the CL with the specified

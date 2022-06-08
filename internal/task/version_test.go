@@ -102,7 +102,7 @@ func TestVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = tasks.AwaitCL(ctx, changeID)
+	_, err = tasks.AwaitCL(ctx, changeID, "")
 	if strings.Contains(err.Error(), "trybots failed") {
 		t.Logf("Trybots failed, as they usually do: %v. Abandoning CL and ending test.", err)
 		if err := cl.AbandonChange(ctx, changeID, "test is done"); err != nil {
@@ -119,7 +119,7 @@ func TestVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cleaning up VERSION: %v", err)
 	}
-	if _, err := tasks.AwaitCL(ctx, changeID); err != nil {
+	if _, err := tasks.AwaitCL(ctx, changeID, ""); err != nil {
 		t.Fatalf("cleaning up VERSION: %v", err)
 	}
 }

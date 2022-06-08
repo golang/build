@@ -375,7 +375,7 @@ func (g *fakeGerrit) CreateAutoSubmitChange(ctx context.Context, input gerrit.Ch
 	return "fake~12345", nil
 }
 
-func (g *fakeGerrit) AwaitSubmit(ctx context.Context, changeID string) (string, error) {
+func (g *fakeGerrit) AwaitSubmit(ctx context.Context, changeID, baseCommit string) (string, error) {
 	return "fakehash", nil
 }
 
@@ -386,6 +386,10 @@ func (g *fakeGerrit) ListTags(ctx context.Context, project string) ([]string, er
 func (g *fakeGerrit) Tag(ctx context.Context, project, tag, commit string) error {
 	g.createdTags[tag] = commit
 	return nil
+}
+
+func (g *fakeGerrit) ReadBranchHead(ctx context.Context, project, branch string) (string, error) {
+	return fmt.Sprintf("fake HEAD commit for %v/%v", project, branch), nil
 }
 
 type fakeGitHub struct {
