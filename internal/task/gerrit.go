@@ -85,7 +85,20 @@ func (c *RealGerritClient) AwaitSubmit(ctx context.Context, changeID string) (st
 }
 
 func (c *RealGerritClient) Tag(ctx context.Context, project, tag, commit string) error {
-	_, err := c.Client.CreateTag(ctx, project, tag, gerrit.TagInput{
+	info, err := c.Client.GetTag(ctx, project, tag)
+	if err != nil && err != gerrit.ErrTagNotExist {
+		return fmt.Errorf("checking if tag already exists: %v", err)
+	}
+	if err == nil {
+		if info.Revision != commit {
+			return fmt.Errorf("tag %q already exists on revision %q rather than our %q", tag, info.Revision, commit)
+		} else {
+			// Nothing to do.
+			return nil
+		}
+	}
+
+	_, err = c.Client.CreateTag(ctx, project, tag, gerrit.TagInput{
 		Revision: commit,
 	})
 	return err

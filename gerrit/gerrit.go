@@ -774,15 +774,14 @@ func (c *Client) PublishChangeEdit(ctx context.Context, changeID string) error {
 	return c.do(ctx, nil, "POST", "/changes/"+changeID+"/edit:publish", wantResStatus(http.StatusNoContent))
 }
 
-// ErrProjectNotExist is returned when a project doesn't exist.
+// ErrXNotExist is returned when the requested X doesn't exist.
 // It is not necessarily returned unless a method is documented as
 // returning it.
-var ErrProjectNotExist = errors.New("gerrit: requested project does not exist")
-
-// ErrChangeNotExist is returned when a change doesn't exist.
-// It is not necessarily returned unless a method is documented as
-// returning it.
-var ErrChangeNotExist = errors.New("gerrit: requested change does not exist")
+var (
+	ErrProjectNotExist = errors.New("gerrit: requested project does not exist")
+	ErrChangeNotExist  = errors.New("gerrit: requested change does not exist")
+	ErrTagNotExist     = errors.New("gerrit: requested tag does not exist")
+)
 
 // GetProjectInfo returns info about a project.
 // If the project doesn't exist, the error will be ErrProjectNotExist.
@@ -881,6 +880,19 @@ func (c *Client) GetProjectTags(ctx context.Context, name string) (map[string]Ta
 		m[ti.Ref] = ti
 	}
 	return m, nil
+}
+
+// GetTag returns a particular tag on project. If the tag doesn't exist, the
+// error will be ErrTagNotExist.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-tag.
+func (c *Client) GetTag(ctx context.Context, project, tag string) (TagInfo, error) {
+	var res TagInfo
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/tags/%s", project, tag))
+	if he, ok := err.(*HTTPError); ok && he.Res.StatusCode == 404 {
+		return TagInfo{}, ErrTagNotExist
+	}
+	return res, err
 }
 
 // TagInput contains information for creating a tag.
