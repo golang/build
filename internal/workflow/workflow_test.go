@@ -319,12 +319,13 @@ func TestResume(t *testing.T) {
 	}
 	storage.assertState(t, w, map[string]*workflow.TaskState{
 		"run once": {Name: "run once", Finished: true, Result: "ran"},
-		"block":    {Name: "block"}, // We cancelled the workflow before it could save its state.
+		"block":    {Name: "block", Finished: true, Error: "context canceled"}, // We cancelled the workflow before it could save its state.
 	})
 
 	block = false
 	wfState := &workflow.WorkflowState{ID: w.ID, Params: nil}
 	taskStates := storage.states[w.ID]
+	taskStates["block"] = &workflow.TaskState{Name: "block"}
 	w2, err := workflow.Resume(wd, wfState, taskStates)
 	if err != nil {
 		t.Fatal(err)
@@ -376,6 +377,7 @@ func (l *mapListener) TaskStateChanged(workflowID uuid.UUID, taskID string, stat
 }
 
 func (l *mapListener) assertState(t *testing.T, w *workflow.Workflow, want map[string]*workflow.TaskState) {
+	t.Helper()
 	if diff := cmp.Diff(l.states[w.ID], want, cmpopts.IgnoreFields(workflow.TaskState{}, "SerializedResult")); diff != "" {
 		t.Errorf("task state didn't match expections: %v", diff)
 	}
@@ -399,7 +401,7 @@ func runWorkflow(t *testing.T, w *workflow.Workflow, listener workflow.Listener)
 	}
 	outputs, err := w.Run(ctx, listener)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("w.Run() = _, %v, wanted no error", err)
 	}
 	return outputs
 }

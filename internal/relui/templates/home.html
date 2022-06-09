@@ -17,6 +17,14 @@
             <span class="WorkflowList-titleTime">
               {{$workflow.CreatedAt.UTC.Format "2006/01/02 15:04 MST"}}
             </span>
+            {{if not (or $workflow.Finished $workflow.Error)}}
+              <div class="WorkflowList-titleStop">
+                <form action="{{baseLink (printf "/workflows/%s/stop" $workflow.ID) }}" method="post">
+                  <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />
+                  <input name="workflow.stop" class="Button Button--red" type="submit" value="STOP" onclick="return this.form.reportValidity() && confirm('This will stop the workflow and all in-flight tasks.\n\nAre you sure you want to proceed?')" />
+                </form>
+              </div>
+            {{end}}
           </h3>
           <table class="WorkflowList-params">
             <tbody>
@@ -102,7 +110,7 @@
                     <div class="TaskList-retryTask">
                       <form action="{{baseLink (printf "/workflows/%s/tasks/%s/retry" $workflow.ID $task.Name) }}" method="post">
                         <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />
-                        <input name="task.reset" type="submit" value="Retry" onclick="return this.form.reportValidity() && confirm('This will retry the task and clear workflow errors.\n\nReady to proceed?')" />
+                        <input class="Button Button--small" name="task.reset" type="submit" value="Retry" onclick="return this.form.reportValidity() && confirm('This will retry the task and clear workflow errors.\n\nReady to proceed?')" />
                       </form>
                     </div>
                     {{end}}
@@ -110,7 +118,7 @@
                     <div class="TaskList-approveTask">
                       <form action="{{baseLink (printf "/workflows/%s/tasks/%s/approve" $workflow.ID $task.Name) }}" method="post">
                         <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />
-                        <input name="task.approve" type="submit" value="Approve" onclick="return this.form.reportValidity() && confirm('This will mark the task approved and resume the workflow.\n\nReady to proceed?')" />
+                        <input class="Button Button--small" name="task.approve" type="submit" value="Approve" onclick="return this.form.reportValidity() && confirm('This will mark the task approved and resume the workflow.\n\nReady to proceed?')" />
                       </form>
                     </div>
                     {{end}}

@@ -604,11 +604,6 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 
 		state := <-stateChan
 		w.tasks[state.def] = &state
-		if state.err != nil && ctx.Err() != nil {
-			// Don't report failures that occur after cancellation has begun.
-			// They may be due to the cancellation itself.
-			continue
-		}
 		listener.TaskStateChanged(w.ID, state.def.name, state.toExported())
 	}
 }

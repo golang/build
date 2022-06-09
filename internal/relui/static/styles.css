@@ -100,6 +100,9 @@ h6 {
 .WorkflowList-titleTime {
   font-size: 1rem;
 }
+.WorkflowList-titleStop {
+  float: right;
+}
 .WorkflowList-paramData:first-child {
   text-transform: capitalize;
 }
@@ -236,6 +239,7 @@ h6 {
   font-weight: bold;
 }
 .Button {
+  border: none;
   background: #375eab;
   border-radius: 0.1875rem;
   box-shadow: 0 0.1875rem 0.0625rem -0.125rem rgba(0, 0, 0, 0.2),
@@ -246,6 +250,10 @@ h6 {
   min-width: 4rem;
   padding: 0.5rem 1rem;
   text-decoration: none;
+}
+.Button--small {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
 }
 .Button:hover,
 .Button:focus {
@@ -259,4 +267,14 @@ h6 {
   box-shadow: 0 0.3125rem 0.3125rem -0.1875rem rgba(0, 0, 0, 0.2),
     0 0.5rem 0.625rem 0.0625rem rgba(0, 0, 0, 0.14),
     0 0.1875rem 0.875rem 0.125rem rgba(0, 0, 0, 0.12);
+}
+.Button--red {
+  background: #d14836;
+}
+.Button--red:hover,
+.Button--red:focus {
+  background: #c53727;
+}
+.Button--red:active {
+  background: #d14836;
 }

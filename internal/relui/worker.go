@@ -27,6 +27,8 @@ type Listener interface {
 	WorkflowFinished(ctx context.Context, workflowID uuid.UUID, outputs map[string]interface{}, err error) error
 }
 
+type stopFunc func()
+
 // Worker runs workflows, and persists their state.
 type Worker struct {
 	dh *DefinitionHolder
@@ -41,7 +43,7 @@ type Worker struct {
 	// running is a set of currently running Workflow ids. Run uses
 	// this set to prevent starting a simultaneous execution of a
 	// currently running Workflow.
-	running map[string]struct{}
+	running map[string]stopFunc
 }
 
 // NewWorker returns a Worker ready to accept and run workflows.
@@ -52,7 +54,7 @@ func NewWorker(dh *DefinitionHolder, db *pgxpool.Pool, l Listener) *Worker {
 		l:       l,
 		done:    make(chan struct{}),
 		pending: make(chan *workflow.Workflow, 1),
-		running: make(map[string]struct{}),
+		running: make(map[string]stopFunc),
 	}
 }
 
@@ -72,13 +74,15 @@ func (w *Worker) Run(ctx context.Context) error {
 			return ctx.Err()
 		case wf := <-w.pending:
 			eg.Go(func() error {
-				if err := w.markRunning(wf); err != nil {
+				runCtx, cancel := context.WithCancel(ctx)
+				defer cancel()
+				if err := w.markRunning(wf, cancel); err != nil {
 					log.Println(err)
 					return nil
 				}
 				defer w.markStopped(wf)
 
-				outputs, err := wf.Run(ctx, w.l)
+				outputs, err := wf.Run(runCtx, w.l)
 				if wfErr := w.l.WorkflowFinished(ctx, wf.ID, outputs, err); wfErr != nil {
 					return fmt.Errorf("w.l.WorkflowFinished(_, %q, %v, %q) = %w", wf.ID, outputs, err, wfErr)
 				}
@@ -88,13 +92,13 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 }
 
-func (w *Worker) markRunning(wf *workflow.Workflow) error {
+func (w *Worker) markRunning(wf *workflow.Workflow, stop func()) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if _, ok := w.running[wf.ID.String()]; ok {
 		return fmt.Errorf("workflow %q already running", wf.ID)
 	}
-	w.running[wf.ID.String()] = struct{}{}
+	w.running[wf.ID.String()] = stop
 	return nil
 }
 
@@ -102,6 +106,17 @@ func (w *Worker) markStopped(wf *workflow.Workflow) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	delete(w.running, wf.ID.String())
+}
+
+func (w *Worker) cancelWorkflow(id uuid.UUID) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	stop, ok := w.running[id.String()]
+	if !ok {
+		return ok
+	}
+	stop()
+	return ok
 }
 
 func (w *Worker) run(wf *workflow.Workflow) error {

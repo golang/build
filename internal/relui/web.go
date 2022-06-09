@@ -82,6 +82,7 @@ func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL, header SiteHeader) 
 	layout := template.Must(template.New("layout.html").Funcs(helpers).ParseFS(templates, "templates/layout.html"))
 	s.homeTmpl = template.Must(template.Must(layout.Clone()).Funcs(helpers).ParseFS(templates, "templates/home.html"))
 	s.newWorkflowTmpl = template.Must(template.Must(layout.Clone()).Funcs(helpers).ParseFS(templates, "templates/new_workflow.html"))
+	s.m.POST("/workflows/:id/stop", s.stopWorkflowHandler)
 	s.m.POST("/workflows/:id/tasks/:name/retry", s.retryTaskHandler)
 	s.m.POST("/workflows/:id/tasks/:name/approve", s.approveTaskHandler)
 	s.m.Handler(http.MethodGet, "/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
@@ -258,7 +259,7 @@ func (s *Server) retryTaskHandler(w http.ResponseWriter, r *http.Request, params
 	id, err := uuid.Parse(params.ByName("id"))
 	if err != nil {
 		log.Printf("retryTaskHandler(_, _, %v) uuid.Parse(%v): %v", params, params.ByName("id"), err)
-		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 	if err := s.retryTask(r.Context(), id, params.ByName("name")); err != nil {
@@ -306,7 +307,7 @@ func (s *Server) approveTaskHandler(w http.ResponseWriter, r *http.Request, para
 	id, err := uuid.Parse(params.ByName("id"))
 	if err != nil {
 		log.Printf("approveTaskHandler(_, _, %v) uuid.Parse(%v): %v", params, params.ByName("id"), err)
-		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 	q := db.New(s.db)
@@ -321,5 +322,19 @@ func (s *Server) approveTaskHandler(w http.ResponseWriter, r *http.Request, para
 	}
 	// This log entry serves as approval.
 	s.w.l.Logger(id, t.Name).Printf("USER-APPROVED")
+	http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
+}
+
+func (s *Server) stopWorkflowHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	id, err := uuid.Parse(params.ByName("id"))
+	if err != nil {
+		log.Printf("stopWorkflowHandler(_, _, %v) uuid.Parse(%v): %v", params, params.ByName("id"), err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	if !s.w.cancelWorkflow(id) {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
 	http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
 }

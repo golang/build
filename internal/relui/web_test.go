@@ -27,6 +27,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/build/internal/relui/db"
+	"golang.org/x/build/internal/workflow"
 )
 
 // testStatic is our static web server content.
@@ -449,7 +450,7 @@ func TestServerRetryTaskHandler(t *testing.T) {
 		{
 			desc:          "invalid workflow id",
 			params:        map[string]string{"id": "invalid", "name": "greeting"},
-			wantCode:      http.StatusNotFound,
+			wantCode:      http.StatusBadRequest,
 			wantWorkflows: []db.Workflow{unchangedWorkflow},
 		},
 		{
@@ -593,7 +594,7 @@ func TestServerApproveTaskHandler(t *testing.T) {
 		{
 			desc:     "invalid workflow id",
 			params:   map[string]string{"id": "invalid", "name": "greeting"},
-			wantCode: http.StatusNotFound,
+			wantCode: http.StatusBadRequest,
 		},
 		{
 			desc:     "wrong workflow id",
@@ -676,6 +677,78 @@ func TestServerApproveTaskHandler(t *testing.T) {
 			}
 			if diff := cmp.Diff(c.wantLogs, logs, SameUUIDVariant(), cmpopts.EquateApproxTime(time.Minute), cmpopts.IgnoreFields(db.TaskLog{}, "ID")); diff != "" {
 				t.Fatalf("q.TaskLogsForTask() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestServerStopWorkflow(t *testing.T) {
+	wfID := uuid.New()
+	cases := []struct {
+		desc        string
+		params      map[string]string
+		wantCode    int
+		wantHeaders map[string]string
+		wantLogs    []db.TaskLog
+		wantCancel  bool
+	}{
+		{
+			desc:     "no params",
+			wantCode: http.StatusNotFound,
+		},
+		{
+			desc:     "invalid workflow id",
+			params:   map[string]string{"id": "invalid"},
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			desc:     "wrong workflow id",
+			params:   map[string]string{"id": uuid.New().String()},
+			wantCode: http.StatusNotFound,
+		},
+		{
+			desc:     "successful stop",
+			params:   map[string]string{"id": wfID.String()},
+			wantCode: http.StatusSeeOther,
+			wantHeaders: map[string]string{
+				"Location": "/",
+			},
+			wantCancel: true,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", c.params["id"], "stop"), nil)
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rec := httptest.NewRecorder()
+			worker := NewWorker(NewDefinitionHolder(), nil, nil)
+
+			wf := &workflow.Workflow{ID: wfID}
+			if err := worker.markRunning(wf, cancel); err != nil {
+				t.Fatalf("worker.markRunning(%v, %v) = %v, wanted no error", wf, cancel, err)
+			}
+
+			s := NewServer(nil, worker, nil, SiteHeader{})
+			s.m.ServeHTTP(rec, req)
+			resp := rec.Result()
+
+			if resp.StatusCode != c.wantCode {
+				t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, c.wantCode)
+			}
+			for k, v := range c.wantHeaders {
+				if resp.Header.Get(k) != v {
+					t.Errorf("resp.Header.Get(%q) = %q, wanted %q", k, resp.Header.Get(k), v)
+				}
+			}
+			if c.wantCancel {
+				<-ctx.Done()
+				return
+			}
+			if ctx.Err() != nil {
+				t.Errorf("tx.Err() = %v, wanted no error", ctx.Err())
 			}
 		})
 	}
