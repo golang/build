@@ -474,8 +474,8 @@ func (b *BuildReleaseTasks) runBuildStep(
 		return artifact{}, err
 	}
 	var in io.ReadCloser
-	if input.scratchPath != "" {
-		in, err = scratchFS.Open(input.scratchPath)
+	if input.ScratchPath != "" {
+		in, err = scratchFS.Open(input.ScratchPath)
 		if err != nil {
 			return artifact{}, err
 		}
@@ -520,33 +520,33 @@ func (b *BuildReleaseTasks) runBuildStep(
 		}
 	}
 	return artifact{
-		target:      target,
-		scratchPath: scratchPath,
-		suffix:      outputSuffix,
-		sha256:      fmt.Sprintf("%x", string(hash.Sum([]byte(nil)))),
-		size:        size.size,
+		Target:      target,
+		ScratchPath: scratchPath,
+		Suffix:      outputSuffix,
+		SHA256:      fmt.Sprintf("%x", string(hash.Sum([]byte(nil)))),
+		Size:        size.size,
 	}, nil
 }
 
 type artifact struct {
 	// The target platform of this artifact, or nil for source.
-	target *releasetargets.Target
+	Target *releasetargets.Target
 	// The scratch path of this artifact.
-	scratchPath string
+	ScratchPath string
 	// The path the artifact was staged to for the signing process.
-	stagingPath string
+	StagingPath string
 	// The path artifact can be found at after the signing process. It may be
 	// the same as the staging path for artifacts that are externally signed.
-	signedPath string
+	SignedPath string
 	// The contents of the GPG signature for this artifact (.asc file).
-	gpgSignature string
+	GPGSignature string
 	// The filename suffix of the artifact, e.g. "tar.gz" or "src.tar.gz",
-	// combined with the version and target name to produce filename.
-	suffix string
-	// The final filename of this artifact as it will be downloaded.
-	filename string
-	sha256   string
-	size     int
+	// combined with the version and Target name to produce Filename.
+	Suffix string
+	// The final Filename of this artifact as it will be downloaded.
+	Filename string
+	SHA256   string
+	Size     int
 }
 
 type sizeWriter struct {
@@ -570,19 +570,19 @@ func (tasks *BuildReleaseTasks) copyToStaging(ctx *workflow.TaskContext, version
 	var stagedArtifacts []artifact
 	for _, a := range artifacts {
 		staged := a
-		if a.target != nil {
-			staged.filename = version + "." + a.target.Name + "." + a.suffix
+		if a.Target != nil {
+			staged.Filename = version + "." + a.Target.Name + "." + a.Suffix
 		} else {
-			staged.filename = version + "." + a.suffix
+			staged.Filename = version + "." + a.Suffix
 		}
-		staged.stagingPath = path.Join(version, staged.filename)
+		staged.StagingPath = path.Join(version, staged.Filename)
 		stagedArtifacts = append(stagedArtifacts, staged)
 
-		in, err := scratchFS.Open(a.scratchPath)
+		in, err := scratchFS.Open(a.ScratchPath)
 		if err != nil {
 			return nil, err
 		}
-		out, err := gcsfs.Create(stagingFS, staged.stagingPath)
+		out, err := gcsfs.Create(stagingFS, staged.StagingPath)
 		if err != nil {
 			return nil, err
 		}
@@ -608,10 +608,10 @@ func (tasks *BuildReleaseTasks) awaitSigned(ctx *workflow.TaskContext, version s
 	// to be filled out once the files exist.
 	for _, t := range darwinTargets {
 		artifacts = append(artifacts, artifact{
-			target:   t,
-			suffix:   "pkg",
-			filename: version + "." + t.Name + ".pkg",
-			size:     -1,
+			Target:   t,
+			Suffix:   "pkg",
+			Filename: version + "." + t.Name + ".pkg",
+			Size:     -1,
 		})
 	}
 
@@ -658,14 +658,14 @@ func readSignedArtifact(stagingFS fs.FS, version string, a artifact) (_ artifact
 	// too, but we GPG sign them anyway.
 	modifiedBySigning := false
 	hasGPG := false
-	suffix := func(suffix string) bool { return a.suffix == suffix }
+	suffix := func(suffix string) bool { return a.Suffix == suffix }
 	switch {
 	case suffix("src.tar.gz"):
 		hasGPG = true
-	case a.target.GOOS == "darwin" && suffix("tar.gz"):
+	case a.Target.GOOS == "darwin" && suffix("tar.gz"):
 		modifiedBySigning = true
 		hasGPG = true
-	case a.target.GOOS == "darwin" && suffix("pkg"):
+	case a.Target.GOOS == "darwin" && suffix("pkg"):
 		modifiedBySigning = true
 	case suffix("tar.gz"):
 		hasGPG = true
@@ -674,41 +674,41 @@ func readSignedArtifact(stagingFS fs.FS, version string, a artifact) (_ artifact
 	case suffix("zip"):
 		// For reasons unclear, we don't sign zip files.
 	default:
-		return artifact{}, false, fmt.Errorf("unhandled file type %q", a.suffix)
+		return artifact{}, false, fmt.Errorf("unhandled file type %q", a.Suffix)
 	}
 
 	signed := artifact{
-		target:   a.target,
-		filename: a.filename,
-		suffix:   a.suffix,
+		Target:   a.Target,
+		Filename: a.Filename,
+		Suffix:   a.Suffix,
 	}
 	if modifiedBySigning {
-		signed.signedPath = version + "/signed/" + a.filename
+		signed.SignedPath = version + "/signed/" + a.Filename
 	} else {
-		signed.signedPath = version + "/" + a.filename
+		signed.SignedPath = version + "/" + a.Filename
 	}
 
-	fi, err := fs.Stat(stagingFS, signed.signedPath)
+	fi, err := fs.Stat(stagingFS, signed.SignedPath)
 	if err != nil {
 		return artifact{}, false, nil
 	}
 	if modifiedBySigning {
-		hash, err := fs.ReadFile(stagingFS, version+"/signed/"+a.filename+".sha256")
+		hash, err := fs.ReadFile(stagingFS, version+"/signed/"+a.Filename+".sha256")
 		if err != nil {
 			return artifact{}, false, err
 		}
-		signed.size = int(fi.Size())
-		signed.sha256 = string(hash)
+		signed.Size = int(fi.Size())
+		signed.SHA256 = string(hash)
 	} else {
-		signed.sha256 = a.sha256
-		signed.size = a.size
+		signed.SHA256 = a.SHA256
+		signed.Size = a.Size
 	}
 	if hasGPG {
-		sig, err := fs.ReadFile(stagingFS, version+"/signed/"+a.filename+".asc")
+		sig, err := fs.ReadFile(stagingFS, version+"/signed/"+a.Filename+".asc")
 		if err != nil {
 			return artifact{}, false, nil
 		}
-		signed.gpgSignature = string(sig)
+		signed.GPGSignature = string(sig)
 	}
 	return signed, true, nil
 }
@@ -735,7 +735,7 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *workflow.TaskContext, artif
 
 	for {
 		for _, a := range artifacts {
-			resp, err := http.Head(tasks.DownloadURL + "/" + a.filename)
+			resp, err := http.Head(tasks.DownloadURL + "/" + a.Filename)
 			if err != nil {
 				return err
 			}
@@ -758,13 +758,13 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *workflow.TaskContext, artif
 }
 
 func uploadArtifact(stagingFS, servingFS fs.FS, a artifact) error {
-	in, err := stagingFS.Open(a.signedPath)
+	in, err := stagingFS.Open(a.SignedPath)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
 
-	out, err := gcsfs.Create(servingFS, a.filename)
+	out, err := gcsfs.Create(servingFS, a.Filename)
 	if err != nil {
 		return err
 	}
@@ -776,25 +776,25 @@ func uploadArtifact(stagingFS, servingFS fs.FS, a artifact) error {
 		return err
 	}
 
-	sha256, err := gcsfs.Create(servingFS, a.filename+".sha256")
+	sha256, err := gcsfs.Create(servingFS, a.Filename+".sha256")
 	if err != nil {
 		return err
 	}
 	defer sha256.Close()
-	if _, err := sha256.Write([]byte(a.sha256)); err != nil {
+	if _, err := sha256.Write([]byte(a.SHA256)); err != nil {
 		return err
 	}
 	if err := sha256.Close(); err != nil {
 		return err
 	}
 
-	if a.gpgSignature != "" {
-		asc, err := gcsfs.Create(servingFS, a.filename+".asc")
+	if a.GPGSignature != "" {
+		asc, err := gcsfs.Create(servingFS, a.Filename+".asc")
 		if err != nil {
 			return err
 		}
 		defer asc.Close()
-		if _, err := asc.Write([]byte(a.gpgSignature)); err != nil {
+		if _, err := asc.Write([]byte(a.GPGSignature)); err != nil {
 			return err
 		}
 		if err := asc.Close(); err != nil {
@@ -807,19 +807,19 @@ func uploadArtifact(stagingFS, servingFS fs.FS, a artifact) error {
 func (tasks *BuildReleaseTasks) publishArtifacts(ctx *workflow.TaskContext, version string, artifacts []artifact) (string, error) {
 	for _, a := range artifacts {
 		f := &WebsiteFile{
-			Filename:       a.filename,
+			Filename:       a.Filename,
 			Version:        version,
-			ChecksumSHA256: a.sha256,
-			Size:           int64(a.size),
+			ChecksumSHA256: a.SHA256,
+			Size:           int64(a.Size),
 		}
-		if a.target != nil {
-			f.OS = a.target.GOOS
-			f.Arch = a.target.GOARCH
-			if a.target.GOARCH == "arm" {
+		if a.Target != nil {
+			f.OS = a.Target.GOOS
+			f.Arch = a.Target.GOARCH
+			if a.Target.GOARCH == "arm" {
 				f.Arch = "armv6l"
 			}
 		}
-		switch a.suffix {
+		switch a.Suffix {
 		case "src.tar.gz":
 			f.Kind = "source"
 		case "tar.gz", "zip":
