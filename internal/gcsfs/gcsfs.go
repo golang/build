@@ -168,11 +168,11 @@ func (f *GCSFile) Close() error {
 
 func (f *GCSFile) Read(b []byte) (int, error) {
 	if f.reader == nil {
-		var err error
-		f.reader, err = f.fs.object(f.name).NewReader(f.fs.ctx)
+		reader, err := f.fs.object(f.name).NewReader(f.fs.ctx)
 		if err != nil {
 			return 0, f.translateError("read", err)
 		}
+		f.reader = reader
 	}
 	n, err := f.reader.Read(b)
 	return n, f.translateError("read", err)
