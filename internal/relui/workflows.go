@@ -251,7 +251,7 @@ func ApproveActionDep(p *pgxpool.Pool) func(taskName string) func(*workflow.Task
 func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks) error {
 	createSingle := func(name, major string, kind task.ReleaseKind) error {
 		wd := workflow.New()
-		err := addSingleReleaseWorkflow(build, milestone, version, wd, "go1.19", task.KindMajor)
+		err := addSingleReleaseWorkflow(build, milestone, version, wd, major, kind)
 		if err != nil {
 			return err
 		}
