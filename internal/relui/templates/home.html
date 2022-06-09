@@ -95,7 +95,7 @@
                     {{$task.UpdatedAt.UTC.Format "Mon Jan _2 2006 15:04:05"}}
                   </td>
                   <td class="TaskList-itemCol TaskList-itemResult">
-                    {{$task.Result}}
+                    {{$task.Result.String}}
                   </td>
                   <td class="TaskList-itemCol TaskList-itemAction">
                     {{if $task.Error.Valid}}
