@@ -131,6 +131,9 @@ var dropPatterns = []string{
 	// Users don't need the api checker binary pre-built. It's
 	// used by tests, but all.bash builds it first.
 	`pkg/tool/[^/]+/api.*`,
+	// Users also don't need the metadata command, which is run dynamically
+	// by cmd/dist. As of writing we don't know why it's showing up at all.
+	`pkg/tool/[^/]+/metadata.*`,
 	// Remove pkg/${GOOS}_${GOARCH}/cmd. This saves a bunch of
 	// space, and users don't typically rebuild cmd/compile,
 	// cmd/link, etc. If they want to, they still can, but they'll

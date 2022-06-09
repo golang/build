@@ -40,6 +40,7 @@ func TestDropRegexpMatches(t *testing.T) {
 		{"bin/go", true},
 		{"pkg/obj/README", false},
 		{"pkg/tool/linux_amd64/api", false},
+		{"pkg/tool/linux_amd64/metadata", false},
 		{"pkg/linux_amd64/cmd/go.a", false},
 		{"pkg/linux_amd64/runtime.a", true},
 		{"bin/go.exe~", false},
