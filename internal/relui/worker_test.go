@@ -212,7 +212,7 @@ func TestWorkflowResumeRetry(t *testing.T) {
 	counter := 0
 	blockingChan := make(chan bool)
 	wd := workflow.New()
-	nothing := wd.Task("needs retry", func(ctx context.Context) (string, error) {
+	nothing := workflow.Task0(wd, "needs retry", func(ctx context.Context) (string, error) {
 		// Send twice so that the test can stop us mid-execution.
 		for i := 0; i < 2; i++ {
 			select {
@@ -224,7 +224,7 @@ func TestWorkflowResumeRetry(t *testing.T) {
 		}
 		return "", errors.New("expected")
 	})
-	wd.Output("nothing", nothing)
+	workflow.Output(wd, "nothing", nothing)
 	dh.RegisterDefinition(t.Name(), wd)
 
 	// Run the workflow. It will try the task 3 times and then fail; stop the
@@ -277,9 +277,9 @@ func newTestEchoWorkflow() *workflow.Definition {
 	echo := func(ctx context.Context, greeting string, names []string) (string, error) {
 		return fmt.Sprintf("%v %v", greeting, strings.Join(names, " ")), nil
 	}
-	greeting := wd.Parameter(workflow.Parameter{Name: "greeting"})
-	names := wd.Parameter(workflow.Parameter{Name: "names", ParameterType: workflow.SliceShort})
-	wd.Output("echo", wd.Task("echo", echo, greeting, names))
+	greeting := workflow.Param(wd, workflow.ParamDef[string]{Name: "greeting"})
+	names := workflow.Param(wd, workflow.ParamDef[[]string]{Name: "names", ParamType: workflow.SliceShort})
+	workflow.Output(wd, "echo", workflow.Task2(wd, "echo", echo, greeting, names))
 	return wd
 }
 

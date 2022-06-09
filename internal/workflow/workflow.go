@@ -10,8 +10,8 @@
 // doesn't exist yet, and can't be used directly. Each value has a dynamic type,
 // which must match its uses.
 //
-// To wrap an existing Go object in a Value, use Constant. To define a
-// parameter that will be set when the workflow is started, use Parameter.
+// To wrap an existing Go object in a Value, use Const. To define a
+// parameter that will be set when the workflow is started, use Param.
 // To read a task's return value, register it as an Output, and it will be
 // returned from Run. An arbitrary number of Values of the same type can
 // be combined with Slice.
@@ -52,7 +52,7 @@ func New() *Definition {
 	return &Definition{
 		definitionState: &definitionState{
 			tasks:   make(map[string]*taskDefinition),
-			outputs: make(map[string]*taskResult),
+			outputs: make(map[string]*taskDefinition),
 		},
 	}
 }
@@ -75,53 +75,81 @@ func (d *Definition) name(name string) string {
 }
 
 type definitionState struct {
-	parameters []Parameter // Ordered according to registration, unique parameter names.
+	parameters []MetaParameter // Ordered according to registration, unique parameter names.
 	tasks      map[string]*taskDefinition
-	outputs    map[string]*taskResult
+	outputs    map[string]*taskDefinition
 }
 
-// A TaskInput is any input to the definition of a task.
-type TaskInput interface {
-	deps() []*taskDefinition
+// A TaskOption affects the execution of a task but is not an argument to its function.
+type TaskOption interface {
+	taskOption()
 }
 
 // A Value is a piece of data that will be produced or consumed when a task
 // runs. It cannot be read directly.
-type Value interface {
-	TaskInput
+type Value[T any] interface {
+	// This function prevents Values of different types from being convertible
+	// to each other.
+	valueType(T)
+	metaValue
+}
+
+type metaValue interface {
+	Dependency
 	typ() reflect.Type
 	value(*Workflow) reflect.Value
 }
 
-// A Dependency represents a dependency on a prior task that does not produce
-// any in-band Value.
-type Dependency interface {
-	TaskInput
-	dependencyOnly()
+type MetaParameter interface {
+	// RequireNonZero reports whether parameter p is required to have a non-zero value.
+	RequireNonZero() bool
+	Name() string
+	Type() reflect.Type
+	HTMLElement() string
+	HTMLInputType() string
+	Doc() string
+	Example() string
 }
 
-// Parameter describes a Value that is filled in at workflow creation time.
+// ParamDef describes a Value that is filled in at workflow creation time.
 //
-// It can be registered to a workflow with the Workflow.Parameter method.
-type Parameter struct {
-	Name          string // Name identifies the parameter within a workflow. Must be non-empty.
-	ParameterType        // Parameter type. Defaults to BasicString if not specified.
-	Doc           string // Doc documents the parameter. Optional.
-	Example       string // Example is an example value. Optional.
+// It can be registered to a workflow with the Parameter function.
+type ParamDef[T any] struct {
+	Name         string // Name identifies the parameter within a workflow. Must be non-empty.
+	ParamType[T]        // Parameter type. For strings, defaults to BasicString if not specified.
+	Doc          string // Doc documents the parameter. Optional.
+	Example      string // Example is an example value. Optional.
 }
 
-// RequireNonZero reports whether parameter p is required to have a non-zero value.
-func (p Parameter) RequireNonZero() bool {
-	return !strings.HasSuffix(p.Name, " (optional)")
+// parameter adds Value methods to ParamDef, so that users can't accidentally
+// use a ParamDef without registering it.
+type parameter[T any] struct {
+	d ParamDef[T]
 }
 
-// ParameterType defines the type of a workflow parameter.
+func (p parameter[T]) Name() string          { return p.d.Name }
+func (p parameter[T]) Type() reflect.Type    { return p.typ() }
+func (p parameter[T]) HTMLElement() string   { return p.d.HTMLElement }
+func (p parameter[T]) HTMLInputType() string { return p.d.HTMLInputType }
+func (p parameter[T]) Doc() string           { return p.d.Doc }
+func (p parameter[T]) Example() string       { return p.d.Example }
+func (p parameter[T]) RequireNonZero() bool {
+	return !strings.HasSuffix(p.d.Name, " (optional)")
+}
+
+func (p parameter[T]) valueType(T) {}
+func (p parameter[T]) typ() reflect.Type {
+	var zero T
+	return reflect.TypeOf(zero)
+}
+func (p parameter[T]) value(w *Workflow) reflect.Value { return reflect.ValueOf(w.params[p.d.Name]) }
+func (p parameter[T]) dependencies() []*taskDefinition { return nil }
+
+// ParamType defines the type of a workflow parameter.
 //
 // Since parameters are entered via an HTML form,
 // there are some HTML-related knobs available.
-type ParameterType struct {
-	Type reflect.Type // The Go type of the parameter.
-
+type ParamType[T any] struct {
 	// HTMLElement configures the HTML element for entering the parameter value.
 	// Supported values are "input" and "textarea".
 	HTMLElement string
@@ -133,218 +161,218 @@ type ParameterType struct {
 
 var (
 	// String parameter types.
-	BasicString = ParameterType{
-		Type:        reflect.TypeOf(""),
+	BasicString = ParamType[string]{
 		HTMLElement: "input",
 	}
-	URL = ParameterType{
-		Type:          reflect.TypeOf(""),
+	URL = ParamType[string]{
 		HTMLElement:   "input",
 		HTMLInputType: "url",
 	}
 
 	// Slice of string parameter types.
-	SliceShort = ParameterType{
-		Type:        reflect.TypeOf([]string(nil)),
+	SliceShort = ParamType[[]string]{
 		HTMLElement: "input",
 	}
-	SliceLong = ParameterType{
-		Type:        reflect.TypeOf([]string(nil)),
+	SliceLong = ParamType[[]string]{
 		HTMLElement: "textarea",
 	}
 )
 
-// Parameter registers a new parameter p that is filled in at
+// Param registers a new parameter p that is filled in at
 // workflow creation time and returns the corresponding Value.
-// Parameter name must be non-empty and uniquely identify the
+// Param name must be non-empty and uniquely identify the
 // parameter in the workflow definition.
-//
-// If the parameter type is unspecified, BasicString is used.
-func (d *Definition) Parameter(p Parameter) Value {
+func Param[T any](d *Definition, p ParamDef[T]) Value[T] {
 	if p.Name == "" {
 		panic(fmt.Errorf("parameter name must be non-empty"))
 	}
 	p.Name = d.name(p.Name)
-	if p.ParameterType == (ParameterType{}) {
-		p.ParameterType = BasicString
+	if p.HTMLElement == "" {
+		var zero T
+		switch any(zero).(type) {
+		case string:
+			p.HTMLElement = "input"
+		default:
+			panic(fmt.Errorf("must specify ParamType for %T", zero))
+		}
 	}
 	for _, old := range d.parameters {
-		if p.Name == old.Name {
+		if p.Name == old.Name() {
 			panic(fmt.Errorf("parameter with name %q was already registered with this workflow definition", p.Name))
 		}
 	}
-	d.parameters = append(d.parameters, p)
-	return parameter(p)
+	d.parameters = append(d.parameters, parameter[T]{p})
+	return parameter[T]{p}
 }
-
-// parameter implements Value for a workflow parameter.
-type parameter Parameter
-
-func (p parameter) typ() reflect.Type               { return p.Type }
-func (p parameter) value(w *Workflow) reflect.Value { return reflect.ValueOf(w.params[p.Name]) }
-func (p parameter) deps() []*taskDefinition         { return nil }
 
 // Parameters returns parameters associated with the Definition
 // in the same order that they were registered.
-func (d *Definition) Parameters() []Parameter {
+func (d *Definition) Parameters() []MetaParameter {
 	return d.parameters
 }
 
-// Constant creates a Value from an existing object.
-func (d *Definition) Constant(value interface{}) Value {
-	return &constant{reflect.ValueOf(value)}
+// Const creates a Value from an existing object.
+func Const[T any](value T) Value[T] {
+	return &constant[T]{value}
 }
 
-type constant struct {
-	v reflect.Value
+type constant[T any] struct {
+	v T
 }
 
-func (c *constant) typ() reflect.Type               { return c.v.Type() }
-func (c *constant) value(_ *Workflow) reflect.Value { return c.v }
-func (c *constant) deps() []*taskDefinition         { return nil }
+func (c *constant[T]) valueType(T) {}
+func (c *constant[T]) typ() reflect.Type {
+	var zero []T
+	return reflect.TypeOf(zero)
+}
+func (c *constant[T]) value(_ *Workflow) reflect.Value { return reflect.ValueOf(c.v) }
+func (c *constant[T]) dependencies() []*taskDefinition { return nil }
 
 // Slice combines multiple Values of the same type into a Value containing
 // a slice of that type.
-func (d *Definition) Slice(vs ...Value) Value {
-	if len(vs) == 0 {
-		return &slice{}
-	}
-	typ := vs[0].typ()
-	for _, v := range vs[1:] {
-		if v.typ() != typ {
-			panic(fmt.Errorf("mismatched value types in Slice: %v vs. %v", v.typ(), typ))
-		}
-	}
-	return &slice{elt: typ, vals: vs}
+func Slice[T any](vs ...Value[T]) Value[[]T] {
+	return &slice[T]{vals: vs}
 }
 
-type slice struct {
-	elt  reflect.Type
-	vals []Value
+type slice[T any] struct {
+	vals []Value[T]
 }
 
-func (s *slice) typ() reflect.Type {
-	return reflect.SliceOf(s.elt)
+func (s *slice[T]) valueType([]T) {}
+
+func (s *slice[T]) typ() reflect.Type {
+	var zero []T
+	return reflect.TypeOf(zero)
 }
 
-func (s *slice) value(w *Workflow) reflect.Value {
-	value := reflect.MakeSlice(reflect.SliceOf(s.elt), len(s.vals), len(s.vals))
+func (s *slice[T]) value(w *Workflow) reflect.Value {
+	value := reflect.ValueOf(make([]T, len(s.vals)))
 	for i, v := range s.vals {
 		value.Index(i).Set(v.value(w))
 	}
 	return value
 }
 
-func (s *slice) deps() []*taskDefinition {
+func (s *slice[T]) dependencies() []*taskDefinition {
 	var result []*taskDefinition
 	for _, v := range s.vals {
-		result = append(result, v.deps()...)
+		result = append(result, v.dependencies()...)
 	}
 	return result
 }
 
 // Output registers a Value as a workflow output which will be returned when
 // the workflow finishes.
-func (d *Definition) Output(name string, v Value) {
-	tr, ok := v.(*taskResult)
+func Output[T any](d *Definition, name string, v Value[T]) {
+	tr, ok := v.(*taskResult[T])
 	if !ok {
-		panic(fmt.Errorf("output must be a task result"))
+		panic(fmt.Errorf("output must be a task result, is %T", v))
 	}
-	d.outputs[d.name(name)] = tr
+	d.outputs[d.name(name)] = tr.task
+}
+
+// A Dependency represents a dependency on a prior task.
+type Dependency interface {
+	dependencies() []*taskDefinition
 }
 
 // After represents an ordering dependency on another Task or Action. It can be
 // passed in addition to any arguments to the task's function.
-func (*Definition) After(inputs ...TaskInput) TaskInput {
+func After(afters ...Dependency) TaskOption {
 	var deps []*taskDefinition
-	for _, a := range inputs {
-		deps = append(deps, a.deps()...)
+	for _, a := range afters {
+		deps = append(deps, a.dependencies()...)
 	}
 	return &after{deps}
 }
 
 type after struct {
-	dependencies []*taskDefinition
+	deps []*taskDefinition
 }
 
-func (a *after) deps() []*taskDefinition {
-	return a.dependencies
-}
+func (a *after) taskOption() {}
 
-// Task adds a task to the workflow definition. It can take any number of
-// inputs, and returns one output. name must uniquely identify the task in
-// the workflow.
+// TaskN adds a task to the workflow definition. It takes N inputs, and returns
+// one output. name must uniquely identify the task in the workflow.
 // f must be a function that takes a context.Context or *TaskContext argument,
 // followed by one argument for each Value in inputs, corresponding to the
 // Value's dynamic type. It must return two values, the first of which will
 // be returned as its Value, and an error that will be used by the workflow
 // engine. See the package documentation for examples.
-func (d *Definition) Task(name string, f interface{}, inputs ...TaskInput) Value {
-	td := d.addTask(true, name, f, inputs...)
-	return &taskResult{td}
+func Task0[C context.Context, O1 any](d *Definition, name string, f func(C) (O1, error), opts ...TaskOption) Value[O1] {
+	return addTask[O1](d, name, f, nil, opts)
 }
 
-func (d *Definition) addTask(hasResult bool, name string, f interface{}, inputs ...TaskInput) *taskDefinition {
+func Task1[C context.Context, I1, O1 any](d *Definition, name string, f func(C, I1) (O1, error), i1 Value[I1], opts ...TaskOption) Value[O1] {
+	return addTask[O1](d, name, f, []metaValue{i1}, opts)
+}
+
+func Task2[C context.Context, I1, I2, O1 any](d *Definition, name string, f func(C, I1, I2) (O1, error), i1 Value[I1], i2 Value[I2], opts ...TaskOption) Value[O1] {
+	return addTask[O1](d, name, f, []metaValue{i1, i2}, opts)
+}
+
+func Task3[C context.Context, I1, I2, I3, O1 any](d *Definition, name string, f func(C, I1, I2, I3) (O1, error), i1 Value[I1], i2 Value[I2], i3 Value[I3], opts ...TaskOption) Value[O1] {
+	return addTask[O1](d, name, f, []metaValue{i1, i2, i3}, opts)
+}
+
+func Task4[C context.Context, I1, I2, I3, I4, O1 any](d *Definition, name string, f func(C, I1, I2, I3, I4) (O1, error), i1 Value[I1], i2 Value[I2], i3 Value[I3], i4 Value[I4], opts ...TaskOption) Value[O1] {
+	return addTask[O1](d, name, f, []metaValue{i1, i2, i3, i4}, opts)
+}
+
+func Task5[C context.Context, I1, I2, I3, I4, I5, O1 any](d *Definition, name string, f func(C, I1, I2, I3, I4, I5) (O1, error), i1 Value[I1], i2 Value[I2], i3 Value[I3], i4 Value[I4], i5 Value[I5], opts ...TaskOption) Value[O1] {
+	return addTask[O1](d, name, f, []metaValue{i1, i2, i3, i4, i5}, opts)
+}
+
+func addTask[O1 any](d *Definition, name string, f interface{}, inputs []metaValue, opts []TaskOption) *taskResult[O1] {
 	name = d.name(name)
-	if d.tasks[name] != nil {
-		panic(fmt.Errorf("task %q already exists in the workflow", name))
+	td := &taskDefinition{name: name, f: f, args: inputs}
+	for _, input := range inputs {
+		td.deps = append(td.deps, input.dependencies()...)
 	}
-	ftyp := reflect.ValueOf(f).Type()
-	if ftyp.Kind() != reflect.Func {
-		panic(fmt.Errorf("%v is not a function", f))
+	for _, opt := range opts {
+		td.deps = append(td.deps, opt.(*after).deps...)
 	}
-	if ftyp.NumIn()-1 > len(inputs) {
-		panic(fmt.Errorf("%v takes %v non-Context arguments, but was passed %v", f, ftyp.NumIn()-1, len(inputs)))
-	}
-
-	if !reflect.TypeOf((*TaskContext)(nil)).AssignableTo(ftyp.In(0)) {
-		panic(fmt.Errorf("the first argument of %v must be a context.Context or *TaskContext, is %v", f, ftyp.In(0)))
-	}
-	for i, arg := range inputs[:ftyp.NumIn()-1] {
-		val, ok := arg.(Value)
-		if !ok {
-			panic(fmt.Errorf("argument %v is a %T, not a Value", i, arg))
-		}
-		if !val.typ().AssignableTo(ftyp.In(i + 1)) {
-			panic(fmt.Errorf("argument %v to %v is %v, but was passed %v", i, f, ftyp.In(i+1), val.typ()))
-		}
-	}
-	for i, input := range inputs[ftyp.NumIn()-1:] {
-		if _, ok := input.(*after); !ok {
-			panic(fmt.Errorf("argument %v is a %T; only calls to After are allowed as extra arguments", i+ftyp.NumIn()-1, input))
-		}
-	}
-
-	wantOuts := 2
-	if !hasResult {
-		wantOuts = 1
-	}
-	if ftyp.NumOut() != wantOuts {
-		panic(fmt.Errorf("function for task %v returns %v values, must return %v", name, ftyp.NumOut(), wantOuts))
-	}
-	if ftyp.Out(wantOuts-1) != reflect.TypeOf((*error)(nil)).Elem() {
-		panic(fmt.Errorf("%v's last return value must be error, is %v", f, ftyp.Out(wantOuts-1)))
-	}
-	td := &taskDefinition{name: name, inputs: inputs, f: f}
 	d.tasks[name] = td
-	return td
+	return &taskResult[O1]{td}
 }
 
-// Action adds an Action to the workflow definition. Its behavior and
+func addAction(d *Definition, name string, f interface{}, inputs []metaValue, opts []TaskOption) *dependency {
+	tr := addTask[interface{}](d, name, f, inputs, opts)
+	return &dependency{tr.task}
+}
+
+// ActionN adds an Action to the workflow definition. Its behavior and
 // requirements are the same as Task, except that f must only return an error,
 // and the result of the definition is a Dependency.
-func (d *Definition) Action(name string, f interface{}, inputs ...TaskInput) Dependency {
-	td := d.addTask(false, name, f, inputs...)
-	return &dependency{td}
+func Action0[C context.Context](d *Definition, name string, f func(C) error, opts ...TaskOption) Dependency {
+	return addAction(d, name, f, nil, opts)
+}
+
+func Action1[C context.Context, I1 any](d *Definition, name string, f func(C, I1) error, i1 Value[I1], opts ...TaskOption) Dependency {
+	return addAction(d, name, f, []metaValue{i1}, opts)
+}
+
+func Action2[C context.Context, I1, I2 any](d *Definition, name string, f func(C, I1, I2) error, i1 Value[I1], i2 Value[I2], opts ...TaskOption) Dependency {
+	return addAction(d, name, f, []metaValue{i1, i2}, opts)
+}
+
+func Action3[C context.Context, I1, I2, I3 any](d *Definition, name string, f func(C, I1, I2, I3) error, i1 Value[I1], i2 Value[I2], i3 Value[I3], opts ...TaskOption) Dependency {
+	return addAction(d, name, f, []metaValue{i1, i2, i3}, opts)
+}
+
+func Action4[C context.Context, I1, I2, I3, I4 any](d *Definition, name string, f func(C, I1, I2, I3, I4) error, i1 Value[I1], i2 Value[I2], i3 Value[I3], i4 Value[I4], opts ...TaskOption) Dependency {
+	return addAction(d, name, f, []metaValue{i1, i2, i3, i4}, opts)
+}
+
+func Action5[C context.Context, I1, I2, I3, I4, I5 any](d *Definition, name string, f func(C, I1, I2, I3, I4, I5) error, i1 Value[I1], i2 Value[I2], i3 Value[I3], i4 Value[I4], i5 Value[I5], opts ...TaskOption) Dependency {
+	return addAction(d, name, f, []metaValue{i1, i2, i3, i4, i5}, opts)
 }
 
 type dependency struct {
 	task *taskDefinition
 }
 
-func (d *dependency) dependencyOnly() {}
-
-func (d *dependency) deps() []*taskDefinition {
+func (d *dependency) dependencies() []*taskDefinition {
 	return []*taskDefinition{d.task}
 }
 
@@ -395,24 +423,28 @@ type Logger interface {
 }
 
 type taskDefinition struct {
-	name   string
-	inputs []TaskInput
-	f      interface{}
+	name string
+	args []metaValue
+	deps []*taskDefinition
+	f    interface{}
 }
 
-type taskResult struct {
+type taskResult[T any] struct {
 	task *taskDefinition
 }
 
-func (tr *taskResult) typ() reflect.Type {
-	return reflect.ValueOf(tr.task.f).Type().Out(0)
+func (tr *taskResult[T]) valueType(T) {}
+
+func (tr *taskResult[T]) typ() reflect.Type {
+	var zero []T
+	return reflect.TypeOf(zero)
 }
 
-func (tr *taskResult) value(w *Workflow) reflect.Value {
+func (tr *taskResult[T]) value(w *Workflow) reflect.Value {
 	return reflect.ValueOf(w.tasks[tr.task].result)
 }
 
-func (tr *taskResult) deps() []*taskDefinition {
+func (tr *taskResult[T]) dependencies() []*taskDefinition {
 	return []*taskDefinition{tr.task}
 }
 
@@ -437,16 +469,14 @@ type taskState struct {
 }
 
 func (t *taskState) args() ([]reflect.Value, bool) {
+	for _, dep := range t.def.deps {
+		if depState, ok := t.w.tasks[dep]; !ok || !depState.finished || depState.err != nil {
+			return nil, false
+		}
+	}
 	var args []reflect.Value
-	for _, arg := range t.def.inputs {
-		for _, dep := range arg.deps() {
-			if depState, ok := t.w.tasks[dep]; !ok || !depState.finished || depState.err != nil {
-				return nil, false
-			}
-		}
-		if v, ok := arg.(Value); ok {
-			args = append(args, v.value(t.w))
-		}
+	for _, v := range t.def.args {
+		args = append(args, v.value(t.w))
 	}
 	return args, true
 }
@@ -487,14 +517,12 @@ func (w *Workflow) validate() error {
 	// Validate tasks.
 	used := map[*taskDefinition]bool{}
 	for _, taskDef := range w.def.tasks {
-		for _, arg := range taskDef.inputs {
-			for _, argDep := range arg.deps() {
-				used[argDep] = true
-			}
+		for _, dep := range taskDef.deps {
+			used[dep] = true
 		}
 	}
 	for _, output := range w.def.outputs {
-		used[output.task] = true
+		used[output] = true
 	}
 	for _, task := range w.def.tasks {
 		if !used[task] {
@@ -506,16 +534,16 @@ func (w *Workflow) validate() error {
 	if got, want := len(w.params), len(w.def.parameters); got != want {
 		return fmt.Errorf("parameter count mismatch: workflow instance has %d, but definition has %d", got, want)
 	}
-	paramDefs := map[string]Value{} // Key is parameter name.
+	paramDefs := map[string]MetaParameter{} // Key is parameter name.
 	for _, p := range w.def.parameters {
-		if _, ok := w.params[p.Name]; !ok {
-			return fmt.Errorf("parameter name mismatch: workflow instance doesn't have %q, but definition requires it", p.Name)
+		if _, ok := w.params[p.Name()]; !ok {
+			return fmt.Errorf("parameter name mismatch: workflow instance doesn't have %q, but definition requires it", p.Name())
 		}
-		paramDefs[p.Name] = parameter(p)
+		paramDefs[p.Name()] = p
 	}
 	for name, v := range w.params {
-		if !paramDefs[name].typ().AssignableTo(reflect.TypeOf(v)) {
-			return fmt.Errorf("parameter type mismatch: value of parameter %q has type %v, but definition specifies %v", name, reflect.TypeOf(v), paramDefs[name].typ())
+		if !paramDefs[name].Type().AssignableTo(reflect.TypeOf(v)) {
+			return fmt.Errorf("parameter type mismatch: value of parameter %q has type %v, but definition specifies %v", name, reflect.TypeOf(v), paramDefs[name].Type())
 		}
 	}
 
@@ -592,7 +620,7 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 		// If we have all the outputs, the workflow is done.
 		outValues := map[string]interface{}{}
 		for outName, outDef := range w.def.outputs {
-			if task := w.tasks[outDef.task]; task.finished && task.err == nil {
+			if task := w.tasks[outDef]; task.finished && task.err == nil {
 				outValues[outName] = task.result
 			}
 		}

@@ -17,7 +17,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
-	"golang.org/x/build/internal/workflow"
+	wf "golang.org/x/build/internal/workflow"
 )
 
 func TestTrivial(t *testing.T) {
@@ -25,9 +25,10 @@ func TestTrivial(t *testing.T) {
 		return arg, nil
 	}
 
-	wd := workflow.New()
-	greeting := wd.Task("echo", echo, wd.Constant("hello world"))
-	wd.Output("greeting", greeting)
+	wd := wf.New()
+	wf.Task1(wd, "echo", echo, wf.Const("hello world"))
+	greeting := wf.Task1(wd, "echo", echo, wf.Const("hello world"))
+	wf.Output(wd, "greeting", greeting)
 
 	w := startWorkflow(t, wd, nil)
 	outputs := runWorkflow(t, w, nil)
@@ -56,10 +57,10 @@ func TestDependency(t *testing.T) {
 		return "hello world", nil
 	}
 
-	wd := workflow.New()
-	firstDep := wd.Action("first action", action)
-	secondDep := wd.Task("check action", checkAction, wd.After(firstDep))
-	wd.Output("greeting", wd.Task("say hi", hi, wd.After(secondDep)))
+	wd := wf.New()
+	firstDep := wf.Action0(wd, "first action", action)
+	secondDep := wf.Task0(wd, "check action", checkAction, wf.After(firstDep))
+	wf.Output(wd, "greeting", wf.Task0(wd, "say hi", hi, wf.After(secondDep)))
 
 	w := startWorkflow(t, wd, nil)
 	outputs := runWorkflow(t, w, nil)
@@ -76,9 +77,9 @@ func TestDependencyError(t *testing.T) {
 		return "", fmt.Errorf("unexpected error")
 	}
 
-	wd := workflow.New()
-	dep := wd.Action("failing action", action)
-	wd.Output("output", wd.Task("task", task, wd.After(dep)))
+	wd := wf.New()
+	dep := wf.Action0(wd, "failing action", action)
+	wf.Output(wd, "output", wf.Task0(wd, "task", task, wf.After(dep)))
 	w := startWorkflow(t, wd, nil)
 	l := &verboseListener{t: t}
 	if _, err := w.Run(context.Background(), l); err == nil {
@@ -94,12 +95,12 @@ func TestSub(t *testing.T) {
 		return s1 + " " + s2, nil
 	}
 
-	wd := workflow.New()
+	wd := wf.New()
 	sub1 := wd.Sub("sub1")
-	g1 := sub1.Task("Greeting", hi)
+	g1 := wf.Task0(sub1, "Greeting", hi)
 	sub2 := wd.Sub("sub2")
-	g2 := sub2.Task("Greeting", hi)
-	wd.Output("result", wd.Task("Concatenate", concat, g1, g2))
+	g2 := wf.Task0(sub2, "Greeting", hi)
+	wf.Output(wd, "result", wf.Task2(wd, "Concatenate", concat, g1, g2))
 
 	w := startWorkflow(t, wd, nil)
 	outputs := runWorkflow(t, w, nil)
@@ -113,9 +114,9 @@ func TestStuck(t *testing.T) {
 		return "", fmt.Errorf("goodbye world")
 	}
 
-	wd := workflow.New()
-	nothing := wd.Task("fail", fail)
-	wd.Output("nothing", nothing)
+	wd := wf.New()
+	nothing := wf.Task0(wd, "fail", fail)
+	wf.Output(wd, "nothing", nothing)
 
 	w := startWorkflow(t, wd, nil)
 	_, err := w.Run(context.Background(), &verboseListener{t: t})
@@ -135,13 +136,13 @@ func TestSplitJoin(t *testing.T) {
 		return strings.Join(s, ","), nil
 	}
 
-	wd := workflow.New()
-	in := wd.Task("echo", echo, wd.Constant("string #"))
-	add1 := wd.Task("add 1", appendInt, in, wd.Constant(1))
-	add2 := wd.Task("add 2", appendInt, in, wd.Constant(2))
-	both := wd.Slice(add1, add2)
-	out := wd.Task("join", join, both)
-	wd.Output("strings", out)
+	wd := wf.New()
+	in := wf.Task1(wd, "echo", echo, wf.Const("string #"))
+	add1 := wf.Task2(wd, "add 1", appendInt, in, wf.Const(1))
+	add2 := wf.Task2(wd, "add 2", appendInt, in, wf.Const(2))
+	both := wf.Slice(add1, add2)
+	out := wf.Task1(wd, "join", join, both)
+	wf.Output(wd, "strings", out)
 
 	w := startWorkflow(t, wd, nil)
 	outputs := runWorkflow(t, w, nil)
@@ -169,11 +170,11 @@ func TestParallelism(t *testing.T) {
 		}
 		return "", ctx.Err()
 	}
-	wd := workflow.New()
-	out1 := wd.Task("block #1", block1)
-	out2 := wd.Task("block #2", block2)
-	wd.Output("out1", out1)
-	wd.Output("out2", out2)
+	wd := wf.New()
+	out1 := wf.Task0(wd, "block #1", block1)
+	out2 := wf.Task0(wd, "block #2", block2)
+	wf.Output(wd, "out1", out1)
+	wf.Output(wd, "out2", out2)
 
 	w := startWorkflow(t, wd, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -188,21 +189,13 @@ func TestParameters(t *testing.T) {
 		return arg, nil
 	}
 
-	wd := workflow.New()
-	param1 := wd.Parameter(workflow.Parameter{Name: "param1"})
-	param2 := wd.Parameter(workflow.Parameter{Name: "param2"})
-	out1 := wd.Task("echo 1", echo, param1)
-	out2 := wd.Task("echo 2", echo, param2)
-	wd.Output("out1", out1)
-	wd.Output("out2", out2)
-
-	wantParams := []workflow.Parameter{
-		{Name: "param1", ParameterType: workflow.BasicString},
-		{Name: "param2", ParameterType: workflow.BasicString},
-	}
-	if diff := cmp.Diff(wantParams, wd.Parameters(), cmp.Comparer(func(x, y reflect.Type) bool { return x == y })); diff != "" {
-		t.Errorf("wd.Parameters() mismatch (-want +got):\n%s", diff)
-	}
+	wd := wf.New()
+	param1 := wf.Param(wd, wf.ParamDef[string]{Name: "param1"})
+	param2 := wf.Param(wd, wf.ParamDef[string]{Name: "param2"})
+	out1 := wf.Task1(wd, "echo 1", echo, param1)
+	out2 := wf.Task1(wd, "echo 2", echo, param2)
+	wf.Output(wd, "out1", out1)
+	wf.Output(wd, "out2", out2)
 
 	w := startWorkflow(t, wd, map[string]interface{}{"param1": "#1", "param2": "#2"})
 	outputs := runWorkflow(t, w, nil)
@@ -211,30 +204,30 @@ func TestParameters(t *testing.T) {
 	}
 
 	t.Run("CountMismatch", func(t *testing.T) {
-		_, err := workflow.Start(wd, map[string]interface{}{"param1": "#1"})
+		_, err := wf.Start(wd, map[string]interface{}{"param1": "#1"})
 		if err == nil {
-			t.Errorf("workflow.Start didn't return an error despite a parameter count mismatch")
+			t.Errorf("wf.Start didn't return an error despite a parameter count mismatch")
 		}
 	})
 	t.Run("NameMismatch", func(t *testing.T) {
-		_, err := workflow.Start(wd, map[string]interface{}{"paramA": "#1", "paramB": "#2"})
+		_, err := wf.Start(wd, map[string]interface{}{"paramA": "#1", "paramB": "#2"})
 		if err == nil {
-			t.Errorf("workflow.Start didn't return an error despite a parameter name mismatch")
+			t.Errorf("wf.Start didn't return an error despite a parameter name mismatch")
 		}
 	})
 	t.Run("TypeMismatch", func(t *testing.T) {
-		_, err := workflow.Start(wd, map[string]interface{}{"param1": "#1", "param2": 42})
+		_, err := wf.Start(wd, map[string]interface{}{"param1": "#1", "param2": 42})
 		if err == nil {
-			t.Errorf("workflow.Start didn't return an error despite a parameter type mismatch")
+			t.Errorf("wf.Start didn't return an error despite a parameter type mismatch")
 		}
 	})
 }
 
-// Test that passing workflow.Parameter{...} directly to Definition.Task would be a build-time error.
+// Test that passing wf.Parameter{...} directly to Definition.Task would be a build-time error.
 // Parameters need to be registered via the Definition.Parameter method.
 func TestParameterValue(t *testing.T) {
-	var p interface{} = workflow.Parameter{}
-	if _, ok := p.(workflow.Value); ok {
+	var p interface{} = wf.ParamDef[int]{}
+	if _, ok := p.(wf.Value[int]); ok {
 		t.Errorf("Parameter unexpectedly implements Value; it intentionally tries not to to reduce possible API misuse")
 	}
 }
@@ -249,8 +242,8 @@ func TestRetry(t *testing.T) {
 		return "hi", nil
 	}
 
-	wd := workflow.New()
-	wd.Output("result", wd.Task("needs retry", needsRetry))
+	wd := wf.New()
+	wf.Output(wd, "result", wf.Task0(wd, "needs retry", needsRetry))
 
 	w := startWorkflow(t, wd, nil)
 	outputs := runWorkflow(t, w, nil)
@@ -264,14 +257,14 @@ func TestRetry(t *testing.T) {
 
 func TestRetryDisabled(t *testing.T) {
 	counter := 0
-	noRetry := func(ctx *workflow.TaskContext) (string, error) {
+	noRetry := func(ctx *wf.TaskContext) (string, error) {
 		ctx.DisableRetries()
 		counter++
 		return "", fmt.Errorf("do not pass go")
 	}
 
-	wd := workflow.New()
-	wd.Output("result", wd.Task("no retry", noRetry))
+	wd := wf.New()
+	wf.Output(wd, "result", wf.Task0(wd, "no retry", noRetry))
 
 	w := startWorkflow(t, wd, nil)
 	_, err := w.Run(context.Background(), &verboseListener{t: t})
@@ -285,14 +278,14 @@ func TestRetryDisabled(t *testing.T) {
 }
 
 func TestLogging(t *testing.T) {
-	log := func(ctx *workflow.TaskContext, arg string) (string, error) {
+	log := func(ctx *wf.TaskContext, arg string) (string, error) {
 		ctx.Printf("logging argument: %v", arg)
 		return arg, nil
 	}
 
-	wd := workflow.New()
-	out := wd.Task("log", log, wd.Constant("hey there"))
-	wd.Output("out", out)
+	wd := wf.New()
+	out := wf.Task1(wd, "log", log, wf.Const("hey there"))
+	wf.Output(wd, "out", out)
 
 	logger := &capturingLogger{}
 	listener := &logTestListener{
@@ -307,11 +300,11 @@ func TestLogging(t *testing.T) {
 }
 
 type logTestListener struct {
-	workflow.Listener
-	logger workflow.Logger
+	wf.Listener
+	logger wf.Logger
 }
 
-func (l *logTestListener) Logger(_ uuid.UUID, _ string) workflow.Logger {
+func (l *logTestListener) Logger(_ uuid.UUID, _ string) wf.Logger {
 	return l.logger
 }
 
@@ -334,7 +327,7 @@ func TestResume(t *testing.T) {
 	// canceled at its step.
 	block := true
 	blocked := make(chan bool, 1)
-	maybeBlock := func(ctx *workflow.TaskContext, _ string) (string, error) {
+	maybeBlock := func(ctx *wf.TaskContext, _ string) (string, error) {
 		ctx.DisableRetries()
 		if block {
 			blocked <- true
@@ -343,10 +336,10 @@ func TestResume(t *testing.T) {
 		}
 		return "not blocked", nil
 	}
-	wd := workflow.New()
-	v1 := wd.Task("run once", runOnlyOnce)
-	v2 := wd.Task("block", maybeBlock, v1)
-	wd.Output("output", v2)
+	wd := wf.New()
+	v1 := wf.Task0(wd, "run once", runOnlyOnce)
+	v2 := wf.Task1(wd, "block", maybeBlock, v1)
+	wf.Output(wd, "output", v2)
 
 	// Cancel the workflow once we've entered maybeBlock.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -354,7 +347,7 @@ func TestResume(t *testing.T) {
 		<-blocked
 		cancel()
 	}()
-	w, err := workflow.Start(wd, nil)
+	w, err := wf.Start(wd, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,16 +356,16 @@ func TestResume(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled workflow returned error %v, wanted Canceled", err)
 	}
-	storage.assertState(t, w, map[string]*workflow.TaskState{
+	storage.assertState(t, w, map[string]*wf.TaskState{
 		"run once": {Name: "run once", Started: true, Finished: true, Result: "ran"},
 		"block":    {Name: "block", Started: true, Finished: true, Error: "context canceled"}, // We cancelled the workflow before it could save its state.
 	})
 
 	block = false
-	wfState := &workflow.WorkflowState{ID: w.ID, Params: nil}
+	wfState := &wf.WorkflowState{ID: w.ID, Params: nil}
 	taskStates := storage.states[w.ID]
-	taskStates["block"] = &workflow.TaskState{Name: "block"}
-	w2, err := workflow.Resume(wd, wfState, taskStates)
+	taskStates["block"] = &wf.TaskState{Name: "block"}
+	w2, err := wf.Resume(wd, wfState, taskStates)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -383,7 +376,7 @@ func TestResume(t *testing.T) {
 	if runs != 1 {
 		t.Errorf("runOnlyOnce ran %v times, wanted 1", runs)
 	}
-	storage.assertState(t, w, map[string]*workflow.TaskState{
+	storage.assertState(t, w, map[string]*wf.TaskState{
 		"run once": {Name: "run once", Started: true, Finished: true, Result: "ran"},
 		"block":    {Name: "block", Started: true, Finished: true, Result: "not blocked"},
 	})
@@ -398,8 +391,8 @@ func TestBadMarshaling(t *testing.T) {
 		return badResult{"hi"}, nil
 	}
 
-	wd := workflow.New()
-	wd.Output("greeting", wd.Task("greet", greet))
+	wd := wf.New()
+	wf.Output(wd, "greeting", wf.Task0(wd, "greet", greet))
 	w := startWorkflow(t, wd, nil)
 	if _, err := w.Run(context.Background(), &verboseListener{t}); err == nil {
 		t.Errorf("running a workflow with bad JSON should give an error, got none")
@@ -407,38 +400,38 @@ func TestBadMarshaling(t *testing.T) {
 }
 
 type mapListener struct {
-	workflow.Listener
-	states map[uuid.UUID]map[string]*workflow.TaskState
+	wf.Listener
+	states map[uuid.UUID]map[string]*wf.TaskState
 }
 
-func (l *mapListener) TaskStateChanged(workflowID uuid.UUID, taskID string, state *workflow.TaskState) error {
+func (l *mapListener) TaskStateChanged(workflowID uuid.UUID, taskID string, state *wf.TaskState) error {
 	if l.states == nil {
-		l.states = map[uuid.UUID]map[string]*workflow.TaskState{}
+		l.states = map[uuid.UUID]map[string]*wf.TaskState{}
 	}
 	if l.states[workflowID] == nil {
-		l.states[workflowID] = map[string]*workflow.TaskState{}
+		l.states[workflowID] = map[string]*wf.TaskState{}
 	}
 	l.states[workflowID][taskID] = state
 	return l.Listener.TaskStateChanged(workflowID, taskID, state)
 }
 
-func (l *mapListener) assertState(t *testing.T, w *workflow.Workflow, want map[string]*workflow.TaskState) {
+func (l *mapListener) assertState(t *testing.T, w *wf.Workflow, want map[string]*wf.TaskState) {
 	t.Helper()
-	if diff := cmp.Diff(l.states[w.ID], want, cmpopts.IgnoreFields(workflow.TaskState{}, "SerializedResult")); diff != "" {
+	if diff := cmp.Diff(l.states[w.ID], want, cmpopts.IgnoreFields(wf.TaskState{}, "SerializedResult")); diff != "" {
 		t.Errorf("task state didn't match expections: %v", diff)
 	}
 }
 
-func startWorkflow(t *testing.T, wd *workflow.Definition, params map[string]interface{}) *workflow.Workflow {
+func startWorkflow(t *testing.T, wd *wf.Definition, params map[string]interface{}) *wf.Workflow {
 	t.Helper()
-	w, err := workflow.Start(wd, params)
+	w, err := wf.Start(wd, params)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return w
 }
 
-func runWorkflow(t *testing.T, w *workflow.Workflow, listener workflow.Listener) map[string]interface{} {
+func runWorkflow(t *testing.T, w *wf.Workflow, listener wf.Listener) map[string]interface{} {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	t.Helper()
@@ -454,7 +447,7 @@ func runWorkflow(t *testing.T, w *workflow.Workflow, listener workflow.Listener)
 
 type verboseListener struct{ t *testing.T }
 
-func (l *verboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *workflow.TaskState) error {
+func (l *verboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *wf.TaskState) error {
 	switch {
 	case !st.Started:
 		// Task creation is uninteresting.
@@ -468,7 +461,7 @@ func (l *verboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *workflow.T
 	return nil
 }
 
-func (l *verboseListener) Logger(_ uuid.UUID, task string) workflow.Logger {
+func (l *verboseListener) Logger(_ uuid.UUID, task string) wf.Logger {
 	return &testLogger{t: l.t, task: task}
 }
 

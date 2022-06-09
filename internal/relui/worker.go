@@ -198,13 +198,13 @@ func (w *Worker) Resume(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 	for _, param := range d.Parameters() {
-		ptr := reflect.New(param.Type)
-		if err := json.Unmarshal(rawParams[param.Name], ptr.Interface()); err != nil {
-			err := fmt.Errorf("unmarshaling param %q for %q: %w", param.Name, id, err)
+		ptr := reflect.New(param.Type())
+		if err := json.Unmarshal(rawParams[param.Name()], ptr.Interface()); err != nil {
+			err := fmt.Errorf("unmarshaling param %q for %q: %w", param.Name(), id, err)
 			w.l.WorkflowFinished(ctx, wf.ID, nil, err)
 			return err
 		}
-		state.Params[param.Name] = ptr.Elem().Interface()
+		state.Params[param.Name()] = ptr.Elem().Interface()
 	}
 
 	taskStates := make(map[string]*workflow.TaskState)

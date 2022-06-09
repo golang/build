@@ -172,7 +172,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wd.Output("Published Go version", v)
+	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
 		"Targets to skip testing (or 'all') (optional)":            []string{"js-wasm"},
@@ -291,7 +291,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wd.Output("Published Go version", v)
+	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
 		"Targets to skip testing (or 'all') (optional)":            []string{"js-wasm"},
@@ -337,7 +337,7 @@ func TestAdvisoryTrybotFail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wd.Output("Published Go version", v)
+	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
 		"Targets to skip testing (or 'all') (optional)":            []string(nil),

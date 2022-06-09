@@ -248,23 +248,23 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	params := make(map[string]interface{})
 	for _, p := range d.Parameters() {
-		switch p.Type.String() {
+		switch p.Type().String() {
 		case "string":
-			v := r.FormValue(fmt.Sprintf("workflow.params.%s", p.Name))
+			v := r.FormValue(fmt.Sprintf("workflow.params.%s", p.Name()))
 			if p.RequireNonZero() && v == "" {
-				http.Error(w, fmt.Sprintf("parameter %q must have non-zero value", p.Name), http.StatusBadRequest)
+				http.Error(w, fmt.Sprintf("parameter %q must have non-zero value", p.Name()), http.StatusBadRequest)
 				return
 			}
-			params[p.Name] = v
+			params[p.Name()] = v
 		case "[]string":
-			v := r.Form[fmt.Sprintf("workflow.params.%s", p.Name)]
+			v := r.Form[fmt.Sprintf("workflow.params.%s", p.Name())]
 			if p.RequireNonZero() && len(v) == 0 {
-				http.Error(w, fmt.Sprintf("parameter %q must have non-zero value", p.Name), http.StatusBadRequest)
+				http.Error(w, fmt.Sprintf("parameter %q must have non-zero value", p.Name()), http.StatusBadRequest)
 				return
 			}
-			params[p.Name] = v
+			params[p.Name()] = v
 		default:
-			http.Error(w, fmt.Sprintf("parameter %q has an unsupported type %q", p.Name, p.Type), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("parameter %q has an unsupported type %q", p.Name(), p.Type()), http.StatusInternalServerError)
 			return
 		}
 	}

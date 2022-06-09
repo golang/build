@@ -59,9 +59,9 @@ func TestAwaitFunc(t *testing.T) {
 				}
 			}
 			wd := workflow.New()
-			await := wd.Action("AwaitFunc", AwaitFunc, wd.Constant(10*time.Millisecond), wd.Constant(cond))
-			truth := wd.Task("truth", func(_ context.Context) (bool, error) { return true, nil }, wd.After(await))
-			wd.Output("await", truth)
+			await := workflow.Action2(wd, "AwaitFunc", AwaitFunc, workflow.Const(10*time.Millisecond), workflow.Const(AwaitConditionFunc(cond)))
+			truth := workflow.Task0(wd, "truth", func(_ context.Context) (bool, error) { return true, nil }, workflow.After(await))
+			workflow.Output(wd, "await", truth)
 
 			w, err := workflow.Start(wd, nil)
 			if err != nil {
