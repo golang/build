@@ -518,11 +518,11 @@ func Resume(def *Definition, state *WorkflowState, taskStates map[string]*TaskSt
 			serializedResult: tState.SerializedResult,
 		}
 		if state.serializedResult != nil {
-			ptr := reflect.New(reflect.ValueOf(taskDef.f).Type().Out(0))
-			if err := json.Unmarshal(tState.SerializedResult, ptr.Interface()); err != nil {
+			result, err := unmarshalNew(reflect.ValueOf(taskDef.f).Type().Out(0), tState.SerializedResult)
+			if err != nil {
 				return nil, fmt.Errorf("failed to unmarshal result of %v: %v", taskDef.name, err)
 			}
-			state.result = ptr.Elem().Interface()
+			state.result = result
 		}
 		if tState.Error != "" {
 			state.err = fmt.Errorf("serialized error: %v", tState.Error) // untyped, but hopefully that doesn't matter.
@@ -530,6 +530,14 @@ func Resume(def *Definition, state *WorkflowState, taskStates map[string]*TaskSt
 		w.tasks[taskDef] = state
 	}
 	return w, nil
+}
+
+func unmarshalNew(t reflect.Type, data []byte) (interface{}, error) {
+	ptr := reflect.New(t)
+	if err := json.Unmarshal(data, ptr.Interface()); err != nil {
+		return nil, err
+	}
+	return ptr.Elem().Interface(), nil
 }
 
 // Run runs a workflow to completion or quiescence and returns its outputs.
@@ -612,17 +620,21 @@ func (w *Workflow) runTask(ctx context.Context, listener Listener, state taskSta
 		WorkflowID: w.ID,
 	}
 	in := append([]reflect.Value{reflect.ValueOf(tctx)}, args...)
-	out := reflect.ValueOf(state.def.f).Call(in)
+	fv := reflect.ValueOf(state.def.f)
+	out := fv.Call(in)
 
 	if errIdx := len(out) - 1; !out[errIdx].IsNil() {
 		state.err = out[errIdx].Interface().(error)
 	}
 	state.finished = true
-	if len(out) == 2 {
-		state.result = out[0].Interface()
-	}
-	if state.err == nil {
-		state.serializedResult, state.err = json.Marshal(state.result)
+	if len(out) == 2 && state.err == nil {
+		state.serializedResult, state.err = json.Marshal(out[0].Interface())
+		if state.err == nil {
+			state.result, state.err = unmarshalNew(fv.Type().Out(0), state.serializedResult)
+		}
+		if state.err == nil && !reflect.DeepEqual(out[0].Interface(), state.result) {
+			state.err = fmt.Errorf("JSON marshaling changed result from %#v to %#v", out[0].Interface(), state.result)
+		}
 	}
 	return state
 }

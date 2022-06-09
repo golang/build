@@ -342,6 +342,23 @@ func TestResume(t *testing.T) {
 	})
 }
 
+type badResult struct {
+	unexported string
+}
+
+func TestBadMarshaling(t *testing.T) {
+	greet := func(_ context.Context) (badResult, error) {
+		return badResult{"hi"}, nil
+	}
+
+	wd := workflow.New()
+	wd.Output("greeting", wd.Task("greet", greet))
+	w := startWorkflow(t, wd, nil)
+	if _, err := w.Run(context.Background(), &verboseListener{t}); err == nil {
+		t.Errorf("running a workflow with bad JSON should give an error, got none")
+	}
+}
+
 type mapListener struct {
 	workflow.Listener
 	states map[uuid.UUID]map[string]*workflow.TaskState
