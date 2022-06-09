@@ -558,10 +558,6 @@ func (w *sizeWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func combineResults(ctx *workflow.TaskContext, artifacts []artifact) ([]artifact, error) {
-	return artifacts, nil
-}
-
 func (tasks *BuildReleaseTasks) copyToStaging(ctx *workflow.TaskContext, version string, artifacts []artifact) ([]artifact, error) {
 	scratchFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.ScratchURL)
 	if err != nil {

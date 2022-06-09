@@ -37,7 +37,7 @@ RETURNING *;
 -- name: Tasks :many
 SELECT tasks.*
 FROM tasks
-ORDER BY created_at;
+ORDER BY updated_at;
 
 -- name: TasksForWorkflow :many
 SELECT tasks.*

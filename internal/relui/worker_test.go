@@ -186,7 +186,10 @@ func TestWorkflowResumeAll(t *testing.T) {
 			UpdatedAt:  time.Now(), // cmpopts.EquateApproxTime
 		},
 	}
-	if diff := cmp.Diff(want, tasks, cmpopts.EquateApproxTime(time.Minute)); diff != "" {
+	sort := cmpopts.SortSlices(func(x db.Task, y db.Task) bool {
+		return x.WorkflowID.String() < y.WorkflowID.String()
+	})
+	if diff := cmp.Diff(want, tasks, cmpopts.EquateApproxTime(time.Minute), sort); diff != "" {
 		t.Errorf("q.Tasks() mismatch (-want +got):\n%s", diff)
 	}
 }

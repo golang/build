@@ -281,7 +281,7 @@ func (q *Queries) TaskLogsForTask(ctx context.Context, arg TaskLogsForTaskParams
 const tasks = `-- name: Tasks :many
 SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at
 FROM tasks
-ORDER BY created_at
+ORDER BY updated_at
 `
 
 func (q *Queries) Tasks(ctx context.Context) ([]Task, error) {
