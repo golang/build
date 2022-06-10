@@ -6,6 +6,7 @@ package gerrit
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -69,8 +70,8 @@ func TestProjectNotFound(t *testing.T) {
 	defer s.Close()
 	c := NewClient(s.URL, NoAuth)
 	_, err := c.GetProjectInfo(context.Background(), "unknown")
-	if err != ErrProjectNotExist {
-		t.Errorf("expected to get ErrProjectNotExist, got %v", err)
+	if !errors.Is(err, ErrResourceNotExist) {
+		t.Errorf("expected to get ErrResourceNotExist, got %v", err)
 	}
 }
 
@@ -176,8 +177,8 @@ func TestGetChangeError(t *testing.T) {
 	if !hitServer {
 		t.Errorf("expected to hit test server, didn't")
 	}
-	if err != ErrChangeNotExist {
-		t.Errorf("expected ErrChangeNotExist, got %v", err)
+	if !errors.Is(err, ErrResourceNotExist) {
+		t.Errorf("expected ErrResourceNotExist, got %v", err)
 	}
 }
 

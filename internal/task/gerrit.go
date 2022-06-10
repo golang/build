@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -93,7 +94,7 @@ func (c *RealGerritClient) AwaitSubmit(ctx context.Context, changeID, parentComm
 
 func (c *RealGerritClient) Tag(ctx context.Context, project, tag, commit string) error {
 	info, err := c.Client.GetTag(ctx, project, tag)
-	if err != nil && err != gerrit.ErrTagNotExist {
+	if err != nil && !errors.Is(err, gerrit.ErrResourceNotExist) {
 		return fmt.Errorf("checking if tag already exists: %v", err)
 	}
 	if err == nil {

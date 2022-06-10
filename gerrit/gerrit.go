@@ -57,6 +57,10 @@ func (c *Client) httpClient() *http.Client {
 	return http.DefaultClient
 }
 
+// ErrResourceNotExist is returned when the requested resource doesn't exist.
+// It is only for use with errors.Is.
+var ErrResourceNotExist = errors.New("gerrit: requested resource does not exist")
+
 // HTTPError is the error type returned when a Gerrit API call does not return
 // the expected status.
 type HTTPError struct {
@@ -67,6 +71,10 @@ type HTTPError struct {
 
 func (e *HTTPError) Error() string {
 	return fmt.Sprintf("HTTP status %s on request to %s; %s", e.Res.Status, e.Res.Request.URL, e.Body)
+}
+
+func (e *HTTPError) Is(target error) bool {
+	return target == ErrResourceNotExist && e.Res.StatusCode == http.StatusNotFound
 }
 
 // doArg is an optional argument for the Client.do method.
@@ -463,7 +471,6 @@ func (c *Client) QueryChanges(ctx context.Context, q string, opts ...QueryChange
 
 // GetChange returns information about a single change.
 // For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#get-change
-// If the change doesn't exist, the error will be ErrChangeNotExist.
 func (c *Client) GetChange(ctx context.Context, changeID string, opts ...QueryChangesOpt) (*ChangeInfo, error) {
 	var opt QueryChangesOpt
 	switch len(opts) {
@@ -478,9 +485,6 @@ func (c *Client) GetChange(ctx context.Context, changeID string, opts ...QueryCh
 		"n": condInt(opt.N),
 		"o": opt.Fields,
 	})
-	if he, ok := err.(*HTTPError); ok && he.Res.StatusCode == 404 {
-		return nil, ErrChangeNotExist
-	}
 	return &change, err
 }
 
@@ -774,24 +778,10 @@ func (c *Client) PublishChangeEdit(ctx context.Context, changeID string) error {
 	return c.do(ctx, nil, "POST", "/changes/"+changeID+"/edit:publish", wantResStatus(http.StatusNoContent))
 }
 
-// ErrXNotExist is returned when the requested X doesn't exist.
-// It is not necessarily returned unless a method is documented as
-// returning it.
-var (
-	ErrProjectNotExist = errors.New("gerrit: requested project does not exist")
-	ErrChangeNotExist  = errors.New("gerrit: requested change does not exist")
-	ErrTagNotExist     = errors.New("gerrit: requested tag does not exist")
-	ErrBranchNotExist  = errors.New("gerrit: requested branch does not exist")
-)
-
 // GetProjectInfo returns info about a project.
-// If the project doesn't exist, the error will be ErrProjectNotExist.
 func (c *Client) GetProjectInfo(ctx context.Context, name string) (ProjectInfo, error) {
 	var res ProjectInfo
 	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s", name))
-	if he, ok := err.(*HTTPError); ok && he.Res.StatusCode == 404 {
-		return res, ErrProjectNotExist
-	}
 	return res, err
 }
 
@@ -818,16 +808,12 @@ func (c *Client) GetProjectBranches(ctx context.Context, name string) (map[strin
 	return m, nil
 }
 
-// GetBranch gets a particular branch in project. If the branch doesn't exist, the
-// error will be ErrBranchNotExist.
+// GetBranch gets a particular branch in project.
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-branch.
 func (c *Client) GetBranch(ctx context.Context, project, branch string) (BranchInfo, error) {
 	var res BranchInfo
 	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/%s", project, branch))
-	if he, ok := err.(*HTTPError); ok && he.Res.StatusCode == 404 {
-		return BranchInfo{}, ErrBranchNotExist
-	}
 	return res, err
 }
 
@@ -896,16 +882,12 @@ func (c *Client) GetProjectTags(ctx context.Context, name string) (map[string]Ta
 	return m, nil
 }
 
-// GetTag returns a particular tag on project. If the tag doesn't exist, the
-// error will be ErrTagNotExist.
+// GetTag returns a particular tag on project.
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-tag.
 func (c *Client) GetTag(ctx context.Context, project, tag string) (TagInfo, error) {
 	var res TagInfo
 	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/tags/%s", project, tag))
-	if he, ok := err.(*HTTPError); ok && he.Res.StatusCode == 404 {
-		return TagInfo{}, ErrTagNotExist
-	}
 	return res, err
 }
 
