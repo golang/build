@@ -308,7 +308,7 @@ func (s *Server) ExecuteCommand(req *protos.ExecuteCommandRequest, stream protos
 		return status.Errorf(codes.Internal, "unable to retrieve configuration for instance")
 	}
 	remoteErr, execErr := bc.Exec(stream.Context(), req.GetCommand(), buildlet.ExecOpts{
-		Dir:         req.GetCommand(),
+		Dir:         req.GetDirectory(),
 		SystemLevel: req.GetSystemLevel(),
 		Output: &streamWriter{writeFunc: func(p []byte) (int, error) {
 			err := stream.Send(&protos.ExecuteCommandResponse{
