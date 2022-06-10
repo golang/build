@@ -25,16 +25,26 @@ type FlagResolver struct {
 
 const secretSuffix = "[ specify `secret:[project name/]<secret name>` to read from Secret Manager ]"
 
-// Flag declares a string flag on set that will be resolved using r.
-func (r *FlagResolver) Flag(set *flag.FlagSet, name string, usage string) *string {
-	var value string
+// Flag defines a string flag on set that will be resolved using r.
+// The return value is the address of a string variable that stores the value of the flag.
+func (r *FlagResolver) Flag(set *flag.FlagSet, name, usage string) *string {
+	p := new(string)
+	r.FlagVar(set, p, name, usage)
+	return p
+}
+
+// FlagVar defines a string flag on set that will be resolved using r.
+// The argument p points to a string variable in which to store the value of the flag.
+func (r *FlagResolver) FlagVar(set *flag.FlagSet, p *string, name, usage string) {
 	suffixedUsage := usage + "\n" + secretSuffix
 	set.Func(name, suffixedUsage, func(flagValue string) error {
-		var err error
-		value, err = r.resolveSecret(flagValue)
-		return err
+		value, err := r.resolveSecret(flagValue)
+		if err != nil {
+			return err
+		}
+		*p = value
+		return nil
 	})
-	return &value
 }
 
 func (r *FlagResolver) resolveSecret(flagValue string) (string, error) {
@@ -62,9 +72,9 @@ func (r *FlagResolver) resolveSecret(flagValue string) (string, error) {
 	return string(result.Payload.GetData()), nil
 }
 
-// JSONVarFlag declares a flag on set that behaves like Flag and then
+// JSONVarFlag defines a flag on set that behaves like Flag and then
 // json.Unmarshals the resulting string into value.
-func (r *FlagResolver) JSONVarFlag(set *flag.FlagSet, value interface{}, name string, usage string) {
+func (r *FlagResolver) JSONVarFlag(set *flag.FlagSet, value interface{}, name, usage string) {
 	suffixedUsage := usage + "\n" + fmt.Sprintf("A JSON representation of a %T.", value) + "\n" + secretSuffix
 	set.Func(name, suffixedUsage, func(flagValue string) error {
 		stringValue, err := r.resolveSecret(flagValue)
@@ -78,16 +88,23 @@ func (r *FlagResolver) JSONVarFlag(set *flag.FlagSet, value interface{}, name st
 // DefaultResolver is the FlagResolver used by the convenience functions.
 var DefaultResolver FlagResolver
 
-// Flag declares a string flag on flag.CommandLine that supports Secret Manager
+// Flag defines a string flag on flag.CommandLine that supports Secret Manager
 // resolution for values like "secret:<secret name>". InitFlagSupport must be
 // called before flag.Parse.
-func Flag(name string, usage string) *string {
+func Flag(name, usage string) *string {
 	return DefaultResolver.Flag(flag.CommandLine, name, usage)
 }
 
-// JSONVarFlag declares a flag on flag.CommandLine that behaves like Flag
+// FlagVar defines a string flag on flag.CommandLine that supports Secret Manager
+// resolution for values like "secret:<secret name>". InitFlagSupport must be
+// called before flag.Parse.
+func FlagVar(p *string, name, usage string) {
+	DefaultResolver.FlagVar(flag.CommandLine, p, name, usage)
+}
+
+// JSONVarFlag defines a flag on flag.CommandLine that behaves like Flag
 // and then json.Unmarshals the resulting string into value.
-func JSONVarFlag(value interface{}, name string, usage string) {
+func JSONVarFlag(value interface{}, name, usage string) {
 	DefaultResolver.JSONVarFlag(flag.CommandLine, value, name, usage)
 }
 
