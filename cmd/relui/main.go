@@ -183,8 +183,10 @@ func publishFile(uploadURL string, auth buildlet.UserPass, f *relui.WebsiteFile)
 	if err != nil {
 		return fmt.Errorf("invalid website upload URL %q: %v", *websiteUploadURL, err)
 	}
-	u.Query().Set("user", strings.TrimPrefix("user-", auth.Username))
-	u.Query().Set("key", auth.Password)
+	q := u.Query()
+	q.Set("user", strings.TrimPrefix(auth.Username, "user-"))
+	q.Set("key", auth.Password)
+	u.RawQuery = q.Encode()
 	resp, err := http.Post(u.String(), "application/json", bytes.NewReader(req))
 	if err != nil {
 		return err
