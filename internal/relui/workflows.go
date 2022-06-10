@@ -5,6 +5,7 @@
 package relui
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -25,6 +26,7 @@ import (
 	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/net/context/ctxhttp"
 )
 
 // DefinitionHolder holds workflow definitions.
@@ -735,11 +737,14 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *workflow.TaskContext, artif
 
 	for {
 		for _, a := range artifacts {
-			resp, err := http.Head(tasks.DownloadURL + "/" + a.Filename)
-			if err != nil {
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			resp, err := ctxhttp.Head(ctx, http.DefaultClient, tasks.DownloadURL+"/"+a.Filename)
+			if err != nil && err != context.DeadlineExceeded {
 				return err
 			}
 			resp.Body.Close()
+			cancel()
 			if resp.StatusCode == http.StatusOK {
 				delete(todo, a)
 			}
