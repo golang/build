@@ -19,6 +19,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -182,7 +183,7 @@ func publishFile(uploadURL string, auth buildlet.UserPass, f *relui.WebsiteFile)
 	if err != nil {
 		return fmt.Errorf("invalid website upload URL %q: %v", *websiteUploadURL, err)
 	}
-	u.Query().Set("user", auth.Username)
+	u.Query().Set("user", strings.TrimPrefix("user-", auth.Username))
 	u.Query().Set("key", auth.Password)
 	resp, err := http.Post(u.String(), "application/json", bytes.NewReader(req))
 	if err != nil {
