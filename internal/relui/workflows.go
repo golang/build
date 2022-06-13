@@ -697,7 +697,7 @@ func readSignedArtifact(stagingFS fs.FS, version string, a artifact) (_ artifact
 	if modifiedBySigning {
 		hash, err := fs.ReadFile(stagingFS, version+"/signed/"+a.Filename+".sha256")
 		if err != nil {
-			return artifact{}, false, err
+			return artifact{}, false, nil
 		}
 		signed.Size = int(fi.Size())
 		signed.SHA256 = string(hash)
