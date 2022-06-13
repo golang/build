@@ -297,7 +297,7 @@ func addSingleReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Mileston
 		branch = "master"
 	}
 	branchVal := wd.Constant(branch)
-	branchHead := wd.Task("Read branch HEAD", version.ReadBranchHead, branchVal)
+	releaseBase := wd.Task("Pick release base commit", version.ReadBranchHead, branchVal)
 
 	// Select version, check milestones.
 	nextVersion := wd.Task("Get next version", version.GetNextVersion, kindVal)
@@ -308,7 +308,7 @@ func addSingleReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Mileston
 	wd.Output("Download CL submitted", dlclCommit)
 
 	// Build, test, and sign release.
-	signedAndTestedArtifacts, err := build.addBuildTasks(wd, "go1.19", nextVersion, branchHead, skipTests, checked)
+	signedAndTestedArtifacts, err := build.addBuildTasks(wd, "go1.19", nextVersion, releaseBase, skipTests, checked)
 	if err != nil {
 		return err
 	}
@@ -319,11 +319,11 @@ func addSingleReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Mileston
 	// Tag version and upload to CDN/website.
 	uploaded := wd.Action("Upload artifacts to CDN", build.uploadArtifacts, signedAndTestedArtifacts, verified)
 
-	tagCommit := branchHead
+	tagCommit := releaseBase
 	if branch != "master" {
-		branchHeadChecked := wd.Action("Check for modified branch head", version.CheckBranchHead, branchVal, branchHead, uploaded)
+		branchHeadChecked := wd.Action("Check for modified branch head", version.CheckBranchHead, branchVal, releaseBase, uploaded)
 		versionCL := wd.Task("Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, nextVersion, branchHeadChecked)
-		tagCommit = wd.Task("Wait for version CL submission", version.AwaitCL, versionCL, branchHead)
+		tagCommit = wd.Task("Wait for version CL submission", version.AwaitCL, versionCL, releaseBase)
 	}
 	tagged := wd.Action("Tag version", version.TagRelease, nextVersion, tagCommit, uploaded)
 

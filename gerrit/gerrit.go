@@ -61,6 +61,10 @@ func (c *Client) httpClient() *http.Client {
 // It is only for use with errors.Is.
 var ErrResourceNotExist = errors.New("gerrit: requested resource does not exist")
 
+// ErrNotModified is returned when a modification didn't result in any change.
+// It is only for use with errors.Is. Not all APIs return this error; check the documentation.
+var ErrNotModified = errors.New("gerrit: requested modification resulted in no change")
+
 // HTTPError is the error type returned when a Gerrit API call does not return
 // the expected status.
 type HTTPError struct {
@@ -74,7 +78,17 @@ func (e *HTTPError) Error() string {
 }
 
 func (e *HTTPError) Is(target error) bool {
-	return target == ErrResourceNotExist && e.Res.StatusCode == http.StatusNotFound
+	switch target {
+	case ErrResourceNotExist:
+		return e.Res.StatusCode == http.StatusNotFound
+	case ErrNotModified:
+		// As of writing, this error text is the only way to distinguish different Conflict errors. See
+		// https://cs.opensource.google/gerrit/gerrit/gerrit/+/master:java/com/google/gerrit/server/restapi/change/ChangeEdits.java;l=346;drc=d338da307a518f7f28b94310c1c083c997ca3c6a
+		// https://cs.opensource.google/gerrit/gerrit/gerrit/+/master:java/com/google/gerrit/server/edit/ChangeEditModifier.java;l=453;drc=3bc970bb3e689d1d340382c3f5e5285d44f91dbf
+		return e.Res.StatusCode == http.StatusConflict && bytes.Contains(e.Body, []byte("no changes were made"))
+	default:
+		return false
+	}
 }
 
 // doArg is an optional argument for the Client.do method.
@@ -750,21 +764,16 @@ type ChangeInput struct {
 }
 
 // ChangeFileContentInChangeEdit puts content of a file to a change edit.
+// If no change is made, an error that matches ErrNotModified is returned.
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#put-edit-file.
 func (c *Client) ChangeFileContentInChangeEdit(ctx context.Context, changeID string, path string, content string) error {
-	err := c.do(ctx, nil, "PUT", "/changes/"+changeID+"/edit/"+url.QueryEscape(path),
+	return c.do(ctx, nil, "PUT", "/changes/"+changeID+"/edit/"+url.QueryEscape(path),
 		reqBodyRaw{strings.NewReader(content)}, wantResStatus(http.StatusNoContent))
-	if he, ok := err.(*HTTPError); ok && he.Res.StatusCode == http.StatusConflict {
-		// The change edit was a no-op.
-		// Note: If/when there's a need inside x/build to handle this differently,
-		// maybe it'll be a good time to return something other than a *HTTPError
-		// and document it as part of the API.
-	}
-	return err
 }
 
 // DeleteFileInChangeEdit deletes a file from a change edit.
+// If no change is made, an error that matches ErrNotModified is returned.
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#delete-edit-file.
 func (c *Client) DeleteFileInChangeEdit(ctx context.Context, changeID string, path string) error {

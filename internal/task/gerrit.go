@@ -11,9 +11,11 @@ import (
 )
 
 type GerritClient interface {
-	// CreateAutoSubmitChange creates a change with the given metadata and contents, sets
-	// Run-TryBots and Auto-Submit, and returns its change ID.
+	// CreateAutoSubmitChange creates a change with the given metadata and
+	// contents, sets Run-TryBots and Auto-Submit, and returns its change ID.
 	// If the content of a file is empty, that file will be deleted from the repository.
+	// If the requested contents match the state of the repository, no change
+	// is created and the returned change ID will be empty.
 	CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, contents map[string]string) (string, error)
 	// AwaitSubmit waits for the specified change to be auto-submitted or fail
 	// trybots. If the CL is submitted, returns the submitted commit hash.
@@ -37,16 +39,27 @@ func (c *RealGerritClient) CreateAutoSubmitChange(ctx context.Context, input ger
 		return "", err
 	}
 	changeID := fmt.Sprintf("%s~%d", change.Project, change.ChangeNumber)
+	anyChange := false
 	for path, content := range files {
+		var err error
 		if content == "" {
-			if err := c.Client.DeleteFileInChangeEdit(ctx, changeID, path); err != nil {
-				return "", err
-			}
+			err = c.Client.DeleteFileInChangeEdit(ctx, changeID, path)
 		} else {
-			if err := c.Client.ChangeFileContentInChangeEdit(ctx, changeID, path, content); err != nil {
-				return "", err
-			}
+			err = c.Client.ChangeFileContentInChangeEdit(ctx, changeID, path, content)
 		}
+		if errors.Is(err, gerrit.ErrNotModified) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		anyChange = true
+	}
+	if !anyChange {
+		if err := c.Client.AbandonChange(ctx, changeID, "no changes necessary"); err != nil {
+			return "", err
+		}
+		return "", nil
 	}
 
 	if err := c.Client.PublishChangeEdit(ctx, changeID); err != nil {

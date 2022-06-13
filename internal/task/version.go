@@ -84,8 +84,17 @@ func (t *VersionTasks) CreateAutoSubmitVersionCL(ctx *workflow.TaskContext, bran
 	})
 }
 
-// AwaitCL waits for the specified CL to be submitted.
+// AwaitCL waits for the specified CL to be submitted, and returns the new
+// branch head. Callers can pass baseCommit, the current branch head, to verify
+// that no CLs were submitted between when the CL was created and when it was
+// merged. If changeID is blank because the intended CL was a no-op, baseCommit
+// is returned immediately.
 func (t *VersionTasks) AwaitCL(ctx *workflow.TaskContext, changeID, baseCommit string) (string, error) {
+	if changeID == "" {
+		ctx.Printf("No CL was necessary")
+		return baseCommit, nil
+	}
+
 	ctx.Printf("Awaiting review/submit of %v", ChangeLink(changeID))
 	return t.Gerrit.AwaitSubmit(ctx, changeID, baseCommit)
 }
