@@ -307,6 +307,9 @@ func addSingleReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Mileston
 	dlclCommit := wd.Task("Wait for DL CL", version.AwaitCL, dlcl, wd.Constant(""))
 	wd.Output("Download CL submitted", dlclCommit)
 
+	startSigner := wd.Task("Start signing command", build.startSigningCommand, nextVersion)
+	wd.Output("Signing command", startSigner)
+
 	// Build, test, and sign release.
 	signedAndTestedArtifacts, err := build.addBuildTasks(wd, "go1.19", nextVersion, releaseBase, skipTests, checked)
 	if err != nil {
@@ -382,13 +385,13 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, majorVers
 
 // BuildReleaseTasks serves as an adapter to the various build tasks in the task package.
 type BuildReleaseTasks struct {
-	GerritURL                          string
-	GCSClient                          *storage.Client
-	ScratchURL, StagingURL, ServingURL string
-	DownloadURL                        string
-	PublishFile                        func(*WebsiteFile) error
-	CreateBuildlet                     func(string) (buildlet.Client, error)
-	ApproveActionFunc                  func(taskName string) func(*workflow.TaskContext, interface{}) error
+	GerritURL              string
+	GCSClient              *storage.Client
+	ScratchURL, ServingURL string
+	DownloadURL            string
+	PublishFile            func(*WebsiteFile) error
+	CreateBuildlet         func(string) (buildlet.Client, error)
+	ApproveActionFunc      func(taskName string) func(*workflow.TaskContext, interface{}) error
 }
 
 func (b *BuildReleaseTasks) buildSource(ctx *workflow.TaskContext, revision, version string) (artifact, error) {
@@ -530,15 +533,22 @@ func (b *BuildReleaseTasks) runBuildStep(
 	}, nil
 }
 
+// An artifact represents a file as it moves through the release process. Most
+// files will appear on go.dev/dl eventually.
 type artifact struct {
 	// The target platform of this artifact, or nil for source.
 	Target *releasetargets.Target
-	// The scratch path of this artifact.
+	// The scratch path of this artifact within the scratch directory.
+	// <workflow-id>/<filename>-<random-number>
 	ScratchPath string
-	// The path the artifact was staged to for the signing process.
+	// The path within the scratch directory the artifact was staged to for the
+	// signing process.
+	// <workflow-id>/signing/<go version>/<filename>
 	StagingPath string
-	// The path artifact can be found at after the signing process. It may be
-	// the same as the staging path for artifacts that are externally signed.
+	// The path within the scratch directory the artifact can be found at
+	// after the signing process. For files not modified by the signing
+	// process, the staging path, or for those that are
+	// <workflow-id>/signing/<go version>/signed/<filename>
 	SignedPath string
 	// The contents of the GPG signature for this artifact (.asc file).
 	GPGSignature string
@@ -560,12 +570,14 @@ func (w *sizeWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+func (tasks *BuildReleaseTasks) startSigningCommand(ctx *workflow.TaskContext, version string) (string, error) {
+	args := fmt.Sprintf("--relui_staging=%q", path.Join(tasks.ScratchURL, signingStagingDir(ctx, version)))
+	ctx.Printf("run signer with " + args)
+	return args, nil
+}
+
 func (tasks *BuildReleaseTasks) copyToStaging(ctx *workflow.TaskContext, version string, artifacts []artifact) ([]artifact, error) {
 	scratchFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.ScratchURL)
-	if err != nil {
-		return nil, err
-	}
-	stagingFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.StagingURL)
 	if err != nil {
 		return nil, err
 	}
@@ -577,14 +589,14 @@ func (tasks *BuildReleaseTasks) copyToStaging(ctx *workflow.TaskContext, version
 		} else {
 			staged.Filename = version + "." + a.Suffix
 		}
-		staged.StagingPath = path.Join(version, staged.Filename)
+		staged.StagingPath = path.Join(signingStagingDir(ctx, version), staged.Filename)
 		stagedArtifacts = append(stagedArtifacts, staged)
 
 		in, err := scratchFS.Open(a.ScratchPath)
 		if err != nil {
 			return nil, err
 		}
-		out, err := gcsfs.Create(stagingFS, staged.StagingPath)
+		out, err := gcsfs.Create(scratchFS, staged.StagingPath)
 		if err != nil {
 			return nil, err
 		}
@@ -598,7 +610,18 @@ func (tasks *BuildReleaseTasks) copyToStaging(ctx *workflow.TaskContext, version
 			return nil, err
 		}
 	}
+	out, err := gcsfs.Create(scratchFS, path.Join(signingStagingDir(ctx, version), "ready"))
+	if err != nil {
+		return nil, err
+	}
+	if err := out.Close(); err != nil {
+		return nil, err
+	}
 	return stagedArtifacts, nil
+}
+
+func signingStagingDir(ctx *workflow.TaskContext, version string) string {
+	return path.Join(ctx.WorkflowID.String(), "signing", version)
 }
 
 var signingPollDuration = 30 * time.Second
@@ -617,7 +640,7 @@ func (tasks *BuildReleaseTasks) awaitSigned(ctx *workflow.TaskContext, version s
 		})
 	}
 
-	stagingFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.StagingURL)
+	scratchFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.ScratchURL)
 	if err != nil {
 		return nil, err
 	}
@@ -629,7 +652,7 @@ func (tasks *BuildReleaseTasks) awaitSigned(ctx *workflow.TaskContext, version s
 	var signedArtifacts []artifact
 	for {
 		for a := range todo {
-			signed, ok, err := readSignedArtifact(stagingFS, version, a)
+			signed, ok, err := readSignedArtifact(ctx, scratchFS, version, a)
 			if err != nil {
 				return nil, err
 			}
@@ -653,7 +676,7 @@ func (tasks *BuildReleaseTasks) awaitSigned(ctx *workflow.TaskContext, version s
 	}
 }
 
-func readSignedArtifact(stagingFS fs.FS, version string, a artifact) (_ artifact, ok bool, _ error) {
+func readSignedArtifact(ctx *workflow.TaskContext, scratchFS fs.FS, version string, a artifact) (_ artifact, ok bool, _ error) {
 	// Our signing process has somewhat uneven behavior. In general, for things
 	// that contain their own signature, such as MSIs and .pkgs, we don't
 	// produce a GPG signature, just the new file. On macOS, tars can be signed
@@ -684,18 +707,19 @@ func readSignedArtifact(stagingFS fs.FS, version string, a artifact) (_ artifact
 		Filename: a.Filename,
 		Suffix:   a.Suffix,
 	}
+	stagingDir := signingStagingDir(ctx, version)
 	if modifiedBySigning {
-		signed.SignedPath = version + "/signed/" + a.Filename
+		signed.SignedPath = stagingDir + "/signed/" + a.Filename
 	} else {
-		signed.SignedPath = version + "/" + a.Filename
+		signed.SignedPath = stagingDir + "/" + a.Filename
 	}
 
-	fi, err := fs.Stat(stagingFS, signed.SignedPath)
+	fi, err := fs.Stat(scratchFS, signed.SignedPath)
 	if err != nil {
 		return artifact{}, false, nil
 	}
 	if modifiedBySigning {
-		hash, err := fs.ReadFile(stagingFS, version+"/signed/"+a.Filename+".sha256")
+		hash, err := fs.ReadFile(scratchFS, stagingDir+"/signed/"+a.Filename+".sha256")
 		if err != nil {
 			return artifact{}, false, nil
 		}
@@ -706,7 +730,7 @@ func readSignedArtifact(stagingFS fs.FS, version string, a artifact) (_ artifact
 		signed.Size = a.Size
 	}
 	if hasGPG {
-		sig, err := fs.ReadFile(stagingFS, version+"/signed/"+a.Filename+".asc")
+		sig, err := fs.ReadFile(scratchFS, stagingDir+"/signed/"+a.Filename+".asc")
 		if err != nil {
 			return artifact{}, false, nil
 		}
@@ -718,7 +742,7 @@ func readSignedArtifact(stagingFS fs.FS, version string, a artifact) (_ artifact
 var uploadPollDuration = 30 * time.Second
 
 func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *workflow.TaskContext, artifacts []artifact) error {
-	stagingFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.StagingURL)
+	scratchFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.ScratchURL)
 	if err != nil {
 		return err
 	}
@@ -729,7 +753,7 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *workflow.TaskContext, artif
 
 	todo := map[artifact]bool{}
 	for _, a := range artifacts {
-		if err := uploadArtifact(stagingFS, servingFS, a); err != nil {
+		if err := uploadArtifact(scratchFS, servingFS, a); err != nil {
 			return err
 		}
 		todo[a] = true
@@ -762,8 +786,8 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *workflow.TaskContext, artif
 	}
 }
 
-func uploadArtifact(stagingFS, servingFS fs.FS, a artifact) error {
-	in, err := stagingFS.Open(a.SignedPath)
+func uploadArtifact(scratchFS, servingFS fs.FS, a artifact) error {
+	in, err := scratchFS.Open(a.SignedPath)
 	if err != nil {
 		return err
 	}

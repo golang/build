@@ -150,7 +150,7 @@ func runWorkflow(t *testing.T, ctx context.Context, w *workflow.Workflow, listen
 	defer cancel()
 	t.Helper()
 	if listener == nil {
-		listener = &verboseListener{t}
+		listener = &verboseListener{t, nil}
 	}
 	return w.Run(ctx, listener)
 }

@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -65,9 +66,23 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	}
 
 	// Set up the fake signing process.
-	stagingDir := t.TempDir()
-	go fakeSign(ctx, t, filepath.Join(stagingDir, wantVersion))
+	scratchDir := t.TempDir()
 	signingPollDuration = 100 * time.Millisecond
+	argRe := regexp.MustCompile(`--relui_staging="(.*?)"`)
+	outputListener := func(taskName string, output interface{}) {
+		if taskName != "Start signing command" {
+			return
+		}
+		matches := argRe.FindStringSubmatch(output.(string))
+		if matches == nil {
+			return
+		}
+		u, err := url.Parse(matches[1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		go fakeSign(ctx, t, u.Path)
+	}
 
 	// Set up the fake CDN publishing process.
 	servingDir := t.TempDir()
@@ -100,8 +115,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	buildTasks := &BuildReleaseTasks{
 		GerritURL:      tarballServer.URL,
 		GCSClient:      nil,
-		ScratchURL:     "file://" + filepath.ToSlash(t.TempDir()),
-		StagingURL:     "file://" + filepath.ToSlash(stagingDir),
+		ScratchURL:     "file://" + filepath.ToSlash(scratchDir),
 		ServingURL:     "file://" + filepath.ToSlash(servingDir),
 		CreateBuildlet: fakeBuildlets.createBuildlet,
 		DownloadURL:    dlServer.URL,
@@ -122,7 +136,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = w.Run(ctx, &verboseListener{t})
+	_, err = w.Run(ctx, &verboseListener{t, outputListener})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -596,7 +610,10 @@ func (b *fakeBuildlet) WorkDir(ctx context.Context) (string, error) {
 	return b.dir, nil
 }
 
-type verboseListener struct{ t *testing.T }
+type verboseListener struct {
+	t              *testing.T
+	outputListener func(string, interface{})
+}
 
 func (l *verboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *workflow.TaskState) error {
 	switch {
@@ -606,6 +623,9 @@ func (l *verboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *workflow.T
 		l.t.Logf("task %-10v: error: %v", st.Name, st.Error)
 	default:
 		l.t.Logf("task %-10v: done: %v", st.Name, st.Result)
+		if l.outputListener != nil {
+			l.outputListener(st.Name, st.Result)
+		}
 	}
 	return nil
 }
@@ -632,10 +652,14 @@ func fakeSign(ctx context.Context, t *testing.T, dir string) {
 }
 
 func fakeSignOnce(t *testing.T, dir string, seen map[string]bool) {
-	contents, err := os.ReadDir(dir)
+	_, err := os.Stat(filepath.Join(dir, "ready"))
 	if os.IsNotExist(err) {
 		return
 	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	contents, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -758,6 +782,9 @@ func TestFakeSign(t *testing.T) {
 		if err := ioutil.WriteFile(filepath.Join(dir, f), []byte("hi"), 0777); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if err := ioutil.WriteFile(filepath.Join(dir, "ready"), nil, 0777); err != nil {
+		t.Fatal(err)
 	}
 	fakeSignOnce(t, dir, map[string]bool{})
 	want := map[string]bool{}

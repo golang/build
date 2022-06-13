@@ -46,7 +46,6 @@ var (
 	pgConnect   = flag.String("pg-connect", "", "Postgres connection string or URI. If empty, libpq connection defaults are used.")
 
 	scratchFilesBase = flag.String("scratch-files-base", "", "Storage for scratch files. gs://bucket/path or file:///path/to/scratch.")
-	stagingFilesBase = flag.String("staging-files-base", "", "Storage for staging files. gs://bucket/path or file:///path/to/staging.")
 	servingFilesBase = flag.String("serving-files-base", "", "Storage for serving files. gs://bucket/path or file:///path/to/serving.")
 	edgeCacheURL     = flag.String("edge-cache-url", "", "URL release files appear at when published to the CDN, e.g. https://dl.google.com/go.")
 	websiteUploadURL = flag.String("website-upload-url", "", "URL to POST website file data to, e.g. https://go.dev/dl/upload.")
@@ -130,7 +129,6 @@ func main() {
 		CreateBuildlet: coordinator.CreateBuildlet,
 		GCSClient:      gcsClient,
 		ScratchURL:     *scratchFilesBase,
-		StagingURL:     *stagingFilesBase,
 		ServingURL:     *servingFilesBase,
 		DownloadURL:    *edgeCacheURL,
 		PublishFile: func(f *relui.WebsiteFile) error {
