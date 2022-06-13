@@ -39,6 +39,8 @@ func main() {
 	mux := http.NewServeMux()
 	app.RegisterOnMux(mux)
 
+	log.Printf("Serving...")
+
 	ctx := context.Background()
 	log.Fatal(https.ListenAndServe(ctx, mux))
 }

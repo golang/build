@@ -27,6 +27,19 @@ const (
 	backfillWindow = 30 * 24 * time.Hour // 30 days.
 )
 
+func (a *App) influxClient(ctx context.Context) (influxdb2.Client, error) {
+	if a.InfluxHost == "" {
+		return nil, fmt.Errorf("Influx host unknown (set INFLUX_HOST?)")
+	}
+
+	token, err := a.findInfluxToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error finding Influx token: %w", err)
+	}
+
+	return influxdb2.NewClient(a.InfluxHost, token), nil
+}
+
 // syncInflux handles /cron/syncinflux, which updates an InfluxDB instance with
 // the latest data from perfdata.golang.org (i.e. storage), or backfills it.
 func (a *App) syncInflux(w http.ResponseWriter, r *http.Request) {
@@ -40,21 +53,12 @@ func (a *App) syncInflux(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if a.InfluxHost == "" {
-		s := "Influx host unknown (set INFLUX_HOST?)"
-		log.Printf(s)
-		http.Error(w, s, 500)
-		return
-	}
-
-	token, err := a.findInfluxToken(ctx)
+	ifxc, err := a.influxClient(ctx)
 	if err != nil {
-		log.Printf("Error finding Influx token: %v", err)
+		log.Printf("Error getting Influx client: %v", err)
 		http.Error(w, err.Error(), 500)
 		return
 	}
-
-	ifxc := influxdb2.NewClient(a.InfluxHost, token)
 	defer ifxc.Close()
 
 	log.Printf("Connecting to influx...")

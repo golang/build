@@ -1,0 +1,141 @@
+/*!
+ * Copyright 2022 The Go Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style
+ * license that can be found in the LICENSE file.
+ */
+
+* {
+  box-sizing: border-box;
+}
+body {
+  color: #222;
+  font-family: sans-serif;
+  margin: 0;
+  padding: 10px;
+}
+
+h1,
+h2,
+h1 > a,
+h2 > a,
+h1 > a:visited,
+h2 > a:visited {
+  color: #375eab;
+}
+h1 {
+  font-size: 24px;
+}
+h2 {
+  font-size: 20px;
+}
+
+h1 > a,
+h2 > a {
+  display: none;
+  text-decoration: none;
+}
+
+h1:hover > a,
+h2:hover > a {
+  display: inline;
+}
+
+h1 > a:hover,
+h2 > a:hover {
+  text-decoration: underline;
+}
+
+pre {
+  font-family: monospace;
+  font-size: 9pt;
+}
+
+header {
+  background: #e0ebf5;
+  margin: -10px -10px 0 -10px;
+  padding: 10px 10px;
+}
+header h1 {
+  display: inline;
+  margin: 0;
+  padding-top: 5px;
+}
+header h1 a {
+  display: initial;
+}
+header nav {
+  display: inline-block;
+  margin-left: 20px;
+}
+header nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+header nav ul li {
+  display: inline-block;
+}
+header nav a {
+  background: #375eab;
+  border: 1px solid #375eab;
+  border-radius: 5px;
+  color: white;
+  display: inline-block;
+  font-size: 16px;
+  margin: 0;
+  margin-right: 5px;
+  padding: 10px;
+  text-decoration: none;
+}
+
+.Dashboard {
+  margin: 0;
+  padding: 0;
+}
+.Dashboard-topbar {
+  margin: 0;
+  padding: 0.625rem 0.625rem;
+}
+.Dashboard-title {
+  background: #e0ebf5;
+  padding: 0.125rem 0.3125rem;
+}
+.Dashboard-controls {
+  padding: 0.5rem;
+}
+
+.Dashboard-search {
+  display: inline-block;
+  width: 300px;
+}
+input {
+  border: 1px solid transparent;
+  background-color: #f4f4f4;
+  padding: 10px;
+  font-size: 16px;
+}
+input[type=text] {
+  background-color: #f4f4f4;
+  width: 100%;
+}
+input[type=submit] {
+  background: #375eab;
+  border: 1px solid #375eab;
+  border-radius: 5px;
+  color: white;
+  display: inline-block;
+  font-size: 16px;
+  margin: 0;
+  margin-right: 5px;
+  padding: 10px;
+  text-decoration: none;
+}
+.Dashboard-grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+.Dashboard-grid-item {
+  padding: 8px;
+}
