@@ -59,6 +59,7 @@ type Server struct {
 	// mux used if baseURL is set
 	bm *http.ServeMux
 
+	templates       *template.Template
 	homeTmpl        *template.Template
 	newWorkflowTmpl *template.Template
 }
@@ -79,9 +80,9 @@ func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL, header SiteHeader) 
 		"baseLink":  s.BaseLink,
 		"hasPrefix": strings.HasPrefix,
 	}
-	layout := template.Must(template.New("layout.html").Funcs(helpers).ParseFS(templates, "templates/layout.html"))
-	s.homeTmpl = template.Must(template.Must(layout.Clone()).Funcs(helpers).ParseFS(templates, "templates/home.html"))
-	s.newWorkflowTmpl = template.Must(template.Must(layout.Clone()).Funcs(helpers).ParseFS(templates, "templates/new_workflow.html"))
+	s.templates = template.Must(template.New("").Funcs(helpers).ParseFS(templates, "templates/*.html"))
+	s.homeTmpl = s.mustLookup("home.html")
+	s.newWorkflowTmpl = s.mustLookup("new_workflow.html")
 	s.m.POST("/workflows/:id/stop", s.stopWorkflowHandler)
 	s.m.POST("/workflows/:id/tasks/:name/retry", s.retryTaskHandler)
 	s.m.POST("/workflows/:id/tasks/:name/approve", s.approveTaskHandler)
@@ -96,6 +97,14 @@ func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL, header SiteHeader) 
 		s.bm.Handle("/", s.m)
 	}
 	return s
+}
+
+func (s *Server) mustLookup(name string) *template.Template {
+	t := template.Must(template.Must(s.templates.Clone()).ParseFS(templates, path.Join("templates", name))).Lookup(name)
+	if t == nil {
+		panic(fmt.Errorf("template %q not found", name))
+	}
+	return t
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -124,19 +133,18 @@ func (s *Server) BaseLink(target string) string {
 	return u.String()
 }
 
-type homeResponse struct {
-	SiteHeader    SiteHeader
-	Workflows     []db.Workflow
-	WorkflowTasks map[uuid.UUID][]db.Task
-	TaskLogs      map[uuid.UUID]map[string][]db.TaskLog
+type workflowDetail struct {
+	Workflow db.Workflow
+	Tasks    []db.Task
+	// TaskLogs is a map of all logs for a db.Task, keyed on
+	// (db.Task).Name
+	TaskLogs map[string][]db.TaskLog
 }
 
-func (h *homeResponse) Logs(workflow uuid.UUID, task string) []db.TaskLog {
-	t := h.TaskLogs[workflow]
-	if t == nil {
-		return nil
-	}
-	return t[task]
+type homeResponse struct {
+	SiteHeader      SiteHeader
+	WorkflowIDs     []uuid.UUID
+	WorkflowDetails map[uuid.UUID]*workflowDetail
 }
 
 func (h *homeResponse) WorkflowParams(wf db.Workflow) map[string]string {
@@ -172,22 +180,31 @@ func (s *Server) buildHomeResponse(ctx context.Context) (*homeResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	wfTasks := make(map[uuid.UUID][]db.Task, len(ws))
+	hr := &homeResponse{
+		SiteHeader:      s.header,
+		WorkflowDetails: make(map[uuid.UUID]*workflowDetail),
+	}
+	for _, w := range ws {
+		hr.WorkflowIDs = append(hr.WorkflowIDs, w.ID)
+		hr.WorkflowDetails[w.ID] = &workflowDetail{Workflow: w}
+	}
 	for _, t := range tasks {
-		wfTasks[t.WorkflowID] = append(wfTasks[t.WorkflowID], t)
+		wd := hr.WorkflowDetails[t.WorkflowID]
+		wd.Tasks = append(hr.WorkflowDetails[t.WorkflowID].Tasks, t)
+		wd.TaskLogs = make(map[string][]db.TaskLog)
 	}
 	tlogs, err := q.TaskLogs(ctx)
 	if err != nil {
 		return nil, err
 	}
-	wftlogs := make(map[uuid.UUID]map[string][]db.TaskLog)
 	for _, l := range tlogs {
-		if wftlogs[l.WorkflowID] == nil {
-			wftlogs[l.WorkflowID] = make(map[string][]db.TaskLog)
+		wd := hr.WorkflowDetails[l.WorkflowID]
+		if wd.TaskLogs == nil {
+			wd.TaskLogs = make(map[string][]db.TaskLog)
 		}
-		wftlogs[l.WorkflowID][l.TaskName] = append(wftlogs[l.WorkflowID][l.TaskName], l)
+		wd.TaskLogs[l.TaskName] = append(wd.TaskLogs[l.TaskName], l)
 	}
-	return &homeResponse{SiteHeader: s.header, Workflows: ws, WorkflowTasks: wfTasks, TaskLogs: wftlogs}, nil
+	return hr, nil
 }
 
 type newWorkflowResponse struct {

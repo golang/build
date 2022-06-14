@@ -3,6 +3,7 @@
     Use of this source code is governed by a BSD-style
     license that can be found in the LICENSE file.
 -->
+{{define "layout"}}
 <!DOCTYPE html>
 <html lang="en">
   <title>{{.SiteHeader.Title}}</title>
@@ -16,7 +17,8 @@
       </div>
     </header>
     <main class="Site-content">
-      {{template "content" .}}
+      {{block "content" .}}{{end}}
     </main>
   </body>
 </html>
+{{end}}

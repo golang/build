@@ -3,6 +3,8 @@
     Use of this source code is governed by a BSD-style
     license that can be found in the LICENSE file.
 -->
+{{template "layout" .}}
+
 {{define "content"}}
   <section class="Workflows">
     <div class="Workflows-header">
@@ -10,7 +12,9 @@
       <a href="{{baseLink "/workflows/new"}}" class="Button">New</a>
     </div>
     <ul class="WorkflowList">
-      {{range $workflow := .Workflows}}
+      {{range $wfid := .WorkflowIDs}}
+        {{$detail := index $.WorkflowDetails $wfid}}
+        {{$workflow := $detail.Workflow}}
         <li class="WorkflowList-item">
           <h3 class="WorkflowList-title">
             {{$workflow.Name.String}}
@@ -19,8 +23,8 @@
             </span>
             {{if not (or $workflow.Finished $workflow.Error)}}
               <div class="WorkflowList-titleStop">
-                <form action="{{baseLink (printf "/workflows/%s/stop" $workflow.ID) }}" method="post">
-                  <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />
+                <form action="{{baseLink (printf "/workflows/%s/stop" $wfid)}}" method="post">
+                  <input type="hidden" id="workflow.id" name="workflow.id" value="{{$wfid}}" />
                   <input name="workflow.stop" class="Button Button--red" type="submit" value="STOP" onclick="return this.form.reportValidity() && confirm('This will stop the workflow and all in-flight tasks.\n\nAre you sure you want to proceed?')" />
                 </form>
               </div>
@@ -60,87 +64,7 @@
             </tbody>
           </table>
           <h4 class="WorkflowList-sectionTitle">Tasks</h4>
-          <table class="TaskList">
-            <thead>
-              <tr class="TaskList-item TaskList-itemHeader">
-                <th class="TaskList-itemHeaderCol TaskList-itemExpand"></th>
-                <th class="TaskList-itemHeaderCol TaskList-itemState">State</th>
-                <th class="TaskList-itemHeaderCol TaskList-itemName">Name</th>
-                <th class="TaskList-itemHeaderCol TaskList-itemStarted">Started</th>
-                <th class="TaskList-itemHeaderCol TaskList-itemUpdated">Updated</th>
-                <th class="TaskList-itemHeaderCol TaskList-itemResult">Result</th>
-                <th class="TaskList-itemHeaderCol TaskList-itemActions">Actions</th>
-              </tr>
-            </thead>
-            {{$tasks := index $.WorkflowTasks $workflow.ID}}
-            {{range $task := $tasks}}
-              <tbody>
-                <tr class="TaskList-item TaskList-itemSummary TaskList-expandableItem">
-                  <td class="TaskList-itemCol TaskList-itemExpand">
-                    <span class="TaskList-itemExpandClosed">
-                      <img class="TaskList-itemExpandControl" alt="unfold more" src="{{baseLink "/static/images/chevron_right_black_24dp.svg"}}" />
-                    </span>
-                    <span class="TaskList-ItemExpandOpened">
-                      <img class="TaskList-itemExpandControl" alt="unfold less" src="{{baseLink "/static/images/expand_more_black_24dp.svg"}}" />
-                    </span>
-                  </td>
-                  <td class="TaskList-itemCol TaskList-itemState">
-                    {{if $task.Error.Valid}}
-                      <img class="TaskList-itemStateIcon" alt="error" src="{{baseLink "/static/images/error_red_24dp.svg"}}" />
-                    {{else if $task.Finished}}
-                      <img class="TaskList-itemStateIcon" alt="finished" src="{{baseLink "/static/images/check_circle_green_24dp.svg"}}" />
-                    {{else}}
-                      <img class="TaskList-itemStateIcon" alt="pending" src="{{baseLink "/static/images/pending_yellow_24dp.svg"}}" />
-                    {{end}}
-                  </td>
-                  <td class="TaskList-itemCol TaskList-itemName">
-                    {{$task.Name}}
-                  </td>
-                  <td class="TaskList-itemCol TaskList-itemStarted">
-                    {{$task.CreatedAt.UTC.Format "Mon Jan _2 2006 15:04:05"}}
-                  </td>
-                  <td class="TaskList-itemCol TaskList-itemUpdated">
-                    {{$task.UpdatedAt.UTC.Format "Mon Jan _2 2006 15:04:05"}}
-                  </td>
-                  <td class="TaskList-itemCol TaskList-itemResult">
-                    {{$task.Result.String}}
-                  </td>
-                  <td class="TaskList-itemCol TaskList-itemAction">
-                    {{if $task.Error.Valid}}
-                    <div class="TaskList-retryTask">
-                      <form action="{{baseLink (printf "/workflows/%s/tasks/%s/retry" $workflow.ID $task.Name) }}" method="post">
-                        <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />
-                        <input class="Button Button--small" name="task.reset" type="submit" value="Retry" onclick="return this.form.reportValidity() && confirm('This will retry the task and clear workflow errors.\n\nReady to proceed?')" />
-                      </form>
-                    </div>
-                    {{end}}
-                    {{if and (not $task.Finished) (hasPrefix $task.Name "APPROVE-")}}
-                    <div class="TaskList-approveTask">
-                      <form action="{{baseLink (printf "/workflows/%s/tasks/%s/approve" $workflow.ID $task.Name) }}" method="post">
-                        <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />
-                        <input class="Button Button--small" name="task.approve" type="submit" value="Approve" onclick="return this.form.reportValidity() && confirm('This will mark the task approved and resume the workflow.\n\nReady to proceed?')" />
-                      </form>
-                    </div>
-                    {{end}}
-                  </td>
-                </tr>
-                <tr class="TaskList-itemLogsRow">
-                  <td class="TaskList-itemLogs" colspan="7">
-                    {{if $task.Error.Valid}}
-                      <div class="TaskList-itemLogLine TaskList-itemLogLineError">
-                        {{- $task.Error.Value -}}
-                      </div>
-                    {{end}}
-                    {{range $log := $.Logs $workflow.ID  $task.Name}}
-                      <div class="TaskList-itemLogLine">
-                        {{- $log.CreatedAt.UTC.Format "2006/01/02 15:04:05"}} {{$log.Body -}}
-                      </div>
-                    {{end}}
-                  </td>
-                </tr>
-              </tbody>
-            {{end}}
-          </table>
+          {{template "task_list" $detail}}
         </li>
       {{end}}
     </ul>
