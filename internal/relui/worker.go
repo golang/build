@@ -180,11 +180,15 @@ func (w *Worker) Resume(ctx context.Context, id uuid.UUID) error {
 	}
 	d := w.dh.Definition(wf.Name.String)
 	if d == nil {
-		return fmt.Errorf("no workflow named %q", wf.Name.String)
+		err := fmt.Errorf("no workflow named %q", wf.Name.String)
+		w.l.WorkflowFinished(ctx, wf.ID, nil, err)
+		return err
 	}
 	state := &workflow.WorkflowState{ID: wf.ID}
 	if err := json.Unmarshal([]byte(wf.Params.String), &state.Params); err != nil {
-		return fmt.Errorf("unmarshalling params for %q: %w", id, err)
+		err := fmt.Errorf("unmarshalling params for %q: %w", id, err)
+		w.l.WorkflowFinished(ctx, wf.ID, nil, err)
+		return err
 	}
 	taskStates := make(map[string]*workflow.TaskState)
 	for _, t := range tasks {
@@ -199,6 +203,7 @@ func (w *Worker) Resume(ctx context.Context, id uuid.UUID) error {
 	}
 	res, err := workflow.Resume(d, state, taskStates)
 	if err != nil {
+		w.l.WorkflowFinished(ctx, wf.ID, nil, err)
 		return err
 	}
 	return w.run(res)

@@ -273,8 +273,6 @@ func (s *Server) retryTaskHandler(w http.ResponseWriter, r *http.Request, params
 	}
 	if err := s.w.Resume(r.Context(), id); err != nil {
 		log.Printf("s.w.Resume(_, %q): %v", id, err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
 	}
 	http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
 }
