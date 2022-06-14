@@ -2646,6 +2646,7 @@ func init() {
 		buildsRepo:     onlyMasterDefault,
 		distTestAdjust: riscvDistTestPolicy,
 		privateGoProxy: true, // this builder is behind firewall
+		KnownIssues:    []int{53379},
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-s390x-ibm",
