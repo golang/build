@@ -2463,6 +2463,7 @@ func init() {
 			"GOHOSTOS=linux",
 			"CGO_ENABLED=1",
 		},
+		KnownIssues: []int{42212, 51001, 52724},
 	})
 	addBuilder(BuildConfig{
 		Name:              "android-amd64-emu",
@@ -2493,6 +2494,7 @@ func init() {
 			"GOHOSTOS=linux",
 			"CGO_ENABLED=1",
 		},
+		KnownIssues: []int{42212, 51001, 52724},
 	})
 	addBuilder(BuildConfig{
 		Name:     "illumos-amd64",
