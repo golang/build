@@ -1,0 +1,23 @@
+root: true
+extends: google
+parserOptions:
+  ecmaVersion: 2018
+rules:
+  require-jsdoc: 'off'
+  indent: 'off'
+  arrow-parens: 'off'
+overrides:
+  - files:
+    - "*.js"
+    env:
+      browser: true
+    extends:
+      - eslint:recommended
+      - plugin:prettier/recommended
+    rules:
+      max-len: off
+      valid-jsdoc:
+        - error
+        - requireParamType: false
+          requireReturnType: false
+          requireReturn: false

@@ -14,6 +14,9 @@ POSTGRES_TEST := psql --username=$(POSTGRES_USER) -c "SELECT 1;"
 
 DEV_CFG := ${HOME}/.local/share/relui
 
+MODULE_ROOT := "$(shell readlink -f ../../)"
+NODE_IMAGE_VERSION := "node:16.15.1-bullseye"
+
 .PHONY: dev
 dev: postgres-dev docker
 	docker run --rm --name=relui-dev -v $(POSTGRES_RUN_DEV) -e PGUSER=$(POSTGRES_USER) -e PGDATABASE=relui-dev -p 8080:8080 $(DOCKER_TAG)
@@ -65,3 +68,26 @@ push-prod: docker-prod
 deploy-prod: push-prod
 	go install golang.org/x/build/cmd/xb
 	xb --prod kubectl --namespace prod set image deployment/relui-deployment relui=$(IMAGE_PROD):$(VERSION)
+
+node_modules/: package.json package-lock.json
+	docker run --rm \
+		--volume $(MODULE_ROOT):/workspace \
+		--workdir /workspace/cmd/relui \
+		--env NODE_OPTIONS="--experimental-vm-modules --no-warnings" \
+		$(NODE_IMAGE_VERSION) \
+		npm install --no-update-notifier
+
+.PHONY: lint
+lint: node_modules/
+	docker run --rm \
+		--volume $(MODULE_ROOT):/workspace \
+		--workdir /workspace/cmd/relui \
+		--env NODE_OPTIONS="--experimental-vm-modules --no-warnings" \
+		$(NODE_IMAGE_VERSION) \
+		npm --no-update-notifier run lint:js
+	docker run --rm \
+		--volume $(MODULE_ROOT):/workspace \
+		--workdir /workspace/cmd/relui \
+		--env NODE_OPTIONS="--experimental-vm-modules --no-warnings" \
+		$(NODE_IMAGE_VERSION) \
+		npm --no-update-notifier run lint:css

@@ -72,3 +72,19 @@ Alternatively, using docker:
 ```bash
 make test
 ```
+
+## JS/CSS formatting and lint
+
+This project uses eslint and stylelint to format JavaScript and CSS files.
+
+To run:
+
+```bash
+npm run lint
+```
+
+Alternatively, using Docker:
+
+```bash
+make lint
+```

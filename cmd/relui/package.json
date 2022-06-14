@@ -1,0 +1,23 @@
+{
+  "private": true,
+  "scripts": {
+    "lint": "npm-run-all --continue-on-error lint:js lint:css",
+    "lint:css": "stylelint --config .stylelintrc.yaml ../../internal/relui/static/**/*.css",
+    "lint:css-fix": "stylelint --config .stylelintrc.yaml ../../internal/relui/static/**/*.css",
+    "lint:js": "eslint -c .eslintrc.yaml --ext .js ../../internal/relui/",
+    "lint:js-fix": "eslint --fix -c .eslintrc.yaml --ext .js ../../internal/relui/"
+  },
+  "devDependencies": {
+    "eslint": "8.17.0",
+    "eslint-config-google": "0.14.0",
+    "eslint-config-prettier": "8.5.0",
+    "eslint-plugin-prettier": "4.0.0",
+    "npm-run-all": "4.1.5",
+    "stylelint": "14.9.1",
+    "stylelint-config-prettier": "9.0.3",
+    "stylelint-config-recommended": "8.0.0",
+    "stylelint-config-standard": "26.0.0",
+    "stylelint-order": "5.0.0",
+    "stylelint-prettier": "2.0.0"
+  }
+}

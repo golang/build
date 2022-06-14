@@ -1,0 +1,12 @@
+extends:
+  - stylelint-config-standard
+  - stylelint-prettier/recommended
+plugins:
+  - stylelint-order
+rules:
+  color-hex-case: lower
+  order/properties-alphabetical-order: true
+  unit-disallowed-list:
+    - 'px'
+  selector-class-pattern: '^[a-zA-Z\-]+$'
+  rule-empty-line-before: never

@@ -4,28 +4,41 @@
   license that can be found in the LICENSE file.
 */
 
-;(function () {
-  const registerTaskListExpandListeners = (selector) => {
+(function () {
+  /**
+   * registerTaskListExpandListeners toggles displaying of logs on workflow
+   * tasks.
+   *
+   * For each selector on the page, add a TaskList-Expanded class to this
+   * element and its next sibling.
+   *
+   * @param {string} selector - css selector for target element
+   */
+  function registerTaskListExpandListeners(selector) {
     document.querySelectorAll(selector).forEach((element) => {
       element.addEventListener("click", (e) => {
-        e.stopPropagation()
-        element.classList.toggle("TaskList-expanded")
-        element.nextElementSibling.classList.toggle("TaskList-expanded")
-      })
-    })
+        e.stopPropagation();
+        element.classList.toggle("TaskList-expanded");
+        element.nextElementSibling.classList.toggle("TaskList-expanded");
+      });
+    });
   }
 
-  registerTaskListExpandListeners(".TaskList-expandableItem")
-})()
+  registerTaskListExpandListeners(".TaskList-expandableItem");
+})();
 
-// addSliceRow creates and appends a row to a slice parameter
-// for filling in an element.
-//
-// container is the parameter container element.
-// paramName is the parameter name.
-// element is the element tag to create, and inputType is its type attribute if element is "input".
-// paramExample is an example value for the parameter.
-addSliceRow = (container, paramName, element, inputType, paramExample) => {
+/* eslint-disable no-unused-vars */
+/**
+ * addSliceRow creates and appends a row to a slice parameter
+ * for filling in an element.
+ *
+ * @param {HTMLElement} container - the container element
+ * @param {string} paramName - the parameter name
+ * @param {string} element - the element tag to create
+ * @param {string} inputType - the type attribute if element is "input"
+ * @param {string} paramExample - an example value for the parameter
+ */
+function addSliceRow(container, paramName, element, inputType, paramExample) {
   /*
     Create an input element, a button to remove it, group them in a "parameterRow" div:
 
@@ -34,24 +47,25 @@ addSliceRow = (container, paramName, element, inputType, paramExample) => {
       <button title="Remove this row from the slice." onclick="/ * Remove this row. * /">-</button>
     </div>
   */
-  const input = document.createElement(element)
-  input.name = "workflow.params." + paramName
-  if (element == "input") {
-    input.type = inputType
+  const input = document.createElement(element);
+  input.name = "workflow.params." + paramName;
+  if (element === "input") {
+    input.type = inputType;
   }
-  input.placeholder = paramExample
-  const removeButton = document.createElement("button")
-  removeButton.title = "Remove this row from the slice."
+  input.placeholder = paramExample;
+  const removeButton = document.createElement("button");
+  removeButton.title = "Remove this row from the slice.";
   removeButton.addEventListener("click", (e) => {
-    e.preventDefault()
-    container.removeChild(div)
-  })
-  removeButton.appendChild(document.createTextNode("-"))
-  const div = document.createElement("div")
+    e.preventDefault();
+    container.removeChild(div);
+  });
+  removeButton.appendChild(document.createTextNode("-"));
+  const div = document.createElement("div");
   div.className = "NewWorkflow-parameterRow";
-  div.appendChild(input)
-  div.appendChild(removeButton)
+  div.appendChild(input);
+  div.appendChild(removeButton);
 
   // Add the "parameterRow" div to the document.
-  container.appendChild(div)
+  container.appendChild(div);
 }
+/* eslint-enable no-unused-vars */
