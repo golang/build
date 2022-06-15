@@ -41,7 +41,6 @@ function BandChart(data, {
 	xOrdTicks.push(xRange[1]);
 	const xScale = d3.scaleOrdinal(X, xOrdTicks);
 	const yScale = d3.scaleLinear(yDomain, yRange);
-	const xAxis = d3.axisBottom(xScale).tickSizeOuter(0).tickValues(d3.map(C, c => c.slice(0, 7)));
 	const yAxis = d3.axisLeft(yScale).ticks(height / 40, "+%");
 
 	const svg = d3.create("svg")
@@ -165,16 +164,14 @@ function BandChart(data, {
 		.attr("opacity", 0.1)
 		.attr("d", area(I));
 
-	// Add X axis.
-	svg.append("g")
-		.attr("transform", `translate(0,${height - marginBottom})`)
-		.call(xAxis)
-		.call(g => g.select(".domain").remove())
-		.selectAll("text")
-		.attr("y", 6)
-		.attr("x", -42)
-		.attr("transform", "rotate(315)")
-		.style("text-anchor", "start");
+	// Add X axis label.
+	svg.append("text")
+		.attr("x", xRange[0] + (xRange[1]-xRange[0])/2)
+		.attr("y", yRange[0] + (yRange[0]-yRange[1])*0.12)
+		.attr("fill", "currentColor")
+		.attr("text-anchor", "middle")
+		.attr("font-size", "12px")
+		.text("Commits");
 
 	// Create center line.
 
