@@ -558,8 +558,9 @@ func push(args []string) error {
 			return fmt.Errorf("unable to upload file to GCS: %s", err)
 		}
 		if _, err := client.WriteTGZFromURL(ctx, &protos.WriteTGZFromURLRequest{
-			GomoteId: name,
-			Url:      fmt.Sprintf("%s%s", resp.GetUrl(), resp.GetObjectName()),
+			GomoteId:  name,
+			Url:       fmt.Sprintf("%s%s", resp.GetUrl(), resp.GetObjectName()),
+			Directory: "go",
 		}); err != nil {
 			return fmt.Errorf("failed writing tarball to buildlet: %s", statusFromError(err))
 		}
