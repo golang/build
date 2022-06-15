@@ -269,6 +269,7 @@ function BandChart(data, {
 							.attr("stroke-width", 1)
 							.attr("stroke-dasharray", 2)
 							.attr("opacity", 0.5)
+							.attr("pointer-events", "none")
 						)
 						.call(g => g.append('text')
 							.attr("x", (() => {
