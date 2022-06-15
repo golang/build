@@ -182,22 +182,9 @@ function BandChart(data, {
 
 	svg.append("path")
 		.attr("fill", "none")
-		.attr("stroke", "#375eab")
-		.attr("stroke-width", 3)
+		.attr("stroke", "#212121")
+		.attr("stroke-width", 2.5)
 		.attr("d", line(I))
-
-	// Create dots.
-
-	svg.append("g")
-		.attr("fill", "#375eab")
-		.attr("stroke", "#e0ebf5")
-		.attr("stroke-width", 1)
-		.selectAll("circle")
-		.data(I)
-		.join("circle")
-			.attr("cx", i => xScale(X[i]))
-			.attr("cy", i => yScale(Y[i]))
-			.attr("r", 4);
 
 	// Divide the chart into columns and apply links and hover actions to them.
 	svg.append("g")
