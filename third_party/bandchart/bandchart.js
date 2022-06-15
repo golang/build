@@ -28,7 +28,7 @@ function BandChart(data, {
 	// Compute default domains.
 	let yDomain = d3.nice(...d3.extent([...Y1, ...Y2]), 10);
 	// Don't show <2.5% up-close because it just looks extremely noisy.
-	const minYDomain = [-2.5, 2.5];
+	const minYDomain = [-0.025, 0.025];
 	if (yDomain[0] > minYDomain[0]) {
 		yDomain[0] = minYDomain[0];
 	}
@@ -42,7 +42,7 @@ function BandChart(data, {
 	const xScale = d3.scaleOrdinal(X, xOrdTicks);
 	const yScale = d3.scaleLinear(yDomain, yRange);
 	const xAxis = d3.axisBottom(xScale).tickSizeOuter(0).tickValues(d3.map(C, c => c.slice(0, 7)));
-	const yAxis = d3.axisLeft(yScale).ticks(height / 40);
+	const yAxis = d3.axisLeft(yScale).ticks(height / 40, "+%");
 
 	const svg = d3.create("svg")
 		.attr("width", width)
@@ -68,7 +68,7 @@ function BandChart(data, {
 
 	const defs = svg.append("defs")
 
-	const maxHalfColorPercent = 10;
+	const maxHalfColorValue = 0.10;
 	const maxHalfColorOpacity = 0.25;
 
 	// Draw top half.
@@ -103,10 +103,10 @@ function BandChart(data, {
 		.style("stop-opacity", 0);
 	let topGStopOpacity = maxHalfColorOpacity;
 	let topGOffsetPercent = 100.0;
-	if (yDomain[1] > maxHalfColorPercent) {
-		topGOffsetPercent *= maxHalfColorPercent/yDomain[1];
+	if (yDomain[1] > maxHalfColorValue) {
+		topGOffsetPercent *= maxHalfColorValue/yDomain[1];
 	} else {
-		topGStopOpacity *= yDomain[1]/maxHalfColorPercent;
+		topGStopOpacity *= yDomain[1]/maxHalfColorValue;
 	}
 	topGradient.append("stop")
 		.attr("offset", topGOffsetPercent+"%")
@@ -125,10 +125,10 @@ function BandChart(data, {
 		.style("stop-opacity", 0);
 	let bottomGStopOpacity = maxHalfColorOpacity;
 	let bottomGOffsetPercent = 100.0;
-	if (yDomain[0] < -maxHalfColorPercent) {
-		bottomGOffsetPercent *= -maxHalfColorPercent/yDomain[0];
+	if (yDomain[0] < -maxHalfColorValue) {
+		bottomGOffsetPercent *= -maxHalfColorValue/yDomain[0];
 	} else {
-		bottomGStopOpacity *= -yDomain[0]/maxHalfColorPercent;
+		bottomGStopOpacity *= -yDomain[0]/maxHalfColorValue;
 	}
 	bottomGradient.append("stop")
 		.attr("offset", bottomGOffsetPercent+"%")

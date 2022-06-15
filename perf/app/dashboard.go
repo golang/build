@@ -112,9 +112,9 @@ from(bucket: "perf")
 		b.Values = append(b.Values, ValueJSON{
 			CommitDate: rec.Time(),
 			CommitHash: commit,
-			Low:        (low - 1) * 100,
-			Center:     (center - 1) * 100,
-			High:       (high - 1) * 100,
+			Low:        low - 1,
+			Center:     center - 1,
+			High:       high - 1,
 		})
 	}
 
