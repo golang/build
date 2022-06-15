@@ -68,11 +68,11 @@ function BandChart(data, {
 	const defs = svg.append("defs")
 
 	const maxHalfColorValue = 0.10;
-	const maxHalfColorOpacity = 0.25;
+	const maxHalfColorOpacity = 0.5;
 
 	// Draw top half.
-	const goodColor = "blue";
-	const badColor = "red";
+	const goodColor = "#005AB5";
+	const badColor = "#DC3220";
 
 	// By default, lower is better.
 	var bottomColor = goodColor;
