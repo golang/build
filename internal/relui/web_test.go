@@ -753,3 +753,60 @@ func TestServerStopWorkflow(t *testing.T) {
 		})
 	}
 }
+
+func TestResultDetail(t *testing.T) {
+	cases := []struct {
+		desc     string
+		input    string
+		want     *resultDetail
+		wantKind string
+	}{
+		{
+			desc:     "string",
+			input:    `"hello"`,
+			want:     &resultDetail{String: "hello"},
+			wantKind: "String",
+		},
+		{
+			desc:     "nested json string",
+			input:    `{"SomeOutput": "hello"}`,
+			want:     &resultDetail{Outputs: map[string]*resultDetail{"SomeOutput": {String: "hello"}}},
+			wantKind: "Outputs",
+		},
+		{
+			desc:     "nested json complex",
+			input:    `{"SomeOutput": {"Filename": "go.exe"}}`,
+			want:     &resultDetail{Outputs: map[string]*resultDetail{"SomeOutput": {Artifact: artifact{Filename: "go.exe"}}}},
+			wantKind: "Outputs",
+		},
+		{
+			desc:     "nested json slice",
+			input:    `{"SomeOutput": [{"Filename": "go.exe"}]}`,
+			want:     &resultDetail{Outputs: map[string]*resultDetail{"SomeOutput": {Artifacts: []artifact{{Filename: "go.exe"}}}}},
+			wantKind: "Outputs",
+		},
+		{
+			desc:     "nested json output",
+			input:    `{"SomeOutput": {"OtherOutput": "go.exe"}}`,
+			want:     &resultDetail{Outputs: map[string]*resultDetail{"SomeOutput": {Outputs: map[string]*resultDetail{"OtherOutput": {String: "go.exe"}}}}},
+			wantKind: "Outputs",
+		},
+		{
+			desc:  "null json",
+			input: `null`,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			got := unmarshalResultDetail(c.input)
+
+			if got.Kind() != c.wantKind {
+				t.Errorf("got.Kind() = %q, wanted %q", got.Kind(), c.wantKind)
+			}
+			if diff := cmp.Diff(c.want, got); diff != "" {
+				t.Errorf("unmarshalResultDetail mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+
+}

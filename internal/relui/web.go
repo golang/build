@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"reflect"
 	"strings"
 	"time"
 
@@ -77,8 +78,10 @@ func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL, header SiteHeader) 
 		header:  header,
 	}
 	helpers := map[string]interface{}{
-		"baseLink":  s.BaseLink,
-		"hasPrefix": strings.HasPrefix,
+		"baseLink":              s.BaseLink,
+		"hasPrefix":             strings.HasPrefix,
+		"prettySize":            prettySize,
+		"unmarshalResultDetail": unmarshalResultDetail,
 	}
 	s.templates = template.Must(template.New("").Funcs(helpers).ParseFS(templates, "templates/*.html"))
 	s.homeTmpl = s.mustLookup("home.html")
@@ -352,4 +355,67 @@ func (s *Server) stopWorkflowHandler(w http.ResponseWriter, r *http.Request, par
 		return
 	}
 	http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
+}
+
+// resultDetail contains unmarshalled results from a workflow task, or
+// workflow output. Only one field is expected to be populated.
+//
+// The UI implementation uses Kind to determine which result type to
+// render.
+type resultDetail struct {
+	Artifact  artifact
+	Artifacts []artifact
+	Outputs   map[string]*resultDetail
+	JSON      map[string]interface{}
+	String    string
+	Unknown   interface{}
+}
+
+func (r *resultDetail) Kind() string {
+	v := reflect.ValueOf(r)
+	if v.IsZero() {
+		return ""
+	}
+	v = v.Elem()
+	for i := 0; i < v.NumField(); i++ {
+		if v.Field(i).IsZero() {
+			continue
+		}
+		return v.Type().Field(i).Name
+	}
+	return ""
+}
+
+func (r *resultDetail) UnmarshalJSON(result []byte) error {
+	v := reflect.ValueOf(r).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		f := v.Field(i)
+		if err := json.Unmarshal(result, f.Addr().Interface()); err == nil {
+			if f.IsZero() {
+				continue
+			}
+			return nil
+		}
+	}
+	return errors.New("unknown result type")
+}
+
+func unmarshalResultDetail(result string) *resultDetail {
+	ret := new(resultDetail)
+	if err := json.Unmarshal([]byte(result), &ret); err != nil {
+		ret.String = err.Error()
+	}
+	return ret
+}
+
+func prettySize(size int) string {
+	const mb = 1 << 20
+	if size == 0 {
+		return ""
+	}
+	if size < mb {
+		// All Go releases are >1mb, but handle this case anyway.
+		return fmt.Sprintf("%v bytes", size)
+	}
+	return fmt.Sprintf("%.0fMiB", float64(size)/mb)
 }
