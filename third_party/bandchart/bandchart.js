@@ -27,13 +27,46 @@ function BandChart(data, {
 
 	// Compute default domains.
 	let yDomain = d3.nice(...d3.extent([...Y1, ...Y2]), 10);
-	// Don't show <2.5% up-close because it just looks extremely noisy.
+
+	// Determine Y domain.
+	//
+	// Three cases:
+	// (1) All data is above Y=0 line.
+	// (2) All data is below Y=0 line.
+	// (3) Data crosses the Y=0 line.
+	//
+	// For (1) set the Y=0 line as the bottom of the domain.
+	// For (2) set it at the top.
+	// For (3) make sure the Y=0 line is in the middle.
+	//
+	// Finally, make sure we don't get closer than 0.025,
+	// bceuase otherwise it just looks really noisy.
 	const minYDomain = [-0.025, 0.025];
-	if (yDomain[0] > minYDomain[0]) {
-		yDomain[0] = minYDomain[0];
-	}
-	if (yDomain[1] < minYDomain[1]) {
-		yDomain[1] = minYDomain[1];
+	if (yDomain[0] > 0) {
+		// (1)
+		yDomain[0] = 0;
+		if (yDomain[1] < minYDomain[1]) {
+			yDomain[1] = minYDomain[1];
+		}
+	} else if (yDomain[1] < 0) {
+		// (2)
+		yDomain[1] = 0;
+		if (yDomain[0] > minYDomain[0]) {
+			yDomain[0] = minYDomain[0];
+		}
+	} else {
+		// (3)
+		if (Math.abs(yDomain[1]) > Math.abs(yDomain[0])) {
+			yDomain[0] = -Math.abs(yDomain[1]);
+		} else {
+			yDomain[1] = Math.abs(yDomain[0]);
+		}
+		if (yDomain[0] > minYDomain[0]) {
+			yDomain[0] = minYDomain[0];
+		}
+		if (yDomain[1] < minYDomain[1]) {
+			yDomain[1] = minYDomain[1];
+		}
 	}
 
 	// Construct scales and axes.
