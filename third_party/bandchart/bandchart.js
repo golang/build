@@ -150,6 +150,19 @@ function BandChart(data, {
 		.attr("width", xRange[1] - xRange[0])
 		.attr("height", (-yDomain[0]/(yDomain[1]-yDomain[0]))*(height-marginTop-marginBottom));
 
+	// Add a harder gridline for Y=0 to make it stand out.
+
+	const line0 = d3.line()
+		.defined(i => D[i])
+		.x(i => xScale(X[i]))
+		.y(i => yScale(0))
+
+	svg.append("path")
+		.attr("fill", "none")
+		.attr("stroke", "#999999")
+		.attr("stroke-width", 2)
+		.attr("d", line0(I))
+
 	// Create CI area.
 
 	const area = d3.area()
