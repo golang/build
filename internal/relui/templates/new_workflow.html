@@ -37,7 +37,12 @@
             <div class="NewWorkflow-parameter NewWorkflow-parameter--slice">
               <div class="NewWorkflow-parameterRow">
                 <label title="{{$p.Doc}}">{{$p.Name}}</label>
-                <button title="Increment the slice length." onclick="event.preventDefault(); addSliceRow(this.parentElement.parentElement, '{{$p.Name}}', '{{$p.HTMLElement}}', '{{$p.HTMLInputType}}', '{{$p.Example}}');">+</button>
+                <button class="NewWorkflow-addSliceRowButton" title="Increment the slice length."
+                        type="button"
+                        data-ParamName="{{$p.Name}}"
+                        data-Element="{{$p.HTMLElement}}"
+                        data-InputType="{{$p.HTMLInputType}}"
+                        data-ParamExample="{{$p.Example}}">+</button>
               </div>
             </div>
           {{else}}

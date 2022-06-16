@@ -15,7 +15,12 @@ overrides:
       - eslint:recommended
       - plugin:prettier/recommended
     rules:
-      max-len: off
+      func-style:
+        - error
+        - "expression"
+      prettier/prettier:
+        - error
+        - printWidth: 120
       valid-jsdoc:
         - error
         - requireParamType: false
