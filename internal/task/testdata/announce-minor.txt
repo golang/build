@@ -1,0 +1,17 @@
+Hello gophers,
+
+We have just released Go versions 1.18.1 and 1.17.9, minor point releases.
+
+View the release notes for more information:
+https://go.dev/doc/devel/release#go1.18.1
+
+You can download binary and source distributions from the Go website:
+https://go.dev/dl/
+
+To compile from source using a Git clone, update to the release with
+git checkout go1.18.1 and build as usual.
+
+Thanks to everyone who contributed to the releases.
+
+Cheers,
+Alice, Bob, and Charlie for the Go team

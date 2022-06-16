@@ -1,0 +1,45 @@
+Hello gophers,
+
+We have just released Go versions 1.18.1 and 1.17.9, minor point releases.
+
+These minor releases include 3 security fixes following the security policy <https://go.dev/security>:
+
+-	encoding/pem: fix stack overflow in Decode
+
+	A large (more than 5 MB) PEM input can cause a stack overflow in Decode, leading the program to crash.
+
+	Thanks to Juho Nurminen of Mattermost who reported the error.
+
+	This is CVE-2022-24675 and https://go.dev/issue/51853.
+
+-	crypto/elliptic: tolerate all oversized scalars in generic P-256
+
+	A crafted scalar input longer than 32 bytes can cause P256().ScalarMult or P256().ScalarBaseMult to panic. Indirect uses through crypto/ecdsa and crypto/tls are unaffected. amd64, arm64, ppc64le, and s390x are unaffected.
+
+	This was discovered thanks to a Project Wycheproof test vector.
+
+	This is CVE-2022-28327 and https://go.dev/issue/52075.
+
+-	crypto/x509: non-compliant certificates can cause a panic in Verify on macOS in Go 1.18
+
+	Verifying certificate chains containing certificates which are not compliant with RFC 5280 causes Certificate.Verify to panic on macOS.
+
+	These chains can be delivered through TLS and can cause a crypto/tls or net/http client to crash.
+
+	Thanks to Tailscale for doing weird things and finding this.
+
+	This is CVE-2022-27536 and https://go.dev/issue/51759.
+
+View the release notes for more information:
+https://go.dev/doc/devel/release#go1.18.1
+
+You can download binary and source distributions from the Go website:
+https://go.dev/dl/
+
+To compile from source using a Git clone, update to the release with
+git checkout go1.18.1 and build as usual.
+
+Thanks to everyone who contributed to the releases.
+
+Cheers,
+The Go team

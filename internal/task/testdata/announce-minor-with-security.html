@@ -1,0 +1,33 @@
+<p>Hello gophers,</p>
+<p>We have just released Go versions 1.18.1 and 1.17.9, minor point releases.</p>
+<p>These minor releases include 3 security fixes following the <a href="https://go.dev/security">security policy</a>:</p>
+<ul>
+<li>
+<p>encoding/pem: fix stack overflow in Decode</p>
+<p>A large (more than 5 MB) PEM input can cause a stack overflow in Decode, leading the program to crash.</p>
+<p>Thanks to Juho Nurminen of Mattermost who reported the error.</p>
+<p>This is CVE-2022-24675 and <a href="https://go.dev/issue/51853">https://go.dev/issue/51853</a>.</p>
+</li>
+<li>
+<p>crypto/elliptic: tolerate all oversized scalars in generic P-256</p>
+<p>A crafted scalar input longer than 32 bytes can cause P256().ScalarMult or P256().ScalarBaseMult to panic. Indirect uses through crypto/ecdsa and crypto/tls are unaffected. amd64, arm64, ppc64le, and s390x are unaffected.</p>
+<p>This was discovered thanks to a Project Wycheproof test vector.</p>
+<p>This is CVE-2022-28327 and <a href="https://go.dev/issue/52075">https://go.dev/issue/52075</a>.</p>
+</li>
+<li>
+<p>crypto/x509: non-compliant certificates can cause a panic in Verify on macOS in Go 1.18</p>
+<p>Verifying certificate chains containing certificates which are not compliant with RFC 5280 causes Certificate.Verify to panic on macOS.</p>
+<p>These chains can be delivered through TLS and can cause a crypto/tls or net/http client to crash.</p>
+<p>Thanks to Tailscale for doing weird things and finding this.</p>
+<p>This is CVE-2022-27536 and <a href="https://go.dev/issue/51759">https://go.dev/issue/51759</a>.</p>
+</li>
+</ul>
+<p>View the release notes for more information:<br>
+<a href="https://go.dev/doc/devel/release#go1.18.1">https://go.dev/doc/devel/release#go1.18.1</a></p>
+<p>You can download binary and source distributions from the Go website:<br>
+<a href="https://go.dev/dl/">https://go.dev/dl/</a></p>
+<p>To compile from source using a Git clone, update to the release with<br>
+<code>git checkout go1.18.1</code> and build as usual.</p>
+<p>Thanks to everyone who contributed to the releases.</p>
+<p>Cheers,<br>
+The Go team</p>
