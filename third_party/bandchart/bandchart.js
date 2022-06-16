@@ -7,7 +7,7 @@ function BandChart(data, {
 	marginTop = 50, // top margin, in pixels
 	marginRight = 15, // right margin, in pixels
 	marginBottom = 50, // bottom margin, in pixels
-	marginLeft = 30, // left margin, in pixels
+	marginLeft = 50, // left margin, in pixels
 	width = 480, // outer width, in pixels
 	height = 240, // outer height, in pixels
 	unit,
