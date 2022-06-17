@@ -571,7 +571,7 @@ func (w *sizeWriter) Write(p []byte) (n int, err error) {
 }
 
 func (tasks *BuildReleaseTasks) startSigningCommand(ctx *workflow.TaskContext, version string) (string, error) {
-	args := fmt.Sprintf("--relui_staging=%q", path.Join(tasks.ScratchURL, signingStagingDir(ctx, version)))
+	args := fmt.Sprintf("--relui_staging=%q", tasks.ScratchURL+"/"+signingStagingDir(ctx, version))
 	ctx.Printf("run signer with " + args)
 	return args, nil
 }
@@ -612,6 +612,9 @@ func (tasks *BuildReleaseTasks) copyToStaging(ctx *workflow.TaskContext, version
 	}
 	out, err := gcsfs.Create(scratchFS, path.Join(signingStagingDir(ctx, version), "ready"))
 	if err != nil {
+		return nil, err
+	}
+	if _, err := out.Write([]byte("ready")); err != nil {
 		return nil, err
 	}
 	if err := out.Close(); err != nil {
