@@ -272,35 +272,13 @@ function BandChart(data, {
 							.attr("pointer-events", "none")
 						)
 						.call(g => g.append('text')
-							.attr("x", (() => {
-								let base = xScale(X[i]);
-								if (base < marginLeft+100) {
-									base += 10;
-								} else if (base > width-marginRight-100) {
-									base -= 10;
-								}
-								return base;
-							})())
-							.attr("y", (() => {
-								let base = yScale(Y[i]);
-								if (base < marginTop+100) {
-									base += 30;
-								} else if (base > height-marginBottom-100) {
-									base -= 30;
-								}
-								return base;
-							}))
+							// Point metadata (commit hash and date).
+							// Below the x-axis "Commits" label.
+							.attr("x", xRange[0] + (xRange[1]-xRange[0])/2)
+							.attr("y", yRange[0] + (yRange[0]-yRange[1])*0.12*2)
 							.attr("pointer-events", "none")
 							.attr("fill", "currentColor")
-							.attr("text-anchor", (() => {
-								let base = xScale(X[i]);
-								if (base < marginLeft+100) {
-									return "start";
-								} else if (base > width-marginRight-100) {
-									return "end";
-								}
-								return "middle";
-							})())
+							.attr("text-anchor", "middle")
 							.attr("font-family", "sans-serif")
 							.attr("font-size", 12)
 							.text(C[i].slice(0, 7) + " ("
