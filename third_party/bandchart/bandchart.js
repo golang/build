@@ -288,6 +288,30 @@ function BandChart(data, {
 								}).format(X[i])
 								+ ")")
 						)
+						.call(g => g.append('text')
+							// Point center, low, high values.
+							// Bottom-right corner, next to "Commits".
+							.attr("x", xRange[1])
+							.attr("y", yRange[0] + (yRange[0]-yRange[1])*0.12)
+							.attr("pointer-events", "none")
+							.attr("fill", "currentColor")
+							.attr("text-anchor", "end")
+							.attr("font-family", "sans-serif")
+							.attr("font-size", 12)
+							.text(Intl.NumberFormat([], {
+								style: 'percent',
+								signDisplay: 'always',
+								minimumFractionDigits: 2,
+							}).format(Y[i]) + " (" + Intl.NumberFormat([], {
+								style: 'percent',
+								signDisplay: 'always',
+								minimumFractionDigits: 2,
+							}).format(Y1[i]) + ", " + Intl.NumberFormat([], {
+								style: 'percent',
+								signDisplay: 'always',
+								minimumFractionDigits: 2,
+							}).format(Y2[i]) + ")")
+						)
 				})
 				.on("mouseout", () => svg.selectAll('.tooltip').remove());
 
