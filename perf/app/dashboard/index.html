@@ -41,25 +41,8 @@ license that can be found in the LICENSE file.
 <div id="dashboard"></div>
 
 <script>
-function addContent(name, benchmarks) {
+function addContent(benchmarks) {
 	let dashboard = document.getElementById("dashboard");
-
-	if (name == "" || name == null || name == undefined) {
-		// All benchmarks.
-		// TODO(prattmic): Replace with a simpler overview?
-	} else {
-		// Filter to specified benchmark.
-		benchmarks = benchmarks.filter(function(b) {
-			return b.Name == name;
-		});
-		if (benchmarks.length == 0) {
-			let title = document.createElement("h2");
-			title.classList.add("Dashboard-title");
-			title.innerHTML = "Benchmark \"" + name + "\" not found.";
-			dashboard.appendChild(title);
-			return;
-		}
-	}
 
 	let prevName = "";
 	let grid = null;
@@ -88,9 +71,27 @@ function addContent(name, benchmarks) {
 	}
 }
 
+function failure(name) {
+	let dashboard = document.getElementById("dashboard");
+
+	let title = document.createElement("h2");
+	title.classList.add("Dashboard-title");
+	title.innerHTML = "Benchmark \"" + name + "\" not found.";
+	dashboard.appendChild(title);
+}
+
 let benchmark = (new URLSearchParams(window.location.search)).get('benchmark');
-fetch('./data.json')
-	.then(response => response.json())
+let dataURL = './data.json';
+if (benchmark) {
+	dataURL += '?benchmark=' + benchmark;
+}
+fetch(dataURL)
+	.then(response => {
+		if (!response.ok) {
+			throw new Error("Data fetch failed");
+		}
+		return response.json();
+	})
 	.then(function(benchmarks) {
 		// Convert CommitDate to a proper date.
 		benchmarks.forEach(function(b) {
@@ -99,8 +100,11 @@ fetch('./data.json')
 			});
 		});
 
-		addContent(benchmark, benchmarks);
-	});
+		addContent(benchmarks);
+	})
+	// This will look odd if the error isn't a 404 and benchmark is
+	// undefined, but close enough.
+	.catch(error => failure(benchmark));
 </script>
 
 </body>
