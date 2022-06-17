@@ -70,7 +70,7 @@ func (b *BenchmarkJSON) fetch(ctx context.Context, qc api.QueryAPI) error {
 	// data.
 	query := fmt.Sprintf(`
 from(bucket: "perf")
-  |> range(start: -7d)
+  |> range(start: -30d)
   |> filter(fn: (r) => r["_measurement"] == "benchmark-result")
   |> filter(fn: (r) => r["name"] == "%s")
   |> filter(fn: (r) => r["unit"] == "%s")
