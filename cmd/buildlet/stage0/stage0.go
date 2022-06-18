@@ -85,7 +85,7 @@ func main() {
 		}
 	case "linux/arm64":
 		switch env := os.Getenv("GO_BUILDER_ENV"); env {
-		case "host-linux-arm64-packet", "host-linux-arm64-aws":
+		case "host-linux-arm64-aws":
 			// No special setup.
 		default:
 			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
@@ -182,16 +182,6 @@ Download:
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-s390x")...)
 	case "linux/arm64":
 		switch buildEnv {
-		case "host-linux-arm64-packet":
-			hostname := os.Getenv("HOSTNAME") // if empty, docker container name is used
-			cmd.Args = append(cmd.Args,
-				"--reverse-type="+buildEnv,
-				"--workdir=/workdir",
-				"--hostname="+hostname,
-				"--halt=false",
-				"--reboot=false",
-				"--coordinator=farmer.golang.org:443",
-			)
 		case "host-linux-arm64-aws":
 			// no special configuration
 		default:

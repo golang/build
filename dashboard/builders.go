@@ -564,14 +564,6 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:     "root",
 		HermeticReverse: true,
 	},
-	"host-linux-arm64-packet": &HostConfig{
-		Notes:           "On 96 core packet.net host (Xenial) in Docker containers (Debian Buster); run by Go team. See x/build/env/linux-arm64/packet",
-		IsReverse:       true,
-		HermeticReverse: true,
-		ExpectNum:       8,
-		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
-		SSHUsername:     "root",
-	},
 	"host-linux-arm64-aws": &HostConfig{
 		Notes:           "Debian Buster, EC2 arm64 instance. See x/build/env/linux-arm64/aws",
 		VMImage:         "ami-03089323a1d38e652",
@@ -2527,11 +2519,6 @@ func init() {
 		FlakyNet:       true,
 		distTestAdjust: ppc64DistTestPolicy,
 		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see golang.org/issues/44422
-	})
-	addBuilder(BuildConfig{
-		Name:     "linux-arm64-packet",
-		HostType: "host-linux-arm64-packet",
-		FlakyNet: true, // maybe not flaky, but here conservatively
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-arm64-aws",

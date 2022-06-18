@@ -149,7 +149,6 @@ var basePinErr atomic.Value
 func addHealthCheckers(ctx context.Context, sc *secret.Client) {
 	addHealthChecker(newMacHealthChecker())
 	addHealthChecker(newMacOSARM64Checker())
-	addHealthChecker(newPacketHealthChecker())
 	addHealthChecker(newOSUPPC64Checker())
 	addHealthChecker(newOSUPPC64leChecker())
 	addHealthChecker(newOSUPPC64lePower9Checker())
@@ -397,20 +396,6 @@ func expectedHosts(hostType string) int {
 		panic(fmt.Sprintf("unknown host type %q", hostType))
 	}
 	return hc.ExpectNum
-}
-
-func newPacketHealthChecker() *healthChecker {
-	var hosts []string
-	for i := 1; i <= expectedHosts("host-linux-arm64-packet"); i++ {
-		name := fmt.Sprintf("packet%02d", i)
-		hosts = append(hosts, name)
-	}
-	return &healthChecker{
-		ID:     "packet",
-		Title:  "Packet linux/arm64 machines",
-		DocURL: "https://github.com/golang/build/tree/master/env/linux-arm64/packet",
-		Check:  reverseHostChecker(hosts),
-	}
 }
 
 func newOSUPPC64Checker() *healthChecker {
