@@ -363,7 +363,7 @@ func findGoogleGroupsThread(ctx *workflow.TaskContext, subject string) (threadUR
 	}
 	if ct, want := resp.Header.Get("Content-Type"), "text/html; charset=utf-8"; ct != want {
 		if log := ctx.Logger; log != nil {
-			log.Printf("findGoogleGroupsThread: got error response with non-'text/html; charset=utf-8' Content-Type header %q\n", ct)
+			log.Printf("findGoogleGroupsThread: got response with non-'text/html; charset=utf-8' Content-Type header %q\n", ct)
 		}
 		if mediaType, _, err := mime.ParseMediaType(ct); err != nil {
 			return "", fmt.Errorf("bad Content-Type header %q: %v", ct, err)
