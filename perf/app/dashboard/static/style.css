@@ -31,13 +31,7 @@ h2 {
 
 h1 > a,
 h2 > a {
-  display: none;
   text-decoration: none;
-}
-
-h1:hover > a,
-h2:hover > a {
-  display: inline;
 }
 
 h1 > a:hover,
@@ -59,9 +53,6 @@ header h1 {
   display: inline;
   margin-right: 20px;
   padding-top: 5px;
-}
-header h1 a {
-  display: initial;
 }
 nav {
   display: inline-block;
