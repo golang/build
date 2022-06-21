@@ -127,20 +127,27 @@ func (t AnnounceMailTasks) announceRelease(ctx *workflow.TaskContext, r ReleaseA
 		return SentMail{}, err
 	}
 	if log := ctx.Logger; log != nil {
-		log.Printf("announcement subject: %s\n", m.Subject)
-		log.Printf("\nannouncement body HTML:\n%s", m.BodyHTML)
-		log.Printf("\nannouncement body text:\n%s", m.BodyText)
+		log.Printf("announcement subject: %s\n\n", m.Subject)
+		log.Printf("announcement body HTML:\n%s\n", m.BodyHTML)
+		log.Printf("announcement body text:\n%s", m.BodyText)
 	}
 
-	// Confirm that this announcement doesn't already exist.
+	// Before sending, check to see if this announcement already exists.
 	if threadURL, err := findGoogleGroupsThread(ctx, m.Subject); err != nil {
 		// Proceeding would risk sending a duplicate email, so error out instead.
 		return SentMail{}, fmt.Errorf("stopping early due to error checking for an existing Google Groups thread: %v", err)
 	} else if threadURL != "" {
-		// TODO(go.dev/issue/47406): Once this task is a part of a larger workflow (which may need
-		// to tolerate resuming, restarting, and so on), the case of the matching subject already
-		// being there should become considered as "success, keep going" rather than "error, stop".
-		return SentMail{}, fmt.Errorf("a Google Groups thread with matching subject %q already exists at %q, stopping", m.Subject, threadURL)
+		// This should never happen since this task runs once per release.
+		// It can happen under unusual circumstances, for example if the task crashes after
+		// mailing but before completion, or if parts of the release workflow are restarted,
+		// or if a human mails the announcement email manually out of band.
+		//
+		// So if we see that the email exists, consider it as "task completed successfully"
+		// and pretend we were the ones that sent it, so the high level workflow can keep going.
+		if log := ctx.Logger; log != nil {
+			log.Printf("a Google Groups thread with matching subject %q already exists at %q, so we'll consider that as it being sent successfully", m.Subject, threadURL)
+		}
+		return SentMail{m.Subject}, nil
 	}
 
 	// Send the announcement email to the destination mailing lists.

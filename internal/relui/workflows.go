@@ -100,9 +100,171 @@ For example:
 	h.RegisterDefinition("mail-dl-cl", wd)
 }
 
-// RegisterAnnounceDefinitions registers workflow definitions involving announcing
+// RegisterCommunicationDefinitions registers workflow definitions
+// involving mailing announcements and posting tweets onto h.
+func RegisterCommunicationDefinitions(h *DefinitionHolder, tasks task.AnnounceMailTasks, e task.ExternalConfig) {
+	version := workflow.Parameter{
+		Name: "Version",
+		Doc: `Version is the Go version that has been released.
+
+The version string must use the same format as Go tags.`,
+	}
+	securitySummary := workflow.Parameter{
+		Name: "Security Summary (optional)",
+		Doc: `Security Summary is an optional sentence describing security fixes included in this release.
+
+It shows up in the release tweet.
+
+The empty string means there are no security fixes to highlight.
+
+Past examples:
+• "Includes a security fix for crypto/tls (CVE-2021-34558)."
+• "Includes a security fix for the Wasm port (CVE-2021-38297)."
+• "Includes security fixes for encoding/pem (CVE-2022-24675), crypto/elliptic (CVE-2022-28327), crypto/x509 (CVE-2022-27536)."`,
+	}
+	securityFixes := workflow.Parameter{
+		Name:          "Security Fixes (optional)",
+		ParameterType: workflow.SliceLong,
+		Doc: `Security Fixes is a list of descriptions, one for each distinct security fix included in this release, in Markdown format.
+
+It shows up in the announcement mail.
+
+The empty list means there are no security fixes included.
+
+Past examples:
+• "encoding/pem: fix stack overflow in Decode
+
+   A large (more than 5 MB) PEM input can cause a stack overflow in Decode,
+   leading the program to crash.
+
+   Thanks to Juho Nurminen of Mattermost who reported the error.
+
+   This is CVE-2022-24675 and Go issue https://go.dev/issue/51853."
+• "crypto/elliptic: tolerate all oversized scalars in generic P-256
+
+   A crafted scalar input longer than 32 bytes can cause P256().ScalarMult
+   or P256().ScalarBaseMult to panic. Indirect uses through crypto/ecdsa and
+   crypto/tls are unaffected. amd64, arm64, ppc64le, and s390x are unaffected.
+
+   This was discovered thanks to a Project Wycheproof test vector.
+
+   This is CVE-2022-28327 and Go issue https://go.dev/issue/52075."`,
+		Example: `encoding/pem: fix stack overflow in Decode
+
+A large (more than 5 MB) PEM input can cause a stack overflow in Decode,
+leading the program to crash.
+
+Thanks to Juho Nurminen of Mattermost who reported the error.
+
+This is CVE-2022-24675 and Go issue https://go.dev/issue/51853.`,
+	}
+	names := workflow.Parameter{
+		Name:          "Names (optional)",
+		ParameterType: workflow.SliceShort,
+		Doc: `Names is an optional list of release coordinator names to include in the sign-off message.
+
+It shows up in the announcement mail.`,
+	}
+
+	{
+		wd := workflow.New()
+
+		minorVersion := version
+		minorVersion.Example = "go1.18.2"
+		v1 := wd.Parameter(minorVersion)
+		v2 := wd.Parameter(workflow.Parameter{
+			Name:    "Secondary Version",
+			Doc:     `Secondary Version is an older Go version that was also released.`,
+			Example: "go1.17.10",
+		})
+		securitySummary := wd.Parameter(securitySummary)
+		securityFixes := wd.Parameter(securityFixes)
+		names := wd.Parameter(names)
+
+		sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v1, v2 string, sec, names []string) (task.SentMail, error) {
+			return tasks.AnnounceMinorRelease(ctx, task.ReleaseAnnouncement{Version: v1, SecondaryVersion: v2, Security: sec, Names: names})
+		}, v1, v2, securityFixes, names)
+		announcementURL := wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail)
+		tweetURL := wd.Task("post-tweet", func(ctx *workflow.TaskContext, v1, v2, sec, ann string) (string, error) {
+			return task.TweetMinorRelease(ctx, task.ReleaseTweet{Version: v1, SecondaryVersion: v2, Security: sec, Announcement: ann}, e)
+		}, v1, v2, securitySummary, announcementURL)
+
+		wd.Output("AnnouncementURL", announcementURL)
+		wd.Output("TweetURL", tweetURL)
+
+		h.RegisterDefinition("announce-and-tweet-minor", wd)
+	}
+	{
+		wd := workflow.New()
+
+		betaVersion := version
+		betaVersion.Example = "go1.19beta1"
+		v := wd.Parameter(betaVersion)
+		names := wd.Parameter(names)
+
+		sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v string, names []string) (task.SentMail, error) {
+			return tasks.AnnounceBetaRelease(ctx, task.ReleaseAnnouncement{Version: v, Names: names})
+		}, v, names)
+		announcementURL := wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail)
+		tweetURL := wd.Task("post-tweet", func(ctx *workflow.TaskContext, v, ann string) (string, error) {
+			return task.TweetBetaRelease(ctx, task.ReleaseTweet{Version: v, Announcement: ann}, e)
+		}, v, announcementURL)
+
+		wd.Output("AnnouncementURL", announcementURL)
+		wd.Output("TweetURL", tweetURL)
+
+		h.RegisterDefinition("announce-and-tweet-beta", wd)
+	}
+	{
+		wd := workflow.New()
+
+		rcVersion := version
+		rcVersion.Example = "go1.19rc1"
+		v := wd.Parameter(rcVersion)
+		names := wd.Parameter(names)
+
+		sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v string, names []string) (task.SentMail, error) {
+			return tasks.AnnounceRCRelease(ctx, task.ReleaseAnnouncement{Version: v, Names: names})
+		}, v, names)
+		announcementURL := wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail)
+		tweetURL := wd.Task("post-tweet", func(ctx *workflow.TaskContext, v, ann string) (string, error) {
+			return task.TweetRCRelease(ctx, task.ReleaseTweet{Version: v, Announcement: ann}, e)
+		}, v, announcementURL)
+
+		wd.Output("AnnouncementURL", announcementURL)
+		wd.Output("TweetURL", tweetURL)
+
+		h.RegisterDefinition("announce-and-tweet-rc", wd)
+	}
+	{
+		wd := workflow.New()
+
+		majorVersion := version
+		majorVersion.Example = "go1.19"
+		v := wd.Parameter(majorVersion)
+		names := wd.Parameter(names)
+
+		sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v string, names []string) (task.SentMail, error) {
+			return tasks.AnnounceMajorRelease(ctx, task.ReleaseAnnouncement{Version: v, Names: names})
+		}, v, names)
+		announcementURL := wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail)
+		tweetURL := wd.Task("post-tweet", func(ctx *workflow.TaskContext, v string) (string, error) {
+			return task.TweetMajorRelease(ctx, task.ReleaseTweet{Version: v}, e)
+		}, v)
+
+		wd.Output("AnnouncementURL", announcementURL)
+		wd.Output("TweetURL", tweetURL)
+
+		h.RegisterDefinition("announce-and-tweet-major", wd)
+	}
+}
+
+// RegisterAnnounceMailOnlyDefinitions registers workflow definitions involving announcing
 // onto h.
-func RegisterAnnounceDefinitions(h *DefinitionHolder, tasks task.AnnounceMailTasks) {
+//
+// This is superseded by RegisterCommunicationDefinitions and will be removed
+// after some time, when we confirm there's no need for separate workflows.
+func RegisterAnnounceMailOnlyDefinitions(h *DefinitionHolder, tasks task.AnnounceMailTasks) {
 	version := workflow.Parameter{
 		Name: "Version",
 		Doc: `Version is the Go version that has been released.
@@ -202,9 +364,12 @@ This is CVE-2022-24675 and Go issue https://go.dev/issue/51853.`,
 	}
 }
 
-// RegisterTweetDefinitions registers workflow definitions involving tweeting
+// RegisterTweetOnlyDefinitions registers workflow definitions involving tweeting
 // onto h, using e for the external service configuration.
-func RegisterTweetDefinitions(h *DefinitionHolder, e task.ExternalConfig) {
+//
+// This is superseded by RegisterCommunicationDefinitions and will be removed
+// after some time, when we confirm there's no need for separate workflows.
+func RegisterTweetOnlyDefinitions(h *DefinitionHolder, e task.ExternalConfig) {
 	version := workflow.Parameter{
 		Name: "Version",
 		Doc: `Version is the Go version that has been released.
