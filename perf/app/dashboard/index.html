@@ -26,14 +26,19 @@ license that can be found in the LICENSE file.
 	</nav>
 </header>
 
-<form autocomplete="off" action="./">
 <nav class="Dashboard-controls">
-	<div class="Dashboard-search">
-		<input id="benchmarkInput" type="text" name="benchmark" placeholder="Type benchmark name...">
-	</div>
-	<input type="submit">
+	<ul>
+		<li>
+			<form autocomplete="off" action="./">
+				<div class="Dashboard-search">
+					<input id="benchmarkInput" type="text" name="benchmark" placeholder="Type benchmark name...">
+				</div>
+				<input type="submit">
+			</form>
+		</li>
+		<li><a href="?benchmark=all">All benchmarks</a></li>
+	</ul>
 </nav>
-</form>
 
 <script>
 </script>
