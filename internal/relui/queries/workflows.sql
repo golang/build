@@ -18,8 +18,8 @@ VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: CreateTask :one
-INSERT INTO tasks (workflow_id, name, finished, result, error, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO tasks (workflow_id, name, finished, result, error, created_at, updated_at, approved_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: UpsertTask :one
@@ -100,4 +100,12 @@ SET finished   = false,
     error      = DEFAULT,
     updated_at = $2
 WHERE id = $1
+RETURNING *;
+
+-- name: ApproveTask :one
+UPDATE tasks
+SET approved_at = $3,
+    updated_at = $3
+WHERE workflow_id = $1
+  AND name = $2
 RETURNING *;

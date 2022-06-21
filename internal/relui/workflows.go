@@ -13,7 +13,6 @@ import (
 	"math/rand"
 	"net/http"
 	"path"
-	"strings"
 	"sync"
 	"time"
 
@@ -323,19 +322,11 @@ func AwaitAction(ctx *workflow.TaskContext, period time.Duration, awaitCondition
 
 func checkTaskApproved(ctx *workflow.TaskContext, p *pgxpool.Pool, taskName string) (bool, error) {
 	q := db.New(p)
-	logs, err := q.TaskLogsForTask(ctx, db.TaskLogsForTaskParams{
+	t, err := q.Task(ctx, db.TaskParams{
 		WorkflowID: ctx.WorkflowID,
-		TaskName:   taskName,
+		Name:       taskName,
 	})
-	if err != nil {
-		return false, err
-	}
-	for _, l := range logs {
-		if strings.Contains(l.Body, "USER-APPROVED") {
-			return true, nil
-		}
-	}
-	return false, nil
+	return t.ApprovedAt.Valid, err
 }
 
 func approveActionDep(p *pgxpool.Pool, taskName string) func(*workflow.TaskContext, interface{}) error {

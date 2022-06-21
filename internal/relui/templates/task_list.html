@@ -54,7 +54,11 @@
             {{$task.UpdatedAt.UTC.Format "Mon Jan _2 2006 15:04:05"}}
           </td>
           <td class="TaskList-itemCol TaskList-itemResult">
-            {{ $resultDetail.Kind }}
+            {{if $task.ApprovedAt.Valid}}
+                Approved
+            {{else}}
+              {{ $resultDetail.Kind }}
+            {{end}}
           </td>
           <td class="TaskList-itemCol TaskList-itemAction">
             {{if $task.Error.Valid}}
@@ -65,7 +69,7 @@
                 </form>
               </div>
             {{end}}
-            {{if and (not $task.Finished) (hasPrefix $task.Name "APPROVE-")}}
+            {{if and (not $task.ApprovedAt.Valid) (hasPrefix $task.Name "APPROVE-")}}
               <div class="TaskList-approveTask">
                 <form action="{{baseLink (printf "/workflows/%s/tasks/%s/approve" $workflow.ID $task.Name)}}" method="post">
                   <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />
@@ -80,6 +84,11 @@
             {{if $task.Error.Valid}}
               <div class="TaskList-itemLogLine TaskList-itemLogLineError">
                 {{- $task.Error.Value -}}
+              </div>
+            {{end}}
+            {{if $task.ApprovedAt.Valid}}
+              <div class="TaskList-itemLogLine TaskList-itemLogLineApproved">
+                  {{- printf "Approved at: %s" ($task.ApprovedAt.Value.UTC.Format "2006/01/02 15:04:05") -}}
               </div>
             {{end}}
             {{range $log := index $.TaskLogs $task.Name}}

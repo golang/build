@@ -19,6 +19,7 @@ type Task struct {
 	Error      sql.NullString
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+	ApprovedAt sql.NullTime
 }
 
 type TaskLog struct {

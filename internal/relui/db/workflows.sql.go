@@ -13,10 +13,41 @@ import (
 	"github.com/google/uuid"
 )
 
+const approveTask = `-- name: ApproveTask :one
+UPDATE tasks
+SET approved_at = $3,
+    updated_at = $3
+WHERE workflow_id = $1
+  AND name = $2
+RETURNING workflow_id, name, finished, result, error, created_at, updated_at, approved_at
+`
+
+type ApproveTaskParams struct {
+	WorkflowID uuid.UUID
+	Name       string
+	ApprovedAt sql.NullTime
+}
+
+func (q *Queries) ApproveTask(ctx context.Context, arg ApproveTaskParams) (Task, error) {
+	row := q.db.QueryRow(ctx, approveTask, arg.WorkflowID, arg.Name, arg.ApprovedAt)
+	var i Task
+	err := row.Scan(
+		&i.WorkflowID,
+		&i.Name,
+		&i.Finished,
+		&i.Result,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ApprovedAt,
+	)
+	return i, err
+}
+
 const createTask = `-- name: CreateTask :one
-INSERT INTO tasks (workflow_id, name, finished, result, error, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING workflow_id, name, finished, result, error, created_at, updated_at
+INSERT INTO tasks (workflow_id, name, finished, result, error, created_at, updated_at, approved_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING workflow_id, name, finished, result, error, created_at, updated_at, approved_at
 `
 
 type CreateTaskParams struct {
@@ -27,6 +58,7 @@ type CreateTaskParams struct {
 	Error      sql.NullString
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+	ApprovedAt sql.NullTime
 }
 
 func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, error) {
@@ -38,6 +70,7 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		arg.Error,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.ApprovedAt,
 	)
 	var i Task
 	err := row.Scan(
@@ -48,6 +81,7 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		&i.Error,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ApprovedAt,
 	)
 	return i, err
 }
@@ -122,7 +156,7 @@ SET finished   = false,
     updated_at = $3
 WHERE workflow_id = $1
   AND name = $2
-RETURNING workflow_id, name, finished, result, error, created_at, updated_at
+RETURNING workflow_id, name, finished, result, error, created_at, updated_at, approved_at
 `
 
 type ResetTaskParams struct {
@@ -142,6 +176,7 @@ func (q *Queries) ResetTask(ctx context.Context, arg ResetTaskParams) (Task, err
 		&i.Error,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ApprovedAt,
 	)
 	return i, err
 }
@@ -178,7 +213,7 @@ func (q *Queries) ResetWorkflow(ctx context.Context, arg ResetWorkflowParams) (W
 }
 
 const task = `-- name: Task :one
-SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at
+SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at, tasks.approved_at
 FROM tasks
 WHERE workflow_id = $1
   AND name = $2
@@ -201,6 +236,7 @@ func (q *Queries) Task(ctx context.Context, arg TaskParams) (Task, error) {
 		&i.Error,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ApprovedAt,
 	)
 	return i, err
 }
@@ -279,7 +315,7 @@ func (q *Queries) TaskLogsForTask(ctx context.Context, arg TaskLogsForTaskParams
 }
 
 const tasks = `-- name: Tasks :many
-SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at
+SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at, tasks.approved_at
 FROM tasks
 ORDER BY updated_at
 `
@@ -301,6 +337,7 @@ func (q *Queries) Tasks(ctx context.Context) ([]Task, error) {
 			&i.Error,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ApprovedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -313,7 +350,7 @@ func (q *Queries) Tasks(ctx context.Context) ([]Task, error) {
 }
 
 const tasksForWorkflow = `-- name: TasksForWorkflow :many
-SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at
+SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at, tasks.approved_at
 FROM tasks
 WHERE workflow_id = $1
 ORDER BY created_at
@@ -336,6 +373,7 @@ func (q *Queries) TasksForWorkflow(ctx context.Context, workflowID uuid.UUID) ([
 			&i.Error,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ApprovedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -392,7 +430,7 @@ ON CONFLICT (workflow_id, name) DO UPDATE
         result      = excluded.result,
         error       = excluded.error,
         updated_at  = excluded.updated_at
-RETURNING workflow_id, name, finished, result, error, created_at, updated_at
+RETURNING workflow_id, name, finished, result, error, created_at, updated_at, approved_at
 `
 
 type UpsertTaskParams struct {
@@ -424,6 +462,7 @@ func (q *Queries) UpsertTask(ctx context.Context, arg UpsertTaskParams) (Task, e
 		&i.Error,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ApprovedAt,
 	)
 	return i, err
 }

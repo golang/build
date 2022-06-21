@@ -231,6 +231,11 @@ h6 {
   color: white;
   padding: 0.5rem 1rem;
 }
+.TaskList-itemLogLineApproved {
+  background-color: #3b65b3;
+  color: white;
+  padding: 0.5rem 1rem;
+}
 .TaskList-itemHeader {
   align-items: center;
   font-size: 0.8125rem;

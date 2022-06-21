@@ -585,41 +585,65 @@ func TestServerApproveTaskHandler(t *testing.T) {
 		params      map[string]string
 		wantCode    int
 		wantHeaders map[string]string
-		wantLogs    []db.TaskLog
+		want        db.Task
 	}{
 		{
 			desc:     "no params",
 			wantCode: http.StatusNotFound,
+			want: db.Task{
+				WorkflowID: wfID,
+				Name:       "APPROVE-please",
+				CreatedAt:  hourAgo,
+				UpdatedAt:  hourAgo,
+			},
 		},
 		{
 			desc:     "invalid workflow id",
 			params:   map[string]string{"id": "invalid", "name": "greeting"},
 			wantCode: http.StatusBadRequest,
+			want: db.Task{
+				WorkflowID: wfID,
+				Name:       "APPROVE-please",
+				CreatedAt:  hourAgo,
+				UpdatedAt:  hourAgo,
+			},
 		},
 		{
 			desc:     "wrong workflow id",
 			params:   map[string]string{"id": uuid.New().String(), "name": "greeting"},
 			wantCode: http.StatusNotFound,
+			want: db.Task{
+				WorkflowID: wfID,
+				Name:       "APPROVE-please",
+				CreatedAt:  hourAgo,
+				UpdatedAt:  hourAgo,
+			},
 		},
 		{
 			desc:     "invalid task name",
 			params:   map[string]string{"id": wfID.String(), "name": "invalid"},
 			wantCode: http.StatusNotFound,
+			want: db.Task{
+				WorkflowID: wfID,
+				Name:       "APPROVE-please",
+				CreatedAt:  hourAgo,
+				UpdatedAt:  hourAgo,
+			},
 		},
 		{
-			desc:     "successful reset",
+			desc:     "successful approval",
 			params:   map[string]string{"id": wfID.String(), "name": "APPROVE-please"},
 			wantCode: http.StatusSeeOther,
 			wantHeaders: map[string]string{
 				"Location": "/",
 			},
-			wantLogs: []db.TaskLog{{
+			want: db.Task{
 				WorkflowID: wfID,
-				TaskName:   "APPROVE-please",
-				Body:       "USER-APPROVED",
-				CreatedAt:  time.Now(),
+				Name:       "APPROVE-please",
+				CreatedAt:  hourAgo,
 				UpdatedAt:  time.Now(),
-			}},
+				ApprovedAt: sql.NullTime{Time: time.Now(), Valid: true},
+			},
 		},
 	}
 	for _, c := range cases {
@@ -640,8 +664,7 @@ func TestServerApproveTaskHandler(t *testing.T) {
 			gtg := db.CreateTaskParams{
 				WorkflowID: wf.ID,
 				Name:       "APPROVE-please",
-				Finished:   true,
-				Error:      nullString("internal explosion"),
+				Finished:   false,
 				CreatedAt:  hourAgo,
 				UpdatedAt:  hourAgo,
 			}
@@ -668,15 +691,15 @@ func TestServerApproveTaskHandler(t *testing.T) {
 			if c.wantCode == http.StatusBadRequest {
 				return
 			}
-			logs, err := q.TaskLogsForTask(ctx, db.TaskLogsForTaskParams{
-				WorkflowID: wfID,
-				TaskName:   "APPROVE-please",
+			task, err := q.Task(ctx, db.TaskParams{
+				WorkflowID: wf.ID,
+				Name:       "APPROVE-please",
 			})
 			if err != nil {
-				t.Fatalf("q.TaskLogsForTask() = %v, %v, wanted no error", logs, err)
+				t.Fatalf("q.Task() = %v, %v, wanted no error", task, err)
 			}
-			if diff := cmp.Diff(c.wantLogs, logs, SameUUIDVariant(), cmpopts.EquateApproxTime(time.Minute), cmpopts.IgnoreFields(db.TaskLog{}, "ID")); diff != "" {
-				t.Fatalf("q.TaskLogsForTask() mismatch (-want +got):\n%s", diff)
+			if diff := cmp.Diff(c.want, task, cmpopts.EquateApproxTime(time.Minute)); diff != "" {
+				t.Fatalf("q.Task() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

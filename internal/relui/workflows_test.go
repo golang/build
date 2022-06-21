@@ -2,6 +2,7 @@ package relui
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -129,14 +130,14 @@ func TestCheckTaskApproved(t *testing.T) {
 		t.Errorf("checkTaskApproved(_, %v, %q) = %t, %v wanted %t, %v", p, gtg.Name, got, err, false, nil)
 	}
 
-	ctlp := db.CreateTaskLogParams{
+	atp := db.ApproveTaskParams{
 		WorkflowID: wf.ID,
-		TaskName:   gtg.Name,
-		Body:       "USER-APPROVED",
+		Name:       gtg.Name,
+		ApprovedAt: sql.NullTime{Time: time.Now(), Valid: true},
 	}
-	_, err = q.CreateTaskLog(ctx, ctlp)
+	_, err = q.ApproveTask(ctx, atp)
 	if err != nil {
-		t.Errorf("CreateTaskLog(_, %v) = _, %v, wanted no error", ctlp, err)
+		t.Errorf("q.ApproveTask(_, %v) = _, %v, wanted no error", atp, err)
 	}
 
 	got, err = checkTaskApproved(tctx, p, gtg.Name)

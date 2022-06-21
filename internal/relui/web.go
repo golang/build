@@ -329,16 +329,19 @@ func (s *Server) approveTaskHandler(w http.ResponseWriter, r *http.Request, para
 		return
 	}
 	q := db.New(s.db)
-	t, err := q.Task(r.Context(), db.TaskParams{WorkflowID: id, Name: params.ByName("name")})
+	t, err := q.ApproveTask(r.Context(), db.ApproveTaskParams{
+		WorkflowID: id,
+		Name:       params.ByName("name"),
+		ApprovedAt: sql.NullTime{Time: time.Now(), Valid: true},
+	})
 	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	} else if err != nil {
-		log.Printf("q.Task(_, %q): %v", id, err)
+		log.Printf("q.ApproveTask(_, %q) = %v, %v", id, t, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	// This log entry serves as approval.
 	s.w.l.Logger(id, t.Name).Printf("USER-APPROVED")
 	http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
 }
