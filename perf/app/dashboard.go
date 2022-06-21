@@ -153,6 +153,10 @@ func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI) ([]*BenchmarkJ
 		},
 		{
 			name: "Tile38WithinCircle100kmRequest",
+			unit: "p50-latency-sec",
+		},
+		{
+			name: "Tile38WithinCircle100kmRequest",
 			unit: "p90-latency-sec",
 		},
 		{
@@ -164,11 +168,35 @@ func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI) ([]*BenchmarkJ
 			unit: "peak-RSS-bytes",
 		},
 		{
+			name: "BleveQuery",
+			unit: "sec/op",
+		},
+		{
+			name: "BleveQuery",
+			unit: "average-RSS-bytes",
+		},
+		{
+			name: "BleveQuery",
+			unit: "peak-RSS-bytes",
+		},
+		{
 			name: "GoBuildKubelet",
 			unit: "sec/op",
 		},
 		{
 			name: "GoBuildKubeletLink",
+			unit: "sec/op",
+		},
+		{
+			name: "RegexMatch-8",
+			unit: "sec/op",
+		},
+		{
+			name: "BuildJSON-8",
+			unit: "sec/op",
+		},
+		{
+			name: "ZapJSON-8",
 			unit: "sec/op",
 		},
 	}
