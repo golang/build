@@ -93,6 +93,9 @@ nav a {
 .Dashboard-controls {
   padding: 0.5rem;
 }
+.Dashboard-documentation {
+  padding-left: 0.5rem;
+}
 
 .Dashboard-search {
   display: inline-block;

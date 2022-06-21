@@ -40,8 +40,22 @@ license that can be found in the LICENSE file.
 	</ul>
 </nav>
 
-<script>
-</script>
+<div class="Dashboard-documentation">
+	<p>
+		Each graph displays benchmark results relative to its baseline
+		commit, which is the latest stable release (e.g., 1.18.3) at
+		the time of testing. The 95% confidence interval is displayed
+		in light gray. On hover, the graph displays the benchmarked
+		commit at that point (click to view full commit).
+	</p>
+	<p>
+		Note that some commits are not tested, so there could be
+		multiple commits (not shown) between two points on the graph.
+		See the <code>linux-amd64-perf</code> column on the
+		<a href="https://build.golang.org/?repo=golang.org%2fx%2fbenchmarks">x/benchmarks build dashboard</a>
+		for tested ("ok") / untested (empty) commits.
+	</p>
+</div>
 
 <div id="dashboard">
 	<h2 class="Dashboard-title" id="loading">Loading...</h2>
