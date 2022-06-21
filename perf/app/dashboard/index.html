@@ -43,11 +43,20 @@ license that can be found in the LICENSE file.
 <script>
 </script>
 
-<div id="dashboard"></div>
+<div id="dashboard">
+	<h2 class="Dashboard-title" id="loading">Loading...</h2>
+</div>
 
 <script>
+function removeLoadingMessage() {
+	let loading = document.getElementById("loading");
+	loading.parentNode.removeChild(loading);
+}
+
 function addContent(benchmarks) {
 	let dashboard = document.getElementById("dashboard");
+
+	removeLoadingMessage();
 
 	let prevName = "";
 	let grid = null;
@@ -78,6 +87,8 @@ function addContent(benchmarks) {
 
 function failure(name) {
 	let dashboard = document.getElementById("dashboard");
+
+	removeLoadingMessage();
 
 	let title = document.createElement("h2");
 	title.classList.add("Dashboard-title");
