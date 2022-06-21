@@ -405,8 +405,22 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
+	"host-windows-amd64-2008-newcc": &HostConfig{
+		VMImage:            "windows-amd64-server-2008r2-v8",
+		machineType:        "e2-highcpu-4", // 4 vCPUs, 4 GB mem
+		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
+		SSHUsername:        "gopher",
+	},
 	"host-windows-amd64-2012": &HostConfig{
 		VMImage:            "windows-amd64-server-2012r2-v7",
+		machineType:        "e2-highcpu-4", // 4 vCPUs, 4 GB mem
+		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
+		SSHUsername:        "gopher",
+	},
+	"host-windows-amd64-2012-newcc": &HostConfig{
+		VMImage:            "windows-amd64-server-2012r2-v8",
 		machineType:        "e2-highcpu-4", // 4 vCPUs, 4 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
@@ -419,9 +433,24 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
+	"host-windows-amd64-2016-newcc": &HostConfig{
+		VMImage:            "windows-amd64-server-2016-v8",
+		machineType:        "e2-highcpu-4", // 4 vCPUs, 4 GB mem
+		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
+		SSHUsername:        "gopher",
+	},
 	"host-windows-amd64-2016-big": &HostConfig{
 		Notes:              "Same as host-windows-amd64-2016, but on e2-highcpu-16",
 		VMImage:            "windows-amd64-server-2016-v7",
+		machineType:        "e2-highcpu-16", // 16 vCPUs, 16 GB mem
+		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
+		SSHUsername:        "gopher",
+	},
+	"host-windows-amd64-2016-big-newcc": &HostConfig{
+		Notes:              "Same as host-windows-amd64-2016, but on e2-highcpu-16",
+		VMImage:            "windows-amd64-server-2016-v8",
 		machineType:        "e2-highcpu-16", // 16 vCPUs, 16 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
@@ -2222,6 +2251,22 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
+		Name:           "windows-amd64-2008-newcc",
+		HostType:       "host-windows-amd64-2008-newcc",
+		distTestAdjust: noTestDirAndNoReboot,
+		buildsRepo:     onlyGo,
+		env: []string{
+			"GOARCH=amd64",
+			"GOHOSTARCH=amd64",
+			// cmd/go takes ~188 seconds on windows-amd64
+			// now, which is over the 180 second default
+			// dist test timeout. So, bump this builder
+			// up:
+			"GO_TEST_TIMEOUT_SCALE=2",
+		},
+		KnownIssues: []int{35006},
+	})
+	addBuilder(BuildConfig{
 		Name:              "windows-386-2008",
 		HostType:          "host-windows-amd64-2008",
 		buildsRepo:        defaultPlusExpBuild,
@@ -2231,6 +2276,13 @@ func init() {
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
+		Name:        "windows-386-2008-newcc",
+		HostType:    "host-windows-amd64-2008-newcc",
+		buildsRepo:  defaultPlusExpBuild,
+		env:         []string{"GOARCH=386", "GOHOSTARCH=386"},
+		KnownIssues: []int{35006},
+	})
+	addBuilder(BuildConfig{
 		Name:              "windows-386-2012",
 		HostType:          "host-windows-amd64-2012",
 		distTestAdjust:    fasterTrybots,
@@ -2238,6 +2290,13 @@ func init() {
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 4,
+	})
+	addBuilder(BuildConfig{
+		Name:        "windows-386-2012-newcc",
+		HostType:    "host-windows-amd64-2012-newcc",
+		buildsRepo:  onlyGo,
+		env:         []string{"GOARCH=386", "GOHOSTARCH=386"},
+		KnownIssues: []int{35006},
 	})
 	addBuilder(BuildConfig{
 		Name:           "windows-amd64-2012",
@@ -2255,6 +2314,22 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
+		Name:           "windows-amd64-2012-newcc",
+		HostType:       "host-windows-amd64-2012-newcc",
+		distTestAdjust: noTestDirAndNoReboot,
+		buildsRepo:     onlyGo,
+		env: []string{
+			"GOARCH=amd64",
+			"GOHOSTARCH=amd64",
+			// cmd/go takes ~188 seconds on windows-amd64
+			// now, which is over the 180 second default
+			// dist test timeout. So, bump this builder
+			// up:
+			"GO_TEST_TIMEOUT_SCALE=2",
+		},
+		KnownIssues: []int{35006},
+	})
+	addBuilder(BuildConfig{
 		Name:           "windows-amd64-2016",
 		HostType:       "host-windows-amd64-2016",
 		buildsRepo:     defaultPlusExpBuild,
@@ -2270,6 +2345,21 @@ func init() {
 		},
 		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 5,
+	})
+	addBuilder(BuildConfig{
+		Name:       "windows-amd64-2016-newcc",
+		HostType:   "host-windows-amd64-2016-newcc",
+		buildsRepo: defaultPlusExpBuild,
+		env: []string{
+			"GOARCH=amd64",
+			"GOHOSTARCH=amd64",
+			// cmd/go takes ~188 seconds on windows-amd64
+			// now, which is over the 180 second default
+			// dist test timeout. So, bump this builder
+			// up:
+			"GO_TEST_TIMEOUT_SCALE=2",
+		},
+		KnownIssues: []int{35006},
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-longtest",
@@ -2294,6 +2384,24 @@ func init() {
 		numTryTestHelpers: 4, // Target time is < 15 min for golang.org/issue/42661.
 	})
 	addBuilder(BuildConfig{
+		Name:     "windows-amd64-longtest-newcc",
+		HostType: "host-windows-amd64-2016-big-newcc",
+		Notes:    "Windows Server 2016 with go test -short=false",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			b := defaultPlusExpBuild(repo, branch, goBranch)
+			if repo != "go" && !(branch == "master" && goBranch == "master") {
+				// For golang.org/x repos, don't test non-latest versions.
+				b = false
+			}
+			return b
+		},
+		needsGoProxy: true, // for cmd/go module tests
+		env: []string{
+			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
+		},
+		KnownIssues: []int{35006},
+	})
+	addBuilder(BuildConfig{
 		Name:     "windows-amd64-race",
 		HostType: "host-windows-amd64-2016-big",
 		Notes:    "Only runs -race tests (./race.bat)",
@@ -2305,6 +2413,20 @@ func init() {
 			// dist test timeout. So, bump this builder
 			// up:
 			"GO_TEST_TIMEOUT_SCALE=2"},
+	})
+	addBuilder(BuildConfig{
+		Name:     "windows-amd64-race-newcc",
+		HostType: "host-windows-amd64-2016-big-newcc",
+		Notes:    "Only runs -race tests (./race.bat)",
+		env: []string{
+			"GOARCH=amd64",
+			"GOHOSTARCH=amd64",
+			// cmd/go takes ~188 seconds on windows-amd64
+			// now, which is over the 180 second default
+			// dist test timeout. So, bump this builder
+			// up:
+			"GO_TEST_TIMEOUT_SCALE=2"},
+		KnownIssues: []int{35006},
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-arm-zx2c4",
