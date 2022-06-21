@@ -18,7 +18,8 @@ echo "Pushing go tip to buildlet"
 (
   TEMPDIR=`mktemp -d `
   cd $TEMPDIR
-  git clone //go.googlesource.com/go
+  git clone https://go.googlesource.com/go
+  echo "devel.dummy_to_avoid_git_usage" > go/VERSION
   tar zcf - ./go > go.tar.gz
   gomote puttar "$BUILDLET" go.tar.gz
   rm -rf go go.tar.gz
