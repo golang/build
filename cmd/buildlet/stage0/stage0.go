@@ -173,7 +173,7 @@ Download:
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	case "host-linux-ppc64-osu":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
-	case "host-linux-amd64-wsl":
+	case "host-linux-amd64-wsl", "host-linux-riscv64-unmatched":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	}
 	switch osArch {
