@@ -1384,9 +1384,9 @@ func (c *HostConfig) MachineType() string {
 		// so their /workdir tmpfs can be larger. The COS
 		// image has no swap, so we want to make sure the
 		// /workdir fits completely in memory.
-		return "e2-standard-4" // 4 vCPUs, 16 GB mem
+		return "e2-standard-16" // 16 vCPUs, 64 GB mem
 	}
-	return "e2-highcpu-2"
+	return "e2-standard-8" // 8 vCPUs, 32 GB mem
 }
 
 // IsEC2 returns true if the machine type is an EC2 arm64 type.

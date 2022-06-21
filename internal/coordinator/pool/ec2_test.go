@@ -31,8 +31,8 @@ func TestEC2BuildletGetBuildlet(t *testing.T) {
 		// set to default gce type because there is no way to set the machine
 		// type from outside of the buildenv package.
 		{
-			Type: "e2-standard-4",
-			CPU:  4,
+			Type: "e2-standard-16",
+			CPU:  16,
 		},
 	})
 	l.SetCPULimit(20)
@@ -175,9 +175,9 @@ func TestEC2BuildletGetBuildletLogger(t *testing.T) {
 				cpuUsed:  0,
 				entries:  make(map[string]*entry),
 				types: map[string]*cloud.InstanceType{
-					"e2-highcpu-2": {
-						Type: "e2-highcpu-2",
-						CPU:  4,
+					"e2-standard-8": {
+						Type: "e2-standard-8",
+						CPU:  8,
 					},
 				},
 			},
@@ -200,9 +200,9 @@ func TestEC2BuildletGetBuildletLogger(t *testing.T) {
 				cpuUsed:  0,
 				entries:  make(map[string]*entry),
 				types: map[string]*cloud.InstanceType{
-					"e2-highcpu-2": {
-						Type: "e2-highcpu-2",
-						CPU:  4,
+					"e2-standard-8": {
+						Type: "e2-standard-8",
+						CPU:  8,
 					},
 				},
 			},
@@ -225,9 +225,9 @@ func TestEC2BuildletGetBuildletLogger(t *testing.T) {
 				cpuUsed:  0,
 				entries:  make(map[string]*entry),
 				types: map[string]*cloud.InstanceType{
-					"e2-highcpu-2": {
-						Type: "e2-highcpu-2",
-						CPU:  4,
+					"e2-standard-8": {
+						Type: "e2-standard-8",
+						CPU:  8,
 					},
 				},
 			},
@@ -250,9 +250,9 @@ func TestEC2BuildletGetBuildletLogger(t *testing.T) {
 				cpuUsed:  0,
 				entries:  make(map[string]*entry),
 				types: map[string]*cloud.InstanceType{
-					"e2-highcpu-2": {
-						Type: "e2-highcpu-2",
-						CPU:  4,
+					"e2-standard-8": {
+						Type: "e2-standard-8",
+						CPU:  8,
 					},
 				},
 			},
