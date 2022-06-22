@@ -29,17 +29,26 @@ license that can be found in the LICENSE file.
 </header>
 
 <nav class="Dashboard-controls">
-	<ul>
-		<li>
-			<form autocomplete="off" action="./">
+	<form autocomplete="off" action="./">
+		<ul>
+			<li>
 				<div class="Dashboard-search">
-					<input id="benchmarkInput" type="text" name="benchmark" placeholder="Type benchmark name...">
+					<input id="benchmark-input" type="text" name="benchmark" placeholder="Type benchmark name..." />
 				</div>
+				<input type="submit" />
+			</li>
+			<li><a href="?benchmark=all">All benchmarks</a></li>
+			<span class="left-separator"></span>
+			<li>
+				Duration (days):
+				<div class="Dashboard-duration">
+					<input id="days-input" type="number" name="days" value="30" />
+				</div>
+				End (UTC): <input id="end-input" type="datetime-local" name="end" />
 				<input type="submit">
-			</form>
-		</li>
-		<li><a href="?benchmark=all">All benchmarks</a></li>
-	</ul>
+			</li>
+		</ul>
+	</form>
 </nav>
 
 <div class="Dashboard-documentation">
@@ -105,7 +114,7 @@ function addContent(benchmarks) {
 	}
 }
 
-function failure(name) {
+function failure(name, response) {
 	let dashboard = document.getElementById("dashboard");
 
 	removeLoadingMessage();
@@ -114,17 +123,56 @@ function failure(name) {
 	title.classList.add("Dashboard-title");
 	title.innerHTML = "Benchmark \"" + name + "\" not found.";
 	dashboard.appendChild(title);
+
+	let message = document.createElement("p");
+	message.classList.add("Dashboard-documentation");
+	response.text().then(function(error) {
+		message.innerHTML = error;
+	});
+	dashboard.appendChild(message);
 }
 
-let benchmark = (new URLSearchParams(window.location.search)).get('benchmark');
-let dataURL = './data.json';
-if (benchmark) {
-	dataURL += '?benchmark=' + benchmark;
+// Fill search boxes from query params.
+function prefillSearch() {
+	let params = new URLSearchParams(window.location.search);
+
+	let benchmark = params.get('benchmark');
+	if (benchmark) {
+		let input = document.getElementById('benchmark-input');
+		input.value = benchmark;
+	}
+
+	let days = params.get('days');
+	if (days) {
+		let input = document.getElementById('days-input');
+		input.value = days;
+	}
+
+	let end = params.get('end');
+	let input = document.getElementById('end-input');
+	if (end) {
+		input.value = end;
+	} else {
+		// Default to now.
+		let now = new Date();
+
+		// toISOString always uses UTC, then we just chop off the end
+		// of string to get the datetime-local format of
+		// 2000-12-31T15:00.
+		//
+		// Yes, this is really the suggested approach...
+		input.value = now.toISOString().slice(0, 16);
+	}
 }
+prefillSearch()
+
+// Fetch content.
+let benchmark = (new URLSearchParams(window.location.search)).get('benchmark');
+let dataURL = './data.json' + window.location.search;  // Pass through all URL params.
 fetch(dataURL)
 	.then(response => {
 		if (!response.ok) {
-			failure(benchmark);
+			failure(benchmark, response);
 			throw new Error("Data fetch failed");
 		}
 		return response.json();

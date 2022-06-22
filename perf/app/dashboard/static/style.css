@@ -77,6 +77,12 @@ nav a {
   padding: 10px;
   text-decoration: none;
 }
+nav .left-separator {
+  border-left: 2px solid #b7b7b7;
+  padding-left: 10px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
 
 .Dashboard {
   margin: 0;
@@ -108,7 +114,6 @@ input {
   font-size: 16px;
 }
 input[type=text] {
-  background-color: #f4f4f4;
   width: 100%;
 }
 input[type=submit] {
@@ -123,6 +128,15 @@ input[type=submit] {
   padding: 10px;
   text-decoration: none;
 }
+
+.Dashboard-duration {
+  display: inline-block;
+  width: 4em;
+}
+input[type=number] {
+  width: 100%;
+}
+
 .Dashboard-grid {
   display: flex;
   flex-direction: row;

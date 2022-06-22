@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -105,7 +106,7 @@ func validateFluxString(s string) error {
 var errBenchmarkNotFound = errors.New("benchmark not found")
 
 // fetchNamedUnitBenchmark queries Influx for a specific name + unit benchmark.
-func fetchNamedUnitBenchmark(ctx context.Context, qc api.QueryAPI, name, unit string) (*BenchmarkJSON, error) {
+func fetchNamedUnitBenchmark(ctx context.Context, qc api.QueryAPI, start, end time.Time, name, unit string) (*BenchmarkJSON, error) {
 	if err := validateFluxString(name); err != nil {
 		return nil, fmt.Errorf("invalid benchmark name: %w", err)
 	}
@@ -115,7 +116,7 @@ func fetchNamedUnitBenchmark(ctx context.Context, qc api.QueryAPI, name, unit st
 
 	query := fmt.Sprintf(`
 from(bucket: "perf")
-  |> range(start: -30d)
+  |> range(start: %s, stop: %s)
   |> filter(fn: (r) => r["_measurement"] == "benchmark-result")
   |> filter(fn: (r) => r["name"] == "%s")
   |> filter(fn: (r) => r["unit"] == "%s")
@@ -124,7 +125,7 @@ from(bucket: "perf")
   |> filter(fn: (r) => r["goarch"] == "amd64")
   |> pivot(columnKey: ["_field"], rowKey: ["_time"], valueColumn: "_value")
   |> yield(name: "last")
-`, name, unit)
+`, start.Format(time.RFC3339), end.Format(time.RFC3339), name, unit)
 
 	res, err := qc.Query(ctx, query)
 	if err != nil {
@@ -145,7 +146,7 @@ from(bucket: "perf")
 }
 
 // fetchDefaultBenchmarks queries Influx for the default benchmark set.
-func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI) ([]*BenchmarkJSON, error) {
+func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI, start, end time.Time) ([]*BenchmarkJSON, error) {
 	// Keep benchmarks with the same name grouped together, which is
 	// assumed by the JS.
 	benchmarks := []struct{ name, unit string }{
@@ -205,7 +206,7 @@ func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI) ([]*BenchmarkJ
 
 	ret := make([]*BenchmarkJSON, 0, len(benchmarks))
 	for _, bench := range benchmarks {
-		b, err := fetchNamedUnitBenchmark(ctx, qc, bench.name, bench.unit)
+		b, err := fetchNamedUnitBenchmark(ctx, qc, start, end, bench.name, bench.unit)
 		if err != nil {
 			return nil, fmt.Errorf("error fetching benchmark %s/%s: %w", bench.name, bench.unit, err)
 		}
@@ -217,14 +218,14 @@ func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI) ([]*BenchmarkJ
 
 // fetchNamedBenchmark queries Influx for all benchmark results with the passed
 // name (for all units).
-func fetchNamedBenchmark(ctx context.Context, qc api.QueryAPI, name string) ([]*BenchmarkJSON, error) {
+func fetchNamedBenchmark(ctx context.Context, qc api.QueryAPI, start, end time.Time, name string) ([]*BenchmarkJSON, error) {
 	if err := validateFluxString(name); err != nil {
 		return nil, fmt.Errorf("invalid benchmark name: %w", err)
 	}
 
 	query := fmt.Sprintf(`
 from(bucket: "perf")
-  |> range(start: -30d)
+  |> range(start: %s, stop: %s)
   |> filter(fn: (r) => r["_measurement"] == "benchmark-result")
   |> filter(fn: (r) => r["name"] == "%s")
   |> filter(fn: (r) => r["branch"] == "master")
@@ -232,7 +233,7 @@ from(bucket: "perf")
   |> filter(fn: (r) => r["goarch"] == "amd64")
   |> pivot(columnKey: ["_field"], rowKey: ["_time"], valueColumn: "_value")
   |> yield(name: "last")
-`, name)
+`, start.Format(time.RFC3339), end.Format(time.RFC3339), name)
 
 	res, err := qc.Query(ctx, query)
 	if err != nil {
@@ -250,17 +251,17 @@ from(bucket: "perf")
 }
 
 // fetchAllBenchmarks queries Influx for all benchmark results.
-func fetchAllBenchmarks(ctx context.Context, qc api.QueryAPI) ([]*BenchmarkJSON, error) {
-	const query = `
+func fetchAllBenchmarks(ctx context.Context, qc api.QueryAPI, start, end time.Time) ([]*BenchmarkJSON, error) {
+	query := fmt.Sprintf(`
 from(bucket: "perf")
-  |> range(start: -30d)
+  |> range(start: %s, stop: %s)
   |> filter(fn: (r) => r["_measurement"] == "benchmark-result")
   |> filter(fn: (r) => r["branch"] == "master")
   |> filter(fn: (r) => r["goos"] == "linux")
   |> filter(fn: (r) => r["goarch"] == "amd64")
   |> pivot(columnKey: ["_field"], rowKey: ["_time"], valueColumn: "_value")
   |> yield(name: "last")
-`
+`, start.Format(time.RFC3339), end.Format(time.RFC3339))
 
 	res, err := qc.Query(ctx, query)
 	if err != nil {
@@ -340,6 +341,11 @@ func (w *gzipResponseWriter) Write(b []byte) (int, error) {
 	return w.w.Write(b)
 }
 
+const (
+	defaultDays = 30
+	maxDays     = 366
+)
+
 // search handles /dashboard/data.json.
 //
 // TODO(prattmic): Consider caching Influx results in-memory for a few mintures
@@ -347,9 +353,44 @@ func (w *gzipResponseWriter) Write(b []byte) (int, error) {
 func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	start := time.Now()
+	days := uint64(defaultDays)
+	dayParam := r.FormValue("days")
+	if dayParam != "" {
+		var err error
+		days, err = strconv.ParseUint(dayParam, 10, 32)
+		if err != nil {
+			log.Printf("Error parsing days %q: %v", dayParam, err)
+			http.Error(w, fmt.Sprintf("day parameter must be a positive integer less than or equal to %d", maxDays), http.StatusBadRequest)
+			return
+		}
+		if days == 0 || days > maxDays {
+			log.Printf("days %d too large", days)
+			http.Error(w, fmt.Sprintf("day parameter must be a positive integer less than or equal to %d", maxDays), http.StatusBadRequest)
+			return
+		}
+	}
+
+	end := time.Now()
+	endParam := r.FormValue("end")
+	if endParam != "" {
+		var err error
+		// Quirk: Browsers don't have an easy built-in way to deal with
+		// timezone in input boxes. The datetime input type yields a
+		// string in this form, with no timezone (either local or UTC).
+		// Thus, we just treat this as UTC.
+		end, err = time.Parse("2006-01-02T15:04", endParam)
+		if err != nil {
+			log.Printf("Error parsing end %q: %v", endParam, err)
+			http.Error(w, "end parameter must be a timestamp similar to RFC3339 without a time zone, like 2000-12-31T15:00", http.StatusBadRequest)
+			return
+		}
+	}
+
+	start := end.Add(-24*time.Hour*time.Duration(days))
+
+	methStart := time.Now()
 	defer func() {
-		log.Printf("Dashboard total query time: %s", time.Since(start))
+		log.Printf("Dashboard total query time: %s", time.Since(methStart))
 	}()
 
 	ifxc, err := a.influxClient(ctx)
@@ -365,11 +406,11 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 	benchmark := r.FormValue("benchmark")
 	var benchmarks []*BenchmarkJSON
 	if benchmark == "" {
-		benchmarks, err = fetchDefaultBenchmarks(ctx, qc)
+		benchmarks, err = fetchDefaultBenchmarks(ctx, qc, start, end)
 	} else if benchmark == "all" {
-		benchmarks, err = fetchAllBenchmarks(ctx, qc)
+		benchmarks, err = fetchAllBenchmarks(ctx, qc, start, end)
 	} else {
-		benchmarks, err = fetchNamedBenchmark(ctx, qc, benchmark)
+		benchmarks, err = fetchNamedBenchmark(ctx, qc, start, end, benchmark)
 	}
 	if err == errBenchmarkNotFound {
 		log.Printf("Benchmark not found: %q", benchmark)
