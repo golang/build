@@ -5,6 +5,7 @@
 package app
 
 import (
+	"compress/gzip"
 	"context"
 	"embed"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/influxdata/influxdb-client-go/v2/api"
@@ -329,6 +331,15 @@ func groupBenchmarkResults(res *api.QueryTableResult) ([]*BenchmarkJSON, error) 
 	return s, nil
 }
 
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	w *gzip.Writer
+}
+
+func (w *gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.w.Write(b)
+}
+
 // search handles /dashboard/data.json.
 //
 // TODO(prattmic): Consider caching Influx results in-memory for a few mintures
@@ -372,8 +383,15 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		w = &gzipResponseWriter{w: gz, ResponseWriter: w}
+	}
+
 	w.WriteHeader(http.StatusOK)
 	e := json.NewEncoder(w)
-	e.SetIndent("", "\t")
 	e.Encode(benchmarks)
 }
