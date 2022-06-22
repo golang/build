@@ -18,8 +18,8 @@ VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: CreateTask :one
-INSERT INTO tasks (workflow_id, name, finished, result, error, created_at, updated_at, approved_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO tasks (workflow_id, name, finished, result, error, created_at, updated_at, approved_at, ready_for_approval)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *;
 
 -- name: UpsertTask :one
@@ -72,7 +72,7 @@ ORDER BY created_at;
 -- name: UnfinishedWorkflows :many
 SELECT workflows.*
 FROM workflows
-WHERE workflows.finished = false;
+WHERE workflows.finished = FALSE;
 
 -- name: WorkflowFinished :one
 UPDATE workflows
@@ -85,7 +85,7 @@ RETURNING *;
 
 -- name: ResetTask :one
 UPDATE tasks
-SET finished   = false,
+SET finished   = FALSE,
     result     = DEFAULT,
     error      = DEFAULT,
     updated_at = $3
@@ -95,7 +95,7 @@ RETURNING *;
 
 -- name: ResetWorkflow :one
 UPDATE workflows
-SET finished   = false,
+SET finished   = FALSE,
     output     = DEFAULT,
     error      = DEFAULT,
     updated_at = $2
@@ -105,7 +105,14 @@ RETURNING *;
 -- name: ApproveTask :one
 UPDATE tasks
 SET approved_at = $3,
-    updated_at = $3
+    updated_at  = $3
+WHERE workflow_id = $1
+  AND name = $2
+RETURNING *;
+
+-- name: UpdateTaskReadyForApproval :one
+UPDATE tasks
+SET ready_for_approval = $3
 WHERE workflow_id = $1
   AND name = $2
 RETURNING *;

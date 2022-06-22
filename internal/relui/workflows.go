@@ -478,11 +478,21 @@ func AwaitFunc(ctx *workflow.TaskContext, period time.Duration, awaitCondition A
 	}
 }
 
-// AwaitAction is a workflow.Action that is a convenience wrapper
+// AwaitAction returns a workflow.Action that is a convenience wrapper
 // around AwaitFunc.
-func AwaitAction(ctx *workflow.TaskContext, period time.Duration, awaitCondition AwaitConditionFunc) error {
-	_, err := AwaitFunc(ctx, period, awaitCondition)
-	return err
+func AwaitAction(period time.Duration, awaitCondition AwaitConditionFunc) func(*workflow.TaskContext) error {
+	return func(ctx *workflow.TaskContext) error {
+		_, err := AwaitFunc(ctx, period, awaitCondition)
+		return err
+	}
+}
+
+// AwaitActionDep returns a workflow.Action with a single dependency
+// that is a convenience wrapper around AwaitFunc.
+func AwaitActionDep(period time.Duration, awaitCondition AwaitConditionFunc) func(*workflow.TaskContext, interface{}) error {
+	return func(ctx *workflow.TaskContext, _ interface{}) error {
+		return AwaitAction(period, awaitCondition)(ctx)
+	}
 }
 
 func checkTaskApproved(ctx *workflow.TaskContext, p *pgxpool.Pool, taskName string) (bool, error) {
@@ -491,20 +501,39 @@ func checkTaskApproved(ctx *workflow.TaskContext, p *pgxpool.Pool, taskName stri
 		WorkflowID: ctx.WorkflowID,
 		Name:       taskName,
 	})
+	if !t.ReadyForApproval {
+		_, err := q.UpdateTaskReadyForApproval(ctx, db.UpdateTaskReadyForApprovalParams{
+			ReadyForApproval: true,
+			Name:             taskName,
+			WorkflowID:       ctx.WorkflowID,
+		})
+		if err != nil {
+			return false, err
+		}
+	}
 	return t.ApprovedAt.Valid, err
 }
 
-func approveActionDep(p *pgxpool.Pool, taskName string) func(*workflow.TaskContext, interface{}) error {
-	return func(ctx *workflow.TaskContext, _ interface{}) error {
-		return AwaitAction(ctx, 10*time.Second, func(ctx *workflow.TaskContext) (done bool, err error) {
-			return checkTaskApproved(ctx, p, taskName)
-		})
-	}
-}
-
+// ApproveActionDep returns a function for defining approval Actions.
+//
+// ApproveActionDep takes a single *pgxpool.Pool argument, which is
+// used to query the database to determine if a task has been marked
+// approved. ApproveActionDep returns a function that accepts a single
+// string argument that must match the name of the task being defined.
+// The returned function is suitable for a single workflow Action with
+// a single dependency.
+//
+// ApproveActionDep marks the task as requiring approval in the
+// database once the task is started. This can be used to show an
+// "approve" control in the UI.
+//
+//	actionName := "Wait for Approval"
+//	waitAction := wd.Action(actionName, ApproveActionDep(db)(actionName), someDependency)
 func ApproveActionDep(p *pgxpool.Pool) func(taskName string) func(*workflow.TaskContext, interface{}) error {
 	return func(taskName string) func(*workflow.TaskContext, interface{}) error {
-		return approveActionDep(p, taskName)
+		return AwaitActionDep(5*time.Second, func(ctx *workflow.TaskContext) (done bool, err error) {
+			return checkTaskApproved(ctx, p, taskName)
+		})
 	}
 }
 
@@ -574,7 +603,7 @@ func addSingleReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Mileston
 		return err
 	}
 
-	verifiedName := "APPROVE-Wait for Release Coordinator Approval"
+	verifiedName := "Wait for Release Coordinator Approval"
 	verified := wd.Action(verifiedName, build.ApproveActionFunc(verifiedName), signedAndTestedArtifacts)
 
 	// Tag version and upload to CDN/website.

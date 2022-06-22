@@ -12,14 +12,15 @@ import (
 )
 
 type Task struct {
-	WorkflowID uuid.UUID
-	Name       string
-	Finished   bool
-	Result     sql.NullString
-	Error      sql.NullString
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-	ApprovedAt sql.NullTime
+	WorkflowID       uuid.UUID
+	Name             string
+	Finished         bool
+	Result           sql.NullString
+	Error            sql.NullString
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	ApprovedAt       sql.NullTime
+	ReadyForApproval bool
 }
 
 type TaskLog struct {

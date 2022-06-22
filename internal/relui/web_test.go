@@ -592,7 +592,7 @@ func TestServerApproveTaskHandler(t *testing.T) {
 			wantCode: http.StatusNotFound,
 			want: db.Task{
 				WorkflowID: wfID,
-				Name:       "APPROVE-please",
+				Name:       "approve please",
 				CreatedAt:  hourAgo,
 				UpdatedAt:  hourAgo,
 			},
@@ -603,7 +603,7 @@ func TestServerApproveTaskHandler(t *testing.T) {
 			wantCode: http.StatusBadRequest,
 			want: db.Task{
 				WorkflowID: wfID,
-				Name:       "APPROVE-please",
+				Name:       "approve please",
 				CreatedAt:  hourAgo,
 				UpdatedAt:  hourAgo,
 			},
@@ -614,7 +614,7 @@ func TestServerApproveTaskHandler(t *testing.T) {
 			wantCode: http.StatusNotFound,
 			want: db.Task{
 				WorkflowID: wfID,
-				Name:       "APPROVE-please",
+				Name:       "approve please",
 				CreatedAt:  hourAgo,
 				UpdatedAt:  hourAgo,
 			},
@@ -625,21 +625,21 @@ func TestServerApproveTaskHandler(t *testing.T) {
 			wantCode: http.StatusNotFound,
 			want: db.Task{
 				WorkflowID: wfID,
-				Name:       "APPROVE-please",
+				Name:       "approve please",
 				CreatedAt:  hourAgo,
 				UpdatedAt:  hourAgo,
 			},
 		},
 		{
 			desc:     "successful approval",
-			params:   map[string]string{"id": wfID.String(), "name": "APPROVE-please"},
+			params:   map[string]string{"id": wfID.String(), "name": "approve please"},
 			wantCode: http.StatusSeeOther,
 			wantHeaders: map[string]string{
 				"Location": "/",
 			},
 			want: db.Task{
 				WorkflowID: wfID,
-				Name:       "APPROVE-please",
+				Name:       "approve please",
 				CreatedAt:  hourAgo,
 				UpdatedAt:  time.Now(),
 				ApprovedAt: sql.NullTime{Time: time.Now(), Valid: true},
@@ -663,7 +663,7 @@ func TestServerApproveTaskHandler(t *testing.T) {
 			}
 			gtg := db.CreateTaskParams{
 				WorkflowID: wf.ID,
-				Name:       "APPROVE-please",
+				Name:       "approve please",
 				Finished:   false,
 				CreatedAt:  hourAgo,
 				UpdatedAt:  hourAgo,
@@ -672,7 +672,7 @@ func TestServerApproveTaskHandler(t *testing.T) {
 				t.Fatalf("CreateTask(_, %v) = _, %v, wanted no error", gtg, err)
 			}
 
-			req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", c.params["id"], "tasks", c.params["name"], "approve"), nil)
+			req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", c.params["id"], "tasks", url.PathEscape(c.params["name"]), "approve"), nil)
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			rec := httptest.NewRecorder()
 			s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}), nil, SiteHeader{})
@@ -693,7 +693,7 @@ func TestServerApproveTaskHandler(t *testing.T) {
 			}
 			task, err := q.Task(ctx, db.TaskParams{
 				WorkflowID: wf.ID,
-				Name:       "APPROVE-please",
+				Name:       "approve please",
 			})
 			if err != nil {
 				t.Fatalf("q.Task() = %v, %v, wanted no error", task, err)

@@ -69,7 +69,7 @@
                 </form>
               </div>
             {{end}}
-            {{if and (not $task.ApprovedAt.Valid) (hasPrefix $task.Name "APPROVE-")}}
+            {{if and (not $task.ApprovedAt.Valid) ($task.ReadyForApproval)}}
               <div class="TaskList-approveTask">
                 <form action="{{baseLink (printf "/workflows/%s/tasks/%s/approve" $workflow.ID $task.Name)}}" method="post">
                   <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />

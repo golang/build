@@ -114,7 +114,7 @@ func TestCheckTaskApproved(t *testing.T) {
 	}
 	gtg := db.CreateTaskParams{
 		WorkflowID: wf.ID,
-		Name:       "APPROVE-please",
+		Name:       "approve please",
 		Finished:   true,
 		Error:      nullString("internal explosion"),
 		CreatedAt:  hourAgo,
@@ -128,6 +128,14 @@ func TestCheckTaskApproved(t *testing.T) {
 	got, err := checkTaskApproved(tctx, p, gtg.Name)
 	if err != nil || got {
 		t.Errorf("checkTaskApproved(_, %v, %q) = %t, %v wanted %t, %v", p, gtg.Name, got, err, false, nil)
+	}
+	tp := db.TaskParams{WorkflowID: wf.ID, Name: gtg.Name}
+	task, err := q.Task(ctx, tp)
+	if err != nil {
+		t.Fatalf("q.Task(_, %v) = %v, %v, wanted no error", tp, task, err)
+	}
+	if !task.ReadyForApproval {
+		t.Errorf("task.ReadyForApproval = %v, wanted %v", task.ReadyForApproval, true)
 	}
 
 	atp := db.ApproveTaskParams{
