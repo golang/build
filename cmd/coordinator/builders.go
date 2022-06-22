@@ -82,7 +82,8 @@ var buildersTmpl = template.Must(template.New("builders").Funcs(template.FuncMap
 	</h1>
 	<nav>
 		<ul>
-			<li><a href="https://build.golang.org/">Dashboard</a></li>
+			<li><a href="https://build.golang.org/">Build Dashboard</a></li>
+			<li><a href="https://perf.golang.org/dashboard">Performance Dashboard</a></li>
 			<li><a href="/builders">Builders</a></li>
 		</ul>
 	</nav>
