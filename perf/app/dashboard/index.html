@@ -124,6 +124,7 @@ if (benchmark) {
 fetch(dataURL)
 	.then(response => {
 		if (!response.ok) {
+			failure(benchmark);
 			throw new Error("Data fetch failed");
 		}
 		return response.json();
@@ -137,10 +138,7 @@ fetch(dataURL)
 		});
 
 		addContent(benchmarks);
-	})
-	// This will look odd if the error isn't a 404 and benchmark is
-	// undefined, but close enough.
-	.catch(error => failure(benchmark));
+	});
 </script>
 
 </body>
