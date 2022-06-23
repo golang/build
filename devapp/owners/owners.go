@@ -30,7 +30,30 @@ type Entry struct {
 
 type Request struct {
 	Payload struct {
+		// Paths is a set of relative paths rooted at go.googlesource.com,
+		// where the first path component refers to the repository name,
+		// while the rest refers to a path within that repository.
+		//
+		// For instance, a path like go/src/runtime/trace/trace.go refers
+		// to the repository at go.googlesource.com/go, and the path
+		// src/runtime/trace/trace.go within that repository.
+		//
+		// A request with Paths set will return the owner entry
+		// for the deepest part of each path that it has information
+		// on.
+		//
+		// For example, the path go/src/runtime/trace/trace.go will
+		// match go/src/runtime/trace if there exist entries for both
+		// go/src/runtime and go/src/runtime/trace.
+		//
+		// Must be empty if All is true.
 		Paths []string `json:"paths"`
+
+		// All indicates that the response must contain every available
+		// entry about code owners.
+		//
+		// If All is true, Paths must be empty.
+		All bool `json:"all"`
 	} `json:"payload"`
 	Version int `json:"v"` // API version
 }
@@ -94,11 +117,25 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var resp Response
-		resp.Payload.Entries = make(map[string]*Entry)
-		for _, p := range req.Payload.Paths {
-			resp.Payload.Entries[p] = match(p)
+		if len(req.Payload.Paths) > 0 && req.Payload.All {
+			jsonError(w, "paths must be empty when all is true", http.StatusBadRequest)
+			// TODO: increment expvar for monitoring.
+			log.Printf("invalid request: paths is non-empty but all is true")
+			return
 		}
+
+		var resp Response
+		if req.Payload.All {
+			resp.Payload.Entries = entries
+		} else {
+			resp.Payload.Entries = make(map[string]*Entry)
+			for _, p := range req.Payload.Paths {
+				resp.Payload.Entries[p] = match(p)
+			}
+		}
+		// resp.Payload.Entries must not be mutated because it contains
+		// references to the global "entries" value.
+
 		var buf bytes.Buffer
 		if err := json.NewEncoder(&buf).Encode(resp); err != nil {
 			jsonError(w, "unable to encode response", http.StatusInternalServerError)
@@ -126,14 +163,14 @@ func jsonError(w http.ResponseWriter, text string, code int) {
 	w.Write(buf.Bytes())
 }
 
-// translatePath takes a path for a package based on go.googlesource.com
+// TranslatePathForIssues takes a path for a package based on go.googlesource.com
 // and translates it into a form that aligns more closely with the issue
 // tracker.
 //
 // Specifically, Go standard library packages lose the go/src prefix,
 // repositories with a golang.org/x/ import path get the x/ prefix,
 // and all other paths are left as-is (this includes e.g. domains).
-func translatePath(path string) string {
+func TranslatePathForIssues(path string) string {
 	// Check if it's in the standard library, in which case,
 	// drop the prefix.
 	if strings.HasPrefix(path, "go/src/") {
@@ -165,7 +202,7 @@ func translatePath(path string) string {
 func translateOwnersPaths() (map[string]*Entry, error) {
 	tm := make(map[string]*Entry)
 	for path, entry := range entries {
-		tPath := translatePath(path)
+		tPath := TranslatePathForIssues(path)
 		if _, ok := tm[tPath]; ok {
 			return nil, fmt.Errorf("path translation of %q creates a duplicate entry %q", path, tPath)
 		}

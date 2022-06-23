@@ -431,6 +431,7 @@ var tasks = []struct {
 	{"unwait-release", (*gopherbot).unwaitRelease},
 	{"ping-early-issues", (*gopherbot).pingEarlyIssues},
 	{"label build issues", (*gopherbot).labelBuildIssues},
+	{"label compiler/runtime issues", (*gopherbot).labelCompilerRuntimeIssues},
 	{"label mobile issues", (*gopherbot).labelMobileIssues},
 	{"label tools issues", (*gopherbot).labelToolsIssues},
 	{"label website issues", (*gopherbot).labelWebsiteIssues},
@@ -1108,6 +1109,43 @@ func (b *gopherbot) labelBuildIssues(ctx context.Context) error {
 			return nil
 		}
 		return b.addLabel(ctx, b.gorepo.ID(), gi, "Builders")
+	})
+}
+
+func (b *gopherbot) labelCompilerRuntimeIssues(ctx context.Context) error {
+	entries, err := getAllCodeOwners(ctx)
+	if err != nil {
+		return err
+	}
+	// Filter out any entries that don't contain compiler/runtime owners into
+	// a set of compiler/runtime-owned packages whose names match the names
+	// used in the issue tracker.
+	crtPackages := make(map[string]struct{}) // Key is issue title prefix, like "cmd/compile" or "x/sys/unix."
+	for pkg, entry := range entries {
+		for _, owner := range entry.Primary {
+			name := owner.GitHubUsername
+			if name == "golang/compiler" || name == "golang/runtime" {
+				crtPackages[owners.TranslatePathForIssues(pkg)] = struct{}{}
+				break
+			}
+		}
+	}
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
+		if gi.HasLabel("compiler/runtime") || gi.HasEvent("unlabeled") {
+			return nil
+		}
+		components := strings.SplitN(gi.Title, ":", 2)
+		if len(components) != 2 {
+			return nil
+		}
+		for _, p := range strings.Split(strings.TrimSpace(components[0]), ",") {
+			if _, ok := crtPackages[strings.TrimSpace(p)]; !ok {
+				continue
+			}
+			// TODO(mknyszek): Add this issue to the GitHub project as well.
+			return b.addLabel(ctx, b.gorepo.ID(), gi, "compiler/runtime")
+		}
+		return nil
 	})
 }
 
@@ -2594,6 +2632,32 @@ func getCodeOwners(ctx context.Context, paths []string) ([]*owners.Entry, error)
 	oReq := owners.Request{Version: 1}
 	oReq.Payload.Paths = paths
 
+	oResp, err := fetchCodeOwners(ctx, &oReq)
+	if err != nil {
+		return nil, err
+	}
+
+	var entries []*owners.Entry
+	for _, entry := range oResp.Payload.Entries {
+		if entry == nil {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	return entries, nil
+}
+
+func getAllCodeOwners(ctx context.Context) (map[string]*owners.Entry, error) {
+	oReq := owners.Request{Version: 1}
+	oReq.Payload.All = true
+	oResp, err := fetchCodeOwners(ctx, &oReq)
+	if err != nil {
+		return nil, err
+	}
+	return oResp.Payload.Entries, nil
+}
+
+func fetchCodeOwners(ctx context.Context, oReq *owners.Request) (*owners.Response, error) {
 	b, err := json.Marshal(oReq)
 	if err != nil {
 		return nil, err
@@ -2617,14 +2681,7 @@ func getCodeOwners(ctx context.Context, paths []string) ([]*owners.Entry, error)
 	if oResp.Error != "" {
 		return nil, fmt.Errorf("error from dev.golang.org/owners endpoint: %v", oResp.Error)
 	}
-	var entries []*owners.Entry
-	for _, entry := range oResp.Payload.Entries {
-		if entry == nil {
-			continue
-		}
-		entries = append(entries, entry)
-	}
-	return entries, nil
+	return &oResp, nil
 }
 
 // mergeOwnersEntries takes multiple owners.Entry structs and aggregates all
