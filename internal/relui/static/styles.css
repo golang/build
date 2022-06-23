@@ -156,6 +156,7 @@ h6 {
   border-bottom: 0.0625rem solid #d6d6d6;
   border-collapse: collapse;
   margin-bottom: 1rem;
+  table-layout: fixed;
   width: 100%;
 }
 .TaskList-itemHeaderCol {
@@ -201,9 +202,12 @@ h6 {
 .TaskList-expanded.TaskList-itemLogsRow {
   display: table-row;
 }
+.TaskList-itemState {
+  max-width: 4rem;
+  width: 3rem;
+}
 .TaskList-itemCol.TaskList-itemState {
   padding: 0.25rem 0 0;
-  width: 3.25rem;
 }
 .TaskList-itemStateIcon {
   height: 1.25rem;
@@ -219,6 +223,8 @@ h6 {
 }
 .TaskList-itemLogLine {
   font-family: monospace;
+  overflow: auto;
+  overflow-wrap: anywhere;
   padding: 0 1rem;
   tab-size: 4;
   white-space: pre-wrap;
