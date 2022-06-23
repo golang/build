@@ -590,7 +590,7 @@ func addSingleReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Mileston
 	nextVersion := wd.Task("Get next version", version.GetNextVersion, kindVal)
 	milestones := wd.Task("Pick milestones", milestone.FetchMilestones, nextVersion, kindVal)
 	checked := wd.Action("Check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal)
-	dlcl := wd.Task("Mail DL CL", version.MailDLCL, wd.Slice([]workflow.Value{nextVersion}), wd.Constant(false))
+	dlcl := wd.Task("Mail DL CL", version.MailDLCL, wd.Slice(nextVersion), wd.Constant(false))
 	dlclCommit := wd.Task("Wait for DL CL", version.AwaitCL, dlcl, wd.Constant(""))
 	wd.Output("Download CL submitted", dlclCommit)
 
@@ -662,7 +662,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, majorVers
 			testsPassed = append(testsPassed, long)
 		}
 	}
-	stagedArtifacts := wd.Task("Stage artifacts for signing", tasks.copyToStaging, version, wd.Slice(artifacts))
+	stagedArtifacts := wd.Task("Stage artifacts for signing", tasks.copyToStaging, version, wd.Slice(artifacts...))
 	signedArtifacts := wd.Task("Wait for signed artifacts", tasks.awaitSigned, version, wd.Constant(darwinTargets), stagedArtifacts)
 	signedAndTested := wd.Task("Wait for signing and tests", func(ctx *workflow.TaskContext, artifacts []artifact) ([]artifact, error) {
 		return artifacts, nil

@@ -139,7 +139,7 @@ func TestSplitJoin(t *testing.T) {
 	in := wd.Task("echo", echo, wd.Constant("string #"))
 	add1 := wd.Task("add 1", appendInt, in, wd.Constant(1))
 	add2 := wd.Task("add 2", appendInt, in, wd.Constant(2))
-	both := wd.Slice([]workflow.Value{add1, add2})
+	both := wd.Slice(add1, add2)
 	out := wd.Task("join", join, both)
 	wd.Output("strings", out)
 

@@ -201,7 +201,7 @@ func (c *constant) deps() []*taskDefinition         { return nil }
 
 // Slice combines multiple Values of the same type into a Value containing
 // a slice of that type.
-func (d *Definition) Slice(vs []Value) Value {
+func (d *Definition) Slice(vs ...Value) Value {
 	if len(vs) == 0 {
 		return &slice{}
 	}
