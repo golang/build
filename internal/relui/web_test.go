@@ -26,6 +26,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/workflow"
 )
@@ -105,7 +106,11 @@ func TestServerHomeHandler(t *testing.T) {
 	if _, err := q.CreateWorkflow(ctx, wf); err != nil {
 		t.Fatalf("CreateWorkflow(_, %v) = _, %v, wanted no error", wf, err)
 	}
-	tp := db.CreateTaskParams{WorkflowID: wf.ID, Name: "TestTask"}
+	tp := db.CreateTaskParams{
+		WorkflowID: wf.ID,
+		Name:       "TestTask",
+		Result:     nullString(`{"Filename": "foo.exe"}`),
+	}
 	if _, err := q.CreateTask(ctx, tp); err != nil {
 		t.Fatalf("CreateTask(_, %v) = _, %v, wanted no error", tp, err)
 	}
@@ -789,6 +794,18 @@ func TestResultDetail(t *testing.T) {
 			input:    `"hello"`,
 			want:     &resultDetail{String: "hello"},
 			wantKind: "String",
+		},
+		{
+			desc:     "artifact",
+			input:    `{"Filename": "foo.exe", "Target": {"Name": "windows-test"}}`,
+			want:     &resultDetail{Artifact: artifact{Filename: "foo.exe", Target: &releasetargets.Target{Name: "windows-test"}}},
+			wantKind: "Artifact",
+		},
+		{
+			desc:     "artifact missing target",
+			input:    `{"Filename": "foo.exe"}`,
+			want:     &resultDetail{Artifact: artifact{Filename: "foo.exe"}},
+			wantKind: "Artifact",
 		},
 		{
 			desc:     "nested json string",

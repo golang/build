@@ -112,35 +112,38 @@
 {{end}}
 
 {{define "itemResult"}}
-  {{$resultDetail := .}}
-  {{if eq $resultDetail.Kind "Artifact"}}
+  {{if eq .Kind "Artifact"}}
     <dl class="TaskList-itemResultDetailList">
       <dt class="TaskList-itemResultTerm">Name</dt>
       <dd class="TaskList-itemResultDefinition">
-          {{$resultDetail.Artifact.Target.Name}}
+        {{with .Artifact.Target}}
+          {{.Name}}
+        {{else}}
+          {{.Artifact.Filename}}
+        {{end}}
       </dd>
       <dt class="TaskList-itemResultTerm">Filename</dt>
       <dd class="TaskList-itemResultDefinition">
-          {{$resultDetail.Artifact.Filename}}
+          {{.Artifact.Filename}}
       </dd>
       <dt class="TaskList-itemResultTerm">ScratchPath</dt>
       <dd class="TaskList-itemResultDefinition">
-          {{$resultDetail.Artifact.ScratchPath}}
+          {{.Artifact.ScratchPath}}
       </dd>
       <dt class="TaskList-itemResultTerm">StagingPath</dt>
       <dd class="TaskList-itemResultDefinition">
-          {{$resultDetail.Artifact.StagingPath}}
+          {{.Artifact.StagingPath}}
       </dd>
     </dl>
-  {{else if eq $resultDetail.Kind "Artifacts"}}
+  {{else if eq .Kind "Artifacts"}}
     <dt class="TaskList-itemResultTerm">Filenames</dt>
     <dd class="TaskList-itemResultDefinition">
-        {{range $artifact := $resultDetail.Artifacts}}
+        {{range $artifact := .Artifacts}}
             {{$artifact.Filename}} <span class="TaskList-itemResultArtifactSize">{{prettySize $artifact.Size}}</span>
         {{end}}
     </dd>
-  {{else if eq $resultDetail.Kind "Outputs"}}
-    {{range $key, $value := $resultDetail.Outputs}}
+  {{else if eq .Kind "Outputs"}}
+    {{range $key, $value := .Outputs}}
       <dt class="TaskList-itemResultTerm">
         {{$key}}
       </dt>
@@ -148,8 +151,8 @@
         {{template "itemResult" $value}}
       </dd>
     {{end}}
-  {{else if eq $resultDetail.Kind "JSON"}}
-    {{range $key, $value := $resultDetail.JSON}}
+  {{else if eq .Kind "JSON"}}
+    {{range $key, $value := .JSON}}
       <dt class="TaskList-itemResultTerm">
         {{$key}}
         </dt>
@@ -157,12 +160,12 @@
         {{$value}}
       </dd>
     {{end}}
-  {{else if eq $resultDetail.Kind "String"}}
+  {{else if eq .Kind "String"}}
     <dt class="TaskList-itemResultTerm">
       String
     </dt>
     <dd class="TaskList-itemResultDefinition TaskList-itemResultDefinition--string">
-      {{$resultDetail.String}}
+      {{.String}}
     </dd>
   {{end}}
 {{end}}
