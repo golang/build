@@ -285,7 +285,6 @@ h6 {
 .TaskList-itemResultDefinition--string {
   display: block;
   -webkit-line-clamp: 3;
-  max-height: 7.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
 }

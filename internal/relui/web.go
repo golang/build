@@ -366,12 +366,13 @@ func (s *Server) stopWorkflowHandler(w http.ResponseWriter, r *http.Request, par
 // The UI implementation uses Kind to determine which result type to
 // render.
 type resultDetail struct {
-	Artifact  artifact
-	Artifacts []artifact
-	Outputs   map[string]*resultDetail
-	JSON      map[string]interface{}
-	String    string
-	Unknown   interface{}
+	Artifact artifact
+	Outputs  map[string]*resultDetail
+	JSON     map[string]interface{}
+	String   string
+	Number   float64
+	Slice    []*resultDetail
+	Unknown  interface{}
 }
 
 func (r *resultDetail) Kind() string {

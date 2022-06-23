@@ -820,15 +820,23 @@ func TestResultDetail(t *testing.T) {
 			wantKind: "Outputs",
 		},
 		{
-			desc:     "nested json slice",
-			input:    `{"SomeOutput": [{"Filename": "go.exe"}]}`,
-			want:     &resultDetail{Outputs: map[string]*resultDetail{"SomeOutput": {Artifacts: []artifact{{Filename: "go.exe"}}}}},
+			desc:  "nested json slice",
+			input: `{"SomeOutput": [{"Filename": "go.exe"}]}`,
+			want: &resultDetail{Outputs: map[string]*resultDetail{"SomeOutput": {Slice: []*resultDetail{{
+				Artifact: artifact{Filename: "go.exe"},
+			}}}}},
 			wantKind: "Outputs",
 		},
 		{
-			desc:     "nested json output",
-			input:    `{"SomeOutput": {"OtherOutput": "go.exe"}}`,
-			want:     &resultDetail{Outputs: map[string]*resultDetail{"SomeOutput": {Outputs: map[string]*resultDetail{"OtherOutput": {String: "go.exe"}}}}},
+			desc:  "nested json output",
+			input: `{"SomeOutput": {"OtherOutput": "go.exe", "Next": 123, "Thing": {"foo": "bar"}, "Sauces": ["cranberry", "pizza"]}}`,
+			want: &resultDetail{Outputs: map[string]*resultDetail{
+				"SomeOutput": {Outputs: map[string]*resultDetail{
+					"OtherOutput": {String: "go.exe"},
+					"Next":        {Number: 123},
+					"Thing":       {Outputs: map[string]*resultDetail{"foo": {String: "bar"}}},
+					"Sauces":      {Slice: []*resultDetail{{String: "cranberry"}, {String: "pizza"}}},
+				}}}},
 			wantKind: "Outputs",
 		},
 		{

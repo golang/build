@@ -135,13 +135,6 @@
           {{.Artifact.StagingPath}}
       </dd>
     </dl>
-  {{else if eq .Kind "Artifacts"}}
-    <dt class="TaskList-itemResultTerm">Filenames</dt>
-    <dd class="TaskList-itemResultDefinition">
-        {{range $artifact := .Artifacts}}
-            {{$artifact.Filename}} <span class="TaskList-itemResultArtifactSize">{{prettySize $artifact.Size}}</span>
-        {{end}}
-    </dd>
   {{else if eq .Kind "Outputs"}}
     {{range $key, $value := .Outputs}}
       <dt class="TaskList-itemResultTerm">
@@ -167,5 +160,33 @@
     <dd class="TaskList-itemResultDefinition TaskList-itemResultDefinition--string">
       {{.String}}
     </dd>
+  {{else if eq .Kind "Slice"}}
+    {{with .Slice}}
+      {{if eq (index . 1).Kind "Artifact"}}
+        <dt class="TaskList-itemResultTerm">Filenames</dt>
+        <dd class="TaskList-itemResultDefinition">
+          {{range $detail := .}}
+            {{with $detail.Artifact}}
+            {{.Filename}} <span class="TaskList-itemResultArtifactSize">{{prettySize .Size}}</span>
+            {{end}}
+          {{end}}
+        </dd>
+      {{else}}
+        {{range $value := .}}
+          <dt class="TaskList-itemResultTerm">
+            {{$value.Kind}}
+          </dt>
+          <dd class="TaskList-itemResultDefinition TaskList-itemResultDefinition--string">
+            {{template "itemResult" $value}}
+          </dd>
+        {{end}}
+      {{end}}
+    {{end}}
+  {{else if eq .Kind "Number"}}
+    {{.Number}}
+  {{else}}
+    {{with .}}
+      {{.Unknown}}
+    {{end}}
   {{end}}
 {{end}}
