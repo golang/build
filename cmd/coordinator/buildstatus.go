@@ -1227,6 +1227,7 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 	env := append(st.conf.Env(),
 		"BENCH_BASELINE_GOROOT="+baselineGoroot,
 		"BENCH_BRANCH="+st.RevBranch,
+		"BENCH_REPOSITORY=go",
 		"GOROOT="+goroot,
 		"GOPATH="+gopath,
 		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
