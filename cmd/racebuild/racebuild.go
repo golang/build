@@ -237,9 +237,12 @@ cp llvm-project/compiler-rt/lib/tsan/go/race_netbsd_amd64.syso go/src/runtime/ra
 @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "[System.net.ServicePointManager]::SecurityProtocol = 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\chocolatey\bin"
 choco install git -y
 if %errorlevel% neq 0 exit /b %errorlevel%
-choco install mingw --version 5.3.0 -y
-if %errorlevel% neq 0 exit /b %errorlevel%
 call refreshenv
+echo adding back in compiler path
+set PATH=C:\go\bin;%PATH%;C:\godep\gcc64\bin
+rem make sure we have a working copy of gcc
+gcc --version
+if %errorlevel% neq 0 exit /b %errorlevel%
 git clone https://go.googlesource.com/go
 if %errorlevel% neq 0 exit /b %errorlevel%
 cd go
