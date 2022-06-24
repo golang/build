@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"regexp"
 	"sort"
@@ -132,7 +133,7 @@ from(bucket: "perf")
 		return nil, fmt.Errorf("error performing query: %W", err)
 	}
 
-	b, err := groupBenchmarkResults(res)
+	b, err := groupBenchmarkResults(res, false)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +241,7 @@ from(bucket: "perf")
 		return nil, fmt.Errorf("error performing query: %W", err)
 	}
 
-	b, err := groupBenchmarkResults(res)
+	b, err := groupBenchmarkResults(res, false)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +252,7 @@ from(bucket: "perf")
 }
 
 // fetchAllBenchmarks queries Influx for all benchmark results.
-func fetchAllBenchmarks(ctx context.Context, qc api.QueryAPI, start, end time.Time) ([]*BenchmarkJSON, error) {
+func fetchAllBenchmarks(ctx context.Context, qc api.QueryAPI, regressions bool, start, end time.Time) ([]*BenchmarkJSON, error) {
 	query := fmt.Sprintf(`
 from(bucket: "perf")
   |> range(start: %s, stop: %s)
@@ -268,11 +269,20 @@ from(bucket: "perf")
 		return nil, fmt.Errorf("error performing query: %W", err)
 	}
 
-	return groupBenchmarkResults(res)
+	return groupBenchmarkResults(res, regressions)
+}
+
+type regression struct {
+	change         float64 // endpoint regression, if any
+	deltaIndex     int     // index at which largest increase of regression occurs
+	deltaScore     float64 // score of that change (in 95%ile boxes)
+	delta          float64 // size of that changes
+	unit           string
+	ignoredBecause string
 }
 
 // groupBenchmarkResults groups all benchmark results from the passed query.
-func groupBenchmarkResults(res *api.QueryTableResult) ([]*BenchmarkJSON, error) {
+func groupBenchmarkResults(res *api.QueryTableResult, byRegression bool) ([]*BenchmarkJSON, error) {
 	type key struct {
 		name string
 		unit string
@@ -314,20 +324,82 @@ func groupBenchmarkResults(res *api.QueryTableResult) ([]*BenchmarkJSON, error) 
 	for _, b := range m {
 		s = append(s, b)
 	}
-	// Keep benchmarks with the same name grouped together, which is
-	// assumed by the JS.
-	sort.Slice(s, func(i, j int) bool {
-		if s[i].Name == s[j].Name {
-			return s[i].Unit < s[j].Unit
-		}
-		return s[i].Name < s[j].Name
-	})
 
+	if !byRegression {
+		for _, b := range s {
+			sort.Slice(b.Values, func(i, j int) bool {
+				return b.Values[i].CommitDate.Before(b.Values[j].CommitDate)
+			})
+		}
+
+		// Keep benchmarks with the same name grouped together, which is
+		// assumed by the JS.
+		sort.Slice(s, func(i, j int) bool {
+			if s[i].Name == s[j].Name {
+				return s[i].Unit < s[j].Unit
+			}
+			return s[i].Name < s[j].Name
+		})
+		return s, nil
+	}
+
+	r := make(map[string]regression) // worst regression for each benchmark name, across all units for that benchmark
+
+	// Compute per-benchmark estimates of point where the most interesting regression happened.
+	// TODO This information might be worth adding to the graphs in general, once we do that for the regressions view.
 	for _, b := range s {
 		sort.Slice(b.Values, func(i, j int) bool {
 			return b.Values[i].CommitDate.Before(b.Values[j].CommitDate)
 		})
+		if worst := worstRegression(b); worst.deltaScore > 1 && worst.delta > r[b.Name].delta {
+			r[b.Name] = worst
+		} else if _, ok := r[b.Name]; !ok { // don't overwrite success for one unit w/ failure explanation for another
+			r[b.Name] = worst // This is for regression ordering debugging and might end up removed.
+		}
 	}
+
+	// Sort benchmarks with detectable regressions first, ordered by
+	// size of regression at end of sample.  Also sort the remaining
+	// benchmarks into end-of-sample regression order.  Keep benchmarks
+	// with the same name grouped together, which is assumed by the JS.
+	sort.Slice(s, func(i, j int) bool {
+		if s[i].Name == s[j].Name {
+			return s[i].Unit < s[j].Unit
+		}
+		ri, iok := r[s[i].Name]
+		rj, jok := r[s[j].Name]
+		if iok != jok {
+			// a name with regression information attached comes first.
+			return iok
+		}
+		// regressions w/ a delta index come first
+		if (ri.deltaIndex < 0) != (rj.deltaIndex < 0) {
+			return rj.deltaIndex < 0
+		}
+		if ri.change != rj.change {
+			// put larger regression first.
+			return ri.change > rj.change
+		}
+		return s[i].Name < s[j].Name
+	})
+
+	detected := 0
+	// This injects regression information into the titles.
+	// TODO(drchase, mpratt) better if this can be done in the graph or surrounding text.
+	for i, b := range s {
+		if change, ok := r[b.Name]; ok {
+			if change.deltaIndex >= 0 {
+				detected++
+				v := b.Values[change.deltaIndex]
+				commit, date := v.CommitHash[:7], v.CommitDate.Format(time.RFC3339)
+				s[i].Name = fmt.Sprintf("%s %s %3.1f%% regression, %3.1f%%point change at %s on %s (score %3.1f)", b.Name, change.unit, 100*change.change, 100*change.delta, commit, date, change.deltaScore)
+			} else {
+				s[i].Name = fmt.Sprintf("%s %s not ranked because %s", b.Name, change.unit, change.ignoredBecause)
+			}
+		}
+	}
+
+	log.Printf("Detected %d regressions out of %d benchmarks", detected, len(s))
 
 	return s, nil
 }
@@ -345,6 +417,108 @@ const (
 	defaultDays = 30
 	maxDays     = 366
 )
+
+// changeScore returns an indicator of the change and direction.
+// This is a heuristic measure of the lack of overlap between
+// two confidence intervals; minimum lack of overlap (i.e., same
+// confidence intervals) is zero.  Exact non-overlap, meaning
+// the high end of one interval is equal to the low end of the
+// other, is one.  A gap of size G between the two intervals
+// yields a score of 1 + G/M where M is the size of the larger
+// interval (this suppresses changescores adjacent to noise).
+// A partial overlap of size G yields a score of
+// 1 - G/M.
+//
+// Empty confidence intervals are problematic and produces infinities
+// or NaNs.
+func changeScore(l1, c1, h1, l2, c2, h2 float64) float64 {
+	sign := 1.0
+	if c1 > c2 {
+		l1, c1, h1, l2, c2, h2 = l2, c2, h2, l1, c1, h1
+		sign = -sign
+	}
+	r := math.Max(h1-l1, h2-l2)
+	// we know l1 < c1 < h1, c1 < c2, l2 < c2 < h2
+	// therefore l1 < c1 < c2 < h2
+	if h1 > l2 { // overlap
+		overlapHigh, overlapLow := h1, l2
+		if overlapHigh > h2 {
+			overlapHigh = h2
+		}
+		if overlapLow < l1 {
+			overlapLow = l1
+		}
+		return sign * (1 - (overlapHigh-overlapLow)/r) // perfect overlap == 0
+	} else { // no overlap
+		return sign * (1 + (l2-h1)/r) // just touching, l2 == h1, magnitude == 1, and then increases w/ the gap between intervals.
+	}
+}
+
+func worstRegression(b *BenchmarkJSON) regression {
+	values := b.Values
+	l := len(values)
+	ninf := math.Inf(-1)
+
+	sign := 1.0
+	// TODO unit "good direction" information must be available from somewhere else, but for now, do this.
+	switch b.Unit {
+	case "B/s", "ops/s":
+		sign = -1
+	}
+
+	min := sign * values[l-1].Center
+	worst := regression{deltaScore: ninf, deltaIndex: -1, change: min, unit: b.Unit}
+
+	if len(values) < 4 {
+		worst.ignoredBecause = "too few values"
+		return worst
+	}
+
+	scores := []float64{}
+
+	// First classify benchmarks that are too darn noisy, and get a feel for noisiness.
+	for i := l - 1; i > 0; i-- {
+		v1, v0 := values[i-1], values[i]
+		scores = append(scores, math.Abs(changeScore(v1.Low, v1.Center, v1.High, v0.Low, v0.Center, v0.High)))
+	}
+
+	sort.Float64s(scores)
+	median := (scores[len(scores)/2] + scores[(len(scores)-1)/2]) / 2
+
+	// MAGIC NUMBER "1".  Removing this added 25% to the "detected regressions", but they were all junk.
+	if median > 1 {
+		worst.ignoredBecause = "median change score > 1"
+		return worst
+	}
+
+	if math.IsNaN(median) {
+		worst.ignoredBecause = "median is NaN"
+		return worst
+	}
+
+	// MAGIC NUMBER "1.2".  Smaller than that tends to admit junky benchmarks.
+	magicScoreThreshold := math.Max(2*median, 1.2)
+
+	// Scan backwards looking for most recent outlier regression
+	for i := l - 1; i > 0; i-- {
+		v1, v0 := values[i-1], values[i]
+		score := sign * changeScore(v1.Low, v1.Center, v1.High, v0.Low, v0.Center, v0.High)
+
+		if score > magicScoreThreshold && sign*v1.Center < min && score > worst.deltaScore {
+			worst.deltaIndex = i
+			worst.deltaScore = score
+			worst.delta = sign * (v0.Center - v1.Center)
+		}
+
+		min = math.Min(sign*v0.Center, min)
+	}
+
+	if worst.deltaIndex == -1 {
+		worst.ignoredBecause = "didn't detect outlier regression"
+	}
+
+	return worst
+}
 
 // search handles /dashboard/data.json.
 //
@@ -386,7 +560,7 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	start := end.Add(-24*time.Hour*time.Duration(days))
+	start := end.Add(-24 * time.Hour * time.Duration(days))
 
 	methStart := time.Now()
 	defer func() {
@@ -408,7 +582,9 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 	if benchmark == "" {
 		benchmarks, err = fetchDefaultBenchmarks(ctx, qc, start, end)
 	} else if benchmark == "all" {
-		benchmarks, err = fetchAllBenchmarks(ctx, qc, start, end)
+		benchmarks, err = fetchAllBenchmarks(ctx, qc, false, start, end)
+	} else if benchmark == "regressions" {
+		benchmarks, err = fetchAllBenchmarks(ctx, qc, true, start, end)
 	} else {
 		benchmarks, err = fetchNamedBenchmark(ctx, qc, start, end, benchmark)
 	}
