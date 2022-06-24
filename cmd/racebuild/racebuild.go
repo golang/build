@@ -31,10 +31,12 @@ import (
 )
 
 var (
-	flagGoroot    = flag.String("goroot", "", "path to Go repository to update (required)")
-	flagRev       = flag.String("rev", "", "llvm-project git revision from https://github.com/llvm/llvm-project (required)")
-	flagGoRev     = flag.String("gorev", "HEAD", "Go repository revision to use; HEAD is relative to --goroot")
-	flagPlatforms = flag.String("platforms", "all", `comma-separated platforms (such as "linux/amd64") to rebuild, or "all"`)
+	flagGoroot     = flag.String("goroot", "", "path to Go repository to update (required)")
+	flagRev        = flag.String("rev", "", "llvm-project git revision from https://github.com/llvm/llvm-project (required)")
+	flagCherryPick = flag.String("cherrypick", "", "go.googlesource.com CL reference to cherry-pick on top of Go repo (takes form 'refs/changes/NNN/<CL number>/<patchset number>') (optional)")
+	flagCheckout   = flag.String("checkout", "", "go.googlesource.com CL reference to check out on top of Go repo (takes form 'refs/changes/NNN/<CL number>/<patchset number>') (optional)")
+	flagGoRev      = flag.String("gorev", "HEAD", "Go repository revision to use; HEAD is relative to --goroot")
+	flagPlatforms  = flag.String("platforms", "all", `comma-separated platforms (such as "linux/amd64") to rebuild, or "all"`)
 )
 
 // goRev is the resolved commit ID of flagGoRev.
@@ -51,6 +53,10 @@ set -e
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
+if [ "$GOGITOP" != "" ]; then
+  git fetch https://go.googlesource.com/go "$GOSRCREF"
+  git $GOGITOP FETCH_HEAD
+fi
 popd
 git clone https://github.com/llvm/llvm-project
 (cd llvm-project && git checkout $REV)
@@ -68,6 +74,10 @@ set -e
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
+if [ "$GOGITOP" != "" ]; then
+  git fetch https://go.googlesource.com/go "$GOSRCREF"
+  git $GOGITOP FETCH_HEAD
+fi
 popd
 git clone https://github.com/llvm/llvm-project
 (cd llvm-project && git checkout $REV)
@@ -86,6 +96,10 @@ set -e
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
+if [ "$GOGITOP" != "" ]; then
+  git fetch https://go.googlesource.com/go "$GOSRCREF"
+  git $GOGITOP FETCH_HEAD
+fi
 popd
 git clone https://github.com/llvm/llvm-project
 (cd llvm-project && git checkout $REV)
@@ -121,6 +135,10 @@ set -e
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
+if [ "$GOGITOP" != "" ]; then
+  git fetch https://go.googlesource.com/go "$GOSRCREF"
+  git $GOGITOP FETCH_HEAD
+fi
 popd
 git clone https://github.com/llvm/llvm-project
 (cd llvm-project && git checkout $REV)
@@ -141,6 +159,10 @@ apt-get install -y git g++
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
+if [ "$GOGITOP" != "" ]; then
+  git fetch https://go.googlesource.com/go "$GOSRCREF"
+  git $GOGITOP FETCH_HEAD
+fi
 popd
 git clone https://github.com/llvm/llvm-project
 (cd llvm-project && git checkout $REV)
@@ -180,6 +202,10 @@ apt-get install -y git g++
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
+if [ "$GOGITOP" != "" ]; then
+  git fetch https://go.googlesource.com/go "$GOSRCREF"
+  git $GOGITOP FETCH_HEAD
+fi
 popd
 workdir=$(pwd)
 pushd /tmp
@@ -203,6 +229,10 @@ apt-get install -y git g++
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
+if [ "$GOGITOP" != "" ]; then
+  git fetch https://go.googlesource.com/go "$GOSRCREF"
+  git $GOGITOP FETCH_HEAD
+fi
 popd
 git clone https://github.com/llvm/llvm-project
 (cd llvm-project && git checkout $REV)
@@ -220,6 +250,10 @@ set -e
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
+if [ "$GOGITOP" != "" ]; then
+  git fetch https://go.googlesource.com/go "$GOSRCREF"
+  git $GOGITOP FETCH_HEAD
+fi
 popd
 git clone https://github.com/llvm/llvm-project
 (cd llvm-project && git checkout $REV)
@@ -248,6 +282,12 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 cd go
 git checkout %GOREV%
 if %errorlevel% neq 0 exit /b %errorlevel%
+if "%$GOGITOP%"=="" goto nogogitop
+git fetch https://go.googlesource.com/go %GOSRCREF%
+if %errorlevel% neq 0 exit /b %errorlevel%
+git %GOGITOP% FETCH_HEAD
+if %errorlevel% neq 0 exit /b %errorlevel%
+:nogogitop
 cd ..
 git clone https://github.com/llvm/llvm-project
 if %errorlevel% neq 0 exit /b %errorlevel%
@@ -277,6 +317,10 @@ yum install -y gcc-c++ git golang-bin
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
+if [ "$GOGITOP" != "" ]; then
+  git fetch https://go.googlesource.com/go "$GOSRCREF"
+  git $GOGITOP FETCH_HEAD
+fi
 popd
 git clone https://github.com/llvm/llvm-project
 (cd llvm-project && git checkout $REV)
@@ -336,6 +380,9 @@ func main() {
 	if *flagRev == "" || *flagGoroot == "" || *flagGoRev == "" {
 		flag.PrintDefaults()
 		os.Exit(1)
+	}
+	if *flagCherryPick != "" && *flagCheckout != "" {
+		log.Fatalf("select at most one of -cherrypick and -checkout")
 	}
 	parsePlatformsFlag()
 
@@ -403,6 +450,15 @@ func (p *Platform) Basename() string {
 	return fmt.Sprintf("race_%v_%s.syso", p.OS, p.Arch)
 }
 
+func setupForGoRepoGitOp() (string, string) {
+	if *flagCherryPick != "" {
+		return "cherry-pick -n", *flagCherryPick
+	} else if *flagCheckout != "" {
+		return "checkout", *flagCheckout
+	}
+	return "", ""
+}
+
 func (p *Platform) Build(ctx context.Context) error {
 	// Create gomote instance (or reuse an existing instance for debugging).
 	var lastErr error
@@ -453,7 +509,10 @@ func (p *Platform) Build(ctx context.Context) error {
 	if _, err := p.Gomote(ctx, "put", "-mode=0700", p.Inst, script.Name(), targetName); err != nil {
 		return err
 	}
-	if _, err := p.Gomote(ctx, "run", "-e=REV="+*flagRev, "-e=GOREV="+goRev, p.Inst, targetName); err != nil {
+	gogitop, gosrcref := setupForGoRepoGitOp()
+	if _, err := p.Gomote(ctx, "run", "-e=REV="+*flagRev, "-e=GOREV="+goRev,
+		"-e=GOGITOP="+gogitop, "-e=GOSRCREF="+gosrcref,
+		p.Inst, targetName); err != nil {
 		return err
 	}
 
