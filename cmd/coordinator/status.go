@@ -778,23 +778,27 @@ type statusData struct {
 	HealthCheckers    []*healthChecker
 }
 
-var statusTmpl = template.Must(template.New("status").Parse(`
-<!DOCTYPE html>
-<html>
-<head><link rel="stylesheet" href="/style.css"/><title>Go Farmer</title></head>
-<body>
-<header>
+// baseTmpl defines common templates for reuse in other coordinator templates.
+var baseTmpl = template.Must(template.New("").Parse(`{{define "build-header"}}<header>
 	<h1>
 		<a href="/">Go Build Coordinator</a>
 	</h1>
 	<nav>
 		<ul>
-			<li><a href="https://build.golang.org/">Dashboard</a></li>
+			<li><a href="https://build.golang.org/">Build Dashboard</a></li>
+			<li><a href="https://perf.golang.org/dashboard">Performance Dashboard</a></li>
 			<li><a href="/builders">Builders</a></li>
 		</ul>
 	</nav>
 	<div class="clear"></div>
-</header>
+</header>{{end}}`))
+
+var statusTmpl = template.Must(baseTmpl.New("status").Parse(`
+<!DOCTYPE html>
+<html>
+<head><link rel="stylesheet" href="/style.css"/><title>Go Farmer</title></head>
+<body>
+{{template "build-header"}}
 
 <h2>Running</h2>
 <p>{{printf "%d" .Total}} total builds; {{printf "%d" .ActiveBuilds}} active ({{.ActiveReverse}} reverse). Uptime {{printf "%s" .Uptime}}. Version {{.Version}}.

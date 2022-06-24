@@ -44,7 +44,7 @@ func handleBuilders(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-var buildersTmpl = template.Must(template.New("builders").Funcs(template.FuncMap{
+var buildersTmpl = template.Must(baseTmpl.New("builders").Funcs(template.FuncMap{
 	"builderOwners": func(bc *dashboard.BuildConfig) template.HTML {
 		owners := bc.HostConfig().Owners
 		if len(owners) == 0 {
@@ -76,19 +76,7 @@ var buildersTmpl = template.Must(template.New("builders").Funcs(template.FuncMap
 <html>
 <head><link rel="stylesheet" href="/style.css"/><title>Go Farmer</title></head>
 <body>
-<header>
-	<h1>
-		<a href="/">Go Build Coordinator</a>
-	</h1>
-	<nav>
-		<ul>
-			<li><a href="https://build.golang.org/">Build Dashboard</a></li>
-			<li><a href="https://perf.golang.org/dashboard">Performance Dashboard</a></li>
-			<li><a href="/builders">Builders</a></li>
-		</ul>
-	</nav>
-	<div class="clear"></div>
-</header>
+{{template "build-header"}}
 
 <h2 id='builders'>Defined Builders</h2>
 
