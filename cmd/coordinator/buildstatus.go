@@ -1164,43 +1164,10 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 	repoPath := importPathOfRepo(st.SubName)
 
 	// Install baseline toolchain in addition to the experiment toolchain.
-	sp := st.CreateSpan("install_baseline")
-	baseline, err := st.baselineCommit()
-	if err != nil {
-		return nil, sp.Done(fmt.Errorf("error finding baseline commit: %w", err))
+	baselineCommit, remoteErr, err := st.installBaselineToolchain(goroot, baselineDir)
+	if remoteErr != nil || err != nil {
+		return remoteErr, err
 	}
-	fmt.Fprintf(st, "Baseline toolchain %v\n", baseline)
-	if st.useSnapshotFor(baseline) {
-		if err := st.writeGoSnapshotTo(baseline, baselineDir); err != nil {
-			return nil, sp.Done(fmt.Errorf("error writing baseline snapshot: %w", err))
-		}
-	} else {
-		if err := st.writeGoSourceTo(st.bc, baseline, baselineDir); err != nil {
-			return nil, sp.Done(fmt.Errorf("error writing baseline source: %w", err))
-		}
-
-		br := st.BuilderRev
-		br.Rev = baseline
-
-		builder := buildgo.GoBuilder{
-			Logger:     st,
-			BuilderRev: br,
-			Conf:       st.conf,
-			Goroot:     baselineDir,
-			// Use the primary GOROOT as GOROOT_BOOTSTRAP. The
-			// typical bootstrap toolchain may not be available if
-			// the primary toolchain was installed from a snapshot.
-			GorootBootstrap: goroot,
-		}
-		remoteErr, err = builder.RunMake(st.ctx, st.bc, st)
-		if err != nil {
-			return nil, sp.Done(err)
-		}
-		if remoteErr != nil {
-			return sp.Done(remoteErr), nil
-		}
-	}
-	sp.Done(nil)
 
 	st.LogEventTime("fetching_subrepo", st.SubName)
 
@@ -1221,7 +1188,7 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 	}
 
 	// Run golang.org/x/benchmarks/cmd/bench to perform benchmarks.
-	sp = st.CreateSpan("running_benchmark_tests", st.SubName)
+	sp := st.CreateSpan("running_benchmark_tests", st.SubName)
 	defer func() { sp.Done(err) }()
 
 	env := append(st.conf.Env(),
@@ -1246,13 +1213,13 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 	}
 
 	// Upload benchmark results on success.
-	if err := st.uploadBenchResults(baseline); err != nil {
+	if err := st.uploadBenchResults(baselineCommit); err != nil {
 		return nil, err
 	}
 	return nil, nil
 }
 
-func (st *buildStatus) uploadBenchResults(baseline string) (err error) {
+func (st *buildStatus) uploadBenchResults(baselineCommit string) (err error) {
 	sp := st.CreateSpan("upload_bench_results")
 	defer func() { sp.Done(err) }()
 
@@ -1273,7 +1240,7 @@ func (st *buildStatus) uploadBenchResults(baseline string) (err error) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "experiment-commit: %s\n", st.Rev)
 	fmt.Fprintf(&b, "experiment-commit-time: %s\n", st.RevCommitTime.In(time.UTC).Format(time.RFC3339Nano))
-	fmt.Fprintf(&b, "baseline-commit: %s\n", baseline)
+	fmt.Fprintf(&b, "baseline-commit: %s\n", baselineCommit)
 	fmt.Fprintf(&b, "benchmarks-commit: %s\n", st.SubRev)
 	fmt.Fprintf(&b, "post-submit: %t\n", st.trySet == nil)
 	if _, err := w.Write([]byte(b.String())); err != nil {
@@ -1293,6 +1260,50 @@ func (st *buildStatus) uploadBenchResults(baseline string) (err error) {
 	}
 	st.LogEventTime("bench_upload", status.UploadID)
 	return nil
+}
+
+func (st *buildStatus) installBaselineToolchain(goroot, baselineDir string) (baselineCommit string, remoteErr, err error) {
+	sp := st.CreateSpan("install_baseline")
+	defer func() { sp.Done(err) }()
+
+	commit, err := st.baselineCommit()
+	if err != nil {
+		return "", nil, fmt.Errorf("error finding baseline commit: %w", err)
+	}
+	fmt.Fprintf(st, "Baseline toolchain %v\n", commit)
+
+	if st.useSnapshotFor(commit) {
+		if err := st.writeGoSnapshotTo(commit, baselineDir); err != nil {
+			return "", nil, fmt.Errorf("error writing baseline snapshot: %w", err)
+		}
+		return commit, nil, nil
+	}
+
+	if err := st.writeGoSourceTo(st.bc, commit, baselineDir); err != nil {
+		return "", nil, fmt.Errorf("error writing baseline source: %w", err)
+	}
+
+	br := st.BuilderRev
+	br.Rev = commit
+
+	builder := buildgo.GoBuilder{
+		Logger:     st,
+		BuilderRev: br,
+		Conf:       st.conf,
+		Goroot:     baselineDir,
+		// Use the primary GOROOT as GOROOT_BOOTSTRAP. The
+		// typical bootstrap toolchain may not be available if
+		// the primary toolchain was installed from a snapshot.
+		GorootBootstrap: goroot,
+	}
+	remoteErr, err = builder.RunMake(st.ctx, st.bc, st)
+	if err != nil {
+		return "", nil, err
+	}
+	if remoteErr != nil {
+		return "", remoteErr, nil
+	}
+	return commit, nil, nil
 }
 
 var errBuildletsGone = errors.New("runTests: dist test failed: all buildlets had network errors or timeouts, yet tests remain")
