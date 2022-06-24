@@ -1320,7 +1320,7 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 	}
 
 	// Run golang.org/x/benchmarks/cmd/bench to perform benchmarks.
-	sp = st.CreateSpan("running_subrepo_tests", st.SubName)
+	sp = st.CreateSpan("running_benchmark_tests", st.SubName)
 	defer func() { sp.Done(err) }()
 
 	env := append(st.conf.Env(),
