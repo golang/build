@@ -127,9 +127,11 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		},
 	}
 	wd := workflow.New()
-	if err := addSingleReleaseWorkflow(buildTasks, milestoneTasks, versionTasks, wd, "go1.18", kind); err != nil {
+	v, err := addSingleReleaseWorkflow(buildTasks, milestoneTasks, versionTasks, wd, "go1.18", kind)
+	if err != nil {
 		t.Fatal(err)
 	}
+	wd.Output("Published Go version", v)
 	w, err := workflow.Start(wd, map[string]interface{}{
 		"Targets to skip testing (or 'all') (optional)": []string(nil),
 	})

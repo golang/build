@@ -153,7 +153,7 @@ func main() {
 		RepoOwner: "golang",
 		RepoName:  "go",
 	}
-	relui.RegisterReleaseWorkflows(dh, buildTasks, milestoneTasks, versionTasks)
+	relui.RegisterReleaseWorkflows(dh, buildTasks, milestoneTasks, versionTasks, annMail, extCfg)
 
 	w := relui.NewWorker(dh, db, relui.NewPGListener(db))
 	go w.Run(ctx)
