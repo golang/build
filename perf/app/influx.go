@@ -326,7 +326,14 @@ comparisonLoop:
 				benchmarksCommit := residues["benchmarks-commit"]  // field
 				baselineCommit := cs.HashPairs[series].DenHash     // field
 				experimentCommit := cs.HashPairs[series].NumHash   // field
+				repository := residues["repository"]               // tag
 				branch := residues["branch"]                       // tag
+
+				// cmd/bench didn't set repository prior to
+				// CL 413915. Older runs are all against go.
+				if repository == "" {
+					repository = "go"
+				}
 
 				// Push to influx.
 				t, err := benchseries.ParseNormalizedDateString(series)
@@ -343,12 +350,13 @@ comparisonLoop:
 					"experiment-commit": experimentCommit,
 				}
 				tags := map[string]string{
-					"name":   benchmarkName,
-					"unit":   unit,
-					"cpu":    cpu,
-					"goarch": goarch,
-					"goos":   goos,
-					"branch": branch,
+					"name":       benchmarkName,
+					"unit":       unit,
+					"cpu":        cpu,
+					"goarch":     goarch,
+					"goos":       goos,
+					"repository": repository,
+					"branch":     branch,
 					// TODO(prattmic): Add pkg, which
 					// benchseries currently can't handle.
 				}
