@@ -155,8 +155,9 @@ func TestGetNewSegments(t *testing.T) {
 		// If empty, prefixSum calls are errors.
 		prefixSum string
 
-		want      []fileSeg
-		wantSplit bool
+		want          []fileSeg
+		wantSplit     bool
+		wantUnchanged bool
 	}
 	tests := []testCase{
 		{
@@ -226,22 +227,20 @@ func TestGetNewSegments(t *testing.T) {
 			},
 		},
 		{
-			name: "incremental_with_sleep",
+			name: "faulty_server_returns_no_new_data",
 			lastSegs: []fileSeg{
 				{seg: 1, size: 101, sha224: "abc", file: "/fake/0001.mutlog"},
 			},
 			serverSegs: [][]LogSegmentJSON{
 				[]LogSegmentJSON{
-					{Number: 1, Size: 101, SHA224: "abc"},
+					{Number: 1, Size: 101, SHA224: "abc"}, // Same as lastSegs, results in unchanged error.
 				},
 				[]LogSegmentJSON{
 					{Number: 1, Size: 101, SHA224: "abc"},
 					{Number: 2, Size: 102, SHA224: "def"},
 				},
 			},
-			want: []fileSeg{
-				{seg: 2, size: 102, sha224: "def", skip: 0, file: "/fake/0002.mutlog"},
-			},
+			wantUnchanged: true,
 		},
 		{
 			name: "split_error_diff_first_seg_same_size",
@@ -300,13 +299,13 @@ func TestGetNewSegments(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			serverSegCalls := 0
-			waits := 0
+			syncSegCalls := 0
 			ns := &netMutSource{
 				last: tt.lastSegs,
 				testHookGetServerSegments: func(_ context.Context, waitSizeNot int64) (segs []LogSegmentJSON, err error) {
 					serverSegCalls++
-					if serverSegCalls > 10 {
-						t.Fatalf("infinite loop calling getServerSegments? num wait calls = %v", waits)
+					if serverSegCalls%2 == 1 {
+						return nil, fetchError{PossiblyRetryable: true, Err: fmt.Errorf("fake error to simulate the internet saying 'not this time' every now and then")}
 					}
 					if len(tt.serverSegs) == 0 {
 						return nil, nil
@@ -318,6 +317,10 @@ func TestGetNewSegments(t *testing.T) {
 					return segs, nil
 				},
 				testHookSyncSeg: func(_ context.Context, seg LogSegmentJSON) (fileSeg, []byte, error) {
+					syncSegCalls++
+					if syncSegCalls%3 == 1 {
+						return fileSeg{}, nil, fetchError{PossiblyRetryable: true, Err: fmt.Errorf("fake error to simulate the internet saying 'not this time' every now and then")}
+					}
 					return fileSeg{
 						seg:    seg.Number,
 						size:   seg.Size,
@@ -334,12 +337,19 @@ func TestGetNewSegments(t *testing.T) {
 				},
 			}
 			got, err := ns.getNewSegments(context.Background())
-			if tt.wantSplit && err == ErrSplit {
+			if tt.wantSplit {
+				if err != ErrSplit {
+					t.Fatalf("wanted ErrSplit; got %+v, %v", got, err)
+				}
 				// Success.
 				return
 			}
-			if tt.wantSplit {
-				t.Fatalf("wanted ErrSplit; got %+v, %v", got, err)
+			if tt.wantUnchanged {
+				if err == nil || err.Error() != "maintner.netsource: maintnerd server returned unchanged log segments" {
+					t.Fatalf("wanted unchanged; got %+v, %v", got, err)
+				}
+				// Success.
+				return
 			}
 			if err != nil {
 				t.Fatal(err)

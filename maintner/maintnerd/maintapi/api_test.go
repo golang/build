@@ -430,7 +430,7 @@ var (
 
 func getGoData(tb testing.TB) *maintner.Corpus {
 	if testing.Short() {
-		tb.Skip("skipping maintner godata test in short mode")
+		tb.Skip("skipping test requiring large download in short mode")
 	}
 	corpusMu.Lock()
 	defer corpusMu.Unlock()

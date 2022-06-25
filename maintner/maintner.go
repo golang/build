@@ -244,7 +244,7 @@ var ErrSplit = errors.New("maintner: leader server's history split, process out 
 // the latest state from the MutationSource passed earlier to
 // Initialize. It does not return until there's either a new change or
 // the context expires.
-// If Update returns ErrSplit, the corpus can longer be updated.
+// If Update returns ErrSplit, the corpus can no longer be updated.
 //
 // Update must not be called concurrently with any other Update calls. If
 // reading the corpus concurrently while the corpus is updating, you must hold
