@@ -54,7 +54,6 @@ func (a *App) RegisterOnMux(mux *http.ServeMux) {
 	mux.HandleFunc("/", a.index)
 	mux.HandleFunc("/search", a.search)
 	mux.HandleFunc("/compare", a.compare)
-	mux.HandleFunc("/trend", a.trend)
 	mux.HandleFunc("/cron/syncinflux", a.syncInflux)
 	mux.HandleFunc("/healthz", a.healthz)
 	a.dashboardRegisterOnMux(mux)
