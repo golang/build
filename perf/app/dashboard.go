@@ -428,20 +428,6 @@ func groupBenchmarkResults(res *api.QueryTableResult, byRegression bool) ([]*Ben
 	return s, nil
 }
 
-type gzipResponseWriter struct {
-	http.ResponseWriter
-	w *gzip.Writer
-}
-
-func (w *gzipResponseWriter) Write(b []byte) (int, error) {
-	return w.w.Write(b)
-}
-
-const (
-	defaultDays = 30
-	maxDays     = 366
-)
-
 // changeScore returns an indicator of the change and direction.
 // This is a heuristic measure of the lack of overlap between
 // two confidence intervals; minimum lack of overlap (i.e., same
@@ -543,6 +529,20 @@ func worstRegression(b *BenchmarkJSON) regression {
 
 	return worst
 }
+
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	w *gzip.Writer
+}
+
+func (w *gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.w.Write(b)
+}
+
+const (
+	defaultDays = 30
+	maxDays     = 366
+)
 
 // search handles /dashboard/data.json.
 //
