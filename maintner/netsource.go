@@ -144,6 +144,7 @@ type netMutSource struct {
 	// Hooks for testing. If nil, unused:
 	testHookGetServerSegments func(context.Context, int64) ([]LogSegmentJSON, error)
 	testHookSyncSeg           func(context.Context, LogSegmentJSON) (fileSeg, []byte, error)
+	testHookOnSplit           func(sumCommon int64)
 	testHookFilePrefixSum224  func(file string, n int64) string
 }
 
@@ -400,6 +401,9 @@ func (ns *netMutSource) getNewSegments(ctx context.Context) ([]fileSeg, error) {
 	// and check there is in fact something new.
 	sumCommon := ns.sumCommonPrefixSize(fileSegs, ns.last)
 	if sumCommon != sumLast {
+		if fn := ns.testHookOnSplit; fn != nil {
+			fn(sumCommon)
+		}
 		// Our history diverged from the source.
 		return nil, ErrSplit
 	} else if sumCur := sumSegSize(fileSegs); sumCommon == sumCur {
@@ -464,6 +468,8 @@ func sumJSONSegSize(segs []LogSegmentJSON) (sum int64) {
 	return
 }
 
+// sumCommonPrefixSize computes the size of the longest common prefix of file segments a and b
+// that can be found quickly by checking for matching checksums between segment boundaries.
 func (ns *netMutSource) sumCommonPrefixSize(a, b []fileSeg) (sum int64) {
 	for len(a) > 0 && len(b) > 0 {
 		sa, sb := a[0], b[0]
@@ -588,38 +594,46 @@ func (ns *netMutSource) syncSeg(ctx context.Context, seg LogSegmentJSON) (_ file
 		}
 	}
 
-	// Otherwise, download.
-	req, err := http.NewRequestWithContext(ctx, "GET", segURL.String(), nil)
-	if err != nil {
-		return fileSeg{}, nil, err
-	}
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", len(have), seg.Size-1))
+	// Otherwise, download new data.
+	if int64(len(have)) < seg.Size {
+		req, err := http.NewRequestWithContext(ctx, "GET", segURL.String(), nil)
+		if err != nil {
+			return fileSeg{}, nil, err
+		}
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", len(have), seg.Size-1))
 
-	if !ns.quiet {
-		log.Printf("Downloading %d bytes of %s ...", seg.Size-int64(len(have)), segURL)
-	}
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fileSeg{}, nil, fetchError{Err: err, PossiblyRetryable: true}
-	}
-	defer res.Body.Close()
-	if res.StatusCode/100 == 5 {
-		// Consider a 5xx server response to possibly succeed later.
-		return fileSeg{}, nil, fetchError{Err: fmt.Errorf("%s: %s", segURL.String(), res.Status), PossiblyRetryable: true}
-	} else if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusPartialContent {
-		return fileSeg{}, nil, fmt.Errorf("%s: %s", segURL.String(), res.Status)
-	}
-	slurp, err := io.ReadAll(res.Body)
-	res.Body.Close()
-	if err != nil {
-		return fileSeg{}, nil, fetchError{Err: err, PossiblyRetryable: true}
+		if !ns.quiet {
+			log.Printf("Downloading %d bytes of %s ...", seg.Size-int64(len(have)), segURL)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return fileSeg{}, nil, fetchError{Err: err, PossiblyRetryable: true}
+		}
+		defer res.Body.Close()
+		if res.StatusCode/100 == 5 {
+			// Consider a 5xx server response to possibly succeed later.
+			return fileSeg{}, nil, fetchError{Err: fmt.Errorf("%s: %s", segURL.String(), res.Status), PossiblyRetryable: true}
+		} else if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusPartialContent {
+			return fileSeg{}, nil, fmt.Errorf("%s: %s", segURL.String(), res.Status)
+		}
+		newData, err = io.ReadAll(res.Body)
+		res.Body.Close()
+		if err != nil {
+			return fileSeg{}, nil, fetchError{Err: err, PossiblyRetryable: true}
+		}
 	}
 
+	// Commit to disk.
 	var newContents []byte
-	if int64(len(slurp)) == seg.Size {
-		newContents = slurp
-	} else if int64(len(have)+len(slurp)) == seg.Size {
-		newContents = append(have, slurp...)
+	if int64(len(newData)) == seg.Size {
+		newContents = newData
+	} else if int64(len(have)+len(newData)) == seg.Size {
+		newContents = append(have, newData...)
+	} else if int64(len(have)) > seg.Size {
+		// We have more data than the server; likely because it restarted with uncommitted
+		// transactions, and so we're headed towards an ErrSplit. Reuse the longest common
+		// prefix as long as its checksum matches.
+		newContents = have[:seg.Size]
 	}
 	got224 := fmt.Sprintf("%x", sha256.Sum224(newContents))
 	if got224 != seg.SHA224 {
@@ -655,7 +669,7 @@ func (ns *netMutSource) syncSeg(ctx context.Context, seg LogSegmentJSON) (_ file
 	if !ns.quiet {
 		log.Printf("wrote %v", finalName)
 	}
-	return fileSeg{seg: seg.Number, file: finalName, size: seg.Size, sha224: seg.SHA224}, slurp, nil
+	return fileSeg{seg: seg.Number, file: finalName, size: seg.Size, sha224: seg.SHA224}, newData, nil
 }
 
 type LogSegmentJSON struct {

@@ -157,6 +157,7 @@ func TestGetNewSegments(t *testing.T) {
 
 		want          []fileSeg
 		wantSplit     bool
+		wantSumCommon int64
 		wantUnchanged bool
 	}
 	tests := []testCase{
@@ -281,6 +282,20 @@ func TestGetNewSegments(t *testing.T) {
 			wantSplit: true,
 		},
 		{
+			name: "split_error_same_first_seg_but_shorter",
+			lastSegs: []fileSeg{
+				{seg: 1, size: 101, sha224: "abc", file: "/fake/0001.mutlog"},
+			},
+			serverSegs: [][]LogSegmentJSON{
+				[]LogSegmentJSON{
+					{Number: 1, Size: 50, SHA224: "def"},
+				},
+			},
+			prefixSum:     "def", // match
+			wantSplit:     true,
+			wantSumCommon: 50,
+		},
+		{
 			name: "split_error_diff_final_seg",
 			lastSegs: []fileSeg{
 				{seg: 1, size: 100, sha224: "abc", file: "/fake/0001.mutlog"},
@@ -292,8 +307,9 @@ func TestGetNewSegments(t *testing.T) {
 					{Number: 2, Size: 4, SHA224: "fff"},
 				},
 			},
-			prefixSum: "not_def",
-			wantSplit: true,
+			prefixSum:     "not_def",
+			wantSplit:     true,
+			wantSumCommon: 100,
 		},
 	}
 	for _, tt := range tests {
@@ -327,6 +343,11 @@ func TestGetNewSegments(t *testing.T) {
 						sha224: seg.SHA224,
 						file:   fmt.Sprintf("/fake/%04d.mutlog", seg.Number),
 					}, nil, nil
+				},
+				testHookOnSplit: func(sumCommon int64) {
+					if got, want := sumCommon, tt.wantSumCommon; got != want {
+						t.Errorf("sumCommon = %v; want %v", got, want)
+					}
 				},
 				testHookFilePrefixSum224: func(file string, n int64) string {
 					if tt.prefixSum != "" {
