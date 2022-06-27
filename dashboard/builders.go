@@ -2790,6 +2790,7 @@ func init() {
 		distTestAdjust: noTestDirAndNoReboot,
 		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see golang.org/issue/45216
 		SkipSnapshot:   true,
+		KnownIssues:    []int{53577},
 	})
 	addBuilder(BuildConfig{
 		Name:           "freebsd-arm-paulzhol",
