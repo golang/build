@@ -313,7 +313,7 @@ func (ss *SSHServer) legacyIncomingSSHPostAuth(s gssh.Session, rb *Buildlet) {
 	case "plan9":
 		fmt.Fprintf(s, "# Plan9 user/pass: glenda/glenda123\n")
 		if ipErr != nil {
-			fmt.Fprintf(s, "# Failed to get IP out of %q: %v\n", rb.Buildlet().IPPort(), err)
+			fmt.Fprintf(s, "# Failed to get IP out of %q: %v\n", rb.Buildlet().IPPort(), ipErr)
 			return
 		}
 		cmd = exec.Command("/usr/local/bin/drawterm",
@@ -457,7 +457,7 @@ func (ss *SSHServer) IncomingSSHPostAuth(s gssh.Session, rs *Session) {
 	case "plan9":
 		fmt.Fprintf(s, "# Plan9 user/pass: glenda/glenda123\n")
 		if ipErr != nil {
-			fmt.Fprintf(s, "# Failed to get IP out of %q: %v\n", bc.IPPort(), err)
+			fmt.Fprintf(s, "# Failed to get IP out of %q: %v\n", bc.IPPort(), ipErr)
 			return
 		}
 		cmd = exec.Command("/usr/local/bin/drawterm",
