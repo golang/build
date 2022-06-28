@@ -347,12 +347,14 @@ func push(args []string) error {
 		return fmt.Errorf("error listing buildlet's existing files: %s", statusFromError(err))
 	}
 	for _, entry := range resp.GetEntries() {
-		if strings.HasPrefix(entry, "go1.4/") {
+		de := buildlet.DirEntry{Line: entry}
+		en := de.Name()
+		if strings.HasPrefix(en, "go1.4/") {
 			haveGo14 = true
 			continue
 		}
-		if strings.HasPrefix(entry, "go/") {
-			remote[name[len("go/"):]] = buildlet.DirEntry{Line: entry}
+		if strings.HasPrefix(en, "go/") {
+			remote[en[len("go/"):]] = de
 		}
 	}
 	if !haveGo14 {
