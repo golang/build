@@ -2415,7 +2415,7 @@ func init() {
 			"GO_TEST_TIMEOUT_SCALE=2"},
 	})
 	addBuilder(BuildConfig{
-		Name:     "windows-amd64-race-newcc",
+		Name:     "windows-amd64-newcc-race",
 		HostType: "host-windows-amd64-2016-big-newcc",
 		Notes:    "Only runs -race tests (./race.bat)",
 		env: []string{
