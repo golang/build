@@ -243,7 +243,7 @@ func (gl *GCSLog) serveJSONLogsIndex(w http.ResponseWriter, r *http.Request) {
 		// Return a 304 if there's no activity in just under a minute.
 		// This keeps some occasional activity on the TCP connection
 		// so we (and any proxies) know it's alive, and can fit
-		// within reason read/write deadlines on either side.
+		// within reasonable read/write deadlines on either side.
 		ctx, cancel := context.WithTimeout(r.Context(), 55*time.Second)
 		defer cancel()
 		changed := gl.waitSizeNot(ctx, oldSize)

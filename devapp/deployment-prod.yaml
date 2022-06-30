@@ -48,7 +48,7 @@ metadata:
   namespace: prod
   name: devapp-internal-iap
   annotations:
-    beta.cloud.google.com/backend-config: '{"default": "build-ingress-iap-backend"}'
+    cloud.google.com/backend-config: '{"default": "build-ingress-iap-backend"}'
     cloud.google.com/neg: '{"ingress": false}'
     cloud.google.com/app-protocols: '{"https":"HTTP2"}'
 spec:
