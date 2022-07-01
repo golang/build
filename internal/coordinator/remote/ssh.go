@@ -532,7 +532,7 @@ func handleCertificateAuthFunc(sp *SessionPool, caKeySigner ssh.Signer) gssh.Pub
 			return false
 		}
 
-		_, err := sp.Session(sessionID)
+		ses, err := sp.Session(sessionID)
 		if err != nil {
 			log.Printf("HandleCertificateAuth: unable to retrieve session=%s: %s", sessionID, err)
 			return false
@@ -543,7 +543,13 @@ func handleCertificateAuthFunc(sp *SessionPool, caKeySigner ssh.Signer) gssh.Pub
 			log.Printf("certChecker.CheckCert(%s, user_certificate) = %s", wantPrincipal, err)
 			return false
 		}
-		return true
+		for _, principal := range cert.ValidPrincipals {
+			if principal == ses.OwnerID {
+				return true
+			}
+		}
+		log.Printf("HandleCertificateAuth: unable to verify ownerID in certificate principals")
+		return false
 	}
 }
 
