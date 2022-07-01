@@ -35,6 +35,7 @@ var (
 	flagRev        = flag.String("rev", "", "llvm-project git revision from https://github.com/llvm/llvm-project (required)")
 	flagCherryPick = flag.String("cherrypick", "", "go.googlesource.com CL reference to cherry-pick on top of Go repo (takes form 'refs/changes/NNN/<CL number>/<patchset number>') (optional)")
 	flagCheckout   = flag.String("checkout", "", "go.googlesource.com CL reference to check out on top of Go repo (takes form 'refs/changes/NNN/<CL number>/<patchset number>') (optional)")
+	flagCopyOnFail = flag.Bool("copyonfail", false, "Attempt to copy newly built race syso into Go repo even if script fails.")
 	flagGoRev      = flag.String("gorev", "HEAD", "Go repository revision to use; HEAD is relative to --goroot")
 	flagPlatforms  = flag.String("platforms", "all", `comma-separated platforms (such as "linux/amd64") to rebuild, or "all"`)
 )
@@ -509,11 +510,16 @@ func (p *Platform) Build(ctx context.Context) error {
 	if _, err := p.Gomote(ctx, "put", "-mode=0700", p.Inst, script.Name(), targetName); err != nil {
 		return err
 	}
+	var scriptRunErr error
 	gogitop, gosrcref := setupForGoRepoGitOp()
 	if _, err := p.Gomote(ctx, "run", "-e=REV="+*flagRev, "-e=GOREV="+goRev,
 		"-e=GOGITOP="+gogitop, "-e=GOSRCREF="+gosrcref,
 		p.Inst, targetName); err != nil {
-		return err
+		if !*flagCopyOnFail {
+			return err
+		}
+		log.Printf("%v: gomote script run failed, continuing...\n", p.Name())
+		scriptRunErr = err
 	}
 
 	// The script is supposed to leave updated runtime at that path. Copy it out.
@@ -526,6 +532,9 @@ func (p *Platform) Build(ctx context.Context) error {
 	// Untar the runtime and write it to goroot.
 	if err := p.WriteSyso(filepath.Join(*flagGoroot, "src", "runtime", "race", syso), targz); err != nil {
 		return fmt.Errorf("%v", err)
+	}
+	if scriptRunErr != nil {
+		return err
 	}
 
 	log.Printf("%v: build completed", p.Name())
