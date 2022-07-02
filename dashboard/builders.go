@@ -648,7 +648,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-linux-mips64le-rtrk": &HostConfig{
 		Notes:     "cavium,rhino_utm8 board hosted at RT-RK.com; quad-core cpu, 8GB of ram and 240GB ssd disks.",
-		Owners:    []*gophers.Person{gh("bogojevic"), gh("milanknezevic")}, // See https://github.com/golang/go/issues/31217#issuecomment-547004892.
+		Owners:    []*gophers.Person{gh("draganmladjenovic")}, // See https://github.com/golang/go/issues/53574#issuecomment-1169891255.
 		IsReverse: true,
 		ExpectNum: 1,
 		env: []string{
@@ -657,7 +657,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-linux-mips64-rtrk": &HostConfig{
 		Notes:     "cavium,rhino_utm8 board hosted at RT-RK.com; quad-core cpu, 8GB of ram and 240GB ssd disks.",
-		Owners:    []*gophers.Person{gh("bogojevic"), gh("milanknezevic")}, // See https://github.com/golang/go/issues/31217#issuecomment-547004892.
+		Owners:    []*gophers.Person{gh("draganmladjenovic")}, // See https://github.com/golang/go/issues/53574#issuecomment-1169891255.
 		IsReverse: true,
 		ExpectNum: 1,
 		env: []string{
