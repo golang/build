@@ -307,13 +307,14 @@ func main() {
 		log.Fatalf("Unknown mode: %q", *mode)
 	}
 
-	addHealthCheckers(context.Background(), sc)
+	mux := http.NewServeMux()
+
+	addHealthCheckers(context.Background(), mux, sc)
 
 	gr, err := metrics.GKEResource("coordinator-deployment")
 	if err != nil && metadata.OnGCE() {
 		log.Println("metrics.GKEResource:", err)
 	}
-	mux := http.NewServeMux()
 	if ms, err := metrics.NewService(gr, views); err != nil {
 		log.Println("failed to initialize metrics:", err)
 	} else {

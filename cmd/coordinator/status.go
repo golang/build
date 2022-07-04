@@ -132,13 +132,13 @@ var (
 	healthCheckerByID = map[string]*healthChecker{}
 )
 
-func addHealthChecker(hc *healthChecker) {
+func addHealthChecker(mux *http.ServeMux, hc *healthChecker) {
 	if _, dup := healthCheckerByID[hc.ID]; dup {
 		panic("duplicate health checker ID " + hc.ID)
 	}
 	healthCheckers = append(healthCheckers, hc)
 	healthCheckerByID[hc.ID] = hc
-	http.Handle("/status/"+hc.ID, healthCheckerHandler(hc))
+	mux.Handle("/status/"+hc.ID, healthCheckerHandler(hc))
 }
 
 // basePinErr is the status of the start-up time basepin disk creation
@@ -146,15 +146,15 @@ func addHealthChecker(hc *healthChecker) {
 // empty string means success, and non-empty means an error.
 var basePinErr atomic.Value
 
-func addHealthCheckers(ctx context.Context, sc *secret.Client) {
-	addHealthChecker(newMacHealthChecker())
-	addHealthChecker(newMacOSARM64Checker())
-	addHealthChecker(newOSUPPC64Checker())
-	addHealthChecker(newOSUPPC64leChecker())
-	addHealthChecker(newOSUPPC64lePower9Checker())
-	addHealthChecker(newBasepinChecker())
-	addHealthChecker(newGitMirrorChecker())
-	addHealthChecker(newGitHubAPIChecker(ctx, sc))
+func addHealthCheckers(ctx context.Context, mux *http.ServeMux, sc *secret.Client) {
+	addHealthChecker(mux, newMacHealthChecker())
+	addHealthChecker(mux, newMacOSARM64Checker())
+	addHealthChecker(mux, newOSUPPC64Checker())
+	addHealthChecker(mux, newOSUPPC64leChecker())
+	addHealthChecker(mux, newOSUPPC64lePower9Checker())
+	addHealthChecker(mux, newBasepinChecker())
+	addHealthChecker(mux, newGitMirrorChecker())
+	addHealthChecker(mux, newGitHubAPIChecker(ctx, sc))
 }
 
 func newBasepinChecker() *healthChecker {

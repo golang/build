@@ -12,6 +12,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"regexp"
 	"strings"
@@ -50,13 +51,13 @@ func TestFriendlyDuration(t *testing.T) {
 func TestHandleStatus_HealthFormatting(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	addHealthCheckers(ctx, nil)
-	addHealthChecker(&healthChecker{
+	addHealthCheckers(ctx, http.NewServeMux(), nil)
+	addHealthChecker(http.NewServeMux(), &healthChecker{
 		ID:    "allgood",
 		Title: "All Good Test",
 		Check: func(*checkWriter) {},
 	})
-	addHealthChecker(&healthChecker{
+	addHealthChecker(http.NewServeMux(), &healthChecker{
 		ID:    "errortest",
 		Title: "Error Test",
 		Check: func(cw *checkWriter) {
