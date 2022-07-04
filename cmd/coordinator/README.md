@@ -1,18 +1,17 @@
 # Coordinator
 
-## Running locally
-
 Building, running tests, running locally is supported on Linux and macOS only.
 
-Run
+## Running locally in dev mode
 
 ```sh
-go run golang.org/x/build/cmd/coordinator -mode=dev
+go run . -mode=dev -listen-http=localhost:8080
 ```
 
-to start a server on https://localhost:8119. Proceed past the TLS warning and
-you should get the homepage. Some features won't work when running locally,
-but you should be able to navigate between the homepage, the dashboard,
+Then visit http://localhost:8080/ in your browser.
+
+Some features won't work when running in dev mode,
+but you should be able to navigate between the homepage, the build dashboard,
 the builders page, and do limited local development and testing.
 
 To test builds locally, start a `host-linux-amd64-localdev` reverse buildlet,
@@ -22,14 +21,5 @@ which will run `linux-amd64` tests:
 go run golang.org/x/build/cmd/buildlet -halt=false -reverse-type=host-linux-amd64-localdev
 ```
 
-#### Render the "Trybot Status" page locally
-
-To view/modify the "Trybot Status" page locally, you can run the coordinator
-with the `-dev` tag.
-
-```sh
-go run -tags=dev golang.org/x/build/cmd/coordinator -mode=dev -env=dev
-```
-
-Then visit https://localhost:8119/try-dev in your browser.
+To view/modify the "Trybot Status" page locally, visit the /try-dev endpoint.
 You should see a trybot status page with some example data.

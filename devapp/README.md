@@ -3,11 +3,10 @@
 ## Local development
 
 ```sh
-$ go build
-$ ./devapp
+$ go run .
 ```
 
-Then visit http://localhost:6343
+Then visit http://localhost:6343 in your browser.
 
 ## Deployment
 
