@@ -88,17 +88,10 @@ func main() {
 	// The site header communicates to humans what will happen
 	// when workflows run.
 	// Keep these appropriately in sync.
-	var (
-		siteHeader = relui.SiteHeader{
-			Title:    *siteTitle,
-			CSSClass: *siteHeaderCSS,
-		}
-		extCfg = task.ExternalConfig{
-			// TODO(go.dev/issue/51150): When twitter client creation is factored out from task package, update code here.
-			TwitterAPI: twitterAPI,
-		}
-	)
-
+	siteHeader := relui.SiteHeader{
+		Title:    *siteTitle,
+		CSSClass: *siteHeaderCSS,
+	}
 	gerritClient := &task.RealGerritClient{
 		Client: gerrit.NewClient("https://go-review.googlesource.com", gerrit.BasicAuth("git-gobot.golang.org", *gerritAPIFlag)),
 	}
@@ -106,11 +99,17 @@ func main() {
 		Gerrit:    gerritClient,
 		GoProject: "go",
 	}
+	commTasks := task.CommunicationTasks{
+		AnnounceMailTasks: annMail,
+		TweetTasks: task.TweetTasks{
+			TwitterClient: task.NewTwitterClient(twitterAPI),
+		},
+	}
 	dh := relui.NewDefinitionHolder()
 	relui.RegisterMailDLCLDefinition(dh, versionTasks)
-	relui.RegisterCommunicationDefinitions(dh, annMail, extCfg)
-	relui.RegisterAnnounceMailOnlyDefinitions(dh, annMail)
-	relui.RegisterTweetOnlyDefinitions(dh, extCfg)
+	relui.RegisterCommunicationDefinitions(dh, commTasks)
+	relui.RegisterAnnounceMailOnlyDefinitions(dh, commTasks.AnnounceMailTasks)
+	relui.RegisterTweetOnlyDefinitions(dh, commTasks.TweetTasks)
 	userPassAuth := buildlet.UserPass{
 		Username: "user-relui",
 		Password: key(*masterKey, "user-relui"),
@@ -153,7 +152,7 @@ func main() {
 		RepoOwner: "golang",
 		RepoName:  "go",
 	}
-	relui.RegisterReleaseWorkflows(dh, buildTasks, milestoneTasks, versionTasks, annMail, extCfg)
+	relui.RegisterReleaseWorkflows(dh, buildTasks, milestoneTasks, versionTasks, commTasks)
 
 	w := relui.NewWorker(dh, db, relui.NewPGListener(db))
 	go w.Run(ctx)

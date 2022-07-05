@@ -108,7 +108,7 @@ For example:
 //
 // This is superseded by RegisterReleaseWorkflows and will be removed
 // after some time, when we confirm there's no need for separate workflows.
-func RegisterCommunicationDefinitions(h *DefinitionHolder, tasks task.AnnounceMailTasks, e task.ExternalConfig) {
+func RegisterCommunicationDefinitions(h *DefinitionHolder, tasks task.CommunicationTasks) {
 	version := workflow.Parameter{
 		Name: "Version",
 		Doc: `Version is the Go version that has been released.
@@ -136,7 +136,7 @@ The version string must use the same format as Go tags.`,
 		}, v1, v2, securityFixes, names)
 		announcementURL := wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail)
 		tweetURL := wd.Task("post-tweet", func(ctx *workflow.TaskContext, v1, v2, sec, ann string) (string, error) {
-			return task.TweetMinorRelease(ctx, task.ReleaseTweet{Version: v1, SecondaryVersion: v2, Security: sec, Announcement: ann}, e)
+			return tasks.TweetMinorRelease(ctx, task.ReleaseTweet{Version: v1, SecondaryVersion: v2, Security: sec, Announcement: ann})
 		}, v1, v2, securitySummary, announcementURL)
 
 		wd.Output("AnnouncementURL", announcementURL)
@@ -157,7 +157,7 @@ The version string must use the same format as Go tags.`,
 		}, v, names)
 		announcementURL := wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail)
 		tweetURL := wd.Task("post-tweet", func(ctx *workflow.TaskContext, v, ann string) (string, error) {
-			return task.TweetBetaRelease(ctx, task.ReleaseTweet{Version: v, Announcement: ann}, e)
+			return tasks.TweetBetaRelease(ctx, task.ReleaseTweet{Version: v, Announcement: ann})
 		}, v, announcementURL)
 
 		wd.Output("AnnouncementURL", announcementURL)
@@ -178,7 +178,7 @@ The version string must use the same format as Go tags.`,
 		}, v, names)
 		announcementURL := wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail)
 		tweetURL := wd.Task("post-tweet", func(ctx *workflow.TaskContext, v, ann string) (string, error) {
-			return task.TweetRCRelease(ctx, task.ReleaseTweet{Version: v, Announcement: ann}, e)
+			return tasks.TweetRCRelease(ctx, task.ReleaseTweet{Version: v, Announcement: ann})
 		}, v, announcementURL)
 
 		wd.Output("AnnouncementURL", announcementURL)
@@ -199,7 +199,7 @@ The version string must use the same format as Go tags.`,
 		}, v, names)
 		announcementURL := wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail)
 		tweetURL := wd.Task("post-tweet", func(ctx *workflow.TaskContext, v string) (string, error) {
-			return task.TweetMajorRelease(ctx, task.ReleaseTweet{Version: v}, e)
+			return tasks.TweetMajorRelease(ctx, task.ReleaseTweet{Version: v})
 		}, v)
 
 		wd.Output("AnnouncementURL", announcementURL)
@@ -377,11 +377,11 @@ This is CVE-2022-24675 and Go issue https://go.dev/issue/51853.`,
 }
 
 // RegisterTweetOnlyDefinitions registers workflow definitions involving tweeting
-// onto h, using e for the external service configuration.
+// onto h.
 //
 // This is superseded by RegisterReleaseWorkflows and will be removed
 // after some time, when we confirm there's no need for separate workflows.
-func RegisterTweetOnlyDefinitions(h *DefinitionHolder, e task.ExternalConfig) {
+func RegisterTweetOnlyDefinitions(h *DefinitionHolder, tasks task.TweetTasks) {
 	version := workflow.Parameter{
 		Name: "Version",
 		Doc: `Version is the Go version that has been released.
@@ -420,7 +420,7 @@ It's applicable to all release types other than major
 
 		wd := workflow.New()
 		wd.Output("TweetURL", wd.Task("tweet-minor", func(ctx *workflow.TaskContext, v1, v2, sec, ann string) (string, error) {
-			return task.TweetMinorRelease(ctx, task.ReleaseTweet{Version: v1, SecondaryVersion: v2, Security: sec, Announcement: ann}, e)
+			return tasks.TweetMinorRelease(ctx, task.ReleaseTweet{Version: v1, SecondaryVersion: v2, Security: sec, Announcement: ann})
 		}, wd.Parameter(minorVersion), wd.Parameter(secondaryVersion), wd.Parameter(security), wd.Parameter(announcement)))
 		h.RegisterDefinition("tweet-minor", wd)
 	}
@@ -430,7 +430,7 @@ It's applicable to all release types other than major
 
 		wd := workflow.New()
 		wd.Output("TweetURL", wd.Task("tweet-beta", func(ctx *workflow.TaskContext, v, sec, ann string) (string, error) {
-			return task.TweetBetaRelease(ctx, task.ReleaseTweet{Version: v, Security: sec, Announcement: ann}, e)
+			return tasks.TweetBetaRelease(ctx, task.ReleaseTweet{Version: v, Security: sec, Announcement: ann})
 		}, wd.Parameter(betaVersion), wd.Parameter(security), wd.Parameter(announcement)))
 		h.RegisterDefinition("tweet-beta", wd)
 	}
@@ -440,7 +440,7 @@ It's applicable to all release types other than major
 
 		wd := workflow.New()
 		wd.Output("TweetURL", wd.Task("tweet-rc", func(ctx *workflow.TaskContext, v, sec, ann string) (string, error) {
-			return task.TweetRCRelease(ctx, task.ReleaseTweet{Version: v, Security: sec, Announcement: ann}, e)
+			return tasks.TweetRCRelease(ctx, task.ReleaseTweet{Version: v, Security: sec, Announcement: ann})
 		}, wd.Parameter(rcVersion), wd.Parameter(security), wd.Parameter(announcement)))
 		h.RegisterDefinition("tweet-rc", wd)
 	}
@@ -450,7 +450,7 @@ It's applicable to all release types other than major
 
 		wd := workflow.New()
 		wd.Output("TweetURL", wd.Task("tweet-major", func(ctx *workflow.TaskContext, v, sec string) (string, error) {
-			return task.TweetMajorRelease(ctx, task.ReleaseTweet{Version: v, Security: sec}, e)
+			return tasks.TweetMajorRelease(ctx, task.ReleaseTweet{Version: v, Security: sec})
 		}, wd.Parameter(majorVersion), wd.Parameter(security)))
 		h.RegisterDefinition("tweet-major", wd)
 	}
@@ -553,7 +553,7 @@ func ApproveActionDep(p *pgxpool.Pool) func(taskName string) func(*workflow.Task
 const mergeCommTasksIntoReleaseWorkflows = false
 
 // RegisterReleaseWorkflows registers workflows for issuing Go releases.
-func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.AnnounceMailTasks, extCfg task.ExternalConfig) error {
+func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks) error {
 	createSingle := func(name, major string, kind task.ReleaseKind) error {
 		wd := workflow.New()
 
@@ -588,11 +588,11 @@ func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, mil
 			tweetURL := wd.Task("post-tweet", func(ctx *workflow.TaskContext, v, ann string) (string, error) {
 				switch kind {
 				case task.KindMajor:
-					return task.TweetMajorRelease(ctx, task.ReleaseTweet{Version: v}, extCfg)
+					return comm.TweetMajorRelease(ctx, task.ReleaseTweet{Version: v})
 				case task.KindRC:
-					return task.TweetRCRelease(ctx, task.ReleaseTweet{Version: v, Announcement: ann}, extCfg)
+					return comm.TweetRCRelease(ctx, task.ReleaseTweet{Version: v, Announcement: ann})
 				case task.KindBeta:
-					return task.TweetBetaRelease(ctx, task.ReleaseTweet{Version: v, Announcement: ann}, extCfg)
+					return comm.TweetBetaRelease(ctx, task.ReleaseTweet{Version: v, Announcement: ann})
 				default:
 					return "", fmt.Errorf("unknown release kind %v", kind)
 				}
@@ -614,7 +614,7 @@ func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, mil
 	if err := createSingle("Go 1.19 next beta", "go1.19", task.KindBeta); err != nil {
 		return err
 	}
-	wd, err := createMinorReleaseWorkflow(build, milestone, version, comm, extCfg, "go1.17", "go1.18")
+	wd, err := createMinorReleaseWorkflow(build, milestone, version, comm, "go1.17", "go1.18")
 	if err != nil {
 		return err
 	}
@@ -622,7 +622,7 @@ func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, mil
 	return nil
 }
 
-func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.AnnounceMailTasks, extCfg task.ExternalConfig, prev, current string) (*workflow.Definition, error) {
+func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, prev, current string) (*workflow.Definition, error) {
 	wd := workflow.New()
 
 	var securitySummary, securityFixes, names workflow.Value
@@ -651,7 +651,7 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 		}, v1Published, v2Published, securityFixes, names, okayToAnnounceAndTweet)
 		announcementURL := wd.Task("await-announcement", comm.AwaitAnnounceMail, sentMail)
 		tweetURL := wd.Task("post-tweet", func(ctx *workflow.TaskContext, v1, v2, sec, ann string) (string, error) {
-			return task.TweetMinorRelease(ctx, task.ReleaseTweet{Version: v1, SecondaryVersion: v2, Security: sec, Announcement: ann}, extCfg)
+			return comm.TweetMinorRelease(ctx, task.ReleaseTweet{Version: v1, SecondaryVersion: v2, Security: sec, Announcement: ann})
 		}, v1Published, v2Published, securitySummary, announcementURL, okayToAnnounceAndTweet)
 
 		wd.Output("Announcement URL", announcementURL)

@@ -31,13 +31,13 @@ func TestTweetRelease(t *testing.T) {
 
 	tests := [...]struct {
 		name    string
-		taskFn  func(*workflow.TaskContext, ReleaseTweet, ExternalConfig) (string, error)
+		taskFn  func(TweetTasks, *workflow.TaskContext, ReleaseTweet) (string, error)
 		in      ReleaseTweet
 		wantLog string
 	}{
 		{
 			name:   "minor",
-			taskFn: TweetMinorRelease,
+			taskFn: TweetTasks.TweetMinorRelease,
 			in: ReleaseTweet{
 				Version:          "go1.17.1",
 				SecondaryVersion: "go1.16.8",
@@ -68,7 +68,7 @@ go version go1.17.1 linux/arm64` + "\n",
 		},
 		{
 			name:   "beta",
-			taskFn: TweetBetaRelease,
+			taskFn: TweetTasks.TweetBetaRelease,
 			in: ReleaseTweet{
 				Version:      "go1.17beta1",
 				Announcement: "https://groups.google.com/g/golang-announce/c/i4EliPDV9Ok/m/MxA-nj53AAAJ",
@@ -97,7 +97,7 @@ go version go1.17beta1 darwin/amd64` + "\n",
 		},
 		{
 			name:   "rc",
-			taskFn: TweetRCRelease,
+			taskFn: TweetTasks.TweetRCRelease,
 			in: ReleaseTweet{
 				Version:      "go1.17rc2",
 				Announcement: "https://groups.google.com/g/golang-announce/c/yk30ovJGXWY/m/p9uUnKbbBQAJ",
@@ -126,7 +126,7 @@ go version go1.17rc2 windows/arm64` + "\n",
 		},
 		{
 			name:   "major",
-			taskFn: TweetMajorRelease,
+			taskFn: TweetTasks.TweetMajorRelease,
 			in: ReleaseTweet{
 				Version:    "go1.17",
 				Security:   "Includes a super duper security fix (CVE-123).",
@@ -160,7 +160,7 @@ go version go1.17 freebsd/amd64` + "\n",
 			// doesn't actually try to tweet, but capture its log.
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			tweetURL, err := tc.taskFn(ctx, tc.in, ExternalConfig{DryRun: true})
+			tweetURL, err := tc.taskFn(TweetTasks{TwitterClient: nil}, ctx, tc.in)
 			if err != nil {
 				t.Fatal("got a non-nil error:", err)
 			}
@@ -290,11 +290,11 @@ func TestPostTweet(t *testing.T) {
 		}
 		mustWrite(w, `{"id_str": "tweet-123", "user": {"screen_name": "golang"}}`)
 	})
-	httpClient := &http.Client{Transport: localRoundTripper{mux}}
+	cl := realTwitterClient{twitterAPI: &http.Client{Transport: localRoundTripper{mux}}}
 
-	tweetURL, err := postTweet(httpClient, "tweet-text", []byte("image-png-bytes"))
+	tweetURL, err := cl.PostTweet("tweet-text", []byte("image-png-bytes"))
 	if err != nil {
-		t.Fatal("postTweet:", err)
+		t.Fatal("PostTweet:", err)
 	}
 	if got, want := tweetURL, "https://twitter.com/golang/status/tweet-123"; got != want {
 		t.Errorf("got tweetURL=%q, want %q", got, want)

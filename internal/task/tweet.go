@@ -77,9 +77,22 @@ func (r ReleaseTweet) seed() int64 {
 	return r.RandomSeed
 }
 
+// TweetTasks contains tasks related to the release tweet.
+type TweetTasks struct {
+	// TwitterClient can be used to post a tweet.
+	TwitterClient interface {
+		// PostTweet posts a tweet with the given text and PNG image,
+		// both of which must be non-empty, and returns the tweet URL.
+		//
+		// ErrTweetTooLong error is returned if posting fails
+		// due to the tweet text length exceeding Twitter's limit.
+		PostTweet(text string, imagePNG []byte) (tweetURL string, _ error)
+	}
+}
+
 // TweetMinorRelease posts a tweet announcing a minor Go release.
 // ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func TweetMinorRelease(ctx *workflow.TaskContext, r ReleaseTweet, e ExternalConfig) (tweetURL string, _ error) {
+func (t TweetTasks) TweetMinorRelease(ctx *workflow.TaskContext, r ReleaseTweet) (tweetURL string, _ error) {
 	if err := verifyGoVersions(r.Version, r.SecondaryVersion); err != nil {
 		return "", err
 	}
@@ -87,12 +100,12 @@ func TweetMinorRelease(ctx *workflow.TaskContext, r ReleaseTweet, e ExternalConf
 		return "", fmt.Errorf("announcement URL %q doesn't have the expected prefix %q", r.Announcement, announcementPrefix)
 	}
 
-	return tweetRelease(ctx, r, e)
+	return t.tweetRelease(ctx, r)
 }
 
 // TweetBetaRelease posts a tweet announcing a beta Go release.
 // ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func TweetBetaRelease(ctx *workflow.TaskContext, r ReleaseTweet, e ExternalConfig) (tweetURL string, _ error) {
+func (t TweetTasks) TweetBetaRelease(ctx *workflow.TaskContext, r ReleaseTweet) (tweetURL string, _ error) {
 	if r.SecondaryVersion != "" {
 		return "", fmt.Errorf("got 2 Go versions, want 1")
 	}
@@ -103,12 +116,12 @@ func TweetBetaRelease(ctx *workflow.TaskContext, r ReleaseTweet, e ExternalConfi
 		return "", fmt.Errorf("announcement URL %q doesn't have the expected prefix %q", r.Announcement, announcementPrefix)
 	}
 
-	return tweetRelease(ctx, r, e)
+	return t.tweetRelease(ctx, r)
 }
 
 // TweetRCRelease posts a tweet announcing a Go release candidate.
 // ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func TweetRCRelease(ctx *workflow.TaskContext, r ReleaseTweet, e ExternalConfig) (tweetURL string, _ error) {
+func (t TweetTasks) TweetRCRelease(ctx *workflow.TaskContext, r ReleaseTweet) (tweetURL string, _ error) {
 	if r.SecondaryVersion != "" {
 		return "", fmt.Errorf("got 2 Go versions, want 1")
 	}
@@ -119,14 +132,14 @@ func TweetRCRelease(ctx *workflow.TaskContext, r ReleaseTweet, e ExternalConfig)
 		return "", fmt.Errorf("announcement URL %q doesn't have the expected prefix %q", r.Announcement, announcementPrefix)
 	}
 
-	return tweetRelease(ctx, r, e)
+	return t.tweetRelease(ctx, r)
 }
 
 const announcementPrefix = "https://groups.google.com/g/golang-announce/c/"
 
 // TweetMajorRelease posts a tweet announcing a major Go release.
 // ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func TweetMajorRelease(ctx *workflow.TaskContext, r ReleaseTweet, e ExternalConfig) (tweetURL string, _ error) {
+func (t TweetTasks) TweetMajorRelease(ctx *workflow.TaskContext, r ReleaseTweet) (tweetURL string, _ error) {
 	if r.SecondaryVersion != "" {
 		return "", fmt.Errorf("got 2 Go versions, want 1")
 	}
@@ -137,11 +150,11 @@ func TweetMajorRelease(ctx *workflow.TaskContext, r ReleaseTweet, e ExternalConf
 		return "", fmt.Errorf("major release tweet doesn't accept an accouncement URL")
 	}
 
-	return tweetRelease(ctx, r, e)
+	return t.tweetRelease(ctx, r)
 }
 
 // tweetRelease posts a tweet announcing a Go release.
-func tweetRelease(ctx *workflow.TaskContext, r ReleaseTweet, e ExternalConfig) (tweetURL string, _ error) {
+func (t TweetTasks) tweetRelease(ctx *workflow.TaskContext, r ReleaseTweet) (tweetURL string, _ error) {
 	rnd := rand.New(rand.NewSource(r.seed()))
 
 	// Generate tweet text.
@@ -163,14 +176,10 @@ func tweetRelease(ctx *workflow.TaskContext, r ReleaseTweet, e ExternalConfig) (
 	}
 
 	// Post a tweet via the Twitter API.
-	if e.DryRun {
+	if t.TwitterClient == nil {
 		return "(dry-run)", nil
 	}
-	cl, err := twitterClient(e.TwitterAPI)
-	if err != nil {
-		return "", err
-	}
-	tweetURL, err = postTweet(cl, tweetText, imagePNG)
+	tweetURL, err = t.TwitterClient.PostTweet(tweetText, imagePNG)
 	return tweetURL, err
 }
 
@@ -592,9 +601,12 @@ var (
 	shadowColor = color.NRGBA{0, 0, 0, 140} // #0000008c.
 )
 
-// postTweet posts a tweet with the provided text and image.
-// twitterAPI is used to make Twitter API calls.
-func postTweet(twitterAPI *http.Client, text string, imagePNG []byte) (tweetURL string, _ error) {
+type realTwitterClient struct {
+	twitterAPI *http.Client
+}
+
+// PostTweet implements the TweetTasks.TwitterClient interface.
+func (c realTwitterClient) PostTweet(text string, imagePNG []byte) (tweetURL string, _ error) {
 	// Make a Twitter API call to upload PNG to upload.twitter.com.
 	// See https://developer.twitter.com/en/docs/twitter-api/v1/media/upload-media/api-reference/post-media-upload.
 	var buf bytes.Buffer
@@ -611,7 +623,7 @@ func postTweet(twitterAPI *http.Client, text string, imagePNG []byte) (tweetURL 
 		return "", err
 	}
 	req.Header.Set("Content-Type", w.FormDataContentType())
-	resp, err := twitterAPI.Do(req)
+	resp, err := c.twitterAPI.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -629,7 +641,7 @@ func postTweet(twitterAPI *http.Client, text string, imagePNG []byte) (tweetURL 
 
 	// Make a Twitter API call to update status with uploaded image.
 	// See https://developer.twitter.com/en/docs/twitter-api/v1/tweets/post-and-engage/api-reference/post-statuses-update.
-	resp, err = twitterAPI.PostForm("https://api.twitter.com/1.1/statuses/update.json", url.Values{
+	resp, err = c.twitterAPI.PostForm("https://api.twitter.com/1.1/statuses/update.json", url.Values{
 		"status":    []string{text},
 		"media_ids": []string{media.ID},
 	})
@@ -674,10 +686,10 @@ func isTweetTooLong(resp *http.Response, body []byte) bool {
 	return len(r.Errors) == 1 && r.Errors[0].Code == 186
 }
 
-// twitterClient creates an HTTP client authenticated to
-// make Twitter API calls using the provided credentials.
-func twitterClient(t secret.TwitterCredentials) (*http.Client, error) {
+// NewTwitterClient creates a Twitter API client authenticated
+// to make Twitter API calls using the provided credentials.
+func NewTwitterClient(t secret.TwitterCredentials) realTwitterClient {
 	config := oauth1.NewConfig(t.ConsumerKey, t.ConsumerSecret)
 	token := oauth1.NewToken(t.AccessTokenKey, t.AccessTokenSecret)
-	return config.Client(context.Background(), token), nil
+	return realTwitterClient{twitterAPI: config.Client(context.Background(), token)}
 }

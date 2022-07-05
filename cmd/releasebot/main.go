@@ -220,15 +220,13 @@ func postTweet(kind string) {
 		log.Fatalln("error parsing release tweet JSON object:", err)
 	}
 
-	extCfg := task.ExternalConfig{
-		DryRun: dryRun,
-	}
+	var tasks task.TweetTasks
 	if !dryRun {
-		var err error
-		extCfg.TwitterAPI, err = loadTwitterAuth()
+		twitterAPI, err := loadTwitterAuth()
 		if err != nil {
 			log.Fatalln("error loading Twitter API credentials:", err)
 		}
+		tasks.TwitterClient = task.NewTwitterClient(twitterAPI)
 	}
 
 	versions := []string{tweet.Version}
@@ -251,13 +249,13 @@ func postTweet(kind string) {
 	} else if resp != "Y" && resp != "y" {
 		log.Fatalln("stopped as requested")
 	}
-	tweetRelease := map[string]func(*workflow.TaskContext, task.ReleaseTweet, task.ExternalConfig) (string, error){
-		"minor": task.TweetMinorRelease,
-		"beta":  task.TweetBetaRelease,
-		"rc":    task.TweetRCRelease,
-		"major": task.TweetMajorRelease,
+	tweetRelease := map[string]func(*workflow.TaskContext, task.ReleaseTweet) (string, error){
+		"minor": tasks.TweetMinorRelease,
+		"beta":  tasks.TweetBetaRelease,
+		"rc":    tasks.TweetRCRelease,
+		"major": tasks.TweetMajorRelease,
 	}[kind]
-	tweetURL, err := tweetRelease(&workflow.TaskContext{Context: context.Background(), Logger: log.Default()}, tweet, extCfg)
+	tweetURL, err := tweetRelease(&workflow.TaskContext{Context: context.Background(), Logger: log.Default()}, tweet)
 	if errors.Is(err, task.ErrTweetTooLong) && len([]rune(tweet.Security)) > 120 {
 		log.Fatalf(`A tweet was not created because it's too long.
 
