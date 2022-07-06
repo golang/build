@@ -23,3 +23,7 @@ go run golang.org/x/build/cmd/buildlet -halt=false -reverse-type=host-linux-amd6
 
 To view/modify the "Trybot Status" page locally, visit the /try-dev endpoint.
 You should see a trybot status page with some example data.
+
+## Deployment
+
+See the documentation on [deployment](../../doc/deployment.md).

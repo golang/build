@@ -73,6 +73,10 @@ Alternatively, using docker:
 make test
 ```
 
+## Deployment
+
+See the documentation on [deployment](../../doc/deployment.md).
+
 ## JS/CSS formatting and lint
 
 This project uses eslint and stylelint to format JavaScript and CSS files.

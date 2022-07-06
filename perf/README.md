@@ -47,3 +47,6 @@ One-time setup:
         --role roles/iam.workloadIdentityUser \
         --member "serviceAccount:<PROJECT>.svc.id.goog[prod/perf-prod]"
 
+## Deployment
+
+See the documentation on [deployment](../doc/deployment.md).

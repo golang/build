@@ -64,3 +64,7 @@ Then login at https://influx.golang.org.
 To access the admin password, admin API token, or reader API token, change to
 `--secret` to one of `influx-admin-pass`, `influx-admin-token`, or
 `influx-reader-token`, respectively.
+
+## Deployment
+
+See the documentation on [deployment](../doc/deployment.md).
