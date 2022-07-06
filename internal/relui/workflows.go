@@ -619,6 +619,29 @@ func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, mil
 		return err
 	}
 	h.RegisterDefinition("Minor releases for Go 1.17 and 1.18", wd)
+	wd = workflow.New()
+	if err := addBuildAndTestOnlyWorkflow(wd, version, build, "go1.19", task.KindBeta); err != nil {
+		return err
+	}
+	h.RegisterDefinition("dry-run (test and build only): Go 1.19 next beta", wd)
+
+	return nil
+}
+
+func addBuildAndTestOnlyWorkflow(wd *workflow.Definition, version *task.VersionTasks, build *BuildReleaseTasks, major string, kind task.ReleaseKind) error {
+	nextVersion := wd.Task("Get next version", version.GetNextVersion, wd.Constant(kind))
+	branch := fmt.Sprintf("release-branch.%v", major)
+	if kind == task.KindBeta {
+		branch = "master"
+	}
+	branchVal := wd.Constant(branch)
+	releaseBase := wd.Task("Pick release base commit", version.ReadBranchHead, branchVal)
+	noop := wd.Action("noop", func(_ *workflow.TaskContext) error { return nil })
+	artifacts, err := build.addBuildTasks(wd, major, nextVersion, releaseBase, wd.Constant([]string{}), true, noop)
+	if err != nil {
+		return err
+	}
+	wd.Output("Artifacts", artifacts)
 	return nil
 }
 
@@ -687,7 +710,7 @@ func addSingleReleaseWorkflow(
 	wd.Output("Signing command", startSigner)
 
 	// Build, test, and sign release.
-	signedAndTestedArtifacts, err := build.addBuildTasks(wd, "go1.19", nextVersion, releaseBase, skipTests, checked)
+	signedAndTestedArtifacts, err := build.addBuildTasks(wd, "go1.19", nextVersion, releaseBase, skipTests, false, checked)
 	if err != nil {
 		return nil, err
 	}
@@ -714,7 +737,7 @@ func addSingleReleaseWorkflow(
 
 // addBuildTasks registers tasks to build, test, and sign the release onto wd.
 // It returns the output from the last task, a slice of signed and tested artifacts.
-func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, majorVersion string, version, revision, skipTests workflow.Value, dependency workflow.Dependency) (workflow.Value, error) {
+func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, majorVersion string, version, revision, skipTests workflow.Value, skipSigning bool, dependency workflow.Dependency) (workflow.Value, error) {
 	targets, ok := releasetargets.TargetsForVersion(majorVersion)
 	if !ok {
 		return nil, fmt.Errorf("malformed/unknown version %q", majorVersion)
@@ -752,6 +775,12 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, majorVers
 			long := wd.Action("Run long tests", tasks.runTests, targetVal, wd.Constant(target.LongTestBuilder), skipTests, bin)
 			testsPassed = append(testsPassed, long)
 		}
+	}
+	if skipSigning {
+		builtAndTested := wd.Task("Wait for artifacts and tests", func(ctx *workflow.TaskContext, artifacts []artifact) ([]artifact, error) {
+			return artifacts, nil
+		}, append([]workflow.TaskInput{wd.Slice(artifacts...)}, testsPassed...)...)
+		return builtAndTested, nil
 	}
 	stagedArtifacts := wd.Task("Stage artifacts for signing", tasks.copyToStaging, version, wd.Slice(artifacts...))
 	signedArtifacts := wd.Task("Wait for signed artifacts", tasks.awaitSigned, version, wd.Constant(darwinTargets), stagedArtifacts)
