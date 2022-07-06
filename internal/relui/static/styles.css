@@ -76,9 +76,28 @@ h6 {
   font-weight: normal;
   margin: 0.875rem 0 0.5rem;
 }
-.WorkflowList-params {
+.WorkflowList-details {
+  display: flex;
+  flex-flow: row;
+  justify-content: space-between;
+}
+.WorkflowList-output {
+  border: 0.0625rem solid #ccc;
+  border-radius: 0.25rem;
+  margin: 0;
+  max-height: 23rem;
+  overflow-y: auto;
+  width: 17.8125rem;
+}
+.WorkflowList-paramsTable {
   border: none;
-  border-spacing: 0;
+  font-size: 0.875rem;
+}
+.WorkflowList-paramData {
+  padding-left: 0.5rem;
+}
+.WorkflowList-paramData:first-child {
+  text-transform: capitalize;
 }
 .WorkflowList-workflowStateIcon {
   background-size: contain;
@@ -101,12 +120,6 @@ h6 {
 }
 .WorkflowList-titleStop {
   float: right;
-}
-.WorkflowList-paramData {
-  font-size: 0.875rem;
-}
-.WorkflowList-paramData:first-child {
-  text-transform: capitalize;
 }
 .WorkflowList-sectionTitle {
   font-weight: normal;
@@ -264,7 +277,7 @@ h6 {
   margin: 0;
 }
 .TaskList-itemResultTerm {
-  background: #fafafa;
+  background: #fdfdfd;
   border-top: 0.0625rem solid #ccc;
   font-size: 0.75rem;
   padding: 0.1875rem 0.25rem 0;
@@ -273,7 +286,7 @@ h6 {
   background: #f8f8f8;
 }
 .TaskList-itemResultDefinition {
-  background: #fafafa;
+  background: #fdfdfd;
   font-size: 0.875rem;
   margin: 0;
   min-height: 1.875rem;
@@ -288,8 +301,14 @@ h6 {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.TaskList-itemResultArtifactSize {
-  float: right;
+.TaskList-itemResultArtifact {
+  display: flex;
+  justify-content: space-between;
+}
+.TaskList-itemResultArtifactName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .Button {
   background: #375eab;

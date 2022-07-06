@@ -30,39 +30,43 @@
               </div>
             {{end}}
           </h3>
-          <table class="WorkflowList-params">
-            <tbody>
-              <tr>
-                <td>State:</td>
-                <td class="WorkflowList-paramData">
-                  {{if $workflow.Error}}
-                    Error
-                    <div class="WorkflowList-workflowStateIcon Workflowlist-workflowStateIcon--error"></div>
-                  {{else if $workflow.Finished}}
-                    Success
-                    <div class="WorkflowList-workflowStateIcon Workflowlist-workflowStateIcon--success"></div>
-                  {{else}}
-                    Pending
-                    <div class="WorkflowList-workflowStateIcon Workflowlist-workflowStateIcon--pending"></div>
-                  {{end}}
-                </td>
-              </tr>
-              <tr>
-                <td>Output:</td>
-                <td class="WorkflowList-paramData">{{$workflow.Output}}</td>
-              </tr>
-              <tr>
-                <td>Error:</td>
-                <td class="WorkflowList-paramData">{{$workflow.Error}}</td>
-              </tr>
-              {{range $name, $value := $.WorkflowParams $workflow}}
+          <div class="WorkflowList-details">
+            <div class="WorkflowList-params">
+              <table class="WorkflowList-paramsTable">
+                <tbody>
                 <tr>
-                  <td>{{$name}}:</td>
-                  <td class="WorkflowList-paramData">{{$value}}</td>
+                  <td>State:</td>
+                  <td class="WorkflowList-paramData">
+                    {{if $workflow.Error}}
+                      Error
+                      <div class="WorkflowList-workflowStateIcon Workflowlist-workflowStateIcon--error"></div>
+                    {{else if $workflow.Finished}}
+                      Success
+                      <div class="WorkflowList-workflowStateIcon Workflowlist-workflowStateIcon--success"></div>
+                    {{else}}
+                      Pending
+                      <div class="WorkflowList-workflowStateIcon Workflowlist-workflowStateIcon--pending"></div>
+                    {{end}}
+                  </td>
                 </tr>
-              {{end}}
-            </tbody>
-          </table>
+                <tr>
+                  <td>Error:</td>
+                  <td class="WorkflowList-paramData">{{$workflow.Error}}</td>
+                </tr>
+                {{range $name, $value := $.WorkflowParams $workflow}}
+                  <tr>
+                    <td>{{$name}}:</td>
+                    <td class="WorkflowList-paramData">{{$value}}</td>
+                  </tr>
+                {{end}}
+                </tbody>
+              </table>
+            </div>
+            <dl class="WorkflowList-output">
+              {{ $resultDetail := unmarshalResultDetail $workflow.Output }}
+              {{template "itemResult" $resultDetail}}
+            </dl>
+          </div>
           <h4 class="WorkflowList-sectionTitle">Tasks</h4>
           {{template "task_list" $detail}}
         </li>

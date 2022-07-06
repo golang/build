@@ -80,6 +80,7 @@ func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL, header SiteHeader) 
 	helpers := map[string]interface{}{
 		"baseLink":              s.BaseLink,
 		"hasPrefix":             strings.HasPrefix,
+		"pathBase":              path.Base,
 		"prettySize":            prettySize,
 		"unmarshalResultDetail": unmarshalResultDetail,
 	}

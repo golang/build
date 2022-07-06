@@ -140,9 +140,7 @@
       <dt class="TaskList-itemResultTerm">
         {{$key}}
       </dt>
-      <dd class="TaskList-itemResultDefinition">
-        {{template "itemResult" $value}}
-      </dd>
+      {{template "itemResult" $value}}
     {{end}}
   {{else if eq .Kind "JSON"}}
     {{range $key, $value := .JSON}}
@@ -154,9 +152,6 @@
       </dd>
     {{end}}
   {{else if eq .Kind "String"}}
-    <dt class="TaskList-itemResultTerm">
-      String
-    </dt>
     <dd class="TaskList-itemResultDefinition TaskList-itemResultDefinition--string">
       {{.String}}
     </dd>
@@ -167,7 +162,18 @@
         <dd class="TaskList-itemResultDefinition">
           {{range $detail := .}}
             {{with $detail.Artifact}}
-            {{.Filename}} <span class="TaskList-itemResultArtifactSize">{{prettySize .Size}}</span>
+            <div class="TaskList-itemResultArtifact">
+              <div class="TaskList-itemResultArtifactName">
+                {{if .Filename}}
+                  {{.Filename}}
+                {{else if .Target}}
+                  {{.Target.Name}}
+                {{else }}
+                  {{pathBase .ScratchPath}}
+                {{end}}
+              </div>
+              <div class="TaskList-itemResultArtifactSize">{{prettySize .Size}}</div>
+            </div>
             {{end}}
           {{end}}
         </dd>
