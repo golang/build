@@ -708,7 +708,7 @@ func addSingleReleaseWorkflow(
 
 	pushed := wd.Action("Push issues", milestone.PushIssues, milestones, nextVersion, kindVal, tagged)
 	versionPublished = wd.Task("Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, pushed)
-
+	wd.Output("Released version", versionPublished)
 	return versionPublished, nil
 }
 

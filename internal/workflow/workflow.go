@@ -23,6 +23,8 @@
 // a value of any type and an error. The TaskContext can be used as a normal
 // Context, and also supports workflow features like unstructured logging.
 // A task only runs once all of its input Values and Dependencies are ready.
+// All task outputs must be used either as inputs to another task or as a
+// workflow Output.
 //
 // In addition to Tasks, a workflow can have Actions, which represent functions
 // that don't produce an output. Their Go function must only return an error,
