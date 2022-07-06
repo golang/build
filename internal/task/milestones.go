@@ -83,6 +83,12 @@ func uppercaseVersion(version string) string {
 // CheckBlockers returns an error if there are open release blockers in
 // the current milestone.
 func (m *MilestoneTasks) CheckBlockers(ctx *workflow.TaskContext, milestones ReleaseMilestones, version string, kind ReleaseKind) error {
+	if kind == KindRC {
+		// We don't check blockers for release candidates; they're expected to
+		// at least have recurring blockers, and we don't have an okay-after
+		// label to suppress them.
+		return nil
+	}
 	issues, err := m.loadMilestoneIssues(ctx, milestones.Current, kind)
 	if err != nil {
 		return err
