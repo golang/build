@@ -58,8 +58,8 @@ func main() {
 		log.Fatalln(err)
 	}
 	gerritAPIFlag := secret.Flag("gerrit-api-secret", "Gerrit API secret to use for workflows that interact with Gerrit.")
-	var annMail task.AnnounceMailTasks
-	secret.FlagVar(&annMail.SendGridAPIKey, "sendgrid-api-key", "SendGrid API key for workflows involving sending email.")
+	sendgridAPIKey := secret.Flag("sendgrid-api-key", "SendGrid API key for workflows involving sending email.")
+	var annMail task.MailHeader
 	addressVarFlag(&annMail.From, "announce-mail-from", "The From address to use for the announcement mail.")
 	addressVarFlag(&annMail.To, "announce-mail-to", "The To address to use for the announcement mail.")
 	addressListVarFlag(&annMail.BCC, "announce-mail-bcc", "The BCC address list to use for the announcement mail.")
@@ -100,7 +100,10 @@ func main() {
 		GoProject: "go",
 	}
 	commTasks := task.CommunicationTasks{
-		AnnounceMailTasks: annMail,
+		AnnounceMailTasks: task.AnnounceMailTasks{
+			SendMail:           task.NewSendGridMailClient(*sendgridAPIKey).SendMail,
+			AnnounceMailHeader: annMail,
+		},
 		TweetTasks: task.TweetTasks{
 			TwitterClient: task.NewTwitterClient(twitterAPI),
 		},

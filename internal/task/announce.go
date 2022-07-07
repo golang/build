@@ -58,11 +58,16 @@ type ReleaseAnnouncement struct {
 
 // AnnounceMailTasks contains tasks related to the release announcement email.
 type AnnounceMailTasks struct {
-	SendGridAPIKey string
+	// SendMail sends an email with the given header and content
+	// using an externally-provided implementation.
+	//
+	// Email delivery happens asynchronously, so SendMail returns a nil error
+	// if the transmission was started successfully, but that error value
+	// doesn't indicate anything about the status of the delivery.
+	SendMail func(MailHeader, mailContent) error
 
-	From mail.Address // An RFC 5322 address. For example, "Barry Gibbs <bg@example.com>".
-	To   mail.Address
-	BCC  []mail.Address
+	// AnnounceMailHeader is the header to use for the release announcement email.
+	AnnounceMailHeader MailHeader
 }
 
 // SentMail represents an email that was sent.
@@ -151,10 +156,10 @@ func (t AnnounceMailTasks) announceRelease(ctx *workflow.TaskContext, r ReleaseA
 	}
 
 	// Send the announcement email to the destination mailing lists.
-	if t.SendGridAPIKey == "" {
+	if t.SendMail == nil {
 		return SentMail{Subject: "[dry-run] " + m.Subject}, nil
 	}
-	err = t.sendMailViaSendGrid(m)
+	err = t.SendMail(t.AnnounceMailHeader, m)
 	if err != nil {
 		return SentMail{}, err
 	}
@@ -162,6 +167,14 @@ func (t AnnounceMailTasks) announceRelease(ctx *workflow.TaskContext, r ReleaseA
 	return SentMail{m.Subject}, nil
 }
 
+// A MailHeader is an email header.
+type MailHeader struct {
+	From mail.Address // An RFC 5322 address. For example, "Barry Gibbs <bg@example.com>".
+	To   mail.Address
+	BCC  []mail.Address
+}
+
+// A mailContent holds the content of an email.
 type mailContent struct {
 	Subject  string
 	BodyHTML string
@@ -284,28 +297,34 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 //go:embed template
 var tmplDir embed.FS
 
-// sendMailViaSendGrid sends an email by making
-// an authenticated request to the SendGrid API.
-func (t AnnounceMailTasks) sendMailViaSendGrid(m mailContent) error {
-	from, to := sendgridmail.Email(t.From), sendgridmail.Email(t.To)
+type realSendGridMailClient struct {
+	sg *sendgrid.Client
+}
+
+// NewSendGridMailClient creates a SendGrid mail client
+// authenticated with the given API key.
+func NewSendGridMailClient(sendgridAPIKey string) realSendGridMailClient {
+	return realSendGridMailClient{sg: sendgrid.NewSendClient(sendgridAPIKey)}
+}
+
+// SendMail sends an email by making an authenticated request to the SendGrid API.
+func (c realSendGridMailClient) SendMail(h MailHeader, m mailContent) error {
+	from, to := sendgridmail.Email(h.From), sendgridmail.Email(h.To)
 	req := sendgridmail.NewSingleEmail(&from, m.Subject, &to, m.BodyText, m.BodyHTML)
 	if len(req.Personalizations) != 1 {
 		return fmt.Errorf("internal error: len(req.Personalizations) is %d, want 1", len(req.Personalizations))
 	}
-	for _, bcc := range t.BCC {
+	for _, bcc := range h.BCC {
 		bcc := sendgridmail.Email(bcc)
 		req.Personalizations[0].AddBCCs(&bcc)
 	}
-
 	no := false
 	req.TrackingSettings = &sendgridmail.TrackingSettings{
 		ClickTracking:        &sendgridmail.ClickTrackingSetting{Enable: &no},
 		OpenTracking:         &sendgridmail.OpenTrackingSetting{Enable: &no},
 		SubscriptionTracking: &sendgridmail.SubscriptionTrackingSetting{Enable: &no},
 	}
-
-	sg := sendgrid.NewSendClient(t.SendGridAPIKey)
-	resp, err := sg.Send(req)
+	resp, err := c.sg.Send(req)
 	if err != nil {
 		return err
 	} else if resp.StatusCode != http.StatusAccepted {

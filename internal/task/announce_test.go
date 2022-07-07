@@ -7,6 +7,7 @@ package task
 import (
 	"bytes"
 	"context"
+	"net/mail"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,20 +155,20 @@ func TestAnnounceRelease(t *testing.T) {
 
 	tests := [...]struct {
 		name    string
-		taskFn  func(*workflow.TaskContext, ReleaseAnnouncement) (SentMail, error)
+		taskFn  func(AnnounceMailTasks, *workflow.TaskContext, ReleaseAnnouncement) (SentMail, error)
 		in      ReleaseAnnouncement
 		want    SentMail
 		wantLog string
 	}{
 		{
 			name:   "minor",
-			taskFn: (AnnounceMailTasks{}).AnnounceMinorRelease,
+			taskFn: AnnounceMailTasks.AnnounceMinorRelease,
 			in: ReleaseAnnouncement{
 				Version:          "go1.18.1",
 				SecondaryVersion: "go1.17.8", // Intentionally not 1.17.9 so the real email doesn't get in the way.
 				Names:            []string{"Alice", "Bob", "Charlie"},
 			},
-			want: SentMail{Subject: "[dry-run] Go 1.18.1 and Go 1.17.8 are released"},
+			want: SentMail{Subject: "Go 1.18.1 and Go 1.17.8 are released"},
 			wantLog: `announcement subject: Go 1.18.1 and Go 1.17.8 are released
 
 announcement body HTML:
@@ -207,11 +208,25 @@ Alice, Bob, and Charlie for the Go team` + "\n",
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Call the announce task function in dry-run mode so it
-			// doesn't actually try to announce, but capture its log.
+			annMail := MailHeader{
+				From: mail.Address{Address: "from-address@golang.test"},
+				To:   mail.Address{Address: "to-address@golang.test"},
+			}
+			tasks := AnnounceMailTasks{
+				SendMail: func(h MailHeader, c mailContent) error {
+					if diff := cmp.Diff(annMail, h); diff != "" {
+						t.Errorf("mail header mismatch (-want +got):\n%s", diff)
+					}
+					if diff := cmp.Diff(tc.want.Subject, c.Subject); diff != "" {
+						t.Errorf("mail subject mismatch (-want +got):\n%s", diff)
+					}
+					return nil
+				},
+				AnnounceMailHeader: annMail,
+			}
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			sentMail, err := tc.taskFn(ctx, tc.in)
+			sentMail, err := tc.taskFn(tasks, ctx, tc.in)
 			if err != nil {
 				t.Fatal("task function returned non-nil error:", err)
 			}
