@@ -84,6 +84,7 @@ var (
 	tombergan    = gh("tombergan")
 	zpavlinovic  = gh("zpavlinovic")
 
+	compilerTeam = gh("golang/compiler")
 	fuzzingTeam  = gh("golang/fuzzing")
 	pkgsiteTeam  = gh("golang/pkgsite")
 	runtimeTeam  = gh("golang/runtime")
@@ -113,60 +114,72 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{bradfitz, iant},
 	},
 	"go/src/cmd/asm": {
-		Primary: []Owner{cherryyz},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{cherryyz},
 	},
 	"go/src/cmd/compile": {
-		Primary:   []Owner{khr, gri},
-		Secondary: []Owner{mdempsky, martisch},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{khr, gri, mdempsky, martisch},
 	},
 	"go/src/cmd/compile/internal/amd64": {
-		Primary:   []Owner{khr},
-		Secondary: []Owner{rsc, drchase, cherryyz, martisch},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{khr, rsc, drchase, cherryyz, martisch},
 	},
 	"go/src/cmd/compile/internal/arm": {
-		Primary:   []Owner{khr},
-		Secondary: []Owner{rsc, drchase, cherryyz},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{khr, rsc, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/internal/arm64": {
-		Primary:   []Owner{khr},
-		Secondary: []Owner{rsc, drchase, cherryyz},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{khr, rsc, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/internal/mips": {
-		Primary:   []Owner{khr},
-		Secondary: []Owner{rsc, drchase, cherryyz},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{khr, rsc, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/internal/mips64": {
-		Primary:   []Owner{khr},
-		Secondary: []Owner{rsc, drchase, cherryyz},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{khr, rsc, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/internal/ppc64": {
-		Primary:   []Owner{khr},
-		Secondary: []Owner{rsc, drchase, cherryyz},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{khr, rsc, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/internal/s390x": {
-		Primary:   []Owner{khr},
-		Secondary: []Owner{rsc, drchase, cherryyz},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{khr, rsc, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/internal/x86": {
-		Primary:   []Owner{khr},
-		Secondary: []Owner{rsc, drchase, cherryyz, martisch},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{khr, rsc, drchase, cherryyz, martisch},
 	},
 	"go/src/cmd/compile/internal/syntax": {
-		Primary:   []Owner{gri},
-		Secondary: []Owner{rsc, mdempsky},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{gri, rsc, mdempsky},
 	},
 	"go/src/cmd/compile/internal/types": {
-		Primary:   []Owner{gri},
-		Secondary: []Owner{mdempsky, rsc},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{gri, mdempsky, rsc},
 	},
 	"go/src/cmd/compile/internal/types2": {
-		Primary: []Owner{gri, findleyr},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{gri, findleyr},
 	},
 	"go/src/cmd/compile/internal/ssa": {
-		Primary:   []Owner{khr},
-		Secondary: []Owner{martisch},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{khr, martisch},
 	},
-	"go/src/cmd/compile/internal/wasm": wasmOwners,
+	"go/src/cmd/compile/internal/wasm": {
+		Primary:   []Owner{compilerTeam},
+		Secondary: wasmOwners,
+	},
+	"go/src/cmd/cgo": {
+		Primary: []Owner{compilerTeam},
+	},
+	"go/src/cmd/cover": {
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{thanm},
+	},
 	"go/src/cmd/doc": {
 		Primary:   []Owner{r},
 		Secondary: []Owner{mvdan},
@@ -179,12 +192,63 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{gri},
 		Secondary: []Owner{mvdan},
 	},
-	"go/src/cmd/internal/obj/wasm": wasmOwners,
-	"go/src/cmd/link": {
-		Primary:   []Owner{cherryyz, rsc, iant},
-		Secondary: []Owner{mwhudson, thanm},
+	"go/src/cmd/internal/archive": {
+		Primary: []Owner{compilerTeam},
 	},
-	"go/src/cmd/link/internal/wasm": wasmOwners,
+	"go/src/cmd/internal/bio": {
+		Primary: []Owner{compilerTeam},
+	},
+	"go/src/cmd/internal/codesign": {
+		Primary: []Owner{compilerTeam},
+	},
+	"go/src/cmd/internal/dwarf": {
+		Primary: []Owner{compilerTeam},
+	},
+	"go/src/cmd/internal/gcprog": {
+		Primary: []Owner{compilerTeam},
+	},
+	"go/src/cmd/internal/goobj": {
+		Primary: []Owner{compilerTeam},
+	},
+	"go/src/cmd/internal/notsha256": {
+		Primary: []Owner{compilerTeam},
+	},
+	"go/src/cmd/internal/obj": {
+		Primary: []Owner{compilerTeam},
+	},
+	"go/src/cmd/internal/objabi": {
+		Primary: []Owner{compilerTeam},
+	},
+	"go/src/cmd/internal/objfile": {
+		Primary: []Owner{compilerTeam},
+	},
+	"go/src/cmd/internal/src": {
+		Primary: []Owner{compilerTeam},
+	},
+	"go/src/cmd/internal/sys": {
+		Primary: []Owner{compilerTeam},
+	},
+	"go/src/cmd/internal/obj/wasm": {
+		Primary:   []Owner{compilerTeam},
+		Secondary: wasmOwners,
+	},
+	"go/src/cmd/link": {
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{cherryyz, rsc, iant, mwhudson, thanm},
+	},
+	"go/src/cmd/link/internal/wasm": {
+		Primary:   []Owner{compilerTeam},
+		Secondary: wasmOwners,
+	},
+	"go/src/cmd/nm": {
+		Primary: []Owner{compilerTeam},
+	},
+	"go/src/cmd/objdump": {
+		Primary: []Owner{compilerTeam},
+	},
+	"go/src/cmd/pack": {
+		Primary: []Owner{compilerTeam},
+	},
 	"go/src/cmd/pprof": {
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{cherryyz},
@@ -241,11 +305,12 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{kevinburke},
 	},
 	"go/src/debug/dwarf": {
-		Primary:   []Owner{austin},
-		Secondary: []Owner{thanm},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{austin, thanm},
 	},
 	"go/src/debug/elf": {
-		Primary: []Owner{iant},
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{iant},
 	},
 	"go/src/debug/pe": {
 		Primary: []Owner{alexbrainman},
@@ -347,8 +412,11 @@ var entries = map[string]*Entry{
 		Primary: []Owner{gri},
 	},
 	"go/src/internal/abi": {
-		Primary:   []Owner{runtimeTeam},
+		Primary:   []Owner{compilerTeam, runtimeTeam},
 		Secondary: []Owner{mknyszek, cherryyz},
+	},
+	"go/src/internal/buildcfg": {
+		Primary: []Owner{compilerTeam},
 	},
 	"go/src/internal/bytealg": {
 		Primary: []Owner{khr},
@@ -375,6 +443,9 @@ var entries = map[string]*Entry{
 	"go/src/internal/goos": {
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{mknyszek, prattmic},
+	},
+	"go/src/internal/pkgbits": {
+		Primary: []Owner{compilerTeam},
 	},
 	"go/src/internal/poll": {
 		Primary:   []Owner{runtimeTeam},
@@ -417,6 +488,9 @@ var entries = map[string]*Entry{
 	"go/src/internal/trace": {
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{mknyszek, prattmic},
+	},
+	"go/src/internal/xcoff": {
+		Primary: []Owner{compilerTeam},
 	},
 	"go/src/io": {
 		Primary:   []Owner{gri},
@@ -615,7 +689,9 @@ var entries = map[string]*Entry{
 	},
 
 	// Misc. additional tooling in the Go repository.
-	"go/misc/wasm": wasmOwners,
+	"go/misc/wasm": {
+		Primary: wasmOwners,
+	},
 
 	// golang.org/x/ repositories.
 	"arch": {
@@ -876,9 +952,7 @@ var entries = map[string]*Entry{
 	"sum.golang.org":   modProxyOwners,
 }
 
-var wasmOwners = &Entry{
-	Primary: []Owner{neelance, cherryyz},
-}
+var wasmOwners = []Owner{neelance, cherryyz}
 
 var modProxyOwners = &Entry{
 	Primary:   []Owner{toolsTeam},
