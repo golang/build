@@ -444,25 +444,12 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-386-12_3", "mobile"), none},
 
 		// FreeBSD 11.4
-		{b("freebsd-amd64-11_4@go1.16", "go"), onlyPost},
-		{b("freebsd-amd64-11_4@go1.16", "net"), onlyPost},
-		{b("freebsd-amd64-11_4@go1.16", "sys"), both},
-		{b("freebsd-amd64-11_4", "go"), none},
+		{b("freebsd-amd64-11_4@go1.17", "go"), onlyPost},
+		{b("freebsd-amd64-11_4@go1.17", "net"), none},
+		{b("freebsd-amd64-11_4@go1.17", "sys"), none},
 		{b("freebsd-386-11_4@go1.17", "go"), onlyPost},
-		{b("freebsd-386-11_4@go1.17", "net"), onlyPost},
-		{b("freebsd-386-11_4@go1.17", "sys"), both},
-		{b("freebsd-386-11_4", "go"), none},
-
-		// FreeBSD 11.2
-		// See golang.org/issue/45727
-		{b("freebsd-amd64-11_2@go1.15", "go"), onlyPost},
-		{b("freebsd-amd64-11_2@go1.15", "net"), onlyPost},
-		{b("freebsd-amd64-11_2@go1.15", "sys"), both},
-		{b("freebsd-amd64-11_2", "go"), none},
-		{b("freebsd-386-11_2@go1.16", "go"), onlyPost},
-		{b("freebsd-386-11_2@go1.16", "net"), onlyPost},
-		{b("freebsd-386-11_2@go1.16", "sys"), both},
-		{b("freebsd-386-11_2", "go"), none},
+		{b("freebsd-386-11_4@go1.17", "net"), none},
+		{b("freebsd-386-11_4@go1.17", "sys"), none},
 
 		// NetBSD
 		{b("netbsd-amd64-9_0", "go"), onlyPost},

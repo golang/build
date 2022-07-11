@@ -282,14 +282,6 @@ var Hosts = map[string]*HostConfig{
 		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		Owners:    []*gophers.Person{gh("4a6f656c")},
 	},
-	"host-freebsd-11_2": &HostConfig{
-		VMImage:            "freebsd-amd64-112",
-		Notes:              "FreeBSD 11.2; GCE VM is built from script in build/env/freebsd-amd64",
-		machineType:        "n2-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
-		SSHUsername:        "gopher",
-	},
 	"host-freebsd-11_4": &HostConfig{
 		VMImage:            "freebsd-amd64-114",
 		Notes:              "FreeBSD 11.4; GCE VM is built from script in build/env/freebsd-amd64",
@@ -1525,28 +1517,14 @@ func explicitTrySet(projs ...string) func(proj, branch, goBranch string) bool {
 
 func init() {
 	addBuilder(BuildConfig{
-		Name:              "freebsd-amd64-11_2",
-		HostType:          "host-freebsd-11_2",
-		tryBot:            explicitTrySet("sys"),
-		distTestAdjust:    fasterTrybots,
-		numTryTestHelpers: 4,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder is still used by Go 1.16 and 1.15,
-			// so keep it around a bit longer. See golang.org/issue/45727.
-			// Test relevant Go versions so that we're better informed.
-			return atMostGo1(goBranch, 16) && buildRepoByDefault(repo)
-		},
-	})
-	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-11_4",
 		HostType:          "host-freebsd-11_4",
-		tryBot:            explicitTrySet("sys"),
 		distTestAdjust:    fasterTrybots,
 		numTryTestHelpers: 4,
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder is still used by Go 1.17 and 1.16,
+			// This builder is still used by Go 1.17,
 			// keep it around a bit longer. See go.dev/issue/49491.
-			return atMostGo1(goBranch, 17) && buildRepoByDefault(repo)
+			return atMostGo1(goBranch, 17) && repo == "go"
 		},
 	})
 	addBuilder(BuildConfig{
@@ -1584,28 +1562,14 @@ func init() {
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
-		Name:           "freebsd-386-11_2",
-		HostType:       "host-freebsd-11_2",
-		distTestAdjust: noTestDirAndNoReboot,
-		tryBot:         explicitTrySet("sys"),
-		env:            []string{"GOARCH=386", "GOHOSTARCH=386"},
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder is still used by Go 1.16 and 1.15,
-			// so keep it around a bit longer. See golang.org/issue/45727.
-			// Test relevant Go versions so that we're better informed.
-			return atMostGo1(goBranch, 16) && buildRepoByDefault(repo)
-		},
-	})
-	addBuilder(BuildConfig{
 		Name:           "freebsd-386-11_4",
 		HostType:       "host-freebsd-11_4",
 		distTestAdjust: noTestDirAndNoReboot,
-		tryBot:         explicitTrySet("sys"),
 		env:            []string{"GOARCH=386", "GOHOSTARCH=386"},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// This builder is still used by Go 1.17 and 1.16,
 			// keep it around a bit longer. See go.dev/issue/49491.
-			return atMostGo1(goBranch, 17) && buildRepoByDefault(repo)
+			return atMostGo1(goBranch, 17) && repo == "go"
 		},
 	})
 	addBuilder(BuildConfig{
