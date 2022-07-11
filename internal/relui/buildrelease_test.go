@@ -48,20 +48,39 @@ func TestRelease(t *testing.T) {
 	})
 }
 
-func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
+func TestSecurity(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		testSecurity(t, true)
+	})
+	t.Run("failure", func(t *testing.T) {
+		testSecurity(t, false)
+	})
+}
+
+type releaseTestDeps struct {
+	ctx            context.Context
+	buildlets      *fakeBuildlets
+	gerrit         *fakeGerrit
+	versionTasks   *task.VersionTasks
+	buildTasks     *BuildReleaseTasks
+	milestoneTasks *task.MilestoneTasks
+	publishedFiles map[string]*WebsiteFile
+	outputListener func(taskName string, output interface{})
+}
+
+func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	if runtime.GOOS != "linux" {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("Requires bash shell scripting support.")
 	}
 
 	// Set up a server that will be used to serve inputs to the build.
-	tarballServer := httptest.NewServer(http.HandlerFunc(serveTarballs))
-	defer tarballServer.Close()
+	bootstrapServer := httptest.NewServer(http.HandlerFunc(serveBootstrap))
+	t.Cleanup(bootstrapServer.Close)
 	fakeBuildlets := &fakeBuildlets{
 		t:       t,
 		dir:     t.TempDir(),
-		httpURL: tarballServer.URL,
+		httpURL: bootstrapServer.URL,
 		logs:    map[string][]*[]string{},
 	}
 
@@ -88,7 +107,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	servingDir := t.TempDir()
 	dlDir := t.TempDir()
 	dlServer := httptest.NewServer(http.FileServer(http.FS(os.DirFS(dlDir))))
-	defer dlServer.Close()
+	t.Cleanup(dlServer.Close)
 	go fakeCDNLoad(ctx, t, servingDir, dlDir)
 	uploadPollDuration = 100 * time.Millisecond
 
@@ -112,8 +131,11 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		RepoOwner: "golang",
 		RepoName:  "go",
 	}
+
+	snapshotServer := httptest.NewServer(http.HandlerFunc(serveSnapshot))
+	t.Cleanup(snapshotServer.Close)
 	buildTasks := &BuildReleaseTasks{
-		GerritURL:      tarballServer.URL,
+		GerritURL:      snapshotServer.URL,
 		GCSClient:      nil,
 		ScratchURL:     "file://" + filepath.ToSlash(scratchDir),
 		ServingURL:     "file://" + filepath.ToSlash(servingDir),
@@ -124,29 +146,49 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 			return nil
 		},
 	}
+	// Cleanups are called in reverse order, and we need to cancel the context
+	// before the temp dirs are deleted.
+	t.Cleanup(cancel)
+	return &releaseTestDeps{
+		ctx:            ctx,
+		buildlets:      fakeBuildlets,
+		gerrit:         gerrit,
+		versionTasks:   versionTasks,
+		buildTasks:     buildTasks,
+		milestoneTasks: milestoneTasks,
+		publishedFiles: files,
+		outputListener: outputListener,
+	}
+}
+
+func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
+	deps := newReleaseTestDeps(t, wantVersion)
 	wd := workflow.New()
-	v, err := addSingleReleaseWorkflow(buildTasks, milestoneTasks, versionTasks, wd, "go1.18", kind)
+	v, err := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, "go1.18", kind)
 	if err != nil {
 		t.Fatal(err)
 	}
 	wd.Output("Published Go version", v)
+
 	w, err := workflow.Start(wd, map[string]interface{}{
-		"Targets to skip testing (or 'all') (optional)": []string(nil),
+		"Targets to skip testing (or 'all') (optional)":            []string(nil),
+		"Ref from the private repository to build from (optional)": "",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = w.Run(ctx, &verboseListener{t, outputListener})
+	_, err = w.Run(deps.ctx, &verboseListener{t, deps.outputListener})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range files {
+	for _, f := range deps.publishedFiles {
 		if f.ChecksumSHA256 == "" || f.Size < 1 || f.Filename == "" || f.Kind == "" {
 			t.Errorf("release process produced an invalid artifact: %#v", f)
 		}
 	}
 
-	checkTGZ(t, dlDir, files, "src.tar.gz", &WebsiteFile{
+	dlURL, files := deps.buildTasks.DownloadURL, deps.publishedFiles
+	checkTGZ(t, dlURL, files, "src.tar.gz", &WebsiteFile{
 		OS:   "",
 		Arch: "",
 		Kind: "source",
@@ -154,12 +196,12 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		"go/VERSION":       wantVersion,
 		"go/src/make.bash": makeScript,
 	})
-	checkContents(t, dlDir, files, "windows-amd64.msi", &WebsiteFile{
+	checkContents(t, dlURL, files, "windows-amd64.msi", &WebsiteFile{
 		OS:   "windows",
 		Arch: "amd64",
 		Kind: "installer",
 	}, "I'm an MSI!\n")
-	checkTGZ(t, dlDir, files, "linux-amd64.tar.gz", &WebsiteFile{
+	checkTGZ(t, dlURL, files, "linux-amd64.tar.gz", &WebsiteFile{
 		OS:   "linux",
 		Arch: "amd64",
 		Kind: "archive",
@@ -168,7 +210,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		"go/tool/something_orother/compile": "",
 		"go/pkg/something_orother/race.a":   "",
 	})
-	checkZip(t, dlDir, files, "windows-arm64.zip", &WebsiteFile{
+	checkZip(t, dlURL, files, "windows-arm64.zip", &WebsiteFile{
 		OS:   "windows",
 		Arch: "arm64",
 		Kind: "archive",
@@ -176,7 +218,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		"go/VERSION":                        wantVersion,
 		"go/tool/something_orother/compile": "",
 	})
-	checkTGZ(t, dlDir, files, "linux-armv6l.tar.gz", &WebsiteFile{
+	checkTGZ(t, dlURL, files, "linux-armv6l.tar.gz", &WebsiteFile{
 		OS:   "linux",
 		Arch: "armv6l",
 		Kind: "archive",
@@ -184,7 +226,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		"go/VERSION":                        wantVersion,
 		"go/tool/something_orother/compile": "",
 	})
-	checkContents(t, dlDir, files, "darwin-amd64.pkg", &WebsiteFile{
+	checkContents(t, dlURL, files, "darwin-amd64.pkg", &WebsiteFile{
 		OS:   "darwin",
 		Arch: "amd64",
 		Kind: "installer",
@@ -194,16 +236,16 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	if kind == task.KindBeta {
 		wantCLs--
 	}
-	if gerrit.changesCreated != wantCLs {
-		t.Errorf("workflow sent %v changes to Gerrit, want %v", gerrit.changesCreated, wantCLs)
+	if deps.gerrit.changesCreated != wantCLs {
+		t.Errorf("workflow sent %v changes to Gerrit, want %v", deps.gerrit.changesCreated, wantCLs)
 	}
 
-	if len(gerrit.createdTags) != 1 {
-		t.Errorf("workflow created %v tags, want 1", gerrit.createdTags)
+	if len(deps.gerrit.createdTags) != 1 {
+		t.Errorf("workflow created %v tags, want 1", deps.gerrit.createdTags)
 	}
 
 	// TODO: consider logging this to golden files?
-	for name, logs := range fakeBuildlets.logs {
+	for name, logs := range deps.buildlets.logs {
 		t.Logf("%v buildlets:", name)
 		for _, group := range logs {
 			for _, line := range *group {
@@ -211,6 +253,66 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 			}
 		}
 	}
+}
+
+func testSecurity(t *testing.T, mergeFixes bool) {
+	deps := newReleaseTestDeps(t, "go1.18rc1")
+
+	// Set up the fake merge process. Once we stop to ask for approval, switch
+	// the public Gerrit server to serve the same content as the private server.
+	approved := false
+	privateServer := httptest.NewServer(http.HandlerFunc(serveSecureSnapshot))
+	t.Cleanup(privateServer.Close)
+	deps.buildTasks.PrivateGerritURL = privateServer.URL
+
+	publicServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if approved && mergeFixes {
+			serveSecureSnapshot(w, r)
+		} else {
+			serveSnapshot(w, r)
+		}
+	}))
+	t.Cleanup(publicServer.Close)
+	deps.buildTasks.GerritURL = publicServer.URL
+
+	defaultApprove := deps.buildTasks.ApproveAction
+	deps.buildTasks.ApproveAction = func(tc *workflow.TaskContext, i interface{}) error {
+		approved = true
+		return defaultApprove(tc, i)
+	}
+
+	// Run the release.
+	wd := workflow.New()
+	v, err := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, "go1.18", task.KindRC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wd.Output("Published Go version", v)
+
+	w, err := workflow.Start(wd, map[string]interface{}{
+		"Targets to skip testing (or 'all') (optional)":            []string(nil),
+		"Ref from the private repository to build from (optional)": "security-ref",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = w.Run(deps.ctx, &verboseListener{t, deps.outputListener})
+	if mergeFixes && err != nil {
+		t.Fatal(err)
+	}
+	if !mergeFixes {
+		if err == nil {
+			t.Fatal("release succeeded without merging fixes to the public repository")
+		}
+		return
+	}
+	checkTGZ(t, deps.buildTasks.DownloadURL, deps.publishedFiles, "src.tar.gz", &WebsiteFile{
+		OS:   "",
+		Arch: "",
+		Kind: "source",
+	}, map[string]string{
+		"go/security.txt": "This file makes us secure",
+	})
 }
 
 // makeScript pretends to be make.bash. It creates a fake go command that
@@ -256,12 +358,43 @@ echo "I'm a test! :D"
 exit 0
 `
 
+func serveBootstrap(w http.ResponseWriter, r *http.Request) {
+	serveTarball("go-builder-data/go", map[string]string{
+		"bin/go": "I'm a dummy bootstrap go command!",
+	}, w, r)
+}
+
+func serveSnapshot(w http.ResponseWriter, r *http.Request) {
+	serveTarball("+archive", map[string]string{
+		"src/make.bash": makeScript,
+		"src/make.bat":  makeScript,
+		"src/all.bash":  allScript,
+		"src/all.bat":   allScript,
+	}, w, r)
+}
+
+func serveSecureSnapshot(w http.ResponseWriter, r *http.Request) {
+	serveTarball("+archive", map[string]string{
+		"src/make.bash": makeScript,
+		"src/make.bat":  makeScript,
+		"src/all.bash":  allScript,
+		"src/all.bat":   allScript,
+		"security.txt":  "This file makes us secure",
+	}, w, r)
+}
+
 // serveTarballs serves the files the release process relies on.
 // PutTarFromURL is hardcoded to read from this server.
-func serveTarballs(w http.ResponseWriter, r *http.Request) {
+func serveTarball(pathMatch string, files map[string]string, w http.ResponseWriter, r *http.Request) {
+	if !strings.Contains(r.URL.Path, pathMatch) {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
 	gzw := gzip.NewWriter(w)
 	tw := tar.NewWriter(gzw)
-	writeFile := func(name, contents string) {
+
+	for name, contents := range files {
 		if err := tw.WriteHeader(&tar.Header{
 			Typeflag: tar.TypeReg,
 			Name:     name,
@@ -275,18 +408,6 @@ func serveTarballs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	switch {
-	case strings.Contains(r.URL.Path, "+archive"):
-		writeFile("src/make.bash", makeScript)
-		writeFile("src/make.bat", makeScript)
-		writeFile("src/all.bash", allScript)
-		writeFile("src/all.bat", allScript)
-	case strings.Contains(r.URL.Path, "go-builder-data/go"):
-		writeFile("bin/go", "I'm a dummy bootstrap go command!")
-	default:
-		panic("unknown url requested: " + r.URL.String())
-	}
-
 	if err := tw.Close(); err != nil {
 		panic(err)
 	}
@@ -295,7 +416,7 @@ func serveTarballs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func checkFile(t *testing.T, dlDir string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, check func([]byte)) {
+func checkFile(t *testing.T, dlURL string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, check func([]byte)) {
 	t.Run(filename, func(t *testing.T) {
 		f, ok := files[filename]
 		if !ok {
@@ -304,24 +425,28 @@ func checkFile(t *testing.T, dlDir string, files map[string]*WebsiteFile, filena
 		if diff := cmp.Diff(meta, f, cmpopts.IgnoreFields(WebsiteFile{}, "Filename", "Version", "ChecksumSHA256", "Size")); diff != "" {
 			t.Errorf("file metadata mismatch (-want +got):\n%v", diff)
 		}
-		b, err := ioutil.ReadFile(filepath.Join(dlDir, f.Filename))
+		resp, err := http.Get(dlURL + "/" + f.Filename)
+		if err != nil {
+			t.Fatalf("getting %v: %v", f.Filename, err)
+		}
+		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			t.Fatalf("reading %v: %v", f.Filename, err)
 		}
-		check(b)
+		check(body)
 	})
 }
 
-func checkContents(t *testing.T, dlDir string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, contents string) {
-	checkFile(t, dlDir, files, filename, meta, func(b []byte) {
+func checkContents(t *testing.T, dlURL string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, contents string) {
+	checkFile(t, dlURL, files, filename, meta, func(b []byte) {
 		if got, want := string(b), contents; got != want {
 			t.Errorf("%v contains %q, want %q", filename, got, want)
 		}
 	})
 }
 
-func checkTGZ(t *testing.T, dlDir string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, contents map[string]string) {
-	checkFile(t, dlDir, files, filename, meta, func(b []byte) {
+func checkTGZ(t *testing.T, dlURL string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, contents map[string]string) {
+	checkFile(t, dlURL, files, filename, meta, func(b []byte) {
 		gzr, err := gzip.NewReader(bytes.NewReader(b))
 		if err != nil {
 			t.Fatal(err)
@@ -354,8 +479,8 @@ func checkTGZ(t *testing.T, dlDir string, files map[string]*WebsiteFile, filenam
 	})
 }
 
-func checkZip(t *testing.T, dlDir string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, contents map[string]string) {
-	checkFile(t, dlDir, files, filename, meta, func(b []byte) {
+func checkZip(t *testing.T, dlURL string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, contents map[string]string) {
+	checkFile(t, dlURL, files, filename, meta, func(b []byte) {
 		zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
 		if err != nil {
 			t.Fatal(err)

@@ -121,7 +121,7 @@ func main() {
 	}
 }
 
-const gerritURL = "https://go.googlesource.com"
+const gerritURL = "https://go.googlesource.com/go"
 
 func doRelease(ctx *workflow.TaskContext, revision, version string, target *releasetargets.Target, stagingDir string, watch bool) error {
 	srcBuf := &bytes.Buffer{}

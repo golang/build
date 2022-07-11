@@ -5,6 +5,9 @@
 package relui
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -17,6 +20,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/google/go-cmp/cmp"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
@@ -633,8 +637,7 @@ func addBuildAndTestOnlyWorkflow(wd *workflow.Definition, version *task.VersionT
 	}
 	branchVal := wd.Constant(branch)
 	releaseBase := wd.Task("Pick release base commit", version.ReadBranchHead, branchVal)
-	noop := wd.Action("noop", func(_ *workflow.TaskContext) error { return nil })
-	artifacts, err := build.addBuildTasks(wd, major, nextVersion, releaseBase, wd.Constant([]string{}), true, noop)
+	artifacts, err := build.addBuildTasks(wd, major, nextVersion, releaseBase, true)
 	if err != nil {
 		return err
 	}
@@ -684,15 +687,13 @@ func addSingleReleaseWorkflow(
 	build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks,
 	wd *workflow.Definition, major string, kind task.ReleaseKind,
 ) (versionPublished workflow.Value, _ error) {
-	skipTests := wd.Parameter(workflow.Parameter{Name: "Targets to skip testing (or 'all') (optional)", ParameterType: workflow.SliceShort})
-
 	kindVal := wd.Constant(kind)
 	branch := fmt.Sprintf("release-branch.%v", major)
 	if kind == task.KindBeta {
 		branch = "master"
 	}
 	branchVal := wd.Constant(branch)
-	releaseBase := wd.Task("Pick release base commit", version.ReadBranchHead, branchVal)
+	startingHead := wd.Task("Read starting branch head", version.ReadBranchHead, branchVal)
 
 	// Select version, check milestones.
 	nextVersion := wd.Task("Get next version", version.GetNextVersion, kindVal)
@@ -705,8 +706,11 @@ func addSingleReleaseWorkflow(
 	startSigner := wd.Task("Start signing command", build.startSigningCommand, nextVersion)
 	wd.Output("Signing command", startSigner)
 
+	securityRef := wd.Parameter(workflow.Parameter{Name: "Ref from the private repository to build from (optional)"})
+	source := wd.Task("Build source archive", build.buildSource, startingHead, securityRef, nextVersion, checked)
+
 	// Build, test, and sign release.
-	signedAndTestedArtifacts, err := build.addBuildTasks(wd, "go1.19", nextVersion, releaseBase, skipTests, false, checked)
+	signedAndTestedArtifacts, err := build.addBuildTasks(wd, "go1.19", nextVersion, source, false)
 	if err != nil {
 		return nil, err
 	}
@@ -714,31 +718,35 @@ func addSingleReleaseWorkflow(
 	okayToTagAndPublish := wd.Action("Wait for Release Coordinator Approval", build.ApproveAction, signedAndTestedArtifacts)
 
 	// Tag version and upload to CDN/website.
-	uploaded := wd.Action("Upload artifacts to CDN", build.uploadArtifacts, signedAndTestedArtifacts, okayToTagAndPublish)
-
-	tagCommit := releaseBase
+	// If we're releasing a beta from master, tagging is easy; we just tag the
+	// commit we started from. Otherwise, we're going to submit a VERSION CL,
+	// and we need to make sure that that CL is submitted on top of the same
+	// state we built from. For security releases that state may not have
+	// been public when we started, but it should be now.
+	tagCommit := startingHead
 	if branch != "master" {
-		branchHeadChecked := wd.Action("Check for modified branch head", version.CheckBranchHead, branchVal, releaseBase, uploaded)
+		publishingHead := wd.Task("Read current branch head", version.ReadBranchHead, branchVal, okayToTagAndPublish)
+		branchHeadChecked := wd.Action("Check branch state matches source archive", build.checkSourceMatch, publishingHead, nextVersion, source)
 		versionCL := wd.Task("Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, nextVersion, branchHeadChecked)
-		tagCommit = wd.Task("Wait for version CL submission", version.AwaitCL, versionCL, releaseBase)
+		tagCommit = wd.Task("Wait for version CL submission", version.AwaitCL, versionCL, publishingHead)
 	}
-	tagged := wd.Action("Tag version", version.TagRelease, nextVersion, tagCommit, uploaded)
-
+	tagged := wd.Action("Tag version", version.TagRelease, nextVersion, tagCommit, okayToTagAndPublish)
+	uploaded := wd.Action("Upload artifacts to CDN", build.uploadArtifacts, signedAndTestedArtifacts, tagged)
 	pushed := wd.Action("Push issues", milestone.PushIssues, milestones, nextVersion, kindVal, tagged)
-	versionPublished = wd.Task("Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, pushed)
+	versionPublished = wd.Task("Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, uploaded, pushed)
 	wd.Output("Released version", versionPublished)
 	return versionPublished, nil
 }
 
 // addBuildTasks registers tasks to build, test, and sign the release onto wd.
 // It returns the output from the last task, a slice of signed and tested artifacts.
-func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, majorVersion string, version, revision, skipTests workflow.Value, skipSigning bool, dependency workflow.Dependency) (workflow.Value, error) {
+func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, majorVersion string, version, source workflow.Value, skipSigning bool) (workflow.Value, error) {
 	targets, ok := releasetargets.TargetsForVersion(majorVersion)
 	if !ok {
 		return nil, fmt.Errorf("malformed/unknown version %q", majorVersion)
 	}
 
-	source := wd.Task("Build source archive", tasks.buildSource, revision, version, dependency)
+	skipTests := wd.Parameter(workflow.Parameter{Name: "Targets to skip testing (or 'all') (optional)", ParameterType: workflow.SliceShort})
 	// Artifact file paths.
 	artifacts := []workflow.Value{source}
 	var darwinTargets []*releasetargets.Target
@@ -788,6 +796,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, majorVers
 // BuildReleaseTasks serves as an adapter to the various build tasks in the task package.
 type BuildReleaseTasks struct {
 	GerritURL              string
+	PrivateGerritURL       string
 	GCSClient              *storage.Client
 	ScratchURL, ServingURL string
 	DownloadURL            string
@@ -796,10 +805,59 @@ type BuildReleaseTasks struct {
 	ApproveAction          func(*workflow.TaskContext, interface{}) error
 }
 
-func (b *BuildReleaseTasks) buildSource(ctx *workflow.TaskContext, revision, version string) (artifact, error) {
+func (b *BuildReleaseTasks) buildSource(ctx *workflow.TaskContext, revision, securityRevision, version string) (artifact, error) {
 	return b.runBuildStep(ctx, nil, "", artifact{}, "src.tar.gz", func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
+		if securityRevision != "" {
+			return task.WriteSourceArchive(ctx, b.PrivateGerritURL, securityRevision, version, w)
+		}
 		return task.WriteSourceArchive(ctx, b.GerritURL, revision, version, w)
 	})
+}
+
+func (b *BuildReleaseTasks) checkSourceMatch(ctx *workflow.TaskContext, head, version string, source artifact) error {
+	_, err := b.runBuildStep(ctx, nil, "", source, "", func(_ *task.BuildletStep, r io.Reader, _ io.Writer) error {
+		branchArchive := &bytes.Buffer{}
+		if err := task.WriteSourceArchive(ctx, b.GerritURL, head, version, branchArchive); err != nil {
+			return err
+		}
+		branchHashes, err := tarballHashes(branchArchive)
+		if err != nil {
+			return fmt.Errorf("hashing branch tarball: %v", err)
+		}
+		archiveHashes, err := tarballHashes(r)
+		if err != nil {
+			return fmt.Errorf("hashing archive tarball: %v", err)
+		}
+		if diff := cmp.Diff(branchHashes, archiveHashes); diff != "" {
+			return fmt.Errorf("branch state doesn't match source archive (-branch, +archive):\n%v", diff)
+		}
+		return nil
+	})
+	return err
+}
+
+func tarballHashes(r io.Reader) (map[string]string, error) {
+	gzr, err := gzip.NewReader(r)
+	if err != nil {
+		return nil, err
+	}
+	defer gzr.Close()
+	tr := tar.NewReader(gzr)
+	hashes := map[string]string{}
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, fmt.Errorf("reading tar header: %v", err)
+		}
+		h := sha256.New()
+		if _, err := io.CopyN(h, tr, header.Size); err != nil {
+			return nil, fmt.Errorf("reading file %q: %v", header.Name, err)
+		}
+		hashes[header.Name] = fmt.Sprintf("%X", h.Sum(nil))
+	}
+	return hashes, nil
 }
 
 func (b *BuildReleaseTasks) buildBinary(ctx *workflow.TaskContext, target *releasetargets.Target, source artifact) (artifact, error) {

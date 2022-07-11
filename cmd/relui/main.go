@@ -135,12 +135,13 @@ func main() {
 	defer db.Close()
 
 	buildTasks := &relui.BuildReleaseTasks{
-		GerritURL:      "https://go.googlesource.com",
-		CreateBuildlet: coordinator.CreateBuildlet,
-		GCSClient:      gcsClient,
-		ScratchURL:     *scratchFilesBase,
-		ServingURL:     *servingFilesBase,
-		DownloadURL:    *edgeCacheURL,
+		GerritURL:        "https://go.googlesource.com/go",
+		PrivateGerritURL: "https://team.googlesource.com/go-private",
+		CreateBuildlet:   coordinator.CreateBuildlet,
+		GCSClient:        gcsClient,
+		ScratchURL:       *scratchFilesBase,
+		ServingURL:       *servingFilesBase,
+		DownloadURL:      *edgeCacheURL,
 		PublishFile: func(f *relui.WebsiteFile) error {
 			return publishFile(*websiteUploadURL, userPassAuth, f)
 		},

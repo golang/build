@@ -104,17 +104,6 @@ func (t *VersionTasks) ReadBranchHead(ctx *workflow.TaskContext, branch string) 
 	return t.Gerrit.ReadBranchHead(ctx, t.GoProject, branch)
 }
 
-func (t *VersionTasks) CheckBranchHead(ctx *workflow.TaskContext, branch, expectedCommit string) error {
-	head, err := t.ReadBranchHead(ctx, branch)
-	if err != nil {
-		return err
-	}
-	if head != expectedCommit {
-		return fmt.Errorf("head of branch %q is %q, wanted %q", branch, head, expectedCommit)
-	}
-	return nil
-}
-
 // TagRelease tags commit as version.
 func (t *VersionTasks) TagRelease(ctx *workflow.TaskContext, version, commit string) error {
 	return t.Gerrit.Tag(ctx, t.GoProject, version, commit)
