@@ -646,22 +646,22 @@ func (l *testLogger) Printf(format string, v ...interface{}) {
 // fakeSign acts like a human running the signbinaries job periodically.
 func fakeSign(ctx context.Context, t *testing.T, dir string) {
 	seen := map[string]bool{}
-	internal.PeriodicallyDo(ctx, 100*time.Millisecond, func(_ context.Context, _ time.Time) {
-		fakeSignOnce(t, dir, seen)
+	periodicallyDo(ctx, t, 100*time.Millisecond, func() error {
+		return fakeSignOnce(t, dir, seen)
 	})
 }
 
-func fakeSignOnce(t *testing.T, dir string, seen map[string]bool) {
+func fakeSignOnce(t *testing.T, dir string, seen map[string]bool) error {
 	_, err := os.Stat(filepath.Join(dir, "ready"))
 	if os.IsNotExist(err) {
-		return
+		return nil
 	}
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 	contents, err := os.ReadDir(dir)
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 	for _, fi := range contents {
 		fn := fi.Name()
@@ -687,32 +687,40 @@ func fakeSignOnce(t *testing.T, dir string, seen map[string]bool) {
 			t.Fatal(err)
 		}
 
-		writeSignedWithHash := func(filename string, contents []byte) {
+		writeSignedWithHash := func(filename string, contents []byte) error {
 			path := filepath.Join(dir, "signed", filename)
 			if err := ioutil.WriteFile(path, contents, 0777); err != nil {
-				t.Fatal(err)
+				return err
 			}
 			hash := fmt.Sprintf("%x", sha256.Sum256(contents))
 			if err := ioutil.WriteFile(path+".sha256", []byte(hash), 0777); err != nil {
-				t.Fatal(err)
+				return err
 			}
+			return nil
 		}
 
 		if copy {
 			bytes, err := ioutil.ReadFile(filepath.Join(dir, fn))
 			if err != nil {
-				t.Fatal(err)
+				return err
 			}
-			writeSignedWithHash(fn, bytes)
+			if err := writeSignedWithHash(fn, bytes); err != nil {
+				return err
+			}
 		}
 		if makePkg {
-			writeSignedWithHash(strings.ReplaceAll(fn, ".tar.gz", ".pkg"), []byte("I'm a .pkg!\n"))
+			if err := writeSignedWithHash(strings.ReplaceAll(fn, ".tar.gz", ".pkg"), []byte("I'm a .pkg!\n")); err != nil {
+				return err
+			}
 		}
 		if gpgSign {
-			writeSignedWithHash(fn+".asc", []byte("gpg signature"))
+			if err := writeSignedWithHash(fn+".asc", []byte("gpg signature")); err != nil {
+				return err
+			}
 		}
 		seen[fn] = true
 	}
+	return nil
 }
 
 // These are the files created by the Go 1.18 release.
@@ -806,10 +814,10 @@ func TestFakeSign(t *testing.T) {
 
 func fakeCDNLoad(ctx context.Context, t *testing.T, from, to string) {
 	seen := map[string]bool{}
-	internal.PeriodicallyDo(ctx, 100*time.Millisecond, func(_ context.Context, _ time.Time) {
+	periodicallyDo(ctx, t, 100*time.Millisecond, func() error {
 		files, err := os.ReadDir(from)
 		if err != nil {
-			t.Fatal(err)
+			return err
 		}
 		for _, f := range files {
 			if seen[f.Name()] {
@@ -818,11 +826,27 @@ func fakeCDNLoad(ctx context.Context, t *testing.T, from, to string) {
 			seen[f.Name()] = true
 			contents, err := os.ReadFile(filepath.Join(from, f.Name()))
 			if err != nil {
-				t.Fatal(err)
+				return err
 			}
 			if err := os.WriteFile(filepath.Join(to, f.Name()), contents, 0777); err != nil {
-				t.Fatal(err)
+				return err
 			}
 		}
+		return nil
 	})
+}
+
+func periodicallyDo(ctx context.Context, t *testing.T, period time.Duration, f func() error) {
+	var err error
+	childCtx, cancel := context.WithCancel(ctx)
+	internal.PeriodicallyDo(childCtx, period, func(_ context.Context, _ time.Time) {
+		err = f()
+		if err != nil {
+			cancel()
+		}
+	})
+	// Suppress errors caused by the test finishing before we notice.
+	if err != nil && ctx.Err() == nil {
+		t.Fatal(err)
+	}
 }
