@@ -328,6 +328,7 @@ func (d *dependency) deps() []*taskDefinition {
 type TaskContext struct {
 	context.Context
 	Logger
+	TaskName   string
 	WorkflowID uuid.UUID
 }
 
@@ -614,6 +615,7 @@ func (w *Workflow) runTask(ctx context.Context, listener Listener, state taskSta
 	tctx := &TaskContext{
 		Context:    ctx,
 		Logger:     listener.Logger(w.ID, state.def.name),
+		TaskName:   state.def.name,
 		WorkflowID: w.ID,
 	}
 	in := append([]reflect.Value{reflect.ValueOf(tctx)}, args...)

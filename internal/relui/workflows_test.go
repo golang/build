@@ -123,9 +123,9 @@ func TestCheckTaskApproved(t *testing.T) {
 	if _, err := q.CreateTask(ctx, gtg); err != nil {
 		t.Fatalf("CreateTask(_, %v) = _, %v, wanted no error", gtg, err)
 	}
-	tctx := &workflow.TaskContext{Context: ctx, WorkflowID: wf.ID}
+	tctx := &workflow.TaskContext{Context: ctx, WorkflowID: wf.ID, TaskName: gtg.Name}
 
-	got, err := checkTaskApproved(tctx, p, gtg.Name)
+	got, err := checkTaskApproved(tctx, p)
 	if err != nil || got {
 		t.Errorf("checkTaskApproved(_, %v, %q) = %t, %v wanted %t, %v", p, gtg.Name, got, err, false, nil)
 	}
@@ -148,7 +148,7 @@ func TestCheckTaskApproved(t *testing.T) {
 		t.Errorf("q.ApproveTask(_, %v) = _, %v, wanted no error", atp, err)
 	}
 
-	got, err = checkTaskApproved(tctx, p, gtg.Name)
+	got, err = checkTaskApproved(tctx, p)
 	if err != nil || !got {
 		t.Errorf("checkTaskApproved(_, %v, %q) = %t, %v wanted %t, %v", p, gtg.Name, got, err, true, nil)
 	}

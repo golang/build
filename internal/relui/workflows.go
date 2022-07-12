@@ -507,16 +507,16 @@ func AwaitActionDep(period time.Duration, awaitCondition AwaitConditionFunc) fun
 	}
 }
 
-func checkTaskApproved(ctx *workflow.TaskContext, p *pgxpool.Pool, taskName string) (bool, error) {
+func checkTaskApproved(ctx *workflow.TaskContext, p *pgxpool.Pool) (bool, error) {
 	q := db.New(p)
 	t, err := q.Task(ctx, db.TaskParams{
+		Name:       ctx.TaskName,
 		WorkflowID: ctx.WorkflowID,
-		Name:       taskName,
 	})
 	if !t.ReadyForApproval {
 		_, err := q.UpdateTaskReadyForApproval(ctx, db.UpdateTaskReadyForApprovalParams{
 			ReadyForApproval: true,
-			Name:             taskName,
+			Name:             ctx.TaskName,
 			WorkflowID:       ctx.WorkflowID,
 		})
 		if err != nil {
@@ -541,12 +541,10 @@ func checkTaskApproved(ctx *workflow.TaskContext, p *pgxpool.Pool, taskName stri
 //
 //	actionName := "Wait for Approval"
 //	waitAction := wd.Action(actionName, ApproveActionDep(db)(actionName), someDependency)
-func ApproveActionDep(p *pgxpool.Pool) func(taskName string) func(*workflow.TaskContext, interface{}) error {
-	return func(taskName string) func(*workflow.TaskContext, interface{}) error {
-		return AwaitActionDep(5*time.Second, func(ctx *workflow.TaskContext) (done bool, err error) {
-			return checkTaskApproved(ctx, p, taskName)
-		})
-	}
+func ApproveActionDep(p *pgxpool.Pool) func(*workflow.TaskContext, interface{}) error {
+	return AwaitActionDep(5*time.Second, func(ctx *workflow.TaskContext) (done bool, err error) {
+		return checkTaskApproved(ctx, p)
+	})
 }
 
 // TODO(go.dev/issue/53537): Flip to true.
@@ -568,8 +566,7 @@ func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, mil
 		}
 
 		if mergeCommTasksIntoReleaseWorkflows {
-			const announceAndTweet = "Wait to Announce"
-			okayToAnnounceAndTweet := wd.Action(announceAndTweet, build.ApproveActionFunc(announceAndTweet), versionPublished)
+			okayToAnnounceAndTweet := wd.Action("Wait to Announce", build.ApproveAction, versionPublished)
 
 			// Announce that a new Go release has been published.
 			sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v string, names []string) (task.SentMail, error) {
@@ -665,8 +662,7 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	}
 
 	if mergeCommTasksIntoReleaseWorkflows {
-		const announceAndTweet = "Wait to Announce"
-		okayToAnnounceAndTweet := wd.Action(announceAndTweet, build.ApproveActionFunc(announceAndTweet), wd.Slice(v1Published, v2Published))
+		okayToAnnounceAndTweet := wd.Action("Wait to Announce", build.ApproveAction, wd.Slice(v1Published, v2Published))
 
 		// Announce that a new Go release has been published.
 		sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v1, v2 string, sec, names []string) (task.SentMail, error) {
@@ -715,12 +711,7 @@ func addSingleReleaseWorkflow(
 		return nil, err
 	}
 
-	const tagAndPublish = "Wait for Release Coordinator Approval"
-	majorTagAndPublish := tagAndPublish
-	if kind == task.KindPrevMinor || kind == task.KindCurrentMinor {
-		majorTagAndPublish = fmt.Sprintf("%s: %s", major, tagAndPublish)
-	}
-	okayToTagAndPublish := wd.Action(tagAndPublish, build.ApproveActionFunc(majorTagAndPublish), signedAndTestedArtifacts)
+	okayToTagAndPublish := wd.Action("Wait for Release Coordinator Approval", build.ApproveAction, signedAndTestedArtifacts)
 
 	// Tag version and upload to CDN/website.
 	uploaded := wd.Action("Upload artifacts to CDN", build.uploadArtifacts, signedAndTestedArtifacts, okayToTagAndPublish)
@@ -802,7 +793,7 @@ type BuildReleaseTasks struct {
 	DownloadURL            string
 	PublishFile            func(*WebsiteFile) error
 	CreateBuildlet         func(string) (buildlet.Client, error)
-	ApproveActionFunc      func(taskName string) func(*workflow.TaskContext, interface{}) error
+	ApproveAction          func(*workflow.TaskContext, interface{}) error
 }
 
 func (b *BuildReleaseTasks) buildSource(ctx *workflow.TaskContext, revision, version string) (artifact, error) {

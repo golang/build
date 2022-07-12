@@ -144,7 +144,7 @@ func main() {
 		PublishFile: func(f *relui.WebsiteFile) error {
 			return publishFile(*websiteUploadURL, userPassAuth, f)
 		},
-		ApproveActionFunc: relui.ApproveActionDep(db),
+		ApproveAction: relui.ApproveActionDep(db),
 	}
 	githubHTTPClient := oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: *githubToken}))
 	milestoneTasks := &task.MilestoneTasks{

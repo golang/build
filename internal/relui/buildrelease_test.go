@@ -120,10 +120,8 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		CreateBuildlet: fakeBuildlets.createBuildlet,
 		DownloadURL:    dlServer.URL,
 		PublishFile:    publishFile,
-		ApproveActionFunc: func(taskName string) func(*workflow.TaskContext, interface{}) error {
-			return func(_ *workflow.TaskContext, _ interface{}) error {
-				return nil
-			}
+		ApproveAction: func(*workflow.TaskContext, interface{}) error {
+			return nil
 		},
 	}
 	wd := workflow.New()
