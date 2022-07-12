@@ -108,9 +108,11 @@ func init() {
 	})
 
 	add(&Repo{
-		GoGerritProject: "vscode-go",
-		MirrorToGitHub:  true,
-		GitHubRepo:      "golang/vscode-go",
+		GoGerritProject:    "vscode-go",
+		MirrorToGitHub:     true,
+		GitHubRepo:         "golang/vscode-go",
+		WebsiteDesc:        "Go extension for Visual Studio Code",
+		MirrorToCSRProject: "go-vscode-go",
 	})
 }
 
