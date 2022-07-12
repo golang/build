@@ -15,6 +15,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -125,7 +126,7 @@ const gerritURL = "https://go.googlesource.com/go"
 
 func doRelease(ctx *workflow.TaskContext, revision, version string, target *releasetargets.Target, stagingDir string, watch bool) error {
 	srcBuf := &bytes.Buffer{}
-	if err := task.WriteSourceArchive(ctx, gerritURL, revision, version, srcBuf); err != nil {
+	if err := task.WriteSourceArchive(ctx, http.DefaultClient, gerritURL, revision, version, srcBuf); err != nil {
 		return fmt.Errorf("Building source archive: %v", err)
 	}
 
@@ -261,7 +262,7 @@ func writeSourceFile(ctx *workflow.TaskContext, revision, version, outPath strin
 	if err != nil {
 		return err
 	}
-	if err := task.WriteSourceArchive(ctx, gerritURL, revision, version, w); err != nil {
+	if err := task.WriteSourceArchive(ctx, http.DefaultClient, gerritURL, revision, version, w); err != nil {
 		return err
 	}
 	return w.Close()

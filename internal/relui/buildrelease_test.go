@@ -135,13 +135,14 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 	snapshotServer := httptest.NewServer(http.HandlerFunc(serveSnapshot))
 	t.Cleanup(snapshotServer.Close)
 	buildTasks := &BuildReleaseTasks{
-		GerritURL:      snapshotServer.URL,
-		GCSClient:      nil,
-		ScratchURL:     "file://" + filepath.ToSlash(scratchDir),
-		ServingURL:     "file://" + filepath.ToSlash(servingDir),
-		CreateBuildlet: fakeBuildlets.createBuildlet,
-		DownloadURL:    dlServer.URL,
-		PublishFile:    publishFile,
+		GerritHTTPClient: http.DefaultClient,
+		GerritURL:        snapshotServer.URL,
+		GCSClient:        nil,
+		ScratchURL:       "file://" + filepath.ToSlash(scratchDir),
+		ServingURL:       "file://" + filepath.ToSlash(servingDir),
+		CreateBuildlet:   fakeBuildlets.createBuildlet,
+		DownloadURL:      dlServer.URL,
+		PublishFile:      publishFile,
 		ApproveAction: func(*workflow.TaskContext, interface{}) error {
 			return nil
 		},

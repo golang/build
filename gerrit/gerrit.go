@@ -160,7 +160,9 @@ func (c *Client) do(ctx context.Context, dst interface{}, method, path string, o
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	c.auth.setAuth(c, req)
+	if err := c.auth.setAuth(c, req); err != nil {
+		return fmt.Errorf("setting Gerrit auth: %v", err)
+	}
 	res, err := c.httpClient().Do(req)
 	if err != nil {
 		return err

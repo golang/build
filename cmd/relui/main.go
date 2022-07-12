@@ -35,6 +35,7 @@ import (
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 )
 
 var (
@@ -57,7 +58,6 @@ func main() {
 	if err := secret.InitFlagSupport(context.Background()); err != nil {
 		log.Fatalln(err)
 	}
-	gerritAPIFlag := secret.Flag("gerrit-api-secret", "Gerrit API secret to use for workflows that interact with Gerrit.")
 	sendgridAPIKey := secret.Flag("sendgrid-api-key", "SendGrid API key for workflows involving sending email.")
 	var annMail task.MailHeader
 	addressVarFlag(&annMail.From, "announce-mail-from", "The From address to use for the announcement mail.")
@@ -92,8 +92,12 @@ func main() {
 		Title:    *siteTitle,
 		CSSClass: *siteHeaderCSS,
 	}
+	creds, err := google.FindDefaultCredentials(ctx, gerrit.OAuth2Scopes...)
+	if err != nil {
+		log.Fatalf("reading GCP credentials: %v", err)
+	}
 	gerritClient := &task.RealGerritClient{
-		Client: gerrit.NewClient("https://go-review.googlesource.com", gerrit.BasicAuth("git-gobot.golang.org", *gerritAPIFlag)),
+		Client: gerrit.NewClient("https://go-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
 	}
 	versionTasks := &task.VersionTasks{
 		Gerrit:    gerritClient,
@@ -135,6 +139,7 @@ func main() {
 	defer db.Close()
 
 	buildTasks := &relui.BuildReleaseTasks{
+		GerritHTTPClient: oauth2.NewClient(ctx, creds.TokenSource),
 		GerritURL:        "https://go.googlesource.com/go",
 		PrivateGerritURL: "https://team.googlesource.com/go-private",
 		CreateBuildlet:   coordinator.CreateBuildlet,

@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -22,12 +21,14 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/oauth2"
 )
 
 // Auth is a Gerrit authentication mode.
 // The most common ones are NoAuth or BasicAuth.
 type Auth interface {
-	setAuth(*Client, *http.Request)
+	setAuth(*Client, *http.Request) error
 }
 
 // BasicAuth sends a username and password.
@@ -39,8 +40,9 @@ type basicAuth struct {
 	username, password string
 }
 
-func (ba basicAuth) setAuth(c *Client, r *http.Request) {
+func (ba basicAuth) setAuth(c *Client, r *http.Request) error {
 	r.SetBasicAuth(ba.username, ba.password)
+	return nil
 }
 
 // GitCookiesAuth derives the Gerrit authentication token from
@@ -69,7 +71,7 @@ func netrcPath() string {
 
 type gitCookiesAuth struct{}
 
-func (gitCookiesAuth) setAuth(c *Client, r *http.Request) {
+func (gitCookiesAuth) setAuth(c *Client, r *http.Request) error {
 	// First look in Git's http.cookiefile, which is where Gerrit
 	// now tells users to store this information.
 	git := exec.Command("git", "config", "http.cookiefile")
@@ -82,16 +84,17 @@ func (gitCookiesAuth) setAuth(c *Client, r *http.Request) {
 	cookieFile := strings.TrimSpace(string(gitOut))
 	if len(cookieFile) != 0 {
 		auth := &gitCookieFileAuth{file: cookieFile}
-		auth.setAuth(c, r)
+		if err := auth.setAuth(c, r); err != nil {
+			return err
+		}
 		if len(r.Header["Cookie"]) > 0 {
-			return
+			return nil
 		}
 	}
 
 	url, err := url.Parse(c.url)
 	if err != nil {
-		// Something else will complain about this.
-		return
+		return err
 	}
 
 	// If not there, then look in $HOME/.netrc, which is where Gerrit
@@ -107,10 +110,10 @@ func (gitCookiesAuth) setAuth(c *Client, r *http.Request) {
 		f := strings.Fields(line)
 		if len(f) >= 6 && f[0] == "machine" && f[1] == host && f[2] == "login" && f[4] == "password" {
 			r.SetBasicAuth(f[3], f[5])
-			return
+			return nil
 		}
 	}
-	log.Printf("no authentication configured for Gerrit; tried both git config http.cookiefile and %s", netrc)
+	return fmt.Errorf("no authentication configured for Gerrit; tried both git config http.cookiefile and %s", netrc)
 }
 
 type gitCookieFileAuth struct {
@@ -130,22 +133,21 @@ func (a *gitCookieFileAuth) loadCookieFileOnce() {
 	a.jar = parseGitCookies(string(data))
 }
 
-func (a *gitCookieFileAuth) setAuth(c *Client, r *http.Request) {
+func (a *gitCookieFileAuth) setAuth(c *Client, r *http.Request) error {
 	a.once.Do(a.loadCookieFileOnce)
 	if a.err != nil {
-		log.Print(a.err)
-		return
+		return a.err
 	}
 
 	url, err := url.Parse(c.url)
 	if err != nil {
-		// Something else will complain about this.
-		return
+		return err
 	}
 
 	for _, cookie := range a.jar.Cookies(url) {
 		r.AddCookie(cookie)
 	}
+	return nil
 }
 
 func parseGitCookies(data string) *cookiejar.Jar {
@@ -178,12 +180,41 @@ func parseGitCookies(data string) *cookiejar.Jar {
 	return jar
 }
 
+// Scopes to use when creating a TokenSource.
+var OAuth2Scopes = []string{
+	"https://www.googleapis.com/auth/cloud-platform",
+	"https://www.googleapis.com/auth/gerritcodereview",
+	"https://www.googleapis.com/auth/source.full_control",
+	"https://www.googleapis.com/auth/source.read_write",
+	"https://www.googleapis.com/auth/source.read_only",
+}
+
+// OAuth2Auth uses the given TokenSource to authenticate requests.
+func OAuth2Auth(src oauth2.TokenSource) Auth {
+	return oauth2Auth{src}
+}
+
+type oauth2Auth struct {
+	src oauth2.TokenSource
+}
+
+func (a oauth2Auth) setAuth(c *Client, r *http.Request) error {
+	token, err := a.src.Token()
+	if err != nil {
+		return err
+	}
+	token.SetAuthHeader(r)
+	return nil
+}
+
 // NoAuth makes requests unauthenticated.
 var NoAuth = noAuth{}
 
 type noAuth struct{}
 
-func (noAuth) setAuth(c *Client, r *http.Request) {}
+func (noAuth) setAuth(c *Client, r *http.Request) error {
+	return nil
+}
 
 type digestAuth struct {
 	Username, Password, Realm, NONCE, QOP, Opaque, Algorithm string
@@ -254,12 +285,13 @@ func getDigestAuthString(auth *digestAuth, url *url.URL, method string, nc int) 
 	return buf.String()
 }
 
-func (a digestAuth) setAuth(c *Client, r *http.Request) {
+func (a digestAuth) setAuth(c *Client, r *http.Request) error {
 	resp, err := http.Get(r.URL.String())
 	if err != nil {
-		return
+		return err
 	}
 	setDigestAuth(r, a.Username, a.Password, resp, 1)
+	return nil
 }
 
 // DigestAuth returns an Auth implementation which sends

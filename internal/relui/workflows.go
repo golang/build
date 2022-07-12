@@ -795,6 +795,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, majorVers
 
 // BuildReleaseTasks serves as an adapter to the various build tasks in the task package.
 type BuildReleaseTasks struct {
+	GerritHTTPClient       *http.Client
 	GerritURL              string
 	PrivateGerritURL       string
 	GCSClient              *storage.Client
@@ -808,16 +809,16 @@ type BuildReleaseTasks struct {
 func (b *BuildReleaseTasks) buildSource(ctx *workflow.TaskContext, revision, securityRevision, version string) (artifact, error) {
 	return b.runBuildStep(ctx, nil, "", artifact{}, "src.tar.gz", func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
 		if securityRevision != "" {
-			return task.WriteSourceArchive(ctx, b.PrivateGerritURL, securityRevision, version, w)
+			return task.WriteSourceArchive(ctx, b.GerritHTTPClient, b.PrivateGerritURL, securityRevision, version, w)
 		}
-		return task.WriteSourceArchive(ctx, b.GerritURL, revision, version, w)
+		return task.WriteSourceArchive(ctx, b.GerritHTTPClient, b.GerritURL, revision, version, w)
 	})
 }
 
 func (b *BuildReleaseTasks) checkSourceMatch(ctx *workflow.TaskContext, head, version string, source artifact) error {
 	_, err := b.runBuildStep(ctx, nil, "", source, "", func(_ *task.BuildletStep, r io.Reader, _ io.Writer) error {
 		branchArchive := &bytes.Buffer{}
-		if err := task.WriteSourceArchive(ctx, b.GerritURL, head, version, branchArchive); err != nil {
+		if err := task.WriteSourceArchive(ctx, b.GerritHTTPClient, b.GerritURL, head, version, branchArchive); err != nil {
 			return err
 		}
 		branchHashes, err := tarballHashes(branchArchive)
