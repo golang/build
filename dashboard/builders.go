@@ -78,9 +78,9 @@ var slowBotAliases = map[string]string{
 	"netbsd-arm":           "netbsd-arm-bsiegert",
 	"netbsd-arm64":         "netbsd-arm64-bsiegert",
 	"nocgo":                "linux-amd64-nocgo",
-	"openbsd":              "openbsd-amd64-68",
-	"openbsd-386":          "openbsd-386-68",
-	"openbsd-amd64":        "openbsd-amd64-68",
+	"openbsd":              "openbsd-amd64-70",
+	"openbsd-386":          "openbsd-386-70",
+	"openbsd-amd64":        "openbsd-amd64-70",
 	"openbsd-arm":          "openbsd-arm-jsing",
 	"openbsd-arm64":        "openbsd-arm64-jsing",
 	"openbsd-mips64":       "openbsd-mips64-jsing",
@@ -2023,14 +2023,12 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-68",
 		HostType:          "host-openbsd-amd64-68",
-		tryBot:            defaultTrySet(),
 		distTestAdjust:    noTestDirAndNoReboot,
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
 		Name:     "openbsd-386-68",
 		HostType: "host-openbsd-386-68",
-		tryBot:   explicitTrySet("sys"),
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			if repo == "review" {
 				// https://golang.org/issue/49529: git seems to be too slow on this

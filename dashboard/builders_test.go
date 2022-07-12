@@ -102,7 +102,6 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-nounified",
 				"linux-arm-aws",
 				"linux-arm64-aws",
-				"openbsd-amd64-68",
 				"openbsd-amd64-70",
 				"windows-386-2008",
 				"windows-386-2012",
@@ -136,7 +135,6 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-race",
 				"linux-arm-aws",
 				"linux-arm64-aws",
-				"openbsd-amd64-68",
 				"openbsd-amd64-70",
 				"windows-386-2008",
 				"windows-386-2012",
@@ -175,7 +173,6 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-race",
 				"linux-arm-aws",
 				"linux-arm64-aws",
-				"openbsd-amd64-68",
 				"windows-386-2008",
 				"windows-386-2012",
 				"windows-amd64-2016",
@@ -223,9 +220,7 @@ func TestTrybots(t *testing.T) {
 				"linux-arm-aws",
 				"linux-arm64-aws",
 				"netbsd-amd64-9_0",
-				"openbsd-386-68",
 				"openbsd-386-70",
-				"openbsd-amd64-68",
 				"openbsd-amd64-70",
 				"windows-386-2008",
 				"windows-amd64-2016",
@@ -422,10 +417,15 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-loong64-3a5000", "sys"), onlyPost},
 		{b("linux-loong64-3a5000", "net"), onlyPost},
 
-		// OpenBSD.
-		{b("openbsd-amd64-68@go1.16", "go"), both},
-		{b("openbsd-amd64-68@go1.15", "go"), both},
-		{b("openbsd-amd64-68@go1.14", "go"), both},
+		// OpenBSD 6.8.
+		{b("openbsd-amd64-68", "go"), onlyPost},
+		{b("openbsd-amd64-68@go1.16", "go"), onlyPost},
+		{b("openbsd-amd64-68@go1.15", "go"), onlyPost},
+		{b("openbsd-amd64-68@go1.14", "go"), onlyPost},
+
+		// OpenBSD 7.0.
+		{b("openbsd-amd64-70", "go"), both},
+		{b("openbsd-amd64-70@go1.17", "go"), both},
 
 		// FreeBSD 13.0
 		{b("freebsd-amd64-13_0", "go"), onlyPost},
