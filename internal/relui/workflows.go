@@ -716,7 +716,11 @@ func addSingleReleaseWorkflow(
 	}
 
 	const tagAndPublish = "Wait for Release Coordinator Approval"
-	okayToTagAndPublish := wd.Action(tagAndPublish, build.ApproveActionFunc(tagAndPublish), signedAndTestedArtifacts)
+	majorTagAndPublish := tagAndPublish
+	if kind == task.KindPrevMinor || kind == task.KindCurrentMinor {
+		majorTagAndPublish = fmt.Sprintf("%s: %s", major, tagAndPublish)
+	}
+	okayToTagAndPublish := wd.Action(tagAndPublish, build.ApproveActionFunc(majorTagAndPublish), signedAndTestedArtifacts)
 
 	// Tag version and upload to CDN/website.
 	uploaded := wd.Action("Upload artifacts to CDN", build.uploadArtifacts, signedAndTestedArtifacts, okayToTagAndPublish)
