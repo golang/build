@@ -21,6 +21,7 @@ type Task struct {
 	UpdatedAt        time.Time
 	ApprovedAt       sql.NullTime
 	ReadyForApproval bool
+	Started          bool
 }
 
 type TaskLog struct {

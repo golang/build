@@ -139,7 +139,7 @@ func (s *Server) BaseLink(target string) string {
 
 type workflowDetail struct {
 	Workflow db.Workflow
-	Tasks    []db.Task
+	Tasks    []db.TasksRow
 	// TaskLogs is a map of all logs for a db.Task, keyed on
 	// (db.Task).Name
 	TaskLogs map[string][]db.TaskLog

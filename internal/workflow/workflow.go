@@ -346,6 +346,7 @@ type Listener interface {
 // is true, either Result or Error will be populated.
 type TaskState struct {
 	Name             string
+	Started          bool
 	Finished         bool
 	Result           interface{}
 	SerializedResult []byte
@@ -425,6 +426,7 @@ func (t *taskState) toExported() *TaskState {
 		Finished:         t.finished,
 		Result:           t.result,
 		SerializedResult: append([]byte(nil), t.serializedResult...),
+		Started:          t.started,
 	}
 	if t.err != nil {
 		state.Error = t.err.Error()

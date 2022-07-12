@@ -192,14 +192,25 @@ func (w *Worker) Resume(ctx context.Context, id uuid.UUID) error {
 	}
 	taskStates := make(map[string]*workflow.TaskState)
 	for _, t := range tasks {
-		taskStates[t.Name] = &workflow.TaskState{
+		ts := &workflow.TaskState{
 			Name:     t.Name,
 			Finished: t.Finished,
 			Error:    t.Error.String,
 		}
-		if t.Result.Valid {
-			taskStates[t.Name].SerializedResult = []byte(t.Result.String)
+		// The worker may have crashed, or been re-deployed. Any
+		// started but unfinished tasks are in an unknown state.
+		// Mark them as such for human review.
+		if t.Started && !t.Finished {
+			ts.Finished = true
+			ts.Error = "task interrupted before completion"
+			if t.Error.Valid {
+				ts.Error = fmt.Sprintf("%s. Previous error: %s", ts.Error, t.Error.String)
+			}
 		}
+		if t.Result.Valid {
+			ts.SerializedResult = []byte(t.Result.String)
+		}
+		taskStates[t.Name] = ts
 	}
 	res, err := workflow.Resume(d, state, taskStates)
 	if err != nil {

@@ -19,7 +19,7 @@ SET approved_at = $3,
     updated_at  = $3
 WHERE workflow_id = $1
   AND name = $2
-RETURNING workflow_id, name, finished, result, error, created_at, updated_at, approved_at, ready_for_approval
+RETURNING workflow_id, name, finished, result, error, created_at, updated_at, approved_at, ready_for_approval, started
 `
 
 type ApproveTaskParams struct {
@@ -41,14 +41,16 @@ func (q *Queries) ApproveTask(ctx context.Context, arg ApproveTaskParams) (Task,
 		&i.UpdatedAt,
 		&i.ApprovedAt,
 		&i.ReadyForApproval,
+		&i.Started,
 	)
 	return i, err
 }
 
 const createTask = `-- name: CreateTask :one
-INSERT INTO tasks (workflow_id, name, finished, result, error, created_at, updated_at, approved_at, ready_for_approval)
+INSERT INTO tasks (workflow_id, name, finished, result, error, created_at, updated_at, approved_at,
+                   ready_for_approval)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING workflow_id, name, finished, result, error, created_at, updated_at, approved_at, ready_for_approval
+RETURNING workflow_id, name, finished, result, error, created_at, updated_at, approved_at, ready_for_approval, started
 `
 
 type CreateTaskParams struct {
@@ -86,6 +88,7 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		&i.UpdatedAt,
 		&i.ApprovedAt,
 		&i.ReadyForApproval,
+		&i.Started,
 	)
 	return i, err
 }
@@ -154,13 +157,15 @@ func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) 
 
 const resetTask = `-- name: ResetTask :one
 UPDATE tasks
-SET finished   = FALSE,
-    result     = DEFAULT,
-    error      = DEFAULT,
-    updated_at = $3
+SET finished    = FALSE,
+    started     = FALSE,
+    approved_at = DEFAULT,
+    result      = DEFAULT,
+    error       = DEFAULT,
+    updated_at  = $3
 WHERE workflow_id = $1
   AND name = $2
-RETURNING workflow_id, name, finished, result, error, created_at, updated_at, approved_at, ready_for_approval
+RETURNING workflow_id, name, finished, result, error, created_at, updated_at, approved_at, ready_for_approval, started
 `
 
 type ResetTaskParams struct {
@@ -182,6 +187,7 @@ func (q *Queries) ResetTask(ctx context.Context, arg ResetTaskParams) (Task, err
 		&i.UpdatedAt,
 		&i.ApprovedAt,
 		&i.ReadyForApproval,
+		&i.Started,
 	)
 	return i, err
 }
@@ -218,7 +224,7 @@ func (q *Queries) ResetWorkflow(ctx context.Context, arg ResetWorkflowParams) (W
 }
 
 const task = `-- name: Task :one
-SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at, tasks.approved_at, tasks.ready_for_approval
+SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at, tasks.approved_at, tasks.ready_for_approval, tasks.started
 FROM tasks
 WHERE workflow_id = $1
   AND name = $2
@@ -243,6 +249,7 @@ func (q *Queries) Task(ctx context.Context, arg TaskParams) (Task, error) {
 		&i.UpdatedAt,
 		&i.ApprovedAt,
 		&i.ReadyForApproval,
+		&i.Started,
 	)
 	return i, err
 }
@@ -321,20 +328,42 @@ func (q *Queries) TaskLogsForTask(ctx context.Context, arg TaskLogsForTaskParams
 }
 
 const tasks = `-- name: Tasks :many
-SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at, tasks.approved_at, tasks.ready_for_approval
+WITH most_recent_logs AS (
+    SELECT workflow_id, task_name, MAX(updated_at) AS updated_at
+    FROM task_logs
+    GROUP BY workflow_id, task_name
+)
+SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at, tasks.approved_at, tasks.ready_for_approval, tasks.started,
+       GREATEST(most_recent_logs.updated_at, tasks.updated_at)::timestamptz AS most_recent_update
 FROM tasks
-ORDER BY updated_at
+LEFT JOIN most_recent_logs ON tasks.workflow_id = most_recent_logs.workflow_id AND
+                              tasks.name = most_recent_logs.task_name
+ORDER BY most_recent_update DESC
 `
 
-func (q *Queries) Tasks(ctx context.Context) ([]Task, error) {
+type TasksRow struct {
+	WorkflowID       uuid.UUID
+	Name             string
+	Finished         bool
+	Result           sql.NullString
+	Error            sql.NullString
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	ApprovedAt       sql.NullTime
+	ReadyForApproval bool
+	Started          bool
+	MostRecentUpdate time.Time
+}
+
+func (q *Queries) Tasks(ctx context.Context) ([]TasksRow, error) {
 	rows, err := q.db.Query(ctx, tasks)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Task
+	var items []TasksRow
 	for rows.Next() {
-		var i Task
+		var i TasksRow
 		if err := rows.Scan(
 			&i.WorkflowID,
 			&i.Name,
@@ -345,6 +374,8 @@ func (q *Queries) Tasks(ctx context.Context) ([]Task, error) {
 			&i.UpdatedAt,
 			&i.ApprovedAt,
 			&i.ReadyForApproval,
+			&i.Started,
+			&i.MostRecentUpdate,
 		); err != nil {
 			return nil, err
 		}
@@ -357,7 +388,7 @@ func (q *Queries) Tasks(ctx context.Context) ([]Task, error) {
 }
 
 const tasksForWorkflow = `-- name: TasksForWorkflow :many
-SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at, tasks.approved_at, tasks.ready_for_approval
+SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at, tasks.approved_at, tasks.ready_for_approval, tasks.started
 FROM tasks
 WHERE workflow_id = $1
 ORDER BY created_at
@@ -382,6 +413,7 @@ func (q *Queries) TasksForWorkflow(ctx context.Context, workflowID uuid.UUID) ([
 			&i.UpdatedAt,
 			&i.ApprovedAt,
 			&i.ReadyForApproval,
+			&i.Started,
 		); err != nil {
 			return nil, err
 		}
@@ -433,7 +465,7 @@ UPDATE tasks
 SET ready_for_approval = $3
 WHERE workflow_id = $1
   AND name = $2
-RETURNING workflow_id, name, finished, result, error, created_at, updated_at, approved_at, ready_for_approval
+RETURNING workflow_id, name, finished, result, error, created_at, updated_at, approved_at, ready_for_approval, started
 `
 
 type UpdateTaskReadyForApprovalParams struct {
@@ -455,26 +487,29 @@ func (q *Queries) UpdateTaskReadyForApproval(ctx context.Context, arg UpdateTask
 		&i.UpdatedAt,
 		&i.ApprovedAt,
 		&i.ReadyForApproval,
+		&i.Started,
 	)
 	return i, err
 }
 
 const upsertTask = `-- name: UpsertTask :one
-INSERT INTO tasks (workflow_id, name, finished, result, error, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO tasks (workflow_id, name, started, finished, result, error, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (workflow_id, name) DO UPDATE
     SET workflow_id = excluded.workflow_id,
         name        = excluded.name,
+        started     = excluded.started,
         finished    = excluded.finished,
         result      = excluded.result,
         error       = excluded.error,
         updated_at  = excluded.updated_at
-RETURNING workflow_id, name, finished, result, error, created_at, updated_at, approved_at, ready_for_approval
+RETURNING workflow_id, name, finished, result, error, created_at, updated_at, approved_at, ready_for_approval, started
 `
 
 type UpsertTaskParams struct {
 	WorkflowID uuid.UUID
 	Name       string
+	Started    bool
 	Finished   bool
 	Result     sql.NullString
 	Error      sql.NullString
@@ -486,6 +521,7 @@ func (q *Queries) UpsertTask(ctx context.Context, arg UpsertTaskParams) (Task, e
 	row := q.db.QueryRow(ctx, upsertTask,
 		arg.WorkflowID,
 		arg.Name,
+		arg.Started,
 		arg.Finished,
 		arg.Result,
 		arg.Error,
@@ -503,6 +539,7 @@ func (q *Queries) UpsertTask(ctx context.Context, arg UpsertTaskParams) (Task, e
 		&i.UpdatedAt,
 		&i.ApprovedAt,
 		&i.ReadyForApproval,
+		&i.Started,
 	)
 	return i, err
 }

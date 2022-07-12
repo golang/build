@@ -318,8 +318,8 @@ func TestResume(t *testing.T) {
 		t.Fatalf("canceled workflow returned error %v, wanted Canceled", err)
 	}
 	storage.assertState(t, w, map[string]*workflow.TaskState{
-		"run once": {Name: "run once", Finished: true, Result: "ran"},
-		"block":    {Name: "block", Finished: true, Error: "context canceled"}, // We cancelled the workflow before it could save its state.
+		"run once": {Name: "run once", Started: true, Finished: true, Result: "ran"},
+		"block":    {Name: "block", Started: true, Finished: true, Error: "context canceled"}, // We cancelled the workflow before it could save its state.
 	})
 
 	block = false
@@ -338,8 +338,8 @@ func TestResume(t *testing.T) {
 		t.Errorf("runOnlyOnce ran %v times, wanted 1", runs)
 	}
 	storage.assertState(t, w, map[string]*workflow.TaskState{
-		"run once": {Name: "run once", Finished: true, Result: "ran"},
-		"block":    {Name: "block", Finished: true, Result: "not blocked"},
+		"run once": {Name: "run once", Started: true, Finished: true, Result: "ran"},
+		"block":    {Name: "block", Started: true, Finished: true, Result: "not blocked"},
 	})
 }
 

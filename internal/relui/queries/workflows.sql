@@ -18,16 +18,18 @@ VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: CreateTask :one
-INSERT INTO tasks (workflow_id, name, finished, result, error, created_at, updated_at, approved_at, ready_for_approval)
+INSERT INTO tasks (workflow_id, name, finished, result, error, created_at, updated_at, approved_at,
+                   ready_for_approval)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *;
 
 -- name: UpsertTask :one
-INSERT INTO tasks (workflow_id, name, finished, result, error, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO tasks (workflow_id, name, started, finished, result, error, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 ON CONFLICT (workflow_id, name) DO UPDATE
     SET workflow_id = excluded.workflow_id,
         name        = excluded.name,
+        started     = excluded.started,
         finished    = excluded.finished,
         result      = excluded.result,
         error       = excluded.error,
@@ -35,9 +37,17 @@ ON CONFLICT (workflow_id, name) DO UPDATE
 RETURNING *;
 
 -- name: Tasks :many
-SELECT tasks.*
+WITH most_recent_logs AS (
+    SELECT workflow_id, task_name, MAX(updated_at) AS updated_at
+    FROM task_logs
+    GROUP BY workflow_id, task_name
+)
+SELECT tasks.*,
+       GREATEST(most_recent_logs.updated_at, tasks.updated_at)::timestamptz AS most_recent_update
 FROM tasks
-ORDER BY updated_at;
+LEFT JOIN most_recent_logs ON tasks.workflow_id = most_recent_logs.workflow_id AND
+                              tasks.name = most_recent_logs.task_name
+ORDER BY most_recent_update DESC;
 
 -- name: TasksForWorkflow :many
 SELECT tasks.*
@@ -85,10 +95,12 @@ RETURNING *;
 
 -- name: ResetTask :one
 UPDATE tasks
-SET finished   = FALSE,
-    result     = DEFAULT,
-    error      = DEFAULT,
-    updated_at = $3
+SET finished    = FALSE,
+    started     = FALSE,
+    approved_at = DEFAULT,
+    result      = DEFAULT,
+    error       = DEFAULT,
+    updated_at  = $3
 WHERE workflow_id = $1
   AND name = $2
 RETURNING *;

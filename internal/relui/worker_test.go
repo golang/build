@@ -68,6 +68,7 @@ func TestWorkerStartWorkflow(t *testing.T) {
 		{
 			WorkflowID: wfid,
 			Name:       "echo",
+			Started:    true,
 			Finished:   true,
 			Result:     nullString(`"greetings"`),
 			Error:      sql.NullString{},
@@ -110,6 +111,7 @@ func TestWorkerResume(t *testing.T) {
 	want := []db.Task{{
 		WorkflowID: wfid,
 		Name:       "echo",
+		Started:    true,
 		Finished:   true,
 		Result:     nullString(`"hello"`),
 		Error:      sql.NullString{},
@@ -166,27 +168,31 @@ func TestWorkflowResumeAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("q.Tasks() = %v, %v, wanted no error", tasks, err)
 	}
-	want := []db.Task{
+	want := []db.TasksRow{
 		{
-			WorkflowID: wfid1,
-			Name:       "echo",
-			Finished:   true,
-			Result:     nullString(`"hello"`),
-			Error:      sql.NullString{},
-			CreatedAt:  time.Now(), // cmpopts.EquateApproxTime
-			UpdatedAt:  time.Now(), // cmpopts.EquateApproxTime
+			WorkflowID:       wfid1,
+			Name:             "echo",
+			Started:          true,
+			Finished:         true,
+			Result:           nullString(`"hello"`),
+			Error:            sql.NullString{},
+			CreatedAt:        time.Now(), // cmpopts.EquateApproxTime
+			UpdatedAt:        time.Now(), // cmpopts.EquateApproxTime
+			MostRecentUpdate: time.Now(),
 		},
 		{
-			WorkflowID: wfid2,
-			Name:       "echo",
-			Finished:   true,
-			Result:     nullString(`"hello"`),
-			Error:      sql.NullString{},
-			CreatedAt:  time.Now(), // cmpopts.EquateApproxTime
-			UpdatedAt:  time.Now(), // cmpopts.EquateApproxTime
+			WorkflowID:       wfid2,
+			Name:             "echo",
+			Started:          true,
+			Finished:         true,
+			Result:           nullString(`"hello"`),
+			Error:            sql.NullString{},
+			CreatedAt:        time.Now(), // cmpopts.EquateApproxTime
+			UpdatedAt:        time.Now(), // cmpopts.EquateApproxTime
+			MostRecentUpdate: time.Now(),
 		},
 	}
-	sort := cmpopts.SortSlices(func(x db.Task, y db.Task) bool {
+	sort := cmpopts.SortSlices(func(x, y db.TasksRow) bool {
 		return x.WorkflowID.String() < y.WorkflowID.String()
 	})
 	if diff := cmp.Diff(want, tasks, cmpopts.EquateApproxTime(time.Minute), sort); diff != "" {

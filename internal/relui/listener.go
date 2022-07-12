@@ -45,6 +45,7 @@ func (l *PGListener) TaskStateChanged(workflowID uuid.UUID, taskName string, sta
 		_, err := q.UpsertTask(ctx, db.UpsertTaskParams{
 			WorkflowID: workflowID,
 			Name:       taskName,
+			Started:    state.Started,
 			Finished:   state.Finished,
 			Result:     sql.NullString{String: string(result), Valid: len(result) > 0},
 			Error:      sql.NullString{String: state.Error, Valid: state.Error != ""},

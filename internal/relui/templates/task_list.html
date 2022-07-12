@@ -37,11 +37,16 @@
                 class="TaskList-itemStateIcon"
                 alt="finished"
                 src="{{baseLink "/static/images/check_circle_green_24dp.svg"}}" />
+            {{else if $task.Started}}
+              <img
+                class="TaskList-itemStateIcon"
+                alt="started"
+                src="{{baseLink "/static/images/pending_yellow_24dp.svg"}}" />
             {{else}}
               <img
                 class="TaskList-itemStateIcon"
                 alt="pending"
-                src="{{baseLink "/static/images/pending_yellow_24dp.svg"}}" />
+                src="{{baseLink "/static/images/pending_grey_24dp.svg"}}" />
             {{end}}
           </td>
           <td class="TaskList-itemCol TaskList-itemName">
@@ -51,7 +56,7 @@
             {{$task.CreatedAt.UTC.Format "Mon Jan _2 2006 15:04:05"}}
           </td>
           <td class="TaskList-itemCol TaskList-itemUpdated">
-            {{$task.UpdatedAt.UTC.Format "Mon Jan _2 2006 15:04:05"}}
+            {{$task.MostRecentUpdate.UTC.Format "Mon Jan _2 2006 15:04:05"}}
           </td>
           <td class="TaskList-itemCol TaskList-itemResult">
             {{if $task.ApprovedAt.Valid}}
@@ -68,8 +73,7 @@
                   <input class="Button Button--small" name="task.reset" type="submit" value="Retry" onclick="return this.form.reportValidity() && confirm('This will retry the task and clear workflow errors.\n\nReady to proceed?')" />
                 </form>
               </div>
-            {{end}}
-            {{if and (not $task.ApprovedAt.Valid) ($task.ReadyForApproval)}}
+            {{else if and (not $task.ApprovedAt.Valid) ($task.ReadyForApproval)}}
               <div class="TaskList-approveTask">
                 <form action="{{baseLink (printf "/workflows/%s/tasks/%s/approve" $workflow.ID $task.Name)}}" method="post">
                   <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />
