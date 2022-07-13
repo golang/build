@@ -355,85 +355,74 @@ func TestRemoveLabels(t *testing.T) {
 
 func TestHumanReviewersInMetas(t *testing.T) {
 	testCases := []struct {
+		desc      string
 		commitMsg string
 		hasHuman  bool
-		atLeast   int
 		wantIDs   []string
 	}{
-		{`Patch-set: 6
+		{
+			desc: "one human reviewer",
+			commitMsg: `Patch-set: 6
 Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
-			true,
-			1,
-			[]string{"22285"},
+			hasHuman: true,
+			wantIDs:  []string{"22285"},
 		},
-		{`Patch-set: 6
+		{
+			desc: "one human CC",
+			commitMsg: `Patch-set: 6
 CC: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
-			true,
-			1,
-			[]string{"22285"},
+			hasHuman: true,
+			wantIDs:  []string{"22285"},
 		},
-		{`Patch-set: 6
+		{
+			desc: "gobot reviewer",
+			commitMsg: `Patch-set: 6
 Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
-			false,
-			1,
-			[]string{},
+			wantIDs: []string{"5976"},
 		},
-		{`Patch-set: 6
+		{
+			desc: "gobot reviewer and human CC",
+			commitMsg: `Patch-set: 6
 Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
 CC: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
-			true,
-			1,
-			[]string{"22285"},
+			hasHuman: true,
+			wantIDs:  []string{"5976", "22285"},
 		},
-		{`Patch-set: 6
+		{
+			desc: "gobot reviewer and human reviewer",
+			commitMsg: `Patch-set: 6
 Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
-			true,
-			1,
-			[]string{"22285"},
+			hasHuman: true,
+			wantIDs:  []string{"5976", "22285"},
 		},
-		{`Patch-set: 6
-Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
-Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
-		`,
-			false,
-			2,
-			[]string{"22285"},
-		},
-		{`Patch-set: 6
+		{
+			desc: "gobot reviewer and two human reviewers",
+			commitMsg: `Patch-set: 6
 Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Rebecca Stambler <16140@62eb7196-b449-3ce5-99f1-c037f21e1705>
 				`,
-			true,
-			2,
-			[]string{"22285", "16140"},
+			hasHuman: true,
+			wantIDs:  []string{"5976", "22285", "16140"},
 		},
 	}
 
 	for _, tc := range testCases {
-		metas := []*maintner.GerritMeta{
-			{Commit: &maintner.GitCommit{Msg: tc.commitMsg}},
-		}
-		ids, got := humanReviewersInMetas(metas, tc.atLeast)
-		if want := tc.hasHuman; got != want {
-			t.Errorf("Unexpected result for meta commit message: got %v; want %v for\n%s", got, want, tc.commitMsg)
-			continue
-		}
-		if len(ids) != len(tc.wantIDs) {
-			t.Errorf("Unexpected result for meta commit message: got %v reviewer IDs, want %v", len(ids), len(tc.wantIDs))
-			continue
-		}
-		for i, id := range tc.wantIDs {
-			if id != ids[i] {
-				t.Errorf("Unexpected ID at %d: got %v, want %v", i, ids[i], id)
+		t.Run(tc.desc, func(t *testing.T) {
+			metas := []*maintner.GerritMeta{
+				{Commit: &maintner.GitCommit{Msg: tc.commitMsg}},
 			}
-		}
+			ids := reviewersInMetas(metas)
+			if diff := cmp.Diff(tc.wantIDs, ids); diff != "" {
+				t.Fatalf("reviewersInMetas() mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 

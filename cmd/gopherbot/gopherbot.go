@@ -75,6 +75,12 @@ const (
 	gopherbotGitHubID = 8566911
 )
 
+const (
+	gobotGerritID     = "5976"
+	gerritbotGerritID = "12446"
+	kokoroGerritID    = "37747"
+)
+
 // GitHub Label IDs for the golang/go repo.
 const (
 	needsDecisionID      = 373401956
@@ -2322,24 +2328,29 @@ func (b *gopherbot) whoNeedsAccess(ctx context.Context) error {
 // used as a key to deletedChanges and the ID returned by cl.ChangeID() can be
 // associated with multiple changes (cherry-picks, for example).
 func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritChange, cl *maintner.GerritCL) ([]string, bool) {
-	const (
-		gobotID     = 5976
-		gerritbotID = 12446
-		kokoroID    = 37747
-	)
 	// The CL's owner will be GerritBot if it is imported from a PR.
 	// In that case, if the CL's author has a Gerrit account, they will be
 	// added as a reviewer (golang.org/issue/30265). Otherwise, no reviewers
 	// will be added. Work around this by requiring 2 human reviewers on PRs.
-	ownerID := int64(cl.OwnerID())
-	isPR := ownerID == gerritbotID
+	ownerID := strconv.Itoa(cl.OwnerID())
+	isPR := ownerID == gerritbotGerritID
 	minHumans := 1
 	if isPR {
 		minHumans = 2
 	}
+	reject := []string{gobotGerritID, gerritbotGerritID, kokoroGerritID, ownerID}
+	ownerOrRobot := func(gerritID string) bool {
+		for _, r := range reject {
+			if gerritID == r {
+				return true
+			}
+		}
+		return false
+	}
 
-	if reviewers, found := humanReviewersInMetas(cl.Metas, minHumans); found {
-		return reviewers, true
+	ids := deleteStrings(reviewersInMetas(cl.Metas), ownerOrRobot)
+	if len(ids) >= minHumans {
+		return ids, true
 	}
 
 	reviewers, err := b.gerrit.ListReviewers(ctx, change.ID())
@@ -2350,20 +2361,27 @@ func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritCha
 		log.Printf("Could not list reviewers on change %q: %v", change.ID(), err)
 		return nil, true
 	}
-	var ids []string
+	ids = []string{}
 	for _, r := range reviewers {
-		switch id := r.NumericID; {
-		case id == gobotID, id == gerritbotID, id == kokoroID,
-			hasServiceUserTag(r.AccountInfo):
-			// Skip bots.
-			continue
-		case id == ownerID:
-			// Skip owner.
+		id := strconv.FormatInt(r.NumericID, 10)
+		if hasServiceUserTag(r.AccountInfo) || ownerOrRobot(id) {
+			// Skip bots and owner.
 			continue
 		}
-		ids = append(ids, strconv.FormatInt(r.NumericID, 10))
+		ids = append(ids, id)
 	}
 	return ids, len(ids) >= minHumans
+}
+
+func deleteStrings(s []string, reject func(val string) bool) []string {
+	var filtered []string
+	for _, val := range s {
+		if reject(val) {
+			continue
+		}
+		filtered = append(filtered, val)
+	}
+	return filtered
 }
 
 // hasServiceUserTag reports whether the account has a SERVICE_USER tag.
@@ -2579,17 +2597,8 @@ var reviewerRe = regexp.MustCompile(`.* <(?P<id>\d+)@.*>`)
 
 const gerritInstanceID = "@62eb7196-b449-3ce5-99f1-c037f21e1705"
 
-// humanReviewersInMetas reports whether there are at least minHumans human
-// reviewers in the given metas. It also returns the Gerrit IDs of all of the
-// human reviewers.
-func humanReviewersInMetas(metas []*maintner.GerritMeta, minHumans int) ([]string, bool) {
-	// Emails as they appear in maintner (<numeric ID>@<instance ID>)
-	var (
-		gobotEmail     = "5976" + gerritInstanceID
-		gerritbotEmail = "12446" + gerritInstanceID
-		kokoroEmail    = "37747" + gerritInstanceID
-	)
-	var count int
+// reviewersInMetas returns the Gerrit IDs of any reviewers in the metadata.
+func reviewersInMetas(metas []*maintner.GerritMeta) []string {
 	var ids []string
 	for _, m := range metas {
 		if !strings.Contains(m.Commit.Msg, "Reviewer:") && !strings.Contains(m.Commit.Msg, "CC:") {
@@ -2600,32 +2609,27 @@ func humanReviewersInMetas(metas []*maintner.GerritMeta, minHumans int) ([]strin
 			if !strings.HasPrefix(ln, "Reviewer:") && !strings.HasPrefix(ln, "CC:") {
 				return nil
 			}
-			if !strings.Contains(ln, gobotEmail) && !strings.Contains(ln, gerritbotEmail) &&
-				!strings.Contains(ln, kokoroEmail) {
-				match := reviewerRe.FindStringSubmatch(ln)
-				if match == nil {
-					return nil
+			match := reviewerRe.FindStringSubmatch(ln)
+			if match == nil {
+				return nil
+			}
+			// Extract the human's Gerrit ID.
+			for i, name := range reviewerRe.SubexpNames() {
+				if name != "id" {
+					continue
 				}
-				// A human is already on the change.
-				count++
-				// Extract the human's Gerrit ID.
-				for i, name := range reviewerRe.SubexpNames() {
-					if name != "id" {
-						continue
-					}
-					if i < 0 || i > len(match) {
-						continue
-					}
-					ids = append(ids, match[i])
+				if i < 0 || i > len(match) {
+					continue
 				}
+				ids = append(ids, match[i])
 			}
 			return nil
 		})
 		if err != nil {
-			log.Printf("humanReviewersInMetas: got unexpected error from foreach.LineStr: %v", err)
+			log.Printf("reviewersInMetas: got unexpected error from foreach.LineStr: %v", err)
 		}
 	}
-	return ids, count >= minHumans
+	return ids
 }
 
 func getCodeOwners(ctx context.Context, paths []string) ([]*owners.Entry, error) {
