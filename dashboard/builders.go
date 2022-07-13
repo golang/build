@@ -2715,7 +2715,7 @@ func init() {
 	addBuilder(BuildConfig{
 		HostType:       "host-linux-riscv64-unmatched",
 		Name:           "linux-riscv64-unmatched",
-		env:            []string{"GO_TEST_TIMEOUT_SCALE=4"},
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=6"},
 		FlakyNet:       true,
 		buildsRepo:     onlyMasterDefault,
 		distTestAdjust: riscvDistTestPolicy,
