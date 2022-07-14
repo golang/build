@@ -2713,11 +2713,17 @@ func init() {
 	addBuilder(BuildConfig{
 		HostType:       "host-linux-riscv64-unmatched",
 		Name:           "linux-riscv64-unmatched",
-		env:            []string{"GO_TEST_TIMEOUT_SCALE=6"},
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=4"},
 		FlakyNet:       true,
-		buildsRepo:     onlyMasterDefault,
 		distTestAdjust: riscvDistTestPolicy,
 		privateGoProxy: true, // this builder is behind firewall
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// see https://go.dev/issue/53745
+			if repo == "perf" {
+				return false
+			}
+			return onlyMasterDefault(repo, branch, goBranch)
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-s390x-ibm",
