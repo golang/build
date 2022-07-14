@@ -281,12 +281,16 @@ type regression struct {
 	ignoredBecause string
 }
 
-// groupBenchmarkResults groups all benchmark results from the passed query.
-func groupBenchmarkResults(res *api.QueryTableResult, byRegression bool) ([]*BenchmarkJSON, error) {
+// queryToJson process a QueryTableResult into a slice of BenchmarkJSON,
+// with that slice in no particular order (i.e., it needs to be sorted or
+// run-to-run results will vary).  For each benchmark in the slice, however,
+// results are sorted into commit-date order.
+func queryToJson(res *api.QueryTableResult) ([]*BenchmarkJSON, error) {
 	type key struct {
 		name string
 		unit string
 	}
+
 	m := make(map[key]*BenchmarkJSON)
 
 	for res.Next() {
@@ -322,35 +326,25 @@ func groupBenchmarkResults(res *api.QueryTableResult, byRegression bool) ([]*Ben
 
 	s := make([]*BenchmarkJSON, 0, len(m))
 	for _, b := range m {
+		// Ensure that the benchmarks are commit-date ordered.
+		sort.Slice(b.Values, func(i, j int) bool {
+			return b.Values[i].CommitDate.Before(b.Values[j].CommitDate)
+		})
 		s = append(s, b)
 	}
 
-	if !byRegression {
-		for _, b := range s {
-			sort.Slice(b.Values, func(i, j int) bool {
-				return b.Values[i].CommitDate.Before(b.Values[j].CommitDate)
-			})
-		}
+	return s, nil
+}
 
-		// Keep benchmarks with the same name grouped together, which is
-		// assumed by the JS.
-		sort.Slice(s, func(i, j int) bool {
-			if s[i].Name == s[j].Name {
-				return s[i].Unit < s[j].Unit
-			}
-			return s[i].Name < s[j].Name
-		})
-		return s, nil
-	}
-
+// reorderRegressionsFirst sorts the benchmarks in s so that those with the
+// largest detectable regressions come first, and returns a map from benchmark name
+// to the worst regression for that name (across all units)
+func reorderRegressionsFirst(s []*BenchmarkJSON) map[string]regression {
 	r := make(map[string]regression) // worst regression for each benchmark name, across all units for that benchmark
 
 	// Compute per-benchmark estimates of point where the most interesting regression happened.
 	// TODO This information might be worth adding to the graphs in general, once we do that for the regressions view.
 	for _, b := range s {
-		sort.Slice(b.Values, func(i, j int) bool {
-			return b.Values[i].CommitDate.Before(b.Values[j].CommitDate)
-		})
 		if worst := worstRegression(b); worst.deltaScore > 1 && worst.delta > r[b.Name].delta {
 			r[b.Name] = worst
 		} else if _, ok := r[b.Name]; !ok { // don't overwrite success for one unit w/ failure explanation for another
@@ -361,7 +355,8 @@ func groupBenchmarkResults(res *api.QueryTableResult, byRegression bool) ([]*Ben
 	// Sort benchmarks with detectable regressions first, ordered by
 	// size of regression at end of sample.  Also sort the remaining
 	// benchmarks into end-of-sample regression order.  Keep benchmarks
-	// with the same name grouped together, which is assumed by the JS.
+	// with the same name grouped together, which is assumed by the
+	// graph presentation server.
 	sort.Slice(s, func(i, j int) bool {
 		if s[i].Name == s[j].Name {
 			return s[i].Unit < s[j].Unit
@@ -383,9 +378,15 @@ func groupBenchmarkResults(res *api.QueryTableResult, byRegression bool) ([]*Ben
 		return s[i].Name < s[j].Name
 	})
 
+	return r
+}
+
+// renameBenchmarksWithRegressions changes the names of benchmarks to include information about regressions,
+// and returns the number of regression points that were detected.
+// TODO(drchase, mpratt) better if this can be done in the graph or surrounding text.
+func renameBenchmarksWithRegressions(s []*BenchmarkJSON, r map[string]regression) {
 	detected := 0
 	// This injects regression information into the titles.
-	// TODO(drchase, mpratt) better if this can be done in the graph or surrounding text.
 	for i, b := range s {
 		if change, ok := r[b.Name]; ok {
 			if change.deltaIndex >= 0 {
@@ -398,8 +399,31 @@ func groupBenchmarkResults(res *api.QueryTableResult, byRegression bool) ([]*Ben
 			}
 		}
 	}
+}
 
-	log.Printf("Detected %d regressions out of %d benchmarks", detected, len(s))
+// groupBenchmarkResults groups all benchmark results from the passed query.
+// if byRegression is true, order the benchmarks with largest current regressions
+// with detectable points first.
+func groupBenchmarkResults(res *api.QueryTableResult, byRegression bool) ([]*BenchmarkJSON, error) {
+	s, err := queryToJson(res)
+	if err != nil {
+		return nil, err
+	}
+
+	if !byRegression {
+		// Keep benchmarks with the same name grouped together, which is
+		// assumed by the JS.
+		sort.Slice(s, func(i, j int) bool {
+			if s[i].Name == s[j].Name {
+				return s[i].Unit < s[j].Unit
+			}
+			return s[i].Name < s[j].Name
+		})
+		return s, nil
+	}
+
+	regressions := reorderRegressionsFirst(s)
+	renameBenchmarksWithRegressions(s, regressions)
 
 	return s, nil
 }
