@@ -122,6 +122,8 @@ func (t AnnounceMailTasks) AnnounceMajorRelease(ctx *workflow.TaskContext, r Rel
 
 // announceRelease sends an email announcing a Go release.
 func (t AnnounceMailTasks) announceRelease(ctx *workflow.TaskContext, r ReleaseAnnouncement) (SentMail, error) {
+	ctx.DisableRetries()
+
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < time.Minute {
 		return SentMail{}, fmt.Errorf("insufficient time for announce release task; a minimum of a minute left on context is required")
 	}

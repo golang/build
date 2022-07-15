@@ -155,6 +155,8 @@ func (t TweetTasks) TweetMajorRelease(ctx *workflow.TaskContext, r ReleaseTweet)
 
 // tweetRelease posts a tweet announcing a Go release.
 func (t TweetTasks) tweetRelease(ctx *workflow.TaskContext, r ReleaseTweet) (tweetURL string, _ error) {
+	ctx.DisableRetries()
+
 	rnd := rand.New(rand.NewSource(r.seed()))
 
 	// Generate tweet text.

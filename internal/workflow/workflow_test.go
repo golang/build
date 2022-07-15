@@ -20,10 +20,6 @@ import (
 	"golang.org/x/build/internal/workflow"
 )
 
-func init() {
-	workflow.MaxRetries = 3
-}
-
 func TestTrivial(t *testing.T) {
 	echo := func(ctx context.Context, arg string) (string, error) {
 		return arg, nil

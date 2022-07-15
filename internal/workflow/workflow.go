@@ -623,8 +623,7 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 }
 
 // Maximum number of retries. This could be a workflow property.
-// TODO(heschi): set to 3 and change to an internal constant.
-var MaxRetries = 0
+const maxRetries = 3
 
 func (w *Workflow) runTask(ctx context.Context, listener Listener, state taskState, args []reflect.Value) taskState {
 	tctx := &TaskContext{
@@ -651,8 +650,8 @@ func (w *Workflow) runTask(ctx context.Context, listener Listener, state taskSta
 		}
 	}
 
-	if state.err != nil && !tctx.disableRetries && state.retryCount+1 < MaxRetries {
-		tctx.Printf("task failed, will retry (%v of %v): %v", state.retryCount+1, MaxRetries, state.err)
+	if state.err != nil && !tctx.disableRetries && state.retryCount+1 < maxRetries {
+		tctx.Printf("task failed, will retry (%v of %v): %v", state.retryCount+1, maxRetries, state.err)
 		state = taskState{
 			def:        state.def,
 			w:          state.w,

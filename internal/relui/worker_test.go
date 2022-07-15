@@ -20,10 +20,6 @@ import (
 	"golang.org/x/build/internal/workflow"
 )
 
-func init() {
-	workflow.MaxRetries = 3
-}
-
 func TestWorkerStartWorkflow(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
