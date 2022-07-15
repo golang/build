@@ -636,8 +636,8 @@ func addBuildAndTestOnlyWorkflow(wd *workflow.Definition, version *task.VersionT
 		branch = "master"
 	}
 	branchVal := wd.Constant(branch)
-	releaseBase := wd.Task("Pick release base commit", version.ReadBranchHead, branchVal)
-	artifacts, err := build.addBuildTasks(wd, major, nextVersion, releaseBase, true)
+	source := wd.Task("Build source archive", build.buildSource, branchVal, wd.Constant(""), nextVersion)
+	artifacts, err := build.addBuildTasks(wd, major, nextVersion, source, true)
 	if err != nil {
 		return err
 	}
