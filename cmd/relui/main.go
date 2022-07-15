@@ -141,7 +141,7 @@ func main() {
 	buildTasks := &relui.BuildReleaseTasks{
 		GerritHTTPClient: oauth2.NewClient(ctx, creds.TokenSource),
 		GerritURL:        "https://go.googlesource.com/go",
-		PrivateGerritURL: "https://team.googlesource.com/go-private",
+		PrivateGerritURL: "https://team.googlesource.com/golang/go-private",
 		CreateBuildlet:   coordinator.CreateBuildlet,
 		GCSClient:        gcsClient,
 		ScratchURL:       *scratchFilesBase,
