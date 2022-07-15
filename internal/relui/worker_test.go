@@ -20,6 +20,10 @@ import (
 	"golang.org/x/build/internal/workflow"
 )
 
+func init() {
+	workflow.MaxRetries = 3
+}
+
 func TestWorkerStartWorkflow(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -37,7 +41,7 @@ func TestWorkerStartWorkflow(t *testing.T) {
 	params := map[string]interface{}{"echo": "greetings"}
 
 	wg.Add(1)
-	wfid, err := w.StartWorkflow(ctx, t.Name(), wd, params)
+	wfid, err := w.StartWorkflow(ctx, t.Name(), params)
 	if err != nil {
 		t.Fatalf("w.StartWorkflow(_, %v, %v) = %v, %v, wanted no error", wd, params, wfid, err)
 	}
@@ -197,6 +201,76 @@ func TestWorkflowResumeAll(t *testing.T) {
 	})
 	if diff := cmp.Diff(want, tasks, cmpopts.EquateApproxTime(time.Minute), sort); diff != "" {
 		t.Errorf("q.Tasks() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestWorkflowResumeRetry(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dbp := testDB(ctx, t)
+	dh := NewDefinitionHolder()
+	w := NewWorker(dh, dbp, &PGListener{dbp})
+
+	counter := 0
+	blockingChan := make(chan bool)
+	wd := workflow.New()
+	nothing := wd.Task("needs retry", func(ctx context.Context) (string, error) {
+		// Send twice so that the test can stop us mid-execution.
+		for i := 0; i < 2; i++ {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case blockingChan <- true:
+				counter++
+			}
+		}
+		return "", errors.New("expected")
+	})
+	wd.Output("nothing", nothing)
+	dh.RegisterDefinition(t.Name(), wd)
+
+	// Run the workflow. It will try the task 3 times and then fail; stop the
+	// worker during its second run, then resume it and verify the task retries.
+	go func() {
+		for i := 0; i < 3; i++ {
+			<-blockingChan
+		}
+		cancel()
+	}()
+	wfid, err := w.StartWorkflow(ctx, t.Name(), nil)
+	if err != nil {
+		t.Fatalf("w.StartWorkflow(_, %v, %v) = %v, %v, wanted no error", wd, nil, wfid, err)
+	}
+	w.Run(ctx)
+	if counter != 3 {
+		t.Fatalf("task sent %v times, wanted 3", counter)
+	}
+
+	t.Log("Restarting worker")
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+	wfDone := make(chan bool, 1)
+	w = NewWorker(dh, dbp, &testWorkflowListener{
+		Listener:   &PGListener{dbp},
+		onFinished: func() { wfDone <- true },
+	})
+
+	go func() {
+		for {
+			select {
+			case <-blockingChan:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	go w.Run(ctx)
+	if err := w.Resume(ctx, wfid); err != nil {
+		t.Fatalf("w.Resume(_, %v) = %v, wanted no error", wfid, err)
+	}
+	<-wfDone
+	if counter-3 != 2 {
+		t.Fatalf("task sent %v more times, wanted 2", counter-3)
 	}
 }
 

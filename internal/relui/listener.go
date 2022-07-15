@@ -51,6 +51,7 @@ func (l *PGListener) TaskStateChanged(workflowID uuid.UUID, taskName string, sta
 			Error:      sql.NullString{String: state.Error, Valid: state.Error != ""},
 			CreatedAt:  updated,
 			UpdatedAt:  updated,
+			RetryCount: int32(state.RetryCount),
 		})
 		return err
 	})

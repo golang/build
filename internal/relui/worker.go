@@ -129,8 +129,12 @@ func (w *Worker) run(wf *workflow.Workflow) error {
 }
 
 // StartWorkflow persists and starts running a workflow.
-func (w *Worker) StartWorkflow(ctx context.Context, name string, def *workflow.Definition, params map[string]interface{}) (uuid.UUID, error) {
-	wf, err := workflow.Start(def, params)
+func (w *Worker) StartWorkflow(ctx context.Context, name string, params map[string]interface{}) (uuid.UUID, error) {
+	d := w.dh.Definition(name)
+	if d == nil {
+		return uuid.UUID{}, fmt.Errorf("no workflow named %q", name)
+	}
+	wf, err := workflow.Start(d, params)
 	if err != nil {
 		return uuid.UUID{}, err
 	}
@@ -193,9 +197,10 @@ func (w *Worker) Resume(ctx context.Context, id uuid.UUID) error {
 	taskStates := make(map[string]*workflow.TaskState)
 	for _, t := range tasks {
 		ts := &workflow.TaskState{
-			Name:     t.Name,
-			Finished: t.Finished,
-			Error:    t.Error.String,
+			Name:       t.Name,
+			Finished:   t.Finished,
+			Error:      t.Error.String,
+			RetryCount: int(t.RetryCount),
 		}
 		// The worker may have crashed, or been re-deployed. Any
 		// started but unfinished tasks are in an unknown state.

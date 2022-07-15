@@ -24,8 +24,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *;
 
 -- name: UpsertTask :one
-INSERT INTO tasks (workflow_id, name, started, finished, result, error, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO tasks (workflow_id, name, started, finished, result, error, created_at, updated_at, retry_count)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (workflow_id, name) DO UPDATE
     SET workflow_id = excluded.workflow_id,
         name        = excluded.name,
@@ -33,7 +33,8 @@ ON CONFLICT (workflow_id, name) DO UPDATE
         finished    = excluded.finished,
         result      = excluded.result,
         error       = excluded.error,
-        updated_at  = excluded.updated_at
+        updated_at  = excluded.updated_at,
+        retry_count = excluded.retry_count
 RETURNING *;
 
 -- name: Tasks :many

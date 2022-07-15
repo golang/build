@@ -268,7 +268,7 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if _, err := s.w.StartWorkflow(r.Context(), name, d, params); err != nil {
+	if _, err := s.w.StartWorkflow(r.Context(), name, params); err != nil {
 		log.Printf("s.w.StartWorkflow(%v, %v, %v): %v", r.Context(), d, params, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
