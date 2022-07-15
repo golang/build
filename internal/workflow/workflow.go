@@ -327,9 +327,14 @@ func (d *dependency) deps() []*taskDefinition {
 // A TaskContext is a context.Context, plus workflow-related features.
 type TaskContext struct {
 	context.Context
+	disableRetries bool
 	Logger
 	TaskName   string
 	WorkflowID uuid.UUID
+}
+
+func (c *TaskContext) DisableRetries() {
+	c.disableRetries = true
 }
 
 // A Listener is used to notify the workflow host of state changes, for display
@@ -351,6 +356,7 @@ type TaskState struct {
 	Result           interface{}
 	SerializedResult []byte
 	Error            string
+	RetryCount       int
 }
 
 // WorkflowState contains the shallow state of a running workflow.
@@ -403,6 +409,7 @@ type taskState struct {
 	result           interface{}
 	serializedResult []byte
 	err              error
+	retryCount       int
 }
 
 func (t *taskState) args() ([]reflect.Value, bool) {
@@ -427,6 +434,7 @@ func (t *taskState) toExported() *TaskState {
 		Result:           t.result,
 		SerializedResult: append([]byte(nil), t.serializedResult...),
 		Started:          t.started,
+		RetryCount:       t.retryCount,
 	}
 	if t.err != nil {
 		state.Error = t.err.Error()
@@ -521,6 +529,7 @@ func Resume(def *Definition, state *WorkflowState, taskStates map[string]*TaskSt
 			started:          tState.Finished, // Can't resume tasks, so either it's new or done.
 			finished:         tState.Finished,
 			serializedResult: tState.SerializedResult,
+			retryCount:       tState.RetryCount,
 		}
 		if state.serializedResult != nil {
 			result, err := unmarshalNew(reflect.ValueOf(taskDef.f).Type().Out(0), tState.SerializedResult)
@@ -608,10 +617,14 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 		}
 
 		state := <-stateChan
-		w.tasks[state.def] = &state
 		listener.TaskStateChanged(w.ID, state.def.name, state.toExported())
+		w.tasks[state.def] = &state
 	}
 }
+
+// Maximum number of retries. This could be a workflow property.
+// TODO(heschi): set to 3 and change to an internal constant.
+var MaxRetries = 0
 
 func (w *Workflow) runTask(ctx context.Context, listener Listener, state taskState, args []reflect.Value) taskState {
 	tctx := &TaskContext{
@@ -635,6 +648,15 @@ func (w *Workflow) runTask(ctx context.Context, listener Listener, state taskSta
 		}
 		if state.err == nil && !reflect.DeepEqual(out[0].Interface(), state.result) {
 			state.err = fmt.Errorf("JSON marshaling changed result from %#v to %#v", out[0].Interface(), state.result)
+		}
+	}
+
+	if state.err != nil && !tctx.disableRetries && state.retryCount+1 < MaxRetries {
+		tctx.Printf("task failed, will retry (%v of %v): %v", state.retryCount+1, MaxRetries, state.err)
+		state = taskState{
+			def:        state.def,
+			w:          state.w,
+			retryCount: state.retryCount + 1,
 		}
 	}
 	return state

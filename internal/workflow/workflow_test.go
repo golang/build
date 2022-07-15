@@ -20,6 +20,10 @@ import (
 	"golang.org/x/build/internal/workflow"
 )
 
+func init() {
+	workflow.MaxRetries = 3
+}
+
 func TestTrivial(t *testing.T) {
 	echo := func(ctx context.Context, arg string) (string, error) {
 		return arg, nil
@@ -239,6 +243,51 @@ func TestParameterValue(t *testing.T) {
 	}
 }
 
+func TestRetry(t *testing.T) {
+	counter := 0
+	needsRetry := func(ctx context.Context) (string, error) {
+		if counter < 2 {
+			counter++
+			return "", fmt.Errorf("counter %v too low", counter)
+		}
+		return "hi", nil
+	}
+
+	wd := workflow.New()
+	wd.Output("result", wd.Task("needs retry", needsRetry))
+
+	w := startWorkflow(t, wd, nil)
+	outputs := runWorkflow(t, w, nil)
+	if got, want := outputs["result"], "hi"; got != want {
+		t.Errorf("result = %q, want %q", got, want)
+	}
+	if counter != 2 {
+		t.Errorf("counter = %v, want 2", counter)
+	}
+}
+
+func TestRetryDisabled(t *testing.T) {
+	counter := 0
+	noRetry := func(ctx *workflow.TaskContext) (string, error) {
+		ctx.DisableRetries()
+		counter++
+		return "", fmt.Errorf("do not pass go")
+	}
+
+	wd := workflow.New()
+	wd.Output("result", wd.Task("no retry", noRetry))
+
+	w := startWorkflow(t, wd, nil)
+	_, err := w.Run(context.Background(), &verboseListener{t: t})
+	if err == nil || !strings.Contains(err.Error(), "as far as it can") {
+		t.Errorf("Run of failing workflow = %v, wanted it to fail", err)
+	}
+
+	if counter != 1 {
+		t.Errorf("task with retries disabled ran %v times, wanted 1", counter)
+	}
+}
+
 func TestLogging(t *testing.T) {
 	log := func(ctx *workflow.TaskContext, arg string) (string, error) {
 		ctx.Printf("logging argument: %v", arg)
@@ -289,7 +338,8 @@ func TestResume(t *testing.T) {
 	// canceled at its step.
 	block := true
 	blocked := make(chan bool, 1)
-	maybeBlock := func(ctx context.Context, _ string) (string, error) {
+	maybeBlock := func(ctx *workflow.TaskContext, _ string) (string, error) {
+		ctx.DisableRetries()
 		if block {
 			blocked <- true
 			<-ctx.Done()
@@ -410,6 +460,8 @@ type verboseListener struct{ t *testing.T }
 
 func (l *verboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *workflow.TaskState) error {
 	switch {
+	case !st.Started:
+		// Task creation is uninteresting.
 	case !st.Finished:
 		l.t.Logf("task %-10v: started", st.Name)
 	case st.Error != "":
