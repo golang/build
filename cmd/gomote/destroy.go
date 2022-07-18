@@ -16,6 +16,10 @@ import (
 )
 
 func legacyDestroy(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not support groups")
+	}
+
 	fs := flag.NewFlagSet("destroy", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "destroy usage: gomote destroy <instance>")
@@ -53,6 +57,10 @@ func legacyDestroy(args []string) error {
 }
 
 func destroy(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not yet support groups")
+	}
+
 	fs := flag.NewFlagSet("destroy", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "destroy usage: gomote destroy <instance>")

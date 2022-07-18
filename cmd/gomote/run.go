@@ -21,6 +21,10 @@ import (
 )
 
 func legacyRun(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not support groups")
+	}
+
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "run usage: gomote run [run-opts] <instance> <cmd> [args...]")
@@ -108,6 +112,10 @@ func (ss *stringSlice) Set(v string) error {
 }
 
 func run(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not yet support groups")
+	}
+
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "run usage: gomote run [run-opts] <instance> <cmd> [args...]")

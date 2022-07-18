@@ -78,6 +78,10 @@ func builders() (bt []builderType) {
 }
 
 func legacyCreate(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not support groups")
+	}
+
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
 
 	fs.Usage = func() {
@@ -133,6 +137,10 @@ func legacyCreate(args []string) error {
 }
 
 func create(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not yet support groups")
+	}
+
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
 
 	fs.Usage = func() {

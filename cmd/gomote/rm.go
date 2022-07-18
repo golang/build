@@ -14,6 +14,10 @@ import (
 )
 
 func legacyRm(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not support groups")
+	}
+
 	fs := flag.NewFlagSet("rm", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "rm usage: gomote rm <instance> <file-or-dir>+")
@@ -37,6 +41,10 @@ func legacyRm(args []string) error {
 }
 
 func rm(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not yet support groups")
+	}
+
 	fs := flag.NewFlagSet("rm", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "rm usage: gomote rm <instance> <file-or-dir>+")

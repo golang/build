@@ -16,6 +16,10 @@ import (
 )
 
 func legacyLs(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not support groups")
+	}
+
 	fs := flag.NewFlagSet("ls", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "ls usage: gomote ls <instance> [-R] [dir]")
@@ -52,6 +56,10 @@ func legacyLs(args []string) error {
 }
 
 func ls(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not yet support groups")
+	}
+
 	fs := flag.NewFlagSet("ls", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "ls usage: gomote ls <instance> [-R] [dir]")

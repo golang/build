@@ -14,6 +14,10 @@ import (
 )
 
 func legacyPing(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not support groups")
+	}
+
 	fs := flag.NewFlagSet("ping", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "ping usage: gomote ping [--status] <instance>")
@@ -44,6 +48,10 @@ func legacyPing(args []string) error {
 }
 
 func ping(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not yet support groups")
+	}
+
 	fs := flag.NewFlagSet("ping", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "ping usage: gomote ping [--status] <instance>")

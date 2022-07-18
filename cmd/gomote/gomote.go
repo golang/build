@@ -36,6 +36,7 @@ To list the subcommands, run "gomote" without arguments:
 	  rm         delete files or directories
 	  rdp        RDP (Remote Desktop Protocol) to a Windows buildlet
 	  run        run a command on a buildlet
+	  group      manage gomote groups (v2 only)
 	  ssh        ssh to a buildlet
 
 To list all the builder types available, run "create" with no arguments:
@@ -71,6 +72,7 @@ The "gomote run" command has many of its own flags:
 	  -system
 	        run inside the system, and not inside the workdir; this is implicit if cmd starts with '/'
 
+
 # Debugging buildlets directly
 
 Using "gomote create" contacts the build coordinator
@@ -95,11 +97,13 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/iapclient"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 var (
-	buildEnv *buildenv.Environment
+	buildEnv    *buildenv.Environment
+	activeGroup *groupData
 )
 
 type command struct {
@@ -148,6 +152,7 @@ func registerCommands(version int) {
 		registerCommand("create", "create a buildlet; with no args, list types of buildlets", create)
 		registerCommand("destroy", "destroy a buildlet", destroy)
 		registerCommand("gettar", "extract a tar.gz from a buildlet", getTar)
+		registerCommand("group", "manage groups of instances", group)
 		registerCommand("ls", "list the contents of a directory on a buildlet", ls)
 		registerCommand("list", "list active buildlets", list)
 		registerCommand("ping", "test whether a buildlet is alive and reachable ", ping)
@@ -174,6 +179,7 @@ func registerCommands(version int) {
 	registerCommand("rdp", "RDP (Remote Desktop Protocol) to a Windows buildlet", rdp)
 	registerCommand("rm", "delete files or directories", legacyRm)
 	registerCommand("run", "run a command on a buildlet", legacyRun)
+	registerCommand("group", "manage gomote groups (v2 only)", group)
 	registerCommand("ssh", "ssh to a buildlet", legacySSH)
 }
 
@@ -182,6 +188,8 @@ var (
 )
 
 func main() {
+	// Set up and parse global flags.
+	groupName := flag.String("group", os.Getenv("GOMOTE_GROUP"), "name of the gomote group to apply commands to (default is $GOMOTE_GROUP)")
 	buildlet.RegisterFlags()
 	version := 2
 	if vs := os.Getenv("GOMOTE_VERSION"); vs != "" {
@@ -196,19 +204,40 @@ func main() {
 	registerCommands(version)
 	flag.Usage = usage
 	flag.Parse()
-	buildEnv = buildenv.FromFlags()
 	args := flag.Args()
 	if len(args) == 0 {
 		usage()
 	}
+
+	// Set up globals.
+	buildEnv = buildenv.FromFlags()
+	if *groupName != "" {
+		var err error
+		activeGroup, err = loadGroup(*groupName)
+		if os.Getenv("GOMOTE_GROUP") != *groupName {
+			// Only fail hard since it was specified by the flag.
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failure: %v\n", err)
+				usage()
+			}
+		} else {
+			// With a valid group from GOMOTE_GROUP,
+			// make it explicit to the user that we're going
+			// ahead with it. We don't need this with the flag
+			// because it's explicit.
+			if err == nil {
+				fmt.Fprintf(os.Stderr, "# Using group %q from GOMOTE_GROUP\n", *groupName)
+			}
+		}
+	}
+
 	cmdName := args[0]
 	cmd, ok := commands[cmdName]
 	if !ok {
 		fmt.Fprintf(os.Stderr, "Unknown command %q\n", cmdName)
 		usage()
 	}
-	err := cmd.run(args[1:])
-	if err != nil {
+	if err := cmd.run(args[1:]); err != nil {
 		logAndExitf("Error running %s: %v\n", cmdName, err)
 	}
 }
@@ -232,4 +261,8 @@ func logAndExitf(format string, v ...interface{}) {
 // statusFromError returns the message portion of a GRPC error.
 func statusFromError(err error) string {
 	return status.Convert(err).Message()
+}
+
+func instanceDoesNotExist(err error) bool {
+	return status.Code(err) == codes.NotFound
 }

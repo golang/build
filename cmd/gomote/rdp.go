@@ -21,6 +21,10 @@ import (
 const rdpPort = 3389
 
 func rdp(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not support groups")
+	}
+
 	fs := flag.NewFlagSet("rdp", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "rdp usage: gomote rdp [--listen=...] <instance>")

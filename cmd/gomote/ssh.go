@@ -22,6 +22,10 @@ import (
 )
 
 func legacySSH(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not support groups")
+	}
+
 	fs := flag.NewFlagSet("ssh", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "ssh usage: gomote ssh <instance>")
@@ -60,6 +64,10 @@ func legacySSH(args []string) error {
 }
 
 func ssh(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not support groups")
+	}
+
 	fs := flag.NewFlagSet("ssh", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "ssh usage: gomote ssh <instance>")

@@ -25,6 +25,10 @@ import (
 
 // legacyPutTar a .tar.gz
 func legacyPutTar(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not support groups")
+	}
+
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "puttar usage: gomote puttar [put-opts] <buildlet-name> [tar.gz file or '-' for stdin]")
@@ -95,6 +99,10 @@ func legacyPutTar(args []string) error {
 
 // putTar a .tar.gz
 func putTar(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not yet support groups")
+	}
+
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "puttar usage: gomote puttar [put-opts] <buildlet-name> [tar.gz file or '-' for stdin]")
@@ -195,6 +203,10 @@ func putTar(args []string) error {
 
 // put go1.4 in the workdir
 func put14(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not support groups")
+	}
+
 	fs := flag.NewFlagSet("put14", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "put14 usage: gomote put14 <buildlet-name>")
@@ -221,6 +233,10 @@ func put14(args []string) error {
 
 // putBootstrap places the bootstrap version of go in the workdir
 func putBootstrap(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not yet support groups")
+	}
+
 	fs := flag.NewFlagSet("putbootstrap", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "putbootstrap usage: gomote putbootstrap <buildlet-name>")
@@ -248,6 +264,10 @@ func putBootstrap(args []string) error {
 
 // legacyPut single file
 func legacyPut(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not support groups")
+	}
+
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "put usage: gomote put [put-opts] <buildlet-name> <source or '-' for stdin> [destination]")
@@ -310,6 +330,10 @@ func legacyPut(args []string) error {
 
 // put single file
 func put(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not yet support groups")
+	}
+
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "put usage: gomote put [put-opts] <buildlet-name> <source or '-' for stdin> [destination]")

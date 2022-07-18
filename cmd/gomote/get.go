@@ -18,6 +18,10 @@ import (
 
 // legacyGetTar a .tar.gz
 func legacyGetTar(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not support groups")
+	}
+
 	fs := flag.NewFlagSet("get", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "gettar usage: gomote gettar [get-opts] <buildlet-name>")
@@ -48,6 +52,10 @@ func legacyGetTar(args []string) error {
 
 // getTar a .tar.gz
 func getTar(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not yet support groups")
+	}
+
 	fs := flag.NewFlagSet("get", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "gettar usage: gomote gettar [get-opts] <buildlet-name>")

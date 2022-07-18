@@ -27,6 +27,10 @@ import (
 )
 
 func legacyPush(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not support groups")
+	}
+
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
 	var dryRun bool
 	fs.BoolVar(&dryRun, "dry-run", false, "print what would be done only")
@@ -37,18 +41,10 @@ func legacyPush(args []string) error {
 	}
 	fs.Parse(args)
 
-	goroot := os.Getenv("GOROOT")
-	if goroot == "" {
-		slurp, err := exec.Command("go", "env", "GOROOT").Output()
-		if err != nil {
-			return fmt.Errorf("failed to get GOROOT from go env: %v", err)
-		}
-		goroot = strings.TrimSpace(string(slurp))
-		if goroot == "" {
-			return errors.New("Failed to get $GOROOT from environment or go env")
-		}
+	goroot, err := getGOROOT()
+	if err != nil {
+		return err
 	}
-	goroot = filepath.Clean(goroot)
 
 	if fs.NArg() != 1 {
 		fs.Usage()
@@ -294,6 +290,10 @@ func legacyPush(args []string) error {
 }
 
 func push(args []string) error {
+	if activeGroup != nil {
+		return fmt.Errorf("command does not yet support groups")
+	}
+
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
 	var dryRun bool
 	fs.BoolVar(&dryRun, "dry-run", false, "print what would be done only")
@@ -304,18 +304,10 @@ func push(args []string) error {
 	}
 	fs.Parse(args)
 
-	goroot := os.Getenv("GOROOT")
-	if goroot == "" {
-		slurp, err := exec.Command("go", "env", "GOROOT").Output()
-		if err != nil {
-			return fmt.Errorf("failed to get GOROOT from go env: %v", err)
-		}
-		goroot = strings.TrimSpace(string(slurp))
-		if goroot == "" {
-			return errors.New("Failed to get $GOROOT from environment or go env")
-		}
+	goroot, err := getGOROOT()
+	if err != nil {
+		return err
 	}
-	goroot = filepath.Clean(goroot)
 
 	if fs.NArg() != 1 {
 		fs.Usage()
@@ -668,4 +660,20 @@ func fileSHA1(path string) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("%x", s1.Sum(nil)), nil
+}
+
+func getGOROOT() (string, error) {
+	goroot := os.Getenv("GOROOT")
+	if goroot == "" {
+		slurp, err := exec.Command("go", "env", "GOROOT").Output()
+		if err != nil {
+			return "", fmt.Errorf("failed to get GOROOT from go env: %v", err)
+		}
+		goroot = strings.TrimSpace(string(slurp))
+		if goroot == "" {
+			return "", errors.New("Failed to get $GOROOT from environment or go env")
+		}
+	}
+	goroot = filepath.Clean(goroot)
+	return goroot, nil
 }
