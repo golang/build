@@ -8,7 +8,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"flag"
 	"fmt"
 	"html"
@@ -104,11 +103,6 @@ func main() {
 var nameRE = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)
 
 func loadAndHandle(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/tls" {
-		handleTLS(w, r)
-		return
-	}
-	addTLSLog(w, r)
 	if r.URL.Path == "/" {
 		overview(w, r)
 		return
@@ -143,18 +137,6 @@ func overview(w http.ResponseWriter, r *http.Request) {
 		tw.Write([]byte(line))
 	}
 	tw.Flush()
-}
-
-func fallbackSNI(getCert func(*tls.ClientHelloInfo) (*tls.Certificate, error), host string) func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
-	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-		saveHello(hello)
-		if hello.ServerName == "" {
-			h := *hello
-			hello = &h
-			hello.ServerName = host
-		}
-		return getCert(hello)
-	}
 }
 
 type loggingResponseWriter struct {
