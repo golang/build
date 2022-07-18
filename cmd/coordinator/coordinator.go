@@ -40,7 +40,6 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/storage"
-	"golang.org/x/build"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	builddash "golang.org/x/build/cmd/coordinator/internal/dashboard"
@@ -133,14 +132,6 @@ var maintnerClient apipb.MaintnerServiceClient
 const (
 	maxStatusDone = 30
 )
-
-// Fake keys signed by a fake CA.
-// These are used in localhost dev mode. (Not to be confused with the
-// staging "dev" instance under GCE project "go-dashboard-dev")
-var testFiles = map[string]string{
-	"farmer-cert.pem": build.DevCoordinatorCA,
-	"farmer-key.pem":  build.DevCoordinatorKey,
-}
 
 // httpRouter is the coordinator's handler, routing traffic to one of
 // two locations:
@@ -260,7 +251,7 @@ func main() {
 	// a shared package.
 	pool.SetBuilderMasterKey(masterKey())
 
-	err := pool.InitGCE(sc, testFiles, &basePinErr, isGCERemoteBuildlet, *buildEnvName, *mode)
+	err := pool.InitGCE(sc, &basePinErr, isGCERemoteBuildlet, *buildEnvName, *mode)
 	if err != nil {
 		if *mode == "" {
 			*mode = "dev"

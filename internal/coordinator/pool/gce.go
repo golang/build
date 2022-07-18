@@ -16,10 +16,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"path"
 	"sort"
 	"strconv"
@@ -84,15 +82,13 @@ var (
 
 	// values created due to separating the buildlet pools into a separate package
 	gceMode             string
-	testFiles           map[string]string
 	basePinErr          *atomic.Value
 	isGCERemoteBuildlet IsRemoteBuildletFunc
 )
 
 // InitGCE initializes the GCE buildlet pool.
-func InitGCE(sc *secret.Client, tFiles map[string]string, basePin *atomic.Value, fn IsRemoteBuildletFunc, buildEnvName, mode string) error {
+func InitGCE(sc *secret.Client, basePin *atomic.Value, fn IsRemoteBuildletFunc, buildEnvName, mode string) error {
 	gceMode = mode
-	testFiles = tFiles
 	basePinErr = basePin
 	isGCERemoteBuildlet = fn
 
@@ -798,28 +794,6 @@ func hasComputeScope() bool {
 
 func hasStorageScope() bool {
 	return HasScope(storage.ScopeReadWrite) || HasScope(storage.ScopeFullControl) || HasScope(compute.CloudPlatformScope)
-}
-
-// ReadGCSFile reads the named file from the GCS bucket.
-func ReadGCSFile(name string) ([]byte, error) {
-	if gceMode == "dev" {
-		b, ok := testFiles[name]
-		if !ok {
-			return nil, &os.PathError{
-				Op:   "open",
-				Path: name,
-				Err:  os.ErrNotExist,
-			}
-		}
-		return []byte(b), nil
-	}
-
-	r, err := storageClient.Bucket(buildEnv.BuildletBucket).Object(name).NewReader(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
-	return ioutil.ReadAll(r)
 }
 
 // syncBuildStatsLoop runs forever in its own goroutine and syncs the
