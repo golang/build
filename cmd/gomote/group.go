@@ -157,22 +157,17 @@ func listGroups(args []string) error {
 	if len(args) != 0 {
 		usage()
 	}
-	dir, err := groupDir()
+	groups, err := loadAllGroups()
 	if err != nil {
-		return fmt.Errorf("acquiring group directory: %w", err)
+		return err
 	}
-	matches, _ := filepath.Glob(filepath.Join(dir, "*.json"))
 	// N.B. Glob ignores I/O errors, so no matches also means the directory
 	// does not exist.
 	emit := func(name, inst string) {
 		fmt.Printf("%s\t%s\t\n", name, inst)
 	}
 	emit("Name", "Instances")
-	for _, match := range matches {
-		g, err := loadGroupFromFile(match)
-		if err != nil {
-			return fmt.Errorf("reading group file for %q: %w", match, err)
-		}
+	for _, g := range groups {
 		sort.Strings(g.Instances)
 		emitted := false
 		for _, inst := range g.Instances {
@@ -187,7 +182,7 @@ func listGroups(args []string) error {
 			emit(g.Name, "(none)")
 		}
 	}
-	if len(matches) == 0 {
+	if len(groups) == 0 {
 		fmt.Println("(none)")
 	}
 	return nil
@@ -199,6 +194,34 @@ type groupData struct {
 
 	// Instances is a list of instances in the group.
 	Instances []string `json:"instances"`
+}
+
+func (g *groupData) has(inst string) bool {
+	for _, i := range g.Instances {
+		if inst == i {
+			return true
+		}
+	}
+	return false
+}
+
+func loadAllGroups() ([]*groupData, error) {
+	dir, err := groupDir()
+	if err != nil {
+		return nil, fmt.Errorf("acquiring group directory: %w", err)
+	}
+	// N.B. Glob ignores I/O errors, so no matches also means the directory
+	// does not exist.
+	matches, _ := filepath.Glob(filepath.Join(dir, "*.json"))
+	var groups []*groupData
+	for _, match := range matches {
+		g, err := loadGroupFromFile(match)
+		if err != nil {
+			return nil, fmt.Errorf("reading group file for %q: %w", match, err)
+		}
+		groups = append(groups, g)
+	}
+	return groups, nil
 }
 
 func loadGroup(name string) (*groupData, error) {
