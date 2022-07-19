@@ -57,13 +57,12 @@ func legacyDestroy(args []string) error {
 }
 
 func destroy(args []string) error {
-	if activeGroup != nil {
-		return fmt.Errorf("command does not yet support groups")
-	}
-
 	fs := flag.NewFlagSet("destroy", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "destroy usage: gomote destroy <instance>")
+		fmt.Fprintln(os.Stderr, "destroy usage: gomote destroy [instance]")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "Destroys a single instance, or all instances in a group.")
+		fmt.Fprintln(os.Stderr, "Instance argument is optional with a group.")
 		fs.PrintDefaults()
 		if fs.NArg() == 0 {
 			// List buildlets that you might want to destroy.
@@ -83,16 +82,32 @@ func destroy(args []string) error {
 	}
 
 	fs.Parse(args)
-	if fs.NArg() != 1 {
+
+	var destroySet []string
+	if fs.NArg() == 1 {
+		destroySet = append(destroySet, fs.Arg(0))
+	} else if activeGroup != nil {
+		for _, inst := range activeGroup.Instances {
+			destroySet = append(destroySet, inst)
+		}
+	} else {
 		fs.Usage()
 	}
-	name := fs.Arg(0)
-	ctx := context.Background()
-	client := gomoteServerClient(ctx)
-	if _, err := client.DestroyInstance(ctx, &protos.DestroyInstanceRequest{
-		GomoteId: name,
-	}); err != nil {
-		return fmt.Errorf("unable to destroy instance: %s", statusFromError(err))
+	for _, name := range destroySet {
+		fmt.Fprintf(os.Stderr, "# Destroying %s\n", name)
+		ctx := context.Background()
+		client := gomoteServerClient(ctx)
+		if _, err := client.DestroyInstance(ctx, &protos.DestroyInstanceRequest{
+			GomoteId: name,
+		}); err != nil {
+			return fmt.Errorf("unable to destroy instance: %s", statusFromError(err))
+		}
+	}
+	if activeGroup != nil {
+		activeGroup.Instances = nil
+		if err := storeGroup(activeGroup); err != nil {
+			return err
+		}
 	}
 	return nil
 }
