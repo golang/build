@@ -17,7 +17,6 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
-	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/spanlog"
 	"golang.org/x/build/types"
@@ -142,7 +141,7 @@ func (l stderrLogger) CreateSpan(event string, optText ...string) spanlog.Span {
 }
 
 // getPoolBuildlet is launched as its own goroutine to do a
-// potentially long blocking cal to pool.GetBuildlet.
+// potentially long blocking call to pool.GetBuildlet.
 func (s *Scheduler) getPoolBuildlet(pool pool.Buildlet, hostType string) {
 	res := getBuildletResult{
 		Pool:     pool,
@@ -171,7 +170,7 @@ func (s *Scheduler) matchWaiter(hostType string) (_ *SchedItem, ok bool) {
 
 	var best *SchedItem
 	for si := range waiters {
-		if best == nil || schedLess(si, best) {
+		if best == nil || si.Less(best) {
 			best = si
 		}
 	}
@@ -277,83 +276,12 @@ func (s *Scheduler) WaiterState(waiter *SchedItem) (ws types.BuildletWaitStatus)
 
 	m := s.waiting[waiter.HostType]
 	for si := range m {
-		if schedLess(si, waiter) {
+		if si.Less(waiter) {
 			ws.Ahead++
 		}
 	}
 
 	return ws
-}
-
-// schedLess reports whether the scheduler item ia is "less" (more
-// important) than scheduler item ib.
-func schedLess(ia, ib *SchedItem) bool {
-	// TODO: flesh out this policy more. For now this is much
-	// better than the old random policy.
-	// For example, consider IsHelper? Figure out a policy.
-	// TODO: consider SchedItem.Branch.
-	// TODO: pass in a context to schedLess that includes current time and current
-	// top of various branches. Then we can use that in decisions rather than doing
-	// lookups or locks in a less function.
-
-	// Gomote is most important, then TryBots (FIFO for either), then
-	// post-submit builds (LIFO, by commit time)
-	if ia.IsGomote != ib.IsGomote {
-		return ia.IsGomote
-	}
-	if ia.IsTry != ib.IsTry {
-		return ia.IsTry
-	}
-	// Gomote and TryBots are FIFO.
-	if ia.IsGomote || ia.IsTry {
-		// TODO: if IsTry, consider how many TryBot requests
-		// are outstanding per user. The scheduler should
-		// round-robin between CL authors, rather than use
-		// time. But time works for now.
-		return ia.requestTime.Before(ib.requestTime)
-	}
-
-	// Post-submit builds are LIFO by commit time, not necessarily
-	// when the coordinator's findWork loop threw them at the
-	// scheduler.
-	return ia.CommitTime.After(ib.CommitTime)
-}
-
-// SchedItem is a specification of a requested buildlet in its
-// exported fields, and internal scheduler state used while waiting
-// for that buildlet.
-type SchedItem struct {
-	buildgo.BuilderRev // not set for gomote
-	HostType           string
-	IsGomote           bool
-	IsTry              bool
-	IsHelper           bool
-	Branch             string
-
-	// CommitTime is the latest commit date of the relevant repos
-	// that make up the work being tested. (For example, x/foo
-	// being tested against master can have either x/foo commit
-	// being newer, or master being newer).
-	CommitTime time.Time
-
-	// The following unexported fields are set by the Scheduler in
-	// Scheduler.GetBuildlet.
-
-	s           *Scheduler
-	requestTime time.Time
-	tryFor      string // TODO: which user. (user with 1 trybot >> user with 50 trybots)
-	pool        pool.Buildlet
-	ctxDone     <-chan struct{}
-
-	// wantRes is the unbuffered channel that's passed
-	// synchronously from Scheduler.GetBuildlet to
-	// Scheduler.matchBuildlet. Its value is a channel (whose
-	// buffering doesn't matter) to pass over a buildlet.Client
-	// just obtained from a BuildletPool. The contract to use
-	// wantRes is that the sender must have a result already
-	// available to send on the inner channel, and the receiver
-	// still wants it (their context hasn't expired).
-	wantRes chan chan<- buildlet.Client
 }
 
 // GetBuildlet requests a buildlet with the parameters described in si.
