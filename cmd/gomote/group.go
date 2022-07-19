@@ -57,16 +57,16 @@ func createGroup(args []string) error {
 	if len(args) != 1 {
 		usage()
 	}
-	name := args[0]
+	_, err := doCreateGroup(args[0])
+	return err
+}
+
+func doCreateGroup(name string) (*groupData, error) {
 	if _, err := loadGroup(name); err == nil {
-		return fmt.Errorf("group %q already exists", name)
+		return nil, fmt.Errorf("group %q already exists", name)
 	}
-	if err := storeGroup(&groupData{
-		Name: name,
-	}); err != nil {
-		return err
-	}
-	return nil
+	g := &groupData{Name: name}
+	return g, storeGroup(g)
 }
 
 func destroyGroup(args []string) error {

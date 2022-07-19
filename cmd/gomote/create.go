@@ -164,6 +164,8 @@ func create(args []string) error {
 	fs.IntVar(&count, "count", 1, "number of instances to create")
 	var setup bool
 	fs.BoolVar(&setup, "setup", false, "set up the instance by pushing GOROOT and building the Go toolchain")
+	var newGroup string
+	fs.StringVar(&newGroup, "new-group", "", "also create a new group and add the new instances to it")
 
 	fs.Parse(args)
 	if fs.NArg() != 1 {
@@ -180,7 +182,15 @@ func create(args []string) error {
 		}
 	}
 
-	var activeGroupMu sync.Mutex
+	var groupMu sync.Mutex
+	group := activeGroup
+	if newGroup != "" {
+		group, err = doCreateGroup(newGroup)
+		if err != nil {
+			return err
+		}
+	}
+
 	eg, ctx := errgroup.WithContext(context.Background())
 	client := gomoteServerClient(ctx)
 	for i := 0; i < count; i++ {
@@ -207,10 +217,10 @@ func create(args []string) error {
 				}
 			}
 			fmt.Println(inst)
-			if activeGroup != nil {
-				activeGroupMu.Lock()
-				activeGroup.Instances = append(activeGroup.Instances, inst)
-				activeGroupMu.Unlock()
+			if group != nil {
+				groupMu.Lock()
+				group.Instances = append(group.Instances, inst)
+				groupMu.Unlock()
 			}
 			if !setup {
 				return nil
@@ -239,8 +249,8 @@ func create(args []string) error {
 	if err := eg.Wait(); err != nil {
 		return err
 	}
-	if activeGroup != nil {
-		return storeGroup(activeGroup)
+	if group != nil {
+		return storeGroup(group)
 	}
 	return nil
 }
