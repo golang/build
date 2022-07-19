@@ -15,11 +15,13 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/types"
+	"golang.org/x/sync/errgroup"
 )
 
 type builderType struct {
@@ -158,39 +160,55 @@ func create(args []string) error {
 	}
 	var status bool
 	fs.BoolVar(&status, "status", true, "print regular status updates while waiting")
+	var count int
+	fs.IntVar(&count, "count", 1, "number of instances to create")
 
 	fs.Parse(args)
 	if fs.NArg() != 1 {
 		fs.Usage()
 	}
 	builderType := fs.Arg(0)
-	ctx := context.Background()
-	client := gomoteServerClient(ctx)
 
-	start := time.Now()
-	stream, err := client.CreateInstance(ctx, &protos.CreateInstanceRequest{BuilderType: builderType})
-	if err != nil {
-		return fmt.Errorf("failed to create buildlet: %v", statusFromError(err))
+	var activeGroupMu sync.Mutex
+	eg, ctx := errgroup.WithContext(context.Background())
+	client := gomoteServerClient(ctx)
+	for i := 0; i < count; i++ {
+		i := i
+		eg.Go(func() error {
+			start := time.Now()
+			stream, err := client.CreateInstance(ctx, &protos.CreateInstanceRequest{BuilderType: builderType})
+			if err != nil {
+				return fmt.Errorf("failed to create buildlet: %v", statusFromError(err))
+			}
+			var instanceName string
+		updateLoop:
+			for {
+				update, err := stream.Recv()
+				switch {
+				case err == io.EOF:
+					break updateLoop
+				case err != nil:
+					return fmt.Errorf("failed to create buildlet (%d): %v", i+1, statusFromError(err))
+				case update.GetStatus() != protos.CreateInstanceResponse_COMPLETE && status:
+					fmt.Fprintf(os.Stderr, "# still creating %s (%d) after %v; %d requests ahead of you\n", builderType, i+1, time.Since(start).Round(time.Second), update.GetWaitersAhead())
+				case update.GetStatus() == protos.CreateInstanceResponse_COMPLETE:
+					instanceName = update.GetInstance().GetGomoteId()
+				}
+			}
+			fmt.Println(instanceName)
+			if activeGroup != nil {
+				activeGroupMu.Lock()
+				activeGroup.Instances = append(activeGroup.Instances, instanceName)
+				activeGroupMu.Unlock()
+			}
+			return nil
+		})
 	}
-	var instanceName string
-updateLoop:
-	for {
-		update, err := stream.Recv()
-		switch {
-		case err == io.EOF:
-			break updateLoop
-		case err != nil:
-			return fmt.Errorf("failed to create buildlet: %v", statusFromError(err))
-		case update.GetStatus() != protos.CreateInstanceResponse_COMPLETE && status:
-			fmt.Fprintf(os.Stderr, "# still creating %s after %v; %d requests ahead of you\n", builderType, time.Since(start).Round(time.Second), update.GetWaitersAhead())
-		case update.GetStatus() == protos.CreateInstanceResponse_COMPLETE:
-			instanceName = update.GetInstance().GetGomoteId()
-		}
+	if err := eg.Wait(); err != nil {
+		return err
 	}
-	fmt.Println(instanceName)
-	if activeGroup == nil {
-		return nil
+	if activeGroup != nil {
+		return storeGroup(activeGroup)
 	}
-	activeGroup.Instances = append(activeGroup.Instances, instanceName)
-	return storeGroup(activeGroup)
+	return nil
 }
