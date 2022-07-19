@@ -10,12 +10,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/internal/gomote/protos"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -112,10 +114,6 @@ func (ss *stringSlice) Set(v string) error {
 }
 
 func run(args []string) error {
-	if activeGroup != nil {
-		return fmt.Errorf("command does not yet support groups")
-	}
-
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "run usage: gomote run [run-opts] <instance> <cmd> [args...]")
@@ -139,10 +137,40 @@ func run(args []string) error {
 	fs.StringVar(&builderEnv, "builderenv", "", "Optional alternate builder to act like. Must share the same underlying buildlet host type, or it's an error. For instance, linux-amd64-race or linux-386-387 are compatible with linux-amd64, but openbsd-amd64 and openbsd-386 are different hosts.")
 
 	fs.Parse(args)
-	if fs.NArg() < 2 {
+	if fs.NArg() == 0 {
 		fs.Usage()
 	}
-	name, cmd := fs.Arg(0), fs.Arg(1)
+	// First check if the instance name refers to a live instance.
+	ctx := context.Background()
+	client := gomoteServerClient(ctx)
+	_, err := client.InstanceAlive(ctx, &protos.InstanceAliveRequest{
+		GomoteId: fs.Arg(0),
+	})
+	var cmd string
+	var cmdArgs []string
+	var runSet []string
+	if err != nil {
+		// When there's no active group, this must be an instance name.
+		// Given that we got an error, we should surface that.
+		if activeGroup == nil {
+			return fmt.Errorf("instance %q: %s", fs.Arg(0), statusFromError(err))
+		}
+		// When there is an active group, this just means that we're going
+		// to use the group instead and assume the rest is a command.
+		for _, inst := range activeGroup.Instances {
+			runSet = append(runSet, inst)
+		}
+		cmd = fs.Arg(0)
+		cmdArgs = fs.Args()[1:]
+	} else {
+		runSet = append(runSet, fs.Arg(0))
+		if fs.NArg() == 1 {
+			fmt.Fprintln(os.Stderr, "missing command")
+			fs.Usage()
+		}
+		cmd = fs.Arg(1)
+		cmdArgs = fs.Args()[2:]
+	}
 	var pathOpt []string
 	if path == "EMPTY" {
 		pathOpt = []string{} // non-nil
@@ -151,35 +179,70 @@ func run(args []string) error {
 	}
 	env = append(env, "GO_DISABLE_OUTBOUND_NETWORK="+fmt.Sprint(firewall))
 
-	ctx := context.Background()
-	client := gomoteServerClient(ctx)
-	stream, err := client.ExecuteCommand(ctx, &protos.ExecuteCommandRequest{
-		AppendEnvironment: []string(env),
-		Args:              fs.Args()[2:],
-		Command:           cmd,
-		Debug:             debug,
-		Directory:         dir,
-		GomoteId:          name,
-		Path:              pathOpt,
-		SystemLevel:       sys || strings.HasPrefix(cmd, "/"),
-		ImitateHostType:   builderEnv,
-	})
+	detailedProgress := len(runSet) == 1
+
+	// Create temporary directory for output.
+	// This is useful even if we don't have multiple gomotes running, since
+	// it's easy to accidentally lose the output.
+	tmpOutDir, err := os.MkdirTemp("", "gomote")
 	if err != nil {
-		return fmt.Errorf("unable to execute %s: %s", cmd, statusFromError(err))
+		return err
 	}
-	for {
-		update, err := stream.Recv()
-		if err == io.EOF {
-			return nil
+
+	eg, ctx := errgroup.WithContext(context.Background())
+	for _, inst := range runSet {
+		inst := inst
+		if !detailedProgress {
+			fmt.Fprintf(os.Stderr, "# Running command on %q...\n", inst)
 		}
-		if err != nil {
-			// execution error
-			if status.Code(err) == codes.Aborted {
-				return fmt.Errorf("Error trying to execute %s: %v", cmd, statusFromError(err))
+		eg.Go(func() error {
+			outf, err := os.Create(filepath.Join(tmpOutDir, fmt.Sprintf("%s.stdout", inst)))
+			if err != nil {
+				return err
 			}
-			// remote error
-			return fmt.Errorf("unable to execute %s: %s", cmd, statusFromError(err))
-		}
-		os.Stdout.Write(update.GetOutput())
+			defer func() {
+				outf.Close()
+				fmt.Fprintf(os.Stderr, "# Wrote results from %q to %q.\n", inst, outf.Name())
+			}()
+			fmt.Fprintf(os.Stderr, "# Streaming results from %q to %q...\n", inst, outf.Name())
+			var outWriter io.Writer
+			if detailedProgress {
+				outWriter = io.MultiWriter(os.Stdout, outf)
+			} else {
+				outWriter = outf
+			}
+
+			client := gomoteServerClient(ctx)
+			stream, err := client.ExecuteCommand(ctx, &protos.ExecuteCommandRequest{
+				AppendEnvironment: []string(env),
+				Args:              cmdArgs,
+				Command:           cmd,
+				Debug:             debug,
+				Directory:         dir,
+				GomoteId:          inst,
+				Path:              pathOpt,
+				SystemLevel:       sys || strings.HasPrefix(cmd, "/"),
+				ImitateHostType:   builderEnv,
+			})
+			if err != nil {
+				return fmt.Errorf("unable to execute %s: %s", cmd, statusFromError(err))
+			}
+			for {
+				update, err := stream.Recv()
+				if err == io.EOF {
+					return nil
+				}
+				if err != nil {
+					// execution error
+					if status.Code(err) == codes.Aborted {
+						return fmt.Errorf("Error trying to execute %s: %v", cmd, statusFromError(err))
+					}
+					// remote error
+					return fmt.Errorf("unable to execute %s: %s", cmd, statusFromError(err))
+				}
+				fmt.Fprintf(outWriter, string(update.GetOutput()))
+			}
+		})
 	}
+	return eg.Wait()
 }
