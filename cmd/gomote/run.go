@@ -171,15 +171,14 @@ func run(args []string) error {
 		cmd = fs.Arg(1)
 		cmdArgs = fs.Args()[2:]
 	}
+
+	detailedProgress := len(runSet) == 1
 	var pathOpt []string
 	if path == "EMPTY" {
 		pathOpt = []string{} // non-nil
 	} else if path != "" {
 		pathOpt = strings.Split(path, ",")
 	}
-	env = append(env, "GO_DISABLE_OUTBOUND_NETWORK="+fmt.Sprint(firewall))
-
-	detailedProgress := len(runSet) == 1
 
 	// Create temporary directory for output.
 	// This is useful even if we don't have multiple gomotes running, since
@@ -196,53 +195,119 @@ func run(args []string) error {
 			fmt.Fprintf(os.Stderr, "# Running command on %q...\n", inst)
 		}
 		eg.Go(func() error {
-			outf, err := os.Create(filepath.Join(tmpOutDir, fmt.Sprintf("%s.stdout", inst)))
-			if err != nil {
-				return err
-			}
-			defer func() {
-				outf.Close()
-				fmt.Fprintf(os.Stderr, "# Wrote results from %q to %q.\n", inst, outf.Name())
-			}()
-			fmt.Fprintf(os.Stderr, "# Streaming results from %q to %q...\n", inst, outf.Name())
-			var outWriter io.Writer
-			if detailedProgress {
-				outWriter = io.MultiWriter(os.Stdout, outf)
-			} else {
-				outWriter = outf
-			}
-
-			client := gomoteServerClient(ctx)
-			stream, err := client.ExecuteCommand(ctx, &protos.ExecuteCommandRequest{
-				AppendEnvironment: []string(env),
-				Args:              cmdArgs,
-				Command:           cmd,
-				Debug:             debug,
-				Directory:         dir,
-				GomoteId:          inst,
-				Path:              pathOpt,
-				SystemLevel:       sys || strings.HasPrefix(cmd, "/"),
-				ImitateHostType:   builderEnv,
-			})
-			if err != nil {
-				return fmt.Errorf("unable to execute %s: %s", cmd, statusFromError(err))
-			}
-			for {
-				update, err := stream.Recv()
-				if err == io.EOF {
-					return nil
-				}
-				if err != nil {
-					// execution error
-					if status.Code(err) == codes.Aborted {
-						return fmt.Errorf("Error trying to execute %s: %v", cmd, statusFromError(err))
-					}
-					// remote error
-					return fmt.Errorf("unable to execute %s: %s", cmd, statusFromError(err))
-				}
-				fmt.Fprintf(outWriter, string(update.GetOutput()))
-			}
+			return doRun(
+				ctx,
+				inst,
+				tmpOutDir,
+				cmd,
+				cmdArgs,
+				detailedProgress,
+				runDir(dir),
+				runBuilderEnv(builderEnv),
+				runEnv(env),
+				runPath(pathOpt),
+				runSystem(sys),
+				runDebug(debug),
+				runFirewall(firewall),
+			)
 		})
 	}
 	return eg.Wait()
+}
+
+func doRun(ctx context.Context, inst, tmpOutDir, cmd string, cmdArgs []string, detailedProgress bool, opts ...runOpt) error {
+	req := &protos.ExecuteCommandRequest{
+		AppendEnvironment: []string{},
+		Args:              cmdArgs,
+		Command:           cmd,
+		Path:              []string{},
+		GomoteId:          inst,
+	}
+	for _, opt := range opts {
+		opt(req)
+	}
+	if !req.SystemLevel {
+		req.SystemLevel = strings.HasPrefix(cmd, "/")
+	}
+
+	outf, err := os.Create(filepath.Join(tmpOutDir, fmt.Sprintf("%s.stdout", inst)))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		outf.Close()
+		fmt.Fprintf(os.Stderr, "# Wrote results from %q to %q.\n", inst, outf.Name())
+	}()
+	fmt.Fprintf(os.Stderr, "# Streaming results from %q to %q...\n", inst, outf.Name())
+	var outWriter io.Writer
+	if detailedProgress {
+		outWriter = io.MultiWriter(os.Stdout, outf)
+	} else {
+		outWriter = outf
+	}
+
+	client := gomoteServerClient(ctx)
+	stream, err := client.ExecuteCommand(ctx, req)
+	if err != nil {
+		return fmt.Errorf("unable to execute %s: %s", cmd, statusFromError(err))
+	}
+	for {
+		update, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			// execution error
+			if status.Code(err) == codes.Aborted {
+				return fmt.Errorf("Error trying to execute %s: %v", cmd, statusFromError(err))
+			}
+			// remote error
+			return fmt.Errorf("unable to execute %s: %s", cmd, statusFromError(err))
+		}
+		fmt.Fprintf(outWriter, string(update.GetOutput()))
+	}
+}
+
+type runOpt func(*protos.ExecuteCommandRequest)
+
+func runBuilderEnv(builderEnv string) runOpt {
+	return func(r *protos.ExecuteCommandRequest) {
+		r.ImitateHostType = builderEnv
+	}
+}
+
+func runDir(dir string) runOpt {
+	return func(r *protos.ExecuteCommandRequest) {
+		r.Directory = dir
+	}
+}
+
+func runEnv(env []string) runOpt {
+	return func(r *protos.ExecuteCommandRequest) {
+		r.AppendEnvironment = append(r.AppendEnvironment, env...)
+	}
+}
+
+func runPath(path []string) runOpt {
+	return func(r *protos.ExecuteCommandRequest) {
+		r.Path = append(r.Path, path...)
+	}
+}
+
+func runDebug(debug bool) runOpt {
+	return func(r *protos.ExecuteCommandRequest) {
+		r.Debug = debug
+	}
+}
+
+func runSystem(sys bool) runOpt {
+	return func(r *protos.ExecuteCommandRequest) {
+		r.SystemLevel = sys
+	}
+}
+
+func runFirewall(firewall bool) runOpt {
+	return func(r *protos.ExecuteCommandRequest) {
+		r.AppendEnvironment = append(r.AppendEnvironment, "GO_DISABLE_OUTBOUND_NETWORK="+fmt.Sprint(firewall))
+	}
 }
