@@ -162,12 +162,23 @@ func create(args []string) error {
 	fs.BoolVar(&status, "status", true, "print regular status updates while waiting")
 	var count int
 	fs.IntVar(&count, "count", 1, "number of instances to create")
+	var setup bool
+	fs.BoolVar(&setup, "setup", false, "set up the instance by pushing GOROOT and building the Go toolchain")
 
 	fs.Parse(args)
 	if fs.NArg() != 1 {
 		fs.Usage()
 	}
 	builderType := fs.Arg(0)
+
+	var tmpOutDir string
+	var err error
+	if setup {
+		tmpOutDir, err = os.MkdirTemp("", "gomote")
+		if err != nil {
+			return fmt.Errorf("failed to create a temporary directory for setup output: %v", err)
+		}
+	}
 
 	var activeGroupMu sync.Mutex
 	eg, ctx := errgroup.WithContext(context.Background())
@@ -180,7 +191,7 @@ func create(args []string) error {
 			if err != nil {
 				return fmt.Errorf("failed to create buildlet: %v", statusFromError(err))
 			}
-			var instanceName string
+			var inst string
 		updateLoop:
 			for {
 				update, err := stream.Recv()
@@ -192,16 +203,37 @@ func create(args []string) error {
 				case update.GetStatus() != protos.CreateInstanceResponse_COMPLETE && status:
 					fmt.Fprintf(os.Stderr, "# still creating %s (%d) after %v; %d requests ahead of you\n", builderType, i+1, time.Since(start).Round(time.Second), update.GetWaitersAhead())
 				case update.GetStatus() == protos.CreateInstanceResponse_COMPLETE:
-					instanceName = update.GetInstance().GetGomoteId()
+					inst = update.GetInstance().GetGomoteId()
 				}
 			}
-			fmt.Println(instanceName)
+			fmt.Println(inst)
 			if activeGroup != nil {
 				activeGroupMu.Lock()
-				activeGroup.Instances = append(activeGroup.Instances, instanceName)
+				activeGroup.Instances = append(activeGroup.Instances, inst)
 				activeGroupMu.Unlock()
 			}
-			return nil
+			if !setup {
+				return nil
+			}
+			detailedProgress := count == 1
+			goroot, err := getGOROOT()
+			if err != nil {
+				return err
+			}
+			if !detailedProgress {
+				fmt.Fprintf(os.Stderr, "# Pushing GOROOT %q to %q...\n", goroot, inst)
+			}
+			if err := doPush(ctx, inst, goroot, false, detailedProgress); err != nil {
+				return err
+			}
+			cmd := "go/src/make.bash"
+			if strings.Contains(builderType, "windows") {
+				cmd = "go/src/make.bat"
+			}
+			if !detailedProgress {
+				fmt.Fprintf(os.Stderr, "# Running %q on %q...\n", cmd, inst)
+			}
+			return doRun(ctx, inst, tmpOutDir, cmd, []string{}, count == 1)
 		})
 	}
 	if err := eg.Wait(); err != nil {

@@ -322,7 +322,7 @@ func push(args []string) error {
 	for _, inst := range pushSet {
 		inst := inst
 		eg.Go(func() error {
-			fmt.Fprintf(os.Stderr, "# Pushing to %q...\n", inst)
+			fmt.Fprintf(os.Stderr, "# Pushing GOROOT %q to %q...\n", goroot, inst)
 			return doPush(ctx, inst, goroot, dryRun, detailedProgress)
 		})
 	}
