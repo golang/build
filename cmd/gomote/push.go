@@ -24,6 +24,7 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/internal/gomote/protos"
+	"golang.org/x/sync/errgroup"
 )
 
 func legacyPush(args []string) error {
@@ -290,10 +291,6 @@ func legacyPush(args []string) error {
 }
 
 func push(args []string) error {
-	if activeGroup != nil {
-		return fmt.Errorf("command does not yet support groups")
-	}
-
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
 	var dryRun bool
 	fs.BoolVar(&dryRun, "dry-run", false, "print what would be done only")
@@ -309,15 +306,38 @@ func push(args []string) error {
 		return err
 	}
 
-	if fs.NArg() != 1 {
+	var pushSet []string
+	if fs.NArg() == 1 {
+		pushSet = append(pushSet, fs.Arg(0))
+	} else if activeGroup != nil {
+		for _, inst := range activeGroup.Instances {
+			pushSet = append(pushSet, inst)
+		}
+	} else {
 		fs.Usage()
 	}
-	name := fs.Arg(0)
 
+	detailedProgress := len(pushSet) == 1
+	eg, ctx := errgroup.WithContext(context.Background())
+	for _, inst := range pushSet {
+		inst := inst
+		eg.Go(func() error {
+			fmt.Fprintf(os.Stderr, "# Pushing to %q...\n", inst)
+			return doPush(ctx, inst, goroot, dryRun, detailedProgress)
+		})
+	}
+	return eg.Wait()
+}
+
+func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress bool) error {
+	logf := func(s string, a ...interface{}) {
+		if detailedProgress {
+			log.Printf(s, a...)
+		}
+	}
 	haveGo14 := false
 	remote := map[string]buildlet.DirEntry{} // keys like "src/make.bash"
 
-	ctx := context.Background()
 	client := gomoteServerClient(ctx)
 	resp, err := client.ListDirectory(ctx, &protos.ListDirectoryRequest{
 		GomoteId:  name,
@@ -350,9 +370,9 @@ func push(args []string) error {
 		}
 	}
 	if !haveGo14 {
-		log.Printf("installing go1.4")
+		logf("installing go1.4")
 		if dryRun {
-			log.Printf("(Dry-run) Would have pushed go1.4")
+			logf("(Dry-run) Would have pushed go1.4")
 		} else {
 			_, err := client.AddBootstrap(ctx, &protos.AddBootstrapRequest{
 				GomoteId: name,
@@ -489,9 +509,9 @@ func push(args []string) error {
 		}
 		sort.Strings(withGo)
 		if dryRun {
-			log.Printf("(Dry-run) Would have deleted remote files: %q", withGo)
+			logf("(Dry-run) Would have deleted remote files: %q", withGo)
 		} else {
-			log.Printf("Deleting remote files: %q", withGo)
+			logf("Deleting remote files: %q", withGo)
 			if _, err := client.RemoveFiles(ctx, &protos.RemoveFilesRequest{
 				GomoteId: name,
 				Paths:    withGo,
@@ -509,28 +529,28 @@ func push(args []string) error {
 		}
 		if !inf.fi.Mode().IsRegular() {
 			if !inf.fi.IsDir() {
-				log.Printf("Ignoring local non-regular, non-directory file %s: %v", rel, inf.fi.Mode())
+				logf("Ignoring local non-regular, non-directory file %s: %v", rel, inf.fi.Mode())
 			}
 			continue
 		}
 		rem, ok := remote[rel]
 		if !ok {
 			if notHave++; notHave <= maxNotHavePrint {
-				log.Printf("Remote doesn't have %q", rel)
+				logf("Remote doesn't have %q", rel)
 			}
 			toSend = append(toSend, rel)
 			continue
 		}
 		if rem.Digest() != inf.sha1 {
-			log.Printf("Remote's %s digest is %q; want %q", rel, rem.Digest(), inf.sha1)
+			logf("Remote's %s digest is %q; want %q", rel, rem.Digest(), inf.sha1)
 			toSend = append(toSend, rel)
 		}
 	}
 	if notHave > maxNotHavePrint {
-		log.Printf("Remote doesn't have %d files (only showed %d).", notHave, maxNotHavePrint)
+		logf("Remote doesn't have %d files (only showed %d).", notHave, maxNotHavePrint)
 	}
 	if _, hasVersion := remote["VERSION"]; !hasVersion {
-		log.Printf("Remote lacks a VERSION file; sending a fake one")
+		logf("Remote lacks a VERSION file; sending a fake one")
 		toSend = append(toSend, "VERSION")
 	}
 	if len(toSend) > 0 {
@@ -539,9 +559,9 @@ func push(args []string) error {
 		if err != nil {
 			return err
 		}
-		log.Printf("Uploading %d new/changed files; %d byte .tar.gz", len(toSend), tgz.Len())
+		logf("Uploading %d new/changed files; %d byte .tar.gz", len(toSend), tgz.Len())
 		if dryRun {
-			log.Printf("(Dry-run mode; not doing anything.")
+			logf("(Dry-run mode; not doing anything.")
 			return nil
 		}
 		resp, err := client.UploadFile(ctx, &protos.UploadFileRequest{})
