@@ -137,10 +137,6 @@ func legacyCreate(args []string) error {
 }
 
 func create(args []string) error {
-	if activeGroup != nil {
-		return fmt.Errorf("command does not yet support groups")
-	}
-
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
 
 	fs.Usage = func() {
@@ -177,12 +173,12 @@ func create(args []string) error {
 		return fmt.Errorf("failed to create buildlet: %v", statusFromError(err))
 	}
 	var instanceName string
+updateLoop:
 	for {
 		update, err := stream.Recv()
 		switch {
 		case err == io.EOF:
-			fmt.Println(instanceName)
-			return nil
+			break updateLoop
 		case err != nil:
 			return fmt.Errorf("failed to create buildlet: %v", statusFromError(err))
 		case update.GetStatus() != protos.CreateInstanceResponse_COMPLETE && status:
@@ -191,4 +187,10 @@ func create(args []string) error {
 			instanceName = update.GetInstance().GetGomoteId()
 		}
 	}
+	fmt.Println(instanceName)
+	if activeGroup == nil {
+		return nil
+	}
+	activeGroup.Instances = append(activeGroup.Instances, instanceName)
+	return storeGroup(activeGroup)
 }
