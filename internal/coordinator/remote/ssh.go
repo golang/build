@@ -493,6 +493,9 @@ func (ss *SSHServer) setupRemoteSSHEnv(bconf *dashboard.BuildConfig, workDir str
 		// A Unix system.
 		for _, env := range bconf.Env() {
 			fmt.Fprintln(f, env)
+			if idx := strings.Index(env, "="); idx > 0 {
+				fmt.Fprintf(f, "export %s\n", env[:idx])
+			}
 		}
 		fmt.Fprintf(f, "GOPATH=%s/gopath\n", workDir)
 		fmt.Fprintf(f, "PATH=$PATH:%s/go/bin\n", workDir)
