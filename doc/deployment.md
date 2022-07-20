@@ -36,16 +36,6 @@ Then to deploy, run:
 ```sh
 $ make deploy-staging
 ```
-
-#### Deploying for the first time
-
-If creating the deployment and service the first time, then before
-`make deploy-staging` run:
-
-```sh
-$ kubectl create -f deployment-staging.yaml
-$ kubectl create -f service-staging.yaml
-```
 -->
 
 ### Prod
@@ -61,14 +51,4 @@ Then to deploy, run:
 
 ```sh
 $ make deploy-prod
-```
-
-#### Deploying for the first time
-
-If creating the deployment and service the first time, then before
-`make deploy-prod` run:
-
-```sh
-$ kubectl create -f deployment-prod.yaml
-$ kubectl create -f service-prod.yaml
 ```
