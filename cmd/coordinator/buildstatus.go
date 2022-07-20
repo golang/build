@@ -1063,12 +1063,12 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		Dir      string   // Directory where 'go test' should be executed.
 		Patterns []string // Import path patterns to provide to 'go test'.
 	}
-	// The default behavior is to test the pattern "golang.org/x/{repo}/..."
-	// in the repository root.
+	// Test all packages selected by the "./..." pattern at the repository root.
+	// (If there are modules in subdirectories, they'll be found and handled below.)
 	repoPath := importPathOfRepo(st.SubName)
 	testRuns := []goTestRun{{
 		Dir:      "gopath/src/" + repoPath,
-		Patterns: []string{repoPath + "/..."},
+		Patterns: []string{"./..."},
 	}}
 
 	// Check out the provided sub-repo to the buildlet's workspace so we
@@ -1104,10 +1104,10 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 			// go.mod file is in a directory we're not looking to support, so skip it.
 			return
 		}
-		// Add an additional test run entry that will test this entire module.
+		// Add an additional test run entry that will test all packages in this module.
 		testRuns = append(testRuns, goTestRun{
 			Dir:      "gopath/src/" + modulePath,
-			Patterns: []string{modulePath + "/..."},
+			Patterns: []string{"./..."},
 		})
 	})
 	sp.Done(err)
