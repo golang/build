@@ -17,6 +17,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	cpool "golang.org/x/build/internal/coordinator/pool"
+	"golang.org/x/build/internal/coordinator/pool/queue"
 	"golang.org/x/build/internal/spanlog"
 )
 
@@ -33,7 +34,7 @@ type step func(*testing.T, *Scheduler)
 
 // getBuildletCall represents a call to GetBuildlet.
 type getBuildletCall struct {
-	si        *SchedItem
+	si        *queue.SchedItem
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 
@@ -42,7 +43,7 @@ type getBuildletCall struct {
 	gotErr    error
 }
 
-func newGetBuildletCall(si *SchedItem) *getBuildletCall {
+func newGetBuildletCall(si *queue.SchedItem) *getBuildletCall {
 	c := &getBuildletCall{
 		si:   si,
 		done: make(chan struct{}),
@@ -108,10 +109,12 @@ func (c *getBuildletCall) wantGetBuildlet(t *testing.T, s *Scheduler) {
 	}
 }
 
-type poolChan map[string]chan interface{} // hostType -> { buildlet.Client | error}
+type fakePool struct {
+	poolChan map[string]chan interface{} // hostType -> { buildlet.Client | error}
+}
 
-func (m poolChan) GetBuildlet(ctx context.Context, hostType string, lg cpool.Logger) (buildlet.Client, error) {
-	c, ok := m[hostType]
+func (f *fakePool) GetBuildlet(ctx context.Context, hostType string, lg cpool.Logger, item *queue.SchedItem) (buildlet.Client, error) {
+	c, ok := f.poolChan[hostType]
 	if !ok {
 		return nil, fmt.Errorf("pool doesn't support host type %q", hostType)
 	}
@@ -126,18 +129,18 @@ func (m poolChan) GetBuildlet(ctx context.Context, hostType string, lg cpool.Log
 	}
 }
 
-func (poolChan) String() string { return "testing poolChan" }
+func (fakePool) String() string { return "testing poolChan" }
 
 func TestScheduler(t *testing.T) {
 	defer func() { cpool.TestPoolHook = nil }()
 
-	var pool poolChan // initialized per test below
+	var pool *fakePool // initialized per test below
 	// buildletAvailable is a step that creates a buildlet to the pool.
 	buildletAvailable := func(hostType string) step {
 		return func(t *testing.T, s *Scheduler) {
 			bc := buildlet.NewClient("127.0.0.1:9999", buildlet.NoKeyPair) // dummy
 			t.Logf("adding buildlet to pool for %q...", hostType)
-			ch := pool[hostType]
+			ch := pool.poolChan[hostType]
 			ch <- bc
 			t.Logf("added buildlet to pool for %q (ch=%p)", hostType, ch)
 		}
@@ -150,7 +153,7 @@ func TestScheduler(t *testing.T) {
 		{
 			name: "simple-get-before-available",
 			steps: func() []step {
-				si := &SchedItem{HostType: "test-host-foo"}
+				si := &queue.SchedItem{HostType: "test-host-foo"}
 				fooGet := newGetBuildletCall(si)
 				return []step{
 					fooGet.start,
@@ -162,7 +165,7 @@ func TestScheduler(t *testing.T) {
 		{
 			name: "simple-get-already-available",
 			steps: func() []step {
-				si := &SchedItem{HostType: "test-host-foo"}
+				si := &queue.SchedItem{HostType: "test-host-foo"}
 				fooGet := newGetBuildletCall(si)
 				return []step{
 					buildletAvailable("test-host-foo"),
@@ -172,26 +175,9 @@ func TestScheduler(t *testing.T) {
 			},
 		},
 		{
-			name: "try-bot-trumps-regular", // really that prioritization works at all; TestSchedLess tests actual policy
-			steps: func() []step {
-				tryItem := &SchedItem{HostType: "test-host-foo", IsTry: true}
-				regItem := &SchedItem{HostType: "test-host-foo"}
-				tryGet := newGetBuildletCall(tryItem)
-				regGet := newGetBuildletCall(regItem)
-				return []step{
-					regGet.start,
-					tryGet.start,
-					buildletAvailable("test-host-foo"),
-					tryGet.wantGetBuildlet,
-					buildletAvailable("test-host-foo"),
-					regGet.wantGetBuildlet,
-				}
-			},
-		},
-		{
 			name: "cancel-context-removes-waiter",
 			steps: func() []step {
-				si := &SchedItem{HostType: "test-host-foo"}
+				si := &queue.SchedItem{HostType: "test-host-foo"}
 				get := newGetBuildletCall(si)
 				return []step{
 					get.start,
@@ -206,9 +192,9 @@ func TestScheduler(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		pool = make(poolChan)
-		pool["test-host-foo"] = make(chan interface{}, 1)
-		pool["test-host-bar"] = make(chan interface{}, 1)
+		pool = &fakePool{poolChan: map[string]chan interface{}{}}
+		pool.poolChan["test-host-foo"] = make(chan interface{}, 1)
+		pool.poolChan["test-host-bar"] = make(chan interface{}, 1)
 
 		cpool.TestPoolHook = func(*dashboard.HostConfig) cpool.Buildlet { return pool }
 		t.Run(tt.name, func(t *testing.T) {

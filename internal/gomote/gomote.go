@@ -25,6 +25,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/access"
+	"golang.org/x/build/internal/coordinator/pool/queue"
 	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/internal/envutil"
@@ -37,8 +38,8 @@ import (
 
 type scheduler interface {
 	State() (st schedule.SchedulerState)
-	WaiterState(waiter *schedule.SchedItem) (ws types.BuildletWaitStatus)
-	GetBuildlet(ctx context.Context, si *schedule.SchedItem) (buildlet.Client, error)
+	WaiterState(waiter *queue.SchedItem) (ws types.BuildletWaitStatus)
+	GetBuildlet(ctx context.Context, si *queue.SchedItem) (buildlet.Client, error)
 }
 
 // bucketHandle interface used to enable testing of the storage.bucketHandle.
@@ -130,7 +131,7 @@ func (s *Server) CreateInstance(req *protos.CreateInstanceRequest, stream protos
 	if bconf.IsRestricted() && !isPrivilegedUser(creds.Email) {
 		return status.Errorf(codes.PermissionDenied, "user is unable to create gomote of that builder type")
 	}
-	si := &schedule.SchedItem{
+	si := &queue.SchedItem{
 		HostType: bconf.HostType,
 		IsGomote: true,
 	}

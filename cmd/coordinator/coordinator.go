@@ -52,8 +52,8 @@ import (
 	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/buildstats"
 	"golang.org/x/build/internal/cloud"
-	clog "golang.org/x/build/internal/coordinator/log"
 	"golang.org/x/build/internal/coordinator/pool"
+	"golang.org/x/build/internal/coordinator/pool/queue"
 	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/internal/gomote"
@@ -232,7 +232,7 @@ func main() {
 	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
 
-	clog.SetProcessMetadata(processID, processStartTime)
+	pool.SetProcessMetadata(processID, processStartTime)
 
 	if Version == "" && *mode == "dev" {
 		Version = "dev"
@@ -289,7 +289,7 @@ func main() {
 		}
 	}
 
-	go clog.CoordinatorProcess().UpdateInstanceRecord()
+	go pool.CoordinatorProcess().UpdateInstanceRecord()
 
 	switch *mode {
 	case "dev", "prod":
@@ -1763,7 +1763,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 
 // getBuildlets creates up to n buildlets and sends them on the returned channel
 // before closing the channel.
-func getBuildlets(ctx context.Context, n int, schedTmpl *schedule.SchedItem, lg pool.Logger) <-chan buildlet.Client {
+func getBuildlets(ctx context.Context, n int, schedTmpl *queue.SchedItem, lg pool.Logger) <-chan buildlet.Client {
 	ch := make(chan buildlet.Client) // NOT buffered
 	var wg sync.WaitGroup
 	wg.Add(n)

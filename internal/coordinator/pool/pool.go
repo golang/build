@@ -17,6 +17,7 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/coordinator/pool/queue"
 )
 
 // Buildlet defines an interface for a pool of buildlets.
@@ -29,7 +30,7 @@ type Buildlet interface {
 	//
 	// Users of GetBuildlet must both call Client.Close when done
 	// with the client as well as cancel the provided Context.
-	GetBuildlet(ctx context.Context, hostType string, lg Logger) (buildlet.Client, error)
+	GetBuildlet(ctx context.Context, hostType string, lg Logger, item *queue.SchedItem) (buildlet.Client, error)
 
 	String() string // TODO(bradfitz): more status stuff
 }

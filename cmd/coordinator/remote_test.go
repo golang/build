@@ -23,6 +23,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool"
+	"golang.org/x/build/internal/coordinator/pool/queue"
 	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/gophers"
 )
@@ -34,7 +35,7 @@ type TestBuildletPool struct {
 
 // GetBuildlet finds the first available buildlet for the hostType and returns
 // it, or an error if no buildlets are available for that hostType.
-func (tp *TestBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg pool.Logger) (buildlet.Client, error) {
+func (tp *TestBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg pool.Logger, item *queue.SchedItem) (buildlet.Client, error) {
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
 	c, ok := tp.clients[hostType]

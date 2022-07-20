@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/coordinator/pool/queue"
 	"golang.org/x/build/internal/sourcecache"
 	"golang.org/x/build/kubernetes"
 	"golang.org/x/build/kubernetes/api"
@@ -236,7 +237,7 @@ func (p *kubeBuildletPool) pollCapacity(ctx context.Context) {
 
 }
 
-func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg Logger) (buildlet.Client, error) {
+func (p *kubeBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg Logger, item *queue.SchedItem) (buildlet.Client, error) {
 	hconf, ok := dashboard.Hosts[hostType]
 	if !ok || !hconf.IsContainer() {
 		return nil, fmt.Errorf("kubepool: invalid host type %q", hostType)

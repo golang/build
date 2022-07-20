@@ -2,17 +2,12 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build linux || darwin
-// +build linux darwin
-
-package schedule
+package queue
 
 import (
 	"time"
 
-	"golang.org/x/build/buildlet"
 	"golang.org/x/build/internal/buildgo"
-	"golang.org/x/build/internal/coordinator/pool"
 )
 
 type BuildletPriority int
@@ -28,6 +23,8 @@ const (
 // SchedItem is a specification of a requested buildlet in its
 // exported fields, and internal scheduler state used while waiting
 // for that buildlet.
+//
+// SchedItem is safe for copying.
 type SchedItem struct {
 	buildgo.BuilderRev // not set for gomote
 	HostType           string
@@ -40,26 +37,9 @@ type SchedItem struct {
 	// that make up the work being tested. (For example, x/foo
 	// being tested against master can have either x/foo commit
 	// being newer, or master being newer).
-	CommitTime time.Time
-
-	// The following unexported fields are set by the Scheduler in
-	// Scheduler.GetBuildlet.
-
-	s           *Scheduler
-	requestTime time.Time
+	CommitTime  time.Time
+	RequestTime time.Time
 	tryFor      string // TODO: which user. (user with 1 trybot >> user with 50 trybots)
-	pool        pool.Buildlet
-	ctxDone     <-chan struct{}
-
-	// wantRes is the unbuffered channel that's passed
-	// synchronously from Scheduler.GetBuildlet to
-	// Scheduler.matchBuildlet. Its value is a channel (whose
-	// buffering doesn't matter) to pass over a buildlet.Client
-	// just obtained from a BuildletPool. The contract to use
-	// wantRes is that the sender must have a result already
-	// available to send on the inner channel, and the receiver
-	// still wants it (their context hasn't expired).
-	wantRes chan chan<- buildlet.Client
 }
 
 // Priority returns the BuildletPriority for a SchedItem.
@@ -76,7 +56,7 @@ func (s *SchedItem) Priority() BuildletPriority {
 
 func (s *SchedItem) sortTime() time.Time {
 	if s.IsGomote || s.IsTry || s.CommitTime.IsZero() {
-		return s.requestTime
+		return s.RequestTime
 	}
 	return s.CommitTime
 }

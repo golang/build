@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/internal/coordinator/pool/queue"
 	"golang.org/x/build/types"
 )
 
@@ -34,7 +35,7 @@ func NewFake() *Fake {
 func (f *Fake) State() (st SchedulerState) { return f.state }
 
 // WaiterState is the waiter state of the fake scheduler.
-func (f *Fake) WaiterState(waiter *SchedItem) (ws types.BuildletWaitStatus) {
+func (f *Fake) WaiterState(waiter *queue.SchedItem) (ws types.BuildletWaitStatus) {
 	return types.BuildletWaitStatus{
 		Message: "buildlet created",
 		Ahead:   0,
@@ -42,6 +43,6 @@ func (f *Fake) WaiterState(waiter *SchedItem) (ws types.BuildletWaitStatus) {
 }
 
 // GetBuildlet returns a fake buildlet client for the requested buildlet.
-func (f *Fake) GetBuildlet(ctx context.Context, si *SchedItem) (buildlet.Client, error) {
+func (f *Fake) GetBuildlet(ctx context.Context, si *queue.SchedItem) (buildlet.Client, error) {
 	return &buildlet.FakeClient{}, nil
 }

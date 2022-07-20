@@ -28,8 +28,8 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool"
+	"golang.org/x/build/internal/coordinator/pool/queue"
 	"golang.org/x/build/internal/coordinator/remote"
-	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/types"
 )
 
@@ -126,7 +126,7 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 		w.(http.Flusher).Flush()
 	}
 
-	si := &schedule.SchedItem{
+	si := &queue.SchedItem{
 		HostType: bconf.HostType,
 		IsGomote: true,
 	}

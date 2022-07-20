@@ -10,12 +10,12 @@ package pool
 import (
 	"context"
 	"fmt"
-	"log"
 	"sort"
 	"sync"
 	"time"
 
 	"golang.org/x/build/internal/cloud"
+	"golang.org/x/build/internal/coordinator/pool/queue"
 )
 
 // entry contains the resource usage of an instance as well as
@@ -26,6 +26,7 @@ type entry struct {
 	instanceName string
 	instanceType string
 	vCPUCount    int64
+	quota        *queue.Item
 }
 
 // ledger contains a record of the instances and their resource
@@ -33,17 +34,11 @@ type entry struct {
 // will ensure that there are available resources for the new instance.
 type ledger struct {
 	mu sync.RWMutex
-	// cpuLimit is the limit of how many on-demand vCPUs can be created on EC2.
-	cpuLimit int64
-	// cpuUsed is the current count of vCPUs reserved for on-demand instances.
-	cpuUsed int64
+	// cpuQueue is the queue for on-demand vCPU VMs created on EC2.
+	cpuQueue *queue.Quota
 	// entries contains a mapping of instance name to entries for each instance
 	// that has resources allocated to it.
 	entries map[string]*entry
-	// instanceA1Limit is the limit of a1.metal instances which can be created on EC2.
-	instanceA1Limit int64
-	// instanceA1Used is the current count of a1.metal instances.
-	instanceA1Used int64
 	// types contains a mapping of instance type names to instance types for each
 	// ARM64 EC2 instance.
 	types map[string]*cloud.InstanceType
@@ -51,34 +46,46 @@ type ledger struct {
 
 // newLedger creates a new ledger.
 func newLedger() *ledger {
-	return &ledger{
-		entries:         make(map[string]*entry),
-		instanceA1Limit: 1, // TODO(golang.org/issue/42604) query for limit once issue is resolved.
-		types:           make(map[string]*cloud.InstanceType),
+	l := &ledger{
+		entries:  make(map[string]*entry),
+		cpuQueue: queue.NewQuota(),
+		types:    make(map[string]*cloud.InstanceType),
 	}
+	return l
 }
 
 // ReserveResources attempts to reserve the resources required for an instance to be created.
 // It will attempt to reserve the resourses that an instance type would require. This will
 // attempt to reserve the resources until the context deadline is reached.
-func (l *ledger) ReserveResources(ctx context.Context, instName, vmType string) error {
+func (l *ledger) ReserveResources(ctx context.Context, instName, vmType string, si *queue.SchedItem) error {
 	instType, err := l.PrepareReservationRequest(instName, vmType)
 	if err != nil {
 		return err
 	}
 
-	t := time.NewTicker(2 * time.Second)
-	defer t.Stop()
-	for {
-		if l.allocateResources(instType.CPU, instName, instType.Type) {
-			return nil
-		}
-		select {
-		case <-t.C:
-		case <-ctx.Done():
-			return ctx.Err()
+	// should never happen
+	if instType.CPU <= 0 {
+		return fmt.Errorf("invalid allocation requested: %d", instType.CPU)
+	}
+	item := l.cpuQueue.Enqueue(int(instType.CPU), si)
+	if err := item.Await(ctx); err != nil {
+		return err
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	e, ok := l.entries[instName]
+	if ok {
+		e.vCPUCount = instType.CPU
+	} else {
+		l.entries[instName] = &entry{
+			instanceName: instName,
+			vCPUCount:    instType.CPU,
+			instanceType: instType.Type,
+			quota:        item,
 		}
 	}
+	return nil
 }
 
 // PrepareReservationRequest ensures all the preconditions necessary for a reservation request are
@@ -99,8 +106,6 @@ func (l *ledger) PrepareReservationRequest(instName, vmType string) (*cloud.Inst
 	return instType, nil
 }
 
-const a1MetalInstance = "a1.metal" // added for golang.org/issue/42604
-
 // releaseResources deletes the entry associated with an instance. The resources associated with the
 // instance will also be released. An error is returned if the instance entry is not found.
 // Lock l.mu must be held by the caller.
@@ -109,67 +114,8 @@ func (l *ledger) releaseResources(instName string) error {
 	if !ok {
 		return fmt.Errorf("instance not found for releasing quota: %s", instName)
 	}
-	if e.instanceType == a1MetalInstance && l.instanceA1Used > 0 {
-		l.instanceA1Used--
-	}
-	l.deallocateCPU(e.vCPUCount)
+	e.quota.ReturnQuota()
 	return nil
-}
-
-// allocateResources ensures that there is enough CPU to allocate below the CPU Quota
-// for the caller to create a resouce with the numCPU passed in. If there is enough
-// then the amount of used CPU will increase by the requested amount. If there is
-// not enough CPU available, then a false is returned. In the event that CPU is allocated
-// an entry will be added in the entries map for the instance.
-// It also enforces instance type limits.
-func (l *ledger) allocateResources(numCPU int64, instName, instType string) bool {
-	// should never happen
-	if numCPU <= 0 {
-		log.Printf("invalid allocation requested: %d", numCPU)
-		return false
-	}
-	isA1Metal := instType == a1MetalInstance
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	if isA1Metal && l.instanceA1Used >= l.instanceA1Limit {
-		return false
-	}
-	if numCPU+l.cpuUsed > l.cpuLimit {
-		return false
-	}
-	l.cpuUsed += numCPU
-	if isA1Metal {
-		l.instanceA1Used++
-	}
-	e, ok := l.entries[instName]
-	if ok {
-		e.vCPUCount = numCPU
-	} else {
-		l.entries[instName] = &entry{
-			instanceName: instName,
-			vCPUCount:    numCPU,
-			instanceType: instType,
-		}
-	}
-	return true
-}
-
-// deallocateCPU releases the CPU allocated to an instance associated with an entry. When an instance
-// is deleted, the CPU allocated for the instance should not be counted against the CPU quota reserved
-// all on-demand instances. If an invalid CPU number is passed in the function will not lower the CPU count.
-// Lock l.mu must be held by the caller.
-func (l *ledger) deallocateCPU(numCPU int64) {
-	if numCPU <= 0 {
-		log.Printf("invalid deallocation requested: %d", numCPU)
-		return
-	}
-	if l.cpuUsed-numCPU < 0 {
-		log.Printf("attempting to deallocate more cpu than used: %d of %d", numCPU, l.cpuUsed)
-		return
-	}
-	l.cpuUsed -= numCPU
 }
 
 // UpdateReservation updates the entry for an instance with the id value for that instance. If
@@ -218,10 +164,7 @@ func (l *ledger) InstanceID(instName string) string {
 // SetCPULimit sets the vCPU limit used to determine if a CPU allocation would
 // cross the threshold for available CPU for on-demand instances.
 func (l *ledger) SetCPULimit(numCPU int64) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	l.cpuLimit = numCPU
+	l.cpuQueue.UpdateLimit(int(numCPU))
 }
 
 // UpdateInstanceTypes updates the map of instance types used to map instance
@@ -251,10 +194,11 @@ func (l *ledger) Resources() *resources {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
+	used, limit := l.cpuQueue.Quotas()
 	return &resources{
 		InstCount: int64(len(l.entries)),
-		CPUUsed:   l.cpuUsed,
-		CPULimit:  l.cpuLimit,
+		CPUUsed:   int64(used),
+		CPULimit:  int64(limit),
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"golang.org/x/build/internal/cloud"
+	"golang.org/x/build/internal/coordinator/pool/queue"
 )
 
 func canceledContext() context.Context {
@@ -39,7 +40,7 @@ func TestLedgerReserveResources(t *testing.T) {
 			instName: "small-instance",
 			vmType:   "aa.small",
 			instTypes: []*cloud.InstanceType{
-				&cloud.InstanceType{
+				{
 					Type: "aa.small",
 					CPU:  5,
 				},
@@ -54,7 +55,7 @@ func TestLedgerReserveResources(t *testing.T) {
 			instName: "small-instance",
 			vmType:   "aa.small",
 			instTypes: []*cloud.InstanceType{
-				&cloud.InstanceType{
+				{
 					Type: "aa.small",
 					CPU:  5,
 				},
@@ -79,7 +80,7 @@ func TestLedgerReserveResources(t *testing.T) {
 			instName: "large-instance",
 			vmType:   "aa.small",
 			instTypes: []*cloud.InstanceType{
-				&cloud.InstanceType{
+				{
 					Type: "aa.small",
 					CPU:  5,
 				},
@@ -91,18 +92,16 @@ func TestLedgerReserveResources(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			l := &ledger{
-				cpuLimit: tc.cpuLimit,
-				cpuUsed:  tc.cpuUsed,
-				entries: map[string]*entry{
-					"large-instance": &entry{},
-				},
-				types: make(map[string]*cloud.InstanceType),
+			l := newLedger()
+			l.entries = map[string]*entry{
+				"large-instance": {},
 			}
+			l.SetCPULimit(tc.cpuLimit)
+			l.types = make(map[string]*cloud.InstanceType)
 			l.UpdateInstanceTypes(tc.instTypes)
-			gotErr := l.ReserveResources(tc.ctx, tc.instName, tc.vmType)
+			gotErr := l.ReserveResources(tc.ctx, tc.instName, tc.vmType, new(queue.SchedItem))
 			if (gotErr != nil) != tc.wantErr {
-				t.Errorf("ledger.reserveResources(%+v, %s, %s) = %s; want error %t", tc.ctx, tc.instName, tc.vmType, gotErr, tc.wantErr)
+				t.Errorf("ledger.ReserveResources(%+v, %s, %s) = %s; want error %t", tc.ctx, tc.instName, tc.vmType, gotErr, tc.wantErr)
 			}
 		})
 	}
@@ -116,7 +115,6 @@ func TestLedgerReleaseResources(t *testing.T) {
 		cpuUsed     int64
 		a1Used      int64
 		wantCPUUsed int64
-		wantA1Used  int64
 		wantErr     bool
 	}{
 		{
@@ -129,7 +127,6 @@ func TestLedgerReleaseResources(t *testing.T) {
 			cpuUsed:     20,
 			a1Used:      0,
 			wantCPUUsed: 10,
-			wantA1Used:  0,
 			wantErr:     false,
 		},
 		{
@@ -142,72 +139,42 @@ func TestLedgerReleaseResources(t *testing.T) {
 			cpuUsed:     20,
 			a1Used:      0,
 			wantCPUUsed: 20,
-			wantA1Used:  0,
-			wantErr:     true,
-		},
-		{
-			desc:     "success-with-a1-instance",
-			instName: "inst-x",
-			entry: &entry{
-				instanceName: "inst-x",
-				vCPUCount:    10,
-				instanceType: a1MetalInstance,
-			},
-			cpuUsed:     20,
-			a1Used:      1,
-			wantCPUUsed: 10,
-			wantA1Used:  0,
-			wantErr:     false,
-		},
-		{
-			desc:     "entry-not-found-with-a1-instance",
-			instName: "inst-x",
-			entry: &entry{
-				instanceName: "inst-w",
-				vCPUCount:    10,
-				instanceType: a1MetalInstance,
-			},
-			cpuUsed:     20,
-			a1Used:      1,
-			wantCPUUsed: 20,
-			wantA1Used:  1,
 			wantErr:     true,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			l := &ledger{
-				cpuUsed:        tc.cpuUsed,
-				instanceA1Used: tc.a1Used,
-				entries: map[string]*entry{
-					tc.entry.instanceName: tc.entry,
-				},
+			l := newLedger()
+			l.cpuQueue.UpdateQuotas(int(tc.cpuUsed-tc.entry.vCPUCount), 20)
+			l.entries = map[string]*entry{
+				tc.entry.instanceName: tc.entry,
 			}
+			item := l.cpuQueue.Enqueue(int(tc.entry.vCPUCount), new(queue.SchedItem))
+			if err := item.Await(context.Background()); err != nil {
+				t.Fatalf("item.Await() = %q, wanted no error", err)
+			}
+			tc.entry.quota = item
 			gotErr := l.releaseResources(tc.instName)
 			if (gotErr != nil) != tc.wantErr {
 				t.Errorf("ledger.releaseResources(%s) = %s; want error %t", tc.instName, gotErr, tc.wantErr)
 			}
-			if l.cpuUsed != tc.wantCPUUsed {
-				t.Errorf("ledger.cpuUsed = %d; wanted %d", l.cpuUsed, tc.wantCPUUsed)
-			}
-			if l.instanceA1Used != tc.wantA1Used {
-				t.Errorf("ledger.instanceA1Used = %d; wanted %d", l.instanceA1Used, tc.wantA1Used)
+			cpuUsed, _ := l.cpuQueue.Quotas()
+			if int64(cpuUsed) != tc.wantCPUUsed {
+				t.Errorf("ledger.cpuUsed = %d; wanted %d", cpuUsed, tc.wantCPUUsed)
 			}
 		})
 	}
 }
 
-func TestLedgerAllocateResources(t *testing.T) {
+func TestReserveResourcesEntries(t *testing.T) {
 	testCases := []struct {
 		desc        string
 		numCPU      int64
 		cpuLimit    int64
 		cpuUsed     int64
-		a1Used      int64
-		a1Limit     int64
 		instName    string
 		instType    string
-		wantReserve bool
+		wantErr     bool
 		wantCPUUsed int64
 		wantA1Used  int64
 	}{
@@ -216,143 +183,56 @@ func TestLedgerAllocateResources(t *testing.T) {
 			numCPU:      10,
 			cpuLimit:    10,
 			cpuUsed:     0,
-			a1Used:      0,
-			a1Limit:     1,
 			instName:    "chacha",
 			instType:    "x.type",
-			wantReserve: true,
+			wantErr:     false,
 			wantCPUUsed: 10,
 			wantA1Used:  0,
 		},
 		{
 			desc:        "failed-to-reserve",
-			a1Used:      0,
-			a1Limit:     1,
 			numCPU:      10,
 			cpuLimit:    5,
 			cpuUsed:     0,
 			instName:    "pasa",
 			instType:    "x.type",
-			wantReserve: false,
+			wantErr:     true,
 			wantCPUUsed: 0,
 			wantA1Used:  0,
 		},
 		{
 			desc:        "invalid-cpu-count",
-			a1Used:      0,
-			a1Limit:     1,
 			numCPU:      0,
 			cpuLimit:    50,
 			cpuUsed:     20,
 			instName:    "double",
 			instType:    "x.type",
-			wantReserve: false,
-			wantCPUUsed: 20,
-			wantA1Used:  0,
-		},
-		{
-			desc:        "reservation-success with a1.metal instance",
-			numCPU:      10,
-			cpuLimit:    10,
-			cpuUsed:     0,
-			a1Used:      0,
-			a1Limit:     1,
-			instName:    "chacha",
-			instType:    a1MetalInstance,
-			wantReserve: true,
-			wantCPUUsed: 10,
-			wantA1Used:  1,
-		},
-		{
-			desc:        "failed-to-reserve with a1.metal instance",
-			a1Used:      0,
-			a1Limit:     1,
-			numCPU:      10,
-			cpuLimit:    5,
-			cpuUsed:     0,
-			instName:    "pasa",
-			instType:    a1MetalInstance,
-			wantReserve: false,
-			wantCPUUsed: 0,
-			wantA1Used:  0,
-		},
-		{
-			desc:        "invalid-cpu-count with a1.metal instance",
-			a1Used:      0,
-			a1Limit:     10,
-			numCPU:      0,
-			cpuLimit:    50,
-			cpuUsed:     20,
-			instName:    "double",
-			instType:    a1MetalInstance,
-			wantReserve: false,
+			wantErr:     true,
 			wantCPUUsed: 20,
 			wantA1Used:  0,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			l := &ledger{
-				entries:         make(map[string]*entry),
-				cpuLimit:        tc.cpuLimit,
-				cpuUsed:         tc.cpuUsed,
-				instanceA1Limit: tc.a1Limit,
-				instanceA1Used:  tc.a1Used,
+			l := newLedger()
+			l.types = make(map[string]*cloud.InstanceType)
+			l.UpdateInstanceTypes([]*cloud.InstanceType{{Type: tc.instType, CPU: tc.numCPU}})
+			l.cpuQueue.UpdateQuotas(int(tc.cpuUsed), int(tc.cpuLimit))
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			err := l.ReserveResources(ctx, tc.instName, tc.instType, new(queue.SchedItem))
+			if (err != nil) != tc.wantErr {
+				t.Errorf("ledger.allocateResources(%d) = %v, wantErr: %v", tc.numCPU, err, tc.wantErr)
 			}
-			gotReserve := l.allocateResources(tc.numCPU, tc.instName, tc.instType)
-			if gotReserve != tc.wantReserve {
-				t.Errorf("ledger.allocateResources(%d) = %v, want %v", tc.numCPU, gotReserve, tc.wantReserve)
+			cpuUsed, _ := l.cpuQueue.Quotas()
+			if int64(cpuUsed) != tc.wantCPUUsed {
+				t.Errorf("ledger.cpuUsed = %d; want %d", cpuUsed, tc.wantCPUUsed)
 			}
-			if l.cpuUsed != tc.wantCPUUsed {
-				t.Errorf("ledger.cpuUsed = %d; want %d", l.cpuUsed, tc.wantCPUUsed)
-			}
-			if l.instanceA1Used != tc.wantA1Used {
-				t.Errorf("ledger.instanceA1Used = %d; want %d", l.instanceA1Used, tc.wantA1Used)
-			}
-			if _, ok := l.entries[tc.instName]; tc.wantReserve && !ok {
+			if _, ok := l.entries[tc.instName]; !tc.wantErr && !ok {
 				t.Fatalf("ledger.entries[%s] = nil; want it to exist", tc.instName)
 			}
-			if e, _ := l.entries[tc.instName]; tc.wantReserve && e.vCPUCount != tc.numCPU {
+			if e, _ := l.entries[tc.instName]; !tc.wantErr && e.vCPUCount != tc.numCPU {
 				t.Fatalf("ledger.entries[%s].vCPUCount = %d; want %d", tc.instName, e.vCPUCount, tc.numCPU)
-			}
-		})
-	}
-}
-
-func TestLedgerDeallocateCPU(t *testing.T) {
-	testCases := []struct {
-		desc        string
-		numCPU      int64
-		cpuUsed     int64
-		wantCPUUsed int64
-	}{
-		{
-			desc:        "release-success",
-			numCPU:      10,
-			cpuUsed:     10,
-			wantCPUUsed: 0,
-		},
-		{
-			desc:        "failed-to-release",
-			numCPU:      10,
-			cpuUsed:     5,
-			wantCPUUsed: 5,
-		},
-		{
-			desc:        "invalid-cpu-count",
-			numCPU:      0,
-			cpuUsed:     0,
-			wantCPUUsed: 0,
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
-			l := &ledger{
-				cpuUsed: tc.cpuUsed,
-			}
-			l.deallocateCPU(tc.numCPU)
-			if l.cpuUsed != tc.wantCPUUsed {
-				t.Errorf("ledger.cpuUsed = %d; want %d", l.cpuUsed, tc.wantCPUUsed)
 			}
 		})
 	}
@@ -387,10 +267,9 @@ func TestLedgerUpdateReservation(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			l := &ledger{
-				entries: map[string]*entry{
-					tc.entry.instanceName: tc.entry,
-				},
+			l := newLedger()
+			l.entries = map[string]*entry{
+				tc.entry.instanceName: tc.entry,
 			}
 			if gotErr := l.UpdateReservation(tc.instName, tc.instID); (gotErr != nil) != tc.wantErr {
 				t.Errorf("ledger.updateReservation(%s, %s) = %s; want error %t", tc.instName, tc.instID, gotErr, tc.wantErr)
@@ -440,84 +319,38 @@ func TestLedgerRemove(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			l := &ledger{
-				cpuUsed: tc.cpuUsed,
-				entries: map[string]*entry{
-					tc.entry.instanceName: tc.entry,
-				},
+			l := newLedger()
+			l.cpuQueue.UpdateQuotas(int(tc.cpuUsed-tc.entry.vCPUCount), 100)
+			l.entries = map[string]*entry{
+				tc.entry.instanceName: tc.entry,
 			}
+			item := l.cpuQueue.Enqueue(int(tc.entry.vCPUCount), new(queue.SchedItem))
+			if err := item.Await(context.Background()); err != nil {
+				t.Fatalf("item.Await() = %q, wanted no error", err)
+			}
+			tc.entry.quota = item
+			l.cpuQueue.UpdateQuotas(int(tc.cpuUsed), 20)
 			if gotErr := l.Remove(tc.instName); (gotErr != nil) != tc.wantErr {
 				t.Errorf("ledger.remove(%s) = %s; want error %t", tc.instName, gotErr, tc.wantErr)
 			}
 			if gotE, ok := l.entries[tc.instName]; ok {
 				t.Errorf("ledger.entries[%s] = %+v; want it not to exist", tc.instName, gotE)
 			}
-			if l.cpuUsed != tc.wantCPUUsed {
-				t.Errorf("ledger.cpuUsed = %d; want %d", l.cpuUsed, tc.wantCPUUsed)
-			}
-		})
-	}
-}
-
-func TestInstanceID(t *testing.T) {
-	testCases := []struct {
-		desc        string
-		instName    string
-		entry       *entry
-		cpuUsed     int64
-		wantCPUUsed int64
-		wantErr     bool
-	}{
-		{
-			desc:     "success",
-			instName: "inst-x",
-			entry: &entry{
-				instanceName: "inst-x",
-				vCPUCount:    10,
-			},
-			cpuUsed:     100,
-			wantCPUUsed: 90,
-			wantErr:     false,
-		},
-		{
-			desc:     "entry-does-not-exist",
-			instName: "inst-x",
-			entry: &entry{
-				instanceName: "inst-w",
-				vCPUCount:    10,
-			},
-			cpuUsed:     100,
-			wantCPUUsed: 100,
-			wantErr:     true,
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
-			l := &ledger{
-				cpuUsed: tc.cpuUsed,
-				entries: map[string]*entry{
-					tc.entry.instanceName: tc.entry,
-				},
-			}
-			if gotErr := l.Remove(tc.instName); (gotErr != nil) != tc.wantErr {
-				t.Errorf("ledger.remove(%s) = %s; want error %t", tc.instName, gotErr, tc.wantErr)
-			}
-			if gotE, ok := l.entries[tc.instName]; ok {
-				t.Errorf("ledger.entries[%s] = %+v; want it not to exist", tc.instName, gotE)
-			}
-			if l.cpuUsed != tc.wantCPUUsed {
-				t.Errorf("ledger.cpuUsed = %d; want %d", l.cpuUsed, tc.wantCPUUsed)
+			cpuUsed, _ := l.cpuQueue.Quotas()
+			if int64(cpuUsed) != tc.wantCPUUsed {
+				t.Errorf("ledger.cpuUsed = %d; want %d", cpuUsed, tc.wantCPUUsed)
 			}
 		})
 	}
 }
 
 func TestLedgerSetCPULimit(t *testing.T) {
-	l := &ledger{}
+	l := newLedger()
 	var want int64 = 300
 	l.SetCPULimit(300)
-	if l.cpuLimit != want {
-		t.Errorf("ledger.cpuLimit = %d; want %d", l.cpuLimit, want)
+	_, cpuLimit := l.cpuQueue.Quotas()
+	if int64(cpuLimit) != want {
+		t.Errorf("ledger.cpuLimit = %d; want %d", cpuLimit, want)
 	}
 }
 
@@ -527,7 +360,7 @@ func TestLedgerUpdateInstanceTypes(t *testing.T) {
 		types []*cloud.InstanceType
 	}{
 		{"no-type", []*cloud.InstanceType{}},
-		{"single-type", []*cloud.InstanceType{&cloud.InstanceType{"x", 15}}},
+		{"single-type", []*cloud.InstanceType{{"x", 15}}},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -554,15 +387,13 @@ func TestLedgerResources(t *testing.T) {
 		wantInstCount int64
 	}{
 		{"no-instances", map[string]*entry{}, 2, 3, 0},
-		{"single-instance", map[string]*entry{"x": &entry{}}, 2, 3, 1},
+		{"single-instance", map[string]*entry{"x": {}}, 2, 3, 1},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			l := &ledger{
-				entries:  tc.entries,
-				cpuLimit: tc.cpuLimit,
-				cpuUsed:  tc.cpuCount,
-			}
+			l := newLedger()
+			l.entries = tc.entries
+			l.cpuQueue.UpdateQuotas(int(tc.cpuCount), int(tc.cpuLimit))
 			gotR := l.Resources()
 			if gotR.InstCount != tc.wantInstCount {
 				t.Errorf("ledger.instCount = %d; want %d", gotR.InstCount, tc.wantInstCount)
@@ -586,7 +417,7 @@ func TestLedgerResourceTime(t *testing.T) {
 	}{
 		{"no-instances", map[string]*entry{}},
 		{"single-instance", map[string]*entry{
-			"inst-x": &entry{
+			"inst-x": {
 				createdAt:    ct,
 				instanceID:   "id-x",
 				instanceName: "inst-x",
@@ -594,19 +425,19 @@ func TestLedgerResourceTime(t *testing.T) {
 			},
 		}},
 		{"multiple-instances", map[string]*entry{
-			"inst-z": &entry{
+			"inst-z": {
 				createdAt:    ct.Add(2 * time.Second),
 				instanceID:   "id-z",
 				instanceName: "inst-z",
 				vCPUCount:    1,
 			},
-			"inst-y": &entry{
+			"inst-y": {
 				createdAt:    ct.Add(time.Second),
 				instanceID:   "id-y",
 				instanceName: "inst-y",
 				vCPUCount:    1,
 			},
-			"inst-x": &entry{
+			"inst-x": {
 				createdAt:    ct,
 				instanceID:   "id-x",
 				instanceName: "inst-x",
@@ -616,9 +447,8 @@ func TestLedgerResourceTime(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			l := &ledger{
-				entries: tc.entries,
-			}
+			l := newLedger()
+			l.entries = tc.entries
 			gotRT := l.ResourceTime()
 			if !sort.SliceIsSorted(gotRT, func(i, j int) bool { return gotRT[i].Creation.Before(gotRT[j].Creation) }) {
 				t.Errorf("resource time is not sorted")

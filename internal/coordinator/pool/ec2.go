@@ -22,6 +22,7 @@ import (
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal"
 	"golang.org/x/build/internal/cloud"
+	"golang.org/x/build/internal/coordinator/pool/queue"
 	"golang.org/x/build/internal/spanlog"
 )
 
@@ -152,7 +153,7 @@ func NewEC2Buildlet(client *cloud.AWSClient, buildEnv *buildenv.Environment, hos
 }
 
 // GetBuildlet retrieves a buildlet client for a newly created buildlet.
-func (eb *EC2Buildlet) GetBuildlet(ctx context.Context, hostType string, lg Logger) (buildlet.Client, error) {
+func (eb *EC2Buildlet) GetBuildlet(ctx context.Context, hostType string, lg Logger, si *queue.SchedItem) (buildlet.Client, error) {
 	hconf, ok := eb.hosts[hostType]
 	if !ok {
 		return nil, fmt.Errorf("ec2 pool: unknown host type %q", hostType)
@@ -166,7 +167,7 @@ func (eb *EC2Buildlet) GetBuildlet(ctx context.Context, hostType string, lg Logg
 	}
 
 	qsp := lg.CreateSpan("awaiting_ec2_quota")
-	err = eb.ledger.ReserveResources(ctx, instName, hconf.MachineType())
+	err = eb.ledger.ReserveResources(ctx, instName, hconf.MachineType(), si)
 	qsp.Done(err)
 	if err != nil {
 		return nil, err

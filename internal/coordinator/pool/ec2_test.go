@@ -20,6 +20,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/cloud"
+	"golang.org/x/build/internal/coordinator/pool/queue"
 	"golang.org/x/build/internal/spanlog"
 )
 
@@ -53,7 +54,7 @@ func TestEC2BuildletGetBuildlet(t *testing.T) {
 			},
 		},
 	}
-	_, err := bp.GetBuildlet(context.Background(), host, noopEventTimeLogger{})
+	_, err := bp.GetBuildlet(context.Background(), host, noopEventTimeLogger{}, new(queue.SchedItem))
 	if err != nil {
 		t.Errorf("EC2Buildlet.GetBuildlet(ctx, %q, %+v) = _, %s; want no error", host, noopEventTimeLogger{}, err)
 	}
@@ -66,21 +67,18 @@ func TestEC2BuildletGetBuildletError(t *testing.T) {
 		hostType       string
 		logger         Logger
 		ledger         *ledger
+		types          []*cloud.InstanceType
 		buildletClient ec2BuildletClient
 		hosts          map[string]*dashboard.HostConfig
 	}{
 		{
 			desc:     "invalid-host-type",
 			hostType: host,
-			ledger: &ledger{
-				cpuLimit: 20,
-				cpuUsed:  0,
-				entries:  make(map[string]*entry),
-				types: map[string]*cloud.InstanceType{
-					"e2-highcpu-2": {
-						Type: "e2-highcpu-2",
-						CPU:  4,
-					},
+			ledger:   newLedger(),
+			types: []*cloud.InstanceType{
+				{
+					Type: "e2-highcpu-2",
+					CPU:  4,
 				},
 			},
 			hosts: map[string]*dashboard.HostConfig{
@@ -95,15 +93,11 @@ func TestEC2BuildletGetBuildletError(t *testing.T) {
 		{
 			desc:     "buildlet-client-failed-instance-created",
 			hostType: host,
-			ledger: &ledger{
-				cpuLimit: 20,
-				cpuUsed:  0,
-				entries:  make(map[string]*entry),
-				types: map[string]*cloud.InstanceType{
-					"e2-highcpu-2": {
-						Type: "e2-highcpu-2",
-						CPU:  4,
-					},
+			ledger:   newLedger(),
+			types: []*cloud.InstanceType{
+				{
+					Type: "e2-highcpu-2",
+					CPU:  4,
 				},
 			},
 			hosts: map[string]*dashboard.HostConfig{
@@ -118,15 +112,11 @@ func TestEC2BuildletGetBuildletError(t *testing.T) {
 		{
 			desc:     "buildlet-client-failed-instance-not-created",
 			hostType: host,
-			ledger: &ledger{
-				cpuLimit: 20,
-				cpuUsed:  0,
-				entries:  make(map[string]*entry),
-				types: map[string]*cloud.InstanceType{
-					"e2-highcpu-2": {
-						Type: "e2-highcpu-2",
-						CPU:  4,
-					},
+			ledger:   newLedger(),
+			types: []*cloud.InstanceType{
+				{
+					Type: "e2-highcpu-2",
+					CPU:  4,
 				},
 			},
 			hosts: map[string]*dashboard.HostConfig{
@@ -147,7 +137,8 @@ func TestEC2BuildletGetBuildletError(t *testing.T) {
 				ledger:         tt.ledger,
 				hosts:          tt.hosts,
 			}
-			_, gotErr := bp.GetBuildlet(context.Background(), tt.hostType, tt.logger)
+			tt.ledger.UpdateInstanceTypes(tt.types)
+			_, gotErr := bp.GetBuildlet(context.Background(), tt.hostType, tt.logger, new(queue.SchedItem))
 			if gotErr == nil {
 				t.Errorf("EC2Buildlet.GetBuildlet(ctx, %q, %+v) = _, %s", tt.hostType, tt.logger, gotErr)
 			}
@@ -163,6 +154,7 @@ func TestEC2BuildletGetBuildletLogger(t *testing.T) {
 		hostType       string
 		hosts          map[string]*dashboard.HostConfig
 		ledger         *ledger
+		types          []*cloud.InstanceType
 		wantLogs       []string
 		wantSpans      []string
 		wantSpansErr   []string
@@ -170,15 +162,11 @@ func TestEC2BuildletGetBuildletLogger(t *testing.T) {
 		{
 			desc:     "buildlet-client-failed-instance-create-request-failed",
 			hostType: host,
-			ledger: &ledger{
-				cpuLimit: 20,
-				cpuUsed:  0,
-				entries:  make(map[string]*entry),
-				types: map[string]*cloud.InstanceType{
-					"e2-standard-8": {
-						Type: "e2-standard-8",
-						CPU:  8,
-					},
+			ledger:   newLedger(),
+			types: []*cloud.InstanceType{
+				{
+					Type: "e2-standard-8",
+					CPU:  8,
 				},
 			},
 			hosts: map[string]*dashboard.HostConfig{
@@ -195,15 +183,11 @@ func TestEC2BuildletGetBuildletLogger(t *testing.T) {
 		{
 			desc:     "buildlet-client-failed-instance-not-created",
 			hostType: host,
-			ledger: &ledger{
-				cpuLimit: 20,
-				cpuUsed:  0,
-				entries:  make(map[string]*entry),
-				types: map[string]*cloud.InstanceType{
-					"e2-standard-8": {
-						Type: "e2-standard-8",
-						CPU:  8,
-					},
+			ledger:   newLedger(),
+			types: []*cloud.InstanceType{
+				{
+					Type: "e2-standard-8",
+					CPU:  8,
 				},
 			},
 			hosts: map[string]*dashboard.HostConfig{
@@ -220,15 +204,11 @@ func TestEC2BuildletGetBuildletLogger(t *testing.T) {
 		{
 			desc:     "buildlet-client-failed-instance-created",
 			hostType: host,
-			ledger: &ledger{
-				cpuLimit: 20,
-				cpuUsed:  0,
-				entries:  make(map[string]*entry),
-				types: map[string]*cloud.InstanceType{
-					"e2-standard-8": {
-						Type: "e2-standard-8",
-						CPU:  8,
-					},
+			ledger:   newLedger(),
+			types: []*cloud.InstanceType{
+				{
+					Type: "e2-standard-8",
+					CPU:  8,
 				},
 			},
 			hosts: map[string]*dashboard.HostConfig{
@@ -245,15 +225,11 @@ func TestEC2BuildletGetBuildletLogger(t *testing.T) {
 		{
 			desc:     "success",
 			hostType: host,
-			ledger: &ledger{
-				cpuLimit: 20,
-				cpuUsed:  0,
-				entries:  make(map[string]*entry),
-				types: map[string]*cloud.InstanceType{
-					"e2-standard-8": {
-						Type: "e2-standard-8",
-						CPU:  8,
-					},
+			ledger:   newLedger(),
+			types: []*cloud.InstanceType{
+				{
+					Type: "e2-standard-8",
+					CPU:  8,
 				},
 			},
 			hosts: map[string]*dashboard.HostConfig{
@@ -276,8 +252,10 @@ func TestEC2BuildletGetBuildletLogger(t *testing.T) {
 				ledger:         tc.ledger,
 				hosts:          tc.hosts,
 			}
+			bp.ledger.SetCPULimit(20)
+			bp.ledger.UpdateInstanceTypes(tc.types)
 			l := newTestLogger()
-			_, _ = bp.GetBuildlet(context.Background(), tc.hostType, l)
+			_, _ = bp.GetBuildlet(context.Background(), tc.hostType, l, new(queue.SchedItem))
 			if !cmp.Equal(l.spanEvents(), tc.wantSpans, cmp.Transformer("sort", func(in []string) []string {
 				out := append([]string(nil), in...)
 				sort.Strings(out)
@@ -315,13 +293,10 @@ func TestEC2BuildletString(t *testing.T) {
 			for i, e := range es {
 				entries[fmt.Sprintf("%d", i)] = e
 			}
-			eb := &EC2Buildlet{
-				ledger: &ledger{
-					cpuLimit: tc.cpuLimit,
-					cpuUsed:  tc.cpuCount,
-					entries:  entries,
-				},
-			}
+			l := newLedger()
+			eb := &EC2Buildlet{ledger: l}
+			l.entries = entries
+			eb.ledger.cpuQueue.UpdateQuotas(int(tc.cpuCount), int(tc.cpuLimit))
 			want := fmt.Sprintf("EC2 pool capacity: %d instances; %d/%d CPUs", tc.instCount, tc.cpuCount, tc.cpuLimit)
 			got := eb.String()
 			if got != want {
@@ -348,13 +323,10 @@ func TestEC2BuildletCapacityString(t *testing.T) {
 			for i, e := range es {
 				entries[fmt.Sprintf("%d", i)] = e
 			}
-			eb := &EC2Buildlet{
-				ledger: &ledger{
-					cpuLimit: tc.cpuLimit,
-					cpuUsed:  tc.cpuCount,
-					entries:  entries,
-				},
-			}
+			l := newLedger()
+			l.entries = entries
+			eb := &EC2Buildlet{ledger: l}
+			eb.ledger.cpuQueue.UpdateQuotas(int(tc.cpuCount), int(tc.cpuLimit))
 			want := fmt.Sprintf("%d instances; %d/%d CPUs", tc.instCount, tc.cpuCount, tc.cpuLimit)
 			got := eb.capacityString()
 			if got != want {
@@ -382,19 +354,18 @@ func TestEC2BuildletbuildletDone(t *testing.T) {
 			t.Errorf("unable to create instance: %s", err)
 		}
 
+		l := newLedger()
 		pool := &EC2Buildlet{
 			awsClient: awsC,
-			ledger: &ledger{
-				cpuLimit: 20,
-				cpuUsed:  5,
-				entries: map[string]*entry{
-					instName: {
-						createdAt:    time.Now(),
-						instanceID:   inst.ID,
-						instanceName: instName,
-						vCPUCount:    5,
-					},
-				},
+			ledger:    l,
+		}
+		l.entries = map[string]*entry{
+			instName: {
+				createdAt:    time.Now(),
+				instanceID:   inst.ID,
+				instanceName: instName,
+				vCPUCount:    5,
+				quota:        new(queue.Item),
 			},
 		}
 		pool.buildletDone(instName)
@@ -425,11 +396,7 @@ func TestEC2BuildletbuildletDone(t *testing.T) {
 
 		pool := &EC2Buildlet{
 			awsClient: awsC,
-			ledger: &ledger{
-				cpuLimit: 20,
-				cpuUsed:  5,
-				entries:  map[string]*entry{},
-			},
+			ledger:    newLedger(),
 		}
 		pool.buildletDone(inst.Name)
 		gotInsts, err := awsC.RunningInstances(context.Background())
@@ -439,19 +406,18 @@ func TestEC2BuildletbuildletDone(t *testing.T) {
 	})
 	t.Run("instance-not-in-ec2", func(t *testing.T) {
 		instName := "instance-name-x"
+		l := newLedger()
 		pool := &EC2Buildlet{
 			awsClient: cloud.NewFakeAWSClient(),
-			ledger: &ledger{
-				cpuLimit: 20,
-				cpuUsed:  5,
-				entries: map[string]*entry{
-					instName: {
-						createdAt:    time.Now(),
-						instanceID:   "instance-id-14",
-						instanceName: instName,
-						vCPUCount:    5,
-					},
-				},
+			ledger:    l,
+		}
+		l.entries = map[string]*entry{
+			instName: {
+				createdAt:    time.Now(),
+				instanceID:   "instance-id-14",
+				instanceName: instName,
+				vCPUCount:    5,
+				quota:        new(queue.Item),
 			},
 		}
 		pool.buildletDone(instName)
@@ -481,8 +447,9 @@ func TestEC2BuildletRetrieveAndSetQuota(t *testing.T) {
 	if err != nil {
 		t.Errorf("EC2Buildlet.retrieveAndSetQuota(ctx) = %s; want nil", err)
 	}
-	if pool.ledger.cpuLimit == 0 {
-		t.Errorf("ledger.cpuLimit = %d; want non-zero", pool.ledger.cpuLimit)
+	_, limit := pool.ledger.cpuQueue.Quotas()
+	if limit == 0 {
+		t.Errorf("ledger.cpuLimit = %d; want non-zero", limit)
 	}
 }
 
@@ -525,6 +492,7 @@ func TestEC2BuildeletDestroyUntrackedInstances(t *testing.T) {
 	wantRemoteInst := create(instanceName("host-test-type", 10))
 	_ = create("debug-tiger-host-14") // non buildlet instance
 
+	l := newLedger()
 	pool := &EC2Buildlet{
 		awsClient: awsC,
 		isRemoteBuildlet: func(name string) bool {
@@ -533,17 +501,14 @@ func TestEC2BuildeletDestroyUntrackedInstances(t *testing.T) {
 			}
 			return false
 		},
-		ledger: &ledger{
-			cpuLimit: 200,
-			cpuUsed:  4,
-			entries: map[string]*entry{
-				wantTrackedInst.Name: {
-					createdAt:    time.Now(),
-					instanceID:   wantTrackedInst.ID,
-					instanceName: wantTrackedInst.Name,
-					vCPUCount:    4,
-				},
-			},
+		ledger: l,
+	}
+	l.entries = map[string]*entry{
+		wantTrackedInst.Name: {
+			createdAt:    time.Now(),
+			instanceID:   wantTrackedInst.ID,
+			instanceName: wantTrackedInst.Name,
+			vCPUCount:    4,
 		},
 	}
 	pool.destroyUntrackedInstances(context.Background())

@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	clog "golang.org/x/build/internal/coordinator/log"
 	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/types"
 )
@@ -85,7 +84,7 @@ func (s *Span) Done(err error) error {
 		fmt.Fprintf(&text, "; %v", s.optText)
 	}
 	if st, ok := s.el.(Spanner); ok {
-		clog.CoordinatorProcess().PutSpanRecord(st.SpanRecord(s, err))
+		pool.CoordinatorProcess().PutSpanRecord(st.SpanRecord(s, err))
 	}
 	s.el.LogEventTime("finish_"+s.event, text.String())
 	return err

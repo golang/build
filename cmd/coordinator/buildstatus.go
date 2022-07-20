@@ -31,8 +31,8 @@ import (
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/buildstats"
-	clog "golang.org/x/build/internal/coordinator/log"
 	"golang.org/x/build/internal/coordinator/pool"
+	"golang.org/x/build/internal/coordinator/pool/queue"
 	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/internal/singleflight"
 	"golang.org/x/build/internal/sourcecache"
@@ -93,14 +93,14 @@ type buildStatus struct {
 
 	hasBuildlet int32 // atomic: non-zero if this build has a buildlet; for status.go.
 
-	mu              sync.Mutex          // guards following
-	canceled        bool                // whether this build was forcefully canceled, so errors should be ignored
-	schedItem       *schedule.SchedItem // for the initial buildlet (ignoring helpers for now)
-	logURL          string              // if non-empty, permanent URL of log
-	bc              buildlet.Client     // nil initially, until pool returns one
-	done            time.Time           // finished running
-	succeeded       bool                // set when done
-	output          livelog.Buffer      // stdout and stderr
+	mu              sync.Mutex       // guards following
+	canceled        bool             // whether this build was forcefully canceled, so errors should be ignored
+	schedItem       *queue.SchedItem // for the initial buildlet (ignoring helpers for now)
+	logURL          string           // if non-empty, permanent URL of log
+	bc              buildlet.Client  // nil initially, until pool returns one
+	done            time.Time        // finished running
+	succeeded       bool             // set when done
+	output          livelog.Buffer   // stdout and stderr
 	events          []eventAndTime
 	useSnapshotMemo map[string]bool // memoized result of useSnapshotFor(rev), where the key is rev
 }
@@ -198,7 +198,7 @@ func (st *buildStatus) start() {
 				log.Println(st.BuilderRev, "failed:", err)
 			}
 			st.setDone(err == nil)
-			clog.CoordinatorProcess().PutBuildRecord(st.buildRecord())
+			pool.CoordinatorProcess().PutBuildRecord(st.buildRecord())
 		}
 		markDone(st.BuilderRev)
 	}()
@@ -278,7 +278,7 @@ func (st *buildStatus) getHelpers() <-chan buildlet.Client {
 }
 
 func (st *buildStatus) onceInitHelpersFunc() {
-	schedTmpl := &schedule.SchedItem{
+	schedTmpl := &queue.SchedItem{
 		BuilderRev: st.BuilderRev,
 		HostType:   st.conf.HostType,
 		IsTry:      st.isTry(),
@@ -373,7 +373,7 @@ func (st *buildStatus) checkDep(ctx context.Context, dep string) (have bool, err
 var errSkipBuildDueToDeps = errors.New("build was skipped due to missing deps")
 
 func (st *buildStatus) getBuildlet() (buildlet.Client, error) {
-	schedItem := &schedule.SchedItem{
+	schedItem := &queue.SchedItem{
 		HostType:   st.conf.HostType,
 		IsTry:      st.trySet != nil,
 		BuilderRev: st.BuilderRev,
@@ -421,7 +421,7 @@ func (st *buildStatus) build() error {
 		cancel()
 	}
 
-	clog.CoordinatorProcess().PutBuildRecord(st.buildRecord())
+	pool.CoordinatorProcess().PutBuildRecord(st.buildRecord())
 
 	sp := st.CreateSpan("checking_for_snapshot")
 	if pool.NewGCEConfiguration().InStaging() {
@@ -694,7 +694,7 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompil
 	ctx, cancel := context.WithCancel(st.ctx)
 	defer cancel()
 	sp := st.CreateSpan("get_buildlet_cross")
-	kubeBC, err := sched.GetBuildlet(ctx, &schedule.SchedItem{
+	kubeBC, err := sched.GetBuildlet(ctx, &queue.SchedItem{
 		HostType:   config.CompileHostType,
 		IsTry:      st.trySet != nil,
 		BuilderRev: st.BuilderRev,

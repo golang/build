@@ -2,10 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build linux || darwin
-// +build linux darwin
-
-package schedule
+package queue
 
 import (
 	"testing"
@@ -24,10 +21,10 @@ func TestSchedItemLess(t *testing.T) {
 			name: "gomote over reg",
 			a: &SchedItem{
 				IsGomote:    true,
-				requestTime: t2,
+				RequestTime: t2,
 			},
 			b: &SchedItem{
-				requestTime: t1,
+				RequestTime: t1,
 			},
 			want: true,
 		},
@@ -35,11 +32,11 @@ func TestSchedItemLess(t *testing.T) {
 			name: "gomote over try",
 			a: &SchedItem{
 				IsGomote:    true,
-				requestTime: t2,
+				RequestTime: t2,
 			},
 			b: &SchedItem{
 				IsTry:       true,
-				requestTime: t1,
+				RequestTime: t1,
 			},
 			want: true,
 		},
@@ -47,10 +44,10 @@ func TestSchedItemLess(t *testing.T) {
 			name: "try over reg",
 			a: &SchedItem{
 				IsTry:       true,
-				requestTime: t2,
+				RequestTime: t2,
 			},
 			b: &SchedItem{
-				requestTime: t1,
+				RequestTime: t1,
 			},
 			want: true,
 		},
@@ -58,11 +55,11 @@ func TestSchedItemLess(t *testing.T) {
 			name: "try FIFO, less",
 			a: &SchedItem{
 				IsTry:       true,
-				requestTime: t1,
+				RequestTime: t1,
 			},
 			b: &SchedItem{
 				IsTry:       true,
-				requestTime: t2,
+				RequestTime: t2,
 			},
 			want: true,
 		},
@@ -70,11 +67,11 @@ func TestSchedItemLess(t *testing.T) {
 			name: "try FIFO, greater",
 			a: &SchedItem{
 				IsTry:       true,
-				requestTime: t2,
+				RequestTime: t2,
 			},
 			b: &SchedItem{
 				IsTry:       true,
-				requestTime: t1,
+				RequestTime: t1,
 			},
 			want: false,
 		},
@@ -82,11 +79,11 @@ func TestSchedItemLess(t *testing.T) {
 			name: "reg LIFO, less",
 			a: &SchedItem{
 				CommitTime:  t2,
-				requestTime: t1, // shouldn't be used
+				RequestTime: t1, // shouldn't be used
 			},
 			b: &SchedItem{
 				CommitTime:  t1,
-				requestTime: t2, // shouldn't be used
+				RequestTime: t2, // shouldn't be used
 			},
 			want: true,
 		},
@@ -94,11 +91,11 @@ func TestSchedItemLess(t *testing.T) {
 			name: "reg LIFO, greater",
 			a: &SchedItem{
 				CommitTime:  t1,
-				requestTime: t2, // shouldn't be used
+				RequestTime: t2, // shouldn't be used
 			},
 			b: &SchedItem{
 				CommitTime:  t2,
-				requestTime: t1, // shouldn't be used
+				RequestTime: t1, // shouldn't be used
 			},
 			want: false,
 		},

@@ -49,6 +49,7 @@ import (
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/coordinator/pool/queue"
 	"golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
 )
@@ -58,6 +59,7 @@ const minBuildletVersion = 23
 var (
 	reversePool = &ReverseBuildletPool{
 		hostLastGood: make(map[string]time.Time),
+		hostQueue:    make(map[string]*queue.Quota),
 	}
 
 	builderMasterKey []byte
@@ -84,9 +86,7 @@ type ReverseBuildletPool struct {
 	// TODO: switch to a map[hostType][]buildlets or map of set.
 	buildlets []*reverseBuildlet
 
-	wakeChan map[string]chan token // hostType => best-effort wake-up chan when buildlet free
-
-	waiters map[string]int // hostType => number waiters blocked in GetBuildlet
+	hostQueue map[string]*queue.Quota
 
 	// hostLastGood tracks when buildlets were last seen to be
 	// healthy. It's only used by the health reporting code (in
@@ -156,8 +156,8 @@ func (p *ReverseBuildletPool) BuildReverseStatusJSON() *types.ReverseBuilderStat
 
 		hs.Machines[b.hostname] = bs
 	}
-	for hostType, waiters := range p.waiters {
-		status.Host(hostType).Waiters = waiters
+	for hostType, queue := range p.hostQueue {
+		status.Host(hostType).Waiters = queue.Len()
 	}
 	for hostType, hc := range dashboard.Hosts {
 		if hc.ExpectNum > 0 {
@@ -174,6 +174,7 @@ func (p *ReverseBuildletPool) BuildReverseStatusJSON() *types.ReverseBuilderStat
 func (p *ReverseBuildletPool) tryToGrab(hostType string) (bc buildlet.Client, busy int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	defer p.updateQuotasLocked()
 	for _, b := range p.buildlets {
 		if b.hostType != hostType {
 			continue
@@ -190,34 +191,13 @@ func (p *ReverseBuildletPool) tryToGrab(hostType string) (bc buildlet.Client, bu
 	return nil, busy
 }
 
-func (p *ReverseBuildletPool) getWakeChan(hostType string) chan token {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.wakeChan == nil {
-		p.wakeChan = make(map[string]chan token)
-	}
-	c, ok := p.wakeChan[hostType]
-	if !ok {
-		c = make(chan token)
-		p.wakeChan[hostType] = c
-	}
-	return c
-}
-
-func (p *ReverseBuildletPool) noteBuildletAvailable(hostType string) {
-	wake := p.getWakeChan(hostType)
-	select {
-	case wake <- token{}:
-	default:
-	}
-}
-
 // nukeBuildlet wipes out victim as a buildlet we'll ever return again,
 // and closes its TCP connection in hopes that it will fix itself
 // later.
 func (p *ReverseBuildletPool) nukeBuildlet(victim buildlet.Client) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	defer p.updateQuotasLocked()
 	for i, rb := range p.buildlets {
 		if rb.client == victim {
 			defer rb.conn.Close()
@@ -247,6 +227,7 @@ func (p *ReverseBuildletPool) recordHealthy(b *reverseBuildlet) {
 }
 
 func (p *ReverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
+	defer p.updateQuotas()
 	if b.client.IsBroken() {
 		return false
 	}
@@ -297,26 +278,29 @@ func (p *ReverseBuildletPool) healthCheckBuildlet(b *reverseBuildlet) bool {
 	b.inHealthCheck = false
 	b.inUseTime = time.Now()
 	p.recordHealthy(b)
-	go p.noteBuildletAvailable(b.hostType)
 	return true
 }
 
-func (p *ReverseBuildletPool) updateWaiterCounter(hostType string, delta int) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.waiters == nil {
-		p.waiters = make(map[string]int)
+func (p *ReverseBuildletPool) hostTypeQueue(hostType string) *queue.Quota {
+	if p.hostQueue[hostType] == nil {
+		queue := queue.NewQuota()
+		p.hostQueue[hostType] = queue
 	}
-	p.waiters[hostType] += delta
+	return p.hostQueue[hostType]
 }
 
 // GetBuildlet builds a buildlet client for the passed in host.
-func (p *ReverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg Logger) (buildlet.Client, error) {
-	p.updateWaiterCounter(hostType, 1)
-	defer p.updateWaiterCounter(hostType, -1)
-	seenErrInUse := false
-
+func (p *ReverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, lg Logger, si *queue.SchedItem) (buildlet.Client, error) {
 	sp := lg.CreateSpan("wait_static_builder", hostType)
+	// No need to return quota when done. The quotas will be updated
+	// when the reverse buildlet reconnects and becomes healthy.
+	err := p.hostTypeQueue(hostType).AwaitQueue(ctx, 1, si)
+	sp.Done(err)
+	if err != nil {
+		return nil, err
+	}
+
+	seenErrInUse := false
 	for {
 		bc, busy := p.tryToGrab(hostType)
 		if bc != nil {
@@ -331,11 +315,6 @@ func (p *ReverseBuildletPool) GetBuildlet(ctx context.Context, hostType string, 
 		case <-ctx.Done():
 			return nil, sp.Done(ctx.Err())
 		case <-time.After(10 * time.Second):
-			// As multiple goroutines can be listening for
-			// the available signal, it must be treated as
-			// a best effort signal. So periodically try
-			// to grab a buildlet again.
-		case <-p.getWakeChan(hostType):
 		}
 	}
 }
@@ -453,17 +432,11 @@ func (p *ReverseBuildletPool) String() string {
 	return "TODO: some reverse buildlet summary"
 }
 
-// HostTypes returns the a deduplicated list of buildlet types curently supported
-// by the pool.
+// HostTypes returns a sorted, deduplicated list of buildlet types
+// currently supported by the pool.
 func (p *ReverseBuildletPool) HostTypes() (types []string) {
-	s := make(map[string]bool)
-	p.mu.Lock()
-	for _, b := range p.buildlets {
-		s[b.hostType] = true
-	}
-	p.mu.Unlock()
-
-	for t := range s {
+	totals := p.HostTypeCount()
+	for t := range totals {
 		types = append(types, t)
 	}
 	sort.Strings(types)
@@ -483,9 +456,30 @@ func (p *ReverseBuildletPool) CanBuild(hostType string) bool {
 	return false
 }
 
+func (p *ReverseBuildletPool) updateQuotas() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.updateQuotasLocked()
+}
+
+func (p *ReverseBuildletPool) updateQuotasLocked() {
+	limits := make(map[string]int)
+	used := make(map[string]int)
+	for _, b := range p.buildlets {
+		limits[b.hostType] += 1
+		if b.inUse {
+			used[b.hostType] += 1
+		}
+	}
+	for hostType, limit := range limits {
+		q := p.hostTypeQueue(hostType)
+		q.UpdateQuotas(used[hostType], limit)
+	}
+}
+
 func (p *ReverseBuildletPool) addBuildlet(b *reverseBuildlet) {
 	p.mu.Lock()
-	defer p.noteBuildletAvailable(b.hostType)
+	defer p.updateQuotas()
 	defer p.mu.Unlock()
 	p.buildlets = append(p.buildlets, b)
 	p.recordHealthy(b)
