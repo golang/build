@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -12,6 +13,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -141,9 +143,21 @@ func run(args []string) error {
 	var collect bool
 	fs.BoolVar(&collect, "collect", false, "Collect artifacts (stdout, work dir .tar.gz) into $PWD once complete.")
 
+	var untilPattern string
+	fs.StringVar(&untilPattern, "until", "", "Run command repeatedly until the output matches the provided regexp.")
+
 	fs.Parse(args)
 	if fs.NArg() == 0 {
 		fs.Usage()
+	}
+
+	var until *regexp.Regexp
+	var err error
+	if untilPattern != "" {
+		until, err = regexp.Compile(untilPattern)
+		if err != nil {
+			return fmt.Errorf("bad regexp %q for 'until': %v", untilPattern, err)
+		}
 	}
 
 	var cmd string
@@ -187,7 +201,6 @@ func run(args []string) error {
 	// This is useful even if we don't have multiple gomotes running, since
 	// it's easy to accidentally lose the output.
 	var outDir string
-	var err error
 	if collect {
 		outDir, err = os.Getwd()
 		if err != nil {
@@ -228,32 +241,57 @@ func run(args []string) error {
 			if len(runSet) == 1 {
 				outputs = append(outputs, os.Stdout)
 			}
-			err = doRun(
-				ctx,
-				inst,
-				cmd,
-				cmdArgs,
-				runDir(dir),
-				runBuilderEnv(builderEnv),
-				runEnv(env),
-				runPath(pathOpt),
-				runSystem(sys),
-				runDebug(debug),
-				runFirewall(firewall),
-				runWriters(outputs...),
-			)
-			// If it's just that the command failed, don't exit just yet, and don't return
-			// an error to the errgroup because we want the other commands to keep going.
-			if err != nil {
-				ce, ok := err.(*cmdFailedError)
-				if !ok {
-					return err
+			// Give ourselves the output too so that we can match against it.
+			var outBuf bytes.Buffer
+			if until != nil {
+				outputs = append(outputs, &outBuf)
+			}
+			var ce *cmdFailedError
+			for {
+				err := doRun(
+					ctx,
+					inst,
+					cmd,
+					cmdArgs,
+					runDir(dir),
+					runBuilderEnv(builderEnv),
+					runEnv(env),
+					runPath(pathOpt),
+					runSystem(sys),
+					runDebug(debug),
+					runFirewall(firewall),
+					runWriters(outputs...),
+				)
+				// If it's just that the command failed, don't exit just yet, and don't return
+				// an error to the errgroup because we want the other commands to keep going.
+				if err != nil {
+					var ok bool
+					ce, ok = err.(*cmdFailedError)
+					if !ok {
+						return err
+					}
 				}
+				if until == nil || until.Match(outBuf.Bytes()) {
+					break
+				}
+				// Reset the output file and our buffer for the next run.
+				outBuf.Reset()
+				if err := outf.Truncate(0); err != nil {
+					return fmt.Errorf("failed to truncate output file %q: %v", outf.Name(), err)
+				}
+
+				fmt.Fprintf(os.Stderr, "# No match found on %q, running again...\n", inst)
+			}
+			if until != nil {
+				fmt.Fprintf(os.Stderr, "# Match found on %q.\n", inst)
+			}
+			if ce != nil {
+				// N.B. If err this wasn't a cmdFailedError
 				cmdsFailedMu.Lock()
 				cmdsFailed = append(cmdsFailed, ce)
 				cmdsFailedMu.Unlock()
 				// Write out the error.
-				_, err := io.MultiWriter(outputs...).Write([]byte(err.Error() + "\n"))
+				_, err := io.MultiWriter(outputs...).Write([]byte(ce.Error() + "\n"))
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "failed to write error to output: %v", err)
 				}
