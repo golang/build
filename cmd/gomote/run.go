@@ -145,18 +145,15 @@ func run(args []string) error {
 	if fs.NArg() == 0 {
 		fs.Usage()
 	}
-	// First check if the instance name refers to a live instance.
-	ctx := context.Background()
-	client := gomoteServerClient(ctx)
-	_, err := client.InstanceAlive(ctx, &protos.InstanceAliveRequest{
-		GomoteId: fs.Arg(0),
-	})
+
 	var cmd string
 	var cmdArgs []string
 	var runSet []string
-	if err != nil {
-		// When there's no active group, this must be an instance name.
-		// Given that we got an error, we should surface that.
+
+	// First check if the instance name refers to a live instance.
+	ctx := context.Background()
+	if err := doPing(ctx, fs.Arg(0)); instanceDoesNotExist(err) {
+		// When there's no active group, this is just an error.
 		if activeGroup == nil {
 			return fmt.Errorf("instance %q: %s", fs.Arg(0), statusFromError(err))
 		}
@@ -167,7 +164,7 @@ func run(args []string) error {
 		}
 		cmd = fs.Arg(0)
 		cmdArgs = fs.Args()[1:]
-	} else {
+	} else if err == nil {
 		runSet = append(runSet, fs.Arg(0))
 		if fs.NArg() == 1 {
 			fmt.Fprintln(os.Stderr, "missing command")
@@ -175,6 +172,8 @@ func run(args []string) error {
 		}
 		cmd = fs.Arg(1)
 		cmdArgs = fs.Args()[2:]
+	} else {
+		return fmt.Errorf("checking instance %q: %v", fs.Arg(0), err)
 	}
 
 	var pathOpt []string
@@ -188,6 +187,7 @@ func run(args []string) error {
 	// This is useful even if we don't have multiple gomotes running, since
 	// it's easy to accidentally lose the output.
 	var outDir string
+	var err error
 	if collect {
 		outDir, err = os.Getwd()
 		if err != nil {

@@ -12,8 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-
-	"golang.org/x/build/internal/gomote/protos"
 )
 
 func group(args []string) error {
@@ -105,13 +103,9 @@ func addToGroup(args []string) error {
 		fmt.Fprintln(os.Stderr, "No active group found. Use -group or GOMOTE_GROUP.")
 		usage()
 	}
+	ctx := context.Background()
 	for _, inst := range args {
-		ctx := context.Background()
-		client := gomoteServerClient(ctx)
-		_, err := client.InstanceAlive(ctx, &protos.InstanceAliveRequest{
-			GomoteId: inst,
-		})
-		if err != nil {
+		if err := doPing(ctx, inst); err != nil {
 			return fmt.Errorf("instance %q: %s", inst, statusFromError(err))
 		}
 		activeGroup.Instances = append(activeGroup.Instances, inst)
@@ -250,13 +244,10 @@ func loadGroupFromFile(fname string) (*groupData, error) {
 	//
 	// Otherwise, we can get into situations where we sometimes
 	// don't have an accurate record.
+	ctx := context.Background()
 	newInstances := make([]string, 0, len(g.Instances))
 	for _, inst := range g.Instances {
-		ctx := context.Background()
-		client := gomoteServerClient(ctx)
-		_, err := client.InstanceAlive(ctx, &protos.InstanceAliveRequest{
-			GomoteId: inst,
-		})
+		err := doPing(ctx, inst)
 		if instanceDoesNotExist(err) {
 			continue
 		} else if err != nil {
