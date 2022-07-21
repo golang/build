@@ -80,6 +80,8 @@ func destroy(args []string) error {
 		}
 		os.Exit(1)
 	}
+	var destroyGroup bool
+	fs.BoolVar(&destroyGroup, "destroy-group", false, "if a group is used, destroy the group too")
 
 	fs.Parse(args)
 
@@ -104,9 +106,15 @@ func destroy(args []string) error {
 		}
 	}
 	if activeGroup != nil {
-		activeGroup.Instances = nil
-		if err := storeGroup(activeGroup); err != nil {
-			return err
+		if destroyGroup {
+			if err := deleteGroup(activeGroup.Name); err != nil {
+				return err
+			}
+		} else {
+			activeGroup.Instances = nil
+			if err := storeGroup(activeGroup); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
