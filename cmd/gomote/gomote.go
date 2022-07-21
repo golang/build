@@ -36,7 +36,6 @@ To list the subcommands, run "gomote" without arguments:
 	  rm         delete files or directories
 	  rdp        RDP (Remote Desktop Protocol) to a Windows buildlet
 	  run        run a command on a buildlet
-	  group      manage gomote groups (v2 only)
 	  ssh        ssh to a buildlet
 
 To list all the builder types available, run "create" with no arguments:
@@ -82,6 +81,73 @@ then proxy your request via the coordinator.  To access a buildlet
 directly (for example, when working on the buildlet code), you can
 skip the "gomote create" step and use the special builder name
 "<build-config-name>@ip[:port>", such as "windows-amd64-2008@10.1.5.3".
+
+## Groups
+
+Instances may be managed in named groups, and commands are broadcast to all
+instances in the group.
+
+A group is specified either by the -group global flag or through the
+GOMOTE_GROUP environment variable. The -group flag must always specify a
+valid group, whereas GOMOTE_GROUP may contain an invalid group.
+Instances may be part of more than one group.
+
+Groups may be explicitly managed with the "group" subcommand, but there
+are several short-cuts that make this unnecessary in most cases:
+
+- The create command can create a new group for instances with the
+  -new-group flag.
+- The create command will automatically create the group in GOMOTE_GROUP
+  if it does not exist and no other group is explicitly specified.
+- The destroy command can destroy a group in addition to its instances
+  with the -destroy-group flag.
+
+As a result, the easiest way to use groups is to just set the
+GOMOTE_GROUP environment variable:
+
+	$ export GOMOTE_GROUP=debug
+	$ gomote create linux-amd64
+	$ GOROOT=/path/to/goroot gomote create linux-amd64
+	$ gomote run go/src/make.bash
+
+As this example demonstrates, groups are useful even if the group
+contains only a single instance: it can dramatically shorten most gomote
+commands.
+
+## Tips and tricks
+
+- The create command accepts the -setup flag which also pushes a GOROOT
+  and runs the appropriate equivalent of "make.bash" for the instance.
+- The create command accepts the -count flag for creating several
+  instances at once.
+- The run command accepts the -collect flag for automatically writing
+  the output from the command to a file in $PWD, as well as a copy of
+  the full file tree from the instance. This command is useful for
+  capturing the output of long-running commands in a set-and-forget
+  manner.
+- The run command accepts the -until flag for continuously executing
+  a command until the output of the command matches some pattern. Useful
+  for reproducing rare issues, and especially useful when used in tandem
+  with -collect.
+- The run command always streams output to a temporary file regardless
+  of any additional flags to avoid losing output due to terminal
+  scrollback. It always prints the location of the file.
+
+Using some of these tricks, it's straightforward to hammer at some test
+to reproduce a rare failure, like so:
+
+	$ export GOMOTE_GROUP=debug
+	$ GOROOT=/path/to/goroot gomote create -setup -count=10 linux-amd64
+	$ gomote run -until='unexpected return pc' -collect go/bin/go run -run="MyFlakyTest" -count=100 runtime
+
+# Recent breaking CLI changes
+
+- gettar writes to <instance name>.tar.gz by default, not to stdout.
+- puttar has a new CLI that accepts a wider range of sources as an
+  argument, removing a few mutually exclusive flags.
+- More output is now emitted, but those = lines always start with "#"
+  so they're fairly easy to filter out.
+
 */
 package main
 
