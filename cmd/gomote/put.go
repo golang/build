@@ -14,13 +14,16 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/tarutil"
+	"golang.org/x/sync/errgroup"
 )
 
 // legacyPutTar a .tar.gz
@@ -99,91 +102,163 @@ func legacyPutTar(args []string) error {
 
 // putTar a .tar.gz
 func putTar(args []string) error {
-	if activeGroup != nil {
-		return fmt.Errorf("command does not yet support groups")
-	}
-
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "puttar usage: gomote puttar [put-opts] <buildlet-name> [tar.gz file or '-' for stdin]")
+		fmt.Fprintln(os.Stderr, "puttar usage: gomote puttar [put-opts] [instance] <source>")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "<source> may be one of:")
+		fmt.Fprintln(os.Stderr, "- A path to a local .tar.gz file.")
+		fmt.Fprintln(os.Stderr, "- A URL that points at a .tar.gz file.")
+		fmt.Fprintln(os.Stderr, "- The '-' character to indicate a .tar.gz file passed via stdin.")
+		fmt.Fprintln(os.Stderr, "- Git hash (min 7 characters) for the Go repository (extract a .tar.gz of the repository at that commit w/o history)")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "Instance name is optional if a group is specified.")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
-	var rev string
-	fs.StringVar(&rev, "gorev", "", "If non-empty, git hash to download from gerrit and put to the buildlet. e.g. 886b02d705ff for Go 1.4.1. This just maps to the --URL flag, so the two options are mutually exclusive.")
 	var dir string
 	fs.StringVar(&dir, "dir", "", "relative directory from buildlet's work dir to extra tarball into")
-	var tarURL string
-	fs.StringVar(&tarURL, "url", "", "URL of tarball, instead of provided file.")
 
 	fs.Parse(args)
-	if fs.NArg() < 1 || fs.NArg() > 2 {
-		fs.Usage()
-	}
-	if rev != "" && tarURL != "" {
-		fmt.Fprintln(os.Stderr, "--gorev and --url are mutually exclusive")
-		fs.Usage()
-	}
-	name := fs.Arg(0)
-	ctx := context.Background()
-	client := gomoteServerClient(ctx)
 
-	if rev != "" {
-		tarURL = "https://go.googlesource.com/go/+archive/" + rev + ".tar.gz"
-	}
-	if tarURL != "" {
-		if fs.NArg() != 1 {
+	// Parse arguments.
+	var putSet []string
+	var src string
+	switch fs.NArg() {
+	case 1:
+		// Must be just the source, so we need an active group.
+		if activeGroup == nil {
+			fmt.Fprintln(os.Stderr, "no active group found; need an active group with only 1 argument")
 			fs.Usage()
 		}
-		_, err := client.WriteTGZFromURL(ctx, &protos.WriteTGZFromURLRequest{
-			GomoteId:  name,
-			Directory: dir,
-			Url:       tarURL,
-		})
-		if err != nil {
-			return fmt.Errorf("unable to write tar to instance: %s", statusFromError(err))
+		for _, inst := range activeGroup.Instances {
+			putSet = append(putSet, inst)
 		}
-		if rev != "" {
-			// Put a VERSION file there too, to avoid git usage.
-			version := strings.NewReader("devel " + rev)
-			var vtar tarutil.FileList
-			vtar.AddRegular(&tar.Header{
-				Name: "VERSION",
-				Mode: 0644,
-				Size: int64(version.Len()),
-			}, int64(version.Len()), version)
-			tgz := vtar.TarGz()
-			defer tgz.Close()
-
-			resp, err := client.UploadFile(ctx, &protos.UploadFileRequest{})
-			if err != nil {
-				return fmt.Errorf("unable to request credentials for a file upload: %s", statusFromError(err))
-			}
-			if err := uploadToGCS(ctx, resp.GetFields(), tgz, resp.GetObjectName(), resp.GetUrl()); err != nil {
-				return fmt.Errorf("unable to upload version file to GCS: %s", err)
-			}
-			if _, err = client.WriteTGZFromURL(ctx, &protos.WriteTGZFromURLRequest{
-				GomoteId:  name,
-				Directory: dir,
-				Url:       fmt.Sprintf("%s%s", resp.GetUrl(), resp.GetObjectName()),
-			}); err != nil {
-				return fmt.Errorf("unable to write tar to instance: %s", statusFromError(err))
-			}
-		}
-		return nil
-	}
-	var tgz io.Reader = os.Stdin
-	if fs.NArg() != 2 {
+		src = fs.Arg(0)
+	case 2:
+		// Instance and source is specified.
+		putSet = []string{fs.Arg(0)}
+		src = fs.Arg(1)
+	case 0:
+		fmt.Fprintln(os.Stderr, "error: not enough arguments")
+		fs.Usage()
+	default:
+		fmt.Fprintln(os.Stderr, "error: too many arguments")
 		fs.Usage()
 	}
-	if fs.Arg(1) != "-" {
-		f, err := os.Open(fs.Arg(1))
+
+	// Interpret source.
+	var putTarFn func(ctx context.Context, inst string) error
+	if src == "-" {
+		// We might have multiple readers, so slurp up STDIN
+		// and store it, then hand out bytes.Readers to everyone.
+		var buf bytes.Buffer
+		_, err := io.Copy(&buf, os.Stdin)
 		if err != nil {
-			return err
+			return fmt.Errorf("reading stdin: %v", err)
 		}
-		defer f.Close()
-		tgz = f
+		sharedTarBuf := buf.Bytes()
+		putTarFn = func(ctx context.Context, inst string) error {
+			return doPutTar(ctx, inst, dir, bytes.NewReader(sharedTarBuf))
+		}
+	} else {
+		u, err := url.Parse(src)
+		if err != nil {
+			// The URL parser should technically accept any of these, so the fact that
+			// we failed means its *very* malformed.
+			return fmt.Errorf("malformed source: not a path, a URL, -, or a git hash")
+		}
+		if u.Scheme != "" || u.Host != "" {
+			// Probably a real URL.
+			putTarFn = func(ctx context.Context, inst string) error {
+				return doPutTarURL(ctx, inst, dir, u.String())
+			}
+		} else {
+			// Probably a path. Check if it exists.
+			_, err := os.Stat(src)
+			if os.IsNotExist(err) {
+				// It must be a git hash. Check if this actually matches a git hash.
+				if len(src) < 7 || len(src) > 40 || regexp.MustCompile("[^a-f0-9]").MatchString(src) {
+					return fmt.Errorf("malformed source: not a path, a URL, -, or a git hash")
+				}
+				putTarFn = func(ctx context.Context, inst string) error {
+					return doPutTarGoRev(ctx, inst, dir, src)
+				}
+			} else if err != nil {
+				return fmt.Errorf("failed to stat %q: %v", src, err)
+			} else {
+				// It's a path.
+				putTarFn = func(ctx context.Context, inst string) error {
+					f, err := os.Open(src)
+					if err != nil {
+						return fmt.Errorf("opening %q: %v", src, err)
+					}
+					defer f.Close()
+					return doPutTar(ctx, inst, dir, f)
+				}
+			}
+		}
 	}
+	eg, ctx := errgroup.WithContext(context.Background())
+	for _, inst := range putSet {
+		inst := inst
+		eg.Go(func() error {
+			return putTarFn(ctx, inst)
+		})
+	}
+	return eg.Wait()
+}
+
+func doPutTarURL(ctx context.Context, name, dir, tarURL string) error {
+	client := gomoteServerClient(ctx)
+	_, err := client.WriteTGZFromURL(ctx, &protos.WriteTGZFromURLRequest{
+		GomoteId:  name,
+		Directory: dir,
+		Url:       tarURL,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to write tar to instance: %s", statusFromError(err))
+	}
+	return nil
+}
+
+func doPutTarGoRev(ctx context.Context, name, dir, rev string) error {
+	tarURL := "https://go.googlesource.com/go/+archive/" + rev + ".tar.gz"
+	if err := doPutTarURL(ctx, name, dir, tarURL); err != nil {
+		return err
+	}
+
+	// Put a VERSION file there too, to avoid git usage.
+	version := strings.NewReader("devel " + rev)
+	var vtar tarutil.FileList
+	vtar.AddRegular(&tar.Header{
+		Name: "VERSION",
+		Mode: 0644,
+		Size: int64(version.Len()),
+	}, int64(version.Len()), version)
+	tgz := vtar.TarGz()
+	defer tgz.Close()
+
+	client := gomoteServerClient(ctx)
+	resp, err := client.UploadFile(ctx, &protos.UploadFileRequest{})
+	if err != nil {
+		return fmt.Errorf("unable to request credentials for a file upload: %s", statusFromError(err))
+	}
+	if err := uploadToGCS(ctx, resp.GetFields(), tgz, resp.GetObjectName(), resp.GetUrl()); err != nil {
+		return fmt.Errorf("unable to upload version file to GCS: %s", err)
+	}
+	if _, err = client.WriteTGZFromURL(ctx, &protos.WriteTGZFromURLRequest{
+		GomoteId:  name,
+		Directory: dir,
+		Url:       fmt.Sprintf("%s%s", resp.GetUrl(), resp.GetObjectName()),
+	}); err != nil {
+		return fmt.Errorf("unable to write tar to instance: %s", statusFromError(err))
+	}
+	return nil
+}
+
+func doPutTar(ctx context.Context, name, dir string, tgz io.Reader) error {
+	client := gomoteServerClient(ctx)
 	resp, err := client.UploadFile(ctx, &protos.UploadFileRequest{})
 	if err != nil {
 		return fmt.Errorf("unable to request credentials for a file upload: %s", statusFromError(err))
