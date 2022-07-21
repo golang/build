@@ -6,12 +6,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
@@ -136,6 +138,9 @@ func run(args []string) error {
 	var builderEnv string
 	fs.StringVar(&builderEnv, "builderenv", "", "Optional alternate builder to act like. Must share the same underlying buildlet host type, or it's an error. For instance, linux-amd64-race or linux-386-387 are compatible with linux-amd64, but openbsd-amd64 and openbsd-386 are different hosts.")
 
+	var collect bool
+	fs.BoolVar(&collect, "collect", false, "Collect artifacts (stdout, work dir .tar.gz) into $PWD once complete.")
+
 	fs.Parse(args)
 	if fs.NArg() == 0 {
 		fs.Usage()
@@ -172,7 +177,6 @@ func run(args []string) error {
 		cmdArgs = fs.Args()[2:]
 	}
 
-	detailedProgress := len(runSet) == 1
 	var pathOpt []string
 	if path == "EMPTY" {
 		pathOpt = []string{} // non-nil
@@ -183,25 +187,52 @@ func run(args []string) error {
 	// Create temporary directory for output.
 	// This is useful even if we don't have multiple gomotes running, since
 	// it's easy to accidentally lose the output.
-	tmpOutDir, err := os.MkdirTemp("", "gomote")
-	if err != nil {
-		return err
+	var outDir string
+	if collect {
+		outDir, err = os.Getwd()
+		if err != nil {
+			return err
+		}
+	} else {
+		outDir, err = os.MkdirTemp("", "gomote")
+		if err != nil {
+			return err
+		}
 	}
 
+	var cmdsFailedMu sync.Mutex
+	var cmdsFailed []*cmdFailedError
 	eg, ctx := errgroup.WithContext(context.Background())
 	for _, inst := range runSet {
 		inst := inst
-		if !detailedProgress {
+		if len(runSet) > 1 {
+			// There's more than one instance running the command, so let's
+			// be explicit about that.
 			fmt.Fprintf(os.Stderr, "# Running command on %q...\n", inst)
 		}
 		eg.Go(func() error {
-			return doRun(
+			// Create a file to write output to so it doesn't get lost.
+			outf, err := os.Create(filepath.Join(outDir, fmt.Sprintf("%s.stdout", inst)))
+			if err != nil {
+				return err
+			}
+			defer func() {
+				outf.Close()
+				fmt.Fprintf(os.Stderr, "# Wrote results from %q to %q.\n", inst, outf.Name())
+			}()
+			fmt.Fprintf(os.Stderr, "# Streaming results from %q to %q...\n", inst, outf.Name())
+
+			outputs := []io.Writer{outf}
+			// If this is the only command running, print to stdout too, for convenience and
+			// backwards compatibility.
+			if len(runSet) == 1 {
+				outputs = append(outputs, os.Stdout)
+			}
+			err = doRun(
 				ctx,
 				inst,
-				tmpOutDir,
 				cmd,
 				cmdArgs,
-				detailedProgress,
 				runDir(dir),
 				runBuilderEnv(builderEnv),
 				runEnv(env),
@@ -209,45 +240,75 @@ func run(args []string) error {
 				runSystem(sys),
 				runDebug(debug),
 				runFirewall(firewall),
+				runWriters(outputs...),
 			)
+			// If it's just that the command failed, don't exit just yet, and don't return
+			// an error to the errgroup because we want the other commands to keep going.
+			if err != nil {
+				ce, ok := err.(*cmdFailedError)
+				if !ok {
+					return err
+				}
+				cmdsFailedMu.Lock()
+				cmdsFailed = append(cmdsFailed, ce)
+				cmdsFailedMu.Unlock()
+				// Write out the error.
+				_, err := io.MultiWriter(outputs...).Write([]byte(err.Error() + "\n"))
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to write error to output: %v", err)
+				}
+			}
+			if collect {
+				f, err := os.Create(fmt.Sprintf("%s.tar.gz", inst))
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "failed to create file to write instance tarball: %v", err)
+					return nil
+				}
+				defer f.Close()
+				fmt.Fprintf(os.Stderr, "# Downloading work dir tarball for %q to %q...\n", inst, f.Name())
+				if err := doGetTar(inst, ".", f); err != nil {
+					fmt.Fprintf(os.Stderr, "failed to retrieve instance tarball: %v", err)
+					return nil
+				}
+			}
+			return nil
 		})
 	}
-	return eg.Wait()
-}
-
-func doRun(ctx context.Context, inst, tmpOutDir, cmd string, cmdArgs []string, detailedProgress bool, opts ...runOpt) error {
-	req := &protos.ExecuteCommandRequest{
-		AppendEnvironment: []string{},
-		Args:              cmdArgs,
-		Command:           cmd,
-		Path:              []string{},
-		GomoteId:          inst,
-	}
-	for _, opt := range opts {
-		opt(req)
-	}
-	if !req.SystemLevel {
-		req.SystemLevel = strings.HasPrefix(cmd, "/")
-	}
-
-	outf, err := os.Create(filepath.Join(tmpOutDir, fmt.Sprintf("%s.stdout", inst)))
-	if err != nil {
+	if err := eg.Wait(); err != nil {
 		return err
 	}
-	defer func() {
-		outf.Close()
-		fmt.Fprintf(os.Stderr, "# Wrote results from %q to %q.\n", inst, outf.Name())
-	}()
-	fmt.Fprintf(os.Stderr, "# Streaming results from %q to %q...\n", inst, outf.Name())
-	var outWriter io.Writer
-	if detailedProgress {
-		outWriter = io.MultiWriter(os.Stdout, outf)
-	} else {
-		outWriter = outf
+	// Handle failed commands separately so that we can let all the instances finish
+	// running. We still want to handle them, though, because we want to make sure
+	// we exit with a non-zero exit code to reflect the command failure.
+	for _, ce := range cmdsFailed {
+		fmt.Fprintf(os.Stderr, "# Command %q failed on %q: %v\n", ce.cmd, ce.inst, err)
+	}
+	if len(cmdsFailed) > 0 {
+		return errors.New("one or more commands failed")
+	}
+	return nil
+}
+
+func doRun(ctx context.Context, inst, cmd string, cmdArgs []string, opts ...runOpt) error {
+	cfg := &runCfg{
+		req: protos.ExecuteCommandRequest{
+			AppendEnvironment: []string{},
+			Args:              cmdArgs,
+			Command:           cmd,
+			Path:              []string{},
+			GomoteId:          inst,
+		},
+	}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+	if !cfg.req.SystemLevel {
+		cfg.req.SystemLevel = strings.HasPrefix(cmd, "/")
 	}
 
+	outWriter := io.MultiWriter(cfg.outputs...)
 	client := gomoteServerClient(ctx)
-	stream, err := client.ExecuteCommand(ctx, req)
+	stream, err := client.ExecuteCommand(ctx, &cfg.req)
 	if err != nil {
 		return fmt.Errorf("unable to execute %s: %s", cmd, statusFromError(err))
 	}
@@ -259,7 +320,7 @@ func doRun(ctx context.Context, inst, tmpOutDir, cmd string, cmdArgs []string, d
 		if err != nil {
 			// execution error
 			if status.Code(err) == codes.Aborted {
-				return fmt.Errorf("Error trying to execute %s: %v", cmd, statusFromError(err))
+				return &cmdFailedError{inst: inst, cmd: cmd, err: err}
 			}
 			// remote error
 			return fmt.Errorf("unable to execute %s: %s", cmd, statusFromError(err))
@@ -268,46 +329,66 @@ func doRun(ctx context.Context, inst, tmpOutDir, cmd string, cmdArgs []string, d
 	}
 }
 
-type runOpt func(*protos.ExecuteCommandRequest)
+type cmdFailedError struct {
+	inst, cmd string
+	err       error
+}
+
+func (e *cmdFailedError) Error() string {
+	return fmt.Sprintf("Error trying to execute %s: %v", e.cmd, statusFromError(e.err))
+}
+
+type runCfg struct {
+	outputs []io.Writer
+	req     protos.ExecuteCommandRequest
+}
+
+type runOpt func(*runCfg)
 
 func runBuilderEnv(builderEnv string) runOpt {
-	return func(r *protos.ExecuteCommandRequest) {
-		r.ImitateHostType = builderEnv
+	return func(r *runCfg) {
+		r.req.ImitateHostType = builderEnv
 	}
 }
 
 func runDir(dir string) runOpt {
-	return func(r *protos.ExecuteCommandRequest) {
-		r.Directory = dir
+	return func(r *runCfg) {
+		r.req.Directory = dir
 	}
 }
 
 func runEnv(env []string) runOpt {
-	return func(r *protos.ExecuteCommandRequest) {
-		r.AppendEnvironment = append(r.AppendEnvironment, env...)
+	return func(r *runCfg) {
+		r.req.AppendEnvironment = append(r.req.AppendEnvironment, env...)
 	}
 }
 
 func runPath(path []string) runOpt {
-	return func(r *protos.ExecuteCommandRequest) {
-		r.Path = append(r.Path, path...)
+	return func(r *runCfg) {
+		r.req.Path = append(r.req.Path, path...)
 	}
 }
 
 func runDebug(debug bool) runOpt {
-	return func(r *protos.ExecuteCommandRequest) {
-		r.Debug = debug
+	return func(r *runCfg) {
+		r.req.Debug = debug
 	}
 }
 
 func runSystem(sys bool) runOpt {
-	return func(r *protos.ExecuteCommandRequest) {
-		r.SystemLevel = sys
+	return func(r *runCfg) {
+		r.req.SystemLevel = sys
 	}
 }
 
 func runFirewall(firewall bool) runOpt {
-	return func(r *protos.ExecuteCommandRequest) {
-		r.AppendEnvironment = append(r.AppendEnvironment, "GO_DISABLE_OUTBOUND_NETWORK="+fmt.Sprint(firewall))
+	return func(r *runCfg) {
+		r.req.AppendEnvironment = append(r.req.AppendEnvironment, "GO_DISABLE_OUTBOUND_NETWORK="+fmt.Sprint(firewall))
+	}
+}
+
+func runWriters(writers ...io.Writer) runOpt {
+	return func(r *runCfg) {
+		r.outputs = writers
 	}
 }

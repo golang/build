@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -173,17 +174,9 @@ func create(args []string) error {
 	}
 	builderType := fs.Arg(0)
 
-	var tmpOutDir string
-	var err error
-	if setup {
-		tmpOutDir, err = os.MkdirTemp("", "gomote")
-		if err != nil {
-			return fmt.Errorf("failed to create a temporary directory for setup output: %v", err)
-		}
-	}
-
 	var groupMu sync.Mutex
 	group := activeGroup
+	var err error
 	if newGroup != "" {
 		group, err = doCreateGroup(newGroup)
 		if err != nil {
@@ -191,6 +184,8 @@ func create(args []string) error {
 		}
 	}
 
+	var tmpOutDir string
+	var tmpOutDirOnce sync.Once
 	eg, ctx := errgroup.WithContext(context.Background())
 	client := gomoteServerClient(ctx)
 	for i := 0; i < count; i++ {
@@ -225,6 +220,17 @@ func create(args []string) error {
 			if !setup {
 				return nil
 			}
+
+			// -setup is set, so push GOROOT and run make.bash.
+
+			tmpOutDirOnce.Do(func() {
+				tmpOutDir, err = os.MkdirTemp("", "gomote")
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create a temporary directory for setup output: %v", err)
+			}
+
+			// Push GOROOT.
 			detailedProgress := count == 1
 			goroot, err := getGOROOT()
 			if err != nil {
@@ -236,14 +242,33 @@ func create(args []string) error {
 			if err := doPush(ctx, inst, goroot, false, detailedProgress); err != nil {
 				return err
 			}
+
+			// Run make.bash or make.bat.
 			cmd := "go/src/make.bash"
 			if strings.Contains(builderType, "windows") {
 				cmd = "go/src/make.bat"
 			}
-			if !detailedProgress {
+
+			// Create a file to write output to so it doesn't get lost.
+			outf, err := os.Create(filepath.Join(tmpOutDir, fmt.Sprintf("%s.stdout", inst)))
+			if err != nil {
+				return err
+			}
+			defer func() {
+				outf.Close()
+				fmt.Fprintf(os.Stderr, "# Wrote results from %q to %q.\n", inst, outf.Name())
+			}()
+			fmt.Fprintf(os.Stderr, "# Streaming results from %q to %q...\n", inst, outf.Name())
+
+			// If this is the only command running, print to stdout too, for convenience and
+			// backwards compatibility.
+			outputs := []io.Writer{outf}
+			if detailedProgress {
+				outputs = append(outputs, os.Stdout)
+			} else {
 				fmt.Fprintf(os.Stderr, "# Running %q on %q...\n", cmd, inst)
 			}
-			return doRun(ctx, inst, tmpOutDir, cmd, []string{}, count == 1)
+			return doRun(ctx, inst, cmd, []string{}, runWriters(outputs...))
 		})
 	}
 	if err := eg.Wait(); err != nil {

@@ -71,6 +71,10 @@ func getTar(args []string) error {
 	}
 
 	name := fs.Arg(0)
+	return doGetTar(name, dir, os.Stdout)
+}
+
+func doGetTar(name, dir string, out io.Writer) error {
 	ctx := context.Background()
 	client := gomoteServerClient(ctx)
 	resp, err := client.ReadTGZToURL(ctx, &protos.ReadTGZToURLRequest{
@@ -95,7 +99,7 @@ func getTar(args []string) error {
 		return fmt.Errorf("unable to download tgz: %s", err)
 	}
 	defer r.Body.Close()
-	_, err = io.Copy(os.Stdout, r.Body)
+	_, err = io.Copy(out, r.Body)
 	if err != nil {
 		return fmt.Errorf("unable to copy tgz to stdout: %s", err)
 	}
