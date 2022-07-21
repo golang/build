@@ -144,6 +144,12 @@ func create(args []string) error {
 
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "create usage: gomote create [create-opts] <type>")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "If there's a valid group specified, new instances are")
+		fmt.Fprintln(os.Stderr, "automatically added to the group. If the group in")
+		fmt.Fprintln(os.Stderr, "$GOMOTE_GROUP doesn't exist, and there's no other group")
+		fmt.Fprintln(os.Stderr, "specified, it will be created and new instances will be")
+		fmt.Fprintln(os.Stderr, "added to that group.")
 		fs.PrintDefaults()
 		fmt.Fprintln(os.Stderr, "\nValid types:")
 		for _, bt := range builders() {
@@ -179,6 +185,12 @@ func create(args []string) error {
 	var err error
 	if newGroup != "" {
 		group, err = doCreateGroup(newGroup)
+		if err != nil {
+			return err
+		}
+	}
+	if group == nil && os.Getenv("GOMOTE_GROUP") != "" {
+		group, err = doCreateGroup(os.Getenv("GOMOTE_GROUP"))
 		if err != nil {
 			return err
 		}

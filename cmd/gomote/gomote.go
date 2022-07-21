@@ -228,6 +228,7 @@ func main() {
 			if err == nil {
 				fmt.Fprintf(os.Stderr, "# Using group %q from GOMOTE_GROUP\n", *groupName)
 			}
+			// Note that an invalid group in GOMOTE_GROUP is OK.
 		}
 	}
 
