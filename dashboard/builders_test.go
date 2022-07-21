@@ -125,7 +125,7 @@ func TestTrybots(t *testing.T) {
 		},
 		{
 			repo:   "go",
-			branch: "release-branch.go1.17",
+			branch: "release-branch.go1.18",
 			want: []string{
 				"freebsd-amd64-12_3",
 				"js-wasm",
@@ -163,7 +163,7 @@ func TestTrybots(t *testing.T) {
 		},
 		{
 			repo:   "go",
-			branch: "release-branch.go1.16",
+			branch: "release-branch.go1.17",
 			want: []string{
 				"freebsd-amd64-12_3",
 				"js-wasm",
@@ -173,6 +173,7 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-race",
 				"linux-arm-aws",
 				"linux-arm64-aws",
+				"openbsd-amd64-70",
 				"windows-386-2008",
 				"windows-386-2012",
 				"windows-amd64-2016",
