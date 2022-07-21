@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/net/context"
 )
 
 // VersionTasks contains tasks related to versioning the release.
@@ -15,27 +16,40 @@ type VersionTasks struct {
 	GoProject string
 }
 
-// GetNextVersion returns the next for the given type of release.
-func (t *VersionTasks) GetNextVersion(ctx *workflow.TaskContext, kind ReleaseKind) (string, error) {
-	tags, err := t.Gerrit.ListTags(ctx, t.GoProject)
+func (t *VersionTasks) GetCurrentMajor(ctx context.Context) (int, error) {
+	_, currentMajor, err := t.tagInfo(ctx)
+	return currentMajor, err
+}
+
+func (t *VersionTasks) tagInfo(ctx context.Context) (tags map[string]bool, currentMajor int, _ error) {
+	tagList, err := t.Gerrit.ListTags(ctx, t.GoProject)
 	if err != nil {
-		return "", err
+		return nil, 0, err
 	}
-	tagSet := map[string]bool{}
-	for _, tag := range tags {
-		tagSet[tag] = true
+	tags = map[string]bool{}
+	for _, tag := range tagList {
+		tags[tag] = true
 	}
 	// Find the most recently released major version.
 	// Going down from a high number is convenient for testing.
-	currentMajor := 100
+	currentMajor = 100
 	for ; ; currentMajor-- {
-		if tagSet[fmt.Sprintf("go1.%d", currentMajor)] {
+		if tags[fmt.Sprintf("go1.%d", currentMajor)] {
 			break
 		}
 	}
+	return tags, currentMajor, nil
+}
+
+// GetNextVersion returns the next for the given type of release.
+func (t *VersionTasks) GetNextVersion(ctx context.Context, kind ReleaseKind) (string, error) {
+	tags, currentMajor, err := t.tagInfo(ctx)
+	if err != nil {
+		return "", err
+	}
 	findUnused := func(v string) (string, error) {
 		for {
-			if !tagSet[v] {
+			if !tags[v] {
 				return v, nil
 			}
 			v, err = nextVersion(v)

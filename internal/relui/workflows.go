@@ -555,8 +555,23 @@ func ApproveActionDep(p *pgxpool.Pool) func(*workflow.TaskContext, interface{}) 
 const mergeCommTasksIntoReleaseWorkflows = false
 
 // RegisterReleaseWorkflows registers workflows for issuing Go releases.
-func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks) error {
-	createSingle := func(name, major string, kind task.ReleaseKind) error {
+func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks) error {
+	currentMajor, err := version.GetCurrentMajor(ctx)
+	if err != nil {
+		return err
+	}
+	releases := []struct {
+		kind   task.ReleaseKind
+		major  int
+		suffix string
+	}{
+		{task.KindMajor, currentMajor + 1, "final"},
+		{task.KindRC, currentMajor + 1, "next RC"},
+		{task.KindBeta, currentMajor + 1, "next beta"},
+		{task.KindCurrentMinor, currentMajor, "next minor"},
+		{task.KindPrevMinor, currentMajor - 1, "next minor"},
+	}
+	for _, r := range releases {
 		wd := workflow.New()
 
 		var names workflow.Value
@@ -564,7 +579,7 @@ func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, mil
 			names = wd.Parameter(releaseCoordinatorNames)
 		}
 
-		versionPublished, err := addSingleReleaseWorkflow(build, milestone, version, wd, major, kind)
+		versionPublished, err := addSingleReleaseWorkflow(build, milestone, version, wd, r.major, r.kind)
 		if err != nil {
 			return err
 		}
@@ -574,7 +589,7 @@ func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, mil
 
 			// Announce that a new Go release has been published.
 			sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v string, names []string) (task.SentMail, error) {
-				switch kind {
+				switch r.kind {
 				case task.KindMajor:
 					return comm.AnnounceMajorRelease(ctx, task.ReleaseAnnouncement{Version: v, Names: names})
 				case task.KindRC:
@@ -582,12 +597,12 @@ func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, mil
 				case task.KindBeta:
 					return comm.AnnounceBetaRelease(ctx, task.ReleaseAnnouncement{Version: v, Names: names})
 				default:
-					return task.SentMail{}, fmt.Errorf("unknown release kind %v", kind)
+					return task.SentMail{}, fmt.Errorf("unknown release kind %v", r.kind)
 				}
 			}, versionPublished, names, okayToAnnounceAndTweet)
 			announcementURL := wd.Task("await-announcement", comm.AwaitAnnounceMail, sentMail)
 			tweetURL := wd.Task("post-tweet", func(ctx *workflow.TaskContext, v, ann string) (string, error) {
-				switch kind {
+				switch r.kind {
 				case task.KindMajor:
 					return comm.TweetMajorRelease(ctx, task.ReleaseTweet{Version: v})
 				case task.KindRC:
@@ -595,7 +610,7 @@ func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, mil
 				case task.KindBeta:
 					return comm.TweetBetaRelease(ctx, task.ReleaseTweet{Version: v, Announcement: ann})
 				default:
-					return "", fmt.Errorf("unknown release kind %v", kind)
+					return "", fmt.Errorf("unknown release kind %v", r.kind)
 				}
 			}, versionPublished, announcementURL, okayToAnnounceAndTweet)
 
@@ -603,35 +618,27 @@ func RegisterReleaseWorkflows(h *DefinitionHolder, build *BuildReleaseTasks, mil
 			wd.Output("Tweet URL", tweetURL)
 		}
 
-		h.RegisterDefinition(name, wd)
-		return nil
+		h.RegisterDefinition(fmt.Sprintf("Go 1.%d %s", r.major, r.suffix), wd)
 	}
-	if err := createSingle("Go 1.19 final", "go1.19", task.KindMajor); err != nil {
-		return err
-	}
-	if err := createSingle("Go 1.19 next RC", "go1.19", task.KindRC); err != nil {
-		return err
-	}
-	if err := createSingle("Go 1.19 next beta", "go1.19", task.KindBeta); err != nil {
-		return err
-	}
-	wd, err := createMinorReleaseWorkflow(build, milestone, version, comm, "go1.17", "go1.18")
+
+	wd, err := createMinorReleaseWorkflow(build, milestone, version, comm, currentMajor-1, currentMajor)
 	if err != nil {
 		return err
 	}
-	h.RegisterDefinition("Minor releases for Go 1.17 and 1.18", wd)
+	h.RegisterDefinition(fmt.Sprintf("Minor releases for Go 1.%d and 1.%d", currentMajor-1, currentMajor), wd)
+
 	wd = workflow.New()
-	if err := addBuildAndTestOnlyWorkflow(wd, version, build, "go1.19", task.KindBeta); err != nil {
+	if err := addBuildAndTestOnlyWorkflow(wd, version, build, currentMajor+1, task.KindBeta); err != nil {
 		return err
 	}
-	h.RegisterDefinition("dry-run (test and build only): Go 1.19 next beta", wd)
+	h.RegisterDefinition(fmt.Sprintf("dry-run (test and build only): Go 1.%d next beta", currentMajor+1), wd)
 
 	return nil
 }
 
-func addBuildAndTestOnlyWorkflow(wd *workflow.Definition, version *task.VersionTasks, build *BuildReleaseTasks, major string, kind task.ReleaseKind) error {
+func addBuildAndTestOnlyWorkflow(wd *workflow.Definition, version *task.VersionTasks, build *BuildReleaseTasks, major int, kind task.ReleaseKind) error {
 	nextVersion := wd.Task("Get next version", version.GetNextVersion, wd.Constant(kind))
-	branch := fmt.Sprintf("release-branch.%v", major)
+	branch := fmt.Sprintf("release-branch.go1.%d", major)
 	if kind == task.KindBeta {
 		branch = "master"
 	}
@@ -645,7 +652,7 @@ func addBuildAndTestOnlyWorkflow(wd *workflow.Definition, version *task.VersionT
 	return nil
 }
 
-func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, prev, current string) (*workflow.Definition, error) {
+func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, prevMajor, currentMajor int) (*workflow.Definition, error) {
 	wd := workflow.New()
 
 	var securitySummary, securityFixes, names workflow.Value
@@ -655,11 +662,11 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 		names = wd.Parameter(releaseCoordinatorNames)
 	}
 
-	v1Published, err := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(current), current, task.KindCurrentMinor)
+	v1Published, err := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindCurrentMinor)
 	if err != nil {
 		return nil, err
 	}
-	v2Published, err := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(prev), prev, task.KindPrevMinor)
+	v2Published, err := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindPrevMinor)
 	if err != nil {
 		return nil, err
 	}
@@ -685,10 +692,10 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 
 func addSingleReleaseWorkflow(
 	build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks,
-	wd *workflow.Definition, major string, kind task.ReleaseKind,
+	wd *workflow.Definition, major int, kind task.ReleaseKind,
 ) (versionPublished workflow.Value, _ error) {
 	kindVal := wd.Constant(kind)
-	branch := fmt.Sprintf("release-branch.%v", major)
+	branch := fmt.Sprintf("release-branch.go1.%d", major)
 	if kind == task.KindBeta {
 		branch = "master"
 	}
@@ -710,7 +717,7 @@ func addSingleReleaseWorkflow(
 	source := wd.Task("Build source archive", build.buildSource, startingHead, securityRef, nextVersion, checked)
 
 	// Build, test, and sign release.
-	signedAndTestedArtifacts, err := build.addBuildTasks(wd, "go1.19", nextVersion, source, false)
+	signedAndTestedArtifacts, err := build.addBuildTasks(wd, major, nextVersion, source, false)
 	if err != nil {
 		return nil, err
 	}
@@ -740,12 +747,8 @@ func addSingleReleaseWorkflow(
 
 // addBuildTasks registers tasks to build, test, and sign the release onto wd.
 // It returns the output from the last task, a slice of signed and tested artifacts.
-func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, majorVersion string, version, source workflow.Value, skipSigning bool) (workflow.Value, error) {
-	targets, ok := releasetargets.TargetsForVersion(majorVersion)
-	if !ok {
-		return nil, fmt.Errorf("malformed/unknown version %q", majorVersion)
-	}
-
+func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, major int, version, source workflow.Value, skipSigning bool) (workflow.Value, error) {
+	targets := releasetargets.TargetsForGo1Point(major)
 	skipTests := wd.Parameter(workflow.Parameter{Name: "Targets to skip testing (or 'all') (optional)", ParameterType: workflow.SliceShort})
 	// Artifact file paths.
 	artifacts := []workflow.Value{source}

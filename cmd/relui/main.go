@@ -161,7 +161,9 @@ func main() {
 		RepoOwner: "golang",
 		RepoName:  "go",
 	}
-	relui.RegisterReleaseWorkflows(dh, buildTasks, milestoneTasks, versionTasks, commTasks)
+	if err := relui.RegisterReleaseWorkflows(ctx, dh, buildTasks, milestoneTasks, versionTasks, commTasks); err != nil {
+		log.Fatalf("RegisterReleaseWorkflows: %v", err)
+	}
 
 	w := relui.NewWorker(dh, db, relui.NewPGListener(db))
 	go w.Run(ctx)
