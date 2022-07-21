@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"golang.org/x/build/internal/gomote/protos"
+	"golang.org/x/sync/errgroup"
 )
 
 // legacyGetTar a .tar.gz
@@ -52,13 +53,15 @@ func legacyGetTar(args []string) error {
 
 // getTar a .tar.gz
 func getTar(args []string) error {
-	if activeGroup != nil {
-		return fmt.Errorf("command does not yet support groups")
-	}
-
 	fs := flag.NewFlagSet("get", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "gettar usage: gomote gettar [get-opts] <buildlet-name>")
+		fmt.Fprintln(os.Stderr, "gettar usage: gomote gettar [get-opts] [buildlet-name]")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Writes tarball into the current working directory.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Buildlet name is optional if a group is selected, in which case")
+		fmt.Fprintln(os.Stderr, "tarballs from all buildlets in the group are downloaded into the")
+		fmt.Fprintln(os.Stderr, "current working directory.")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
@@ -66,16 +69,36 @@ func getTar(args []string) error {
 	fs.StringVar(&dir, "dir", "", "relative directory from buildlet's work dir to tar up")
 
 	fs.Parse(args)
-	if fs.NArg() != 1 {
+
+	var getSet []string
+	if fs.NArg() == 1 {
+		getSet = []string{fs.Arg(0)}
+	} else if fs.NArg() == 0 && activeGroup != nil {
+		for _, inst := range activeGroup.Instances {
+			getSet = append(getSet, inst)
+		}
+	} else {
 		fs.Usage()
 	}
 
-	name := fs.Arg(0)
-	return doGetTar(name, dir, os.Stdout)
+	eg, ctx := errgroup.WithContext(context.Background())
+	for _, inst := range getSet {
+		inst := inst
+		eg.Go(func() error {
+			f, err := os.Create(fmt.Sprintf("%s.tar.gz", inst))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to create file to write instance tarball: %v", err)
+				return nil
+			}
+			defer f.Close()
+			fmt.Fprintf(os.Stderr, "# Downloading tarball for %q to %q...\n", inst, f.Name())
+			return doGetTar(ctx, inst, dir, f)
+		})
+	}
+	return eg.Wait()
 }
 
-func doGetTar(name, dir string, out io.Writer) error {
-	ctx := context.Background()
+func doGetTar(ctx context.Context, name, dir string, out io.Writer) error {
 	client := gomoteServerClient(ctx)
 	resp, err := client.ReadTGZToURL(ctx, &protos.ReadTGZToURLRequest{
 		GomoteId:  name,

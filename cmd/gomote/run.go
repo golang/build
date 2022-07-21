@@ -266,7 +266,7 @@ func run(args []string) error {
 				}
 				defer f.Close()
 				fmt.Fprintf(os.Stderr, "# Downloading work dir tarball for %q to %q...\n", inst, f.Name())
-				if err := doGetTar(inst, ".", f); err != nil {
+				if err := doGetTar(ctx, inst, ".", f); err != nil {
 					fmt.Fprintf(os.Stderr, "failed to retrieve instance tarball: %v", err)
 					return nil
 				}
