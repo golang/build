@@ -308,33 +308,51 @@ func put14(args []string) error {
 
 // putBootstrap places the bootstrap version of go in the workdir
 func putBootstrap(args []string) error {
-	if activeGroup != nil {
-		return fmt.Errorf("command does not yet support groups")
-	}
-
 	fs := flag.NewFlagSet("putbootstrap", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "putbootstrap usage: gomote putbootstrap <buildlet-name>")
+		fmt.Fprintln(os.Stderr, "putbootstrap usage: gomote putbootstrap [instance]")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "Instance name is optional if a group is specified.")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
 	fs.Parse(args)
-	if fs.NArg() != 1 {
+
+	var putSet []string
+	switch fs.NArg() {
+	case 0:
+		if activeGroup == nil {
+			fmt.Fprintln(os.Stderr, "no active group found; need an active group with only 1 argument")
+			fs.Usage()
+		}
+		for _, inst := range activeGroup.Instances {
+			putSet = append(putSet, inst)
+		}
+	case 1:
+		putSet = []string{fs.Arg(0)}
+	default:
+		fmt.Fprintln(os.Stderr, "too many arguments")
 		fs.Usage()
 	}
-	name := fs.Arg(0)
-	ctx := context.Background()
-	client := gomoteServerClient(ctx)
-	resp, err := client.AddBootstrap(ctx, &protos.AddBootstrapRequest{
-		GomoteId: name,
-	})
-	if err != nil {
-		return fmt.Errorf("unable to add bootstrap version of Go to instance: %s", statusFromError(err))
+
+	eg, ctx := errgroup.WithContext(context.Background())
+	for _, inst := range putSet {
+		inst := inst
+		eg.Go(func() error {
+			client := gomoteServerClient(ctx)
+			resp, err := client.AddBootstrap(ctx, &protos.AddBootstrapRequest{
+				GomoteId: inst,
+			})
+			if err != nil {
+				return fmt.Errorf("unable to add bootstrap version of Go to instance: %s", statusFromError(err))
+			}
+			if resp.GetBootstrapGoUrl() == "" {
+				fmt.Printf("No GoBootstrapURL defined for %q; ignoring. (may be baked into image)\n", inst)
+			}
+			return nil
+		})
 	}
-	if resp.GetBootstrapGoUrl() == "" {
-		fmt.Printf("No GoBootstrapURL defined for %q; ignoring. (may be baked into image)\n", name)
-	}
-	return nil
+	return eg.Wait()
 }
 
 // legacyPut single file
