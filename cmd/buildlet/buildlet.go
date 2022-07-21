@@ -2011,7 +2011,9 @@ func disableOutboundNetwork() {
 
 func disableOutboundNetworkLinux() {
 	const iptables = "/sbin/iptables"
-	const vcsTestGolangOrgIP = "35.184.38.56" // vcs-test.golang.org
+	const vcsTestGolangOrgIPOnVM = "35.184.38.56" // vcs-test.golang.org, on previous VM
+	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "1", "-m", "state", "--state", "NEW", "-d", vcsTestGolangOrgIPOnVM, "-p", "tcp", "-j", "ACCEPT"))
+	const vcsTestGolangOrgIP = "34.110.184.62" // vcs-test.golang.org, on GKE
 	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "1", "-m", "state", "--state", "NEW", "-d", vcsTestGolangOrgIP, "-p", "tcp", "-j", "ACCEPT"))
 	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "2", "-m", "state", "--state", "NEW", "-d", "10.0.0.0/8", "-p", "tcp", "-j", "ACCEPT"))
 	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "3", "-m", "state", "--state", "NEW", "-p", "tcp", "--dport", "443", "-j", "REJECT", "--reject-with", "icmp-host-prohibited"))
