@@ -56,13 +56,11 @@ func legacyLs(args []string) error {
 }
 
 func ls(args []string) error {
-	if activeGroup != nil {
-		return fmt.Errorf("command does not yet support groups")
-	}
-
 	fs := flag.NewFlagSet("ls", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "ls usage: gomote ls <instance> [-R] [dir]")
+		fmt.Fprintln(os.Stderr, "ls usage: gomote ls [ls-opts] [instance] [dir]")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Instance name is optional if a group is specified.")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
@@ -74,27 +72,63 @@ func ls(args []string) error {
 	fs.StringVar(&skip, "skip", "", "comma-separated list of relative directories to skip (use forward slashes)")
 	fs.Parse(args)
 
-	dir := "."
-	if n := fs.NArg(); n < 1 || n > 2 {
-		fs.Usage()
-	} else if n == 2 {
-		dir = fs.Arg(1)
-	}
-	name := fs.Arg(0)
 	ctx := context.Background()
-	client := gomoteServerClient(ctx)
-	resp, err := client.ListDirectory(ctx, &protos.ListDirectoryRequest{
-		GomoteId:  name,
-		Directory: dir,
-		Recursive: recursive,
-		SkipFiles: strings.Split(skip, ","),
-		Digest:    digest,
-	})
-	if err != nil {
-		return fmt.Errorf("unable to ls: %s", statusFromError(err))
+	dir := "."
+	var lsSet []string
+	switch fs.NArg() {
+	case 0:
+		// With no arguments, we need an active group to do anything useful.
+		if activeGroup == nil {
+			fmt.Fprintln(os.Stderr, "error: no group specified")
+			fs.Usage()
+		}
+		for _, inst := range activeGroup.Instances {
+			lsSet = append(lsSet, inst)
+		}
+	case 1:
+		// Ambiguous case. Check if it's a real instance, if not, treat it
+		// as a directory.
+		if err := doPing(ctx, fs.Arg(0)); instanceDoesNotExist(err) {
+			// Not an instance.
+			for _, inst := range activeGroup.Instances {
+				lsSet = append(lsSet, inst)
+			}
+			dir = fs.Arg(0)
+		} else if err == nil {
+			// It's an instance.
+			lsSet = []string{fs.Arg(0)}
+		} else {
+			return fmt.Errorf("failed to ping %q: %v", fs.Arg(0), err)
+		}
+	case 2:
+		// Instance and directory is specified.
+		lsSet = []string{fs.Arg(0)}
+		dir = fs.Arg(1)
+	default:
+		fmt.Fprintln(os.Stderr, "error: too many arguments")
+		fs.Usage()
 	}
-	for _, entry := range resp.GetEntries() {
-		fmt.Fprintf(os.Stdout, "%s\n", entry)
+	for _, inst := range lsSet {
+		client := gomoteServerClient(ctx)
+		resp, err := client.ListDirectory(ctx, &protos.ListDirectoryRequest{
+			GomoteId:  inst,
+			Directory: dir,
+			Recursive: recursive,
+			SkipFiles: strings.Split(skip, ","),
+			Digest:    digest,
+		})
+		if err != nil {
+			return fmt.Errorf("unable to ls: %s", statusFromError(err))
+		}
+		if len(lsSet) > 1 {
+			fmt.Fprintf(os.Stdout, "# %s\n", inst)
+		}
+		for _, entry := range resp.GetEntries() {
+			fmt.Fprintf(os.Stdout, "%s\n", entry)
+		}
+		if len(lsSet) > 1 {
+			fmt.Fprintln(os.Stdout)
+		}
 	}
 	return nil
 }
