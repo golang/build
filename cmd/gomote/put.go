@@ -331,7 +331,7 @@ func putBootstrap(args []string) error {
 	case 1:
 		putSet = []string{fs.Arg(0)}
 	default:
-		fmt.Fprintln(os.Stderr, "too many arguments")
+		fmt.Fprintln(os.Stderr, "error: too many arguments")
 		fs.Usage()
 	}
 
@@ -423,42 +423,65 @@ func legacyPut(args []string) error {
 
 // put single file
 func put(args []string) error {
-	if activeGroup != nil {
-		return fmt.Errorf("command does not yet support groups")
-	}
-
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "put usage: gomote put [put-opts] <buildlet-name> <source or '-' for stdin> [destination]")
+		fmt.Fprintln(os.Stderr, "put usage: gomote put [put-opts] [instance] <source or '-' for stdin> [destination]")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "Instance name is optional if a group is specified.")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
 	modeStr := fs.String("mode", "", "Unix file mode (octal); default to source file mode")
 	fs.Parse(args)
-	if n := fs.NArg(); n < 2 || n > 3 {
+
+	if fs.NArg() == 0 {
 		fs.Usage()
 	}
 
-	var r io.Reader = os.Stdin
-	var mode os.FileMode = 0666
-
-	src := fs.Arg(1)
-	if src != "-" {
-		f, err := os.Open(src)
-		if err != nil {
-			return err
+	ctx := context.Background()
+	var putSet []string
+	var src, dst string
+	if err := doPing(ctx, fs.Arg(0)); instanceDoesNotExist(err) {
+		// When there's no active group, this is just an error.
+		if activeGroup == nil {
+			return fmt.Errorf("instance %q: %s", fs.Arg(0), statusFromError(err))
 		}
-		defer f.Close()
-		r = f
-
-		if *modeStr == "" {
-			fi, err := f.Stat()
-			if err != nil {
-				return err
-			}
-			mode = fi.Mode()
+		// When there is an active group, this just means that we're going
+		// to use the group instead and assume the rest is a command.
+		for _, inst := range activeGroup.Instances {
+			putSet = append(putSet, inst)
 		}
+		src = fs.Arg(0)
+		if fs.NArg() == 2 {
+			dst = fs.Arg(1)
+		} else if fs.NArg() != 1 {
+			fmt.Fprintln(os.Stderr, "error: too many arguments")
+			fs.Usage()
+		}
+	} else if err == nil {
+		putSet = append(putSet, fs.Arg(0))
+		if fs.NArg() == 1 {
+			fmt.Fprintln(os.Stderr, "error: missing source")
+			fs.Usage()
+		}
+		src = fs.Arg(1)
+		if fs.NArg() == 3 {
+			dst = fs.Arg(2)
+		} else if fs.NArg() != 2 {
+			fmt.Fprintln(os.Stderr, "error: too many arguments")
+			fs.Usage()
+		}
+	} else {
+		return fmt.Errorf("checking instance %q: %v", fs.Arg(0), err)
 	}
+	if dst == "" {
+		if src == "-" {
+			return errors.New("must specify destination file name when source is standard input")
+		}
+		dst = filepath.Base(src)
+	}
+
+	var mode os.FileMode = 0666
 	if *modeStr != "" {
 		modeInt, err := strconv.ParseInt(*modeStr, 8, 64)
 		if err != nil {
@@ -469,28 +492,61 @@ func put(args []string) error {
 			return fmt.Errorf("bad mode: %v", mode)
 		}
 	}
-	dest := fs.Arg(2)
-	if dest == "" {
-		if src == "-" {
-			return errors.New("must specify destination file name when source is standard input")
+
+	var putFileFn func(context.Context, string) error
+	if src == "-" {
+		var buf bytes.Buffer
+		_, err := io.Copy(&buf, os.Stdin)
+		if err != nil {
+			return fmt.Errorf("reading from stdin: %v", err)
 		}
-		dest = filepath.Base(src)
+		sharedFileBuf := buf.Bytes()
+		putFileFn = func(ctx context.Context, inst string) error {
+			return doPutFile(ctx, inst, bytes.NewReader(sharedFileBuf), dst, mode)
+		}
+	} else {
+		putFileFn = func(ctx context.Context, inst string) error {
+			f, err := os.Open(src)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+
+			if *modeStr == "" {
+				fi, err := f.Stat()
+				if err != nil {
+					return err
+				}
+				mode = fi.Mode()
+			}
+			return doPutFile(ctx, inst, f, dst, mode)
+		}
 	}
-	ctx := context.Background()
+
+	eg, ctx := errgroup.WithContext(ctx)
+	for _, inst := range putSet {
+		inst := inst
+		eg.Go(func() error {
+			return putFileFn(ctx, inst)
+		})
+	}
+	return eg.Wait()
+}
+
+func doPutFile(ctx context.Context, inst string, r io.Reader, dst string, mode os.FileMode) error {
 	client := gomoteServerClient(ctx)
 	resp, err := client.UploadFile(ctx, &protos.UploadFileRequest{})
 	if err != nil {
 		return fmt.Errorf("unable to request credentials for a file upload: %s", statusFromError(err))
 	}
-	err = uploadToGCS(ctx, resp.GetFields(), r, dest, resp.GetUrl())
+	err = uploadToGCS(ctx, resp.GetFields(), r, dst, resp.GetUrl())
 	if err != nil {
 		return fmt.Errorf("unable to upload file to GCS: %s", err)
 	}
-	name := fs.Arg(0)
 	_, err = client.WriteFileFromURL(ctx, &protos.WriteFileFromURLRequest{
-		GomoteId: name,
+		GomoteId: inst,
 		Url:      fmt.Sprintf("%s%s", resp.GetUrl(), resp.GetObjectName()),
-		Filename: dest,
+		Filename: dst,
 		Mode:     uint32(mode),
 	})
 	if err != nil {
