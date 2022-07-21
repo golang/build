@@ -2025,10 +2025,6 @@ func newBuildLogBlob(objName string) (obj io.WriteCloser, url_ string) {
 
 	wr := pool.NewGCEConfiguration().StorageClient().Bucket(bucket).Object(objName).NewWriter(context.Background())
 	wr.ContentType = "text/plain; charset=utf-8"
-	wr.ACL = append(wr.ACL, storage.ACLRule{
-		Entity: storage.AllUsers,
-		Role:   storage.RoleReader,
-	})
 
 	return wr, fmt.Sprintf("https://storage.googleapis.com/%s/%s", bucket, objName)
 }

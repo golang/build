@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/errorreporting"
-	"cloud.google.com/go/storage"
 	"go4.org/syncutil"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
@@ -894,7 +893,6 @@ func (st *buildStatus) writeSnapshot(bc buildlet.Client) (err error) {
 	}
 	wr := sc.Bucket(bucket).Object(st.SnapshotObjectName()).NewWriter(ctx)
 	wr.ContentType = "application/octet-stream"
-	wr.ACL = append(wr.ACL, storage.ACLRule{Entity: storage.AllUsers, Role: storage.RoleReader})
 	if n, err := io.Copy(wr, tgz); err != nil {
 		st.logf("failed to write snapshot to GCS after copying %d bytes: %v", n, err)
 		return err
