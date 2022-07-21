@@ -46,7 +46,7 @@ func legacyPing(args []string) error {
 func ping(args []string) error {
 	fs := flag.NewFlagSet("ping", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "ping usage: gomote v2 ping [--status] <instance>")
+		fmt.Fprintln(os.Stderr, "ping usage: gomote ping [--status] <instance>")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}

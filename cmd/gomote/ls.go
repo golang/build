@@ -54,7 +54,7 @@ func legacyLs(args []string) error {
 func ls(args []string) error {
 	fs := flag.NewFlagSet("ls", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "ls usage: gomote v2 ls <instance> [-R] [dir]")
+		fmt.Fprintln(os.Stderr, "ls usage: gomote ls <instance> [-R] [dir]")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}

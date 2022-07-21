@@ -37,7 +37,6 @@ To list the subcommands, run "gomote" without arguments:
 	  rdp        RDP (Remote Desktop Protocol) to a Windows buildlet
 	  run        run a command on a buildlet
 	  ssh        ssh to a buildlet
-	  v2         version 2 of the gomote API
 
 To list all the builder types available, run "create" with no arguments:
 
@@ -90,6 +89,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
@@ -127,7 +127,7 @@ Global flags:
 	flag.PrintDefaults()
 	fmt.Fprintf(os.Stderr, "Commands:\n\n")
 	for _, name := range sortedCommands() {
-		fmt.Fprintf(os.Stderr, "  %-10s %s\n", name, commands[name].des)
+		fmt.Fprintf(os.Stderr, "  %-13s %s\n", name, commands[name].des)
 	}
 	os.Exit(1)
 }
@@ -143,7 +143,24 @@ func registerCommand(name, des string, run func([]string) error) {
 	}
 }
 
-func registerCommands() {
+func registerCommands(version int) {
+	if version == 2 {
+		registerCommand("create", "create a buildlet; with no args, list types of buildlets", create)
+		registerCommand("destroy", "destroy a buildlet", destroy)
+		registerCommand("gettar", "extract a tar.gz from a buildlet", getTar)
+		registerCommand("ls", "list the contents of a directory on a buildlet", ls)
+		registerCommand("list", "list active buildlets", list)
+		registerCommand("ping", "test whether a buildlet is alive and reachable ", ping)
+		registerCommand("push", "sync your GOROOT directory to the buildlet", push)
+		registerCommand("put", "put files on a buildlet", put)
+		registerCommand("putbootstrap", "put bootstrap toolchain in place", putBootstrap)
+		registerCommand("puttar", "extract a tar.gz to a buildlet", putTar)
+		registerCommand("rdp", "RDP (Remote Desktop Protocol) to a Windows buildlet", rdp)
+		registerCommand("rm", "delete files or directories", rm)
+		registerCommand("run", "run a command on a buildlet", run)
+		registerCommand("ssh", "ssh to a buildlet", ssh)
+		return
+	}
 	registerCommand("create", "create a buildlet; with no args, list types of buildlets", legacyCreate)
 	registerCommand("destroy", "destroy a buildlet", legacyDestroy)
 	registerCommand("gettar", "extract a tar.gz from a buildlet", legacyGetTar)
@@ -158,7 +175,6 @@ func registerCommands() {
 	registerCommand("rm", "delete files or directories", legacyRm)
 	registerCommand("run", "run a command on a buildlet", legacyRun)
 	registerCommand("ssh", "ssh to a buildlet", legacySSH)
-	registerCommand("v2", "version 2 of the gomote commands", version2)
 }
 
 var (
@@ -167,7 +183,17 @@ var (
 
 func main() {
 	buildlet.RegisterFlags()
-	registerCommands()
+	version := 1
+	if vs := os.Getenv("GOMOTE_VERSION"); vs != "" {
+		v, err := strconv.Atoi(vs)
+		if err == nil {
+			version = v
+		}
+	}
+	if version < 1 || version > 2 {
+		fmt.Fprintf(os.Stderr, "unsupported version %d", version)
+	}
+	registerCommands(version)
 	flag.Usage = usage
 	flag.Parse()
 	buildEnv = buildenv.FromFlags()
@@ -195,37 +221,6 @@ func gomoteServerClient(ctx context.Context) protos.GomoteServiceClient {
 		logAndExitf("dialing the server=%s failed with: %s", *serverAddr, err)
 	}
 	return protos.NewGomoteServiceClient(grpcClient)
-}
-
-type subCommand func([]string) error
-
-// version2 manages how version 2 subcommands are called.
-func version2(args []string) error {
-	cm := map[string]subCommand{
-
-		"create":       create,
-		"destroy":      destroy,
-		"list":         list,
-		"ls":           ls,
-		"run":          run,
-		"ping":         ping,
-		"ssh":          ssh,
-		"rm":           rm,
-		"gettar":       getTar,
-		"put":          put,
-		"puttar":       putTar,
-		"putbootstrap": putBootstrap,
-		"push":         push,
-	}
-	if len(args) == 0 {
-		usage()
-	}
-	subCmd := args[0]
-	sc, ok := cm[subCmd]
-	if !ok {
-		return fmt.Errorf("unknown sub-command %q\n", subCmd)
-	}
-	return sc(args[1:])
 }
 
 // logAndExitf is equivalent to Printf to Stderr followed by a call to os.Exit(1).
