@@ -172,7 +172,6 @@ func run(args []string) error {
 			// remote error
 			return fmt.Errorf("unable to execute %s: %s", cmd, statusFromError(err))
 		}
-		fmt.Fprintf(os.Stdout, update.GetOutput())
+		os.Stdout.Write(update.GetOutput())
 	}
-	return nil
 }

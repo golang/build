@@ -312,7 +312,7 @@ func (s *Server) ExecuteCommand(req *protos.ExecuteCommandRequest, stream protos
 		SystemLevel: req.GetSystemLevel(),
 		Output: &streamWriter{writeFunc: func(p []byte) (int, error) {
 			err := stream.Send(&protos.ExecuteCommandResponse{
-				Output: string(p),
+				Output: p,
 			})
 			if err != nil {
 				return 0, fmt.Errorf("unable to send data=%w", err)

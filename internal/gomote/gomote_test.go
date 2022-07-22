@@ -501,7 +501,7 @@ func TestExecuteCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("client.ExecuteCommand(ctx, req) = response, %s; want no error", err)
 	}
-	out := []string{}
+	var out []byte
 	for {
 		res, err := stream.Recv()
 		if err != nil && err == io.EOF {
@@ -510,7 +510,7 @@ func TestExecuteCommand(t *testing.T) {
 		if err != nil {
 			t.Fatalf("stream.Recv() = _, %s; want no error", err)
 		}
-		out = append(out, res.GetOutput())
+		out = append(out, res.GetOutput()...)
 	}
 	if len(out) == 0 {
 		t.Fatalf("output: %q, expected non-empty", out)

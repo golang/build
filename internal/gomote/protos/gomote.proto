@@ -124,7 +124,7 @@ message ExecuteCommandRequest {
 // ExecuteCommandResponse contains data about the executed command.
 message ExecuteCommandResponse {
   // The output from the executed command.
-  string output = 1;
+  bytes output = 1;
 }
 
 // Instance contains descriptive information about a gomote instance.
