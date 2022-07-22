@@ -18,19 +18,19 @@ func TestHostTypeToVersion(t *testing.T) {
 	}{
 		{
 			desc:     "valid original darwin host type",
-			hostType: "host-darwin-10_11",
+			hostType: "host-darwin-10_14",
 			wantVersion: &Version{
 				Major: 10,
-				Minor: 11,
+				Minor: 14,
 				Arch:  "amd64",
 			},
 		},
 		{
 			desc:     "valid original darwin host type",
-			hostType: "host-darwin-10_12",
+			hostType: "host-darwin-10_15",
 			wantVersion: &Version{
 				Major: 10,
-				Minor: 12,
+				Minor: 15,
 				Arch:  "amd64",
 			},
 		},
@@ -49,6 +49,15 @@ func TestHostTypeToVersion(t *testing.T) {
 			wantVersion: &Version{
 				Major: 11,
 				Minor: 1,
+				Arch:  "amd64",
+			},
+		},
+		{
+			desc:     "valid newer darwin host AMD64",
+			hostType: "host-darwin-amd64-13",
+			wantVersion: &Version{
+				Major: 13,
+				Minor: 0,
 				Arch:  "amd64",
 			},
 		},

@@ -642,8 +642,7 @@ func autoAdjust() {
 		}
 	}()
 
-	req, _ := http.NewRequest("GET", "https://farmer.golang.org/status/reverse.json", nil)
-	req = req.WithContext(ctx)
+	req, _ := http.NewRequestWithContext(ctx, "GET", "https://farmer.golang.org/status/reverse.json", nil)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		errors = append(errors, fmt.Sprintf("getting /status/reverse.json from coordinator: %v", err))
@@ -739,7 +738,7 @@ func (v Version) String() string {
 }
 
 // hostTypeToVersion determines the version of macOS from the host type.
-// Sample host types would be: host-darwin-10_12 and host-darwin-arm64-11_0.
+// Sample host types would be: host-darwin-10_15 and host-darwin-arm64-11_0.
 func hostTypeToVersion(hostType string) (*Version, error) {
 	v := &Version{}
 	var err error
@@ -747,32 +746,37 @@ func hostTypeToVersion(hostType string) (*Version, error) {
 		return nil, errors.New("unrecognized version")
 	}
 	htv := strings.TrimPrefix(hostType, "host-darwin-")
-	vs := strings.Split(htv, "-")
-	if len(vs) > 2 {
-		return nil, errors.New("unrecognized version")
-	}
 	var majorMinor string
-	if len(vs) == 2 {
+	switch vs := strings.Split(htv, "-"); len(vs) {
+	case 2:
 		if vs[0] != "amd64" && vs[0] != "arm64" {
 			return nil, errors.New("unrecognized version")
 		}
 		v.Arch = vs[0]
 		majorMinor = vs[1]
-	} else {
+	case 1:
 		v.Arch = "amd64"
 		majorMinor = vs[0]
-	}
-	mms := strings.Split(majorMinor, "_")
-	if len(mms) != 2 {
+	default:
 		return nil, errors.New("unrecognized version")
 	}
-	v.Major, err = strconv.Atoi(mms[0])
-	if err != nil {
-		return nil, err
-	}
-	v.Minor, err = strconv.Atoi(mms[1])
-	if err != nil {
-		return nil, err
+	switch mms := strings.Split(majorMinor, "_"); len(mms) {
+	case 1:
+		v.Major, err = strconv.Atoi(mms[0])
+		if err != nil {
+			return nil, err
+		}
+	case 2:
+		v.Major, err = strconv.Atoi(mms[0])
+		if err != nil {
+			return nil, err
+		}
+		v.Minor, err = strconv.Atoi(mms[1])
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, errors.New("unrecognized version")
 	}
 	return v, nil
 }
@@ -781,10 +785,10 @@ func hostTypeToVersion(hostType string) (*Version, error) {
 // or nil to not make anything. It gets the latest reverse buildlet
 // status from the coordinator.
 func wantedMacVersionNext(st *State, rstat *types.ReverseBuilderStatus) *Version {
-	// TODO: improve this logic now that the coordinator has a
-	// proper scheduler. Instead, don't create anything
-	// proactively until there's demand from it from the
-	// scheduler. (will need to add that to the coordinator's
+	// TODO(go.dev/issue/35698): improve this logic now that
+	// the coordinator has a proper scheduler. Instead, don't
+	// create anything proactively until there's demand from it
+	// from the scheduler. (will need to add that to the coordinator's
 	// status JSON) And maybe add a streaming endpoint to the
 	// coordinator so we don't need to poll every N seconds. Or
 	// just poll every few seconds, perhaps at a lighter endpoint
@@ -893,8 +897,7 @@ var (
 )
 
 func getLatestMacBuildlet(ctx context.Context) (bin []byte, err error) {
-	req, _ := http.NewRequest("HEAD", "https://storage.googleapis.com/go-builder-data/buildlet.darwin-amd64", nil)
-	req = req.WithContext(ctx)
+	req, _ := http.NewRequestWithContext(ctx, "HEAD", "https://storage.googleapis.com/go-builder-data/buildlet.darwin-amd64", nil)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -917,8 +920,7 @@ func getLatestMacBuildlet(ctx context.Context) (bin []byte, err error) {
 	buildletMu.Unlock()
 
 	log.Printf("fetching buildlet from GCS...")
-	req, _ = http.NewRequest("GET", "https://storage.googleapis.com/go-builder-data/buildlet.darwin-amd64", nil)
-	req = req.WithContext(ctx)
+	req, _ = http.NewRequestWithContext(ctx, "GET", "https://storage.googleapis.com/go-builder-data/buildlet.darwin-amd64", nil)
 	res, err = http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err

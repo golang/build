@@ -468,19 +468,9 @@ var Hosts = map[string]*HostConfig{
 		IsReverse:          true,
 		ExpectNum:          5,
 	},
-	"host-darwin-10_12": &HostConfig{
-		IsReverse: true,
-		ExpectNum: 2,
-		Notes:     "MacStadium OS X 10.12 VM under VMWare ESXi",
-		env: []string{
-			"GOROOT_BOOTSTRAP=/Users/gopher/go1.4",
-		},
-		SSHUsername:     "gopher",
-		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
-	},
 	"host-darwin-10_14": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 2,
+		ExpectNum: 3,
 		Notes:     "MacStadium macOS Mojave (10.14) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.12.1
@@ -500,7 +490,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-amd64-11_0": &HostConfig{
 		IsReverse: true,
-		ExpectNum: 4,
+		ExpectNum: 5,
 		Notes:     "MacStadium macOS Big Sur (11.0) VM under VMWare ESXi",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot", // Go 1.13.4
@@ -2420,15 +2410,6 @@ func init() {
 			"GOMAXPROCS=4", // OOM problems, see go.dev/issue/51019
 		},
 		KnownIssues: []int{51019},
-	})
-	addBuilder(BuildConfig{
-		Name:           "darwin-amd64-10_12",
-		HostType:       "host-darwin-10_12",
-		distTestAdjust: macTestPolicy,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// macOS 10.12 not supported after Go 1.16
-			return atMostGo1(goBranch, 16) && buildRepoByDefault(repo)
-		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-10_14",

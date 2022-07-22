@@ -543,7 +543,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-10_14", "exp"), onlyPost},
 		{b("darwin-amd64-10_15", "exp"), onlyPost},
 		// ... but not on most others:
-		{b("darwin-amd64-10_12", "exp"), none},
 		{b("freebsd-386-11_4", "exp"), none},
 		{b("freebsd-386-12_3", "exp"), none},
 		{b("freebsd-amd64-11_4", "exp"), none},
@@ -560,7 +559,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "build"), both},
 		{b("linux-amd64-longtest", "build"), onlyPost},
 		{b("windows-amd64-2016", "build"), both},
-		{b("darwin-amd64-10_12", "build"), none},
 		{b("darwin-amd64-10_14", "build"), none},
 		{b("darwin-amd64-10_15", "build"), onlyPost},
 		{b("openbsd-amd64-68", "build"), none},
@@ -582,14 +580,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-amd64-emu", "build"), none},
 
 		// Only use latest macOS for subrepos, and only amd64:
-		{b("darwin-amd64-10_12@go1.16", "net"), onlyPost},
-		{b("darwin-amd64-10_12", "net"), none},
 		{b("darwin-amd64-10_14", "net"), onlyPost},
 
 		{b("darwin-amd64-10_15", "go"), onlyPost},
 		{b("darwin-amd64-10_14", "go"), onlyPost},
-		{b("darwin-amd64-10_12", "go"), none},
-		{b("darwin-amd64-10_12@go1.16", "go"), onlyPost},
 
 		// plan9 only lived at master. We didn't support any past releases.
 		// But it's off for now as it's always failing.
@@ -739,7 +733,6 @@ func TestShouldRunDistTest(t *testing.T) {
 		{"linux-amd64", "reboot", tryMode, true},
 		{"linux-amd64-race", "reboot", tryMode, false},
 
-		{"darwin-amd64-10_12", "test:foo", postSubmit, false},
 		{"darwin-amd64-10_14", "test:foo", postSubmit, false},
 		{"darwin-amd64-10_14", "reboot", postSubmit, false},
 		{"darwin-amd64-10_14", "api", postSubmit, false},
@@ -944,9 +937,10 @@ func TestMiscCompileLinuxGOARM5(t *testing.T) {
 	}
 }
 
-// TestExpectedMacstadiumVMCount ensures that only 20 instances of macOS virtual machines
-// are expected at MacStadium.
-// TODO: remove once the scheduler allocates VMs based on demand https://golang.org/issue/35698
+// TestExpectedMacstadiumVMCount ensures that the right number of
+// instances of macOS virtual machines are expected at MacStadium.
+//
+// TODO(go.dev/issue/35698): remove once the scheduler allocates VMs based on demand.
 func TestExpectedMacstadiumVMCount(t *testing.T) {
 	got := 0
 	for host, config := range Hosts {
