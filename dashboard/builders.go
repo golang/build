@@ -217,13 +217,12 @@ var Hosts = map[string]*HostConfig{
 		},
 		SSHUsername: "gopher",
 	},
-	"host-dragonfly-amd64-master": {
-		IsReverse:   true,
-		ExpectNum:   1,
-		Notes:       "DragonFly BSD master, run by DragonFly team",
-		env:         []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
-		SSHUsername: "root",
-		Owners:      []*gophers.Person{gh("tuxillo")},
+	"host-dragonfly-amd64-622": {
+		Notes:              "DragonFly BSD 6.2.2 on GCE, built from build/env/dragonfly-amd64",
+		VMImage:            "dragonfly-amd64-622",
+		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.dragonfly-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-dragonfly-amd64-go1.17.12.tar.gz",
+		SSHUsername:        "root",
 	},
 	"host-freebsd-amd64-11_4": {
 		VMImage:            "freebsd-amd64-114",
@@ -2697,13 +2696,9 @@ func init() {
 		tryOnly:  true,
 	})
 	addBuilder(BuildConfig{
-		Name:           "dragonfly-amd64",
-		HostType:       "host-dragonfly-amd64-master",
-		Notes:          "DragonFly BSD master, run by DragonFly team",
-		distTestAdjust: noTestDirAndNoReboot,
-		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see golang.org/issue/45216
-		SkipSnapshot:   true,
-		KnownIssues:    []int{53577},
+		Name:     "dragonfly-amd64",
+		HostType: "host-dragonfly-amd64-622",
+		Notes:    "DragonFly BSD 6.2.2, running on GCE",
 	})
 	addBuilder(BuildConfig{
 		Name:           "freebsd-arm-paulzhol",
