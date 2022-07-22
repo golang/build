@@ -118,14 +118,6 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
-	"host-linux-bullseye-morecpu": &HostConfig{
-		Notes:           "Debian Bullseye, but on e2-highcpu-16",
-		ContainerImage:  "linux-x86-bullseye:latest",
-		machineType:     "e2-highcpu-16", // 16 vCPUs, 16 GB mem
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		SSHUsername:     "root",
-	},
 	"host-linux-buster": &HostConfig{
 		Notes:           "Debian Buster",
 		ContainerImage:  "linux-x86-buster:latest",
@@ -136,7 +128,6 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-stretch": &HostConfig{
 		Notes:           "Debian Stretch",
 		ContainerImage:  "linux-x86-stretch:latest",
-		machineType:     "e2-standard-4", // 4 vCPUs, 16 GB mem
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
@@ -144,7 +135,6 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-stretch-vmx": &HostConfig{
 		Notes:           "Debian Stretch w/ Nested Virtualization (VMX CPU bit) enabled, for testing",
 		ContainerImage:  "linux-x86-stretch:latest",
-		machineType:     "n2-highcpu-4", // e2 instances do not support MinCPUPlatform or NestedVirt.
 		NestedVirt:      true,
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
@@ -224,44 +214,44 @@ var Hosts = map[string]*HostConfig{
 		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/goboot"},
 	},
 	"host-openbsd-amd64-68": &HostConfig{
-		VMImage:            "openbsd-amd64-68-v3", // v3 adds 009_exit syspatch; see golang.org/cl/278732.
-		machineType:        "n2-highcpu-4",
+		VMImage:            "openbsd-amd64-68-v3", // v3 adds 009_exit syspatch; see go.dev/cl/278732.
+		machineType:        "n2",                  // force Intel; see go.dev/issue/49209
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
-		Notes:              "OpenBSD 6.8 (with 009_exit syspatch); GCE VM is built from script in build/env/openbsd-amd64",
+		Notes:              "OpenBSD 6.8 (with 009_exit syspatch); GCE VM, built from build/env/openbsd-amd64",
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-386-68": &HostConfig{
-		VMImage:            "openbsd-386-68-v3", // v3 adds 009_exit syspatch; see golang.org/cl/278732.
-		machineType:        "n2-highcpu-4",
+		VMImage:            "openbsd-386-68-v3", // v3 adds 009_exit syspatch; see go.dev/cl/278732.
+		machineType:        "n2",                // force Intel; see go.dev/issue/49209
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
-		Notes:              "OpenBSD 6.8 (with 009_exit syspatch); GCE VM is built from script in build/env/openbsd-386",
+		Notes:              "OpenBSD 6.8 (with 009_exit syspatch); GCE VM, built from build/env/openbsd-386",
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-amd64-70": &HostConfig{
 		VMImage:            "openbsd-amd64-70",
-		machineType:        "n2-highcpu-4",
+		machineType:        "n2", // force Intel; see go.dev/issue/49209
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
-		Notes:              "OpenBSD 7.0; GCE VM is built from script in build/env/openbsd-amd64. n2-highcpu host.",
+		Notes:              "OpenBSD 7.0; GCE VM, built from build/env/openbsd-amd64",
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-386-70": &HostConfig{
 		VMImage:            "openbsd-386-70",
-		machineType:        "n2-highcpu-4",
+		machineType:        "n2", // force Intel; see go.dev/issue/49209
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
-		Notes:              "OpenBSD 7.0; GCE VM is built from script in build/env/openbsd-386. n2-highcpu host.",
+		Notes:              "OpenBSD 7.0; GCE VM, built from build/env/openbsd-386",
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-386-70-n2d": &HostConfig{
 		// This host config is only for the runtime team to use investigating golang/go#49209.
 		VMImage:            "openbsd-386-70",
-		machineType:        "n2d-highcpu-4",
+		machineType:        "n2d", // force AMD; see go.dev/issue/49209
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
-		Notes:              "OpenBSD 7.0; GCE VM is built from script in build/env/openbsd-386. n2d-highcpu host.",
+		Notes:              "OpenBSD 7.0; GCE VM, built from build/env/openbsd-386; AMD",
 		SSHUsername:        "gopher",
 	},
 	"host-openbsd-arm-joelsing": &HostConfig{
@@ -284,48 +274,38 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-freebsd-11_4": &HostConfig{
 		VMImage:            "freebsd-amd64-114",
-		Notes:              "FreeBSD 11.4; GCE VM is built from script in build/env/freebsd-amd64",
-		machineType:        "n2-highcpu-4",
+		machineType:        "n2", // Intel only due to AMD memory corruption. See https://go.dev/cl/377474.
+		Notes:              "FreeBSD 11.4; GCE VM, built from build/env/freebsd-amd64",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-freebsd-12_3": &HostConfig{
 		VMImage:            "freebsd-amd64-123-stable-20211230",
-		Notes:              "FreeBSD 12.3; GCE VM is built from script in build/env/freebsd-amd64",
-		machineType:        "e2-highcpu-4",
+		Notes:              "FreeBSD 12.3; GCE VM, built from build/env/freebsd-amd64",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-freebsd-13_0": &HostConfig{
 		VMImage:            "freebsd-amd64-130-stable-20211230",
-		Notes:              "FreeBSD 13.0; GCE VM is built from script in build/env/freebsd-amd64",
-		machineType:        "e2-highcpu-4",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
-		SSHUsername:        "gopher",
-	},
-	"host-freebsd-13_0-big": &HostConfig{
-		VMImage:            "freebsd-amd64-130-stable-20211230",
-		Notes:              "Same as host-freebsd-13_0, but on e2-standard-4",
-		machineType:        "e2-standard-4", // 4 vCPUs, 16 GB mem
+		Notes:              "FreeBSD 13.0; GCE VM, built from build/env/freebsd-amd64",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-netbsd-amd64-9_0": &HostConfig{
 		VMImage:            "netbsd-amd64-9-0-2019q4",
-		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-amd64. n2-highcpu host.",
-		machineType:        "n2-highcpu-4",
+		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-amd64",
+		machineType:        "n2", // force Intel; see go.dev/issue/49209
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64-2da6b33.tar.gz",
 		SSHUsername:        "root",
 	},
 	"host-netbsd-386-9_0": &HostConfig{
 		VMImage:            "netbsd-i386-9-0-2019q4",
-		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-386. n2-highcpu host.",
-		machineType:        "n2-highcpu-4",
+		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-386",
+		machineType:        "n2", // force Intel; see go.dev/issue/49209
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-386-0b3b511.tar.gz",
 		SSHUsername:        "root",
@@ -384,66 +364,57 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-plan9-386-gce": &HostConfig{
 		VMImage:            "plan9-386-v7",
-		Notes:              "Plan 9 from 0intro; GCE VM is built from script in build/env/plan9-386",
+		Notes:              "Plan 9 from 0intro; GCE VM, built from build/env/plan9-386",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.plan9-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-plan9-386.tar.gz",
-		machineType:        "e2-highcpu-4",
 		env:                []string{"GO_TEST_TIMEOUT_SCALE=3"},
 	},
 	"host-windows-amd64-2008": &HostConfig{
 		VMImage:            "windows-amd64-server-2008r2-v7",
-		machineType:        "e2-highcpu-4", // 4 vCPUs, 4 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2008-newcc": &HostConfig{
 		VMImage:            "windows-amd64-server-2008r2-v8",
-		machineType:        "e2-highcpu-4", // 4 vCPUs, 4 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2012": &HostConfig{
 		VMImage:            "windows-amd64-server-2012r2-v7",
-		machineType:        "e2-highcpu-4", // 4 vCPUs, 4 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2012-newcc": &HostConfig{
 		VMImage:            "windows-amd64-server-2012r2-v8",
-		machineType:        "e2-highcpu-4", // 4 vCPUs, 4 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2016": &HostConfig{
 		VMImage:            "windows-amd64-server-2016-v7",
-		machineType:        "e2-highcpu-4", // 4 vCPUs, 4 GB mem
+		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
+		SSHUsername:        "gopher",
+	},
+	"host-windows-amd64-2016-big": &HostConfig{
+		VMImage:            "windows-amd64-server-2016-v7",
+		machineType:        "e2-standard-16",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2016-newcc": &HostConfig{
 		VMImage:            "windows-amd64-server-2016-v8",
-		machineType:        "e2-highcpu-4", // 4 vCPUs, 4 GB mem
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
-		SSHUsername:        "gopher",
-	},
-	"host-windows-amd64-2016-big": &HostConfig{
-		Notes:              "Same as host-windows-amd64-2016, but on e2-highcpu-16",
-		VMImage:            "windows-amd64-server-2016-v7",
-		machineType:        "e2-highcpu-16", // 16 vCPUs, 16 GB mem
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2016-big-newcc": &HostConfig{
-		Notes:              "Same as host-windows-amd64-2016, but on e2-highcpu-16",
 		VMImage:            "windows-amd64-server-2016-v8",
-		machineType:        "e2-highcpu-16", // 16 vCPUs, 16 GB mem
+		machineType:        "e2-standard-16",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
@@ -692,7 +663,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-linux-amd64-perf": &HostConfig{
 		Notes:               "Cascade Lake performance testing machines",
-		machineType:         "c2-standard-8", // C2 has precisely defined, consistent server architecture.
+		machineType:         "c2", // C2 has precisely defined, consistent server architecture.
 		ContainerImage:      "linux-x86-bullseye:latest",
 		buildletURLTmpl:     "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:                 []string{"GOROOT_BOOTSTRAP=/go1.4"},
@@ -781,7 +752,7 @@ type HostConfig struct {
 	IsReverse      bool   // if true, only use the reverse buildlet pool
 
 	// GCE options, if VMImage != "" || ContainerImage != ""
-	machineType    string // optional GCE instance type
+	machineType    string // optional GCE instance type ("n2-standard-4") or instance class ("n2")
 	RegularDisk    bool   // if true, use spinning disk instead of SSD
 	MinCPUPlatform string // optional. e2 instances are not supported. see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform.
 
@@ -831,7 +802,7 @@ type BuildConfig struct {
 	// For example, "host-linux-bullseye".
 	HostType string
 
-	// KnownIssues is a slice of non-zero golang.org/issue/nnn numbers for a
+	// KnownIssues is a slice of non-zero go.dev/issue/nnn numbers for a
 	// builder that may fail due to a known issue, such as because it is a new
 	// builder still in development/testing, or because the feature
 	// or port that it's meant to test hasn't been added yet, etc.
@@ -976,7 +947,7 @@ func (c *BuildConfig) Env() []string {
 	}
 	if c.IsLongTest() {
 		// Set a private hook in cmd/dist to run main Go repository tests
-		// without the default -short flag. See golang.org/issue/12508.
+		// without the default -short flag. See go.dev/issue/12508.
 		env = append(env, "GO_TEST_SHORT=0")
 	}
 	env = append(env, c.HostConfig().env...)
@@ -1277,7 +1248,7 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 		}
 	}
 
-	// Build dev.boringcrypto branches only on linux/amd64 and windows/386 (see golang.org/issue/26791).
+	// Build dev.boringcrypto branches only on linux/amd64 and windows/386 (see go.dev/issue/26791).
 	if repo == "go" && (branch == "dev.boringcrypto" || strings.HasPrefix(branch, "dev.boringcrypto.")) {
 		if c.Name != "linux-amd64" && c.Name != "windows-386-2008" {
 			return false
@@ -1374,22 +1345,27 @@ func (c *BuildConfig) GorootFinal() string {
 
 // MachineType returns the GCE machine type to use for this builder.
 func (c *HostConfig) MachineType() string {
-	if v := c.machineType; v != "" {
-		return v
+	typ := c.machineType
+	if typ == "" {
+		if c.NestedVirt || c.MinCPUPlatform != "" {
+			// e2 instances do not support nested virtualization, but n2 instances do.
+			// Same for MinCPUPlatform: https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform#limitations
+			typ = "n2"
+		} else {
+			typ = "e2"
+		}
 	}
-	if c.NestedVirt {
-		// e2 instances do not support nested virtualization, but n2
-		// instances do.
-		return "n2-standard-4" // 4 vCPUs, 16 GB mem
+	if strings.Contains(typ, "-") { // full type like "n2-standard-8"
+		return typ
 	}
 	if c.IsContainer() {
 		// Set a higher default machine size for containers,
 		// so their /workdir tmpfs can be larger. The COS
 		// image has no swap, so we want to make sure the
 		// /workdir fits completely in memory.
-		return "e2-standard-16" // 16 vCPUs, 64 GB mem
+		return typ + "-standard-16" // 16 vCPUs, 64 GB mem
 	}
-	return "e2-standard-8" // 8 vCPUs, 32 GB mem
+	return typ + "-standard-8" // 8 vCPUs, 32 GB mem
 }
 
 // IsEC2 returns true if the machine type is an EC2 arm64 type.
@@ -1534,7 +1510,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-race",
-		HostType: "host-freebsd-13_0-big",
+		HostType: "host-freebsd-13_0",
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-13_0",
@@ -1672,7 +1648,7 @@ func init() {
 
 	// Arrange so that no more than 3 ports are tested sequentially in each misc-compile
 	// TryBot to avoid any individual misc-compile TryBot from becoming a bottleneck for
-	// overall TryBot completion time (currently 10 minutes; see golang.org/issue/17104).
+	// overall TryBot completion time (currently 10 minutes; see go.dev/issue/17104).
 	//
 	// The TestTryBotsCompileAllPorts test is used to detect any gaps in TryBot coverage
 	// when new ports are added, and the misc-compile pairs below can be re-arranged.
@@ -1681,7 +1657,7 @@ func init() {
 	// for a given GOOS value. However, over time as new architectures were added,
 	// some misc-compile TryBot could become much slower than others.)
 	//
-	// See golang.org/issue/32632.
+	// See go.dev/issue/32632.
 	addMiscCompile("-windows-arm", "windows-arm", "windows-arm64")
 	addMiscCompile("-darwin", "darwin-amd64", "darwin-arm64")
 	addMiscCompile("-mips", "linux-mips", "linux-mips64")
@@ -1750,7 +1726,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-staticlockranking",
 		HostType: "host-linux-stretch",
-		Notes:    "builder with GOEXPERIMENT=staticlockranking, see golang.org/issue/37937",
+		Notes:    "builder with GOEXPERIMENT=staticlockranking, see go.dev/issue/37937",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go"
 		},
@@ -1762,7 +1738,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-unified",
 		HostType: "host-linux-buster",
-		Notes:    "builder with GOEXPERIMENT=unified, see golang.org/issue/46786",
+		Notes:    "builder with GOEXPERIMENT=unified, see go.dev/issue/46786",
 		tryBot: func(repo, branch, goBranch string) bool {
 			// TODO(go.dev/issue/52150): Restore testing against tools repo.
 			return (repo == "go" /*|| repo == "tools"*/) && (goBranch == "master" || goBranch == "dev.unified")
@@ -1784,7 +1760,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-nounified",
 		HostType: "host-linux-buster",
-		Notes:    "builder with GOEXPERIMENT=nounified, see golang.org/issue/51397",
+		Notes:    "builder with GOEXPERIMENT=nounified, see go.dev/issue/51397",
 		tryBot: func(repo, branch, goBranch string) bool {
 			return (repo == "go" || repo == "tools") && (goBranch == "master" || goBranch == "dev.unified")
 		},
@@ -1931,7 +1907,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-longtest",
-		HostType: "host-linux-bullseye-morecpu",
+		HostType: "host-linux-bullseye",
 		Notes:    "Debian Bullseye with go test -short=false",
 		tryBot: func(repo, branch, goBranch string) bool {
 			onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
@@ -1946,11 +1922,11 @@ func init() {
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
-		numTryTestHelpers: 4, // Target time is < 15 min for golang.org/issue/42661.
+		numTryTestHelpers: 4, // Target time is < 15 min for go.dev/issue/42661.
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-386-longtest",
-		HostType: "host-linux-bullseye-morecpu",
+		HostType: "host-linux-bullseye",
 		Notes:    "Debian Bullseye with go test -short=false; to get 32-bit coverage",
 		tryBot: func(repo, branch, goBranch string) bool {
 			onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
@@ -1970,7 +1946,7 @@ func init() {
 			"GOHOSTARCH=386",
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
-		numTryTestHelpers: 4, // Target time is < 15 min for golang.org/issue/42661.
+		numTryTestHelpers: 4, // Target time is < 15 min for go.dev/issue/42661.
 	})
 	addBuilder(BuildConfig{
 		Name:     "js-wasm",
@@ -2021,7 +1997,7 @@ func init() {
 		HostType: "host-openbsd-386-68",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			if repo == "review" {
-				// https://golang.org/issue/49529: git seems to be too slow on this
+				// https://go.dev/issue/49529: git seems to be too slow on this
 				// platform.
 				return false
 			}
@@ -2048,7 +2024,7 @@ func init() {
 		tryBot:   explicitTrySet("sys"),
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			if repo == "review" {
-				// https://golang.org/issue/49529: git seems to be too slow on this
+				// https://go.dev/issue/49529: git seems to be too slow on this
 				// platform.
 				return false
 			}
@@ -2144,7 +2120,7 @@ func init() {
 		HostType: "host-netbsd-arm-bsiegert",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			if repo == "review" {
-				// https://golang.org/issue/49530: This test seems to be too slow even
+				// https://go.dev/issue/49530: This test seems to be too slow even
 				// with a long scale factor.
 				return false
 			}
@@ -2333,7 +2309,7 @@ func init() {
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
-		numTryTestHelpers: 4, // Target time is < 15 min for golang.org/issue/42661.
+		numTryTestHelpers: 4, // Target time is < 15 min for go.dev/issue/42661.
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-longtest-newcc",
@@ -2355,7 +2331,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-race",
-		HostType: "host-windows-amd64-2016-big",
+		HostType: "host-windows-amd64-2016",
 		Notes:    "Only runs -race tests (./race.bat)",
 		env: []string{
 			"GOARCH=amd64",
@@ -2368,7 +2344,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-newcc-race",
-		HostType: "host-windows-amd64-2016-big-newcc",
+		HostType: "host-windows-amd64-2016-newcc",
 		Notes:    "Only runs -race tests (./race.bat)",
 		env: []string{
 			"GOARCH=amd64",
@@ -2570,21 +2546,21 @@ func init() {
 		HostType:       "host-linux-ppc64-osu",
 		FlakyNet:       true,
 		distTestAdjust: ppc64DistTestPolicy,
-		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see golang.org/issues/44422
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see go.dev/issues/44422
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-ppc64le-buildlet",
 		HostType:       "host-linux-ppc64le-osu",
 		FlakyNet:       true,
 		distTestAdjust: ppc64DistTestPolicy,
-		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see golang.org/issues/44422
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see go.dev/issues/44422
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-ppc64le-power9osu",
 		HostType:       "host-linux-ppc64le-power9-osu",
 		FlakyNet:       true,
 		distTestAdjust: ppc64DistTestPolicy,
-		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see golang.org/issues/44422
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see go.dev/issues/44422
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-arm64-aws",
@@ -2815,7 +2791,7 @@ func init() {
 				// vulndb currently uses a dependency which does not build cleanly
 				// on aix-ppc64. Until that issue is resolved, skip vulndb on
 				// this builder.
-				// (https://golang.org/issue/49218).
+				// (https://go.dev/issue/49218).
 				return false
 			}
 			return buildRepoByDefault(repo)
@@ -2893,7 +2869,7 @@ func tryNewMiscCompile(suffix, rx string, knownIssue int, goDeps []string) {
 		GoDeps:      goDeps,
 		env:         []string{"GO_DISABLE_OUTBOUND_NETWORK=1"},
 		CompileOnly: true,
-		Notes:       fmt.Sprintf("Tries buildall.bash to cross-compile & vet std+cmd packages for "+rx+", but doesn't run any tests. See golang.org/issue/%d.", knownIssue),
+		Notes:       fmt.Sprintf("Tries buildall.bash to cross-compile & vet std+cmd packages for "+rx+", but doesn't run any tests. See go.dev/issue/%d.", knownIssue),
 		allScriptArgs: []string{
 			// Filtering pattern to buildall.bash:
 			rx,
@@ -2926,7 +2902,7 @@ func noTestDirAndNoReboot(run bool, distTest string, isNormalTry bool) bool {
 func ppc64DistTestPolicy(run bool, distTest string, isNormalTry bool) bool {
 	if distTest == "reboot" {
 		// Skip test. It seems to use a lot of memory?
-		// See https://golang.org/issue/35233.
+		// See https://go.dev/issue/35233.
 		return false
 	}
 	return run
