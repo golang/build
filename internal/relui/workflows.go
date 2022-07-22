@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"net/http"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -772,13 +773,19 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, major int
 		if target.BuildOnly {
 			continue
 		}
-		short := wd.Action("Run short tests", tasks.runTests, targetVal, wd.Constant(target.Builder), skipTests, bin)
+		short := wd.Action("Run short tests", tasks.runTests, targetVal, wd.Constant(dashboard.Builders[target.Builder]), skipTests, bin)
 		testsPassed = append(testsPassed, short)
 		if target.LongTestBuilder != "" {
-			long := wd.Action("Run long tests", tasks.runTests, targetVal, wd.Constant(target.LongTestBuilder), skipTests, bin)
+			long := wd.Action("Run long tests", tasks.runTests, targetVal, wd.Constant(dashboard.Builders[target.Builder]), skipTests, bin)
 			testsPassed = append(testsPassed, long)
 		}
 	}
+	var advisoryResults []workflow.Value
+	for _, bc := range advisoryTryBots(major) {
+		result := wd.Task("Run advisory TryBot "+bc.Name, tasks.runAdvisoryTryBot, wd.Constant(bc), skipTests, source)
+		advisoryResults = append(advisoryResults, result)
+	}
+	tryBotsApproved := wd.Action("Approve any TryBot failures", tasks.checkAdvisoryTrybots, wd.Slice(advisoryResults...))
 	if skipSigning {
 		builtAndTested := wd.Task("Wait for artifacts and tests", func(ctx *workflow.TaskContext, artifacts []artifact) ([]artifact, error) {
 			return artifacts, nil
@@ -789,8 +796,31 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, major int
 	signedArtifacts := wd.Task("Wait for signed artifacts", tasks.awaitSigned, version, wd.Constant(darwinTargets), stagedArtifacts)
 	signedAndTested := wd.Task("Wait for signing and tests", func(ctx *workflow.TaskContext, artifacts []artifact) ([]artifact, error) {
 		return artifacts, nil
-	}, append([]workflow.TaskInput{signedArtifacts}, testsPassed...)...)
+	}, append([]workflow.TaskInput{signedArtifacts, tryBotsApproved}, testsPassed...)...)
 	return signedAndTested, nil
+}
+
+func advisoryTryBots(major int) []*dashboard.BuildConfig {
+	usedBuilders := map[string]bool{}
+	for _, t := range releasetargets.TargetsForGo1Point(major) {
+		usedBuilders[t.Builder] = true
+		usedBuilders[t.LongTestBuilder] = true
+	}
+
+	var extras []*dashboard.BuildConfig
+	for name, bc := range dashboard.Builders {
+		if usedBuilders[name] {
+			continue
+		}
+		if !bc.BuildsRepoPostSubmit("go", fmt.Sprintf("release-branch.go1.%d", major), "") {
+			continue
+		}
+		if !bc.IsVM() && !bc.IsContainer() {
+			continue
+		}
+		extras = append(extras, bc)
+	}
+	return extras
 }
 
 // BuildReleaseTasks serves as an adapter to the various build tasks in the task package.
@@ -807,7 +837,7 @@ type BuildReleaseTasks struct {
 }
 
 func (b *BuildReleaseTasks) buildSource(ctx *workflow.TaskContext, revision, securityRevision, version string) (artifact, error) {
-	return b.runBuildStep(ctx, nil, "", artifact{}, "src.tar.gz", func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
+	return b.runBuildStep(ctx, nil, nil, artifact{}, "src.tar.gz", func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
 		if securityRevision != "" {
 			return task.WriteSourceArchive(ctx, b.GerritHTTPClient, b.PrivateGerritURL, securityRevision, version, w)
 		}
@@ -816,7 +846,7 @@ func (b *BuildReleaseTasks) buildSource(ctx *workflow.TaskContext, revision, sec
 }
 
 func (b *BuildReleaseTasks) checkSourceMatch(ctx *workflow.TaskContext, head, version string, source artifact) error {
-	_, err := b.runBuildStep(ctx, nil, "", source, "", func(_ *task.BuildletStep, r io.Reader, _ io.Writer) error {
+	_, err := b.runBuildStep(ctx, nil, nil, source, "", func(_ *task.BuildletStep, r io.Reader, _ io.Writer) error {
 		branchArchive := &bytes.Buffer{}
 		if err := task.WriteSourceArchive(ctx, b.GerritHTTPClient, b.GerritURL, head, version, branchArchive); err != nil {
 			return err
@@ -862,43 +892,76 @@ func tarballHashes(r io.Reader) (map[string]string, error) {
 }
 
 func (b *BuildReleaseTasks) buildBinary(ctx *workflow.TaskContext, target *releasetargets.Target, source artifact) (artifact, error) {
-	return b.runBuildStep(ctx, target, target.Builder, source, "tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
+	build := dashboard.Builders[target.Builder]
+	return b.runBuildStep(ctx, target, build, source, "tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return bs.BuildBinary(ctx, r, w)
 	})
 }
 
 func (b *BuildReleaseTasks) buildMSI(ctx *workflow.TaskContext, target *releasetargets.Target, binary artifact) (artifact, error) {
-	return b.runBuildStep(ctx, target, target.Builder, binary, "msi", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
+	build := dashboard.Builders[target.Builder]
+	return b.runBuildStep(ctx, target, build, binary, "msi", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return bs.BuildMSI(ctx, r, w)
 	})
 }
 
 func (b *BuildReleaseTasks) convertToZip(ctx *workflow.TaskContext, target *releasetargets.Target, binary artifact) (artifact, error) {
-	return b.runBuildStep(ctx, target, "", binary, "zip", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
+	return b.runBuildStep(ctx, target, nil, binary, "zip", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return task.ConvertTGZToZIP(r, w)
 	})
 }
 
-func (b *BuildReleaseTasks) runTests(ctx *workflow.TaskContext, target *releasetargets.Target, buildlet string, skipTests []string, binary artifact) error {
-	skipped := false
+func (b *BuildReleaseTasks) runTests(ctx *workflow.TaskContext, target *releasetargets.Target, build *dashboard.BuildConfig, skipTests []string, binary artifact) error {
 	for _, skip := range skipTests {
 		if skip == "all" || target.Name == skip {
-			skipped = true
-			break
+			ctx.Printf("Skipping test")
+			return nil
 		}
 	}
-	if skipped {
-		ctx.Printf("Skipping test")
-		return nil
-	}
-	_, err := b.runBuildStep(ctx, target, buildlet, binary, "", func(bs *task.BuildletStep, r io.Reader, _ io.Writer) error {
+	_, err := b.runBuildStep(ctx, target, build, binary, "", func(bs *task.BuildletStep, r io.Reader, _ io.Writer) error {
 		return bs.TestTarget(ctx, r)
 	})
 	return err
 }
 
+type tryBotResult struct {
+	Name   string
+	Passed bool
+}
+
+func (b *BuildReleaseTasks) runAdvisoryTryBot(ctx *workflow.TaskContext, bc *dashboard.BuildConfig, skipTests []string, source artifact) (tryBotResult, error) {
+	for _, skip := range skipTests {
+		if skip == "all" || bc.Name == skip {
+			ctx.Printf("Skipping test")
+			return tryBotResult{bc.Name, true}, nil
+		}
+	}
+
+	passed := false
+	_, err := b.runBuildStep(ctx, nil, bc, source, "", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
+		var err error
+		passed, err = bs.RunTryBot(ctx, r)
+		return err
+	})
+	return tryBotResult{bc.Name, passed}, err
+}
+
+func (b *BuildReleaseTasks) checkAdvisoryTrybots(ctx *workflow.TaskContext, results []tryBotResult) error {
+	var fails []string
+	for _, r := range results {
+		if !r.Passed {
+			fails = append(fails, r.Name)
+		}
+	}
+	if len(fails) == 0 {
+		return nil
+	}
+	ctx.Printf("Some advisory TryBots failed. Check their logs and approve this task if it's okay:\n%v", strings.Join(fails, "\n"))
+	return b.ApproveAction(ctx, "")
+}
+
 // runBuildStep is a convenience function that manages resources a build step might need.
-// If target and buildlet name are specified, a BuildletStep will be passed to f.
+// If target and build config are specified, a BuildletStep will be passed to f.
 // If inputName is specified, it will be opened and passed as a Reader to f.
 // If outputSuffix is specified, a unique filename will be generated based off
 // it (and the target name, if any), the file will be opened and passed as a
@@ -906,30 +969,23 @@ func (b *BuildReleaseTasks) runTests(ctx *workflow.TaskContext, target *releaset
 func (b *BuildReleaseTasks) runBuildStep(
 	ctx *workflow.TaskContext,
 	target *releasetargets.Target,
-	buildletName string,
+	build *dashboard.BuildConfig,
 	input artifact,
 	outputSuffix string,
 	f func(*task.BuildletStep, io.Reader, io.Writer) error,
 ) (artifact, error) {
 	var step *task.BuildletStep
-	if buildletName != "" {
-		if target == nil {
-			return artifact{}, fmt.Errorf("target must be specified to use a buildlet")
-		}
-		ctx.Printf("Creating buildlet %v.", buildletName)
-		client, err := b.CreateBuildlet(buildletName)
+	if build != nil {
+		ctx.Printf("Creating buildlet %v.", build.Name)
+		client, err := b.CreateBuildlet(build.Name)
 		if err != nil {
 			return artifact{}, err
 		}
 		defer client.Close()
-		buildConfig, ok := dashboard.Builders[buildletName]
-		if !ok {
-			return artifact{}, fmt.Errorf("unknown builder: %v", buildConfig)
-		}
 		step = &task.BuildletStep{
 			Target:      target,
 			Buildlet:    client,
-			BuildConfig: buildConfig,
+			BuildConfig: build,
 			Watch:       true,
 		}
 		ctx.Printf("Buildlet ready.")

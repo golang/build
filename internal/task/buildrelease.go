@@ -361,6 +361,27 @@ func (b *BuildletStep) TestTarget(ctx *workflow.TaskContext, binaryArchive io.Re
 	})
 }
 
+func (b *BuildletStep) RunTryBot(ctx *workflow.TaskContext, sourceArchive io.Reader) (bool, error) {
+	ctx.Printf("Pushing source to buildlet.")
+	if err := b.Buildlet.PutTar(ctx, sourceArchive, ""); err != nil {
+		return false, fmt.Errorf("failed to put generated source tarball: %v", err)
+	}
+
+	if u := b.BuildConfig.GoBootstrapURL(buildenv.Production); u != "" {
+		ctx.Printf("Installing go1.4.")
+		if err := b.Buildlet.PutTarFromURL(ctx, u, go14); err != nil {
+			return false, err
+		}
+	}
+
+	ctx.Printf("Testing")
+	err := b.exec(ctx, goDir+"/"+b.BuildConfig.AllScript(), b.BuildConfig.AllScriptArgs(), buildlet.ExecOpts{})
+	if err != nil {
+		ctx.Printf("testing failed: %v", err)
+	}
+	return err == nil, nil
+}
+
 // exec runs cmd with args. Its working dir is opts.Dir, or the directory of cmd.
 // Its environment is the buildlet's environment, plus a GOPATH setting, plus opts.ExtraEnv.
 // If the command fails, its output is included in the returned error.

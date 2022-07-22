@@ -143,8 +143,11 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 		CreateBuildlet:   fakeBuildlets.createBuildlet,
 		DownloadURL:      dlServer.URL,
 		PublishFile:      publishFile,
-		ApproveAction: func(*workflow.TaskContext, interface{}) error {
-			return nil
+		ApproveAction: func(ctx *workflow.TaskContext, _ interface{}) error {
+			if strings.Contains(ctx.TaskName, "Release Coordinator Approval") {
+				return nil
+			}
+			return fmt.Errorf("unexpected approval for %q", ctx.TaskName)
 		},
 	}
 	// Cleanups are called in reverse order, and we need to cancel the context
@@ -172,7 +175,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	wd.Output("Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
-		"Targets to skip testing (or 'all') (optional)":            []string(nil),
+		"Targets to skip testing (or 'all') (optional)":            []string{"js-wasm"},
 		"Ref from the private repository to build from (optional)": "",
 	})
 	if err != nil {
@@ -291,7 +294,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	wd.Output("Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
-		"Targets to skip testing (or 'all') (optional)":            []string(nil),
+		"Targets to skip testing (or 'all') (optional)":            []string{"js-wasm"},
 		"Ref from the private repository to build from (optional)": "security-ref",
 	})
 	if err != nil {
@@ -314,6 +317,42 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	}, map[string]string{
 		"go/security.txt": "This file makes us secure",
 	})
+}
+
+func TestAdvisoryTrybotFail(t *testing.T) {
+	deps := newReleaseTestDeps(t, "go1.18rc1")
+	defaultApprove := deps.buildTasks.ApproveAction
+	approvedTrybots := false
+	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext, i interface{}) error {
+		if strings.Contains(ctx.TaskName, "TryBot failures") {
+			approvedTrybots = true
+			return nil
+		}
+		return defaultApprove(ctx, i)
+	}
+
+	// Run the release.
+	wd := workflow.New()
+	v, err := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, task.KindRC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wd.Output("Published Go version", v)
+
+	w, err := workflow.Start(wd, map[string]interface{}{
+		"Targets to skip testing (or 'all') (optional)":            []string(nil),
+		"Ref from the private repository to build from (optional)": "",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Run(deps.ctx, &verboseListener{t, deps.outputListener}); err != nil {
+		t.Fatal(err)
+	}
+	if !approvedTrybots {
+		t.Errorf("advisory trybots didn't need approval")
+	}
+
 }
 
 // makeScript pretends to be make.bash. It creates a fake go command that
@@ -356,6 +395,12 @@ touch $GO/tool/something_orother/compile
 const allScript = `#!/bin/bash -eu
 
 echo "I'm a test! :D"
+
+if [[ $GO_BUILDER_NAME =~ "js-wasm" ]]; then
+  echo "Oh no, WASM is broken"
+  exit 1
+fi
+
 exit 0
 `
 
@@ -371,6 +416,8 @@ func serveSnapshot(w http.ResponseWriter, r *http.Request) {
 		"src/make.bat":  makeScript,
 		"src/all.bash":  allScript,
 		"src/all.bat":   allScript,
+		"src/race.bash": allScript,
+		"src/race.bat":  allScript,
 	}, w, r)
 }
 
@@ -380,6 +427,8 @@ func serveSecureSnapshot(w http.ResponseWriter, r *http.Request) {
 		"src/make.bat":  makeScript,
 		"src/all.bash":  allScript,
 		"src/all.bat":   allScript,
+		"src/race.bash": allScript,
+		"src/race.bat":  allScript,
 		"security.txt":  "This file makes us secure",
 	}, w, r)
 }
