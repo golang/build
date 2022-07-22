@@ -1,0 +1,28 @@
+The Makefile in this directory creates a Google Compute Engine VM image to run the Go
+DragonflyBSD builder, booting up to run the buildlet.
+
+make must be run on a Linux box with qemu and a few additional packages:
+
+	apt-get install qemu-system-x86 qemu-utils expect genisoimage
+
+To override the default Dragonfly version, set V= on the make command line:
+
+	make V=600
+
+To add new Dragonfly versions, add lines to the "Database" in the Makefile
+and perhaps change the V= line to update the default.
+
+	make upload-prod
+
+builds and uploads the image. To replace an existing image, use
+
+	make delete-prod upload-prod
+
+s/prod/staging/ to test in the staging cluster instead.
+
+The VM needs to be run with the GCE metadata attribute "buildlet-binary-url" set to a URL
+of the DragonflyBSD buildlet (cross-compiled, typically).
+
+	buildlet-binary-url == http://storage.googleapis.com/go-builder-data/buildlet.dragonfly-amd64
+
+The buildlet rc script is lightly modified from ../freebsd-amd64.

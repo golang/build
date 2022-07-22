@@ -1,0 +1,5 @@
+*.iso
+*.iso.bz2
+disk-*
+disk.*
+isotmp

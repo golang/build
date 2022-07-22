@@ -19,6 +19,32 @@ stop_cmd=":"
 load_rc_config $name
 : ${buildlet_enable:="NO"}
 
+buildlet_resetnet()
+{
+	warn "buildlet resetting network"
+	ifconfig vtnet0 down
+	sleep 1
+	ifconfig vtnet0 up
+	sleep 1
+	dhclient vtnet0
+	sleep 1
+}
+
+buildlet_fixnet()
+{
+	# Some fraction of the time, the VM comes up unable to deliver UDP packets.
+	# If we detect this situation, by host -W 3 failing to look up metadata.google.internal,
+	# then reset the network interface (ifup/ifdown/dhclient).
+	# Once is almost always enough, so 10 attempts should drive the failure rate to zero.
+	for i in 0 1 2 3 4 5 6 7 8 9; do
+		if /usr/local/bin/host -W 3 metadata.google.internal; then
+			return 0
+		fi
+		buildlet_resetnet
+	done
+	return 1
+}
+
 buildlet_prestart()
 {
 	local buildlet_url
@@ -26,8 +52,20 @@ buildlet_prestart()
 	info $(netstat -rn)
 	info $(cat /etc/resolv.conf)
 
+	if ! buildlet_fixnet; then
+		warn "cannot fix network"
+		poweroff
+		return 1
+	fi
+
 	buildlet_url=$(/usr/local/bin/curl -s -H "Metadata-Flavor: Google" \
 		http://metadata.google.internal/computeMetadata/v1/instance/attributes/buildlet-binary-url)
+
+	if [ "$buildlet_url" = "" ]; then
+		warn "cannot find buildlet url"
+		poweroff
+		return 1
+	fi
 
 	if ! /usr/local/bin/curl -o /buildlet "${buildlet_url}"; then
 		warn "failed to download buildlet from ${buildlet_url}"
