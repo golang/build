@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -288,9 +289,14 @@ func createIAPTunnel(ctx context.Context, inst *compute.Instance) (string, func(
 	// Start the gcloud command. For some reason, when gcloud is run with a
 	// pipe for stdout, it doesn't log the success message, so we can only
 	// check for success empirically.
+	m := regexp.MustCompile(`/projects/([^/]+)/zones/([^/]+)`).FindStringSubmatch(inst.Zone)
+	if m == nil {
+		return "", nil, fmt.Errorf("unexpected inst.Zone: %q", inst.Zone)
+	}
+	project, zone := m[1], m[2]
 	tunnelCmd := exec.CommandContext(ctx,
 		"gcloud", "compute", "start-iap-tunnel", "--iap-tunnel-disable-connection-check",
-		"--zone", inst.Zone, inst.Name, "80", "--local-host-port", localAddr.String())
+		"--project", project, "--zone", zone, inst.Name, "80", "--local-host-port", localAddr.String())
 	tunnelCmd.Stderr = os.Stderr
 	tunnelCmd.Stdout = os.Stdout
 	if err := tunnelCmd.Start(); err != nil {

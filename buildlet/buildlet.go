@@ -100,7 +100,7 @@ func buildletClient(ctx context.Context, buildletURL, ipPort string, opts *VMOpt
 			break
 		}
 		log.Printf("probing buildlet at %s with attempt %d failed: %s", buildletURL, try, err)
-		time.Sleep(time.Second)
+		time.Sleep(3 * time.Second)
 	}
 	return NewClient(ipPort, opts.TLS), nil
 }

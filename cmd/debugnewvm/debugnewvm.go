@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
@@ -273,19 +274,22 @@ func awsCredentialsFromSecrets() (string, string, error) {
 }
 
 func gceBuildlet(creds *google.Credentials, env *buildenv.Environment, name, hostType, zone string) (buildlet.Client, error) {
-	var zoneSelected string
 	return buildlet.StartNewVM(creds, env, name, hostType, buildlet.VMOpts{
 		Zone:                zone,
 		OnInstanceRequested: func() { log.Printf("instance requested") },
 		OnInstanceCreated: func() {
 			log.Printf("instance created")
-			if *serial {
-				go watchSerial(zoneSelected, name)
-			}
 		},
 		OnGotInstanceInfo: func(inst *compute.Instance) {
-			zoneSelected = inst.Zone
-			log.Printf("got instance info; running in %v", zoneSelected)
+			zone := inst.Zone
+			m := regexp.MustCompile(`/projects/([^/]+)/zones/([^/]+)`).FindStringSubmatch(inst.Zone)
+			if m != nil {
+				zone = m[2]
+			}
+			log.Printf("got instance info; running in %v (%v)", inst.Zone, zone)
+			if *serial {
+				go watchSerial(zone, name)
+			}
 		},
 		OnBeginBuildletProbe: func(buildletURL string) {
 			log.Printf("About to hit %s to see if buildlet is up yet...", buildletURL)
