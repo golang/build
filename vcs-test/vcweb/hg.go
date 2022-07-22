@@ -17,10 +17,18 @@ import (
 	"strings"
 )
 
-var hgwebPy = `#!/usr/bin/python
-from mercurial import demandimport; demandimport.enable()
+var hgwebPy = `#!/usr/bin/env python3
+config = b"../hgweb.cfg"
+
+import cgitb; cgitb.enable()
+
+from mercurial import demandimport
+
+demandimport.enable()
 from mercurial.hgweb import hgweb, wsgicgi
-wsgicgi.launch(hgweb("../hgweb.cfg"))
+
+application = hgweb(config)
+wsgicgi.launch(application)
 `
 
 var hgwebCfg = `
