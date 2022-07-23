@@ -26,8 +26,11 @@ import (
 	"google.golang.org/grpc"
 )
 
+// firstClassPorts is the set of first-class ports, copied from the
+// canonical source at go.dev/wiki/PortingPolicy#first-class-ports.
 var firstClassPorts = map[string]bool{
 	"darwin-amd64":  true,
+	"darwin-arm64":  true,
 	"linux-386":     true,
 	"linux-amd64":   true,
 	"linux-arm":     true,

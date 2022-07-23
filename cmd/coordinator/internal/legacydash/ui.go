@@ -595,7 +595,7 @@ func buildersOfCommits(commits []*CommitInfo) map[string]bool {
 	return m
 }
 
-// addBuilders adds builders to the provide map that should be active for
+// addBuilders adds builders to the provided map that should be active for
 // the named Gerrit project & branch. (Issue 19930)
 func addBuilders(builders map[string]bool, gerritProj, branch string) {
 	for name, bc := range dashboard.Builders {
@@ -646,29 +646,32 @@ func isRace(s string) bool {
 }
 
 func unsupported(builder string) bool {
-	return unsupportedOS(builderOS(builder))
+	_, ok := firstClassPorts[osArch{builderOS(builder), builderArch(builder)}]
+	return !ok
 }
 
-func unsupportedOS(os string) bool {
-	if os == "race" || os == "android" || os == "all" {
-		return false
-	}
-	p, ok := osPriority[os]
-	return !ok || p > 1
+type osArch struct{ OS, Arch string }
+
+// firstClassPorts is the set of first-class ports, copied from the
+// canonical source at go.dev/wiki/PortingPolicy#first-class-ports.
+var firstClassPorts = map[osArch]struct{}{
+	{"darwin", "amd64"}:  {},
+	{"darwin", "arm64"}:  {},
+	{"linux", "386"}:     {},
+	{"linux", "amd64"}:   {},
+	{"linux", "arm"}:     {},
+	{"linux", "arm64"}:   {},
+	{"windows", "386"}:   {},
+	{"windows", "amd64"}: {},
 }
 
-// Priorities for specific operating systems.
+// osPriority encodes priorities for specific operating systems.
 var osPriority = map[string]int{
-	"all":     0,
-	"darwin":  1,
-	"freebsd": 1,
-	"linux":   1,
-	"windows": 1,
+	"all":    0,
+	"darwin": 1, "linux": 1, "windows": 1,
 	// race == 2
-	"android":   3,
-	"openbsd":   4,
-	"netbsd":    5,
-	"dragonfly": 6,
+	"freebsd": 3, "openbsd": 3, "netbsd": 3,
+	"android": 4, "ios": 4,
 }
 
 // TagState represents the state of all Packages at a branch.
@@ -905,9 +908,10 @@ func builderSubheading2(s string) string {
 }
 
 type builderSpan struct {
-	N           int
+	N           int // Total number of builders.
+	FirstN      int // Number of builders for a first-class port.
 	OS          string
-	Unsupported bool
+	Unsupported bool // Unsupported means the entire span has no builders for a first-class port.
 }
 
 // builderSpans creates a list of tags showing
@@ -918,11 +922,17 @@ func builderSpans(s []string) []builderSpan {
 	for len(s) > 0 {
 		i := 1
 		os := builderOSOrRace(s[0])
-		u := unsupportedOS(os)
 		for i < len(s) && builderOSOrRace(s[i]) == os {
 			i++
 		}
-		sp = append(sp, builderSpan{i, os, u})
+		var f int // First-class ports.
+		for _, b := range s[:i] {
+			if unsupported(b) {
+				continue
+			}
+			f++
+		}
+		sp = append(sp, builderSpan{i, f, os, f == 0})
 		s = s[i:]
 	}
 	return sp

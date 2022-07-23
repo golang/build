@@ -9,18 +9,30 @@
   <head>
     <title>{{$.Dashboard.Name}} Build Dashboard</title>
     <link rel="stylesheet" href="/static/style.css"/>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script>
-    <script>
-    var showUnsupported = window.location.hash.substr(1) != "short";
-    function redraw() {
-        showUnsupported = !$("#showshort").prop('checked');
-        $('.unsupported')[showUnsupported?'show':'hide']();
-        window.location.hash = showUnsupported?'':'short';
-    }
-    $(document).ready(function() {
-        $("#showshort").attr('checked', !showUnsupported).change(redraw);
+    <script async>
+      let showUnsupported = window.location.hash.substr(1) !== 'short';
+
+      function redraw() {
+          showUnsupported = !document.querySelector('#showshort').checked;
+          document.querySelectorAll('.unsupported').forEach(el => {
+            el.hidden = !showUnsupported;
+          });
+          window.location.hash = showUnsupported ? '' : 'short';
+          document.querySelectorAll('.js-redraw-colspan').forEach(el => {
+            const newColspan = el.getAttribute(showUnsupported ? 'data-archs' : 'data-firstarchs');
+            el.setAttribute('colspan', newColspan);
+          });
+          document.querySelectorAll('.js-redraw-span').forEach(el => {
+            const newSpan = el.getAttribute(showUnsupported ? 'data-archs' : 'data-firstarchs');
+            el.setAttribute('span', newSpan);
+          });
+      }
+
+      window.addEventListener('load', () => {
+        document.querySelector('#showshort').checked = !showUnsupported;
+        document.querySelector('#showshort').addEventListener('change', redraw);
         redraw();
-    })
+      });
     </script>
   </head>
 
@@ -69,7 +81,7 @@
       <colgroup class="col-time"></colgroup>
       <colgroup class="col-desc"></colgroup>
     {{range $.Builders | builderSpans}}
-      <colgroup class="col-result{{if .Unsupported}} unsupported{{end}}" span="{{.N}}"></colgroup>
+      <colgroup class="col-result js-redraw-span{{if .Unsupported}} unsupported{{end}}" span="{{.N}}" data-archs="{{.N}}" data-firstarchs="{{.FirstN}}"></colgroup>
     {{end}}
       <tr>
         <!-- extra row to make alternating colors use dark for first result -->
@@ -84,7 +96,7 @@
         <th></th>
         <th></th>
     {{range $.Builders | builderSpans}}
-        <th {{if .Unsupported}}class="unsupported"{{end}} colspan="{{.N}}">{{.OS}}</th>
+        <th class="js-redraw-colspan{{if .Unsupported}} unsupported{{end}}" colspan="{{.N}}" data-archs="{{.N}}" data-firstarchs="{{.FirstN}}">{{.OS}}</th>
     {{end}}
       </tr>
 
@@ -196,7 +208,7 @@
       <colgroup class="col-time"></colgroup>
       <colgroup class="col-desc"></colgroup>
       {{range $builders | builderSpans}}
-        <colgroup class="col-result{{if .Unsupported}} unsupported{{end}}" span="{{.N}}"></colgroup>
+        <colgroup class="col-result js-redraw-span{{if .Unsupported}} unsupported{{end}}" span="{{.N}}" data-archs="{{.N}}" data-firstarchs="{{.FirstN}}"></colgroup>
       {{end}}
       <tr>
         <!-- extra row to make alternating colors use dark for first result -->
@@ -208,7 +220,7 @@
         <th></th>
         <th></th>
         {{range $builders | builderSpans}}
-          <th {{if .Unsupported}}class="unsupported"{{end}} colspan="{{.N}}">{{.OS}}</th>
+          <th class="js-redraw-colspan{{if .Unsupported}} unsupported{{end}}" colspan="{{.N}}" data-archs="{{.N}}" data-firstarchs="{{.FirstN}}">{{.OS}}</th>
         {{end}}
       </tr>
       <tr>
