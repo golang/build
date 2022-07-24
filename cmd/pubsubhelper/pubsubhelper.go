@@ -264,20 +264,12 @@ func (e *env) Close() error {
 		log.Printf("Ignoring signed, DKIM-verified, non-Gerrit email from %q:\n%s", from, bodyBytes)
 		return nil
 	}
-	changeNum, _ := strconv.Atoi(hdr.Get("X-Gerrit-Change-Number"))
 
-	// Extract gerrit project "oauth2" from List-Id header like:
-	// List-Id: <gerrit-oauth2.go-review.googlesource.com>
-	project := strings.TrimPrefix(hdr.Get("List-Id"), "<gerrit-")
-	if i := strings.IndexByte(project, '.'); i == -1 {
-		project = ""
-	} else {
-		project = project[:i]
-	}
+	changeNum, _ := strconv.Atoi(hdr.Get("X-Gerrit-Change-Number"))
 	publish(&pubsubtypes.Event{
 		Gerrit: &pubsubtypes.GerritEvent{
-			URL:          strings.Trim(hdr.Get("X-Gerrit-ChangeURL"), "<>"),
-			Project:      project,
+			URL:          strings.TrimSuffix(strings.Trim(hdr.Get("X-Gerrit-ChangeURL"), "<>"), "?usp=email"),
+			Project:      hdr.Get("X-Gerrit-Project"),
 			CommitHash:   hdr.Get("X-Gerrit-Commit"),
 			ChangeNumber: changeNum,
 		},
