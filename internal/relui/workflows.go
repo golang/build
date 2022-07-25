@@ -534,17 +534,14 @@ func checkTaskApproved(ctx *workflow.TaskContext, p *pgxpool.Pool) (bool, error)
 //
 // ApproveActionDep takes a single *pgxpool.Pool argument, which is
 // used to query the database to determine if a task has been marked
-// approved. ApproveActionDep returns a function that accepts a single
-// string argument that must match the name of the task being defined.
-// The returned function is suitable for a single workflow Action with
-// a single dependency.
+// approved. ApproveActionDep returns a function that is suitable
+// for a single workflow Action with a single dependency.
 //
 // ApproveActionDep marks the task as requiring approval in the
 // database once the task is started. This can be used to show an
 // "approve" control in the UI.
 //
-//	actionName := "Wait for Approval"
-//	waitAction := wd.Action(actionName, ApproveActionDep(db)(actionName), someDependency)
+//	waitAction := wd.Action("Wait for Approval", ApproveActionDep(db), someDependency)
 func ApproveActionDep(p *pgxpool.Pool) func(*workflow.TaskContext, interface{}) error {
 	return AwaitActionDep(5*time.Second, func(ctx *workflow.TaskContext) (done bool, err error) {
 		return checkTaskApproved(ctx, p)
