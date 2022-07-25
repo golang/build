@@ -39,7 +39,8 @@ type ReleaseAnnouncement struct {
 	// 	• "go1.18beta1" or "go1.18rc1" for a pre-release
 	Version string
 	// SecondaryVersion is an older Go version that was also released.
-	// This only applies to minor releases. For example, "go1.16.10".
+	// This only applies to minor releases when two releases are made.
+	// For example, "go1.16.10".
 	SecondaryVersion string
 
 	// Security is a list of descriptions, one for each distinct
@@ -77,7 +78,9 @@ type SentMail struct {
 
 // AnnounceMinorRelease sends an email announcing a minor Go release to Google Groups.
 func (t AnnounceMailTasks) AnnounceMinorRelease(ctx *workflow.TaskContext, r ReleaseAnnouncement) (SentMail, error) {
-	if err := verifyGoVersions(r.Version, r.SecondaryVersion); err != nil {
+	if err := verifyGoVersions(r.Version); err != nil {
+		return SentMail{}, err
+	} else if err := verifyGoVersions(r.SecondaryVersion); r.SecondaryVersion != "" && err != nil {
 		return SentMail{}, err
 	}
 

@@ -81,6 +81,15 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 			wantSubject: "[security] Go 1.18.1 and Go 1.17.9 are released",
 		},
 		{
+			name: "minor-solo",
+			in: ReleaseAnnouncement{
+				Version:  "go1.11.1",
+				Security: []string{"abc: security fix 1", "xyz: security fix 2"},
+				Names:    []string{"Alice"},
+			},
+			wantSubject: "[security] Go 1.11.1 is released",
+		},
+		{
 			name: "beta",
 			in: ReleaseAnnouncement{
 				Version: "go1.19beta5",

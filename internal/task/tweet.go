@@ -43,7 +43,8 @@ type ReleaseTweet struct {
 	// 	• "go1.18beta1" or "go1.18rc1" for a pre-release
 	Version string
 	// SecondaryVersion is an older Go version that was also released.
-	// This only applies to minor releases. For example, "go1.16.10".
+	// This only applies to minor releases when two releases are made.
+	// For example, "go1.16.10".
 	SecondaryVersion string
 
 	// Security is an optional sentence describing security fixes
@@ -93,7 +94,9 @@ type TweetTasks struct {
 // TweetMinorRelease posts a tweet announcing a minor Go release.
 // ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
 func (t TweetTasks) TweetMinorRelease(ctx *workflow.TaskContext, r ReleaseTweet) (tweetURL string, _ error) {
-	if err := verifyGoVersions(r.Version, r.SecondaryVersion); err != nil {
+	if err := verifyGoVersions(r.Version); err != nil {
+		return "", err
+	} else if err := verifyGoVersions(r.SecondaryVersion); r.SecondaryVersion != "" && err != nil {
 		return "", err
 	}
 	if !strings.HasPrefix(r.Announcement, announcementPrefix) {
@@ -241,7 +244,7 @@ func tweetText(r ReleaseTweet, rnd *rand.Rand) (string, error) {
 			ReleaseTweet
 		}{
 			Curr:         r.Version[len("go"):],
-			Prev:         r.SecondaryVersion[len("go"):],
+			Prev:         strings.TrimPrefix(r.SecondaryVersion, "go"),
 			ReleaseTweet: r,
 		}
 	} else {
@@ -256,7 +259,7 @@ func tweetText(r ReleaseTweet, rnd *rand.Rand) (string, error) {
 }
 
 const tweetTextTmpl = `{{define "minor" -}}
-{{emoji "release"}} Go {{.Curr}} and {{.Prev}} are released!
+{{emoji "release"}} Go {{.Curr}} {{with .Prev}}and {{.}} are{{else}}is{{end}} released!
 
 {{with .Security}}{{emoji "security"}} Security: {{.}}{{"\n\n"}}{{end -}}
 
@@ -441,7 +444,7 @@ func fetchRandomArchive(goVer string, rnd *rand.Rand) (archive golangorgDLFile, 
 func fetchReleaseArchives(goVer string) (archives []golangorgDLFile, _ error) {
 	url := "https://go.dev/dl/?mode=json"
 	if strings.Contains(goVer, "beta") || strings.Contains(goVer, "rc") ||
-		goVer == "go1.17" || goVer == "go1.17.1" /* For TestTweetRelease. */ {
+		goVer == "go1.17" || goVer == "go1.17.1" || goVer == "go1.11.1" /* For TestTweetRelease. */ {
 
 		url += "&include=all"
 	}

@@ -67,6 +67,33 @@ $ go1.17.1 version
 go version go1.17.1 linux/arm64` + "\n",
 		},
 		{
+			name:   "minor-solo",
+			taskFn: TweetTasks.TweetMinorRelease,
+			in: ReleaseTweet{
+				Version:      "go1.11.1",
+				Announcement: "https://groups.google.com/g/golang-announce/c/pFXKAfoVJqw",
+				RandomSeed:   23,
+			},
+			wantLog: `tweet text:
+🎆 Go 1.11.1 is released!
+
+📣 Announcement: https://groups.google.com/g/golang-announce/c/pFXKAfoVJqw
+
+📦 Download: https://go.dev/dl/#go1.11.1
+
+#golang
+tweet image:
+$ go install golang.org/dl/go1.11.1@latest
+$ go1.11.1 download
+Downloaded   0.0% (        0 / 124181190 bytes) ...
+Downloaded  50.0% ( 62090595 / 124181190 bytes) ...
+Downloaded 100.0% (124181190 / 124181190 bytes)
+Unpacking go1.11.1.darwin-amd64.tar.gz ...
+Success. You may now run 'go1.11.1'
+$ go1.11.1 version
+go version go1.11.1 darwin/amd64` + "\n",
+		},
+		{
 			name:   "beta",
 			taskFn: TweetTasks.TweetBetaRelease,
 			in: ReleaseTweet{
