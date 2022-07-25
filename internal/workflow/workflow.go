@@ -22,13 +22,15 @@
 // corresponding to the dynamic type of the Values passed to it. It must return
 // a value of any type and an error. The TaskContext can be used as a normal
 // Context, and also supports workflow features like unstructured logging.
-// A task only runs once all of its input Values and Dependencies are ready.
-// All task outputs must be used either as inputs to another task or as a
-// workflow Output.
+// A task only runs once all of its inputs are ready. All task outputs must be
+// used either as inputs to another task or as a workflow Output.
 //
 // In addition to Tasks, a workflow can have Actions, which represent functions
 // that don't produce an output. Their Go function must only return an error,
-// and their definition results in a Dependency rather than a Value.
+// and their definition results in a Dependency rather than a Value. Both
+// Dependencies and Values can be passed to After and then to Task and Action
+// definitions to create an ordering dependency that doesn't correspond to a
+// function argument.
 //
 // Once a Definition is complete, call Start to set its parameters and
 // instantiate it into a Workflow. Call Run to execute the workflow until
@@ -251,6 +253,24 @@ func (d *Definition) Output(name string, v Value) {
 	d.outputs[d.name(name)] = tr
 }
 
+// After represents an ordering dependency on another Task or Action. It can be
+// passed in addition to any arguments to the task's function.
+func (*Definition) After(inputs ...TaskInput) TaskInput {
+	var deps []*taskDefinition
+	for _, a := range inputs {
+		deps = append(deps, a.deps()...)
+	}
+	return &after{deps}
+}
+
+type after struct {
+	dependencies []*taskDefinition
+}
+
+func (a *after) deps() []*taskDefinition {
+	return a.dependencies
+}
+
 // Task adds a task to the workflow definition. It can take any number of
 // inputs, and returns one output. name must uniquely identify the task in
 // the workflow.
@@ -266,13 +286,6 @@ func (d *Definition) Task(name string, f interface{}, inputs ...TaskInput) Value
 
 func (d *Definition) addTask(hasResult bool, name string, f interface{}, inputs ...TaskInput) *taskDefinition {
 	name = d.name(name)
-	var args []Value
-	for _, arg := range inputs {
-		val, ok := arg.(Value)
-		if ok {
-			args = append(args, val)
-		}
-	}
 	if d.tasks[name] != nil {
 		panic(fmt.Errorf("task %q already exists in the workflow", name))
 	}
@@ -280,17 +293,28 @@ func (d *Definition) addTask(hasResult bool, name string, f interface{}, inputs 
 	if ftyp.Kind() != reflect.Func {
 		panic(fmt.Errorf("%v is not a function", f))
 	}
-	if ftyp.NumIn()-1 != len(args) {
-		panic(fmt.Errorf("%v takes %v non-Context arguments, but was passed %v", f, ftyp.NumIn()-1, len(args)))
+	if ftyp.NumIn()-1 > len(inputs) {
+		panic(fmt.Errorf("%v takes %v non-Context arguments, but was passed %v", f, ftyp.NumIn()-1, len(inputs)))
 	}
+
 	if !reflect.TypeOf((*TaskContext)(nil)).AssignableTo(ftyp.In(0)) {
 		panic(fmt.Errorf("the first argument of %v must be a context.Context or *TaskContext, is %v", f, ftyp.In(0)))
 	}
-	for i, val := range args {
+	for i, arg := range inputs[:ftyp.NumIn()-1] {
+		val, ok := arg.(Value)
+		if !ok {
+			panic(fmt.Errorf("argument %v is a %T, not a Value", i, arg))
+		}
 		if !val.typ().AssignableTo(ftyp.In(i + 1)) {
 			panic(fmt.Errorf("argument %v to %v is %v, but was passed %v", i, f, ftyp.In(i+1), val.typ()))
 		}
 	}
+	for i, input := range inputs[ftyp.NumIn()-1:] {
+		if _, ok := input.(*after); !ok {
+			panic(fmt.Errorf("argument %v is a %T; only calls to After are allowed as extra arguments", i+ftyp.NumIn()-1, input))
+		}
+	}
+
 	wantOuts := 2
 	if !hasResult {
 		wantOuts = 1

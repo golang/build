@@ -143,7 +143,7 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 		CreateBuildlet:   fakeBuildlets.createBuildlet,
 		DownloadURL:      dlServer.URL,
 		PublishFile:      publishFile,
-		ApproveAction: func(ctx *workflow.TaskContext, _ interface{}) error {
+		ApproveAction: func(ctx *workflow.TaskContext) error {
 			if strings.Contains(ctx.TaskName, "Release Coordinator Approval") {
 				return nil
 			}
@@ -280,9 +280,9 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	deps.buildTasks.GerritURL = publicServer.URL
 
 	defaultApprove := deps.buildTasks.ApproveAction
-	deps.buildTasks.ApproveAction = func(tc *workflow.TaskContext, i interface{}) error {
+	deps.buildTasks.ApproveAction = func(tc *workflow.TaskContext) error {
 		approved = true
-		return defaultApprove(tc, i)
+		return defaultApprove(tc)
 	}
 
 	// Run the release.
@@ -323,12 +323,12 @@ func TestAdvisoryTrybotFail(t *testing.T) {
 	deps := newReleaseTestDeps(t, "go1.18rc1")
 	defaultApprove := deps.buildTasks.ApproveAction
 	approvedTrybots := false
-	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext, i interface{}) error {
+	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
 		if strings.Contains(ctx.TaskName, "TryBot failures") {
 			approvedTrybots = true
 			return nil
 		}
-		return defaultApprove(ctx, i)
+		return defaultApprove(ctx)
 	}
 
 	// Run the release.

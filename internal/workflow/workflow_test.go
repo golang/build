@@ -42,12 +42,12 @@ func TestDependency(t *testing.T) {
 		actionRan = true
 		return nil
 	}
-	checkAction := func(ctx context.Context) error {
+	checkAction := func(ctx context.Context) (string, error) {
 		if !actionRan {
-			return fmt.Errorf("prior action didn't run")
+			return "", fmt.Errorf("prior action didn't run")
 		}
 		checkRan = true
-		return nil
+		return "", nil
 	}
 	hi := func(ctx context.Context) (string, error) {
 		if !actionRan || !checkRan {
@@ -58,8 +58,8 @@ func TestDependency(t *testing.T) {
 
 	wd := workflow.New()
 	firstDep := wd.Action("first action", action)
-	secondDep := wd.Action("check action", checkAction, firstDep)
-	wd.Output("greeting", wd.Task("say hi", hi, secondDep))
+	secondDep := wd.Task("check action", checkAction, wd.After(firstDep))
+	wd.Output("greeting", wd.Task("say hi", hi, wd.After(secondDep)))
 
 	w := startWorkflow(t, wd, nil)
 	outputs := runWorkflow(t, w, nil)
@@ -78,7 +78,7 @@ func TestDependencyError(t *testing.T) {
 
 	wd := workflow.New()
 	dep := wd.Action("failing action", action)
-	wd.Output("output", wd.Task("task", task, dep))
+	wd.Output("output", wd.Task("task", task, wd.After(dep)))
 	w := startWorkflow(t, wd, nil)
 	l := &verboseListener{t: t}
 	if _, err := w.Run(context.Background(), l); err == nil {

@@ -479,36 +479,19 @@ type AwaitConditionFunc func(ctx *workflow.TaskContext) (done bool, err error)
 
 // AwaitFunc is a workflow.Task that polls the provided awaitCondition
 // every period until it either returns true or returns an error.
-func AwaitFunc(ctx *workflow.TaskContext, period time.Duration, awaitCondition AwaitConditionFunc) (bool, error) {
+func AwaitFunc(ctx *workflow.TaskContext, period time.Duration, awaitCondition AwaitConditionFunc) error {
 	ticker := time.NewTicker(period)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			return false, ctx.Err()
+			return ctx.Err()
 		case <-ticker.C:
 			ok, err := awaitCondition(ctx)
 			if ok || err != nil {
-				return ok, err
+				return err
 			}
 		}
-	}
-}
-
-// AwaitAction returns a workflow.Action that is a convenience wrapper
-// around AwaitFunc.
-func AwaitAction(period time.Duration, awaitCondition AwaitConditionFunc) func(*workflow.TaskContext) error {
-	return func(ctx *workflow.TaskContext) error {
-		_, err := AwaitFunc(ctx, period, awaitCondition)
-		return err
-	}
-}
-
-// AwaitActionDep returns a workflow.Action with a single dependency
-// that is a convenience wrapper around AwaitFunc.
-func AwaitActionDep(period time.Duration, awaitCondition AwaitConditionFunc) func(*workflow.TaskContext, interface{}) error {
-	return func(ctx *workflow.TaskContext, _ interface{}) error {
-		return AwaitAction(period, awaitCondition)(ctx)
 	}
 }
 
@@ -535,18 +518,19 @@ func checkTaskApproved(ctx *workflow.TaskContext, p *pgxpool.Pool) (bool, error)
 //
 // ApproveActionDep takes a single *pgxpool.Pool argument, which is
 // used to query the database to determine if a task has been marked
-// approved. ApproveActionDep returns a function that is suitable
-// for a single workflow Action with a single dependency.
+// approved.
 //
 // ApproveActionDep marks the task as requiring approval in the
 // database once the task is started. This can be used to show an
 // "approve" control in the UI.
 //
-//	waitAction := wd.Action("Wait for Approval", ApproveActionDep(db), someDependency)
-func ApproveActionDep(p *pgxpool.Pool) func(*workflow.TaskContext, interface{}) error {
-	return AwaitActionDep(5*time.Second, func(ctx *workflow.TaskContext) (done bool, err error) {
-		return checkTaskApproved(ctx, p)
-	})
+//	waitAction := wd.Action("Wait for Approval", ApproveActionDep(db), wd.After(someDependency))
+func ApproveActionDep(p *pgxpool.Pool) func(*workflow.TaskContext) error {
+	return func(ctx *workflow.TaskContext) error {
+		return AwaitFunc(ctx, 5*time.Second, func(ctx *workflow.TaskContext) (done bool, err error) {
+			return checkTaskApproved(ctx, p)
+		})
+	}
 }
 
 // TODO(go.dev/issue/53537): Flip to true.
@@ -583,7 +567,7 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		}
 
 		if mergeCommTasksIntoReleaseWorkflows {
-			okayToAnnounceAndTweet := wd.Action("Wait to Announce", build.ApproveAction, versionPublished)
+			okayToAnnounceAndTweet := wd.Action("Wait to Announce", build.ApproveAction, wd.After(versionPublished))
 
 			// Announce that a new Go release has been published.
 			sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v string, names []string) (task.SentMail, error) {
@@ -597,7 +581,7 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 				default:
 					return task.SentMail{}, fmt.Errorf("unknown release kind %v", r.kind)
 				}
-			}, versionPublished, names, okayToAnnounceAndTweet)
+			}, versionPublished, names, wd.After(okayToAnnounceAndTweet))
 			announcementURL := wd.Task("await-announcement", comm.AwaitAnnounceMail, sentMail)
 			tweetURL := wd.Task("post-tweet", func(ctx *workflow.TaskContext, v, ann string) (string, error) {
 				switch r.kind {
@@ -610,7 +594,7 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 				default:
 					return "", fmt.Errorf("unknown release kind %v", r.kind)
 				}
-			}, versionPublished, announcementURL, okayToAnnounceAndTweet)
+			}, versionPublished, announcementURL, wd.After(okayToAnnounceAndTweet))
 
 			wd.Output("Announcement URL", announcementURL)
 			wd.Output("Tweet URL", tweetURL)
@@ -670,16 +654,16 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	}
 
 	if mergeCommTasksIntoReleaseWorkflows {
-		okayToAnnounceAndTweet := wd.Action("Wait to Announce", build.ApproveAction, wd.Slice(v1Published, v2Published))
+		okayToAnnounceAndTweet := wd.Action("Wait to Announce", build.ApproveAction, wd.After(v1Published, v2Published))
 
 		// Announce that a new Go release has been published.
 		sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v1, v2 string, sec, names []string) (task.SentMail, error) {
 			return comm.AnnounceMinorRelease(ctx, task.ReleaseAnnouncement{Version: v1, SecondaryVersion: v2, Security: sec, Names: names})
-		}, v1Published, v2Published, securityFixes, names, okayToAnnounceAndTweet)
+		}, v1Published, v2Published, securityFixes, names, wd.After(okayToAnnounceAndTweet))
 		announcementURL := wd.Task("await-announcement", comm.AwaitAnnounceMail, sentMail)
 		tweetURL := wd.Task("post-tweet", func(ctx *workflow.TaskContext, v1, v2, sec, ann string) (string, error) {
 			return comm.TweetMinorRelease(ctx, task.ReleaseTweet{Version: v1, SecondaryVersion: v2, Security: sec, Announcement: ann})
-		}, v1Published, v2Published, securitySummary, announcementURL, okayToAnnounceAndTweet)
+		}, v1Published, v2Published, securitySummary, announcementURL, wd.After(okayToAnnounceAndTweet))
 
 		wd.Output("Announcement URL", announcementURL)
 		wd.Output("Tweet URL", tweetURL)
@@ -712,7 +696,7 @@ func addSingleReleaseWorkflow(
 	wd.Output("Signing command", startSigner)
 
 	securityRef := wd.Parameter(workflow.Parameter{Name: "Ref from the private repository to build from (optional)"})
-	source := wd.Task("Build source archive", build.buildSource, startingHead, securityRef, nextVersion, checked)
+	source := wd.Task("Build source archive", build.buildSource, startingHead, securityRef, nextVersion, wd.After(checked))
 
 	// Build, test, and sign release.
 	signedAndTestedArtifacts, err := build.addBuildTasks(wd, major, nextVersion, source, false)
@@ -720,7 +704,7 @@ func addSingleReleaseWorkflow(
 		return nil, err
 	}
 
-	okayToTagAndPublish := wd.Action("Wait for Release Coordinator Approval", build.ApproveAction, signedAndTestedArtifacts)
+	okayToTagAndPublish := wd.Action("Wait for Release Coordinator Approval", build.ApproveAction, wd.After(signedAndTestedArtifacts))
 
 	// Tag version and upload to CDN/website.
 	// If we're releasing a beta from master, tagging is easy; we just tag the
@@ -730,15 +714,15 @@ func addSingleReleaseWorkflow(
 	// been public when we started, but it should be now.
 	tagCommit := startingHead
 	if branch != "master" {
-		publishingHead := wd.Task("Read current branch head", version.ReadBranchHead, branchVal, okayToTagAndPublish)
+		publishingHead := wd.Task("Read current branch head", version.ReadBranchHead, branchVal, wd.After(okayToTagAndPublish))
 		branchHeadChecked := wd.Action("Check branch state matches source archive", build.checkSourceMatch, publishingHead, nextVersion, source)
-		versionCL := wd.Task("Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, nextVersion, branchHeadChecked)
+		versionCL := wd.Task("Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, nextVersion, wd.After(branchHeadChecked))
 		tagCommit = wd.Task("Wait for version CL submission", version.AwaitCL, versionCL, publishingHead)
 	}
-	tagged := wd.Action("Tag version", version.TagRelease, nextVersion, tagCommit, okayToTagAndPublish)
-	uploaded := wd.Action("Upload artifacts to CDN", build.uploadArtifacts, signedAndTestedArtifacts, tagged)
-	pushed := wd.Action("Push issues", milestone.PushIssues, milestones, nextVersion, kindVal, tagged)
-	versionPublished = wd.Task("Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, uploaded, pushed)
+	tagged := wd.Action("Tag version", version.TagRelease, nextVersion, tagCommit, wd.After(okayToTagAndPublish))
+	uploaded := wd.Action("Upload artifacts to CDN", build.uploadArtifacts, signedAndTestedArtifacts, wd.After(tagged))
+	pushed := wd.Action("Push issues", milestone.PushIssues, milestones, nextVersion, kindVal, wd.After(tagged))
+	versionPublished = wd.Task("Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, wd.After(uploaded, pushed))
 	wd.Output("Released version", versionPublished)
 	return versionPublished, nil
 }
@@ -796,7 +780,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, major int
 	signedArtifacts := wd.Task("Wait for signed artifacts", tasks.awaitSigned, version, wd.Constant(darwinTargets), stagedArtifacts)
 	signedAndTested := wd.Task("Wait for signing and tests", func(ctx *workflow.TaskContext, artifacts []artifact) ([]artifact, error) {
 		return artifacts, nil
-	}, append([]workflow.TaskInput{signedArtifacts, tryBotsApproved}, testsPassed...)...)
+	}, signedArtifacts, wd.After(tryBotsApproved), wd.After(testsPassed...))
 	return signedAndTested, nil
 }
 
@@ -833,7 +817,7 @@ type BuildReleaseTasks struct {
 	DownloadURL            string
 	PublishFile            func(*WebsiteFile) error
 	CreateBuildlet         func(string) (buildlet.Client, error)
-	ApproveAction          func(*workflow.TaskContext, interface{}) error
+	ApproveAction          func(*workflow.TaskContext) error
 }
 
 func (b *BuildReleaseTasks) buildSource(ctx *workflow.TaskContext, revision, securityRevision, version string) (artifact, error) {
@@ -957,7 +941,7 @@ func (b *BuildReleaseTasks) checkAdvisoryTrybots(ctx *workflow.TaskContext, resu
 		return nil
 	}
 	ctx.Printf("Some advisory TryBots failed. Check their logs and approve this task if it's okay:\n%v", strings.Join(fails, "\n"))
-	return b.ApproveAction(ctx, "")
+	return b.ApproveAction(ctx)
 }
 
 // runBuildStep is a convenience function that manages resources a build step might need.
