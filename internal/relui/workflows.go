@@ -277,193 +277,6 @@ It shows up in the announcement mail.`,
 	}
 )
 
-// RegisterAnnounceMailOnlyDefinitions registers workflow definitions involving announcing
-// onto h.
-//
-// This is superseded by RegisterReleaseWorkflows and will be removed
-// after some time, when we confirm there's no need for separate workflows.
-func RegisterAnnounceMailOnlyDefinitions(h *DefinitionHolder, tasks task.AnnounceMailTasks) {
-	version := workflow.Parameter{
-		Name: "Version",
-		Doc: `Version is the Go version that has been released.
-
-The version string must use the same format as Go tags.`,
-	}
-	security := workflow.Parameter{
-		Name:          "Security (optional)",
-		ParameterType: workflow.SliceLong,
-		Doc: `Security is a list of descriptions, one for each distinct security fix included in this release, in Markdown format.
-
-The empty list means there are no security fixes included.
-
-This field applies only to minor releases.
-
-Past examples:
-• "encoding/pem: fix stack overflow in Decode
-
-   A large (more than 5 MB) PEM input can cause a stack overflow in Decode,
-   leading the program to crash.
-
-   Thanks to Juho Nurminen of Mattermost who reported the error.
-
-   This is CVE-2022-24675 and Go issue https://go.dev/issue/51853."
-• "crypto/elliptic: tolerate all oversized scalars in generic P-256
-
-   A crafted scalar input longer than 32 bytes can cause P256().ScalarMult
-   or P256().ScalarBaseMult to panic. Indirect uses through crypto/ecdsa and
-   crypto/tls are unaffected. amd64, arm64, ppc64le, and s390x are unaffected.
-
-   This was discovered thanks to a Project Wycheproof test vector.
-
-   This is CVE-2022-28327 and Go issue https://go.dev/issue/52075."`,
-		Example: `encoding/pem: fix stack overflow in Decode
-
-A large (more than 5 MB) PEM input can cause a stack overflow in Decode,
-leading the program to crash.
-
-Thanks to Juho Nurminen of Mattermost who reported the error.
-
-This is CVE-2022-24675 and Go issue https://go.dev/issue/51853.`,
-	}
-	names := workflow.Parameter{
-		Name:          "Names (optional)",
-		ParameterType: workflow.SliceShort,
-		Doc:           `Names is an optional list of release coordinator names to include in the sign-off message.`,
-	}
-
-	{
-		minorVersion := version
-		minorVersion.Example = "go1.18.2"
-		secondaryVersion := workflow.Parameter{
-			Name: "SecondaryVersion (optional)",
-			Doc: `SecondaryVersion is an older Go version that was also released,
-or the empty string if only one minor release was made.`,
-			Example: "go1.17.10",
-		}
-
-		wd := workflow.New()
-		sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v1, v2 string, sec, names []string) (task.SentMail, error) {
-			return tasks.AnnounceMinorRelease(ctx, task.ReleaseAnnouncement{Version: v1, SecondaryVersion: v2, Security: sec, Names: names})
-		}, wd.Parameter(minorVersion), wd.Parameter(secondaryVersion), wd.Parameter(security), wd.Parameter(names))
-		wd.Output("AnnouncementURL", wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail))
-		h.RegisterDefinition("announce-minor", wd)
-	}
-	{
-		betaVersion := version
-		betaVersion.Example = "go1.19beta1"
-
-		wd := workflow.New()
-		sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v string, names []string) (task.SentMail, error) {
-			return tasks.AnnounceBetaRelease(ctx, task.ReleaseAnnouncement{Version: v, Names: names})
-		}, wd.Parameter(betaVersion), wd.Parameter(names))
-		wd.Output("AnnouncementURL", wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail))
-		h.RegisterDefinition("announce-beta", wd)
-	}
-	{
-		rcVersion := version
-		rcVersion.Example = "go1.19rc1"
-
-		wd := workflow.New()
-		sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v string, names []string) (task.SentMail, error) {
-			return tasks.AnnounceRCRelease(ctx, task.ReleaseAnnouncement{Version: v, Names: names})
-		}, wd.Parameter(rcVersion), wd.Parameter(names))
-		wd.Output("AnnouncementURL", wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail))
-		h.RegisterDefinition("announce-rc", wd)
-	}
-	{
-		majorVersion := version
-		majorVersion.Example = "go1.19"
-
-		wd := workflow.New()
-		sentMail := wd.Task("mail-announcement", func(ctx *workflow.TaskContext, v string, names []string) (task.SentMail, error) {
-			return tasks.AnnounceMajorRelease(ctx, task.ReleaseAnnouncement{Version: v, Names: names})
-		}, wd.Parameter(majorVersion), wd.Parameter(names))
-		wd.Output("AnnouncementURL", wd.Task("await-announcement", tasks.AwaitAnnounceMail, sentMail))
-		h.RegisterDefinition("announce-major", wd)
-	}
-}
-
-// RegisterTweetOnlyDefinitions registers workflow definitions involving tweeting
-// onto h.
-//
-// This is superseded by RegisterReleaseWorkflows and will be removed
-// after some time, when we confirm there's no need for separate workflows.
-func RegisterTweetOnlyDefinitions(h *DefinitionHolder, tasks task.TweetTasks) {
-	version := workflow.Parameter{
-		Name: "Version",
-		Doc: `Version is the Go version that has been released.
-
-The version string must use the same format as Go tags.`,
-	}
-	security := workflow.Parameter{
-		Name: "Security (optional)",
-		Doc: `Security is an optional sentence describing security fixes included in this release.
-
-The empty string means there are no security fixes to highlight.
-
-Past examples:
-• "Includes a security fix for crypto/tls (CVE-2021-34558)."
-• "Includes a security fix for the Wasm port (CVE-2021-38297)."
-• "Includes security fixes for encoding/pem (CVE-2022-24675), crypto/elliptic (CVE-2022-28327), crypto/x509 (CVE-2022-27536)."`,
-	}
-	announcement := workflow.Parameter{
-		Name:          "Announcement",
-		ParameterType: workflow.URL,
-		Doc: `Announcement is the announcement URL.
-
-It's applicable to all release types other than major
-(since major releases point to release notes instead).`,
-		Example: "https://groups.google.com/g/golang-announce/c/wB1fph5RpsE/m/ZGwOsStwAwAJ",
-	}
-
-	{
-		minorVersion := version
-		minorVersion.Example = "go1.18.2"
-		secondaryVersion := workflow.Parameter{
-			Name: "SecondaryVersion (optional)",
-			Doc: `SecondaryVersion is an older Go version that was also released,
-or the empty string if only one minor release was made.`,
-			Example: "go1.17.10",
-		}
-
-		wd := workflow.New()
-		wd.Output("TweetURL", wd.Task("tweet-minor", func(ctx *workflow.TaskContext, v1, v2, sec, ann string) (string, error) {
-			return tasks.TweetMinorRelease(ctx, task.ReleaseTweet{Version: v1, SecondaryVersion: v2, Security: sec, Announcement: ann})
-		}, wd.Parameter(minorVersion), wd.Parameter(secondaryVersion), wd.Parameter(security), wd.Parameter(announcement)))
-		h.RegisterDefinition("tweet-minor", wd)
-	}
-	{
-		betaVersion := version
-		betaVersion.Example = "go1.19beta1"
-
-		wd := workflow.New()
-		wd.Output("TweetURL", wd.Task("tweet-beta", func(ctx *workflow.TaskContext, v, sec, ann string) (string, error) {
-			return tasks.TweetBetaRelease(ctx, task.ReleaseTweet{Version: v, Security: sec, Announcement: ann})
-		}, wd.Parameter(betaVersion), wd.Parameter(security), wd.Parameter(announcement)))
-		h.RegisterDefinition("tweet-beta", wd)
-	}
-	{
-		rcVersion := version
-		rcVersion.Example = "go1.19rc1"
-
-		wd := workflow.New()
-		wd.Output("TweetURL", wd.Task("tweet-rc", func(ctx *workflow.TaskContext, v, sec, ann string) (string, error) {
-			return tasks.TweetRCRelease(ctx, task.ReleaseTweet{Version: v, Security: sec, Announcement: ann})
-		}, wd.Parameter(rcVersion), wd.Parameter(security), wd.Parameter(announcement)))
-		h.RegisterDefinition("tweet-rc", wd)
-	}
-	{
-		majorVersion := version
-		majorVersion.Example = "go1.19"
-
-		wd := workflow.New()
-		wd.Output("TweetURL", wd.Task("tweet-major", func(ctx *workflow.TaskContext, v, sec string) (string, error) {
-			return tasks.TweetMajorRelease(ctx, task.ReleaseTweet{Version: v, Security: sec})
-		}, wd.Parameter(majorVersion), wd.Parameter(security)))
-		h.RegisterDefinition("tweet-major", wd)
-	}
-}
-
 // newEchoWorkflow returns a runnable workflow.Definition for
 // development.
 func newEchoWorkflow() *workflow.Definition {
@@ -536,11 +349,32 @@ func ApproveActionDep(p *pgxpool.Pool) func(*workflow.TaskContext) error {
 	}
 }
 
-// TODO(go.dev/issue/53537): Flip to true.
-const mergeCommTasksIntoReleaseWorkflows = false
-
 // RegisterReleaseWorkflows registers workflows for issuing Go releases.
 func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks) error {
+	// Register prod release workflows both with, and without comm tasks at the end.
+	// TODO(go.dev/issue/53537): Simplify after more experience.
+	if err := registerProdReleaseWorkflows(ctx, h, build, milestone, version, comm, true, ""); err != nil {
+		return err
+	}
+	if err := registerProdReleaseWorkflows(ctx, h, build, milestone, version, comm, false, "[without comms] "); err != nil {
+		return err
+	}
+
+	// Register dry-run release workflows.
+	currentMajor, err := version.GetCurrentMajor(ctx)
+	if err != nil {
+		return err
+	}
+	wd := workflow.New()
+	if err := addBuildAndTestOnlyWorkflow(wd, version, build, currentMajor+1, task.KindBeta); err != nil {
+		return err
+	}
+	h.RegisterDefinition(fmt.Sprintf("dry-run (test and build only): Go 1.%d next beta", currentMajor+1), wd)
+
+	return nil
+}
+
+func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, mergeCommTasks bool, definitionPrefix string) error {
 	currentMajor, err := version.GetCurrentMajor(ctx)
 	if err != nil {
 		return err
@@ -560,7 +394,7 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		wd := workflow.New()
 
 		var securitySummary, securityFixes, names workflow.Value
-		if mergeCommTasksIntoReleaseWorkflows {
+		if mergeCommTasks {
 			if r.kind == task.KindCurrentMinor || r.kind == task.KindPrevMinor {
 				securitySummary = wd.Parameter(securitySummaryParameter)
 				securityFixes = wd.Parameter(securityFixesParameter)
@@ -573,24 +407,18 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 			return err
 		}
 
-		if mergeCommTasksIntoReleaseWorkflows {
+		if mergeCommTasks {
 			addCommTasksForSingleRelease(wd, build, comm, r.kind, versionPublished, securitySummary, securityFixes, names)
 		}
 
-		h.RegisterDefinition(fmt.Sprintf("Go 1.%d %s", r.major, r.suffix), wd)
+		h.RegisterDefinition(definitionPrefix+fmt.Sprintf("Go 1.%d %s", r.major, r.suffix), wd)
 	}
 
-	wd, err := createMinorReleaseWorkflow(build, milestone, version, comm, currentMajor-1, currentMajor)
+	wd, err := createMinorReleaseWorkflow(build, milestone, version, comm, mergeCommTasks, currentMajor-1, currentMajor)
 	if err != nil {
 		return err
 	}
-	h.RegisterDefinition(fmt.Sprintf("Minor releases for Go 1.%d and 1.%d", currentMajor-1, currentMajor), wd)
-
-	wd = workflow.New()
-	if err := addBuildAndTestOnlyWorkflow(wd, version, build, currentMajor+1, task.KindBeta); err != nil {
-		return err
-	}
-	h.RegisterDefinition(fmt.Sprintf("dry-run (test and build only): Go 1.%d next beta", currentMajor+1), wd)
+	h.RegisterDefinition(definitionPrefix+fmt.Sprintf("Minor releases for Go 1.%d and 1.%d", currentMajor-1, currentMajor), wd)
 
 	return nil
 }
@@ -611,11 +439,11 @@ func addBuildAndTestOnlyWorkflow(wd *workflow.Definition, version *task.VersionT
 	return nil
 }
 
-func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, prevMajor, currentMajor int) (*workflow.Definition, error) {
+func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, mergeCommTasks bool, prevMajor, currentMajor int) (*workflow.Definition, error) {
 	wd := workflow.New()
 
 	var securitySummary, securityFixes, names workflow.Value
-	if mergeCommTasksIntoReleaseWorkflows {
+	if mergeCommTasks {
 		securitySummary = wd.Parameter(securitySummaryParameter)
 		securityFixes = wd.Parameter(securityFixesParameter)
 		names = wd.Parameter(releaseCoordinatorNames)
@@ -630,7 +458,7 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 		return nil, err
 	}
 
-	if mergeCommTasksIntoReleaseWorkflows {
+	if mergeCommTasks {
 		addCommTasksForDoubleMinorRelease(wd, build, comm, v1Published, v2Published, securitySummary, securityFixes, names)
 	}
 

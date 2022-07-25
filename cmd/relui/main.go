@@ -115,8 +115,6 @@ func main() {
 	dh := relui.NewDefinitionHolder()
 	relui.RegisterMailDLCLDefinition(dh, versionTasks)
 	relui.RegisterCommunicationDefinitions(dh, commTasks)
-	relui.RegisterAnnounceMailOnlyDefinitions(dh, commTasks.AnnounceMailTasks)
-	relui.RegisterTweetOnlyDefinitions(dh, commTasks.TweetTasks)
 	userPassAuth := buildlet.UserPass{
 		Username: "user-relui",
 		Password: key(*masterKey, "user-relui"),
