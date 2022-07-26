@@ -675,7 +675,7 @@ func TestHostConfigsAllUsed(t *testing.T) {
 		"host-linux-armhf-cross": true,
 		"host-linux-armel-cross": true,
 
-		"host-linux-x86-alpine": true, // TODO(golang.org/issue/19938): Fix the Alpine builder, or remove it.
+		"host-linux-amd64-alpine": true, // TODO(golang.org/issue/19938): Fix the Alpine builder, or remove it.
 	}
 
 	used := make(map[string]bool)

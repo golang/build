@@ -111,28 +111,28 @@ var Builders = map[string]*BuildConfig{}
 // Hosts contains the names and configs of all the types of
 // buildlets. They can be VMs, containers, or dedicated machines.
 var Hosts = map[string]*HostConfig{
-	"host-linux-bullseye": &HostConfig{
+	"host-linux-amd64-bullseye": &HostConfig{
 		Notes:           "Debian Bullseye",
 		ContainerImage:  "linux-x86-bullseye:latest",
 		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
-	"host-linux-buster": &HostConfig{
+	"host-linux-amd64-buster": &HostConfig{
 		Notes:           "Debian Buster",
 		ContainerImage:  "linux-x86-buster:latest",
 		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
-	"host-linux-stretch": &HostConfig{
+	"host-linux-amd64-stretch": &HostConfig{
 		Notes:           "Debian Stretch",
 		ContainerImage:  "linux-x86-stretch:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
-	"host-linux-stretch-vmx": &HostConfig{
+	"host-linux-amd64-stretch-vmx": &HostConfig{
 		Notes:           "Debian Stretch w/ Nested Virtualization (VMX CPU bit) enabled, for testing",
 		ContainerImage:  "linux-x86-stretch:latest",
 		NestedVirt:      true,
@@ -165,34 +165,34 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
-	"host-s390x-cross": &HostConfig{
+	"host-linux-s390x-cross": &HostConfig{
 		Notes:           "Container with s390x cross-compiler.",
 		ContainerImage:  "linux-s390x-cross:latest",
 		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
-	"host-linux-x86-alpine": &HostConfig{
+	"host-linux-amd64-alpine": &HostConfig{
 		Notes:           "Alpine container",
 		ContainerImage:  "linux-x86-alpine:latest",
 		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64-static",
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/lib/go"},
 		SSHUsername:     "root",
 	},
-	"host-linux-clang": &HostConfig{
+	"host-linux-amd64-clang": &HostConfig{
 		Notes:           "Container with clang.",
 		ContainerImage:  "linux-x86-clang:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
-	"host-linux-sid": &HostConfig{
+	"host-linux-amd64-sid": &HostConfig{
 		Notes:           "Debian sid, updated occasionally.",
 		ContainerImage:  "linux-x86-sid:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
-	"host-linux-fedora": &HostConfig{
+	"host-linux-amd64-fedora": &HostConfig{
 		Notes:           "Fedora 30",
 		ContainerImage:  "linux-x86-fedora:latest",
 		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
@@ -272,7 +272,7 @@ var Hosts = map[string]*HostConfig{
 		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		Owners:    []*gophers.Person{gh("4a6f656c")},
 	},
-	"host-freebsd-11_4": &HostConfig{
+	"host-freebsd-amd64-11_4": &HostConfig{
 		VMImage:            "freebsd-amd64-114",
 		machineType:        "n2", // Intel only due to AMD memory corruption. See https://go.dev/cl/377474.
 		Notes:              "FreeBSD 11.4; GCE VM, built from build/env/freebsd-amd64",
@@ -280,14 +280,14 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
-	"host-freebsd-12_3": &HostConfig{
+	"host-freebsd-amd64-12_3": &HostConfig{
 		VMImage:            "freebsd-amd64-123-stable-20211230",
 		Notes:              "FreeBSD 12.3; GCE VM, built from build/env/freebsd-amd64",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
-	"host-freebsd-13_0": &HostConfig{
+	"host-freebsd-amd64-13_0": &HostConfig{
 		VMImage:            "freebsd-amd64-130-stable-20211230",
 		Notes:              "FreeBSD 13.0; GCE VM, built from build/env/freebsd-amd64",
 		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
@@ -425,21 +425,21 @@ var Hosts = map[string]*HostConfig{
 		Owners:    []*gophers.Person{gh("zx2c4")},
 		env:       []string{"GOROOT_BOOTSTRAP=C:\\Program Files (Arm)\\Go"},
 	},
-	"host-windows-arm64-mini": &HostConfig{
+	"host-windows-arm64-10": &HostConfig{
 		Notes:              "macOS hosting Windows 10 in qemu with HVM acceleration.",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-arm64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-windows-arm64-f22ec5.tar.gz",
 		IsReverse:          true,
 		ExpectNum:          2,
 	},
-	"host-windows11-arm64-mini": &HostConfig{
+	"host-windows-arm64-11": &HostConfig{
 		Notes:              "macOS hosting Windows 11 in qemu with HVM acceleration.",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-arm64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-windows-arm64-f22ec5.tar.gz",
 		IsReverse:          true,
 		ExpectNum:          5,
 	},
-	"host-darwin-10_14": &HostConfig{
+	"host-darwin-amd64-10_14": &HostConfig{
 		IsReverse: true,
 		ExpectNum: 3,
 		Notes:     "MacStadium macOS Mojave (10.14) VM under VMWare ESXi",
@@ -449,7 +449,7 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
 	},
-	"host-darwin-10_15": &HostConfig{
+	"host-darwin-amd64-10_15": &HostConfig{
 		IsReverse: true,
 		ExpectNum: 3,
 		Notes:     "MacStadium macOS Catalina (10.15) VM under VMWare ESXi",
@@ -573,7 +573,7 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:   1,
 		SSHUsername: "gobuild",
 	},
-	"host-solaris-oracle-amd64-oraclerel": &HostConfig{
+	"host-solaris-amd64-oraclerel": &HostConfig{
 		Notes:     "Oracle Solaris amd64 Release System",
 		Owners:    []*gophers.Person{gh("rorth")}, // https://github.com/golang/go/issues/15581#issuecomment-550368581
 		IsReverse: true,
@@ -729,7 +729,7 @@ func init() {
 
 // A HostConfig describes the available ways to obtain buildlets of
 // different types. Some host configs can serve multiple
-// builders. For example, a host config of "host-linux-bullseye" can
+// builders. For example, a host config of "host-linux-amd64-bullseye" can
 // serve linux-amd64, linux-amd64-race, linux-386, linux-386-387, etc.
 type HostConfig struct {
 	// HostType is the unique name of this host config. It is also
@@ -799,7 +799,7 @@ type BuildConfig struct {
 
 	// HostType is the required key into the Hosts map, describing
 	// the type of host this build will run on.
-	// For example, "host-linux-bullseye".
+	// For example, "host-linux-amd64-bullseye".
 	HostType string
 
 	// KnownIssues is a slice of non-zero go.dev/issue/nnn numbers for a
@@ -1484,7 +1484,7 @@ func explicitTrySet(projs ...string) func(proj, branch, goBranch string) bool {
 func init() {
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-11_4",
-		HostType:          "host-freebsd-11_4",
+		HostType:          "host-freebsd-amd64-11_4",
 		distTestAdjust:    fasterTrybots,
 		numTryTestHelpers: 4,
 		buildsRepo: func(repo, branch, goBranch string) bool {
@@ -1495,7 +1495,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-12_3",
-		HostType: "host-freebsd-12_3",
+		HostType: "host-freebsd-amd64-12_3",
 		tryBot:   defaultTrySet("sys"),
 
 		distTestAdjust:    fasterTrybots, // If changing this policy, update TestShouldRunDistTest accordingly.
@@ -1503,25 +1503,25 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-386-12_3",
-		HostType:          "host-freebsd-12_3",
+		HostType:          "host-freebsd-amd64-12_3",
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		distTestAdjust:    fasterTrybots,
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-race",
-		HostType: "host-freebsd-13_0",
+		HostType: "host-freebsd-amd64-13_0",
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-13_0",
-		HostType:          "host-freebsd-13_0",
+		HostType:          "host-freebsd-amd64-13_0",
 		tryBot:            explicitTrySet("sys"),
 		distTestAdjust:    fasterTrybots, // If changing this policy, update TestShouldRunDistTest accordingly.
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-386-13_0",
-		HostType:          "host-freebsd-13_0",
+		HostType:          "host-freebsd-amd64-13_0",
 		tryBot:            explicitTrySet("sys"),
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		distTestAdjust:    fasterTrybots,
@@ -1529,7 +1529,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:           "freebsd-386-11_4",
-		HostType:       "host-freebsd-11_4",
+		HostType:       "host-freebsd-amd64-11_4",
 		distTestAdjust: noTestDirAndNoReboot,
 		env:            []string{"GOARCH=386", "GOHOSTARCH=386"},
 		buildsRepo: func(repo, branch, goBranch string) bool {
@@ -1540,7 +1540,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-386",
-		HostType:       "host-linux-bullseye",
+		HostType:       "host-linux-amd64-bullseye",
 		distTestAdjust: fasterTrybots,
 		tryBot:         defaultTrySet(),
 		Notes:          "Debian stable (currently Debian bullseye).",
@@ -1558,12 +1558,12 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" || repo == "crypto"
 		},
-		HostType: "host-linux-stretch",
+		HostType: "host-linux-amd64-stretch",
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386", "GO386=softfloat"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64",
-		HostType: "host-linux-bullseye",
+		HostType: "host-linux-amd64-bullseye",
 		tryBot:   defaultTrySet(),
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			if repo == "vulndb" && atMostGo1(goBranch, 17) {
@@ -1581,7 +1581,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-boringcrypto",
-		HostType: "host-linux-bullseye",
+		HostType: "host-linux-amd64-bullseye",
 		Notes:    "GOEXPERIMENT=boringcrypto",
 		tryBot:   defaultTrySet(),
 		env: []string{
@@ -1596,7 +1596,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:       "linux-amd64-vmx",
-		HostType:   "host-linux-stretch-vmx",
+		HostType:   "host-linux-amd64-stretch-vmx",
 		buildsRepo: disabledBuilder,
 	})
 
@@ -1604,7 +1604,7 @@ func init() {
 	if testAlpine {
 		addBuilder(BuildConfig{
 			Name:     "linux-amd64-alpine",
-			HostType: "host-linux-x86-alpine",
+			HostType: "host-linux-amd64-alpine",
 		})
 	}
 
@@ -1627,7 +1627,7 @@ func init() {
 		}
 		addBuilder(BuildConfig{
 			Name:     "misc-compile" + suffix,
-			HostType: "host-linux-stretch",
+			HostType: "host-linux-amd64-stretch",
 			tryBot:   defaultTrySet(),
 			env: []string{
 				"GO_DISABLE_OUTBOUND_NETWORK=1",
@@ -1679,7 +1679,7 @@ func init() {
 
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-nocgo",
-		HostType: "host-linux-bullseye",
+		HostType: "host-linux-amd64-bullseye",
 		Notes:    "cgo disabled",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			b := buildRepoByDefault(repo)
@@ -1704,7 +1704,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:       "linux-amd64-noopt",
 		Notes:      "optimizations and inlining disabled",
-		HostType:   "host-linux-bullseye",
+		HostType:   "host-linux-amd64-bullseye",
 		buildsRepo: onlyGo,
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
@@ -1713,7 +1713,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "linux-amd64-ssacheck",
-		HostType:    "host-linux-bullseye",
+		HostType:    "host-linux-amd64-bullseye",
 		buildsRepo:  onlyGo,
 		tryBot:      nil, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
 		CompileOnly: true,
@@ -1725,7 +1725,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-staticlockranking",
-		HostType: "host-linux-stretch",
+		HostType: "host-linux-amd64-stretch",
 		Notes:    "builder with GOEXPERIMENT=staticlockranking, see go.dev/issue/37937",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go"
@@ -1737,7 +1737,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-unified",
-		HostType: "host-linux-buster",
+		HostType: "host-linux-amd64-buster",
 		Notes:    "builder with GOEXPERIMENT=unified, see go.dev/issue/46786",
 		tryBot: func(repo, branch, goBranch string) bool {
 			// TODO(go.dev/issue/52150): Restore testing against tools repo.
@@ -1759,7 +1759,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-nounified",
-		HostType: "host-linux-buster",
+		HostType: "host-linux-amd64-buster",
 		Notes:    "builder with GOEXPERIMENT=nounified, see go.dev/issue/51397",
 		tryBot: func(repo, branch, goBranch string) bool {
 			return (repo == "go" || repo == "tools") && (goBranch == "master" || goBranch == "dev.unified")
@@ -1779,7 +1779,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-goamd64v3",
-		HostType: "host-linux-bullseye",
+		HostType: "host-linux-amd64-bullseye",
 		Notes:    "builder with GOAMD64=v3, see proposal 45453 and issue 48505",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// GOAMD64 is added in Go 1.18.
@@ -1792,7 +1792,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:                "linux-amd64-racecompile",
-		HostType:            "host-linux-bullseye",
+		HostType:            "host-linux-amd64-bullseye",
 		tryBot:              nil, // TODO: add a func to conditionally run this trybot if compiler dirs are touched
 		CompileOnly:         true,
 		SkipSnapshot:        true,
@@ -1805,7 +1805,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-amd64-race",
-		HostType:          "host-linux-bullseye",
+		HostType:          "host-linux-amd64-bullseye",
 		tryBot:            defaultTrySet(),
 		buildsRepo:        defaultPlusExpBuild,
 		distTestAdjust:    fasterTrybots,
@@ -1817,30 +1817,30 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-386-clang",
-		HostType: "host-linux-clang",
+		HostType: "host-linux-amd64-clang",
 		Notes:    "Debian Buster + clang 7.0 instead of gcc",
 		env:      []string{"CC=/usr/bin/clang", "GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-clang",
-		HostType: "host-linux-clang",
+		HostType: "host-linux-amd64-clang",
 		Notes:    "Debian Buster + clang 7.0 instead of gcc",
 		env:      []string{"CC=/usr/bin/clang"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-386-sid",
-		HostType: "host-linux-sid",
+		HostType: "host-linux-amd64-sid",
 		Notes:    "Debian sid (unstable)",
 		env:      []string{"GOHOSTARCH=386"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-sid",
-		HostType: "host-linux-sid",
+		HostType: "host-linux-amd64-sid",
 		Notes:    "Debian sid (unstable)",
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-fedora",
-		HostType: "host-linux-fedora",
+		HostType: "host-linux-amd64-fedora",
 		Notes:    "Fedora",
 	})
 	addBuilder(BuildConfig{
@@ -1863,7 +1863,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-stretch",
-		HostType: "host-linux-stretch",
+		HostType: "host-linux-amd64-stretch",
 		Notes:    "Debian Stretch.",
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
@@ -1871,7 +1871,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-bullseye",
-		HostType: "host-linux-bullseye",
+		HostType: "host-linux-amd64-bullseye",
 		Notes:    "Debian Bullseye.",
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
@@ -1879,7 +1879,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-buster",
-		HostType: "host-linux-buster",
+		HostType: "host-linux-amd64-buster",
 		Notes:    "Debian Buster.",
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
@@ -1887,7 +1887,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-386-stretch",
-		HostType: "host-linux-stretch",
+		HostType: "host-linux-amd64-stretch",
 		Notes:    "Debian Stretch, 32-bit builder.",
 		env: []string{
 			"GOARCH=386",
@@ -1897,7 +1897,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-386-buster",
-		HostType: "host-linux-buster",
+		HostType: "host-linux-amd64-buster",
 		Notes:    "Debian Buster, 32-bit builder.",
 		env: []string{
 			"GOARCH=386",
@@ -1907,7 +1907,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-longtest",
-		HostType: "host-linux-bullseye",
+		HostType: "host-linux-amd64-bullseye",
 		Notes:    "Debian Bullseye with go test -short=false",
 		tryBot: func(repo, branch, goBranch string) bool {
 			onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
@@ -1926,7 +1926,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-386-longtest",
-		HostType: "host-linux-bullseye",
+		HostType: "host-linux-amd64-bullseye",
 		Notes:    "Debian Bullseye with go test -short=false; to get 32-bit coverage",
 		tryBot: func(repo, branch, goBranch string) bool {
 			onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
@@ -2365,7 +2365,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-arm64-10",
-		HostType:          "host-windows-arm64-mini",
+		HostType:          "host-windows-arm64-10",
 		numTryTestHelpers: 1,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
@@ -2376,7 +2376,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-arm64-11",
-		HostType:          "host-windows11-arm64-mini",
+		HostType:          "host-windows-arm64-11",
 		numTryTestHelpers: 1,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return atLeastGo1(goBranch, 18) && buildRepoByDefault(repo)
@@ -2389,13 +2389,13 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-10_14",
-		HostType:       "host-darwin-10_14",
+		HostType:       "host-darwin-amd64-10_14",
 		distTestAdjust: macTestPolicy,
 		buildsRepo:     defaultPlusExp,
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-10_15",
-		HostType:       "host-darwin-10_15",
+		HostType:       "host-darwin-amd64-10_15",
 		distTestAdjust: macTestPolicy,
 		buildsRepo:     defaultPlusExpBuild,
 	})
@@ -2536,7 +2536,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "solaris-amd64-oraclerel",
-		HostType:    "host-solaris-oracle-amd64-oraclerel",
+		HostType:    "host-solaris-amd64-oraclerel",
 		Notes:       "Oracle Solaris release version",
 		FlakyNet:    true,
 		KnownIssues: []int{51443},
@@ -2690,7 +2690,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "linux-s390x-crosscompile",
-		HostType:    "host-s390x-cross",
+		HostType:    "host-linux-s390x-cross",
 		Notes:       "s390x cross-compile builder for releases; doesn't run tests",
 		CompileOnly: true,
 		tryOnly:     true, // but not in trybot set for now
@@ -2863,7 +2863,7 @@ func tryNewMiscCompile(suffix, rx string, knownIssue int, goDeps []string) {
 	}
 	addBuilder(BuildConfig{
 		Name:        "misc-compile" + suffix,
-		HostType:    "host-linux-bullseye",
+		HostType:    "host-linux-amd64-bullseye",
 		buildsRepo:  func(repo, branch, goBranch string) bool { return repo == "go" && branch == "master" },
 		KnownIssues: []int{knownIssue},
 		GoDeps:      goDeps,
