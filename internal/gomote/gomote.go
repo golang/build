@@ -134,6 +134,7 @@ func (s *Server) CreateInstance(req *protos.CreateInstanceRequest, stream protos
 	si := &queue.SchedItem{
 		HostType: bconf.HostType,
 		IsGomote: true,
+		User:     creds.Email,
 	}
 	type result struct {
 		buildletClient buildlet.Client

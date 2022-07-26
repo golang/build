@@ -28,6 +28,7 @@ const (
 type SchedItem struct {
 	buildgo.BuilderRev // not set for gomote
 	HostType           string
+	IsRelease          bool
 	IsGomote           bool
 	IsTry              bool
 	IsHelper           bool
@@ -39,12 +40,14 @@ type SchedItem struct {
 	// being newer, or master being newer).
 	CommitTime  time.Time
 	RequestTime time.Time
-	tryFor      string // TODO: which user. (user with 1 trybot >> user with 50 trybots)
+	User        string
 }
 
 // Priority returns the BuildletPriority for a SchedItem.
 func (s *SchedItem) Priority() BuildletPriority {
 	switch {
+	case s.IsRelease:
+		return PriorityUrgent
 	case s.IsGomote:
 		return PriorityInteractive
 	case s.IsTry:

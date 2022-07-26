@@ -284,6 +284,7 @@ func (st *buildStatus) onceInitHelpersFunc() {
 		IsTry:      st.isTry(),
 		CommitTime: st.commitTime(),
 		Branch:     st.branch(),
+		User:       st.AuthorEmail,
 	}
 	st.helpers = getBuildlets(st.ctx, st.conf.NumTestHelpers(st.isTry()), schedTmpl, st)
 }
@@ -379,6 +380,7 @@ func (st *buildStatus) getBuildlet() (buildlet.Client, error) {
 		BuilderRev: st.BuilderRev,
 		CommitTime: st.commitTime(),
 		Branch:     st.branch(),
+		User:       st.AuthorEmail,
 	}
 	st.mu.Lock()
 	st.schedItem = schedItem
@@ -700,6 +702,7 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompil
 		BuilderRev: st.BuilderRev,
 		CommitTime: st.commitTime(),
 		Branch:     st.branch(),
+		User:       st.AuthorEmail,
 	})
 	sp.Done(err)
 	if err != nil {

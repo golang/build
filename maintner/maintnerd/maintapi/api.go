@@ -116,10 +116,11 @@ func tryWorkItem(
 	goProj refer, develVersion apipb.MajorMinor, supportedReleases []*apipb.GoRelease,
 ) (*apipb.GerritTryWorkItem, error) {
 	w := &apipb.GerritTryWorkItem{
-		Project:  cl.Project.Project(),
-		Branch:   strings.TrimPrefix(cl.Branch(), "refs/heads/"),
-		ChangeId: cl.ChangeID(),
-		Commit:   cl.Commit.Hash.String(),
+		Project:     cl.Project.Project(),
+		Branch:      strings.TrimPrefix(cl.Branch(), "refs/heads/"),
+		ChangeId:    cl.ChangeID(),
+		Commit:      cl.Commit.Hash.String(),
+		AuthorEmail: cl.Owner().Email(),
 	}
 	if ci.CurrentRevision != "" {
 		// In case maintner is behind.
@@ -313,7 +314,7 @@ func (s apiService) GoFindTryWork(ctx context.Context, req *apipb.GoFindTryWorkR
 func goFindTryWork(ctx context.Context, gerritc *gerrit.Client, maintc *maintner.Corpus) (*apipb.GoFindTryWorkResponse, error) {
 	const query = "label:Run-TryBot=1 label:TryBot-Result=0 status:open"
 	cis, err := gerritc.QueryChanges(ctx, query, gerrit.QueryChangesOpt{
-		Fields: []string{"CURRENT_REVISION", "CURRENT_COMMIT", "MESSAGES"},
+		Fields: []string{"CURRENT_REVISION", "CURRENT_COMMIT", "MESSAGES", "DETAILED_ACCOUNTS"},
 	})
 	if err != nil {
 		return nil, err

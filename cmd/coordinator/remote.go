@@ -127,8 +127,10 @@ func handleBuildletCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	si := &queue.SchedItem{
-		HostType: bconf.HostType,
-		IsGomote: true,
+		HostType:  bconf.HostType,
+		IsGomote:  true,
+		IsRelease: user == "user-relui",
+		User:      user,
 	}
 
 	ctx := r.Context()

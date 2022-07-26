@@ -454,6 +454,16 @@ type commitDetail struct {
 
 	// Branch for BuilderRev.SubRev, if it exists.
 	SubRevBranch string
+
+	// AuthorId is the gerrit-internal ID for the commit author, if
+	// available. For sub-repo trybots, this is the author of the
+	// commit from the trybot CL.
+	AuthorId int64
+
+	// AuthorEmail is the commit author from Gerrit, if available.
+	// For sub-repo trybots, this is the author of the
+	// commit from the trybot CL.
+	AuthorEmail string
 }
 
 // addWorkDetail adds some work to (maybe) do, if it's not already
@@ -1265,7 +1275,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 			continue
 		}
 		brev := tryKeyToBuilderRev(bconf.Name, key, mainBuildGoCommit)
-		bs, err := newBuild(brev, commitDetail{RevBranch: goBranch, SubRevBranch: subBranch})
+		bs, err := newBuild(brev, commitDetail{RevBranch: goBranch, SubRevBranch: subBranch, AuthorEmail: work.AuthorEmail})
 		if err != nil {
 			log.Printf("can't create build for %q: %v", brev, err)
 			continue
@@ -1294,7 +1304,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 				continue
 			}
 			brev := tryKeyToBuilderRev(linuxBuilder.Name, key, goRev)
-			bs, err := newBuild(brev, commitDetail{RevBranch: branch, SubRevBranch: subBranch})
+			bs, err := newBuild(brev, commitDetail{RevBranch: branch, SubRevBranch: subBranch, AuthorEmail: work.AuthorEmail})
 			if err != nil {
 				log.Printf("can't create build for %q: %v", brev, err)
 				continue
@@ -1340,7 +1350,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 				SubRev:  rev,
 			}
 			// getRepoHead always fetches master, so use that as the SubRevBranch.
-			bs, err := newBuild(brev, commitDetail{RevBranch: branch, SubRevBranch: "master"})
+			bs, err := newBuild(brev, commitDetail{RevBranch: branch, SubRevBranch: "master", AuthorEmail: work.AuthorEmail})
 			if err != nil {
 				log.Printf("can't create x/%s trybot build for go/master commit %s: %v", project, rev, err)
 				return nil
