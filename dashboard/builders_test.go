@@ -7,6 +7,7 @@ package dashboard
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -1141,5 +1142,28 @@ func TestDefaultPlusExpBuild(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("%s: got %t, want %t", tc.repo, got, tc.want)
 		}
+	}
+}
+
+func TestHostsSort(t *testing.T) {
+	data, err := os.ReadFile("builders.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	table := regexp.MustCompile(`(?s)\nvar Hosts =.*?\n}\n`).FindString(string(data))
+	if table == "" {
+		t.Fatal("cannot find Hosts table in builders.go")
+	}
+	m := regexp.MustCompile(`\n\t"([^"]+)":`).FindAllStringSubmatch(table, -1)
+	if len(m) < 10 {
+		t.Fatalf("cannot find host keys in table")
+	}
+	var last string
+	for _, sub := range m {
+		key := sub[1]
+		if last > key {
+			t.Errorf("Host table unsorted: %s before %s", last, key)
+		}
+		last = key
 	}
 }
