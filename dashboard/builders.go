@@ -194,7 +194,6 @@ var Hosts = map[string]*HostConfig{
 	"host-dragonfly-amd64-622": {
 		Notes:              "DragonFly BSD 6.2.2 on GCE, built from build/env/dragonfly-amd64",
 		VMImage:            "dragonfly-amd64-622",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.dragonfly-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-dragonfly-amd64-go1.17.12.tar.gz",
 		SSHUsername:        "root",
 	},
@@ -202,21 +201,18 @@ var Hosts = map[string]*HostConfig{
 		VMImage:            "freebsd-amd64-114",
 		Notes:              "FreeBSD 11.4; GCE VM, built from build/env/freebsd-amd64",
 		machineType:        "n2", // Intel only due to AMD memory corruption. See https://go.dev/cl/377474.
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-freebsd-amd64-12_3": {
 		VMImage:            "freebsd-amd64-123-stable-20211230",
 		Notes:              "FreeBSD 12.3; GCE VM, built from build/env/freebsd-amd64",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-freebsd-amd64-13_0": {
 		VMImage:            "freebsd-amd64-130-stable-20211230",
 		Notes:              "FreeBSD 13.0; GCE VM, built from build/env/freebsd-amd64",
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.freebsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-freebsd-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
@@ -251,55 +247,48 @@ var Hosts = map[string]*HostConfig{
 		},
 	},
 	"host-linux-amd64-alpine": {
-		Notes:           "Alpine container",
-		ContainerImage:  "linux-x86-alpine:latest",
-		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64-static",
-		env:             []string{"GOROOT_BOOTSTRAP=/usr/lib/go"},
-		SSHUsername:     "root",
+		Notes:          "Alpine container",
+		ContainerImage: "linux-x86-alpine:latest",
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/lib/go"},
+		SSHUsername:    "root",
 	},
 	"host-linux-amd64-androidemu": {
-		Notes:           "Debian Buster w/ Android SDK + emulator (use nested virt)",
-		ContainerImage:  "android-amd64-emu:bff27c0c9263",
-		KonletVMImage:   "android-amd64-emu",
-		NestedVirt:      true,
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		SSHUsername:     "root",
+		Notes:          "Debian Buster w/ Android SDK + emulator (use nested virt)",
+		ContainerImage: "android-amd64-emu:bff27c0c9263",
+		KonletVMImage:  "android-amd64-emu",
+		NestedVirt:     true,
+		env:            []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:    "root",
 	},
 	"host-linux-amd64-bullseye": {
-		Notes:           "Debian Bullseye",
-		ContainerImage:  "linux-x86-bullseye:latest",
-		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		SSHUsername:     "root",
+		Notes:          "Debian Bullseye",
+		ContainerImage: "linux-x86-bullseye:latest",
+		env:            []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:    "root",
 	},
 	"host-linux-amd64-buster": {
-		Notes:           "Debian Buster",
-		ContainerImage:  "linux-x86-buster:latest",
-		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		SSHUsername:     "root",
+		Notes:          "Debian Buster",
+		ContainerImage: "linux-x86-buster:latest",
+		env:            []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:    "root",
 	},
 	"host-linux-amd64-clang": {
-		Notes:           "Container with clang.",
-		ContainerImage:  "linux-x86-clang:latest",
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		SSHUsername:     "root",
+		Notes:          "Container with clang.",
+		ContainerImage: "linux-x86-clang:latest",
+		env:            []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:    "root",
 	},
 	"host-linux-amd64-fedora": {
-		Notes:           "Fedora 30",
-		ContainerImage:  "linux-x86-fedora:latest",
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/goboot"},
-		SSHUsername:     "root",
+		Notes:          "Fedora 30",
+		ContainerImage: "linux-x86-fedora:latest",
+		env:            []string{"GOROOT_BOOTSTRAP=/goboot"},
+		SSHUsername:    "root",
 	},
 	"host-linux-amd64-js-wasm": {
-		Notes:           "Container with node.js for testing js/wasm.",
-		ContainerImage:  "js-wasm:latest",
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		SSHUsername:     "root",
+		Notes:          "Container with node.js for testing js/wasm.",
+		ContainerImage: "js-wasm:latest",
+		env:            []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:    "root",
 	},
 	"host-linux-amd64-localdev": {
 		IsReverse:   true,
@@ -311,38 +300,33 @@ var Hosts = map[string]*HostConfig{
 		Notes:               "Cascade Lake performance testing machines",
 		machineType:         "c2-standard-8", // C2 has precisely defined, consistent server architecture.
 		ContainerImage:      "linux-x86-bullseye:latest",
-		buildletURLTmpl:     "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
 		env:                 []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:         "root",
 		CustomDeleteTimeout: 8 * time.Hour,
 	},
 	"host-linux-amd64-s390x-cross": {
-		Notes:           "Container with s390x cross-compiler.",
-		ContainerImage:  "linux-s390x-cross:latest",
-		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		Notes:          "Container with s390x cross-compiler.",
+		ContainerImage: "linux-s390x-cross:latest",
+		env:            []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
 	"host-linux-amd64-sid": {
-		Notes:           "Debian sid, updated occasionally.",
-		ContainerImage:  "linux-x86-sid:latest",
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		SSHUsername:     "root",
+		Notes:          "Debian sid, updated occasionally.",
+		ContainerImage: "linux-x86-sid:latest",
+		env:            []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:    "root",
 	},
 	"host-linux-amd64-stretch": {
-		Notes:           "Debian Stretch",
-		ContainerImage:  "linux-x86-stretch:latest",
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		SSHUsername:     "root",
+		Notes:          "Debian Stretch",
+		ContainerImage: "linux-x86-stretch:latest",
+		env:            []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:    "root",
 	},
 	"host-linux-amd64-stretch-vmx": {
-		Notes:           "Debian Stretch w/ Nested Virtualization (VMX CPU bit) enabled, for testing",
-		ContainerImage:  "linux-x86-stretch:latest",
-		NestedVirt:      true,
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		SSHUsername:     "root",
+		Notes:          "Debian Stretch w/ Nested Virtualization (VMX CPU bit) enabled, for testing",
+		ContainerImage: "linux-x86-stretch:latest",
+		NestedVirt:     true,
+		env:            []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:    "root",
 	},
 	"host-linux-amd64-wsl": {
 		Notes:     "Windows 10 WSL2 Ubuntu",
@@ -352,24 +336,22 @@ var Hosts = map[string]*HostConfig{
 		env:       []string{"GOROOT_BOOTSTRAP=/usr/lib/go"},
 	},
 	"host-linux-arm-aws": {
-		Notes:           "Debian Buster, EC2 arm instance. See x/build/env/linux-arm/aws",
-		VMImage:         "ami-07409163bccd5ac4d",
-		ContainerImage:  "gobuilder-arm-aws:latest",
-		machineType:     "m6g.xlarge",
-		isEC2:           true,
-		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-arm",
-		SSHUsername:     "root",
+		Notes:          "Debian Buster, EC2 arm instance. See x/build/env/linux-arm/aws",
+		VMImage:        "ami-07409163bccd5ac4d",
+		ContainerImage: "gobuilder-arm-aws:latest",
+		machineType:    "m6g.xlarge",
+		isEC2:          true,
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		SSHUsername:    "root",
 	},
 	"host-linux-arm64-aws": {
-		Notes:           "Debian Buster, EC2 arm64 instance. See x/build/env/linux-arm64/aws",
-		VMImage:         "ami-03089323a1d38e652",
-		ContainerImage:  "gobuilder-arm64-aws:latest",
-		machineType:     "m6g.xlarge",
-		isEC2:           true,
-		env:             []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-arm64",
-		SSHUsername:     "root",
+		Notes:          "Debian Buster, EC2 arm64 instance. See x/build/env/linux-arm64/aws",
+		VMImage:        "ami-03089323a1d38e652",
+		ContainerImage: "gobuilder-arm64-aws:latest",
+		machineType:    "m6g.xlarge",
+		isEC2:          true,
+		env:            []string{"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		SSHUsername:    "root",
 	},
 	"host-linux-loong64-3a5000": {
 		Notes:     "Loongson 3A5000 Box hosted by Loongson; loong64 is the short name of LoongArch 64 bit version",
@@ -446,7 +428,6 @@ var Hosts = map[string]*HostConfig{
 		VMImage:            "netbsd-i386-9-0-2019q4",
 		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-386",
 		machineType:        "n2", // force Intel; see go.dev/issue/49209
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-386-0b3b511.tar.gz",
 		SSHUsername:        "root",
 	},
@@ -454,7 +435,6 @@ var Hosts = map[string]*HostConfig{
 		VMImage:            "netbsd-amd64-9-0-2019q4",
 		Notes:              "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-amd64",
 		machineType:        "n2", // force Intel; see go.dev/issue/49209
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.netbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-netbsd-amd64-2da6b33.tar.gz",
 		SSHUsername:        "root",
 	},
@@ -473,7 +453,6 @@ var Hosts = map[string]*HostConfig{
 	"host-openbsd-386-68": {
 		VMImage:            "openbsd-386-68-v3", // v3 adds 009_exit syspatch; see go.dev/cl/278732.
 		machineType:        "n2",                // force Intel; see go.dev/issue/49209
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
 		Notes:              "OpenBSD 6.8 (with 009_exit syspatch); GCE VM, built from build/env/openbsd-386",
 		SSHUsername:        "gopher",
@@ -481,7 +460,6 @@ var Hosts = map[string]*HostConfig{
 	"host-openbsd-386-70": {
 		VMImage:            "openbsd-386-70",
 		machineType:        "n2", // force Intel; see go.dev/issue/49209
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
 		Notes:              "OpenBSD 7.0; GCE VM, built from build/env/openbsd-386",
 		SSHUsername:        "gopher",
@@ -490,7 +468,6 @@ var Hosts = map[string]*HostConfig{
 		// This host config is only for the runtime team to use investigating golang/go#49209.
 		VMImage:            "openbsd-386-70",
 		machineType:        "n2d", // force AMD; see go.dev/issue/49209
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-386-go1_12.tar.gz",
 		Notes:              "OpenBSD 7.0; GCE VM, built from build/env/openbsd-386; AMD",
 		SSHUsername:        "gopher",
@@ -498,7 +475,6 @@ var Hosts = map[string]*HostConfig{
 	"host-openbsd-amd64-68": {
 		VMImage:            "openbsd-amd64-68-v3", // v3 adds 009_exit syspatch; see go.dev/cl/278732.
 		machineType:        "n2",                  // force Intel; see go.dev/issue/49209
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
 		Notes:              "OpenBSD 6.8 (with 009_exit syspatch); GCE VM, built from build/env/openbsd-amd64",
 		SSHUsername:        "gopher",
@@ -506,7 +482,6 @@ var Hosts = map[string]*HostConfig{
 	"host-openbsd-amd64-70": {
 		VMImage:            "openbsd-amd64-70",
 		machineType:        "n2", // force Intel; see go.dev/issue/49209
-		buildletURLTmpl:    "https://storage.googleapis.com/$BUCKET/buildlet.openbsd-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-openbsd-amd64-go1_12.tar.gz",
 		Notes:              "OpenBSD 7.0; GCE VM, built from build/env/openbsd-amd64",
 		SSHUsername:        "gopher",
@@ -516,6 +491,7 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum: 1,
 		env:       []string{"GOROOT_BOOTSTRAP=/usr/local/go"},
 		Owners:    []*gophers.Person{gh("4a6f656c")},
+		HostArch:  "openbsd-arm-5",
 	},
 	"host-openbsd-arm64-joelsing": {
 		IsReverse: true,
@@ -538,7 +514,6 @@ var Hosts = map[string]*HostConfig{
 	"host-plan9-386-gce": {
 		VMImage:            "plan9-386-v7",
 		Notes:              "Plan 9 from 0intro; GCE VM, built from build/env/plan9-386",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.plan9-386",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-plan9-386.tar.gz",
 		env:                []string{"GO_TEST_TIMEOUT_SCALE=3"},
 	},
@@ -563,57 +538,48 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-windows-amd64-2008": {
 		VMImage:            "windows-amd64-server-2008r2-v7",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2008-newcc": {
 		VMImage:            "windows-amd64-server-2008r2-v8",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2012": {
 		VMImage:            "windows-amd64-server-2012r2-v7",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2012-newcc": {
 		VMImage:            "windows-amd64-server-2012r2-v8",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2016": {
 		VMImage:            "windows-amd64-server-2016-v7",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2016-big": {
 		VMImage:            "windows-amd64-server-2016-v7",
 		machineType:        "e2-standard-16",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2016-big-newcc": {
 		VMImage:            "windows-amd64-server-2016-v8",
 		machineType:        "e2-standard-16",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-amd64-2016-newcc": {
 		VMImage:            "windows-amd64-server-2016-v8",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-amd64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
 	"host-windows-arm64-mini": { // host name known to cmd/buildlet/stage0, cannot change
 		Notes:              "macOS hosting Windows 10 in qemu with HVM acceleration.",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-arm64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-windows-arm64-f22ec5.tar.gz",
 		IsReverse:          true,
 		ExpectNum:          2,
@@ -626,7 +592,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-windows11-arm64-mini": { // host name known to cmd/buildlet/stage0, cannot change
 		Notes:              "macOS hosting Windows 11 in qemu with HVM acceleration.",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-arm64",
+		HostArch:           "windows-arm64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-windows-arm64-f22ec5.tar.gz",
 		IsReverse:          true,
 		ExpectNum:          5,
@@ -669,6 +635,16 @@ func init() {
 		if c.HostType != key {
 			panic(fmt.Sprintf("HostType %q != key %q", c.HostType, key))
 		}
+		if c.HostArch == "" {
+			f := strings.Split(c.HostType, "-")
+			if len(f) < 3 {
+				panic(fmt.Sprintf("invalid HostType %q", c.HostType))
+			}
+			c.HostArch = f[1] + "-" + f[2] // "linux-amd64"
+			if f[2] == "arm" {
+				c.HostArch += "-7" // assume newer ARM
+			}
+		}
 		nSet := 0
 		if c.VMImage != "" {
 			nSet++
@@ -682,9 +658,6 @@ func init() {
 		if nSet != 1 {
 			panic(fmt.Sprintf("exactly one of VMImage, ContainerImage, IsReverse must be set for host %q; got %v", key, nSet))
 		}
-		if c.buildletURLTmpl == "" && (c.VMImage != "" || c.ContainerImage != "") {
-			panic(fmt.Sprintf("missing buildletURLTmpl for host type %q", key))
-		}
 	}
 }
 
@@ -697,13 +670,18 @@ type HostConfig struct {
 	// the key in the Hosts map.
 	HostType string
 
-	// buildletURLTmpl is the URL "template" ($BUCKET is auto-expanded)
-	// for the URL to the buildlet binary.
-	// This field is required for VM and Container builders. It's not
-	// needed for reverse buildlets because in that case, the buildlets
-	// are already running and their stage0 should know how to update it
-	// it automatically.
-	buildletURLTmpl string
+	// HostArch is a string identifying the host architecture, to decide which binaries to run on it.
+	// If unset, it is derived in func init from the HostType
+	// (for example, host-linux-amd64-foo has HostArch "linux-amd64").
+	// For clarity, the HostArch for 32-bit arm always ends in -5 or -7
+	// to specify the GOARM value; implicit HostArch always use -7.
+	// (This specificity is necessary because there is no one value that
+	// works on all 32-bit ARM chips on non-Linux operating systems.)
+	//
+	// If set explicitly, HostArch should have the form "GOOS-GOARCH-suffix",
+	// where suffix is the GO$GOARCH setting (that is, GOARM for GOARCH=arm).
+	// For example "openbsd-arm-5" for GOOS=openbsd GOARCH=arm GOARM=5.
+	HostArch string
 
 	// Exactly 1 of these must be set (with the exception of EC2 instances).
 	// An EC2 instance may run a container inside a VM. In that case, a VMImage
@@ -1035,8 +1013,7 @@ func (c *BuildConfig) GoBootstrapURL(e *buildenv.Environment) string {
 
 // BuildletBinaryURL returns the public URL of this builder's buildlet.
 func (c *HostConfig) BuildletBinaryURL(e *buildenv.Environment) string {
-	tmpl := c.buildletURLTmpl
-	return strings.Replace(tmpl, "$BUCKET", e.BuildletBucket, 1)
+	return "https://storage.googleapis.com/" + e.BuildletBucket + "/buildlet." + c.HostArch
 }
 
 func (c *BuildConfig) IsRace() bool {

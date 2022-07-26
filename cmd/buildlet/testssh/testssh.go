@@ -139,9 +139,6 @@ func genKey() (pubKey, privateKeyPath string) {
 func getIPPort() string {
 	if *startImage != "" {
 		buildlet := "buildlet.linux-amd64"
-		if strings.Contains(*startImage, "linux-x86-alpine") {
-			buildlet = "buildlet.linux-amd64-static"
-		}
 		log.Printf("creating container with image %s ...", *startImage)
 		out, err := exec.Command("docker", "run", "-d",
 			"--stop-timeout=300",
