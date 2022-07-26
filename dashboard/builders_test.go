@@ -669,12 +669,6 @@ func TestBuilderConfig(t *testing.T) {
 
 func TestHostConfigsAllUsed(t *testing.T) {
 	knownUnused := map[string]bool{
-		// Currently host-linux-armhf-cross and host-linux-armel-cross aren't
-		// referenced, but the coordinator hard-codes them, so don't make
-		// these two an error for now.
-		"host-linux-armhf-cross": true,
-		"host-linux-armel-cross": true,
-
 		"host-linux-amd64-alpine": true, // TODO(golang.org/issue/19938): Fix the Alpine builder, or remove it.
 	}
 

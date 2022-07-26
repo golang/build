@@ -140,18 +140,6 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
-	"host-linux-armhf-cross": &HostConfig{
-		Notes:           "Debian with armhf cross-compiler, built from env/crosscompile/linux-armhf",
-		ContainerImage:  "linux-armhf-cross:latest",
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-	},
-	"host-linux-armel-cross": &HostConfig{
-		Notes:           "Debian with armel cross-compiler, from env/crosscompile/linux-armel",
-		ContainerImage:  "linux-armel-cross:latest",
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-	},
 	"host-linux-amd64-localdev": &HostConfig{
 		IsReverse:   true,
 		ExpectNum:   0,
