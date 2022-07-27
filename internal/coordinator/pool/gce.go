@@ -371,6 +371,16 @@ func (p *GCEBuildlet) pollQuota() {
 	}
 }
 
+func (p *GCEBuildlet) QuotaStats() map[string]*queue.QuotaStats {
+	return map[string]*queue.QuotaStats{
+		"gce-cpu":       p.cpuQueue.ToExported(),
+		"gce-c2-cpu":    p.c2cpuQueue.ToExported(),
+		"gce-n2-cpu":    p.n2cpuQueue.ToExported(),
+		"gce-n2d-cpu":   p.n2dcpuQueue.ToExported(),
+		"gce-instances": p.instQueue.ToExported(),
+	}
+}
+
 // SetEnabled marks the buildlet pool as enabled.
 func (p *GCEBuildlet) SetEnabled(enabled bool) {
 	p.mu.Lock()
@@ -481,13 +491,14 @@ func (p *GCEBuildlet) String() string {
 func (p *GCEBuildlet) capacityString() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	qLen := p.cpuQueue.Len()
 	cpuUsage, cpuLimit := p.cpuQueue.Quotas()
 	c2Usage, c2Limit := p.c2cpuQueue.Quotas()
 	instUsage, instLimit := p.instQueue.Quotas()
 	n2Usage, n2Limit := p.n2cpuQueue.Quotas()
 	n2dUsage, n2dLimit := p.n2dcpuQueue.Quotas()
-	return fmt.Sprintf("%d/%d instances; %d/%d CPUs, %d/%d C2_CPUS, %d/%d N2_CPUS, %d/%d N2D_CPUS",
-		instUsage, instLimit,
+	return fmt.Sprintf("%d/%d instances; %d/%d CPUs (%d), %d/%d C2_CPUS, %d/%d N2_CPUS, %d/%d N2D_CPUS",
+		instUsage, instLimit, qLen,
 		cpuUsage, cpuLimit,
 		c2Limit, c2Usage,
 		n2Limit, n2Usage,

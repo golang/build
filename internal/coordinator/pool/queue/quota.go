@@ -7,6 +7,7 @@ package queue
 import (
 	"container/heap"
 	"context"
+	"sort"
 	"sync"
 )
 
@@ -131,6 +132,36 @@ func (q *Quota) AwaitQueue(ctx context.Context, cost int, si *SchedItem) error {
 		return ctx.Err()
 	}
 	return q.Enqueue(cost, si).Await(ctx)
+}
+
+type QuotaStats struct {
+	Used  int
+	Limit int
+	Items []ItemStats
+}
+
+type ItemStats struct {
+	Build *SchedItem
+	Cost  int
+}
+
+func (q *Quota) ToExported() *QuotaStats {
+	q.mu.Lock()
+	qs := &QuotaStats{
+		Used:  q.used,
+		Limit: q.limit,
+		Items: make([]ItemStats, q.queue.Len()),
+	}
+	for i, item := range *q.queue {
+		qs.Items[i].Build = item.SchedItem()
+		qs.Items[i].Cost = item.cost
+	}
+	q.mu.Unlock()
+
+	sort.Slice(qs.Items, func(i, j int) bool {
+		return qs.Items[i].Build.Less(qs.Items[j].Build)
+	})
+	return qs
 }
 
 // An Item is something we manage in a priority buildletQueue.

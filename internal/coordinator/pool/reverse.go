@@ -401,6 +401,16 @@ func (p *ReverseBuildletPool) WriteHTMLStatus(w io.Writer) {
 	fmt.Fprintf(w, "<b>Reverse pool machine detail</b><ul>%s</ul>", buf.Bytes())
 }
 
+func (p *ReverseBuildletPool) QuotaStats() map[string]*queue.QuotaStats {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	ret := make(map[string]*queue.QuotaStats)
+	for typ, queue := range p.hostQueue {
+		ret[fmt.Sprintf("reverse-%s", typ)] = queue.ToExported()
+	}
+	return ret
+}
+
 // HostTypeCount iterates through the running reverse buildlets, and
 // constructs a count of running buildlets per hostType.
 func (p *ReverseBuildletPool) HostTypeCount() map[string]int {

@@ -222,6 +222,12 @@ func (eb *EC2Buildlet) GetBuildlet(ctx context.Context, hostType string, lg Logg
 	return bc, nil
 }
 
+func (eb *EC2Buildlet) QuotaStats() map[string]*queue.QuotaStats {
+	return map[string]*queue.QuotaStats{
+		"ec2-cpu": eb.ledger.cpuQueue.ToExported(),
+	}
+}
+
 // String gives a report of capacity usage for the EC2 buildlet pool.
 func (eb *EC2Buildlet) String() string {
 	return fmt.Sprintf("EC2 pool capacity: %s", eb.capacityString())

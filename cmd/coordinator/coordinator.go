@@ -287,6 +287,10 @@ func main() {
 			Name:     "linux-amd64",
 			HostType: "host-linux-amd64-localdev",
 		}
+		dashboard.Builders["linux-amd64-localdev"] = &dashboard.BuildConfig{
+			Name:     "linux-amd64",
+			HostType: "host-linux-amd64-localdev",
+		}
 	}
 
 	go pool.CoordinatorProcess().UpdateInstanceRecord()
@@ -375,6 +379,7 @@ func main() {
 	mux.HandleFunc("/status/reverse.json", pool.ReversePool().ServeReverseStatusJSON)
 	mux.HandleFunc("/status/post-submit-active.json", handlePostSubmitActiveJSON)
 	mux.Handle("/dashboard", dashV2)
+	mux.HandleFunc("/queues", handleQueues)
 	mux.Handle("/buildlet/create", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletCreate)))
 	mux.Handle("/buildlet/list", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletList)))
 	if *mode == "dev" {

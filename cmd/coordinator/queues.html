@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2022 The Go Authors All rights reserved.
+ Use of this source code is governed by a BSD-style
+ license that can be found in the LICENSE file.
+-->
+
+<html lang="en">
+  <head>
+    <link rel="stylesheet" href="/style.css" />
+    <title>Go Farmer Queues</title>
+  </head>
+  <body>
+    {{template "build-header"}}
+    <h2>Queues</h2>
+    <div class="QueueStats">
+      {{range $name, $stats := .Queues}}
+        <div class="QueueStats-queue">
+          <table class="QueueStats-queueTable">
+            <caption>
+              <a href="#{{$name}}" id="{{$name}}">
+                {{$name}}
+              </a>
+            </caption>
+            <thead>
+              <tr>
+                <th class="QueueStats-queueTableHeader">Name</th>
+                <th class="QueueStats-queueTableHeader">Cost</th>
+                <th class="QueueStats-queueTableHeader">Type/Priority</th>
+                <th class="QueueStats-queueTableHeader">User</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range $item := $stats.Items}}
+                <tr class="QueueStats-queueTableRow">
+                  {{$build := $item.Build}}
+                  <td class="QueueStats-queueTableColumn">
+                    {{$item.Build.HostType}}
+                  </td>
+                  <td class="QueueStats-queueTableColumn">
+                    {{$item.Cost}}
+                  </td>
+                  <td class="QueueStats-queueTableColumn">
+                    {{if $build.IsRelease}}
+                      Release
+                    {{else if $build.IsGomote}}
+                      Gomote
+                    {{else if $build.IsTry}}
+                      Trybot
+                    {{else}}
+                      Post-submit
+                    {{end}}
+                    /
+                    {{$build.Priority}}
+                  </td>
+                  <td class="QueueStats-queueTableColumn">
+                    {{$build.User}}
+                  </td>
+                </tr>
+              {{else}}
+                <tr class="QueueStats-queueTableRow">
+                  <td class="QueueStats-queueTableColumn" colspan="4">
+                    Queue empty.
+                  </td>
+                </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      {{end}}
+    </div>
+  </body>
+</html>

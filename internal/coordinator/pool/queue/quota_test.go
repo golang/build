@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestQueueEmpty(t *testing.T) {
@@ -162,5 +164,34 @@ func TestQueueCancel(t *testing.T) {
 	used, limit := q.Quotas()
 	if !(used == 0 && limit == 15) {
 		t.Errorf("q.Quotas() = %d, %d, wanted %d, %d", used, limit, 0, 15)
+	}
+}
+
+func TestQueueToExported(t *testing.T) {
+	q := NewQuota()
+	q.UpdateLimit(10)
+	q.Enqueue(100, &SchedItem{IsTry: true})
+	q.Enqueue(100, &SchedItem{IsTry: true})
+	q.Enqueue(100, &SchedItem{IsTry: true})
+	q.Enqueue(100, &SchedItem{IsGomote: true})
+	q.Enqueue(100, &SchedItem{IsGomote: true})
+	q.Enqueue(100, &SchedItem{IsGomote: true})
+	q.Enqueue(100, &SchedItem{IsRelease: true})
+	want := &QuotaStats{
+		Used:  0,
+		Limit: 10,
+		Items: []ItemStats{
+			{Build: &SchedItem{IsRelease: true}, Cost: 100},
+			{Build: &SchedItem{IsGomote: true}, Cost: 100},
+			{Build: &SchedItem{IsGomote: true}, Cost: 100},
+			{Build: &SchedItem{IsGomote: true}, Cost: 100},
+			{Build: &SchedItem{IsTry: true}, Cost: 100},
+			{Build: &SchedItem{IsTry: true}, Cost: 100},
+			{Build: &SchedItem{IsTry: true}, Cost: 100},
+		},
+	}
+	got := q.ToExported()
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("q.ToExported() mismatch (-want +got):\n%s", diff)
 	}
 }
