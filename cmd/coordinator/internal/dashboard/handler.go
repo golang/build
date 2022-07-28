@@ -11,6 +11,7 @@ package dashboard
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"fmt"
 	"html/template"
 	"log"
@@ -20,7 +21,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
-	"golang.org/x/build/cmd/coordinator/internal"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"google.golang.org/grpc"
@@ -291,12 +291,13 @@ func formatGitAuthor(name, email string) string {
 	return "<" + email + ">"
 }
 
+//go:embed dashboard.html
+var dashboardTemplate string
+
 var templ = template.Must(
 	template.New("dashboard.html").Funcs(template.FuncMap{
 		"shortHash": shortHash,
-	}).ParseFiles(
-		internal.FilePath("dashboard.html", "internal/dashboard", "cmd/coordinator/internal/dashboard"),
-	),
+	}).Parse(dashboardTemplate),
 )
 
 // shortHash returns a short version of a hash.

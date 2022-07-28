@@ -334,9 +334,6 @@ func main() {
 	}
 	maintnerClient = apipb.NewMaintnerServiceClient(cc)
 
-	if err := loadStatic(); err != nil {
-		log.Printf("Failed to load static resources: %v", err)
-	}
 	sshCA := mustRetrieveSSHCertificateAuthority()
 
 	var gomoteBucket string

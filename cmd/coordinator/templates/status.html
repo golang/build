@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2022 The Go Authors All rights reserved.
+ Use of this source code is governed by a BSD-style
+ license that can be found in the LICENSE file.
+-->
+
+<html>
+<head><link rel="stylesheet" href="/style.css"/><title>Go Farmer</title></head>
+<body>
+{{template "build-header"}}
+
+<h2>Running</h2>
+<p>{{printf "%d" .Total}} total builds; {{printf "%d" .ActiveBuilds}} active ({{.ActiveReverse}} reverse). Uptime {{printf "%s" .Uptime}}. Version {{.Version}}.
+
+<h2 id=health>Health <a href='#health'>¶</a></h2>
+<ul>{{range .HealthCheckers}}
+    <li><a href="/status/{{.ID}}">{{.Title}}</a>{{if .DocURL}} [<a href="{{.DocURL}}">docs</a>]{{end -}}: {{with .DoCheck.Out}}
+        <ul>
+            {{- range .}}
+              <li>{{ .AsHTML}}</li>
+            {{- end}}
+        </ul>
+        {{else}}ok{{end}}
+    </li>
+    {{end}}</ul>
+
+<h2 id=remote>Remote buildlets <a href='#remote'>¶</a></h2>
+{{.RemoteBuildlets}}
+
+<h2 id=gomote>Gomote Remote buildlets <a href='#gomote'>¶</a></h2>
+{{.GomoteInstances}}
+
+<h2 id=trybots>Active Trybot Runs <a href='#trybots'>¶</a></h2>
+{{- if .TrybotsErr}}
+  <b>trybots disabled:</b>: {{.TrybotsErr}}
+{{else}}
+    {{.Trybots}}
+{{end}}
+
+<h2 id=sched>Scheduler State <a href='#sched'>¶</a></h2>
+<ul>
+    {{range .SchedState.HostTypes}}
+      <li><b>{{.HostType}}</b>: {{.Total.Count}} waiting (oldest {{.Total.Oldest}}, newest {{.Total.Newest}}{{if .LastProgress}}, progress {{.LastProgress}}{{end}})
+          {{if or .Gomote.Count .Try.Count}}<ul>
+              {{if .Gomote.Count}}<li>gomote: {{.Gomote.Count}} (oldest {{.Gomote.Oldest}}, newest {{.Gomote.Newest}})</li>{{end}}
+              {{if .Try.Count}}<li>try: {{.Try.Count}} (oldest {{.Try.Oldest}}, newest {{.Try.Newest}})</li>{{end}}
+          </ul>{{end}}
+      </li>
+    {{end}}
+</ul>
+
+<h2 id=pools>Buildlet pools <a href='#pools'>¶</a></h2>
+<ul>
+  <li>{{.GCEPoolStatus}}</li>
+  <li>{{.EC2PoolStatus}}</li>
+  <li>{{.KubePoolStatus}}</li>
+  <li>{{.ReversePoolStatus}}</li>
+</ul>
+
+<h2 id=active>Active builds <a href='#active'>¶</a></h2>
+<ul>
+    {{range .Active}}
+      <li><pre>{{.HTMLStatusTruncated}}</pre></li>
+    {{end}}
+</ul>
+
+<h2 id=pending>Pending builds <a href='#pending'>¶</a></h2>
+<ul>
+    {{range .Pending}}
+      <li><span>{{.HTMLStatusLine}}</span></li>
+    {{end}}
+</ul>
+
+<h2 id=completed>Recently completed <a href='#completed'>¶</a></h2>
+<ul>
+    {{range .Recent}}
+      <li><span>{{.HTMLStatusLine}}</span></li>
+    {{end}}
+</ul>
+
+<h2 id=disk>Disk Space <a href='#disk'>¶</a></h2>
+<pre>{{.DiskFree}}</pre>
+
+<h2 id=fd>File Descriptors <a href='#fd'>¶</a></h2>
+<p>{{.NumFD}}</p>
+
+</body>
+</html>

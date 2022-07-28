@@ -12,13 +12,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
 	"html/template"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -33,7 +33,6 @@ import (
 
 	"github.com/google/go-github/github"
 	"go.opencensus.io/stats"
-	"golang.org/x/build/cmd/coordinator/internal"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/coordinator/remote"
@@ -778,119 +777,19 @@ type statusData struct {
 	HealthCheckers    []*healthChecker
 }
 
+//go:embed templates/base.html
+var baseTmplStr string
+
 // baseTmpl defines common templates for reuse in other coordinator templates.
-var baseTmpl = template.Must(template.New("").Parse(`{{define "build-header"}}<header>
-	<h1>
-		<a href="/">Go Build Coordinator</a>
-	</h1>
-	<nav>
-		<ul>
-			<li><a href="https://build.golang.org/">Build Dashboard</a></li>
-			<li><a href="https://perf.golang.org/dashboard">Performance Dashboard</a></li>
-			<li><a href="/builders">Builders</a></li>
-		</ul>
-	</nav>
-	<div class="clear"></div>
-</header>{{end}}`))
+var baseTmpl = template.Must(template.New("").Parse(baseTmplStr))
 
-var statusTmpl = template.Must(baseTmpl.New("status").Parse(`
-<!DOCTYPE html>
-<html>
-<head><link rel="stylesheet" href="/style.css"/><title>Go Farmer</title></head>
-<body>
-{{template "build-header"}}
+//go:embed templates/status.html
+var statusTmplStr string
 
-<h2>Running</h2>
-<p>{{printf "%d" .Total}} total builds; {{printf "%d" .ActiveBuilds}} active ({{.ActiveReverse}} reverse). Uptime {{printf "%s" .Uptime}}. Version {{.Version}}.
+var statusTmpl = template.Must(baseTmpl.New("status").Parse(statusTmplStr))
 
-<h2 id=health>Health <a href='#health'>¶</a></h2>
-<ul>{{range .HealthCheckers}}
-  <li><a href="/status/{{.ID}}">{{.Title}}</a>{{if .DocURL}} [<a href="{{.DocURL}}">docs</a>]{{end -}}: {{with .DoCheck.Out}}
-      <ul>
-        {{- range .}}
-          <li>{{ .AsHTML}}</li>
-        {{- end}}
-      </ul>
-    {{else}}ok{{end}}
-  </li>
-{{end}}</ul>
-
-<h2 id=remote>Remote buildlets <a href='#remote'>¶</a></h2>
-{{.RemoteBuildlets}}
-
-<h2 id=gomote>Gomote Remote buildlets <a href='#gomote'>¶</a></h2>
-{{.GomoteInstances}}
-
-<h2 id=trybots>Active Trybot Runs <a href='#trybots'>¶</a></h2>
-{{- if .TrybotsErr}}
-<b>trybots disabled:</b>: {{.TrybotsErr}}
-{{else}}
-{{.Trybots}}
-{{end}}
-
-<h2 id=sched>Scheduler State <a href='#sched'>¶</a></h2>
-<ul>
-   {{range .SchedState.HostTypes}}
-       <li><b>{{.HostType}}</b>: {{.Total.Count}} waiting (oldest {{.Total.Oldest}}, newest {{.Total.Newest}}{{if .LastProgress}}, progress {{.LastProgress}}{{end}})
-          {{if or .Gomote.Count .Try.Count}}<ul>
-            {{if .Gomote.Count}}<li>gomote: {{.Gomote.Count}} (oldest {{.Gomote.Oldest}}, newest {{.Gomote.Newest}})</li>{{end}}
-            {{if .Try.Count}}<li>try: {{.Try.Count}} (oldest {{.Try.Oldest}}, newest {{.Try.Newest}})</li>{{end}}
-          </ul>{{end}}
-       </li>
-   {{end}}
-</ul>
-
-<h2 id=pools>Buildlet pools <a href='#pools'>¶</a></h2>
-<ul>
-	<li>{{.GCEPoolStatus}}</li>
-	<li>{{.EC2PoolStatus}}</li>
-	<li>{{.KubePoolStatus}}</li>
-	<li>{{.ReversePoolStatus}}</li>
-</ul>
-
-<h2 id=active>Active builds <a href='#active'>¶</a></h2>
-<ul>
-	{{range .Active}}
-	<li><pre>{{.HTMLStatusTruncated}}</pre></li>
-	{{end}}
-</ul>
-
-<h2 id=pending>Pending builds <a href='#pending'>¶</a></h2>
-<ul>
-	{{range .Pending}}
-	<li><span>{{.HTMLStatusLine}}</span></li>
-	{{end}}
-</ul>
-
-<h2 id=completed>Recently completed <a href='#completed'>¶</a></h2>
-<ul>
-	{{range .Recent}}
-	<li><span>{{.HTMLStatusLine}}</span></li>
-	{{end}}
-</ul>
-
-<h2 id=disk>Disk Space <a href='#disk'>¶</a></h2>
-<pre>{{.DiskFree}}</pre>
-
-<h2 id=fd>File Descriptors <a href='#fd'>¶</a></h2>
-<p>{{.NumFD}}</p>
-
-</body>
-</html>
-`))
-
+//go:embed style.css
 var styleCSS []byte
-
-// loadStatic loads static resources into memroy for serving.
-func loadStatic() error {
-	path := internal.FilePath("style.css", "cmd/coordinator")
-	css, err := ioutil.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("ioutil.ReadFile(%q): %w", path, err)
-	}
-	styleCSS = css
-	return nil
-}
 
 func handleStyleCSS(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "style.css", processStartTime, bytes.NewReader(styleCSS))

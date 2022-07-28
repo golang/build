@@ -18,7 +18,7 @@ import (
 	"golang.org/x/build/internal/coordinator/pool/queue"
 )
 
-//go:embed queues.html
+//go:embed templates/queues.html
 var queuesTemplateStr string
 
 var queuesTemplate = template.Must(baseTmpl.New("queues.html").Parse(queuesTemplateStr))

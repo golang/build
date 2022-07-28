@@ -10,6 +10,7 @@ package main
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -44,6 +45,9 @@ func handleBuilders(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+//go:embed templates/builders.html
+var buildersTmplStr string
+
 var buildersTmpl = template.Must(baseTmpl.New("builders").Funcs(template.FuncMap{
 	"builderOwners": func(bc *dashboard.BuildConfig) template.HTML {
 		owners := bc.HostConfig().Owners
@@ -71,44 +75,4 @@ var buildersTmpl = template.Must(baseTmpl.New("builders").Funcs(template.FuncMap
 		}
 		return template.HTML(buf.String())
 	},
-}).Parse(`
-<!DOCTYPE html>
-<html>
-<head><link rel="stylesheet" href="/style.css"/><title>Go Farmer</title></head>
-<body>
-{{template "build-header"}}
-
-<h2 id='builders'>Defined Builders</h2>
-
-<table>
-<thead><tr><th>name</th><th>pool</th><th>owners</th><th>known issue</th><th>notes</th></tr>
-</thead>
-{{range .Builders}}
-<tr>
-	<td>{{.Name}}</td>
-	<td><a href='#{{.HostType}}'>{{.HostType}}</a></td>
-	<td>{{builderOwners .}}</td>
-	<td>{{range $i, $issue := .KnownIssues}}{{if ne $i 0}}, {{end}}<a href="https://go.dev/issue/{{$issue}}" title="This builder has a known issue. See: go.dev/issue/{{$issue}}.">#{{$issue}}</a>{{end}}</td>
-	<td>{{.Notes}}</td>
-</tr>
-{{end}}
-</table>
-
-<h2 id='hosts'>Defined Host Types (pools)</h2>
-
-<table>
-<thead><tr><th>name</th><th>type</th><th>notes</th></tr>
-</thead>
-{{range .Hosts}}
-<tr id='{{.HostType}}'>
-	<td>{{.HostType}}</td>
-	<td>{{.PoolName}}</td>
-	<td>{{.Notes}}</td>
-</tr>
-{{end}}
-</table>
-
-
-</body>
-</html>
-`))
+}).Parse(buildersTmplStr))
