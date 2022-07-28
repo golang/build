@@ -50,12 +50,13 @@ set -x
 
 mkdir -p ~/go/bin;
 while true; do
+  rm -f ~/go/bin/buildlet
   url="https://storage.googleapis.com/go-builder-data/buildlet.darwin-arm64"
   while ! curl -f -o ~/go/bin/buildlet "$url"; do
       echo
       echo "curl failed to fetch $url"
       echo "Sleeping before retrying..."
-      sleep 2
+      sleep 5
   done
   chmod +x ~/go/bin/buildlet
 
