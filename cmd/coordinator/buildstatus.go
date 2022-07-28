@@ -284,6 +284,7 @@ func (st *buildStatus) onceInitHelpersFunc() {
 		IsTry:      st.isTry(),
 		CommitTime: st.commitTime(),
 		Branch:     st.branch(),
+		Repo:       st.RepoOrGo(),
 		User:       st.AuthorEmail,
 	}
 	st.helpers = getBuildlets(st.ctx, st.conf.NumTestHelpers(st.isTry()), schedTmpl, st)
@@ -379,6 +380,7 @@ func (st *buildStatus) getBuildlet() (buildlet.Client, error) {
 		IsTry:      st.trySet != nil,
 		BuilderRev: st.BuilderRev,
 		CommitTime: st.commitTime(),
+		Repo:       st.RepoOrGo(),
 		Branch:     st.branch(),
 		User:       st.AuthorEmail,
 	}
@@ -701,6 +703,7 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompil
 		IsTry:      st.trySet != nil,
 		BuilderRev: st.BuilderRev,
 		CommitTime: st.commitTime(),
+		Repo:       st.RepoOrGo(),
 		Branch:     st.branch(),
 		User:       st.AuthorEmail,
 	})

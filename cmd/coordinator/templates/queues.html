@@ -25,9 +25,11 @@
             <thead>
               <tr>
                 <th class="QueueStats-queueTableHeader">Name</th>
+                <th class="QueueStats-queueTableHeader">Branch</th>
                 <th class="QueueStats-queueTableHeader">Cost</th>
-                <th class="QueueStats-queueTableHeader">Type/Priority</th>
+                <th class="QueueStats-queueTableHeader">Priority</th>
                 <th class="QueueStats-queueTableHeader">User</th>
+                <th class="QueueStats-queueTableHeader">Waiting</th>
               </tr>
             </thead>
             <tbody>
@@ -35,7 +37,10 @@
                 <tr class="QueueStats-queueTableRow">
                   {{$build := $item.Build}}
                   <td class="QueueStats-queueTableColumn">
-                    {{$item.Build.HostType}}
+                    {{$item.Build.Name}}
+                  </td>
+                  <td class="QueueStats-queueTableColumn">
+                    {{printf "%s/%s" $item.Build.Repo $item.Build.Branch}}
                   </td>
                   <td class="QueueStats-queueTableColumn">
                     {{$item.Cost}}
@@ -50,18 +55,18 @@
                     {{else}}
                       Post-submit
                     {{end}}
-                    /
-                    {{$build.Priority}}
+                    ({{$build.Priority}})
                   </td>
                   <td class="QueueStats-queueTableColumn">
                     {{$build.User}}
                   </td>
+                  <td class="QueueStats-queueTableColumn">
+                    {{humanDuration (timeSince $build.RequestTime)}}
+                  </td>
                 </tr>
               {{else}}
                 <tr class="QueueStats-queueTableRow">
-                  <td class="QueueStats-queueTableColumn" colspan="4">
-                    Queue empty.
-                  </td>
+                  <td class="QueueStats-queueTableColumn" colspan="6">Queue empty.</td>
                 </tr>
               {{end}}
             </tbody>

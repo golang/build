@@ -32,6 +32,7 @@ type SchedItem struct {
 	IsGomote           bool
 	IsTry              bool
 	IsHelper           bool
+	Repo               string
 	Branch             string
 
 	// CommitTime is the latest commit date of the relevant repos
