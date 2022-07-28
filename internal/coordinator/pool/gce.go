@@ -491,14 +491,13 @@ func (p *GCEBuildlet) String() string {
 func (p *GCEBuildlet) capacityString() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	qLen := p.cpuQueue.Len()
 	cpuUsage, cpuLimit := p.cpuQueue.Quotas()
 	c2Usage, c2Limit := p.c2cpuQueue.Quotas()
 	instUsage, instLimit := p.instQueue.Quotas()
 	n2Usage, n2Limit := p.n2cpuQueue.Quotas()
 	n2dUsage, n2dLimit := p.n2dcpuQueue.Quotas()
-	return fmt.Sprintf("%d/%d instances; %d/%d CPUs (%d), %d/%d C2_CPUS, %d/%d N2_CPUS, %d/%d N2D_CPUS",
-		instUsage, instLimit, qLen,
+	return fmt.Sprintf("%d/%d instances; %d/%d CPUs, %d/%d C2_CPUS, %d/%d N2_CPUS, %d/%d N2D_CPUS",
+		instUsage, instLimit,
 		cpuUsage, cpuLimit,
 		c2Limit, c2Usage,
 		n2Limit, n2Usage,
