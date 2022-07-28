@@ -31,13 +31,11 @@ func TestTweetRelease(t *testing.T) {
 
 	tests := [...]struct {
 		name    string
-		taskFn  func(TweetTasks, *workflow.TaskContext, ReleaseTweet) (string, error)
 		in      ReleaseTweet
 		wantLog string
 	}{
 		{
-			name:   "minor",
-			taskFn: TweetTasks.TweetMinorRelease,
+			name: "minor",
 			in: ReleaseTweet{
 				Version:          "go1.17.1",
 				SecondaryVersion: "go1.16.8",
@@ -67,8 +65,7 @@ $ go1.17.1 version
 go version go1.17.1 linux/arm64` + "\n",
 		},
 		{
-			name:   "minor-solo",
-			taskFn: TweetTasks.TweetMinorRelease,
+			name: "minor-solo",
 			in: ReleaseTweet{
 				Version:      "go1.11.1",
 				Announcement: "https://groups.google.com/g/golang-announce/c/pFXKAfoVJqw",
@@ -94,8 +91,7 @@ $ go1.11.1 version
 go version go1.11.1 darwin/amd64` + "\n",
 		},
 		{
-			name:   "beta",
-			taskFn: TweetTasks.TweetBetaRelease,
+			name: "beta",
 			in: ReleaseTweet{
 				Version:      "go1.17beta1",
 				Announcement: "https://groups.google.com/g/golang-announce/c/i4EliPDV9Ok/m/MxA-nj53AAAJ",
@@ -123,8 +119,7 @@ $ go1.17beta1 version
 go version go1.17beta1 darwin/amd64` + "\n",
 		},
 		{
-			name:   "rc",
-			taskFn: TweetTasks.TweetRCRelease,
+			name: "rc",
 			in: ReleaseTweet{
 				Version:      "go1.17rc2",
 				Announcement: "https://groups.google.com/g/golang-announce/c/yk30ovJGXWY/m/p9uUnKbbBQAJ",
@@ -152,8 +147,7 @@ $ go1.17rc2 version
 go version go1.17rc2 windows/arm64` + "\n",
 		},
 		{
-			name:   "major",
-			taskFn: TweetTasks.TweetMajorRelease,
+			name: "major",
 			in: ReleaseTweet{
 				Version:    "go1.17",
 				Security:   "Includes a super duper security fix (CVE-123).",
@@ -187,7 +181,7 @@ go version go1.17 freebsd/amd64` + "\n",
 			// doesn't actually try to tweet, but capture its log.
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			tweetURL, err := tc.taskFn(TweetTasks{TwitterClient: nil}, ctx, tc.in)
+			tweetURL, err := (TweetTasks{}).TweetRelease(ctx, tc.in)
 			if err != nil {
 				t.Fatal("got a non-nil error:", err)
 			}

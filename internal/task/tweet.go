@@ -91,74 +91,14 @@ type TweetTasks struct {
 	}
 }
 
-// TweetMinorRelease posts a tweet announcing a minor Go release.
+// TweetRelease posts a tweet announcing a Go release.
 // ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func (t TweetTasks) TweetMinorRelease(ctx *workflow.TaskContext, r ReleaseTweet) (tweetURL string, _ error) {
+func (t TweetTasks) TweetRelease(ctx *workflow.TaskContext, r ReleaseTweet) (tweetURL string, _ error) {
 	if err := verifyGoVersions(r.Version); err != nil {
 		return "", err
 	} else if err := verifyGoVersions(r.SecondaryVersion); r.SecondaryVersion != "" && err != nil {
 		return "", err
 	}
-	if !strings.HasPrefix(r.Announcement, announcementPrefix) {
-		return "", fmt.Errorf("announcement URL %q doesn't have the expected prefix %q", r.Announcement, announcementPrefix)
-	}
-
-	return t.tweetRelease(ctx, r)
-}
-
-// TweetBetaRelease posts a tweet announcing a beta Go release.
-// ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func (t TweetTasks) TweetBetaRelease(ctx *workflow.TaskContext, r ReleaseTweet) (tweetURL string, _ error) {
-	if r.SecondaryVersion != "" {
-		return "", fmt.Errorf("got 2 Go versions, want 1")
-	}
-	if err := verifyGoVersions(r.Version); err != nil {
-		return "", err
-	}
-	if !strings.HasPrefix(r.Announcement, announcementPrefix) {
-		return "", fmt.Errorf("announcement URL %q doesn't have the expected prefix %q", r.Announcement, announcementPrefix)
-	}
-
-	return t.tweetRelease(ctx, r)
-}
-
-// TweetRCRelease posts a tweet announcing a Go release candidate.
-// ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func (t TweetTasks) TweetRCRelease(ctx *workflow.TaskContext, r ReleaseTweet) (tweetURL string, _ error) {
-	if r.SecondaryVersion != "" {
-		return "", fmt.Errorf("got 2 Go versions, want 1")
-	}
-	if err := verifyGoVersions(r.Version); err != nil {
-		return "", err
-	}
-	if !strings.HasPrefix(r.Announcement, announcementPrefix) {
-		return "", fmt.Errorf("announcement URL %q doesn't have the expected prefix %q", r.Announcement, announcementPrefix)
-	}
-
-	return t.tweetRelease(ctx, r)
-}
-
-const announcementPrefix = "https://groups.google.com/g/golang-announce/c/"
-
-// TweetMajorRelease posts a tweet announcing a major Go release.
-// ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func (t TweetTasks) TweetMajorRelease(ctx *workflow.TaskContext, r ReleaseTweet) (tweetURL string, _ error) {
-	if r.SecondaryVersion != "" {
-		return "", fmt.Errorf("got 2 Go versions, want 1")
-	}
-	if err := verifyGoVersions(r.Version); err != nil {
-		return "", err
-	}
-	if r.Announcement != "" {
-		return "", fmt.Errorf("major release tweet doesn't accept an accouncement URL")
-	}
-
-	return t.tweetRelease(ctx, r)
-}
-
-// tweetRelease posts a tweet announcing a Go release.
-func (t TweetTasks) tweetRelease(ctx *workflow.TaskContext, r ReleaseTweet) (tweetURL string, _ error) {
-	ctx.DisableRetries()
 
 	rnd := rand.New(rand.NewSource(r.seed()))
 
@@ -184,6 +124,7 @@ func (t TweetTasks) tweetRelease(ctx *workflow.TaskContext, r ReleaseTweet) (twe
 	if t.TwitterClient == nil {
 		return "(dry-run)", nil
 	}
+	ctx.DisableRetries()
 	tweetURL, err = t.TwitterClient.PostTweet(tweetText, imagePNG)
 	return tweetURL, err
 }
@@ -249,6 +190,10 @@ func tweetText(r ReleaseTweet, rnd *rand.Rand) (string, error) {
 		}
 	} else {
 		return "", fmt.Errorf("unknown version format: %q", r.Version)
+	}
+
+	if r.SecondaryVersion != "" && name != "minor" {
+		return "", fmt.Errorf("tweet template %q doesn't support more than one release; the SecondaryVersion field can only be used in minor releases", name)
 	}
 
 	var buf bytes.Buffer

@@ -76,59 +76,15 @@ type SentMail struct {
 	Subject string // Subject of the email. Expected to be unique so it can be used to identify the email.
 }
 
-// AnnounceMinorRelease sends an email announcing a minor Go release to Google Groups.
-func (t AnnounceMailTasks) AnnounceMinorRelease(ctx *workflow.TaskContext, r ReleaseAnnouncement) (SentMail, error) {
+// AnnounceRelease sends an email announcing a Go release to Google Groups.
+func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, r ReleaseAnnouncement) (SentMail, error) {
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < time.Minute {
+		return SentMail{}, fmt.Errorf("insufficient time for announce release task; a minimum of a minute left on context is required")
+	}
 	if err := verifyGoVersions(r.Version); err != nil {
 		return SentMail{}, err
 	} else if err := verifyGoVersions(r.SecondaryVersion); r.SecondaryVersion != "" && err != nil {
 		return SentMail{}, err
-	}
-
-	return t.announceRelease(ctx, r)
-}
-
-// AnnounceBetaRelease sends an email announcing a beta Go release to Google Groups.
-func (t AnnounceMailTasks) AnnounceBetaRelease(ctx *workflow.TaskContext, r ReleaseAnnouncement) (SentMail, error) {
-	if r.SecondaryVersion != "" {
-		return SentMail{}, fmt.Errorf("got 2 Go versions, want 1")
-	}
-	if err := verifyGoVersions(r.Version); err != nil {
-		return SentMail{}, err
-	}
-
-	return t.announceRelease(ctx, r)
-}
-
-// AnnounceRCRelease sends an email announcing a Go release candidate to Google Groups.
-func (t AnnounceMailTasks) AnnounceRCRelease(ctx *workflow.TaskContext, r ReleaseAnnouncement) (SentMail, error) {
-	if r.SecondaryVersion != "" {
-		return SentMail{}, fmt.Errorf("got 2 Go versions, want 1")
-	}
-	if err := verifyGoVersions(r.Version); err != nil {
-		return SentMail{}, err
-	}
-
-	return t.announceRelease(ctx, r)
-}
-
-// AnnounceMajorRelease sends an email announcing a major Go release to Google Groups.
-func (t AnnounceMailTasks) AnnounceMajorRelease(ctx *workflow.TaskContext, r ReleaseAnnouncement) (SentMail, error) {
-	if r.SecondaryVersion != "" {
-		return SentMail{}, fmt.Errorf("got 2 Go versions, want 1")
-	}
-	if err := verifyGoVersions(r.Version); err != nil {
-		return SentMail{}, err
-	}
-
-	return t.announceRelease(ctx, r)
-}
-
-// announceRelease sends an email announcing a Go release.
-func (t AnnounceMailTasks) announceRelease(ctx *workflow.TaskContext, r ReleaseAnnouncement) (SentMail, error) {
-	ctx.DisableRetries()
-
-	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < time.Minute {
-		return SentMail{}, fmt.Errorf("insufficient time for announce release task; a minimum of a minute left on context is required")
 	}
 
 	// Generate the announcement email.
@@ -164,6 +120,7 @@ func (t AnnounceMailTasks) announceRelease(ctx *workflow.TaskContext, r ReleaseA
 	if t.SendMail == nil {
 		return SentMail{Subject: "[dry-run] " + m.Subject}, nil
 	}
+	ctx.DisableRetries()
 	err = t.SendMail(t.AnnounceMailHeader, m)
 	if err != nil {
 		return SentMail{}, err
@@ -210,6 +167,8 @@ func announcementMail(r ReleaseAnnouncement) (mailContent, error) {
 		// "This beta release includes the same security fixes as in Go X.Y.Z and Go A.B.C.",
 		// but we'll have a better idea after these initial templates get more practical use.
 		return mailContent{}, fmt.Errorf("email template %q doesn't support the Security field; this field can only be used in minor releases", name)
+	} else if r.SecondaryVersion != "" && name != "announce-minor.md" {
+		return mailContent{}, fmt.Errorf("email template %q doesn't support more than one release; the SecondaryVersion field can only be used in minor releases", name)
 	}
 
 	// Render the announcement email template.
@@ -438,6 +397,7 @@ func findGoogleGroupsThread(ctx *workflow.TaskContext, subject string) (threadUR
 		return "", err
 	}
 	threadURL = base.ResolveReference(link).String()
+	const announcementPrefix = "https://groups.google.com/g/golang-announce/c/"
 	if !strings.HasPrefix(threadURL, announcementPrefix) {
 		return "", fmt.Errorf("found URL %q, but it doesn't have the expected prefix %q", threadURL, announcementPrefix)
 	}

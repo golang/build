@@ -24,7 +24,7 @@ func TestAnnounceReleaseShortContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	r := ReleaseAnnouncement{Version: "go1.18.1", SecondaryVersion: "go1.17.8"}
-	_, err := (AnnounceMailTasks{}).AnnounceMinorRelease(&workflow.TaskContext{Context: ctx}, r)
+	_, err := (AnnounceMailTasks{}).AnnounceRelease(&workflow.TaskContext{Context: ctx}, r)
 	if err == nil {
 		t.Errorf("want non-nil error")
 	} else if !strings.HasPrefix(err.Error(), "insufficient time") {
@@ -164,14 +164,12 @@ func TestAnnounceRelease(t *testing.T) {
 
 	tests := [...]struct {
 		name    string
-		taskFn  func(AnnounceMailTasks, *workflow.TaskContext, ReleaseAnnouncement) (SentMail, error)
 		in      ReleaseAnnouncement
 		want    SentMail
 		wantLog string
 	}{
 		{
-			name:   "minor",
-			taskFn: AnnounceMailTasks.AnnounceMinorRelease,
+			name: "minor",
 			in: ReleaseAnnouncement{
 				Version:          "go1.18.1",
 				SecondaryVersion: "go1.17.8", // Intentionally not 1.17.9 so the real email doesn't get in the way.
@@ -235,7 +233,7 @@ Alice, Bob, and Charlie for the Go team` + "\n",
 			}
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			sentMail, err := tc.taskFn(tasks, ctx, tc.in)
+			sentMail, err := tasks.AnnounceRelease(ctx, tc.in)
 			if err != nil {
 				t.Fatal("task function returned non-nil error:", err)
 			}
