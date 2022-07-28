@@ -792,6 +792,7 @@ var statusTmpl = template.Must(baseTmpl.New("status").Parse(statusTmplStr))
 var styleCSS []byte
 
 func handleStyleCSS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-cache, private, max-age=0")
 	http.ServeContent(w, r, "style.css", processStartTime, bytes.NewReader(styleCSS))
 }
 
