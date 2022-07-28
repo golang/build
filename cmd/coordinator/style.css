@@ -191,9 +191,11 @@ table.Build tbody tr.commit:hover {
   justify-content: space-around;
 }
 .QueueStats-queueTable {
-  table-layout: fixed;
+  width: 100%;
 }
 .QueueStats-queue {
+  border: 0.0625rem solid #d6d6d6;
+  border-radius: 0.1875rem;
   margin: 1rem;
-  min-width: 35rem;
+  width: 31rem;
 }
