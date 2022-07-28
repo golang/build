@@ -773,7 +773,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *workflow.Definition, major int
 	if skipSigning {
 		builtAndTested := wd.Task("Wait for artifacts and tests", func(ctx *workflow.TaskContext, artifacts []artifact) ([]artifact, error) {
 			return artifacts, nil
-		}, append([]workflow.TaskInput{wd.Slice(artifacts...), tryBotsApproved}, testsPassed...)...)
+		}, append([]workflow.TaskInput{wd.Slice(artifacts...), wd.After(tryBotsApproved)}, wd.After(testsPassed...))...)
 		return builtAndTested, nil
 	}
 	stagedArtifacts := wd.Task("Stage artifacts for signing", tasks.copyToStaging, version, wd.Slice(artifacts...))
