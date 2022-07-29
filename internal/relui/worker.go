@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"reflect"
 	"sync"
 
 	"github.com/google/uuid"
@@ -188,12 +189,24 @@ func (w *Worker) Resume(ctx context.Context, id uuid.UUID) error {
 		w.l.WorkflowFinished(ctx, wf.ID, nil, err)
 		return err
 	}
-	state := &workflow.WorkflowState{ID: wf.ID}
-	if err := json.Unmarshal([]byte(wf.Params.String), &state.Params); err != nil {
-		err := fmt.Errorf("unmarshalling params for %q: %w", id, err)
+	state := &workflow.WorkflowState{ID: wf.ID, Params: map[string]interface{}{}}
+
+	rawParams := map[string]json.RawMessage{}
+	if err := json.Unmarshal([]byte(wf.Params.String), &rawParams); err != nil {
+		err := fmt.Errorf("unmarshaling params for %q: %w", id, err)
 		w.l.WorkflowFinished(ctx, wf.ID, nil, err)
 		return err
 	}
+	for _, param := range d.Parameters() {
+		ptr := reflect.New(param.Type)
+		if err := json.Unmarshal(rawParams[param.Name], ptr.Interface()); err != nil {
+			err := fmt.Errorf("unmarshaling param %q for %q: %w", param.Name, id, err)
+			w.l.WorkflowFinished(ctx, wf.ID, nil, err)
+			return err
+		}
+		state.Params[param.Name] = ptr.Elem().Interface()
+	}
+
 	taskStates := make(map[string]*workflow.TaskState)
 	for _, t := range tasks {
 		ts := &workflow.TaskState{

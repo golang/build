@@ -514,10 +514,6 @@ func (w *Workflow) validate() error {
 		paramDefs[p.Name] = parameter(p)
 	}
 	for name, v := range w.params {
-		if v == nil {
-			w.params[name] = reflect.New(paramDefs[name].typ()).Elem().Interface()
-			continue
-		}
 		if !paramDefs[name].typ().AssignableTo(reflect.TypeOf(v)) {
 			return fmt.Errorf("parameter type mismatch: value of parameter %q has type %v, but definition specifies %v", name, reflect.TypeOf(v), paramDefs[name].typ())
 		}

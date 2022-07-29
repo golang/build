@@ -8,7 +8,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -34,7 +36,7 @@ func TestWorkerStartWorkflow(t *testing.T) {
 
 	wd := newTestEchoWorkflow()
 	dh.RegisterDefinition(t.Name(), wd)
-	params := map[string]interface{}{"echo": "greetings"}
+	params := map[string]interface{}{"greeting": "greetings", "names": []string{"alice", "bob"}}
 
 	wg.Add(1)
 	wfid, err := w.StartWorkflow(ctx, t.Name(), params)
@@ -49,15 +51,15 @@ func TestWorkerStartWorkflow(t *testing.T) {
 		t.Fatalf("q.Workflows() = %v, %v, wanted no error", wfs, err)
 	}
 	wantWfs := []db.Workflow{{
-		ID:        wfid,
-		Params:    nullString(`{"echo": "greetings"}`),
+		ID: wfid,
+		// Params ignored: nondeterministic serialization
 		Name:      nullString(t.Name()),
-		Output:    `{"echo": "greetings"}`,
+		Output:    `{"echo": "greetings alice bob"}`,
 		Finished:  true,
 		CreatedAt: time.Now(), // cmpopts.EquateApproxTime
 		UpdatedAt: time.Now(), // cmpopts.EquateApproxTime
 	}}
-	if diff := cmp.Diff(wantWfs, wfs, cmpopts.EquateApproxTime(time.Minute)); diff != "" {
+	if diff := cmp.Diff(wantWfs, wfs, cmpopts.EquateApproxTime(time.Minute), cmpopts.IgnoreFields(db.Workflow{}, "Params")); diff != "" {
 		t.Fatalf("q.Workflows() mismatch (-want +got):\n%s", diff)
 	}
 	tasks, err := q.TasksForWorkflow(ctx, wfid)
@@ -70,7 +72,7 @@ func TestWorkerStartWorkflow(t *testing.T) {
 			Name:       "echo",
 			Started:    true,
 			Finished:   true,
-			Result:     nullString(`"greetings"`),
+			Result:     nullString(`"greetings alice bob"`),
 			Error:      sql.NullString{},
 			CreatedAt:  time.Now(), // cmpopts.EquateApproxTime
 			UpdatedAt:  time.Now(), // cmpopts.EquateApproxTime
@@ -113,7 +115,7 @@ func TestWorkerResume(t *testing.T) {
 		Name:       "echo",
 		Started:    true,
 		Finished:   true,
-		Result:     nullString(`"hello"`),
+		Result:     nullString(`"hello alice bob"`),
 		Error:      sql.NullString{},
 		CreatedAt:  time.Now(), // cmpopts.EquateApproxTime
 		UpdatedAt:  time.Now(), // cmpopts.EquateApproxTime
@@ -174,7 +176,7 @@ func TestWorkflowResumeAll(t *testing.T) {
 			Name:             "echo",
 			Started:          true,
 			Finished:         true,
-			Result:           nullString(`"hello"`),
+			Result:           nullString(`"hello alice bob"`),
 			Error:            sql.NullString{},
 			CreatedAt:        time.Now(), // cmpopts.EquateApproxTime
 			UpdatedAt:        time.Now(), // cmpopts.EquateApproxTime
@@ -185,7 +187,7 @@ func TestWorkflowResumeAll(t *testing.T) {
 			Name:             "echo",
 			Started:          true,
 			Finished:         true,
-			Result:           nullString(`"hello"`),
+			Result:           nullString(`"hello alice bob"`),
 			Error:            sql.NullString{},
 			CreatedAt:        time.Now(), // cmpopts.EquateApproxTime
 			UpdatedAt:        time.Now(), // cmpopts.EquateApproxTime
@@ -272,16 +274,18 @@ func TestWorkflowResumeRetry(t *testing.T) {
 
 func newTestEchoWorkflow() *workflow.Definition {
 	wd := workflow.New()
-	echo := func(ctx context.Context, arg string) (string, error) {
-		return arg, nil
+	echo := func(ctx context.Context, greeting string, names []string) (string, error) {
+		return fmt.Sprintf("%v %v", greeting, strings.Join(names, " ")), nil
 	}
-	wd.Output("echo", wd.Task("echo", echo, wd.Parameter(workflow.Parameter{Name: "echo"})))
+	greeting := wd.Parameter(workflow.Parameter{Name: "greeting"})
+	names := wd.Parameter(workflow.Parameter{Name: "names", ParameterType: workflow.SliceShort})
+	wd.Output("echo", wd.Task("echo", echo, greeting, names))
 	return wd
 }
 
 func createUnfinishedEchoWorkflow(t *testing.T, ctx context.Context, q *db.Queries) uuid.UUID {
 	t.Helper()
-	cwp := db.CreateWorkflowParams{ID: uuid.New(), Name: nullString(t.Name()), Params: nullString(`{"echo": "hello"}`)}
+	cwp := db.CreateWorkflowParams{ID: uuid.New(), Name: nullString(t.Name()), Params: nullString(`{"greeting": "hello", "names": ["alice", "bob"]}`)}
 	if wf, err := q.CreateWorkflow(ctx, cwp); err != nil {
 		t.Fatalf("q.CreateWorkflow(_, %v) = %v, %v, wanted no error", cwp, wf, err)
 	}
