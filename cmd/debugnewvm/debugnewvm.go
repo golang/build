@@ -165,7 +165,7 @@ func main() {
 	if *runBuild != "" {
 		// Push GOROOT_BOOTSTRAP, if needed.
 		if u := bconf.GoBootstrapURL(env); u != "" {
-			log.Printf("Pushing 'go1.4' Go bootstrap dir ...")
+			log.Printf("Pushing 'go1.4' Go bootstrap dir from %s...", u)
 			const bootstrapDir = "go1.4" // might be newer; name is the default
 			if err := bc.PutTarFromURL(ctx, u, bootstrapDir); err != nil {
 				bc.Close()
