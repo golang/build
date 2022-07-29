@@ -93,9 +93,9 @@ func legacyPush(args []string) error {
 
 	if !haveGo14 {
 		if u := conf.GoBootstrapURL(buildEnv); u != "" {
-			log.Printf("installing go1.4")
+			log.Printf("installing go1.4 from %s", u)
 			if dryRun {
-				log.Printf("(Dry-run) Would have pushed go1.4")
+				log.Printf("(Dry-run) Would have pushed go1.4 from %s", u)
 			} else {
 				if err := bc.PutTarFromURL(ctx, u, "go1.4"); err != nil {
 					return err
