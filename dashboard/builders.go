@@ -277,13 +277,6 @@ var Hosts = map[string]*HostConfig{
 			"GOROOT_BOOTSTRAP=/var/root/go-ios-arm64-bootstrap",
 		},
 	},
-	"host-js-wasm": {
-		Notes:           "Container with node.js for testing js/wasm.",
-		ContainerImage:  "js-wasm:latest",
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		SSHUsername:     "root",
-	},
 	"host-linux-amd64-alpine": {
 		Notes:           "Alpine container",
 		ContainerImage:  "linux-x86-alpine:latest",
@@ -319,6 +312,13 @@ var Hosts = map[string]*HostConfig{
 		env:             []string{"GOROOT_BOOTSTRAP=/goboot"},
 		SSHUsername:     "root",
 	},
+	"host-linux-amd64-js-wasm": {
+		Notes:           "Container with node.js for testing js/wasm.",
+		ContainerImage:  "js-wasm:latest",
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
+		SSHUsername:     "root",
+	},
 	"host-linux-amd64-localdev": {
 		IsReverse:   true,
 		ExpectNum:   0,
@@ -333,6 +333,12 @@ var Hosts = map[string]*HostConfig{
 		env:                 []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:         "root",
 		CustomDeleteTimeout: 8 * time.Hour,
+	},
+	"host-linux-amd64-s390x-cross": {
+		Notes:           "Container with s390x cross-compiler.",
+		ContainerImage:  "linux-s390x-cross:latest",
+		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
 	"host-linux-amd64-sid": {
 		Notes:           "Debian sid, updated occasionally.",
@@ -401,6 +407,16 @@ var Hosts = map[string]*HostConfig{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
 		},
 	},
+	"host-linux-mips64le-mengzhuo": {
+		Notes:     "Loongson 3A Box hosted by Meng Zhuo",
+		Owners:    []*gophers.Person{gh("mengzhuo")},
+		IsReverse: true,
+		ExpectNum: 1,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/lib/golang",
+			"GOMIPS64=hardfloat",
+		},
+	},
 	"host-linux-mips64le-rtrk": {
 		Notes:     "cavium,rhino_utm8 board hosted at RT-RK.com; quad-core cpu, 8GB of ram and 240GB ssd disks.",
 		Owners:    []*gophers.Person{gh("draganmladjenovic")}, // See https://github.com/golang/go/issues/53574#issuecomment-1169891255.
@@ -408,16 +424,6 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum: 1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
-		},
-	},
-	"host-linux-mipsle-mengzhuo": {
-		Notes:     "Loongson 3A Box hosted by Meng Zhuo; actually MIPS64le despite the name",
-		Owners:    []*gophers.Person{gh("mengzhuo")},
-		IsReverse: true,
-		ExpectNum: 1,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/lib/golang",
-			"GOMIPS64=hardfloat",
 		},
 	},
 	"host-linux-ppc64-osu": {
@@ -463,12 +469,6 @@ var Hosts = map[string]*HostConfig{
 		IsReverse: true,
 		ExpectNum: 2, // See https://github.com/golang/go/issues/49557#issuecomment-969148789.
 		env:       []string{"GOROOT_BOOTSTRAP=/var/buildlet/go-linux-s390x-bootstrap"},
-	},
-	"host-linux-s390x-cross": {
-		Notes:           "Container with s390x cross-compiler.",
-		ContainerImage:  "linux-s390x-cross:latest",
-		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 	},
 	"host-netbsd-386-9_0": {
 		VMImage:            "netbsd-i386-9-0-2019q4",
@@ -1939,7 +1939,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "js-wasm",
-		HostType: "host-js-wasm",
+		HostType: "host-linux-amd64-js-wasm",
 		tryBot:   explicitTrySet("go"),
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			b := buildRepoByDefault(repo)
@@ -2586,7 +2586,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		FlakyNet:       true,
-		HostType:       "host-linux-mipsle-mengzhuo",
+		HostType:       "host-linux-mips64le-mengzhuo",
 		Name:           "linux-mips64le-mengzhuo",
 		buildsRepo:     onlyMasterDefault,
 		distTestAdjust: mipsDistTestPolicy,
@@ -2679,7 +2679,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "linux-s390x-crosscompile",
-		HostType:    "host-linux-s390x-cross",
+		HostType:    "host-linux-amd64-s390x-cross",
 		Notes:       "s390x cross-compile builder for releases; doesn't run tests",
 		CompileOnly: true,
 		tryOnly:     true, // but not in trybot set for now
