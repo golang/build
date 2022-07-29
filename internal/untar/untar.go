@@ -8,12 +8,15 @@ package untar
 import (
 	"archive/tar"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -75,6 +78,18 @@ func untar(r io.Reader, dir string) (err error) {
 					return err
 				}
 				madeDir[dir] = true
+			}
+			if runtime.GOOS == "darwin" && mode&0111 != 0 {
+				// The darwin kernel caches binary signatures
+				// and SIGKILLs binaries with mismatched
+				// signatures. Overwriting a binary with
+				// O_TRUNC does not clear the cache, rendering
+				// the new copy unusable. Removing the original
+				// file first does clear the cache. See #54132.
+				err := os.Remove(abs)
+				if err != nil && !errors.Is(err, fs.ErrNotExist) {
+					return err
+				}
 			}
 			wf, err := os.OpenFile(abs, os.O_RDWR|os.O_CREATE|os.O_TRUNC, mode.Perm())
 			if err != nil {

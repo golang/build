@@ -24,6 +24,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"log"
 	"net"
@@ -698,6 +699,17 @@ func handleWrite(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeFile(r io.Reader, path string, mode os.FileMode) error {
+	if runtime.GOOS == "darwin" && mode&0111 != 0 {
+		// The darwin kernel caches binary signatures and SIGKILLs
+		// binaries with mismatched signatures. Overwriting a binary
+		// with O_TRUNC does not clear the cache, rendering the new
+		// copy unusable. Removing the original file first does clear
+		// the cache. See #54132.
+		err := os.Remove(path)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
 	if err != nil {
 		return err
@@ -771,6 +783,13 @@ func untar(r io.Reader, dir string) (err error) {
 					return err
 				}
 				madeDir[dir] = true
+			}
+			if runtime.GOOS == "darwin" && mode&0111 != 0 {
+				// See comment in writeFile.
+				err := os.Remove(abs)
+				if err != nil && !errors.Is(err, fs.ErrNotExist) {
+					return err
+				}
 			}
 			wf, err := os.OpenFile(abs, os.O_RDWR|os.O_CREATE|os.O_TRUNC, mode.Perm())
 			if err != nil {
