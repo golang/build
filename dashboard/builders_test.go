@@ -669,9 +669,7 @@ func TestBuilderConfig(t *testing.T) {
 }
 
 func TestHostConfigsAllUsed(t *testing.T) {
-	knownUnused := map[string]bool{
-		"host-linux-amd64-alpine": true, // TODO(golang.org/issue/19938): Fix the Alpine builder, or remove it.
-	}
+	knownUnused := map[string]bool{}
 
 	used := make(map[string]bool)
 	for _, conf := range Builders {

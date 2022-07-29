@@ -1591,14 +1591,10 @@ func init() {
 		HostType:   "host-linux-amd64-stretch-vmx",
 		buildsRepo: disabledBuilder,
 	})
-
-	const testAlpine = false // Issue 22689 (hide all red builders), Issue 19938 (get Alpine passing)
-	if testAlpine {
-		addBuilder(BuildConfig{
-			Name:     "linux-amd64-alpine",
-			HostType: "host-linux-amd64-alpine",
-		})
-	}
+	addBuilder(BuildConfig{
+		Name:     "linux-amd64-alpine",
+		HostType: "host-linux-amd64-alpine",
+	})
 
 	// addMiscCompileGo1 adds a misc-compile TryBot that
 	// runs buildall.bash on the specified target(s), up to 3 max.
