@@ -20,28 +20,20 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"regexp"
 	"strings"
-	"time"
 
 	"cloud.google.com/go/storage"
-	"golang.org/x/build/internal/envutil"
 )
 
 var (
-	public        = flag.Bool("public", false, "object should be world-readable")
-	cacheable     = flag.Bool("cacheable", true, "object should be cacheable")
-	file          = flag.String("file", "-", "Filename to read object from, or '-' for stdin. If it begins with 'go:' then the rest is considered to be a Go target to install first, and then upload.")
-	verbose       = flag.Bool("verbose", false, "verbose logging")
-	osarch        = flag.String("osarch", "", "Optional 'GOOS-GOARCH' value to cross-compile; used only if --file begins with 'go:'. As a special case, if the value contains a '.' byte, anything up to and including that period is discarded.")
-	project       = flag.String("project", "", "GCE Project. If blank, it's automatically inferred from the bucket name for the common Go buckets.")
-	tags          = flag.String("tags", "", "tags to pass to go list, go install, etc. Only applicable if the --file value begins with 'go:'")
-	doGzip        = flag.Bool("gzip", false, "gzip the stored contents (not the upload's Content-Encoding); this forces the Content-Type to be application/octet-stream. To prevent misuse, the object name must also end in '.gz'")
-	extraEnv      = flag.String("extraenv", "", "comma-separated list of addition KEY=val environment pairs to include in build environment when building a target to upload")
-	installSuffix = flag.String("installsuffix", "", "installsuffix for the go command")
-	static        = flag.Bool("static", false, "compile the binary statically, adds necessary ldflags")
-	goVer         = flag.String("go", "", "optional Go version to use for compilation when using the -file flag to build a Go binary; the Go version is fetched as needed")
+	public    = flag.Bool("public", false, "object should be world-readable")
+	cacheable = flag.Bool("cacheable", true, "object should be cacheable")
+	file      = flag.String("file", "", "read object from `file` ('-' for stdin)")
+	verbose   = flag.Bool("verbose", false, "verbose logging")
+	project   = flag.String("project", "", "GCE Project. If blank, it's automatically inferred from the bucket name for the common Go buckets.")
+	doGzip    = flag.Bool("gzip", false, "gzip the stored contents (not the upload's Content-Encoding); this forces the Content-Type to be application/octet-stream. To prevent misuse, the object name must also end in '.gz'")
+	extraEnv  = flag.String("env", "", "comma-separated list of addition KEY=val environment pairs to include in build environment when building a target to upload")
 )
 
 // to match uploads to e.g. https://storage.googleapis.com/golang/go1.4-bootstrap-20170531.tar.gz.
@@ -49,7 +41,7 @@ var go14BootstrapRx = regexp.MustCompile(`^go1\.4-bootstrap-20\d{6}\.tar\.gz$`)
 
 func main() {
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, `Usage: upload [--public] [--file=...] <bucket/object>
+		fmt.Fprintf(os.Stderr, `Usage: upload [flags] <bucket/object>
 
 If <bucket/object> is of the form "golang/go1.4-bootstrap-20yymmdd.tar.gz",
 then the current release-branch.go1.4 is uploaded from Gerrit, with each
@@ -69,7 +61,7 @@ tar entry filename beginning with the prefix "go/".
 		os.Exit(1)
 	}
 	if strings.HasPrefix(*file, "go:") {
-		buildGoTarget()
+		log.Fatalf("-file=go:target syntax is no longer supported")
 	}
 	bucket, object := args[0], args[1]
 
@@ -77,7 +69,7 @@ tar entry filename beginning with the prefix "go/".
 	is14Src := bucket == "golang" && go14BootstrapRx.MatchString(object)
 	if is14Src {
 		if *file != "-" {
-			log.Fatalf("invalid use of --file with Go 1.4 tarball %v", object)
+			log.Fatalf("invalid use of -file with Go 1.4 tarball %v", object)
 		}
 		*doGzip = true
 		*public = true
@@ -85,7 +77,7 @@ tar entry filename beginning with the prefix "go/".
 	}
 
 	if *doGzip && !strings.HasSuffix(object, ".gz") {
-		log.Fatalf("--gzip flag requires object ending in .gz")
+		log.Fatalf("-gzip flag requires object ending in .gz")
 	}
 
 	proj := *project
@@ -112,7 +104,7 @@ tar entry filename beginning with the prefix "go/".
 		}
 	} else if alreadyUploaded(storageClient, bucket, object) {
 		if *verbose {
-			log.Printf("Already uploaded.")
+			log.Printf("gs://%s/%s up-to-date", bucket, object)
 		}
 		return
 	}
@@ -157,8 +149,9 @@ tar entry filename beginning with the prefix "go/".
 	var buf bytes.Buffer
 	n, err := io.CopyN(&buf, content, maxSlurp)
 	if err != nil && err != io.EOF {
-		log.Fatalf("Error reading from stdin: %v, %v", n, err)
+		log.Fatalf("Error reading file: %v, %v", n, err)
 	}
+
 	if *doGzip {
 		w.ContentType = "application/octet-stream"
 	} else {
@@ -173,9 +166,8 @@ tar entry filename beginning with the prefix "go/".
 		log.Fatalf("Write error: %v", err)
 	}
 	if *verbose {
-		log.Printf("Uploaded %v", object)
+		log.Printf("gs://%s/%s uploaded", bucket, object)
 	}
-	os.Exit(0)
 }
 
 var bucketProject = map[string]string{
@@ -188,105 +180,6 @@ var bucketProject = map[string]string{
 	"winstrap":               "999119582588",
 	"gobuilder":              "999119582588", // deprecated
 	"golang":                 "999119582588",
-}
-
-func buildGoTarget() {
-	target := strings.TrimPrefix(*file, "go:")
-	var goos, goarch string
-	if *osarch != "" {
-		*osarch = strings.TrimSuffix(*osarch, ".gz")
-		*osarch = (*osarch)[strings.LastIndex(*osarch, ".")+1:]
-		v := strings.Split(*osarch, "-")
-		if len(v) == 3 {
-			v = v[:2] // support e.g. "linux-arm-aws" as GOOS=linux, GOARCH=arm
-		}
-		if len(v) != 2 || v[0] == "" || v[1] == "" {
-			log.Fatalf("invalid -osarch value %q", *osarch)
-		}
-		goos, goarch = v[0], v[1]
-	}
-
-	goBin := goCmd()
-	env := []string{"GOOS=" + goos, "GOARCH=" + goarch}
-	if *extraEnv != "" {
-		env = append(env, strings.Split(*extraEnv, ",")...)
-	}
-
-	cmd := exec.Command(goBin,
-		"list",
-		"--tags="+*tags,
-		"--installsuffix="+*installSuffix,
-		"-f", "{{.Target}}",
-		target)
-	envutil.SetEnv(cmd, env...)
-	out, err := cmd.Output()
-	if err != nil {
-		log.Fatalf("go list: %v", err)
-	}
-	outFile := string(bytes.TrimSpace(out))
-	fi0, err := os.Stat(outFile)
-	if os.IsNotExist(err) {
-		if *verbose {
-			log.Printf("File %s doesn't exist; building...", outFile)
-		}
-	}
-
-	version := os.Getenv("USER") + "-" + time.Now().Format(time.RFC3339)
-	ldflags := "-X main.Version=" + version
-	if *static {
-		ldflags = "-linkmode=external -extldflags '-static -pthread' " + ldflags
-	}
-	cmd = exec.Command(goBin,
-		"install",
-		"--tags="+*tags,
-		"--installsuffix="+*installSuffix,
-		"-x",
-		"--ldflags="+ldflags,
-		target)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if *verbose {
-		cmd.Stdout = os.Stdout
-	}
-	envutil.SetEnv(cmd, env...)
-	if err := cmd.Run(); err != nil {
-		log.Fatalf("go install %s: %v, %s", target, err, stderr.Bytes())
-	}
-
-	fi1, err := os.Stat(outFile)
-	if err != nil {
-		log.Fatalf("Expected output file %s stat failure after go install %v: %v", outFile, target, err)
-	}
-	if !os.SameFile(fi0, fi1) {
-		if *verbose {
-			log.Printf("File %s rebuilt.", outFile)
-		}
-	}
-	*file = outFile
-}
-
-func goCmd() string {
-	if *goVer == "" {
-		return "go"
-	}
-	v := "go" + strings.TrimPrefix(*goVer, "go")
-	p, err := exec.LookPath(v)
-	if err != nil {
-		log.Printf("%s not found in path; running go get golang.org/dl/%v", v, v)
-		out, err := exec.Command("go", "get", "golang.org/dl/"+v).CombinedOutput()
-		if err != nil {
-			log.Fatalf("%v; %s", err, out)
-		}
-		p, err = exec.LookPath(v)
-		if err != nil {
-			log.Fatalf("%s still not in $PATH after go get golang.org/dl/%v", v, v)
-		}
-	}
-	out, err := exec.Command(p, "download").CombinedOutput()
-	if err != nil {
-		log.Fatalf("downloading %v: %v, %s", *goVer, err, out)
-	}
-	return p
 }
 
 // alreadyUploaded reports whether *file has already been uploaded and the correct contents

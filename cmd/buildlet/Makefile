@@ -1,203 +1,154 @@
+# Common targets:
+#
+#  - compile: build all buildlets (but do not upload)
+#  - upload: build and upload all buildlets to prod
+#  - dev-upload: build and upload all buildlets to dev cluster
+#  - install-go: install the version of Go needed by the Makefile
+#
+# Individual targets:
+#
+#  - buildlet.linux-amd64: build buildlet for linux-amd64 (but do not upload)
+#  - upload.linux-amd64: build buildlet for linux-amd64 and upload to prod
+#  - dev-upload.linux-amd64: build buildlet for linux-amd64 and upload to dev cluster
+
+GO=go1.19
+
+ALL=\
+	buildlet.aix-ppc64 \
+	buildlet.darwin-amd64 \
+	buildlet.darwin-arm64 \
+	buildlet.dragonfly-amd64 \
+	buildlet.freebsd-amd64 \
+	buildlet.freebsd-arm \
+	buildlet.freebsd-arm-5 \
+	buildlet.freebsd-arm-7 \
+	buildlet.illumos-amd64 \
+	buildlet.linux-amd64 \
+	buildlet.linux-arm \
+	buildlet.linux-arm-5 \
+	buildlet.linux-arm-7 \
+	buildlet.linux-arm-arm5 \
+	buildlet.linux-arm64 \
+	buildlet.linux-mips \
+	buildlet.linux-mips64 \
+	buildlet.linux-mips64le \
+	buildlet.linux-mipsle \
+	buildlet.linux-ppc64 \
+	buildlet.linux-ppc64le \
+	buildlet.linux-riscv64 \
+	buildlet.linux-s390x \
+	buildlet.netbsd-386 \
+	buildlet.netbsd-amd64 \
+	buildlet.netbsd-arm \
+	buildlet.netbsd-arm-5 \
+	buildlet.netbsd-arm-7 \
+	buildlet.netbsd-arm64 \
+	buildlet.openbsd-386 \
+	buildlet.openbsd-amd64 \
+	buildlet.openbsd-arm \
+	buildlet.openbsd-arm-5 \
+	buildlet.openbsd-arm-7 \
+	buildlet.plan9-386 \
+	buildlet.plan9-amd64 \
+	buildlet.plan9-arm \
+	buildlet.plan9-arm-5 \
+	buildlet.plan9-arm-7 \
+	buildlet.solaris-amd64 \
+	buildlet.windows-386 \
+	buildlet.windows-amd64 \
+	buildlet.windows-arm64 \
+
 usage: FORCE
-	# See targets in Makefile (e.g. "buildlet.darwin-amd64")
+	@sed -E '/^$$/q; s/^# ?//' Makefile
 	exit 1
 
 FORCE:
 
-# The 'compile' target is a quick check target to make sure changes
-# compile everywhere, without uploading them to GCS.
-# Note that the goal here isn't to build every GOOS/GOARCH combination;
-# we only build the versions used by buildlet hosts.
-compile:
-	GOOS=aix GOARCH=ppc64 go install golang.org/x/build/cmd/buildlet
-	GOOS=darwin GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
-	GOOS=darwin GOARCH=arm64 go install golang.org/x/build/cmd/buildlet
-	GOOS=dragonfly GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
-	GOOS=freebsd GOARCH=arm go install golang.org/x/build/cmd/buildlet
-	GOOS=freebsd GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
-	GOOS=illumos GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
-	GOOS=linux GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
-	GOOS=linux GOARCH=amd64 go install --ldflags="-linkmode=external -extldflags '-static -pthread'" golang.org/x/build/cmd/buildlet
-	GOOS=linux GOARCH=arm go install golang.org/x/build/cmd/buildlet
-	GOOS=linux GOARCH=arm GOARM=5 go install golang.org/x/build/cmd/buildlet
-	GOOS=linux GOARCH=arm64 go install golang.org/x/build/cmd/buildlet
-	GOOS=linux GOARCH=riscv64 go install golang.org/x/build/cmd/buildlet
-	GOOS=linux GOARCH=mips go install golang.org/x/build/cmd/buildlet
-	GOOS=linux GOARCH=mipsle go install golang.org/x/build/cmd/buildlet
-	GOOS=linux GOARCH=mips64 go install golang.org/x/build/cmd/buildlet
-	GOOS=linux GOARCH=mips64le go install golang.org/x/build/cmd/buildlet
-	GOOS=linux GOARCH=ppc64 go install golang.org/x/build/cmd/buildlet
-	GOOS=linux GOARCH=ppc64le go install golang.org/x/build/cmd/buildlet
-	GOOS=linux GOARCH=s390x go install golang.org/x/build/cmd/buildlet
-	GOOS=netbsd GOARCH=386 go install golang.org/x/build/cmd/buildlet
-	GOOS=netbsd GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
-	GOOS=netbsd GOARCH=arm GOARM=7 go install golang.org/x/build/cmd/buildlet
-	GOOS=netbsd GOARCH=arm64 go install golang.org/x/build/cmd/buildlet
-	GOOS=openbsd GOARCH=arm go install golang.org/x/build/cmd/buildlet
-	GOOS=openbsd GOARCH=386 go install golang.org/x/build/cmd/buildlet
-	GOOS=openbsd GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
-	GOOS=plan9 GOARCH=386 go install golang.org/x/build/cmd/buildlet
-	GOOS=plan9 GOARCH=arm go install golang.org/x/build/cmd/buildlet
-	GOOS=plan9 GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
-	GOOS=solaris GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
-	GOOS=windows GOARCH=386 go install golang.org/x/build/cmd/buildlet
-	GOOS=windows GOARCH=amd64 go install golang.org/x/build/cmd/buildlet
-	GOOS=windows GOARCH=arm64 go install golang.org/x/build/cmd/buildlet
+# A convenience for people who are missing $(GO).
+install-go:
+	go install golang.org/dl/$(GO)@latest
+	$(GO) download
 
-# buildlet.all compiles & uploads all targets.
-buildlet.all: FORCE buildlet.aix-ppc64 buildlet.darwin-amd64 buildlet.darwin-arm64 buildlet.dragonfly-amd64 buildlet.freebsd-arm buildlet.freebsd-amd64 buildlet.linux-amd64 buildlet.linux-amd64-static buildlet.netbsd-386 buildlet.netbsd-amd64 buildlet.netbsd-arm buildlet.netbsd-arm64 buildlet.openbsd-arm buildlet.openbsd-amd64 buildlet.openbsd-386 buildlet.plan9-386 buildlet.plan9-arm buildlet.plan9-amd64 buildlet.windows-386 buildlet.windows-amd64 buildlet.windows-arm64 buildlet.linux-arm buildlet.linux-arm-arm5 buildlet.linux-arm64 buildlet.linux-riscv64 buildlet.linux-mips buildlet.linux-mipsle buildlet.linux-mips64 buildlet.linux-mips64le buildlet.linux-ppc64 buildlet.linux-ppc64le buildlet.linux-s390x buildlet.solaris-amd64 buildlet.illumos-amd64
-	echo "done"
+clean:
+	rm -f buildlet.*-*
 
-buildlet.aix-ppc64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+# Compile everything without uploading.
+compile: $(ALL)
 
-buildlet.darwin-amd64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+GOFILES=$(shell ls *.go)
 
-buildlet.darwin-arm64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+VERSION=$(USER)-$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 
-buildlet.dragonfly-amd64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+BUILD=CGO_ENABLED=0 $(GO) build -ldflags='-X main.Version=$(VERSION)' -o
 
-buildlet.freebsd-arm: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+buildlet.%-386: $(GOFILES)
+	GOOS=$* GOARCH=386 $(BUILD) $@
 
-buildlet.freebsd-amd64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+buildlet.%-amd64: $(GOFILES)
+	GOOS=$* GOARCH=amd64 $(BUILD) $@
 
-buildlet.linux-amd64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+# For ARM we need both GOARM settings because on some operating systems
+# (for example OpenBSD) we can't write a single binary that runs on both ARMv5 and ARMv7.
+buildlet.%-arm-5: $(GOFILES)
+	GOOS=$* GOARCH=arm GOARM=5 $(BUILD) $@
+buildlet.%-arm-7: $(GOFILES)
+	GOOS=$* GOARCH=arm GOARM=7 $(BUILD) $@
 
-buildlet.linux-amd64-static: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false --static go-builder-data/$@
+# Legacy names that existing reverse builders may still be downloading.
+# Yes, both the Linux variants are GOARM=5.
+# (On Linux it doesn't matter much since we use the vdso routines for atomics.)
+# Reverse builders should eventually be updated to use the -5 or -7 form directly.
+buildlet.freebsd-arm: buildlet.freebsd-arm-5
+	cp $< $@
+buildlet.linux-arm: buildlet.linux-arm-5
+	cp $< $@
+buildlet.linux-arm-arm5: buildlet.linux-arm-5
+	cp $< $@
+buildlet.netbsd-arm: buildlet.netbsd-arm-7
+	cp $< $@
+buildlet.openbsd-arm: buildlet.openbsd-arm-5
+	cp $< $@
+buildlet.plan9-arm: buildlet.plan9-arm-5
+	cp $< $@
 
-buildlet.netbsd-amd64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+buildlet.%-arm64: $(GOFILES)
+	GOOS=$* GOARCH=arm64 $(BUILD) $@
 
-buildlet.netbsd-arm: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --extraenv=GOARM=7 --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+buildlet.%-mips: $(GOFILES)
+	GOOS=$* GOARCH=mips $(BUILD) $@
 
-buildlet.netbsd-arm64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+buildlet.%-mipsle: $(GOFILES)
+	GOOS=$* GOARCH=mipsle $(BUILD) $@
 
-buildlet.netbsd-386: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+buildlet.%-mips64: $(GOFILES)
+	GOOS=$* GOARCH=mips64 $(BUILD) $@
 
-buildlet.openbsd-arm: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+buildlet.%-mips64le: $(GOFILES)
+	GOOS=$* GOARCH=mips64le $(BUILD) $@
 
-buildlet.openbsd-amd64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+buildlet.%-ppc64: $(GOFILES)
+	GOOS=$* GOARCH=ppc64 $(BUILD) $@
 
-buildlet.openbsd-386: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+buildlet.%-ppc64le: $(GOFILES)
+	GOOS=$* GOARCH=ppc64le $(BUILD) $@
 
-buildlet.plan9-386: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+buildlet.%-riscv64: $(GOFILES)
+	GOOS=$* GOARCH=riscv64 $(BUILD) $@
 
-buildlet.plan9-arm: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+buildlet.%-s390x: $(GOFILES)
+	GOOS=$* GOARCH=s390x $(BUILD) $@
 
-buildlet.plan9-amd64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+# Upload everything.
+upload: $(ALL:buildlet.%=upload.%)
 
-buildlet.windows-amd64: FORCE buildlet_windows.go
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+UPLOAD=$(GO) run golang.org/x/build/cmd/upload -verbose -public -cacheable=false
 
-buildlet.windows-386: FORCE buildlet_windows.go
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+upload.%: buildlet.%
+	$(UPLOAD) -file=$< go-builder-data/$<
 
-buildlet.windows-arm64: FORCE buildlet_windows.go
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+# Upload everything to dev cluster.
+dev-upload: $(ALL:buildlet.%=upload.%)
 
-buildlet.linux-arm: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
+dev-upload.%: buildlet.%
+	$(UPLOAD) -file=$< dev-go-builder-data/$<
 
-buildlet.linux-arm-arm5: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=linux-arm --installsuffix=arm5 --extraenv=GOARM=5 --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
-
-buildlet.linux-arm64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
-
-buildlet.linux-riscv64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
-
-buildlet.linux-mips: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
-
-buildlet.linux-mipsle: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
-
-buildlet.linux-mips64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
-
-buildlet.linux-mips64le: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
-
-buildlet.linux-ppc64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
-
-buildlet.linux-ppc64le: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
-
-buildlet.linux-s390x: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
-
-buildlet.solaris-amd64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
-
-buildlet.illumos-amd64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false go-builder-data/$@
-
-# Separator between prod and staging targets.
-
-dev-buildlet.linux-arm: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false dev-go-builder-data/buildlet.linux-arm
-
-dev-buildlet.linux-amd64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false dev-go-builder-data/buildlet.linux-amd64
-
-dev-buildlet.windows-amd64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public --cacheable=false dev-go-builder-data/buildlet.windows-amd64
-
-dev-buildlet.plan9-386: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet --public dev-go-builder-data/buildlet.plan9-386
