@@ -112,7 +112,7 @@ func main() {
 
 	env = buildenv.FromFlags()
 	ctx := context.Background()
-	name := fmt.Sprintf("debug-temp-%d", time.Now().Unix())
+	name := fmt.Sprintf("debug-temp-%d-%s", time.Now().Unix(), os.Getenv("USER"))
 
 	log.Printf("Creating %s (with VM image %s)", name, vmImageSummary)
 	var bc buildlet.Client
