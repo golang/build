@@ -43,6 +43,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -378,15 +379,26 @@ func (d *dependency) dependencies() []*taskDefinition {
 
 // A TaskContext is a context.Context, plus workflow-related features.
 type TaskContext struct {
-	context.Context
 	disableRetries bool
-	Logger
+	context.Context
+	Logger     Logger
 	TaskName   string
 	WorkflowID uuid.UUID
+
+	watchdogTimer *time.Timer
+}
+
+func (c *TaskContext) Printf(format string, v ...interface{}) {
+	c.ResetWatchdog()
+	c.Logger.Printf(format, v...)
 }
 
 func (c *TaskContext) DisableRetries() {
 	c.disableRetries = true
+}
+
+func (c *TaskContext) ResetWatchdog() {
+	c.watchdogTimer.Reset(WatchdogDelay)
 }
 
 // A Listener is used to notify the workflow host of state changes, for display
@@ -671,20 +683,29 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 }
 
 // Maximum number of retries. This could be a workflow property.
-const maxRetries = 3
+var MaxRetries = 3
+
+var WatchdogDelay = 10 * time.Minute
 
 func (w *Workflow) runTask(ctx context.Context, listener Listener, state taskState, args []reflect.Value) taskState {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	tctx := &TaskContext{
-		Context:    ctx,
-		Logger:     listener.Logger(w.ID, state.def.name),
-		TaskName:   state.def.name,
-		WorkflowID: w.ID,
+		Context:       ctx,
+		Logger:        listener.Logger(w.ID, state.def.name),
+		TaskName:      state.def.name,
+		WorkflowID:    w.ID,
+		watchdogTimer: time.AfterFunc(WatchdogDelay, cancel),
 	}
+
 	in := append([]reflect.Value{reflect.ValueOf(tctx)}, args...)
 	fv := reflect.ValueOf(state.def.f)
 	out := fv.Call(in)
 
-	if errIdx := len(out) - 1; !out[errIdx].IsNil() {
+	if  !tctx.watchdogTimer.Stop() {
+		state.err = fmt.Errorf("task did not log for %v, assumed hung", WatchdogDelay)
+	} else if errIdx := len(out) - 1; !out[errIdx].IsNil() {
 		state.err = out[errIdx].Interface().(error)
 	}
 	state.finished = true
@@ -698,8 +719,8 @@ func (w *Workflow) runTask(ctx context.Context, listener Listener, state taskSta
 		}
 	}
 
-	if state.err != nil && !tctx.disableRetries && state.retryCount+1 < maxRetries {
-		tctx.Printf("task failed, will retry (%v of %v): %v", state.retryCount+1, maxRetries, state.err)
+	if state.err != nil && !tctx.disableRetries && state.retryCount+1 < MaxRetries {
+		tctx.Printf("task failed, will retry (%v of %v): %v", state.retryCount+1, MaxRetries, state.err)
 		state = taskState{
 			def:        state.def,
 			w:          state.w,

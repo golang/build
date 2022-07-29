@@ -25,16 +25,13 @@ var AwaitDivisor int = 1
 func AwaitCondition[T any](ctx *workflow.TaskContext, period time.Duration, condition func() (T, bool, error)) (T, error) {
 	pollTimer := time.NewTicker(period / time.Duration(AwaitDivisor))
 	defer pollTimer.Stop()
-	heartbeatTimer := time.NewTicker(time.Minute)
-	defer heartbeatTimer.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			var zero T
 			return zero, ctx.Err()
-		case <-heartbeatTimer.C:
-			// TODO: reset watchdog
 		case <-pollTimer.C:
+			ctx.ResetWatchdog()
 			res, done, err := condition()
 			if done || err != nil {
 				return res, err

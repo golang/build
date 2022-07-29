@@ -277,6 +277,50 @@ func TestRetryDisabled(t *testing.T) {
 	}
 }
 
+func TestWatchdog(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		testWatchdog(t, true)
+	})
+	t.Run("failure", func(t *testing.T) {
+		testWatchdog(t, false)
+	})
+}
+
+func testWatchdog(t *testing.T, success bool) {
+	defer func(r int, d time.Duration) {
+		wf.MaxRetries = r
+		wf.WatchdogDelay = d
+	}(wf.MaxRetries, wf.WatchdogDelay)
+	wf.MaxRetries = 1
+	wf.WatchdogDelay = 750 * time.Millisecond
+
+	maybeLog := func(ctx *wf.TaskContext) (string, error) {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+		if success {
+			ctx.Printf("*snore*")
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+		return "huh? what?", nil
+	}
+
+	wd := wf.New()
+	wf.Output(wd, "result", wf.Task0(wd, "sleepy", maybeLog))
+
+	w := startWorkflow(t, wd, nil)
+	_, err := w.Run(context.Background(), &verboseListener{t: t})
+	if err == nil != success {
+		t.Errorf("got error %v, wanted success: %v", err, success)
+	}
+}
+
 func TestLogging(t *testing.T) {
 	log := func(ctx *wf.TaskContext, arg string) (string, error) {
 		ctx.Printf("logging argument: %v", arg)
