@@ -210,7 +210,7 @@ var Hosts = map[string]*HostConfig{
 	"host-freebsd-arm-paulzhol": {
 		IsReverse: true,
 		ExpectNum: 1,
-		Notes:     "Cubiboard2 1Gb RAM dual-core Cortex-A7 (Allwinner A20), FreeBSD 11.1-RELEASE",
+		Notes:     "Raspberry Pi 3 Model B, FreeBSD 13.1-RELEASE with SCHED_4BSD",
 		Owners:    []*gophers.Person{gh("paulzhol")},
 	},
 	"host-freebsd-arm64-dmgk": {
@@ -2870,7 +2870,6 @@ func init() {
 			"CGO_ENABLED=1",
 			"GO_TEST_TIMEOUT_SCALE=8", // from builder's local environment as of 2022-12-06
 		},
-		KnownIssues: []int{52679},
 	})
 	addBuilder(BuildConfig{
 		Name:     "freebsd-arm64-dmgk",
