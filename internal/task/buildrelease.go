@@ -7,14 +7,12 @@ package task
 import (
 	"archive/tar"
 	"archive/zip"
-	"bytes"
 	"compress/gzip"
 	"context"
 	_ "embed"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"path"
 	"regexp"
 	"strings"
@@ -219,7 +217,7 @@ type BuildletStep struct {
 	Target      *releasetargets.Target
 	Buildlet    buildlet.Client
 	BuildConfig *dashboard.BuildConfig
-	Watch       bool
+	LogWriter   io.Writer
 }
 
 // BuildBinary builds a binary distribution from sourceArchive and writes it to out.
@@ -394,19 +392,15 @@ func (b *BuildletStep) exec(ctx context.Context, cmd string, args []string, opts
 	// Set up build environment. The caller's environment wins if there's a conflict.
 	env := append(b.BuildConfig.Env(), "GOPATH="+work+"/gopath")
 	env = append(env, opts.ExtraEnv...)
-	out := &bytes.Buffer{}
-	opts.Output = out
+	opts.Output = b.LogWriter
 	opts.ExtraEnv = env
 	opts.Args = args
-	if b.Watch {
-		opts.Output = io.MultiWriter(opts.Output, os.Stdout)
-	}
 	remoteErr, execErr := b.Buildlet.Exec(ctx, cmd, opts)
 	if execErr != nil {
 		return execErr
 	}
 	if remoteErr != nil {
-		return fmt.Errorf("Command %v %s failed: %v\nOutput:\n%v", cmd, args, remoteErr, out)
+		return fmt.Errorf("Command %v %s failed: %v", cmd, args, remoteErr)
 	}
 
 	return nil

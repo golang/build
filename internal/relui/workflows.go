@@ -761,11 +761,13 @@ func (b *BuildReleaseTasks) runBuildStep(
 			return artifact{}, err
 		}
 		defer client.Close()
+		w := &logWriter{logger: ctx.Logger}
+		go w.run(ctx)
 		step = &task.BuildletStep{
 			Target:      target,
 			Buildlet:    client,
 			BuildConfig: build,
-			Watch:       true,
+			LogWriter:   w,
 		}
 		ctx.Printf("Buildlet ready.")
 	}
@@ -864,6 +866,62 @@ type sizeWriter struct {
 func (w *sizeWriter) Write(p []byte) (n int, err error) {
 	w.size += len(p)
 	return len(p), nil
+}
+
+type logWriter struct {
+	flushTicker *time.Ticker
+
+	mu     sync.Mutex
+	buf    []byte
+	logger wf.Logger
+}
+
+func (w *logWriter) Write(b []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.buf = append(w.buf, b...)
+	if len(w.buf) > 1<<20 {
+		w.flushLocked(false)
+		w.flushTicker.Reset(10 * time.Second)
+	}
+	return len(b), nil
+}
+
+func (w *logWriter) flush(force bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.flushLocked(force)
+}
+
+func (w *logWriter) flushLocked(force bool) {
+	if len(w.buf) == 0 {
+		return
+	}
+	log, rest := w.buf, []byte(nil)
+	if !force {
+		nl := bytes.LastIndexByte(w.buf, '\n')
+		if nl == -1 {
+			return
+		}
+		log, rest = w.buf[:nl], w.buf[nl+1:]
+	}
+	w.logger.Printf("\n%s", string(log))
+	w.buf = append([]byte(nil), rest...) // don't leak
+}
+
+func (w *logWriter) run(ctx context.Context) {
+	w.flushTicker = time.NewTicker(10 * time.Second)
+	defer w.flushTicker.Stop()
+	for {
+		select {
+		case <-w.flushTicker.C:
+			w.flush(false)
+		case <-ctx.Done():
+			w.flush(true)
+			return
+		}
+	}
 }
 
 func (tasks *BuildReleaseTasks) startSigningCommand(ctx *wf.TaskContext, version string) (string, error) {

@@ -151,7 +151,7 @@ func doRelease(ctx *workflow.TaskContext, revision, version string, target *rele
 			Target:      target,
 			Buildlet:    client,
 			BuildConfig: buildConfig,
-			Watch:       watch,
+			LogWriter:   os.Stdout,
 		}
 		if err := f(buildletStep); err != nil {
 			return err
