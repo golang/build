@@ -154,7 +154,7 @@ func registerCommands() {
 	registerCommand("gettar", "extract a tar.gz from a buildlet", legacyGetTar)
 	registerCommand("ls", "list the contents of a directory on a buildlet", legacyLs)
 	registerCommand("list", "list active buildlets", legacyList)
-	registerCommand("ping", "test whether a buildlet is alive and reachable ", ping)
+	registerCommand("ping", "test whether a buildlet is alive and reachable ", legacyPing)
 	registerCommand("push", "sync your GOROOT directory to the buildlet", legacyPush)
 	registerCommand("put", "put files on a buildlet", legacyPut)
 	registerCommand("put14", "put Go 1.4 in place", put14)
