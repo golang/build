@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/workflow"
@@ -110,7 +111,9 @@ func (t *VersionTasks) AwaitCL(ctx *workflow.TaskContext, changeID, baseCommit s
 	}
 
 	ctx.Printf("Awaiting review/submit of %v", ChangeLink(changeID))
-	return t.Gerrit.AwaitSubmit(ctx, changeID, baseCommit)
+	return AwaitCondition(ctx, 10*time.Second, func() (string, bool, error) {
+		return t.Gerrit.Submitted(ctx, changeID, baseCommit)
+	})
 }
 
 // ReadBranchHead returns the current HEAD revision of branch.

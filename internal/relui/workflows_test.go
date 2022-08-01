@@ -10,6 +10,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"golang.org/x/build/internal/relui/db"
+	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
 )
 
@@ -42,24 +43,28 @@ func TestAwaitFunc(t *testing.T) {
 			didWork := make(chan struct{}, 2)
 			success := make(chan interface{})
 			done := make(chan interface{})
-			cond := func(ctx *workflow.TaskContext) (bool, error) {
-				select {
-				case <-success:
-					if c.wantCancel {
-						cancel()
-						return false, ctx.Err()
-					} else if c.wantErr {
-						return false, errors.New("someError")
-					}
-					return true, nil
-				case <-ctx.Done():
-					return false, ctx.Err()
-				case didWork <- struct{}{}:
-					return false, nil
-				}
-			}
 			wd := workflow.New()
-			await := workflow.Action2(wd, "AwaitFunc", AwaitFunc, workflow.Const(10*time.Millisecond), workflow.Const(AwaitConditionFunc(cond)))
+
+			awaitFunc := func(ctx *workflow.TaskContext) error {
+				_, err := task.AwaitCondition(ctx, 10*time.Millisecond, func() (int, bool, error) {
+					select {
+					case <-success:
+						if c.wantCancel {
+							cancel()
+							return 0, false, ctx.Err()
+						} else if c.wantErr {
+							return 0, false, errors.New("someError")
+						}
+						return 0, true, nil
+					case <-ctx.Done():
+						return 0, false, ctx.Err()
+					case didWork <- struct{}{}:
+						return 0, false, nil
+					}
+				})
+				return err
+			}
+			await := workflow.Action0(wd, "AwaitFunc", awaitFunc)
 			truth := workflow.Task0(wd, "truth", func(_ context.Context) (bool, error) { return true, nil }, workflow.After(await))
 			workflow.Output(wd, "await", truth)
 

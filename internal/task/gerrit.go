@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"golang.org/x/build/gerrit"
 )
@@ -17,10 +16,10 @@ type GerritClient interface {
 	// If the requested contents match the state of the repository, no change
 	// is created and the returned change ID will be empty.
 	CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, contents map[string]string) (string, error)
-	// AwaitSubmit waits for the specified change to be auto-submitted or fail
+	// Submitted checks if the specified change has been submitted or failed
 	// trybots. If the CL is submitted, returns the submitted commit hash.
 	// If parentCommit is non-empty, the submitted CL's parent must match it.
-	AwaitSubmit(ctx context.Context, changeID, parentCommit string) (string, error)
+	Submitted(ctx context.Context, changeID, parentCommit string) (string, bool, error)
 	// Tag creates a tag on project at the specified commit.
 	Tag(ctx context.Context, project, tag, commit string) error
 	// ListTags returns all the tags on project.
@@ -76,33 +75,26 @@ func (c *RealGerritClient) CreateAutoSubmitChange(ctx context.Context, input ger
 	return changeID, nil
 }
 
-func (c *RealGerritClient) AwaitSubmit(ctx context.Context, changeID, parentCommit string) (string, error) {
-	for {
-		detail, err := c.Client.GetChangeDetail(ctx, changeID, gerrit.QueryChangesOpt{
-			Fields: []string{"CURRENT_REVISION", "DETAILED_LABELS", "CURRENT_COMMIT"},
-		})
-		if err != nil {
-			return "", err
+func (c *RealGerritClient) Submitted(ctx context.Context, changeID, parentCommit string) (string, bool, error) {
+	detail, err := c.Client.GetChangeDetail(ctx, changeID, gerrit.QueryChangesOpt{
+		Fields: []string{"CURRENT_REVISION", "DETAILED_LABELS", "CURRENT_COMMIT"},
+	})
+	if err != nil {
+		return "", false, err
+	}
+	if detail.Status == "MERGED" {
+		parents := detail.Revisions[detail.CurrentRevision].Commit.Parents
+		if parentCommit != "" && (len(parents) != 1 || parents[0].CommitID != parentCommit) {
+			return "", false, fmt.Errorf("expected merged CL %v to have one parent commit %v, has %v", ChangeLink(changeID), parentCommit, parents)
 		}
-		if detail.Status == "MERGED" {
-			parents := detail.Revisions[detail.CurrentRevision].Commit.Parents
-			if parentCommit != "" && (len(parents) != 1 || parents[0].CommitID != parentCommit) {
-				return "", fmt.Errorf("expected merged CL %v to have one parent commit %v, has %v", ChangeLink(changeID), parentCommit, parents)
-			}
-			return detail.CurrentRevision, nil
-		}
-		for _, approver := range detail.Labels["TryBot-Result"].All {
-			if approver.Value < 0 {
-				return "", fmt.Errorf("trybots failed on %v", ChangeLink(changeID))
-			}
-		}
-
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-time.After(10 * time.Second):
+		return detail.CurrentRevision, true, nil
+	}
+	for _, approver := range detail.Labels["TryBot-Result"].All {
+		if approver.Value < 0 {
+			return "", false, fmt.Errorf("trybots failed on %v", ChangeLink(changeID))
 		}
 	}
+	return "", false, nil
 }
 
 func (c *RealGerritClient) Tag(ctx context.Context, project, tag, commit string) error {

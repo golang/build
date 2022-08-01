@@ -69,6 +69,8 @@ type releaseTestDeps struct {
 }
 
 func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
+	task.AwaitDivisor = 100
+	t.Cleanup(func() { task.AwaitDivisor = 1 })
 	ctx, cancel := context.WithCancel(context.Background())
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("Requires bash shell scripting support.")
@@ -86,7 +88,6 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 
 	// Set up the fake signing process.
 	scratchDir := t.TempDir()
-	signingPollDuration = 100 * time.Millisecond
 	argRe := regexp.MustCompile(`--relui_staging="(.*?)"`)
 	outputListener := func(taskName string, output interface{}) {
 		if taskName != "Start signing command" {
@@ -109,7 +110,6 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 	dlServer := httptest.NewServer(http.FileServer(http.FS(os.DirFS(dlDir))))
 	t.Cleanup(dlServer.Close)
 	go fakeCDNLoad(ctx, t, servingDir, dlDir)
-	uploadPollDuration = 100 * time.Millisecond
 
 	// Set up the fake website to publish to.
 	var filesMu sync.Mutex
@@ -569,8 +569,8 @@ func (g *fakeGerrit) CreateAutoSubmitChange(ctx context.Context, input gerrit.Ch
 	return "fake~12345", nil
 }
 
-func (g *fakeGerrit) AwaitSubmit(ctx context.Context, changeID, baseCommit string) (string, error) {
-	return "fakehash", nil
+func (g *fakeGerrit) Submitted(ctx context.Context, changeID, baseCommit string) (string, bool, error) {
+	return "fakehash", true, nil
 }
 
 func (g *fakeGerrit) ListTags(ctx context.Context, project string) ([]string, error) {

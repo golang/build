@@ -301,37 +301,17 @@ func (c realSendGridMailClient) SendMail(h MailHeader, m mailContent) error {
 // to show up on Google Groups, and returns its canonical URL.
 func (t AnnounceMailTasks) AwaitAnnounceMail(ctx *workflow.TaskContext, m SentMail) (announcementURL string, _ error) {
 	// Find the URL for the announcement while giving the email a chance to be received and moderated.
-	started := time.Now()
-	poll := time.NewTicker(10 * time.Second)
-	defer poll.Stop()
-	updateLog := time.NewTicker(time.Minute)
-	defer updateLog.Stop()
-	for {
-		// Wait a bit, updating the log periodically.
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-poll.C:
-		case t := <-updateLog.C:
-			if log := ctx.Logger; log != nil {
-				log.Printf("... still waiting for %q to appear after %v ...\n", m.Subject, t.Sub(started))
-			}
-			continue
-		}
-
+	check := func() (string, bool, error) {
 		// See if our email is available by now.
 		threadURL, err := findGoogleGroupsThread(ctx, m.Subject)
 		if err != nil {
-			if log := ctx.Logger; log != nil {
-				log.Printf("findGoogleGroupsThread: %v", err)
-			}
-			continue
-		} else if threadURL == "" {
-			// Our email hasn't yet shown up. Wait more and try again.
-			continue
+			ctx.Printf("findGoogleGroupsThread: %v", err)
+			return "", false, nil
 		}
-		return threadURL, nil
+		return threadURL, threadURL != "", nil
+
 	}
+	return AwaitCondition(ctx, 10*time.Second, check)
 }
 
 // findGoogleGroupsThread fetches the first page of threads from the golang-announce

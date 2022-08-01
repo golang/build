@@ -260,26 +260,6 @@ func echo(ctx *wf.TaskContext, arg string) (string, error) {
 	return arg, nil
 }
 
-type AwaitConditionFunc func(ctx *wf.TaskContext) (done bool, err error)
-
-// AwaitFunc is a wf.Task that polls the provided awaitCondition
-// every period until it either returns true or returns an error.
-func AwaitFunc(ctx *wf.TaskContext, period time.Duration, awaitCondition AwaitConditionFunc) error {
-	ticker := time.NewTicker(period)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			ok, err := awaitCondition(ctx)
-			if ok || err != nil {
-				return err
-			}
-		}
-	}
-}
-
 func checkTaskApproved(ctx *wf.TaskContext, p *pgxpool.Pool) (bool, error) {
 	q := db.New(p)
 	t, err := q.Task(ctx, db.TaskParams{
@@ -312,9 +292,11 @@ func checkTaskApproved(ctx *wf.TaskContext, p *pgxpool.Pool) (bool, error) {
 //	waitAction := wf.ActionN(wd, "Wait for Approval", ApproveActionDep(db), wf.After(someDependency))
 func ApproveActionDep(p *pgxpool.Pool) func(*wf.TaskContext) error {
 	return func(ctx *wf.TaskContext) error {
-		return AwaitFunc(ctx, 5*time.Second, func(ctx *wf.TaskContext) (done bool, err error) {
-			return checkTaskApproved(ctx, p)
+		_, err := task.AwaitCondition(ctx, 5*time.Second, func() (int, bool, error) {
+			done, err := checkTaskApproved(ctx, p)
+			return 0, done, err
 		})
+		return err
 	}
 }
 
@@ -941,8 +923,6 @@ func signingStagingDir(ctx *wf.TaskContext, version string) string {
 	return path.Join(ctx.WorkflowID.String(), "signing", version)
 }
 
-var signingPollDuration = 30 * time.Second
-
 // awaitSigned waits for all of artifacts to be signed, plus the pkgs for
 // darwinTargets.
 func (tasks *BuildReleaseTasks) awaitSigned(ctx *wf.TaskContext, version string, darwinTargets []*releasetargets.Target, artifacts []artifact) ([]artifact, error) {
@@ -967,11 +947,12 @@ func (tasks *BuildReleaseTasks) awaitSigned(ctx *wf.TaskContext, version string,
 		todo[a] = true
 	}
 	var signedArtifacts []artifact
-	for {
+
+	check := func() ([]artifact, bool, error) {
 		for a := range todo {
 			signed, ok, err := readSignedArtifact(ctx, scratchFS, version, a)
 			if err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			if !ok {
 				continue
@@ -980,17 +961,9 @@ func (tasks *BuildReleaseTasks) awaitSigned(ctx *wf.TaskContext, version string,
 			signedArtifacts = append(signedArtifacts, signed)
 			delete(todo, a)
 		}
-
-		if len(todo) == 0 {
-			return signedArtifacts, nil
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(signingPollDuration):
-			ctx.Printf("Still waiting for %v artifacts to be signed", len(todo))
-		}
+		return signedArtifacts, len(todo) == 0, nil
 	}
+	return task.AwaitCondition(ctx, 30*time.Second, check)
 }
 
 func readSignedArtifact(ctx *wf.TaskContext, scratchFS fs.FS, version string, a artifact) (_ artifact, ok bool, _ error) {
@@ -1056,8 +1029,6 @@ func readSignedArtifact(ctx *wf.TaskContext, scratchFS fs.FS, version string, a 
 	return signed, true, nil
 }
 
-var uploadPollDuration = 30 * time.Second
-
 func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *wf.TaskContext, artifacts []artifact) error {
 	scratchFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.ScratchURL)
 	if err != nil {
@@ -1076,13 +1047,13 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *wf.TaskContext, artifacts [
 		todo[a] = true
 	}
 
-	for {
+	check := func() (int, bool, error) {
 		for _, a := range artifacts {
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 			resp, err := ctxhttp.Head(ctx, http.DefaultClient, tasks.DownloadURL+"/"+a.Filename)
 			if err != nil && err != context.DeadlineExceeded {
-				return err
+				return 0, false, err
 			}
 			resp.Body.Close()
 			cancel()
@@ -1090,17 +1061,10 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *wf.TaskContext, artifacts [
 				delete(todo, a)
 			}
 		}
-
-		if len(todo) == 0 {
-			return nil
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(uploadPollDuration):
-			ctx.Printf("Still waiting for %v artifacts to be published", len(todo))
-		}
+		return 0, len(todo) == 0, nil
 	}
+	_, err = task.AwaitCondition(ctx, 30*time.Second, check)
+	return err
 }
 
 func uploadArtifact(scratchFS, servingFS fs.FS, a artifact) error {
