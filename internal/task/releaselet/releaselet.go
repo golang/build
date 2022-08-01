@@ -58,6 +58,7 @@ func windowsMSI() error {
 	// Install Wix tools.
 	wix := filepath.Join(cwd, "wix")
 	defer os.RemoveAll(wix)
+	fmt.Fprintln(os.Stderr, "installing wix")
 	switch runtime.GOARCH {
 	default:
 		if err := installWix(wixRelease311, wix); err != nil {
@@ -77,6 +78,7 @@ func windowsMSI() error {
 	}
 
 	// Gather files.
+	fmt.Fprintln(os.Stderr, "running wix heat")
 	goDir := filepath.Join(cwd, "go")
 	appfiles := filepath.Join(win, "AppFiles.wxs")
 	if err := runDir(win, filepath.Join(wix, "heat"),
@@ -108,6 +110,7 @@ func windowsMSI() error {
 	// Build package.
 	verMajor, verMinor, verPatch := splitVersion(version)
 
+	fmt.Fprintln(os.Stderr, "running wix candle")
 	if err := runDir(win, filepath.Join(wix, "candle"),
 		"-nologo",
 		"-arch", msArch(),
@@ -125,6 +128,7 @@ func windowsMSI() error {
 	if err := os.Mkdir(msi, 0755); err != nil {
 		return err
 	}
+	fmt.Fprintln(os.Stderr, "running wix light")
 	return runDir(win, filepath.Join(wix, "light"),
 		"-nologo",
 		"-dcl:high",
