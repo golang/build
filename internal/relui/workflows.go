@@ -551,9 +551,6 @@ func addSingleReleaseWorkflow(
 	nextVersion := wf.Task1(wd, "Get next version", version.GetNextVersion, kindVal)
 	milestones := wf.Task2(wd, "Pick milestones", milestone.FetchMilestones, nextVersion, kindVal)
 	checked := wf.Action3(wd, "Check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal)
-	dlcl := wf.Task2(wd, "Mail DL CL", version.MailDLCL, wf.Slice(nextVersion), wf.Const(false))
-	dlclCommit := wf.Task2(wd, "Wait for DL CL", version.AwaitCL, dlcl, wf.Const(""))
-	wf.Output(wd, "Download CL submitted", dlclCommit)
 
 	startSigner := wf.Task1(wd, "Start signing command", build.startSigningCommand, nextVersion)
 	wf.Output(wd, "Signing command", startSigner)
@@ -568,6 +565,10 @@ func addSingleReleaseWorkflow(
 	}
 
 	okayToTagAndPublish := wf.Action0(wd, "Wait for Release Coordinator Approval", build.ApproveAction, wf.After(signedAndTestedArtifacts))
+
+	dlcl := wf.Task2(wd, "Mail DL CL", version.MailDLCL, wf.Slice(nextVersion), wf.Const(false), wf.After(okayToTagAndPublish))
+	dlclCommit := wf.Task2(wd, "Wait for DL CL", version.AwaitCL, dlcl, wf.Const(""))
+	wf.Output(wd, "Download CL submitted", dlclCommit)
 
 	// Tag version and upload to CDN/website.
 	// If we're releasing a beta from master, tagging is easy; we just tag the
