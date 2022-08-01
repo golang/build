@@ -373,9 +373,7 @@ func (ss *SSHServer) IncomingSSHPostAuth(s gssh.Session, rs *Session) {
 		fmt.Fprintf(s, "WARNING: instance %q host type %q is not currently\n", inst, rs.HostType)
 		fmt.Fprintf(s, "configured to have a hermetic filesystem per boot.\n")
 		fmt.Fprintf(s, "You must be careful not to modify machine state\n")
-		fmt.Fprintf(s, "that will affect future builds. Do you agree? If so,\n")
-		fmt.Fprintf(s, "run gomote ssh --i-will-not-break-the-host <INST>\n")
-		return
+		fmt.Fprintf(s, "that will affect future builds.\n")
 	}
 	log.Printf("connecting to ssh to instance %q ...", inst)
 	fmt.Fprint(s, "# Welcome to the gomote ssh proxy.\n")
