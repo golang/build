@@ -2700,9 +2700,10 @@ func init() {
 		tryOnly:  true,
 	})
 	addBuilder(BuildConfig{
-		Name:     "dragonfly-amd64-622",
-		HostType: "host-dragonfly-amd64-622",
-		Notes:    "DragonFly BSD 6.2.2, running on GCE",
+		Name:         "dragonfly-amd64-622",
+		HostType:     "host-dragonfly-amd64-622",
+		Notes:        "DragonFly BSD 6.2.2, running on GCE",
+		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
 		Name:           "freebsd-arm-paulzhol",
