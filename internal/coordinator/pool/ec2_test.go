@@ -447,9 +447,9 @@ func TestEC2BuildletRetrieveAndSetQuota(t *testing.T) {
 	if err != nil {
 		t.Errorf("EC2Buildlet.retrieveAndSetQuota(ctx) = %s; want nil", err)
 	}
-	_, limit := pool.ledger.cpuQueue.Quotas()
-	if limit == 0 {
-		t.Errorf("ledger.cpuLimit = %d; want non-zero", limit)
+	usage := pool.ledger.cpuQueue.Quotas()
+	if usage.Limit == 0 {
+		t.Errorf("ledger.cpuLimit = %d; want non-zero", usage.Limit)
 	}
 }
 

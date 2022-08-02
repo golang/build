@@ -158,9 +158,9 @@ func TestLedgerReleaseResources(t *testing.T) {
 			if (gotErr != nil) != tc.wantErr {
 				t.Errorf("ledger.releaseResources(%s) = %s; want error %t", tc.instName, gotErr, tc.wantErr)
 			}
-			cpuUsed, _ := l.cpuQueue.Quotas()
-			if int64(cpuUsed) != tc.wantCPUUsed {
-				t.Errorf("ledger.cpuUsed = %d; wanted %d", cpuUsed, tc.wantCPUUsed)
+			usage := l.cpuQueue.Quotas()
+			if int64(usage.Used) != tc.wantCPUUsed {
+				t.Errorf("ledger.cpuUsed = %d; wanted %d", usage.Used, tc.wantCPUUsed)
 			}
 		})
 	}
@@ -175,8 +175,8 @@ func TestReserveResourcesEntries(t *testing.T) {
 		instName    string
 		instType    string
 		wantErr     bool
-		wantCPUUsed int64
-		wantA1Used  int64
+		wantCPUUsed int
+		wantA1Used  int
 	}{
 		{
 			desc:        "reservation-success",
@@ -224,9 +224,9 @@ func TestReserveResourcesEntries(t *testing.T) {
 			if (err != nil) != tc.wantErr {
 				t.Errorf("ledger.allocateResources(%d) = %v, wantErr: %v", tc.numCPU, err, tc.wantErr)
 			}
-			cpuUsed, _ := l.cpuQueue.Quotas()
-			if int64(cpuUsed) != tc.wantCPUUsed {
-				t.Errorf("ledger.cpuUsed = %d; want %d", cpuUsed, tc.wantCPUUsed)
+			usage := l.cpuQueue.Quotas()
+			if usage.Used != tc.wantCPUUsed {
+				t.Errorf("ledger.cpuUsed = %d; want %d", usage.Used, tc.wantCPUUsed)
 			}
 			if _, ok := l.entries[tc.instName]; !tc.wantErr && !ok {
 				t.Fatalf("ledger.entries[%s] = nil; want it to exist", tc.instName)
@@ -290,8 +290,8 @@ func TestLedgerRemove(t *testing.T) {
 		desc        string
 		instName    string
 		entry       *entry
-		cpuUsed     int64
-		wantCPUUsed int64
+		cpuUsed     int
+		wantCPUUsed int
 		wantErr     bool
 	}{
 		{
@@ -320,7 +320,7 @@ func TestLedgerRemove(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			l := newLedger()
-			l.cpuQueue.UpdateQuotas(int(tc.cpuUsed-tc.entry.vCPUCount), 100)
+			l.cpuQueue.UpdateQuotas(tc.cpuUsed-int(tc.entry.vCPUCount), 100)
 			l.entries = map[string]*entry{
 				tc.entry.instanceName: tc.entry,
 			}
@@ -329,16 +329,16 @@ func TestLedgerRemove(t *testing.T) {
 				t.Fatalf("item.Await() = %q, wanted no error", err)
 			}
 			tc.entry.quota = item
-			l.cpuQueue.UpdateQuotas(int(tc.cpuUsed), 20)
+			l.cpuQueue.UpdateQuotas(tc.cpuUsed, 20)
 			if gotErr := l.Remove(tc.instName); (gotErr != nil) != tc.wantErr {
 				t.Errorf("ledger.remove(%s) = %s; want error %t", tc.instName, gotErr, tc.wantErr)
 			}
 			if gotE, ok := l.entries[tc.instName]; ok {
 				t.Errorf("ledger.entries[%s] = %+v; want it not to exist", tc.instName, gotE)
 			}
-			cpuUsed, _ := l.cpuQueue.Quotas()
-			if int64(cpuUsed) != tc.wantCPUUsed {
-				t.Errorf("ledger.cpuUsed = %d; want %d", cpuUsed, tc.wantCPUUsed)
+			usage := l.cpuQueue.Quotas()
+			if usage.Used != tc.wantCPUUsed {
+				t.Errorf("ledger.cpuUsed = %d; want %d", usage.Used, tc.wantCPUUsed)
 			}
 		})
 	}
@@ -346,11 +346,11 @@ func TestLedgerRemove(t *testing.T) {
 
 func TestLedgerSetCPULimit(t *testing.T) {
 	l := newLedger()
-	var want int64 = 300
-	l.SetCPULimit(300)
-	_, cpuLimit := l.cpuQueue.Quotas()
-	if int64(cpuLimit) != want {
-		t.Errorf("ledger.cpuLimit = %d; want %d", cpuLimit, want)
+	want := 300
+	l.SetCPULimit(int64(want))
+	usage := l.cpuQueue.Quotas()
+	if usage.Limit != want {
+		t.Errorf("ledger.cpuLimit = %d; want %d", want, want)
 	}
 }
 

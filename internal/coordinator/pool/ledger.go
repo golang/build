@@ -194,11 +194,11 @@ func (l *ledger) Resources() *resources {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	used, limit := l.cpuQueue.Quotas()
+	usage := l.cpuQueue.Quotas()
 	return &resources{
 		InstCount: int64(len(l.entries)),
-		CPUUsed:   int64(used),
-		CPULimit:  int64(limit),
+		CPUUsed:   int64(usage.Used),
+		CPULimit:  int64(usage.Limit),
 	}
 }
 

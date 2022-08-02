@@ -24,6 +24,9 @@ type Quota struct {
 	queue *buildletQueue
 	limit int
 	used  int
+	// On GCE, other instances run in the same project as buildlet
+	// instances. Track those separately, and subtract from available.
+	untrackedUsed int
 }
 
 func (q *Quota) push(item *Item) {
@@ -55,7 +58,7 @@ func (q *Quota) updated() {
 func (q *Quota) tryPop() *Item {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if !(q.queue.Len() != 0 && q.queue.Peek().cost <= q.limit-q.used) {
+	if !(q.queue.Len() != 0 && q.queue.Peek().cost <= q.limit-q.used-q.untrackedUsed) {
 		return nil
 	}
 	b := q.queue.PopBuildlet()
@@ -93,6 +96,13 @@ func (q *Quota) UpdateLimit(limit int) {
 	q.limit = limit
 }
 
+func (q *Quota) UpdateUntracked(n int) {
+	defer q.updated()
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.untrackedUsed = n
+}
+
 // ReturnQuota decrements the used quota value by v.
 func (q *Quota) ReturnQuota(v int) {
 	defer q.updated()
@@ -101,11 +111,21 @@ func (q *Quota) ReturnQuota(v int) {
 	q.used -= v
 }
 
-// Quotas returns the used and limit values for the queue.
-func (q *Quota) Quotas() (used, limit int) {
+type Usage struct {
+	Used          int
+	Limit         int
+	UntrackedUsed int
+}
+
+// Quotas returns the used, limit, and untracked values for the queue.
+func (q *Quota) Quotas() Usage {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	return q.used, q.limit
+	return Usage{
+		Used:          q.used,
+		Limit:         q.limit,
+		UntrackedUsed: q.untrackedUsed,
+	}
 }
 
 // Enqueue a build and return an Item. See Item's documentation for
@@ -135,8 +155,7 @@ func (q *Quota) AwaitQueue(ctx context.Context, cost int, si *SchedItem) error {
 }
 
 type QuotaStats struct {
-	Used  int
-	Limit int
+	Usage
 	Items []ItemStats
 }
 
@@ -148,8 +167,11 @@ type ItemStats struct {
 func (q *Quota) ToExported() *QuotaStats {
 	q.mu.Lock()
 	qs := &QuotaStats{
-		Used:  q.used,
-		Limit: q.limit,
+		Usage: Usage{
+			Used:          q.used,
+			Limit:         q.limit,
+			UntrackedUsed: q.untrackedUsed,
+		},
 		Items: make([]ItemStats, q.queue.Len()),
 	}
 	for i, item := range *q.queue {

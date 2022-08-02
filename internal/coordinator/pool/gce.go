@@ -341,7 +341,7 @@ type GCEBuildlet struct {
 func (p *GCEBuildlet) pollQuotaLoop() {
 	for {
 		p.pollQuota()
-		time.Sleep(5 * time.Second)
+		time.Sleep(time.Minute)
 	}
 }
 
@@ -353,20 +353,22 @@ func (p *GCEBuildlet) pollQuota() {
 		log.Printf("Failed to get quota for %s/%s: %v", buildEnv.ProjectName, buildEnv.KubeBuild.Region, err)
 		return
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
+
+	if err := p.updateUntrackedQuota(); err != nil {
+		log.Printf("Failed to update quota used by other instances: %q", err)
+	}
 	for _, quota := range reg.Quotas {
 		switch quota.Metric {
 		case "CPUS":
-			p.cpuQueue.UpdateQuotas(int(quota.Usage), int(quota.Limit))
+			p.cpuQueue.UpdateLimit(int(quota.Limit))
 		case "C2_CPUS":
-			p.c2cpuQueue.UpdateQuotas(int(quota.Usage), int(quota.Limit))
+			p.c2cpuQueue.UpdateLimit(int(quota.Limit))
 		case "N2_CPUS":
-			p.n2cpuQueue.UpdateQuotas(int(quota.Usage), int(quota.Limit))
+			p.n2cpuQueue.UpdateLimit(int(quota.Limit))
 		case "N2D_CPUS":
-			p.n2dcpuQueue.UpdateQuotas(int(quota.Usage), int(quota.Limit))
+			p.n2dcpuQueue.UpdateLimit(int(quota.Limit))
 		case "INSTANCES":
-			p.instQueue.UpdateQuotas(int(quota.Usage), int(quota.Limit))
+			p.instQueue.UpdateLimit(int(quota.Limit))
 		}
 	}
 }
@@ -379,6 +381,33 @@ func (p *GCEBuildlet) QuotaStats() map[string]*queue.QuotaStats {
 		"gce-n2d-cpu":   p.n2dcpuQueue.ToExported(),
 		"gce-instances": p.instQueue.ToExported(),
 	}
+}
+
+func (p *GCEBuildlet) updateUntrackedQuota() error {
+	untrackedQuotas := make(map[*queue.Quota]int)
+	for _, zone := range buildEnv.VMZones {
+		gceAPIGate()
+		err := computeService.Instances.List(buildEnv.ProjectName, zone).Pages(context.Background(), func(list *compute.InstanceList) error {
+			for _, inst := range list.Items {
+				if isBuildlet(inst.Name) {
+					continue
+				}
+				untrackedQuotas[p.queueForMachineType(inst.MachineType)] += GCENumCPU(inst.MachineType)
+			}
+			if list.NextPageToken != "" {
+				// Don't use all our quota flipping through pages.
+				gceAPIGate()
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+	for quota, num := range untrackedQuotas {
+		quota.UpdateUntracked(num)
+	}
+	return nil
 }
 
 // SetEnabled marks the buildlet pool as enabled.
@@ -402,7 +431,7 @@ func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logge
 	if err := instItem.Await(ctx); err != nil {
 		return nil, err
 	}
-	cpuItem := p.queueForConf(hconf).Enqueue(hconf.GCENumCPU(), si)
+	cpuItem := p.queueForMachineType(hconf.MachineType()).Enqueue(GCENumCPU(hconf.MachineType()), si)
 	err = cpuItem.Await(ctx)
 	qsp.Done(err)
 	if err != nil {
@@ -489,23 +518,20 @@ func (p *GCEBuildlet) String() string {
 }
 
 func (p *GCEBuildlet) capacityString() string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	cpuUsage, cpuLimit := p.cpuQueue.Quotas()
-	c2Usage, c2Limit := p.c2cpuQueue.Quotas()
-	instUsage, instLimit := p.instQueue.Quotas()
-	n2Usage, n2Limit := p.n2cpuQueue.Quotas()
-	n2dUsage, n2dLimit := p.n2dcpuQueue.Quotas()
+	cpuUsage := p.cpuQueue.Quotas()
+	c2Usage := p.c2cpuQueue.Quotas()
+	instUsage := p.instQueue.Quotas()
+	n2Usage := p.n2cpuQueue.Quotas()
+	n2dUsage := p.n2dcpuQueue.Quotas()
 	return fmt.Sprintf("%d/%d instances; %d/%d CPUs, %d/%d C2_CPUS, %d/%d N2_CPUS, %d/%d N2D_CPUS",
-		instUsage, instLimit,
-		cpuUsage, cpuLimit,
-		c2Usage, c2Limit,
-		n2Usage, n2Limit,
-		n2dUsage, n2dLimit)
+		instUsage.Used, instUsage.Limit,
+		cpuUsage.Used, cpuUsage.Limit,
+		c2Usage.Used, c2Usage.Limit,
+		n2Usage.Used, n2Usage.Limit,
+		n2dUsage.Used, n2dUsage.Limit)
 }
 
-func (p *GCEBuildlet) queueForConf(hconf *dashboard.HostConfig) *queue.Quota {
-	mt := hconf.MachineType()
+func (p *GCEBuildlet) queueForMachineType(mt string) *queue.Quota {
 	if strings.HasPrefix(mt, "n2-") {
 		return p.n2cpuQueue
 	} else if strings.HasPrefix(mt, "n2d-") {
@@ -523,10 +549,8 @@ func (p *GCEBuildlet) queueForConf(hconf *dashboard.HostConfig) *queue.Quota {
 // returnQuota adjusts the dead-reckoning of our quota usage by
 // one instance and cpu CPUs.
 func (p *GCEBuildlet) returnQuota(hconf *dashboard.HostConfig) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	numCPU := hconf.GCENumCPU()
-	p.queueForConf(hconf).ReturnQuota(numCPU)
+	machineType := hconf.MachineType()
+	p.queueForMachineType(hconf.MachineType()).ReturnQuota(GCENumCPU(machineType))
 	p.instQueue.ReturnQuota(1)
 }
 
@@ -614,69 +638,68 @@ func (p *GCEBuildlet) CleanUpOldVMs() {
 
 // cleanZoneVMs is part of cleanUpOldVMs, operating on a single zone.
 func (p *GCEBuildlet) cleanZoneVMs(zone string) error {
-	// Fetch the first 500 (default) running instances and clean
-	// those. We expect that we'll be running many fewer than
-	// that. Even if we have more, eventually the first 500 will
-	// either end or be cleaned, and then the next call will get a
-	// partially-different 500.
-	// TODO(bradfitz): revisit this code if we ever start running
-	// thousands of VMs.
 	gceAPIGate()
-	list, err := computeService.Instances.List(buildEnv.ProjectName, zone).Do()
+	err := computeService.Instances.List(buildEnv.ProjectName, zone).Pages(context.Background(), func(list *compute.InstanceList) error {
+		for _, inst := range list.Items {
+			if inst.Metadata == nil {
+				// Defensive. Not seen in practice.
+				continue
+			}
+			if isGCERemoteBuildlet(inst.Name) {
+				// Remote buildlets have their own expiration mechanism that respects active SSH sessions.
+				log.Printf("cleanZoneVMs: skipping remote buildlet %q", inst.Name)
+				continue
+			}
+			var sawDeleteAt bool
+			var deleteReason string
+			for _, it := range inst.Metadata.Items {
+				if it.Key == "delete-at" {
+					if it.Value == nil {
+						log.Printf("missing delete-at value; ignoring")
+						continue
+					}
+					unixDeadline, err := strconv.ParseInt(*it.Value, 10, 64)
+					if err != nil {
+						log.Printf("invalid delete-at value %q seen; ignoring", *it.Value)
+						continue
+					}
+					sawDeleteAt = true
+					if time.Now().Unix() > unixDeadline {
+						deleteReason = "delete-at expiration"
+					}
+				}
+			}
+			isBuildlet := isBuildlet(inst.Name)
+
+			if isBuildlet && !sawDeleteAt && !p.instanceUsed(inst.Name) {
+				createdAt, _ := time.Parse(time.RFC3339Nano, inst.CreationTimestamp)
+				if createdAt.Before(time.Now().Add(-3 * time.Hour)) {
+					deleteReason = fmt.Sprintf("no delete-at, created at %s", inst.CreationTimestamp)
+				}
+			}
+
+			// Delete buildlets (things we made) from previous
+			// generations. Only deleting things starting with "buildlet-"
+			// is a historical restriction, but still fine for paranoia.
+			if deleteReason == "" && sawDeleteAt && isBuildlet && !p.instanceUsed(inst.Name) {
+				if _, ok := deletedVMCache.Get(inst.Name); !ok {
+					deleteReason = "from earlier coordinator generation"
+				}
+			}
+
+			if deleteReason != "" {
+				log.Printf("deleting VM %q in zone %q; %s ...", inst.Name, zone, deleteReason)
+				deleteVM(zone, inst.Name)
+			}
+		}
+		if list.NextPageToken != "" {
+			// Don't use all our quota flipping through pages.
+			gceAPIGate()
+		}
+		return nil
+	})
 	if err != nil {
 		return fmt.Errorf("listing instances: %v", err)
-	}
-	for _, inst := range list.Items {
-		if inst.Metadata == nil {
-			// Defensive. Not seen in practice.
-			continue
-		}
-		if isGCERemoteBuildlet(inst.Name) {
-			// Remote buildlets have their own expiration mechanism that respects active SSH sessions.
-			log.Printf("cleanZoneVMs: skipping remote buildlet %q", inst.Name)
-			continue
-		}
-		var sawDeleteAt bool
-		var deleteReason string
-		for _, it := range inst.Metadata.Items {
-			if it.Key == "delete-at" {
-				if it.Value == nil {
-					log.Printf("missing delete-at value; ignoring")
-					continue
-				}
-				unixDeadline, err := strconv.ParseInt(*it.Value, 10, 64)
-				if err != nil {
-					log.Printf("invalid delete-at value %q seen; ignoring", *it.Value)
-					continue
-				}
-				sawDeleteAt = true
-				if time.Now().Unix() > unixDeadline {
-					deleteReason = "delete-at expiration"
-				}
-			}
-		}
-		isBuildlet := isBuildlet(inst.Name)
-
-		if isBuildlet && !sawDeleteAt && !p.instanceUsed(inst.Name) {
-			createdAt, _ := time.Parse(time.RFC3339Nano, inst.CreationTimestamp)
-			if createdAt.Before(time.Now().Add(-3 * time.Hour)) {
-				deleteReason = fmt.Sprintf("no delete-at, created at %s", inst.CreationTimestamp)
-			}
-		}
-
-		// Delete buildlets (things we made) from previous
-		// generations. Only deleting things starting with "buildlet-"
-		// is a historical restriction, but still fine for paranoia.
-		if deleteReason == "" && sawDeleteAt && isBuildlet && !p.instanceUsed(inst.Name) {
-			if _, ok := deletedVMCache.Get(inst.Name); !ok {
-				deleteReason = "from earlier coordinator generation"
-			}
-		}
-
-		if deleteReason != "" {
-			log.Printf("deleting VM %q in zone %q; %s ...", inst.Name, zone, deleteReason)
-			deleteVM(zone, inst.Name)
-		}
 	}
 	return nil
 }
@@ -778,4 +801,13 @@ func createBasepinDisks(ctx context.Context) {
 		log.Printf("basepin: created basepin disks after %v", d)
 		return
 	}
+}
+
+// GCENumCPU returns the number of GCE CPUs used by the specified machine type.
+func GCENumCPU(machineType string) int {
+	if strings.HasSuffix(machineType, "e2-medium") || strings.HasSuffix(machineType, "e2-small") || strings.HasSuffix(machineType, "e2-micro") {
+		return 2
+	}
+	n, _ := strconv.Atoi(machineType[strings.LastIndex(machineType, "-")+1:])
+	return n
 }

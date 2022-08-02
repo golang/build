@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/style.css" />
     <title>Go Farmer Queues</title>
   </head>
-  <body>
+  <body class="QueueStats-body">
     {{template "build-header"}}
     <h2>Queues</h2>
     <div class="QueueStats">
@@ -18,9 +18,18 @@
         <div class="QueueStats-queue">
           <table class="QueueStats-queueTable">
             <caption>
-              <a href="#{{$name}}" id="{{$name}}">
-                {{$name}}
-              </a>
+              <div class="QueueStats-queueTableCaption">
+                <div class="QueueStats-captionCol"></div>
+                <div class="QueueStats-captionTitle"><a href="#{{$name}}" id="{{$name}}">{{$name}}</a></div>
+                <div class="QueueStats-capacities">
+                  <div class="QueueStats-capacityTerm">Usage:</div>
+                  <div class="QueueStats-capacityDefinition">{{$stats.Used}}/{{$stats.Limit}}</div>
+                  {{if ne $stats.UntrackedUsed 0}}
+                    <div class="QueueStats-capacityTerm">Untracked:</div>
+                    <div class="QueueStats-capacityDefinition">{{$stats.UntrackedUsed}}</div>
+                  {{end}}
+                </div>
+              </div>
             </caption>
             <thead>
               <tr>
@@ -65,6 +74,12 @@
                   </td>
                 </tr>
               {{else}}
+                <tr class="QueueStats-queueTableRow">
+                  <td class="QueueStats-queueTableColumn" colspan="6">Queue empty.</td>
+                </tr>
+                <tr class="QueueStats-queueTableRow">
+                  <td class="QueueStats-queueTableColumn" colspan="6">Queue empty.</td>
+                </tr>
                 <tr class="QueueStats-queueTableRow">
                   <td class="QueueStats-queueTableColumn" colspan="6">Queue empty.</td>
                 </tr>

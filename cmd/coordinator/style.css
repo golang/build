@@ -3,7 +3,6 @@
  * Use of this source code is governed by a BSD-style
  * license that can be found in the LICENSE file.
  */
-
 * {
   box-sizing: border-box;
 }
@@ -13,7 +12,6 @@ body {
   margin: 0;
   padding: 10px;
 }
-
 h1,
 h2,
 h1 > a,
@@ -28,32 +26,27 @@ h1 {
 h2 {
   font-size: 20px;
 }
-
 h1 > a,
 h2 > a {
   display: none;
   text-decoration: none;
 }
-
 h1:hover > a,
 h2:hover > a {
   display: inline;
 }
-
 h1 > a:hover,
 h2 > a:hover {
   text-decoration: underline;
 }
-
 pre {
   font-family: monospace;
   font-size: 9pt;
 }
-
 header {
   background: #e0ebf5;
-  margin: -10px -10px 0 -10px;
-  padding: 10px 10px;
+  margin: -10px -10px 0;
+  padding: 10px;
 }
 header h1 {
   display: inline;
@@ -87,12 +80,10 @@ header nav a {
   padding: 10px;
   text-decoration: none;
 }
-
 table {
   border-collapse: collapse;
   font-size: 9pt;
 }
-
 table td,
 table th,
 table td,
@@ -101,24 +92,22 @@ table th {
   text-align: left;
   vertical-align: top;
 }
-
 table thead tr {
   background: #fff !important;
 }
-
 .Dashboard {
   margin: 0;
   padding: 0;
 }
 .Dashboard-topbar {
   margin: 0;
-  padding: 0.625rem 0.625rem;
+  padding: 0.625rem;
 }
 table.Build tbody tr:nth-child(even) {
   background-color: #f4f4f4;
 }
 table.Build tbody tr.commit:hover {
-  background-color: #ffff99;
+  background-color: #ff9;
 }
 .ShortHash {
   display: inline-block;
@@ -185,6 +174,9 @@ table.Build tbody tr.commit:hover {
   color: #000;
   text-decoration: none;
 }
+.QueueStats-body {
+  background-color: #f8f8f8;
+}
 .QueueStats {
   display: flex;
   flex-wrap: wrap;
@@ -193,9 +185,32 @@ table.Build tbody tr.commit:hover {
 .QueueStats-queueTable {
   width: 100%;
 }
+.QueueStats-queueTableRow:nth-of-type(even) {
+  background-color: #f8f8f8;
+}
 .QueueStats-queue {
+  background-color: #fff;
   border: 0.0625rem solid #d6d6d6;
   border-radius: 0.1875rem;
   margin: 1rem;
+  padding: 0.125rem;
   width: 44rem;
+}
+.QueueStats-queueTableCaption {
+  display: flex;
+  justify-content: space-between;
+}
+.QueueStats-captionTitle {
+  flex-grow: 2;
+}
+.QueueStats-captionCol,
+.QueueStats-capacities {
+  width: 10rem;
+}
+.QueueStats-capacities {
+  display: flex;
+  justify-content: end;
+}
+.QueueStats-capacityDefinition {
+  margin: 0 0.25rem;
 }

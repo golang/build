@@ -28,19 +28,30 @@ func TestQueueReturnQuotas(t *testing.T) {
 	q := NewQuota()
 	q.UpdateQuotas(7, 15)
 	q.ReturnQuota(3)
-	used, limit := q.Quotas()
-	if !(used == 4 && limit == 15) {
-		t.Errorf("q.Quotas() = %d, %d, wanted %d, %d", used, limit, 10, 15)
+	usage := q.Quotas()
+	if !(usage.Used == 4 && usage.Limit == 15) {
+		t.Errorf("q.Quotas() = %d, %d, wanted %d, %d", usage.Used, usage.Limit, 10, 15)
 	}
 }
 
 func TestQueue(t *testing.T) {
 	q := NewQuota()
-	q.UpdateQuotas(14, 15)
+	q.UpdateQuotas(14, 16)
+	q.UpdateUntracked(1)
 	item := q.Enqueue(4, new(SchedItem))
 
 	if q.Empty() {
 		t.Errorf("q.Empty() = %v, wanted %v", q.Empty(), false)
+	}
+
+	want := Usage{
+		Used:          14,
+		Limit:         16,
+		UntrackedUsed: 1,
+	}
+	got := q.Quotas()
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("q.ToExported() mismatch (-want +got):\n%s", diff)
 	}
 
 	ctx := context.Background()
@@ -54,9 +65,15 @@ func TestQueue(t *testing.T) {
 	if !q.Empty() {
 		t.Errorf("q.Empty() = %v, wanted %v", q.Empty(), true)
 	}
-	used, limit := q.Quotas()
-	if !(used == 4 && limit == 15) {
-		t.Errorf("q.Quotas() = %d, %d, wanted %d, %d", used, limit, 4, 15)
+
+	want = Usage{
+		Used:          4,
+		Limit:         16,
+		UntrackedUsed: 1,
+	}
+	got = q.Quotas()
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("q.ToExported() mismatch (-want +got):\n%s", diff)
 	}
 	select {
 	case err := <-done:
@@ -72,9 +89,14 @@ func TestQueue(t *testing.T) {
 	if !q.Empty() {
 		t.Errorf("q.Empty() = %v, wanted %v", q.Empty(), true)
 	}
-	used, limit = q.Quotas()
-	if !(used == 0 && limit == 15) {
-		t.Errorf("q.Quotas() = %d, %d, wanted %d, %d", used, limit, 0, 15)
+	want = Usage{
+		Used:          0,
+		Limit:         16,
+		UntrackedUsed: 1,
+	}
+	got = q.Quotas()
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("q.ToExported() mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -112,9 +134,9 @@ func TestQueueUpdatedMany(t *testing.T) {
 	if !q.Empty() {
 		t.Errorf("q.Empty() = %v, wanted %v", q.Empty(), true)
 	}
-	used, limit := q.Quotas()
-	if !(used == 0 && limit == 3) {
-		t.Errorf("q.Quotas() = %d, %d, wanted %d, %d", used, limit, 0, 3)
+	usage := q.Quotas()
+	if !(usage.Used == 0 && usage.Limit == 3) {
+		t.Errorf("q.Quotas() = %d, %d, wanted %d, %d", usage.Used, usage.Limit, 0, 3)
 	}
 }
 
@@ -161,9 +183,9 @@ func TestQueueCancel(t *testing.T) {
 	if !q.Empty() {
 		t.Errorf("q.Empty() = %v, wanted %v", q.Empty(), true)
 	}
-	used, limit := q.Quotas()
-	if !(used == 0 && limit == 15) {
-		t.Errorf("q.Quotas() = %d, %d, wanted %d, %d", used, limit, 0, 15)
+	usage := q.Quotas()
+	if !(usage.Used == 0 && usage.Limit == 15) {
+		t.Errorf("q.Quotas() = %d, %d, wanted %d, %d", usage.Used, usage.Limit, 0, 15)
 	}
 }
 
@@ -178,8 +200,9 @@ func TestQueueToExported(t *testing.T) {
 	q.Enqueue(100, &SchedItem{IsGomote: true})
 	q.Enqueue(100, &SchedItem{IsRelease: true})
 	want := &QuotaStats{
-		Used:  0,
-		Limit: 10,
+		Usage: Usage{
+			Limit: 10,
+		},
 		Items: []ItemStats{
 			{Build: &SchedItem{IsRelease: true}, Cost: 100},
 			{Build: &SchedItem{IsGomote: true}, Cost: 100},

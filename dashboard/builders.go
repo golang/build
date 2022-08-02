@@ -1419,13 +1419,6 @@ func (c *HostConfig) IsHermetic() bool {
 	panic("unknown builder type")
 }
 
-// GCENumCPU reports the number of GCE CPUs this buildlet requires.
-func (c *HostConfig) GCENumCPU() int {
-	t := c.MachineType()
-	n, _ := strconv.Atoi(t[strings.LastIndex(t, "-")+1:])
-	return n
-}
-
 // NumTestHelpers reports how many additional buildlets
 // past the first one to help out with sharded tests.
 //
