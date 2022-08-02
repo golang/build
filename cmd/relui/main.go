@@ -113,7 +113,6 @@ func main() {
 		},
 	}
 	dh := relui.NewDefinitionHolder()
-	relui.RegisterMailDLCLDefinition(dh, versionTasks)
 	relui.RegisterCommunicationDefinitions(dh, commTasks)
 	userPassAuth := buildlet.UserPass{
 		Username: "user-relui",

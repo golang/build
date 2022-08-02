@@ -77,37 +77,6 @@ func (h *DefinitionHolder) Definitions() map[string]*wf.Definition {
 	return defs
 }
 
-// RegisterMailDLCLDefinition registers a workflow definition for mailing a golang.org/dl CL
-// onto h.
-//
-// This is superseded by RegisterReleaseWorkflows and will be removed
-// after some time, when we confirm there's no need for separate workflows.
-func RegisterMailDLCLDefinition(h *DefinitionHolder, tasks *task.VersionTasks) {
-	versions := wf.ParamDef[[]string]{
-		Name:      "Versions",
-		ParamType: wf.SliceShort,
-		Doc: `Versions are the Go versions that have been released.
-
-The versions must use the same format as Go tags,
-and the list must contain one or two versions.
-
-For example:
-• "go1.18.2" and "go1.17.10" for a minor Go release
-• "go1.19" for a major Go release
-• "go1.19beta1" or "go1.19rc1" for a pre-release`,
-	}
-
-	wd := wf.New()
-	wf.Output(wd, "ChangeURL", wf.Task1(wd, "mail-dl-cl", func(ctx *wf.TaskContext, versions []string) (string, error) {
-		id, err := tasks.MailDLCL(ctx, versions, false)
-		if err != nil {
-			return "", err
-		}
-		return task.ChangeLink(id), nil
-	}, wf.Param(wd, versions)))
-	h.RegisterDefinition("mail-dl-cl", wd)
-}
-
 // RegisterCommunicationDefinitions registers workflow definitions
 // involving mailing announcements and posting tweets onto h.
 //
