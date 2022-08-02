@@ -42,7 +42,8 @@ var slowBotAliases = map[string]string{
 	"darwin-amd64":         "darwin-amd64-12_0",
 	"darwin-arm64":         "darwin-arm64-12",
 	"ios-arm64":            "ios-arm64-corellium",
-	"dragonfly":            "dragonfly-amd64",
+	"dragonfly":            "dragonfly-amd64-622",
+	"dragonfly-amd64":      "dragonfly-amd64-622",
 	"freebsd":              "freebsd-amd64-13_0",
 	"freebsd-386":          "freebsd-386-13_0",
 	"freebsd-amd64":        "freebsd-amd64-13_0",
@@ -2699,7 +2700,7 @@ func init() {
 		tryOnly:  true,
 	})
 	addBuilder(BuildConfig{
-		Name:     "dragonfly-amd64",
+		Name:     "dragonfly-amd64-622",
 		HostType: "host-dragonfly-amd64-622",
 		Notes:    "DragonFly BSD 6.2.2, running on GCE",
 	})
