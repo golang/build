@@ -499,9 +499,9 @@ func (p *GCEBuildlet) capacityString() string {
 	return fmt.Sprintf("%d/%d instances; %d/%d CPUs, %d/%d C2_CPUS, %d/%d N2_CPUS, %d/%d N2D_CPUS",
 		instUsage, instLimit,
 		cpuUsage, cpuLimit,
-		c2Limit, c2Usage,
-		n2Limit, n2Usage,
-		n2dLimit, n2dUsage)
+		c2Usage, c2Limit,
+		n2Usage, n2Limit,
+		n2dUsage, n2dLimit)
 }
 
 func (p *GCEBuildlet) queueForConf(hconf *dashboard.HostConfig) *queue.Quota {
