@@ -1331,8 +1331,11 @@ func (c *BuildConfig) GorootFinal() string {
 	return "/usr/local/go"
 }
 
-// MachineType returns the GCE machine type to use for this builder.
+// MachineType returns the AWS or GCE machine type to use for this builder.
 func (c *HostConfig) MachineType() string {
+	if c.IsEC2() {
+		return c.machineType
+	}
 	typ := c.machineType
 	if typ == "" {
 		if c.NestedVirt || c.MinCPUPlatform != "" {
