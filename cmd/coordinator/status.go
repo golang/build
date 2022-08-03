@@ -372,7 +372,7 @@ func fetchMakeMacStatus() (errs, warns []string) {
 func newMacOSARM64Checker() *healthChecker {
 	var expect int // Number of expected darwin/arm64 reverse builders based on x/build/dashboard.
 	for hostType, hc := range dashboard.Hosts {
-		if !strings.HasPrefix(hostType, "host-darwin-arm64-") || strings.Contains(hostType, "toothrot") || !hc.IsReverse {
+		if !strings.HasPrefix(hostType, "host-darwin-arm64-") || !hc.IsReverse {
 			continue
 		}
 		expect += hc.ExpectNum

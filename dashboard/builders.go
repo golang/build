@@ -191,27 +191,9 @@ var Hosts = map[string]*HostConfig{
 		},
 		SSHUsername: "gopher",
 	},
-	"host-darwin-arm64-11_0-toothrot": {
-		IsReverse: true,
-		Notes:     "macOS Big Sur (11) ARM64 (M1). Mac mini",
-		ExpectNum: 1,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/Users/gopher/goboot",
-		},
-		SSHUsername: "gopher",
-	},
 	"host-darwin-arm64-12": {
 		IsReverse: true,
 		ExpectNum: 3,
-		Notes:     "macOS Big Sur (12) ARM64 (M1). Mac mini",
-		env: []string{
-			"GOROOT_BOOTSTRAP=/Users/gopher/goboot",
-		},
-		SSHUsername: "gopher",
-	},
-	"host-darwin-arm64-12_0-toothrot": {
-		IsReverse: true,
-		ExpectNum: 1,
 		Notes:     "macOS Big Sur (12) ARM64 (M1). Mac mini",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/Users/gopher/goboot",
@@ -2397,18 +2379,6 @@ func init() {
 		HostType:       "host-darwin-amd64-12_0",
 		distTestAdjust: noTestDirAndNoReboot,
 		env:            []string{"CGO_ENABLED=0"},
-	})
-	addBuilder(BuildConfig{
-		Name:           "darwin-arm64-11_0-toothrot",
-		HostType:       "host-darwin-arm64-11_0-toothrot",
-		distTestAdjust: macTestPolicy,
-		buildsRepo:     defaultPlusExpBuild,
-	})
-	addBuilder(BuildConfig{
-		Name:           "darwin-arm64-12_0-toothrot",
-		HostType:       "host-darwin-arm64-12_0-toothrot",
-		distTestAdjust: macTestPolicy,
-		buildsRepo:     defaultPlusExpBuild,
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-arm64-11",
