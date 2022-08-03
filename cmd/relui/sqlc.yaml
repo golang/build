@@ -2,18 +2,21 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-version: "1"
-packages:
-  - name: "db"
-    path: "../../internal/relui/db"
+version: "2"
+sql:
+  - schema: "../../internal/relui/migrations/"
     queries: "../../internal/relui/queries"
-    schema: "../../internal/relui/migrations/"
     engine: "postgresql"
-    sql_package: "pgx/v4"
-overrides:
-  - go_type: "database/sql.NullString"
-    db_type: "jsonb"
-    nullable: true
-  - go_type: "string"
-    db_type: "jsonb"
-    nullable: false
+    gen:
+      go:
+        package: "db"
+        out: "../../internal/relui/db"
+        sql_package: "pgx/v4"
+        emit_all_enum_values: true
+        overrides:
+          - go_type: "database/sql.NullString"
+            db_type: "jsonb"
+            nullable: true
+          - go_type: "string"
+            db_type: "jsonb"
+            nullable: false
