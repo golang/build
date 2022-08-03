@@ -18,7 +18,7 @@ func TestHostTypeToVersion(t *testing.T) {
 	}{
 		{
 			desc:     "valid original darwin host type",
-			hostType: "host-darwin-10_14",
+			hostType: "host-darwin-amd64-10_14",
 			wantVersion: &Version{
 				Major: 10,
 				Minor: 14,
@@ -27,7 +27,7 @@ func TestHostTypeToVersion(t *testing.T) {
 		},
 		{
 			desc:     "valid original darwin host type",
-			hostType: "host-darwin-10_15",
+			hostType: "host-darwin-amd64-10_15",
 			wantVersion: &Version{
 				Major: 10,
 				Minor: 15,
@@ -112,7 +112,7 @@ func TestHostOnMacStadium(t *testing.T) {
 		},
 		{
 			desc:     "valid original darwin host",
-			hostType: "host-darwin-10_14",
+			hostType: "host-darwin-amd64-10_14",
 			want:     true,
 		},
 		{

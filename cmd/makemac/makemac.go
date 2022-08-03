@@ -10,7 +10,7 @@ See https://github.com/vmware/govmomi/tree/master/govc
 
 Usage:
 
-	$ makemac <macos_version>  # e.g, darwin-10_10, darwin-10_11, darwin-10_15, darwin-amd64-11_0
+	$ makemac <macos_version>  # e.g, darwin-amd64-10_10, darwin-amd64-10_11, darwin-amd64-10_15, darwin-amd64-11_0
 */
 package main
 
@@ -40,7 +40,7 @@ import (
 
 func usage() {
 	fmt.Fprintf(os.Stderr, `Usage:
-    makemac <macos_version> e.g, darwin-10_10, darwin-amd64-11_0
+    makemac <macos_version> e.g, darwin-amd64-10_10, darwin-amd64-11_0
     makemac -status
     makemac -auto
 `)
@@ -259,10 +259,7 @@ func (st *State) CreateMac(ctx context.Context, ver *Version) (slotName string, 
 		return "", err
 	}
 
-	hostType := fmt.Sprintf("host-darwin-%d_%d", ver.Major, ver.Minor)
-	if ver.Major >= 11 {
-		hostType = fmt.Sprintf("host-darwin-%s-%d_%d", ver.Arch, ver.Major, ver.Minor)
-	}
+	hostType := fmt.Sprintf("host-darwin-%s-%d_%d", ver.Arch, ver.Major, ver.Minor)
 	key, err := ioutil.ReadFile(filepath.Join(os.Getenv("HOME"), "keys", hostType))
 	if err != nil {
 		return "", err
@@ -738,7 +735,7 @@ func (v Version) String() string {
 }
 
 // hostTypeToVersion determines the version of macOS from the host type.
-// Sample host types would be: host-darwin-10_15 and host-darwin-arm64-11_0.
+// Sample host types would be: host-darwin-amd64-10_15 and host-darwin-arm64-11_0.
 func hostTypeToVersion(hostType string) (*Version, error) {
 	v := &Version{}
 	var err error
@@ -754,9 +751,6 @@ func hostTypeToVersion(hostType string) (*Version, error) {
 		}
 		v.Arch = vs[0]
 		majorMinor = vs[1]
-	case 1:
-		v.Arch = "amd64"
-		majorMinor = vs[0]
 	default:
 		return nil, errors.New("unrecognized version")
 	}
@@ -981,7 +975,7 @@ func isFileSystemReadOnly() bool {
 }
 
 // onMacStadiumReg matches host names for hosts that are hosted on MacStadium.
-var onMacStadiumReg = regexp.MustCompile("^host-darwin-(amd64-)?[1-9][0-9]+_[0-9]+$")
+var onMacStadiumReg = regexp.MustCompile("^host-darwin-amd64-[1-9][0-9]+_[0-9]+$")
 
 // hostOnMacstadium is true if the host type is hosted on the MacStadium cluster.
 func hostOnMacStadium(hostType string) bool {
