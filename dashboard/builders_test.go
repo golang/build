@@ -411,10 +411,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64@go1.10", "net"), none}, // too old
 		{b("linux-amd64@go1.12", "net@1.12"), both},
 
-		{b("linux-mips64le-mengzhuo", "go"), onlyPost},
-		{b("linux-mips64le-mengzhuo", "sys"), onlyPost},
-		{b("linux-mips64le-mengzhuo", "net"), onlyPost},
-
 		{b("linux-loong64-3a5000", "go"), onlyPost},
 		{b("linux-loong64-3a5000", "sys"), onlyPost},
 		{b("linux-loong64-3a5000", "net"), onlyPost},

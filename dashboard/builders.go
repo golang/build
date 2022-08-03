@@ -58,7 +58,7 @@ var slowBotAliases = map[string]string{
 	"linux-loong64":        "linux-loong64-3a5000",
 	"linux-mips":           "linux-mips-rtrk",
 	"linux-mips64":         "linux-mips64-rtrk",
-	"linux-mips64le":       "linux-mips64le-mengzhuo",
+	"linux-mips64le":       "linux-mips64le-rtrk",
 	"linux-mipsle":         "linux-mipsle-rtrk",
 	"linux-ppc64":          "linux-ppc64-buildlet",
 	"linux-ppc64le":        "linux-ppc64le-buildlet",
@@ -71,7 +71,7 @@ var slowBotAliases = map[string]string{
 	"macos":                "darwin-amd64-10_14",
 	"mips":                 "linux-mips-rtrk",
 	"mips64":               "linux-mips64-rtrk",
-	"mips64le":             "linux-mips64le-mengzhuo",
+	"mips64le":             "linux-mips64le-rtrk",
 	"mipsle":               "linux-mipsle-rtrk",
 	"netbsd":               "netbsd-amd64-9_0",
 	"netbsd-386":           "netbsd-386-9_0",
@@ -396,16 +396,6 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum: 1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
-		},
-	},
-	"host-linux-mipsle-mengzhuo": {
-		Notes:     "Loongson 3A Box hosted by Meng Zhuo; mips64le despite the name",
-		Owners:    []*gophers.Person{gh("mengzhuo")},
-		IsReverse: true,
-		ExpectNum: 1,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/lib/golang",
-			"GOMIPS64=hardfloat",
 		},
 	},
 	"host-linux-ppc64-osu": {
@@ -2545,14 +2535,6 @@ func init() {
 			"GOHOSTARCH=loong64",
 		},
 		KnownIssues: []int{53116, 53093},
-	})
-	addBuilder(BuildConfig{
-		FlakyNet:       true,
-		HostType:       "host-linux-mipsle-mengzhuo",
-		Name:           "linux-mips64le-mengzhuo",
-		buildsRepo:     onlyMasterDefault,
-		distTestAdjust: mipsDistTestPolicy,
-		privateGoProxy: true, // this builder is behind firewall
 	})
 	addBuilder(BuildConfig{
 		FlakyNet:       true,
