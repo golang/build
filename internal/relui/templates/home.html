@@ -6,71 +6,67 @@
 {{template "layout" .}}
 
 {{define "content"}}
+  {{- /* gotype: golang.org/x/build/internal/relui.homeResponse */ -}}
   <section class="Workflows">
     <div class="Workflows-header">
       <h2>Workflows</h2>
-      <a href="{{baseLink "/workflows/new"}}" class="Button">New</a>
+      <a href="{{baseLink "/new_workflow"}}" class="Button">New</a>
     </div>
-    <ul class="WorkflowList">
-      {{range $wfid := .WorkflowIDs}}
-        {{$detail := index $.WorkflowDetails $wfid}}
-        {{$workflow := $detail.Workflow}}
-        <li class="WorkflowList-item">
-          <h3 class="WorkflowList-title">
-            {{$workflow.Name.String}}
-            <span class="WorkflowList-titleTime">
-              {{$workflow.CreatedAt.UTC.Format "2006/01/02 15:04 MST"}}
-            </span>
-            {{if not (or $workflow.Finished $workflow.Error)}}
-              <div class="WorkflowList-titleStop">
-                <form action="{{baseLink (printf "/workflows/%s/stop" $wfid)}}" method="post">
-                  <input type="hidden" id="workflow.id" name="workflow.id" value="{{$wfid}}" />
-                  <input name="workflow.stop" class="Button Button--red" type="submit" value="STOP" onclick="return this.form.reportValidity() && confirm('This will stop the workflow and all in-flight tasks.\n\nAre you sure you want to proceed?')" />
-                </form>
-              </div>
-            {{end}}
-          </h3>
-          <div class="WorkflowList-details">
-            <div class="WorkflowList-params">
-              <table class="WorkflowList-paramsTable">
-                <tbody>
-                <tr>
-                  <td>State:</td>
-                  <td class="WorkflowList-paramData">
-                    {{if $workflow.Error}}
-                      Error
-                      <div class="WorkflowList-workflowStateIcon Workflowlist-workflowStateIcon--error"></div>
-                    {{else if $workflow.Finished}}
-                      Success
-                      <div class="WorkflowList-workflowStateIcon Workflowlist-workflowStateIcon--success"></div>
-                    {{else}}
-                      Pending
-                      <div class="WorkflowList-workflowStateIcon Workflowlist-workflowStateIcon--pending"></div>
-                    {{end}}
-                  </td>
-                </tr>
-                <tr>
-                  <td>Error:</td>
-                  <td class="WorkflowList-paramData">{{$workflow.Error}}</td>
-                </tr>
-                {{range $name, $value := $.WorkflowParams $workflow}}
-                  <tr>
-                    <td>{{$name}}:</td>
-                    <td class="WorkflowList-paramData">{{$value}}</td>
-                  </tr>
-                {{end}}
-                </tbody>
-              </table>
-            </div>
-            <dl class="WorkflowList-output">
-              {{ $resultDetail := unmarshalResultDetail $workflow.Output }}
-              {{template "itemResult" $resultDetail}}
-            </dl>
-          </div>
-          <h4 class="WorkflowList-sectionTitle">Tasks</h4>
-          {{template "task_list" $detail}}
-        </li>
-      {{end}}
-    </ul>
+    <h2>Active Workflows</h2>
+    {{template "workflow_list" .ActiveWorkflows}}
+    <h2>Completed Workflows</h2>
+    {{template "workflow_list" .InactiveWorkflows}}
   </section>
+{{end}}
+
+{{- /* gotype: []golang.org/x/build/internal/relui/db.Workflow */ -}}
+{{define "workflow_list"}}
+  <table class="WorkflowList">
+    <thead>
+      <tr class="WorkflowList-itemHeader">
+        <th class="WorkflowList-itemHeaderCol WorkflowList-itemStateHeader">State</th>
+        <th class="WorkflowList-itemHeaderCol WorkflowList-itemName">Name</th>
+        <th class="WorkflowList-itemHeaderCol WorkflowList-itemCreated">Created</th>
+        <th class="WorkflowList-itemHeaderCol WorkflowList-itemUpdated">Updated</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{- /* gotype: golang.org/x/build/internal/relui/db.Workflow */ -}}
+      {{range .}}
+        <tr class="WorkflowList-item">
+          <td class="WorkflowList-itemState">
+            {{if .Error}}
+              <img
+                class="WorkflowList-itemStateIcon"
+                alt="error"
+                src="{{baseLink "/static/images/error_red_24dp.svg"}}" />
+            {{else if .Finished}}
+              <img
+                class="WorkflowList-itemStateIcon"
+                alt="finished"
+                src="{{baseLink "/static/images/check_circle_green_24dp.svg"}}" />
+            {{else}}
+              <img
+                class="WorkflowList-itemStateIcon"
+                alt="started"
+                src="{{baseLink "/static/images/pending_yellow_24dp.svg"}}" />
+            {{end}}
+          </td>
+          <td class="WorkflowList-itemName">
+            <a href="{{baseLink "/workflows/" .ID.String}}">{{.Name.String}}</a>
+          </td>
+          <td class="WorkflowList-itemCreated">
+            {{.CreatedAt.UTC.Format "Mon, 02 Jan 2006 15:04:05 MST"}}
+          </td>
+          <td class="WorkflowList-itemUpdated">
+            {{.UpdatedAt.UTC.Format "Mon, 02 Jan 2006 15:04:05 MST"}}
+          </td>
+        </tr>
+      {{else}}
+        <tr>
+          <td>None</td>
+        </tr>
+      {{end}}
+    </tbody>
+  </table>
 {{end}}

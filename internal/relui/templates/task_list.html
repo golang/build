@@ -17,27 +17,34 @@
         <th class="TaskList-itemHeaderCol TaskList-itemActions">Actions</th>
       </tr>
     </thead>
-    {{range $task := .Tasks}}
-      {{ $resultDetail := unmarshalResultDetail $task.Result.String }}
-      <tbody>
+    <tbody>
+      {{range .Tasks}}
+        {{- /*gotype: golang.org/x/build/internal/relui/db.TasksForWorkflowSortedRow*/ -}}
+        {{$resultDetail := unmarshalResultDetail .Result.String}}
         <tr class="TaskList-item TaskList-itemSummary TaskList-expandableItem">
           <td class="TaskList-itemCol TaskList-itemExpand">
             <span class="TaskList-itemExpandClosed">
-              <img class="TaskList-itemExpandControl" alt="unfold more" src="{{baseLink "/static/images/chevron_right_black_24dp.svg"}}" />
+              <img
+                class="TaskList-itemExpandControl"
+                alt="unfold more"
+                src="{{baseLink "/static/images/chevron_right_black_24dp.svg"}}" />
             </span>
             <span class="TaskList-ItemExpandOpened">
-              <img class="TaskList-itemExpandControl" alt="unfold less" src="{{baseLink "/static/images/expand_more_black_24dp.svg"}}" />
+              <img
+                class="TaskList-itemExpandControl"
+                alt="unfold less"
+                src="{{baseLink "/static/images/expand_more_black_24dp.svg"}}" />
             </span>
           </td>
           <td class="TaskList-itemCol TaskList-itemState">
-            {{if $task.Error.Valid}}
+            {{if .Error.Valid}}
               <img class="TaskList-itemStateIcon" alt="error" src="{{baseLink "/static/images/error_red_24dp.svg"}}" />
-            {{else if $task.Finished}}
+            {{else if .Finished}}
               <img
                 class="TaskList-itemStateIcon"
                 alt="finished"
                 src="{{baseLink "/static/images/check_circle_green_24dp.svg"}}" />
-            {{else if $task.Started}}
+            {{else if .Started}}
               <img
                 class="TaskList-itemStateIcon"
                 alt="started"
@@ -50,34 +57,48 @@
             {{end}}
           </td>
           <td class="TaskList-itemCol TaskList-itemName">
-            {{$task.Name}}
+            {{.Name}}
           </td>
           <td class="TaskList-itemCol TaskList-itemStarted">
-            {{$task.CreatedAt.UTC.Format "Mon Jan _2 2006 15:04:05"}}
+            {{.CreatedAt.UTC.Format "Mon Jan _2 2006 15:04:05"}}
           </td>
           <td class="TaskList-itemCol TaskList-itemUpdated">
-            {{$task.MostRecentUpdate.UTC.Format "Mon Jan _2 2006 15:04:05"}}
+            {{.MostRecentUpdate.UTC.Format "Mon Jan _2 2006 15:04:05"}}
           </td>
           <td class="TaskList-itemCol TaskList-itemResult">
-            {{if $task.ApprovedAt.Valid}}
-                Approved
+            {{if .ApprovedAt.Valid}}
+              Approved
             {{else}}
-              {{ $resultDetail.Kind }}
+              {{$resultDetail.Kind}}
             {{end}}
           </td>
           <td class="TaskList-itemCol TaskList-itemAction">
-            {{if $task.Error.Valid}}
+            {{if .Error.Valid}}
               <div class="TaskList-retryTask">
-                <form action="{{baseLink (printf "/workflows/%s/tasks/%s/retry" $workflow.ID $task.Name)}}" method="post">
+                <form
+                  action="{{baseLink (printf "/workflows/%s/tasks/%s/retry" $workflow.ID .Name)}}"
+                  method="post">
                   <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />
-                  <input class="Button Button--small" name="task.reset" type="submit" value="Retry" onclick="return this.form.reportValidity() && confirm('This will retry the task and clear workflow errors.\n\nReady to proceed?')" />
+                  <input
+                    class="Button Button--small"
+                    name="task.reset"
+                    type="submit"
+                    value="Retry"
+                    onclick="return this.form.reportValidity() && confirm('This will retry the task and clear workflow errors.\n\nReady to proceed?')" />
                 </form>
               </div>
-            {{else if and (not $task.ApprovedAt.Valid) ($task.ReadyForApproval)}}
+            {{else if and (not .ApprovedAt.Valid) (.ReadyForApproval)}}
               <div class="TaskList-approveTask">
-                <form action="{{baseLink (printf "/workflows/%s/tasks/%s/approve" $workflow.ID $task.Name)}}" method="post">
+                <form
+                  action="{{baseLink (printf "/workflows/%s/tasks/%s/approve" $workflow.ID .Name)}}"
+                  method="post">
                   <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />
-                  <input class="Button Button--small" name="task.approve" type="submit" value="Approve" onclick="return this.form.reportValidity() && confirm('This will mark the task approved and resume the workflow.\n\nReady to proceed?')" />
+                  <input
+                    class="Button Button--small"
+                    name="task.approve"
+                    type="submit"
+                    value="Approve"
+                    onclick="return this.form.reportValidity() && confirm('This will mark the task approved and resume the workflow.\n\nReady to proceed?')" />
                 </form>
               </div>
             {{end}}
@@ -85,24 +106,24 @@
         </tr>
         <tr class="TaskList-itemLogsRow">
           <td class="TaskList-itemLogs" colspan="5">
-            {{if $task.Error.Valid}}
+            {{if .Error.Valid}}
               <div class="TaskList-itemLogLine TaskList-itemLogLineError">
-                {{- $task.Error.Value -}}
+                {{- .Error.Value -}}
               </div>
             {{end}}
-            {{if $task.ApprovedAt.Valid}}
+            {{if .ApprovedAt.Valid}}
               <div class="TaskList-itemLogLine TaskList-itemLogLineApproved">
-                  {{- printf "Approved at: %s" ($task.ApprovedAt.Value.UTC.Format "2006/01/02 15:04:05") -}}
+                {{- printf "Approved at: %s" (.ApprovedAt.Value.UTC.Format "2006/01/02 15:04:05") -}}
               </div>
             {{end}}
-            {{range $log := index $.TaskLogs $task.Name}}
+            {{range $log := index $.TaskLogs .Name}}
               <div class="TaskList-itemLogLine">
                 {{- printf "%s %s" ($log.CreatedAt.UTC.Format "2006/01/02 15:04:05") $log.Body -}}
               </div>
             {{end}}
-            {{if $task.Result.Valid}}
+            {{if .Result.Valid}}
               <div class="TaskList-itemLogLine">
-                {{- $task.Result.String -}}
+                {{- .Result.String -}}
               </div>
             {{end}}
           </td>
@@ -110,8 +131,8 @@
             {{template "itemResult" $resultDetail}}
           </td>
         </tr>
-      </tbody>
-    {{end}}
+      {{end}}
+    </tbody>
   </table>
 {{end}}
 
@@ -128,15 +149,15 @@
       </dd>
       <dt class="TaskList-itemResultTerm">Filename</dt>
       <dd class="TaskList-itemResultDefinition">
-          {{.Artifact.Filename}}
+        {{.Artifact.Filename}}
       </dd>
       <dt class="TaskList-itemResultTerm">ScratchPath</dt>
       <dd class="TaskList-itemResultDefinition">
-          {{.Artifact.ScratchPath}}
+        {{.Artifact.ScratchPath}}
       </dd>
       <dt class="TaskList-itemResultTerm">StagingPath</dt>
       <dd class="TaskList-itemResultDefinition">
-          {{.Artifact.StagingPath}}
+        {{.Artifact.StagingPath}}
       </dd>
     </dl>
   {{else if eq .Kind "Outputs"}}
@@ -150,7 +171,7 @@
     {{range $key, $value := .JSON}}
       <dt class="TaskList-itemResultTerm">
         {{$key}}
-        </dt>
+      </dt>
       <dd class="TaskList-itemResultDefinition">
         {{$value}}
       </dd>
@@ -166,18 +187,18 @@
         <dd class="TaskList-itemResultDefinition">
           {{range $detail := .}}
             {{with $detail.Artifact}}
-            <div class="TaskList-itemResultArtifact">
-              <div class="TaskList-itemResultArtifactName">
-                {{if .Filename}}
-                  {{.Filename}}
-                {{else if .Target}}
-                  {{.Target.Name}}
-                {{else }}
-                  {{pathBase .ScratchPath}}
-                {{end}}
+              <div class="TaskList-itemResultArtifact">
+                <div class="TaskList-itemResultArtifactName">
+                  {{if .Filename}}
+                    {{.Filename}}
+                  {{else if .Target}}
+                    {{.Target.Name}}
+                  {{else}}
+                    {{pathBase .ScratchPath}}
+                  {{end}}
+                </div>
+                <div class="TaskList-itemResultArtifactSize">{{prettySize .Size}}</div>
               </div>
-              <div class="TaskList-itemResultArtifactSize">{{prettySize .Size}}</div>
-            </div>
             {{end}}
           {{end}}
         </dd>

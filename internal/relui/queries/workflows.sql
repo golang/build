@@ -50,6 +50,20 @@ LEFT JOIN most_recent_logs ON tasks.workflow_id = most_recent_logs.workflow_id A
                               tasks.name = most_recent_logs.task_name
 ORDER BY most_recent_update DESC;
 
+-- name: TasksForWorkflowSorted :many
+WITH most_recent_logs AS (
+    SELECT workflow_id, task_name, MAX(updated_at) AS updated_at
+    FROM task_logs
+    GROUP BY workflow_id, task_name
+)
+SELECT tasks.*,
+       GREATEST(most_recent_logs.updated_at, tasks.updated_at)::timestamptz AS most_recent_update
+FROM tasks
+LEFT JOIN most_recent_logs ON tasks.workflow_id = most_recent_logs.workflow_id AND
+                              tasks.name = most_recent_logs.task_name
+WHERE tasks.workflow_id = $1
+ORDER BY most_recent_update DESC;
+
 -- name: TasksForWorkflow :many
 SELECT tasks.*
 FROM tasks
@@ -73,6 +87,12 @@ SELECT task_logs.*
 FROM task_logs
 WHERE workflow_id = $1
   AND task_name = $2
+ORDER BY created_at;
+
+-- name: TaskLogsForWorkflow :many
+SELECT task_logs.*
+FROM task_logs
+WHERE workflow_id = $1
 ORDER BY created_at;
 
 -- name: TaskLogs :many

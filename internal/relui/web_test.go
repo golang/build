@@ -150,7 +150,7 @@ func TestServerNewWorkflowHandler(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
-			u := url.URL{Path: "/workflows/new", RawQuery: c.params.Encode()}
+			u := url.URL{Path: "/new_workflow", RawQuery: c.params.Encode()}
 			req := httptest.NewRequest(http.MethodGet, u.String(), nil)
 			w := httptest.NewRecorder()
 
@@ -173,7 +173,6 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 		desc          string
 		params        url.Values
 		wantCode      int
-		wantHeaders   map[string]string
 		wantWorkflows []db.Workflow
 	}{
 		{
@@ -198,9 +197,6 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 				"workflow.params.farewell": []string{"bye"},
 			},
 			wantCode: http.StatusSeeOther,
-			wantHeaders: map[string]string{
-				"Location": "/",
-			},
 			wantWorkflows: []db.Workflow{
 				{
 					ID:        uuid.New(), // SameUUIDVariant
@@ -228,11 +224,6 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			if resp.StatusCode != c.wantCode {
 				t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, c.wantCode)
 			}
-			for k, v := range c.wantHeaders {
-				if resp.Header.Get(k) != v {
-					t.Errorf("resp.Header.Get(%q) = %q, wanted %q", k, resp.Header.Get(k), v)
-				}
-			}
 			if c.wantCode == http.StatusBadRequest {
 				return
 			}
@@ -242,6 +233,13 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			}
 			if diff := cmp.Diff(c.wantWorkflows, wfs, SameUUIDVariant(), cmpopts.EquateApproxTime(time.Minute)); diff != "" {
 				t.Fatalf("q.Workflows() mismatch (-want +got):\n%s", diff)
+			}
+			if c.wantCode == http.StatusSeeOther {
+				got := resp.Header.Get("Location")
+				want := path.Join("/workflows", wfs[0].ID.String())
+				if got != want {
+					t.Fatalf("resp.Headers.Get(%q) = %q, wanted %q", "Location", got, want)
+				}
 			}
 		})
 	}
@@ -376,6 +374,7 @@ func TestServerBaseLink(t *testing.T) {
 		desc    string
 		baseURL string
 		target  string
+		extras  []string
 		want    string
 	}{
 		{
@@ -401,10 +400,24 @@ func TestServerBaseLink(t *testing.T) {
 			want:    "/releases/workflows",
 		},
 		{
+			desc:    "relative baseURL, relative with extras",
+			baseURL: "/releases",
+			target:  "/workflows",
+			extras:  []string{"a-workflow"},
+			want:    "/releases/workflows/a-workflow",
+		},
+		{
 			desc:    "absolute baseURL, absolute",
 			baseURL: "https://example.test/releases",
 			target:  "https://example.test/something",
 			want:    "https://example.test/something",
+		},
+		{
+			desc:    "absolute baseURL, absolute with extras",
+			baseURL: "https://example.test/releases",
+			target:  "https://example.test/something",
+			extras:  []string{"else"},
+			want:    "https://example.test/something/else",
 		},
 	}
 	for _, c := range cases {
@@ -415,7 +428,7 @@ func TestServerBaseLink(t *testing.T) {
 			}
 			s := NewServer(nil, nil, base, SiteHeader{})
 
-			got := s.BaseLink(c.target)
+			got := s.BaseLink(c.target, c.extras...)
 			if got != c.want {
 				t.Errorf("s.BaseLink(%q) = %q, wanted %q", c.target, got, c.want)
 			}
@@ -640,7 +653,7 @@ func TestServerApproveTaskHandler(t *testing.T) {
 			params:   map[string]string{"id": wfID.String(), "name": "approve please"},
 			wantCode: http.StatusSeeOther,
 			wantHeaders: map[string]string{
-				"Location": "/",
+				"Location": path.Join("/workflows", wfID.String()),
 			},
 			want: db.Task{
 				WorkflowID: wfID,
@@ -722,7 +735,7 @@ func TestServerStopWorkflow(t *testing.T) {
 	}{
 		{
 			desc:     "no params",
-			wantCode: http.StatusNotFound,
+			wantCode: http.StatusMethodNotAllowed,
 		},
 		{
 			desc:     "invalid workflow id",

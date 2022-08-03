@@ -6,14 +6,14 @@
 {{define "layout"}}
 <!DOCTYPE html>
 <html lang="en">
-  <title>{{.SiteHeader.Title}}</title>
+  <title>{{with .SiteHeader.Subtitle}}{{.}}{{else}}{{.SiteHeader.Title}}{{end}}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="{{baseLink "/static/styles.css"}}" />
   <script async defer src="{{baseLink "/static/site.js"}}"></script>
   <body class="Site">
     <header class="Site-header {{.SiteHeader.CSSClass}}">
       <div class="Header">
-        <h1 class="Header-title">{{.SiteHeader.Title}}</h1>
+        <h1 class="Header-title"><a href="{{baseLink "/"}}" class="Header-link">{{.SiteHeader.Title}}</a></h1>
       </div>
     </header>
     <main class="Site-content">

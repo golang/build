@@ -331,6 +331,40 @@ func (q *Queries) TaskLogsForTask(ctx context.Context, arg TaskLogsForTaskParams
 	return items, nil
 }
 
+const taskLogsForWorkflow = `-- name: TaskLogsForWorkflow :many
+SELECT task_logs.id, task_logs.workflow_id, task_logs.task_name, task_logs.body, task_logs.created_at, task_logs.updated_at
+FROM task_logs
+WHERE workflow_id = $1
+ORDER BY created_at
+`
+
+func (q *Queries) TaskLogsForWorkflow(ctx context.Context, workflowID uuid.UUID) ([]TaskLog, error) {
+	rows, err := q.db.Query(ctx, taskLogsForWorkflow, workflowID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskLog
+	for rows.Next() {
+		var i TaskLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkflowID,
+			&i.TaskName,
+			&i.Body,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const tasks = `-- name: Tasks :many
 WITH most_recent_logs AS (
     SELECT workflow_id, task_name, MAX(updated_at) AS updated_at
@@ -421,6 +455,69 @@ func (q *Queries) TasksForWorkflow(ctx context.Context, workflowID uuid.UUID) ([
 			&i.ReadyForApproval,
 			&i.Started,
 			&i.RetryCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const tasksForWorkflowSorted = `-- name: TasksForWorkflowSorted :many
+WITH most_recent_logs AS (
+    SELECT workflow_id, task_name, MAX(updated_at) AS updated_at
+    FROM task_logs
+    GROUP BY workflow_id, task_name
+)
+SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at, tasks.approved_at, tasks.ready_for_approval, tasks.started, tasks.retry_count,
+       GREATEST(most_recent_logs.updated_at, tasks.updated_at)::timestamptz AS most_recent_update
+FROM tasks
+LEFT JOIN most_recent_logs ON tasks.workflow_id = most_recent_logs.workflow_id AND
+                              tasks.name = most_recent_logs.task_name
+WHERE tasks.workflow_id = $1
+ORDER BY most_recent_update DESC
+`
+
+type TasksForWorkflowSortedRow struct {
+	WorkflowID       uuid.UUID
+	Name             string
+	Finished         bool
+	Result           sql.NullString
+	Error            sql.NullString
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	ApprovedAt       sql.NullTime
+	ReadyForApproval bool
+	Started          bool
+	RetryCount       int32
+	MostRecentUpdate time.Time
+}
+
+func (q *Queries) TasksForWorkflowSorted(ctx context.Context, workflowID uuid.UUID) ([]TasksForWorkflowSortedRow, error) {
+	rows, err := q.db.Query(ctx, tasksForWorkflowSorted, workflowID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TasksForWorkflowSortedRow
+	for rows.Next() {
+		var i TasksForWorkflowSortedRow
+		if err := rows.Scan(
+			&i.WorkflowID,
+			&i.Name,
+			&i.Finished,
+			&i.Result,
+			&i.Error,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ApprovedAt,
+			&i.ReadyForApproval,
+			&i.Started,
+			&i.RetryCount,
+			&i.MostRecentUpdate,
 		); err != nil {
 			return nil, err
 		}

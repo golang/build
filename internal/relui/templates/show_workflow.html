@@ -1,0 +1,71 @@
+<!--
+    Copyright 2022 The Go Authors. All rights reserved.
+    Use of this source code is governed by a BSD-style
+    license that can be found in the LICENSE file.
+-->
+{{template "layout" .}}
+
+{{define "content"}}
+  <section class="WorkflowShow">
+    {{- /*gotype: golang.org/x/build/internal/relui.showWorkflowResponse */ -}}
+    {{$workflow := .Workflow}}
+    <h3 class="WorkflowShow-title">
+      {{$workflow.Name.String}}
+      <span class="WorkflowShow-titleTime">
+        {{$workflow.CreatedAt.UTC.Format "2006/01/02 15:04 MST"}}
+      </span>
+      {{if not (or $workflow.Finished $workflow.Error)}}
+        <div class="WorkflowShow-titleStop">
+          <form action="{{baseLink (printf "/workflows/%s/stop" $workflow.ID)}}" method="post">
+            <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />
+            <input
+              name="workflow.stop"
+              class="Button Button--red"
+              type="submit"
+              value="STOP"
+              onclick="return this.form.reportValidity() && confirm('This will stop the workflow and all in-flight tasks.\n\nAre you sure you want to proceed?')" />
+          </form>
+        </div>
+      {{end}}
+    </h3>
+    <div class="WorkflowShow-details">
+      <div class="WorkflowShow-params">
+        <table class="WorkflowShow-paramsTable">
+          <tbody>
+            <tr>
+              <td>State:</td>
+              <td class="WorkflowShow-paramData">
+                {{if $workflow.Error}}
+                  Error
+                  <div class="WorkflowShow-workflowStateIcon WorkflowShow-workflowStateIcon--error"></div>
+                {{else if $workflow.Finished}}
+                  Success
+                  <div class="WorkflowShow-workflowStateIcon WorkflowShow-workflowStateIcon--success"></div>
+                {{else}}
+                  Pending
+                  <div class="WorkflowShow-workflowStateIcon WorkflowShow-workflowStateIcon--pending"></div>
+                {{end}}
+              </td>
+            </tr>
+            <tr>
+              <td>Error:</td>
+              <td class="WorkflowShow-paramData">{{$workflow.Error}}</td>
+            </tr>
+            {{range $name, $value := workflowParams $workflow}}
+              <tr>
+                <td>{{$name}}:</td>
+                <td class="WorkflowShow-paramData">{{$value}}</td>
+              </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      <dl class="WorkflowShow-output">
+        {{$resultDetail := unmarshalResultDetail $workflow.Output}}
+        {{template "itemResult" $resultDetail}}
+      </dl>
+    </div>
+    <h4 class="WorkflowShow-sectionTitle">Tasks</h4>
+    {{template "task_list" .}}
+  </section>
+{{end}}

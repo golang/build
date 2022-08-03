@@ -48,6 +48,7 @@ func fileServerHandler(fs fs.FS) http.Handler {
 type SiteHeader struct {
 	Title    string // Site title. For example, "Go Releases".
 	CSSClass string // Site header CSS class name. Optional.
+	Subtitle string
 }
 
 // Server implements the http handlers for relui.
@@ -83,14 +84,16 @@ func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL, header SiteHeader) 
 		"pathBase":              path.Base,
 		"prettySize":            prettySize,
 		"unmarshalResultDetail": unmarshalResultDetail,
+		"workflowParams":        workflowParams,
 	}
 	s.templates = template.Must(template.New("").Funcs(helpers).ParseFS(templates, "templates/*.html"))
 	s.homeTmpl = s.mustLookup("home.html")
 	s.newWorkflowTmpl = s.mustLookup("new_workflow.html")
+	s.m.GET("/workflows/:id", s.showWorkflowHandler)
 	s.m.POST("/workflows/:id/stop", s.stopWorkflowHandler)
 	s.m.POST("/workflows/:id/tasks/:name/retry", s.retryTaskHandler)
 	s.m.POST("/workflows/:id/tasks/:name/approve", s.approveTaskHandler)
-	s.m.Handler(http.MethodGet, "/workflows/new", http.HandlerFunc(s.newWorkflowHandler))
+	s.m.Handler(http.MethodGet, "/new_workflow", http.HandlerFunc(s.newWorkflowHandler))
 	s.m.Handler(http.MethodPost, "/workflows", http.HandlerFunc(s.createWorkflowHandler))
 	s.m.Handler(http.MethodGet, "/static/*path", fileServerHandler(static))
 	s.m.Handler(http.MethodGet, "/", http.HandlerFunc(s.homeHandler))
@@ -119,16 +122,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.m.ServeHTTP(w, r)
 }
 
-func (s *Server) BaseLink(target string) string {
-	if s.baseURL == nil {
-		return target
-	}
+func (s *Server) BaseLink(target string, extras ...string) string {
 	u, err := url.Parse(target)
 	if err != nil {
 		log.Printf("BaseLink: url.Parse(%q) = %v, %v", target, u, err)
-		return target
+		return path.Join(append([]string{target}, extras...)...)
 	}
-	if u.IsAbs() {
+	u.Path = path.Join(append([]string{u.Path}, extras...)...)
+	if s.baseURL == nil || u.IsAbs() {
 		return u.String()
 	}
 	u.Scheme = s.baseURL.Scheme
@@ -137,21 +138,13 @@ func (s *Server) BaseLink(target string) string {
 	return u.String()
 }
 
-type workflowDetail struct {
-	Workflow db.Workflow
-	Tasks    []db.TasksRow
-	// TaskLogs is a map of all logs for a db.Task, keyed on
-	// (db.Task).Name
-	TaskLogs map[string][]db.TaskLog
-}
-
 type homeResponse struct {
-	SiteHeader      SiteHeader
-	WorkflowIDs     []uuid.UUID
-	WorkflowDetails map[uuid.UUID]*workflowDetail
+	SiteHeader        SiteHeader
+	ActiveWorkflows   []db.Workflow
+	InactiveWorkflows []db.Workflow
 }
 
-func (h *homeResponse) WorkflowParams(wf db.Workflow) map[string]string {
+func workflowParams(wf db.Workflow) map[string]string {
 	params := make(map[string]string)
 	json.Unmarshal([]byte(wf.Params.String), &params)
 	return params
@@ -159,14 +152,23 @@ func (h *homeResponse) WorkflowParams(wf db.Workflow) map[string]string {
 
 // homeHandler renders the homepage.
 func (s *Server) homeHandler(w http.ResponseWriter, r *http.Request) {
-	resp, err := s.buildHomeResponse(r.Context())
+	q := db.New(s.db)
+	ws, err := q.Workflows(r.Context())
 	if err != nil {
 		log.Printf("homeHandler: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+	hr := &homeResponse{SiteHeader: s.header}
+	for _, w := range ws {
+		if s.w.running[w.ID.String()] != nil {
+			hr.ActiveWorkflows = append(hr.ActiveWorkflows, w)
+			continue
+		}
+		hr.InactiveWorkflows = append(hr.InactiveWorkflows, w)
+	}
 	out := bytes.Buffer{}
-	if err := s.homeTmpl.Execute(&out, resp); err != nil {
+	if err := s.homeTmpl.Execute(&out, hr); err != nil {
 		log.Printf("homeHandler: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -174,41 +176,62 @@ func (s *Server) homeHandler(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, &out)
 }
 
-func (s *Server) buildHomeResponse(ctx context.Context) (*homeResponse, error) {
+type showWorkflowResponse struct {
+	SiteHeader SiteHeader
+	Workflow   db.Workflow
+	Tasks      []db.TasksForWorkflowSortedRow
+	// TaskLogs is a map of all logs for a db.Task, keyed on
+	// (db.Task).Name
+	TaskLogs map[string][]db.TaskLog
+}
+
+func (s *Server) showWorkflowHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	id, err := uuid.Parse(params.ByName("id"))
+	if err != nil {
+		log.Printf("showWorkflowHandler(_, _, %v) uuid.Parse(%v): %v", params, params.ByName("id"), err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	resp, err := s.buildShowWorkflowResponse(r.Context(), id)
+	if err != nil {
+		log.Printf("showWorkflowHandler: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	out := bytes.Buffer{}
+	if err := s.mustLookup("show_workflow.html").Execute(&out, resp); err != nil {
+		log.Printf("showWorkflowHandler: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	io.Copy(w, &out)
+}
+
+func (s *Server) buildShowWorkflowResponse(ctx context.Context, id uuid.UUID) (*showWorkflowResponse, error) {
 	q := db.New(s.db)
-	ws, err := q.Workflows(ctx)
+	w, err := q.Workflow(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := q.Tasks(ctx)
+	tasks, err := q.TasksForWorkflowSorted(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	hr := &homeResponse{
-		SiteHeader:      s.header,
-		WorkflowDetails: make(map[uuid.UUID]*workflowDetail),
-	}
-	for _, w := range ws {
-		hr.WorkflowIDs = append(hr.WorkflowIDs, w.ID)
-		hr.WorkflowDetails[w.ID] = &workflowDetail{Workflow: w}
-	}
-	for _, t := range tasks {
-		wd := hr.WorkflowDetails[t.WorkflowID]
-		wd.Tasks = append(hr.WorkflowDetails[t.WorkflowID].Tasks, t)
-		wd.TaskLogs = make(map[string][]db.TaskLog)
-	}
-	tlogs, err := q.TaskLogs(ctx)
+	tlogs, err := q.TaskLogsForWorkflow(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+	sr := &showWorkflowResponse{
+		SiteHeader: s.header,
+		TaskLogs:   make(map[string][]db.TaskLog),
+		Tasks:      tasks,
+		Workflow:   w,
+	}
+	sr.SiteHeader.Subtitle = w.Name.String
 	for _, l := range tlogs {
-		wd := hr.WorkflowDetails[l.WorkflowID]
-		if wd.TaskLogs == nil {
-			wd.TaskLogs = make(map[string][]db.TaskLog)
-		}
-		wd.TaskLogs[l.TaskName] = append(wd.TaskLogs[l.TaskName], l)
+		sr.TaskLogs[l.TaskName] = append(sr.TaskLogs[l.TaskName], l)
 	}
-	return hr, nil
+	return sr, nil
 }
 
 type newWorkflowResponse struct {
@@ -268,12 +291,13 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if _, err := s.w.StartWorkflow(r.Context(), name, params); err != nil {
+	id, err := s.w.StartWorkflow(r.Context(), name, params)
+	if err != nil {
 		log.Printf("s.w.StartWorkflow(%v, %v, %v): %v", r.Context(), d, params, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
+	http.Redirect(w, r, s.BaseLink("/workflows", id.String()), http.StatusSeeOther)
 }
 
 func (s *Server) retryTaskHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
@@ -344,7 +368,7 @@ func (s *Server) approveTaskHandler(w http.ResponseWriter, r *http.Request, para
 		return
 	}
 	s.w.l.Logger(id, t.Name).Printf("USER-APPROVED")
-	http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
+	http.Redirect(w, r, s.BaseLink("/workflows", id.String()), http.StatusSeeOther)
 }
 
 func (s *Server) stopWorkflowHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
