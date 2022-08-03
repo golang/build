@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -297,8 +298,25 @@ func createIAPTunnel(ctx context.Context, inst *compute.Instance) (string, func(
 	tunnelCmd := exec.CommandContext(ctx,
 		"gcloud", "compute", "start-iap-tunnel", "--iap-tunnel-disable-connection-check",
 		"--project", project, "--zone", zone, inst.Name, "80", "--local-host-port", localAddr.String())
-	tunnelCmd.Stderr = os.Stderr
-	tunnelCmd.Stdout = os.Stdout
+
+	// hideWriter hides the underlying io.Writer from os/exec, bypassing the
+	// special case where os/exec will let a subprocess share the fd to an
+	// *os.File. Using hideWriter will result in goroutines that copy from a
+	// fresh pipe and write to the writer in the parent Go program.
+	// That guarantees that if the subprocess
+	// leaves background processes lying around, they will not keep lingering
+	// references to the parent Go program's stdout and stderr.
+	//
+	// Prior to this, it was common for ./debugnewvm | cat to never finish,
+	// because debugnewvm left some gcloud helper processes behind, and cat
+	// (or any other program) would never observe EOF on its input pipe.
+	// We now try to shut gcloud down more carefully with os.Interrupt below,
+	// but hideWriter guarantees that lingering processes won't hang
+	// pipelines.
+	type hideWriter struct{ io.Writer }
+	tunnelCmd.Stderr = hideWriter{os.Stderr}
+	tunnelCmd.Stdout = hideWriter{os.Stdout}
+
 	if err := tunnelCmd.Start(); err != nil {
 		return "", nil, err
 	}
@@ -318,7 +336,14 @@ func createIAPTunnel(ctx context.Context, inst *compute.Instance) (string, func(
 		conn, err := net.DialTCP("tcp", nil, localAddr)
 		if err == nil {
 			conn.Close()
-			kill := func() { tunnelCmd.Process.Kill() }
+			kill := func() {
+				// gcloud compute start-iap-tunnel is a group of Python processes,
+				// so send an interrupt to try for an orderly shutdown of the process tree
+				// before killing the process outright.
+				tunnelCmd.Process.Signal(os.Interrupt)
+				time.Sleep(2 * time.Second)
+				tunnelCmd.Process.Kill()
+			}
 			return fmt.Sprint(localAddr.Port), kill, nil
 		}
 	}
