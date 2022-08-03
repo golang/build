@@ -121,15 +121,6 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum: 1,
 		env:       []string{"GOROOT_BOOTSTRAP=/opt/freeware/lib/golang"},
 	},
-	"host-android-amd64-emu": {
-		Notes:           "Debian Buster w/ Android SDK + emulator (use nested virt)",
-		ContainerImage:  "android-amd64-emu:bff27c0c9263",
-		KonletVMImage:   "android-amd64-emu",
-		NestedVirt:      true,
-		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
-		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
-		SSHUsername:     "root",
-	},
 	"host-android-arm64-corellium-android": {
 		Notes:     "Virtual Android devices hosted by Zenly on Corellium; see issues 31722 and 40523",
 		Owners:    []*gophers.Person{gh("steeve"), gh("changkun")}, // See https://groups.google.com/g/golang-dev/c/oiuIE7qrWp0.
@@ -264,6 +255,15 @@ var Hosts = map[string]*HostConfig{
 		ContainerImage:  "linux-x86-alpine:latest",
 		buildletURLTmpl: "https://storage.googleapis.com/$BUCKET/buildlet.linux-amd64-static",
 		env:             []string{"GOROOT_BOOTSTRAP=/usr/lib/go"},
+		SSHUsername:     "root",
+	},
+	"host-linux-amd64-androidemu": {
+		Notes:           "Debian Buster w/ Android SDK + emulator (use nested virt)",
+		ContainerImage:  "android-amd64-emu:bff27c0c9263",
+		KonletVMImage:   "android-amd64-emu",
+		NestedVirt:      true,
+		buildletURLTmpl: "http://storage.googleapis.com/$BUCKET/buildlet.linux-amd64",
+		env:             []string{"GOROOT_BOOTSTRAP=/go1.4"},
 		SSHUsername:     "root",
 	},
 	"host-linux-amd64-bullseye": {
@@ -1798,7 +1798,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-androidemu",
-		HostType: "host-android-amd64-emu",
+		HostType: "host-linux-amd64-androidemu",
 		env: []string{
 			"GOARCH=amd64",
 			"GOOS=linux",
@@ -2418,7 +2418,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "android-386-emu",
-		HostType: "host-android-amd64-emu", // same amd64 host is used for 386 builder
+		HostType: "host-linux-amd64-androidemu", // same amd64 host is used for 386 builder
 		Notes:    "Android emulator on GCE (GOOS=android GOARCH=386)",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			b := buildRepoByDefault(repo)
@@ -2441,7 +2441,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:              "android-amd64-emu",
-		HostType:          "host-android-amd64-emu",
+		HostType:          "host-linux-amd64-androidemu",
 		Notes:             "Android emulator on GCE (GOOS=android GOARCH=amd64)",
 		numTryTestHelpers: 3,
 		tryBot: func(repo, branch, goBranch string) bool {
