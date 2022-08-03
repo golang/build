@@ -389,16 +389,6 @@ var Hosts = map[string]*HostConfig{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
 		},
 	},
-	"host-linux-mips64le-mengzhuo": {
-		Notes:     "Loongson 3A Box hosted by Meng Zhuo",
-		Owners:    []*gophers.Person{gh("mengzhuo")},
-		IsReverse: true,
-		ExpectNum: 1,
-		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/lib/golang",
-			"GOMIPS64=hardfloat",
-		},
-	},
 	"host-linux-mips64le-rtrk": {
 		Notes:     "cavium,rhino_utm8 board hosted at RT-RK.com; quad-core cpu, 8GB of ram and 240GB ssd disks.",
 		Owners:    []*gophers.Person{gh("draganmladjenovic")}, // See https://github.com/golang/go/issues/53574#issuecomment-1169891255.
@@ -406,6 +396,16 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum: 1,
 		env: []string{
 			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap",
+		},
+	},
+	"host-linux-mipsle-mengzhuo": {
+		Notes:     "Loongson 3A Box hosted by Meng Zhuo; mips64le despite the name",
+		Owners:    []*gophers.Person{gh("mengzhuo")},
+		IsReverse: true,
+		ExpectNum: 1,
+		env: []string{
+			"GOROOT_BOOTSTRAP=/usr/lib/golang",
+			"GOMIPS64=hardfloat",
 		},
 	},
 	"host-linux-ppc64-osu": {
@@ -564,7 +564,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:     "Raspberry Pi 3 Model B, Plan 9 from Bell Labs",
 		Owners:    []*gophers.Person{gh("0intro")},
 	},
-	"host-solaris-amd64-oraclerel": {
+	"host-solaris-oracle-amd64-oraclerel": {
 		Notes:     "Oracle Solaris amd64 Release System",
 		Owners:    []*gophers.Person{gh("rorth")}, // https://github.com/golang/go/issues/15581#issuecomment-550368581
 		IsReverse: true,
@@ -621,25 +621,25 @@ var Hosts = map[string]*HostConfig{
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/go1.4-windows-amd64.tar.gz",
 		SSHUsername:        "gopher",
 	},
-	"host-windows-arm64-10": {
+	"host-windows-arm64-mini": { // host name known to cmd/buildlet/stage0, cannot change
 		Notes:              "macOS hosting Windows 10 in qemu with HVM acceleration.",
 		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-arm64",
 		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-windows-arm64-f22ec5.tar.gz",
 		IsReverse:          true,
 		ExpectNum:          2,
 	},
-	"host-windows-arm64-11": {
-		Notes:              "macOS hosting Windows 11 in qemu with HVM acceleration.",
-		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-arm64",
-		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-windows-arm64-f22ec5.tar.gz",
-		IsReverse:          true,
-		ExpectNum:          5,
-	},
 	"host-windows-arm64-zx2c4": {
 		IsReverse: true,
 		ExpectNum: 0,
 		Owners:    []*gophers.Person{gh("zx2c4")},
 		env:       []string{"GOROOT_BOOTSTRAP=C:\\Program Files (Arm)\\Go"},
+	},
+	"host-windows11-arm64-mini": { // host name known to cmd/buildlet/stage0, cannot change
+		Notes:              "macOS hosting Windows 11 in qemu with HVM acceleration.",
+		buildletURLTmpl:    "http://storage.googleapis.com/$BUCKET/buildlet.windows-arm64",
+		goBootstrapURLTmpl: "https://storage.googleapis.com/$BUCKET/gobootstrap-windows-arm64-f22ec5.tar.gz",
+		IsReverse:          true,
+		ExpectNum:          5,
 	},
 }
 
@@ -2328,7 +2328,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-arm64-10",
-		HostType:          "host-windows-arm64-10",
+		HostType:          "host-windows-arm64-mini",
 		numTryTestHelpers: 1,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
@@ -2339,7 +2339,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:              "windows-arm64-11",
-		HostType:          "host-windows-arm64-11",
+		HostType:          "host-windows11-arm64-mini",
 		numTryTestHelpers: 1,
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return atLeastGo1(goBranch, 18) && buildRepoByDefault(repo)
@@ -2487,7 +2487,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:        "solaris-amd64-oraclerel",
-		HostType:    "host-solaris-amd64-oraclerel",
+		HostType:    "host-solaris-oracle-amd64-oraclerel",
 		Notes:       "Oracle Solaris release version",
 		FlakyNet:    true,
 		KnownIssues: []int{51443},
@@ -2548,7 +2548,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		FlakyNet:       true,
-		HostType:       "host-linux-mips64le-mengzhuo",
+		HostType:       "host-linux-mipsle-mengzhuo",
 		Name:           "linux-mips64le-mengzhuo",
 		buildsRepo:     onlyMasterDefault,
 		distTestAdjust: mipsDistTestPolicy,
