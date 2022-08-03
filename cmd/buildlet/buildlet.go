@@ -1758,7 +1758,7 @@ func configureMacStadium() {
 	}
 	major, minor := m[1], m[2] // "10", "12"
 
-	// As of macOS 11.0 (Big Sur), the major digits are used to indicate the version of
+	// As of macOS 11 (Big Sur), the major digits are used to indicate the version of
 	// macOS. This version also introduced support for multiple architectures. This
 	// takes into account the need to distinguish between versions and architectures for
 	// the later versions.
@@ -1766,10 +1766,14 @@ func configureMacStadium() {
 	if err != nil {
 		log.Fatalf("unable to parse major version %q", major)
 	}
-	if mj >= 11 {
-		*reverseType = fmt.Sprintf("host-darwin-%s-%s_%s", runtime.GOARCH, major, "0")
+	if mj >= 13 {
+		*reverseType = fmt.Sprintf("host-darwin-%s-%s", runtime.GOARCH, major)
+	} else if mj >= 11 {
+		// The darwin-amd64-{11,12}_0 hosts have a "_0" suffix as a historical
+		// relic from when it distinguished macOS 10.15, 10.14 and older, as below.
+		*reverseType = fmt.Sprintf("host-darwin-%s-%s_0", runtime.GOARCH, major)
 	} else {
-		*reverseType = fmt.Sprintf("host-darwin-%s_%s", major, minor)
+		*reverseType = fmt.Sprintf("host-darwin-%s-%s_%s", runtime.GOARCH, major, minor)
 	}
 	*coordinator = "farmer.golang.org:443"
 
