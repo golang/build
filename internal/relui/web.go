@@ -154,7 +154,7 @@ func (s *Server) homeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	hr := &homeResponse{SiteHeader: s.header}
 	for _, w := range ws {
-		if s.w.running[w.ID.String()] != nil {
+		if _, ok := s.w.running[w.ID.String()]; ok {
 			hr.ActiveWorkflows = append(hr.ActiveWorkflows, w)
 			continue
 		}
@@ -300,43 +300,10 @@ func (s *Server) retryTaskHandler(w http.ResponseWriter, r *http.Request, params
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	if err := s.retryTask(r.Context(), id, params.ByName("name")); err != nil {
-		log.Printf("s.retryTask(_, %q, %q): %v", id, params.ByName("id"), err)
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-			return
-		}
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
+	if err := s.w.RetryTask(r.Context(), id, params.ByName("name")); err != nil {
+		log.Printf("s.w.RetryTask(_, %q): %v", id, err)
 	}
-	if err := s.w.Resume(r.Context(), id); err != nil {
-		log.Printf("s.w.Resume(_, %q): %v", id, err)
-	}
-	http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
-}
-
-func (s *Server) retryTask(ctx context.Context, id uuid.UUID, name string) error {
-	return s.db.BeginFunc(ctx, func(tx pgx.Tx) error {
-		q := db.New(tx)
-		wf, err := q.Workflow(ctx, id)
-		if err != nil {
-			return fmt.Errorf("q.Workflow: %w", err)
-		}
-		task, err := q.Task(ctx, db.TaskParams{WorkflowID: id, Name: name})
-		if err != nil {
-			return fmt.Errorf("q.Task: %w", err)
-		}
-		if _, err := q.ResetTask(ctx, db.ResetTaskParams{WorkflowID: id, Name: name, UpdatedAt: time.Now()}); err != nil {
-			return fmt.Errorf("q.ResetTask: %w", err)
-		}
-		if _, err := q.ResetWorkflow(ctx, db.ResetWorkflowParams{ID: id, UpdatedAt: time.Now()}); err != nil {
-			return fmt.Errorf("q.ResetWorkflow: %w", err)
-		}
-		l := s.w.l.Logger(id, name)
-		l.Printf("task reset. Previous state: %#v", task)
-		l.Printf("workflow reset. Previous state: %#v", wf)
-		return nil
-	})
+	http.Redirect(w, r, s.BaseLink("/workflows", id.String()), http.StatusSeeOther)
 }
 
 func (s *Server) approveTaskHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {

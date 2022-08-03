@@ -81,9 +81,8 @@ func TestDependencyError(t *testing.T) {
 	dep := wf.Action0(wd, "failing action", action)
 	wf.Output(wd, "output", wf.Task0(wd, "task", task, wf.After(dep)))
 	w := startWorkflow(t, wd, nil)
-	l := &verboseListener{t: t}
-	if _, err := w.Run(context.Background(), l); err == nil {
-		t.Errorf("workflow finished successfully, expected an error")
+	if got, want := runToFailure(t, w, "failing action"), "hardcoded error"; got != want {
+		t.Errorf("got error %q, want %q", got, want)
 	}
 }
 
@@ -106,22 +105,6 @@ func TestSub(t *testing.T) {
 	outputs := runWorkflow(t, w, nil)
 	if got, want := outputs["result"], "hi hi"; got != want {
 		t.Errorf("result = %q, want %q", got, want)
-	}
-}
-
-func TestStuck(t *testing.T) {
-	fail := func(context.Context) (string, error) {
-		return "", fmt.Errorf("goodbye world")
-	}
-
-	wd := wf.New()
-	nothing := wf.Task0(wd, "fail", fail)
-	wf.Output(wd, "nothing", nothing)
-
-	w := startWorkflow(t, wd, nil)
-	_, err := w.Run(context.Background(), &verboseListener{t: t})
-	if err == nil || !strings.Contains(err.Error(), "as far as it can") {
-		t.Errorf("Run of stuck workflow = %v, wanted it to give up early", err)
 	}
 }
 
@@ -177,11 +160,7 @@ func TestParallelism(t *testing.T) {
 	wf.Output(wd, "out2", out2)
 
 	w := startWorkflow(t, wd, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if _, err := w.Run(ctx, &verboseListener{t}); err != nil {
-		t.Fatal(err)
-	}
+	runWorkflow(t, w, nil)
 }
 
 func TestParameters(t *testing.T) {
@@ -232,9 +211,41 @@ func TestParameterValue(t *testing.T) {
 	}
 }
 
-func TestRetry(t *testing.T) {
+func TestManualRetry(t *testing.T) {
 	counter := 0
-	needsRetry := func(ctx context.Context) (string, error) {
+	needsRetry := func(ctx *wf.TaskContext) (string, error) {
+		ctx.DisableRetries()
+		counter++
+		if counter == 1 {
+			return "", fmt.Errorf("counter %v too low", counter)
+		}
+		return "hi", nil
+	}
+
+	wd := wf.New()
+	wf.Output(wd, "result", wf.Task0(wd, "needs retry", needsRetry))
+
+	w := startWorkflow(t, wd, nil)
+
+	retry := func(string) {
+		go func() {
+			w.RetryTask(context.Background(), "needs retry")
+		}()
+	}
+	listener := &errorListener{
+		taskName: "needs retry",
+		callback: retry,
+		Listener: &verboseListener{t},
+	}
+	runWorkflow(t, w, listener)
+	if counter != 2 {
+		t.Errorf("task ran %v times, wanted 2", counter)
+	}
+}
+
+func TestAutomaticRetry(t *testing.T) {
+	counter := 0
+	needsRetry := func(ctx *wf.TaskContext) (string, error) {
 		if counter < 2 {
 			counter++
 			return "", fmt.Errorf("counter %v too low", counter)
@@ -255,7 +266,7 @@ func TestRetry(t *testing.T) {
 	}
 }
 
-func TestRetryDisabled(t *testing.T) {
+func TestAutomaticRetryDisabled(t *testing.T) {
 	counter := 0
 	noRetry := func(ctx *wf.TaskContext) (string, error) {
 		ctx.DisableRetries()
@@ -267,11 +278,9 @@ func TestRetryDisabled(t *testing.T) {
 	wf.Output(wd, "result", wf.Task0(wd, "no retry", noRetry))
 
 	w := startWorkflow(t, wd, nil)
-	_, err := w.Run(context.Background(), &verboseListener{t: t})
-	if err == nil || !strings.Contains(err.Error(), "as far as it can") {
-		t.Errorf("Run of failing workflow = %v, wanted it to fail", err)
+	if got, want := runToFailure(t, w, "no retry"), "do not pass go"; got != want {
+		t.Errorf("got error %q, want %q", got, want)
 	}
-
 	if counter != 1 {
 		t.Errorf("task with retries disabled ran %v times, wanted 1", counter)
 	}
@@ -315,9 +324,12 @@ func testWatchdog(t *testing.T, success bool) {
 	wf.Output(wd, "result", wf.Task0(wd, "sleepy", maybeLog))
 
 	w := startWorkflow(t, wd, nil)
-	_, err := w.Run(context.Background(), &verboseListener{t: t})
-	if err == nil != success {
-		t.Errorf("got error %v, wanted success: %v", err, success)
+	if success {
+		runWorkflow(t, w, nil)
+	} else {
+		if got, want := runToFailure(t, w, "sleepy"), "assumed hung"; !strings.Contains(got, want) {
+			t.Errorf("got error %q, want %q", got, want)
+		}
 	}
 }
 
@@ -438,8 +450,8 @@ func TestBadMarshaling(t *testing.T) {
 	wd := wf.New()
 	wf.Output(wd, "greeting", wf.Task0(wd, "greet", greet))
 	w := startWorkflow(t, wd, nil)
-	if _, err := w.Run(context.Background(), &verboseListener{t}); err == nil {
-		t.Errorf("running a workflow with bad JSON should give an error, got none")
+	if got, want := runToFailure(t, w, "greet"), "JSON marshaling"; !strings.Contains(got, want) {
+		t.Errorf("got error %q, want %q", got, want)
 	}
 }
 
@@ -516,4 +528,39 @@ type testLogger struct {
 
 func (l *testLogger) Printf(format string, v ...interface{}) {
 	l.t.Logf("task %-10v: LOG: %s", l.task, fmt.Sprintf(format, v...))
+}
+
+func runToFailure(t *testing.T, w *wf.Workflow, task string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	t.Helper()
+	var message string
+	listener := &errorListener{
+		taskName: task,
+		callback: func(m string) {
+			message = m
+			// Allow other tasks to run before shutting down the workflow.
+			time.AfterFunc(50*time.Millisecond, cancel)
+		},
+		Listener: &verboseListener{t},
+	}
+	_, err := w.Run(ctx, listener)
+	if err == nil {
+		t.Fatalf("workflow unexpectedly succeeded")
+	}
+	return message
+}
+
+type errorListener struct {
+	taskName string
+	callback func(string)
+	wf.Listener
+}
+
+func (l *errorListener) TaskStateChanged(id uuid.UUID, taskID string, st *wf.TaskState) error {
+	if st.Name == l.taskName && st.Finished && st.Error != "" {
+		l.callback(st.Error)
+	}
+	l.Listener.TaskStateChanged(id, taskID, st)
+	return nil
 }

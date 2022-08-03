@@ -73,12 +73,16 @@ func TestAwaitFunc(t *testing.T) {
 				t.Fatalf("workflow.Start(%v, %v) = %v, %v, wanted no error", wd, nil, w, err)
 			}
 			go func() {
-				outputs, err := runWorkflow(t, ctx, w, nil)
-				if diff := cmp.Diff(c.want, outputs); diff != "" {
-					t.Errorf("runWorkflow() mismatch (-want +got):\n%s", diff)
-				}
-				if (err != nil) != c.wantErr {
-					t.Errorf("runworkflow() = _, %v, wantErr: %v", err, c.wantErr)
+				if c.wantErr {
+					runToFailure(t, ctx, w, "AwaitFunc", &verboseListener{t, nil})
+				} else {
+					outputs, err := runWorkflow(t, ctx, w, nil)
+					if err != nil {
+						t.Errorf("runworkflow() = _, %v", err)
+					}
+					if diff := cmp.Diff(c.want, outputs); diff != "" {
+						t.Errorf("runWorkflow() mismatch (-want +got):\n%s", diff)
+					}
 				}
 				close(done)
 			}()

@@ -84,7 +84,7 @@
                     name="task.reset"
                     type="submit"
                     value="Retry"
-                    onclick="return this.form.reportValidity() && confirm('This will retry the task and clear workflow errors.\n\nReady to proceed?')" />
+                    onclick="return this.form.reportValidity() && confirm('This will retry the task.\n\nReady to proceed?')" />
                 </form>
               </div>
             {{else if and (not .ApprovedAt.Valid) (.ReadyForApproval)}}

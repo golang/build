@@ -466,9 +466,10 @@ func (tr *taskResult[T]) dependencies() []*taskDefinition {
 
 // A Workflow is an instantiated workflow instance, ready to run.
 type Workflow struct {
-	ID     uuid.UUID
-	def    *Definition
-	params map[string]interface{}
+	ID            uuid.UUID
+	def           *Definition
+	params        map[string]interface{}
+	retryCommands chan retryCommand
 
 	tasks map[*taskDefinition]*taskState
 }
@@ -515,10 +516,11 @@ func (t *taskState) toExported() *TaskState {
 // Start instantiates a workflow with the given parameters.
 func Start(def *Definition, params map[string]interface{}) (*Workflow, error) {
 	w := &Workflow{
-		ID:     uuid.New(),
-		def:    def,
-		params: params,
-		tasks:  map[*taskDefinition]*taskState{},
+		ID:            uuid.New(),
+		def:           def,
+		params:        params,
+		tasks:         map[*taskDefinition]*taskState{},
+		retryCommands: make(chan retryCommand, len(def.tasks)),
 	}
 	if err := w.validate(); err != nil {
 		return nil, err
@@ -574,10 +576,11 @@ func (w *Workflow) validate() error {
 // need to be populated.
 func Resume(def *Definition, state *WorkflowState, taskStates map[string]*TaskState) (*Workflow, error) {
 	w := &Workflow{
-		ID:     state.ID,
-		def:    def,
-		params: state.Params,
-		tasks:  map[*taskDefinition]*taskState{},
+		ID:            state.ID,
+		def:           def,
+		params:        state.Params,
+		tasks:         map[*taskDefinition]*taskState{},
+		retryCommands: make(chan retryCommand, len(def.tasks)),
 	}
 	if err := w.validate(); err != nil {
 		return nil, err
@@ -618,7 +621,7 @@ func unmarshalNew(t reflect.Type, data []byte) (interface{}, error) {
 	return ptr.Elem().Interface(), nil
 }
 
-// Run runs a workflow to completion or quiescence and returns its outputs.
+// Run runs a workflow to completion and returns its outputs.
 // listener.TaskStateChanged will be called immediately, when each task starts,
 // and when they finish. It should be used only for monitoring and persistence
 // purposes. Register Outputs to read task results.
@@ -632,6 +635,7 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 	}
 
 	stateChan := make(chan taskState, 2*len(w.def.tasks))
+	doneOnce := ctx.Done()
 	for {
 		// If we have all the outputs, the workflow is done.
 		outValues := map[string]interface{}{}
@@ -670,19 +674,38 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 			}
 		}
 
-		// Exit if we've run everything we can given errors.
+		// Honor context cancellation only after all tasks have exited.
 		if running == 0 {
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:
-				return nil, fmt.Errorf("workflow has progressed as far as it can")
 			}
 		}
 
-		state := <-stateChan
-		listener.TaskStateChanged(w.ID, state.def.name, state.toExported())
-		w.tasks[state.def] = &state
+		select {
+		case state := <-stateChan:
+			listener.TaskStateChanged(w.ID, state.def.name, state.toExported())
+			w.tasks[state.def] = &state
+		case retry := <-w.retryCommands:
+			def, ok := w.def.tasks[retry.name]
+			if !ok {
+				retry.reply <- fmt.Errorf("unknown task %q", retry.name)
+				break
+			}
+			state := w.tasks[def]
+			if !state.finished || state.err == nil {
+				retry.reply <- fmt.Errorf("cannot retry task that did not finish in error")
+				break
+			}
+			listener.Logger(w.ID, def.name).Printf("Manual retry requested")
+			stateChan <- taskState{def: def, w: w}
+			retry.reply <- nil
+		// Don't get stuck when cancellation comes in after all tasks have
+		// finished, but also don't busy wait if something's still running.
+		case <-doneOnce:
+			doneOnce = nil
+		}
 	}
 }
 
@@ -747,3 +770,19 @@ func (s *defaultListener) Logger(_ uuid.UUID, task string) Logger {
 type defaultLogger struct{}
 
 func (l *defaultLogger) Printf(format string, v ...interface{}) {}
+
+type retryCommand struct {
+	name  string
+	reply chan error
+}
+
+func (w *Workflow) RetryTask(ctx context.Context, name string) error {
+	reply := make(chan error)
+	w.retryCommands <- retryCommand{name, reply}
+	select {
+	case err := <-reply:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}

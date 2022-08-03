@@ -27,8 +27,6 @@ type Listener interface {
 	WorkflowFinished(ctx context.Context, workflowID uuid.UUID, outputs map[string]interface{}, err error) error
 }
 
-type stopFunc func()
-
 // Worker runs workflows, and persists their state.
 type Worker struct {
 	dh *DefinitionHolder
@@ -43,7 +41,12 @@ type Worker struct {
 	// running is a set of currently running Workflow ids. Run uses
 	// this set to prevent starting a simultaneous execution of a
 	// currently running Workflow.
-	running map[string]stopFunc
+	running map[string]runningWorkflow
+}
+
+type runningWorkflow struct {
+	w    *workflow.Workflow
+	stop func()
 }
 
 // NewWorker returns a Worker ready to accept and run workflows.
@@ -54,7 +57,7 @@ func NewWorker(dh *DefinitionHolder, db db.PGDBTX, l Listener) *Worker {
 		l:       l,
 		done:    make(chan struct{}),
 		pending: make(chan *workflow.Workflow, 1),
-		running: make(map[string]stopFunc),
+		running: make(map[string]runningWorkflow),
 	}
 }
 
@@ -98,7 +101,7 @@ func (w *Worker) markRunning(wf *workflow.Workflow, stop func()) error {
 	if _, ok := w.running[wf.ID.String()]; ok {
 		return fmt.Errorf("workflow %q already running", wf.ID)
 	}
-	w.running[wf.ID.String()] = stop
+	w.running[wf.ID.String()] = runningWorkflow{wf, stop}
 	return nil
 }
 
@@ -111,11 +114,11 @@ func (w *Worker) markStopped(wf *workflow.Workflow) {
 func (w *Worker) cancelWorkflow(id uuid.UUID) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	stop, ok := w.running[id.String()]
+	rwf, ok := w.running[id.String()]
 	if !ok {
 		return ok
 	}
-	stop()
+	rwf.stop()
 	return ok
 }
 
@@ -235,4 +238,15 @@ func (w *Worker) Resume(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 	return w.run(res)
+}
+
+// RetryTask retries a task in a running workflow.
+func (w *Worker) RetryTask(ctx context.Context, id uuid.UUID, name string) error {
+	w.mu.Lock()
+	rwf, ok := w.running[id.String()]
+	w.mu.Unlock()
+	if ok {
+		return fmt.Errorf("no workflow with id %q", id)
+	}
+	return rwf.w.RetryTask(ctx, name)
 }

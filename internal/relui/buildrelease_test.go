@@ -300,14 +300,14 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = w.Run(deps.ctx, &verboseListener{t, deps.outputListener})
-	if mergeFixes && err != nil {
-		t.Fatal(err)
-	}
-	if !mergeFixes {
-		if err == nil {
-			t.Fatal("release succeeded without merging fixes to the public repository")
+
+	if mergeFixes {
+		_, err = w.Run(deps.ctx, &verboseListener{t, deps.outputListener})
+		if err != nil {
+			t.Fatal(err)
 		}
+	} else {
+		runToFailure(t, deps.ctx, w, "Check branch state matches source archive", &verboseListener{t, deps.outputListener})
 		return
 	}
 	checkTGZ(t, deps.buildTasks.DownloadURL, deps.publishedFiles, "src.tar.gz", &WebsiteFile{
@@ -816,6 +816,40 @@ type testLogger struct {
 
 func (l *testLogger) Printf(format string, v ...interface{}) {
 	l.t.Logf("task %-10v: LOG: %s", l.task, fmt.Sprintf(format, v...))
+}
+
+func runToFailure(t *testing.T, ctx context.Context, w *workflow.Workflow, task string, wrap workflow.Listener) string {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	t.Helper()
+	var message string
+	listener := &errorListener{
+		taskName: task,
+		callback: func(m string) {
+			message = m
+			cancel()
+		},
+		Listener: wrap,
+	}
+	_, err := w.Run(ctx, listener)
+	if err == nil {
+		t.Fatalf("workflow unexpectedly succeeded")
+	}
+	return message
+}
+
+type errorListener struct {
+	taskName string
+	callback func(string)
+	workflow.Listener
+}
+
+func (l *errorListener) TaskStateChanged(id uuid.UUID, taskID string, st *workflow.TaskState) error {
+	if st.Name == l.taskName && st.Finished && st.Error != "" {
+		l.callback(st.Error)
+	}
+	l.Listener.TaskStateChanged(id, taskID, st)
+	return nil
 }
 
 // fakeSign acts like a human running the signbinaries job periodically.
