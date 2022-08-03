@@ -75,9 +75,9 @@ clean:
 # Compile everything without uploading.
 compile: $(ALL)
 
-GOFILES=$(shell ls *.go)
+GOFILES:=$(shell ls *.go)
 
-VERSION=$(USER)-$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
+VERSION:=$(USER)-$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 
 BUILD=CGO_ENABLED=0 $(GO) build -ldflags='-X main.Version=$(VERSION)' -o
 
