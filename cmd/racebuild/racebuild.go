@@ -155,7 +155,7 @@ cp llvm-project/compiler-rt/lib/tsan/go/race_darwin_arm64.syso go/src/runtime/ra
 		Type:    "linux-amd64-race",
 		Script: `#!/usr/bin/env bash
 set -e
-apt-get update
+apt-get update --allow-releaseinfo-change
 apt-get install -y git g++
 git clone https://go.googlesource.com/go
 pushd go
@@ -198,7 +198,7 @@ cp llvm-project/compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/rac
 		Type: "linux-ppc64le-buildlet",
 		Script: `#!/usr/bin/env bash
 set -e
-apt-get update
+apt-get update --allow-releaseinfo-change
 apt-get install -y git g++
 git clone https://go.googlesource.com/go
 pushd go
@@ -225,7 +225,7 @@ popd
 		Type: "linux-arm64",
 		Script: `#!/usr/bin/env bash
 set -e
-apt-get update
+apt-get update --allow-releaseinfo-change
 apt-get install -y git g++
 git clone https://go.googlesource.com/go
 pushd go
