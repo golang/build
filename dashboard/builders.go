@@ -475,6 +475,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-solaris-oracle-amd64-oraclerel": {
 		Notes:     "Oracle Solaris amd64 Release System",
+		HostArch:  "solaris-amd64",
 		Owners:    []*gophers.Person{gh("rorth")}, // https://github.com/golang/go/issues/15581#issuecomment-550368581
 		IsReverse: true,
 		ExpectNum: 1,
