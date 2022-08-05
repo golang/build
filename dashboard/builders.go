@@ -438,7 +438,6 @@ var Hosts = map[string]*HostConfig{
 		IsReverse: true,
 		ExpectNum: 1,
 		Owners:    []*gophers.Person{gh("4a6f656c")},
-		HostArch:  "openbsd-arm-5",
 	},
 	"host-openbsd-arm64-joelsing": {
 		IsReverse: true,

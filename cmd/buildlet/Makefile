@@ -46,7 +46,6 @@ ALL=\
 	buildlet.openbsd-386 \
 	buildlet.openbsd-amd64 \
 	buildlet.openbsd-arm \
-	buildlet.openbsd-arm-5 \
 	buildlet.openbsd-arm-7 \
 	buildlet.plan9-386 \
 	buildlet.plan9-amd64 \
@@ -106,7 +105,7 @@ buildlet.linux-arm-arm5: buildlet.linux-arm-5
 	cp $< $@
 buildlet.netbsd-arm: buildlet.netbsd-arm-7
 	cp $< $@
-buildlet.openbsd-arm: buildlet.openbsd-arm-5
+buildlet.openbsd-arm: buildlet.openbsd-arm-7
 	cp $< $@
 buildlet.plan9-arm: buildlet.plan9-arm-5
 	cp $< $@
