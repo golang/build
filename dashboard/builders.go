@@ -1484,6 +1484,9 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-alpine",
 		HostType: "host-linux-amd64-alpine",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return atLeastGo1(goBranch, 20) && buildRepoByDefault(repo)
+		},
 	})
 
 	// addMiscCompileGo1 adds a misc-compile TryBot that
