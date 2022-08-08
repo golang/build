@@ -86,20 +86,15 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"flag"
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/iapclient"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/oauth"
 	"google.golang.org/grpc/status"
 )
 
@@ -195,16 +190,7 @@ func main() {
 // gomoteServerClient returns a gomote server client which can be used to interact with the gomote GRPC server.
 // It will either retrieve a previously created authentication token or attempt to create a new one.
 func gomoteServerClient(ctx context.Context) protos.GomoteServiceClient {
-	ts, err := iapclient.TokenSource(ctx)
-	if err != nil {
-		logAndExitf("failed to retrieve oauth token: %s", err)
-	}
-	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: strings.HasPrefix(*serverAddr, "localhost:")})),
-		grpc.WithDefaultCallOptions(grpc.PerRPCCredentials(oauth.TokenSource{TokenSource: ts})),
-		grpc.WithBlock(),
-	}
-	grpcClient, err := grpc.DialContext(ctx, *serverAddr, opts...)
+	grpcClient, err := iapclient.GRPCClient(ctx, *serverAddr)
 	if err != nil {
 		logAndExitf("dialing the server=%s failed with: %s", *serverAddr, err)
 	}

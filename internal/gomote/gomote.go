@@ -168,7 +168,7 @@ func (s *Server) CreateInstance(req *protos.CreateInstanceRequest, stream protos
 			}
 			userName, err := emailToUser(creds.Email)
 			if err != nil {
-				status.Errorf(codes.Internal, "invalid user email format")
+				return status.Errorf(codes.Internal, "invalid user email format")
 			}
 			gomoteID := s.buildlets.AddSession(creds.ID, userName, req.GetBuilderType(), bconf.HostType, r.buildletClient)
 			log.Printf("created buildlet %v for %v (%s)", gomoteID, userName, r.buildletClient.String())
@@ -176,12 +176,17 @@ func (s *Server) CreateInstance(req *protos.CreateInstanceRequest, stream protos
 			if err != nil {
 				return status.Errorf(codes.Internal, "unable to query for gomote timeout") // this should never happen
 			}
+			wd, err := r.buildletClient.WorkDir(stream.Context())
+			if err != nil {
+				return status.Errorf(codes.Internal, "could not read working dir: %v", err)
+			}
 			err = stream.Send(&protos.CreateInstanceResponse{
 				Instance: &protos.Instance{
 					GomoteId:    gomoteID,
 					BuilderType: req.GetBuilderType(),
 					HostType:    bconf.HostType,
 					Expires:     session.Expires.Unix(),
+					WorkingDir:  wd,
 				},
 				Status:       protos.CreateInstanceResponse_COMPLETE,
 				WaitersAhead: 0,

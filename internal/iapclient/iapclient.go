@@ -12,6 +12,7 @@ package iapclient
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,9 +20,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/oauth"
 )
 
 var gomoteConfig = &oauth2.Config{
@@ -114,6 +119,21 @@ func HTTPClient(ctx context.Context) (*http.Client, error) {
 		return nil, err
 	}
 	return oauth2.NewClient(ctx, ts), nil
+}
+
+// GRPCClient returns a *gprc.ClientConn that can access Go's IAP-protected
+// servers. It will prompt for login if necessary.
+func GRPCClient(ctx context.Context, addr string) (*grpc.ClientConn, error) {
+	ts, err := TokenSource(ctx)
+	if err != nil {
+		return nil, err
+	}
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: strings.HasPrefix(addr, "localhost:")})),
+		grpc.WithDefaultCallOptions(grpc.PerRPCCredentials(oauth.TokenSource{TokenSource: ts})),
+		grpc.WithBlock(),
+	}
+	return grpc.DialContext(ctx, addr, opts...)
 }
 
 type jwtTokenSource struct {

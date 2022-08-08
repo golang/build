@@ -20,8 +20,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/oauth2"
 )
 
 var _ Client = (*client)(nil)
@@ -646,51 +644,6 @@ func (c *client) RemoveAll(ctx context.Context, paths ...string) error {
 	return c.doOK(req.WithContext(ctx))
 }
 
-// DestroyVM shuts down the buildlet and destroys the VM instance.
-func (c *client) DestroyVM(ts oauth2.TokenSource, proj, zone, instance string) error {
-	// TODO(bradfitz): move GCE stuff out of this package?
-	gceErrc := make(chan error, 1)
-	buildletErrc := make(chan error, 1)
-	go func() {
-		gceErrc <- DestroyVM(ts, proj, zone, instance)
-	}()
-	go func() {
-		buildletErrc <- c.Close()
-	}()
-	timeout := time.NewTimer(5 * time.Second)
-	defer timeout.Stop()
-
-	var retErr error
-	var gceDone, buildletDone bool
-	for !gceDone || !buildletDone {
-		select {
-		case err := <-gceErrc:
-			if err != nil {
-				retErr = err
-			}
-			gceDone = true
-		case err := <-buildletErrc:
-			if err != nil {
-				retErr = err
-			}
-			buildletDone = true
-		case <-timeout.C:
-			e := ""
-			if !buildletDone {
-				e = "timeout asking buildlet to shut down"
-			}
-			if !gceDone {
-				if e != "" {
-					e += " and "
-				}
-				e += "timeout asking GCE to delete builder VM"
-			}
-			return errors.New(e)
-		}
-	}
-	return retErr
-}
-
 // Status provides status information about the buildlet.
 //
 // A coordinator can use the provided information to decide what, if anything,
@@ -905,11 +858,6 @@ func (c *client) ConnectSSH(user, authorizedPubKey string) (net.Conn, error) {
 	}
 	conn.SetDeadline(time.Time{})
 	return conn, nil
-}
-
-// AddCloseFunc adds an optional extra code to run on close.
-func (c *client) AddCloseFunc(fn func()) {
-	c.closeFuncs = append(c.closeFuncs, fn)
 }
 
 func condRun(fn func()) {

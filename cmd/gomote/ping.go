@@ -39,11 +39,6 @@ func legacyPing(args []string) error {
 	}
 	if status {
 		fmt.Printf("workdir: %v\n", wd)
-		s, err := bc.Status(ctx)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("status: %+v\n", s)
 	}
 	return nil
 }

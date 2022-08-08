@@ -615,7 +615,7 @@ type fakeBuildlets struct {
 	logs   map[string][]*[]string
 }
 
-func (b *fakeBuildlets) createBuildlet(kind string) (buildlet.Client, error) {
+func (b *fakeBuildlets) createBuildlet(kind string) (buildlet.RemoteClient, error) {
 	b.mu.Lock()
 	buildletDir := filepath.Join(b.dir, kind, fmt.Sprint(b.nextID))
 	logs := &[]string{}

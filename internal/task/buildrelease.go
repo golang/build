@@ -215,7 +215,7 @@ const (
 
 type BuildletStep struct {
 	Target      *releasetargets.Target
-	Buildlet    buildlet.Client
+	Buildlet    buildlet.RemoteClient
 	BuildConfig *dashboard.BuildConfig
 	LogWriter   io.Writer
 }

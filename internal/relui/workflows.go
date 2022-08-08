@@ -611,7 +611,7 @@ type BuildReleaseTasks struct {
 	ScratchURL, ServingURL string
 	DownloadURL            string
 	PublishFile            func(*WebsiteFile) error
-	CreateBuildlet         func(string) (buildlet.Client, error)
+	CreateBuildlet         func(string) (buildlet.RemoteClient, error)
 	ApproveAction          func(*wf.TaskContext) error
 }
 

@@ -13,33 +13,37 @@ import (
 	"net/http"
 	"os"
 	"strings"
-
-	"golang.org/x/oauth2"
 )
+
+// RemoteClient is a subset of methods that can be used by a gomote client.
+type RemoteClient interface {
+	Close() error
+	Exec(ctx context.Context, cmd string, opts ExecOpts) (remoteErr, execErr error)
+	GetTar(ctx context.Context, dir string) (io.ReadCloser, error)
+	ListDir(ctx context.Context, dir string, opts ListDirOpts, fn func(DirEntry)) error
+	Put(ctx context.Context, r io.Reader, path string, mode os.FileMode) error
+	PutTar(ctx context.Context, r io.Reader, dir string) error
+	PutTarFromURL(ctx context.Context, tarURL, dir string) error
+	ProxyTCP(port int) (io.ReadWriteCloser, error)
+	RemoteName() string
+	RemoveAll(ctx context.Context, paths ...string) error
+	WorkDir(ctx context.Context) (string, error)
+}
 
 // Client is an interface that represent the methods exposed by client. The
 // fake buildlet client should be used instead of client when testing things that
 // use the client interface.
+// This includes a number of coordinator-internal details; users outside the
+// coordinator should use RemoteClient.
 type Client interface {
-	AddCloseFunc(fn func())
-	Close() error
+	RemoteClient
 	ConnectSSH(user, authorizedPubKey string) (net.Conn, error)
-	DestroyVM(ts oauth2.TokenSource, proj, zone, instance string) error
-	Exec(ctx context.Context, cmd string, opts ExecOpts) (remoteErr, execErr error)
 	GCEInstanceName() string
-	GetTar(ctx context.Context, dir string) (io.ReadCloser, error)
 	IPPort() string
 	IsBroken() bool
-	ListDir(ctx context.Context, dir string, opts ListDirOpts, fn func(DirEntry)) error
 	MarkBroken()
 	Name() string
 	ProxyRoundTripper() http.RoundTripper
-	ProxyTCP(port int) (io.ReadWriteCloser, error)
-	Put(ctx context.Context, r io.Reader, path string, mode os.FileMode) error
-	PutTar(ctx context.Context, r io.Reader, dir string) error
-	PutTarFromURL(ctx context.Context, tarURL, dir string) error
-	RemoteName() string
-	RemoveAll(ctx context.Context, paths ...string) error
 	SetDescription(v string)
 	SetDialer(dialer func(context.Context) (net.Conn, error))
 	SetGCEInstanceName(v string)
@@ -49,7 +53,6 @@ type Client interface {
 	Status(ctx context.Context) (Status, error)
 	String() string
 	URL() string
-	WorkDir(ctx context.Context) (string, error)
 }
 
 var errUnimplemented = errors.New("unimplemented function")
@@ -63,11 +66,6 @@ type FakeClient struct {
 	name         string
 }
 
-// AddCloseFunc adds optional extra code to run on close for the fake buildlet.
-func (fc *FakeClient) AddCloseFunc(fn func()) {
-	fc.closeFuncs = append(fc.closeFuncs, fn)
-}
-
 // Close is a fake client closer.
 func (fc *FakeClient) Close() error {
 	for _, f := range fc.closeFuncs {
@@ -79,11 +77,6 @@ func (fc *FakeClient) Close() error {
 // ConnectSSH connects to a fake SSH server.
 func (fc *FakeClient) ConnectSSH(user, authorizedPubKey string) (net.Conn, error) {
 	return nil, errUnimplemented
-}
-
-// DestroyVM destroys a fake VM.
-func (fc *FakeClient) DestroyVM(ts oauth2.TokenSource, proj, zone, instance string) error {
-	return errUnimplemented
 }
 
 // Exec fakes the execution.
@@ -121,7 +114,7 @@ func (fc *FakeClient) IsBroken() bool { return false }
 // ListDir lists a directory on a fake buildlet.
 func (fc *FakeClient) ListDir(ctx context.Context, dir string, opts ListDirOpts, fn func(DirEntry)) error {
 	if dir == "" || fn == nil {
-		errors.New("invalid arguments")
+		return errors.New("invalid arguments")
 	}
 	var lsOutput = `drwxr-xr-x      gocache/
 drwxr-xr-x      tmp/`
@@ -148,7 +141,7 @@ func (fc *FakeClient) ProxyTCP(port int) (io.ReadWriteCloser, error) { return ni
 func (fc *FakeClient) Put(ctx context.Context, r io.Reader, path string, mode os.FileMode) error {
 	// TODO(go.dev/issue/48742) add a file system implementation which would enable proper testing.
 	if path == "" {
-		errors.New("invalid argument")
+		return errors.New("invalid argument")
 	}
 	return nil
 }
@@ -199,7 +192,9 @@ func (fc *FakeClient) String() string { return "" }
 func (fc *FakeClient) URL() string { return "" }
 
 // WorkDir is the working directory for the fake buildlet.
-func (fc *FakeClient) WorkDir(ctx context.Context) (string, error) { return "", errUnimplemented }
+func (fc *FakeClient) WorkDir(ctx context.Context) (string, error) {
+	return "/work", nil
+}
 
 // RemoveAll deletes the provided paths, relative to the work directory for a fake buildlet.
 func (fc *FakeClient) RemoveAll(ctx context.Context, paths ...string) error {

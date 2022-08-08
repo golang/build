@@ -21,7 +21,6 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/md5"
-	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -39,10 +38,7 @@ import (
 	"golang.org/x/build/cmd/coordinator/protos"
 	"golang.org/x/build/internal/iapclient"
 	"golang.org/x/build/internal/secret"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/oauth"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
@@ -75,16 +71,7 @@ func main() {
 
 	*builderPrefix = strings.TrimSuffix(*builderPrefix, "/")
 	ctx := context.Background()
-	ts, err := iapclient.TokenSource(ctx)
-	if err != nil {
-		log.Fatalf("failed to retrieve oauth token: %s", err)
-	}
-	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: strings.HasPrefix(*grpcHost, "localhost:")})),
-		grpc.WithDefaultCallOptions(grpc.PerRPCCredentials(oauth.TokenSource{TokenSource: ts})),
-		grpc.WithBlock(),
-	}
-	cc, err := grpc.DialContext(ctx, *grpcHost, opts...)
+	cc, err := iapclient.GRPCClient(ctx, *grpcHost)
 	if err != nil {
 		log.Fatalf("grpc.DialContext(_, %q, _) = %v, wanted no error", *grpcHost, err)
 	}

@@ -138,6 +138,8 @@ message Instance {
   // The timestamp for when the builder instance will expire. It is
   // represented in Unix epoch time format.
   int64 expires = 4;
+  // The working directory of the instance.
+  string working_dir = 5;
 }
 
 // InstanceAliveRequest specifies the data needed to check the liveness of a gomote instance.

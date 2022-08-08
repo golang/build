@@ -259,24 +259,35 @@ OpLoop:
 	if opts.OnGotInstanceInfo != nil {
 		opts.OnGotInstanceInfo(inst)
 	}
-	var closeFuncs []func()
+	var closeFunc func()
 	if opts.UseIAPTunnel {
-		localPort, closeFunc, err := createIAPTunnel(ctx, inst)
+		var localPort string
+		var err error
+		localPort, closeFunc, err = createIAPTunnel(ctx, inst)
 		if err != nil {
 			return nil, fmt.Errorf("creating IAP tunnel: %v", err)
 		}
 		buildletURL = "http://localhost:" + localPort
 		ipPort = "127.0.0.1:" + localPort
-		closeFuncs = append(closeFuncs, closeFunc)
 	}
 	client, err := buildletClient(ctx, buildletURL, ipPort, &opts)
 	if err != nil {
 		return nil, err
 	}
-	for _, cf := range closeFuncs {
-		client.AddCloseFunc(cf)
+	if closeFunc != nil {
+		return &extraCloseClient{client, closeFunc}, nil
 	}
 	return client, nil
+}
+
+type extraCloseClient struct {
+	Client
+	close func()
+}
+
+func (e *extraCloseClient) Close() error {
+	defer e.close()
+	return e.Close()
 }
 
 func createIAPTunnel(ctx context.Context, inst *compute.Instance) (string, func(), error) {
@@ -348,16 +359,6 @@ func createIAPTunnel(ctx context.Context, inst *compute.Instance) (string, func(
 		}
 	}
 	return "", nil, fmt.Errorf("iap tunnel startup timed out")
-}
-
-// DestroyVM sends a request to delete a VM. Actual VM description is
-// currently (2015-01-19) very slow for no good reason. This function
-// returns once it's been requested, not when it's done.
-func DestroyVM(ts oauth2.TokenSource, proj, zone, instance string) error {
-	computeService, _ := compute.New(oauth2.NewClient(context.TODO(), ts))
-	apiGate()
-	_, err := computeService.Instances.Delete(proj, zone, instance).Do()
-	return err
 }
 
 type VM struct {
