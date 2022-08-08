@@ -467,35 +467,26 @@ func (tr *taskResult[T]) dependencies() []*taskDefinition {
 // A Workflow is an instantiated workflow instance, ready to run.
 type Workflow struct {
 	ID            uuid.UUID
-	def           *Definition
 	params        map[string]interface{}
 	retryCommands chan retryCommand
 
+	// Notes on ownership and concurrency:
+	// The taskDefinitions used below are immutable. Everything else should be
+	// treated as mutable, used only in the Run goroutine, and never published
+	// to a background goroutine.
+
+	def   *Definition
 	tasks map[*taskDefinition]*taskState
 }
 
 type taskState struct {
 	def              *taskDefinition
-	w                *Workflow
 	started          bool
 	finished         bool
 	result           interface{}
 	serializedResult []byte
 	err              error
 	retryCount       int
-}
-
-func (t *taskState) args() ([]reflect.Value, bool) {
-	for _, dep := range t.def.deps {
-		if depState, ok := t.w.tasks[dep]; !ok || !depState.finished || depState.err != nil {
-			return nil, false
-		}
-	}
-	var args []reflect.Value
-	for _, v := range t.def.args {
-		args = append(args, v.value(t.w))
-	}
-	return args, true
 }
 
 func (t *taskState) toExported() *TaskState {
@@ -526,7 +517,7 @@ func Start(def *Definition, params map[string]interface{}) (*Workflow, error) {
 		return nil, err
 	}
 	for _, taskDef := range def.tasks {
-		w.tasks[taskDef] = &taskState{def: taskDef, w: w}
+		w.tasks[taskDef] = &taskState{def: taskDef}
 	}
 	return w, nil
 }
@@ -592,7 +583,6 @@ func Resume(def *Definition, state *WorkflowState, taskStates map[string]*TaskSt
 		}
 		state := &taskState{
 			def:              taskDef,
-			w:                w,
 			started:          tState.Finished, // Can't resume tasks, so either it's new or done.
 			finished:         tState.Finished,
 			serializedResult: tState.SerializedResult,
@@ -661,7 +651,7 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 				if task.started {
 					continue
 				}
-				in, ready := task.args()
+				args, ready := w.taskArgs(task.def)
 				if !ready {
 					continue
 				}
@@ -669,7 +659,7 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 				running++
 				listener.TaskStateChanged(w.ID, task.def.name, task.toExported())
 				go func(task taskState) {
-					stateChan <- w.runTask(ctx, listener, task, in)
+					stateChan <- runTask(ctx, w.ID, listener, task, args)
 				}(*task)
 			}
 		}
@@ -699,7 +689,7 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 				break
 			}
 			listener.Logger(w.ID, def.name).Printf("Manual retry requested")
-			stateChan <- taskState{def: def, w: w}
+			stateChan <- taskState{def: def}
 			retry.reply <- nil
 		// Don't get stuck when cancellation comes in after all tasks have
 		// finished, but also don't busy wait if something's still running.
@@ -709,20 +699,33 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 	}
 }
 
+func (w *Workflow) taskArgs(def *taskDefinition) ([]reflect.Value, bool) {
+	for _, dep := range def.deps {
+		if depState, ok := w.tasks[dep]; !ok || !depState.finished || depState.err != nil {
+			return nil, false
+		}
+	}
+	var args []reflect.Value
+	for _, v := range def.args {
+		args = append(args, v.value(w))
+	}
+	return args, true
+}
+
 // Maximum number of retries. This could be a workflow property.
 var MaxRetries = 3
 
 var WatchdogDelay = 10 * time.Minute
 
-func (w *Workflow) runTask(ctx context.Context, listener Listener, state taskState, args []reflect.Value) taskState {
+func runTask(ctx context.Context, workflowID uuid.UUID, listener Listener, state taskState, args []reflect.Value) taskState {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	tctx := &TaskContext{
 		Context:       ctx,
-		Logger:        listener.Logger(w.ID, state.def.name),
+		Logger:        listener.Logger(workflowID, state.def.name),
 		TaskName:      state.def.name,
-		WorkflowID:    w.ID,
+		WorkflowID:    workflowID,
 		watchdogTimer: time.AfterFunc(WatchdogDelay, cancel),
 	}
 
@@ -750,7 +753,6 @@ func (w *Workflow) runTask(ctx context.Context, listener Listener, state taskSta
 		tctx.Printf("task failed, will retry (%v of %v): %v", state.retryCount+1, MaxRetries, state.err)
 		state = taskState{
 			def:        state.def,
-			w:          state.w,
 			retryCount: state.retryCount + 1,
 		}
 	}
