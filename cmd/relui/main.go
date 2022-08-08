@@ -27,10 +27,11 @@ import (
 	"github.com/google/go-github/github"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/shurcooL/githubv4"
-	"golang.org/x/build"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/https"
+	"golang.org/x/build/internal/iapclient"
 	"golang.org/x/build/internal/relui"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/task"
@@ -118,11 +119,14 @@ func main() {
 		Username: "user-relui",
 		Password: key(*masterKey, "user-relui"),
 	}
-	coordinator := &buildlet.CoordinatorClient{
-		Auth:     userPassAuth,
-		Instance: build.ProdCoordinator,
+	cc, err := iapclient.GRPCClient(ctx, "build.golang.org:443")
+	if err != nil {
+		log.Fatalf("Could not connect to coordinator: %v", err)
 	}
-	if _, err := coordinator.RemoteBuildlets(); err != nil {
+	coordinator := &buildlet.GRPCCoordinatorClient{
+		Client: protos.NewGomoteServiceClient(cc),
+	}
+	if _, err := coordinator.Client.Authenticate(ctx, &protos.AuthenticateRequest{}); err != nil {
 		log.Fatalf("Broken coordinator client: %v", err)
 	}
 	gcsClient, err := storage.NewClient(ctx)

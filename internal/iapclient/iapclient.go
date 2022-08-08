@@ -22,8 +22,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/idtoken"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/oauth"
@@ -92,6 +94,11 @@ func cachedToken() (*oauth2.Token, error) {
 // TokenSource returns a TokenSource that can be used to access Go's
 // IAP-protected sites. It will prompt for login if necessary.
 func TokenSource(ctx context.Context) (oauth2.TokenSource, error) {
+	const audience = "872405196845-b6fu2qpi0fehdssmc8qo47h2u3cepi0e.apps.googleusercontent.com" // Go build IAP client ID.
+	if metadata.OnGCE() {
+		return idtoken.NewTokenSource(ctx, audience)
+	}
+
 	refresh, err := cachedToken()
 	if err != nil {
 		return nil, err
@@ -102,7 +109,6 @@ func TokenSource(ctx context.Context) (oauth2.TokenSource, error) {
 			return nil, err
 		}
 	}
-	const audience = "872405196845-b6fu2qpi0fehdssmc8qo47h2u3cepi0e.apps.googleusercontent.com" // Go build IAP client ID.
 	tokenSource := oauth2.ReuseTokenSource(nil, &jwtTokenSource{gomoteConfig, audience, refresh})
 	// Eagerly request a token to verify we're good. The source will cache it.
 	if _, err := tokenSource.Token(); err != nil {

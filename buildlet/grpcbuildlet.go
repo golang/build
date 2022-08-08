@@ -211,7 +211,7 @@ func (b *grpcBuildlet) upload(ctx context.Context, r io.Reader) (string, error) 
 	if res.StatusCode != http.StatusNoContent {
 		return "", fmt.Errorf("http post failed: status code=%d", res.StatusCode)
 	}
-	return resp.Url, nil
+	return resp.Url + resp.ObjectName, nil
 }
 
 func (b *grpcBuildlet) ProxyTCP(port int) (io.ReadWriteCloser, error) {
@@ -231,5 +231,5 @@ func (b *grpcBuildlet) RemoveAll(ctx context.Context, paths ...string) error {
 }
 
 func (b *grpcBuildlet) WorkDir(ctx context.Context) (string, error) {
-	panic("unimplemented")
+	return b.workDir, nil
 }

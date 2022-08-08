@@ -611,7 +611,7 @@ type BuildReleaseTasks struct {
 	ScratchURL, ServingURL string
 	DownloadURL            string
 	PublishFile            func(*WebsiteFile) error
-	CreateBuildlet         func(string) (buildlet.RemoteClient, error)
+	CreateBuildlet         func(context.Context, string) (buildlet.RemoteClient, error)
 	ApproveAction          func(*wf.TaskContext) error
 }
 
@@ -756,7 +756,7 @@ func (b *BuildReleaseTasks) runBuildStep(
 	var step *task.BuildletStep
 	if build != nil {
 		ctx.Printf("Creating buildlet %v.", build.Name)
-		client, err := b.CreateBuildlet(build.Name)
+		client, err := b.CreateBuildlet(ctx, build.Name)
 		if err != nil {
 			return artifact{}, err
 		}

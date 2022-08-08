@@ -597,13 +597,10 @@ func (s *Server) sessionAndClient(gomoteID, ownerID string) (*remote.Session, bu
 	return session, bc, nil
 }
 
-// isPrivilagedUser returns true if the user is using a Google account.
+// isPrivilegedUser returns true if the user is trusted to use sensitive machines.
 // The user has to be a part of the appropriate IAM group.
 func isPrivilegedUser(email string) bool {
-	if strings.HasSuffix(email, "@google.com") {
-		return true
-	}
-	return false
+	return strings.HasSuffix(email, "@google.com") || strings.HasSuffix(email, "@symbolic-datum-552.iam.gserviceaccount.com")
 }
 
 // iapEmailRE matches the email string returned by Identity Aware Proxy for sessions where
