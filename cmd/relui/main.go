@@ -23,15 +23,18 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/storage"
 	"github.com/google/go-github/github"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/shurcooL/githubv4"
+	"go.opencensus.io/plugin/ochttp"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/iapclient"
+	"golang.org/x/build/internal/metrics"
 	"golang.org/x/build/internal/relui"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/task"
@@ -139,6 +142,20 @@ func main() {
 	}
 	defer db.Close()
 
+	var gr *metrics.MonitoredResource
+	if metadata.OnGCE() {
+		gr, err = metrics.GKEResource("relui-deployment")
+		if err != nil {
+			log.Println("metrics.GKEResource:", err)
+		}
+	}
+	ms, err := metrics.NewService(gr, relui.Views)
+	if err != nil {
+		log.Println("failed to initialize metrics:", err)
+	} else {
+		defer ms.Stop()
+	}
+
 	buildTasks := &relui.BuildReleaseTasks{
 		GerritHTTPClient: oauth2.NewClient(ctx, creds.TokenSource),
 		GerritURL:        "https://go.googlesource.com/go",
@@ -178,11 +195,11 @@ func main() {
 			log.Fatalf("url.Parse(%q) = %v, %v", *baseURL, base, err)
 		}
 	}
-	s := relui.NewServer(db, w, base, siteHeader)
+	s := relui.NewServer(db, w, base, siteHeader, ms)
 	if err != nil {
 		log.Fatalf("relui.NewServer() = %v", err)
 	}
-	log.Fatalln(https.ListenAndServe(ctx, s))
+	log.Fatalln(https.ListenAndServe(ctx, &ochttp.Handler{Handler: s}))
 }
 
 func key(masterKey, principal string) string {

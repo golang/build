@@ -13,9 +13,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"io/fs"
 	"log"
-	"mime"
 	"net/http"
 	"net/url"
 	"path"
@@ -27,22 +25,10 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/build/internal/metrics"
 	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/workflow"
 )
-
-// fileServerHandler returns a http.Handler for serving static assets.
-//
-// The returned handler sets the appropriate Content-Type and
-// Cache-Control headers for the returned file.
-func fileServerHandler(fs fs.FS) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", mime.TypeByExtension(path.Ext(r.URL.Path)))
-		w.Header().Set("Cache-Control", "no-cache, private, max-age=0")
-		s := http.FileServer(http.FS(fs))
-		s.ServeHTTP(w, r)
-	})
-}
 
 // SiteHeader configures the relui site header.
 type SiteHeader struct {
@@ -54,7 +40,7 @@ type SiteHeader struct {
 // Server implements the http handlers for relui.
 type Server struct {
 	db      *pgxpool.Pool
-	m       *httprouter.Router
+	m       *metricsRouter
 	w       *Worker
 	baseURL *url.URL // nil means "/".
 	header  SiteHeader
@@ -70,10 +56,10 @@ type Server struct {
 // worker, base URL and site header.
 //
 // The base URL may be nil, which is the same as "/".
-func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL, header SiteHeader) *Server {
+func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL, header SiteHeader, ms *metrics.Service) *Server {
 	s := &Server{
 		db:      p,
-		m:       httprouter.New(),
+		m:       &metricsRouter{router: httprouter.New()},
 		w:       w,
 		baseURL: baseURL,
 		header:  header,
@@ -93,9 +79,10 @@ func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL, header SiteHeader) 
 	s.m.POST("/workflows/:id/stop", s.stopWorkflowHandler)
 	s.m.POST("/workflows/:id/tasks/:name/retry", s.retryTaskHandler)
 	s.m.POST("/workflows/:id/tasks/:name/approve", s.approveTaskHandler)
+	s.m.Handler(http.MethodGet, "/metrics", ms)
 	s.m.Handler(http.MethodGet, "/new_workflow", http.HandlerFunc(s.newWorkflowHandler))
 	s.m.Handler(http.MethodPost, "/workflows", http.HandlerFunc(s.createWorkflowHandler))
-	s.m.Handler(http.MethodGet, "/static/*path", fileServerHandler(static))
+	s.m.ServeFiles("/static/*filepath", http.FS(static))
 	s.m.Handler(http.MethodGet, "/", http.HandlerFunc(s.homeHandler))
 	if baseURL != nil && baseURL.Path != "/" && baseURL.Path != "" {
 		nosuffix := strings.TrimSuffix(baseURL.Path, "/")
