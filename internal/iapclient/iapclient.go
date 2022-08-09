@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/compute/metadata"
 	"golang.org/x/oauth2"
@@ -33,27 +34,73 @@ import (
 
 var gomoteConfig = &oauth2.Config{
 	// Gomote client ID and secret.
-	ClientID:     "872405196845-cc4c60gbf7mrmutpocsgl1asjb65du73.apps.googleusercontent.com",
-	ClientSecret: "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",
+	ClientID:     "872405196845-odamr0j3kona7rp7fima6h4ummnd078t.apps.googleusercontent.com",
+	ClientSecret: "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",
 	Endpoint:     google.Endpoint,
-	RedirectURL:  "urn:ietf:wg:oauth:2.0:oob",
 	Scopes:       []string{"openid email"},
 }
 
 func login(ctx context.Context) (*oauth2.Token, error) {
-	const xsrfToken = "unused" // We don't actually get redirects, so we have no chance to check this.
-	codeURL := gomoteConfig.AuthCodeURL(xsrfToken, oauth2.AccessTypeOffline)
-	fmt.Printf("Go to the following link in your browser:\n\n\t%v\n\nEnter verification code: ", codeURL)
-	var code string
-	fmt.Scanln(&code)
-	refresh, err := gomoteConfig.Exchange(ctx, code, oauth2.AccessTypeOffline)
+	resp, err := http.PostForm("https://oauth2.googleapis.com/device/code", url.Values{
+		"client_id": []string{gomoteConfig.ClientID},
+		"scope":     []string{"email openid profile"},
+	})
 	if err != nil {
 		return nil, err
 	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status on device code request %v", resp.Status)
+	}
+	codeResp := &codeResponse{}
+	if err := json.NewDecoder(resp.Body).Decode(&codeResp); err != nil {
+		return nil, err
+	}
+	fmt.Printf("Please visit %v in your browser and enter verification code:\n %v\n", codeResp.VerificationURL, codeResp.UserCode)
+
+	tick := time.NewTicker(time.Duration(codeResp.Interval) * time.Second)
+	defer tick.Stop()
+
+	refresh := &oauth2.Token{}
+outer:
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-tick.C:
+			resp, err := http.PostForm("https://oauth2.googleapis.com/token", url.Values{
+				"client_id":     []string{gomoteConfig.ClientID},
+				"client_secret": []string{gomoteConfig.ClientSecret},
+				"device_code":   []string{codeResp.DeviceCode},
+				"grant_type":    []string{"urn:ietf:params:oauth:grant-type:device_code"},
+			})
+			if err != nil {
+				return nil, err
+			}
+			if resp.StatusCode == http.StatusPreconditionRequired {
+				continue
+			}
+			if resp.StatusCode != http.StatusOK {
+				return nil, fmt.Errorf("unexpected status on token request %v", resp.Status)
+			}
+			if err := json.NewDecoder(resp.Body).Decode(refresh); err != nil {
+				return nil, err
+			}
+			break outer
+		}
+	}
+
 	if err := writeToken(refresh); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not save token, you will be asked to log in again: %v\n", err)
 	}
 	return refresh, nil
+}
+
+// https://developers.google.com/identity/protocols/oauth2/limited-input-device#step-2:-handle-the-authorization-server-response
+type codeResponse struct {
+	DeviceCode      string `json:"device_code"`
+	Interval        int    `json:"interval"`
+	UserCode        string `json:"user_code"`
+	VerificationURL string `json:"verification_url"`
 }
 
 func writeToken(refresh *oauth2.Token) error {
@@ -69,7 +116,7 @@ func writeToken(refresh *oauth2.Token) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(configDir, "gomote/iap-refresh-token"), refreshBytes, 0600)
+	return os.WriteFile(filepath.Join(configDir, "gomote/iap-refresh-tv-token"), refreshBytes, 0600)
 }
 
 func cachedToken() (*oauth2.Token, error) {
@@ -77,7 +124,7 @@ func cachedToken() (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	refreshBytes, err := os.ReadFile(filepath.Join(configDir, "gomote/iap-refresh-token"))
+	refreshBytes, err := os.ReadFile(filepath.Join(configDir, "gomote/iap-refresh-tv-token"))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -95,7 +142,7 @@ func cachedToken() (*oauth2.Token, error) {
 // IAP-protected sites. It will prompt for login if necessary.
 func TokenSource(ctx context.Context) (oauth2.TokenSource, error) {
 	const audience = "872405196845-b6fu2qpi0fehdssmc8qo47h2u3cepi0e.apps.googleusercontent.com" // Go build IAP client ID.
-	if metadata.OnGCE() {
+	if project, err := metadata.ProjectID(); err == nil && project == "symbolic-datum-552" {
 		return idtoken.NewTokenSource(ctx, audience)
 	}
 
