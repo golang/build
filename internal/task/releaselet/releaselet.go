@@ -84,7 +84,7 @@ func windowsMSI() error {
 	if err := runDir(win, filepath.Join(wix, "heat"),
 		"dir", goDir,
 		"-nologo",
-		"-gg", "-g1", "-srd", "-sfrag",
+		"-gg", "-g1", "-srd", "-sfrag", "-sreg",
 		"-cg", "AppFiles",
 		"-template", "fragment",
 		"-dr", "INSTALLDIR",
@@ -383,7 +383,7 @@ var windowsData = map[string]string{
 <Property Id="EXISTING_GOLANG_INSTALLED">
   <RegistrySearch Id="installed" Type="raw" Root="HKCU" Key="Software\GoProgrammingLanguage" Name="installed" />
 </Property>
-<Media Id='1' Cabinet="go.cab" EmbedCab="yes" CompressionLevel="high" />
+<MediaTemplate EmbedCab="yes" CompressionLevel="high" MaximumUncompressedMediaSize="10" />
 <Condition Message="Windows 7 (with Service Pack 1) or greater required.">
     ((VersionNT > 601) OR (VersionNT = 601 AND ServicePackLevel >= 1))
 </Condition>
