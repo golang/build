@@ -7,8 +7,7 @@
 //
 // Workflows are a set of tasks and actions that produce and consume Values.
 // Tasks don't run until the workflow is started, so Values represent data that
-// doesn't exist yet, and can't be used directly. Each value has a dynamic type,
-// which must match its uses.
+// doesn't exist yet, and can't be used directly.
 //
 // To wrap an existing Go object in a Value, use Const. To define a
 // parameter that will be set when the workflow is started, use Param.
@@ -31,6 +30,13 @@
 // Dependencies and Values can be passed to After and then to Task and Action
 // definitions to create an ordering dependency that doesn't correspond to a
 // function argument.
+//
+// Expansions are a third type of function that adds to a running workflow
+// definition rather than producing an output. Unlike Actions and Tasks, they
+// execute multiple times and must produce exactly the same workflow
+// modifications each time. As such, they should be pure functions of their
+// inputs. Producing different modifications, or running multiple expansions
+// concurrently, is an error that will corrupt the workflow's state.
 //
 // Once a Definition is complete, call Start to set its parameters and
 // instantiate it into a Workflow. Call Run to execute the workflow until
@@ -73,6 +79,17 @@ func (d *Definition) Sub(name string) *Definition {
 
 func (d *Definition) name(name string) string {
 	return d.namePrefix + name
+}
+
+func (d *Definition) shallowClone() *Definition {
+	clone := New()
+	for k, v := range d.tasks {
+		clone.tasks[k] = v
+	}
+	for k, v := range d.outputs {
+		clone.outputs[k] = v
+	}
+	return clone
 }
 
 type definitionState struct {
@@ -324,7 +341,7 @@ func Task5[C context.Context, I1, I2, I3, I4, I5, O1 any](d *Definition, name st
 	return addTask[O1](d, name, f, []metaValue{i1, i2, i3, i4, i5}, opts)
 }
 
-func addTask[O1 any](d *Definition, name string, f interface{}, inputs []metaValue, opts []TaskOption) *taskResult[O1] {
+func addFunc(d *Definition, name string, f interface{}, inputs []metaValue, opts []TaskOption) *taskDefinition {
 	name = d.name(name)
 	td := &taskDefinition{name: name, f: f, args: inputs}
 	for _, input := range inputs {
@@ -334,12 +351,22 @@ func addTask[O1 any](d *Definition, name string, f interface{}, inputs []metaVal
 		td.deps = append(td.deps, opt.(*after).deps...)
 	}
 	d.tasks[name] = td
+	return td
+}
+
+func addTask[O1 any](d *Definition, name string, f interface{}, inputs []metaValue, opts []TaskOption) *taskResult[O1] {
+	td := addFunc(d, name, f, inputs, opts)
 	return &taskResult[O1]{td}
 }
 
 func addAction(d *Definition, name string, f interface{}, inputs []metaValue, opts []TaskOption) *dependency {
-	tr := addTask[interface{}](d, name, f, inputs, opts)
-	return &dependency{tr.task}
+	td := addFunc(d, name, f, inputs, opts)
+	return &dependency{td}
+}
+
+func addExpansion(d *Definition, name string, f interface{}, inputs []metaValue, opts []TaskOption) {
+	td := addFunc(d, name, f, inputs, opts)
+	td.isExpansion = true
 }
 
 // ActionN adds an Action to the workflow definition. Its behavior and
@@ -375,6 +402,39 @@ type dependency struct {
 
 func (d *dependency) dependencies() []*taskDefinition {
 	return []*taskDefinition{d.task}
+}
+
+// ExpandN adds a workflow expansion task to the workflow definition.
+// Expansion tasks run similarly to normal tasks, but instead of computing
+// a result, they can add to the workflow definition.
+//
+// Unlike normal tasks, expansions may run multiple times and must produce
+// the exact same changes to the definition each time.
+//
+// Running more than one expansion concurrently is an error and will corrupt
+// the workflow.
+func Expand0(d *Definition, name string, f func(*Definition) error, opts ...TaskOption) {
+	addExpansion(d, name, f, nil, opts)
+}
+
+func Expand1[I1 any](d *Definition, name string, f func(*Definition, I1) error, i1 Value[I1], opts ...TaskOption) {
+	addExpansion(d, name, f, []metaValue{i1}, opts)
+}
+
+func Expand2[I1, I2 any](d *Definition, name string, f func(*Definition, I1, I2) error, i1 Value[I1], i2 Value[I2], opts ...TaskOption) {
+	addExpansion(d, name, f, []metaValue{i1, i2}, opts)
+}
+
+func Expand3[I1, I2, I3 any](d *Definition, name string, f func(*Definition, I1, I2, I3) error, i1 Value[I1], i2 Value[I2], i3 Value[I3], opts ...TaskOption) {
+	addExpansion(d, name, f, []metaValue{i1, i2, i3}, opts)
+}
+
+func Expand4[I1, I2, I3, I4 any](d *Definition, name string, f func(*Definition, I1, I2, I3, I4) error, i1 Value[I1], i2 Value[I2], i3 Value[I3], i4 Value[I4], opts ...TaskOption) {
+	addExpansion(d, name, f, []metaValue{i1, i2, i3, i4}, opts)
+}
+
+func Expand5[I1, I2, I3, I4, I5 any](d *Definition, name string, f func(*Definition, I1, I2, I3, I4, I5) error, i1 Value[I1], i2 Value[I2], i3 Value[I3], i4 Value[I4], i5 Value[I5], opts ...TaskOption) {
+	addExpansion(d, name, f, []metaValue{i1, i2, i3, i4, i5}, opts)
 }
 
 // A TaskContext is a context.Context, plus workflow-related features.
@@ -439,10 +499,11 @@ type Logger interface {
 }
 
 type taskDefinition struct {
-	name string
-	args []metaValue
-	deps []*taskDefinition
-	f    interface{}
+	name        string
+	isExpansion bool
+	args        []metaValue
+	deps        []*taskDefinition
+	f           interface{}
 }
 
 type taskResult[T any] struct {
@@ -477,16 +538,25 @@ type Workflow struct {
 
 	def   *Definition
 	tasks map[*taskDefinition]*taskState
+	// pendingStates stores states that haven't been loaded because their
+	// tasks didn't exist at Resume time.
+	pendingStates map[string]*TaskState
 }
 
 type taskState struct {
-	def              *taskDefinition
-	started          bool
-	finished         bool
+	def      *taskDefinition
+	created  bool
+	started  bool
+	finished bool
+	err      error
+
+	// normal tasks
 	result           interface{}
 	serializedResult []byte
-	err              error
 	retryCount       int
+
+	// workflow expansion
+	expanded *Definition
 }
 
 func (t *taskState) toExported() *TaskState {
@@ -534,7 +604,7 @@ func (w *Workflow) validate() error {
 		used[output] = true
 	}
 	for _, task := range w.def.tasks {
-		if !used[task] {
+		if !used[task] && !task.isExpansion {
 			return fmt.Errorf("task %v is not referenced and should be deleted", task.name)
 		}
 	}
@@ -568,39 +638,55 @@ func (w *Workflow) validate() error {
 func Resume(def *Definition, state *WorkflowState, taskStates map[string]*TaskState) (*Workflow, error) {
 	w := &Workflow{
 		ID:            state.ID,
-		def:           def,
 		params:        state.Params,
-		tasks:         map[*taskDefinition]*taskState{},
 		retryCommands: make(chan retryCommand, len(def.tasks)),
+		def:           def,
+		tasks:         map[*taskDefinition]*taskState{},
+		pendingStates: taskStates,
 	}
 	if err := w.validate(); err != nil {
 		return nil, err
 	}
 	for _, taskDef := range def.tasks {
-		tState, ok := taskStates[taskDef.name]
-		if !ok {
-			return nil, fmt.Errorf("task state for %q not found", taskDef.name)
+		var err error
+		w.tasks[taskDef], err = loadTaskState(w.pendingStates, taskDef, false)
+		if err != nil {
+			return nil, fmt.Errorf("loading state for %v: %v", taskDef.name, err)
 		}
-		state := &taskState{
-			def:              taskDef,
-			started:          tState.Finished, // Can't resume tasks, so either it's new or done.
-			finished:         tState.Finished,
-			serializedResult: tState.SerializedResult,
-			retryCount:       tState.RetryCount,
-		}
-		if state.serializedResult != nil {
-			result, err := unmarshalNew(reflect.ValueOf(taskDef.f).Type().Out(0), tState.SerializedResult)
-			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal result of %v: %v", taskDef.name, err)
-			}
-			state.result = result
-		}
-		if tState.Error != "" {
-			state.err = fmt.Errorf("serialized error: %v", tState.Error) // untyped, but hopefully that doesn't matter.
-		}
-		w.tasks[taskDef] = state
 	}
 	return w, nil
+}
+
+func loadTaskState(states map[string]*TaskState, def *taskDefinition, allowMissing bool) (*taskState, error) {
+	tState, ok := states[def.name]
+	if !ok {
+		if !allowMissing {
+			return nil, fmt.Errorf("task state not found")
+		}
+		tState = &TaskState{}
+	}
+	// Can't resume tasks, so either it's new or done.
+	// Expansions need to run every time.
+	finished := tState.Finished && !def.isExpansion
+	state := &taskState{
+		def:              def,
+		created:          ok,
+		started:          finished,
+		finished:         finished,
+		serializedResult: tState.SerializedResult,
+		retryCount:       tState.RetryCount,
+	}
+	if state.serializedResult != nil {
+		result, err := unmarshalNew(reflect.ValueOf(def.f).Type().Out(0), tState.SerializedResult)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal result: %v", err)
+		}
+		state.result = result
+	}
+	if tState.Error != "" {
+		state.err = fmt.Errorf("serialized error: %v", tState.Error) // untyped, but hopefully that doesn't matter.
+	}
+	return state, nil
 }
 
 func unmarshalNew(t reflect.Type, data []byte) (interface{}, error) {
@@ -620,29 +706,25 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 		listener = &defaultListener{}
 	}
 
-	for _, task := range w.tasks {
-		listener.TaskStateChanged(w.ID, task.def.name, task.toExported())
-	}
-
 	stateChan := make(chan taskState, 2*len(w.def.tasks))
 	doneOnce := ctx.Done()
 	for {
-		// If we have all the outputs, the workflow is done.
-		outValues := map[string]interface{}{}
-		for outName, outDef := range w.def.outputs {
-			if task := w.tasks[outDef]; task.finished && task.err == nil {
-				outValues[outName] = task.result
-			}
-		}
-		if len(outValues) == len(w.def.outputs) {
-			return outValues, nil
-		}
-
 		running := 0
+		allDone := true
 		for _, task := range w.tasks {
+			if !task.created {
+				task.created = true
+				listener.TaskStateChanged(w.ID, task.def.name, task.toExported())
+			}
 			if task.started && !task.finished {
 				running++
 			}
+			if !task.finished || task.err != nil {
+				allDone = false
+			}
+		}
+		if allDone {
+			break
 		}
 
 		if ctx.Err() == nil {
@@ -658,9 +740,13 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 				task.started = true
 				running++
 				listener.TaskStateChanged(w.ID, task.def.name, task.toExported())
-				go func(task taskState) {
-					stateChan <- runTask(ctx, w.ID, listener, task, args)
-				}(*task)
+				taskCopy := *task
+				if task.def.isExpansion {
+					defCopy := w.def.shallowClone()
+					go func() { stateChan <- runExpansion(defCopy, taskCopy, args) }()
+				} else {
+					go func() { stateChan <- runTask(ctx, w.ID, listener, taskCopy, args) }()
+				}
 			}
 		}
 
@@ -675,6 +761,9 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 
 		select {
 		case state := <-stateChan:
+			if state.def.isExpansion && state.finished && state.err == nil {
+				state.err = w.expand(state.expanded)
+			}
 			listener.TaskStateChanged(w.ID, state.def.name, state.toExported())
 			w.tasks[state.def] = &state
 		case retry := <-w.retryCommands:
@@ -689,7 +778,7 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 				break
 			}
 			listener.Logger(w.ID, def.name).Printf("Manual retry requested")
-			stateChan <- taskState{def: def}
+			stateChan <- taskState{def: def, created: true}
 			retry.reply <- nil
 		// Don't get stuck when cancellation comes in after all tasks have
 		// finished, but also don't busy wait if something's still running.
@@ -697,6 +786,12 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 			doneOnce = nil
 		}
 	}
+
+	outs := map[string]interface{}{}
+	for name, def := range w.def.outputs {
+		outs[name] = w.tasks[def].result
+	}
+	return outs, nil
 }
 
 func (w *Workflow) taskArgs(def *taskDefinition) ([]reflect.Value, bool) {
@@ -753,10 +848,45 @@ func runTask(ctx context.Context, workflowID uuid.UUID, listener Listener, state
 		tctx.Printf("task failed, will retry (%v of %v): %v", state.retryCount+1, MaxRetries, state.err)
 		state = taskState{
 			def:        state.def,
+			created:    true,
 			retryCount: state.retryCount + 1,
 		}
 	}
 	return state
+}
+
+func runExpansion(d *Definition, state taskState, args []reflect.Value) taskState {
+	in := append([]reflect.Value{reflect.ValueOf(d)}, args...)
+	fv := reflect.ValueOf(state.def.f)
+	out := fv.Call(in)
+	state.finished = true
+	if out[0].IsNil() {
+		state.expanded = d
+	} else {
+		state.err = out[0].Interface().(error)
+	}
+	return state
+}
+
+func (w *Workflow) expand(expanded *Definition) error {
+	origDef := w.def
+	w.def = expanded
+	if err := w.validate(); err != nil {
+		w.def = origDef
+		return err
+	}
+	for _, def := range w.def.tasks {
+		if _, ok := w.tasks[def]; ok {
+			continue
+		}
+		// w.tasks[def] = &taskState{def: def}
+		var err error
+		w.tasks[def], err = loadTaskState(w.pendingStates, def, true)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type defaultListener struct{}

@@ -81,7 +81,7 @@ func TestDependencyError(t *testing.T) {
 	dep := wf.Action0(wd, "failing action", action)
 	wf.Output(wd, "output", wf.Task0(wd, "task", task, wf.After(dep)))
 	w := startWorkflow(t, wd, nil)
-	if got, want := runToFailure(t, w, "failing action"), "hardcoded error"; got != want {
+	if got, want := runToFailure(t, w, nil, "failing action"), "hardcoded error"; got != want {
 		t.Errorf("got error %q, want %q", got, want)
 	}
 }
@@ -211,6 +211,96 @@ func TestParameterValue(t *testing.T) {
 	}
 }
 
+func TestExpansion(t *testing.T) {
+	first := func(_ context.Context) (string, error) {
+		return "hey", nil
+	}
+	second := func(_ context.Context) (string, error) {
+		return "there", nil
+	}
+	third := func(_ context.Context) (string, error) {
+		return "friend", nil
+	}
+	join := func(_ context.Context, args []string) (string, error) {
+		return strings.Join(args, " "), nil
+	}
+
+	wd := wf.New()
+	v1 := wf.Task0(wd, "first", first)
+	v2 := wf.Task0(wd, "second", second)
+	wf.Output(wd, "second", v2)
+	wf.Expand1(wd, "add a task", func(wd *wf.Definition, arg string) error {
+		v3 := wf.Task0(wd, "third", third)
+		// v1 is resolved before the expansion runs, v2 and v3 are dependencies
+		// created outside and inside the epansion.
+		joined := wf.Task1(wd, "join", join, wf.Slice(wf.Const(arg), v2, v3))
+		wf.Output(wd, "final value", joined)
+		return nil
+	}, v1)
+
+	w := startWorkflow(t, wd, nil)
+	outputs := runWorkflow(t, w, nil)
+	if got, want := outputs["final value"], "hey there friend"; got != want {
+		t.Errorf("joined output = %q, want %q", got, want)
+	}
+}
+
+func TestResumeExpansion(t *testing.T) {
+	counter := 0
+	succeeds := func(ctx *wf.TaskContext) (string, error) {
+		counter++
+		return "", nil
+	}
+	wd := wf.New()
+	wf.Expand0(wd, "expand", func(wd *wf.Definition) error {
+		wf.Output(wd, "result", wf.Task0(wd, "succeeds", succeeds))
+		return nil
+	})
+
+	storage := &mapListener{Listener: &verboseListener{t}}
+	w := startWorkflow(t, wd, nil)
+	runWorkflow(t, w, storage)
+	resumed, err := wf.Resume(wd, &wf.WorkflowState{ID: w.ID}, storage.states[w.ID])
+	if err != nil {
+		t.Fatal(err)
+	}
+	runWorkflow(t, resumed, nil)
+	if counter != 1 {
+		t.Errorf("task ran %v times, wanted 1", counter)
+	}
+}
+
+func TestRetryExpansion(t *testing.T) {
+	counter := 0
+	wd := wf.New()
+	wf.Expand0(wd, "expand", func(wd *wf.Definition) error {
+		counter++
+		if counter == 1 {
+			return fmt.Errorf("first try fail")
+		}
+		wf.Output(wd, "out", wf.Task0(wd, "hi", func(_ context.Context) (string, error) {
+			return "", nil
+		}))
+		return nil
+	})
+
+	w := startWorkflow(t, wd, nil)
+	retry := func(string) {
+		go func() {
+			w.RetryTask(context.Background(), "expand")
+		}()
+	}
+	listener := &errorListener{
+		taskName: "expand",
+		callback: retry,
+		Listener: &verboseListener{t},
+	}
+	runWorkflow(t, w, listener)
+	if counter != 2 {
+		t.Errorf("task ran %v times, wanted 2", counter)
+	}
+}
+
 func TestManualRetry(t *testing.T) {
 	counter := 0
 	needsRetry := func(ctx *wf.TaskContext) (string, error) {
@@ -278,7 +368,7 @@ func TestAutomaticRetryDisabled(t *testing.T) {
 	wf.Output(wd, "result", wf.Task0(wd, "no retry", noRetry))
 
 	w := startWorkflow(t, wd, nil)
-	if got, want := runToFailure(t, w, "no retry"), "do not pass go"; got != want {
+	if got, want := runToFailure(t, w, nil, "no retry"), "do not pass go"; got != want {
 		t.Errorf("got error %q, want %q", got, want)
 	}
 	if counter != 1 {
@@ -327,7 +417,7 @@ func testWatchdog(t *testing.T, success bool) {
 	if success {
 		runWorkflow(t, w, nil)
 	} else {
-		if got, want := runToFailure(t, w, "sleepy"), "assumed hung"; !strings.Contains(got, want) {
+		if got, want := runToFailure(t, w, nil, "sleepy"), "assumed hung"; !strings.Contains(got, want) {
 			t.Errorf("got error %q, want %q", got, want)
 		}
 	}
@@ -450,7 +540,7 @@ func TestBadMarshaling(t *testing.T) {
 	wd := wf.New()
 	wf.Output(wd, "greeting", wf.Task0(wd, "greet", greet))
 	w := startWorkflow(t, wd, nil)
-	if got, want := runToFailure(t, w, "greet"), "JSON marshaling"; !strings.Contains(got, want) {
+	if got, want := runToFailure(t, w, nil, "greet"), "JSON marshaling"; !strings.Contains(got, want) {
 		t.Errorf("got error %q, want %q", got, want)
 	}
 }
@@ -530,19 +620,22 @@ func (l *testLogger) Printf(format string, v ...interface{}) {
 	l.t.Logf("task %-10v: LOG: %s", l.task, fmt.Sprintf(format, v...))
 }
 
-func runToFailure(t *testing.T, w *wf.Workflow, task string) string {
+func runToFailure(t *testing.T, w *wf.Workflow, listener wf.Listener, task string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	t.Helper()
+	if listener == nil {
+		listener = &verboseListener{t}
+	}
 	var message string
-	listener := &errorListener{
+	listener = &errorListener{
 		taskName: task,
 		callback: func(m string) {
 			message = m
 			// Allow other tasks to run before shutting down the workflow.
 			time.AfterFunc(50*time.Millisecond, cancel)
 		},
-		Listener: &verboseListener{t},
+		Listener: listener,
 	}
 	_, err := w.Run(ctx, listener)
 	if err == nil {
