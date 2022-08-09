@@ -5,7 +5,6 @@
 # golang.org/x/build/cmd/gerritbot
 
 The gerritbot binary converts GitHub Pull Requests to Gerrit Changes, updating the PR and Gerrit Change as appropriate.
-
 <!-- End of auto-generated section -->
 
 ## Deployment
