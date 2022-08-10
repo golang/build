@@ -142,8 +142,11 @@ func cachedToken() (*oauth2.Token, error) {
 // IAP-protected sites. It will prompt for login if necessary.
 func TokenSource(ctx context.Context) (oauth2.TokenSource, error) {
 	const audience = "872405196845-b6fu2qpi0fehdssmc8qo47h2u3cepi0e.apps.googleusercontent.com" // Go build IAP client ID.
-	if project, err := metadata.ProjectID(); err == nil && project == "symbolic-datum-552" {
-		return idtoken.NewTokenSource(ctx, audience)
+
+	if metadata.OnGCE() {
+		if project, err := metadata.ProjectID(); err == nil && project == "symbolic-datum-552" {
+			return idtoken.NewTokenSource(ctx, audience)
+		}
 	}
 
 	refresh, err := cachedToken()
