@@ -92,11 +92,9 @@ func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, r ReleaseA
 	if err != nil {
 		return SentMail{}, err
 	}
-	if log := ctx.Logger; log != nil {
-		log.Printf("announcement subject: %s\n\n", m.Subject)
-		log.Printf("announcement body HTML:\n%s\n", m.BodyHTML)
-		log.Printf("announcement body text:\n%s", m.BodyText)
-	}
+	ctx.Printf("announcement subject: %s\n\n", m.Subject)
+	ctx.Printf("announcement body HTML:\n%s\n", m.BodyHTML)
+	ctx.Printf("announcement body text:\n%s", m.BodyText)
 
 	// Before sending, check to see if this announcement already exists.
 	if threadURL, err := findGoogleGroupsThread(ctx, m.Subject); err != nil {
@@ -110,9 +108,7 @@ func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, r ReleaseA
 		//
 		// So if we see that the email exists, consider it as "task completed successfully"
 		// and pretend we were the ones that sent it, so the high level workflow can keep going.
-		if log := ctx.Logger; log != nil {
-			log.Printf("a Google Groups thread with matching subject %q already exists at %q, so we'll consider that as it being sent successfully", m.Subject, threadURL)
-		}
+		ctx.Printf("a Google Groups thread with matching subject %q already exists at %q, so we'll consider that as it being sent successfully", m.Subject, threadURL)
 		return SentMail{m.Subject}, nil
 	}
 
@@ -332,9 +328,7 @@ func findGoogleGroupsThread(ctx *workflow.TaskContext, subject string) (threadUR
 		return "", fmt.Errorf("did not get acceptable status code: %v body: %q", resp.Status, body)
 	}
 	if ct, want := resp.Header.Get("Content-Type"), "text/html; charset=utf-8"; ct != want {
-		if log := ctx.Logger; log != nil {
-			log.Printf("findGoogleGroupsThread: got response with non-'text/html; charset=utf-8' Content-Type header %q\n", ct)
-		}
+		ctx.Printf("findGoogleGroupsThread: got response with non-'text/html; charset=utf-8' Content-Type header %q\n", ct)
 		if mediaType, _, err := mime.ParseMediaType(ct); err != nil {
 			return "", fmt.Errorf("bad Content-Type header %q: %v", ct, err)
 		} else if mediaType != "text/html" {

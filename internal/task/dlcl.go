@@ -64,9 +64,7 @@ func (t *VersionTasks) MailDLCL(ctx *workflow.TaskContext, versions []string, dr
 			return "", fmt.Errorf("could not gofmt: %v", err)
 		}
 		files[path.Join(ver, "main.go")] = string(gofmted)
-		if log := ctx.Logger; log != nil {
-			log.Printf("file %q (command %q):\n%s", path.Join(ver, "main.go"), "golang.org/dl/"+ver, gofmted)
-		}
+		ctx.Printf("file %q (command %q):\n%s", path.Join(ver, "main.go"), "golang.org/dl/"+ver, gofmted)
 	}
 
 	// Create a Gerrit CL using the Gerrit API.

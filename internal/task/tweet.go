@@ -107,18 +107,14 @@ func (t TweetTasks) TweetRelease(ctx *workflow.TaskContext, r ReleaseTweet) (twe
 	if err != nil {
 		return "", err
 	}
-	if log := ctx.Logger; log != nil {
-		log.Printf("tweet text:\n%s\n", tweetText)
-	}
+	ctx.Printf("tweet text:\n%s\n", tweetText)
 
 	// Generate tweet image.
 	imagePNG, imageText, err := tweetImage(r.Version, rnd)
 	if err != nil {
 		return "", err
 	}
-	if log := ctx.Logger; log != nil {
-		log.Printf("tweet image:\n%s\n", imageText)
-	}
+	ctx.Printf("tweet image:\n%s\n", imageText)
 
 	// Post a tweet via the Twitter API.
 	if t.TwitterClient == nil {

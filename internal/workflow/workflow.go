@@ -398,6 +398,10 @@ func (c *TaskContext) DisableRetries() {
 }
 
 func (c *TaskContext) ResetWatchdog() {
+	// Should only occur in tests.
+	if c.watchdogTimer == nil {
+		return
+	}
 	c.watchdogTimer.Reset(WatchdogDelay)
 }
 
@@ -703,7 +707,7 @@ func (w *Workflow) runTask(ctx context.Context, listener Listener, state taskSta
 	fv := reflect.ValueOf(state.def.f)
 	out := fv.Call(in)
 
-	if  !tctx.watchdogTimer.Stop() {
+	if !tctx.watchdogTimer.Stop() {
 		state.err = fmt.Errorf("task did not log for %v, assumed hung", WatchdogDelay)
 	} else if errIdx := len(out) - 1; !out[errIdx].IsNil() {
 		state.err = out[errIdx].Interface().(error)

@@ -760,7 +760,7 @@ func (b *BuildReleaseTasks) runBuildStep(
 			return artifact{}, err
 		}
 		defer client.Close()
-		w := &logWriter{logger: ctx.Logger}
+		w := &logWriter{logger: ctx}
 		go w.run(ctx)
 		step = &task.BuildletStep{
 			Target:      target,
@@ -1202,9 +1202,7 @@ func (tasks *BuildReleaseTasks) publishArtifacts(ctx *wf.TaskContext, version st
 			return "", err
 		}
 	}
-	if log := ctx.Logger; log != nil {
-		log.Printf("Published %v artifacts for %v", len(artifacts), version)
-	}
+	ctx.Printf("Published %v artifacts for %v", len(artifacts), version)
 	return version, nil
 }
 
