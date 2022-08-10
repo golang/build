@@ -390,6 +390,7 @@ type resultDetail struct {
 	String   string
 	Number   float64
 	Slice    []*resultDetail
+	Boolean  bool
 	Unknown  interface{}
 }
 

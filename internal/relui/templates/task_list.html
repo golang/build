@@ -121,14 +121,16 @@
                 {{- printf "%s %s" ($log.CreatedAt.UTC.Format "2006/01/02 15:04:05") $log.Body -}}
               </div>
             {{end}}
-            {{if .Result.Valid}}
+            {{if and .Result.Valid (ne .Result.String "null")}}
               <div class="TaskList-itemLogLine">
                 {{- .Result.String -}}
               </div>
             {{end}}
           </td>
           <td class="TaskList-itemResultDetail" colspan="2">
+            {{with $resultDetail}}
             {{template "itemResult" $resultDetail}}
+            {{end}}
           </td>
         </tr>
       {{end}}
@@ -137,9 +139,14 @@
 {{end}}
 
 {{define "itemResult"}}
-  {{if eq .Kind "Artifact"}}
+    {{- /*gotype: golang.org/x/build/internal/relui.resultDetail*/ -}}
+    {{if eq .Kind "Artifact"}}
     <dl class="TaskList-itemResultDetailList">
-      <dt class="TaskList-itemResultTerm">Name</dt>
+      <dt class="TaskList-itemResultTerm">
+        <div class="TaskList-itemResultTermContent">
+          Name
+        </div>
+      </dt>
       <dd class="TaskList-itemResultDefinition">
         {{with .Artifact.Target}}
           {{.Name}}
@@ -147,15 +154,27 @@
           {{.Artifact.Filename}}
         {{end}}
       </dd>
-      <dt class="TaskList-itemResultTerm">Filename</dt>
+      <dt class="TaskList-itemResultTerm">
+        <div class="TaskList-itemResultTermContent">
+          Filename
+        </div>
+      </dt>
       <dd class="TaskList-itemResultDefinition">
         {{.Artifact.Filename}}
       </dd>
-      <dt class="TaskList-itemResultTerm">ScratchPath</dt>
+      <dt class="TaskList-itemResultTerm">
+        <div class="TaskList-itemResultTermContent">
+          ScratchPath
+        </div>
+      </dt>
       <dd class="TaskList-itemResultDefinition">
         {{.Artifact.ScratchPath}}
       </dd>
-      <dt class="TaskList-itemResultTerm">StagingPath</dt>
+      <dt class="TaskList-itemResultTerm">
+        <div class="TaskList-itemResultTermContent">
+          StagingPath
+        </div>
+      </dt>
       <dd class="TaskList-itemResultDefinition">
         {{.Artifact.StagingPath}}
       </dd>
@@ -163,27 +182,41 @@
   {{else if eq .Kind "Outputs"}}
     {{range $key, $value := .Outputs}}
       <dt class="TaskList-itemResultTerm">
-        {{$key}}
+        <div class="TaskList-itemResultTermContent">
+          {{$key}}
+        </div>
       </dt>
+      <dd class="TaskList-itemResultDefinition TaskList-itemResultDefinition--nested"></dd>
       {{template "itemResult" $value}}
     {{end}}
   {{else if eq .Kind "JSON"}}
     {{range $key, $value := .JSON}}
       <dt class="TaskList-itemResultTerm">
-        {{$key}}
+        <div class="TaskList-itemResultTermContent">
+          {{$key}}
+        </div>
       </dt>
       <dd class="TaskList-itemResultDefinition">
         {{$value}}
       </dd>
     {{end}}
   {{else if eq .Kind "String"}}
+    <dt class="TaskList-itemResultTerm">
+      <div class="TaskList-itemResultTermContent">
+        String
+      </div>
+    </dt>
     <dd class="TaskList-itemResultDefinition TaskList-itemResultDefinition--string">
-      {{.String}}
+      <pre class="TaskList-preString">{{.String}}</pre>
     </dd>
   {{else if eq .Kind "Slice"}}
     {{with .Slice}}
-      {{if eq (index . 1).Kind "Artifact"}}
-        <dt class="TaskList-itemResultTerm">Filenames</dt>
+      {{if eq (index . 0).Kind "Artifact"}}
+        <dt class="TaskList-itemResultTerm">
+          <div class="TaskList-itemResultTermContent">
+            Filenames
+          </div>
+        </dt>
         <dd class="TaskList-itemResultDefinition">
           {{range $detail := .}}
             {{with $detail.Artifact}}
@@ -203,21 +236,30 @@
           {{end}}
         </dd>
       {{else}}
+        <dt class="TaskList-itemResultTerm TaskList-itemResultTerm--nested">
+          <div class="TaskList-itemResultTermContent">
+            Slice
+          </div>
+        </dt>
+        <dd class="TaskList-itemResultDefinition TaskList-itemResultDefinition--nested"></dd>
         {{range $value := .}}
-          <dt class="TaskList-itemResultTerm">
-            {{$value.Kind}}
-          </dt>
-          <dd class="TaskList-itemResultDefinition TaskList-itemResultDefinition--string">
-            {{template "itemResult" $value}}
-          </dd>
+          {{template "itemResult" $value}}
         {{end}}
       {{end}}
     {{end}}
   {{else if eq .Kind "Number"}}
     {{.Number}}
+  {{else if eq .Kind "Boolean"}}
+    <dd class="TaskList-itemResultDefinition TaskList-itemResultDefinition--string">
+      {{.Boolean}}
+    </dd>
   {{else}}
     {{with .}}
       {{.Unknown}}
+    {{else}}
+      <dd class="TaskList-itemResultDefinition TaskList-itemResultDefinition--string">
+        None
+      </dd>
     {{end}}
   {{end}}
 {{end}}

@@ -86,13 +86,34 @@ h6 {
   flex-flow: row;
   justify-content: space-between;
 }
+.WorkflowShow-paramsOutputContainer {
+  align-content: stretch;
+  display: flex;
+  flex-direction: row;
+  gap: 1rem;
+}
+.WorkflowShow-outputContainer {
+  flex-basis: 50%;
+  flex-grow: 1;
+}
+.WorkflowShow-paramsContainer {
+  flex-basis: 50%;
+  flex-grow: 1;
+}
 .WorkflowShow-output {
   border: 0.0625rem solid #ccc;
   border-radius: 0.25rem;
   margin: 0;
   max-height: 23rem;
+  min-height: 3.25rem;
   overflow-y: auto;
-  width: 17.8125rem;
+}
+.WorkflowShow-paramsDetails {
+  border: 0.0625rem solid #ccc;
+  border-radius: 0.25rem;
+  margin: 0;
+  max-height: 23rem;
+  overflow-y: auto;
 }
 .WorkflowShow-paramsTable {
   border: none;
@@ -285,32 +306,54 @@ h6 {
   margin: 0;
 }
 .TaskList-itemResultTerm {
-  background: #fdfdfd;
-  border-top: 0.0625rem solid #ccc;
+  background: white;
+  border-bottom: 0.0625rem solid #ccc;
   font-size: 0.75rem;
-  padding: 0.1875rem 0.25rem 0;
 }
-.TaskList-itemResultTerm:nth-of-type(even) {
-  background: #f8f8f8;
+.TaskList-itemResultTermContent {
+  background: #fff;
+  border-radius: 0 0.3rem 0 0;
+  border-right: 0.0625rem solid #ccc;
+  border-top: 0.0625rem solid #ccc;
+  margin-bottom: -0.0625rem;
+  min-width: 5rem;
+  padding: 0.1875rem 0.25rem 0.0625rem;
+  width: fit-content;
+}
+.TaskList-itemResultTerm--nested {
+  display: none;
 }
 .TaskList-itemResultDefinition {
+  align-content: flex-start;
   background: #fdfdfd;
+  column-gap: 1rem;
+  display: flex;
+  flex-flow: wrap column;
   font-size: 0.875rem;
   margin: 0;
   min-height: 1.875rem;
   padding: 0.5rem 0.375rem;
 }
-.TaskList-itemResultDefinition:nth-of-type(even) {
-  background: #f8f8f8;
+.TaskList-itemResultDefinition--nested {
+  display: none;
 }
 .TaskList-itemResultDefinition--string {
   display: block;
+  font-size: 0.8125rem;
   -webkit-line-clamp: 3;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.TaskList-preString {
+  font-family: inherit;
+  font-size: 0.8125rem;
+  margin: 0;
+  white-space: pre-wrap;
+}
 .TaskList-itemResultArtifact {
   display: flex;
+  flex: 1;
+  gap: 1rem;
   justify-content: space-between;
 }
 .TaskList-itemResultArtifactName {

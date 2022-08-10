@@ -51,19 +51,27 @@
               <td>Error:</td>
               <td class="WorkflowShow-paramData">{{$workflow.Error}}</td>
             </tr>
-            {{range $name, $value := workflowParams $workflow}}
-              <tr>
-                <td>{{$name}}:</td>
-                <td class="WorkflowShow-paramData">{{$value}}</td>
-              </tr>
-            {{end}}
           </tbody>
         </table>
       </div>
-      <dl class="WorkflowShow-output">
-        {{$resultDetail := unmarshalResultDetail $workflow.Output}}
-        {{template "itemResult" $resultDetail}}
-      </dl>
+    </div>
+    <div class="WorkflowShow-paramsOutputContainer">
+      <div class="WorkflowShow-paramsContainer">
+        <h4 class="WorkflowShow-sectionTitle">Params</h4>
+        <dl class="WorkflowShow-paramsDetails">
+          {{with unmarshalResultDetail $workflow.Params.String }}
+            {{template "itemResult" .}}
+          {{end}}
+        </dl>
+      </div>
+      <div class="WorkflowShow-outputContainer">
+        <h4 class="WorkflowShow-sectionTitle">Output</h4>
+          <dl class="WorkflowShow-output">
+            {{with unmarshalResultDetail $workflow.Output }}
+              {{template "itemResult" .}}
+            {{end}}
+          </dl>
+      </div>
     </div>
     <h4 class="WorkflowShow-sectionTitle">Tasks</h4>
     {{template "task_list" .}}
