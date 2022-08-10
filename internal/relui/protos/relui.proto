@@ -44,10 +44,15 @@ message SignArtifactRequest {
 message SigningRequest {
   // unique identifier for the signing job.
   string id = 1;
+  // unique identifier for the request. This would normally reside within
+  // the metadata. This is primarily used to route requests between
+  // caller/responder. The server and client must use the same id for each
+  // corresponging request.
+  string message_id = 2;
   // Request type for the signing client.
   oneof request_oneof {
-    SignArtifactStatusRequest status = 2;
-    SignArtifactRequest sign = 3;
+    SignArtifactStatusRequest status = 3;
+    SignArtifactRequest sign = 4;
   }
 }
 
@@ -76,11 +81,16 @@ message StatusCompleted {
 message SigningStatus {
   // unique identifier for the signing job.
   string id = 1;
+  // unique identifier for the request. This would normally reside within
+  // the metadata. This is primarily used to route requests between
+  // caller/responder. The server and client must use the same id for each
+  // corresponging request.
+  string message_id = 2;
   // The status type of the signing request.
   oneof status_oneof {
-    StatusNotFound not_found = 2;
-    StatusRunning running = 3;
-    StatusFailed failed = 4;
-    StatusCompleted completed = 5;
+    StatusNotFound not_found = 3;
+    StatusRunning running = 4;
+    StatusFailed failed = 5;
+    StatusCompleted completed = 6;
   }
 }
