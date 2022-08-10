@@ -72,7 +72,6 @@ metadata:
   namespace: prod
   name: vcs-test-internal
   annotations:
-    cloud.google.com/neg: '{"ingress": false}'
     cloud.google.com/app-protocols: '{"https":"HTTP2"}'
 spec:
   ports:

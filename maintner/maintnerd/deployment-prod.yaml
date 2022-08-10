@@ -64,7 +64,6 @@ metadata:
   name: maintnerd-internal
   annotations:
     cloud.google.com/backend-config: '{"default": "build-ingress-maintnerd-backend"}'
-    cloud.google.com/neg: '{"ingress": false}'
     cloud.google.com/app-protocols: '{"https":"HTTP2"}'
 spec:
   ports:
