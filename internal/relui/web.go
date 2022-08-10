@@ -144,10 +144,17 @@ type homeResponse struct {
 	InactiveWorkflows []db.Workflow
 }
 
-func workflowParams(wf db.Workflow) map[string]string {
-	params := make(map[string]string)
-	json.Unmarshal([]byte(wf.Params.String), &params)
-	return params
+func workflowParams(wf db.Workflow) (map[string]string, error) {
+	rawParams := make(map[string]json.RawMessage)
+	err := json.Unmarshal([]byte(wf.Params.String), &rawParams)
+	if err != nil {
+		return nil, err
+	}
+	params := make(map[string]string, len(rawParams))
+	for p, v := range rawParams {
+		params[p] = string(v)
+	}
+	return params, nil
 }
 
 // homeHandler renders the homepage.

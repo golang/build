@@ -871,3 +871,17 @@ func TestResultDetail(t *testing.T) {
 	}
 
 }
+
+func TestWorkflowParams(t *testing.T) {
+	got, err := workflowParams(db.Workflow{Params: nullString(`{"greeting": "hello", "names": ["alice", "bob"]}`)})
+	if err != nil {
+		t.Fatalf("workflowParams: err = %v, wanted no error", err)
+	}
+	want := map[string]string{
+		"greeting": `"hello"`,
+		"names":    `["alice", "bob"]`,
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("workflowParams mismatch (-want +got):\n%s", diff)
+	}
+}
