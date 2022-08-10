@@ -131,10 +131,15 @@ func (s *Server) CreateInstance(req *protos.CreateInstanceRequest, stream protos
 	if bconf.IsRestricted() && !isPrivilegedUser(creds.Email) {
 		return status.Errorf(codes.PermissionDenied, "user is unable to create gomote of that builder type")
 	}
+	userName, err := emailToUser(creds.Email)
+	if err != nil {
+		return status.Errorf(codes.Internal, "invalid user email format")
+	}
 	si := &queue.SchedItem{
-		HostType: bconf.HostType,
-		IsGomote: true,
-		User:     creds.Email,
+		HostType:  bconf.HostType,
+		IsGomote:  true,
+		IsRelease: userName == "relui-prod",
+		User:      creds.Email,
 	}
 	type result struct {
 		buildletClient buildlet.Client
@@ -165,10 +170,6 @@ func (s *Server) CreateInstance(req *protos.CreateInstanceRequest, stream protos
 				log.Printf("error creating gomote buildlet: %v", err)
 
 				return status.Errorf(codes.Unknown, "gomote creation failed: %s", err)
-			}
-			userName, err := emailToUser(creds.Email)
-			if err != nil {
-				return status.Errorf(codes.Internal, "invalid user email format")
 			}
 			gomoteID := s.buildlets.AddSession(creds.ID, userName, req.GetBuilderType(), bconf.HostType, r.buildletClient)
 			log.Printf("created buildlet %v for %v (%s)", gomoteID, userName, r.buildletClient.String())
