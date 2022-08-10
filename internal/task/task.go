@@ -26,16 +26,16 @@ func AwaitCondition[T any](ctx *workflow.TaskContext, period time.Duration, cond
 	pollTimer := time.NewTicker(period / time.Duration(AwaitDivisor))
 	defer pollTimer.Stop()
 	for {
+		res, done, err := condition()
+		if done || err != nil {
+			return res, err
+		}
 		select {
 		case <-ctx.Done():
 			var zero T
 			return zero, ctx.Err()
 		case <-pollTimer.C:
 			ctx.ResetWatchdog()
-			res, done, err := condition()
-			if done || err != nil {
-				return res, err
-			}
 		}
 	}
 }
