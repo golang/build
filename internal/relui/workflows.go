@@ -22,7 +22,6 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/google/go-cmp/cmp"
-	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/gcsfs"
@@ -260,7 +259,7 @@ func echo(ctx *wf.TaskContext, arg string) (string, error) {
 	return arg, nil
 }
 
-func checkTaskApproved(ctx *wf.TaskContext, p *pgxpool.Pool) (bool, error) {
+func checkTaskApproved(ctx *wf.TaskContext, p db.PGDBTX) (bool, error) {
 	q := db.New(p)
 	t, err := q.Task(ctx, db.TaskParams{
 		Name:       ctx.TaskName,
@@ -290,7 +289,7 @@ func checkTaskApproved(ctx *wf.TaskContext, p *pgxpool.Pool) (bool, error) {
 // "approve" control in the UI.
 //
 //	waitAction := wf.ActionN(wd, "Wait for Approval", ApproveActionDep(db), wf.After(someDependency))
-func ApproveActionDep(p *pgxpool.Pool) func(*wf.TaskContext) error {
+func ApproveActionDep(p db.PGDBTX) func(*wf.TaskContext) error {
 	return func(ctx *wf.TaskContext) error {
 		_, err := task.AwaitCondition(ctx, 5*time.Second, func() (int, bool, error) {
 			done, err := checkTaskApproved(ctx, p)

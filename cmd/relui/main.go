@@ -36,6 +36,7 @@ import (
 	"golang.org/x/build/internal/iapclient"
 	"golang.org/x/build/internal/metrics"
 	"golang.org/x/build/internal/relui"
+	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/oauth2"
@@ -136,11 +137,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not connect to GCS: %v", err)
 	}
-	db, err := pgxpool.Connect(ctx, *pgConnect)
+	var dbPool db.PGDBTX
+	dbPool, err = pgxpool.Connect(ctx, *pgConnect)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+	defer dbPool.Close()
+	dbPool = &relui.MetricsDB{dbPool}
 
 	var gr *metrics.MonitoredResource
 	if metadata.OnGCE() {
@@ -168,7 +171,7 @@ func main() {
 		PublishFile: func(f *relui.WebsiteFile) error {
 			return publishFile(*websiteUploadURL, userPassAuth, f)
 		},
-		ApproveAction: relui.ApproveActionDep(db),
+		ApproveAction: relui.ApproveActionDep(dbPool),
 	}
 	githubHTTPClient := oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: *githubToken}))
 	milestoneTasks := &task.MilestoneTasks{
@@ -183,7 +186,7 @@ func main() {
 		log.Fatalf("RegisterReleaseWorkflows: %v", err)
 	}
 
-	w := relui.NewWorker(dh, db, relui.NewPGListener(db))
+	w := relui.NewWorker(dh, dbPool, relui.NewPGListener(dbPool))
 	go w.Run(ctx)
 	if err := w.ResumeAll(ctx); err != nil {
 		log.Printf("w.ResumeAll() = %v", err)
@@ -195,7 +198,7 @@ func main() {
 			log.Fatalf("url.Parse(%q) = %v, %v", *baseURL, base, err)
 		}
 	}
-	s := relui.NewServer(db, w, base, siteHeader, ms)
+	s := relui.NewServer(dbPool, w, base, siteHeader, ms)
 	if err != nil {
 		log.Fatalf("relui.NewServer() = %v", err)
 	}

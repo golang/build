@@ -23,7 +23,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/julienschmidt/httprouter"
 	"golang.org/x/build/internal/metrics"
 	"golang.org/x/build/internal/relui/db"
@@ -39,7 +38,7 @@ type SiteHeader struct {
 
 // Server implements the http handlers for relui.
 type Server struct {
-	db      *pgxpool.Pool
+	db      db.PGDBTX
 	m       *metricsRouter
 	w       *Worker
 	baseURL *url.URL // nil means "/".
@@ -56,7 +55,7 @@ type Server struct {
 // worker, base URL and site header.
 //
 // The base URL may be nil, which is the same as "/".
-func NewServer(p *pgxpool.Pool, w *Worker, baseURL *url.URL, header SiteHeader, ms *metrics.Service) *Server {
+func NewServer(p db.PGDBTX, w *Worker, baseURL *url.URL, header SiteHeader, ms *metrics.Service) *Server {
 	s := &Server{
 		db:      p,
 		m:       &metricsRouter{router: httprouter.New()},

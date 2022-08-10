@@ -5,15 +5,27 @@
 package relui
 
 import (
+	"context"
 	"fmt"
 	"mime"
 	"net/http"
 	"path"
+	"strings"
+	"time"
 
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
 	"github.com/julienschmidt/httprouter"
 	"go.opencensus.io/plugin/ochttp"
+	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+	"golang.org/x/build/internal/relui/db"
+)
+
+var (
+	kDBQueryName = tag.MustNewKey("go-build/relui/keys/db/query-name")
+	mDBLatency   = stats.Float64("go-build/relui/db/latency", "Database query latency by query name", stats.UnitMilliseconds)
 )
 
 // Views should contain all measurements. All *view.View added to this
@@ -32,6 +44,13 @@ var Views = []*view.View{
 		TagKeys:     []tag.Key{ochttp.StatusCode, ochttp.KeyServerRoute},
 		Measure:     ochttp.ServerLatency,
 		Aggregation: view.Count(),
+	},
+	{
+		Name:        "go-build/relui/db/query_latency",
+		Description: "Latency distribution of database queries",
+		TagKeys:     []tag.Key{kDBQueryName},
+		Measure:     mDBLatency,
+		Aggregation: ochttp.DefaultLatencyDistribution,
 	},
 }
 
@@ -121,4 +140,37 @@ func (r *metricsRouter) Handle(method, path string, handle httprouter.Handle) {
 			handle(w, r, params)
 		}), path).ServeHTTP(w, r)
 	})
+}
+
+type MetricsDB struct {
+	db.PGDBTX
+}
+
+func (m *MetricsDB) Exec(ctx context.Context, s string, i ...any) (pgconn.CommandTag, error) {
+	defer recordDB(ctx, time.Now(), queryName(s))
+	return m.PGDBTX.Exec(ctx, s, i...)
+}
+
+func (m *MetricsDB) Query(ctx context.Context, s string, i ...any) (pgx.Rows, error) {
+	defer recordDB(ctx, time.Now(), queryName(s))
+	return m.PGDBTX.Query(ctx, s, i...)
+}
+
+func (m *MetricsDB) QueryRow(ctx context.Context, s string, i ...any) pgx.Row {
+	defer recordDB(ctx, time.Now(), queryName(s))
+	return m.PGDBTX.QueryRow(ctx, s, i...)
+}
+
+func recordDB(ctx context.Context, start time.Time, name string) {
+	stats.RecordWithTags(ctx, []tag.Mutator{tag.Upsert(kDBQueryName, name)},
+		mDBLatency.M(float64(time.Since(start))/float64(time.Millisecond)))
+}
+
+func queryName(s string) string {
+	prefix := "-- name: "
+	if !strings.HasPrefix(s, prefix) {
+		return "Unknown"
+	}
+	rest := s[len(prefix):]
+	return rest[:strings.IndexRune(rest, ' ')]
 }

@@ -15,7 +15,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/workflow"
 	"golang.org/x/sync/errgroup"
@@ -34,7 +33,7 @@ type stopFunc func()
 type Worker struct {
 	dh *DefinitionHolder
 
-	db *pgxpool.Pool
+	db db.PGDBTX
 	l  Listener
 
 	done    chan struct{}
@@ -48,7 +47,7 @@ type Worker struct {
 }
 
 // NewWorker returns a Worker ready to accept and run workflows.
-func NewWorker(dh *DefinitionHolder, db *pgxpool.Pool, l Listener) *Worker {
+func NewWorker(dh *DefinitionHolder, db db.PGDBTX, l Listener) *Worker {
 	return &Worker{
 		dh:      dh,
 		db:      db,

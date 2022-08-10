@@ -14,18 +14,17 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
 	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/workflow"
 )
 
-func NewPGListener(db *pgxpool.Pool) *PGListener {
+func NewPGListener(db db.PGDBTX) *PGListener {
 	return &PGListener{db}
 }
 
 // PGListener implements workflow.Listener for recording workflow state.
 type PGListener struct {
-	db *pgxpool.Pool
+	db db.PGDBTX
 }
 
 // TaskStateChanged is called whenever a task is updated by the
@@ -111,7 +110,7 @@ func (l *PGListener) Logger(workflowID uuid.UUID, taskName string) workflow.Logg
 
 // postgresLogger logs task output to the database. It implements workflow.Logger.
 type postgresLogger struct {
-	db         *pgxpool.Pool
+	db         db.PGDBTX
 	workflowID uuid.UUID
 	taskName   string
 }
