@@ -62,7 +62,8 @@ h6 {
   color: #616161;
   display: block;
   font-size: 0.875rem;
-  padding: 0.75rem 0.125rem 0.75rem 0.9625rem;
+  padding: 0 0.125rem 0 0.9625rem;
+  display: flex;
 }
 .Site-navigationRow:hover {
   background-color: #ebf3f8;
@@ -80,6 +81,21 @@ h6 {
 .Site-navigationRow--active:hover {
   background-color: #ebf3f8;
   color: #2e2d2c;
+}
+.Site-navigationRowName {
+  flex: 1;
+  padding: 0.75rem 0;
+}
+.Site-navigationRowCountBadge {
+  font-size: 0.75rem;
+  padding: 0 0.5rem;
+  text-align: center;
+}
+.Site-navigationRowCount {
+  align-content: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 .Header {
   background: #d6d6d6;
@@ -400,8 +416,8 @@ h6 {
   border: none;
   border-radius: 0.1875rem;
   box-shadow: 0 0.1875rem 0.0625rem -0.125rem rgb(0 0 0 / 20%),
-    0 0.125rem 0.125rem 0 rgb(0 0 0 / 14%),
-    0 0.0625rem 0.3125rem 0 rgb(0 0 0 / 12%);
+  0 0.125rem 0.125rem 0 rgb(0 0 0 / 14%),
+  0 0.0625rem 0.3125rem 0 rgb(0 0 0 / 12%);
   color: #fff;
   font-size: 0.875rem;
   min-width: 4rem;
@@ -416,14 +432,14 @@ h6 {
 .Button:focus {
   background: #3b65b3;
   box-shadow: 0 0.125rem 0.25rem -0.0625rem rgb(0 0 0 / 20%),
-    0 0.25rem 0.3125rem 0 rgb(0 0 0 / 14%),
-    0 0.0625rem 0.625rem 0 rgb(0 0 0 / 12%);
+  0 0.25rem 0.3125rem 0 rgb(0 0 0 / 14%),
+  0 0.0625rem 0.625rem 0 rgb(0 0 0 / 12%);
 }
 .Button:active {
   background: #4373cc;
   box-shadow: 0 0.3125rem 0.3125rem -0.1875rem rgb(0 0 0 / 20%),
-    0 0.5rem 0.625rem 0.0625rem rgb(0 0 0 / 14%),
-    0 0.1875rem 0.875rem 0.125rem rgb(0 0 0 / 12%);
+  0 0.5rem 0.625rem 0.0625rem rgb(0 0 0 / 14%),
+  0 0.1875rem 0.875rem 0.125rem rgb(0 0 0 / 12%);
 }
 .Button--red {
   background: #d14836;

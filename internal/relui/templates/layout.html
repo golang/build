@@ -21,12 +21,18 @@
       <nav class="Site-navigation">
         {{$name := .SiteHeader.NameParam}}
         <a href="{{baseLink "/"}}" class="Site-navigationRow {{if eq $name "all"}}Site-navigationRow--active{{end}}">
-          All Workflows ({{allWorkflowsCount}})
+          <div class="Site-navigationRowName">All Workflows</div>
+          <div class="Site-navigationRowCount">
+            <div class="Site-navigationRowCountBadge">{{allWorkflowsCount}}</div>
+          </div>
         </a>
         {{range sidebarWorkflows}}
           {{- /*gotype: golang.org/x/build/internal/relui/db.WorkflowSidebarRow*/ -}}
-          <a href="/?name={{.Name.String}}" class="Site-navigationRow {{if eq $name .Name.String}}Site-navigationRow--active{{end}}">
-            {{.Name.String}} ({{.Count}})
+          <a href="{{baseLink "/"}}?name={{.Name.String}}" class="Site-navigationRow {{if eq $name .Name.String}}Site-navigationRow--active{{end}}">
+            <div class="Site-navigationRowName">{{.Name.String}}</div>
+            <div class="Site-navigationRowCount">
+              <span class="Site-navigationRowCountBadge">{{.Count}}</span>
+            </div>
           </a>
         {{end}}
       </nav>
