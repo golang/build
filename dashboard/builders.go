@@ -1123,7 +1123,7 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 			if bmaj != 1 || bmin < minGo1x {
 				return false
 			}
-			bmm := types.MajorMinor{bmaj, bmin}
+			bmm := types.MajorMinor{Major: bmaj, Minor: bmin}
 			if bmm.Less(c.MinimumGoVersion) {
 				return false
 			}
@@ -1503,7 +1503,7 @@ func init() {
 		var v types.MajorMinor
 		var alsoNote string
 		if min != 0 {
-			v = types.MajorMinor{1, min}
+			v = types.MajorMinor{Major: 1, Minor: min}
 			alsoNote = fmt.Sprintf(" Applies to Go 1.%d and newer.", min)
 		}
 		addBuilder(BuildConfig{
