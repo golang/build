@@ -81,10 +81,10 @@ func New(rsp *remote.SessionPool, sched *schedule.Scheduler, rawCAPriKey []byte,
 func (s *Server) AddBootstrap(ctx context.Context, req *protos.AddBootstrapRequest) (*protos.AddBootstrapResponse, error) {
 	creds, err := access.IAPFromContext(ctx)
 	if err != nil {
-		log.Printf("Authenticate access.IAPFromContext(ctx) = nil, %s", err)
+		log.Printf("AddBootstrap access.IAPFromContext(ctx) = nil, %s", err)
 		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
 	}
-	ses, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
+	ses, bc, err := s.sessionAndClient(ctx, req.GetGomoteId(), creds.ID)
 	if err != nil {
 		// the helper function returns meaningful GRPC error.
 		return nil, err
@@ -230,7 +230,7 @@ func (s *Server) ListDirectory(ctx context.Context, req *protos.ListDirectoryReq
 	if req.GetGomoteId() == "" || req.GetDirectory() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid arguments")
 	}
-	_, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
+	_, bc, err := s.sessionAndClient(ctx, req.GetGomoteId(), creds.ID)
 	if err != nil {
 		// the helper function returns meaningful GRPC error.
 		return nil, err
@@ -302,7 +302,7 @@ func (s *Server) ExecuteCommand(req *protos.ExecuteCommandRequest, stream protos
 	if err != nil {
 		return status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
 	}
-	ses, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
+	ses, bc, err := s.sessionAndClient(stream.Context(), req.GetGomoteId(), creds.ID)
 	if err != nil {
 		// the helper function returns meaningful GRPC error.
 		return err
@@ -360,7 +360,7 @@ func (s *Server) ReadTGZToURL(ctx context.Context, req *protos.ReadTGZToURLReque
 	if err != nil {
 		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
 	}
-	_, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
+	_, bc, err := s.sessionAndClient(ctx, req.GetGomoteId(), creds.ID)
 	if err != nil {
 		// the helper function returns meaningful GRPC error.
 		return nil, err
@@ -405,7 +405,7 @@ func (s *Server) RemoveFiles(ctx context.Context, req *protos.RemoveFilesRequest
 	if req.GetGomoteId() == "" || len(req.GetPaths()) == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid arguments")
 	}
-	_, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
+	_, bc, err := s.sessionAndClient(ctx, req.GetGomoteId(), creds.ID)
 	if err != nil {
 		// the helper function returns meaningful GRPC error.
 		return nil, err
@@ -494,7 +494,7 @@ func (s *Server) WriteFileFromURL(ctx context.Context, req *protos.WriteFileFrom
 		log.Printf("WriteTGZFromURL access.IAPFromContext(ctx) = nil, %s", err)
 		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
 	}
-	_, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
+	_, bc, err := s.sessionAndClient(ctx, req.GetGomoteId(), creds.ID)
 	if err != nil {
 		// the helper function returns meaningful GRPC error.
 		return nil, err
@@ -550,7 +550,7 @@ func (s *Server) WriteTGZFromURL(ctx context.Context, req *protos.WriteTGZFromUR
 	if req.GetUrl() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "missing URL")
 	}
-	_, bc, err := s.sessionAndClient(req.GetGomoteId(), creds.ID)
+	_, bc, err := s.sessionAndClient(ctx, req.GetGomoteId(), creds.ID)
 	if err != nil {
 		// the helper function returns meaningful GRPC error.
 		return nil, err
@@ -585,8 +585,9 @@ func (s *Server) session(gomoteID, ownerID string) (*remote.Session, error) {
 }
 
 // sessionAndClient is a helper function that retrieves a session and buildlet client for the
-// associated gomoteID and ownerID.
-func (s *Server) sessionAndClient(gomoteID, ownerID string) (*remote.Session, buildlet.Client, error) {
+// associated gomoteID and ownerID. The gomote instance timeout is renewed if the gomote id and owner id
+// are valid.
+func (s *Server) sessionAndClient(ctx context.Context, gomoteID, ownerID string) (*remote.Session, buildlet.Client, error) {
 	session, err := s.session(gomoteID, ownerID)
 	if err != nil {
 		return nil, nil, err
@@ -594,6 +595,9 @@ func (s *Server) sessionAndClient(gomoteID, ownerID string) (*remote.Session, bu
 	bc, err := s.buildlets.BuildletClient(gomoteID)
 	if err != nil {
 		return nil, nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
+	}
+	if err := s.buildlets.KeepAlive(ctx, gomoteID); err != nil {
+		log.Printf("gomote: unable to keep alive %s: %s", gomoteID, err)
 	}
 	return session, bc, nil
 }

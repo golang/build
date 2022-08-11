@@ -222,9 +222,15 @@ func (sp *SessionPool) KeepAlive(ctx context.Context, buildletName string) error
 	if !ok {
 		return fmt.Errorf("remote buildlet does not exist=%s", buildletName)
 	}
+	s.renew()
 	go internal.PeriodicallyDo(ctx, time.Minute, func(ctx context.Context, _ time.Time) {
 		sp.mu.Lock()
-		s.renew()
+		ses, ok := sp.m[buildletName]
+		if !ok {
+			log.Printf("remote: KeepAlive unable to retrieve %s in order to renew the timeout", buildletName)
+			return
+		}
+		ses.renew()
 		sp.mu.Unlock()
 	})
 	return nil
