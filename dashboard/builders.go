@@ -2573,6 +2573,9 @@ func init() {
 		HostType:     "host-dragonfly-amd64-622",
 		Notes:        "DragonFly BSD 6.2.2, running on GCE",
 		SkipSnapshot: true,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return atLeastGo1(goBranch, 20) && buildRepoByDefault(repo)
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "freebsd-arm-paulzhol",

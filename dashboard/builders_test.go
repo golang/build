@@ -605,8 +605,6 @@ func TestBuilderConfig(t *testing.T) {
 
 		{b("dragonfly-amd64-622", "go"), onlyPost},
 		{b("dragonfly-amd64-622", "net"), onlyPost},
-		{b("dragonfly-amd64-622@go1.18", "net"), onlyPost}, // Dragonfly ABI changes supported by Go 1.14+
-		{b("dragonfly-amd64-622@go1.18", "go"), onlyPost},  // Dragonfly ABI changes supported by Go 1.14+
 
 		{b("linux-amd64-staticlockranking", "go"), onlyPost},
 		{b("linux-amd64-staticlockranking@go1.18", "go"), onlyPost},
