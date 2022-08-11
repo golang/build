@@ -120,14 +120,19 @@ func InitGCE(sc *secret.Client, basePin *atomic.Value, fn IsRemoteBuildletFunc, 
 			return fmt.Errorf("failed to get current instance hostname: %v", err)
 		}
 
-		if buildEnv.KubeBuild.Zone == "" {
+		if len(buildEnv.VMZones) == 0 || buildEnv.VMRegion == "" {
 			projectZone, err := metadata.Get("instance/zone")
 			if err != nil || projectZone == "" {
 				return fmt.Errorf("failed to get current GCE zone: %v", err)
 			}
 			// Convert the zone from "projects/1234/zones/us-central1-a" to "us-central1-a".
 			projectZone = path.Base(projectZone)
-			buildEnv.KubeBuild.Zone = projectZone
+			if len(buildEnv.VMZones) == 0 {
+				buildEnv.VMZones = []string{projectZone}
+			}
+			if buildEnv.VMRegion == "" {
+				buildEnv.VMRegion = strings.Join(strings.Split(projectZone, "-")[:2], "-")
+			}
 		}
 
 		if buildEnv.StaticIP == "" {
@@ -348,9 +353,9 @@ func (p *GCEBuildlet) pollQuotaLoop() {
 // pollQuota updates cpu usage and limits from the compute API.
 func (p *GCEBuildlet) pollQuota() {
 	gceAPIGate()
-	reg, err := computeService.Regions.Get(buildEnv.ProjectName, buildEnv.KubeBuild.Region).Do()
+	reg, err := computeService.Regions.Get(buildEnv.ProjectName, buildEnv.VMRegion).Do()
 	if err != nil {
-		log.Printf("Failed to get quota for %s/%s: %v", buildEnv.ProjectName, buildEnv.KubeBuild.Region, err)
+		log.Printf("Failed to get quota for %s/%s: %v", buildEnv.ProjectName, buildEnv.VMRegion, err)
 		return
 	}
 

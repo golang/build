@@ -77,9 +77,12 @@ type Environment struct {
 	// disabled and the coordinator serves on 8119.
 	IsProd bool
 
+	// VMRegion is the region we deploy build VMs to.
+	VMRegion string
+
 	// VMZones are the GCE zones that the VMs will be deployed to. These
 	// GCE zones will be periodically cleaned by deleting old VMs. The zones
-	// should all exist within a single region.
+	// should all exist within VMRegion.
 	VMZones []string
 
 	// StaticIP is the public, static IP address that will be attached to the
@@ -87,18 +90,8 @@ type Environment struct {
 	// up by name. This field is optional.
 	StaticIP string
 
-	// KubeBuild is the cluster that runs buildlets.
-	KubeBuild KubeConfig
 	// KubeServices is the cluster that runs the coordinator and other services.
 	KubeServices KubeConfig
-
-	// PreferContainersOnCOS controls whether we do most builds on
-	// Google's Container-Optimized OS Linux image running on a VM
-	// rather than using Kubernetes for builds. This does not
-	// affect cross-compiled builds just running make.bash. Those
-	// still use Kubernetes for now.
-	// See https://golang.org/issue/25108.
-	PreferContainersOnCOS bool
 
 	// DashURL is the base URL of the build dashboard, ending in a slash.
 	DashURL string
@@ -245,18 +238,13 @@ func ByProjectID(projectID string) *Environment {
 // For local dev, override the project with the program's flag to set
 // a custom project.
 var Staging = &Environment{
-	ProjectName:           "go-dashboard-dev",
-	ProjectNumber:         302018677728,
-	GoProjectName:         "go-dashboard-dev",
-	IsProd:                true,
-	VMZones:               []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
-	StaticIP:              "104.154.113.235",
-	PreferContainersOnCOS: true,
-	KubeBuild: KubeConfig{
-		Zone:   "us-central1-f",
-		Region: "us-central1",
-		Name:   "buildlets",
-	},
+	ProjectName:   "go-dashboard-dev",
+	ProjectNumber: 302018677728,
+	GoProjectName: "go-dashboard-dev",
+	IsProd:        true,
+	VMRegion:      "us-central1",
+	VMZones:       []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
+	StaticIP:      "104.154.113.235",
 	KubeServices: KubeConfig{
 		Zone:      "us-central1-f",
 		Region:    "us-central1",
@@ -278,18 +266,13 @@ var Staging = &Environment{
 // Production defines the environment that the coordinator and build
 // infrastructure is deployed to for production usage at build.golang.org.
 var Production = &Environment{
-	ProjectName:           "symbolic-datum-552",
-	ProjectNumber:         872405196845,
-	GoProjectName:         "golang-org",
-	IsProd:                true,
-	VMZones:               []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
-	StaticIP:              "107.178.219.46",
-	PreferContainersOnCOS: true,
-	KubeBuild: KubeConfig{
-		Zone:   "us-central1-c",
-		Region: "us-central1",
-		Name:   "buildlets",
-	},
+	ProjectName:   "symbolic-datum-552",
+	ProjectNumber: 872405196845,
+	GoProjectName: "golang-org",
+	IsProd:        true,
+	VMRegion:      "us-central1",
+	VMZones:       []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
+	StaticIP:      "107.178.219.46",
 	KubeServices: KubeConfig{
 		Region:    "us-central1",
 		Name:      "services",

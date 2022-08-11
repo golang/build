@@ -60,6 +60,7 @@ import (
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/metrics"
 	"golang.org/x/build/internal/secret"
+	"golang.org/x/build/kubernetes/gke"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/repos"
 	"golang.org/x/build/revdial/v2"
@@ -262,12 +263,16 @@ func main() {
 
 	gce := pool.NewGCEConfiguration()
 
-	// TODO(evanbrown: disable kubePool if init fails)
-	err = pool.InitKube(monitorGitMirror)
+	goKubeClient, err := gke.NewClient(context.Background(),
+		gce.BuildEnv().KubeServices.Name,
+		gce.BuildEnv().KubeServices.Location(),
+		gke.OptNamespace(gce.BuildEnv().KubeServices.Namespace),
+		gke.OptProject(gce.BuildEnv().ProjectName),
+		gke.OptTokenSource(gce.GCPCredentials().TokenSource))
 	if err != nil {
-		pool.KubeSetErr(err)
-		log.Printf("Kube support disabled due to error initializing Kubernetes: %v", err)
+		log.Fatalf("connecting to GKE failed: %v", err)
 	}
+	go monitorGitMirror(goKubeClient)
 
 	if *mode == "prod" || (*mode == "dev" && *devEnableEC2) {
 		// TODO(golang.org/issues/38337) the coordinator will use a package scoped pool
@@ -382,9 +387,6 @@ func main() {
 		go findWorkLoop()
 	} else {
 		go gce.BuildletPool().CleanUpOldVMs()
-		if pool.KubeErr() == nil {
-			go pool.KubePool().CleanUpOldPodsLoop(context.Background())
-		}
 
 		if gce.InStaging() {
 			dashboard.Builders = stagingClusterBuilders()

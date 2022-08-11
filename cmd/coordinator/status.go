@@ -38,6 +38,7 @@ import (
 	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/internal/secret"
+	"golang.org/x/build/kubernetes"
 	"golang.org/x/build/kubernetes/api"
 	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
@@ -182,9 +183,9 @@ var gitMirrorStatus = struct {
 	Warnings []string
 }{Warnings: []string{"still checking"}}
 
-func monitorGitMirror() {
+func monitorGitMirror(kcl *kubernetes.Client) {
 	for {
-		errs, warns := gitMirrorErrors()
+		errs, warns := gitMirrorErrors(kcl)
 		gitMirrorStatus.Lock()
 		gitMirrorStatus.Errors, gitMirrorStatus.Warnings = errs, warns
 		gitMirrorStatus.Unlock()
@@ -194,12 +195,10 @@ func monitorGitMirror() {
 
 // gitMirrorErrors queries the status pages of all
 // running gitmirror instances and reports errors.
-//
-// It makes use of pool.KubeGoClient() to do the query.
-func gitMirrorErrors() (errs, warns []string) {
+func gitMirrorErrors(kcl *kubernetes.Client) (errs, warns []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	pods, err := pool.KubeGoClient().GetPods(ctx)
+	pods, err := kcl.GetPods(ctx)
 	if err != nil {
 		log.Println("gitMirrorErrors: goKubeClient.GetPods:", err)
 		return []string{"failed to get pods; can't query gitmirror status"}, nil
@@ -698,10 +697,6 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	data.EC2PoolStatus = template.HTML(buf.String())
 	buf.Reset()
 
-	pool.KubePool().WriteHTMLStatus(&buf)
-	data.KubePoolStatus = template.HTML(buf.String())
-	buf.Reset()
-
 	pool.ReversePool().WriteHTMLStatus(&buf)
 	data.ReversePoolStatus = template.HTML(buf.String())
 
@@ -767,7 +762,6 @@ type statusData struct {
 	Trybots           template.HTML
 	GCEPoolStatus     template.HTML // TODO: embed template
 	EC2PoolStatus     template.HTML // TODO: embed template
-	KubePoolStatus    template.HTML // TODO: embed template
 	ReversePoolStatus template.HTML // TODO: embed template
 	RemoteBuildlets   template.HTML
 	GomoteInstances   template.HTML

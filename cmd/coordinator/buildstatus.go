@@ -326,9 +326,6 @@ func (st *buildStatus) forceSnapshotUsage() {
 }
 
 func (st *buildStatus) getCrossCompileConfig() *dashboard.CrossCompileConfig {
-	if pool.KubeErr() != nil {
-		return nil
-	}
 	config := st.conf.CrossCompileConfig
 	if config == nil {
 		return nil
@@ -698,7 +695,7 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompil
 	ctx, cancel := context.WithCancel(st.ctx)
 	defer cancel()
 	sp := st.CreateSpan("get_buildlet_cross")
-	kubeBC, err := sched.GetBuildlet(ctx, &queue.SchedItem{
+	bc, err := sched.GetBuildlet(ctx, &queue.SchedItem{
 		HostType:   config.CompileHostType,
 		IsTry:      st.trySet != nil,
 		BuilderRev: st.BuilderRev,
@@ -713,18 +710,18 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompil
 		go st.reportErr(err)
 		return err
 	}
-	defer kubeBC.Close()
+	defer bc.Close()
 
-	if err := st.writeGoSourceTo(kubeBC, st.Rev, "go"); err != nil {
+	if err := st.writeGoSourceTo(bc, st.Rev, "go"); err != nil {
 		return err
 	}
 
-	makeSpan := st.CreateSpan("make_cross_compile_kube")
+	makeSpan := st.CreateSpan("make_cross_compile")
 	defer func() { makeSpan.Done(err) }()
 
 	goos, goarch := st.conf.GOOS(), st.conf.GOARCH()
 
-	remoteErr, err := kubeBC.Exec(st.ctx, "/bin/bash", buildlet.ExecOpts{
+	remoteErr, err := bc.Exec(st.ctx, "/bin/bash", buildlet.ExecOpts{
 		SystemLevel: true,
 		Args: []string{
 			"-c",
@@ -756,7 +753,7 @@ func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompil
 		return fmt.Errorf("remote error: %v", remoteErr)
 	}
 
-	if err := st.doSnapshot(kubeBC); err != nil {
+	if err := st.doSnapshot(bc); err != nil {
 		return err
 	}
 

@@ -82,7 +82,7 @@ func (c *Client) MakeBasepinDisks(ctx context.Context) error {
 				delete(need, d.SourceImage)
 				continue
 			}
-			if zone != c.Env.KubeBuild.Zone {
+			if zone != c.Env.VMZones[0] {
 				log.Printf("basepin: deleting unnecessary disk %v in zone %v", d.Name, zone)
 				op, err := svc.Disks.Delete(c.Env.ProjectName, zone, d.Name).Do()
 				if err != nil {

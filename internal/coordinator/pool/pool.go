@@ -126,14 +126,8 @@ func ForHost(conf *dashboard.HostConfig) Buildlet {
 	switch {
 	case conf.IsEC2():
 		return EC2BuildetPool()
-	case conf.IsVM():
+	case conf.IsVM(), conf.IsContainer():
 		return NewGCEConfiguration().BuildletPool()
-	case conf.IsContainer():
-		if NewGCEConfiguration().BuildEnv().PreferContainersOnCOS || KubeErr() != nil {
-			return NewGCEConfiguration().BuildletPool() // it also knows how to do containers.
-		} else {
-			return KubePool()
-		}
 	case conf.IsReverse:
 		return ReversePool()
 	default:
