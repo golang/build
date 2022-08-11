@@ -598,7 +598,8 @@ func (q *Queries) UpdateTaskReadyForApproval(ctx context.Context, arg UpdateTask
 }
 
 const upsertTask = `-- name: UpsertTask :one
-INSERT INTO tasks (workflow_id, name, started, finished, result, error, created_at, updated_at, retry_count)
+INSERT INTO tasks (workflow_id, name, started, finished, result, error, created_at, updated_at,
+                   retry_count)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (workflow_id, name) DO UPDATE
     SET workflow_id = excluded.workflow_id,
@@ -675,6 +676,18 @@ func (q *Queries) Workflow(ctx context.Context, id uuid.UUID) (Workflow, error) 
 	return i, err
 }
 
+const workflowCount = `-- name: WorkflowCount :one
+SELECT COUNT(*)
+FROM workflows
+`
+
+func (q *Queries) WorkflowCount(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, workflowCount)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const workflowFinished = `-- name: WorkflowFinished :one
 UPDATE workflows
 SET finished   = $2,
@@ -715,6 +728,38 @@ func (q *Queries) WorkflowFinished(ctx context.Context, arg WorkflowFinishedPara
 	return i, err
 }
 
+const workflowSidebar = `-- name: WorkflowSidebar :many
+SELECT name, COUNT(*)
+FROM workflows
+GROUP BY name
+ORDER BY name
+`
+
+type WorkflowSidebarRow struct {
+	Name  sql.NullString
+	Count int64
+}
+
+func (q *Queries) WorkflowSidebar(ctx context.Context) ([]WorkflowSidebarRow, error) {
+	rows, err := q.db.Query(ctx, workflowSidebar)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkflowSidebarRow
+	for rows.Next() {
+		var i WorkflowSidebarRow
+		if err := rows.Scan(&i.Name, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const workflows = `-- name: Workflows :many
 
 SELECT id, params, name, created_at, updated_at, finished, output, error
@@ -727,6 +772,42 @@ ORDER BY created_at DESC
 // license that can be found in the LICENSE file.
 func (q *Queries) Workflows(ctx context.Context) ([]Workflow, error) {
 	rows, err := q.db.Query(ctx, workflows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Workflow
+	for rows.Next() {
+		var i Workflow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Params,
+			&i.Name,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Finished,
+			&i.Output,
+			&i.Error,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const workflowsByName = `-- name: WorkflowsByName :many
+SELECT id, params, name, created_at, updated_at, finished, output, error
+FROM workflows
+WHERE name = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) WorkflowsByName(ctx context.Context, name sql.NullString) ([]Workflow, error) {
+	rows, err := q.db.Query(ctx, workflowsByName, name)
 	if err != nil {
 		return nil, err
 	}

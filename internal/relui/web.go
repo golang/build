@@ -31,9 +31,10 @@ import (
 
 // SiteHeader configures the relui site header.
 type SiteHeader struct {
-	Title    string // Site title. For example, "Go Releases".
-	CSSClass string // Site header CSS class name. Optional.
-	Subtitle string
+	Title     string // Site title. For example, "Go Releases".
+	CSSClass  string // Site header CSS class name. Optional.
+	Subtitle  string
+	NameParam string
 }
 
 // Server implements the http handlers for relui.
@@ -64,10 +65,12 @@ func NewServer(p db.PGDBTX, w *Worker, baseURL *url.URL, header SiteHeader, ms *
 		header:  header,
 	}
 	helpers := map[string]interface{}{
+		"allWorkflowsCount":     s.allWorkflowsCount,
 		"baseLink":              s.BaseLink,
 		"hasPrefix":             strings.HasPrefix,
 		"pathBase":              path.Base,
 		"prettySize":            prettySize,
+		"sidebarWorkflows":      s.sidebarWorkflows,
 		"unmarshalResultDetail": unmarshalResultDetail,
 		"workflowParams":        workflowParams,
 	}
@@ -90,6 +93,22 @@ func NewServer(p db.PGDBTX, w *Worker, baseURL *url.URL, header SiteHeader, ms *
 		s.bm.Handle("/", s.m)
 	}
 	return s
+}
+
+func (s *Server) allWorkflowsCount() int64 {
+	count, err := db.New(s.db).WorkflowCount(context.Background())
+	if err != nil {
+		panic(fmt.Sprintf("allWorkflowsCount: %q", err))
+	}
+	return count
+}
+
+func (s *Server) sidebarWorkflows() []db.WorkflowSidebarRow {
+	sb, err := db.New(s.db).WorkflowSidebar(context.Background())
+	if err != nil {
+		panic(fmt.Sprintf("sidebarWorkflows: %q", err))
+	}
+	return sb
 }
 
 func (s *Server) mustLookup(name string) *template.Template {
@@ -146,13 +165,25 @@ func workflowParams(wf db.Workflow) (map[string]string, error) {
 // homeHandler renders the homepage.
 func (s *Server) homeHandler(w http.ResponseWriter, r *http.Request) {
 	q := db.New(s.db)
-	ws, err := q.Workflows(r.Context())
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		name = "all"
+	}
+	hr := &homeResponse{SiteHeader: s.header}
+	hr.SiteHeader.NameParam = name
+
+	var err error
+	var ws []db.Workflow
+	if name != "all" {
+		ws, err = q.WorkflowsByName(r.Context(), sql.NullString{String: name, Valid: true})
+	} else {
+		ws, err = q.Workflows(r.Context())
+	}
 	if err != nil {
 		log.Printf("homeHandler: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	hr := &homeResponse{SiteHeader: s.header}
 	for _, w := range ws {
 		if _, ok := s.w.running[w.ID.String()]; ok {
 			hr.ActiveWorkflows = append(hr.ActiveWorkflows, w)
@@ -221,6 +252,7 @@ func (s *Server) buildShowWorkflowResponse(ctx context.Context, id uuid.UUID) (*
 		Workflow:   w,
 	}
 	sr.SiteHeader.Subtitle = w.Name.String
+	sr.SiteHeader.NameParam = w.Name.String
 	for _, l := range tlogs {
 		sr.TaskLogs[l.TaskName] = append(sr.TaskLogs[l.TaskName], l)
 	}

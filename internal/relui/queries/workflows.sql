@@ -7,10 +7,26 @@ SELECT *
 FROM workflows
 ORDER BY created_at DESC;
 
+-- name: WorkflowsByName :many
+SELECT *
+FROM workflows
+WHERE name = $1
+ORDER BY created_at DESC;
+
 -- name: Workflow :one
 SELECT *
 FROM workflows
 WHERE id = $1;
+
+-- name: WorkflowCount :one
+SELECT COUNT(*)
+FROM workflows;
+
+-- name: WorkflowSidebar :many
+SELECT name, COUNT(*)
+FROM workflows
+GROUP BY name
+ORDER BY name;
 
 -- name: CreateWorkflow :one
 INSERT INTO workflows (id, params, name, created_at, updated_at)
@@ -24,7 +40,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *;
 
 -- name: UpsertTask :one
-INSERT INTO tasks (workflow_id, name, started, finished, result, error, created_at, updated_at, retry_count)
+INSERT INTO tasks (workflow_id, name, started, finished, result, error, created_at, updated_at,
+                   retry_count)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (workflow_id, name) DO UPDATE
     SET workflow_id = excluded.workflow_id,

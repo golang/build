@@ -151,11 +151,14 @@ func TestServerNewWorkflowHandler(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
 			u := url.URL{Path: "/new_workflow", RawQuery: c.params.Encode()}
 			req := httptest.NewRequest(http.MethodGet, u.String(), nil)
 			w := httptest.NewRecorder()
 
-			s := NewServer(nil, NewWorker(NewDefinitionHolder(), nil, nil), nil, SiteHeader{}, nil)
+			s := NewServer(testDB(ctx, t), NewWorker(NewDefinitionHolder(), nil, nil), nil, SiteHeader{}, nil)
 			s.newWorkflowHandler(w, req)
 			resp := w.Result()
 

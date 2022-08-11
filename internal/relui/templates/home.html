@@ -9,7 +9,13 @@
   {{- /* gotype: golang.org/x/build/internal/relui.homeResponse */ -}}
   <section class="Workflows">
     <div class="Workflows-header">
-      <h2>Workflows</h2>
+      <h2>
+      {{if ne .SiteHeader.NameParam "all"}}
+        {{.SiteHeader.NameParam}}
+      {{else}}
+        Workflows
+      {{end}}
+      </h2>
       <a href="{{baseLink "/new_workflow"}}" class="Button">New</a>
     </div>
     <h2>Active Workflows</h2>

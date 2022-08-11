@@ -4,6 +4,7 @@
     license that can be found in the LICENSE file.
 -->
 {{define "layout"}}
+{{- /*gotype: golang.org/x/build/internal/relui.homeResponse*/ -}}
 <!DOCTYPE html>
 <html lang="en">
   <title>{{with .SiteHeader.Subtitle}}{{.}}{{else}}{{.SiteHeader.Title}}{{end}}</title>
@@ -16,9 +17,23 @@
         <h1 class="Header-title"><a href="{{baseLink "/"}}" class="Header-link">{{.SiteHeader.Title}}</a></h1>
       </div>
     </header>
-    <main class="Site-content">
-      {{block "content" .}}{{end}}
-    </main>
+    <div class="Site-bodyWrapper">
+      <nav class="Site-navigation">
+        {{$name := .SiteHeader.NameParam}}
+        <a href="{{baseLink "/"}}" class="Site-navigationRow {{if eq $name "all"}}Site-navigationRow--active{{end}}">
+          All Workflows ({{allWorkflowsCount}})
+        </a>
+        {{range sidebarWorkflows}}
+          {{- /*gotype: golang.org/x/build/internal/relui/db.WorkflowSidebarRow*/ -}}
+          <a href="/?name={{.Name.String}}" class="Site-navigationRow {{if eq $name .Name.String}}Site-navigationRow--active{{end}}">
+            {{.Name.String}} ({{.Count}})
+          </a>
+        {{end}}
+      </nav>
+      <main class="Site-content">
+        {{block "content" .}}{{end}}
+      </main>
+    </div>
   </body>
 </html>
 {{end}}

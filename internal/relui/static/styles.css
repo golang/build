@@ -13,6 +13,7 @@ html,
   height: 100%;
 }
 .Site {
+  align-items: stretch;
   display: flex;
   flex-direction: column;
   font-family: sans-serif;
@@ -41,11 +42,44 @@ h6 {
   letter-spacing: 0.08rem;
 }
 .Site-content {
-  flex: 1 0 auto;
-  width: 100%;
+  flex: 1 auto;
 }
 .Site-header {
   flex: none;
+}
+.Site-bodyWrapper {
+  align-items: stretch;
+  display: flex;
+  flex: 1;
+}
+.Site-navigation {
+  border-right: 0.0625rem solid #ccc;
+  flex: 1 0 13.125rem;
+  max-width: 13.125rem;
+  padding-top: 0.9375rem;
+}
+.Site-navigationRow {
+  color: #616161;
+  display: block;
+  font-size: 0.875rem;
+  padding: 0.75rem 0.125rem 0.75rem 0.9625rem;
+}
+.Site-navigationRow:hover {
+  background-color: #ebf3f8;
+  color: #2e2d2c;
+  cursor: pointer;
+  text-decoration: none;
+}
+.Site-navigationRow--active {
+  background-color: #bde2ee;
+  border-left: 0.375rem solid #00add8;
+  color: #2e2d2c;
+  font-weight: 600;
+  padding-left: 0.5875rem;
+}
+.Site-navigationRow--active:hover {
+  background-color: #ebf3f8;
+  color: #2e2d2c;
 }
 .Header {
   background: #d6d6d6;
