@@ -107,9 +107,7 @@ or the empty string if only one minor release was made.`,
 
 		sentMail := wf.Task3(wd, "mail-announcement", tasks.AnnounceRelease, wf.Slice(v1, v2), securityFixes, names)
 		announcementURL := wf.Task1(wd, "await-announcement", tasks.AwaitAnnounceMail, sentMail)
-		tweetURL := wf.Task4(wd, "post-tweet", func(ctx *wf.TaskContext, v1, v2, sec, ann string) (string, error) {
-			return tasks.TweetRelease(ctx, task.ReleaseTweet{Version: v1, SecondaryVersion: v2, Security: sec, Announcement: ann})
-		}, v1, v2, securitySummary, announcementURL)
+		tweetURL := wf.Task3(wd, "post-tweet", tasks.TweetRelease, wf.Slice(v1, v2), securitySummary, announcementURL)
 
 		wf.Output(wd, "AnnouncementURL", announcementURL)
 		wf.Output(wd, "TweetURL", tweetURL)
@@ -126,9 +124,7 @@ or the empty string if only one minor release was made.`,
 
 		sentMail := wf.Task3(wd, "mail-announcement", tasks.AnnounceRelease, wf.Slice(v), wf.Slice[string](), names)
 		announcementURL := wf.Task1(wd, "await-announcement", tasks.AwaitAnnounceMail, sentMail)
-		tweetURL := wf.Task2(wd, "post-tweet", func(ctx *wf.TaskContext, v, ann string) (string, error) {
-			return tasks.TweetRelease(ctx, task.ReleaseTweet{Version: v, Announcement: ann})
-		}, v, announcementURL)
+		tweetURL := wf.Task3(wd, "post-tweet", tasks.TweetRelease, wf.Slice(v), wf.Const(""), announcementURL)
 
 		wf.Output(wd, "AnnouncementURL", announcementURL)
 		wf.Output(wd, "TweetURL", tweetURL)
@@ -145,9 +141,7 @@ or the empty string if only one minor release was made.`,
 
 		sentMail := wf.Task3(wd, "mail-announcement", tasks.AnnounceRelease, wf.Slice(v), wf.Slice[string](), names)
 		announcementURL := wf.Task1(wd, "await-announcement", tasks.AwaitAnnounceMail, sentMail)
-		tweetURL := wf.Task2(wd, "post-tweet", func(ctx *wf.TaskContext, v, ann string) (string, error) {
-			return tasks.TweetRelease(ctx, task.ReleaseTweet{Version: v, Announcement: ann})
-		}, v, announcementURL)
+		tweetURL := wf.Task3(wd, "post-tweet", tasks.TweetRelease, wf.Slice(v), wf.Const(""), announcementURL)
 
 		wf.Output(wd, "AnnouncementURL", announcementURL)
 		wf.Output(wd, "TweetURL", tweetURL)
@@ -164,9 +158,7 @@ or the empty string if only one minor release was made.`,
 
 		sentMail := wf.Task3(wd, "mail-announcement", tasks.AnnounceRelease, wf.Slice(v), wf.Slice[string](), names)
 		announcementURL := wf.Task1(wd, "await-announcement", tasks.AwaitAnnounceMail, sentMail)
-		tweetURL := wf.Task1(wd, "post-tweet", func(ctx *wf.TaskContext, v string) (string, error) {
-			return tasks.TweetRelease(ctx, task.ReleaseTweet{Version: v})
-		}, v)
+		tweetURL := wf.Task3(wd, "post-tweet", tasks.TweetRelease, wf.Slice(v), wf.Const(""), announcementURL)
 
 		wf.Output(wd, "AnnouncementURL", announcementURL)
 		wf.Output(wd, "TweetURL", tweetURL)
@@ -418,9 +410,7 @@ func addCommTasksForDoubleMinorRelease(
 	// Announce that a new Go release has been published.
 	sentMail := wf.Task3(wd, "mail-announcement", comm.AnnounceRelease, wf.Slice(v1, v2), securityFixes, names, wf.After(okayToAnnounceAndTweet))
 	announcementURL := wf.Task1(wd, "await-announcement", comm.AwaitAnnounceMail, sentMail)
-	tweetURL := wf.Task4(wd, "post-tweet", func(ctx *wf.TaskContext, v1, v2, sec, ann string) (string, error) {
-		return comm.TweetRelease(ctx, task.ReleaseTweet{Version: v1, SecondaryVersion: v2, Security: sec, Announcement: ann})
-	}, v1, v2, securitySummary, announcementURL, wf.After(okayToAnnounceAndTweet))
+	tweetURL := wf.Task3(wd, "post-tweet", comm.TweetRelease, wf.Slice(v1, v2), securitySummary, announcementURL, wf.After(okayToAnnounceAndTweet))
 
 	wf.Output(wd, "Announcement URL", announcementURL)
 	wf.Output(wd, "Tweet URL", tweetURL)
@@ -434,9 +424,7 @@ func addCommTasksForSingleRelease(
 	// Announce that a new Go release has been published.
 	sentMail := wf.Task3(wd, "mail-announcement", comm.AnnounceRelease, wf.Slice(version), securityFixes, names, wf.After(okayToAnnounceAndTweet))
 	announcementURL := wf.Task1(wd, "await-announcement", comm.AwaitAnnounceMail, sentMail)
-	tweetURL := wf.Task3(wd, "post-tweet", func(ctx *wf.TaskContext, v, sec, ann string) (string, error) {
-		return comm.TweetRelease(ctx, task.ReleaseTweet{Version: v, Security: sec, Announcement: ann})
-	}, version, securitySummary, announcementURL, wf.After(okayToAnnounceAndTweet))
+	tweetURL := wf.Task3(wd, "post-tweet", comm.TweetRelease, wf.Slice(version), securitySummary, announcementURL, wf.After(okayToAnnounceAndTweet))
 
 	wf.Output(wd, "Announcement URL", announcementURL)
 	wf.Output(wd, "Tweet URL", tweetURL)

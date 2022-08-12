@@ -30,19 +30,19 @@ func TestTweetRelease(t *testing.T) {
 	}
 
 	tests := [...]struct {
-		name    string
-		in      ReleaseTweet
-		wantLog string
+		name         string
+		versions     []string
+		security     string
+		announcement string
+		randomSeed   int64
+		wantLog      string
 	}{
 		{
-			name: "minor",
-			in: ReleaseTweet{
-				Version:          "go1.17.1",
-				SecondaryVersion: "go1.16.8",
-				Security:         "Includes security fixes for A and B.",
-				Announcement:     "https://groups.google.com/g/golang-announce/c/dx9d7IOseHw/m/KNH37k37AAAJ",
-				RandomSeed:       234,
-			},
+			name:         "minor",
+			versions:     []string{"go1.17.1", "go1.16.8"},
+			security:     "Includes security fixes for A and B.",
+			announcement: "https://groups.google.com/g/golang-announce/c/dx9d7IOseHw/m/KNH37k37AAAJ",
+			randomSeed:   234,
 			wantLog: `tweet text:
 🎊 Go 1.17.1 and 1.16.8 are released!
 
@@ -65,12 +65,10 @@ $ go1.17.1 version
 go version go1.17.1 linux/arm64` + "\n",
 		},
 		{
-			name: "minor-solo",
-			in: ReleaseTweet{
-				Version:      "go1.11.1",
-				Announcement: "https://groups.google.com/g/golang-announce/c/pFXKAfoVJqw",
-				RandomSeed:   23,
-			},
+			name:         "minor-solo",
+			versions:     []string{"go1.11.1"},
+			announcement: "https://groups.google.com/g/golang-announce/c/pFXKAfoVJqw",
+			randomSeed:   23,
 			wantLog: `tweet text:
 🎆 Go 1.11.1 is released!
 
@@ -91,12 +89,10 @@ $ go1.11.1 version
 go version go1.11.1 darwin/amd64` + "\n",
 		},
 		{
-			name: "beta",
-			in: ReleaseTweet{
-				Version:      "go1.17beta1",
-				Announcement: "https://groups.google.com/g/golang-announce/c/i4EliPDV9Ok/m/MxA-nj53AAAJ",
-				RandomSeed:   678,
-			},
+			name:         "beta",
+			versions:     []string{"go1.17beta1"},
+			announcement: "https://groups.google.com/g/golang-announce/c/i4EliPDV9Ok/m/MxA-nj53AAAJ",
+			randomSeed:   678,
 			wantLog: `tweet text:
 ⚡️ Go 1.17 Beta 1 is released!
 
@@ -119,12 +115,10 @@ $ go1.17beta1 version
 go version go1.17beta1 darwin/amd64` + "\n",
 		},
 		{
-			name: "rc",
-			in: ReleaseTweet{
-				Version:      "go1.17rc2",
-				Announcement: "https://groups.google.com/g/golang-announce/c/yk30ovJGXWY/m/p9uUnKbbBQAJ",
-				RandomSeed:   456,
-			},
+			name:         "rc",
+			versions:     []string{"go1.17rc2"},
+			announcement: "https://groups.google.com/g/golang-announce/c/yk30ovJGXWY/m/p9uUnKbbBQAJ",
+			randomSeed:   456,
 			wantLog: `tweet text:
 🎉 Go 1.17 Release Candidate 2 is released!
 
@@ -147,12 +141,10 @@ $ go1.17rc2 version
 go version go1.17rc2 windows/arm64` + "\n",
 		},
 		{
-			name: "major",
-			in: ReleaseTweet{
-				Version:    "go1.17",
-				Security:   "Includes a super duper security fix (CVE-123).",
-				RandomSeed: 123,
-			},
+			name:       "major",
+			versions:   []string{"go1.17"},
+			security:   "Includes a super duper security fix (CVE-123).",
+			randomSeed: 123,
 			wantLog: `tweet text:
 🥳 Go 1.17 is released!
 
@@ -181,7 +173,7 @@ go version go1.17 freebsd/amd64` + "\n",
 			// doesn't actually try to tweet, but capture its log.
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			tweetURL, err := (TweetTasks{}).TweetRelease(ctx, tc.in)
+			tweetURL, err := (TweetTasks{RandomSeed: tc.randomSeed}).TweetRelease(ctx, tc.versions, tc.security, tc.announcement)
 			if err != nil {
 				t.Fatal("got a non-nil error:", err)
 			}

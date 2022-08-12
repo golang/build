@@ -33,8 +33,8 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-// ReleaseTweet describes a tweet that announces a Go release.
-type ReleaseTweet struct {
+// releaseTweet describes a tweet that announces a Go release.
+type releaseTweet struct {
 	// Version is the Go version that has been released.
 	//
 	// The version string must use the same format as Go tags. For example:
@@ -64,18 +64,6 @@ type ReleaseTweet struct {
 	// since major releases point to release notes instead.
 	// For example, "https://groups.google.com/g/golang-announce/c/wB1fph5RpsE/m/ZGwOsStwAwAJ".
 	Announcement string
-
-	// RandomSeed is the pseudo-random number generator seed to use for presentational
-	// choices, such as selecting one out of many available emoji or release archives.
-	// The zero value means to use time.Now().UnixNano().
-	RandomSeed int64
-}
-
-func (r ReleaseTweet) seed() int64 {
-	if r.RandomSeed == 0 {
-		return time.Now().UnixNano()
-	}
-	return r.RandomSeed
 }
 
 // TweetTasks contains tasks related to the release tweet.
@@ -89,18 +77,34 @@ type TweetTasks struct {
 		// due to the tweet text length exceeding Twitter's limit.
 		PostTweet(text string, imagePNG []byte) (tweetURL string, _ error)
 	}
+
+	// RandomSeed is the pseudo-random number generator seed to use for presentational
+	// choices, such as selecting one out of many available emoji or release archives.
+	// The zero value means to use time.Now().UnixNano().
+	RandomSeed int64
 }
 
 // TweetRelease posts a tweet announcing a Go release.
 // ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func (t TweetTasks) TweetRelease(ctx *workflow.TaskContext, r ReleaseTweet) (tweetURL string, _ error) {
-	if err := oneOrTwoGoVersions([]string{r.Version}); err != nil {
-		return "", err
-	} else if err := oneOrTwoGoVersions([]string{r.SecondaryVersion}); r.SecondaryVersion != "" && err != nil {
+func (t TweetTasks) TweetRelease(ctx *workflow.TaskContext, versions []string, security string, announcement string) (tweetURL string, _ error) {
+	if err := oneOrTwoGoVersions(versions); err != nil {
 		return "", err
 	}
 
-	rnd := rand.New(rand.NewSource(r.seed()))
+	r := releaseTweet{
+		Version:      versions[0],
+		Security:     security,
+		Announcement: announcement,
+	}
+	if len(versions) == 2 {
+		r.SecondaryVersion = versions[1]
+	}
+
+	seed := t.RandomSeed
+	if seed == 0 {
+		seed = time.Now().UnixNano()
+	}
+	rnd := rand.New(rand.NewSource(seed))
 
 	// Generate tweet text.
 	tweetText, err := tweetText(r, rnd)
@@ -127,7 +131,7 @@ func (t TweetTasks) TweetRelease(ctx *workflow.TaskContext, r ReleaseTweet) (twe
 
 // tweetText generates the text to use in the announcement
 // tweet for release r.
-func tweetText(r ReleaseTweet, rnd *rand.Rand) (string, error) {
+func tweetText(r releaseTweet, rnd *rand.Rand) (string, error) {
 	// Parse the tweet text template
 	// using rnd for emoji selection.
 	t, err := template.New("").Funcs(template.FuncMap{
@@ -152,37 +156,37 @@ func tweetText(r ReleaseTweet, rnd *rand.Rand) (string, error) {
 	if i := strings.Index(r.Version, "beta"); i != -1 { // A beta release.
 		name, data = "beta", struct {
 			Maj, Beta string
-			ReleaseTweet
+			releaseTweet
 		}{
 			Maj:          r.Version[len("go"):i],
 			Beta:         r.Version[i+len("beta"):],
-			ReleaseTweet: r,
+			releaseTweet: r,
 		}
 	} else if i := strings.Index(r.Version, "rc"); i != -1 { // Release Candidate.
 		name, data = "rc", struct {
 			Maj, RC string
-			ReleaseTweet
+			releaseTweet
 		}{
 			Maj:          r.Version[len("go"):i],
 			RC:           r.Version[i+len("rc"):],
-			ReleaseTweet: r,
+			releaseTweet: r,
 		}
 	} else if strings.Count(r.Version, ".") == 1 { // Major release like "go1.X".
 		name, data = "major", struct {
 			Maj string
-			ReleaseTweet
+			releaseTweet
 		}{
 			Maj:          r.Version[len("go"):],
-			ReleaseTweet: r,
+			releaseTweet: r,
 		}
 	} else if strings.Count(r.Version, ".") == 2 { // Minor release like "go1.X.Y".
 		name, data = "minor", struct {
 			Curr, Prev string
-			ReleaseTweet
+			releaseTweet
 		}{
 			Curr:         r.Version[len("go"):],
 			Prev:         strings.TrimPrefix(r.SecondaryVersion, "go"),
-			ReleaseTweet: r,
+			releaseTweet: r,
 		}
 	} else {
 		return "", fmt.Errorf("unknown version format: %q", r.Version)
