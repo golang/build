@@ -168,10 +168,7 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	deps := newReleaseTestDeps(t, wantVersion)
 	wd := workflow.New()
-	v, err := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, kind)
-	if err != nil {
-		t.Fatal(err)
-	}
+	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, kind)
 	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
@@ -287,10 +284,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 
 	// Run the release.
 	wd := workflow.New()
-	v, err := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, task.KindRC)
-	if err != nil {
-		t.Fatal(err)
-	}
+	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, task.KindRC)
 	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
@@ -333,10 +327,7 @@ func TestAdvisoryTrybotFail(t *testing.T) {
 
 	// Run the release.
 	wd := workflow.New()
-	v, err := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, task.KindRC)
-	if err != nil {
-		t.Fatal(err)
-	}
+	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, task.KindRC)
 	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{

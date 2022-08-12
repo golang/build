@@ -82,23 +82,18 @@ func (h *DefinitionHolder) Definitions() map[string]*wf.Definition {
 // This is superseded by RegisterReleaseWorkflows and will be removed
 // after some time, when we confirm there's no need for separate workflows.
 func RegisterCommunicationDefinitions(h *DefinitionHolder, tasks task.CommunicationTasks) {
-	version := wf.ParamDef[string]{
-		Name: "Version",
-		Doc: `Version is the Go version that has been released.
-
-The version string must use the same format as Go tags.`,
-	}
-
 	{
 		wd := wf.New()
+		v1 := wf.Param(wd, wf.ParamDef[string]{
+			Name: "Version",
+			Doc: `Version is the Go version that has been released.
 
-		minorVersion := version
-		minorVersion.Example = "go1.18.2"
-		v1 := wf.Param(wd, minorVersion)
+	The version string must use the same format as Go tags.`,
+			Example: "go1.18.2",
+		})
 		v2 := wf.Param(wd, wf.ParamDef[string]{
-			Name: "Secondary Version (optional)",
-			Doc: `Secondary Version is an older Go version that was also released,
-or the empty string if only one minor release was made.`,
+			Name:    "Secondary Version",
+			Doc:     `Secondary Version is an older Go version that was also released.`,
 			Example: "go1.17.10",
 		})
 		securitySummary := wf.Param(wd, securitySummaryParameter)
@@ -112,14 +107,17 @@ or the empty string if only one minor release was made.`,
 		wf.Output(wd, "AnnouncementURL", announcementURL)
 		wf.Output(wd, "TweetURL", tweetURL)
 
-		h.RegisterDefinition("announce-and-tweet-minor", wd)
+		h.RegisterDefinition("announce-and-tweet-double-minor", wd)
 	}
 	{
 		wd := wf.New()
+		v := wf.Param(wd, wf.ParamDef[string]{
+			Name: "Version",
+			Doc: `Version is the Go version that has been released.
 
-		betaVersion := version
-		betaVersion.Example = "go1.19beta1"
-		v := wf.Param(wd, betaVersion)
+	The version string must use the same format as Go tags.`,
+			Example: "go1.19beta1",
+		})
 		names := wf.Param(wd, releaseCoordinatorNames)
 
 		sentMail := wf.Task3(wd, "mail-announcement", tasks.AnnounceRelease, wf.Slice(v), wf.Slice[string](), names)
@@ -129,41 +127,7 @@ or the empty string if only one minor release was made.`,
 		wf.Output(wd, "AnnouncementURL", announcementURL)
 		wf.Output(wd, "TweetURL", tweetURL)
 
-		h.RegisterDefinition("announce-and-tweet-beta", wd)
-	}
-	{
-		wd := wf.New()
-
-		rcVersion := version
-		rcVersion.Example = "go1.19rc1"
-		v := wf.Param(wd, rcVersion)
-		names := wf.Param(wd, releaseCoordinatorNames)
-
-		sentMail := wf.Task3(wd, "mail-announcement", tasks.AnnounceRelease, wf.Slice(v), wf.Slice[string](), names)
-		announcementURL := wf.Task1(wd, "await-announcement", tasks.AwaitAnnounceMail, sentMail)
-		tweetURL := wf.Task3(wd, "post-tweet", tasks.TweetRelease, wf.Slice(v), wf.Const(""), announcementURL)
-
-		wf.Output(wd, "AnnouncementURL", announcementURL)
-		wf.Output(wd, "TweetURL", tweetURL)
-
-		h.RegisterDefinition("announce-and-tweet-rc", wd)
-	}
-	{
-		wd := wf.New()
-
-		majorVersion := version
-		majorVersion.Example = "go1.19"
-		v := wf.Param(wd, majorVersion)
-		names := wf.Param(wd, releaseCoordinatorNames)
-
-		sentMail := wf.Task3(wd, "mail-announcement", tasks.AnnounceRelease, wf.Slice(v), wf.Slice[string](), names)
-		announcementURL := wf.Task1(wd, "await-announcement", tasks.AwaitAnnounceMail, sentMail)
-		tweetURL := wf.Task3(wd, "post-tweet", tasks.TweetRelease, wf.Slice(v), wf.Const(""), announcementURL)
-
-		wf.Output(wd, "AnnouncementURL", announcementURL)
-		wf.Output(wd, "TweetURL", tweetURL)
-
-		h.RegisterDefinition("announce-and-tweet-major", wd)
+		h.RegisterDefinition("announce-and-tweet-single", wd)
 	}
 }
 
@@ -327,23 +291,16 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 	for _, r := range releases {
 		wd := wf.New()
 
-		securitySummary := wf.Const("")
-		securityFixes, names := wf.Slice[string](), wf.Slice[string]()
+		versionPublished := addSingleReleaseWorkflow(build, milestone, version, wd, r.major, r.kind)
 		if mergeCommTasks {
+			securitySummary := wf.Const("")
+			securityFixes := wf.Slice[string]()
 			if r.kind == task.KindCurrentMinor || r.kind == task.KindPrevMinor {
 				securitySummary = wf.Param(wd, securitySummaryParameter)
 				securityFixes = wf.Param(wd, securityFixesParameter)
 			}
-			names = wf.Param(wd, releaseCoordinatorNames)
-		}
-
-		versionPublished, err := addSingleReleaseWorkflow(build, milestone, version, wd, r.major, r.kind)
-		if err != nil {
-			return err
-		}
-
-		if mergeCommTasks {
-			addCommTasksForSingleRelease(wd, build, comm, r.kind, versionPublished, securitySummary, securityFixes, names)
+			names := wf.Param(wd, releaseCoordinatorNames)
+			addCommTasks(wd, build, comm, wf.Slice(versionPublished), securitySummary, securityFixes, names)
 		}
 
 		h.RegisterDefinition(definitionPrefix+fmt.Sprintf("Go 1.%d %s", r.major, r.suffix), wd)
@@ -366,10 +323,7 @@ func addBuildAndTestOnlyWorkflow(wd *wf.Definition, version *task.VersionTasks, 
 	}
 	branchVal := wf.Const(branch)
 	source := wf.Task3(wd, "Build source archive", build.buildSource, branchVal, wf.Const(""), nextVersion)
-	artifacts, err := build.addBuildTasks(wd, major, nextVersion, source, true)
-	if err != nil {
-		return err
-	}
+	artifacts := build.addBuildTasks(wd, major, nextVersion, source, true)
 	wf.Output(wd, "Artifacts", artifacts)
 	return nil
 }
@@ -377,54 +331,29 @@ func addBuildAndTestOnlyWorkflow(wd *wf.Definition, version *task.VersionTasks, 
 func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, mergeCommTasks bool, prevMajor, currentMajor int) (*wf.Definition, error) {
 	wd := wf.New()
 
-	var securitySummary wf.Value[string]
-	var securityFixes, names wf.Value[[]string]
-	if mergeCommTasks {
-		securitySummary = wf.Param(wd, securitySummaryParameter)
-		securityFixes = wf.Param(wd, securityFixesParameter)
-		names = wf.Param(wd, releaseCoordinatorNames)
-	}
-
-	v1Published, err := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindCurrentMinor)
-	if err != nil {
-		return nil, err
-	}
-	v2Published, err := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindPrevMinor)
-	if err != nil {
-		return nil, err
-	}
+	v1Published := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindCurrentMinor)
+	v2Published := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindPrevMinor)
 
 	if mergeCommTasks {
-		addCommTasksForDoubleMinorRelease(wd, build, comm, v1Published, v2Published, securitySummary, securityFixes, names)
+		securitySummary := wf.Param(wd, securitySummaryParameter)
+		securityFixes := wf.Param(wd, securityFixesParameter)
+		names := wf.Param(wd, releaseCoordinatorNames)
+		addCommTasks(wd, build, comm, wf.Slice(v1Published, v2Published), securitySummary, securityFixes, names)
 	}
 
 	return wd, nil
 }
 
-func addCommTasksForDoubleMinorRelease(
+func addCommTasks(
 	wd *wf.Definition, build *BuildReleaseTasks, comm task.CommunicationTasks,
-	v1, v2, securitySummary wf.Value[string], securityFixes, names wf.Value[[]string],
+	versions wf.Value[[]string], securitySummary wf.Value[string], securityFixes, names wf.Value[[]string],
 ) {
-	okayToAnnounceAndTweet := wf.Action0(wd, "Wait to Announce", build.ApproveAction, wf.After(v1, v2))
+	okayToAnnounceAndTweet := wf.Action0(wd, "Wait to Announce", build.ApproveAction, wf.After(versions))
 
 	// Announce that a new Go release has been published.
-	sentMail := wf.Task3(wd, "mail-announcement", comm.AnnounceRelease, wf.Slice(v1, v2), securityFixes, names, wf.After(okayToAnnounceAndTweet))
+	sentMail := wf.Task3(wd, "mail-announcement", comm.AnnounceRelease, versions, securityFixes, names, wf.After(okayToAnnounceAndTweet))
 	announcementURL := wf.Task1(wd, "await-announcement", comm.AwaitAnnounceMail, sentMail)
-	tweetURL := wf.Task3(wd, "post-tweet", comm.TweetRelease, wf.Slice(v1, v2), securitySummary, announcementURL, wf.After(okayToAnnounceAndTweet))
-
-	wf.Output(wd, "Announcement URL", announcementURL)
-	wf.Output(wd, "Tweet URL", tweetURL)
-}
-func addCommTasksForSingleRelease(
-	wd *wf.Definition, build *BuildReleaseTasks, comm task.CommunicationTasks,
-	kind task.ReleaseKind, version, securitySummary wf.Value[string], securityFixes, names wf.Value[[]string],
-) {
-	okayToAnnounceAndTweet := wf.Action0(wd, "Wait to Announce", build.ApproveAction, wf.After(version))
-
-	// Announce that a new Go release has been published.
-	sentMail := wf.Task3(wd, "mail-announcement", comm.AnnounceRelease, wf.Slice(version), securityFixes, names, wf.After(okayToAnnounceAndTweet))
-	announcementURL := wf.Task1(wd, "await-announcement", comm.AwaitAnnounceMail, sentMail)
-	tweetURL := wf.Task3(wd, "post-tweet", comm.TweetRelease, wf.Slice(version), securitySummary, announcementURL, wf.After(okayToAnnounceAndTweet))
+	tweetURL := wf.Task3(wd, "post-tweet", comm.TweetRelease, versions, securitySummary, announcementURL, wf.After(okayToAnnounceAndTweet))
 
 	wf.Output(wd, "Announcement URL", announcementURL)
 	wf.Output(wd, "Tweet URL", tweetURL)
@@ -433,7 +362,7 @@ func addCommTasksForSingleRelease(
 func addSingleReleaseWorkflow(
 	build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks,
 	wd *wf.Definition, major int, kind task.ReleaseKind,
-) (versionPublished wf.Value[string], _ error) {
+) (versionPublished wf.Value[string]) {
 	kindVal := wf.Const(kind)
 	branch := fmt.Sprintf("release-branch.go1.%d", major)
 	if kind == task.KindBeta {
@@ -454,11 +383,7 @@ func addSingleReleaseWorkflow(
 	source := wf.Task3(wd, "Build source archive", build.buildSource, startingHead, securityRef, nextVersion, wf.After(checked))
 
 	// Build, test, and sign release.
-	signedAndTestedArtifacts, err := build.addBuildTasks(wd, major, nextVersion, source, false)
-	if err != nil {
-		return nil, err
-	}
-
+	signedAndTestedArtifacts := build.addBuildTasks(wd, major, nextVersion, source, false)
 	okayToTagAndPublish := wf.Action0(wd, "Wait for Release Coordinator Approval", build.ApproveAction, wf.After(signedAndTestedArtifacts))
 
 	dlcl := wf.Task2(wd, "Mail DL CL", version.MailDLCL, wf.Slice(nextVersion), wf.Const(false), wf.After(okayToTagAndPublish))
@@ -483,12 +408,12 @@ func addSingleReleaseWorkflow(
 	pushed := wf.Action3(wd, "Push issues", milestone.PushIssues, milestones, nextVersion, kindVal, wf.After(tagged))
 	versionPublished = wf.Task2(wd, "Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, wf.After(uploaded, pushed))
 	wf.Output(wd, "Released version", versionPublished)
-	return versionPublished, nil
+	return versionPublished
 }
 
 // addBuildTasks registers tasks to build, test, and sign the release onto wd.
 // It returns the output from the last task, a slice of signed and tested artifacts.
-func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, version wf.Value[string], source wf.Value[artifact], skipSigning bool) (wf.Value[[]artifact], error) {
+func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, version wf.Value[string], source wf.Value[artifact], skipSigning bool) wf.Value[[]artifact] {
 	targets := releasetargets.TargetsForGo1Point(major)
 	skipTests := wf.Param(wd, wf.ParamDef[[]string]{Name: "Targets to skip testing (or 'all') (optional)", ParamType: wf.SliceShort})
 	// Artifact file paths.
@@ -533,14 +458,14 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 		builtAndTested := wf.Task1(wd, "Wait for artifacts and tests", func(ctx *wf.TaskContext, artifacts []artifact) ([]artifact, error) {
 			return artifacts, nil
 		}, wf.Slice(artifacts...), wf.After(tryBotsApproved), wf.After(testsPassed...))
-		return builtAndTested, nil
+		return builtAndTested
 	}
 	stagedArtifacts := wf.Task2(wd, "Stage artifacts for signing", tasks.copyToStaging, version, wf.Slice(artifacts...))
 	signedArtifacts := wf.Task3(wd, "Wait for signed artifacts", tasks.awaitSigned, version, wf.Const(darwinTargets), stagedArtifacts)
 	signedAndTested := wf.Task1(wd, "Wait for signing and tests", func(ctx *wf.TaskContext, artifacts []artifact) ([]artifact, error) {
 		return artifacts, nil
 	}, signedArtifacts, wf.After(tryBotsApproved), wf.After(testsPassed...))
-	return signedAndTested, nil
+	return signedAndTested
 }
 
 func advisoryTryBots(major int) []*dashboard.BuildConfig {

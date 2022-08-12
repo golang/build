@@ -28,9 +28,6 @@ import (
 //
 // On success, the ID of the change is returned, like "dl~1234".
 func (t *VersionTasks) MailDLCL(ctx *workflow.TaskContext, versions []string, dryRun bool) (changeID string, _ error) {
-	if len(versions) < 1 || len(versions) > 2 {
-		return "", fmt.Errorf("got %d Go versions, want 1 or 2", len(versions))
-	}
 	if err := oneOrTwoGoVersions(versions); err != nil {
 		return "", err
 	}
