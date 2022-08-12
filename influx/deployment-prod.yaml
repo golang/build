@@ -72,6 +72,7 @@ metadata:
   namespace: prod
   name: influx-internal
   annotations:
+    cloud.google.com/neg: '{"ingress": false}'
     cloud.google.com/app-protocols: '{"https":"HTTP2"}'
 spec:
   ports:

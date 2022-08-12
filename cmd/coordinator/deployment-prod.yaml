@@ -68,6 +68,7 @@ metadata:
   name: coordinator-internal-iap
   annotations:
     cloud.google.com/backend-config: '{"default": "build-ingress-iap-backend"}'
+    cloud.google.com/neg: '{"ingress": false}'
     cloud.google.com/app-protocols: '{"https":"HTTP2"}'
 spec:
   ports:
@@ -84,6 +85,7 @@ metadata:
   namespace: prod
   name: coordinator-internal
   annotations:
+    cloud.google.com/neg: '{"ingress": false}'
     cloud.google.com/app-protocols: '{"https":"HTTP2"}'
 spec:
   ports:
