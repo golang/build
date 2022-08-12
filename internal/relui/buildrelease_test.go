@@ -168,7 +168,9 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	deps := newReleaseTestDeps(t, wantVersion)
 	wd := workflow.New()
-	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, kind)
+
+	deps.gerrit.wantReviewers = []string{"heschi", "dmitshur"}
+	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, kind, workflow.Const(deps.gerrit.wantReviewers))
 	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
@@ -284,7 +286,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 
 	// Run the release.
 	wd := workflow.New()
-	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, task.KindRC)
+	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, task.KindRC, workflow.Slice[string]())
 	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
@@ -327,7 +329,7 @@ func TestAdvisoryTrybotFail(t *testing.T) {
 
 	// Run the release.
 	wd := workflow.New()
-	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, task.KindRC)
+	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, task.KindRC, workflow.Slice[string]())
 	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
@@ -553,10 +555,14 @@ func checkZip(t *testing.T, dlURL string, files map[string]*WebsiteFile, filenam
 type fakeGerrit struct {
 	changesCreated int
 	createdTags    map[string]string
+	wantReviewers  []string
 }
 
-func (g *fakeGerrit) CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, contents map[string]string) (string, error) {
+func (g *fakeGerrit) CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error) {
 	g.changesCreated++
+	if diff := cmp.Diff(g.wantReviewers, reviewers, cmpopts.EquateEmpty()); diff != "" {
+		return "", fmt.Errorf("unexpected reviewers for CL: %v", diff)
+	}
 	return "fake~12345", nil
 }
 

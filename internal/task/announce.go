@@ -25,6 +25,7 @@ import (
 	"github.com/yuin/goldmark/renderer"
 	goldmarkhtml "github.com/yuin/goldmark/renderer/html"
 	goldmarktext "github.com/yuin/goldmark/text"
+	"golang.org/x/build/internal/gophers"
 	"golang.org/x/build/internal/workflow"
 	"golang.org/x/build/maintner/maintnerd/maintapi/version"
 	"golang.org/x/net/html"
@@ -77,13 +78,18 @@ type SentMail struct {
 }
 
 // AnnounceRelease sends an email announcing a Go release to Google Groups.
-func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, versions []string, security []string, names []string) (SentMail, error) {
+func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, versions []string, security []string, users []string) (SentMail, error) {
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < time.Minute {
 		return SentMail{}, fmt.Errorf("insufficient time for announce release task; a minimum of a minute left on context is required")
 	}
 	if err := oneOrTwoGoVersions(versions); err != nil {
 		return SentMail{}, err
 	}
+	names, err := coordinatorFirstNames(users)
+	if err != nil {
+		return SentMail{}, err
+	}
+
 	r := releaseAnnouncement{
 		Version:  versions[0],
 		Security: security,
@@ -129,6 +135,34 @@ func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, versions [
 	}
 
 	return SentMail{m.Subject}, nil
+}
+
+func coordinatorFirstNames(users []string) ([]string, error) {
+	return mapCoordinators(users, func(p *gophers.Person) string {
+		name, _, _ := strings.Cut(p.Name, " ")
+		return name
+	})
+}
+
+func coordinatorEmails(users []string) ([]string, error) {
+	return mapCoordinators(users, func(p *gophers.Person) string {
+		return p.Gerrit
+	})
+}
+
+func mapCoordinators(users []string, f func(*gophers.Person) string) ([]string, error) {
+	var outs []string
+	for _, user := range users {
+		person := gophers.GetPerson(user + "@golang.org")
+		if person == nil {
+			person = gophers.GetPerson(user + "@google.com")
+		}
+		if person == nil {
+			return nil, fmt.Errorf("unknown username %q: no @golang or @google account", user)
+		}
+		outs = append(outs, f(person))
+	}
+	return outs, nil
 }
 
 // A MailHeader is an email header.

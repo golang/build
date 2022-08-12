@@ -98,9 +98,9 @@ func RegisterCommunicationDefinitions(h *DefinitionHolder, tasks task.Communicat
 		})
 		securitySummary := wf.Param(wd, securitySummaryParameter)
 		securityFixes := wf.Param(wd, securityFixesParameter)
-		names := wf.Param(wd, releaseCoordinatorNames)
+		coordinators := wf.Param(wd, releaseCoordinators)
 
-		sentMail := wf.Task3(wd, "mail-announcement", tasks.AnnounceRelease, wf.Slice(v1, v2), securityFixes, names)
+		sentMail := wf.Task3(wd, "mail-announcement", tasks.AnnounceRelease, wf.Slice(v1, v2), securityFixes, coordinators)
 		announcementURL := wf.Task1(wd, "await-announcement", tasks.AwaitAnnounceMail, sentMail)
 		tweetURL := wf.Task3(wd, "post-tweet", tasks.TweetRelease, wf.Slice(v1, v2), securitySummary, announcementURL)
 
@@ -118,9 +118,9 @@ func RegisterCommunicationDefinitions(h *DefinitionHolder, tasks task.Communicat
 	The version string must use the same format as Go tags.`,
 			Example: "go1.19beta1",
 		})
-		names := wf.Param(wd, releaseCoordinatorNames)
+		coordinators := wf.Param(wd, releaseCoordinators)
 
-		sentMail := wf.Task3(wd, "mail-announcement", tasks.AnnounceRelease, wf.Slice(v), wf.Slice[string](), names)
+		sentMail := wf.Task3(wd, "mail-announcement", tasks.AnnounceRelease, wf.Slice(v), wf.Slice[string](), coordinators)
 		announcementURL := wf.Task1(wd, "await-announcement", tasks.AwaitAnnounceMail, sentMail)
 		tweetURL := wf.Task3(wd, "post-tweet", tasks.TweetRelease, wf.Slice(v), wf.Const(""), announcementURL)
 
@@ -184,12 +184,13 @@ Thanks to Juho Nurminen of Mattermost who reported the error.
 This is CVE-2022-24675 and Go issue https://go.dev/issue/51853.`,
 	}
 
-	releaseCoordinatorNames = wf.ParamDef[[]string]{
-		Name:      "Release Coordinator Names (optional)",
+	releaseCoordinators = wf.ParamDef[[]string]{
+		Name:      "Release Coordinator Usernames (optional)",
 		ParamType: wf.SliceShort,
-		Doc: `Release Coordinator Names is an optional list of release coordinator names to include in the sign-off message.
+		Doc: `Release Coordinator Usernames is an optional list of the coordinators of the release.
 
-It shows up in the announcement mail.`,
+Their first names will be included at the end of the release announcement, and CLs will be mailed to them.`,
+		Example: "heschi",
 	}
 )
 
@@ -291,7 +292,9 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 	for _, r := range releases {
 		wd := wf.New()
 
-		versionPublished := addSingleReleaseWorkflow(build, milestone, version, wd, r.major, r.kind)
+		coordinators := wf.Param(wd, releaseCoordinators)
+
+		versionPublished := addSingleReleaseWorkflow(build, milestone, version, wd, r.major, r.kind, coordinators)
 		if mergeCommTasks {
 			securitySummary := wf.Const("")
 			securityFixes := wf.Slice[string]()
@@ -299,8 +302,7 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 				securitySummary = wf.Param(wd, securitySummaryParameter)
 				securityFixes = wf.Param(wd, securityFixesParameter)
 			}
-			names := wf.Param(wd, releaseCoordinatorNames)
-			addCommTasks(wd, build, comm, wf.Slice(versionPublished), securitySummary, securityFixes, names)
+			addCommTasks(wd, build, comm, wf.Slice(versionPublished), securitySummary, securityFixes, coordinators)
 		}
 
 		h.RegisterDefinition(definitionPrefix+fmt.Sprintf("Go 1.%d %s", r.major, r.suffix), wd)
@@ -331,14 +333,14 @@ func addBuildAndTestOnlyWorkflow(wd *wf.Definition, version *task.VersionTasks, 
 func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, mergeCommTasks bool, prevMajor, currentMajor int) (*wf.Definition, error) {
 	wd := wf.New()
 
-	v1Published := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindCurrentMinor)
-	v2Published := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindPrevMinor)
+	coordinators := wf.Param(wd, releaseCoordinators)
+	v1Published := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindCurrentMinor, coordinators)
+	v2Published := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindPrevMinor, coordinators)
 
 	if mergeCommTasks {
 		securitySummary := wf.Param(wd, securitySummaryParameter)
 		securityFixes := wf.Param(wd, securityFixesParameter)
-		names := wf.Param(wd, releaseCoordinatorNames)
-		addCommTasks(wd, build, comm, wf.Slice(v1Published, v2Published), securitySummary, securityFixes, names)
+		addCommTasks(wd, build, comm, wf.Slice(v1Published, v2Published), securitySummary, securityFixes, coordinators)
 	}
 
 	return wd, nil
@@ -346,12 +348,12 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 
 func addCommTasks(
 	wd *wf.Definition, build *BuildReleaseTasks, comm task.CommunicationTasks,
-	versions wf.Value[[]string], securitySummary wf.Value[string], securityFixes, names wf.Value[[]string],
+	versions wf.Value[[]string], securitySummary wf.Value[string], securityFixes, coordinators wf.Value[[]string],
 ) {
 	okayToAnnounceAndTweet := wf.Action0(wd, "Wait to Announce", build.ApproveAction, wf.After(versions))
 
 	// Announce that a new Go release has been published.
-	sentMail := wf.Task3(wd, "mail-announcement", comm.AnnounceRelease, versions, securityFixes, names, wf.After(okayToAnnounceAndTweet))
+	sentMail := wf.Task3(wd, "mail-announcement", comm.AnnounceRelease, versions, securityFixes, coordinators, wf.After(okayToAnnounceAndTweet))
 	announcementURL := wf.Task1(wd, "await-announcement", comm.AwaitAnnounceMail, sentMail)
 	tweetURL := wf.Task3(wd, "post-tweet", comm.TweetRelease, versions, securitySummary, announcementURL, wf.After(okayToAnnounceAndTweet))
 
@@ -361,7 +363,7 @@ func addCommTasks(
 
 func addSingleReleaseWorkflow(
 	build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks,
-	wd *wf.Definition, major int, kind task.ReleaseKind,
+	wd *wf.Definition, major int, kind task.ReleaseKind, coordinators wf.Value[[]string],
 ) (versionPublished wf.Value[string]) {
 	kindVal := wf.Const(kind)
 	branch := fmt.Sprintf("release-branch.go1.%d", major)
@@ -386,7 +388,7 @@ func addSingleReleaseWorkflow(
 	signedAndTestedArtifacts := build.addBuildTasks(wd, major, nextVersion, source, false)
 	okayToTagAndPublish := wf.Action0(wd, "Wait for Release Coordinator Approval", build.ApproveAction, wf.After(signedAndTestedArtifacts))
 
-	dlcl := wf.Task2(wd, "Mail DL CL", version.MailDLCL, wf.Slice(nextVersion), wf.Const(false), wf.After(okayToTagAndPublish))
+	dlcl := wf.Task3(wd, "Mail DL CL", version.MailDLCL, wf.Slice(nextVersion), coordinators, wf.Const(false), wf.After(okayToTagAndPublish))
 	dlclCommit := wf.Task2(wd, "Wait for DL CL", version.AwaitCL, dlcl, wf.Const(""))
 	wf.Output(wd, "Download CL submitted", dlclCommit)
 
@@ -400,7 +402,7 @@ func addSingleReleaseWorkflow(
 	if branch != "master" {
 		publishingHead := wf.Task1(wd, "Read current branch head", version.ReadBranchHead, branchVal, wf.After(okayToTagAndPublish))
 		branchHeadChecked := wf.Action3(wd, "Check branch state matches source archive", build.checkSourceMatch, publishingHead, nextVersion, source)
-		versionCL := wf.Task2(wd, "Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, nextVersion, wf.After(branchHeadChecked))
+		versionCL := wf.Task3(wd, "Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, coordinators, nextVersion, wf.After(branchHeadChecked))
 		tagCommit = wf.Task2(wd, "Wait for version CL submission", version.AwaitCL, versionCL, publishingHead)
 	}
 	tagged := wf.Action2(wd, "Tag version", version.TagRelease, nextVersion, tagCommit, wf.After(okayToTagAndPublish))

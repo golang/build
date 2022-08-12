@@ -162,18 +162,18 @@ func TestAnnounceRelease(t *testing.T) {
 	}
 
 	tests := [...]struct {
-		name     string
-		versions []string
-		security []string
-		names    []string
-		want     SentMail
-		wantLog  string
+		name         string
+		versions     []string
+		security     []string
+		coordinators []string
+		want         SentMail
+		wantLog      string
 	}{
 		{
-			name:     "minor",
-			versions: []string{"go1.18.1", "go1.17.8"}, // Intentionally not 1.17.9 so the real email doesn't get in the way.
-			names:    []string{"Alice", "Bob", "Charlie"},
-			want:     SentMail{Subject: "Go 1.18.1 and Go 1.17.8 are released"},
+			name:         "minor",
+			versions:     []string{"go1.18.1", "go1.17.8"}, // Intentionally not 1.17.9 so the real email doesn't get in the way.
+			coordinators: []string{"heschi", "dmitshur"},
+			want:         SentMail{Subject: "Go 1.18.1 and Go 1.17.8 are released"},
 			wantLog: `announcement subject: Go 1.18.1 and Go 1.17.8 are released
 
 announcement body HTML:
@@ -187,7 +187,7 @@ announcement body HTML:
 <code>git checkout go1.18.1</code> and build as usual.</p>
 <p>Thanks to everyone who contributed to the releases.</p>
 <p>Cheers,<br>
-Alice, Bob, and Charlie for the Go team</p>
+Heschi and Dmitri for the Go team</p>
 
 announcement body text:
 Hello gophers,
@@ -206,7 +206,7 @@ git checkout go1.18.1 and build as usual.
 Thanks to everyone who contributed to the releases.
 
 Cheers,
-Alice, Bob, and Charlie for the Go team` + "\n",
+Heschi and Dmitri for the Go team` + "\n",
 		},
 		// Just one test case is enough, since TestAnnouncementMail
 		// has very thorough coverage for all release types.
@@ -231,7 +231,7 @@ Alice, Bob, and Charlie for the Go team` + "\n",
 			}
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			sentMail, err := tasks.AnnounceRelease(ctx, tc.versions, tc.security, tc.names)
+			sentMail, err := tasks.AnnounceRelease(ctx, tc.versions, tc.security, tc.coordinators)
 			if err != nil {
 				t.Fatal("task function returned non-nil error:", err)
 			}

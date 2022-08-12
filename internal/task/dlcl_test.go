@@ -170,7 +170,7 @@ func main() {
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
 			tasks := &VersionTasks{Gerrit: nil}
-			changeID, err := tasks.MailDLCL(ctx, tc.in, true)
+			changeID, err := tasks.MailDLCL(ctx, tc.in, nil, true)
 			if err != nil {
 				t.Fatal("got a non-nil error:", err)
 			}

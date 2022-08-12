@@ -98,7 +98,7 @@ func TestVersion(t *testing.T) {
 		Logger:  &testLogger{t},
 	}
 
-	changeID, err := tasks.CreateAutoSubmitVersionCL(ctx, "master", "version string")
+	changeID, err := tasks.CreateAutoSubmitVersionCL(ctx, "master", nil, "version string")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestVersion(t *testing.T) {
 		Project: "scratch",
 		Branch:  "master",
 		Subject: "Clean up VERSION",
-	}, map[string]string{"VERSION": ""})
+	}, nil, map[string]string{"VERSION": ""})
 	if err != nil {
 		t.Fatalf("cleaning up VERSION: %v", err)
 	}

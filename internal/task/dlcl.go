@@ -27,7 +27,7 @@ import (
 //   - "go1.18beta1" or "go1.18rc1" for a pre-release
 //
 // On success, the ID of the change is returned, like "dl~1234".
-func (t *VersionTasks) MailDLCL(ctx *workflow.TaskContext, versions []string, dryRun bool) (changeID string, _ error) {
+func (t *VersionTasks) MailDLCL(ctx *workflow.TaskContext, versions []string, reviewers []string, dryRun bool) (changeID string, _ error) {
 	if err := oneOrTwoGoVersions(versions); err != nil {
 		return "", err
 	}
@@ -73,7 +73,7 @@ func (t *VersionTasks) MailDLCL(ctx *workflow.TaskContext, versions []string, dr
 		Subject: "dl: add " + strings.Join(versions, " and "),
 		Branch:  "master",
 	}
-	return t.Gerrit.CreateAutoSubmitChange(ctx, changeInput, files)
+	return t.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
 }
 
 // oneOrTwoGoVersions returns true iff len(versions) is exactly 1 or 2

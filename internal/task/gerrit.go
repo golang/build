@@ -15,7 +15,8 @@ type GerritClient interface {
 	// If the content of a file is empty, that file will be deleted from the repository.
 	// If the requested contents match the state of the repository, no change
 	// is created and the returned change ID will be empty.
-	CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, contents map[string]string) (string, error)
+	// Reviewers is the username part of a google.com or golang.org email address.
+	CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error)
 	// Submitted checks if the specified change has been submitted or failed
 	// trybots. If the CL is submitted, returns the submitted commit hash.
 	// If parentCommit is non-empty, the submitted CL's parent must match it.
@@ -32,7 +33,12 @@ type RealGerritClient struct {
 	Client *gerrit.Client
 }
 
-func (c *RealGerritClient) CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, files map[string]string) (string, error) {
+func (c *RealGerritClient) CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, reviewers []string, files map[string]string) (string, error) {
+	reviewerEmails, err := coordinatorEmails(reviewers)
+	if err != nil {
+		return "", err
+	}
+
 	change, err := c.Client.CreateChange(ctx, input)
 	if err != nil {
 		return "", err
@@ -64,11 +70,17 @@ func (c *RealGerritClient) CreateAutoSubmitChange(ctx context.Context, input ger
 	if err := c.Client.PublishChangeEdit(ctx, changeID); err != nil {
 		return "", err
 	}
+
+	var reviewerInputs []gerrit.ReviewerInput
+	for _, r := range reviewerEmails {
+		reviewerInputs = append(reviewerInputs, gerrit.ReviewerInput{Reviewer: r})
+	}
 	if err := c.Client.SetReview(ctx, changeID, "current", gerrit.ReviewInput{
 		Labels: map[string]int{
 			"Run-TryBot":  1,
 			"Auto-Submit": 1,
 		},
+		Reviewers: reviewerInputs,
 	}); err != nil {
 		return "", err
 	}

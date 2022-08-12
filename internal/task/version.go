@@ -89,12 +89,12 @@ func nextVersion(version string) (string, error) {
 }
 
 // CreateAutoSubmitVersionCL mails an auto-submit change to update VERSION on branch.
-func (t *VersionTasks) CreateAutoSubmitVersionCL(ctx *workflow.TaskContext, branch, version string) (string, error) {
+func (t *VersionTasks) CreateAutoSubmitVersionCL(ctx *workflow.TaskContext, branch string, reviewers []string, version string) (string, error) {
 	return t.Gerrit.CreateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: t.GoProject,
 		Branch:  branch,
 		Subject: fmt.Sprintf("[%v] %v", branch, version),
-	}, map[string]string{
+	}, reviewers, map[string]string{
 		"VERSION": version,
 	})
 }
