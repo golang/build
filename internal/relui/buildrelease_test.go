@@ -562,6 +562,7 @@ type fakeGerrit struct {
 	changesCreated int
 	createdTags    map[string]string
 	wantReviewers  []string
+	task.GerritClient
 }
 
 func (g *fakeGerrit) CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error) {

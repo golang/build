@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"golang.org/x/build/gerrit"
@@ -27,6 +28,10 @@ type GerritClient interface {
 	ListTags(ctx context.Context, project string) ([]string, error)
 	// ReadBranchHead returns the head of a branch in project.
 	ReadBranchHead(ctx context.Context, project, branch string) (string, error)
+	// ListProjects lists all the projects on the server.
+	ListProjects(ctx context.Context) ([]string, error)
+	// ReadFile reads a file from project at the specified commit.
+	ReadFile(ctx context.Context, project, commit, file string) ([]byte, error)
 }
 
 type RealGerritClient struct {
@@ -147,6 +152,27 @@ func (c *RealGerritClient) ReadBranchHead(ctx context.Context, project, branch s
 		return "", err
 	}
 	return branchInfo.Revision, nil
+}
+
+func (c *RealGerritClient) ListProjects(ctx context.Context) ([]string, error) {
+	projects, err := c.Client.ListProjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, p := range projects {
+		names = append(names, p.Name)
+	}
+	return names, nil
+}
+
+func (c *RealGerritClient) ReadFile(ctx context.Context, project, commit, file string) ([]byte, error) {
+	body, err := c.Client.GetFileContent(ctx, project, commit, file)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+	return io.ReadAll(body)
 }
 
 // ChangeLink returns a link to the review page for the CL with the specified

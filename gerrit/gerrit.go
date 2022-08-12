@@ -12,11 +12,11 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"sort"
@@ -116,11 +116,17 @@ type urlValues url.Values
 
 func (urlValues) isDoArg() {}
 
+// respBodyRaw returns the body of the response. If set, dst is ignored.
+type respBodyRaw struct{ rc *io.ReadCloser }
+
+func (respBodyRaw) isDoArg() {}
+
 func (c *Client) do(ctx context.Context, dst interface{}, method, path string, opts ...doArg) error {
 	var arg url.Values
-	var body io.Reader
+	var requestBody io.Reader
 	var contentType string
 	var wantStatus = http.StatusOK
+	var responseBody *io.ReadCloser
 	for _, opt := range opts {
 		switch opt := opt.(type) {
 		case wantResStatus:
@@ -130,13 +136,15 @@ func (c *Client) do(ctx context.Context, dst interface{}, method, path string, o
 			if err != nil {
 				return err
 			}
-			body = bytes.NewReader(b)
+			requestBody = bytes.NewReader(b)
 			contentType = "application/json"
 		case reqBodyRaw:
-			body = opt.r
+			requestBody = opt.r
 			contentType = "application/octet-stream"
 		case urlValues:
 			arg = url.Values(opt)
+		case respBodyRaw:
+			responseBody = opt.rc
 		default:
 			panic(fmt.Sprintf("internal error; unsupported type %T", opt))
 		}
@@ -148,12 +156,11 @@ func (c *Client) do(ctx context.Context, dst interface{}, method, path string, o
 	if _, ok := c.auth.(noAuth); ok {
 		slashA = ""
 	}
-	var err error
 	u := c.url + slashA + path
 	if arg != nil {
 		u += "?" + arg.Encode()
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u, body)
+	req, err := http.NewRequestWithContext(ctx, method, u, requestBody)
 	if err != nil {
 		return err
 	}
@@ -167,16 +174,27 @@ func (c *Client) do(ctx context.Context, dst interface{}, method, path string, o
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
+	defer func() {
+		if responseBody != nil && *responseBody != nil {
+			// We've handed off the body to the user.
+			return
+		}
+		res.Body.Close()
+	}()
 
 	if res.StatusCode != wantStatus {
-		body, err := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
+		body, err := io.ReadAll(io.LimitReader(res.Body, 4<<10))
 		return &HTTPError{res, body, err}
+	}
+
+	if responseBody != nil {
+		*responseBody = res.Body
+		return nil
 	}
 
 	if dst == nil {
 		// Drain the response body, return an error if it's anything but empty.
-		body, err := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
+		body, err := io.ReadAll(io.LimitReader(res.Body, 4<<10))
 		if err != nil || len(body) != 0 {
 			return &HTTPError{res, body, err}
 		}
@@ -711,7 +729,7 @@ type ProjectInfo struct {
 
 // ListProjects returns the server's active projects.
 //
-// The returned slice is sorted by project ID and excludes the "All-Projects" project.
+// The returned slice is sorted by project ID and excludes the "All-Projects" and "All-Users" projects.
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#list-projects
 func (c *Client) ListProjects(ctx context.Context) ([]ProjectInfo, error) {
@@ -722,12 +740,15 @@ func (c *Client) ListProjects(ctx context.Context) ([]ProjectInfo, error) {
 	}
 	var ret []ProjectInfo
 	for name, pi := range res {
-		if name == "All-Projects" {
+		if name == "All-Projects" || name == "All-Users" {
 			continue
 		}
 		if pi.State != "ACTIVE" {
 			continue
 		}
+		// https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#project-info:
+		// "name not set if returned in a map where the project name is used as map key"
+		pi.Name = name
 		ret = append(ret, pi)
 	}
 	sort.Slice(ret, func(i, j int) bool { return ret[i].ID < ret[j].ID })
@@ -826,6 +847,26 @@ func (c *Client) GetBranch(ctx context.Context, project, branch string) (BranchI
 	var res BranchInfo
 	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/%s", project, branch))
 	return res, err
+}
+
+// GetFileContent gets a file's contents at a particular commit.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-content-from-commit.
+func (c *Client) GetFileContent(ctx context.Context, project, commit, path string) (io.ReadCloser, error) {
+	var body io.ReadCloser
+	err := c.do(ctx, nil, "GET", fmt.Sprintf("/projects/%s/commits/%s/files/%s/content", project, commit, url.QueryEscape(path)), respBodyRaw{&body})
+	if err != nil {
+		return nil, err
+	}
+	return readCloser{
+		Reader: base64.NewDecoder(base64.StdEncoding, body),
+		Closer: body,
+	}, nil
+}
+
+type readCloser struct {
+	io.Reader
+	io.Closer
 }
 
 // WebLinkInfo is information about a web link.
