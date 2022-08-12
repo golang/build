@@ -23,8 +23,7 @@ import (
 func TestAnnounceReleaseShortContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	r := ReleaseAnnouncement{Version: "go1.18.1", SecondaryVersion: "go1.17.8"}
-	_, err := (AnnounceMailTasks{}).AnnounceRelease(&workflow.TaskContext{Context: ctx}, r)
+	_, err := (AnnounceMailTasks{}).AnnounceRelease(&workflow.TaskContext{Context: ctx}, []string{"go1.18.1", "go1.17.8"}, nil, nil)
 	if err == nil {
 		t.Errorf("want non-nil error")
 	} else if !strings.HasPrefix(err.Error(), "insufficient time") {
@@ -35,12 +34,12 @@ func TestAnnounceReleaseShortContext(t *testing.T) {
 func TestAnnouncementMail(t *testing.T) {
 	tests := [...]struct {
 		name        string
-		in          ReleaseAnnouncement
+		in          releaseAnnouncement
 		wantSubject string
 	}{
 		{
 			name: "minor",
-			in: ReleaseAnnouncement{
+			in: releaseAnnouncement{
 				Version:          "go1.18.1",
 				SecondaryVersion: "go1.17.9",
 				Names:            []string{"Alice", "Bob", "Charlie"},
@@ -49,7 +48,7 @@ func TestAnnouncementMail(t *testing.T) {
 		},
 		{
 			name: "minor-with-security",
-			in: ReleaseAnnouncement{
+			in: releaseAnnouncement{
 				Version:          "go1.18.1",
 				SecondaryVersion: "go1.17.9",
 				Security: []string{
@@ -82,7 +81,7 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 		},
 		{
 			name: "minor-solo",
-			in: ReleaseAnnouncement{
+			in: releaseAnnouncement{
 				Version:  "go1.11.1",
 				Security: []string{"abc: security fix 1", "xyz: security fix 2"},
 				Names:    []string{"Alice"},
@@ -91,21 +90,21 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 		},
 		{
 			name: "beta",
-			in: ReleaseAnnouncement{
+			in: releaseAnnouncement{
 				Version: "go1.19beta5",
 			},
 			wantSubject: "Go 1.19 Beta 5 is released",
 		},
 		{
 			name: "rc",
-			in: ReleaseAnnouncement{
+			in: releaseAnnouncement{
 				Version: "go1.19rc6",
 			},
 			wantSubject: "Go 1.19 Release Candidate 6 is released",
 		},
 		{
 			name: "major",
-			in: ReleaseAnnouncement{
+			in: releaseAnnouncement{
 				Version: "go1.19",
 			},
 			wantSubject: "Go 1.19 is released",
@@ -163,19 +162,18 @@ func TestAnnounceRelease(t *testing.T) {
 	}
 
 	tests := [...]struct {
-		name    string
-		in      ReleaseAnnouncement
-		want    SentMail
-		wantLog string
+		name     string
+		versions []string
+		security []string
+		names    []string
+		want     SentMail
+		wantLog  string
 	}{
 		{
-			name: "minor",
-			in: ReleaseAnnouncement{
-				Version:          "go1.18.1",
-				SecondaryVersion: "go1.17.8", // Intentionally not 1.17.9 so the real email doesn't get in the way.
-				Names:            []string{"Alice", "Bob", "Charlie"},
-			},
-			want: SentMail{Subject: "Go 1.18.1 and Go 1.17.8 are released"},
+			name:     "minor",
+			versions: []string{"go1.18.1", "go1.17.8"}, // Intentionally not 1.17.9 so the real email doesn't get in the way.
+			names:    []string{"Alice", "Bob", "Charlie"},
+			want:     SentMail{Subject: "Go 1.18.1 and Go 1.17.8 are released"},
 			wantLog: `announcement subject: Go 1.18.1 and Go 1.17.8 are released
 
 announcement body HTML:
@@ -233,7 +231,7 @@ Alice, Bob, and Charlie for the Go team` + "\n",
 			}
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			sentMail, err := tasks.AnnounceRelease(ctx, tc.in)
+			sentMail, err := tasks.AnnounceRelease(ctx, tc.versions, tc.security, tc.names)
 			if err != nil {
 				t.Fatal("task function returned non-nil error:", err)
 			}

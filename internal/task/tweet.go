@@ -94,9 +94,9 @@ type TweetTasks struct {
 // TweetRelease posts a tweet announcing a Go release.
 // ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
 func (t TweetTasks) TweetRelease(ctx *workflow.TaskContext, r ReleaseTweet) (tweetURL string, _ error) {
-	if err := verifyGoVersions(r.Version); err != nil {
+	if err := oneOrTwoGoVersions([]string{r.Version}); err != nil {
 		return "", err
-	} else if err := verifyGoVersions(r.SecondaryVersion); r.SecondaryVersion != "" && err != nil {
+	} else if err := oneOrTwoGoVersions([]string{r.SecondaryVersion}); r.SecondaryVersion != "" && err != nil {
 		return "", err
 	}
 

@@ -30,7 +30,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-type ReleaseAnnouncement struct {
+type releaseAnnouncement struct {
 	// Version is the Go version that has been released.
 	//
 	// The version string must use the same format as Go tags. For example:
@@ -77,14 +77,20 @@ type SentMail struct {
 }
 
 // AnnounceRelease sends an email announcing a Go release to Google Groups.
-func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, r ReleaseAnnouncement) (SentMail, error) {
+func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, versions []string, security []string, names []string) (SentMail, error) {
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < time.Minute {
 		return SentMail{}, fmt.Errorf("insufficient time for announce release task; a minimum of a minute left on context is required")
 	}
-	if err := verifyGoVersions(r.Version); err != nil {
+	if err := oneOrTwoGoVersions(versions); err != nil {
 		return SentMail{}, err
-	} else if err := verifyGoVersions(r.SecondaryVersion); r.SecondaryVersion != "" && err != nil {
-		return SentMail{}, err
+	}
+	r := releaseAnnouncement{
+		Version:  versions[0],
+		Security: security,
+		Names:    names,
+	}
+	if len(versions) == 2 {
+		r.SecondaryVersion = versions[1]
 	}
 
 	// Generate the announcement email.
@@ -140,7 +146,7 @@ type mailContent struct {
 }
 
 // announcementMail generates the announcement email for release r.
-func announcementMail(r ReleaseAnnouncement) (mailContent, error) {
+func announcementMail(r releaseAnnouncement) (mailContent, error) {
 	// Pick a template name for this type of release.
 	var name string
 	if i := strings.Index(r.Version, "beta"); i != -1 { // A beta release.
@@ -216,7 +222,7 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 	"indent": func(s string) string { return "\t" + strings.ReplaceAll(s, "\n", "\n\t") },
 
 	// subjectPrefix returns the email subject prefix for release r, if any.
-	"subjectPrefix": func(r ReleaseAnnouncement) string {
+	"subjectPrefix": func(r releaseAnnouncement) string {
 		switch {
 		case len(r.Security) > 0:
 			// Include a security prefix as documented at https://go.dev/security#receiving-security-updates:
