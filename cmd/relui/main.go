@@ -199,9 +199,6 @@ func main() {
 		}
 	}
 	s := relui.NewServer(dbPool, w, base, siteHeader, ms)
-	if err != nil {
-		log.Fatalf("relui.NewServer() = %v", err)
-	}
 	log.Fatalln(https.ListenAndServe(ctx, &ochttp.Handler{Handler: s}))
 }
 

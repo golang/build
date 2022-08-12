@@ -245,7 +245,7 @@ func (w *Worker) RetryTask(ctx context.Context, id uuid.UUID, name string) error
 	w.mu.Lock()
 	rwf, ok := w.running[id.String()]
 	w.mu.Unlock()
-	if ok {
+	if !ok {
 		return fmt.Errorf("no workflow with id %q", id)
 	}
 	return rwf.w.RetryTask(ctx, name)
