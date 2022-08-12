@@ -70,7 +70,7 @@ func ListenAndServeOpts(ctx context.Context, handler http.Handler, opts *Options
 		if opts.AutocertBucket == "" {
 			return fmt.Errorf("must specify autocert-bucket with listen-https-autocert")
 		}
-		server, err := AutocertServer(ctx, opts.AutocertBucket, opts.AutocertAddr, handler)
+		server, err := autocertServer(ctx, opts.AutocertBucket, opts.AutocertAddr, handler)
 		if err != nil {
 			return err
 		}
@@ -79,7 +79,7 @@ func ListenAndServeOpts(ctx context.Context, handler http.Handler, opts *Options
 	}
 
 	if opts.SelfSignedAddr != "" {
-		server, err := SelfSignedServer(opts.SelfSignedAddr, handler)
+		server, err := selfSignedServer(opts.SelfSignedAddr, handler)
 		if err != nil {
 			return err
 		}
@@ -90,10 +90,10 @@ func ListenAndServeOpts(ctx context.Context, handler http.Handler, opts *Options
 	return <-errc
 }
 
-// AutocertServer returns an http.Server that is configured to serve
+// autocertServer returns an http.Server that is configured to serve
 // HTTPS on addr using a Let's Encrypt certificate cached in the GCS
 // bucket specified by bucket.
-func AutocertServer(ctx context.Context, bucket, addr string, handler http.Handler) (*http.Server, error) {
+func autocertServer(ctx context.Context, bucket, addr string, handler http.Handler) (*http.Server, error) {
 	sc, err := storage.NewClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("storage.NewClient: %v", err)
@@ -118,9 +118,9 @@ func AutocertServer(ctx context.Context, bucket, addr string, handler http.Handl
 	return server, nil
 }
 
-// SelfSignedServer returns an http.Server that is configured to serve
+// selfSignedServer returns an http.Server that is configured to serve
 // self-signed HTTPS on addr.
-func SelfSignedServer(addr string, handler http.Handler) (*http.Server, error) {
+func selfSignedServer(addr string, handler http.Handler) (*http.Server, error) {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil, err

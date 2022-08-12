@@ -30,7 +30,7 @@ spec:
       - name: vcs-test
         image: gcr.io/symbolic-datum-552/vcs-test:latest
         imagePullPolicy: Always
-        command: ["/usr/bin/tini", "--", "/vcweb", "-d=/home/vcweb", "-listen-https-autocert=:443", "-autocert-bucket=vcs-test-autocert", "-listen-https-selfsigned=:444"]
+        command: ["/usr/bin/tini", "--", "/vcweb", "-d=/home/vcweb", "-listen-https-selfsigned=:444"]
         volumeMounts:
         - mountPath: /home/vcweb
           name: vcs-test-cache
@@ -91,7 +91,6 @@ metadata:
   annotations:
     kubernetes.io/ingress.global-static-ip-name: vcs-test-global
     networking.gke.io/managed-certificates: vcs-test-cert
-    ingress.gcp.kubernetes.io/pre-shared-cert: vcs-test-manual
     kubernetes.io/ingress.class: "gce"
 spec:
   rules:

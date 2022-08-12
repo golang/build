@@ -21,8 +21,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/coreos/go-systemd/activation"
-	"github.com/coreos/go-systemd/daemon"
 	"golang.org/x/build/internal/https"
 )
 
@@ -70,33 +68,6 @@ func main() {
 	http.Handle("/auth/", newAuthHandler(http.Dir(filepath.Join(*dir, "auth"))))
 
 	handler := logger(http.HandlerFunc(loadAndHandle))
-
-	// If running under systemd, listen on 80 and 443 and serve TLS.
-	if listeners, _ := activation.ListenersWithNames(); len(listeners) == 2 {
-		httpListener := listeners["vcweb-http.socket"][0]
-		httpsListener := listeners["vcweb-https.socket"][0]
-
-		dt, err := daemon.SdWatchdogEnabled(true)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		daemon.SdNotify(false, "READY=1")
-		go func() {
-			for range time.NewTicker(dt / 2).C {
-				daemon.SdNotify(false, "WATCHDOG=1")
-			}
-		}()
-
-		go func() {
-			log.Fatal(http.Serve(httpListener, handler))
-		}()
-		s, err := https.AutocertServer(ctx, "vcs-test-autocert", "", handler)
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Fatal(s.ServeTLS(httpsListener, "", ""))
-	}
 	log.Fatal(https.ListenAndServe(ctx, handler))
 }
 

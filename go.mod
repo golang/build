@@ -15,7 +15,6 @@ require (
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/aws/aws-sdk-go v1.30.15
 	github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625
-	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f
 	github.com/creack/pty v1.1.15
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dghubble/oauth1 v0.7.0
@@ -52,7 +51,6 @@ require (
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20220209214540-3681064d5158
 	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467
-	golang.org/x/text v0.3.7
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
 	google.golang.org/api v0.70.0
 	google.golang.org/appengine v1.6.7
@@ -108,6 +106,7 @@ require (
 	github.com/shurcooL/graphql v0.0.0-20220520033453-bdb1221e171e // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	go.uber.org/atomic v1.6.0 // indirect
+	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gonum.org/v1/plot v0.10.0 // indirect
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6 // indirect
