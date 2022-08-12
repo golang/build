@@ -325,20 +325,6 @@ func (st *buildStatus) forceSnapshotUsage() {
 	st.useSnapshotMemo[st.Rev] = true
 }
 
-func (st *buildStatus) getCrossCompileConfig() *dashboard.CrossCompileConfig {
-	config := st.conf.CrossCompileConfig
-	if config == nil {
-		return nil
-	}
-	if config.AlwaysCrossCompile {
-		return config
-	}
-	if pool.NewGCEConfiguration().InStaging() || st.isTry() {
-		return config
-	}
-	return nil
-}
-
 func (st *buildStatus) checkDep(ctx context.Context, dep string) (have bool, err error) {
 	span := st.CreateSpan("ask_maintner_has_ancestor")
 	defer func() { span.Done(err) }()
@@ -423,21 +409,6 @@ func (st *buildStatus) build() error {
 	}
 
 	pool.CoordinatorProcess().PutBuildRecord(st.buildRecord())
-
-	sp := st.CreateSpan("checking_for_snapshot")
-	if pool.NewGCEConfiguration().InStaging() {
-		err := pool.NewGCEConfiguration().StorageClient().Bucket(pool.NewGCEConfiguration().BuildEnv().SnapBucket).Object(st.SnapshotObjectName()).Delete(context.Background())
-		st.LogEventTime("deleted_snapshot", fmt.Sprint(err))
-	}
-	snapshotExists := st.useSnapshot()
-	sp.Done(nil)
-
-	if config := st.getCrossCompileConfig(); !snapshotExists && config != nil {
-		if err := st.crossCompileMakeAndSnapshot(config); err != nil {
-			return err
-		}
-		st.forceSnapshotUsage()
-	}
 
 	bc, err := st.getBuildlet()
 	if err != nil {
@@ -683,81 +654,6 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 		return fmt.Errorf("tests failed: %v", remoteErr), nil
 	}
 	return nil, nil
-}
-
-func (st *buildStatus) crossCompileMakeAndSnapshot(config *dashboard.CrossCompileConfig) (err error) {
-	// TODO: currently we ditch this buildlet when we're done with
-	// the make.bash & snapshot. For extra speed later, we could
-	// keep it around and use it to "go test -c" each stdlib
-	// package's tests, and push the binary to each ARM helper
-	// machine. That might be too little gain for the complexity,
-	// though, or slower once we ship everything around.
-	ctx, cancel := context.WithCancel(st.ctx)
-	defer cancel()
-	sp := st.CreateSpan("get_buildlet_cross")
-	bc, err := sched.GetBuildlet(ctx, &queue.SchedItem{
-		HostType:   config.CompileHostType,
-		IsTry:      st.trySet != nil,
-		BuilderRev: st.BuilderRev,
-		CommitTime: st.commitTime(),
-		Repo:       st.RepoOrGo(),
-		Branch:     st.branch(),
-		User:       st.AuthorEmail,
-	})
-	sp.Done(err)
-	if err != nil {
-		err = fmt.Errorf("cross-compile and snapshot: failed to get a buildlet: %v", err)
-		go st.reportErr(err)
-		return err
-	}
-	defer bc.Close()
-
-	if err := st.writeGoSourceTo(bc, st.Rev, "go"); err != nil {
-		return err
-	}
-
-	makeSpan := st.CreateSpan("make_cross_compile")
-	defer func() { makeSpan.Done(err) }()
-
-	goos, goarch := st.conf.GOOS(), st.conf.GOARCH()
-
-	remoteErr, err := bc.Exec(st.ctx, "/bin/bash", buildlet.ExecOpts{
-		SystemLevel: true,
-		Args: []string{
-			"-c",
-			"cd $WORKDIR/go/src && " +
-				"./make.bash && " +
-				"cd .. && " +
-				"mv bin/*_*/* bin && " +
-				"rmdir bin/*_* && " +
-				"rm -rf pkg/linux_amd64 pkg/tool/linux_amd64 pkg/bootstrap pkg/obj",
-		},
-		Output: st,
-		ExtraEnv: []string{
-			"GOROOT_BOOTSTRAP=/go1.4",
-			"CGO_ENABLED=1",
-			"CC_FOR_TARGET=" + config.CCForTarget,
-			"GOOS=" + goos,
-			"GOARCH=" + goarch,
-			"GOARM=" + config.GOARM, // harmless if GOARCH != "arm"
-		},
-		Debug: true,
-	})
-	if err != nil {
-		return err
-	}
-	if remoteErr != nil {
-		// Add the "done" event if make.bash fails, otherwise
-		// try builders will loop forever:
-		st.LogEventTime(eventDone, fmt.Sprintf("make.bash failed: %v", remoteErr))
-		return fmt.Errorf("remote error: %v", remoteErr)
-	}
-
-	if err := st.doSnapshot(bc); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // runAllLegacy executes all.bash (or .bat, or whatever) in the traditional way.

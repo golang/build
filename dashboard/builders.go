@@ -531,23 +531,6 @@ var Hosts = map[string]*HostConfig{
 	},
 }
 
-// CrossCompileConfig describes how to cross-compile a build on a
-// faster host.
-type CrossCompileConfig struct {
-	// CompileHostType is the host type to use for compilation
-	CompileHostType string
-
-	// CCForTarget is the CC_FOR_TARGET environment variable.
-	CCForTarget string
-
-	// GOARM is any GOARM= environment variable.
-	GOARM string
-
-	// AlwaysCrossCompile controls whether this builder always
-	// cross compiles. Otherwise it's only done for trybot runs.
-	AlwaysCrossCompile bool
-}
-
 func gh(githubUsername string) *gophers.Person {
 	p := gophers.GetPerson("@" + githubUsername)
 	if p == nil {
@@ -780,10 +763,6 @@ type BuildConfig struct {
 	// commit to be tested's history. If absent, this builder is
 	// not run for that commit.
 	GoDeps []string
-
-	// CrossCompileConfig optionally specifies whether and how
-	// this build is cross compiled.
-	CrossCompileConfig *CrossCompileConfig
 
 	// distTestAdjust optionally specifies a function that can
 	// adjust the cmd/dist test policy for this builder.

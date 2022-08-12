@@ -808,19 +808,6 @@ func TestSlowBotAliases(t *testing.T) {
 	}
 }
 
-func TestCrossCompileConfigs(t *testing.T) {
-	// Verify that Builders.CrossCompileConfig have valid host types.
-	for name, bc := range Builders {
-		cc := bc.CrossCompileConfig
-		if cc == nil {
-			continue
-		}
-		if _, ok := Hosts[cc.CompileHostType]; !ok {
-			t.Errorf("unknown host type %q for builder %q", cc.CompileHostType, name)
-		}
-	}
-}
-
 // TestTryBotsCompileAllPorts verifies that each port (go tool dist list)
 // is covered by either a real TryBot or a misc-compile TryBot.
 //
