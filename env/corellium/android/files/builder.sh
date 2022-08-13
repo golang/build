@@ -7,7 +7,7 @@ export GO_BUILDER_ENV=host-android-arm64-corellium-android
 (
 	flock -n 9 || exit 0
 	while true; do
-		go get golang.org/x/build/cmd/buildlet
+		go install golang.org/x/build/cmd/buildlet@latest
 		# unset LD_PRELOAD libtermux-exec for 32-bit binaries
 		(unset LD_PRELOAD &&
 			$HOME/go/bin/buildlet -reverse-type host-android-arm64-corellium-android -coordinator farmer.golang.org)

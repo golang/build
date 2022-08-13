@@ -10,7 +10,7 @@
 #
 # place a valid builder key in the `buildkey` file.
 
-curl -o com.termux.apk "https://f-droid.org/repo/com.termux_102.apk"
+curl -o com.termux.apk "https://f-droid.org/repo/com.termux_118.apk"
 curl -o com.termux.boot.apk "https://f-droid.org/repo/com.termux.boot_7.apk"
 
 adb install com.termux.apk

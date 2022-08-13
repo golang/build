@@ -4,7 +4,7 @@ infrastructure.
 The ios and android directories contain scripts and supporting files
 for setting up a newly created virtual device.
 
-The current builders run on the https://go.corellium.com account,
+The current builders run on the https://go.enterprise.corellium.com account,
 kindly provided by [Zenly](https://zen.ly/). Contact: steeve@zen.ly.
 
 New devices are set up through the Corellium
