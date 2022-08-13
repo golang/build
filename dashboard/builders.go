@@ -2438,6 +2438,17 @@ func init() {
 		numTryTestHelpers: 1,
 	})
 	addBuilder(BuildConfig{
+		Name:     "linux-arm64-boringcrypto",
+		HostType: "host-linux-arm64-aws",
+		env: []string{
+			"GOEXPERIMENT=boringcrypto",
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
+		GoDeps: []string{
+			"5c4ed73f1c3f2052d8f60ce5ed45d9d4f9686331", // CL 397895, "internal/goexperiment: add GOEXPERIMENT=boringcrypto"
+		},
+	})
+	addBuilder(BuildConfig{
 		Name:              "linux-arm-aws",
 		HostType:          "host-linux-arm-aws",
 		tryBot:            defaultTrySet(),
