@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build linux || darwin
+// +build linux darwin
+
 package releasetargets
 
 import (
@@ -15,6 +18,7 @@ import (
 	"testing"
 
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/coordinator/pool"
 )
 
 var update = flag.Bool("update", false, "controls whether to update releases.txt")
@@ -66,6 +70,21 @@ func printRelease(w io.Writer, release int, targets ReleaseTargets) {
 		if len(target.ExtraEnv) != 0 {
 			fmt.Fprintf(w, "\tExtra env: %q\n", target.ExtraEnv)
 		}
+		if bc, ok := dashboard.Builders[target.Builder]; ok {
+			var runningOn string
+			switch pool.ForHost(bc.HostConfig()).(type) {
+			case *pool.EC2Buildlet:
+				runningOn = "AWS"
+			case *pool.GCEBuildlet:
+				runningOn = "GCP"
+			case *pool.ReverseBuildletPool:
+				runningOn = fmt.Sprintf("reverse builder: %v", bc.HostConfig().Notes)
+			default:
+				runningOn = "unknown"
+			}
+			fmt.Fprintf(w, "\tRunning on %v\n", runningOn)
+		}
+
 		fmt.Fprintf(w, "\n")
 	}
 	fmt.Fprintf(w, "\n\n")

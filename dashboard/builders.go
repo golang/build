@@ -168,14 +168,14 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-arm64-11": {
 		IsReverse:   true,
-		Notes:       "macOS Big Sur (11) ARM64 (M1). Mac mini",
+		Notes:       "macOS Big Sur (11) ARM64 (M1) on Mac minis in a Google office",
 		ExpectNum:   3,
 		SSHUsername: "gopher",
 	},
 	"host-darwin-arm64-12": {
 		IsReverse:   true,
 		ExpectNum:   3,
-		Notes:       "macOS Big Sur (12) ARM64 (M1). Mac mini",
+		Notes:       "macOS Big Sur (12) ARM64 (M1) on Mac minis in a Google office",
 		SSHUsername: "gopher",
 	},
 	"host-dragonfly-amd64-622": {
@@ -514,7 +514,7 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername: "gopher",
 	},
 	"host-windows-arm64-mini": { // host name known to cmd/buildlet/stage0, cannot change
-		Notes:     "macOS hosting Windows 10 in qemu with HVM acceleration.",
+		Notes:     "MacStadium mac minis hosting Windows 10 in qemu with HVM acceleration.",
 		IsReverse: true,
 		ExpectNum: 2,
 	},
@@ -524,7 +524,7 @@ var Hosts = map[string]*HostConfig{
 		Owners:    []*gophers.Person{gh("zx2c4")},
 	},
 	"host-windows11-arm64-mini": { // host name known to cmd/buildlet/stage0, cannot change
-		Notes:     "macOS hosting Windows 11 in qemu with HVM acceleration.",
+		Notes:     "MacStadium mac minis hosting Windows 11 in qemu with HVM acceleration.",
 		HostArch:  "windows-arm64",
 		IsReverse: true,
 		ExpectNum: 5,
