@@ -728,6 +728,31 @@ func (q *Queries) WorkflowFinished(ctx context.Context, arg WorkflowFinishedPara
 	return i, err
 }
 
+const workflowNames = `-- name: WorkflowNames :many
+SELECT DISTINCT name
+FROM workflows
+`
+
+func (q *Queries) WorkflowNames(ctx context.Context) ([]sql.NullString, error) {
+	rows, err := q.db.Query(ctx, workflowNames)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []sql.NullString
+	for rows.Next() {
+		var name sql.NullString
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const workflowSidebar = `-- name: WorkflowSidebar :many
 SELECT name, COUNT(*)
 FROM workflows
@@ -808,6 +833,42 @@ ORDER BY created_at DESC
 
 func (q *Queries) WorkflowsByName(ctx context.Context, name sql.NullString) ([]Workflow, error) {
 	rows, err := q.db.Query(ctx, workflowsByName, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Workflow
+	for rows.Next() {
+		var i Workflow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Params,
+			&i.Name,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Finished,
+			&i.Output,
+			&i.Error,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const workflowsByNames = `-- name: WorkflowsByNames :many
+SELECT id, params, name, created_at, updated_at, finished, output, error
+FROM workflows
+WHERE name = ANY($1::text[])
+ORDER BY created_at DESC
+`
+
+func (q *Queries) WorkflowsByNames(ctx context.Context, names []string) ([]Workflow, error) {
+	rows, err := q.db.Query(ctx, workflowsByNames, names)
 	if err != nil {
 		return nil, err
 	}

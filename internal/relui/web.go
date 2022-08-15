@@ -108,7 +108,17 @@ func (s *Server) sidebarWorkflows() []db.WorkflowSidebarRow {
 	if err != nil {
 		panic(fmt.Sprintf("sidebarWorkflows: %q", err))
 	}
-	return sb
+	var filtered []db.WorkflowSidebarRow
+	others := db.WorkflowSidebarRow{Name: sql.NullString{String: "Others", Valid: true}}
+	for _, row := range sb {
+		if s.w.dh.Definition(row.Name.String) == nil {
+			others.Count += row.Count
+			continue
+		}
+		filtered = append(filtered, row)
+	}
+	filtered = append(filtered, others)
+	return filtered
 }
 
 func (s *Server) mustLookup(name string) *template.Template {
@@ -165,19 +175,33 @@ func workflowParams(wf db.Workflow) (map[string]string, error) {
 // homeHandler renders the homepage.
 func (s *Server) homeHandler(w http.ResponseWriter, r *http.Request) {
 	q := db.New(s.db)
-	name := r.URL.Query().Get("name")
-	if name == "" {
-		name = "all"
-	}
-	hr := &homeResponse{SiteHeader: s.header}
-	hr.SiteHeader.NameParam = name
 
-	var err error
+	names, err := q.WorkflowNames(r.Context())
+	if err != nil {
+		log.Printf("homeHandler: %v", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	var others []string
+	for _, name := range names {
+		if s.w.dh.Definition(name.String) != nil {
+			continue
+		}
+		others = append(others, name.String)
+	}
+
+	name := r.URL.Query().Get("name")
+	hr := &homeResponse{SiteHeader: s.header}
 	var ws []db.Workflow
-	if name != "all" {
-		ws, err = q.WorkflowsByName(r.Context(), sql.NullString{String: name, Valid: true})
-	} else {
+	switch name {
+	case "all", "All", "":
 		ws, err = q.Workflows(r.Context())
+		hr.SiteHeader.NameParam = "All Workflows"
+	case "others", "Others":
+		ws, err = q.WorkflowsByNames(r.Context(), others)
+		hr.SiteHeader.NameParam = "Others"
+	default:
+		ws, err = q.WorkflowsByName(r.Context(), sql.NullString{String: name, Valid: true})
 	}
 	if err != nil {
 		log.Printf("homeHandler: %v", err)

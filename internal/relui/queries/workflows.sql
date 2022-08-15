@@ -13,6 +13,16 @@ FROM workflows
 WHERE name = $1
 ORDER BY created_at DESC;
 
+-- name: WorkflowsByNames :many
+SELECT *
+FROM workflows
+WHERE name = ANY(@names::text[])
+ORDER BY created_at DESC;
+
+-- name: WorkflowNames :many
+SELECT DISTINCT name
+FROM workflows;
+
 -- name: Workflow :one
 SELECT *
 FROM workflows

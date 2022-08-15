@@ -20,7 +20,7 @@
     <div class="Site-bodyWrapper">
       <nav class="Site-navigation">
         {{$name := .SiteHeader.NameParam}}
-        <a href="{{baseLink "/"}}" class="Site-navigationRow {{if eq $name "all"}}Site-navigationRow--active{{end}}">
+        <a href="{{baseLink "/"}}" class="Site-navigationRow {{if eq $name "All Workflows"}}Site-navigationRow--active{{end}}">
           <div class="Site-navigationRowName">All Workflows</div>
           <div class="Site-navigationRowCount">
             <div class="Site-navigationRowCountBadge">{{allWorkflowsCount}}</div>
