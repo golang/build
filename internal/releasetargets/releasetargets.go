@@ -33,22 +33,21 @@ type ReleaseTargets map[string]*Target
 // GOOS and GOARCH will be set automatically from the target name, but can be
 // overridden if necessary. Name will also be set and should not be overriden.
 var allReleases = map[int]ReleaseTargets{
-	17: {
+	18: {
 		"darwin-amd64": &Target{
-			Builder:  "darwin-amd64-11_0",
+			Builder:  "darwin-amd64-12_0",
 			Race:     true,
 			ExtraEnv: []string{"CGO_CFLAGS=-mmacosx-version-min=10.13"}, // Issues #36025 #35459
-
 		},
 		"darwin-arm64": &Target{
-			Builder: "darwin-arm64-11",
+			Builder: "darwin-arm64-12",
 			Race:    true,
 		},
 		"freebsd-386": &Target{
-			Builder: "freebsd-386-11_4",
+			Builder: "freebsd-386-12_3",
 		},
 		"freebsd-amd64": &Target{
-			Builder: "freebsd-amd64-11_4",
+			Builder: "freebsd-amd64-12_3",
 			Race:    true,
 		},
 		"linux-386": &Target{
@@ -82,27 +81,6 @@ var allReleases = map[int]ReleaseTargets{
 			Builder:         "windows-amd64-2008",
 			LongTestBuilder: "windows-amd64-longtest",
 			Race:            true,
-		},
-		"windows-arm64": &Target{
-			Builder: "windows-arm64-10",
-		},
-	},
-	18: {
-		"darwin-amd64": &Target{
-			Builder:  "darwin-amd64-12_0",
-			Race:     true,
-			ExtraEnv: []string{"CGO_CFLAGS=-mmacosx-version-min=10.13"}, // Issues #36025 #35459
-		},
-		"darwin-arm64": &Target{
-			Builder: "darwin-arm64-12",
-			Race:    true,
-		},
-		"freebsd-386": &Target{
-			Builder: "freebsd-386-12_3",
-		},
-		"freebsd-amd64": &Target{
-			Builder: "freebsd-amd64-12_3",
-			Race:    true,
 		},
 		"windows-arm64": &Target{
 			Builder: "windows-arm64-11",
