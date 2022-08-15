@@ -466,7 +466,7 @@ func serveTarball(pathMatch string, files map[string]string, w http.ResponseWrit
 	}
 }
 
-func checkFile(t *testing.T, dlURL string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, check func([]byte)) {
+func checkFile(t *testing.T, dlURL string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, check func(*testing.T, []byte)) {
 	t.Run(filename, func(t *testing.T) {
 		f, ok := files[filename]
 		if !ok {
@@ -483,12 +483,12 @@ func checkFile(t *testing.T, dlURL string, files map[string]*WebsiteFile, filena
 		if err != nil {
 			t.Fatalf("reading %v: %v", f.Filename, err)
 		}
-		check(body)
+		check(t, body)
 	})
 }
 
 func checkContents(t *testing.T, dlURL string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, contents string) {
-	checkFile(t, dlURL, files, filename, meta, func(b []byte) {
+	checkFile(t, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
 		if got, want := string(b), contents; got != want {
 			t.Errorf("%v contains %q, want %q", filename, got, want)
 		}
@@ -496,7 +496,7 @@ func checkContents(t *testing.T, dlURL string, files map[string]*WebsiteFile, fi
 }
 
 func checkTGZ(t *testing.T, dlURL string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, contents map[string]string) {
-	checkFile(t, dlURL, files, filename, meta, func(b []byte) {
+	checkFile(t, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
 		gzr, err := gzip.NewReader(bytes.NewReader(b))
 		if err != nil {
 			t.Fatal(err)
@@ -530,7 +530,7 @@ func checkTGZ(t *testing.T, dlURL string, files map[string]*WebsiteFile, filenam
 }
 
 func checkZip(t *testing.T, dlURL string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, contents map[string]string) {
-	checkFile(t, dlURL, files, filename, meta, func(b []byte) {
+	checkFile(t, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
 		zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
 		if err != nil {
 			t.Fatal(err)
