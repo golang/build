@@ -15,27 +15,34 @@ type TagXReposTasks struct {
 	Gerrit GerritClient
 }
 
+func (x *TagXReposTasks) NewDefinition() *wf.Definition {
+	wd := wf.New()
+	repos := wf.Task0(wd, "Select repositories", x.SelectRepos)
+	wf.Expand1(wd, "Create plan", x.BuildPlan, repos)
+	return wd
+}
+
 type TagRepo struct {
 	Name string
 	Next string
 	Deps []string
 }
 
-func (x *TagXReposTasks) SelectRepos(ctx *wf.TaskContext) ([]*TagRepo, error) {
+func (x *TagXReposTasks) SelectRepos(ctx *wf.TaskContext) ([]TagRepo, error) {
 	projects, err := x.Gerrit.ListProjects(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	ctx.Printf("Examining repositories %v", projects)
-	var repos []*TagRepo
+	var repos []TagRepo
 	for _, p := range projects {
 		repo, err := x.readRepo(ctx, p)
 		if err != nil {
 			return nil, err
 		}
 		if repo != nil {
-			repos = append(repos, repo)
+			repos = append(repos, *repo)
 		}
 	}
 	return repos, nil
@@ -98,4 +105,56 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 		}
 	}
 	return result, nil
+}
+
+func (x *TagXReposTasks) BuildPlan(wd *wf.Definition, repos []TagRepo) error {
+	updated := map[string]wf.Dependency{}
+
+	// Find all repositories whose dependencies are satisfied and update
+	// them, proceeding until all are updated or no progress can be made.
+	for len(updated) != len(repos) {
+		progress := false
+		for _, repo := range repos {
+			dep, ok := x.planRepo(wd, repo, updated)
+			if !ok {
+				continue
+			}
+			updated[repo.Name] = dep
+			progress = true
+		}
+
+		if !progress {
+			return fmt.Errorf("cycle detected, sorry")
+		}
+	}
+	return nil
+}
+
+func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, updated map[string]wf.Dependency) (wf.Dependency, bool) {
+	var deps []wf.Dependency
+	for _, repoDeps := range repo.Deps {
+		if dep, ok := updated[repoDeps]; ok {
+			deps = append(deps, dep)
+		} else {
+			return nil, false
+		}
+	}
+	wd = wd.Sub(repo.Name)
+	commit := wf.Task1(wd, "update go.mod", x.UpdateGoMod, wf.Const(repo), wf.After(deps...))
+	green := wf.Action2(wd, "wait for green post-submit", x.AwaitGreen, wf.Const(repo), commit)
+	tagged := wf.Task2(wd, "tag", x.TagRepo, wf.Const(repo), commit, wf.After(green))
+	wf.Output(wd, "tagged version", tagged)
+	return tagged, true
+}
+
+func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo) (string, error) {
+	return "", nil
+}
+
+func (x *TagXReposTasks) AwaitGreen(ctx *wf.TaskContext, repo TagRepo, commit string) error {
+	return nil
+}
+
+func (x *TagXReposTasks) TagRepo(ctx *wf.TaskContext, repo TagRepo, commit string) (string, error) {
+	return repo.Next, nil
 }
