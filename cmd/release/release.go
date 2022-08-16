@@ -23,10 +23,11 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/build"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/gomote/protos"
+	"golang.org/x/build/internal/iapclient"
 	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
@@ -49,7 +50,7 @@ var (
 )
 
 var (
-	coordClient *buildlet.CoordinatorClient
+	coordClient *buildlet.GRPCCoordinatorClient
 	buildEnv    *buildenv.Environment
 )
 
@@ -95,7 +96,13 @@ func main() {
 		return
 	}
 
-	coordClient = coordinatorClient()
+	cc, err := iapclient.GRPCClient(ctx, "build.golang.org:443")
+	if err != nil {
+		log.Fatalf("Could not connect to coordinator: %v", err)
+	}
+	coordClient = &buildlet.GRPCCoordinatorClient{
+		Client: protos.NewGomoteServiceClient(cc),
+	}
 	buildEnv = buildenv.Production
 
 	targets, ok := releasetargets.TargetsForVersion(*flagVersion)
@@ -142,7 +149,7 @@ func doRelease(ctx *workflow.TaskContext, revision, version string, target *rele
 		if !ok {
 			return fmt.Errorf("unknown builder: %v", buildConfig)
 		}
-		client, err := coordClient.CreateBuildlet(builder)
+		client, err := coordClient.CreateBuildlet(ctx, builder)
 		if err != nil {
 			return err
 		}
@@ -266,16 +273,6 @@ func writeSourceFile(ctx *workflow.TaskContext, revision, version, outPath strin
 		return err
 	}
 	return w.Close()
-}
-
-func coordinatorClient() *buildlet.CoordinatorClient {
-	return &buildlet.CoordinatorClient{
-		Auth: buildlet.UserPass{
-			Username: "user-" + *user,
-			Password: userToken(),
-		},
-		Instance: build.ProdCoordinator,
-	}
 }
 
 func homeDir() string {
