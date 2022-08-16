@@ -183,7 +183,7 @@ var (
 
 func main() {
 	buildlet.RegisterFlags()
-	version := 1
+	version := 2
 	if vs := os.Getenv("GOMOTE_VERSION"); vs != "" {
 		v, err := strconv.Atoi(vs)
 		if err == nil {
