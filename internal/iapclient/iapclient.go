@@ -144,7 +144,7 @@ func TokenSource(ctx context.Context) (oauth2.TokenSource, error) {
 	const audience = "872405196845-b6fu2qpi0fehdssmc8qo47h2u3cepi0e.apps.googleusercontent.com" // Go build IAP client ID.
 
 	if metadata.OnGCE() {
-		if project, err := metadata.ProjectID(); err == nil && project == "symbolic-datum-552" {
+		if project, err := metadata.ProjectID(); err == nil && (project == "symbolic-datum-552" || project == "go-security-trybots") {
 			return idtoken.NewTokenSource(ctx, audience)
 		}
 	}
