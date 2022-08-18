@@ -49,6 +49,13 @@ spec:
             port:
               number: 444
       - pathType: ImplementationSpecific
+        path: /protos.ReleaseService/*
+        backend:
+          service:
+            name: relui-internal
+            port:
+              number: 444
+      - pathType: ImplementationSpecific
         path: /protos.GomoteService/*
         backend:
           service:
