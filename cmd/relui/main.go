@@ -31,16 +31,20 @@ import (
 	"go.opencensus.io/plugin/ochttp"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
-	"golang.org/x/build/internal/gomote/protos"
+	"golang.org/x/build/internal/access"
+	gomotepb "golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/iapclient"
 	"golang.org/x/build/internal/metrics"
 	"golang.org/x/build/internal/relui"
 	"golang.org/x/build/internal/relui/db"
+	"golang.org/x/build/internal/relui/protos"
+	"golang.org/x/build/internal/relui/sign"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/grpc"
 )
 
 var (
@@ -128,9 +132,9 @@ func main() {
 		log.Fatalf("Could not connect to coordinator: %v", err)
 	}
 	coordinator := &buildlet.GRPCCoordinatorClient{
-		Client: protos.NewGomoteServiceClient(cc),
+		Client: gomotepb.NewGomoteServiceClient(cc),
 	}
-	if _, err := coordinator.Client.Authenticate(ctx, &protos.AuthenticateRequest{}); err != nil {
+	if _, err := coordinator.Client.Authenticate(ctx, &gomotepb.AuthenticateRequest{}); err != nil {
 		log.Fatalf("Broken coordinator client: %v", err)
 	}
 	gcsClient, err := storage.NewClient(ctx)
@@ -158,7 +162,9 @@ func main() {
 	} else {
 		defer ms.Stop()
 	}
-
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(access.RequireIAPAuthUnaryInterceptor(access.IAPSkipAudienceValidation)),
+		grpc.StreamInterceptor(access.RequireIAPAuthStreamInterceptor(access.IAPSkipAudienceValidation)))
+	protos.RegisterReleaseServiceServer(grpcServer, sign.NewServer())
 	buildTasks := &relui.BuildReleaseTasks{
 		GerritHTTPClient: oauth2.NewClient(ctx, creds.TokenSource),
 		GerritURL:        "https://go.googlesource.com/go",
@@ -199,7 +205,19 @@ func main() {
 		}
 	}
 	s := relui.NewServer(dbPool, w, base, siteHeader, ms)
-	log.Fatalln(https.ListenAndServe(ctx, &ochttp.Handler{Handler: s}))
+	log.Fatalln(https.ListenAndServe(ctx, &ochttp.Handler{Handler: GRPCHandler(grpcServer, s)}))
+}
+
+// GRPCHandler creates handler which intercepts requests intended for a GRPC server and directs the calls to the server.
+// All other requests are directed toward the passed in handler.
+func GRPCHandler(gs *grpc.Server, h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+			gs.ServeHTTP(w, r)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
 }
 
 func key(masterKey, principal string) string {
