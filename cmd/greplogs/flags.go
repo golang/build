@@ -4,7 +4,12 @@
 
 package main
 
-import "regexp"
+import (
+	"fmt"
+	"regexp"
+	"sort"
+	"strings"
+)
 
 type regexpList []*regexp.Regexp
 
@@ -56,5 +61,47 @@ func (x *regexpList) Matches(data []byte) [][]int {
 	for _, r := range *x {
 		matches = append(matches, r.FindAllSubmatchIndex(data, -1)...)
 	}
+	return matches
+}
+
+type regexpMap map[string]*regexp.Regexp
+
+func (x *regexpMap) Set(s string) error {
+	if *x == nil {
+		*x = regexpMap{}
+	}
+	k, v, ok := strings.Cut(s, "=")
+	if !ok {
+		return fmt.Errorf("missing key, expected key=value in %q", s)
+	}
+	re, err := regexp.Compile("(?m)" + v)
+	if err != nil {
+		// Get an error without our modifications.
+		_, err2 := regexp.Compile(v)
+		if err2 != nil {
+			err = err2
+		}
+		return err
+	}
+	(*x)[k] = re
+	return nil
+}
+
+func (x *regexpMap) String() string {
+	var result []string
+	for k, v := range *x {
+		result = append(result, fmt.Sprintf("%v=%v", k, v))
+	}
+	return strings.Join(result, ",")
+}
+
+func (x *regexpMap) Matches(data []byte) []string {
+	var matches []string
+	for k, r := range *x {
+		if r.Match(data) {
+			matches = append(matches, k)
+		}
+	}
+	sort.Strings(matches)
 	return matches
 }

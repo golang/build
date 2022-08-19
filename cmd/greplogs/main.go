@@ -46,6 +46,7 @@ var (
 	fileRegexps regexpList
 	failRegexps regexpList
 	omit        regexpList
+	knownIssues regexpMap
 
 	flagDashboard = flag.Bool("dashboard", true, "search dashboard logs from fetchlogs")
 	flagMD        = flag.Bool("md", true, "output in Markdown")
@@ -69,6 +70,7 @@ var brokenBuilders []string
 func main() {
 	// XXX What I want right now is just to point it at a bunch of
 	// logs and have it extract the failures.
+	flag.Var(&knownIssues, "known-issue", "add an issue=regexp mapping; if a log matches regexp it will be categorized under issue. One mapping per flag.")
 	flag.Var(&fileRegexps, "e", "show files matching `regexp`; if provided multiple times, files must match all regexps")
 	flag.Var(&failRegexps, "E", "show only errors matching `regexp`; if provided multiple times, an error must match all regexps")
 	flag.Var(&omit, "omit", "omit results for builder names and/or revisions matching `regexp`; if provided multiple times, logs matching any regexp are omitted")
@@ -244,10 +246,17 @@ func process(path, nicePath string) (found bool, err error) {
 	}
 
 	printPath := nicePath
+	kiMatches := 0
 	if *flagMD && logURL != "" {
 		prefix := ""
 		if *flagTriage {
-			prefix = "- [ ] "
+			matches := knownIssues.Matches(data)
+			if len(matches) == 0 {
+				prefix = "- [ ] "
+			} else {
+				kiMatches++
+				prefix = fmt.Sprintf("- [x] (%v) ", strings.Join(matches, ", "))
+			}
 		}
 		printPath = fmt.Sprintf("%s[%s](%s)", prefix, nicePath, logURL)
 	}
