@@ -550,7 +550,7 @@ type BuildReleaseTasks struct {
 	GCSClient              *storage.Client
 	ScratchURL, ServingURL string
 	DownloadURL            string
-	PublishFile            func(*WebsiteFile) error
+	PublishFile            func(*task.WebsiteFile) error
 	CreateBuildlet         func(context.Context, string) (buildlet.RemoteClient, error)
 	ApproveAction          func(*wf.TaskContext) error
 }
@@ -705,8 +705,8 @@ func (b *BuildReleaseTasks) runBuildStep(
 			return artifact{}, err
 		}
 		defer client.Close()
-		w := &logWriter{logger: ctx}
-		go w.run(ctx)
+		w := &task.LogWriter{Logger: ctx}
+		go w.Run(ctx)
 		step = &task.BuildletStep{
 			Target:      target,
 			Buildlet:    client,
@@ -810,62 +810,6 @@ type sizeWriter struct {
 func (w *sizeWriter) Write(p []byte) (n int, err error) {
 	w.size += len(p)
 	return len(p), nil
-}
-
-type logWriter struct {
-	flushTicker *time.Ticker
-
-	mu     sync.Mutex
-	buf    []byte
-	logger wf.Logger
-}
-
-func (w *logWriter) Write(b []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	w.buf = append(w.buf, b...)
-	if len(w.buf) > 1<<20 {
-		w.flushLocked(false)
-		w.flushTicker.Reset(10 * time.Second)
-	}
-	return len(b), nil
-}
-
-func (w *logWriter) flush(force bool) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.flushLocked(force)
-}
-
-func (w *logWriter) flushLocked(force bool) {
-	if len(w.buf) == 0 {
-		return
-	}
-	log, rest := w.buf, []byte(nil)
-	if !force {
-		nl := bytes.LastIndexByte(w.buf, '\n')
-		if nl == -1 {
-			return
-		}
-		log, rest = w.buf[:nl], w.buf[nl+1:]
-	}
-	w.logger.Printf("\n%s", string(log))
-	w.buf = append([]byte(nil), rest...) // don't leak
-}
-
-func (w *logWriter) run(ctx context.Context) {
-	w.flushTicker = time.NewTicker(10 * time.Second)
-	defer w.flushTicker.Stop()
-	for {
-		select {
-		case <-w.flushTicker.C:
-			w.flush(false)
-		case <-ctx.Done():
-			w.flush(true)
-			return
-		}
-	}
 }
 
 func (tasks *BuildReleaseTasks) startSigningCommand(ctx *wf.TaskContext, version string) (string, error) {
@@ -1099,7 +1043,7 @@ func uploadArtifact(scratchFS, servingFS fs.FS, a artifact) error {
 // The version string uses the same format as Go tags. For example, "go1.19rc1".
 func (tasks *BuildReleaseTasks) publishArtifacts(ctx *wf.TaskContext, version string, artifacts []artifact) (publishedVersion string, _ error) {
 	for _, a := range artifacts {
-		f := &WebsiteFile{
+		f := &task.WebsiteFile{
 			Filename:       a.Filename,
 			Version:        version,
 			ChecksumSHA256: a.SHA256,
@@ -1126,16 +1070,4 @@ func (tasks *BuildReleaseTasks) publishArtifacts(ctx *wf.TaskContext, version st
 	}
 	ctx.Printf("Published %v artifacts for %v", len(artifacts), version)
 	return version, nil
-}
-
-// WebsiteFile represents a file on the go.dev downloads page.
-// It should be kept in sync with the download code in x/website/internal/dl.
-type WebsiteFile struct {
-	Filename       string `json:"filename"`
-	OS             string `json:"os"`
-	Arch           string `json:"arch"`
-	Version        string `json:"version"`
-	ChecksumSHA256 string `json:"sha256"`
-	Size           int64  `json:"size"`
-	Kind           string `json:"kind"` // "archive", "installer", "source"
 }

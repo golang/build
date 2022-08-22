@@ -66,7 +66,7 @@ type releaseTestDeps struct {
 	versionTasks   *task.VersionTasks
 	buildTasks     *BuildReleaseTasks
 	milestoneTasks *task.MilestoneTasks
-	publishedFiles map[string]*WebsiteFile
+	publishedFiles map[string]*task.WebsiteFile
 	outputListener func(taskName string, output interface{})
 }
 
@@ -115,8 +115,8 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 
 	// Set up the fake website to publish to.
 	var filesMu sync.Mutex
-	files := map[string]*WebsiteFile{}
-	publishFile := func(f *WebsiteFile) error {
+	files := map[string]*task.WebsiteFile{}
+	publishFile := func(f *task.WebsiteFile) error {
 		filesMu.Lock()
 		defer filesMu.Unlock()
 		files[strings.TrimPrefix(f.Filename, wantVersion+".")] = f
@@ -197,7 +197,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	}
 
 	dlURL, files := deps.buildTasks.DownloadURL, deps.publishedFiles
-	checkTGZ(t, dlURL, files, "src.tar.gz", &WebsiteFile{
+	checkTGZ(t, dlURL, files, "src.tar.gz", &task.WebsiteFile{
 		OS:   "",
 		Arch: "",
 		Kind: "source",
@@ -205,12 +205,12 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		"go/VERSION":       wantVersion,
 		"go/src/make.bash": makeScript,
 	})
-	checkContents(t, dlURL, files, "windows-amd64.msi", &WebsiteFile{
+	checkContents(t, dlURL, files, "windows-amd64.msi", &task.WebsiteFile{
 		OS:   "windows",
 		Arch: "amd64",
 		Kind: "installer",
 	}, "I'm an MSI!\n")
-	checkTGZ(t, dlURL, files, "linux-amd64.tar.gz", &WebsiteFile{
+	checkTGZ(t, dlURL, files, "linux-amd64.tar.gz", &task.WebsiteFile{
 		OS:   "linux",
 		Arch: "amd64",
 		Kind: "archive",
@@ -219,7 +219,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		"go/tool/something_orother/compile": "",
 		"go/pkg/something_orother/race.a":   "",
 	})
-	checkZip(t, dlURL, files, "windows-arm64.zip", &WebsiteFile{
+	checkZip(t, dlURL, files, "windows-arm64.zip", &task.WebsiteFile{
 		OS:   "windows",
 		Arch: "arm64",
 		Kind: "archive",
@@ -227,7 +227,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		"go/VERSION":                        wantVersion,
 		"go/tool/something_orother/compile": "",
 	})
-	checkTGZ(t, dlURL, files, "linux-armv6l.tar.gz", &WebsiteFile{
+	checkTGZ(t, dlURL, files, "linux-armv6l.tar.gz", &task.WebsiteFile{
 		OS:   "linux",
 		Arch: "armv6l",
 		Kind: "archive",
@@ -235,7 +235,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		"go/VERSION":                        wantVersion,
 		"go/tool/something_orother/compile": "",
 	})
-	checkContents(t, dlURL, files, "darwin-amd64.pkg", &WebsiteFile{
+	checkContents(t, dlURL, files, "darwin-amd64.pkg", &task.WebsiteFile{
 		OS:   "darwin",
 		Arch: "amd64",
 		Kind: "installer",
@@ -312,7 +312,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 		runToFailure(t, deps.ctx, w, "Check branch state matches source archive", &verboseListener{t, deps.outputListener})
 		return
 	}
-	checkTGZ(t, deps.buildTasks.DownloadURL, deps.publishedFiles, "src.tar.gz", &WebsiteFile{
+	checkTGZ(t, deps.buildTasks.DownloadURL, deps.publishedFiles, "src.tar.gz", &task.WebsiteFile{
 		OS:   "",
 		Arch: "",
 		Kind: "source",
@@ -465,13 +465,13 @@ func serveTarball(pathMatch string, files map[string]string, w http.ResponseWrit
 	}
 }
 
-func checkFile(t *testing.T, dlURL string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, check func(*testing.T, []byte)) {
+func checkFile(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, filename string, meta *task.WebsiteFile, check func(*testing.T, []byte)) {
 	t.Run(filename, func(t *testing.T) {
 		f, ok := files[filename]
 		if !ok {
 			t.Fatalf("file %q not published", filename)
 		}
-		if diff := cmp.Diff(meta, f, cmpopts.IgnoreFields(WebsiteFile{}, "Filename", "Version", "ChecksumSHA256", "Size")); diff != "" {
+		if diff := cmp.Diff(meta, f, cmpopts.IgnoreFields(task.WebsiteFile{}, "Filename", "Version", "ChecksumSHA256", "Size")); diff != "" {
 			t.Errorf("file metadata mismatch (-want +got):\n%v", diff)
 		}
 		resp, err := http.Get(dlURL + "/" + f.Filename)
@@ -486,7 +486,7 @@ func checkFile(t *testing.T, dlURL string, files map[string]*WebsiteFile, filena
 	})
 }
 
-func checkContents(t *testing.T, dlURL string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, contents string) {
+func checkContents(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, filename string, meta *task.WebsiteFile, contents string) {
 	checkFile(t, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
 		if got, want := string(b), contents; got != want {
 			t.Errorf("%v contains %q, want %q", filename, got, want)
@@ -494,7 +494,7 @@ func checkContents(t *testing.T, dlURL string, files map[string]*WebsiteFile, fi
 	})
 }
 
-func checkTGZ(t *testing.T, dlURL string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, contents map[string]string) {
+func checkTGZ(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, filename string, meta *task.WebsiteFile, contents map[string]string) {
 	checkFile(t, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
 		gzr, err := gzip.NewReader(bytes.NewReader(b))
 		if err != nil {
@@ -528,7 +528,7 @@ func checkTGZ(t *testing.T, dlURL string, files map[string]*WebsiteFile, filenam
 	})
 }
 
-func checkZip(t *testing.T, dlURL string, files map[string]*WebsiteFile, filename string, meta *WebsiteFile, contents map[string]string) {
+func checkZip(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, filename string, meta *task.WebsiteFile, contents map[string]string) {
 	checkFile(t, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
 		zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
 		if err != nil {

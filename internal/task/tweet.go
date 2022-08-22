@@ -378,15 +378,15 @@ func digits(i int64) int {
 // fetchRandomArchive downloads all release archives for Go version goVer,
 // and selects a random archive to showcase in the image that displays
 // sample output from the 'go install golang.org/dl/...@latest' command.
-func fetchRandomArchive(goVer string, rnd *rand.Rand) (archive golangorgDLFile, _ error) {
+func fetchRandomArchive(goVer string, rnd *rand.Rand) (archive WebsiteFile, _ error) {
 	archives, err := fetchReleaseArchives(goVer)
 	if err != nil {
-		return golangorgDLFile{}, err
+		return WebsiteFile{}, err
 	}
 	return archives[rnd.Intn(len(archives))], nil
 }
 
-func fetchReleaseArchives(goVer string) (archives []golangorgDLFile, _ error) {
+func fetchReleaseArchives(goVer string) (archives []WebsiteFile, _ error) {
 	url := "https://go.dev/dl/?mode=json"
 	if strings.Contains(goVer, "beta") || strings.Contains(goVer, "rc") ||
 		goVer == "go1.17" || goVer == "go1.17.1" || goVer == "go1.11.1" /* For TestTweetRelease. */ {
@@ -403,7 +403,7 @@ func fetchReleaseArchives(goVer string) (archives []golangorgDLFile, _ error) {
 	} else if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
 		return nil, fmt.Errorf("got Content-Type %q, want %q", ct, "application/json")
 	}
-	var releases []golangorgDLRelease
+	var releases []WebsiteRelease
 	err = json.NewDecoder(resp.Body).Decode(&releases)
 	if err != nil {
 		return nil, err
@@ -412,7 +412,7 @@ func fetchReleaseArchives(goVer string) (archives []golangorgDLFile, _ error) {
 		if r.Version != goVer {
 			continue
 		}
-		var archives []golangorgDLFile
+		var archives []WebsiteFile
 		for _, f := range r.Files {
 			if f.Kind != "archive" {
 				continue
@@ -426,29 +426,6 @@ func fetchReleaseArchives(goVer string) (archives []golangorgDLFile, _ error) {
 		return archives, nil
 	}
 	return nil, fmt.Errorf("release version %q not found", goVer)
-}
-
-// golangorgDLRelease represents a release on the go.dev downloads page.
-type golangorgDLRelease struct {
-	Version string
-	Files   []golangorgDLFile
-}
-
-// golangorgDLFile represents a file on the go.dev downloads page.
-// It should be kept in sync with code in x/build/cmd/release and x/website/internal/dl.
-type golangorgDLFile struct {
-	Filename string
-	OS       string
-	Arch     string
-	Size     int64
-	Kind     string // One of "archive", "installer", "source".
-}
-
-func (f golangorgDLFile) GOARCH() string {
-	if f.OS == "linux" && f.Arch == "armv6l" {
-		return "arm"
-	}
-	return f.Arch
 }
 
 // drawTerminal draws an image of a terminal window
