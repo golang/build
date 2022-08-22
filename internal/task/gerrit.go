@@ -22,6 +22,8 @@ type GerritClient interface {
 	// trybots. If the CL is submitted, returns the submitted commit hash.
 	// If parentCommit is non-empty, the submitted CL's parent must match it.
 	Submitted(ctx context.Context, changeID, parentCommit string) (string, bool, error)
+
+	GetTag(ctx context.Context, project, tag string) (gerrit.TagInfo, error)
 	// Tag creates a tag on project at the specified commit.
 	Tag(ctx context.Context, project, tag, commit string) error
 	// ListTags returns all the tags on project.
@@ -144,6 +146,10 @@ func (c *RealGerritClient) ListTags(ctx context.Context, project string) ([]stri
 		tagNames = append(tagNames, strings.TrimPrefix(tag.Ref, "refs/tags/"))
 	}
 	return tagNames, nil
+}
+
+func (c *RealGerritClient) GetTag(ctx context.Context, project, tag string) (gerrit.TagInfo, error) {
+	return c.Client.GetTag(ctx, project, tag)
 }
 
 func (c *RealGerritClient) ReadBranchHead(ctx context.Context, project, branch string) (string, error) {

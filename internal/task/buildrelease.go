@@ -310,14 +310,14 @@ func (b *BuildletStep) BuildMSI(ctx *workflow.TaskContext, binaryArchive io.Read
 		})
 		return err
 	}
-	return b.fetchFile(ctx, msi, "msi")
+	return fetchFile(ctx, b.Buildlet, msi, "msi")
 }
 
 // fetchFile fetches the specified directory from the given buildlet, and
 // writes the first file it finds in that directory to dest.
-func (b *BuildletStep) fetchFile(ctx *workflow.TaskContext, dest io.Writer, dir string) error {
+func fetchFile(ctx *workflow.TaskContext, client buildlet.RemoteClient, dest io.Writer, dir string) error {
 	ctx.Printf("Downloading file from %q.", dir)
-	tgz, err := b.Buildlet.GetTar(context.Background(), dir)
+	tgz, err := client.GetTar(context.Background(), dir)
 	if err != nil {
 		return err
 	}

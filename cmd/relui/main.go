@@ -194,6 +194,12 @@ func main() {
 		log.Fatalf("RegisterReleaseWorkflows: %v", err)
 	}
 
+	tagTasks := &task.TagXReposTasks{
+		Gerrit:         gerritClient,
+		CreateBuildlet: coordinator.CreateBuildlet,
+	}
+	dh.RegisterDefinition("Tag x/ repos", tagTasks.NewDefinition())
+
 	w := relui.NewWorker(dh, dbPool, relui.NewPGListener(dbPool))
 	go w.Run(ctx)
 	if err := w.ResumeAll(ctx); err != nil {
