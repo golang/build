@@ -42,6 +42,19 @@ func (t *VersionTasks) tagInfo(ctx context.Context) (tags map[string]bool, curre
 	return tags, currentMajor, nil
 }
 
+// GetNextVersions returns the next for each of the given types of release.
+func (t *VersionTasks) GetNextVersions(ctx context.Context, kinds []ReleaseKind) ([]string, error) {
+	var next []string
+	for _, k := range kinds {
+		n, err := t.GetNextVersion(ctx, k)
+		if err != nil {
+			return nil, err
+		}
+		next = append(next, n)
+	}
+	return next, nil
+}
+
 // GetNextVersion returns the next for the given type of release.
 func (t *VersionTasks) GetNextVersion(ctx context.Context, kind ReleaseKind) (string, error) {
 	tags, currentMajor, err := t.tagInfo(ctx)

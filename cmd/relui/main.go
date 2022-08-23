@@ -69,9 +69,9 @@ func main() {
 	}
 	sendgridAPIKey := secret.Flag("sendgrid-api-key", "SendGrid API key for workflows involving sending email.")
 	var annMail task.MailHeader
-	addressVarFlag(&annMail.From, "announce-mail-from", "The From address to use for the announcement mail.")
-	addressVarFlag(&annMail.To, "announce-mail-to", "The To address to use for the announcement mail.")
-	addressListVarFlag(&annMail.BCC, "announce-mail-bcc", "The BCC address list to use for the announcement mail.")
+	addressVarFlag(&annMail.From, "announce-mail-from", "The From address to use for the (pre-)announcement mail.")
+	addressVarFlag(&annMail.To, "announce-mail-to", "The To address to use for the (pre-)announcement mail.")
+	addressListVarFlag(&annMail.BCC, "announce-mail-bcc", "The BCC address list to use for the (pre-)announcement mail.")
 	var twitterAPI secret.TwitterCredentials
 	secret.JSONVarFlag(&twitterAPI, "twitter-api-secret", "Twitter API secret to use for workflows involving tweeting.")
 	masterKey := secret.Flag("builder-master-key", "Builder master key")

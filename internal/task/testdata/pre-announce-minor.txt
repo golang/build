@@ -1,0 +1,10 @@
+Hello gophers,
+
+We plan to issue Go 1.18.4 and Go 1.17.12 on Tuesday, July 12.
+
+These minor releases include PRIVATE security fixes to the standard library.
+
+Following our security policy, this is the pre-announcement of those releases.
+
+Thanks,
+Alice for the Go team

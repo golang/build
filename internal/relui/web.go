@@ -26,6 +26,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"golang.org/x/build/internal/metrics"
 	"golang.org/x/build/internal/relui/db"
+	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
 )
 
@@ -335,6 +336,16 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			params[p.Name()] = v
+		case "task.Date":
+			v, err := time.Parse("2006-01-02", r.FormValue(fmt.Sprintf("workflow.params.%s", p.Name())))
+			if err != nil {
+				http.Error(w, fmt.Sprintf("parameter %q parsing error: %v", p.Name(), err), http.StatusBadRequest)
+				return
+			} else if p.RequireNonZero() && v.IsZero() {
+				http.Error(w, fmt.Sprintf("parameter %q must have non-zero value", p.Name()), http.StatusBadRequest)
+				return
+			}
+			params[p.Name()] = task.Date{Year: v.Year(), Month: v.Month(), Day: v.Day()}
 		default:
 			http.Error(w, fmt.Sprintf("parameter %q has an unsupported type %q", p.Name(), p.Type()), http.StatusInternalServerError)
 			return

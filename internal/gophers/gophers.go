@@ -2640,6 +2640,7 @@ func init() {
 	addPerson("Taro Aoki", "aizu.s1230022@gmail.com", "@ktr0731")
 	addPerson("Tarrant", "tarrant@keyneston.com", "@tarrant")
 	addPerson("Taru Karttunen", "taruti@taruti.net", "@taruti")
+	addPerson("Tatiana Bradley", "tatiana@golang.org")
 	addPerson("Tatsuhiro Tsujikawa", "tatsuhiro.t@gmail.com", "@tatsuhiro-t")
 	addPerson("Taufiq Rahman", "taufiqrx8@gmail.com", "@Inconnu08")
 	addPerson("Ted Hahn", "teh@uber.com")

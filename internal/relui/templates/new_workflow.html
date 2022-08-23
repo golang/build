@@ -27,8 +27,19 @@
       <form action="{{baseLink "/workflows"}}" method="post">
         <input type="hidden" id="workflow.name" name="workflow.name" value="{{$.Name}}" />
         {{range $_, $p := .Selected.Parameters}}
-          {{if eq $p.Type.String "string"}}
-            <div class="NewWorkflow-parameter NewWorkflow-parameter--string">
+          {{if eq $p.HTMLElement "select"}}
+            <div class="NewWorkflow-parameter NewWorkflow-parameter--select">
+              <label for="workflow.params.{{$p.Name}}" title="{{$p.Doc}}">{{$p.Name}}</label>
+              <select id="workflow.params.{{$p.Name}}" name="workflow.params.{{$p.Name}}"
+                {{- if $p.RequireNonZero}} required{{end}}>
+                <option></option>
+                {{range $_, $name := $p.HTMLSelectOptions}}
+                  <option value="{{$name}}">{{$name}}</option>
+                {{end}}
+              </select>
+            </div>
+          {{else if or (eq $p.Type.String "string") (eq $p.Type.String "task.Date")}}
+            <div class="NewWorkflow-parameter NewWorkflow-parameter--{{$p.Type.String}}">
               <label for="workflow.params.{{$p.Name}}" title="{{$p.Doc}}">{{$p.Name}}</label>
               <input
                 id="workflow.params.{{$p.Name}}"

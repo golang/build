@@ -58,7 +58,50 @@ type releaseAnnouncement struct {
 	Names []string
 }
 
-// AnnounceMailTasks contains tasks related to the release announcement email.
+type releasePreAnnouncement struct {
+	// Target is the planned date for the release.
+	Target Date
+
+	// Version is the Go version that will be released.
+	//
+	// The version string must use the same format as Go tags. For example, "go1.17.2".
+	Version string
+	// SecondaryVersion is an older Go version that will also be released.
+	// This only applies when two releases are planned. For example, "go1.16.10".
+	SecondaryVersion string
+
+	// Security is the security content to be included in the
+	// release pre-announcement. It should not reveal details
+	// beyond what's allowed by the security policy.
+	Security string
+
+	// Names is an optional list of release coordinator names to
+	// include in the sign-off message.
+	Names []string
+}
+
+// A Date represents a single calendar day (year, month, day).
+//
+// This type does not include location information, and
+// therefore does not describe a unique 24-hour timespan.
+//
+// TODO(go.dev/issue/19700): Start using time.Day or so when available.
+type Date struct {
+	Year  int        // Year (for example, 2009).
+	Month time.Month // Month of the year (January = 1, ...).
+	Day   int        // Day of the month, starting at 1.
+}
+
+func (d Date) String() string { return d.Format("2006-01-02") }
+func (d Date) Format(layout string) string {
+	return time.Date(d.Year, d.Month, d.Day, 0, 0, 0, 0, time.UTC).Format(layout)
+}
+func (d Date) After(year int, month time.Month, day int) bool {
+	return time.Date(d.Year, d.Month, d.Day, 0, 0, 0, 0, time.UTC).
+		After(time.Date(year, month, day, 0, 0, 0, 0, time.UTC))
+}
+
+// AnnounceMailTasks contains tasks related to the release (pre-)announcement email.
 type AnnounceMailTasks struct {
 	// SendMail sends an email with the given header and content
 	// using an externally-provided implementation.
@@ -68,8 +111,11 @@ type AnnounceMailTasks struct {
 	// doesn't indicate anything about the status of the delivery.
 	SendMail func(MailHeader, mailContent) error
 
-	// AnnounceMailHeader is the header to use for the release announcement email.
+	// AnnounceMailHeader is the header to use for the release (pre-)announcement email.
 	AnnounceMailHeader MailHeader
+
+	// testHookNow is optionally set by tests to override time.Now.
+	testHookNow func() time.Time
 }
 
 // SentMail represents an email that was sent.
@@ -137,6 +183,70 @@ func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, versions [
 	return SentMail{m.Subject}, nil
 }
 
+// PreAnnounceRelease sends an email pre-announcing a Go release
+// containing PRIVATE track security fixes planned for the target date.
+func (t AnnounceMailTasks) PreAnnounceRelease(ctx *workflow.TaskContext, versions []string, target Date, security string, users []string) (SentMail, error) {
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < time.Minute {
+		return SentMail{}, fmt.Errorf("insufficient time for pre-announce release task; a minimum of a minute left on context is required")
+	}
+	if err := oneOrTwoGoVersions(versions); err != nil {
+		return SentMail{}, err
+	}
+	now := time.Now().UTC()
+	if t.testHookNow != nil {
+		now = t.testHookNow()
+	}
+	if !target.After(now.Year(), now.Month(), now.Day()) { // A very simple check. Improve as needed.
+		return SentMail{}, fmt.Errorf("target release date is not in the future")
+	}
+	if security == "" {
+		return SentMail{}, fmt.Errorf("security content is not specified")
+	}
+	names, err := coordinatorFirstNames(users)
+	if err != nil {
+		return SentMail{}, err
+	}
+
+	r := releasePreAnnouncement{
+		Target:   target,
+		Version:  versions[0],
+		Security: security,
+		Names:    names,
+	}
+	if len(versions) == 2 {
+		r.SecondaryVersion = versions[1]
+	}
+
+	// Generate the pre-announcement email.
+	m, err := announcementMail(r)
+	if err != nil {
+		return SentMail{}, err
+	}
+	ctx.Printf("pre-announcement subject: %s\n\n", m.Subject)
+	ctx.Printf("pre-announcement body HTML:\n%s\n", m.BodyHTML)
+	ctx.Printf("pre-announcement body text:\n%s", m.BodyText)
+
+	// Before sending, check to see if this pre-announcement already exists.
+	if threadURL, err := findGoogleGroupsThread(ctx, m.Subject); err != nil {
+		return SentMail{}, fmt.Errorf("stopping early due to error checking for an existing Google Groups thread: %v", err)
+	} else if threadURL != "" {
+		ctx.Printf("a Google Groups thread with matching subject %q already exists at %q, so we'll consider that as it being sent successfully", m.Subject, threadURL)
+		return SentMail{m.Subject}, nil
+	}
+
+	// Send the pre-announcement email to the destination mailing lists.
+	if t.SendMail == nil {
+		return SentMail{Subject: "[dry-run] " + m.Subject}, nil
+	}
+	ctx.DisableRetries()
+	err = t.SendMail(t.AnnounceMailHeader, m)
+	if err != nil {
+		return SentMail{}, err
+	}
+
+	return SentMail{m.Subject}, nil
+}
+
 func coordinatorFirstNames(users []string) ([]string, error) {
 	return mapCoordinators(users, func(p *gophers.Person) string {
 		name, _, _ := strings.Cut(p.Name, " ")
@@ -179,39 +289,49 @@ type mailContent struct {
 	BodyText string
 }
 
-// announcementMail generates the announcement email for release r.
-func announcementMail(r releaseAnnouncement) (mailContent, error) {
-	// Pick a template name for this type of release.
+// announcementMail generates the (pre-)announcement email using data,
+// which must be one of these types:
+//   - releaseAnnouncement for a release announcement
+//   - releasePreAnnouncement for a release pre-announcement
+func announcementMail(data any) (mailContent, error) {
+	// Select the appropriate template name.
 	var name string
-	if i := strings.Index(r.Version, "beta"); i != -1 { // A beta release.
-		name = "announce-beta.md"
-	} else if i := strings.Index(r.Version, "rc"); i != -1 { // Release Candidate.
-		name = "announce-rc.md"
-	} else if strings.Count(r.Version, ".") == 1 { // Major release like "go1.X".
-		name = "announce-major.md"
-	} else if strings.Count(r.Version, ".") == 2 { // Minor release like "go1.X.Y".
-		name = "announce-minor.md"
-	} else {
-		return mailContent{}, fmt.Errorf("unknown version format: %q", r.Version)
+	switch r := data.(type) {
+	case releaseAnnouncement:
+		if i := strings.Index(r.Version, "beta"); i != -1 { // A beta release.
+			name = "announce-beta.md"
+		} else if i := strings.Index(r.Version, "rc"); i != -1 { // Release Candidate.
+			name = "announce-rc.md"
+		} else if strings.Count(r.Version, ".") == 1 { // Major release like "go1.X".
+			name = "announce-major.md"
+		} else if strings.Count(r.Version, ".") == 2 { // Minor release like "go1.X.Y".
+			name = "announce-minor.md"
+		} else {
+			return mailContent{}, fmt.Errorf("unknown version format: %q", r.Version)
+		}
+
+		if len(r.Security) > 0 && name != "announce-minor.md" {
+			// The Security field isn't supported in templates other than minor,
+			// so report an error instead of silently dropping it.
+			//
+			// Note: Maybe in the future we'd want to consider support for including sentences like
+			// "This beta release includes the same security fixes as in Go X.Y.Z and Go A.B.C.",
+			// but we'll have a better idea after these initial templates get more practical use.
+			return mailContent{}, fmt.Errorf("email template %q doesn't support the Security field; this field can only be used in minor releases", name)
+		} else if r.SecondaryVersion != "" && name != "announce-minor.md" {
+			return mailContent{}, fmt.Errorf("email template %q doesn't support more than one release; the SecondaryVersion field can only be used in minor releases", name)
+		}
+	case releasePreAnnouncement:
+		name = "pre-announce-minor.md"
+	default:
+		return mailContent{}, fmt.Errorf("unknown template data type %T", data)
 	}
 
-	if len(r.Security) > 0 && name != "announce-minor.md" {
-		// The Security field isn't supported in templates other than minor,
-		// so report an error instead of silently dropping it.
-		//
-		// Note: Maybe in the future we'd want to consider support for including sentences like
-		// "This beta release includes the same security fixes as in Go X.Y.Z and Go A.B.C.",
-		// but we'll have a better idea after these initial templates get more practical use.
-		return mailContent{}, fmt.Errorf("email template %q doesn't support the Security field; this field can only be used in minor releases", name)
-	} else if r.SecondaryVersion != "" && name != "announce-minor.md" {
-		return mailContent{}, fmt.Errorf("email template %q doesn't support more than one release; the SecondaryVersion field can only be used in minor releases", name)
-	}
-
-	// Render the announcement email template.
+	// Render the (pre-)announcement email template.
 	//
 	// It'll produce a valid message with a MIME header and a body, so parse it as such.
 	var buf bytes.Buffer
-	if err := announceTmpl.ExecuteTemplate(&buf, name, r); err != nil {
+	if err := announceTmpl.ExecuteTemplate(&buf, name, data); err != nil {
 		return mailContent{}, err
 	}
 	m, err := mail.ReadMessage(&buf)
@@ -292,7 +412,7 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 		}
 		return "", fmt.Errorf("internal error: unhandled pre-release Go version %q", v)
 	},
-}).ParseFS(tmplDir, "template/announce-*.md"))
+}).ParseFS(tmplDir, "template/announce-*.md", "template/pre-announce-minor.md"))
 
 //go:embed template
 var tmplDir embed.FS

@@ -34,11 +34,11 @@ func TestAnnounceReleaseShortContext(t *testing.T) {
 func TestAnnouncementMail(t *testing.T) {
 	tests := [...]struct {
 		name        string
-		in          releaseAnnouncement
+		in          any
 		wantSubject string
 	}{
 		{
-			name: "minor",
+			name: "announce-minor",
 			in: releaseAnnouncement{
 				Version:          "go1.18.1",
 				SecondaryVersion: "go1.17.9",
@@ -47,7 +47,7 @@ func TestAnnouncementMail(t *testing.T) {
 			wantSubject: "Go 1.18.1 and Go 1.17.9 are released",
 		},
 		{
-			name: "minor-with-security",
+			name: "announce-minor-with-security",
 			in: releaseAnnouncement{
 				Version:          "go1.18.1",
 				SecondaryVersion: "go1.17.9",
@@ -80,7 +80,7 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 			wantSubject: "[security] Go 1.18.1 and Go 1.17.9 are released",
 		},
 		{
-			name: "minor-solo",
+			name: "announce-minor-solo",
 			in: releaseAnnouncement{
 				Version:  "go1.11.1",
 				Security: []string{"abc: security fix 1", "xyz: security fix 2"},
@@ -89,25 +89,47 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 			wantSubject: "[security] Go 1.11.1 is released",
 		},
 		{
-			name: "beta",
+			name: "announce-beta",
 			in: releaseAnnouncement{
 				Version: "go1.19beta5",
 			},
 			wantSubject: "Go 1.19 Beta 5 is released",
 		},
 		{
-			name: "rc",
+			name: "announce-rc",
 			in: releaseAnnouncement{
 				Version: "go1.19rc6",
 			},
 			wantSubject: "Go 1.19 Release Candidate 6 is released",
 		},
 		{
-			name: "major",
+			name: "announce-major",
 			in: releaseAnnouncement{
 				Version: "go1.19",
 			},
 			wantSubject: "Go 1.19 is released",
+		},
+
+		{
+			name: "pre-announce-minor",
+			in: releasePreAnnouncement{
+				Target:           Date{2022, time.July, 12},
+				Version:          "go1.18.4",
+				SecondaryVersion: "go1.17.12",
+				Security:         "the standard library",
+				Names:            []string{"Alice"},
+			},
+			wantSubject: "[security] Go 1.18.4 and Go 1.17.12 pre-announcement",
+		},
+		{
+			name: "pre-announce-minor-solo",
+			in: releasePreAnnouncement{
+				Target:   Date{2022, time.July, 12},
+				Version:  "go1.18.4",
+				Security: "the toolchain",
+				Names:    []string{"Alice", "Bob"},
+			},
+			wantSubject: "[security] Go 1.18.4 pre-announcement",
 		},
 	}
 	for _, tc := range tests {
@@ -117,17 +139,17 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 				t.Fatal("announcementMail returned non-nil error:", err)
 			}
 			if *updateFlag {
-				writeTestdataFile(t, "announce-"+tc.name+".html", []byte(m.BodyHTML))
-				writeTestdataFile(t, "announce-"+tc.name+".txt", []byte(m.BodyText))
+				writeTestdataFile(t, tc.name+".html", []byte(m.BodyHTML))
+				writeTestdataFile(t, tc.name+".txt", []byte(m.BodyText))
 				return
 			}
 			if diff := cmp.Diff(tc.wantSubject, m.Subject); diff != "" {
 				t.Errorf("subject mismatch (-want +got):\n%s", diff)
 			}
-			if diff := cmp.Diff(testdataFile(t, "announce-"+tc.name+".html"), m.BodyHTML); diff != "" {
+			if diff := cmp.Diff(testdataFile(t, tc.name+".html"), m.BodyHTML); diff != "" {
 				t.Errorf("body HTML mismatch (-want +got):\n%s", diff)
 			}
-			if diff := cmp.Diff(testdataFile(t, "announce-"+tc.name+".txt"), m.BodyText); diff != "" {
+			if diff := cmp.Diff(testdataFile(t, tc.name+".txt"), m.BodyText); diff != "" {
 				t.Errorf("body text mismatch (-want +got):\n%s", diff)
 			}
 			if t.Failed() {
@@ -232,6 +254,73 @@ Heschi and Dmitri for the Go team` + "\n",
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
 			sentMail, err := tasks.AnnounceRelease(ctx, tc.versions, tc.security, tc.coordinators)
+			if err != nil {
+				t.Fatal("task function returned non-nil error:", err)
+			}
+			if diff := cmp.Diff(tc.want, sentMail); diff != "" {
+				t.Errorf("sent mail mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.wantLog, buf.String()); diff != "" {
+				t.Errorf("log mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestPreAnnounceRelease(t *testing.T) {
+	if testing.Short() {
+		t.Skip("not running test that uses internet in short mode")
+	}
+
+	tests := [...]struct {
+		name         string
+		versions     []string
+		target       Date
+		security     string
+		coordinators []string
+		want         SentMail
+		wantLog      string
+	}{
+		{
+			name:         "minor",
+			versions:     []string{"go1.18.4", "go1.17.11"}, // Intentionally not 1.17.12 so the real email doesn't get in the way.
+			target:       Date{2022, time.July, 12},
+			security:     "the standard library",
+			coordinators: []string{"tatiana"},
+			want:         SentMail{Subject: "[security] Go 1.18.4 and Go 1.17.11 pre-announcement"},
+			wantLog: `pre-announcement subject: [security] Go 1.18.4 and Go 1.17.11 pre-announcement
+
+pre-announcement body HTML:
+<p>Hello gophers,</p>
+<p>We plan to issue Go 1.18.4 and Go 1.17.11 on Tuesday, July 12.</p>
+<p>These minor releases include PRIVATE security fixes to the standard library.</p>
+<p>Following our security policy, this is the pre-announcement of those releases.</p>
+<p>Thanks,<br>
+Tatiana for the Go team</p>
+
+pre-announcement body text:
+Hello gophers,
+
+We plan to issue Go 1.18.4 and Go 1.17.11 on Tuesday, July 12.
+
+These minor releases include PRIVATE security fixes to the standard library.
+
+Following our security policy, this is the pre-announcement of those releases.
+
+Thanks,
+Tatiana for the Go team` + "\n",
+		},
+		// TestAnnouncementMail has additional coverage.
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tasks := AnnounceMailTasks{
+				SendMail:    func(h MailHeader, c mailContent) error { return nil },
+				testHookNow: func() time.Time { return time.Date(2022, time.July, 7, 0, 0, 0, 0, time.UTC) },
+			}
+			var buf bytes.Buffer
+			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
+			sentMail, err := tasks.PreAnnounceRelease(ctx, tc.versions, tc.target, tc.security, tc.coordinators)
 			if err != nil {
 				t.Fatal("task function returned non-nil error:", err)
 			}

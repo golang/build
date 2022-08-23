@@ -28,6 +28,7 @@ import (
 	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/task"
+	"golang.org/x/build/internal/workflow"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/net/context/ctxhttp"
 )
@@ -133,6 +134,31 @@ func RegisterCommunicationDefinitions(h *DefinitionHolder, tasks task.Communicat
 
 // Release parameter definitions.
 var (
+	targetDateParam = wf.ParamDef[task.Date]{
+		Name: "Target Release Date",
+		ParamType: wf.ParamType[task.Date]{
+			HTMLElement:   "input",
+			HTMLInputType: "date",
+		},
+		Doc: `Target Release Date is the date on which the release is scheduled.
+
+It must be three to seven days after the pre-announcement as documented in the security policy.`,
+	}
+	securityPreAnnParam = wf.ParamDef[string]{
+		Name: "Security Content",
+		ParamType: workflow.ParamType[string]{
+			HTMLElement: "select",
+			HTMLSelectOptions: []string{
+				"the standard library",
+				"the toolchain",
+				"the standard library and the toolchain",
+			},
+		},
+		Doc: `Security Content is the security content to be included in the release pre-announcement.
+
+It must not reveal details beyond what's allowed by the security policy.`,
+	}
+
 	securitySummaryParameter = wf.ParamDef[string]{
 		Name: "Security Summary (optional)",
 		Doc: `Security Summary is an optional sentence describing security fixes included in this release.
@@ -259,11 +285,34 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		return err
 	}
 
-	// Register dry-run release workflows.
+	// Register pre-announcement workflows.
 	currentMajor, err := version.GetCurrentMajor(ctx)
 	if err != nil {
 		return err
 	}
+	releases := []struct {
+		kinds []task.ReleaseKind
+		name  string
+	}{
+		{[]task.ReleaseKind{task.KindCurrentMinor, task.KindPrevMinor}, fmt.Sprintf("next minor release for Go 1.%d and 1.%d", currentMajor, currentMajor-1)},
+		{[]task.ReleaseKind{task.KindCurrentMinor}, fmt.Sprintf("next minor release for Go 1.%d", currentMajor)},
+		{[]task.ReleaseKind{task.KindPrevMinor}, fmt.Sprintf("next minor release for Go 1.%d", currentMajor-1)},
+	}
+	for _, r := range releases {
+		wd := wf.New()
+
+		versions := wf.Task1(wd, "Get next versions", version.GetNextVersions, wf.Const(r.kinds))
+		targetDate := wf.Param(wd, targetDateParam)
+		securityContent := wf.Param(wd, securityPreAnnParam)
+		coordinators := wf.Param(wd, releaseCoordinators)
+
+		sentMail := wf.Task4(wd, "mail-pre-announcement", comm.PreAnnounceRelease, versions, targetDate, securityContent, coordinators)
+		wf.Output(wd, "Pre-announcement URL", wf.Task1(wd, "await-pre-announcement", comm.AwaitAnnounceMail, sentMail))
+
+		h.RegisterDefinition("pre-announce "+r.name, wd)
+	}
+
+	// Register dry-run release workflows.
 	wd := wf.New()
 	if err := addBuildAndTestOnlyWorkflow(wd, version, build, currentMajor+1, task.KindBeta); err != nil {
 		return err

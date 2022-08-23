@@ -125,6 +125,7 @@ type MetaParameter interface {
 	Type() reflect.Type
 	HTMLElement() string
 	HTMLInputType() string
+	HTMLSelectOptions() []string
 	Doc() string
 	Example() string
 }
@@ -145,12 +146,13 @@ type parameter[T any] struct {
 	d ParamDef[T]
 }
 
-func (p parameter[T]) Name() string          { return p.d.Name }
-func (p parameter[T]) Type() reflect.Type    { return p.typ() }
-func (p parameter[T]) HTMLElement() string   { return p.d.HTMLElement }
-func (p parameter[T]) HTMLInputType() string { return p.d.HTMLInputType }
-func (p parameter[T]) Doc() string           { return p.d.Doc }
-func (p parameter[T]) Example() string       { return p.d.Example }
+func (p parameter[T]) Name() string                { return p.d.Name }
+func (p parameter[T]) Type() reflect.Type          { return p.typ() }
+func (p parameter[T]) HTMLElement() string         { return p.d.HTMLElement }
+func (p parameter[T]) HTMLInputType() string       { return p.d.HTMLInputType }
+func (p parameter[T]) HTMLSelectOptions() []string { return p.d.HTMLSelectOptions }
+func (p parameter[T]) Doc() string                 { return p.d.Doc }
+func (p parameter[T]) Example() string             { return p.d.Example }
 func (p parameter[T]) RequireNonZero() bool {
 	return !strings.HasSuffix(p.d.Name, " (optional)")
 }
@@ -169,12 +171,15 @@ func (p parameter[T]) dependencies() []*taskDefinition { return nil }
 // there are some HTML-related knobs available.
 type ParamType[T any] struct {
 	// HTMLElement configures the HTML element for entering the parameter value.
-	// Supported values are "input" and "textarea".
+	// Supported values are "input", "textarea" and "select".
 	HTMLElement string
 	// HTMLInputType optionally configures the <input> type attribute when HTMLElement is "input".
 	// If this attribute is not specified, <input> elements default to type="text".
 	// See https://developer.mozilla.org/en-US/docs/Web/HTML/Element/input#input_types.
 	HTMLInputType string
+	// HTMLSelectOptions configures the available options when HTMLElement is "select".
+	// See https://developer.mozilla.org/en-US/docs/Web/HTML/Element/option.
+	HTMLSelectOptions []string
 }
 
 var (
