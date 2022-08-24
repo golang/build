@@ -51,6 +51,9 @@ func TestUpdateSigningStatusError(t *testing.T) {
 		}
 	})
 	t.Run("non-existant signing request", func(t *testing.T) {
+		// skipping due to go.dev/issue/54654
+		t.Skip("skipping flaky test. see go.dev/issue/54654")
+
 		ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
 		client, server := setupSigningTest(t, ctx)
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
