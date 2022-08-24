@@ -19,7 +19,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -32,12 +31,10 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/go-github/github"
 	"github.com/google/uuid"
-	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal"
 	"golang.org/x/build/internal/gcsfs"
 	"golang.org/x/build/internal/task"
-	"golang.org/x/build/internal/untar"
 	"golang.org/x/build/internal/workflow"
 )
 
@@ -61,8 +58,9 @@ func TestSecurity(t *testing.T) {
 
 type releaseTestDeps struct {
 	ctx            context.Context
-	buildlets      *fakeBuildlets
-	gerrit         *fakeGerrit
+	buildlets      *task.FakeBuildlets
+	goRepo         *task.FakeRepo
+	gerrit         *reviewerCheckGerrit
 	versionTasks   *task.VersionTasks
 	buildTasks     *BuildReleaseTasks
 	milestoneTasks *task.MilestoneTasks
@@ -81,12 +79,7 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 	// Set up a server that will be used to serve inputs to the build.
 	bootstrapServer := httptest.NewServer(http.HandlerFunc(serveBootstrap))
 	t.Cleanup(bootstrapServer.Close)
-	fakeBuildlets := &fakeBuildlets{
-		t:       t,
-		dir:     t.TempDir(),
-		httpURL: bootstrapServer.URL,
-		logs:    map[string][]*[]string{},
-	}
+	fakeBuildlets := task.NewFakeBuildlets(t, bootstrapServer.URL)
 
 	// Set up the fake signing process.
 	scratchDir := t.TempDir()
@@ -123,7 +116,13 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 		return nil
 	}
 
-	gerrit := &fakeGerrit{createdTags: map[string]string{}}
+	goRepo := task.NewFakeRepo(t, "go")
+	base := goRepo.Commit(goFiles)
+	goRepo.Tag("go1.17", base)
+	dlRepo := task.NewFakeRepo(t, "dl")
+	fakeGerrit := task.NewFakeGerrit(t, goRepo, dlRepo)
+
+	gerrit := &reviewerCheckGerrit{FakeGerrit: fakeGerrit}
 	versionTasks := &task.VersionTasks{
 		Gerrit:    gerrit,
 		GoProject: "go",
@@ -137,16 +136,14 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 		},
 	}
 
-	snapshotServer := httptest.NewServer(http.HandlerFunc(serveSnapshot))
-	t.Cleanup(snapshotServer.Close)
 	buildTasks := &BuildReleaseTasks{
 		GerritClient:     gerrit,
 		GerritHTTPClient: http.DefaultClient,
-		GerritURL:        snapshotServer.URL,
+		GerritURL:        fakeGerrit.GerritURL() + "/go",
 		GCSClient:        nil,
 		ScratchURL:       "file://" + filepath.ToSlash(scratchDir),
 		ServingURL:       "file://" + filepath.ToSlash(servingDir),
-		CreateBuildlet:   fakeBuildlets.createBuildlet,
+		CreateBuildlet:   fakeBuildlets.CreateBuildlet,
 		DownloadURL:      dlServer.URL,
 		PublishFile:      publishFile,
 		ApproveAction: func(ctx *workflow.TaskContext) error {
@@ -162,6 +159,7 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 	return &releaseTestDeps{
 		ctx:            ctx,
 		buildlets:      fakeBuildlets,
+		goRepo:         goRepo,
 		gerrit:         gerrit,
 		versionTasks:   versionTasks,
 		buildTasks:     buildTasks,
@@ -241,25 +239,30 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		Kind: "installer",
 	}, "I'm a .pkg!\n")
 
-	wantCLs := 2 // VERSION bump, DL
-	if kind == task.KindBeta {
-		wantCLs--
+	head, err := deps.gerrit.ReadBranchHead(deps.ctx, "dl", "master")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if deps.gerrit.changesCreated != wantCLs {
-		t.Errorf("workflow sent %v changes to Gerrit, want %v", deps.gerrit.changesCreated, wantCLs)
+	content, err := deps.gerrit.ReadFile(deps.ctx, "dl", head, wantVersion+"/main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), fmt.Sprintf("version.Run(%q)", wantVersion)) {
+		t.Errorf("unexpected dl content: %v", content)
 	}
 
-	if len(deps.gerrit.createdTags) != 1 {
-		t.Errorf("workflow created %v tags, want 1", deps.gerrit.createdTags)
+	tag, err := deps.gerrit.GetTag(deps.ctx, "go", wantVersion)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	// TODO: consider logging this to golden files?
-	for name, logs := range deps.buildlets.logs {
-		t.Logf("%v buildlets:", name)
-		for _, group := range logs {
-			for _, line := range *group {
-				t.Log(line)
-			}
+	if kind != task.KindBeta {
+		version, err := deps.gerrit.ReadFile(deps.ctx, "go", tag.Revision, "VERSION")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(version) != wantVersion {
+			t.Errorf("VERSION file is %q, expected %q", version, wantVersion)
 		}
 	}
 }
@@ -267,26 +270,20 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 func testSecurity(t *testing.T, mergeFixes bool) {
 	deps := newReleaseTestDeps(t, "go1.18rc1")
 
-	// Set up the fake merge process. Once we stop to ask for approval, switch
-	// the public Gerrit server to serve the same content as the private server.
-	approved := false
-	privateServer := httptest.NewServer(http.HandlerFunc(serveSecureSnapshot))
-	t.Cleanup(privateServer.Close)
-	deps.buildTasks.PrivateGerritURL = privateServer.URL
-
-	publicServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if approved && mergeFixes {
-			serveSecureSnapshot(w, r)
-		} else {
-			serveSnapshot(w, r)
-		}
-	}))
-	t.Cleanup(publicServer.Close)
-	deps.buildTasks.GerritURL = publicServer.URL
+	// Set up the fake merge process. Once we stop to ask for approval, commit
+	// the fix to the public server.
+	privateRepo := task.NewFakeRepo(t, "go-private")
+	privateRepo.Commit(goFiles)
+	securityFix := map[string]string{"security.txt": "This file makes us secure"}
+	privateRef := privateRepo.Commit(securityFix)
+	privateGerrit := task.NewFakeGerrit(t, privateRepo)
+	deps.buildTasks.PrivateGerritURL = privateGerrit.GerritURL() + "/go-private"
 
 	defaultApprove := deps.buildTasks.ApproveAction
 	deps.buildTasks.ApproveAction = func(tc *workflow.TaskContext) error {
-		approved = true
+		if mergeFixes {
+			deps.goRepo.Commit(securityFix)
+		}
 		return defaultApprove(tc)
 	}
 
@@ -297,7 +294,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 
 	w, err := workflow.Start(wd, map[string]interface{}{
 		"Targets to skip testing (or 'all') (optional)":            []string{"js-wasm"},
-		"Ref from the private repository to build from (optional)": "security-ref",
+		"Ref from the private repository to build from (optional)": privateRef,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -403,66 +400,19 @@ fi
 exit 0
 `
 
+var goFiles = map[string]string{
+	"src/make.bash": makeScript,
+	"src/make.bat":  makeScript,
+	"src/all.bash":  allScript,
+	"src/all.bat":   allScript,
+	"src/race.bash": allScript,
+	"src/race.bat":  allScript,
+}
+
 func serveBootstrap(w http.ResponseWriter, r *http.Request) {
-	serveTarball("go-builder-data/go", map[string]string{
+	task.ServeTarball("go-builder-data/go", map[string]string{
 		"bin/go": "I'm a dummy bootstrap go command!",
 	}, w, r)
-}
-
-func serveSnapshot(w http.ResponseWriter, r *http.Request) {
-	serveTarball("+archive", map[string]string{
-		"src/make.bash": makeScript,
-		"src/make.bat":  makeScript,
-		"src/all.bash":  allScript,
-		"src/all.bat":   allScript,
-		"src/race.bash": allScript,
-		"src/race.bat":  allScript,
-	}, w, r)
-}
-
-func serveSecureSnapshot(w http.ResponseWriter, r *http.Request) {
-	serveTarball("+archive", map[string]string{
-		"src/make.bash": makeScript,
-		"src/make.bat":  makeScript,
-		"src/all.bash":  allScript,
-		"src/all.bat":   allScript,
-		"src/race.bash": allScript,
-		"src/race.bat":  allScript,
-		"security.txt":  "This file makes us secure",
-	}, w, r)
-}
-
-// serveTarballs serves the files the release process relies on.
-// PutTarFromURL is hardcoded to read from this server.
-func serveTarball(pathMatch string, files map[string]string, w http.ResponseWriter, r *http.Request) {
-	if !strings.Contains(r.URL.Path, pathMatch) {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-
-	gzw := gzip.NewWriter(w)
-	tw := tar.NewWriter(gzw)
-
-	for name, contents := range files {
-		if err := tw.WriteHeader(&tar.Header{
-			Typeflag: tar.TypeReg,
-			Name:     name,
-			Size:     int64(len(contents)),
-			Mode:     0777,
-		}); err != nil {
-			panic(err)
-		}
-		if _, err := tw.Write([]byte(contents)); err != nil {
-			panic(err)
-		}
-	}
-
-	if err := tw.Close(); err != nil {
-		panic(err)
-	}
-	if err := gzw.Close(); err != nil {
-		panic(err)
-	}
 }
 
 func checkFile(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, filename string, meta *task.WebsiteFile, check func(*testing.T, []byte)) {
@@ -558,36 +508,16 @@ func checkZip(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, fi
 	})
 }
 
-type fakeGerrit struct {
-	changesCreated int
-	createdTags    map[string]string
-	wantReviewers  []string
-	task.GerritClient
+type reviewerCheckGerrit struct {
+	wantReviewers []string
+	*task.FakeGerrit
 }
 
-func (g *fakeGerrit) CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error) {
-	g.changesCreated++
+func (g *reviewerCheckGerrit) CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error) {
 	if diff := cmp.Diff(g.wantReviewers, reviewers, cmpopts.EquateEmpty()); diff != "" {
 		return "", fmt.Errorf("unexpected reviewers for CL: %v", diff)
 	}
-	return "fake~12345", nil
-}
-
-func (g *fakeGerrit) Submitted(ctx context.Context, changeID, baseCommit string) (string, bool, error) {
-	return "fakehash", true, nil
-}
-
-func (g *fakeGerrit) ListTags(ctx context.Context, project string) ([]string, error) {
-	return []string{"go1.17"}, nil
-}
-
-func (g *fakeGerrit) Tag(ctx context.Context, project, tag, commit string) error {
-	g.createdTags[tag] = commit
-	return nil
-}
-
-func (g *fakeGerrit) ReadBranchHead(ctx context.Context, project, branch string) (string, error) {
-	return fmt.Sprintf("fake HEAD commit for %v/%v", project, branch), nil
+	return g.FakeGerrit.CreateAutoSubmitChange(ctx, input, reviewers, contents)
 }
 
 type fakeGitHub struct {
@@ -607,186 +537,6 @@ func (g *fakeGitHub) EditIssue(ctx context.Context, owner string, repo string, n
 
 func (g *fakeGitHub) EditMilestone(ctx context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
 	return nil, nil, nil
-}
-
-type fakeBuildlets struct {
-	t       *testing.T
-	dir     string
-	httpURL string
-
-	mu     sync.Mutex
-	nextID int
-	logs   map[string][]*[]string
-}
-
-func (b *fakeBuildlets) createBuildlet(_ context.Context, kind string) (buildlet.RemoteClient, error) {
-	b.mu.Lock()
-	buildletDir := filepath.Join(b.dir, kind, fmt.Sprint(b.nextID))
-	logs := &[]string{}
-	b.nextID++
-	b.logs[kind] = append(b.logs[kind], logs)
-	b.mu.Unlock()
-	logf := func(format string, args ...interface{}) {
-		line := fmt.Sprintf(format, args...)
-		line = strings.ReplaceAll(line, buildletDir, "$WORK")
-		*logs = append(*logs, line)
-	}
-	logf("--- create buildlet ---")
-
-	return &fakeBuildlet{
-		t:       b.t,
-		kind:    kind,
-		dir:     buildletDir,
-		httpURL: b.httpURL,
-		logf:    logf,
-	}, nil
-}
-
-type fakeBuildlet struct {
-	buildlet.Client
-	t       *testing.T
-	kind    string
-	dir     string
-	httpURL string
-	logf    func(string, ...interface{})
-	closed  bool
-}
-
-func (b *fakeBuildlet) Close() error {
-	if !b.closed {
-		b.logf("--- destroy buildlet ---")
-		b.closed = true
-	}
-	return nil
-}
-
-func (b *fakeBuildlet) Exec(ctx context.Context, cmd string, opts buildlet.ExecOpts) (remoteErr error, execErr error) {
-	b.logf("exec %v %v\n\twd %q env %v", cmd, opts.Args, opts.Dir, opts.ExtraEnv)
-	absCmd := filepath.Join(b.dir, cmd)
-retry:
-	c := exec.CommandContext(ctx, absCmd, opts.Args...)
-	c.Env = append(os.Environ(), opts.ExtraEnv...)
-	buf := &bytes.Buffer{}
-	var w io.Writer = buf
-	if opts.Output != nil {
-		w = io.MultiWriter(w, opts.Output)
-	}
-	c.Stdout = w
-	c.Stderr = w
-	if opts.Dir == "" {
-		c.Dir = filepath.Dir(absCmd)
-	} else {
-		c.Dir = filepath.Join(b.dir, opts.Dir)
-	}
-	err := c.Run()
-	// Work around Unix foolishness. See go.dev/issue/22315.
-	if err != nil && strings.Contains(err.Error(), "text file busy") {
-		time.Sleep(100 * time.Millisecond)
-		goto retry
-	}
-	if err != nil {
-		return nil, fmt.Errorf("command %v %v failed: %v output: %q", cmd, opts.Args, err, buf.String())
-	}
-	return nil, nil
-}
-
-func (b *fakeBuildlet) GetTar(ctx context.Context, dir string) (io.ReadCloser, error) {
-	b.logf("get tar of %q", dir)
-	buf := &bytes.Buffer{}
-	zw := gzip.NewWriter(buf)
-	tw := tar.NewWriter(zw)
-	base := filepath.Join(b.dir, filepath.FromSlash(dir))
-	// Copied pretty much wholesale from buildlet.go.
-	err := filepath.Walk(base, func(path string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		rel := strings.TrimPrefix(filepath.ToSlash(strings.TrimPrefix(path, base)), "/")
-		th, err := tar.FileInfoHeader(fi, path)
-		if err != nil {
-			return err
-		}
-		th.Name = rel
-		if fi.IsDir() && !strings.HasSuffix(th.Name, "/") {
-			th.Name += "/"
-		}
-		if th.Name == "/" {
-			return nil
-		}
-		if err := tw.WriteHeader(th); err != nil {
-			return err
-		}
-		if fi.Mode().IsRegular() {
-			f, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			if _, err := io.Copy(tw, f); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	if err := tw.Close(); err != nil {
-		return nil, err
-	}
-	if err := zw.Close(); err != nil {
-		return nil, err
-	}
-	return ioutil.NopCloser(buf), nil
-}
-
-func (b *fakeBuildlet) ListDir(ctx context.Context, dir string, opts buildlet.ListDirOpts, fn func(buildlet.DirEntry)) error {
-	// We call this when something goes wrong, so we need it to "succeed".
-	// It's not worth implementing; return some nonsense.
-	fn(buildlet.DirEntry{
-		Line: "ListDir is silently unimplemented, sorry",
-	})
-	return nil
-}
-
-func (b *fakeBuildlet) Put(ctx context.Context, r io.Reader, path string, mode os.FileMode) error {
-	b.logf("write file %q with mode %0o", path, mode)
-	f, err := os.OpenFile(filepath.Join(b.dir, path), os.O_CREATE|os.O_RDWR, mode)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	if _, err := io.Copy(f, r); err != nil {
-		return err
-	}
-	return f.Close()
-}
-
-func (b *fakeBuildlet) PutTar(ctx context.Context, r io.Reader, dir string) error {
-	b.logf("put tar to %q", dir)
-	return untar.Untar(r, filepath.Join(b.dir, dir))
-}
-
-func (b *fakeBuildlet) PutTarFromURL(ctx context.Context, tarURL string, dir string) error {
-	b.logf("put tar from %v to %q", tarURL, dir)
-	u, err := url.Parse(tarURL)
-	if err != nil {
-		return err
-	}
-	resp, err := http.Get(b.httpURL + u.Path)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status for %q: %v", tarURL, resp.Status)
-	}
-	defer resp.Body.Close()
-	return untar.Untar(resp.Body, filepath.Join(b.dir, dir))
-}
-
-func (b *fakeBuildlet) WorkDir(ctx context.Context) (string, error) {
-	return b.dir, nil
 }
 
 type verboseListener struct {

@@ -23,7 +23,7 @@ var (
 func TestMilestones(t *testing.T) {
 	ctx := &workflow.TaskContext{
 		Context: context.Background(),
-		Logger:  &testLogger{t},
+		Logger:  &testLogger{t, ""},
 	}
 
 	if !*flagRun {
@@ -141,12 +141,4 @@ func resetRepo(ctx context.Context, client *github.Client) (normal, blocker *git
 		Labels:    &[]string{"release-blocker", "okay-after-beta1"},
 	})
 	return normal, blocker, err
-}
-
-type testLogger struct {
-	t *testing.T
-}
-
-func (l *testLogger) Printf(format string, v ...interface{}) {
-	l.t.Logf("LOG: %s", fmt.Sprintf(format, v...))
 }

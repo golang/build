@@ -25,7 +25,7 @@ func TestGetNextVersionLive(t *testing.T) {
 	}
 	ctx := &workflow.TaskContext{
 		Context: context.Background(),
-		Logger:  &testLogger{t},
+		Logger:  &testLogger{t, ""},
 	}
 
 	versions := map[ReleaseKind]string{}
@@ -53,7 +53,7 @@ func TestGetNextVersion(t *testing.T) {
 	}
 	ctx := &workflow.TaskContext{
 		Context: context.Background(),
-		Logger:  &testLogger{t},
+		Logger:  &testLogger{t, ""},
 	}
 	versions := map[ReleaseKind]string{}
 	for kind := ReleaseKind(1); kind <= KindPrevMinor; kind++ {
@@ -95,7 +95,7 @@ func TestVersion(t *testing.T) {
 	}
 	ctx := &workflow.TaskContext{
 		Context: context.Background(),
-		Logger:  &testLogger{t},
+		Logger:  &testLogger{t, ""},
 	}
 
 	changeID, err := tasks.CreateAutoSubmitVersionCL(ctx, "master", nil, "version string")

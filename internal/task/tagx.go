@@ -21,8 +21,10 @@ import (
 )
 
 type TagXReposTasks struct {
-	Gerrit         GerritClient
-	CreateBuildlet func(context.Context, string) (buildlet.RemoteClient, error)
+	Gerrit           GerritClient
+	GerritURL        string
+	CreateBuildlet   func(context.Context, string) (buildlet.RemoteClient, error)
+	LatestGoBinaries func(context.Context) (string, error)
 }
 
 func (x *TagXReposTasks) NewDefinition() *wf.Definition {
@@ -248,7 +250,7 @@ type UpdatedModSum struct {
 }
 
 func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []TagRepo, commit string) (UpdatedModSum, error) {
-	binaries, err := latestGoBinaries(ctx)
+	binaries, err := x.LatestGoBinaries(ctx)
 	if err != nil {
 		return UpdatedModSum{}, err
 	}
@@ -261,8 +263,8 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []T
 	if err := bc.PutTarFromURL(ctx, binaries, ""); err != nil {
 		return UpdatedModSum{}, err
 	}
-	archive := fmt.Sprintf("https://go.googlesource.com/%v/+archive/%v.tar.gz", repo.Name, commit)
-	if err := bc.PutTarFromURL(ctx, archive, "repo"); err != nil {
+	tarURL := fmt.Sprintf("%s/%s/+archive/%s.tar.gz", x.GerritURL, repo.Name, commit)
+	if err := bc.PutTarFromURL(ctx, tarURL, "repo"); err != nil {
 		return UpdatedModSum{}, err
 	}
 
@@ -322,7 +324,7 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []T
 	return UpdatedModSum{mod.String(), sum.String()}, nil
 }
 
-func latestGoBinaries(ctx *wf.TaskContext) (string, error) {
+func LatestGoBinaries(ctx context.Context) (string, error) {
 	resp, err := ctxhttp.Get(ctx, http.DefaultClient, "https://go.dev/dl/?mode=json")
 	if err != nil {
 		return "", err
@@ -347,9 +349,6 @@ func latestGoBinaries(ctx *wf.TaskContext) (string, error) {
 }
 
 func (x *TagXReposTasks) MailGoMod(ctx *wf.TaskContext, repo string, gomod UpdatedModSum) (string, error) {
-	if dryRun {
-		return "", fmt.Errorf("nope")
-	}
 	return x.Gerrit.CreateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: repo,
 		Branch:  "master",
@@ -363,8 +362,6 @@ func (x *TagXReposTasks) MailGoMod(ctx *wf.TaskContext, repo string, gomod Updat
 func (x *TagXReposTasks) AwaitGreen(ctx *wf.TaskContext, repo, commit string) error {
 	return nil
 }
-
-const dryRun = true
 
 // MaybeTag tags repo at commit with the next version, unless commit is already
 // the latest tagged version. repo is returned with Version populated.
@@ -380,9 +377,8 @@ func (x *TagXReposTasks) MaybeTag(ctx *wf.TaskContext, repo TagRepo, commit stri
 			highestRelease = tag
 		}
 	}
-	if highestRelease == "" || dryRun {
-		repo.Version = "latest"
-		return repo, nil
+	if highestRelease == "" {
+		return TagRepo{}, fmt.Errorf("no semver tags found in %v", tags)
 	}
 
 	tagInfo, err := x.Gerrit.GetTag(ctx, repo.Name, highestRelease)
