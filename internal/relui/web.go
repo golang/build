@@ -193,6 +193,7 @@ func (s *Server) homeHandler(w http.ResponseWriter, r *http.Request) {
 
 	name := r.URL.Query().Get("name")
 	hr := &homeResponse{SiteHeader: s.header}
+	hr.SiteHeader.NameParam = name
 	var ws []db.Workflow
 	switch name {
 	case "all", "All", "":
