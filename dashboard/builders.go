@@ -49,6 +49,7 @@ var slowBotAliases = map[string]string{
 	"freebsd-amd64":        "freebsd-amd64-13_0",
 	"freebsd-arm":          "freebsd-arm-paulzhol",
 	"freebsd-arm64":        "freebsd-arm64-dmgk",
+	"freebsd-riscv64":      "freebsd-riscv64-unmatched",
 	"illumos":              "illumos-amd64",
 	"ios":                  "ios-arm64-corellium",
 	"js":                   "js-wasm",
@@ -212,6 +213,12 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum: 1,
 		Notes:     "AWS EC2 a1.large 2 vCPU 4GiB RAM, FreeBSD 12.1-STABLE",
 		Owners:    []*gophers.Person{gh("dmgk")},
+	},
+	"host-freebsd-riscv64-unmatched": {
+		IsReverse: true, // afaik
+		ExpectNum: 1,    // actually unspecified
+		Notes:     "SiFive HiFive Unmatched RISC-V board. 16 GB RAM.",
+		Owners:    []*gophers.Person{gh("mengzhuo")},
 	},
 	"host-illumos-amd64-jclulow": {
 		Notes:       "SmartOS base64@19.1.0 zone",
@@ -2608,6 +2615,11 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "freebsd-arm64-dmgk",
 		HostType: "host-freebsd-arm64-dmgk",
+	})
+	addBuilder(BuildConfig{
+		Name:     "freebsd-riscv64-unmatched",
+		HostType: "host-freebsd-riscv64-unmatched",
+		env:      []string{"GO_TEST_TIMEOUT_SCALE=4"},
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-arm",
