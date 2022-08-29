@@ -82,16 +82,16 @@ var (
 	gkeNodeHostname string
 
 	// values created due to separating the buildlet pools into a separate package
-	gceMode             string
-	basePinErr          *atomic.Value
-	isGCERemoteBuildlet IsRemoteBuildletFunc
+	gceMode          string
+	basePinErr       *atomic.Value
+	isRemoteBuildlet IsRemoteBuildletFunc
 )
 
 // InitGCE initializes the GCE buildlet pool.
 func InitGCE(sc *secret.Client, basePin *atomic.Value, fn IsRemoteBuildletFunc, buildEnvName, mode string) error {
 	gceMode = mode
 	basePinErr = basePin
-	isGCERemoteBuildlet = fn
+	isRemoteBuildlet = fn
 
 	ctx := context.Background()
 	var err error
@@ -495,7 +495,7 @@ func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logge
 	}
 	waitBuildlet.Done(nil)
 	bc.SetDescription("GCE VM: " + instName)
-	bc.SetGCEInstanceName(instName)
+	bc.SetInstanceName(instName)
 	bc.SetOnHeartbeatFailure(cleanup)
 	return bc, nil
 }
@@ -650,7 +650,7 @@ func (p *GCEBuildlet) cleanZoneVMs(zone string) error {
 				// Defensive. Not seen in practice.
 				continue
 			}
-			if isGCERemoteBuildlet(inst.Name) {
+			if isRemoteBuildlet(inst.Name) {
 				// Remote buildlets have their own expiration mechanism that respects active SSH sessions.
 				log.Printf("cleanZoneVMs: skipping remote buildlet %q", inst.Name)
 				continue

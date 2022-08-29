@@ -219,6 +219,7 @@ func (eb *EC2Buildlet) GetBuildlet(ctx context.Context, hostType string, lg Logg
 		log.Printf("EC2 VM %q failed heartbeat", instName)
 		eb.buildletDone(instName)
 	})
+	bc.SetInstanceName(instName)
 	return bc, nil
 }
 

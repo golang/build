@@ -96,13 +96,14 @@ func (sp *SessionPool) AddSession(ownerID, username, builderType, hostType strin
 	}
 }
 
-// IsGCESession checks if the session is a GCE instance.
-func (sp *SessionPool) IsGCESession(instName string) bool {
+// IsSession is true if the instance is found in the session pool. The instance name is the not the public
+// name of the instance. It is the name of the instance as it is tracked in the cloud service.
+func (sp *SessionPool) IsSession(instName string) bool {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()
 
 	for _, s := range sp.m {
-		if s.buildlet.GCEInstanceName() == instName {
+		if s.buildlet.InstanceName() == instName {
 			return true
 		}
 	}

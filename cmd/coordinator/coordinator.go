@@ -249,7 +249,13 @@ func main() {
 	// a shared package.
 	pool.SetBuilderMasterKey(masterKey())
 
-	err := pool.InitGCE(sc, &basePinErr, isGCERemoteBuildlet, *buildEnvName, *mode)
+	sp := remote.NewSessionPool(context.Background())
+	// TODO(go.dev/issue/54735): remove while legacy gomote implementation is being removed.
+	isRemoteBuildlet := func(instName string) bool {
+		return isGCERemoteBuildlet(instName) || sp.IsSession(instName)
+	}
+
+	err := pool.InitGCE(sc, &basePinErr, isRemoteBuildlet, *buildEnvName, *mode)
 	if err != nil {
 		if *mode == "" {
 			*mode = "dev"
@@ -277,7 +283,7 @@ func main() {
 	if *mode == "prod" || (*mode == "dev" && *devEnableEC2) {
 		// TODO(golang.org/issues/38337) the coordinator will use a package scoped pool
 		// until the coordinator is refactored to not require them.
-		ec2Pool := mustCreateEC2BuildletPool(sc)
+		ec2Pool := mustCreateEC2BuildletPool(sc, isRemoteBuildlet)
 		defer ec2Pool.Close()
 	}
 
@@ -360,7 +366,6 @@ func main() {
 	dashV1 := legacydash.Handler(gce.GoDSClient(), maintnerClient, string(masterKey()), grpcServer)
 	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
-	sp := remote.NewSessionPool(context.Background())
 	setSessionPool(sp)
 	gomoteServer := gomote.New(sp, sched, sshCA, gomoteBucket, mustStorageClient())
 	protos.RegisterCoordinatorServer(grpcServer, gs)
@@ -2204,7 +2209,7 @@ func mustCreateSecretClientOnGCE() *secret.Client {
 	return secret.MustNewClient()
 }
 
-func mustCreateEC2BuildletPool(sc *secret.Client) *pool.EC2Buildlet {
+func mustCreateEC2BuildletPool(sc *secret.Client, isRemoteBuildlet func(instName string) bool) *pool.EC2Buildlet {
 	awsKeyID, err := sc.Retrieve(context.Background(), secret.NameAWSKeyID)
 	if err != nil {
 		log.Fatalf("unable to retrieve secret %q: %s", secret.NameAWSKeyID, err)
@@ -2220,7 +2225,7 @@ func mustCreateEC2BuildletPool(sc *secret.Client) *pool.EC2Buildlet {
 		log.Fatalf("unable to create AWS client: %s", err)
 	}
 
-	ec2Pool, err := pool.NewEC2Buildlet(awsClient, buildenv.Production, dashboard.Hosts, isGCERemoteBuildlet)
+	ec2Pool, err := pool.NewEC2Buildlet(awsClient, buildenv.Production, dashboard.Hosts, isRemoteBuildlet)
 	if err != nil {
 		log.Fatalf("unable to create EC2 buildlet pool: %s", err)
 	}

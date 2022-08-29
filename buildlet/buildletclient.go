@@ -108,17 +108,17 @@ func (c *client) SetDescription(v string) {
 	c.desc = v
 }
 
-// SetGCEInstanceName sets an instance name for GCE buildlets.
+// SetInstanceName sets an instance name for GCE and EC2 buildlets.
 // This value differs from the buildlet name used in the CLI and web interface.
-func (c *client) SetGCEInstanceName(v string) {
-	c.gceInstanceName = v
+func (c *client) SetInstanceName(v string) {
+	c.instanceName = v
 }
 
-// GCEInstanceName gets an instance name for GCE buildlets.
+// InstanceName gets an instance name for GCE and EC2 buildlets.
 // This value differs from the buildlet name used in the CLI and web interface.
-// For non-GCE buildlets, this will return an empty string.
-func (c *client) GCEInstanceName() string {
-	return c.gceInstanceName
+// For non-GCE or EC2 buildlets, this will return an empty string.
+func (c *client) InstanceName() string {
+	return c.instanceName
 }
 
 // SetHTTPClient replaces the underlying HTTP client.
@@ -153,16 +153,16 @@ func defaultDialer() func(network, addr string) (net.Conn, error) {
 
 // A client interacts with a single buildlet.
 type client struct {
-	ipPort          string // required, unless remoteBuildlet+baseURL is set
-	tls             KeyPair
-	httpClient      *http.Client
-	dialer          func(context.Context) (net.Conn, error) // nil means to use net.Dialer.DialContext
-	baseURL         string                                  // optional baseURL (used by remote buildlets)
-	authUser        string                                  // defaults to "gomote", if password is non-empty
-	password        string                                  // basic auth password or empty for none
-	remoteBuildlet  string                                  // non-empty if for remote buildlets (used by client)
-	name            string                                  // optional name for debugging, returned by Name
-	gceInstanceName string                                  // instance name for GCE VMs
+	ipPort         string // required, unless remoteBuildlet+baseURL is set
+	tls            KeyPair
+	httpClient     *http.Client
+	dialer         func(context.Context) (net.Conn, error) // nil means to use net.Dialer.DialContext
+	baseURL        string                                  // optional baseURL (used by remote buildlets)
+	authUser       string                                  // defaults to "gomote", if password is non-empty
+	password       string                                  // basic auth password or empty for none
+	remoteBuildlet string                                  // non-empty if for remote buildlets (used by client)
+	name           string                                  // optional name for debugging, returned by Name
+	instanceName   string                                  // instance name for GCE and EC2 VMs
 
 	closeFuncs []func() // optional extra code to run on close
 

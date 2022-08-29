@@ -69,7 +69,7 @@ func isGCERemoteBuildlet(instName string) bool {
 	remoteBuildlets.Lock()
 	defer remoteBuildlets.Unlock()
 	for _, rb := range remoteBuildlets.M {
-		if rb.Buildlet().GCEInstanceName() == instName {
+		if rb.Buildlet().InstanceName() == instName {
 			return true
 		}
 	}

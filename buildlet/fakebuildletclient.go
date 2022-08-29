@@ -38,16 +38,16 @@ type RemoteClient interface {
 type Client interface {
 	RemoteClient
 	ConnectSSH(user, authorizedPubKey string) (net.Conn, error)
-	GCEInstanceName() string
 	IPPort() string
+	InstanceName() string
 	IsBroken() bool
 	MarkBroken()
 	Name() string
 	ProxyRoundTripper() http.RoundTripper
 	SetDescription(v string)
 	SetDialer(dialer func(context.Context) (net.Conn, error))
-	SetGCEInstanceName(v string)
 	SetHTTPClient(httpClient *http.Client)
+	SetInstanceName(v string)
 	SetName(name string)
 	SetOnHeartbeatFailure(fn func())
 	Status(ctx context.Context) (Status, error)
@@ -96,8 +96,8 @@ func (fc *FakeClient) Exec(ctx context.Context, cmd string, opts ExecOpts) (remo
 	return nil, nil
 }
 
-// GCEInstanceName gives the fake instance name.
-func (fc *FakeClient) GCEInstanceName() string { return fc.instanceName }
+// InstanceName gives the fake instance name.
+func (fc *FakeClient) InstanceName() string { return fc.instanceName }
 
 // GetTar gives a vake tar zipped directory.
 func (fc *FakeClient) GetTar(ctx context.Context, dir string) (io.ReadCloser, error) {
@@ -166,8 +166,8 @@ func (fc *FakeClient) SetDescription(v string) {}
 // SetDialer sets the function that creates a new connection to the fake buildlet.
 func (fc *FakeClient) SetDialer(dialer func(context.Context) (net.Conn, error)) {}
 
-// SetGCEInstanceName sets the GCE instance name on a fake client.
-func (fc *FakeClient) SetGCEInstanceName(v string) {
+// SetInstanceName sets the GCE or EC2 instance name on a fake client.
+func (fc *FakeClient) SetInstanceName(v string) {
 	fc.instanceName = v
 }
 
