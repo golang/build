@@ -470,28 +470,37 @@ func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logge
 	}
 
 	log.Printf("Creating GCE VM %q for %s at %s", instName, hostType, zone)
-	bc, err = buildlet.StartNewVM(gcpCreds, buildEnv, instName, hostType, buildlet.VMOpts{
-		DeleteIn: determineDeleteTimeout(hconf),
-		OnInstanceRequested: func() {
-			log.Printf("GCE VM %q now booting", instName)
-		},
-		OnInstanceCreated: func() {
-			needDelete = true
+	attempts := 1
+	for {
+		bc, err = buildlet.StartNewVM(gcpCreds, buildEnv, instName, hostType, buildlet.VMOpts{
+			DeleteIn: determineDeleteTimeout(hconf),
+			OnInstanceRequested: func() {
+				log.Printf("GCE VM %q now booting", instName)
+			},
+			OnInstanceCreated: func() {
+				needDelete = true
 
-			createSpan.Done(nil)
-			waitBuildlet = lg.CreateSpan("wait_buildlet_start", instName)
-			curSpan = waitBuildlet
-		},
-		OnGotInstanceInfo: func(*compute.Instance) {
-			lg.LogEventTime("got_instance_info", "waiting_for_buildlet...")
-		},
-		Zone: zone,
-	})
-	if err != nil {
-		curSpan.Done(err)
-		log.Printf("Failed to create VM for %s at %s: %v", hostType, zone, err)
-		cleanup()
-		return nil, err
+				createSpan.Done(nil)
+				waitBuildlet = lg.CreateSpan("wait_buildlet_start", instName)
+				curSpan = waitBuildlet
+			},
+			OnGotInstanceInfo: func(*compute.Instance) {
+				lg.LogEventTime("got_instance_info", "waiting_for_buildlet...")
+			},
+			Zone: zone,
+		})
+		if errors.Is(err, buildlet.ErrQuotaExceeded) && ctx.Err() == nil {
+			log.Printf("Failed to create VM: %q. Retrying after 1 second (attempt: %d).", err, attempts)
+			attempts++
+			time.Sleep(time.Second)
+			continue
+		} else if err != nil {
+			curSpan.Done(err)
+			log.Printf("Failed to create VM for %s at %s: %v", hostType, zone, err)
+			cleanup()
+			return nil, err
+		}
+		break
 	}
 	waitBuildlet.Done(nil)
 	bc.SetDescription("GCE VM: " + instName)

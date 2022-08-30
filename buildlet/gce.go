@@ -36,6 +36,27 @@ func apiGate() {
 	}
 }
 
+// ErrQuotaExceeded matches errors.Is when VM creation fails with a
+// quota error. Currently, it only supports GCE quota errors.
+var ErrQuotaExceeded = errors.New("quota exceeded")
+
+type GCEError struct {
+	OpErrors []*compute.OperationErrorErrors
+}
+
+func (q *GCEError) Error() string {
+	return fmt.Sprintf("failed with errors: %v", q.OpErrors)
+}
+
+func (q *GCEError) Is(target error) bool {
+	for _, err := range q.OpErrors {
+		if target == ErrQuotaExceeded && err.Code == "QUOTA_EXCEEDED" {
+			return true
+		}
+	}
+	return false
+}
+
 // StartNewVM boots a new VM on GCE and returns a buildlet client
 // configured to speak to it.
 func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instName, hostType string, opts VMOpts) (Client, error) {
@@ -209,24 +230,21 @@ OpLoop:
 		apiGate()
 		op, err := computeService.ZoneOperations.Get(projectID, zone, createOp).Do()
 		if err != nil {
-			return nil, fmt.Errorf("Failed to get op %s: %v", createOp, err)
+			return nil, fmt.Errorf("failed to get op %s: %v", createOp, err)
 		}
 		switch op.Status {
 		case "PENDING", "RUNNING":
 			continue
 		case "DONE":
 			if op.Error != nil {
-				for _, operr := range op.Error.Errors {
-					log.Printf("failed to create instance %s in zone %s: %v", instName, zone, operr.Code)
-					// TODO: catch Code=="QUOTA_EXCEEDED" and "Message" and return
-					// a known error value/type.
-					return nil, fmt.Errorf("Error creating instance: %+v", operr)
-				}
-				return nil, errors.New("Failed to start.")
+				err := new(GCEError)
+				copy(err.OpErrors, op.Error.Errors)
+				log.Println(err.Error())
+				return nil, err
 			}
 			break OpLoop
 		default:
-			return nil, fmt.Errorf("Unknown create status %q: %+v", op.Status, op)
+			return nil, fmt.Errorf("unknown create status %q: %+v", op.Status, op)
 		}
 	}
 	condRun(opts.OnInstanceCreated)
@@ -369,50 +387,6 @@ type VM struct {
 	IPPort string
 	TLS    KeyPair
 	Type   string // buildlet type
-}
-
-// ListVMs lists all VMs.
-func ListVMs(ts oauth2.TokenSource, proj, zone string) ([]VM, error) {
-	var vms []VM
-	computeService, _ := compute.New(oauth2.NewClient(context.TODO(), ts))
-
-	// TODO(bradfitz): paging over results if more than 500
-	apiGate()
-	list, err := computeService.Instances.List(proj, zone).Do()
-	if err != nil {
-		return nil, err
-	}
-	for _, inst := range list.Items {
-		if inst.Metadata == nil {
-			// Defensive. Not seen in practice.
-			continue
-		}
-		meta := map[string]string{}
-		for _, it := range inst.Metadata.Items {
-			if it.Value != nil {
-				meta[it.Key] = *it.Value
-			}
-		}
-		hostType := meta["buildlet-host-type"]
-		if hostType == "" {
-			continue
-		}
-		vm := VM{
-			Name: inst.Name,
-			Type: hostType,
-			TLS: KeyPair{
-				CertPEM: meta["tls-cert"],
-				KeyPEM:  meta["tls-key"],
-			},
-		}
-		_, extIP := instanceIPs(inst)
-		if extIP == "" || vm.TLS.IsZero() {
-			continue
-		}
-		vm.IPPort = extIP + ":443"
-		vms = append(vms, vm)
-	}
-	return vms, nil
 }
 
 func instanceIPs(inst *compute.Instance) (intIP, extIP string) {
