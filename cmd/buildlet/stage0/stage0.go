@@ -171,7 +171,7 @@ Download:
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	case "host-linux-ppc64le-osu": // power8
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
-	case "host-linux-ppc64-osu":
+	case "host-linux-ppc64-osu", "host-linux-ppc64-sid":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	case "host-linux-amd64-wsl", "host-linux-riscv64-unmatched":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
