@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/go-github/github"
 	"github.com/shurcooL/githubv4"
-	"golang.org/x/build/internal/workflow"
+	wf "golang.org/x/build/internal/workflow"
 	goversion "golang.org/x/build/maintner/maintnerd/maintapi/version"
 )
 
@@ -16,6 +16,7 @@ import (
 type MilestoneTasks struct {
 	Client              GitHubClientInterface
 	RepoOwner, RepoName string
+	ApproveAction       func(*wf.TaskContext) error
 }
 
 // ReleaseKind is the type of release being run.
@@ -38,7 +39,7 @@ type ReleaseMilestones struct {
 // released, and the next version that outstanding issues should be moved to.
 // If this is a major release, it also creates its first minor release
 // milestone.
-func (m *MilestoneTasks) FetchMilestones(ctx *workflow.TaskContext, currentVersion string, kind ReleaseKind) (ReleaseMilestones, error) {
+func (m *MilestoneTasks) FetchMilestones(ctx *wf.TaskContext, currentVersion string, kind ReleaseKind) (ReleaseMilestones, error) {
 	x, ok := goversion.Go1PointX(currentVersion)
 	if !ok {
 		return ReleaseMilestones{}, fmt.Errorf("could not parse %q as a Go version", currentVersion)
@@ -82,7 +83,7 @@ func uppercaseVersion(version string) string {
 
 // CheckBlockers returns an error if there are open release blockers in
 // the current milestone.
-func (m *MilestoneTasks) CheckBlockers(ctx *workflow.TaskContext, milestones ReleaseMilestones, version string, kind ReleaseKind) error {
+func (m *MilestoneTasks) CheckBlockers(ctx *wf.TaskContext, milestones ReleaseMilestones, version string, kind ReleaseKind) error {
 	if kind == KindRC {
 		// We don't check blockers for release candidates; they're expected to
 		// at least have recurring blockers, and we don't have an okay-after
@@ -104,15 +105,17 @@ func (m *MilestoneTasks) CheckBlockers(ctx *workflow.TaskContext, milestones Rel
 		}
 	}
 	sort.Strings(blockers)
-	if len(blockers) != 0 {
-		return fmt.Errorf("open release blockers:\n%v", strings.Join(blockers, "\n"))
+	if len(blockers) == 0 {
+		return nil
 	}
-	return nil
+	ctx.Printf("There are open release blockers in https://github.com/golang/go/milestone/%d. Check that they're expected and approve this task:\n%v",
+		milestones.Current, strings.Join(blockers, "\n"))
+	return m.ApproveAction(ctx)
 }
 
 // loadMilestoneIssues returns all the open issues in the specified milestone
 // and their labels.
-func (m *MilestoneTasks) loadMilestoneIssues(ctx *workflow.TaskContext, milestoneID int, kind ReleaseKind) (map[int]map[string]bool, error) {
+func (m *MilestoneTasks) loadMilestoneIssues(ctx *wf.TaskContext, milestoneID int, kind ReleaseKind) (map[int]map[string]bool, error) {
 	issues := map[int]map[string]bool{}
 	var query struct {
 		Repository struct {
@@ -168,7 +171,7 @@ more:
 // PushIssues updates issues to reflect a finished release. For beta1 releases,
 // it removes the okay-after-beta1 label. For major and minor releases,
 // it moves them to the next milestone and closes the current one.
-func (m *MilestoneTasks) PushIssues(ctx *workflow.TaskContext, milestones ReleaseMilestones, version string, kind ReleaseKind) error {
+func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMilestones, version string, kind ReleaseKind) error {
 	// For RCs we don't change issues at all.
 	if kind == KindRC {
 		return nil

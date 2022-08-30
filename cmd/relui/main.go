@@ -185,8 +185,9 @@ func main() {
 			V3: github.NewClient(githubHTTPClient),
 			V4: githubv4.NewClient(githubHTTPClient),
 		},
-		RepoOwner: "golang",
-		RepoName:  "go",
+		RepoOwner:     "golang",
+		RepoName:      "go",
+		ApproveAction: relui.ApproveActionDep(dbPool),
 	}
 	if err := relui.RegisterReleaseWorkflows(ctx, dh, buildTasks, milestoneTasks, versionTasks, commTasks); err != nil {
 		log.Fatalf("RegisterReleaseWorkflows: %v", err)

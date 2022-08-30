@@ -130,6 +130,9 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 		Client:    &fakeGitHub{},
 		RepoOwner: "golang",
 		RepoName:  "go",
+		ApproveAction: func(ctx *workflow.TaskContext) error {
+			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
+		},
 	}
 
 	snapshotServer := httptest.NewServer(http.HandlerFunc(serveSnapshot))
@@ -147,7 +150,7 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 			if strings.Contains(ctx.TaskName, "Release Coordinator Approval") {
 				return nil
 			}
-			return fmt.Errorf("unexpected approval for %q", ctx.TaskName)
+			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
 		},
 	}
 	// Cleanups are called in reverse order, and we need to cancel the context

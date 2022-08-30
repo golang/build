@@ -52,6 +52,9 @@ func TestMilestones(t *testing.T) {
 		},
 		RepoOwner: *flagOwner,
 		RepoName:  *flagRepo,
+		ApproveAction: func(*workflow.TaskContext) error {
+			return fmt.Errorf("not approved")
+		},
 	}
 	milestones, err := tasks.FetchMilestones(ctx, "go1.20", KindMajor)
 	if err != nil {
