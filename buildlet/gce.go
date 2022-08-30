@@ -237,7 +237,7 @@ OpLoop:
 			continue
 		case "DONE":
 			if op.Error != nil {
-				err := new(GCEError)
+				err := &GCEError{OpErrors: make([]*compute.OperationErrorErrors, len(op.Error.Errors))}
 				copy(err.OpErrors, op.Error.Errors)
 				log.Println(err.Error())
 				return nil, err
