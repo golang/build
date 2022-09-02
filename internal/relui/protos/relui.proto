@@ -20,8 +20,21 @@ service ReleaseService {
   rpc UpdateSigningStatus (stream SigningStatus) returns (stream SigningRequest) {}
 }
 
-// Request for an update on an existing signing request.
-message SignArtifactStatusRequest {}
+// Request an action from the signing client.
+message SigningRequest {
+  // unique identifier for the signing job.
+  string id = 1;
+  // unique identifier for the request. This would normally reside within
+  // the metadata. This is primarily used to route requests between
+  // caller/responder. The server and client must use the same id for each
+  // corresponging request.
+  string message_id = 2;
+  // Request type for the signing client.
+  oneof request_oneof {
+    SignArtifactRequest sign = 4;
+    SignArtifactStatusRequest status = 3;
+  }
+}
 
 // Request to sign a release artifact.
 message SignArtifactRequest {
@@ -39,43 +52,8 @@ message SignArtifactRequest {
   // GCS bucket.
   string gcs_uri = 2;
 }
-
-// Request an action from the signing client.
-message SigningRequest {
-  // unique identifier for the signing job.
-  string id = 1;
-  // unique identifier for the request. This would normally reside within
-  // the metadata. This is primarily used to route requests between
-  // caller/responder. The server and client must use the same id for each
-  // corresponging request.
-  string message_id = 2;
-  // Request type for the signing client.
-  oneof request_oneof {
-    SignArtifactStatusRequest status = 3;
-    SignArtifactRequest sign = 4;
-  }
-}
-
-// The signing status for a signing request which does not exist.
-message StatusNotFound {}
-
-// The signing status for an in progress signing request.
-message StatusRunning {
-  // Details about the signing request status.
-  string description = 1;
-}
-
-// The signing status for a failed signing request.
-message StatusFailed {
-  // Details about the signing request status.
-  string description = 1;
-}
-
-// The signing status for a successfully completed signing request.
-message StatusCompleted {
-  // The GCS URI of the signed artifact.
-  string gcs_uri = 1;
-}
+// Request for an update on an existing signing request.
+message SignArtifactStatusRequest {}
 
 // The status of the signing request.
 message SigningStatus {
@@ -93,4 +71,22 @@ message SigningStatus {
     StatusFailed failed = 5;
     StatusCompleted completed = 6;
   }
+}
+
+// The signing status for a signing request which does not exist.
+message StatusNotFound {}
+// The signing status for an in progress signing request.
+message StatusRunning {
+  // Details about the signing request status.
+  string description = 1;
+}
+// The signing status for a failed signing request.
+message StatusFailed {
+  // Details about the signing request status.
+  string description = 1;
+}
+// The signing status for a successfully completed signing request.
+message StatusCompleted {
+  // The GCS URI of the signed artifact.
+  string gcs_uri = 1;
 }
