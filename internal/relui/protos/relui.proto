@@ -13,6 +13,7 @@ service ReleaseService {
   // UpdateSigningStatus is a bidirectional connection where server is requesting that the client:
   // - Sign a release artifact.
   // - Provide an update on a previous request to sign a release artifact.
+  // - Consider a previous request to sign a release artifact as obsolete.
   // The client initiates a connection with the server and waits for the server to issue a request
   // such as:
   // - An update on the status of a signing request (either running or completed).
@@ -22,60 +23,76 @@ service ReleaseService {
 
 // Request an action from the signing client.
 message SigningRequest {
-  // unique identifier for the signing job.
-  string id = 1;
   // unique identifier for the request. This would normally reside within
   // the metadata. This is primarily used to route requests between
   // caller/responder. The server and client must use the same id for each
   // corresponging request.
-  string message_id = 2;
+  string message_id = 1;
+
   // Request type for the signing client.
   oneof request_oneof {
-    SignArtifactRequest sign = 4;
+    SignArtifactRequest sign = 2;
     SignArtifactStatusRequest status = 3;
+    SignArtifactCancelRequest cancel = 4;
   }
 }
 
 // Request to sign a release artifact.
 message SignArtifactRequest {
+  // The type of artifact signing request.
   enum BuildType {
     BUILD_TYPE_UNSPECIFIED = 0;
-    BUILD_TYPE_MACOSAMD = 1;
-    BUILD_TYPE_MACOSARM = 2;
-    BUILD_TYPE_WINDOWS = 3;
-    BUILD_TYPE_GPG = 4;
+    BUILD_TYPE_MACOS = 1;
+    BUILD_TYPE_WINDOWS = 2;
+    BUILD_TYPE_GPG = 3;
   }
-  // The type of artifact signing request.
   BuildType build_type = 1;
+
   // The GCS URI for the artifact that should be signed.
   // This artifact must reside in the agreed upon private
   // GCS bucket.
-  string gcs_uri = 2;
+  //
+  // There must be at least one entry, and
+  // each one points to an individual file.
+  // For example, "gs://golang-release-staging/relui-scratch/<...>/go123.linux-amd64.tar.gz".
+  repeated string gcs_uri = 2;
 }
 // Request for an update on an existing signing request.
-message SignArtifactStatusRequest {}
+message SignArtifactStatusRequest {
+  // unique identifier for the signing job.
+  string job_id = 1;
+}
+// Request to stop a previous signing request sooner if possible.
+message SignArtifactCancelRequest {
+  // unique identifier for the signing job.
+  string job_id = 1;
+}
 
 // The status of the signing request.
 message SigningStatus {
-  // unique identifier for the signing job.
-  string id = 1;
   // unique identifier for the request. This would normally reside within
   // the metadata. This is primarily used to route requests between
   // caller/responder. The server and client must use the same id for each
   // corresponging request.
-  string message_id = 2;
+  string message_id = 1;
+
   // The status type of the signing request.
   oneof status_oneof {
     StatusNotFound not_found = 3;
-    StatusRunning running = 4;
-    StatusFailed failed = 5;
-    StatusCompleted completed = 6;
+    StatusStarted started = 4;
+    StatusRunning running = 5;
+    StatusFailed failed = 6;
+    StatusCompleted completed = 7;
   }
 }
 
 // The signing status for a signing request which does not exist.
 message StatusNotFound {}
 // The signing status for an in progress signing request.
+message StatusStarted {
+  // unique identifier for the signing job that started.
+  string job_id = 1;
+}
 message StatusRunning {
   // Details about the signing request status.
   string description = 1;
@@ -87,6 +104,8 @@ message StatusFailed {
 }
 // The signing status for a successfully completed signing request.
 message StatusCompleted {
-  // The GCS URI of the signed artifact.
-  string gcs_uri = 1;
+  // The GCS URIs of the signed artifact(s),
+  // each one pointing to an individual file.
+  // For example, "gs://golang-release-staging/relui-scratch/<...>/go123.linux-amd64.tar.gz".
+  repeated string gcs_uri = 1;
 }

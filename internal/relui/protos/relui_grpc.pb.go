@@ -21,6 +21,7 @@ type ReleaseServiceClient interface {
 	// UpdateSigningStatus is a bidirectional connection where server is requesting that the client:
 	// - Sign a release artifact.
 	// - Provide an update on a previous request to sign a release artifact.
+	// - Consider a previous request to sign a release artifact as obsolete.
 	// The client initiates a connection with the server and waits for the server to issue a request
 	// such as:
 	// - An update on the status of a signing request (either running or completed).
@@ -74,6 +75,7 @@ type ReleaseServiceServer interface {
 	// UpdateSigningStatus is a bidirectional connection where server is requesting that the client:
 	// - Sign a release artifact.
 	// - Provide an update on a previous request to sign a release artifact.
+	// - Consider a previous request to sign a release artifact as obsolete.
 	// The client initiates a connection with the server and waits for the server to issue a request
 	// such as:
 	// - An update on the status of a signing request (either running or completed).

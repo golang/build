@@ -101,7 +101,7 @@ func (rs *SigningServer) send(ctx context.Context, req *protos.SigningRequest) (
 	// send message
 	select {
 	case rs.requests <- req:
-		log.Printf("SigningServer: sent signing request %s", req.GetId())
+		log.Printf("SigningServer: sent signing request with message=%q", req.GetMessageId())
 	case <-ctx.Done():
 		rs.callback.deregister(req.GetMessageId())
 		return nil, ctx.Err()
@@ -110,11 +110,9 @@ func (rs *SigningServer) send(ctx context.Context, req *protos.SigningRequest) (
 	return resp.status, resp.err
 }
 
-// SignArtifact creates a request to sign a release artifact. The object URI must be a URI for an object on the service private GCS. The call
-// will block until either the request has been acknowledged or the passed in context has been canceled. Setting a timeout on the context is recommended.
-func (rs *SigningServer) SignArtifact(ctx context.Context, workflowID, taskName string, retryCount int, bt BuildType, objectURI string) error {
-	_, err := rs.send(ctx, &protos.SigningRequest{
-		Id:        signJobID(workflowID, taskName, retryCount),
+// SignArtifact implements Service.
+func (rs *SigningServer) SignArtifact(ctx context.Context, bt BuildType, objectURI []string) (jobID string, _ error) {
+	resp, err := rs.send(ctx, &protos.SigningRequest{
 		MessageId: uuid.NewString(),
 		RequestOneof: &protos.SigningRequest_Sign{
 			Sign: &protos.SignArtifactRequest{
@@ -123,22 +121,27 @@ func (rs *SigningServer) SignArtifact(ctx context.Context, workflowID, taskName 
 			},
 		},
 	})
-	return err
+	if err != nil {
+		return "", err
+	}
+	switch t := resp.StatusOneof.(type) {
+	case *protos.SigningStatus_Started:
+		return t.Started.JobId, nil
+	default:
+		return "", fmt.Errorf("unexpected response type %T for a sign request", t)
+	}
 }
 
-// ArtifactSigningStatus requests the status of an existing signing request message. If the message is at the status of completed
-// then the objectURI will be populated with the URI for the object in a GCS bucket. The call will block until either the
-// request has been acknowledged or the passed in context has been canceled. Setting a timeout on the context is recommended.
-func (rs *SigningServer) ArtifactSigningStatus(ctx context.Context, workflowID, taskName string, retryCount int) (status Status, objectURI string, err error) {
+// ArtifactSigningStatus implements Service.
+func (rs *SigningServer) ArtifactSigningStatus(ctx context.Context, jobID string) (status Status, objectURI []string, err error) {
 	resp, err := rs.send(ctx, &protos.SigningRequest{
-		Id:        signJobID(workflowID, taskName, retryCount),
 		MessageId: uuid.NewString(),
 		RequestOneof: &protos.SigningRequest_Status{
-			Status: &protos.SignArtifactStatusRequest{},
+			Status: &protos.SignArtifactStatusRequest{JobId: jobID},
 		},
 	})
 	if err != nil {
-		return StatusUnknown, "", err
+		return StatusUnknown, nil, err
 	}
 	switch t := resp.StatusOneof.(type) {
 	case *protos.SigningStatus_Completed:
@@ -148,11 +151,26 @@ func (rs *SigningServer) ArtifactSigningStatus(ctx context.Context, workflowID, 
 		status = StatusFailed
 	case *protos.SigningStatus_NotFound:
 		status = StatusNotFound
-		err = fmt.Errorf("signing request not found for message=%q job=%s", resp.GetMessageId(), resp.GetId())
+		err = fmt.Errorf("signing request not found for message=%q", resp.GetMessageId())
 	case *protos.SigningStatus_Running:
 		status = StatusRunning
+	default:
+		return 0, nil, fmt.Errorf("unexpected response type %T for a status request", t)
 	}
 	return status, objectURI, err
+}
+
+// CancelSigning implements Service.
+func (rs *SigningServer) CancelSigning(ctx context.Context, jobID string) error {
+	_, err := rs.send(ctx, &protos.SigningRequest{
+		MessageId: uuid.NewString(),
+		RequestOneof: &protos.SigningRequest_Cancel{
+			Cancel: &protos.SignArtifactCancelRequest{
+				JobId: jobID,
+			},
+		},
+	})
+	return err
 }
 
 // signResponse contains the response and error from a signing request.
@@ -199,13 +217,8 @@ func (c *responseCallback) callAndDeregister(resp *signResponse) {
 	}
 	if !ok {
 		// drop the message
-		log.Printf("SigningServer: caller not found for message=%s job=%s", resp.status.GetMessageId(), resp.status.GetId())
+		log.Printf("SigningServer: caller not found for message=%q", resp.status.GetMessageId())
 		return
 	}
 	respFunc(resp)
-}
-
-// signJobID creates a signing job identifier.
-func signJobID(wfID, tn string, rc int) string {
-	return fmt.Sprintf("%s-%s-%d", wfID, tn, rc)
 }

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/build/internal/access"
 	"golang.org/x/build/internal/relui/protos"
 	"golang.org/x/net/nettest"
@@ -29,11 +30,10 @@ func TestUpdateSigningStatus(t *testing.T) {
 	defer cancel()
 	go fakeSigningServerClient(t, ctx, client)
 	wg := &sync.WaitGroup{}
-	wg.Add(4)
+	wg.Add(3)
 	go signRequestSeries(t, ctx, "request-1", server, BuildGPG, wg)
-	go signRequestSeries(t, ctx, "request-2", server, BuildMacosAMD, wg)
-	go signRequestSeries(t, ctx, "request-3", server, BuildMacosARM, wg)
-	go signRequestSeries(t, ctx, "request-4", server, BuildWindows, wg)
+	go signRequestSeries(t, ctx, "request-2", server, BuildMacOS, wg)
+	go signRequestSeries(t, ctx, "request-3", server, BuildWindows, wg)
 	wg.Wait()
 }
 
@@ -59,9 +59,8 @@ func TestUpdateSigningStatusError(t *testing.T) {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		go fakeSigningServerClient(t, ctx, client)
-		wf, tsk := "wf", "tsk"
-		if _, _, err := server.ArtifactSigningStatus(ctx, wf, tsk, 0); err == nil {
-			t.Fatalf("ArtifactSigningStatus(ctx, %q, %q, 0) = _, _, nil; want error", wf, tsk)
+		if _, _, err := server.ArtifactSigningStatus(ctx, "not-exist"); err == nil {
+			t.Fatalf("ArtifactSigningStatus(ctx, %q) = _, _, nil; want error", "not-exist")
 		}
 	})
 }
@@ -69,17 +68,15 @@ func TestUpdateSigningStatusError(t *testing.T) {
 func signRequestSeries(t *testing.T, ctx context.Context, id string, server *SigningServer, buildT BuildType, wg *sync.WaitGroup) {
 	defer wg.Done()
 	const uri = "gs://foo/bar.tar.gz"
-	wf := fmt.Sprintf("workflow-%s", id)
-	tn := fmt.Sprintf("taskname-%s", id)
-	rc := 1
-	if err := server.SignArtifact(ctx, wf, tn, rc, buildT, uri); err != nil {
+	jobID, err := server.SignArtifact(ctx, buildT, []string{uri})
+	if err != nil {
 		t.Fatalf("SignArtifact(ctx, %q, %v, %q = %s; want no error", id, buildT, uri, err)
 	}
-	_, _, err := server.ArtifactSigningStatus(ctx, wf, tn, rc)
+	_, _, err = server.ArtifactSigningStatus(ctx, jobID)
 	if err != nil {
 		t.Fatalf("ArtifactSigningStatus(%q) = %s; want no error", id, err)
 	}
-	_, _, err = server.ArtifactSigningStatus(ctx, wf, tn, rc)
+	_, _, err = server.ArtifactSigningStatus(ctx, jobID)
 	if err != nil {
 		t.Fatalf("ArtifactSigningStatus(%q) = %s; want no error", id, err)
 	}
@@ -111,22 +108,23 @@ func fakeSigningServerClient(t *testing.T, ctx context.Context, client protos.Re
 			requests <- in
 		}
 	}()
-	jobs := make(map[string]int) // messageID -> request count
+	jobs := make(map[string]int) // jobID -> request count
 	for request := range requests {
-		id := request.GetId()
 		resp := &protos.SigningStatus{
-			Id:          id,
 			MessageId:   request.GetMessageId(),
 			StatusOneof: nil,
 		}
-		switch request.RequestOneof.(type) {
+		switch r := request.RequestOneof.(type) {
 		case *protos.SigningRequest_Sign:
-			if _, ok := jobs[id]; ok {
-				t.Fatalf("pre-existing job found")
+			newJob := uuid.NewString() // Create a new pretend job with an ID.
+			jobs[newJob] = 1
+			resp.StatusOneof = &protos.SigningStatus_Started{
+				Started: &protos.StatusStarted{
+					JobId: newJob,
+				},
 			}
-			jobs[id] = 1
-			resp.StatusOneof = &protos.SigningStatus_Running{}
 		case *protos.SigningRequest_Status:
+			id := r.Status.JobId
 			c, ok := jobs[id]
 			if !ok {
 				resp.StatusOneof = &protos.SigningStatus_NotFound{}
@@ -137,7 +135,7 @@ func fakeSigningServerClient(t *testing.T, ctx context.Context, client protos.Re
 				delete(jobs, id)
 				resp.StatusOneof = &protos.SigningStatus_Completed{
 					Completed: &protos.StatusCompleted{
-						GcsUri: "gs://private-bucket/some-file.tar.gz",
+						GcsUri: []string{"gs://private-bucket/some-file.tar.gz"},
 					},
 				}
 			}

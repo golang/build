@@ -10,10 +10,20 @@ import (
 	"golang.org/x/build/internal/relui/protos"
 )
 
-// Service interface for a release artifact signging service.
+// Service is an interface for a release artifact signing service.
+//
+// Each call blocks until either the request has been acknowledged or the passed in context has been canceled.
+// Setting a timeout on the context is recommended.
 type Service interface {
-	SignArtifact(ctx context.Context, workflowID, taskName string, retryCount int, bt BuildType, objectURI string) error
-	ArtifactSigningStatus(ctx context.Context, workflowID, taskName string, retryCount int) (status Status, objectURI string, err error)
+	// SignArtifact creates a request to sign a release artifact.
+	// The object URI must be URIs for file(s) on the service private GCS.
+	SignArtifact(ctx context.Context, bt BuildType, objectURI []string) (jobID string, _ error)
+	// ArtifactSigningStatus requests the status of an existing signing request message.
+	// If the message is at the status of completed then the objectURI will be populated with the URIs for signed files in GCS.
+	ArtifactSigningStatus(ctx context.Context, jobID string) (status Status, objectURI []string, err error)
+	// CancelSigning marks a previous signing request as no longer needed,
+	// possibly allowing resources to be freed sooner than otherwise.
+	CancelSigning(ctx context.Context, jobID string) error
 }
 
 // Status of the signing request.
@@ -47,8 +57,7 @@ type BuildType int
 
 const (
 	BuildUnspecified BuildType = iota
-	BuildMacosAMD
-	BuildMacosARM
+	BuildMacOS
 	BuildWindows
 	BuildGPG
 )
@@ -58,10 +67,8 @@ func (bt BuildType) proto() protos.SignArtifactRequest_BuildType {
 	switch bt {
 	case BuildUnspecified:
 		return protos.SignArtifactRequest_BUILD_TYPE_UNSPECIFIED
-	case BuildMacosAMD:
-		return protos.SignArtifactRequest_BUILD_TYPE_MACOSAMD
-	case BuildMacosARM:
-		return protos.SignArtifactRequest_BUILD_TYPE_MACOSARM
+	case BuildMacOS:
+		return protos.SignArtifactRequest_BUILD_TYPE_MACOS
 	case BuildWindows:
 		return protos.SignArtifactRequest_BUILD_TYPE_WINDOWS
 	case BuildGPG:
