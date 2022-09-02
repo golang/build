@@ -45,7 +45,7 @@ type GCEError struct {
 }
 
 func (q *GCEError) Error() string {
-	return fmt.Sprintf("failed with errors: %v", q.OpErrors)
+	return fmt.Sprintf("failed with errors: %+v", q.OpErrors)
 }
 
 func (q *GCEError) Is(target error) bool {
