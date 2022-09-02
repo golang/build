@@ -39,7 +39,7 @@ func TestWorkerStartWorkflow(t *testing.T) {
 	params := map[string]interface{}{"greeting": "greetings", "names": []string{"alice", "bob"}}
 
 	wg.Add(1)
-	wfid, err := w.StartWorkflow(ctx, t.Name(), params)
+	wfid, err := w.StartWorkflow(ctx, t.Name(), params, 0)
 	if err != nil {
 		t.Fatalf("w.StartWorkflow(_, %v, %v) = %v, %v, wanted no error", wd, params, wfid, err)
 	}
@@ -238,7 +238,7 @@ func TestWorkflowResumeRetry(t *testing.T) {
 		}
 		cancel()
 	}()
-	wfid, err := w.StartWorkflow(ctx, t.Name(), nil)
+	wfid, err := w.StartWorkflow(ctx, t.Name(), nil, 0)
 	if err != nil {
 		t.Fatalf("w.StartWorkflow(_, %v, %v) = %v, %v, wanted no error", wd, nil, wfid, err)
 	}
@@ -318,7 +318,7 @@ func (u *unimplementedListener) Logger(uuid.UUID, string) workflow.Logger {
 	return log.Default()
 }
 
-func (u *unimplementedListener) WorkflowStarted(context.Context, uuid.UUID, string, map[string]interface{}) error {
+func (u *unimplementedListener) WorkflowStarted(context.Context, uuid.UUID, string, map[string]interface{}, int) error {
 	return errors.New("method WorkflowStarted not implemented")
 }
 

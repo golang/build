@@ -61,20 +61,22 @@ func (l *PGListener) TaskStateChanged(workflowID uuid.UUID, taskName string, sta
 }
 
 // WorkflowStarted persists a new workflow execution in the database.
-func (l *PGListener) WorkflowStarted(ctx context.Context, workflowID uuid.UUID, name string, params map[string]interface{}) error {
+func (l *PGListener) WorkflowStarted(ctx context.Context, workflowID uuid.UUID, name string, params map[string]interface{}, scheduleID int) error {
 	q := db.New(l.db)
 	m, err := json.Marshal(params)
 	if err != nil {
 		return err
 	}
 	updated := time.Now()
-	_, err = q.CreateWorkflow(ctx, db.CreateWorkflowParams{
-		ID:        workflowID,
-		Name:      sql.NullString{String: name, Valid: true},
-		Params:    sql.NullString{String: string(m), Valid: len(m) > 0},
-		CreatedAt: updated,
-		UpdatedAt: updated,
-	})
+	wfp := db.CreateWorkflowParams{
+		ID:         workflowID,
+		Name:       sql.NullString{String: name, Valid: true},
+		Params:     sql.NullString{String: string(m), Valid: len(m) > 0},
+		ScheduleID: sql.NullInt32{Int32: int32(scheduleID), Valid: scheduleID != 0},
+		CreatedAt:  updated,
+		UpdatedAt:  updated,
+	}
+	_, err = q.CreateWorkflow(ctx, wfp)
 	return err
 }
 

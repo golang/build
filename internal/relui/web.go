@@ -28,7 +28,10 @@ import (
 	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/exp/slices"
 )
+
+const DatetimeLocalLayout = "2006-01-02T15:04"
 
 // SiteHeader configures the relui site header.
 type SiteHeader struct {
@@ -40,11 +43,12 @@ type SiteHeader struct {
 
 // Server implements the http handlers for relui.
 type Server struct {
-	db      db.PGDBTX
-	m       *metricsRouter
-	w       *Worker
-	baseURL *url.URL // nil means "/".
-	header  SiteHeader
+	db        db.PGDBTX
+	m         *metricsRouter
+	w         *Worker
+	scheduler *Scheduler
+	baseURL   *url.URL // nil means "/".
+	header    SiteHeader
 	// mux used if baseURL is set
 	bm *http.ServeMux
 
@@ -59,11 +63,15 @@ type Server struct {
 // The base URL may be nil, which is the same as "/".
 func NewServer(p db.PGDBTX, w *Worker, baseURL *url.URL, header SiteHeader, ms *metrics.Service) *Server {
 	s := &Server{
-		db:      p,
-		m:       &metricsRouter{router: httprouter.New()},
-		w:       w,
-		baseURL: baseURL,
-		header:  header,
+		db:        p,
+		m:         &metricsRouter{router: httprouter.New()},
+		w:         w,
+		scheduler: NewScheduler(p, w),
+		baseURL:   baseURL,
+		header:    header,
+	}
+	if err := s.scheduler.Resume(context.Background()); err != nil {
+		log.Fatalf("s.scheduler.Resume() = %v", err)
 	}
 	helpers := map[string]interface{}{
 		"allWorkflowsCount":     s.allWorkflowsCount,
@@ -104,7 +112,7 @@ func (s *Server) allWorkflowsCount() int64 {
 	return count
 }
 
-func (s *Server) sidebarWorkflows() []db.WorkflowSidebarRow {
+func (s *Server) sidebarWorkflows(nameParam string) []db.WorkflowSidebarRow {
 	sb, err := db.New(s.db).WorkflowSidebar(context.Background())
 	if err != nil {
 		panic(fmt.Sprintf("sidebarWorkflows: %q", err))
@@ -119,6 +127,10 @@ func (s *Server) sidebarWorkflows() []db.WorkflowSidebarRow {
 		filtered = append(filtered, row)
 	}
 	filtered = append(filtered, others)
+	// Add a new row when on the newWorkflowsHandler if the workflow has never been run.
+	if s.w.dh.Definition(nameParam) != nil && slices.IndexFunc(filtered, func(row db.WorkflowSidebarRow) bool { return row.Name.String == nameParam }) == -1 {
+		filtered = append(filtered, db.WorkflowSidebarRow{Name: sql.NullString{String: nameParam, Valid: true}})
+	}
 	return filtered
 }
 
@@ -286,9 +298,12 @@ func (s *Server) buildShowWorkflowResponse(ctx context.Context, id uuid.UUID) (*
 }
 
 type newWorkflowResponse struct {
-	SiteHeader  SiteHeader
-	Definitions map[string]*workflow.Definition
-	Name        string
+	SiteHeader      SiteHeader
+	Definitions     map[string]*workflow.Definition
+	Name            string
+	ScheduleTypes   []ScheduleType
+	Schedule        ScheduleType
+	ScheduleMinTime string
 }
 
 func (n *newWorkflowResponse) Selected() *workflow.Definition {
@@ -298,10 +313,19 @@ func (n *newWorkflowResponse) Selected() *workflow.Definition {
 // newWorkflowHandler presents a form for creating a new workflow.
 func (s *Server) newWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 	out := bytes.Buffer{}
+	name := r.FormValue("workflow.name")
 	resp := &newWorkflowResponse{
-		SiteHeader:  s.header,
-		Definitions: s.w.dh.Definitions(),
-		Name:        r.FormValue("workflow.name"),
+		SiteHeader:      s.header,
+		Definitions:     s.w.dh.Definitions(),
+		Name:            name,
+		ScheduleTypes:   ScheduleTypes,
+		Schedule:        ScheduleImmediate,
+		ScheduleMinTime: time.Now().UTC().Format(DatetimeLocalLayout),
+	}
+	resp.SiteHeader.NameParam = name
+	selectedSchedule := ScheduleType(r.FormValue("workflow.schedule"))
+	if slices.Contains(ScheduleTypes, selectedSchedule) {
+		resp.Schedule = selectedSchedule
 	}
 	if err := s.newWorkflowTmpl.Execute(&out, resp); err != nil {
 		log.Printf("newWorkflowHandler: %v", err)
@@ -352,7 +376,21 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	id, err := s.w.StartWorkflow(r.Context(), name, params)
+	if r.FormValue("workflow.schedule") == string(ScheduleOnce) {
+		t, err := time.ParseInLocation(DatetimeLocalLayout, r.FormValue("workflow.schedule.datetime"), time.UTC)
+		if err != nil || t.Before(time.Now()) {
+			http.Error(w, fmt.Sprintf("parameter %q parsing error: %v", "workflow.schedule.datetime", err), http.StatusBadRequest)
+			return
+		}
+		_, err = s.scheduler.Create(r.Context(), Schedule{Once: t}, name, params)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to create schedule: %v", err), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
+		return
+	}
+	id, err := s.w.StartWorkflow(r.Context(), name, params, 0)
 	if err != nil {
 		log.Printf("s.w.StartWorkflow(%v, %v, %v): %v", r.Context(), d, params, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

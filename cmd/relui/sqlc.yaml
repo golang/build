@@ -20,3 +20,6 @@ sql:
           - go_type: "string"
             db_type: "jsonb"
             nullable: false
+          - column: "schedules.once"
+            go_type:
+              type: "time.Time"

@@ -16,7 +16,7 @@
         Workflows
       {{end}}
       </h2>
-      <a href="{{baseLink "/new_workflow"}}" class="Button">New</a>
+      <a href="{{baseLink (printf "/new_workflow?workflow.name=%s" .SiteHeader.NameParam)}}" class="Button">New</a>
     </div>
     <h2>Active Workflows</h2>
     {{template "workflow_list" .ActiveWorkflows}}

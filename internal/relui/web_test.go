@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -173,11 +174,13 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	now := time.Now()
 	cases := []struct {
 		desc          string
 		params        url.Values
 		wantCode      int
 		wantWorkflows []db.Workflow
+		wantSchedules []db.Schedule
 	}{
 		{
 			desc:     "no params",
@@ -207,8 +210,48 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 					Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
 					Name:      nullString(`echo`),
 					Output:    "{}",
-					CreatedAt: time.Now(), // cmpopts.EquateApproxTime
-					UpdatedAt: time.Now(), // cmpopts.EquateApproxTime
+					CreatedAt: now, // cmpopts.EquateApproxTime
+					UpdatedAt: now, // cmpopts.EquateApproxTime
+				},
+			},
+		},
+		{
+			desc: "successful creation: schedule immediate",
+			params: url.Values{
+				"workflow.name":            []string{"echo"},
+				"workflow.params.greeting": []string{"hello"},
+				"workflow.params.farewell": []string{"bye"},
+				"workflow.schedule":        []string{string(ScheduleImmediate)},
+			},
+			wantCode: http.StatusSeeOther,
+			wantWorkflows: []db.Workflow{
+				{
+					ID:        uuid.New(), // SameUUIDVariant
+					Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
+					Name:      nullString(`echo`),
+					Output:    "{}",
+					CreatedAt: now, // cmpopts.EquateApproxTime
+					UpdatedAt: now, // cmpopts.EquateApproxTime
+				},
+			},
+		},
+		{
+			desc: "successful creation: schedule once",
+			params: url.Values{
+				"workflow.name":              []string{"echo"},
+				"workflow.params.greeting":   []string{"hello"},
+				"workflow.params.farewell":   []string{"bye"},
+				"workflow.schedule":          []string{string(ScheduleOnce)},
+				"workflow.schedule.datetime": []string{now.UTC().AddDate(1, 0, 0).Format(DatetimeLocalLayout)},
+			},
+			wantCode: http.StatusSeeOther,
+			wantSchedules: []db.Schedule{
+				{
+					WorkflowName:   "echo",
+					WorkflowParams: nullString(`{"farewell": "bye", "greeting": "hello"}`),
+					Once:           now.UTC().AddDate(1, 0, 0),
+					CreatedAt:      now, // cmpopts.EquateApproxTime
+					UpdatedAt:      now, // cmpopts.EquateApproxTime
 				},
 			},
 		},
@@ -238,7 +281,14 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			if diff := cmp.Diff(c.wantWorkflows, wfs, SameUUIDVariant(), cmpopts.EquateApproxTime(time.Minute)); diff != "" {
 				t.Fatalf("q.Workflows() mismatch (-want +got):\n%s", diff)
 			}
-			if c.wantCode == http.StatusSeeOther {
+			scheds, err := q.Schedules(ctx)
+			if err != nil {
+				t.Fatalf("q.Schedules() = %v, %v, wanted no error", scheds, err)
+			}
+			if diff := cmp.Diff(c.wantSchedules, scheds, cmpopts.EquateApproxTime(time.Minute), cmpopts.IgnoreFields(db.Schedule{}, "ID")); diff != "" {
+				t.Fatalf("q.Schedules() mismatch (-want +got):\n%s", diff)
+			}
+			if c.wantCode == http.StatusSeeOther && len(c.wantSchedules) == 0 {
 				got := resp.Header.Get("Location")
 				want := path.Join("/workflows", wfs[0].ID.String())
 				if got != want {
@@ -284,6 +334,8 @@ func resetDB(ctx context.Context, t *testing.T, p *pgxpool.Pool) {
 var testPoolOnce sync.Once
 var testPool *pgxpool.Pool
 
+var flagTestDB = flag.String("test-pgdatabase", os.Getenv("PGDATABASE"), "postgres database to use for testing")
+
 // testDB connects, creates, and migrates a database in preparation
 // for testing, and returns a connection pool to the prepared
 // database.
@@ -300,7 +352,7 @@ func testDB(ctx context.Context, t *testing.T) *pgxpool.Pool {
 		t.Skip("Skipping database tests in short mode.")
 	}
 	testPoolOnce.Do(func() {
-		pgdb := url.QueryEscape(os.Getenv("PGDATABASE"))
+		pgdb := url.QueryEscape(*flagTestDB)
 		if pgdb == "" {
 			pgdb = "relui-test"
 		}
@@ -430,7 +482,7 @@ func TestServerBaseLink(t *testing.T) {
 			if err != nil {
 				t.Fatalf("url.Parse(%q) = %v, %v, wanted no error", c.baseURL, base, err)
 			}
-			s := NewServer(nil, nil, base, SiteHeader{}, nil)
+			s := &Server{baseURL: base}
 
 			got := s.BaseLink(c.target, c.extras...)
 			if got != c.want {
@@ -621,7 +673,7 @@ func TestServerStopWorkflow(t *testing.T) {
 				t.Fatalf("worker.markRunning(%v, %v) = %v, wanted no error", wf, cancel, err)
 			}
 
-			s := NewServer(nil, worker, nil, SiteHeader{}, nil)
+			s := NewServer(testDB(ctx, t), worker, nil, SiteHeader{}, nil)
 			s.m.ServeHTTP(rec, req)
 			resp := rec.Result()
 

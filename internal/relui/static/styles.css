@@ -101,6 +101,7 @@ h6 {
   background: #d6d6d6;
   color: #171d27;
   padding: 0.625rem;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 15%);
 }
 .Site-header--production .Header {
   background: #e0ebf5;
@@ -499,4 +500,66 @@ h6 {
 }
 .WorkflowList-itemUpdated {
   width: auto;
+}
+.NewWorkflow-tabContainer {
+  overflow-x: hidden;
+  padding-bottom: 1rem;
+}
+.NewWorkflow-tab {
+  align-items: center;
+  border-bottom: 0.125rem solid #fff;
+  color: rgba(0 0 0 / 60%);
+  display: flex;
+  justify-content: center;
+  padding: 0 0.75rem;
+  transition: 250ms color cubic-bezier(0.4, 0, 0.2, 1);
+}
+.NewWorkflow-tab:hover {
+  background-color: #ebf3f8;
+}
+.NewWorkflow-tabControl {
+  display: none;
+}
+.NewWorkflow-tabHeader {
+  align-items: stretch;
+  display: flex;
+  font-family: Roboto, sans-serif;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.NewWorkflow-tabLabel {
+  cursor: pointer;
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  height: 3rem;
+  letter-spacing: 0.0781rem;
+  line-height: 3rem;
+  text-transform: uppercase;
+  transition: all 0.3s;
+}
+.NewWorkflow-tabContent {
+  display: none;
+}
+.NewWorkflow-tabControl:nth-of-type(1):checked ~ .NewWorkflow-tabHeader .NewWorkflow-tab:nth-of-type(1),
+.NewWorkflow-tabControl:nth-of-type(2):checked ~ .NewWorkflow-tabHeader .NewWorkflow-tab:nth-of-type(2),
+.NewWorkflow-tabControl:nth-of-type(3):checked ~ .NewWorkflow-tabHeader .NewWorkflow-tab:nth-of-type(3),
+.NewWorkflow-tabControl:nth-of-type(4):checked ~ .NewWorkflow-tabHeader .NewWorkflow-tab:nth-of-type(4) {
+  border-bottom: 0.125rem solid #00add8;
+  color: #00add8;
+}
+.NewWorkflow-tabControl:nth-of-type(1):checked ~ .NewWorkflow-tabHeader .NewWorkflow-tab:nth-of-type(1) .NewWorkflow-tabLabel,
+.NewWorkflow-tabControl:nth-of-type(2):checked ~ .NewWorkflow-tabHeader .NewWorkflow-tab:nth-of-type(2) .NewWorkflow-tabLabel,
+.NewWorkflow-tabControl:nth-of-type(3):checked ~ .NewWorkflow-tabHeader .NewWorkflow-tab:nth-of-type(3) .NewWorkflow-tabLabel,
+.NewWorkflow-tabControl:nth-of-type(4):checked ~ .NewWorkflow-tabHeader .NewWorkflow-tab:nth-of-type(4) .NewWorkflow-tabLabel {
+  /*background: #fff;*/
+  /*border-bottom-color: #fff;*/
+  /*color: #222;*/
+}
+.NewWorkflow-tabControl:nth-of-type(1):checked ~ .NewWorkflow-tabContent:nth-of-type(1),
+.NewWorkflow-tabControl:nth-of-type(2):checked ~ .NewWorkflow-tabContent:nth-of-type(2),
+.NewWorkflow-tabControl:nth-of-type(3):checked ~ .NewWorkflow-tabContent:nth-of-type(3),
+.NewWorkflow-tabControl:nth-of-type(4):checked ~ .NewWorkflow-tabContent:nth-of-type(4) {
+  display: block;
 }

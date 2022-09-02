@@ -7,18 +7,21 @@
 
 {{define "content"}}
   {{- /*gotype: golang.org/x/build/internal/relui.newWorkflowResponse*/ -}}
+  {{$response := .}}
   <section class="NewWorkflow">
     <h2>New Go Release</h2>
     <form class="NewWorkflow-workflowSelect" action="{{baseLink "/new_workflow"}}" method="get">
-      <label for="workflow.name">Workflow:</label>
-      <select id="workflow.name" name="workflow.name" onchange="this.form.submit()">
-        <option value="">Select Workflow</option>
-        {{range $name, $definition := .Definitions}}
-          <option value="{{$name}}" {{if eq $name $.Name}}selected="selected"{{end}}>
-            {{$name}}
-          </option>
-        {{end}}
-      </select>
+      <div class="NewWorkflow-parameter">
+        <label for="workflow.name">Workflow:</label>
+        <select id="workflow.name" name="workflow.name" onchange="this.form.submit()">
+          <option value="">Select Workflow</option>
+          {{range $name, $definition := .Definitions}}
+            <option value="{{$name}}" {{if eq $name $.Name}}selected="selected"{{end}}>
+              {{$name}}
+            </option>
+          {{end}}
+        </select>
+      </div>
       <noscript>
         <input name="workflow.new" type="submit" value="New" />
       </noscript>
@@ -26,6 +29,48 @@
     {{if .Selected}}
       <form action="{{baseLink "/workflows"}}" method="post">
         <input type="hidden" id="workflow.name" name="workflow.name" value="{{$.Name}}" />
+        <div class="NewWorkflow-parameter">
+          <div class="NewWorkflow-tabContainer">
+            {{range $sched := .ScheduleTypes}}
+              <input class="NewWorkflow-tabControl" type="radio" id="workflow.schedule.{{$sched.ElementID}}" name="workflow.schedule" value="{{$sched}}" {{if eq $sched $.Schedule}}checked{{end}}>
+            {{end}}
+            <ul class="NewWorkflow-tabHeader">
+              {{range $sched := .ScheduleTypes}}
+                <li class="NewWorkflow-tab"><label class="NewWorkflow-tabLabel" for="workflow.schedule.{{$sched.ElementID}}">{{$sched}}</label></li>
+              {{end}}
+            </ul>
+            {{range $sched := .ScheduleTypes}}
+              {{ $input := $sched.FormField }}
+              <div class="NewWorkflow-tabContent">
+              {{if eq $input ""}}
+                <div class="NewWorkflow-parameter">
+                  Run workflow once immediately.
+                </div>
+              {{else if eq $input "datetime-local"}}
+                <div class="NewWorkflow-parameter">
+                  <label for="workflow.schedule.datetime">Run Once (UTC):</label>
+                  <input type="datetime-local" id="workflow.schedule.datetime" name="workflow.schedule.datetime" min="{{$response.ScheduleMinTime}}" value="{{$response.ScheduleMinTime}}"/>
+                </div>
+              {{else if eq $input "duration"}}
+                <div class="NewWorkflow-parameter">
+                  <label for="workflow.schedule.interval">Run every N minutes:</label>
+                  <input type="number" id="workflow.schedule.interval" name="workflow.schedule.interval" placeholder="5" min="0"/>
+                </div>
+              {{else if eq $input "cron"}}
+                <div class="NewWorkflow-parameter">
+                  <label for="workflow.schedule.cron">Run on a cron schedule (minute hour day-of-month month day-of-week):</label>
+                  <input type="text" id="workflow.schedule.cron" name="workflow.schedule.cron" placeholder="* * * * *" title="Valid Cron-syntax string"
+                         pattern="/(\S+ \S+ \S+ \S+ \S+ *)|@(hourly|daily|weekly|monthly|yearly|annually|midnight)/"/>
+                </div>
+              {{else}}
+                <div class="NewWorkflow-parameter">
+                  Unknown form field for {{$sched}}.
+                </div>
+              {{end}}
+              </div>
+            {{end}}
+          </div>
+        </div>
         {{range $_, $p := .Selected.Parameters}}
           {{if eq $p.HTMLElement "select"}}
             <div class="NewWorkflow-parameter NewWorkflow-parameter--select">

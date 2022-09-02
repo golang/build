@@ -23,7 +23,7 @@ import (
 type Listener interface {
 	workflow.Listener
 
-	WorkflowStarted(ctx context.Context, workflowID uuid.UUID, name string, params map[string]interface{}) error
+	WorkflowStarted(ctx context.Context, workflowID uuid.UUID, name string, params map[string]interface{}, scheduleID int) error
 	WorkflowFinished(ctx context.Context, workflowID uuid.UUID, outputs map[string]interface{}, err error) error
 }
 
@@ -132,7 +132,7 @@ func (w *Worker) run(wf *workflow.Workflow) error {
 }
 
 // StartWorkflow persists and starts running a workflow.
-func (w *Worker) StartWorkflow(ctx context.Context, name string, params map[string]interface{}) (uuid.UUID, error) {
+func (w *Worker) StartWorkflow(ctx context.Context, name string, params map[string]interface{}, scheduleID int) (uuid.UUID, error) {
 	d := w.dh.Definition(name)
 	if d == nil {
 		return uuid.UUID{}, fmt.Errorf("no workflow named %q", name)
@@ -141,7 +141,7 @@ func (w *Worker) StartWorkflow(ctx context.Context, name string, params map[stri
 	if err != nil {
 		return uuid.UUID{}, err
 	}
-	if err := w.l.WorkflowStarted(ctx, wf.ID, name, params); err != nil {
+	if err := w.l.WorkflowStarted(ctx, wf.ID, name, params, scheduleID); err != nil {
 		return wf.ID, err
 	}
 	if err := w.run(wf); err != nil {
@@ -191,23 +191,14 @@ func (w *Worker) Resume(ctx context.Context, id uuid.UUID) error {
 		w.l.WorkflowFinished(ctx, wf.ID, nil, err)
 		return err
 	}
-	state := &workflow.WorkflowState{ID: wf.ID, Params: map[string]interface{}{}}
 
-	rawParams := map[string]json.RawMessage{}
-	if err := json.Unmarshal([]byte(wf.Params.String), &rawParams); err != nil {
-		err := fmt.Errorf("unmarshaling params for %q: %w", id, err)
+	params, err := UnmarshalWorkflow(wf.Params.String, d)
+	if err != nil {
+		err := fmt.Errorf("UnmarshalWorkflow %q: %w", wf.ID, err)
 		w.l.WorkflowFinished(ctx, wf.ID, nil, err)
 		return err
 	}
-	for _, param := range d.Parameters() {
-		ptr := reflect.New(param.Type())
-		if err := json.Unmarshal(rawParams[param.Name()], ptr.Interface()); err != nil {
-			err := fmt.Errorf("unmarshaling param %q for %q: %w", param.Name(), id, err)
-			w.l.WorkflowFinished(ctx, wf.ID, nil, err)
-			return err
-		}
-		state.Params[param.Name()] = ptr.Elem().Interface()
-	}
+	state := &workflow.WorkflowState{ID: wf.ID, Params: params}
 
 	taskStates := make(map[string]*workflow.TaskState)
 	for _, t := range tasks {
@@ -238,6 +229,22 @@ func (w *Worker) Resume(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 	return w.run(res)
+}
+
+func UnmarshalWorkflow(marshalled string, d *workflow.Definition) (map[string]any, error) {
+	params := map[string]any{}
+	rawParams := map[string]json.RawMessage{}
+	if err := json.Unmarshal([]byte(marshalled), &rawParams); err != nil {
+		return nil, err
+	}
+	for _, param := range d.Parameters() {
+		ptr := reflect.New(param.Type())
+		if err := json.Unmarshal(rawParams[param.Name()], ptr.Interface()); err != nil {
+			return nil, fmt.Errorf("unmarshaling param %q: %w", param.Name(), err)
+		}
+		params[param.Name()] = ptr.Elem().Interface()
+	}
+	return params, nil
 }
 
 // RetryTask retries a task in a running workflow.

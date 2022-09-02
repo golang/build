@@ -39,8 +39,8 @@ GROUP BY name
 ORDER BY name;
 
 -- name: CreateWorkflow :one
-INSERT INTO workflows (id, params, name, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO workflows (id, params, name, schedule_id, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: CreateTask :one
@@ -175,4 +175,20 @@ UPDATE tasks
 SET ready_for_approval = $3
 WHERE workflow_id = $1
   AND name = $2
+RETURNING *;
+
+-- name: Schedules :many
+SELECT *
+FROM schedules
+ORDER BY id;
+
+-- name: CreateSchedule :one
+INSERT INTO schedules (workflow_name, workflow_params, spec, once, interval_minutes, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
+-- name: DeleteSchedule :one
+DELETE
+FROM schedules
+WHERE id = $1
 RETURNING *;
