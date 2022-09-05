@@ -8,6 +8,7 @@ import sys
 
 arch = sys.argv[1]
 release = sys.argv[2]
+pkg_release = sys.argv[3]
 
 commands = [
     """cat >> /etc/rc.local <<EOF
@@ -35,13 +36,13 @@ EOF""",
 mtu 1460
 EOF""",
     "dhcpcd",
-    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add bash curl" % (arch, release),
-    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add git-base" % (arch, release),
-    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add mozilla-rootcerts mozilla-rootcerts-openssl go14" % (arch, release),
+    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add bash curl" % (arch, pkg_release),
+    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add git-base" % (arch, pkg_release),
+    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add mozilla-rootcerts mozilla-rootcerts-openssl go14" % (arch, pkg_release),
     # Interactive debugging tools for users using gomote ssh:
-    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add emacs25-nox11 vim screen" % (arch, release),
+    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add emacs25-nox11 vim screen" % (arch, pkg_release),
     # For https://golang.org/issue/24354
-    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add clang cmake" % (arch, release),
+    "env PKG_PATH=http://ftp.netbsd.org/pub/pkgsrc/packages/NetBSD/%s/%s/All/ pkg_add clang cmake" % (arch, pkg_release),
 
     # Remove the /tmp entry, because it's mounted as tmpfs -s=ram%25 by default, which isn't enough disk space.
     """ed /etc/fstab << EOF
@@ -57,7 +58,7 @@ EOF""",
 ]
 
 a = anita.Anita(
-    anita.URL('https://cdn.netbsd.org/pub/NetBSD/NetBSD-9.0/%s/' % arch),
+    anita.URL('https://nycdn.netbsd.org/pub/NetBSD-daily/NetBSD-9/latest/%s/' % arch),
     workdir="work-NetBSD-%s" % arch,
     disk_size="16G",
     memory_size="2G",

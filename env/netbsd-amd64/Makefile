@@ -2,19 +2,26 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
+RELEASE=9.3
+ARCH=amd64
+
+VM_IMAGE_FILE=vm-image-netbsd-${ARCH}-${RELEASE}.tar.gz
+VM_IMAGE_NAME=netbsd-${ARCH}-$(subst .,-,$(RELEASE))
+
+
 upload-staging:
 	go install golang.org/x/build/cmd/upload
-	upload --verbose --file=netbsd-amd64-9.0_2019Q4.tar.gz --public dev-go-builder-data/vm-image-netbsd-amd64-9.0_2019Q4.tar.gz
+	upload --verbose --file=${VM_IMAGE_FILE} --public dev-go-builder-data/${VM_IMAGE_FILE}
 
 upload-prod:
 	go install golang.org/x/build/cmd/upload
-	upload --verbose --file=netbsd-amd64-9.0_2019Q4.tar.gz --public go-builder-data/vm-image-netbsd-amd64-9.0_2019Q4.tar.gz
+	upload --verbose --file=${VM_IMAGE_FILE} --public go-builder-data/${VM_IMAGE_FILE}
 
 create-image-staging:
-	gcloud compute --project go-dashboard-dev images create netbsd-amd64-9-0-2019q4 --source-uri gs://dev-go-builder-data/vm-image-netbsd-amd64-9.0_2019Q4.tar.gz
+	gcloud compute --project go-dashboard-dev images create ${VM_IMAGE_NAME} --source-uri gs://dev-go-builder-data/${VM_IMAGE_FILE}
 
 create-image-prod:
-	gcloud compute --project symbolic-datum-552 images create netbsd-amd64-9-0-2019q4 --source-uri gs://go-builder-data/vm-image-netbsd-amd64-9.0_2019Q4.tar.gz
+	gcloud compute --project symbolic-datum-552 images create ${VM_IMAGE_NAME} --source-uri gs://go-builder-data/${VM_IMAGE_FILE}
 
 clean:
-	rm -rf netbsd-*.tar.gz work-NetBSD-* anita-*.tar.gz anita-*/
+	rm -rf netbsd-*.tar.gz vm-image-netbsd-*.tar.gz work-NetBSD-* anita-*.tar.gz anita-*/
