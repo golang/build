@@ -94,7 +94,7 @@ function addContent(benchmarks) {
 
 			let link = document.createElement("a");
 			link.href = "?benchmark=" + bench.Name;
-			link.innerHTML = bench.Name;
+			link.textContent = bench.Name;
 
 			let title = document.createElement("h2");
 			title.classList.add("Dashboard-title");
@@ -122,13 +122,13 @@ function failure(name, response) {
 
 	let title = document.createElement("h2");
 	title.classList.add("Dashboard-title");
-	title.innerHTML = "Benchmark \"" + name + "\" not found.";
+	title.textContent = "Benchmark \"" + name + "\" not found.";
 	dashboard.appendChild(title);
 
 	let message = document.createElement("p");
 	message.classList.add("Dashboard-documentation");
 	response.text().then(function(error) {
-		message.innerHTML = error;
+		message.textContent = error;
 	});
 	dashboard.appendChild(message);
 }
