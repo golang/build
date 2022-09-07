@@ -63,11 +63,35 @@ func (dir dirFS) Create(name string) (WriteFile, error) {
 	if err := os.MkdirAll(path.Dir(fullName), 0700); err != nil {
 		return nil, err
 	}
-	f, err := os.Create(fullName)
+
+	// GCS doesn't let you see a file until you're done writing it. Write
+	// to a temp file, which will be renamed to the expected name on Close.
+	temp, err := os.CreateTemp(path.Dir(fullName), "."+path.Base(fullName)+".writing-*")
 	if err != nil {
 		return nil, err
 	}
-	return f, nil
+	finalize := func() error {
+		return os.Rename(temp.Name(), fullName)
+	}
+	return &writingFile{temp, finalize}, nil
+}
+
+type writingFile struct {
+	*os.File
+	finalize func() error
+}
+
+func (wf *writingFile) Close() error {
+	if err := wf.File.Close(); err != nil {
+		return err
+	}
+	if wf.finalize != nil {
+		if err := wf.finalize(); err != nil {
+			return err
+		}
+		wf.finalize = nil
+	}
+	return nil
 }
 
 func (dir dirFS) Sub(subDir string) (fs.FS, error) {
