@@ -876,7 +876,7 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 	}
 	// See if there is a dup comment from when GerritBot last got
 	// its data from maintner.
-	ics, resp, err := b.githubClient.Issues.ListComments(ctx, org, repo, int(issueNum), &github.IssueListCommentsOptions{
+	ics, resp, err := b.githubClient.Issues.ListComments(ctx, org, repo, issueNum, &github.IssueListCommentsOptions{
 		Since:       since,
 		ListOptions: github.ListOptions{PerPage: 1000},
 	})
@@ -897,7 +897,7 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 			return err
 		}
 		logGitHubRateLimits(resp)
-		ownerID = int64(issue.GetUser().GetID())
+		ownerID = issue.GetUser().GetID()
 	}
 	for _, ic := range ics {
 		if strings.Contains(ic.GetBody(), msg) {
@@ -905,7 +905,7 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 			return nil
 		}
 		body := ic.GetBody()
-		if int64(ic.GetUser().GetID()) == ownerID && strings.HasPrefix(body, "/comments ") {
+		if ic.GetUser().GetID() == ownerID && strings.HasPrefix(body, "/comments ") {
 			if strings.HasPrefix(body, "/comments off") {
 				noComment = true
 			} else if strings.HasPrefix(body, "/comments on") {
