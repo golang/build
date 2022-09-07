@@ -5,16 +5,17 @@
 package app
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"html/template"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
 	"unicode"
 
+	"github.com/google/safehtml"
+	"github.com/google/safehtml/template"
 	"golang.org/x/build/perfdata/query"
 	"golang.org/x/net/context"
 	"golang.org/x/perf/benchstat"
@@ -137,7 +138,7 @@ func addToQuery(query, add string) string {
 func linkify(labels benchfmt.Labels, label string) string {
 	switch label {
 	case "cl", "commit":
-		return "https://golang.org/cl/" + template.URLQueryEscaper(labels[label])
+		return "https://golang.org/cl/" + url.QueryEscape(labels[label])
 	case "ps":
 		// TODO(quentin): Figure out how to link to a particular patch set on Gerrit.
 		return ""
@@ -182,7 +183,7 @@ func (a *App) compare(w http.ResponseWriter, r *http.Request) {
 type compareData struct {
 	Q            string
 	Error        string
-	Benchstat    template.HTML
+	Benchstat    safehtml.HTML
 	Groups       []*resultGroup
 	Labels       map[string]bool
 	CommonLabels benchfmt.Labels
@@ -307,7 +308,6 @@ func (a *App) compareQuery(ctx context.Context, q string) *compareData {
 		}
 	}
 
-	var buf bytes.Buffer
 	// Compute benchstat
 	c := &benchstat.Collection{
 		AddGeoMean: true,
@@ -324,7 +324,7 @@ func (a *App) compareQuery(ctx context.Context, q string) *compareData {
 	for _, g := range groups {
 		c.AddResults(g.Q, g.results)
 	}
-	benchstat.FormatHTML(&buf, c.Tables())
+	tableHTML := benchstat.SafeFormatHTML(c.Tables())
 
 	// Prepare struct for template.
 	labels := make(map[string]bool)
@@ -358,7 +358,7 @@ func (a *App) compareQuery(ctx context.Context, q string) *compareData {
 	}
 	data := &compareData{
 		Q:            q,
-		Benchstat:    template.HTML(buf.String()),
+		Benchstat:    tableHTML,
 		Groups:       groups,
 		Labels:       labels,
 		CommonLabels: commonLabels,

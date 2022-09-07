@@ -100,7 +100,7 @@ func TestCompareQuery(t *testing.T) {
 			if len(data.Groups) != 2 {
 				t.Errorf("len(Groups) = %d, want 2", len(data.Groups))
 			}
-			if len(data.Benchstat) == 0 {
+			if len(data.Benchstat.String()) == 0 {
 				t.Error("len(Benchstat) = 0, want >0")
 			}
 			if want := map[string]bool{"upload-part": true, "label": true}; !reflect.DeepEqual(data.Labels, want) {

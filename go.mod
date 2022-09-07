@@ -25,6 +25,7 @@ require (
 	github.com/golang/protobuf v1.5.2
 	github.com/google/go-cmp v0.5.8
 	github.com/google/go-github v17.0.0+incompatible
+	github.com/google/safehtml v0.0.3-0.20220430015336-00016cfeca15
 	github.com/google/uuid v1.2.0
 	github.com/googleapis/gax-go/v2 v2.1.1
 	github.com/googleapis/google-cloud-go-testing v0.0.0-20200911160855-bcd43fbb19e8
@@ -47,7 +48,7 @@ require (
 	golang.org/x/image v0.0.0-20210628002857-a66eb6448b8d
 	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8
-	golang.org/x/perf v0.0.0-20220408152633-b570d1a8e7a7
+	golang.org/x/perf v0.0.0-20220913151710-7c6e287988f3
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20220209214540-3681064d5158
 	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467

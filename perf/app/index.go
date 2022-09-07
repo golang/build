@@ -5,10 +5,11 @@
 package app
 
 import (
-	"html/template"
+	_ "embed"
 	"log"
 	"net/http"
 
+	"github.com/google/safehtml/template"
 	"golang.org/x/build/perfdata"
 )
 

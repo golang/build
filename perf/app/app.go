@@ -9,11 +9,15 @@ import (
 	"embed"
 	"net/http"
 
+	"github.com/google/safehtml/template"
 	"golang.org/x/build/perfdata"
 )
 
-//go:embed template/*
-var tmplFS embed.FS
+var (
+	//go:embed template/*
+	tmplEmbedFS embed.FS
+	tmplFS      = template.TrustedFSFromEmbed(tmplEmbedFS)
+)
 
 // App manages the analysis server logic.
 // Construct an App instance and call RegisterOnMux to connect it with an HTTP server.
