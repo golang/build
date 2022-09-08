@@ -449,9 +449,8 @@ func addSingleReleaseWorkflow(
 	// been public when we started, but it should be now.
 	tagCommit := startingHead
 	if branch != "master" {
-		publishingHead := wf.Task1(wd, "Read current branch head", version.ReadBranchHead, branchVal, wf.After(okayToTagAndPublish))
-		branchHeadChecked := wf.Action3(wd, "Check branch state matches source archive", build.checkSourceMatch, publishingHead, nextVersion, source)
-		versionCL := wf.Task3(wd, "Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, coordinators, nextVersion, wf.After(branchHeadChecked))
+		publishingHead := wf.Task3(wd, "Check branch state matches source archive", build.checkSourceMatch, branchVal, nextVersion, source, wf.After(okayToTagAndPublish))
+		versionCL := wf.Task3(wd, "Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, coordinators, nextVersion, wf.After(publishingHead))
 		tagCommit = wf.Task2(wd, "Wait for version CL submission", version.AwaitCL, versionCL, publishingHead)
 	}
 	tagged := wf.Action2(wd, "Tag version", version.TagRelease, nextVersion, tagCommit, wf.After(okayToTagAndPublish))
@@ -544,6 +543,7 @@ func advisoryTryBots(major int) []*dashboard.BuildConfig {
 
 // BuildReleaseTasks serves as an adapter to the various build tasks in the task package.
 type BuildReleaseTasks struct {
+	GerritClient           task.GerritClient
 	GerritHTTPClient       *http.Client
 	GerritURL              string
 	PrivateGerritURL       string
@@ -564,8 +564,12 @@ func (b *BuildReleaseTasks) buildSource(ctx *wf.TaskContext, revision, securityR
 	})
 }
 
-func (b *BuildReleaseTasks) checkSourceMatch(ctx *wf.TaskContext, head, version string, source artifact) error {
-	_, err := b.runBuildStep(ctx, nil, nil, source, "", func(_ *task.BuildletStep, r io.Reader, _ io.Writer) error {
+func (b *BuildReleaseTasks) checkSourceMatch(ctx *wf.TaskContext, branch, version string, source artifact) (head string, _ error) {
+	head, err := b.GerritClient.ReadBranchHead(ctx, "go", branch)
+	if err != nil {
+		return "", err
+	}
+	_, err = b.runBuildStep(ctx, nil, nil, source, "", func(_ *task.BuildletStep, r io.Reader, _ io.Writer) error {
 		branchArchive := &bytes.Buffer{}
 		if err := task.WriteSourceArchive(ctx, b.GerritHTTPClient, b.GerritURL, head, version, branchArchive); err != nil {
 			return err
@@ -583,7 +587,7 @@ func (b *BuildReleaseTasks) checkSourceMatch(ctx *wf.TaskContext, head, version 
 		}
 		return nil
 	})
-	return err
+	return head, err
 }
 
 func tarballHashes(r io.Reader) (map[string]string, error) {

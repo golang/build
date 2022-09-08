@@ -166,6 +166,7 @@ func main() {
 		grpc.StreamInterceptor(access.RequireIAPAuthStreamInterceptor(access.IAPSkipAudienceValidation)))
 	protos.RegisterReleaseServiceServer(grpcServer, sign.NewServer())
 	buildTasks := &relui.BuildReleaseTasks{
+		GerritClient:     gerritClient,
 		GerritHTTPClient: oauth2.NewClient(ctx, creds.TokenSource),
 		GerritURL:        "https://go.googlesource.com/go",
 		PrivateGerritURL: "https://team.googlesource.com/golang/go-private",
