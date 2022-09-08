@@ -37,7 +37,6 @@ var (
 	empijei      = gh("empijei")
 	filippo      = gh("FiloSottile")
 	findleyr     = gh("findleyr")
-	guodongli    = gh("guodongli-google")
 	gri          = gh("griesemer")
 	hanwen       = gh("hanwen")
 	heschi       = gh("heschi")
@@ -800,8 +799,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mvdan},
 	},
 	"tools/go/analysis": {
-		Primary:   []Owner{matloob},
-		Secondary: []Owner{taking, guodongli, zpavlinovic},
+		Primary:   []Owner{taking},
+		Secondary: []Owner{matloob, zpavlinovic},
 	},
 	"tools/go/ast": {
 		Primary:   []Owner{gri},
@@ -812,8 +811,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{dmitshur},
 	},
 	"tools/go/callgraph": {
-		Primary:   []Owner{toolsTeam},
-		Secondary: []Owner{taking, guodongli, zpavlinovic},
+		Primary:   []Owner{zpavlinovic},
+		Secondary: []Owner{taking, toolsTeam},
 	},
 	"tools/go/gcexportdata": {
 		Primary:   []Owner{gri, findleyr},
