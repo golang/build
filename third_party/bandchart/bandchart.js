@@ -40,7 +40,7 @@ function BandChart(data, {
 	// For (3) make sure the Y=0 line is in the middle.
 	//
 	// Finally, make sure we don't get closer than 0.025,
-	// bceuase otherwise it just looks really noisy.
+	// because otherwise it just looks really noisy.
 	const minYDomain = [-0.025, 0.025];
 	if (yDomain[0] > 0) {
 		// (1)

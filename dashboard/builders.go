@@ -766,7 +766,7 @@ type BuildConfig struct {
 
 	// privateGoProxy for builder has it's own Go proxy instead of
 	// proxy.golang.org, after setting this builder will respect
-	// GOPROXY enviroment value.
+	// GOPROXY environment value.
 	privateGoProxy bool
 
 	// InstallRacePackages controls which packages to "go install

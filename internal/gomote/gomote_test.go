@@ -519,7 +519,7 @@ func TestExecuteCommand(t *testing.T) {
 
 func TestExecuteCommandError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call TestExecuteCommand.
-	// If overrideID is set to true, the test will use a diffrent gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than the
 	// the one created for the test.
 	testCases := []struct {
 		desc       string

@@ -556,7 +556,7 @@ func (f *fakeEC2BuildletClient) StartNewVM(ctx context.Context, buildEnv *builde
 	}
 	condRun(opts.OnInstanceRequested)
 	if !f.VMCreated {
-		return nil, errors.New("error waiting for instance to exist: vm existance disabled")
+		return nil, errors.New("error waiting for instance to exist: vm existence disabled")
 	}
 
 	condRun(opts.OnInstanceCreated)

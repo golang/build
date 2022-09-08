@@ -31,7 +31,7 @@ type ReleaseTargets map[string]*Target
 // propagated forward unless overridden. To remove a target in a later release,
 // set it to nil explicitly.
 // GOOS and GOARCH will be set automatically from the target name, but can be
-// overridden if necessary. Name will also be set and should not be overriden.
+// overridden if necessary. Name will also be set and should not be overridden.
 var allReleases = map[int]ReleaseTargets{
 	18: {
 		"darwin-amd64": &Target{

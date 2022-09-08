@@ -3,6 +3,6 @@
 // license that can be found in the LICENSE file.
 
 // Package gomote contains all of the necessary components to implement
-// and use the gomote funcitonality. Gomotes are instances which are dedicated
+// and use the gomote functionality. Gomotes are instances which are dedicated
 // to an individual user or service.
 package gomote
