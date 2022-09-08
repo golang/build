@@ -13,6 +13,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -34,6 +35,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal"
+	"golang.org/x/build/internal/gcsfs"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/untar"
 	"golang.org/x/build/internal/workflow"
@@ -861,14 +863,15 @@ func fakeSign(ctx context.Context, t *testing.T, dir string) {
 }
 
 func fakeSignOnce(t *testing.T, dir string, seen map[string]bool) error {
-	_, err := os.Stat(filepath.Join(dir, "ready"))
+	dirFS := gcsfs.DirFS(dir)
+	_, err := fs.Stat(dirFS, "ready")
 	if os.IsNotExist(err) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	contents, err := os.ReadDir(dir)
+	contents, err := fs.ReadDir(dirFS, ".")
 	if err != nil {
 		return err
 	}
@@ -892,24 +895,16 @@ func fakeSignOnce(t *testing.T, dir string, seen map[string]bool) error {
 			copy = true
 		}
 
-		if err := os.MkdirAll(filepath.Join(dir, "signed"), 0777); err != nil {
-			t.Fatal(err)
-		}
-
 		writeSignedWithHash := func(filename string, contents []byte) error {
-			path := filepath.Join(dir, "signed", filename)
-			if err := ioutil.WriteFile(path, contents, 0777); err != nil {
+			if err := gcsfs.WriteFile(dirFS, "signed/"+filename, contents); err != nil {
 				return err
 			}
 			hash := fmt.Sprintf("%x", sha256.Sum256(contents))
-			if err := ioutil.WriteFile(path+".sha256", []byte(hash), 0777); err != nil {
-				return err
-			}
-			return nil
+			return gcsfs.WriteFile(dirFS, "signed/"+filename+".sha256", []byte(hash))
 		}
 
 		if copy {
-			bytes, err := ioutil.ReadFile(filepath.Join(dir, fn))
+			bytes, err := fs.ReadFile(dirFS, fn)
 			if err != nil {
 				return err
 			}
@@ -1022,9 +1017,10 @@ func TestFakeSign(t *testing.T) {
 }
 
 func fakeCDNLoad(ctx context.Context, t *testing.T, from, to string) {
+	fromFS, toFS := gcsfs.DirFS(from), gcsfs.DirFS(to)
 	seen := map[string]bool{}
 	periodicallyDo(ctx, t, 100*time.Millisecond, func() error {
-		files, err := os.ReadDir(from)
+		files, err := fs.ReadDir(fromFS, ".")
 		if err != nil {
 			return err
 		}
@@ -1033,11 +1029,11 @@ func fakeCDNLoad(ctx context.Context, t *testing.T, from, to string) {
 				continue
 			}
 			seen[f.Name()] = true
-			contents, err := os.ReadFile(filepath.Join(from, f.Name()))
+			contents, err := fs.ReadFile(fromFS, f.Name())
 			if err != nil {
 				return err
 			}
-			if err := os.WriteFile(filepath.Join(to, f.Name()), contents, 0777); err != nil {
+			if err := gcsfs.WriteFile(toFS, f.Name(), contents); err != nil {
 				return err
 			}
 		}

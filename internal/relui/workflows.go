@@ -904,14 +904,7 @@ func (tasks *BuildReleaseTasks) copyToStaging(ctx *wf.TaskContext, version strin
 			return nil, err
 		}
 	}
-	out, err := gcsfs.Create(scratchFS, path.Join(signingStagingDir(ctx, version), "ready"))
-	if err != nil {
-		return nil, err
-	}
-	if _, err := out.Write([]byte("ready")); err != nil {
-		return nil, err
-	}
-	if err := out.Close(); err != nil {
+	if err := gcsfs.WriteFile(scratchFS, path.Join(signingStagingDir(ctx, version), "ready"), []byte("ready")); err != nil {
 		return nil, err
 	}
 	return stagedArtifacts, nil
@@ -1084,28 +1077,12 @@ func uploadArtifact(scratchFS, servingFS fs.FS, a artifact) error {
 		return err
 	}
 
-	sha256, err := gcsfs.Create(servingFS, a.Filename+".sha256")
-	if err != nil {
-		return err
-	}
-	defer sha256.Close()
-	if _, err := sha256.Write([]byte(a.SHA256)); err != nil {
-		return err
-	}
-	if err := sha256.Close(); err != nil {
+	if err := gcsfs.WriteFile(servingFS, a.Filename+".sha256", []byte(a.SHA256)); err != nil {
 		return err
 	}
 
 	if a.GPGSignature != "" {
-		asc, err := gcsfs.Create(servingFS, a.Filename+".asc")
-		if err != nil {
-			return err
-		}
-		defer asc.Close()
-		if _, err := asc.Write([]byte(a.GPGSignature)); err != nil {
-			return err
-		}
-		if err := asc.Close(); err != nil {
+		if err := gcsfs.WriteFile(servingFS, a.Filename+".asc", []byte(a.GPGSignature)); err != nil {
 			return err
 		}
 	}

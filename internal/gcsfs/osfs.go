@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"strings"
 )
 
 var _ = fs.FS((*dirFS)(nil))
@@ -41,7 +42,7 @@ func (dir dirFS) Open(name string) (fs.File, error) {
 	if err != nil {
 		return nil, err // nil fs.File
 	}
-	return f, nil
+	return &atomicWriteFile{f, nil}, nil
 }
 
 func (dir dirFS) Stat(name string) (fs.FileInfo, error) {
@@ -55,7 +56,7 @@ func (dir dirFS) Stat(name string) (fs.FileInfo, error) {
 	return f, nil
 }
 
-func (dir dirFS) Create(name string) (WriteFile, error) {
+func (dir dirFS) Create(name string) (WriterFile, error) {
 	if !fs.ValidPath(name) || runtime.GOOS == "windows" && containsAny(name, `\:`) {
 		return nil, &fs.PathError{Op: "create", Path: name, Err: fs.ErrInvalid}
 	}
@@ -73,15 +74,26 @@ func (dir dirFS) Create(name string) (WriteFile, error) {
 	finalize := func() error {
 		return os.Rename(temp.Name(), fullName)
 	}
-	return &writingFile{temp, finalize}, nil
+	return &atomicWriteFile{temp, finalize}, nil
 }
 
-type writingFile struct {
+type atomicWriteFile struct {
 	*os.File
 	finalize func() error
 }
 
-func (wf *writingFile) Close() error {
+func (wf *atomicWriteFile) ReadDir(n int) ([]fs.DirEntry, error) {
+	unfiltered, err := wf.File.ReadDir(n)
+	var result []fs.DirEntry
+	for _, de := range unfiltered {
+		if !strings.HasPrefix(de.Name(), ".") {
+			result = append(result, de)
+		}
+	}
+	return result, err
+}
+
+func (wf *atomicWriteFile) Close() error {
 	if err := wf.File.Close(); err != nil {
 		return err
 	}

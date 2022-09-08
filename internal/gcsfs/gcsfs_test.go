@@ -9,6 +9,7 @@ import (
 	"flag"
 	"io/fs"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
@@ -51,6 +52,20 @@ func TestGCSFS(t *testing.T) {
 func TestDirFS(t *testing.T) {
 	if err := fstest.TestFS(DirFS("./testdata/dirfs"), "a", "b", "dir/x"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDirFSDotFiles(t *testing.T) {
+	temp := t.TempDir()
+	if err := os.WriteFile(temp+"/.foo", nil, 0777); err != nil {
+		t.Fatal(err)
+	}
+	files, err := fs.ReadDir(DirFS(temp), ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Errorf("ReadDir didn't hide . files: %v", files)
 	}
 }
 

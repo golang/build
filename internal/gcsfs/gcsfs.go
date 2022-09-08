@@ -44,7 +44,7 @@ func FromURL(ctx context.Context, client *storage.Client, base string) (fs.FS, e
 }
 
 // Create creates a new file on fsys, which must be a CreateFS.
-func Create(fsys fs.FS, name string) (WriteFile, error) {
+func Create(fsys fs.FS, name string) (WriterFile, error) {
 	cfs, ok := fsys.(CreateFS)
 	if !ok {
 		return nil, &fs.PathError{Op: "create", Path: name, Err: fmt.Errorf("not implemented on type %T", fsys)}
@@ -55,14 +55,27 @@ func Create(fsys fs.FS, name string) (WriteFile, error) {
 // CreateFS is an fs.FS that supports creating writable files.
 type CreateFS interface {
 	fs.FS
-	Create(string) (WriteFile, error)
+	Create(string) (WriterFile, error)
 }
 
-// WriteFile is an fs.File that can be written to.
+// WriterFile is an fs.File that can be written to.
 // The behavior of writing and reading the same file is undefined.
-type WriteFile interface {
+type WriterFile interface {
 	fs.File
 	io.Writer
+}
+
+// WriteFile is like os.WriteFile for CreateFSs.
+func WriteFile(fsys fs.FS, filename string, contents []byte) error {
+	f, err := Create(fsys, filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := f.Write(contents); err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 // gcsFS implements fs.FS for GCS.
@@ -110,7 +123,7 @@ func (fsys *gcsFS) Open(name string) (fs.File, error) {
 }
 
 // Create creates the named file.
-func (fsys *gcsFS) Create(name string) (WriteFile, error) {
+func (fsys *gcsFS) Create(name string) (WriterFile, error) {
 	f, err := fsys.Open(name)
 	if err != nil {
 		return nil, err
