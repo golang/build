@@ -70,7 +70,7 @@ func getTar(args []string) error {
 		Directory: dir,
 	})
 	if err != nil {
-		return fmt.Errorf("unable to retireve tgz URL: %s", statusFromError(err))
+		return fmt.Errorf("unable to retrieve tgz URL: %s", statusFromError(err))
 	}
 	httpClient := &http.Client{
 		Timeout: 10 * time.Second,

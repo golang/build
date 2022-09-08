@@ -4,4 +4,4 @@
 
 # golang.org/x/build/internal/access
 
-Package access provides primatives for implementing authentication and authorization.
+Package access provides primitives for implementing authentication and authorization.

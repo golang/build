@@ -138,7 +138,7 @@ func (ss *SSHServer) ListenAndServe() error {
 	return ss.server.ListenAndServe()
 }
 
-// Close imediately closes all active listeners and connections.
+// Close immediately closes all active listeners and connections.
 func (ss *SSHServer) Close() error {
 	return ss.server.Close()
 }

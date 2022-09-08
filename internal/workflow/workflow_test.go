@@ -564,7 +564,7 @@ func (l *mapListener) TaskStateChanged(workflowID uuid.UUID, taskID string, stat
 func (l *mapListener) assertState(t *testing.T, w *wf.Workflow, want map[string]*wf.TaskState) {
 	t.Helper()
 	if diff := cmp.Diff(l.states[w.ID], want, cmpopts.IgnoreFields(wf.TaskState{}, "SerializedResult")); diff != "" {
-		t.Errorf("task state didn't match expections: %v", diff)
+		t.Errorf("task state didn't match expectations: %v", diff)
 	}
 }
 

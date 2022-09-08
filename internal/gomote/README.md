@@ -4,4 +4,4 @@
 
 # golang.org/x/build/internal/gomote
 
-Package gomote contains all of the necessary components to implement and use the gomote funcitonality.
+Package gomote contains all of the necessary components to implement and use the gomote functionality.

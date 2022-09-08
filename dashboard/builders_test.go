@@ -504,7 +504,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("js-wasm", "tour"), none},
 		{b("js-wasm", "website"), none},
 
-		// Race builders. Linux for all, GCE buidlers for
+		// Race builders. Linux for all, GCE builders for
 		// post-submit, and only post-submit for "go" for
 		// Darwin (limited resources).
 		{b("linux-amd64-race", "go"), both},
