@@ -443,7 +443,7 @@ var tasks = []struct {
 	{"label website issues", (*gopherbot).labelWebsiteIssues},
 	{"label pkgsite issues", (*gopherbot).labelPkgsiteIssues},
 	{"label proxy.golang.org issues", (*gopherbot).labelProxyIssues},
-	{"label x/vuln issues", (*gopherbot).labelVulnIssues},
+	{"label vulncheck or vulndb issues", (*gopherbot).labelVulnIssues},
 	{"label proposals", (*gopherbot).labelProposals},
 	{"handle gopls issues", (*gopherbot).handleGoplsIssues},
 	{"open cherry pick issues", (*gopherbot).openCherryPickIssues},
@@ -1223,11 +1223,12 @@ func (b *gopherbot) labelProxyIssues(ctx context.Context) error {
 
 func (b *gopherbot) labelVulnIssues(ctx context.Context) error {
 	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
-		hasVulnTitle := strings.HasPrefix(gi.Title, "x/vuln:") || strings.HasPrefix(gi.Title, "x/vuln/")
-		if !hasVulnTitle || gi.HasLabel("x/vuln") || gi.HasEvent("unlabeled") {
+		hasVulnTitle := strings.HasPrefix(gi.Title, "x/vuln:") || strings.HasPrefix(gi.Title, "x/vuln/") ||
+			strings.HasPrefix(gi.Title, "x/vulndb:") || strings.HasPrefix(gi.Title, "x/vulndb/")
+		if !hasVulnTitle || gi.HasLabel("vulncheck or vulndb") || gi.HasEvent("unlabeled") {
 			return nil
 		}
-		return b.addLabel(ctx, b.gorepo.ID(), gi, "x/vuln")
+		return b.addLabel(ctx, b.gorepo.ID(), gi, "vulncheck or vulndb")
 	})
 }
 
