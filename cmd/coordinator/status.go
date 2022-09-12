@@ -671,7 +671,6 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	statusMu.Unlock()
 
 	gce := pool.NewGCEConfiguration()
-	data.RemoteBuildlets = template.HTML(remoteBuildletStatus())
 	data.GomoteInstances = remoteSessionStatus()
 
 	sort.Sort(byAge(data.Active))

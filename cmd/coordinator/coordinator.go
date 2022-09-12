@@ -134,20 +134,6 @@ const (
 	maxStatusDone = 30
 )
 
-// httpRouter is the coordinator's handler, routing traffic to one of
-// two locations:
-//  1. a buildlet, from gomote clients (if X-Buildlet-Proxy is set)
-//  2. traffic to the coordinator itself (the default)
-func httpRouter(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("X-Buildlet-Proxy") != "" {
-			requireBuildletProxyAuth(http.HandlerFunc(proxyBuildletHTTP)).ServeHTTP(w, r)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
 var validHosts = map[string]bool{
 	"farmer.golang.org": true,
 	"build.golang.org":  true,
@@ -248,14 +234,8 @@ func main() {
 	// TODO(golang.org/issue/36841): remove after key functions are moved into
 	// a shared package.
 	pool.SetBuilderMasterKey(masterKey())
-
 	sp := remote.NewSessionPool(context.Background())
-	// TODO(go.dev/issue/54735): remove while legacy gomote implementation is being removed.
-	isRemoteBuildlet := func(instName string) bool {
-		return isGCERemoteBuildlet(instName) || sp.IsSession(instName)
-	}
-
-	err := pool.InitGCE(sc, &basePinErr, isRemoteBuildlet, *buildEnvName, *mode)
+	err := pool.InitGCE(sc, &basePinErr, sp.IsSession, *buildEnvName, *mode)
 	if err != nil {
 		if *mode == "" {
 			*mode = "dev"
@@ -283,7 +263,7 @@ func main() {
 	if *mode == "prod" || (*mode == "dev" && *devEnableEC2) {
 		// TODO(golang.org/issues/38337) the coordinator will use a package scoped pool
 		// until the coordinator is refactored to not require them.
-		ec2Pool := mustCreateEC2BuildletPool(sc, isRemoteBuildlet)
+		ec2Pool := mustCreateEC2BuildletPool(sc, sp.IsSession)
 		defer ec2Pool.Close()
 	}
 
@@ -384,8 +364,6 @@ func main() {
 	mux.HandleFunc("/status/post-submit-active.json", handlePostSubmitActiveJSON)
 	mux.Handle("/dashboard", dashV2)
 	mux.HandleFunc("/queues", handleQueues)
-	mux.Handle("/buildlet/create", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletCreate)))
-	mux.Handle("/buildlet/list", requireBuildletProxyAuth(http.HandlerFunc(handleBuildletList)))
 	if *mode == "dev" {
 		// TODO(crawshaw): do more in dev mode
 		gce.BuildletPool().SetEnabled(*devEnableGCE)
@@ -410,7 +388,7 @@ func main() {
 		if err != nil {
 			return nil, fmt.Errorf("unable to retrieve keys for SSH Server: %v", err)
 		}
-		return remote.NewSSHServer(*sshAddr, privateKey, publicKey, sshCA, sp, remoteBuildlets)
+		return remote.NewSSHServer(*sshAddr, privateKey, publicKey, sshCA, sp)
 	}
 	sshServ, err := configureSSHServer()
 	if err != nil {
@@ -428,14 +406,7 @@ func main() {
 			}
 		}()
 	}
-
-	h := httpRouter(mux)
-	if *mode == "dev" {
-		// Use hostPathHandler in local development mode (only) to improve
-		// convenience of testing multiple domains that coordinator serves.
-		h = hostPathHandler(h)
-	}
-	log.Fatalln(https.ListenAndServe(context.Background(), h))
+	log.Fatalln(https.ListenAndServe(context.Background(), mux))
 }
 
 // ignoreAllNewWork, when true, prevents addWork from doing anything.

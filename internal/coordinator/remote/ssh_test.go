@@ -270,10 +270,7 @@ func setupSSHServer(t *testing.T, ctx context.Context) (addr string, sp *Session
 		t.Fatalf("nettest.NewLocalListener(tcp) = _, %s; want no error", err)
 	}
 	addr = l.Addr().String()
-	rbs := &Buildlets{
-		M: map[string]*Buildlet{},
-	}
-	s, err = NewSSHServer(addr, []byte(devCertAlternateClientPrivate), []byte(devCertCAPublic), []byte(devCertCAPrivate), sp, rbs)
+	s, err = NewSSHServer(addr, []byte(devCertAlternateClientPrivate), []byte(devCertCAPublic), []byte(devCertCAPrivate), sp)
 	if err != nil {
 		t.Fatalf("NewSSHServer(...) = %s; want no error", err)
 	}
