@@ -96,11 +96,12 @@ const (
 
 // GitHub Milestone numbers for the golang/go repo.
 var (
-	proposal   = milestone{30, "Proposal"}
-	unreleased = milestone{22, "Unreleased"}
-	unplanned  = milestone{6, "Unplanned"}
-	gccgo      = milestone{23, "Gccgo"}
-	vgo        = milestone{71, "vgo"}
+	proposal      = milestone{30, "Proposal"}
+	unreleased    = milestone{22, "Unreleased"}
+	unplanned     = milestone{6, "Unplanned"}
+	gccgo         = milestone{23, "Gccgo"}
+	vgo           = milestone{71, "vgo"}
+	vulnUnplanned = milestone{288, "vuln/unplanned"}
 )
 
 // GitHub Milestone numbers for the golang/vscode-go repo.
@@ -1087,6 +1088,9 @@ func (b *gopherbot) setMiscMilestones(ctx context.Context) error {
 		}
 		if strings.HasPrefix(gi.Title, "x/vgo") {
 			return b.setMilestone(ctx, b.gorepo.ID(), gi, vgo)
+		}
+		if strings.HasPrefix(gi.Title, "x/vuln") {
+			return b.setMilestone(ctx, b.gorepo.ID(), gi, vulnUnplanned)
 		}
 		return nil
 	})
