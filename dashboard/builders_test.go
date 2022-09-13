@@ -918,7 +918,7 @@ func TestMiscCompileLinuxGOARM5(t *testing.T) {
 func TestExpectedMacstadiumVMCount(t *testing.T) {
 	got := 0
 	for host, config := range Hosts {
-		if strings.HasPrefix(host, "host-darwin-10_") || strings.HasPrefix(host, "host-darwin-amd64-") {
+		if strings.HasPrefix(host, "host-darwin-amd64-") && !strings.HasSuffix(host, "-aws") {
 			got += config.ExpectNum
 		}
 	}

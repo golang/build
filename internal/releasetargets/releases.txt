@@ -3,7 +3,7 @@ Targets for release 1.18
 darwin-amd64    darwin     amd64      darwin-amd64-12_0
 	Race enabled
 	Extra env: ["CGO_CFLAGS=-mmacosx-version-min=10.13"]
-	Running on reverse builder: MacStadium macOS Monterey (12.0) VM under VMWare ESXi
+	Running on reverse builder: MacStadium macOS Monterey (12) VM under VMWare ESXi
 
 darwin-arm64    darwin     arm64      darwin-arm64-12
 	Race enabled
@@ -55,7 +55,7 @@ Targets for release 1.19
 darwin-amd64    darwin     amd64      darwin-amd64-12_0
 	Race enabled
 	Extra env: ["CGO_CFLAGS=-mmacosx-version-min=10.13"]
-	Running on reverse builder: MacStadium macOS Monterey (12.0) VM under VMWare ESXi
+	Running on reverse builder: MacStadium macOS Monterey (12) VM under VMWare ESXi
 
 darwin-arm64    darwin     arm64      darwin-arm64-12
 	Race enabled

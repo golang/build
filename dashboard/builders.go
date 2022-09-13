@@ -158,14 +158,21 @@ var Hosts = map[string]*HostConfig{
 	"host-darwin-amd64-11_0": {
 		IsReverse:       true,
 		ExpectNum:       5,
-		Notes:           "MacStadium macOS Big Sur (11.0) VM under VMWare ESXi",
+		Notes:           "MacStadium macOS Big Sur (11) VM under VMWare ESXi",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
+	},
+	"host-darwin-amd64-12-aws": {
+		IsReverse:       true,
+		ExpectNum:       1,
+		Notes:           "AWS macOS Monterey (12)",
+		SSHUsername:     "gopher",
+		HermeticReverse: true,
 	},
 	"host-darwin-amd64-12_0": {
 		IsReverse:       true,
 		ExpectNum:       5,
-		Notes:           "MacStadium macOS Monterey (12.0) VM under VMWare ESXi",
+		Notes:           "MacStadium macOS Monterey (12) VM under VMWare ESXi",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
 	},
@@ -2292,6 +2299,13 @@ func init() {
 		HostType:       "host-darwin-amd64-12_0",
 		distTestAdjust: noTestDirAndNoReboot,
 		env:            []string{"CGO_ENABLED=0"},
+	})
+	addBuilder(BuildConfig{
+		Name:           "darwin-amd64-12-aws",
+		HostType:       "host-darwin-amd64-12-aws",
+		distTestAdjust: macTestPolicy,
+		buildsRepo:     defaultPlusExpBuild,
+		KnownIssues:    []int{48945},
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-arm64-11",
