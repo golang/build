@@ -406,6 +406,11 @@ func main() {
 			}
 		}()
 	}
+	if *mode == "dev" {
+		// Use hostPathHandler in local development mode (only) to improve
+		// convenience of testing multiple domains that coordinator serves.
+		log.Fatalln(https.ListenAndServe(context.Background(), hostPathHandler(mux)))
+	}
 	log.Fatalln(https.ListenAndServe(context.Background(), mux))
 }
 
