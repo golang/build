@@ -414,11 +414,15 @@ func dashboardRequest(view dashboardView, r *http.Request) (*apipb.DashboardRequ
 	if branch == "" {
 		branch = "master"
 	}
+	maxCommits := commitsPerPage
+	if branch == "mixed" {
+		maxCommits = 0 // let maintner decide
+	}
 	return &apipb.DashboardRequest{
 		Page:       int32(page),
 		Branch:     branch,
 		Repo:       repo,
-		MaxCommits: commitsPerPage,
+		MaxCommits: int32(maxCommits),
 	}, nil
 }
 
