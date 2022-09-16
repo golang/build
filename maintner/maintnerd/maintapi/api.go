@@ -632,6 +632,9 @@ func (s apiService) GetDashboard(ctx context.Context, req *apipb.DashboardReques
 			commitsPerPage = 30 // what build.golang.org historically used
 		}
 	}
+	if mixBranches && commitsPerPage < len(res.Branches) {
+		return nil, grpc.Errorf(codes.InvalidArgument, "page size too small for `mixed`: %v < %v", commitsPerPage, len(res.Branches))
+	}
 
 	if req.Page < 0 {
 		return nil, grpc.Errorf(codes.InvalidArgument, "invalid page")
