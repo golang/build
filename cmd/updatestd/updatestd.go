@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"go/ast"
@@ -278,6 +279,9 @@ func (r runner) runOut(args ...string) []byte {
 	out, err := cmd.Output()
 	if err != nil {
 		log.Printf("> %s\n", strings.Join(args, " "))
+		if ee := (*exec.ExitError)(nil); errors.As(err, &ee) {
+			out = append(out, ee.Stderr...)
+		}
 		log.Fatalf("command failed: %s\n%s", err, out)
 	}
 	return out
