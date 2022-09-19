@@ -1,4 +1,4 @@
-# For VMs only #
+# For VMWare VMs only #
 
 The Disk should be formatted with a case insensitive file system (default).
 
@@ -37,11 +37,11 @@ Install VMWare tools daemon.
 
 Create `$HOME/stage0.sh`.
 
-**For VMs**
+**For VMWare VMs**
 ```
 #!/bin/bash
 while true; do (curl -v http://172.17.20.2:8713/stage0/$(sw_vers -productVersion) | sh); sleep 5; done
-```
+
 **For physical machines**
 ```
 #!/bin/bash
@@ -66,11 +66,37 @@ while true; do
 done
 ```
 
+**For QEMU VMs**
+```
+#!/bin/bash
+
+set -x
+
+export GO_BUILDER_ENV=qemu_vm
+
+mkdir -p ~/go/bin;
+while true; do
+  rm -f ~/go/bin/buildlet
+  url="https://storage.googleapis.com/go-builder-data/buildlet.darwin-arm64"
+  while ! curl -f -o ~/go/bin/buildlet "$url"; do
+      echo
+      echo "curl failed to fetch $url"
+      echo "Sleeping before retrying..."
+      sleep 5
+  done
+  chmod +x ~/go/bin/buildlet
+
+  mkdir -p /tmp/buildlet
+  ~/go/bin/buildlet --coordinator=farmer.golang.org --reverse-type host-darwin-arm64-XX-aws --halt=true --workdir=/tmp/buildlet;
+   sleep 2;
+done
+```
+
 `chmod +x $HOME/stage0.sh`
 
 - Run Automator.
 - Create a new Application.
-- Add a "run shell script" item with the command: 
+- Add a "run shell script" item with the command:
   `open -a Terminal.app $HOME/stage0.sh`
 - Save it to the desktop as "run-builder".
 
@@ -91,5 +117,7 @@ https://developer.apple.com/support/xcode/ is a more authoritative list of versi
 - run xcode-select: `sudo xcode-select --switch /Applications/Xcode.app`
 - run `xcodebuild -version` and wait for Xcode to be verified, which will take a long time.
 - accept the license: `sudo xcodebuild -license accept`
+- install the command line tools: `sudo xcode-select --install`
+- run xcode-select: `sudo xcode-select --switch /Library/Developer/CommandLineTools`
 
 Put a builder key in the usual spot.
