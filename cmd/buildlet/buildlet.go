@@ -1221,10 +1221,11 @@ func doHalt() {
 	case "plan9":
 		err = exec.Command("fshalt").Run()
 	case "darwin":
-		if os.Getenv("GO_BUILDER_ENV") == "macstadium_vm" {
+		switch os.Getenv("GO_BUILDER_ENV") {
+		case "macstadium_vm", "qemu_vm":
 			// Fast, sloppy, unsafe, because we're never reusing this VM again.
 			err = exec.Command("/usr/bin/sudo", "/sbin/halt", "-n", "-q", "-l").Run()
-		} else {
+		default:
 			err = errors.New("not respecting -halt flag on macOS in unknown environment")
 		}
 	case "windows":
