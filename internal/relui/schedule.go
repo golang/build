@@ -52,10 +52,49 @@ var (
 // Schedule represents the interval on which a job should be run. Only
 // Type and one other field should be set.
 type Schedule struct {
-	Once     time.Time
-	Duration time.Duration
-	Cron     string
-	Type     ScheduleType
+	Once time.Time
+	Cron string
+	Type ScheduleType
+}
+
+func (s Schedule) Parse() (cron.Schedule, error) {
+	if err := s.Valid(); err != nil {
+		return nil, err
+	}
+	switch s.Type {
+	case ScheduleOnce:
+		return &RunOnce{next: s.Once}, nil
+	case ScheduleCron:
+		return cron.ParseStandard(s.Cron)
+	}
+	return nil, fmt.Errorf("unschedulable Schedule.Type %q", s.Type)
+}
+
+func (s Schedule) Valid() error {
+	switch s.Type {
+	case ScheduleOnce:
+		if s.Once.IsZero() {
+			return fmt.Errorf("time not set for %q", ScheduleOnce)
+		}
+		return nil
+	case ScheduleCron:
+		_, err := cron.ParseStandard(s.Cron)
+		return err
+	case ScheduleImmediate:
+		return nil
+	}
+	return fmt.Errorf("invalid ScheduleType %q", s.Type)
+}
+
+func (s *Schedule) setType() {
+	switch {
+	case !s.Once.IsZero():
+		s.Type = ScheduleOnce
+	case s.Cron != "":
+		s.Type = ScheduleCron
+	default:
+		s.Type = ScheduleImmediate
+	}
 }
 
 // NewScheduler returns a Scheduler ready to run jobs.
@@ -90,6 +129,10 @@ func (s *Scheduler) Create(ctx context.Context, sched Schedule, workflowName str
 	if err != nil {
 		return row, err
 	}
+	cronSched, err := sched.Parse()
+	if err != nil {
+		return row, err
+	}
 	err = s.db.BeginFunc(ctx, func(tx pgx.Tx) error {
 		now := time.Now()
 		q := db.New(tx)
@@ -97,6 +140,7 @@ func (s *Scheduler) Create(ctx context.Context, sched Schedule, workflowName str
 			WorkflowName:   workflowName,
 			WorkflowParams: sql.NullString{String: string(m), Valid: len(m) > 0},
 			Once:           sched.Once,
+			Spec:           sched.Cron,
 			CreatedAt:      now,
 			UpdatedAt:      now,
 		})
@@ -105,30 +149,43 @@ func (s *Scheduler) Create(ctx context.Context, sched Schedule, workflowName str
 		}
 		return nil
 	})
-	s.cron.Schedule(&RunOnce{next: sched.Once}, &WorkflowSchedule{Schedule: row, worker: s.w, Params: params})
+	s.cron.Schedule(cronSched, &WorkflowSchedule{Schedule: row, worker: s.w, Params: params})
 	return row, err
 }
 
 // Resume fetches schedules from the database and schedules them.
 func (s *Scheduler) Resume(ctx context.Context) error {
 	q := db.New(s.db)
-	scheds, err := q.Schedules(ctx)
+	rows, err := q.Schedules(ctx)
 	if err != nil {
 		return err
 	}
-	for _, sched := range scheds {
-		def := s.w.dh.Definition(sched.WorkflowName)
+	for _, row := range rows {
+		def := s.w.dh.Definition(row.WorkflowName)
 		if def == nil {
-			log.Printf("Unable to schedule %q (schedule.id: %d): no definition found", sched.WorkflowName, sched.ID)
+			log.Printf("Unable to schedule %q (schedule.id: %d): no definition found", row.WorkflowName, row.ID)
 			continue
 		}
-		params, err := UnmarshalWorkflow(sched.WorkflowParams.String, def)
+		params, err := UnmarshalWorkflow(row.WorkflowParams.String, def)
 		if err != nil {
-			log.Printf("Error in UnmarshalWorkflow(%q, %q) for schedule %d: %q", sched.WorkflowParams.String, sched.WorkflowName, sched.ID, err)
+			log.Printf("Error in UnmarshalWorkflow(%q, %q) for schedule %d: %q", row.WorkflowParams.String, row.WorkflowName, row.ID, err)
 			continue
 		}
-		s.cron.Schedule(&RunOnce{next: sched.Once}, &WorkflowSchedule{
-			Schedule: sched,
+		sched := Schedule{Once: row.Once, Cron: row.Spec}
+		sched.setType()
+		if sched.Type == ScheduleOnce && row.Once.Before(time.Now()) {
+			log.Printf("Skipping %q Schedule (schedule.id: %d): %q is in the past", sched.Type, row.ID, sched.Once.String())
+			continue
+		}
+
+		cronSched, err := sched.Parse()
+		if err != nil {
+			log.Printf("Unable to schedule %q (schedule.id %d): invalid Schedule: %q", row.WorkflowName, row.ID, err)
+			continue
+		}
+
+		s.cron.Schedule(cronSched, &WorkflowSchedule{
+			Schedule: row,
 			Params:   params,
 			worker:   s.w,
 		})

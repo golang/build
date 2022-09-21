@@ -12,8 +12,18 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/robfig/cron/v3"
 	"golang.org/x/build/internal/relui/db"
 )
+
+func mustParseSpec(t *testing.T, spec string) cron.Schedule {
+	t.Helper()
+	sched, err := cron.ParseStandard(spec)
+	if err != nil {
+		t.Fatalf("cron.ParseStandard(%q) = %q, wanted no error", spec, err)
+	}
+	return sched
+}
 
 func TestSchedulerCreate(t *testing.T) {
 	now := time.Now()
@@ -28,7 +38,7 @@ func TestSchedulerCreate(t *testing.T) {
 	}{
 		{
 			desc:         "success: once",
-			sched:        Schedule{Once: now.AddDate(1, 0, 0)},
+			sched:        Schedule{Once: now.AddDate(1, 0, 0), Type: ScheduleOnce},
 			workflowName: "echo",
 			params:       map[string]any{"greeting": "hello", "farewell": "bye"},
 			want: db.Schedule{
@@ -61,6 +71,49 @@ func TestSchedulerCreate(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc:         "success: cron",
+			sched:        Schedule{Cron: "* * * * *", Type: ScheduleCron},
+			workflowName: "echo",
+			params:       map[string]any{"greeting": "hello", "farewell": "bye"},
+			want: db.Schedule{
+				WorkflowName: "echo",
+				WorkflowParams: sql.NullString{
+					String: `{"farewell": "bye", "greeting": "hello"}`,
+					Valid:  true,
+				},
+				Spec:      "* * * * *",
+				CreatedAt: now,
+				UpdatedAt: now,
+			},
+			wantEntries: []ScheduleEntry{
+				{
+					Schedule: mustParseSpec(t, "* * * * *"),
+					Next:     now.Add(time.Minute),
+					Job: &WorkflowSchedule{
+						Schedule: db.Schedule{
+							WorkflowName: "echo",
+							WorkflowParams: sql.NullString{
+								String: `{"farewell": "bye", "greeting": "hello"}`,
+								Valid:  true,
+							},
+							Spec:      "* * * * *",
+							CreatedAt: now,
+							UpdatedAt: now,
+						},
+						Params: map[string]any{"greeting": "hello", "farewell": "bye"},
+					},
+				},
+			},
+		},
+		{
+			desc:         "error: invalid Schedule",
+			sched:        Schedule{Type: ScheduleImmediate},
+			workflowName: "echo",
+			params:       map[string]any{"greeting": "hello", "farewell": "bye"},
+			wantErr:      true,
+			wantEntries:  []ScheduleEntry{},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
@@ -69,8 +122,8 @@ func TestSchedulerCreate(t *testing.T) {
 			p := testDB(ctx, t)
 			s := NewScheduler(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}))
 			row, err := s.Create(ctx, c.sched, c.workflowName, c.params)
-			if err != nil {
-				t.Fatalf("s.Create(_, %v, %q, %v) = %v, %v, wanted no error", c.sched, c.workflowName, c.params, row, err)
+			if (err != nil) != c.wantErr {
+				t.Fatalf("s.Create(_, %v, %q, %v) = %v, %v, wantErr: %t", c.sched, c.workflowName, c.params, row, err, c.wantErr)
 			}
 			if diff := cmp.Diff(c.want, row, cmpopts.EquateApproxTime(time.Minute), cmpopts.IgnoreFields(db.Schedule{}, "ID")); diff != "" {
 				t.Fatalf("s.Create() mismatch (-want +got):\n%s", diff)
@@ -80,7 +133,7 @@ func TestSchedulerCreate(t *testing.T) {
 			diffOpts := []cmp.Option{
 				cmpopts.EquateApproxTime(time.Minute),
 				cmpopts.IgnoreFields(db.Schedule{}, "ID"),
-				cmpopts.IgnoreUnexported(RunOnce{}, WorkflowSchedule{}),
+				cmpopts.IgnoreUnexported(RunOnce{}, WorkflowSchedule{}, time.Location{}),
 				cmpopts.IgnoreFields(ScheduleEntry{}, "ID", "WrappedJob"),
 			}
 			if diff := cmp.Diff(c.wantEntries, got, diffOpts...); diff != "" {
@@ -133,6 +186,56 @@ func TestSchedulerResume(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc: "success: cron",
+			scheds: []db.CreateScheduleParams{
+				{
+					WorkflowName: "echo",
+					WorkflowParams: sql.NullString{
+						String: `{"farewell": "bye", "greeting": "hello"}`,
+						Valid:  true,
+					},
+					Spec:      "* * * * *",
+					CreatedAt: now,
+					UpdatedAt: now,
+				},
+			},
+			want: []ScheduleEntry{
+				{
+					Schedule: mustParseSpec(t, "* * * * *"),
+					Next:     now.Add(time.Minute),
+					Job: &WorkflowSchedule{
+						Schedule: db.Schedule{
+							WorkflowName: "echo",
+							WorkflowParams: sql.NullString{
+								String: `{"farewell": "bye", "greeting": "hello"}`,
+								Valid:  true,
+							},
+							Spec:      "* * * * *",
+							CreatedAt: now,
+							UpdatedAt: now,
+						},
+						Params: map[string]any{"greeting": "hello", "farewell": "bye"},
+					},
+				},
+			},
+		},
+		{
+			desc: "skip past RunOnce schedules",
+			scheds: []db.CreateScheduleParams{
+				{
+					WorkflowName: "echo",
+					WorkflowParams: sql.NullString{
+						String: `{"farewell": "bye", "greeting": "hello"}`,
+						Valid:  true,
+					},
+					Once:      time.Now().AddDate(-1, 0, 0),
+					CreatedAt: now,
+					UpdatedAt: now,
+				},
+			},
+			want: []ScheduleEntry{},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
@@ -155,7 +258,7 @@ func TestSchedulerResume(t *testing.T) {
 			diffOpts := []cmp.Option{
 				cmpopts.EquateApproxTime(time.Minute),
 				cmpopts.IgnoreFields(db.Schedule{}, "ID"),
-				cmpopts.IgnoreUnexported(RunOnce{}, WorkflowSchedule{}),
+				cmpopts.IgnoreUnexported(RunOnce{}, WorkflowSchedule{}, time.Location{}),
 				cmpopts.IgnoreFields(ScheduleEntry{}, "ID", "WrappedJob"),
 			}
 			if diff := cmp.Diff(c.want, got, diffOpts...); diff != "" {

@@ -10,6 +10,7 @@ import (
 	"embed"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -187,13 +188,19 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			wantCode: http.StatusBadRequest,
 		},
 		{
-			desc:     "invalid workflow name",
-			params:   url.Values{"workflow.name": []string{"invalid"}},
+			desc: "invalid workflow name",
+			params: url.Values{
+				"workflow.name":     []string{"invalid"},
+				"workflow.schedule": []string{string(ScheduleImmediate)},
+			},
 			wantCode: http.StatusBadRequest,
 		},
 		{
-			desc:     "missing workflow params",
-			params:   url.Values{"workflow.name": []string{"echo"}},
+			desc: "missing workflow params",
+			params: url.Values{
+				"workflow.name":     []string{"echo"},
+				"workflow.schedule": []string{string(ScheduleImmediate)},
+			},
 			wantCode: http.StatusBadRequest,
 		},
 		{
@@ -202,6 +209,7 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 				"workflow.name":            []string{"echo"},
 				"workflow.params.greeting": []string{"hello"},
 				"workflow.params.farewell": []string{"bye"},
+				"workflow.schedule":        []string{string(ScheduleImmediate)},
 			},
 			wantCode: http.StatusSeeOther,
 			wantWorkflows: []db.Workflow{
@@ -255,6 +263,26 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc: "successful creation: schedule cron",
+			params: url.Values{
+				"workflow.name":            []string{"echo"},
+				"workflow.params.greeting": []string{"hello"},
+				"workflow.params.farewell": []string{"bye"},
+				"workflow.schedule":        []string{string(ScheduleCron)},
+				"workflow.schedule.cron":   []string{"0 0 1 1 0"},
+			},
+			wantCode: http.StatusSeeOther,
+			wantSchedules: []db.Schedule{
+				{
+					WorkflowName:   "echo",
+					WorkflowParams: nullString(`{"farewell": "bye", "greeting": "hello"}`),
+					Spec:           "0 0 1 1 0",
+					CreatedAt:      now, // cmpopts.EquateApproxTime
+					UpdatedAt:      now, // cmpopts.EquateApproxTime
+				},
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
@@ -270,6 +298,10 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 
 			if resp.StatusCode != c.wantCode {
 				t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, c.wantCode)
+				if resp.StatusCode == http.StatusBadRequest {
+					b, _ := io.ReadAll(resp.Body)
+					t.Logf("resp.Body: \n%v", string(b))
+				}
 			}
 			if c.wantCode == http.StatusBadRequest {
 				return

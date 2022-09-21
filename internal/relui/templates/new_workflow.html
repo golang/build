@@ -60,7 +60,7 @@
                 <div class="NewWorkflow-parameter">
                   <label for="workflow.schedule.cron">Run on a cron schedule (minute hour day-of-month month day-of-week):</label>
                   <input type="text" id="workflow.schedule.cron" name="workflow.schedule.cron" placeholder="* * * * *" title="Valid Cron-syntax string"
-                         pattern="/(\S+ \S+ \S+ \S+ \S+ *)|@(hourly|daily|weekly|monthly|yearly|annually|midnight)/"/>
+                         pattern="(\S+ \S+ \S+ \S+ \S+ *)|@(hourly|daily|weekly|monthly|yearly|annually|midnight)"/>
                 </div>
               {{else}}
                 <div class="NewWorkflow-parameter">

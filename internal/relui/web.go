@@ -376,14 +376,24 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if r.FormValue("workflow.schedule") == string(ScheduleOnce) {
-		t, err := time.ParseInLocation(DatetimeLocalLayout, r.FormValue("workflow.schedule.datetime"), time.UTC)
-		if err != nil || t.Before(time.Now()) {
-			http.Error(w, fmt.Sprintf("parameter %q parsing error: %v", "workflow.schedule.datetime", err), http.StatusBadRequest)
+	sched := Schedule{Type: ScheduleType(r.FormValue("workflow.schedule"))}
+	if sched.Type != ScheduleImmediate {
+		switch sched.Type {
+		case ScheduleOnce:
+			t, err := time.ParseInLocation(DatetimeLocalLayout, r.FormValue("workflow.schedule.datetime"), time.UTC)
+			if err != nil || t.Before(time.Now()) {
+				http.Error(w, fmt.Sprintf("parameter %q parsing error: %v", "workflow.schedule.datetime", err), http.StatusBadRequest)
+				return
+			}
+			sched.Once = t
+		case ScheduleCron:
+			sched.Cron = r.FormValue("workflow.schedule.cron")
+		}
+		if err := sched.Valid(); err != nil {
+			http.Error(w, fmt.Sprintf("parameter %q parsing error: %v", "workflow.schedule", err), http.StatusBadRequest)
 			return
 		}
-		_, err = s.scheduler.Create(r.Context(), Schedule{Once: t}, name, params)
-		if err != nil {
+		if _, err := s.scheduler.Create(r.Context(), sched, name, params); err != nil {
 			http.Error(w, fmt.Sprintf("failed to create schedule: %v", err), http.StatusInternalServerError)
 			return
 		}
